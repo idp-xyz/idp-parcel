@@ -25,84 +25,8 @@ export const operatingRegistryLabels: Record<OperatingRegistry, string> = {
   'cost-allocation': '成本分摊',
 };
 
-// 客户费用三段封闭演进，中文取 ChargeStage 注释原词（费用可以经历预估、暂估和确认）。
-// 「调整」不在此集：CONTEXT 把调整定为追加的调整明细，各由唯一创建用例形成，不是阶段的
-// 第四个取值，词表也不为它留假格。
-export const chargeStageLabels: Record<string, string> = {
-  ESTIMATED: '预估',
-  PROVISIONAL: '暂估',
-  CONFIRMED: '确认',
-};
-
-// 异议处理的封闭四走向，中文取 UC-SA-003 原句（形成接受、部分接受、拒绝或待复核结果）。
-export const disputeResolutionLabels: Record<string, string> = {
-  ACCEPTED: '接受',
-  PARTIALLY_ACCEPTED: '部分接受',
-  REJECTED: '拒绝',
-  PENDING_REVIEW: '待复核',
-};
-
-// 后续账期纳入的封闭二来源，中文取 InclusionKind 注释原词。
-export const inclusionKindLabels: Record<string, string> = {
-  ADJUSTMENT: '既有调整',
-  LATE_CHARGE: '迟到的已确认费用',
-};
-
-// 外部资金事实的封闭三值，中文取 FundsFactKind 注释原词。通知不在其中——运营方收到付款
-// 通知但财务未确认时保持待确认，词表跟着没有那一格。
-export const fundsFactKindLabels: Record<string, string> = {
-  RECEIPT_CONFIRMED: '确认到账',
-  PAYMENT_FAILED: '付款失败',
-  FUNDS_RETURNED: '资金退回',
-};
-
-// 资金可映射目标的封闭集，中文取 SettlementTargetKind 注释原词。费用本体不在其中；映射到客户赔付
-// 或追偿认可、核销它，只改核销状态与未分配余额，不改那条金额。整条认作代收本金不是核销对象：那笔钱是
-// 运营企业替客户保管的商品交易资金，不进任何客户应收作用域的入账余额，去向在代收与清分的分户账里。
-export const settlementTargetKindLabels: Record<string, string> = {
-  STATEMENT: '客户对账单',
-  PAYABLE: '供应商审核应付',
-  CREDIT_NOTE: '供应商费用贷项',
-  ACCOUNT: '应收结算账户',
-  CUSTOMER_COMPENSATION: '客户赔付或索赔费用退款',
-  RECOVERY_ACKNOWLEDGEMENT: '追偿认可金额',
-  COLLECTED_PRINCIPAL: '代收本金',
-};
-
-// 经营指标口径的封闭三值，中文取 OperatingBasis 注释原词。索赔调整后口径必须声明所依附的
-// 基础口径，属编排层组合，不是第四格。
-export const operatingBasisLabels: Record<string, string> = {
-  ESTIMATED: '预估',
-  CONFIRMED: '已确认',
-  SETTLED: '已结算',
-};
-
-// 组成项对指标的封闭二向，中文取 ComponentEffect 注释原词。
-export const componentEffectLabels: Record<string, string> = {
-  INCREASES: '增加',
-  DECREASES: '减少',
-};
-
-// 组成项在本口径下的采用物身份，中文取 CONTEXT「经营毛利的客户与外部供应商基础必须按阶段
-// 成对采用」那句逐口径点名的原词（ADR-0087 决定三）。词表按口径分组不是一个平集：同一个
-// 「审核应付」在预估口径下不成立，那个口径采用的是预期成本。
-export const componentRoleLabels: Record<string, string> = {
-  CUSTOMER_ESTIMATE: '客户预估费用',
-  SUPPLIER_EXPECTED_COST: '供应商预期成本',
-  CUSTOMER_OPERATING_RECEIVABLE: '客户运营应收',
-  AUDITED_PAYABLE: '审核应付',
-  SUPPLIER_CREDIT_NOTE: '供应商费用贷项',
-  SETTLED_CUSTOMER_RECEIVABLE: '已核销客户运营应收',
-  SETTLED_AUDITED_PAYABLE: '已核销审核应付',
-  SETTLED_SUPPLIER_CREDIT_NOTE: '已核销供应商费用贷项',
-};
-
-// 客户费用的收付方向，中文取 ChargeDirection 注释原词。**是收付不是借贷**：本模块另有
-// DEBIT/CREDIT 的借贷方向词表（调整用），两者不是一回事，不共用（ADR-0087 决定一）。
-export const chargeDirectionLabels: Record<string, string> = {
-  RECEIVABLE: '应收',
-  PAYABLE: '应付',
-};
+// 阶段、方向、资金事实种类、口径、组成项角色这些封闭集的中文与色调都在 src/vocabulary/status.ts（界面用语词典，一处定义），
+// 页面经 labelFor / StatusPill 取，本文件不再另存一份。
 
 /**
  * 资金事实在客户应收作用域上怎么记入入账余额（ADR-0283），给收付款核销页一格。落到几个作用域时要说出未分配停在哪、
@@ -148,23 +72,19 @@ export const unregistered = '未登记';
  * HANDOFF_ENVELOPE_REJECTED，服务端整笔回滚、什么都没登记，重发同一份永远同一个结果（票 sa-cc/32）。
  */
 export const problemCodeNotes: Record<string, string> = {
-  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题，不是业务答案。',
-  MALFORMED_REQUEST: '请求构造不出命令（登记输入形状不合），重发同样的内容不会改变结果。',
-  INTAKE_FAILED: '接入解析未能完成，本次没有形成任何业务答案，可稍后重试。',
-  NO_ANSWER_FORMED:
-    '服务端处理未能完成（资金事实库不可用或事务回滚），本次没有形成任何业务答案，登记与否未知，可稍后重试。',
-  UNNAMED_OUTCOME: '用例交回了一个没有名字的答案——实现坏了，不是业务答案；请携带关联标识查询服务端记录。',
-  HANDOFF_NOT_SENT:
-    '事实已采用（版本行已落），但向 customs-compliance 交的采用信封因依赖故障未出——重发同一份即补发同一封，不会重复采用。',
-  HANDOFF_ENVELOPE_REJECTED:
-    '采用信封被框架确定性拒收（引用太长把信封顶过上限），本次什么都没登记；要改的是引用的长度或形，重发同一份永远同一个结果。',
-  OUTSIDE_ADMISSION_SCOPE:
-    '这笔生产写不在治理登记的生产权威区间内，要阶段治理去登记区间；什么都没登记，重试不会好。',
-  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动（发行方公钥集、操作者册或准入范围），可稍后重试。',
+  METHOD_NOT_ALLOWED: '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。',
+  MALFORMED_REQUEST: '填写的内容格式不对，系统读不出一笔完整的登记；请按提示检查各项后再提交。',
+  INTAKE_FAILED: '登录信息没能核对通过，这次没有登记任何内容；请稍后重试。',
+  NO_ANSWER_FORMED: '系统暂时没能处理这笔登记，是否登记成功还不确定；请稍后刷新查看，必要时重新提交同一份。',
+  UNNAMED_OUTCOME: '系统返回了无法识别的结果；请记下关联标识，联系系统管理员核查。',
+  HANDOFF_NOT_SENT: '这笔收付款已登记，但通知关务那一步没有发出；重新提交同一份即可补发，不会重复登记。',
+  HANDOFF_ENVELOPE_REJECTED: '引用太长，这笔登记没有保存；请缩短引用后重新提交。',
+  OUTSIDE_ADMISSION_SCOPE: '当前阶段还没有放开这项登记；什么都没有保存，请联系负责阶段管理的同事。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '暂时无法核对登录身份，请稍后重试。',
 };
 
 export function problemNote(code: string): string {
-  return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
+  return problemCodeNotes[code] ?? `这次提交没有成功（错误码 ${code}）；请记下关联标识联系系统管理员。`;
 }
 
 /**
@@ -173,8 +93,8 @@ export function problemNote(code: string): string {
  * 回指链头的新版本），标题照实说。
  */
 export const fundsRegistrationTitles: Record<FundsRegistrationKind, string> = {
-  'external-funds-fact': '采用外部资金事实（首版）',
-  'external-funds-fact-correction': '采用外部资金事实更正（回指链头）',
+  'external-funds-fact': '登记一笔收付款',
+  'external-funds-fact-correction': '更正一笔收付款的金额',
 };
 
 /**
@@ -182,11 +102,7 @@ export const fundsRegistrationTitles: Record<FundsRegistrationKind, string> = {
  * 同一句提示在其中一遍被改动时悄悄分叉。暂以 JSON 录入只是逐字段表单还没做（票 demo-chain-gaps/156）。
  */
 function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
-  return (
-    `登记输入 JSON 的形状与受控登记口 parcel-settlement-register ${kind} -input 吃的同一份，也与外部系统经集成客户端送来的相同；` +
-    '租户取登录账号的绑定、提交人由服务端记下，载荷里不带这两格（带 tenantId 即拒）；采用要持「外部资金事实采用」这一种授予。' +
-    fields
-  );
+  return `${fields} 填的是银行或支付系统给的原始记录，与集成接口送来的同一份形状（${kind}）；提交人与所属公司由系统记下，不用填。`;
 }
 
 /**
@@ -197,17 +113,13 @@ function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
 export const fundsRegistrationSnapshotHints: Record<FundsRegistrationKind, string> = {
   'external-funds-fact': snapshotHint(
     'external-funds-fact',
-    '键为 factRef / sourceRef / payerRef / kind / currency / amountMinor / version / occurredAt；' +
-      '种类取封闭三词 RECEIPT_CONFIRMED / PAYMENT_FAILED / FUNDS_RETURNED，缺席同样拒；' +
-      'payerRef 可缺席（来源未提供付款人是事实的一个诚实状态），给了却全是空白则拒；' +
-      'amountMinor 是最小单位整数；occurredAt 是外部事实的业务发生时刻，不是登记时刻。' +
-      '同事实同版本同内容重发答已存在；同版本换内容、同事实第二个首版都是内容冲突，更正走另一签。',
+    '请填 factRef（银行流水号或支付单号）、sourceRef（来源系统）、payerRef（付款人，没有可不填）、kind（RECEIPT_CONFIRMED 到账 / ' +
+      'PAYMENT_FAILED 付款失败 / FUNDS_RETURNED 资金退回）、currency、amountMinor（金额，按币种最小单位的整数）、version（版本，首次填 v1）、' +
+      'occurredAt（银行记录的发生时间，不是现在）。同一笔重复提交不会登两次；金额填错请用「更正金额」。',
   ),
   'external-funds-fact-correction': snapshotHint(
     'external-funds-fact-correction',
-    '键为 factRef / corrects / version / amountMinor / correctedAt；' +
-      'corrects 必须等于该事实当前链头的版本，version 是这次更正形成的新版本，只有金额变——' +
-      '来源、付款人、种类、币种与发生时刻从链头照抄，载荷带了它们按未知字段拒（其余若也变了那是另一条事实）。' +
-      '回指自己、回指非链头、更正一条未采用的事实都答`未受理`；原版本保留，更正形成新有效版本。',
+    '请填 factRef（要更正的那笔）、corrects（它现在的版本号）、version（这次更正的新版本号）、amountMinor（正确金额）、correctedAt（更正时间）。' +
+      '只能改金额；来源、付款人、币种、发生时间要改的话那是另一笔收付款，请另行登记。原来的金额会保留在历史里。',
   ),
 };

@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -11,69 +14,62 @@ import {
   type OperatingResultListResponseBody,
   type OperatingResultRecord,
 } from './api';
-import {
-  componentEffectLabels,
-  componentRoleLabels,
-  labelOf,
-  operatingBasisLabels,
-} from './presentation';
+import { formatMoney, technicalRows } from './ops-ui';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
+// 经营核算页（主责上下文 settlement-accounting，UC-SA-006 按口径、版本、币种与截至时点派生经营毛利）。两签都接
+// GET /settlement-operating-results 按 registry 分派。成本分摊在本页而不在费用页：分摊只改变经营归因、不转移原债权债务责任。
 const info = moduleInfoById['operating-metrics'];
 
-// 本页两签，都接 GET /settlement-operating-results 按 registry 分派。成本分摊在本页而不在
-// 费用页：两册同属 UC-SA-006（分摊与指标由同一个用例形成、经同一个 OperatingIntent 交下游），
-// 而分摊只改变经营归因、不转移原债权债务责任——摆进费用页会让读者以为它动了应收应付。
-//
-// 旧骨架的「客户侧采用／供应商侧采用／其中：审核应付／其中：供应商费用贷项」四栏当初随
-// 对栏裁定撤下，理由是组成元素上没有角色维、要填那四栏就得由读面先猜某个来源属于哪一类。
-// ADR-0087 决定三把角色维补进了元素，那个理由不再成立——**但四栏仍不设**，改成在逐项呈现
-// 里把角色一并显示出来。
-//
-// 换的是理由不是结论：四栏是按角色对组成求和，求和这一层放在页面就成了第二处定义，而
-// 「审核应付与贷项按各自借贷方向分别计入一次、不得净含贷项」要人看见的恰恰是**逐项**，
-// 不是四个合计数。角色在项上显示之后，哪一项是审核应付、哪一项是贷项一眼可辨，那句硬句
-// 想让人看见的东西就已经在页面上了，再合计成四栏只会把它重新收拢回去。
-//
-// 「经营损失」栏一并撤下：它与经营毛利是同一个数按正负分两栏，会让「零」落进两栏都不占的
-// 缝里。毛利一栏带符号呈现，负值即经营损失。
+// 组成项逐项呈现而不按角色合计成四栏：求和这一层放在页面就成了第二处定义，而「审核应付与贷项按各自借贷方向分别计入
+// 一次、不得净含贷项」要人看见的恰恰是逐项。毛利一栏带符号呈现，负值即经营损失，不另设「损失」栏（「零」会落进两栏都
+// 不占的缝里）。
 
-// —— 经营结果快照签 ——
+// —— 经营结果签 ——
+
+function resultTechnicalRows(row: OperatingResultRecord) {
+  return technicalRows([
+    { label: '分析范围', value: row.scope },
+    { label: '账期', value: row.period },
+    { label: '计算版本', value: row.version },
+    { label: '纠错自', value: row.corrects },
+    { label: '登记时间', value: formatInstant(row.recordedAt) },
+  ]);
+}
 
 const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
-  { id: 'scope', header: '分析范围', className: 'font-mono text-xs', render: (row) => row.scope },
+  { id: 'scope', header: '分析范围', className: 'font-mono text-xs text-idpxyz-textBright', render: (row) => row.scope },
   { id: 'period', header: '账期', className: 'font-mono text-xs', render: (row) => row.period },
   {
     id: 'basis',
     header: '口径',
     align: 'center',
-    className: 'w-[72px]',
     // 封闭三格。索赔调整后口径必须声明所依附的基础口径，属编排层组合，不是第四格。
-    render: (row) => labelOf(operatingBasisLabels, row.basis),
+    render: (row) => <StatusPill code={row.basis} />,
   },
-  { id: 'version', header: '计算版本', className: 'font-mono text-xs', render: (row) => row.version },
-  { id: 'currency', header: '币种', align: 'center', className: 'w-[64px] font-mono', render: (row) => row.currency },
   {
     id: 'margin',
-    header: '经营毛利',
+    header: '毛利',
     align: 'right',
-    className: 'font-mono text-xs',
-    // 带符号照实呈现，负值即经营损失。不重算：派生它的门在写口（重建时复验组成与毛利
-    // 是否相符），读侧再算一遍就成了第二处定义，两处一旦不一致，页面上看到的会是没人验过的那个。
-    render: (row) => row.margin,
+    className: 'font-mono text-xs tabular-nums',
+    // 带符号照实呈现，负值即经营损失。不重算：派生它的门在写口，读侧再算一遍就成了第二处定义。
+    render: (row) => (
+      <span className={row.margin.startsWith('-') ? 'text-[color:var(--ds-status-danger-fg)]' : 'text-idpxyz-textBright'}>
+        {formatMoney(row.margin, row.currency)}
+      </span>
+    ),
   },
   {
     id: 'components',
-    header: '组成（角色／来源／增减向／金额）',
-    // 逐项呈现而不按角色合计成四栏（理由见文件头）。角色照册转写，不是页面判出来的。
-    // 空数组是「这份快照没有组成项」的如实一格，不留白——留白读起来像渲染掉了东西。
+    header: '组成',
+    // 角色照册转写，不是页面判出来的。空数组是「这份快照没有组成项」的如实一格，不留白。
     render: (row) =>
       row.components.length > 0 ? (
-        <div className="min-w-72 font-mono text-xs">
+        <div className="min-w-64 text-xs">
           {row.components.map((component) => (
-            <p key={`${component.role}:${component.source}:${component.effect}:${component.amount}`}>
-              {labelOf(componentRoleLabels, component.role)}／{component.source}／
-              {labelOf(componentEffectLabels, component.effect)}／{component.amount}
+            <p key={`${component.role}:${component.source}:${component.effect}:${component.amount}`} className="whitespace-nowrap">
+              {labelFor(component.role)}
+              <span className="text-idpxyz-textMuted">（{labelFor(component.effect)}）</span> {formatMoney(component.amount, '')}
+              <span className="ml-1 font-mono text-[11px] text-idpxyz-textMuted">{component.source}</span>
             </p>
           ))}
         </div>
@@ -83,22 +79,15 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
   },
   {
     id: 'as-of',
-    header: '截至时点',
-    className: 'min-w-44 font-mono text-xs',
+    header: '截至',
+    className: 'whitespace-nowrap font-mono text-xs',
     render: (row) => formatInstant(row.asOf),
   },
   {
-    id: 'corrects',
-    header: '纠错回指',
-    className: 'font-mono text-xs',
-    // 缺席即这不是一次纠错重算，不是「未登记」——重算形成新版本，原快照保留。
-    render: (row) => row.corrects ?? <span className="text-idpxyz-textMuted">非纠错</span>,
-  },
-  {
-    id: 'recorded-at',
-    header: '登记时间',
-    className: 'min-w-44 font-mono text-xs',
-    render: (row) => formatInstant(row.recordedAt),
+    id: 'technical',
+    header: '',
+    className: 'w-[1%] whitespace-nowrap align-top',
+    render: (row) => <TechnicalDetails rows={resultTechnicalRows(row)} />,
   },
 ];
 
@@ -121,34 +110,26 @@ function OperatingResultsTable() {
   const results = answer?.kind === 'outcome' ? answer.body.results : [];
   const needle = search.trim().toLowerCase();
   const visibleResults = needle
-    ? results.filter((row) =>
-        [row.scope, row.period, row.version].some((value) => value.toLowerCase().includes(needle)),
-      )
+    ? results.filter((row) => [row.scope, row.period, row.version].some((value) => value.toLowerCase().includes(needle)))
     : results;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<OperatingResultRecord>
-      title="经营结果快照"
-      description={`毛利只能派生不能直接修改；组成按各自借贷方向逐项呈现，不净含贷项`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索分析范围 / 账期 / 计算版本',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `当前返回 ${results.length} 份快照` : undefined
-      }
+      title="经营结果"
+      description="按范围和账期算出的毛利，分预估、已确认、已结算三种口径"
+      search={{ value: search, onChange: setSearch, placeholder: '搜分析范围、账期' }}
+      filterSummary={answer?.kind === 'outcome' ? `${results.length} 份快照` : undefined}
       columns={operatingResultColumns}
       rows={visibleResults}
       // 行键循口径三件加计算版本：同一范围同一账期下各口径各版本分别成行。
       rowKey={(row) => [row.scope, row.period, row.basis, row.version].join(':')}
+      emptyRowsNote="没有匹配的快照"
       viewState={catalogueViewState(answer, results.length, retry, {
         module: info,
         endpoint: 'GET /settlement-operating-results?registry=operating-result',
-        emptyTitle: '当前租户尚无已登记的经营结果快照',
-        emptyDescription:
-          '读取入口已配置，但经营结果登记册为空；快照由 UC-SA-006 按口径派生，其来源费用与应付的事务链在接入渠道墙后面。页面不会为好看造任何毛利或损失数字。',
+        emptyTitle: '还没有经营结果',
+        emptyDescription: '费用确认、账单审核之后系统按口径算出毛利，这里会随之出现；页面不会为好看造任何毛利或损失数字。',
       })}
     />
   );
@@ -156,27 +137,36 @@ function OperatingResultsTable() {
 
 // —— 成本分摊签 ——
 
+function allocationTechnicalRows(row: CostAllocationRecord) {
+  return technicalRows([
+    { label: '分摊', value: row.allocation },
+    { label: '来源金额', value: row.source },
+    { label: '规则版本', value: row.rule },
+    { label: '版本', value: row.version },
+    { label: '纠错自', value: row.corrects },
+    { label: '登记时间', value: formatInstant(row.recordedAt) },
+  ]);
+}
+
 const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
-  { id: 'allocation', header: '分摊标识', className: 'font-mono text-xs', render: (row) => row.allocation },
-  { id: 'source', header: '来源金额身份', className: 'font-mono text-xs', render: (row) => row.source },
+  { id: 'source', header: '来源成本', className: 'font-mono text-xs text-idpxyz-textBright', render: (row) => row.source },
   {
     id: 'source-amount',
-    header: '来源金额',
+    header: '金额',
     align: 'right',
-    className: 'font-mono text-xs',
-    render: (row) => `${row.sourceAmount} ${row.currency}`,
+    className: 'font-mono text-xs tabular-nums',
+    render: (row) => formatMoney(row.sourceAmount, row.currency),
   },
-  { id: 'rule', header: '规则版本', className: 'font-mono text-xs', render: (row) => row.rule },
   {
     id: 'portions',
-    header: '份额（分析对象／金额）',
+    header: '分到哪里',
     // 空数组即「全额未分摊」——与未分摊余额栏互相印证，不折进份额里凑平。
     render: (row) =>
       row.portions.length > 0 ? (
-        <div className="min-w-48 font-mono text-xs">
+        <div className="min-w-48 text-xs">
           {row.portions.map((portion) => (
-            <p key={`${portion.target}:${portion.amount}`}>
-              {portion.target}／{portion.amount}
+            <p key={`${portion.target}:${portion.amount}`} className="whitespace-nowrap">
+              <span className="font-mono">{portion.target}</span> {formatMoney(portion.amount, '')}
             </p>
           ))}
         </div>
@@ -186,31 +176,23 @@ const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
   },
   {
     id: 'unallocated',
-    header: '未分摊余额',
+    header: '未分摊',
     align: 'right',
-    className: 'font-mono text-xs',
-    // 单独成栏：已分摊与未分摊之和严格等于来源金额是写口的不变量，未分摊余额是第一类结果
-    // 不是尾差——没有合格对象或分母为零时来源金额整笔留在这里等新依据。
-    render: (row) => row.unallocatedAmount,
-  },
-  { id: 'version', header: '版本', className: 'font-mono text-xs', render: (row) => row.version },
-  {
-    id: 'corrects',
-    header: '纠错回指',
-    className: 'font-mono text-xs',
-    render: (row) => row.corrects ?? <span className="text-idpxyz-textMuted">非纠错</span>,
+    className: 'font-mono text-xs tabular-nums',
+    // 单独成栏：未分摊余额是第一类结果不是尾差——没有合格对象或分母为零时来源金额整笔留在这里等新依据。
+    render: (row) => formatMoney(row.unallocatedAmount, ''),
   },
   {
     id: 'allocated-at',
     header: '分摊时间',
-    className: 'min-w-44 font-mono text-xs',
+    className: 'whitespace-nowrap font-mono text-xs',
     render: (row) => formatInstant(row.allocatedAt),
   },
   {
-    id: 'recorded-at',
-    header: '登记时间',
-    className: 'min-w-44 font-mono text-xs',
-    render: (row) => formatInstant(row.recordedAt),
+    id: 'technical',
+    header: '',
+    className: 'w-[1%] whitespace-nowrap align-top',
+    render: (row) => <TechnicalDetails rows={allocationTechnicalRows(row)} />,
   },
 ];
 
@@ -233,43 +215,33 @@ function CostAllocationsTable() {
   const allocations = answer?.kind === 'outcome' ? answer.body.allocations : [];
   const needle = search.trim().toLowerCase();
   const visibleAllocations = needle
-    ? allocations.filter((row) =>
-        [row.allocation, row.source, row.rule].some((value) => value.toLowerCase().includes(needle)),
-      )
+    ? allocations.filter((row) => [row.allocation, row.source, row.rule].some((value) => value.toLowerCase().includes(needle)))
     : allocations;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<CostAllocationRecord>
       title="成本分摊"
-      description={`分摊只改变经营归因，不转移原债权债务责任；未分摊余额是第一类结果不是尾差`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索分摊标识 / 来源金额身份 / 规则版本',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `当前返回 ${allocations.length} 次分摊` : undefined
-      }
+      description="把一笔成本按规则分到各个分析对象上；只改经营归因，不改谁欠谁的钱"
+      search={{ value: search, onChange: setSearch, placeholder: '搜来源成本、规则' }}
+      filterSummary={answer?.kind === 'outcome' ? `${allocations.length} 次分摊` : undefined}
       columns={costAllocationColumns}
       rows={visibleAllocations}
       // 行键循分摊标识加版本：纠错重算换版本，原分摊保留。
       rowKey={(row) => `${row.allocation}:${row.version}`}
+      emptyRowsNote="没有匹配的分摊"
       viewState={catalogueViewState(answer, allocations.length, retry, {
         module: info,
         endpoint: 'GET /settlement-operating-results?registry=cost-allocation',
-        emptyTitle: '当前租户尚无已登记的成本分摊',
-        emptyDescription:
-          '读取入口已配置，但成本分摊登记册为空；分摊由 UC-SA-006 依规则版本形成，其来源成本的事务链在接入渠道墙后面。',
+        emptyTitle: '还没有成本分摊',
+        emptyDescription: '分摊规则登记后系统按规则分摊成本，这里会随之出现；页面不会预置分摊。',
       })}
     />
   );
 }
 
 /**
- * 经营核算（settlement-accounting）。两册各自成签：经营结果快照（按口径、计算版本、币种与
- * 截至时点派生的指标）与成本分摊（经营归因）。
- *
+ * 经营核算。两册各自成签：经营结果快照（按口径、计算版本、币种与截至时点派生的指标）与成本分摊（经营归因）。
  * 指标只能派生不能直接修改，本页是查阅面，不设任何指标编辑动作。
  */
 export function OperatingMetricsPage() {
@@ -277,7 +249,7 @@ export function OperatingMetricsPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="results" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="results">经营结果快照</TabsTrigger>
+          <TabsTrigger value="results">经营结果</TabsTrigger>
           <TabsTrigger value="allocations">成本分摊</TabsTrigger>
         </TabsList>
         <TabsContent value="results" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">

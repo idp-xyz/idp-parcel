@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -12,174 +15,117 @@ import {
   registerExternalFundsFact,
   type ExternalFundsFactListResponseBody,
   type ExternalFundsFactRecord,
+  type FundsMappingRecord,
   type FundsRegistrationKind,
 } from './api';
-import {
-  fundsFactKindLabels,
-  fundsRegistrationSnapshotHints,
-  fundsRegistrationTitles,
-  labelOf,
-  problemNote,
-  scopePostingText,
-} from './presentation';
+import { fundsRegistrationSnapshotHints, fundsRegistrationTitles, problemNote, scopePostingText } from './presentation';
+import { formatMoney, technicalRows } from './ops-ui';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
+// 收付款核销页（主责上下文 settlement-accounting，UC-SA-005 映射外部收付款并形成运营核销）。接 GET /settlement-funds-applications，
+// 资金事实册只有一本、不设 registry 分派。
 const info = moduleInfoById['settlement-application'];
 
-// 本页接 GET /settlement-funds-applications，不设 registry 分派——资金事实册只有一本，
-// 封闭集为一时参数只会造出一个恒定值。读面类型取自 pages/settlement/api（理由同
-// ReconciliationPage 的文件头：目录是导航分组，不是上下文边界）。
+// 列只留运营对账要看的：流水号、来自哪个系统、种类、金额、核了多少、核到哪里、发生时间。版本、更正回指、登记人、入账余额
+// 的记法进技术详情。三个金额各算各的和而不是一个净额（「从未核销过」与「核销过又撤销了」在净额上长着同一张脸），列上
+// 只给已核与未核两个，已撤销金额进技术详情。
 //
-// 旧骨架各栏随对栏裁定处置：
-//   方向（收款／付款）——**换栏为事实种类**。册上是封闭三格，三格里只有一格是「收到了钱」；
-//     折成收／付两向会把「付款失败」与「资金退回」压进同一格。
-//   对方、责任法人、结算账户——**全撤**。三者在册上都没有列（册级缺席）。骨架自注说
-//     「身份由外部事实保存，本页不推断」——册上确实没保存，那就不该留栏请人推断。
-//   分配状态（未分配／部分核销／已核销）——**撤栏**。三态词会把「从未核销」与「核销过又
-//     撤销了」压成同一格，而这两态的续办相反：前者要人去分配，后者要人去看当初为什么撤。
-//   已撤销金额——**加栏**。三个金额各算各的和摆开，正是为了让上面那两态分得开；撤销不删
-//     历史，那一截金额必须仍看得见。
-//
-// 映射与核销两组挂载物不进列表，按详情面处置（同下方页面自注）。
+// 没有「人工分配」按钮：核销的在线口今天没有，摆一个永远灰的按钮是假动作。登记收付款另有一签。
+
+/** 一笔收付款核到了哪里：映射目标种类译成中文、目标编号跟在后面；没有映射就说还没核到任何地方。 */
+function mappedTo(mappings: FundsMappingRecord[]): string {
+  if (mappings.length === 0) return '尚未核到任何地方';
+  return mappings.map((mapping) => `${labelFor(mapping.targetKind, 'funds-target')} ${mapping.target}`).join('；');
+}
+
+function factTechnicalRows(row: ExternalFundsFactRecord) {
+  return technicalRows([
+    { label: '资金事实', value: row.fact },
+    { label: '来源系统', value: row.source },
+    { label: '版本', value: row.version },
+    { label: '更正自', value: row.corrects },
+    { label: '更正时间', value: row.correctedAt ? formatInstant(row.correctedAt) : undefined },
+    // 缺席是那一路不记提交方（接口或受控 CLI 送入），照实说出缘由，不留白也不写「无」。
+    { label: '登记人', value: row.operationEvidence ?? '未记（接口送入）' },
+    { label: '已撤销金额', value: formatMoney(row.reversedAmount, row.currency) },
+    { label: '核销笔数', value: String(row.applicationCount) },
+    { label: '入账余额', value: scopePostingText(row) },
+    {
+      label: '映射依据',
+      value: row.mappings.map((mapping) => `${mapping.mapping}：${mapping.basis}（${formatInstant(mapping.mappedAt)}）`).join('；') || undefined,
+    },
+  ]);
+}
 
 const columns: ListColumn<ExternalFundsFactRecord>[] = [
-  { id: 'fact', header: '资金事实标识', className: 'font-mono text-xs', render: (row) => row.fact },
+  { id: 'fact', header: '流水号', render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.fact}</span> },
   { id: 'source', header: '来源系统', className: 'font-mono text-xs', render: (row) => row.source },
   {
     id: 'kind',
-    header: '事实种类',
+    header: '种类',
     align: 'center',
-    // 封闭三格照原样呈现。通知不在其中——运营方收到付款通知但财务未确认时保持待确认，
-    // 词表跟着没有那一格。
-    render: (row) => labelOf(fundsFactKindLabels, row.kind),
+    // 封闭三格照原样呈现：只有一格是「收到了钱」，折成收／付两向会把「付款失败」与「资金退回」压进同一格。
+    render: (row) => <StatusPill code={row.kind} />,
   },
   {
     id: 'amount',
-    header: '原币金额',
+    header: '金额',
     align: 'right',
-    className: 'font-mono text-xs',
-    render: (row) => `${row.amount} ${row.currency}`,
-  },
-  {
-    id: 'adoptedBy',
-    // 一行是一条事实、金额取链头那一版，提交方也取链头那一版：首版与各次更正可能出自不同的人，表头点明是哪一版的。
-    header: '采用人（链头那一版）',
-    className: 'font-mono text-xs',
-    // 缺席是那一路不记提交方（外部系统经集成客户端送入或受控 CLI），照实说出缘由，不留白也不写「无」。
-    render: (row) => row.operationEvidence ?? '未记（非手工采用）',
+    className: 'font-mono text-xs tabular-nums',
+    render: (row) => formatMoney(row.amount, row.currency),
   },
   {
     id: 'applied',
-    header: '已分配金额',
+    header: '已核销 / 未核销',
     align: 'right',
-    className: 'font-mono text-xs',
-    // 只加未撤销的核销。
-    render: (row) => row.appliedAmount,
+    className: 'whitespace-nowrap font-mono text-xs tabular-nums',
+    // 未核销是第一类结果不是尾差，不得被默认费用吞并；未核销不为零时亮出来。
+    render: (row) => (
+      <span>
+        {formatMoney(row.appliedAmount, '')} /{' '}
+        <span className={row.unappliedAmount !== '0' ? 'text-idpxyz-textBright' : 'text-idpxyz-textMuted'}>
+          {formatMoney(row.unappliedAmount, '')}
+        </span>
+      </span>
+    ),
   },
-  {
-    id: 'reversed',
-    header: '已撤销金额',
-    align: 'right',
-    className: 'font-mono text-xs',
-    // 只加已撤销的。与上一栏是两笔各算各的和，不是一个净额。
-    render: (row) => row.reversedAmount,
-  },
-  {
-    id: 'unapplied',
-    header: '未分配金额',
-    align: 'right',
-    className: 'font-mono text-xs',
-    // 未分配是第一类结果不是尾差，不得被默认费用吞并。
-    render: (row) => row.unappliedAmount,
-  },
-  {
-    id: 'scope-posting',
-    header: '入账余额记入',
-    className: 'min-w-48 text-xs',
-    // 未分配金额一栏说的是钱还没核到哪里；这一栏说它在客户应收作用域的入账余额上怎么算——落到几个作用域时，
-    // 收款的未分配不计进任何一个作用域、退回的未分配每个作用域都先扣，要人先把它核到作用域上，余额才各归各位（ADR-0283）。
-    render: (row) => scopePostingText(row),
-  },
-  {
-    id: 'application-count',
-    header: '核销笔数',
-    align: 'right',
-    className: 'font-mono',
-    // 三个金额之外再给笔数，判据同代收分户账页的记账笔数：金额全为零时，「从未核销过」与
-    // 「核销过、金额相抵为零」长着同一张脸，笔数是唯一分得开的照实转写。
-    render: (row) => String(row.applicationCount),
-  },
-  { id: 'version', header: '版本', className: 'font-mono text-xs', render: (row) => row.version },
-  {
-    id: 'corrects',
-    header: '更正回指',
-    className: 'font-mono text-xs',
-    // 与更正时刻成对缺席表示这是首采。更正形成新有效版本，原采用保留。
-    render: (row) =>
-      row.corrects ? (
-        <div className="min-w-40 text-xs">
-          <p>{row.corrects}</p>
-          {row.correctedAt && (
-            <p className="text-idpxyz-textMuted">{formatInstant(row.correctedAt)}</p>
-          )}
-        </div>
-      ) : (
-        <span className="text-idpxyz-textMuted">非更正</span>
-      ),
-  },
+  { id: 'mapped', header: '核到哪里', className: 'text-xs', render: (row) => mappedTo(row.mappings) },
   {
     id: 'occurred-at',
-    header: '业务时间',
-    className: 'min-w-44 font-mono text-xs',
+    header: '发生时间',
+    className: 'whitespace-nowrap font-mono text-xs',
     // 外部事实的业务发生时刻，不是系统接收或写入时间。
     render: (row) => formatInstant(row.occurredAt),
   },
   {
-    id: 'actions',
-    header: '操作',
-    align: 'center',
-    // 动作只有「人工分配」：自动核销只在匹配结果唯一时由 UC-SA-005 编排形成，不提供任何
-    // 「自动分配」入口。本票只建读面，接线不取得创建权，故保持 disabled——核销撤销随详情
-    // 呈现另立，不塞进列表。
-    render: () => (
-      <Button size="sm" disabled>
-        人工分配
-      </Button>
-    ),
+    id: 'technical',
+    header: '',
+    className: 'w-[1%] whitespace-nowrap align-top',
+    render: (row) => <TechnicalDetails rows={factTechnicalRows(row)} />,
   },
 ];
 
 /**
- * 收付款核销（UC-SA-005 映射外部收付款并形成运营核销）。
+ * 收付款核销。独立成页而不是对账页内区块：核销的行对象是已采用的外部资金事实及其分配关系，未结项跨客户运营应收、
+ * 供应商审核应付、赔付／退款义务、供应商费用贷项、追偿应收与代垫回收，不从属于对账单（CONTEXT「结算账户、对账与争议」）。
  *
- * 独立成页而不是对账页内区块：核销的行对象是已采用的外部资金事实及其分配关系，未结项跨
- * 客户运营应收、供应商审核应付、赔付／退款义务、供应商费用贷项、追偿应收与代垫回收，
- * 不从属于对账单；CONTEXT「结算账户、对账与争议」明确收付款事实与核销关系同对账单分别
- * 管理，收付款不改变对账单内容。
- *
- * 真实收付映射与核销分配片段（目标金额身份、借贷方向、带方向金额、匹配／抵销依据）与核销
- * 撤销届时按 DetailPageTemplate 另立详情，不在本列表展开——映射不是核销，事实接收、金额
- * 责任确认、真实到账与核销是不同结果。
- *
- * 登记签（票 sa-cc/31）排在读签之后，读写各占各的签（与关务两页同一处置）：登的是外部资金事实
- * 的采用与更正——本册的写口只此一处（ADR-0137 决定四：资金事实进产品只经 settlement-accounting 采用），
- * 映射与核销不在本签，它们不是登记而是另两个显式判断。
+ * 真实收付映射与核销分配片段、核销撤销届时按 DetailPageTemplate 另立详情——映射不是核销，事实接收、金额责任确认、
+ * 真实到账与核销是不同结果。登记签登的是外部资金事实的采用与更正（ADR-0137 决定四：资金事实进产品只经 settlement-accounting
+ * 采用；手工口 ADR-0236），映射与核销不在本签。
  */
 export function SettlementApplicationPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="facts" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="facts">资金事实</TabsTrigger>
-          <TabsTrigger value="register">采用资金事实</TabsTrigger>
+          <TabsTrigger value="facts">收付款</TabsTrigger>
+          <TabsTrigger value="register">登记收付款</TabsTrigger>
         </TabsList>
         <TabsContent value="facts" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ExternalFundsFactsTable />
         </TabsContent>
         <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          {/* 两口两张表单经选册切换而不是一张带模式的表单：采用与更正的登记输入形状互不相容（更正只带
-              回指与金额，其余键按未知字段拒），换册即换草稿那条纪律在 MultiRegistrationPanel 只有一处。
-              选册词取端点路径与 CLI 子命令原词。 */}
+          {/* 两口两张表单经选册切换而不是一张带模式的表单：登记与更正的输入形状互不相容（更正只带回指与金额），
+              换册即换草稿那条纪律在 MultiRegistrationPanel 只有一处。 */}
           <MultiRegistrationPanel
             moduleId="settlement-application"
             targets={fundsRegistrationTargets}
@@ -204,7 +150,6 @@ const fundsRegistrationTargets: RegistrationTarget[] = (
   outcomeLabels: fundsRegistrationOutcomeLabels,
 }));
 
-// ExternalFundsFactsTable 是本页原有的读签：接 GET /settlement-funds-applications 的资金事实册列表。
 function ExternalFundsFactsTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -226,33 +171,28 @@ function ExternalFundsFactsTable() {
   // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
   const visibleFacts = needle
     ? facts.filter((row) =>
-        [row.fact, row.source, row.currency].some((value) => value.toLowerCase().includes(needle)),
+        [row.fact, row.source, row.currency, mappedTo(row.mappings)].some((value) => value.toLowerCase().includes(needle)),
       )
     : facts;
   const retry = () => setReloadKey((value) => value + 1);
+  const unapplied = facts.filter((row) => row.unappliedAmount !== '0').length;
 
   return (
     <ListPageTemplate<ExternalFundsFactRecord>
-      title={info.title}
-      description={`外部系统拥有真实收付事实；对方、责任法人与结算账户不在本册，页面不推断`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索资金事实标识 / 来源系统 / 币种',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `当前返回 ${facts.length} 笔资金事实` : undefined
-      }
+      title="收付款"
+      description="银行和支付系统传来的每一笔收付款，以及它核到了哪张对账单或账户上"
+      search={{ value: search, onChange: setSearch, placeholder: '搜流水号、来源系统、核销目标' }}
+      filterSummary={answer?.kind === 'outcome' ? `${facts.length} 笔 · 有未核销金额 ${unapplied} 笔` : undefined}
       columns={columns}
       rows={visibleFacts}
       // 行键循身份加版本：相同身份与版本只采用一次，更正形成新有效版本。
       rowKey={(row) => `${row.fact}:${row.version}`}
+      emptyRowsNote="没有匹配的收付款"
       viewState={catalogueViewState(answer, facts.length, retry, {
         module: info,
         endpoint: 'GET /settlement-funds-applications',
-        emptyTitle: '当前租户尚无已采用的外部资金事实',
-        emptyDescription:
-          '读取入口已配置，但资金事实登记册为空；真实收付款由外部财务或支付系统拥有，经 UC-SA-005 采用后才入册，页面不会预置资金事实。',
+        emptyTitle: '还没有收付款记录',
+        emptyDescription: '收付款由银行或支付系统传入，或在「登记收付款」里手工登记后出现在这里；页面不会预置任何收付款。',
       })}
     />
   );

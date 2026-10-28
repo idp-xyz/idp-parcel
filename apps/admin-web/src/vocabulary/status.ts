@@ -189,6 +189,47 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   NOT_SELECTED: muted('落选'),
   EXCLUDED: muted('出局'),
   TIED: warn('并列'),
+
+  // —— 账务 · settlement-accounting 的其余封闭集（费用页、对账单页、收付款页、经营核算页）——
+  // 确认条件目录里「要哪一种依据」：词取各上下文的事实名。
+  EFFECTIVE_DELIVERY_FINALIZED: muted('签收终局'),
+  NODE_INTAKE_RECORDED: muted('网点收寄'),
+  // 供应商预期成本的收费发生原因。
+  ACTUAL_FULFILLMENT: muted('实际履约'),
+  PLANNED_FULFILLMENT: muted('计划履约'),
+  CORRECTION: warn('纠错'),
+  // 外部资金事实三种：只有到账是收到了钱；付款失败与退回都要人去看。
+  RECEIPT_CONFIRMED: good('已到账'),
+  PAYMENT_FAILED: bad('付款失败'),
+  FUNDS_RETURNED: warn('资金退回'),
+  // 收付方向（是收付不是借贷）。
+  RECEIVABLE: muted('应收'),
+  PAYABLE: muted('应付'),
+  // 后续账期纳入的来源。
+  ADJUSTMENT: muted('调整'),
+  LATE_CHARGE: warn('迟到费用'),
+  // 经营结果组成项的增减向与角色（ADR-0087 决定三按口径分组的采用物）。
+  INCREASES: good('增加'),
+  DECREASES: bad('减少'),
+  CUSTOMER_ESTIMATE: muted('客户预估费用'),
+  SUPPLIER_EXPECTED_COST: muted('供应商预期成本'),
+  CUSTOMER_OPERATING_RECEIVABLE: muted('客户应收'),
+  AUDITED_PAYABLE: muted('审核应付'),
+  SUPPLIER_CREDIT_NOTE: muted('供应商贷项'),
+  SETTLED_CUSTOMER_RECEIVABLE: muted('已核销客户应收'),
+  SETTLED_AUDITED_PAYABLE: muted('已核销审核应付'),
+  SETTLED_SUPPLIER_CREDIT_NOTE: muted('已核销供应商贷项'),
+  // 资金可核到的目标。
+  STATEMENT: muted('客户对账单'),
+  CREDIT_NOTE: muted('供应商贷项'),
+  ACCOUNT: muted('结算账户'),
+  CUSTOMER_COMPENSATION: muted('客户赔付或退款'),
+  RECOVERY_ACKNOWLEDGEMENT: muted('追偿认可金额'),
+  COLLECTED_PRINCIPAL: muted('代收货款本金'),
+
+  // —— 代收货款 · collection-remittance 回汇批次 ——
+  COLLECTED: info('已归集'),
+  HANDED_FOR_PAYMENT: good('已交付汇付'),
 };
 
 /**
@@ -212,6 +253,10 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
   consolidation: { OPEN: info('开放装入') },
   // 税费覆盖：PARTIAL 是部分覆盖，不是部分放行。
   'duty-coverage': { PARTIAL: warn('部分覆盖') },
+  // 对账单异议的裁定：ACCEPTED 是异议被接受（客户说得对），不是运单受理。
+  dispute: { ACCEPTED: good('接受'), REJECTED: bad('拒绝') },
+  // 资金核到的目标种类：PAYABLE 是供应商审核应付这一本，不是收付方向。
+  'funds-target': { PAYABLE: muted('供应商审核应付') },
 };
 
 type UnknownCodeHandler = (code: string) => void;

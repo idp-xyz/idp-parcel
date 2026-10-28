@@ -438,11 +438,8 @@ export function registerExternalFundsFact(
  * （外部更正走更正口回指链头，不在采用口顶替），受理门拒绝要改内容，重放则什么都不用做。
  */
 export const fundsRegistrationOutcomeLabels: Record<string, string> = {
-  FUNDS_FACT_ADOPTED:
-    '已采用——形成引用与待匹配入口，不直接成为已核销；向 customs-compliance 交的采用信封已随同一笔落下',
-  EXISTING_FUNDS_FACT: '已存在——同事实同版本同内容的重放，原行不动；上次未出的信封会随重放补发',
-  FUNDS_FACT_CONFLICT:
-    '内容冲突——同版本字面异内容、或同事实第二个首版，绝不覆盖；先核对既有登记，外部更正走更正口回指当前链头',
-  SOURCE_NOT_ACCEPTED:
-    '受理门拒绝——引用立不住、金额非正、回指自己、回指非链头或更正一条未采用的事实；改内容再登，重发同一份没有意义',
+  FUNDS_FACT_ADOPTED: '已登记。这笔收付款进入待核销，还没有核到任何对账单或账户上。',
+  EXISTING_FUNDS_FACT: '这笔收付款之前已经登记过，内容一样，没有重复登记。',
+  FUNDS_FACT_CONFLICT: '同一笔收付款已经登记过，但内容不一样；请先核对已登记的那笔，金额要改请用「更正金额」。',
+  SOURCE_NOT_ACCEPTED: '没有登记：请检查流水号是否填了、金额是否大于零、更正时版本号是否指向当前版本。',
 };
