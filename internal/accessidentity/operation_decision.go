@@ -147,6 +147,11 @@ const (
 	DecisionInternalRestrictionDecision      DecisionKind = "INTERNAL_RESTRICTION_DECISION"
 )
 
+// DecisionCustomsCaseClosure 是关务案件关闭（UC-CC-010 的关闭入口）：有权角色对进行中的关务案件请求关闭，关闭核对逐项盘点义务、全部终结或被有效承接才
+// 形成关闭决定。它与关务建案（CUSTOMS_CASE_ESTABLISHMENT）分开授予——关务 CONTEXT 要求关闭决定角色不由管理员或通用关务角色代替，能建案的
+// 不因此能关案。受控重开是另一种权力（原关闭责任来源约束），不在这一种里。谁持有是租户取值，未登记时没有人能关案。
+const DecisionCustomsCaseClosure DecisionKind = "CUSTOMS_CASE_CLOSURE"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -172,6 +177,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPostIntakeServiceDisposition,
 	DecisionRegulatoryDispositionAcceptance, DecisionAlternateJourneyStart,
 	DecisionInternalRestrictionEstablishment, DecisionInternalRestrictionDecision,
+	DecisionCustomsCaseClosure,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
