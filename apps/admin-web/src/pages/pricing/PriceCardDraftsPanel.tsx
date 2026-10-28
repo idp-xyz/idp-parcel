@@ -30,6 +30,7 @@ import {
   type PriceCardDraftAction,
 } from './price-card-import';
 import { labelOf } from './presentation';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -227,13 +228,13 @@ function DraftRow({
         )}
       </td>
       <td className="py-1.5 pr-3">
-        <div className="font-mono break-all">{row.submitter}</div>
+        <div><PrincipalRef value={row.submitter} /></div>
         <div className="text-[11px] text-idpxyz-textMuted">{formatInstant(row.submittedAt)}</div>
       </td>
       <td className="py-1.5 pr-3">
         {row.approver ? (
           <>
-            <div className="font-mono break-all">{row.approver}</div>
+            <div><PrincipalRef value={row.approver} /></div>
             {row.approvedAt ? (
               <div className="text-[11px] text-idpxyz-textMuted">{formatInstant(row.approvedAt)}</div>
             ) : null}

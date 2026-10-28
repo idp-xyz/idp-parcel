@@ -1,7 +1,7 @@
 # 04 管理台的操作者引用长串与显示时区
 
 Category: enhancement
-Status: in-progress——2026-10-28 tops-20（idp-parcel-91）立并认领（用户「都要修」），分支 claude-demo-ui
+Status: 作者完工待评审——分支 claude-demo-ui（用户「都要修」；tops-20 立）
 Blocked by: 无
 
 ## 现象
@@ -19,3 +19,9 @@ Blocked by: 无
 
 - 单测覆盖引用短名（几种形状含无 `#` 的原样）与时区格式化（配置 / 未配置）；`tsc -b`、全部单测、`vite build` 通过。
 - 碰共享面（`components/*`、`shell/*` 等）按 `docs/agents/workflow.md`「前端切片」要一份非作者评审。
+
+## 完成记录（作者）
+
+- 引用短名：`components/principal-ref.ts`（`shortPrincipalRef`，主体 >16 字符截短加「…」，无 `#` 或 `#` 后为空原样）与 `components/PrincipalRef.tsx`（`title` 给全文）。接入：待发布草稿「录入者」、委托查阅「来源」、阶段准入页执行人 / 决定人、价卡草稿面板录入者 / 批准者、价卡目录批准责任方、参考序列登记责任方、收寄后处置请求详情的请求方 / 授权 / 处理人（该处是纯文本，无 title）。未动：登记依据（自由文本）、验收复核与关务页内嵌文本串。
+- 时区：`moment.ts` 新增 `resolveDisplayTimeZone`（`VITE_DISPLAY_TIME_ZONE` 合法则用，空取浏览器区，非法退回并 `console.warn`）；`main.tsx` 改走它；新增 `src/vite-env.d.ts` 声明该变量。原有 `formatInstant` 已是共享函数并带 `UTC+8` 标注。演示说明（demo-run README、talk-track 开机清单）改为起管理台时设该变量。
+- 判据：单测（引用 6 种形状、时区配置 / 未配置 / 非法）、`tsc -b`、全部单测 829 通过、`vite build` 通过。碰共享面 `components/*`，待非作者评审。

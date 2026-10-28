@@ -15,6 +15,7 @@ import {
   type PostIntakeManualItemRow,
   type PostIntakeManualItemsResponseBody,
 } from './api';
+import { shortPrincipalRef } from '../../components/principal-ref';
 
 // 收寄后处置页的呈现逻辑(UC-PS-006;ADR-0332 收寄后服务处置决定、ADR-0341 待人工处理项),与页面组件分开住:
 // 这一层没有 React,测试能直接钉去向集、草案形状、各格结果与空态措辞。词表取服务端响应的原词。
@@ -93,8 +94,8 @@ export function requestDetailRows(row: PostIntakeDispositionRequestRow): { label
     { label: '包裹', value: row.parcelId, mono: true },
     { label: '请求键', value: row.requestKey, mono: true },
     { label: '来源', value: row.origin },
-    { label: '请求方', value: row.requester || notPreserved },
-    { label: '授权', value: row.authority || notPreserved },
+    { label: '请求方', value: row.requester ? shortPrincipalRef(row.requester) : notPreserved },
+    { label: '授权', value: row.authority ? shortPrincipalRef(row.authority) : notPreserved },
     { label: '原因', value: row.reason || notPreserved },
     { label: '请求时间', value: row.requestedAt ? formatInstant(row.requestedAt) : notPreserved },
     { label: '取消边界前', value: row.intakeBefore || '—' },
@@ -257,7 +258,7 @@ export function manualItemLineOf(item: PostIntakeManualItemRow): ManualItemLine 
       ? `已被后来的决定取代(链尾 v${item.currentVersion}),办之前先核对链尾决定说了什么`
       : '',
     resultText: item.result
-      ? `${manualOutcomeLabel(item.result.outcome)} · ${item.result.note} · ${item.result.handledBy} · ${formatInstant(item.result.handledAt)}`
+      ? `${manualOutcomeLabel(item.result.outcome)} · ${item.result.note} · ${shortPrincipalRef(item.result.handledBy)} · ${formatInstant(item.result.handledAt)}`
       : '',
   };
 }

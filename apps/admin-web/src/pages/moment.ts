@@ -16,6 +16,27 @@ export function configureDisplayTimeZone(timeZone: string): void {
   displayTimeZone = timeZone;
 }
 
+/**
+ * 装配点解析呈现时区：构建期配置（`VITE_DISPLAY_TIME_ZONE`，IANA 名）优先，未配置按浏览器所在区。
+ * 配了但不是合法 IANA 名时退回浏览器区并告警一次——宁可显错区也不让整个管理台白屏；
+ * 产品不写死任何租户的时区。
+ */
+export function resolveDisplayTimeZone(
+  configured: string | undefined,
+  browserZone: string,
+  warn: (message: string) => void = console.warn,
+): string {
+  const name = configured?.trim();
+  if (!name) return browserZone;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: name });
+    return name;
+  } catch {
+    warn(`VITE_DISPLAY_TIME_ZONE=${name} 不是合法的 IANA 时区名，已退回浏览器时区 ${browserZone}`);
+    return browserZone;
+  }
+}
+
 export function currentDisplayTimeZone(): string {
   return displayTimeZone;
 }

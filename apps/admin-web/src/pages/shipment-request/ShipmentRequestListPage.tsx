@@ -28,6 +28,7 @@ import {
   type ViewsListResponseBody,
 } from './api';
 import { ShipmentRequestDetailPage } from './ShipmentRequestDetailPage';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 // 页面标题的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['shipment-request-inquiry'];
@@ -79,7 +80,7 @@ const columns: ListColumn<ShipmentRequestSummary>[] = [
     id: 'source',
     header: '来源',
     className: 'w-[132px]',
-    render: (row) => <span className="font-mono text-[12px]">{row.source}</span>,
+    render: (row) => <PrincipalRef value={row.source} className="font-mono text-[12px]" />,
   },
   {
     id: 'source-request-key',
