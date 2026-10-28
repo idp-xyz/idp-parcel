@@ -1,7 +1,7 @@
 # 43 TF 监管运输处置承接与备用/退运旅程启动没有生产入口
 
 Category: enhancement
-Status: needs-triage——R3（不急）：两条用例在首发主链之外（监管退运、备用伙伴切换、普通退运都按受控异常走），今天生产上没有人能走到这两口；后果是 UC-TF-001、UC-TF-007 的结果契约与 AT 只在领域与编排测试里成立。2026-10-21 文档自洽 08 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc08。
+Status: in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code43。此前 needs-triage——R3（不急）：两条用例在首发主链之外（监管退运、备用伙伴切换、普通退运都按受控异常走），今天生产上没有人能走到这两口；后果是 UC-TF-001、UC-TF-007 的结果契约与 AT 只在领域与编排测试里成立。2026-10-21 文档自洽 08 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc08。
 Blocked by: 无
 出处：[audit/tf.md](../audit/tf.md) M15（UC 状态行过时、UC-TF-007 没有端点）与 L8（承接「待补充」，裁定见 [ADR-0265](../../../docs/adr/0265-a-regulatory-disposition-supplement-required-is-an-answer-not-a-recorded-decision.md)）；文档侧见 [08](../issues/08-tf-docs.md)。
 

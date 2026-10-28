@@ -1,7 +1,7 @@
 # 03 CC 关闭依据项只有三值，缺「冲突」
 
 Category: bug
-Status: ready-for-agent——R3（不急）：关案编排 `CloseCustomsCaseHandler` 在 `cmd/` 下没有装配，今天没有生产路径；接线之前必须先修，否则冲突项会被迫读成未解决或已终结。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code03。此前 ready-for-agent——R3（不急）：关案编排 `CloseCustomsCaseHandler` 在 `cmd/` 下没有装配，今天没有生产路径；接线之前必须先修，否则冲突项会被迫读成未解决或已终结。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/cc.md](../audit/cc.md) M8（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
