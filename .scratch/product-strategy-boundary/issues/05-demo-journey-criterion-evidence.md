@@ -585,3 +585,56 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 6. **申报发送通道（票 10 第 1 项）**——已知冻结格，`REGISTERED_PENDING_SEND` 照记，不算新停点。经营结果册空同理，归成本分摊（票 22 范围外、冻结清单）。
 
 **没走到**：节点协作承接的"待补充"轮次（我的载荷两次 400，没追）；到点自动截单（等上海 18:00，dispatch 真库用例已证）。
+
+## 补走（钉 `da577c6db`，2026-10-28）
+
+会话 `tops-20` 派的 Claude Code 子代理做，只读代码，不直写库，不补登种子之外的行（运营在生产口上的正常登记除外，下面逐条标出）。检出 `da577c6db`（当时的 main，worktree 分支），已含 launch-wiring/08（`23d4ad7e2`）与 launch-wiring/07（`6e1ac2ddb`，ADR-0343）。只补走上一节「收口重走」用了绕法的两段：关务放行之后的交出门禁（停点一）、结算确认之后的占用转出与新件放行（停点三）。主链其余段、对账单发布、供应商账单上一节已验，本节不重走。
+
+**环境。** 一次性库 `walk1028b`（55432 上 `idp-parcel-postgres-gate`），`seed.sh` 原样灌入退 0。操作者发行方与集成客户端发行方用 compose 起的共享那两只（5556、5558），三族令牌与合成报关服务商、合成干线承运商、合成银行的令牌都取得到，没有另起私有的。`parcel-api`（:19130）与 `parcel-dispatch` 照动线「前置」设变量，拍间隔 2s。取证时段 07:58Z–08:10Z。实测只记 `S`。走完已停进程、删库、删二进制；没有起私有容器。
+
+**结论**：**两处绕法都已不需要。**
+
+- 停点一：按种子原样（没有任何补登）走关务专项包裹，放行 `FULL` 之后放行门禁核对答 `MET`，交给干线承运商的读数是 **`ADMITTED`**，依据是那条放行结果；走到终局，费用自动 `CONFIRMED`。
+- 停点三：演示账户连续提交四件委托（第三件被拒，第四件放行），没有直写库。每件费用确认后冻结与暴露账本都转成 `CONVERTED`，已确认未结按确认额增加；第二件之后余额只剩 800，第三次提交按预期被限（`RESTRICTED` / `AVAILABLE_BALANCE_INSUFFICIENT`）；经生产口登记一笔外部收款并映射之后，同样的新委托放行并走到终局。
+
+### 逐段
+
+- **关务专项包裹（第一件）**，包裹 `DPCL-BXHKE6Q7DMJLIEVTMHDGMUMSXM`，委托 `SHR-K6JHCDC7BBHUSDZBY4L4NR3ZCM`：
+  - 提交 `201 SUBMITTED`；dispatch 下一拍成`已接受`，冻结 `FRZ-0001` 与暴露 `EXP-0001` 各 9600（`HELD`）。
+  - 预报后收寄 `201 INTAKE_FORMED`、`VERIFIED`。`declare-one-parcel.sh`：立案（`CASE-N6XR47SEDQWH44J5X2K7EJK2YE`）、授权确认、申报提交，首次尝试 `REGISTERED_PENDING_SEND`（冻结格）。
+  - 报关服务商令牌 `POST /customs/external-results`（`RELEASE_RESULT`、`FULL`，`claimedVersion` 取提交版本，`scope` 取 `SYN-UNIT-CN-EXPORT-DEMO-01`）答 `201 RESULT_RECORDED`。我第一次把 `occurredAt` 手写成了比服务端时钟晚十分钟的时刻，答 `200 RESULT_UNDECIDED` / `EVALUATION_INSTANT_UNTRUSTED`，是服务端对未来时刻的正确拒绝，改成当前时刻后成立；这一笔多落了一行未决结果，是我操作失误留下的，不是机制问题。
+  - 放行门禁核对：范围取**申报单元** `SYN-UNIT-CN-EXPORT-DEMO-01`（上一节按种子原样答 `UNDECIDED` / `GATE_CATALOG_NOT_CONFIGURED` 的那个范围）、动作 `CROSS_CUSTOMS_MOVEMENT`、边界 `SYN-PROC-CN-EXPORT`，答 `201 RECORDED`、`MET`、前置 `SYN-PRE-EXPORT-DECL-RELEASED`。
+  - 自营段 SHA→SZX 照上一节四步（登班次、两池预占、装载分配、交出、问询、出发、交进深圳口岸），读数分别 `NOT_GUARDED`、`NOT_GUARDED`、`NOT_GUARDED`、`UNDECIDED`（交出方是自营干线，预期）。
+  - 干线委托（`v3`，先于交接）`201 COMMISSION_SUBMITTED`，订舱 `201`，合成干线承运商答复 `201 BOOKING_ANSWERED`。
+  - **SZX 交给干线承运商 `201 HANDOVER_REGISTERED`，`gateReading.answer` 为 `ADMITTED`**（`at` `SYN-NODE-SZX-GATE`，`onward` `SYN-NODE-SIN-HUB`）；`action_admission_judgement` 里这一行 `CROSS_CUSTOMS_MOVEMENT` 为 `CROSSING` / `ADMITTED`。段采用 `201 COMMISSION_ADOPTED`；交进新加坡枢纽、尾程交接（`FINAL_DELIVERY`）、派送尝试、有效交付各 `201`，有效交付读数 `NOT_GUARDED`。
+  - 费用 `SELLCC-SELLREQ-XLD5…` 自动 `CONFIRMED`，确认依据 `final-outcome/<包裹>/EFFECTIVE_DELIVERY/DRV-000000000001`，9600。
+- **结算与占用**。种子账户是预付：入账余额 20000（种子里那笔外部收款映射到账户）、授信额度 0；每件冻结与暴露各 9600，两本账都写。下表的"可用"按 SA CONTEXT 算式：入账 − 剩余冻结 − 已确认未结。读数来自 `operational_balance`、`funds_freeze`、`credit_exposure`、`pre_acceptance_control_conversion`、`customer_charge`（只读查询）。
+
+  | 时点 | 入账 | 剩余冻结 | 已确认未结 | 可用 |
+  |---|---|---|---|---|
+  | 第一件接受后 | 20000 | 9600 | 0 | 10400 |
+  | 第一件确认后（`FRZ-0001`、`EXP-0001` 转 `CONVERTED`，转出册各一行） | 20000 | 0 | 9600 | 10400 |
+  | 第二件接受后 | 20000 | 9600 | 9600 | 800 |
+  | 第二件确认后（`FRZ-0002`、`EXP-0002` `CONVERTED`） | 20000 | 0 | 19200 | 800 |
+  | 第三次提交（`SHR-TZNRWEXAAK53Q6YRYUCXVNFUNU`） | 20000 | 0 | 19200 | 800：`RESTRICTED` / `AVAILABLE_BALANCE_INSUFFICIENT`，委托被拒，不占用 |
+  | 登记外部收款 20000 并映射后 | 40000 | 0 | 19200 | 20800 |
+  | 第四件（第三件放行的新委托）接受后 | 40000 | 9600 | 19200 | 11200 |
+  | 第四件确认后（`FRZ-0003`、`EXP-0003` `CONVERTED`） | 40000 | 0 | 28800 | 11200 |
+
+  - 第二件与第四件（第三次被拒之后放行的新委托）是普通件（不立案），走到终局：提交、预报、收寄、自营段、干线委托、交给干线承运商、段采用、交进新加坡枢纽、尾程、有效交付，各 `201`。这两件在 SZX 交给干线承运商的读数是 `UNDECIDED`（跨区、没有案件），与重走（钉 `76686b7b`）同，不是新现象。
+  - 每件转出后"入账不动、已确认未结增加确认额、占用离开"，与 ADR-0343 决定三、四一致；本演示里确认额等于估价，所以可用额在确认前后不变，"可用额恰变化估价 − 确认额"这一判据在零差额上成立，非零差额由 07 票真库用例证，这里没有造。
+  - 重放：对第一件的费用再打运营确认口 `POST /settlement-charge-confirmations` 答 `200 ALREADY_CONFIRMED`；转出册仍是每件两行（共 6 行），余额不动（入账 40000、未结 28800）。
+  - 第三次提交被限是预付下钱不够时的正确行为（07 票完成记录已写明"确认并不凭空恢复额度"）；之前的"第三件被拒、对账单发布也不释放"现象的差别在于：现在是**钱真的用掉了**（已确认未结 19200），不是占用卡死。
+  - 恢复路径走生产口，没有直写库：合成银行客户端令牌 `POST /settlement-external-funds-fact-registrations`（`RECEIPT_CONFIRMED`、20000 CNY、新事实号）答 `201 FUNDS_FACT_ADOPTED`；映射走受控 CLI `parcel-settlement-register funds-mapping`（`ACCOUNT` 目标，映射没有在线口，ADR-0236 决定七）答 `FUNDS_MAPPED`。之后的新委托（第四件）一次放行。第三次被拒的那件委托是终态，不会自己重判，所以重新提交一件新的。
+  - 授信分支**演示租户上走不了**：`credit_standing` 种子额度是 0，授信下"核销后额度恢复"这一半没有可演示的账户（见停点 2）。该判据由 07 票真库用例 `TestAConfirmedCreditChargeMovesTheExposureIntoUnsettledAndSettlementRestoresTheLimit` 证，本次没有造授信账户。
+- **日志**：`parcel-api`、`parcel-dispatch` 全程没有 `ERROR`；`WARN` 全是已知没有订阅者的信封品类（申报提交已形成、放行门禁核对已记录、可达性判断、费用确认已形成、干线委托已提交、客户视图已发布、治理停权与复权）。
+
+### 停点
+
+没有挡上线的，也没有新的绕法。
+
+1. **绕法清零。** 停点一、三（收口重走）都已关闭：按种子原样放行即为 `ADMITTED`，占用随确认转出，余额算式对得上。下面不是停点，只是边界记录。
+2. **授信这一路在演示租户上走不了（额度 0）**——不挡，是演示租户取值：种子账户 `SYN-SETTLEMENT-ACCOUNT-01` 的 `credit_standing.limit_minor` 为 0，而每件委托仍同时写冻结与暴露两本账（组合策略）。要在进程上演示"授信核销后额度恢复"得有授信账户，属租户取值，机制由 07 票真库用例证。去处：冻结清单「五 → 记录」一行。
+3. **同日演示重走的"一库一件"**——脚本，不挡。`declare-one-parcel.sh` 写死申报单元与义务引用，第二件关务专项包裹要换单元；本节第二、第四件走普通件，没碰这条。已知，不新记。
+
+没有走到：授信下对账单发布 + 核销（见停点 2）；非零差额的占用转出（确认额不等于估价，由 07 票真库用例证）。
