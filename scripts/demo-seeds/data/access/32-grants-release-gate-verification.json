@@ -1,0 +1,14 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-RELEASE-GATE-VERIFICATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "RELEASE_GATE_VERIFICATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-RELEASE-GATE-VERIFICATION-01"
+    }
+  ]
+}
