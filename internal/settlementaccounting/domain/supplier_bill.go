@@ -206,14 +206,17 @@ const (
 	DuplicateBilling
 )
 
-// MatchClassificationFromName 按字面取值认匹配分类，给受控登记口与运营决定口的载荷用。
+// ErrUnknownMatchClassification 说明载荷里的匹配分类不是产品认得的那几种。
+var ErrUnknownMatchClassification = errors.New("settlement accounting: unknown match classification")
+
+// MatchClassificationFromName 按字面取值认匹配分类，给账单接收口的载荷用。
 func MatchClassificationFromName(name string) (MatchClassification, error) {
 	for classification := LineMatched; classification <= DuplicateBilling; classification++ {
 		if classification.String() == name {
 			return classification, nil
 		}
 	}
-	return MatchClassificationInvalid, fmt.Errorf("%w: match classification %q", ErrBlankValue, name)
+	return MatchClassificationInvalid, fmt.Errorf("%w: %q", ErrUnknownMatchClassification, name)
 }
 
 func (classification MatchClassification) valid() bool {

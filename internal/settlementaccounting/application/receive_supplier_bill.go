@@ -209,8 +209,8 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 	if err != nil {
 		return ReceiveSupplierBillResult{outcome: BillNotAccepted}, nil
 	}
-	// 每行必须有且仅有一个裁决：漏行会让未匹配金额凭空消失，多余裁决指向主张外的行。
-	if len(command.Directives) != len(claim.Lines()) {
+	// 每行必须有且仅有一个裁决：漏行会让未匹配金额凭空消失，多余裁决指向主张外的行，同一行两条会让另一行没有匹配。
+	if !eachLineDirectedOnce(claim, command.Directives) {
 		return ReceiveSupplierBillResult{outcome: BillNotAccepted}, nil
 	}
 
@@ -368,4 +368,18 @@ func billContentDigest(command ReceiveSupplierBillCommand) string {
 	}
 	return settlementCanonicalDigest(domain.CanonicalizeSupplierBillPayload(
 		command.Claim.Supplier.String(), command.Claim.Period.String(), command.Claim.Currency.String(), command.Claim.ReceivedAt, lines, directives))
+}
+
+func eachLineDirectedOnce(claim domain.SupplierBillClaim, directives []LineMatchDirective) bool {
+	if len(directives) != len(claim.Lines()) {
+		return false
+	}
+	seen := make(map[domain.BillLineReference]bool, len(directives))
+	for _, directive := range directives {
+		if _, found := claim.LineFor(directive.Line); !found || seen[directive.Line] {
+			return false
+		}
+		seen[directive.Line] = true
+	}
+	return true
 }

@@ -110,9 +110,60 @@ func SupplierBillReceptionFromJSONForTenant(raw []byte, tenant domain.TenantID) 
 				return none, fmt.Errorf("directives.basis：%w", err)
 			}
 		}
+		if err := directiveShapeHolds(parsed); err != nil {
+			return none, fmt.Errorf("directives[%s]：%w", directive.Line, err)
+		}
 		command.Directives = append(command.Directives, parsed)
 	}
+	if err := eachLineDirectedOnce(spec.Lines, command.Directives); err != nil {
+		return none, err
+	}
 	return command, nil
+}
+
+// directiveShapeHolds 先过一遍匹配门对各分类的形状要求（domain.MatchBillLine）：形状写错是录入的错，当场答坏报文，不落进编排去答一个
+// 不带原因的未受理。金额对不对得上预期成本要读册，仍由匹配门判。
+func directiveShapeHolds(directive application.LineMatchDirective) error {
+	expected := directive.ExpectedVersion.String() != ""
+	basis := directive.Basis.String() != ""
+	switch directive.Classification {
+	case domain.LineMatched:
+		if !expected || basis {
+			return fmt.Errorf("完全匹配要点名预期成本、不带匹配依据")
+		}
+	case domain.QuantityVariance, domain.PriceVariance, domain.DuplicateBilling:
+		if !expected || !basis {
+			return fmt.Errorf("差异与重复计费要点名预期成本并带匹配依据")
+		}
+	case domain.NoMatchingOccurrence:
+		if expected || !basis {
+			return fmt.Errorf("没有对应发生项不点名预期成本、要带匹配依据")
+		}
+	}
+	return nil
+}
+
+// eachLineDirectedOnce 要账单每一行恰好一条裁决：漏行、多出一条指向账单外的行、同一行两条，都当场拒。
+func eachLineDirectedOnce(lines []domain.BillLine, directives []application.LineMatchDirective) error {
+	claimed := make(map[string]bool, len(lines))
+	for _, line := range lines {
+		claimed[line.Line.String()] = true
+	}
+	directed := make(map[string]bool, len(directives))
+	for _, directive := range directives {
+		line := directive.Line.String()
+		if !claimed[line] {
+			return fmt.Errorf("directives：%s 不是账单上的行", line)
+		}
+		if directed[line] {
+			return fmt.Errorf("directives：%s 有两条裁决", line)
+		}
+		directed[line] = true
+	}
+	if len(directed) != len(claimed) {
+		return fmt.Errorf("directives：每一行都要有一条裁决")
+	}
+	return nil
 }
 
 type supplierBillAuditDocument struct {

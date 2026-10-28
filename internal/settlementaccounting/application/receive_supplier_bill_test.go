@@ -477,6 +477,20 @@ func TestUndecidedAndNotAcceptedSplitByRecovery(t *testing.T) {
 		}
 	})
 
+	// Covers: AT-SA-225——同一行两条裁决：条数对得上也不收，否则另一行没有匹配、事后审核它只答未受理。
+	t.Run("two directives on one line are not accepted", func(t *testing.T) {
+		fixture := newBillFixture(t)
+		command := billCommand(t, "bill-1")
+		command.Directives[1] = command.Directives[0]
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.BillNotAccepted || len(fixture.store.records) != 0 {
+			t.Fatalf("outcome = %q 落库 %d，want 未受理、不落库", result.Outcome(), len(fixture.store.records))
+		}
+	})
+
 	t.Run("a line without a directive is not accepted", func(t *testing.T) {
 		fixture := newBillFixture(t)
 		command := billCommand(t, "bill-1")

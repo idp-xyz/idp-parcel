@@ -20,6 +20,8 @@ import (
 const (
 	billClerk   = "SYN-BILL-CLERK-PSB22"
 	billAuditor = "SYN-BILL-AUDITOR-PSB22"
+	// billSecondClerk 另持一份账单接收授予，用来看换一个人重放留下的是谁。
+	billSecondClerk = "SYN-BILL-CLERK-PSB22-B"
 
 	supplierBillReceptionFace = "/settlement-supplier-bill-receptions"
 	supplierBillAuditFace     = "/settlement-supplier-bill-audits"
@@ -38,6 +40,7 @@ func newSupplierBillFixture(t *testing.T) *settlementDecisionsFixture {
 	}
 	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billClerk, interval, accessidentity.DecisionSupplierBillReception)
 	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billAuditor, interval, accessidentity.DecisionSupplierBillAudit)
+	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billSecondClerk, interval, accessidentity.DecisionSupplierBillReception)
 	for _, pattern := range []string{supplierBillReceptionFace, supplierBillAuditFace} {
 		if fixture.endpoints[pattern] == nil {
 			t.Fatalf("%s 没按登记处挂上", pattern)
@@ -126,8 +129,8 @@ const supplierBillBody = `{"claim":"SYN-BILL-PSB22-1","version":"v1","supplier":
 
 const supplierBillAuditBody = `{"claim":"SYN-BILL-PSB22-1","version":"v1","line":"L1","payable":"SYN-PAYABLE-PSB22-1"}`
 
-// Covers: AT-SA-225（ADR-0340 决定一、三）——持账单接收授予的人录一份账单并裁决匹配：答 201、重放答已存在；持审核授予的人打接收口答
-// 未授予；接收行记下提交操作者。
+// Covers: AT-SA-225（ADR-0340 决定一、三）——持账单接收授予的人录一份账单并裁决匹配：答 201；另一位持同种授予的人重放答已存在，接收行
+// 记下的仍是首次那一位；持审核授予的人打接收口答未授予。
 func TestTheSupplierBillReceptionFaceReceivesAndRecordsTheClerk(t *testing.T) {
 	fixture := newSupplierBillFixture(t)
 	seedSupplierBillRegisters(t, fixture, true)
@@ -139,9 +142,9 @@ func TestTheSupplierBillReceptionFaceReceivesAndRecordsTheClerk(t *testing.T) {
 		answer["outcome"] != "BILL_RECEIVED" {
 		t.Fatalf("接收 = %d %v", status, answer)
 	}
-	if status, answer := fixture.post(t, supplierBillReceptionFace, billClerk, supplierBillBody); status != http.StatusOK ||
+	if status, answer := fixture.post(t, supplierBillReceptionFace, billSecondClerk, supplierBillBody); status != http.StatusOK ||
 		answer["outcome"] != "EXISTING_RESULT" {
-		t.Fatalf("重放 = %d %v", status, answer)
+		t.Fatalf("换一个人重放 = %d %v", status, answer)
 	}
 	if evidence := fixture.text(t, `SELECT operation_evidence FROM settlement_accounting.supplier_bill_reception
 		 WHERE tenant_id = $1 AND claim_id = 'SYN-BILL-PSB22-1'`, decisionsTenant); evidence != operatorEvidenceOf(billClerk) {

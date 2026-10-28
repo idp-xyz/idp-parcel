@@ -38,7 +38,8 @@ const receptionBody = `{"claim":"SYN-BILL-1","version":"v1","supplier":"SYN-CARR
 	`{"line":"L2","classification":"NO_MATCHING_OCCURRENCE","basis":"SYN-BASIS-1"}]}`
 
 // Covers: AT-SA-225（Intake 半边）——接收口按 SUPPLIER_BILL_RECEPTION 认证；账单各格与逐行裁决逐字到命令，金额按最小币单位整数串收，
-// 完全匹配不带依据也收；操作证据是 `OPERATOR/发行方#sub`。分类写错、金额带符号、自报租户都答 400、不进编排。
+// 完全匹配不带依据也收；操作证据是 `OPERATOR/发行方#sub`。分类写错、金额带符号、自报租户、裁决形状不合匹配门、每行不是恰好一条
+// 裁决，都答 400、不进编排。
 func TestTheSupplierBillReceptionIntakeTranslatesTheBillAndRecordsTheClerk(t *testing.T) {
 	var asked []settlementhttp.OperatorDecision
 	receiver := &capturingReceiver{}
@@ -59,10 +60,15 @@ func TestTheSupplierBillReceptionIntakeTranslatesTheBillAndRecordsTheClerk(t *te
 	}
 
 	for name, body := range map[string]string{
-		"分类写错":  strings.Replace(receptionBody, `"MATCHED"`, `"OK"`, 1),
-		"金额带符号": strings.Replace(receptionBody, `"8500"`, `"+8500"`, 1),
-		"自报租户":  strings.Replace(receptionBody, `{"claim"`, `{"tenantId":"SYN-TENANT-02","claim"`, 1),
-		"没有行":   strings.Replace(receptionBody, `"lines":[{"line":"L1","feeItem":"SYN-FEE-1","claimed":"8500"},{"line":"L2","feeItem":"SYN-FEE-1","claimed":"300"}]`, `"lines":[]`, 1),
+		"分类写错":         strings.Replace(receptionBody, `"MATCHED"`, `"OK"`, 1),
+		"金额带符号":        strings.Replace(receptionBody, `"8500"`, `"+8500"`, 1),
+		"自报租户":         strings.Replace(receptionBody, `{"claim"`, `{"tenantId":"SYN-TENANT-02","claim"`, 1),
+		"同一行两条裁决":      strings.Replace(receptionBody, `{"line":"L2","classification"`, `{"line":"L1","classification"`, 1),
+		"漏一行裁决":        strings.Replace(receptionBody, `,{"line":"L2","classification":"NO_MATCHING_OCCURRENCE","basis":"SYN-BASIS-1"}`, ``, 1),
+		"裁决指账单外的行":     strings.Replace(receptionBody, `{"line":"L2","classification"`, `{"line":"L9","classification"`, 1),
+		"完全匹配带依据":      strings.Replace(receptionBody, `"expectedVersion":"SYN-COST-1"}`, `"expectedVersion":"SYN-COST-1","basis":"SYN-BASIS-9"}`, 1),
+		"无对应发生项点名预期成本": strings.Replace(receptionBody, `"classification":"NO_MATCHING_OCCURRENCE",`, `"classification":"NO_MATCHING_OCCURRENCE","expectedVersion":"SYN-COST-1",`, 1),
+		"没有行":          strings.Replace(receptionBody, `"lines":[{"line":"L1","feeItem":"SYN-FEE-1","claimed":"8500"},{"line":"L2","feeItem":"SYN-FEE-1","claimed":"300"}]`, `"lines":[]`, 1),
 	} {
 		before := len(receiver.calls)
 		response := httptest.NewRecorder()
