@@ -234,6 +234,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜内部合规限制建立口覆盖项缺 `standing` 时答 `200 NOT_ACCEPTED` 不带原因；限制没有读口（`GET /customs-internal-restrictions` 答 405），运营只能从准入读数间接看到｜psb/05 收口重走停点五（launch-wiring/01）｜R3
 - 2026-10-28｜已接受委托下某件包裹取消或失败时，它在冻结或暴露账本上的份额没有释放触发口，一直占着（ADR-0343 决定八；ADR-0290「已接受的委托绝不放」要按包裹粒度修订）；只让可用额偏保守，无人工绕法｜launch-wiring/07 评审｜R2（中等：SA 按包裹份额部分释放 + PS 取消/失败终局触发）
 - 2026-10-28｜演示租户的授信账户额度为 0（`credit_standing.limit_minor`），每件委托却同时写冻结与暴露两本账；要在进程上演示"授信核销后额度恢复"得另有授信账户，机制由 launch-wiring/07 真库用例证｜[psb/05「补走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)｜R3（演示租户取值）
+- 2026-10-28｜关务四个查阅口（`/customs-*-records`、判断册）固定 limit 200、无游标，超出静默截断；customs-cases 页把外部结果整表拉回按版本挂，超 200 条时较晚版本显示「尚无结果」（说错）｜demo-2026-10-30/01 评审｜R3（租户数据量大前改 `?version=` 或游标）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

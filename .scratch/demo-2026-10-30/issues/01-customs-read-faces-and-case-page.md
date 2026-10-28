@@ -1,7 +1,7 @@
 # 01 关务读口与 customs-cases 页
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-demo-cc（代码最后一笔见完成记录）。此前：2026-10-28 tops-20（idp-parcel-91）立并认领，分支 claude-demo-cc
+Status: resolved——2026-10-28 进 main（`dc7830ec8`；全量 162 ok / 0 FAIL，admin-web 822 pass，种子退 0），见文末。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-demo-cc（代码最后一笔见完成记录）。此前：2026-10-28 tops-20（idp-parcel-91）立并认领，分支 claude-demo-cc
 Blocked by: 无
 
 ## 现象
@@ -34,3 +34,12 @@ Blocked by: 无
 - 代决（须评审）：1 路径命名（`/customs-*-records`，避开已有 POST 路径）；2 行类型用纯字符串不重建领域对象（查阅面不替写口把关）；3 判断册 `?object=` 按 object_ref 精确匹配，包裹或单元号取决于消费方登记什么；4 未立 ADR、未取 AT 号。
 - 自验（含 PG）：`go build`、`go vet`、`gofmt`；`go test -p 1 ./internal/customscompliance/... ./cmd/parcel-api ./internal/architecture/...` 全绿；前端 `tsc --noEmit` 与 `pnpm test`（813）全绿。真库用例：演示租户形状数据答出内容、他租户不可见、空册答空、limit 非正拒；403 与 405 与 5xx 在 http 单测。未起浏览器截图，未跑种子端到端。
 - 留给协调方：演示前用 `declare-one-parcel.sh` + 发送 + 放行 + 交出后在页面上目测一次；`/customs-internal-restrictions` 无 GET（审计 2.7）不在本票；机制清点需重生成。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `2d5d9fd0c`）
+
+两轴无阻断。租户隔离逐处核过（主表与各相关子查询、LEFT JOIN 的 ON 都带租户；他租户为空有真库用例）；各层原样上列、不折总状态，封闭值与迁移、`external_result.go` 层名对上；前端六个 interface 与后端 json tag 逐字段一致；路径与 `/exception-case-records` 等同族。判断册 `object_ref` 是声明包裹号（交出门禁按包裹号写入），按包裹号查得到、按申报单元号得空——前端标签与注释原写「按包裹或申报单元查」会误导，推送方改为「按包裹号查」（`70d530089`）。非阻断记入冻结清单：固定 limit 200、无游标，外部结果整表拉回在前端按版本挂，超 200 条时较晚版本会显示「尚无结果」。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-demo-cc` tip `2d5d9fd0c` 作出处；隔离树 cherry-pick 到 main `6bf5f4b0c`，加文案订正一笔；重生成生成物、两项 `-check` 退 0；admin-web `tsc -b` 与 822 项单测通过；全量 162 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `dc7830ec8`。
+
