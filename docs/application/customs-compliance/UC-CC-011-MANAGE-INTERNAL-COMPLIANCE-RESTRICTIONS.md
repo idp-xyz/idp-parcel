@@ -1,6 +1,6 @@
 # UC-CC-011 管理内部合规限制及解除
 
-状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；对象、登记册、确认与解除决定和并进动作准入已交付（[ADR-0334](../../adr/0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md)）；生产里没有形成与解除的运营入口，也没有向 `party-commercial` 核决定方的当前授权，就绪、门禁核对与案件关闭尚未读本用例的结果；代码里的 `RegulatoryRestriction` 是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
+状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；对象、登记册、确认与解除决定和并进动作准入已交付（[ADR-0334](../../adr/0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md)）；生产里形成与解除的运营入口已接（建立、决定两口，各一种运营决定授予），但还没有向 `party-commercial` 核决定方的当前授权，就绪、门禁核对与案件关闭尚未读本用例的结果；代码里的 `RegulatoryRestriction` 是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
 
 ## 目标与边界
 

@@ -116,5 +116,5 @@
 
 - 节点区域取值：`PAR-CUS-08`，演示以 `SYN-ZONE-CN` / `SYN-ZONE-SG` 合成（证据 `S`）。
 - 逐件建案口已由 [ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 提供；默认演示动线上出不出现放行，取决于是否灌外部放行结果。
-- 实现缺口：监管限制与内部合规限制在生产里都还没有写入面（ADR-0206 越权风险点 1、[ADR-0334](../../adr/0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md) 越权风险点 1），两本册在生产上是空的，限制挡不住动作，产品对内部合规限制只能如实说「没有入口」；册上没有记录不产生依据，也不是「无内部限制」的结论。内部合规限制的模型、册与并进本判断已交付，对象与取舍见 UC-CC-011 与 ADR-0334。
+- 实现缺口：监管限制在生产里还没有写入面（ADR-0206 越权风险点 1）；内部合规限制的写入面已接（UC-CC-011 的建立、决定两口），但决定方对来源的当前授权核验仍缺（[ADR-0334](../../adr/0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md) 越权风险点 1），监管限制册在生产上是空的，挡不住动作；册上没有记录不产生依据，也不是「无内部限制」的结论。内部合规限制的模型、册与并进本判断已交付，对象与取舍见 UC-CC-011 与 ADR-0334。
 - 待决风险以 ADR-0206、ADR-0300「越权风险点」为准，此处不复述。

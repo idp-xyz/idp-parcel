@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-INTERNAL-RESTRICTION-ESTABLISHMENT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "INTERNAL_RESTRICTION_ESTABLISHMENT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-INTERNAL-RESTRICTION-DECISION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "INTERNAL_RESTRICTION_DECISION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    }
+  ]
+}
