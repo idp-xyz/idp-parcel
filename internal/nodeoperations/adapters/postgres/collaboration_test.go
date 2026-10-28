@@ -23,7 +23,7 @@ var (
 	factPerformedAt  = time.Date(2026, 8, 13, 11, 0, 0, 0, time.UTC)
 )
 
-func TestAnAcceptanceRoundTripsInAllThreeDecisions(t *testing.T) {
+func TestAnAcceptanceRoundTripsInAllFourDecisions(t *testing.T) {
 	acceptances, _, transactor, _ := newCollaborationStores(t)
 	ctx := t.Context()
 
@@ -34,6 +34,7 @@ func TestAnAcceptanceRoundTripsInAllThreeDecisions(t *testing.T) {
 		{name: "accepted", record: acceptedRecord(t, "tenant-a", "item-1")},
 		{name: "declined", record: declinedRecord(t, "tenant-a", "item-2")},
 		{name: "partial", record: partialRecord(t, "tenant-a", "item-3")},
+		{name: "pending", record: pendingSupplementRecord(t, "tenant-a", "item-4")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,6 +68,9 @@ func TestAnAcceptanceRoundTripsInAllThreeDecisions(t *testing.T) {
 				len(got.AcceptedActions()) != len(want.AcceptedActions()) {
 				t.Fatalf("范围往返变形：units=%d actions=%d",
 					len(got.AcceptedUnits()), len(got.AcceptedActions()))
+			}
+			if len(got.Gaps()) != len(want.Gaps()) || found.Round != tc.record.Round {
+				t.Fatalf("缺口或轮次往返变形：gaps=%v round=%d", got.Gaps(), found.Round)
 			}
 			_, wantBasis := want.Basis()
 			_, gotBasis := got.Basis()
@@ -235,6 +239,48 @@ func TestCollaborationRollbackLeavesNothingBehind(t *testing.T) {
 	}
 }
 
+// 待补充之后的新决定是下一轮：旧轮原样保留，读回交最新一轮；同一轮不能写两次。
+func TestASupplementedDecisionIsANewRoundAndFindByKeyReadsTheLatest(t *testing.T) {
+	acceptances, _, transactor, pool := newCollaborationStores(t)
+	ctx := t.Context()
+
+	pending := pendingSupplementRecord(t, "tenant-a", "item-round")
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := acceptances.Save(txCtx, pending)
+		return err
+	})
+
+	decided := acceptedRecord(t, "tenant-a", "item-round")
+	decided.Round = 2
+	var again ports.AcceptanceSaveOutcome
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		outcome, err := acceptances.Save(txCtx, decided)
+		if err != nil {
+			return err
+		}
+		if outcome != ports.AcceptanceSaved {
+			t.Fatalf("第 2 轮写入结果 = %d", outcome)
+		}
+		again, err = acceptances.Save(txCtx, decided)
+		return err
+	})
+	if again != ports.AcceptanceAlreadyDecided {
+		t.Fatalf("同一轮第二次写入结果 = %d，应为 ALREADY_DECIDED", again)
+	}
+
+	latest, found, err := acceptances.FindByKey(ctx, pending.Key)
+	if err != nil || !found || latest.Round != 2 || latest.Acceptance.Decision() != domain.CollaborationAccepted {
+		t.Fatalf("读回最新一轮失败：found=%v err=%v round=%d", found, err, latest.Round)
+	}
+
+	var rows int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM node_operations.collaboration_acceptance
+		  WHERE tenant_id = 'tenant-a' AND item_ref = 'item-round' AND decision = 'PENDING_SUPPLEMENT'`).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("原待补充行被改写或丢失：rows=%d err=%v", rows, err)
+	}
+}
+
 func TestCollaborationCheckConstraintsRejectImpossibleRows(t *testing.T) {
 	_, _, _, pool := newCollaborationStores(t)
 	ctx := t.Context()
@@ -284,6 +330,20 @@ func TestCollaborationCheckConstraintsRejectImpossibleRows(t *testing.T) {
 		t.Fatal("一行「拒接却没有依据」溜进了承接库")
 	}
 
+	for name, row := range map[string]string{
+		"待补充却没有缺口":   `'PENDING_SUPPLEMENT', 'auth-1', NULL, '[]', '[]', '[]'`,
+		"待补充却带着承接范围": `'PENDING_SUPPLEMENT', 'auth-1', NULL, '["unit-1"]', '["UNSEAL"]', '["OBJECT"]'`,
+		"接受却带着缺口":    `'ACCEPTED', 'auth-1', NULL, '["unit-1"]', '["UNSEAL"]', '["OBJECT"]'`,
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO node_operations.collaboration_acceptance
+				(tenant_id, item_ref, node_ref, decision, authority, basis,
+				 accepted_units, accepted_actions, gaps, decided_at, content_digest, recorded_at)
+			 VALUES ('tenant-a', 'item-bad-gap', 'node-1', `+row+`, now(), 'digest-1', now())`); err == nil {
+			t.Fatalf("一行「%s」溜进了承接库", name)
+		}
+	}
+
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO node_operations.execution_fact
 			(tenant_id, item_ref, unit_id, action, node_ref, evidence,
@@ -322,6 +382,7 @@ func acceptedRecord(t *testing.T, tenant, item string) ports.CollaborationAccept
 	}
 	return ports.CollaborationAcceptanceRecord{
 		Key:           ports.CollaborationAcceptanceKey{TenantID: spec.TenantID, Item: spec.Item},
+		Round:         1,
 		ContentDigest: "digest-" + item + "-accepted",
 		Acceptance:    acceptance,
 		RecordedAt:    collabRecordedAt,
@@ -337,6 +398,7 @@ func declinedRecord(t *testing.T, tenant, item string) ports.CollaborationAccept
 	}
 	return ports.CollaborationAcceptanceRecord{
 		Key:           ports.CollaborationAcceptanceKey{TenantID: spec.TenantID, Item: spec.Item},
+		Round:         1,
 		ContentDigest: "digest-" + item + "-declined",
 		Acceptance:    acceptance,
 		RecordedAt:    collabRecordedAt,
@@ -352,7 +414,24 @@ func partialRecord(t *testing.T, tenant, item string) ports.CollaborationAccepta
 	}
 	return ports.CollaborationAcceptanceRecord{
 		Key:           ports.CollaborationAcceptanceKey{TenantID: spec.TenantID, Item: spec.Item},
+		Round:         1,
 		ContentDigest: "digest-" + item + "-partial",
+		Acceptance:    acceptance,
+		RecordedAt:    collabRecordedAt,
+	}
+}
+
+func pendingSupplementRecord(t *testing.T, tenant, item string) ports.CollaborationAcceptanceRecord {
+	t.Helper()
+	spec := collabSpec(t, tenant, item, domain.CollaborationPendingSupplement)
+	acceptance, err := domain.DecideCollaborationAcceptance(spec)
+	if err != nil {
+		t.Fatalf("构造待补充：%v", err)
+	}
+	return ports.CollaborationAcceptanceRecord{
+		Key:           ports.CollaborationAcceptanceKey{TenantID: spec.TenantID, Item: spec.Item},
+		Round:         1,
+		ContentDigest: "digest-" + item + "-pending",
 		Acceptance:    acceptance,
 		RecordedAt:    collabRecordedAt,
 	}
@@ -368,14 +447,17 @@ func collabSpec(t *testing.T, tenant, item string, decision domain.AcceptanceDec
 		Authority: ref(t, domain.NewAcceptanceAuthorityReference, "node-authority-1"),
 		DecidedAt: collabDecidedAt,
 	}
-	if decision != domain.CollaborationDeclined {
+	if decision != domain.CollaborationDeclined && decision != domain.CollaborationPendingSupplement {
 		spec.AcceptedUnits = []domain.HandlingUnitID{
 			ref(t, domain.NewHandlingUnitID, "unit-1"),
 			ref(t, domain.NewHandlingUnitID, "unit-2"),
 		}
 		spec.AcceptedActions = []domain.CollaborationActionKind{domain.UnsealAction, domain.PresentAction}
 	}
-	if decision != domain.CollaborationAccepted {
+	if decision == domain.CollaborationPendingSupplement {
+		spec.Gaps = []domain.SupplementGapKind{domain.MissingObjectGap, domain.MissingWorkConditionGap}
+	}
+	if decision != domain.CollaborationAccepted && decision != domain.CollaborationPendingSupplement {
 		spec.Basis = ref(t, domain.NewAcceptanceBasisReference, "basis-"+decision.String())
 	}
 	return spec

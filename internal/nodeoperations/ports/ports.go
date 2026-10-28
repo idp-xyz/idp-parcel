@@ -483,8 +483,10 @@ type IdentityRecheckDoorbell interface {
 	RingIdentityRecheck(ctx context.Context, intent IdentityRecheckDoorbellIntent) error
 }
 
-// CollaborationAcceptanceKey 是承接决定的幂等键：同一协作事项只决定一次，重放返回
-// 原决定；同事项异决定形成冲突，不按最后到达顶替。
+// CollaborationAcceptanceKey 是承接决定的幂等键：同一协作事项在同一轮次只决定一次，
+// 重放返回原决定；同事项异决定形成冲突，不按最后到达顶替。唯一的例外是`待补充`：它不
+// 形成承接，补充到位后的决定作为下一轮次的新决定回指它，原决定不改写；FindByKey 交回
+// 当前轮次（最新一轮）。
 type CollaborationAcceptanceKey struct {
 	TenantID domain.TenantID
 	Item     domain.CollaborationItemReference
@@ -492,7 +494,9 @@ type CollaborationAcceptanceKey struct {
 
 // CollaborationAcceptanceRecord 是一次承接决定越过提交边界留下的东西。
 type CollaborationAcceptanceRecord struct {
-	Key           CollaborationAcceptanceKey
+	Key CollaborationAcceptanceKey
+	// Round 从 1 起：第 n+1 轮回指第 n 轮，而第 n 轮必为待补充。
+	Round         int
 	ContentDigest string
 	Acceptance    domain.CollaborationAcceptance
 	RecordedAt    time.Time

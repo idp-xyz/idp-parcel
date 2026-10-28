@@ -23,7 +23,8 @@ var (
 )
 
 // CollaborationOutcome 是承接/执行提交的应用处理结果。`拒接事项无可执行`与`越权`是
-// 业务负向格——恢复动作分别是重新承接与扩承接范围，不是改单也不是重试（ADR-0029）。
+// 业务负向格——恢复动作分别是重新承接与扩承接范围，不是改单也不是重试（ADR-0029）；
+// `待补充事项无可执行`的恢复动作是补齐缺口后重新决定。
 type CollaborationOutcome uint8
 
 const (
@@ -37,6 +38,11 @@ const (
 	ExecutionOnDeclinedItem
 	ExecutionOutsideScope
 	CollaborationNotAccepted
+	// CollaborationPendingSupplement：承接请求合法但缺口未补，已记下待补充决定；与已决定分格，
+	// 因为下一步是补齐缺口再决定一次（ADR-0029）。
+	CollaborationPendingSupplement
+	// ExecutionOnPendingSupplement：事项待补充，没有承接范围可执行；恢复动作是补齐后重新决定。
+	ExecutionOnPendingSupplement
 )
 
 func (outcome CollaborationOutcome) String() string {
@@ -59,6 +65,10 @@ func (outcome CollaborationOutcome) String() string {
 		return "OUTSIDE_ACCEPTED_SCOPE"
 	case CollaborationNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
+	case CollaborationPendingSupplement:
+		return "PENDING_SUPPLEMENT"
+	case ExecutionOnPendingSupplement:
+		return "ITEM_PENDING_SUPPLEMENT"
 	default:
 		return ""
 	}
@@ -74,7 +84,9 @@ type AcceptCollaborationCommand struct {
 	AcceptedActions []domain.CollaborationActionKind
 	Authority       string
 	Basis           string
-	DecidedAt       time.Time
+	// Gaps 只在待补充时给。
+	Gaps      []domain.SupplementGapKind
+	DecidedAt time.Time
 }
 
 // RecordExecutionCommand 携带一次执行事实登记的全部输入。
@@ -142,8 +154,9 @@ func NewAcceptCollaborationHandler(deps AcceptCollaborationDeps) (*AcceptCollabo
 	return &AcceptCollaborationHandler{deps: deps}, nil
 }
 
-// Accept 把一次承接决定推进到提交：受理（决定三格由领域把门）→ 幂等按（租户+事项）
-// 分重放/冲突（同一事项只决定一次）→ 原子提交 → 意图交回 CC。
+// Accept 把一次承接决定推进到提交：受理（决定四格由领域把门）→ 幂等按（租户+事项）
+// 分重放/冲突（同一事项只决定一次；当前决定是待补充时例外，不同的新决定开下一轮）→
+// 原子提交 → 意图交回 CC。
 //
 // 本方册读写失败、已存摘要形状认不出、并发读回失败，一律交回 error 而不是答一格`未决`：UC-NO-001 把它们归
 // 「节点协作结果未形成」，ADR-0022 让「没形成」只有返回 error 一种说法——答 2xx 的话设备出队，这一次作业在服务端
@@ -160,6 +173,7 @@ func (handler *AcceptCollaborationHandler) Accept(
 	key := ports.CollaborationAcceptanceKey{TenantID: command.TenantID, Item: acceptance.Item()}
 	_, digest, err := domain.CanonicalizeAcceptancePayload(
 		command.Decision, command.Node, command.Authority, command.Basis, command.AcceptedUnits, command.AcceptedActions,
+		command.Gaps,
 	)
 	if err != nil {
 		return CollaborationResult{}, err
@@ -168,14 +182,19 @@ func (handler *AcceptCollaborationHandler) Accept(
 	if err != nil {
 		return CollaborationResult{}, fmt.Errorf("look up collaboration acceptance: %w", err)
 	}
+	round := 1
 	if found {
 		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAcceptanceDigest(command)) {
 		case domain.SamePayload:
 			return handler.existingAcceptance(ctx, existing), nil
 		case domain.DifferentPayload:
-			// 同一事项携带不同决定或范围：冲突保留原决定——改主意走事项方的重派，
-			// 不在这里顶替。
-			return CollaborationResult{outcome: CollaborationDecisionConflict}, nil
+			if existing.Acceptance.Decision() != domain.CollaborationPendingSupplement {
+				// 同一事项携带不同决定或范围：冲突保留原决定——改主意走事项方的重派，
+				// 不在这里顶替。
+				return CollaborationResult{outcome: CollaborationDecisionConflict}, nil
+			}
+			// 待补充没有形成承接，补充到位后的决定是新一轮决定、回指它；原待补充记录不改写。
+			round = existing.Round + 1
 		default:
 			return CollaborationResult{}, errors.New("node operations: stored acceptance digest is not comparable")
 		}
@@ -183,6 +202,7 @@ func (handler *AcceptCollaborationHandler) Accept(
 
 	record := ports.CollaborationAcceptanceRecord{
 		Key:           key,
+		Round:         round,
 		ContentDigest: digest,
 		Acceptance:    acceptance,
 		RecordedAt:    handler.deps.Clock.Now(),
@@ -194,6 +214,9 @@ func (handler *AcceptCollaborationHandler) Accept(
 	switch saved {
 	case ports.AcceptanceSaved:
 		result := CollaborationResult{outcome: CollaborationDecided, acceptance: record, hasRecord: true}
+		if acceptance.Decision() == domain.CollaborationPendingSupplement {
+			result.outcome = CollaborationPendingSupplement
+		}
 		result.handoff = handler.handOffAcceptance(ctx, record)
 		return result, nil
 	case ports.AcceptanceAlreadyDecided:
@@ -243,6 +266,9 @@ func (handler *AcceptCollaborationHandler) RecordExecution(
 	fact, err := domain.RecordExecutionFact(acceptanceRecord.Acceptance, unit, command.Action, evidence, command.PerformedAt)
 	if errors.Is(err, domain.ErrCollaborationRefused) {
 		return CollaborationResult{outcome: ExecutionOnDeclinedItem}, nil
+	}
+	if errors.Is(err, domain.ErrCollaborationPendingSupplement) {
+		return CollaborationResult{outcome: ExecutionOnPendingSupplement}, nil
 	}
 	if errors.Is(err, domain.ErrOutsideAcceptedScope) {
 		return CollaborationResult{outcome: ExecutionOutsideScope}, nil
@@ -305,6 +331,7 @@ func decideFrom(command AcceptCollaborationCommand) (domain.CollaborationAccepta
 		TenantID:        command.TenantID,
 		Decision:        command.Decision,
 		AcceptedActions: command.AcceptedActions,
+		Gaps:            command.Gaps,
 		DecidedAt:       command.DecidedAt,
 	}
 	var err error

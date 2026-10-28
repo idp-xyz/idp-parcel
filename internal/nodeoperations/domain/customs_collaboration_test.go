@@ -135,6 +135,7 @@ func TestAnAcceptanceIsTheNodesOwnDecision(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, decision := range []domain.AcceptanceDecisionKind{
 			domain.CollaborationAccepted, domain.CollaborationDeclined, domain.CollaborationPartiallyAccepted,
+			domain.CollaborationPendingSupplement,
 		} {
 			label := decision.String()
 			if label == "" {
@@ -142,11 +143,11 @@ func TestAnAcceptanceIsTheNodesOwnDecision(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 3 {
+		if len(labels) != 4 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if domain.AcceptanceDecisionKind(len(labels)+1).String() != "" {
-			t.Fatal("第四个决定取值带了标签——封闭集合被悄悄放开")
+			t.Fatal("第五个决定取值带了标签——封闭集合被悄悄放开")
 		}
 	})
 }
@@ -284,6 +285,90 @@ func TestExecutionFactsDoNotImpersonateInspectionResults(t *testing.T) {
 		}
 		if domain.CollaborationActionKind(len(labels)+1).String() != "" {
 			t.Fatal("第六个动作取值带了标签——放行或查验结论溜进了节点动作集")
+		}
+	})
+}
+
+func pendingSpec(t *testing.T, gaps ...domain.SupplementGapKind) domain.CollaborationAcceptanceSpec {
+	t.Helper()
+	spec := acceptanceSpec(t, domain.CollaborationDeclined)
+	spec.Decision = domain.CollaborationPendingSupplement
+	spec.Basis = domain.AcceptanceBasisReference{}
+	spec.Gaps = gaps
+	return spec
+}
+
+// Covers: UC-NO-001 `AT-NO-002`/`AT-NO-003`——对象、动作、节点、授权依据或必要作业条件不足时
+// 形成待补充：带缺口、不带承接范围，且没有可执行的东西（与拒接、越权分格）。
+func TestAPendingSupplementCarriesGapsAndNoScope(t *testing.T) {
+	pending, err := domain.DecideCollaborationAcceptance(pendingSpec(t, domain.MissingObjectGap, domain.MissingAuthorityGap))
+	if err != nil {
+		t.Fatalf("decide pending: %v", err)
+	}
+	if pending.Decision() != domain.CollaborationPendingSupplement || len(pending.Gaps()) != 2 {
+		t.Fatalf("decision = %v gaps = %v", pending.Decision(), pending.Gaps())
+	}
+	if len(pending.AcceptedUnits()) != 0 || len(pending.AcceptedActions()) != 0 {
+		t.Fatal("待补充不形成承接，却带了承接范围")
+	}
+
+	broken := map[string]func(*domain.CollaborationAcceptanceSpec){
+		"no gaps": func(spec *domain.CollaborationAcceptanceSpec) { spec.Gaps = nil },
+		"unknown gap": func(spec *domain.CollaborationAcceptanceSpec) {
+			spec.Gaps = []domain.SupplementGapKind{domain.SupplementGapKindInvalid}
+		},
+		"duplicate gap": func(spec *domain.CollaborationAcceptanceSpec) {
+			spec.Gaps = []domain.SupplementGapKind{domain.MissingNodeGap, domain.MissingNodeGap}
+		},
+		"carrying a scope": func(spec *domain.CollaborationAcceptanceSpec) {
+			spec.AcceptedUnits = []domain.HandlingUnitID{collabValue(t, domain.NewHandlingUnitID, "unit-1")}
+			spec.AcceptedActions = []domain.CollaborationActionKind{domain.UnsealAction}
+		},
+	}
+	for name, breakSpec := range broken {
+		t.Run(name, func(t *testing.T) {
+			spec := pendingSpec(t, domain.MissingActionGap)
+			breakSpec(&spec)
+			if _, err := domain.DecideCollaborationAcceptance(spec); !errors.Is(err, domain.ErrInvalidCollaborationAcceptance) {
+				t.Fatalf("error = %v, want ErrInvalidCollaborationAcceptance", err)
+			}
+		})
+	}
+
+	t.Run("gaps belong to pending only", func(t *testing.T) {
+		spec := acceptanceSpec(t, domain.CollaborationAccepted)
+		spec.Gaps = []domain.SupplementGapKind{domain.MissingObjectGap}
+		if _, err := domain.DecideCollaborationAcceptance(spec); !errors.Is(err, domain.ErrInvalidCollaborationAcceptance) {
+			t.Fatalf("error = %v, want ErrInvalidCollaborationAcceptance", err)
+		}
+	})
+
+	t.Run("nothing can be executed against it", func(t *testing.T) {
+		_, err := domain.RecordExecutionFact(
+			pending,
+			collabValue(t, domain.NewHandlingUnitID, "unit-1"),
+			domain.UnsealAction,
+			collabValue(t, domain.NewExecutionEvidenceReference, "evidence-1"),
+			collaborationDecidedAt.Add(time.Hour),
+		)
+		if !errors.Is(err, domain.ErrCollaborationPendingSupplement) {
+			t.Fatalf("error = %v, want ErrCollaborationPendingSupplement", err)
+		}
+	})
+
+	t.Run("the gap set is closed", func(t *testing.T) {
+		labels := map[string]struct{}{}
+		for _, gap := range []domain.SupplementGapKind{
+			domain.MissingObjectGap, domain.MissingActionGap, domain.MissingNodeGap,
+			domain.MissingAuthorityGap, domain.MissingWorkConditionGap,
+		} {
+			if gap.String() == "" {
+				t.Fatalf("gap %d has no label", gap)
+			}
+			labels[gap.String()] = struct{}{}
+		}
+		if len(labels) != 5 || domain.SupplementGapKind(len(labels)+1).String() != "" {
+			t.Fatal("缺口取值集合不封闭")
 		}
 	})
 }

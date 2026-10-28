@@ -67,6 +67,9 @@ type acceptancePayloadDocument struct {
 	Basis            string   `json:"basis"`
 	AcceptedUnits    []string `json:"accepted_units"`
 	AcceptedActions  []string `json:"accepted_actions"`
+	// Gaps 只在待补充时在场；omitempty 让其余三值的文档逐字节不变——NOC-1 不就地扩列，
+	// 已存摘要不能因此失配。
+	Gaps []string `json:"gaps,omitempty"`
 }
 
 // CanonicalizeAcceptancePayload 定承接决定口的 NOC-1 形状，交回文档与摘要。
@@ -77,7 +80,13 @@ func CanonicalizeAcceptancePayload(
 	basis string,
 	acceptedUnits []string,
 	acceptedActions []CollaborationActionKind,
+	gaps []SupplementGapKind,
 ) ([]byte, string, error) {
+	gapNames := make([]string, len(gaps))
+	for index, gap := range gaps {
+		gapNames[index] = gap.String()
+	}
+	slices.Sort(gapNames)
 	units := slices.Clone(acceptedUnits)
 	slices.Sort(units)
 	actions := make([]string, len(acceptedActions))
@@ -94,6 +103,7 @@ func CanonicalizeAcceptancePayload(
 		Basis:            basis,
 		AcceptedUnits:    units,
 		AcceptedActions:  actions,
+		Gaps:             gapNames,
 	})
 	if err != nil {
 		return nil, "", err
