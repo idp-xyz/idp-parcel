@@ -1,6 +1,6 @@
 # ADR-0316：发布载荷的逐格问题带稳定的问题码与参数；管理台按码译，认不出的码退回原话
 
-Status: Accepted（2026-10-26，Claude Code 会话代 owner 决，用户授权代决；票 party-commercial-uiux-backend/05。裁决能力边界：读过运营操作者面发布载荷的解码与逐格问题收集（`publication_draft_payload*.go`）、预览与录入的答复形状、管理台 `field-problem-text.ts` 的原话译表与各表单对问题行的消费；越权风险点见文末，待 PC owner 复核。）<!-- 索引注记 -->｜**入口**：逐格问题的 `problem` 是领域错误或解析错误的 `err.Error()` 原话，管理台只能按原话的形状猜中文，服务端一改措辞就译不出。**取法**：每一格问题除原话外另带 `code`（封闭词表，只增不改）与 `params`（字符串键值，键随码固定）；管理台认得的码直接查话术，码缺席、是兜底的 `INVALID` 或不认得时退回按原话译。
+Status: Accepted（2026-10-26，Claude Code 会话代 owner 决，用户授权代决；票 party-commercial-uiux-backend/05。裁决能力边界：读过运营操作者面发布载荷的解码与逐格问题收集（`publication_draft_payload*.go`）、预览与录入的答复形状、管理台 `field-problem-text.ts` 的原话译表与各表单对问题行的消费；越权风险点见文末。PC owner 复核：2026-10-27 用户授权会话 idp-parcel-97 以 PC owner 身份复核，认可决定一至四与风险点 1–4，附带一条——多语种时为 `NOT_IN_SET` 新增稳定格键参数，`what` 原样保留（只增不改）；下一批贴码的错误由实施期配置员实际撞到的点名，不预铺词表。结论与理由见 [owner 复核清单](../../.scratch/party-commercial-uiux-backend/owner-review.md)「复核结论」。）<!-- 索引注记 -->｜**入口**：逐格问题的 `problem` 是领域错误或解析错误的 `err.Error()` 原话，管理台只能按原话的形状猜中文，服务端一改措辞就译不出。**取法**：每一格问题除原话外另带 `code`（封闭词表，只增不改）与 `params`（字符串键值，键随码固定）；管理台认得的码直接查话术，码缺席、是兜底的 `INVALID` 或不认得时退回按原话译。
 Date: 2026-10-26
 
 ## Context

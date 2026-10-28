@@ -1,6 +1,6 @@
 # ADR-0314：待批准的发布载体可由运营操作者读回；批准与发布都绑定调用方看到的那份内容摘要，摘要不符答「已变更」
 
-Status: Accepted（2026-10-26，Claude Code 会话代 owner 决，用户授权代决；票 party-commercial-uiux-backend/03。裁决能力边界：读过 ADR-0126 全文、`PublicationDraft` 领域对象与载体册适配器、`SubmitPublicationDraft` / `ApprovePublicationDraft` / `PublishPublicationDraft` 三个用例、运营操作者面的载荷解码、管理台发布草稿流程；越权风险点见文末，待 PC owner 复核。）<!-- 索引注记 -->｜**入口**：ADR-0126 立了待批准载体并让批准与发布各走一口，但批准口只收（类别、对象、版本）三格，批准者既读不回载体、也无法声明「我批的是哪份内容」。**取法**：载体增两个运营查阅读口（列表、单份读回，单份带规范化文档）；批准口与发布口的载荷必带 `expectedDigest`（内容摘要）与 `expectedShellDigest`（版本壳摘要），任一个与载体此刻的不同答 `DRAFT_CHANGED`，不批、不发。
+Status: Accepted（2026-10-26，Claude Code 会话代 owner 决，用户授权代决；票 party-commercial-uiux-backend/03。裁决能力边界：读过 ADR-0126 全文、`PublicationDraft` 领域对象与载体册适配器、`SubmitPublicationDraft` / `ApprovePublicationDraft` / `PublishPublicationDraft` 三个用例、运营操作者面的载荷解码、管理台发布草稿流程；越权风险点见文末。PC owner 复核：2026-10-27 用户授权会话 idp-parcel-97 以 PC owner 身份复核，认可决定一至四与风险点 1–5，附带两条——日后若收窄在途载体的可见范围，走新增一格读授予（风险点 2 所指），不改挂登记写面，看与写不绑；风险点 5「任一行读不回整页答 5xx」一句由在途的 ADR-0333 部分停用，本复核不重裁。结论与理由见 [owner 复核清单](../../.scratch/party-commercial-uiux-backend/owner-review.md)「复核结论」。）<!-- 索引注记 -->｜**入口**：ADR-0126 立了待批准载体并让批准与发布各走一口，但批准口只收（类别、对象、版本）三格，批准者既读不回载体、也无法声明「我批的是哪份内容」。**取法**：载体增两个运营查阅读口（列表、单份读回，单份带规范化文档）；批准口与发布口的载荷必带 `expectedDigest`（内容摘要）与 `expectedShellDigest`（版本壳摘要），任一个与载体此刻的不同答 `DRAFT_CHANGED`，不批、不发。
 Date: 2026-10-26
 
 ## Context
