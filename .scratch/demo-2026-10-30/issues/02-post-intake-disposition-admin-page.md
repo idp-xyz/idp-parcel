@@ -1,7 +1,7 @@
 # 02 收寄后处置管理台页
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待评审与进 main，分支 claude-demo-pid（最后一笔见 git log）
+Status: resolved——2026-10-28 进 main（前端切片：diff 只在 `apps/admin-web/src/pages/**`、`navigation.ts`、`page-registry.tsx` 与票面，不碰共享面；作者自查加推送方在重放 tip 上复跑 `tsc -b`、`pnpm test` 818 pass / 0 fail、`vite build` 通过）。此前 in-progress——2026-10-28 作者完工，待评审与进 main，分支 claude-demo-pid（最后一笔见 git log）
 Blocked by: 无
 
 ## 现象
