@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）完工待评审，分支 claude-psb22（见文末「第 1 笔完成记录」）。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2–4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -56,3 +56,12 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 **修订后自验**：受影响各包加 `internal/architecture` 全过。新增用例：两头取锁（单元）、确认信封交接失败要重投（单元）、包裹确认锁只让同一件包裹排队（真库并发）、锁在事务外被拒（架构门禁要求）。`go vet ./...` 干净，`gofmt -l` 为空。
 
 **复核**（同一评审，钉 `9fa63de61`）：阻断清零。N1–N6 修法成立。N2 有修前、修后两次并发探针取证：形成事务读终局时终局尚未提交、终局那一路随后到达；修后终局那一路等形成提交之后再读，费用落到`已确认`、确认信封一封；修前（`935cf7fb2`）没有等待，费用停在`预估`、确认信封零封。两只旧探针在新 tip 上结果不变，只有「无账户」那一格的失败码按 N1 由 `consumer_undecided` 变为 `publish_failed`。新提一条 N8（措辞）：`AT-SA-217` 没写失败码的口径，已补。
+
+## 第 1 笔进 main 记录（2026-10-28）
+
+- **main**：`53c514602`。分支 `claude-psb22` 在 main `2afdd0b1e` 之上重放（`git rebase origin/main`，无冲突），共六笔：实现 `64b9eab7d`、修订 `c75085b24`、N8 与复核 `c905238df`，以及三份生成物各一笔（ADR 索引 `50aff4cbf`、AT 盘点补行与重算 `5f71d70bd`、机制清点 `53c514602`）。
+- **评审**：非作者隔离评审两轮，阻断清零，见上面「评审记录与修订轮」。
+- **生成物**：`go run ./tools/adr-index -check` 与 `go run ./tools/at-coverage-counts -check` 都退 0；机制清点重生成之后 `git status --porcelain` 为空。
+- **全量真库**：`scripts/test-full.sh` 在推送的 tip 上退 0，160 个包 ok，0 FAIL。
+- **种子**：`seed.sh` 灌一次性库 `psb22_seed` 退 0，用完已删。
+- **推送**：`git push origin 53c514602:main`，`origin/main` 等于该 SHA。
