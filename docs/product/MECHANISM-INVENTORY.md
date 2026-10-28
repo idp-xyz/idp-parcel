@@ -6,23 +6,23 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 41 | 50 | 0 | 6 | 0 | 3 |
+| accessidentity | 41 | 51 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
-| customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
+| customscompliance | 130 | 133 | 25 | 48 | 10 | 18 |
 | networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
 | nodeoperations | 113 | 120 | 15 | 30 | 4 | 17 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
-| parcelshipment | 260 | 263 | 26 | 51 | 12 | 29 |
+| parcelshipment | 267 | 265 | 27 | 53 | 13 | 31 |
 | partycommercial | 177 | 197 | 15 | 43 | 1 | 43 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 239 | 192 | 40 | 71 | 13 | 10 |
 | transportfulfillment | 302 | 314 | 56 | 62 | 16 | 53 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1711 | 1729 | 230 | 394 | 68 | 228 |
+| **合计** | 1722 | 1735 | 232 | 397 | 69 | 230 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 248、测试 408。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 250、测试 410。
 
 ## 跨上下文消费缝：51 组，171 个生产文件
 
@@ -80,24 +80,24 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：12 个模块共 336 份 SQL
+## 迁移：12 个模块共 339 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 27 |
+| access_identity | 28 |
 | collection_remittance | 4 |
-| customs_compliance | 27 |
+| customs_compliance | 28 |
 | network_routing | 32 |
 | node_operations | 21 |
 | parcel_pricing | 14 |
-| parcel_shipment | 32 |
+| parcel_shipment | 33 |
 | party_commercial | 42 |
 | pilot_governance | 8 |
 | settlement_accounting | 47 |
 | transport_fulfillment | 50 |
 | visibility_exception | 32 |
 
-## 接线面：接入面端点 206 个，消费适配器 62 个生产文件，直投路由表 44 条
+## 接线面：接入面端点 208 个，消费适配器 62 个生产文件，直投路由表 44 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -109,13 +109,13 @@
 | networkrouting | 13 |
 | nodeoperations | 17 |
 | parcelpricing | 20 |
-| parcelshipment | 19 |
+| parcelshipment | 21 |
 | partycommercial | 40 |
 | pilotgovernance | 1 |
 | settlementaccounting | 8 |
 | transportfulfillment | 48 |
 | visibilityexception | 15 |
-| **合计** | 206 |
+| **合计** | 208 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -146,10 +146,11 @@
 | （未归类） | 1 |
 | **合计** | 44 |
 
-## 端口：声明 639 个；基线口径缺 43，精确口径缺 2
+## 端口：声明 644 个；基线口径缺 44，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
+- `customscompliance.InternalRestrictionScopeView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres.InternalRestrictions）
 - `customscompliance.RestrictionScopeView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres.Restrictions）
 - `networkrouting.InitialRouteEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogInitialRouteEvidence）
 - `networkrouting.NetworkEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogNetworkEvidence）
