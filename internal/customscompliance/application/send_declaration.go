@@ -166,17 +166,36 @@ func (handler *SendDeclarationHandler) Send(
 			outcome = domain.AttemptAcknowledged
 		}
 	}
+	// 越过发送边界之后，任何确定性的失败都不得让这一笔回滚成「没发」：回滚就是重投，重投就是再发一遍。通道给的消息号记不下
+	// （不成形，或已经给过另一份尝试）就不带它记，答复摘要里留原样；异步回执那时关联不上，答待关联。
 	fact, err := domain.RecordSubmissionSend(version, attempt.Sequence(), sentAt, outcome, answer.Message, answer.Response)
 	if err != nil {
-		return SendDeclarationResult{}, err
+		fact, err = domain.RecordSubmissionSend(version, attempt.Sequence(), sentAt, outcome, "",
+			"unrecordable messageId; "+answer.Response)
+		if err != nil {
+			return SendDeclarationResult{}, err
+		}
 	}
 	saved, err := handler.deps.SendFacts.SaveSendFact(ctx, tenant, fact, sentAt)
 	if err != nil {
 		return undecidedSend(fmt.Errorf("submission send fact store: %w", err)), nil
 	}
 	if saved == ports.SubmissionSendConflict {
-		// 同一份尝试已有另一笔发送事实，或通道把同一个消息号给过另一份尝试：两侧说法矛盾，不覆盖。
-		return SendDeclarationResult{}, fmt.Errorf("customs compliance: send fact conflict for %s/%d", version, attempt.Sequence())
+		if stored, found, err := handler.deps.SendFacts.FindSendFact(ctx, tenant, version, attempt.Sequence()); err != nil {
+			return undecidedSend(fmt.Errorf("submission send fact store: %w", err)), nil
+		} else if found {
+			return SendDeclarationResult{outcome: DeclarationAlreadySent, fact: stored}, nil
+		}
+		fact, err = domain.RecordSubmissionSend(version, attempt.Sequence(), sentAt, outcome, "",
+			fmt.Sprintf("messageId %s already names another attempt; %s", fact.ChannelMessage(), fact.Response()))
+		if err != nil {
+			return SendDeclarationResult{}, err
+		}
+		if saved, err = handler.deps.SendFacts.SaveSendFact(ctx, tenant, fact, sentAt); err != nil {
+			return undecidedSend(fmt.Errorf("submission send fact store: %w", err)), nil
+		} else if saved == ports.SubmissionSendConflict {
+			return SendDeclarationResult{}, fmt.Errorf("customs compliance: send fact conflict for %s/%d", version, attempt.Sequence())
+		}
 	}
 	return SendDeclarationResult{outcome: DeclarationSent, fact: fact}, nil
 }

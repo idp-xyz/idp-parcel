@@ -37,11 +37,16 @@ type HTTPSender struct {
 
 var _ application.DeclarationSender = (*HTTPSender)(nil)
 
-// NewHTTPSender 用给定的 client（nil 取带超时的默认值）与环境读取函数（nil 取 os.Getenv）。
+// NewHTTPSender 用给定的 client（nil 取带超时的默认值）与环境读取函数（nil 取 os.Getenv）。给定的 client 照抄一份再关掉跟随
+// 重定向：第一跳已经收到了整份申报包，跟过去之后下一跳拨不通会被认成「确知没发出去」而重投；跟过去本身也会把正文送到通道
+// 登记之外、未必是 https 的地址。3xx 原样留下，落进「没拿到答复」那一格。
 func NewHTTPSender(client *http.Client, getenv func(string) string) *HTTPSender {
 	if client == nil {
 		client = &http.Client{Timeout: sendTimeout}
 	}
+	own := *client
+	own.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client = &own
 	if getenv == nil {
 		getenv = os.Getenv
 	}

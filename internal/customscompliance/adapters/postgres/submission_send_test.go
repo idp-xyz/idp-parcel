@@ -60,7 +60,7 @@ func TestSubmissionSendWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	version := declarationValue(t, domain.NewSubmissionVersionID, "v-1")
 	channel, _ := domain.NewDeclarationChannel("SYN-CHANNEL-01", "https://broker.syn.example/d", "")
 	fact, _ := domain.RecordSubmissionSend(version, 1, time.Now(), domain.AttemptAcknowledged, "MSG-1", "")
-	receipt, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptAcknowledged, time.Now(), "d")
+	receipt, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptAcknowledged, time.Now(), time.Now(), "d")
 	if _, err := sends.SaveDeclarationChannel(t.Context(), tenant, channel, time.Now()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveDeclarationChannel err = %v", err)
 	}
@@ -114,9 +114,9 @@ func TestSendFactsAndReceiptsAppendWithoutOverwriting(t *testing.T) {
 	sentAt := declarationFixedAt.Add(time.Hour)
 	fact, _ := domain.RecordSubmissionSend(version, 1, sentAt, domain.AttemptPendingConfirmation, "MSG-1", "timeout")
 	differs, _ := domain.RecordSubmissionSend(version, 1, sentAt, domain.AttemptAcknowledged, "MSG-1", "")
-	first, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptAcknowledged, sentAt.Add(time.Minute), "d1")
-	changed, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptFailed, sentAt.Add(time.Minute), "d1-changed")
-	second, _ := domain.ReceiveTechnicalReceipt("R-2", version, 1, domain.AttemptFailed, sentAt.Add(2*time.Minute), "d2")
+	first, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptAcknowledged, sentAt, sentAt.Add(time.Minute), "d1")
+	changed, _ := domain.ReceiveTechnicalReceipt("R-1", version, 1, domain.AttemptFailed, sentAt, sentAt.Add(time.Minute), "d1-changed")
+	second, _ := domain.ReceiveTechnicalReceipt("R-2", version, 1, domain.AttemptFailed, sentAt, sentAt.Add(2*time.Minute), "d2")
 	var effects []ports.SubmissionSendEffect
 	fixture.sendTx(t, ctx, func(txCtx context.Context) error {
 		for _, step := range []func() (ports.SubmissionSendEffect, error){
@@ -159,7 +159,7 @@ func TestSendFactsAndReceiptsAppendWithoutOverwriting(t *testing.T) {
 	}
 	receipts, err := sends.ListTechnicalReceipts(ctx, tenant, version, 1)
 	if err != nil || len(receipts) != 2 || receipts[0].Source() != "R-1" || receipts[0].Outcome() != domain.AttemptAcknowledged ||
-		receipts[1].Source() != "R-2" {
+		receipts[1].Source() != "R-2" || !receipts[0].OccurredAt().Equal(sentAt) {
 		t.Fatalf("回执 = %+v err = %v", receipts, err)
 	}
 }

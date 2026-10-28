@@ -56,6 +56,12 @@ func (books *sendBooksDouble) SaveSendFact(_ context.Context, _ domain.TenantID,
 		}
 		return ports.SubmissionSendConflict, nil
 	}
+	// 照真库的部分唯一索引：同租户里一个消息号只指一份尝试。
+	for _, stored := range books.facts {
+		if fact.ChannelMessage() != "" && stored.ChannelMessage() == fact.ChannelMessage() {
+			return ports.SubmissionSendConflict, nil
+		}
+	}
 	books.facts[key] = fact
 	return ports.SubmissionSendRegistered, nil
 }
@@ -141,7 +147,7 @@ func newSendFixture(t *testing.T) *sendFixture {
 		t.Fatal(err)
 	}
 	receive, err := application.NewReceiveTechnicalReceiptHandler(application.ReceiveTechnicalReceiptDeps{
-		Submissions: declaration.store, SendFacts: fixture.books, Receipts: fixture.books, Clock: fixedClock{at: sendAt}})
+		SendFacts: fixture.books, Receipts: fixture.books, Clock: fixedClock{at: sendAt}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,6 +239,18 @@ func TestOnlyACertainNonSendIsRetried(t *testing.T) {
 		t.Fatalf("登记之后授权撤了 = %v", result.Outcome())
 	}
 
+	// 通道把已经给过另一份尝试的消息号又给了这一份：照样记下发送事实（不带消息号），不回滚、不重投。
+	taken := newSendFixture(t)
+	taken.registerChannel(t)
+	other, _ := domain.NewSubmissionVersionID("SYN-OTHER-VERSION")
+	earlier, _ := domain.RecordSubmissionSend(other, 1, sendAt, domain.AttemptAcknowledged, "MSG-1", "")
+	taken.books.facts[fmt.Sprintf("%s/%d", other, 1)] = earlier
+	result, err = taken.send.Send(ctx, taken.tenant, taken.version)
+	if err != nil || result.Outcome() != application.DeclarationSent || result.Fact().ChannelMessage() != "" ||
+		result.Fact().Outcome() != domain.AttemptAcknowledged {
+		t.Fatalf("消息号已被占 = %v %+v err = %v", result.Outcome(), result.Fact(), err)
+	}
+
 	unreadable := newSendFixture(t)
 	unreadable.books.failRead = errors.New("down")
 	if result, _ := unreadable.send.Send(ctx, unreadable.tenant, unreadable.version); result.Outcome() != application.DeclarationSendUndecided {
@@ -251,7 +269,7 @@ func TestTechnicalReceiptsAttachByChannelMessageAndFoldTheCurrentJudgment(t *tes
 	}
 	// 待确认那一笔没有消息号，任何回执都关联不上。
 	receipt := application.ReceiveTechnicalReceiptCommand{TenantID: fixture.tenant, Source: "RCPT-1", ChannelMessage: "MSG-1",
-		Outcome: domain.AttemptAcknowledged, ReceivedAt: sendAt.Add(time.Minute), Digest: "TR-1:a"}
+		Outcome: domain.AttemptAcknowledged, OccurredAt: sendAt, ReceivedAt: sendAt.Add(time.Minute), Digest: "TR-1:a"}
 	if result, _ := fixture.receive.Handle(ctx, receipt); result.Outcome() != application.TechnicalReceiptUnattributable {
 		t.Fatalf("无消息号 = %v", result.Outcome())
 	}

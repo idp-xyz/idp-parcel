@@ -41,16 +41,12 @@ func buildTechnicalReceiptsOrchestration(db *bentopg.DB) (customshttp.TechnicalR
 	if db == nil {
 		return nil, fmt.Errorf("parcel-api: technical receipts: db is nil")
 	}
-	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: declaration submissions for receipts: %w", err)
-	}
 	sends, err := ccpostgres.NewSubmissionSends(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: submission sends: %w", err)
 	}
 	handler, err := customsapp.NewReceiveTechnicalReceiptHandler(customsapp.ReceiveTechnicalReceiptDeps{
-		Submissions: submissions, SendFacts: sends, Receipts: sends, Clock: systemClock{},
+		SendFacts: sends, Receipts: sends, Clock: systemClock{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: receive technical receipt: %w", err)

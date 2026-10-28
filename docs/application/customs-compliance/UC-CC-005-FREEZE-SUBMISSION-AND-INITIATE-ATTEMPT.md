@@ -344,7 +344,7 @@
 | `AT-CC-443` | 委托被接受、接受信封经生产派发图扇出，或检查生产进程的全部触发面 | 不建案、不形成申报单元、提交授权、提交版本或尝试；建案、授权确认与提交编排只由运营决定口构造，生产进程没有自动提交路径 |
 | `AT-CC-445` | 建案、授权确认、提交执行三口分别由只持其中一种运营决定授予的主体调用 | 每口只认自己那一种；持批准的不能发起提交，持提交的不能确认授权，越权答未授予且不写任何对象；合成租户与真实租户走同一条命令面 |
 | `AT-CC-453` | 为一个发送目标登记申报通道，同内容重登、换端点或换凭据再登 | 首登记下端点与凭据引用（凭据只登变量名，不登密钥）；同内容答已有；异内容答冲突、不覆盖。端点不是 https、又不在回环上，登记即拒（[ADR-0342](../../adr/0342-a-declaration-is-sent-by-a-dispatch-consumer-through-a-registered-channel-and-crossing-the-send-boundary-is-an-appended-send-fact.md)） |
-| `AT-CC-454` | 提交版本已形成，dispatch 投到申报发送；通道答收下、答拒收、答 5xx 或读不懂、连不上，或这一份已发过、通道没登、登记之后授权或就绪失效 | 越过发送边界的三格各记一笔发送事实：已回执、失败、待确认（不当失败、不自动重发）；连不上不记、续办重投；已发过、没登通道、失效都不发；尝试行不改，一份尝试至多一笔；请求带由尝试身份派生的幂等键（[ADR-0342](../../adr/0342-a-declaration-is-sent-by-a-dispatch-consumer-through-a-registered-channel-and-crossing-the-send-boundary-is-an-appended-send-fact.md)） |
+| `AT-CC-454` | 提交版本已形成，dispatch 投到申报发送；通道答收下、答拒收、答 5xx、重定向或读不懂、连不上、给了已被另一份尝试占用的消息号，或这一份已发过、通道没登、登记之后授权或就绪失效 | 越过发送边界的三格各记一笔发送事实：已回执、失败、待确认（不当失败、不自动重发）；连不上不记、续办重投；越过边界之后的失败不回滚成没发（消息号记不下就不带它记）；已发过、没登通道、失效都不发；尝试行不改，一份尝试至多一笔；请求带由尝试身份派生的幂等键（[ADR-0342](../../adr/0342-a-declaration-is-sent-by-a-dispatch-consumer-through-a-registered-channel-and-crossing-the-send-boundary-is-an-appended-send-fact.md)） |
 | `AT-CC-448` | 持提交执行授予的主体发起提交，但该单元没有就绪判断 | 返回`提交前提未配置`（未决并指名就绪未配置）；不落申报单元、提交版本或尝试，不写成门禁已阻断（[ADR-0243](../../adr/0243-customs-first-release-answers-replace-the-uc-cells-they-answer-and-unavailable-dependencies-answer-undecided.md)） |
 
 ## 生产参数与待决风险

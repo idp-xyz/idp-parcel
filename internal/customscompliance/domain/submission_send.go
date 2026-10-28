@@ -108,6 +108,7 @@ type TechnicalReceipt struct {
 	version    SubmissionVersionID
 	sequence   int
 	outcome    AttemptResult
+	occurredAt time.Time
 	receivedAt time.Time
 	digest     string
 }
@@ -117,16 +118,17 @@ func ReceiveTechnicalReceipt(
 	version SubmissionVersionID,
 	sequence int,
 	outcome AttemptResult,
+	occurredAt time.Time,
 	receivedAt time.Time,
 	digest string,
 ) (TechnicalReceipt, error) {
 	source, digest = strings.TrimSpace(source), strings.TrimSpace(digest)
-	if source == "" || digest == "" || !version.valid() || sequence < 1 || receivedAt.IsZero() ||
+	if source == "" || digest == "" || !version.valid() || sequence < 1 || occurredAt.IsZero() || receivedAt.IsZero() ||
 		(outcome != AttemptAcknowledged && outcome != AttemptFailed) {
 		return TechnicalReceipt{}, ErrInvalidTechnicalReceipt
 	}
 	return TechnicalReceipt{source: source, version: version, sequence: sequence, outcome: outcome,
-		receivedAt: receivedAt.UTC(), digest: digest}, nil
+		occurredAt: occurredAt.UTC(), receivedAt: receivedAt.UTC(), digest: digest}, nil
 }
 
 func (receipt TechnicalReceipt) Source() string { return receipt.source }
@@ -137,24 +139,24 @@ func (receipt TechnicalReceipt) Sequence() int { return receipt.sequence }
 
 func (receipt TechnicalReceipt) Outcome() AttemptResult { return receipt.outcome }
 
+// OccurredAt 是通道写下这份回执的时刻，只作审计；当前判断按本侧的到达时刻排，不信对端的钟。
+func (receipt TechnicalReceipt) OccurredAt() time.Time { return receipt.occurredAt }
+
 func (receipt TechnicalReceipt) ReceivedAt() time.Time { return receipt.receivedAt }
 
 func (receipt TechnicalReceipt) Digest() string { return receipt.digest }
 
-// CurrentTechnicalJudgment 折出一次尝试此刻的技术判断：没有发送事实就是尝试行上的那一格（首次尝试是已登记待发送，受控重发
-// 形成时已带结果）；有发送事实取它；之后到达的技术回执按到达先后逐份覆盖——后到的明确回执改变的是当前判断，不改写前面
-// 那几份（ADR-0242 决定三）。回执须是这一次尝试的，别的尝试的混进来是调用方装错了。
-func CurrentTechnicalJudgment(attempt SubmissionAttempt, send *SubmissionSendFact, receipts []TechnicalReceipt) (AttemptResult, error) {
-	current := attempt.Result()
-	if send != nil {
-		if send.version != attempt.version || send.sequence != attempt.sequence {
-			return AttemptResultInvalid, ErrInvalidSendFact
-		}
-		current = send.outcome
+// TechnicalJudgmentAfterSend 折出一次已发出的尝试此刻的技术判断：先取发送事实上的那一格，之后到达的技术回执按到达先后逐份
+// 覆盖——后到的明确回执改变的是当前判断，不改写前面那几份（ADR-0242 决定三）。只按发送事实认尝试，不读提交版本册上的「最新
+// 一份」：受控重发之后，给前一份尝试迟到的回执照样折在前一份上。回执须是这一次尝试的，别的尝试的混进来是调用方装错了。
+func TechnicalJudgmentAfterSend(send SubmissionSendFact, receipts []TechnicalReceipt) (AttemptResult, error) {
+	if !send.version.valid() {
+		return AttemptResultInvalid, ErrInvalidSendFact
 	}
+	current := send.outcome
 	var latest time.Time
 	for _, receipt := range receipts {
-		if receipt.version != attempt.version || receipt.sequence != attempt.sequence {
+		if receipt.version != send.version || receipt.sequence != send.sequence {
 			return AttemptResultInvalid, ErrInvalidTechnicalReceipt
 		}
 		if !receipt.receivedAt.Before(latest) {

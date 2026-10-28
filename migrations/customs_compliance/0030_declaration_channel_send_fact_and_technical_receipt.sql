@@ -52,6 +52,7 @@ CREATE TABLE customs_compliance.technical_receipt (
     version_id     text        NOT NULL,
     sequence       integer     NOT NULL,
     outcome        text        NOT NULL,
+    occurred_at    timestamptz NOT NULL,
     received_at    timestamptz NOT NULL,
     content_digest text        NOT NULL,
     recorded_at    timestamptz NOT NULL,

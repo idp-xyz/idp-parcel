@@ -240,10 +240,10 @@ func (repository *SubmissionSends) SaveTechnicalReceipt(
 	}
 	tag, err := executor.Exec(ctx, `
 		INSERT INTO customs_compliance.technical_receipt
-			(tenant_id, source_id, version_id, sequence, outcome, received_at, content_digest, recorded_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+			(tenant_id, source_id, version_id, sequence, outcome, occurred_at, received_at, content_digest, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
 		tenant.String(), receipt.Source(), receipt.Version().String(), receipt.Sequence(), receipt.Outcome().String(),
-		receipt.ReceivedAt(), receipt.Digest(), at.UTC())
+		receipt.OccurredAt(), receipt.ReceivedAt(), receipt.Digest(), at.UTC())
 	if err != nil {
 		return 0, fmt.Errorf("save technical receipt: %w", err)
 	}
@@ -273,7 +273,7 @@ func (repository *SubmissionSends) ListTechnicalReceipts(
 		return nil, fmt.Errorf("list technical receipts: %w", err)
 	}
 	rows, err := querier.Query(ctx, `
-		SELECT source_id, outcome, received_at, content_digest FROM customs_compliance.technical_receipt
+		SELECT source_id, outcome, occurred_at, received_at, content_digest FROM customs_compliance.technical_receipt
 		 WHERE tenant_id = $1 AND version_id = $2 AND sequence = $3 ORDER BY received_at, source_id`,
 		tenant.String(), version.String(), sequence)
 	if err != nil {
@@ -284,16 +284,16 @@ func (repository *SubmissionSends) ListTechnicalReceipts(
 	for rows.Next() {
 		var (
 			source, outcome, digest string
-			receivedAt              time.Time
+			occurredAt, receivedAt  time.Time
 		)
-		if err := rows.Scan(&source, &outcome, &receivedAt, &digest); err != nil {
+		if err := rows.Scan(&source, &outcome, &occurredAt, &receivedAt, &digest); err != nil {
 			return nil, fmt.Errorf("list technical receipts: %w", err)
 		}
 		result, err := attemptResultFrom(outcome)
 		if err != nil {
 			return nil, fmt.Errorf("list technical receipts: %w", err)
 		}
-		receipt, err := domain.ReceiveTechnicalReceipt(source, version, sequence, result, receivedAt, digest)
+		receipt, err := domain.ReceiveTechnicalReceipt(source, version, sequence, result, occurredAt, receivedAt, digest)
 		if err != nil {
 			return nil, fmt.Errorf("list technical receipts: %w", err)
 		}

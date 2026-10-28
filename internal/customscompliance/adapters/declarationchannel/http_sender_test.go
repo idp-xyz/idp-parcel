@@ -33,6 +33,9 @@ func channelTo(t *testing.T, endpoint, credential string) domain.DeclarationChan
 
 // Covers: AT-CC-454（连接器半边）
 func TestTheHTTPSenderSpeaksTheProductWireFormat(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	deadURL := dead.URL + "/declarations"
+	dead.Close()
 	var seen *http.Request
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +47,9 @@ func TestTheHTTPSenderSpeaksTheProductWireFormat(t *testing.T) {
 			_, _ = w.Write([]byte(`{"outcome":"REJECTED","messageId":"MSG-R"}`))
 		case "BOOM":
 			w.WriteHeader(http.StatusBadGateway)
+		case "REDIRECT":
+			w.Header().Set("Location", deadURL)
+			w.WriteHeader(http.StatusTemporaryRedirect)
 		case "GARBLE":
 			_, _ = w.Write([]byte(`not json`))
 		default:
@@ -70,7 +76,9 @@ func TestTheHTTPSenderSpeaksTheProductWireFormat(t *testing.T) {
 	for unit, want := range map[string]application.ChannelAnswer{
 		"REJECT": {Answered: true, Accepted: false, Message: "MSG-R"},
 		"BOOM":   {Answered: false},
-		"GARBLE": {Answered: false},
+		// 第一跳已经收下了正文：不跟去拨不通的下一跳，不认作没发出去。
+		"REDIRECT": {Answered: false},
+		"GARBLE":   {Answered: false},
 	} {
 		request := pkg()
 		request.Unit = unit

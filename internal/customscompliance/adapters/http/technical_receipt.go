@@ -70,6 +70,7 @@ func (intake *IntegrationClientIntake) IntakeTechnicalReceipt(
 		Source:         document.SourceID,
 		ChannelMessage: document.MessageID,
 		Outcome:        outcome,
+		OccurredAt:     occurredAt,
 		ReceivedAt:     intake.clock.Now().UTC(),
 		Digest:         "TR-1:" + hex.EncodeToString(sum[:]),
 	}, nil

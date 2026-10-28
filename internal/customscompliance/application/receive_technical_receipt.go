@@ -11,7 +11,7 @@ import (
 )
 
 // 技术回执接收（ADR-0342 决定四；ADR-0242 决定一至三）：通道异步送来的回执按它给原发送的消息号关联回那一次尝试，逐份追加；尝试
-// 此刻的技术判断由尝试行、发送事实与全部回执折出。接收纪律照 UC-CC-006：同一来源身份同内容答已有，异内容是来源响应冲突、不覆盖，
+// 此刻的技术判断由发送事实与全部回执折出。接收纪律照 UC-CC-006：同一来源身份同内容答已有，异内容是来源响应冲突、不覆盖，
 // 关联不上答待关联、什么都不记。
 
 type ReceiveTechnicalReceiptCommand struct {
@@ -19,6 +19,7 @@ type ReceiveTechnicalReceiptCommand struct {
 	Source         string
 	ChannelMessage string
 	Outcome        domain.AttemptResult
+	OccurredAt     time.Time
 	ReceivedAt     time.Time
 	Digest         string
 }
@@ -73,10 +74,9 @@ func (result TechnicalReceiptResult) Attempt() (domain.SubmissionVersionID, int)
 func (result TechnicalReceiptResult) Current() domain.AttemptResult { return result.current }
 
 type ReceiveTechnicalReceiptDeps struct {
-	Submissions ports.DeclarationSubmissionStore
-	SendFacts   ports.SubmissionSendFactStore
-	Receipts    ports.TechnicalReceiptStore
-	Clock       ports.Clock
+	SendFacts ports.SubmissionSendFactStore
+	Receipts  ports.TechnicalReceiptStore
+	Clock     ports.Clock
 }
 
 type ReceiveTechnicalReceiptHandler struct {
@@ -84,7 +84,7 @@ type ReceiveTechnicalReceiptHandler struct {
 }
 
 func NewReceiveTechnicalReceiptHandler(deps ReceiveTechnicalReceiptDeps) (*ReceiveTechnicalReceiptHandler, error) {
-	if deps.Submissions == nil || deps.SendFacts == nil || deps.Receipts == nil || deps.Clock == nil {
+	if deps.SendFacts == nil || deps.Receipts == nil || deps.Clock == nil {
 		return nil, fmt.Errorf("customs compliance: receive technical receipt dependency is nil")
 	}
 	return &ReceiveTechnicalReceiptHandler{deps: deps}, nil
@@ -106,7 +106,7 @@ func (handler *ReceiveTechnicalReceiptHandler) Handle(
 		return TechnicalReceiptResult{outcome: TechnicalReceiptUnattributable}, nil
 	}
 	receipt, err := domain.ReceiveTechnicalReceipt(command.Source, send.Version(), send.Sequence(), command.Outcome,
-		command.ReceivedAt, command.Digest)
+		command.OccurredAt, command.ReceivedAt, command.Digest)
 	if err != nil {
 		return TechnicalReceiptResult{outcome: TechnicalReceiptNotAccepted}, nil
 	}
@@ -133,16 +133,9 @@ func (handler *ReceiveTechnicalReceiptHandler) currentJudgment(
 	tenant domain.TenantID,
 	send domain.SubmissionSendFact,
 ) (domain.AttemptResult, error) {
-	record, found, err := handler.deps.Submissions.FindByVersion(ctx, tenant, send.Version())
-	if err != nil || !found {
-		return domain.AttemptResultInvalid, fmt.Errorf("declaration submission %s: found=%v err=%v", send.Version(), found, err)
-	}
-	if record.Attempt.Sequence() != send.Sequence() {
-		return domain.AttemptResultInvalid, fmt.Errorf("send fact names attempt %d, register holds %d", send.Sequence(), record.Attempt.Sequence())
-	}
 	receipts, err := handler.deps.Receipts.ListTechnicalReceipts(ctx, tenant, send.Version(), send.Sequence())
 	if err != nil {
 		return domain.AttemptResultInvalid, err
 	}
-	return domain.CurrentTechnicalJudgment(record.Attempt, &send, receipts)
+	return domain.TechnicalJudgmentAfterSend(send, receipts)
 }

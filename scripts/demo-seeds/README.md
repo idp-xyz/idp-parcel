@@ -145,9 +145,9 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 末行那一个，委托要已成`已接受`（dispatch 跑过一拍）；没接受答 `PARCEL_NOT_ACCEPTED`。三口的权力分开授予，查阅员持哪一种都没有，三口都答
 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
-发送归 dispatch（ADR-0342）：同一步把演示单元的发送目标 `SYN-CHANNEL-CN-EXPORT` 登到本机的合成报关服务商（`data/customs/33`，
+发送归 dispatch（ADR-0342）：`steps/461-customs-declaration-channel.sh` 把演示单元的发送目标 `SYN-CHANNEL-CN-EXPORT` 登到本机的合成报关服务商（`data/customs/33`，
 `http://127.0.0.1:19180/declarations`）。先 `go run ./scripts/demo-seeds/declaration-broker` 起它，dispatch 收到提交版本已形成就经它发出去，
-服务商同步答已收、给一个消息号；没起它，dispatch 记「确知没发出去」照常续办，起了之后下一拍发出。接着
+服务商同步答已收、给一个消息号；没起它，dispatch 记「确知没发出去」照常续办，起了之后下一拍发出；久到重投预算用完，这一封就放弃了，要重灌或人工重放。接着
 `IDP_PARCEL_API_BASE=… scripts/demo-seeds/send-one-declaration.sh <提交版本号>` 用合成报关服务商那台集成客户端
 （`syn-integration-customs-broker-01`）送一份异步技术回执到 `POST /customs/technical-receipts`，末行打出尝试此刻的技术判断
 `ACKNOWLEDGED`。parcel-api 要带集成客户端族三件参数（下面「集成客户端渠道」）。
