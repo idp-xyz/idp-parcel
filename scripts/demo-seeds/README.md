@@ -175,6 +175,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 认定；执行方在作业事实面的后补（`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、`/transport-fulfillment/delivery-attempt-result-corrections`）
 走作业事实登记授予与在用设备，不需要这一节。查阅员没有这两种，认定口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
+配置员另持运营决定「节点监管协作承接」（ADR-0338 决定一；票 launch-wiring/04），按种类单列，与监管运输处置承接、送站交接确认都分开：授予、对照与权威区间另起
+`steps/484-access-node-collaboration.sh` 一节，数据是 `data/access/28`、`29` 与 `data/governance/65`、`66`。节点现场登记协作执行事实走作业事实登记面
+（`POST /node-operations/collaboration-executions`），不需要另一种操作者授予，要的是在用设备、作业范围授予与这一节登的事实类型 `NODE_COLLABORATION_EXECUTION`
+的准入对照。种子不作任何承接、不登记任何执行事实。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 

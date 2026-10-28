@@ -91,7 +91,10 @@ type AcceptCollaborationCommand struct {
 
 // RecordExecutionCommand 携带一次执行事实登记的全部输入。
 type RecordExecutionCommand struct {
-	TenantID    domain.TenantID
+	TenantID domain.TenantID
+	// Node 是登记这条事实的现场所在节点（取自认证出的作业范围）。必须就是承接决定里的节点：别的节点的设备替承接节点登记，
+	// 等于冒充现场，按未受理答，不泄露事项是否存在。
+	Node        domain.NodeReference
 	Item        string
 	Unit        string
 	Action      domain.CollaborationActionKind
@@ -260,6 +263,10 @@ func (handler *AcceptCollaborationHandler) RecordExecution(
 	}
 	if !found {
 		// 没有承接决定就没有可执行的范围——先承接再执行。
+		return CollaborationResult{outcome: CollaborationNotAccepted}, nil
+	}
+
+	if command.Node != acceptanceRecord.Acceptance.Node() {
 		return CollaborationResult{outcome: CollaborationNotAccepted}, nil
 	}
 

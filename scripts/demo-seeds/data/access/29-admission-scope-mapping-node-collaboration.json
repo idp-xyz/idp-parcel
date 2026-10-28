@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-NODE-COLLABORATION-ACCEPTANCE-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "NODE_COLLABORATION_ACCEPTANCE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WF-NODE-COLLABORATION-EXECUTION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "NODE_COLLABORATION_EXECUTION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-04"
+    }
+  ]
+}
