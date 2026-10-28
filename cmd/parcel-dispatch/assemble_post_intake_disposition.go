@@ -18,8 +18,6 @@ import (
 // 译出的命令被编排拒收或来源冲突——重投不会变，保持 publish_failed 让现场去查那份信封。
 var postIntakeDispositionJourneyUndecidedSentinels = []error{
 	tfparcelshipment.ErrPostIntakeJourneyUndecided,
-	// 信封里有没人承接的请求项：等的是 NO、NR（与 TF 扣住）的消费者到位，落 consumer_undecided 让信封留在可见的失败状态。
-	tfparcelshipment.ErrPostIntakeRequestUnhandledOwner,
 }
 
 // startJourneyOnPostIntakeDispositionConsumer 接 PS 处置决定 → TF 另起旅程。处理方与运营决定口（parcel-api）是同一只 StartAlternateJourneyHandler，

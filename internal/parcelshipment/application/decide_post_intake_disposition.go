@@ -102,6 +102,8 @@ type DecidePostIntakeDispositionDeps struct {
 	Finals        ports.CurrentFinalView
 	Cancellations ports.ParcelCancellationView
 	Handoff       ports.PostIntakeDispositionHandoff
+	// ManualItems 落决定里需要人工处理的请求项（ADR-0340）：与决定留痕、信封同笔。
+	ManualItems ports.PostIntakeManualItems
 	// BoundaryLock 让决定与同一包裹上的取消、收寄采用、终局采用排队：决定的前提（已越界、尚无终局）正是它们在锁里写的东西。
 	BoundaryLock ports.CancellationBoundaryLock
 	Clock        ports.Clock
@@ -214,13 +216,17 @@ func (handler *DecidePostIntakeDispositionHandler) Handle(
 	if err := handler.deps.Handoff.HandOffPostIntakeDisposition(ctx, ports.PostIntakeDispositionHandoffIntent{Disposition: disposition}); err != nil {
 		return DecidePostIntakeDispositionResult{}, fmt.Errorf("decide post-intake disposition: hand off: %w", err)
 	}
+	// 系统不替所有者执行的请求项与决定同笔落成待人工处理项：落在决定形成的这一刻，之后没有第二个入口，所以不会漏、也不会重复。
+	if err := handler.deps.ManualItems.RecordPostIntakeManualItems(ctx, disposition); err != nil {
+		return DecidePostIntakeDispositionResult{}, fmt.Errorf("decide post-intake disposition: manual items: %w", err)
+	}
 	return decidedBefore(disposition, PostIntakeDispositionDecided), nil
 }
 
 func (handler *DecidePostIntakeDispositionHandler) assembled() error {
 	deps := handler.deps
 	if deps.Dispositions == nil || deps.Requests == nil || deps.Adoptions == nil || deps.Finals == nil ||
-		deps.Cancellations == nil || deps.Handoff == nil || deps.BoundaryLock == nil || deps.Clock == nil {
+		deps.Cancellations == nil || deps.Handoff == nil || deps.ManualItems == nil || deps.BoundaryLock == nil || deps.Clock == nil {
 		return ErrPostIntakeDispositionNotAssembled
 	}
 	return nil
