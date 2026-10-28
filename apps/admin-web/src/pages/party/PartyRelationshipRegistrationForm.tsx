@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
@@ -54,6 +54,8 @@ export interface PartyRelationshipRegistrationFormProps {
   parties: ApiResult<BusinessPartyListResponseBody> | null;
   /** 登记册答 `REGISTERED` 时回调，页面借它重取关系列表。 */
   onRegistered: () => void;
+  /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -64,6 +66,7 @@ export function PartyRelationshipRegistrationForm({
   knownRelationships,
   parties,
   onRegistered,
+  onUnsavedChange,
 }: PartyRelationshipRegistrationFormProps) {
   const form = useRegistrationForm<PartyRelationshipDraft>({
     kind,
@@ -74,7 +77,11 @@ export function PartyRelationshipRegistrationForm({
     landedOutcome: 'REGISTERED',
     onLanded: onRegistered,
   });
-  const { draft, patch, problems, locked, timeZone } = form;
+  const { draft, patch, problems, locked, timeZone, unsaved } = form;
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+  }, [onUnsavedChange, unsaved]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
   const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
   const deliveryScope = draft.role === authorizedDeliveringPartyRole ? deliveryScopeSpellingOf(draft) : null;
@@ -90,7 +97,7 @@ export function PartyRelationshipRegistrationForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {/* 双方在不在册、角色与双方是否匹配、区间是否合法都由服务端按册面判；租户由操作者身份给出，不在表单上。 */}
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="text-[12px] text-idpxyz-breadcrumb">
             {'关系记录谁对谁持有什么角色、在什么范围、多长时间。一笔登记形成一个修订，首笔修订号从 1 起，之后必须连续。双方都要已登记为业务参与方；角色与双方是否匹配、区间是否合法，由服务端检查。不填批准信息即登记为候选关系，批准另登一笔新修订。'}
           </p>
 
@@ -103,7 +110,7 @@ export function PartyRelationshipRegistrationForm({
                 placeholder="如 SYN-REL-AGENT-07"
                 onChange={(event) => patch({ relationshipId: event.target.value })}
               />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                 {known
                   ? `已取回关系册里有这一关系，最新修订 r${known.revision}；本次登记是它的新修订。`
                   : '列表里还没有这个关系标识，这一笔是它的首笔修订；如果别人刚登记过，服务端会拒绝。'}
@@ -159,7 +166,7 @@ export function PartyRelationshipRegistrationForm({
                   </option>
                 ))}
               </select>
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                 角色与双方是否匹配由服务端检查。
               </span>
             </Field>
@@ -197,7 +204,7 @@ export function PartyRelationshipRegistrationForm({
                     />
                   </label>
                 </div>
-                <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                   持有方是交付方，相对方是这个客户账户所属的参与方；范围收到这个客户账户，可再收到一个节点。
                   {deliveryScope.ok ? (
                     <>

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { FileText, History, IdCard, X } from 'lucide-react';
 import {
   Button,
@@ -15,45 +15,19 @@ import { LegalEntityBanners, LegalEntityLifecycle, LegalEntityMoreMenu } from '.
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
-import { DetailRow, Instant, UnknownPartyName, statusBadge, useCopyToClipboard } from './detail-primitives';
+import {
+  DetailRow,
+  Fact,
+  FactStrip,
+  Instant,
+  RefChip,
+  UnknownPartyName,
+  statusBadge,
+  useCopyToClipboard,
+} from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
 type PanelTab = 'overview' | 'profile' | 'history';
-
-/** 引用签：点一下复制，与参照页同一手势。 */
-function RefChip({
-  label,
-  value,
-  title,
-  onCopy,
-}: {
-  label: string;
-  value?: string;
-  title: string;
-  onCopy: (label: string, value: string) => void;
-}) {
-  if (!value) return null;
-  return (
-    <button
-      type="button"
-      title={`${title}（点击复制）`}
-      onClick={() => onCopy(title, value)}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[12px] hover:border-idpxyz-accent"
-    >
-      <span className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</span>
-      <span className="truncate font-mono text-idpxyz-text">{value}</span>
-    </button>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
-      <p className="mt-0.5 break-words font-mono text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
-    </div>
-  );
-}
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
@@ -139,10 +113,7 @@ export function LegalEntityDetailPanel({
         <LegalEntityBanners row={row} />
       </div>
 
-      {/* 事实条按栏宽在四列与两列之间二选一（票 group-legal-entities-uiux/10）：固定四列在窄栏里把「08:00:00」这样一个词拆成
-          两半；按最小格宽自动分列又会在中间宽度排出三格加一格。minmax 的下限用 clamp 夹：栏宽过 32rem 时中间项为负、取下界
-          25%，排四列；不到时中间项极大、取上界 50%，排两列——四格放得下每个词时才排四列。 */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border px-5 py-3">
+      <FactStrip>
         <Fact label="当前修订">{identityRevisionLabel(row.revision)}</Fact>
         <Fact label="生效自">
           <Instant value={row.effectiveFrom} />
@@ -151,7 +122,7 @@ export function LegalEntityDetailPanel({
           <Instant value={row.registeredAt} />
         </Fact>
         <Fact label="停用时点">{row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用'}</Fact>
-      </div>
+      </FactStrip>
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-5 mt-3 shrink-0">

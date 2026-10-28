@@ -7,6 +7,7 @@ import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknow
 import {
   legalEntityLifecycle,
   lifecycleConnectorReached,
+  type IdentityLifecycleInput,
   type LifecycleStage,
   type LifecycleStageState,
 } from './legal-entity-lifecycle';
@@ -55,7 +56,7 @@ function StageMark({ stage }: { stage: LifecycleStage }) {
  * 主线（已登记 → 已生效）一条，已停用隔一道虚线摆在右侧作旁支终态（票 group-legal-entities-uiux/06）：停用是例外分支，
  * 不是每个法人迟早走到的下一步。分段判读在 legal-entity-lifecycle.ts。
  */
-export function LegalEntityLifecycle({ row }: { row: GroupLegalEntityRecord }) {
+export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
   const stages = legalEntityLifecycle(row);
   if (stages === null) return null;
   const main = stages.filter((stage) => !stage.terminal);

@@ -21,12 +21,18 @@ const TERMINAL: IdentityStatusCode = 'DEACTIVATED';
 const STAGES: readonly IdentityStatusCode[] = ['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'];
 
 /**
+ * 判读只看身份状态、生效自与停用时点三格。业务参与方身份（BusinessPartyRecord）与法人身份同一套状态代数、同这三格，
+ * 业务参与方页的详情栏与对象页借同一条判读画生命周期，所以收窄到这三格而不收整条法人记录。
+ */
+export type IdentityLifecycleInput = Pick<GroupLegalEntityRecord, 'status' | 'effectiveFrom' | 'deactivatedAt'>;
+
+/**
  * 三段各处什么态。状态码不在三格之内时答 null，详情栏不画这条——不把新答案硬塞进旧三段。
  *
  * 已停用时「已生效」那段按时点判：生效自早于停用时点才算走过，否则是跳过——登记后未到生效就停用的法人从没生效过，
  * 画成走过就是说假话。时点解析不了时按走过，与服务端状态码给的顺序一致。
  */
-export function legalEntityLifecycle(row: GroupLegalEntityRecord): LifecycleStage[] | null {
+export function legalEntityLifecycle(row: IdentityLifecycleInput): LifecycleStage[] | null {
   const current = STAGES.indexOf(row.status as IdentityStatusCode);
   if (current === -1) return null;
   return STAGES.map((code, index) => {
@@ -45,7 +51,7 @@ export function lifecycleConnectorReached(from: LifecycleStage, to: LifecycleSta
   return from.state === 'done' && (to.state === 'done' || to.state === 'current');
 }
 
-function effectiveBeforeDeactivation(row: GroupLegalEntityRecord): boolean {
+function effectiveBeforeDeactivation(row: IdentityLifecycleInput): boolean {
   if (row.deactivatedAt === undefined) return true;
   const effective = Date.parse(row.effectiveFrom);
   const deactivated = Date.parse(row.deactivatedAt);

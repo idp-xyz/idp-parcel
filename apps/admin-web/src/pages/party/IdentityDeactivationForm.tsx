@@ -32,6 +32,7 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import type { DeactivationPreset } from './business-parties-address';
+import { registrationDraftUnsaved } from './registration-form';
 import {
   deactivationConfirmation,
   emptyIdentityDeactivationDraft,
@@ -69,6 +70,11 @@ export interface IdentityDeactivationFormProps {
    * 再填。换一份预填（同一张标签里又从另一个法人点过来）就再填一次。
    */
   preset?: DeactivationPreset | null;
+  /**
+   * 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。基线带着预填：只有预填那两格、人还什么都没填
+   * 时不算没提交——与下面 guardUnsaved 关掉的理由同一条。卸载时报 false。
+   */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -186,7 +192,12 @@ function RegisterPicker<K extends IdentityKind>({
   );
 }
 
-export function IdentityDeactivationForm({ parties, onDeactivated, preset = null }: IdentityDeactivationFormProps) {
+export function IdentityDeactivationForm({
+  parties,
+  onDeactivated,
+  preset = null,
+  onUnsavedChange,
+}: IdentityDeactivationFormProps) {
   const [confirming, setConfirming] = useState(false);
   // 本表单自读那一册的答案，连同是哪一册（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连
   // 标识一起清」同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
@@ -226,6 +237,16 @@ export function IdentityDeactivationForm({ parties, onDeactivated, preset = null
   });
   const { draft, patch, problems, locked, timeZone } = form;
   const selectedKind = isIdentityKind(draft.kind) ? draft.kind : null;
+  // 离开确认的基线带着预填两格：预填进来、人什么都没填，不算没提交。
+  const unsaved = registrationDraftUnsaved(
+    draft,
+    { ...emptyIdentityDeactivationDraft(), kind: preset?.kind ?? '', id: preset?.id ?? '' },
+    form.landedKey,
+  );
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+  }, [onUnsavedChange, unsaved]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
   useEffect(() => {
     // 参与方册不在这里读：页面持有的那份答案就是它。其余两册在选中时读一次、落册后重读一次；未回的旧请求按 cancelled 丢。
@@ -270,7 +291,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated, preset = null
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {/* 修订号是操作者声明自己看到的册面（册上最新 + 1），错位由服务端拒而不是替人猜；租户由操作者身份给出，不在表单上。 */}
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="text-[12px] text-idpxyz-breadcrumb">
             {'停用会在这个身份的修订记录上新增一笔，之前的修订不变。从停用时点起，它不再支持新的商业决定；停用后不能撤回。修订号填列表上最新的修订号 + 1，对不上说明有人刚登记过，服务端会拒绝。参与方关系不在这里停用，关系的结束走撤销、到期或替代。'}
           </p>
 
@@ -290,7 +311,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated, preset = null
                   </option>
                 ))}
               </select>
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                 法人与客户账户也在这里停用；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
               </span>
             </Field>
@@ -376,7 +397,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated, preset = null
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
             {confirmation.facts.map((fact) => (
               <div key={fact.label} className="contents">
-                <dt className="text-idpxyz-textMuted">{fact.label}</dt>
+                <dt className="text-idpxyz-breadcrumb">{fact.label}</dt>
                 <dd className="font-mono break-all text-idpxyz-text">{fact.value}</dd>
               </div>
             ))}

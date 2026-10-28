@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
+import { statusToneSurface } from '../../components/status-tone';
 import { formatInstant } from '../catalogue-view';
 import type { ListColumn } from '../../templates';
 import { labelOf, partyNameUnknownNote } from './presentation';
@@ -93,6 +94,78 @@ export function useCopyToClipboard() {
         }),
     );
   };
+}
+
+/** 详情栏头部的引用签：点一下复制，与参照页同一手势。没有值就不摆。 */
+export function RefChip({
+  label,
+  value,
+  title,
+  onCopy,
+}: {
+  label: string;
+  value?: string;
+  title: string;
+  onCopy: (label: string, value: string) => void;
+}) {
+  if (!value) return null;
+  return (
+    <button
+      type="button"
+      title={`${title}（点击复制）`}
+      onClick={() => onCopy(title, value)}
+      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[12px] hover:border-idpxyz-accent"
+    >
+      <span className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</span>
+      <span className="truncate font-mono text-idpxyz-text">{value}</span>
+    </button>
+  );
+}
+
+/** 详情栏事实条里的一格：标签在上、等宽值在下。 */
+export function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
+      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
+      <p className="mt-0.5 break-words font-mono text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
+    </div>
+  );
+}
+
+/**
+ * 事实条按栏宽在四列与两列之间二选一（票 group-legal-entities-uiux/10）：固定四列在窄栏里把「08:00:00」这样一个词拆成
+ * 两半；按最小格宽自动分列又会在中间宽度排出三格加一格。minmax 的下限用 clamp 夹：栏宽过 32rem 时中间项为负、取下界
+ * 25%，排四列；不到时中间项极大、取上界 50%，排两列——四格放得下每个词时才排四列。
+ */
+export function FactStrip({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border px-5 py-3">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * 「在用中已生效」的占比条（身份册工作台的指标位）。不用上游 Progress：它不转发 aria-*，进度条起不了名字
+ * （axe aria-progressbar-name），轨道的 `bg-idpxyz-border/50` 在本仓也生不出来（主题色是裸 CSS 变量，见
+ * components/primary-action.ts）。名字由各册给，说清分子分母是哪一册的。
+ */
+export function EffectiveShareBar({ share, label }: { share: number; label: string }) {
+  return (
+    <div
+      role="progressbar"
+      aria-label={label}
+      aria-valuenow={share}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="h-1 w-24 overflow-hidden rounded-full bg-idpxyz-border"
+    >
+      <div
+        className={`h-full rounded-full ${share >= 100 ? statusToneSurface.success : 'bg-idpxyz-accent'}`}
+        style={{ width: `${share}%` }}
+      />
+    </div>
+  );
 }
 
 /** 抽屉里的一格：标签 + 值，可选复制按钮。用在 `<dl>` 里。 */

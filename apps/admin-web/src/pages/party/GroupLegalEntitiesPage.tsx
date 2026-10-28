@@ -13,7 +13,7 @@ import {
 import { moduleInfoById } from '../../navigation';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
-import { statusToneSurface, statusToneText } from '../../components/status-tone';
+import { statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
@@ -24,7 +24,7 @@ import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
 import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
-import { Instant, UnknownPartyName, statusBadge } from './detail-primitives';
+import { EffectiveShareBar, Instant, UnknownPartyName, statusBadge } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import {
   countLegalEntities,
@@ -161,28 +161,6 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     ),
   },
 ];
-
-/**
- * 「在用中已生效」的占比条。不用上游 Progress：它不转发 aria-*，进度条起不了名字（axe aria-progressbar-name），轨道的
- * `bg-idpxyz-border/50` 在本仓也生不出来（主题色是裸 CSS 变量，见 components/primary-action.ts）。
- */
-function EffectiveShareBar({ share }: { share: number }) {
-  return (
-    <div
-      role="progressbar"
-      aria-label="在用法人中已生效的占比"
-      aria-valuenow={share}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      className="h-1 w-24 overflow-hidden rounded-full bg-idpxyz-border"
-    >
-      <div
-        className={`h-full rounded-full ${share >= 100 ? statusToneSurface.success : 'bg-idpxyz-accent'}`}
-        style={{ width: `${share}%` }}
-      />
-    </div>
-  );
-}
 
 /** 详情地址：hash 二段。壳层拿前两段作标签 id，对象页因此另开一张标签，列表留在原处。 */
 function detailHash(legalEntityId: string): string {
@@ -360,7 +338,7 @@ export function GroupLegalEntitiesPage() {
               <span className="text-[12px] font-semibold leading-none text-idpxyz-breadcrumb">—</span>
             ) : (
               <div className="flex items-center gap-1.5">
-                <EffectiveShareBar share={effectiveShare} />
+                <EffectiveShareBar share={effectiveShare} label="在用法人中已生效的占比" />
                 <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectiveShare}%</span>
               </div>
             ),

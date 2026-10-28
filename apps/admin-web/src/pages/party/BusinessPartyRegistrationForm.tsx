@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
@@ -25,14 +26,20 @@ import {
 export interface BusinessPartyRegistrationFormProps {
   /** 页面已取回的参与方列表（给修订号建议用）；列表没取到传 null，建议一律为 1。 */
   knownParties: readonly BusinessPartyRecord[] | null;
-  /** 登记册答 `REGISTERED` 时回调，页面借它重取列表让新行在「参与方身份」签立刻可见。 */
+  /** 登记册答 `REGISTERED` 时回调，页面借它重取列表让新行在「参与方身份」册立刻可见。 */
   onRegistered: () => void;
+  /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const info = moduleInfoById['business-parties'];
 const kind = 'business-party';
 
-export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: BusinessPartyRegistrationFormProps) {
+export function BusinessPartyRegistrationForm({
+  knownParties,
+  onRegistered,
+  onUnsavedChange,
+}: BusinessPartyRegistrationFormProps) {
   const form = useRegistrationForm<BusinessPartyDraft>({
     kind,
     empty: emptyBusinessPartyDraft,
@@ -43,7 +50,11 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
     landedOutcome: 'REGISTERED',
     onLanded: onRegistered,
   });
-  const { draft, patch, problems, locked, timeZone } = form;
+  const { draft, patch, problems, locked, timeZone, unsaved } = form;
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+  }, [onUnsavedChange, unsaved]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
   // 按原串找而不裁空白：载荷也不裁，" X" 送上去就是另一个身份，这里若裁了就会把它说成「已在册」。
   const known = knownParties?.find((row) => row.partyId === draft.partyId);
@@ -57,7 +68,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
         <CardContent className="flex flex-col gap-4">
           {/* 修订是否连续由服务端按册面判，表单只把格编对；租户由操作者身份给出，不在表单上。各格首尾空白原样送出——
               不替人合并两个只差空格的标识，所以要把这一点说给人听。 */}
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="text-[12px] text-idpxyz-breadcrumb">
             {'一笔登记形成一个修订。首笔修订号从 1 起，之后必须连续；要更正，用下一个修订号再登一笔，原来的不会被覆盖。标识的首尾空格会原样提交：多一个空格就是另一个参与方。'}
           </p>
 
@@ -70,7 +81,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
                 placeholder="如 SYN-PARTY-AGENT-07"
                 onChange={(event) => patch({ partyId: event.target.value })}
               />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                 {known
                   ? `已取回列表里有这一参与方，最新修订 r${known.revision}；本次登记是它的新修订。`
                   : '列表里还没有这个标识，这一笔是它的首笔修订；如果别人刚登记过，服务端会拒绝。'}

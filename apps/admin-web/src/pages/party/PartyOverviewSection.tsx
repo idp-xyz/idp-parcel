@@ -41,7 +41,7 @@ import { useRegisterList } from './register-list';
 // useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头会每次渲染重取。
 const listSettlementPolicies = () => listCommercialPolicies('SETTLEMENT_POLICY');
 
-const note = 'text-[12px] text-idpxyz-textMuted';
+const note = 'text-[12px] text-idpxyz-breadcrumb';
 
 function SectionBody<Row>({
   state,
@@ -130,7 +130,7 @@ function Section<Row>({
       <header className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-[12px] font-medium text-idpxyz-text">
           {title}
-          <span className="ml-1.5 font-mono text-idpxyz-textMuted">{countText(state)}</span>
+          <span className="ml-1.5 font-mono text-idpxyz-breadcrumb">{countText(state)}</span>
         </h3>
         {target ? (
           <Button
@@ -156,7 +156,7 @@ function RowCard({ children }: { children: ReactNode }) {
 function Line({ label, children, mono = false }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
     <p className="mt-0.5">
-      <span className="text-idpxyz-textMuted">{label}：</span>
+      <span className="text-idpxyz-breadcrumb">{label}：</span>
       <span className={mono ? 'font-mono' : ''}>{children}</span>
     </p>
   );
@@ -166,7 +166,7 @@ function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   if (roles.length === 0) return null;
   return (
     <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
-      <span className="text-idpxyz-textMuted">{label}</span>
+      <span className="text-idpxyz-breadcrumb">{label}</span>
       {roles.map((role) => (
         <span key={role} className="rounded border border-idpxyz-border px-1.5 py-0.5 text-idpxyz-text">
           {labelOf(partyRoleLabels, role)}
@@ -253,7 +253,7 @@ export function PartyOverviewSection({
             </RowCard>
           )}
         />
-        <p className={`mt-2 ${note}`}>全部关系在本页「参与方关系」签可筛看。</p>
+        <p className={`mt-2 ${note}`}>全部关系在本页「参与方关系」册可筛看。</p>
       </Section>
 
       <Section title="货主客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>

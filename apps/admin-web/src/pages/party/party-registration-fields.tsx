@@ -81,10 +81,8 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
   const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
   // 最近一次落册送出的那份草稿的内容键：之后没再动就不算没提交（票 party-commercial-uiux/17）。
   const [landedKey, setLandedKey] = useState<string | null>(null);
-  useUnsavedGuard(
-    registrationGroup(spec.kind),
-    spec.guardUnsaved !== false && registrationDraftUnsaved(draft, spec.empty(), landedKey),
-  );
+  const unsaved = registrationDraftUnsaved(draft, spec.empty(), landedKey);
+  useUnsavedGuard(registrationGroup(spec.kind), spec.guardUnsaved !== false && unsaved);
 
   const timeZone = currentDisplayTimeZone();
   const suggestion = spec.suggestion(draft);
@@ -124,7 +122,23 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
     onUseSuggestion: () => setRevisionEdited(false),
   };
 
-  return { draft, effectiveDraft, patch, problems, canSend, locked, state, timeZone, submit, send, revisionField };
+  // unsaved 与 landedKey 一并交出：住在地址上的登记视图（业务参与方页）要在「返回列表」前问一句，问的就是这一格；
+  // 由深链预填的表单拿 landedKey 对着带预填的基线自己再算一次（IdentityDeactivationForm）。
+  return {
+    draft,
+    effectiveDraft,
+    patch,
+    problems,
+    canSend,
+    locked,
+    state,
+    timeZone,
+    submit,
+    send,
+    revisionField,
+    unsaved,
+    landedKey,
+  };
 }
 
 /**

@@ -70,8 +70,11 @@ export function countLegalEntities(rows: readonly GroupLegalEntityRecord[]): Leg
 /**
  * 在用法人里已生效的占比（整数百分比）。分母只数在用的两格（已登记、已生效）：已停用的永远不会再生效，算进分母
  * 这条就永远到不了 100%。没有在用法人时答 null，页面显「—」而不是给空集编一个 0%。
+ *
+ * 只收按身份状态分格的那一张：业务参与方册的计数（business-party-list.ts）是同一套身份状态代数，占比同一个公式，
+ * 借这一份算，不在那边再抄一遍。
  */
-export function effectiveShareOfInUse(counts: LegalEntityCounts): number | null {
+export function effectiveShareOfInUse(counts: Pick<LegalEntityCounts, 'byStatus'>): number | null {
   const inUse = counts.byStatus.REGISTERED + counts.byStatus.EFFECTIVE;
   if (inUse === 0) return null;
   return Math.round((counts.byStatus.EFFECTIVE / inUse) * 100);

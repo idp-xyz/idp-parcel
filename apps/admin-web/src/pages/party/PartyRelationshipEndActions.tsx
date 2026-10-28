@@ -100,7 +100,7 @@ export function PartyRelationshipEndActions({
         })}
       </div>
       {unavailable.length > 0 ? (
-        <ul className="text-[12px] text-idpxyz-textMuted">
+        <ul className="text-[12px] text-idpxyz-breadcrumb">
           {unavailable.map(({ action, reason }) => (
             <li key={action}>
               {partyRelationshipEndingActionLabels[action]}不可用：{reason}
@@ -111,7 +111,7 @@ export function PartyRelationshipEndActions({
 
       {open !== null ? (
         <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-3">
-          <div className="text-[12px] text-idpxyz-textMuted">
+          <div className="text-[12px] text-idpxyz-breadcrumb">
             <p>
               {open === 'revocation'
                 ? '撤销即时结束这段关系：终止修订一落册，它就不再支持新的商业决定。时刻不得晚于此刻。'
