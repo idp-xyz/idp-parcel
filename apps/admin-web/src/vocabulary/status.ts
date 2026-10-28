@@ -358,6 +358,17 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   FORMED: good('已形成'),
   ALREADY_COMPLETED: muted('已有记录'),
   COMMERCIAL_BASIS_UNAVAILABLE: warn('商务依据暂不可用'),
+
+  // —— 面单交易(交易级结果与后续动作)· parcel-shipment ——
+  ESTABLISHED: info('已建立'),
+  SUBMITTED_TO_CHANNEL: info('已提交渠道'),
+  RESULT_UNCERTAIN: warn('结果待确认'),
+  SUCCEEDED: good('成功'),
+  PARTIALLY_SUCCEEDED: warn('部分成功'),
+  CHANNEL_VOID: muted('渠道作废'),
+  CHANNEL_REFUND: muted('渠道退款'),
+  REPLACEMENT: info('替代'),
+  RETRY: info('重试'),
 };
 
 /**

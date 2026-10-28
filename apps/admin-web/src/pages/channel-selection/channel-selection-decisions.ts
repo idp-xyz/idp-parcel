@@ -1,12 +1,14 @@
-// 渠道择优决定页的判读与行转写（票 label-channel/23）。
+// 渠道择优页的判读与行转写(票 label-channel/23)。
 //
-// 单独成模块而不写在页面里：这一页的风险都在「每一格该显示什么」上——「此刻没有并列冲突」与「接入渠道
+// 单独成模块而不写在页面里:这一页的风险都在「每一格该显示什么」上——「此刻没有并列冲突」与「接入渠道
 // 未配置」分不分得开、按标识查不到是终局答案还是故障、出局因由会不会被折成一句笼统的「失败」——而页面
-// 组件要跑起来得有 React 与 DOM。判读是纯函数就能拿测试钉住（同 effective-time-judgment 的先例）。
+// 组件要跑起来得有 React 与 DOM。判读是纯函数就能拿测试钉住(同 effective-time-judgment 的先例)。
+// 屏上说运营的话:错误只说下一步做什么,状态码与问题码由页面收进技术详情。
 
 import type { OperatorRefusal } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import type { ApiResult } from '../catalogue-api';
 import type {
@@ -16,7 +18,7 @@ import type {
   TiedChannelSelectionDecisionsResponseBody,
 } from './api';
 
-/** 逐候选结果封闭四格（parcelshipment domain ChannelCandidateOutcome），中文取票 14 裁决原词。 */
+/** 逐候选结果封闭四格(parcelshipment domain ChannelCandidateOutcome),中文取票 14 裁决原词。 */
 export const candidateOutcomeLabels: Record<string, string> = {
   SELECTED: '选中',
   NOT_SELECTED: '落选',
@@ -24,30 +26,30 @@ export const candidateOutcomeLabels: Record<string, string> = {
   TIED: '并列',
 };
 
-/** 结论三格（domain ChannelSelectionConclusion）：与比较器的三种非错误出口一一对应。 */
+/** 结论三格(domain ChannelSelectionConclusion):与比较器的三种非错误出口一一对应。 */
 export const conclusionLabels: Record<string, string> = {
-  SELECTED: '选出唯一一条',
-  TIED: '并列冲突——交人工裁决',
-  NONE_QUALIFIED: '无人参选',
+  SELECTED: '选出唯一一家',
+  TIED: '几家并列,等人裁',
+  NONE_QUALIFIED: '没有渠道可选',
 };
 
 /**
- * 出局因由四格（domain ChannelCostUnavailability），一一对应 parcel-pricing 四种非完成结果；措辞取该文件
- * 逐格注释的续办句——四格续办各不相同，页面不把它们折成一句「不可计价」。
+ * 出局因由四格(domain ChannelCostUnavailability),一一对应 parcel-pricing 四种非完成结果;措辞取该文件
+ * 逐格注释的续办句——四格续办各不相同,页面不把它们折成一句「不可计价」。
  */
 export const exclusionLabels: Record<string, string> = {
   PENDING_EVIDENCE: '待判断——补齐事实即可计价',
   RATECARD_EXCLUSION: '不可计价——价卡明确排除',
-  CONFLICT: '冲突——规则、区间或版本互斥，待治理裁决',
-  NOT_FORMED: '未形成——请求不合法或计算未完成，可重试',
+  CONFLICT: '冲突——规则、区间或版本互斥,待治理裁决',
+  NOT_FORMED: '未形成——请求不合法或计算未完成,可重试',
 };
 
-/** 择优规则引用（domain ChannelSelectionRule）。首发只有成本单维。 */
+/** 择优规则引用(domain ChannelSelectionRule)。首发只有成本单维。 */
 export const ruleLabels: Record<string, string> = {
-  COST_ONLY: '成本单维',
+  COST_ONLY: '只比成本',
 };
 
-/** 词表没收录的词原样示出，不猜格：某天新增一格时页面宁可显示英文原名，也不让它冒充既有一格。 */
+/** 词表没收录的词原样示出,不猜格:某天新增一格时页面宁可显示英文原名,也不让它冒充既有一格。 */
 export function wordOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }
@@ -59,8 +61,8 @@ export interface DecisionRow {
 }
 
 /**
- * 并列冲突一行。tiedCandidates 列出并列的那几家——冲突列表要答的正是「哪几家并列」，人工裁决从这里起步；
- * 出局与落选的不进这一列，逐候选明细在展开面板里。
+ * 并列冲突一行。tiedCandidates 列出并列的那几家——冲突列表要答的正是「哪几家并列」,人工裁决从这里起步;
+ * 出局与落选的不进这一列,逐候选明细在展开面板里。决定号、范围与映射引用不上列,进面板的技术详情。
  */
 export function decisionRowsOf(body: TiedChannelSelectionDecisionsResponseBody): DecisionRow[] {
   return body.decisions.map((decision) => ({
@@ -89,8 +91,8 @@ export interface CandidateRow {
 }
 
 /**
- * 逐候选明细一行。评价引用缺席显 `—`（没登记价卡的候选没经过评价，不是漏了）；出局因由只在出局行上有字，
- * 其余行留空——非出局不得带因由，是决定记录自己的形状。
+ * 逐候选明细一行。评价引用缺席显 `—`(没登记价卡的候选没经过评价,不是漏了);出局因由只在出局行上有字,
+ * 其余行留空——非出局不得带因由,是决定记录自己的形状。
  */
 export function candidateRowsOf(decision: ChannelSelectionDecisionRecord): CandidateRow[] {
   return decision.candidates.map((candidate) => ({
@@ -104,17 +106,33 @@ export function candidateRowsOf(decision: ChannelSelectionDecisionRecord): Candi
   }));
 }
 
+/** 一条决定的技术详情:决定号、范围与映射引用、候选装配时点、各候选所用的评价引用。 */
+export function decisionTechnicalRows(decision: ChannelSelectionDecisionRecord): TechnicalRow[] {
+  return [
+    { label: '决定标识', value: decision.decisionId },
+    { label: '商业范围引用', value: decision.scope },
+    { label: '产品—渠道映射', value: decision.mapping },
+    { label: '择优规则码', value: decision.rule },
+    { label: '结论码', value: decision.conclusion },
+    { label: '候选装配时点', value: decision.assembledAsOf },
+    ...decision.candidates.map((candidate) => ({
+      label: `评价引用 · ${candidate.candidate}`,
+      value: candidate.evaluation ?? '',
+    })),
+  ];
+}
+
 interface TiedListViewOptions {
   module: ModuleInfo;
   endpoint: string;
 }
 
 /**
- * 列表区的呈现态。HTTP 那半（未配置 / 调用方问题 / 未形成答案 / 传输失败）转交 catalogueViewState，不在
- * 这里抄第二份；本函数只管空册措辞：收窄与不收窄各一句。
+ * 列表区的呈现态。HTTP 那半(未配置 / 调用方问题 / 未形成答案 / 传输失败)转交 catalogueViewState,不在
+ * 这里抄第二份;本函数只管空册措辞:收窄与不收窄各一句。
  *
- * 空册是真答案不是缺陷：没有并列冲突说的是「此刻没有等人工裁决的择优」——与 403 的「接入渠道未配置」
- * 是两件事，也与「择优编排今天没有生产装配点」是两件事（后者让册子在接线前恒空，页面在描述里说明）。
+ * 空册是真答案不是缺陷:没有并列冲突说的是「此刻没有等人工裁决的择优」——与 403 的「接入渠道未配置」
+ * 是两件事,也与「择优编排今天没有生产装配点」是两件事(后者让册子在接线前恒空)。
  */
 export function tiedListViewState(
   answer: ApiResult<TiedChannelSelectionDecisionsResponseBody> | null,
@@ -125,14 +143,12 @@ export function tiedListViewState(
 ): TemplateViewState {
   const empty = subject
     ? {
-        title: `对象 ${subject.scope} / ${subject.mapping} 此刻没有并列冲突`,
-        description:
-          '读取入口已配置，这一格是真答案：该商业范围下按这笔产品—渠道映射做过的择优里，没有停在并列冲突的记录。去掉对象收窄可看租户内全部并列冲突。',
+        title: '这个范围与映射下现在没有并列的择优',
+        description: '在这个商业范围下按这条产品—渠道映射做过的择优里,没有停在并列等人裁的;去掉收窄可看全部。',
       }
     : {
-        title: '当前租户此刻没有并列冲突',
-        description:
-          '读取入口已配置，这一格是真答案：没有择优停在「并列且无法选出唯一一条」等人工裁决。择优编排今天没有生产装配点，接线之前本册恒空是设计而不是缺陷。',
+        title: '现在没有并列的渠道择优',
+        description: '系统给一票货比渠道时,几家并列、选不出唯一一家的才会停在这里等人裁;现在没有。',
       };
   return catalogueViewState(answer, rowCount, retry, {
     module: options.module,
@@ -143,8 +159,9 @@ export function tiedListViewState(
 }
 
 /**
- * 单份查阅的呈现态。404 CHANNEL_SELECTION_DECISION_NOT_VISIBLE 是终局业务答案（`统一不可见结果`：不存在与
- * 属别的租户同答），自成一格、不当错误重试；其余 4xx 与 5xx 各归调用方问题与未形成答案。
+ * 单份查阅的呈现态。404 CHANNEL_SELECTION_DECISION_NOT_VISIBLE 是终局业务答案(`统一不可见结果`:不存在与
+ * 属别的租户同答),自成一格、不当错误重试;其余 4xx 与 5xx 各归调用方问题与未形成答案。
+ * message 只说下一步做什么,状态码与问题码在 technical 里,页面放进技术详情。
  */
 export type DecisionDetailState =
   | { kind: 'loading' }
@@ -152,7 +169,7 @@ export type DecisionDetailState =
   | { kind: 'notVisible'; decisionId: string }
   | { kind: 'unconfigured' }
   | OperatorRefusal
-  | { kind: 'error'; message: string; canRetry: boolean };
+  | { kind: 'error'; message: string; canRetry: boolean; technical: TechnicalRow[] };
 
 export function decisionDetailState(
   answer: ApiResult<ChannelSelectionDecisionResponseBody> | null,
@@ -172,16 +189,24 @@ export function decisionDetailState(
       }
       return {
         kind: 'error',
-        message: `调用方式问题（HTTP ${answer.status}，${answer.code}）；重发同样内容不会改变结果。`,
+        message: '按这个决定号查不到,请核对后再查;原样重查不会有不同结果。',
         canRetry: false,
+        technical: [
+          { label: 'HTTP 状态', value: String(answer.status) },
+          { label: '问题码', value: answer.code },
+        ],
       };
     case 'noAnswer':
       return {
         kind: 'error',
-        message: `服务端未形成答案（HTTP ${answer.status}，${answer.code}），可稍后重试。`,
+        message: '这次没有读到,可以稍后再试。',
         canRetry: true,
+        technical: [
+          { label: 'HTTP 状态', value: String(answer.status) },
+          { label: '问题码', value: answer.code },
+        ],
       };
     case 'transport':
-      return { kind: 'error', message: `请求未到达 parcel-api：${answer.message}`, canRetry: true };
+      return { kind: 'error', message: '没有连上服务器,请检查网络后再试。', canRetry: true, technical: [{ label: '错误', value: answer.message }] };
   }
 }

@@ -66,8 +66,8 @@ test('并列冲突行：结论译回原词，并列的那几家单独列出，�
   equal(rows.length, 1);
   equal(rows[0].key, 'decision:CSDN-1');
   equal(rows[0].decisionId, 'CSDN-1');
-  equal(rows[0].values.conclusion, '并列冲突——交人工裁决');
-  equal(rows[0].values.rule, '成本单维');
+  equal(rows[0].values.conclusion, '几家并列,等人裁');
+  equal(rows[0].values.rule, '只比成本');
   equal(rows[0].values.tiedCandidates, 'cand-a、cand-b');
   equal(rows[0].values.candidateCount, '4');
   equal(rows[0].values.decidedAt, '2026-09-04 18:30:00 UTC');
@@ -118,11 +118,11 @@ test('空册是答案：不收窄与收窄各一句，与未配置分开', () =>
   });
   const whole = tiedListViewState(empty, undefined, 0, noRetry, options);
   equal(whole.kind, 'empty');
-  ok(whole.kind === 'empty' && whole.title === '当前租户此刻没有并列冲突');
+  ok(whole.kind === 'empty' && whole.title === '现在没有并列的渠道择优');
 
   const narrowed = tiedListViewState(empty, { scope: 'scope-a', mapping: 'mapping-1' }, 0, noRetry, options);
   equal(narrowed.kind, 'empty');
-  ok(narrowed.kind === 'empty' && narrowed.title === '对象 scope-a / mapping-1 此刻没有并列冲突');
+  ok(narrowed.kind === 'empty' && narrowed.title === '这个范围与映射下现在没有并列的择优');
 
   const unconfigured = tiedListViewState({ kind: 'unconfigured' }, undefined, 0, noRetry, options);
   equal(unconfigured.kind, 'unconfigured');
