@@ -38,18 +38,18 @@ func (repository *DispositionAcceptances) FindByKey(
 	}
 
 	var basis, kindName, digest string
-	var declineBasis, authority *string
+	var declineBasis, authority, decidedByColumn *string
 	var objectsJSON []byte
 	var decidedAt time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT basis, kind, accepted_objects, decline_basis, movement_authority,
-		        decided_at, content_digest
+		        decided_at, content_digest, decided_by
 		   FROM transport_fulfillment.disposition_acceptance
 		  WHERE tenant_id = $1
 		    AND item_ref = $2`,
 		key.Tenant.String(),
 		key.Item.String(),
-	).Scan(&basis, &kindName, &objectsJSON, &declineBasis, &authority, &decidedAt, &digest)
+	).Scan(&basis, &kindName, &objectsJSON, &declineBasis, &authority, &decidedAt, &digest, &decidedByColumn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DispositionAcceptanceRecord{}, false, nil
 	}
@@ -61,10 +61,15 @@ func (repository *DispositionAcceptances) FindByKey(
 	if err != nil {
 		return ports.DispositionAcceptanceRecord{}, false, fmt.Errorf("find disposition acceptance: %w", err)
 	}
+	decidedBy, err := registrantFromColumn(decidedByColumn)
+	if err != nil {
+		return ports.DispositionAcceptanceRecord{}, false, fmt.Errorf("find disposition acceptance: %w", err)
+	}
 	return ports.DispositionAcceptanceRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Decision:      decision,
+		DecidedBy:     decidedBy,
 	}, true, nil
 }
 
@@ -100,8 +105,8 @@ func (repository *DispositionAcceptances) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.disposition_acceptance
 			(tenant_id, item_ref, basis, kind, accepted_objects, decline_basis,
-			 movement_authority, decided_at, content_digest)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 movement_authority, decided_at, content_digest, decided_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.Tenant.String(),
 		record.Key.Item.String(),
@@ -112,6 +117,7 @@ func (repository *DispositionAcceptances) Save(
 		authority,
 		record.Decision.DecidedAt().UTC(),
 		record.ContentDigest,
+		optionalRegistrant(record.DecidedBy),
 	)
 	if err != nil {
 		return ports.DispositionAcceptanceSaveOutcomeInvalid, fmt.Errorf("save disposition acceptance: %w", err)

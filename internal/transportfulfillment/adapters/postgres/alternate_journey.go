@@ -41,8 +41,9 @@ func (repository *AlternateJourneys) FindByKey(
 	var journeyID, basisKind, digest string
 	var membersJSON []byte
 	var startedAt, recordedAt time.Time
+	var startedByColumn *string
 	err = querier.QueryRow(ctx,
-		`SELECT journey_id, basis_kind, members, started_at, content_digest, recorded_at
+		`SELECT journey_id, basis_kind, members, started_at, content_digest, recorded_at, started_by
 		   FROM transport_fulfillment.alternate_journey
 		  WHERE tenant_id = $1
 		    AND original_journey = $2
@@ -52,7 +53,7 @@ func (repository *AlternateJourneys) FindByKey(
 		key.Original.String(),
 		key.Purpose.String(),
 		key.Basis.String(),
-	).Scan(&journeyID, &basisKind, &membersJSON, &startedAt, &digest, &recordedAt)
+	).Scan(&journeyID, &basisKind, &membersJSON, &startedAt, &digest, &recordedAt, &startedByColumn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.AlternateJourneyRecord{}, false, nil
 	}
@@ -62,6 +63,9 @@ func (repository *AlternateJourneys) FindByKey(
 
 	record, err := alternateJourneyRecordFrom(key, journeyID, basisKind, membersJSON, startedAt, digest, recordedAt)
 	if err != nil {
+		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+	}
+	if record.StartedBy, err = registrantFromColumn(startedByColumn); err != nil {
 		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
 	}
 	return record, true, nil
@@ -211,8 +215,8 @@ func (repository *AlternateJourneys) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.alternate_journey
 			(tenant_id, original_journey, purpose, basis, journey_id, basis_kind,
-			 members, started_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 members, started_at, content_digest, recorded_at, started_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Original.String(),
@@ -224,6 +228,7 @@ func (repository *AlternateJourneys) Save(
 		record.Journey.StartedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalRegistrant(record.StartedBy),
 	)
 	if err != nil {
 		return ports.AlternateJourneySaveOutcomeInvalid, fmt.Errorf("save alternate journey: %w", err)

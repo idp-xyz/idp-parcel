@@ -74,6 +74,8 @@ type StartAlternateJourneyCommand struct {
 	Basis     string
 	Members   []string
 	StartedAt time.Time
+	// StartedBy 是启动这条旅程的操作者，只进审计（ADR-0303 的待遇）：不进重放比对，也不进任何门。
+	StartedBy string
 }
 
 type StartAlternateJourneyResult struct {
@@ -139,6 +141,10 @@ func (handler *StartAlternateJourneyHandler) Handle(
 	if err != nil {
 		return StartAlternateJourneyResult{outcome: JourneyNotAccepted}, nil
 	}
+	startedBy, err := domain.OptionalRegistrantReference(command.StartedBy)
+	if err != nil {
+		return StartAlternateJourneyResult{outcome: JourneyNotAccepted}, nil
+	}
 
 	key := ports.AlternateJourneyKey{
 		TenantID: command.TenantID,
@@ -172,6 +178,7 @@ func (handler *StartAlternateJourneyHandler) Handle(
 		ContentDigest: digest,
 		Journey:       journey,
 		RecordedAt:    handler.deps.Clock.Now(),
+		StartedBy:     startedBy,
 	}
 	saved, err := handler.deps.Journeys.Save(ctx, record)
 	if err != nil {

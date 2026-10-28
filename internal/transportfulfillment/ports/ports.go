@@ -382,6 +382,9 @@ type AlternateJourneyRecord struct {
 	ContentDigest string
 	Journey       domain.AlternateJourney
 	RecordedAt    time.Time
+	// StartedBy 是经运营决定口启动这条旅程的操作者（ADR-0303 的待遇）：操作证据，与登记时刻同属出处，
+	// 不进内容摘要，重放与冲突比对、任何门都不读它。派发进程等不经该口形成的行留空。
+	StartedBy domain.RegistrantReference
 }
 
 type AlternateJourneySaveOutcome uint8
@@ -508,6 +511,8 @@ type DispositionAcceptanceRecord struct {
 	Key           DispositionAcceptanceKey
 	ContentDigest string
 	Decision      domain.RegulatoryTransportDisposition
+	// DecidedBy 是经运营决定口作出这份承接决定的操作者（ADR-0303 的待遇），只进审计。
+	DecidedBy domain.RegistrantReference
 }
 
 type DispositionAcceptanceSaveOutcome uint8
