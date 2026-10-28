@@ -16,8 +16,8 @@ import (
 // （扇出），两路各记各的 inbox 账。
 const finalOutcomeFormedConsumerName = "settlement-accounting/request-sell-evaluation-on-final-outcome"
 
-// confirmationBasisOnFinalOutcomeConsumerName 是同一封终局信封在 SA 里的第二路：给已形成的客户费用记确认依据并按时点
-// 确认（ADR-0336 决定二）。与发起 SELL 那一路分名、各记各的 inbox 账——一路重投不该把另一路也拖着重做。
+// confirmationBasisOnFinalOutcomeConsumerName 是同一封终局信封在 SA 里给已形成的客户费用记确认依据、按时点确认的那一路
+// （ADR-0336 决定二）。与发起 SELL 那一路分名、各记各的 inbox 账——一路重投不该把另一路也拖着重做。
 const confirmationBasisOnFinalOutcomeConsumerName = "settlement-accounting/record-confirmation-basis-on-final-outcome"
 
 // FinalOutcomeFormedEventType 是本消费者认的事件类型：parcel-shipment 落下一份终局采用判断（终局或不采用、首派生或

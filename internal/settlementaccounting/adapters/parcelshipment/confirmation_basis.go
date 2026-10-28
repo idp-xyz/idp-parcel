@@ -80,7 +80,7 @@ type ChargeConfirmer interface {
 	) (saapplication.ConfirmOnBasisResult, error)
 }
 
-// ConfirmOnFinalOutcomeAdapter 是终局信封那一路的真实处理方（sainbox.ConfirmationBasisOnFinalOutcomeConsumer）：按信封四维
+// ConfirmOnFinalOutcomeAdapter 是终局信封那一路的真实处理方（sainbox.NewConfirmationBasisOnFinalOutcomeConsumer 装出的消费门）：按信封四维
 // 回读终局记录，已终局的有效交付给这件包裹已形成的客户费用记确认依据并按时点确认。费用还没形成的什么都不记，那一拍由
 // 形成那一笔补上。
 type ConfirmOnFinalOutcomeAdapter struct {

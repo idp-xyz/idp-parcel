@@ -507,6 +507,12 @@ type ConfirmationBasisRecorder interface {
 	) (CatalogueRegistrationEffect, error)
 }
 
+// ParcelConfirmationSerializer 让同一件包裹上「记确认依据」的两头排队：终局到达那一头读费用之前、费用形成那一头读终局之前
+// 都先取它，锁到各自事务结束（ADR-0336 决定二）。
+type ParcelConfirmationSerializer interface {
+	SerializeParcelConfirmation(ctx context.Context, tenant domain.TenantID, parcel domain.ParcelReference) error
+}
+
 // EffectiveDeliveryFinalView 问一件包裹此刻有没有已终局的「有效交付」。有就交回指得回那一份终局采用的依据引用；终局
 // 不是有效交付、未终局或没有终局都答 false。
 type EffectiveDeliveryFinalView interface {

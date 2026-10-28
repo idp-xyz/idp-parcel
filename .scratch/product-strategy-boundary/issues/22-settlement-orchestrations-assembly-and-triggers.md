@@ -39,3 +39,18 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **自验**（受影响范围，真库 `idp-parcel-postgres-gate`）：`go test ./internal/settlementaccounting/... ./cmd/parcel-dispatch/ ./cmd/parcel-settlement-register/ ./cmd/parcel-api/ ./internal/architecture/... -count=1` 全过；`go vet ./...` 干净；`gofmt -l` 空。真库路由表用例 `TestAFormedChargeIsConfirmedOnTheEffectiveDeliveryFinalInEitherOrder` 两种先后都走到`已确认`、交出一封费用确认信封。全量与种子灌库留给推送方。
 - **改动的既有用例**：dispatch 三条用例。两条直写 SELL 请求的补登了请求指名的结算账户（`sellRequestAccount`），因为形成之后要按标识读回那一户；终局扇出用例的 inbox 期望由两路改成三路。
 - **代决与越权风险点**：见 ADR-0336「越权风险点」，待 SA owner 复核。
+
+## 第 1 笔评审记录与修订轮（2026-10-28）
+
+**评审**：非作者隔离评审（子代理，隔离检出，钉 `935cf7fb2`，对 main `c2a771cbb`）。结论：可合入，无阻断。核过的有：事务边界、重投不重复确认也不重发信封（真库探针：终局先到并确认之后，再投两封同键终局，确认信封始终一封）、租户取值缺席的几格（真库探针：删条件、删时点各只记依据、不重投；删账户则整笔回滚、重投）、`Retryable` 分格、`SaveConfirmationCondition` 的读回、与 parcel-api 装配逐项一致、改动的既有用例。建议七条，本轮这样处理：
+
+- **N1 矛盾被记成待重投**：已修。跟进只把等依赖的几格包上 `ErrConfirmationFollowUpUnavailable`，外层据它答未决；请求指名的账户不在册上等矛盾原样上抛。
+- **N2 两头并发漏记**：已修。新增 `ParcelConfirmationSerializer` / `ParcelConfirmationLocks`，按（租户、包裹）取事务级咨询锁；终局那一头读请求之前取，形成那一头读终局之前取。ADR-0336 决定二第 4 项与越权风险点 3 相应改写。
+- **N3 确认信封没交出去不重投**：已修。确认交接引用非空时 `Retryable` 为真。
+- **N4 注释指了一个不存在的符号**：已修。
+- **N5 跨文件的序数与计数**：已修，改为按名字指。
+- **N6 一条注释的理由不成立**：已修，改写了理由。
+- **N7 确认装配在两个进程里各写一份**：本笔不动。第 2 笔给 parcel-api 开运营确认口时会再碰这一段，到时抽成共用构造或加比对用例。
+- **待核（终局重派生之后旧信封迟到）**：与既有 `RequestOnFinalOutcomeAdapter` 的读法同形，归 ADR-0336 越权风险点 4。
+
+**修订后自验**：受影响各包加 `internal/architecture` 全过。新增用例：两头取锁（单元）、确认信封交接失败要重投（单元）、包裹确认锁只让同一件包裹排队（真库并发）、锁在事务外被拒（架构门禁要求）。`go vet ./...` 干净，`gofmt -l` 为空。

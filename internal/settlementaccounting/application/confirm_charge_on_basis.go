@@ -70,13 +70,20 @@ func (result ConfirmOnBasisResult) Confirmation() ConfirmChargeResult { return r
 // UndecidedCause 只在未决时非空，给消费门写进重投的错误。
 func (result ConfirmOnBasisResult) UndecidedCause() error { return result.cause }
 
-// Retryable 说这一拍要不要重投：本编排自己读写不动，或确认编排停在依赖读不动的那几格。确认条件目录与确认事实册没登是
-// 租户取值缺席，补登之前重投只会再答一次同一格，不算（ADR-0029 按恢复动作分格）。
+// Retryable 说这一拍要不要重投：本编排自己读写不动，确认编排停在依赖读不动的那几格，或费用已确认而确认信封没交出去。
+// 确认条件目录与确认事实册没登是租户取值缺席，补登之前重投只会再答一次同一格，不算（ADR-0029 按恢复动作分格）。
 func (result ConfirmOnBasisResult) Retryable() bool {
 	if result.outcome == ConfirmOnBasisUndecided {
 		return true
 	}
-	if result.outcome != ConfirmOnBasisConfirmAttempted || result.confirmation.Outcome() != ConfirmUndecided {
+	if result.outcome != ConfirmOnBasisConfirmAttempted {
+		return false
+	}
+	// 确认编排把交接失败折成一个续办引用、照答已确认：经运营口进来的有人能重放，消费门这一路入账之后就再没人推它。
+	if result.confirmation.ConfirmationHandoffReference() != "" {
+		return true
+	}
+	if result.confirmation.Outcome() != ConfirmUndecided {
 		return false
 	}
 	switch result.confirmation.UndecidedReason() {
@@ -88,12 +95,14 @@ func (result ConfirmOnBasisResult) Retryable() bool {
 }
 
 type ConfirmChargeOnBasisDeps struct {
-	Requests ports.SellEvaluationRequestView
-	Charges  ports.CustomerChargeStore
-	Bases    ports.ConfirmationBasisRecorder
-	Moments  *AdmitSettlementMomentHandler
-	Confirm  *ConfirmChargeHandler
-	Clock    ports.Clock
+	// Serializer 让 OnParcel 与费用形成那一头的回读排队，见 ports.ParcelConfirmationSerializer。
+	Serializer ports.ParcelConfirmationSerializer
+	Requests   ports.SellEvaluationRequestView
+	Charges    ports.CustomerChargeStore
+	Bases      ports.ConfirmationBasisRecorder
+	Moments    *AdmitSettlementMomentHandler
+	Confirm    *ConfirmChargeHandler
+	Clock      ports.Clock
 }
 
 // ConfirmChargeOnBasisHandler 见文件头注。调用方给环境事务：依据行、确认后的费用行与确认信封同笔落下。
@@ -102,20 +111,24 @@ type ConfirmChargeOnBasisHandler struct {
 }
 
 func NewConfirmChargeOnBasisHandler(deps ConfirmChargeOnBasisDeps) (*ConfirmChargeOnBasisHandler, error) {
-	if deps.Requests == nil || deps.Charges == nil || deps.Bases == nil || deps.Moments == nil || deps.Confirm == nil ||
+	if deps.Serializer == nil || deps.Requests == nil || deps.Charges == nil || deps.Bases == nil || deps.Moments == nil || deps.Confirm == nil ||
 		deps.Clock == nil {
 		return nil, fmt.Errorf("%w: confirm charge on basis", ErrNilDependency)
 	}
 	return &ConfirmChargeOnBasisHandler{deps: deps}, nil
 }
 
-// OnParcel 按包裹找当前那份 SELL 请求形成的费用，再走 OnCharge。只认当前一代：前几代停在待判断、没有费用。
+// OnParcel 按包裹找当前那份 SELL 请求形成的费用，再走 OnCharge。只认当前一代：前几代停在待判断、没有费用。先取包裹确认
+// 锁再读请求：形成那一头若正持锁，这里等它提交，读到的就是形成之后的请求。
 func (handler *ConfirmChargeOnBasisHandler) OnParcel(
 	ctx context.Context,
 	tenant domain.TenantID,
 	parcel domain.ParcelReference,
 	basis ConfirmationBasis,
 ) (ConfirmOnBasisResult, error) {
+	if err := handler.deps.Serializer.SerializeParcelConfirmation(ctx, tenant, parcel); err != nil {
+		return ConfirmOnBasisResult{outcome: ConfirmOnBasisUndecided, cause: err}, nil
+	}
 	record, found, err := handler.deps.Requests.FindCurrentByParcel(ctx, tenant, parcel)
 	if err != nil {
 		return ConfirmOnBasisResult{outcome: ConfirmOnBasisUndecided, cause: fmt.Errorf("sell request register: %w", err)}, nil

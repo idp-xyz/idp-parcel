@@ -2,8 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -112,5 +115,69 @@ func TestASettlementAccountReadsBackByID(t *testing.T) {
 	}
 	if loaded.Responsibility().String() != "CONTRACT-1" || loaded.Key().LegalEntity().String() != "LE-1" {
 		t.Fatalf("读回 = 成立依据 %s 法人 %s", loaded.Responsibility(), loaded.Key().LegalEntity())
+	}
+}
+
+// Covers: AT-SA-218、AT-SA-219——包裹确认锁让同一件包裹的两头排队：一笔持锁未提交时，另一笔取同一件包裹的锁要等；别的包裹
+// 不等；持锁那一笔提交之后取得到。
+func TestTheParcelConfirmationLockQueuesTheSameParcelOnly(t *testing.T) {
+	db := catalogueDB(t)
+	locks, err := adapter.NewParcelConfirmationLocks(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := registerTenant(t)
+	parcel := mustAccountRef(t, domain.NewParcelReference, "SYN-PARCEL-LOCK-1")
+	other := mustAccountRef(t, domain.NewParcelReference, "SYN-PARCEL-LOCK-2")
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- db.Transactor().WithinTransaction(context.Background(), func(ctx context.Context) error {
+			if err := locks.SerializeParcelConfirmation(ctx, tenant, parcel); err != nil {
+				return err
+			}
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+
+	if err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		return locks.SerializeParcelConfirmation(ctx, tenant, other)
+	}); err != nil {
+		t.Fatalf("别的包裹也等了：%v", err)
+	}
+	waiting, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	err = db.Transactor().WithinTransaction(waiting, func(ctx context.Context) error {
+		return locks.SerializeParcelConfirmation(ctx, tenant, parcel)
+	})
+	cancel()
+	if err == nil {
+		t.Fatal("同一件包裹在对方持锁时取到了锁")
+	}
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		return locks.SerializeParcelConfirmation(ctx, tenant, parcel)
+	}); err != nil {
+		t.Fatalf("对方提交之后仍取不到：%v", err)
+	}
+}
+
+// 包裹确认锁是事务级锁，事务外取等于没锁：按框架合同拒。
+func TestTheParcelConfirmationLockRefusesToRunOutsideATransaction(t *testing.T) {
+	locks, err := adapter.NewParcelConfirmationLocks(catalogueDB(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = locks.SerializeParcelConfirmation(t.Context(), registerTenant(t), mustAccountRef(t, domain.NewParcelReference, "SYN-PARCEL-LOCK-1"))
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外取锁应答 ErrTransactionRequired，实得：%v", err)
 	}
 }

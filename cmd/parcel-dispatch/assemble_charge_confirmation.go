@@ -77,8 +77,12 @@ func chargeConfirmationOnBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation requests for confirmation: %w", err)
 	}
+	locks, err := sapostgres.NewParcelConfirmationLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel confirmation locks: %w", err)
+	}
 	handler, err := saapplication.NewConfirmChargeOnBasisHandler(saapplication.ConfirmChargeOnBasisDeps{
-		Requests: requests, Charges: charges, Bases: conditions, Moments: moments, Confirm: confirm, Clock: clock,
+		Serializer: locks, Requests: requests, Charges: charges, Bases: conditions, Moments: moments, Confirm: confirm, Clock: clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge on basis: %w", err)
@@ -112,8 +116,12 @@ func formedChargeConfirmationFollowUp(
 	if err != nil {
 		return nil, err
 	}
+	locks, err := sapostgres.NewParcelConfirmationLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel confirmation locks: %w", err)
+	}
 	followUp, err := saapplication.NewFormedChargeConfirmationFollowUp(saapplication.FormedChargeConfirmationDeps{
-		Accounts: accounts, Facts: facts, Finals: effectiveFinals, Confirmation: confirmation, Clock: clock,
+		Serializer: locks, Accounts: accounts, Facts: facts, Finals: effectiveFinals, Confirmation: confirmation, Clock: clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: formed charge confirmation follow-up: %w", err)

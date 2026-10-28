@@ -11,11 +11,16 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
+// ErrConfirmationFollowUpUnavailable 标出跟进停在依赖读写不动上：外层据它答未决、整笔回滚重投。别的错误是两侧说法矛盾或
+// 封闭集合外的结果，外层原样上抛，按矛盾那一格处置，不当成等依赖（ADR-0029）。
+var ErrConfirmationFollowUpUnavailable = errors.New("settlement accounting: formed charge follow-up stalled on a dependency")
+
 // ErrSellRequestAccountMissing 说明 SELL 请求指名的结算账户不在账户册上。请求是照册上那一户提交的，册上又不删行，读不到
 // 是两侧说法矛盾，不是取值缺席。
 var ErrSellRequestAccountMissing = errors.New("settlement accounting: sell request names a settlement account absent from the register")
 
-// EstimatedChargeFollowUp 是形成编排外层在费用落下之后调的那一步。返回错误时外层整笔不作答，让事务回滚、信封重投。
+// EstimatedChargeFollowUp 是形成编排外层在费用落下之后调的那一步。返回错误时外层整笔不作答、让事务回滚：错误链上带
+// ErrConfirmationFollowUpUnavailable 的答未决、重投，其余原样上抛。
 type EstimatedChargeFollowUp interface {
 	AfterEstimatedChargeFormed(
 		ctx context.Context,
@@ -26,6 +31,8 @@ type EstimatedChargeFollowUp interface {
 }
 
 type FormedChargeConfirmationDeps struct {
+	// Serializer 让回读终局与终局那一头的 OnParcel 排队，见 ports.ParcelConfirmationSerializer。
+	Serializer   ports.ParcelConfirmationSerializer
 	Accounts     ports.SettlementAccountByIDView
 	Facts        ports.ChargeConfirmationFactRegister
 	Finals       ports.EffectiveDeliveryFinalView
@@ -41,7 +48,7 @@ type FormedChargeConfirmationFollowUp struct {
 var _ EstimatedChargeFollowUp = (*FormedChargeConfirmationFollowUp)(nil)
 
 func NewFormedChargeConfirmationFollowUp(deps FormedChargeConfirmationDeps) (*FormedChargeConfirmationFollowUp, error) {
-	if deps.Accounts == nil || deps.Facts == nil || deps.Finals == nil || deps.Confirmation == nil || deps.Clock == nil {
+	if deps.Serializer == nil || deps.Accounts == nil || deps.Facts == nil || deps.Finals == nil || deps.Confirmation == nil || deps.Clock == nil {
 		return nil, fmt.Errorf("%w: formed charge confirmation follow-up", ErrNilDependency)
 	}
 	return &FormedChargeConfirmationFollowUp{deps: deps}, nil
@@ -60,7 +67,7 @@ func (followUp *FormedChargeConfirmationFollowUp) AfterEstimatedChargeFormed(
 ) error {
 	account, found, err := followUp.deps.Accounts.FindByID(ctx, tenant, request.Account())
 	if err != nil {
-		return fmt.Errorf("settlement account register: %w", err)
+		return fmt.Errorf("%w: settlement account register: %w", ErrConfirmationFollowUpUnavailable, err)
 	}
 	if !found {
 		return fmt.Errorf("%w: request %s account %s", ErrSellRequestAccountMissing, request.ID(), request.Account())
@@ -70,12 +77,16 @@ func (followUp *FormedChargeConfirmationFollowUp) AfterEstimatedChargeFormed(
 		return err
 	}
 	if _, err := followUp.deps.Facts.SaveChargeConfirmationFacts(ctx, tenant, registration, followUp.deps.Clock.Now()); err != nil {
-		return fmt.Errorf("charge confirmation fact register: %w", err)
+		return fmt.Errorf("%w: charge confirmation fact register: %w", ErrConfirmationFollowUpUnavailable, err)
+	}
+
+	if err := followUp.deps.Serializer.SerializeParcelConfirmation(ctx, tenant, request.Parcel()); err != nil {
+		return fmt.Errorf("%w: %w", ErrConfirmationFollowUpUnavailable, err)
 	}
 
 	basis, finalized, err := followUp.deps.Finals.FindEffectiveDeliveryFinal(ctx, tenant, request.Parcel())
 	if err != nil {
-		return fmt.Errorf("effective delivery final: %w", err)
+		return fmt.Errorf("%w: effective delivery final: %w", ErrConfirmationFollowUpUnavailable, err)
 	}
 	if !finalized {
 		return nil
@@ -87,7 +98,8 @@ func (followUp *FormedChargeConfirmationFollowUp) AfterEstimatedChargeFormed(
 		return err
 	}
 	if result.Retryable() {
-		return fmt.Errorf("confirm on effective delivery final: %s: %w", result.Outcome(), undecidedCauseOf(result))
+		return fmt.Errorf("%w: confirm on effective delivery final: %s: %w", ErrConfirmationFollowUpUnavailable,
+			result.Outcome(), undecidedCauseOf(result))
 	}
 	return nil
 }
@@ -120,6 +132,9 @@ func confirmationFactsOf(
 func undecidedCauseOf(result ConfirmOnBasisResult) error {
 	if cause := result.UndecidedCause(); cause != nil {
 		return cause
+	}
+	if reference := result.Confirmation().ConfirmationHandoffReference(); reference != "" {
+		return fmt.Errorf("charge confirmation handoff pending: %s", reference)
 	}
 	return fmt.Errorf("charge confirmation undecided: %s", result.Confirmation().UndecidedReason())
 }

@@ -384,7 +384,7 @@ func TestBothParcelMomentEnvelopesFanOutToTheSettlementLane(t *testing.T) {
 		lanes     int
 	}{
 		"收寄采用": {sainbox.NetworkIntakeRecordedEventType, sellOnNetworkIntakeConsumer, 2},
-		// 终局另扇给 SA 记确认依据那一路（ADR-0336 决定二），三路各一行。
+		// 终局另扇给 SA 记确认依据那一路（ADR-0336 决定二）。
 		"终局": {sainbox.FinalOutcomeFormedEventType, "settlement-accounting/request-sell-evaluation-on-final-outcome", 3},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -306,12 +307,13 @@ func TestEveryChargeLineMappingToOneFeeItemFormsTheEstimatedCustomerCharge(t *te
 	}
 }
 
-// Covers: AT-SA-217（ADR-0336 决定一）——跟进那一步没做成，外层答未决、不记结论，整笔由调用方回滚重投；停在待判断的各格不跟进。
+// Covers: AT-SA-217（ADR-0336 决定一）——跟进停在依赖上，外层答未决、不记结论，整笔由调用方回滚重投；跟进报矛盾，外层
+// 上抛；停在待判断的各格不跟进。
 func TestAFailedFollowUpLeavesTheRequestUnconcluded(t *testing.T) {
 	fixture := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
 	})
-	fixture.followUp.err = errors.New("synthetic confirmation fact register down")
+	fixture.followUp.err = fmt.Errorf("%w: synthetic confirmation fact register down", application.ErrConfirmationFollowUpUnavailable)
 
 	result, err := fixture.handle(t)
 	if err != nil || result.Outcome() != application.EstimatedCustomerChargeUndecided ||
@@ -320,6 +322,15 @@ func TestAFailedFollowUpLeavesTheRequestUnconcluded(t *testing.T) {
 	}
 	if stored := fixture.storedState(t); stored.State != domain.SellRequestSubmitted {
 		t.Fatalf("请求册 = %s，want 仍是已提交", stored.State)
+	}
+
+	// 不带等依赖标记的是矛盾：原样上抛，不答未决。
+	contradiction := newEstimatedChargeFixture(t, map[string]string{
+		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
+	})
+	contradiction.followUp.err = application.ErrSellRequestAccountMissing
+	if _, err := contradiction.handle(t); !errors.Is(err, application.ErrSellRequestAccountMissing) {
+		t.Fatalf("矛盾 err = %v，want 上抛", err)
 	}
 
 	pending := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})

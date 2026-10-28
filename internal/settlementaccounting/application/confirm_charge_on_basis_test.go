@@ -55,6 +55,7 @@ func (double parcelRequestDouble) FindCurrentByParcel(
 }
 
 type confirmOnBasisFixture struct {
+	locks    *serializerDouble
 	confirm  *confirmFixture
 	bases    *basisRecorderDouble
 	requests *parcelRequestDouble
@@ -65,18 +66,20 @@ type confirmOnBasisFixture struct {
 func newConfirmOnBasisFixture(t *testing.T, momentRegistered bool) *confirmOnBasisFixture {
 	t.Helper()
 	fixture := &confirmOnBasisFixture{
+		locks:    &serializerDouble{},
 		confirm:  newConfirmFixture(t),
 		bases:    &basisRecorderDouble{},
 		requests: &parcelRequestDouble{},
 		moment:   &settlementMomentViewDouble{found: momentRegistered, moment: domain.SettlementMomentConfirm},
 	}
 	handler, err := application.NewConfirmChargeOnBasisHandler(application.ConfirmChargeOnBasisDeps{
-		Requests: fixture.requests,
-		Charges:  fixture.confirm.store,
-		Bases:    fixture.bases,
-		Moments:  newMomentHandler(t, momentViewRef{fixture.moment}),
-		Confirm:  fixture.confirm.handler,
-		Clock:    confirmClock{at: chargeConfirmedAt},
+		Serializer: fixture.locks,
+		Requests:   fixture.requests,
+		Charges:    fixture.confirm.store,
+		Bases:      fixture.bases,
+		Moments:    newMomentHandler(t, momentViewRef{fixture.moment}),
+		Confirm:    fixture.confirm.handler,
+		Clock:      confirmClock{at: chargeConfirmedAt},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -295,6 +298,7 @@ func newFollowUpFixture(t *testing.T) *followUpFixture {
 		finals:   &effectiveFinalDouble{},
 	}
 	followUp, err := application.NewFormedChargeConfirmationFollowUp(application.FormedChargeConfirmationDeps{
+		Serializer:   fixture.basis.locks,
 		Accounts:     accountsRef{fixture.accounts},
 		Facts:        fixture.facts,
 		Finals:       finalsRef{fixture.finals},
@@ -366,16 +370,17 @@ func TestAChargeFormedAfterTheFinalOutcomeIsConfirmedOnFormation(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-217、AT-SA-219（ADR-0336 决定一、二）——请求指名的账户不在册上是矛盾；账户册、事实册、终局读口读写不动与确认停在依赖上都交回
-// 错误，让外层整笔回滚重投。
+// Covers: AT-SA-217、AT-SA-219（ADR-0336 决定一、二）——请求指名的账户不在册上是矛盾，原样交回；账户册、事实册、终局读口读写
+// 不动与确认停在依赖上都标成等依赖，外层据此整笔回滚重投。
 func TestFollowUpFailuresAreReturned(t *testing.T) {
 	tenant := confirmCommand(t).TenantID
 	charge := billValue(t, domain.NewCustomerChargeID, "charge-1")
 
 	missing := newFollowUpFixture(t)
 	missing.accounts.found = false
-	if err := missing.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); !errors.Is(err, application.ErrSellRequestAccountMissing) {
-		t.Fatalf("账户不在册 err = %v", err)
+	if err := missing.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); !errors.Is(err, application.ErrSellRequestAccountMissing) ||
+		errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
+		t.Fatalf("账户不在册 err = %v，want 矛盾、不当等依赖", err)
 	}
 
 	for name, arrange := range map[string]func(*followUpFixture){
@@ -389,8 +394,64 @@ func TestFollowUpFailuresAreReturned(t *testing.T) {
 	} {
 		fixture := newFollowUpFixture(t)
 		arrange(fixture)
-		if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); err == nil {
-			t.Fatalf("%s读写不动 err = nil", name)
+		if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
+			t.Fatalf("%s读写不动 err = %v，want 等依赖", name, err)
 		}
+	}
+}
+
+type serializerDouble struct {
+	parcels []string
+	err     error
+}
+
+func (double *serializerDouble) SerializeParcelConfirmation(_ context.Context, _ domain.TenantID, parcel domain.ParcelReference) error {
+	double.parcels = append(double.parcels, parcel.String())
+	return double.err
+}
+
+// Covers: AT-SA-218、AT-SA-219（ADR-0336 决定二）——两头都先取包裹确认锁再读对方：终局那一头读请求之前，形成那一头读终局
+// 之前。取不到锁是依赖读写不动。
+func TestBothEndsSerializeOnTheParcelBeforeReadingTheOtherSide(t *testing.T) {
+	tenant := confirmCommand(t).TenantID
+	parcel := billValue(t, domain.NewParcelReference, "SYN-PARCEL-1")
+
+	fixture := newConfirmOnBasisFixture(t, true)
+	if _, err := fixture.handler.OnParcel(t.Context(), tenant, parcel, finalBasis(t)); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.locks.parcels) != 1 || fixture.locks.parcels[0] != "SYN-PARCEL-1" {
+		t.Fatalf("终局那一头取锁 = %v", fixture.locks.parcels)
+	}
+	fixture.locks.err = errors.New("synthetic lock down")
+	if result, _ := fixture.handler.OnParcel(t.Context(), tenant, parcel, finalBasis(t)); result.Outcome() != application.ConfirmOnBasisUndecided {
+		t.Fatalf("取不到锁 = %s，want 未决", result.Outcome())
+	}
+
+	followUp := newFollowUpFixture(t)
+	if err := followUp.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t),
+		billValue(t, domain.NewCustomerChargeID, "charge-1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(followUp.basis.locks.parcels) != 1 || followUp.basis.locks.parcels[0] != "SYN-PARCEL-1" {
+		t.Fatalf("形成那一头取锁 = %v", followUp.basis.locks.parcels)
+	}
+	followUp.basis.locks.err = errors.New("synthetic lock down")
+	if err := followUp.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t),
+		billValue(t, domain.NewCustomerChargeID, "charge-1")); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
+		t.Fatalf("取不到锁 err = %v", err)
+	}
+}
+
+// Covers: AT-SA-218（ADR-0336 决定二）——费用已确认而确认信封没交出去，要重投。
+func TestAConfirmationWhoseHandoffFailedIsRetryable(t *testing.T) {
+	fixture := newConfirmOnBasisFixture(t, true)
+	fixture.confirm.handoff.err = errors.New("synthetic outbox down")
+	result, err := fixture.handler.OnCharge(t.Context(), confirmCommand(t).TenantID,
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), finalBasis(t))
+	if err != nil || result.Outcome() != application.ConfirmOnBasisConfirmAttempted ||
+		result.Confirmation().ConfirmationHandoffReference() == "" || !result.Retryable() {
+		t.Fatalf("结果 = %s 交接引用 %q 重投 %v err %v", result.Outcome(),
+			result.Confirmation().ConfirmationHandoffReference(), result.Retryable(), err)
 	}
 }

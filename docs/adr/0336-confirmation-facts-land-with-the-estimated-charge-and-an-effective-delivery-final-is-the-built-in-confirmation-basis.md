@@ -22,8 +22,9 @@ Date: 2026-10-28
 1. 种类字面 `EFFECTIVE_DELIVERY_FINALIZED`，与包裹计费时点同词，指同一件事：小包托运把包裹采用为终局「有效交付」。依据引用是那一份终局采用键，与 SELL 来源事实同形（`final-outcome/<包裹>/<种类>/<版本>`）。
 2. PS 终局信封到达时，SA 另开一路消费（`settlement-accounting/record-confirmation-basis-on-final-outcome`，与发起 SELL 那一路分名）：按四维回读终局，只认已终局的有效交付，给这件包裹当前那份 SELL 请求已形成的费用记依据。费用还没形成就什么都不记。
 3. 费用在终局之后才形成（例如按终局计费）的，形成那一笔回读 PS 当前终局，已终局为有效交付就同笔补记依据。
-4. 依据记下之后问确认时点：这一户登了 `CONFIRM` 就当场调确认编排，确认信封随同一笔交出；没登就只记依据。确认条件目录与确认事实没登是租户取值缺席，入账不重投；册读写不动才重投（ADR-0029）。
-5. 用哪种依据确认哪个费用项目仍是租户取值。确认条件目录开受控登记口 `parcel-settlement-register charge-confirmation-condition`：同费用项目登同一种答重放，登另一种答冲突、不覆盖；只收产品认得的依据种类。
+4. 两头读对方之前都先按（租户、包裹）取事务级咨询锁（`ParcelConfirmationSerializer`），锁到各自事务结束：一头正在形成或正在记依据时，另一头等它提交再读。
+5. 依据记下之后问确认时点：这一户登了 `CONFIRM` 就当场调确认编排，确认信封随同一笔交出；没登就只记依据。确认条件目录与确认事实没登是租户取值缺席，入账不重投；册读写不动、或费用已确认而确认信封没交出去才重投（ADR-0029）。形成那一头的跟进只把等依赖的几格标成未决；请求指名的账户不在册上这类矛盾原样上抛，按矛盾那一格处置。
+6. 用哪种依据确认哪个费用项目仍是租户取值。确认条件目录开受控登记口 `parcel-settlement-register charge-confirmation-condition`：同费用项目登同一种答重放，登另一种答冲突、不覆盖；只收产品认得的依据种类。
 
 **三、运营确认口。** 运营决定口点名一笔费用确认，走同一道时点门与同一只确认编排；用于补拍，例如登确认时点之前已到依据的费用。决定种类、端点与载荷随本票第 2 笔落，本记录只定它存在、走同一条路。
 
@@ -39,6 +40,7 @@ Date: 2026-10-28
 - SA：`FormEstimatedCustomerChargeHandler` 多一个必备依赖 `FollowUp`；新编排 `ConfirmChargeOnBasisHandler`（`OnParcel` / `OnCharge`）与 `FormedChargeConfirmationFollowUp`；新端口 `SettlementAccountByIDView`、`ConfirmationBasisRecorder`、`EffectiveDeliveryFinalView`、`ChargeConfirmationConditionRegister`；领域类型 `ConfirmationBasisKind`。
 - `cmd/parcel-dispatch`：终局路由多一路，名次 `positionBilling + 10`；SELL 评价已记录那一路的形成编排接上跟进。
 - `cmd/parcel-settlement-register`：新命令 `charge-confirmation-condition`。
+- SA PostgreSQL 适配器多一只 `ParcelConfirmationLocks`（锁空间 `settlement_accounting.charge_confirmation.parcel`）。
 - 无迁移：依据表、条件表、事实表、账户表都已在。
 - 演示租户要走到`已确认`，还须登确认条件与 `CONFIRM` 时点，随本票第 4 笔的种子落。
 
@@ -46,7 +48,7 @@ Date: 2026-10-28
 
 1. **主要计费范围取 SELL 请求的计价范围。** 两者在 CONTEXT 里是不同的词；首发每户一个计价范围，读法相同。若某户的主要计费范围比计价范围细，就要另一种取法。
 2. **只认有效交付。** 退运完成、服务终止等终局不是确认依据，那几类费用的确认依据要另立种类。
-3. **两头并发漏记。** 终局信封那一路读费用、与形成那一路读终局各在自己的事务里；形成那一笔恰在 PS 终局提交之前读、而终局那一路恰在形成提交之前读，这一件就两头都错过。窗口很窄，补救是第三条的运营确认口；要彻底关掉需要按包裹加锁。
+3. **两头排队靠包裹确认锁。** 终局那一头读费用、形成那一头读终局各在自己的事务里；两头都先按（租户、包裹）取事务级咨询锁再读对方，否则两边恰在对方提交之前读，这一件就两头都错过。锁让同一件包裹上的这两步串行，代价是同一件包裹的终局消费与 SELL 形成互等。
 4. **依据记下之后终局被更正或作废，已确认的费用不回退。** 迟到的变化按 CONTEXT 走调整，不由本记录处理。
 5. **确认事实册上异内容不覆盖、也不报。** 受控登记口先登了不同的七项，确认照它确认，跟进那一步不出声。
 

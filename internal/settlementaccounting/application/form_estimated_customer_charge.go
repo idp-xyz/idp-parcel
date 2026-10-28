@@ -244,9 +244,13 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	}
 	switch formed.Outcome() {
 	case SellChargeFormed, SellChargeAlreadyFormed:
-		// 已形成那一格也跟进：上一次落行之后整笔回滚过的话，事实与依据也跟着没了，跟进本身同键重放无害。
+		// 已形成那一格也跟进：费用行早已在册而请求仍是`已提交`时才走到这里，那一笔的事实与依据有没有落不知道，跟进同键重放
+		// 无害。
 		if err := handler.deps.FollowUp.AfterEstimatedChargeFormed(ctx, command.TenantID, record.Request, charge); err != nil {
-			return undecidedEstimatedCharge(ConfirmationFollowUpUndecided, err), nil
+			if errors.Is(err, ErrConfirmationFollowUpUnavailable) {
+				return undecidedEstimatedCharge(ConfirmationFollowUpUndecided, err), nil
+			}
+			return EstimatedCustomerChargeResult{}, err
 		}
 		conclusion, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
 		if err != nil {
