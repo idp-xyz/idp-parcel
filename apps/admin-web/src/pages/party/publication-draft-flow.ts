@@ -8,6 +8,7 @@
 // Go 那边加一格，这里跟着改这一张表，不在组件里按字符串散拼。
 
 import type { ApiResult } from '../catalogue-api';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { codedProblemLine } from './field-problem-text';
 import type {
   CommercialPublicationPayload,
@@ -122,8 +123,27 @@ export function publicationDraftUnsaved(initialKey: string, currentKey: string, 
   return currentKey !== initialKey && step !== 'publish';
 }
 
-/** 批准与发布区里一个动作的状态：可以按、已做完、还轮不到。 */
-export type DecisionState = 'ready' | 'done' | 'waiting';
+/** 批准与发布区里一个动作的状态：可以按、已做完、还轮不到、绑的摘要已过时（见 changedDecisionOf）。 */
+export type DecisionState = 'ready' | 'done' | 'waiting' | 'stale';
+
+/** 批准口或发布口答`已变更`的原词（application 两个 Outcome 的 String()）。 */
+const draftChanged = 'DRAFT_CHANGED';
+
+/**
+ * 答`已变更`的那一口。批准与发布绑的是存为待批准时服务端答的那对摘要（ADR-0314）；册上这份载体被别的操作者改动之后，再按一次
+ * 仍带旧摘要、仍答已变更，所以那颗按钮要收回，改摆两条续办：去「待批准发布」页读回现在的内容、在那里批；或用表单上这份重新
+ * 存为待批准（`待批准期间修订`，覆盖别人的改动）拿到新摘要再批。只看同键的答复；发布口的答复比批准口的后到，先看它。
+ */
+export function changedDecisionOf(flow: PublicationFlowState, key: string): 'approve' | 'publish' | null {
+  if (outcomeOf(flow.publication, key) === draftChanged) return 'publish';
+  if (outcomeOf(flow.approval, key) === draftChanged) return 'approve';
+  return null;
+}
+
+/** 「待批准发布」页的地址，检索词预填对象标识：落地就只剩这个对象的稿，不用再找。 */
+export function pendingPublicationsHash(objectId: string): string {
+  return hashWithQueryValue('#/pending-publications', ADDRESS_KEYWORD_PARAM, objectId);
+}
 
 export interface DecisionPanel {
   /** 存为待批准之后才摆出这一区；此前表单还在录入，批准与发布与它无关。 */
@@ -137,12 +157,16 @@ export interface DecisionPanel {
  * 批准与发布是两个动作、可能是两个人：批准由租户的审批职责规则决定谁能做，发布又不能撤回。此前一颗按钮随步骤换名，
  * 批准一落发布就顶在同一个位置上，手快的人会一路点到发布；分成各自的按钮，批准做完发布才亮，两件事各是各的。
  */
-export function decisionPanelOf(step: FlowStep): DecisionPanel {
+export function decisionPanelOf(step: FlowStep, changed: 'approve' | 'publish' | null = null): DecisionPanel {
   switch (step) {
     case 'submit':
-      return { visible: true, status: '已存为待批准，等待批准。', approve: 'ready', publish: 'waiting' };
+      return changed === 'approve'
+        ? { visible: true, status: '册上这份发布稿已被别的操作者改动，不是你存下的那份；批准已收回。', approve: 'stale', publish: 'waiting' }
+        : { visible: true, status: '已存为待批准，等待批准。', approve: 'ready', publish: 'waiting' };
     case 'approve':
-      return { visible: true, status: '已批准，等待发布。', approve: 'done', publish: 'ready' };
+      return changed === 'publish'
+        ? { visible: true, status: '册上这份发布稿在批准之后又被改动，不是批准时的那份；发布已收回。', approve: 'done', publish: 'stale' }
+        : { visible: true, status: '已批准，等待发布。', approve: 'done', publish: 'ready' };
     case 'publish':
       return { visible: true, status: '已发布。结果在对应册立刻可见。', approve: 'done', publish: 'done' };
     case 'form':

@@ -21,6 +21,7 @@ import {
   type CommercialPublicationPayload,
 } from './publication-draft-api';
 import {
+  changedDecisionOf,
   currentAnswer,
   decisionPanelOf,
   decisionDigestOf,
@@ -33,6 +34,7 @@ import {
   publicationDraftUnsaved,
   nextAction,
   payloadKey,
+  pendingPublicationsHash,
   problemsByField,
   reachedStep,
   unclaimedProblems,
@@ -177,7 +179,9 @@ export function PublicationDraftFlow({
   // 录入区只管预览与存为待批准；批准与发布各有自己的按钮区（票 party-commercial-uiux/19）。
   const recordAction = action === 'preview' || action === 'submit' ? action : null;
   const actionDisabled = busy !== null || (recordAction === 'preview' && hasLocalProblems);
-  const decision = decisionPanelOf(step);
+  // 批准或发布答`已变更`：旧摘要再送也是同一个答案，按钮收回，下面另摆续办。
+  const changed = changedDecisionOf(flow, key);
+  const decision = decisionPanelOf(step, changed);
 
   return (
     <Card className="m-4">
@@ -274,6 +278,28 @@ export function PublicationDraftFlow({
                 {busy === 'publish' ? '发布中…' : decision.publish === 'done' ? '已发布' : '发布'}
               </Button>
             </div>
+            {changed !== null ? (
+              <>
+                <p className="text-xs text-idpxyz-textMuted">
+                  {'要采用别人改后的内容，去「待批准发布」页读回现在的内容后在那里批；要以表单上这份为准，重新存为待批准——' +
+                    '册上那份会改回眼前这份（待批准期间修订），别人的改动随之覆盖，然后再批。'}
+                </p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Button
+                    variant="outline"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      window.location.hash = pendingPublicationsHash(payload.objectId);
+                    }}
+                  >
+                    去「待批准发布」页核对
+                  </Button>
+                  <Button variant="outline" disabled={busy !== null} onClick={() => run('submit')}>
+                    {busy === 'submit' ? '存为待批准中…' : '用表单上这份重新存为待批准'}
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </section>
         ) : null}
         {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}

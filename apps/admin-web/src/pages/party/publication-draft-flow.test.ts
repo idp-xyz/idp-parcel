@@ -9,6 +9,7 @@ import type {
   PublicationPreviewResponseBody,
 } from './publication-draft-api';
 import {
+  changedDecisionOf,
   currentAnswer,
   decisionDigestOf,
   decisionPanelOf,
@@ -18,6 +19,7 @@ import {
   isFormLocked,
   nextAction,
   payloadKey,
+  pendingPublicationsHash,
   problemsByField,
   publicationDraftUnsaved,
   reachedStep,
@@ -288,4 +290,44 @@ test('批准与发布区：存为待批准之后才出现；批准做完发布�
   equal(published.approve, 'done');
   equal(published.publish, 'done');
   equal(published.status.includes('已发布'), true);
+});
+
+test('批准或发布答已变更：按钮收回、区里说明，只认同键的答复', () => {
+  const key = 'k';
+  const submitted = withSubmission(
+    withPreview(emptyFlow(), key, outcome({ outcome: 'PREVIEWED' })),
+    key,
+    outcome({ outcome: 'DRAFT_SUBMITTED', contentDigest: 'PCC-1:abc', shellDigest: 'PCS-1:def' }),
+  );
+  equal(changedDecisionOf(submitted, key), null);
+  deepEqual(decisionPanelOf('submit', null), decisionPanelOf('submit'));
+
+  const approveChanged = withApproval(submitted, key, outcome({ outcome: 'DRAFT_CHANGED' }));
+  equal(changedDecisionOf(approveChanged, key), 'approve');
+  equal(changedDecisionOf(approveChanged, 'another-key'), null);
+  equal(reachedStep(approveChanged, key), 'submit');
+  const stale = decisionPanelOf('submit', 'approve');
+  equal(stale.visible, true);
+  equal(stale.approve, 'stale');
+  equal(stale.publish, 'waiting');
+  ok(stale.status.includes('批准已收回'));
+  // 重新存为待批准清掉批准答复：已变更随之消失，新摘要接上。
+  const resubmitted = withSubmission(approveChanged, key, outcome({ outcome: 'DRAFT_REVISED', contentDigest: 'PCC-2:x', shellDigest: 'PCS-2:y' }));
+  equal(changedDecisionOf(resubmitted, key), null);
+  deepEqual(decisionDigestOf(resubmitted, key), { content: 'PCC-2:x', shell: 'PCS-2:y' });
+
+  const approved = withApproval(submitted, key, outcome({ outcome: 'DRAFT_APPROVED' }));
+  const publishChanged = withPublication(approved, key, outcome({ outcome: 'DRAFT_CHANGED' }));
+  equal(changedDecisionOf(publishChanged, key), 'publish');
+  equal(reachedStep(publishChanged, key), 'approve');
+  const stalePublish = decisionPanelOf('approve', 'publish');
+  equal(stalePublish.approve, 'done');
+  equal(stalePublish.publish, 'stale');
+  ok(stalePublish.status.includes('发布已收回'));
+  // 别的停留原词不算已变更：换人批准仍是同一份载体，按钮照摆。
+  equal(changedDecisionOf(withApproval(submitted, key, outcome({ outcome: 'NEEDS_ANOTHER_APPROVER' })), key), null);
+});
+
+test('「待批准发布」页地址带对象标识作检索词', () => {
+  equal(pendingPublicationsHash('SYN-CREDIT-01'), '#/pending-publications?q=SYN-CREDIT-01');
 });
