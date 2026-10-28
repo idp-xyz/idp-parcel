@@ -222,17 +222,17 @@ func TestZeroAmountFreezeCannotStandInForNoControl(t *testing.T) {
 // 没有任何表示放行或拒绝的取值。
 func TestFreezeStatusSetCarriesNoAcceptanceVerdict(t *testing.T) {
 	labels := map[string]struct{}{}
-	for _, status := range []domain.FreezeStatus{domain.FreezeHeld, domain.FreezeReleased, domain.FreezeRestricted} {
+	for _, status := range []domain.FreezeStatus{domain.FreezeHeld, domain.FreezeReleased, domain.FreezeRestricted, domain.FreezeConverted} {
 		label := status.String()
 		if label == "" {
 			t.Fatalf("status %d has no label", status)
 		}
 		labels[label] = struct{}{}
 	}
-	if len(labels) != 3 {
+	if len(labels) != 4 {
 		t.Fatalf("freeze status collapsed into %d labels", len(labels))
 	}
 	if domain.FreezeStatus(len(labels)+1).String() != "" {
-		t.Fatal("a fourth freeze status exists, which invites an acceptance verdict into this context")
+		t.Fatal("a fifth freeze status exists, which invites an acceptance verdict into this context")
 	}
 }

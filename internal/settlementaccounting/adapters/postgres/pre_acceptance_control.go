@@ -102,7 +102,7 @@ func (repository *FreezeLedgers) LoadForScope(
 
 	rows, err := querier.Query(ctx,
 		`SELECT control_request_id, freeze_id, status, amount_minor, association,
-		        request_digest, frozen_at, released_at
+		        request_digest, frozen_at, released_at, converted_minor, converted_at
 		   FROM settlement_accounting.funds_freeze
 		  WHERE tenant_id = $1
 		    AND legal_entity = $2
@@ -125,9 +125,10 @@ func (repository *FreezeLedgers) LoadForScope(
 		var status uint8
 		var amountMinor int64
 		var frozenAt time.Time
-		var releasedAt *time.Time
+		var releasedAt, convertedAt *time.Time
+		var convertedMinor int64
 		if err := rows.Scan(&requestID, &freezeID, &status, &amountMinor,
-			&association, &digest, &frozenAt, &releasedAt); err != nil {
+			&association, &digest, &frozenAt, &releasedAt, &convertedMinor, &convertedAt); err != nil {
 			return nil, fmt.Errorf("load freeze ledger: %w", err)
 		}
 		decoded, err := decodeDigest(digest)
@@ -136,6 +137,12 @@ func (repository *FreezeLedgers) LoadForScope(
 		}
 		spec, err := freezeSpecOf(requestID, freezeID, status, amountMinor,
 			association, decoded, frozenAt, releasedAt, scope)
+		if err == nil {
+			spec.ConvertedMinor = convertedMinor
+			if convertedAt != nil {
+				spec.ConvertedAt = *convertedAt
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("load freeze ledger: %w", err)
 		}
@@ -175,23 +182,31 @@ func (repository *FreezeLedgers) Save(
 			// 账本自己的不变量：入册的冻结必有指纹。走到这里是领域或适配器的 bug。
 			return fmt.Errorf("save freeze ledger: 冻结 %s 没有幂等指纹", freeze.FreezeID())
 		}
-		var releasedAt *time.Time
+		var releasedAt, convertedAt *time.Time
 		if freeze.Status() == domain.FreezeReleased {
 			at := freeze.ReleasedAt().UTC()
 			releasedAt = &at
+		}
+		if !freeze.ConvertedAt().IsZero() {
+			at := freeze.ConvertedAt().UTC()
+			convertedAt = &at
 		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO settlement_accounting.funds_freeze
 				(tenant_id, legal_entity, account_id, currency, control_request_id,
 				 freeze_id, status, amount_minor, association, request_digest,
-				 frozen_at, released_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				 frozen_at, released_at, converted_minor, converted_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $15, $16)
 			 ON CONFLICT ON CONSTRAINT funds_freeze_pkey DO UPDATE
 			    SET status = EXCLUDED.status,
 			        released_at = EXCLUDED.released_at,
+			        converted_minor = EXCLUDED.converted_minor,
+			        converted_at = EXCLUDED.converted_at,
 			        saved_at = now()
 			  WHERE funds_freeze.status = $13
-			    AND EXCLUDED.status = $14`,
+			    AND EXCLUDED.converted_minor >= funds_freeze.converted_minor
+			    AND (EXCLUDED.status = $14
+			         OR EXCLUDED.converted_minor > funds_freeze.converted_minor)`,
 			tenant.String(),
 			scope.LegalEntity().String(),
 			scope.Account().String(),
@@ -206,6 +221,8 @@ func (repository *FreezeLedgers) Save(
 			releasedAt,
 			uint8(domain.FreezeHeld),
 			uint8(domain.FreezeReleased),
+			freeze.ConvertedMinor(),
+			convertedAt,
 		); err != nil {
 			return fmt.Errorf("save freeze ledger: %w", err)
 		}
@@ -273,7 +290,8 @@ func (repository *CreditExposureLedgers) LoadForScope(
 
 	rows, err := querier.Query(ctx,
 		`SELECT control_request_id, exposure_id, status, amount_minor, association,
-		        request_digest, exposed_at, released_at, credit_policy_ref
+		        request_digest, exposed_at, released_at, credit_policy_ref,
+		        converted_minor, converted_at
 		   FROM settlement_accounting.credit_exposure
 		  WHERE tenant_id = $1
 		    AND legal_entity = $2
@@ -296,10 +314,12 @@ func (repository *CreditExposureLedgers) LoadForScope(
 		var status uint8
 		var amountMinor int64
 		var exposedAt time.Time
-		var releasedAt *time.Time
+		var releasedAt, convertedAt *time.Time
 		var policyRef *string
+		var convertedMinor int64
 		if err := rows.Scan(&requestID, &exposureID, &status, &amountMinor,
-			&association, &digest, &exposedAt, &releasedAt, &policyRef); err != nil {
+			&association, &digest, &exposedAt, &releasedAt, &policyRef,
+			&convertedMinor, &convertedAt); err != nil {
 			return nil, fmt.Errorf("load credit exposure ledger: %w", err)
 		}
 		controlRequest, err := domain.NewControlRequestID(requestID)
@@ -323,9 +343,14 @@ func (repository *CreditExposureLedgers) LoadForScope(
 			Status:      domain.ExposureStatus(status),
 			ExposedAt:   exposedAt,
 			Digest:      decoded,
+
+			ConvertedMinor: convertedMinor,
 		}
 		if releasedAt != nil {
 			spec.ReleasedAt = *releasedAt
+		}
+		if convertedAt != nil {
+			spec.ConvertedAt = *convertedAt
 		}
 		if policyRef != nil {
 			// NULL 是政策引用列落地之前的存量行，如实读回为零值；非 NULL 的值 CHECK 已保证非空白，
@@ -369,10 +394,14 @@ func (repository *CreditExposureLedgers) Save(
 		if !found {
 			return fmt.Errorf("save credit exposure ledger: 暴露 %s 没有幂等指纹", exposure.ExposureID())
 		}
-		var releasedAt *time.Time
+		var releasedAt, convertedAt *time.Time
 		if exposure.Status() == domain.ExposureReleased {
 			at := exposure.ReleasedAt().UTC()
 			releasedAt = &at
+		}
+		if !exposure.ConvertedAt().IsZero() {
+			at := exposure.ConvertedAt().UTC()
+			convertedAt = &at
 		}
 		// 零值出处只属于重建回来的存量行，原样写回 NULL；新形成的暴露一律带出处（Expose 不收没换上
 		// 授权额度的状况，领域门保证）。
@@ -385,14 +414,18 @@ func (repository *CreditExposureLedgers) Save(
 			`INSERT INTO settlement_accounting.credit_exposure
 				(tenant_id, legal_entity, account_id, currency, control_request_id,
 				 exposure_id, status, amount_minor, association, request_digest,
-				 exposed_at, released_at, credit_policy_ref)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+				 exposed_at, released_at, credit_policy_ref, converted_minor, converted_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $16, $17)
 			 ON CONFLICT ON CONSTRAINT credit_exposure_pkey DO UPDATE
 			    SET status = EXCLUDED.status,
 			        released_at = EXCLUDED.released_at,
+			        converted_minor = EXCLUDED.converted_minor,
+			        converted_at = EXCLUDED.converted_at,
 			        saved_at = now()
 			  WHERE credit_exposure.status = $14
-			    AND EXCLUDED.status = $15`,
+			    AND EXCLUDED.converted_minor >= credit_exposure.converted_minor
+			    AND (EXCLUDED.status = $15
+			         OR EXCLUDED.converted_minor > credit_exposure.converted_minor)`,
 			tenant.String(),
 			scope.LegalEntity().String(),
 			scope.Account().String(),
@@ -408,6 +441,8 @@ func (repository *CreditExposureLedgers) Save(
 			policyRef,
 			uint8(domain.ExposureRecorded),
 			uint8(domain.ExposureReleased),
+			exposure.ConvertedMinor(),
+			convertedAt,
 		); err != nil {
 			return fmt.Errorf("save credit exposure ledger: %w", err)
 		}

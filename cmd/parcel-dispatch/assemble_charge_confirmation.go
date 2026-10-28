@@ -58,9 +58,13 @@ func chargeConfirmationOnBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: judge charge attribution: %w", err)
 	}
+	occupation, err := occupationConversion(db, clock)
+	if err != nil {
+		return nil, err
+	}
 	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
 		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-		Downstream: handoff, Clock: clock,
+		Downstream: handoff, Occupation: occupation, Clock: clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge: %w", err)
@@ -86,6 +90,40 @@ func chargeConfirmationOnBasis(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge on basis: %w", err)
+	}
+	return handler, nil
+}
+
+// occupationConversion 装费用确认同笔的占用收口（ADR-0343）：冻结与暴露账本、控制作用域锁、转出册，以及重算入账余额与已确认未结
+// 的那一口（与客户收款映射同一个 CustomerReceiptPostings、同一个求法）。parcel-api 与 parcel-dispatch 的确认入口装的是同一组册，
+// 两个进程各装一份，答案不因从哪个进程进来而不同。
+func occupationConversion(db *bentopg.DB, clock systemClock) (*saapplication.ConvertOccupationOnChargeConfirmationHandler, error) {
+	book, err := sapostgres.NewPreAcceptanceConversions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance conversions: %w", err)
+	}
+	freezes, err := sapostgres.NewFreezeLedgers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: freeze ledgers for conversion: %w", err)
+	}
+	exposures, err := sapostgres.NewCreditExposureLedgers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: credit exposure ledgers for conversion: %w", err)
+	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: control scope locks for conversion: %w", err)
+	}
+	postings, err := sapostgres.NewCustomerReceiptPostings(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer receipt postings for conversion: %w", err)
+	}
+	handler, err := saapplication.NewConvertOccupationOnChargeConfirmationHandler(saapplication.ConvertOccupationDeps{
+		Book: book, Freezes: freezes, Exposures: exposures, ScopeLock: scopeLocks,
+		Balances: postings, Books: postings, Clock: clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: convert occupation: %w", err)
 	}
 	return handler, nil
 }

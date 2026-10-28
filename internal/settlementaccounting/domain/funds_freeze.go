@@ -17,6 +17,8 @@ var (
 	ErrSettlementScopeMismatch   = errors.New("settlement accounting: balance belongs to another settlement scope")
 	ErrControlRequestConflict    = errors.New("settlement accounting: control request identity carries different content")
 	ErrFreezeNotFound            = errors.New("settlement accounting: freeze not found")
+	// ErrInvalidConversion 拒绝不合规则的转正式扣费：金额非正、超出冻结或暴露尚未转的余额，或对象已不在占着的状态。
+	ErrInvalidConversion = errors.New("settlement accounting: invalid conversion of an occupation")
 )
 
 type requiredValue struct {
@@ -203,6 +205,9 @@ const (
 	FreezeHeld
 	FreezeReleased
 	FreezeRestricted
+	// FreezeConverted 是冻结已全部转为正式扣费：原金额一分不剩地转过去了，不再占用资金。部分转出时仍是 FreezeHeld，
+	// 只是占着的金额少了已转出的那截（HeldMinor）。
+	FreezeConverted
 )
 
 func (status FreezeStatus) String() string {
@@ -213,6 +218,8 @@ func (status FreezeStatus) String() string {
 		return "RELEASED"
 	case FreezeRestricted:
 		return "RESTRICTED"
+	case FreezeConverted:
+		return "CONVERTED"
 	default:
 		return ""
 	}
@@ -228,6 +235,10 @@ type FundsFreeze struct {
 	frozenAt    time.Time
 	releasedAt  time.Time
 	reason      RestrictionReason
+	// convertedMinor 是已转为正式扣费的金额，convertedAt 是最近一次转出的时刻。原金额与原冻结时间不因转出而改写：
+	// 冻结发生过这件事不因转出而不曾发生，仍占着的金额是 amountMinor - convertedMinor。
+	convertedMinor int64
+	convertedAt    time.Time
 }
 
 func (freeze FundsFreeze) FreezeID() FreezeID {
@@ -256,6 +267,24 @@ func (freeze FundsFreeze) ReleasedAt() time.Time {
 
 func (freeze FundsFreeze) Reason() RestrictionReason {
 	return freeze.reason
+}
+
+// ConvertedMinor 是已转为正式扣费的金额。
+func (freeze FundsFreeze) ConvertedMinor() int64 {
+	return freeze.convertedMinor
+}
+
+// ConvertedAt 是最近一次转出的时刻；从未转出为零值。
+func (freeze FundsFreeze) ConvertedAt() time.Time {
+	return freeze.convertedAt
+}
+
+// RemainingMinor 是这笔冻结此刻还占着的金额：占着时是原金额减已转出，其余状态不占。
+func (freeze FundsFreeze) RemainingMinor() int64 {
+	if freeze.status != FreezeHeld {
+		return 0
+	}
+	return freeze.amountMinor - freeze.convertedMinor
 }
 
 // FreezeLedger 只增不删地记录冻结。释放只是给记录打上标记，原金额与原冻结时间原样
@@ -329,7 +358,8 @@ func (ledger *FreezeLedger) Release(freezeID FreezeID, releasedAt time.Time) (Fu
 	if !found {
 		return FundsFreeze{}, ErrFreezeNotFound
 	}
-	if freeze.status == FreezeReleased {
+	if freeze.status == FreezeReleased || freeze.status == FreezeConverted {
+		// 已转满的冻结没有可放的东西：交回原样，由编排按状态答`无可释放`，不把转为正式扣费的钱当成放掉。
 		return freeze, nil
 	}
 	if releasedAt.IsZero() || releasedAt.Before(freeze.frozenAt) {
@@ -337,6 +367,29 @@ func (ledger *FreezeLedger) Release(freezeID FreezeID, releasedAt time.Time) (Fu
 	}
 	freeze.status = FreezeReleased
 	freeze.releasedAt = releasedAt.UTC()
+	ledger.byFreeze[freezeID] = freeze
+	return freeze, nil
+}
+
+// Convert 把一笔占着的冻结按金额转为正式扣费（CONTEXT「冻结后必须转为正式扣费或显式释放」）。转出的金额离开占用，
+// 转满即 FreezeConverted；正式扣费本身不在冻结账本里，它是已确认费用进入已确认未结（ADR-0181 决定三），这里只收口占用。
+// 金额超出还占着的部分、冻结已释放或已转满、转出时刻早于冻结都不合规则：按原关联认领到的冻结与确认费用对不上，
+// 不截断也不静默放过。
+func (ledger *FreezeLedger) Convert(requestID ControlRequestID, minor int64, convertedAt time.Time) (FundsFreeze, error) {
+	freezeID, found := ledger.byRequest[requestID]
+	if !found {
+		return FundsFreeze{}, ErrFreezeNotFound
+	}
+	freeze := ledger.byFreeze[freezeID]
+	if minor <= 0 || convertedAt.IsZero() || convertedAt.Before(freeze.frozenAt) ||
+		freeze.status != FreezeHeld || minor > freeze.RemainingMinor() {
+		return FundsFreeze{}, ErrInvalidConversion
+	}
+	freeze.convertedMinor += minor
+	freeze.convertedAt = convertedAt.UTC()
+	if freeze.convertedMinor == freeze.amountMinor {
+		freeze.status = FreezeConverted
+	}
 	ledger.byFreeze[freezeID] = freeze
 	return freeze, nil
 }
@@ -372,9 +425,7 @@ func (ledger *FreezeLedger) HeldCount() int {
 func (ledger *FreezeLedger) HeldMinor() int64 {
 	total := int64(0)
 	for _, freeze := range ledger.byFreeze {
-		if freeze.status == FreezeHeld {
-			total += freeze.amountMinor
-		}
+		total += freeze.RemainingMinor()
 	}
 	return total
 }
