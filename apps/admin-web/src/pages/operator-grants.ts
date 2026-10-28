@@ -35,3 +35,14 @@ export function heldGrantsOf(answer: ApiResult<OperatorGrantsResponseBody> | nul
 export function mayWriteRegistry(held: HeldGrants | undefined): boolean {
   return held === undefined || held.faces.has(registryWriteFace);
 }
+
+/** 入口按授予收起时，原本指向它的文案改说这一句：说谁能用，不让人去找本页没有摆出的签或按钮。 */
+export const hiddenEntryHint = '登记与发布入口只对持登记册配置写授予的操作者显示。';
+
+/**
+ * 空态与说明里指向写入口的那半句。入口摆着时照说它在哪（`pointer`）；入口按授予收起时换成 hiddenEntryHint——文案跟着入口走，
+ * 否则查阅员会被指去一个看不见的「登记」签。
+ */
+export function entryHint(mayWrite: boolean, pointer: string): string {
+  return mayWrite ? pointer : hiddenEntryHint;
+}

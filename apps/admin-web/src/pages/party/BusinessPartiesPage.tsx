@@ -64,6 +64,7 @@ import {
   type PartyRelationshipStatusFilter,
 } from './party-relationship-list';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
@@ -402,6 +403,7 @@ function BusinessPartyIdentitiesTable({
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
 }) {
+  const mayWrite = useMayWriteRegistry();
   // 检索词放在地址 `?q=`：集团与法人详情的「到业务参与方页停用」带上参与方标识，这一册挂载时已经筛到那一行。
   // 关系册检索留在页内，停用入口定位的是身份这一册。
   const [search, setSearch] = useAddressKeyword();
@@ -462,7 +464,7 @@ function BusinessPartyIdentitiesTable({
           module: info,
           endpoint: 'GET /commercial-business-parties',
           emptyTitle: '当前租户尚无参与方身份登记',
-          emptyDescription: '还没有登记任何业务参与方。在「登记」页签登记第一个；本页不会预置参与方。',
+          emptyDescription: `还没有登记任何业务参与方；本页不会预置参与方。${entryHint(mayWrite, '在「登记」页签登记第一个。')}`,
         })}
       />
       <BusinessPartyDrawer
@@ -490,6 +492,7 @@ function PartyRelationshipsTable({
   answer: ApiResult<PartyRelationshipListResponseBody> | null;
   retry: () => void;
 }) {
+  const mayWrite = useMayWriteRegistry();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
   const [status, setStatus] = useState<PartyRelationshipStatusFilter>('ALL');
@@ -566,7 +569,7 @@ function PartyRelationshipsTable({
           module: info,
           endpoint: 'GET /commercial-party-relationships',
           emptyTitle: '当前租户尚无参与方关系登记',
-          emptyDescription: '还没有登记任何参与方关系。在「登记」页签登记第一段；本页不会预置参与方或关系。',
+          emptyDescription: `还没有登记任何参与方关系；本页不会预置参与方或关系。${entryHint(mayWrite, '在「登记」页签登记第一段。')}`,
         })}
       />
       <PartyRelationshipDrawer row={selected} onClose={() => setSelectedId(null)} onEnded={retry} />

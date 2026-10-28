@@ -34,6 +34,7 @@ import { VersionClosureDrawer } from './VersionClosureDrawer';
 import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { versionHistoryOf } from './version-history';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
@@ -139,7 +140,7 @@ function SupplierAgreementCatalogue({
           module: info,
           endpoint: 'GET /commercial-supplier-agreements',
           emptyTitle: '当前租户尚无供应商协议版本',
-          emptyDescription: '还没有任何供应商协议。在「发布协议版本」签发布第一份；本页不会预置供应商或采购条件。',
+          emptyDescription: `还没有任何供应商协议；本页不会预置供应商或采购条件。${entryHint(mayWrite, '在「发布协议版本」签发布第一份。')}`,
         })}
       />
       <VersionDetailDrawer<SupplierAgreementRow>

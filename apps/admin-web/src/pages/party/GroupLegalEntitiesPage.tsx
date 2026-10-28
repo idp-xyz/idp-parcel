@@ -39,11 +39,14 @@ import {
   type LegalEntityStatusFilter,
 } from './legal-entity-list';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
 
-const emptyDescription = '还没有登记任何责任法人。用页头的「登记责任法人」登记第一个。';
+function emptyDescriptionOf(mayWrite: boolean): string {
+  return `还没有登记任何责任法人。${entryHint(mayWrite, '用页头的「登记责任法人」登记第一个。')}`;
+}
 
 // 行首圆点的颜色随身份状态；待补的行圆点闪，与参照页「逾期 / 暂挂」同一个记号。
 const statusDotClass: Record<string, string> = {
@@ -431,7 +434,7 @@ export function GroupLegalEntitiesPage() {
         module: info,
         endpoint: 'GET /commercial-group-legal-entities',
         emptyTitle: '当前租户尚无责任法人登记',
-        emptyDescription,
+        emptyDescription: emptyDescriptionOf(mayWrite),
       })}
     />
   );

@@ -22,6 +22,7 @@ import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { mappingHistoryOf } from './mapping-history';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['channel-product-catalog'];
@@ -96,6 +97,7 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
  * 区间形成新修订，不覆盖历史。
  */
 function ProductChannelMappingTable() {
+  const mayWrite = useMayWriteRegistry();
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
@@ -184,8 +186,7 @@ function ProductChannelMappingTable() {
           module: info,
           endpoint: 'GET /commercial-product-channel-mappings',
           emptyTitle: '当前租户尚无产品—渠道映射登记',
-          emptyDescription:
-            '还没有登记任何产品—渠道映射。在「登记映射」签登记第一条；本页不会预置映射或渠道候选。',
+          emptyDescription: `还没有登记任何产品—渠道映射；本页不会预置映射或渠道候选。${entryHint(mayWrite, '在「登记映射」签登记第一条。')}`,
         })}
       />
       <VersionDetailDrawer<ProductChannelMappingRecord>

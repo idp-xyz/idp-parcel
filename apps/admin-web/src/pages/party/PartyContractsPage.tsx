@@ -52,6 +52,7 @@ import {
   registrationTitles,
 } from './presentation';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['party-contracts'];
@@ -288,7 +289,7 @@ function CustomerContractsTable({
           module: info,
           endpoint: 'GET /commercial-customer-contracts',
           emptyTitle: '当前租户尚无客户合同版本',
-          emptyDescription: '还没有发布任何客户合同。在「发布合同版本」签发布第一份；本页不会预置合同。',
+          emptyDescription: `还没有发布任何客户合同；本页不会预置合同。${entryHint(mayWrite, '在「发布合同版本」签发布第一份。')}`,
         })}
       />
       <VersionDetailDrawer<CustomerContractRecord>
@@ -418,6 +419,7 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
  * 次序是读口的缺省序，本签不另排。不在答回来的那一页上再筛——截断之后再筛，答出的「没有」可能是假的。检索覆盖哪几格以读口为准。
  */
 function CustomerAccountsTable() {
+  const mayWrite = useMayWriteRegistry();
   const [search, setSearch] = useAddressKeyword();
   const conditions = { q: useSettledKeyword(search) };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listCustomerAccounts);
@@ -442,8 +444,7 @@ function CustomerAccountsTable() {
         module: info,
         endpoint: 'GET /commercial-customer-accounts',
         emptyTitle: '当前租户尚无货主客户账户登记',
-        emptyDescription:
-          '还没有登记任何货主客户账户。在「登记账户」签登记第一个；本页不会预置账户。',
+        emptyDescription: `还没有登记任何货主客户账户；本页不会预置账户。${entryHint(mayWrite, '在「登记账户」签登记第一个。')}`,
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />

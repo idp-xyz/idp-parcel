@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { equal, ok } from 'node:assert/strict';
-import { heldGrantsOf, mayWriteRegistry, type OperatorGrantsResponseBody } from './operator-grants';
+import { entryHint, heldGrantsOf, hiddenEntryHint, mayWriteRegistry, type OperatorGrantsResponseBody } from './operator-grants';
 
 // 本文件钉授予自查答复的判读与「摆不摆写入口」的口径（ADR-0315）：只有业务成格才算拿到；明确没有登记册配置写授予才收起
 // 入口，各种答不出一律当不知道、入口照摆——摆不摆只是呈现，服务端仍是裁决方。
@@ -34,4 +34,9 @@ test('明确没有登记册配置写授予才收起写入口', () => {
   // 没有任何授予也是「明确知道没有」，不是不知道；服务端对这种操作者本来就连读都拒，入口收不收无所谓，口径不为它开例外。
   equal(mayWriteRegistry(heldGrantsOf(resolved([]))), false);
   equal(mayWriteRegistry(undefined), true);
+});
+
+test('指向写入口的文案跟着入口走：摆着时说它在哪，收起时说谁能用', () => {
+  equal(entryHint(true, '在「登记」页签登记第一个。'), '在「登记」页签登记第一个。');
+  equal(entryHint(false, '在「登记」页签登记第一个。'), hiddenEntryHint);
 });

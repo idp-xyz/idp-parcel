@@ -46,6 +46,7 @@ import {
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 const info = moduleInfoById['service-products'];
 
@@ -202,8 +203,10 @@ function ServiceProductVersionsTable({
           module: info,
           endpoint: 'GET /commercial-service-products',
           emptyTitle: '当前租户尚无服务产品版本',
-          emptyDescription:
-            '还没有发布任何服务产品。在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
+          emptyDescription: `还没有发布任何服务产品。${entryHint(
+            mayWrite,
+            '在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
+          )}`,
         })}
       />
       <VersionDetailDrawer<ServiceProductRecord>

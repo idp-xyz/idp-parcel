@@ -37,6 +37,7 @@ import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant, statusBadge } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
@@ -111,6 +112,7 @@ function viewStateOf(
   answer: ApiResult<GroupLegalEntityListResponseBody> | null,
   row: GroupLegalEntityRecord | null,
   retry: () => void,
+  mayWrite: boolean,
 ): TemplateViewState {
   if (answer === null) return { kind: 'loading' };
   if (answer.kind === 'outcome') {
@@ -126,7 +128,7 @@ function viewStateOf(
     module: info,
     endpoint: 'GET /commercial-group-legal-entities',
     emptyTitle: '当前租户尚无责任法人登记',
-    emptyDescription: '还没有登记任何责任法人。回到列表，用页头的「登记责任法人」登记第一个。',
+    emptyDescription: `还没有登记任何责任法人。${entryHint(mayWrite, '回到列表，用页头的「登记责任法人」登记第一个。')}`,
   });
 }
 
@@ -148,10 +150,10 @@ export function LegalEntityDetailPage({
   retry: () => void;
   onBack: () => void;
 }) {
-  const viewState = viewStateOf(listAnswer, row, retry);
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
+  const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const openProfileForm = () => {
     setTab('summary');
