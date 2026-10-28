@@ -19,14 +19,14 @@ export function ShipmentRequestPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 flex gap-2 px-6 pt-4">
         <button type="button" className={tabClass(view === 'submit')} onClick={() => setView('submit')}>
-          提交服务请求
+          新建运单
         </button>
         <button
           type="button"
           className={tabClass(view === 'withdraw')}
           onClick={() => setView('withdraw')}
         >
-          决定前撤回
+          撤回运单
         </button>
       </div>
       {view === 'submit' ? <SubmitShipmentRequestPage /> : <WithdrawShipmentRequestPage />}
