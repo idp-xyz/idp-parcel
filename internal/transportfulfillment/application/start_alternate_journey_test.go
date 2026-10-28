@@ -285,3 +285,42 @@ func TestJourneyRecoveryDiscipline(t *testing.T) {
 		}
 	})
 }
+
+// Covers: ADR-0303 的待遇对旅程启动口：启动旅程的操作者记在旅程记录上，只进审计——同一处置换一位操作者重放，答已有旅程、在册的仍是
+// 先到的那一位；不带操作者照样启动（操作者不进任何门）。
+func TestTheStartingOperatorIsRecordedAndNeverGatesOrDistinguishesAReplay(t *testing.T) {
+	fixture := newJourneyFixture(t)
+	first := startJourneyCommand(t, domain.ServiceDispositionDecision)
+	first.StartedBy = "http://idp.example/dex#operator-a"
+
+	started, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || started.Outcome() != application.JourneyStarted {
+		t.Fatalf("first: %v %q", err, started.Outcome())
+	}
+	record, _ := started.Record()
+	if record.StartedBy.String() != first.StartedBy {
+		t.Fatalf("recorded operator = %q, want %q", record.StartedBy.String(), first.StartedBy)
+	}
+
+	second := first
+	second.StartedBy = "http://idp.example/dex#operator-b"
+	replay, err := fixture.handler.Handle(context.Background(), second)
+	if err != nil || replay.Outcome() != application.JourneyExistingResult {
+		t.Fatalf("replay: %v %q", err, replay.Outcome())
+	}
+	kept, _ := replay.Record()
+	if kept.StartedBy.String() != first.StartedBy {
+		t.Fatalf("replay replaced the recorded operator with %q", kept.StartedBy.String())
+	}
+
+	anonymous := newJourneyFixture(t)
+	command := startJourneyCommand(t, domain.ServiceDispositionDecision)
+	command.StartedBy = ""
+	formed, err := anonymous.handler.Handle(context.Background(), command)
+	if err != nil || formed.Outcome() != application.JourneyStarted {
+		t.Fatalf("without an operator: %v %q", err, formed.Outcome())
+	}
+	if noOne, _ := formed.Record(); noOne.StartedBy.Present() {
+		t.Fatal("an absent operator was recorded as present")
+	}
+}

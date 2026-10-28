@@ -111,6 +111,9 @@ func acceptDispositionCommand(t *testing.T) application.AcceptRegulatoryDisposit
 		Item:              item,
 		Basis:             basis,
 		MovementAction:    "RETURN_TO_BONDED_WAREHOUSE",
+		ItemObjects:       []string{"unit-1", "unit-2"},
+		Origin:            "SYN-NODE-A",
+		Destination:       "SYN-NODE-B",
 		Decision:          domain.DispositionAccepted,
 		AcceptedObjects:   []string{"unit-1", "unit-2"},
 		MovementAuthority: "movement-authority-1",
@@ -175,6 +178,7 @@ func TestANodeOnlyCollaborationBuildsNoTransportObject(t *testing.T) {
 	fixture := newAcceptDispositionFixture(t)
 	command := acceptDispositionCommand(t)
 	command.MovementAction = "  "
+	command.Origin, command.Destination = "", ""
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -206,8 +210,102 @@ func TestDetentionWithoutMovementAuthorityIsSupplementRequired(t *testing.T) {
 	if result.Outcome() != application.DispositionSupplementRequired {
 		t.Fatalf("outcome = %q, want SUPPLEMENT_REQUIRED", result.Outcome())
 	}
+	if result.SupplementReason() != application.SupplementMovementAuthorityMissing {
+		t.Fatalf("supplement reason = %q, want MOVEMENT_AUTHORITY_MISSING", result.SupplementReason())
+	}
 	if fixture.acceptances.saves != 0 || len(fixture.receipt.intents) != 0 {
 		t.Fatal("a supplement-required round still saved a decision or handed off a receipt")
+	}
+}
+
+// Covers: UC-TF-001 步骤 3「核对对象、起止地点、移动授权、责任」与 `AT-TF-004`「移动授权、载运对象、运输动作或起止责任（含起止地点）
+// 缺失→答待补充、不落承接决定、不交回执」，以及 ADR-0265 决定四「待补充带一个原因、指名缺的那一项」。事项本体的另三种缺口各答一格原因，
+// 都不落决定、不交回执，不创建占位旅程。
+func TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*application.AcceptRegulatoryDispositionCommand)
+		want   application.SupplementReason
+	}{
+		{"没有移动动作但声称有起止", func(c *application.AcceptRegulatoryDispositionCommand) { c.MovementAction = "" }, application.SupplementMovementActionMissing},
+		{"事项没有载运对象", func(c *application.AcceptRegulatoryDispositionCommand) { c.ItemObjects = []string{" "} }, application.SupplementObjectMissing},
+		{"缺起点", func(c *application.AcceptRegulatoryDispositionCommand) { c.Origin = "" }, application.SupplementResponsibilityMissing},
+		{"缺终点", func(c *application.AcceptRegulatoryDispositionCommand) { c.Destination = " " }, application.SupplementResponsibilityMissing},
+		{"缺移动授权", func(c *application.AcceptRegulatoryDispositionCommand) { c.MovementAuthority = "" }, application.SupplementMovementAuthorityMissing},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newAcceptDispositionFixture(t)
+			command := acceptDispositionCommand(t)
+			tc.mutate(&command)
+
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.DispositionSupplementRequired || result.SupplementReason() != tc.want {
+				t.Fatalf("outcome = %q reason = %q, want SUPPLEMENT_REQUIRED %q", result.Outcome(), result.SupplementReason(), tc.want)
+			}
+			if _, present := result.Acceptance(); present || fixture.acceptances.saves != 0 || len(fixture.receipt.intents) != 0 {
+				t.Fatal("a supplement-required round still saved a decision or handed off a receipt")
+			}
+		})
+	}
+}
+
+// Covers: UC-TF-001 输入语义契约「不重新解释监管原文或扩大移动范围」：承接的对象不得超出协作事项指名的载运对象，超出答未受理、不落决定。
+func TestAnAcceptanceCannotWidenTheItemsObjectScope(t *testing.T) {
+	fixture := newAcceptDispositionFixture(t)
+	command := acceptDispositionCommand(t)
+	command.AcceptedObjects = []string{"unit-1", "unit-not-in-the-item"}
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptDispositionNotAccepted || fixture.acceptances.saves != 0 {
+		t.Fatalf("outcome = %q saves = %d, want NOT_ACCEPTED with nothing saved", result.Outcome(), fixture.acceptances.saves)
+	}
+}
+
+// Covers: ADR-0303 的待遇对承接口：作出决定的操作者记在决定记录上，只进审计——同一事项同内容换一位操作者重放，答已有决定、在册的
+// 仍是先到的那一位；不带操作者照样形成（操作者不进任何门）。
+func TestTheDecidingOperatorIsRecordedAndNeverGatesOrDistinguishesAReplay(t *testing.T) {
+	fixture := newAcceptDispositionFixture(t)
+	first := acceptDispositionCommand(t)
+	first.DecidedBy = "http://idp.example/dex#operator-a"
+
+	created, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || created.Outcome() != application.DispositionDecided {
+		t.Fatalf("first: %v %q", err, created.Outcome())
+	}
+	record, _ := created.Acceptance()
+	if record.DecidedBy.String() != first.DecidedBy {
+		t.Fatalf("recorded operator = %q, want %q", record.DecidedBy.String(), first.DecidedBy)
+	}
+
+	second := first
+	second.DecidedBy = "http://idp.example/dex#operator-b"
+	replay, err := fixture.handler.Handle(context.Background(), second)
+	if err != nil || replay.Outcome() != application.DispositionExistingDecision {
+		t.Fatalf("replay: %v %q", err, replay.Outcome())
+	}
+	kept, _ := replay.Acceptance()
+	if kept.DecidedBy.String() != first.DecidedBy {
+		t.Fatalf("replay replaced the recorded operator with %q", kept.DecidedBy.String())
+	}
+
+	anonymous := newAcceptDispositionFixture(t)
+	command := acceptDispositionCommand(t)
+	command.DecidedBy = " "
+	formed, err := anonymous.handler.Handle(context.Background(), command)
+	if err != nil || formed.Outcome() != application.DispositionDecided {
+		t.Fatalf("without an operator: %v %q", err, formed.Outcome())
+	}
+	if noOne, _ := formed.Acceptance(); noOne.DecidedBy.Present() {
+		t.Fatal("a blank operator was recorded as present")
 	}
 }
 
