@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
 import { ReloginButton } from '../../auth/ReloginButton';
+import { TechnicalDetails } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import { Field, inputClass, Section } from './controls';
+import { ParcelNo } from './refs';
 import { postIntakeDispositionDecision, postIntakeManualItemDecision } from '../operator-grants';
 import { useMayMakeDecision } from '../use-operator-grants';
 import {
@@ -39,27 +41,30 @@ import {
   requestQueueRowOf,
   requestQueueViewState,
   requestSummaryText,
+  requestTechnicalRows,
   type OperatorNote,
 } from './post-intake-disposition';
 
+// 页面标题取导航登记的那一份;主责上下文(parcel-shipment)只在代码里出现,屏上不说系统的话。
 const info = moduleInfoById['post-intake-disposition'];
 
 function NoteLine({ note }: { note: OperatorNote | null }) {
   if (!note) return null;
   return (
-    <p className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+    <div className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
       {note.text}
       {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
-    </p>
+      <TechnicalDetails rows={note.technical} />
+    </div>
   );
 }
 
 /**
- * 收寄后处置(UC-PS-006;ADR-0332、ADR-0341)。上半是等回应的停止请求与收寄后服务处置决定(去向五选一);
- * 下半是决定留下的待人工处理项:登记已处理 / 无法处理,并可按包裹读回各项结果。
+ * 货物处置(UC-PS-006 的收寄后服务处置决定;ADR-0332、ADR-0341)。上半是客户收寄后申请停止、等运营决定去向的运单
+ * (去向五选一);下半是决定留下的待办事项(领域词「待人工处理项」):登记已办 / 办不了,并可按包裹读回各项结果。
  *
- * 写入口按授予收起(ADR-0315):处置决定与待人工处理项登记是两种分开授予的运营决定(ADR-0341 决定三)。
- * 摆不摆只是呈现,每个写口照旧由服务端判授予。取消先于收寄的入口在「取消与收寄后处置」页,不在这里。
+ * 写入口按授予收起(ADR-0315):处置决定与待办登记是两种分开授予的运营决定(ADR-0341 决定三)。
+ * 摆不摆只是呈现,每个写口照旧由服务端判授予。取消先于收寄的入口在「取消运单」页,不在这里。
  */
 export function PostIntakeDispositionPage() {
   const mayDecide = useMayMakeDecision(postIntakeDispositionDecision);
@@ -86,7 +91,7 @@ export function PostIntakeDispositionPage() {
   const requests = body?.requests ?? [];
   const selected: PostIntakeDispositionRequestRow | null = requests.find((row) => requestKeyOf(row) === selectedId) ?? null;
   const retry = () => setReloadKey((value) => value + 1);
-  // 形成决定会让待人工处理项多出几项,下半部随之重读。
+  // 形成决定会让待办事项多出几项,下半部随之重读。
   const [itemsReloadKey, setItemsReloadKey] = useState(0);
 
   const decisions: ReviewDecisionOption<PostIntakeDirection>[] = mayDecide
@@ -99,7 +104,7 @@ export function PostIntakeDispositionPage() {
   const onDecide = ({ itemId, decision, reason }: { itemId: string; decision: PostIntakeDirection; reason: string }) => {
     const row = requests.find((candidate) => requestKeyOf(candidate) === itemId);
     if (!row) return;
-    const label = `收寄后服务处置决定:${directionLabel(decision)}`;
+    const label = `处置:${directionLabel(decision)}`;
     setPending(true);
     setNote(null);
     void decidePostIntakeDisposition(decisionDraftOf(row, decision, reason, destination)).then((result) => {
@@ -115,7 +120,10 @@ export function PostIntakeDispositionPage() {
   };
 
   const detailFields: DetailField[] | undefined = selected
-    ? requestDetailRows(selected).map((r) => ({ label: r.label, value: r.mono || r.title ? <span className={r.mono ? 'font-mono' : undefined} title={r.title}>{r.value}</span> : r.value }))
+    ? requestDetailRows(selected).map((r) => ({
+        label: r.label,
+        value: r.mono ? <ParcelNo parcelId={selected.parcelId} /> : r.title ? <span title={r.title}>{r.value}</span> : r.value,
+      }))
     : undefined;
 
   return (
@@ -123,8 +131,8 @@ export function PostIntakeDispositionPage() {
       <div className="flex min-h-[460px] flex-col">
         <ReviewFlowTemplate<PostIntakeDirection>
           title={info.title}
-          description={`客户在取消边界之后提出的停止请求,等有权主体形成收寄后服务处置决定。${body ? requestSummaryText(body) : ''}`}
-          queueTitle="等回应的请求"
+          description={`客户在货物收寄后申请停止运送的运单,在这里决定去向;系统办不了的事项列在下方待办事项。${body ? requestSummaryText(body) : ''}`}
+          queueTitle="等待处置的运单"
           queue={requests.map((row) => {
             const line = requestQueueRowOf(row);
             return {
@@ -140,28 +148,29 @@ export function PostIntakeDispositionPage() {
             setSelectedId(id);
             setDestination('');
           }}
-          detailTitle="请求详情"
+          detailTitle="处置这票货"
           detailFields={detailFields}
           detailExtra={
             <div className="flex flex-col gap-3">
               {mayDecide ? (
                 <>
-                  <Field label="改送目的地" hint="只有「改送」带目的地,别的去向不带。">
+                  <Field label="新目的地" hint="选「改送」时填;其他去向不用填。">
                     <input
                       className={inputClass}
                       value={destination}
                       onChange={(event) => setDestination(event.target.value)}
-                      placeholder="改送的目的地"
+                      placeholder="改送到哪里"
                     />
                   </Field>
                   <p className="text-[12px] text-idpxyz-textMuted">
-                    「复核理由」就是决定的依据,必填。决定只追加、不可撤销;之后要改走向,请基于链尾再形成一份新的收寄后服务处置决定。
+                    在下方写明处置理由后选择去向。决定会留下记录,之后要改去向,再做一次新的决定。
                   </p>
                 </>
               ) : (
-                <p className="text-[12px] text-idpxyz-textMuted">收寄后服务处置决定的入口只对持该运营决定授予的操作者显示。</p>
+                <p className="text-[12px] text-idpxyz-textMuted">只有获得「货物处置」权限的操作员能在这里做决定。</p>
               )}
               <NoteLine note={note} />
+              {selected ? <TechnicalDetails rows={requestTechnicalRows(selected)} /> : null}
             </div>
           }
           decisions={decisions}
@@ -207,7 +216,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
     const reason = manualResultBlockedReason(noteText);
     setBlocked(reason ?? null);
     if (reason) return;
-    const label = `登记${outcome === 'HANDLED' ? '已处理' : '无法处理'}`;
+    const label = `登记${outcome === 'HANDLED' ? '已办' : '办不了'}`;
     setSending(true);
     setNote(null);
     void registerPostIntakeManualItemResult(manualResultDraftOf(selected, outcome, noteText)).then((result) => {
@@ -222,15 +231,15 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
 
   return (
     <div className="px-4 pb-6">
-      <Section title="待人工处理项">
+      <Section title="待办事项">
         <p className="mb-3 text-[12px] text-idpxyz-textMuted">
-          收寄后服务处置决定里系统不自动执行的请求,要运营人员在系统外办完后在这里登记结果。「已处理」与「无法处理」都是承接结果;无法处理时当前控制责任不因此消失。
-          被后来的决定取代的项不会消失,办之前先看链尾决定说了什么。
+          处置决定里要人去办的事(扣件、安排退运等),办完后在这里登记「已办」或「办不了」。办不了也要登记,这票货仍归当前网点看管。
+          之后又做过新决定的事项不会消失,办之前先看最新一次决定怎么说。
         </p>
         <div className="mb-3 flex flex-wrap items-end gap-2">
           <div className="w-[260px]">
-            <Field label="按包裹读回">
-              <input className={inputClass} value={parcelInput} onChange={(event) => setParcelInput(event.target.value)} placeholder="包裹标识" />
+            <Field label="按包裹号查">
+              <input className={inputClass} value={parcelInput} onChange={(event) => setParcelInput(event.target.value)} placeholder="包裹号" />
             </Field>
           </div>
           <Button
@@ -240,7 +249,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
               setSelectedKey(null);
             }}
           >
-            读回
+            查询
           </Button>
           {parcel && (
             <Button
@@ -257,9 +266,19 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
         </div>
         {!answer && <p className="text-[12px] text-idpxyz-textMuted">读取中…</p>}
         {answer && answer.kind !== 'outcome' && (
-          <p className="text-[12px] text-idpxyz-textMuted">
-            待人工处理项读不到({answer.kind === 'callerProblem' || answer.kind === 'noAnswer' ? `HTTP ${answer.status} ${answer.code}` : answer.kind === 'transport' ? answer.message : answer.kind})。这不是「没有待人工处理项」。
-          </p>
+          <div className="text-[12px] text-idpxyz-textMuted">
+            待办事项这次没有读到,不代表没有待办。请稍后刷新。
+            <TechnicalDetails
+              rows={
+                answer.kind === 'callerProblem' || answer.kind === 'noAnswer'
+                  ? [
+                      { label: 'HTTP 状态', value: String(answer.status) },
+                      { label: '问题码', value: answer.code },
+                    ]
+                  : [{ label: '原因', value: answer.kind === 'transport' ? answer.message : answer.kind }]
+              }
+            />
+          </div>
         )}
         {body && <p className="mb-2 text-[12px] text-idpxyz-text">{manualSummaryText(body, parcel)}</p>}
         {body && items.length === 0 && (
@@ -272,15 +291,21 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
             return (
               <li key={line.id} className={`rounded border p-3 ${active ? 'border-idpxyz-accent' : 'border-idpxyz-border'}`}>
                 <button type="button" className="block w-full text-left" onClick={() => setSelectedKey(line.id)}>
-                  <div className="font-mono text-[12px] text-idpxyz-textBright">{line.title}</div>
-                  <div className="text-[12px] text-idpxyz-text">{line.detail}</div>
+                  <div className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                    <ParcelNo parcelId={line.parcelId} className="text-idpxyz-textBright" />
+                    <span className="text-idpxyz-text">{line.task}</span>
+                  </div>
+                  <div className="text-[11px] text-idpxyz-textMuted">
+                    {line.decisionText} · {line.decidedAt}
+                  </div>
                   {line.superseded && <div className="text-[11px] text-idpxyz-accent">{line.supersededText}</div>}
-                  <div className="text-[11px] text-idpxyz-textMuted" title={line.resultTitle || undefined}>{line.resultText ? `结果:${line.resultText}` : '尚未登记结果'}</div>
+                  <div className="text-[11px] text-idpxyz-textMuted" title={line.resultTitle || undefined}>{line.resultText ? `结果:${line.resultText}` : '还没登记结果'}</div>
                 </button>
+                {active && <TechnicalDetails rows={line.technical} />}
                 {active && !item.result && (
                   mayRegister ? (
                     <div className="mt-3 flex flex-col gap-2">
-                      <Field label="处理结果" required>
+                      <Field label="办得怎么样" required>
                         <select className={inputClass} value={outcome} onChange={(event) => setOutcome(event.target.value as ManualItemOutcome)}>
                           {manualOutcomeOptions.map((option) => (
                             <option key={option.id} value={option.id}>
@@ -289,7 +314,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
                           ))}
                         </select>
                       </Field>
-                      <Field label="说明" required error={blocked ?? undefined} hint="做了什么,或为什么办不了;随结果留痕。">
+                      <Field label="说明" required error={blocked ?? undefined} hint="做了什么,或为什么办不了。">
                         <textarea className={inputClass} rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} />
                       </Field>
                       <div>
@@ -300,7 +325,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[12px] text-idpxyz-textMuted">登记结果的入口只对持待人工处理项登记授予的操作者显示。</p>
+                    <p className="mt-2 text-[12px] text-idpxyz-textMuted">只有获得「待办登记」权限的操作员能登记结果。</p>
                   )
                 )}
               </li>
