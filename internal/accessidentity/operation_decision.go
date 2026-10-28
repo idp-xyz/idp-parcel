@@ -139,6 +139,11 @@ const (
 	DecisionAlternateJourneyStart           DecisionKind = "ALTERNATE_JOURNEY_START"
 )
 
+// 节点监管协作承接（ADR-0338 决定一）：节点作业责任角色对关务协作事项形成承接决定（已承接、部分承接、待补充、拒绝），自成一种。不与
+// 送站交接确认（DELIVERY_HANDOVER_CONFIRMATION）或身份冲突处置共用——那两种裁断的是交付范围与实物身份，这一种是接受现场监管作业责任；
+// 也不与现场执行事实登记（作业事实登记面的 NODE_COLLABORATION_EXECUTION）共用：能承接的人不因此能替现场登记已做了什么。
+const DecisionNodeCollaborationAcceptance DecisionKind = "NODE_COLLABORATION_ACCEPTANCE"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -163,6 +168,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPickupAttemptResultConfirmation, DecisionDeliveryAttemptResultConfirmation,
 	DecisionPostIntakeServiceDisposition,
 	DecisionRegulatoryDispositionAcceptance, DecisionAlternateJourneyStart,
+	DecisionNodeCollaborationAcceptance,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

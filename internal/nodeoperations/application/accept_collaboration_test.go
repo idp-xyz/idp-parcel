@@ -211,8 +211,13 @@ func acceptCommand(t *testing.T) application.AcceptCollaborationCommand {
 
 func executeCommand(t *testing.T) application.RecordExecutionCommand {
 	t.Helper()
+	node, err := domain.NewNodeReference("node-1")
+	if err != nil {
+		t.Fatalf("node: %v", err)
+	}
 	return application.RecordExecutionCommand{
 		TenantID:    collabTenant(t),
+		Node:        node,
 		Item:        "collaboration-item-1",
 		Unit:        "unit-1",
 		Action:      domain.UnsealAction,
@@ -612,4 +617,26 @@ func TestAPendingSupplementIsFollowedByANewDecisionThatPointsBack(t *testing.T) 
 			t.Fatalf("outcome = %q err = %v", result.Outcome(), err)
 		}
 	})
+}
+
+// 登记执行事实的现场节点必须就是承接决定里的节点：别的节点的设备替承接节点登记，答未受理、不落事实、不交意图（UC-NO-001
+// 应用流程步骤 1「节点、事项或对象不能合法关联时未受理」）。
+func TestAnExecutionFactFromAnotherNodeIsNotAccepted(t *testing.T) {
+	fixture := newCollabFixture(t)
+	if _, err := fixture.handler.Accept(context.Background(), acceptCommand(t)); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	command := executeCommand(t)
+	other, err := domain.NewNodeReference("node-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Node = other
+	result, err := fixture.handler.RecordExecution(context.Background(), command)
+	if err != nil {
+		t.Fatalf("record execution: %v", err)
+	}
+	if result.Outcome() != application.CollaborationNotAccepted || fixture.facts.saves != 0 || len(fixture.executions.intents) != 0 {
+		t.Fatalf("outcome = %q saves = %d intents = %d", result.Outcome(), fixture.facts.saves, len(fixture.executions.intents))
+	}
 }

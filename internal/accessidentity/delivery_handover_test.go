@@ -132,6 +132,7 @@ func TestHandoverNoteWorkFactsAreAdmissionRequirements(t *testing.T) {
 		"DELIVERY_HANDOVER_NOTE_OPENING":    accessidentity.WorkFactDeliveryHandoverNoteOpening,
 		"DELIVERY_HANDOVER_NOTE_ASSIGNMENT": accessidentity.WorkFactDeliveryHandoverNoteAssignment,
 		"DELIVERY_HANDOVER_NOTE_CLOSURE":    accessidentity.WorkFactDeliveryHandoverNoteClosure,
+		"NODE_COLLABORATION_EXECUTION":      accessidentity.WorkFactNodeCollaborationExecution,
 	} {
 		parsed, err := accessidentity.ParseWorkFactKind(literal)
 		if err != nil || parsed != kind {
