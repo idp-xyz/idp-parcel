@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -127,8 +128,8 @@ func (repository *CollaborationAcceptances) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.collaboration_acceptance
 			(tenant_id, item_ref, round, node_ref, decision, authority, basis,
-			 accepted_units, accepted_actions, gaps, decided_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 accepted_units, accepted_actions, gaps, decided_at, content_digest, recorded_at, decided_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Item.String(),
@@ -143,6 +144,7 @@ func (repository *CollaborationAcceptances) Save(
 		record.Acceptance.DecidedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		auditOperator(record.DecidedBy),
 	)
 	if err != nil {
 		return ports.AcceptanceSaveOutcomeInvalid, fmt.Errorf("save collaboration acceptance: %w", err)
@@ -362,8 +364,8 @@ func (repository *ExecutionFacts) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.execution_fact
 			(tenant_id, item_ref, unit_id, action, node_ref, evidence,
-			 performed_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 performed_at, content_digest, recorded_at, recorded_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Item.String(),
@@ -374,6 +376,7 @@ func (repository *ExecutionFacts) Save(
 		record.Fact.PerformedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		auditOperator(record.RecordedBy),
 	)
 	if err != nil {
 		return ports.ExecutionFactSaveOutcomeInvalid, fmt.Errorf("save execution fact: %w", err)
@@ -382,4 +385,12 @@ func (repository *ExecutionFacts) Save(
 		return ports.ExecutionFactAlreadyRecorded, nil
 	}
 	return ports.ExecutionFactSaved, nil
+}
+
+// auditOperator 把空操作者写成 NULL：列可空，给了就不得是空白（迁移 0025）；没有操作者的写入（编排单测与旧调用方）不造一个空串。
+func auditOperator(operator string) *string {
+	if strings.TrimSpace(operator) == "" {
+		return nil
+	}
+	return &operator
 }

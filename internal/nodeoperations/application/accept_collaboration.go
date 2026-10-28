@@ -87,6 +87,8 @@ type AcceptCollaborationCommand struct {
 	// Gaps 只在待补充时给。
 	Gaps      []domain.SupplementGapKind
 	DecidedAt time.Time
+	// Operator 是提交的操作者引用，只进审计、不进摘要（ADR-0338 决定四）。
+	Operator string
 }
 
 // RecordExecutionCommand 携带一次执行事实登记的全部输入。
@@ -100,6 +102,8 @@ type RecordExecutionCommand struct {
 	Action      domain.CollaborationActionKind
 	Evidence    string
 	PerformedAt time.Time
+	// Operator 是登记的操作者引用，只进审计、不进摘要（ADR-0338 决定四）。
+	Operator string
 }
 
 type CollaborationResult struct {
@@ -209,6 +213,7 @@ func (handler *AcceptCollaborationHandler) Accept(
 		ContentDigest: digest,
 		Acceptance:    acceptance,
 		RecordedAt:    handler.deps.Clock.Now(),
+		DecidedBy:     command.Operator,
 	}
 	saved, err := handler.deps.Acceptances.Save(ctx, record)
 	if err != nil {
@@ -309,6 +314,7 @@ func (handler *AcceptCollaborationHandler) RecordExecution(
 		ContentDigest: digest,
 		Fact:          fact,
 		RecordedAt:    handler.deps.Clock.Now(),
+		RecordedBy:    command.Operator,
 	}
 	saved, err := handler.deps.Facts.Save(ctx, record)
 	if err != nil {

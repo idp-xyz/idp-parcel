@@ -17,11 +17,11 @@ var _ nodeopshttp.CollaborationExecutionAuthenticator = (*WorkFactAuthenticator)
 func (authenticator *WorkFactAuthenticator) AuthenticateCollaborationExecution(
 	ctx context.Context,
 	bearerToken, deviceID, scopeKind, scopeReference string,
-) (domain.TenantID, domain.NodeReference, error) {
+) (domain.TenantID, domain.NodeReference, string, error) {
 	none := domain.NodeReference{}
 	scope, err := identity.NewWorkScope(identity.WorkScopeKind(scopeKind), scopeReference)
 	if err != nil {
-		return domain.TenantID{}, none, fmt.Errorf("%w: %v", nodeopshttp.ErrMalformedRequest, err)
+		return domain.TenantID{}, none, "", fmt.Errorf("%w: %v", nodeopshttp.ErrMalformedRequest, err)
 	}
 	envelope, err := authenticator.minter.MintWorkFact(ctx, identity.NewOperatorCredential(bearerToken), identity.WorkFactRequest{
 		WorkScope: scope,
@@ -29,15 +29,16 @@ func (authenticator *WorkFactAuthenticator) AuthenticateCollaborationExecution(
 		Admission: identity.WorkFactAdmission(identity.WorkFactNodeCollaborationExecution),
 	})
 	if err != nil {
-		return domain.TenantID{}, none, answerAdmittedWorkFact(err)
+		return domain.TenantID{}, none, "", answerAdmittedWorkFact(err)
 	}
 	tenant, err := domain.NewTenantID(envelope.TenantID())
 	if err != nil {
-		return domain.TenantID{}, none, fmt.Errorf("node operations accessidentity: tenant: %w", err)
+		return domain.TenantID{}, none, "", fmt.Errorf("node operations accessidentity: tenant: %w", err)
 	}
 	node, err := domain.NewNodeReference(envelope.WorkScope().Reference())
 	if err != nil {
-		return domain.TenantID{}, none, fmt.Errorf("%w: %v", nodeopshttp.ErrMalformedRequest, err)
+		return domain.TenantID{}, none, "", fmt.Errorf("%w: %v", nodeopshttp.ErrMalformedRequest, err)
 	}
-	return tenant, node, nil
+	subject := envelope.Subject()
+	return tenant, node, subject.Issuer() + "#" + subject.Subject(), nil
 }
