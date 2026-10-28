@@ -470,3 +470,59 @@ func TestPreAcceptanceConversionWritesRefuseToRunOutsideATransaction(t *testing.
 		t.Fatalf("无事务记转出应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
+
+// Covers: ADR-0343 决定三——同一控制请求含两件包裹：P1 确认只转 P1 份额，请求仍占着 P2 份额；P2 确认后转满。
+func TestAMultiParcelRequestKeepsTheOtherParcelsShareUntilItsOwnChargeIsConfirmed(t *testing.T) {
+	rig := newConversionRig(t)
+	receipts := mustFundsHandler(t, mustFundsFacts(t, rig.db), mustFundsMappings(t, rig.db), mustApplications(t, rig.db),
+		rig.postings, rig.clock)
+	rig.within(func(ctx context.Context) error {
+		_, err := receipts.AdoptFact(ctx, receiptFact(rig.tenant, "receipt-1", domain.FundsReceiptConfirmed, 20_000, "v1"))
+		return err
+	})
+	rig.within(func(ctx context.Context) error {
+		_, err := receipts.Map(ctx, receiptMap(rig.tenant, "map-receipt", "receipt-1", domain.TargetStatement, "stmt-1"))
+		return err
+	})
+	trials := `[{"parcel":"P1","evaluation":"e1","versions":[],"totalMinor":4000,"currency":"CNY"},` +
+		`{"parcel":"P2","evaluation":"e2","versions":[],"totalMinor":6000,"currency":"CNY"}]`
+	if _, err := rig.pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.pre_acceptance_estimate_trace
+			(tenant_id, legal_entity, account_id, currency, control_request_id,
+			 shipment_request_ref, submission_version_ref, trial_at, form, pricing_scope_id,
+			 price_card, total_minor, trials, recorded_at)
+		 VALUES ('tenant-receipt', 'le-1', 'acct-1', 'CNY', 'ship-1/v1', 'ship-1', 'v1', now(),
+		         'PER_PARCEL_SELL_TRIAL_SUM', 'scope-1', 'card-1', 10000, $1::jsonb, now())`, trials); err != nil {
+		t.Fatalf("估价留痕：%v", err)
+	}
+	rig.within(func(ctx context.Context) error {
+		balance, err := rig.balances.LoadBalance(ctx, rig.tenant, rig.scope)
+		if err != nil {
+			return err
+		}
+		ledger, err := rig.freezes.LoadForScope(ctx, rig.tenant, rig.scope)
+		if err != nil {
+			return err
+		}
+		if _, err := ledger.Freeze(domainFreezeRequest(t, "ship-1/v1", rig.scope, 10_000, rig.clock.at), balance); err != nil {
+			return err
+		}
+		return rig.freezes.Save(ctx, rig.tenant, rig.scope, ledger)
+	})
+
+	if got := rig.confirm("charge-p1", "P1", 4_000); got.FreezeConvertedMinor() != 4_000 {
+		t.Fatalf("P1 确认转出 %d，want 4000", got.FreezeConvertedMinor())
+	}
+	if status, converted := rig.occupation("funds_freeze", "ship-1/v1"); status != int(domain.FreezeHeld) || converted != 4_000 {
+		t.Fatalf("P1 之后冻结 = 状态 %d 转出 %d，want HELD 4000（P2 份额仍占着）", status, converted)
+	}
+	if got := rig.available(); got != 20_000-6_000-4_000 {
+		t.Fatalf("P1 之后可用 = %d，want 10000", got)
+	}
+	if got := rig.confirm("charge-p2", "P2", 6_000); got.FreezeConvertedMinor() != 6_000 {
+		t.Fatalf("P2 确认转出 %d，want 6000", got.FreezeConvertedMinor())
+	}
+	if status, converted := rig.occupation("funds_freeze", "ship-1/v1"); status != int(domain.FreezeConverted) || converted != 10_000 {
+		t.Fatalf("P2 之后冻结 = 状态 %d 转出 %d，want CONVERTED 10000", status, converted)
+	}
+}
