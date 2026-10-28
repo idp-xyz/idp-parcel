@@ -78,7 +78,7 @@ func NewRegisterPostIntakeManualItemResultHandler(deps RegisterPostIntakeManualI
 	return &RegisterPostIntakeManualItemResultHandler{deps: deps}
 }
 
-// Handle 登记一项待人工处理项的处理结果（ADR-0340 决定二）。调用方把它放进一笔事务；返回错误即整笔回滚。
+// Handle 登记一项待人工处理项的处理结果（ADR-0341 决定二）。调用方把它放进一笔事务；返回错误即整笔回滚。
 //
 // 每项至多一份结果：重放答`已登记过`，同项异内容答`结果冲突`，都不覆盖。登记不要求这一项所属的决定还是链尾——包裹实物上的扣住或装载不因后来的决定而自行消失，
 // 运营人员办完了就该有地方记；清单与读回面各自给出链尾版本，办之前看链尾说了什么是操作者的事。

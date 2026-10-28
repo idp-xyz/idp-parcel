@@ -11,9 +11,10 @@ import (
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	tfparcelshipment "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/parcelshipment"
 )
 
-// 本文件对真实 PostgreSQL 证收寄后服务处置决定到待人工处理项的整条进程（ADR-0340；票 launch-wiring/05），夹具全为合成（S 级）。
+// 本文件对真实 PostgreSQL 证收寄后服务处置决定到待人工处理项的整条进程（ADR-0341；票 launch-wiring/05），夹具全为合成（S 级）。
 // 决定编排与登记编排是生产那一套真库缝（决定链、请求册、采用链、终局库、取消册、信封交接、取消边界锁、待人工处理项），派发一拍走生产 wireDispatcher；
 // HTTP 面的授权与响应形状由 cmd/parcel-api 的用例钉。
 
@@ -171,7 +172,7 @@ func (fixture *postIntakeManualFixture) registerResult(
 	return result.Outcome()
 }
 
-// Covers: AT-PS-083（退运决定形成并转 UC-TF-007：退运旅程开出，不表示退运完成）、AT-PS-088（处置请求的承接结果由 PS 读回）；ADR-0340。
+// Covers: AT-PS-083（退运决定形成并转 UC-TF-007：退运旅程开出，不表示退运完成）、AT-PS-088（处置请求的承接结果由 PS 读回）；ADR-0341。
 // 演示租户同形的合成租户上：「退运」决定 → 派发后 TF 退运旅程开出，NR 的规划退运路径与 NO 的按退运装载进待人工处理清单（TF 的项不进）；「拦截」决定 → 不开旅程，
 // NO 扣住与 TF 扣住两项进清单；运营逐项登记处理结果，PS 按包裹读回各项结果，清单清空。
 func TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPSReadsBack(t *testing.T) {
@@ -245,6 +246,45 @@ func TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPS
 	for _, item := range read {
 		if item.Key.Owner == nr && item.Result.Outcome != handled {
 			t.Fatalf("异内容的登记覆盖了先前的结果 %+v", item.Result)
+		}
+	}
+}
+
+// Covers: ADR-0341 决定一的护栏——PS 请求表里「系统执行」为真的（所有者，动作）恰好等于运输履约适配器真正执行的集合。多了，是有动作被当成系统执行而无人执行，
+// 既不开旅程也不落待人工处理项，静默成功；少了，是适配器执行的动作又落了一份人工项，重复。
+func TestTheActionsMarkedSystemExecutedAreExactlyTheOnesTheTransportAdapterExecutes(t *testing.T) {
+	marked := map[[2]string]bool{}
+	for _, direction := range []psdomain.PostIntakeDispositionDirection{
+		psdomain.PostIntakeContinue, psdomain.PostIntakeIntercept, psdomain.PostIntakeRedirect, psdomain.PostIntakeReturn, psdomain.PostIntakeTerminateService,
+	} {
+		for _, request := range direction.OwnerRequests() {
+			if request.Action.ExecutedBySystem() {
+				marked[[2]string{request.Owner.String(), request.Action.String()}] = true
+			}
+		}
+	}
+	handled := map[[2]string]bool{}
+	for _, pair := range tfparcelshipment.HandledPostIntakeActions() {
+		handled[pair] = true
+	}
+	if len(marked) != len(handled) {
+		t.Fatalf("系统执行的集合 %v 与适配器执行的集合 %v 不等", marked, handled)
+	}
+	for pair := range marked {
+		if !handled[pair] {
+			t.Fatalf("%v 标为系统执行，适配器不执行它", pair)
+		}
+	}
+	// 全集里每个动作要么系统执行，要么出现在某个去向的人工项里：没有第三种。
+	manual := map[string]bool{}
+	for _, direction := range []psdomain.PostIntakeDispositionDirection{psdomain.PostIntakeIntercept, psdomain.PostIntakeRedirect, psdomain.PostIntakeReturn, psdomain.PostIntakeTerminateService} {
+		for _, request := range direction.ManualOwnerRequests() {
+			manual[request.Action.String()] = true
+		}
+	}
+	for _, action := range psdomain.DispositionOwnerActions() {
+		if !action.ExecutedBySystem() && !manual[action.String()] {
+			t.Errorf("动作 %s 既非系统执行、也不在任何去向的人工项里", action)
 		}
 	}
 }

@@ -23,13 +23,18 @@ func ParseDispositionOwner(raw string) (DispositionOwner, error) {
 	return DispositionOwnerInvalid, fmt.Errorf("disposition owner %q is not an owner", raw)
 }
 
-// ParseDispositionOwnerAction 按字面认请求动作，词不在封闭集内即拒。
-func ParseDispositionOwnerAction(raw string) (DispositionOwnerAction, error) {
-	for _, action := range []DispositionOwnerAction{
+// DispositionOwnerActions 是请求动作的封闭全集，次序固定。
+func DispositionOwnerActions() []DispositionOwnerAction {
+	return []DispositionOwnerAction{
 		DispositionActionHoldAtControl, DispositionActionHoldOnwardMovement, DispositionActionReplanToAlternateDestination,
 		DispositionActionStartAlternateJourney, DispositionActionPlanReturnRoute, DispositionActionLoadForReturn,
 		DispositionActionStartReturnJourney, DispositionActionReleaseUnconsumedPlan,
-	} {
+	}
+}
+
+// ParseDispositionOwnerAction 按字面认请求动作，词不在封闭集内即拒。
+func ParseDispositionOwnerAction(raw string) (DispositionOwnerAction, error) {
+	for _, action := range DispositionOwnerActions() {
 		if action.String() == raw {
 			return action, nil
 		}

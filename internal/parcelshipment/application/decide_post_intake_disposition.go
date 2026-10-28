@@ -102,7 +102,7 @@ type DecidePostIntakeDispositionDeps struct {
 	Finals        ports.CurrentFinalView
 	Cancellations ports.ParcelCancellationView
 	Handoff       ports.PostIntakeDispositionHandoff
-	// ManualItems 落决定里需要人工处理的请求项（ADR-0340）：与决定留痕、信封同笔。
+	// ManualItems 落决定里需要人工处理的请求项（ADR-0341）：与决定留痕、信封同笔。
 	ManualItems ports.PostIntakeManualItems
 	// BoundaryLock 让决定与同一包裹上的取消、收寄采用、终局采用排队：决定的前提（已越界、尚无终局）正是它们在锁里写的东西。
 	BoundaryLock ports.CancellationBoundaryLock

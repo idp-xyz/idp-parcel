@@ -97,7 +97,7 @@ NO 三项、NR 三项、TF 两项扣住，全需所有者先立模型（扣住�
 
 ## 第二阶段完成记录
 
-起点 `05909894d`。新 ADR [ADR-0340](../../../docs/adr/0340-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md)（部分停用 ADR-0332 决定四「不立承接结果读回面」一句，写法照 adr/README 顶部；PS CONTEXT 同笔改为现行）。
+起点 `05909894d`。新 ADR [ADR-0341](../../../docs/adr/0341-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md)（部分停用 ADR-0332 决定四「不立承接结果读回面」一句，写法照 adr/README 顶部；PS CONTEXT 同笔改为现行）。
 
 **改了什么**
 - 待人工处理项归 PS 持有：决定形成时（`DecidePostIntakeDispositionHandler`）同笔落项，新迁移 `parcel_shipment/0034`（项、结果两表，主键含决定版本、所有者、动作；结果每项至多一份）。哪些动作系统执行是内置策略 `DispositionOwnerAction.ExecutedBySystem`（今天仅 TF 两个另起旅程动作）。
@@ -106,10 +106,18 @@ NO 三项、NR 三项、TF 两项扣住，全需所有者先立模型（扣住�
 - 演示租户种子：新步骤 `487-access-post-intake-disposition.sh`，补 `POST_INTAKE_SERVICE_DISPOSITION` 与新种类的授予（access 34）、准入对照（35）、权威区间（governance 69、70）。
 - 测试：`TestAPostIntakeEnvelopeWithManualRequestsIsPublishedAndOnlyTheSystemExecutedOnesOpenJourneys` 取代原「未承接请求保持可见失败」用例；真库进程用例 `TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPSReadsBack`（退运决定经生产编排与派发一拍：退运旅程开出、NR/NO 两项进清单、TF 不进；拦截不开旅程、两项进清单；登记、重放、冲突、PS 读回、清单清空）；cmd/parcel-api 的 HTTP 用例（授权 403、201/200/409/404/400、他租户不可见、按包裹读回）；适配器无事务负向用例；领域单测。
 
-**判据对用例**：演示租户同形租户上「退运」与「拦截」各走通（证据 `S`）。`AT-PS-083`、`AT-PS-088` 由④移入①（088 的"无法处理"即承接拒绝的保留）；`AT-PS-084`（监管退运转 UC-TF-001）不在本票范围，仍在④。UC-PS-006 交接行与 PS CONTEXT 已改为现行。收口条件（用户裁定）：清单与登记口生产可用——已装配于 parcel-api；之后 `POST_INTAKE_SERVICE_DISPOSITION` 授予可发给真实租户（ADR-0340 之前的"不发给真实租户"约束作废）。
+**判据对用例**：演示租户同形租户上「退运」与「拦截」各走通（证据 `S`）。`AT-PS-083`、`AT-PS-088` 由④移入①（088 的"无法处理"即承接拒绝的保留）；`AT-PS-084`（监管退运转 UC-TF-001）不在本票范围，仍在④。UC-PS-006 交接行与 PS CONTEXT 已改为现行。收口条件（用户裁定）：清单与登记口生产可用——已装配于 parcel-api；之后 `POST_INTAKE_SERVICE_DISPOSITION` 授予可发给真实租户（ADR-0341 之前的"不发给真实租户"约束作废）。
 
-**代决与越权风险点**：见 ADR-0340 越权风险点 1 至 4（策略集合、归 PS 持有、授予单立、登记不要求链尾且冲突不覆盖）。另：清单不过滤"已被后来的决定取代"的项，只给 `currentVersion` 由操作者判断（作者取舍）。
+**代决与越权风险点**：见 ADR-0341 越权风险点 1 至 4（策略集合、归 PS 持有、授予单立、登记不要求链尾且冲突不覆盖）。另：清单不过滤"已被后来的决定取代"的项，只给 `currentVersion` 由操作者判断（作者取舍）。
 
 **自验（含 PG）**：`go build ./...`、`go vet`、`gofmt -l` 无输出；带 PG DSN `go test -count=1 -p 1` 跑 `./internal/parcelshipment/...`、`./internal/accessidentity/...`、`./internal/transportfulfillment/...`、`./internal/architecture/...`、`./migrations/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-api` 通过；种子灌一次性库退 0（三条新授予/对照/区间登记成功）。`adr-index -check`、`at-coverage-counts -check` 只报生成物过期。
 
 **留给协调方**：重生成 ADR 索引、AT 盘点计数、机制清点；管理台页（清单与登记）未做；`AT-PS-084` 仍待立票。
+
+## 第二阶段评审修订
+
+隔离评审（钉 `789897626`）实现无阻断；三处阻断是基线落后：psb/22 已在 origin/main 占了 ADR-0340（供应商账单）与 `access_identity/0035`。
+- 变基到 origin/main，`decisionKinds` 与其测试列表取并集。ADR 改号 0341（取号前核过 origin/main 与各 claude-* 分支），连带 ADR-0332 的 Status 索引注记与 Links 前向指针、PS CONTEXT、UC-PS-006、代码/迁移/种子注释与本票面引用；`access_identity` 迁移改 `0036`，CHECK 取 `0035` 供应商账单那一份全集加 `POST_INTAKE_MANUAL_ITEM_HANDLING`，头注不再以编号作锚。`parcel_shipment/0034` 未撞，不改号。
+- 护栏：`TestTheActionsMarkedSystemExecutedAreExactlyTheOnesTheTransportAdapterExecutes` 钉住 `ExecutedBySystem` 为真的集合恰好等于 TF 适配器执行的集合（适配器导出 `HandledPostIntakeActions`），并核全集每个动作要么系统执行、要么在某去向的人工项里。
+- 清单与读回面每项加派生标志 `supersededByLaterDecision`（决定版本小于链尾版本），用例断言之；ADR-0341 越权风险点 4 补一句。
+- 迁移 `parcel_shipment/0034` 头注关于 CHECK 的说法改准；AT-PS-088 盘点行写明「非 TF 拒绝，而是人工项登记无法处理」。

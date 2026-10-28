@@ -27,7 +27,7 @@ type PostIntakeJourneyStarter interface {
 // 以链上这一版作处置依据启动旅程（ADR-0332 请求表，UC-TF-007）。
 //
 // 只承接「另起旅程」这两个动作。信封里其余请求项（拦截与服务终止对运输履约的「不再安排向前移动」、节点运营与网络路由的各项）不是本适配器的事：
-// 系统今天没有这几个所有者的执行器，PS 在决定形成时已把它们同笔落成待人工处理项（ADR-0340），由运营人员登记处理结果。所以这里忽略非「另起旅程」的项、
+// 系统今天没有这几个所有者的执行器，PS 在决定形成时已把它们同笔落成待人工处理项（ADR-0341），由运营人员登记处理结果。所以这里忽略非「另起旅程」的项、
 // 信封照常入账——不丢（待人工处理项在 PS 一侧已落）、不重复（旅程身份由包裹与决定版本确定性派生）。信封不带「谁是人工项」，本适配器也不判：
 // 它只认自己能执行的两个动作。
 type StartJourneyOnPostIntakeDisposition struct {
@@ -57,6 +57,15 @@ const (
 	postIntakeActionStartReturn         = "START_RETURN_JOURNEY"
 	postIntakeServiceDispositionKind    = "SERVICE_DISPOSITION"
 )
+
+// HandledPostIntakeActions 是本适配器真正执行的（所有者，动作）字面。PS 一侧「系统执行」的动作集合必须恰好等于它，否则会有动作被当成系统执行而无人执行，
+// 静默成功、也不落待人工处理项；两边的一致由 cmd/parcel-dispatch 的用例钉住。
+func HandledPostIntakeActions() [][2]string {
+	return [][2]string{
+		{postIntakeOwnerTransportFulfillment, postIntakeActionStartAlternate},
+		{postIntakeOwnerTransportFulfillment, postIntakeActionStartReturn},
+	}
+}
 
 func (processing *StartJourneyOnPostIntakeDisposition) HandleDecidedPostIntakeDisposition(
 	ctx context.Context,

@@ -108,7 +108,7 @@ func tfOnlyDecision(tenant, parcel string, version int, action string, at time.T
 	}
 }
 
-// Covers: AT-PS-083 的运输履约一半（其余所有者的请求项是待人工处理项，ADR-0340）；ADR-0332 决定四、请求表；UC-TF-007——处理方直接调两次是幂等的：同一份只开一条旅程、
+// Covers: AT-PS-083 的运输履约一半（其余所有者的请求项是待人工处理项，ADR-0341）；ADR-0332 决定四、请求表；UC-TF-007——处理方直接调两次是幂等的：同一份只开一条旅程、
 // 只交一份异常链意图；下一版的原旅程取前一条旅程；原旅程不把自己当原旅程。
 func TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
@@ -143,7 +143,7 @@ func TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals(t *t
 	}
 }
 
-// Covers: ADR-0340 决定二、四——信封里含系统不执行的请求项（NO、NR 各项，TF 的扣住）不再让整封答未决：TF 两个「另起旅程」动作照开旅程，其余项由 PS 在决定形成时
+// Covers: ADR-0341 决定二、四——信封里含系统不执行的请求项（NO、NR 各项，TF 的扣住）不再让整封答未决：TF 两个「另起旅程」动作照开旅程，其余项由 PS 在决定形成时
 // 落成待人工处理项，信封照常发布；拦截、服务终止、继续不开旅程，信封也不留失败码。
 func TestAPostIntakeEnvelopeWithManualRequestsIsPublishedAndOnlyTheSystemExecutedOnesOpenJourneys(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)

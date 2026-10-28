@@ -157,7 +157,7 @@ _Avoid in this context_: 范围内包裹、按客户过滤、客户匹配
 包裹越过适用取消边界后，针对继续、拦截、改送、退运、服务终止这五个去向之一形成的明确业务决定，去向是封闭集合，新增去向另立 ADR（[ADR-0332](../../adr/0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md)）。该决定必须固定对象、目的、决定来源、实际决定方、授权、原因、生效时间和责任范围；它不等于执行已经发生，也不直接形成包裹终局服务结果。
 
 **待人工处理项**  
-收寄后服务处置决定向对象所有者提出的范围化请求里，系统今天不替所有者执行的那几项，由小包托运在决定形成时同笔落成的一行；键是（包裹，决定版本，所有者，动作）。哪些请求项由系统执行、哪些是待人工处理项，是随产品发布的内置策略，不是租户取值。运营人员在系统里逐项登记处理结果——已处理或无法处理，附说明，记操作者与处理时刻——登记即该项的承接结果，每项至多一份、不改不删；无法处理也是承接结果，当前控制责任不因此消失（[ADR-0340](../../adr/0340-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md)）。待人工处理项不改写所有者的对象，也不形成包裹终局服务结果。
+收寄后服务处置决定向对象所有者提出的范围化请求里，系统今天不替所有者执行的那几项，由小包托运在决定形成时同笔落成的一行；键是（包裹，决定版本，所有者，动作）。哪些请求项由系统执行、哪些是待人工处理项，是随产品发布的内置策略，不是租户取值。运营人员在系统里逐项登记处理结果——已处理或无法处理，附说明，记操作者与处理时刻——登记即该项的承接结果，每项至多一份、不改不删；无法处理也是承接结果，当前控制责任不因此消失（[ADR-0341](../../adr/0341-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md)）。待人工处理项不改写所有者的对象，也不形成包裹终局服务结果。
 
 **委托完成**  
 固定服务范围内所有当前有效包裹均已形成终局服务结果后派生的委托汇总结论。委托完成不代表异常案件、客户索赔、供应商追偿、运营结算或法定财务处理已经关闭。

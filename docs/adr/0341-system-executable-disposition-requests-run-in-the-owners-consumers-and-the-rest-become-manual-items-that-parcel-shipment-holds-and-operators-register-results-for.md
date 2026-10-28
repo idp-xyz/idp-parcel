@@ -1,4 +1,4 @@
-# ADR-0340：处置请求项里系统能执行的由所有者的消费者自动执行，其余成为由小包托运持有的待人工处理项，运营人员逐项登记处理结果，登记即承接结果
+# ADR-0341：处置请求项里系统能执行的由所有者的消费者自动执行，其余成为由小包托运持有的待人工处理项，运营人员逐项登记处理结果，登记即承接结果
 
 Status: Accepted（2026-10-28，Claude Code 会话代 PS owner 裁定：用户 2026-10-28 答「实际业务不是所有的都系统打通的，有些可能就在我们的系统人工更新处理」并选「照这个做」，见票 [launch-wiring/05](../../.scratch/launch-wiring/issues/05-post-intake-disposition-request-consumers.md) 文末「用户裁定」；待人工处理项归小包托运持有、授予单立一种、冲突与重放的答案形状是作者代决。裁决能力边界：读过 [ADR-0332](./0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md) 全文、PS CONTEXT 词条「收寄后服务处置决定」、UC-PS-006、运输履约一侧的消费者与旅程启动编排的代码；没有读过 NO、NR 的聚合，也没有读过管理台。越权风险点见文末，待 PS owner 复核，知会 NO、NR、TF owner 与访问身份 owner。）<!-- 索引注记 -->｜**决定的形状**：请求表里哪些动作由系统执行是随产品发布的内置策略（今天只有运输履约的两个「另起旅程」动作），其余都是待人工处理项；项在决定形成时由小包托运同笔落库，运营人员逐项登记「已处理」或「无法处理」加说明，登记即该项的承接结果，小包托运可读回。**授权**：「运营决定」族再立 `POST_INTAKE_MANUAL_ITEM_HANDLING`，租户取值，未登记没有人能登记。｜**去向**：部分停用 [ADR-0332](./0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md) 决定四里「本记录不立「承接结果」的读回面；各所有者消费这封信封并回报承接结果属各自上下文的票（见 Consequences）。」一句
 
@@ -53,7 +53,7 @@ Date: 2026-10-28
 1. 哪些动作由系统执行、哪些人工（今天除运输履约两项外全人工）是作者按各所有者现状做的产品策略取舍，待 PS owner 复核，知会 NO、NR、TF owner。
 2. 待人工处理项归小包托运持有，是作者代决，待 PS owner 复核。
 3. 授予单立一种而不并入收寄后服务处置，待访问身份 owner 复核。
-4. 登记不要求所属决定仍是链尾、结果冲突答 409 而不覆盖，是作者的取舍，待 PS owner 复核。
+4. 登记不要求所属决定仍是链尾、结果冲突答 409 而不覆盖，是作者的取舍；清单与读回面对每项给出派生标志「已被后来的决定取代」（决定版本小于链尾版本），被取代的项不隐藏也不自动作废，由操作者按链尾判断，待 PS owner 复核。
 
 ## Links
 

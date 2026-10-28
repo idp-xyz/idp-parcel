@@ -39,7 +39,7 @@ func (registration transactionalPostIntakeManualItemResult) Handle(
 	return result, nil
 }
 
-// buildPostIntakeManualItemResult 装配 `/post-intake-disposition-manual-item-results` 的真编排（ADR-0340）。
+// buildPostIntakeManualItemResult 装配 `/post-intake-disposition-manual-item-results` 的真编排（ADR-0341）。
 func buildPostIntakeManualItemResult(db *bentopg.DB) (shipmenthttp.PostIntakeManualItemResultHandler, error) {
 	items, err := pspostgres.NewPostIntakeManualItems(db)
 	if err != nil {
