@@ -17,14 +17,14 @@
 | partycommercial | 177 | 197 | 15 | 43 | 1 | 43 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 234 | 188 | 38 | 70 | 13 | 10 |
+| settlementaccounting | 239 | 192 | 40 | 71 | 13 | 10 |
 | transportfulfillment | 302 | 314 | 56 | 62 | 16 | 53 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1706 | 1725 | 228 | 393 | 68 | 228 |
+| **合计** | 1711 | 1729 | 230 | 394 | 68 | 228 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 247、测试 407。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 248、测试 408。
 
-## 跨上下文消费缝：51 组，170 个生产文件
+## 跨上下文消费缝：51 组，171 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -63,7 +63,7 @@
 | settlementaccounting | accessidentity | 3 |
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 7 |
-| settlementaccounting | parcelshipment | 2 |
+| settlementaccounting | parcelshipment | 3 |
 | settlementaccounting | partycommercial | 5 |
 | settlementaccounting | transportfulfillment | 2 |
 | transportfulfillment | accessidentity | 5 |
@@ -146,7 +146,7 @@
 | （未归类） | 1 |
 | **合计** | 44 |
 
-## 端口：声明 634 个；基线口径缺 42，精确口径缺 2
+## 端口：声明 639 个；基线口径缺 43，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -176,6 +176,7 @@
 - `settlementaccounting.PeriodicFeeView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.PeriodicFees）
 - `settlementaccounting.SellEvaluationTriggerRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SellEvaluationTriggers）
 - `settlementaccounting.SellEvaluationTriggerView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SellEvaluationTriggers）
+- `settlementaccounting.SettlementAccountByIDView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementAccounts）
 - `settlementaccounting.SettlementAccountRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementAccounts）
 - `settlementaccounting.SupplierAuditAuthorityRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `settlementaccounting.SupplierAuditAuthorityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
