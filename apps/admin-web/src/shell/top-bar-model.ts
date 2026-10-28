@@ -47,14 +47,16 @@ export const COMMAND_PALETTE_HINT = '搜索导航与最近对象；跨对象搜�
 export const COMMAND_PALETTE_UNWIRED_REASON = '命令面板未接线';
 
 /**
- * 作用域 chip：本产品一会话一租户（ADR-0100——操作者主体绑定唯一租户，绑定登在服务端的操作者册，不在 id_token 里），
- * 所以它只读、不做切换器；前端拿不到租户名时如实写「由服务端按会话判定」，不编一个。
+ * 公司 chip：一家公司一套系统（ADR-0100——操作者主体绑定唯一租户，绑定登在服务端的操作者册，不在 id_token 里），所以它
+ * 只读、不做切换器。界面上说「公司」不说「租户」「作用域」（设计源第四节：租户不显示给用户）；产品没有登记公司显示名的
+ * 地方，显的是公司编码。前端拿不到时如实写「按登录身份确定」，不编一个。
  */
-export const SCOPE_JUDGED_BY_SERVER = '作用域：由服务端按会话判定';
-export const SCOPE_CHIP_HINT = '本产品一会话一租户，作用域随登录会话由服务端判定，不提供切换';
+export const COMPANY_CHIP_PREFIX = '公司';
+export const SCOPE_JUDGED_BY_SERVER = `${COMPANY_CHIP_PREFIX} · 按登录身份确定`;
+export const SCOPE_CHIP_HINT = '你登录的账号属于哪家公司，看到的就是哪家公司的数据；不提供切换';
 
 export function scopeChipLabel(tenantName: string | undefined): string {
-  return tenantName ? `作用域：${tenantName}` : SCOPE_JUDGED_BY_SERVER;
+  return tenantName ? `${COMPANY_CHIP_PREFIX} · ${tenantName}` : SCOPE_JUDGED_BY_SERVER;
 }
 
 /** 切换按钮的可访问名说「切过去会变成什么」而不是「现在是什么」——现在是什么图标已经在表示，念两遍是噪音。 */

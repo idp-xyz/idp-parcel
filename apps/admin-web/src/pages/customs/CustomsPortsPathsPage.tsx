@@ -100,7 +100,7 @@ function CandidatePortsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="合规候选口岸"
-      description={`${info.owner}——一行即「该口岸在该生效区间内是本租户的合规候选」；所属区域与关务适用性判断不在册`}
+      description={`一行即「该口岸在该生效区间内是本租户的合规候选」；所属区域与关务适用性判断不在册`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索口岸标识' }}
       filterSummary={
         answer?.kind === 'outcome'
@@ -174,7 +174,7 @@ function DeclarationPathsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="申报路径"
-      description={`${info.owner}——目录只登路径三维事实，不做路由选择；路由在合格候选中选择是 network-routing 的事`}
+      description={`目录只登路径三维事实，不做路由选择；路由在合格候选中选择是 network-routing 的事`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索申报路径 / 口岸 / 申报模式' }}
       filterSummary={
         answer?.kind === 'outcome'
@@ -213,7 +213,7 @@ function CandidateRegionsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="合规候选区域"
-      description={`${info.owner}——关务提供合规候选区域，路由只在合格候选中选择`}
+      description={`关务提供合规候选区域，路由只在合格候选中选择`}
       search={{ value: search, onChange: setSearch, placeholder: '按区域标识检索' }}
       columns={regionColumns}
       rows={[]}

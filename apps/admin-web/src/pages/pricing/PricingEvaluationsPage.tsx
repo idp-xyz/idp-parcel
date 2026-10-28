@@ -104,7 +104,7 @@ export function PricingEvaluationsPage() {
   return (
     <ListPageTemplate<PricingEvaluationRecord>
       title={info.title}
-      description={`${info.owner}——登记册检索列面；语义细节与金额住在评价快照内，属详情读法`}
+      description={`登记册检索列面；语义细节与金额住在评价快照内，属详情读法`}
       search={{
         value: search,
         onChange: setSearch,

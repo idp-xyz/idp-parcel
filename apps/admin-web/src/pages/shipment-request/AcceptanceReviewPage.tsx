@@ -303,7 +303,7 @@ export function AcceptanceReviewPage() {
     <>
       <ReviewFlowTemplate<ReviewCommandId>
         title={info.title}
-        description={`${info.owner}——停在「等待人工复核」的委托；复核完成只落留痕，决定由下一轮判断形成`}
+        description={`停在「等待人工复核」的委托；复核完成只落留痕，决定由下一轮判断形成`}
         queueTitle="等待人工复核"
         queue={entries.map((entry) => ({
           id: entry.shipmentRequestId,

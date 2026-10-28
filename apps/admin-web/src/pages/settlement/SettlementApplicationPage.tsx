@@ -234,7 +234,7 @@ function ExternalFundsFactsTable() {
   return (
     <ListPageTemplate<ExternalFundsFactRecord>
       title={info.title}
-      description={`${info.owner}——外部系统拥有真实收付事实；对方、责任法人与结算账户不在本册，页面不推断`}
+      description={`外部系统拥有真实收付事实；对方、责任法人与结算账户不在本册，页面不推断`}
       search={{
         value: search,
         onChange: setSearch,

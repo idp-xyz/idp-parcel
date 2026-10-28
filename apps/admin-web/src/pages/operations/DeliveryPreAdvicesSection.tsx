@@ -84,7 +84,7 @@ export function DeliveryPreAdvicesSection({ chips }: { chips: ReactNode }) {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<PreAdviceReviewRow>
         title={info.title}
-        description={`${info.owner} · 送站预报是客户账户在送站之前交来的到货计划：送到哪个节点、预计何时送达、送来哪些客户包裹件号。本区只读；点一行看号码集合。`}
+        description={`送站预报是客户账户在送站之前交来的到货计划：送到哪个节点、预计何时送达、送来哪些客户包裹件号。本区只读；点一行看号码集合。`}
         filters={<DeliveryScopeFilters chips={chips} filter={filter} dayLabel="预计送达日" onChange={setFilter} />}
         filterSummary={body ? `送站预报 ${rows.length} 行` : undefined}
         emptyRowsNote={narrowed ? '当前筛选条件下没有预报' : undefined}

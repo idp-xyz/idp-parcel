@@ -271,7 +271,7 @@ export function ExceptionTriagePage() {
     return (
       <ListPageTemplate<RequestRow>
         title={info.title}
-        description={`${info.owner}——处置请求册：请求一行一版本，被替代的行照列（替代不是删除）；实际执行结果由目标上下文按事实返回，本册无该列`}
+        description={`处置请求册：请求一行一版本，被替代的行照列（替代不是删除）；实际执行结果由目标上下文按事实返回，本册无该列`}
         headerActions={viewChips}
         search={{
           value: search,
@@ -298,7 +298,7 @@ export function ExceptionTriagePage() {
   return (
     <ReviewFlowTemplate<TriageDecisionId>
       title={info.title}
-      description={`${info.owner}——信号发作期册连同各自的分诊结论；分诊决定命令端点未建，决定区如实禁用`}
+      description={`信号发作期册连同各自的分诊结论；分诊决定命令端点未建，决定区如实禁用`}
       headerActions={viewChips}
       queueTitle="进入分诊的信号"
       queue={episodes.map((episode) => ({

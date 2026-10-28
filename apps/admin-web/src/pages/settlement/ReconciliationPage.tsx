@@ -121,7 +121,7 @@ function CustomerStatementsTable() {
   return (
     <ListPageTemplate<CustomerStatementRecord>
       title="客户对账单"
-      description={`${info.owner}——只上已发布对账单；异议不撤销原单，收付款也不改变单的内容`}
+      description={`只上已发布对账单；异议不撤销原单，收付款也不改变单的内容`}
       search={{
         value: search,
         onChange: setSearch,
@@ -223,7 +223,7 @@ function SupplierBillReceptionsTable() {
   return (
     <ListPageTemplate<SupplierBillReceptionRecord>
       title="供应商账单主张"
-      description={`${info.owner}——主张是供应商侧的说法，不是审核应付；未审核、存在争议或被拒绝的金额不得混入审核应付`}
+      description={`主张是供应商侧的说法，不是审核应付；未审核、存在争议或被拒绝的金额不得混入审核应付`}
       search={{
         value: search,
         onChange: setSearch,

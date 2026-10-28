@@ -500,7 +500,7 @@ export function TransportFulfillmentReviewPage() {
   return (
     <ListPageTemplate<ReviewRow>
       title={info.title}
-      description={`${info.owner} · 治理查阅面，只读履约判断与事实；实时现场作业属一线作业端（ADR-0021）。`}
+      description={`治理查阅面，只读履约判断与事实；实时现场作业属一线作业端（ADR-0021）。`}
       search={
         isScopeSummary
           ? {

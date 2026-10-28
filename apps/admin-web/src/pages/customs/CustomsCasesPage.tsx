@@ -209,7 +209,7 @@ function CustomsCasesTable() {
   return (
     <RecordTable
       title="关务案件"
-      description={`${info.owner}——出口、进口及其他独立监管程序分别建立案件；关案记录缺席即未关闭`}
+      description={`出口、进口及其他独立监管程序分别建立案件；关案记录缺席即未关闭`}
       searchPlaceholder="搜索案件标识 / 监管辖区 / 包裹"
       columns={caseColumns}
       rows={caseRows(cases)}
@@ -230,7 +230,7 @@ function DeclarationUnitsTable() {
   return (
     <RecordTable
       title="申报单元"
-      description={`${info.owner}——申报单元不是客户委托、集运单元、总单、舱单或运输班次；随案件读回`}
+      description={`申报单元不是客户委托、集运单元、总单、舱单或运输班次；随案件读回`}
       searchPlaceholder="搜索申报单元 / 所属案件 / 包裹"
       columns={unitColumns}
       rows={rows}
@@ -250,7 +250,7 @@ function DeclarationSnapshotsTable() {
   return (
     <RecordTable
       title="正式申报资料快照"
-      description={`${info.owner}——每个提交版本在对外发送前固定的那份资料；字段级来源溯源不在本读面，需另查`}
+      description={`每个提交版本在对外发送前固定的那份资料；字段级来源溯源不在本读面，需另查`}
       searchPlaceholder="搜索提交版本 / 申报单元 / 资料引用"
       columns={snapshotColumns}
       rows={snapshotRows(submissions)}
@@ -279,7 +279,7 @@ function SubmissionVersionsTable() {
   return (
     <RecordTable
       title="提交版本"
-      description={`${info.owner}——提交版本是不可覆盖快照，其存在不证明技术传输、监管接收、业务受理或放行成功；各层各占一列`}
+      description={`提交版本是不可覆盖快照，其存在不证明技术传输、监管接收、业务受理或放行成功；各层各占一列`}
       searchPlaceholder="搜索提交版本 / 申报单元 / 授权依据"
       columns={submissionColumns}
       rows={answer?.kind === 'outcome' ? submissionRows(submissions, results) : []}
@@ -302,7 +302,7 @@ function ExternalResultsTable() {
   return (
     <RecordTable
       title="外部监管结果与放行"
-      description={`${info.owner}——六层结果分层保存，放行层另带范围与条件明确的放行事实；归属不上的响应只留原始语义，不猜版本`}
+      description={`六层结果分层保存，放行层另带范围与条件明确的放行事实；归属不上的响应只留原始语义，不猜版本`}
       searchPlaceholder="搜索来源标识 / 结果层 / 提交版本"
       columns={resultColumns}
       rows={externalResultRows(results)}
@@ -355,7 +355,7 @@ function AdmissionJudgementsTable() {
       </form>
       <RecordTable
         title="动作准入判断册"
-        description={`${info.owner}——每行是判断当时的整次答复与逐动作答复及依据；查阅面不重判，也不用此刻的登记册覆盖当时的答案`}
+        description={`每行是判断当时的整次答复与逐动作答复及依据；查阅面不重判，也不用此刻的登记册覆盖当时的答案`}
         searchPlaceholder="在结果内搜索对象 / 节点 / 答复"
         columns={judgementColumns}
         rows={judgementRows(judgements)}
@@ -487,7 +487,7 @@ function SubmissionPreconditionsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="申报就绪判断与提交授权"
-      description={`${info.owner}——就绪与授权分别形成、分别失效，两栏各带自己的撤销态；页面不合成「可提交」标记`}
+      description={`就绪与授权分别形成、分别失效，两栏各带自己的撤销态；页面不合成「可提交」标记`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索申报单元或依据引用' }}
       filterSummary={
         listed
@@ -582,7 +582,7 @@ function ClosureObligationsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="关闭义务目录"
-      description={`${info.owner}——目录未登记的案件按未决处理，不在本列；目录已登记而清单为空才是如实的「无义务项」`}
+      description={`目录未登记的案件按未决处理，不在本列；目录已登记而清单为空才是如实的「无义务项」`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索关务案件、义务事项或依据' }}
       filterSummary={
         answer?.kind === 'outcome'
@@ -649,7 +649,7 @@ function CredentialsTable() {
   return (
     <ListPageTemplate<RegisterRow>
       title="监管凭证"
-      description={`${info.owner}——一身份一版、不可变；附件文件只是证据，不能代替凭证身份和适用性判断。本签只列在册凭证，不判适用性，也不登余额`}
+      description={`一身份一版、不可变；附件文件只是证据，不能代替凭证身份和适用性判断。本签只列在册凭证，不判适用性，也不登余额`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索凭证身份 / 签发机构 / 持有人 / 监管程序' }}
       filterSummary={
         answer?.kind === 'outcome'

@@ -148,7 +148,7 @@ export function StageAdmissionPage() {
     viewState = {
       kind: 'unconfigured',
       title: '访问通道尚未配置',
-      description: `${info.owner}的登记册读取入口（GET /governance-registers）当前不可用；这不是「登记册为空」。`,
+      description: `登记册读取入口（GET /governance-registers）当前不可用；这不是「登记册为空」。`,
       facts: {
         owner: info.owner,
         source: info.source,
@@ -311,7 +311,7 @@ export function StageAdmissionPage() {
   return (
     <DetailPageTemplate
       title={info.title}
-      description={`${info.owner}——本页登记的是产品实例级治理事实，不按租户隔离（ADR-0083）`}
+      description={`本页登记的是产品实例级治理事实，不按租户隔离（ADR-0083）`}
       basicTitle="登记面"
       basicFields={[
         {

@@ -130,7 +130,7 @@ function OperatingResultsTable() {
   return (
     <ListPageTemplate<OperatingResultRecord>
       title="经营结果快照"
-      description={`${info.owner}——毛利只能派生不能直接修改；组成按各自借贷方向逐项呈现，不净含贷项`}
+      description={`毛利只能派生不能直接修改；组成按各自借贷方向逐项呈现，不净含贷项`}
       search={{
         value: search,
         onChange: setSearch,
@@ -242,7 +242,7 @@ function CostAllocationsTable() {
   return (
     <ListPageTemplate<CostAllocationRecord>
       title="成本分摊"
-      description={`${info.owner}——分摊只改变经营归因，不转移原债权债务责任；未分摊余额是第一类结果不是尾差`}
+      description={`分摊只改变经营归因，不转移原债权债务责任；未分摊余额是第一类结果不是尾差`}
       search={{
         value: search,
         onChange: setSearch,

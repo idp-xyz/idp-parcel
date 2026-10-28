@@ -142,7 +142,7 @@ function CustomerNoticesTable() {
   return (
     <ListPageTemplate<ReviewRow>
       title="客户异常通知"
-      description={`${info.owner}——通知决定、渠道接受、送达与客户确认分别记录；赔付与追偿金额归 settlement-accounting`}
+      description={`通知决定、渠道接受、送达与客户确认分别记录；赔付与追偿金额归 settlement-accounting`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索通知标识 / 目标客户' }}
       filterSummary={body ? `客户异常通知 ${visibleRows.length} 行` : undefined}
       columns={noticeColumns}
@@ -228,7 +228,7 @@ function CustomerClaimsTable() {
   return (
     <ListPageTemplate<ReviewRow>
       title="客户索赔项"
-      description={`${info.owner}——最终赔付金额由 settlement-accounting 管理，本表无金额列是边界不是遗漏；首次索赔期限在项行上无登记格，不代填`}
+      description={`最终赔付金额由 settlement-accounting 管理，本表无金额列是边界不是遗漏；首次索赔期限在项行上无登记格，不代填`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索索赔项标识 / 货主客户账户' }}
       filterSummary={body ? `客户索赔项 ${visibleRows.length} 行` : undefined}
       columns={claimColumns}
@@ -304,7 +304,7 @@ function RecoveryMattersTable() {
   return (
     <ListPageTemplate<ReviewRow>
       title="追偿事项"
-      description={`${info.owner}——追偿金额由 settlement-accounting 形成；预先通知与正式主张不合并为「已追偿」；对方响应与外部结论在存储上无登记格，不代填`}
+      description={`追偿金额由 settlement-accounting 形成；预先通知与正式主张不合并为「已追偿」；对方响应与外部结论在存储上无登记格，不代填`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索追偿事项标识 / 责任相对方' }}
       filterSummary={body ? `追偿事项 ${visibleRows.length} 行` : undefined}
       columns={recoveryColumns}

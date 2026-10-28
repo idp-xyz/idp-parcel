@@ -137,7 +137,7 @@ export function ControlReleaseRefusalsPage() {
     <>
       <ReviewFlowTemplate<ControlReleaseRefusalAction>
         title={info.title}
-        description={`${info.owner}——被结算确定不受理的释放：业务事实已成立，这一笔占用仍在。${body ? refusalSummaryText(body) : ''}`}
+        description={`被结算确定不受理的释放：业务事实已成立，这一笔占用仍在。${body ? refusalSummaryText(body) : ''}`}
         queueTitle="未处理的释放拒收"
         queue={refusals.map((row) => {
           const line = refusalQueueRowOf(row);

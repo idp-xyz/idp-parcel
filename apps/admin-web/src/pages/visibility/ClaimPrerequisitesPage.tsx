@@ -136,7 +136,7 @@ function ClaimPrerequisitesTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title={info.title}
-      description={`${info.owner}——索赔资格与索赔授权两册索赔前置。资格按客户合同版本列出覆盖的索赔种类;授权按客户账户列出获准代提的申请人,空名单是「不授权任何人代提」的显式决定而非缺登记,种类与申请人是开放引用按原词直示`}
+      description={`索赔资格与索赔授权两册索赔前置。资格按客户合同版本列出覆盖的索赔种类;授权按客户账户列出获准代提的申请人,空名单是「不授权任何人代提」的显式决定而非缺登记,种类与申请人是开放引用按原词直示`}
       search={{
         value: search,
         onChange: setSearch,

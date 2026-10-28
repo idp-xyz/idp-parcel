@@ -255,7 +255,7 @@ export function RoutePlansPage() {
   );
   const shared = {
     title: info.title,
-    description: `${info.owner}——两册照登转写；计划本体与改路决定住在判断快照内，本页上列检索列面`,
+    description: `两册照登转写；计划本体与改路决定住在判断快照内，本页上列检索列面`,
     search: {
       value: keyword,
       onChange: setKeyword,

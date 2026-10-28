@@ -190,7 +190,7 @@ export function LabelTransactionsPage() {
     <ListPageTemplate<LabelTransactionRow>
       title={info.title}
       // 页头携带定案语义的硬句：定案 ≠ 成功，受控关闭 ≠ 终局。
-      description={`${info.owner}——定案只说明结果不再待确认（定下的可能是失败）；受控关闭只拒绝边界后的新尝试，不使既有面单失效，也不直接形成包裹终局。${continuedAttemptNote}`}
+      description={`定案只说明结果不再待确认（定下的可能是失败）；受控关闭只拒绝边界后的新尝试，不使既有面单失效，也不直接形成包裹终局。${continuedAttemptNote}`}
       search={{
         value: keyword,
         onChange: setKeyword,

@@ -299,7 +299,7 @@ function ReferenceSeriesTable({
       <CoverageSummaryBar onSelectSeries={setFocus} focusedSeries={focus} />
       <ListPageTemplate<ReferenceSeriesRecord>
         title={info.title}
-        description={`${info.owner}——计价只登记不生产数值(ADR-0013)`}
+        description={`计价只登记不生产数值(ADR-0013)`}
         search={{
           value: keyword,
           onChange: setKeyword,

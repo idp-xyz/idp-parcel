@@ -48,12 +48,13 @@ test('未接线时的留位说明', () => {
   equal(COMMAND_PALETTE_UNWIRED_REASON, '命令面板未接线');
 });
 
-// Covers: 作用域 chip 拿不到租户名时如实写「由服务端按会话判定」；拿到了才显名字，且前缀一致。
-test('作用域 chip 有租户名显名字、没有显服务端判定', () => {
+// Covers: 公司 chip 说「公司 · <编码>」，不说「租户」「作用域」（设计源第四节）；拿不到时如实写按登录身份确定，前缀一致。
+test('公司 chip 有编码显编码、没有显按登录身份确定', () => {
   equal(scopeChipLabel(undefined), SCOPE_JUDGED_BY_SERVER);
   equal(scopeChipLabel(''), SCOPE_JUDGED_BY_SERVER);
-  equal(scopeChipLabel('SYN-租户甲'), '作用域：SYN-租户甲');
-  match(SCOPE_JUDGED_BY_SERVER, /^作用域：/);
+  equal(scopeChipLabel('SYN-TENANT-01'), '公司 · SYN-TENANT-01');
+  match(SCOPE_JUDGED_BY_SERVER, /^公司 · /);
+  equal(/租户|作用域/.test(SCOPE_JUDGED_BY_SERVER + scopeChipLabel('X')), false);
 });
 
 // Covers: 切换按钮的名说的是「切过去会变成什么」，与当前态相反。

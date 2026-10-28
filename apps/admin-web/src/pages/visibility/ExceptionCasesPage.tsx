@@ -188,7 +188,7 @@ export function ExceptionCasesPage() {
     <ListPageTemplate<CaseRow>
       title={info.title}
       // 页头携带归并与重开的共同底线：两者都以追加表达，不删除历史。
-      description={`${info.owner}——受控归并以「已归并」关闭并关联主案件（原编号照列），均不删除历史；严重度、优先级与工作条件在案件行上无登记格，本表不代填`}
+      description={`受控归并以「已归并」关闭并关联主案件（原编号照列），均不删除历史；严重度、优先级与工作条件在案件行上无登记格，本表不代填`}
       search={{
         value: search,
         onChange: setSearch,

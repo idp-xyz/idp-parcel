@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ChevronDown, CircleUser, Landmark, Moon, Package, Rows3, Rows4, Search, Sun } from 'lucide-react';
+import { Building2, ChevronDown, CircleUser, Moon, Package, Rows3, Rows4, Search, Sun } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuLabel, MenuSeparator, Tag, Tooltip } from '@idpxyz/ui-primitives';
 import { useDensity, useTheme } from '@idpxyz/ui-theme-runtime';
 import {
@@ -125,12 +125,12 @@ function GlobalSearchSlot({ onOpen }: { onOpen?: () => void }) {
   );
 }
 
-/** 作用域只读 chip：不是切换器，所以是 Tag 不是按钮；悬停说明为什么没有切换。 */
+/** 公司只读 chip：不是切换器，所以是 Tag 不是按钮；悬停说明为什么没有切换。 */
 function ScopeChip({ tenantName }: { tenantName?: string }) {
   return (
     <Tooltip content={SCOPE_CHIP_HINT} side="bottom">
       <Tag variant="outline" size="md" className="whitespace-nowrap hover:shadow-none">
-        <Landmark className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <Building2 className="h-3 w-3 shrink-0" aria-hidden="true" />
         {scopeChipLabel(tenantName)}
       </Tag>
     </Tooltip>

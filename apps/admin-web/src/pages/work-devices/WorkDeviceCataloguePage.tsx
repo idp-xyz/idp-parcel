@@ -72,7 +72,7 @@ export function WorkDeviceCataloguePage() {
     <ListPageTemplate<WorkDeviceRecord>
       moduleId="work-devices"
       title={info.title}
-      description={`${info.owner}——只查阅已登记的设备行。登记与停用走受控登记口，本页不登记、不停用。`}
+      description={`只查阅已登记的设备行。登记与停用走受控登记口，本页不登记、不停用。`}
       search={{
         value: search,
         onChange: setSearch,

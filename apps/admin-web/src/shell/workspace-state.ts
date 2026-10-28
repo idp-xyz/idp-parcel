@@ -374,6 +374,11 @@ export function themeWord(theme: 'light' | 'dark'): string {
   return theme === 'dark' ? '深色主题' : '浅色主题';
 }
 
+/** 状态栏上密度档位的词，说「现在是什么」；上游 StatusBar 自带那颗按钮写的是英文（Comfortable / compact），所以档位词由本仓给。 */
+export function densityWord(density: 'comfortable' | 'compact'): string {
+  return density === 'compact' ? '紧凑' : '舒适';
+}
+
 // —— 快捷键 ——
 
 export type WorkspaceShortcut = 'close-active-tab' | 'reopen-closed-tab';

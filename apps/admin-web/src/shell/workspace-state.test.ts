@@ -31,6 +31,7 @@ import {
   setSidebarWidth,
   tabForHash,
   tabIdFromHash,
+  densityWord,
   themeWord,
   togglePinned,
   workspaceLocationLabel,
@@ -446,6 +447,11 @@ test('workspaceLocationLabel：对象标签「模块名 · 对象标识」、模
   equal(workspaceLocationLabel({ id: 'shipment-request-inquiry/SR-1', name: '委托查阅', subtitle: 'SR-1' }, '工作台'), '委托查阅 · SR-1');
   equal(workspaceLocationLabel({ id: 'exception-cases', name: '异常案件' }, '工作台'), '异常案件');
   equal(workspaceLocationLabel(null, '工作台'), '工作台');
+});
+
+test('densityWord 说现在是什么，不出英文', () => {
+  equal(densityWord('comfortable'), '舒适');
+  equal(densityWord('compact'), '紧凑');
 });
 
 test('themeWord 说现在是什么', () => {

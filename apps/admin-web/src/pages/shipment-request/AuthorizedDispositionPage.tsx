@@ -247,7 +247,7 @@ export function AuthorizedDispositionPage() {
     <>
       <ReviewFlowTemplate<AuthorizedDispositionChoice>
         title={info.title}
-        description={`${info.owner}——停在「等待授权处置」的委托；处置只决定去向（拒绝 / 交客户补充），从不形成接受`}
+        description={`停在「等待授权处置」的委托；处置只决定去向（拒绝 / 交客户补充），从不形成接受`}
         queueTitle="等待授权处置"
         queue={entries.map((entry) => {
           const row = dispositionQueueRowOf(entry);

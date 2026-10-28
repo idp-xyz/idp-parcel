@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CircleCheck, CircleDashed, FlaskConical, History, Radio, Star } from 'lucide-react';
 import { Button, Tag } from '@idpxyz/ui-primitives';
-import { navigationSections, moduleInfoById } from '../navigation';
+import { navigationSections } from '../navigation';
 import { readinessOf, type ModuleReadiness } from '../page-registry';
 import { listRecentObjects, recentObjectHash, type RecentObject } from './my-work/recent-objects';
 import { listSavedViews, savedViewHash, type SavedView } from './my-work/saved-views';
@@ -57,21 +57,23 @@ interface SectionOverview {
   liveCount: number;
 }
 
-// 总览跳过「总览」自身；其余分区按导航原序呈现，不另造第二套分组。
+// 总览跳过工作台自身这一条；其余条目按导航分区原序呈现，不另造第二套分组。
 const sections: SectionOverview[] = navigationSections
-  .filter((section) => section.title !== '总览')
   .map((section) => {
-    const items = section.items.map((item) => ({
-      id: item.id,
-      label: item.label,
-      readiness: readinessOf(item.id),
-    }));
+    const items = section.items
+      .filter((item) => item.id !== 'workbench')
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        readiness: readinessOf(item.id),
+      }));
     return {
       title: section.title,
       items,
       liveCount: items.filter((item) => item.readiness === 'live').length,
     };
-  });
+  })
+  .filter((section) => section.items.length > 0);
 
 const totals = sections
   .flatMap((section) => section.items)
@@ -234,7 +236,6 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
               <ul className="space-y-1">
                 {section.items.map((item) => {
                   const meta = readinessMeta[item.readiness];
-                  const owner = moduleInfoById[item.id]?.owner;
                   return (
                     <li key={item.id}>
                       <button
@@ -243,11 +244,6 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
                         className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-idpxyz-hover"
                       >
                         <span className="text-[12px] text-idpxyz-text">{item.label}</span>
-                        {owner ? (
-                          <span className="hidden sm:inline text-[11px] text-idpxyz-textMuted truncate">
-                            {owner}
-                          </span>
-                        ) : null}
                         <span
                           className={`ml-auto shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${meta.toneClass}`}
                         >

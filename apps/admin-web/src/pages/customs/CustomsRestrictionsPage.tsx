@@ -155,7 +155,7 @@ function ComplianceRestrictionsTable() {
     <ListPageTemplate<ComplianceRestrictionRow>
       title="内部合规限制"
       // 页头携带两类解除独立生命周期的硬句原词。
-      description={`${info.owner}——外部放行不自动解除内部限制，内部限制解除也不证明监管机构已经放行`}
+      description={`外部放行不自动解除内部限制，内部限制解除也不证明监管机构已经放行`}
       // 筛选维度（接线时实装进 filters 槽）：限制责任来源、限制适用性判断（有效限制/
       // 无内部限制/待确认/冲突，封闭四格）、受限动作。限制标识经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索限制标识 / 责任来源' }}
@@ -177,7 +177,7 @@ function RegulatoryDutiesTable() {
   return (
     <ListPageTemplate<RegulatoryDutyRow>
       title="监管核定税费"
-      description={`${info.owner}——监管核定与实际付款、资金退回、代垫回收分别存在；代垫回收归 settlement-accounting`}
+      description={`监管核定与实际付款、资金退回、代垫回收分别存在；代垫回收归 settlement-accounting`}
       // 筛选维度（接线时实装进 filters 槽）：核对三轴各自的状态（覆盖/差额/有效性，
       // 互斥总状态是 CONTEXT 明禁形状，筛选也按轴分立）、法定义务人。标识与范围经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索税费结果标识 / 申报范围' }}
@@ -286,7 +286,7 @@ function ReleaseGatesTable() {
       title="放行门禁核对"
       // 页头携带的是本页最容易读错的那一格：未登记不等于不受门禁。安全作业不受阻断
       // 那条硬句在下面的空册文案里另说——它讲的是「阻断什么」，与「读得出什么」不同题。
-      description={`${info.owner}——未登记的（范围·动作·边界）不在本列，其门禁判断读作未决；已登记而无前置条件才是「本就不受门禁」`}
+      description={`未登记的（范围·动作·边界）不在本列，其门禁判断读作未决；已登记而无前置条件才是「本就不受门禁」`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索申报范围 / 拟执行动作 / 监管边界 / 前置条件' }}
       filterSummary={
         answer?.kind === 'outcome'
@@ -356,7 +356,7 @@ function DutyCollaborationsTable() {
   return (
     <ListPageTemplate<RegisterRow>
       title="税费付款协作事项"
-      description={`${info.owner}——依据已接受监管核定税费或明确无需付款依据形成；缺少税费结果不能被解释为无需付款。它不等于支付指令、付款交易、客户回收或监管放行`}
+      description={`依据已接受监管核定税费或明确无需付款依据形成；缺少税费结果不能被解释为无需付款。它不等于支付指令、付款交易、客户回收或监管放行`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索申报范围 / 税费引用 / 法定义务人 / 责任交接目标' }}
       filterSummary={
         answer?.kind === 'outcome'
@@ -421,7 +421,7 @@ function DutyVerificationsTable() {
   return (
     <ListPageTemplate<RegisterRow>
       title="税费付款核对"
-      description={`${info.owner}——覆盖、差额与事实有效性分别表达，不折成互斥总状态；核对不形成实际付款、客户回收或监管放行`}
+      description={`覆盖、差额与事实有效性分别表达，不折成互斥总状态；核对不形成实际付款、客户回收或监管放行`}
       search={{ value: search, onChange: setSearch, placeholder: '搜索税费版本 / 资金事实引用 / 申报范围 / 关联依据' }}
       // 摘要只报版本数，不数「几版悬着 / 几版可放」：那两个数都要先把三轴折一次，正是本签
       // 不做的事（票 sa-cc/10 红线：读面不推派生）。

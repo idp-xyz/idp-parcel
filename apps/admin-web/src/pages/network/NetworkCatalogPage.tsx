@@ -191,7 +191,7 @@ function NetworkCatalogTable() {
   return (
     <ListPageTemplate<CatalogRow>
       title={info.title}
-      description={`${info.owner}——逐族查阅版本原文,不选版、不折叠为路由判断`}
+      description={`逐族查阅版本原文,不选版、不折叠为路由判断`}
       search={{
         value: keyword,
         onChange: setKeyword,

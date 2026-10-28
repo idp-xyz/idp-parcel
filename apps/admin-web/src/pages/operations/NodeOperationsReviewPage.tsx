@@ -363,7 +363,7 @@ export function NodeOperationsReviewPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<ReviewRow>
         title={info.title}
-        description={`${info.owner} · 实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实；待识别实物可指名重核（按存下的号再问 parcel-shipment），判身份冲突的实物可处置（在候选里指定一件或确认都不是）。`}
+        description={`实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实；待识别实物可指名重核（按存下的号再问 parcel-shipment），判身份冲突的实物可处置（在候选里指定一件或确认都不是）。`}
         search={{
           value: keyword,
           onChange: setKeyword,

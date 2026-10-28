@@ -119,7 +119,7 @@ export function ChannelSelectionDecisionsPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<DecisionRow>
         title={info.title}
-        description={`${info.owner} · 列出停在「并列冲突」等人工裁决的择优决定（PAR-NET-16）；页面只列不裁、只透评价引用不透金额。`}
+        description={`列出停在「并列冲突」等人工裁决的择优决定（PAR-NET-16）；页面只列不裁、只透评价引用不透金额。`}
         headerActions={
           <div className="flex items-center gap-2">
             <Input

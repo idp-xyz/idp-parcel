@@ -126,7 +126,7 @@ function ComplianceRulesTable() {
   return (
     <ListPageTemplate<RuleRow>
       title={info.title}
-      description={`${info.owner}——只读展示登记规则,新规则不默认追溯既有判断`}
+      description={`只读展示登记规则,新规则不默认追溯既有判断`}
       search={{
         value: search,
         onChange: setSearch,

@@ -95,7 +95,7 @@ export function DeliveryHandoverNotesSection({ chips }: { chips: ReactNode }) {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<HandoverNoteReviewRow>
         title={info.title}
-        description={`${info.owner} · 送站交接单由节点当场开立，声称的客户账户全部确认才成立可验证交付范围。点一行看各账户的结论与名下成员；待确认的账户可由持「送站交接确认」授予的运营操作者依授权交付关系确认。`}
+        description={`送站交接单由节点当场开立，声称的客户账户全部确认才成立可验证交付范围。点一行看各账户的结论与名下成员；待确认的账户可由持「送站交接确认」授予的运营操作者依授权交付关系确认。`}
         filters={<DeliveryScopeFilters chips={chips} filter={filter} dayLabel="开立日" onChange={setFilter} />}
         filterSummary={body ? `送站交接单 ${rows.length} 行` : undefined}
         emptyRowsNote={narrowed ? '当前筛选条件下没有交接单' : undefined}

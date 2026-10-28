@@ -123,7 +123,7 @@ export function PostIntakeDispositionPage() {
       <div className="flex min-h-[460px] flex-col">
         <ReviewFlowTemplate<PostIntakeDirection>
           title={info.title}
-          description={`${info.owner}——客户在取消边界之后提出的停止请求,等有权主体形成收寄后服务处置决定。${body ? requestSummaryText(body) : ''}`}
+          description={`客户在取消边界之后提出的停止请求,等有权主体形成收寄后服务处置决定。${body ? requestSummaryText(body) : ''}`}
           queueTitle="等回应的请求"
           queue={requests.map((row) => {
             const line = requestQueueRowOf(row);

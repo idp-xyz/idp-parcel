@@ -223,7 +223,7 @@ function DisclosurePoliciesTable() {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——通知策略、披露策略与异常披露规则三册对外披露口径。通知时限是相对量,绝对截止点由披露决定时间加出;披露策略按客户逐行答里程碑、ETA、终局、备注四维,content 只在「展示」态在场;异常披露规则(0023)是与披露策略相邻的另一本册,按客户 × 信号类型 × 可信度答披露条件、自动发布与内容来处。渠道、义务判据、信号类型与可信度都是开放引用按原词直示。当前签:${disclosureKindNotes[kind]}`}
+      description={`通知策略、披露策略与异常披露规则三册对外披露口径。通知时限是相对量,绝对截止点由披露决定时间加出;披露策略按客户逐行答里程碑、ETA、终局、备注四维,content 只在「展示」态在场;异常披露规则(0023)是与披露策略相邻的另一本册,按客户 × 信号类型 × 可信度答披露条件、自动发布与内容来处。渠道、义务判据、信号类型与可信度都是开放引用按原词直示。当前签:${disclosureKindNotes[kind]}`}
       search={{
         value: search,
         onChange: setSearch,

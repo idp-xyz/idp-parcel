@@ -259,7 +259,7 @@ export function TrackingProjectionPage() {
     <ListPageTemplate<TrackingProjectionRow>
       title={info.title}
       // 页头携带 GLOSSARY「追踪摘要」的硬句原词,与并列分列的表形互为呼应。
-      description={`${info.owner}——运营查阅按租户作用域读投影,各源各列,不折成覆盖各源状态的统一状态机`}
+      description={`运营查阅按租户作用域读投影,各源各列,不折成覆盖各源状态的统一状态机`}
       search={{
         value: keyword,
         onChange: setKeyword,

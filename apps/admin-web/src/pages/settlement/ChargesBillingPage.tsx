@@ -226,7 +226,7 @@ function CustomerChargesTable() {
   return (
     <ListPageTemplate<CustomerChargeRecord>
       title="客户费用"
-      description={`${info.owner}——一行即一条客户费用；收付方向、责任法人与结算相对方不在本册，页面不推断`}
+      description={`一行即一条客户费用；收付方向、责任法人与结算相对方不在本册，页面不推断`}
       search={{
         value: search,
         onChange: setSearch,
@@ -354,7 +354,7 @@ function SupplierExpectedCostsTable() {
   return (
     <ListPageTemplate<SupplierExpectedCostRecord>
       title="供应商预期成本"
-      description={`${info.owner}——整册属预估口径、从不进对账单，故不设阶段栏；一行即一版，纠错换版本不覆盖历史`}
+      description={`整册属预估口径、从不进对账单，故不设阶段栏；一行即一版，纠错换版本不覆盖历史`}
       search={{
         value: search,
         onChange: setSearch,

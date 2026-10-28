@@ -57,7 +57,7 @@ function ServiceAreasTable() {
   return (
     <ListPageTemplate<NetworkVersionRecord>
       title={info.title}
-      description={`${info.owner}——版本骨架查阅;地理覆盖列尚不存在(PAR-NET-14),页面不虚构覆盖关系`}
+      description={`版本骨架查阅;地理覆盖列尚不存在(PAR-NET-14),页面不虚构覆盖关系`}
       search={{
         value: keyword,
         onChange: setKeyword,

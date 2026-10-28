@@ -213,7 +213,7 @@ function PriceCardCatalogTable() {
   return (
     <ListPageTemplate<PriceCardRecord>
       title={info.title}
-      description={`${info.owner}——本签只查阅;导入走「导入价卡」签,JSON 快照在「高级」签,受控登记口仍可用`}
+      description={`本签只查阅;导入走「导入价卡」签,JSON 快照在「高级」签,受控登记口仍可用`}
       search={{
         value: keyword,
         onChange: setKeyword,

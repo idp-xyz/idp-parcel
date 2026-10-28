@@ -143,7 +143,7 @@ export function EffectiveTimeJudgmentPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<FactRow>
         title={info.title}
-        description={`${info.owner} · 所有者就一条外部承运轨迹事实显式给出「从何时起对本仓有效」（ADR-0102 决定三）；页面不解释状态词、不建议时间。`}
+        description={`所有者就一条外部承运轨迹事实显式给出「从何时起对本仓有效」（ADR-0102 决定三）；页面不解释状态词、不建议时间。`}
         headerActions={
           <Button variant="outline" onClick={() => setJudging({ fact: '' })}>
             判断指名事实

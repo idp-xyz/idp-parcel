@@ -136,7 +136,7 @@ export function CodLedgerPage() {
     <ListPageTemplate<CodSubledgerRecord>
       title={info.title}
       // 页头说明直接携带硬约束,与在途/应付两栏的命名互为呼应。
-      description={`${info.owner}——未实际收到的代收款不得进入可付客户余额;金额列为币种最小单位计数`}
+      description={`未实际收到的代收款不得进入可付客户余额;金额列为币种最小单位计数`}
       search={{
         value: search,
         onChange: setSearch,
