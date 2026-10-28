@@ -82,18 +82,18 @@ function SectionBody<Row>({
     case 'noAnswer':
       return (
         <SectionError
-          title="服务端没有形成答案"
+          title="没有得到答案"
           description={problemNote(state.code)}
           technical={httpRows(state.status, state.code)}
           onRetry={retry}
         />
       );
     case 'transport':
-      return <SectionError title="无法连接主数据读取服务" description={state.message} onRetry={retry} />;
+      return <SectionError title="读不到数据" description={state.message} onRetry={retry} />;
     case 'mismatch':
       return (
         <p className={note}>
-          读回的数据与所问的{what}对不上，已丢弃；请确认前端与服务端是同一版本。
+          读回的数据与所问的{what}对不上，已丢弃；请刷新后再试，仍不对就报障。
           <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
             重试
           </Button>
@@ -205,39 +205,39 @@ export function PartyOverviewSection({
       <section className="py-3 border-b border-idpxyz-border">
         <h3 className="text-[12px] font-medium text-idpxyz-text">它对我们是什么</h3>
         {roles === null ? (
-          <p className={`mt-1 ${note}`}>关系册尚未答复，角色摘要见下方「参与方关系」一段。</p>
+          <p className={`mt-1 ${note}`}>合作关系还没读到，角色见下方「合作关系」一段。</p>
         ) : roles.asHolder.length === 0 && roles.asCounterparty.length === 0 ? (
-          <p className={`mt-1 ${note}`}>关系册上没有本参与方状态为「已生效」的关系。</p>
+          <p className={`mt-1 ${note}`}>还没有已生效的合作关系。</p>
         ) : (
           <>
-            <RoleTags label="作为持有方：" roles={roles.asHolder} />
-            <RoleTags label="作为相对方：" roles={roles.asCounterparty} />
+            <RoleTags label="担任：" roles={roles.asHolder} />
+            <RoleTags label="对方担任：" roles={roles.asCounterparty} />
           </>
         )}
         <p className={`mt-2 ${note}`}>
-          关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 责任法人 {countText(entityState)} · 供应商协议{' '}
+          合作关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 公司主体 {countText(entityState)} · 供应商协议{' '}
           {countText(agreementState)} · 结算政策 {countText(settlementState)}
         </p>
         <p className={`mt-1 ${note}`}>
-          授信、余额与委托不在这里显示。角色只统计已生效的关系。
+          授信、余额与运单不在这里显示；角色只数已生效的关系。
         </p>
       </section>
 
-      <Section title="参与方关系" state={relationshipState}>
+      <Section title="合作关系" state={relationshipState}>
         <SectionBody
           state={relationshipState}
-          what="参与方关系"
-          emptyNote="关系册上没有以本参与方为持有方或相对方的关系。"
+          what="合作关系"
+          emptyNote="还没有与这家单位的合作关系。"
           retry={retryRelationships}
           renderRow={(view) => (
             <RowCard key={view.relationshipId}>
               <div className="flex items-center justify-between gap-2">
                 <span>
-                  {view.side === 'HOLDER' ? '本方为持有方' : '本方为相对方'} · {labelOf(partyRoleLabels, view.role)}
+                  {view.side === 'HOLDER' ? '担任' : '对方担任'}{labelOf(partyRoleLabels, view.role)}
                 </span>
                 {statusBadge(relationshipStatusLabels, view.status)}
               </div>
-              <Line label={view.side === 'HOLDER' ? '相对方' : '持有方'}>
+              <Line label="对方">
                 <span className="font-mono">{view.otherPartyId}</span>{' '}
                 {view.otherPartyNameKnown ? view.otherPartyName : <UnknownPartyName />}
               </Line>
@@ -247,20 +247,20 @@ export function PartyOverviewSection({
               <Line label="有效区间" mono>
                 <InstantRange from={view.effectiveStartsAt} to={view.effectiveEndsAt} />
               </Line>
-              <Line label="关系标识" mono>
+              <Line label="关系编号" mono>
                 {view.relationshipId} r{view.revision}
               </Line>
             </RowCard>
           )}
         />
-        <p className={`mt-2 ${note}`}>全部关系在本页「参与方关系」册可筛看。</p>
+        <p className={`mt-2 ${note}`}>全部关系在本页「合作关系」册可筛看。</p>
       </Section>
 
-      <Section title="货主客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>
+      <Section title="客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>
         <SectionBody
           state={accountState}
-          what="货主客户账户"
-          emptyNote="客户账户册上没有关联到本参与方的货主客户账户。"
+          what="客户账户"
+          emptyNote="还没有关联到这家单位的客户账户。"
           retry={accounts.retry}
           renderRow={(row) => (
             <RowCard key={row.accountId}>
@@ -270,7 +270,7 @@ export function PartyOverviewSection({
                 </span>
                 {statusBadge(identityStatusLabels, row.status)}
               </div>
-              <Line label="生效时点" mono>
+              <Line label="生效时间" mono>
                 <Instant value={row.effectiveFrom} />
               </Line>
             </RowCard>
@@ -278,11 +278,11 @@ export function PartyOverviewSection({
         />
       </Section>
 
-      <Section title="责任法人" moduleId="group-legal-entities" partyId={partyId} state={entityState}>
+      <Section title="公司主体" moduleId="group-legal-entities" partyId={partyId} state={entityState}>
         <SectionBody
           state={entityState}
-          what="责任法人"
-          emptyNote="本参与方不是本集团登记的责任法人（法人册上没有钉着它的法人）。"
+          what="公司主体"
+          emptyNote="这家单位不是我们登记的公司主体。"
           retry={entities.retry}
           renderRow={(row) => (
             <RowCard key={row.legalEntityId}>
@@ -304,7 +304,7 @@ export function PartyOverviewSection({
         <SectionBody
           state={agreementState}
           what="供应商协议"
-          emptyNote="供应商协议册上没有供应商是本参与方的已登记正文。"
+          emptyNote="还没有以这家单位为供应商的协议。"
           retry={agreements.retry}
           renderRow={(row) => (
             <RowCard key={`${row.objectId}@${row.version}`}>
@@ -314,7 +314,7 @@ export function PartyOverviewSection({
                 </span>
                 {statusBadge(commercialStatusLabels, row.status)}
               </div>
-              <Line label="责任法人" mono>
+              <Line label="公司主体" mono>
                 {row.legalEntity}
               </Line>
               <Line label="采购方案" mono>
@@ -332,15 +332,15 @@ export function PartyOverviewSection({
           )}
         />
         {agreementState.kind === 'answered' ? (
-          <p className={`mt-2 ${note}`}>还没随发布登记正文的协议版本不带供应商，所以不在此列。</p>
+          <p className={`mt-2 ${note}`}>只发布了版本、还没登记正文的协议看不出供应商，所以不在此列。</p>
         ) : null}
       </Section>
 
-      <Section title="结算政策（本方为客户相对方）" moduleId="commercial-policies" partyId={partyId} state={settlementState}>
+      <Section title="结算政策（作为客户）" moduleId="commercial-policies" partyId={partyId} state={settlementState}>
         <SectionBody
           state={settlementState}
           what="结算政策"
-          emptyNote="结算政策册上没有以本参与方为客户相对方的政策。"
+          emptyNote="还没有以这家单位为客户的结算政策。"
           retry={settlement.retry}
           renderRow={(row) => (
             <RowCard key={`${row.objectId}@${row.version}`}>
@@ -350,7 +350,7 @@ export function PartyOverviewSection({
                 </span>
                 <span>{labelOf(settlementMethodLabels, row.method)}</span>
               </div>
-              <Line label="责任法人" mono>
+              <Line label="公司主体" mono>
                 {row.legalEntity}
               </Line>
               <Line label="合同" mono>

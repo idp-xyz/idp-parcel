@@ -30,7 +30,7 @@ import {
 import { RefLink } from './RefLink';
 import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { useLoaded } from './PublicationFormFields';
-import { statusBadge } from './detail-primitives';
+import { StatusPill } from '../../components/StatusPill';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
@@ -43,14 +43,17 @@ import {
   type CustomerContractListResponseBody,
   type CustomerContractRecord,
 } from './api';
-import {
-  commercialStatusLabels,
-  identityStatusLabels,
-  labelOf,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-} from './presentation';
+import { labelOf, partyNameUnknownNote, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+
+// 抽屉副题里给状态补一句「所以呢」：运营看到「已退役」要知道的是它不再用于新单。
+const contractStatusNotes: Record<string, string> = {
+  DRAFT: '还没发布，不作数',
+  PUBLISHED: '已发布，到生效时间起作数',
+  EFFECTIVE: '现在按这一版办',
+  EXPIRED: '已到期，新单不再按它办',
+  RETIRED: '已退役，新单不再按它办',
+  SUPERSEDED: '已被新版本替代',
+};
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -59,27 +62,22 @@ const info = moduleInfoById['party-contracts'];
 
 // 合同读面带出正文里指名的货主客户账户（customerAccountId）；责任法人合同自己没有，随接单规则包（规则包行上有）。账户的客户
 // 名称取自客户账户册的第一页，读不到就只显账户标识，不猜名字。账户册自己在本页「客户账户」签。
+// 主列只留运营要看的：合同与版本、客户、状态、规则与约定、有效期；适用范围、各标识进详情抽屉的「技术详情」。
 const columns: ListColumn<CustomerContractRecord>[] = [
   {
     id: 'contract',
-    header: '合同 / 版本',
+    header: '合同',
     render: (row) => (
-      <div className="min-w-48">
+      <div className="min-w-40">
         <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.version}</p>
+        <p className="mt-0.5 text-xs text-idpxyz-textMuted">版本 {row.version}</p>
       </div>
     ),
   },
   {
-    id: 'scope',
-    header: '适用范围',
-    className: 'font-mono text-xs',
-    render: (row) => row.scope,
-  },
-  {
     id: 'status',
     header: '状态',
-    render: (row) => statusBadge(commercialStatusLabels, row.status),
+    render: (row) => <StatusPill code={row.status} />,
   },
   {
     id: 'rule-package',
@@ -96,20 +94,20 @@ const columns: ListColumn<CustomerContractRecord>[] = [
   },
   {
     id: 'bindings',
-    header: '接受前财务控制约定',
+    header: '接单前财务控制',
     className: 'min-w-64',
     render: (row) => <ControlBindings row={row} />,
   },
   {
     // 合同层交付条件（0030，票 admin-write-faces/25）：与正文是两层各自可缺，这一格不看 contentRegistered，只看键在不在。
     id: 'delivery-conditions',
-    header: '交付条件（合同层）',
+    header: '交付条件',
     className: 'min-w-64',
     render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
   },
   {
     id: 'effective',
-    header: '有效区间',
+    header: '有效期',
     className: 'min-w-64 font-mono text-xs',
     render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
   },
@@ -136,7 +134,7 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
     return <span className="text-idpxyz-textMuted">正文未登记</span>;
   }
   if (row.bindings.length === 0) {
-    return <span className="text-idpxyz-textMuted">已登记，未对任何费用范围作约定</span>;
+    return <span className="text-idpxyz-textMuted">未对任何费用范围作约定</span>;
   }
   return (
     <ul className="space-y-0.5">
@@ -157,19 +155,19 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
   );
 }
 
-/** 「货主客户账户」一列：账户标识为主，客户名称取自账户册已取回的那一页（取不到不显名称，不猜）。 */
+/** 「客户」一列：客户名称为主（取自账户册已取回的那一页），账户编码为辅；取不到名称时只显编码，不猜。 */
 function customerAccountColumn(names: ReadonlyMap<string, string>): ListColumn<CustomerContractRecord> {
   return {
     id: 'customer-account',
-    header: '货主客户账户',
-    className: 'font-mono text-xs',
+    header: '客户',
+    className: 'text-xs',
     render: (row) => {
       if (row.customerAccountId) {
         const name = names.get(row.customerAccountId);
         return (
           <div className="min-w-40">
-            <p>{row.customerAccountId}</p>
-            {name ? <p className="mt-0.5 font-sans text-idpxyz-textMuted">{name}</p> : null}
+            {name ? <p className="font-medium text-idpxyz-text">{name}</p> : null}
+            <p className={`font-mono ${name ? 'mt-0.5 text-idpxyz-textMuted' : 'text-idpxyz-text'}`}>{row.customerAccountId}</p>
           </div>
         );
       }
@@ -207,9 +205,9 @@ function CustomerContractsTable({
         )
       : [],
   );
-  // 账户列紧跟状态列；按列标识找位置，不按下标数。
-  const afterStatus = columns.findIndex((column) => column.id === 'status') + 1;
-  const contractColumns = [...columns.slice(0, afterStatus), customerAccountColumn(accountNames), ...columns.slice(afterStatus)];
+  // 客户列紧跟合同列：运营先认合同、再认客户；按列标识找位置，不按下标数。
+  const afterContract = columns.findIndex((column) => column.id === 'contract') + 1;
+  const contractColumns = [...columns.slice(0, afterContract), customerAccountColumn(accountNames), ...columns.slice(afterContract)];
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
@@ -250,11 +248,11 @@ function CustomerContractsTable({
     <>
       <ListPageTemplate<CustomerContractRecord>
         title={info.title}
-        description="客户合同的各个版本：货主客户账户、合同约定的接单规则包与接受前财务控制、交付条件与有效区间。"
+        description="每份客户合同签了什么、什么时候生效：客户、接单规则、财务控制约定与交付条件；要改条款就签新版本"
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索合同、版本、适用范围、客户账户或规则包',
+          placeholder: '搜索合同、客户或规则包',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
@@ -288,15 +286,23 @@ function CustomerContractsTable({
         viewState={catalogueViewState(answer, contracts.length, retry, {
           module: info,
           endpoint: 'GET /commercial-customer-contracts',
-          emptyTitle: '当前租户尚无客户合同版本',
-          emptyDescription: `还没有发布任何客户合同；本页不会预置合同。${entryHint(mayWrite, '在「发布合同版本」签发布第一份。')}`,
+          emptyTitle: '还没有签订任何客户合同',
+          emptyDescription: `客户下单要按合同办。${entryHint(mayWrite, '在「签订合同」签签第一份。')}`,
         })}
       />
       <VersionDetailDrawer<CustomerContractRecord>
         row={selected}
         columns={contractColumns}
         title={(row) => ({ objectId: row.objectId, version: row.version })}
-        subtitle={(row) => `客户合同 · 适用范围 ${row.scope}`}
+        subtitle={(row) => `客户合同 · ${labelOf(contractStatusNotes, row.status)}`}
+        technical={(row) => [
+          { label: '合同标识', value: row.objectId },
+          { label: '版本号', value: row.version },
+          { label: '适用范围', value: row.scope },
+          { label: '客户账户标识', value: row.customerAccountId ?? '' },
+          { label: '接单规则包标识', value: row.rulePackageId ?? '' },
+          { label: '正文登记时间', value: row.declaredAt ?? '' },
+        ]}
         status={(row) => row.status}
         history={(row) => versionHistoryOf(contracts, row)}
         currentVersion={(row) => row.version}
@@ -315,7 +321,7 @@ function CustomerContractsTable({
                 onStartNewVersion(row);
               }}
             >
-              发新版本
+              签新版本
             </Button>
             {closable.has(closureKeyOf(row)) ? (
               <Button
@@ -343,30 +349,26 @@ function CustomerContractsTable({
 // 写进去的依据就无处可见，停用签也就不能按「写签跟着读签走」落在这一页。
 const accountColumns: ListColumn<CustomerAccountRecord>[] = [
   {
-    id: 'account',
-    header: '账户标识 / 修订',
-    render: (row) => (
-      <div className="min-w-40">
-        <p className="font-mono font-medium text-idpxyz-text">{row.accountId}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">r{row.revision}</p>
-      </div>
-    ),
-  },
-  {
     id: 'customer-party',
-    header: '客户参与方',
+    header: '客户',
     // 名称在参与方册上（账户不抄第二份）；customerPartyNameKnown 为假是写入门失败才会
     // 出现的悬空引用，如实标出让人去查写侧，不补占位文本冒充名称。
     render: (row) => (
       <div className="min-w-36">
-        <p className="font-mono text-xs text-idpxyz-textMuted">{row.customerPartyId}</p>
         {row.customerPartyNameKnown ? (
-          <p className="mt-0.5 font-medium text-idpxyz-text">{row.customerPartyName}</p>
+          <p className="font-medium text-idpxyz-text">{row.customerPartyName}</p>
         ) : (
-          <p className="mt-0.5 text-xs text-idpxyz-textMuted">参与方册查无此身份</p>
+          <p className="text-xs text-idpxyz-textMuted">{partyNameUnknownNote}</p>
         )}
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.customerPartyId}</p>
       </div>
     ),
+  },
+  {
+    id: 'account',
+    header: '账户编码',
+    className: 'font-mono text-xs',
+    render: (row) => row.accountId,
   },
   {
     id: 'status',
@@ -374,7 +376,9 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
     align: 'center',
     render: (row) => (
       <div>
-        <p>{statusBadge(identityStatusLabels, row.status)}</p>
+        <p>
+          <StatusPill code={row.status} />
+        </p>
         {row.deactivatedAt ? (
           <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
             自 {formatInstant(row.deactivatedAt)}
@@ -387,14 +391,8 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
     ),
   },
   {
-    id: 'basis',
-    header: '登记依据',
-    className: 'font-mono text-xs',
-    render: (row) => row.basis,
-  },
-  {
     id: 'effective-from',
-    header: '生效自',
+    header: '生效时间',
     className: 'min-w-44 font-mono text-xs',
     render: (row) => formatInstant(row.effectiveFrom),
   },
@@ -428,23 +426,23 @@ function CustomerAccountsTable() {
   return (
     <ListPageTemplate<CustomerAccountRecord>
       title={info.title}
-      description="货主客户账户，每个账户显示最新一笔登记修订；名称取自所属业务参与方，状态按打开页面时的时点判断。"
+      description="每个客户账户属于哪家客户、什么时候生效；运单、合同与对账都挂在账户上"
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索账户、客户参与方或名称',
+        placeholder: '搜索客户或账户编码',
       }}
-      filterSummary={answer?.kind === 'outcome' ? `本页 ${accounts.length} 个货主客户账户` : undefined}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${accounts.length} 个客户账户` : undefined}
       columns={accountColumns}
       rows={accounts}
       rowKey={(row) => row.accountId}
-      emptyRowsNote="当前检索条件下没有匹配的货主客户账户"
+      emptyRowsNote="当前检索条件下没有匹配的客户账户"
       pagination={pagination}
       viewState={catalogueViewState(answer, accounts.length, retry, {
         module: info,
         endpoint: 'GET /commercial-customer-accounts',
-        emptyTitle: '当前租户尚无货主客户账户登记',
-        emptyDescription: `还没有登记任何货主客户账户；本页不会预置账户。${entryHint(mayWrite, '在「登记账户」签登记第一个。')}`,
+        emptyTitle: '还没有登记任何客户账户',
+        emptyDescription: `客户下单、对账都要先有账户。${entryHint(mayWrite, '在「新增客户账户」签登记第一个。')}`,
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
@@ -483,7 +481,7 @@ export function PartyContractsPage() {
   const replaceGuard = useReplaceDraftGuard<CustomerContractRecord>(
     () => publicationGroup('CUSTOMER_CONTRACT'),
     beginNewVersion,
-    '发布合同版本',
+    '签订合同',
   );
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -491,9 +489,9 @@ export function PartyContractsPage() {
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="contracts">客户合同</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger> : null}
+          {mayWrite ? <TabsTrigger value="publish-contract">签订合同</TabsTrigger> : null}
           <TabsTrigger value="accounts">客户账户</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="register">登记账户</TabsTrigger> : null}
+          {mayWrite ? <TabsTrigger value="register">新增客户账户</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="contracts"

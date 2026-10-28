@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { Drawer, DrawerBody, DrawerHeader, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import type { ListColumn } from '../../templates';
-import { DetailRow, statusBadge } from './detail-primitives';
-import { commercialStatusLabels } from './presentation';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
+import { DetailRow } from './detail-primitives';
 import type { HistoryEntry } from './version-history';
 
 /**
@@ -25,6 +26,7 @@ export function VersionDetailDrawer<Row>({
   actions,
   readOnly = false,
   emptyHistoryNote,
+  technical,
   onClose,
 }: {
   row: Row | null;
@@ -46,6 +48,8 @@ export function VersionDetailDrawer<Row>({
   readOnly?: boolean;
   /** 历史栏为空时的说明；缺省说这一行随所属版本发布。读面不给历史的册（产品—渠道映射）另说。 */
   emptyHistoryNote?: string;
+  /** 这一行排查用的字（内容摘要、批准引用、租户……），收进详情签底部的「技术详情」；不给就不摆。 */
+  technical?: (row: Row) => TechnicalRow[];
   onClose: () => void;
 }) {
   return (
@@ -56,7 +60,7 @@ export function VersionDetailDrawer<Row>({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono font-medium text-idpxyz-text">{title(row).objectId}</span>
               <span className="font-mono text-xs text-idpxyz-textMuted">{title(row).version}</span>
-              {status?.(row) ? statusBadge(commercialStatusLabels, status(row) as string) : null}
+              {status?.(row) ? <StatusPill code={status(row) as string} /> : null}
             </div>
             <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">{subtitle(row)}</p>
             {actions && !readOnly ? <div className="mt-2 flex flex-wrap items-center gap-2">{actions(row)}</div> : null}
@@ -77,6 +81,7 @@ export function VersionDetailDrawer<Row>({
                       </DetailRow>
                     ))}
                 </dl>
+                {technical ? <TechnicalDetails className="mt-3" rows={technical(row)} /> : null}
               </TabsContent>
               <TabsContent value="history">
                 <HistoryList
@@ -122,7 +127,7 @@ function HistoryList({
           >
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-[13px] font-medium text-idpxyz-text">{entry.label ?? entry.version}</span>
-              {entry.status ? statusBadge(commercialStatusLabels, entry.status) : null}
+              {entry.status ? <StatusPill code={entry.status} /> : null}
               {entry.version === current ? <span className="text-[11px] text-idpxyz-accent">正在查看</span> : null}
             </span>
             <span className="mt-1 block font-mono text-[12px] text-idpxyz-textMuted">{entry.interval}</span>

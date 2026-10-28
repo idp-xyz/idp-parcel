@@ -135,7 +135,7 @@ function ShellFields({
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>版本信息</h3>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="合同对象标识 *" path="objectId" problems={form.problems}>
+        <Field label="合同编号 *" path="objectId" problems={form.problems}>
           <Input
             value={draft.objectId}
             readOnly={form.locked}
@@ -148,6 +148,7 @@ function ShellFields({
             value={draft.version}
             readOnly={form.locked}
             className="font-mono text-[13px]"
+            placeholder="如 v1；改条款就用下一个版本号"
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
@@ -156,13 +157,13 @@ function ShellFields({
             value={draft.scope}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="商业范围引用"
+            placeholder="这份合同管哪些业务，按公司约定的写法填"
             onChange={(event) => patch({ scope: event.target.value })}
           />
         </Field>
         <div />
         <WallTimeField
-          label="生效起点 *"
+          label="开始时间 *"
           path="effectiveStartsAt"
           problems={form.problems}
           value={draft.effectiveStartsAt}
@@ -171,19 +172,19 @@ function ShellFields({
           onChange={(value) => patch({ effectiveStartsAt: value })}
         />
         <WallTimeField
-          label="生效止点"
+          label="结束时间"
           path="effectiveEndsAt"
           problems={form.problems}
           value={draft.effectiveEndsAt}
           locked={form.locked}
           timeZone={timeZone}
-          note="留空即持续有效。"
+          note="留空即长期有效。"
           onChange={(value) => patch({ effectiveEndsAt: value })}
         />
       </div>
       {form.versionNote}
       <p className="text-[11px] text-idpxyz-textMuted">
-        起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。
+        开始时间晚于现在也可以先保存和批准；到了开始时间再发布即可。
       </p>
     </section>
   );
@@ -209,11 +210,11 @@ function ContractContentFields({
   const bindingsBase = 'customerContract.contractContent.bindings';
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>合同正文：接单规则包与按费用范围的接受前财务控制约定</h3>
+      <h3 className={sectionTitle}>合同条款：接单规则与按费用范围的财务控制约定</h3>
       {/* 解析时只有键上那一个客户账户的合同参选。账户册读口分页，所以是能直接输入的格、带第一页候选作提示，不做成
           只列得出第一页的选单（票 party-commercial-uiux/13）。 */}
       <SuggestInput
-        label="货主客户账户 *"
+        label="客户账户 *"
         path="customerContract.contractContent.customerAccount"
         problems={form.problems}
         value={draft.customerAccount}
@@ -222,7 +223,7 @@ function ContractContentFields({
         load={loadCustomerAccountSuggestions}
         optionsOf={customerAccountPickerOptions}
         readFace="货主客户账户册"
-        placeholder="这份合同属于哪个货主客户账户"
+        placeholder="这份合同属于哪个客户账户"
       />
       <Field
         label="接单规则包 *"
@@ -368,10 +369,10 @@ function PreAcceptanceControlFields({
   const basisShown = draft.controlRequirement === 'NOT_APPLICABLE';
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>合同级声明：这份合同要不要接受前财务控制</h3>
+      <h3 className={sectionTitle}>这份合同接单前要不要做财务控制</h3>
       {/* 「不适用」必带依据：缺依据的不适用与一次默认放行分不开；「要求」不得带依据。两条都由服务端裁。 */}
       <p className="text-[11px] text-idpxyz-textMuted">
-        这里回答整份合同要不要接受前财务控制；上面的约定表按费用范围回答用哪份策略或不适用，两者分开填。选「不适用」必须写明商业依据，选「要求」不填依据。
+        这里回答整份合同接单前要不要做财务控制（预付冻结、信用校验）；上面的约定表按费用范围回答用哪份策略。选「不适用」要写明商业依据。
       </p>
       <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
         {/* 依据格只在「不适用」时显；隐着时它认领的路径由「要求」这格代显（票 22 判据 3），显着时各显各的、不重复。 */}
