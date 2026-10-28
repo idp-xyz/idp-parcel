@@ -481,6 +481,42 @@ type ConfirmationCondition struct {
 	Gap   string
 }
 
+// ChargeConfirmationConditionRegister 是确认条件目录的写口：一个费用项目要哪种确认依据。同费用项目已登同一种答重放，
+// 登了另一种答冲突、不覆盖。
+type ChargeConfirmationConditionRegister interface {
+	SaveConfirmationCondition(
+		ctx context.Context,
+		tenant domain.TenantID,
+		feeItem domain.FeeItemReference,
+		kind domain.ConfirmationBasisKind,
+		at time.Time,
+	) (CatalogueRegistrationEffect, error)
+}
+
+// ConfirmationBasisRecorder 记下一笔费用到达的一份确认依据。键是（费用、费用项目、依据种类）：同键已有即答重放，不覆盖
+// 先到的那份引用——确认只认一份依据，后到的同种依据不改它。
+type ConfirmationBasisRecorder interface {
+	RecordConfirmationBasis(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerChargeID,
+		feeItem domain.FeeItemReference,
+		kind domain.ConfirmationBasisKind,
+		basis domain.ConfirmationBasisReference,
+		at time.Time,
+	) (CatalogueRegistrationEffect, error)
+}
+
+// EffectiveDeliveryFinalView 问一件包裹此刻有没有已终局的「有效交付」。有就交回指得回那一份终局采用的依据引用；终局
+// 不是有效交付、未终局或没有终局都答 false。
+type EffectiveDeliveryFinalView interface {
+	FindEffectiveDeliveryFinal(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.ParcelReference,
+	) (domain.ConfirmationBasisReference, bool, error)
+}
+
 // ConfirmationConditionView 取该费用类型的确认条件核对结果。found=false 表示确认
 // 条件目录未配置——实例半边未提供时确认停在未决，不默认转正（UC-SA-002「费用已确认：
 // 确认条件已满足」，条件本身是实例参数）。

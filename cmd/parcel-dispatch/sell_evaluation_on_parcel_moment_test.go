@@ -381,9 +381,11 @@ func TestBothParcelMomentEnvelopesFanOutToTheSettlementLane(t *testing.T) {
 	for name, lane := range map[string]struct {
 		eventType eventing.EventType
 		consumer  string
+		lanes     int
 	}{
-		"收寄采用": {sainbox.NetworkIntakeRecordedEventType, sellOnNetworkIntakeConsumer},
-		"终局":   {sainbox.FinalOutcomeFormedEventType, "settlement-accounting/request-sell-evaluation-on-final-outcome"},
+		"收寄采用": {sainbox.NetworkIntakeRecordedEventType, sellOnNetworkIntakeConsumer, 2},
+		// 终局另扇给 SA 记确认依据那一路（ADR-0336 决定二），三路各一行。
+		"终局": {sainbox.FinalOutcomeFormedEventType, "settlement-accounting/request-sell-evaluation-on-final-outcome", 3},
 	} {
 		t.Run(name, func(t *testing.T) {
 			beat, db, store := wiredBeat(t)
@@ -410,8 +412,8 @@ func TestBothParcelMomentEnvelopesFanOutToTheSettlementLane(t *testing.T) {
 			if err := querier.QueryRow(t.Context(), query, "moment-1", lane.consumer).Scan(&settlement); err != nil {
 				t.Fatalf("数 SA inbox：%v", err)
 			}
-			if lanes != 2 || settlement != 1 {
-				t.Fatalf("inbox 行 = %d（SA 名下 %d）, want 两路各一行", lanes, settlement)
+			if lanes != lane.lanes || settlement != 1 {
+				t.Fatalf("inbox 行 = %d（SA 名下 %d）, want %d 路各一行", lanes, settlement, lane.lanes)
 			}
 		})
 	}

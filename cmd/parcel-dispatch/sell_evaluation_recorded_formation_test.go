@@ -145,7 +145,15 @@ func TestASellEvaluationRecordedFormsAnEstimatedCustomerChargeThroughTheRouteTab
 		freight = append(freight, mapping)
 	}
 	registeredAt := beatInstant()
+	accounts, err := sapostgres.NewSettlementAccounts(db)
+	if err != nil {
+		t.Fatalf("SA 账户册：%v", err)
+	}
+	account := sellRequestAccount(t)
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		if _, err := accounts.Save(txCtx, tenant, account, registeredAt); err != nil {
+			return err
+		}
 		for _, record := range []saports.SellEvaluationRequestRecord{mapped, unmapped} {
 			if _, err := requests.Save(txCtx, record); err != nil {
 				return err

@@ -363,7 +363,16 @@ func TestASellRequestPendingOnAnIncompleteMappingResumesAfterTheMappingIsRegiste
 		t.Fatal(err)
 	}
 	first := sellRequestRecord(t, "SELLREQ-SYN-MAP-1", "SYN-PARCEL-01", "SYN-SCOPE-01")
+	accounts, err := sapostgres.NewSettlementAccounts(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := sellRequestAccount(t)
+	accountTenant := saValue(t, sadomain.NewTenantID, demoTenant)
 	mustWithinTX(t, fixture.transactor, t.Context(), func(ctx context.Context) error {
+		if _, err := accounts.Save(ctx, accountTenant, account, beatInstant()); err != nil {
+			return err
+		}
 		if _, err := requests.Save(ctx, first); err != nil {
 			return err
 		}

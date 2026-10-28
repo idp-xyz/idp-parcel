@@ -12,7 +12,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		sellEvaluations, err := formEstimatedCustomerChargeOnSellEvaluationConsumer(sources.db, sources.inbox, sources.clock)
+		sellEvaluations, err := formEstimatedCustomerChargeOnSellEvaluationConsumer(sources.db, sources.outbox, sources.inbox, sources.clock)
 		if err != nil {
 			return nil, err
 		}

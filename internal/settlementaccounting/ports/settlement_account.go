@@ -28,6 +28,15 @@ type SettlementAccountView interface {
 	) (domain.SettlementAccountID, bool, error)
 }
 
+// SettlementAccountByIDView 按账户标识交回一整户。册上没有答 false。
+type SettlementAccountByIDView interface {
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.SettlementAccountID,
+	) (domain.SettlementAccount, bool, error)
+}
+
 // SettlementAccountRegister 是结算账户登记册的写口。
 type SettlementAccountRegister interface {
 	Save(

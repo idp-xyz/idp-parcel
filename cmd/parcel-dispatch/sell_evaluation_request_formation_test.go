@@ -237,6 +237,28 @@ func acceptedSellParcel(t *testing.T, fixture *synVerticalFixture) {
 	}
 }
 
+// sellRequestAccount 是 sellRequestRecord 指名的那一户。请求是照账户册上的一户提交的，形成之后登确认事实要按标识读回它
+// （ADR-0336 决定一），所以直写请求的用例也得先登这一户。在事务外造好，事务回调里只做 Save。
+func sellRequestAccount(t *testing.T) sadomain.SettlementAccount {
+	t.Helper()
+	key, err := sadomain.NewSettlementAccountKey(
+		saValue(t, sadomain.NewLegalEntityReference, "SYN-LE-01"),
+		saValue(t, sadomain.NewSettlementCounterpartyReference, "SYN-PARTY-SHIPPER-01"),
+		sadomain.ChargeReceivable,
+		saValue(t, sadomain.NewCurrencyCode, "CNY"),
+		saValue(t, sadomain.NewSettlementPolicyReference, "SYN-SETTLEMENT-PREPAID-01"),
+	)
+	if err != nil {
+		t.Fatalf("账户固定属性：%v", err)
+	}
+	account, err := sadomain.NewSettlementAccount(saValue(t, sadomain.NewSettlementAccountID, "SYN-SA-SHIPPER-01-RECEIVABLE"),
+		key, sadomain.SettlementCounterpartyReference{}, false, saValue(t, sadomain.NewResponsibilityBasis, "SYN-CONTRACT-01"))
+	if err != nil {
+		t.Fatalf("账户：%v", err)
+	}
+	return account
+}
+
 // sellRequestRecord 造一份演示租户在`有效网络收寄已采用`那一拍的 SELL 评价请求记录。
 func sellRequestRecord(t *testing.T, id, parcel, scope string) saports.SellEvaluationRequestRecord {
 	t.Helper()

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -60,6 +61,31 @@ type ConfirmationBasisReference struct{ requiredValue }
 func NewConfirmationBasisReference(value string) (ConfirmationBasisReference, error) {
 	required, err := newRequiredValue("confirmation basis reference", value)
 	return ConfirmationBasisReference{required}, err
+}
+
+// ConfirmationBasisKind 是确认依据的种类。确认条件目录按费用项目点名要哪一种，到达的另一种不顶替它。
+type ConfirmationBasisKind struct{ requiredValue }
+
+func NewConfirmationBasisKind(value string) (ConfirmationBasisKind, error) {
+	required, err := newRequiredValue("confirmation basis kind", value)
+	return ConfirmationBasisKind{required}, err
+}
+
+// EffectiveDeliveryFinalizedBasis 是产品内置的那一种确认依据：小包托运把这件包裹采用为终局「有效交付」。用哪种依据确认
+// 哪个费用项目仍由租户在确认条件目录上登（ADR-0336 决定二）。字面与包裹计费时点`有效交付已终局`同词，指的是同一件事。
+func EffectiveDeliveryFinalizedBasis() ConfirmationBasisKind {
+	return ConfirmationBasisKind{requiredValue{value: "EFFECTIVE_DELIVERY_FINALIZED"}}
+}
+
+// ErrUnknownConfirmationBasisKind 说明登记口收到产品不认得的依据种类。
+var ErrUnknownConfirmationBasisKind = errors.New("settlement accounting: unknown confirmation basis kind")
+
+// ConfirmationBasisKindFromName 只认产品内置的依据种类。没有任何一路会写下别的种类，登上去的条件就永远满足不了。
+func ConfirmationBasisKindFromName(name string) (ConfirmationBasisKind, error) {
+	if kind := EffectiveDeliveryFinalizedBasis(); name == kind.String() {
+		return kind, nil
+	}
+	return ConfirmationBasisKind{}, fmt.Errorf("%w: %q", ErrUnknownConfirmationBasisKind, name)
 }
 
 // SettlementCounterpartyReference 指名这笔钱与谁结算。

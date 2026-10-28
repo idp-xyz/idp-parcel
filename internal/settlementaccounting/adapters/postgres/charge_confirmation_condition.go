@@ -206,3 +206,63 @@ func (repository *ChargeConfirmationConditions) RecordBasis(
 	}
 	return Registered, nil
 }
+
+var _ ports.ConfirmationBasisRecorder = (*ChargeConfirmationConditions)(nil)
+
+// RecordConfirmationBasis 是 RecordBasis 的端口形：种类走领域类型，落点译成登记册共用的三格。同键已有一律答重放——表上
+// ON CONFLICT DO NOTHING 不比内容，先到的那份引用留着（端口头注）。
+func (repository *ChargeConfirmationConditions) RecordConfirmationBasis(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerChargeID,
+	feeItem domain.FeeItemReference,
+	kind domain.ConfirmationBasisKind,
+	basis domain.ConfirmationBasisReference,
+	at time.Time,
+) (ports.CatalogueRegistrationEffect, error) {
+	outcome, err := repository.RecordBasis(ctx, tenant, charge, feeItem, kind.String(), basis, at)
+	if err != nil {
+		return 0, err
+	}
+	if outcome == AlreadyRegistered {
+		return ports.CatalogueReplay, nil
+	}
+	return ports.CatalogueRegistered, nil
+}
+
+var _ ports.ChargeConfirmationConditionRegister = (*ChargeConfirmationConditions)(nil)
+
+// SaveConfirmationCondition 是受控登记口用的那一口（ADR-0336 决定二）。与 RegisterCondition 同插一行，但把「已登同一种」
+// 与「已登另一种」分成重放与冲突：后者是租户改口，改配置怎么留痕还没定，不覆盖。
+func (repository *ChargeConfirmationConditions) SaveConfirmationCondition(
+	ctx context.Context,
+	tenant domain.TenantID,
+	feeItem domain.FeeItemReference,
+	kind domain.ConfirmationBasisKind,
+	at time.Time,
+) (ports.CatalogueRegistrationEffect, error) {
+	outcome, err := repository.RegisterCondition(ctx, tenant, feeItem, kind.String(), at)
+	if err != nil {
+		return 0, err
+	}
+	if outcome == Registered {
+		return ports.CatalogueRegistered, nil
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("save confirmation condition: %w", err)
+	}
+	var stored string
+	if err := querier.QueryRow(ctx,
+		`SELECT required_basis_kind
+		   FROM settlement_accounting.charge_confirmation_condition
+		  WHERE tenant_id = $1 AND fee_item = $2`,
+		tenant.String(), feeItem.String(),
+	).Scan(&stored); err != nil {
+		return 0, fmt.Errorf("save confirmation condition: %w", err)
+	}
+	if stored == kind.String() {
+		return ports.CatalogueReplay, nil
+	}
+	return ports.CatalogueConflict, nil
+}

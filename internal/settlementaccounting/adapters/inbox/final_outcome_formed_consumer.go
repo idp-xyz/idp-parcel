@@ -16,6 +16,10 @@ import (
 // （扇出），两路各记各的 inbox 账。
 const finalOutcomeFormedConsumerName = "settlement-accounting/request-sell-evaluation-on-final-outcome"
 
+// confirmationBasisOnFinalOutcomeConsumerName 是同一封终局信封在 SA 里的第二路：给已形成的客户费用记确认依据并按时点
+// 确认（ADR-0336 决定二）。与发起 SELL 那一路分名、各记各的 inbox 账——一路重投不该把另一路也拖着重做。
+const confirmationBasisOnFinalOutcomeConsumerName = "settlement-accounting/record-confirmation-basis-on-final-outcome"
+
 // FinalOutcomeFormedEventType 是本消费者认的事件类型：parcel-shipment 落下一份终局采用判断（终局或不采用、首派生或
 // 重派生）后交出的信封。字符串由消费方自己写出，两串是否相等由 cmd/parcel-dispatch 的真库装配用例钉。
 const FinalOutcomeFormedEventType eventing.EventType = "parcel-shipment.final-outcome.formed"
@@ -44,6 +48,25 @@ func NewFinalOutcomeFormedConsumer(
 	store *inbox.Store,
 	handler FormedFinalOutcomeHandler,
 ) (*FinalOutcomeFormedConsumer, error) {
+	return newFinalOutcomeConsumer(finalOutcomeFormedConsumerName, transactor, store, handler)
+}
+
+// NewConfirmationBasisOnFinalOutcomeConsumer 是同一封信封的确认依据那一路，真实装配接 adapters/parcelshipment 的
+// ConfirmOnFinalOutcomeAdapter。
+func NewConfirmationBasisOnFinalOutcomeConsumer(
+	transactor bentoapp.Transactor,
+	store *inbox.Store,
+	handler FormedFinalOutcomeHandler,
+) (*FinalOutcomeFormedConsumer, error) {
+	return newFinalOutcomeConsumer(confirmationBasisOnFinalOutcomeConsumerName, transactor, store, handler)
+}
+
+func newFinalOutcomeConsumer(
+	name string,
+	transactor bentoapp.Transactor,
+	store *inbox.Store,
+	handler FormedFinalOutcomeHandler,
+) (*FinalOutcomeFormedConsumer, error) {
 	if transactor == nil {
 		return nil, fmt.Errorf("settlement accounting inbox: transactor is nil")
 	}
@@ -56,7 +79,7 @@ func NewFinalOutcomeFormedConsumer(
 	gate, err := inboxconsume.New(inboxconsume.Spec[FormedFinalOutcome]{
 		Transactor:     transactor,
 		Store:          store,
-		Name:           finalOutcomeFormedConsumerName,
+		Name:           name,
 		EventType:      FinalOutcomeFormedEventType,
 		Decode:         decodeFormedFinalOutcome,
 		Handle:         handler.HandleFormedFinalOutcome,

@@ -86,6 +86,7 @@ type registrar struct {
 	arrangements *application.RegisterStatementArrangementHandler
 	sellTriggers *application.RegisterSellEvaluationTriggerHandler
 	moments      *application.RegisterSettlementMomentHandler
+	conditions   *application.RegisterChargeConfirmationConditionHandler
 	adoptions    *application.RegisterPreAcceptanceEstimateAdoptionHandler
 	sellMoments  *application.RegisterSellBillingMomentAdoptionHandler
 	feeMappings  *application.RegisterFeeItemMappingHandler
@@ -331,6 +332,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造结算触发登记：%w", err)
 	}
+	conditionStore, err := sapostgres.NewChargeConfirmationConditions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造确认条件目录：%w", err)
+	}
+	conditionHandler, err := application.NewRegisterChargeConfirmationConditionHandler(conditionStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造确认条件登记：%w", err)
+	}
 	adoptionStore, err := sapostgres.NewPreAcceptanceEstimateAdoptions(db)
 	if err != nil {
 		return none, fmt.Errorf("构造受理前估价采用册：%w", err)
@@ -380,6 +389,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		arrangements: arrangementHandler,
 		sellTriggers: sellTriggerHandler,
 		moments:      momentHandler,
+		conditions:   conditionHandler,
 		adoptions:    adoptionHandler,
 		sellMoments:  sellMomentHandler,
 		feeMappings:  feeItemMappingHandler,

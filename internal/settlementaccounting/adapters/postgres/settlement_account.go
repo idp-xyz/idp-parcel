@@ -119,6 +119,25 @@ func (repository *SettlementAccounts) Find(
 	return id, true, nil
 }
 
+// FindByID 按账户标识读回一整户，给确认事实随费用形成同笔落下那一步取固定属性与成立依据（ADR-0336 决定一）。
+func (repository *SettlementAccounts) FindByID(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.SettlementAccountID,
+) (domain.SettlementAccount, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.SettlementAccount{}, false, fmt.Errorf("find settlement account by id: %w", err)
+	}
+	account, found, err := scanAccount(querier.QueryRow(ctx, settlementAccountSelect+`
+		 WHERE tenant_id = $1 AND account_id = $2`,
+		tenant.String(), id.String()))
+	if err != nil {
+		return domain.SettlementAccount{}, false, fmt.Errorf("find settlement account by id: %w", err)
+	}
+	return account, found, nil
+}
+
 func (repository *SettlementAccounts) classify(
 	ctx context.Context,
 	querier interface {

@@ -116,7 +116,8 @@ func newGateFixture(t *testing.T, mappings gateMappings, evaluations ...ppdomain
 	formSell := must[*saapplication.FormSellCustomerChargeHandler](t)(saapplication.NewFormSellCustomerChargeHandler(view, charges))
 	formation := must[*saapplication.FormEstimatedCustomerChargeHandler](t)(saapplication.NewFormEstimatedCustomerChargeHandler(
 		saapplication.FormEstimatedCustomerChargeDeps{
-			Requests: requests, Conclusions: requests, Mappings: mappings, Charges: formSell, Clock: gateClock{},
+			Requests: requests, Conclusions: requests, Mappings: mappings, Charges: formSell, FollowUp: gateFollowUp{},
+			Clock: gateClock{},
 		}))
 	gate := must[*adapter.FormOnSellEvaluationRecordedAdapter](t)(adapter.NewFormOnSellEvaluationRecordedAdapter(view, formation))
 	return &gateFixture{gate: gate, requests: requests, charges: charges}
@@ -225,4 +226,13 @@ func TestTheSellGateRefusesNilDependencies(t *testing.T) {
 	if _, err := adapter.NewFormOnSellEvaluationRecordedAdapter(view, nil); err == nil {
 		t.Fatal("nil 形成编排被收下了")
 	}
+}
+
+// gateFollowUp 是形成之后的跟进替身：本文件钉的是消费门的分格，跟进那一步由 application 包的用例钉。
+type gateFollowUp struct{}
+
+func (gateFollowUp) AfterEstimatedChargeFormed(
+	context.Context, domain.TenantID, domain.SellEvaluationRequest, domain.CustomerChargeID,
+) error {
+	return nil
 }

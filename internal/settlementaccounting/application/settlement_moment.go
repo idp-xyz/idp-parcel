@@ -90,3 +90,32 @@ func (handler *RegisterSettlementMomentHandler) RegisterSettlementMoment(
 	}
 	return handler.moments.SaveSettlementMoment(ctx, tenant, moment, handler.clock.Now())
 }
+
+// RegisterChargeConfirmationConditionHandler 登记确认条件目录的一行：哪个费用项目要哪种确认依据（ADR-0336 决定二）。
+// 用哪种依据确认哪类费用是租户取值，本口不预选；落库时刻不是载荷的一格。
+type RegisterChargeConfirmationConditionHandler struct {
+	conditions ports.ChargeConfirmationConditionRegister
+	clock      ports.Clock
+}
+
+func NewRegisterChargeConfirmationConditionHandler(
+	conditions ports.ChargeConfirmationConditionRegister,
+	clock ports.Clock,
+) (*RegisterChargeConfirmationConditionHandler, error) {
+	if conditions == nil || clock == nil {
+		return nil, fmt.Errorf("%w: charge confirmation condition register", ErrNilDependency)
+	}
+	return &RegisterChargeConfirmationConditionHandler{conditions: conditions, clock: clock}, nil
+}
+
+func (handler *RegisterChargeConfirmationConditionHandler) RegisterChargeConfirmationCondition(
+	ctx context.Context,
+	tenant domain.TenantID,
+	feeItem domain.FeeItemReference,
+	kind domain.ConfirmationBasisKind,
+) (ports.CatalogueRegistrationEffect, error) {
+	if tenant.String() == "" || feeItem.String() == "" || kind.String() == "" {
+		return 0, fmt.Errorf("%w: charge confirmation condition", domain.ErrBlankValue)
+	}
+	return handler.conditions.SaveConfirmationCondition(ctx, tenant, feeItem, kind, handler.clock.Now())
+}

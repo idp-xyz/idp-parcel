@@ -73,6 +73,8 @@ const (
 	FeeItemMappingViewUnavailable
 	SellChargeFormationUndecided
 	SellEvaluationRequestRegisterUnavailable
+	// ConfirmationFollowUpUndecided：费用落下之后登确认事实或补记确认依据那一步没做成，整笔回滚重投（ADR-0336）。
+	ConfirmationFollowUpUndecided
 )
 
 func (reason EstimatedCustomerChargeUndecidedReason) String() string {
@@ -85,6 +87,8 @@ func (reason EstimatedCustomerChargeUndecidedReason) String() string {
 		return "SELL_CHARGE_FORMATION_UNDECIDED"
 	case SellEvaluationRequestRegisterUnavailable:
 		return "SELL_EVALUATION_REQUEST_REGISTER_UNAVAILABLE"
+	case ConfirmationFollowUpUndecided:
+		return "CONFIRMATION_FOLLOW_UP_UNDECIDED"
 	default:
 		return ""
 	}
@@ -140,7 +144,9 @@ type FormEstimatedCustomerChargeDeps struct {
 	Conclusions ports.SellEvaluationRequestConclusionRecorder
 	Mappings    ports.FeeItemMappingView
 	Charges     *FormSellCustomerChargeHandler
-	Clock       ports.Clock
+	// FollowUp 在费用落下之后、记结论之前同笔调：登确认事实，已终局的补记确认依据（ADR-0336 决定一、二）。
+	FollowUp EstimatedChargeFollowUp
+	Clock    ports.Clock
 }
 
 // FormEstimatedCustomerChargeHandler 是 ADR-0190 决定五的形成编排外层：SELL·客户费用评价已记录之后，按评价回指读回
@@ -151,7 +157,8 @@ type FormEstimatedCustomerChargeHandler struct {
 }
 
 func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps) (*FormEstimatedCustomerChargeHandler, error) {
-	if deps.Requests == nil || deps.Conclusions == nil || deps.Mappings == nil || deps.Charges == nil || deps.Clock == nil {
+	if deps.Requests == nil || deps.Conclusions == nil || deps.Mappings == nil || deps.Charges == nil || deps.FollowUp == nil ||
+		deps.Clock == nil {
 		return nil, fmt.Errorf("%w: estimated customer charge", ErrNilDependency)
 	}
 	return &FormEstimatedCustomerChargeHandler{deps: deps}, nil
@@ -237,6 +244,10 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	}
 	switch formed.Outcome() {
 	case SellChargeFormed, SellChargeAlreadyFormed:
+		// 已形成那一格也跟进：上一次落行之后整笔回滚过的话，事实与依据也跟着没了，跟进本身同键重放无害。
+		if err := handler.deps.FollowUp.AfterEstimatedChargeFormed(ctx, command.TenantID, record.Request, charge); err != nil {
+			return undecidedEstimatedCharge(ConfirmationFollowUpUndecided, err), nil
+		}
 		conclusion, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
 		if err != nil {
 			return EstimatedCustomerChargeResult{}, err

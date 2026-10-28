@@ -40,6 +40,7 @@ const (
 	commandStatementArrangement        = "statement-arrangement"
 	commandSellEvaluationTrigger       = "sell-evaluation-trigger"
 	commandSettlementMoment            = "settlement-moment"
+	commandChargeConfirmationCondition = "charge-confirmation-condition"
 	commandPreAcceptanceEstimate       = "pre-acceptance-estimate-adoption"
 	commandSellBillingMomentAdoption   = "sell-billing-moment-adoption"
 	commandFeeItemMapping              = "fee-item-mapping"
@@ -67,6 +68,7 @@ var allCommands = []string{
 	commandStatementArrangement,
 	commandSellEvaluationTrigger,
 	commandSettlementMoment,
+	commandChargeConfirmationCondition,
 	commandPreAcceptanceEstimate,
 	commandSellBillingMomentAdoption,
 	commandFeeItemMapping,
@@ -370,6 +372,19 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := catalogueAnswer(commandSettlementMoment, effect, moment.String())
+			return message, code, nil
+		}, nil
+	case commandChargeConfirmationCondition:
+		tenant, feeItem, kind, err := registrationjson.ChargeConfirmationConditionFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.conditions.RegisterChargeConfirmationCondition(ctx, tenant, feeItem, kind)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandChargeConfirmationCondition, effect, feeItem.String())
 			return message, code, nil
 		}, nil
 	case commandSellEvaluationTrigger:

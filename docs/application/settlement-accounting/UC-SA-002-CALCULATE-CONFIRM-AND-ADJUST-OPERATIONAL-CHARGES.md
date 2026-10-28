@@ -212,6 +212,10 @@
 | `AT-SA-210` | 发生项失效之后长出替代版本、交出已形成信封；另交来一版失效版本 | 替代版本照常发起 BUY 评价请求（请求自然键带新版本，是另一份请求）；失效版本不发起（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定八，部分停用 ADR-0208 决定五一句） |
 | `AT-SA-214` | 包裹计费时点那一路，SELL·客户费用评价待判断、不可计价或冲突，或评价已完成而费用行映不全、映到多个费用项目 | 不形成费用（含零金额）、不建占位费用，入账不重投；SELL 请求记`待判断`、`不可计价`或`冲突`连同停因，补登参数之后经续办另起新一代（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定三，[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三、五）。结果语义契约「待判断/冲突/未受理/未形成」一行要求保存的缺口与冲突、`AT-SA-177` 记录的缺口，在本路请求册上都只落到停因为止，是例外：缺的是哪个费用代码不落库，拿评价的费用代码对映射册重算；评价待判断缺的是哪一类按 `AT-SA-189` 分格记进停因，缺的具体哪一项（如读不出的那一条序列；本路没有缺换算步骤那一格，见 `AT-SA-188`）与冲突的明细留在评价上，经计价按回指读回；排除依据与评价引用照 `AT-SA-175` 留在评价上（ADR-0198 越权风险点 2、3） |
 | `AT-SA-215` | 包裹计费时点那一路的 SELL·客户费用评价，或回指在册请求的 BUY·供应商成本评价，已完成而合计为零（例如扣减恰好扣到零；按合同结算币判，跨币种时是评价内换算后的合计） | 负向结束，不是两侧矛盾：不形成费用或成本行（含零金额；替代版本上也不追加纠错版本），入账不重投；SELL 请求记`负向结束（零额）`，BUY 请求册记同名一格，都不带停因、不进续办队列，同一封重投不改；结算币种对不上请求快照、费用项目映射不全、发生项那一版已失效照各自那一格先答（[ADR-0306](../../adr/0306-a-completed-evaluation-totalling-zero-ends-its-request-negatively-without-a-charge.md) 决定一至三；部分停用 [ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四、ADR-0200 决定四、ADR-0169 决定二各一句与 ADR-0232 决定八两句）。生命周期「费用明细」一节「不成立……必须保存依据」在本路是例外，同 `AT-SA-214`、`AT-SA-183`：两本请求册上零额那一格不存评价引用与时刻，零额的依据（评价引用、版本清单、费用行与合计）留在评价上，经计价按回指读回 |
+| `AT-SA-217` | 包裹计费时点那一路形成一笔预估客户费用 | 同笔在确认事实册登上七项：结算账户、主要计费范围、来源事实取 SELL 请求，责任法人、相对方、方向取请求所指那一户的固定属性，合同依据取那一户的成立依据；册上已有异内容不覆盖；请求所指的账户不在册上整笔不作答、重投（[ADR-0336](../../adr/0336-confirmation-facts-land-with-the-estimated-charge-and-an-effective-delivery-final-is-the-built-in-confirmation-basis.md) 决定一） |
+| `AT-SA-218` | 已形成预估客户费用的包裹终局为有效交付；这一户为该费用项目登了`有效交付已终局`确认条件 | 给这笔费用记一份依据（引用为终局采用键）；登了确认时点就当场确认、交出费用确认信封，没登只记依据；终局不采用或不是有效交付不记；确认条件或确认事实没登答未配置、不重投（ADR-0336 决定二） |
+| `AT-SA-219` | 终局先于费用形成（例如按终局计费） | 费用形成那一笔回读到已终局的有效交付，同笔记依据并照 `AT-SA-218` 确认（ADR-0336 决定二） |
+| `AT-SA-220` | 受控登记口登确认条件 | 同一费用项目登同一种依据答重放，登另一种答冲突、不覆盖；产品不认得的依据种类当场拒（ADR-0336 决定二） |
 
 ## 生产参数与待决风险
 
@@ -230,6 +234,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| 费用确认：运营点名一笔费用补拍确认（ADR-0336 决定三） | 运营确认口尚无端点与决定种类；登确认时点之前已记依据的费用，今天只能等下一份依据 | [product-strategy-boundary/22](../../../.scratch/product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md) 第 2 笔 |
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。

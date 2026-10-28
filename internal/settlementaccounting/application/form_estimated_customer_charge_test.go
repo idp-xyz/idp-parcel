@@ -142,6 +142,7 @@ type estimatedChargeFixture struct {
 	requests *sellRequestRegisterDouble
 	mappings *feeItemMappingViewDouble
 	charges  *estimatedChargeStoreDouble
+	followUp *followUpDouble
 	adoption ports.SellEvaluationAdoption
 	handler  *application.FormEstimatedCustomerChargeHandler
 }
@@ -166,7 +167,8 @@ func newEstimatedChargeFixture(t *testing.T, items map[string]string) *estimated
 		t.Fatalf("SELL 请求：%v", err)
 	}
 	fixture := &estimatedChargeFixture{
-		tenant: tenant,
+		tenant:   tenant,
+		followUp: &followUpDouble{},
 		requests: &sellRequestRegisterDouble{records: map[string]ports.SellEvaluationRequestRecord{
 			tenant.String() + "/" + sellRequestID: {
 				Key:        ports.SellEvaluationRequestKey{TenantID: tenant, Request: request.ID()},
@@ -206,6 +208,7 @@ func (fixture *estimatedChargeFixture) build(t *testing.T) {
 		Conclusions: fixture.requests,
 		Mappings:    fixture.mappings,
 		Charges:     charges,
+		FollowUp:    fixture.followUp,
 		Clock:       fixedClock{at: estimatedChargeAt},
 	})
 	if err != nil {
@@ -295,6 +298,54 @@ func TestEveryChargeLineMappingToOneFeeItemFormsTheEstimatedCustomerCharge(t *te
 	if len(fixture.mappings.asked) != 2 {
 		t.Fatalf("映射册被问了 %v，want 两个不同代码各一次", fixture.mappings.asked)
 	}
+	// 形成之后同笔跟进一次，带的是那份请求与派生出的费用标识（ADR-0336 决定一）。
+	if len(fixture.followUp.charges) != 1 || fixture.followUp.charges[0] != derivedChargeID ||
+		fixture.followUp.requests[0] != sellRequestID {
+		t.Fatalf("跟进 = %v / %v，want 恰一次 %s / %s", fixture.followUp.charges, fixture.followUp.requests,
+			derivedChargeID, sellRequestID)
+	}
+}
+
+// Covers: AT-SA-217（ADR-0336 决定一）——跟进那一步没做成，外层答未决、不记结论，整笔由调用方回滚重投；停在待判断的各格不跟进。
+func TestAFailedFollowUpLeavesTheRequestUnconcluded(t *testing.T) {
+	fixture := newEstimatedChargeFixture(t, map[string]string{
+		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
+	})
+	fixture.followUp.err = errors.New("synthetic confirmation fact register down")
+
+	result, err := fixture.handle(t)
+	if err != nil || result.Outcome() != application.EstimatedCustomerChargeUndecided ||
+		result.UndecidedReason() != application.ConfirmationFollowUpUndecided {
+		t.Fatalf("结果 = %s / %s err = %v，want 未决 / CONFIRMATION_FOLLOW_UP_UNDECIDED", result.Outcome(), result.UndecidedReason(), err)
+	}
+	if stored := fixture.storedState(t); stored.State != domain.SellRequestSubmitted {
+		t.Fatalf("请求册 = %s，want 仍是已提交", stored.State)
+	}
+
+	pending := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
+	if _, err := pending.handle(t); err != nil {
+		t.Fatalf("映不全 err = %v", err)
+	}
+	if len(pending.followUp.charges) != 0 {
+		t.Fatalf("映不全也跟进了 %v", pending.followUp.charges)
+	}
+}
+
+type followUpDouble struct {
+	charges  []string
+	requests []string
+	err      error
+}
+
+func (double *followUpDouble) AfterEstimatedChargeFormed(
+	_ context.Context,
+	_ domain.TenantID,
+	request domain.SellEvaluationRequest,
+	charge domain.CustomerChargeID,
+) error {
+	double.charges = append(double.charges, charge.String())
+	double.requests = append(double.requests, request.ID().String())
+	return double.err
 }
 
 // Covers: AT-SA-174——任一费用行没有映射，记`待判断`，不建占位费用、不拿价格代码当费用项目。

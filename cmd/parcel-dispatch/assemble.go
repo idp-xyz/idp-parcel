@@ -2479,6 +2479,7 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 // （FormSellCustomerChargeCommand 头注）。映射册与请求册都是真册，空册时答`待判断`或「不归本编排」，不替租户配。
 func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 	db *bentopg.DB,
+	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
@@ -2506,11 +2507,16 @@ func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: fee item mapping register: %w", err)
 	}
+	followUp, err := formedChargeConfirmationFollowUp(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
 	formation, err := saapplication.NewFormEstimatedCustomerChargeHandler(saapplication.FormEstimatedCustomerChargeDeps{
 		Requests:    requests,
 		Conclusions: requests,
 		Mappings:    mappings,
 		Charges:     formSell,
+		FollowUp:    followUp,
 		Clock:       clock,
 	})
 	if err != nil {
