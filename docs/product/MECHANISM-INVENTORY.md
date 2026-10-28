@@ -6,12 +6,12 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 41 | 52 | 0 | 6 | 0 | 3 |
+| accessidentity | 41 | 56 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
-| customscompliance | 130 | 133 | 25 | 48 | 10 | 18 |
+| customscompliance | 133 | 136 | 25 | 48 | 10 | 21 |
 | networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
-| nodeoperations | 113 | 120 | 15 | 30 | 4 | 17 |
+| nodeoperations | 115 | 121 | 15 | 30 | 4 | 18 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
 | parcelshipment | 267 | 265 | 27 | 53 | 13 | 31 |
 | partycommercial | 177 | 197 | 15 | 43 | 1 | 43 |
@@ -20,11 +20,11 @@
 | settlementaccounting | 239 | 192 | 40 | 71 | 13 | 10 |
 | transportfulfillment | 307 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1727 | 1738 | 232 | 397 | 69 | 233 |
+| **合计** | 1732 | 1746 | 232 | 397 | 69 | 237 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 254、测试 413。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 262、测试 421。
 
-## 跨上下文消费缝：51 组，172 个生产文件
+## 跨上下文消费缝：51 组，173 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -40,7 +40,7 @@
 | networkrouting | parcelshipment | 4 |
 | networkrouting | partycommercial | 4 |
 | networkrouting | transportfulfillment | 1 |
-| nodeoperations | accessidentity | 6 |
+| nodeoperations | accessidentity | 7 |
 | nodeoperations | networkrouting | 1 |
 | nodeoperations | parcelshipment | 5 |
 | nodeoperations | partycommercial | 1 |
@@ -80,15 +80,15 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：12 个模块共 343 份 SQL
+## 迁移：12 个模块共 348 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 29 |
+| access_identity | 33 |
 | collection_remittance | 4 |
 | customs_compliance | 29 |
 | network_routing | 32 |
-| node_operations | 22 |
+| node_operations | 23 |
 | parcel_pricing | 14 |
 | parcel_shipment | 33 |
 | party_commercial | 42 |
@@ -97,7 +97,7 @@
 | transport_fulfillment | 51 |
 | visibility_exception | 32 |
 
-## 接线面：接入面端点 210 个，消费适配器 63 个生产文件，直投路由表 45 条
+## 接线面：接入面端点 216 个，消费适配器 63 个生产文件，直投路由表 45 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -105,9 +105,9 @@
 |---|---|
 | accessidentity | 3 |
 | collectionremittance | 1 |
-| customscompliance | 21 |
+| customscompliance | 25 |
 | networkrouting | 13 |
-| nodeoperations | 17 |
+| nodeoperations | 19 |
 | parcelpricing | 20 |
 | parcelshipment | 21 |
 | partycommercial | 40 |
@@ -115,7 +115,7 @@
 | settlementaccounting | 8 |
 | transportfulfillment | 50 |
 | visibilityexception | 15 |
-| **合计** | 210 |
+| **合计** | 216 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
