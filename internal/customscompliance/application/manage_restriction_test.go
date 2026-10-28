@@ -108,12 +108,8 @@ func restrictionSpec(t *testing.T, id string, constrains ...domain.GuardedAction
 	}
 }
 
-// Covers: UC-CC-011 的编排面——同 ID 重放返原限制不重立（`AT-CC-345`「相同限制形成请求和相同来源、范围、动作、依据再次到达」→「返回已有限制结果，不创建第二限制或重置开始时间」）；
-// 同 ID 异约束集是冒名冲突
-// 不顶替（`AT-CC-346`「相同限制请求身份携带不同来源、范围、动作或依据→形成限制请求
-// 冲突」；限制身份由建立它的监管决定给出，改内容要新限制）；解除只凭监管结果且重复
-// 解除按已解除作答（幂等不是错误，`AT-CC-370`「相同解除请求和相同内容重复到达→返回
-// 已有解除结果」）。
+// Covers: 监管限制的编排面（不是 UC-CC-011 的对象，ADR-0241 决定二）——同 ID 重放返原限制不重立；同 ID 异约束集是冒名冲突
+// 不顶替，限制身份由建立它的监管决定给出，改内容要新限制；解除只凭监管结果且重复解除按已解除作答（幂等不是错误）。
 func TestRestrictionsEstablishOnceAndReleaseIdempotently(t *testing.T) {
 	fixture := newRestrictionFixture(t)
 
@@ -184,9 +180,8 @@ func TestRestrictionsEstablishOnceAndReleaseIdempotently(t *testing.T) {
 }
 
 // Covers: CC CONTEXT「只有作用于当前对象和拟执行动作的全部阻断性限制均已解除，相应动作才可继续」的编排面——两条限制同时约束出库时部分解除仍阻断（清单列全）；全部
-// 解除后放行；不约束此动作或不同范围的限制不参与。点名 `AT-CC-347`「两个独立来源均
-// 限制同一对象……当前动作受全部有效限制共同阻断」与 `AT-CC-348`「S1 解除但 S2 仍
-// 有效→S1 的解除有效，S2 继续阻断」。
+// 解除后放行；不约束此动作或不同范围的限制不参与。这是监管限制册的事（ADR-0241 决定二）；
+// 内部合规限制的同形判据在 domain 包的适用性四格测试里。
 func TestActionJudgmentListsEveryBlockerUntilAllRelease(t *testing.T) {
 	fixture := newRestrictionFixture(t)
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")

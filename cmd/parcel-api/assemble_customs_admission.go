@@ -108,6 +108,10 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs restrictions: %w", err)
 	}
+	internalRestrictions, err := ccpostgres.NewInternalRestrictions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs internal restrictions: %w", err)
+	}
 	// 门禁目录与「税费付款」规则行同一只读适配器，付款核对当前版另一只——与放行门禁核对接的是同一批（读法也是同一份，
 	// assessReleaseGate）。
 	gates, err := ccpostgres.NewGateConditionView(db)
@@ -127,15 +131,16 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 		return none, fmt.Errorf("parcel-api: customs action admission judgements: %w", err)
 	}
 	judge, err := customsapp.NewJudgeActionAdmissionHandler(customsapp.JudgeActionAdmissionDeps{
-		Zones:             zoneView,
-		Scopes:            scopes,
-		Restrictions:      restrictions,
-		Conditions:        gates,
-		DutyRules:         gates,
-		DutyVerifications: dutyVerifications,
-		Releases:          releases,
-		Store:             judgements,
-		Clock:             systemClock{},
+		Zones:                zoneView,
+		Scopes:               scopes,
+		Restrictions:         restrictions,
+		InternalRestrictions: internalRestrictions,
+		Conditions:           gates,
+		DutyRules:            gates,
+		DutyVerifications:    dutyVerifications,
+		Releases:             releases,
+		Store:                judgements,
+		Clock:                systemClock{},
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs action admission orchestration: %w", err)

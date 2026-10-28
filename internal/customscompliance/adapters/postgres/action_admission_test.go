@@ -59,6 +59,8 @@ func newAdmissionDB(t *testing.T) *admissionDB {
 	construct(err)
 	restrictions, err := adapter.NewRestrictions(fixture.db)
 	construct(err)
+	internalRestrictions, err := adapter.NewInternalRestrictions(fixture.db)
+	construct(err)
 	gates, err := adapter.NewGateConditionView(fixture.db)
 	construct(err)
 	duty, err := adapter.NewDutyPaymentReconciliation(fixture.db)
@@ -69,15 +71,16 @@ func newAdmissionDB(t *testing.T) *admissionDB {
 	construct(err)
 	clock := &admissionDBClock{at: admissionDBAt.Add(time.Minute)}
 	handler, err := application.NewJudgeActionAdmissionHandler(application.JudgeActionAdmissionDeps{
-		Zones:             zoneView,
-		Scopes:            scopes,
-		Restrictions:      restrictions,
-		Conditions:        gates,
-		DutyRules:         gates,
-		DutyVerifications: duty,
-		Releases:          releases,
-		Store:             store,
-		Clock:             clock,
+		Zones:                zoneView,
+		Scopes:               scopes,
+		Restrictions:         restrictions,
+		InternalRestrictions: internalRestrictions,
+		Conditions:           gates,
+		DutyRules:            gates,
+		DutyVerifications:    duty,
+		Releases:             releases,
+		Store:                store,
+		Clock:                clock,
 	})
 	construct(err)
 	return &admissionDB{t: t, fixture: fixture, handler: handler, zones: zoneRegistry, clock: clock}
@@ -281,7 +284,7 @@ func TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease(t *testing
 		t.Fatalf("整次答复 = %s", admitted.Answer())
 	}
 
-	// 外部放行不解内部限制：直接落在包裹上的限制照挡。
+	// 外部放行不自动解除限制：直接落在包裹上的限制照挡。
 	db.restrictParcel("SYN-RESTRICTION-ADM-01", "CROSS_CUSTOMS_MOVEMENT")
 	_, blocked, _ := db.judge("SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB")
 	expectAdmission(t, admissionFinding(t, blocked, domain.CrossCustomsMovement), domain.AdmissionBlocked, domain.CauseRestrictionInForce)

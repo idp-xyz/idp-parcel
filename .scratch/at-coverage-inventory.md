@@ -60,11 +60,11 @@
 | `AT-CC-250` | internal/customscompliance/application/verify_disposition_test.go::TestFactFailuresStallAndIntentsRetry |
 | `AT-CC-307` | internal/customscompliance/application/close_customs_case_test.go::TestClosureIsBlockedItemByItemAndClosesOnceWhole |
 | `AT-CC-308` | internal/customscompliance/application/close_customs_case_test.go::TestClosureIsBlockedItemByItemAndClosesOnceWhole |
-| `AT-CC-345` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
-| `AT-CC-346` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
-| `AT-CC-347` | internal/customscompliance/application/manage_restriction_test.go::TestActionJudgmentListsEveryBlockerUntilAllRelease |
-| `AT-CC-348` | internal/customscompliance/application/manage_restriction_test.go::TestActionJudgmentListsEveryBlockerUntilAllRelease |
-| `AT-CC-370` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
+| `AT-CC-345` | internal/customscompliance/application/manage_internal_restriction_test.go::TestEstablishingAnInternalRestrictionReplaysAndRefusesChangedContent |
+| `AT-CC-346` | internal/customscompliance/application/manage_internal_restriction_test.go::TestEstablishingAnInternalRestrictionReplaysAndRefusesChangedContent |
+| `AT-CC-347` | internal/customscompliance/domain/internal_compliance_restriction_test.go::TestApplicabilityFoldsFourCellsAtTheActionInstant |
+| `AT-CC-348` | internal/customscompliance/domain/internal_compliance_restriction_test.go::TestApplicabilityFoldsFourCellsAtTheActionInstant |
+| `AT-CC-370` | internal/customscompliance/application/manage_internal_restriction_test.go::TestOnlyTheResponsibleSourcesDecisionsAreMadeAndReplayedFirst |
 | `AT-CC-380` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
 | `AT-CC-381` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
 | `AT-CC-387` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |

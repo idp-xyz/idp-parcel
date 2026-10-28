@@ -164,3 +164,9 @@ internal/customscompliance/domain ComplianceJudgmentSpec
 internal/customscompliance/domain ComplianceRuleVersionReference
 internal/customscompliance/domain ComplianceTopicReference
 internal/customscompliance/domain JudgmentMode
+
+# 内部合规限制适用性的判断结果：经 JudgeInternalApplicability 取得，而它只在 JudgeActionAdmission 的折叠里（包内）调用，
+# 包外没有消费方。等的是 UC-CC-003 就绪、UC-CC-009 门禁核对、UC-CC-010 关闭核对读内部合规限制的接线（ADR-0334 越权风险点
+# 7）；它们各自接上，要的正是这一份「四格加所涉限制标识」，到那时这两行随之出名单。
+internal/customscompliance/domain InternalApplicability
+internal/customscompliance/domain RestrictionApplicability

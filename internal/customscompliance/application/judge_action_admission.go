@@ -15,7 +15,7 @@ import (
 // 请求驱动（ADR-0137 决定二）：只在请求到达时判一次并记下，来源变化不后台重算。判断记录不入队：今天没有订阅者，
 // 消费方把答复随自己的事实同笔保存（票 demo-chain-gaps/32），这里的记录只为「当时凭什么这么答」可查、可重放。
 //
-// 三源各自的读法不在这里另写：限制按时点的适用性在 domain.JudgeActionAdmissibilityAt，门禁读数与放行门禁核对
+// 三源各自的读法不在这里另写：监管限制按时点的适用性在 domain.JudgeActionAdmissibilityAt，内部合规限制的在 domain.JudgeInternalApplicability，门禁读数与放行门禁核对
 // 共用 assessReleaseGate，放行事实只读 UC-CC-006 收下的那些。本编排只负责按对象解析出的范围把三源盘齐、交领域折。
 // 现有 VerifyReleaseGate 与它交出的 gate-verification.recorded 不因本编排改变——准入判断不登门禁核对册，也
 // 不替谁发门禁信封。
@@ -58,6 +58,7 @@ const (
 	NodeZoneViewUnavailable
 	ObjectScopeViewUnavailable
 	RestrictionViewUnavailable
+	InternalRestrictionViewUnavailable
 	AdmissionGateConditionsUnavailable
 	AdmissionDutyPaymentRuleUnavailable
 	AdmissionDutyVerificationsUnavailable
@@ -73,6 +74,8 @@ func (reason ActionAdmissionUnreadableReason) String() string {
 		return "OBJECT_SCOPE_VIEW_UNAVAILABLE"
 	case RestrictionViewUnavailable:
 		return "RESTRICTION_VIEW_UNAVAILABLE"
+	case InternalRestrictionViewUnavailable:
+		return "INTERNAL_RESTRICTION_VIEW_UNAVAILABLE"
 	case AdmissionGateConditionsUnavailable:
 		return "GATE_CONDITION_VIEW_UNAVAILABLE"
 	case AdmissionDutyPaymentRuleUnavailable:
@@ -123,15 +126,17 @@ func admissionUnreadable(reason ActionAdmissionUnreadableReason) JudgeActionAdmi
 
 // JudgeActionAdmissionDeps 是准入编排要问的各口。门禁那三口与放行门禁核对同型，生产上接同一批适配器。
 type JudgeActionAdmissionDeps struct {
-	Zones             ports.NodeCustomsZoneView
-	Scopes            ports.ObjectCustomsScopeView
-	Restrictions      ports.RestrictionScopeView
-	Conditions        ports.GateConditionView
-	DutyRules         ports.DutyPaymentGateRuleView
-	DutyVerifications ports.CurrentDutyVerificationView
-	Releases          ports.ReleaseOutcomeView
-	Store             ports.ActionAdmissionJudgementStore
-	Clock             ports.Clock
+	Zones        ports.NodeCustomsZoneView
+	Scopes       ports.ObjectCustomsScopeView
+	Restrictions ports.RestrictionScopeView
+	// InternalRestrictions 是内部合规限制册的读口，与监管限制册是两本（ADR-0334）；漏接在构造时炸出来，不静默当空册。
+	InternalRestrictions ports.InternalRestrictionScopeView
+	Conditions           ports.GateConditionView
+	DutyRules            ports.DutyPaymentGateRuleView
+	DutyVerifications    ports.CurrentDutyVerificationView
+	Releases             ports.ReleaseOutcomeView
+	Store                ports.ActionAdmissionJudgementStore
+	Clock                ports.Clock
 }
 
 type JudgeActionAdmissionHandler struct {
@@ -148,6 +153,7 @@ func NewJudgeActionAdmissionHandler(deps JudgeActionAdmissionDeps) (*JudgeAction
 		{"node customs zone view", deps.Zones == nil},
 		{"object customs scope view", deps.Scopes == nil},
 		{"restriction scope view", deps.Restrictions == nil},
+		{"internal restriction scope view", deps.InternalRestrictions == nil},
 		{"gate condition view", deps.Conditions == nil},
 		{"duty payment gate rule view", deps.DutyRules == nil},
 		{"current duty verification view", deps.DutyVerifications == nil},
@@ -228,6 +234,15 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 		}
 		restrictions = append(restrictions, listed...)
 	}
+	// 内部合规限制册另读一口，读不动指名它自己：不当作无内部限制，也不折成未决（ADR-0334 决定六）。
+	var internalRestrictions []domain.InternalRestriction
+	for _, decisionScope := range distinctScopes(restrictionScopes) {
+		listed, err := handler.deps.InternalRestrictions.ListInternalByScope(ctx, command.TenantID, decisionScope)
+		if err != nil {
+			return admissionUnreadable(InternalRestrictionViewUnavailable), nil
+		}
+		internalRestrictions = append(internalRestrictions, listed...)
+	}
 
 	gated := applicability.Guarded()
 	if applicability.CrossZone() == domain.CrossZoneUndetermined {
@@ -267,16 +282,17 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 	}
 
 	judgement, err := domain.JudgeActionAdmission(domain.ActionAdmissionInput{
-		Object:             command.Object,
-		Intent:             command.Intent,
-		At:                 command.At,
-		Zones:              zones,
-		TenantZonesInForce: tenantZonesInForce,
-		Scope:              scope,
-		Restrictions:       restrictions,
-		Gates:              gates,
-		Releases:           releases,
-		JudgedAt:           handler.deps.Clock.Now(),
+		Object:               command.Object,
+		Intent:               command.Intent,
+		At:                   command.At,
+		Zones:                zones,
+		TenantZonesInForce:   tenantZonesInForce,
+		Scope:                scope,
+		Restrictions:         restrictions,
+		InternalRestrictions: internalRestrictions,
+		Gates:                gates,
+		Releases:             releases,
+		JudgedAt:             handler.deps.Clock.Now(),
 	})
 	if err != nil {
 		return JudgeActionAdmissionResult{}, err
