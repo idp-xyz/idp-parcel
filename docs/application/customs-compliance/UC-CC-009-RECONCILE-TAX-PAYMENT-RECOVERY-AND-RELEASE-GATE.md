@@ -152,9 +152,9 @@
 | 结果码 | 对应上表 | 何时 |
 |---|---|---|
 | 门禁核对 `RECORDED` / `EXISTING_RESULT`，结论 `UNMET`、`PARTIALLY_MET`、`MET`、`CONFLICTING`、`NOT_APPLICABLE` | 放行门禁待满足、部分满足、已满足、冲突、不适用 | 形成或重放一版门禁核对；交发布意图失败照答已形成，带续办引用 `CONT-GATE/…` |
-| 门禁核对 `NOT_ACCEPTED` | 未受理 | 请求缺租户、申报范围或监管边界，或动作不在词表内；读回的认定清单折不出结论时今天也答这一格——与「未受理」的定义（不能合法关联）对不上，动作准入同一情形答读不动，缺陷见 [docs-consistency/code/34](../../../.scratch/docs-consistency/code/34-release-gate-verification-answers-not-accepted-when-recorded-findings-do-not-fold.md) |
+| 门禁核对 `NOT_ACCEPTED` | 未受理 | 请求缺租户、申报范围或监管边界，或动作不在词表内；请求本身不能合法关联才答这一格，读回的认定清单折不出结论不在此列（见下方 `GATE_CONDITION_VIEW_UNAVAILABLE` 一行） |
 | 门禁核对 `UNDECIDED` + `GATE_CATALOG_NOT_CONFIGURED`、`DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED`、`DUTY_PAYMENT_FINDING_REGISTERED_BESIDE_RULE`、`DUTY_VERIFICATION_ABSENT`、`DUTY_VERIFICATION_PENDING` | 放行门禁核对未决 | 目录或规则没登、规则旁另登了认定；没有付款核对，或三态待确认、冲突 |
-| 门禁核对 `UNDECIDED` + `GATE_CONDITION_VIEW_UNAVAILABLE`、`DUTY_PAYMENT_GATE_RULE_VIEW_UNAVAILABLE`、`DUTY_VERIFICATION_VIEW_UNAVAILABLE`、`GATE_STORE_UNAVAILABLE` | 未形成税费/门禁核对 | 门禁目录、税费付款规则、付款核对读不动，或门禁核对册写不进；整笔不落，续办是运维去救、原样重试 |
+| 门禁核对 `UNDECIDED` + `GATE_CONDITION_VIEW_UNAVAILABLE`、`DUTY_PAYMENT_GATE_RULE_VIEW_UNAVAILABLE`、`DUTY_VERIFICATION_VIEW_UNAVAILABLE`、`GATE_STORE_UNAVAILABLE` | 未形成税费/门禁核对 | 门禁目录、税费付款规则、付款核对读不动，或门禁核对册写不进；门禁目录读回的认定清单折不出结论（册上认定不合法）同归 `GATE_CONDITION_VIEW_UNAVAILABLE`，与动作准入同一事实同一答法；整笔不落，续办是运维去救、原样重试 |
 | 付款核对 `DUTY_VERIFICATION_FORMED` / `EXISTING_DUTY_VERIFICATION` | 税费付款核对的覆盖、差额、有效性各状态 | 人重核形成或重放一版核对；交结算意图失败照答已形成，带续办引用 `CONT-DUTY-VERIFICATION/…` 与原始交接错误 |
 | 付款核对 `NOT_ACCEPTED` | 未受理 | 请求缺坐标或不成立 |
 | 付款核对 `UNDECIDED` + `DUTY_OBLIGATION_BASIS_ABSENT`、`PAYER_REQUIREMENT_NOT_CONFIGURED`、`PAYER_REQUIRED_NOT_PROVIDED` | 付款核对未决（上表未单列这一格，见 `AT-CC-260`、`AT-CC-266`） | 等税费结果、等登记方补付款人规则或等来源补付款人；重投同样内容不会变 |

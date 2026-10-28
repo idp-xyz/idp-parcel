@@ -184,7 +184,11 @@ func (handler *VerifyReleaseGateHandler) Handle(
 		return gateUndecided(assessment.reason), nil
 	}
 	if assessment.foldRefused {
-		return VerifyReleaseGateResult{outcome: GateVerificationNotAccepted}, nil
+		// 请求没错，是册上读回的认定不合法——「未受理」指请求不能合法关联、续办是改请求，
+		// 改请求换不来结果。与动作准入同一事实同一答法：读不动并指名门禁目录那一口，
+		// 与目录读到坏行同归 GATE_CONDITION_VIEW_UNAVAILABLE；不另立原因码，恢复动作同样
+		// 是运维去救登记（ADR-0029 按恢复动作分格）。
+		return gateUndecided(GateConditionViewUnavailable), nil
 	}
 	findings, reading, applied := assessment.findings, assessment.reading, assessment.applied
 
@@ -262,7 +266,7 @@ type releaseGateSources struct {
 
 // releaseGateAssessment 是一道门禁读到哪一步、读出了什么。reason 非零即停在那个停点（含依赖读不动）；
 // foldRefused 说认定清单折不出结论（读回的认定不合法）。它不并进 reason：两条编排各按自己的答复格归它，
-// 门禁读法不替它们选格。
+// 门禁读法不替它们选格；两条编排都把它归到门禁目录读不动那一格（核对答未决、准入答读不动）。
 type releaseGateAssessment struct {
 	reason      VerifyGateUndecidedReason
 	foldRefused bool

@@ -479,3 +479,25 @@ func TestTheGateHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		}
 	}
 }
+
+// Covers: UC-CC-009 首发结果码对照——门禁目录读回的认定折不出结论（册上认定不合法）答未决并指名门禁目录那一口，
+// 不答「未受理」（请求没错，改请求换不来结果），也不落册、不发意图；与动作准入同一情形同一归法
+// （AT-CC-424 的门禁目录那一支）。
+func TestFindingsThatDoNotFoldAnswerUndecidedNamingTheGateCatalogue(t *testing.T) {
+	fixture := newGateFixture(t)
+	fixture.conditions.findings = []domain.PreconditionFinding{
+		finding(t, "DISPOSITION/verified", domain.PreconditionStateInvalid),
+	}
+
+	result, err := fixture.handler.Handle(context.Background(), gateCommand(t))
+	if err != nil {
+		t.Fatalf("读回坏认定不是编程错误：%v", err)
+	}
+	if result.Outcome() != application.GateVerificationUndecided ||
+		result.UndecidedReason() != application.GateConditionViewUnavailable {
+		t.Fatalf("outcome = %q reason = %q；要未决 / GATE_CONDITION_VIEW_UNAVAILABLE", result.Outcome(), result.UndecidedReason())
+	}
+	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+		t.Fatal("折不出结论的门禁落了册或发了意图")
+	}
+}
