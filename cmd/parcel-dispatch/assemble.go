@@ -735,7 +735,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: dispatcher: %w", err)
 	}
-	return dispatcher, nil
+	cycles, err := cutOffStatementsOnCycle(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	return cycleCutBeat{dispatch: dispatcher, cycles: cycles, transactor: db.Transactor()}, nil
 }
 
 // logDeliveryFailure 是 ADR-0095 Decision 二那个观察口在本装配点的实现。

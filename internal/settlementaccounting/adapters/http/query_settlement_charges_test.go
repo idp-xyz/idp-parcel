@@ -359,3 +359,33 @@ func TestFailingChargeReadsAreNoAnswerRatherThanEmptyRegisters(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-SA-223（读口半边）——客户费用行透出归属日与所在对账单，名字是 attributionDate、billedOn；没形成或没出账就不出现这一键，
+// 不印成空串。
+func TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn(t *testing.T) {
+	register := &stubChargeCatalogue{
+		charges: []ports.CustomerChargeCatalogueRow{
+			{Charge: "SYN-CHG-BILLED", Stage: "CONFIRMED", FormedAt: catalogueBaseAt, AttributionDate: "2026-10-31", BilledOn: "SYN-STMT-01"},
+			{Charge: "SYN-CHG-OPEN", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
+		},
+	}
+	response := serveGet(chargesEndpoint(register), "/settlement-charges?registry=customer-charge")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Charges []map[string]any `json:"charges"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Charges[0]["attributionDate"] != "2026-10-31" || body.Charges[0]["billedOn"] != "SYN-STMT-01" {
+		t.Fatalf("出账那一行 = %v", body.Charges[0])
+	}
+	if _, has := body.Charges[1]["attributionDate"]; has {
+		t.Fatalf("没形成归属日也印了这一键：%v", body.Charges[1])
+	}
+	if _, has := body.Charges[1]["billedOn"]; has {
+		t.Fatalf("没出账也印了这一键：%v", body.Charges[1])
+	}
+}

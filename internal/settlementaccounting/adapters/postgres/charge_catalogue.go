@@ -65,6 +65,14 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 		        c.responsible_entity, c.counterparty_ref, c.charge_direction,
 		        c.settlement_account_id, c.contract_basis, c.primary_charging_scope,
 		        c.source_fact_ref,
+		        to_char(c.attribution_date, 'YYYY-MM-DD'),
+		        (SELECT s.statement_number
+		           FROM settlement_accounting.customer_statement AS s
+		          WHERE s.tenant_id = c.tenant_id
+		            AND s.voided_at IS NULL
+		            AND s.lines @> jsonb_build_array(jsonb_build_object('charge', c.charge_id))
+		          ORDER BY s.published_at, s.statement_number
+		          LIMIT 1),
 		        req.required_basis_kind,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -102,6 +110,8 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			conversionStep    *string
 			confirmationBasis *string
 			requiredBasisKind *string
+			attributionDate   *string
+			billedOn          *string
 			formedAt          time.Time
 			confirmedAt       *time.Time
 			basesJSON         []byte
@@ -115,6 +125,7 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			&facts.responsibleEntity, &facts.counterparty, &facts.direction,
 			&facts.settlementAccount, &facts.contractBasis, &facts.primaryChargingScope,
 			&facts.sourceFact,
+			&attributionDate, &billedOn,
 			&requiredBasisKind,
 			&basesJSON,
 		); err != nil {
@@ -132,6 +143,10 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 		row.PrimaryChargingScope = catalogueText(facts.primaryChargingScope)
 		row.SourceFact = catalogueText(facts.sourceFact)
 		row.RequiredBasisKind = catalogueText(requiredBasisKind)
+		// 归属日与所在对账单给运营列截单清单用（ADR-0339 决定三）。所在对账单的判据与截单的出账锁（LockChargeBilling）
+		// 同一条：未作废的已发布单的行里有这笔费用，取法也同，按发布时刻与单号取第一张。截单不读这两格，照旧当场判。
+		row.AttributionDate = catalogueText(attributionDate)
+		row.BilledOn = catalogueText(billedOn)
 		row.FormedAt = formedAt.UTC()
 		row.ConfirmedAt = catalogueInstant(confirmedAt)
 

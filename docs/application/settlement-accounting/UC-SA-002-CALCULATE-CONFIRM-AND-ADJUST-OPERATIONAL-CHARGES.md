@@ -216,6 +216,7 @@
 | `AT-SA-218` | 已形成预估客户费用的包裹终局为有效交付；这一户为该费用项目登了`有效交付已终局`确认条件 | 给这笔费用记一份依据（引用为终局采用键）；登了确认时点就当场确认、交出费用确认信封，没登只记依据；终局不采用或不是有效交付不记；确认条件或确认事实没登答未配置、不重投（ADR-0336 决定二） |
 | `AT-SA-219` | 终局先于费用形成（例如按终局计费） | 费用形成那一笔回读到已终局的有效交付，同笔记依据并照 `AT-SA-218` 确认（ADR-0336 决定二） |
 | `AT-SA-220` | 受控登记口登确认条件 | 同一费用项目登同一种依据答重放，登另一种答冲突、不覆盖；产品不认得的依据种类当场拒（ADR-0336 决定二） |
+| `AT-SA-221` | 持`费用确认`授予的人经运营确认口点名一笔费用 | 先过确认时点门：没登答 `SETTLEMENT_MOMENT_UNCONFIGURED`、不调确认；登了照确认编排答确认、已确认、条件未满足，或确认条件、确认事实没登的未决（都是答案）；时点册或依赖读不动、确认信封没交出去不形成答案；不持这一种授予答未授予（[ADR-0339](../../adr/0339-charge-confirmation-and-statement-publication-are-operator-decisions-and-a-registered-statement-cycle-cuts-on-its-closing-dates.md) 决定一） |
 
 ## 生产参数与待决风险
 
@@ -234,7 +235,6 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| 费用确认：运营点名一笔费用补拍确认（ADR-0336 决定三） | 运营确认口尚无端点与决定种类；登确认时点之前已记依据的费用，今天只能等下一份依据 | [product-strategy-boundary/22](../../../.scratch/product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md) 第 2 笔 |
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。

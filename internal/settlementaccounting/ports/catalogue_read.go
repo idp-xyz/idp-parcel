@@ -76,6 +76,9 @@ type CustomerChargeCatalogueRow struct {
 	ConfirmedAt          *time.Time
 	RequiredBasisKind    string
 	ConfirmationBases    []ChargeConfirmationBasisEntry
+	// AttributionDate 是已形成的结算归属日（YYYY-MM-DD），没形成为空。BilledOn 是这笔费用所在的未作废对账单号，没出账为空。
+	AttributionDate string
+	BilledOn        string
 }
 
 // SupplierExpectedCostCatalogueRow 是供应商预期成本版本册上列的一行。

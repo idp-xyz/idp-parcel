@@ -119,3 +119,27 @@ func (handler *RegisterChargeConfirmationConditionHandler) RegisterChargeConfirm
 	}
 	return handler.conditions.SaveConfirmationCondition(ctx, tenant, feeItem, kind, handler.clock.Now())
 }
+
+// RegisterStatementCycleHandler 登一户的对账周期（ADR-0339 决定三）。切法与截止日是租户取值，本口不预选；落库时刻不是载荷的一格。
+type RegisterStatementCycleHandler struct {
+	cycles ports.StatementCycleRegister
+	clock  ports.Clock
+}
+
+func NewRegisterStatementCycleHandler(cycles ports.StatementCycleRegister, clock ports.Clock) (*RegisterStatementCycleHandler, error) {
+	if cycles == nil || clock == nil {
+		return nil, fmt.Errorf("%w: statement cycle register", ErrNilDependency)
+	}
+	return &RegisterStatementCycleHandler{cycles: cycles, clock: clock}, nil
+}
+
+func (handler *RegisterStatementCycleHandler) RegisterStatementCycle(
+	ctx context.Context,
+	tenant domain.TenantID,
+	cycle domain.StatementCycle,
+) (ports.CatalogueRegistrationEffect, error) {
+	if tenant.String() == "" || cycle.Account().String() == "" {
+		return 0, fmt.Errorf("%w: statement cycle", domain.ErrBlankValue)
+	}
+	return handler.cycles.SaveStatementCycle(ctx, tenant, cycle, handler.clock.Now())
+}

@@ -220,3 +220,25 @@ func TestTheCatalogueCommandsTranslateBeforeTheTransaction(t *testing.T) {
 		t.Fatal("最低消费行收下了保底量")
 	}
 }
+
+// Covers: AT-SA-220、AT-SA-224——确认条件与对账周期两条命令在事务之前译装：载荷形状与取值不对当场拒，不开事务。
+func TestTheConditionAndCycleCommandsTranslateBeforeTheTransaction(t *testing.T) {
+	for command, body := range map[string]string{
+		commandChargeConfirmationCondition: `{"tenantId":"SYN-T1","feeItem":"SYN-FEE-1","basisKind":"EFFECTIVE_DELIVERY_FINALIZED"}`,
+		commandStatementCycle:              `{"tenantId":"SYN-T1","accountId":"ACCT-1","kind":"MONTHLY","closingMonthDay":0,"since":"2026-10-01"}`,
+	} {
+		if dispatch, err := commandFor(command, []byte(body)); err != nil || dispatch == nil {
+			t.Fatalf("%s 译装失败：dispatch=%v err=%v", command, dispatch, err)
+		}
+	}
+	for name, tc := range map[string]struct{ command, body string }{
+		"不认得的依据种类": {commandChargeConfirmationCondition, `{"tenantId":"SYN-T1","feeItem":"SYN-FEE-1","basisKind":"DELIVERED"}`},
+		"月截 29 号":  {commandStatementCycle, `{"tenantId":"SYN-T1","accountId":"ACCT-1","kind":"MONTHLY","closingMonthDay":29,"since":"2026-10-01"}`},
+		"周截不点星期几":  {commandStatementCycle, `{"tenantId":"SYN-T1","accountId":"ACCT-1","kind":"WEEKLY","since":"2026-10-01"}`},
+		"周期带截单时刻":  {commandStatementCycle, `{"tenantId":"SYN-T1","accountId":"ACCT-1","kind":"DAILY","since":"2026-10-01","cutoffMinute":0}`},
+	} {
+		if _, err := commandFor(tc.command, []byte(tc.body)); err == nil {
+			t.Fatalf("%s 被收下了", name)
+		}
+	}
+}

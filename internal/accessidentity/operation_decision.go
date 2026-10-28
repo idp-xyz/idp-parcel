@@ -162,6 +162,13 @@ const DecisionReleaseGateVerification DecisionKind = "RELEASE_GATE_VERIFICATION"
 // 也不与现场执行事实登记（作业事实登记面的 NODE_COLLABORATION_EXECUTION）共用：能承接的人不因此能替现场登记已做了什么。
 const DecisionNodeCollaborationAcceptance DecisionKind = "NODE_COLLABORATION_ACCEPTANCE"
 
+// 结算的两种运营决定（ADR-0339 决定一、二）：点名一笔客户费用补拍确认，与发布一期客户对账单。确认只把一笔费用按它自己的确认条件
+// 定格，发布要列一期的费用、报合计并固定单号与账期，做这两件事的通常不是同一批人，授予分开。
+const (
+	DecisionChargeConfirmation   DecisionKind = "CHARGE_CONFIRMATION"
+	DecisionStatementPublication DecisionKind = "STATEMENT_PUBLICATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -190,6 +197,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCustomsCaseClosure,
 	DecisionReleaseGateVerification,
 	DecisionNodeCollaborationAcceptance,
+	DecisionChargeConfirmation, DecisionStatementPublication,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

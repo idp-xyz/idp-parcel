@@ -16,6 +16,9 @@ coverage.out
 # catch. Keep the leading slash: unanchored, the pattern would also ignore the
 # cmd/<name>/ source directories.
 /parcel-*
+# 在 cmd/<进程>/ 目录里 go build 产出的同名二进制。
+/cmd/*/parcel-*
+!/cmd/*/parcel-*.go
 
 # Go caches pointed at the repository root. They must never be committed, and
 # they are worth naming here for a second reason: several architecture gates walk

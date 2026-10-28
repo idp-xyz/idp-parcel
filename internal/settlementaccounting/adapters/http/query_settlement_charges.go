@@ -126,6 +126,8 @@ func serveCustomerCharges(
 			ConfirmedAt:          optionalInstant(row.ConfirmedAt),
 			RequiredBasisKind:    row.RequiredBasisKind,
 			ConfirmationBases:    bases,
+			AttributionDate:      row.AttributionDate,
+			BilledOn:             row.BilledOn,
 		})
 	}
 	writeJSON(response, http.StatusOK, customerChargeListResponse{
@@ -215,6 +217,8 @@ type customerChargeBody struct {
 	ConfirmedAt          string                        `json:"confirmedAt,omitempty"`
 	RequiredBasisKind    string                        `json:"requiredBasisKind,omitempty"`
 	ConfirmationBases    []chargeConfirmationBasisBody `json:"confirmationBases"`
+	AttributionDate      string                        `json:"attributionDate,omitempty"`
+	BilledOn             string                        `json:"billedOn,omitempty"`
 }
 
 // chargeConfirmationBasisBody 逐字段透出一种已到达的确认依据。「到了哪几种」与

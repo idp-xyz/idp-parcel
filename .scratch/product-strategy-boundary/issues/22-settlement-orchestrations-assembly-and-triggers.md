@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2–4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口）完工待评审，分支 claude-psb22（见文末「第 2 笔完成记录」）；第 3、4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -65,3 +65,49 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **全量真库**：`scripts/test-full.sh` 在推送的 tip 上退 0，160 个包 ok，0 FAIL。
 - **种子**：`seed.sh` 灌一次性库 `psb22_seed` 退 0，用完已删。
 - **推送**：`git push origin 53c514602:main`，`origin/main` 等于该 SHA。
+
+## 第 2 笔完成记录（分支 claude-psb22，rebase 于 main `2d0193336`）
+
+- **做了什么**：
+  - **两种运营决定**：`CHARGE_CONFIRMATION`、`STATEMENT_PUBLICATION`（`accessidentity`，迁移 `access_identity/0034`；CHECK 全集以 main 上 0029 为底）。
+  - **SA 两口**：`NewConfirmChargeEndpoint`、`NewPublishStatementEndpoint`，以及 `OperatorDecisionIntake` 上的两个 Intake。parcel-api 特性文件 `endpoints_settlement_decisions.go` 挂 `/settlement-charge-confirmations` 与 `/settlement-statement-publications`。
+  - **客户费用读口**：多 `attributionDate`、`billedOn` 两格。
+  - **到点截单**（用户 2026-10-28 答「自动截单」）：
+    - 领域 `StatementCycle`（日截、周截、月截与起算日）；
+    - 迁移 `settlement_accounting/0049`，即对账周期册与截止记录；
+    - 编排 `CutOffStatementsOnCycleHandler`；
+    - dispatch 的 `assemble_cycle_cut.go`：派发器外包一层，每拍之后逐户截；
+    - CLI 命令 `statement-cycle`。
+- **裁决**：ADR-0339（原拟 0337、0338，号都被别的票先占，改号）。决定三改为到点截单。CONTEXT「对账安排」与「结算账户、对账与争议」两处、GLOSSARY「对账安排」各补一句；ADR-0269 那句「本期边界由截单命令点名」照旧成立，不停用。
+- **文档**：UC-SA-002 加 `AT-SA-221`，删掉「运营确认口归第 2 笔」那行交接；UC-SA-003 加 `AT-SA-222`–`224`。
+- **自验**（真库）：受影响各包加 `internal/architecture`、`migrations` 全过。真库用例：
+  - parcel-api 两口的纵向用例；
+  - dispatch `TestTheDispatchBeatCutsADueCycleIntoAPublishedStatement`：确认那一拍归属日没关上不出单；归属日拨到前天后一拍出一张单，收这一笔、合计 10500；之后的截止日只记无费用；再一拍不多出单。
+- **评审第一轮**（钉 `8178355da`，非作者隔离评审）：两条阻断，都已修。
+  - **B1**：误把 `cmd/parcel-api/parcel-api` 二进制提交进来。已从那一笔拿掉、改写了提交；`.gitignore` 补了 `/cmd/*/parcel-*`。
+  - **B2**：迁移 CHECK 漏了 main 上新加的决定种类。rebase 后改号 0030，以 0029 为底。
+  - **建议 N1–N5**：已修。截单时刻固定一次；发布口各格在 Intake 校验，申报合计只收不带符号与前导零的整数串；`billedOn` 排序与出账锁一致；删掉 `main.go` 里多余的那次构造和计数注释；补读口 JSON 与发布口载荷的用例。
+  - **N6**：票面完成判据的措辞，收票时对齐。
+- **评审 N7 没收**：确认与截单编排在两个进程各装一份，到点截单又多了一处。仓里没有给多个 cmd 共用的装配包，新开一个是架构取舍，不在本票范围。
+
+**第二轮评审**（钉 `5ffe1187c`）：B1、B2、N1–N5 复核已修。新增两条阻断，都已修：
+
+- **B3**：确认时判不出归属日的费用，到点截单永远收不到（候选 SQL 的 NULL 比较）。修法：截之前先给这一户这类费用当场补判、判出即落库，与截单编排判同一只；判不出这一户停住、不记截止日，报 `ErrCycleCutUnconfigured`。dispatch 真库用例改走这一格：清空归属日、确认时刻拨回两天，执行器补判之后截进那一期。
+- **B4**：「对账周期是不是对账安排的一部分」，文档前后不一。按 (a) 处理：周期是对账安排之下的第二本册，同步改了领域头注、迁移头注和 ADR-0339 决定三之 1；ADR-0339 写明回答了 ADR-0269 越权风险点 5。CONTEXT 与 GLOSSARY 原有的「属于对账安排」照旧成立，不停用任何 ADR。
+
+建议这样处理：
+
+- **N8** 改注释：起算日只定第一个截止日从哪天之后算起，不是费用的下限。
+- **N9** 截单时点门挪到最前面，没登就什么都不记。
+- **N10** 日志按等依赖、未配置、矛盾分开记（`cycleCutFailureKind`）；没有退避，记进越权风险点 4。
+- **N11** 记进越权风险点 3。
+- **N13** `ClosingInstant` 改按墙钟取截单时刻。
+- **N14** 补了 CLI 两条命令的译装用例。候选 SQL 各排除条件（已出账、币种不符）与跨进程并发截，仍没有专门用例。
+- **N15** ADR 的取证 SHA 已更新。
+- **N12** 同 N7，不收。
+
+**第三轮评审**（钉 `023a3bc83`）：阻断清零，可合入。B3、B4 修法成立；dispatch 真库用例确实走到补判那一格，上海 18 点前后两种情形期望都自洽。新提三条建议：
+
+- **N16**（一笔判不出归属日让整户停截）：记进 ADR-0339 越权风险点 5。
+- **N17**（缺来源时点的费用被静默跳过）：记进越权风险点 6。
+- **N18**（时点门判停时，没登对账安排的户每拍报一条日志）：与 N10 同类，不另收。

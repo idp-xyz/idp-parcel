@@ -275,11 +275,6 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return nil, err
 	}
-	// 结算编排入口（票 product-strategy-boundary/12「结算编排的生产入口与触发面」）：七个构造接在这里。确认与截单没登记答未配置。
-	if _, err := buildSettlementOrchestrations(db); err != nil {
-		return nil, err
-	}
-
 	return assembleBusinessEndpoints(endpointSources{
 		db:                   db,
 		isolatedWrite:        startup.isolatedWrite,

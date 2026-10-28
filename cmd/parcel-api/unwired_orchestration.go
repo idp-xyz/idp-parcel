@@ -2019,3 +2019,21 @@ func (unwiredResults) Handle(
 ) (customsapp.ReceiveExternalResultResult, error) {
 	return customsapp.ReceiveExternalResultResult{}, errOrchestrationNotWired
 }
+
+type unwiredChargeConfirmation struct{}
+
+func (unwiredChargeConfirmation) Confirm(
+	context.Context,
+	settlementapp.ConfirmChargeCommand,
+) (settlementapp.SettlementMomentOutcome, settlementapp.ConfirmChargeResult, error) {
+	return 0, settlementapp.ConfirmChargeResult{}, errOrchestrationNotWired
+}
+
+type unwiredStatementPublication struct{}
+
+func (unwiredStatementPublication) CutOff(
+	context.Context,
+	settlementapp.PublishStatementCommand,
+) (settlementapp.SettlementMomentOutcome, settlementapp.StatementResult, error) {
+	return 0, settlementapp.StatementResult{}, errOrchestrationNotWired
+}

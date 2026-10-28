@@ -1888,7 +1888,7 @@ Status: Confirmed
 
 一个结算账户对账所用的业务时区、截单时刻与对账周期。
 
-- 所有者：`settlement-accounting`。业务时区与截单时刻按（租户、结算账户）登记、可追加新一版，是归属日判定与截单的唯一出处；没登记答`未配置`。对账周期的日历不在这本册里，本期边界由截单命令点名（[ADR-0269](../adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)）。
+- 所有者：`settlement-accounting`。业务时区与截单时刻按（租户、结算账户）登记、可追加新一版，是归属日判定与截单的唯一出处；没登记答`未配置`。对账周期的日历不在这本册里，本期边界由截单命令点名（[ADR-0269](../adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)）。对账周期另登在对账周期册上，到点截单照它发起截单命令（[ADR-0339](../adr/0339-charge-confirmation-and-statement-publication-are-operator-decisions-and-a-registered-statement-cycle-cuts-on-its-closing-dates.md) 决定三）。
 - 它不是结算账户登记册的一格，也不是商业[结算政策](#结算政策)；付款条件属结算政策。
 - 避免使用：结算政策、账期配置、费用项目时区。
 
