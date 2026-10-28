@@ -1,7 +1,7 @@
 # 01 内部合规限制形成与解除没有生产入口
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 9d06793c9）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
+Status: resolved——2026-10-28 进 main（`2e24f5941`，launch-wiring 01–04 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 9d06793c9）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
 Blocked by: 无
 
 ## 做什么
@@ -42,3 +42,14 @@ Blocked by: 无
 
 ### 留给协调方
 - 无需立票的新发现。进 main 时若另两位作者的 `access_identity/0030` 撞号，本份顺延；CHECK 的并集要把后进来的词补进去（0030 头注已写明约定）。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `f977c587c`，01–03 同一评审）
+
+两轴无阻断。建立与决定各一种授予；决定方取自认证信封记 `DecidedBy`（ADR-0303）；授权引用只存不核、决定的 `source` 由请求方自报——ADR-0334 越权风险点 1 后半，UC 现状句如实。非阻断：`ParseGuardedAction` 与两处旧译表重复。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 与 launch-wiring 02、03、04 同批：隔离树上先 cherry-pick `claude-lw-cc`（tip `f977c587c`）、再 `claude-lw-no`（tip `272f98c15`）到 main `322b5695c`；`internal/accessidentity/operation_decision.go` 的 `decisionKinds` 文本冲突按并集解。access_identity 迁移 0030（01）、0031（04）、0032（02）、0033（03）依序施加，0033 的 CHECK 为全集（评审逐词核过）。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `2e24f5941` 到 main。

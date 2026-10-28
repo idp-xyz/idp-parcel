@@ -1,7 +1,7 @@
 # 03 CC 放行门禁核对编排无装配
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 c5de67335）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
+Status: resolved——2026-10-28 进 main（`2e24f5941`，launch-wiring 01–04 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 c5de67335）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
 Blocked by: 无
 
 ## 做什么
@@ -42,3 +42,14 @@ Blocked by: 无
 ### 留给协调方
 - 第 3 条的缺口（「税费付款」规则行无登记面）：它让 03 在生产上建好了口却到不了 `RECORDED`，请裁是否立票；建议比较小（登记 CLI + registrationjson 译装 + 演示租户 S 级种子，规则取值留给租户或用「不构成前置条件」作演示租户值）。
 - 迁移号：本组占 access_identity 0030（01）、0032（02）、0033（03），0031 留给 `claude-lw-no`；种子号占 access 26/27、30/31、32/33，governance 63/64、67、68，步骤 483、485、486。进 main 时按实际次序再核一遍；`operation_decision.go` 的 `decisionKinds` 与各份 CHECK 并集会与 NO 分支文本冲突，按并集合。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `f977c587c`，01–03 同一评审）
+
+两轴无阻断。两种「未配置」停点不落册不发意图；`MET` 落册；重放；响应无放行字段。「交出门禁读数读动作准入、不读核对册」与 UC-CC-009/013 不相抵（共用 `assessReleaseGate`）。非阻断：核对记录不带请求人（核对是系统折出的判断，不算违 ADR-0303）。作者报告的缺口——「税费付款」规则行无生产登记面，租户上线当天门禁核对与动作准入都停在 `DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED`、无绕法——评审核实属实、挡上线，转 [06](./06-duty-payment-gate-rule-registration-face.md)。本票不因此留开：接线本身已成。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 与 launch-wiring 01、02、04 同批：隔离树上先 cherry-pick `claude-lw-cc`（tip `f977c587c`）、再 `claude-lw-no`（tip `272f98c15`）到 main `322b5695c`；`internal/accessidentity/operation_decision.go` 的 `decisionKinds` 文本冲突按并集解。access_identity 迁移 0030（01）、0031（04）、0032（02）、0033（03）依序施加，0033 的 CHECK 为全集（评审逐词核过）。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `2e24f5941` 到 main。

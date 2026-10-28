@@ -1,7 +1,7 @@
 # 04 NO 监管协作承接编排无装配
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待进 main，分支 claude-lw-no（代码最后一笔 6923b87a5，含评审修订）。此前 in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-no
+Status: resolved——2026-10-28 进 main（`2e24f5941`，launch-wiring 01–04 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待进 main，分支 claude-lw-no（代码最后一笔 6923b87a5，含评审修订）。此前 in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-no
 Blocked by: 无
 
 ## 做什么
@@ -25,3 +25,15 @@ Blocked by: 无
 ## 评审修订
 
 隔离评审（钉 `d60e058eb`）两轴无阻断，协调方要求补三项，已做：（1）access_identity 0031 取号不改，头注只讲本迁移加了什么；（2）操作者落库：NO 迁移 `0025` 给承接册加可空 `decided_by`、执行事实册加可空 `recorded_by`，端点从认证信封取「发行方#sub」写入，不进摘要、不回填、读回不带；真库用例断言两列落的操作者；ADR-0338 决定四与越权风险点 2 改现行；（3）ADR-0338 Consequences 补两份意图无订阅者、`dispatch.no_subscriber` 是认下的代价（同 ADR-0202 决定六先例）。自验同前：build、vet、gofmt、含 PG 的受影响包测试全绿。
+
+## 评审记录（2026-10-28，隔离子代理）
+
+- 第一轮（钉 `d60e058eb`）两轴无阻断：0031 CHECK 无漏词；节点防线合 UC-NO-001；无订阅者为响亮失败、每份信封自成分区。待处理：与 `claude-lw-cc` 的 0031 撞号（CC 让到 0032、0033）。协调方另要求操作者落库以与 TF（ADR-0303、ADR-0337）同口径。
+- 第二轮（钉 `272f98c15`）：NO 迁移 0025 加 `decided_by`、`recorded_by`，可空不回填；操作者取自认证信封、只进审计不进摘要；ADR-0338 改现行并补无订阅者代价。阻断清零。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 与 launch-wiring 01、02、03 同批：隔离树上先 cherry-pick `claude-lw-cc`（tip `f977c587c`）、再 `claude-lw-no`（tip `272f98c15`）到 main `322b5695c`；`internal/accessidentity/operation_decision.go` 的 `decisionKinds` 文本冲突按并集解。access_identity 迁移 0030（01）、0031（04）、0032（02）、0033（03）依序施加，0033 的 CHECK 为全集（评审逐词核过）。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `2e24f5941` 到 main。

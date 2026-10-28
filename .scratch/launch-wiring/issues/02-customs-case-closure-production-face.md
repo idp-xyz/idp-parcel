@@ -1,7 +1,7 @@
 # 02 CC 关案编排无装配
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 1017dc84d）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
+Status: resolved——2026-10-28 进 main（`2e24f5941`，launch-wiring 01–04 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 1017dc84d）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
 Blocked by: 无
 
 ## 做什么
@@ -41,3 +41,14 @@ Blocked by: 无
 
 ### 留给协调方
 - 无需立票的新发现。受控重开仍无生产入口（UC-CC-010 的另一半），不在本批。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `f977c587c`，01–03 同一评审）
+
+两轴无阻断。关闭与建案分开授予；目录未登记答未决不落记录；BLOCKED 列未解决与冲突项（带依据）；CLOSED 落 `decidedBy`、记录与意图同笔、重放意图恰一份。受控重开仍无入口；逐项关闭责任来源与授权范围不校验（租户取值 PAR-CUS-06），已披露。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 与 launch-wiring 01、03、04 同批：隔离树上先 cherry-pick `claude-lw-cc`（tip `f977c587c`）、再 `claude-lw-no`（tip `272f98c15`）到 main `322b5695c`；`internal/accessidentity/operation_decision.go` 的 `decisionKinds` 文本冲突按并集解。access_identity 迁移 0030（01）、0031（04）、0032（02）、0033（03）依序施加，0033 的 CHECK 为全集（评审逐词核过）。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `2e24f5941` 到 main。
