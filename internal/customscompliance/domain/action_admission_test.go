@@ -382,3 +382,173 @@ func TestMissingGateReadingIsAProgrammingError(t *testing.T) {
 		t.Fatalf("缺动作时点：err = %v", err)
 	}
 }
+
+// internalOnObject 在对象自身上加一条内部合规限制（责任来源 SYN-SOURCE-TRADE-COMPLIANCE），覆盖项都按给定的开始时适用性；
+// decisions 在限制形成后依次追加。
+func (c *admissionCase) internalOnObject(id string, standing domain.CoverageStanding, constrains []domain.GuardedAction, decisions ...func(domain.InternalRestriction) domain.InternalRestriction) *admissionCase {
+	c.t.Helper()
+	spec := domain.InternalRestrictionSpec{
+		ID:        mustValue(c.t, domain.NewInternalRestrictionID, id),
+		Source:    mustValue(c.t, domain.NewRestrictionSource, "SYN-SOURCE-TRADE-COMPLIANCE"),
+		Basis:     mustValue(c.t, domain.NewRestrictionBasis, "SYN-RULE-DUAL-USE@v3"),
+		Mode:      domain.ManualDecision,
+		DecidedBy: mustValue(c.t, domain.NewRestrictionDecider, "SYN-ROLE-COMPLIANCE-REVIEWER"),
+		Condition: mustValue(c.t, domain.NewRestrictionReleaseCondition, "SYN-COND-LICENCE-ON-FILE"),
+		StartedAt: admissionAt.Add(-2 * time.Hour),
+	}
+	for _, action := range constrains {
+		spec.Coverage = append(spec.Coverage, domain.CoverageSpec{
+			Scope:    mustValue(c.t, domain.NewDecisionScopeReference, admissionObject),
+			Action:   action,
+			Standing: standing,
+		})
+	}
+	built, err := domain.EstablishInternalRestriction(spec)
+	if err != nil {
+		c.t.Fatalf("构造内部合规限制：%v", err)
+	}
+	for _, apply := range decisions {
+		built = apply(built)
+	}
+	c.input.InternalRestrictions = append(c.input.InternalRestrictions, built)
+	return c
+}
+
+// sourceDecides 是限制责任来源在给定时刻对对象上给定动作形成的确认或解除决定。
+func (c *admissionCase) sourceDecides(id string, kind domain.RestrictionDecisionKind, at time.Time, action domain.GuardedAction) func(domain.InternalRestriction) domain.InternalRestriction {
+	return func(restriction domain.InternalRestriction) domain.InternalRestriction {
+		c.t.Helper()
+		made, err := domain.NewRestrictionDecision(domain.RestrictionDecisionSpec{
+			ID:        mustValue(c.t, domain.NewRestrictionDecisionID, id),
+			Kind:      kind,
+			Source:    mustValue(c.t, domain.NewRestrictionSource, "SYN-SOURCE-TRADE-COMPLIANCE"),
+			Covers:    []domain.CoverageKey{{Scope: mustValue(c.t, domain.NewDecisionScopeReference, admissionObject), Action: action}},
+			Evidence:  mustValue(c.t, domain.NewRestrictionEvidence, "SYN-EVIDENCE-LICENCE-4711"),
+			DecidedBy: mustValue(c.t, domain.NewRestrictionDecider, "SYN-ROLE-COMPLIANCE-REVIEWER"),
+			Authority: mustValue(c.t, domain.NewRestrictionAuthority, "SYN-DELEGATION-2026-07"),
+			At:        at,
+		})
+		if err != nil {
+			c.t.Fatalf("构造决定：%v", err)
+		}
+		decided, err := restriction.Decide(made)
+		if err != nil {
+			c.t.Fatalf("形成决定：%v", err)
+		}
+		return decided
+	}
+}
+
+// 门禁满足、已有全部放行，内部合规限制的覆盖项在动作时点待确认：该动作答未决并指名那条限制——它不是一条有效限制（阻断要指得回
+// 一条有效限制），也不能读成无内部限制；确认决定晚于动作时点的动作仍读到待确认，确认生效后才答阻断。空册不产生依据。
+// Covers: AT-CC-449（领域半边）。
+func TestAnInternalRestrictionUnconfirmedAtTheActionInstantMakesTheActionUndecided(t *testing.T) {
+	met := func() *admissionCase {
+		return newAdmissionCase(t).inUnit().gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateMet).
+			release("SYN-SRC-FULL", domain.FullRelease, admissionAt.Add(-time.Hour))
+	}
+
+	pending := met().internalOnObject("SYN-IR-1", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.LoadingDeparture}).judge()
+	finding := findingOf(t, pending, domain.LoadingDeparture)
+	assertFinding(t, finding, domain.AdmissionUndecided, domain.CauseInternalRestrictionUnconfirmed)
+	if finding.Bases[0].Scope.String() != admissionObject || len(finding.Bases[0].Sources) != 1 || finding.Bases[0].Sources[0] != "SYN-IR-1" {
+		t.Fatalf("待确认依据要指名范围与那条限制：%+v", finding.Bases[0])
+	}
+	if pending.Answer() != domain.AdmissionUndecided {
+		t.Fatalf("整次答复 = %s", pending.Answer())
+	}
+
+	c := met()
+	confirmedAfter := c.internalOnObject("SYN-IR-1", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.LoadingDeparture},
+		c.sourceDecides("D-1", domain.ConfirmCoverage, admissionAt.Add(time.Minute), domain.LoadingDeparture)).judge()
+	assertFinding(t, findingOf(t, confirmedAfter, domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseInternalRestrictionUnconfirmed)
+
+	c = met()
+	confirmedBefore := c.internalOnObject("SYN-IR-1", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.LoadingDeparture},
+		c.sourceDecides("D-1", domain.ConfirmCoverage, admissionAt.Add(-time.Minute), domain.LoadingDeparture)).judge()
+	assertFinding(t, findingOf(t, confirmedBefore, domain.LoadingDeparture), domain.AdmissionBlocked, domain.CauseInternalRestrictionInForce)
+
+	elsewhere := met().internalOnObject("SYN-IR-1", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.FinalDelivery}).judge()
+	assertFinding(t, findingOf(t, elsewhere, domain.LoadingDeparture), domain.AdmissionAdmitted, domain.CauseReleasedInFull)
+
+	emptyRegister := met().judge()
+	assertFinding(t, findingOf(t, emptyRegister, domain.LoadingDeparture), domain.AdmissionAdmitted, domain.CauseReleasedInFull)
+}
+
+// 冲突与待确认同样答未决，但依据另成一种（续办不同：裁冲突，还是去确认来源）；同一动作上另有一条有效的内部合规限制时答阻断，
+// 阻断压过未决，列着的只有挡住它的那一条。
+// Covers: AT-CC-450（领域半边）。
+func TestAConflictingInternalRestrictionIsUndecidedUnderItsOwnCause(t *testing.T) {
+	conflict := newAdmissionCase(t).internalOnObject("SYN-IR-1", domain.CoverageConflicting, []domain.GuardedAction{domain.LoadingDeparture}).judge()
+	assertFinding(t, findingOf(t, conflict, domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseInternalRestrictionConflicting)
+	if conflict.Answer() != domain.AdmissionUndecided {
+		t.Fatalf("整次答复 = %s", conflict.Answer())
+	}
+
+	both := newAdmissionCase(t).
+		internalOnObject("SYN-IR-1", domain.CoverageConflicting, []domain.GuardedAction{domain.LoadingDeparture}).
+		internalOnObject("SYN-IR-2", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.LoadingDeparture}).judge()
+	finding := findingOf(t, both, domain.LoadingDeparture)
+	assertFinding(t, finding, domain.AdmissionUndecided, domain.CauseInternalRestrictionConflicting, domain.CauseInternalRestrictionUnconfirmed)
+	if finding.Bases[0].Sources[0] != "SYN-IR-1" || finding.Bases[1].Sources[0] != "SYN-IR-2" {
+		t.Fatalf("两种依据各指名各的限制：%+v", finding.Bases)
+	}
+
+	blocked := newAdmissionCase(t).
+		internalOnObject("SYN-IR-1", domain.CoverageConflicting, []domain.GuardedAction{domain.LoadingDeparture}).
+		internalOnObject("SYN-IR-3", domain.CoverageInForce, []domain.GuardedAction{domain.LoadingDeparture}).judge()
+	finding = findingOf(t, blocked, domain.LoadingDeparture)
+	assertFinding(t, finding, domain.AdmissionBlocked, domain.CauseInternalRestrictionInForce)
+	if finding.Bases[0].Sources[0] != "SYN-IR-3" {
+		t.Fatalf("阻断只列挡住它的那条：%+v", finding.Bases)
+	}
+}
+
+// 两种限制各按自己的依据解除，互不相干：同一动作上监管限制与内部合规限制都有效时两条依据都列；只解除其中一种仍阻断，两种都
+// 解除才不再有限制依据；外部放行不解除任何一种。
+// Covers: AT-CC-451（领域半边）。
+func TestEachKindOfRestrictionBlocksUntilItsOwnBasisReleasesIt(t *testing.T) {
+	build := func(regulatoryReleasedAt time.Time, internalReleased bool) *admissionCase {
+		c := newAdmissionCase(t).inUnit().gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateMet).
+			release("SYN-SRC-FULL", domain.FullRelease, admissionAt.Add(-time.Hour)).
+			restrictedOnObject("SYN-RESTRICTION-01", regulatoryReleasedAt, domain.LoadingDeparture)
+		var decisions []func(domain.InternalRestriction) domain.InternalRestriction
+		if internalReleased {
+			decisions = append(decisions, c.sourceDecides("D-1", domain.ReleaseCoverage, admissionAt.Add(-30*time.Minute), domain.LoadingDeparture))
+		}
+		return c.internalOnObject("SYN-IR-1", domain.CoverageInForce, []domain.GuardedAction{domain.LoadingDeparture}, decisions...)
+	}
+	released := admissionAt.Add(-45 * time.Minute)
+
+	both := findingOf(t, build(time.Time{}, false).judge(), domain.LoadingDeparture)
+	assertFinding(t, both, domain.AdmissionBlocked, domain.CauseRestrictionInForce, domain.CauseInternalRestrictionInForce)
+	if both.Bases[0].Sources[0] != "SYN-RESTRICTION-01" || both.Bases[1].Sources[0] != "SYN-IR-1" {
+		t.Fatalf("两种限制的依据各指名各的限制：%+v", both.Bases)
+	}
+
+	onlyRegulatoryReleased := findingOf(t, build(released, false).judge(), domain.LoadingDeparture)
+	assertFinding(t, onlyRegulatoryReleased, domain.AdmissionBlocked, domain.CauseInternalRestrictionInForce)
+
+	onlyInternalReleased := findingOf(t, build(time.Time{}, true).judge(), domain.LoadingDeparture)
+	assertFinding(t, onlyInternalReleased, domain.AdmissionBlocked, domain.CauseRestrictionInForce)
+
+	neither := findingOf(t, build(released, true).judge(), domain.LoadingDeparture)
+	assertFinding(t, neither, domain.AdmissionAdmitted, domain.CauseReleasedInFull)
+}
+
+// 内部合规限制约束跨区移动、而终点节点未登记区域：同监管限制一样说明对象带着跨区的门，这一道答未配置并指名未登记的节点。
+// Covers: AT-CC-421（内部合规限制那一支的领域半边）。
+func TestAnInternalRestrictionOnTheCrossZoneLineMakesAnUnzonedDestinationNotConfigured(t *testing.T) {
+	restricted := newAdmissionCase(t).unzonedDestination().
+		internalOnObject("SYN-IR-1", domain.CoverageUnconfirmed, []domain.GuardedAction{domain.CrossCustomsMovement}).judge()
+	assertFinding(t, findingOf(t, restricted, domain.CrossCustomsMovement), domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
+}
+
+// 判断输入里的内部合规限制是零值（编排漏了构造）是编程错误，不折成任何业务格。
+func TestAnUnconstructedInternalRestrictionIsAProgrammingError(t *testing.T) {
+	c := newAdmissionCase(t)
+	c.input.InternalRestrictions = []domain.InternalRestriction{{}}
+	if _, err := domain.JudgeActionAdmission(c.input); !errors.Is(err, domain.ErrInvalidAdmissionInput) {
+		t.Fatalf("零值内部合规限制：err = %v", err)
+	}
+}
