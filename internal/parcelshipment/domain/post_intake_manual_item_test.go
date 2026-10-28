@@ -6,7 +6,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// Covers: ADR-0340 决定一——请求表里系统不执行的几项才成待人工处理项：今天只有运输履约的两个「另起旅程」动作由系统执行，其余全人工；继续没有请求项。
+// Covers: ADR-0341 决定一——请求表里系统不执行的几项才成待人工处理项：今天只有运输履约的两个「另起旅程」动作由系统执行，其余全人工；继续没有请求项。
 func TestOnlyTheRequestsTheSystemDoesNotExecuteBecomeManualItems(t *testing.T) {
 	want := map[domain.PostIntakeDispositionDirection]int{
 		domain.PostIntakeContinue: 0, domain.PostIntakeIntercept: 2, domain.PostIntakeRedirect: 1,
@@ -25,7 +25,7 @@ func TestOnlyTheRequestsTheSystemDoesNotExecuteBecomeManualItems(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0340 决定二——登记的键只收封闭表里需要人工处理的项；结果、说明、操作者缺一即拒。
+// Covers: ADR-0341 决定二——登记的键只收封闭表里需要人工处理的项；结果、说明、操作者缺一即拒。
 func TestAManualItemKeyAndResultNeedTheirParts(t *testing.T) {
 	tenant, _ := domain.NewTenantID("t")
 	parcel, _ := domain.NewDeclaredParcelID("p")

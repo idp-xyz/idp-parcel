@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// PostIntakeManualItems 实现 ports.PostIntakeManualItems：待人工处理项及其处理结果（ADR-0340）。项只追加，结果每项至多一份、不改不删；租户条件进每条语句。
+// PostIntakeManualItems 实现 ports.PostIntakeManualItems：待人工处理项及其处理结果（ADR-0341）。项只追加，结果每项至多一份、不改不删；租户条件进每条语句。
 type PostIntakeManualItems struct {
 	db *bentopg.DB
 }

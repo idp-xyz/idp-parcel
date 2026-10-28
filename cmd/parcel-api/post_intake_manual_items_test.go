@@ -38,7 +38,7 @@ func manualResultBody(parcel string, version int, owner, action, outcome, note s
 		`","outcome":"` + outcome + `","note":"` + note + `"}`
 }
 
-// Covers: AT-PS-088 的人工项半边；ADR-0340 决定二、三——一个「拦截」决定同笔落两项待人工处理项（NO 扣住、TF 扣住）：清单可查，只持决定授予的人登记不了（403），
+// Covers: AT-PS-088 的人工项半边；ADR-0341 决定二、三——一个「拦截」决定同笔落两项待人工处理项（NO 扣住、TF 扣住）：清单可查，只持决定授予的人登记不了（403），
 // 持登记授予的人逐项登记（201），结果取自认证的操作者；重放答 200，同项异内容答 409 且不覆盖；系统执行的动作、不在册的项、他租户的项各得 400 与统一的 404；按包裹读回带结果。
 func TestRegisteringManualItemResultsIsAuthorizedIdempotentAndReadBackPerParcel(t *testing.T) {
 	fixture := newPostIntakeE2E(t)
@@ -56,6 +56,17 @@ func TestRegisteringManualItemResultsIsAuthorizedIdempotentAndReadBackPerParcel(
 	}
 	if err := json.Unmarshal([]byte(raw), &listed); err != nil || status != http.StatusOK || listed.PendingCount != 2 || len(listed.Items) != 2 {
 		t.Fatalf("清单 = %d %s, want 200 与 2 项", status, raw)
+	}
+
+	if !strings.Contains(raw, `"supersededByLaterDecision":false`) || strings.Contains(raw, `"supersededByLaterDecision":true`) {
+		t.Fatalf("链尾就是这一版时的标志 = %s, want 全为 false", raw)
+	}
+	// 追加一份「继续」取代拦截：项照旧在册，清单标出它所属的决定已被取代。
+	if status, raw := fixture.post(pidDecider, pidBody("SYN-PARCEL-M1", 1, "CONTINUE", "", "")); status != http.StatusCreated {
+		t.Fatalf("追加继续 = %d %s", status, raw)
+	}
+	if status, raw = fixture.manualGet(pidDecider, ""); status != http.StatusOK || strings.Count(raw, `"supersededByLaterDecision":true`) != 2 {
+		t.Fatalf("被取代后的清单 = %d %s, want 两项都标已被后来的决定取代", status, raw)
 	}
 
 	body := manualResultBody("SYN-PARCEL-M1", 1, "NODE_OPERATIONS", "HOLD_AT_CONTROL", "HANDLED", "已在控制处扣住")

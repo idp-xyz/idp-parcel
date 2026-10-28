@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// Covers: PBC-08 行为面——待人工处理项的两个写口（落项、登记结果）在无事务上下文必须被拒绝，落库行数为零（ADR-0340）。
+// Covers: PBC-08 行为面——待人工处理项的两个写口（落项、登记结果）在无事务上下文必须被拒绝，落库行数为零（ADR-0341）。
 func TestThePostIntakeManualItemWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	rig := newConflictDecisionRig(t)
 	items, err := adapter.NewPostIntakeManualItems(rig.db)

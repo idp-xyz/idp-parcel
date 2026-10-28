@@ -13,9 +13,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// 待人工处理项的两个运营口（ADR-0340）：GET /post-intake-disposition-manual-items 查阅，POST /post-intake-disposition-manual-item-results 逐项登记处理结果。
+// 待人工处理项的两个运营口（ADR-0341）：GET /post-intake-disposition-manual-items 查阅，POST /post-intake-disposition-manual-item-results 逐项登记处理结果。
 
-// OperatorDecisionPostIntakeManualItemHandling 与收寄后服务处置分开授予（ADR-0340 决定三）：形成决定的人与在现场办完这些事的人通常不是同一批。
+// OperatorDecisionPostIntakeManualItemHandling 与收寄后服务处置分开授予（ADR-0341 决定三）：形成决定的人与在现场办完这些事的人通常不是同一批。
 const OperatorDecisionPostIntakeManualItemHandling OperatorDecision = "POST_INTAKE_MANUAL_ITEM_HANDLING"
 
 var (
@@ -243,15 +243,17 @@ type postIntakeManualItemsResponse struct {
 // postIntakeManualItemBody 逐字段透出一项：登记命令要的几段（包裹、决定版本、所有者、动作）原样给出，另带所属决定的去向、目的地与包裹决定链此刻的版本；
 // 结果在场时带结果、说明、操作者与处理时刻。
 type postIntakeManualItemBody struct {
-	ParcelID        string                       `json:"parcelId"`
-	DecisionVersion int                          `json:"decisionVersion"`
-	Owner           string                       `json:"owner"`
-	Action          string                       `json:"action"`
-	Direction       string                       `json:"direction"`
-	Destination     string                       `json:"destination,omitempty"`
-	DecidedAt       string                       `json:"decidedAt"`
-	CurrentVersion  int                          `json:"currentVersion"`
-	Result          *postIntakeManualItemOutcome `json:"result,omitempty"`
+	ParcelID        string `json:"parcelId"`
+	DecisionVersion int    `json:"decisionVersion"`
+	Owner           string `json:"owner"`
+	Action          string `json:"action"`
+	Direction       string `json:"direction"`
+	Destination     string `json:"destination,omitempty"`
+	DecidedAt       string `json:"decidedAt"`
+	CurrentVersion  int    `json:"currentVersion"`
+	// SupersededByLaterDecision 是派生标志（决定版本小于链尾版本）：这一项所属的决定已被后来的决定取代，办之前先看链尾说了什么。项本身不因此消失。
+	SupersededByLaterDecision bool                         `json:"supersededByLaterDecision"`
+	Result                    *postIntakeManualItemOutcome `json:"result,omitempty"`
 }
 
 type postIntakeManualItemOutcome struct {
@@ -271,6 +273,8 @@ func postIntakeManualItemBodyOf(item ports.PostIntakeManualItem) postIntakeManua
 		Destination:     item.Destination.String(),
 		DecidedAt:       item.DecidedAt.UTC().Format(time.RFC3339Nano),
 		CurrentVersion:  item.CurrentVersion,
+
+		SupersededByLaterDecision: item.Key.DecisionVersion < item.CurrentVersion,
 	}
 	if item.HasResult {
 		body.Result = &postIntakeManualItemOutcome{
