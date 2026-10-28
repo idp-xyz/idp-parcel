@@ -13,8 +13,10 @@ var (
 	ErrCaseNotClosed     = errors.New("customs compliance: the case is not closed")
 )
 
-// ObligationItemState 是关闭依据项的封闭三值：已终结、已被有权接收方有效承接、未
-// 解决。前两者可关，任一未解决阻止关闭（CONTEXT「任一未解决或冲突项都阻止关闭」）。
+// ObligationItemState 是关闭依据项的封闭四值：已终结、已被有权接收方有效承接、未
+// 解决、冲突。前两者可关，任一未解决或冲突阻止关闭（CONTEXT「任一未解决或冲突项都阻止关闭」）。
+// 冲突与未解决分开：未解决的恢复动作是补依据或逐项处置，冲突的恢复动作是先裁清
+// 相互矛盾的事实，两者混成一格会让后者被读成「再等等」。
 type ObligationItemState uint8
 
 const (
@@ -22,10 +24,11 @@ const (
 	ObligationConcluded
 	ObligationHandedOver
 	ObligationUnresolved
+	ObligationConflict
 )
 
 func (state ObligationItemState) valid() bool {
-	return state >= ObligationConcluded && state <= ObligationUnresolved
+	return state >= ObligationConcluded && state <= ObligationConflict
 }
 
 func (state ObligationItemState) String() string {
@@ -36,12 +39,16 @@ func (state ObligationItemState) String() string {
 		return "HANDED_OVER"
 	case ObligationUnresolved:
 		return "UNRESOLVED"
+	case ObligationConflict:
+		return "CONFLICT"
 	default:
 		return ""
 	}
 }
 
-// ClosureObligationItem 是一项关闭依据：义务、范围、状态与依据。承接项必须指名接收
+// ClosureObligationItem 是一项关闭依据：义务、范围、状态与依据。冲突项必须带冲突
+// 依据 ConflictsWith——相互矛盾的事实引用，至少两份：一份事实不构成冲突，说不出与谁
+// 矛盾的「冲突」与未解决分不开，也无从裁清；非冲突项不得携带。承接项必须指名接收
 // 责任方——CONTEXT Rules「税费、放行与案件闭环」一节「发送交接、技术送达、任务创建、计划后续处理、部分接受或默认超时接受都不能证明全部责任已经移交」，
 // 承接引用正是「有权接收方接受决定」的落点。
 type ClosureObligationItem struct {
@@ -50,6 +57,25 @@ type ClosureObligationItem struct {
 	State      ObligationItemState
 	Basis      string
 	HandedTo   string
+	// ConflictsWith 是冲突项的冲突依据：相互矛盾的事实引用。
+	ConflictsWith []string
+}
+
+// Equal 逐格比较两项关闭依据（冲突依据按登记次序）。含切片的结构体不能用 ==，
+// 空与缺席视为同一。
+func (item ClosureObligationItem) Equal(other ClosureObligationItem) bool {
+	if item.Obligation != other.Obligation || item.Scope != other.Scope ||
+		item.State != other.State || item.Basis != other.Basis ||
+		item.HandedTo != other.HandedTo ||
+		len(item.ConflictsWith) != len(other.ConflictsWith) {
+		return false
+	}
+	for index, ref := range item.ConflictsWith {
+		if ref != other.ConflictsWith[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (item ClosureObligationItem) complete() bool {
@@ -59,7 +85,23 @@ func (item ClosureObligationItem) complete() bool {
 	if item.State == ObligationHandedOver && item.HandedTo == "" {
 		return false
 	}
-	return true
+	return conflictBasisMatches(item)
+}
+
+// conflictBasisMatches 双向核冲突依据：冲突项至少带两份互不相同的非空事实引用，
+// 非冲突项不带。
+func conflictBasisMatches(item ClosureObligationItem) bool {
+	if item.State != ObligationConflict {
+		return len(item.ConflictsWith) == 0
+	}
+	distinct := make(map[string]bool, len(item.ConflictsWith))
+	for _, ref := range item.ConflictsWith {
+		if ref == "" {
+			return false
+		}
+		distinct[ref] = true
+	}
+	return len(distinct) >= 2
 }
 
 // ClosureVerification 是在明确业务截点对案件内全部适用义务逐项形成关闭依据的版本化
@@ -123,9 +165,31 @@ func (verification ClosureVerification) UnresolvedItems() []ClosureObligationIte
 	return unresolved
 }
 
-// Closable 报告全部依据项是否都已终结或已被有效承接。
+// ConflictItems 给出全部冲突项。
+func (verification ClosureVerification) ConflictItems() []ClosureObligationItem {
+	conflicts := make([]ClosureObligationItem, 0)
+	for _, item := range verification.items {
+		if item.State == ObligationConflict {
+			conflicts = append(conflicts, item)
+		}
+	}
+	return conflicts
+}
+
+// BlockingItems 给出阻止关闭的全部项（未解决与冲突），保持核对时的次序。
+func (verification ClosureVerification) BlockingItems() []ClosureObligationItem {
+	blocking := make([]ClosureObligationItem, 0)
+	for _, item := range verification.items {
+		if item.State == ObligationUnresolved || item.State == ObligationConflict {
+			blocking = append(blocking, item)
+		}
+	}
+	return blocking
+}
+
+// Closable 报告全部依据项是否都已终结或已被有效承接——未解决与冲突都阻止关闭。
 func (verification ClosureVerification) Closable() bool {
-	return len(verification.UnresolvedItems()) == 0
+	return len(verification.BlockingItems()) == 0
 }
 
 // CustomsCaseClosure 是关务案件的关闭决定与受控重开记录。CONTEXT Rules「税费、放行与案件闭环」一节「单个案件不存在部分关闭」
@@ -148,7 +212,7 @@ type ControlledReopening struct {
 	ReopenedAt    time.Time
 }
 
-// CloseCase 依据可关闭的核对形成关闭决定。任一未解决项阻止关闭（独立哨兵带清单）；
+// CloseCase 依据可关闭的核对形成关闭决定。任一未解决或冲突项阻止关闭（独立哨兵带清单）；
 // 关闭核对证明可关闭不等于已关闭——这一步才是有权责任角色的决定。
 func CloseCase(
 	verification ClosureVerification,

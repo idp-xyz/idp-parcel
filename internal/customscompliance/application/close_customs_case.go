@@ -90,8 +90,8 @@ func (result CloseCustomsCaseResult) Closure() (*domain.CustomsCaseClosure, bool
 	return result.closure, result.closure != nil
 }
 
-// Unresolved 只在关闭被阻止时给出——被哪些未解决义务挡着一目了然，恢复动作是逐项
-// 终结或有效承接，不是重试。
+// Unresolved 只在关闭被阻止时给出——被哪些未解决或冲突义务挡着一目了然（冲突项带
+// 冲突依据），恢复动作是逐项终结、有效承接或先裁清矛盾的事实，不是重试。
 func (result CloseCustomsCaseResult) Unresolved() []domain.ClosureObligationItem {
 	return append([]domain.ClosureObligationItem(nil), result.unresolved...)
 }
@@ -122,7 +122,7 @@ func NewCloseCustomsCaseHandler(deps CloseCustomsCaseDeps) *CloseCustomsCaseHand
 
 // Handle 把一次关闭请求推进到整案一次的关闭决定：已关案件重放返原关闭（一案至多一份
 // 关闭记录，重开走 Reopen 不走这里）→ 义务清单读取（目录未登记未决，不是「没有义务
-// 所以可关」）→ VerifyClosure 逐项核对 → 任一未解决阻止关闭带清单（业务负向，恢复
+// 所以可关」）→ VerifyClosure 逐项核对 → 任一未解决或冲突阻止关闭带清单（业务负向，恢复
 // 动作是逐项处置不是重试）→ CloseCase 决定 → 提交与意图。
 func (handler *CloseCustomsCaseHandler) Handle(
 	ctx context.Context,
@@ -160,7 +160,7 @@ func (handler *CloseCustomsCaseHandler) Handle(
 	if !verification.Closable() {
 		return CloseCustomsCaseResult{
 			outcome:    ClosureBlocked,
-			unresolved: verification.UnresolvedItems(),
+			unresolved: verification.BlockingItems(),
 		}, nil
 	}
 

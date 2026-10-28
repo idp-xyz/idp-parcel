@@ -176,12 +176,13 @@ func serveClosureObligations(
 		items := make([]closureObligationItemBody, 0, len(entry.Items))
 		for _, registration := range entry.Items {
 			item := closureObligationItemBody{
-				Obligation:  registration.Item.Obligation,
-				Scope:       registration.Item.Scope,
-				State:       registration.Item.State.String(),
-				Basis:       registration.Item.Basis,
-				HandedTo:    registration.Item.HandedTo,
-				AppliesFrom: registration.AppliesFrom.UTC().Format(time.RFC3339Nano),
+				Obligation:    registration.Item.Obligation,
+				Scope:         registration.Item.Scope,
+				State:         registration.Item.State.String(),
+				Basis:         registration.Item.Basis,
+				HandedTo:      registration.Item.HandedTo,
+				ConflictsWith: registration.Item.ConflictsWith,
+				AppliesFrom:   registration.AppliesFrom.UTC().Format(time.RFC3339Nano),
 			}
 			// 终点零值即尚无终点：缺席是真话不是缺陷（判据同解释规则的开放版）。
 			if !registration.AppliesUntil.IsZero() {
@@ -246,6 +247,8 @@ type closureObligationItemBody struct {
 	// handedTo 只在承接项在场（CONTEXT「来源责任方、接收责任方、接受决定及权限」：承接必须指名接收责任方；库 CHECK
 	// 双向配对），非承接项缺席。
 	HandedTo string `json:"handedTo,omitempty"`
+	// conflictsWith 只在冲突项在场（相互矛盾的事实引用，库 CHECK 双向配对）。
+	ConflictsWith []string `json:"conflictsWith,omitempty"`
 	// 适用区间原样透出（appliesUntil 缺席即尚无终点）。截点判读归读者：本端点不收
 	// cutoff，见文件头裁决。
 	AppliesFrom  string `json:"appliesFrom"`

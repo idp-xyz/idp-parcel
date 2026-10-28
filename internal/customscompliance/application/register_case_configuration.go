@@ -363,7 +363,7 @@ func (handler *RegisterCaseConfigurationHandler) RegisterObligationItem(
 		if item.Obligation != registration.Item.Obligation {
 			continue
 		}
-		if item != registration.Item {
+		if !item.Equal(registration.Item) {
 			return ConfigurationContentConflict, nil
 		}
 		return ConfigurationExisting, nil

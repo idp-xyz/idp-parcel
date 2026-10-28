@@ -138,7 +138,7 @@ func TestObligationItemChecksPinHandoverAndCatalogPresence(t *testing.T) {
 		`INSERT INTO customs_compliance.closure_obligation_item
 			(tenant_id, case_ref, obligation, scope, item_state, basis, handed_to, applies_from)
 		 VALUES ('tenant-a', 'case-1', 'O', 's', 'CONCLUDED', 'b', 'broker-x', now())`)
-	fixture.rejects(t, "封闭三值之外的状态",
+	fixture.rejects(t, "封闭四值之外的状态",
 		`INSERT INTO customs_compliance.closure_obligation_item
 			(tenant_id, case_ref, obligation, scope, item_state, basis, applies_from)
 		 VALUES ('tenant-a', 'case-1', 'O', 's', 'PROBABLY_FINE', 'b', now())`)
@@ -146,4 +146,41 @@ func TestObligationItemChecksPinHandoverAndCatalogPresence(t *testing.T) {
 		`INSERT INTO customs_compliance.closure_obligation_item
 			(tenant_id, case_ref, obligation, scope, item_state, basis, applies_from)
 		 VALUES ('tenant-a', 'case-nope', 'O', 's', 'CONCLUDED', 'b', now())`)
+}
+
+// Covers: CC CONTEXT「任一未解决或冲突项都阻止关闭」的库面——冲突项带冲突依据读回原样（次序保留）；
+// 库 CHECK 双向守：冲突项至少两份互不相同的非空事实引用，非冲突项不带。
+func TestConflictObligationItemRoundTripsItsConflictBasis(t *testing.T) {
+	view, fixture := newObligationInventoryView(t)
+	seedObligationCatalog(t, fixture, "tenant-a", "case-1")
+
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.closure_obligation_item
+			(tenant_id, case_ref, obligation, scope, item_state, basis, conflicts_with, applies_from)
+		 VALUES ('tenant-a', 'case-1', 'DUTY', 'unit-1', 'CONFLICT', 'b',
+		         ARRAY['fact/release-a', 'fact/hold-b'], $1)`, viewBaseAt)
+	items, configured := loadObligations(t, view, "tenant-a", "case-1", viewBaseAt.Add(time.Hour))
+	if !configured || len(items) != 1 || items[0].State != domain.ObligationConflict {
+		t.Fatalf("items = %#v configured = %v", items, configured)
+	}
+	if got := items[0].ConflictsWith; len(got) != 2 || got[0] != "fact/release-a" || got[1] != "fact/hold-b" {
+		t.Fatalf("conflictsWith = %v", got)
+	}
+
+	for name, refs := range map[string]string{
+		"冲突项没有冲突依据":    "NULL",
+		"冲突项只有一份事实":    "ARRAY['fact/a']",
+		"冲突项两份引用相同":    "ARRAY['fact/a', 'fact/a']",
+		"冲突项带空引用":      "ARRAY['fact/a', ' ']",
+		"冲突项带 NULL 引用": "ARRAY['fact/a', NULL]",
+	} {
+		fixture.rejects(t, name,
+			`INSERT INTO customs_compliance.closure_obligation_item
+				(tenant_id, case_ref, obligation, scope, item_state, basis, conflicts_with, applies_from)
+			 VALUES ('tenant-a', 'case-1', 'O2', 's', 'CONFLICT', 'b', `+refs+`, now())`)
+	}
+	fixture.rejects(t, "非冲突项带了冲突依据",
+		`INSERT INTO customs_compliance.closure_obligation_item
+			(tenant_id, case_ref, obligation, scope, item_state, basis, conflicts_with, applies_from)
+		 VALUES ('tenant-a', 'case-1', 'O3', 's', 'UNRESOLVED', 'b', ARRAY['fact/a', 'fact/b'], now())`)
 }

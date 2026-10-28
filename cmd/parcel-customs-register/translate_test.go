@@ -210,6 +210,31 @@ func TestCommandForRejectsHandedToMismatch(t *testing.T) {
 	}
 }
 
+// TestCommandForGuardsTheConflictBasisBothWays 证冲突依据在译装处双向守住：冲突项至少
+// 两份互不相同的事实引用，非冲突项带冲突依据会被适配器静默丢弃。
+func TestCommandForGuardsTheConflictBasisBothWays(t *testing.T) {
+	item := func(state, refs string) []byte {
+		return []byte(`{
+			"tenantId": "SYN-T1", "caseRef": "case-1", "obligation": "duty-1",
+			"scope": "scope-1", "state": "` + state + `", "basis": "basis-1",
+			"conflictsWith": ` + refs + `, "appliesFrom": "2026-08-24T01:00:00Z"
+		}`)
+	}
+	if _, err := commandFor(commandObligationItem, item("CONFLICT", `["fact/a", "fact/b"]`)); err != nil {
+		t.Fatalf("带两份相互矛盾事实的冲突项应收下：%v", err)
+	}
+	for name, raw := range map[string][]byte{
+		"冲突项缺冲突依据":  item("CONFLICT", `[]`),
+		"冲突项只有一份事实": item("CONFLICT", `["fact/a"]`),
+		"冲突项两份引用相同": item("CONFLICT", `["fact/a", "fact/a"]`),
+		"非冲突项带冲突依据": item("UNRESOLVED", `["fact/a", "fact/b"]`),
+	} {
+		if _, err := commandFor(commandObligationItem, raw); err == nil {
+			t.Fatalf("%s要拒", name)
+		}
+	}
+}
+
 // TestCommandForRejectsAbsentRegistrationInstant 证目录登记时刻必填：两本目录的
 // registeredAt 在领域与库上都没有零值门（timestamptz 装得下 0001 年），缺格只能在
 // 译装处拦，否则「没给」会静默变成一个错的事实。

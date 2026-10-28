@@ -225,3 +225,34 @@ func TestInventoryGapsStallAndClosureIntentsRetry(t *testing.T) {
 		t.Fatalf("intents = %d saved = %d; 重发的必须是原关闭那一份", len(fixture.downstream.intents), fixture.store.saved)
 	}
 }
+
+// Covers: CC CONTEXT「任一未解决或冲突项都阻止关闭」与 UC-CC-010「案件关闭未决：……冲突……未决义务、缺口、冲突……」的编排面
+// ——冲突项阻止关闭，清单带冲突依据，不落库；它是业务负向，不是未决也不是未受理。
+func TestClosureIsBlockedByAConflictItemWithItsBasis(t *testing.T) {
+	fixture := newCloseCaseFixture(t)
+	fixture.inventory.items = []domain.ClosureObligationItem{
+		concludedItem("DUTY_SETTLEMENT"),
+		{
+			Obligation:    "DISPOSITION_EXECUTION",
+			Scope:         "declaration-unit-1",
+			State:         domain.ObligationConflict,
+			Basis:         "two results disagree",
+			ConflictsWith: []string{"result/pass-1", "result/hold-2"},
+		},
+	}
+
+	blocked, err := fixture.handler.Handle(context.Background(), closeCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if blocked.Outcome() != application.ClosureBlocked {
+		t.Fatalf("outcome = %q", blocked.Outcome())
+	}
+	items := blocked.Unresolved()
+	if len(items) != 1 || items[0].State != domain.ObligationConflict || len(items[0].ConflictsWith) != 2 {
+		t.Fatalf("blocking = %#v; 冲突项与冲突依据必须在清单里", items)
+	}
+	if fixture.store.saved != 0 {
+		t.Fatal("被冲突项阻止的关闭落了库")
+	}
+}

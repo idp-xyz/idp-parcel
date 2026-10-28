@@ -171,17 +171,19 @@ func (catalogue *CaseRegisterCatalogue) ListSubmissionAuthorities(
 // appliesUntil 用指针收 NULL：非承接项的承接对象、尚无终点的适用区间在库里就是
 // NULL，指针缺席即领域侧的零值，不代填任何编造值。
 type closureObligationItemDocument struct {
-	Obligation   string     `json:"obligation"`
-	Scope        string     `json:"scope"`
-	State        string     `json:"state"`
-	Basis        string     `json:"basis"`
-	HandedTo     *string    `json:"handedTo"`
-	AppliesFrom  time.Time  `json:"appliesFrom"`
-	AppliesUntil *time.Time `json:"appliesUntil"`
+	Obligation string  `json:"obligation"`
+	Scope      string  `json:"scope"`
+	State      string  `json:"state"`
+	Basis      string  `json:"basis"`
+	HandedTo   *string `json:"handedTo"`
+	// conflictsWith 在库里是可空数组，json_agg 里 NULL 即缺席。
+	ConflictsWith []string   `json:"conflictsWith"`
+	AppliesFrom   time.Time  `json:"appliesFrom"`
+	AppliesUntil  *time.Time `json:"appliesUntil"`
 }
 
 func (document closureObligationItemDocument) registration() (ports.ObligationRegistration, error) {
-	// 状态封闭三值经同一张译表（obligationItemStateOf）：集外取值上抛，判据同点读
+	// 状态封闭四值经同一张译表（obligationItemStateOf）：集外取值上抛，判据同点读
 	// ——静默吸收会让旁路写入的坏数据穿进查阅答案。
 	state, err := obligationItemStateOf(document.State)
 	if err != nil {
@@ -196,6 +198,7 @@ func (document closureObligationItemDocument) registration() (ports.ObligationRe
 	if document.HandedTo != nil {
 		item.HandedTo = *document.HandedTo
 	}
+	item.ConflictsWith = document.ConflictsWith
 	registration := ports.ObligationRegistration{
 		Item:        item,
 		AppliesFrom: document.AppliesFrom.UTC(),
@@ -229,6 +232,7 @@ func (catalogue *CaseRegisterCatalogue) ListClosureObligations(
 		                            'state',        item.item_state,
 		                            'basis',        item.basis,
 		                            'handedTo',     item.handed_to,
+		                            'conflictsWith', item.conflicts_with,
 		                            'appliesFrom',  item.applies_from,
 		                            'appliesUntil', item.applies_until
 		                        )

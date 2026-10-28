@@ -111,3 +111,51 @@ func TestReopeningIsControlledAndAppendsOnly(t *testing.T) {
 		t.Fatalf("err = %v; 早于关闭的重开被收下了", err)
 	}
 }
+
+// Covers: CC CONTEXT「关闭依据项……分别表达已终结、已移交、未解决或冲突」与「任一未解决或冲突项都阻止关闭」
+// ——冲突项阻止关闭且在阻止清单里带冲突依据；冲突依据双向必备：冲突项至少两份互不相同的
+// 事实引用，非冲突项不得携带（说不出与谁矛盾的冲突与未解决分不开）。
+func TestConflictItemBlocksClosureAndCarriesItsConflictBasis(t *testing.T) {
+	conflict := obligation("duty-settled", domain.ObligationConflict)
+	conflict.ConflictsWith = []string{"fact/release-a", "fact/hold-b"}
+	verification, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt,
+		[]domain.ClosureObligationItem{obligation("declaration-submitted", domain.ObligationConcluded), conflict},
+		closureCutoffAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("verify closure: %v", err)
+	}
+	if verification.Closable() {
+		t.Fatal("有冲突项还说可关闭")
+	}
+	if len(verification.UnresolvedItems()) != 0 || len(verification.ConflictItems()) != 1 {
+		t.Fatalf("冲突不应混进未解决：unresolved=%v conflict=%v", verification.UnresolvedItems(), verification.ConflictItems())
+	}
+	blocking := verification.BlockingItems()
+	if len(blocking) != 1 || len(blocking[0].ConflictsWith) != 2 {
+		t.Fatalf("blocking = %#v", blocking)
+	}
+	if _, err := domain.CloseCase(verification, "customs-owner", closureCutoffAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClosureBlocked) {
+		t.Fatalf("err = %v; 冲突项没有挡住关闭", err)
+	}
+
+	invalid := map[string]domain.ClosureObligationItem{}
+	for name, refs := range map[string][]string{
+		"冲突项没有冲突依据": nil,
+		"冲突项只有一份事实": {"fact/a"},
+		"冲突项两份引用相同": {"fact/a", "fact/a"},
+		"冲突项带空引用":   {"fact/a", ""},
+	} {
+		item := obligation("duty-settled", domain.ObligationConflict)
+		item.ConflictsWith = refs
+		invalid[name] = item
+	}
+	carried := obligation("duty-settled", domain.ObligationUnresolved)
+	carried.ConflictsWith = []string{"fact/a", "fact/b"}
+	invalid["非冲突项带了冲突依据"] = carried
+	for name, item := range invalid {
+		if _, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt,
+			[]domain.ClosureObligationItem{item}, closureCutoffAt.Add(time.Hour)); !errors.Is(err, domain.ErrInvalidClosure) {
+			t.Fatalf("%s：err = %v", name, err)
+		}
+	}
+}

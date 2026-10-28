@@ -483,6 +483,9 @@ type closureItemRow struct {
 	State      string `json:"state"`
 	Basis      string `json:"basis"`
 	HandedTo   string `json:"handedTo,omitempty"`
+	// 冲突依据随关闭记录原样保存：关闭时冲突项必已为空，此列只为读回时与领域
+	// 构造同形，不做第二套口径。
+	ConflictsWith []string `json:"conflictsWith,omitempty"`
 }
 
 type reopeningRow struct {
@@ -593,11 +596,12 @@ func marshalClosureItems(items []domain.ClosureObligationItem) ([]byte, error) {
 	rows := make([]closureItemRow, 0, len(items))
 	for _, item := range items {
 		rows = append(rows, closureItemRow{
-			Obligation: item.Obligation,
-			Scope:      item.Scope,
-			State:      item.State.String(),
-			Basis:      item.Basis,
-			HandedTo:   item.HandedTo,
+			Obligation:    item.Obligation,
+			Scope:         item.Scope,
+			State:         item.State.String(),
+			Basis:         item.Basis,
+			HandedTo:      item.HandedTo,
+			ConflictsWith: append([]string(nil), item.ConflictsWith...),
 		})
 	}
 	return json.Marshal(rows)
@@ -634,11 +638,12 @@ func rebuildCaseClosure(
 			return nil, err
 		}
 		items = append(items, domain.ClosureObligationItem{
-			Obligation: row.Obligation,
-			Scope:      row.Scope,
-			State:      state,
-			Basis:      row.Basis,
-			HandedTo:   row.HandedTo,
+			Obligation:    row.Obligation,
+			Scope:         row.Scope,
+			State:         state,
+			Basis:         row.Basis,
+			HandedTo:      row.HandedTo,
+			ConflictsWith: row.ConflictsWith,
 		})
 	}
 	verification, err := domain.VerifyClosure(caseRef, cutoffAt, items, verifiedAt)
@@ -675,6 +680,8 @@ func obligationStateFrom(value string) (domain.ObligationItemState, error) {
 		return domain.ObligationHandedOver, nil
 	case "UNRESOLVED":
 		return domain.ObligationUnresolved, nil
+	case "CONFLICT":
+		return domain.ObligationConflict, nil
 	default:
 		return domain.ObligationItemStateInvalid,
 			fmt.Errorf("customs compliance postgres: unknown obligation state %q", value)

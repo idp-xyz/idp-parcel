@@ -331,8 +331,8 @@ func (registry *ObligationInventoryRegistrations) RegisterObligationItem(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.closure_obligation_item
 			(tenant_id, case_ref, obligation, scope, item_state, basis, handed_to,
-			 applies_from, applies_until)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 applies_from, applies_until, conflicts_with)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT (tenant_id, case_ref, obligation) DO NOTHING`,
 		tenant.String(),
 		caseRef.String(),
@@ -343,6 +343,7 @@ func (registry *ObligationInventoryRegistrations) RegisterObligationItem(
 		handedToColumn(registration.Item),
 		registration.AppliesFrom.UTC(),
 		appliesUntilColumn(registration),
+		conflictsWithColumn(registration.Item),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register obligation item: %w", err)
@@ -362,6 +363,15 @@ func handedToColumn(item domain.ClosureObligationItem) *string {
 	}
 	handedTo := item.HandedTo
 	return &handedTo
+}
+
+// conflictsWithColumn 把冲突依据译成可空数组列：非冲突项交回 NULL，库的 CHECK
+// 要求「冲突项带至少两份互不相同的事实引用、非冲突项不带」双向成立。
+func conflictsWithColumn(item domain.ClosureObligationItem) []string {
+	if item.State != domain.ObligationConflict {
+		return nil
+	}
+	return append([]string(nil), item.ConflictsWith...)
 }
 
 // appliesUntilColumn 把零值终点译成 NULL：「尚无终点」与「某刻失效」在读口的半开
