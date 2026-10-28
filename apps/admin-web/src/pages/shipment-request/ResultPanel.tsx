@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
-import { OperatorRefusalState, UnconfiguredState } from '../../components/states';
+import { OperatorRefusalState, TechnicalDetails, UnconfiguredState } from '../../components/states';
 import type { ApiResult } from './api';
-import { problemNote } from './presentation';
+import { answerTechnicalRows, problemMessage } from './words';
 import { NoticeCard } from './controls';
 
 // ApiResult 各格的统一呈现(格的划分见 api.ts)。业务答案(2xx)长什么样由页面
 // 各自渲染——提交与撤回的封闭词汇表不同,合并渲染就得开「其他」格,那正是
-// ADR-0022 不允许的口子;答案之外的各格在两页语义相同,集中在这里。
+// ADR-0022 不允许的口子;答案之外的各格在各页语义相同,集中在这里。
+// 正文只说下一步做什么;状态码与问题码收进「技术详情」。
 export function ResultPanel<Body>({
   result,
   pending,
@@ -19,7 +20,7 @@ export function ResultPanel<Body>({
   if (pending) {
     return (
       <div className="rounded border border-idpxyz-border p-4 text-[13px] text-idpxyz-textMuted">
-        等待服务端答复…
+        正在提交…
       </div>
     );
   }
@@ -43,36 +44,27 @@ export function ResultPanel<Body>({
       // 调用方的错(4xx):答案没形成,但重发同样内容不会改变结果——交给人改,
       // 呈现为可改正的陈述,不是系统故障。
       return (
-        <NoticeCard
-          title="请求未被受理"
-          meta={`HTTP ${result.status} · ${result.code}`}
-        >
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">
-            {problemNote(result.code)}
-          </p>
+        <NoticeCard title="没有受理">
+          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{problemMessage(result.code)}</p>
+          <TechnicalDetails rows={answerTechnicalRows(result)} />
         </NoticeCard>
       );
 
     case 'noAnswer':
       return (
-        <NoticeCard
-          title="服务端未形成答案"
-          meta={`HTTP ${result.status} · ${result.code}`}
-        >
+        <NoticeCard title="这次没有处理成功">
           <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">
-            {problemNote(result.code)}
-            本次调用没有形成任何业务决定,重试是安全的,不会造成重复委托。
+            {problemMessage(result.code)} 这次没有形成任何业务决定,重试是安全的,不会重复建单。
           </p>
+          <TechnicalDetails rows={answerTechnicalRows(result)} />
         </NoticeCard>
       );
 
     case 'transport':
       return (
-        <NoticeCard title="未连通服务端" meta={result.message}>
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">
-            请求未到达 parcel-api。请确认装配侧已注入 API 前缀
-            (configureShipmentRequestApi,约定走 /api 经代理转发)且代理与服务端在运行。
-          </p>
+        <NoticeCard title="没有连上服务器">
+          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">请求没有送出去。请检查网络后再试;一直连不上请联系管理员。</p>
+          <TechnicalDetails rows={answerTechnicalRows(result)} />
         </NoticeCard>
       );
   }

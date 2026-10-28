@@ -2,43 +2,37 @@ import { formatInstant } from '../moment';
 import { useState } from 'react';
 import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { pendingText } from '../../components/action-feedback';
+import { TechnicalDetails } from '../../components/states';
 import {
   cancelParcel,
   type ApiResult,
   type CancellationDraft,
   type CancellationResponseBody,
 } from './api';
-import {
-  cancellationOutcomeViews,
-  cancellationPendingReasonViews,
-  withCode,
-  type OutcomeView,
-} from './presentation';
+import { cancellationOutcomeViews, cancellationPendingReasonViews, type OutcomeView } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
+import { ParcelNo } from './refs';
 import { ResultPanel } from './ResultPanel';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
-// UC-PS-006 接受后取消入口:取消已接受委托中的明确包裹,或协调收寄后服务处置。
+// 取消运单(UC-PS-006 接受后取消入口):取消已接受委托中的明确包裹;货已收寄的包裹不能取消,转收寄后服务处置。
 //
-// 端点 POST /shipment-requests/parcel-cancellations 已真挂载(cmd/parcel-api 装配
-// 取消编排),本页照 withdraw 页模式对形状接线:api.ts 收编端点形状、presentation
-// 收编结果词表、表单只收客户可声明部分——来源信封与请求方身份由接入适配器从认证
-// 结果铸造,业务发生时间由渠道契约声明,页面都不送。授权规则未登记时服务端答
-// 未决 + AUTHORITY_UNCONFIGURED,按未配置态如实呈现,不画成错误。
+// 端点 POST /shipment-requests/parcel-cancellations 已真挂载(cmd/parcel-api 装配取消编排),本页照 withdraw 页模式
+// 对形状接线:api.ts 收编端点形状、presentation 收编结果词表、表单只收客户可声明部分——来源信封与请求方身份由
+// 接入适配器从认证结果铸造,业务发生时间由渠道契约声明,页面都不送。授权规则未登记时服务端答未决 +
+// AUTHORITY_UNCONFIGURED,按未配置态如实呈现,不画成错误。
 //
-// 批量语义(UC-PS-006 步骤 1):端点一次受理一件包裹,批量只归组、不拥有共同状态。
-// 页面把多件包裹逐件分发、逐件呈现结果,部分成功由此自然表达;一件的结果不回滚
-// 其他件已合法形成的决定。已收寄包裹这里绝不提供改回「已取消」的口子:边界后的
-// 走向是待处置或明确拒绝,由服务端裁决,页面不预判。
+// 批量语义(UC-PS-006 步骤 1):端点一次受理一件包裹,批量只归组、不拥有共同状态。页面把多件包裹逐件分发、
+// 逐件呈现结果,部分成功由此自然表达;一件的结果不回滚其他件已合法形成的决定。已收寄包裹这里绝不提供改回
+// 「已取消」的口子:边界后的走向是待处置或明确拒绝,由服务端裁决,页面不预判。
 //
-// 边界文案的出处:parcel-shipment CONTEXT.md「包裹取消决定」「收寄后服务处置决定」
-// 与 UC-PS-006 决定矩阵。措辞守住该用例的「本用例不执行」:不把客户消息自动解释
-// 为取消。
+// 屏上的话按运营的说法:「运单号」是委托标识,「客户单号」是原提交的来源请求键;边界规则不摆在表单上讲,
+// 结果卡里按答案说。出处:parcel-shipment CONTEXT.md「包裹取消决定」「收寄后服务处置决定」与 UC-PS-006 决定矩阵。
 
 interface CancellationFormState {
   originalRequestKey: string;
   shipmentRequestId: string;
-  /** 每行一件包裹标识;逐件分发时按行序受理。 */
+  /** 每行一件包裹号;逐件分发时按行序受理。 */
   parcelIds: string;
   requesterReference: string;
   reasonReference: string;
@@ -72,15 +66,14 @@ function parcelIdsOf(form: CancellationFormState): string[] {
 }
 
 // 必填集取 UC-PS-006 取消请求的最低业务语义:目标委托、目标包裹、请求方与原因
-// 缺一即构造不出取消请求(服务端同判 REQUEST_NOT_ACCEPTED)。授权判定属服务端,
-// 页面不判。
+// 缺一即构造不出取消请求(服务端同判 REQUEST_NOT_ACCEPTED)。授权判定属服务端,页面不判。
 function validate(form: CancellationFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!form.originalRequestKey.trim()) errors.originalRequestKey = '必填';
-  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '必填';
-  if (parcelIdsOf(form).length === 0) errors.parcelIds = '至少填写一件包裹标识';
-  if (!form.requesterReference.trim()) errors.requesterReference = '必填';
-  if (!form.reasonReference.trim()) errors.reasonReference = '必填';
+  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写运单号。';
+  if (!form.originalRequestKey.trim()) errors.originalRequestKey = '请填写客户单号。';
+  if (parcelIdsOf(form).length === 0) errors.parcelIds = '至少填写一个包裹号。';
+  if (!form.requesterReference.trim()) errors.requesterReference = '请填写是谁提出取消。';
+  if (!form.reasonReference.trim()) errors.reasonReference = '请填写取消原因。';
   return errors;
 }
 
@@ -94,14 +87,14 @@ function buildDraft(form: CancellationFormState, parcelId: string): Cancellation
   };
 }
 
-// 确认弹层的正文（票 admin-web-workspace-form/05 第 3 条，蓝图 21.2）：逐件列出要取消的包裹标识、影响什么、以谁的名义,
-// 不写「确定吗」。边界句取 UC-PS-006 的口径：逐件裁决允许部分成功;越过取消边界的不回退为「已取消」,转收寄后服务处置。
+// 确认弹层的正文(票 admin-web-workspace-form/05 第 3 条,蓝图 21.2):逐件列出要取消的包裹、影响什么、以谁的名义,
+// 不写「确定吗」。边界句取 UC-PS-006 的口径:逐件裁决允许部分成功;已收寄的包裹不回退为「已取消」,转货物处置。
 function cancellationConfirmText(form: CancellationFormState): string {
   const parcels = parcelIdsOf(form);
   return (
-    `将对委托 ${form.shipmentRequestId.trim()}(来源请求 ${form.originalRequestKey.trim()})中的 ${parcels.length} 件包裹逐件请求取消:` +
-    `${parcels.join('、')}。每件独立裁决,允许部分成功;已越过取消边界的包裹不回退为「已取消」,转收寄后服务处置。` +
-    `以请求方 ${form.requesterReference.trim()} 的名义,原因 ${form.reasonReference.trim()}。`
+    `运单 ${form.shipmentRequestId.trim()}(客户单号 ${form.originalRequestKey.trim()})里的 ${parcels.length} 件包裹将逐件申请取消:` +
+    `${parcels.join('、')}。每件单独判,可能只取消一部分;已经收寄的包裹取消不了,会转到货物处置。` +
+    `申请人 ${form.requesterReference.trim()},原因:${form.reasonReference.trim()}。`
   );
 }
 
@@ -146,75 +139,35 @@ export function CancelParcelPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[720px] mx-auto px-6 py-6 space-y-4">
         <header>
-          <h1 className="text-[18px] font-bold text-idpxyz-textBright">
-            取消包裹或协调收寄后服务处置
-          </h1>
+          <h1 className="text-[18px] font-bold text-idpxyz-textBright">取消运单</h1>
           <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-1">
-            对已接受委托中的明确包裹逐件裁决(UC-PS-006):尚未越过适用取消边界时形成
-            包裹取消决定;已越过边界时明确拒绝回退取消,转收寄后服务处置。仍为
-            「已提交」的整份委托撤回走「决定前撤回」,不在本页。越过边界之后的
-            收寄后服务处置决定与待人工处理项登记,在「收寄后处置决定」页。
+            客户要停一票已受理的运单时,在这里按包裹逐件申请取消。货已经收寄的包裹取消不了,会转到「货物处置」由运营决定去向;
+            还没受理的运单要停请走「提交与撤回」。
           </p>
         </header>
 
-        <Section title="入口边界">
-          <ul className="list-disc pl-5 space-y-1.5 text-[12px] leading-5 text-idpxyz-textMuted">
-            <li>
-              取消权按包裹判断,批量请求允许部分成功;一个包裹的结果不回滚其他包裹
-              已合法形成的决定。
-            </li>
-            <li>
-              网络服务包裹只允许在有效网络收寄结果形成前取消;有效网络收寄已先行成立时
-              不回退为「已取消」,只能形成收寄后服务处置决定、保持未决或明确拒绝。
-            </li>
-            <li>
-              取消保留包裹身份、接受基线、请求、授权与既有交易或作业历史;已有面单交易时,
-              包裹取消不能代替渠道作废或渠道退款结果。
-            </li>
-            <li>
-              客户消息、异常信号、拒收、无路由或运输停止本身不自动生成取消、退运或
-              服务终止;处置决定必须由有权主体明确形成。
-            </li>
-          </ul>
-        </Section>
-
-        <Section title="目标委托">
+        <Section title="哪一票运单">
           <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="原提交的来源请求标识"
-              required
-              error={errors.originalRequestKey}
-              hint="产生该委托的那次提交所用的请求标识;与委托标识双重指名,缺一即统一不可见。"
-            >
+            <Field label="运单号" required error={errors.shipmentRequestId} hint="受理时给客户的运单号。">
               <input
-                className={inputClass}
-                value={form.originalRequestKey}
-                onChange={(event) => setField('originalRequestKey')(event.target.value)}
-              />
-            </Field>
-            <Field
-              label="委托标识"
-              required
-              error={errors.shipmentRequestId}
-              hint="提交成立时返回的 shipmentRequestId。"
-            >
-              <input
-                className={inputClass}
+                className={`${inputClass} font-mono`}
                 value={form.shipmentRequestId}
                 onChange={(event) => setField('shipmentRequestId')(event.target.value)}
+              />
+            </Field>
+            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与运单号一起才能找到这票运单。">
+              <input
+                className={`${inputClass} font-mono`}
+                value={form.originalRequestKey}
+                onChange={(event) => setField('originalRequestKey')(event.target.value)}
               />
             </Field>
           </div>
         </Section>
 
-        <Section title="取消请求">
+        <Section title="取消哪些包裹">
           <div className="space-y-3">
-            <Field
-              label="目标包裹标识"
-              required
-              error={errors.parcelIds}
-              hint="每行一件。取消按包裹逐件裁决,多件时逐件发出请求、逐件返回结果,允许部分成功。"
-            >
+            <Field label="包裹号" required error={errors.parcelIds} hint="每行一个。每件单独判,可能只取消一部分。">
               <textarea
                 className={`${inputClass} min-h-[72px] font-mono`}
                 rows={3}
@@ -223,24 +176,14 @@ export function CancelParcelPage() {
               />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field
-                label="请求方引用"
-                required
-                error={errors.requesterReference}
-                hint="取消授权的真实规则待租户登记,此处只记录引用,授权由服务端逐件判定。"
-              >
+              <Field label="谁提出取消" required error={errors.requesterReference} hint="客户或联系人的名字 / 编号,记在取消记录里。">
                 <input
                   className={inputClass}
                   value={form.requesterReference}
                   onChange={(event) => setField('requesterReference')(event.target.value)}
                 />
               </Field>
-              <Field
-                label="取消原因引用"
-                required
-                error={errors.reasonReference}
-                hint="原因目录属待登记参数,此处按引用填写,不提供预设选项。"
-              >
+              <Field label="取消原因" required error={errors.reasonReference} hint="一句话说明,记在取消记录里。">
                 <input
                   className={inputClass}
                   value={form.reasonReference}
@@ -258,12 +201,10 @@ export function CancelParcelPage() {
             onClick={requestCancel}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
-            {pending ? pendingText('取消') : '逐件请求取消列出的包裹'}
+            {pending ? pendingText('取消') : '取消列出的包裹'}
           </button>
           {Object.keys(errors).length > 0 ? (
-            <span className="text-[12px] text-idpxyz-textBright">
-              尚有输入不完整,已在字段旁标出。
-            </span>
+            <span className="text-[12px] text-idpxyz-textBright">还有没填好的地方,已在字段旁标出。</span>
           ) : null}
         </div>
 
@@ -272,21 +213,17 @@ export function CancelParcelPage() {
             {entries.map(({ parcelId, result }) => (
               <div key={parcelId} className="space-y-1">
                 <div className="text-[12px] text-idpxyz-textMuted">
-                  包裹 <span className="font-mono text-idpxyz-text">{parcelId}</span>
+                  包裹 <ParcelNo parcelId={parcelId} className="text-idpxyz-text" />
                 </div>
                 <ResultPanel
                   result={result}
                   pending={false}
-                  renderOutcome={(body, status) => (
-                    <CancellationOutcomeCard body={body} status={status} />
-                  )}
+                  renderOutcome={(body, status) => <CancellationOutcomeCard body={body} status={status} />}
                 />
               </div>
             ))}
             {pending ? (
-              <div className="rounded border border-idpxyz-border p-4 text-[13px] text-idpxyz-textMuted">
-                正在逐件请求,等待服务端答复…
-              </div>
+              <div className="rounded border border-idpxyz-border p-4 text-[13px] text-idpxyz-textMuted">正在逐件提交…</div>
             ) : null}
           </div>
         ) : null}
@@ -296,10 +233,10 @@ export function CancelParcelPage() {
           renderFooter={confirmDialogFooter}
           open={confirming}
           tone="danger"
-          title="逐件请求取消列出的包裹"
+          title="取消这些包裹"
           message={cancellationConfirmText(form)}
-          confirmLabel="逐件请求取消"
-          cancelLabel="不取消"
+          confirmLabel="确认取消"
+          cancelLabel="先不取消"
           onConfirm={handleCancel}
           onCancel={() => setConfirming(false)}
         />
@@ -309,75 +246,47 @@ export function CancelParcelPage() {
 }
 
 const unknownOutcome: OutcomeView = {
-  label: '',
-  note: '本页尚未收录该结果词,请以原词核对服务端记录与用例文档。',
+  label: '结果未收录',
+  note: '系统交回了本页还不认识的结果,请按技术详情里的结果码核对记录。',
 };
 
-function CancellationOutcomeCard({
-  body,
-  status,
-}: {
-  body: CancellationResponseBody;
-  status: number;
-}) {
+function CancellationOutcomeCard({ body, status }: { body: CancellationResponseBody; status: number }) {
   const view = cancellationOutcomeViews[body.outcome] ?? unknownOutcome;
-  const pendingView = body.pendingReason
-    ? cancellationPendingReasonViews[body.pendingReason]
-    : undefined;
+  const pendingView = body.pendingReason ? cancellationPendingReasonViews[body.pendingReason] : undefined;
   return (
-    <NoticeCard
-      title={withCode(view.label, body.outcome)}
-      titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}
-      meta={`HTTP ${status}${status === 201 ? ' · 取消新建成立' : ''}`}
-    >
+    <NoticeCard title={view.label} titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}>
       <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
 
       <dl className="mt-3 space-y-1">
-        {body.cancellationId ? (
-          <DetailRow label="取消决定标识" value={body.cancellationId} mono />
-        ) : null}
-        {body.decidedAt ? <DetailRow label="判断时间" value={formatInstant(body.decidedAt)} mono /> : null}
-        {body.intakeVersion ? (
-          <DetailRow label="越过的收寄版本" value={body.intakeVersion} mono />
-        ) : null}
-        {body.refusalBasis ? (
-          <DetailRow label="规则依据" value={body.refusalBasis} mono />
-        ) : null}
-        {body.standingFinal ? (
-          <DetailRow label="既有终局" value={body.standingFinal} mono />
-        ) : null}
-        {body.pendingReason ? (
-          <DetailRow
-            label="未决原因"
-            value={withCode(pendingView?.label, body.pendingReason)}
-          />
-        ) : null}
-        {body.continuationReference ? (
-          <DetailRow label="续办引用" value={body.continuationReference} mono />
-        ) : null}
-        {body.handoffReference ? (
-          <DetailRow label="重发引用" value={body.handoffReference} mono />
-        ) : null}
+        {body.decidedAt ? <DetailRow label="决定时间" value={formatInstant(body.decidedAt)} /> : null}
+        {body.pendingReason ? <DetailRow label="未决原因" value={pendingView?.label ?? body.pendingReason} /> : null}
       </dl>
 
       {pendingView ? (
         // 未配置态用正文色而非沉底色:它是要人去登记参数的行动项,不是可忽略的细节;
         // 但仍不是错误色——未配置不是故障,也不是业务否定。
-        <p
-          className={`text-[11px] leading-4 mt-2 ${
-            pendingView.unconfigured ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
-          }`}
-        >
+        <p className={`text-[11px] leading-4 mt-2 ${pendingView.unconfigured ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
           {pendingView.note}
         </p>
       ) : null}
 
       {body.handoffReference ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">
-          重发引用与判断续办是两条路:取消决定已成立,只是发布意图未交出;重放同一
-          请求会重发同一份意图,不会形成第二份决定。
-        </p>
+        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">取消已经成立,只是通知还没发出去;再提交一次只会重发通知,不会形成第二份取消。</p>
       ) : null}
+
+      <TechnicalDetails
+        rows={[
+          { label: 'HTTP 状态', value: String(status) },
+          { label: '结果码', value: body.outcome },
+          { label: '取消决定标识', value: body.cancellationId ?? '' },
+          { label: '越过的收寄版本', value: body.intakeVersion ?? '' },
+          { label: '规则依据', value: body.refusalBasis ?? '' },
+          { label: '既有终局', value: body.standingFinal ?? '' },
+          { label: '未决原因码', value: body.pendingReason ?? '' },
+          { label: '续办引用', value: body.continuationReference ?? '' },
+          { label: '重发引用', value: body.handoffReference ?? '' },
+        ]}
+      />
     </NoticeCard>
   );
 }
