@@ -40,9 +40,9 @@ export function mayWriteRegistry(held: HeldGrants | undefined): boolean {
 export const hiddenEntryHint = '登记与发布入口只对持登记册配置写授予的操作者显示。';
 
 /**
- * 空态与说明里指向写入口的那半句。入口摆着时照说它在哪（`pointer`）；入口按授予收起时换成 hiddenEntryHint——文案跟着入口走，
- * 否则查阅员会被指去一个看不见的「登记」签。
+ * 空态与说明里指向写入口的那半句。入口摆着时照说它在哪（`pointer`）；入口按授予收起时换成 `whenHidden`，默认 hiddenEntryHint——
+ * 文案跟着入口走，否则查阅员会被指去一个看不见的「登记」签。本页本来就没有那个入口、只是在说载体从哪来的，另给一句或给空串。
  */
-export function entryHint(mayWrite: boolean, pointer: string): string {
-  return mayWrite ? pointer : hiddenEntryHint;
+export function entryHint(mayWrite: boolean, pointer: string, whenHidden: string = hiddenEntryHint): string {
+  return mayWrite ? pointer : whenHidden;
 }

@@ -71,10 +71,12 @@ export interface PublicationFlowState {
   submission: KeyedAnswer<PublicationDraftResponseBody> | null;
   approval: KeyedAnswer<PublicationDraftResponseBody> | null;
   publication: KeyedAnswer<PublicationDraftPublicationResponseBody> | null;
+  /** 已变更之后那次没放行的重新存为待批准（见 withResubmission）；放行的那次直接成为 submission。 */
+  resubmission: KeyedAnswer<PublicationDraftResponseBody> | null;
 }
 
 export function emptyFlow(): PublicationFlowState {
-  return { preview: null, submission: null, approval: null, publication: null };
+  return { preview: null, submission: null, approval: null, publication: null, resubmission: null };
 }
 
 // 放行边。每张表只列让流程**前进**的原词；其余一律停在原地，答复原样显给操作者——续办动作各不相同
@@ -131,8 +133,9 @@ const draftChanged = 'DRAFT_CHANGED';
 
 /**
  * 答`已变更`的那一口。批准与发布绑的是存为待批准时服务端答的那对摘要（ADR-0314）；册上这份载体被别的操作者改动之后，再按一次
- * 仍带旧摘要、仍答已变更，所以那颗按钮要收回，改摆两条续办：去「待批准发布」页读回现在的内容、在那里批；或用表单上这份重新
- * 存为待批准（`待批准期间修订`，覆盖别人的改动）拿到新摘要再批。只看同键的答复；发布口的答复比批准口的后到，先看它。
+ * 仍带旧摘要、仍答已变更，所以那颗按钮要收回，改摆续办：去「待批准发布」页读回现在的内容、在那里批或发；批准那一口答的还可以
+ * 用表单上这份重新存为待批准（`待批准期间修订`，覆盖别人的改动）拿到新摘要再批——发布那一口答的不行，载体已批准、内容固定，
+ * 录入口只会答 `CONTENT_FIXED`。只看同键的答复；发布口的答复比批准口的后到，先看它。
  */
 export function changedDecisionOf(flow: PublicationFlowState, key: string): 'approve' | 'publish' | null {
   if (outcomeOf(flow.publication, key) === draftChanged) return 'publish';
@@ -187,7 +190,7 @@ export function withPreview(
   key: string,
   answer: ApiResult<PublicationPreviewResponseBody>,
 ): PublicationFlowState {
-  return { preview: { key, answer }, submission: null, approval: null, publication: null };
+  return { preview: { key, answer }, submission: null, approval: null, publication: null, resubmission: null };
 }
 
 export function withSubmission(
@@ -195,7 +198,21 @@ export function withSubmission(
   key: string,
   answer: ApiResult<PublicationDraftResponseBody>,
 ): PublicationFlowState {
-  return { ...flow, submission: { key, answer }, approval: null, publication: null };
+  return { ...flow, submission: { key, answer }, approval: null, publication: null, resubmission: null };
+}
+
+/**
+ * 已变更之后的重新存为待批准。放行了就同 withSubmission：新摘要接上，已变更随批准答复一起清掉。没放行（未受理、403、内容固定）
+ * 只记下这口答复给人看，录入与批准各步原样留着——册上那份载体还在，表单仍锁、已变更仍显；若照 withSubmission 覆盖，一次没成的
+ * 重录会把流程退回预览、把表单解锁，看着像从没存过。
+ */
+export function withResubmission(
+  flow: PublicationFlowState,
+  key: string,
+  answer: ApiResult<PublicationDraftResponseBody>,
+): PublicationFlowState {
+  if (answer.kind === 'outcome' && submitAdvances.has(answer.body.outcome)) return withSubmission(flow, key, answer);
+  return { ...flow, resubmission: { key, answer } };
 }
 
 export function withApproval(

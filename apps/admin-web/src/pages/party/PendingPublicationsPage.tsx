@@ -97,7 +97,8 @@ export function PendingPublicationsPage() {
       )
     : rows;
   const retry = () => setReloadKey((value) => value + 1);
-  // 录入入口在各册的发布签，没有登记册配置写授予的操作者看不到它们（ADR-0315），说明文案不往那里指。
+  // 录入入口在各册的发布签，没有登记册配置写授予的操作者看不到它们（ADR-0315）；本页自己没有那个入口，说明文案不往那里指，
+  // 也不解释一个本页没有的入口。
   const mayWrite = useMayWriteRegistry();
 
   return (
@@ -105,7 +106,7 @@ export function PendingPublicationsPage() {
       <ListPageTemplate<PendingDraftRow>
         moduleId="pending-publications"
         title={info.title}
-        description={`已经存为待批准、或已批准而还没发布的发布稿。点一行读回内容，批准与发布在详情里做。${entryHint(mayWrite, '录入在各册的发布页签。')}`}
+        description={`已经存为待批准、或已批准而还没发布的发布稿。点一行读回内容，批准与发布在详情里做。${entryHint(mayWrite, '录入在各册的发布页签。', '')}`}
         search={{
           value: search,
           onChange: setSearch,
@@ -122,7 +123,7 @@ export function PendingPublicationsPage() {
           module: info,
           endpoint: 'GET /commercial-open-publication-drafts',
           emptyTitle: '当前没有待批准的发布稿',
-          emptyDescription: `没有尚未发布的载体。${entryHint(mayWrite, '各册发布页签里「存为待批准」之后，它们会出现在这里。')}`,
+          emptyDescription: `没有尚未发布的载体。${entryHint(mayWrite, '各册发布页签里「存为待批准」之后，它们会出现在这里。', '有人在各册存为待批准之后，它们会出现在这里。')}`,
         })}
       />
       <PendingDraftDrawer

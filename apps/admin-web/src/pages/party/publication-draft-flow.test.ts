@@ -27,6 +27,7 @@ import {
   withApproval,
   withPreview,
   withPublication,
+  withResubmission,
   withSubmission,
 } from './publication-draft-flow';
 
@@ -311,10 +312,21 @@ test('批准或发布答已变更：按钮收回、区里说明，只认同键�
   equal(stale.approve, 'stale');
   equal(stale.publish, 'waiting');
   ok(stale.status.includes('批准已收回'));
-  // 重新存为待批准清掉批准答复：已变更随之消失，新摘要接上。
-  const resubmitted = withSubmission(approveChanged, key, outcome({ outcome: 'DRAFT_REVISED', contentDigest: 'PCC-2:x', shellDigest: 'PCS-2:y' }));
+  // 重新存为待批准放行即清掉批准答复：已变更随之消失，新摘要接上。
+  const resubmitted = withResubmission(approveChanged, key, outcome({ outcome: 'DRAFT_REVISED', contentDigest: 'PCC-2:x', shellDigest: 'PCS-2:y' }));
   equal(changedDecisionOf(resubmitted, key), null);
+  equal(resubmitted.resubmission, null);
   deepEqual(decisionDigestOf(resubmitted, key), { content: 'PCC-2:x', shell: 'PCS-2:y' });
+  // 没放行的重录只记下答复：仍停在存为待批准、表单仍锁、已变更仍在、旧摘要仍在。
+  for (const failed of [outcome({ outcome: 'NOT_ACCEPTED', problems: [] }), outcome({ outcome: 'CONTENT_FIXED' }), unconfigured]) {
+    const kept = withResubmission(approveChanged, key, failed as ApiResult<PublicationDraftResponseBody>);
+    equal(reachedStep(kept, key), 'submit');
+    equal(changedDecisionOf(kept, key), 'approve');
+    deepEqual(decisionDigestOf(kept, key), { content: 'PCC-1:abc', shell: 'PCS-1:def' });
+    equal(currentAnswer(kept.resubmission, key), failed);
+  }
+  // 下一次预览或放行的录入把没放行的那次清掉。
+  equal(withPreview(withResubmission(approveChanged, key, unconfigured), key, outcome({ outcome: 'PREVIEWED' })).resubmission, null);
 
   const approved = withApproval(submitted, key, outcome({ outcome: 'DRAFT_APPROVED' }));
   const publishChanged = withPublication(approved, key, outcome({ outcome: 'DRAFT_CHANGED' }));

@@ -39,4 +39,5 @@ test('明确没有登记册配置写授予才收起写入口', () => {
 test('指向写入口的文案跟着入口走：摆着时说它在哪，收起时说谁能用', () => {
   equal(entryHint(true, '在「登记」页签登记第一个。'), '在「登记」页签登记第一个。');
   equal(entryHint(false, '在「登记」页签登记第一个。'), hiddenEntryHint);
+  equal(entryHint(false, '录入在各册的发布页签。', ''), '');
 });

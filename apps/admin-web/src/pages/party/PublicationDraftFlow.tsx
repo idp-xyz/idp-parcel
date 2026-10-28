@@ -41,6 +41,7 @@ import {
   withApproval,
   withPreview,
   withPublication,
+  withResubmission,
   withSubmission,
   type FlowAction,
   type FlowStep,
@@ -124,6 +125,7 @@ export function PublicationDraftFlow({
   const submission = currentAnswer(flow.submission, key);
   const approval = currentAnswer(flow.approval, key);
   const publication = currentAnswer(flow.publication, key);
+  const resubmission = currentAnswer(flow.resubmission, key);
   // 批准与发布绑定存为待批准时服务端答的摘要；拿不到时两个按钮都收回，不拿别的摘要顶。
   const digest = decisionDigestOf(flow, key);
 
@@ -144,30 +146,34 @@ export function PublicationDraftFlow({
     }
   }, [step, key, onPublished]);
 
-  const run = (which: FlowAction) => {
+  const settle = <Body,>(
+    which: FlowAction,
+    request: Promise<ApiResult<Body>>,
+    apply: (flow: PublicationFlowState, key: string, answer: ApiResult<Body>) => PublicationFlowState,
+  ) => {
     setBusy(which);
     const at = key;
-    const settle = <Body,>(
-      request: Promise<ApiResult<Body>>,
-      apply: (flow: PublicationFlowState, key: string, answer: ApiResult<Body>) => PublicationFlowState,
-    ) => {
-      void request.then((answer) => {
-        setFlow((current) => apply(current, at, answer));
-        setBusy(null);
-      });
-    };
+    void request.then((answer) => {
+      setFlow((current) => apply(current, at, answer));
+      setBusy(null);
+    });
+  };
+  // 已变更之后用表单上这份重录：同一口、同一份载荷，只是没放行时不覆盖已有各步（withResubmission）。
+  const resubmit = () => settle('submit', submitPublicationDraft(payload), withResubmission);
+
+  const run = (which: FlowAction) => {
     switch (which) {
       case 'preview':
-        return settle(previewCommercialPublication(payload), withPreview);
+        return settle(which, previewCommercialPublication(payload), withPreview);
       case 'submit':
-        return settle(submitPublicationDraft(payload), withSubmission);
+        return settle(which, submitPublicationDraft(payload), withSubmission);
       // 批准与发布要带存下那份载体的摘要；没有就不发（按钮此时本来就是收回的）。
       case 'approve':
-        if (digest === null) return setBusy(null);
-        return settle(approvePublicationDraft(draftReferenceOf(payload, digest)), withApproval);
+        if (digest === null) return;
+        return settle(which, approvePublicationDraft(draftReferenceOf(payload, digest)), withApproval);
       case 'publish':
-        if (digest === null) return setBusy(null);
-        return settle(publishPublicationDraft(draftReferenceOf(payload, digest)), withPublication);
+        if (digest === null) return;
+        return settle(which, publishPublicationDraft(draftReferenceOf(payload, digest)), withPublication);
     }
   };
 
@@ -281,8 +287,10 @@ export function PublicationDraftFlow({
             {changed !== null ? (
               <>
                 <p className="text-xs text-idpxyz-textMuted">
-                  {'要采用别人改后的内容，去「待批准发布」页读回现在的内容后在那里批；要以表单上这份为准，重新存为待批准——' +
-                    '册上那份会改回眼前这份（待批准期间修订），别人的改动随之覆盖，然后再批。'}
+                  {changed === 'approve'
+                    ? '要采用别人改后的内容，去「待批准发布」页读回现在的内容后在那里批；要以表单上这份为准，重新存为待批准——' +
+                      '册上那份会改回眼前这份（待批准期间修订），别人的改动随之覆盖，然后再批。'
+                    : '去「待批准发布」页读回现在的内容，核对后在那里发布。这一版已批准、内容固定，表单上这份不能再存回去。'}
                 </p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <Button
@@ -294,10 +302,13 @@ export function PublicationDraftFlow({
                   >
                     去「待批准发布」页核对
                   </Button>
-                  <Button variant="outline" disabled={busy !== null} onClick={() => run('submit')}>
-                    {busy === 'submit' ? '存为待批准中…' : '用表单上这份重新存为待批准'}
-                  </Button>
+                  {changed === 'approve' ? (
+                    <Button variant="outline" disabled={busy !== null} onClick={resubmit}>
+                      {busy === 'submit' ? '存为待批准中…' : '用表单上这份重新存为待批准'}
+                    </Button>
+                  ) : null}
                 </div>
+                {resubmission ? <DraftNote answer={resubmission} what="重新存为待批准" labels={submitOutcomeLabels} /> : null}
               </>
             ) : null}
           </section>
