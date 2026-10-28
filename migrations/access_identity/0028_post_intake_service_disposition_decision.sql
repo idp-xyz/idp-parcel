@@ -1,4 +1,4 @@
--- 「运营决定」能力面加一种决定：收寄后服务处置（ADR-0336 决定二；票 docs-consistency/code/37）。与
+-- 「运营决定」能力面加一种决定：收寄后服务处置（ADR-0332 决定二；票 docs-consistency/code/37）。与
 -- accessidentity.DecisionPostIntakeServiceDisposition 同笔放开（0001 头注那条约定）。本迁移不种任何行：谁被授予哪一种决定是租户取值。
 --
 -- 只重建决定种类这一条 CHECK。全集取此前各份重建的并集（以 0027 那一份为底），再加本份一个词。迁移不按编号先后施加，本份可能晚于编号更大的一份施加，

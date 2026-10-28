@@ -134,6 +134,9 @@ var declaredPartitionSubjects = map[string]string{
 	// 「取消被认定不成立」口（ADR-0295 决定四）一份冲突一条队：续办读的是库里已落定的状态，不依赖队里在前的信封；与同包裹的取消、采用、终局信封同队，会让一封因下游
 	// 未决而停在队头的同包裹信封把续办堵在后面，而续办正是要放行被它们之一挡住的来源。
 	"internal/parcelshipment/adapters/postgres/cancellation_not_upheld_handoff.go": partitionPerEnvelopePrefix + "（租户，包裹，取消，边界种类，边界那一代）五维，一份冲突至多一封",
+	// 收寄后服务处置决定口（ADR-0332 决定四）取「租户/包裹/口名」：同一包裹的决定链按版本先后一条队，口名段让它不与同包裹的取消、采用、终局信封同队——它们的下游未决
+	// 不该堵住一份扣住包裹的请求。
+	"internal/parcelshipment/adapters/postgres/post_intake_disposition_handoff.go": partitionSubjectPrefix + "租户/包裹/口名" + partitionRulingMark + "ADR-0332 决定四（本口段 /post-intake-disposition）",
 	// 「委托已提交」口按（租户/客户账户/委托）排队——同一委托的提交侧事件一条队，不同
 	// 委托互不阻塞。与上面接受决定口的「租户/委托请求」是同一聚合的两个口、两个分区
 	// 字符串：本表的可扫性正是为让这类取舍摆在明面（要不要并队归裁定，不归本行）。

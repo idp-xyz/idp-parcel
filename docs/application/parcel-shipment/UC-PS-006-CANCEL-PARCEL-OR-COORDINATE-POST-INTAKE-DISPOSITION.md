@@ -1,6 +1,6 @@
 # UC-PS-006 取消包裹或协调收寄后服务处置
 
-状态：开发基线；逐包裹取消已实现，含目标委托须已接受且属信封账户的闸门、提交边界上的终局与面单渠道服务首次有效收寄核验、取消—收寄冲突的判法与留存；收寄后服务处置决定与取消—收寄冲突的解开尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
+状态：开发基线；逐包裹取消已实现，含目标委托须已接受且属信封账户的闸门、提交边界上的终局与面单渠道服务首次有效收寄核验、取消—收寄冲突的判法与留存与解开；收寄后服务处置决定的留痕与向对象所有者交出的信封已实现（[ADR-0332](../../adr/0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md)），各所有者的承接与承接结果读回尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
 
 ## 目标与边界
 
@@ -67,7 +67,7 @@
 | 结果 | 代码 | 业务含义 | 禁止行为 |
 |---|---|---|---|
 | 包裹已取消 | `PARCEL_CANCELLED` | 授权成立、提交边界上没有在册的收寄或终局，形成取消终局 | 不得删除身份、接受基线或既有交易 |
-| 待处置 | `DISPOSITION_PENDING` | 提交边界上收寄已在册，取消不形成；记下越过的收寄版本，收寄后服务处置决定由后续独立请求形成 | 不得回退为已取消，也不得据此自动退运或终止 |
+| 待处置 | `DISPOSITION_PENDING` | 提交边界上收寄已在册，取消不形成；记下越过的收寄版本，请求方、授权依据、原因与业务时间随记录保全，收寄后服务处置决定由运营经决定面形成（ADR-0332） | 不得回退为已取消，也不得据此自动退运或终止 |
 | 取消被拒 | `CANCELLATION_REFUSED` | 授权答不允许，带规则依据；或面单渠道服务的实际承运商首次有效收寄在提交边界上已经在册，依据指名越过的那一代收寄（`CARRIER_FIRST_EFFECTIVE_PICKUP/<收寄事实>@<版本>`） | 不得在授权规则未登记时作答 |
 | 取消未决 | `CANCELLATION_UNDECIDED` | 依赖读不回、授权规则未登记、面单渠道服务的首次有效收寄判过但待确认，或本方提交没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)），原因是 `REQUEST_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`AUTHORITY_UNCONFIGURED`、`ADOPTION_STORE_UNAVAILABLE`、`CANCELLATION_STORE_UNAVAILABLE`、`CANCELLATION_IDENTITY_UNAVAILABLE`、`FINAL_OUTCOME_STORE_UNAVAILABLE`、`CARRIER_PICKUP_UNAVAILABLE`、`CARRIER_PICKUP_PENDING` 之一，带续办引用 | 不得默认授权或默认放行取消 |
 | 已有结果 | `EXISTING_RESULT` | 同一请求身份、同一包裹、相同内容的重复请求，返回原逐包裹结果 | 不得重复形成取消 |
@@ -144,6 +144,9 @@
 | `AT-PS-171` | 冲突被认定边界事实有误、交来源方更正 | 取消保持有效，不作废任何记录，没有续办信封；这一代边界事实在收寄采用处不采用（`SOURCE_NOT_ADOPTED`，依据 `BOUNDARY_FACT_REFERRED/<取消标识>`，重放答已有结果）、在面单渠道终局判断处答 `CANCELLATION_STANDS`，不写第二行冲突；来源方更正出的新一代按 `AT-PS-107`、`AT-PS-108` 重判；决定读不动按依赖未决回滚重投 |
 | `AT-PS-172` | 面单渠道服务的冲突被认定取消依据不成立 | 续办按 TF 首次有效收寄链尾现读，已形成交面单终局判断，形成非取消终局；没有或待确认不判；册上还有没被决定的冲突时，交易与关闭两路仍答冲突 |
 | `AT-PS-173` | 网络服务的冲突被认定取消依据不成立 | 续办凭回放原料把收寄来源交回收寄采用，目标取当前已接受委托，形成责任起点与正式承诺并交下游采用意图；把依据该取消的有效交付交回终局采用，重新进入终局规则判断（规则未配置停在未决），规则放行形成的终局自己交出一封终局信封，不被被删行当初那一封的去重吞掉（终局信封的交接身份折进该包裹的作废代次，没有作废决定的包裹其信封 ID 与载荷不变；VE 终局投影凭载荷里的代次给它另一个事实版本、取代不采用那一份，见 `AT-VE-174`）；每条链的结果过自己消费门的译表，未决回滚重投；重放答已有结果；续办门的未决名单只收等依赖的几格 |
+| `AT-PS-174` | 运营对越界待处置的停止请求（或被认定依据不成立的取消）形成收寄后服务处置决定；多位同时回应同一份请求，或同一人原样重发，或另一位随后回应、或运营发起后一份取代前一份 | 决定成立并留痕（去向、来源、决定人取认证出的操作者、依据、责任范围、时刻），向路由、节点、运输各提一项范围化请求，信封与留痕同笔、一个版本恰一封，依据种类是服务处置决定；等回应清单里随之消失；并发恰一笔成立，重发读回原决定时刻一致且不多一封，再回应同一请求答已被回应，运营发起的后一份取代前一份并另发信封，链尾对不上答前一份已变；继续不请求任何所有者；回执不回显决定人；编排在无事务时拒跑 |
+| `AT-PS-175` | 收寄后服务处置决定的授权与前提 | 只持别种授予 403、没有令牌 401、载荷自报租户或改送缺目的地、别的去向带目的地、去向不在封闭集 400，册上没有的请求 404 统一不可见；租户未登记这一种授予时没有人能决定；包裹没有责任起点答未越过边界、已有有效取消答终局成立并指名它，都是确定答案、什么也不落；查阅同理（无查阅读授予 403，别的租户只看自己的） |
+| `AT-PS-176` | 收寄后服务处置决定的去向与所有者请求表（领域） | 去向封闭五个、每个去向对各所有者的范围化请求是封闭表（继续不请求，拦截请求节点与运输，改送请求路由与运输，退运请求路由、节点、运输，服务终止请求路由释放、节点与运输扣住），不含结算；只有改送与退运另起关联但独立的旅程；改送必带目的地、别的去向不带，客户请求来源必须指名请求、运营发起必须不指名，决定人与依据缺一不立，版本接不上前一版不立 |
 
 ## 给开发的交接
 
@@ -151,7 +154,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| 收寄后服务处置决定；`AT-PS-083`、`AT-PS-084`、`AT-PS-088` | 编排越过边界时只记`待处置`，收寄后服务处置决定没有模型、没有决定面，也不向下游提出范围化请求；本行预期结果不变 | [code/37](../../../.scratch/docs-consistency/code/37-post-intake-service-disposition-decision-has-no-model.md) |
+| 收寄后服务处置决定；`AT-PS-083`、`AT-PS-084`、`AT-PS-088` | 已补决定本体与向所有者的请求：`POST /post-intake-disposition-decisions` 形成每包裹一条只追加的决定链（去向封闭为继续、拦截、改送、退运、服务终止；来源客户请求或运营发起），同笔向路由、节点、运输交一封范围化请求信封，授权是「运营决定」族的 `POST_INTAKE_SERVICE_DISPOSITION`，租户取值、未登记没有人能决定；`GET /post-intake-disposition-requests` 查阅等回应的停止请求（越界待处置与被认定依据不成立的取消）。未补：各所有者对信封的承接与拒绝的保留（`AT-PS-088`）、监管退运转 `UC-TF-001` 的承接（`AT-PS-084`）、管理台页 | [code/37](../../../.scratch/docs-consistency/code/37-post-intake-service-disposition-decision-has-no-model.md) |
 | 面单渠道服务的取消边界；`AT-PS-086` | 已补：提交边界上先读当前有效终局，已有终局答 `FINAL_OUTCOME_STANDS`；再读网络收寄的采用链与面单渠道服务的首次有效收寄，已形成的收寄答 `CANCELLATION_REFUSED` 并指名那一代，待确认答未决 `CARRIER_PICKUP_PENDING` | [code/21](../../../.scratch/docs-consistency/code/21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) |
 | 目标委托的生命周期与账户 | 已补：取消只对已接受的委托开放，已撤回、已拒绝答 `REQUEST_ENDED`、已提交答 `REQUEST_AWAITING_DECISION`；取消命令带必填的信封客户账户，目标委托不属该账户与查无同答统一不可见，账户缺席答 `REQUEST_NOT_ACCEPTED`；对应首方取消口接入面须以认证结果填该账户 | [code/101](../../../.scratch/docs-consistency/code/101-parcel-cancellation-and-final-formation-have-no-request-lifecycle-gate-and-cancellation-does-not-check-the-account.md) |
 | 统一不可见 | 已补：委托查无、编号不符、跨租户与成员出界由取消编排认成同一个统一不可见错误，HTTP 答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`；`REQUEST_NOT_ACCEPTED` 只剩字段缺 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |

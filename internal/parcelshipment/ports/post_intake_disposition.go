@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件是收寄后服务处置决定要读、要记与要交出的口（ADR-0336）：越过取消边界的包裹，客户的停止请求停在待处置（CancellationRecord 的
+// 本文件是收寄后服务处置决定要读、要记与要交出的口（ADR-0332）：越过取消边界的包裹，客户的停止请求停在待处置（CancellationRecord 的
 // RecordDispositionPending），有权主体对它或对一件包裹自己发起，形成一份只追加的决定；决定向各对象所有者提出范围化请求，由信封交出。
 
 // PostIntakeDispositionRequestOrigin 说明一份待回应的请求为什么待回应。
