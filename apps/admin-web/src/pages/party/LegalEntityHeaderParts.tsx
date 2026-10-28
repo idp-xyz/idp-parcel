@@ -103,22 +103,22 @@ export function LegalEntityBanners({ row }: { row: GroupLegalEntityRecord }) {
         <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.danger}`}>
           <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText.danger}`} aria-hidden="true" />
           <span>
-            自 <Instant value={row.deactivatedAt} /> 起停用，不再支持新的商业决定
-            {row.deactivationBasis ? ` — 依据 ${row.deactivationBasis}` : ''}
+            自 <Instant value={row.deactivatedAt} /> 起停用，新的签约与开票不再用它
+            {row.deactivationBasis ? ` — 来源单据 ${row.deactivationBasis}` : ''}
           </span>
         </div>
       )}
       {!row.identityLayerRegistered && (
         <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
           <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
-          <span>待补：身份层两格{identityLayerAbsentNote}。登记同一法人的下一修订补齐（列表页头「登记责任法人」）。</span>
+          <span>待补：注册地与注册号{identityLayerAbsentNote}。用页头的「新增公司主体」填同一个编码再保存一次即可补齐。</span>
         </div>
       )}
       {!row.partyNameKnown && (
         <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
           <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
           <span>
-            待查：{partyNameUnknownNote}（{row.partyId}）。多半是当初登记时出了问题，登记新修订补不上；请到业务参与方页核对这个参与方。
+            待查：{partyNameUnknownNote}（{row.partyId}）。多半是当初登记时出了问题；请到「往来单位」里核对这家单位。
           </span>
         </div>
       )}
@@ -157,7 +157,7 @@ export function LegalEntityMoreMenu({
       ) : null}
       <MenuItem onSelect={() => copy('法人标识', row.legalEntityId)}>
         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        复制法人标识
+        复制编码
       </MenuItem>
       {mayWrite ? <MenuSeparator /> : null}
       {/* 法人的停用表单在业务参与方页「登记 › 身份停用」（一个命令带种类）；深链预填种类与这个法人的标识，
@@ -169,7 +169,7 @@ export function LegalEntityMoreMenu({
           }}
         >
           <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          停用此责任法人…
+          停用这个公司主体…
         </MenuItem>
       ) : null}
     </DropdownMenu>

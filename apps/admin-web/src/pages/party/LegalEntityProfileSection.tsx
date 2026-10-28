@@ -94,15 +94,15 @@ export function LegalEntityProfileSection({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
-            <p className="mt-1 text-xs text-idpxyz-breadcrumb">按生效时点读取法人资料；未来生效的修订不会覆盖历史。</p>
+            <p className="mt-1 text-xs text-idpxyz-breadcrumb">开票时按当时生效的那一版资料；可以提前登记未来生效的资料。</p>
           </div>
         </div>
         <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
       </section>
       <section className="border-t border-idpxyz-border pt-5">
         <div>
-          <h4 className="text-[13px] font-semibold text-idpxyz-text">资料修订历史</h4>
-          <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次登记形成新的资料修订，已登记内容不可覆盖。</p>
+          <h4 className="text-[13px] font-semibold text-idpxyz-text">历次资料</h4>
+          <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都留一版，旧的不会被改掉。</p>
         </div>
         <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
       </section>
@@ -112,7 +112,7 @@ export function LegalEntityProfileSection({
             <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
           ) : (
             <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
-              登记新的资料修订
+              更新开票资料
             </Button>
           )}
         </section>
@@ -197,7 +197,7 @@ function ResolutionAnswer({
   if (answer.kind === 'noAnswer') {
     return (
       <SectionError
-        title="服务端没有形成答案"
+        title="没有得到答案"
         description={problemNote(answer.code)}
         technical={httpRows(answer.status, answer.code)}
         onRetry={retry}
@@ -298,10 +298,9 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
         <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
           <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
           <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
-            <li>一笔登记形成一个资料修订，登记过的不被覆盖；新修订自其生效时点起取代前一修订，可以登记未来生效的修订。</li>
+            <li>每次更新都留一版，新的一版从它的生效时间起取代上一版；可以提前登记未来生效的资料。</li>
             <li>注册地址的国家 / 地区须与身份上的注册国家 / 地区一致。</li>
-            <li>不带开票抬头的修订生效后，按时点解析答「资料不全」，开票会被拒。</li>
-            <li>表单只检查格式；地址与身份对不对得上、税号合不合目录、修订是否连续，由登记册判定，答复显示在提交按钮旁。</li>
+            <li>没填开票抬头的那一版生效后，开票会因「资料不全」被拒。</li>
           </ul>
         </div>
 
@@ -423,18 +422,18 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
           </div>
         </FormGroup>
 
-        <FormGroup title="登记" description="这一笔资料修订的依据与生效时点；生效时点可以在未来。">
-          <Field label="登记依据 *" path="profiles[0].basis" problems={problems}>
+        <FormGroup title="登记" description="这次更新依据哪份单据、从什么时候起生效；生效时间可以在未来。">
+          <Field label="来源单据 *" path="profiles[0].basis" problems={problems}>
             <Input
               value={draft.basis}
               readOnly={locked}
               className="font-mono text-[13px]"
-              placeholder="资料登记依据引用"
+              placeholder="营业执照、税务登记或审批单号"
               onChange={(event) => patch({ basis: event.target.value })}
             />
           </Field>
           <WallTimeField
-            label="生效自 *"
+            label="生效时间 *"
             path="profiles[0].effectiveFrom"
             problems={problems}
             value={draft.effectiveFrom}
@@ -446,11 +445,11 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
 
         <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
           <RevisionField
-            label="资料修订号 *"
+            label="更新序号"
             path="profiles[0].revision"
             problems={problems}
             {...form.revisionField}
-            note="建议值取这个法人最新资料修订 + 1，没有为 1。"
+            note="系统按已登记的记录自动算好，一般不用改。"
           />
         </AdvancedGroup>
 
@@ -461,7 +460,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
             onClick={form.send}
             disabled={locked || !form.canSend}
           >
-            {locked ? '提交中…' : '提交资料修订'}
+            {locked ? '保存中…' : '保存'}
           </Button>
           <RegistrationAnswerNote
             state={form.state}

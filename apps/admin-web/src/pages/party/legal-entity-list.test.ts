@@ -135,9 +135,9 @@ test('同一秒内小数位数不定的时刻按真实先后排', () => {
 // Covers: 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
 // 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」（两者续办不同：前者改条件，后者去登记）。
 test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
-  equal(legalEntityCountSummary(4, 4), '共 4 个责任法人，当前显示 4 个');
-  equal(legalEntityCountSummary(4, 0), '共 4 个责任法人，当前显示 0 个');
-  equal(legalEntityNoMatchNote, '当前筛选条件下没有匹配的法人');
+  equal(legalEntityCountSummary(4, 4), '共 4 个公司主体，当前显示 4 个');
+  equal(legalEntityCountSummary(4, 0), '共 4 个公司主体，当前显示 0 个');
+  equal(legalEntityNoMatchNote, '当前筛选条件下没有匹配的公司主体');
 });
 
 // Covers: 胶囊选项与封闭词一一对应、「全部」在首位——页面直接渲染这张表，不另抄一份。

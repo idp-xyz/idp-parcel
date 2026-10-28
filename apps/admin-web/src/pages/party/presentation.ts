@@ -215,7 +215,7 @@ export function updateOrdinalLabel(revision: number): string {
 // 法人册对象类型今天只有一格(传输层 kindResponsibleLegalEntity):经营组织没有
 // 登记面,如实不上列,不预开空格。
 export const legalEntityKindLabels: Record<string, string> = {
-  RESPONSIBLE_LEGAL_ENTITY: '责任法人',
+  RESPONSIBLE_LEGAL_ENTITY: '公司主体',
 };
 
 // 责任法人身上有两条修订轴——身份登记修订与法人资料修订（ADR-0145 决定三），各自从 1 编号，同一屏常常一起出现；

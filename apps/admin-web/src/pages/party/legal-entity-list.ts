@@ -86,11 +86,11 @@ export function effectiveShareOfInUse(counts: Pick<LegalEntityCounts, 'byStatus'
  * 「共 N 个，当前显示 0 个」，表格区另显 legalEntityNoMatchNote，不把页面切成空态。
  */
 export function legalEntityCountSummary(total: number, visible: number): string {
-  return `共 ${total} 个责任法人，当前显示 ${visible} 个`;
+  return `共 ${total} 个公司主体，当前显示 ${visible} 个`;
 }
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
-export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的法人';
+export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的公司主体';
 
 /** 按表头排序交回新数组，不改输入；同值保持原序。认不得的键原样交回。 */
 export function sortLegalEntities(

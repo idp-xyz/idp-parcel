@@ -19,17 +19,17 @@ import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
 import { useBoundTenant } from '../use-operator-binding';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
-import { identityLayerAbsentNote, identityRevisionLabel, identityStatusLabels } from './presentation';
+import { identityLayerAbsentNote } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
 import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
-import { EffectiveShareBar, Instant, UnknownPartyName, statusBadge } from './detail-primitives';
+import { Instant, UnknownPartyName } from './detail-primitives';
+import { StatusPill } from '../../components/StatusPill';
 import { useRegisterList } from './register-list';
 import {
   countLegalEntities,
   defaultLegalEntitySort,
-  effectiveShareOfInUse,
   filterLegalEntities,
   legalEntityCountSummary,
   legalEntityNeedsAttention,
@@ -46,7 +46,7 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['group-legal-entities'];
 
 function emptyDescriptionOf(mayWrite: boolean): string {
-  return `还没有登记任何责任法人。${entryHint(mayWrite, '用页头的「登记责任法人」登记第一个。')}`;
+  return `签约、开票都要以公司主体的名义。${entryHint(mayWrite, '用页头的「新增公司主体」登记第一个。')}`;
 }
 
 // 行首圆点的颜色随身份状态；待补的行圆点闪，与参照页「逾期 / 暂挂」同一个记号。
@@ -74,22 +74,23 @@ function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
 // 本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格，种类进详情栏与对象页。
 const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
   {
-    key: 'legal-entity',
-    header: '法人标识',
-    sortKey: 'legal-entity',
+    key: 'party',
+    header: '公司主体',
+    sortKey: 'party-name',
+    // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
+    // 主列只留名称；法人标识、参与方标识、修订号、登记依据进详情栏底部的「技术详情」。
     render: (row) => (
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-36 items-center gap-1.5">
         <span
           className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
             legalEntityNeedsAttention(row) ? 'animate-pulse' : ''
           }`}
           aria-hidden="true"
         />
-        {/* 标识取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
-        <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.legalEntityId}>
-          {row.legalEntityId}
+        {/* 名称取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
+        <span className="truncate font-medium text-[color:var(--ds-text-link-hover)]" title={row.legalEntityId}>
+          {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
         </span>
-        <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">{identityRevisionLabel(row.revision)}</span>
         {legalEntityNeedsAttention(row) && (
           <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待补" />
         )}
@@ -97,21 +98,8 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     ),
   },
   {
-    key: 'party',
-    header: '责任主体',
-    sortKey: 'party-name',
-    hideWhenDetailOpen: true,
-    // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
-    render: (row) => (
-      <div>
-        <div className="text-idpxyz-textBright">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</div>
-        <div className="font-mono text-[12px] text-idpxyz-breadcrumb">{row.partyId}</div>
-      </div>
-    ),
-  },
-  {
     key: 'identity-layer',
-    header: '注册身份',
+    header: '注册地与注册号',
     hideWhenDetailOpen: true,
     render: (row) => <IdentityLayerCell row={row} />,
   },
@@ -121,7 +109,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
     render: (row) => (
       <div className="flex flex-col items-start gap-1 whitespace-nowrap">
-        {statusBadge(identityStatusLabels, row.status)}
+        <StatusPill code={row.status} />
         {row.deactivatedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
             自 <Instant value={row.deactivatedAt} />
@@ -132,10 +120,10 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
   },
   {
     key: 'effective-from',
-    header: '生效自',
+    header: '生效时间',
     sortKey: 'effective-from',
-    // 已登记即还没到生效时点，与参照页「预计到货」临近那一格同一个提示。参照页把时刻本身标琥珀色，这里改配一个琥珀色
-    // 时钟：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
+    // 待生效配一个琥珀色时钟而不是把时刻标琥珀色：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08
+    // 评审），图标是非文字，门槛 3:1。
     render: (row) => (
       <span className="inline-flex items-center gap-1 font-mono text-idpxyz-text">
         {row.status === 'REGISTERED' ? (
@@ -144,12 +132,6 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
         <Instant value={row.effectiveFrom} />
       </span>
     ),
-  },
-  {
-    key: 'basis',
-    header: '登记依据',
-    hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{row.basis}</span>,
   },
   {
     key: 'registered-at',
@@ -196,6 +178,8 @@ export function GroupLegalEntitiesPage() {
   // 页名里的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户（票 group-legal-entities-uiux/11）。答不出就不显，
   // 不拿列表行上的 tenantId 顶：空册时那一格根本没有，有时有、有时没有的页头比不显更让人疑惑。
   const boundTenant = useBoundTenant();
+  // 页名下不再写集团标识：一家公司一套系统，租户是谁不必告诉运营；绑定仍读着，壳层顶栏显公司名用它。
+  void boundTenant;
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const tabReturn = useTabReturn();
@@ -274,9 +258,9 @@ export function GroupLegalEntitiesPage() {
             返回列表
           </Button>
           <div className="min-w-0">
-            <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">登记责任法人</h1>
+            <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">新增公司主体</h1>
             <p className="truncate text-[12px] text-idpxyz-breadcrumb">
-              每次登记形成新修订，历史不可覆盖；更正身份就登记同一法人的下一修订号
+              我们自己对外签约、开票的公司；先登记注册地与注册号，开票资料之后在详情里补
             </p>
           </div>
         </div>
@@ -289,8 +273,8 @@ export function GroupLegalEntitiesPage() {
           renderFooter={confirmDialogFooter}
           open={confirmingLeave}
           tone="warning"
-          title="离开登记视图？"
-          message="这份登记还没有提交，离开后填写的内容不会保留。"
+          title="离开这一页？"
+          message="有内容还没有保存，离开后填写的内容不会保留。"
           confirmLabel="离开"
           cancelLabel="继续填写"
           onConfirm={leaveRegister}
@@ -304,7 +288,6 @@ export function GroupLegalEntitiesPage() {
   const visible = sortLegalEntities(filterLegalEntities(entities, { search, status, attentionOnly }), sort);
   const answered = answer?.kind === 'outcome';
   const counts = countLegalEntities(entities);
-  const effectiveShare = effectiveShareOfInUse(counts);
   const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
 
   const kpis: WorkbenchKpi[] | undefined = answered
@@ -319,7 +302,7 @@ export function GroupLegalEntitiesPage() {
           onClick: () => setAttentionOnly(!attentionOnly),
         },
         {
-          label: '已登记未生效',
+          label: '待生效',
           value: counts.byStatus.REGISTERED,
           tone: counts.byStatus.REGISTERED > 0 ? statusToneText.warning : undefined,
           active: status === 'REGISTERED',
@@ -333,17 +316,10 @@ export function GroupLegalEntitiesPage() {
           onClick: () => toggleStatus('EFFECTIVE'),
         },
         {
-          label: '在用中已生效',
-          value: '',
-          custom:
-            effectiveShare === null ? (
-              <span className="text-[12px] font-semibold leading-none text-idpxyz-breadcrumb">—</span>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <EffectiveShareBar share={effectiveShare} label="在用法人中已生效的占比" />
-                <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectiveShare}%</span>
-              </div>
-            ),
+          label: '已停用',
+          value: counts.byStatus.DEACTIVATED,
+          active: status === 'DEACTIVATED',
+          onClick: () => toggleStatus('DEACTIVATED'),
         },
       ]
     : undefined;
@@ -368,7 +344,7 @@ export function GroupLegalEntitiesPage() {
   return (
     <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
-      subtitle={`${boundTenant ? `集团 ${boundTenant} · ` : ''}责任法人是对外签约、开票与结算的经营主体 · 每次登记形成新修订，历史不可覆盖`}
+      subtitle="我们自己对外签约、开票与结算的公司：注册信息、开票资料与它们的变更"
       kpis={kpis}
       onRefresh={retry}
       refreshing={pending}
@@ -376,11 +352,11 @@ export function GroupLegalEntitiesPage() {
         mayWrite ? (
           <Button variant="default" className={primaryActionClass} onClick={openRegister}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            登记责任法人
+            新增公司主体
           </Button>
         ) : undefined
       }
-      search={{ value: search, onChange: setSearch, placeholder: '搜索法人、参与方身份或名称…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索公司名称、编码或注册号…' }}
       statusChips={statusChips}
       toolbarRight={answered ? legalEntityCountSummary(entities.length, visible.length) : undefined}
       columns={columns}
@@ -413,7 +389,7 @@ export function GroupLegalEntitiesPage() {
       viewState={catalogueViewState(answer, entities.length, retry, {
         module: info,
         endpoint: 'GET /commercial-group-legal-entities',
-        emptyTitle: '当前租户尚无责任法人登记',
+        emptyTitle: '还没有登记任何公司主体',
         emptyDescription: emptyDescriptionOf(mayWrite),
       })}
     />

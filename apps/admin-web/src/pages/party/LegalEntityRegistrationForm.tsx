@@ -135,17 +135,16 @@ export function LegalEntityRegistrationForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
-            <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
+            <p className="text-[13px] font-medium text-idpxyz-text">说明</p>
             <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
-              <li>一笔登记形成一个身份修订，登记过的不被覆盖。首笔修订从 1 起，此后必须连续。</li>
-              <li>录错了就登记同一法人的下一修订；改正注册国家 / 地区或终身注册号时写明身份更正依据。</li>
-              <li>注册国家 / 地区与终身注册号不作变更：号变了就是另一个法人，停用旧身份、登记新身份。</li>
-              <li>表单只检查格式；参与方是否在册且已生效、修订是否连续，由登记册判定，答复显示在提交按钮旁。</li>
+              <li>公司主体先要登记为往来单位，这里把它钉成我们自己签约、开票的公司。</li>
+              <li>录错了就填同一个编码再保存一次；改正注册地或注册号时在「高级」里写明更正的来源单据。</li>
+              <li>注册号换了就是另一家公司：停用旧的、新增一个。</li>
             </ul>
           </div>
 
           <FormGroup title="法人身份" description="法人是谁：稳定标识、所钉的业务参与方身份、注册国家 / 地区与终身注册号。">
-            <Field label="法人标识 *" path="legalEntities[0].legalEntityId" problems={problems}>
+            <Field label="编码 *" path="legalEntities[0].legalEntityId" problems={problems}>
               <Input
                 value={draft.legalEntityId}
                 readOnly={locked}
@@ -157,7 +156,7 @@ export function LegalEntityRegistrationForm({
             </Field>
 
             <ReferencePicker<BusinessPartyListResponseBody>
-              label="业务参与方身份 *"
+              label="对应的往来单位 *"
               path="legalEntities[0].partyId"
               problems={problems}
               value={draft.partyId}
@@ -172,7 +171,7 @@ export function LegalEntityRegistrationForm({
 
             <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
               answer={typeCatalogue}
-              label="注册国家 / 地区 *"
+              label="注册地（国家 / 地区）*"
               path="legalEntities[0].registrationCountry"
               problems={problems}
               value={draft.registrationCountry}
@@ -232,19 +231,19 @@ export function LegalEntityRegistrationForm({
             </div>
           </FormGroup>
 
-          <FormGroup title="登记" description="这一笔修订的依据与生效时点。">
-            <Field label="登记依据 *" path="legalEntities[0].basis" problems={problems}>
+          <FormGroup title="登记" description="这次登记依据哪份单据、从什么时候起生效。">
+            <Field label="来源单据 *" path="legalEntities[0].basis" problems={problems}>
               <Input
                 value={draft.basis}
                 readOnly={locked}
                 className="font-mono text-[13px]"
-                placeholder="登记依据引用（如董事会决议编号）"
+                placeholder="董事会决议、营业执照或审批单号"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
             </Field>
 
             <WallTimeField
-              label="生效自 *"
+              label="生效时间 *"
               path="legalEntities[0].effectiveFrom"
               problems={problems}
               value={draft.effectiveFrom}
@@ -256,23 +255,23 @@ export function LegalEntityRegistrationForm({
 
           <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
             <RevisionField
-              label="身份修订号 *"
+              label="更新序号"
               path="legalEntities[0].revision"
               problems={problems}
               {...form.revisionField}
-              note="建议值取该法人最新修订 + 1，不在册为 1。"
+              note="系统按已登记的记录自动算好，一般不用改。保存时提示序号对不上，说明列表已过时，刷新后再试。"
             />
 
-            <Field label="身份更正依据" path="legalEntities[0].identityCorrectionBasis" problems={problems}>
+            <Field label="更正的来源单据" path="legalEntities[0].identityCorrectionBasis" problems={problems}>
               <Input
                 value={draft.identityCorrectionBasis}
                 readOnly={locked}
                 className="font-mono text-[13px]"
-                placeholder="更正依据引用；留空即不带"
+                placeholder="只在改正注册地或注册号时填"
                 onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
               />
               <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
-                只在更正修订上填：改正录错的注册国家 / 地区或终身注册号时，写明依据。首笔修订不填。
+                改正录错的注册地或注册号时，写明依据哪份单据；首次登记不填。
               </span>
             </Field>
           </AdvancedGroup>
@@ -284,7 +283,7 @@ export function LegalEntityRegistrationForm({
               onClick={form.send}
               disabled={locked || !form.canSend}
             >
-              {locked ? '提交中…' : '提交登记'}
+              {locked ? '保存中…' : '保存'}
             </Button>
             <RegistrationAnswerNote
               state={form.state}

@@ -9,21 +9,22 @@ import {
 } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import type { GroupLegalEntityRecord } from './api';
-import { identityRevisionLabel, identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import { labelOf, legalEntityKindLabels, updateOrdinalLabel } from './presentation';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityBanners, LegalEntityLifecycle, LegalEntityMoreMenu } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import {
-  DetailRow,
   Fact,
   FactStrip,
   Instant,
   RefChip,
   UnknownPartyName,
-  statusBadge,
   useCopyToClipboard,
+  DetailRow,
 } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
@@ -73,25 +74,24 @@ export function LegalEntityDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{row.legalEntityId}</h2>
+              <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
+                {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
+              </h2>
               <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">{kind}</span>
-              {statusBadge(identityStatusLabels, row.status)}
+              <StatusPill code={row.status} />
             </div>
-            <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
-              {row.partyNameKnown ? row.partyName : <UnknownPartyName />} ·{' '}
-              <span className="whitespace-nowrap font-mono">{row.partyId}</span>
-            </p>
+            <p className="mt-0.5 font-mono text-[12px] text-idpxyz-breadcrumb">编码 {row.legalEntityId}</p>
+            {/* 注册地与注册号是业务事实，留在头部；登记依据与各标识收进概要签底部的「技术详情」。 */}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <RefChip label="国家" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
-              <RefChip label="注册号" value={identity?.numbers} title="终身注册号" onCopy={copy} />
-              <RefChip label="依据" value={row.basis} title="登记依据" onCopy={copy} />
+              <RefChip label="注册地" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
+              <RefChip label="注册号" value={identity?.numbers} title="注册号" onCopy={copy} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {mayWrite ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                登记资料修订
+                更新开票资料
               </Button>
             ) : null}
             <LegalEntityMoreMenu row={row} onOpenObjectPage={onOpenObjectPage} />
@@ -114,8 +114,8 @@ export function LegalEntityDetailPanel({
       </div>
 
       <FactStrip>
-        <Fact label="当前修订">{identityRevisionLabel(row.revision)}</Fact>
-        <Fact label="生效自">
+        <Fact label="变更">{updateOrdinalLabel(row.revision)}</Fact>
+        <Fact label="生效时间">
           <Instant value={row.effectiveFrom} />
         </Fact>
         <Fact label="登记时间">
@@ -132,29 +132,35 @@ export function LegalEntityDetailPanel({
           </TabsTrigger>
           <TabsTrigger value="profile" className="text-idpxyz-breadcrumb">
             <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            法人资料
+            开票资料
           </TabsTrigger>
           <TabsTrigger value="history" className="text-idpxyz-breadcrumb">
             <History className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            身份修订
+            变更记录
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <TabsContent value="overview" className="mt-0">
             <dl>
-              <DetailRow label="业务参与方身份" mono onCopy={() => copy('参与方身份', row.partyId)}>
-                {row.partyId}
-              </DetailRow>
-              <DetailRow label="身份更正依据" mono>
-                {row.identityCorrectionBasis ?? <span className="text-idpxyz-breadcrumb">—</span>}
-              </DetailRow>
-              <DetailRow label="停用依据" mono>
-                {row.deactivationBasis ?? <span className="text-idpxyz-breadcrumb">—</span>}
-              </DetailRow>
-              <DetailRow label="租户" mono>
-                {row.tenantId}
-              </DetailRow>
+              <DetailRow label="对应的往来单位">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</DetailRow>
+              {row.deactivationBasis ? (
+                <DetailRow label="停用的来源单据" mono>
+                  {row.deactivationBasis}
+                </DetailRow>
+              ) : null}
             </dl>
+            <TechnicalDetails
+              className="mt-4"
+              rows={[
+                { label: '法人标识', value: row.legalEntityId },
+                { label: '参与方标识', value: row.partyId },
+                { label: '身份修订号', value: String(row.revision) },
+                { label: '登记依据', value: row.basis },
+                { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
+                { label: '停用依据', value: row.deactivationBasis ?? '' },
+                { label: '租户', value: row.tenantId },
+              ]}
+            />
           </TabsContent>
           <TabsContent
             value="profile"

@@ -21,10 +21,8 @@ import {
 } from './api';
 import {
   identityLayerAbsentNote,
-  identityRevisionLabel,
-  identityStatusLabels,
   partyNameUnknownNote,
-} from './presentation';
+ updateOrdinalLabel } from './presentation';
 import {
   LegalEntityBanners,
   LegalEntityLifecycle,
@@ -35,7 +33,9 @@ import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
-import { Instant, statusBadge } from './detail-primitives';
+import { Instant } from './detail-primitives';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -74,14 +74,13 @@ function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
       label: '注册号',
       value: identity ? <span className="font-mono">{identity.numbers}</span> : muted(identityLayerAbsentNote),
     },
-    { label: '依据', value: <span className="font-mono">{row.basis}</span> },
   ];
 }
 
 function buildSummary(row: GroupLegalEntityRecord): DetailSummaryStat[] {
   return [
-    { label: '当前修订', value: <span className="font-mono">{identityRevisionLabel(row.revision)}</span> },
-    { label: '生效自', value: <Instant value={row.effectiveFrom} /> },
+    { label: '变更', value: updateOrdinalLabel(row.revision) },
+    { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
     { label: '登记时间', value: <Instant value={row.registeredAt} /> },
     { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
     { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
@@ -91,16 +90,27 @@ function buildSummary(row: GroupLegalEntityRecord): DetailSummaryStat[] {
 /** 与详情栏概要签同一份格：头区与指标带已经显示的不再重复。 */
 function buildBasicFields(row: GroupLegalEntityRecord): DetailField[] {
   return [
-    { label: '业务参与方身份', value: <span className="font-mono">{row.partyId}</span> },
+    { label: '对应的往来单位', value: row.partyNameKnown ? row.partyName : muted(partyNameUnknownNote) },
     {
-      label: '身份更正依据',
-      value: row.identityCorrectionBasis ? <span className="font-mono">{row.identityCorrectionBasis}</span> : muted('—'),
+      label: '停用的来源单据',
+      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('未停用'),
     },
     {
-      label: '停用依据',
-      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('—'),
+      label: '技术详情',
+      value: (
+        <TechnicalDetails
+          rows={[
+            { label: '法人标识', value: row.legalEntityId },
+            { label: '参与方标识', value: row.partyId },
+            { label: '身份修订号', value: String(row.revision) },
+            { label: '登记依据', value: row.basis },
+            { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
+            { label: '停用依据', value: row.deactivationBasis ?? '' },
+            { label: '租户', value: row.tenantId },
+          ]}
+        />
+      ),
     },
-    { label: '租户', value: <span className="font-mono">{row.tenantId}</span> },
   ];
 }
 
@@ -120,15 +130,15 @@ function viewStateOf(
       ? { kind: 'ready' }
       : {
           kind: 'empty',
-          title: '册上没有这个法人',
+          title: '没有这个公司主体',
           description: '本租户没有登记过这个法人标识。请检查链接或标识是否正确。',
         };
   }
   return catalogueViewState(answer, 1, retry, {
     module: info,
     endpoint: 'GET /commercial-group-legal-entities',
-    emptyTitle: '当前租户尚无责任法人登记',
-    emptyDescription: `还没有登记任何责任法人。${entryHint(mayWrite, '回到列表，用页头的「登记责任法人」登记第一个。')}`,
+    emptyTitle: '还没有登记任何公司主体',
+    emptyDescription: `签约、开票都要以公司主体的名义。${entryHint(mayWrite, '回到列表，用页头的「新增公司主体」登记第一个。')}`,
   });
 }
 
@@ -161,10 +171,10 @@ export function LegalEntityDetailPage({
   };
   return (
     <DetailPageTemplate
-      title="责任法人"
-      identifier={row?.legalEntityId ?? legalEntityId}
-      status={row ? statusBadge(identityStatusLabels, row.status) : undefined}
-      description={row ? `${row.partyNameKnown ? row.partyName : partyNameUnknownNote} · ${row.partyId}` : undefined}
+      title={info.title}
+      identifier={row ? (row.partyNameKnown ? row.partyName : partyNameUnknownNote) : legalEntityId}
+      status={row ? <StatusPill code={row.status} /> : undefined}
+      description={row ? `编码 ${row.legalEntityId}` : undefined}
       headerActions={
         <>
           {row ? (
@@ -210,7 +220,7 @@ export function LegalEntityDetailPage({
                 : []),
               {
                 id: 'profile',
-                title: '法人资料',
+                title: '开票资料',
                 description: '法人身份与法人资料分开登记；这里查看当前有效资料与资料修订历史，并登记下一笔资料修订。',
                 content: (
                   <LegalEntityProfileSection
