@@ -52,3 +52,5 @@ L：领域对象与只追加登记、授权端口、命令口与操作者或客�
 2. 下游承接（不挡上线，但在此之前信封入队后无人消费，决定本身可审）：TF 消费信封另起备用/退运旅程并以 `POST_INTAKE_DISPOSITION/<包裹>/<版本>` 作服务处置决定依据（UC-TF-007）、NO 扣住与按退运装载、NR 重新规划与释放、承接结果读回（`AT-PS-088`）、监管退运转 UC-TF-001（`AT-PS-084`）。
 3. 管理台页与演示租户的授予种子未随票；授予是租户取值，演示租户若要演示需另灌 `POST_INTAKE_SERVICE_DISPOSITION` 授予。
 4. `cmd/parcel-dispatch` 未改。
+
+**评审修订**（2026-10-28，隔离评审钉 `d034d4641`）：补 `TestACancellationNotUpheldWaitsForADispositionAndCanBeAnswered`（带 PG：被认定依据不成立的取消进清单、来路 `CANCELLATION_NOT_UPHELD`，并能被一份决定回应），`AT-PS-174` 名实相符；PS CONTEXT「收寄后服务处置决定」词条与取消边界一条的「或其他」改为五向封闭、指 ADR-0332，UC-PS-006 无同样措辞。
