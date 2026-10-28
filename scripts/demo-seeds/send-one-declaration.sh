@@ -57,7 +57,7 @@ PY
   case "$outcome" in
     200:UNATTRIBUTABLE) sleep 2 ;;
     201:RECEIPT_RECORDED|200:EXISTING_RECEIPT)
-      python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); print(f"消息号 {sys.argv[2]}；尝试 {b[\"version\"]}/{b[\"sequence\"]}；回执 {b[\"outcome\"]}；当前技术判断 {b[\"current\"]}")' \
+      python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); print("消息号 %s；尝试 %s/%s；回执 %s；当前技术判断 %s" % (sys.argv[2], b["version"], b["sequence"], b["outcome"], b["current"]))' \
         "$answer_file" "$message"
       exit 0 ;;
     *) printf 'send-one-declaration: 回执答 %s，应答：\n%s\n' "$outcome" "$(cat "$answer_file")" >&2; exit 1 ;;

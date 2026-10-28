@@ -40,7 +40,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 | 票 | 这次上调的范围 | 留在冻结里的 |
 |---|---|---|
-| [product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md](./product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) | 第 1 项申报发送通道：至少一种连接器形态对合成报关服务商跑通「授权确认 → 提交尝试 → 技术回执」，技术回执按 ADR-0242 归提交尝试 | 第 2–7 项（参考配置样板与待核各项） |
+| [product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md](./product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) | 第 1 项申报发送通道：至少一种连接器形态对合成报关服务商跑通「授权确认 → 提交尝试 → 技术回执」，技术回执按 ADR-0242 归提交尝试。**2026-10-28 已进 main（ADR-0342：dispatch 经登记通道发出、发送事实与异步技术回执），第 1 项完成。** | 第 2–7 项（参考配置样板与待核各项） |
 | [product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md](./product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md) | 费用确认、截单发布、供应商账单接收与审核的装配与入口，以及确认与截单的内置触发。**2026-10-28 已进 main（确认、截单发布与到点截单、供应商账单接收与审核），本票 resolved。** | 费用调整（先裁票面「要裁的」第 3 项）、成本分摊、赔付金额（首发只做受控模拟） |
 
 排期：等 tops-26 名下的 6 张 code 票进 main 后先做 10（量小，与那批同在 customs-compliance），再做 22。解冻条件即本节，不再看「首个租户撞上」。
