@@ -671,7 +671,7 @@ export interface AdmissionJudgementListResponseBody {
   judgements: AdmissionJudgementBody[];
 }
 
-/** object 空串即不按对象过滤;非空按包裹或申报单元查,最近的判断在前。 */
+/** object 空串即不按对象过滤;非空按包裹号精确查（判断册的对象是声明包裹，传申报单元号得空册）,最近的判断在前。 */
 export function listAdmissionJudgements(
   object: string,
 ): Promise<ApiResult<AdmissionJudgementListResponseBody>> {

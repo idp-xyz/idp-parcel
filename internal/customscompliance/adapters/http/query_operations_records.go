@@ -351,7 +351,7 @@ type admissionBasisBody struct {
 }
 
 // NewQueryActionAdmissionJudgementsEndpoint 交回动作准入判断册查阅的 HTTP 入口
-// （GET /customs-action-admission-judgements，可选 ?object= 按包裹或申报单元查）。
+// （GET /customs-action-admission-judgements，可选 ?object= 按包裹号精确查——判断册的对象是声明包裹，传申报单元号只会得到空册）。
 //
 // 判断册是判断当时的记录：每行带当时的区域读数与逐动作答复及依据，旧行不改。查阅面不重判、
 // 不拿「此刻」的登记册覆盖当时的答案——换了登记册之后同一请求的新判断是另一行。

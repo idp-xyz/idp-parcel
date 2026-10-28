@@ -342,7 +342,7 @@ function AdmissionJudgementsTable() {
           setObject(draft.trim());
         }}
       >
-        <label className="text-sm" htmlFor="admission-object">按包裹或申报单元查</label>
+        <label className="text-sm" htmlFor="admission-object">按包裹号查</label>
         <input
           id="admission-object"
           className="border rounded px-2 py-1 text-sm font-mono"
