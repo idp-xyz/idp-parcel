@@ -46,7 +46,7 @@ test('只有已生效的关系开得了两个动作，开不了时按状态词�
   equal(revoked.available, false);
   ok(!revoked.available && revoked.reason.includes('已撤销') && revoked.reason.includes('只有已生效的关系能撤销'));
   const candidate = endingAvailability(row({ status: 'CANDIDATE', effectiveEndsAt: '2026-06-01T00:00:00Z' }), 'expiration');
-  ok(!candidate.available && candidate.reason.includes('候选关系') && candidate.reason.includes('到期'));
+  ok(!candidate.available && candidate.reason.includes('待确认') && candidate.reason.includes('到期'));
 });
 
 test('到期另要区间有终点：开区间的关系无期可到，指去撤销', () => {

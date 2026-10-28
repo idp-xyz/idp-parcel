@@ -146,7 +146,7 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
  * 翻册，连续性（登记）或错位（停用）仍由服务端按册面判——这一句就显在格下，不让人把建议读成校验。
  */
 export function RevisionField({
-  label = '修订号 *',
+  label = '更新序号',
   path,
   problems,
   value,
@@ -181,7 +181,7 @@ export function RevisionField({
         />
         {edited ? (
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" disabled={locked} onClick={onUseSuggestion}>
-            用建议值 {suggestion}
+            用系统算的 {suggestion}
           </Button>
         ) : null}
       </div>

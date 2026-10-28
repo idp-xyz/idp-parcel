@@ -82,8 +82,8 @@ const kind = 'identity-deactivation';
 const kindOptions = identityKindOptions();
 
 const pickerNotes = {
-  emptyNote: '这类身份还没有登记过；可以先登记，或手填标识。',
-  optionsNote: '候选里也有已停用的身份；对已停用的再停用，服务端会拒绝。',
+  emptyNote: '这一类还没有登记过任何对象；可以先登记，或直接填编码。',
+  optionsNote: '候选里也有已停用的；已停用的不能再停用。',
 } as const;
 
 /** 种类 → 该册答案体的形状。三册体形各异（parties / entities / accounts），一个种类只在这里说一次它的体是什么。 */
@@ -274,7 +274,7 @@ export function IdentityDeactivationForm({
   const selectedName = selected === null ? null : pairedLabelOf(selected, draft.id);
   const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName);
   const pickerProps = {
-    label: '身份标识 *',
+    label: '停用哪一个 *',
     path: 'deactivations[0].id',
     problems,
     value: draft.id,
@@ -292,11 +292,11 @@ export function IdentityDeactivationForm({
         <CardContent className="flex flex-col gap-4">
           {/* 修订号是操作者声明自己看到的册面（册上最新 + 1），错位由服务端拒而不是替人猜；租户由操作者身份给出，不在表单上。 */}
           <p className="text-[12px] text-idpxyz-breadcrumb">
-            {'停用会在这个身份的修订记录上新增一笔，之前的修订不变。从停用时点起，它不再支持新的商业决定；停用后不能撤回。修订号填列表上最新的修订号 + 1，对不上说明有人刚登记过，服务端会拒绝。参与方关系不在这里停用，关系的结束走撤销、到期或替代。'}
+            {'从停用时间起，新的业务不再找它；已有记录保留，停用后不能撤回。合作关系不在这里停用——到合作关系里撤销或到期。'}
           </p>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="身份种类 *" path="deactivations[0].kind" problems={problems}>
+            <Field label="停用什么 *" path="deactivations[0].kind" problems={problems}>
               <select
                 className={selectClass}
                 value={draft.kind}
@@ -339,23 +339,23 @@ export function IdentityDeactivationForm({
                 // 落点显的就是建议值本身（同一份 rows、同一个标识算出来的），不在这里再加一次——「最新修订加一」只在
                 // suggestedNextRevision 一处。
                 known
-                  ? `这个身份最新的修订是 r${known.revision}，停用这一笔建议填 r${form.revisionField.suggestion}；如果期间有人登记过，服务端会拒绝。`
-                  : '列表里没有这个标识（或还没读到），建议填 1；停用一个从未登记的身份，服务端会答「没有找到这个身份」。'
+                  ? `系统按已登记的记录算好了序号（第 ${form.revisionField.suggestion} 次更新），一般不用改；提示序号对不上时刷新后再试。`
+                  : '列表里没有这个编码（或还没读到）；停用一个从未登记的对象会提示「没有找到」。'
               }
             />
 
-            <Field label="停用依据 *" path="deactivations[0].basis" problems={problems}>
+            <Field label="来源单据 *" path="deactivations[0].basis" problems={problems}>
               <Input
                 value={draft.basis}
                 readOnly={locked}
                 className="font-mono text-[13px]"
-                placeholder="停用依据引用"
+                placeholder="停用通知、审批单号或邮件"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
             </Field>
 
             <WallTimeField
-              label="停用时点 *"
+              label="停用时间 *"
               path="deactivations[0].at"
               problems={problems}
               value={draft.at}
@@ -373,7 +373,7 @@ export function IdentityDeactivationForm({
               onClick={() => setConfirming(true)}
               disabled={locked || !form.canSend}
             >
-              {locked ? '提交中…' : '提交停用'}
+              {locked ? '停用中…' : '停用'}
             </Button>
             <RegistrationAnswerNote
               state={form.state}

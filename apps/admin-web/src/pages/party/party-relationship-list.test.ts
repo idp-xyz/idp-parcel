@@ -158,13 +158,13 @@ test('同一秒内小数位数不定的时刻按真实先后排', () => {
 // Covers: 票 01 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报（单位沿用读签原词「段」），筛空时照显
 // 「共 N 段，当前显示 0 段」，表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」。
 test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
-  equal(partyRelationshipCountSummary(4, 4), '共 4 段参与方关系，当前显示 4 段');
-  equal(partyRelationshipCountSummary(4, 0), '共 4 段参与方关系，当前显示 0 段');
-  equal(partyRelationshipNoMatchNote, '当前筛选条件下没有匹配的参与方关系');
+  equal(partyRelationshipCountSummary(4, 4), '共 4 段合作关系，当前显示 4 段');
+  equal(partyRelationshipCountSummary(4, 0), '共 4 段合作关系，当前显示 0 段');
+  equal(partyRelationshipNoMatchNote, '当前筛选条件下没有匹配的合作关系');
 });
 
 // Covers: 选项表与封闭词一一对应、默认项在首位；角色词从 partyRoleLabels、状态词从 relationshipStatusLabels 派生
-// （含 CONTEXT 原词「候选关系」），本文件不另抄。
+// （CANDIDATE 显示为「待确认」），本文件不另抄。
 test('筛选选项表', () => {
   deepEqual(
     partyRelationshipRoleFilterOptions.map((option) => option.value),
@@ -180,6 +180,6 @@ test('筛选选项表', () => {
   );
   deepEqual(
     partyRelationshipStatusFilterOptions.map((option) => option.label),
-    ['全部', '候选关系', '已生效', '已到期', '已撤销', '已替代'],
+    ['全部', '待确认', '已生效', '已到期', '已撤销', '已替代'],
   );
 });

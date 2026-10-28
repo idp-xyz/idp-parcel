@@ -24,8 +24,8 @@ export function BusinessPartyBanners({ row }: { row: BusinessPartyRecord }) {
     <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.danger}`}>
       <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText.danger}`} aria-hidden="true" />
       <span>
-        自 <Instant value={row.deactivatedAt} /> 起停用，不再支持新的商业决定
-        {row.deactivationBasis ? ` — 依据 ${row.deactivationBasis}` : ''}
+        自 <Instant value={row.deactivatedAt} /> 起停用，新的业务不再找它
+        {row.deactivationBasis ? ` — 来源单据 ${row.deactivationBasis}` : ''}
       </span>
     </div>
   );
@@ -68,15 +68,15 @@ export function BusinessPartyMoreMenu({
           在新标签打开对象页
         </MenuItem>
       ) : null}
-      <MenuItem onSelect={() => copy('参与方标识', row.partyId)}>
+      <MenuItem onSelect={() => copy('编码', row.partyId)}>
         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        复制参与方标识
+        复制编码
       </MenuItem>
       {mayWrite ? <MenuSeparator /> : null}
       {mayWrite ? (
         <MenuItem onSelect={deactivate}>
           <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          停用此参与方…
+          停用这家单位…
         </MenuItem>
       ) : null}
     </DropdownMenu>
@@ -103,7 +103,7 @@ export function PartyRelationshipBanners({ row }: { row: PartyRelationshipRecord
         <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner[tone]}`}>
           <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText[tone]}`} aria-hidden="true" />
           <span>
-            自 <Instant value={row.endedAt} /> 起{labelOf(relationshipStatusLabels, row.status)}，边界之后的新决定不再依据这段关系
+            自 <Instant value={row.endedAt} /> 起{labelOf(relationshipStatusLabels, row.status)}，之后的新业务不再按这段关系办
           </span>
         </div>
       )}
@@ -119,7 +119,7 @@ function UnknownPartyBanner({ side, partyId }: { side: string; partyId: string }
       <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
       <span>
         待查：{side}
-        {partyNameUnknownNote}（{partyId}）。多半是当初登记时出了问题，登记新修订补不上；请到参与方身份册核对这个参与方。
+        {partyNameUnknownNote}（{partyId}）。多半是当初登记时出了问题；请到「往来单位」里核对这家单位。
       </span>
     </div>
   );
@@ -151,11 +151,11 @@ export function PartyRelationshipMoreMenu({ row }: { row: PartyRelationshipRecor
       <MenuSeparator />
       <MenuItem onSelect={() => openParty(row.holderId)}>
         <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        打开持有方对象页
+        打开{row.holderNameKnown ? row.holderName : '这家单位'}
       </MenuItem>
       <MenuItem onSelect={() => openParty(row.counterpartyId)}>
         <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        打开相对方对象页
+        打开{row.counterpartyNameKnown ? row.counterpartyName : '对方'}
       </MenuItem>
     </DropdownMenu>
   );

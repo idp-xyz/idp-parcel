@@ -1,13 +1,16 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { BusinessPartyRecord } from './api';
+import type { BusinessPartyRecord, PartyRelationshipRecord } from './api';
 import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
+  businessPartyTypeFilterOptions,
   countBusinessParties,
   defaultBusinessPartySort,
   filterBusinessParties,
+  indexPartyRoles,
+  rolesOfParty,
   sortBusinessParties,
 } from './business-party-list';
 import { effectiveShareOfInUse } from './legal-entity-list';
@@ -69,7 +72,11 @@ test('状态筛选精确匹配封闭词', () => {
 
 // Covers: 计数按状态分格，数的是传进来的这一页；词表之外的状态码不进任何格也不抛。占比公式借法人册那一份：分母只数在用两格。
 test('countBusinessParties 按状态计数，占比只按在用身份算', () => {
-  deepEqual(countBusinessParties(rows), { total: 4, byStatus: { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 } });
+  const counts = countBusinessParties(rows);
+  equal(counts.total, 4);
+  deepEqual(counts.byStatus, { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 });
+  // 没有关系册时谁都没有角色：四家都是「往来单位」。
+  equal(counts.withoutRole, 4);
   deepEqual(countBusinessParties([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
   equal(effectiveShareOfInUse(countBusinessParties(rows)), 67);
   equal(effectiveShareOfInUse(countBusinessParties([record({ status: 'DEACTIVATED' })])), null);
@@ -131,12 +138,12 @@ test('同一秒内小数位数不定的时刻按真实先后排', () => {
 // Covers: 票 01 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
 // 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」。
 test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
-  equal(businessPartyCountSummary(4, 4), '共 4 个参与方身份，当前显示 4 个');
-  equal(businessPartyCountSummary(4, 0), '共 4 个参与方身份，当前显示 0 个');
-  equal(businessPartyNoMatchNote, '当前筛选条件下没有匹配的参与方身份');
+  equal(businessPartyCountSummary(4, 4), '共 4 家单位，当前显示 4 家');
+  equal(businessPartyCountSummary(4, 0), '共 4 家单位，当前显示 0 家');
+  equal(businessPartyNoMatchNote, '当前筛选条件下没有匹配的单位');
 });
 
-// Covers: 胶囊选项与封闭词一一对应、「全部」在首位；词从 identityStatusLabels 派生（已登记 / 已生效 / 已停用），本文件不另抄。
+// Covers: 胶囊选项与封闭词一一对应、「全部」在首位；词从 identityStatusLabels 派生（待生效 / 已生效 / 已停用），本文件不另抄。
 test('状态胶囊选项表', () => {
   deepEqual(
     businessPartyStatusFilterOptions.map((option) => option.value),
@@ -144,6 +151,65 @@ test('状态胶囊选项表', () => {
   );
   deepEqual(
     businessPartyStatusFilterOptions.map((option) => option.label),
-    ['全部', '已登记', '已生效', '已停用'],
+    ['全部', '待生效', '已生效', '已停用'],
   );
+});
+
+function relationship(over: Partial<PartyRelationshipRecord>): PartyRelationshipRecord {
+  return {
+    tenantId: 'SYN-TENANT-01',
+    relationshipId: 'SYN-REL-01',
+    revision: 1,
+    holderId: 'SYN-PARTY-OPERATOR-01',
+    holderName: '合成运营方一号（演示）',
+    holderNameKnown: true,
+    counterpartyId: 'SYN-PARTY-LE-01',
+    counterpartyName: '合成物流（上海）',
+    counterpartyNameKnown: true,
+    role: 'CUSTOMER',
+    scope: 'SYN-SCOPE-01',
+    basis: 'SYN-REL-BASIS-01',
+    status: 'EFFECTIVE',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    registeredAt: '2026-09-16T04:00:00Z',
+    ...over,
+  };
+}
+
+// Covers: 类型由关系册上持有的角色算——只数持有方那一侧、只数在用（待确认 / 已生效）的关系、去重并按词表顺序；
+// 词表之外的角色码不进索引；关系册没取到时索引为空。
+test('indexPartyRoles 按持有方汇总在用关系的角色', () => {
+  const index = indexPartyRoles([
+    relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'SUPPLIER' }),
+    relationship({ relationshipId: 'R2', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER', status: 'CANDIDATE' }),
+    relationship({ relationshipId: 'R3', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' }),
+    relationship({ relationshipId: 'R4', holderId: 'SYN-PARTY-AGENT-04', role: 'CARRIER_AGENT', status: 'EXPIRED' }),
+    relationship({ relationshipId: 'R5', holderId: 'SYN-PARTY-AGENT-04', role: 'SOMETHING_NEW' }),
+  ]);
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-OPERATOR-01'), ['CUSTOMER', 'SUPPLIER']);
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-AGENT-04'), []);
+  // 相对方不因被持有而得到角色。
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-LE-01'), []);
+  equal(indexPartyRoles(null).size, 0);
+});
+
+// Covers: 类型筛选精确到角色；NONE 只留没有角色的；类型中文也能被搜索命中；计数按角色与「无角色」分格。
+test('类型筛选与计数按持有的角色', () => {
+  const index = indexPartyRoles([
+    relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' }),
+    relationship({ relationshipId: 'R2', holderId: 'SYN-PARTY-AGENT-04', role: 'CARRIER_AGENT' }),
+  ]);
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'CUSTOMER' }, index)), ['SYN-PARTY-OPERATOR-01']);
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'NONE' }, index)), [
+    'SYN-PARTY-CARRIER-02',
+    'SYN-PARTY-RETIRED-01',
+  ]);
+  deepEqual(ids(filterBusinessParties(rows, { search: '承运商代理', status: 'ALL' }, index)), ['SYN-PARTY-AGENT-04']);
+  deepEqual(ids(filterBusinessParties(rows, { search: '往来单位', status: 'ALL' }, index)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
+  const counts = countBusinessParties(rows, index);
+  equal(counts.byRole.CUSTOMER, 1);
+  equal(counts.byRole.CARRIER_AGENT, 1);
+  equal(counts.withoutRole, 2);
+  equal(businessPartyTypeFilterOptions[0].value, 'ALL');
+  equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
 });

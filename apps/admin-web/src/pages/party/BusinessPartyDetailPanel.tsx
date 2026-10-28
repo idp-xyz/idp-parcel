@@ -3,13 +3,14 @@ import { IdCard, Network, X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody } from './api';
-import { identityStatusLabels } from './presentation';
+import { identityStatusLabels, labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
+import { TechnicalDetails } from './TechnicalDetails';
 import { BusinessPartyBanners, BusinessPartyMoreMenu } from './BusinessPartyHeaderParts';
 import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
-import { DetailRow, Fact, FactStrip, Instant, RefChip, statusBadge, useCopyToClipboard } from './detail-primitives';
+import { DetailRow, Fact, FactStrip, Instant, statusBadge } from './detail-primitives';
 
 type PanelTab = 'overview' | 'identity';
 
@@ -17,8 +18,8 @@ type PanelTab = 'overview' | 'identity';
  * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（标识 + 状态徽章 +
  * 名称一行 + 引用签）· 「更多」菜单 + 关闭 · 生命周期条 · 停用横幅 · 事实条 · 两签。
  *
- * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：修订号、生效时点、登记时间与停用时点归事实条，依据归引用签，
- * 名称归副题；「身份与修订」签只列这几处都没有的格（停用依据、租户），参与方标识那一行留着是因为它带复制。
+ * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：更新次数、生效时点、登记时间与停用时点归事实条，名称是标题，
+ * 编码是副题；标识、修订号、登记依据、租户这类排查用的字收进「变更记录」签底部的「技术详情」，不再占头部。
  *
  * 两签沿票 operator-workspace-gaps/01：「全景」（默认）回答这个参与方对我们是什么，「身份与修订」装剩下的格与修订历史。
  * 去过的签留着挂载（隐藏而不卸载）：全景一开就读四册、修订历史读一条链，每切回来一次就重取一次会闪一次加载态；只留
@@ -26,6 +27,7 @@ type PanelTab = 'overview' | 'identity';
  */
 export function BusinessPartyDetailPanel({
   row,
+  roles,
   relationships,
   retryRelationships,
   onClose,
@@ -33,6 +35,8 @@ export function BusinessPartyDetailPanel({
   onDeactivate,
 }: {
   row: BusinessPartyRecord;
+  /** 这个参与方在关系册上持有的角色（business-party-list.ts 的 indexPartyRoles），头部按它称呼；空即「往来单位」。 */
+  roles: readonly string[];
   /** 关系册答案随页面持有、交给全景签，与关系册工作台同一份，不另取。 */
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
@@ -43,7 +47,6 @@ export function BusinessPartyDetailPanel({
 }) {
   const [tab, setTab] = useState<PanelTab>('overview');
   const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
-  const copy = useCopyToClipboard();
   const selectTab = (next: PanelTab) => {
     setTab(next);
     setVisited((previous) => (previous.has(next) ? previous : new Set(previous).add(next)));
@@ -55,12 +58,23 @@ export function BusinessPartyDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{row.partyId}</h2>
+              <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">{row.partyName}</h2>
               {statusBadge(identityStatusLabels, row.status)}
             </div>
-            <p className="mt-0.5 text-[13px] text-idpxyz-text">{row.partyName}</p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <RefChip label="依据" value={row.basis} title="登记依据" onCopy={copy} />
+            {/* 类型按持有的角色称呼；一个角色都没有就说「往来单位」，不留空。 */}
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {roles.length === 0 ? (
+                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
+                  {partyTypeFallbackLabel}
+                </span>
+              ) : (
+                roles.map((role) => (
+                  <span key={role} className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
+                    {labelOf(partyRoleLabels, role)}
+                  </span>
+                ))
+              )}
+              <span className="font-mono text-[12px] text-idpxyz-breadcrumb">编码 {row.partyId}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -84,8 +98,8 @@ export function BusinessPartyDetailPanel({
       </div>
 
       <FactStrip>
-        <Fact label="当前修订">r{row.revision}</Fact>
-        <Fact label="生效时点">
+        <Fact label="变更">{updateOrdinalLabel(row.revision)}</Fact>
+        <Fact label="生效时间">
           <Instant value={row.effectiveFrom} />
         </Fact>
         <Fact label="登记时间">
@@ -102,7 +116,7 @@ export function BusinessPartyDetailPanel({
           </TabsTrigger>
           <TabsTrigger value="identity" className="text-idpxyz-breadcrumb">
             <IdCard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            身份与修订
+            变更记录
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -118,21 +132,27 @@ export function BusinessPartyDetailPanel({
             forceMount={visited.has('identity') || undefined}
             className="mt-0 data-[state=inactive]:hidden"
           >
-            <dl>
-              <DetailRow label="参与方标识" mono onCopy={() => copy('参与方标识', row.partyId)}>
-                {row.partyId}
-              </DetailRow>
-              <DetailRow label="停用依据" mono>
-                {row.deactivationBasis ?? <span className="text-idpxyz-breadcrumb">—</span>}
-              </DetailRow>
-              <DetailRow label="租户" mono>
-                {row.tenantId}
-              </DetailRow>
-            </dl>
-            <section className="mt-4">
-              <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
+            {row.deactivationBasis ? (
+              <dl>
+                <DetailRow label="停用的来源单据" mono>
+                  {row.deactivationBasis}
+                </DetailRow>
+              </dl>
+            ) : null}
+            <section className={row.deactivationBasis ? 'mt-4' : ''}>
+              <h3 className="text-[12px] font-medium text-idpxyz-text">历次更新</h3>
               <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
             </section>
+            <TechnicalDetails
+              className="mt-4"
+              rows={[
+                { label: '参与方标识', value: row.partyId },
+                { label: '当前修订号', value: String(row.revision) },
+                { label: '登记依据', value: row.basis },
+                { label: '停用依据', value: row.deactivationBasis },
+                { label: '租户', value: row.tenantId },
+              ]}
+            />
           </TabsContent>
         </div>
       </Tabs>

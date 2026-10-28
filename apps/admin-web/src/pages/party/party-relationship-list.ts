@@ -70,7 +70,9 @@ export function filterPartyRelationships(
       row.counterpartyId,
       row.counterpartyName,
       row.role,
+      partyRoleLabels[row.role as PartyRoleCode] ?? '',
       row.status,
+      relationshipStatusLabels[row.status as RelationshipStatusCode] ?? '',
     ]);
   });
 }
@@ -98,11 +100,11 @@ export function countPartyRelationships(rows: readonly PartyRelationshipRecord[]
  * 状态区「这不是目录为空」直接矛盾（票 09 完成判据点名的那一格）。
  */
 export function partyRelationshipCountSummary(total: number, visible: number): string {
-  return `共 ${total} 段参与方关系，当前显示 ${visible} 段`;
+  return `共 ${total} 段合作关系，当前显示 ${visible} 段`;
 }
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
-export const partyRelationshipNoMatchNote = '当前筛选条件下没有匹配的参与方关系';
+export const partyRelationshipNoMatchNote = '当前筛选条件下没有匹配的合作关系';
 
 /** 按表头排序交回新数组，不改输入；同值保持原序。认不得的键原样交回。 */
 export function sortPartyRelationships(

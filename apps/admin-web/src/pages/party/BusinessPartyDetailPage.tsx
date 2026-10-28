@@ -18,7 +18,8 @@ import {
   type BusinessPartyRevisionListResponseBody,
   type PartyRelationshipListResponseBody,
 } from './api';
-import { identityStatusLabels } from './presentation';
+import { identityStatusLabels, updateOrdinalLabel } from './presentation';
+import { TechnicalDetails } from './TechnicalDetails';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
 import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
@@ -53,27 +54,40 @@ function muted(text: string): ReactNode {
 // 身份修订历史进「时间线」签——签名受共用模板的固定词表约束（workspace-tabs.ts），全景没有对应的词，留在概要签里成区。
 
 function buildMeta(row: BusinessPartyRecord): DetailMeta[] {
-  return [{ label: '依据', value: <span className="font-mono">{row.basis}</span> }];
+  return [{ label: '编码', value: <span className="font-mono">{row.partyId}</span> }];
 }
 
 function buildSummary(row: BusinessPartyRecord): DetailSummaryStat[] {
   return [
-    { label: '当前修订', value: <span className="font-mono">r{row.revision}</span> },
-    { label: '生效时点', value: <Instant value={row.effectiveFrom} /> },
+    { label: '变更', value: updateOrdinalLabel(row.revision) },
+    { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
     { label: '登记时间', value: <Instant value={row.registeredAt} /> },
     { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
     { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
   ];
 }
 
-/** 与详情栏「身份与修订」签同一份格：头区与指标带已经显示的不再重复。 */
+/** 与详情栏「变更记录」签同一份格：头区与指标带已经显示的不再重复；标识、修订号、依据、租户收进技术详情。 */
 function buildBasicFields(row: BusinessPartyRecord): DetailField[] {
   return [
     {
-      label: '停用依据',
-      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('—'),
+      label: '停用的来源单据',
+      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('未停用'),
     },
-    { label: '租户', value: <span className="font-mono">{row.tenantId}</span> },
+    {
+      label: '技术详情',
+      value: (
+        <TechnicalDetails
+          rows={[
+            { label: '参与方标识', value: row.partyId },
+            { label: '当前修订号', value: String(row.revision) },
+            { label: '登记依据', value: row.basis },
+            { label: '停用依据', value: row.deactivationBasis },
+            { label: '租户', value: row.tenantId },
+          ]}
+        />
+      ),
+    },
   ];
 }
 
@@ -93,15 +107,15 @@ function viewStateOf(
       ? { kind: 'ready' }
       : {
           kind: 'empty',
-          title: '册上没有这个参与方',
-          description: '本租户没有登记过这个参与方标识。请检查链接或标识是否正确。',
+          title: '没有这家单位',
+          description: '没有登记过这个编码。请检查链接或编码是否正确。',
         };
   }
   return catalogueViewState(answer, 1, retry, {
     module: info,
     endpoint: 'GET /commercial-business-parties',
-    emptyTitle: '当前租户尚无参与方身份登记',
-    emptyDescription: `还没有登记任何业务参与方。${entryHint(mayWrite, '回到列表，用页头的「登记参与方身份」登记第一个。')}`,
+    emptyTitle: '还没有登记任何往来单位',
+    emptyDescription: `客户、承运商、代理都从这里登记。${entryHint(mayWrite, '回到列表，用页头的「新增往来单位」登记第一家。')}`,
   });
 }
 
@@ -133,10 +147,9 @@ export function BusinessPartyDetailPage({
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   return (
     <DetailPageTemplate
-      title="业务参与方"
-      identifier={row?.partyId ?? partyId}
+      title={info.title}
+      identifier={row?.partyName ?? partyId}
       status={row ? statusBadge(identityStatusLabels, row.status) : undefined}
-      description={row?.partyName}
       headerActions={
         <>
           {row ? <BusinessPartyMoreMenu row={row} /> : null}
@@ -168,7 +181,7 @@ export function BusinessPartyDetailPage({
               {
                 id: 'overview',
                 title: '全景',
-                description: '这个参与方对我们是什么：它持有或被持有的关系、关联的货主客户账户、责任法人、供应商协议与结算政策。',
+                description: '这家单位对我们是什么：合作关系、客户账户、公司主体、供应商协议与结算政策。',
                 content: (
                   <PartyOverviewSection
                     partyId={row.partyId}

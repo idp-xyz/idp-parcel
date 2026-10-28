@@ -170,8 +170,10 @@ export const cancellationPartyLabels: Record<string, string> = {
 // 参与方身份生命周期封闭三格(domain IdentityStatus)。与 commercialStatusLabels 分表:
 // 身份状态按时点导出,商业对象状态是发布生命周期,同词 EFFECTIVE 在两套代数里含义
 // 不同,并表会让一套的封闭性替另一套背书。
+// REGISTERED 上屏说「待生效」而不是 CONTEXT 原词「已登记」：运营看这格要知道的是「还没开始算」，「已登记」只说明进了册、
+// 读不出它还没起作用（改版方案第四节用语词典）。码不变，只换显示词。
 export const identityStatusLabels = {
-  REGISTERED: '已登记',
+  REGISTERED: '待生效',
   EFFECTIVE: '已生效',
   DEACTIVATED: '已停用',
 } as const satisfies Record<string, string>;
@@ -179,8 +181,9 @@ export const identityStatusLabels = {
 export type IdentityStatusCode = keyof typeof identityStatusLabels;
 
 // 参与方关系生命周期封闭五格(domain RelationshipStatus),中文取 CONTEXT 原词。
+// CANDIDATE 上屏说「待确认」：登了但没有批准事实，等的是确认；「候选关系」是 CONTEXT 词，运营读不出下一步是什么。
 export const relationshipStatusLabels = {
-  CANDIDATE: '候选关系',
+  CANDIDATE: '待确认',
   EFFECTIVE: '已生效',
   EXPIRED: '已到期',
   REVOKED: '已撤销',
@@ -200,6 +203,25 @@ export const partyRoleLabels = {
 } as const satisfies Record<string, string>;
 
 export type PartyRoleCode = keyof typeof partyRoleLabels;
+
+/**
+ * 参与方按它持有的角色称呼（客户、供应商、承运商代理……）；一个角色都没有时叫「往来单位」——它在册、有名称，只是还没
+ * 登记与谁的合作关系。角色词取关系册的封闭集，不另造一套「类型」。
+ */
+export const partyTypeFallbackLabel = '往来单位';
+
+export function partyTypeLabel(roles: readonly string[]): string {
+  if (roles.length === 0) return partyTypeFallbackLabel;
+  return roles.map((role) => labelOf(partyRoleLabels, role)).join(' / ');
+}
+
+/**
+ * 修订号给人看时说「第 N 次更新」：首笔也算一次，所以 r1 就是第 1 次。列表主列不显它，只在变更记录与事实条上出现；
+ * 技术详情里仍是裸数字。
+ */
+export function updateOrdinalLabel(revision: number): string {
+  return `第 ${revision} 次更新`;
+}
 
 // 法人册对象类型今天只有一格(传输层 kindResponsibleLegalEntity):经营组织没有
 // 登记面,如实不上列,不预开空格。
@@ -283,15 +305,15 @@ export function labelOf(table: Record<string, string>, code: string): string {
  * （已生效/已计划生效/未决），改叫登记会让操作者拿它与身份、映射两族的登记答案对齐。
  */
 export const registrationTitles: Record<CommercialRegistrationKind, string> = {
-  publication: '发布商业权威依据版本',
-  'business-party': '登记业务参与方身份修订',
-  'legal-entity': '登记责任法人身份修订',
-  'legal-entity-profile': '登记法人资料修订',
-  'customer-account': '登记货主客户账户修订',
-  'party-relationship': '登记参与方关系修订',
-  'identity-deactivation': '停用身份（形成新修订）',
-  'service-product-form': '登记服务产品版本的服务形态',
-  'product-channel-mapping': '登记产品—渠道映射修订',
+  publication: '发布新版本',
+  'business-party': '新增往来单位',
+  'legal-entity': '新增公司主体',
+  'legal-entity-profile': '更新公司资料',
+  'customer-account': '新增客户账户',
+  'party-relationship': '建立合作关系',
+  'identity-deactivation': '停用',
+  'service-product-form': '登记服务形态',
+  'product-channel-mapping': '登记产品可用渠道',
 };
 
 // 登记快照形状的提示句。各类共用的开头由一处拼出：抄几遍会让「这一签是什么」那句在其中一遍被改时悄悄分叉。

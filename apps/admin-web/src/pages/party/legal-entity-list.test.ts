@@ -146,9 +146,9 @@ test('状态胶囊选项表', () => {
     legalEntityStatusFilterOptions.map((option) => option.value),
     ['ALL', 'REGISTERED', 'EFFECTIVE', 'DEACTIVATED'],
   );
-  // 词从 identityStatusLabels 派生：三格 CONTEXT 原词（已登记 / 已生效 / 已停用）不在本文件另抄。
+  // 词从 identityStatusLabels 派生：三格显示词（待生效 / 已生效 / 已停用）不在本文件另抄。
   deepEqual(
     legalEntityStatusFilterOptions.map((option) => option.label),
-    ['全部', '已登记', '已生效', '已停用'],
+    ['全部', '待生效', '已生效', '已停用'],
   );
 });
