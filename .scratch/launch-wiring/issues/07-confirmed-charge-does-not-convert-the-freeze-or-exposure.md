@@ -1,7 +1,7 @@
 # 07 费用确认后冻结与信用暴露不转正式扣费、不释放
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-occ（代码最后一笔见完成记录）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点三，协调方按冻结清单「上线线」口径上调为挡上线；分支 claude-lw-occ
+Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-occ（代码最后一笔 8158554a8）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点三，协调方按冻结清单「上线线」口径上调为挡上线；分支 claude-lw-occ
 Blocked by: 无
 
 ## 现象
