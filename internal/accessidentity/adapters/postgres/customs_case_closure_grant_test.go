@@ -7,8 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 )
 
-// Covers: UC-CC-010 关闭入口（授予往返，票 launch-wiring/02）——「关务案件关闭」的授予登得进操作者册（access_identity 0031 放开决定种类那条 CHECK），
-// 读回是它自己，与关务建案互不相通；之前各份放开的种类（含 0030 的内部合规限制两种）仍登得进。
+// Covers: UC-CC-010 关闭入口（授予往返，票 launch-wiring/02）——「关务案件关闭」的授予登得进操作者册（access_identity 0032 放开决定种类那条 CHECK），
+// 读回是它自己，与关务建案互不相通；之前各份放开的种类（含 0030 的内部合规限制两种与 0031 的节点监管协作承接）仍登得进。
 func TestTheCustomsCaseClosureDecisionIsGrantedApartFromCaseEstablishment(t *testing.T) {
 	register := newOperatorRegister(t)
 	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
