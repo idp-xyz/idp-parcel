@@ -220,6 +220,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜CC 测试 `Covers:` 点名 AT-CC-339、340、342、352–357，盘点里是否已登未核｜code/27 评审｜R3（归 docs-consistency/10）
 - 2026-10-28｜CC 关闭依据项的冲突依据：领域层 `conflictBasisMatches` 不 trim，译装层与库 CHECK 会 trim，空白引用三处口径不一（进库被 CHECK 拒，不静默写错）｜docs-consistency/code/03 评审｜R3
 - 2026-10-28｜NO 承接（`AcceptCollaborationHandler`）、CC 关案（`CloseCustomsCaseHandler`）、CC 放行门禁核对（`VerifyReleaseGateHandler`）照各票面只补了模型与答法，`cmd/` 下仍无装配，生产走不到｜docs-consistency/code/18、03、34｜待用户定是否上调
+- 2026-10-28｜TF 旅程启动口对监管来路的旅程不核有对应承接决定、成员不核在已承接对象内，持 `ALTERNATE_JOURNEY_START` 授予者可绕过承接开监管来路旅程（与 UC-TF-007「不能经本用例绕过」相抵；操作者落 `started_by`）｜docs-consistency/code/43 评审（ADR-0337 越权风险点 3）｜R2（租户把该授予发给多人前补；S–M）
+- 2026-10-28｜TF 承接口的协作事项由运营人员抄录进载荷，是持授予者的断言而非读回事实，当前有效性无来源可核；关务一侧记住在等补的事项、消费承接回执两半未建｜docs-consistency/code/43（ADR-0337 越权风险点 1、2）｜R3（CC 出协作事项读口时撤下抄录四格）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
