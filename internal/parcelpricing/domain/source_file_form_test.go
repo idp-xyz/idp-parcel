@@ -7,8 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// 页面表单提交的价卡没有文件：来源标识名由散列推出（form: 加散列前 12 位），认「来自页面表单」只看名称是否恰是自己散列推出的
-// 那一个——一个碰巧叫 form:xxxx 的上传文件名对不上自己字节的散列，不会被当成表单。
+// Covers: `AT-PP-045`，ADR-0349 决定五——页面表单提交的价卡没有文件：来源标识名由散列推出（form: 加散列前 12 位），认「来自页面表单」
+// 只看名称是否恰是自己散列推出的那一个——一个碰巧叫 form:xxxx 的上传文件名对不上自己字节的散列，不会被当成表单。
 func TestAFormSourceFileIdentityIsNamedAfterItsOwnDigest(t *testing.T) {
 	digest := strings.Repeat("ab", 32)
 	source, err := domain.NewFormSourceFileIdentity(digest)

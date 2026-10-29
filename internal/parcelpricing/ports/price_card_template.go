@@ -81,6 +81,8 @@ const (
 	TemplateReferenceUnused      PriceCardTemplateProblemCode = "REFERENCE_UNUSED"
 	TemplateTreeInvalid          PriceCardTemplateProblemCode = "TREE_INVALID"
 	TemplateConstructionRejected PriceCardTemplateProblemCode = "CONSTRUCTION_REJECTED"
+	// TemplateProblemsTruncated：问题多到收不下，清单只含先发现的那些；这一条在清单最前，没有表与坐标。
+	TemplateProblemsTruncated PriceCardTemplateProblemCode = "PROBLEMS_TRUNCATED"
 )
 
 // 价卡导入的第二种载体：页面表单提交的结构化工作簿（JSON）。它与电子表格文件是同一个模板的两种写法，读出来走同一套
@@ -94,11 +96,13 @@ var (
 	ErrPriceCardWorkbookMalformed = errors.New("parcel pricing: price card workbook is malformed")
 )
 
-// PriceCardWorkbookRejection 是工作簿 JSON 的形状没过：Detail 是说人话的说明（哪里不对），errors.Is 认上面两个哨兵。
-// 它存在是为了让答复里的话是 Detail 本身，而不是带英文哨兵前缀的错误串。
+// PriceCardWorkbookRejection 是工作簿 JSON 的形状没过或超了技术上限：Detail 是说人话的说明（哪里不对），errors.Is 认
+// ErrPriceCardWorkbookTooLarge 与 ErrPriceCardWorkbookMalformed。它存在是为了让答复里的话是 Detail 本身，而不是带英文哨兵
+// 前缀的错误串。TemplateVersion 是读口当时认的最新模板版本，整份不收的答复照读文件同类情形那样回显它。
 type PriceCardWorkbookRejection struct {
-	TooLarge bool
-	Detail   string
+	TooLarge        bool
+	Detail          string
+	TemplateVersion string
 }
 
 func (rejection PriceCardWorkbookRejection) Error() string {
@@ -113,6 +117,24 @@ func (rejection PriceCardWorkbookRejection) Is(target error) bool {
 		return target == ErrPriceCardWorkbookTooLarge
 	}
 	return target == ErrPriceCardWorkbookMalformed
+}
+
+// WorkbookRejectionReading 把工作簿的拒收折成整份不收的读法：问题码是 FILE_TOO_LARGE 或 FILE_NOT_WORKBOOK，话取 Detail。
+// 「拒收转问题码与说明」只在这里写一遍，读口自己的读法与应用层在规范化那一步就被拒的答复共用它。不是
+// PriceCardWorkbookRejection 的错误按「读不出」处理。
+func WorkbookRejectionReading(err error) PriceCardTemplateReading {
+	code, detail, version := TemplateFileNotWorkbook, err.Error(), ""
+	var rejection PriceCardWorkbookRejection
+	if errors.As(err, &rejection) {
+		detail, version = rejection.Detail, rejection.TemplateVersion
+		if rejection.TooLarge {
+			code = TemplateFileTooLarge
+		}
+	}
+	return PriceCardTemplateReading{
+		TemplateVersion: version,
+		Problems:        []PriceCardTemplateProblem{{Code: code, Message: "读不出这份工作簿：" + detail}},
+	}
 }
 
 // PriceCardWorkbookReader 读页面表单提交的结构化工作簿。分两步，是为了让「源文件身份」与「被读的字节」是同一份：先规范化
@@ -149,7 +171,8 @@ type PriceCardTemplateSheetSpec struct {
 }
 
 // PriceCardTemplateColumnSpec 是一列（或 card 表的一个字段）。Requirement 取 always、conditional、optional。AllowedValues 只有
-// 封闭取值的列才有；MultiValued 为真时那一格是以英文分号分隔的列表，AllowedValues 是每个元素的可取值。
+// 封闭取值的列才有；MultiValued 为真时那一格是以英文分号分隔的列表，AllowedValues 是每个元素的可取值。平时开放、满足条件才封闭的列
+// （如 conditions.category：来源为 ADDRESS_NATURE 时只收两个地址性质词）不带 AllowedValues，而在 AllowedValuesWhen 里给条件与取值。
 type PriceCardTemplateColumnSpec struct {
 	Key           string
 	Title         string
@@ -157,6 +180,15 @@ type PriceCardTemplateColumnSpec struct {
 	Description   string
 	AllowedValues []string
 	MultiValued   bool
+	// AllowedValuesWhen 给「只在同一行另一格取某值时才封闭」的列：这一列平时是开放词汇，满足条件时取值才限在 Values 里。
+	AllowedValuesWhen []PriceCardTemplateValuesWhen
+}
+
+// PriceCardTemplateValuesWhen 是一条条件封闭取值：同一行的 Column 格等于 Equals 时，本列只收 Values。
+type PriceCardTemplateValuesWhen struct {
+	Column string
+	Equals string
+	Values []string
 }
 
 // PriceCardTemplateSpecSource 交出模板规格。

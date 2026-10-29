@@ -45,24 +45,45 @@ func (rec record) get(key string) field {
 	return field{sheet: rec.sheet, row: rec.row, column: key}
 }
 
+// maxProblems 是问题清单的条数上限（技术上限，不是业务取值）：一份几万行的文件每行错几格，问题清单就按行数成倍长，
+// 草稿要把它们全存下来、管理台要把它们全画出来，没有人改得了几千条。超出的不再收集，清单开头多一条
+// PROBLEMS_TRUNCATED 说清是截断。
+const maxProblems = 1000
+
+// reportKey 是已报问题的坐标加码，给「这一格是不是已经报过必填」按集合查，不按问题清单线性扫。
+type reportKey struct {
+	sheet  string
+	row    int
+	column string
+	code   ports.PriceCardTemplateProblemCode
+}
+
 type decoder struct {
 	// version 是这份文件自己声明的模板版本：按它挑表集合与封闭取值，旧版文件因此读出与进位之前一样的东西。
 	// 空串按最新一版算。
 	version  string
 	problems []ports.PriceCardTemplateProblem
+	reported map[reportKey]struct{}
+	// truncated 记下问题已多到收不下：之后再报的问题不收，清单里补一条说明。
+	truncated bool
 	// broken 记下结构有问题的表（缺表、缺列）：指进这些表的引用不再报解析不到，免得一处结构
 	// 问题引出一串连带问题。
 	broken map[string]bool
 }
 
 func newDecoder() *decoder {
-	return &decoder{broken: map[string]bool{}}
+	return &decoder{broken: map[string]bool{}, reported: map[reportKey]struct{}{}}
 }
 
 func (d *decoder) report(sheet string, row int, column string, code ports.PriceCardTemplateProblemCode, format string, args ...any) {
+	if len(d.problems) >= maxProblems {
+		d.truncated = true
+		return
+	}
 	d.problems = append(d.problems, ports.PriceCardTemplateProblem{
 		Sheet: sheet, Row: row, Column: column, Code: code, Message: fmt.Sprintf(format, args...),
 	})
+	d.reported[reportKey{sheet, row, column, code}] = struct{}{}
 }
 
 func (d *decoder) at(f field, code ports.PriceCardTemplateProblemCode, format string, args ...any) {
@@ -94,6 +115,13 @@ func (d *decoder) sorted() []ports.PriceCardTemplateProblem {
 		}
 		return a.Message < b.Message
 	})
+	if d.truncated {
+		// 整份层面的一条，排在最前：读的人先看到清单是截断的。
+		problems = append([]ports.PriceCardTemplateProblem{{
+			Code:    ports.TemplateProblemsTruncated,
+			Message: fmt.Sprintf("问题太多，已显示先发现的 %d 条；先改这些再重新校验，其余的会在下一次校验里出现", maxProblems),
+		}}, problems...)
+	}
 	return problems
 }
 
@@ -275,12 +303,8 @@ func (d *decoder) required(f field) bool {
 }
 
 func (d *decoder) alreadyReported(f field, code ports.PriceCardTemplateProblemCode) bool {
-	for _, problem := range d.problems {
-		if problem.Sheet == f.sheet && problem.Row == f.row && problem.Column == f.column && problem.Code == code {
-			return true
-		}
-	}
-	return false
+	_, reported := d.reported[reportKey{f.sheet, f.row, f.column, code}]
+	return reported
 }
 
 // mustBeBlank 答这一格是不是空的；填了值的报不适用。

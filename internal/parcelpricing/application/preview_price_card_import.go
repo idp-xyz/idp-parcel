@@ -128,18 +128,9 @@ func readPriceCardWorkbookImport(reader ports.PriceCardWorkbookReader, tenant do
 	}
 	canonical, err := reader.CanonicalizePriceCardWorkbook(raw)
 	if err != nil {
-		code, detail := ports.TemplateFileNotWorkbook, err.Error()
-		var rejection ports.PriceCardWorkbookRejection
-		if errors.As(err, &rejection) {
-			detail = rejection.Detail
-			if rejection.TooLarge {
-				code = ports.TemplateFileTooLarge
-			}
-		}
-		return PriceCardImportPreview{
-			Outcome:  PriceCardImportNotAccepted,
-			Problems: []ports.PriceCardTemplateProblem{{Code: code, Message: "读不出这份工作簿：" + detail}},
-		}
+		// 整份不收，没有规范化字节也就没有来源标识；话与回显的版本取自与读口自己的读法同一处折法。
+		rejected := ports.WorkbookRejectionReading(err)
+		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted, TemplateVersion: rejected.TemplateVersion, Problems: rejected.Problems}
 	}
 	digest := sha256.Sum256(canonical)
 	source, err := domain.NewFormSourceFileIdentity(hex.EncodeToString(digest[:]))

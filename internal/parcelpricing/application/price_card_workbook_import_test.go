@@ -98,19 +98,21 @@ func TestPreviewReadsAFormWorkbookThroughTheWorkbookReader(t *testing.T) {
 // 形状没过、缺租户、没装工作簿读口：各答各的——形状没过是整份不收（读不通是一种读法，没有来源标识可记），缺租户未受理，没装读口是装配错误。
 func TestPreviewOfAFormWorkbookRefusesWhatCannotBeRead(t *testing.T) {
 	cases := map[string]struct {
-		err  error
-		code ports.PriceCardTemplateProblemCode
-		text string
+		err     error
+		code    ports.PriceCardTemplateProblemCode
+		text    string
+		version string
 	}{
-		"形状不对": {ports.PriceCardWorkbookRejection{Detail: "顶层缺 sheets"}, ports.TemplateFileNotWorkbook, "读不出这份工作簿：顶层缺 sheets"},
-		"超限":   {ports.PriceCardWorkbookRejection{TooLarge: true, Detail: "超过技术上限"}, ports.TemplateFileTooLarge, "读不出这份工作簿：超过技术上限"},
-		"别的错误": {errors.New("boom"), ports.TemplateFileNotWorkbook, "boom"},
+		"形状不对": {ports.PriceCardWorkbookRejection{Detail: "顶层缺 sheets", TemplateVersion: "PPT-2"}, ports.TemplateFileNotWorkbook, "读不出这份工作簿：顶层缺 sheets", "PPT-2"},
+		"超限":   {ports.PriceCardWorkbookRejection{TooLarge: true, Detail: "超过技术上限", TemplateVersion: "PPT-2"}, ports.TemplateFileTooLarge, "读不出这份工作簿：超过技术上限", "PPT-2"},
+		"别的错误": {errors.New("boom"), ports.TemplateFileNotWorkbook, "boom", ""},
 	}
 	for name, testCase := range cases {
 		workbook := &workbookReaderDouble{canonicalizeErr: testCase.err}
 		answer, err := previewWithWorkbook(t, &templateReaderDouble{}, workbook).Handle(context.Background(),
 			application.PreviewPriceCardImportCommand{Tenant: previewTenant(t), FromForm: true, Raw: []byte(`x`)})
 		if err != nil || answer.Outcome != application.PriceCardImportNotAccepted || answer.SourceFile.Name() != "" || workbook.read != nil ||
+			answer.TemplateVersion != testCase.version ||
 			len(answer.Problems) != 1 || answer.Problems[0].Code != testCase.code || !strings.Contains(answer.Problems[0].Message, testCase.text) {
 			t.Errorf("%s：%+v err=%v", name, answer, err)
 		}

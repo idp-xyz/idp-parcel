@@ -66,6 +66,14 @@ type priceCardTemplateColumnSpecBody struct {
 	Description   string   `json:"description"`
 	AllowedValues []string `json:"allowedValues,omitempty"`
 	MultiValued   bool     `json:"multiValued,omitempty"`
+	// AllowedValuesWhen 只在「平时开放、满足条件才封闭」的列上有：同一行的 column 格等于 equals 时，本列只收 allowedValues。
+	AllowedValuesWhen []priceCardTemplateValuesWhenBody `json:"allowedValuesWhen,omitempty"`
+}
+
+type priceCardTemplateValuesWhenBody struct {
+	Column        string   `json:"column"`
+	Equals        string   `json:"equals"`
+	AllowedValues []string `json:"allowedValues"`
 }
 
 func priceCardTemplateSpecResponseOf(spec ports.PriceCardTemplateSpec) priceCardTemplateSpecResponse {
@@ -81,10 +89,14 @@ func priceCardTemplateSpecResponseOf(spec ports.PriceCardTemplateSpec) priceCard
 			Columns: make([]priceCardTemplateColumnSpecBody, 0, len(sheet.Columns)),
 		}
 		for _, column := range sheet.Columns {
-			out.Columns = append(out.Columns, priceCardTemplateColumnSpecBody{
+			body := priceCardTemplateColumnSpecBody{
 				Key: column.Key, Title: column.Title, Requirement: column.Requirement, Description: column.Description,
 				AllowedValues: column.AllowedValues, MultiValued: column.MultiValued,
-			})
+			}
+			for _, when := range column.AllowedValuesWhen {
+				body.AllowedValuesWhen = append(body.AllowedValuesWhen, priceCardTemplateValuesWhenBody{Column: when.Column, Equals: when.Equals, AllowedValues: when.Values})
+			}
+			out.Columns = append(out.Columns, body)
 		}
 		body.Sheets = append(body.Sheets, out)
 	}

@@ -935,17 +935,45 @@ func (t *translation) readForest(name string) forest {
 		}
 		parent.children = append(parent.children, node)
 	}
+	loops := loopingNodes(trees)
 	for _, node := range trees.order {
-		seen := map[string]bool{}
-		for cursor := node; cursor != nil && cursor.parent != ""; cursor = trees.nodes[cursor.parent] {
-			if seen[cursor.id] {
-				d.at(node.rec.get("parentId"), ports.TemplateTreeInvalid, "节点 %s 的祖先链成环", node.id)
-				break
-			}
-			seen[cursor.id] = true
+		if loops[node] {
+			d.at(node.rec.get("parentId"), ports.TemplateTreeInvalid, "节点 %s 的祖先链成环", node.id)
 		}
 	}
 	return trees
+}
+
+// loopingNodes 答哪些节点的祖先链成环：沿父节点一路走会回到走过的节点（环上的与通到环里去的）都算。逐个节点各走一遍祖先链是
+// 节点数的平方（一条几万节点的长链就是几十秒），所以每个节点只走一次：走到已有定论的节点就沿用它的定论，走回本条路径上的
+// 节点就是成环。结果与逐个走一遍完全相同（用例对着朴素写法核过）。
+func loopingNodes(trees forest) map[*treeNode]bool {
+	const (
+		onPath = 1
+		done   = 2
+	)
+	state := map[*treeNode]int{}
+	loops := map[*treeNode]bool{}
+	for _, start := range trees.order {
+		var path []*treeNode
+		verdict := false
+		for cursor := start; cursor != nil && cursor.parent != ""; cursor = trees.nodes[cursor.parent] {
+			if state[cursor] == onPath {
+				verdict = true
+				break
+			}
+			if state[cursor] == done {
+				verdict = loops[cursor]
+				break
+			}
+			state[cursor] = onPath
+			path = append(path, cursor)
+		}
+		for _, node := range path {
+			state[node], loops[node] = done, verdict
+		}
+	}
+	return loops
 }
 
 // root 解析一格指向树根的引用。树所在的表结构有问题时不报解析不到。
