@@ -1,10 +1,11 @@
 # 价卡导入模板与校验规范（parcel-pricing）
 
-- **模板版本**：`PPT-1`
-- **对应规范化版本**：`PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)；即本构建领域常量 `canonicalizationVersion` 的值）
-- **状态**：生效，2026-09-25，票 `.scratch/price-card-import/issues/01`
+- **模板版本**：`PPT-2`（最新，本构建写出的版本）；`PPT-1` 的文件仍然接受，见第二节
+- **对应规范化版本**：不是一对一——按内容取能表达它的最低一版：用到最低 / 最高收费或按偏远档位查表的方案写 `PPC-6`，其余写 `PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0348](../adr/0348-a-price-card-may-declare-total-charge-bounds-and-key-a-surcharge-table-by-remote-tier-and-plans-using-them-are-written-as-ppc-6.md) 决定四）
+- **状态**：生效，2026-09-25，票 `.scratch/price-card-import/issues/01`；2026-10-29 进位 `PPT-2`，票 `.scratch/price-card-import/issues/08`
 - **依据**：
   - [ADR-0101](../adr/0101-operator-facing-registration-payload-shape-is-product-defined.md) 决定二至四；
+  - [ADR-0349](../adr/0349-the-price-card-import-template-advances-to-ppt-2-and-its-structured-workbook-is-a-second-carrier-read-through-the-same-path.md)：`PPT-2`、结构化工作簿载体、模板规格口；
   - [ADR-0015](../adr/0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md) 封闭文法；
   - parcel-pricing [`CONTEXT.md`](../domain/parcel-pricing/CONTEXT.md)「定价方案与价表版本」生命周期与「金额保真度：不可默认成立」。
 
@@ -22,14 +23,17 @@
 
 ## 二、版本
 
-- 模板版本号形如 `PPT-<n>`，**只在表集合、列集合或列语义变化时进位**。
+- 模板版本号形如 `PPT-<n>`，**只在表集合、列集合或列语义变化时进位**（可取值的增减也算列语义变化）。
 - 规范化版本进位而表与列不变时，模板版本不动，只在下表加一行。
-- 每个构建只认一个模板版本，同 ADR-0014 对规范化版本的做法。别的版本整份不收，答复里点名本构建认的那一个。
-  - 理由：同时认两个版本就要同时维护两套翻译，而旧模板里缺的列无从补——补任何值都是替租户填卡。
+- **一个版本只在「只增不改」时才与旧版并存。** `PPT-2` 相对 `PPT-1` 只新增了一张表（`total_bounds`）和 `calculations.method` 的一个取值（`TABLE_LOOKUP_BY_REMOTE_TIER`），既有的表、列、取值与读法一个没动，所以本构建同时认 `PPT-1` 与 `PPT-2`：文件声明哪一版，就按哪一版的表集合与取值读，读出的方案、摘要与问题清单与进位之前逐位相同。
+  - `PPT-1` 文件里出现 `PPT-2` 才有的表或取值，答明确的问题（自哪一版起才有、请换用哪一版的模板），不是笼统的「未知表」「不是可取值」；它的可取值清单也不列后来才有的取值。
+  - 日后进位若不是只增不改（删列、改列语义、收窄取值），旧版缺的或语义变了的东西无从补——补任何值都是替租户填卡——那一版起不再认旧版，整份不收，答复里点名本构建认的版本。
+- 别的版本整份不收，答复里列出本构建认的全部版本。
 
 | 模板版本 | 规范化版本 | 自 |
 |---|---|---|
 | `PPT-1` | `PPC-5` | 2026-09-25 |
+| `PPT-2` | `PPC-5`；用到新结构的方案 `PPC-6` | 2026-10-29 |
 
 ## 三、物理格式
 
@@ -40,6 +44,8 @@
 1. **源文件身份是一份文件。** 登记记的是一个文件名加一个 SHA-256（`SourceFileIdentity`）。一张价卡是方案头、价表、计重、附加费、条件树等多张表，一份 CSV 只装得下一张表；拆成多份 CSV 就没有「那一份源文件」可记。
 2. **矩阵型、多表的工件，工作簿是原生容器。** 定价人员用的就是电子表格，承运商的价卡也多以工作簿形式到达。
 3. **单表的现场汇总不受影响。** 那边一份文件一张表，CSV 正合适；两处各按自己的形状取格式，不强求一致。
+
+**另有第二种载体**：页面表单提交的结构化工作簿（JSON），译成与读电子表格同一个内部表示再走同一套译码与校验，见第十节。电子表格仍是主载体，源文件身份、整份不收的形态与上限都按本节。
 
 **读取件**放在 `internal/platform/spreadsheet`，只用标准库（`archive/zip`、`encoding/xml`）。它读出工作表名、逐行逐格的文本与格类型，不做任何业务判断——翻译与领域构造都在 parcel-pricing 一侧（ADR-0101 Alternatives 否决把导入器放进 platform，指的是翻译那一半，读格不在此列）。
 
@@ -64,9 +70,9 @@
 
 **表集合封闭**，就是下面这些，各表的列在本节各小节定：
 
-`card`、`tables`、`rates_weight_zone`、`rates_first_continue`、`rates_unit_price`、`weight_rounding`、`fixed_charges`、`surcharges`、`conditions`、`calculations`、`charge_dependencies`、`reference_series`、`exclusions`、`reference_catalogues`、`manifest_dependencies`。
+`card`、`tables`、`rates_weight_zone`、`rates_first_continue`、`rates_unit_price`、`weight_rounding`、`fixed_charges`、`surcharges`、`conditions`、`calculations`、`charge_dependencies`、`total_bounds`（`PPT-2` 起）、`reference_series`、`exclusions`、`reference_catalogues`、`manifest_dependencies`。
 
-每一张都要在，空表可以。另可有一张名为 `说明` 的表，解析时整张跳过。
+文件声明的版本里有的表，每一张都要在，空表可以（`PPT-1` 文件没有 `total_bounds`，不缺它；有了它反而是问题，见第二节）。另可有一张名为 `说明` 的表，解析时整张跳过。
 - 其他表名报 `SHEET_UNKNOWN`，缺表报 `SHEET_MISSING`。
 - 理由：模板文件是生成的，所有表本来都在；改名或删表几乎总是误操作，悄悄当作「没有这张表」会让一整类规则无声消失。
 
@@ -83,7 +89,7 @@
 
 | 字段 | 必填 | 交给 |
 |---|---|---|
-| `templateVersion` | 是 | 须等于 `PPT-1`，否则整份不收 |
+| `templateVersion` | 是 | 须是本构建认的版本（`PPT-1` 或 `PPT-2`，见第二节），否则整份不收；它同时决定这份文件按哪一版的表集合与取值读 |
 | `planId`、`planVersion` | 是 | `NewVersionReferenceIdentity(ArtifactPricingPlan, …)`，即方案版本引用；读不出即整份不收 |
 | `scope` | 是 | `NewPricingScopeID` |
 | `direction` | 是 | `PricingDirection`：`BUY`、`SELL`、`INTERNAL` |
@@ -214,11 +220,13 @@
 |---|---|---|
 | `FIXED_AMOUNT` | `NewFixedAmountSurcharge` | `amount`（主价表币种） |
 | `TABLE_LOOKUP` | `NewTableLookupSurcharge` | `tableId`（指 `tables`） |
+| `TABLE_LOOKUP_BY_REMOTE_TIER`（`PPT-2` 起） | `NewRemoteTierTableLookupSurcharge` | `tableId`（指 `tables`）。价表行的 `zone` 列写偏远档位（`T1`、`T2`……），重量再在档位之内分档；`reference_catalogues` 里必须有一行 `REMOTE_TIER`（否则报 `REFERENCE_UNRESOLVED`，落在这一行的 `method` 格），触发条件定哪些档位收费、价表定各档金额（ADR-0348 决定三） |
 | `PERCENT_OF_BASIS` | `NewPercentOfBasisSurcharge` 或 `NewSeriesRateSurcharge` | `basisDependencyId`（指 `charge_dependencies`），再二选一：`percentage`（百分数，`12.5` 即 12.5%），或 `seriesKind` 与 `seriesFactor`（费率取序列读数，再乘卡上写明的系数） |
 | `GREATER_OF` | `NewGreaterOfSurcharge` | 不填值格；恰好两个子节点，行序即先后 |
 | `SERIES_AMOUNT` | `NewSeriesAmountSurcharge` | `seriesId`、`outOfWindow`（`NOT_CHARGED`、`PENDING`） |
 
 - 「按序列费率」不另立一种 `method`。领域里它仍是按基数百分比，只是费率的来源不同（见 `NewSeriesRateSurcharge` 的注释：费率的来源与算术是两个轴），模板照此表达。
+- `TABLE_LOOKUP_BY_REMOTE_TIER` 不另开价表族：它指的仍是 `tables` 里一张 `WEIGHT_ZONE`（或别的族）的价表，只是评价拿偏远档位而不是分区去查，所以价表行里承载档位的是 `zone` 这一列。
 - 取较大值的操作数不得自身又是取较大值，交构造门；树因此最多两层。
 - 每个根都必须被 `surcharges` 指到。
 
@@ -244,7 +252,19 @@
 1. `NewPricingPlanStructures`（附加费、费用依赖、参考序列）；
 2. `WithExclusionRules`；
 3. `WithAmountRounding`；
-4. `WithReferenceCatalogues`。
+4. `WithReferenceCatalogues`；
+5. `WithTotalChargeBounds`（`PPT-2` 起）。
+
+### 4.10 `total_bounds`（最低 / 最高收费，`PPT-2` 起）
+
+| 列 | 必填 | 交给 |
+|---|---|---|
+| `minimum` | 与 `maximum` 至少填一个 | 最低收费，按主价表币种立 `Money` |
+| `maximum` | 与 `minimum` 至少填一个 | 最高收费，按主价表币种立 `Money` |
+
+- 至多一行：它是对整票合计的一次声明。整行空白即没声明（读取时空白行本就跳过）；多出的行报 `CELL_NOT_APPLICABLE`。
+- 两格交 `NewTotalChargeBounds`，再交 `PricingPlanStructures.WithTotalChargeBounds`。两端至少一个、各自为正、下限不高于上限，以及卡声明了金额取整时两端须落在进位单位的整数倍上，全由领域构造门判（ADR-0348 决定一）；构造门拒了，问题落在这一行的格上（`CONSTRUCTION_REJECTED`），不落在整份方案上。
+- 声明了的方案，评价多出 `MINIMUM_CHARGE` 补差行或 `MAXIMUM_CHARGE` 冲减行，规范化版本写 `PPC-6`。合计低于最低收费时补足到最低收费，高于最高收费时封顶到最高收费（ADR-0348 决定二）。数值是租户取值，模板不带默认。
 
 **行序不进摘要。** 领域在构造时把价表行、各类规则、依赖、绑定、排除条款与目录链接排好序，所以这些表的行序不影响内容摘要。条件树与计算树里兄弟节点的先后除外，它们按行序进树。
 
@@ -291,7 +311,7 @@
 |---|---|
 | `FILE_TOO_LARGE` | 超过第三节的技术上限 |
 | `FILE_NOT_WORKBOOK` | 不是可读的 `.xlsx`，含第三节列出的各种整份不收的形态 |
-| `TEMPLATE_VERSION_UNSUPPORTED` | `card` 表缺，或 `templateVersion` 缺、不是本构建认的那一个 |
+| `TEMPLATE_VERSION_UNSUPPORTED` | `card` 表缺，或 `templateVersion` 缺、不是本构建认的版本之一 |
 | `PLAN_IDENTITY_UNREADABLE` | `planId`、`planVersion` 读不出一个方案版本引用。草稿按方案身份一版一行，没有身份就没有行可落 |
 
 这四格按表中先后逐项查，撞到第一格就只答这一格：前一格不成立时，后面几格没有意义。
@@ -322,7 +342,7 @@
 ## 七、模板文件
 
 - **解析与模板同源。** 表集合、列键、必填性、`说明` 表里每列的中文解释，都来自实现里同一张列定义。模板文件由它生成，不手工维护，所以模板与解析器不会漂开。
-- **生成与存放。** 由命令 `cmd/parcel-pricing-template` 写出，入库在管理台静态资源目录 `apps/admin-web/public/templates/`，文件名带模板版本，供「导入价卡」签下载（票 `.scratch/price-card-import/issues/05`）。一个测试用生成器重算一遍、与入库文件逐字节比对，不等即失败并提示重新生成。为此生成器的输出必须确定：压缩包内的时间戳固定、部件顺序固定。
+- **生成与存放。** 由命令 `cmd/parcel-pricing-template` 写出（写出的永远是最新一版），入库在管理台静态资源目录 `apps/admin-web/public/templates/`，文件名带模板版本，供「导入价卡」签下载（票 `.scratch/price-card-import/issues/05`）。进位后旧版的文件留在目录里、仍可下载（旧版文件仍被接受），但不再由生成器重算。一个测试用生成器重算一遍、与入库文件逐字节比对，不等即失败并提示重新生成。为此生成器的输出必须确定：压缩包内的时间戳固定、部件顺序固定。
 - **文本格。** 生成的模板把所有金额、小数、重量与标识列预设为文本格，正常填写就不会碰到第五节的浮点问题。
 - **不带示例值。** 模板里不预填任何业务值，同 ADR-0089「模板属机制半边，模板里的取值属实例半边」。样例单独成文件，只用合成 `SYN-` 值，见下节。
 
@@ -388,9 +408,42 @@
 
 样例文件与种子不一致时，以验收判据（摘要逐字节相等）判谁错。
 
-## 九、`PPT-1` 不覆盖的
+`PPT-2` 的样例是完整价卡三 `SYN-PLAN-CN-SG-FULL-03`（偏远一条规则按偏远档位查价表，加最低收费 120.99）：入库的 golden 夹具在 `internal/parcelpricing/adapters/pricecardtemplate/testdata/`，电子表格与结构化工作簿各一份，供手工试导入、也给做编辑器的人当结构样例。验收判据同上，且更强：导入得到的 `plan` 块与种子逐值相等、内容摘要相同（规范化版本 `PPC-6`）。上文的 `PPT-1` 样例按第二节仍然接受，读出与此前相同的摘要。
 
-- **带指纹或摘要的版本引用。** 模板里的引用一律只带种类、标识、版本三元，因为登记链路今天不读引用上的摘要：登记用例对方向授权只记引用、不回查；价表与计重策略的引用嵌在方案里，内容已由方案的内容摘要覆盖。加这几列只会多出没人读的格。合成数据的引用本来也只带三元（ADR-0108）。日后哪个消费方要用引用上的摘要，随那张票进位 `PPT-2`。
+## 九、模板不覆盖的
+
+- **带指纹或摘要的版本引用。** 模板里的引用一律只带种类、标识、版本三元，因为登记链路今天不读引用上的摘要：登记用例对方向授权只记引用、不回查；价表与计重策略的引用嵌在方案里，内容已由方案的内容摘要覆盖。加这几列只会多出没人读的格。合成数据的引用本来也只带三元（ADR-0108）。日后哪个消费方要用引用上的摘要，随那张票进位。
+- **已登记价卡反推成模板。** 模板只管「填进去」：一张已登记的价卡（规范化文档）没有反向译成电子表格或结构化工作簿的路，编辑器要「打开已有价卡改一版」得另立。
+- **一份工作簿多个方案版本。** 一份工作簿恰是一张价卡的一个版本，批量导入不在此列。
+- **总额上下限的口径与联合键。** 模板能表达的就是领域能表达的：总额上下限只对整票全部费用行之和生效（不分基数），偏远档位只能单独做查表键，分区 × 档位联合键没有（ADR-0348 越权风险点 0、9）。
 - **CSV 编码**：理由见第三节。
 - **租户自有格式的转换**：实施服务，不进产品（ADR-0101 决定二）。
 - **原始文件本体的存放**：ADR-0008 外置证据库的连接器尚无，草稿与登记都只记文件名与 SHA-256。
+
+## 十、结构化工作簿：第二种载体（`PPT-2` 起）
+
+页面表单（价卡编辑器）直接提交一份结构化工作簿，不必在浏览器里生成电子表格。它和电子表格是**同一个模板的两种写法**（ADR-0349 决定四）：服务端把它译成与读电子表格同一个内部表示，再走同一套译码与校验，判定只有一条路径。
+
+**形状。**
+
+```json
+{"templateVersion":"PPT-2","sheets":{"<表名>":[{"<列键>":<字符串|数字|null>, ...}, ...], ...}}
+```
+
+- 表名与列键逐字等于模板；一行一个对象；`card` 表照电子表格里 `card` 表的写法，每个字段一行，写成 `{"field":"planId","value":"…"}`，且字段要列全（值可为 `null`）——缺字段仍报 `FIELD_MISSING`。
+- 格的值：字符串；数字（取书写的十进制字面量，不经浮点，与同样字面量的字符串读成同一格；`1e3` 这样的写法同电子表格里的文本一样答「不是十进制数」）；`null` 与缺键都是空格；布尔按「格类型不对」报 `CELL_NOT_TEXT`。嵌套的对象或数组不是合法的工作簿，整份不收。
+- **没有出现的表按只有列键行的空表算**，不报 `SHEET_MISSING`：电子表格里删掉一张表是要拦的失误，JSON 里没有「删」这回事。出现了模板里没有的表或列，照样报 `SHEET_UNKNOWN` / `COLUMN_UNKNOWN`。
+- **外层的 `templateVersion`** 在 `card` 表没有这个字段（或值为空）时补进 `card` 表；两处都写了而不同则整份不收（`TEMPLATE_VERSION_UNSUPPORTED`，话里说明两处须一致）。外层版本为 `PPT-1` 时不补 `total_bounds`，与 `PPT-1` 文件一致。
+- **问题的位置**与电子表格一致：数组下标 `i` 的那一行是第 `i+2` 行（第 1 行是列键行）；`card` 表的字段按给出的先后排在第 2 行起。问题的表、行、列、码与话都与同一份内容写成电子表格时逐字相同。
+
+**整份不收。** 形状没过（不是 JSON、顶层缺键或多键、同一对象里同名键出现两次、表不是行数组、行不是对象、格不是字符串 / 数字 / `null`、尾随内容、嵌套过深）答 `FILE_NOT_WORKBOOK`，超过技术上限（总字节 10 MiB、单表 100 000 行）答 `FILE_TOO_LARGE`；与读文件一样，读不通是一种读法，不是 HTTP 错误。
+
+**规范化与来源标识。** 先把工作簿规范化——键排序、去多余空白、数字落成字符串、行数组保持原序——再读规范化字节。源文件身份取规范化字节：`sourceFileSha256` 是规范化字节的 SHA-256，`sourceFileName` 是 `form:` 加该散列前 12 位十六进制。空白与键序不同的同一份内容因此得同一个身份；数字写成 `12.50` 还是 `"12.50"` 也得同一个身份。
+
+**HTTP。** `POST /pricing-price-card-previews` 与 `POST /pricing-price-card-drafts` 在 `Content-Type: application/json` 时收这份工作簿，租户（与录入者）仍只取认证信封；答复形状与电子表格路径一致，草稿查阅读口对表单草稿多一格 `sourceOrigin: "FORM"`。别的 `Content-Type` 照原样按上传解。
+
+## 十一、模板规格只读口（`PPT-2` 起）
+
+`GET /pricing-price-card-template/spec`（挂主数据与运营查阅读，租户取认证信封，内容租户无关）答：本构建写出的模板版本与接受的全部版本；表清单（`name`、中文 `title`、一句话 `purpose`、`layout`、`repeatable`、`since`）；每张表的列（`key`、中文 `title`、`requirement`：`always` / `conditional` / `optional`，`description`，封闭取值的列另有 `allowedValues`，列表型的格另有 `multiValued`）。`card` 表的 `layout` 是 `FIELDS`——它的「列」是字段，工作簿里写成 `{field, value}` 行；别的表是 `ROWS`。
+
+规格整个由实现里的表集合、字段集合与封闭取值登记处生成（第七节「解析与模板同源」的同一张列定义），读取实际收的取值与规格口答的取值是同一份；增删一列，规格自动跟着变。`conditions.unit` 的 `allowedValues` 是重量单位与长度单位的并集——哪一类由 `source` 定。规格只答最新一版。
