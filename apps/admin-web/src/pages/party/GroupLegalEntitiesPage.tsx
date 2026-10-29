@@ -39,6 +39,7 @@ import {
   type LegalEntityStatusFilter,
 } from './legal-entity-list';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { CountryLabel } from '../refdata-labels';
 import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -55,13 +56,14 @@ const statusDotClass: Record<string, string> = {
   DEACTIVATED: 'bg-gray-400',
 };
 
-// 身份两格照答复原样示出，国家在上、号在下；最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
+// 身份两格国家在上、号在下：号照答复原样，国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，ADR-0335 决定七）；
+// 最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
 function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
   const cells = identityLayerCellsOf(row);
   if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
   return (
     <div className="min-w-40">
-      <p>{cells.country}</p>
+      <p>{cells.country === '' ? '' : <CountryLabel code={cells.country} />}</p>
       <p className="mt-0.5 text-idpxyz-breadcrumb">{cells.numbers}</p>
     </div>
   );

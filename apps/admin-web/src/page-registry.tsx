@@ -17,6 +17,7 @@ const loadVisibility = () => import('./pages/visibility');
 const loadCustoms = () => import('./pages/customs');
 const loadParty = () => import('./pages/party');
 const loadWorkDevices = () => import('./pages/work-devices');
+const loadReferenceData = () => import('./pages/reference-data');
 
 const domainLoaders = [
   loadMyWork,
@@ -33,6 +34,7 @@ const domainLoaders = [
   loadCustoms,
   loadParty,
   loadWorkDevices,
+  loadReferenceData,
 ];
 
 // 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
@@ -100,6 +102,7 @@ export const pageById: Record<string, ComponentType> = {
   'commercial-policies': page(loadParty, (m) => m.CommercialPoliciesPage),
   'pending-publications': page(loadParty, (m) => m.PendingPublicationsPage),
   'work-devices': page(loadWorkDevices, (m) => m.WorkDeviceCataloguePage),
+  'reference-data': page(loadReferenceData, (m) => m.ReferenceDataPage),
 };
 
 /**
@@ -156,6 +159,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'label-transactions',
   'channel-selection-decisions',
   'work-devices',
+  'reference-data',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',

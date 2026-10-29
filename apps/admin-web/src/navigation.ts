@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   BadgeDollarSign,
   Banknote,
+  BookOpen,
   Boxes,
   Building2,
   Calculator,
@@ -170,6 +171,8 @@ export const navigationSections: NavigationSection[] = [
       // 作业设备册是登记式目录，不是现场作业，也不做设备管理（ADR-0149 越权风险点 2）。
       { id: 'work-devices', label: '扫描设备', icon: 'work-devices' },
       { id: 'pending-publications', label: '审批与发布', icon: 'pending-publications' },
+      // 基础数据是产品内置的只读目录（ADR-0335），不是公司自己登记的配置，所以放在审批之后、管理员专用的试点治理之前。
+      { id: 'reference-data', label: '基础数据', icon: 'reference-data' },
       { id: 'stage-admission', label: '试点治理', icon: 'stage-admission' },
       { id: 'template-preview', label: '演示', icon: 'template-preview' },
     ],
@@ -215,6 +218,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'disclosure-policies': Eye,
   'claim-prerequisites': BadgeCheck,
   'work-devices': TabletSmartphone,
+  'reference-data': BookOpen,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
   'exception-cases': FolderOpen,
@@ -554,6 +558,15 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '等待批准的合同、价格与规则发布稿。',
     owner: '参与方与商业（party-commercial）',
     source: 'docs/domain/party-commercial/CONTEXT.md 待批准发布与商业版本的批准；docs/adr/0314 待批准载体的读回与摘要绑定',
+  },
+
+  // —— 设置 · 基础数据（产品内置目录；不是限界上下文）——
+  'reference-data': {
+    title: '基础数据',
+    summary: '国家和地区、币种、计量单位的标准目录，只读查阅。',
+    owner: '产品内置基础数据（platform/refdata；不是限界上下文）',
+    source:
+      'docs/adr/0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md 决定一、三、六、七',
   },
 
   // —— 设置 · 试点治理（pilotgovernance）——

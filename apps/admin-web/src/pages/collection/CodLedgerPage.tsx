@@ -8,6 +8,7 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { listCodSubledgers, type CodSubledgerListResponseBody, type CodSubledgerRecord } from './api';
 import { TwoLine, formatMoney, technicalRows } from '../settlement/ops-ui';
+import { CurrencyLabel } from '../refdata-labels';
 import { namedRef, usePartyNames, type PartyNames } from '../settlement/party-names';
 
 // 代收货款页（主责上下文 collection-remittance：代收指令、代收事实、代收分户账、回汇批次与差异事项）。行对象是一本代收分户账
@@ -61,7 +62,7 @@ function columns(names: PartyNames): ListColumn<CodSubledgerRecord>[] {
       },
     },
     { id: 'channel', header: '代收渠道', className: 'whitespace-nowrap font-mono text-xs', render: (row) => row.channel },
-    { id: 'currency', header: '币种', align: 'center', className: 'font-mono text-xs', render: (row) => row.currency },
+    { id: 'currency', header: '币种', align: 'center', className: 'whitespace-nowrap text-xs', render: (row) => <CurrencyLabel code={row.currency} /> },
     amountCol('payable', '应付客户', (row) => row.balances.payableToCustomer),
     amountCol('in-transit', '渠道在途', (row) => row.balances.inTransitAtChannel),
     amountCol('awaiting', '待清分', (row) => row.balances.awaitingAllocation),

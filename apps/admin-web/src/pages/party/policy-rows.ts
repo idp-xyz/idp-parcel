@@ -3,6 +3,7 @@
 
 import type { ListColumn } from '../../templates';
 import { formatInstant, formatRange } from '../catalogue-view';
+import { currencyLabel } from '../refdata-names';
 import type {
   AuthorizationRuleRecord,
   CommercialPolicyKind,
@@ -393,7 +394,8 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           counterparty: record.counterparty,
           contractLabel: record.contractLabel,
           chargeScope: record.chargeScope,
-          currency: record.currency,
+          // 币种经基础数据目录译成「人民币（CNY）」，查不到原样显示（ADR-0335 决定七）；搜索仍按码命中，括号里有码。
+          currency: currencyLabel(record.currency),
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           registeredAt: formatInstant(record.registeredAt),
         },
