@@ -110,6 +110,7 @@ export const roundingNoneLabel = '不进位';
 /** 金额取整的应用点（AmountRoundingPoint）。 */
 export const amountRoundingPointLabels: Readonly<Record<string, string>> = {
   PER_LINE: '每一项费用',
+  AFTER_CONVERSION: '换算之后',
   TOTAL: '合计',
 };
 
@@ -141,4 +142,29 @@ export const priceCardStatusLabels: Readonly<
   EXPIRED: { label: '已过期', tone: 'muted' },
   CUT_OFF: { label: '已截止', tone: 'warn' },
   RETIRED: { label: '已退役', tone: 'muted' },
+};
+
+// ---- 价卡编辑器（新建价卡签）的选项词 ----
+//
+// 编辑器的可取值取自模板规格口（allowedValues），这里只给「值 → 中文」的译法；规格口新增了本表没有的取值，选项照样出现，
+// 以码原样显示，不替它猜译法。
+
+/** 价表类型（RateTableFamily）。 */
+export const rateTableFamilyLabels: Readonly<Record<string, string>> = {
+  FIRST_CONTINUE: '首重续重',
+  WEIGHT_ZONE: '按分区与重量段',
+  UNIT_PRICE: '按重量单价',
+};
+
+/** 计重方法（PricingWeightMethod）。 */
+export const weightMethodLabels: Readonly<Record<string, string>> = {
+  ACTUAL_ONLY: '只按实重',
+  MAX: '取实重与体积重较大者',
+};
+
+/** 进位模式作选项时的名词写法（句子里的写法见 roundingModeLabels）。 */
+export const roundingModeOptionLabels: Readonly<Record<string, string>> = {
+  NONE: '不进位',
+  CEILING: '向上进位',
+  HALF_UP: '四舍五入',
 };

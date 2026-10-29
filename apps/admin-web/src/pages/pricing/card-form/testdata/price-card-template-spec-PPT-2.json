@@ -1,0 +1,941 @@
+{
+ "templateVersion": "PPT-2",
+ "acceptedTemplateVersions": [
+  "PPT-1",
+  "PPT-2"
+ ],
+ "sheets": [
+  {
+   "name": "card",
+   "title": "方案头与登记件",
+   "purpose": "方案头与登记件：每个字段一行",
+   "layout": "FIELDS",
+   "repeatable": false,
+   "columns": [
+    {
+     "key": "templateVersion",
+     "title": "模板版本",
+     "requirement": "always",
+     "description": "模板版本，写 PPT-2（旧版 PPT-1 的文件仍然接受）"
+    },
+    {
+     "key": "planId",
+     "title": "方案标识",
+     "requirement": "always",
+     "description": "定价方案标识"
+    },
+    {
+     "key": "planVersion",
+     "title": "方案版本号",
+     "requirement": "always",
+     "description": "定价方案版本号"
+    },
+    {
+     "key": "scope",
+     "title": "计价范围",
+     "requirement": "always",
+     "description": "计价范围"
+    },
+    {
+     "key": "direction",
+     "title": "价格方向",
+     "requirement": "always",
+     "description": "价格方向：BUY、SELL、INTERNAL",
+     "allowedValues": [
+      "BUY",
+      "SELL",
+      "INTERNAL"
+     ]
+    },
+    {
+     "key": "purpose",
+     "title": "计价目的",
+     "requirement": "always",
+     "description": "计价目的：CUSTOMER_CHARGE、SUPPLIER_COST、INTERNAL_PRICE",
+     "allowedValues": [
+      "CUSTOMER_CHARGE",
+      "SUPPLIER_COST",
+      "INTERNAL_PRICE"
+     ]
+    },
+    {
+     "key": "aggregation",
+     "title": "计价对象",
+     "requirement": "always",
+     "description": "计价对象：PER_PACKAGE（逐包）、PER_SHIPMENT、PER_MASTER_DOCUMENT；必须写明",
+     "allowedValues": [
+      "PER_PACKAGE",
+      "PER_SHIPMENT",
+      "PER_MASTER_DOCUMENT"
+     ]
+    },
+    {
+     "key": "baseChargeCode",
+     "title": "基础运费代码",
+     "requirement": "always",
+     "description": "基础运费的费用代码（大写字母、数字、下划线）"
+    },
+    {
+     "key": "periodStartsAt",
+     "title": "方案生效起点",
+     "requirement": "always",
+     "description": "方案生效起点，带时区的时刻，如 2026-01-01T00:00:00Z"
+    },
+    {
+     "key": "periodEndsAt",
+     "title": "方案生效止点",
+     "requirement": "optional",
+     "description": "方案生效止点；空即不设止点"
+    },
+    {
+     "key": "rateTableId",
+     "title": "主价表标识",
+     "requirement": "always",
+     "description": "主价表标识，指 tables 表的一行"
+    },
+    {
+     "key": "weightPolicyId",
+     "title": "计重策略标识",
+     "requirement": "always",
+     "description": "计重策略标识"
+    },
+    {
+     "key": "weightPolicyVersion",
+     "title": "计重策略版本号",
+     "requirement": "always",
+     "description": "计重策略版本号"
+    },
+    {
+     "key": "weightMethod",
+     "title": "计重方法",
+     "requirement": "always",
+     "description": "计重方法：ACTUAL_ONLY、MAX",
+     "allowedValues": [
+      "ACTUAL_ONLY",
+      "MAX"
+     ]
+    },
+    {
+     "key": "volumetricDivisor",
+     "title": "体积重除数",
+     "requirement": "conditional",
+     "description": "体积重除数；与 volumetricLengthUnit 成对，进位段写在 weight_rounding 的 VOLUMETRIC 行"
+    },
+    {
+     "key": "volumetricLengthUnit",
+     "title": "体积重长度单位",
+     "requirement": "conditional",
+     "description": "体积重的长度单位：CM、IN；与 volumetricDivisor 成对",
+     "allowedValues": [
+      "CM",
+      "IN"
+     ]
+    },
+    {
+     "key": "amountRoundingMode",
+     "title": "金额取整模式",
+     "requirement": "conditional",
+     "description": "金额取整模式：NONE、CEILING、HALF_UP；与下两格同有同无",
+     "allowedValues": [
+      "NONE",
+      "CEILING",
+      "HALF_UP"
+     ]
+    },
+    {
+     "key": "amountRoundingIncrement",
+     "title": "金额取整进位单位",
+     "requirement": "conditional",
+     "description": "金额取整的进位单位，按主价表币种"
+    },
+    {
+     "key": "amountRoundingPoints",
+     "title": "金额取整应用点",
+     "requirement": "conditional",
+     "description": "金额取整的应用点，以英文分号分隔：PER_LINE、AFTER_CONVERSION、TOTAL",
+     "allowedValues": [
+      "PER_LINE",
+      "AFTER_CONVERSION",
+      "TOTAL"
+     ],
+     "multiValued": true
+    },
+    {
+     "key": "directionAuthorizationId",
+     "title": "价格方向授权标识",
+     "requirement": "always",
+     "description": "价格方向授权标识（party-commercial 签发）"
+    },
+    {
+     "key": "directionAuthorizationVersion",
+     "title": "价格方向授权版本号",
+     "requirement": "always",
+     "description": "价格方向授权版本号"
+    }
+   ]
+  },
+  {
+   "name": "tables",
+   "title": "价表表头",
+   "purpose": "价表表头：主价表与附加费查表用的价表都在这里声明",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "tableId",
+     "title": "价表标识",
+     "requirement": "always",
+     "description": "价表标识"
+    },
+    {
+     "key": "tableVersion",
+     "title": "价表版本号",
+     "requirement": "always",
+     "description": "价表版本号"
+    },
+    {
+     "key": "family",
+     "title": "价表族",
+     "requirement": "always",
+     "description": "价表族：WEIGHT_ZONE、FIRST_CONTINUE、UNIT_PRICE",
+     "allowedValues": [
+      "WEIGHT_ZONE",
+      "FIRST_CONTINUE",
+      "UNIT_PRICE"
+     ]
+    },
+    {
+     "key": "currency",
+     "title": "币种",
+     "requirement": "always",
+     "description": "本表各行金额的币种，如 CNY"
+    },
+    {
+     "key": "weightUnit",
+     "title": "重量单位",
+     "requirement": "always",
+     "description": "本表各行重量的单位：G、KG、OZ、LB",
+     "allowedValues": [
+      "G",
+      "KG",
+      "OZ",
+      "LB"
+     ]
+    },
+    {
+     "key": "periodStartsAt",
+     "title": "价表生效起点",
+     "requirement": "always",
+     "description": "价表生效起点，带时区的时刻"
+    },
+    {
+     "key": "periodEndsAt",
+     "title": "价表生效止点",
+     "requirement": "optional",
+     "description": "价表生效止点；空即不设止点"
+    }
+   ]
+  },
+  {
+   "name": "rates_weight_zone",
+   "title": "重量分区价表行",
+   "purpose": "WEIGHT_ZONE 族的价表行：分区 × 重量区间 → 金额",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "tableId",
+     "title": "价表标识",
+     "requirement": "always",
+     "description": "指一张 WEIGHT_ZONE 族的表"
+    },
+    {
+     "key": "entryId",
+     "title": "价表行标识",
+     "requirement": "always",
+     "description": "价表行标识"
+    },
+    {
+     "key": "zone",
+     "title": "分区名",
+     "requirement": "always",
+     "description": "分区名；被 TABLE_LOOKUP_BY_REMOTE_TIER 查的价表里填偏远档位（T1、T2……）"
+    },
+    {
+     "key": "minimum",
+     "title": "区间下界",
+     "requirement": "always",
+     "description": "区间下界，按表的重量单位"
+    },
+    {
+     "key": "maximum",
+     "title": "区间上界",
+     "requirement": "optional",
+     "description": "区间上界；空即不封顶"
+    },
+    {
+     "key": "amount",
+     "title": "金额",
+     "requirement": "always",
+     "description": "金额，按表的币种"
+    }
+   ]
+  },
+  {
+   "name": "rates_first_continue",
+   "title": "首续重价表行",
+   "purpose": "FIRST_CONTINUE 族的价表行：首重 + 续重",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "tableId",
+     "title": "价表标识",
+     "requirement": "always",
+     "description": "指一张 FIRST_CONTINUE 族的表"
+    },
+    {
+     "key": "entryId",
+     "title": "价表行标识",
+     "requirement": "always",
+     "description": "价表行标识"
+    },
+    {
+     "key": "zone",
+     "title": "分区名",
+     "requirement": "always",
+     "description": "分区名；被 TABLE_LOOKUP_BY_REMOTE_TIER 查的价表里填偏远档位（T1、T2……）"
+    },
+    {
+     "key": "firstWeight",
+     "title": "首重",
+     "requirement": "always",
+     "description": "首重"
+    },
+    {
+     "key": "firstAmount",
+     "title": "首重金额",
+     "requirement": "always",
+     "description": "首重金额"
+    },
+    {
+     "key": "step",
+     "title": "续重步长",
+     "requirement": "always",
+     "description": "续重步长"
+    },
+    {
+     "key": "stepAmount",
+     "title": "续重金额",
+     "requirement": "always",
+     "description": "每步续重金额"
+    }
+   ]
+  },
+  {
+   "name": "rates_unit_price",
+   "title": "单价价表行",
+   "purpose": "UNIT_PRICE 族的价表行：计费重 × 单价",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "tableId",
+     "title": "价表标识",
+     "requirement": "always",
+     "description": "指一张 UNIT_PRICE 族的表"
+    },
+    {
+     "key": "entryId",
+     "title": "价表行标识",
+     "requirement": "always",
+     "description": "价表行标识"
+    },
+    {
+     "key": "zone",
+     "title": "分区名",
+     "requirement": "always",
+     "description": "分区名；被 TABLE_LOOKUP_BY_REMOTE_TIER 查的价表里填偏远档位（T1、T2……）"
+    },
+    {
+     "key": "amountPerUnit",
+     "title": "单位金额",
+     "requirement": "always",
+     "description": "每个重量单位的金额"
+    }
+   ]
+  },
+  {
+   "name": "weight_rounding",
+   "title": "计重进位段",
+   "purpose": "计费重与体积重的进位段：同一 policy 的各行按行序组成分段",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "policy",
+     "title": "进位对象",
+     "requirement": "always",
+     "description": "CHARGEABLE（计费重，必须有）或 VOLUMETRIC（体积重，与 card 的体积重因子同有同无）",
+     "allowedValues": [
+      "CHARGEABLE",
+      "VOLUMETRIC"
+     ]
+    },
+    {
+     "key": "mode",
+     "title": "进位模式",
+     "requirement": "always",
+     "description": "进位模式：NONE、CEILING、HALF_UP",
+     "allowedValues": [
+      "NONE",
+      "CEILING",
+      "HALF_UP"
+     ]
+    },
+    {
+     "key": "increment",
+     "title": "进位单位",
+     "requirement": "always",
+     "description": "进位单位"
+    },
+    {
+     "key": "maximum",
+     "title": "本段上界",
+     "requirement": "optional",
+     "description": "本段上界；空即最后一段、不封顶"
+    },
+    {
+     "key": "unit",
+     "title": "重量单位",
+     "requirement": "always",
+     "description": "increment 与 maximum 的重量单位：G、KG、OZ、LB",
+     "allowedValues": [
+      "G",
+      "KG",
+      "OZ",
+      "LB"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "fixed_charges",
+   "title": "固定费用",
+   "purpose": "固定费用",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "ruleId",
+     "title": "规则标识",
+     "requirement": "always",
+     "description": "规则标识"
+    },
+    {
+     "key": "chargeCode",
+     "title": "费用代码",
+     "requirement": "always",
+     "description": "费用代码"
+    },
+    {
+     "key": "description",
+     "title": "说明",
+     "requirement": "always",
+     "description": "说明"
+    },
+    {
+     "key": "effect",
+     "title": "收费方向",
+     "requirement": "always",
+     "description": "ADD 或 DEDUCT",
+     "allowedValues": [
+      "ADD",
+      "DEDUCT"
+     ]
+    },
+    {
+     "key": "amount",
+     "title": "金额",
+     "requirement": "always",
+     "description": "金额，按主价表币种"
+    },
+    {
+     "key": "order",
+     "title": "顺序号",
+     "requirement": "always",
+     "description": "顺序号，整数"
+    },
+    {
+     "key": "unit",
+     "title": "计费单位",
+     "requirement": "optional",
+     "description": "空即按计价对象计；PER_PIECE 为按件（只对非逐包方案成立）",
+     "allowedValues": [
+      "PER_PIECE"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "surcharges",
+   "title": "附加费",
+   "purpose": "附加费：触发条件指 conditions 的根，计算方式指 calculations 的根",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "ruleId",
+     "title": "规则标识",
+     "requirement": "always",
+     "description": "规则标识"
+    },
+    {
+     "key": "chargeCode",
+     "title": "费用代码",
+     "requirement": "always",
+     "description": "费用代码"
+    },
+    {
+     "key": "description",
+     "title": "说明",
+     "requirement": "always",
+     "description": "说明"
+    },
+    {
+     "key": "effect",
+     "title": "收费方向",
+     "requirement": "always",
+     "description": "ADD 或 DEDUCT",
+     "allowedValues": [
+      "ADD",
+      "DEDUCT"
+     ]
+    },
+    {
+     "key": "conditionId",
+     "title": "触发条件",
+     "requirement": "always",
+     "description": "触发条件：conditions 表里一个根节点的 nodeId"
+    },
+    {
+     "key": "calculationId",
+     "title": "计算方式",
+     "requirement": "always",
+     "description": "计算方式：calculations 表里一个根节点的 nodeId"
+    },
+    {
+     "key": "exclusivity",
+     "title": "互斥立场",
+     "requirement": "optional",
+     "description": "空即未声明互斥立场；STANDALONE 或 GROUPED",
+     "allowedValues": [
+      "STANDALONE",
+      "GROUPED"
+     ]
+    },
+    {
+     "key": "exclusivityGroup",
+     "title": "互斥组名",
+     "requirement": "conditional",
+     "description": "互斥组名；GROUPED 时必填，否则必空"
+    },
+    {
+     "key": "priority",
+     "title": "组内优先级",
+     "requirement": "conditional",
+     "description": "组内优先级，整数；GROUPED 时必填，否则必空"
+    },
+    {
+     "key": "unit",
+     "title": "计费单位",
+     "requirement": "optional",
+     "description": "空即按计价对象计；PER_PIECE 为按件",
+     "allowedValues": [
+      "PER_PIECE"
+     ]
+    },
+    {
+     "key": "minimumWeightId",
+     "title": "条件最低计价重量标识",
+     "requirement": "conditional",
+     "description": "条件最低计价重量的标识；与下两格同有同无"
+    },
+    {
+     "key": "minimumWeightConditionId",
+     "title": "条件最低计价重量的条件",
+     "requirement": "conditional",
+     "description": "条件最低计价重量的条件：conditions 表里一个根节点的 nodeId"
+    },
+    {
+     "key": "minimumWeight",
+     "title": "条件最低计价重量",
+     "requirement": "conditional",
+     "description": "条件最低计价重量，按主价表的重量单位"
+    }
+   ]
+  },
+  {
+   "name": "conditions",
+   "title": "条件树",
+   "purpose": "条件树：一行一个节点，没有 parentId 的是根；兄弟节点的先后即行序",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "nodeId",
+     "title": "节点标识",
+     "requirement": "always",
+     "description": "节点标识，本表内唯一"
+    },
+    {
+     "key": "parentId",
+     "title": "父节点",
+     "requirement": "optional",
+     "description": "父节点的 nodeId；空即根"
+    },
+    {
+     "key": "kind",
+     "title": "节点类型",
+     "requirement": "always",
+     "description": "PREDICATE（判定）、ALL_OF（全部满足）、ANY_OF（任一满足）",
+     "allowedValues": [
+      "PREDICATE",
+      "ALL_OF",
+      "ANY_OF"
+     ]
+    },
+    {
+     "key": "source",
+     "title": "判定的特征来源",
+     "requirement": "conditional",
+     "description": "判定的特征来源；PREDICATE 必填。CHARGEABLE_WEIGHT 是包裹自身的计价重量（派生、进位之后），不含条件最低计价重量的抬高",
+     "allowedValues": [
+      "LONGEST_SIDE",
+      "SECOND_LONGEST_SIDE",
+      "LENGTH_AND_GIRTH",
+      "VOLUME",
+      "ACTUAL_WEIGHT",
+      "VOLUMETRIC_WEIGHT",
+      "CHARGEABLE_WEIGHT",
+      "ZONE",
+      "ADDRESS_TYPE",
+      "ADDRESS_NATURE",
+      "SERVICE_OPTION"
+     ]
+    },
+    {
+     "key": "operator",
+     "title": "比较运算",
+     "requirement": "conditional",
+     "description": "比较：GT、GE、LT、LE、EQ；长度、体积、重量类来源必填，类别类来源空或 EQ",
+     "allowedValues": [
+      "GT",
+      "GE",
+      "LT",
+      "LE",
+      "EQ"
+     ]
+    },
+    {
+     "key": "threshold",
+     "title": "阈值",
+     "requirement": "conditional",
+     "description": "阈值；长度、体积、重量类来源必填"
+    },
+    {
+     "key": "unit",
+     "title": "阈值单位",
+     "requirement": "conditional",
+     "description": "阈值单位：长度与体积类为 CM、IN，重量类为 G、KG、OZ、LB",
+     "allowedValues": [
+      "G",
+      "KG",
+      "OZ",
+      "LB",
+      "CM",
+      "IN"
+     ]
+    },
+    {
+     "key": "category",
+     "title": "类别值",
+     "requirement": "conditional",
+     "description": "期望的类别值；ZONE、ADDRESS_TYPE、SERVICE_OPTION 来源必填，ADDRESS_NATURE 来源必填且只收 COMMERCIAL、RESIDENTIAL"
+    }
+   ]
+  },
+  {
+   "name": "calculations",
+   "title": "计算树",
+   "purpose": "计算树：一行一个节点；只有 GREATER_OF 能当父节点，且恰好两个子节点",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "nodeId",
+     "title": "节点标识",
+     "requirement": "always",
+     "description": "节点标识，本表内唯一"
+    },
+    {
+     "key": "parentId",
+     "title": "父节点",
+     "requirement": "optional",
+     "description": "父节点的 nodeId；空即根"
+    },
+    {
+     "key": "method",
+     "title": "计算类型",
+     "requirement": "always",
+     "description": "FIXED_AMOUNT、TABLE_LOOKUP、PERCENT_OF_BASIS、GREATER_OF、SERIES_AMOUNT；TABLE_LOOKUP_BY_REMOTE_TIER（PPT-2 起）按偏远档位查价表，价表行的 zone 列写档位，并须在 reference_catalogues 绑一份 REMOTE_TIER 目录",
+     "allowedValues": [
+      "FIXED_AMOUNT",
+      "TABLE_LOOKUP",
+      "PERCENT_OF_BASIS",
+      "GREATER_OF",
+      "SERIES_AMOUNT",
+      "TABLE_LOOKUP_BY_REMOTE_TIER"
+     ]
+    },
+    {
+     "key": "amount",
+     "title": "固定金额",
+     "requirement": "conditional",
+     "description": "FIXED_AMOUNT 的金额，按主价表币种"
+    },
+    {
+     "key": "tableId",
+     "title": "查的价表",
+     "requirement": "conditional",
+     "description": "TABLE_LOOKUP 与 TABLE_LOOKUP_BY_REMOTE_TIER 查的表，指 tables"
+    },
+    {
+     "key": "percentage",
+     "title": "百分数",
+     "requirement": "conditional",
+     "description": "PERCENT_OF_BASIS 的百分数（12.5 即 12.5%）；与 seriesKind 二选一"
+    },
+    {
+     "key": "seriesKind",
+     "title": "序列种类",
+     "requirement": "conditional",
+     "description": "PERCENT_OF_BASIS 取序列读数作费率时的序列种类：FUEL_RATE、EXCHANGE_RATE、PUBLISHED_AMOUNT",
+     "allowedValues": [
+      "FUEL_RATE",
+      "EXCHANGE_RATE",
+      "PUBLISHED_AMOUNT"
+     ]
+    },
+    {
+     "key": "seriesFactor",
+     "title": "序列系数",
+     "requirement": "conditional",
+     "description": "与 seriesKind 成对：乘在序列读数上的系数"
+    },
+    {
+     "key": "basisDependencyId",
+     "title": "基数依赖",
+     "requirement": "conditional",
+     "description": "PERCENT_OF_BASIS 的基数，指 charge_dependencies 的 dependencyId"
+    },
+    {
+     "key": "seriesId",
+     "title": "序列标识",
+     "requirement": "conditional",
+     "description": "SERIES_AMOUNT 取金额的序列标识"
+    },
+    {
+     "key": "outOfWindow",
+     "title": "无读数时的处置",
+     "requirement": "conditional",
+     "description": "SERIES_AMOUNT 在序列无读数时：NOT_CHARGED、PENDING",
+     "allowedValues": [
+      "NOT_CHARGED",
+      "PENDING"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "charge_dependencies",
+   "title": "费用依赖",
+   "purpose": "费用依赖：百分比计算的基数",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "dependencyId",
+     "title": "依赖标识",
+     "requirement": "always",
+     "description": "依赖标识"
+    },
+    {
+     "key": "chargeCode",
+     "title": "费用代码",
+     "requirement": "always",
+     "description": "依附的费用代码"
+    },
+    {
+     "key": "composition",
+     "title": "基数构成",
+     "requirement": "always",
+     "description": "ALL_CHARGES（全部费用）或 LISTED_CHARGES（列出的费用）",
+     "allowedValues": [
+      "ALL_CHARGES",
+      "LISTED_CHARGES"
+     ]
+    },
+    {
+     "key": "includes",
+     "title": "计入的费用",
+     "requirement": "conditional",
+     "description": "LISTED_CHARGES 必填、否则必空：费用代码，以英文分号分隔"
+    },
+    {
+     "key": "excludes",
+     "title": "排除的费用",
+     "requirement": "optional",
+     "description": "排除的费用代码，以英文分号分隔"
+    }
+   ]
+  },
+  {
+   "name": "total_bounds",
+   "title": "最低 / 最高收费",
+   "purpose": "最低 / 最高收费：对整票合计声明下限与上限，至多一行，两端可只填一端。各行合计低于最低收费时补足到最低收费，高于最高收费时封顶到最高收费",
+   "layout": "ROWS",
+   "repeatable": false,
+   "since": "PPT-2",
+   "columns": [
+    {
+     "key": "minimum",
+     "title": "最低收费",
+     "requirement": "conditional",
+     "description": "最低收费（整票合计的下限，按主价表币种）：合计低于它就补一条 MINIMUM_CHARGE 补足行；与 maximum 至少填一个。卡声明了金额取整时，须落在进位单位的整数倍上"
+    },
+    {
+     "key": "maximum",
+     "title": "最高收费",
+     "requirement": "conditional",
+     "description": "最高收费（整票合计的上限，按主价表币种）：合计高于它就补一条 MAXIMUM_CHARGE 冲减行；不低于 minimum。卡声明了金额取整时，须落在进位单位的整数倍上"
+    }
+   ]
+  },
+  {
+   "name": "reference_series",
+   "title": "参考序列绑定",
+   "purpose": "参考序列绑定：只绑序列标识，不绑版本",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "kind",
+     "title": "序列种类",
+     "requirement": "always",
+     "description": "FUEL_RATE、EXCHANGE_RATE、PUBLISHED_AMOUNT",
+     "allowedValues": [
+      "FUEL_RATE",
+      "EXCHANGE_RATE",
+      "PUBLISHED_AMOUNT"
+     ]
+    },
+    {
+     "key": "seriesId",
+     "title": "序列标识",
+     "requirement": "always",
+     "description": "序列标识"
+    }
+   ]
+  },
+  {
+   "name": "exclusions",
+   "title": "排除条款",
+   "purpose": "排除条款：条件指 conditions 的根",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "exclusionId",
+     "title": "条款标识",
+     "requirement": "always",
+     "description": "条款标识"
+    },
+    {
+     "key": "clause",
+     "title": "条款原文",
+     "requirement": "always",
+     "description": "条款原文或出处"
+    },
+    {
+     "key": "conditionId",
+     "title": "条件",
+     "requirement": "always",
+     "description": "conditions 表里一个根节点的 nodeId"
+    }
+   ]
+  },
+  {
+   "name": "reference_catalogues",
+   "title": "参考目录绑定",
+   "purpose": "参考目录绑定",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "kind",
+     "title": "目录种类",
+     "requirement": "always",
+     "description": "ZONE 或 REMOTE_TIER",
+     "allowedValues": [
+      "ZONE",
+      "REMOTE_TIER"
+     ]
+    },
+    {
+     "key": "catalogueId",
+     "title": "目录标识",
+     "requirement": "always",
+     "description": "目录标识"
+    }
+   ]
+  },
+  {
+   "name": "manifest_dependencies",
+   "title": "版本清单依赖",
+   "purpose": "版本清单依赖：方案另外依赖的版本化工件",
+   "layout": "ROWS",
+   "repeatable": true,
+   "columns": [
+    {
+     "key": "kind",
+     "title": "工件种类",
+     "requirement": "always",
+     "description": "工件种类：pricing-plan、rate-table、weight-policy、reference-series、reference-catalogue、commercial-policy、commercial-authorization、numeric-profile",
+     "allowedValues": [
+      "pricing-plan",
+      "rate-table",
+      "weight-policy",
+      "reference-series",
+      "reference-catalogue",
+      "commercial-policy",
+      "commercial-authorization",
+      "numeric-profile"
+     ]
+    },
+    {
+     "key": "id",
+     "title": "工件标识",
+     "requirement": "always",
+     "description": "工件标识"
+    },
+    {
+     "key": "version",
+     "title": "工件版本号",
+     "requirement": "always",
+     "description": "工件版本号"
+    }
+   ]
+  }
+ ]
+}
