@@ -1,7 +1,7 @@
 # 02 计价引擎没有单票合计的最低 / 最高收费，附加费价表读不到偏远档位
 
 Category: enhancement
-Status: in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-pricingB（代码最后一笔 `6c7ca8ff8`）。
+Status: in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-pricingB（代码最后一笔 `6c7ca8ff8`；评审修订轮 `f7cd3e04b` 只改注释与文字）。
 Blocked by: 无（接票 01 之外独立；ADR-0346 单位换算已在 main）
 
 ## 现象
