@@ -48,9 +48,23 @@ function locate(problem: PriceCardProblem, target: Target, path: string, named: 
   return { problem, step: stepOfField(target.field), field: target.field, where, ...problemWords(problem.message) };
 }
 
+/** 话里的生成标识换回它在表单里的名字，最长的先换，免得短标识是长标识的前缀时换坏。 */
+function withNames(text: string, ids: Readonly<Record<string, string>>): string {
+  return Object.keys(ids)
+    .filter((id) => id !== '')
+    .sort((left, right) => right.length - left.length)
+    .reduce((current, id) => current.split(id).join(ids[id]), text);
+}
+
 export function mapProblems(problems: readonly PriceCardProblem[], origins: OriginIndex): MappedProblems {
   const located: LocatedProblem[] = [];
   const unlocated: PriceCardProblem[] = [];
+  const add = (entry: LocatedProblem) => {
+    // 同一格被几行工作簿共用时（币种、重量单位、生效起点各出现在每张价表里）服务端会各报一遍，页面上只留一条。
+    const text = withNames(entry.text, origins.ids);
+    const duplicate = located.some((other) => other.field === entry.field && other.where === entry.where && other.text === text);
+    if (!duplicate) located.push({ ...entry, text });
+  };
   for (const problem of problems) {
     if (problem.sheet === '') {
       unlocated.push(problem);
@@ -59,7 +73,7 @@ export function mapProblems(problems: readonly PriceCardProblem[], origins: Orig
     if (problem.sheet === 'card') {
       const target = origins.cardFields[problem.column];
       if (target === undefined) unlocated.push(problem);
-      else located.push(locate(problem, target, '', true));
+      else add(locate(problem, target, '', true));
       continue;
     }
     const fallbackSheet = origins.sheets[problem.sheet];
@@ -67,9 +81,9 @@ export function mapProblems(problems: readonly PriceCardProblem[], origins: Orig
     const origin = problem.row >= 2 ? origins.rows[problem.sheet]?.[problem.row - 2] : undefined;
     if (origin !== undefined) {
       const cell = origin.cells[problem.column];
-      located.push(locate(problem, cell ?? origin.fallback, origin.path, cell !== undefined));
+      add(locate(problem, cell ?? origin.fallback, origin.path, cell !== undefined));
     } else if (fallbackSheet !== undefined) {
-      located.push(locate(problem, fallbackSheet.target, fallbackSheet.path, problem.row === 0 && problem.column !== ''));
+      add(locate(problem, fallbackSheet.target, fallbackSheet.path, problem.row === 0 && problem.column !== ''));
     } else {
       unlocated.push(problem);
     }

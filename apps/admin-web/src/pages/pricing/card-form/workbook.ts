@@ -36,6 +36,8 @@ export interface OriginIndex {
   cardFields: Record<string, Target>;
   /** 表层面的问题（行号 0）与找不到行的问题落这里。 */
   sheets: Record<string, { path: string; target: Target }>;
+  /** 生成的标识 → 它在表单里是什么（「基础运费价表」「费用项 2「超尺寸费」」）。服务端的话里会带标识，翻回人话。 */
+  ids: Record<string, string>;
 }
 
 export interface GeneratedWorkbook {
@@ -70,7 +72,7 @@ export function remoteTiers(fee: FeeItemState): string[] {
 export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec): GeneratedWorkbook {
   const { basics } = state;
   const sheets: Record<string, Record<string, PriceCardWorkbookCell>[]> = {};
-  const origins: OriginIndex = { rows: {}, cardFields: {}, sheets: {} };
+  const origins: OriginIndex = { rows: {}, cardFields: {}, sheets: {}, ids: {} };
   const planId = trim(basics.planId);
   const planVersion = trim(basics.planVersion);
   const idOf = (slot: string, fallback: string) => state.idHints[slot] ?? fallback;
@@ -98,6 +100,8 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   const tableId = idOf('table', `${planId}-TABLE`);
   const tableVersion = idOf('tableVersion', planVersion);
   const family = trim(state.base.family);
+  origins.ids[tableId] = '基础运费价表';
+  origins.ids[idOf('weight', `${planId}-WEIGHT`)] = '重量规则';
   const baseTargetOf = (sheet: string, column: string, rowUid?: string): Target =>
     rowUid === undefined
       ? { field: field.base('family'), label: '价表类型' }
@@ -173,6 +177,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     const amountTarget: Target = { field: field.fee(fee.uid, 'amount'), label: '金额' };
     const chargeCode = trim(fee.code);
     const description = trim(fee.name);
+    origins.ids[idOf(`fee:${fee.uid}:rule`, `${planId}-RULE-${n}`)] = path;
 
     if (fee.kind === 'FIXED') {
       fixedCount.value += 1;
@@ -203,6 +208,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
           }))
         : fee.conditions;
     const conditionRoot = idOf(`fee:${fee.uid}:cond`, `${planId}-COND-${n}`);
+    origins.ids[conditionRoot] = `${path} · 触发条件`;
     const conditionTarget: Target = { field: field.fee(fee.uid, 'conditions'), label: '触发条件' };
     const grouped = predicates.length > 1;
     if (grouped) {
@@ -249,6 +255,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
 
     // 计算方式。
     const calcId = idOf(`fee:${fee.uid}:calc`, `${planId}-CALC-${n}`);
+    origins.ids[calcId] = path;
     const calcOrigin = (cells: Record<string, Target>): Origin => ({ path, fallback: nameTarget, cells });
     let calcCells: Cells;
     let calcTargets: Record<string, Target>;
@@ -259,6 +266,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
         break;
       case 'PERCENT': {
         const depId = idOf(`fee:${fee.uid}:dep`, `${planId}-DEP-${n}`);
+        origins.ids[depId] = `${path} · 计算基数`;
         const seriesMode = fee.percentMode === 'SERIES';
         calcCells = seriesMode
           ? { nodeId: calcId, method: 'PERCENT_OF_BASIS', basisDependencyId: depId, seriesKind: 'FUEL_RATE', seriesFactor: trim(fee.seriesFactor) }
@@ -298,6 +306,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
       case 'TABLE_ZONE':
       case 'TABLE_REMOTE': {
         const itemTable = idOf(`fee:${fee.uid}:table`, `${planId}-TABLE-${n}`);
+        origins.ids[itemTable] = `${path} · 价表`;
         calcCells = {
           nodeId: calcId,
           method: fee.kind === 'TABLE_REMOTE' ? 'TABLE_LOOKUP_BY_REMOTE_TIER' : 'TABLE_LOOKUP',

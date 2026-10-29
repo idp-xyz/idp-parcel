@@ -171,8 +171,10 @@ export function PriceCardCatalogPage() {
           <PriceCardCatalogTable />
         </TabsContent>
         {mayWrite ? (
+          // forceMount：切到别的签时表单不卸载，填了一半的内容与预览结果留着，切回来接着填。
           <TabsContent
             value="create"
+            forceMount
             className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
           >
             <PriceCardEditorPanel onOpenDrafts={() => setTab('drafts')} onDraftSaved={() => setDraftsSignal((value) => value + 1)} />

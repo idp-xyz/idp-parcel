@@ -148,6 +148,9 @@ function weightIssues(state: CardFormState, spec: PriceCardTemplateSpec): Issue[
   segmentIssues('chargeable', '计价重量进位');
   if (weight.method === 'MAX') {
     check.number(field.weight('divisor'), '体积重除数', weight.divisor);
+    if (isDecimal(weight.divisor) && Number(weight.divisor) <= 0) {
+      issues.push({ field: field.weight('divisor'), where: '重量规则', text: '体积重除数要大于 0' });
+    }
     check.choice(field.weight('lengthUnit'), '长度单位', weight.lengthUnit, allowedValues(spec, sheetNames.card, 'volumetricLengthUnit'));
     segmentIssues('volumetric', '体积重进位');
   }
@@ -203,8 +206,8 @@ function feeIssues(state: CardFormState, spec: PriceCardTemplateSpec, fee: FeeIt
       }
     });
   }
-  if (feeHasGroup(fee.kind) && fee.groupName.trim() !== '' && !integer.test(fee.priority.trim())) {
-    issues.push({ field: field.fee(fee.uid, 'priority'), where, text: '互斥组内要填优先级，用整数（1 最高）' });
+  if (feeHasGroup(fee.kind) && fee.groupName.trim() !== '' && (!integer.test(fee.priority.trim()) || Number(fee.priority) < 1)) {
+    issues.push({ field: field.fee(fee.uid, 'priority'), where, text: '互斥组内要填优先级，用大于 0 的整数（1 最高）' });
   }
   return issues;
 }
