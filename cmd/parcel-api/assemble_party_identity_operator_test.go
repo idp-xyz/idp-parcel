@@ -86,7 +86,7 @@ func TestTheOperatorChannelRegistersThePartyIdentityFamilyAgainstARealDatabase(t
 	tenant := pcSynthetic(t, commercialdomain.NewTenantID, "SYN-TENANT-01")
 	numberType, err := registration.registrationNumberType.Register(t.Context(), commercialapp.RegisterRegistrationNumberTypeCommand{
 		Tenant:   tenant,
-		Country:  pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "XA"),
+		Country:  pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "CN"),
 		Code:     pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeCode, "SYN-XA-LIFETIME"),
 		Revision: 1,
 		Spec: commercialdomain.RegistrationNumberTypeSpec{
@@ -114,7 +114,7 @@ func TestTheOperatorChannelRegistersThePartyIdentityFamilyAgainstARealDatabase(t
 			`"revision":1,"basis":"SYN-BASIS/oc04-party-02","effectiveFrom":"2026-01-01T00:00:00Z"}]}`, http.StatusCreated, "REGISTERED"},
 		{"责任法人", legalEntities, "/commercial-legal-entity-registrations", `{"legalEntities":[{"legalEntityId":"SYN-LE-OC04-01",` +
 			`"partyId":"SYN-PARTY-OC04-01","revision":1,"basis":"SYN-BASIS/oc04-le-01","effectiveFrom":"2026-02-01T00:00:00Z",` +
-			`"registrationCountry":"XA","lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":"SYN-XA-000041"}]}]}`,
+			`"registrationCountry":"CN","lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":"SYN-XA-000041"}]}]}`,
 			http.StatusCreated, "REGISTERED"},
 		{"货主客户账户", accounts, "/commercial-customer-account-registrations", `{"customerAccounts":[{"accountId":"SYN-ACCT-OC04-01",` +
 			`"customerPartyId":"SYN-PARTY-OC04-01","revision":1,"basis":"SYN-BASIS/oc04-acct-01","effectiveFrom":"2026-02-01T00:00:00Z"}]}`,

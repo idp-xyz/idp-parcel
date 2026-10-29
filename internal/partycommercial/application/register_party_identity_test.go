@@ -281,7 +281,7 @@ func TestLegalEntityDemandsAnEffectiveParty(t *testing.T) {
 		Revision:      1,
 		Basis:         identityValue(t, domain.NewIdentityBasisReference, "basis-le"),
 		EffectiveFrom: entityEffectiveFrom,
-	}, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	}, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	dangling, err := handler.RegisterLegalEntity(ctx, command)
 	if err != nil || dangling.Outcome() != application.PartyIdentityNotAccepted {
 		t.Fatalf("dangling party = (%v, %v), want NOT_ACCEPTED", dangling.Outcome(), err)

@@ -1434,7 +1434,7 @@ func settlementPolicyBodyFrom(
 	if err != nil {
 		return nil, err
 	}
-	currency, err := pcdomain.NewCurrencyCode(document.Currency)
+	currency, err := pcdomain.NewCatalogueCurrencyCode(document.Currency)
 	if err != nil {
 		return nil, err
 	}

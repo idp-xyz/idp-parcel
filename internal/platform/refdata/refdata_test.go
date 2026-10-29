@@ -370,3 +370,28 @@ func hasCurrency(rows []CurrencyInfo, code string) bool {
 	}
 	return false
 }
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——写入边界用的两个判目录成员的函数：目录里的码通过，目录外、小写、带空白、串种类都答
+// ErrNotInCatalogue；不做任何宽容，规范化是边界的事。
+func TestCheckAnswersCatalogueMembershipWithoutLeniency(t *testing.T) {
+	for _, code := range []string{"CN", "SG", "US"} {
+		if err := CheckCountry(code); err != nil {
+			t.Errorf("CheckCountry(%q) = %v", code, err)
+		}
+	}
+	for _, code := range []string{"CNY", "USD", "SGD"} {
+		if err := CheckCurrency(code); err != nil {
+			t.Errorf("CheckCurrency(%q) = %v", code, err)
+		}
+	}
+	for _, code := range []string{"ZZ", "XA", "cn", " CN", "CN ", "CNY", ""} {
+		if err := CheckCountry(code); !errors.Is(err, ErrNotInCatalogue) {
+			t.Errorf("CheckCountry(%q) = %v, 应答目录外", code, err)
+		}
+	}
+	for _, code := range []string{"XXX", "SYN", "cny", "CNY ", "CN", ""} {
+		if err := CheckCurrency(code); !errors.Is(err, ErrNotInCatalogue) {
+			t.Errorf("CheckCurrency(%q) = %v, 应答目录外", code, err)
+		}
+	}
+}

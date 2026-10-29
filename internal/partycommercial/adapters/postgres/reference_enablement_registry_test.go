@@ -78,7 +78,7 @@ func saveEnablement(
 	return outcome
 }
 
-// Covers: ADR-0345 决定三——修订 1 落册、同键同内容重放答已登记（审计两件不同也算同内容）、同键异内容冲突不覆盖；
+// Covers: `AT-PC-073`，ADR-0345 决定三——修订 1 落册、同键同内容重放答已登记（审计两件不同也算同内容）、同键异内容冲突不覆盖；
 // 读回时往返不走样，登记责任方与登记时间照落库值原样回来。
 func TestReferenceEnablementRegistersReplaysAndConflicts(t *testing.T) {
 	registry, transactor, _ := newReferenceEnablements(t)
@@ -115,7 +115,7 @@ func TestReferenceEnablementRegistersReplaysAndConflicts(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定三「当前状态由生效时点不晚于此刻的最新一行导出」与停用后再启用——三笔追加后整册读出带全部修订，
+// Covers: `AT-PC-075`，ADR-0345 决定三「当前状态由生效时点不晚于此刻的最新一行导出」与停用后再启用——三笔追加后整册读出带全部修订，
 // 导出的状态是最后一笔的启用；LoadLatest 取最高修订；来源单据可空，空读回仍是空。
 func TestReferenceEnablementDisableThenEnableAgainDerivesTheLatestEffectiveRow(t *testing.T) {
 	registry, transactor, _ := newReferenceEnablements(t)
@@ -168,7 +168,7 @@ func TestReferenceEnablementDisableThenEnableAgainDerivesTheLatestEffectiveRow(t
 	}
 }
 
-// Covers: ADR-0345 决定四——册面按租户隔离，种类互不串；同码各租户各登各的首笔。
+// Covers: `AT-PC-076`，ADR-0345 决定四——册面按租户隔离，种类互不串；同码各租户各登各的首笔。
 func TestReferenceEnablementIsolatesTenantsAndKinds(t *testing.T) {
 	registry, transactor, _ := newReferenceEnablements(t)
 	ctx := t.Context()

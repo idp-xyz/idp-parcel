@@ -28,6 +28,9 @@ func AuditEscalationCeilingFromJSON(raw []byte) (domain.TenantID, domain.AuditEs
 	if err != nil {
 		return domain.TenantID{}, domain.AuditEscalationCeilingRegistration{}, err
 	}
+	if err := requireCatalogueCurrency(document.Currency); err != nil {
+		return domain.TenantID{}, domain.AuditEscalationCeilingRegistration{}, err
+	}
 	registration, err := domain.NewAuditEscalationCeilingRegistration(
 		catalogueRef(domain.NewSupplierPartyReference, document.SupplierID),
 		catalogueRef(domain.NewLegalEntityReference, document.LegalEntityID),

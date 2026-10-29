@@ -471,7 +471,7 @@ func TestServiceAreaVersionsShowTheirCoverage(t *testing.T) {
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
 		&stubCatalogReader{areas: []ports.ServiceAreaDefinitionVersion{
 			{Code: "area-covered", Version: 1, EffectiveFrom: effective,
-				HasCoverage: true, CoverageCountry: "XA", PostalPrefixes: []string{"10"},
+				HasCoverage: true, CoverageCountry: "CN", PostalPrefixes: []string{"10"},
 				OriginNodes: []string{"node-a"}},
 			{Code: "area-bare", Version: 1, EffectiveFrom: effective},
 		}},
@@ -492,7 +492,7 @@ func TestServiceAreaVersionsShowTheirCoverage(t *testing.T) {
 		t.Fatalf("versions = %s", response.Body.String())
 	}
 	if got := string(body.Versions[0]["coverage"]); got !=
-		`{"country":"XA","postalPrefixes":["10"],"originNodes":["node-a"]}` {
+		`{"country":"CN","postalPrefixes":["10"],"originNodes":["node-a"]}` {
 		t.Fatalf("登过覆盖的版本透出 %s", got)
 	}
 	if _, present := body.Versions[1]["coverage"]; present {

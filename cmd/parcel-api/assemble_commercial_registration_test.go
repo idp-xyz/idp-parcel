@@ -180,7 +180,7 @@ func TestTheWiredLegalEntityProfileRegistrationLandsAgainstARealDatabase(t *test
 	registerLegalEntityWithIdentityLayer(t, registration, "SYN-TENANT-API-LEP03", "SYN-API-LEP03-PARTY", "SYN-API-LEP03-LE")
 	tenant := pcSynthetic(t, commercialdomain.NewTenantID, "SYN-TENANT-API-LEP03")
 	entity := pcSynthetic(t, commercialdomain.NewLegalEntityReference, "SYN-API-LEP03-LE")
-	country := pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "XA")
+	country := pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "CN")
 	entityFrom := legalEntityWithIdentityLayerFrom
 
 	address, err := commercialdomain.NewRegisteredAddress(country, []string{"SYN 合成路 3 号"})
@@ -221,8 +221,8 @@ func TestTheWiredLegalEntityProfileRegistrationLandsAgainstARealDatabase(t *test
 // legalEntityWithIdentityLayerFrom 是 registerLegalEntityWithIdentityLayer 所登法人的生效时点；资料修订按它往后登才过得了资料门。
 var legalEntityWithIdentityLayerFrom = time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 
-// registerLegalEntityWithIdentityLayer 经生产装配给租户铺好登资料要的底子：XA 两层各一类注册号类型（2026-01-01 起在用）、
-// 一个参与方与一个带 XA 身份层的法人（legalEntityWithIdentityLayerFrom 起生效）。资料门要对着法人身份判地址国家、对着目录
+// registerLegalEntityWithIdentityLayer 经生产装配给租户铺好登资料要的底子：CN 两层各一类注册号类型（2026-01-01 起在用）、
+// 一个参与方与一个带 CN 身份层的法人（legalEntityWithIdentityLayerFrom 起生效）。资料门要对着法人身份判地址国家、对着目录
 // 判税号，缺哪样资料都登不上。
 func registerLegalEntityWithIdentityLayer(
 	t *testing.T,
@@ -232,7 +232,7 @@ func registerLegalEntityWithIdentityLayer(
 	t.Helper()
 	ctx := t.Context()
 	tenant := pcSynthetic(t, commercialdomain.NewTenantID, tenantID)
-	country := pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "XA")
+	country := pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "CN")
 	typesFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for _, numberType := range []struct {

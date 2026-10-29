@@ -1,6 +1,7 @@
 package registrationjson
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,5 +31,27 @@ func TestISODurationSubsetParsesExactlyTheDeclaredShape(t *testing.T) {
 				t.Fatalf("parse %q 被收下了", raw)
 			}
 		})
+	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——受控批文口（与 CLI、在线批文镜像同一份译装）里结算政策的币种是新登记入口，只收内置币种目录里的码：
+// 目录内的 CNY 照常译出，形状合法而目录外的 XXX 被拒并说清是目录不认。
+func TestSettlementPolicyBodyCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
+	document := settlementPolicyBodyDocument{
+		Method:            "TERMS",
+		LegalEntity:       "legal-1",
+		Counterparty:      "account-1",
+		ChargeScope:       "charge-terms",
+		Currency:          "CNY",
+		EffectiveStartsAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	}
+	document.Contract.ObjectID = "contract-1"
+	document.Contract.Version = "v3"
+	if _, err := settlementPolicyBodyFrom(document); err != nil {
+		t.Fatalf("目录内的币种应照常译出：%v", err)
+	}
+	document.Currency = "XXX"
+	if _, err := settlementPolicyBodyFrom(document); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+		t.Fatalf("目录外的币种应被拒并说清是目录不认：%v", err)
 	}
 }

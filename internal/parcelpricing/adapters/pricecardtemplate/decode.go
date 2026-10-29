@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 	"go.idp.xyz/idp-parcel/internal/platform/spreadsheet"
 )
 
@@ -377,6 +378,11 @@ func (t *translation) readTables() {
 		currencyOK := false
 		if currency := rec.get("currency"); d.required(currency) {
 			value, err := domain.NewCurrency(currency.text)
+			if err == nil {
+				// 新导入的价卡只收产品内置币种目录里的码（ADR-0345 决定五）。门在导入这一层：NewCurrency 与读回不查目录，
+				// 已发布的价卡照样读得回、照样评价。
+				err = refdata.CheckCurrency(currency.text)
+			}
 			if err != nil {
 				d.at(currency, ports.TemplateCellInvalid, "币种「%s」立不住：%v", currency.text, err)
 			} else {

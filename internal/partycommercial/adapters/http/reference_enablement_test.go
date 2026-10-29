@@ -177,7 +177,7 @@ func enablementRead(t *testing.T, read http.Handler, token, query string) (int, 
 
 const enableChina = `{"kind":"COUNTRY","code":"CN","revision":1,"status":"ENABLED","effectiveFrom":"2026-06-01T00:00:00Z","source":"MEMO-1"}`
 
-// Covers: ADR-0345 决定四——登记口的租户与登记责任方都只取认证信封，落库的登记责任方是“发行方#sub”；
+// Covers: `AT-PC-076`，ADR-0345 决定四——登记口的租户与登记责任方都只取认证信封，落库的登记责任方是“发行方#sub”；
 // 他租户读不到；未授予（凭证被拒）一律先于载荷。
 func TestEnablementRegistrationTakesTenantAndRegistrantFromTheEnvelope(t *testing.T) {
 	registry := &enablementRegistryDouble{}
@@ -205,7 +205,7 @@ func TestEnablementRegistrationTakesTenantAndRegistrantFromTheEnvelope(t *testin
 	}
 }
 
-// Covers: ADR-0345 决定四——载荷里自报租户（null 也算）、自报登记责任方（未知键）一概拒；缺修订、缺生效时点、集外种类与
+// Covers: `AT-PC-076`，ADR-0345 决定四——载荷里自报租户（null 也算）、自报登记责任方（未知键）一概拒；缺修订、缺生效时点、集外种类与
 // 状态都是请求畸形；令牌缺失在读载荷之前就答凭证被拒。
 func TestEnablementRegistrationRefusesWhatTheEnvelopeAlreadyAnswers(t *testing.T) {
 	registry := &enablementRegistryDouble{}
@@ -239,7 +239,7 @@ func TestEnablementRegistrationRefusesWhatTheEnvelopeAlreadyAnswers(t *testing.T
 	}
 }
 
-// Covers: ADR-0345 决定三——目录外的码答 200 未受理并指名 CODE_NOT_IN_CATALOGUE（业务答复，不是 5xx 也不是 400）；
+// Covers: `AT-PC-074`，ADR-0345 决定三——目录外的码答 200 未受理并指名 CODE_NOT_IN_CATALOGUE（业务答复，不是 5xx 也不是 400）；
 // 重放答 200 已登记，异内容答 200 内容冲突；修订错位指名理由。
 func TestEnablementRegistrationAnswersBusinessGrades(t *testing.T) {
 	registry := &enablementRegistryDouble{}
@@ -273,7 +273,7 @@ func TestEnablementRegistrationAnswersBusinessGrades(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定四——读回口：种类必给且在封闭集内；未授予不读册；方法只放 GET；读册失败答 5xx 没形成答案；
+// Covers: `AT-PC-075`，ADR-0345 决定四——读回口：种类必给且在封闭集内；未授予不读册；方法只放 GET；读册失败答 5xx 没形成答案；
 // 状态由读的这一刻导出（未来生效的行答 NOT_CONFIGURED，停用后再启用以后到者为准）。
 func TestEnablementReadBackDerivesTheStandingAtTheMomentOfReading(t *testing.T) {
 	registry := &enablementRegistryDouble{}

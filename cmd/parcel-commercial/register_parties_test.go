@@ -18,7 +18,7 @@ const partyFullBatchJSON = `{
   ],
   "legalEntities": [
     {"legalEntityId": "legal-acme", "partyId": "party-acme", "revision": 1, "basis": "REG/legal-acme", "effectiveFrom": "2026-01-02T00:00:00Z",
-     "registrationCountry": "XA", "lifetimeRegistrationNumbers": [{"typeCode": "SYN-LIFETIME", "number": "SYN-000001"}]}
+     "registrationCountry": "CN", "lifetimeRegistrationNumbers": [{"typeCode": "SYN-LIFETIME", "number": "SYN-000001"}]}
   ],
   "customerAccounts": [
     {"accountId": "account-beta", "customerPartyId": "party-beta", "revision": 1, "basis": "REG/account-beta", "effectiveFrom": "2026-01-02T00:00:00Z"}

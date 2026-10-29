@@ -18,7 +18,7 @@ import (
 func settlementAccountDocument(accountID, counterparty, basis string) string {
 	return `{
 		"tenantId": "SYN-T1", "accountId": "` + accountID + `", "legalEntityId": "SYN-LE-1",
-		"counterpartyId": "` + counterparty + `", "direction": "RECEIVABLE", "currency": "XTS",
+		"counterpartyId": "` + counterparty + `", "direction": "RECEIVABLE", "currency": "CNY",
 		"settlementPolicyId": "SYN-SETTLE-1", "responsibilityBasis": "` + basis + `"
 	}`
 }

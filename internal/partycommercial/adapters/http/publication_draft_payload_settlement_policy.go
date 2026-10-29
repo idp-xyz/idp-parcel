@@ -49,7 +49,7 @@ func (payload SettlementPolicyBodyPayload) body(problems *PublicationPayloadProb
 	contractObject := requireField(problems, "settlementPolicy.contract.objectId", domain.NewCommercialObjectID, payload.Contract.ObjectID)
 	contractVersion := requireField(problems, "settlementPolicy.contract.version", domain.NewCommercialVersionLabel, payload.Contract.Version)
 	chargeScope := requireField(problems, "settlementPolicy.chargeScope", domain.NewChargeScopeReference, payload.ChargeScope)
-	currency := requireField(problems, "settlementPolicy.currency", domain.NewCurrencyCode, payload.Currency)
+	currency := requireField(problems, "settlementPolicy.currency", domain.NewCatalogueCurrencyCode, payload.Currency)
 	effective := intervalField(problems, "settlementPolicy.effectiveStartsAt", "settlementPolicy.effectiveEndsAt",
 		payload.EffectiveStartsAt, payload.EffectiveEndsAt)
 	if len(problems.Problems) > before {

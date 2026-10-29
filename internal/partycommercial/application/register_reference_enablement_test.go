@@ -128,7 +128,7 @@ func registerEnablement(
 	return result
 }
 
-// Covers: ADR-0345 决定三——首笔是修订 1，其后连续；同键同内容重放答已登记、不再落笔，同键异内容答内容冲突、册面不动。
+// Covers: `AT-PC-073`，ADR-0345 决定三——首笔是修订 1，其后连续；同键同内容重放答已登记、不再落笔，同键异内容答内容冲突、册面不动。
 func TestReferenceEnablementRegistersReplaysAndConflicts(t *testing.T) {
 	registry := &fakeReferenceEnablementRegistry{}
 	handler := application.NewRegisterReferenceEnablementHandler(registry, fixedEnablementClock{enablementNow})
@@ -159,7 +159,7 @@ func TestReferenceEnablementRegistersReplaysAndConflicts(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定三——停用与再启用都是新修订追加，历史原样在册。
+// Covers: `AT-PC-075`，ADR-0345 决定三——停用与再启用都是新修订追加，历史原样在册。
 func TestReferenceEnablementDisableThenEnableAgainAppends(t *testing.T) {
 	registry := &fakeReferenceEnablementRegistry{}
 	handler := application.NewRegisterReferenceEnablementHandler(registry, fixedEnablementClock{enablementNow})
@@ -200,7 +200,7 @@ func TestReferenceEnablementDisableThenEnableAgainAppends(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定三——码取自内置目录，目录外答未受理并指名 CODE_NOT_IN_CATALOGUE，一个字节没写；
+// Covers: `AT-PC-074`，ADR-0345 决定三——码取自内置目录，目录外答未受理并指名 CODE_NOT_IN_CATALOGUE，一个字节没写；
 // 修订错位与生效时点早于前一修订各有各的理由。
 func TestReferenceEnablementRefusalsAreNamedAndWriteNothing(t *testing.T) {
 	registry := &fakeReferenceEnablementRegistry{}
@@ -242,7 +242,7 @@ func TestReferenceEnablementRefusalsAreNamedAndWriteNothing(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定一——没登记就是未配置：此刻没有生效行的码（压根没登，或全是未来生效）读面答 HasStanding=false，
+// Covers: `AT-PC-075`，ADR-0345 决定一——没登记就是未配置：此刻没有生效行的码（压根没登，或全是未来生效）读面答 HasStanding=false，
 // 不折成启用或停用；册上没有行的码不出现在读面。
 func TestReferenceEnablementWithoutAnEffectiveRowIsNotConfigured(t *testing.T) {
 	registry := &fakeReferenceEnablementRegistry{}
@@ -264,7 +264,7 @@ func TestReferenceEnablementWithoutAnEffectiveRowIsNotConfigured(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定四——册面按租户隔离：他租户登的行本租户读不到，同码各租户各登各的首笔。
+// Covers: `AT-PC-076`，ADR-0345 决定四——册面按租户隔离：他租户登的行本租户读不到，同码各租户各登各的首笔。
 func TestReferenceEnablementIsolatesTenants(t *testing.T) {
 	registry := &fakeReferenceEnablementRegistry{}
 	handler := application.NewRegisterReferenceEnablementHandler(registry, fixedEnablementClock{enablementNow})

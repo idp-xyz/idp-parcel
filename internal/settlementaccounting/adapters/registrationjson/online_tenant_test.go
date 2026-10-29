@@ -17,7 +17,7 @@ import (
 var tenantKeyCaseVariants = []string{"tenantId", "TenantId", "tenantID", "tenantid", "tenantiD", "TENANTID"}
 
 const onlineAdoptBody = `{"factRef":"SYN-FACT-1","sourceRef":"SYN-SOURCE-BANK-1","kind":"RECEIPT_CONFIRMED",` +
-	`"currency":"XTS","amountMinor":8000,"version":"SYN-FACT-1/v1","occurredAt":"2026-09-01T08:00:00Z"}`
+	`"currency":"CNY","amountMinor":8000,"version":"SYN-FACT-1/v1","occurredAt":"2026-09-01T08:00:00Z"}`
 
 const onlineCorrectionBody = `{"factRef":"SYN-FACT-1","corrects":"SYN-FACT-1/v1","version":"SYN-FACT-1/v2",` +
 	`"amountMinor":7000,"correctedAt":"2026-09-02T08:00:00Z"}`

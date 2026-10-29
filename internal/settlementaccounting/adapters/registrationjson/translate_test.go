@@ -11,7 +11,7 @@ import (
 
 // 本文件证译装两半：正——载荷每一格原样到命令（保真，不规范化、不补默认）；反——形状坏、词表外、
 // 有构造门的标识空白，一律在入库前拒并指名差哪格。`AdoptFact` 的答案格与更正的链头判断在应用层已证（ADR-0137
-// 决定四），这里不碰库。夹具币种取 ISO 4217 测试码 `XTS`，不用任何流通币的真码。
+// 决定四），这里不碰库。夹具币种取目录里的真码 `CNY`：账户、应付账户与上限这几个登记入口只收内置币种目录里的码（ADR-0345 决定五）。
 
 const adoptDocument = `{
 	"tenantId": "SYN-T1",
@@ -19,7 +19,7 @@ const adoptDocument = `{
 	"sourceRef": "SYN-SOURCE-BANK-1",
 	"payerRef": "SYN-PAYER-1",
 	"kind": "RECEIPT_CONFIRMED",
-	"currency": "XTS",
+	"currency": "CNY",
 	"amountMinor": 8000,
 	"version": "SYN-FACT-1/v1",
 	"occurredAt": "2026-09-01T08:00:00Z"
@@ -41,7 +41,7 @@ func TestExternalFundsFactFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 	if command.Kind != domain.FundsReceiptConfirmed {
 		t.Fatalf("kind = %v，要 RECEIPT_CONFIRMED 译回的领域常量", command.Kind)
 	}
-	if command.Currency != "XTS" || command.AmountMinor != 8000 || command.Version != "SYN-FACT-1/v1" {
+	if command.Currency != "CNY" || command.AmountMinor != 8000 || command.Version != "SYN-FACT-1/v1" {
 		t.Fatalf("内容失真：currency=%q amount=%d version=%q", command.Currency, command.AmountMinor, command.Version)
 	}
 	if want := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
@@ -53,7 +53,7 @@ func TestExternalFundsFactFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 func TestExternalFundsFactFromJSONLetsThePayerBeAbsent(t *testing.T) {
 	command, err := registrationjson.ExternalFundsFactFromJSON([]byte(`{
 		"tenantId": "SYN-T1", "factRef": "SYN-FACT-1", "sourceRef": "SYN-SOURCE-BANK-1",
-		"kind": "PAYMENT_FAILED", "currency": "XTS", "amountMinor": 8000,
+		"kind": "PAYMENT_FAILED", "currency": "CNY", "amountMinor": 8000,
 		"version": "SYN-FACT-1/v1", "occurredAt": "2026-09-01T08:00:00Z"
 	}`))
 	if err != nil {
@@ -78,7 +78,7 @@ func TestExternalFundsFactFromJSONRejectsBadShapeVocabularyAndBlankIdentifiers(t
 		"事实引用空白":   {strings.Replace(adoptDocument, `"factRef": "SYN-FACT-1"`, `"factRef": ""`, 1), "fact"},
 		"来源引用空白":   {strings.Replace(adoptDocument, `"SYN-SOURCE-BANK-1"`, `" "`, 1), "source"},
 		"版本空白":     {strings.Replace(adoptDocument, `"version": "SYN-FACT-1/v1"`, `"version": ""`, 1), "version"},
-		"币种空白":     {strings.Replace(adoptDocument, `"XTS"`, `""`, 1), "currency"},
+		"币种空白":     {strings.Replace(adoptDocument, `"CNY"`, `""`, 1), "currency"},
 		"付款人给了但空白": {strings.Replace(adoptDocument, `"SYN-PAYER-1"`, `"  "`, 1), "payer"},
 	}
 	for name, test := range cases {
@@ -127,7 +127,7 @@ func TestExternalFundsFactCorrectionFromJSONRejectsForeignFieldsAndBlankVersions
 		names string
 	}{
 		"带来源引用":  {strings.Replace(correctionDocument, `"corrects"`, `"sourceRef": "SYN-SOURCE-BANK-1", "corrects"`, 1), "sourceref"},
-		"带币种":    {strings.Replace(correctionDocument, `"corrects"`, `"currency": "XTS", "corrects"`, 1), "currency"},
+		"带币种":    {strings.Replace(correctionDocument, `"corrects"`, `"currency": "CNY", "corrects"`, 1), "currency"},
 		"回指空白":   {strings.Replace(correctionDocument, `"corrects": "SYN-FACT-1/v1"`, `"corrects": " "`, 1), "corrects"},
 		"新版本空白":  {strings.Replace(correctionDocument, `"version": "SYN-FACT-1/v2"`, `"version": ""`, 1), "version"},
 		"事实引用空白": {strings.Replace(correctionDocument, `"factRef": "SYN-FACT-1"`, `"factRef": ""`, 1), "fact"},
@@ -149,7 +149,7 @@ const settlementAccountDocument = `{
 	"legalEntityId": "LE-1",
 	"counterpartyId": "CP-1",
 	"direction": "RECEIVABLE",
-	"currency": "XTS",
+	"currency": "CNY",
 	"settlementPolicyId": "settle-1",
 	"responsibilityBasis": "CONTRACT-1"
 }`
@@ -179,5 +179,42 @@ func TestSettlementAccountFromJSONRejectsStatementFieldsAndARepeatedPayer(t *tes
 	repeated := strings.Replace(settlementAccountDocument, `"responsibilityBasis"`, `"payerId": "CP-1", "responsibilityBasis"`, 1)
 	if _, err := registrationjson.SettlementAccountFromJSON([]byte(repeated)); err == nil {
 		t.Fatal("付款责任方与相对方相同仍被译装")
+	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——结算账户、供应商应付账户、越权升级上限是新登记入口，币种只收内置币种目录里的码：目录内的 CNY 照常
+// 译出，形状合法而目录外的 XXX 在译装门被拒并说清是目录不认，不到达用例。
+func TestSettlementRegisterEntriesTakeOnlyCataloguedCurrencies(t *testing.T) {
+	const supplierPayable = `{"tenantId":"SYN-T1","supplierId":"SUP-1","legalEntityId":"LE-1","currency":"CNY","accountId":"ACCT-1"}`
+	const ceiling = `{"tenantId":"SYN-T1","supplierId":"SUP-1","legalEntityId":"LE-1","currency":"CNY","ceilingMinor":50000}`
+
+	if _, _, err := registrationjson.SupplierPayableAccountFromJSON([]byte(supplierPayable)); err != nil {
+		t.Fatalf("目录内的币种应照常译出（应付账户）：%v", err)
+	}
+	if _, _, err := registrationjson.AuditEscalationCeilingFromJSON([]byte(ceiling)); err != nil {
+		t.Fatalf("目录内的币种应照常译出（上限）：%v", err)
+	}
+
+	outside := map[string]func() error{
+		"结算账户": func() error {
+			_, err := registrationjson.SettlementAccountFromJSON(
+				[]byte(strings.Replace(settlementAccountDocument, `"currency": "CNY"`, `"currency": "XXX"`, 1)))
+			return err
+		},
+		"供应商应付账户": func() error {
+			_, _, err := registrationjson.SupplierPayableAccountFromJSON(
+				[]byte(strings.Replace(supplierPayable, `"CNY"`, `"XXX"`, 1)))
+			return err
+		},
+		"越权升级上限": func() error {
+			_, _, err := registrationjson.AuditEscalationCeilingFromJSON(
+				[]byte(strings.Replace(ceiling, `"CNY"`, `"XXX"`, 1)))
+			return err
+		},
+	}
+	for name, translate := range outside {
+		if err := translate(); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+			t.Errorf("%s：目录外的币种应被拒并说清是目录不认：%v", name, err)
+		}
 	}
 }

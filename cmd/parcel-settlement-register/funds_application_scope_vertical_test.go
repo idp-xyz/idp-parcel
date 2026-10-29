@@ -20,7 +20,7 @@ import (
 const (
 	scopeLegalEntity = "SYN-LE-01"
 	scopeAccount     = "SYN-ACCT-RECV-1"
-	scopeCurrency    = "XTS"
+	scopeCurrency    = "CNY"
 	scopeStatement   = "SYN-STMT-C"
 )
 
@@ -32,12 +32,12 @@ func (rig ceilingRig) seedReceivableScope(t *testing.T) {
 		"应收账户": `INSERT INTO settlement_accounting.settlement_account
 			(tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency,
 			 settlement_policy_id, responsibility_basis, registered_at)
-		 VALUES ('SYN-T1', 'SYN-ACCT-RECV-1', 'SYN-LE-01', 'SYN-PARTY-SHIPPER-01', 'RECEIVABLE', 'XTS',
+		 VALUES ('SYN-T1', 'SYN-ACCT-RECV-1', 'SYN-LE-01', 'SYN-PARTY-SHIPPER-01', 'RECEIVABLE', 'CNY',
 		         'SYN-SETTLEMENT-POLICY-1', 'SYN-CONTRACT-01', now())`,
 		"对账单 C": `INSERT INTO settlement_accounting.customer_statement
 			(tenant_id, statement_number, account_id, period_ref, currency, total_minor,
 			 content_digest, lines, adjustment_lines, published_at, recorded_at)
-		 VALUES ('SYN-T1', 'SYN-STMT-C', 'SYN-ACCT-RECV-1', 'SYN-PERIOD-1', 'XTS', 10000,
+		 VALUES ('SYN-T1', 'SYN-STMT-C', 'SYN-ACCT-RECV-1', 'SYN-PERIOD-1', 'CNY', 10000,
 		         'SYN-DIGEST-STMT-C', '[{"charge":"SYN-CHARGE-C-1","amount_minor":10000}]'::jsonb, '[]'::jsonb, now(), now())`,
 		"已确认应收": `INSERT INTO settlement_accounting.customer_charge
 			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
@@ -46,7 +46,7 @@ func (rig ceilingRig) seedReceivableScope(t *testing.T) {
 			 responsible_entity, counterparty_ref, charge_direction,
 			 settlement_account_id, contract_basis, primary_charging_scope,
 			 source_fact_ref)
-		 VALUES ('SYN-T1', 'SYN-CHARGE-C-1', 'SYN-FEE-ITEM-FREIGHT-01', 'SYN-EVAL-1', 'XTS', 10000, 'XTS', 10000,
+		 VALUES ('SYN-T1', 'SYN-CHARGE-C-1', 'SYN-FEE-ITEM-FREIGHT-01', 'SYN-EVAL-1', 'CNY', 10000, 'CNY', 10000,
 		         'CONFIRMED', 'SYN-BASIS-1', now(), now(), now(),
 		         'SYN-LE-01', 'SYN-PARTY-SHIPPER-01', 'RECEIVABLE', 'SYN-ACCT-RECV-1', 'SYN-CONTRACT-01', 'SYN-SCOPE-01',
 		         'SYN-SOURCE-FACT-1')`,
@@ -225,7 +225,7 @@ func TestAClaimTargetAppliedBeyondItsAmountExitsAsConflict(t *testing.T) {
 		`INSERT INTO settlement_accounting.settlement_application
 			(tenant_id, application_id, fact_id, currency, fact_minor, applied_minor,
 			 allocations, basis, applied_at, content_digest, recorded_at)
-		 VALUES ('SYN-T1', 'SYN-APPLICATION-LEGACY', 'SYN-FACT-LEGACY', 'XTS', 9000, 6000,
+		 VALUES ('SYN-T1', 'SYN-APPLICATION-LEGACY', 'SYN-FACT-LEGACY', 'CNY', 9000, 6000,
 		         '[{"mapping":"SYN-MAPPING-LEGACY","targetKind":"CUSTOMER_COMPENSATION","target":"SYN-COMP-1","direction":"DEBIT","amountMinor":6000}]'::jsonb,
 		         'SYN-BASIS-LEGACY', now(), 'SYN-DIGEST-LEGACY', now())`); err != nil {
 		t.Fatalf("垫越额核销：%v", err)

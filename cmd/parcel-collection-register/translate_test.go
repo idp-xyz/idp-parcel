@@ -168,3 +168,20 @@ func TestAnAgreedOffsetInputFillsNothingIn(t *testing.T) {
 		}
 	}
 }
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——新开分户账是登记入口，币种只收内置币种目录里的码：目录内的 EUR 照常译出，形状合法而目录外的
+// XXX 在译装门被拒并说清是目录不认；记账等其余入口共用的账键不查目录（已在册的账照样记账），这里只证开立这一口。
+func TestOpeningASubledgerTakesOnlyACataloguedCurrency(t *testing.T) {
+	open := func(currency string) error {
+		_, err := subledgerCommandFromJSON([]byte(`{"tenantId":"SYN-T1","customerRef":"SYN-C1","legalEntityRef":"SYN-E1",
+			"currency":"` + currency + `","channelRef":"SYN-CH1","custodyBasisRef":"SYN-COD-V1",
+			"openedAt":"2026-08-24T00:00:00Z"}`))
+		return err
+	}
+	if err := open("EUR"); err != nil {
+		t.Fatalf("目录内的币种应照常译出：%v", err)
+	}
+	if err := open("XXX"); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+		t.Fatalf("目录外的币种应被拒并说清是目录不认：%v", err)
+	}
+}

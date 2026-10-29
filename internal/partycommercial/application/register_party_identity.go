@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // PartyRegistryOutcome 是身份/关系登记用例的结果代数：`已登记`、`已停用`与`已结束`是本次落库；
@@ -346,6 +347,11 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 		return "", errors.New("注册号类型目录未装配，判不了终身注册号")
 	}
 	country := identity.Country()
+	// 新登记入口只收产品内置国家 / 地区目录里的码（ADR-0345 决定五）。门只在这里——这一函数只被将要落册的新登记与
+	// 新修订走到，重放与读回不经它，所以册上已有的目录外码照样读得回。
+	if err := refdata.CheckCountry(country.String()); err != nil {
+		return fmt.Sprintf("注册国家 / 地区 %s 不在产品内置的国家 / 地区目录里（ISO 3166-1）：换成目录里的码", country), nil
+	}
 	catalogue, err := handler.numberTypes.LoadRegistrationNumberTypeCatalogue(ctx, tenant, country)
 	if err != nil {
 		return "", err

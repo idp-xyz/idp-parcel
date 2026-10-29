@@ -265,6 +265,9 @@ func SettlementAccountFromJSON(raw []byte) (application.RegisterSettlementAccoun
 	if err != nil {
 		return none, fmt.Errorf("currency：%w", err)
 	}
+	if err := requireCatalogueCurrency(document.Currency); err != nil {
+		return none, err
+	}
 	policy, err := domain.NewSettlementPolicyReference(document.SettlementPolicyID)
 	if err != nil {
 		return none, fmt.Errorf("settlementPolicyId：%w", err)

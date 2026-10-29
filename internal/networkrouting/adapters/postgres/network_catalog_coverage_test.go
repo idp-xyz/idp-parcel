@@ -20,7 +20,7 @@ func TestCatalogServiceAreaCoverageRoundTrips(t *testing.T) {
 
 	covered := ports.ServiceAreaDefinitionVersion{
 		Code: "SYN-AREA-XA-10", Version: 1, EffectiveFrom: effective,
-		HasCoverage: true, CoverageCountry: "XA", PostalPrefixes: []string{"10", "11"},
+		HasCoverage: true, CoverageCountry: "CN", PostalPrefixes: []string{"10", "11"},
 		OriginNodes: []string{"SYN-NODE-A"}, DestinationNodes: []string{"SYN-NODE-B", "SYN-NODE-C"},
 	}
 	bare := ports.ServiceAreaDefinitionVersion{Code: "SYN-AREA-BARE", Version: 1, EffectiveFrom: effective}
@@ -58,7 +58,7 @@ func TestCatalogueListShowsServiceAreaCoverage(t *testing.T) {
 	within(t, transactor, ctx, func(txCtx context.Context) error {
 		if err := catalog.RegisterServiceAreaVersion(txCtx, tenant, ports.ServiceAreaDefinitionVersion{
 			Code: "SYN-AREA-XB", Version: 1, EffectiveFrom: effective,
-			HasCoverage: true, CoverageCountry: "XB", DestinationNodes: []string{"SYN-NODE-LM"},
+			HasCoverage: true, CoverageCountry: "SG", DestinationNodes: []string{"SYN-NODE-LM"},
 		}); err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func TestCatalogueListShowsServiceAreaCoverage(t *testing.T) {
 		byCode[row.Code] = row
 	}
 	listed := byCode["SYN-AREA-XB"]
-	if !listed.HasCoverage || listed.CoverageCountry != "XB" || len(listed.PostalPrefixes) != 0 ||
+	if !listed.HasCoverage || listed.CoverageCountry != "SG" || len(listed.PostalPrefixes) != 0 ||
 		len(listed.OriginNodes) != 0 || !reflect.DeepEqual(listed.DestinationNodes, []string{"SYN-NODE-LM"}) {
 		t.Fatalf("列出的覆盖走样：%+v", listed)
 	}

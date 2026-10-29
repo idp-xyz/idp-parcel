@@ -125,7 +125,7 @@ func TestACorrectionIntoAnUnbalancedScopeIsAdoptedAndNamesTheScopeThroughTheComm
 			 evaluation_ref, authorization_ref, original_currency, original_minor,
 			 settlement_currency, settlement_minor, conversion_ref, formed_at, recorded_at)
 		 VALUES ('SYN-T1', 'SYN-ADJUSTMENT-UNB', 'SYN-CHARGE-C-1', 'PRICING_CORRECTION', 'CREDIT',
-		         'SYN-EVAL-CORRECTION-UNB', NULL, 'XTS', 6000, 'XTS', 6000, NULL, now(), now())`); err != nil {
+		         'SYN-EVAL-CORRECTION-UNB', NULL, 'CNY', 6000, 'CNY', 6000, NULL, now(), now())`); err != nil {
 		t.Fatalf("登价格纠错贷记：%v", err)
 	}
 
