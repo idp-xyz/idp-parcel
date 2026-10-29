@@ -423,6 +423,7 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     LENGTH: muted('长度'),
     VOLUME: muted('体积'),
     COUNT: muted('件数'),
+  },
   // 接受前财务控制的结果:HELD 是占用已成立,不是查验。
   'financial-control': { HELD: good('已占用'), RESTRICTED: warn('受限'), NOT_APPLICABLE: muted('不适用'), CREDIT_EXPOSED: warn('信用敞口') },
   // 接受判断任务停在哪一步等谁(ResumePath):词说「等谁」,不说分诊结论。
