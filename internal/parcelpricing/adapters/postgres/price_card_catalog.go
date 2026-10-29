@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -278,6 +279,73 @@ func (catalog *PriceCards) FindByReference(
 		return domain.PricingPlanVersion{}, false, fmt.Errorf("find price card version: %w", err)
 	}
 	return plan, true, nil
+}
+
+var _ ports.PriceCardContentRead = (*PriceCards)(nil)
+
+// ReadPriceCardContent 按（租户 + 方案版本引用）读回一版价卡登记的规范化文档与登记元数据
+// （ports.PriceCardContentRead）。读法与 FindByReference 同一道：同一行、同一个整图重验与比对列交叉核——
+// 区别只在交出的东西：那边交回重建的领域对象，这边交回快照里 `plan` 那一块的原样 JSON。
+//
+// 先重验再取原文，不是直接把列里的 jsonb 端出去：一份被改过的快照（列与快照分岔、摘要自校不过）不该被当成
+// 「这张卡登记的内容」展示给运营。重验过了，快照里的 plan 与重建出的方案是同一份。
+//
+// 不折截止与退役（ADR-0234）：本口答的是「这一版登记了什么」，它后来是否仍被选中是目录那一口的事。
+func (catalog *PriceCards) ReadPriceCardContent(
+	ctx context.Context,
+	tenant domain.TenantID,
+	reference domain.VersionReference,
+) (ports.PriceCardContent, bool, error) {
+	if tenant.String() == "" || reference.ID() == "" || reference.Version() == "" {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: tenant and plan reference are required")
+	}
+	if reference.Kind() != domain.ArtifactPricingPlan {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: reference kind %q is not %q", reference.Kind(), domain.ArtifactPricingPlan)
+	}
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: %w", err)
+	}
+
+	var (
+		approver     string
+		registeredAt time.Time
+	)
+	var row priceCardRow
+	err = querier.QueryRow(ctx,
+		`SELECT `+priceCardRowColumns+`, publication_approver, registered_at
+		   FROM parcel_pricing.price_card_version
+		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3`,
+		tenant.String(), reference.ID(), reference.Version(),
+	).Scan(&row.planID, &row.planVersion, &row.direction, &row.purpose, &row.scope,
+		&row.tableID, &row.tableVersion, &row.effectiveFrom, &row.effectiveTo,
+		&row.canonicalization, &row.digest, &row.sourceSHA, &row.snapshot,
+		&approver, &registeredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.PriceCardContent{}, false, nil
+	}
+	if err != nil {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: %w", err)
+	}
+	if _, err := row.plan(tenant); err != nil {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: %w", err)
+	}
+
+	var snapshot struct {
+		Plan json.RawMessage `json:"plan"`
+	}
+	if err := json.Unmarshal(row.snapshot, &snapshot); err != nil || len(snapshot.Plan) == 0 {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: snapshot of %s/%s has no plan document", row.planID, row.planVersion)
+	}
+	return ports.PriceCardContent{
+		PlanID:              row.planID,
+		PlanVersion:         row.planVersion,
+		Canonicalization:    row.canonicalization,
+		ContentDigest:       row.digest,
+		PublicationApprover: approver,
+		RegisteredAt:        registeredAt,
+		Document:            snapshot.Plan,
+	}, true, nil
 }
 
 // optionalPeriodEnd 把无上界适用期（endsAt 零值）折成 NULL 列。
