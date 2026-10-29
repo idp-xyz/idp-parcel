@@ -10,6 +10,7 @@ import (
 
 type pricingCatalogueWiring struct {
 	priceCards               pricinghttp.PriceCardCatalogueReader
+	priceCardContent         pricinghttp.PriceCardContentReader
 	referenceSeries          pricinghttp.ReferenceSeriesCatalogueReader
 	referenceSeriesCoverage  pricinghttp.ReferenceSeriesCoverageReader
 	pendingSeriesEvaluations pricinghttp.PendingSeriesEvaluationReader
@@ -19,7 +20,11 @@ type pricingCatalogueWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[pricingCatalogueWiring]{
 		lines: map[string]endpointLine{
-			"/pricing-price-cards":                {method: http.MethodGet, face: operationsReadFace()},
+			"/pricing-price-cards": {method: http.MethodGet, face: operationsReadFace()},
+			"/pricing-price-cards/content": {
+				method: http.MethodGet, face: operationsReadFace(),
+				probe: "/pricing-price-cards/content?id=SYN-PLAN-CN-SG-01&version=v1",
+			},
 			"/pricing-reference-series":           {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-reference-series-coverage":  {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-pending-series-evaluations": {method: http.MethodGet, face: operationsReadFace()},
@@ -30,6 +35,13 @@ func init() {
 			// 主数据目录查阅直接接所属上下文的存储读面（ADR-0077），不绕进应用编排。
 			// 同一上下文的多个端点共享同一只读适配器，读的仍是各登记写口背后的那份库。
 			pricingCatalog, err := pppostgres.NewOperationsCatalogue(sources.db)
+			if err != nil {
+				return none, err
+			}
+			// 价卡内容读口：按（方案标识、版本）读回登记的规范化文档，读的是价卡版本表那一行的快照并经领域整图重验，
+			// 与目录读面（只读列面、不读快照）是同一张表的两种读法；它用 PriceCards 而不是 OperationsCatalogue，
+			// 因为重验的门（priceCardRow.plan）在前者那里，不在目录适配器里复刻第二份。
+			priceCardContent, err := pppostgres.NewPriceCards(sources.db)
 			if err != nil {
 				return none, err
 			}
@@ -52,6 +64,7 @@ func init() {
 			}
 			return pricingCatalogueWiring{
 				priceCards:               pricingCatalog,
+				priceCardContent:         priceCardContent,
 				referenceSeries:          pricingCatalog,
 				referenceSeriesCoverage:  referenceSeriesCoverage,
 				pendingSeriesEvaluations: pendingSeriesEvaluations,
@@ -62,6 +75,7 @@ func init() {
 			pricingCatalogueIntake := channels.pricingCatalogue()
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, wiring.priceCards)},
+				{Pattern: "/pricing-price-cards/content", Handler: pricinghttp.NewQueryPriceCardContentEndpoint(pricingCatalogueIntake, wiring.priceCardContent)},
 				{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, wiring.referenceSeries)},
 				// 覆盖地平线（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：一条序列一行，
 				// 答的是「还盖得住多久、谁欠一个动作」。时刻源在此处选定——组合根就是挑具体依赖

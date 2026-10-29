@@ -774,6 +774,18 @@ func (unwiredPricingCatalogue) ListReferenceSeries(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredPriceCardContent 是价卡内容读口的占位。不并进 unwiredPricingCatalogue：生产装配点上它是另一只适配器
+// （价卡仓储，带整图重验的门；目录适配器只读列面），并成一个会让装配测试盖不住「这本册接错了适配器」这一格。
+type unwiredPriceCardContent struct{}
+
+func (unwiredPriceCardContent) ReadPriceCardContent(
+	context.Context,
+	pricingdomain.TenantID,
+	pricingdomain.VersionReference,
+) (pricingports.PriceCardContent, bool, error) {
+	return pricingports.PriceCardContent{}, false, errOrchestrationNotWired
+}
+
 // unwiredReferenceSeriesCoverage 是覆盖地平线读口的占位（票
 // pricing-reference-series-operations/05 切片 05a）。不并进 unwiredPricingCatalogue：
 // 生产装配点上它是独立适配器（那两口只读版本表一张，这一口连版本与复核两张），并成一个
