@@ -12,7 +12,7 @@
 | customscompliance | 146 | 144 | 28 | 50 | 10 | 23 |
 | networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
 | nodeoperations | 115 | 121 | 15 | 30 | 4 | 18 |
-| parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
+| parcelpricing | 148 | 142 | 20 | 20 | 1 | 25 |
 | parcelshipment | 272 | 267 | 28 | 54 | 13 | 32 |
 | partycommercial | 178 | 201 | 15 | 43 | 1 | 43 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 252 | 199 | 43 | 73 | 13 | 12 |
 | transportfulfillment | 307 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1769 | 1770 | 239 | 402 | 69 | 242 |
+| **合计** | 1770 | 1777 | 239 | 402 | 69 | 242 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 271、测试 434。
 
