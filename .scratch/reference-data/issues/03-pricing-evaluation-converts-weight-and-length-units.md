@@ -38,7 +38,7 @@ Blocked by: 无（接票 01，ADR-0335 已进 main）
 - 无迁移、无库表（评价快照是 JSON 文档）。
 
 **不变的证据**
-- 既有测试零改动：`git diff origin/main --stat -- '*_test.go'` 只有新增文件，唯一一个动到的既有测试文件 `internal/platform/refdata/refdata_test.go` 只在文末前追加了一个新用例（`git diff` 里没有一行删除或改写）。
+- 既有测试零改动：`git diff origin/main --numstat -- '*_test.go'` 在取证于 `acbea73c6` 时是 6 个新增文件加 `internal/platform/refdata/refdata_test.go` 中部追加的一个新用例，删除列全为 0——没有一行既有测试被删除或改写，既有黄金用例同样未动。
 - 摘要与快照字节对照：同一组夹具在 `git archive origin/main` 解出的树上与本分支上各跑一遍，七行里五行（单位一致 ActualOnly、单位一致 MAX 带尺寸、缺尺寸待判断、查无费率待判断、对这几份的重放）语义摘要与快照散列逐位相同；受影响的两行（磅对千克、英寸对厘米）原是 `CONFLICT`，现为 `COMPLETED`。把这两份请求置冻结且无记录（等于换算接入之前答过冲突的评价被重放），摘要与快照散列与 main 上的 `CONFLICT` 两行逐位相同。对照脚本在作者暂存区，不入库。
 - 受影响的评价路径只有两条：输入实重（含票级合计实重）单位 ≠ 价表查表单位；尺寸单位 ≠ 体积系数长度单位。
 
