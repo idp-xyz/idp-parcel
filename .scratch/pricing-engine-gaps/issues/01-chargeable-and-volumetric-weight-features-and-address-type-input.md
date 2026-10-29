@@ -1,7 +1,7 @@
 # 01 判定条件读不到体积重与计价重量，计价输入没有地址性质——超重费只能按实重收、住宅派送费表达不了
 
 Category: enhancement
-Status: in-progress——2026-10-29 作者完工并补完评审修订轮（B1 阻断已修），待复评与进 main，分支 claude-pricingA（代码最后一笔 `d4eaf592b`）。此前：作者完工，待隔离评审与进 main（代码最后一笔 `ece038c03`，已随 rebase 改号为 `aa99d559d`）
+Status: resolved——2026-10-29 进 main（`6d7ada458`；全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-10-29 作者完工并补完评审修订轮（B1 阻断已修），待复评与进 main，分支 claude-pricingA（代码最后一笔 `d4eaf592b`）。此前：作者完工，待隔离评审与进 main（代码最后一笔 `ece038c03`，已随 rebase 改号为 `aa99d559d`）
 Blocked by: 无（接 reference-data/03 即 ADR-0346，已进 main）
 
 ## 现象
@@ -108,4 +108,13 @@ Blocked by: 无（接 reference-data/03 即 ADR-0346，已进 main）
 3. `CHARGEABLE_WEIGHT` 命名风险：导入模板条件表 `source` 列说明与导入规格对应行补「不含条件最低计价重量的抬高」（入库模板重生成）；ADR-0347 风险点 0 记明「现在没有已发布卡依赖这个量，是最便宜的改名窗口，交 PP owner」。
 
 **自验（修订轮，含 PG）**：`go build ./...`、`go vet`（`./internal/parcelpricing/...`、`./cmd/...`、`./scripts/...`）、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/platform/... ./internal/architecture/... ./cmd/...`（带 DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`）42 个有测试的包全部 ok、退 0（含 `internal/architecture` 门禁、`cmd/parcel-api` 真库用例、`cmd/parcel-pricing-template` 入库模板与生成器逐字节相等）；管理台 `tsc -b` 退 0、`pnpm test` 905 项全过（含 B 的改动）、`vite build` 过。`*_test.go` 对起点（`7ea1aa677` 的合并基）只新增，删除列全为 0。AT-PP-023 的行与盘点 ① 桶同步补了新用例。
+
+## 评审记录（2026-10-29，隔离子代理，钉 `ce5526f92`）
+
+阻断 1 条，已修。**B1**：换算后提前收尾的评价（拒收命中、序列缺失待判断、抬高条件求值出错）丢了换算记录，重放与同标识重复请求会判成 CONFLICT——评审用 50 磅 × 读自身计价重量 × 序列缺失 / 拒收命中两个探针复现，FULL-02 本身具备这三个要素，与 AT-PP-020 及 ADR-0346 决定三相抵。作者修（`d4eaf592b`）：自身重量那一遍成功后把换算记录与解释行当场记在评价上，走到正式计价重量那一遍时以那一遍为准并撤掉前一遍的解释行（记录与解释行各只一份）；新用例三种提前收尾 × 重放 × 快照往返重放各一条、同标识重复请求一条；变异（去掉当场记录那一行）4 条用例全红；原有用例一字未动。其余：既有评价一字不变——测试文件七个全新增、删除列 0，`PPC-5` 规范化未动；对拍钩子 2378 行（278 个确定性键 2326 行逐行相同、52 行随机标识噪声同量级）、真库 HTTP 3020 个试算请求逐字相同、守卫 `readsPackageWeights` 白盒穷举 5491 个形状与独立期望一致；阈值换算 7616 个有理数用例全匹配（变异后 2472 例不匹配）；地址性质载荷只收 `COMMERCIAL` / `RESIDENTIAL`，不填读它的卡答输入不全而不套默认，动线 `SYN-SCOPE-01` 选卡不变；ADR-0152 部分停用写法合规；FULL-02 七票试算复跑与作者表一致。非阻断并已处理：风险点 7 低估了旧构建影响（租户级、草稿列表整租户报错），改如实并写运维约束；ADR-0346 补指针；`CHARGEABLE_WEIGHT` 不含条件最低计价重量抬高的命名风险写进导入模板列说明与 ADR 风险点 0（现在没有已发布卡依赖，是最便宜的改名窗口，交 PP owner）。非阻断未处理：`FeatureAddressType` 实际装偏远档位的术语债；GLOSSARY 没收「自身计价重量」「地址性质」；旧构建读到带 `ADDRESS_NATURE` 条件的 PPC-5 卡报的是泛化「快照无效」而不是「不认这一版」，可选让读该特征的方案也写 PPC-6。
+
+## 进 main 记录（2026-10-29，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-pricingA` tip `b66f7fef3` 作出处（已重放到 main `05a05a34e`，与 B 的 6 个文件冲突取并集）；隔离树 cherry-pick，重生成 ADR 索引、AT 盘点计数与机制清点，两项 `-check` 退 0；全量 164 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `6d7ada458`。
+- 修订轮未再派评审（改动限于评审复现的路径，由变异用例守着，旧评价被守卫挡在外面）。
 
