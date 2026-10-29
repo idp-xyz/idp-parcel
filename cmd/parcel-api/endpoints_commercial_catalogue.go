@@ -20,6 +20,7 @@ type commercialCatalogueWiring struct {
 	publicationDrafts          commercialhttp.PublicationDraftReader
 	legalEntityProfiles        commercialhttp.LegalEntityProfileRevisionHistoryReader
 	legalEntityProfileResolver commercialhttp.LegalEntityProfileResolver
+	referenceEnablements       commercialhttp.ReferenceEnablementReader
 }
 
 func init() {
@@ -55,6 +56,7 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-product-channel-mappings/SYN-MAP-01/revisions",
 			},
 			"/commercial-registration-number-types": {method: http.MethodGet, face: operationsReadFace()},
+			"/reference-data/enablement":            {method: http.MethodGet, face: operationsReadFace(), probe: "/reference-data/enablement?kind=COUNTRY"},
 		},
 		build: func(sources endpointSources) (commercialCatalogueWiring, error) {
 			none := commercialCatalogueWiring{}
@@ -78,6 +80,10 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			referenceEnablements, err := pcpostgres.NewReferenceEnablements(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return commercialCatalogueWiring{
 				publicationDrafts:          publicationDrafts,
 				serviceProducts:            commercialCatalog,
@@ -89,6 +95,7 @@ func init() {
 				registrationNumberTypes:    commercialCatalog,
 				legalEntityProfiles:        legalEntityProfiles,
 				legalEntityProfileResolver: commercialapp.NewResolveLegalEntityProfileHandler(legalEntityProfiles, partyIdentityRegistrations),
+				referenceEnablements:       commercialapp.NewQueryReferenceEnablementsHandler(referenceEnablements, systemClock{}),
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring commercialCatalogueWiring) []httpapi.BusinessEndpoint {
@@ -145,6 +152,9 @@ func init() {
 				// 注册号类型目录（ADR-0145 决定一，票 legal-entity-profile/01）：按注册国家 / 地区登记的
 				// 类型、格式与所属层的最新修订。判号不走本口，走 ports.RegistrationNumberTypeLookup。
 				{Pattern: "/commercial-registration-number-types", Handler: commercialhttp.NewQueryRegistrationNumberTypesEndpoint(commercialCatalogueIntake, wiring.registrationNumberTypes)},
+				// 启用范围读回（ADR-0345）：按种类读出本租户册上登过的每个码此刻的状态与全部修订；册上没有行的码不在结果里
+				// （未配置由缺席表达）。同 Intake 变量，挂操作者查阅读；此刻的状态由读侧编排对读的这一刻导出，不在装配点预先挑。
+				{Pattern: "/reference-data/enablement", Handler: commercialhttp.NewQueryReferenceEnablementsEndpoint(commercialCatalogueIntake, wiring.referenceEnablements)},
 			}
 		},
 	})

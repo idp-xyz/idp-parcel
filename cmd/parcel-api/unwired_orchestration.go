@@ -1270,6 +1270,26 @@ func (unwiredRegistrationNumberTypeRegistration) Deactivate(
 	return commercialapp.RegistrationNumberTypeResult{}, errOrchestrationNotWired
 }
 
+type unwiredReferenceEnablementRegistration struct{}
+
+func (unwiredReferenceEnablementRegistration) Register(
+	context.Context,
+	commercialapp.RegisterReferenceEnablementCommand,
+) (commercialapp.ReferenceEnablementResult, error) {
+	return commercialapp.ReferenceEnablementResult{}, errOrchestrationNotWired
+}
+
+// unwiredReferenceEnablements 是启用范围读口的占位。
+type unwiredReferenceEnablements struct{}
+
+func (unwiredReferenceEnablements) ListReferenceEnablements(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.ReferenceKind,
+) (time.Time, []commercialapp.ReferenceEnablementEntry, error) {
+	return time.Time{}, nil, errOrchestrationNotWired
+}
+
 type unwiredLegalEntityProfileRegistration struct{}
 
 func (unwiredLegalEntityProfileRegistration) Register(
