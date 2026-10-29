@@ -5,6 +5,7 @@ import (
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/pricecardtemplate"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -21,6 +22,8 @@ func init() {
 	registerEndpoints(endpointFeature[pricingCatalogueWiring]{
 		lines: map[string]endpointLine{
 			"/pricing-price-cards": {method: http.MethodGet, face: operationsReadFace()},
+			// 价卡导入模板规格（ADR-0349）：内容是产品随版本发布的静态规格，租户无关；仍挂查阅行 Intake，认证与授予照常。
+			"/pricing-price-card-template/spec": {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-price-cards/content": {
 				method: http.MethodGet, face: operationsReadFace(),
 				probe: "/pricing-price-cards/content?id=SYN-PLAN-CN-SG-01&version=v1",
@@ -76,6 +79,7 @@ func init() {
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, wiring.priceCards)},
 				{Pattern: "/pricing-price-cards/content", Handler: pricinghttp.NewQueryPriceCardContentEndpoint(pricingCatalogueIntake, wiring.priceCardContent)},
+				{Pattern: "/pricing-price-card-template/spec", Handler: pricinghttp.NewQueryPriceCardTemplateSpecEndpoint(pricingCatalogueIntake, pricecardtemplate.Reader{})},
 				{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, wiring.referenceSeries)},
 				// 覆盖地平线（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：一条序列一行，
 				// 答的是「还盖得住多久、谁欠一个动作」。时刻源在此处选定——组合根就是挑具体依赖

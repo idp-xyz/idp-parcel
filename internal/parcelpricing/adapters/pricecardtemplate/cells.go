@@ -46,6 +46,9 @@ func (rec record) get(key string) field {
 }
 
 type decoder struct {
+	// version 是这份文件自己声明的模板版本：按它挑表集合与封闭取值，旧版文件因此读出与进位之前一样的东西。
+	// 空串按最新一版算。
+	version  string
 	problems []ports.PriceCardTemplateProblem
 	// broken 记下结构有问题的表（缺表、缺列）：指进这些表的引用不再报解析不到，免得一处结构
 	// 问题引出一串连带问题。
@@ -287,6 +290,22 @@ func (d *decoder) mustBeBlank(f field, why string) bool {
 		return false
 	}
 	return f.state == fieldAbsent
+}
+
+// closedCode 读一格封闭取值：可取值来自登记处 closedVocabulary，按这份文件的模板版本过滤。读到自更晚版本才有的取值，
+// 说清是版本问题而不是笼统的「不是可取值」。
+func (d *decoder) closedCode(f field) (string, bool) {
+	vocab := vocabularyOf(f.sheet, f.column)
+	allowed := vocab.valuesFor(d.version)
+	if f.state == fieldPresent && !contains(allowed, f.text) {
+		if since, later := vocab.since[f.text]; later {
+			d.at(f, ports.TemplateCellInvalid,
+				"「%s」自模板 %s 起才可用，这份文件的模板版本是 %s；要用它，请换用 %s 模板，并把 card 表的 templateVersion 改成 %s",
+				f.text, since, d.version, since, since)
+			return "", false
+		}
+	}
+	return d.code(f, allowed)
 }
 
 func (d *decoder) code(f field, allowed []string) (string, bool) {

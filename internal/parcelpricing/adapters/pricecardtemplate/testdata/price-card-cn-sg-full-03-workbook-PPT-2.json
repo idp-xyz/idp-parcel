@@ -1,0 +1,314 @@
+{
+  "sheets": {
+    "calculations": [
+      {
+        "basisDependencyId": "SYN-DEP-FULL3-FUEL",
+        "method": "PERCENT_OF_BASIS",
+        "nodeId": "K-FUEL",
+        "seriesFactor": "1",
+        "seriesKind": "FUEL_RATE"
+      },
+      {
+        "amount": "35",
+        "method": "FIXED_AMOUNT",
+        "nodeId": "K-OVERSIZE"
+      },
+      {
+        "amount": "25",
+        "method": "FIXED_AMOUNT",
+        "nodeId": "K-OVERWEIGHT"
+      },
+      {
+        "method": "TABLE_LOOKUP_BY_REMOTE_TIER",
+        "nodeId": "K-REMOTE",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03-REMOTE"
+      }
+    ],
+    "card": [
+      {
+        "field": "templateVersion",
+        "value": "PPT-2"
+      },
+      {
+        "field": "planId",
+        "value": "SYN-PLAN-CN-SG-FULL-03"
+      },
+      {
+        "field": "planVersion",
+        "value": "v1"
+      },
+      {
+        "field": "scope",
+        "value": "SYN-SCOPE-04"
+      },
+      {
+        "field": "direction",
+        "value": "SELL"
+      },
+      {
+        "field": "purpose",
+        "value": "CUSTOMER_CHARGE"
+      },
+      {
+        "field": "aggregation",
+        "value": "PER_PACKAGE"
+      },
+      {
+        "field": "baseChargeCode",
+        "value": "BASE_FREIGHT"
+      },
+      {
+        "field": "periodStartsAt",
+        "value": "2026-01-01T00:00:00Z"
+      },
+      {
+        "field": "periodEndsAt",
+        "value": null
+      },
+      {
+        "field": "rateTableId",
+        "value": "SYN-TABLE-CN-SG-FULL-03"
+      },
+      {
+        "field": "weightPolicyId",
+        "value": "SYN-WEIGHT-CN-SG-FULL-03"
+      },
+      {
+        "field": "weightPolicyVersion",
+        "value": "v1"
+      },
+      {
+        "field": "weightMethod",
+        "value": "MAX"
+      },
+      {
+        "field": "volumetricDivisor",
+        "value": "5000"
+      },
+      {
+        "field": "volumetricLengthUnit",
+        "value": "CM"
+      },
+      {
+        "field": "amountRoundingMode",
+        "value": "HALF_UP"
+      },
+      {
+        "field": "amountRoundingIncrement",
+        "value": "0.01"
+      },
+      {
+        "field": "amountRoundingPoints",
+        "value": "PER_LINE;TOTAL"
+      },
+      {
+        "field": "directionAuthorizationId",
+        "value": "SYN-AUTH-PRICE-DIR-01"
+      },
+      {
+        "field": "directionAuthorizationVersion",
+        "value": "v1"
+      }
+    ],
+    "charge_dependencies": [
+      {
+        "chargeCode": "FUEL_SURCHARGE",
+        "composition": "LISTED_CHARGES",
+        "dependencyId": "SYN-DEP-FULL3-FUEL",
+        "includes": "BASE_FREIGHT"
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "PREDICATE",
+        "nodeId": "C-FUEL",
+        "operator": "GT",
+        "source": "ACTUAL_WEIGHT",
+        "threshold": "0",
+        "unit": "KG"
+      },
+      {
+        "kind": "ANY_OF",
+        "nodeId": "C-OVERSIZE"
+      },
+      {
+        "kind": "PREDICATE",
+        "nodeId": "C-OVERSIZE-SIDE",
+        "operator": "GT",
+        "parentId": "C-OVERSIZE",
+        "source": "LONGEST_SIDE",
+        "threshold": "100",
+        "unit": "CM"
+      },
+      {
+        "kind": "PREDICATE",
+        "nodeId": "C-OVERSIZE-GIRTH",
+        "operator": "GT",
+        "parentId": "C-OVERSIZE",
+        "source": "LENGTH_AND_GIRTH",
+        "threshold": "300",
+        "unit": "CM"
+      },
+      {
+        "kind": "PREDICATE",
+        "nodeId": "C-OVERWEIGHT",
+        "operator": "GT",
+        "source": "ACTUAL_WEIGHT",
+        "threshold": "20",
+        "unit": "KG"
+      },
+      {
+        "kind": "ANY_OF",
+        "nodeId": "C-REMOTE"
+      },
+      {
+        "category": "T1",
+        "kind": "PREDICATE",
+        "nodeId": "C-REMOTE-T1",
+        "operator": "EQ",
+        "parentId": "C-REMOTE",
+        "source": "ADDRESS_TYPE"
+      },
+      {
+        "category": "T2",
+        "kind": "PREDICATE",
+        "nodeId": "C-REMOTE-T2",
+        "operator": "EQ",
+        "parentId": "C-REMOTE",
+        "source": "ADDRESS_TYPE"
+      }
+    ],
+    "rates_first_continue": [
+      {
+        "entryId": "SYN-RATE-CN-SG-FULL3-Z1",
+        "firstAmount": "55",
+        "firstWeight": "0.5",
+        "step": "0.5",
+        "stepAmount": "18",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03",
+        "zone": "Z1"
+      },
+      {
+        "entryId": "SYN-RATE-CN-SG-FULL3-Z2",
+        "firstAmount": "48",
+        "firstWeight": "0.5",
+        "step": "0.5",
+        "stepAmount": "15",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03",
+        "zone": "Z2"
+      }
+    ],
+    "rates_weight_zone": [
+      {
+        "amount": "12",
+        "entryId": "SYN-RATE-CN-SG-FULL3-REMOTE-T1",
+        "minimum": "0",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03-REMOTE",
+        "zone": "T1"
+      },
+      {
+        "amount": "28",
+        "entryId": "SYN-RATE-CN-SG-FULL3-REMOTE-T2",
+        "minimum": "0",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03-REMOTE",
+        "zone": "T2"
+      }
+    ],
+    "reference_catalogues": [
+      {
+        "catalogueId": "SYN-CAT-REMOTE-TIER-CN-SG",
+        "kind": "REMOTE_TIER"
+      },
+      {
+        "catalogueId": "SYN-CAT-ZONE-CN-SG-FULL",
+        "kind": "ZONE"
+      }
+    ],
+    "reference_series": [
+      {
+        "kind": "FUEL_RATE",
+        "seriesId": "SYN-SERIES-FUEL-FULL-01"
+      }
+    ],
+    "surcharges": [
+      {
+        "calculationId": "K-FUEL",
+        "chargeCode": "FUEL_SURCHARGE",
+        "conditionId": "C-FUEL",
+        "description": "燃油附加费（合成演示值）",
+        "effect": "ADD",
+        "exclusivity": "STANDALONE",
+        "ruleId": "SYN-RULE-FULL3-FUEL"
+      },
+      {
+        "calculationId": "K-OVERSIZE",
+        "chargeCode": "OVERSIZE_SURCHARGE",
+        "conditionId": "C-OVERSIZE",
+        "description": "超尺寸费（合成演示值）",
+        "effect": "ADD",
+        "exclusivity": "GROUPED",
+        "exclusivityGroup": "SYN-GROUP-FULL3-OVERSIZE-OVERWEIGHT",
+        "priority": "1",
+        "ruleId": "SYN-RULE-FULL3-OVERSIZE"
+      },
+      {
+        "calculationId": "K-OVERWEIGHT",
+        "chargeCode": "OVERWEIGHT_SURCHARGE",
+        "conditionId": "C-OVERWEIGHT",
+        "description": "超重费（合成演示值）",
+        "effect": "ADD",
+        "exclusivity": "GROUPED",
+        "exclusivityGroup": "SYN-GROUP-FULL3-OVERSIZE-OVERWEIGHT",
+        "priority": "1",
+        "ruleId": "SYN-RULE-FULL3-OVERWEIGHT"
+      },
+      {
+        "calculationId": "K-REMOTE",
+        "chargeCode": "REMOTE_AREA_SURCHARGE",
+        "conditionId": "C-REMOTE",
+        "description": "偏远地区费（合成演示值）",
+        "effect": "ADD",
+        "exclusivity": "STANDALONE",
+        "ruleId": "SYN-RULE-FULL3-REMOTE"
+      }
+    ],
+    "tables": [
+      {
+        "currency": "CNY",
+        "family": "FIRST_CONTINUE",
+        "periodStartsAt": "2026-01-01T00:00:00Z",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03",
+        "tableVersion": "v1",
+        "weightUnit": "KG"
+      },
+      {
+        "currency": "CNY",
+        "family": "WEIGHT_ZONE",
+        "periodStartsAt": "2026-01-01T00:00:00Z",
+        "tableId": "SYN-TABLE-CN-SG-FULL-03-REMOTE",
+        "tableVersion": "v1",
+        "weightUnit": "KG"
+      }
+    ],
+    "total_bounds": [
+      {
+        "minimum": "120.99"
+      }
+    ],
+    "weight_rounding": [
+      {
+        "increment": "0.5",
+        "mode": "CEILING",
+        "policy": "CHARGEABLE",
+        "unit": "KG"
+      },
+      {
+        "increment": "0.1",
+        "mode": "CEILING",
+        "policy": "VOLUMETRIC",
+        "unit": "KG"
+      }
+    ]
+  },
+  "templateVersion": "PPT-2"
+}

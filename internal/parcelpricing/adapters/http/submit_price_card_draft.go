@@ -58,6 +58,9 @@ func NewSubmitPriceCardDraftEndpoint(intake PriceCardDraftSubmissionIntake, subm
 	})
 }
 
+// sourceOriginForm 标明草稿来自页面表单。
+const sourceOriginForm = "FORM"
+
 // wroteTheRow 答这一落点是不是本次写下了册上那一行。重放可以落在已批准乃至已发布的行上，内容已固定的行已批准，
 // 两格里应用层交回的草稿是这一次拟录的那份而不是册上的；把它当册上的行交出去，一行已批准的草稿就被答成了
 // `已校验`。所以只有这两格带行、取 201（ADR-0022：状态码只说答案有没有形成、有没有新落一行）。
@@ -74,11 +77,14 @@ type priceCardDraftSubmissionResponse struct {
 }
 
 // priceCardDraftBody 是草稿册上的一行，录入口与查阅读口同形。录入者与批准者并排（ADR-0101 Consequences）；
-// 批准与发布两格的痕迹缺席即还没走到那一步，内容概要自`已校验`起在场，逐格问题只有`草稿`有。
+// 批准与发布两格的痕迹缺席即还没走到那一步，内容概要自`已校验`起在场，逐格问题只有`草稿`有。`sourceOrigin` 只在草稿来自
+// 页面表单时有（"FORM"，ADR-0349）：那时 sourceFile 的名称是 form:<散列前 12 位>、散列是规范化工作簿的散列，不是一份文件；
+// 上传文件的草稿没有这一格，答复与此前一字不差。
 type priceCardDraftBody struct {
 	Plan        planReferenceBody      `json:"plan"`
 	Status      string                 `json:"status"`
 	SourceFile  sourceFileBody         `json:"sourceFile"`
+	Origin      string                 `json:"sourceOrigin,omitempty"`
 	Submitter   string                 `json:"submitter"`
 	SubmittedAt string                 `json:"submittedAt"`
 	Approver    string                 `json:"approver,omitempty"`
@@ -96,6 +102,9 @@ func priceCardDraftBodyOf(draft domain.PriceCardDraft) priceCardDraftBody {
 		Submitter:   draft.Submitter(),
 		SubmittedAt: rfc3339(draft.SubmittedAt()),
 		Problems:    []priceCardProblemBody{},
+	}
+	if draft.SourceFile().FromForm() {
+		body.Origin = sourceOriginForm
 	}
 	if approver, ok := draft.Approver(); ok {
 		body.Approver = approver
@@ -127,6 +136,15 @@ func (intake *OperatorRegistryIntake) IntakePriceCardDraftSubmission(ctx context
 	operator, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
 	if err != nil {
 		return application.SubmitPriceCardDraftCommand{}, err
+	}
+	if isWorkbookJSON(request) {
+		raw, err := readWorkbookJSON(request)
+		if err != nil {
+			return application.SubmitPriceCardDraftCommand{}, err
+		}
+		return application.SubmitPriceCardDraftCommand{
+			Tenant: operator.Tenant, Submitter: operator.Operator, Raw: raw, FromForm: true,
+		}, nil
 	}
 	upload, err := DecodePriceCardUpload(request)
 	if err != nil {

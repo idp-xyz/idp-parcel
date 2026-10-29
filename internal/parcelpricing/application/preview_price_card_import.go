@@ -40,11 +40,13 @@ func (outcome PreviewPriceCardImportOutcome) String() string {
 	}
 }
 
-// PreviewPriceCardImportCommand 是一次预览：租户取自操作者信封，文件名与字节取自上传。
+// PreviewPriceCardImportCommand 是一次预览：租户取自操作者信封，文件名与字节取自上传。FromForm 为真时 Raw 是页面表单
+// 提交的结构化工作簿（JSON），不是电子表格字节，FileName 不用：来源标识由规范化字节算出（ADR-0349）。
 type PreviewPriceCardImportCommand struct {
 	Tenant   domain.TenantID
 	FileName string
 	Raw      []byte
+	FromForm bool
 }
 
 // PriceCardImportPreview 是预览的结果。SourceFile 在命令立得住时才有；Plan 在方案身份读得出来时
@@ -58,19 +60,49 @@ type PriceCardImportPreview struct {
 	Problems        []ports.PriceCardTemplateProblem
 }
 
-// PreviewPriceCardImportHandler 只依赖模板读口：预览不写库，依赖结构上就没有仓储。
-type PreviewPriceCardImportHandler struct {
-	reader ports.PriceCardTemplateReader
+// ErrWorkbookCarrierNotWired：收到页面表单提交的工作簿，而本编排没有装配工作簿读口。是装配错误，不是业务答案。
+var ErrWorkbookCarrierNotWired = errors.New("parcel pricing: price card import was handed a form workbook but no workbook reader is wired")
+
+// PriceCardImportOption 给导入的两个编排（预览、录入）装可选件。
+type PriceCardImportOption func(*priceCardImportOptions)
+
+type priceCardImportOptions struct {
+	workbook ports.PriceCardWorkbookReader
 }
 
-func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader) (*PreviewPriceCardImportHandler, error) {
+// WithWorkbookReader 装上页面表单提交的工作簿读口。预览与录入要装同一个，同一份内容过两口才得同一个来源标识与同一份读法。
+func WithWorkbookReader(reader ports.PriceCardWorkbookReader) PriceCardImportOption {
+	return func(options *priceCardImportOptions) { options.workbook = reader }
+}
+
+func importOptionsOf(options []PriceCardImportOption) priceCardImportOptions {
+	var resolved priceCardImportOptions
+	for _, option := range options {
+		option(&resolved)
+	}
+	return resolved
+}
+
+// PreviewPriceCardImportHandler 只依赖模板读口：预览不写库，依赖结构上就没有仓储。
+type PreviewPriceCardImportHandler struct {
+	reader   ports.PriceCardTemplateReader
+	workbook ports.PriceCardWorkbookReader
+}
+
+func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader, options ...PriceCardImportOption) (*PreviewPriceCardImportHandler, error) {
 	if reader == nil {
 		return nil, errors.New("parcel pricing: price card import preview needs a template reader")
 	}
-	return &PreviewPriceCardImportHandler{reader: reader}, nil
+	return &PreviewPriceCardImportHandler{reader: reader, workbook: importOptionsOf(options).workbook}, nil
 }
 
 func (handler *PreviewPriceCardImportHandler) Handle(_ context.Context, command PreviewPriceCardImportCommand) (PriceCardImportPreview, error) {
+	if command.FromForm {
+		if handler.workbook == nil {
+			return PriceCardImportPreview{}, ErrWorkbookCarrierNotWired
+		}
+		return readPriceCardWorkbookImport(handler.workbook, command.Tenant, command.Raw), nil
+	}
 	return readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw), nil
 }
 
@@ -84,7 +116,41 @@ func readPriceCardImport(reader ports.PriceCardTemplateReader, tenant domain.Ten
 	if err != nil {
 		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}
 	}
-	reading := reader.ReadPriceCardTemplate(raw)
+	return previewOf(source, reader.ReadPriceCardTemplate(raw))
+}
+
+// readPriceCardWorkbookImport 是页面表单提交的那一条路：先把工作簿 JSON 规范化，来源标识取规范化字节的散列（名称 form:<散列前
+// 12 位>），再读规范化字节。读法交给与读文件同一个 previewOf，三种形状与问题坐标因此一模一样；形状都没过的整份不收，
+// 没有规范化字节也就没有来源标识。
+func readPriceCardWorkbookImport(reader ports.PriceCardWorkbookReader, tenant domain.TenantID, raw []byte) PriceCardImportPreview {
+	if tenant.String() == "" {
+		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}
+	}
+	canonical, err := reader.CanonicalizePriceCardWorkbook(raw)
+	if err != nil {
+		code, detail := ports.TemplateFileNotWorkbook, err.Error()
+		var rejection ports.PriceCardWorkbookRejection
+		if errors.As(err, &rejection) {
+			detail = rejection.Detail
+			if rejection.TooLarge {
+				code = ports.TemplateFileTooLarge
+			}
+		}
+		return PriceCardImportPreview{
+			Outcome:  PriceCardImportNotAccepted,
+			Problems: []ports.PriceCardTemplateProblem{{Code: code, Message: "读不出这份工作簿：" + detail}},
+		}
+	}
+	digest := sha256.Sum256(canonical)
+	source, err := domain.NewFormSourceFileIdentity(hex.EncodeToString(digest[:]))
+	if err != nil {
+		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}
+	}
+	return previewOf(source, reader.ReadPriceCardWorkbook(canonical))
+}
+
+// previewOf 把读口交出的读法折成预览的答复，读文件与读表单工作簿共用。
+func previewOf(source domain.SourceFileIdentity, reading ports.PriceCardTemplateReading) PriceCardImportPreview {
 	preview := PriceCardImportPreview{
 		TemplateVersion: reading.TemplateVersion,
 		SourceFile:      source,

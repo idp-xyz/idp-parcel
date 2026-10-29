@@ -47,9 +47,14 @@ func readme() spreadsheet.WriteSheet {
 		{"", "", "", "所有格按文本填写，不要用公式。金额、小数、重量写十进制数，不用科学计数法；单位与币种由列或表头给出。"},
 		{"", "", "", "时刻写成带时区的形式，如 2026-01-01T00:00:00Z 或 2026-01-01T08:00:00+08:00。"},
 		{"", "", "", "列表格以英文分号 ; 分隔。封闭代码照下面列出的原样书写。"},
+		{"", "", "", "旧版 " + templateVersionV1 + " 的文件仍然接受；" + TemplateVersion + " 在它之上新增 " + sheetTotalBounds + " 表（最低 / 最高收费）与 " + methodTableLookupByRemoteTier + " 计算类型（附加费价表按偏远档位查档），其余不变。"},
 	}
 	for _, spec := range sheets {
-		rows = append(rows, []string{spec.name, "", "", spec.note})
+		note := spec.note
+		if spec.since != "" {
+			note = "（" + spec.since + " 起）" + note
+		}
+		rows = append(rows, []string{spec.name, "", "", note})
 		entries := spec.columns
 		if spec.name == sheetCard {
 			entries = cardFields

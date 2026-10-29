@@ -14,9 +14,10 @@ import (
 )
 
 // buildPriceCardImportPreview 装配 `/pricing-price-card-previews` 的真编排（ADR-0101 决定四；票 price-card-import/02）。
-// 预览只读上传的字节、不碰库，依赖只有模板读口；录入口（票 03）要拿同一个读口，同一份字节过两口才逐字节同摘要。
+// 预览只读上传的字节、不碰库，依赖只有模板读口；录入口（票 03）要拿同一个读口，同一份字节过两口才逐字节同摘要。页面表单提交的
+// 结构化工作簿（ADR-0349）由同一个读口的另一个入口读，预览与录入装的是同一只。
 func buildPriceCardImportPreview() (*pricingapp.PreviewPriceCardImportHandler, error) {
-	handler, err := pricingapp.NewPreviewPriceCardImportHandler(pricecardtemplate.Reader{})
+	handler, err := pricingapp.NewPreviewPriceCardImportHandler(pricecardtemplate.Reader{}, pricingapp.WithWorkbookReader(pricecardtemplate.Reader{}))
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: price card import preview: %w", err)
 	}
@@ -59,7 +60,8 @@ func buildPriceCardDraftSubmission(db *bentopg.DB) (transactionalPriceCardDraftS
 	if err != nil {
 		return transactionalPriceCardDraftSubmission{}, fmt.Errorf("parcel-api: price card draft register: %w", err)
 	}
-	handler, err := pricingapp.NewSubmitPriceCardDraftHandler(pricecardtemplate.Reader{}, drafts, systemClock{})
+	handler, err := pricingapp.NewSubmitPriceCardDraftHandler(pricecardtemplate.Reader{}, drafts, systemClock{},
+		pricingapp.WithWorkbookReader(pricecardtemplate.Reader{}))
 	if err != nil {
 		return transactionalPriceCardDraftSubmission{}, fmt.Errorf("parcel-api: price card draft submission: %w", err)
 	}
