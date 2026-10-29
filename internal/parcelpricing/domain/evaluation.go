@@ -395,6 +395,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	// 却会抬高读取基础档位所用的方案级计价重量；而拒收条款直接就定了结果。
 	var features PackageFeatures
 	haveFeatures := false
+	// ownConversionLines 是自身重量那一遍留在解释里的换算行，正式计价重量那一遍重新记换算时要撤掉它们（见下）。
+	var ownConversionLines []string
 	if len(request.plan.structures.surchargeRules) > 0 || len(request.plan.structures.exclusions) > 0 {
 		derived, featuresErr := request.input.Features()
 		if featuresErr != nil {
@@ -421,6 +423,15 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 					evaluation.explanation = append(evaluation.explanation, step.explain())
 				}
 				return evaluation.withCalculationError(ownErr)
+			}
+			// 这一遍做过的换算当场记在评价上：拒收命中、序列取值缺失待判断、抬高条件求值出错，评价都在正式计价重量那一遍
+			// 之前就收尾了，不记就丢了换算——重放与同标识重复请求只认记下的系数，没记录会把原来的待判断或不可计价判成
+			// 结果不一致（ADR-0346 决定三、ADR-0347 决定一）。
+			evaluation.unitConversions = steps
+			for _, step := range steps {
+				line := step.explain()
+				evaluation.explanation = append(evaluation.explanation, line)
+				ownConversionLines = append(ownConversionLines, line)
 			}
 			volumetric, _ := own.VolumetricWeight()
 			features = features.WithDerivedWeights(volumetric, own.rounded)
@@ -501,6 +512,9 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		converter := newUnitConverter(request.conversionsFrozen, request.recordedConversions)
 		converter.conditionScale = request.plan.structures.volumetricThresholdScale()
 		pricingWeight, err = calculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, converter, floors...)
+		// 正式这一遍带着抬高的下限，换算保留的小数位可能比自身重量那一遍更细，所以以这一遍的记录为准：撤掉那一遍
+		// 留下的换算行再记，记录与解释都只有一份。
+		evaluation.explanation = withoutLines(evaluation.explanation, ownConversionLines)
 		evaluation.unitConversions = converter.recordedSteps()
 		for _, step := range evaluation.unitConversions {
 			evaluation.explanation = append(evaluation.explanation, step.explain())

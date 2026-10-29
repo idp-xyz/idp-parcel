@@ -140,3 +140,26 @@ func (result PricingWeightResult) explainOwnWeights() string {
 	return fmt.Sprintf("package weights read by conditions, before any conditional minimum: volumetric=%s; chargeable=%s %s",
 		volumetric, result.rounded.value.String(), result.rounded.unit)
 }
+
+// withoutLines 从解释里各撤掉 remove 中每一行的第一处，其余原样。
+func withoutLines(explanation []string, remove []string) []string {
+	if len(remove) == 0 {
+		return explanation
+	}
+	pending := append([]string(nil), remove...)
+	kept := make([]string, 0, len(explanation))
+	for _, line := range explanation {
+		dropped := false
+		for index, candidate := range pending {
+			if candidate == line {
+				pending = append(pending[:index], pending[index+1:]...)
+				dropped = true
+				break
+			}
+		}
+		if !dropped {
+			kept = append(kept, line)
+		}
+	}
+	return kept
+}
