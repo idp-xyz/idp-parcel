@@ -206,7 +206,7 @@ var sheets = []sheetSpec{
 		{"nodeId", requiredAlways, "节点标识，本表内唯一"},
 		{"parentId", requiredOptional, "父节点的 nodeId；空即根"},
 		{"kind", requiredAlways, "PREDICATE（判定）、ALL_OF（全部满足）、ANY_OF（任一满足）"},
-		{"source", requiredConditional, "判定的特征来源；PREDICATE 必填"},
+		{"source", requiredConditional, "判定的特征来源；PREDICATE 必填。CHARGEABLE_WEIGHT 是包裹自身的计价重量（派生、进位之后），不含条件最低计价重量的抬高"},
 		{"operator", requiredConditional, "比较：GT、GE、LT、LE、EQ；长度、体积、重量类来源必填，类别类来源空或 EQ"},
 		{"threshold", requiredConditional, "阈值；长度、体积、重量类来源必填"},
 		{"unit", requiredConditional, "阈值单位：长度与体积类为 CM、IN，重量类为 G、KG、OZ、LB"},
