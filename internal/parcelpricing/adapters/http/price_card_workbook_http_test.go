@@ -43,6 +43,11 @@ func sampleSpec() ports.PriceCardTemplateSpec {
 			{Name: "total_bounds", Title: "最低 / 最高收费", Purpose: "对整票合计声明下限与上限", Layout: "ROWS", Repeatable: false, Since: "PPT-2", Columns: []ports.PriceCardTemplateColumnSpec{
 				{Key: "minimum", Title: "最低收费", Requirement: "conditional", Description: "下限"},
 			}},
+			{Name: "conditions", Title: "条件树", Purpose: "条件树", Layout: "ROWS", Repeatable: true, Columns: []ports.PriceCardTemplateColumnSpec{
+				{Key: "category", Title: "类别值", Requirement: "conditional", Description: "类别值", AllowedValuesWhen: []ports.PriceCardTemplateValuesWhen{
+					{Column: "source", Equals: "ADDRESS_NATURE", Values: []string{"COMMERCIAL", "RESIDENTIAL"}},
+				}},
+			}},
 		},
 	}
 }
@@ -132,7 +137,7 @@ func TestTemplateSpecEndpointAnswersTheSourceSpecInItsDocumentedShape(t *testing
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.TemplateVersion != "PPT-2" || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2" || len(body.Sheets) != 2 {
+	if body.TemplateVersion != "PPT-2" || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2" || len(body.Sheets) != 3 {
 		t.Fatalf("body = %s", recorder.Body)
 	}
 	card, bounds := body.Sheets[0], body.Sheets[1]
@@ -150,11 +155,21 @@ func TestTemplateSpecEndpointAnswersTheSourceSpecInItsDocumentedShape(t *testing
 	if card.Columns[1]["multiValued"] != true {
 		t.Fatalf("amountRoundingPoints = %v", card.Columns[1])
 	}
-	// 没有封闭取值的列不带 allowedValues，也不带 multiValued：缺席即「开放词汇」。
-	for _, key := range []string{"allowedValues", "multiValued"} {
+	// 没有封闭取值的列不带 allowedValues、multiValued 与 allowedValuesWhen：缺席即「开放词汇」。
+	for _, key := range []string{"allowedValues", "multiValued", "allowedValuesWhen"} {
 		if _, present := card.Columns[2][key]; present {
 			t.Errorf("planId 不该带 %s：%v", key, card.Columns[2])
 		}
+	}
+	// 条件封闭的列：不带 allowedValues，条件与取值在 allowedValuesWhen 里。
+	category := body.Sheets[2].Columns[0]
+	when, _ := category["allowedValuesWhen"].([]any)
+	if _, closed := category["allowedValues"]; closed || len(when) != 1 {
+		t.Fatalf("category = %v", category)
+	}
+	first, _ := when[0].(map[string]any)
+	if first["column"] != "source" || first["equals"] != "ADDRESS_NATURE" || len(first["allowedValues"].([]any)) != 2 {
+		t.Fatalf("allowedValuesWhen = %v", first)
 	}
 	if !strings.Contains(recorder.Body.String(), `"sheets":[`) || strings.Contains(recorder.Body.String(), `"since":""`) {
 		t.Errorf("无 since 的表不该写出空 since：%s", recorder.Body)

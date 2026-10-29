@@ -32,6 +32,11 @@ func (Reader) PriceCardTemplateSpec() ports.PriceCardTemplateSpec {
 				column.AllowedValues = append([]string(nil), vocab.valuesFor(TemplateVersion)...)
 				column.MultiValued = vocab.multi
 			}
+			for _, when := range conditionalClosedVocabulary[sheet.name][entry.key] {
+				column.AllowedValuesWhen = append(column.AllowedValuesWhen, ports.PriceCardTemplateValuesWhen{
+					Column: when.column, Equals: when.equals, Values: append([]string(nil), when.values...),
+				})
+			}
 			out.Columns = append(out.Columns, column)
 		}
 		spec.Sheets = append(spec.Sheets, out)

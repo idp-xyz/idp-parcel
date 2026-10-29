@@ -170,6 +170,21 @@ func TestDecoderReadsClosedColumnsThroughTheRegistry(t *testing.T) {
 			t.Errorf("%s.%s：话里列的不是登记处的取值 %v：%s", target.sheet, target.column, allowed, message)
 		}
 	}
+	// 币种列不走 closedCode：译码的门是产品内置币种目录（refdata.CheckCurrency），登记处里的清单取自同一个目录。
+	covered[sheetTables+".currency"] = true
+	if len(currencyCodes) == 0 {
+		t.Fatal("币种清单是空的")
+	}
+	for _, code := range currencyCodes {
+		card := costCard()
+		card.data[sheetTables][0]["currency"] = code
+		for _, problem := range read(t, card.bytes(t)).Problems {
+			if problem.Sheet == sheetTables && problem.Column == "currency" {
+				t.Errorf("清单里的币种 %s 不该在币种格报问题：%s", code, problem.Message)
+			}
+		}
+	}
+
 	var missing []string
 	for sheet, columns := range closedVocabulary {
 		for key := range columns {
@@ -181,5 +196,60 @@ func TestDecoderReadsClosedColumnsThroughTheRegistry(t *testing.T) {
 	sort.Strings(missing)
 	if len(missing) != 0 {
 		t.Fatalf("登记处里这些封闭列没有在本用例里验过：%v", missing)
+	}
+}
+
+// Covers: `AT-PP-047`——条件封闭取值：conditions.category 平时是开放词汇，来源为 ADDRESS_NATURE 时才只收两个地址性质词。规格口把它作为
+// allowedValuesWhen 交出，列本身不带 allowedValues（否则编辑器会把分区名、偏远档位的格也画成两项下拉）；清单里的词领域都认，
+// 词表之外的词在 category 格上被领域拒。
+func TestSpecGivesTheAddressNatureWordsAsAConditionalVocabulary(t *testing.T) {
+	spec := Reader{}.PriceCardTemplateSpec()
+	var category ports.PriceCardTemplateColumnSpec
+	for _, column := range spec.Sheets[indexOfSheet(t, spec, sheetConditions)].Columns {
+		if column.Key == "category" {
+			category = column
+		}
+	}
+	if len(category.AllowedValues) != 0 || len(category.AllowedValuesWhen) != 1 {
+		t.Fatalf("category = %+v", category)
+	}
+	when := category.AllowedValuesWhen[0]
+	if when.Column != "source" || when.Equals != "ADDRESS_NATURE" || strings.Join(when.Values, ",") != "COMMERCIAL,RESIDENTIAL" {
+		t.Fatalf("when = %+v", when)
+	}
+	if !strings.Contains(category.Description, "source 为 ADDRESS_NATURE") {
+		t.Errorf("说明里要写清与 source 的对应：%s", category.Description)
+	}
+
+	natureCard := func(word string) filled {
+		card := fullCard().clone()
+		card.data[sheetConditions] = append(card.data[sheetConditions],
+			map[string]string{"nodeId": "C-NATURE", "kind": "PREDICATE", "source": "ADDRESS_NATURE", "operator": "EQ", "category": word})
+		card.data[sheetSurcharges][2]["conditionId"] = "C-NATURE"
+		return card
+	}
+	for _, word := range when.Values {
+		for _, problem := range read(t, natureCard(word).bytes(t)).Problems {
+			if problem.Sheet == sheetConditions && problem.Column == "category" {
+				t.Errorf("清单里的词 %s 领域该认：%s", word, problem.Message)
+			}
+		}
+	}
+	reading := read(t, natureCard("ZZZ").bytes(t))
+	found := false
+	for _, problem := range reading.Problems {
+		found = found || (problem.Sheet == sheetConditions && problem.Column == "category" && problem.Code == ports.TemplateConstructionRejected)
+	}
+	if !found {
+		t.Fatalf("词表之外的地址性质该在 category 格被拒：%s", describe(reading.Problems))
+	}
+
+	// 开放词汇的来源不受影响：分区名、偏远档位照写。
+	zone := fullCard().clone()
+	zone.data[sheetConditions][5]["category"] = "ANY-ZONE-NAME"
+	for _, problem := range read(t, zone.bytes(t)).Problems {
+		if problem.Column == "category" {
+			t.Errorf("开放词汇不该被拒：%s", problem.Message)
+		}
 	}
 }

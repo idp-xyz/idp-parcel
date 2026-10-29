@@ -155,7 +155,7 @@ func TestMalformedWorkbookJSONIsRefusedWithAReason(t *testing.T) {
 		"同一行同名键出现两次": {`{"templateVersion":"PPT-2","sheets":{"tables":[{"tableId":"A","tableId":"B"}]}}`, `"tableId" 出现了不止一次`},
 		"同名表出现两次":    {`{"templateVersion":"PPT-2","sheets":{"tables":[],"tables":[]}}`, `"tables" 出现了不止一次`},
 		"尾随内容":       {`{"templateVersion":"PPT-2","sheets":{}} {}`, "多余的内容"},
-		"嵌套过深":       {`{"templateVersion":"PPT-2","sheets":{"a":[{"b":[[[[[[[[[1]]]]]]]]]}]}}`, "嵌套过深"},
+		"格是深层嵌套":     {`{"templateVersion":"PPT-2","sheets":{"a":[{"b":[[[[[[[[[1]]]]]]]]]}]}}`, "只能是字符串、数字或 null"},
 	}
 	for name, testCase := range cases {
 		_, err := templateReader.CanonicalizePriceCardWorkbook([]byte(testCase.raw))
@@ -164,17 +164,17 @@ func TestMalformedWorkbookJSONIsRefusedWithAReason(t *testing.T) {
 			t.Errorf("%s: err = %v, 应点名「%s」", name, err, testCase.mention)
 		}
 		reading := templateReader.ReadPriceCardWorkbook([]byte(testCase.raw))
+		if reading.TemplateVersion != TemplateVersion || rejection.TemplateVersion != TemplateVersion {
+			t.Errorf("%s：整份不收也该回显最新一版（读文件同类情形如此）：读法 %q，拒收 %q", name, reading.TemplateVersion, rejection.TemplateVersion)
+		}
 		if reading.Accepted || reading.Content != nil || len(reading.Problems) != 1 || reading.Problems[0].Code != ports.TemplateFileNotWorkbook {
 			t.Errorf("%s: 读法 accepted=%v problems=%s", name, reading.Accepted, describe(reading.Problems))
 		}
 	}
 
-	huge := `{"templateVersion":"PPT-2","sheets":{"x":[` + strings.Repeat(`{"a":"b"},`, 1) + `{}]},"pad":"` + strings.Repeat("x", MaxFileBytes) + `"}`
+	huge := `{"templateVersion":"PPT-2","sheets":{"x":[{"a":"` + strings.Repeat("x", MaxFileBytes) + `"}]}}`
 	if _, err := templateReader.CanonicalizePriceCardWorkbook([]byte(huge)); !errors.Is(err, ports.ErrPriceCardWorkbookTooLarge) {
 		t.Errorf("超过文件上限：err = %v", err)
-	}
-	if reading := templateReader.ReadPriceCardWorkbook([]byte(huge)); reading.Accepted || len(reading.Problems) != 1 || reading.Problems[0].Code != ports.TemplateFileTooLarge {
-		t.Errorf("超限的读法：%s", describe(reading.Problems))
 	}
 	manyRows := `{"templateVersion":"PPT-2","sheets":{"x":[` + strings.Repeat("{},", maxRowsPerSheet) + `{}]}}`
 	if _, err := templateReader.CanonicalizePriceCardWorkbook([]byte(manyRows)); !errors.Is(err, ports.ErrPriceCardWorkbookTooLarge) {

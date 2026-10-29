@@ -11,7 +11,12 @@
 // 译码与校验，不存在第二套判定。
 package pricecardtemplate
 
-// TemplateVersion 是本构建写出的模板版本，也是最新的一版（规范第二节）。表集合、列集合或列语义变化时进位，
+import (
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
+)
+
+// TemplateVersion 是本构建写出的模板版本，也是最新的一版（规范「版本」一节）。表集合、列集合或列语义变化时进位，
 // 可取值的增减也算列语义变化。进位不等于旧版作废：旧版文件仍按旧版的表集合与取值读，读出的内容与进位之前
 // 逐位相同（acceptedTemplateVersions）。
 const TemplateVersion = "PPT-2"
@@ -168,6 +173,11 @@ var (
 	// 由 source 定（翻译处按来源逐格判），所以规格口只能给并集。
 	conditionUnitCodes = append(append([]string{}, weightUnitCodes...), lengthUnitCodes...)
 	catalogueKindCodes = []string{"ZONE", "REMOTE_TIER"}
+	// currencyCodes 是产品内置币种目录里的码（refdata，ISO 4217 常用集）：价表表头的币种只收它们，译码的门（refdata.CheckCurrency）
+	// 与这份清单是同一个目录。
+	currencyCodes = refdataCurrencyCodes()
+	// addressNatureCodes 是 ADDRESS_NATURE 来源的期望取值，领域的封闭词表；译码交 domain.NewCategoryFeatureCondition，由领域判。
+	addressNatureCodes = []string{domain.AddressNatureCommercial.String(), domain.AddressNatureResidential.String()}
 	artifactKindCodes  = []string{
 		"pricing-plan", "rate-table", "weight-policy", "reference-series", "reference-catalogue",
 		"commercial-policy", "commercial-authorization", "numeric-profile",
@@ -198,6 +208,30 @@ func (vocab vocabulary) valuesFor(version string) []string {
 
 var remoteTierMethodSince = map[string]string{methodTableLookupByRemoteTier: TemplateVersion}
 
+func refdataCurrencyCodes() []string {
+	currencies := refdata.Currencies()
+	codes := make([]string, 0, len(currencies))
+	for _, currency := range currencies {
+		codes = append(codes, currency.Code)
+	}
+	return codes
+}
+
+// conditionalVocabulary 登记「只在同一行另一格取某值时才封闭」的列：这一列平时是开放词汇（分区名、偏远档位、服务选项由租户填），
+// 满足条件时取值才限在 values 里。规格口把它们作为 allowedValuesWhen 交出，列本身不带 allowedValues，免得编辑器把开放词汇
+// 的格也画成下拉。读取不经这里——这类取值的判在领域构造门，规格口的清单取自领域的封闭词表。
+type conditionalVocabulary struct {
+	column string
+	equals string
+	values []string
+}
+
+var conditionalClosedVocabulary = map[string]map[string][]conditionalVocabulary{
+	sheetConditions: {
+		"category": {{column: "source", equals: "ADDRESS_NATURE", values: addressNatureCodes}},
+	},
+}
+
 // closedVocabulary 是全部封闭取值列的登记处，表名 → 列键 → 取值。读取（decoder.closedCode）与规格口都只从这里取：
 // 一列的可取值只有这一处定义，规格口答的与读取实际收的不会是两份。
 var closedVocabulary = map[string]map[string]vocabulary{
@@ -212,6 +246,7 @@ var closedVocabulary = map[string]map[string]vocabulary{
 	},
 	sheetTables: {
 		"family":     {values: familyCodes},
+		"currency":   {values: currencyCodes},
 		"weightUnit": {values: weightUnitCodes},
 	},
 	sheetWeightRounding: {
@@ -297,7 +332,7 @@ var sheets = []sheetSpec{
 		{"tableId", "价表标识", requiredAlways, "价表标识"},
 		{"tableVersion", "价表版本号", requiredAlways, "价表版本号"},
 		{"family", "价表族", requiredAlways, "价表族：WEIGHT_ZONE、FIRST_CONTINUE、UNIT_PRICE"},
-		{"currency", "币种", requiredAlways, "本表各行金额的币种，如 CNY"},
+		{"currency", "币种", requiredAlways, "本表各行金额的币种，取产品内置币种目录里的码，如 CNY"},
 		{"weightUnit", "重量单位", requiredAlways, "本表各行重量的单位：G、KG、OZ、LB"},
 		{"periodStartsAt", "价表生效起点", requiredAlways, "价表生效起点，带时区的时刻"},
 		{"periodEndsAt", "价表生效止点", requiredOptional, "价表生效止点；空即不设止点"},
@@ -364,7 +399,7 @@ var sheets = []sheetSpec{
 		{"operator", "比较运算", requiredConditional, "比较：GT、GE、LT、LE、EQ；长度、体积、重量类来源必填，类别类来源空或 EQ"},
 		{"threshold", "阈值", requiredConditional, "阈值；长度、体积、重量类来源必填"},
 		{"unit", "阈值单位", requiredConditional, "阈值单位：长度与体积类为 CM、IN，重量类为 G、KG、OZ、LB"},
-		{"category", "类别值", requiredConditional, "期望的类别值；ZONE、ADDRESS_TYPE、SERVICE_OPTION 来源必填，ADDRESS_NATURE 来源必填且只收 COMMERCIAL、RESIDENTIAL"},
+		{"category", "类别值", requiredConditional, "期望的类别值；类别类来源（ZONE、ADDRESS_TYPE、SERVICE_OPTION、ADDRESS_NATURE）必填。前三者是开放词汇（分区名、偏远档位、服务选项由租户填）；source 为 ADDRESS_NATURE 时只收 COMMERCIAL、RESIDENTIAL"},
 	}},
 	{name: sheetCalculations, title: "计算树", note: "计算树：一行一个节点；只有 GREATER_OF 能当父节点，且恰好两个子节点", columns: []column{
 		{"nodeId", "节点标识", requiredAlways, "节点标识，本表内唯一"},
