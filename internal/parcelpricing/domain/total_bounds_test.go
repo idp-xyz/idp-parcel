@@ -441,8 +441,8 @@ func newPlanWithStructuresAndRules(t *testing.T, structures domain.PricingPlanSt
 }
 
 // Covers: AT-PP-035
-// 下面两个摘要是在引入总额上下限与偏远档位查档价表之前的 origin/main 上算出来记下的：同一份夹具在本构建上必须
-// 得到同一串。它们钉的是「不改变任何今天已算对的评价」——方案内容摘要、评价语义摘要、规范化版本三样都不动
+// 本用例里作为字面值钉住的方案内容摘要与评价语义摘要，是在引入总额上下限与偏远档位查档价表之前的 origin/main 上算出来
+// 记下的：同一份夹具在本构建上必须得到同一串。它们钉的是「不改变任何今天已算对的评价」——方案内容摘要、评价语义摘要、规范化版本三样都不动
 // （ADR-0348 决定五；跨树的整份对拍见票面完成记录）。
 func TestATPP035DigestsOfOldShapeFixturesAreTheOnesRecordedBeforeBoundsExisted(t *testing.T) {
 	structures := structuresWithRounding(t, structuresWithCatalogues(t, catalogueLink(t, domain.CatalogueKindZone, "SYN-CAT-ZONE")),

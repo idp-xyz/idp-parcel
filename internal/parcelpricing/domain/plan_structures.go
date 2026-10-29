@@ -21,7 +21,7 @@ type SurchargeCalculation struct {
 	// 由卡声明（ADR-0110 Decision 三）。
 	seriesID    string
 	outOfWindow OutOfWindowBehaviour
-	// tableKey 只在「查表」上有：价表按哪个类别维度查档（ADR-0348 决定四）。零值是分区——既有各卡的读法，
+	// tableKey 只在「查表」上有：价表按哪个类别维度查档（ADR-0348 决定三）。零值是分区——既有各卡的读法，
 	// 字节与语义都不动。
 	tableKey TableKey
 }

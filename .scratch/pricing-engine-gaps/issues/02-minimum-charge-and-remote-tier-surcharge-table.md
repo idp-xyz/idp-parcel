@@ -101,6 +101,17 @@ Blocked by: 无（接票 01 之外独立；ADR-0346 单位换算已在 main）
   1. 试算响应（`estimateChargeBody`）的费用行不带方向，管理台试算页会把 `MAXIMUM_CHARGE` 冲减行显示成正数（既有 `DEDUCT` 固定规则同病）；要补是给响应加方向字段并让页面按方向显示。演示卡三不含最高收费，所以演示里看不到。
   2. 价卡导入模板暂不支持总额上下限与按档位查档（R2：真实承运商价目表常有）；要接得另立模板格式的决定。
   3. 声明了总额上下限的卡会出 `MINIMUM_CHARGE` / `MAXIMUM_CHARGE` 费用行，结算的费用项目映射要有这两个码——租户取值，随租户上线登记，没登记按既有口径答未配置。
-  4. 第一张带新结构的价卡登记之前，所有读价卡的进程必须已是认 `PPC-6` 的构建（滚动发布约束，ADR-0348 风险点 6）。
+  4. 第一张带新结构的价卡登记之前，所有读价卡的进程必须已是认 `PPC-6` 的构建（滚动发布约束，ADR-0348 风险点 6）：眼下只是文档约束、代码里没有门；旧进程遇到 `PPC-6` 卡时各读价卡路径出错即停、不会算错金额，序列 / 目录登记与复核的受影响范围扫描是租户级的，会波及 `parcel-pricing-feed` 周更燃油序列。最小防护（登记 `PPC-6` 价卡前要求显式部署开关，默认关）列为后续加固，不在本轮。
 - 共享草稿区的名字冲突：开工时我往共享 scratchpad 根写了 `dbname`、`seed.log`，并 `rm -rf` 重建了 `main-tree`，可能覆盖了别的会话同名文件；之后我已把自己的产物挪进 `scratchpad/pricingB/`。
 - 隔离评审请重点看：`requiredCanonicalization` 的「记的版本必须等于内容该写的最低一版」是否会误伤某条读回路径；总额上下限在评价里的位置（附加费收齐之后、换算之前）与 `validCompletedCharges` 里补差行「只能最后一行」的约束；`PPC-6` 方案的评价摘要写 `PPC-6` 这一点。
+
+## 修订轮（2026-10-29 作者，应协调方转来的隔离评审意见，评审钉 `32e652fc8`、阻断为 0）
+
+只改文字，不动行为与既有测试。
+
+1. 三处 ADR 决定号引错改正：`plan_structures.go` 的 `tableKey` 注释与 `fingerprint.go` 里查档维度那一键的注释改指决定三，`plan.go` 的 `valid()` 注释改指决定四，`remote_tier_table_test.go` 头注改指决定三。
+2. ADR-0348 决定四如实写旧构建的读法：价卡登记快照与草稿答 `ErrCanonicalizationVersionUnsupported`；带补差行的 `PPC-6` 评价快照答泛化的 `ErrEvaluationSnapshotInvalid`；不带补差行的 `PPC-6` 评价旧构建照常读成完成。
+3. ADR-0348 风险点 6 补各读价卡路径遇到 `PPC-6` 卡时的结果（试算整次 unavailable、评价请求与售价预估只在唯一适用卡是 `PPC-6` 时 unavailable、序列与目录登记 / 复核的受影响范围扫描租户级整笔失败），并明记这眼下只是文档约束、代码里没有门，最小防护列为后续加固。
+4. 位置词与计数：`fingerprint.go` 的「见上」「只多两处」「那两处」改用符号名与结构名；`total_bounds_test.go` 的「下面两个摘要」、`seedgen/main.go` 的「绑上面已登记的」改指名；cmd 用例注释里的「七类包裹」去掉计数。`hashPricingEvaluation` 里退回 `CurrentCanonicalizationVersion()` 的那条走不到的回退，注释写明用途——给接线棘轮一个生产调用点。
+
+自验（带 DSN）：`go build ./...`、`go vet`、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/architecture/... ./cmd/parcel-pricing-register/...` 全部 ok。

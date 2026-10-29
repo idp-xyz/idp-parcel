@@ -329,7 +329,7 @@ func (plan PricingPlanVersion) valid() bool {
 		return false
 	}
 	// 方案记的规范化版本必须是能表达它内容的最低一版：带总额上下限或偏远档位查档价表的写 PPC-6，其余写 PPC-5。
-	// 反过来也成立——不带新内容却记着 PPC-6、或带了新内容却记着 PPC-5，都是读回的数据对不上（ADR-0348 决定五）。
+	// 反过来也成立——不带新内容却记着 PPC-6、或带了新内容却记着 PPC-5，都是读回的数据对不上（ADR-0348 决定四）。
 	if plan.canonicalization != plan.structures.requiredCanonicalization() {
 		return false
 	}
