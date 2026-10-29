@@ -1,7 +1,7 @@
 # 03 计价评价遇到输入单位与价卡声明的单位不同时直接答冲突，没有换算
 
 Category: enhancement
-Status: in-progress——作者完工，待隔离评审与进 main，分支 claude-refdata2b（代码最后一笔 `0d337609c`）
+Status: in-progress——作者完工并补完评审修订轮，待进 main，分支 claude-refdata2b（代码最后一笔 `2569dbec7`）。此前：作者完工，待隔离评审与进 main（代码最后一笔 `0d337609c`）。
 Blocked by: 无（接票 01，ADR-0335 已进 main）
 
 ## 现象
@@ -73,3 +73,13 @@ Blocked by: 无（接票 01，ADR-0335 已进 main）
 - 评价上多出的换算记录目前只在快照与解释里可读，HTTP 响应没有结构化字段；管理台若要单列「换算」，另立票（不挡）。
 - 不挡上线的新发现：特征判定里阈值与特征的单位比较仍不换算（`R40` 公制阈值对英制价表），是 ADR-0346 风险点 1 点名的下一轮，请协调方记入冻结清单；目录里的吨、毫克、毫米、米、英尺、码要进评价，需先放宽 `WeightUnit` / `LengthUnit` 封闭集，同记。
 - 隔离评审请重点看：`guardPlaces` 论证的 `g` 是否枚举全了（风险点 2），以及「先走原函数、答了单位不一致再换算」这一结构对既有评价的保证。
+
+## 修订轮（2026-10-29 作者，应协调方转来的隔离评审意见，评审钉 `edf13c831`、阻断为 0）
+
+提交：`2569dbec7`（代码与用例）；其后文档一笔。
+
+1. **冻结模式也冻截断位数**（评审非阻断第 1 条，进 main 前定）：`convertWeight` 在冻结模式下取记录里同一个量、同一对单位的 `places`，并校验它不小于当前公式推出的下限（`guardPlaces`）；小于、没记、记成精确、只记在另一个量名下，一律按答不出处理（原来的单位不一致，重放因此判成结果不一致），不静默改用较小位数。尺寸的展示位数在冻结模式下同样取记下的，重放出的记录与原记录逐字相同。用例：`TestFrozenReplayKeepsTheRecordedTruncationPlaces`（记 20 位的评价重放与读回后重放都得同摘要；记 11 位同摘要于当前公式；记 8 位被拒；位数不同摘要里的实重串就不同）、`TestFrozenInexactConversionNeedsARecordWithAtLeastTheFloorPlaces`（内部）；去掉「取记下位数」或去掉下限校验，两个用例各自失败（作者做过两次变异）。造「位数与当前公式不同的记录」只能经测试专用的 `unit_conversion_export_test.go`，不进生产构建。ADR-0346 决定三补一句，越权风险点 2 补这条的后果与处理（位数公式只能放宽下限、不能收紧，收紧要另立决定并处理存量）；UC-PP-001 `AT-PP-020` 与盘点 ① 桶同步。
+2. **ADR-0335 Status 索引注记补挂**「越权风险点 6 由 ADR-0346 决定四回答，无条款停用」（评审第 3 条）。
+3. nit：parcel-pricing CONTEXT 里「规则见下一条，不在此列」改成「见「单位换算」一条」（评审第 4 条）；`unit_conversion.go` 头注「单位一致的路径根本不走本文件」改成如实——`EvaluatePricing` 先走原函数、不构造换算器，但读回门 `validUnitConversions` 与访问口 `UnitConversions` 对每个评价都会被调到，记录为空时是空操作。
+
+**自验**（带 DSN）：`go build ./...`、`go vet`、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/platform/... ./internal/architecture/...` 26 个有测试的包全部 ok、退 0。既有测试仍零改动（`*_test.go` 对 origin/main 的 diff 删除列全为 0）。
