@@ -2,6 +2,7 @@ package refdata
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"regexp"
 	"strings"
@@ -393,5 +394,28 @@ func TestCheckAnswersCatalogueMembershipWithoutLeniency(t *testing.T) {
 		if err := CheckCurrency(code); !errors.Is(err, ErrNotInCatalogue) {
 			t.Errorf("CheckCurrency(%q) = %v, 应答目录外", code, err)
 		}
+	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——目录外码的错误文字只出中文（各写入边界把它原样拼进导入问题与译装拒绝，操作者直接看到），
+// 不带哨兵的英文原句；errors.Is 仍命中 ErrNotInCatalogue，调用方照旧按哨兵分流。
+func TestNotInCatalogueErrorReadsInChineseOnlyAndStillMatchesTheSentinel(t *testing.T) {
+	for _, err := range []error{CheckCountry("ZZ"), CheckCurrency("XXX")} {
+		if !errors.Is(err, ErrNotInCatalogue) {
+			t.Fatalf("%v 应命中 ErrNotInCatalogue", err)
+		}
+		// 外面再包一层（各边界都这么写）也不该冒出英文。
+		wrapped := fmt.Errorf("币种「X」立不住：%w", err)
+		for _, english := range []string{"refdata", "catalogue", "built-in", "code is not"} {
+			if strings.Contains(wrapped.Error(), english) {
+				t.Errorf("错误文字带出英文 %q：%s", english, wrapped)
+			}
+		}
+		if !strings.Contains(err.Error(), "不在产品内置的目录里") {
+			t.Errorf("要说清是目录不认：%s", err)
+		}
+	}
+	if got := CheckCountry("ZZ").Error(); !strings.Contains(got, "国家 / 地区码") || !strings.Contains(got, "ZZ") {
+		t.Errorf("国家 / 地区的话要点出种类与送来的码：%s", got)
 	}
 }

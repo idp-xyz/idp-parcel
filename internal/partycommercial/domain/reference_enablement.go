@@ -49,6 +49,18 @@ func (kind ReferenceKind) valid() bool {
 	return kind.String() != ""
 }
 
+// Label 是种类给登记方看的中文名；String 才是线上封闭词。
+func (kind ReferenceKind) Label() string {
+	switch kind {
+	case ReferenceKindCountry:
+		return "国家 / 地区"
+	case ReferenceKindCurrency:
+		return "币种"
+	default:
+		return ""
+	}
+}
+
 // ReferenceKindNamed 把原词反查回封闭集；空串与集外都答不认识。
 func ReferenceKindNamed(name string) (ReferenceKind, bool) {
 	return closedCodeNamed(ReferenceKind.valid, ReferenceKind.String, name)
@@ -194,6 +206,13 @@ func rehydrateReferenceEnablementRegistration(
 		registrant:    registrant,
 		recordedAt:    recordedAt.UTC(),
 	}, nil
+}
+
+// RetiredCodeMayStillBeTouched 回答：册上已有这个码的行（latest 是最新一行），而它已不在内置目录里（ISO 废止后目录随发版
+// 删了它），登记方还能对它做什么。能：重放或冲突比对已在册的修订（revision 不超过册上最新的），以及追加停用——停用一个
+// 目录里已经没有的码是合理动作，不放行就等于它在册上再也停不掉。不能：新启用它，也不能首次登记一个目录外的码。
+func RetiredCodeMayStillBeTouched(latest ReferenceEnablementRegistration, revision int, status ReferenceEnablementStatus) bool {
+	return revision <= latest.revision || status == ReferenceEnablementDisabled
 }
 
 func referenceCodeInCatalogue(kind ReferenceKind, code string) bool {

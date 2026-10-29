@@ -161,6 +161,9 @@ func TestSettlementPolicyCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
 	if len(problems.Problems) != 1 || problems.Problems[0].Field != "settlementPolicy.currency" {
 		t.Fatalf("应只点名 settlementPolicy.currency，实得 %+v", problems.Problems)
 	}
+	if text := problems.Problems[0].Problem; !strings.Contains(text, "不在产品内置的目录里") || strings.Contains(text, "refdata") {
+		t.Fatalf("问题文字要说清是目录不认、且不带英文哨兵原句：%q", text)
+	}
 }
 
 // Covers: CONTEXT 结算方式那条规则末句（票 admin-write-faces/23 裁决二）——六维里的合同版本同时作壳上的指名引用交出。

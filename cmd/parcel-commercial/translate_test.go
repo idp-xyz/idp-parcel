@@ -1099,8 +1099,8 @@ func TestSettlementSelectorTranslatesWithoutAContractDimension(t *testing.T) {
 		"anchorAt": "2026-07-01T00:00:00Z",
 		"requiredBases": ["CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE", "SETTLEMENT_POLICY"],
 		"settlement": {"counterparty": "customer-1", "chargeScope": "charge-express", "currency": "SYN"}
-	}`)); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
-		t.Fatalf("目录外的结算币种应被拒并说清是目录不认：%v", err)
+	}`)); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") || strings.Contains(err.Error(), "refdata") {
+		t.Fatalf("目录外的结算币种应被拒并说清是目录不认、且不带英文哨兵原句：%v", err)
 	}
 
 	refusals := map[string]string{

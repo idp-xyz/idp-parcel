@@ -216,9 +216,9 @@ func TestReferenceEnablementRefusalsAreNamedAndWriteNothing(t *testing.T) {
 		cause   string
 	}{
 		{"目录外的国家码", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "ZZ", 1, domain.ReferenceEnablementEnabled, enablementNow),
-			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：COUNTRY ZZ"},
+			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：国家 / 地区 ZZ"},
 		{"目录外的币种码", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XXX", 1, domain.ReferenceEnablementEnabled, enablementNow),
-			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：CURRENCY XXX"},
+			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：币种 XXX"},
 		{"册上没有时首笔不是 1", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "SG", 2, domain.ReferenceEnablementEnabled, enablementNow),
 			application.ReferenceEnablementRevisionOutOfSequence, "首笔登记修订必须是 1"},
 		{"跳号", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "CN", 3, domain.ReferenceEnablementDisabled, enablementNow),
@@ -293,5 +293,42 @@ func TestReferenceEnablementSurfacesRegistryFailureAsError(t *testing.T) {
 	tenant, _ := domain.NewTenantID("SYN-TENANT-01")
 	if _, _, err := query.ListReferenceEnablements(t.Context(), tenant, domain.ReferenceKindCountry); err == nil {
 		t.Fatal("读面读不回是错误，不是空册")
+	}
+}
+
+// Covers: `AT-PC-074`，ADR-0345 决定三、风险点 2——册上已有行的码后来被目录删了（ISO 废止）：对它重放已在册的修订照常答已登记、
+// 追加停用照常受理（停不掉就永远停不掉了），新启用它与首次登记一个目录外的码都答目录里没有这个码。
+func TestAnEnabledCodeTheCatalogueNoLongerHasCanStillBeReplayedAndDisabled(t *testing.T) {
+	registry := &fakeReferenceEnablementRegistry{}
+	handler := application.NewRegisterReferenceEnablementHandler(registry, fixedEnablementClock{enablementNow})
+
+	// 目录删码之前登进册的一行：直接经领域重建门落进替身册面。
+	legacy := enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XXX", 1, domain.ReferenceEnablementEnabled, enablementNow.AddDate(0, 0, -30))
+	row, err := domain.RehydrateReferenceEnablementRegistration(legacy.Tenant, legacy.Kind, legacy.Code, 1,
+		domain.ReferenceEnablementSpec{Status: legacy.Status, EffectiveFrom: legacy.EffectiveFrom},
+		legacy.Registrant, enablementNow.AddDate(0, 0, -30))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry.rows = append(registry.rows, row)
+
+	if got := registerEnablement(t, handler, legacy).Outcome(); got != application.ReferenceEnablementAlreadyRegistered {
+		t.Fatalf("重放已在册的目录外码 = %s，want ALREADY_REGISTERED", got)
+	}
+	enableAgain := enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XXX", 2, domain.ReferenceEnablementEnabled, enablementNow)
+	if result := registerEnablement(t, handler, enableAgain); result.Refusal() != application.ReferenceEnablementCodeNotInCatalogue {
+		t.Fatalf("新启用目录外的码 = %s / %s，want CODE_NOT_IN_CATALOGUE", result.Outcome(), result.Refusal())
+	}
+	disable := enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XXX", 2, domain.ReferenceEnablementDisabled, enablementNow)
+	if got := registerEnablement(t, handler, disable).Outcome(); got != application.ReferenceEnablementRegistered {
+		t.Fatalf("追加停用目录外的已登记码 = %s，want REGISTERED", got)
+	}
+	// 放行只对册上已有的码：首次登记另一个目录外的码照旧被拒，哪怕是停用。
+	first := enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XYZ", 1, domain.ReferenceEnablementDisabled, enablementNow)
+	if result := registerEnablement(t, handler, first); result.Refusal() != application.ReferenceEnablementCodeNotInCatalogue {
+		t.Fatalf("首次登记目录外的码 = %s / %s，want CODE_NOT_IN_CATALOGUE", result.Outcome(), result.Refusal())
+	}
+	if len(registry.rows) != 2 {
+		t.Fatalf("册上应是 XXX 的两行（老行与停用），实得 %d 行", len(registry.rows))
 	}
 }

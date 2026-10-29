@@ -350,7 +350,9 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 	// 新登记入口只收产品内置国家 / 地区目录里的码（ADR-0345 决定五）。门只在这里——这一函数只被将要落册的新登记与
 	// 新修订走到，重放与读回不经它，所以册上已有的目录外码照样读得回。
 	if err := refdata.CheckCountry(country.String()); err != nil {
-		return fmt.Sprintf("注册国家 / 地区 %s 不在产品内置的国家 / 地区目录里（ISO 3166-1）：换成目录里的码", country), nil
+		return fmt.Sprintf(
+			"注册国家 / 地区 %s 不在产品内置的国家 / 地区目录里（ISO 3166-1）：换成目录里的码；"+
+				"已在册的法人要先带身份更正依据，把注册国家 / 地区更正成目录内的码", country), nil
 	}
 	catalogue, err := handler.numberTypes.LoadRegistrationNumberTypeCatalogue(ctx, tenant, country)
 	if err != nil {

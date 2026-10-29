@@ -93,7 +93,7 @@ func satisfiedCustoms() *customsDouble {
 	return &customsDouble{outcome: domain.ConstraintSatisfied}
 }
 
-// syntheticCatalog 是一张最小合成网：寄件国 CN 的收寄枢纽经口岸到收件国 SG 的末端，一条线路两段；XB 的交付
+// syntheticCatalog 是一张最小合成网：寄件国 CN 的收寄枢纽经口岸到收件国 SG 的末端，一条线路两段；SG 的交付
 // 区域只覆盖邮编前缀 10。修订锚取 7，证视图修订就是它。
 func syntheticCatalog(t *testing.T) *catalogReadDouble {
 	t.Helper()
