@@ -170,9 +170,9 @@ func decodePriceCardRegistrationSnapshot(raw []byte) (priceCardRegistrationSnaps
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: %v", ErrPriceCardRegistrationSnapshotInvalid, err)
 	}
-	if document.Plan.Canonicalization != canonicalizationVersion {
-		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q",
-			ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion)
+	if !supportedCanonicalization(document.Plan.Canonicalization) {
+		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q and %q",
+			ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion, canonicalizationVersionTotalBounds)
 	}
 	return document, nil
 }
