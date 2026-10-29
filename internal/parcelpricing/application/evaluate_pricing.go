@@ -193,6 +193,9 @@ func (handler *EvaluatePricingHandler) settleAgainstExisting(
 	if err != nil {
 		return EvaluatePricingResult{outcome: EvaluationConflict}
 	}
+	// 单位换算的系数同理借原评价记下的（ADR-0346 决定三）：目录此刻可能已随发版换了，而这里要判的是同一次
+	// 计算的重复请求，不是目录变没变；原评价没有换算记录时照旧不换算。
+	request = request.WithRecordedUnitConversions(existing.UnitConversions())
 	replayed := domain.EvaluatePricing(request)
 	if replayed.SemanticDigest() != existing.SemanticDigest() {
 		return EvaluatePricingResult{outcome: EvaluationConflict}

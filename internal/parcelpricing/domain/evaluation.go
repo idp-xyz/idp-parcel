@@ -183,6 +183,10 @@ type EvaluationRequest struct {
 	// requestReference 是这份评价为哪一份 SA 评价请求而形成（票 sa-cc/11 裁决 2），可缺席：PP 内部或测试路径
 	// 形成的评价没有它。它不是计算输入，与 replayOf 同一族——随评价入册、供读口按它取，不进任何摘要。
 	requestReference *EvaluationRequestReference
+	// conversionsFrozen 为真时单位换算只认 recordedConversions 里记下的系数、不查目录（ADR-0346 决定三）：
+	// 重放带原评价记下的，同标识重复请求借原评价记下的。首次评价为假，系数取自目录并记进评价。
+	conversionsFrozen   bool
+	recordedConversions []UnitConversionStep
 }
 
 // WithRequestReference 带上回指。回指随评价入册、读口可按它取；它**不是计算输入**：不进 semanticDigest 也不进
@@ -271,6 +275,10 @@ func NewReplayEvaluationRequest(
 		expectedManifest:         &manifest,
 		expectedContentDigest:    original.planContentDigest,
 		expectedCanonicalization: original.planCanonicalization,
+		// 重放按原评价记下的换算系数重算，不重新查目录（ADR-0346 决定三）：目录随发版会变，而重放要重现当初那次。
+		// 原评价没有换算记录（单位一致，或在换算接入之前答过单位不一致）时记录为空，重放照旧不换算。
+		conversionsFrozen:   true,
+		recordedConversions: append([]UnitConversionStep(nil), original.unitConversions...),
 	}, nil
 }
 
@@ -319,9 +327,12 @@ type PricingEvaluation struct {
 	// amountRounding 是本次评价按卡上策略做过的每一次取整（ADR-0107）：逐行的先于换算后的，
 	// 换算后的先于合计的。合计不再等于费用行之和时，差在这里可复算。
 	amountRounding []AmountRoundingStep
-	issues         []EvaluationIssue
-	explanation    []string
-	semanticDigest string
+	// unitConversions 是本次评价做过的单位换算（ADR-0346）：原值与原单位、换算后值与目标单位、所用系数。
+	// 只进快照，不进规范化文档——换算后的值已经落在摘要覆盖的计价重量里，既有评价的摘要因此一个字节不动。
+	unitConversions []UnitConversionStep
+	issues          []EvaluationIssue
+	explanation     []string
+	semanticDigest  string
 }
 
 // amountPrecisionUndeclaredIssue 是 ADR-0107 Decision 四那条结构化问题项的编码：卡没声明金额取整
@@ -453,7 +464,19 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 	}
 
+	// 先按不换算的老路算：单位本来就一致的评价走的就是原函数，结果与换算接入之前逐字节相同，这是「不改变任何
+	// 今天已经算对的评价」的结构保证。只有老路答了单位不一致，才带着换算器再算一遍（ADR-0346 决定二）。
+	// 换算记录无论后面成败都留在评价上：换算之后才待判断的评价（如换算了实重、尺寸还没到），重放要靠这条记录
+	// 才走得到同一个待判断。
 	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, floors...)
+	if errors.Is(err, ErrWeightUnitMismatch) || errors.Is(err, ErrLengthUnitMismatch) {
+		converter := newUnitConverter(request.conversionsFrozen, request.recordedConversions)
+		pricingWeight, err = calculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, converter, floors...)
+		evaluation.unitConversions = converter.recordedSteps()
+		for _, step := range evaluation.unitConversions {
+			evaluation.explanation = append(evaluation.explanation, step.explain())
+		}
+	}
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
@@ -895,6 +918,9 @@ func (evaluation PricingEvaluation) valid() bool {
 		}
 	}
 	if evaluation.pricingWeight != nil && !evaluation.pricingWeight.valid() {
+		return false
+	}
+	if !evaluation.validUnitConversions() {
 		return false
 	}
 	if evaluation.matchedRate != nil && !evaluation.matchedRate.valid() {

@@ -276,6 +276,18 @@ func TestConvertRefusesCrossCategoryAndUnknownUnits(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0335 决定四——Convert 收到 nil 报 ErrNilValue 而不是 panic；先于单位码检查，未知单位也不改变这一点。
+func TestConvertRefusesANilValueInsteadOfPanicking(t *testing.T) {
+	t.Parallel()
+
+	if _, err := Convert(nil, "KG", "LB"); !errors.Is(err, ErrNilValue) {
+		t.Errorf("nil 量应报 ErrNilValue，得到 %v", err)
+	}
+	if _, err := Convert(nil, "STONE", "KG"); !errors.Is(err, ErrNilValue) {
+		t.Errorf("nil 量与未知单位并存时仍先报 ErrNilValue，得到 %v", err)
+	}
+}
+
 // Covers: ADR-0335 决定六——检索按码或名称（不分大小写、子串），空检索答全表，大洲 / 类别过滤；列表交回副本，改它不影响目录。
 func TestSearchAndListing(t *testing.T) {
 	t.Parallel()

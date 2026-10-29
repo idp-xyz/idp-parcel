@@ -209,6 +209,49 @@ func amountRoundingStepFrom(snapshot amountRoundingStepSnapshot) AmountRoundingS
 	}
 }
 
+// unitConversionSnapshot 是一次单位换算记录的快照形状（ADR-0346）：只进快照不进规范化文档，旧快照没有这一格照样读回、
+// 视为没有换算。系数是文本——有限小数的十进制或既约分数——不经浮点。
+type unitConversionSnapshot struct {
+	Quantity  string            `json:"quantity"`
+	From      string            `json:"from"`
+	To        string            `json:"to"`
+	Factor    string            `json:"factor"`
+	Original  []decimalSnapshot `json:"original"`
+	Converted []decimalSnapshot `json:"converted"`
+	Exact     bool              `json:"exact"`
+	Places    uint32            `json:"places,omitempty"`
+}
+
+func unitConversionSnapshotOf(step UnitConversionStep) unitConversionSnapshot {
+	snapshot := unitConversionSnapshot{
+		Quantity: string(step.quantity), From: step.from, To: step.to, Factor: step.factor,
+		Original:  make([]decimalSnapshot, 0, len(step.original)),
+		Converted: make([]decimalSnapshot, 0, len(step.converted)),
+		Exact:     step.exact, Places: step.places,
+	}
+	for _, value := range step.original {
+		snapshot.Original = append(snapshot.Original, decimalOf(value))
+	}
+	for _, value := range step.converted {
+		snapshot.Converted = append(snapshot.Converted, decimalOf(value))
+	}
+	return snapshot
+}
+
+func unitConversionStepFrom(snapshot unitConversionSnapshot) UnitConversionStep {
+	step := UnitConversionStep{
+		quantity: ConvertedQuantity(snapshot.Quantity), from: snapshot.From, to: snapshot.To, factor: snapshot.Factor,
+		exact: snapshot.Exact, places: snapshot.Places,
+	}
+	for _, value := range snapshot.Original {
+		step.original = append(step.original, decimalFrom(value))
+	}
+	for _, value := range snapshot.Converted {
+		step.converted = append(step.converted, decimalFrom(value))
+	}
+	return step
+}
+
 type evaluationSnapshot struct {
 	ID       string  `json:"id"`
 	ReplayOf *string `json:"replayOf,omitempty"`
@@ -232,6 +275,7 @@ type evaluationSnapshot struct {
 	Conversion           *conversionSnapshot          `json:"conversion,omitempty"`
 	Comparison           *comparisonSnapshot          `json:"comparison,omitempty"`
 	AmountRounding       []amountRoundingStepSnapshot `json:"amountRounding,omitempty"`
+	UnitConversions      []unitConversionSnapshot     `json:"unitConversions,omitempty"`
 	Issues               []issueSnapshot              `json:"issues"`
 	Explanation          []string                     `json:"explanation"`
 	SemanticDigest       string                       `json:"semanticDigest"`
@@ -312,6 +356,9 @@ func MarshalEvaluationSnapshot(evaluation PricingEvaluation) ([]byte, error) {
 	for _, step := range evaluation.amountRounding {
 		document.AmountRounding = append(document.AmountRounding, amountRoundingStepOf(step))
 	}
+	for _, step := range evaluation.unitConversions {
+		document.UnitConversions = append(document.UnitConversions, unitConversionSnapshotOf(step))
+	}
 	for _, issue := range evaluation.issues {
 		document.Issues = append(document.Issues, issueSnapshotOf(issue))
 	}
@@ -367,6 +414,9 @@ func RehydrateEvaluationSnapshot(raw []byte) (PricingEvaluation, error) {
 	}
 	for _, step := range document.AmountRounding {
 		evaluation.amountRounding = append(evaluation.amountRounding, amountRoundingStepFrom(step))
+	}
+	for _, step := range document.UnitConversions {
+		evaluation.unitConversions = append(evaluation.unitConversions, unitConversionStepFrom(step))
 	}
 	if document.Total != nil {
 		total := moneyFrom(*document.Total)
