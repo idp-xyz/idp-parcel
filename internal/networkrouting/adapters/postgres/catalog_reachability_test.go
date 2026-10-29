@@ -71,7 +71,7 @@ func (fixture *catalogReachFixture) registered(t *testing.T, register func(ctx c
 	})
 }
 
-// seedNetwork 登一张最小合成网：寄件国 XA 的收寄枢纽经口岸到收件国 XB 的末端，一条线路两段，一版适用于
+// seedNetwork 登一张最小合成网：寄件国 CN 的收寄枢纽经口岸到收件国 SG 的末端，一条线路两段，一版适用于
 // 本服务目的的路由策略。共九笔登记，目录修订锚随之到 9。
 func (fixture *catalogReachFixture) seedNetwork(t *testing.T) {
 	t.Helper()
@@ -103,9 +103,9 @@ func (fixture *catalogReachFixture) seedNetwork(t *testing.T) {
 	})
 	for _, area := range []ports.ServiceAreaDefinitionVersion{
 		{Code: "SYN-AREA-XA", Version: 1, EffectiveFrom: catalogReachEffective,
-			HasCoverage: true, CoverageCountry: "XA", OriginNodes: []string{"SYN-NODE-ORIGIN"}},
+			HasCoverage: true, CoverageCountry: "CN", OriginNodes: []string{"SYN-NODE-ORIGIN"}},
 		{Code: "SYN-AREA-XB-10", Version: 1, EffectiveFrom: catalogReachEffective,
-			HasCoverage: true, CoverageCountry: "XB", PostalPrefixes: []string{"10"},
+			HasCoverage: true, CoverageCountry: "SG", PostalPrefixes: []string{"10"},
 			DestinationNodes: []string{"SYN-NODE-LAST-MILE"}},
 	} {
 		fixture.registered(t, func(ctx context.Context) (application.RegisterCatalogResult, error) {
@@ -197,7 +197,7 @@ func (fixture *catalogReachFixture) key(t *testing.T, parcel, purpose string) do
 
 func catalogReachGeo(deliveryCountry, deliveryPostal string) ports.RequestCarriedContent {
 	return ports.RequestCarriedContent{Geo: domain.NewGeoResolutionProjection(
-		domain.NewGeoResolutionSide("XA", true, "", false),
+		domain.NewGeoResolutionSide("CN", true, "", false),
 		domain.NewGeoResolutionSide(deliveryCountry, deliveryCountry != "", deliveryPostal, deliveryPostal != ""),
 	)}
 }
@@ -235,7 +235,7 @@ func TestReachabilityOverARealCatalogFormsEachOfTheThreeValues(t *testing.T) {
 		want    domain.ReachabilityValue
 		reason  string
 	}{
-		{"SYN-PARCEL-REACHABLE", catalogReachGeo("XB", "100200"), domain.Reachable, ""},
+		{"SYN-PARCEL-REACHABLE", catalogReachGeo("SG", "100200"), domain.Reachable, ""},
 		{"SYN-PARCEL-UNREACHABLE", catalogReachGeo("XC", "100200"), domain.Unreachable,
 			"SERVICE_AREA_EXCLUDES_DESTINATION/SYN-AREA-XB-10@1"},
 		{"SYN-PARCEL-INSUFFICIENT", catalogReachGeo("", "100200"), domain.InsufficientEvidence,
@@ -279,7 +279,7 @@ func TestReachabilityOverARealCatalogAnswersUnconfigured(t *testing.T) {
 	fixture := newCatalogReachFixture(t)
 
 	result := fixture.assess(t, fixture.key(t, "SYN-PARCEL-EMPTY", catalogReachPurpose),
-		"SYN-CORRELATION-EMPTY", catalogReachGeo("XB", "100200"))
+		"SYN-CORRELATION-EMPTY", catalogReachGeo("SG", "100200"))
 	if result.Outcome() != application.JudgmentNotFormed ||
 		result.NotFormedReason() != application.NetworkEvidenceNotConfigured {
 		t.Fatalf("空目录：outcome = %s reason = %s，想要 NETWORK_EVIDENCE_NOT_CONFIGURED", result.Outcome(), result.NotFormedReason())
@@ -287,7 +287,7 @@ func TestReachabilityOverARealCatalogAnswersUnconfigured(t *testing.T) {
 
 	fixture.seedNetwork(t)
 	result = fixture.assess(t, fixture.key(t, "SYN-PARCEL-OTHER-PURPOSE", "SYN-PURPOSE-EXPRESS"),
-		"SYN-CORRELATION-OTHER-PURPOSE", catalogReachGeo("XB", "100200"))
+		"SYN-CORRELATION-OTHER-PURPOSE", catalogReachGeo("SG", "100200"))
 	if result.Outcome() != application.JudgmentNotFormed ||
 		result.NotFormedReason() != application.NetworkEvidenceNotConfigured {
 		t.Fatalf("无适用策略：outcome = %s reason = %s，想要 NETWORK_EVIDENCE_NOT_CONFIGURED", result.Outcome(), result.NotFormedReason())
@@ -307,7 +307,7 @@ func TestAOneRowCatalogChangeSupersedesTheJudgment(t *testing.T) {
 	fixture := newCatalogReachFixture(t)
 	fixture.seedNetwork(t)
 	key := fixture.key(t, "SYN-PARCEL-REVISION", catalogReachPurpose)
-	if result := fixture.assess(t, key, "SYN-CORRELATION-REVISION", catalogReachGeo("XB", "100200")); result.Outcome() != application.JudgmentFormed {
+	if result := fixture.assess(t, key, "SYN-CORRELATION-REVISION", catalogReachGeo("SG", "100200")); result.Outcome() != application.JudgmentFormed {
 		t.Fatalf("形成判断：outcome = %s reason = %s", result.Outcome(), result.NotFormedReason())
 	}
 
@@ -330,7 +330,7 @@ func TestAOneRowCatalogChangeSupersedesTheJudgment(t *testing.T) {
 			},
 		})
 	})
-	evidence, configured, err := fixture.evidence(t).LoadNetworkEvidence(t.Context(), key, catalogReachGeo("XB", "100200"))
+	evidence, configured, err := fixture.evidence(t).LoadNetworkEvidence(t.Context(), key, catalogReachGeo("SG", "100200"))
 	if err != nil || !configured || evidence.ViewRevision.String() != "10" {
 		t.Fatalf("改一笔后视图修订 = %q（configured=%v err=%v），想要 10", evidence.ViewRevision, configured, err)
 	}

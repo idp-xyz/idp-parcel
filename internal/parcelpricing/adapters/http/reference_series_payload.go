@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // 本文件是运营操作者面的序列登记载荷（票 pricing-reference-series-operations/08）：管理台逐字段
@@ -118,6 +119,10 @@ func (payload ReferenceSeriesRegistrationPayload) Registration(
 	}
 	if payload.Currency != "" {
 		currency, err := domain.NewCurrency(payload.Currency)
+		if err == nil {
+			// 新登记的参照序列只收产品内置币种目录里的码（ADR-0345 决定五）；NewCurrency 与读回不查目录。
+			err = refdata.CheckCurrency(payload.Currency)
+		}
 		if err != nil {
 			return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: currency: %v", ErrMalformedRequest, err)
 		}

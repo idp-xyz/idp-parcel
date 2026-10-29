@@ -17,27 +17,27 @@ const legalEntityProfileBatchJSON = `{
   "profiles": [
     {
       "legalEntityId": "legal-acme", "revision": 1, "basis": "SYN-PROFILE-BASIS-01", "effectiveFrom": "2026-01-02T00:00:00Z",
-      "registeredAddress": {"country": "XA", "lines": ["SYN 一号路 1 号"]},
+      "registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]},
       "taxRegistrationNumbers": [{"typeCode": "SYN-TAX", "number": "SYN-TAX-0001"}],
       "contacts": [{"name": "SYN 联系人", "email": "syn@example.invalid"}]
     },
     {
       "legalEntityId": "legal-acme", "revision": 2, "basis": "SYN-PROFILE-BASIS-02", "effectiveFrom": "2026-03-01T00:00:00Z",
-      "registeredAddress": {"country": "XA", "lines": ["SYN 一号路 1 号"]},
+      "registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]},
       "taxRegistrationNumbers": [{"typeCode": "SYN-TAX", "number": "SYN-TAX-0001"}],
       "invoiceTitle": "SYN Acme 抬头"
     }
   ]
 }`
 
-// legalEntityProfileSetupTypes 与 legalEntityProfileSetupParties 给端到端用例铺底：XA 两层各一类型、一个带 XA 身份层的
+// legalEntityProfileSetupTypes 与 legalEntityProfileSetupParties 给端到端用例铺底：CN 两层各一类型、一个带 CN 身份层的
 // 法人。不复用注册号类型用例的批：那一批停用了税号类型，资料修订按生效时点判号会撞上「不在用」。
 const legalEntityProfileSetupTypes = `{
   "tenantId": "tenant-1",
   "types": [
-    {"countryCode": "XA", "typeCode": "SYN-LIFETIME", "revision": 1, "name": "合成终身注册号", "layer": "IDENTITY",
+    {"countryCode": "CN", "typeCode": "SYN-LIFETIME", "revision": 1, "name": "合成终身注册号", "layer": "IDENTITY",
      "format": "SYN-[0-9]{6}", "basis": "SYN-BASIS-01", "effectiveFrom": "2026-01-01T00:00:00Z"},
-    {"countryCode": "XA", "typeCode": "SYN-TAX", "revision": 1, "name": "合成税务登记号", "layer": "PROFILE",
+    {"countryCode": "CN", "typeCode": "SYN-TAX", "revision": 1, "name": "合成税务登记号", "layer": "PROFILE",
      "format": "SYN-TAX-[0-9]{4}", "basis": "SYN-BASIS-02", "effectiveFrom": "2026-01-01T00:00:00Z"}
   ]
 }`
@@ -49,12 +49,12 @@ const legalEntityProfileSetupParties = `{
   ],
   "legalEntities": [
     {"legalEntityId": "legal-acme", "partyId": "party-acme", "revision": 1, "basis": "REG/legal-acme", "effectiveFrom": "2026-01-02T00:00:00Z",
-     "registrationCountry": "XA", "lifetimeRegistrationNumbers": [{"typeCode": "SYN-LIFETIME", "number": "SYN-000001"}]}
+     "registrationCountry": "CN", "lifetimeRegistrationNumbers": [{"typeCode": "SYN-LIFETIME", "number": "SYN-000001"}]}
   ]
 }`
 
 // validProfileRest 是一项资料里除法人、修订与依据之外的最小合格各格；拒收用例各在它上面改一处。
-const validProfileRest = `"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "XA", "lines": ["SYN 一号路 1 号"]}`
+const validProfileRest = `"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]}`
 
 func profileBatchOf(rest string) string {
 	return `{"tenantId": "tenant-1", "profiles": [{"legalEntityId": "legal-acme", "revision": 1, "basis": "SYN-PROFILE-BASIS-01", ` + rest + `}]}`
@@ -125,9 +125,9 @@ func TestLegalEntityProfileBatchTranslationRefusesBeforeTouchingTheDatabase(t *t
 	cases := map[string]string{
 		"未知字段":   profileBatchOf(validProfileRest + `, "nickname": "x"`),
 		"缺注册地址":  profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z"`),
-		"空地址行":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "XA", "lines": []}`),
+		"空地址行":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "CN", "lines": []}`),
 		"小写国家":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "xa", "lines": ["SYN 一号路 1 号"]}`),
-		"缺生效时点":  profileBatchOf(`"registeredAddress": {"country": "XA", "lines": ["SYN 一号路 1 号"]}`),
+		"缺生效时点":  profileBatchOf(`"registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]}`),
 		"空抬头":    profileBatchOf(validProfileRest + `, "invoiceTitle": ""`),
 		"联系人没名字": profileBatchOf(validProfileRest + `, "contacts": [{"email": "syn@example.invalid"}]`),
 		"税号缺类型":  profileBatchOf(validProfileRest + `, "taxRegistrationNumbers": [{"number": "SYN-TAX-0001"}]`),
@@ -164,9 +164,9 @@ func TestRegisterLegalEntityProfilesBatchLandsRepliesAndRefuses(t *testing.T) {
 	}
 
 	for name, body := range map[string]string{
-		"同修订异内容":  singleLegalEntityProfile("legal-acme", "1", "XA", "SYN 二号路 2 号"),
-		"地址国家对不上": singleLegalEntityProfile("legal-acme", "3", "XB", "SYN 境外路 1 号"),
-		"法人未登记":   singleLegalEntityProfile("legal-ghost", "1", "XA", "SYN 一号路 1 号"),
+		"同修订异内容":  singleLegalEntityProfile("legal-acme", "1", "CN", "SYN 二号路 2 号"),
+		"地址国家对不上": singleLegalEntityProfile("legal-acme", "3", "SG", "SYN 境外路 1 号"),
+		"法人未登记":   singleLegalEntityProfile("legal-ghost", "1", "CN", "SYN 一号路 1 号"),
 	} {
 		if code := runCLI(t, dsn, "register-legal-entity-profiles", "-input", batchFile(t, body)); code != exitAttention {
 			t.Fatalf("%s exit = %d, want %d", name, code, exitAttention)

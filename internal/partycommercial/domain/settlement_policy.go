@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 var (
@@ -35,6 +37,20 @@ type CurrencyCode struct{ requiredValue }
 func NewCurrencyCode(value string) (CurrencyCode, error) {
 	required, err := newRequiredValue("currency code", value)
 	return CurrencyCode{required}, err
+}
+
+// NewCatalogueCurrencyCode 是新登记入口（发布载荷的结算政策币种）用的币种码构造门：先过 NewCurrencyCode 的非空，再要求码在
+// 产品内置的币种目录里（ADR-0345 决定五）。它是另立的一个函数而不是改 NewCurrencyCode：后者也是读回已发布版本的重建门，
+// 目录随发版变，读回不能因为目录更新而读不出已在册的版本。
+func NewCatalogueCurrencyCode(value string) (CurrencyCode, error) {
+	code, err := NewCurrencyCode(value)
+	if err != nil {
+		return CurrencyCode{}, err
+	}
+	if err := refdata.CheckCurrency(value); err != nil {
+		return CurrencyCode{}, err
+	}
+	return code, nil
 }
 
 // SettlementMethod 有意只封闭在两个取值。第三个取值——客户级默认值——正是本上下文

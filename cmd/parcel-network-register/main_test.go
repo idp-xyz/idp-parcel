@@ -466,13 +466,13 @@ func TestExecuteTranslatesTheDeclaredRankingForm(t *testing.T) {
 func TestExecuteTranslatesServiceAreaCoverage(t *testing.T) {
 	covered := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-AREA-XA","version":1,
 		"effective_from":"2026-08-20T12:00:00Z",
-		"coverage":{"country":"XA","postal_prefixes":["20","10"],
+		"coverage":{"country":"CN","postal_prefixes":["20","10"],
 			"origin_nodes":["SYN-NODE-A"],"destination_nodes":["SYN-NODE-B"]}}`)
 	double := &registryDouble{}
 	if message, code := execute(t.Context(), kindServiceArea, covered, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
 		t.Fatalf("message=%q code=%d, 想要 REGISTERED/0", message, code)
 	}
-	if area := double.area; area == nil || !area.HasCoverage || area.CoverageCountry != "XA" ||
+	if area := double.area; area == nil || !area.HasCoverage || area.CoverageCountry != "CN" ||
 		strings.Join(area.PostalPrefixes, ",") != "10,20" ||
 		strings.Join(area.OriginNodes, ",") != "SYN-NODE-A" || strings.Join(area.DestinationNodes, ",") != "SYN-NODE-B" {
 		t.Fatalf("覆盖没有译成领域规整后的形状到达写入口：%+v", double.area)

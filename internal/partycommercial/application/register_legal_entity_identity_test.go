@@ -63,14 +63,14 @@ func numberType(
 	return registration
 }
 
-// newFakeNumberTypes 登 XA 一国两类：身份层终身注册号与资料层税务登记号；XB 故意不登。国家 / 地区
-// 取 ISO 3166 用户自定义码，类型与格式全为合成值。
+// newFakeNumberTypes 登 CN 一国两类：身份层终身注册号与资料层税务登记号；SG 故意不登。国家 / 地区
+// 取目录里的真码，类型与格式全为合成值。
 func newFakeNumberTypes(t *testing.T) *fakeNumberTypes {
 	t.Helper()
 	return &fakeNumberTypes{byCountry: map[string][]domain.RegistrationNumberTypeRegistration{
-		"XA": {
-			numberType(t, "XA", "SYN-XA-LIFETIME", domain.RegistrationNumberIdentityLayer, `SYN-XA-[0-9]{6}`),
-			numberType(t, "XA", "SYN-XA-TAX", domain.RegistrationNumberProfileLayer, `SYN-XA-TAX-[0-9]{4}`),
+		"CN": {
+			numberType(t, "CN", "SYN-XA-LIFETIME", domain.RegistrationNumberIdentityLayer, `SYN-XA-[0-9]{6}`),
+			numberType(t, "CN", "SYN-XA-TAX", domain.RegistrationNumberProfileLayer, `SYN-XA-TAX-[0-9]{4}`),
 		},
 	}}
 }
@@ -129,12 +129,12 @@ func TestLegalEntityIdentityLayerGates(t *testing.T) {
 	result, err := handler.RegisterLegalEntity(ctx, bare)
 	expectNotAccepted(t, result, err, "必须带注册国家 / 地区")
 
-	onlyNumbers := withLegalEntityIdentity(t, bare, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	onlyNumbers := withLegalEntityIdentity(t, bare, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	onlyNumbers.RegistrationCountry = nil
 	result, err = handler.RegisterLegalEntity(ctx, onlyNumbers)
 	expectNotAccepted(t, result, err, "缺注册国家 / 地区")
 
-	onlyCountry := withLegalEntityIdentity(t, bare, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	onlyCountry := withLegalEntityIdentity(t, bare, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	onlyCountry.LifetimeNumbers = nil
 	result, err = handler.RegisterLegalEntity(ctx, onlyCountry)
 	expectNotAccepted(t, result, err, "缺终身注册号")
@@ -142,10 +142,10 @@ func TestLegalEntityIdentityLayerGates(t *testing.T) {
 	cases := []struct {
 		name, country, code, number, mentions string
 	}{
-		{"国家未登记", "XB", "SYN-XB-LIFETIME", "SYN-XB-000001", "未登记：先在目录登记"},
-		{"类型未登记", "XA", "SYN-XA-OTHER", "SYN-XA-000001", "SYN-XA-OTHER"},
-		{"号属资料层", "XA", "SYN-XA-TAX", "SYN-XA-TAX-0001", "属资料层"},
-		{"格式不符", "XA", "SYN-XA-LIFETIME", "SYN-XA-12", "不合类型"},
+		{"国家未登记", "SG", "SYN-XB-LIFETIME", "SYN-XB-000001", "未登记：先在目录登记"},
+		{"类型未登记", "CN", "SYN-XA-OTHER", "SYN-XA-000001", "SYN-XA-OTHER"},
+		{"号属资料层", "CN", "SYN-XA-TAX", "SYN-XA-TAX-0001", "属资料层"},
+		{"格式不符", "CN", "SYN-XA-LIFETIME", "SYN-XA-12", "不合类型"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestLegalEntityIdentityLayerGates(t *testing.T) {
 		t.Fatal("refused registrations must not write a byte")
 	}
 
-	good := withLegalEntityIdentity(t, bare, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	good := withLegalEntityIdentity(t, bare, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	result, err = handler.RegisterLegalEntity(ctx, good)
 	if err != nil || result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("registration = (%v, %v), want REGISTERED", result.Outcome(), err)
@@ -168,9 +168,81 @@ func TestLegalEntityIdentityLayerGates(t *testing.T) {
 		t.Fatalf("replay = (%v, %v), want ALREADY_REGISTERED", result.Outcome(), err)
 	}
 	stored, _, _ := registry.LoadLatestLegalEntity(ctx, bare.Tenant, bare.Entity)
-	if layer, has := stored.IdentityLayer(); !has || layer.Country().String() != "XA" {
-		t.Fatalf("stored identity layer = %+v (has %v), want country XA", layer, has)
+	if layer, has := stored.IdentityLayer(); !has || layer.Country().String() != "CN" {
+		t.Fatalf("stored identity layer = %+v (has %v), want country CN", layer, has)
 	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——新登记法人的注册国家只收内置国家 / 地区目录里的码：形状合法（两位大写）而目录外的 ZZ，哪怕租户
+// 已在注册号类型目录里为它登了类型，也在目录成员这道门上答未受理、一个字节不写；目录内的码照常落册。门只拦新登记与新修订，
+// 已在册的目录外法人读回与重放不受牵连。
+func TestLegalEntityRegistrationCountryMustBeInTheBuiltInCountryCatalogue(t *testing.T) {
+	registry := newFakePartyRegistry()
+	numberTypes := newFakeNumberTypes(t)
+	numberTypes.byCountry["ZZ"] = []domain.RegistrationNumberTypeRegistration{
+		numberType(t, "ZZ", "SYN-ZZ-LIFETIME", domain.RegistrationNumberIdentityLayer, `SYN-ZZ-[0-9]{6}`),
+	}
+	handler := application.NewRegisterPartyIdentityHandler(registry, numberTypes)
+	ctx := context.Background()
+	registerParty(t, handler, "tenant-1", "party-le", "运营法人参与方")
+
+	outside := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "ZZ", "SYN-ZZ-LIFETIME", "SYN-ZZ-000001")
+	result, err := handler.RegisterLegalEntity(ctx, outside)
+	expectNotAccepted(t, result, err, "不在产品内置的国家 / 地区目录里")
+	if _, found, _ := registry.LoadLatestLegalEntity(ctx, outside.Tenant, outside.Entity); found {
+		t.Fatal("目录外的注册国家不得落册一个字节")
+	}
+
+	inside := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	if result, err := handler.RegisterLegalEntity(ctx, inside); err != nil || result.Outcome() != application.PartyIdentityRegistered {
+		t.Fatalf("目录内的注册国家应照常落册：(%v, %v)", result.Outcome(), err)
+	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五、六——收紧只在写入边界：收紧之前登进册的目录外法人，同内容重放照样答已登记（修订号落在已有修订上
+// 的不经目录成员这道门），册面读回不动；对它登记新修订则要重新过这道门。
+func TestAnExistingLegalEntityOutsideTheCountryCatalogueStillReplays(t *testing.T) {
+	registry := newFakePartyRegistry()
+	numberTypes := newFakeNumberTypes(t)
+	numberTypes.byCountry["ZZ"] = []domain.RegistrationNumberTypeRegistration{
+		numberType(t, "ZZ", "SYN-ZZ-LIFETIME", domain.RegistrationNumberIdentityLayer, `SYN-ZZ-[0-9]{6}`),
+	}
+	handler := application.NewRegisterPartyIdentityHandler(registry, numberTypes)
+	ctx := context.Background()
+	registerParty(t, handler, "tenant-1", "party-le", "运营法人参与方")
+
+	command := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "ZZ", "SYN-ZZ-LIFETIME", "SYN-ZZ-000001")
+	party, _, _ := registry.LoadLatestBusinessParty(ctx, command.Tenant, command.Party)
+	entity, err := domain.NewResponsibleLegalEntity(command.Tenant, command.Entity, party.Party())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle, err := domain.NewIdentityLifecycle(command.EffectiveFrom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := domain.NewLegalEntityRegistration(entity, 1, command.Basis, lifecycle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layer, err := domain.NewLegalEntityIdentityLayer(*command.RegistrationCountry, command.LifetimeNumbers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy, err = legacy.WithIdentityLayer(layer, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.SaveLegalEntity(ctx, legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	if result, err := handler.RegisterLegalEntity(ctx, command); err != nil || result.Outcome() != application.PartyIdentityAlreadyRegistered {
+		t.Fatalf("收紧之前登进册的目录外法人，同内容重放 = (%v, %v)，want ALREADY_REGISTERED", result.Outcome(), err)
+	}
+	next := command
+	next.Revision = 2
+	result, err := handler.RegisterLegalEntity(ctx, next)
+	expectNotAccepted(t, result, err, "不在产品内置的国家 / 地区目录里")
 }
 
 // Covers: 票 legal-entity-profile/02「不作变更，录错走更正」——修订改了号必须带身份更正依据，不带即拒；带了即落为
@@ -182,7 +254,7 @@ func TestLegalEntityIdentityCorrectionNeedsABasis(t *testing.T) {
 	registerParty(t, handler, "tenant-1", "party-le", "运营法人参与方")
 
 	correction := identityValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
-	first := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	first := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	firstWithCorrection := first
 	firstWithCorrection.IdentityCorrectionBasis = &correction
 	result, err := handler.RegisterLegalEntity(ctx, firstWithCorrection)
@@ -197,11 +269,11 @@ func TestLegalEntityIdentityCorrectionNeedsABasis(t *testing.T) {
 	result, err = handler.RegisterLegalEntity(ctx, firstWithCorrection)
 	expectNotAccepted(t, result, err, "首笔登记")
 
-	changed := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")
+	changed := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "CN", "SYN-XA-LIFETIME", "SYN-XA-000009")
 	result, err = handler.RegisterLegalEntity(ctx, changed)
 	expectNotAccepted(t, result, err, "不作变更")
 
-	unchanged := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	unchanged := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	unchanged.IdentityCorrectionBasis = &correction
 	result, err = handler.RegisterLegalEntity(ctx, unchanged)
 	expectNotAccepted(t, result, err, "身份更正依据只随改了身份层的修订出现")
@@ -250,7 +322,7 @@ func TestLegacyLegalEntityRevisionReplaysAndBackfills(t *testing.T) {
 	result, err = handler.RegisterLegalEntity(ctx, legalEntityCommand(t, 2))
 	expectNotAccepted(t, result, err, "必须带注册国家 / 地区")
 
-	backfill := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	backfill := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	result, err = handler.RegisterLegalEntity(ctx, backfill)
 	if err != nil || result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("backfill = (%v, %v), want REGISTERED", result.Outcome(), err)
@@ -265,7 +337,7 @@ func TestLegalEntityRegistrationWithoutNumberTypesFailsLoudly(t *testing.T) {
 	registerParty(t, handler, "tenant-1", "party-le", "运营法人参与方")
 
 	_, err := handler.RegisterLegalEntity(ctx,
-		withLegalEntityIdentity(t, legalEntityCommand(t, 1), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001"))
+		withLegalEntityIdentity(t, legalEntityCommand(t, 1), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001"))
 	if err == nil || !strings.Contains(err.Error(), "未装配") {
 		t.Fatalf("error = %v, want a technical failure naming the missing catalogue", err)
 	}

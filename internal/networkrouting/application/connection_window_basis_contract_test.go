@@ -56,9 +56,9 @@ func connectionContractCatalog(t *testing.T, connections ...ports.ConnectionDefi
 		},
 		ServiceAreas: []ports.ServiceAreaDefinitionVersion{
 			{Code: "SYN-AREA-XA", Version: 1, EffectiveFrom: catalogEffectiveFrom,
-				HasCoverage: true, CoverageCountry: "XA", OriginNodes: []string{"SYN-NODE-A"}},
+				HasCoverage: true, CoverageCountry: "CN", OriginNodes: []string{"SYN-NODE-A"}},
 			{Code: "SYN-AREA-XB-10", Version: 1, EffectiveFrom: catalogEffectiveFrom,
-				HasCoverage: true, CoverageCountry: "XB", PostalPrefixes: []string{"10"},
+				HasCoverage: true, CoverageCountry: "SG", PostalPrefixes: []string{"10"},
 				DestinationNodes: []string{"SYN-NODE-C", "SYN-NODE-C2"}},
 		},
 		Strategies: []ports.RouteStrategyDefinitionVersion{
@@ -88,7 +88,7 @@ func pathOverCatalog(t *testing.T, catalog *catalogReadDouble) ports.CandidatePa
 		t.Fatalf("构造目录证据视图：%v", err)
 	}
 	evidence, configured, err := view.LoadInitialRouteEvidence(t.Context(), catalogInitialRouteKey(t),
-		carriedGeo("XA", "", "XB", "100200"))
+		carriedGeo("CN", "", "SG", "100200"))
 	if err != nil || !configured {
 		t.Fatalf("configured=%v err=%v", configured, err)
 	}

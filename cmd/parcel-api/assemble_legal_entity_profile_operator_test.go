@@ -42,7 +42,7 @@ func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealD
 	const target = "/commercial-legal-entity-profile-registrations"
 	endpoint := commercialhttp.NewRegisterLegalEntityProfileEndpoint(operatorRegistriesForRegistryWriter(t).commercial, registration.legalEntityProfile)
 	current := `{"legalEntityId":"SYN-LE-LEP05","revision":1,"basis":"SYN-PROFILE-BASIS/lep05-r1","effectiveFrom":"2026-02-01T00:00:00Z",` +
-		`"registeredAddress":{"country":"XA","lines":["SYN 合成路 5 号"]},` +
+		`"registeredAddress":{"country":"CN","lines":["SYN 合成路 5 号"]},` +
 		`"taxRegistrationNumbers":[{"typeCode":"SYN-XA-TAX","number":"SYN-XA-TAX-0005"}],"invoiceTitle":"SYN 合成抬头"}`
 
 	refused := postAsOperator(endpoint, target, presentedOperatorToken, `{"tenantId":"SYN-TENANT-01","profiles":[`+current+`]}`)
@@ -60,7 +60,7 @@ func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealD
 		t.Fatalf("合规载荷答 %d %s，want 201 REGISTERED", landed.Code, landed.Body.String())
 	}
 	future := `{"legalEntityId":"SYN-LE-LEP05","revision":2,"basis":"SYN-PROFILE-BASIS/lep05-r2","effectiveFrom":"2030-01-01T00:00:00Z",` +
-		`"registeredAddress":{"country":"XA","lines":["SYN 合成新址"]},"invoiceTitle":"SYN 合成抬头"}`
+		`"registeredAddress":{"country":"CN","lines":["SYN 合成新址"]},"invoiceTitle":"SYN 合成抬头"}`
 	if landed := postAsOperator(endpoint, target, presentedOperatorToken, `{"profiles":[`+future+`]}`); landed.Code != http.StatusCreated {
 		t.Fatalf("未来生效的新修订答 %d %s，want 201", landed.Code, landed.Body.String())
 	}

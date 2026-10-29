@@ -33,7 +33,7 @@ func fundsFactEventID(fact, version string) string {
 func adoptDocumentFor(version string, amountMinor string) string {
 	return `{
 		"tenantId": "SYN-T1", "factRef": "SYN-FACT-1", "sourceRef": "SYN-SOURCE-BANK-1",
-		"payerRef": "SYN-PAYER-1", "kind": "RECEIPT_CONFIRMED", "currency": "XTS",
+		"payerRef": "SYN-PAYER-1", "kind": "RECEIPT_CONFIRMED", "currency": "CNY",
 		"amountMinor": ` + amountMinor + `, "version": "` + version + `",
 		"occurredAt": "2026-09-01T08:00:00Z"
 	}`

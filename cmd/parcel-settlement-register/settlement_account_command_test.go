@@ -129,7 +129,7 @@ func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T)
 		"legalEntityId": "LE-1",
 		"counterpartyId": "CP-1",
 		"direction": "RECEIVABLE",
-		"currency": "XTS",
+		"currency": "CNY",
 		"settlementPolicyId": "settle-1",
 		"responsibilityBasis": "CONTRACT-1"
 	}`)

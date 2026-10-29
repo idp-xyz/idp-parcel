@@ -33,7 +33,7 @@ func mustBuild[T any](t *testing.T, build func(string) (T, error), raw string) T
 	return value
 }
 
-// seedClaimAmounts 登一条客户赔付 5000 XTS（SYN-COMP-1，SYN-T1），一条只在 SYN-T2 的赔付（SYN-COMP-T2-ONLY），以及
+// seedClaimAmounts 登一条客户赔付 5000 CNY（SYN-COMP-1，SYN-T1），一条只在 SYN-T2 的赔付（SYN-COMP-T2-ONLY），以及
 // SYN-T1 名下一条应追偿 10000 与它的部分认可 6000（SYN-ACK-1）。
 func seedClaimAmounts(t *testing.T, db *bentopg.DB) {
 	t.Helper()
@@ -58,7 +58,7 @@ func seedClaimAmounts(t *testing.T, db *bentopg.DB) {
 			Responsibility: mustBuild(t, domain.NewResponsibilityConclusionReference, "SYN-RESPONSIBILITY-1/v1"),
 			RuleVersion:    mustBuild(t, domain.NewAmountRuleVersionReference, "SYN-CLAIM-RULE-1/v1"),
 			LegalEntity:    mustBuild(t, domain.NewLegalEntityReference, "SYN-LE-01"),
-			Currency:       mustBuild(t, domain.NewCurrencyCode, "XTS"),
+			Currency:       mustBuild(t, domain.NewCurrencyCode, "CNY"),
 			AmountMinor:    5000,
 			Period:         mustBuild(t, domain.NewBillingPeriodReference, "SYN-PERIOD-2026-08"),
 			FormedAt:       formedAt,
@@ -78,7 +78,7 @@ func seedClaimAmounts(t *testing.T, db *bentopg.DB) {
 		Counterparty:   mustBuild(t, domain.NewRecoveryCounterpartyReference, "SYN-PARTY-CARRIER-01"),
 		RuleVersion:    mustBuild(t, domain.NewAmountRuleVersionReference, "SYN-CLAIM-RULE-1/v1"),
 		LegalEntity:    mustBuild(t, domain.NewLegalEntityReference, "SYN-LE-01"),
-		Currency:       mustBuild(t, domain.NewCurrencyCode, "XTS"),
+		Currency:       mustBuild(t, domain.NewCurrencyCode, "CNY"),
 		AmountMinor:    10000,
 		FormedAt:       formedAt,
 	})
@@ -118,7 +118,7 @@ func seedClaimAmounts(t *testing.T, db *bentopg.DB) {
 func receiptDocument(fact string, amountMinor string) string {
 	return `{
 		"tenantId": "SYN-T1", "factRef": "` + fact + `", "sourceRef": "SYN-SOURCE-BANK-1",
-		"kind": "RECEIPT_CONFIRMED", "currency": "XTS", "amountMinor": ` + amountMinor + `,
+		"kind": "RECEIPT_CONFIRMED", "currency": "CNY", "amountMinor": ` + amountMinor + `,
 		"version": "` + fact + `/v1", "occurredAt": "2026-09-01T08:00:00Z"
 	}`
 }
@@ -134,7 +134,7 @@ func claimMappingDocument(mapping, fact, kind, target string) string {
 func applicationDocument(application, fact, mapping, kind, target, amountMinor string) string {
 	return `{
 		"tenantId": "SYN-T1", "applicationRef": "` + application + `", "factRef": "` + fact + `",
-		"targetCurrency": "XTS", "mappingRefs": ["` + mapping + `"],
+		"targetCurrency": "CNY", "mappingRefs": ["` + mapping + `"],
 		"allocations": [{"mappingRef": "` + mapping + `", "targetKind": "` + kind + `", "targetRef": "` + target + `",
 			"direction": "DEBIT", "amountMinor": ` + amountMinor + `}],
 		"basis": "SYN-PAYMENT-INSTRUCTION-1", "appliedAt": "2026-09-01T10:00:00Z"

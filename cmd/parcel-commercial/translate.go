@@ -111,7 +111,7 @@ func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistr
 			document.Settlement.ChargeScope); err != nil {
 			return none, err
 		}
-		if registration.SettlementCurrency, err = pcdomain.NewCurrencyCode(
+		if registration.SettlementCurrency, err = pcdomain.NewCatalogueCurrencyCode(
 			document.Settlement.Currency); err != nil {
 			return none, err
 		}

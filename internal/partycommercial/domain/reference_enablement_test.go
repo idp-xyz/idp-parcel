@@ -31,7 +31,7 @@ func enablementRegistration(
 	)
 }
 
-// Covers: ADR-0345 决定二「码必须在内置目录内」——目录里的码照常登记，目录外的码答 ErrReferenceCodeNotInCatalogue，
+// Covers: `AT-PC-074`，ADR-0345 决定三「码必须在内置目录内」——目录里的码照常登记，目录外的码答 ErrReferenceCodeNotInCatalogue，
 // 国家码与币种码各查各的目录（CN 不是币种，CNY 不是国家 / 地区）。
 func TestEnablementCodeMustBeInTheBuiltInCatalogueOfItsKind(t *testing.T) {
 	cases := []struct {
@@ -121,7 +121,7 @@ func TestEnablementSourceIsOptionalAndBounded(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定三「修订连续、生效时点不早于前一修订」。
+// Covers: `AT-PC-073`，ADR-0345 决定三「修订连续、生效时点不早于前一修订」。
 func TestEnablementRevisionsFollowOneAnotherInOrder(t *testing.T) {
 	first, err := enablementRegistration(t, domain.ReferenceKindCountry, "CN", 1, domain.ReferenceEnablementEnabled, referenceEnablementBase)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestEnablementRevisionsFollowOneAnotherInOrder(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0345 决定三「当前状态由生效时点不晚于此刻的最新一行导出」——没有生效的行（含全是未来生效）答不出来，
+// Covers: `AT-PC-075`，ADR-0345 决定三「当前状态由生效时点不晚于此刻的最新一行导出」——没有生效的行（含全是未来生效）答不出来，
 // 就是未配置；停用后再启用，后到者取胜；同刻生效取修订号大的；未来生效的行在到点之前不说话。
 func TestEnablementStandingIsTheLatestRowEffectiveByThatMoment(t *testing.T) {
 	row := func(revision int, status domain.ReferenceEnablementStatus, at time.Time) domain.ReferenceEnablementRegistration {

@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/application"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // 本文件把各种登记输入 JSON 折成用例命令。翻译严格且零默认：未知字段拒收（打错字段名
@@ -115,6 +116,11 @@ func subledgerCommandFromJSON(raw []byte) (application.OpenSubledgerCommand, err
 		document.CustomerRef, document.LegalEntityRef, document.Currency, document.ChannelRef)
 	if err != nil {
 		return none, err
+	}
+	// 新开分户账只收产品内置币种目录里的码（ADR-0345 决定五）。门只在开立这一入口：记账、对账等其余入口共用的
+	// ledgerKeyFrom 不查目录，已在册的账照样读得回、照样记账。
+	if err := refdata.CheckCurrency(document.Currency); err != nil {
+		return none, fmt.Errorf("分户账开立：%w", err)
 	}
 	custody, err := domain.NewCustodyBasisReference(document.CustodyBasisRef)
 	if err != nil {

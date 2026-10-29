@@ -47,7 +47,7 @@ func (double *legalEntityProfileRegistrarDouble) Register(
 func legalEntityProfileAnswers(t *testing.T) (registered, refused application.LegalEntityProfileResult) {
 	t.Helper()
 	handler := application.NewRegisterLegalEntityProfileHandler(&profileRegistryDouble{}, legalEntityLookupDouble{t: t}, nil)
-	address, err := domain.NewRegisteredAddress(catValue(t, domain.NewRegistrationCountryCode, "XA"), []string{"SYN 一号路"})
+	address, err := domain.NewRegisteredAddress(catValue(t, domain.NewRegistrationCountryCode, "CN"), []string{"SYN 一号路"})
 	if err != nil {
 		t.Fatalf("new address: %v", err)
 	}
@@ -91,7 +91,7 @@ func (double *profileRegistryDouble) LoadLatestLegalEntityProfile(
 	return double.saved[len(double.saved)-1], true, nil
 }
 
-// legalEntityLookupDouble 交回一个带 XA 身份层、在用的 le-1。
+// legalEntityLookupDouble 交回一个带 CN 身份层、在用的 le-1。
 type legalEntityLookupDouble struct{ t *testing.T }
 
 func (double legalEntityLookupDouble) LoadLatestLegalEntity(
@@ -122,7 +122,7 @@ func (double legalEntityLookupDouble) LoadLatestLegalEntity(
 	if err != nil {
 		t.Fatalf("new lifetime number: %v", err)
 	}
-	layer, err := domain.NewLegalEntityIdentityLayer(catValue(t, domain.NewRegistrationCountryCode, "XA"), []domain.LifetimeRegistrationNumber{number})
+	layer, err := domain.NewLegalEntityIdentityLayer(catValue(t, domain.NewRegistrationCountryCode, "CN"), []domain.LifetimeRegistrationNumber{number})
 	if err != nil {
 		t.Fatalf("new identity layer: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestLegalEntityProfileRevisionsEndpointTranscribesRows(t *testing.T) {
 		rows: []ports.LegalEntityProfileRevisionRow{
 			{
 				TenantID: "tenant-1", LegalEntityID: "le-1", Revision: 1, Basis: "SYN-PROFILE-BASIS",
-				EffectiveFrom: registeredAt.AddDate(0, -2, 0), AddressCountry: "XA", AddressLines: []string{"SYN 一号路", "SYN 二层"},
+				EffectiveFrom: registeredAt.AddDate(0, -2, 0), AddressCountry: "CN", AddressLines: []string{"SYN 一号路", "SYN 二层"},
 				TaxNumbers:   []ports.TaxRegistrationNumberRow{{TypeCode: "SYN-XA-TAX", Number: "SYN-XA-TAX-0001"}},
 				HasInvoicing: true, InvoiceTitle: "SYN 抬头",
 				Contacts:     []ports.LegalEntityContactRow{{Name: "SYN 联系人", Email: "syn@example.invalid"}},
@@ -232,7 +232,7 @@ func TestLegalEntityProfileRevisionsEndpointTranscribesRows(t *testing.T) {
 			},
 			{
 				TenantID: "tenant-1", LegalEntityID: "le-1", Revision: 2, Basis: "SYN-PROFILE-BASIS-2",
-				EffectiveFrom: registeredAt.AddDate(0, -1, 0), AddressCountry: "XA", AddressLines: []string{"SYN 新址"},
+				EffectiveFrom: registeredAt.AddDate(0, -1, 0), AddressCountry: "CN", AddressLines: []string{"SYN 新址"},
 				RegisteredAt: registeredAt,
 			},
 		},
@@ -256,7 +256,7 @@ func TestLegalEntityProfileRevisionsEndpointTranscribesRows(t *testing.T) {
 	}
 	first, second := response.Revisions[0], response.Revisions[1]
 	address := first["registeredAddress"].(map[string]interface{})
-	if first["revision"] != float64(1) || address["country"] != "XA" || len(address["lines"].([]interface{})) != 2 ||
+	if first["revision"] != float64(1) || address["country"] != "CN" || len(address["lines"].([]interface{})) != 2 ||
 		first["invoicingRegistered"] != true || first["invoiceTitle"] != "SYN 抬头" ||
 		first["taxRegistrationNumbers"].([]interface{})[0].(map[string]interface{})["number"] != "SYN-XA-TAX-0001" ||
 		first["contacts"].([]interface{})[0].(map[string]interface{})["email"] != "syn@example.invalid" ||

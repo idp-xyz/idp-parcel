@@ -249,3 +249,22 @@ func TestSeriesPayloadRejectsWhatItCannotTranslate(t *testing.T) {
 		t.Fatalf("缺登记责任方：err = %v", err)
 	}
 }
+
+// Covers: `AT-PC-077`，ADR-0345 决定五——参照序列登记的币种（金额序列才带）是新登记入口，只收内置币种目录里的码：目录内的 CNY 照常翻成
+// 登记，形状合法而目录外的 XXX 答 ErrMalformedRequest（改载荷才会好）并说清是币种目录不认。
+func TestSeriesPayloadCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
+	withCurrency := func(code string) string {
+		return `{
+		  "seriesId": "SYN-PRC-PUBLISHED-AMOUNT", "seriesVersion": "v1", "kind": "PUBLISHED_AMOUNT", "currency": "` + code + `",
+		  "sourceIdentifier": "SYN-CARRIER/surcharge-bulletin",
+		  "periods": [{"startsAt": "2026-08-03T00:00:00Z", "value": "12.50", "evidenceRef": "SYN-EVIDENCE/amount-2026-W32"}]
+		}`
+	}
+	if _, err := decodeSeriesPayload(t, withCurrency("CNY")).Registration(payloadTenant(t), "SYN-PRC-SERIES-REGISTRAR"); err != nil {
+		t.Fatalf("目录内的币种应照常翻成登记：%v", err)
+	}
+	_, err := decodeSeriesPayload(t, withCurrency("XXX")).Registration(payloadTenant(t), "SYN-PRC-SERIES-REGISTRAR")
+	if !errors.Is(err, pricinghttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+		t.Fatalf("目录外的币种应答 ErrMalformedRequest 并说清是目录不认：%v", err)
+	}
+}

@@ -10,6 +10,8 @@
 package refdata
 
 import (
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -88,6 +90,27 @@ func Country(code string) (CountryInfo, bool) {
 func Currency(code string) (CurrencyInfo, bool) {
 	row, found := currencyIndex[code]
 	return row, found
+}
+
+// ErrNotInCatalogue 表示码不在产品内置的目录里。它只回答“是不是目录里的码”，不判断这个码该不该被某个租户或某份数据用——
+// 后者是租户启用范围的事（ADR-0345）。各写入边界拿它拒掉目录外的码，答复由各边界按自己的业务格译。
+var ErrNotInCatalogue = errors.New("refdata: code is not in the built-in catalogue")
+
+// CheckCountry 判一个国家 / 地区码是不是目录里的码；不是则交回 ErrNotInCatalogue 与一句给登记方看的话。
+// 写法同 Country：精确匹配，不做大小写或空白的宽容。
+func CheckCountry(code string) error {
+	if _, found := Country(code); !found {
+		return fmt.Errorf("国家 / 地区码 %q 不在产品内置的目录里（ISO 3166-1 alpha-2）：%w", code, ErrNotInCatalogue)
+	}
+	return nil
+}
+
+// CheckCurrency 判一个币种码是不是目录里的码，语义同 CheckCountry。
+func CheckCurrency(code string) error {
+	if _, found := Currency(code); !found {
+		return fmt.Errorf("币种码 %q 不在产品内置的目录里（ISO 4217 常用集）：%w", code, ErrNotInCatalogue)
+	}
+	return nil
 }
 
 // Countries 按码升序交回全表的副本，调用方改它不影响目录。

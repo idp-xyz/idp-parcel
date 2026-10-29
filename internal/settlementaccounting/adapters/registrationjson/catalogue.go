@@ -3,6 +3,7 @@ package registrationjson
 import (
 	"fmt"
 
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
@@ -70,6 +71,9 @@ func SupplierPayableAccountFromJSON(raw []byte) (domain.TenantID, domain.Supplie
 	if err != nil {
 		return domain.TenantID{}, domain.SupplierPayableAccountRegistration{}, fmt.Errorf("tenantId：%w", err)
 	}
+	if err := requireCatalogueCurrency(document.Currency); err != nil {
+		return domain.TenantID{}, domain.SupplierPayableAccountRegistration{}, err
+	}
 	registration, err := domain.NewSupplierPayableAccountRegistration(
 		catalogueRef(domain.NewSupplierPartyReference, document.SupplierID),
 		catalogueRef(domain.NewLegalEntityReference, document.LegalEntityID),
@@ -131,6 +135,16 @@ func ChargeConfirmationFactsFromJSON(raw []byte) (domain.TenantID, domain.Charge
 		return domain.TenantID{}, domain.ChargeConfirmationFactRegistration{}, err
 	}
 	return tenant, registration, nil
+}
+
+// requireCatalogueCurrency 是账户、上限这类新登记入口的币种门：币种码必须在产品内置的币种目录里（ADR-0345 决定五）。
+// 单立一个前置判断而不是换掉 catalogueRef 的解析函数：catalogueRef 吞掉解析错误、把零值交给领域构造门去拒，换了
+// 解析函数，登记方读到的只是一句泛泛的“立不住”，看不出是币种目录不认。
+func requireCatalogueCurrency(value string) error {
+	if err := refdata.CheckCurrency(value); err != nil {
+		return fmt.Errorf("currency：%w", err)
+	}
+	return nil
 }
 
 func catalogueRef[T any](parse func(string) (T, error), value string) T {

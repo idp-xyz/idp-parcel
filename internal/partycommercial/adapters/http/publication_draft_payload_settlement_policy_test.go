@@ -140,6 +140,29 @@ func TestSettlementPolicyPayloadCollectsEveryFieldProblem(t *testing.T) {
 	}
 }
 
+// Covers: `AT-PC-077`，ADR-0345 决定五——结算政策的币种是新登记入口，只收内置币种目录里的码：形状合法而目录外的 XXX 在逐格问题里点名
+// settlementPolicy.currency（400 畸形，改载荷才会好），其余格不被连带；目录内的码（CNY）照常过。
+func TestSettlementPolicyCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+
+	if _, _, err := decodePublication(t, settlementPolicyPayload).Publication(tenant); err != nil {
+		t.Fatalf("目录内的币种应照常过：%v", err)
+	}
+
+	outside := strings.Replace(settlementPolicyPayload, `"currency": "CNY"`, `"currency": "XXX"`, 1)
+	if outside == settlementPolicyPayload {
+		t.Fatal("fixture did not take the currency; the anchor text moved")
+	}
+	_, _, err := decodePublication(t, outside).Publication(tenant)
+	var problems *commercialhttp.PublicationPayloadProblems
+	if !errors.As(err, &problems) || !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+		t.Fatalf("err = %v (%T), want *PublicationPayloadProblems", err, err)
+	}
+	if len(problems.Problems) != 1 || problems.Problems[0].Field != "settlementPolicy.currency" {
+		t.Fatalf("应只点名 settlementPolicy.currency，实得 %+v", problems.Problems)
+	}
+}
+
 // Covers: CONTEXT 结算方式那条规则末句（票 admin-write-faces/23 裁决二）——六维里的合同版本同时作壳上的指名引用交出。
 // 载荷层核两处：壳 references.CUSTOMER_CONTRACT 与六维 contract.objectId 都在场且不同，问题落在 references.CUSTOMER_CONTRACT
 // 一格（表单从六维镜像出壳引用，壳是派生的一侧），六维那两格不被连带点名；相同则壳引用照常进 PublicationDraftShell；壳上

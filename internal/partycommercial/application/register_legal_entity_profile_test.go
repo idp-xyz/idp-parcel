@@ -193,28 +193,28 @@ func registerProfile(
 func TestRegisterLegalEntityProfileKeepsRevisionsContinuousAndImmutable(t *testing.T) {
 	profiles := newFakeProfiles()
 	handler := application.NewRegisterLegalEntityProfileHandler(
-		profiles, &fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true}, newFakeNumberTypes(t),
+		profiles, &fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true}, newFakeNumberTypes(t),
 	)
 
-	if got := registerProfile(t, handler, profileCommand(t, 2, "XA", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted {
+	if got := registerProfile(t, handler, profileCommand(t, 2, "CN", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted {
 		t.Fatalf("first revision numbered 2: %s", got.Outcome())
 	}
-	first := profileCommand(t, 1, "XA", "SYN-XA-TAX", "SYN-XA-TAX-0001", "SYN 抬头")
+	first := profileCommand(t, 1, "CN", "SYN-XA-TAX", "SYN-XA-TAX-0001", "SYN 抬头")
 	if got := registerProfile(t, handler, first); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("first revision: %s (%v)", got.Outcome(), got.Cause())
 	}
 	if got := registerProfile(t, handler, first); got.Outcome() != application.LegalEntityProfileAlreadyRegistered {
 		t.Fatalf("replay: %s", got.Outcome())
 	}
-	if got := registerProfile(t, handler, profileCommand(t, 1, "XA", "", "", "SYN 另一抬头")); got.Outcome() != application.LegalEntityProfileContentConflict {
+	if got := registerProfile(t, handler, profileCommand(t, 1, "CN", "", "", "SYN 另一抬头")); got.Outcome() != application.LegalEntityProfileContentConflict {
 		t.Fatalf("same revision, other content: %s", got.Outcome())
 	}
-	if got := registerProfile(t, handler, profileCommand(t, 3, "XA", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted ||
+	if got := registerProfile(t, handler, profileCommand(t, 3, "CN", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted ||
 		!strings.Contains(got.Cause().Error(), "连续") {
 		t.Fatalf("skipped revision: %s (%v)", got.Outcome(), got.Cause())
 	}
 	// 开票资料可以缺：登记时不拦，缺的后果在解析时才出现。
-	if got := registerProfile(t, handler, profileCommand(t, 2, "XA", "", "", "")); got.Outcome() != application.LegalEntityProfileRegistered {
+	if got := registerProfile(t, handler, profileCommand(t, 2, "CN", "", "", "")); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("second revision without invoicing details: %s (%v)", got.Outcome(), got.Cause())
 	}
 	if len(profiles.revisions) != 2 {
@@ -223,7 +223,7 @@ func TestRegisterLegalEntityProfileKeepsRevisionsContinuousAndImmutable(t *testi
 }
 
 func TestRegisterLegalEntityProfileRefusesWhatTheProfileGatesReject(t *testing.T) {
-	deactivated, err := profileLegalEntity(t, "XA").Deactivate(
+	deactivated, err := profileLegalEntity(t, "CN").Deactivate(
 		identityValue(t, domain.NewIdentityBasisReference, "SYN-DEACTIVATION"), profileEntityEffectiveFrom.AddDate(0, 6, 0),
 	)
 	if err != nil {
@@ -235,28 +235,28 @@ func TestRegisterLegalEntityProfileRefusesWhatTheProfileGatesReject(t *testing.T
 		want     string
 	}{
 		"legal entity not registered": {
-			&fakeLegalEntities{}, profileCommand(t, 1, "XA", "", "", "SYN 抬头"), "未登记",
+			&fakeLegalEntities{}, profileCommand(t, 1, "CN", "", "", "SYN 抬头"), "未登记",
 		},
 		"legal entity deactivated, even before its deactivation time": {
-			&fakeLegalEntities{registration: deactivated, found: true}, profileCommand(t, 1, "XA", "", "", "SYN 抬头"), "已停用",
+			&fakeLegalEntities{registration: deactivated, found: true}, profileCommand(t, 1, "CN", "", "", "SYN 抬头"), "已停用",
 		},
 		"identity layer not registered": {
-			&fakeLegalEntities{registration: profileLegalEntity(t, ""), found: true}, profileCommand(t, 1, "XA", "", "", "SYN 抬头"), "身份层",
+			&fakeLegalEntities{registration: profileLegalEntity(t, ""), found: true}, profileCommand(t, 1, "CN", "", "", "SYN 抬头"), "身份层",
 		},
 		"address country differs from the registration country": {
-			&fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true}, profileCommand(t, 1, "XB", "", "", "SYN 抬头"), "不一致",
+			&fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true}, profileCommand(t, 1, "SG", "", "", "SYN 抬头"), "不一致",
 		},
 		"identity-layer type used as a tax number": {
-			&fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true},
-			profileCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-000002", "SYN 抬头"), "资料层只收税务登记号",
+			&fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true},
+			profileCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-000002", "SYN 抬头"), "资料层只收税务登记号",
 		},
 		"tax number type not registered": {
-			&fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true},
-			profileCommand(t, 1, "XA", "SYN-XA-GST", "SYN-XA-GST-1", "SYN 抬头"), "未登记",
+			&fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true},
+			profileCommand(t, 1, "CN", "SYN-XA-GST", "SYN-XA-GST-1", "SYN 抬头"), "未登记",
 		},
 		"tax number off its format": {
-			&fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true},
-			profileCommand(t, 1, "XA", "SYN-XA-TAX", "SYN-XA-TAX-X", "SYN 抬头"), "格式",
+			&fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true},
+			profileCommand(t, 1, "CN", "SYN-XA-TAX", "SYN-XA-TAX-X", "SYN 抬头"), "格式",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -275,9 +275,9 @@ func TestRegisterLegalEntityProfileRefusesWhatTheProfileGatesReject(t *testing.T
 
 func TestRegisterLegalEntityProfileReplaysUnderTodaysGates(t *testing.T) {
 	profiles := newFakeProfiles()
-	entities := &fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true}
+	entities := &fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true}
 	handler := application.NewRegisterLegalEntityProfileHandler(profiles, entities, newFakeNumberTypes(t))
-	first := profileCommand(t, 1, "XA", "", "", "SYN 抬头")
+	first := profileCommand(t, 1, "CN", "", "", "SYN 抬头")
 	if got := registerProfile(t, handler, first); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("first revision: %s (%v)", got.Outcome(), got.Cause())
 	}
@@ -292,18 +292,18 @@ func TestRegisterLegalEntityProfileReplaysUnderTodaysGates(t *testing.T) {
 	if got := registerProfile(t, handler, first); got.Outcome() != application.LegalEntityProfileAlreadyRegistered {
 		t.Fatalf("replay after the legal entity was deactivated: %s (%v)", got.Outcome(), got.Cause())
 	}
-	if got := registerProfile(t, handler, profileCommand(t, 2, "XA", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted {
+	if got := registerProfile(t, handler, profileCommand(t, 2, "CN", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileNotAccepted {
 		t.Fatalf("new revision after deactivation: %s", got.Outcome())
 	}
 }
 
 func TestRegisterLegalEntityProfileNeedsTheCatalogueOnlyForTaxNumbers(t *testing.T) {
-	entities := &fakeLegalEntities{registration: profileLegalEntity(t, "XA"), found: true}
+	entities := &fakeLegalEntities{registration: profileLegalEntity(t, "CN"), found: true}
 	handler := application.NewRegisterLegalEntityProfileHandler(newFakeProfiles(), entities, nil)
-	if got := registerProfile(t, handler, profileCommand(t, 1, "XA", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileRegistered {
+	if got := registerProfile(t, handler, profileCommand(t, 1, "CN", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("no tax numbers, no catalogue: %s (%v)", got.Outcome(), got.Cause())
 	}
-	_, err := handler.Register(context.Background(), profileCommand(t, 2, "XA", "SYN-XA-TAX", "SYN-XA-TAX-0001", "SYN 抬头"))
+	_, err := handler.Register(context.Background(), profileCommand(t, 2, "CN", "SYN-XA-TAX", "SYN-XA-TAX-0001", "SYN 抬头"))
 	if err == nil || !strings.Contains(err.Error(), "目录未装配") {
 		t.Fatalf("tax numbers without a catalogue should be a technical error, got %v", err)
 	}
@@ -325,9 +325,9 @@ func TestResolveLegalEntityProfileReadsTheEntityAndTheWholeChain(t *testing.T) {
 		t.Fatalf("unregistered legal entity: %s", resolution.Outcome())
 	}
 
-	entities.registration, entities.found = profileLegalEntity(t, "XA"), true
+	entities.registration, entities.found = profileLegalEntity(t, "CN"), true
 	registrar := application.NewRegisterLegalEntityProfileHandler(profiles, entities, newFakeNumberTypes(t))
-	if got := registerProfile(t, registrar, profileCommand(t, 1, "XA", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileRegistered {
+	if got := registerProfile(t, registrar, profileCommand(t, 1, "CN", "", "", "SYN 抬头")); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("register: %s (%v)", got.Outcome(), got.Cause())
 	}
 	resolution, err = resolver.Resolve(context.Background(), tenant, entity, at)

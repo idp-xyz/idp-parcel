@@ -63,8 +63,8 @@ func newLegalEntityIdentityFixture(t *testing.T) legalEntityIdentityFixture {
 		handler:    application.NewRegisterPartyIdentityHandler(identities, types),
 	}
 	for _, registration := range []domain.RegistrationNumberTypeRegistration{
-		registrationTypeFixture(t, "tenant-1", "XA", "SYN-XA-LIFETIME", 1, domain.RegistrationNumberIdentityLayer, `SYN-XA-[0-9]{6}`),
-		registrationTypeFixture(t, "tenant-1", "XA", "SYN-XA-TAX", 1, domain.RegistrationNumberProfileLayer, `SYN-XA-TAX-[0-9]{4}`),
+		registrationTypeFixture(t, "tenant-1", "CN", "SYN-XA-LIFETIME", 1, domain.RegistrationNumberIdentityLayer, `SYN-XA-[0-9]{6}`),
+		registrationTypeFixture(t, "tenant-1", "CN", "SYN-XA-TAX", 1, domain.RegistrationNumberProfileLayer, `SYN-XA-TAX-[0-9]{4}`),
 	} {
 		saveRegistrationType(t, fixture.transactor, types, registration)
 	}
@@ -134,22 +134,22 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 	basis := pcValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
 
 	expectRefused(t, fixture.register(t, identityCommand(t, 1, "", "SYN-XA-LIFETIME", "SYN-XA-000001")), "缺注册国家 / 地区")
-	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "", "")), "缺终身注册号")
-	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "SYN-XA-TAX", "SYN-XA-TAX-0001")), "属资料层")
-	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-12")), "不合类型")
-	firstWithCorrection := identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	expectRefused(t, fixture.register(t, identityCommand(t, 1, "CN", "", "")), "缺终身注册号")
+	expectRefused(t, fixture.register(t, identityCommand(t, 1, "CN", "SYN-XA-TAX", "SYN-XA-TAX-0001")), "属资料层")
+	expectRefused(t, fixture.register(t, identityCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-12")), "不合类型")
+	firstWithCorrection := identityCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	firstWithCorrection.IdentityCorrectionBasis = &basis
 	expectRefused(t, fixture.register(t, firstWithCorrection), "首笔登记")
 	if rows, err := fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10); err != nil || len(rows) != 0 {
 		t.Fatalf("refused registrations wrote rows: %d rows, err %v", len(rows), err)
 	}
 
-	if result := fixture.register(t, identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")); result.Outcome() != application.PartyIdentityRegistered {
+	if result := fixture.register(t, identityCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")); result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("registration outcome = %s (%v)", result.Outcome(), result.Cause())
 	}
-	expectRefused(t, fixture.register(t, identityCommand(t, 2, "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")), "不作变更")
+	expectRefused(t, fixture.register(t, identityCommand(t, 2, "CN", "SYN-XA-LIFETIME", "SYN-XA-000009")), "不作变更")
 
-	corrected := identityCommand(t, 2, "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")
+	corrected := identityCommand(t, 2, "CN", "SYN-XA-LIFETIME", "SYN-XA-000009")
 	corrected.IdentityCorrectionBasis = &basis
 	if result := fixture.register(t, corrected); result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("correction outcome = %s (%v)", result.Outcome(), result.Cause())
@@ -160,7 +160,7 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 		t.Fatalf("catalogue = %d rows, err %v", len(rows), err)
 	}
 	row := rows[0]
-	if !row.HasIdentityLayer || row.RegistrationCountry != "XA" || len(row.LifetimeNumbers) != 1 ||
+	if !row.HasIdentityLayer || row.RegistrationCountry != "CN" || len(row.LifetimeNumbers) != 1 ||
 		row.LifetimeNumbers[0].TypeCode != "SYN-XA-LIFETIME" || row.LifetimeNumbers[0].Number != "SYN-XA-000009" {
 		t.Fatalf("catalogue identity layer = %+v", row)
 	}

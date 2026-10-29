@@ -35,7 +35,7 @@ func (double *profileResolverDouble) Resolve(
 
 var resolutionMonth = func(month time.Month) time.Time { return time.Date(2026, month, 1, 0, 0, 0, 0, time.UTC) }
 
-// resolutionEntity 造 tenant-1 / le-1 的一笔法人修订：带 XA 身份层，自 from 起生效；deactivatedAt 非零即已停用。
+// resolutionEntity 造 tenant-1 / le-1 的一笔法人修订：带 CN 身份层，自 from 起生效；deactivatedAt 非零即已停用。
 func resolutionEntity(t *testing.T, from, deactivatedAt time.Time) domain.LegalEntityRegistration {
 	t.Helper()
 	party, err := domain.NewBusinessParty(catValue(t, domain.NewTenantID, "tenant-1"), catValue(t, domain.NewPartyID, "party-1"),
@@ -60,7 +60,7 @@ func resolutionEntity(t *testing.T, from, deactivatedAt time.Time) domain.LegalE
 	if err != nil {
 		t.Fatalf("new lifetime number: %v", err)
 	}
-	layer, err := domain.NewLegalEntityIdentityLayer(catValue(t, domain.NewRegistrationCountryCode, "XA"), []domain.LifetimeRegistrationNumber{number})
+	layer, err := domain.NewLegalEntityIdentityLayer(catValue(t, domain.NewRegistrationCountryCode, "CN"), []domain.LifetimeRegistrationNumber{number})
 	if err != nil {
 		t.Fatalf("new identity layer: %v", err)
 	}
@@ -78,7 +78,7 @@ func resolutionEntity(t *testing.T, from, deactivatedAt time.Time) domain.LegalE
 // resolutionRevision 造 le-1 的第 revision 笔资料：地址在 XA 一行 line；title 为空即不带开票资料。
 func resolutionRevision(t *testing.T, revision int, from time.Time, line, title string) domain.LegalEntityProfileRevision {
 	t.Helper()
-	address, err := domain.NewRegisteredAddress(catValue(t, domain.NewRegistrationCountryCode, "XA"), []string{line})
+	address, err := domain.NewRegisteredAddress(catValue(t, domain.NewRegistrationCountryCode, "CN"), []string{line})
 	if err != nil {
 		t.Fatalf("new address: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestLegalEntityProfileResolutionEndpointTranscribesEachOutcome(t *testing.T
 				return
 			}
 			revision := answer.EffectiveRevision
-			if revision.Revision != 1 || revision.RegisteredAddress.Country != "XA" || len(revision.RegisteredAddress.Lines) != 1 ||
+			if revision.Revision != 1 || revision.RegisteredAddress.Country != "CN" || len(revision.RegisteredAddress.Lines) != 1 ||
 				revision.EffectiveFrom != "2026-03-01T00:00:00Z" || revision.InvoicingRegistered != testCase.wantInvoicing ||
 				revision.TaxRegistrationNumbers == nil || revision.Contacts == nil {
 				t.Fatalf("有效修订转写走样：%s", recorder.Body)

@@ -30,7 +30,7 @@ type legalEntityProfileFixture struct {
 func newLegalEntityProfileFixture(t *testing.T) legalEntityProfileFixture {
 	t.Helper()
 	identity := newLegalEntityIdentityFixture(t)
-	if got := identity.register(t, identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")); got.Outcome() != application.PartyIdentityRegistered {
+	if got := identity.register(t, identityCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")); got.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("登记法人 le-1：%s（%v）", got.Outcome(), got.Cause())
 	}
 	profiles, err := adapter.NewLegalEntityProfiles(identity.db)
@@ -141,14 +141,14 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 		}
 	}
 
-	register(profileAt(t, 1, day(time.March, 1), "XA", "SYN 旧址", "SYN 抬头"))
+	register(profileAt(t, 1, day(time.March, 1), "CN", "SYN 旧址", "SYN 抬头"))
 	resolution := fixture.resolveAt(t, day(time.February, 15))
 	if resolution.Outcome() != domain.LegalEntityProfileIncomplete || resolution.IncompleteCause() != domain.LegalEntityProfileNoEffectiveRevision {
 		t.Fatalf("法人已生效、资料修订未到生效时点：%s / %s，want PROFILE_INCOMPLETE / NO_EFFECTIVE_REVISION",
 			resolution.Outcome(), resolution.IncompleteCause())
 	}
 
-	register(profileAt(t, 2, day(time.June, 1), "XA", "SYN 新址", "SYN 抬头"))
+	register(profileAt(t, 2, day(time.June, 1), "CN", "SYN 新址", "SYN 抬头"))
 	expectResolvedRevision(t, fixture.resolveAt(t, day(time.April, 1)), 1, "SYN 旧址")
 	fixed, _ := fixture.resolveAt(t, day(time.July, 1)).Resolved()
 	if fixed.Revision() != 2 {
@@ -158,7 +158,7 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 
 	// 追溯生效：第三笔五月起生效，取代其后的全部前序修订——七月重读答它；而七月初开出、固定了第二笔引用的单据
 	// 照旧指向第二笔，第二笔的内容一个字节没变。
-	register(profileAt(t, 3, day(time.May, 1), "XA", "SYN 更正址", "SYN 抬头"))
+	register(profileAt(t, 3, day(time.May, 1), "CN", "SYN 更正址", "SYN 抬头"))
 	expectResolvedRevision(t, fixture.resolveAt(t, day(time.July, 1)), 3, "SYN 更正址")
 	expectResolvedRevision(t, fixture.resolveAt(t, day(time.April, 1)), 1, "SYN 旧址")
 	history, err := fixture.profiles.ListLegalEntityProfileRevisions(t.Context(), fixedReference.Tenant(), fixedReference.LegalEntity())
@@ -169,7 +169,7 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 		t.Fatalf("固定过的引用（修订 %d）应仍指向原内容，历史为 %+v", fixedReference.Revision(), history)
 	}
 
-	register(profileAt(t, 4, day(time.September, 1), "XA", "SYN 更正址", ""))
+	register(profileAt(t, 4, day(time.September, 1), "CN", "SYN 更正址", ""))
 	resolution = fixture.resolveAt(t, day(time.October, 1))
 	if resolution.Outcome() != domain.LegalEntityProfileIncomplete || resolution.IncompleteCause() != domain.LegalEntityProfileNoInvoicingDetails {
 		t.Fatalf("有效修订缺开票资料：%s / %s，want PROFILE_INCOMPLETE / NO_INVOICING_DETAILS", resolution.Outcome(), resolution.IncompleteCause())
@@ -178,7 +178,7 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 		t.Fatal("缺开票资料不得退回前一笔修订，也不得以默认值补齐")
 	}
 
-	expectProfileRefused(t, fixture.registerProfile(t, profileAt(t, 5, day(time.November, 1), "XB", "SYN 他国址", "SYN 抬头")), "不一致")
+	expectProfileRefused(t, fixture.registerProfile(t, profileAt(t, 5, day(time.November, 1), "SG", "SYN 他国址", "SYN 抬头")), "不一致")
 
 	var deactivation application.PartyRegistryResult
 	mustWithinPublicationTransaction(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
@@ -199,7 +199,7 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 	if got := fixture.resolveAt(t, day(time.December, 15)).Outcome(); got != domain.LegalEntityProfileEntityDeactivated {
 		t.Fatalf("法人停用之后：%s，want LEGAL_ENTITY_DEACTIVATED", got)
 	}
-	expectProfileRefused(t, fixture.registerProfile(t, profileAt(t, 5, day(time.November, 1), "XA", "SYN 更正址", "SYN 抬头")), "已停用")
+	expectProfileRefused(t, fixture.registerProfile(t, profileAt(t, 5, day(time.November, 1), "CN", "SYN 更正址", "SYN 抬头")), "已停用")
 
 	var rows int
 	if err := fixture.pool.QueryRow(t.Context(),
@@ -214,14 +214,14 @@ func TestLegalEntityProfileResolvesByEffectiveTimeAgainstTheRealRegister(t *test
 
 func TestLegalEntityProfileRegisterReplaysAndReadsBack(t *testing.T) {
 	fixture := newLegalEntityProfileFixture(t)
-	first := profileAt(t, 1, day(time.March, 1), "XA", "SYN 旧址", "SYN 抬头")
+	first := profileAt(t, 1, day(time.March, 1), "CN", "SYN 旧址", "SYN 抬头")
 	if got := fixture.registerProfile(t, first); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("登记：%s（%v）", got.Outcome(), got.Cause())
 	}
 	if got := fixture.registerProfile(t, first); got.Outcome() != application.LegalEntityProfileAlreadyRegistered {
 		t.Fatalf("重放：%s", got.Outcome())
 	}
-	if got := fixture.registerProfile(t, profileAt(t, 1, day(time.March, 1), "XA", "SYN 旧址", "SYN 另一抬头")); got.Outcome() != application.LegalEntityProfileContentConflict {
+	if got := fixture.registerProfile(t, profileAt(t, 1, day(time.March, 1), "CN", "SYN 旧址", "SYN 另一抬头")); got.Outcome() != application.LegalEntityProfileContentConflict {
 		t.Fatalf("同修订异内容：%s", got.Outcome())
 	}
 
@@ -242,7 +242,7 @@ func TestLegalEntityProfileRegisterReplaysAndReadsBack(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("修订历史：%d 行，err=%v", len(rows), err)
 	}
-	if row := rows[0]; !row.HasInvoicing || row.InvoiceTitle != "SYN 抬头" || row.AddressCountry != "XA" ||
+	if row := rows[0]; !row.HasInvoicing || row.InvoiceTitle != "SYN 抬头" || row.AddressCountry != "CN" ||
 		len(row.TaxNumbers) != 1 || row.TaxNumbers[0].Number != "SYN-XA-TAX-0001" || row.RegisteredAt.IsZero() {
 		t.Fatalf("历史行转写走样：%+v", row)
 	}
@@ -251,7 +251,7 @@ func TestLegalEntityProfileRegisterReplaysAndReadsBack(t *testing.T) {
 		t.Fatalf("跨租户应答零行无错：%d 行，err=%v", len(other), err)
 	}
 
-	withoutCollections := profileAt(t, 2, day(time.April, 1), "XA", "SYN 旧址", "")
+	withoutCollections := profileAt(t, 2, day(time.April, 1), "CN", "SYN 旧址", "")
 	withoutCollections.TaxNumbers, withoutCollections.Contacts = nil, nil
 	if got := fixture.registerProfile(t, withoutCollections); got.Outcome() != application.LegalEntityProfileRegistered {
 		t.Fatalf("不带税号与联系人：%s（%v）", got.Outcome(), got.Cause())

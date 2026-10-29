@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // 版本化网络目录（ADR-0068）的登记用例。它站在写入口之前，只作一件事：**把不完整的
@@ -105,6 +106,9 @@ const (
 	// 路由信封都失败；或者读成另一条连接——`X@1+Y` 被读成 `X`，准备照 `X` 作答，静默答错。要换的是代码；身份不缺，
 	// 所以不并进缺身份码那一格。
 	CatalogConnectionCodeCarriesBasisSeparator
+	// CatalogCoverageCountryNotInCatalogue 是覆盖国家形状对、却不在产品内置的国家 / 地区目录里（ADR-0345 决定五）：
+	// 要改的是那个国家码。与覆盖不成形分开，因为恢复动作不同——前者是码写错了形状，后者是码合法而目录不认。
+	CatalogCoverageCountryNotInCatalogue
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -141,6 +145,8 @@ func (reason CatalogRefusalReason) String() string {
 		return "RANKING_FORM_UNKNOWN"
 	case CatalogCoverageMalformed:
 		return "COVERAGE_MALFORMED"
+	case CatalogCoverageCountryNotInCatalogue:
+		return "COVERAGE_COUNTRY_NOT_IN_CATALOGUE"
 	case CatalogNodeRoleBlank:
 		return "NODE_ROLE_BLANK"
 	case CatalogNodeRoleDuplicated:
@@ -572,6 +578,11 @@ func normalizeServiceAreaCoverage(row ports.ServiceAreaDefinitionVersion) (ports
 	coverage, err := domain.NewServiceAreaCoverage(row.CoverageCountry, row.PostalPrefixes)
 	if err != nil {
 		return row, CatalogCoverageMalformed
+	}
+	// 新登记的覆盖只收产品内置国家 / 地区目录里的码（ADR-0345 决定五）。门只在登记口：领域构造函数与读回
+	// （areasByNodeRole）不查目录，册上已有的目录外覆盖照样读得回、照样参与解析。
+	if err := refdata.CheckCountry(coverage.Country()); err != nil {
+		return row, CatalogCoverageCountryNotInCatalogue
 	}
 	for _, role := range [][]string{row.OriginNodes, row.DestinationNodes} {
 		if reason := checkNodeRole(role); reason != CatalogRefusalReasonNone {

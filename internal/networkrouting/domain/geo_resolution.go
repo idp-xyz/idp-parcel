@@ -182,7 +182,7 @@ func (coverage ServiceAreaCoverage) Match(side GeoResolutionSide) CoverageMatch 
 	return CoverageNotCovered
 }
 
-// isCountryCodeShape 判 ISO 3166 两位大写字母的形状；不查产品内置的国家目录（refdata）——ADR-0335 决定五不收紧成员资格，与目录其余国家格同一判法。
+// isCountryCodeShape 判 ISO 3166 两位大写字母的形状；不查产品内置的国家目录（refdata）——构造函数与读回都只验形状，已在册的目录外覆盖照样读得回。新登记的覆盖是否在目录内，由登记口（application 的 normalizeServiceAreaCoverage）判，ADR-0345 决定五。
 func isCountryCodeShape(value string) bool {
 	if len(value) != 2 {
 		return false

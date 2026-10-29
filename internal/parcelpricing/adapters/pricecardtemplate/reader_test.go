@@ -406,6 +406,29 @@ func TestStructureAndCellKindProblems(t *testing.T) {
 	validated(t, decodeWorkbook(book))
 }
 
+// Covers: `AT-PC-077`，ADR-0345 决定五——价表的币种格是新导入价卡的登记入口，只收内置币种目录里的码：形状合法而目录外的 XXX 在币种格
+// 报格值立不住，且点名是目录不认；目录内的币种照常通过，并且不连带报别的格。
+func TestRateTableCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
+	card := costCard()
+	validated(t, read(t, card.bytes(t)))
+
+	card = costCard()
+	card.data[sheetTables][0]["currency"] = "XXX"
+	reading := read(t, card.bytes(t))
+	if !hasProblem(reading.Problems, at{sheetTables, 2, "currency", ports.TemplateCellInvalid}) {
+		t.Fatalf("目录外的币种应在币种格报格值立不住：%s", describe(reading.Problems))
+	}
+	found := false
+	for _, problem := range reading.Problems {
+		if problem.Column == "currency" && strings.Contains(problem.Message, "不在产品内置的目录里") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("问题要说清是币种目录不认：%s", describe(reading.Problems))
+	}
+}
+
 // 问题按表序、行号、列序排，与发现的先后无关。
 func TestProblemsAreSortedByTemplateOrder(t *testing.T) {
 	card := costCard()

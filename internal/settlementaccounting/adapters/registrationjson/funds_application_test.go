@@ -19,7 +19,7 @@ const fundsApplicationDocument = `{
 	"tenantId": "SYN-T1",
 	"applicationRef": "SYN-APPLICATION-1",
 	"factRef": "SYN-FACT-1",
-	"targetCurrency": "XTS",
+	"targetCurrency": "CNY",
 	"mappingRefs": ["SYN-MAPPING-STMT-1", "SYN-MAPPING-COMP-1"],
 	"allocations": [
 		{"mappingRef": "SYN-MAPPING-STMT-1", "targetKind": "STATEMENT", "targetRef": "SYN-STMT-1", "direction": "DEBIT", "amountMinor": 5000},
@@ -94,7 +94,7 @@ func TestFundsApplicationFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 	if command.TenantID.String() != "SYN-T1" || command.Application != "SYN-APPLICATION-1" || command.Fact != "SYN-FACT-1" {
 		t.Fatalf("身份失真：%+v", command)
 	}
-	if command.TargetCurrency != "XTS" || command.Basis != "SYN-PAYMENT-INSTRUCTION-1" {
+	if command.TargetCurrency != "CNY" || command.Basis != "SYN-PAYMENT-INSTRUCTION-1" {
 		t.Fatalf("币种或依据失真：%+v", command)
 	}
 	if want := time.Date(2026, 9, 3, 8, 0, 0, 0, time.UTC); !command.AppliedAt.Equal(want) {
@@ -125,7 +125,7 @@ func TestFundsApplicationFromJSONRejectsBadVocabularyAndBlankIdentifiers(t *test
 		"目标种类词表外":  {strings.Replace(fundsApplicationDocument, `"targetKind": "STATEMENT"`, `"targetKind": "CHARGE"`, 1), "targetkind"},
 		"核销引用空白":   {strings.Replace(fundsApplicationDocument, `"applicationRef": "SYN-APPLICATION-1"`, `"applicationRef": " "`, 1), "applicationref"},
 		"事实引用空白":   {strings.Replace(fundsApplicationDocument, `"factRef": "SYN-FACT-1"`, `"factRef": ""`, 1), "factref"},
-		"目标币种空白":   {strings.Replace(fundsApplicationDocument, `"targetCurrency": "XTS"`, `"targetCurrency": ""`, 1), "targetcurrency"},
+		"目标币种空白":   {strings.Replace(fundsApplicationDocument, `"targetCurrency": "CNY"`, `"targetCurrency": ""`, 1), "targetcurrency"},
 		"映射清单里有空白": {strings.Replace(fundsApplicationDocument, `["SYN-MAPPING-STMT-1", `, `["", `, 1), "mappingrefs"},
 		"分配的映射空白":  {strings.Replace(fundsApplicationDocument, `{"mappingRef": "SYN-MAPPING-STMT-1"`, `{"mappingRef": " "`, 1), "mappingref"},
 		"分配的目标空白":  {strings.Replace(fundsApplicationDocument, `"targetRef": "SYN-STMT-1"`, `"targetRef": ""`, 1), "targetref"},

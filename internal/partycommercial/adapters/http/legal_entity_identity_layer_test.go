@@ -24,15 +24,15 @@ func TestOperatorRegistryIntakeTranslatesTheLegalEntityIdentityLayer(t *testing.
 		"revision":2,
 		"basis":"SYN-BASIS/le-02-r2",
 		"effectiveFrom":"2026-09-16T00:00:00Z",
-		"registrationCountry":"XA",
+		"registrationCountry":"CN",
 		"lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":"SYN-XA-000009"}],
 		"identityCorrectionBasis":"SYN-CORRECTION-01"
 	}]}`))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if command.RegistrationCountry == nil || command.RegistrationCountry.String() != "XA" {
-		t.Fatalf("RegistrationCountry = %v, want XA", command.RegistrationCountry)
+	if command.RegistrationCountry == nil || command.RegistrationCountry.String() != "CN" {
+		t.Fatalf("RegistrationCountry = %v, want CN", command.RegistrationCountry)
 	}
 	if len(command.LifetimeNumbers) != 1 ||
 		command.LifetimeNumbers[0].TypeCode().String() != "SYN-XA-LIFETIME" ||
@@ -53,8 +53,8 @@ func TestOperatorRegistryIntakeTranslatesTheLegalEntityIdentityLayer(t *testing.
 
 	malformed := map[string]string{
 		"国家小写":  `"registrationCountry":"xa"`,
-		"类型为空":  `"registrationCountry":"XA","lifetimeRegistrationNumbers":[{"typeCode":"","number":"SYN-XA-000001"}]`,
-		"号为空":   `"registrationCountry":"XA","lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":""}]`,
+		"类型为空":  `"registrationCountry":"CN","lifetimeRegistrationNumbers":[{"typeCode":"","number":"SYN-XA-000001"}]`,
+		"号为空":   `"registrationCountry":"CN","lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":""}]`,
 		"更正依据空": `"identityCorrectionBasis":""`,
 	}
 	for name, fields := range malformed {
@@ -74,7 +74,7 @@ var identityLayerRow = struct {
 	numbers    []ports.LifetimeRegistrationNumberRow
 	correction string
 }{
-	country:    "XA",
+	country:    "CN",
 	numbers:    []ports.LifetimeRegistrationNumberRow{{TypeCode: "SYN-XA-LIFETIME", Number: "SYN-XA-000009"}},
 	correction: "SYN-CORRECTION-01",
 }
@@ -101,7 +101,7 @@ func assertIdentityLayerKeys(t *testing.T, label string, item map[string]json.Ra
 	_ = json.Unmarshal(item["registrationCountry"], &country)
 	_ = json.Unmarshal(item["identityCorrectionBasis"], &correction)
 	_ = json.Unmarshal(item["lifetimeRegistrationNumbers"], &numbers)
-	if country != "XA" || correction != "SYN-CORRECTION-01" || len(numbers) != 1 ||
+	if country != "CN" || correction != "SYN-CORRECTION-01" || len(numbers) != 1 ||
 		numbers[0].TypeCode != "SYN-XA-LIFETIME" || numbers[0].Number != "SYN-XA-000009" {
 		t.Fatalf("%s identity layer = country %q, correction %q, numbers %+v", label, country, correction, numbers)
 	}

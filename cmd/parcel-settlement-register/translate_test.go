@@ -73,7 +73,7 @@ func TestCommandForAcceptsTheSellCustomerChargeRegisters(t *testing.T) {
 // funds_application_vertical_test）；两份载荷形状不同，送错命令按未知字段拒，不靠字段名巧合译进另一条。
 func TestCommandForAcceptsTheApplicationCommands(t *testing.T) {
 	application := []byte(`{
-		"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "factRef": "SYN-FACT-1", "targetCurrency": "XTS",
+		"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "factRef": "SYN-FACT-1", "targetCurrency": "CNY",
 		"mappingRefs": ["SYN-MAPPING-1"],
 		"allocations": [{"mappingRef": "SYN-MAPPING-1", "targetKind": "RECOVERY_ACKNOWLEDGEMENT", "targetRef": "SYN-ACK-1", "direction": "DEBIT", "amountMinor": 100}],
 		"basis": "SYN-PAYMENT-INSTRUCTION-1", "appliedAt": "2026-09-03T08:00:00Z"

@@ -18,7 +18,7 @@ func (rig ceilingRig) seedSecondReceivableAccount(t *testing.T) {
 		`INSERT INTO settlement_accounting.settlement_account
 			(tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency,
 			 settlement_policy_id, responsibility_basis, registered_at)
-		 VALUES ('SYN-T1', 'SYN-ACCT-RECV-2', 'SYN-LE-01', 'SYN-PARTY-SHIPPER-02', 'RECEIVABLE', 'XTS',
+		 VALUES ('SYN-T1', 'SYN-ACCT-RECV-2', 'SYN-LE-01', 'SYN-PARTY-SHIPPER-02', 'RECEIVABLE', 'CNY',
 		         'SYN-SETTLEMENT-POLICY-1', 'SYN-CONTRACT-01', now())`); err != nil {
 		t.Fatalf("登第二个应收账户：%v", err)
 	}
@@ -174,7 +174,7 @@ func TestAnUnbalancedScopeOnlyRefusesTheStepsThatTouchIt(t *testing.T) {
 			 evaluation_ref, authorization_ref, original_currency, original_minor,
 			 settlement_currency, settlement_minor, conversion_ref, formed_at, recorded_at)
 		 VALUES ('SYN-T1', 'SYN-ADJUSTMENT-C-1', 'SYN-CHARGE-C-1', 'PRICING_CORRECTION', 'CREDIT',
-		         'SYN-EVAL-CORRECTION-1', NULL, 'XTS', 2000, 'XTS', 2000, NULL, now(), now())`); err != nil {
+		         'SYN-EVAL-CORRECTION-1', NULL, 'CNY', 2000, 'CNY', 2000, NULL, now(), now())`); err != nil {
 		t.Fatalf("登价格纠错贷记：%v", err)
 	}
 

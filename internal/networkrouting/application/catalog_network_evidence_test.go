@@ -15,8 +15,9 @@ import (
 // 本文件证可达性证据视图从版本化网络目录折出事实（ADR-0148 决定一、二、三、五、六）：`未配置`由目录修订锚与
 // 适用路由策略版本答；首版候选是判断时点适用的一条完整线路；服务区域解析按所携投影逐字比覆盖；路径可执行性
 // 看临时调整；关务一格由来源作答、来源未接答状态未知；视图修订就是目录修订锚。领域评估照旧在领域——结论经
-// AssessParcelReachabilityHandler 与领域管线得出，这里只替换证据视图的实现。取值一律 SYN- 合成，XA / XB / XC
-// 是用户自定义码段里的合成国家码（隔离合成只记 S）。
+// AssessParcelReachabilityHandler 与领域管线得出，这里只替换证据视图的实现。取值一律 SYN- 合成，登记的覆盖国家取目录里的真码
+// CN / SG（登记口只收目录内的码，ADR-0345 决定五），XC 是目录外的码、只作地址侧“寄件国不在始发区域”的输入——解析与读回
+// 不查目录（隔离合成只记 S）。
 
 const catalogPurpose = "SYN-PURPOSE-NETWORK"
 
@@ -92,7 +93,7 @@ func satisfiedCustoms() *customsDouble {
 	return &customsDouble{outcome: domain.ConstraintSatisfied}
 }
 
-// syntheticCatalog 是一张最小合成网：寄件国 XA 的收寄枢纽经口岸到收件国 XB 的末端，一条线路两段；XB 的交付
+// syntheticCatalog 是一张最小合成网：寄件国 CN 的收寄枢纽经口岸到收件国 SG 的末端，一条线路两段；XB 的交付
 // 区域只覆盖邮编前缀 10。修订锚取 7，证视图修订就是它。
 func syntheticCatalog(t *testing.T) *catalogReadDouble {
 	t.Helper()
@@ -115,9 +116,9 @@ func syntheticCatalog(t *testing.T) *catalogReadDouble {
 		},
 		ServiceAreas: []ports.ServiceAreaDefinitionVersion{
 			{Code: "SYN-AREA-XA", Version: 1, EffectiveFrom: catalogEffectiveFrom,
-				HasCoverage: true, CoverageCountry: "XA", OriginNodes: []string{"SYN-NODE-ORIGIN"}},
+				HasCoverage: true, CoverageCountry: "CN", OriginNodes: []string{"SYN-NODE-ORIGIN"}},
 			{Code: "SYN-AREA-XB-10", Version: 4, EffectiveFrom: catalogEffectiveFrom,
-				HasCoverage: true, CoverageCountry: "XB", PostalPrefixes: []string{"10"},
+				HasCoverage: true, CoverageCountry: "SG", PostalPrefixes: []string{"10"},
 				DestinationNodes: []string{"SYN-NODE-LAST-MILE"}},
 		},
 		Strategies: []ports.RouteStrategyDefinitionVersion{
@@ -194,7 +195,7 @@ func TestACatalogLineCoveringBothEndsIsReachable(t *testing.T) {
 	catalog := syntheticCatalog(t)
 	customs := satisfiedCustoms()
 
-	result, store := assessThroughCatalog(t, catalog, customs, carriedGeo("XA", "", "XB", "100200"))
+	result, store := assessThroughCatalog(t, catalog, customs, carriedGeo("CN", "", "SG", "100200"))
 
 	finding := formedFinding(t, result)
 	if finding.Value() != domain.Reachable {
@@ -225,10 +226,23 @@ func TestACatalogLineCoveringBothEndsIsReachable(t *testing.T) {
 		t.Fatalf("关务来源收到的段链 = %+v", legs)
 	}
 	projected := query.Candidates[0]
-	if projected.Origin != "XA" || !projected.HasOrigin ||
-		projected.Destination != "XB" || !projected.HasDestination {
+	if projected.Origin != "CN" || !projected.HasOrigin ||
+		projected.Destination != "SG" || !projected.HasDestination {
 		t.Fatalf("关务来源收到的两端国家 = %q/%v → %q/%v，该随请求投影携带寄件/收件国",
 			projected.Origin, projected.HasOrigin, projected.Destination, projected.HasDestination)
+	}
+}
+
+// Covers: `AT-PC-077`，ADR-0345 决定五、六——登记口收紧到目录成员，读回与解析不动：册上已有的目录外覆盖（比如收紧之前登的）仍按形状读回、
+// 仍参与解析，判断为`可达`。
+func TestAnExistingCoverageOutsideTheCountryCatalogueStillReadsBackAndResolves(t *testing.T) {
+	catalog := syntheticCatalog(t)
+	catalog.snapshot.ServiceAreas[0].CoverageCountry = "ZZ"
+
+	result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("ZZ", "", "SG", "100200"))
+
+	if finding := formedFinding(t, result); finding.Value() != domain.Reachable {
+		t.Fatalf("value = %s，已在册的目录外覆盖照常解析，想要 REACHABLE", finding.Value())
 	}
 }
 
@@ -236,13 +250,13 @@ func TestACatalogLineCoveringBothEndsIsReachable(t *testing.T) {
 // 只带成形的国家码，缺格如实交缺席格，由 CC 按「证据不足」答状态未知。
 func TestTheCustomsQueryCarriesOnlyUsableEndpointCountries(t *testing.T) {
 	customs := satisfiedCustoms()
-	_, _ = assessThroughCatalog(t, syntheticCatalog(t), customs, carriedGeo("xa", "", "XB", "100200"))
+	_, _ = assessThroughCatalog(t, syntheticCatalog(t), customs, carriedGeo("xa", "", "SG", "100200"))
 
 	projected := customs.gotQuery.Candidates[0]
 	if projected.HasOrigin || projected.Origin != "" {
 		t.Fatalf("寄件国 = %q/%v，不成形的国家码该按缺席交，不把垃圾码当国家", projected.Origin, projected.HasOrigin)
 	}
-	if projected.Destination != "XB" || !projected.HasDestination {
+	if projected.Destination != "SG" || !projected.HasDestination {
 		t.Fatalf("收件国 = %q/%v，成形国家码该照带", projected.Destination, projected.HasDestination)
 	}
 }
@@ -255,9 +269,9 @@ func TestACatalogAreaThatExcludesAnEndIsUnreachable(t *testing.T) {
 		carried ports.RequestCarriedContent
 		reason  string
 	}{
-		{"寄件国不在始发区域", carriedGeo("XC", "", "XB", "100200"), "SERVICE_AREA_EXCLUDES_ORIGIN/SYN-AREA-XA@1"},
-		{"收件邮编不在交付前缀内", carriedGeo("XA", "", "XB", "200300"), "SERVICE_AREA_EXCLUDES_DESTINATION/SYN-AREA-XB-10@4"},
-		{"收件邮编带前导空白", carriedGeo("XA", "", "XB", " 100200"), "SERVICE_AREA_EXCLUDES_DESTINATION/SYN-AREA-XB-10@4"},
+		{"寄件国不在始发区域", carriedGeo("XC", "", "SG", "100200"), "SERVICE_AREA_EXCLUDES_ORIGIN/SYN-AREA-XA@1"},
+		{"收件邮编不在交付前缀内", carriedGeo("CN", "", "SG", "200300"), "SERVICE_AREA_EXCLUDES_DESTINATION/SYN-AREA-XB-10@4"},
+		{"收件邮编带前导空白", carriedGeo("CN", "", "SG", " 100200"), "SERVICE_AREA_EXCLUDES_DESTINATION/SYN-AREA-XB-10@4"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -279,8 +293,8 @@ func TestACatalogJudgmentWithoutTheGeoElementsItNeedsIsInsufficient(t *testing.T
 		carried ports.RequestCarriedContent
 		gap     string
 	}{
-		{"寄件侧缺国家码", carriedGeo("", "", "XB", "100200"), "GEO_ELEMENTS_MISSING/SENDER_COUNTRY"},
-		{"收件侧前缀覆盖下缺邮编", carriedGeo("XA", "", "XB", ""), "GEO_ELEMENTS_MISSING/DELIVERY_POSTAL_CODE"},
+		{"寄件侧缺国家码", carriedGeo("", "", "SG", "100200"), "GEO_ELEMENTS_MISSING/SENDER_COUNTRY"},
+		{"收件侧前缀覆盖下缺邮编", carriedGeo("CN", "", "SG", ""), "GEO_ELEMENTS_MISSING/DELIVERY_POSTAL_CODE"},
 		{"两侧都缺", carriedGeo("xa", "", "", ""), "GEO_ELEMENTS_MISSING/SENDER_COUNTRY+DELIVERY_COUNTRY"},
 		{"发起方没带投影", ports.RequestCarriedContent{}, "GEO_PROJECTION_NOT_CARRIED"},
 	}
@@ -304,7 +318,7 @@ func TestACatalogJudgmentWithoutTheGeoElementsItNeedsIsInsufficient(t *testing.T
 // `可达`；来源答适用限制则确定性淘汰（`AT-NR-031` 的限制半边）。
 func TestTheCustomsSourceDecidesTheLastHardConstraint(t *testing.T) {
 	notConnected := application.CustomsApplicabilityNotConnected{}
-	result, _ := assessThroughCatalog(t, syntheticCatalog(t), notConnected, carriedGeo("XA", "", "XB", "100200"))
+	result, _ := assessThroughCatalog(t, syntheticCatalog(t), notConnected, carriedGeo("CN", "", "SG", "100200"))
 	finding := formedFinding(t, result)
 	if finding.Value() != domain.InsufficientEvidence {
 		t.Fatalf("关务来源未接时 value = %s，想要 INSUFFICIENT_EVIDENCE", finding.Value())
@@ -314,7 +328,7 @@ func TestTheCustomsSourceDecidesTheLastHardConstraint(t *testing.T) {
 	}
 
 	restricted := &customsDouble{outcome: domain.RestrictionApplies}
-	result, _ = assessThroughCatalog(t, syntheticCatalog(t), restricted, carriedGeo("XA", "", "XB", "100200"))
+	result, _ = assessThroughCatalog(t, syntheticCatalog(t), restricted, carriedGeo("CN", "", "SG", "100200"))
 	finding = formedFinding(t, result)
 	if candidate := onlyCandidate(t, finding); finding.Value() != domain.Unreachable ||
 		candidate.Reason().String() != "HARD_CONSTRAINT_RESTRICTION/SYN-CUSTOMS-RESTRICTION-1" {
@@ -339,7 +353,7 @@ func TestAnAdjustmentInForceOnTheLineMakesItNotExecutable(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			catalog := syntheticCatalog(t)
 			catalog.snapshot.Adjustments = []ports.AvailabilityAdjustmentStatement{statement}
-			result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("XA", "", "XB", "100200"))
+			result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("CN", "", "SG", "100200"))
 			finding := formedFinding(t, result)
 			if candidate := onlyCandidate(t, finding); finding.Value() != domain.Unreachable ||
 				candidate.Reason().String() != "PATH_NOT_EXECUTABLE/ADJUSTMENT/SYN-ADJ-1@2" {
@@ -353,7 +367,7 @@ func TestAnAdjustmentInForceOnTheLineMakesItNotExecutable(t *testing.T) {
 		adjustment(ports.AdjustmentResumption, ports.TargetConnection, "SYN-CONN-ORIGIN-GATE"),
 		adjustment(ports.AdjustmentSuspension, ports.TargetConnection, "SYN-CONN-ELSEWHERE"),
 	}
-	result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("XA", "", "XB", "100200"))
+	result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("CN", "", "SG", "100200"))
 	if finding := formedFinding(t, result); finding.Value() != domain.Reachable {
 		t.Fatalf("恢复陈述与不在路上的停运都不该挡路，value = %s", finding.Value())
 	}
@@ -370,14 +384,14 @@ func TestOnlyApplicableLinesServingBothEndsBecomeCandidates(t *testing.T) {
 	noOriginRole.Code, noOriginRole.Segments = "SYN-LINE-FROM-GATE", []string{"SYN-CONN-GATE-LAST-MILE"}
 	catalog.snapshot.Lines = append(catalog.snapshot.Lines, otherScope, noOriginRole)
 
-	result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("XA", "", "XB", "100200"))
+	result, _ := assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("CN", "", "SG", "100200"))
 	if candidate := onlyCandidate(t, formedFinding(t, result)); candidate.ID().String() != "SYN-LINE-XA-XB@3" {
 		t.Fatalf("进候选空间的是 %s", candidate.ID())
 	}
 
 	catalog = syntheticCatalog(t)
 	catalog.snapshot.Lines = []ports.LineDefinitionVersion{noOriginRole}
-	result, _ = assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("XA", "", "XB", "100200"))
+	result, _ = assessThroughCatalog(t, catalog, satisfiedCustoms(), carriedGeo("CN", "", "SG", "100200"))
 	if result.Outcome() != application.JudgmentNotFormed ||
 		result.NotFormedReason() != application.CandidateSpaceNotEstablished {
 		t.Fatalf("候选空间为空时 outcome = %s reason = %s", result.Outcome(), result.NotFormedReason())
@@ -399,7 +413,7 @@ func TestTheCatalogEvidenceIsUnconfiguredWithoutAnApplicableStrategy(t *testing.
 		t.Run(name, func(t *testing.T) {
 			customs := satisfiedCustoms()
 			_, configured, err := newCatalogEvidence(t, catalog, customs).LoadNetworkEvidence(
-				t.Context(), catalogJudgmentKey(t), carriedGeo("XA", "", "XB", "100200"))
+				t.Context(), catalogJudgmentKey(t), carriedGeo("CN", "", "SG", "100200"))
 			if err != nil || configured {
 				t.Fatalf("configured=%v err=%v，想要未配置", configured, err)
 			}
@@ -411,7 +425,7 @@ func TestTheCatalogEvidenceIsUnconfiguredWithoutAnApplicableStrategy(t *testing.
 
 	down := errors.New("catalog store is down")
 	if _, _, err := newCatalogEvidence(t, &catalogReadDouble{err: down}, satisfiedCustoms()).LoadNetworkEvidence(
-		t.Context(), catalogJudgmentKey(t), carriedGeo("XA", "", "XB", "100200")); !errors.Is(err, down) {
+		t.Context(), catalogJudgmentKey(t), carriedGeo("CN", "", "SG", "100200")); !errors.Is(err, down) {
 		t.Fatalf("目录读不通应原样上抛，实得 %v", err)
 	}
 }
@@ -445,7 +459,7 @@ func TestACatalogThatCannotBeResolvedIsALoudError(t *testing.T) {
 			catalog := syntheticCatalog(t)
 			breakIt(&catalog.snapshot)
 			_, configured, err := newCatalogEvidence(t, catalog, satisfiedCustoms()).LoadNetworkEvidence(
-				t.Context(), catalogJudgmentKey(t), carriedGeo("XA", "", "XB", "100200"))
+				t.Context(), catalogJudgmentKey(t), carriedGeo("CN", "", "SG", "100200"))
 			if !errors.Is(err, application.ErrCatalogUnresolvable) || configured {
 				t.Fatalf("configured=%v err=%v，想要 ErrCatalogUnresolvable", configured, err)
 			}
@@ -458,13 +472,13 @@ func TestACatalogThatCannotBeResolvedIsALoudError(t *testing.T) {
 func TestAnIncompleteCustomsAnswerIsALoudError(t *testing.T) {
 	omitting := &customsDouble{outcome: domain.ConstraintSatisfied, omit: map[string]bool{"SYN-LINE-XA-XB@3": true}}
 	if _, _, err := newCatalogEvidence(t, syntheticCatalog(t), omitting).LoadNetworkEvidence(
-		t.Context(), catalogJudgmentKey(t), carriedGeo("XA", "", "XB", "100200")); !errors.Is(err, application.ErrCustomsAnswerIncomplete) {
+		t.Context(), catalogJudgmentKey(t), carriedGeo("CN", "", "SG", "100200")); !errors.Is(err, application.ErrCustomsAnswerIncomplete) {
 		t.Fatalf("漏答应交回 ErrCustomsAnswerIncomplete，实得 %v", err)
 	}
 
 	down := errors.New("customs source is down")
 	if _, _, err := newCatalogEvidence(t, syntheticCatalog(t), &customsDouble{err: down}).LoadNetworkEvidence(
-		t.Context(), catalogJudgmentKey(t), carriedGeo("XA", "", "XB", "100200")); !errors.Is(err, down) {
+		t.Context(), catalogJudgmentKey(t), carriedGeo("CN", "", "SG", "100200")); !errors.Is(err, down) {
 		t.Fatalf("关务来源调不通应原样上抛，实得 %v", err)
 	}
 }
