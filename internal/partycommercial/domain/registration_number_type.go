@@ -18,8 +18,8 @@ var (
 )
 
 // RegistrationCountryCode 是注册国家 / 地区（CONTEXT「责任法人」）。只收两位大写拉丁字母那一种
-// 形状（ISO 3166-1 alpha-2），不内置码表：哪个国家 / 地区有注册号类型由目录登记回答，查无就是
-// `未登记`。锁形状是为了一个国家 / 地区在目录里只有一个键——cn、CN、CHN 并存时，目录登在 CN 下
+// 形状（ISO 3166-1 alpha-2），不拿产品内置的国家目录（refdata）收紧成员资格——ADR-0335 决定五：哪个国家 / 地区有
+// 注册号类型由目录登记回答，查无就是`未登记`。锁形状是为了一个国家 / 地区在目录里只有一个键——cn、CN、CHN 并存时，目录登在 CN 下
 // 而校验按 cn 查，会把登过的国家 / 地区答成未登记。
 type RegistrationCountryCode struct{ value string }
 

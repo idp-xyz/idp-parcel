@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 type identifier struct {
@@ -126,17 +128,14 @@ func (currency Currency) valid() bool {
 }
 
 // MinorUnitScale 报出该币种最小币单位的小数位（ISO 4217 公开基准，产品内置数据，不是租户取值）。
-// 绝大多数币种是 2 位；0 位与 3 位的异常集封闭且在 ISO 里固定，各列一张小表，其余按 2 位答。
-// 消费侧拿它把精确十进制合计取整一次时用（ADR-0148 决定四：按比较币种的最小币单位取整）。
+// 数据在共享目录 refdata（ADR-0335 决定五），本方法只是查它：目录里的币种按目录答，目录外的三位大写码
+// 仍是形状合法的币种码（NewCurrency 只验形状），小数位按 2 位答——与目录建立之前的行为一致，既有数据不因此被拒或改值。
+// 消费侧拿它把精确十进制合计取整一次时用（ADR-0148 决定四：按比较币种的最小币单位取整），上界 3 由目录保证。
 func (currency Currency) MinorUnitScale() uint8 {
-	switch currency.code {
-	case "JPY", "KRW", "VND", "CLP", "ISK", "XOF", "XAF", "XPF", "KMF", "BIF", "DJF", "GNF", "RWF", "UGX", "PYG", "VUV":
-		return 0
-	case "KWD", "BHD", "OMR", "JOD", "TND", "IQD", "LYD":
-		return 3
-	default:
-		return 2
+	if known, found := refdata.Currency(currency.code); found {
+		return known.MinorUnitScale
 	}
+	return 2
 }
 
 type ChargeCode struct {
