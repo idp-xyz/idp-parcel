@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import type { CommercialPolicyListResponseBody } from './api';
 import { cancellationCell, kindColumns, pricePolicyCaliberCell, rowsOf } from './policy-rows';
+import { emptyRefdataNames, setCurrentRefdataNames } from '../refdata-names';
 import {
   commercialPolicyKinds,
   policyKindLabels,
@@ -488,5 +489,51 @@ test('信用政策的责任法人交引用原值', () => {
   for (const row of rowsOf(creditPolicies)) {
     equal(row.refs?.legalEntity?.kind, 'legal-entity');
     equal(row.refs?.legalEntity?.id, row.values.legalEntity);
+  }
+});
+
+// Covers: ADR-0335 决定七——结算政策册的币种列经基础数据目录译成“人民币（CNY）”，查不到原样显示；译的只是显示，
+// 行里的原始记录不动，搜索仍按码命中（括号里有码）。
+test('结算政策的币种列译名，目录读不回或码在目录之外时原样显示', () => {
+  const body: CommercialPolicyListResponseBody = {
+    outcome: 'COMMERCIAL_POLICIES_LISTED',
+    kind: 'SETTLEMENT_POLICY',
+    policies: [
+      {
+        objectId: 'settle-1',
+        version: 'v1',
+        method: 'PREPAID',
+        legalEntity: 'legal-1',
+        counterparty: 'party-1',
+        contractLabel: 'label-1',
+        chargeScope: 'scope-1',
+        currency: 'CNY',
+        effectiveStartsAt: '2026-01-01T00:00:00Z',
+        registeredAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        objectId: 'settle-2',
+        version: 'v1',
+        method: 'PREPAID',
+        legalEntity: 'legal-1',
+        counterparty: 'party-1',
+        contractLabel: 'label-2',
+        chargeScope: 'scope-1',
+        currency: 'ZZZ',
+        effectiveStartsAt: '2026-01-01T00:00:00Z',
+        registeredAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+  };
+  equal(rowsOf(body)[0].values.currency, 'CNY');
+  setCurrentRefdataNames({ countries: new Map(), currencies: new Map([['CNY', '人民币']]) });
+  try {
+    const rows = rowsOf(body);
+    equal(rows[0].values.currency, '人民币（CNY）');
+    equal(rows[1].values.currency, 'ZZZ');
+    const source = rows[0].source;
+    ok(source !== undefined && source.kind === 'SETTLEMENT_POLICY' && source.record.currency === 'CNY');
+  } finally {
+    setCurrentRefdataNames(emptyRefdataNames);
   }
 });
