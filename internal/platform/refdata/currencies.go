@@ -131,6 +131,7 @@ var currencies = []CurrencyInfo{
 	{"SRD", "苏里南元", "Surinamese Dollar", "Sr$", 2},
 	{"SSP", "南苏丹镑", "South Sudanese Pound", "SSP", 2},
 	{"STN", "圣多美和普林西比多布拉", "São Tomé and Príncipe Dobra", "Db", 2},
+	{"SVC", "萨尔瓦多科朗", "Salvadoran Colon", "₡", 2},
 	{"SYP", "叙利亚镑", "Syrian Pound", "£S", 2},
 	{"SZL", "斯威士兰里兰吉尼", "Swazi Lilangeni", "E", 2},
 	{"THB", "泰铢", "Thai Baht", "฿", 2},
@@ -159,4 +160,5 @@ var currencies = []CurrencyInfo{
 	{"YER", "也门里亚尔", "Yemeni Rial", "﷼", 2},
 	{"ZAR", "南非兰特", "South African Rand", "R", 2},
 	{"ZMW", "赞比亚克瓦查", "Zambian Kwacha", "ZK", 2},
+	{"ZWG", "津巴布韦金", "Zimbabwe Gold", "ZiG", 2},
 }

@@ -120,7 +120,7 @@ func NewUnitsEndpoint(authenticator OperationsReadAuthenticator) (http.Handler, 
 }
 
 // newEndpoint 收拢三口共有的外壳：方法、认证、再交给各口自己的取数。认证在读参数之前——没有授予的人
-// 连 400（参数不成立）都不该看见，与其余目录读口先认证后读参数同序。
+// 连 400（参数不成立）都不该看见。其余目录读口有的先校验封闭选择参数再认证，这里取更保守的一头，不与它们同序。
 func newEndpoint(authenticator OperationsReadAuthenticator, serve http.HandlerFunc) (http.Handler, error) {
 	if authenticator == nil {
 		return nil, errors.New("reference data http: endpoint needs an authenticator")
