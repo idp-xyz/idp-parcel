@@ -7,7 +7,7 @@ import type { ApiResult } from '../../catalogue-api';
 import type { PriceCardDraftSubmissionBody, PriceCardImportReading, PriceCardWorkbook } from '../api';
 import { workbookToDocument } from '../card-form/document';
 import type { Issue } from '../card-form/validate';
-import type { LocatedProblem, MappedProblems } from '../card-form/problems';
+import { problemWords, type LocatedProblem, type MappedProblems } from '../card-form/problems';
 import { parsePriceCardContent, type PriceCardContentView } from '../price-card-content';
 import { PriceCardViewSections } from '../PriceCardDetailPanel';
 import { priceCardDraftStatusLabels } from '../price-card-import';
@@ -40,6 +40,22 @@ function localView(workbook: PriceCardWorkbook): PriceCardContentView | null {
   } catch {
     return null;
   }
+}
+
+/** 说不到具体格子的问题：中文留作话，夹带的英文原文折叠。 */
+function UnlocatedLine({ message }: { message: string }) {
+  const words = problemWords(message);
+  return (
+    <li className="rounded border border-idpxyz-border px-3 py-2 text-[12px] text-[color:var(--ds-status-danger-fg)]">
+      {words.text}
+      {words.original ? (
+        <details className="ml-1 inline-block align-top text-idpxyz-breadcrumb">
+          <summary className="cursor-pointer select-none">原话</summary>
+          <span className="font-mono break-all">{words.original}</span>
+        </details>
+      ) : null}
+    </li>
+  );
 }
 
 function ProblemList({ located, onJump }: { located: readonly LocatedProblem[]; onJump: (fieldId: string) => void }) {
@@ -172,11 +188,9 @@ export function StepPreview({
           </SectionTitle>
           {preview && preview.mapped.located.length > 0 ? <ProblemList located={preview.mapped.located} onJump={onJump} /> : null}
           {preview && preview.mapped.unlocated.length > 0 ? (
-            <ul className="mt-2 space-y-1.5">
+            <ul className="mt-2 space-y-1.5" aria-label="说不到具体格子的问题">
               {preview.mapped.unlocated.map((problem, index) => (
-                <li key={`${index}-${problem.code}`} className="rounded border border-idpxyz-border px-3 py-2 text-[12px] text-[color:var(--ds-status-danger-fg)]">
-                  {problem.message}
-                </li>
+                <UnlocatedLine key={`${index}-${problem.code}`} message={problem.message} />
               ))}
             </ul>
           ) : null}

@@ -42,7 +42,7 @@ function Segments({ policy, title, hint }: { policy: 'chargeable' | 'volumetric'
               <tr key={segment.uid} className="border-t border-idpxyz-border">
                 <td className="px-2 py-1 text-idpxyz-breadcrumb">{index + 1}</td>
                 <td className="px-1 py-1">
-                  <SegmentMode id={field.segment(policy, segment.uid, 'mode')} value={segment.mode} options={modes} onChange={(mode) => patch(segment.uid, { mode })} />
+                  <SegmentMode id={field.segment(policy, segment.uid, 'mode')} value={segment.mode} options={modes} onChange={(mode) => patch(segment.uid, { mode, ...(mode === 'NONE' ? { increment: '1' } : {}) })} />
                 </td>
                 <td className="px-1 py-1">
                   <CellInput id={field.segment(policy, segment.uid, 'increment')} label={`第 ${index + 1} 段进位单位`} value={segment.increment} onChange={(increment) => patch(segment.uid, { increment })} />
@@ -61,6 +61,7 @@ function Segments({ policy, title, hint }: { policy: 'chargeable' | 'volumetric'
         </table>
       </div>
       <GroupErrors ids={ids} />
+      <p className={`${hintClass} mt-1`}>选「不进位」时进位单位填 1。</p>
       <Button variant="outline" size="sm" className="mt-2" onClick={() => setSegments((list) => [...list, newSegment()])}>
         <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
         添加一段

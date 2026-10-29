@@ -463,3 +463,43 @@ test('两项同属一个互斥组：都写 GROUPED 与组名，优先级逐项�
     ],
   );
 });
+
+test('同一格被几张价表共用时服务端各报一遍，页面只留一条', () => {
+  const { origins } = formToWorkbook(sampleState(), spec);
+  const same = { code: 'CELL_INVALID', column: 'currency', message: '币种码 "XXX" 不在产品内置的目录里' };
+  const { located } = mapProblems(
+    [
+      { ...same, sheet: 'tables', row: 2 },
+      { ...same, sheet: 'tables', row: 3 },
+    ],
+    origins,
+  );
+  equal(located.length, 1);
+  equal(located[0].where, '基本信息 · 币种');
+});
+
+test('服务端话里带的生成标识换回表单里的名字：价表、费用项', () => {
+  const state = sampleState();
+  const { origins } = formToWorkbook(state, spec);
+  const P = state.basics.planId;
+  const { located } = mapProblems(
+    [
+      { sheet: 'tables', row: 2, column: 'tableId', code: 'CONSTRUCTION_REJECTED', message: `价表 ${P}-TABLE立不住：parcel pricing: rate interval overlap: zone Z1` },
+      { sheet: 'tables', row: 3, column: 'tableId', code: 'CONSTRUCTION_REJECTED', message: `价表 ${P}-TABLE-4立不住：parcel pricing: rate table conflict` },
+    ],
+    origins,
+  );
+  equal(located[0].text, '价表 基础运费价表立不住（原因见「原话」）');
+  equal(located[1].text, '价表 费用项 4「偏远地区费（合成演示值）」 · 价表立不住（原因见「原话」）');
+  ok(located[0].original?.includes('rate interval overlap'));
+});
+
+test('本地校验：互斥组优先级要大于 0，体积重除数要大于 0', () => {
+  const state = sampleState();
+  state.fees[1].priority = '0';
+  state.weight.divisor = '0';
+  equal(validateStep('fees', state, spec).length, 1);
+  const weight = validateStep('weight', state, spec);
+  equal(weight.length, 1);
+  equal(weight[0].text, '体积重除数要大于 0');
+});

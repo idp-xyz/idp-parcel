@@ -93,7 +93,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
           const text = conditionRowText(row);
           const units = unitOptionsFor(row.source);
           return (
-            <div key={row.uid} className="rounded border border-idpxyz-border bg-idpxyz-sidebar/40 p-2">
+            <div key={row.uid} className="rounded border border-idpxyz-border p-2">
               <div className="flex flex-wrap items-start gap-2">
                 <span className="w-12 pt-1.5 text-[12px] text-idpxyz-breadcrumb">条件 {index + 1}</span>
                 <div className="w-44">
