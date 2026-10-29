@@ -1,7 +1,7 @@
 # 02 租户启用哪些国家 / 地区与币种没有登记处，新写入入口也不认内置目录
 
 Category: enhancement
-Status: in-progress——2026-10-29 评审修订完成，待复评与进 main，分支 claude-refdata2a（已重放到 main `7fac89bf9`，代码最后一笔 `ae01699c3`）。此前：in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-refdata2a（代码最后一笔 `a3215649b`，重放前的 SHA）。此前：in-progress——2026-10-29 作者认领，分支 claude-refdata2a（起点 `b8fe76a42`）。
+Status: resolved——2026-10-29 进 main（`466d4599c`；全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-10-29 评审修订完成，待复评与进 main，分支 claude-refdata2a（已重放到 main `7fac89bf9`，代码最后一笔 `ae01699c3`）。此前：in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-refdata2a（代码最后一笔 `a3215649b`，重放前的 SHA）。此前：in-progress——2026-10-29 作者认领，分支 claude-refdata2a（起点 `b8fe76a42`）。
 Blocked by: 无（承接 [01](./01-countries-currencies-and-units-are-product-built-in-reference-data.md) 的后续轮次）
 
 ## 现象
@@ -79,4 +79,13 @@ Blocked by: 无（承接 [01](./01-countries-currencies-and-units-are-product-bu
 5. **Standards**。`ports/reference_enablement.go` 注释去掉对别包数据的计数，改“以内置目录的大小为界”；`catalog_network_evidence_test.go` 的 `syntheticCatalog` 注释残留的 XB 改成 SG。UC-PC-001 的 `AT-PC-074`、`AT-PC-077` 行同步（含废止码、恢复路径、各入口答法与未收紧的入口），AT 盘点两行补测试名。
 
 **自验（含 PG）**：`go build ./...`、`go vet ./...`、`gofmt -l` 无输出；`go test -count=1 -p 1` 于 `./internal/partycommercial/...`、`./internal/networkrouting/...`、`./internal/settlementaccounting/...`、`./internal/parcelpricing/...`、`./internal/collectionremittance/...`、`./internal/platform/...`、`./internal/accessidentity/...`、`./internal/architecture/...`、`./migrations/...`、`./cmd/...`，85 个包全 ok、0 FAIL，既有测试没有削弱（夹具改动仍是纯换码）；前端 `tsc -b` 无输出、897 个单测全过。`adr-index` 与 `at-coverage-counts` 的 `-check` 只报生成物过期。
+
+## 评审记录（2026-10-29，隔离子代理，钉 `fec201b98`）
+
+实质通过：启用范围不拦截、没登记读作缺席不套默认；登记册只追加、按「生效时点不晚于此刻的最新一行」导出，迁移 0043 约束逐条在真库验过、未改已发布迁移、编号不撞；写面用登记册配置写授予（不新增授予种类）；收紧只在写入边界，构造函数、读回与重放不动（目录外覆盖、目录外法人照样读回与重放有测试）；被加门的全部是人工驱动的登记、导入与 CLI，没有一条在消费上游事件、外部事实或派发信封的路径上，事实类入口（记账、外部资金事实、供应商账单、资金核销等约 50 处币种构造）一处未收紧，不存在把信封卡死的风险；测试夹具 47 个文件中 23 个纯换码（XA→CN、XB→SG、XTS→CNY）无净删除、无测试函数被删、无新增 Skip。阻断 1 条（文档）：ADR-0335 没挂前向指针。非阻断并已处理（`7cd8efddd`）：原因文字尾巴带英文、ADR-0345「均为业务格」措辞不实（两处载荷口答 400 属调用方的错）、重放前的目录门与废止码的处理（启用范围对已登记的码放行重放与追加停用）、法人恢复路径补用例与拒绝文字半句、别包数据计数与注释残留。非阻断未处理：`cmd/parcel-pricing-register` 的价卡与序列批量口、路线策略版本的比较币种登记口没有目录门（ADR-0345 风险点 10）；库层不挡 UPDATE/DELETE（同类册一致，靠仓库纪律）；生效时点带亚微秒的重放可能误判冲突（同类册同样、前端毫秒不触发）。
+
+## 进 main 记录（2026-10-29，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-refdata2a` tip `7cd8efddd` 作出处（已重放到 main `7fac89bf9`，无冲突）；隔离树 cherry-pick，重生成 ADR 索引、AT 盘点计数与机制清点，两项 `-check` 退 0；全量 164 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `466d4599c`。
+- 修订轮未再派评审（改动为文档、文字、一条用例与错误类型）。
 
