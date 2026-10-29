@@ -274,7 +274,7 @@ type canonicalSurchargeCalculationDocument struct {
 	// 取当期序列定额（ADR-0110）：序列标识与窗外行为两格都进摘要——只差窗外声明的两张卡收法不同。
 	SeriesID    string `json:"series_id,omitempty"`
 	OutOfWindow string `json:"out_of_window,omitempty"`
-	// 附加费价表的查档维度（ADR-0348 决定四）：只有按偏远档位查档的价表才有这一键，按分区查档（既有各卡的读法）
+	// 附加费价表的查档维度（ADR-0348 决定三）：只有按偏远档位查档的价表才有这一键，按分区查档（既有各卡的读法）
 	// 省略，字节不变——带这一键的方案写 PPC-6，见 requiredCanonicalization。
 	TableKey string `json:"table_key,omitempty"`
 }
@@ -432,17 +432,17 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // ADR-0111 逐委托/逐主单聚合）都记在这一号下。换号发生在第一份改规范化文档的提交里而不是
 // 最后一笔：不换号的中间态会让同一个版本号下存在两套字节，PPC-4 快照重算出来的摘要既不等于
 // 原值又不会被版本门挡住。
-// PPC-6 只多两处可缺的键（ADR-0348，照 ADR-0267 决定一换号并取能表达内容的最低一版）：方案级的总额上下限与
-// 附加费价表的查档维度。不带这两处的方案仍写 PPC-5、字节一个不动，本构建两版都认、都能折回；带的写 PPC-6。
-// canonicalizationVersion 是其中基础的那一版 PPC-5。
+// PPC-6 新增的都是可缺键（ADR-0348，照 ADR-0267 决定一换号并取能表达内容的最低一版）：方案级的总额上下限，与
+// 查表型附加费计算的查档维度。不带这些键的方案仍写 PPC-5、字节一个不动，本构建 PPC-5 与 PPC-6 都认、都能折回；
+// 带的写 PPC-6。canonicalizationVersion 是其中基础的那一版 PPC-5。
 const canonicalizationVersion = "PPC-5"
 
-// canonicalizationVersionTotalBounds 是 PPC-6，见上。
+// canonicalizationVersionTotalBounds 是 PPC-6：带总额上下限或按偏远档位查档价表的方案写它。
 const canonicalizationVersionTotalBounds = "PPC-6"
 
 // CurrentCanonicalizationVersion 报出本构建写下的基础规范化版本 PPC-5：不带总额上下限与偏远档位查档价表的方案
-// 按它写。带那两处的方案写 PPC-6，本构建同样认得（见 supportedCanonicalization）；按这两版之外记录的工件，
-// 在这里无法重新算出其摘要。
+// 按它写。带那些结构的方案写 PPC-6，本构建同样认得（supportedCanonicalization）；按 PPC-5 与 PPC-6 之外记录的
+// 工件，在这里无法重新算出其摘要。
 func CurrentCanonicalizationVersion() string { return canonicalizationVersion }
 
 // supportedCanonicalization 报出本构建能不能按某个规范化版本重新规范化。
@@ -904,7 +904,9 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		return compareCanonicalReferences(manifest[left], manifest[right]) < 0
 	})
 	// 评价的规范化版本随它所评的方案走：PPC-5 的方案评出的评价摘要与此前逐字相同，PPC-6 的方案评出的写 PPC-6。
-	// 本构建不认的版本（重放一份按旧形记录的评价时才会遇到）不在这里重算，退回基础版本。
+	// 评价的 planCanonicalization 取自它所评的方案，而方案重验只放行本构建认得的版本，所以这条退回在生产路径上走不到：
+	// 它只给手工拼出的评价值一个确定的答案，不替任何不认的版本算摘要。退回时走 CurrentCanonicalizationVersion 而不直接用
+	// 常量，是为了让这个导出函数有一个生产调用点——接线棘轮（internal/architecture）要求导出的领域工厂不能无人调用。
 	canonicalization := evaluation.planCanonicalization
 	if !supportedCanonicalization(canonicalization) {
 		canonicalization = CurrentCanonicalizationVersion()

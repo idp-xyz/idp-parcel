@@ -63,8 +63,8 @@ func main() {
 	write(outDir, "reference-series-fuel-full.json", fullFuelSeriesSnapshot())
 	write(outDir, "reference-series-fuel-full-review.json", seriesReviewDocument(fullFuelSeriesID, "v1"))
 	write(outDir, "price-card-cn-sg-full.json", fullSellCardSnapshot())
-	// 第三张完整价卡（范围 SYN-SCOPE-04，见 full_card_03.go）：偏远一条规则按档位查价表，加单票合计最低收费。绑上面已登记的
-	// 同一批目录与燃油序列，不另登。
+	// 第三张完整价卡（范围 SYN-SCOPE-04，见 full_card_03.go）：偏远一条规则按档位查价表，加单票合计最低收费。绑 FULL-01 那一节（steps/160）
+	// 已登记的同一批目录与燃油序列，不另登。
 	write(outDir, "price-card-cn-sg-full-03.json", fullSellCard03Snapshot())
 }
 
