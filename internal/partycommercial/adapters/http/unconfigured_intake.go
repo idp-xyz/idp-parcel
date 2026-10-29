@@ -63,6 +63,7 @@ var (
 	_ ChannelAccountUseRevocationIntake        = UnconfiguredIntake{}
 	_ RegistrationNumberTypeRegistrationIntake = UnconfiguredIntake{}
 	_ RegistrationNumberTypeDeactivationIntake = UnconfiguredIntake{}
+	_ ReferenceEnablementRegistrationIntake    = UnconfiguredIntake{}
 )
 
 // 方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每类各有
@@ -176,4 +177,10 @@ func (UnconfiguredIntake) IntakeRegistrationNumberTypeDeactivation(
 	context.Context, *http.Request,
 ) (application.DeactivateRegistrationNumberTypeCommand, error) {
 	return application.DeactivateRegistrationNumberTypeCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeReferenceEnablementRegistration(
+	context.Context, *http.Request,
+) (application.RegisterReferenceEnablementCommand, error) {
+	return application.RegisterReferenceEnablementCommand{}, ErrAccessChannelNotConfigured
 }

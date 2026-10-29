@@ -16,6 +16,7 @@ type commercialRegistrationWiring struct {
 	registrationNumberTypeRegistration commercialhttp.RegistrationNumberTypeRegistrar
 	legalEntityProfileRegistration     commercialhttp.LegalEntityProfileRegistrar
 	channelAccountUseRegistration      commercialhttp.ChannelAccountUseRegistrar
+	referenceEnablementRegistration    commercialhttp.ReferenceEnablementRegistrar
 }
 
 func init() {
@@ -41,6 +42,7 @@ func init() {
 			"/commercial-legal-entity-profile-registrations":     {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-channel-account-use-registrations":      {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-channel-account-use-revocations":        {method: http.MethodPost, face: registryWriteFace()},
+			"/reference-data/enablement-registrations":           {method: http.MethodPost, face: registryWriteFace()},
 		},
 		build: func(sources endpointSources) (commercialRegistrationWiring, error) {
 			commercialRegistration, err := buildCommercialRegistrationOrchestration(sources.db)
@@ -53,6 +55,7 @@ func init() {
 				registrationNumberTypeRegistration: commercialRegistration.registrationNumberType,
 				legalEntityProfileRegistration:     commercialRegistration.legalEntityProfile,
 				channelAccountUseRegistration:      commercialRegistration.channelAccountUse,
+				referenceEnablementRegistration:    commercialRegistration.referenceEnablement,
 			}, err
 		},
 		mount: func(channels endpointChannels, wiring commercialRegistrationWiring) []httpapi.BusinessEndpoint {
@@ -110,6 +113,10 @@ func init() {
 				// 正文，等于把「后继修订不得改换账号或双方」那道门要挡的机会又递回给调用方。
 				{Pattern: "/commercial-channel-account-use-registrations", Handler: commercialhttp.NewRegisterChannelAccountUseEndpoint(channels.operatorRegistries.commercial, wiring.channelAccountUseRegistration)},
 				{Pattern: "/commercial-channel-account-use-revocations", Handler: commercialhttp.NewRevokeChannelAccountUseEndpoint(channels.operatorRegistries.commercial, wiring.channelAccountUseRegistration)},
+				// 启用范围登记（ADR-0345）：某租户启用哪些国家 / 地区与币种由租户登记，启用与停用同是往修订链上追加一笔，所以
+				// 只有一个口。路径落在 `/reference-data/` 下是因为它的使用者是“基础数据”页，登记册的所有权在本上下文。授予面是
+				// 登记册配置写（ADR-0085 决定一），不新增授予种类；租户与登记责任方取认证信封。
+				{Pattern: "/reference-data/enablement-registrations", Handler: commercialhttp.NewRegisterReferenceEnablementEndpoint(channels.operatorRegistries.commercial, wiring.referenceEnablementRegistration)},
 			}
 		},
 	})

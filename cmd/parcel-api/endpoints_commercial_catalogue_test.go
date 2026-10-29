@@ -12,5 +12,6 @@ func init() {
 		publicationDrafts:          unwiredPublicationDraftRead{},
 		legalEntityProfiles:        unwiredLegalEntityProfileRevisions{},
 		legalEntityProfileResolver: unwiredLegalEntityProfileResolver{},
+		referenceEnablements:       unwiredReferenceEnablements{},
 	})
 }

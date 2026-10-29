@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -194,15 +195,20 @@ func TestReferenceEnablementIsolatesTenantsAndKinds(t *testing.T) {
 	}
 }
 
-// Covers: 登记写口无环境事务即拒（判据同其余登记册）；迁移的 CHECK 守形状与封闭集——绕过领域门的写入也进不去。
-func TestReferenceEnablementWriteNeedsATransactionAndTheTableGuardsShape(t *testing.T) {
-	registry, _, pool := newReferenceEnablements(t)
-	ctx := t.Context()
-
-	_, err := registry.SaveReferenceEnablement(ctx, enablementFixture(t, "tenant-enable-4", domain.ReferenceKindCountry, "CN", 1, domain.ReferenceEnablementEnabled, enablementEffective, "", "idp#a"))
-	if err == nil {
-		t.Fatal("无环境事务应拒")
+// Covers: 登记写口无环境事务即拒（判据同其余登记册）。
+func TestReferenceEnablementWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	registry, _, _ := newReferenceEnablements(t)
+	if _, err := registry.SaveReferenceEnablement(t.Context(),
+		enablementFixture(t, "tenant-enable-4", domain.ReferenceKindCountry, "CN", 1, domain.ReferenceEnablementEnabled, enablementEffective, "", "idp#a"),
+	); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务 SaveReferenceEnablement 应返回 ErrTransactionRequired，实得：%v", err)
 	}
+}
+
+// Covers: 迁移的 CHECK 守形状与封闭集——绕过领域门的写入也进不去。
+func TestReferenceEnablementTableGuardsShape(t *testing.T) {
+	_, _, pool := newReferenceEnablements(t)
+	ctx := t.Context()
 
 	for name, args := range map[string][]any{
 		"国家码形状":    {"tenant-enable-4", "COUNTRY", "CHN", 1, "ENABLED", ""},
