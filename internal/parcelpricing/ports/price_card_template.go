@@ -1,6 +1,10 @@
 package ports
 
-import "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+import (
+	"errors"
+
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+)
 
 // 价卡导入模板的读口（ADR-0101 决定二至四）。模板怎么读、问题码各指什么，由设计文档
 // docs/design/pp-price-card-import-template-and-validation-spec.md 定；这里只立预览与录入
@@ -78,3 +82,84 @@ const (
 	TemplateTreeInvalid          PriceCardTemplateProblemCode = "TREE_INVALID"
 	TemplateConstructionRejected PriceCardTemplateProblemCode = "CONSTRUCTION_REJECTED"
 )
+
+// 价卡导入的第二种载体：页面表单提交的结构化工作簿（JSON）。它与电子表格文件是同一个模板的两种写法，读出来走同一套
+// 译码与校验，所以读法的三种形状、问题码与坐标都与读文件一模一样；变的只有字节从哪来、源文件身份怎么记。
+
+var (
+	// ErrPriceCardWorkbookTooLarge：提交的工作簿 JSON 超过技术上限（与文件同一组上限）。
+	ErrPriceCardWorkbookTooLarge = errors.New("parcel pricing: price card workbook exceeds the read limits")
+	// ErrPriceCardWorkbookMalformed：提交的不是一份形状对的工作簿 JSON（不是 JSON、顶层缺键或多键、表不是数组、格不是
+	// 字符串 / 数字 / null、同一对象里同名键出现两次……）。
+	ErrPriceCardWorkbookMalformed = errors.New("parcel pricing: price card workbook is malformed")
+)
+
+// PriceCardWorkbookRejection 是工作簿 JSON 的形状没过：Detail 是说人话的说明（哪里不对），errors.Is 认上面两个哨兵。
+// 它存在是为了让答复里的话是 Detail 本身，而不是带英文哨兵前缀的错误串。
+type PriceCardWorkbookRejection struct {
+	TooLarge bool
+	Detail   string
+}
+
+func (rejection PriceCardWorkbookRejection) Error() string {
+	if rejection.TooLarge {
+		return ErrPriceCardWorkbookTooLarge.Error() + ": " + rejection.Detail
+	}
+	return ErrPriceCardWorkbookMalformed.Error() + ": " + rejection.Detail
+}
+
+func (rejection PriceCardWorkbookRejection) Is(target error) bool {
+	if rejection.TooLarge {
+		return target == ErrPriceCardWorkbookTooLarge
+	}
+	return target == ErrPriceCardWorkbookMalformed
+}
+
+// PriceCardWorkbookReader 读页面表单提交的结构化工作簿。分两步，是为了让「源文件身份」与「被读的字节」是同一份：先规范化
+// （键排序、去空白，数值字面量原样保留），身份取规范化字节的散列；再读规范化字节。同一份内容无论空白与键序怎么写，
+// 得到同一个身份与同一份读法。
+type PriceCardWorkbookReader interface {
+	// CanonicalizePriceCardWorkbook 校验工作簿 JSON 的形状并给出规范化字节；形状不对或超限答 PriceCardWorkbookRejection。
+	// 形状之外的一切（表、列、格的内容）不在这一步判。
+	CanonicalizePriceCardWorkbook(raw []byte) ([]byte, error)
+	// ReadPriceCardWorkbook 读规范化字节。读法本身就是答案，没有错误返回。
+	ReadPriceCardWorkbook(canonical []byte) PriceCardTemplateReading
+}
+
+// PriceCardTemplateSpec 是模板规格：版本、表清单与每一列的定义。它由读取模板的同一张列定义生成，增删一列规格自动跟着变，
+// 编辑器照它画表单而不是在前端抄一份列表。
+type PriceCardTemplateSpec struct {
+	// TemplateVersion 是本构建写出的版本（最新的一版）；AcceptedTemplateVersions 是本构建读得了的全部版本。
+	TemplateVersion          string
+	AcceptedTemplateVersions []string
+	Sheets                   []PriceCardTemplateSheetSpec
+}
+
+// PriceCardTemplateSheetSpec 是一张表。Layout 为 ROWS 的表一行一条记录、列就是 Columns；为 FIELDS 的表（card）每个字段
+// 一行，Columns 列的是字段，工作簿里写成 {field, value} 行。
+type PriceCardTemplateSheetSpec struct {
+	Name       string
+	Title      string
+	Purpose    string
+	Layout     string
+	Repeatable bool
+	// Since 非空：这张表自该版起才有。
+	Since   string
+	Columns []PriceCardTemplateColumnSpec
+}
+
+// PriceCardTemplateColumnSpec 是一列（或 card 表的一个字段）。Requirement 取 always、conditional、optional。AllowedValues 只有
+// 封闭取值的列才有；MultiValued 为真时那一格是以英文分号分隔的列表，AllowedValues 是每个元素的可取值。
+type PriceCardTemplateColumnSpec struct {
+	Key           string
+	Title         string
+	Requirement   string
+	Description   string
+	AllowedValues []string
+	MultiValued   bool
+}
+
+// PriceCardTemplateSpecSource 交出模板规格。
+type PriceCardTemplateSpecSource interface {
+	PriceCardTemplateSpec() PriceCardTemplateSpec
+}

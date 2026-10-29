@@ -49,12 +49,14 @@ func (outcome SubmitPriceCardDraftOutcome) String() string {
 	}
 }
 
-// SubmitPriceCardDraftCommand 是一次录入：租户与录入者取自操作者信封，文件名与字节取自上传。
+// SubmitPriceCardDraftCommand 是一次录入：租户与录入者取自操作者信封，文件名与字节取自上传。FromForm 为真时 Raw 是页面
+// 表单提交的结构化工作簿（JSON），FileName 不用，口径同预览命令。
 type SubmitPriceCardDraftCommand struct {
 	Tenant    domain.TenantID
 	Submitter string
 	FileName  string
 	Raw       []byte
+	FromForm  bool
 }
 
 // SubmitPriceCardDraftResult 是录入的结果。Reading 是同一份字节过预览会得到的那份读法；Draft 是本次录入立出的
@@ -69,20 +71,22 @@ type SubmitPriceCardDraftResult struct {
 
 // SubmitPriceCardDraftHandler 依赖模板读口（与预览同一个）、草稿册与时钟。
 type SubmitPriceCardDraftHandler struct {
-	reader ports.PriceCardTemplateReader
-	drafts ports.PriceCardDraftRegister
-	clock  ports.Clock
+	reader   ports.PriceCardTemplateReader
+	workbook ports.PriceCardWorkbookReader
+	drafts   ports.PriceCardDraftRegister
+	clock    ports.Clock
 }
 
 func NewSubmitPriceCardDraftHandler(
 	reader ports.PriceCardTemplateReader,
 	drafts ports.PriceCardDraftRegister,
 	clock ports.Clock,
+	options ...PriceCardImportOption,
 ) (*SubmitPriceCardDraftHandler, error) {
 	if reader == nil || drafts == nil || clock == nil {
 		return nil, errors.New("parcel pricing: price card draft submission needs a template reader, a draft register and a clock")
 	}
-	return &SubmitPriceCardDraftHandler{reader: reader, drafts: drafts, clock: clock}, nil
+	return &SubmitPriceCardDraftHandler{reader: reader, workbook: importOptionsOf(options).workbook, drafts: drafts, clock: clock}, nil
 }
 
 // Handle 读文件、立草稿、落册。缺录入者与缺租户同属命令立不住，不读文件。草稿立不起来、或草稿册读写失败，都不是
@@ -94,7 +98,15 @@ func (handler *SubmitPriceCardDraftHandler) Handle(ctx context.Context, command 
 			Reading: PriceCardImportPreview{Outcome: PriceCardImportNotAccepted},
 		}, nil
 	}
-	reading := readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw)
+	var reading PriceCardImportPreview
+	if command.FromForm {
+		if handler.workbook == nil {
+			return SubmitPriceCardDraftResult{}, fmt.Errorf("submit price card draft: %w", ErrWorkbookCarrierNotWired)
+		}
+		reading = readPriceCardWorkbookImport(handler.workbook, command.Tenant, command.Raw)
+	} else {
+		reading = readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw)
+	}
 	if reading.Outcome == PriceCardImportNotAccepted {
 		return SubmitPriceCardDraftResult{Outcome: PriceCardDraftNotAccepted, Reading: reading}, nil
 	}

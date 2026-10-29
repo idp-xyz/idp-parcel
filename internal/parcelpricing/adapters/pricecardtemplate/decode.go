@@ -1,7 +1,9 @@
 package pricecardtemplate
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -10,7 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/spreadsheet"
 )
 
-// decodeWorkbook 按规范第四至六节把一份工作簿读成三种读法之一。
+// decodeWorkbook 按规范第四至六节把一份工作簿读成三种读法之一。工作簿是两种载体共用的内部表示：电子表格文件读出来的，
+// 与页面表单提交的结构化工作簿译出来的，都从这里进，之后没有任何一步看得出它是从哪来的。
 func decodeWorkbook(book spreadsheet.Workbook) ports.PriceCardTemplateReading {
 	d := newDecoder()
 	present := map[string]spreadsheet.Sheet{}
@@ -18,37 +21,58 @@ func decodeWorkbook(book spreadsheet.Workbook) ports.PriceCardTemplateReading {
 		if sheet.Name == sheetReadme {
 			continue
 		}
-		if _, _, known := sheetByName(sheet.Name); !known {
-			d.report(sheet.Name, 0, "", ports.TemplateSheetUnknown, "表 %s 不在模板的表集合里", sheet.Name)
-			continue
+		if _, _, known := sheetByName(sheet.Name); known {
+			present[sheet.Name] = sheet
 		}
-		present[sheet.Name] = sheet
 	}
 
 	card, found := present[sheetCard]
 	if !found {
-		return rejectedReading(ports.TemplateVersionUnsupported, "缺 card 表，读不出模板版本；本构建认 %s", TemplateVersion)
+		return rejectedReading(TemplateVersion, ports.TemplateVersionUnsupported, "缺 card 表，读不出模板版本；本构建认 %s", acceptedVersionsText())
 	}
 	values := d.cardValues(card)
 	if values == nil {
-		return rejectedReading(ports.TemplateVersionUnsupported, "card 表的列键行不完整，读不出模板版本；本构建认 %s", TemplateVersion)
+		return rejectedReading(TemplateVersion, ports.TemplateVersionUnsupported, "card 表的列键行不完整，读不出模板版本；本构建认 %s", acceptedVersionsText())
 	}
 	switch version := values["templateVersion"]; {
 	case version.state != fieldPresent:
-		return rejectedReading(ports.TemplateVersionUnsupported, "card 表读不出模板版本；本构建认 %s", TemplateVersion)
-	case version.text != TemplateVersion:
-		return rejectedReading(ports.TemplateVersionUnsupported, "模板版本是 %s，本构建只认 %s", version.text, TemplateVersion)
+		return rejectedReading(TemplateVersion, ports.TemplateVersionUnsupported, "card 表读不出模板版本；本构建认 %s", acceptedVersionsText())
+	case !acceptedVersion(version.text):
+		return rejectedReading(TemplateVersion, ports.TemplateVersionUnsupported, "模板版本是 %s，本构建认 %s", version.text, acceptedVersionsText())
 	}
+	version := values["templateVersion"].text
+	d.version = version
+
+	// 表集合按文件声明的版本算：自更晚版本才有的表出现在旧版文件里，是未知表，且要说清是版本问题。
+	for _, sheet := range book.Sheets {
+		if sheet.Name == sheetReadme {
+			continue
+		}
+		spec, _, known := sheetByName(sheet.Name)
+		switch {
+		case !known:
+			d.report(sheet.Name, 0, "", ports.TemplateSheetUnknown, "表 %s 不在模板的表集合里", sheet.Name)
+		case !availableIn(spec.since, version):
+			d.report(sheet.Name, 0, "", ports.TemplateSheetUnknown,
+				"表 %s 自模板 %s 起才有，这份文件的模板版本是 %s；要用它，请换用 %s 模板，并把 card 表的 templateVersion 改成 %s",
+				sheet.Name, spec.since, version, spec.since, spec.since)
+			delete(present, sheet.Name)
+		}
+	}
+
 	planID, planVersion := values["planId"], values["planVersion"]
 	if planID.state != fieldPresent || planVersion.state != fieldPresent {
-		return rejectedReading(ports.TemplatePlanIdentityUnreadable, "planId 与 planVersion 读不出来，草稿没有身份可落")
+		return rejectedReading(version, ports.TemplatePlanIdentityUnreadable, "planId 与 planVersion 读不出来，草稿没有身份可落")
 	}
 	plan, err := domain.NewVersionReferenceIdentity(domain.ArtifactPricingPlan, planID.text, planVersion.text)
 	if err != nil {
-		return rejectedReading(ports.TemplatePlanIdentityUnreadable, "planId「%s」与 planVersion「%s」立不成方案版本引用：%v", planID.text, planVersion.text, err)
+		return rejectedReading(version, ports.TemplatePlanIdentityUnreadable, "planId「%s」与 planVersion「%s」立不成方案版本引用：%v", planID.text, planVersion.text, err)
 	}
 
 	for _, spec := range sheets {
+		if !availableIn(spec.since, version) {
+			continue
+		}
 		if _, found := present[spec.name]; !found {
 			d.report(spec.name, 0, "", ports.TemplateSheetMissing, "缺表 %s；用不到的表留空即可，不要删", spec.name)
 			d.broken[spec.name] = true
@@ -57,7 +81,7 @@ func decodeWorkbook(book spreadsheet.Workbook) ports.PriceCardTemplateReading {
 	t := newTranslation(d, values, plan)
 	t.run(present)
 
-	reading := ports.PriceCardTemplateReading{TemplateVersion: TemplateVersion, Accepted: true, Plan: plan}
+	reading := ports.PriceCardTemplateReading{TemplateVersion: version, Accepted: true, Plan: plan}
 	if len(d.problems) == 0 {
 		if t.plan == nil {
 			// 没报任何问题却没立出方案，是本包的缺陷；如实交成一条问题，不交出一份没有内容的「已校验」。
@@ -70,9 +94,13 @@ func decodeWorkbook(book spreadsheet.Workbook) ports.PriceCardTemplateReading {
 	return reading
 }
 
-func rejectedReading(code ports.PriceCardTemplateProblemCode, format string, args ...any) ports.PriceCardTemplateReading {
+func acceptedVersionsText() string {
+	return strings.Join(acceptedTemplateVersions, "、")
+}
+
+func rejectedReading(version string, code ports.PriceCardTemplateProblemCode, format string, args ...any) ports.PriceCardTemplateReading {
 	return ports.PriceCardTemplateReading{
-		TemplateVersion: TemplateVersion,
+		TemplateVersion: version,
 		Problems:        []ports.PriceCardTemplateProblem{{Code: code, Message: fmt.Sprintf(format, args...)}},
 	}
 }
@@ -234,8 +262,15 @@ type translation struct {
 	exclusionsOK bool
 	catalogues   []domain.ReferenceCatalogueLink
 	cataloguesOK bool
-	manifest     []domain.VersionReference
-	manifestOK   bool
+	// tierCatalogueDeclared 记下 reference_catalogues 里有没有写过 REMOTE_TIER 一行（不论那一行立不立得住）：按偏远档位
+	// 查表的计算要求方案绑一份偏远档位目录，没写过就在计算那一格说清，而不是等方案构造门报一句笼统的话。
+	tierCatalogueDeclared bool
+
+	totalBounds    *domain.TotalChargeBounds
+	totalBoundsRow record
+	totalBoundsOK  bool
+	manifest       []domain.VersionReference
+	manifestOK     bool
 
 	amountRounding   *domain.AmountRoundingPolicy
 	amountRoundingOK bool
@@ -270,6 +305,8 @@ func (t *translation) run(present map[string]spreadsheet.Sheet) {
 	t.readSeries()
 	t.readExclusions()
 	t.readCatalogues()
+	t.readTotalBounds()
+	t.checkRemoteTierBinding()
 	t.readManifest()
 	t.reportUnused()
 	t.readAmountRounding()
@@ -308,9 +345,9 @@ func (t *translation) readHeader() {
 			t.scope, scopeOK = value, true
 		}
 	}
-	direction, directionOK := d.code(t.card["direction"], directionCodes)
-	purpose, purposeOK := d.code(t.card["purpose"], purposeCodes)
-	aggregation, aggregationOK := d.code(t.card["aggregation"], aggregationCodes)
+	direction, directionOK := d.closedCode(t.card["direction"])
+	purpose, purposeOK := d.closedCode(t.card["purpose"])
+	aggregation, aggregationOK := d.closedCode(t.card["aggregation"])
 	t.direction, t.purpose, t.aggregation = domain.PricingDirection(direction), domain.PricingPurpose(purpose), aggregation
 	baseOK := false
 	if base := t.card["baseChargeCode"]; d.required(base) {
@@ -373,7 +410,7 @@ func (t *translation) readTables() {
 				table.ref, refOK = ref, true
 			}
 		}
-		family, familyOK := d.code(rec.get("family"), familyCodes)
+		family, familyOK := d.closedCode(rec.get("family"))
 		table.family = family
 		currencyOK := false
 		if currency := rec.get("currency"); d.required(currency) {
@@ -643,7 +680,7 @@ func (t *translation) readWeight() {
 			ref, refOK = value, true
 		}
 	}
-	method, methodOK := d.code(t.card["weightMethod"], weightMethodCodes)
+	method, methodOK := d.closedCode(t.card["weightMethod"])
 
 	divisorField, unitField := t.card["volumetricDivisor"], t.card["volumetricLengthUnit"]
 	volumetricDeclared := divisorField.state == fieldPresent || unitField.state == fieldPresent
@@ -691,7 +728,7 @@ func (t *translation) readRounding(volumetricDeclared bool) (domain.WeightRoundi
 		return domain.WeightRoundingPolicy{}, domain.WeightRoundingPolicy{}, false
 	}
 	for _, rec := range records {
-		policy, ok := d.code(rec.get("policy"), roundingPolicyCodes)
+		policy, ok := d.closedCode(rec.get("policy"))
 		if !ok {
 			groupsOK["CHARGEABLE"], groupsOK["VOLUMETRIC"] = false, false
 			continue
@@ -728,7 +765,7 @@ func (t *translation) roundingPolicy(rows []record, groupOK bool) (domain.Weight
 	segments := make([]domain.WeightRoundingSegment, 0, len(rows))
 	ok := groupOK
 	for _, rec := range rows {
-		mode, modeOK := d.code(rec.get("mode"), roundingModeCodes)
+		mode, modeOK := d.closedCode(rec.get("mode"))
 		unit, unitOK := t.weightUnit(rec.get("unit"))
 		increment, incrementOK := d.decimal(rec.get("increment"))
 		maximumField := rec.get("maximum")
@@ -828,7 +865,7 @@ func (t *translation) readDependencies() {
 		}
 		t.dependencyIDs[id.text] = true
 		code, codeOK := t.chargeCode(rec.get("chargeCode"))
-		composition, compositionOK := d.code(rec.get("composition"), compositionCodes)
+		composition, compositionOK := d.closedCode(rec.get("composition"))
 		includesField, excludesField := rec.get("includes"), rec.get("excludes")
 		var includes, excludes []domain.ChargeCode
 		includesOK, excludesOK := true, excludesField.state != fieldBad
@@ -951,7 +988,7 @@ var predicateColumns = []string{"source", "operator", "threshold", "unit", "cate
 func (t *translation) conditionOf(node *treeNode) (domain.TriggerCondition, bool) {
 	d := t.d
 	rec := node.rec
-	kind, ok := d.code(rec.get("kind"), triggerKindCodes)
+	kind, ok := d.closedCode(rec.get("kind"))
 	if !ok {
 		return domain.TriggerCondition{}, false
 	}
@@ -1010,7 +1047,7 @@ func (t *translation) conditionOf(node *treeNode) (domain.TriggerCondition, bool
 
 func (t *translation) predicate(rec record) (domain.FeatureCondition, bool) {
 	d := t.d
-	source, ok := d.code(rec.get("source"), featureSourceCodes)
+	source, ok := d.closedCode(rec.get("source"))
 	if !ok {
 		return domain.FeatureCondition{}, false
 	}
@@ -1038,7 +1075,7 @@ func (t *translation) predicate(rec record) (domain.FeatureCondition, bool) {
 		return condition, true
 	}
 	categoryOK := d.mustBeBlank(rec.get("category"), "长度、体积、重量类来源不填类别")
-	operator, operatorOK := d.code(rec.get("operator"), operatorCodes)
+	operator, operatorOK := d.closedCode(rec.get("operator"))
 	threshold, thresholdOK := d.decimal(rec.get("threshold"))
 	comparison := domain.ComparisonOperator(operator)
 	unitField := rec.get("unit")
@@ -1091,12 +1128,16 @@ func (t *translation) predicate(rec record) (domain.FeatureCondition, bool) {
 func (t *translation) markLookupTables() {
 	for _, node := range t.calculations.order {
 		method, lookup := node.rec.get("method"), node.rec.get("tableId")
-		if method.state == fieldPresent && method.text == "TABLE_LOOKUP" && lookup.state == fieldPresent {
+		if method.state == fieldPresent && isTableLookup(method.text) && lookup.state == fieldPresent {
 			if table, found := t.tables[lookup.text]; found {
 				table.used = true
 			}
 		}
 	}
+}
+
+func isTableLookup(method string) bool {
+	return method == "TABLE_LOOKUP" || method == methodTableLookupByRemoteTier
 }
 
 func (t *translation) calculationRoot(f field) (domain.SurchargeCalculation, bool) {
@@ -1119,17 +1160,18 @@ func (t *translation) calculation(node *treeNode) (domain.SurchargeCalculation, 
 var calculationValueColumns = []string{"amount", "tableId", "percentage", "seriesKind", "seriesFactor", "basisDependencyId", "seriesId", "outOfWindow"}
 
 var calculationUses = map[string][]string{
-	"FIXED_AMOUNT":     {"amount"},
-	"TABLE_LOOKUP":     {"tableId"},
-	"PERCENT_OF_BASIS": {"percentage", "seriesKind", "seriesFactor", "basisDependencyId"},
-	"GREATER_OF":       {},
-	"SERIES_AMOUNT":    {"seriesId", "outOfWindow"},
+	"FIXED_AMOUNT":                {"amount"},
+	"TABLE_LOOKUP":                {"tableId"},
+	methodTableLookupByRemoteTier: {"tableId"},
+	"PERCENT_OF_BASIS":            {"percentage", "seriesKind", "seriesFactor", "basisDependencyId"},
+	"GREATER_OF":                  {},
+	"SERIES_AMOUNT":               {"seriesId", "outOfWindow"},
 }
 
 func (t *translation) calculationOf(node *treeNode) (domain.SurchargeCalculation, bool) {
 	d := t.d
 	rec := node.rec
-	method, ok := d.code(rec.get("method"), methodCodes)
+	method, ok := d.closedCode(rec.get("method"))
 	if !ok {
 		return domain.SurchargeCalculation{}, false
 	}
@@ -1155,12 +1197,16 @@ func (t *translation) calculationOf(node *treeNode) (domain.SurchargeCalculation
 			return domain.SurchargeCalculation{}, false
 		}
 		calculation, err = domain.NewFixedAmountSurcharge(amount)
-	case "TABLE_LOOKUP":
+	case "TABLE_LOOKUP", methodTableLookupByRemoteTier:
 		table, found := t.tableOf(rec.get("tableId"))
 		if !blanks || !found || !table.built {
 			return domain.SurchargeCalculation{}, false
 		}
-		calculation, err = domain.NewTableLookupSurcharge(table.version)
+		if method == methodTableLookupByRemoteTier {
+			calculation, err = domain.NewRemoteTierTableLookupSurcharge(table.version)
+		} else {
+			calculation, err = domain.NewTableLookupSurcharge(table.version)
+		}
 	case "PERCENT_OF_BASIS":
 		return t.percentOfBasis(rec, blanks)
 	case "GREATER_OF":
@@ -1177,7 +1223,7 @@ func (t *translation) calculationOf(node *treeNode) (domain.SurchargeCalculation
 	case "SERIES_AMOUNT":
 		series := rec.get("seriesId")
 		seriesOK := d.required(series)
-		behaviour, behaviourOK := d.code(rec.get("outOfWindow"), outOfWindowCodes)
+		behaviour, behaviourOK := d.closedCode(rec.get("outOfWindow"))
 		if !all(blanks, seriesOK, behaviourOK) {
 			return domain.SurchargeCalculation{}, false
 		}
@@ -1216,7 +1262,7 @@ func (t *translation) percentOfBasis(rec record, blanks bool) (domain.SurchargeC
 		}
 		calculation, err = domain.NewPercentOfBasisSurcharge(value, basis.text)
 	case seriesDeclared:
-		code, kindOK := d.code(kind, seriesKindCodes)
+		code, kindOK := d.closedCode(kind)
 		value, factorOK := d.decimal(factor)
 		if !all(blanks, basisOK, kindOK, factorOK) {
 			return domain.SurchargeCalculation{}, false
@@ -1251,7 +1297,7 @@ func (t *translation) chargeUnit(f field) (bool, bool) {
 	case fieldBad:
 		return false, false
 	}
-	code, ok := t.d.code(f, chargeUnitCodes)
+	code, ok := t.d.closedCode(f)
 	return code == "PER_PIECE", ok
 }
 
@@ -1262,7 +1308,7 @@ func (t *translation) readFixedCharges() {
 		id, description := rec.get("ruleId"), rec.get("description")
 		idOK, descriptionOK := d.required(id), d.required(description)
 		code, codeOK := t.chargeCode(rec.get("chargeCode"))
-		effect, effectOK := d.code(rec.get("effect"), effectCodes)
+		effect, effectOK := d.closedCode(rec.get("effect"))
 		amount, amountOK := t.mainMoney(rec.get("amount"))
 		order, orderOK := d.integer(rec.get("order"))
 		perPiece, unitOK := t.chargeUnit(rec.get("unit"))
@@ -1305,7 +1351,7 @@ func (t *translation) readSurcharges() {
 		id, description := rec.get("ruleId"), rec.get("description")
 		idOK, descriptionOK := d.required(id), d.required(description)
 		code, codeOK := t.chargeCode(rec.get("chargeCode"))
-		effect, effectOK := d.code(rec.get("effect"), effectCodes)
+		effect, effectOK := d.closedCode(rec.get("effect"))
 		perPiece, unitOK := t.chargeUnit(rec.get("unit"))
 
 		exclusivity := rec.get("exclusivity")
@@ -1313,7 +1359,7 @@ func (t *translation) readSurcharges() {
 		stance, stanceOK := "", exclusivity.state != fieldBad
 		var priority int
 		if exclusivity.state == fieldPresent {
-			stance, stanceOK = d.code(exclusivity, exclusivityCodes)
+			stance, stanceOK = d.closedCode(exclusivity)
 		}
 		switch stance {
 		case "GROUPED":
@@ -1368,7 +1414,7 @@ func (t *translation) readSeries() {
 	d := t.d
 	t.seriesOK = !d.broken[sheetReferenceSeries]
 	for _, rec := range t.records(sheetReferenceSeries) {
-		kind, kindOK := d.code(rec.get("kind"), seriesKindCodes)
+		kind, kindOK := d.closedCode(rec.get("kind"))
 		series := rec.get("seriesId")
 		if !all(kindOK, d.required(series)) {
 			t.seriesOK = false
@@ -1408,8 +1454,11 @@ func (t *translation) readCatalogues() {
 	d := t.d
 	t.cataloguesOK = !d.broken[sheetReferenceCatalogues]
 	for _, rec := range t.records(sheetReferenceCatalogues) {
-		kind, kindOK := d.code(rec.get("kind"), catalogueKindCodes)
+		kind, kindOK := d.closedCode(rec.get("kind"))
 		catalogue := rec.get("catalogueId")
+		if kindOK && kind == string(domain.CatalogueKindRemoteTier) {
+			t.tierCatalogueDeclared = true
+		}
 		if !all(kindOK, d.required(catalogue)) {
 			t.cataloguesOK = false
 			continue
@@ -1428,7 +1477,7 @@ func (t *translation) readManifest() {
 	d := t.d
 	t.manifestOK = !d.broken[sheetManifestDependencies]
 	for _, rec := range t.records(sheetManifestDependencies) {
-		kind, kindOK := d.code(rec.get("kind"), artifactKindCodes)
+		kind, kindOK := d.closedCode(rec.get("kind"))
 		id, version := rec.get("id"), rec.get("version")
 		if !all(kindOK, d.required(id), d.required(version)) {
 			t.manifestOK = false
@@ -1471,9 +1520,9 @@ func (t *translation) readAmountRounding() {
 		t.amountRoundingOK = true
 		return
 	}
-	code, modeOK := d.code(mode, roundingModeCodes)
+	code, modeOK := d.closedCode(mode)
 	money, incrementOK := t.mainMoney(increment)
-	items, pointsOK := d.list(points, oneOf(roundingPointCodes))
+	items, pointsOK := d.list(points, oneOf(vocabularyOf(sheetCard, "amountRoundingPoints").values))
 	if !all(modeOK, incrementOK, pointsOK) {
 		return
 	}
@@ -1502,13 +1551,96 @@ func (t *translation) readAuthorization() {
 	t.authorization, t.authorizationOK = reference, true
 }
 
+// readTotalBounds 读 total_bounds：至多一行，最低与最高收费各自可缺但不能都缺。金额按主价表币种立，值的取舍
+// （两端至少一个、为正、下限不高于上限、金额取整的整倍数）全在领域构造门，这里只翻译。整行空白的行读取时已跳过，所以
+// 「一行都没填」就是没声明，不是问题。
+func (t *translation) readTotalBounds() {
+	d := t.d
+	t.totalBoundsOK = !d.broken[sheetTotalBounds]
+	rows := t.records(sheetTotalBounds)
+	if len(rows) == 0 {
+		return
+	}
+	for _, extra := range rows[1:] {
+		d.at(extra.get("minimum"), ports.TemplateCellNotApplicable,
+			"total_bounds 表至多一行：最低 / 最高收费是对整票合计的一次声明，这一行多余")
+		t.totalBoundsOK = false
+	}
+	rec := rows[0]
+	minimumField, maximumField := rec.get("minimum"), rec.get("maximum")
+	var minimum, maximum *domain.Money
+	valid := true
+	if minimumField.state == fieldPresent {
+		if money, ok := t.mainMoney(minimumField); ok {
+			minimum = &money
+		} else {
+			valid = false
+		}
+	} else if minimumField.state == fieldBad {
+		valid = false
+	}
+	if maximumField.state == fieldPresent {
+		if money, ok := t.mainMoney(maximumField); ok {
+			maximum = &money
+		} else {
+			valid = false
+		}
+	} else if maximumField.state == fieldBad {
+		valid = false
+	}
+	if !valid {
+		t.totalBoundsOK = false
+		return
+	}
+	bounds, err := domain.NewTotalChargeBounds(minimum, maximum)
+	if err != nil {
+		d.rejected(rec.get(firstDeclared(minimumField, "minimum", "maximum")), "总额上下限", err)
+		t.totalBoundsOK = false
+		return
+	}
+	t.totalBounds, t.totalBoundsRow = &bounds, rec
+}
+
+// firstDeclared 取两格里先填了的那一格的列键，给坐标用：问题落在运营填的那一格上。
+func firstDeclared(first field, firstKey, secondKey string) string {
+	if first.state == fieldPresent {
+		return firstKey
+	}
+	return secondKey
+}
+
+// totalBoundsAnchor 是总额上下限自洽判不过时问题落的那一格：先填了的那端。
+func (t *translation) totalBoundsAnchor() string {
+	return firstDeclared(t.totalBoundsRow.get("minimum"), "minimum", "maximum")
+}
+
+// checkRemoteTierBinding 核按偏远档位查表的计算有没有对应的目录绑定。领域构造门也判这一条，但它的话是笼统的、
+// 不带坐标；这里先把话说在计算那一格上。判不过就不再往下交构造门，免得同一件事报两遍。
+func (t *translation) checkRemoteTierBinding() {
+	if t.tierCatalogueDeclared {
+		return
+	}
+	for _, node := range t.calculations.order {
+		method := node.rec.get("method")
+		if method.state != fieldPresent || method.text != methodTableLookupByRemoteTier {
+			continue
+		}
+		if built, visited := t.calculationValues[node.id]; !visited || !built.ok {
+			continue
+		}
+		t.d.at(method, ports.TemplateReferenceUnresolved,
+			"%s 要求方案绑一份偏远档位目录：reference_catalogues 表里没有 kind 为 REMOTE_TIER 的行，没有目录就解不出档位", methodTableLookupByRemoteTier)
+		t.surchargesOK = false
+	}
+}
+
 // ---- 方案 ----
 
 func (t *translation) buildPlan() {
 	if t.main == nil || !t.main.built {
 		return
 	}
-	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK) {
+	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK, t.totalBoundsOK) {
 		return
 	}
 	planLevel := field{sheet: sheetCard}
@@ -1521,6 +1653,9 @@ func (t *translation) buildPlan() {
 	}
 	if err == nil && len(t.catalogues) > 0 {
 		structures, err = structures.WithReferenceCatalogues(t.catalogues...)
+	}
+	if err == nil && t.totalBounds != nil {
+		structures, err = structures.WithTotalChargeBounds(*t.totalBounds)
 	}
 	if err != nil {
 		t.d.rejected(planLevel, "方案结构件", err)
@@ -1535,6 +1670,12 @@ func (t *translation) buildPlan() {
 			t.purpose, t.baseCharge, t.period, t.main.version, t.weight, t.rules, structures, t.manifest...)
 	}
 	if err != nil {
+		// 总额上下限与方案其余部分不自洽（币种、金额取整的整倍数）是 total_bounds 那一行的事，坐标落在那里，
+		// 不落到整份方案上：运营要改的是那一行的值。
+		if t.totalBounds != nil && errors.Is(err, domain.ErrInvalidTotalChargeBounds) {
+			t.d.rejected(t.totalBoundsRow.get(t.totalBoundsAnchor()), "总额上下限", err)
+			return
+		}
 		t.d.rejected(planLevel, "定价方案", err)
 		return
 	}

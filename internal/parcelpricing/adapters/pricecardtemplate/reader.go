@@ -25,10 +25,10 @@ func (Reader) ReadPriceCardTemplate(raw []byte) ports.PriceCardTemplateReading {
 	})
 	switch {
 	case errors.Is(err, spreadsheet.ErrTooLarge):
-		return rejectedReading(ports.TemplateFileTooLarge,
+		return rejectedReading(TemplateVersion, ports.TemplateFileTooLarge,
 			"文件超过技术上限（文件 10 MiB、解压后 64 MiB、单表 100 000 行）：%v", err)
 	case err != nil:
-		return rejectedReading(ports.TemplateFileNotWorkbook,
+		return rejectedReading(TemplateVersion, ports.TemplateFileNotWorkbook,
 			"读不出这份文件（%v）；请在 Excel 或 WPS 里另存为「Excel 工作簿（*.xlsx）」", err)
 	}
 	return decodeWorkbook(book)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
@@ -166,6 +167,24 @@ func priceCardContentBodyOf(plan domain.PricingPlanVersion) priceCardContentBody
 	return body
 }
 
+// isWorkbookJSON 答这个请求带的是不是页面表单提交的结构化工作簿（Content-Type: application/json）。别的类型一律走原有的
+// 上传解码，行为一字不变。
+func isWorkbookJSON(request *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/json"
+}
+
+// readWorkbookJSON 读结构化工作簿的请求体，上限同上传。形状与内容的判定都不在这里：身份不从载荷里来，所以这里不解它，
+// 规范化与读取交给应用层持有的工作簿读口（同一条路径服务预览与录入）。
+func readWorkbookJSON(request *http.Request) ([]byte, error) {
+	request.Body = http.MaxBytesReader(nil, request.Body, maxPriceCardUploadBytes)
+	raw, err := io.ReadAll(request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	return raw, nil
+}
+
 // PriceCardUploadField 是上传表单里文件那一格的字段名。
 const PriceCardUploadField = "file"
 
@@ -212,11 +231,19 @@ func (upload PriceCardUpload) PreviewCommand(tenant domain.TenantID) application
 var _ PriceCardPreviewIntake = (*OperatorRegistryIntake)(nil)
 
 // IntakePriceCardPreview 是操作者渠道对价卡导入预览的译法：先认证、后解上传，租户取认证出的身份。上传走本文件
-// 自己的解码与上限，不经登记载荷那条读取上限——一张价卡工作簿比一份 JSON 登记载荷大得多。
+// 自己的解码与上限，不经登记载荷那条读取上限——一张价卡工作簿比一份 JSON 登记载荷大得多。请求体是 application/json 时
+// 收页面表单提交的结构化工作簿（ADR-0349），其余类型照旧按 multipart 上传解。
 func (intake *OperatorRegistryIntake) IntakePriceCardPreview(ctx context.Context, request *http.Request) (application.PreviewPriceCardImportCommand, error) {
 	operator, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
 	if err != nil {
 		return application.PreviewPriceCardImportCommand{}, err
+	}
+	if isWorkbookJSON(request) {
+		raw, err := readWorkbookJSON(request)
+		if err != nil {
+			return application.PreviewPriceCardImportCommand{}, err
+		}
+		return application.PreviewPriceCardImportCommand{Tenant: operator.Tenant, Raw: raw, FromForm: true}, nil
 	}
 	upload, err := DecodePriceCardUpload(request)
 	if err != nil {
