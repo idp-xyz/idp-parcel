@@ -379,6 +379,10 @@ func (plan PricingPlanVersion) valid() bool {
 	if plan.structures.coherentWithPlan(plan.rateTable.currency, seenCodes) != nil {
 		return false
 	}
+	// 读回门与装配门同一道：读体积重与自身计价重量的条件立不立得住（ADR-0347 决定二），不信任存下来的文档。
+	if plan.structures.checkPackageWeightReads(plan.weight, plan.rateTable.unit) != nil {
+		return false
+	}
 	requiredReferences := []VersionReference{
 		plan.reference,
 		plan.rateTable.reference,
