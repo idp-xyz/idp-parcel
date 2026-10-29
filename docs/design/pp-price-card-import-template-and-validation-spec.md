@@ -309,8 +309,8 @@
 
 | 码 | 情形 |
 |---|---|
-| `FILE_TOO_LARGE` | 超过第三节的技术上限 |
-| `FILE_NOT_WORKBOOK` | 不是可读的 `.xlsx`，含第三节列出的各种整份不收的形态 |
+| `FILE_TOO_LARGE` | 超过第三节的技术上限；结构化工作簿另见第十节的结构上限 |
+| `FILE_NOT_WORKBOOK` | 不是可读的 `.xlsx`，含第三节列出的各种整份不收的形态；结构化工作簿则是形状没过（第十节） |
 | `TEMPLATE_VERSION_UNSUPPORTED` | `card` 表缺，或 `templateVersion` 缺、不是本构建认的版本之一 |
 | `PLAN_IDENTITY_UNREADABLE` | `planId`、`planVersion` 读不出一个方案版本引用。草稿按方案身份一版一行，没有身份就没有行可落 |
 
@@ -330,6 +330,9 @@
 | `REFERENCE_UNRESOLVED`、`REFERENCE_UNUSED` | 指向不存在或指错了种类（如指到非根节点、指到族不合的表）；声明了却没人用 |
 | `TREE_INVALID` | 父节点不存在、成环、叶子带子节点、组合没有子节点、取较大值不是恰好两个子节点 |
 | `CONSTRUCTION_REJECTED` | 格都读得通，领域构造门拒收；坐标指向这次构造用到的行，方案级构造门拒收时指 `card` 表、行号为 0 |
+| `PROBLEMS_TRUNCATED` | 问题多到收不下（见下）。这一条在清单最前，没有表与坐标 |
+
+- **问题清单有总数上限（1000 条）。** 一份几万行的文件每行错几格，清单就按行数成倍长，草稿要全存、管理台要全画，没有人改得了几千条。收到上限就不再收集，清单最前补一条 `PROBLEMS_TRUNCATED`，说明只显示先发现的那些；改完前面的再校验，后面的才会出现。没到上限的清单与此前一字不差，不带这一条。这是防御性的技术上限，不是业务取值。
 
 - **问题收齐再答**，不撞第一格就停：表单与导入都要的是「哪几格不对」（ADR-0126 决定四）。
 - 但**上游格有问题时，依赖它的构造门不再跑**，免得一个错格引出一串连带问题。例如某条价表行金额写错，这张表就不再交 `NewRateTableVersion`，方案也不再交 `NewPricingPlanVersion`。
@@ -436,7 +439,21 @@
 - **外层的 `templateVersion`** 在 `card` 表没有这个字段（或值为空）时补进 `card` 表；两处都写了而不同则整份不收（`TEMPLATE_VERSION_UNSUPPORTED`，话里说明两处须一致）。外层版本为 `PPT-1` 时不补 `total_bounds`，与 `PPT-1` 文件一致。
 - **问题的位置**与电子表格一致：数组下标 `i` 的那一行是第 `i+2` 行（第 1 行是列键行）；`card` 表的字段按给出的先后排在第 2 行起。问题的表、行、列、码与话都与同一份内容写成电子表格时逐字相同。
 
-**整份不收。** 形状没过（不是 JSON、顶层缺键或多键、同一对象里同名键出现两次、表不是行数组、行不是对象、格不是字符串 / 数字 / `null`、尾随内容、嵌套过深）答 `FILE_NOT_WORKBOOK`，超过技术上限（总字节 10 MiB、单表 100 000 行）答 `FILE_TOO_LARGE`；与读文件一样，读不通是一种读法，不是 HTTP 错误。
+**整份不收。** 形状没过（不是 JSON、顶层缺键或多键、同一对象里同名键出现两次、表不是行数组、行不是对象、格不是字符串 / 数字 / `null`——嵌套的对象或数组也在此列、尾随内容）答 `FILE_NOT_WORKBOOK`；超过技术上限答 `FILE_TOO_LARGE`；与读文件一样，读不通是一种读法，不是 HTTP 错误，回显的模板版本是最新一版。
+
+**结构上限（技术上限，不是业务取值）。** 电子表格读口边读边数、超限即停；JSON 的解析同样边解边数、到上限立刻停，不先把整份解成树再判：
+
+| 上限 | 值 | 说明 |
+|---|---|---|
+| 原始请求体 | 10 MiB | 沿用文件上限；只在入口按原始请求体判一次，规范化后字节数可以比原始的多（数字落成字符串），读规范化字节时不再判 |
+| 表数 | 64 | 远大于模板的表数，余量留给未知表（照样要如实报出来） |
+| 每表行数 | 100 000 | 沿用电子表格路径已有的单表行数上限 |
+| 每表不同列键数 | 64 | 远大于模板最宽那张表的列数，余量留给未知列；也是行内同名键位掩码的宽度 |
+| 总格数 | 1 000 000 | 含值为 `null` 的格；模板里最宽的价表行表按单表行数上限铺满也装得下 |
+
+解析的代价因此跟着总格数走，不是行数乘列数。
+
+**数字是写出来的字面量。** 电子表格的数值格存的是浮点数，所以读取拒收有效数字超过十五位的格（第五节）；JSON 的数字是调用方写下的十进制字面量，没有浮点往返，不经那道门。后果是编辑器若把金额当 JSON 数字发，要自己保证字面量就是想要的值：**金额与所有十进制格都应当作字符串发**。
 
 **规范化与来源标识。** 先把工作簿规范化——键排序、去多余空白、数字落成字符串、行数组保持原序——再读规范化字节。源文件身份取规范化字节：`sourceFileSha256` 是规范化字节的 SHA-256，`sourceFileName` 是 `form:` 加该散列前 12 位十六进制。空白与键序不同的同一份内容因此得同一个身份；数字写成 `12.50` 还是 `"12.50"` 也得同一个身份。
 
@@ -444,6 +461,9 @@
 
 ## 十一、模板规格只读口（`PPT-2` 起）
 
-`GET /pricing-price-card-template/spec`（挂主数据与运营查阅读，租户取认证信封，内容租户无关）答：本构建写出的模板版本与接受的全部版本；表清单（`name`、中文 `title`、一句话 `purpose`、`layout`、`repeatable`、`since`）；每张表的列（`key`、中文 `title`、`requirement`：`always` / `conditional` / `optional`，`description`，封闭取值的列另有 `allowedValues`，列表型的格另有 `multiValued`）。`card` 表的 `layout` 是 `FIELDS`——它的「列」是字段，工作簿里写成 `{field, value}` 行；别的表是 `ROWS`。
+`GET /pricing-price-card-template/spec`（挂主数据与运营查阅读，租户取认证信封，内容租户无关）答：本构建写出的模板版本与接受的全部版本；表清单（`name`、中文 `title`、一句话 `purpose`、`layout`、`repeatable`、`since`）；每张表的列（`key`、中文 `title`、`requirement`：`always` / `conditional` / `optional`，`description`，封闭取值的列另有 `allowedValues`，列表型的格另有 `multiValued`，平时开放、满足条件才封闭的列另有 `allowedValuesWhen`）。`card` 表的 `layout` 是 `FIELDS`——它的「列」是字段，工作簿里写成 `{field, value}` 行；别的表是 `ROWS`。
 
 规格整个由实现里的表集合、字段集合与封闭取值登记处生成（第七节「解析与模板同源」的同一张列定义），读取实际收的取值与规格口答的取值是同一份；增删一列，规格自动跟着变。`conditions.unit` 的 `allowedValues` 是重量单位与长度单位的并集——哪一类由 `source` 定。规格只答最新一版。
+
+- `tables.currency` 的 `allowedValues` 是产品内置币种目录里的码（译码的门与这份清单是同一个目录）。
+- `conditions.category` 对分区名、偏远档位、服务选项是开放词汇，所以不带 `allowedValues`，而带 `allowedValuesWhen: [{"column":"source","equals":"ADDRESS_NATURE","allowedValues":["COMMERCIAL","RESIDENTIAL"]}]`：同一行 `source` 等于 `ADDRESS_NATURE` 时，这一格才只收那两个地址性质词。若放进 `allowedValues`，编辑器会把所有类别格都画成两项下拉。
