@@ -1016,7 +1016,7 @@ func (t *translation) predicate(rec record) (domain.FeatureCondition, bool) {
 	}
 	feature := domain.FeatureSource(source)
 	switch source {
-	case "ZONE", "ADDRESS_TYPE", "SERVICE_OPTION":
+	case "ZONE", "ADDRESS_TYPE", "ADDRESS_NATURE", "SERVICE_OPTION":
 		operator := rec.get("operator")
 		operatorOK := operator.state != fieldBad
 		if operator.state == fieldPresent && operator.text != "EQ" {

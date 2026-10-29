@@ -184,7 +184,7 @@ func estimateEvaluationBodyOf(evaluation domain.PricingEvaluation) estimateEvalu
 }
 
 // EstimatePayload 是运营操作者面的试算载荷线格式（UC-PP-001「试算声明」；逐字段表单，ADR-0101 决定八自裁）。各项由发起方
-// 声明、一格不给默认；可缺的四项（尺寸、分区、邮编路线、结算币种）缺席即未声明。
+// 声明、一格不给默认；可缺的五项（尺寸、分区、邮编路线、结算币种、收件地址性质）缺席即未声明。
 //
 // **载荷里只有内容，没有身份。** 租户从 `OperatorEnvelope` 来、由 Intake 作为入参交进来；载荷里出现 tenant 之类的键
 // 按未知键拒——严格解码不是挑剔，是不让自报身份有地方落。
@@ -197,6 +197,9 @@ type EstimatePayload struct {
 	Zone               string              `json:"zone"`
 	PostalRoute        *estimateRoute      `json:"postalRoute"`
 	SettlementCurrency string              `json:"settlementCurrency"`
+	// AddressNature 是收件地址性质，封闭词 COMMERCIAL / RESIDENTIAL。键名不叫 addressType：计价引擎里「地址类型」
+	// 那一格承载的是偏远档位（ADR-0109），性质另有一格 ADDRESS_NATURE（ADR-0347 决定四），线上的键名跟着后者走。
+	AddressNature string `json:"addressNature"`
 }
 
 type estimateWeight struct {
@@ -284,6 +287,13 @@ func (payload EstimatePayload) Command(tenant domain.TenantID) (application.Form
 			return malformed("settlementCurrency", err)
 		}
 		command.Settlement = &currency
+	}
+	if payload.AddressNature != "" {
+		nature, err := domain.NewAddressNature(payload.AddressNature)
+		if err != nil {
+			return malformed("addressNature", err)
+		}
+		command.AddressNature = &nature
 	}
 	return command, nil
 }

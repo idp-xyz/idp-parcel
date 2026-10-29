@@ -193,7 +193,7 @@
 | `LONGEST_SIDE`、`SECOND_LONGEST_SIDE`、`LENGTH_AND_GIRTH` | `NewLengthFeatureCondition` | `operator`、`threshold`、`unit`（`CM`、`IN`） |
 | `VOLUME` | `NewVolumeFeatureCondition` | `operator`、`threshold`、`unit`（`CM`、`IN`） |
 | `ACTUAL_WEIGHT`、`VOLUMETRIC_WEIGHT`、`CHARGEABLE_WEIGHT` | `NewWeightFeatureCondition` | `operator`、`threshold`、`unit`（`G`、`KG`、`OZ`、`LB`） |
-| `ZONE`、`ADDRESS_TYPE`、`SERVICE_OPTION` | `NewCategoryFeatureCondition` | `category`；`operator` 空或 `EQ`（领域里类别判定恒为等于） |
+| `ZONE`、`ADDRESS_TYPE`、`ADDRESS_NATURE`、`SERVICE_OPTION` | `NewCategoryFeatureCondition` | `category`（`ADDRESS_NATURE` 只收 `COMMERCIAL`、`RESIDENTIAL`）；`operator` 空或 `EQ`（领域里类别判定恒为等于） |
 
 树的纪律：
 - `PREDICATE` 不得有子节点；`ALL_OF`、`ANY_OF` 至少一个子节点。

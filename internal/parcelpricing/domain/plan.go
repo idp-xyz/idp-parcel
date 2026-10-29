@@ -269,6 +269,10 @@ func NewAggregatePricingPlanVersion(
 	if err := structures.coherentWithPlan(rateTable.currency, seenCodes); err != nil {
 		return PricingPlanVersion{}, err
 	}
+	// 读体积重与自身计价重量的条件：系数、单位对不上，对每一件包裹都只会同一种失败，装配时就拒（ADR-0347 决定二、三）。
+	if err := structures.checkPackageWeightReads(weight, rateTable.unit); err != nil {
+		return PricingPlanVersion{}, err
+	}
 
 	// 序列绑定不进方案清单：方案绑的是序列标识，用到哪一版是评价形成时的结论，由评价
 	// 自己的清单冻结（ADR-0099）。

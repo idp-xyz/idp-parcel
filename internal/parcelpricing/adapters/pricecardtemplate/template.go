@@ -94,7 +94,7 @@ var (
 	featureSourceCodes  = []string{
 		"LONGEST_SIDE", "SECOND_LONGEST_SIDE", "LENGTH_AND_GIRTH", "VOLUME",
 		"ACTUAL_WEIGHT", "VOLUMETRIC_WEIGHT", "CHARGEABLE_WEIGHT",
-		"ZONE", "ADDRESS_TYPE", "SERVICE_OPTION",
+		"ZONE", "ADDRESS_TYPE", "ADDRESS_NATURE", "SERVICE_OPTION",
 	}
 	operatorCodes      = []string{"GT", "GE", "LT", "LE", "EQ"}
 	methodCodes        = []string{"FIXED_AMOUNT", "TABLE_LOOKUP", "PERCENT_OF_BASIS", "GREATER_OF", "SERIES_AMOUNT"}
@@ -210,7 +210,7 @@ var sheets = []sheetSpec{
 		{"operator", requiredConditional, "比较：GT、GE、LT、LE、EQ；长度、体积、重量类来源必填，类别类来源空或 EQ"},
 		{"threshold", requiredConditional, "阈值；长度、体积、重量类来源必填"},
 		{"unit", requiredConditional, "阈值单位：长度与体积类为 CM、IN，重量类为 G、KG、OZ、LB"},
-		{"category", requiredConditional, "期望的类别值；ZONE、ADDRESS_TYPE、SERVICE_OPTION 来源必填"},
+		{"category", requiredConditional, "期望的类别值；ZONE、ADDRESS_TYPE、SERVICE_OPTION 来源必填，ADDRESS_NATURE 来源必填且只收 COMMERCIAL、RESIDENTIAL"},
 	}},
 	{sheetCalculations, "计算树：一行一个节点；只有 GREATER_OF 能当父节点，且恰好两个子节点", []column{
 		{"nodeId", requiredAlways, "节点标识，本表内唯一"},

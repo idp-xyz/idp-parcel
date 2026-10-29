@@ -158,6 +158,10 @@ type PricingInputSnapshot struct {
 	factReferences []VersionedFactReference
 	seriesValues   []ReferenceSeriesValue
 	settlement     *Currency
+	// addressNature 是发起方声明的收件地址性质（ADR-0347 决定四），可缺：空串即未声明，评价里读它的规则答待判断，
+	// 不套默认。它不进规范化文档——影响评价结果的方式只有「读它的规则是否命中」，那已落在费用行与状态上，与结算币种
+	// 同一种放法；只进评价快照。
+	addressNature AddressNature
 	// comparison 是本次评价的比较币种（ADR-0148 决定四）：路由策略版本的租户取值，只服务内部
 	// 择优比较，不改结算。与 settlement 同路随快照进来，不另立来源。
 	comparison *Currency
@@ -274,6 +278,22 @@ func (input PricingInputSnapshot) WithComparisonCurrency(comparison Currency) (P
 	declared := comparison
 	updated.comparison = &declared
 	return updated, nil
+}
+
+// WithAddressNature 记录发起方声明的收件地址性质。地址性质不是计价能推断的事实：偏远档位由邮编分类事实解出，
+// 商业 / 住宅却没有目录可查，只能由持有地址的一方声明（ADR-0347 决定四）。
+func (input PricingInputSnapshot) WithAddressNature(nature AddressNature) (PricingInputSnapshot, error) {
+	if !input.valid() || !nature.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	updated.addressNature = nature
+	return updated, nil
+}
+
+// AddressNature 报出输入声明的收件地址性质；未声明时第二个返回值为假。
+func (input PricingInputSnapshot) AddressNature() (AddressNature, bool) {
+	return input.addressNature, input.addressNature != ""
 }
 
 // ComparisonCurrency 报出本次评价声明的比较币种；未声明即只按卡币种计价，不多算一笔比较换算。
@@ -441,6 +461,9 @@ func (input PricingInputSnapshot) valid() bool {
 	if input.dimensions != nil && !input.dimensions.valid() {
 		return false
 	}
+	if input.addressNature != "" && !input.addressNature.valid() {
+		return false
+	}
 	// 成员清单与主体种类成对：聚合主体必有且合计实重就是快照的实重，单包裹主体必无。
 	if input.subject.kind.aggregate() != (input.members != nil) {
 		return false
@@ -492,6 +515,9 @@ func calculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	boundaryScale := uint32(0)
 	if converter != nil {
 		boundaryScale = conversionBoundaryScale(input, policy, floors)
+		if converter.conditionScale > boundaryScale {
+			boundaryScale = converter.conditionScale
+		}
 	}
 	if actual.unit != expectedUnit {
 		if converter == nil {

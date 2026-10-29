@@ -405,6 +405,27 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		// 类别量随解析结果填进特征：分区一定有；偏远档位只在卡绑了档位目录时有，没绑的卡该格缺席，
 		// 地址类型条件读到缺席照旧报特征不可用。
 		features, haveFeatures = derived.WithCategories(categories.zone, categories.tier), true
+		// 地址性质是输入里发起方声明的一格，与偏远档位是两个槽（ADR-0347 决定四）：没声明就不填，读它的规则
+		// 答待判断，不套默认。
+		if nature, declared := request.input.AddressNature(); declared {
+			features = features.WithAddressNature(nature)
+		}
+		// 体积重与自身计价重量只在方案有条件读它们时才算：它们由包裹自己与重量策略决定、不取决于任何规则命中，
+		// 所以在判定第一条规则之前一次算好填进特征（ADR-0347 决定一）。方案不读它们时一步不多走，评价与此前逐字
+		// 相同。算不出来（尺寸没到、单位对不上）就是后面的判定都无从谈起，按与正式计价重量同一种缺口作答。
+		if request.plan.structures.readsPackageWeights() {
+			own, steps, ownErr := packageOwnWeights(request)
+			if ownErr != nil {
+				evaluation.unitConversions = steps
+				for _, step := range steps {
+					evaluation.explanation = append(evaluation.explanation, step.explain())
+				}
+				return evaluation.withCalculationError(ownErr)
+			}
+			volumetric, _ := own.VolumetricWeight()
+			features = features.WithDerivedWeights(volumetric, own.rounded)
+			evaluation.explanation = append(evaluation.explanation, own.explainOwnWeights())
+		}
 	}
 
 	// 先定拒收，再谈任何缺口。缺一期序列取值是`待判断`，它等于告诉调用方补上就能得出
@@ -478,6 +499,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, floors...)
 	if errors.Is(err, ErrWeightUnitMismatch) || errors.Is(err, ErrLengthUnitMismatch) {
 		converter := newUnitConverter(request.conversionsFrozen, request.recordedConversions)
+		converter.conditionScale = request.plan.structures.volumetricThresholdScale()
 		pricingWeight, err = calculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, converter, floors...)
 		evaluation.unitConversions = converter.recordedSteps()
 		for _, step := range evaluation.unitConversions {
@@ -1164,6 +1186,9 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 	switch {
 	case errors.Is(err, ErrMissingDimensions):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("DIMENSIONS_REQUIRED", err.Error()))
+	// 卡上有规则按地址性质判定而输入没声明：缺的是发起方补得上的事实，答待判断（ADR-0347 决定四）。
+	case errors.Is(err, ErrAddressNatureRequired):
+		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("ADDRESS_NATURE_REQUIRED", err.Error()))
 	case errors.Is(err, ErrNoMatchingRate):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("RATE_NOT_FOUND", err.Error()))
 	// 分区 / 档位两格分开（ADR-0109 Decision 四）：前者影响基础运费查表，后者只影响一类附加费，续办不同。
