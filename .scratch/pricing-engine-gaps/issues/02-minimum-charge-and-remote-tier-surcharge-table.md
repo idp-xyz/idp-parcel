@@ -1,7 +1,7 @@
 # 02 计价引擎没有单票合计的最低 / 最高收费，附加费价表读不到偏远档位
 
 Category: enhancement
-Status: in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-pricingB（代码最后一笔 `6c7ca8ff8`；评审修订轮 `f7cd3e04b` 只改注释与文字）。
+Status: resolved——2026-10-29 进 main（`3a1e4da6a`；全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-pricingB（代码最后一笔 `6c7ca8ff8`；评审修订轮 `f7cd3e04b` 只改注释与文字）。
 Blocked by: 无（接票 01 之外独立；ADR-0346 单位换算已在 main）
 
 ## 现象
@@ -115,3 +115,12 @@ Blocked by: 无（接票 01 之外独立；ADR-0346 单位换算已在 main）
 4. 位置词与计数：`fingerprint.go` 的「见上」「只多两处」「那两处」改用符号名与结构名；`total_bounds_test.go` 的「下面两个摘要」、`seedgen/main.go` 的「绑上面已登记的」改指名；cmd 用例注释里的「七类包裹」去掉计数。`hashPricingEvaluation` 里退回 `CurrentCanonicalizationVersion()` 的那条走不到的回退，注释写明用途——给接线棘轮一个生产调用点。
 
 自验（带 DSN）：`go build ./...`、`go vet`、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/architecture/... ./cmd/parcel-pricing-register/...` 全部 ok。
+
+## 评审记录（2026-10-29，隔离子代理，钉 `32e652fc8`）
+
+阻断清零。既有评价一字不变：测试文件五个全新增、删除列 0；种子对起点只新增 FULL-03，seedgen 重跑逐字节复现；对拍三组——领域与应用包 2116 行、宽跑 2385 行（86 包，评价 2282 + 登记 103，全部写 PPC-5）、自写网格 8820 行（7056 次评价），起点树对分支树 diff 为 0（52 行噪声来自带随机标识的夹具，起点树自己跑两遍同量级）。最低 / 最高收费：独立有理数预言扫 68040 个有效用例（40508 个触发）全部一致；补差行 `TOTAL_BOUND`、ADD、金额 = 下限 − 各行之和，不进燃油基数；上限冲减行 DEDUCT、金额为正；下限大于上限、币种不一致、负值、不在取整整倍数上均拒。偏远档位：一条规则一个费用代码按档位查表，解不出答 `REMOTE_TIER_UNRESOLVED`、价表缺档答 `RATE_NOT_FOUND`，声明按档位查表必须绑偏远档位目录。「最低一版」规则不误判既有 PPC-5 计划（改种子版本号读回逐一验）。v1 无条件偏远附加是固定规则、不是附加费规则，属实。价卡导入遇多余表与列明确拒绝。旧构建遇 PPC-6 的各读价卡路径逐条列出（均出错即停、不算错金额；序列与目录登记 / 复核的受影响范围扫描是租户级）。偏远档位占用的是 `ADDRESS_TYPE` 槽，与 claude-pricingA 另立 `ADDRESS_NATURE` 槽语义无冲突。非阻断并已处理（`2b0a01d4a`）：ADR 决定号引错三处、决定四对旧构建读法的措辞、风险点 6 补租户级半径、位置词。非阻断未处理：登记 PPC-6 前要求显式部署开关（现在只是文档约束，代码没有门，列为后续加固）；试算响应费用行不带方向，`MAXIMUM_CHARGE` 冲减行在试算页显示成正数（既有 DEDUCT 固定规则同病）；价卡导入暂不支持新结构（拒绝文案是通用的）；依赖基数里点名 `MINIMUM_CHARGE` 构造期静默放行（与既有「点名不存在的码也放行」一致）；结算费用项目映射要登记 `MINIMUM_CHARGE` / `MAXIMUM_CHARGE`（租户取值）。
+
+## 进 main 记录（2026-10-29，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-pricingB` tip `2b0a01d4a` 作出处；隔离树 cherry-pick 到 main，无冲突；重生成 ADR 索引、AT 盘点计数与机制清点，两项 `-check` 退 0；全量 164 ok / 0 FAIL；种子一次性库退 0（第一次因推送脚本把库名大小写弄错而失败，改小写补跑通过）；推确切 SHA `3a1e4da6a`。
+
