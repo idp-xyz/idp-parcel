@@ -379,6 +379,18 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     OCEANIA: muted('大洋洲'),
     ANTARCTICA: muted('南极洲'),
   },
+  // 计价费用代码（parcel-pricing 的「计价费用代码」）：开放词表，由价卡声明；这里收随产品发布的参考译法，演示租户
+  // 按真实租户对待（ADR-0150），它价卡上的码先译好，别的租户的新码如实露码并告警，由那张票补译，不猜。
+  'charge-code': {
+    BASE_FREIGHT: muted('基础运费'),
+    FUEL_SURCHARGE: muted('燃油附加费'),
+    REMOTE_AREA_SURCHARGE: muted('偏远地区费'),
+    REMOTE_AREA_EXTENDED_SURCHARGE: muted('偏远地区费（二档）'),
+    OVERSIZE_SURCHARGE: muted('超尺寸费'),
+    OVERWEIGHT_SURCHARGE: muted('超重费'),
+    RESIDENTIAL_DELIVERY_SURCHARGE: muted('住宅派送费'),
+    MINIMUM_CHARGE: muted('最低收费'),
+  },
   'refdata-unit-category': {
     WEIGHT: muted('重量'),
     LENGTH: muted('长度'),
@@ -415,6 +427,11 @@ export function statusEntryFor(code: string, scope?: string): StatusEntry {
 
 export function labelFor(code: string, scope?: string): string {
   return statusEntryFor(code, scope).label;
+}
+
+/** 计价费用代码的界面词；查不到的码原样作词并告警一次（与状态码同一机制）。 */
+export function chargeCodeLabel(code: string): string {
+  return labelFor(code, 'charge-code');
 }
 
 export function toneFor(code: string, scope?: string): StatusTone {

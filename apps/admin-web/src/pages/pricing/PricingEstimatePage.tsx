@@ -14,6 +14,7 @@ import {
 } from './api';
 import { emptyEstimateDraft, estimateLocalProblems, estimatePayloadOf, type EstimateDraft } from './estimate-form';
 import {
+  chargeLineName,
   directionLabels,
   estimateAnswerLabels,
   estimateMissingLabels,
@@ -306,22 +307,33 @@ function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord
         <table className="w-full text-left">
           <thead className="text-idpxyz-textMuted">
             <tr>
-              <th className="py-1 font-normal">费用代码</th>
-              <th className="py-1 font-normal">说明</th>
+              <th className="py-1 font-normal">费用</th>
               <th className="py-1 text-right font-normal">金额</th>
             </tr>
           </thead>
           <tbody>
             {evaluation.chargeLines.map((line, index) => (
-              <tr key={`${line.code}-${index}`} className="border-t border-idpxyz-border">
-                <td className="py-1 font-mono">{line.code}</td>
-                <td className="py-1">{line.description}</td>
+              <tr key={`${line.code}-${index}`} className="border-t border-idpxyz-border align-top">
+                <td className="py-1">
+                  <div>{chargeLineName(line)}</div>
+                  <div className="font-mono text-[10px] text-idpxyz-textMuted">{line.code}</div>
+                </td>
                 <td className="py-1 text-right font-mono">
                   {line.amount.amount} {line.amount.currency}
                 </td>
               </tr>
             ))}
           </tbody>
+          {evaluation.total ? (
+            <tfoot>
+              <tr className="border-t border-idpxyz-border font-semibold">
+                <td className="py-1">合计</td>
+                <td className="py-1 text-right font-mono">
+                  {evaluation.total.amount} {evaluation.total.currency}
+                </td>
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
       ) : null}
       {evaluation.issues.length > 0 ? (

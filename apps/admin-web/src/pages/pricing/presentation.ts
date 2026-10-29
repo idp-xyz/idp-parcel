@@ -1,5 +1,7 @@
 // 计价目录查阅的结果词表。词取 parcel-pricing CONTEXT 与传输层原词,不自造译法。
 
+import { chargeCodeLabel } from '../../vocabulary/status';
+
 export const directionLabels: Record<string, string> = {
   BUY: '买价',
   SELL: '卖价',
@@ -111,4 +113,10 @@ export function problemNote(code: string): string {
 
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
+}
+
+// 费用行的主列用词：价卡为这条规则写的说明本身是中文就直接用（它是租户在卡上起的名）；说明缺失或没有中文（基础运费行是引擎
+// 固定写的英文 "Base rate"）就按费用代码查词典。不拿英文说明上屏，也不替租户改写他写的中文。
+export function chargeLineName(line: { code: string; description: string }): string {
+  return /[\u3400-\u9fff]/.test(line.description) ? line.description : chargeCodeLabel(line.code);
 }

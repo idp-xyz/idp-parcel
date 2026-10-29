@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import {
+  chargeCodeLabel,
   configureVocabularyWarnings,
   knownStatusCodes,
   labelFor,
@@ -95,4 +96,21 @@ test('分册覆盖按册生效', () => {
   equal(labelFor('PENDING', 'pricing-evaluation'), '待判断');
   equal(labelFor('REFUSED', 'handover'), '已拒收');
   equal(toneFor('OPEN', 'consolidation'), 'info');
+});
+
+// Covers: 计价费用代码的参考译法；查不到的码原样显示并按词典同一机制只告警一次。
+test('费用代码按册译成中文，查不到的码告警一次', () => {
+  equal(chargeCodeLabel('BASE_FREIGHT'), '基础运费');
+  equal(chargeCodeLabel('FUEL_SURCHARGE'), '燃油附加费');
+  equal(chargeCodeLabel('REMOTE_AREA_SURCHARGE'), '偏远地区费');
+  equal(chargeCodeLabel('OVERSIZE_SURCHARGE'), '超尺寸费');
+  equal(chargeCodeLabel('OVERWEIGHT_SURCHARGE'), '超重费');
+  equal(chargeCodeLabel('RESIDENTIAL_DELIVERY_SURCHARGE'), '住宅派送费');
+  equal(chargeCodeLabel('MINIMUM_CHARGE'), '最低收费');
+  const warnings: string[] = [];
+  configureVocabularyWarnings((code) => warnings.push(code));
+  equal(chargeCodeLabel('SYN_UNSEEN_CHARGE'), 'SYN_UNSEEN_CHARGE');
+  equal(chargeCodeLabel('SYN_UNSEEN_CHARGE'), 'SYN_UNSEEN_CHARGE');
+  deepEqual(warnings, ['SYN_UNSEEN_CHARGE']);
+  configureVocabularyWarnings(null);
 });
