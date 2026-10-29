@@ -23,7 +23,12 @@ export interface EstimateDraft {
   origin: string;
   destination: string;
   settlementCurrency: string;
+  /** 收件地址性质：空即不选（未声明，读它的卡点名缺项，不套默认）；否则是 ADDRESS_NATURE_CODES 里的原词。 */
+  addressNature: string;
 }
+
+/** 收件地址性质的封闭词（传输层 domain.NewAddressNature 同一张表）；页面不自造取值。 */
+export const ADDRESS_NATURE_CODES = ['COMMERCIAL', 'RESIDENTIAL'] as const;
 
 /** 空草稿：一格不预填业务值（UC-PP-001「本用例一格不给默认」）。 */
 export function emptyEstimateDraft(): EstimateDraft {
@@ -41,6 +46,7 @@ export function emptyEstimateDraft(): EstimateDraft {
     origin: '',
     destination: '',
     settlementCurrency: '',
+    addressNature: '',
   };
 }
 
@@ -63,6 +69,7 @@ export function estimatePayloadOf(draft: EstimateDraft, timeZone: string): Estim
     payload.postalRoute = { origin: draft.origin, destination: draft.destination };
   }
   if (filled(draft.settlementCurrency)) payload.settlementCurrency = draft.settlementCurrency;
+  if (filled(draft.addressNature)) payload.addressNature = draft.addressNature;
   return payload;
 }
 

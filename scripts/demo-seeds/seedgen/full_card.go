@@ -1,9 +1,11 @@
 package main
 
-// 完整售价卡的合成种子：演示租户在基础运费之外带燃油、偏远、超尺寸、超重四项附加费的第二张 SELL 价卡。
+// 完整售价卡的合成种子：演示租户在基础运费之外带燃油、偏远、超尺寸、超重四项附加费的第二张 SELL 价卡，以及在它之上
+// 超重费改按计价重量触发、另带住宅派送费的第三张（fullNatureSpec）。
 //
-// 它与 sellCardSnapshot 那张 v1 并存而不顶替它：演示动线（提交、受理前估价、费用确认、对账）的客户费用金额
-// 由 v1 产生，这张卡放在另一个计价范围（fullScopeID），评价按范围选卡，不选到它，既有动线的评价结果因此不变。
+// 它们与 sellCardSnapshot 那张 v1 并存而不顶替它：演示动线（提交、受理前估价、费用确认、对账）的客户费用金额
+// 由 v1 产生，这几张卡各放在自己的计价范围（fullScopeID、fullNatureScopeID），评价按范围选卡，不选到它们，既有动线的
+// 评价结果因此不变。
 // 卡上的所有金额、门槛与费率系数都是演示租户的合成采用值，证据只记 S，不是产品默认，也不是任何承运商的真实资费。
 
 import "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -11,6 +13,9 @@ import "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 const (
 	// fullScopeID 是完整价卡独占的计价范围，不与 scopeID 重叠：试算页按这个范围查，只会看到这一张卡。
 	fullScopeID = "SYN-SCOPE-02"
+	// fullNatureScopeID 是第二张完整价卡独占的计价范围：它与 FULL-01 的金额、门槛与目录绑定逐项相同，只在超重费与住宅派送费上
+	// 不同，放在同一个范围里试算页会并排出两张近似的卡；各占一个范围，各自的试算结果一眼分得开。
+	fullNatureScopeID = "SYN-SCOPE-03"
 
 	fullZoneCatalogueID = "SYN-CAT-ZONE-CN-SG-FULL"
 	fullTierCatalogueID = "SYN-CAT-REMOTE-TIER-CN-SG"
@@ -111,6 +116,33 @@ func remoteTierCatalogueSnapshot() []byte {
 	return raw
 }
 
+// fullCardSpec 是两张完整售价卡之间唯一不同的几格：卡与价表、重量策略、费率行的标识，计价范围，登记用的源文件名，
+// 以及两项随引擎能力而来的差别——超重费按哪个特征触发、有没有住宅派送费。其余一切（基础运费、体积重、燃油、偏远、超尺寸、
+// 金额取整、两本目录与燃油序列的绑定）两张卡逐字相同，所以共用 buildFullSellCard 一份构造，而不是复制一遍。
+type fullCardSpec struct {
+	planID         string
+	tableID        string
+	weightPolicyID string
+	// rateIDPrefix 后接 -Z1 / -Z2 即两条费率行的标识。
+	rateIDPrefix   string
+	scope          string
+	sourceFileName string
+	// overweightOnChargeable 为真时超重费读自身计价重量（CHARGEABLE_WEIGHT），否则读实重。
+	overweightOnChargeable bool
+	// residentialDelivery 为真时多一条住宅派送费：收件地址性质为住宅则加收 6 CNY，与偏远档位是两个独立维度，同时计收。
+	residentialDelivery bool
+}
+
+// fullCardOne 是 SYN-PLAN-CN-SG-FULL-01 的几格。
+var fullCardOne = fullCardSpec{
+	planID:         "SYN-PLAN-CN-SG-FULL-01",
+	tableID:        "SYN-TABLE-CN-SG-FULL-01",
+	weightPolicyID: "SYN-WEIGHT-CN-SG-FULL-01",
+	rateIDPrefix:   "SYN-RATE-CN-SG-FULL",
+	scope:          fullScopeID,
+	sourceFileName: "SYN-CARD-CN-SG-FULL-01.xlsx",
+}
+
 // fullSellCardSnapshot 折装完整售价卡 SYN-PLAN-CN-SG-FULL-01 v1（范围 SYN-SCOPE-02，SELL / CUSTOMER_CHARGE，CNY，KG，
 // 每件计收）。基础运费的首重续重价与体积重规则抄 v1，便于两张卡并排对比；其上带四项附加费：
 //
@@ -119,33 +151,37 @@ func remoteTierCatalogueSnapshot() []byte {
 //     档位，所以档位走触发条件（地址类型特征承载偏远档位，ADR-0109），一档一条规则、一档一个费用代码——一张卡里同一费用
 //     代码只能出现一条附加费规则。两档同属一个互斥组，一票至多收一档。按档位查表的一条规则写法见 full_card_03.go。
 //   - 超尺寸费：最长边超过 100 厘米，或长加围超过 300 厘米，任一成立收一次。
-//   - 超重费：实重超过 20 千克。触发读实重而不读计费重量：评价器至今不把体积重与计价重量填进判定特征（只提供
-//     WithDerivedWeights 而无人调用），一条读计费重量的条件会让评价落 CALCULATION_FAILED。
+//   - 超重费：实重超过 20 千克。这一张读实重——落成之时评价器还不把体积重与计价重量填进判定特征；之后补上了
+//     （ADR-0347），按计价重量收超重费的写法见 SYN-PLAN-CN-SG-FULL-02，本卡一字不动。
 //
 // 超尺寸与超重同一互斥组、同一优先级，组内同级取金额较高者；两者并存时收超尺寸（35 > 25），超重留痕不计收。
 // 金额取整逐行加合计：每一行先取整到分，合计是各行之和，页面上看到的各行加起来就是合计。
 //
-// 住宅派送费没有做：计价输入快照不带地址性质（地址类型特征槽被偏远档位占用，试算声明也没有这一格）。最低收费这张卡也没有
-// 做——它成形时引擎没有对单票合计设下限的结构，现已有，演示见 full_card_03.go。
+// 住宅派送费与最低收费这一张都没有做：落成之时计价输入快照不带地址性质，引擎也没有对单票合计设下限的结构。地址性质
+// 之后有了输入与独立的特征槽（ADR-0347），住宅派送费见 SYN-PLAN-CN-SG-FULL-02；总额下限现已有，演示见 full_card_03.go。
 func fullSellCardSnapshot() []byte {
+	return buildFullSellCard(fullCardOne)
+}
+
+func buildFullSellCard(spec fullCardSpec) []byte {
 	cny := currency("CNY")
 	kilogram := domain.WeightUnitKilogram
 
 	firstHalfKilo := weight("0.5", kilogram)
 	east, err := domain.NewFirstContinueRate(
-		rateEntryID("SYN-RATE-CN-SG-FULL-Z1"), "Z1",
+		rateEntryID(spec.rateIDPrefix+"-Z1"), "Z1",
 		firstHalfKilo, money("55", cny),
 		firstHalfKilo, money("18", cny),
 	)
 	must("完整卡 Z1 首续费率", err)
 	south, err := domain.NewFirstContinueRate(
-		rateEntryID("SYN-RATE-CN-SG-FULL-Z2"), "Z2",
+		rateEntryID(spec.rateIDPrefix+"-Z2"), "Z2",
 		firstHalfKilo, money("48", cny),
 		firstHalfKilo, money("15", cny),
 	)
 	must("完整卡 Z2 首续费率", err)
 	table, err := domain.NewFirstContinueRateTable(
-		reference(domain.ArtifactRateTable, "SYN-TABLE-CN-SG-FULL-01", "v1"),
+		reference(domain.ArtifactRateTable, spec.tableID, "v1"),
 		cny, kilogram, period("2026-01-01"),
 		[]domain.FirstContinueRate{east, south},
 	)
@@ -158,7 +194,7 @@ func fullSellCardSnapshot() []byte {
 	factor, err := domain.NewVolumetricFactor(decimal("5000"), domain.LengthUnitCentimeter, factorRounding)
 	must("完整卡体积系数", err)
 	weightPolicy, err := domain.NewPricingWeightPolicy(
-		reference(domain.ArtifactWeightPolicy, "SYN-WEIGHT-CN-SG-FULL-01", "v1"),
+		reference(domain.ArtifactWeightPolicy, spec.weightPolicyID, "v1"),
 		domain.PricingWeightMax, rounding, &factor,
 	)
 	must("完整卡计费重策略", err)
@@ -176,6 +212,9 @@ func fullSellCardSnapshot() []byte {
 	}
 	actualOver := func(kilograms string) domain.TriggerCondition {
 		return trigger(domain.NewWeightFeatureCondition(domain.FeatureActualWeight, domain.ComparisonGreaterThan, weight(kilograms, kilogram)))
+	}
+	chargeableOver := func(kilograms string) domain.TriggerCondition {
+		return trigger(domain.NewWeightFeatureCondition(domain.FeatureChargeableWeight, domain.ComparisonGreaterThan, weight(kilograms, kilogram)))
 	}
 	tierIs := func(tier string) domain.TriggerCondition {
 		return trigger(domain.NewCategoryFeatureCondition(domain.FeatureAddressType, domain.CategoryValue(tier)))
@@ -217,8 +256,12 @@ func fullSellCardSnapshot() []byte {
 	must("超尺寸规则", err)
 	oversize, err = oversize.InExclusivityGroup("SYN-GROUP-FULL-OVERSIZE-OVERWEIGHT", 1)
 	must("超尺寸互斥组", err)
+	overweightTrigger := actualOver("20")
+	if spec.overweightOnChargeable {
+		overweightTrigger = chargeableOver("20")
+	}
 	overweight, err := domain.NewSurchargeRule("SYN-RULE-FULL-OVERWEIGHT", chargeCode("OVERWEIGHT_SURCHARGE"),
-		"超重费（合成演示值）", domain.ChargeEffectAdd, actualOver("20"), fixed("25"))
+		"超重费（合成演示值）", domain.ChargeEffectAdd, overweightTrigger, fixed("25"))
 	must("超重规则", err)
 	overweight, err = overweight.InExclusivityGroup("SYN-GROUP-FULL-OVERSIZE-OVERWEIGHT", 1)
 	must("超重互斥组", err)
@@ -228,8 +271,21 @@ func fullSellCardSnapshot() []byte {
 	must("燃油基数", err)
 	fuelBinding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, fullFuelSeriesID)
 	must("燃油序列绑定", err)
+	surcharges := []domain.SurchargeRule{fuel, remoteFirst, remoteSecond, oversize, overweight}
+	if spec.residentialDelivery {
+		// 住宅派送费按收件地址性质收，与偏远档位是两个独立维度（CONTEXT「地址分类」），所以独立计收、不进任何互斥组：
+		// 同一票既是住宅又落在偏远档位时两笔都收。
+		residential, residentialErr := domain.NewCategoryFeatureCondition(domain.FeatureAddressNature, domain.CategoryValue(domain.AddressNatureResidential))
+		residentialTrigger := trigger(residential, residentialErr)
+		rule, ruleErr := domain.NewSurchargeRule("SYN-RULE-FULL-RESIDENTIAL", chargeCode("RESIDENTIAL_DELIVERY_SURCHARGE"),
+			"住宅派送费（合成演示值）", domain.ChargeEffectAdd, residentialTrigger, fixed("6"))
+		must("住宅派送规则", ruleErr)
+		rule, ruleErr = rule.Standalone()
+		must("住宅派送并列计收", ruleErr)
+		surcharges = append(surcharges, rule)
+	}
 	structures, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{fuel, remoteFirst, remoteSecond, oversize, overweight},
+		surcharges,
 		[]domain.ChargeDependency{fuelBasis},
 		[]domain.ReferenceSeriesBinding{fuelBinding},
 	)
@@ -248,15 +304,15 @@ func fullSellCardSnapshot() []byte {
 	structures, err = structures.WithAmountRounding(amountRounding)
 	must("完整卡方案结构声明金额取整", err)
 
-	scope, err := domain.NewPricingScopeID(fullScopeID)
+	scope, err := domain.NewPricingScopeID(spec.scope)
 	must("完整卡计价范围", err)
 	plan, err := domain.NewPricingPlanVersion(
-		reference(domain.ArtifactPricingPlan, "SYN-PLAN-CN-SG-FULL-01", "v1"),
+		reference(domain.ArtifactPricingPlan, spec.planID, "v1"),
 		scope, domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge,
 		chargeCode("BASE_FREIGHT"), period("2026-01-01"),
 		table, weightPolicy, nil, structures,
 	)
 	must("完整售价方案", err)
 
-	return marshalCard(plan, "SYN-CARD-CN-SG-FULL-01.xlsx", "SYN-AUTH-PRICE-DIR-01")
+	return marshalCard(plan, spec.sourceFileName, "SYN-AUTH-PRICE-DIR-01")
 }

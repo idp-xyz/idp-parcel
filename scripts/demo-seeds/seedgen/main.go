@@ -63,6 +63,9 @@ func main() {
 	write(outDir, "reference-series-fuel-full.json", fullFuelSeriesSnapshot())
 	write(outDir, "reference-series-fuel-full-review.json", seriesReviewDocument(fullFuelSeriesID, "v1"))
 	write(outDir, "price-card-cn-sg-full.json", fullSellCardSnapshot())
+	// 第二张完整价卡（范围 SYN-SCOPE-03，见 full_card_nature.go）：超重费按计价重量触发，另带按地址性质收的住宅派送费。
+	// 与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
+	write(outDir, "price-card-cn-sg-full-02.json", fullNatureSellCardSnapshot())
 	// 第三张完整价卡（范围 SYN-SCOPE-04，见 full_card_03.go）：偏远一条规则按档位查价表，加单票合计最低收费。绑 FULL-01 那一节（steps/160）
 	// 已登记的同一批目录与燃油序列，不另登。
 	write(outDir, "price-card-cn-sg-full-03.json", fullSellCard03Snapshot())

@@ -607,6 +607,8 @@ export interface EstimatePayload {
   zone?: string;
   postalRoute?: { origin: string; destination: string };
   settlementCurrency?: string;
+  /** 收件地址性质，封闭词；键名不叫 addressType——引擎里「地址类型」那一格承载偏远档位（ADR-0347 决定四）。 */
+  addressNature?: string;
 }
 
 export interface EstimateMoney {
