@@ -169,7 +169,16 @@ export interface PriceCardSpecColumn {
   requirement: string;
   description: string;
   allowedValues?: string[];
+  /** 平时是开放词汇、同一行另一格取某值时才封闭的列（如 conditions.category：来源为地址性质时只收商业 / 住宅）。 */
+  allowedValuesWhen?: PriceCardSpecValuesWhen[];
   multiValued?: boolean;
+}
+
+export interface PriceCardSpecValuesWhen {
+  /** 同一行里作条件的那一列的列键。 */
+  column: string;
+  equals: string;
+  allowedValues: string[];
 }
 
 export interface PriceCardSpecSheet {
@@ -193,8 +202,11 @@ export function readPriceCardTemplateSpec(): Promise<ApiResult<PriceCardTemplate
   return exchangeMasterData<PriceCardTemplateSpec>(priceCardTemplateSpecPath);
 }
 
-/** 表单提交的结构化工作簿：表名与列键逐字等于模板；一格是文本、数字或 null。 */
-export type PriceCardWorkbookCell = string | number | null;
+/**
+ * 表单提交的结构化工作簿：表名与列键逐字等于模板；一格是文本或 null。
+ * 不发数字：JSON 数字是调用方写下的字面量、不经浮点判，金额与阈值一律按字符串发，字面量就是想要的值（ADR-0349 风险点 10）。
+ */
+export type PriceCardWorkbookCell = string | null;
 export interface PriceCardWorkbook {
   templateVersion: string;
   sheets: Record<string, Record<string, PriceCardWorkbookCell>[]>;

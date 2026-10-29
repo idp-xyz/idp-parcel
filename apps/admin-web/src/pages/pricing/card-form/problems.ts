@@ -39,6 +39,22 @@ export interface MappedProblems {
   located: LocatedProblem[];
   /** 映射不到控件的问题：整份层面的、表层面又没有默认落点的。 */
   unlocated: PriceCardProblem[];
+  /** 问题清单被截断的说明（`PROBLEMS_TRUNCATED`，问题多于 1000 条时才有）：不是一条要改的问题，放总清单顶部。 */
+  truncated: string | null;
+}
+
+/** 问题清单被截断时服务端补在最前的问题码。 */
+export const problemsTruncatedCode = 'PROBLEMS_TRUNCATED';
+/** 整份内容超出技术上限（表数、行数、列数、总格数、请求体大小）时的问题码。 */
+export const fileTooLargeCode = 'FILE_TOO_LARGE';
+
+/**
+ * 说不到格子的问题的话。超技术上限的话里点名的是工作簿的哪个上限，运营看不懂也没法照办，换成「太大，请拆分」，
+ * 原话留作折叠的原文；其余照 problemWords。
+ */
+export function unlocatedWords(problem: PriceCardProblem): { text: string; original?: string } {
+  if (problem.code === fileTooLargeCode) return { text: '这份价卡太大，请拆分成几张再提交。', original: problem.message };
+  return problemWords(problem.message);
 }
 
 function locate(problem: PriceCardProblem, target: Target, path: string, named: boolean): LocatedProblem {
@@ -59,6 +75,7 @@ function withNames(text: string, ids: Readonly<Record<string, string>>): string 
 export function mapProblems(problems: readonly PriceCardProblem[], origins: OriginIndex): MappedProblems {
   const located: LocatedProblem[] = [];
   const unlocated: PriceCardProblem[] = [];
+  let truncated: string | null = null;
   const add = (entry: LocatedProblem) => {
     // 同一格被几行工作簿共用时（币种、重量单位、生效起点各出现在每张价表里）服务端会各报一遍，页面上只留一条。
     const text = withNames(entry.text, origins.ids);
@@ -66,6 +83,10 @@ export function mapProblems(problems: readonly PriceCardProblem[], origins: Orig
     if (!duplicate) located.push({ ...entry, text });
   };
   for (const problem of problems) {
+    if (problem.code === problemsTruncatedCode) {
+      truncated = problem.message;
+      continue;
+    }
     if (problem.sheet === '') {
       unlocated.push(problem);
       continue;
@@ -88,7 +109,7 @@ export function mapProblems(problems: readonly PriceCardProblem[], origins: Orig
       unlocated.push(problem);
     }
   }
-  return { located, unlocated };
+  return { located, unlocated, truncated };
 }
 
 /** 各步骤上的问题条数，给步骤条画标记用。 */
