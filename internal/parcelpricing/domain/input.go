@@ -471,34 +471,64 @@ type PricingWeightResult struct {
 // 最后才进位。CONTEXT 固定了这个顺序——派生、抬高、再进位——而且它是可观察的：整千克
 // 向上进位下的 1.2 KG 下限得出 2 KG，而先进位后抬高会得出 1.2，那根本不是一个整进位
 // 单位。
+//
+// 这里不换算单位：输入实重或尺寸的单位与方案声明的不同，照旧答单位不一致。换算是评价这一层的事
+// （EvaluatePricing 带着换算器调 calculatePricingWeight，ADR-0346）。
 func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit, floors ...Weight) (PricingWeightResult, error) {
+	return calculatePricingWeight(input, policy, expectedUnit, nil, floors...)
+}
+
+// calculatePricingWeight 是 CalculatePricingWeight 的本体。converter 为空即不换算；非空时输入实重、
+// 合计体积重与尺寸的单位对不上方案声明的单位，改按目录系数（或重放时记下的系数）换算，
+// 换算后走与单位一致时完全相同的派生、抬高、进位（取整规则一字不改）。
+func calculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit, converter *unitConverter, floors ...Weight) (PricingWeightResult, error) {
 	if !input.valid() || !policy.valid() {
 		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
-	if input.actualWeight.unit != expectedUnit {
-		return PricingWeightResult{}, ErrWeightUnitMismatch
-	}
 	if policy.rounding.unit() != expectedUnit {
 		return PricingWeightResult{}, ErrWeightUnitMismatch
+	}
+	actual := input.actualWeight
+	boundaryScale := uint32(0)
+	if converter != nil {
+		boundaryScale = conversionBoundaryScale(input, policy, floors)
+	}
+	if actual.unit != expectedUnit {
+		if converter == nil {
+			return PricingWeightResult{}, ErrWeightUnitMismatch
+		}
+		converted, err := converter.convertWeight(ConvertedActualWeight, actual, expectedUnit, boundaryScale, policy.rounding.allowsTruncation())
+		if err != nil {
+			return PricingWeightResult{}, err
+		}
+		actual = converted
 	}
 	var raw Weight
 	var volumetric Weight
 	hasVolumetric := false
 	switch policy.method {
 	case PricingWeightActualOnly:
-		raw = input.actualWeight
+		raw = actual
 	case PricingWeightMax:
-		derived, err := deriveVolumetricWeight(input, policy)
+		derived, err := deriveVolumetricWeight(input, policy, converter)
 		if err != nil {
 			return PricingWeightResult{}, err
+		}
+		if derived.unit != expectedUnit && converter != nil && input.members != nil {
+			// 票级 / 主单级主体的合计体积重由调用方声明，单位随成员清单走，与合计实重同一对单位。
+			converted, err := converter.convertWeight(ConvertedTotalVolumetricWeight, derived, expectedUnit, boundaryScale, policy.rounding.allowsTruncation())
+			if err != nil {
+				return PricingWeightResult{}, err
+			}
+			derived = converted
 		}
 		volumetric, hasVolumetric = derived, true
 		if volumetric.unit != expectedUnit {
 			return PricingWeightResult{}, ErrWeightUnitMismatch
 		}
-		comparison := input.actualWeight.value.Cmp(volumetric.value)
+		comparison := actual.value.Cmp(volumetric.value)
 		if comparison >= 0 {
-			raw = input.actualWeight
+			raw = actual
 		} else {
 			raw = volumetric
 		}
@@ -528,7 +558,7 @@ func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s%s; rounding=%s increment=%s %s%s; rounded=%s %s", policy.method, derived.value.String(), derived.unit, raiseText, segment.mode, segment.increment.value.String(), segment.increment.unit, roundingSegmentScope(segment), rounded.value.String(), rounded.unit)
 	return PricingWeightResult{
 		method:       policy.method,
-		actual:       input.actualWeight,
+		actual:       actual,
 		volumetric:   optionalWeightCopy(volumetric, hasVolumetric),
 		raw:          raw,
 		rounded:      rounded,
@@ -565,7 +595,9 @@ func (result PricingWeightResult) valid() bool {
 
 // deriveVolumetricWeight 把卡声明的体积系数施加到包裹尺寸上。尺寸没到是一个之后还可能
 // 补上的事实缺失，所以调用方让评价保持`待判断`，而不是退回实重、悄悄给另一件包裹计价。
-func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPolicy) (Weight, error) {
+// 尺寸的长度单位与系数声明的不同时：没有换算器照旧答长度单位不一致，有换算器则把三边换算到系数声明的
+// 单位再算（除数只对它声明的那个单位成立，所以换的是尺寸，不是除数）。
+func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPolicy, converter *unitConverter) (Weight, error) {
 	factor, declared := policy.VolumetricFactor()
 	if !declared {
 		return Weight{}, ErrInvalidRoundingPolicy
@@ -581,6 +613,9 @@ func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	sides, measured := input.Dimensions()
 	if !measured {
 		return Weight{}, ErrMissingDimensions
+	}
+	if converter != nil && sides.unit != factor.lengthUnit {
+		return converter.volumetricWeightFromDimensions(sides, factor)
 	}
 	volume, err := sides.Volume()
 	if err != nil {

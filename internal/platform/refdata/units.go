@@ -137,15 +137,21 @@ var (
 	ErrUnknownUnit = errors.New("refdata: unknown unit")
 	// ErrUnitCategoryMismatch：两个单位不同类别，没有换算（千克换不成厘米）。
 	ErrUnitCategoryMismatch = errors.New("refdata: units belong to different categories")
+	// ErrNilValue：Convert 收到空的量。调用方传 nil 是编程错误，但目录挡在计价评价的路上，
+	// 评价是纯函数、不该因一个空指针 panic——报错让调用方按它的业务格去答。
+	ErrNilValue = errors.New("refdata: value to convert is nil")
 )
 
 // Convert 把 value 个 from 换成以 to 计的量，结果是精确有理数：不取整、不截断、不经浮点。
 // 商可能是无限小数（1 千克折多少磅），所以交回的是有理数而不是定标十进制——要落成某个小数位的十进制文本，
 // 由调用方在它自己的业务位置上取整一次（那是它的业务决定，目录不替它做）。输入的 value 不被修改。
 //
-// 目前没有任何生产调用方：计价里重量单位不一致仍报 ErrWeightUnitMismatch，不自动换算（ADR-0335 决定四）——
-// 换算会改金额，接不接、在哪一步接、哪些口径允许，是单独的裁决。
+// 计价评价的重量与长度换算是它的调用方（ADR-0346，接上 ADR-0335 决定四原先留着的后续轮次）；
+// 体积、件数单位尚无调用方。
 func Convert(value *big.Rat, from, to string) (*big.Rat, error) {
+	if value == nil {
+		return nil, ErrNilValue
+	}
 	source, found := Unit(from)
 	if !found {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownUnit, from)
