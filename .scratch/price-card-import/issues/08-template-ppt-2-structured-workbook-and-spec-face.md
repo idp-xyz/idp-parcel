@@ -1,7 +1,7 @@
 # 08 模板 PPT-2、结构化工作簿载体与模板规格口（价卡配置编辑器的后端第一步）
 
 Category: enhancement
-Status: in-progress——2026-10-29 作者完工，评审（钉 `8d6b6961e`）阻断 1 条已在修订轮改完，待复评与进 main，分支 claude-tmplpt2（代码最后一笔 `ad21b8ee2`）
+Status: resolved——2026-10-29 复评通过并进 main（见末尾「评审记录」「进 main 记录」）。此前：in-progress——2026-10-29 作者完工，评审（钉 `8d6b6961e`）阻断 1 条已在修订轮改完，待复评与进 main，分支 claude-tmplpt2（代码最后一笔 `ad21b8ee2`）
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/parcelpricing/{adapters/pricecardtemplate,adapters/http,application,ports,domain}`、`cmd/parcel-api` 的端点表与装配、`docs/adr`（0349 与 0348 的前向指针）、`docs/design/pp-price-card-import-template-and-validation-spec.md`、`docs/application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md`；`apps/admin-web` 只新增一份静态模板文件，源码不动。
@@ -76,3 +76,23 @@ Blocked by: 无
 **Standards**：ADR 与本票里的跨文件序数改成引节名；`workbook()` 注释去掉「十六张」；`ports` 的「上面两个哨兵」改成指名；「拒收转问题码与说明」两处重复合成 `ports.WorkbookRejectionReading` 一份；`TestAFormSourceFileIdentityIsNamedAfterItsOwnDigest` 补 `Covers:`。AT-PP-043 / 046 / 047 的 UC 行与盘点行同步补了新用例。
 
 **对契约形状的影响**（claude-cardeditor 在本分支之上做）：JSON 工作簿形状、预览 / 录入答复形状不变。新增的都是可缺的东西：规格口列上的 `allowedValuesWhen`，`tables.currency` 的 `allowedValues`（原先没有），问题码 `PROBLEMS_TRUNCATED`（只在问题多于 1000 条时出现，清单最前）。超限的 JSON 现在答 `NOT_ACCEPTED` 加 `FILE_TOO_LARGE`。
+
+## 评审记录（2026-10-29，隔离评审）
+
+首评钉 `8d6b6961e`，阻断 1 条（B1：JSON 载体无结构上限，一份 2.7 MB 请求体可让读取耗 29.9 秒）；修订后复评钉 `a9297508e`（代码最后一笔 `ad21b8ee2`），**阻断清零**。复评核过的：
+
+- B1 全部资源探针与各上限的边界（表数 64、每表行数 100 000、每表不同列键数 64、总格数 1 000 000、请求体 10 MiB，恰在上限接受、多一即拒）；原复现探针由 29.9 秒降到 119 微秒，峰值 RSS 由 95 MB 降到 19 MB；上限以内最大合法形状读取约 0.6 至 0.9 秒、RSS 不超过 180 MB。
+- 语义不变：PPT-1 的 12 145 个输入受理与否、方案身份、摘要、规范化版本、登记快照零差异；6 000 张随机变异卡的电子表格与两种 JSON 写法零差异；FULL-03 的摘要仍等于种子。
+- 祖先链成环检查改线性后，4 000 份随机树的问题清单逐字节一致。
+- `PROBLEMS_TRUNCATED` 的边界（恰 1 000 条不截断，超出则清单最前补一条）与 `allowedValuesWhen`、币种 `allowedValues` 的全空间对拍。
+- Standards 轴通过：注释全中文、无行号、`internal/architecture` 绿、`gofmt`、`go vet` 干净。
+
+**复评留下的非阻断项（记入冻结清单，不在本票改）**
+
+- N-a：结构化工作簿的规范化字节对含 `<`、`>`、`&` 的字符串输出转义写法（`\u003c` 等），起点那版不转义；只改变含这三个字符内容的来源散列与 `form:` 名，读法与摘要不受影响，新旧两版从未同时上线。
+- R1（既有，非本票引入）：领域层 `TriggerCondition` 校验对长嵌套的条件树是平方代价，JSON 十万节点（请求体 5.4 MB）读取约 168 秒；电子表格载体同样可达。要在模板层或领域给条件树、计算树设深度上限。
+- R2：空行不计格数，64 张表各 5.4 万个空行的请求体（9.9 MiB）使 RSS 约 224 MB，耗时 0.28 秒，有界；把空行也计入总格数或另设总行数上限可压到几十 MB。
+
+## 进 main 记录（2026-10-29，协调方 tops-20）
+
+复评阻断清零后，把 `2986a040c..a9297508e` 重放到 `origin/main`（`4c4056dc6`），重生成 ADR 索引、AT 盘点计数与机制清点；重放后全量 `scripts/test-full.sh` 退 0（164 个包 ok），种子灌一次性库退 0，用后删库。
