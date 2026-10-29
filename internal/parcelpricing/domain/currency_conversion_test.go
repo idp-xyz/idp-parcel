@@ -264,19 +264,20 @@ func TestDigestChangesWithTheComparisonResult(t *testing.T) {
 }
 
 // Covers: ISO 4217 最小币单位基准——0 位与 3 位的异常集各验一格，2 位是缺省。
+// ADR-0335 决定五：数据改由 refdata 目录提供而行为不变，所以这里把改查目录之前内置的两张封闭小表逐码钉住，
+// 并钉住目录外的三位大写码仍按 2 位答（既有数据里可能有目录没登的码，它们不能因此被拒或改值）。
 func TestCurrencyMinorUnitScale(t *testing.T) {
-	cases := []struct {
-		code  string
-		scale uint8
-	}{
-		{"CNY", 2}, {"USD", 2}, {"SGD", 2}, {"EUR", 2},
-		{"JPY", 0}, {"KRW", 0}, {"VND", 0},
-		{"KWD", 3}, {"BHD", 3}, {"JOD", 3},
+	scales := map[uint8][]string{
+		0: {"JPY", "KRW", "VND", "CLP", "ISK", "XOF", "XAF", "XPF", "KMF", "BIF", "DJF", "GNF", "RWF", "UGX", "PYG", "VUV"},
+		2: {"CNY", "USD", "SGD", "EUR", "ZZZ", "XXX", "ABC"},
+		3: {"KWD", "BHD", "OMR", "JOD", "TND", "IQD", "LYD"},
 	}
-	for _, test := range cases {
-		currency := mustValue(t, domain.NewCurrency, test.code)
-		if scale := currency.MinorUnitScale(); scale != test.scale {
-			t.Fatalf("%s minor unit scale = %d, want %d", test.code, scale, test.scale)
+	for want, codes := range scales {
+		for _, code := range codes {
+			currency := mustValue(t, domain.NewCurrency, code)
+			if scale := currency.MinorUnitScale(); scale != want {
+				t.Fatalf("%s minor unit scale = %d, want %d", code, scale, want)
+			}
 		}
 	}
 }
