@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/pricecardtemplate"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
 type pricingCatalogueWiring struct {
 	priceCards               pricinghttp.PriceCardCatalogueReader
 	priceCardContent         pricinghttp.PriceCardContentReader
+	priceCardTemplateSpec    pricinghttp.PriceCardTemplateSpecReader
 	referenceSeries          pricinghttp.ReferenceSeriesCatalogueReader
 	referenceSeriesCoverage  pricinghttp.ReferenceSeriesCoverageReader
 	pendingSeriesEvaluations pricinghttp.PendingSeriesEvaluationReader
@@ -48,6 +51,8 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			// 价卡导入模板规格：进程内的静态规格，读口由模板适配器自己生成，不碰库。
+			priceCardTemplateSpec := staticPriceCardTemplateSpec{source: pricecardtemplate.Reader{}}
 			// 覆盖地平线读口（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：
 			// 与目录读面同库，但它要连版本与复核两张表，且在用版本由领域按时刻挑，故自成一只适配器。
 			referenceSeriesCoverage, err := pppostgres.NewReferenceSeriesCoverage(sources.db)
@@ -68,6 +73,7 @@ func init() {
 			return pricingCatalogueWiring{
 				priceCards:               pricingCatalog,
 				priceCardContent:         priceCardContent,
+				priceCardTemplateSpec:    priceCardTemplateSpec,
 				referenceSeries:          pricingCatalog,
 				referenceSeriesCoverage:  referenceSeriesCoverage,
 				pendingSeriesEvaluations: pendingSeriesEvaluations,
@@ -79,7 +85,7 @@ func init() {
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, wiring.priceCards)},
 				{Pattern: "/pricing-price-cards/content", Handler: pricinghttp.NewQueryPriceCardContentEndpoint(pricingCatalogueIntake, wiring.priceCardContent)},
-				{Pattern: "/pricing-price-card-template/spec", Handler: pricinghttp.NewQueryPriceCardTemplateSpecEndpoint(pricingCatalogueIntake, pricecardtemplate.Reader{})},
+				{Pattern: "/pricing-price-card-template/spec", Handler: pricinghttp.NewQueryPriceCardTemplateSpecEndpoint(pricingCatalogueIntake, wiring.priceCardTemplateSpec)},
 				{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, wiring.referenceSeries)},
 				// 覆盖地平线（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：一条序列一行，
 				// 答的是「还盖得住多久、谁欠一个动作」。时刻源在此处选定——组合根就是挑具体依赖
@@ -95,4 +101,13 @@ func init() {
 			}
 		},
 	})
+}
+
+// staticPriceCardTemplateSpec 把模板适配器的规格交给规格口：规格是随版本发布的静态内容，读它不会失败。
+type staticPriceCardTemplateSpec struct {
+	source ports.PriceCardTemplateSpecSource
+}
+
+func (spec staticPriceCardTemplateSpec) ReadPriceCardTemplateSpec(context.Context) (ports.PriceCardTemplateSpec, error) {
+	return spec.source.PriceCardTemplateSpec(), nil
 }

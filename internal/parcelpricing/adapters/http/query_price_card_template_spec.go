@@ -1,6 +1,7 @@
 package pricinghttp
 
 import (
+	"context"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
@@ -10,9 +11,15 @@ import (
 // 表单，而不是在前端抄一份列表。内容由读取模板的同一张列定义生成（ports.PriceCardTemplateSpecSource），租户无关，但仍挂
 // 查阅行的 Intake——认证与授予照常，租户取认证信封，不因内容静态就免掉。
 
+// PriceCardTemplateSpecReader 是本端点消费的读口。真实现是进程内的静态规格、不会失败；读口仍带错误返回，是为了和端点表里
+// 每一条读行同形——装配测试的未接线占位如实答没接线，而不是让这一行从「接线是否到位」的核对里缺席。
+type PriceCardTemplateSpecReader interface {
+	ReadPriceCardTemplateSpec(ctx context.Context) (ports.PriceCardTemplateSpec, error)
+}
+
 // NewQueryPriceCardTemplateSpecEndpoint 交回规格口。先认证、后解查询串：令牌不过的请求不泄露本端点认哪些键；查询串封闭，
 // 本口不收任何键，带一个 tenant 来就是以为自己能指定租户。
-func NewQueryPriceCardTemplateSpecEndpoint(intake PricingCatalogueIntake, source ports.PriceCardTemplateSpecSource) http.Handler {
+func NewQueryPriceCardTemplateSpecEndpoint(intake PricingCatalogueIntake, reader PriceCardTemplateSpecReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
@@ -23,11 +30,16 @@ func NewQueryPriceCardTemplateSpecEndpoint(intake PricingCatalogueIntake, source
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		if len(request.URL.Query()) != 0 || request.URL.RawQuery != "" {
+		if request.URL.RawQuery != "" {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		writeJSON(response, http.StatusOK, priceCardTemplateSpecResponseOf(source.PriceCardTemplateSpec()))
+		spec, err := reader.ReadPriceCardTemplateSpec(request.Context())
+		if err != nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeJSON(response, http.StatusOK, priceCardTemplateSpecResponseOf(spec))
 	})
 }
 
