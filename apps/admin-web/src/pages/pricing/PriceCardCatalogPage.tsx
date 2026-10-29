@@ -1,231 +1,143 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
-import {
-  ListPageTemplate,
-  type ListColumn,
-  type TemplateViewState,
-} from '../../templates';
+import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
+import { StatusPill } from '../../components/StatusPill';
+import { priceDirectionLabels, priceCardPurposeLabels } from '../../vocabulary/price-card';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
+import { catalogueViewState } from '../catalogue-view';
+import { InstantRange } from '../party/detail-primitives';
+import { useRegisterList } from '../party/register-list';
 import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
 import { PriceCardImportPanel } from './PriceCardImportPanel';
-import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
+import { PriceCardDetailPanel, PriceCardUnits } from './PriceCardDetailPanel';
+import { problemNote } from './presentation';
+import { priceCardStatus, priceCardStatusLabel } from './price-card-content';
 import {
-  listPriceCards,
-  registerPriceCard,
-  registrationOutcomeLabels,
-  type ApiResult,
-  type PriceCardListResponseBody,
-  type PriceCardRecord,
-} from './api';
-import { PrincipalRef } from '../../components/PrincipalRef';
-import { formatInstant } from '../moment';
+  countPriceCards,
+  filterPriceCards,
+  priceCardCountSummary,
+  priceCardNoMatchNote,
+  priceCardRowKey,
+  priceCardStatusFilterOptions,
+  type PriceCardStatusFilter,
+} from './price-card-list';
+import { listPriceCards, registerPriceCard, registrationOutcomeLabels, type PriceCardRecord } from './api';
 
 const info = moduleInfoById['price-card-catalog'];
 
-const columns: ListColumn<PriceCardRecord>[] = [
+// 列只留运营认得出一张卡所需的几样：方案、方向、范围、币种与单位、适用期、状态。标识之外的系统引用（规范化版本、内容摘要、
+// 源文件身份、发布授权、登记责任方）都不在列上，进右栏底部的「技术详情」。
+const columns: WorkbenchColumn<PriceCardRecord>[] = [
   {
-    id: 'plan',
+    key: 'plan',
     header: '定价方案',
-    className: 'w-[140px]',
     render: (row) => (
-      <div>
-        <div className="font-mono text-[12px] text-idpxyz-accent">{row.planId}</div>
-        <div className="font-mono text-[11px] text-idpxyz-textMuted">{row.planVersion}</div>
+      <div className="min-w-36">
+        <div className="break-all font-medium text-[color:var(--ds-text-link-hover)]">{row.planId}</div>
+        <div className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">版本 {row.planVersion}</div>
       </div>
     ),
   },
   {
-    id: 'direction',
-    header: '价格方向',
-    align: 'center',
-    className: 'w-[72px]',
-    render: (row) => labelOf(directionLabels, row.direction),
-  },
-  {
-    id: 'purpose',
-    header: '计算目的',
+    key: 'direction',
+    header: '方向',
     render: (row) => (
-      <span className="font-mono text-[12px]">{labelOf(purposeLabels, row.purpose)}</span>
+      <div className="whitespace-nowrap">
+        <div>{priceDirectionLabels[row.direction] ?? row.direction}</div>
+        <div className="text-[12px] text-idpxyz-breadcrumb">{priceCardPurposeLabels[row.purpose] ?? row.purpose}</div>
+      </div>
     ),
   },
-  { id: 'scope', header: '适用范围', render: (row) => row.scope },
+  { key: 'scope', header: '适用范围', render: (row) => <span className="break-all">{row.scope}</span> },
   {
-    id: 'rate-table',
-    header: '价表',
-    render: (row) => (
-      <span className="font-mono text-[12px]">
-        {row.rateTableId}@{row.rateTableVersion}
-      </span>
-    ),
+    key: 'units',
+    header: '币种与单位',
+    hideWhenDetailOpen: true,
+    render: (row) => <PriceCardUnits row={row} />,
   },
   {
-    id: 'period',
+    key: 'period',
     header: '适用期',
-    className: 'w-[200px]',
+    hideWhenDetailOpen: true,
     render: (row) => (
       <span className="font-mono text-[12px]">
-        {row.effectiveFrom}
-        {row.effectiveTo ? ` → ${row.effectiveTo}` : ' → 开放'}
+        <InstantRange from={row.effectiveFrom} to={row.effectiveTo} />
       </span>
     ),
   },
   {
-    id: 'canon',
-    header: '规范化版本',
-    align: 'center',
-    render: (row) => <span className="font-mono text-[12px]">{row.canonicalization}</span>,
-  },
-  {
-    id: 'digest',
-    header: '版本内容摘要',
-    render: (row) => (
-      <span className="font-mono text-[11px]" title={row.contentDigest}>
-        {row.contentDigest.length > 16
-          ? `${row.contentDigest.slice(0, 16)}…`
-          : row.contentDigest}
-      </span>
-    ),
-  },
-  {
-    id: 'source',
-    header: '源文件身份',
-    render: (row) => (
-      <div>
-        <div>{row.sourceFileName}</div>
-        <div className="font-mono text-[11px] text-idpxyz-textMuted" title={row.sourceFileSha256}>
-          {row.sourceFileSha256.slice(0, 12)}…
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: 'auth',
-    header: '发布授权',
-    render: (row) => (
-      <span className="font-mono text-[12px]">
-        {row.authorizationId}@{row.authorizationVersion}
-      </span>
-    ),
-  },
-  { id: 'approver', header: '发布批准责任方', render: (row) => <PrincipalRef value={row.publicationApprover} /> },
-  {
-    id: 'registered',
-    header: '登记时间',
-    className: 'w-[180px]',
-    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.registeredAt)}</span>,
+    key: 'status',
+    header: '状态',
+    render: (row) => {
+      const status = priceCardStatusLabel(priceCardStatus(row, new Date()));
+      return <StatusPill label={status.label} tone={status.tone} />;
+    },
   },
 ];
 
-function viewStateOf(
-  answer: ApiResult<PriceCardListResponseBody> | null,
-  rowCount: number,
-  retry: () => void,
-): TemplateViewState {
-  if (answer === null) return { kind: 'loading' };
-  switch (answer.kind) {
-    case 'outcome':
-      return rowCount === 0
-        ? {
-            kind: 'empty',
-            title: '当前租户内尚无价卡版本',
-            description:
-              '空列表是正常业务答案(PRICE_CARDS_LISTED),不是故障;经受控登记口登记价卡后本页即可见。',
-          }
-        : { kind: 'ready' };
-    case 'unconfigured':
-      return {
-        kind: 'unconfigured',
-        title: '接入渠道未配置',
-        description:
-          '价卡目录查阅端点(GET /pricing-price-cards)已建立并装配,但接入渠道认证方式未登记,' +
-          '服务端按 ADR-0055 如实答 403 ACCESS_CHANNEL_NOT_CONFIGURED。这是诚实答案不是接线缺陷;' +
-          '改请求或重试不会改变结果。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock:
-            '登记接入渠道认证参数(PAR-INT-01,实例半边)后由装配侧换上真 Intake 即放行;' +
-            '在此之前登记走受控登记口(parcel-pricing-register)。导入签的预览与存草稿' +
-            '(见「导入价卡」)挂的是操作者渠道,发行方未设时今天同答未配置。',
-        },
-      };
-    case 'loginRequired':
-    case 'notGranted':
-      return { kind: answer.kind, facts: { owner: info.owner, source: info.source } };
-    case 'callerProblem':
-      return {
-        kind: 'error',
-        title: `调用方式问题(HTTP ${answer.status})`,
-        description: problemNote(answer.code),
-      };
-    case 'noAnswer':
-      return {
-        kind: 'error',
-        title: `服务端未形成答案(HTTP ${answer.status})`,
-        description: problemNote(answer.code),
-        onRetry: retry,
-      };
-    case 'transport':
-      return {
-        kind: 'error',
-        title: '请求未到达 parcel-api',
-        description: `${answer.message};请确认代理与服务端在运行(约定走 /api 经代理转发)。`,
-        onRetry: retry,
-      };
-  }
-}
-
 /**
- * 价卡目录:已登记定价方案版本的查阅面,外加导入签、草稿签与高级 JSON 签
- * （ADR-0101，票 price-card-import/05、06）。
+ * 价格表：已登记价卡版本的工作台。单击一行在右栏看这张卡有哪些费用项、每项怎么收、什么时候收（价卡内容读口）。
+ * 导入、草稿与高级 JSON 三签仍在同页其余签里。
  *
- * 导入签与草稿签今天在发行方未设时答 403「接入渠道未配置」,那是诚实答案,页面不拿演示数据顶替。
- * JSON 快照签不在运营配置员的主路径上。
+ * 筛选只在已取回的这一页上做：读口一页答完，不下推查询参数。导入签与草稿签今天在发行方未设时答 403
+ * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
 function PriceCardCatalogTable() {
-  const [keyword, setKeyword] = useState('');
-  const [answer, setAnswer] = useState<ApiResult<PriceCardListResponseBody> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
+  const { answer, retry, pending } = useRegisterList(listPriceCards);
+  const [search, setSearch] = useAddressKeyword();
+  const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listPriceCards().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
-  const retry = () => setReloadToken((token) => token + 1);
   const rows = answer?.kind === 'outcome' ? answer.body.cards : [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        [row.planId, row.sourceFileName, row.publicationApprover].some((field) =>
-          field.toLowerCase().includes(needle),
-        ),
-      )
-    : rows;
+  const now = new Date();
+  const visible = filterPriceCards(rows, { search, status }, now);
+  const counts = countPriceCards(rows, now);
+  const answered = answer?.kind === 'outcome';
+
+  const statusChips: WorkbenchChip[] | undefined = answered
+    ? priceCardStatusFilterOptions()
+        .filter((option) => option.value === 'ALL' || option.value === status || counts.byStatus[option.value] > 0)
+        .map((option) => ({
+          id: option.value,
+          label: option.label,
+          count: option.value === 'ALL' ? counts.total : counts.byStatus[option.value],
+          active: status === option.value,
+          onClick: () => setStatus(option.value === 'ALL' || status === option.value ? 'ALL' : option.value),
+        }))
+    : undefined;
 
   return (
-    <ListPageTemplate<PriceCardRecord>
+    <WorkbenchPageTemplate<PriceCardRecord>
       title={info.title}
-      description={`本签只查阅;导入走「导入价卡」签,JSON 快照在「高级」签,受控登记口仍可用`}
-      search={{
-        value: keyword,
-        onChange: setKeyword,
-        placeholder: '搜索定价方案 / 源文件身份 / 批准责任方',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `共 ${visibleRows.length} 条` : undefined
-      }
+      subtitle="对客户与对供应商的价格表：点开一行，看这张价格表收哪些费、怎么收、什么时候收"
+      onRefresh={retry}
+      refreshing={pending}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索定价方案或适用范围…' }}
+      statusChips={statusChips}
+      toolbarRight={answered ? priceCardCountSummary(rows.length, visible.length) : undefined}
       columns={columns}
-      rows={visibleRows}
-      rowKey={(row) => `${row.planId}@${row.planVersion}`}
-      viewState={viewStateOf(answer, rows.length, retry)}
+      rows={visible}
+      rowKey={priceCardRowKey}
+      selectedKey={selectedKey}
+      onSelect={setSelectedKey}
+      noMatchText={priceCardNoMatchNote}
+      onClearFilters={() => {
+        setSearch('');
+        setStatus('ALL');
+      }}
+      renderDetail={(key) => {
+        const row = visible.find((card) => priceCardRowKey(card) === key);
+        return row ? <PriceCardDetailPanel row={row} onClose={() => setSelectedKey(null)} /> : null;
+      }}
+      // 筛出为空不是空态：viewState 按总数判，表格区另显 noMatchText。
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /pricing-price-cards',
+        emptyTitle: '当前租户内还没有价卡',
+        emptyDescription: '没有价卡不是故障；经「导入价卡」或受控登记口登记之后，本页即可见。',
+      })}
     />
   );
 }

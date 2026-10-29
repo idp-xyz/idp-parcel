@@ -280,6 +280,10 @@ export interface PriceCardRecord {
   authorizationVersion: string;
   publicationApprover: string;
   registeredAt: string;
+  /** 收尾三格（ADR-0234）：缺席即没有那一种收尾；发布时的适用期两格照旧，不被它们覆盖。 */
+  selectionEndsAt?: string;
+  retiredAt?: string;
+  successorVersion?: string;
 }
 
 export interface PriceCardListResponseBody {
@@ -477,6 +481,40 @@ export interface ReferenceSeriesListResponseBody {
 
 export function listPriceCards() {
   return exchangeMasterData<PriceCardListResponseBody>('/pricing-price-cards');
+}
+
+/**
+ * 价卡内容查阅（GET /pricing-price-cards/content?id=&version=）：一版已登记价卡的规范化文档与登记元数据。
+ * `document` 是服务端原样交出的 JSON，形状随规范化版本变，所以这里不给它类型——翻成人话的解析在
+ * price-card-content.ts，看不懂的结构在那里降级。
+ *
+ * 业务成格按 ADR-0022 在 `outcome`：查无与「册上有、本构建读不了」都是 200 的业务答案，不是错误。
+ */
+export interface PriceCardContentFoundBody {
+  outcome: 'PRICE_CARD_CONTENT_FOUND';
+  planId: string;
+  planVersion: string;
+  canonicalization: string;
+  contentDigest: string;
+  publicationApprover: string;
+  registeredAt: string;
+  document: unknown;
+}
+
+export interface PriceCardContentMissingBody {
+  outcome: 'NOT_FOUND' | 'CANONICALIZATION_UNSUPPORTED';
+  planId: string;
+  planVersion: string;
+}
+
+export type PriceCardContentBody = PriceCardContentFoundBody | PriceCardContentMissingBody;
+
+export function priceCardContentPath(planId: string, planVersion: string): string {
+  return `/pricing-price-cards/content?id=${encodeURIComponent(planId)}&version=${encodeURIComponent(planVersion)}`;
+}
+
+export function readPriceCardContent(planId: string, planVersion: string) {
+  return exchangeMasterData<PriceCardContentBody>(priceCardContentPath(planId, planVersion));
 }
 
 export function listReferenceSeries() {
