@@ -192,7 +192,7 @@
 |---|---|---|
 | `LONGEST_SIDE`、`SECOND_LONGEST_SIDE`、`LENGTH_AND_GIRTH` | `NewLengthFeatureCondition` | `operator`、`threshold`、`unit`（`CM`、`IN`） |
 | `VOLUME` | `NewVolumeFeatureCondition` | `operator`、`threshold`、`unit`（`CM`、`IN`） |
-| `ACTUAL_WEIGHT`、`VOLUMETRIC_WEIGHT`、`CHARGEABLE_WEIGHT` | `NewWeightFeatureCondition` | `operator`、`threshold`、`unit`（`G`、`KG`、`OZ`、`LB`） |
+| `ACTUAL_WEIGHT`、`VOLUMETRIC_WEIGHT`、`CHARGEABLE_WEIGHT` | `NewWeightFeatureCondition` | `operator`、`threshold`、`unit`（`G`、`KG`、`OZ`、`LB`）；`CHARGEABLE_WEIGHT` 是包裹自身的计价重量（派生、进位之后），**不含条件最低计价重量的抬高**；`VOLUMETRIC_WEIGHT` 与 `CHARGEABLE_WEIGHT` 的阈值单位须是价表单位（ADR-0347） |
 | `ZONE`、`ADDRESS_TYPE`、`ADDRESS_NATURE`、`SERVICE_OPTION` | `NewCategoryFeatureCondition` | `category`（`ADDRESS_NATURE` 只收 `COMMERCIAL`、`RESIDENTIAL`）；`operator` 空或 `EQ`（领域里类别判定恒为等于） |
 
 树的纪律：

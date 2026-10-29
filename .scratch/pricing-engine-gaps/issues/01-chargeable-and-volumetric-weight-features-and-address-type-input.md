@@ -1,7 +1,7 @@
 # 01 判定条件读不到体积重与计价重量，计价输入没有地址性质——超重费只能按实重收、住宅派送费表达不了
 
 Category: enhancement
-Status: in-progress——2026-10-29 作者完工，待隔离评审与进 main，分支 claude-pricingA（代码最后一笔 `ece038c03`）
+Status: in-progress——2026-10-29 作者完工并补完评审修订轮（B1 阻断已修），待复评与进 main，分支 claude-pricingA（代码最后一笔 `d4eaf592b`）。此前：作者完工，待隔离评审与进 main（代码最后一笔 `ece038c03`，已随 rebase 改号为 `aa99d559d`）
 Blocked by: 无（接 reference-data/03 即 ADR-0346，已进 main）
 
 ## 现象
@@ -29,7 +29,7 @@ Blocked by: 无（接 reference-data/03 即 ADR-0346，已进 main）
 
 ## 完成记录（2026-10-29 作者）
 
-起点 `7ea1aa677`（origin/main）；分支 `claude-pricingA`。提交：`14525a485`（领域、编排、载荷、导入模板与用例）、`85aec03bd`（管理台下拉与第二张完整价卡种子）、`454e84ccb`（读回门补同一道检查）、`ece038c03`（重生成入库的价卡导入模板：条件表 category 列的说明多一句，模板版本 `PPT-1` 与表、列都不动）；其后文档一笔（ADR-0347、ADR-0152 前向指针、CONTEXT、UC-PP-001、AT 盘点、导入模板规格一行、本票面）。
+起点 `7ea1aa677`（origin/main）；分支 `claude-pricingA`。提交（rebase 到 origin/main `05a05a34e` 之后的号；原号 `14525a485`、`85aec03bd`、`454e84ccb`、`ece038c03` 对应改为）：`7ec26586f`（领域、编排、载荷、导入模板与用例）、`51431b4bc`（管理台下拉与第二张完整价卡种子）、`ca35edbad`（读回门补同一道检查）、`aa99d559d`（重生成入库的价卡导入模板：条件表 category 列的说明多一句，模板版本 `PPT-1` 与表、列都不动）；其后文档一笔（ADR-0347、ADR-0152 前向指针、CONTEXT、UC-PP-001、AT 盘点、导入模板规格一行、本票面）。
 
 **核实：「地址类型特征槽被偏远档位占用」属实。** `resolveCatalogues` 解出的偏远档位经 `WithCategories(zone, tier)` 填进 `PackageFeatures.addressType`（ADR-0109 Context 的对应关系）；绑了档位目录的卡该槽就是档位码，没绑的卡该槽缺席。FULL-01 的偏远一档、二档两条规则读的正是它（`ADDRESS_TYPE = T1 / T2`）。后果：把住宅派送费写成 `ADDRESS_TYPE = RESIDENTIAL`，在绑了档位目录的卡上**静默永不命中**，在没绑的卡上落 `CALCULATION_FAILED`——住宅派送与偏远档位无法同卡并收，与 CONTEXT「地址分类」词条写明的「同一票可以既命中住宅派送又落在某一偏远档位」直接相抵。**改法**：不改指（已发布卡与摘要读的是今天的含义），另立 `ADDRESS_NATURE` 槽（CONTEXT「特征」词条的一次拓宽，ADR-0347 决定四；这正是 shape-gaps/01 完成记录里留给 owner 的那一问：「若 owner 判定地址性质也要成为可判定量，那是「特征」词条的一次拓宽，另立票」）。
 
@@ -93,3 +93,19 @@ Blocked by: 无（接 reference-data/03 即 ADR-0346，已进 main）
 - **术语债**：`FeatureAddressType`（地址类型）实际装偏远档位，名字与含义错位，本票不改（改要换规范化号并迁移已发布卡）；ADR-0347 风险点 2。
 - 不挡上线的新发现：晚期待判断的评价（序列读数、偏远档位、地址性质）把已成形的基础运费行留在评价上、只是没有合计（既有行为，`ADDRESS_NATURE_REQUIRED` 沿用）；读到含新特征来源价卡的旧构建在读回门上拒收（风险点 7，进生产后滚动发布才相关）。
 - 隔离评审请重点看：口径取舍（自身计价重量不含抬高，风险点 0）；`readsPackageWeights` 这道守卫是不是真把「不读新特征的评价」挡在新代码之外（对拍脚本可向作者要）；`conditionScale` 的论证（决定五，变异已做）；读回门新增的一道对既有存量卡的影响（风险点 4）。
+
+## 修订轮（2026-10-29 作者，应协调方转来的隔离评审意见，评审钉 `ce5526f92`、阻断 1 条）
+
+**先 rebase。** `git rebase origin/main`（`05a05a34e`，B 的 `pricing-engine-gaps/02` 已先进）：六个文件文本冲突，全部取并集——`plan.go` 两处（装配门里 `checkPackageWeightReads` 与 B 的 `coherentWithPlan` 并存，读回门同；两道都在）、`seedgen/main.go`（FULL-02 与 B 的 FULL-03 两条 `write`）、`seedgen/full_card.go`（头注合并成「住宅派送费与最低收费这一张都没做：地址性质见 FULL-02，总额下限见 full_card_03.go」）、`scripts/demo-seeds/README.md`（FULL-01 一行的「超重读实重 / 住宅派送费没有做」句改成现状，FULL-02 与 FULL-03 各一行）、`.scratch/at-coverage-inventory.md` 与 `UC-PP-001` 的 AT 表（`AT-PP-022` 至 `026` 与 B 的 `030` 至 `040` 并存，节序按号）。号没有撞：ADR 0347 与 0348、AT 022–026 与 030–040。rebase 之后的对拍：领域层同一批 32 行夹具与新的 origin/main 比，逐位相同。
+
+**B1（阻断）修了。** 提前收尾的评价丢了自身重量那一遍做过的换算。触发 = 方案有条件读体积重或自身计价重量 ∧ 输入单位要换算 ∧ 评价在正式计价重量之前收尾（拒收命中、序列取值缺失待判断、抬高条件求值出错）；原评价没有换算记录，重放与同标识重复请求（冻结、只认记下的系数）答单位不一致，被判成结果不一致。**修法**：`EvaluatePricing` 在自身重量那一遍成功后当场把换算记录与解释行记在评价上（所有提前收尾的出口因此都带着）；走到正式计价重量那一遍时以那一遍的记录为准、撤掉这一遍留的解释行（`withoutLines`），记录与解释都只有一份——不能直接沿用这一遍的记录，因为带抬高下限时正式那一遍保留的小数位可能更细，冻结重放要认的是正式那一遍记下的。ADR-0347 决定一的那句假设（「随后正式那一遍会统一记下」）已改写。
+- 用例（`package_weight_early_exit_test.go`）：磅输入 × 读自身计价重量的条款 × 序列缺失（PENDING `REFERENCE_SERIES_UNRESOLVED`）/ 拒收命中（UNRATABLE `EXCLUDED_BY_RATE_CARD`）/ 抬高条件求值出错（CONFLICT `WEIGHT_UNIT_MISMATCH`），各钉「换算记录在、记录与解释行条数相等、重放同状态同摘要、快照往返后重放同样」；带抬高下限的完成评价记录与解释行各只一份且重放同摘要。应用层 `evaluate_pricing_early_exit_conversion_test.go`：拒收命中的磅件，同标识重复请求认作已有结果（`EvaluationExistingResult`），不判冲突、不重复入册。**变异**：去掉当场记录那一行，三条领域用例与应用层用例都失败（失败信息是评审复现的那个：换算数 0）。原有用例一个字未动，既有 Completed 重放用例（`TestChargeableWeightReadsTheConvertedWeightAndDoesNotRecordTheConversionTwice` 等）照过。
+- 评审附带的「冻结模式下『体积重=』解释行小数位可能与原评价不同」：对不齐——冻结取记下的位数，而记下的是带下限那一遍的；只在「票级主体、合计体积重以另一个单位声明、换算结果是无限小数、卡又带抬高下限」这一格里才不同，语义摘要不含解释行；已在 ADR-0347 Consequences 写了一句。
+
+**非阻断三条一并做了**
+1. ADR-0347 风险点 7 改成如实：旧构建读到含 `ADDRESS_NATURE` 条件的 `PPC-5` 卡，答的是泛化的「价卡登记快照无效」；序列 / 目录登记与复核后的受影响范围扫描是租户级的（整笔失败、信封回滚，波及周更燃油序列），价卡草稿列表整租户报错，评价请求与售价预估在唯一适用的卡读不回时答 unavailable；写明运维约束「所有读价卡的进程换成新构建之后，才登记第一张读 `ADDRESS_NATURE` 的卡」，与 ADR-0348 风险点 6 对齐。Context 里「规范化版本是全局一个常量」一句补上 ADR-0348 之后的现状，决定六说明读新特征的方案仍写 `PPC-5`、与 `PPC-6` 互不依赖。
+2. ADR-0346 Status 行索引注记补「越权风险点 2 的回答」（无条款停用，指向 ADR-0347 决定五），Links 补一条。
+3. `CHARGEABLE_WEIGHT` 命名风险：导入模板条件表 `source` 列说明与导入规格对应行补「不含条件最低计价重量的抬高」（入库模板重生成）；ADR-0347 风险点 0 记明「现在没有已发布卡依赖这个量，是最便宜的改名窗口，交 PP owner」。
+
+**自验（修订轮，含 PG）**：`go build ./...`、`go vet`（`./internal/parcelpricing/...`、`./cmd/...`、`./scripts/...`）、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/platform/... ./internal/architecture/... ./cmd/...`（带 DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`）42 个有测试的包全部 ok、退 0（含 `internal/architecture` 门禁、`cmd/parcel-api` 真库用例、`cmd/parcel-pricing-template` 入库模板与生成器逐字节相等）；管理台 `tsc -b` 退 0、`pnpm test` 905 项全过（含 B 的改动）、`vite build` 过。`*_test.go` 对起点（`7ea1aa677` 的合并基）只新增，删除列全为 0。AT-PP-023 的行与盘点 ① 桶同步补了新用例。
+

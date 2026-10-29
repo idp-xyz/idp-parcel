@@ -1,6 +1,6 @@
 # ADR-0346：评价把输入实重与尺寸按内置单位目录精确换算到方案声明的单位，换算系数随评价记下、重放只认记下的系数；无限小数按取整边界保留足够位数并如实记截断
 
-Status: Accepted（2026-10-29，Claude Code 会话代产品 owner、PP owner 决（代决）：用户要补「基础数据」第二轮，把 ADR-0335 留下的单位换算接进计价评价；设计由协调方代决、作者落笔，用户未逐条过目，越权风险点待 PP owner 复核。部分停用 [ADR-0335](./0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md) 决定四一句。）<!-- 索引注记 -->｜**判据**：评价里输入实重 / 尺寸的单位与方案声明的单位（价表查表单位、体积系数的长度单位）不同时，按 `refdata` 目录的精确系数换算后再走原有取整规则，不再答单位不一致；单位一致的评价先走原函数、字节不动；换算的原值、换算值与系数随评价记下，重放只认记下的系数；换算结果不是有限小数时保留的位数由取整边界推出并如实记截断，含 `NONE` 段的取整策略不收截断；只接重量与长度，特征判定里的阈值单位比较与体积、件数单位不在内。
+Status: Accepted（2026-10-29，Claude Code 会话代产品 owner、PP owner 决（代决）：用户要补「基础数据」第二轮，把 ADR-0335 留下的单位换算接进计价评价；设计由协调方代决、作者落笔，用户未逐条过目，越权风险点待 PP owner 复核。部分停用 [ADR-0335](./0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md) 决定四一句。）<!-- 索引注记 -->｜**判据**：评价里输入实重 / 尺寸的单位与方案声明的单位（价表查表单位、体积系数的长度单位）不同时，按 `refdata` 目录的精确系数换算后再走原有取整规则，不再答单位不一致；单位一致的评价先走原函数、字节不动；换算的原值、换算值与系数随评价记下，重放只认记下的系数；换算结果不是有限小数时保留的位数由取整边界推出并如实记截断，含 `NONE` 段的取整策略不收截断；只接重量与长度，特征判定里的阈值单位比较与体积、件数单位不在内。｜**越权风险点 2 的回答**（无条款停用）：「日后评价里若新增了任何拿计价重量去比较或落点的量，必须并入 `conversionBoundaryScale`」这条要求，其第一次兑现见 [ADR-0347](./0347-conditions-read-the-volumetric-weight-and-the-packages-own-chargeable-weight-before-any-rule-is-judged-and-the-address-nature-is-a-declared-input-with-its-own-feature-slot.md) 决定五——读体积重的判定条件的阈值并入截断位数的边界。其余各条不变。
 
 Date: 2026-10-29
 
@@ -96,4 +96,5 @@ Date: 2026-10-29
 - [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0267](./0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md)：规范化形状与换号规则；决定五说明为何这里不触发
 - [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md)：汇率换算「保留原币与所引序列版本」的纪律，单位换算照同一条
 - [ADR-0107](./0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)：取整策略由价卡声明；本记录不改任何取整规则
+- [ADR-0347](./0347-conditions-read-the-volumetric-weight-and-the-packages-own-chargeable-weight-before-any-rule-is-judged-and-the-address-nature-is-a-declared-input-with-its-own-feature-slot.md)：决定五兑现越权风险点 2（读体积重的条件的阈值并入 `conditionScale`）
 - 票 [reference-data/03](../../.scratch/reference-data/issues/03-pricing-evaluation-converts-weight-and-length-units.md)
