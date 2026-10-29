@@ -88,7 +88,6 @@ export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
   const mainHeader = tables.get(mainTableId);
   if (mainHeader === undefined) throw new DocumentUnreadable('没有主价表');
   const currency = get(mainHeader, 'currency');
-  const weightUnit = get(mainHeader, 'weightUnit');
 
   // ---- 条件树 ----
   const conditions = sheet(sheetNames.conditions);
@@ -242,6 +241,5 @@ export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
     };
   }
 
-  void weightUnit;
   return doc;
 }

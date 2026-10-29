@@ -118,17 +118,11 @@ function ReferenceList({ rows }: { rows: readonly ReferenceRow[] }) {
   );
 }
 
-function Content({ body, view }: { body: PriceCardContentFoundBody; view: PriceCardContentView }) {
-  const technical = [
-    { label: '方案标识', value: body.planId },
-    { label: '版本', value: body.planVersion },
-    { label: '规范化版本', value: body.canonicalization },
-    { label: '内容摘要', value: body.contentDigest },
-    ...view.technicalRefs,
-    ...view.references.map((reference) => ({ label: reference.kindLabel, value: reference.name })),
-    { label: '登记时间', value: formatInstant(body.registeredAt) },
-    { label: '登记责任方', value: body.publicationApprover },
-  ];
+/**
+ * 一张价卡的内容怎么念：费用项表、重量规则、不接收的情形、引用的参考数据。详情栏与价卡编辑器的预览共用这一份摆法，
+ * 所以编辑器里预览到的和保存后详情栏里看到的是同一个样子。
+ */
+export function PriceCardViewSections({ view }: { view: PriceCardContentView }) {
   return (
     <div className="space-y-5">
       {view.unsupportedCount > 0 ? (
@@ -169,7 +163,24 @@ function Content({ body, view }: { body: PriceCardContentFoundBody; view: PriceC
           <ReferenceList rows={view.references} />
         </section>
       ) : null}
+    </div>
+  );
+}
 
+function Content({ body, view }: { body: PriceCardContentFoundBody; view: PriceCardContentView }) {
+  const technical = [
+    { label: '方案标识', value: body.planId },
+    { label: '版本', value: body.planVersion },
+    { label: '规范化版本', value: body.canonicalization },
+    { label: '内容摘要', value: body.contentDigest },
+    ...view.technicalRefs,
+    ...view.references.map((reference) => ({ label: reference.kindLabel, value: reference.name })),
+    { label: '登记时间', value: formatInstant(body.registeredAt) },
+    { label: '登记责任方', value: body.publicationApprover },
+  ];
+  return (
+    <div className="space-y-5">
+      <PriceCardViewSections view={view} />
       <TechnicalDetails rows={technical} />
     </div>
   );

@@ -64,3 +64,24 @@ export function isTextColumn(key: string): boolean {
 export function cardFieldKeys(spec: PriceCardTemplateSpec): string[] {
   return (sheetOf(spec, sheetNames.card)?.columns ?? []).map((column) => column.key);
 }
+
+/**
+ * 价表行里一列带的是重量还是金额，给表头补「（千克）」「（CNY）」用。规格只给列的中文标题，不说列的量纲，
+ * 这里按列键认；认不出的列不补。
+ */
+export function rateColumnKind(key: string): 'weight' | 'money' | undefined {
+  switch (key) {
+    case 'minimum':
+    case 'maximum':
+    case 'firstWeight':
+    case 'step':
+      return 'weight';
+    case 'amount':
+    case 'firstAmount':
+    case 'stepAmount':
+    case 'amountPerUnit':
+      return 'money';
+    default:
+      return undefined;
+  }
+}

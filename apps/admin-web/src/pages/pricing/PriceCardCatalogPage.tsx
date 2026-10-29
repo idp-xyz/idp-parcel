@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -9,6 +9,8 @@ import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { catalogueViewState } from '../catalogue-view';
 import { InstantRange } from '../party/detail-primitives';
 import { useRegisterList } from '../party/register-list';
+import { useMayWriteRegistry } from '../use-operator-grants';
+import { PriceCardEditorPanel } from './card-editor/PriceCardEditorPanel';
 import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
 import { PriceCardImportPanel } from './PriceCardImportPanel';
 import { PriceCardDetailPanel, PriceCardUnits } from './PriceCardDetailPanel';
@@ -79,7 +81,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
 
 /**
  * 价格表：已登记价卡版本的工作台。单击一行在右栏看这张卡有哪些费用项、每项怎么收、什么时候收（价卡内容读口）。
- * 导入、草稿与高级 JSON 三签仍在同页其余签里。
+ * 新建、导入、草稿与高级 JSON 四签在同页其余签里。
  *
  * 筛选只在已取回的这一页上做：读口一页答完，不下推查询参数。导入签与草稿签今天在发行方未设时答 403
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
@@ -143,11 +145,21 @@ function PriceCardCatalogTable() {
 }
 
 export function PriceCardCatalogPage() {
+  // 没有登记册配置写授予的操作者不摆「新建价卡」：写口照旧在服务端判授予，这里只是呈现（ADR-0315）。
+  const mayWrite = useMayWriteRegistry();
+  const [tab, setTab] = useState('catalog');
+  // 授予答出来之后才知道没有写授予：停在「新建价卡」的话回到目录，不留一个空签。
+  useEffect(() => {
+    if (!mayWrite && tab === 'create') setTab('catalog');
+  }, [mayWrite, tab]);
+  // 「新建价卡」存下草稿后让「草稿」签重取一次：签的内容不卸载，不通知就停在旧册上。
+  const [draftsSignal, setDraftsSignal] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">价卡目录</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="create">新建价卡</TabsTrigger> : null}
           <TabsTrigger value="import">导入价卡</TabsTrigger>
           <TabsTrigger value="drafts">草稿</TabsTrigger>
           <TabsTrigger value="advanced">高级：JSON 快照</TabsTrigger>
@@ -158,6 +170,14 @@ export function PriceCardCatalogPage() {
         >
           <PriceCardCatalogTable />
         </TabsContent>
+        {mayWrite ? (
+          <TabsContent
+            value="create"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <PriceCardEditorPanel onOpenDrafts={() => setTab('drafts')} onDraftSaved={() => setDraftsSignal((value) => value + 1)} />
+          </TabsContent>
+        ) : null}
         <TabsContent
           value="import"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
@@ -168,7 +188,7 @@ export function PriceCardCatalogPage() {
           value="drafts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PriceCardDraftsPanel />
+          <PriceCardDraftsPanel refreshSignal={draftsSignal} />
         </TabsContent>
         <TabsContent
           value="advanced"

@@ -16,6 +16,23 @@ export interface LocatedProblem {
   field: string;
   /** 位置的人话。 */
   where: string;
+  /** 问题的话（中文部分）。 */
+  text: string;
+  /** 服务端话里夹带的英文原文（领域错误原文），单独收着，页面折叠显示。 */
+  original?: string;
+}
+
+/**
+ * 服务端的话多是中文白话；构造门拒收时会在中文后面附领域错误的英文原文（如「……立不住：parcel pricing: invalid rate entry」）。
+ * 中文部分当话、英文部分收作原文，页面折叠显示：运营读中文，排查时原文还在。
+ */
+export function problemWords(message: string): { text: string; original?: string } {
+  const cjk = /[\u3400-\u9fff]/;
+  if (!cjk.test(message)) return { text: '没有通过检查', original: message };
+  // 英文原文是一句带空格的纯 ASCII 话；「可取：G、KG」这类代码清单不算。
+  const match = /^(.*?)[:：]\s*([A-Za-z][\x20-\x7e]*)$/s.exec(message);
+  if (match !== null && match[1].trim() !== '' && /\s/.test(match[2].trim())) return { text: `${match[1].trim()}（原因见「原话」）`, original: match[2].trim() };
+  return { text: message };
 }
 
 export interface MappedProblems {
@@ -24,17 +41,11 @@ export interface MappedProblems {
   unlocated: PriceCardProblem[];
 }
 
-function locate(problem: PriceCardProblem, target: Target, path: string): LocatedProblem {
-  return {
-    problem,
-    step: stepOfField(target.field),
-    field: target.field,
-    where: (target.path ?? path) === '' ? target.label : `${target.path ?? path} · ${target.label}`,
-  };
-}
-
-function cellOf(origin: Origin, column: string): Target {
-  return origin.cells[column] ?? origin.fallback;
+function locate(problem: PriceCardProblem, target: Target, path: string, named: boolean): LocatedProblem {
+  const base = target.path ?? path;
+  // 列对不上具体的格（行层面的拒收，列是各种标识列）时只说到行，焦点落在这一行的第一个控件。
+  const where = !named || base === '' ? (named ? target.label : base || target.label) : `${base} · ${target.label}`;
+  return { problem, step: stepOfField(target.field), field: target.field, where, ...problemWords(problem.message) };
 }
 
 export function mapProblems(problems: readonly PriceCardProblem[], origins: OriginIndex): MappedProblems {
@@ -48,30 +59,22 @@ export function mapProblems(problems: readonly PriceCardProblem[], origins: Orig
     if (problem.sheet === 'card') {
       const target = origins.cardFields[problem.column];
       if (target === undefined) unlocated.push(problem);
-      else located.push(locate(problem, target, ''));
+      else located.push(locate(problem, target, '', true));
       continue;
     }
     const fallbackSheet = origins.sheets[problem.sheet];
     // 行号 = 数组下标 + 2；表层面的问题行号为 0。
     const origin = problem.row >= 2 ? origins.rows[problem.sheet]?.[problem.row - 2] : undefined;
     if (origin !== undefined) {
-      located.push(locate(problem, cellOf(origin, problem.column), origin.path));
+      const cell = origin.cells[problem.column];
+      located.push(locate(problem, cell ?? origin.fallback, origin.path, cell !== undefined));
     } else if (fallbackSheet !== undefined) {
-      located.push(locate(problem, fallbackSheet.target, fallbackSheet.path));
+      located.push(locate(problem, fallbackSheet.target, fallbackSheet.path, problem.row === 0 && problem.column !== ''));
     } else {
       unlocated.push(problem);
     }
   }
   return { located, unlocated };
-}
-
-/** 控件 → 该控件上的问题话，给输入框显示用。 */
-export function problemsByField(located: readonly LocatedProblem[]): Map<string, string[]> {
-  const byField = new Map<string, string[]>();
-  for (const entry of located) {
-    byField.set(entry.field, [...(byField.get(entry.field) ?? []), entry.problem.message]);
-  }
-  return byField;
 }
 
 /** 各步骤上的问题条数，给步骤条画标记用。 */
