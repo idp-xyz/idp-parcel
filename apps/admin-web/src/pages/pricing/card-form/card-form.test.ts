@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { PriceCardTemplateSpec, PriceCardWorkbook } from '../api';
 import { parsePriceCardContent } from '../price-card-content';
 import { workbookToDocument } from './document';
+import { closedValuesWhen } from './spec';
 import { stepOfField } from './fields';
 import {
   alwaysCondition,
@@ -15,7 +16,8 @@ import {
   suggestChargeCode,
   type CardFormState,
 } from './model';
-import { mapProblems, problemCountsByStep, problemWords } from './problems';
+import { conditionCategoryChoices, currencyChoices } from './options';
+import { mapProblems, problemCountsByStep, problemWords, unlocatedWords } from './problems';
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
 import { formToWorkbook } from './workbook';
@@ -502,4 +504,167 @@ test('本地校验：互斥组优先级要大于 0，体积重除数要大于 0'
   const weight = validateStep('weight', state, spec);
   equal(weight.length, 1);
   equal(weight[0].text, '体积重除数要大于 0');
+});
+
+// ---- 规格口的 allowedValuesWhen ----
+
+test('allowedValuesWhen：同一行来源是地址性质时类别才封闭，其余来源仍是开放词汇', () => {
+  deepEqual(closedValuesWhen(spec, 'conditions', 'category', { source: 'ADDRESS_NATURE' }), ['COMMERCIAL', 'RESIDENTIAL']);
+  equal(closedValuesWhen(spec, 'conditions', 'category', { source: 'ZONE' }), null);
+  equal(closedValuesWhen(spec, 'conditions', 'category', { source: 'ADDRESS_TYPE' }), null);
+  equal(closedValuesWhen(spec, 'conditions', 'category', {}), null);
+  // 没有 allowedValuesWhen 的列永远答 null。
+  equal(closedValuesWhen(spec, 'conditions', 'threshold', { source: 'ADDRESS_NATURE' }), null);
+});
+
+test('类别下拉：封闭时按规格口的取值出选项并译成商业 / 住宅，开放时答 null 按文本画', () => {
+  deepEqual(conditionCategoryChoices(spec, 'ADDRESS_NATURE'), [
+    { value: 'COMMERCIAL', label: '商业' },
+    { value: 'RESIDENTIAL', label: '住宅' },
+  ]);
+  equal(conditionCategoryChoices(spec, 'ZONE'), null);
+  equal(conditionCategoryChoices(spec, 'SERVICE_OPTION'), null);
+  equal(conditionCategoryChoices(spec, ''), null);
+});
+
+test('类别下拉的取值取自规格口、不在前端写死：规格口多给一个取值，选项就多一个，词典没有的以码原样显示', () => {
+  const changed = JSON.parse(JSON.stringify(spec)) as PriceCardTemplateSpec;
+  const column = changed.sheets.find((sheet) => sheet.name === 'conditions')?.columns.find((candidate) => candidate.key === 'category');
+  ok(column?.allowedValuesWhen);
+  column.allowedValuesWhen[0].allowedValues = ['COMMERCIAL', 'RESIDENTIAL', 'INDUSTRIAL'];
+  deepEqual(
+    conditionCategoryChoices(changed, 'ADDRESS_NATURE')?.map((choice) => choice.label),
+    ['商业', '住宅', 'INDUSTRIAL'],
+  );
+});
+
+test('地址性质的类别要在规格口给的取值里；分区、偏远档位、服务选项照文本填', () => {
+  const state = sampleState();
+  state.fees[2].conditions = [newCondition({ source: 'ADDRESS_NATURE', operator: 'EQ', value: 'FACTORY' })];
+  const bad = validateStep('fees', state, spec);
+  equal(bad.length, 1);
+  equal(bad[0].text, '类别不在可选范围内，请重新选择');
+  state.fees[2].conditions = [newCondition({ source: 'ADDRESS_NATURE', operator: 'EQ', value: 'RESIDENTIAL' })];
+  deepEqual(validateStep('fees', state, spec), []);
+  state.fees[2].conditions = [newCondition({ source: 'ZONE', operator: 'EQ', value: '随便什么分区名' })];
+  deepEqual(validateStep('fees', state, spec), []);
+  state.fees[2].conditions = [newCondition({ source: 'ZONE', operator: 'EQ', value: '' })];
+  equal(validateStep('fees', state, spec).length, 1);
+});
+
+test('地址性质条件生成的工作簿带 category，译成的文档念成「地址性质等于住宅」', () => {
+  const state = sampleState();
+  state.fees[2].conditions = [newCondition({ source: 'ADDRESS_NATURE', operator: 'EQ', value: 'RESIDENTIAL' })];
+  const { workbook } = formToWorkbook(state, spec);
+  const row = workbook.sheets.conditions.find((candidate) => candidate.source === 'ADDRESS_NATURE');
+  deepEqual(row && { source: row.source, operator: row.operator, category: row.category, threshold: row.threshold ?? null }, {
+    source: 'ADDRESS_NATURE',
+    operator: 'EQ',
+    category: 'RESIDENTIAL',
+    threshold: null,
+  });
+  const view = parsePriceCardContent(workbookToDocument(workbook));
+  deepEqual(view.feeItems.find((item) => item.name.startsWith('超重'))?.when, ['地址性质等于住宅']);
+});
+
+// ---- 币种：规格口与币种目录 ----
+
+const specCurrencies = (): string[] => spec.sheets.find((sheet) => sheet.name === 'tables')?.columns.find((column) => column.key === 'currency')?.allowedValues ?? [];
+
+test('规格口给了币种取值：下拉以规格口为准，名字取目录；两处一致时没有差异', () => {
+  const codes = specCurrencies();
+  ok(codes.includes('CNY'));
+  const catalogue = codes.map((code) => ({ code, label: `名字（${code}）` }));
+  const choices = currencyChoices(spec, catalogue);
+  deepEqual(choices.options?.[0], { value: codes[0], label: `名字（${codes[0]}）` });
+  equal(choices.options?.length, codes.length);
+  deepEqual([choices.onlyInSpec, choices.onlyInCatalogue], [[], []]);
+});
+
+test('币种目录与规格口不一致：以规格口为准，差异分开报出', () => {
+  const codes = specCurrencies();
+  const catalogue = [...codes.filter((code) => code !== 'JPY'), 'ZZZ'].map((code) => ({ code, label: code }));
+  const choices = currencyChoices(spec, catalogue);
+  ok(choices.options?.some((option) => option.value === 'JPY'));
+  ok(!choices.options?.some((option) => option.value === 'ZZZ'));
+  deepEqual([choices.onlyInSpec, choices.onlyInCatalogue], [['JPY'], ['ZZZ']]);
+});
+
+test('币种：目录读不到就用规格口的码；规格口没给取值（旧后端）就只用目录；两处都没有答 null', () => {
+  const codes = specCurrencies();
+  deepEqual(currencyChoices(spec, null).options?.slice(0, 2), codes.slice(0, 2).map((code) => ({ value: code, label: code })));
+  const old = JSON.parse(JSON.stringify(spec)) as PriceCardTemplateSpec;
+  const currency = old.sheets.find((sheet) => sheet.name === 'tables')?.columns.find((column) => column.key === 'currency');
+  ok(currency);
+  delete currency.allowedValues;
+  deepEqual(currencyChoices(old, [{ code: 'CNY', label: '人民币（CNY）' }]).options, [{ value: 'CNY', label: '人民币（CNY）' }]);
+  equal(currencyChoices(old, null).options, null);
+});
+
+test('币种不在规格口的取值里会被本地拦下', () => {
+  const state = sampleState();
+  state.basics.currency = 'ZZZ';
+  const issues = validateStep('basics', state, spec);
+  equal(issues.length, 1);
+  equal(issues[0].field, 'basics.currency');
+});
+
+// ---- 问题清单被截断 / 整份太大 ----
+
+test('PROBLEMS_TRUNCATED：说明放总清单顶部，不当问题映射、不计入条数，也不进说不到格子的清单', () => {
+  const { origins } = formToWorkbook(sampleState(), spec);
+  const mapped = mapProblems(
+    [
+      { sheet: '', row: 0, column: '', code: 'PROBLEMS_TRUNCATED', message: '问题太多，已显示先发现的 1000 条；先改这些再重新校验，其余的会在下一次校验里出现' },
+      { sheet: 'tables', row: 2, column: 'weightUnit', code: 'CELL_INVALID', message: '不是可取值' },
+    ],
+    origins,
+  );
+  equal(mapped.truncated, '问题太多，已显示先发现的 1000 条；先改这些再重新校验，其余的会在下一次校验里出现');
+  equal(mapped.located.length, 1);
+  equal(mapped.unlocated.length, 0);
+  equal(mapProblems([], origins).truncated, null);
+});
+
+test('FILE_TOO_LARGE：说「太大，请拆分」，服务端点名的上限收作原文', () => {
+  const words = unlocatedWords({ sheet: '', row: 0, column: '', code: 'FILE_TOO_LARGE', message: '读不出这份工作簿：表超过 64 张的技术上限' });
+  equal(words.text, '这份价卡太大，请拆分成几张再提交。');
+  equal(words.original, '读不出这份工作簿：表超过 64 张的技术上限');
+  const { origins } = formToWorkbook(sampleState(), spec);
+  const mapped = mapProblems([{ sheet: '', row: 0, column: '', code: 'FILE_TOO_LARGE', message: '超限' }], origins);
+  equal(mapped.located.length, 0);
+  equal(mapped.unlocated.length, 1);
+  // 别的整份层面的问题照旧：中文留作话。
+  equal(unlocatedWords({ sheet: '', row: 0, column: '', code: 'FILE_NOT_WORKBOOK', message: '不是可读的工作簿' }).text, '不是可读的工作簿');
+});
+
+// ---- 金额与阈值一律按字符串发 ----
+
+test('生成的工作簿里每一格都是字符串或 null，没有数字：金额、阈值、顺序号、优先级、百分比都是写出来的文本', () => {
+  const sets: Record<string, CardFormState> = { sample: sampleState(), cost: costCardState(), surcharge: surchargeCardState(), full03: workbookToForm(full03Workbook()) };
+  const fixed = sampleState();
+  const fee = newFee('FIXED', 'KG');
+  Object.assign(fee, { name: '操作费', code: 'HANDLING_FEE', amount: '3' });
+  fixed.fees = [fee];
+  sets.fixed = fixed;
+  for (const [name, state] of Object.entries(sets)) {
+    const { workbook } = formToWorkbook(state, spec);
+    for (const [sheet, rows] of Object.entries(workbook.sheets)) {
+      for (const row of rows) {
+        for (const [column, cell] of Object.entries(row)) {
+          ok(cell === null || typeof cell === 'string', `${name}：${sheet}.${column} 是 ${typeof cell}`);
+        }
+      }
+    }
+    equal(typeof JSON.stringify(workbook), 'string');
+  }
+  // 抽几格点名核：阈值、金额、顺序号、优先级。
+  const sample = formToWorkbook(sampleState(), spec).workbook;
+  equal(sample.sheets.conditions.find((row) => row.source === 'LONGEST_SIDE')?.threshold, '100');
+  equal(sample.sheets.calculations.find((row) => row.method === 'FIXED_AMOUNT')?.amount, '35');
+  equal(sample.sheets.surcharges.find((row) => row.exclusivity === 'GROUPED')?.priority, '1');
+  equal(sample.sheets.total_bounds[0].minimum, '120.99');
+  const handling = formToWorkbook(fixed, spec).workbook;
+  equal(handling.sheets.fixed_charges[0].order, '1');
+  equal(handling.sheets.fixed_charges[0].amount, '3');
 });

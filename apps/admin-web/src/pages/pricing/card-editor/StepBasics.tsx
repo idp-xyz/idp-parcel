@@ -1,6 +1,7 @@
 import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels } from '../../../vocabulary/price-card';
 import { field } from '../card-form/fields';
 import { defaultBaseChargeCode, type BasicsState } from '../card-form/model';
+import { currencyChoices } from '../card-form/options';
 import { allowedValues, sheetNames } from '../card-form/spec';
 import { SelectField, TextField, SectionTitle, hintClass } from './controls';
 import { useEditor } from './EditorContext';
@@ -18,6 +19,7 @@ export function StepBasics() {
   const { basics } = state;
   const patch = (change: Partial<BasicsState>) => update((draft) => ({ ...draft, basics: { ...draft.basics, ...change } }));
   const purposes = allowedValues(spec, sheetNames.card, 'purpose');
+  const currencies = currencyChoices(spec, env.currencies);
 
   return (
     <div className="space-y-6">
@@ -65,13 +67,13 @@ export function StepBasics() {
       <section>
         <SectionTitle hint="整张价卡的金额用同一种币种、重量用同一种单位。">币种与重量单位</SectionTitle>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {env.currencies !== null ? (
+          {currencies.options !== null ? (
             <SelectField
               id={field.basics('currency')}
               label="币种"
               required
               value={basics.currency}
-              options={env.currencies.map((currency) => ({ value: currency.code, label: currency.label }))}
+              options={currencies.options}
               onChange={(currency) => patch({ currency })}
             />
           ) : (

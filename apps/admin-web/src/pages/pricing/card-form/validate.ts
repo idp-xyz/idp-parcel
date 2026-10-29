@@ -8,6 +8,7 @@ import { normalizeMoment } from '../series-form';
 import { field } from './fields';
 import { feePath } from './workbook';
 import { chargeCodePattern, feeHasConditionBuilder, feeHasGroup, stepOrder, type CardFormState, type FeeItemState, type StepId } from './model';
+import { conditionCategoryChoices } from './options';
 import { allowedValues, isTextColumn, rateColumns, sheetNames } from './spec';
 
 export interface Issue {
@@ -83,7 +84,10 @@ function basicsIssues(state: CardFormState, spec: PriceCardTemplateSpec): Issue[
   if (!chargeCodePattern.test(basics.baseChargeCode.trim())) {
     issues.push({ field: field.basics('baseChargeCode'), where: '基本信息', text: '基础运费代码只能是大写字母、数字和下划线，且以字母开头' });
   }
-  if (basics.currency.trim() === '') issues.push({ field: field.basics('currency'), where: '基本信息', text: '请选择币种' });
+  // 规格口给了币种取值就按它查；没给（旧后端）只拦没填。币种目录与规格口不一致时以规格口为准。
+  const currencies = allowedValues(spec, sheetNames.tables, 'currency');
+  if (currencies.length > 0) check.choice(field.basics('currency'), '币种', basics.currency, currencies);
+  else if (basics.currency.trim() === '') issues.push({ field: field.basics('currency'), where: '基本信息', text: '请选择币种' });
   check.choice(field.basics('weightUnit'), '重量单位', basics.weightUnit, allowedValues(spec, sheetNames.tables, 'weightUnit'));
   if (basics.periodStartsAt.trim() === '') {
     issues.push({ field: field.basics('periodStartsAt'), where: '基本信息', text: '请填写生效起点' });
@@ -194,7 +198,10 @@ function feeIssues(state: CardFormState, spec: PriceCardTemplateSpec, fee: FeeIt
       if (row.source === '') return;
       const measure = featureMeasure(row.source);
       if (measure === 'category') {
-        rowCheck.required(field.condition(fee.uid, row.uid, 'value'), '取值', row.value);
+        // 类别平时是开放词汇；规格口说这一来源下是封闭的（地址性质只收商业 / 住宅）才按选项查。
+        const closed = conditionCategoryChoices(spec, row.source);
+        if (closed === null) rowCheck.required(field.condition(fee.uid, row.uid, 'value'), '取值', row.value);
+        else rowCheck.choice(field.condition(fee.uid, row.uid, 'value'), '类别', row.value, closed.map((choice) => choice.value));
         return;
       }
       rowCheck.choice(field.condition(fee.uid, row.uid, 'operator'), '比较', row.operator, allowedValues(spec, sheetNames.conditions, 'operator'));

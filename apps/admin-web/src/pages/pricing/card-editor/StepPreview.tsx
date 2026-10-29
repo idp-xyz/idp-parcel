@@ -4,10 +4,10 @@ import { primaryActionClass } from '../../../components/primary-action';
 import { TechnicalDetails } from '../../../components/states';
 import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels } from '../../../vocabulary/price-card';
 import type { ApiResult } from '../../catalogue-api';
-import type { PriceCardDraftSubmissionBody, PriceCardImportReading, PriceCardWorkbook } from '../api';
+import type { PriceCardDraftSubmissionBody, PriceCardImportReading, PriceCardProblem, PriceCardWorkbook } from '../api';
 import { workbookToDocument } from '../card-form/document';
 import type { Issue } from '../card-form/validate';
-import { problemWords, type LocatedProblem, type MappedProblems } from '../card-form/problems';
+import { unlocatedWords, type LocatedProblem, type MappedProblems } from '../card-form/problems';
 import { parsePriceCardContent, type PriceCardContentView } from '../price-card-content';
 import { PriceCardViewSections } from '../PriceCardDetailPanel';
 import { priceCardDraftStatusLabels } from '../price-card-import';
@@ -43,8 +43,8 @@ function localView(workbook: PriceCardWorkbook): PriceCardContentView | null {
 }
 
 /** 说不到具体格子的问题：中文留作话，夹带的英文原文折叠。 */
-function UnlocatedLine({ message }: { message: string }) {
-  const words = problemWords(message);
+function UnlocatedLine({ problem }: { problem: PriceCardProblem }) {
+  const words = unlocatedWords(problem);
   return (
     <li className="rounded border border-idpxyz-border px-3 py-2 text-[12px] text-[color:var(--ds-status-danger-fg)]">
       {words.text}
@@ -182,15 +182,21 @@ export function StepPreview({
 
       {reading && !passed ? (
         <section aria-label="预览发现的问题">
-          <SectionTitle hint="问题已经在对应的格子里标红；也可以在这里点「去修改」直达。改完回到这一步重新预览。">
-            预览发现 {preview?.mapped.located.length ?? 0} 处要改
-            {preview && preview.mapped.unlocated.length > 0 ? `，另有 ${preview.mapped.unlocated.length} 处说不到具体格子` : ''}
+          <SectionTitle hint={(preview?.mapped.located.length ?? 0) > 0 ? '问题已经在对应的格子里标红；也可以在这里点「去修改」直达。改完回到这一步重新预览。' : undefined}>
+            {(preview?.mapped.located.length ?? 0) > 0
+              ? `预览发现 ${preview?.mapped.located.length ?? 0} 处要改${(preview?.mapped.unlocated.length ?? 0) > 0 ? `，另有 ${preview?.mapped.unlocated.length ?? 0} 处说不到具体格子` : ''}`
+              : '这份价卡没有通过预览'}
           </SectionTitle>
+          {preview?.mapped.truncated ? (
+            <p role="note" className="mb-2 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-warning-fg)] px-3 py-2 text-[12px] text-idpxyz-text">
+              {preview.mapped.truncated}
+            </p>
+          ) : null}
           {preview && preview.mapped.located.length > 0 ? <ProblemList located={preview.mapped.located} onJump={onJump} /> : null}
           {preview && preview.mapped.unlocated.length > 0 ? (
             <ul className="mt-2 space-y-1.5" aria-label="说不到具体格子的问题">
               {preview.mapped.unlocated.map((problem, index) => (
-                <UnlocatedLine key={`${index}-${problem.code}`} message={problem.message} />
+                <UnlocatedLine key={`${index}-${problem.code}`} problem={problem} />
               ))}
             </ul>
           ) : null}

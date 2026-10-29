@@ -1,7 +1,8 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { Plus, Trash2 } from 'lucide-react';
-import { addressNatureValueLabels, comparisonLabels, featureLabels, lengthUnitLabels, volumeUnitLabels } from '../../../vocabulary/price-card';
+import { comparisonLabels, featureLabels, lengthUnitLabels, volumeUnitLabels } from '../../../vocabulary/price-card';
 import { conditionRowText, feeConditionText } from '../card-form/describe';
+import { conditionCategoryChoices } from '../card-form/options';
 import { field } from '../card-form/fields';
 import { newCondition, type ConditionRow, type FeeItemState } from '../card-form/model';
 import { allowedValues, sheetNames } from '../card-form/spec';
@@ -90,6 +91,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
         {fee.conditions.map((row, index) => {
           const measure = featureMeasure(row.source);
           const category = measure === 'category';
+          const categoryChoices = category ? conditionCategoryChoices(spec, row.source) : null;
           const text = conditionRowText(row);
           const units = unitOptionsFor(row.source);
           return (
@@ -115,15 +117,15 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
                   <>
                     <span className="pt-1.5 text-[12px] text-idpxyz-text">{comparisonLabels.EQ}</span>
                     <div className="w-36">
-                      {row.source === 'ADDRESS_NATURE' ? (
+                      {categoryChoices !== null ? (
                         <ControlWithErrors id={field.condition(fee.uid, row.uid, 'value')}>
                           {(invalid) => (
                             <SelectControl
                               id={field.condition(fee.uid, row.uid, 'value')}
-                              label="地址性质"
+                              label="类别"
                               value={row.value}
                               invalid={invalid}
-                              options={labelled(Object.keys(addressNatureValueLabels), addressNatureValueLabels)}
+                              options={categoryChoices}
                               onChange={(value) => patchRow(row.uid, { value })}
                             />
                           )}

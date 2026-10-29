@@ -43,6 +43,22 @@ export function allowedValues(spec: PriceCardTemplateSpec, sheet: string, key: s
   return columnOf(spec, sheet, key)?.allowedValues ?? [];
 }
 
+/**
+ * 同一行另一格取某值时才封闭的列：行里作条件的那几格取值（列键 → 值）满足某条 allowedValuesWhen 就答那一条的取值，
+ * 否则答 null——平时是开放词汇，页面按文本画。
+ */
+export function closedValuesWhen(
+  spec: PriceCardTemplateSpec,
+  sheet: string,
+  key: string,
+  row: Readonly<Record<string, string>>,
+): string[] | null {
+  for (const when of columnOf(spec, sheet, key)?.allowedValuesWhen ?? []) {
+    if (row[when.column] === when.equals) return when.allowedValues;
+  }
+  return null;
+}
+
 /** 一列的中文标题；规格里没有这一列时退回列键。 */
 export function columnTitle(spec: PriceCardTemplateSpec, sheet: string, key: string): string {
   return columnOf(spec, sheet, key)?.title ?? key;
