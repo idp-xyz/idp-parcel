@@ -40,6 +40,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 | [05](./issues/05-admin-import-tab.md) | 管理台「导入价卡」签 | 前端切片 | 03 | resolved |
 | [06](./issues/06-admin-drafts-tab.md) | 管理台「草稿」签 | 前端切片 | 04、05 | resolved |
 | [07](./issues/07-parcel-pricing-context-gains-approval-duty-rule-and-operator-subject-terms.md) | parcel-pricing CONTEXT 收审批职责规则与操作者主体词条 | 纯文档 | 04 | needs-triage |
+| [08](./issues/08-template-ppt-2-structured-workbook-and-spec-face.md) | 模板 PPT-2、结构化工作簿载体与模板规格口（价卡配置编辑器的后端第一步） | 走并行会话那条路 | — | in-progress |
 
 ## 不做
 
