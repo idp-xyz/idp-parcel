@@ -118,6 +118,8 @@ type surchargeCalculationSnapshot struct {
 	Operands     []surchargeCalculationSnapshot `json:"operands,omitempty"`
 	SeriesID     string                         `json:"seriesId,omitempty"`
 	OutOfWindow  string                         `json:"outOfWindow,omitempty"`
+	// TableKey 只在按偏远档位查表时有（ADR-0348）：缺键即按分区，既有各卡的快照读回不变。
+	TableKey string `json:"tableKey,omitempty"`
 }
 
 type conditionalMinimumSnapshot struct {
@@ -187,6 +189,12 @@ func amountRoundingFrom(snapshot amountRoundingSnapshot) AmountRoundingPolicy {
 	return AmountRoundingPolicy{mode: RoundingMode(snapshot.Mode), increment: moneyFrom(snapshot.Increment), points: points}
 }
 
+// totalBoundsSnapshot 是总额上下限在快照里的形状（ADR-0348）：两端各自可缺。
+type totalBoundsSnapshot struct {
+	Minimum *moneySnapshot `json:"minimum,omitempty"`
+	Maximum *moneySnapshot `json:"maximum,omitempty"`
+}
+
 type pricingPlanSnapshot struct {
 	Canonicalization string                           `json:"canonicalization"`
 	Reference        versionReferenceSnapshot         `json:"reference"`
@@ -205,6 +213,7 @@ type pricingPlanSnapshot struct {
 	Exclusions       []exclusionRuleSnapshot          `json:"exclusions,omitempty"`
 	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
 	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
+	TotalBounds      *totalBoundsSnapshot             `json:"totalChargeBounds,omitempty"`
 	Manifest         []versionReferenceSnapshot       `json:"manifest"`
 	ContentDigest    string                           `json:"contentDigest"`
 }
@@ -254,6 +263,18 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 		document.Catalogues = append(document.Catalogues, referenceCatalogueLinkSnapshot{
 			Kind: link.kind.String(), CatalogueID: link.catalogueID,
 		})
+	}
+	if plan.structures.totalBounds != nil {
+		bounds := totalBoundsSnapshot{}
+		if plan.structures.totalBounds.minimum != nil {
+			minimum := moneyOf(*plan.structures.totalBounds.minimum)
+			bounds.Minimum = &minimum
+		}
+		if plan.structures.totalBounds.maximum != nil {
+			maximum := moneyOf(*plan.structures.totalBounds.maximum)
+			bounds.Maximum = &maximum
+		}
+		document.TotalBounds = &bounds
 	}
 	for _, reference := range plan.manifest.references {
 		document.Manifest = append(document.Manifest, versionReferenceOf(reference))
@@ -305,6 +326,18 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 		plan.structures.referenceCatalogues = append(plan.structures.referenceCatalogues, ReferenceCatalogueLink{
 			kind: CatalogueKind(link.Kind), catalogueID: link.CatalogueID,
 		})
+	}
+	if document.TotalBounds != nil {
+		bounds := TotalChargeBounds{}
+		if document.TotalBounds.Minimum != nil {
+			minimum := moneyFrom(*document.TotalBounds.Minimum)
+			bounds.minimum = &minimum
+		}
+		if document.TotalBounds.Maximum != nil {
+			maximum := moneyFrom(*document.TotalBounds.Maximum)
+			bounds.maximum = &maximum
+		}
+		plan.structures.totalBounds = &bounds
 	}
 	references := make([]VersionReference, 0, len(document.Manifest))
 	for _, reference := range document.Manifest {
@@ -523,6 +556,7 @@ func surchargeCalculationDocumentOf(calculation SurchargeCalculation) surchargeC
 		Basis:       calculation.basis,
 		SeriesID:    calculation.seriesID,
 		OutOfWindow: calculation.outOfWindow.String(),
+		TableKey:    calculation.tableKey.String(),
 	}
 	if calculation.amount != nil {
 		amount := moneyOf(*calculation.amount)
@@ -555,6 +589,7 @@ func surchargeCalculationFrom(document surchargeCalculationSnapshot) SurchargeCa
 		basis:       document.Basis,
 		seriesID:    document.SeriesID,
 		outOfWindow: OutOfWindowBehaviour(document.OutOfWindow),
+		tableKey:    TableKey(document.TableKey),
 	}
 	if document.Amount != nil {
 		amount := moneyFrom(*document.Amount)

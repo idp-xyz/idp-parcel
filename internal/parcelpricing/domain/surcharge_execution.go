@@ -81,8 +81,10 @@ func highestMinimum(raises []minimumRaise) (minimumRaise, bool) {
 // 以及基础运费使用的计价重量。分档附加费读的是与基础价表同一个重量，两者因此不可能
 // 对「这件包裹有多重」产生分歧。
 type surchargeContext struct {
-	features      PackageFeatures
-	zone          string
+	features PackageFeatures
+	zone     string
+	// tier 是评价从偏远档位目录解出的档位；方案没绑档位目录时为空。按偏远档位查表的附加费读它（ADR-0348）。
+	tier          CategoryValue
 	pricingWeight Weight
 	series        map[ReferenceSeriesKind]ReferenceSeriesValue
 	// amounts 是金额序列的读数，按序列标识索引（ADR-0110）；窗外无期次的读数也在这里，值缺席。
@@ -121,7 +123,7 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 				default:
 					outcome.amount = amount
 					outcome.selected = true
-					outcome.source = rule.calculation.describeAmountSource(reading.amounts)
+					outcome.source = rule.calculation.describeAmountSource(reading.amounts) + rule.calculation.describeTableKey(reading.tier)
 				}
 			}
 		}
@@ -131,6 +133,14 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 		return nil, err
 	}
 	return outcomes, nil
+}
+
+// describeTableKey 写出按偏远档位查表的金额是按哪一档查的；按分区查表（既有各卡的读法）交回空串，解释一个字不变。
+func (calculation SurchargeCalculation) describeTableKey(tier CategoryValue) string {
+	if !calculation.usesRemoteTierKey() {
+		return ""
+	}
+	return fmt.Sprintf(" looked up by remote tier %s", tier)
 }
 
 // needsBasis 报出给这项计算定值是否需要仍在收集中的费用行。取较大值从任一操作数继承
@@ -167,8 +177,20 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis 
 		if !ok {
 			return Money{}, ErrInvalidSurchargeRule
 		}
-		selection, err := table.Lookup(reading.zone, reading.pricingWeight)
+		key := reading.zone
+		if calculation.tableKey == TableKeyRemoteTier {
+			// 方案构造时已要求绑档位目录，评价开头的解析也已在解不出时答待判断；走到这里没有档位只可能是结构坏了，
+			// 仍答同一个待判断而不是套默认档（ADR-0109 决定四）。
+			if reading.tier == "" {
+				return Money{}, fmt.Errorf("%w: the surcharge table is keyed by remote tier and the evaluation resolved none", ErrRemoteTierUnresolved)
+			}
+			key = string(reading.tier)
+		}
+		selection, err := table.Lookup(key, reading.pricingWeight)
 		if err != nil {
+			if calculation.tableKey == TableKeyRemoteTier {
+				return Money{}, fmt.Errorf("remote tier %s: %w", reading.tier, err)
+			}
 			return Money{}, err
 		}
 		return selection.amount, nil

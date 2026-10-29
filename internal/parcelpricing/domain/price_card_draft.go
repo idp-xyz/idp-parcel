@@ -409,9 +409,9 @@ func RehydratePriceCardDraft(spec RehydratePriceCardDraftSpec) (PriceCardDraft, 
 		publishedAt: spec.PublishedAt.UTC(),
 	}
 	if document.Plan != nil {
-		if document.Plan.Canonicalization != canonicalizationVersion {
-			return PriceCardDraft{}, fmt.Errorf("%w: draft records %q, this build canonicalizes %q",
-				ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion)
+		if !supportedCanonicalization(document.Plan.Canonicalization) {
+			return PriceCardDraft{}, fmt.Errorf("%w: draft records %q, this build canonicalizes %q and %q",
+				ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion, canonicalizationVersionTotalBounds)
 		}
 		draft.content.Plan = pricingPlanFrom(*document.Plan)
 	}

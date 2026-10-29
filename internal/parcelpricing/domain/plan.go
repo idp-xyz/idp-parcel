@@ -265,6 +265,10 @@ func NewAggregatePricingPlanVersion(
 	if structures.amountRounding != nil && structures.amountRounding.increment.currency != rateTable.currency {
 		return PricingPlanVersion{}, ErrCurrencyMismatch
 	}
+	// 总额上下限与偏远档位查档的价表同方案其余部分的自洽（币种、取整整倍数、费用代码占用、档位目录绑定）。
+	if err := structures.coherentWithPlan(rateTable.currency, seenCodes); err != nil {
+		return PricingPlanVersion{}, err
+	}
 
 	// 序列绑定不进方案清单：方案绑的是序列标识，用到哪一版是评价形成时的结论，由评价
 	// 自己的清单冻结（ADR-0099）。
@@ -288,7 +292,7 @@ func NewAggregatePricingPlanVersion(
 		rules:            copyOfRules,
 		structures:       structures,
 		manifest:         manifest,
-		canonicalization: canonicalizationVersion,
+		canonicalization: structures.requiredCanonicalization(),
 	}
 	plan.contentDigest = calculatePricingPlanContentDigest(plan)
 	return plan, nil
@@ -322,6 +326,11 @@ func (plan PricingPlanVersion) valid() bool {
 		return false
 	}
 	if !plan.aggregation.aggregate() && plan.structures.declaresPerPiece(plan.rules) {
+		return false
+	}
+	// 方案记的规范化版本必须是能表达它内容的最低一版：带总额上下限或偏远档位查档价表的写 PPC-6，其余写 PPC-5。
+	// 反过来也成立——不带新内容却记着 PPC-6、或带了新内容却记着 PPC-5，都是读回的数据对不上（ADR-0348 决定五）。
+	if plan.canonicalization != plan.structures.requiredCanonicalization() {
 		return false
 	}
 	seenRuleIDs := make(map[string]struct{}, len(plan.rules))
@@ -362,6 +371,9 @@ func (plan PricingPlanVersion) valid() bool {
 			return false
 		}
 		seenCodes[surcharge.chargeCode.String()] = struct{}{}
+	}
+	if plan.structures.coherentWithPlan(plan.rateTable.currency, seenCodes) != nil {
+		return false
 	}
 	requiredReferences := []VersionReference{
 		plan.reference,

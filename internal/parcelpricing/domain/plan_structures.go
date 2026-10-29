@@ -21,7 +21,26 @@ type SurchargeCalculation struct {
 	// 由卡声明（ADR-0110 Decision 三）。
 	seriesID    string
 	outOfWindow OutOfWindowBehaviour
+	// tableKey 只在「查表」上有：价表按哪个类别维度查档（ADR-0348 决定四）。零值是分区——既有各卡的读法，
+	// 字节与语义都不动。
+	tableKey TableKey
 }
+
+// TableKey 是附加费价表查档所按的类别维度，与重量并列：价表的条目带一个类别键（价表条目上叫 zone），重量再在
+// 键之内分档。封闭两格：分区（缺省，既有各卡的读法）与偏远档位。联合键（分区 × 档位）首发不接。
+type TableKey string
+
+const (
+	// TableKeyZone 是缺省：按评价解出的分区查档。
+	TableKeyZone TableKey = ""
+	// TableKeyRemoteTier 按评价从偏远档位目录解出的档位查档（ADR-0109、ADR-0348）：一条规则一个费用代码，
+	// 各档的金额在同一张价表里。
+	TableKeyRemoteTier TableKey = "REMOTE_TIER"
+)
+
+func (key TableKey) String() string { return string(key) }
+
+func (key TableKey) valid() bool { return key == TableKeyZone || key == TableKeyRemoteTier }
 
 // OutOfWindowBehaviour 是绑了金额序列的附加费规则在卡上声明的窗外行为（ADR-0110 Decision 三），封闭两格：
 // 不计收——PSS 的常态，窗外就是不收，零是登记出来的答案；待判断——金额尚未公布、不能当零。未声明的卡不合法：
@@ -86,6 +105,13 @@ func NewTableLookupSurcharge(table RateTableVersion) (SurchargeCalculation, erro
 	return validSurcharge(SurchargeCalculation{method: ChargeMethodTableLookup, table: &table})
 }
 
+// NewRemoteTierTableLookupSurcharge 声明「按偏远档位查表」：价表条目的类别键是偏远档位（T0、T1、T2……），评价拿
+// 目的邮编从偏远档位目录解出的档位去查，再按计价重量在该档之内分档。方案必须同时绑定偏远档位目录，那一道在
+// NewAggregatePricingPlanVersion 上判；解不出档位时评价答待判断，不套默认档（ADR-0109 决定四）。
+func NewRemoteTierTableLookupSurcharge(table RateTableVersion) (SurchargeCalculation, error) {
+	return validSurcharge(SurchargeCalculation{method: ChargeMethodTableLookup, table: &table, tableKey: TableKeyRemoteTier})
+}
+
 // NewPercentOfBasisSurcharge 接收定义基数的那条 ChargeDependency 的 ID。指名费用依赖
 // 而不是再抄一份费用代码清单，使基数只有一处定义；方案会拒绝那些指名了它并未声明的
 // 基数的规则。
@@ -146,6 +172,22 @@ func (calculation SurchargeCalculation) LookupTable() (RateTableVersion, bool) {
 	return *calculation.table, true
 }
 
+// TableKey 报出查表所按的类别维度；非查表的计算交回缺省的分区。
+func (calculation SurchargeCalculation) TableKey() TableKey { return calculation.tableKey }
+
+// usesRemoteTierKey 报出本计算（含取较大值的操作数）是否按偏远档位查表。
+func (calculation SurchargeCalculation) usesRemoteTierKey() bool {
+	if calculation.tableKey == TableKeyRemoteTier {
+		return true
+	}
+	for _, operand := range calculation.operands {
+		if operand.usesRemoteTierKey() {
+			return true
+		}
+	}
+	return false
+}
+
 func (calculation SurchargeCalculation) PercentOfBasis() (Decimal, string, bool) {
 	if calculation.method != ChargeMethodPercentOfBasis || calculation.percentage == nil {
 		return Decimal{}, "", false
@@ -200,6 +242,10 @@ func (calculation SurchargeCalculation) valid() bool {
 		return false
 	}
 	if calculation.percentage != nil && seriesRate {
+		return false
+	}
+	// 查档维度只对查表有意义，且取值闭合。
+	if !calculation.tableKey.valid() || (calculation.tableKey != TableKeyZone && (calculation.method != ChargeMethodTableLookup || calculation.table == nil)) {
 		return false
 	}
 	switch calculation.method {
@@ -670,6 +716,8 @@ type PricingPlanStructures struct {
 	// referenceCatalogues 是卡声明的目录绑定（ADR-0109），可缺：没绑目录的卡保留调用方给分区的路径，
 	// 两条路径由这一格是否为空在内容摘要里分开。
 	referenceCatalogues []ReferenceCatalogueLink
+	// totalBounds 是卡对单票合计声明的下限与上限（ADR-0348），可缺：不声明的卡评价与引入它之前逐字相同。
+	totalBounds *TotalChargeBounds
 }
 
 func NewPricingPlanStructures(
@@ -820,7 +868,17 @@ func (structures PricingPlanStructures) AmountRounding() (AmountRoundingPolicy, 
 func (structures PricingPlanStructures) Declared() bool {
 	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 ||
 		len(structures.referenceSeries) > 0 || len(structures.exclusions) > 0 ||
-		len(structures.referenceCatalogues) > 0
+		len(structures.referenceCatalogues) > 0 || structures.totalBounds != nil
+}
+
+// declaresRemoteTierKey 报出任何一条附加费规则是否按偏远档位查表。
+func (structures PricingPlanStructures) declaresRemoteTierKey() bool {
+	for _, rule := range structures.surchargeRules {
+		if rule.calculation.usesRemoteTierKey() {
+			return true
+		}
+	}
+	return false
 }
 
 func (structures PricingPlanStructures) valid() bool {
@@ -899,6 +957,9 @@ func (structures PricingPlanStructures) valid() bool {
 		}
 	}
 	if structures.amountRounding != nil && !structures.amountRounding.valid() {
+		return false
+	}
+	if structures.totalBounds != nil && !structures.totalBounds.valid() {
 		return false
 	}
 	return validCatalogueLinks(structures.referenceCatalogues)

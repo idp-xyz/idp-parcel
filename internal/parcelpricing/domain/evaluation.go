@@ -82,6 +82,9 @@ const (
 	ChargeLineBase      ChargeLineKind = "BASE"
 	ChargeLineFixed     ChargeLineKind = "FIXED"
 	ChargeLineSurcharge ChargeLineKind = "SURCHARGE"
+	// ChargeLineTotalBound 是方案级总额上下限产生的费用行（ADR-0348）：低于下限的补足行，或高于上限的冲减行。它
+	// 不来自任何一条规则，所以单列一种类型；码与方向固定配对，见 validTotalBoundLine。
+	ChargeLineTotalBound ChargeLineKind = "TOTAL_BOUND"
 )
 
 type ChargeLine struct {
@@ -109,6 +112,10 @@ func newChargeLine(id string, kind ChargeLineKind, code ChargeCode, scope Charge
 		}
 	case ChargeLineFixed, ChargeLineSurcharge:
 		if basis != ChargeBasisFixedAmount || method != ChargeMethodFixedAmount || order < 1 {
+			return ChargeLine{}, ErrInvalidChargeLine
+		}
+	case ChargeLineTotalBound:
+		if basis != ChargeBasisFixedAmount || method != ChargeMethodFixedAmount || order < 1 || !validTotalBoundLine(code, effect) {
 			return ChargeLine{}, ErrInvalidChargeLine
 		}
 	default:
@@ -346,7 +353,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	}
 	// 内容摘要只在产生它的那个规范化版本内有意义。重放一次按本构建已不再实现的形状
 	// 记录的评价，是结构上算不出来，不是版本内容冲突，因此不得报成冲突。见 ADR-0014。
-	if request.expectedCanonicalization != "" && request.expectedCanonicalization != CurrentCanonicalizationVersion() {
+	if request.expectedCanonicalization != "" && !supportedCanonicalization(request.expectedCanonicalization) {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CANONICALIZATION_VERSION_UNSUPPORTED", ErrCanonicalizationVersionUnsupported.Error()))
 	}
 	// 比的是评价自己的清单（方案清单 + 本次采用的序列版本），不是方案清单：重放带着原输入
@@ -556,6 +563,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		outcomes, resolveErr := request.plan.structures.resolveSurcharges(surchargeContext{
 			features:      features,
 			zone:          zone,
+			tier:          categories.tier,
 			pricingWeight: pricingWeight.rounded,
 			series:        series,
 			amounts:       amounts,
@@ -657,6 +665,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			amount, resolveErr := outcome.rule.calculation.resolve(surchargeContext{
 				features:      features,
 				zone:          zone,
+				tier:          categories.tier,
 				pricingWeight: pricingWeight.rounded,
 				series:        series,
 				amounts:       amounts,
@@ -671,6 +680,46 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 					outcome.rule.calculation.describeRate(series), amount.amount.String(), amount.currency))
 			if collectErr := collect(outcome); collectErr != nil {
 				return evaluation.withCalculationError(collectErr)
+			}
+		}
+	}
+
+	// 总额上下限在一切费用行收齐之后、结算币种换算与合计取整之前施加（ADR-0348 决定二）：它对的是各行之和这个
+	// 「单票合计」，补足行或冲减行也是一条费用行，各行相加因此仍等于合计。上下限以卡币种声明，所以早于换算。
+	if bounds := request.plan.structures.totalBounds; bounds != nil {
+		subtotal, subtotalErr := NewMoney(runningAmount, request.plan.rateTable.currency)
+		if subtotalErr != nil {
+			return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, subtotalErr))
+		}
+		adjustment, note, adjustErr := bounds.adjust(subtotal)
+		if adjustErr != nil {
+			return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, adjustErr))
+		}
+		evaluation.explanation = append(evaluation.explanation, note)
+		if adjustment != nil {
+			lineAmount, roundErr := roundLine(adjustment.lineID, adjustment.amount)
+			if roundErr != nil {
+				return evaluation.withCalculationError(roundErr)
+			}
+			order := 0
+			for _, line := range evaluation.chargeLines {
+				if line.order > order {
+					order = line.order
+				}
+			}
+			line, lineErr := newTotalBoundChargeLine(*adjustment, request.plan.aggregation.subjectScope(), lineAmount, order+1)
+			if lineErr != nil {
+				return evaluation.withCalculationError(lineErr)
+			}
+			evaluation.chargeLines = append(evaluation.chargeLines, line)
+			switch adjustment.effect {
+			case ChargeEffectAdd:
+				runningAmount, err = runningAmount.Add(lineAmount.amount)
+			case ChargeEffectDeduct:
+				runningAmount, err = runningAmount.Sub(lineAmount.amount)
+			}
+			if err != nil {
+				return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
 			}
 		}
 	}
@@ -945,7 +994,7 @@ func (evaluation PricingEvaluation) valid() bool {
 	}
 	// 在另一个规范化版本下记录的摘要，本构建无法重新算出，因此在这里无法自校；
 	// 重放路径会显式拒绝它，而不是静默当成数据损坏。见 ADR-0014。
-	if evaluation.planCanonicalization != CurrentCanonicalizationVersion() {
+	if !supportedCanonicalization(evaluation.planCanonicalization) {
 		return true
 	}
 	return evaluation.semanticDigest == evaluation.calculateSemanticDigest()
@@ -987,11 +1036,17 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 			return false
 		}
 		seenCodes[line.chargeCode.String()] = struct{}{}
+		if line.kind == ChargeLineTotalBound {
+			// 总额上下限的行只会是最后一行，且至多一条：补足与冲减不会同时发生，它们也不是规则产生的。
+			if index != len(evaluation.chargeLines)-1 {
+				return false
+			}
+		}
 		if index == 0 {
 			if line.kind != ChargeLineBase || line.scope != subjectScope || line.basis != ChargeBasisRateEntry || line.method != ChargeMethodTableLookup || line.effect != ChargeEffectAdd || line.order != 0 {
 				return false
 			}
-		} else if (line.kind != ChargeLineFixed && line.kind != ChargeLineSurcharge) || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
+		} else if (line.kind != ChargeLineFixed && line.kind != ChargeLineSurcharge && line.kind != ChargeLineTotalBound) || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
 			return false
 		}
 		if index > 0 {
