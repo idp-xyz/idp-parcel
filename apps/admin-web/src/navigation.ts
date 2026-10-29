@@ -563,10 +563,10 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   // —— 设置 · 基础数据（产品内置目录；不是限界上下文）——
   'reference-data': {
     title: '基础数据',
-    summary: '国家和地区、币种、计量单位的标准目录，只读查阅。',
-    owner: '产品内置基础数据（platform/refdata；不是限界上下文）',
+    summary: '国家和地区、币种、计量单位的标准目录；国家和币种另可登记本公司启用哪些。',
+    owner: '产品内置基础数据（platform/refdata；不是限界上下文）；启用范围登记归参与方与商业（party-commercial）',
     source:
-      'docs/adr/0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md 决定一、三、六、七',
+      'docs/adr/0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md 决定一、三、六、七；启用范围见 docs/adr/0345-tenant-enablement-of-countries-and-currencies-is-a-tenant-value-registered-in-party-commercial-and-new-write-entries-accept-only-catalogue-codes.md',
   },
 
   // —— 设置 · 试点治理（pilotgovernance）——

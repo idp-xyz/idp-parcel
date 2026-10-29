@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
-import type { ApiResult } from '../catalogue-api';
+import { EnablementDialog, enablementColumns, useEnablement, useMayConfigureEnablement } from './EnablementControls';
+import { enablementScopeNote } from './enablement';
+import { useCatalogue } from './use-catalogue';
 import {
   listCountries,
   listCurrencies,
@@ -37,33 +39,8 @@ import {
 const info = moduleInfoById['reference-data'];
 
 // 基础数据：国家 / 地区、币种、计量单位三本产品内置目录的只读查阅（ADR-0335 决定七）。三签各接一个读口，整表取回、前端检索。
-// 没有写入口也没有“登记”签——目录随产品发布，租户与操作者都改不了；要的码不在里面是发版的事，不是登记的事。
-
-/** 取一本目录的整表；换签（组件重新挂载）时重取，刷新钮重取。 */
-function useCatalogue<Body>(load: () => Promise<ApiResult<Body>>) {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
-    void load().then((result) => {
-      if (cancelled) return;
-      setAnswer(result);
-      setRefreshing(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // load 是模块级函数，恒等；只随刷新钮重取。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadToken]);
-  const retry = () => {
-    setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  };
-  return { answer, retry, refreshing };
-}
+// 目录本身没有写入口——随产品发布，租户与操作者都改不了；要的码不在里面是发版的事，不是登记的事。国家和币种两签另有一列
+// “启用状态”与“启用 / 停用”动作：那是本公司自己的登记（ADR-0345），登记的码只能从目录里选，登记不改目录也不拦任何业务。
 
 function filterChips(counts: readonly FilterCount[], total: number, active: string, select: (value: string) => void): WorkbenchChip[] {
   return [
@@ -136,6 +113,9 @@ const countryColumns: WorkbenchColumn<CountryRecord>[] = [
 
 function CountriesTab() {
   const { answer, retry, refreshing } = useCatalogue<CountryListResponseBody>(listCountries);
+  const enablement = useEnablement('COUNTRY');
+  const mayConfigure = useMayConfigureEnablement();
+  const [asking, setAsking] = useState<Parameters<typeof EnablementDialog>[0]['pending']>(null);
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -144,45 +124,51 @@ function CountriesTab() {
   const visible = filterCountries(rows, { search, region });
 
   return (
-    <WorkbenchPageTemplate<CountryRecord>
-      title="国家和地区"
-      subtitle="标准两位代码对应的国家和地区名称，只读。"
-      onRefresh={retry}
-      refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名…' }}
-      statusChips={answered ? filterChips(countByRegion(rows), rows.length, region, setRegion) : undefined}
-      toolbarRight={answered ? countSummary(rows.length, visible.length, '个国家和地区') : undefined}
-      columns={countryColumns}
-      rows={visible}
-      rowKey={(row) => row.code}
-      selectedKey={selectedKey}
-      onSelect={setSelectedKey}
-      noMatchText={noMatchNote('国家和地区')}
-      onClearFilters={() => {
-        setSearch('');
-        setRegion('ALL');
-      }}
-      renderDetail={(key) => {
-        const row = rows.find((item) => item.code === key);
-        return row ? (
-          <DetailPanel
-            code={row.code}
-            name={row.nameZh}
-            facts={[
-              { label: '英文名', value: row.nameEn },
-              { label: '区域', value: regionLabel(row.region) },
-            ]}
-            note="区域只用来分组查找，不是服务区域或覆盖范围；那些在“服务区域”里登记。"
-            technical={[
-              { label: '两位代码', value: row.code },
-              { label: '区域码', value: row.region },
-            ]}
-            onClose={() => setSelectedKey(null)}
-          />
-        ) : null;
-      }}
-      viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/countries', '国家和地区')}
-    />
+    <>
+      <WorkbenchPageTemplate<CountryRecord>
+        title="国家和地区"
+        subtitle={`标准两位代码对应的国家和地区名称。${enablementScopeNote}`}
+        onRefresh={() => {
+          retry();
+          enablement.reload();
+        }}
+        refreshing={refreshing || enablement.refreshing}
+        search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名…' }}
+        statusChips={answered ? filterChips(countByRegion(rows), rows.length, region, setRegion) : undefined}
+        toolbarRight={answered ? countSummary(rows.length, visible.length, '个国家和地区') : undefined}
+        columns={[...countryColumns, ...enablementColumns<CountryRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking)]}
+        rows={visible}
+        rowKey={(row) => row.code}
+        selectedKey={selectedKey}
+        onSelect={setSelectedKey}
+        noMatchText={noMatchNote('国家和地区')}
+        onClearFilters={() => {
+          setSearch('');
+          setRegion('ALL');
+        }}
+        renderDetail={(key) => {
+          const row = rows.find((item) => item.code === key);
+          return row ? (
+            <DetailPanel
+              code={row.code}
+              name={row.nameZh}
+              facts={[
+                { label: '英文名', value: row.nameEn },
+                { label: '区域', value: regionLabel(row.region) },
+              ]}
+              note="区域只用来分组查找，不是服务区域或覆盖范围；那些在“服务区域”里登记。"
+              technical={[
+                { label: '两位代码', value: row.code },
+                { label: '区域码', value: row.region },
+              ]}
+              onClose={() => setSelectedKey(null)}
+            />
+          ) : null;
+        }}
+        viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/countries', '国家和地区')}
+      />
+      <EnablementDialog kind="COUNTRY" pending={asking} enablement={enablement} onClose={() => setAsking(null)} />
+    </>
   );
 }
 
@@ -198,6 +184,9 @@ const currencyColumns: WorkbenchColumn<CurrencyRecord>[] = [
 
 function CurrenciesTab() {
   const { answer, retry, refreshing } = useCatalogue<CurrencyListResponseBody>(listCurrencies);
+  const enablement = useEnablement('CURRENCY');
+  const mayConfigure = useMayConfigureEnablement();
+  const [asking, setAsking] = useState<Parameters<typeof EnablementDialog>[0]['pending']>(null);
   const [search, setSearch] = useState('');
   const [scale, setScale] = useState('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -206,46 +195,52 @@ function CurrenciesTab() {
   const visible = filterCurrencies(rows, { search, scale });
 
   return (
-    <WorkbenchPageTemplate<CurrencyRecord>
-      title="币种"
-      subtitle="标准三位币种代码，以及各币种金额最小到几位小数，只读。"
-      onRefresh={retry}
-      refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名、符号…' }}
-      statusChips={answered ? filterChips(countByMinorUnitScale(rows), rows.length, scale, setScale) : undefined}
-      toolbarRight={answered ? countSummary(rows.length, visible.length, '种币种') : undefined}
-      columns={currencyColumns}
-      rows={visible}
-      rowKey={(row) => row.code}
-      selectedKey={selectedKey}
-      onSelect={setSelectedKey}
-      noMatchText={noMatchNote('币种')}
-      onClearFilters={() => {
-        setSearch('');
-        setScale('ALL');
-      }}
-      renderDetail={(key) => {
-        const row = rows.find((item) => item.code === key);
-        return row ? (
-          <DetailPanel
-            code={row.code}
-            name={row.nameZh}
-            facts={[
-              { label: '英文名', value: row.nameEn },
-              { label: '符号', value: row.symbol },
-              { label: '小数位', value: minorUnitScaleText(row.minorUnitScale) },
-            ]}
-            note="小数位是这个币种金额最小到哪一位：计价与结算把金额合计取整时按它定位数。目录之外的三位代码仍可使用，只是这里查不到名称。"
-            technical={[
-              { label: '三位代码', value: row.code },
-              { label: '最小币单位小数位', value: String(row.minorUnitScale) },
-            ]}
-            onClose={() => setSelectedKey(null)}
-          />
-        ) : null;
-      }}
-      viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/currencies', '币种')}
-    />
+    <>
+      <WorkbenchPageTemplate<CurrencyRecord>
+        title="币种"
+        subtitle={`标准三位币种代码，以及各币种金额最小到几位小数。${enablementScopeNote}`}
+        onRefresh={() => {
+          retry();
+          enablement.reload();
+        }}
+        refreshing={refreshing || enablement.refreshing}
+        search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名、符号…' }}
+        statusChips={answered ? filterChips(countByMinorUnitScale(rows), rows.length, scale, setScale) : undefined}
+        toolbarRight={answered ? countSummary(rows.length, visible.length, '种币种') : undefined}
+        columns={[...currencyColumns, ...enablementColumns<CurrencyRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking)]}
+        rows={visible}
+        rowKey={(row) => row.code}
+        selectedKey={selectedKey}
+        onSelect={setSelectedKey}
+        noMatchText={noMatchNote('币种')}
+        onClearFilters={() => {
+          setSearch('');
+          setScale('ALL');
+        }}
+        renderDetail={(key) => {
+          const row = rows.find((item) => item.code === key);
+          return row ? (
+            <DetailPanel
+              code={row.code}
+              name={row.nameZh}
+              facts={[
+                { label: '英文名', value: row.nameEn },
+                { label: '符号', value: row.symbol },
+                { label: '小数位', value: minorUnitScaleText(row.minorUnitScale) },
+              ]}
+              note="小数位是这个币种金额最小到哪一位：计价与结算把金额合计取整时按它定位数。目录之外的三位代码仍可使用，只是这里查不到名称。"
+              technical={[
+                { label: '三位代码', value: row.code },
+                { label: '最小币单位小数位', value: String(row.minorUnitScale) },
+              ]}
+              onClose={() => setSelectedKey(null)}
+            />
+          ) : null;
+        }}
+        viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/currencies', '币种')}
+      />
+      <EnablementDialog kind="CURRENCY" pending={asking} enablement={enablement} onClose={() => setAsking(null)} />
+    </>
   );
 }
 

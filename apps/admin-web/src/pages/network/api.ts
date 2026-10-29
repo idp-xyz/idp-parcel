@@ -159,6 +159,8 @@ export const registrationRefusalReasonLabels: Record<string, string> = {
   RANKING_FORM_UNKNOWN: '排序形态不在封闭集——路由策略版本声明了族外的排序形态；改成族内的一种，或不声明',
   COVERAGE_MALFORMED:
     '覆盖不成形——国家码或邮编前缀写法不对，或没登覆盖国家却带了前缀；改覆盖那一格',
+  COVERAGE_COUNTRY_NOT_IN_CATALOGUE:
+    '覆盖国家不在国家和地区目录里——换成目录里的两位代码；目录可在“基础数据”页查看',
   NODE_ROLE_BLANK: '节点角色里有空白节点——补上节点身份',
   NODE_ROLE_DUPLICATED: '同一角色里一个节点登了两次——删掉重复的那一个',
   NODE_ROLES_WITHOUT_COVERAGE: '没登覆盖却登了节点角色——先登覆盖，再挂节点角色',
