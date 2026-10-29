@@ -907,7 +907,7 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	// 本构建不认的版本（重放一份按旧形记录的评价时才会遇到）不在这里重算，退回基础版本。
 	canonicalization := evaluation.planCanonicalization
 	if !supportedCanonicalization(canonicalization) {
-		canonicalization = canonicalizationVersion
+		canonicalization = CurrentCanonicalizationVersion()
 	}
 	document := canonicalEvaluation{
 		Canonicalization: canonicalization,
