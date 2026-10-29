@@ -1,6 +1,6 @@
 # ADR-0152: 运营试算是计价自有的应用用例——按假设包裹对每张适用价卡各形成一份试算评价，只算不存、结构上不交结算、不择优；入口是 `parcel-api` 命令行 `POST /pricing-estimates`，起步未配置、随操作者渠道换 Intake
 
-Status: Accepted（2026-09-25，用户经 IDP 队列答通道 3「按你的理解和建议，你自己独立完成吧」「按你的建议，但是要理解我们的实现方式」授权自决；票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md) 的产物。越权风险点见「裁决方的能力边界」，同日用户授权通道 3 代为复核、四条维持，见文末「owner 复核记录」）
+Status: Accepted（2026-09-25，用户经 IDP 队列答通道 3「按你的理解和建议，你自己独立完成吧」「按你的建议，但是要理解我们的实现方式」授权自决；票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md) 的产物。越权风险点见「裁决方的能力边界」，同日用户授权通道 3 代为复核、四条维持，见文末「owner 复核记录」）<!-- 索引注记 -->｜**部分停用**：其决定八「不做的」里「地址性质与服务选项：输入快照今天不带这两格，随特征来源另立。」一句的地址性质那一半已由 [ADR-0347](./0347-conditions-read-the-volumetric-weight-and-the-packages-own-chargeable-weight-before-any-rule-is-judged-and-the-address-nature-is-a-declared-input-with-its-own-feature-slot.md) 决定四接上——输入快照可带发起方声明的收件地址性质，试算声明可选声明它，读它的卡在声明缺席时点名缺项。服务选项那一半仍未做；**适用场景**：只限收件地址性质，来源上下文（`parcel-shipment`）今天没有结构化的地址性质。其余各条不变。
 Date: 2026-09-25
 
 ## Context
@@ -86,6 +86,7 @@ Date: 2026-09-25
 - [UC-PP-001 按假设包裹形成试算评价](../application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md)
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)、[ADR-0124](./0124-evaluation-replay-is-triggered-through-a-parcel-api-command-endpoint-and-never-handed-to-settlement.md)、[ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)
 - 票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md)
+- [ADR-0347](./0347-conditions-read-the-volumetric-weight-and-the-packages-own-chargeable-weight-before-any-rule-is-judged-and-the-address-nature-is-a-declared-input-with-its-own-feature-slot.md)：决定八「不做的」里地址性质那一半被它接上
 
 ## owner 复核记录
 
