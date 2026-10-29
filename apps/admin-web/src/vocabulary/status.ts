@@ -390,6 +390,7 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     OVERWEIGHT_SURCHARGE: muted('超重费'),
     RESIDENTIAL_DELIVERY_SURCHARGE: muted('住宅派送费'),
     MINIMUM_CHARGE: muted('最低收费'),
+    MAXIMUM_CHARGE: muted('最高收费'),
   },
   'refdata-unit-category': {
     WEIGHT: muted('重量'),

@@ -63,6 +63,9 @@ func main() {
 	write(outDir, "reference-series-fuel-full.json", fullFuelSeriesSnapshot())
 	write(outDir, "reference-series-fuel-full-review.json", seriesReviewDocument(fullFuelSeriesID, "v1"))
 	write(outDir, "price-card-cn-sg-full.json", fullSellCardSnapshot())
+	// 第三张完整价卡（范围 SYN-SCOPE-04，见 full_card_03.go）：偏远一条规则按档位查价表，加单票合计最低收费。绑上面已登记的
+	// 同一批目录与燃油序列，不另登。
+	write(outDir, "price-card-cn-sg-full-03.json", fullSellCard03Snapshot())
 }
 
 // reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者
