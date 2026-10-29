@@ -290,6 +290,9 @@ type ConditionalMinimumWeight struct {
 
 func NewConditionalMinimumWeight(id string, condition TriggerCondition, minimum Weight) (ConditionalMinimumWeight, error) {
 	value := ConditionalMinimumWeight{id: id, condition: condition, minimum: minimum}
+	if condition.valid() && condition.reads(FeatureChargeableWeight) {
+		return ConditionalMinimumWeight{}, ErrConditionalMinimumReadsChargeableWeight
+	}
 	if !value.valid() {
 		return ConditionalMinimumWeight{}, ErrInvalidSurchargeRule
 	}
@@ -301,7 +304,9 @@ func (value ConditionalMinimumWeight) Condition() TriggerCondition { return valu
 func (value ConditionalMinimumWeight) Minimum() Weight             { return value.minimum }
 
 func (value ConditionalMinimumWeight) valid() bool {
-	return trimmed(value.id) && value.condition.valid() && value.minimum.valid() && value.minimum.value.Sign() > 0
+	// 触发条件不读自身计价重量：快照折回时也过这一道，不信任存下来的文档（ADR-0347 决定三）。
+	return trimmed(value.id) && value.condition.valid() && !value.condition.reads(FeatureChargeableWeight) &&
+		value.minimum.valid() && value.minimum.value.Sign() > 0
 }
 
 // ExclusivityStance 表达卡对「这条附加费是与其他附加费竞争，还是与它们并列计收」的

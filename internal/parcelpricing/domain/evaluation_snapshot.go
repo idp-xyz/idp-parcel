@@ -102,6 +102,8 @@ type inputSnapshotDocument struct {
 	SeriesValues      []seriesValueSnapshot      `json:"seriesValues"`
 	Settlement        *string                    `json:"settlement,omitempty"`
 	Comparison        *string                    `json:"comparison,omitempty"`
+	// 未声明地址性质的评价不写这一键，旧快照没有它照样读回（ADR-0347 决定四）。
+	AddressNature string `json:"addressNature,omitempty"`
 }
 
 type weightResultSnapshot struct {
@@ -558,6 +560,7 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 		comparison := input.comparison.code
 		document.Comparison = &comparison
 	}
+	document.AddressNature = string(input.addressNature)
 	if input.postal != nil {
 		document.Postal = &postalRouteSnapshot{Origin: input.postal.origin, Destination: input.postal.destination}
 	}
@@ -629,6 +632,7 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 		comparison := Currency{code: *document.Comparison}
 		input.comparison = &comparison
 	}
+	input.addressNature = AddressNature(document.AddressNature)
 	if document.Postal != nil {
 		input.postal = &PostalRoute{origin: document.Postal.Origin, destination: document.Postal.Destination}
 	}

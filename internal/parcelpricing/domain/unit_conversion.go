@@ -156,6 +156,9 @@ type unitConverter struct {
 	frozen   bool
 	recorded []UnitConversionStep
 	steps    []UnitConversionStep
+	// conditionScale 是方案里读体积重的判定条件的阈值里最细的小数位：这些阈值要拿去比较可能被截断的换算后合计
+	// 体积重，须并入截断位数的边界（ADR-0347 决定五）。方案不读体积重时为零，位数公式与此前逐字相同。
+	conditionScale uint32
 }
 
 func newUnitConverter(frozen bool, recorded []UnitConversionStep) *unitConverter {

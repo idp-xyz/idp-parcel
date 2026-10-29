@@ -110,6 +110,8 @@ const (
 	EstimateMissingZone        = "ZONE"
 	EstimateMissingPostalRoute = "POSTAL_ROUTE"
 	EstimateMissingMeasurement = "MEASUREMENT"
+	// EstimateMissingAddressNature：这张卡有规则按收件地址性质判定，而声明没有给（ADR-0347 决定四）。
+	EstimateMissingAddressNature = "ADDRESS_NATURE"
 )
 
 // EstimateCandidate 是一张适用价卡的结果。
@@ -121,7 +123,7 @@ type EstimateCandidate struct {
 }
 
 // FormEstimateEvaluationsCommand 是一份试算声明在本上下文词汇里的转述（UC-PP-001「试算声明」）。租户由接入面从信封交进来；
-// 其余各项由发起方声明、不给默认：分区为空串、邮编路线与结算币种为 nil 即未声明。
+// 其余各项由发起方声明、不给默认：分区为空串、邮编路线、结算币种与地址性质为 nil 即未声明。
 type FormEstimateEvaluationsCommand struct {
 	Tenant     domain.TenantID
 	Scope      domain.PricingScopeID
@@ -132,6 +134,9 @@ type FormEstimateEvaluationsCommand struct {
 	Zone       string
 	Route      *domain.PostalRoute
 	Settlement *domain.Currency
+	// AddressNature 是收件地址性质。计价既不推断它也不从别处读它（PS 今天没有结构化的地址性质，ADR-0347 决定四）：
+	// 读它的卡要发起方声明，没声明就点名缺项，不套默认住宅或商业。
+	AddressNature *domain.AddressNature
 }
 
 // FormEstimateEvaluationsResult 是入口的答复。字段导出、不设访问器，形状随 FormEvaluationFromRequestResult。
@@ -314,25 +319,34 @@ func estimateInput(
 		}
 	}
 
-	var input domain.PricingInputSnapshot
-	var err error
+	// 该给的没给一并点名，不拿另一种给法顶替，也不给默认。地址性质与分区、邮编路线同一种缺项：卡有规则按它判定而声明
+	// 没给（ADR-0347 决定四）。
+	var missing []string
 	if zoneBound {
 		if command.Route == nil {
-			return domain.PricingInputSnapshot{}, []string{EstimateMissingPostalRoute}, nil
+			missing = append(missing, EstimateMissingPostalRoute)
 		}
-		input, err = domain.NewPostalPricingInputSnapshot(command.Tenant, command.Scope, subject, *command.Route,
-			command.Weight, command.Dimensions, command.BasisAt, facts...)
 	} else {
-		missing := make([]string, 0, 2)
 		if command.Zone == "" {
 			missing = append(missing, EstimateMissingZone)
 		}
 		if tierBound && command.Route == nil {
 			missing = append(missing, EstimateMissingPostalRoute)
 		}
-		if len(missing) > 0 {
-			return domain.PricingInputSnapshot{}, missing, nil
-		}
+	}
+	if command.AddressNature == nil && plan.Structures().ReadsFeature(domain.FeatureAddressNature) {
+		missing = append(missing, EstimateMissingAddressNature)
+	}
+	if len(missing) > 0 {
+		return domain.PricingInputSnapshot{}, missing, nil
+	}
+
+	var input domain.PricingInputSnapshot
+	var err error
+	if zoneBound {
+		input, err = domain.NewPostalPricingInputSnapshot(command.Tenant, command.Scope, subject, *command.Route,
+			command.Weight, command.Dimensions, command.BasisAt, facts...)
+	} else {
 		input, err = domain.NewPricingInputSnapshot(command.Tenant, command.Scope, subject, command.Zone,
 			command.Weight, command.Dimensions, command.BasisAt, facts...)
 		if err == nil && tierBound {
@@ -344,6 +358,12 @@ func estimateInput(
 	}
 	if command.Settlement != nil {
 		input, err = input.WithSettlementCurrency(*command.Settlement)
+		if err != nil {
+			return domain.PricingInputSnapshot{}, nil, err
+		}
+	}
+	if command.AddressNature != nil {
+		input, err = input.WithAddressNature(*command.AddressNature)
 		if err != nil {
 			return domain.PricingInputSnapshot{}, nil, err
 		}
@@ -383,6 +403,11 @@ func estimateIdentity(command FormEstimateEvaluationsCommand, plan domain.Pricin
 		parts = append(parts, command.Settlement.String())
 	} else {
 		parts = append(parts, "-")
+	}
+	// 地址性质只在声明了时追加，各带一个标签：它改的是评价内容，换一格就该换标识；没声明就一段都不追加，同一份
+	// 声明、同一张卡在引入这一格之前派生的标识（受理前估价的留痕里存着它们）因此不变。
+	if command.AddressNature != nil {
+		parts = append(parts, "address-nature", command.AddressNature.String())
 	}
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "EST-" + hex.EncodeToString(digest[:8])

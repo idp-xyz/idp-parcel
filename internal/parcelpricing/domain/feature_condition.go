@@ -3,11 +3,15 @@ package domain
 // FeatureSource 是判定条件可以读取的可判定量的封闭集合。保持封闭，评价才能仅凭版本清单
 // 重放每条规则的命中与未命中；集合一旦开放，就还需要规则正文本身。
 //
-// 十项与 CONTEXT「特征」词条的闭合集合一一对应：七项数值量按量纲比较，三项类别量
-// （分区、地址类型、服务选项）按取值相等——类别没有大小，比较运算配它们在构造期就
-// 拦下。体积重与计价重量是评价过程的派生量：条件要读它们，评价器必须先把算出的值
-// 填进 PackageFeatures，缺席时判定报特征不可用而不是悄悄未命中——判定条件必须可
-// 逐条解释命中与否，缺量解释不出。
+// 与 CONTEXT「特征」词条的闭合集合一一对应：数值量按量纲比较，类别量（分区、地址类型、
+// 地址性质、服务选项）按取值相等——类别没有大小，比较运算配它们在构造期就拦下。
+//
+// 地址类型与地址性质是两个槽：前者承载偏远档位（ADR-0109，名字是那时起的），后者承载商业 / 住宅
+// （ADR-0347）。已发布价卡的偏远条件读的是前者，所以后者另立一个标识，而不是把前者改指别处。
+//
+// 体积重与计价重量是评价过程的派生量：条件要读它们，评价器必须先把算出的值填进 PackageFeatures，
+// 缺席时判定报特征不可用而不是悄悄未命中——判定条件必须可逐条解释命中与否，缺量解释不出。
+// 计价重量这一格读的是包裹自身的计价重量，不含条件最低计价重量的抬高（ADR-0347 决定一）。
 type FeatureSource string
 
 const (
@@ -20,6 +24,7 @@ const (
 	FeatureChargeableWeight  FeatureSource = "CHARGEABLE_WEIGHT"
 	FeatureZone              FeatureSource = "ZONE"
 	FeatureAddressType       FeatureSource = "ADDRESS_TYPE"
+	FeatureAddressNature     FeatureSource = "ADDRESS_NATURE"
 	FeatureServiceOption     FeatureSource = "SERVICE_OPTION"
 )
 
@@ -49,7 +54,7 @@ func (source FeatureSource) measure() featureMeasure {
 		return measureVolume
 	case FeatureActualWeight, FeatureVolumetricWeight, FeatureChargeableWeight:
 		return measureWeight
-	case FeatureZone, FeatureAddressType, FeatureServiceOption:
+	case FeatureZone, FeatureAddressType, FeatureAddressNature, FeatureServiceOption:
 		return measureCategory
 	default:
 		return measureUnknown
@@ -129,6 +134,7 @@ type PackageFeatures struct {
 	chargeableWeight Weight
 	zone             CategoryValue
 	addressType      CategoryValue
+	addressNature    AddressNature
 	serviceOptions   []CategoryValue
 }
 
@@ -162,6 +168,14 @@ func (features PackageFeatures) WithCategories(
 	enriched.zone = zone
 	enriched.addressType = addressType
 	enriched.serviceOptions = append([]CategoryValue(nil), serviceOptions...)
+	return enriched
+}
+
+// WithAddressNature 交回带上收件地址性质的副本。它与 WithCategories 分开，是因为地址性质不由计价解出（偏远
+// 档位才是），而是输入快照里发起方声明的一格；没声明就不调用，条件读到缺席报 ErrAddressNatureRequired。
+func (features PackageFeatures) WithAddressNature(nature AddressNature) PackageFeatures {
+	enriched := features
+	enriched.addressNature = nature
 	return enriched
 }
 
@@ -209,6 +223,11 @@ func (features PackageFeatures) categoryMatches(source FeatureSource, expected C
 			return false, ErrFeatureUnavailable
 		}
 		return features.addressType == expected, nil
+	case FeatureAddressNature:
+		if !features.addressNature.valid() {
+			return false, ErrAddressNatureRequired
+		}
+		return string(features.addressNature) == string(expected), nil
 	case FeatureServiceOption:
 		if len(features.serviceOptions) == 0 {
 			return false, ErrFeatureUnavailable
@@ -283,15 +302,22 @@ func NewWeightFeatureCondition(source FeatureSource, operator ComparisonOperator
 
 // NewCategoryFeatureCondition 声明一个类别相等条件。运算固定为 EQ——类别没有大小，
 // 由调用方传次序运算是把「分区大于 5」这类无意义条款放进卡里，构造期拦下。
+//
+// 地址性质的取值是封闭词表（商业 / 住宅），期望取值不在表内一律拒——否则卡上一个拼错的「RESIDENTAL」
+// 会成为永远不命中的条件，少收而无人知道。其余类别特征的取值目录属价卡与商业规则的实例半边，这里只要求非空。
 func NewCategoryFeatureCondition(source FeatureSource, expected CategoryValue) (FeatureCondition, error) {
 	if source.measure() != measureCategory || !expected.valid() {
 		return FeatureCondition{}, ErrInvalidFeatureCondition
 	}
-	return FeatureCondition{
+	condition := FeatureCondition{
 		source:           source,
 		operator:         ComparisonEquals,
 		categoryExpected: expected,
-	}, nil
+	}
+	if !condition.valid() {
+		return FeatureCondition{}, ErrInvalidFeatureCondition
+	}
+	return condition, nil
 }
 
 func (condition FeatureCondition) Source() FeatureSource        { return condition.source }
@@ -398,6 +424,9 @@ func (condition FeatureCondition) valid() bool {
 	case measureWeight:
 		return condition.operator.ordersNumbers() && condition.weightThreshold.valid()
 	case measureCategory:
+		if condition.source == FeatureAddressNature && !AddressNature(condition.categoryExpected).valid() {
+			return false
+		}
 		return condition.operator == ComparisonEquals && condition.categoryExpected.valid()
 	default:
 		return false
