@@ -92,6 +92,13 @@ export const estimateAnswerLabels: Record<string, string> = {
 export const estimateMissingLabels: Record<string, string> = {
   ZONE: '分区（这张卡没绑分区目录，要发起方给分区）',
   POSTAL_ROUTE: '邮编路线（这张卡按邮编路线查分区或偏远档位目录）',
+  ADDRESS_NATURE: '收件地址性质（这张卡有规则按商业 / 住宅判定，要发起方声明，不套默认）',
+};
+
+// 收件地址性质（ADR-0347 决定四）：封闭词，声明由发起方给，计价不推断。
+export const addressNatureLabels: Record<string, string> = {
+  COMMERCIAL: '商业地址',
+  RESIDENTIAL: '住宅地址',
 };
 
 export const estimateReasonLabels: Record<string, string> = {

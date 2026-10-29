@@ -12,8 +12,9 @@ import {
   type EstimateEvaluationRecord,
   type EstimateResponseBody,
 } from './api';
-import { emptyEstimateDraft, estimateLocalProblems, estimatePayloadOf, type EstimateDraft } from './estimate-form';
+import { ADDRESS_NATURE_CODES, emptyEstimateDraft, estimateLocalProblems, estimatePayloadOf, type EstimateDraft } from './estimate-form';
 import {
+  addressNatureLabels,
   chargeLineName,
   directionLabels,
   estimateAnswerLabels,
@@ -165,6 +166,16 @@ export function PricingEstimatePage() {
 
             <Field label="分区（可缺）" hint="没绑分区目录的卡用它">
               <Input className="font-mono" value={draft.zone} placeholder="如 Z1" onChange={(event) => patch({ zone: event.target.value })} />
+            </Field>
+            <Field label="收件地址性质（可不选）" hint="有规则按商业 / 住宅判定的卡用它；不选就如实点名缺项，不套默认">
+              <select className={selectClass} value={draft.addressNature} onChange={(event) => patch({ addressNature: event.target.value })}>
+                <option value="">不选</option>
+                {ADDRESS_NATURE_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {labelOf(addressNatureLabels, code)}（{code}）
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="邮编路线（可缺）" hint="绑了分区或偏远档位目录的卡用它查目录" problem={problems.postalRoute}>
               <div className="flex gap-2">
