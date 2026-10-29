@@ -53,6 +53,16 @@ func main() {
 	// 不复核就不在用，与序列同一条纪律。
 	write(outDir, "reference-catalogue-zone-cn-sg.json", zoneCatalogueSnapshot())
 	write(outDir, "reference-catalogue-zone-cn-sg-review.json", catalogueReviewDocument("SYN-CAT-ZONE-CN-SG", "v1"))
+
+	// 完整售价卡（范围 SYN-SCOPE-02，见 full_card.go）与它绑的两本目录：分区目录覆盖偏远前缀，偏远档位目录是新种类的一本。
+	// 与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
+	write(outDir, "reference-catalogue-zone-cn-sg-full.json", fullZoneCatalogueSnapshot())
+	write(outDir, "reference-catalogue-zone-cn-sg-full-review.json", catalogueReviewDocument(fullZoneCatalogueID, "v1"))
+	write(outDir, "reference-catalogue-remote-tier-cn-sg.json", remoteTierCatalogueSnapshot())
+	write(outDir, "reference-catalogue-remote-tier-cn-sg-review.json", catalogueReviewDocument(fullTierCatalogueID, "v1"))
+	write(outDir, "reference-series-fuel-full.json", fullFuelSeriesSnapshot())
+	write(outDir, "reference-series-fuel-full-review.json", seriesReviewDocument(fullFuelSeriesID, "v1"))
+	write(outDir, "price-card-cn-sg-full.json", fullSellCardSnapshot())
 }
 
 // reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者
