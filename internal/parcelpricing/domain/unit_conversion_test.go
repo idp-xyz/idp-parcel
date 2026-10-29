@@ -528,3 +528,64 @@ func aggregatePlanForConversion(t testing.TB, factor *volumetricSpec) domain.Pri
 	}
 	return plan
 }
+
+// Covers: ADR-0346 决定三、四——冻结模式连截断位数也只认记下的：摘要里的实重是截断后的十进制串，日后调整位数公式
+// 不能让既有评价重放出另一串。记下 20 位（大于当前公式的 11 位）的评价，重放与读回后再重放都得同一个摘要；
+// 记下的位数小于当前公式推出的下限（8 位）不静默改用较小位数，按答不出处理，仍是原来的单位不一致。
+func TestFrozenReplayKeepsTheRecordedTruncationPlaces(t *testing.T) {
+	plan := tieredPlan(t, "places", domain.WeightUnitPound, domain.RoundingCeiling, "0.5", nil)
+	input := unitInput(t, "1", domain.WeightUnitKilogram, nil)
+	fresh := evaluate(t, "eval-places-fresh", plan, input)
+	if fresh.UnitConversions()[0].Places() != 11 {
+		t.Fatalf("当前公式下限 = %d 位，want 11", fresh.UnitConversions()[0].Places())
+	}
+
+	asRecordedBy := func(places uint32) domain.PricingEvaluation {
+		request, err := domain.NewEvaluationRequest(mustValue(t, domain.NewEvaluationID, "eval-places"), plan, input, domain.EvidenceSynthetic)
+		if err != nil {
+			t.Fatalf("evaluation request: %v", err)
+		}
+		recorded := domain.RecordedTruncatedWeightConversionForTest(domain.ConvertedActualWeight, "KG", "LB", "100000000/45359237", "1", places)
+		return domain.EvaluatePricing(request.WithRecordedUnitConversions([]domain.UnitConversionStep{recorded}))
+	}
+
+	wide := asRecordedBy(20)
+	if wide.Status() != domain.EvaluationCompleted || wide.UnitConversions()[0].Places() != 20 {
+		t.Fatalf("记 20 位的评价 = %s %v", wide.Status(), wide.Issues())
+	}
+	freshWeight, _ := fresh.PricingWeight()
+	wideWeight, _ := wide.PricingWeight()
+	if wideWeight.ActualWeight().Value().String() == freshWeight.ActualWeight().Value().String() || wide.SemanticDigest() == fresh.SemanticDigest() {
+		t.Fatal("位数不同，摘要里的实重串应当不同——这正是位数要冻结的原因")
+	}
+	if wideWeight.RoundedWeight().Value().String() != "2.5" || totalOf(t, wide) != totalOf(t, fresh) {
+		t.Fatalf("位数只是更细，进位后的重量与金额不变：%s / %s", wideWeight.RoundedWeight().Value(), totalOf(t, wide))
+	}
+
+	replay, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-places-replay"), wide, plan, domain.EvidenceSynthetic)
+	if err != nil || replay.Status() != domain.EvaluationCompleted || replay.SemanticDigest() != wide.SemanticDigest() || replay.UnitConversions()[0].Places() != 20 {
+		t.Fatalf("记 20 位的评价重放 = %s %v digest 相同 %v", replay.Status(), err, replay.SemanticDigest() == wide.SemanticDigest())
+	}
+	raw, err := domain.MarshalEvaluationSnapshot(wide)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rebuilt, err := domain.RehydrateEvaluationSnapshot(raw)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	again, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-places-replay-2"), rebuilt, plan, domain.EvidenceSynthetic)
+	if err != nil || again.SemanticDigest() != wide.SemanticDigest() {
+		t.Fatalf("读回后重放 = %s %v", again.Status(), err)
+	}
+
+	atFloor := asRecordedBy(11)
+	if atFloor.Status() != domain.EvaluationCompleted || atFloor.SemanticDigest() != fresh.SemanticDigest() {
+		t.Fatalf("记下的位数恰等于下限应照常评价且同摘要：%s", atFloor.Status())
+	}
+	short := asRecordedBy(8)
+	if short.Status() != domain.EvaluationConflict || len(short.Issues()) != 1 || short.Issues()[0].Code() != "WEIGHT_UNIT_MISMATCH" ||
+		short.Issues()[0].Message() != domain.ErrWeightUnitMismatch.Error() || len(short.UnitConversions()) != 0 {
+		t.Fatalf("记 8 位（小于下限）= %s %v conversions %d", short.Status(), short.Issues(), len(short.UnitConversions()))
+	}
+}

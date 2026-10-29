@@ -141,3 +141,49 @@ func volumetricFactorForTest(t testing.TB, length LengthUnit) VolumetricFactor {
 	}
 	return factor
 }
+
+// Covers: ADR-0346 决定三、四——冻结模式下不精确换算的位数只认同一个量、同一对单位记下的那一条：
+// 不小于当前下限（11 位）照用记下的位数，更小、没记、记成精确、只记在另一个量名下都答不出（原来的单位不一致）。
+func TestFrozenInexactConversionNeedsARecordWithAtLeastTheFloorPlaces(t *testing.T) {
+	weight := Weight{value: mustDecimal(t, "1"), unit: WeightUnitKilogram}
+	record := func(quantity ConvertedQuantity, exact bool, places uint32) []UnitConversionStep {
+		return []UnitConversionStep{{
+			quantity: quantity, from: "KG", to: "LB", factor: "100000000/45359237",
+			original: []Decimal{mustDecimal(t, "1")}, converted: []Decimal{mustDecimal(t, "2")}, exact: exact, places: places,
+		}}
+	}
+	const boundaryScale = 2 // 进位单位 0.5 的中点占两位；下限 = 8（分母位数）+ 2 + 1 = 11
+	convert := func(recorded []UnitConversionStep) (Weight, error) {
+		return newUnitConverter(true, recorded).convertWeight(ConvertedActualWeight, weight, WeightUnitPound, boundaryScale, true)
+	}
+
+	for _, places := range []uint32{11, 20} {
+		converted, err := convert(record(ConvertedActualWeight, false, places))
+		if err != nil {
+			t.Fatalf("记 %d 位：%v", places, err)
+		}
+		want, _ := ratTruncate(new(big.Rat).Inv(mustRat(t, "0.45359237")), places)
+		if !converted.value.Equal(want) {
+			t.Errorf("记 %d 位，换算值 %s，want %s", places, converted.value, want)
+		}
+	}
+	for name, recorded := range map[string][]UnitConversionStep{
+		"记 10 位，小于下限": record(ConvertedActualWeight, false, 10),
+		"没有记录":        nil,
+		"记成精确":        record(ConvertedActualWeight, true, 0),
+		"只记在另一个量名下":   record(ConvertedTotalVolumetricWeight, false, 20),
+	} {
+		if _, err := convert(recorded); err != ErrWeightUnitMismatch {
+			t.Errorf("%s：err = %v，want ErrWeightUnitMismatch", name, err)
+		}
+	}
+}
+
+func mustRat(t testing.TB, text string) *big.Rat {
+	t.Helper()
+	value, ok := new(big.Rat).SetString(text)
+	if !ok {
+		t.Fatalf("not a rational: %q", text)
+	}
+	return value
+}

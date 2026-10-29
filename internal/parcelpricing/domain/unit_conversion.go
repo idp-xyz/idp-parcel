@@ -12,7 +12,9 @@ import (
 // 评价按产品内置的单位目录（refdata）把输入换算过去再走原有规则，而不是答单位不一致。
 //
 // 三条纪律：
-//   - 单位本来就一致的路径根本不走本文件——没有换算步骤、没有解释行，既有评价的字节一个不动。
+//   - 单位本来就一致的评价不产生换算：EvaluatePricing 先走原函数，不构造换算器，没有换算步骤、没有解释行，
+//     既有评价的字节一个不动。（读回门 validUnitConversions 与访问口 UnitConversions 对每个评价都会被调到，
+//     换算记录为空时是空操作。）
 //   - 换算只发生在 EvaluatePricing 里（calculatePricingWeight 带着 converter 才换）；直接调用
 //     CalculatePricingWeight 的人仍然得到单位不一致，换算与否是评价这一层的事。
 //   - 换算所用的系数记在评价上（UnitConversionStep），重放只认记下的系数、不再查目录——目录随发版会变，
@@ -178,6 +180,16 @@ func (converter *unitConverter) factorFor(from, to string) (*big.Rat, string, bo
 	return factor, factorText(factor), true
 }
 
+// recordedFor 在冻结模式下取记下的那一条：同一个量、同一对单位。
+func (converter *unitConverter) recordedFor(quantity ConvertedQuantity, from, to string) (UnitConversionStep, bool) {
+	for _, step := range converter.recorded {
+		if step.quantity == quantity && step.from == from && step.to == to {
+			return step, true
+		}
+	}
+	return UnitConversionStep{}, false
+}
+
 func (converter *unitConverter) record(step UnitConversionStep) {
 	converter.steps = append(converter.steps, step)
 }
@@ -188,6 +200,9 @@ func (converter *unitConverter) recordedSteps() []UnitConversionStep {
 
 // convertWeight 把重量换算到 to。换算结果不是有限小数时：不允许截断的取整策略（含 NONE 段）一律拒；
 // 允许时按 guardPlaces 保留足够位数——见 guardPlaces 里「截断不改变任何取整与比较结果」的论证。
+// 冻结模式（重放、同标识重复请求）连截断位数也只认记下的：摘要里的实重、进位前重量是截断后的十进制串，
+// 日后调整 guardPlaces 或 conversionBoundaryScale，不能让既有评价重放出另一串。记下的位数不得小于当前公式推出的
+// 下限——小于就是记录与当前对不上，不静默改用较小位数，按答不出处理；大于下限无妨（论证只要求不小于下限）。
 // 答不出一律是原来的单位不一致，不另起一个错：错误文字进评价的问题项和语义摘要，冻结模式的重放必须得出同一句。
 func (converter *unitConverter) convertWeight(quantity ConvertedQuantity, weight Weight, to WeightUnit, boundaryScale uint32, allowInexact bool) (Weight, error) {
 	factor, text, ok := converter.factorFor(weight.unit.String(), to.String())
@@ -210,6 +225,13 @@ func (converter *unitConverter) convertWeight(quantity ConvertedQuantity, weight
 			return Weight{}, ErrWeightUnitMismatch
 		}
 		places := guardPlaces(product, boundaryScale)
+		if converter.frozen {
+			recorded, found := converter.recordedFor(quantity, weight.unit.String(), to.String())
+			if !found || recorded.exact || recorded.places < places {
+				return Weight{}, ErrWeightUnitMismatch
+			}
+			places = recorded.places
+		}
 		truncated, ok := ratTruncate(product, places)
 		if !ok {
 			return Weight{}, ErrWeightUnitMismatch
@@ -261,6 +283,10 @@ func (converter *unitConverter) volumetricWeightFromDimensions(sides Dimensions,
 	}
 	if !allExact {
 		step.places = dimensionsDisplayPlaces
+		// 展示位数在冻结模式下也取记下的：它不进计算与摘要，但重放出来的记录该与原记录逐字相同。
+		if recorded, found := converter.recordedFor(ConvertedDimensions, step.from, step.to); converter.frozen && found && !recorded.exact {
+			step.places = recorded.places
+		}
 		converted = converted[:0]
 		for _, side := range original {
 			truncated, ok := ratTruncate(new(big.Rat).Mul(decimalRat(side), ratio), step.places)
