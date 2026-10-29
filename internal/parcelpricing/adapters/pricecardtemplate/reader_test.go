@@ -422,6 +422,9 @@ func TestRateTableCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
 	for _, problem := range reading.Problems {
 		if problem.Column == "currency" && strings.Contains(problem.Message, "不在产品内置的目录里") {
 			found = true
+			if strings.Contains(problem.Message, "refdata") {
+				t.Errorf("问题文字带出了英文哨兵原句：%s", problem.Message)
+			}
 		}
 	}
 	if !found {

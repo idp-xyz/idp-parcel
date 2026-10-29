@@ -93,7 +93,7 @@ func referenceEnablementNotAccepted(
 	switch {
 	case errors.Is(err, domain.ErrReferenceCodeNotInCatalogue):
 		refusal = ReferenceEnablementCodeNotInCatalogue
-		cause = fmt.Errorf("目录里没有这个码：%s %s——登记的码只能取自产品内置的国家 / 地区或币种目录", command.Kind, command.Code)
+		cause = fmt.Errorf("目录里没有这个码：%s %s——登记的码只能取自产品内置的国家 / 地区或币种目录", command.Kind.Label(), command.Code)
 	case errors.Is(err, domain.ErrReferenceEnablementOutOfSequence):
 		refusal = ReferenceEnablementRevisionOutOfSequence
 		if hasLatest {
@@ -139,19 +139,26 @@ func NewRegisterReferenceEnablementHandler(
 // （启用范围的强制是后续轮次）。
 //
 // 修订号小于等于册上最新的，是对一个已在册修订的重放或冲突，交给落库那一步按内容比；大于的才查连续性与生效时点。
+// 目录成员这道门有一个例外：册上已有这个码的行、而它后来被目录删了（ISO 废止），重放与追加停用照常受理，新启用与首次
+// 登记不受理（RetiredCodeMayStillBeTouched）。
 func (handler *RegisterReferenceEnablementHandler) Register(
 	ctx context.Context,
 	command RegisterReferenceEnablementCommand,
 ) (ReferenceEnablementResult, error) {
+	spec := domain.ReferenceEnablementSpec{
+		Status:        command.Status,
+		EffectiveFrom: command.EffectiveFrom,
+		Source:        command.Source,
+	}
+	recordedAt := handler.clock.Now()
 	candidate, err := domain.NewReferenceEnablementRegistration(
-		command.Tenant, command.Kind, command.Code, command.Revision,
-		domain.ReferenceEnablementSpec{
-			Status:        command.Status,
-			EffectiveFrom: command.EffectiveFrom,
-			Source:        command.Source,
-		},
-		command.Registrant, handler.clock.Now(),
-	)
+		command.Tenant, command.Kind, command.Code, command.Revision, spec, command.Registrant, recordedAt)
+	retired := errors.Is(err, domain.ErrReferenceCodeNotInCatalogue)
+	if retired {
+		// 先只验形状：是不是目录外的老码、放不放行，要看册上有没有它的行。
+		candidate, err = domain.RehydrateReferenceEnablementRegistration(
+			command.Tenant, command.Kind, command.Code, command.Revision, spec, command.Registrant, recordedAt)
+	}
 	if err != nil {
 		return referenceEnablementNotAccepted(err, command, domain.ReferenceEnablementRegistration{}, false), nil
 	}
@@ -159,6 +166,9 @@ func (handler *RegisterReferenceEnablementHandler) Register(
 	latest, found, err := handler.registry.LoadLatestReferenceEnablement(ctx, command.Tenant, command.Kind, command.Code)
 	if err != nil {
 		return ReferenceEnablementResult{}, fmt.Errorf("register reference enablement: %w", err)
+	}
+	if retired && !(found && domain.RetiredCodeMayStillBeTouched(latest, command.Revision, command.Status)) {
+		return referenceEnablementNotAccepted(domain.ErrReferenceCodeNotInCatalogue, command, latest, found), nil
 	}
 	if !found || command.Revision > latest.Revision() {
 		if err := candidate.FollowsFrom(latest, found); err != nil {

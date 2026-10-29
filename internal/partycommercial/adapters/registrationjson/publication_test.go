@@ -51,7 +51,7 @@ func TestSettlementPolicyBodyCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
 		t.Fatalf("目录内的币种应照常译出：%v", err)
 	}
 	document.Currency = "XXX"
-	if _, err := settlementPolicyBodyFrom(document); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+	if _, err := settlementPolicyBodyFrom(document); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") || strings.Contains(err.Error(), "refdata") {
 		t.Fatalf("目录外的币种应被拒并说清是目录不认：%v", err)
 	}
 }

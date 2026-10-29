@@ -96,11 +96,28 @@ func Currency(code string) (CurrencyInfo, bool) {
 // 后者是租户启用范围的事（ADR-0345）。各写入边界拿它拒掉目录外的码，答复由各边界按自己的业务格译。
 var ErrNotInCatalogue = errors.New("refdata: code is not in the built-in catalogue")
 
-// CheckCountry 判一个国家 / 地区码是不是目录里的码；不是则交回 ErrNotInCatalogue 与一句给登记方看的话。
+// NotInCatalogueError 是 CheckCountry / CheckCurrency 交回的错误：Error() 只出给登记方看的中文，不带哨兵的英文原句——
+// 各写入边界把它的文字原样拼进导入问题、译装拒绝与逐格问题，英文尾巴会直接出现在操作者面前。errors.Is 仍认
+// ErrNotInCatalogue。
+type NotInCatalogueError struct {
+	// Kind 是目录的中文名（“国家 / 地区”“币种”），Code 是送来的码，Standard 是目录对应的标准。
+	Kind     string
+	Code     string
+	Standard string
+}
+
+func (err *NotInCatalogueError) Error() string {
+	return fmt.Sprintf("%s码 %q 不在产品内置的目录里（%s）", err.Kind, err.Code, err.Standard)
+}
+
+// Unwrap 让 errors.Is(err, ErrNotInCatalogue) 命中。
+func (err *NotInCatalogueError) Unwrap() error { return ErrNotInCatalogue }
+
+// CheckCountry 判一个国家 / 地区码是不是目录里的码；不是则交回 *NotInCatalogueError。
 // 写法同 Country：精确匹配，不做大小写或空白的宽容。
 func CheckCountry(code string) error {
 	if _, found := Country(code); !found {
-		return fmt.Errorf("国家 / 地区码 %q 不在产品内置的目录里（ISO 3166-1 alpha-2）：%w", code, ErrNotInCatalogue)
+		return &NotInCatalogueError{Kind: "国家 / 地区", Code: code, Standard: "ISO 3166-1 alpha-2"}
 	}
 	return nil
 }
@@ -108,7 +125,7 @@ func CheckCountry(code string) error {
 // CheckCurrency 判一个币种码是不是目录里的码，语义同 CheckCountry。
 func CheckCurrency(code string) error {
 	if _, found := Currency(code); !found {
-		return fmt.Errorf("币种码 %q 不在产品内置的目录里（ISO 4217 常用集）：%w", code, ErrNotInCatalogue)
+		return &NotInCatalogueError{Kind: "币种", Code: code, Standard: "ISO 4217 常用集"}
 	}
 	return nil
 }

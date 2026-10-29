@@ -264,7 +264,7 @@ func TestSeriesPayloadCurrencyMustBeInTheBuiltInCatalogue(t *testing.T) {
 		t.Fatalf("目录内的币种应照常翻成登记：%v", err)
 	}
 	_, err := decodeSeriesPayload(t, withCurrency("XXX")).Registration(payloadTenant(t), "SYN-PRC-SERIES-REGISTRAR")
-	if !errors.Is(err, pricinghttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+	if !errors.Is(err, pricinghttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "不在产品内置的目录里") || strings.Contains(err.Error(), "refdata") {
 		t.Fatalf("目录外的币种应答 ErrMalformedRequest 并说清是目录不认：%v", err)
 	}
 }

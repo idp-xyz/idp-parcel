@@ -36,7 +36,7 @@ func (outcome ReferenceEnablementSaveOutcome) String() string {
 // found=false = 从未登记；读取失败走 error，不得折成 found=false（折了，登记方会对着一本其实有行的册去补首笔）。
 //
 // ListReferenceEnablements 取某租户某种类下全部码的**全部修订**，按码、修订升序：读面据此导出每个码此刻的状态并带出
-// 历史。册上的码数以内置目录为界（国家 / 地区 249、币种 152），每个码的修订数是人工登记的次数，不分页。
+// 历史。册上的码数以内置目录的大小为界，每个码的修订数是人工登记的次数，不分页。
 type ReferenceEnablementRegistry interface {
 	SaveReferenceEnablement(
 		ctx context.Context,

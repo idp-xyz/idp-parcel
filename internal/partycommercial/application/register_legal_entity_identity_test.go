@@ -200,7 +200,7 @@ func TestLegalEntityRegistrationCountryMustBeInTheBuiltInCountryCatalogue(t *tes
 }
 
 // Covers: `AT-PC-077`，ADR-0345 决定五、六——收紧只在写入边界：收紧之前登进册的目录外法人，同内容重放照样答已登记（修订号落在已有修订上
-// 的不经目录成员这道门），册面读回不动；对它登记新修订则要重新过这道门。
+// 的不经目录成员这道门），册面读回不动；对它登记新修订则要重新过这道门，恢复路径是带身份更正依据把国家更正成目录内的码。
 func TestAnExistingLegalEntityOutsideTheCountryCatalogueStillReplays(t *testing.T) {
 	registry := newFakePartyRegistry()
 	numberTypes := newFakeNumberTypes(t)
@@ -243,6 +243,20 @@ func TestAnExistingLegalEntityOutsideTheCountryCatalogueStillReplays(t *testing.
 	next.Revision = 2
 	result, err := handler.RegisterLegalEntity(ctx, next)
 	expectNotAccepted(t, result, err, "不在产品内置的国家 / 地区目录里")
+	// 拒绝文字要指出恢复路径，登记方不必去猜。
+	expectNotAccepted(t, result, err, "身份更正依据")
+
+	// 恢复路径：修订 2 把注册国家更正成目录内的码，带身份更正依据，答已登记。
+	correction := identityValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-COUNTRY")
+	recovered := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	recovered.IdentityCorrectionBasis = &correction
+	if result, err := handler.RegisterLegalEntity(ctx, recovered); err != nil || result.Outcome() != application.PartyIdentityRegistered {
+		t.Fatalf("更正成目录内国家并带更正依据 = (%v, %v)，want REGISTERED", result.Outcome(), err)
+	}
+	stored, _, _ := registry.LoadLatestLegalEntity(ctx, command.Tenant, command.Entity)
+	if layer, has := stored.IdentityLayer(); !has || layer.Country().String() != "CN" || stored.Revision() != 2 {
+		t.Fatalf("更正后册上最新应是修订 2、国家 CN：r%d %+v", stored.Revision(), layer)
+	}
 }
 
 // Covers: 票 legal-entity-profile/02「不作变更，录错走更正」——修订改了号必须带身份更正依据，不带即拒；带了即落为

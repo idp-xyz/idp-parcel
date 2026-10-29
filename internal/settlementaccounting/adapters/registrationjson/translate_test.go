@@ -213,8 +213,11 @@ func TestSettlementRegisterEntriesTakeOnlyCataloguedCurrencies(t *testing.T) {
 		},
 	}
 	for name, translate := range outside {
-		if err := translate(); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+		err := translate()
+		if err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
 			t.Errorf("%s：目录外的币种应被拒并说清是目录不认：%v", name, err)
+		} else if strings.Contains(err.Error(), "refdata") {
+			t.Errorf("%s：拒绝文字带出了英文哨兵原句：%v", name, err)
 		}
 	}
 }

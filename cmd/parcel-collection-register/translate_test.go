@@ -181,7 +181,7 @@ func TestOpeningASubledgerTakesOnlyACataloguedCurrency(t *testing.T) {
 	if err := open("EUR"); err != nil {
 		t.Fatalf("目录内的币种应照常译出：%v", err)
 	}
-	if err := open("XXX"); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") {
+	if err := open("XXX"); err == nil || !strings.Contains(err.Error(), "不在产品内置的目录里") || strings.Contains(err.Error(), "refdata") {
 		t.Fatalf("目录外的币种应被拒并说清是目录不认：%v", err)
 	}
 }
