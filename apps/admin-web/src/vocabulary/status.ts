@@ -57,6 +57,10 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   REGISTERED: warn('待生效'),
   EFFECTIVE: good('已生效'),
   DEACTIVATED: muted('已停用'),
+  // 本公司对国家 / 地区与币种的启用范围登记（ADR-0345）：说的是“有没有登记过”，不是“能不能用”。未登记的码照常可用，
+  // “未配置”这个词取总表已有的那一条；基础数据页里它占绝大多数行，页面在胶囊上另指灰色，免得满屏琥珀。
+  ENABLED: good('已启用'),
+  DISABLED: muted('已停用'),
   CANDIDATE: warn('待确认'),
   EXPIRED: muted('已到期'),
   // 撤销是携依据的主动终止，边界之后仍拿这段关系做决定就是错，要点出来；到期与替代是时间到了、有后继接着，中性。
