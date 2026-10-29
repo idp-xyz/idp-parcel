@@ -365,6 +365,22 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
   dispute: { ACCEPTED: good('接受'), REJECTED: bad('拒绝') },
   // 资金核到的目标种类：PAYABLE 是供应商审核应付这一本，不是收付方向。
   'funds-target': { PAYABLE: muted('供应商审核应付') },
+  // 基础数据目录里的封闭词（ADR-0335）：大洲与计量单位类别。COUNT、VOLUME 这类通用词只在这两本册里取这个意思，不进总表。
+  'refdata-region': {
+    ASIA: muted('亚洲'),
+    EUROPE: muted('欧洲'),
+    AFRICA: muted('非洲'),
+    NORTH_AMERICA: muted('北美洲'),
+    SOUTH_AMERICA: muted('南美洲'),
+    OCEANIA: muted('大洋洲'),
+    ANTARCTICA: muted('南极洲'),
+  },
+  'refdata-unit-category': {
+    WEIGHT: muted('重量'),
+    LENGTH: muted('长度'),
+    VOLUME: muted('体积'),
+    COUNT: muted('件数'),
+  },
 };
 
 type UnknownCodeHandler = (code: string) => void;

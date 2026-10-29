@@ -70,6 +70,7 @@ import {
   registrationTitles,
 } from './presentation';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { useRefdataNames } from '../use-refdata-names';
 
 const info = moduleInfoById['commercial-policies'];
 
@@ -141,6 +142,8 @@ function PolicyRegisters({
   }, [kind, reloadKey, externalReloadKey]);
 
   const answer = loaded?.kind === kind ? loaded.answer : null;
+  // 行里的币种经 currencyLabel 译名；订阅名表只为名表读回时重绘这些行。
+  useRefdataNames();
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
   const needle = search.trim().toLowerCase();
   const searchedRows = needle
