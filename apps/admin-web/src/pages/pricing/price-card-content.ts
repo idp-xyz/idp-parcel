@@ -208,7 +208,7 @@ function weightUnitWord(unit: string): string {
 // ---- 判定条件 ----
 
 /** 特征是数值（带单位）还是类别（取值相等）。与 domain 的 FeatureSource.measure 对齐。 */
-type Measure = 'length' | 'volume' | 'weight' | 'category';
+export type Measure = 'length' | 'volume' | 'weight' | 'category';
 
 const measureOf: Readonly<Record<string, Measure>> = {
   LONGEST_SIDE: 'length',
@@ -281,6 +281,24 @@ function triggerText(value: unknown, nested = false): string {
   }
   const joined = operands.map((operand) => triggerText(operand, true)).join(kind === 'ALL_OF' ? '，且' : '，或');
   return nested ? `（${joined}）` : joined;
+}
+
+/** 特征读的是长度、体积、重量还是类别；词典里没有的特征答 undefined。 */
+export function featureMeasure(source: string): Measure | undefined {
+  return measureOf[source];
+}
+
+/**
+ * 一棵触发条件（规范化文档里 `condition` 的形状）念成一句话；看不懂或还不完整时答 null，不抛。
+ * 价卡编辑器边填边预览条件文字用，措辞与详情栏是同一个函数的输出。
+ */
+export function describeTrigger(trigger: unknown): string | null {
+  try {
+    return triggerText(trigger);
+  } catch (error) {
+    if (error instanceof Unsupported) return null;
+    throw error;
+  }
 }
 
 /** 任一成立里全是同一个类别特征的「等于」时，合成「偏远档位属于 T1、T2」；否则 null。 */

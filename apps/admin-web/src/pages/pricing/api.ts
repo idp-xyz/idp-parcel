@@ -55,9 +55,9 @@ export function registerPriceCard(
 export const priceCardPreviewPath = '/pricing-price-card-previews';
 export const priceCardDraftPath = '/pricing-price-card-drafts';
 
-/** 空白模板。文件名带模板版本，与 `pricecardtemplate.TemplateFileName` 同一份。 */
-export const priceCardTemplateHref = '/templates/price-card-import-template-PPT-1.xlsx';
-export const priceCardTemplateFileName = 'price-card-import-template-PPT-1.xlsx';
+/** 空白模板。文件名带模板版本，与 `pricecardtemplate.TemplateFileName` 同一份；旧版 PPT-1 的文件仍可上传。 */
+export const priceCardTemplateHref = '/templates/price-card-import-template-PPT-2.xlsx';
+export const priceCardTemplateFileName = 'price-card-import-template-PPT-2.xlsx';
 
 /** 表单字段名与 `DecodePriceCardUpload` 认的那一格相同：多一格服务端就拒。 */
 export const priceCardUploadField = 'file';
@@ -112,6 +112,8 @@ export interface PriceCardDraftRow {
   plan: PriceCardPlanReference;
   status: string;
   sourceFile: { name: string; sha256: string };
+  /** 草稿来自页面表单时为 FORM；上传文件的草稿没有这一格。 */
+  sourceOrigin?: string;
   submitter: string;
   submittedAt: string;
   approver?: string;
@@ -151,6 +153,61 @@ export function submitPriceCardDraft(
     priceCardDraftPath,
     priceCardUploadForm(file, fileName),
   );
+}
+
+// ---- 新建价卡（页面表单提交的结构化工作簿；ADR-0349 决定四、六）----
+//
+// 预览与草稿两口按 Content-Type 分流：application/json 的请求体就是下面的 PriceCardWorkbook，答复形状与上传文件一致。
+// 模板规格口交出表与列的清单；编辑器的列标题、必填性与可选值都取自它，前端不抄一份。
+
+export const priceCardTemplateSpecPath = '/pricing-price-card-template/spec';
+
+export interface PriceCardSpecColumn {
+  key: string;
+  title: string;
+  /** always 必填 / conditional 视情况 / optional 可缺。 */
+  requirement: string;
+  description: string;
+  allowedValues?: string[];
+  multiValued?: boolean;
+}
+
+export interface PriceCardSpecSheet {
+  name: string;
+  title: string;
+  purpose: string;
+  /** FIELDS：card 表，「列」是字段；ROWS：明细表。 */
+  layout: string;
+  repeatable: boolean;
+  since?: string;
+  columns: PriceCardSpecColumn[];
+}
+
+export interface PriceCardTemplateSpec {
+  templateVersion: string;
+  acceptedTemplateVersions: string[];
+  sheets: PriceCardSpecSheet[];
+}
+
+export function readPriceCardTemplateSpec(): Promise<ApiResult<PriceCardTemplateSpec>> {
+  return exchangeMasterData<PriceCardTemplateSpec>(priceCardTemplateSpecPath);
+}
+
+/** 表单提交的结构化工作簿：表名与列键逐字等于模板；一格是文本、数字或 null。 */
+export type PriceCardWorkbookCell = string | number | null;
+export interface PriceCardWorkbook {
+  templateVersion: string;
+  sheets: Record<string, Record<string, PriceCardWorkbookCell>[]>;
+}
+
+export function previewPriceCardWorkbook(workbook: PriceCardWorkbook): Promise<ApiResult<PriceCardImportReading>> {
+  return postMasterData<PriceCardImportReading>(priceCardPreviewPath, workbook);
+}
+
+export function submitPriceCardWorkbookDraft(
+  workbook: PriceCardWorkbook,
+): Promise<ApiResult<PriceCardDraftSubmissionBody>> {
+  return postMasterData<PriceCardDraftSubmissionBody>(priceCardDraftPath, workbook);
 }
 
 // ---- 价卡草稿签（ADR-0101 决定五；票 price-card-import/03、04、06）----
