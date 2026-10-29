@@ -239,8 +239,3 @@ function refsIssues(state: CardFormState): Issue[] {
   }
   return issues;
 }
-
-/** 某一步在给定的问题清单里有没有问题。 */
-export function issuesOfStep(issues: readonly Issue[], stepOf: (fieldId: string) => StepId, step: StepId): Issue[] {
-  return issues.filter((issue) => stepOf(issue.field) === step);
-}

@@ -50,7 +50,7 @@ const noteClass: Record<DraftActionNote['tone'], string> = {
  * 批准门（审批职责规则、主体相同、授予不足）全在服务端：页面不预判谁能批，按钮按状态给，答回来哪一格就如实呈现哪一格。
  * 端点今天在部署没设发行方参数时答 403，页面只呈现未配置，不拿演示数据顶替。
  */
-export function PriceCardDraftsPanel() {
+export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: number }) {
   const [answer, setAnswer] = useState<ApiResult<PriceCardDraftListResponseBody> | null>(null);
   const [rows, setRows] = useState<PriceCardDraftRow[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
@@ -76,6 +76,12 @@ export function PriceCardDraftsPanel() {
     setNotes({});
     setReloadToken((token) => token + 1);
   };
+
+  // 别的签（新建价卡）存下了新草稿：这一签留在后台没有卸载，靠信号重取一次，切过来就是最新的册。
+  useEffect(() => {
+    if (refreshSignal > 0) reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   function toggle(key: string) {
     setExpanded((current) => {
@@ -210,7 +216,7 @@ function DraftRow({
         ) : null}
       </td>
       <td className="py-1.5 pr-3">
-        <div>{row.sourceFile.name}</div>
+        <div>{row.sourceOrigin === 'FORM' ? '页面表单' : row.sourceFile.name}</div>
         <div className="font-mono text-[11px] text-idpxyz-textMuted" title={row.sourceFile.sha256}>
           {row.sourceFile.sha256.slice(0, 12)}…
         </div>

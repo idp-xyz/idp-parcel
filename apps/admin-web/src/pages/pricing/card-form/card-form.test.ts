@@ -15,7 +15,7 @@ import {
   suggestChargeCode,
   type CardFormState,
 } from './model';
-import { mapProblems, problemCountsByStep, problemsByField } from './problems';
+import { mapProblems, problemCountsByStep, problemWords } from './problems';
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
 import { formToWorkbook } from './workbook';
@@ -303,7 +303,6 @@ test('问题按（表、行、列）查回表单控件，路径是运营看得�
   equal(scope.field, 'basics.scope');
   equal(bounds.step, 'bounds');
   deepEqual(problemCountsByStep(located), { fees: 2, basics: 2, base: 1, bounds: 1 });
-  equal(problemsByField(located).get('basics.weightUnit')?.length, 1);
 });
 
 test('表层面的问题（行号 0）落到该表的默认控件；找不到行的落默认控件而不是丢掉', () => {
@@ -402,4 +401,65 @@ test('固定金额没有条件构造器，也不进互斥组', () => {
 test('「每件都收」的起手条件是实重大于 0（FULL-03 里燃油费也是这么表达的）', () => {
   const row = alwaysCondition('KG');
   equal(`${row.source} ${row.operator} ${row.value} ${row.unit}`, 'ACTUAL_WEIGHT GT 0 KG');
+});
+
+test('构造门拒收的行层面问题（列是标识列）只说到行，焦点落这一行的第一个控件', () => {
+  const state = sampleState();
+  const { origins } = formToWorkbook(state, spec);
+  const { located } = mapProblems(
+    [{ sheet: 'rates_first_continue', row: 2, column: 'entryId', code: 'CONSTRUCTION_REJECTED', message: '首续重价表行立不住：parcel pricing: invalid rate entry' }],
+    origins,
+  );
+  equal(located[0].where, '基础运费 · 第 1 行');
+  equal(located[0].field, `base.row.${state.base.rows[0].uid}.zone`);
+  equal(located[0].text, '首续重价表行立不住（原因见「原话」）');
+  equal(located[0].original, 'parcel pricing: invalid rate entry');
+});
+
+test('服务端的话：中文留作话，夹带的英文领域错误收作原文', () => {
+  deepEqual(problemWords('「LBS」不是可取值；可取：G、KG、OZ、LB'), { text: '「LBS」不是可取值；可取：G、KG、OZ、LB' });
+  deepEqual(problemWords('最低收费立不住：parcel pricing: invalid total charge bounds'), {
+    text: '最低收费立不住（原因见「原话」）',
+    original: 'parcel pricing: invalid total charge bounds',
+  });
+  deepEqual(problemWords('invalid thing'), { text: '没有通过检查', original: 'invalid thing' });
+});
+
+test('按重量单价的基础价表：生成单价行，译成的文档带 unitPrice', () => {
+  const state = costCardState();
+  state.idHints = {};
+  state.base = { family: 'UNIT_PRICE', rows: [newRateRow({ zone: 'Z1', amountPerUnit: '12.5' })] };
+  const { workbook } = formToWorkbook(state, spec);
+  deepEqual(workbook.sheets.rates_unit_price, [{ tableId: `${state.basics.planId}-TABLE`, entryId: `${state.basics.planId}-RATE-1`, zone: 'Z1', amountPerUnit: '12.5' }]);
+  const view = parsePriceCardContent(workbookToDocument(workbook));
+  ok(view.feeItems[0].how.some((line) => line.includes('每千克 12.50 元')), view.feeItems[0].how.join('|'));
+});
+
+test('按固定百分比、基数取其他全部费用：不绑参考序列，依赖写 ALL_CHARGES', () => {
+  const state = costCardState();
+  state.idHints = {};
+  const fee = newFee('PERCENT', 'KG');
+  Object.assign(fee, { name: '服务费', code: 'SERVICE_FEE', percentMode: 'FIXED', percentage: '12.5', basis: 'ALL' });
+  state.fees = [fee];
+  const { workbook } = formToWorkbook(state, spec);
+  equal(workbook.sheets.reference_series, undefined);
+  deepEqual(workbook.sheets.charge_dependencies, [{ dependencyId: `${state.basics.planId}-DEP-1`, chargeCode: 'SERVICE_FEE', composition: 'ALL_CHARGES' }]);
+  deepEqual(workbook.sheets.calculations, [{ nodeId: `${state.basics.planId}-CALC-1`, method: 'PERCENT_OF_BASIS', basisDependencyId: `${state.basics.planId}-DEP-1`, percentage: '12.5' }]);
+  const view = parsePriceCardContent(workbookToDocument(workbook));
+  const item = view.feeItems.find((candidate) => candidate.name === '服务费');
+  deepEqual(item?.how, ['按其他已计收费用之和的 12.5% 收取']);
+});
+
+test('两项同属一个互斥组：都写 GROUPED 与组名，优先级逐项带出；不互斥的写 STANDALONE', () => {
+  const state = sampleState();
+  const rows = formToWorkbook(state, spec).workbook.sheets.surcharges;
+  deepEqual(
+    rows.map((row) => [row.chargeCode, row.exclusivity, row.exclusivityGroup ?? null, row.priority ?? null]),
+    [
+      ['FUEL_SURCHARGE', 'STANDALONE', null, null],
+      ['OVERSIZE_SURCHARGE', 'GROUPED', 'SYN-GROUP-OVERSIZE-OVERWEIGHT', '1'],
+      ['OVERWEIGHT_SURCHARGE', 'GROUPED', 'SYN-GROUP-OVERSIZE-OVERWEIGHT', '1'],
+      ['REMOTE_AREA_SURCHARGE', 'STANDALONE', null, null],
+    ],
+  );
 });
