@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,19 +213,20 @@ func TestReferenceEnablementRefusalsAreNamedAndWriteNothing(t *testing.T) {
 		name    string
 		command application.RegisterReferenceEnablementCommand
 		refusal application.ReferenceEnablementRefusal
+		cause   string
 	}{
 		{"目录外的国家码", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "ZZ", 1, domain.ReferenceEnablementEnabled, enablementNow),
-			application.ReferenceEnablementCodeNotInCatalogue},
+			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：COUNTRY ZZ"},
 		{"目录外的币种码", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCurrency, "XXX", 1, domain.ReferenceEnablementEnabled, enablementNow),
-			application.ReferenceEnablementCodeNotInCatalogue},
+			application.ReferenceEnablementCodeNotInCatalogue, "目录里没有这个码：CURRENCY XXX"},
 		{"册上没有时首笔不是 1", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "SG", 2, domain.ReferenceEnablementEnabled, enablementNow),
-			application.ReferenceEnablementRevisionOutOfSequence},
+			application.ReferenceEnablementRevisionOutOfSequence, "首笔登记修订必须是 1"},
 		{"跳号", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "CN", 3, domain.ReferenceEnablementDisabled, enablementNow),
-			application.ReferenceEnablementRevisionOutOfSequence},
+			application.ReferenceEnablementRevisionOutOfSequence, "修订必须连续：册上最新为 1，收到 3"},
 		{"生效时点早于前一修订", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "CN", 2, domain.ReferenceEnablementDisabled, enablementNow.Add(-time.Hour)),
-			application.ReferenceEnablementEffectiveBeforePrior},
+			application.ReferenceEnablementEffectiveBeforePrior, "生效时点不得早于前一修订的"},
 		{"没有生效时点", enablementCommand(t, "SYN-TENANT-01", domain.ReferenceKindCountry, "CN", 2, domain.ReferenceEnablementDisabled, time.Time{}),
-			application.ReferenceEnablementInputNotWellFormed},
+			application.ReferenceEnablementInputNotWellFormed, "登记内容不成立"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,8 +234,8 @@ func TestReferenceEnablementRefusalsAreNamedAndWriteNothing(t *testing.T) {
 			if result.Outcome() != application.ReferenceEnablementNotAccepted || result.Refusal() != tc.refusal {
 				t.Fatalf("应答未受理 / %s，实际 %s / %s", tc.refusal, result.Outcome(), result.Refusal())
 			}
-			if result.Cause() == nil {
-				t.Fatal("未受理要带原因散文")
+			if result.Cause() == nil || !strings.Contains(result.Cause().Error(), tc.cause) {
+				t.Fatalf("未受理要带中文原因散文，应含 %q，实得 %v", tc.cause, result.Cause())
 			}
 		})
 	}

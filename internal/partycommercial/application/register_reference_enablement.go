@@ -81,15 +81,30 @@ func (result ReferenceEnablementResult) Refusal() ReferenceEnablementRefusal { r
 // Cause 是散文，只在`未受理`时非空；判别靠 Refusal，不靠它。
 func (result ReferenceEnablementResult) Cause() error { return result.cause }
 
-func referenceEnablementNotAccepted(cause error) ReferenceEnablementResult {
+// referenceEnablementNotAccepted 把领域门的拒绝译成封闭理由，散文原因写给登记方看（中文，带上他送来的值）。
+func referenceEnablementNotAccepted(
+	err error,
+	command RegisterReferenceEnablementCommand,
+	latest domain.ReferenceEnablementRegistration,
+	hasLatest bool,
+) ReferenceEnablementResult {
 	refusal := ReferenceEnablementInputNotWellFormed
+	cause := fmt.Errorf("登记内容不成立：%w", err)
 	switch {
-	case errors.Is(cause, domain.ErrReferenceCodeNotInCatalogue):
+	case errors.Is(err, domain.ErrReferenceCodeNotInCatalogue):
 		refusal = ReferenceEnablementCodeNotInCatalogue
-	case errors.Is(cause, domain.ErrReferenceEnablementOutOfSequence):
+		cause = fmt.Errorf("目录里没有这个码：%s %s——登记的码只能取自产品内置的国家 / 地区或币种目录", command.Kind, command.Code)
+	case errors.Is(err, domain.ErrReferenceEnablementOutOfSequence):
 		refusal = ReferenceEnablementRevisionOutOfSequence
-	case errors.Is(cause, domain.ErrReferenceEnablementEffectiveBeforePrior):
+		if hasLatest {
+			cause = fmt.Errorf("修订必须连续：册上最新为 %d，收到 %d", latest.Revision(), command.Revision)
+		} else {
+			cause = fmt.Errorf("首笔登记修订必须是 1，收到 %d", command.Revision)
+		}
+	case errors.Is(err, domain.ErrReferenceEnablementEffectiveBeforePrior):
 		refusal = ReferenceEnablementEffectiveBeforePrior
+		cause = fmt.Errorf("生效时点不得早于前一修订的 %s，收到 %s",
+			latest.EffectiveFrom().Format(time.RFC3339), command.EffectiveFrom.UTC().Format(time.RFC3339))
 	}
 	return ReferenceEnablementResult{outcome: ReferenceEnablementNotAccepted, refusal: refusal, cause: cause}
 }
@@ -138,7 +153,7 @@ func (handler *RegisterReferenceEnablementHandler) Register(
 		command.Registrant, handler.clock.Now(),
 	)
 	if err != nil {
-		return referenceEnablementNotAccepted(err), nil
+		return referenceEnablementNotAccepted(err, command, domain.ReferenceEnablementRegistration{}, false), nil
 	}
 
 	latest, found, err := handler.registry.LoadLatestReferenceEnablement(ctx, command.Tenant, command.Kind, command.Code)
@@ -147,7 +162,7 @@ func (handler *RegisterReferenceEnablementHandler) Register(
 	}
 	if !found || command.Revision > latest.Revision() {
 		if err := candidate.FollowsFrom(latest, found); err != nil {
-			return referenceEnablementNotAccepted(err), nil
+			return referenceEnablementNotAccepted(err, command, latest, found), nil
 		}
 	}
 
