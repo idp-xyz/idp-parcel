@@ -1,6 +1,6 @@
 # ADR-0335：国家 / 地区、币种、计量单位是产品内置的只读基础数据目录，随代码发布；单位换算保留精度，暂不接入计价
 
-Status: Accepted（2026-10-28，Claude Code 会话代产品 owner 决（代决）：用户要补「国家 / 地区、币种、计量单位」的基础数据维护，设计由协调方代决、作者落笔；用户未逐条过目，越权风险点待产品 owner 复核。）<!-- 索引注记 -->｜**三份目录**：国家 / 地区（ISO 3166-1 alpha-2 全量）、币种（ISO 4217 常用集带小数位）、计量单位（四类别、基准单位加精确系数）都是产品内置的只读 Go 数据，放共享的 `internal/platform/refdata`，不入库、不建上下文；**不动校验与计价语义**：现有两位 / 三位形状校验原样，`Convert` 不接计价评价，只有 `Currency.MinorUnitScale` 改查目录且行为不变。
+Status: Accepted（2026-10-28，Claude Code 会话代产品 owner 决（代决）：用户要补「国家 / 地区、币种、计量单位」的基础数据维护，设计由协调方代决、作者落笔；用户未逐条过目，越权风险点待产品 owner 复核。）<!-- 索引注记 -->｜**三份目录**：国家 / 地区（ISO 3166-1 alpha-2 全量）、币种（ISO 4217 常用集带小数位）、计量单位（四类别、基准单位加精确系数）都是产品内置的只读 Go 数据，放共享的 `internal/platform/refdata`，不入库、不建上下文；**不动校验与计价语义**：现有两位 / 三位形状校验原样，`Convert` 不接计价评价，只有 `Currency.MinorUnitScale` 改查目录且行为不变。｜**部分停用**：其决定四「本记录**不把 `Convert` 接进计价评价**：重量单位不一致仍报 `ErrWeightUnitMismatch`，因为自动换算会改金额，接不接、接在评价的哪一步、哪些口径允许，是单独的裁决。」一句，与越权风险点 1「也不让任何计价路径自动换算单位」半句，已由 [ADR-0346](./0346-evaluation-converts-input-weight-and-dimensions-to-the-units-the-plan-declares-by-the-built-in-unit-catalogue-and-records-the-factor-it-used.md) 决定一停用——评价里输入实重与尺寸的单位与方案声明的单位不同时，按本目录的精确系数换算后再走原有取整规则。**适用场景**：仅限重量与长度两类单位在计价评价内的换算；体积、件数单位与特征判定里的单位比较不在此列；其余各条不变。
 
 Date: 2026-10-28
 
@@ -76,3 +76,4 @@ Date: 2026-10-28
 - [ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)：跨上下文方向，目录不放进任一业务上下文
 - [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：演示租户当真租户对待，目录外的合成码照常被接受
 - 票 [reference-data/01](../../.scratch/reference-data/issues/01-countries-currencies-and-units-are-product-built-in-reference-data.md)
+- [ADR-0346](./0346-evaluation-converts-input-weight-and-dimensions-to-the-units-the-plan-declares-by-the-built-in-unit-catalogue-and-records-the-factor-it-used.md)：部分停用决定四「不把 `Convert` 接进计价评价」一句——评价内重量与长度的单位换算接上，其余不变
