@@ -53,4 +53,4 @@ Status: resolved
 
 ## 进 main 记录
 
-按前端切片流程在共享树 `main` 直接落地；三道门与票面判据通过，独立评审通过。提交与 CI 结果随最终收口记录核对。
+按前端切片流程在共享树 `main` 直接落地；三道门与票面判据通过，独立评审通过。代码提交为 `593822731d795e015c59ea6e62a3f762c28db63f`，已推至 `origin/main`；[Parcel CI](https://github.com/idp-xyz/idp-parcel/actions/runs/41012132729) 的 `admin-web typecheck, tests, build` 任务通过，整套流水线的最终状态以该记录为准。参考 ZIP 文件保留为未跟踪输入，不入提交。
