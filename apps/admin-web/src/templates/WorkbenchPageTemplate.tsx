@@ -215,7 +215,7 @@ export function WorkbenchPageTemplate<Row>({
       </div>
     ) : (
       <table className="w-full text-[12px]">
-        <thead className="sticky top-0 z-10 bg-idpxyz-editor">
+        <thead className="sticky top-0 z-10 bg-idpxyz-panelBg">
           <tr className="border-b border-idpxyz-border text-left text-idpxyz-breadcrumb">
             {visibleColumns.map((column, index) => (
               <th
