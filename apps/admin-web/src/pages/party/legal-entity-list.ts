@@ -7,6 +7,7 @@
 
 import type { WorkbenchSort } from '../../templates/workbench';
 import type { GroupLegalEntityRecord } from './api';
+import { identityLayerCellsOf } from './legal-entity-identity';
 import { identityStatusLabels, type IdentityStatusCode } from './presentation';
 import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter } from './list-order';
 
@@ -16,6 +17,8 @@ export type LegalEntityStatusFilter = CodeFilter<IdentityStatusCode>;
 export interface LegalEntityFilter {
   search: string;
   status: LegalEntityStatusFilter;
+  /** 按身份登记上的注册国家 / 地区筛选；未登记身份层的行不匹配具体国家。 */
+  registrationCountry: string;
   /** 只看待补的行（legalEntityNeedsAttention）。 */
   attentionOnly: boolean;
 }
@@ -38,15 +41,24 @@ export function legalEntityNeedsAttention(row: GroupLegalEntityRecord): boolean 
   return !row.identityLayerRegistered || !row.partyNameKnown;
 }
 
-/** 搜索是包含匹配、不分大小写，命中法人标识 / 参与方身份 / 名称 / 状态原名任一格。 */
+/** 搜索是包含匹配、不分大小写，命中法人标识 / 参与方身份 / 名称 / 状态 / 注册地 / 注册号任一格。 */
 export function filterLegalEntities(
   rows: readonly GroupLegalEntityRecord[],
   filter: LegalEntityFilter,
 ): GroupLegalEntityRecord[] {
   return rows.filter((row) => {
+    const identity = identityLayerCellsOf(row);
     if (filter.status !== 'ALL' && row.status !== filter.status) return false;
+    if (filter.registrationCountry !== 'ALL' && identity?.country !== filter.registrationCountry) return false;
     if (filter.attentionOnly && !legalEntityNeedsAttention(row)) return false;
-    return matchesSearch(filter.search, [row.legalEntityId, row.partyId, row.partyName, row.status]);
+    return matchesSearch(filter.search, [
+      row.legalEntityId,
+      row.partyId,
+      row.partyName,
+      row.status,
+      identity?.country,
+      identity?.numbers,
+    ]);
   });
 }
 
@@ -56,7 +68,7 @@ export interface LegalEntityCounts {
   attention: number;
 }
 
-/** 命令头指标与状态胶囊的计数，数的是已取回的这一页。 */
+/** 工具栏筛选计数，数的是已取回的这一页。 */
 export function countLegalEntities(rows: readonly GroupLegalEntityRecord[]): LegalEntityCounts {
   const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
   let attention = 0;

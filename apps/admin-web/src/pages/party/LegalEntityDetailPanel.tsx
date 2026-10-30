@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, History, IdCard, X } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import {
   Button,
   Tabs,
@@ -13,8 +13,9 @@ import { labelOf, legalEntityKindLabels, updateOrdinalLabel } from './presentati
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { identityLayerCellsOf } from './legal-entity-identity';
-import { LegalEntityBanners, LegalEntityLifecycle, LegalEntityMoreMenu } from './LegalEntityHeaderParts';
+import { LegalEntityBanners, LegalEntityMoreMenu } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import {
@@ -32,12 +33,12 @@ type PanelTab = 'overview' | 'profile' | 'history';
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
- * 头部（标识 + 种类 / 状态徽章 + 一行副题 + 引用签）· 主动作 + 「更多」菜单 + 关闭 · 生命周期条 · 关键事实条 · 页签。
+ * 头部（标识 + 种类 / 状态徽章 + 一行副题 + 引用签）· 主动作 + 「更多」菜单 + 关闭 · 关键事实条 · 页签。
  *
  * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：修订号与登记时间归事实条，国家、注册号与依据归引用签，
- * 参与方名称归副题；概要签只列这几处都没有的格，参与方身份那一行留着是因为它带复制。
+ * 参与方名称归副题；概要签补充当前法人资料摘要，技术标识与依据仍收进技术详情。
  *
- * 内容只取行上已有的与两个既有区块（法人资料、修订历史各自取数），不为详情栏另开读口。生命周期条、横幅与「更多」菜单
+ * 内容只取行上已有的与两个既有区块（法人资料、修订历史各自取数），不为详情栏另开读口。横幅与「更多」菜单
  * 在 LegalEntityHeaderParts.tsx，对象页摆的是同一份。参照页的收货、证据、协作三签在法人册上没有对应的事实，不摆。
  */
 export function LegalEntityDetailPanel({
@@ -56,6 +57,7 @@ export function LegalEntityDetailPanel({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
+  const [profileRefresh, setProfileRefresh] = useState(0);
   const copy = useCopyToClipboard();
   const identity = identityLayerCellsOf(row);
   const kind = labelOf(legalEntityKindLabels, row.kind);
@@ -108,8 +110,6 @@ export function LegalEntityDetailPanel({
           </div>
         </div>
 
-        <LegalEntityLifecycle row={row} />
-
         <LegalEntityBanners row={row} />
       </div>
 
@@ -124,62 +124,75 @@ export function LegalEntityDetailPanel({
         <Fact label="停用时点">{row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用'}</Fact>
       </FactStrip>
 
-      <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-5 mt-3 shrink-0">
-          <TabsTrigger value="overview" className="text-idpxyz-breadcrumb">
-            <IdCard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+      <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">
+        <TabsList className="mx-5 mt-2 h-9 w-auto shrink-0 gap-5">
+          <TabsTrigger
+            value="overview"
+            className="px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent"
+          >
             概要
           </TabsTrigger>
-          <TabsTrigger value="profile" className="text-idpxyz-breadcrumb">
-            <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+          <TabsTrigger
+            value="profile"
+            className="px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent"
+          >
             开票资料
           </TabsTrigger>
-          <TabsTrigger value="history" className="text-idpxyz-breadcrumb">
-            <History className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            变更记录
+          <TabsTrigger
+            value="history"
+            className="px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent"
+          >
+            身份修订
           </TabsTrigger>
         </TabsList>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <TabsContent value="overview" className="mt-0">
-            <dl>
-              <DetailRow label="对应的往来单位">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</DetailRow>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+          <div className="w-full max-w-[1120px]">
+            <TabsContent value="overview" className="mt-0">
               {row.deactivationBasis ? (
-                <DetailRow label="停用的来源单据" mono>
-                  {row.deactivationBasis}
-                </DetailRow>
+                <dl className="mb-4">
+                  <DetailRow label="停用依据" mono>
+                    {row.deactivationBasis}
+                  </DetailRow>
+                </dl>
               ) : null}
-            </dl>
-            <TechnicalDetails
-              className="mt-4"
-              rows={[
-                { label: '法人标识', value: row.legalEntityId },
-                { label: '参与方标识', value: row.partyId },
-                { label: '身份修订号', value: String(row.revision) },
-                { label: '登记依据', value: row.basis },
-                { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
-                { label: '停用依据', value: row.deactivationBasis ?? '' },
-                { label: '租户', value: row.tenantId },
-              ]}
-            />
-          </TabsContent>
-          <TabsContent
-            value="profile"
-            forceMount={visited.has('profile') || undefined}
-            className="mt-0 data-[state=inactive]:hidden"
-          >
-            <LegalEntityProfileSection
-              key={row.legalEntityId}
-              legalEntityId={row.legalEntityId}
-              formOpenRequest={formOpenRequest}
-            />
-          </TabsContent>
-          <TabsContent
-            value="history"
-            forceMount={visited.has('history') || undefined}
-            className="mt-0 data-[state=inactive]:hidden"
-          >
-            <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
-          </TabsContent>
+              <LegalEntityProfileSummary
+                key={`${row.legalEntityId}:${row.revision}:${row.status}`}
+                legalEntityId={row.legalEntityId}
+                refreshKey={profileRefresh}
+              />
+              <TechnicalDetails
+                className="mt-4"
+                rows={[
+                  { label: '法人标识', value: row.legalEntityId },
+                  { label: '参与方标识', value: row.partyId },
+                  { label: '身份修订号', value: String(row.revision) },
+                  { label: '登记依据', value: row.basis },
+                  { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
+                  { label: '停用依据', value: row.deactivationBasis ?? '' },
+                  { label: '租户', value: row.tenantId },
+                ]}
+              />
+            </TabsContent>
+            <TabsContent
+              value="profile"
+              forceMount={visited.has('profile') || undefined}
+              className="mt-0 data-[state=inactive]:hidden"
+            >
+              <LegalEntityProfileSection
+                key={row.legalEntityId}
+                legalEntityId={row.legalEntityId}
+                formOpenRequest={formOpenRequest}
+                onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
+              />
+            </TabsContent>
+            <TabsContent
+              value="history"
+              forceMount={visited.has('history') || undefined}
+              className="mt-0 data-[state=inactive]:hidden"
+            >
+              <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
+            </TabsContent>
+          </div>
         </div>
       </Tabs>
     </div>

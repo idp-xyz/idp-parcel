@@ -1,19 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Clock, Plus } from 'lucide-react';
-import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Clock, Info, Plus, X } from 'lucide-react';
+import {
+  Button,
+  ConfirmDialog,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@idpxyz/ui-primitives';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
   useTabReturn,
-  type WorkbenchChip,
   type WorkbenchColumn,
-  type WorkbenchKpi,
   type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
-import { statusToneText } from '../../components/status-tone';
+import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
@@ -24,7 +32,7 @@ import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
 import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
-import { Instant, UnknownPartyName } from './detail-primitives';
+import { filterSelectClass, Instant, UnknownPartyName } from './detail-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { useRegisterList } from './register-list';
 import {
@@ -34,7 +42,6 @@ import {
   legalEntityCountSummary,
   legalEntityNeedsAttention,
   legalEntityNoMatchNote,
-  legalEntityStatusFilterOptions,
   sortLegalEntities,
   type LegalEntityStatusFilter,
 } from './legal-entity-list';
@@ -49,11 +56,51 @@ function emptyDescriptionOf(mayWrite: boolean): string {
   return `签约、开票都要以公司主体的名义。${entryHint(mayWrite, '用页头的「新增公司主体」登记第一个。')}`;
 }
 
+interface LegalEntityFilterItem {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}
+
+function LegalEntityFilterButton({ item }: { item: LegalEntityFilterItem }) {
+  return (
+    <button
+      type="button"
+      onClick={item.onClick}
+      aria-pressed={item.active}
+      disabled={item.count === 0 && !item.active}
+      className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent text-[12px] leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+        item.active
+          ? 'border-b-idpxyz-accent font-semibold text-idpxyz-textBright'
+          : 'text-idpxyz-breadcrumb hover:text-idpxyz-textBright'
+      }`}
+    >
+      <span>{item.label}</span>
+      <span className="font-medium tabular-nums text-idpxyz-textBright">{item.count}家</span>
+    </button>
+  );
+}
+
+function LegalEntityStatusFilters({ items }: { items: LegalEntityFilterItem[] }) {
+  return (
+    <div
+      role="group"
+      aria-label="生命周期状态筛选"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2"
+    >
+      {items.map((item) => (
+        <LegalEntityFilterButton key={item.label} item={item} />
+      ))}
+    </div>
+  );
+}
+
 // 行首圆点的颜色随身份状态；待补的行圆点闪，与参照页「逾期 / 暂挂」同一个记号。
 const statusDotClass: Record<string, string> = {
-  REGISTERED: 'bg-sky-400',
-  EFFECTIVE: 'bg-emerald-400',
-  DEACTIVATED: 'bg-gray-400',
+  REGISTERED: statusToneSurface.warning,
+  EFFECTIVE: statusToneSurface.success,
+  DEACTIVATED: 'bg-idpxyz-textMuted',
 };
 
 // 身份两格国家在上、号在下：号照答复原样，国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，ADR-0335 决定七）；
@@ -63,8 +110,10 @@ function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
   if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
   return (
     <div className="min-w-40">
-      <p>{cells.country === '' ? '' : <CountryLabel code={cells.country} />}</p>
-      <p className="mt-0.5 text-idpxyz-breadcrumb">{cells.numbers}</p>
+      <p className="text-[13px] font-medium leading-5 text-idpxyz-text">
+        {cells.country === '' ? '' : <CountryLabel code={cells.country} />}
+      </p>
+      <p className="mt-0.5 font-mono text-[12px] leading-4 text-idpxyz-breadcrumb">{cells.numbers}</p>
     </div>
   );
 }
@@ -78,21 +127,26 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     header: '公司主体',
     sortKey: 'party-name',
     // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
-    // 主列只留名称；法人标识、参与方标识、修订号、登记依据进详情栏底部的「技术详情」。
+    // 主列把名称与法人标识并排成两层，方便扫描；参与方标识、修订号、登记依据仍进详情栏底部的「技术详情」。
     render: (row) => (
-      <div className="flex min-w-36 items-center gap-1.5">
+      <div className="flex min-w-44 items-start gap-2">
         <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
+          className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
             legalEntityNeedsAttention(row) ? 'animate-pulse' : ''
           }`}
           aria-hidden="true"
         />
-        {/* 名称取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
-        <span className="truncate font-medium text-[color:var(--ds-text-link-hover)]" title={row.legalEntityId}>
-          {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
+        <span
+          className="min-w-0 truncate text-[14px] font-semibold leading-5 text-idpxyz-textBright"
+          title={row.partyNameKnown ? row.partyName : row.legalEntityId}
+        >
+          <span className="block truncate">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</span>
+          <span className="mt-0.5 block truncate font-mono text-[12px] font-normal leading-4 text-idpxyz-breadcrumb">
+            {row.legalEntityId}
+          </span>
         </span>
         {legalEntityNeedsAttention(row) && (
-          <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待补" />
+          <AlertTriangle className={`mt-1 h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待处理" />
         )}
       </div>
     ),
@@ -108,7 +162,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     header: '状态',
     // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
     render: (row) => (
-      <div className="flex flex-col items-start gap-1 whitespace-nowrap">
+      <div className="flex flex-col items-start gap-1">
         <StatusPill code={row.status} />
         {row.deactivatedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
@@ -122,10 +176,11 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'effective-from',
     header: '生效时间',
     sortKey: 'effective-from',
+    hideWhenDetailOpen: true,
     // 待生效配一个琥珀色时钟而不是把时刻标琥珀色：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08
     // 评审），图标是非文字，门槛 3:1。
     render: (row) => (
-      <span className="inline-flex items-center gap-1 font-mono text-idpxyz-text">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-idpxyz-text">
         {row.status === 'REGISTERED' ? (
           <Clock className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="尚未生效" />
         ) : null}
@@ -156,7 +211,7 @@ function detailHash(legalEntityId: string): string {
  * （ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按修订版本化不可覆盖，停用形成新修订而不是删除。
  *
  * 形态照 idp-prism 采购订单工作台（票 admin-web-group-legal-entities/15，用户令「完全参考」，取代 spec「不做」里
- * 「不改两签结构」那一条）：命令头指标可点即筛、状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、
+ * 「不改两签结构」那一条）：搜索栏旁的状态计数可点即筛、表头点排序、单击行在右栏开详情（可拖宽）、
  * 详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。登记从页头主动作进登记视图，不再是第二个签。
  *
  * 参照页有而这里没有的，都是因为册上没有对应的事实或端点：分页（读口一页答完，下推归票 04）、批量勾选
@@ -194,7 +249,10 @@ export function GroupLegalEntitiesPage() {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
+  const [registrationCountry, setRegistrationCountry] = useState('ALL');
   const [attentionOnly, setAttentionOnly] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [sort, setSort] = useState<WorkbenchSort>(defaultLegalEntitySort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
@@ -234,6 +292,11 @@ export function GroupLegalEntitiesPage() {
   // 列表没取到（加载中 / 未配置 / 出错）传 null：登记表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
   const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
   const entities = knownEntities ?? [];
+  const registrationCountries = useMemo(
+    () =>
+      [...new Set(entities.map((entity) => identityLayerCellsOf(entity)?.country).filter((country): country is string => Boolean(country)))].sort(),
+    [entities],
+  );
 
   if (view.kind === 'object') {
     const row = entities.find((entity) => entity.legalEntityId === view.legalEntityId) ?? null;
@@ -285,79 +348,114 @@ export function GroupLegalEntitiesPage() {
   }
 
   // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
-  const visible = sortLegalEntities(filterLegalEntities(entities, { search, status, attentionOnly }), sort);
+  const visible = sortLegalEntities(filterLegalEntities(entities, { search, status, registrationCountry, attentionOnly }), sort);
   const answered = answer?.kind === 'outcome';
   const counts = countLegalEntities(entities);
   const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
 
-  const kpis: WorkbenchKpi[] | undefined = answered
+  const attentionFilter: LegalEntityFilterItem | undefined = answered
+    ? {
+        label: '待处理',
+        count: counts.attention,
+        active: attentionOnly,
+        onClick: () => setAttentionOnly(!attentionOnly),
+      }
+    : undefined;
+  const statusItems: LegalEntityFilterItem[] | undefined = answered
     ? [
         {
-          label: '待补',
-          value: counts.attention,
-          tone: counts.attention > 0 ? statusToneText.warning : undefined,
-          icon:
-            counts.attention > 0 ? <AlertTriangle className={`h-3 w-3 ${statusToneText.warning}`} aria-hidden="true" /> : undefined,
-          active: attentionOnly,
-          onClick: () => setAttentionOnly(!attentionOnly),
-        },
-        {
           label: '待生效',
-          value: counts.byStatus.REGISTERED,
-          tone: counts.byStatus.REGISTERED > 0 ? statusToneText.warning : undefined,
+          count: counts.byStatus.REGISTERED,
           active: status === 'REGISTERED',
           onClick: () => toggleStatus('REGISTERED'),
         },
         {
           label: '已生效',
-          value: counts.byStatus.EFFECTIVE,
-          tone: statusToneText.info,
+          count: counts.byStatus.EFFECTIVE,
           active: status === 'EFFECTIVE',
           onClick: () => toggleStatus('EFFECTIVE'),
         },
         {
           label: '已停用',
-          value: counts.byStatus.DEACTIVATED,
+          count: counts.byStatus.DEACTIVATED,
           active: status === 'DEACTIVATED',
           onClick: () => toggleStatus('DEACTIVATED'),
         },
       ]
     : undefined;
-
-  const statusChips: WorkbenchChip[] | undefined = answered
-    ? legalEntityStatusFilterOptions
-        .filter(
-          (option) =>
-            option.value === 'ALL' ||
-            option.value === status ||
-            counts.byStatus[option.value as keyof typeof counts.byStatus] > 0,
-        )
-        .map((option) => ({
-          id: option.value,
-          label: option.label,
-          count: option.value === 'ALL' ? counts.total : counts.byStatus[option.value as keyof typeof counts.byStatus],
-          active: status === option.value,
-          onClick: () => (option.value === 'ALL' ? setStatus('ALL') : toggleStatus(option.value)),
-        }))
-    : undefined;
+  const hasActiveFilters = search.length > 0 || status !== 'ALL' || registrationCountry !== 'ALL' || attentionOnly;
+  const clearFilters = () => {
+    setSearch('');
+    setStatus('ALL');
+    setRegistrationCountry('ALL');
+    setAttentionOnly(false);
+  };
 
   return (
-    <WorkbenchPageTemplate<GroupLegalEntityRecord>
+    <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+      <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
-      subtitle="我们自己对外签约、开票与结算的公司：注册信息、开票资料与它们的变更"
-      kpis={kpis}
+      subtitle="我方签约、开票与结算使用的法人；身份登记和开票资料分别留存修订"
       onRefresh={retry}
       refreshing={pending}
       primaryAction={
-        mayWrite ? (
-          <Button variant="default" className={primaryActionClass} onClick={openRegister}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            新增公司主体
+        <>
+          <Button
+            ref={helpButtonRef}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-[12px] text-idpxyz-accent"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            onClick={() => setHelpOpen(true)}
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+            使用说明
           </Button>
-        ) : undefined
+          {mayWrite ? (
+            <Button variant="default" className={primaryActionClass} onClick={openRegister}>
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              新增公司主体
+            </Button>
+          ) : null}
+        </>
       }
       search={{ value: search, onChange: setSearch, placeholder: '搜索公司名称、编码或注册号…' }}
-      statusChips={statusChips}
+      extraFilters={
+        answered ? (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {attentionFilter ? (
+              <div role="group" aria-label="待处理事项筛选" className="flex items-center">
+                <LegalEntityFilterButton item={attentionFilter} />
+              </div>
+            ) : null}
+            {statusItems ? <LegalEntityStatusFilters items={statusItems} /> : null}
+            <select
+              className={filterSelectClass + ' h-[34px] leading-normal'}
+              value={registrationCountry}
+              aria-label="注册国家或地区"
+              onChange={(event) => setRegistrationCountry(event.target.value)}
+            >
+              <option value="ALL">全部注册地</option>
+              {registrationCountries.map((country) => (
+                <option key={country} value={country}>
+                  <CountryLabel code={country} />
+                </option>
+              ))}
+            </select>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                className="inline-flex h-[34px] items-center whitespace-nowrap text-[12px] leading-normal text-idpxyz-breadcrumb hover:text-idpxyz-textBright focus-visible:outline-none focus-visible:underline"
+                onClick={clearFilters}
+              >
+                清除
+              </button>
+            ) : null}
+          </div>
+        ) : undefined
+      }
       toolbarRight={answered ? legalEntityCountSummary(entities.length, visible.length) : undefined}
       columns={columns}
       rows={visible}
@@ -368,11 +466,7 @@ export function GroupLegalEntitiesPage() {
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
       noMatchText={legalEntityNoMatchNote}
-      onClearFilters={() => {
-        setSearch('');
-        setStatus('ALL');
-        setAttentionOnly(false);
-      }}
+      onClearFilters={clearFilters}
       renderDetail={(key) => {
         const row = visible.find((entity) => entity.legalEntityId === key);
         return row ? (
@@ -392,6 +486,61 @@ export function GroupLegalEntitiesPage() {
         emptyTitle: '还没有登记任何公司主体',
         emptyDescription: emptyDescriptionOf(mayWrite),
       })}
-    />
+      />
+      <DialogContent
+        size="lg"
+        className="max-h-[80vh] overflow-y-auto"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          helpButtonRef.current?.focus();
+        }}
+      >
+          <DialogHeader className="items-start">
+            <div>
+              <DialogTitle>使用说明</DialogTitle>
+              <DialogDescription className="mt-1">
+                公司主体是我方签约、开票与结算所依据的责任法人。
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="关闭使用说明"
+              onClick={() => setHelpOpen(false)}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </DialogHeader>
+          <DialogBody className="space-y-4 text-[12px] leading-5 text-idpxyz-text">
+            <section>
+              <h3 className="font-semibold text-idpxyz-textBright">主体关系</h3>
+              <p className="mt-1">
+                本页维护我方责任法人，并关联往来单位身份。客户、供应商是往来单位承担的业务角色，不是另一份法人身份。
+              </p>
+            </section>
+            <section>
+              <h3 className="font-semibold text-idpxyz-textBright">状态与待处理</h3>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                <li>待生效：已登记，生效时点尚未到。</li>
+                <li>已生效：当前可用于新的商业决定。</li>
+                <li>已停用：自停用时点起不再用于新的商业决定，历史引用保留。</li>
+                <li>待处理：身份资料缺失，或关联的往来单位名称未解析；打开明细查看对应处理提示。</li>
+              </ul>
+            </section>
+            <section>
+              <h3 className="font-semibold text-idpxyz-textBright">资料维护</h3>
+              <p className="mt-1">
+                身份更正以新修订留存，不覆盖历史。开票资料与法人身份分开维护，可在明细页的“开票资料”中查看和登记。
+              </p>
+            </section>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setHelpOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

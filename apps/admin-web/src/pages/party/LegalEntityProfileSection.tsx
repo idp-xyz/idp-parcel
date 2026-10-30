@@ -41,8 +41,8 @@ import {
 } from './legal-entity-profile';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
-// 法人对象页「概要」签里的「法人资料」区（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：当前有效的那一修订、修订历史、
-// 登记新修订的表单。判读与载荷在 legal-entity-profile.ts（纯函数，node:test 钉着），这里只摆。
+// 法人对象页概要中的「开票资料」区（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：资料修订历史与登记新修订的表单。
+// 当前时点摘要由 LegalEntityProfileSummary 负责；判读与载荷在 legal-entity-profile.ts（纯函数，node:test 钉着），这里只摆。
 //
 // 调用方按法人给 key：换一个法人就整块重挂，表单草稿里钉的法人标识不会停在上一个法人身上。
 
@@ -64,13 +64,19 @@ const profileRevisionHistory: RevisionHistoryRegister<LegalEntityProfileRevision
 export function LegalEntityProfileSection({
   legalEntityId,
   formOpenRequest = 0,
+  collapseCurrentProfile = false,
+  onProfileUpdated,
 }: {
   legalEntityId: string;
   /** 调用方每要一次「直接打开登记表」就加一（工作台详情栏的主动作）；0 即没要过。 */
   formOpenRequest?: number;
+  /** 对象页已有当前资料摘要时折叠时点查询，仍保留历史与未来时点的查看入口。 */
+  collapseCurrentProfile?: boolean;
+  onProfileUpdated?: () => void;
 }) {
   // 登记落册一次加一：当前有效区与历史区都按它重取，新登的那笔立刻可见。
   const [landed, setLanded] = useState(0);
+  const [lookupVisited, setLookupVisited] = useState(false);
   // 没有登记册配置写授予的操作者不摆登记表与打开它的按钮（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
@@ -90,18 +96,31 @@ export function LegalEntityProfileSection({
   }, [scrollRequest]);
   return (
     <div className="flex flex-col gap-5">
-      <section>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
-            <p className="mt-1 text-xs text-idpxyz-breadcrumb">开票时按当时生效的那一版资料；可以提前登记未来生效的资料。</p>
+      {collapseCurrentProfile ? (
+        <details
+          onToggle={(event) => {
+            if (event.currentTarget.open) setLookupVisited(true);
+          }}
+        >
+          <summary className="cursor-pointer text-[13px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">
+            按时点查看法人资料
+          </summary>
+          {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} landed={landed} /> : null}
+        </details>
+      ) : (
+        <section>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
+              <p className="mt-1 text-xs text-idpxyz-breadcrumb">开票时按当时生效的那一版资料；可以提前登记未来生效的资料。</p>
+            </div>
           </div>
-        </div>
-        <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
-      </section>
+          <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
+        </section>
+      )}
       <section className="border-t border-idpxyz-border pt-5">
         <div>
-          <h4 className="text-[13px] font-semibold text-idpxyz-text">历次资料</h4>
+          <h4 className="text-[13px] font-semibold text-idpxyz-text">资料修订历史</h4>
           <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都留一版，旧的不会被改掉。</p>
         </div>
         <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
@@ -109,7 +128,13 @@ export function LegalEntityProfileSection({
       {mayWrite ? (
         <section ref={formRef} className="border-t border-idpxyz-border pt-5">
           {formOpen ? (
-            <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
+            <ProfileRegistrationForm
+              legalEntityId={legalEntityId}
+              onLanded={() => {
+                setLanded((count) => count + 1);
+                onProfileUpdated?.();
+              }}
+            />
           ) : (
             <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
               更新开票资料

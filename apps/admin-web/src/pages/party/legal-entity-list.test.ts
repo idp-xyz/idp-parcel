@@ -33,12 +33,20 @@ function record(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
     registeredAt: '2026-09-16T04:27:55Z',
     identityLayerRegistered: true,
     registrationCountry: 'CN',
+    lifetimeRegistrationNumbers: [{ typeCode: 'USCC', number: '91310000SYN00001' }],
     ...over,
   };
 }
 
 const rows: GroupLegalEntityRecord[] = [
-  record({ legalEntityId: 'SYN-LE-02', status: 'REGISTERED', effectiveFrom: '2030-01-01T00:00:00Z', registeredAt: '2026-09-16T05:00:00Z' }),
+  record({
+    legalEntityId: 'SYN-LE-02',
+    status: 'REGISTERED',
+    effectiveFrom: '2030-01-01T00:00:00Z',
+    registeredAt: '2026-09-16T05:00:00Z',
+    registrationCountry: 'US',
+    lifetimeRegistrationNumbers: [{ typeCode: 'EIN', number: '91310000SYN00002' }],
+  }),
   record({ legalEntityId: 'SYN-LE-01' }),
   record({
     legalEntityId: 'SYN-LE-03',
@@ -51,6 +59,7 @@ const rows: GroupLegalEntityRecord[] = [
     registeredAt: '2026-09-16T03:00:00Z',
     identityLayerRegistered: false,
     registrationCountry: undefined,
+    lifetimeRegistrationNumbers: undefined,
   }),
   record({ legalEntityId: 'SYN-LE-04', partyName: undefined, partyNameKnown: false, registeredAt: '2026-09-16T04:00:00Z' }),
 ];
@@ -59,15 +68,17 @@ const ids = (list: GroupLegalEntityRecord[]) => list.map((row) => row.legalEntit
 const filter = (over: Partial<LegalEntityFilter>): LegalEntityFilter => ({
   search: '',
   status: 'ALL',
+  registrationCountry: 'ALL',
   attentionOnly: false,
   ...over,
 });
 
-// Covers: 搜索是包含匹配、不分大小写，命中法人标识 / 参与方身份 / 名称任一格；名称未知的行按空串参与、不抛。
-test('搜索按包含匹配四格之一', () => {
+// Covers: 搜索是包含匹配、不分大小写，命中身份标识 / 名称 / 状态 / 注册号任一格；名称未知的行按空串参与、不抛。
+test('搜索按包含匹配身份标识、名称、状态与注册号', () => {
   deepEqual(ids(filterLegalEntities(rows, filter({ search: 'le-0' }))), ['SYN-LE-02', 'SYN-LE-01', 'SYN-LE-03', 'SYN-LE-04']);
   deepEqual(ids(filterLegalEntities(rows, filter({ search: '停用示例' }))), ['SYN-LE-03']);
   deepEqual(ids(filterLegalEntities(rows, filter({ search: 'retired' }))), ['SYN-LE-03']);
+  deepEqual(ids(filterLegalEntities(rows, filter({ search: '91310000syn00002' }))), ['SYN-LE-02']);
   deepEqual(ids(filterLegalEntities(rows, filter({ search: '  ' }))), ids(rows));
 });
 
@@ -76,6 +87,15 @@ test('状态筛选精确匹配封闭词', () => {
   deepEqual(ids(filterLegalEntities(rows, filter({ status: 'DEACTIVATED' }))), ['SYN-LE-03']);
   deepEqual(ids(filterLegalEntities(rows, filter({ status: 'REGISTERED' }))), ['SYN-LE-02']);
   deepEqual(ids(filterLegalEntities(rows, filter({ search: 'LE-01', status: 'DEACTIVATED' }))), []);
+});
+
+// Covers: 注册地筛选只看身份层登记的国家 / 地区；未登记的行不冒充任何国家。
+test('注册地筛选按身份层国家匹配', () => {
+  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'CN' }))), ['SYN-LE-01', 'SYN-LE-04']);
+  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'US' }))), ['SYN-LE-02']);
+  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'CN', attentionOnly: true }))), ['SYN-LE-04']);
+  const absentIdentityLayer = record({ legalEntityId: 'SYN-LE-05', identityLayerRegistered: false, registrationCountry: 'US' });
+  deepEqual(filterLegalEntities([absentIdentityLayer], filter({ registrationCountry: 'US' })), []);
 });
 
 // Covers: 待补 = 身份层两格没有，或参与方册查无此身份；停用本身不算待补。只看待补与状态筛选叠加。

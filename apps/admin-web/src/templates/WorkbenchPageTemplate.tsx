@@ -215,7 +215,7 @@ export function WorkbenchPageTemplate<Row>({
       </div>
     ) : (
       <table className="w-full text-[12px]">
-        <thead className="sticky top-0 z-10 bg-idpxyz-sidebar">
+        <thead className="sticky top-0 z-10 bg-idpxyz-editor">
           <tr className="border-b border-idpxyz-border text-left text-idpxyz-breadcrumb">
             {visibleColumns.map((column, index) => (
               <th
@@ -362,7 +362,7 @@ export function WorkbenchPageTemplate<Row>({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-idpxyz-border px-6 py-2.5">
-        <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 text-[12px]">
+        <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 text-[12px] focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
           <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
           <input
             ref={searchRef}
@@ -403,7 +403,7 @@ export function WorkbenchPageTemplate<Row>({
       <div ref={split.containerRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div
           data-pane="list"
-          className="flex min-h-0 min-w-0 flex-col"
+          className="flex min-h-0 min-w-0 flex-col bg-idpxyz-panelBg"
           style={detailOpen ? { flex: `0 0 ${split.ratio}%` } : { flex: '1 1 100%' }}
         >
           <div ref={listRef} className="min-h-0 flex-1 overflow-auto">

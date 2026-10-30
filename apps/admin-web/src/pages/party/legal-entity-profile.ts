@@ -9,6 +9,7 @@
 import type {
   LegalEntityContactRecord,
   LegalEntityProfileContent,
+  LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
   RegisteredAddressRecord,
   TaxRegistrationNumberRecord,
@@ -156,6 +157,51 @@ export interface ProfileContentLine {
   value: string;
 }
 
+export type LegalEntityProfileStatusTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
+
+export interface LegalEntityProfileStatus {
+  label: string;
+  tone: LegalEntityProfileStatusTone;
+  description: string;
+}
+
+export function legalEntityProfileStatusOf(
+  resolution: Pick<LegalEntityProfileResolutionResponseBody, 'outcome' | 'incompleteCause' | 'effectiveRevision'>,
+): LegalEntityProfileStatus {
+  if (resolution.outcome === 'RESOLVED') {
+    if (resolution.effectiveRevision === undefined) {
+      return { label: '状态未识别', tone: 'bad', description: '解析结果没有返回当前生效的法人资料修订。' };
+    }
+    return {
+      label: '开票资料可用',
+      tone: 'good',
+      description: '当前时点有生效资料，且已登记开票资料。',
+    };
+  }
+  if (resolution.outcome === 'PROFILE_INCOMPLETE') {
+    if (resolution.incompleteCause === 'NO_EFFECTIVE_REVISION') {
+      return { label: '未配置', tone: 'warn', description: '当前时点没有已生效的法人资料修订。' };
+    }
+    if (resolution.incompleteCause === 'NO_INVOICING_DETAILS') {
+      if (resolution.effectiveRevision === undefined) {
+        return { label: '状态未识别', tone: 'bad', description: '资料不全的解析结果没有返回对应的生效修订。' };
+      }
+      return { label: '资料不全', tone: 'warn', description: '当前生效修订没有登记开票资料。' };
+    }
+    return { label: '状态未识别', tone: 'bad', description: '资料不全的解析结果没有返回可识别原因。' };
+  }
+  if (resolution.outcome === 'LEGAL_ENTITY_NOT_EFFECTIVE') {
+    return { label: '主体尚未生效', tone: 'info', description: '法人身份在当前时点尚未生效。' };
+  }
+  if (resolution.outcome === 'LEGAL_ENTITY_DEACTIVATED') {
+    return { label: '主体已停用', tone: 'muted', description: '法人身份已停用，不能用于新的签约或开票。' };
+  }
+  if (resolution.outcome === 'LEGAL_ENTITY_NOT_REGISTERED') {
+    return { label: '法人不在册', tone: 'bad', description: '当前租户的法人册中没有这个法人。' };
+  }
+  return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的法人资料状态。' };
+}
+
 /**
  * 一笔资料的内容照答复原样转写：国家码、地址各行、税号类型码都不译不补。开票资料看 invoicingRegistered 那个显式布尔，
  * 为假就写「未登开票资料」——按时点解析会据此答资料不全，这里不拿抬头缺席去推。
@@ -163,18 +209,21 @@ export interface ProfileContentLine {
 export function profileContentLines(content: LegalEntityProfileContent): ProfileContentLine[] {
   const address = [content.registeredAddress.country, ...content.registeredAddress.lines].filter((part) => part !== '');
   return [
-    { label: '注册地址', value: address.length === 0 ? '—' : address.join(' · ') },
+    { label: '注册地址', value: address.length === 0 ? '未配置' : address.join(' · ') },
     {
       label: '税务登记号',
       value:
         content.taxRegistrationNumbers.length === 0
-          ? '—'
+          ? '未配置'
           : content.taxRegistrationNumbers.map((entry) => `${entry.typeCode} ${entry.number}`).join('；'),
     },
-    { label: '开票抬头', value: content.invoicingRegistered ? (content.invoiceTitle ?? '') : '未登开票资料' },
+    {
+      label: '开票抬头',
+      value: content.invoicingRegistered ? (content.invoiceTitle || '未配置') : '未登开票资料',
+    },
     {
       label: '联系人',
-      value: content.contacts.length === 0 ? '—' : content.contacts.map(contactText).join('；'),
+      value: content.contacts.length === 0 ? '未配置' : content.contacts.map(contactText).join('；'),
     },
   ];
 }

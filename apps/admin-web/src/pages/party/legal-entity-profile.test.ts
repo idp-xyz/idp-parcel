@@ -5,6 +5,7 @@ import {
   emptyLegalEntityProfileDraft,
   legalEntityProfileLocalProblems,
   legalEntityProfilePayloadOf,
+  legalEntityProfileStatusOf,
   profileContentLines,
   profileRevisionTimeline,
   resolutionInstantOf,
@@ -123,13 +124,13 @@ test('修订号建议', () => {
   equal(suggestedProfileRevision(null, 'SYN-LE-01'), 1);
 });
 
-// Covers: 内容照答复原样转写；开票资料看显式布尔，为假写「未登开票资料」；空列表写「—」；联系人带上给了的联络方式。
+// Covers: 内容照答复原样转写；缺少的资料明示未配置；开票资料看显式布尔；联系人带上给了的联络方式。
 test('资料内容转写', () => {
   deepEqual(profileContentLines(revision({})), [
     { label: '注册地址', value: 'CN · SYN 地址' },
-    { label: '税务登记号', value: '—' },
+    { label: '税务登记号', value: '未配置' },
     { label: '开票抬头', value: '未登开票资料' },
-    { label: '联系人', value: '—' },
+    { label: '联系人', value: '未配置' },
   ]);
   deepEqual(
     profileContentLines(
@@ -149,6 +150,34 @@ test('资料内容转写', () => {
       { label: '联系人', value: 'SYN 甲（a@example.invalid，100）；SYN 乙' },
     ],
   );
+  deepEqual(
+    profileContentLines(revision({ registeredAddress: { country: '', lines: [] } })).slice(0, 1),
+    [{ label: '注册地址', value: '未配置' }],
+  );
+});
+
+test('法人资料状态按当前解析结果区分未配置、资料不全与可开票', () => {
+  deepEqual(legalEntityProfileStatusOf({ outcome: 'RESOLVED', effectiveRevision: revision({}) }), {
+    label: '开票资料可用',
+    tone: 'good',
+    description: '当前时点有生效资料，且已登记开票资料。',
+  });
+  equal(legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_EFFECTIVE_REVISION' }).label, '未配置');
+  equal(
+    legalEntityProfileStatusOf({
+      outcome: 'PROFILE_INCOMPLETE',
+      incompleteCause: 'NO_INVOICING_DETAILS',
+      effectiveRevision: revision({}),
+    }).label,
+    '资料不全',
+  );
+  equal(legalEntityProfileStatusOf({ outcome: 'LEGAL_ENTITY_DEACTIVATED' }).label, '主体已停用');
+  equal(legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'UNKNOWN' }).label, '状态未识别');
+  equal(
+    legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_INVOICING_DETAILS' }).label,
+    '状态未识别',
+  );
+  equal(legalEntityProfileStatusOf({ outcome: 'RESOLVED' }).label, '状态未识别');
 });
 
 // Covers: 历史从新到旧；标题点名是资料修订（与身份修订分得开，票 group-legal-entities-uiux/01）并带生效时点，

@@ -22,14 +22,15 @@ import {
 import {
   identityLayerAbsentNote,
   partyNameUnknownNote,
- updateOrdinalLabel } from './presentation';
+  updateOrdinalLabel,
+} from './presentation';
 import {
   LegalEntityBanners,
-  LegalEntityLifecycle,
   LegalEntityMoreMenu,
   legalEntityHasBanners,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
@@ -60,8 +61,8 @@ function muted(text: string): ReactNode {
 }
 
 // 对象页与工作台详情栏摆同一套头区（票 group-legal-entities-uiux/09）：详情栏的引用签（国家、注册号、依据）进头区第二行，
-// 事实条四格加生命周期条进指标带，概要签的格与详情栏概要签同一份，停用与待补横幅、法人资料各成一区，身份修订历史进
-// 「时间线」签——签名受共用模板的固定词表约束（workspace-tabs.ts），法人资料没有对应的词，留在概要签里成区。
+// 事实条四格进指标带，概要签包含同一份法人资料摘要，停用与待补横幅、资料修订各成一区，身份修订历史进
+// 「时间线」签——签名受共用模板的固定词表约束（workspace-tabs.ts）。
 
 function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
   const identity = identityLayerCellsOf(row);
@@ -83,7 +84,6 @@ function buildSummary(row: GroupLegalEntityRecord): DetailSummaryStat[] {
     { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
     { label: '登记时间', value: <Instant value={row.registeredAt} /> },
     { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
-    { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
   ];
 }
 
@@ -165,6 +165,7 @@ export function LegalEntityDetailPage({
   const mayWrite = useMayWriteRegistry();
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   const [formOpenRequest, setFormOpenRequest] = useState(0);
+  const [profileRefresh, setProfileRefresh] = useState(0);
   const openProfileForm = () => {
     setTab('summary');
     setFormOpenRequest((count) => count + 1);
@@ -219,6 +220,18 @@ export function LegalEntityDetailPage({
                   ]
                 : []),
               {
+                id: 'profile-summary',
+                title: '法人资料摘要',
+                description: '当前时点的资料状态与开票可用性；资料修订历史和登记入口见下方开票资料。',
+                content: (
+                  <LegalEntityProfileSummary
+                    key={`${row.legalEntityId}:${row.revision}:${row.status}`}
+                    legalEntityId={row.legalEntityId}
+                    refreshKey={profileRefresh}
+                  />
+                ),
+              },
+              {
                 id: 'profile',
                 title: '开票资料',
                 description: '法人身份与法人资料分开登记；这里查看当前有效资料与资料修订历史，并登记下一笔资料修订。',
@@ -227,6 +240,8 @@ export function LegalEntityDetailPage({
                     key={row.legalEntityId}
                     legalEntityId={row.legalEntityId}
                     formOpenRequest={formOpenRequest}
+                    collapseCurrentProfile
+                    onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
                   />
                 ),
               },

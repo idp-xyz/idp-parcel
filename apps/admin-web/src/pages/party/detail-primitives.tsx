@@ -125,7 +125,7 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
       <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
-      <p className="mt-0.5 break-words font-mono text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
+      <p className="mt-0.5 break-words font-mono text-[13px] font-medium leading-5 text-idpxyz-text [&_time]:text-[12px] [&_time]:font-normal">{children}</p>
     </div>
   );
 }
@@ -137,7 +137,7 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
  */
 export function FactStrip({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border px-5 py-3">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border bg-idpxyz-editor px-5 py-3">
       {children}
     </div>
   );
@@ -179,12 +179,12 @@ export function DetailRow({
   onCopy?: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 py-2 border-b border-idpxyz-border last:border-b-0">
-      <dt className="text-[12px] text-idpxyz-breadcrumb">{label}</dt>
-      <dd className={`flex items-start justify-between gap-2 text-[13px] text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
-        <span className="break-all">{children}</span>
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 border-b border-idpxyz-border py-2.5 last:border-b-0">
+      <dt className="pt-0.5 text-[12px] leading-5 text-idpxyz-breadcrumb">{label}</dt>
+      <dd className={`flex min-w-0 items-start justify-between gap-2 text-[13px] leading-5 text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
+        <span className="min-w-0 break-words">{children}</span>
         {onCopy ? (
-          <Button variant="ghost" size="sm" className="shrink-0 text-[12px] text-idpxyz-breadcrumb" onClick={onCopy}>
+          <Button variant="ghost" size="sm" className="shrink-0 px-1.5 text-[12px] text-idpxyz-breadcrumb" onClick={onCopy}>
             复制
           </Button>
         ) : null}
