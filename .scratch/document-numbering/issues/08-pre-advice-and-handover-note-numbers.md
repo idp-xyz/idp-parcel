@@ -1,7 +1,7 @@
 # 08 送站预报、送站交接单的单据号
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum08`（完成记录见文末）；待非作者评审与进 main
+Status: resolved——2026-11-02 进 main（全量 171 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum08`（完成记录见文末）；待非作者评审与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二；UC-NO-006
@@ -82,3 +82,12 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 5. **计数与序数**：`NodeBusinessTimezoneRead`（「要读七族」→「全部定义族」）、`routing_basis.go` 包注释、`DocumentNumberAbsence` 与其测试 Covers、`assemble_delivery_scope_document_numbers_test.go` 文件头（改引票面那一条的原文）与撞号用例里的「二十」（改指 `docnumber.MaxSkippedNumbers`）、`issuer_test.go` 与 `issuer.go`、三处 build 函数注释与 `DocumentNumberingDeps`、端口文件头，以及各处「两格都空」「两本册」一类跨文件的数，都改成按名说。
 
 修订后自验（本机 PG）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出，`go mod tidy -diff` 无输出；`go test -count=1 -p 1` 覆盖 architecture、platform、cmd、nodeoperations、networkrouting、migrations、tests 全绿（含 PG）；管理台 `tsc -b`、`pnpm test`（1062 pass）、`vite build` 退 0；种子灌一次性库 `docnum08_seed2` 退 0（两表 0 行、0026 的约束在册），用后删库。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `d2d5b461b`，复评钉 `3c1fc2f2f`）
+
+两轮两轴阻断均为零。首轮核实：NR 窄读口 `NodeBusinessTimezoneRead` 只交回时区串、不带出版本行，NO 的防腐适配器在消费侧（ADR-0025），NO 领域、应用、端口依赖闭包无 pgx、net/http、NR 包；时区链为网点此刻生效版本时区 → 租户单据编号时区 → 未配置，无任何兜底；`business_timezone` 库上非空故网点版本不会缺时区；已闭网点版本不顶用、目录两版同时适用时报错不落且序列不动；重放身份上的事务级咨询锁、在册回显原号不取号；离线交接单按服务端收下那天出号、设备标识不变；撞号整笔回滚。修订轮（`3c1fc2f2f`，含并入 main 的合并 `55918f11c`）照协调方统一：无号原因码改为 `ISSUED_BEFORE_NUMBERING`（迁移 0026 只入库「时区未配置」，两格皆空读作上线前开立）、管理台改取共用词典（预报区号名随词典为「预报号」）、客户确认交接单的答复新增 `documentNumber` / `documentNumberAbsence`（只对所指那张交接单、未被声称的账户照旧 404）、注释里跨文件计数与序数改按名说。复评重跑首轮探针全过。余下非阻断由推送方处理：演示脚本那句客户确认答复的说法补上交接单号（`8ff852be5`）；完成记录里「跨票口径待统一」那条以「评审修订」一节为准。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum08` tip `3c1fc2f2f` 在隔离树上以合并提交并入 main `70b162795`（`.scratch/at-coverage-inventory.md` 文末 07 与 08 两段追记冲突，两段都留），叠演示脚本一句修正；重算 AT 盘点总览计数、重生成机制清点各成一笔，两项 `-check` 退 0；对 `8bc71266a` 跑全量 171 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum08` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+
