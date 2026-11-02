@@ -38,15 +38,19 @@ var (
 // legalEntityProfileDocument 是登记快照的形状。集合格一律写成数组（空即 []），不写 null：同一份内容只有一种
 // 字节，摘要才判得出重放。
 type legalEntityProfileDocument struct {
-	Tenant        string                           `json:"tenant"`
-	LegalEntity   string                           `json:"legalEntity"`
-	Revision      int                              `json:"revision"`
-	Basis         string                           `json:"basis"`
-	EffectiveFrom time.Time                        `json:"effectiveFrom"`
-	Address       legalEntityProfileAddressDoc     `json:"address"`
-	TaxNumbers    []legalEntityProfileTaxNumberDoc `json:"taxRegistrationNumbers"`
-	InvoiceTitle  *string                          `json:"invoiceTitle,omitempty"`
-	Contacts      []legalEntityProfileContactDoc   `json:"contacts"`
+	Tenant                string                           `json:"tenant"`
+	LegalEntity           string                           `json:"legalEntity"`
+	Revision              int                              `json:"revision"`
+	Basis                 string                           `json:"basis"`
+	EffectiveFrom         time.Time                        `json:"effectiveFrom"`
+	Address               legalEntityProfileAddressDoc     `json:"address"`
+	TaxNumbers            []legalEntityProfileTaxNumberDoc `json:"taxRegistrationNumbers"`
+	InvoiceTitle          *string                          `json:"invoiceTitle,omitempty"`
+	Contacts              []legalEntityProfileContactDoc   `json:"contacts"`
+	Representative        *legalEntityRepresentativeDoc    `json:"representative,omitempty"`
+	OfficeAddress         *legalEntityProfileAddressDoc    `json:"officeAddress,omitempty"`
+	CorrespondenceAddress *legalEntityProfileAddressDoc    `json:"correspondenceAddress,omitempty"`
+	Shape                 string                           `json:"shape,omitempty"`
 }
 
 type legalEntityProfileAddressDoc struct {
@@ -60,9 +64,19 @@ type legalEntityProfileTaxNumberDoc struct {
 }
 
 type legalEntityProfileContactDoc struct {
-	Name  string `json:"name"`
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
+	Name           string                        `json:"name"`
+	Email          string                        `json:"email,omitempty"`
+	Phone          string                        `json:"phone,omitempty"`
+	Department     string                        `json:"department,omitempty"`
+	Position       string                        `json:"position,omitempty"`
+	Purposes       []domain.ContactPurpose       `json:"purposes,omitempty"`
+	PrimaryFor     []domain.ContactPurpose       `json:"primaryFor,omitempty"`
+	SocialAccounts []domain.ContactSocialAccount `json:"socialAccounts,omitempty"`
+}
+
+type legalEntityRepresentativeDoc struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
 }
 
 func documentOfLegalEntityProfile(revision domain.LegalEntityProfileRevision) legalEntityProfileDocument {
@@ -90,12 +104,66 @@ func documentOfLegalEntityProfile(revision domain.LegalEntityProfileRevision) le
 	}
 	for _, contact := range content.Contacts() {
 		document.Contacts = append(document.Contacts, legalEntityProfileContactDoc{
-			Name:  contact.Name(),
-			Email: contact.Email(),
-			Phone: contact.Phone(),
+			Name:       contact.Name(),
+			Email:      contact.Email(),
+			Phone:      contact.Phone(),
+			Department: contact.Details().Department, Position: contact.Details().Position, Purposes: contact.Details().Purposes, PrimaryFor: contact.Details().PrimaryFor, SocialAccounts: contact.Details().SocialAccounts,
 		})
 	}
+	supplement := content.Supplement()
+	if value := supplement.Representative; value != nil {
+		document.Representative = &legalEntityRepresentativeDoc{Kind: value.Kind(), Name: value.Name()}
+	}
+	if value := supplement.OfficeAddress; value != nil {
+		document.OfficeAddress = &legalEntityProfileAddressDoc{Country: value.Country().String(), Lines: value.Lines()}
+	}
+	if value := supplement.CorrespondenceAddress; value != nil {
+		document.CorrespondenceAddress = &legalEntityProfileAddressDoc{Country: value.Country().String(), Lines: value.Lines()}
+	}
+	document.Shape = document.minimumShape()
 	return document
+}
+
+func (document legalEntityProfileDocument) hasExtendedDetails() bool {
+	if document.Representative != nil || document.OfficeAddress != nil || document.CorrespondenceAddress != nil {
+		return true
+	}
+	for _, contact := range document.Contacts {
+		if contact.Department != "" || contact.Position != "" || len(contact.Purposes) > 0 || len(contact.PrimaryFor) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (document legalEntityProfileDocument) minimumShape() string {
+	for _, contact := range document.Contacts {
+		if len(contact.SocialAccounts) > 0 {
+			return "LEP-3"
+		}
+	}
+	if document.hasExtendedDetails() {
+		return "LEP-2"
+	}
+	return ""
+}
+
+func (document legalEntityProfileDocument) checkShape() error {
+	if document.Shape != "" && document.Shape != "LEP-2" && document.Shape != "LEP-3" {
+		return fmt.Errorf("法人资料快照形状 %q 不受本构建支持", document.Shape)
+	}
+	if document.Shape != document.minimumShape() {
+		return errors.New("法人资料快照形状与内容不符")
+	}
+	for _, contact := range document.Contacts {
+		if len(contact.SocialAccounts) == 0 {
+			continue
+		}
+		if _, err := domain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, domain.LegalEntityContactDetails{SocialAccounts: contact.SocialAccounts}); err != nil {
+			return fmt.Errorf("法人资料快照社交账号无效：%w", err)
+		}
+	}
+	return nil
 }
 
 func (repository *LegalEntityProfiles) SaveLegalEntityProfile(
@@ -115,6 +183,9 @@ func (repository *LegalEntityProfiles) SaveLegalEntityProfile(
 	}
 	digest := sha256.Sum256(raw)
 	contentDigest := hex.EncodeToString(digest[:])
+	if document.Shape != "" {
+		contentDigest = document.Shape + ":" + contentDigest
+	}
 	lines, err := json.Marshal(document.Address.Lines)
 	if err != nil {
 		return ports.LegalEntityProfileSaveOutcomeInvalid, fmt.Errorf("%s: %w", operation, err)
@@ -239,6 +310,9 @@ func (repository *LegalEntityProfiles) ListLegalEntityProfileRevisions(
 		if err := json.Unmarshal(raw, &document); err != nil {
 			return nil, fmt.Errorf("%s: 快照不是本适配器写下的形状：%w", operation, err)
 		}
+		if err := document.checkShape(); err != nil {
+			return nil, fmt.Errorf("%s: %w", operation, err)
+		}
 		row := ports.LegalEntityProfileRevisionRow{
 			TenantID:       document.Tenant,
 			LegalEntityID:  document.LegalEntity,
@@ -258,7 +332,16 @@ func (repository *LegalEntityProfiles) ListLegalEntityProfileRevisions(
 			row.HasInvoicing, row.InvoiceTitle = true, *document.InvoiceTitle
 		}
 		for _, contact := range document.Contacts {
-			row.Contacts = append(row.Contacts, ports.LegalEntityContactRow{Name: contact.Name, Email: contact.Email, Phone: contact.Phone})
+			row.Contacts = append(row.Contacts, ports.LegalEntityContactRow{Name: contact.Name, Email: contact.Email, Phone: contact.Phone, Department: contact.Department, Position: contact.Position, Purposes: purposeStrings(contact.Purposes), PrimaryFor: purposeStrings(contact.PrimaryFor), SocialAccounts: contact.SocialAccounts})
+		}
+		if value := document.Representative; value != nil {
+			row.Representative = &ports.LegalEntityRepresentativeRow{Kind: value.Kind, Name: value.Name}
+		}
+		if value := document.OfficeAddress; value != nil {
+			row.OfficeAddress = &ports.LegalEntityAddressRow{Country: value.Country, Lines: value.Lines}
+		}
+		if value := document.CorrespondenceAddress; value != nil {
+			row.CorrespondenceAddress = &ports.LegalEntityAddressRow{Country: value.Country, Lines: value.Lines}
 		}
 		rows = append(rows, row)
 	}
@@ -312,6 +395,9 @@ func legalEntityProfileFromSnapshot(raw []byte) (domain.LegalEntityProfileRevisi
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return domain.LegalEntityProfileRevision{}, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
 	}
+	if err := document.checkShape(); err != nil {
+		return domain.LegalEntityProfileRevision{}, err
+	}
 	tenant, err := domain.NewTenantID(document.Tenant)
 	if err != nil {
 		return domain.LegalEntityProfileRevision{}, err
@@ -362,15 +448,50 @@ func legalEntityProfileFromSnapshot(raw []byte) (domain.LegalEntityProfileRevisi
 	}
 	contacts := make([]domain.LegalEntityContact, 0, len(document.Contacts))
 	for _, raw := range document.Contacts {
-		contact, err := domain.NewLegalEntityContact(raw.Name, raw.Email, raw.Phone)
+		contact, err := domain.NewLegalEntityContactWithDetails(raw.Name, raw.Email, raw.Phone, domain.LegalEntityContactDetails{Department: raw.Department, Position: raw.Position, Purposes: raw.Purposes, PrimaryFor: raw.PrimaryFor, SocialAccounts: raw.SocialAccounts})
 		if err != nil {
 			return domain.LegalEntityProfileRevision{}, err
 		}
 		contacts = append(contacts, contact)
 	}
-	content, err := domain.NewLegalEntityProfileContent(address, taxNumbers, invoicing, contacts)
+	var supplement domain.LegalEntityProfileSupplement
+	if value := document.Representative; value != nil {
+		representative, err := domain.NewLegalEntityRepresentative(value.Kind, value.Name)
+		if err != nil {
+			return domain.LegalEntityProfileRevision{}, err
+		}
+		supplement.Representative = &representative
+	}
+	for _, entry := range []struct {
+		raw    *legalEntityProfileAddressDoc
+		target **domain.RegisteredAddress
+	}{
+		{document.OfficeAddress, &supplement.OfficeAddress}, {document.CorrespondenceAddress, &supplement.CorrespondenceAddress},
+	} {
+		if entry.raw == nil {
+			continue
+		}
+		country, err := domain.NewRegistrationCountryCode(entry.raw.Country)
+		if err != nil {
+			return domain.LegalEntityProfileRevision{}, err
+		}
+		address, err := domain.NewRegisteredAddress(country, entry.raw.Lines)
+		if err != nil {
+			return domain.LegalEntityProfileRevision{}, err
+		}
+		*entry.target = &address
+	}
+	content, err := domain.NewLegalEntityProfileContentWithSupplement(address, taxNumbers, invoicing, contacts, supplement)
 	if err != nil {
 		return domain.LegalEntityProfileRevision{}, err
 	}
 	return domain.NewLegalEntityProfileRevision(tenant, entity, document.Revision, basis, document.EffectiveFrom, content)
+}
+
+func purposeStrings(values []domain.ContactPurpose) []string {
+	result := make([]string, len(values))
+	for i, value := range values {
+		result[i] = string(value)
+	}
+	return result
 }

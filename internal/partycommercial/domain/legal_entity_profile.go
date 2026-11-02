@@ -109,11 +109,12 @@ func (details InvoicingDetails) Title() InvoiceTitle {
 	return details.title
 }
 
-// LegalEntityContact 是法人资料上的一位联系人：姓名必填，邮箱与电话可空，取值照录入原文，不在这里判格式。
+// LegalEntityContact 的姓名必填，其余取值可空；联系用途不构成权限或签署授权。
 type LegalEntityContact struct {
-	name  string
-	email string
-	phone string
+	name    string
+	email   string
+	phone   string
+	details LegalEntityContactDetails
 }
 
 func NewLegalEntityContact(name, email, phone string) (LegalEntityContact, error) {
@@ -154,6 +155,7 @@ type LegalEntityProfileContent struct {
 	invoicing    InvoicingDetails
 	hasInvoicing bool
 	contacts     []LegalEntityContact
+	supplement   LegalEntityProfileSupplement
 }
 
 func NewLegalEntityProfileContent(
@@ -191,11 +193,22 @@ func NewLegalEntityProfileContent(
 		content.hasInvoicing = true
 	}
 	content.contacts = make([]LegalEntityContact, len(contacts))
+	primary := make(map[ContactPurpose]bool)
 	for index, contact := range contacts {
 		if strings.TrimSpace(contact.name) == "" {
 			return LegalEntityProfileContent{}, fmt.Errorf("%w: contact needs a name", ErrInvalidLegalEntityProfile)
 		}
-		content.contacts[index] = contact
+		checked, err := NewLegalEntityContactWithDetails(contact.name, contact.email, contact.phone, contact.Details())
+		if err != nil {
+			return LegalEntityProfileContent{}, err
+		}
+		for _, purpose := range checked.details.PrimaryFor {
+			if primary[purpose] {
+				return LegalEntityProfileContent{}, fmt.Errorf("%w: more than one primary contact for %s", ErrInvalidLegalEntityProfile, purpose)
+			}
+			primary[purpose] = true
+		}
+		content.contacts[index] = checked
 	}
 	return content, nil
 }

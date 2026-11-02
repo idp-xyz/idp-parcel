@@ -36,6 +36,9 @@ type legalEntityProfileItemDocument struct {
 	TaxRegistrationNumbers []legalEntityProfileTaxNumberDocument `json:"taxRegistrationNumbers,omitempty"`
 	InvoiceTitle           *string                               `json:"invoiceTitle,omitempty"`
 	Contacts               []legalEntityProfileContactDocument   `json:"contacts,omitempty"`
+	Representative         *legalEntityRepresentativeDocument    `json:"representative,omitempty"`
+	OfficeAddress          *legalEntityProfileAddressDocument    `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *legalEntityProfileAddressDocument    `json:"correspondenceAddress,omitempty"`
 }
 
 type legalEntityProfileAddressDocument struct {
@@ -49,9 +52,19 @@ type legalEntityProfileTaxNumberDocument struct {
 }
 
 type legalEntityProfileContactDocument struct {
-	Name  string `json:"name"`
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
+	Name           string                          `json:"name"`
+	Email          string                          `json:"email,omitempty"`
+	Phone          string                          `json:"phone,omitempty"`
+	Department     string                          `json:"department,omitempty"`
+	Position       string                          `json:"position,omitempty"`
+	Purposes       []pcdomain.ContactPurpose       `json:"purposes,omitempty"`
+	PrimaryFor     []pcdomain.ContactPurpose       `json:"primaryFor,omitempty"`
+	SocialAccounts []pcdomain.ContactSocialAccount `json:"socialAccounts,omitempty"`
+}
+
+type legalEntityRepresentativeDocument struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
 }
 
 // legalEntityProfileBatchCommand 是翻译产物里的一项：标签供回显。
@@ -149,13 +162,40 @@ func legalEntityProfileCommandFrom(
 
 	contacts := make([]pcdomain.LegalEntityContact, 0, len(item.Contacts))
 	for _, contact := range item.Contacts {
-		built, err := pcdomain.NewLegalEntityContact(contact.Name, contact.Email, contact.Phone)
+		built, err := pcdomain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, pcdomain.LegalEntityContactDetails{Department: contact.Department, Position: contact.Position, Purposes: contact.Purposes, PrimaryFor: contact.PrimaryFor, SocialAccounts: contact.SocialAccounts})
 		if err != nil {
 			return none, err
 		}
 		contacts = append(contacts, built)
 	}
 
+	var supplement pcdomain.LegalEntityProfileSupplement
+	if value := item.Representative; value != nil {
+		representative, err := pcdomain.NewLegalEntityRepresentative(value.Kind, value.Name)
+		if err != nil {
+			return none, err
+		}
+		supplement.Representative = &representative
+	}
+	for _, entry := range []struct {
+		raw    *legalEntityProfileAddressDocument
+		target **pcdomain.RegisteredAddress
+	}{
+		{item.OfficeAddress, &supplement.OfficeAddress}, {item.CorrespondenceAddress, &supplement.CorrespondenceAddress},
+	} {
+		if entry.raw == nil {
+			continue
+		}
+		country, err := pcdomain.NewRegistrationCountryCode(entry.raw.Country)
+		if err != nil {
+			return none, err
+		}
+		address, err := pcdomain.NewRegisteredAddress(country, entry.raw.Lines)
+		if err != nil {
+			return none, err
+		}
+		*entry.target = &address
+	}
 	return pcapplication.RegisterLegalEntityProfileCommand{
 		Tenant:        tenant,
 		Entity:        entity,
@@ -166,6 +206,7 @@ func legalEntityProfileCommandFrom(
 		TaxNumbers:    taxNumbers,
 		Invoicing:     invoicing,
 		Contacts:      contacts,
+		Supplement:    supplement,
 	}, nil
 }
 

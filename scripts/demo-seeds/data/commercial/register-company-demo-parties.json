@@ -1,0 +1,91 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "businessParties": [
+    {
+      "partyId": "SYN-PARTY-CN-SH-01",
+      "name": "IDP物流科技（上海）有限公司（演示）",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PARTY-CN-SH-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-HK-01",
+      "name": "IDP Parcel Hong Kong Limited（演示）",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PARTY-HK-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-US-01",
+      "name": "IDP Parcel USA Inc.（演示）",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PARTY-US-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-CN-SZ-01",
+      "name": "IDP供应链（深圳）有限公司（演示）",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PARTY-CN-SZ-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "legalEntities": [
+    {
+      "legalEntityId": "SYN-LE-CN-SH-01",
+      "partyId": "SYN-PARTY-CN-SH-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-ENTITY-CN-SH-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registrationCountry": "CN",
+      "lifetimeRegistrationNumbers": [
+        {
+          "typeCode": "SYN-CN-REG",
+          "number": "SYN-CN-REG-0101"
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-HK-01",
+      "partyId": "SYN-PARTY-HK-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-ENTITY-HK-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registrationCountry": "HK",
+      "lifetimeRegistrationNumbers": [
+        {
+          "typeCode": "SYN-HK-REG",
+          "number": "SYN-HK-REG-0201"
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-US-01",
+      "partyId": "SYN-PARTY-US-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-ENTITY-US-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registrationCountry": "US",
+      "lifetimeRegistrationNumbers": [
+        {
+          "typeCode": "SYN-US-REG",
+          "number": "SYN-US-REG-0301"
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-CN-SZ-01",
+      "partyId": "SYN-PARTY-CN-SZ-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-ENTITY-CN-SZ-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registrationCountry": "CN",
+      "lifetimeRegistrationNumbers": [
+        {
+          "typeCode": "SYN-CN-REG",
+          "number": "SYN-CN-REG-0102"
+        }
+      ]
+    }
+  ]
+}

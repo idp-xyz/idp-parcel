@@ -30,7 +30,11 @@ import {
   legalEntityHasBanners,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
+import { LegalEntityContactsSection } from './LegalEntityContactsSection';
+import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
+import { legalEntityContactCountOf } from './legal-entity-profile';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
@@ -44,7 +48,7 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['group-legal-entities'];
 
 /**
- * 对象页「时间线」签与工作台详情栏「身份修订」签交给修订历史区的那几样。判读在 legal-entity-revisions.ts。
+ * 对象页与工作台详情栏共用身份修订历史的判读。
  * 模块级常量——load 进 effect 依赖。
  */
 export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
@@ -60,9 +64,7 @@ function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
 }
 
-// 对象页与工作台详情栏摆同一套头区（票 group-legal-entities-uiux/09）：详情栏的引用签（国家、注册号、依据）进头区第二行，
-// 事实条四格进指标带，概要签包含同一份法人资料摘要，停用与待补横幅、资料修订各成一区，身份修订历史进
-// 「时间线」签——签名受共用模板的固定词表约束（workspace-tabs.ts）。
+// 身份事实留在头部，当前资料归概要，资料版本与身份修订各用自己的历史链。
 
 function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
   const identity = identityLayerCellsOf(row);
@@ -143,8 +145,7 @@ function viewStateOf(
 }
 
 /**
- * 法人对象页（`#/group-legal-entities/<法人标识>`）。结构同工作台详情栏（见上）；主动作「登记资料修订」先把人带回概要签
- * 再展开法人资料区的登记表单并滚到它——人可能正停在时间线签上，所以签由本页记，经模板的受控签口交进去。
+ * 页头更新动作先激活资料版本，再展开表单并滚到它；受控页签保证从任何签都能到达编辑入口。
  */
 export function LegalEntityDetailPage({
   legalEntityId,
@@ -160,14 +161,22 @@ export function LegalEntityDetailPage({
   retry: () => void;
   onBack: () => void;
 }) {
-  const [tab, setTab] = useState<WorkspaceTabId>('summary');
+  const [tab, setTab] = useTabViewState<WorkspaceTabId>('legal-entity.object-tab', 'summary');
+  // 旧对象页把身份历史放在时间线签，保留工作区已记住的历史查看位置。
+  const activeTab = tab === 'timeline' ? 'identity-revisions' : tab;
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, `${row?.revision}:${row?.status}:${profileRefresh}`);
+  const contactCount = legalEntityContactCountOf(
+    profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row?.legalEntityId
+      ? profileQuery.answer.body
+      : undefined,
+  );
   const openProfileForm = () => {
-    setTab('summary');
+    setTab('profile-versions');
     setFormOpenRequest((count) => count + 1);
   };
   return (
@@ -188,7 +197,7 @@ export function LegalEntityDetailPage({
                   onClick={openProfileForm}
                 >
                   <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                  登记资料修订
+                  更新法人资料
                 </Button>
               ) : null}
               <LegalEntityMoreMenu row={row} />
@@ -219,32 +228,6 @@ export function LegalEntityDetailPage({
                     },
                   ]
                 : []),
-              {
-                id: 'profile-summary',
-                title: '法人资料摘要',
-                description: '当前时点的资料状态与开票可用性；资料修订历史和登记入口见下方开票资料。',
-                content: (
-                  <LegalEntityProfileSummary
-                    key={`${row.legalEntityId}:${row.revision}:${row.status}`}
-                    legalEntityId={row.legalEntityId}
-                    refreshKey={profileRefresh}
-                  />
-                ),
-              },
-              {
-                id: 'profile',
-                title: '开票资料',
-                description: '法人身份与法人资料分开登记；这里查看当前有效资料与资料修订历史，并登记下一笔资料修订。',
-                content: (
-                  <LegalEntityProfileSection
-                    key={row.legalEntityId}
-                    legalEntityId={row.legalEntityId}
-                    formOpenRequest={formOpenRequest}
-                    collapseCurrentProfile
-                    onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
-                  />
-                ),
-              },
             ]
           : undefined
       }
@@ -252,7 +235,39 @@ export function LegalEntityDetailPage({
         row
           ? [
               {
-                id: 'timeline',
+                id: 'summary',
+                content: (
+                  <section className="bg-idpxyz-bg p-5">
+                    <LegalEntityProfileSummary query={profileQuery} />
+                  </section>
+                ),
+              },
+              {
+                id: 'contacts',
+                count: contactCount,
+                content: (
+                  <section className="bg-idpxyz-bg p-5">
+                    <LegalEntityContactsSection query={profileQuery} />
+                  </section>
+                ),
+              },
+              {
+                id: 'profile-versions',
+                keepMounted: true,
+                content: (
+                  <section className="bg-idpxyz-bg p-5">
+                    <LegalEntityProfileSection
+                      key={row.legalEntityId}
+                      legalEntityId={row.legalEntityId}
+                      formOpenRequest={formOpenRequest}
+                      collapseCurrentProfile
+                      onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
+                    />
+                  </section>
+                ),
+              },
+              {
+                id: 'identity-revisions',
                 content: (
                   <RevisionHistorySection
                     register={legalEntityRevisionHistory}
@@ -264,7 +279,7 @@ export function LegalEntityDetailPage({
             ]
           : undefined
       }
-      activeTab={tab}
+      activeTab={activeTab}
       onActiveTabChange={setTab}
       viewState={viewState}
     />

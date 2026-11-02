@@ -27,6 +27,7 @@ import {
   type WorkspaceTabId,
   type WorkspaceTabInput,
 } from './workspace-tabs';
+import { TabCountBadge } from '../components/TabCountBadge';
 
 /** 业务区块：一个区块渲染成一个 Panel（Card），内容由调用方组装。 */
 export interface DetailSection {
@@ -56,7 +57,7 @@ export interface DetailSummaryStat {
   value: ReactNode;
 }
 
-/** 调用方给的一签：id 只能是六个稳定命名之一，词与顺序由 workspace-tabs 的固定表钉住。 */
+/** 调用方给的一签：id 只能取稳定命名，词与顺序由 workspace-tabs 的固定表钉住。 */
 export type DetailWorkspaceTab = WorkspaceTabInput<ReactNode>;
 
 export interface DetailPageTemplateProps {
@@ -95,8 +96,8 @@ export interface DetailPageTemplateProps {
   tabs?: DetailWorkspaceTab[];
   /**
    * 当前签（可选受控）。不传由模板自己记，与此前一致；传了由调用方记，签切换经 onActiveTabChange 报回。要它的是
-   * 「页头动作要把人带到某一签」那种页面——法人对象页的「登记资料修订」要先回到概要签再展开表单（票
-   * group-legal-entities-uiux/09），模板自己记的话调用方够不着。传进来的签此刻没有内容时照旧退回第一签。
+   * 「页头动作要把人带到某一签」那种页面，模板自己记的话调用方够不着。
+   * 传进来的签此刻没有内容时照旧退回第一签。
    */
   activeTab?: WorkspaceTabId;
   onActiveTabChange?: (tab: WorkspaceTabId) => void;
@@ -320,7 +321,9 @@ function WorkspaceTabs({
           <TabsTrigger key={tab.id} value={tab.id}>
             {tab.label}
             {tab.count !== undefined && (
-              <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
+              tab.id === 'contacts'
+                ? <TabCountBadge count={tab.count} />
+                : <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
             )}
           </TabsTrigger>
         ))}
@@ -328,7 +331,12 @@ function WorkspaceTabs({
       <div className="flex-1 overflow-auto">
         <ContentColumns aside={aside}>
           {tabs.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="flex flex-col gap-4">
+            <TabsContent
+              key={tab.id}
+              value={tab.id}
+              forceMount={tab.keepMounted || undefined}
+              className="flex flex-col gap-4 data-[state=inactive]:hidden"
+            >
               {tab.contents.map((content, index) => (
                 <Fragment key={index}>{content}</Fragment>
               ))}

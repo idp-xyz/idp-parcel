@@ -79,17 +79,20 @@ type legalEntityProfileRevisionListResponse struct {
 // legalEntityProfileRevisionBody 逐字段透出一笔资料修订。集合格总是数组（空即 []）；开票资料在不在用显式布尔
 // invoicingRegistered 说，不拿空抬头去推——缺开票资料是开立时答`资料不全`的成因之一，页面要能如实标出来。
 type legalEntityProfileRevisionBody struct {
-	TenantID               string                      `json:"tenantId"`
-	LegalEntityID          string                      `json:"legalEntityId"`
-	Revision               int                         `json:"revision"`
-	Basis                  string                      `json:"basis"`
-	EffectiveFrom          string                      `json:"effectiveFrom"`
-	RegisteredAddress      registeredAddressBody       `json:"registeredAddress"`
-	TaxRegistrationNumbers []taxRegistrationNumberBody `json:"taxRegistrationNumbers"`
-	InvoicingRegistered    bool                        `json:"invoicingRegistered"`
-	InvoiceTitle           string                      `json:"invoiceTitle,omitempty"`
-	Contacts               []legalEntityContactBody    `json:"contacts"`
-	RegisteredAt           string                      `json:"registeredAt"`
+	TenantID               string                         `json:"tenantId"`
+	LegalEntityID          string                         `json:"legalEntityId"`
+	Revision               int                            `json:"revision"`
+	Basis                  string                         `json:"basis"`
+	EffectiveFrom          string                         `json:"effectiveFrom"`
+	RegisteredAddress      registeredAddressBody          `json:"registeredAddress"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody    `json:"taxRegistrationNumbers"`
+	InvoicingRegistered    bool                           `json:"invoicingRegistered"`
+	InvoiceTitle           string                         `json:"invoiceTitle,omitempty"`
+	Contacts               []legalEntityContactBody       `json:"contacts"`
+	RegisteredAt           string                         `json:"registeredAt"`
+	Representative         *legalEntityRepresentativeBody `json:"representative,omitempty"`
+	OfficeAddress          *registeredAddressBody         `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *registeredAddressBody         `json:"correspondenceAddress,omitempty"`
 }
 
 type registeredAddressBody struct {
@@ -103,9 +106,19 @@ type taxRegistrationNumberBody struct {
 }
 
 type legalEntityContactBody struct {
-	Name  string `json:"name"`
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
+	Name           string                        `json:"name"`
+	Email          string                        `json:"email,omitempty"`
+	Phone          string                        `json:"phone,omitempty"`
+	Department     string                        `json:"department,omitempty"`
+	Position       string                        `json:"position,omitempty"`
+	Purposes       []domain.ContactPurpose       `json:"purposes,omitempty"`
+	PrimaryFor     []domain.ContactPurpose       `json:"primaryFor,omitempty"`
+	SocialAccounts []domain.ContactSocialAccount `json:"socialAccounts,omitempty"`
+}
+
+type legalEntityRepresentativeBody struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
 }
 
 func legalEntityProfileRevisionBodyOf(row ports.LegalEntityProfileRevisionRow) legalEntityProfileRevisionBody {
@@ -132,7 +145,24 @@ func legalEntityProfileRevisionBodyOf(row ports.LegalEntityProfileRevisionRow) l
 		body.InvoiceTitle = row.InvoiceTitle
 	}
 	for _, contact := range row.Contacts {
-		body.Contacts = append(body.Contacts, legalEntityContactBody{Name: contact.Name, Email: contact.Email, Phone: contact.Phone})
+		body.Contacts = append(body.Contacts, legalEntityContactBody{Name: contact.Name, Email: contact.Email, Phone: contact.Phone, Department: contact.Department, Position: contact.Position, Purposes: toContactPurposes(contact.Purposes), PrimaryFor: toContactPurposes(contact.PrimaryFor), SocialAccounts: contact.SocialAccounts})
+	}
+	if value := row.Representative; value != nil {
+		body.Representative = &legalEntityRepresentativeBody{Kind: value.Kind, Name: value.Name}
+	}
+	if value := row.OfficeAddress; value != nil {
+		body.OfficeAddress = &registeredAddressBody{Country: value.Country, Lines: value.Lines}
+	}
+	if value := row.CorrespondenceAddress; value != nil {
+		body.CorrespondenceAddress = &registeredAddressBody{Country: value.Country, Lines: value.Lines}
 	}
 	return body
+}
+
+func toContactPurposes(values []string) []domain.ContactPurpose {
+	result := make([]domain.ContactPurpose, len(values))
+	for i, value := range values {
+		result[i] = domain.ContactPurpose(value)
+	}
+	return result
 }

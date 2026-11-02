@@ -85,10 +85,13 @@ type LegalEntityProfileRevisionRow struct {
 	AddressLines   []string
 	TaxNumbers     []TaxRegistrationNumberRow
 	// HasInvoicing 为假即这笔修订没带开票资料；InvoiceTitle 只在它为真时有意义。
-	HasInvoicing bool
-	InvoiceTitle string
-	Contacts     []LegalEntityContactRow
-	RegisteredAt time.Time
+	HasInvoicing          bool
+	InvoiceTitle          string
+	Contacts              []LegalEntityContactRow
+	RegisteredAt          time.Time
+	Representative        *LegalEntityRepresentativeRow
+	OfficeAddress         *LegalEntityAddressRow
+	CorrespondenceAddress *LegalEntityAddressRow
 }
 
 type TaxRegistrationNumberRow struct {
@@ -98,9 +101,20 @@ type TaxRegistrationNumberRow struct {
 
 // LegalEntityContactRow 的邮箱与电话空串即未登记。
 type LegalEntityContactRow struct {
-	Name  string
-	Email string
-	Phone string
+	Name           string
+	Email          string
+	Phone          string
+	Department     string
+	Position       string
+	Purposes       []string
+	PrimaryFor     []string
+	SocialAccounts []domain.ContactSocialAccount
+}
+
+type LegalEntityRepresentativeRow struct{ Kind, Name string }
+type LegalEntityAddressRow struct {
+	Country string
+	Lines   []string
 }
 
 // LegalEntityProfileRevisionHistoryRead 是法人资料修订历史的读端口：按单个法人展开登记册上的全部修订，按

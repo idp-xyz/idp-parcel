@@ -11,11 +11,15 @@ import { primaryActionClass } from '../../components/primary-action';
 import type { GroupLegalEntityRecord } from './api';
 import { labelOf, legalEntityKindLabels, updateOrdinalLabel } from './presentation';
 import { StatusPill } from '../../components/StatusPill';
+import { TabCountBadge } from '../../components/TabCountBadge';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityBanners, LegalEntityMoreMenu } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
+import { LegalEntityContactsSection } from './LegalEntityContactsSection';
+import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
+import { legalEntityContactCountOf } from './legal-entity-profile';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import {
@@ -28,8 +32,9 @@ import {
   DetailRow,
 } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { useTabViewState } from '../../templates/workspace-view-state';
 
-type PanelTab = 'overview' | 'profile' | 'history';
+type PanelTab = 'overview' | 'contacts' | 'profile' | 'history';
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
@@ -50,14 +55,20 @@ export function LegalEntityDetailPanel({
   onClose: () => void;
   onOpenObjectPage: () => void;
 }) {
-  const [tab, setTab] = useState<PanelTab>('overview');
+  const [tab, setTab] = useTabViewState<PanelTab>('legal-entity.panel-tab', 'overview');
   // 去过的签留着挂载（隐藏而不卸载）：Radix 默认卸掉非活动签，法人资料与修订历史两区每切回来一次就重取一次、闪一次加载态。
-  // 只留「去过的」，不一开栏就三签全挂——方向键逐行翻时不为没看的签取数。
-  const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
+  // 只留「去过的」，不一开栏就把所有签挂上——方向键逐行翻时不为没看的签取数。
+  const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview', tab]));
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, `${row.revision}:${row.status}:${profileRefresh}`);
+  const contactCount = legalEntityContactCountOf(
+    profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row.legalEntityId
+      ? profileQuery.answer.body
+      : undefined,
+  );
   const copy = useCopyToClipboard();
   const identity = identityLayerCellsOf(row);
   const kind = labelOf(legalEntityKindLabels, row.kind);
@@ -93,7 +104,7 @@ export function LegalEntityDetailPanel({
             {mayWrite ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                更新开票资料
+                更新法人资料
               </Button>
             ) : null}
             <LegalEntityMoreMenu row={row} onOpenObjectPage={onOpenObjectPage} />
@@ -133,10 +144,17 @@ export function LegalEntityDetailPanel({
             概要
           </TabsTrigger>
           <TabsTrigger
+            value="contacts"
+            className="px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent"
+          >
+            联系人
+            {contactCount !== undefined ? <TabCountBadge count={contactCount} /> : null}
+          </TabsTrigger>
+          <TabsTrigger
             value="profile"
             className="px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent"
           >
-            开票资料
+            资料版本
           </TabsTrigger>
           <TabsTrigger
             value="history"
@@ -155,11 +173,7 @@ export function LegalEntityDetailPanel({
                   </DetailRow>
                 </dl>
               ) : null}
-              <LegalEntityProfileSummary
-                key={`${row.legalEntityId}:${row.revision}:${row.status}`}
-                legalEntityId={row.legalEntityId}
-                refreshKey={profileRefresh}
-              />
+              <LegalEntityProfileSummary query={profileQuery} />
               <TechnicalDetails
                 className="mt-4"
                 rows={[
@@ -174,6 +188,13 @@ export function LegalEntityDetailPanel({
               />
             </TabsContent>
             <TabsContent
+              value="contacts"
+              forceMount={visited.has('contacts') || undefined}
+              className="mt-0 data-[state=inactive]:hidden"
+            >
+              <LegalEntityContactsSection query={profileQuery} />
+            </TabsContent>
+            <TabsContent
               value="profile"
               forceMount={visited.has('profile') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
@@ -182,6 +203,7 @@ export function LegalEntityDetailPanel({
                 key={row.legalEntityId}
                 legalEntityId={row.legalEntityId}
                 formOpenRequest={formOpenRequest}
+                collapseCurrentProfile
                 onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
               />
             </TabsContent>

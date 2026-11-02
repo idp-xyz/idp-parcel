@@ -6,12 +6,101 @@ import {
   legalEntityProfileLocalProblems,
   legalEntityProfilePayloadOf,
   legalEntityProfileStatusOf,
+  legalEntityContactCountOf,
+  profileDraftContentOf,
+  profileMaintenanceNotes,
   profileContentLines,
   profileRevisionTimeline,
   resolutionInstantOf,
   suggestedProfileRevision,
   type LegalEntityProfileDraft,
 } from './legal-entity-profile';
+
+test('社交账号带入再保存保全且不共享可变资料，部分输入与重复组合提示问题', () => {
+  const source = revision({ contacts: [{ name: 'SYN 联系人', socialAccounts: [{ platform: '微信', account: 'SYN-WX-01' }, { platform: 'Telegram', account: 'SYN-TG-01' }] }] });
+  const content = profileDraftContentOf(source);
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  deepEqual(payload.contacts, source.contacts);
+  content.contacts[0].socialAccounts![0].account = 'SYN-CHANGED';
+  equal(source.contacts[0].socialAccounts![0].account, 'SYN-WX-01');
+  const broken = draft({ contacts: [{ name: 'SYN', email: '', phone: '', socialAccounts: [{ platform: '微信', account: '' }, { platform: 'Telegram', account: 'SYN-01' }, { platform: ' telegram ', account: ' SYN-01 ' }] }] });
+  const problems = legalEntityProfileLocalProblems(broken, 'UTC');
+  equal(problems['profiles[0].contacts[0].socialAccounts[0]']?.length, 1);
+  equal(problems['profiles[0].contacts[0].socialAccounts[2]']?.length, 1);
+  equal(profileMaintenanceNotes(source).some(note => note.includes('未配置可联系')), false);
+});
+
+test('联系人计数区分真实零人、没有可读资料与开票不全', () => {
+  const response = { outcome: 'RESOLVED', legalEntityId: 'SYN-LE-01', at: '2026-10-30T08:00:00Z', effectiveRevision: revision({ contacts: [] }) };
+  equal(legalEntityContactCountOf(response), 0);
+  const withContacts = { ...response, effectiveRevision: revision({ contacts: [{ name: 'SYN-A' }, { name: 'SYN-B' }] }) };
+  equal(legalEntityContactCountOf(withContacts), 2);
+  equal(legalEntityContactCountOf({ ...withContacts, outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_INVOICING_DETAILS' }), 2);
+  equal(legalEntityContactCountOf(undefined), undefined);
+  equal(legalEntityContactCountOf({ ...response, effectiveRevision: undefined }), undefined);
+  for (const outcome of ['LEGAL_ENTITY_DEACTIVATED', 'LEGAL_ENTITY_NOT_EFFECTIVE', 'LEGAL_ENTITY_NOT_REGISTERED', 'UNKNOWN']) {
+    equal(legalEntityContactCountOf({ ...withContacts, outcome }), undefined);
+  }
+  equal(legalEntityContactCountOf({ ...withContacts, outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_EFFECTIVE_REVISION' }), undefined);
+});
+
+test('扩展资料带入和再保存保全内容，但不沿用旧登记决定', () => {
+  const source = revision({
+    representative: { kind: 'LEGAL_REPRESENTATIVE', name: 'SYN 代表人' },
+    officeAddress: { country: 'SG', lines: ['SYN 办公地址'] },
+    correspondenceAddress: { country: 'CN', lines: ['SYN 通信地址'] },
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    contacts: [
+      {
+        name: 'SYN 财务联系人',
+        department: 'SYN 财务部',
+        position: 'SYN 经理',
+        purposes: ['FINANCE', 'BUSINESS'],
+        primaryFor: ['FINANCE'],
+        email: 'finance@example.invalid',
+      },
+    ],
+  });
+  const content = profileDraftContentOf(source);
+  equal('basis' in content, false);
+  equal('effectiveFrom' in content, false);
+  equal('revision' in content, false);
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  deepEqual(payload.contacts, source.contacts);
+  deepEqual(payload.representative, source.representative);
+  deepEqual(payload.officeAddress, source.officeAddress);
+  deepEqual(payload.correspondenceAddress, source.correspondenceAddress);
+  content.contacts[0].primaryFor!.push('BUSINESS');
+  equal(source.contacts[0].primaryFor!.length, 1);
+  deepEqual(profileMaintenanceNotes(source), ['商务主要联系人未指名']);
+});
+
+test('扩展可选格不产生默认值；半填和主要联系人冲突明确报告', () => {
+  const blank = legalEntityProfilePayloadOf(draft({}), 'UTC').profiles[0];
+  equal('representative' in blank, false);
+  equal('officeAddress' in blank, false);
+  equal('correspondenceAddress' in blank, false);
+  const problems = legalEntityProfileLocalProblems(
+    draft({
+      representativeName: 'SYN 代表人',
+      officeCountry: 'CN',
+      contacts: [
+        { name: 'SYN-A', email: '', phone: '', purposes: ['FINANCE'], primaryFor: ['FINANCE'] },
+        { name: 'SYN-B', email: '', phone: '', purposes: ['FINANCE'], primaryFor: ['FINANCE'] },
+        { name: '', email: 'finance@example.invalid', phone: '' },
+      ],
+    }),
+    'UTC',
+  );
+  deepEqual(problems['profiles[0].representative'], ['身份类型与姓名需要成对填写']);
+  deepEqual(problems['profiles[0].officeAddress'], ['国家 / 地区与地址需要一起填写']);
+  deepEqual(problems['profiles[0].contacts[1]'], ['财务已指名其他主要联系人']);
+  deepEqual(problems['profiles[0].contacts[2]'], ['请填写联系人姓名']);
+  const old = profileDraftContentOf(revision({}));
+  equal(old.representativeKind, '');
+  equal(old.officeCountry, '');
+});
 
 // 本文件钉法人资料区的纯逻辑（票 legal-entity-profile/04 第 2 项）：表单只做编码层的事——修订号编整数、墙钟换 RFC 3339、
 // 可缺键缺席而不是空串；法人在不在册、地址国家对不对得上身份、税号合不合目录一律送给服务端答。内容照答复原样转写。
@@ -150,10 +239,9 @@ test('资料内容转写', () => {
       { label: '联系人', value: 'SYN 甲（a@example.invalid，100）；SYN 乙' },
     ],
   );
-  deepEqual(
-    profileContentLines(revision({ registeredAddress: { country: '', lines: [] } })).slice(0, 1),
-    [{ label: '注册地址', value: '未配置' }],
-  );
+  deepEqual(profileContentLines(revision({ registeredAddress: { country: '', lines: [] } })).slice(0, 1), [
+    { label: '注册地址', value: '未配置' },
+  ]);
 });
 
 test('法人资料状态按当前解析结果区分未配置、资料不全与可开票', () => {
@@ -162,7 +250,10 @@ test('法人资料状态按当前解析结果区分未配置、资料不全与�
     tone: 'good',
     description: '当前时点有生效资料，且已登记开票资料。',
   });
-  equal(legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_EFFECTIVE_REVISION' }).label, '未配置');
+  equal(
+    legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_EFFECTIVE_REVISION' }).label,
+    '未配置',
+  );
   equal(
     legalEntityProfileStatusOf({
       outcome: 'PROFILE_INCOMPLETE',

@@ -3,10 +3,13 @@
 
 /**
  * 手册「对象工作区（Workspace）统一规范」Main Content Tabs 的稳定命名，渲染顺序即此序；调用方传进来的顺序不算数。
- * 六个 id 只在这里写一遍——WorkspaceTabId 从它派生，多一个少一个都不会出现「类型有、表里没有」的缝。
+ * 稳定 id 只在这里写一遍——WorkspaceTabId 从它派生，不会出现「类型有、表里没有」的缝。
  */
 export const workspaceTabOrder = [
   'summary',
+  'contacts',
+  'profile-versions',
+  'identity-revisions',
   'timeline',
   'related',
   'exceptions',
@@ -14,12 +17,15 @@ export const workspaceTabOrder = [
   'audit',
 ] as const;
 
-/** 换产品不换签名：调用方只能给这六个 id 之一，给不了新签。 */
+/** 调用方只能给固定表中的 id，签名与顺序统一维护。 */
 export type WorkspaceTabId = (typeof workspaceTabOrder)[number];
 
 /** id → 签上的词。词由这里钉住，调用方改不了。 */
 export const workspaceTabLabels: Record<WorkspaceTabId, string> = {
   summary: '概要',
+  contacts: '联系人',
+  'profile-versions': '资料版本',
+  'identity-revisions': '身份修订',
   timeline: '时间线',
   related: '关联',
   exceptions: '异常',
@@ -32,6 +38,8 @@ export interface WorkspaceTabInput<Content> {
   id: WorkspaceTabId;
   content: Content;
   count?: number;
+  /** 编辑签切走时保留草稿与查询状态；未声明的签沿用卸载行为。 */
+  keepMounted?: boolean;
 }
 
 /** 归并后要渲染的一签：内容按序摊平，模板内容在前。 */
@@ -40,6 +48,7 @@ export interface ResolvedWorkspaceTab<Content> {
   label: string;
   contents: Content[];
   count?: number;
+  keepMounted?: boolean;
 }
 
 /**
@@ -58,13 +67,15 @@ export function resolveWorkspaceTabs<Content>(
   for (const id of workspaceTabOrder) {
     const contents: Content[] = [...(templateContents[id] ?? [])];
     let count: number | undefined;
+    let keepMounted: boolean | undefined;
     for (const tab of callerTabs ?? []) {
       if (tab.id !== id) continue;
       contents.push(tab.content);
       if (count === undefined) count = tab.count;
+      if (tab.keepMounted) keepMounted = true;
     }
     if (contents.length === 0) continue;
-    resolved.push({ id, label: workspaceTabLabels[id], contents, count });
+    resolved.push({ id, label: workspaceTabLabels[id], contents, count, keepMounted });
   }
   return resolved;
 }
