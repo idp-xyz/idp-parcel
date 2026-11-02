@@ -1,6 +1,6 @@
 # ADR-0340：供应商账单接收与审核应付是两种运营决定，各自记下点它的那个人
 
-Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的拆笔答「按你的建议开始吧」、2026-10-28 答「继续」；票 product-strategy-boundary/22 第 3 笔。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：供应商账单的接收编排与审核（它的 `Audit`）已装在 parcel-api，没有任何口能调到；UC-SA-004 要求接收与审核分别授权、审计记下审核人与决定人，审核应付上的 `auditor_ref` 却是审核授权册登的那一方。**取法**：开两个运营决定口，各一种授予；两份命令带操作证据，落在接收行与应付行上，只作审计。
+Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的拆笔答「按你的建议开始吧」、2026-10-28 答「继续」；票 product-strategy-boundary/22 第 3 笔。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：供应商账单的接收编排与审核（它的 `Audit`）已装在 parcel-api，没有任何口能调到；UC-SA-004 要求接收与审核分别授权、审计记下审核人与决定人，审核应付上的 `auditor_ref` 却是审核授权册登的那一方。**取法**：开两个运营决定口，各一种授予；两份命令带操作证据，落在接收行与应付行上，只作审计。｜**部分停用**（2026-11-02）：其决定一「载荷包括：账单身份与版本、供应商、法人、账期、币种、逐行（行、费用项目、主张金额）、到达时刻、可缺的被追加账单，以及逐行匹配裁决（行、分类、点名的预期成本版本、匹配依据）。」与「重放、版本冲突、未受理、点名的预期成本不是当前版，都是答案（`200`）。」两句，决定二「载荷点名账单、版本、行与要形成的应付标识；金额、越权升级上限、应付归集账户都读册。」与「已存在、冲突、这一行不可审核、超上限要升级，都是答案。」两句，已由 [ADR-0357](./0357-a-supplier-bill-number-is-an-external-identifier-of-the-claim-and-an-audit-passes-disputes-or-rejects-amount-ranges-of-a-line.md) 停用——接收载荷扩成加可缺的供应商账单号（外部标识，另记一册，同一供应商同号只标识一份主张，答复加账单号冲突）；审核载荷改为点名决定标识、结果（通过、争议、拒绝）与这一行上的金额范围，应付金额取范围长度、通过之和不超已匹配金额，答复加争议已记、拒绝已记、范围已裁决；只点名应付标识的旧载荷照收，读作通过整行。其余各条不变｜**由 [ADR-0357](./0357-a-supplier-bill-number-is-an-external-identifier-of-the-claim-and-an-audit-passes-disputes-or-rejects-amount-ranges-of-a-line.md) 回答**：越权风险点一「贷项与争议决定没开口。」的争议决定那一半——争议与拒绝经审核口按范围给出、争议以点名它的再审解除；贷项那一半仍没有口，无条款停用
 Date: 2026-10-28
 
 ## Context
@@ -55,3 +55,4 @@ Date: 2026-10-28
 - [ADR-0163](./0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md)、[ADR-0151](./0151-unassigned-command-faces-get-their-families.md)
 - [UC-SA-004](../application/settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md)：`AT-SA-225`、`AT-SA-226`
 - 票 [product-strategy-boundary/22](../../.scratch/product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)
+- [ADR-0357](./0357-a-supplier-bill-number-is-an-external-identifier-of-the-claim-and-an-audit-passes-disputes-or-rejects-amount-ranges-of-a-line.md)：部分停用决定一两句（接收载荷加供应商账单号、答复加账单号冲突）与决定二两句（审核按范围给通过、争议或拒绝）；回答越权风险点一的争议决定那一半
