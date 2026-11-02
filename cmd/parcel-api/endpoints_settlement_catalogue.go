@@ -12,6 +12,7 @@ type settlementCatalogueWiring struct {
 	settlementCharges           settlementhttp.ChargeCatalogueReader
 	settlementStatements        settlementhttp.StatementCatalogueReader
 	settlementDisputed          settlementhttp.DisputedStatementReader
+	settlementStatementLines    settlementhttp.StatementLineReader
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader
 	settlementOperatingResults  settlementhttp.OperatingCatalogueReader
 }
@@ -22,6 +23,7 @@ func init() {
 			"/settlement-charges":             {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-charges?registry=customer-charge"},
 			"/settlement-statements":          {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statements?registry=customer-statement"},
 			"/settlement-disputed-statements": {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-statement-lines":     {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statement-lines?statement=SYN-PROBE"},
 			"/settlement-funds-applications":  {method: http.MethodGet, face: operationsReadFace()},
 			"/settlement-operating-results":   {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
 		},
@@ -50,6 +52,7 @@ func init() {
 				settlementStatements: settlementStatements,
 				// 存在争议的单读的是对账单册同一张表、同一套列，同一个适配器两口共用。
 				settlementDisputed:          settlementStatements,
+				settlementStatementLines:    settlementStatements,
 				settlementFundsApplications: settlementFundsApplications,
 				settlementOperatingResults:  settlementOperatingResults,
 			}, nil
@@ -64,6 +67,8 @@ func init() {
 				{Pattern: "/settlement-charges", Handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementCatalogueIntake, wiring.settlementCharges)},
 				{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, wiring.settlementStatements)},
 				{Pattern: "/settlement-disputed-statements", Handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(settlementCatalogueIntake, wiring.settlementDisputed)},
+				// 一张单自己的费用行：管理台登记争议时从这里选费用（ADR-0354）。
+				{Pattern: "/settlement-statement-lines", Handler: settlementhttp.NewQueryStatementLinesEndpoint(settlementCatalogueIntake, wiring.settlementStatementLines)},
 				{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, wiring.settlementFundsApplications)},
 				{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, wiring.settlementOperatingResults)},
 			}

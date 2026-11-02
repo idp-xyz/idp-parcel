@@ -7,12 +7,13 @@ import { formatInstant } from '../catalogue-view';
 import { hiddenDecisionHint, statementDisputeRegistrationDecision, statementDisputeResolutionDecision } from '../operator-grants';
 import { useMayMakeDecision } from '../use-operator-grants';
 import {
+  getStatementLines,
   registerStatementDispute,
   resolveStatementDispute,
-  type CustomerChargeRecord,
   type CustomerStatementRecord,
   type DisputeDecisionResponseBody,
   type DisputeResolutionPayload,
+  type StatementLinesResponseBody,
 } from './api';
 import {
   amountProblem,
@@ -20,6 +21,7 @@ import {
   instantToLocalInput,
   localInputToInstant,
   newDisputeId,
+  openedAtProblem,
   openDisputesOf,
   registrationAnswerText,
   resolutionAnswerText,
@@ -55,16 +57,30 @@ function AnswerNote({ answer, verb, words }: { answer: ApiResult<DisputeDecision
   );
 }
 
+/** 答复里这几格说明库上已有那一项或刚落了一项：重读这一签，左边的行与右栏的待处理项跟着读口走。 */
+const registrationSettled = new Set(['DISPUTE_OPENED', 'EXISTING_DISPUTE']);
+const resolutionSettled = new Set(['DISPUTE_RESOLVED', 'DISPUTE_ALREADY_RESOLVED']);
+
 function RegisterDisputeForm({
   statement,
-  charges,
   onAnswered,
 }: {
   statement: CustomerStatementRecord;
-  charges: readonly CustomerChargeRecord[];
   onAnswered: (text: string) => void;
 }) {
-  const options = useMemo(() => chargesOnStatement(charges, statement.statementNumber), [charges, statement.statementNumber]);
+  // 费用取这张单自己的行：目录行只带行数，按页上列的费用册又会漏掉页外的费用、认不出作废单上的行。
+  const [lines, setLines] = useState<ApiResult<StatementLinesResponseBody> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLines(null);
+    void getStatementLines(statement.statementNumber).then((next) => {
+      if (!cancelled) setLines(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [statement.statementNumber]);
+  const options = useMemo(() => (lines?.kind === 'outcome' ? chargesOnStatement(lines.body) : []), [lines]);
   const [charge, setCharge] = useState('');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
@@ -84,11 +100,13 @@ function RegisterDisputeForm({
   }, [statement.statementNumber]);
 
   const selected = options.find((option) => option.charge === charge);
+  const openedInstant = localInputToInstant(openedAt);
   const problems = {
     charge: charge === '' ? '选一笔客户不认的费用' : null,
     amount: amountProblem(amount, selected?.amount),
     reason: textProblem(reason, '客户怎么说'),
-    openedAt: localInputToInstant(openedAt) === null ? '填客户提出异议的时间' : null,
+    openedAt:
+      openedInstant === null ? '填客户提出异议的时间' : openedAtProblem(openedInstant, statement.publishedAt, statement.voidedAt),
   };
   const blocked = Object.values(problems).some((problem) => problem !== null);
 
@@ -107,22 +125,22 @@ function RegisterDisputeForm({
     });
     setPending(false);
     setAnswer(result);
-    if (result.kind === 'outcome' && result.body.outcome === 'DISPUTE_OPENED') {
-      setDisputeId(newDisputeId(new Date(), Math.random().toString(36).slice(2)));
-      setAmount('');
-      setReason('');
-      setTouched(false);
+    if (result.kind === 'outcome' && registrationSettled.has(result.body.outcome)) {
+      if (result.body.outcome === 'DISPUTE_OPENED') {
+        setDisputeId(newDisputeId(new Date(), Math.random().toString(36).slice(2)));
+        setAmount('');
+        setReason('');
+        setTouched(false);
+      }
       onAnswered(registrationAnswerText(result.body));
     }
   };
 
-  if (statement.voidBasis) {
-    return <p className="text-[12px] leading-5 text-idpxyz-textMuted">这张单已经作废，不再收新的争议；请对着替代单登记。</p>;
-  }
-  if (options.length === 0) {
+  if (lines === null) return <p className="text-[12px] text-idpxyz-textMuted">正在读这张单上的费用…</p>;
+  if (lines.kind !== 'outcome' || options.length === 0) {
     return (
       <p className="text-[12px] leading-5 text-idpxyz-textMuted">
-        客户费用列表里还看不到这张单上的费用，没法选是哪一笔；刷新一下，或到「费用」页确认它已出账。
+        {lines.kind === 'outcome' ? '这张单上没有能选的费用行。' : `${feedbackFor(lines, '读取').text}；读不到这张单上的费用，没法选是哪一笔。`}
       </p>
     );
   }
@@ -139,7 +157,7 @@ function RegisterDisputeForm({
           <option value="">选一笔</option>
           {options.map((option) => (
             <option key={option.charge} value={option.charge}>
-              {labelFor(option.feeItem)} · {formatMoney(option.amount, option.currency)} · {option.charge}
+              {option.charge} · {formatMoney(option.amount, option.currency)}
             </option>
           ))}
         </select>
@@ -150,6 +168,11 @@ function RegisterDisputeForm({
       <Field label="客户怎么说" problem={touched ? problems.reason : null}>
         <textarea className={fieldClass} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例：客户来电说这票实重 1.2 kg，单上按 1.5 kg 计" />
       </Field>
+      {statement.voidedAt ? (
+        <p className="text-[11px] leading-4 text-idpxyz-textMuted">
+          这张单在 {formatInstant(statement.voidedAt)} 作废；作废之前客户提出的异议照常登记，作废之后提出的不再登记在这张单上。
+        </p>
+      ) : null}
       <Field label="客户提出的时间" problem={touched ? problems.openedAt : null}>
         <input className={fieldClass} type="datetime-local" value={openedAt} onChange={(event) => setOpenedAt(event.target.value)} />
       </Field>
@@ -197,7 +220,7 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
     });
     setPending(false);
     setAnswer(result);
-    if (result.kind === 'outcome' && result.body.outcome === 'DISPUTE_RESOLVED') {
+    if (result.kind === 'outcome' && resolutionSettled.has(result.body.outcome)) {
       setDispute('');
       setResolution('');
       setBasis('');
@@ -269,12 +292,10 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
 export function StatementDisputePanel({
   statement,
   gone = false,
-  charges,
   onAnswered,
 }: {
   statement: CustomerStatementRecord | undefined;
   gone?: boolean;
-  charges: readonly CustomerChargeRecord[];
   onAnswered: () => void;
 }) {
   const mayRegister = useMayMakeDecision(statementDisputeRegistrationDecision);
@@ -307,7 +328,7 @@ export function StatementDisputePanel({
             <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">登记争议</h3>
             <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">客户来电或来信说某笔费用不对，照他的话登记下来，等财务核实。</p>
             {mayRegister ? (
-              <RegisterDisputeForm statement={statement} charges={charges} onAnswered={answered} />
+              <RegisterDisputeForm statement={statement} onAnswered={answered} />
             ) : (
               <p className="text-[12px] text-idpxyz-textMuted">{hiddenDecisionHint('登记争议', labelFor(statementDisputeRegistrationDecision))}</p>
             )}

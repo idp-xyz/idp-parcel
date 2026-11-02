@@ -11,7 +11,6 @@ import {
   listDisputedCustomerStatements,
   listSettlementCharges,
   listSettlementStatements,
-  type CustomerChargeRecord,
   type CustomerStatementListResponseBody,
   type DisputedCustomerStatementListResponseBody,
   type CustomerStatementRecord,
@@ -133,8 +132,6 @@ function CustomerStatementsTable({
     null,
   );
   const [accountOwners, setAccountOwners] = useState<Map<string, string>>(() => new Map());
-  // 客户费用两用：名称转写的「账户 → 相对方」，与右栏登记争议时按「所在对账单」列出一张单上的费用。
-  const [charges, setCharges] = useState<CustomerChargeRecord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
@@ -146,10 +143,7 @@ function CustomerStatementsTable({
     });
     // 账户归谁的对应只是名称转写的辅助一问：它不成也不影响对账单本身的呈现，列上退回显账户号。
     void listSettlementCharges('customer-charge').then((next) => {
-      if (!cancelled && next.kind === 'outcome') {
-        setAccountOwners(accountCounterparties(next.body.charges));
-        setCharges(next.body.charges);
-      }
+      if (!cancelled && next.kind === 'outcome') setAccountOwners(accountCounterparties(next.body.charges));
     });
     return () => {
       cancelled = true;
@@ -234,7 +228,7 @@ function CustomerStatementsTable({
         />
       </div>
       {/* 登记或处理落定后重读这一签：单上的争议与首页待对账的件数都从读口来，页面不自己往行上补。 */}
-      <StatementDisputePanel statement={panelStatement} gone={panelGone} charges={charges} onAnswered={retry} />
+      <StatementDisputePanel statement={panelStatement} gone={panelGone} onAnswered={retry} />
     </div>
   );
 }

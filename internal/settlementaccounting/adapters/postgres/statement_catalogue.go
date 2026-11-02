@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -36,6 +38,7 @@ func NewStatementCatalogue(db *bentopg.DB) (*StatementCatalogue, error) {
 var (
 	_ ports.StatementCatalogueRead = (*StatementCatalogue)(nil)
 	_ ports.DisputedStatementRead  = (*StatementCatalogue)(nil)
+	_ ports.StatementLineRead      = (*StatementCatalogue)(nil)
 )
 
 // statementDisputeDocument 与 subsequentInclusionDocument 是两个聚合的临时词形。
@@ -309,4 +312,51 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
 	}
 	return entries, nil
+}
+
+// statementLineDocument 是 customer_statement.lines 里一行的词形（截单发布落库时写的那一份）。
+type statementLineDocument struct {
+	Charge      string `json:"charge"`
+	AmountMinor int64  `json:"amount_minor"`
+}
+
+// FindStatementLines 读一张已发布对账单自己的费用行（单上的不可覆盖快照），连同币种、发布与作废时刻；单不在册答 false。
+func (catalogue *StatementCatalogue) FindStatementLines(
+	ctx context.Context,
+	tenant domain.TenantID,
+	number string,
+) (ports.StatementLines, bool, error) {
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.StatementLines{}, false, fmt.Errorf("find statement lines: %w", err)
+	}
+	var (
+		found       ports.StatementLines
+		publishedAt time.Time
+		voidedAt    *time.Time
+		linesJSON   []byte
+	)
+	err = querier.QueryRow(ctx,
+		`SELECT statement_number, currency, published_at, voided_at, lines
+		   FROM settlement_accounting.customer_statement
+		  WHERE tenant_id = $1 AND statement_number = $2`,
+		tenant.String(), number,
+	).Scan(&found.StatementNumber, &found.Currency, &publishedAt, &voidedAt, &linesJSON)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.StatementLines{}, false, nil
+	}
+	if err != nil {
+		return ports.StatementLines{}, false, fmt.Errorf("find statement lines: %w", err)
+	}
+	found.PublishedAt = publishedAt.UTC()
+	found.VoidedAt = catalogueInstant(voidedAt)
+	var documents []statementLineDocument
+	if err := json.Unmarshal(linesJSON, &documents); err != nil {
+		return ports.StatementLines{}, false, fmt.Errorf("find statement lines: 费用行解码：%w", err)
+	}
+	found.Lines = make([]ports.StatementLineEntry, 0, len(documents))
+	for _, document := range documents {
+		found.Lines = append(found.Lines, ports.StatementLineEntry{Charge: document.Charge, AmountMinor: document.AmountMinor})
+	}
+	return found, true, nil
 }

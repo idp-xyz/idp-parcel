@@ -88,3 +88,24 @@ func TestDisputedStatementsAreThoseWithADisputeAwaitingAFinalResolution(t *testi
 		t.Fatal("limit 为 0 必须拒")
 	}
 }
+
+// Covers: AT-SA-228（读口半边）——一张单自己的费用行照单上快照读出，带币种、发布与作废时刻；作废单的行照样读得出（作废前提出的
+// 争议还要从它上面选费用）；他租户与不在册的单答没有。
+func TestStatementLinesAreReadFromTheStatementItself(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	fixture.seedStatement(t, catalogueTenant, "SYN-STMT-L", true)
+	found, has, err := fixture.statement.FindStatementLines(t.Context(), catalogueTenantID(t, catalogueTenant), "SYN-STMT-L")
+	if err != nil || !has {
+		t.Fatalf("读费用行：%v %v", err, has)
+	}
+	if found.StatementNumber != "SYN-STMT-L" || found.Currency != "SYN-CUR-01" || found.VoidedAt == nil ||
+		len(found.Lines) != 1 || found.Lines[0].Charge != "SYN-CHG-01" || found.Lines[0].AmountMinor != 1000 {
+		t.Fatalf("费用行走样：%+v", found)
+	}
+	if _, has, err := fixture.statement.FindStatementLines(t.Context(), catalogueTenantID(t, "tenant-b"), "SYN-STMT-L"); err != nil || has {
+		t.Fatalf("他租户不得读到：%v %v", err, has)
+	}
+	if _, has, err := fixture.statement.FindStatementLines(t.Context(), catalogueTenantID(t, catalogueTenant), "SYN-STMT-NONE"); err != nil || has {
+		t.Fatalf("不在册答没有：%v %v", err, has)
+	}
+}

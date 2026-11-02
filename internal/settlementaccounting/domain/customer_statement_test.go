@@ -572,8 +572,8 @@ func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-228（领域半边）——争议对着已经发给客户的那张单：提出时刻早于发布的不收；已作废的单不收新争议，答的是作废那一格
-// 而不是笼统的无效（ADR-0354 决定三），作废之前已开的争议不受影响。
+// Covers: AT-SA-228（领域半边）——争议对着已经发给客户的那张单：提出时刻早于发布的不收；提出时刻在作废之后的不收，答的是作废那一格
+// 而不是笼统的无效；提出时刻在作废之前（或恰在作废那一刻）的照收（ADR-0354 决定三）。
 func TestADisputeNeedsAStillValidStatementPublishedBeforeItWasRaised(t *testing.T) {
 	statement := publishedStatement(t)
 	charge := settlementValue(t, domain.NewCustomerChargeID, "charge-1")
@@ -591,6 +591,11 @@ func TestADisputeNeedsAStillValidStatementPublishedBeforeItWasRaised(t *testing.
 		t.Fatalf("作废：%v", err)
 	}
 	if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, statementPublishedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
-		t.Fatalf("已作废的单：error = %v", err)
+		t.Fatalf("作废之后提出：error = %v", err)
+	}
+	for _, raised := range []time.Time{statementPublishedAt.Add(30 * time.Minute), statementPublishedAt.Add(time.Hour)} {
+		if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, raised); err != nil {
+			t.Fatalf("作废之前（%s）提出、之后才登记的应当收：%v", raised, err)
+		}
 	}
 }

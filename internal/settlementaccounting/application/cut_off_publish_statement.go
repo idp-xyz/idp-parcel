@@ -835,8 +835,16 @@ func (handler *CutOffPublishStatementHandler) OpenDispute(
 	case ports.DisputeSaved:
 		return StatementResult{outcome: DisputeOpened, dispute: record, hasRecord: true}, nil
 	case ports.DisputeAlreadyOpened:
+		// 同一编号的另一份登记先落了库：与读时就已在册同一个判法——同内容是重放，不同内容是冲突。撞了主键就一律答已存在，
+		// 会把金额或理由不同的那一份悄悄吞掉，还带回别人的内容当成自己的。
 		winner, found, err := handler.deps.Disputes.FindByKey(ctx, key)
 		if err != nil || !found {
+			return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
+		}
+		switch domain.CompareStoredDigest(winner.ContentDigest, digest, unversionedDisputeDigest(command)) {
+		case domain.DifferentPayload:
+			return StatementResult{outcome: DisputeConflict}, nil
+		case domain.UnknownPayloadShape:
 			return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
 		}
 		return StatementResult{outcome: DisputeExistingResult, dispute: winner, hasRecord: true}, nil
