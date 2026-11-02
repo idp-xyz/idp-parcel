@@ -14,6 +14,9 @@ import (
 // 撞号要等人在「设置 → 单据编号」换格式，或周期换了、旧号让出——都是分钟以上的事。每再试一次是事务内一次取号：最多从序列
 // 取跳号上限那么多个值（在保存点里，撞了就退回）加同样多次「是否已用」的索引查，几十毫秒，并短暂占着该租户该周期的序列行；
 // 五分钟一回，换完格式的人最多等五分钟就看到案件建起来，没换的时候也不会在同一段旧号上反复空撞、跟正常开立抢那一行锁。
+//
+// 重驱停在依赖上（或出错）的那几件同样推后这一个间隔（Defer）：撞号命中已经等过了，晚一个间隔建案不改变什么；不推后，
+// 读不动的那几件到期时刻不变，每拍都排在页首，页一满后面真能建成的就永远轮不到。
 const CaseNumberingRedriveInterval = 5 * time.Minute
 
 // ErrCaseNumberingRuleCollision 标出「案件单据号仍撞号」的那一类重驱结果：派发进程据它把这一类单独说给看日志的人——要人去
@@ -33,6 +36,8 @@ const (
 	CaseNumberingRedriven
 	// CaseNumberingStillColliding：又撞了，册上那一行推后 CaseNumberingRedriveInterval。
 	CaseNumberingStillColliding
+	// CaseNumberingRedriveSkipped：没抢到这一行——另一个派发进程正在重驱它，或它已被销掉、推后。什么都不做，不算失败。
+	CaseNumberingRedriveSkipped
 )
 
 func (outcome CaseNumberingRedriveOutcome) String() string {
@@ -41,6 +46,8 @@ func (outcome CaseNumberingRedriveOutcome) String() string {
 		return "REDRIVEN"
 	case CaseNumberingStillColliding:
 		return "STILL_COLLIDING"
+	case CaseNumberingRedriveSkipped:
+		return "SKIPPED"
 	default:
 		return ""
 	}
@@ -65,15 +72,24 @@ func (redrive *CaseNumberingRedrive) Due(ctx context.Context, limit int) ([]port
 	return redrive.queue.DueCaseNumberingCollisions(ctx, redrive.clock.Now(), limit)
 }
 
-// Redrive 在调用方的事务里把一件撞号命中按原样再交一次分诊。命令照册上记的那一次命中重建（判断时间仍是当初那一刻）：
-// 发作期没落过，这一回就是它的第一次分诊；分诊规则若已改成不建案，就按新规则走——「是否建立案件重新经过分诊规则」。
+// Redrive 在调用方的事务里把一件撞号命中按原样再交一次分诊。先抢册上那一行（锁不到、已不在、不再到期就答跳过）：取页与
+// 分诊之间隔着别的派发进程与正常命中，按取页时那一份直接分诊会让同一原因立两件案。命令照抢到的那一行重建——首次撞号的
+// 那次命中，判断时间仍是当初那一刻：发作期没落过，这一回就是它的第一次分诊；分诊规则若已改成不建案，就按新规则走——
+// 「是否建立案件重新经过分诊规则」。
 func (redrive *CaseNumberingRedrive) Redrive(
 	ctx context.Context,
 	raiser SignalRaiser,
-	collision ports.CaseNumberingCollision,
+	due ports.CaseNumberingCollision,
 ) (CaseNumberingRedriveOutcome, error) {
 	if raiser == nil {
 		return CaseNumberingRedriveOutcomeInvalid, errors.New("visibility exception: case numbering redrive needs a signal raiser")
+	}
+	collision, claimed, err := redrive.queue.ClaimDueCaseNumberingCollision(ctx, due.Key(), redrive.clock.Now())
+	if err != nil {
+		return CaseNumberingRedriveOutcomeInvalid, err
+	}
+	if !claimed {
+		return CaseNumberingRedriveSkipped, nil
 	}
 	hit := collision.Hit
 	result, err := raiser.Handle(ctx, RaiseSignalCommand{
@@ -111,4 +127,9 @@ func (redrive *CaseNumberingRedrive) Redrive(
 		// 未受理说明册上那一行重建不出一次完整的命中——那是写坏了，不是业务答案；封闭集合外同样上抛。
 		return CaseNumberingRedriveOutcomeInvalid, fmt.Errorf("visibility exception: case numbering redrive got %q", result.Outcome())
 	}
+}
+
+// Defer 把一件这一拍没重驱成的命中（停在依赖上或出错，事务已回滚）推后一个间隔，在调用方另开的事务里调。行不在了不算错。
+func (redrive *CaseNumberingRedrive) Defer(ctx context.Context, key ports.CaseNumberingCollisionKey) error {
+	return redrive.queue.PostponeCaseNumberingCollision(ctx, key, redrive.clock.Now().Add(CaseNumberingRedriveInterval))
 }

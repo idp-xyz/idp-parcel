@@ -22,7 +22,7 @@ func documentNumberOf(issue ports.DocumentNumberIssue) (domain.DocumentNumber, b
 		}
 		return number, false, nil
 	case ports.DocumentNumberingTimeZoneNotConfigured:
-		return domain.NumberlessForUnconfiguredTimeZone(), false, nil
+		return domain.DocumentNumberAbsentForUnconfiguredTimeZone(), false, nil
 	case ports.DocumentNumberingRuleCollision:
 		return domain.DocumentNumber{}, true, nil
 	default:

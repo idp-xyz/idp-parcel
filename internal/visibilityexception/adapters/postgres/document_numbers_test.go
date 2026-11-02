@@ -52,6 +52,7 @@ func (clock *movableClock) set(at time.Time) {
 
 type numberingFixture struct {
 	pool       *pgxpool.Pool
+	db         *bentopg.DB
 	transactor bentoapp.Transactor
 	clock      *movableClock
 	registrar  *docnumber.Registrar
@@ -113,7 +114,7 @@ func newNumberingFixture(t *testing.T) *numberingFixture {
 	// 受理只用到索赔库与取号两样依赖。
 	receipts := application.NewHandleClaimHandler(application.HandleClaimDeps{Claims: claims, ClaimNumbers: numbers})
 	return &numberingFixture{
-		pool: pool, transactor: db.Transactor(), clock: clock, registrar: registrar,
+		pool: pool, db: db, transactor: db.Transactor(), clock: clock, registrar: registrar,
 		numbers: numbers, claims: claims, episodes: episodes, review: review, receipts: receipts,
 	}
 }
@@ -477,7 +478,7 @@ func TestACollisionAnswersAndReleasesEverythingItTook(t *testing.T) {
 	bystander, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
 		ID:             claimValue(t, domain.NewClaimItemID, "bystander"),
 		Batch:          claimValue(t, domain.NewClaimBatchReference, "SYN-BATCH-1"),
-		DocumentNumber: domain.NumberlessForUnconfiguredTimeZone(),
+		DocumentNumber: domain.DocumentNumberAbsentForUnconfiguredTimeZone(),
 		Customer:       claimValue(t, domain.NewCustomerAccountReference, "SYN-ACCOUNT-01"),
 		Applicant:      claimValue(t, domain.NewApplicantReference, "SYN-APPLICANT-01"),
 		Contract:       claimValue(t, domain.NewContractScopeReference, "SYN-CONTRACT-01"),

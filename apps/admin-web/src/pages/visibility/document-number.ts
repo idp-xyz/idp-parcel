@@ -2,7 +2,7 @@
 //
 // 有号的单据以号为主列、可按号检索，内部标识进技术详情；没有号的单据照旧显示内部标识，技术详情按读口答的无号原因说是
 // 哪一种。号叫什么、无号原因怎么说都取共用词典 vocabulary/document-numbering，这里只管「有号 / 无号」这一个分支，
-// 三页（异常案件、处置请求、索赔与追偿）的单据号格都经它与 DocumentNumberCell，不各写一遍。
+// 本区各页（异常案件、处置请求、索赔与追偿）的单据号格都经它与 DocumentNumberCell，不各写一遍。
 
 import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 

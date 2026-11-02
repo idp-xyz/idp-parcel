@@ -34,7 +34,7 @@ func TestADocumentNumberCellRebuildsItsThreeShapesAndRefusesTheRest(t *testing.T
 	}
 	if unconfigured.Absence() != domain.NumberingTimeZoneNotConfigured ||
 		unconfigured.StoredAbsence() != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" ||
-		domain.NumberlessForUnconfiguredTimeZone() != unconfigured {
+		domain.DocumentNumberAbsentForUnconfiguredTimeZone() != unconfigured {
 		t.Fatalf("时区未配置那一格读回不对：%+v", unconfigured)
 	}
 
@@ -82,7 +82,7 @@ func TestACaseIsEstablishedWithItsNumberAndKeepsItThroughItsLifecycle(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	duplicate, err := establish("case-2", domain.NumberlessForUnconfiguredTimeZone())
+	duplicate, err := establish("case-2", domain.DocumentNumberAbsentForUnconfiguredTimeZone())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestAClaimCarriesItsNumberNextToTheCustomersOwnIdentifiers(t *testing.T) {
 	if _, err := domain.ReceiveClaimItem(spec); !errors.Is(err, domain.ErrInvalidClaim) {
 		t.Fatalf("零值单据号受理了索赔：%v", err)
 	}
-	spec.DocumentNumber = domain.NumberlessForUnconfiguredTimeZone()
+	spec.DocumentNumber = domain.DocumentNumberAbsentForUnconfiguredTimeZone()
 	unnumbered, err := domain.ReceiveClaimItem(spec)
 	if err != nil {
 		t.Fatalf("时区未配置的索赔照常受理：%v", err)

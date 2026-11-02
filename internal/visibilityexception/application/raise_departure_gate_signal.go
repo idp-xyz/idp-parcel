@@ -60,8 +60,6 @@ type RaiseDepartureGateSignalCommand struct {
 type RaiseDepartureGateSignalResult struct {
 	outcome    DepartureGateSignalOutcome
 	handoffRef string
-	// collidedTemplate 只随 DepartureGateSignalCaseNumberingCollided 在场。
-	collidedTemplate string
 }
 
 func (result RaiseDepartureGateSignalResult) Outcome() DepartureGateSignalOutcome {
@@ -71,11 +69,6 @@ func (result RaiseDepartureGateSignalResult) Outcome() DepartureGateSignalOutcom
 // HandoffReference 非空说明分诊结论已落库但意图还没交出去，重放会重发同一份。
 func (result RaiseDepartureGateSignalResult) HandoffReference() string {
 	return result.handoffRef
-}
-
-// CollidedTemplate 只在案件单据号撞号时非空：撞上旧号的那份格式。
-func (result RaiseDepartureGateSignalResult) CollidedTemplate() string {
-	return result.collidedTemplate
 }
 
 // RaiseDepartureGateSignalDeps 的 Rules 在装配期绑租户，Signals 是 `UC-VE-004` 的入口（RaiseSignalHandler）。
@@ -141,7 +134,8 @@ func (handler *RaiseDepartureGateSignalHandler) Handle(
 	case RaiseSignalUndecided:
 		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalDeferred}, nil
 	case CaseNumberingCollided:
-		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalCaseNumberingCollided, collidedTemplate: raised.CollidedTemplate()}, nil
+		// 撞上的格式记在案件撞号册上（重驱的日志会带出来），这一格不另带一份。
+		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalCaseNumberingCollided}, nil
 	default:
 		return RaiseDepartureGateSignalResult{}, fmt.Errorf("%w: %q", ErrUnexpectedDepartureGateSignalOutcome, raised.Outcome())
 	}

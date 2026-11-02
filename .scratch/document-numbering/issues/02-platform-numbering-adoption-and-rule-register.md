@@ -89,7 +89,7 @@ Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库
 
 - **取装配**：parcel-api 的特性 build 从 `endpointSources.documentNumbers`、parcel-dispatch 的路由特性从 `dispatchSources.documentNumbers` 取 `docnumbering.Components`，用其中的 `Assigner`；别处再装一套就是第二份类型汇总与第二个 DB。各上下文立自己的消费侧端口（ADR-0025），在组合根把 `Assigner` 接上去；类型代码用本上下文 `domain` 里的声明变量（如 `ShipmentDocumentNumberType.Code`），不另写字符串。
 - **事务与 DB**：`Assign` 必须在开立事务的 ctx 里调，且那笔事务由同一个 `*bentopg.DB` 的事务器开——框架按 DB 认事务归属，事务外或别的 DB 开的事务里调一律答 `ErrTransactionRequired`。只在确定要落单的那一步调（决定三）：答业务答案而不落单、事务却照常提交的分支不得先取号。
-- **按答案办**：`NUMBER_ASSIGNED` → 号随单落库，`Skipped` 个空号随之落定；`NUMBERING_TIME_ZONE_NOT_CONFIGURED` → 单据照常开立、不带单据号，单据上记无号原因「单据编号时区未配置」，事后不补；`NUMBERING_RULE_COLLISION` 或任何错误 → 回滚开立事务、这一次不落单，撞号答复说人话并指到规则册（「设置 → 单据编号」）。
+- **按答案办**：`NUMBER_ASSIGNED` → 号随单落库，`Skipped` 个空号随之落定；`NUMBERING_TIME_ZONE_NOT_CONFIGURED` → 单据照常开立、不带单据号，单据上记无号原因「单据编号时区未配置」，事后不补；`NUMBERING_RULE_COLLISION` 或任何错误 → 这一次不落单，并必须让取过的流水不提交：回滚开立事务，或在取号那一步包保存点只退号（2026-11-02 票 06 评审后补，同 `docnumber.NumberingRuleCollision` 注释）；撞号答复说人话并指到规则册（「设置 → 单据编号」）。
 - **开立方业务时区由调用方传**：类型声明为「开立方有业务时区」的（对账单、送站预报、送站交接单），调用方把开立方已登记的业务时区（IANA 名）放进 `IssueRequest.IssuerTimeZone`；开立方没登就留空，退到租户的单据编号时区。声明为「没有」的类型传了业务时区是编程错误（`ErrIssuerTimeZoneNotDeclared`）——若实现票核定该类其实有，先改本上下文那一处声明。
 - **判撞**：`IssueRequest.IsUsed` 在同一事务里查本上下文单据表（租户，单据号）是否已用；表上照样建（租户，单据号）唯一约束作最后一道保险。
 

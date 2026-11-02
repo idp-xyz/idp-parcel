@@ -124,8 +124,6 @@ type RaiseSignalResult struct {
 	exceptionCase *domain.ExceptionCase
 	reason        RaiseSignalUndecidedReason
 	handoffRef    string
-	// collidedTemplate 只在 CaseNumberingCollided 时在场：撞上旧号的那份格式。
-	collidedTemplate string
 }
 
 func (result RaiseSignalResult) Outcome() RaiseSignalOutcome {
@@ -153,11 +151,6 @@ func (result RaiseSignalResult) UndecidedReason() RaiseSignalUndecidedReason {
 	return result.reason
 }
 
-// CollidedTemplate 只在 CaseNumberingCollided 时非空：撞上旧号的那份格式，给日志与册面指认。
-func (result RaiseSignalResult) CollidedTemplate() string {
-	return result.collidedTemplate
-}
-
 // HandoffReference 非空说明分诊结论已落库但意图还没交出去，重放会重发同一份。
 func (result RaiseSignalResult) HandoffReference() string {
 	return result.handoffRef
@@ -170,7 +163,7 @@ type RaiseSignalDeps struct {
 	Cases      ports.CaseIdentityFactory
 	// CaseNumbers 为自动建立的案件取单据号；只在走向为`自动建案`的那一轮调。
 	CaseNumbers ports.CaseNumberIssuer
-	// Collisions 记下案件单据号撞号的那一次命中；只在撞号时调。
+	// Collisions 是案件撞号册：每一轮开头锁住这一原因在册上的那一行，撞号时记下那一次命中。
 	Collisions ports.CaseNumberingCollisionRecorder
 	Downstream ports.TriageHandoff
 	Clock      ports.Clock
@@ -201,6 +194,14 @@ func (handler *RaiseSignalHandler) Handle(
 	// 先判命中事实再读依赖：规则版本、可信度、因果条件或事实依据立不起来的输入构不成信号，而一次已经发出的查询收不回来。
 	if command.TenantID.String() == "" || !command.hit().Complete() {
 		return RaiseSignalResult{outcome: RaiseSignalNotAccepted}, nil
+	}
+
+	// 先锁这一原因在案件撞号册上的那一行（若有），再找发作期：重驱与正常命中对同一原因交叠时，后到的要等先到的提交后再看
+	// 发作期，才不会两边都以为「没有发作期」各开一期、各立一案（ports.CaseNumberingCollisionRecorder）。
+	if err := handler.deps.Collisions.HoldCaseNumberingCollision(ctx, ports.CaseNumberingCollisionKey{
+		Tenant: command.TenantID, Parcel: command.Parcel, Kind: command.Kind, Cause: command.Cause,
+	}); err != nil {
+		return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 	}
 
 	latest, found, err := handler.deps.Episodes.FindLatestForCause(
@@ -287,7 +288,7 @@ func (handler *RaiseSignalHandler) Handle(
 			}); err != nil {
 				return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 			}
-			return RaiseSignalResult{outcome: CaseNumberingCollided, collidedTemplate: issue.Template}, nil
+			return RaiseSignalResult{outcome: CaseNumberingCollided}, nil
 		}
 		exceptionCase, err = establishCaseFor(caseID, number, command.Parcel, verdict.team, now)
 		if err != nil {

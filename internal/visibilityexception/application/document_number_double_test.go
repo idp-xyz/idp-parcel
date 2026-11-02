@@ -71,24 +71,52 @@ type collisionBookDouble struct {
 	next      map[ports.CaseNumberingCollisionKey]time.Time
 	rows      map[ports.CaseNumberingCollisionKey]ports.CaseNumberingCollision
 	resolved  []ports.CaseNumberingCollisionKey
+	held      []ports.CaseNumberingCollisionKey
 	recordErr error
+	holdErr   error
+	// lockedElsewhere 模拟另一个派发进程正锁着那一行。
+	lockedElsewhere map[ports.CaseNumberingCollisionKey]bool
 }
 
 func newCollisionBook() *collisionBookDouble {
 	return &collisionBookDouble{
-		next: map[ports.CaseNumberingCollisionKey]time.Time{},
-		rows: map[ports.CaseNumberingCollisionKey]ports.CaseNumberingCollision{},
+		next:            map[ports.CaseNumberingCollisionKey]time.Time{},
+		rows:            map[ports.CaseNumberingCollisionKey]ports.CaseNumberingCollision{},
+		lockedElsewhere: map[ports.CaseNumberingCollisionKey]bool{},
 	}
 }
 
+func (double *collisionBookDouble) HoldCaseNumberingCollision(_ context.Context, key ports.CaseNumberingCollisionKey) error {
+	double.held = append(double.held, key)
+	return double.holdErr
+}
+
+// RecordCaseNumberingCollision 照真册的口径：同键再撞保留首次命中，只换格式、立刻到期。
 func (double *collisionBookDouble) RecordCaseNumberingCollision(_ context.Context, collision ports.CaseNumberingCollision) error {
 	if double.recordErr != nil {
 		return double.recordErr
 	}
 	double.recorded = append(double.recorded, collision)
-	double.rows[collision.Key()] = collision
+	row := collision
+	if first, present := double.rows[collision.Key()]; present {
+		row.Hit = first.Hit
+	}
+	double.rows[collision.Key()] = row
 	double.next[collision.Key()] = collision.At
 	return nil
+}
+
+// ClaimDueCaseNumberingCollision 照真册的口径：被「别的进程」锁着、不在册或未到期都答 false。
+func (double *collisionBookDouble) ClaimDueCaseNumberingCollision(
+	_ context.Context,
+	key ports.CaseNumberingCollisionKey,
+	at time.Time,
+) (ports.CaseNumberingCollision, bool, error) {
+	row, present := double.rows[key]
+	if !present || double.lockedElsewhere[key] || double.next[key].After(at) {
+		return ports.CaseNumberingCollision{}, false, nil
+	}
+	return row, true, nil
 }
 
 func (double *collisionBookDouble) DueCaseNumberingCollisions(_ context.Context, at time.Time, limit int) ([]ports.CaseNumberingCollision, error) {

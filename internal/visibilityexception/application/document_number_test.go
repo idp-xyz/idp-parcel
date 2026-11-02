@@ -125,7 +125,7 @@ func TestACaseNumberCollisionLandsNothingButRecordsTheHit(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-228（编排半边）——出发门禁阻断那一路不丢撞号原因：答单独一格「案件单据号撞号」（不折进搁置），带撞上的格式；
+// Covers: AT-VE-228（编排半边）——出发门禁阻断那一路不丢撞号原因：答单独一格「案件单据号撞号」（不折进搁置），撞上的格式记在撞号册；
 // 冲突信号那一路记为单独的去向，派生照常。
 func TestBothSignalRoutesKeepTheCaseNumberingCollisionAsItsOwnAnswer(t *testing.T) {
 	gate, _, raise := newDepartureGateSignalFixture(t)
@@ -136,12 +136,11 @@ func TestBothSignalRoutesKeepTheCaseNumberingCollisionAsItsOwnAnswer(t *testing.
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if result.Outcome() != application.DepartureGateSignalCaseNumberingCollided || result.CollidedTemplate() != "SYN-{seq:5}" ||
-		result.Outcome().String() != "CASE_NUMBERING_RULE_COLLISION" {
-		t.Fatalf("outcome = %q template = %q", result.Outcome(), result.CollidedTemplate())
+	if result.Outcome() != application.DepartureGateSignalCaseNumberingCollided || result.Outcome().String() != "CASE_NUMBERING_RULE_COLLISION" {
+		t.Fatalf("outcome = %q", result.Outcome())
 	}
-	if len(raise.collisions.recorded) != 1 {
-		t.Fatal("出发门禁那一路撞号没记进撞号册")
+	if len(raise.collisions.recorded) != 1 || raise.collisions.recorded[0].Template != "SYN-{seq:5}" {
+		t.Fatal("出发门禁那一路撞号没连同撞上的格式记进撞号册")
 	}
 
 	derive := newDeriveFixture(t)
@@ -211,6 +210,20 @@ func TestTheRedriveRetriesACollidedHitAsItWasRecorded(t *testing.T) {
 	if again, _ := redrive.Due(ctx, 10); len(again) != 0 {
 		t.Fatal("推后之后仍算到期")
 	}
+	// 取页之后被推后的那一行，按取页时那一份去重驱也抢不到：答跳过，什么都不做。
+	if outcome, err := redrive.Redrive(ctx, raise.handler, due[0]); err != nil || outcome != application.CaseNumberingRedriveSkipped {
+		t.Fatalf("未到期仍重驱了：%v %q", err, outcome)
+	}
+
+	// 别的派发进程正锁着：跳过，不等。
+	key := due[0].Key()
+	book.next[key] = clock.at
+	book.lockedElsewhere[key] = true
+	if outcome, err := redrive.Redrive(ctx, raise.handler, due[0]); err != nil || outcome != application.CaseNumberingRedriveSkipped ||
+		len(raise.episodes.cases) != 0 {
+		t.Fatalf("别处锁着仍重驱了：%v %q", err, outcome)
+	}
+	book.lockedElsewhere[key] = false
 
 	// 换了格式：同一只真编排这回取到号，建案、销账；重建的命令就是当初那一次命中。
 	raise.caseNumbers.outcome = ports.DocumentNumberAssigned
@@ -225,13 +238,19 @@ func TestTheRedriveRetriesACollidedHitAsItWasRecorded(t *testing.T) {
 	// 分诊停在依赖上：答未决错误，册上那一行原样留着（调用方回滚这一笔）。
 	stalled := newRaiseFixture(t)
 	stalled.episodes.findErr = errors.New("episode store unavailable")
-	book.rows[due[0].Key()] = due[0]
+	book.rows[key] = due[0]
+	book.next[key] = clock.at
 	if _, err := redrive.Redrive(ctx, stalled.handler, due[0]); !errors.Is(err, application.ErrCaseNumberingRedriveUndecided) {
 		t.Fatalf("分诊未决时应答未决错误：%v", err)
 	}
-	if _, present := book.rows[due[0].Key()]; !present {
+	if _, present := book.rows[key]; !present {
 		t.Fatal("未决那一回把册上那一行销掉了")
 	}
+	// 没重驱成的推后一个间隔，不再占着页首。
+	if err := redrive.Defer(ctx, key); err != nil || !book.next[key].Equal(clock.at.Add(application.CaseNumberingRedriveInterval)) {
+		t.Fatalf("推后：%v %v", err, book.next[key])
+	}
+	book.next[key] = clock.at
 
 	// 交给分诊的就是当初那一次命中。
 	recorder := &signalRaiserDouble{err: errors.New("stop here")}
@@ -343,7 +362,7 @@ func TestAReceiptThatTookANumberButLandedNothingAsksForARollback(t *testing.T) {
 	winner, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
 		ID:             mustValue(t, domain.NewClaimItemID, "item-1"),
 		Batch:          mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
-		DocumentNumber: domain.NumberlessForUnconfiguredTimeZone(),
+		DocumentNumber: domain.DocumentNumberAbsentForUnconfiguredTimeZone(),
 		Customer:       mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
 		Applicant:      mustValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:       mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
@@ -362,5 +381,49 @@ func TestAReceiptThatTookANumberButLandedNothingAsksForARollback(t *testing.T) {
 	}
 	if result.Outcome() != application.ClaimExistingResult || result.DiscardIssuing() {
 		t.Fatalf("outcome = %q discard = %v；没取号就没有要退的", result.Outcome(), result.DiscardIssuing())
+	}
+}
+
+// Covers: AT-VE-228（编排半边）——分诊每一轮先锁这一原因在撞号册上的那一行再找发作期；同一原因再撞，册上保留首次命中，
+// 重驱按首次命中开期（CONTEXT「原样重新分诊」）。
+func TestTheTriageHoldsTheCollisionRowFirstAndARepeatCollisionKeepsTheFirstHit(t *testing.T) {
+	ctx := context.Background()
+	raise := newRaiseFixture(t)
+	raise.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	first := raiseCommand(t, signalHitAt)
+	second := raiseCommand(t, signalHitAt.Add(30*time.Minute))
+	for _, command := range []application.RaiseSignalCommand{first, second} {
+		if _, err := raise.handler.Handle(ctx, command); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(raise.collisions.held) != 2 || raise.collisions.held[0].Cause != first.Cause {
+		t.Fatalf("没在找发作期之前锁那一行：%+v", raise.collisions.held)
+	}
+	key := ports.CaseNumberingCollisionKey{Tenant: first.TenantID, Parcel: first.Parcel, Kind: first.Kind, Cause: first.Cause}
+	if row := raise.collisions.rows[key]; !row.Hit.At.Equal(first.HitAt) {
+		t.Fatalf("再撞改写了首次命中：%v", row.Hit.At)
+	}
+
+	held := newRaiseFixture(t)
+	held.collisions.holdErr = errors.New("collision book unavailable")
+	if result, err := held.handler.Handle(ctx, first); err != nil || result.Outcome() != application.RaiseSignalUndecided ||
+		held.triage.calls != 0 {
+		t.Fatalf("锁不到撞号册仍往下走了：%v %q", err, result.Outcome())
+	}
+
+	clock := fixedClock{at: signalHitAt.Add(time.Hour)}
+	redrive, err := application.NewCaseNumberingRedrive(raise.collisions, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raise.caseNumbers.outcome = ports.DocumentNumberAssigned
+	due, _ := redrive.Due(ctx, 10)
+	if outcome, err := redrive.Redrive(ctx, raise.handler, due[0]); err != nil || outcome != application.CaseNumberingRedriven {
+		t.Fatalf("重驱：%v %q", err, outcome)
+	}
+	episode := raise.episodes.latest[episodeKey{tenant: first.TenantID, parcel: first.Parcel, kind: first.Kind, cause: first.Cause}]
+	if episode == nil || !episode.Snapshot().StartedAt.Equal(first.HitAt) || episode.Hits() != 1 {
+		t.Fatalf("重驱建出的发作期没按首次命中开期：%+v", episode)
 	}
 }

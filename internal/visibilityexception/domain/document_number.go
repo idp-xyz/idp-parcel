@@ -24,7 +24,7 @@ const (
 // DocumentNumber 是一份单据上的单据号那一格：开立时取到的号，或者没有号以及为什么没有。
 //
 // 零值是「本规则生效前开立」。新开立的单据不许带着零值落库——那会把「开立时没取号」伪装成「上线前开立」，而后者正是
-// 页面上要与「时区未配置」分开说的两种情形；开立路径只用 NewDocumentNumber 与 NumberlessForUnconfiguredTimeZone 两个
+// 页面上要与「时区未配置」分开说的两种情形；开立路径只用 NewDocumentNumber 与 DocumentNumberAbsentForUnconfiguredTimeZone 两个
 // 构造，由 issuedAtOpening 把门。
 type DocumentNumber struct {
 	number                string
@@ -39,8 +39,8 @@ func NewDocumentNumber(value string) (DocumentNumber, error) {
 	return DocumentNumber{number: value}, nil
 }
 
-// NumberlessForUnconfiguredTimeZone 是开立时单据编号时区未配置的那一格：单据照常开立，记下无号原因。
-func NumberlessForUnconfiguredTimeZone() DocumentNumber {
+// DocumentNumberAbsentForUnconfiguredTimeZone 是开立时单据编号时区未配置的那一格：单据照常开立，记下无号原因。
+func DocumentNumberAbsentForUnconfiguredTimeZone() DocumentNumber {
 	return DocumentNumber{timeZoneNotConfigured: true}
 }
 
@@ -55,7 +55,7 @@ func RehydrateDocumentNumber(number, reason string) (DocumentNumber, error) {
 	case reason == "":
 		return DocumentNumber{}, nil
 	case DocumentNumberAbsence(reason) == NumberingTimeZoneNotConfigured:
-		return NumberlessForUnconfiguredTimeZone(), nil
+		return DocumentNumberAbsentForUnconfiguredTimeZone(), nil
 	default:
 		return DocumentNumber{}, fmt.Errorf("%w: document number absence %q", ErrInvalidDocumentNumber, reason)
 	}

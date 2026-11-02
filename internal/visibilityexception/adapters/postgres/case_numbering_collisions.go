@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -30,8 +31,8 @@ func NewCaseNumberingCollisions(db *bentopg.DB) (*CaseNumberingCollisions, error
 	return &CaseNumberingCollisions{db: db}, nil
 }
 
-// RecordCaseNumberingCollision 记下或覆盖一次撞号：命中各样换成最近这一次，次数加一，并让它此刻到期——下一拍重驱就再试一回，
-// 撞着的那一刻派发日志里看得见。
+// RecordCaseNumberingCollision 记下一次撞号；同一原因再撞只加次数、换成最近撞上的格式并让它此刻到期——下一拍重驱就再试一回，
+// 撞着的那一刻派发日志里看得见。首次命中的各样（规则版本、可信度、事实依据、判断时间）不动：重驱按首次命中开期。
 func (book *CaseNumberingCollisions) RecordCaseNumberingCollision(ctx context.Context, collision ports.CaseNumberingCollision) error {
 	executor, err := book.db.RequireExecutor(ctx)
 	if err != nil {
@@ -51,10 +52,6 @@ func (book *CaseNumberingCollisions) RecordCaseNumberingCollision(ctx context.Co
 			 template, first_collided_at, last_collided_at, collisions, next_attempt_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10)
 		 ON CONFLICT (tenant_id, parcel_ref, kind_ref, causal_condition) DO UPDATE SET
-			rule_ref = EXCLUDED.rule_ref,
-			confidence_ref = EXCLUDED.confidence_ref,
-			fact_basis = EXCLUDED.fact_basis,
-			hit_at = EXCLUDED.hit_at,
 			template = EXCLUDED.template,
 			last_collided_at = GREATEST(case_numbering_collision.last_collided_at, EXCLUDED.last_collided_at),
 			collisions = case_numbering_collision.collisions + 1,
@@ -66,6 +63,62 @@ func (book *CaseNumberingCollisions) RecordCaseNumberingCollision(ctx context.Co
 		return fmt.Errorf("record case numbering collision: %w", err)
 	}
 	return nil
+}
+
+// HoldCaseNumberingCollision 锁住这一原因在册上的那一行（FOR UPDATE，等）；没有那一行就什么都不锁。别的事务删掉它之后才放行
+// 的，读回为空，调用方接下来读发作期就看得见那一笔已提交的结果。
+func (book *CaseNumberingCollisions) HoldCaseNumberingCollision(ctx context.Context, key ports.CaseNumberingCollisionKey) error {
+	executor, err := book.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("hold case numbering collision: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT 1 FROM visibility_exception.case_numbering_collision
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND kind_ref = $3 AND causal_condition = $4
+		  FOR UPDATE`,
+		key.Tenant.String(), key.Parcel.String(), key.Kind.String(), key.Cause.String(),
+	); err != nil {
+		return fmt.Errorf("hold case numbering collision: %w", err)
+	}
+	return nil
+}
+
+// ClaimDueCaseNumberingCollision 抢这一行：FOR UPDATE SKIP LOCKED，且仍到期才交回此刻库里那一行；锁不到、已销掉或已推后都答
+// false，不等——正在重驱它的另一个派发进程会把它办完。
+func (book *CaseNumberingCollisions) ClaimDueCaseNumberingCollision(
+	ctx context.Context,
+	key ports.CaseNumberingCollisionKey,
+	at time.Time,
+) (ports.CaseNumberingCollision, bool, error) {
+	executor, err := book.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.CaseNumberingCollision{}, false, fmt.Errorf("claim case numbering collision: %w", err)
+	}
+	var (
+		tenant, parcel, kind, cause, rule, confidence, template string
+		basisJSON                                               []byte
+		hitAt, collidedAt                                       time.Time
+	)
+	err = executor.QueryRow(ctx,
+		`SELECT tenant_id, parcel_ref, kind_ref, causal_condition, rule_ref, confidence_ref, fact_basis, hit_at,
+		        template, last_collided_at
+		   FROM visibility_exception.case_numbering_collision
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND kind_ref = $3 AND causal_condition = $4
+		    AND next_attempt_at <= $5
+		  FOR UPDATE SKIP LOCKED`,
+		key.Tenant.String(), key.Parcel.String(), key.Kind.String(), key.Cause.String(), at.UTC(),
+	).Scan(&tenant, &parcel, &kind, &cause, &rule, &confidence, &basisJSON, &hitAt, &template, &collidedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.CaseNumberingCollision{}, false, nil
+	}
+	if err != nil {
+		return ports.CaseNumberingCollision{}, false, fmt.Errorf("claim case numbering collision: %w", err)
+	}
+	collision, err := rebuildCaseNumberingCollision(tenant, parcel, kind, cause, rule, confidence, basisJSON, hitAt, template, collidedAt)
+	if err != nil {
+		return ports.CaseNumberingCollision{}, false, fmt.Errorf("claim case numbering collision: %s/%s: %w", tenant, parcel, err)
+	}
+	return collision, true, nil
 }
 
 // DueCaseNumberingCollisions 交回 at 时刻到期的撞号命中，最早到期的在前，最多 limit 件。跨租户取：重驱在派发进程里统一跑，

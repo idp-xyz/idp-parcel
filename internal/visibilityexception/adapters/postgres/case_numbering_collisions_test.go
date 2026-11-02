@@ -29,7 +29,7 @@ func collisionOf(t *testing.T, tenant, parcel, fact string, at time.Time, templa
 }
 
 // Covers: AT-VE-228 真库半边——案件撞号册：命中各样原样读回（因果条件、规则版本、可信度、事实依据、判断时间）、撞号那一刻
-// 就到期；同一原因再撞覆盖成最近那一次、次数加一；推后之后不到期；销掉之后不在；跨租户按到期序取。
+// 就到期；同一原因再撞保留首次命中、次数加一、换成最近撞上的格式；推后之后不到期；销掉之后不在；跨租户按到期序取。
 func TestTheCaseNumberingCollisionBookKeepsTheHitForTheRedrive(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -70,8 +70,9 @@ func TestTheCaseNumberingCollisionBookKeepsTheHitForTheRedrive(t *testing.T) {
 		t.Fatalf("撞号之前就到期了：%+v", notYet)
 	}
 
-	// 同一原因再撞：覆盖成最近那一次，次数加一，立刻到期。
+	// 同一原因再撞（命中晚了一小时）：首次命中不动，次数加一、换格式，立刻到期。
 	again := first
+	again.Hit.At = factBaseAt.Add(time.Hour)
 	again.Template = "SYN2-{seq:5}"
 	again.At = factBaseAt.Add(3 * time.Hour)
 	inTx(func(txCtx context.Context) error {
@@ -82,9 +83,11 @@ func TestTheCaseNumberingCollisionBookKeepsTheHitForTheRedrive(t *testing.T) {
 	})
 	var collisions int
 	var template string
-	if err := pool.QueryRow(ctx, `SELECT collisions, template FROM visibility_exception.case_numbering_collision
-		WHERE tenant_id = 'SYN-TENANT-01'`).Scan(&collisions, &template); err != nil || collisions != 2 || template != "SYN2-{seq:5}" {
-		t.Fatalf("再撞没覆盖：%d %q %v", collisions, template, err)
+	var hitAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT collisions, template, hit_at FROM visibility_exception.case_numbering_collision
+		WHERE tenant_id = 'SYN-TENANT-01'`).Scan(&collisions, &template, &hitAt); err != nil || collisions != 2 ||
+		template != "SYN2-{seq:5}" || !hitAt.Equal(first.Hit.At) {
+		t.Fatalf("再撞：%d 次 %q 命中 %v %v，want 两次、新格式、首次命中", collisions, template, hitAt, err)
 	}
 	if due, _ := book.DueCaseNumberingCollisions(ctx, again.At, 10); len(due) != 2 {
 		t.Fatalf("再撞之后没立刻到期：%d", len(due))
@@ -134,7 +137,7 @@ func TestSavingARaisedEpisodeResolvesItsCollision(t *testing.T) {
 	}
 }
 
-// Covers: 案件撞号册的写口无事务即拒（ErrTransactionRequired），不改用连接池。
+// Covers: 案件撞号册的写口与两种锁行无事务即拒（ErrTransactionRequired），不改用连接池——锁只在事务里才锁得住。
 func TestCaseNumberingCollisionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -154,5 +157,11 @@ func TestCaseNumberingCollisionWritesRefuseToRunOutsideATransaction(t *testing.T
 	}
 	if err := book.ResolveCaseNumberingCollision(ctx, collision.Key()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务销账应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if err := book.HoldCaseNumberingCollision(ctx, collision.Key()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务锁那一行应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, _, err := book.ClaimDueCaseNumberingCollision(ctx, collision.Key(), factBaseAt); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务抢那一行应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }

@@ -23,6 +23,8 @@ const caseNumberingRedrivePageSize = 20
 // 烧完预算、连同命中一起丢掉。所以撞号那一拍信封入账、命中记进撞号册，这里按到期时刻定时再试，与按截止日截单
 // （cycleCutBeat）同一种做法。
 //
+// 同一页可能被并存的另一个派发进程同时取到：Redrive 先抢册上那一行（SKIP LOCKED），抢不到答跳过，只有一边真去分诊。
+//
 // 仍撞的那几件作为本拍的错误交给循环记日志，单列一类（veapplication.ErrCaseNumberingRuleCollision）：看日志的人要去
 // 「设置 → 单据编号」换格式，不是去查依赖或传输。每件按 veapplication.CaseNumberingRedriveInterval 推后，日志不会每拍刷屏。
 type caseNumberingRedriveBeat struct {
@@ -57,6 +59,12 @@ func (beat caseNumberingRedriveBeat) redriveDue(ctx context.Context) error {
 			return redriveErr
 		}); err != nil {
 			failures = append(failures, fmt.Errorf("case numbering redrive %s/%s: %w", collision.Tenant, hit.Parcel, err))
+			// 那一笔已回滚、到期时刻没动：另开一笔推后，免得读不动的几件每拍占满页首（CaseNumberingRedriveInterval 的注释）。
+			if deferErr := beat.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+				return beat.redrive.Defer(txCtx, collision.Key())
+			}); deferErr != nil {
+				failures = append(failures, fmt.Errorf("case numbering redrive %s/%s: defer: %w", collision.Tenant, hit.Parcel, deferErr))
+			}
 			continue
 		}
 		if outcome == veapplication.CaseNumberingStillColliding {
