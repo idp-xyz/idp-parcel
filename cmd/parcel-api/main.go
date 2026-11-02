@@ -16,6 +16,7 @@ import (
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -132,6 +133,21 @@ func run(logger *slog.Logger) error {
 			"env", pricingRegisterNewerCanonicalizationEnv)
 	}
 
+	// 单据号加扰密钥（ADR-0355 决定五）与各族信任锚同处开池之前：配了而读不动或不合规要带原因退出。配没配都出声，只说配了
+	// 几个租户，不说是谁、更不说密钥——没配时用加扰的模板登记答 SCRAMBLE_SECRET_NOT_CONFIGURED，启动日志是分辨「没配」与
+	// 「配了但不含这个租户」的第一处。
+	scrambleSecrets, scrambleSecretsConfigured, err := docnumber.LoadScrambleSecrets(os.Getenv, os.ReadFile)
+	if err != nil {
+		return err
+	}
+	if scrambleSecretsConfigured {
+		logger.Info("Document number scramble secrets configured (ADR-0355): scrambled templates may be registered for the listed tenants",
+			"env", docnumber.ScrambleSecretsFileEnv, "tenants", scrambleSecrets.Tenants())
+	} else {
+		logger.Info("Document number scramble secrets not configured (ADR-0355): registrations of scrambled templates answer SCRAMBLE_SECRET_NOT_CONFIGURED",
+			"env", docnumber.ScrambleSecretsFileEnv)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -152,6 +168,7 @@ func run(logger *slog.Logger) error {
 		integrationClientVerifier:     integrationClientVerifier,
 		customerClientVerifier:        customerClientVerifier,
 		registerNewerCanonicalization: registerNewerCanonicalization,
+		scrambleSecrets:               scrambleSecrets,
 	})
 	if err != nil {
 		return err
@@ -190,7 +207,7 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方与价卡登记的版本开关。它们在 run 里带启动日志解析，
+// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方、价卡登记的版本开关与单据号加扰密钥表。它们在 run 里带启动日志解析，
 // 参数不合规时在开池之前就带原因退出。
 type startupChannels struct {
 	isolatedRead              *isolatedReadIntakes
@@ -201,6 +218,8 @@ type startupChannels struct {
 	customerClientVerifier    accessidentity.CustomerClientCredentialVerifier
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），在 run 里带启动日志读一次。
 	registerNewerCanonicalization bool
+	// scrambleSecrets 是单据号加扰密钥表（ADR-0355 决定五），在 run 里带启动日志读一次；零值即没配。
+	scrambleSecrets docnumber.SecretTable
 }
 
 // assembleProductionEndpoints 是开池之后的那一段生产装配：先建各族接入渠道，再装只为启动即查的几只编排，最后展开端点
@@ -300,6 +319,7 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 		operatorMinter:                operatorMinter,
 		customerClientMinter:          customerClientMinter,
 		registerNewerCanonicalization: startup.registerNewerCanonicalization,
+		scrambleSecrets:               startup.scrambleSecrets,
 	}, endpointChannels{
 		isolatedRead:       startup.isolatedRead,
 		customerSubmission: customerSubmission,
