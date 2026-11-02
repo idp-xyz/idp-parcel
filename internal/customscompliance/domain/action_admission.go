@@ -36,6 +36,12 @@ func (answer AdmissionAnswer) valid() bool {
 	return answer >= AdmissionNotGuarded && answer <= AdmissionBlocked
 }
 
+// Admits 答这一格是否让动作过门：放行与不受门禁过；未决、未配置、阻断都不过——压制次序里未决及以上都是「还不能走」，
+// 差的只是缺东西、缺配置还是被挡。运营查阅「卡关」的对象按这一格判，不另立一张词表。
+func (answer AdmissionAnswer) Admits() bool {
+	return answer == AdmissionNotGuarded || answer == AdmissionAdmitted
+}
+
 func (answer AdmissionAnswer) String() string {
 	switch answer {
 	case AdmissionNotGuarded:

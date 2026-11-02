@@ -537,6 +537,12 @@ func (kind DisputeResolutionKind) valid() bool {
 	return kind >= DisputeAccepted && kind <= DisputePendingReview
 }
 
+// Final 答这一走向是不是终局：接受、部分接受、拒绝是终局，不可再改；待复核不是，可再处理。没有终局结果的争议
+// 还在等人核实或处置。
+func (kind DisputeResolutionKind) Final() bool {
+	return kind == DisputeAccepted || kind == DisputePartiallyAccepted || kind == DisputeRejected
+}
+
 func (kind DisputeResolutionKind) String() string {
 	switch kind {
 	case DisputeAccepted:
@@ -640,7 +646,7 @@ func (dispute StatementDispute) Resolve(
 	if !kind.valid() || !basis.valid() || resolvedAt.IsZero() || resolvedAt.Before(dispute.openedAt) {
 		return StatementDispute{}, ErrInvalidDispute
 	}
-	if kind, _, _, resolved := dispute.Resolution(); resolved && kind != DisputePendingReview {
+	if kind, _, _, resolved := dispute.Resolution(); resolved && kind.Final() {
 		return StatementDispute{}, ErrDisputeResolved
 	}
 	resolved := dispute

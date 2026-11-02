@@ -84,6 +84,13 @@ func (stub unreachableCatalogues) ListCustomerStatements(
 	return nil, nil
 }
 
+func (stub unreachableCatalogues) ListDisputedCustomerStatements(
+	context.Context, domain.TenantID, int,
+) (ports.DisputedCustomerStatements, error) {
+	stub.refuse("disputed customer statement")
+	return ports.DisputedCustomerStatements{}, nil
+}
+
 func (stub unreachableCatalogues) ListSupplierBillReceptions(
 	context.Context, domain.TenantID, int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
@@ -112,14 +119,14 @@ func (stub unreachableCatalogues) ListCostAllocations(
 	return nil, nil
 }
 
-// endpointCase 是「四页七册」里的一格：端点入口加一个能取到该册的合法目标。
+// endpointCase 是一个目录查阅端点：端点入口加一个能取到该册的合法目标。
 type endpointCase struct {
 	name    string
 	target  string
 	handler http.Handler
 }
 
-// refusedCatalogueEndpoints 交回四个端点，读口一律是断言未触到的替身。
+// refusedCatalogueEndpoints 交回本上下文的目录查阅端点，读口一律是断言未触到的替身。
 func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQueryIntake) []endpointCase {
 	t.Helper()
 	unreachable := unreachableCatalogues{t: t}
@@ -133,6 +140,11 @@ func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQuer
 			name:    "statements",
 			target:  "/settlement-statements?registry=customer-statement",
 			handler: settlementhttp.NewQuerySettlementStatementsEndpoint(intake, unreachable),
+		},
+		{
+			name:    "disputed-statements",
+			target:  "/settlement-disputed-statements",
+			handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(intake, unreachable),
 		},
 		{
 			name:    "funds-applications",

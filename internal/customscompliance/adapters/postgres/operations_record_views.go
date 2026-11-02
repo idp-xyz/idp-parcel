@@ -12,8 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// OperationsRecordViews 实现关务运营查阅的四本记录读面（案件、提交版本、外部监管结果、动作准入判断册）。
-// 它们是转述已存在事实的读面，不折叠结论：技术回执、监管接收、业务受理与放行分层保存，各层原样上列。
+// OperationsRecordViews 实现关务运营查阅的记录读面：案件、提交版本、外部监管结果、动作准入判断册，以及从判断册里
+// 挑出的卡关对象。它们是转述已存在事实的读面，不折叠结论：技术回执、监管接收、业务受理与放行分层保存，各层原样上列。
 //
 // 父子关系**一条语句取回**：ReadExecutor 不保证两条语句同一快照，分次取会拼出从未同时存在的父子状态
 // （做法同 GateConditionCatalogue）。子集走相关子查询 json_agg 各聚各的，避免多族 LEFT JOIN 的笛卡尔积。
@@ -35,6 +35,7 @@ var (
 	_ ports.SubmissionRecordRead         = (*OperationsRecordViews)(nil)
 	_ ports.ExternalResultViewRead       = (*OperationsRecordViews)(nil)
 	_ ports.ActionAdmissionJudgementRead = (*OperationsRecordViews)(nil)
+	_ ports.UnadmittedObjectRead         = (*OperationsRecordViews)(nil)
 )
 
 func (views *OperationsRecordViews) query(ctx context.Context, what string, limit int, sql string, args ...any) (rowsCloser, error) {
@@ -382,28 +383,8 @@ func (views *OperationsRecordViews) ListActionAdmissionJudgements(
 			&record.ActionAt, &record.CrossZone, &record.Answer, &zonesRaw, &findingsRaw, &record.JudgedAt); err != nil {
 			return nil, fmt.Errorf("list action admission judgements: %w", err)
 		}
-		record.OnwardNode = orEmpty(onward)
-		record.ActionAt = record.ActionAt.UTC()
-		record.JudgedAt = record.JudgedAt.UTC()
-		var zones []admissionZoneRow
-		if err := json.Unmarshal(zonesRaw, &zones); err != nil {
-			return nil, fmt.Errorf("list action admission judgements: zones: %w", err)
-		}
-		for _, zone := range zones {
-			record.Zones = append(record.Zones, ports.AdmissionZoneRecord{
-				Node: zone.Node, Zone: zone.Zone, Registered: zone.Registered})
-		}
-		var findings []admissionFindingRow
-		if err := json.Unmarshal(findingsRaw, &findings); err != nil {
-			return nil, fmt.Errorf("list action admission judgements: findings: %w", err)
-		}
-		for _, finding := range findings {
-			entry := ports.AdmissionFindingRecord{Action: finding.Action, Answer: finding.Answer}
-			for _, basis := range finding.Bases {
-				entry.Bases = append(entry.Bases, ports.AdmissionBasisRecord{
-					Cause: basis.Cause, Scope: basis.Scope, Procedure: basis.Procedure, Sources: basis.Sources})
-			}
-			record.Findings = append(record.Findings, entry)
+		if err := completeAdmissionJudgement(&record, onward, zonesRaw, findingsRaw); err != nil {
+			return nil, fmt.Errorf("list action admission judgements: %w", err)
 		}
 		records = append(records, record)
 	}
@@ -411,4 +392,106 @@ func (views *OperationsRecordViews) ListActionAdmissionJudgements(
 		return nil, fmt.Errorf("list action admission judgements: %w", err)
 	}
 	return records, nil
+}
+
+// completeAdmissionJudgement 把一行判断的可空列与两份 jsonb 补进记录；判断册与卡关对象两口共用，两边的同一份判断
+// 读出来必须一样。
+func completeAdmissionJudgement(
+	record *ports.ActionAdmissionJudgementRecord,
+	onward *string,
+	zonesRaw, findingsRaw []byte,
+) error {
+	record.OnwardNode = orEmpty(onward)
+	record.ActionAt = record.ActionAt.UTC()
+	record.JudgedAt = record.JudgedAt.UTC()
+	var zones []admissionZoneRow
+	if err := json.Unmarshal(zonesRaw, &zones); err != nil {
+		return fmt.Errorf("zones: %w", err)
+	}
+	for _, zone := range zones {
+		record.Zones = append(record.Zones, ports.AdmissionZoneRecord{
+			Node: zone.Node, Zone: zone.Zone, Registered: zone.Registered})
+	}
+	var findings []admissionFindingRow
+	if err := json.Unmarshal(findingsRaw, &findings); err != nil {
+		return fmt.Errorf("findings: %w", err)
+	}
+	for _, finding := range findings {
+		entry := ports.AdmissionFindingRecord{Action: finding.Action, Answer: finding.Answer}
+		for _, basis := range finding.Bases {
+			entry.Bases = append(entry.Bases, ports.AdmissionBasisRecord{
+				Cause: basis.Cause, Scope: basis.Scope, Procedure: basis.Procedure, Sources: basis.Sources})
+		}
+		record.Findings = append(record.Findings, entry)
+	}
+	return nil
+}
+
+// —— 卡关对象 ——
+
+// unadmittedAnswers 是不让动作过门的那几格的库上词形，取自 domain.AdmissionAnswer.Admits，不在 SQL 里另抄一份。
+var unadmittedAnswers = func() []string {
+	var words []string
+	for answer := domain.AdmissionNotGuarded; answer <= domain.AdmissionBlocked; answer++ {
+		if !answer.Admits() {
+			words = append(words, answer.String())
+		}
+	}
+	return words
+}()
+
+// ListUnadmittedObjects 每个对象取动作时点最晚的那份判断（同一时点再按判断时刻），留下不让动作过门的。
+// 「最近」按动作时点而不按判断时刻：执行方晚报的一次早先动作不该盖过它之后那次动作的答复。
+//
+// 件数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，件数是全部卡关对象而不是这一页；分两条语句求，
+// 两次读之间进来的判断会让件数与这一页对不上。没有卡关对象时一行都没有，件数如实是 0。
+func (views *OperationsRecordViews) ListUnadmittedObjects(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) (ports.UnadmittedObjects, error) {
+	rows, err := views.query(ctx, "unadmitted objects", limit,
+		`WITH latest AS (
+		     SELECT DISTINCT ON (object_ref)
+		            judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
+		            cross_zone, answer, zones, findings, judged_at
+		       FROM customs_compliance.action_admission_judgement
+		      WHERE tenant_id = $1
+		      ORDER BY object_ref, action_at DESC, judged_at DESC, judgement_id DESC
+		 )
+		 SELECT judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
+		        cross_zone, answer, zones, findings, judged_at, count(*) OVER ()
+		   FROM latest
+		  WHERE answer = ANY($2)
+		  ORDER BY action_at, object_ref
+		  LIMIT $3`,
+		tenant.String(), unadmittedAnswers, limit)
+	if err != nil {
+		return ports.UnadmittedObjects{}, err
+	}
+	defer rows.Close()
+
+	listed := ports.UnadmittedObjects{Judgements: make([]ports.ActionAdmissionJudgementRecord, 0, limit)}
+	for rows.Next() {
+		var (
+			record                ports.ActionAdmissionJudgementRecord
+			onward                *string
+			zonesRaw, findingsRaw []byte
+			count                 int64
+		)
+		if err := rows.Scan(&record.Judgement, &record.Object, &record.Intent, &record.Node, &onward,
+			&record.ActionAt, &record.CrossZone, &record.Answer, &zonesRaw, &findingsRaw, &record.JudgedAt,
+			&count); err != nil {
+			return ports.UnadmittedObjects{}, fmt.Errorf("list unadmitted objects: %w", err)
+		}
+		if err := completeAdmissionJudgement(&record, onward, zonesRaw, findingsRaw); err != nil {
+			return ports.UnadmittedObjects{}, fmt.Errorf("list unadmitted objects: %w", err)
+		}
+		listed.Count = int(count)
+		listed.Judgements = append(listed.Judgements, record)
+	}
+	if err := rows.Err(); err != nil {
+		return ports.UnadmittedObjects{}, fmt.Errorf("list unadmitted objects: %w", err)
+	}
+	return listed, nil
 }
