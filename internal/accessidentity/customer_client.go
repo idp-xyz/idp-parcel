@@ -121,6 +121,9 @@ const (
 	// CustomerCapabilityTrackingViewQuery 是客户追踪视图查阅（`/v1/customer-tracking-view`，UC-VE-008；ADR-0139 决定四）。查阅口不判准入
 	// 范围（ADR-0139 决定八），所以它不进 customerCapabilitiesAdmittedAtMint。
 	CustomerCapabilityTrackingViewQuery CustomerCapability = "CUSTOMER_TRACKING_VIEW_QUERY"
+	// CustomerCapabilityShipmentTrackingQuery 是客户追踪按运单号查询（`/v1/customer-shipment-tracking`，UC-VE-008；ADR-0356 决定一）。
+	// 与按包裹查同一用例、另一口，所以另一个词；同样不判准入范围，不进 customerCapabilitiesAdmittedAtMint。
+	CustomerCapabilityShipmentTrackingQuery CustomerCapability = "CUSTOMER_SHIPMENT_TRACKING_QUERY"
 	// 以下五词是首方客户命令五口（票 first-party-api/06；ADR-0310）。词在此一处定义；迁移 0024 的 CHECK 与
 	// customerCapabilitiesAdmittedAtMint 引同一批，改一处必改三处。五口都是生产写，铸造侧判准入范围。
 	//
@@ -142,6 +145,7 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
 	CustomerCapabilityDeliveryHandoverConfirmation,
 	CustomerCapabilityTrackingViewQuery,
+	CustomerCapabilityShipmentTrackingQuery,
 	CustomerCapabilityShipmentRequestWithdrawal,
 	CustomerCapabilityParcelCancellation,
 	CustomerCapabilitySourceDataAmendment,
