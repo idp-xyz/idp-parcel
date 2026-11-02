@@ -1,7 +1,7 @@
 # 09 订舱、运输委托的单据号
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-02 进 main（全量 173 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、十；UC-TF-004
@@ -82,4 +82,12 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 4. 总单区委托号、订舱号两列照共同条款第 7 条：有号显号、没号显标识；标识与无号原因（「委托无号原因」「订舱无号原因」）进技术详情。订舱区主列本来就是这条纪律；订舱区技术详情的「委托号」仍按上轮裁定，无号时注明原因。
 
 自验同前：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；TF、architecture、platform、cmd、migrations 全量 `go test -count=1 -p 1`（含 PG）全绿；前端 `tsc -b`、`pnpm test`（1067 过）、`vite build` 过。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `c5b9073b0`，复评钉 `6880f6f47`、`1e918d351`）
+
+三轮，末轮阻断清零。首轮按基线两轴零阻断，合入面一条：`vocabulary/objects.ts` 新加的委托号、订舱号与 main 上票 03 的 `documentTypeWords` 重复且委托号说法不一（修订轮改取共用词典）。首轮核实：取号在 `Save` 答已存之后、同一开立事务，并发首交输家不取号，撞号与出错整笔回滚、序列复原，重放在 `Save` 之前答原号，取消不取号；委托与订舱都没有可用的开立方已登记业务时区（订舱的开立方是租户运营，不是起点网点）。协调方裁定引用处带号：总单册与登记答复、未形成册、段采用与解除、取消委托、发生项冲突回显都带「所属单据 + DocumentNumber」，总单区以号为列并可检索。复评一轮查出修订引入的新阻断：新登总单按键读回失败时答未决而那一版已提交（真库探针复现）；再修订（`1e918d351`）改为交 error 整笔回滚，新增编排与真库用例，评审改回旧写法证两条用例都会红，并以非 SQL 与 SQL 两种读回错误探针证不再半落。其余非阻断（取号两处合一、AT 表按号排序与 `AT-TF-374`、换版不换号与订舱撞号真库用例、TF CONTEXT 分开说起点网点时区与周期安排那一格、常量挪出 import 区、总单区无号订舱显标识）均已处理。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum09` tip `1e918d351` 在隔离树上以合并提交并入 main `f9d2b059c`（AT 盘点文末追记冲突，两段都留）；重算 AT 盘点总览计数、重生成机制清点各成一笔，两项 `-check` 退 0；对 `920687530` 跑全量 173 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum09` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
 
