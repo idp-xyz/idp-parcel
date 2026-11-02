@@ -380,8 +380,8 @@ function ExternalResultsTable() {
 }
 
 // 放行记录按运单号查：不填则列最近的记录。记录是判断当时的结论，换了规则之后同一请求的新判断是另一行，旧行不改。
-// 「只看卡关」换一口读：每件运单只看它最近那份放行检查，没过门的（阻断、未决、未配置）才列，件数是读口答的全部件数——
-// 在这一页里数「已拦截」只数得到最近两百条，也会把后来已放行的运单算进去。首页「今日待办」的卡关格点进来就落在这里。
+// 「只看卡关」换一口读：每件运单只看它最近那一刻的放行检查，有一份没过门的（阻断、未决、未配置）才列，件数是读口答的全部
+// 件数——在判断册这一页里数「已拦截」只数得到服务端交回的那一页，也会把后来已放行的运单算进去。首页「今日待办」的卡关格点进来就落在这里。
 function AdmissionJudgementsTable({
   unadmittedOnly,
   onUnadmittedOnlyChange,
@@ -418,7 +418,7 @@ function AdmissionJudgementsTable({
           只看卡关
         </label>
         {unadmittedOnly ? (
-          <span className="text-xs text-idpxyz-textMuted">每件运单只看最近一次放行检查，没过的（被拦、待定、缺配置）才列，卡得最久的在前</span>
+          <span className="text-xs text-idpxyz-textMuted">每件运单只看最近那一刻的放行检查，有一项没过的（被拦、待定、缺配置）就列，卡得最久的在前</span>
         ) : (
           <form
             className="flex items-center gap-2"

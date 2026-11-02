@@ -537,6 +537,11 @@ func (kind DisputeResolutionKind) valid() bool {
 	return kind >= DisputeAccepted && kind <= DisputePendingReview
 }
 
+// DisputeResolutionKinds 交出四走向的全集。读写两面要按 Final 挑出其中几格去库里筛，从这里取，不按常量的次序数区间。
+func DisputeResolutionKinds() []DisputeResolutionKind {
+	return []DisputeResolutionKind{DisputeAccepted, DisputePartiallyAccepted, DisputeRejected, DisputePendingReview}
+}
+
 // Final 答这一走向是不是终局：接受、部分接受、拒绝是终局，不可再改；待复核不是，可再处理。没有终局结果的争议
 // 还在等人核实或处置。
 func (kind DisputeResolutionKind) Final() bool {

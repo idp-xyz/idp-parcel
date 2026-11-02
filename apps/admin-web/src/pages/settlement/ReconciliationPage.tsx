@@ -114,7 +114,7 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
 }
 
 // 「只看有未了结异议的」是按单上已记的异议筛（至少一项还没有终局结果），不是给单下对账状态：对账状态要连相对方确认一起判，
-// 本产品不记相对方确认。张数取读口答的全部张数——在全册里自己数只数得到前两百张。首页「今日待办」的待对账格点进来就落在这里。
+// 本产品不记相对方确认。张数取读口答的全部张数——在对账单册上自己数只数得到服务端交回的那一页。首页「今日待办」的待对账格点进来就落在这里。
 function CustomerStatementsTable({
   names,
   disputedOnly,
@@ -162,7 +162,9 @@ function CustomerStatementsTable({
   const voided = statements.filter((row) => row.voidBasis).length;
 
   const summary = disputed
-    ? `共 ${disputed.disputedCount} 张有未了结异议${disputed.truncated ? ` · 只列出前 ${statements.length} 张` : ''} · 其中已作废 ${voided} 张`
+    ? `共 ${disputed.disputedCount} 张有未了结异议${
+        disputed.truncated ? ` · 只列出前 ${statements.length} 张，这一页里已作废 ${voided} 张` : ` · 其中已作废 ${voided} 张`
+      }`
     : `${statements.length} 张 · 已作废 ${voided} 张`;
 
   return (

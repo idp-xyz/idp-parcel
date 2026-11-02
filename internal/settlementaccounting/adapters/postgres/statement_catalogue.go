@@ -146,17 +146,6 @@ func (catalogue *StatementCatalogue) ListCustomerStatements(
 	return entries, nil
 }
 
-// finalDisputeResolutions 是终局走向的库上词形，取自 domain.DisputeResolutionKind.Final，不在 SQL 里另抄一份。
-var finalDisputeResolutions = func() []string {
-	var words []string
-	for kind := domain.DisputeAccepted; kind <= domain.DisputePendingReview; kind++ {
-		if kind.Final() {
-			words = append(words, kind.String())
-		}
-	}
-	return words
-}()
-
 // ListDisputedCustomerStatements 上列至少挂着一项没有终局结果的争议的对账单（见 ports.DisputedCustomerStatements）。张数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，张数是全部而不是这一页，
 // 也不会与这一页分属两个快照；一张都没有时一行都不回，张数如实是 0。
 func (catalogue *StatementCatalogue) ListDisputedCustomerStatements(

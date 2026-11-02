@@ -409,8 +409,8 @@ type unadmittedObjectsResponse struct {
 	Judgements      []admissionJudgementBody `json:"judgements"`
 }
 
-// NewQueryUnadmittedObjectsEndpoint 交回卡关对象查阅的 HTTP 入口（GET /customs-unadmitted-objects）：每个对象最近
-// 那份动作准入判断不让动作过门的，连同全部件数与是否截断。哪一格算「不过门」与「最近」怎么取，见
+// NewQueryUnadmittedObjectsEndpoint 交回卡关对象查阅的 HTTP 入口（GET /customs-unadmitted-objects）：每个对象最晚
+// 那一刻上有一份动作准入判断不让动作过门的，连同全部件数与是否截断。哪一格算「不过门」与「最近」怎么取，见
 // ports.UnadmittedObjects。行形与判断册同一份，列表页按同一套列读它。
 //
 // 不收过滤参数：这口回答的就是一问，按对象查归判断册那一口。

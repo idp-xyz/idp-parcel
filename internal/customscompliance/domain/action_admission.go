@@ -36,6 +36,12 @@ func (answer AdmissionAnswer) valid() bool {
 	return answer >= AdmissionNotGuarded && answer <= AdmissionBlocked
 }
 
+// AdmissionAnswers 交出封闭五格的全集。读面要按 Admits 挑出其中几格去库里筛，从这里取，不按常量的次序数区间——次序是压制次序，
+// 将来插一格进来，区间就会悄悄多算或少算。
+func AdmissionAnswers() []AdmissionAnswer {
+	return []AdmissionAnswer{AdmissionNotGuarded, AdmissionAdmitted, AdmissionUndecided, AdmissionNotConfigured, AdmissionBlocked}
+}
+
 // Admits 答这一格是否让动作过门：放行与不受门禁过；未决、未配置、阻断都不过——压制次序里未决及以上都是「还不能走」，
 // 差的只是缺东西、缺配置还是被挡。运营查阅「卡关」的对象按这一格判，不另立一张词表。
 func (answer AdmissionAnswer) Admits() bool {

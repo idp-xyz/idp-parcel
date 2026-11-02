@@ -197,22 +197,27 @@ func TestOperationsViewsEmptyRegistersAnswerEmptyAndRejectNonPositiveLimit(t *te
 	}
 }
 
-// seedJudgement 播一份动作准入判断；answer 是整次答复，逐动作答复取同一格，依据只为让 jsonb 成形。
+// seedJudgement 播一份出发的动作准入判断；answer 是整次答复，逐动作答复取同一格，依据只为让 jsonb 成形。
 func seedJudgement(t *testing.T, fixture *viewFixture, tenant, id, object string, actionAt time.Time, answer string) {
+	t.Helper()
+	seedIntentJudgement(t, fixture, tenant, id, object, "DEPARTURE", actionAt, answer)
+}
+
+func seedIntentJudgement(t *testing.T, fixture *viewFixture, tenant, id, object, intent string, actionAt time.Time, answer string) {
 	t.Helper()
 	fixture.seed(t,
 		`INSERT INTO customs_compliance.action_admission_judgement
 			(tenant_id, judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
 			 cross_zone, answer, zones, findings, judged_at)
-		 VALUES ($1, $2, $3, 'DEPARTURE', 'NODE-A', 'NODE-B', $4, 'CROSSING', $5, '[]',
+		 VALUES ($1, $2, $3, $6, 'NODE-A', 'NODE-B', $4, 'CROSSING', $5, '[]',
 		         jsonb_build_array(jsonb_build_object('action', 'LOADING_DEPARTURE', 'answer', $5::text, 'bases', '[]'::jsonb)),
 		         $4)`,
-		tenant, id, object, actionAt, answer)
+		tenant, id, object, actionAt, answer, intent)
 }
 
-// Covers: AT-CC-456 — 每个对象只看动作时点最晚的那份判断：阻断、未决、未配置算卡关，放行、不受门禁不算；
-// 先被挡后放行的不算，先放行后被挡的算；晚报的早先动作不盖过之后那次；卡得最久的在前；件数不受页大小截断；
-// 他租户的判断不进来。
+// Covers: AT-CC-456 — 每个对象只看动作时点最晚的那一刻：那一刻上有一份阻断、未决或未配置就算卡关，只计一次，放行、不受门禁不算；
+// 先被挡后放行的不算，先放行后被挡的算；同一刻上一份交出被挡、一份出发放行的算（被挡那份交回）；晚报的早先动作不盖过之后那次；
+// 卡得最久的在前；件数不受页大小截断；他租户的判断不进来。
 func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T) {
 	views, fixture := newOperationsRecordViews(t)
 	tenant := "SYN-TENANT-01"
@@ -233,6 +238,12 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 	fixture.seed(t,
 		`UPDATE customs_compliance.action_admission_judgement SET judged_at = $2 WHERE judgement_id = 'J-F0' AND tenant_id = $1`,
 		tenant, at(9))
+	// PCL-G 同一动作时点问了交出又问了出发：交出被挡、出发放行。那一刻有一件事没做成，同刻的放行不把它盖掉。
+	seedIntentJudgement(t, fixture, tenant, "J-G1", "PCL-G", "HANDOVER", at(7), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-G2", "PCL-G", "DEPARTURE", at(7), "ADMITTED")
+	// PCL-H 同一刻两份都不过门（未决、阻断），只计一次。
+	seedIntentJudgement(t, fixture, tenant, "J-H1", "PCL-H", "HANDOVER", at(8), "UNDECIDED")
+	seedIntentJudgement(t, fixture, tenant, "J-H2", "PCL-H", "DEPARTURE", at(8), "BLOCKED")
 	seedJudgement(t, fixture, "SYN-TENANT-02", "J-X1", "PCL-X", at(1), "BLOCKED")
 
 	listed, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 10)
@@ -243,7 +254,7 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 	for _, judgement := range listed.Judgements {
 		objects = append(objects, judgement.Object+"/"+judgement.Judgement)
 	}
-	want := []string{"PCL-C/J-C1", "PCL-D/J-D1", "PCL-B/J-B2"}
+	want := []string{"PCL-C/J-C1", "PCL-D/J-D1", "PCL-B/J-B2", "PCL-G/J-G1", "PCL-H/J-H2"}
 	if listed.Count != len(want) || len(objects) != len(want) {
 		t.Fatalf("件数或清单走样：count=%d rows=%v，要 %v", listed.Count, objects, want)
 	}
