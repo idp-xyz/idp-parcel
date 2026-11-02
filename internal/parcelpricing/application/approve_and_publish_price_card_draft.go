@@ -142,7 +142,7 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 }
 
 // PublishPriceCardDraftOutcome 是发布的答复。`已发布`说的是登记落定（入册或重放）且草稿已推进；`发布未落定`说的是登记
-// 用例答了冲突、规范化不可比、未受理或未决之一——草稿留在`已批准`，登记的那一格随结果原样交回，续办照那一格办。
+// 用例答了冲突、规范化不可比、未受理、较新规范化版本未启用或未决之一——草稿留在`已批准`，登记的那一格随结果原样交回，续办照那一格办。
 type PublishPriceCardDraftOutcome uint8
 
 const (

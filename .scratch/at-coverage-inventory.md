@@ -20,11 +20,11 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 983 |
+| ① 已钉住 | 985 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 423 |
-| 合计 | 1786 |
+| 合计 | 1788 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -33,7 +33,7 @@
 | NO | 109 | 82 | 20 | 5 | 2 |
 | NR | 110 | 87 | 22 | 1 | 0 |
 | PC | 77 | 63 | 14 | 0 | 0 |
-| PP | 44 | 44 | 0 | 0 | 0 |
+| PP | 46 | 46 | 0 | 0 | 0 |
 | PS | 174 | 147 | 24 | 2 | 1 |
 | SA | 222 | 112 | 91 | 19 | 0 |
 | TF | 348 | 279 | 59 | 7 | 3 |
@@ -400,6 +400,8 @@
 | `AT-PP-045` | internal/parcelpricing/adapters/pricecardtemplate/ppt2_test.go::TestRemoteTierLookupNeedsTheCatalogueAndOnlyNewStructuresWritePPC6；internal/parcelpricing/adapters/http/price_card_workbook_http_test.go::TestADraftFromAFormSaysSoAndAFileDraftSaysNothingNew；internal/parcelpricing/domain/source_file_form_test.go::TestAFormSourceFileIdentityIsNamedAfterItsOwnDigest；internal/parcelpricing/application/price_card_workbook_import_test.go::TestSubmitSavesAFormWorkbookAsADraftWhoseSourceIsTheForm；cmd/parcel-api/assemble_pricing_workbook_test.go::TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase；cmd/parcel-api/assemble_pricing_workbook_test.go::TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6 |
 | `AT-PP-046` | internal/parcelpricing/adapters/pricecardtemplate/workbook_json_test.go::TestWorkbookJSONReadsExactlyWhatTheSpreadsheetReads；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_test.go::TestCanonicalWorkbookIdentityIgnoresWhitespaceKeyOrderAndNumberQuoting；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_test.go::TestMalformedWorkbookJSONIsRefusedWithAReason；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_test.go::TestWorkbookJSONCarrierConventions；internal/parcelpricing/adapters/http/price_card_workbook_http_test.go::TestOperatorIntakeTakesAJSONWorkbookAndLeavesOtherContentTypesToTheUploadPath；internal/parcelpricing/application/price_card_workbook_import_test.go::TestPreviewReadsAFormWorkbookThroughTheWorkbookReader；internal/parcelpricing/application/price_card_workbook_import_test.go::TestPreviewOfAFormWorkbookRefusesWhatCannotBeRead；cmd/parcel-api/assemble_pricing_workbook_test.go::TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestWorkbookJSONStopsAtItsStructuralLimits；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestWorkbookJSONCostFollowsTheCellsNotRowsTimesColumns；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestWorkbookJSONMemoryIsBoundedByTheRowLimitNotTheBody；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestTheByteLimitIsJudgedOnTheRawBodyOnlyOnce；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestAPaddedEnvelopeVersionIsReadAsTheTrimmedOne；internal/parcelpricing/adapters/pricecardtemplate/workbook_json_limits_test.go::TestTheLargestLegalWorkbookIsReadWithinBoundedTimeAndMemory |
 | `AT-PP-047` | internal/parcelpricing/adapters/pricecardtemplate/spec_test.go::TestSpecMirrorsTheSheetAndColumnDefinitions；internal/parcelpricing/adapters/pricecardtemplate/spec_test.go::TestSpecAllowedValuesAreTheClosedVocabulary；internal/parcelpricing/adapters/pricecardtemplate/spec_test.go::TestDecoderReadsClosedColumnsThroughTheRegistry；internal/parcelpricing/adapters/http/price_card_workbook_http_test.go::TestTemplateSpecEndpointGatesBeforeAnsweringAndTakesNoQuery；internal/parcelpricing/adapters/http/price_card_workbook_http_test.go::TestTemplateSpecEndpointAnswersTheSourceSpecInItsDocumentedShape；cmd/parcel-api/assemble_pricing_workbook_test.go::TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChannel；internal/parcelpricing/adapters/pricecardtemplate/spec_test.go::TestSpecGivesTheAddressNatureWordsAsAConditionalVocabulary |
+| `AT-PP-048` | internal/parcelpricing/application/register_price_card_gate_test.go::TestRegisteringANewerCanonicalizationNeedsTheDeploymentSwitch；internal/parcelpricing/application/register_price_card_gate_test.go::TestAReplayOfANewerCanonicalizationIsRefusedWhileTheSwitchIsOff；cmd/parcel-api/assemble_pricing_register_switch_test.go::TestTheNewerCanonicalizationSwitchOpensOnlyOnTrue；cmd/parcel-api/assemble_pricing_register_switch_test.go::TestTheWiredPriceCardRegistrationHonoursTheNewerCanonicalizationSwitch；cmd/parcel-pricing-register/register_switch_test.go::TestTheNewerCanonicalizationRefusalHasItsOwnExitCode；cmd/parcel-pricing-register/register_switch_test.go::TestTheControlledRegistrationOfANewerCanonicalizationWaitsForTheSwitch；internal/parcelpricing/adapters/http/register_price_card_test.go::TestRegisterPriceCardEndpointTranscribesAnswersVerbatim |
+| `AT-PP-049` | internal/parcelpricing/application/register_price_card_gate_test.go::TestAPublicationRefusedByTheSwitchCanBeRetriedOnceItIsOn；cmd/parcel-api/assemble_pricing_workbook_test.go::TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6（真库：开关关着发布未落定、草稿仍已批准、册上无卡，开关开后同一份发布落定）；internal/parcelpricing/adapters/http/progress_price_card_draft_test.go::TestThePublicationEndpointHandsTheRegistrationAnswerThrough；apps/admin-web/src/pages/pricing/price-card-import.test.ts（部署开关没开时的中文业务话） |
 | `AT-PS-001` | internal/parcelshipment/domain/acceptance_decision_test.go::TestAllChecksPassingAcceptsAndFixesBaselineAndCommitment |
 | `AT-PS-002` | internal/parcelshipment/domain/acceptance_decision_test.go::TestOneFailingMemberBlocksTheWholeSubmissionVersion |
 | `AT-PS-003` | internal/parcelshipment/application/submit_shipment_request_test.go::TestSubmitReplayReturnsExistingResultWithoutASecondRequest；cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn |

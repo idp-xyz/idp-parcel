@@ -118,6 +118,8 @@ type endpointSources struct {
 	// operatorMinter 与 customerClientMinter 是两族在本进程唯一的那一只铸造器。
 	operatorMinter       *accessidentity.OperatorMinter
 	customerClientMinter *accessidentity.CustomerClientMinter
+	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），价卡登记口与草稿发布口共读这一格。
+	registerNewerCanonicalization bool
 }
 
 // endpointChannels 是各特性共用的接入渠道。生产装配与装配测试各给一份；装配测试换其中哪几格，那几格的答复格就由哪条用例钉。

@@ -102,6 +102,34 @@ func minimalPlan(t *testing.T) domain.PricingPlanVersion {
 // 引用背后内容变了」那一格——回放用例要它。
 func minimalPlanPriced(t *testing.T, rate string) domain.PricingPlanVersion {
 	t.Helper()
+	return minimalPlanShaped(t, rate, domain.PricingPlanStructures{})
+}
+
+// totalBoundedPlan 是 minimalPlan 加一条单票合计下限：带了总额上下限，方案就写较新的规范化版本 PPC-6（ADR-0348
+// 决定四），登记门要看的正是这一格。
+func totalBoundedPlan(t *testing.T) domain.PricingPlanVersion {
+	t.Helper()
+	minimum, err := domain.NewMoneyFromString("5", mustValue(t, domain.NewCurrency, "USD"))
+	if err != nil {
+		t.Fatalf("minimum: %v", err)
+	}
+	bounds, err := domain.NewTotalChargeBounds(&minimum, nil)
+	if err != nil {
+		t.Fatalf("total bounds: %v", err)
+	}
+	structures, err := domain.PricingPlanStructures{}.WithTotalChargeBounds(bounds)
+	if err != nil {
+		t.Fatalf("structures: %v", err)
+	}
+	plan := minimalPlanShaped(t, "10", structures)
+	if plan.CanonicalizationVersion() == domain.CurrentCanonicalizationVersion() {
+		t.Fatalf("带总额上下限的方案仍记基础版 %s", plan.CanonicalizationVersion())
+	}
+	return plan
+}
+
+func minimalPlanShaped(t *testing.T, rate string, structures domain.PricingPlanStructures) domain.PricingPlanVersion {
+	t.Helper()
 	currency := mustValue(t, domain.NewCurrency, "USD")
 	amount, err := domain.NewMoneyFromString(rate, currency)
 	if err != nil {
@@ -167,7 +195,7 @@ func minimalPlanPriced(t *testing.T, rate string) domain.PricingPlanVersion {
 		table,
 		weightPolicy,
 		nil,
-		domain.PricingPlanStructures{},
+		structures,
 	)
 	if err != nil {
 		t.Fatalf("pricing plan: %v", err)

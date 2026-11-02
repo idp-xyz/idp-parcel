@@ -39,6 +39,9 @@ export const registrationOutcomeLabels: Record<string, string> = {
   CANONICALIZATION_DIFFERS: '这个版本号已按另一种格式登记过，两份没法比较；请换一个新版本号',
   NOT_ACCEPTED: '内容有误，没有登记；按提示改好后再提交',
   UNDECIDED: '这次没处理完，登没登上还不确定；稍后刷新列表确认',
+  // ADR-0352：不是卡有错，是部署还没放开较新的计价结构；续办在运维，不在改卡。
+  NEWER_CANONICALIZATION_NOT_ENABLED:
+    '这张价卡用了较新的计价结构，当前环境尚未允许登记。请先确认所有服务都已升级到新版本，再请运维开启开关后重试。',
 };
 
 export function registerPriceCard(

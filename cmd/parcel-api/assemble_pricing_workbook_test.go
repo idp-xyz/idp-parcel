@@ -352,9 +352,10 @@ func TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase(t *testing.T
 	}
 }
 
-// Covers: `AT-PP-045`，ADR-0349 决定二、四——用到新结构（总额下限、按偏远档位查表）的页面表单草稿走完批准与发布：草稿是 PPC-6 的已校验草稿，
+// Covers: `AT-PP-045`、`AT-PP-049`，ADR-0349 决定二、四——用到新结构（总额下限、按偏远档位查表）的页面表单草稿走完批准与发布：草稿是 PPC-6 的已校验草稿，
 // 批准后发布登进价卡册（RECORDED），册上读回的规范化版本是 PPC-6、摘要等于种子 FULL-03 的摘要。导入这一条路从此能造出 PPC-6 的卡，
-// 发布前所有读价卡的进程必须已是认 PPC-6 的构建（ADR-0348 风险点 6）。输入是隔离合成，只记 `S`。
+// 所以发布要过部署开关（ADR-0352）：开关关着的那次发布答 PUBLICATION_NOT_LANDED / NEWER_CANONICALIZATION_NOT_ENABLED，册上
+// 没有这张卡、草稿仍是已批准；同一份批准在开关打开后再发布即落定。输入是隔离合成，只记 `S`。
 func TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -369,7 +370,15 @@ func TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	publication, err := buildPriceCardDraftPublication(db)
+	switchedOff, err := buildPriceCardDraftPublication(db, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publication, err := buildPriceCardDraftPublication(db, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drafts, err := pppostgres.NewPriceCardDrafts(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,6 +426,17 @@ func TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6(t *testing.T) 
 	plan := submitted.Draft.Plan()
 	if result, err := approval.Handle(t.Context(), pricingapp.ApprovePriceCardDraftCommand{Tenant: tenant, Plan: plan, Approver: approver}); err != nil || result.Outcome != pricingapp.PriceCardDraftApproved {
 		t.Fatalf("批准 = %s err=%v", result.Outcome, err)
+	}
+	refused, err := switchedOff.Handle(t.Context(), pricingapp.PublishPriceCardDraftCommand{Tenant: tenant, Plan: plan})
+	if err != nil || refused.Outcome != pricingapp.PriceCardPublicationNotLanded ||
+		refused.Registration != pricingapp.PriceCardRegistrationNewerCanonicalizationNotEnabled {
+		t.Fatalf("开关关着发布 = %s / %s err=%v", refused.Outcome, refused.Registration, err)
+	}
+	if _, found, err := cards.ReadPriceCardContent(t.Context(), tenant, plan); err != nil || found {
+		t.Fatalf("开关关着时册上不该有这张卡：found=%v err=%v", found, err)
+	}
+	if still, found, err := drafts.LoadPriceCardDraft(t.Context(), tenant, plan); err != nil || !found || still.Status() != domain.PriceCardDraftStatusApproved {
+		t.Fatalf("开关关着发布之后草稿 = %v found=%v err=%v，want 仍是已批准", still.Status(), found, err)
 	}
 	published, err := publication.Handle(t.Context(), pricingapp.PublishPriceCardDraftCommand{Tenant: tenant, Plan: plan})
 	if err != nil || published.Outcome != pricingapp.PriceCardDraftPublished || published.Registration != pricingapp.PriceCardRecorded {

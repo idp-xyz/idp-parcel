@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -141,10 +142,20 @@ func buildReferenceCatalogueRegistrationOrchestration(db *bentopg.DB) (transacti
 	return transactionalReferenceCatalogueRegistration{transactor: db.Transactor(), inner: handler}, nil
 }
 
+// pricingRegisterNewerCanonicalizationEnv 是登记较新规范化版本价卡的部署开关（ADR-0352）：与权威串、发行方参数同属
+// 随部署走的那一类，但它不是租户取值，而是「这一次部署里所有读价卡的进程是不是都已升级」的运维断言。产品给的缺省是关；
+// 只有恰为 `true` 才开——拼错、`1`、`yes` 都按关读，开错的代价（旧进程读到新卡整笔失败）远大于没开（登记答未启用、可重试）。
+const pricingRegisterNewerCanonicalizationEnv = "IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION"
+
+// pricingRegisterNewerCanonicalization 在进程里只读一次：登记口与草稿发布口装同一个值，同一张卡在各口得到同一个答案。
+func pricingRegisterNewerCanonicalization(getenv func(string) string) bool {
+	return strings.TrimSpace(getenv(pricingRegisterNewerCanonicalizationEnv)) == "true"
+}
+
 // buildPriceCardRegistrationOrchestration 装配 `/pricing-price-card-registrations`
 // 的真编排（ADR-0085 首切片，票 admin-write-faces/01）。接真不等墙降：未配置 Intake
 // 拒在编排之前，接入渠道就位前编排一次也不会被调到——墙降那笔工作换的只是 Intake。
-func buildPriceCardRegistrationOrchestration(db *bentopg.DB) (transactionalPriceCardRegistration, error) {
+func buildPriceCardRegistrationOrchestration(db *bentopg.DB, newerCanonicalization bool) (transactionalPriceCardRegistration, error) {
 	catalog, err := pppostgres.NewPriceCards(db)
 	if err != nil {
 		return transactionalPriceCardRegistration{}, fmt.Errorf("parcel-api: price card catalog: %w", err)
@@ -153,7 +164,9 @@ func buildPriceCardRegistrationOrchestration(db *bentopg.DB) (transactionalPrice
 	if err != nil {
 		return transactionalPriceCardRegistration{}, err
 	}
-	handler := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog, Registered: registered})
+	handler := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{
+		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+	})
 	return transactionalPriceCardRegistration{transactor: db.Transactor(), inner: handler}, nil
 }
 

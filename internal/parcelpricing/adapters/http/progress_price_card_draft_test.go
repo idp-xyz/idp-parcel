@@ -217,6 +217,9 @@ func TestThePublicationEndpointHandsTheRegistrationAnswerThrough(t *testing.T) {
 			HasRegistration: true}, http.StatusOK, "CONTENT_CONFLICT", false},
 		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationNotLanded, Registration: application.PriceCardRegistrationIncomparable,
 			HasRegistration: true}, http.StatusOK, "CANONICALIZATION_DIFFERS", false},
+		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationNotLanded,
+			Registration: application.PriceCardRegistrationNewerCanonicalizationNotEnabled, HasRegistration: true},
+			http.StatusOK, "NEWER_CANONICALIZATION_NOT_ENABLED", false},
 		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationDraftNotApproved}, http.StatusOK, "", false},
 	}
 	for _, test := range cases {
