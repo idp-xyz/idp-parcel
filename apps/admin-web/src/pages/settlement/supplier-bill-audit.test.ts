@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import { deepEqual, equal, match, ok } from 'node:assert/strict';
 import {
   auditDraftProblems,
+  billNumberConflictText,
+  rangedAuditAnswerText,
   firstAuditRow,
   freeRanges,
   hasAuditDraftProblems,
@@ -104,4 +106,24 @@ test('标识：主张标识与审核决定标识都由页面生成，不含账�
   const now = new Date(Date.UTC(2026, 10, 2, 3, 4, 5));
   equal(newClaimId(now, 'a1-b2c3d4e5'), 'BILL-20261102-030405-A1B2C3');
   equal(newAuditDecisionId(now, 'zz'), 'AUDIT-20261102-030405-ZZ');
+});
+
+test('审核答复说人话：三种结果、超出已匹配、范围已裁决、未配置各说各的', () => {
+  const money = (amount: string, currency: string) => `${amount}/${currency}`;
+  match(
+    rangedAuditAnswerText({ outcome: 'PAYABLE_FORMED', documentNumber: 'AP-202611-00001', amount: '5000', currency: 'CNY' }, '第 1 行 ', 'CNY', money),
+    /第 1 行 审核通过，形成应付 AP-202611-00001，金额 5000\/CNY/,
+  );
+  match(rangedAuditAnswerText({ outcome: 'PAYABLE_FORMED', payable: 'AUDIT-1', documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }, '', 'CNY'), /AUDIT-1（/);
+  match(rangedAuditAnswerText({ outcome: 'DISPUTE_RECORDED' }, '', 'CNY'), /不形成应付、也不算拒绝/);
+  match(rangedAuditAnswerText({ outcome: 'REJECTION_RECORDED' }, '', 'CNY'), /追加账单/);
+  match(rangedAuditAnswerText({ outcome: 'LINE_NOT_AUDITABLE', matchedAmount: '8000', passedAmount: '5000' }, '', 'CNY', money), /最多只能通过 8000\/CNY，已通过 5000\/CNY/);
+  match(rangedAuditAnswerText({ outcome: 'RANGE_ALREADY_DECIDED' }, '', 'CNY'), /已经有审核结果/);
+  match(rangedAuditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'AUDIT_AUTHORITY_UNCONFIGURED' }, '', 'CNY'), /审核授权未配置/);
+  match(rangedAuditAnswerText({ outcome: 'NUMBERING_RULE_COLLISION', documentType: 'AUDITED_PAYABLE' }, '', 'CNY'), /应付单号/);
+});
+
+test('账单号冲突说清撞的是哪一边', () => {
+  match(billNumberConflictText({ registeredClaim: 'BILL-1' }, ' INV-1 ', (claim) => `主张 ${claim}`), /账单号 INV-1 已经登记过（主张 BILL-1）/);
+  match(billNumberConflictText({ registeredSupplierBillNumber: 'INV-0' }, 'INV-1'), /已经以账单号 INV-0 登记过/);
 });

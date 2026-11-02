@@ -5,6 +5,8 @@
 // 还空着的地方起依次排开——位置只让「不重叠」「再审只落在原争议之内」在结构上成立，不给人多一件要想的事。金额全程用 bigint，不经
 // 浮点；服务端照样判范围、已匹配金额与上限，这里只拦人能当场改的错。
 
+import { documentNumberAbsenceNote, numberingCollisionNote } from '../../vocabulary/document-numbering';
+
 /** 审核结果的三种字面（领域 AuditVerdict）。 */
 export type AuditVerdict = 'PASSED' | 'DISPUTED' | 'REJECTED';
 
@@ -249,4 +251,102 @@ export function newAuditDecisionId(now: Date, random: string): string {
  */
 export function newClaimId(now: Date, random: string): string {
   return `BILL-${stampOf(now)}-${tail(random)}`;
+}
+
+// —— 答复那一句 ——
+
+/** 审核口答复里本页要说的几格（POST /settlement-supplier-bill-audits，ADR-0357 决定五）。 */
+export interface RangedAuditAnswer {
+  outcome: string;
+  decision?: string;
+  verdict?: string;
+  rangeFrom?: string;
+  rangeTo?: string;
+  resolvesDispute?: string;
+  payable?: string;
+  documentNumber?: string;
+  documentNumberAbsence?: string;
+  documentType?: string;
+  amount?: string;
+  currency?: string;
+  matchedAmount?: string;
+  passedAmount?: string;
+  undecidedReason?: string;
+}
+
+/** 审核答复里这几格说明库上刚落了一份决定或本来就有：重读这张账单（与应付册）。 */
+export const rangedAuditSettled = new Set(['PAYABLE_FORMED', 'EXISTING_PAYABLE', 'DISPUTE_RECORDED', 'REJECTION_RECORDED', 'EXISTING_DECISION']);
+
+const undecidedWords: Record<string, string> = {
+  AUDIT_AUTHORITY_UNCONFIGURED: '这家供应商在这个公司主体下还没有登记审核人（审核授权未配置）',
+  PAYABLE_ACCOUNT_UNCONFIGURED: '这家供应商在这个公司主体下还没有登记应付归集账户（未配置）',
+  AUDIT_ESCALATION_UNCONFIGURED: '本公司还没有登记越权审核上限（未配置），不默认放行',
+};
+
+/**
+ * 审核口答复的那一句。segment 是表单上这一段的说法（例如「第 2 行 50.00 CNY」），money 是页面的金额写法（ops-ui 的
+ * formatMoney），由调用方交进来，本文件不引 tsx。
+ */
+export function rangedAuditAnswerText(
+  body: RangedAuditAnswer,
+  segment: string,
+  currency: string,
+  money: (amount: string, currency: string) => string = (amount, unit) => `${amount} ${unit}`,
+): string {
+  const payable = () => {
+    const label = body.documentNumber ?? body.payable ?? '';
+    const note = !body.documentNumber && body.documentNumberAbsence ? documentNumberAbsenceNote(body.documentNumberAbsence) : undefined;
+    return note ? `${label}（${note}）` : label;
+  };
+  switch (body.outcome) {
+    case 'PAYABLE_FORMED':
+      return `${segment}审核通过，形成应付 ${payable()}${body.amount ? `，金额 ${money(body.amount, body.currency ?? currency)}` : ''}。`;
+    case 'EXISTING_PAYABLE':
+      return `${segment}已经通过过，应付 ${payable()}，没有重复形成。`;
+    case 'DISPUTE_RECORDED':
+      return `${segment}记为争议，不形成应付、也不算拒绝；核实之后在这一行对这段争议再审。`;
+    case 'REJECTION_RECORDED':
+      return `${segment}已拒绝，这份账单上不再审这一段；供应商要再收这笔，得另开追加账单。`;
+    case 'EXISTING_DECISION':
+      return `${segment}已经给过同样的结果，没有重复记。`;
+    case 'PAYABLE_CONFLICT':
+    case 'DECISION_CONFLICT':
+      return `${segment}没有记下：这个审核标识已经用在别的内容上；刷新这张账单后重审。`;
+    case 'RANGE_ALREADY_DECIDED':
+      return `${segment}没有记下：这一段已经有审核结果了（可能有人刚审过）；刷新这张账单看最新的去向。`;
+    case 'LINE_NOT_AUDITABLE': {
+      const bound =
+        body.matchedAmount !== undefined
+          ? `这一行最多只能通过 ${money(body.matchedAmount, currency)}${body.passedAmount && body.passedAmount !== '0' ? `，已通过 ${money(body.passedAmount, currency)}` : ''}`
+          : '这一行能通过的已经用完';
+      return `${segment}没有通过：${bound}。超出的部分和预期成本对不上，只能记争议或拒绝；真要多付，先更正预期成本、以新版本重新登记账单再审。`;
+    }
+    case 'AUDIT_MUST_ESCALATE':
+      return `${segment}没有形成应付：这一行的金额超过本公司登记的越权审核上限，要升级审批。升级后由谁终审还没有定，这一段先停着。`;
+    case 'SOURCE_NOT_ACCEPTED':
+      return `${segment}没有审核：找不到这张账单或这一行，或这一段不在这一行（再审要落在原争议之内）；刷新后重试。`;
+    case 'AUDIT_UNDECIDED': {
+      const reason = body.undecidedReason ? undecidedWords[body.undecidedReason] : undefined;
+      return reason
+        ? `${segment}没有记下：${reason}。登好之后再审。`
+        : `${segment}没有记下：服务端这一次没有答出结果（${body.undecidedReason ?? '原因未说'}），稍后重试。`;
+    }
+    case 'NUMBERING_RULE_COLLISION':
+      return numberingCollisionNote(body.documentType);
+    default:
+      return `服务端答 ${body.outcome}`;
+  }
+}
+
+/** 接收口答「账单号冲突」时的那一句（ADR-0357 决定一）：号已标识另一份主张，或这份主张已以另一个号登记。 */
+export function billNumberConflictText(
+  body: { registeredClaim?: string; registeredSupplierBillNumber?: string },
+  billNumber: string,
+  claimLabel: (claim: string) => string = (claim) => claim,
+): string {
+  if (body.registeredSupplierBillNumber) {
+    return `没有登记：这份账单已经以账单号 ${body.registeredSupplierBillNumber} 登记过，账单号不能改；照来件核对账单号。`;
+  }
+  const registered = body.registeredClaim ? `（${claimLabel(body.registeredClaim)}）` : '';
+  return `没有登记：这家供应商的账单号 ${billNumber.trim()} 已经登记过${registered}。去看已登记的那份；供应商更正后重发的，在那一份上以新版本登记。`;
 }
