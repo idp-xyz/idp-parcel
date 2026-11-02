@@ -5,6 +5,8 @@ import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { parcelNoOf } from '../shipment-request/ref-no';
 import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
+import { placePairLabel, type PlaceNameIndex } from '../network/place-names';
+import { usePlaceNames } from '../network/use-place-names';
 import {
   ReviewDetail,
   reviewStatusOf,
@@ -139,11 +141,12 @@ const sections: ReviewSection[] = [
     // 一类派生状态列(票 05 Comments)。
     columns: [
       col('scheduleId', '班次', { mono: true }),
-      col('leg', '从 → 到', { mono: true }),
+      col('leg', '从 → 到'),
       col('departsAt', '出发时间', { mono: true }),
       col('arrivesAt', '到达时间', { mono: true }),
       col('runningDate', '运行日', { mono: true }),
       techCol([
+        ['两端网点编码', 'legCodes'],
         ['运输连接', 'connection'],
         ['服务范围', 'serviceScope'],
         ['班次模板', 'template'],
@@ -181,11 +184,12 @@ const sections: ReviewSection[] = [
     // 对象级结果派生,本区行粒度就是载运对象。
     columns: [
       parcelCol('object', '包裹'),
-      col('boundary', '从谁交给谁', { mono: true }),
+      col('boundary', '从谁交给谁'),
       col('verdict', '结果', { pill: { codeKey: 'verdictCode', scope: 'handover' }, className: 'w-[104px]' }),
       col('judgedAt', '交接时间', { mono: true }),
       techCol([
         ['包裹标识', 'object'],
+        ['交出方 → 接收方编码', 'boundaryCodes'],
         ['交接批次', 'scope'],
         ['判断版本', 'version'],
         ['依据', 'basis'],
@@ -327,14 +331,19 @@ const masterDocumentStandingLabels: Record<string, string> = {
   SUPERSEDED: '已替代',
 };
 
-function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
+/**
+ * 册行转写。班次两端与交接的交出方、接收方里的网点按此刻生效那一版显名称（use-place-names）；交接两端也可能是承运商或场外地点，
+ * 那些查不到名称、照显编码。两端原编码各进技术详情。
+ */
+function rowsOf(body: TransportFulfillmentListResponseBody, places: PlaceNameIndex): ReviewRow[] {
   switch (body.outcome) {
     case 'TRANSPORT_SCHEDULES_LISTED':
       return body.schedules.map((record) => ({
         key: `schedule:${record.scheduleId}`,
         values: {
           scheduleId: record.scheduleId,
-          leg: record.fromNode || record.toNode ? `${record.fromNode ?? '—'} → ${record.toNode ?? '—'}` : '',
+          leg: record.fromNode || record.toNode ? placePairLabel(places, record.fromNode, record.toNode) : '',
+          legCodes: record.fromNode || record.toNode ? `${record.fromNode ?? '—'} → ${record.toNode ?? '—'}` : '',
           departsAt: formatInstant(record.departsAt),
           arrivesAt: record.arrivesAt ? formatInstant(record.arrivesAt) : '',
           runningDate: record.runningDate ?? '',
@@ -364,7 +373,8 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
         values: {
           object: record.object,
           // 交接边界由交出方与接收方两个参与方引用表达,组合成「A → B」是呈现的事。
-          boundary: `${record.releasedBy} → ${record.receivedBy}`,
+          boundary: placePairLabel(places, record.releasedBy, record.receivedBy),
+          boundaryCodes: `${record.releasedBy} → ${record.receivedBy}`,
           verdict: labelOf(handoverVerdictLabels, record.verdict),
           verdictCode: record.verdict,
           scope: record.scope,
@@ -438,6 +448,7 @@ export function TransportFulfillmentReviewPage() {
     scope: string;
     answer: ApiResult<HandoverScopeSummaryResponseBody>;
   } | null>(null);
+  const places = usePlaceNames();
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
   const registry = section.registry;
   const isScopeSummary = section.scopeSummary === true;
@@ -486,7 +497,7 @@ export function TransportFulfillmentReviewPage() {
       ? scopeSummaryRowsOf(summaryBody)
       : []
     : body
-      ? rowsOf(body)
+      ? rowsOf(body, places)
       : [];
   // 汇总区至多一行，本地检索对它没有意义——检索框在那一区是范围入参，不是过滤词。
   const retry = () => setReloadKey((value) => value + 1);
