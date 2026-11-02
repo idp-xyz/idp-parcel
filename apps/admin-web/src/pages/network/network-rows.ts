@@ -44,6 +44,13 @@ export function timeZoneLabel(zone: string | undefined): string {
   }
 }
 
+/**
+ * 网点与口岸在领域里只有编码、没有名称这一格：network-routing 的物流节点版本只登编码、时区与生效区间，customs-compliance 的
+ * 合规候选口岸只登口岸引用与生效区间，两边的 CONTEXT 都没有定义名称属性，读口也就不带。页面不替它拟名（拿编码猜城市名就是
+ * 自造事实），行首照显编码，名称一格如实说没登记。哪天领域加了名称，这里换成读口的值。
+ */
+export const unregisteredNameWord = '未登记名称';
+
 /** 版本号的屏上写法：「第 2 版」。版本号由登记方给，进技术详情；主列只在同一对象有多版时才需要它。 */
 export function versionWord(version: number | string | undefined): string {
   return version === undefined || version === '' ? '' : `第 ${version} 版`;

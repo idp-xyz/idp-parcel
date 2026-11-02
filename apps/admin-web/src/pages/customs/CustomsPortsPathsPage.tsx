@@ -17,7 +17,7 @@ import {
 import { portsPathsRegistryLabels, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { labelFor } from '../../vocabulary/status';
 import { useMayWriteRegistry } from '../use-operator-grants';
-import { validityOf } from '../network/network-rows';
+import { unregisteredNameWord, validityOf } from '../network/network-rows';
 import { codeStatus } from '../visibility/exception-list';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, notConnectedOverride, techRows, type RowStatus } from '../network/route-workbench';
@@ -58,11 +58,17 @@ function statusOf(row: CatalogueRow): RowStatus | undefined {
   return code ? codeStatus(code) : undefined;
 }
 
-const nameColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
+const nameColumn = (header: string, unnamed = false): WorkbenchColumn<CatalogueRow> => ({
   key: 'name',
   header,
   sortKey: 'name',
-  render: (row) => <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.name}</span>,
+  render: (row) => (
+    <div className="min-w-0">
+      <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.name}</div>
+      {/* 口岸在领域里只有编码（network-rows 的 unregisteredNameWord 写着为什么），名称一格如实说没登记。 */}
+      {unnamed ? <div className="text-[11px] text-idpxyz-breadcrumb">{unregisteredNameWord}</div> : null}
+    </div>
+  ),
 });
 const statusColumn: WorkbenchColumn<CatalogueRow> = {
   key: 'status',
@@ -80,7 +86,7 @@ const periodColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
 });
 
 const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
-  ports: [nameColumn('口岸'), statusColumn, periodColumn('可用期间')],
+  ports: [nameColumn('口岸', true), statusColumn, periodColumn('可用期间')],
   paths: [
     nameColumn('申报路径'),
     statusColumn,
@@ -124,7 +130,7 @@ function CatalogueDetail({ view, row, onClose }: { view: View; row: CatalogueRow
       subtitle={view === 'ports' ? '可用口岸' : '申报路径'}
       facts={
         view === 'ports'
-          ? [period]
+          ? [{ label: '名称', value: <span className="font-normal text-idpxyz-breadcrumb">{unregisteredNameWord}</span> }, period]
           : [
               { label: '经哪个口岸', value: <span className="font-mono">{row.port}</span> },
               { label: '方向', value: row.direction ? labelFor(row.direction) : '—' },

@@ -29,7 +29,7 @@ import {
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
-import { adjustmentWindowOf, timeZoneLabel, validityOf, versionWord } from './network-rows';
+import { adjustmentWindowOf, timeZoneLabel, unregisteredNameWord, validityOf, versionWord } from './network-rows';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows, type DetailFact, type RowStatus } from './route-workbench';
 
 const info = moduleInfoById['network-catalog'];
@@ -60,7 +60,9 @@ function identityCell(row: Row, family: NetworkCatalogFamily) {
         ? row.targetKind
           ? labelFor(row.targetKind)
           : ''
-        : versionWord(row.version);
+        : family === 'node'
+          ? `${unregisteredNameWord} · ${versionWord(row.version)}`
+          : versionWord(row.version);
   return (
     <div className="min-w-0">
       <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{code ?? '—'}</div>
@@ -166,7 +168,11 @@ function factsOf(family: NetworkCatalogFamily, row: Row): DetailFact[] {
     case 'service-calendar':
       return [{ label: '适用对象', value: row.targetKind ? labelFor(row.targetKind) : '—' }, period];
     default:
-      return [{ label: '时区', value: timeZoneLabel(row.businessTimezone) }, period];
+      return [
+        { label: '名称', value: <span className="font-normal text-idpxyz-breadcrumb">{unregisteredNameWord}</span> },
+        { label: '时区', value: timeZoneLabel(row.businessTimezone) },
+        period,
+      ];
   }
 }
 
