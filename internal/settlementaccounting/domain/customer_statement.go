@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -534,10 +535,10 @@ const (
 )
 
 func (kind DisputeResolutionKind) valid() bool {
-	return kind >= DisputeAccepted && kind <= DisputePendingReview
+	return slices.Contains(DisputeResolutionKinds(), kind)
 }
 
-// DisputeResolutionKinds 交出四走向的全集。读写两面要按 Final 挑出其中几格去库里筛，从这里取，不按常量的次序数区间。
+// DisputeResolutionKinds 交出四走向的全集。valid 与读写两面按 Final 挑格都从这里取，不按常量的次序数区间。
 func DisputeResolutionKinds() []DisputeResolutionKind {
 	return []DisputeResolutionKind{DisputeAccepted, DisputePartiallyAccepted, DisputeRejected, DisputePendingReview}
 }

@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 )
@@ -33,11 +34,11 @@ const (
 )
 
 func (answer AdmissionAnswer) valid() bool {
-	return answer >= AdmissionNotGuarded && answer <= AdmissionBlocked
+	return slices.Contains(AdmissionAnswers(), answer)
 }
 
-// AdmissionAnswers 交出封闭五格的全集。读面要按 Admits 挑出其中几格去库里筛，从这里取，不按常量的次序数区间——次序是压制次序，
-// 将来插一格进来，区间就会悄悄多算或少算。
+// AdmissionAnswers 交出封闭五格的全集，按压制次序排（轻在前、阻断在末）。valid 与读面按 Admits 挑格都从这里取，不按常量的
+// 次序数区间——将来插一格进来，区间就会悄悄多算或少算；读面挑同一刻最重的一份也按这里的次序。
 func AdmissionAnswers() []AdmissionAnswer {
 	return []AdmissionAnswer{AdmissionNotGuarded, AdmissionAdmitted, AdmissionUndecided, AdmissionNotConfigured, AdmissionBlocked}
 }

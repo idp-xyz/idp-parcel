@@ -197,6 +197,14 @@ func TestOperationsViewsEmptyRegistersAnswerEmptyAndRejectNonPositiveLimit(t *te
 	}
 }
 
+// rejudge 把一份判断的判断时刻挪到 at：同一请求晚些时候重判的那一份。
+func rejudge(t *testing.T, fixture *viewFixture, tenant, id string, at time.Time) {
+	t.Helper()
+	fixture.seed(t,
+		`UPDATE customs_compliance.action_admission_judgement SET judged_at = $3 WHERE tenant_id = $1 AND judgement_id = $2`,
+		tenant, id, at)
+}
+
 // seedJudgement 播一份出发的动作准入判断；answer 是整次答复，逐动作答复取同一格，依据只为让 jsonb 成形。
 func seedJudgement(t *testing.T, fixture *viewFixture, tenant, id, object string, actionAt time.Time, answer string) {
 	t.Helper()
@@ -215,9 +223,10 @@ func seedIntentJudgement(t *testing.T, fixture *viewFixture, tenant, id, object,
 		tenant, id, object, actionAt, answer, intent)
 }
 
-// Covers: AT-CC-456 — 每个对象只看动作时点最晚的那一刻：那一刻上有一份阻断、未决或未配置就算卡关，只计一次，放行、不受门禁不算；
-// 先被挡后放行的不算，先放行后被挡的算；同一刻上一份交出被挡、一份出发放行的算（被挡那份交回）；晚报的早先动作不盖过之后那次；
-// 卡得最久的在前；件数不受页大小截断；他租户的判断不进来。
+// Covers: AT-CC-456 — 每个对象只看动作时点最晚的那一刻，那一刻上每一次请求取判断时刻最晚的当前答复：有一份阻断、未决或未配置
+// 就算卡关，只计一次，放行、不受门禁不算；先被挡后放行的不算，先放行后被挡的算；同一刻交出被挡、出发放行的算（被挡那份交回）；
+// 同一请求同一刻先挡后重判放行的不算；同一刻阻断与未决并存交回阻断；晚报的早先动作不盖过之后那次；卡得最久的在前；件数不受页
+// 大小截断；他租户的判断不进来。
 func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T) {
 	views, fixture := newOperationsRecordViews(t)
 	tenant := "SYN-TENANT-01"
@@ -241,9 +250,14 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 	// PCL-G 同一动作时点问了交出又问了出发：交出被挡、出发放行。那一刻有一件事没做成，同刻的放行不把它盖掉。
 	seedIntentJudgement(t, fixture, tenant, "J-G1", "PCL-G", "HANDOVER", at(7), "BLOCKED")
 	seedIntentJudgement(t, fixture, tenant, "J-G2", "PCL-G", "DEPARTURE", at(7), "ADMITTED")
-	// PCL-H 同一刻两份都不过门（未决、阻断），只计一次。
-	seedIntentJudgement(t, fixture, tenant, "J-H1", "PCL-H", "HANDOVER", at(8), "UNDECIDED")
+	// PCL-H 同一刻两份都不过门（阻断、未决），只计一次，交回最重的阻断——标识与判断时刻都排在未决后面也一样。
 	seedIntentJudgement(t, fixture, tenant, "J-H2", "PCL-H", "DEPARTURE", at(8), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-H9", "PCL-H", "HANDOVER", at(8), "UNDECIDED")
+	rejudge(t, fixture, tenant, "J-H9", at(9))
+	// PCL-T 同一请求在同一动作时点先判阻断、三源变了重判放行（另记一行）：当前答复是放行，不算卡关。
+	seedIntentJudgement(t, fixture, tenant, "J-T1", "PCL-T", "DEPARTURE", at(9), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-T2", "PCL-T", "DEPARTURE", at(9), "ADMITTED")
+	rejudge(t, fixture, tenant, "J-T2", at(10))
 	seedJudgement(t, fixture, "SYN-TENANT-02", "J-X1", "PCL-X", at(1), "BLOCKED")
 
 	listed, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 10)
