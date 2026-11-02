@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type {
   InitialRouteListResponseBody,
   InitialRouteRecord,
+  PlannedLegRecord,
   RoutePlanApplicability,
   RouteReassessmentListResponseBody,
   RouteReassessmentRecord,
@@ -113,7 +114,10 @@ const judgmentRequired = [
   'conclusion',
   'recordedAt',
 ] as const satisfies readonly RequiredKeys<InitialRouteRecord>[];
-const judgmentOptional = ['planVersion', 'applicability'] as const satisfies readonly OptionalKeys<InitialRouteRecord>[];
+const legRequired = ['reference', 'kind', 'from', 'to', 'responsible', 'earliest', 'latest', 'windowBasis'] as const satisfies readonly RequiredKeys<PlannedLegRecord>[];
+const legComplete: Exhaustive<PlannedLegRecord, (typeof legRequired)[number]> = true;
+
+const judgmentOptional = ['planVersion', 'legs', 'applicability'] as const satisfies readonly OptionalKeys<InitialRouteRecord>[];
 const judgmentComplete: Exhaustive<
   InitialRouteRecord,
   (typeof judgmentRequired)[number] | (typeof judgmentOptional)[number]
@@ -123,6 +127,7 @@ const judgmentShape: KeyShape = {
   required: judgmentRequired,
   optional: judgmentOptional,
   nested: { applicability: { required: applicabilityRequired, optional: applicabilityOptional } },
+  rows: { legs: { required: legRequired, optional: [] } },
 };
 
 // —— 路由复核册 ——
@@ -158,6 +163,7 @@ const reassessmentShape: KeyShape = { required: reassessmentRequired, optional: 
 void initialRouteBodyComplete;
 void applicabilityComplete;
 void judgmentComplete;
+void legComplete;
 void reassessmentBodyComplete;
 void reassessmentComplete;
 
