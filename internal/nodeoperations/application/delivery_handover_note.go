@@ -54,6 +54,9 @@ const (
 	// DeliveryHandoverAuthorizationNotConfigured：运营决定确认时本租户一条授权交付关系都没登记、交付方又不是该客户账户所属参与方本身，
 	// 不落结论、不默认放行。
 	DeliveryHandoverAuthorizationNotConfigured
+	// DeliveryHandoverNumberingRuleCollision：开立时取单据号跳过到上限仍撞上已用的号（ADR-0355 决定八），交接单不落，答案不带交接单。
+	// 进程级入口见到这一格必须回滚事务，理由同 DeliveryPreAdviceNumberingRuleCollision；设备在规则册换了格式之后原样重投即可。
+	DeliveryHandoverNumberingRuleCollision
 )
 
 func (outcome DeliveryHandoverOutcome) String() string {
@@ -80,6 +83,8 @@ func (outcome DeliveryHandoverOutcome) String() string {
 		return "NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP"
 	case DeliveryHandoverAuthorizationNotConfigured:
 		return "AUTHORIZED_DELIVERY_NOT_CONFIGURED"
+	case DeliveryHandoverNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -216,6 +221,8 @@ type DeliveryHandoverDeps struct {
 	AuthorizedDelivery ports.AuthorizedDeliveryView
 	Doorbell           ports.DeliveryScopeEstablishedDoorbell
 	Clock              ports.Clock
+	// DocumentNumbers 是服务端收下开立时取交接单单据号要的取号编排与网点业务时区（ADR-0355 决定二）。
+	DocumentNumbers DocumentNumberingDeps
 }
 
 type DeliveryHandoverNoteHandler struct {
@@ -235,12 +242,17 @@ func NewDeliveryHandoverNoteHandler(deps DeliveryHandoverDeps) (*DeliveryHandove
 		return nil, errors.New("node operations: delivery handover needs the delivery scope doorbell")
 	case deps.Clock == nil:
 		return nil, errors.New("node operations: delivery handover needs a clock")
+	case !deps.DocumentNumbers.complete():
+		return nil, errors.New("node operations: delivery handover needs a document number issuer and node time zones")
 	}
 	return &DeliveryHandoverNoteHandler{deps: deps}, nil
 }
 
-// Open 开立一张交接单。重放按设备签发的交接单标识认（ADR-0023）：同一标识同一内容答已有结果，换了内容答来源冲突，册上那一张都不被
-// 顶替。节点取自作业事实信封：别的节点的设备用同一标识开立，内容就不同。
+// Open 开立一张交接单。重放按设备签发的交接单标识认（ADR-0023）：同一标识同一内容答已有结果，换了内容答来源冲突，册上那一张连同它
+// 的单据号都不被顶替。节点取自作业事实信封：别的节点的设备用同一标识开立，内容就不同。
+//
+// 单据号在服务端收下开立时取（ADR-0355 决定二），标识仍是设备签的，单据号不替代它：先锁住标识、读过没有在册的那一张，才去取号；
+// 日期按开立网点此刻的业务时区与服务端此刻（决定七），离线开立、晚到的交接单按收下的那一天出号，不按设备声明的开立时刻。
 func (handler *DeliveryHandoverNoteHandler) Open(ctx context.Context, command OpenDeliveryHandoverNoteCommand) (DeliveryHandoverResult, error) {
 	note, err := domain.OpenDeliveryHandoverNote(domain.DeliveryHandoverNoteSpec{
 		TenantID:        command.TenantID,
@@ -253,14 +265,11 @@ func (handler *DeliveryHandoverNoteHandler) Open(ctx context.Context, command Op
 	if err != nil {
 		return DeliveryHandoverResult{}, fmt.Errorf("%w: %v", ErrDeliveryHandoverCommandRejected, err)
 	}
-	recorded, outcome, err := handler.deps.Notes.OpenDeliveryHandoverNote(ctx, note)
+	recorded, found, err := handler.deps.Notes.LockDeliveryHandoverNoteOpening(ctx, note.TenantID(), note.ID())
 	if err != nil {
 		return DeliveryHandoverResult{}, fmt.Errorf("open delivery handover note: %w", err)
 	}
-	switch outcome {
-	case ports.DeliveryScopeAppended:
-		return NewDeliveryHandoverResult(DeliveryHandoverNoteOpened, DeliveryHandoverAnswer{Note: recorded}), nil
-	case ports.DeliveryScopeAlreadyRecorded:
+	if found {
 		answer, err := handler.noteAnswer(ctx, recorded.TenantID(), recorded.ID())
 		if err != nil {
 			return DeliveryHandoverResult{}, err
@@ -269,9 +278,24 @@ func (handler *DeliveryHandoverNoteHandler) Open(ctx context.Context, command Op
 			return NewDeliveryHandoverResult(DeliveryHandoverExistingResult, answer), nil
 		}
 		return NewDeliveryHandoverResult(DeliveryHandoverSourceConflict, answer), nil
-	default:
-		return DeliveryHandoverResult{}, fmt.Errorf("open delivery handover note: unexpected register outcome %q", outcome)
 	}
+	issued, err := issueDocumentNumber(ctx, handler.deps.DocumentNumbers, note.TenantID(), domain.DeliveryHandoverNoteDocumentNumberType,
+		note.Node(), handler.deps.Clock, handler.deps.Notes.DeliveryHandoverNoteDocumentNumberUsed)
+	if err != nil {
+		return DeliveryHandoverResult{}, fmt.Errorf("open delivery handover note: %w", err)
+	}
+	if issued.collided {
+		return NewDeliveryHandoverResult(DeliveryHandoverNumberingRuleCollision, DeliveryHandoverAnswer{}), nil
+	}
+	opened, outcome, err := handler.deps.Notes.OpenDeliveryHandoverNote(ctx, note.WithDocumentNumbering(issued.numbering))
+	if err != nil {
+		return DeliveryHandoverResult{}, fmt.Errorf("open delivery handover note: %w", err)
+	}
+	if outcome != ports.DeliveryScopeAppended {
+		// 标识已在本事务里锁住、读过没有在册的那一张，册不该再答已在册；理由同 DeliveryPreAdviceHandler.Submit 锁住来源之后册答已在册的那一格。
+		return DeliveryHandoverResult{}, fmt.Errorf("open delivery handover note: unexpected register outcome %q after the opening was locked", outcome)
+	}
+	return NewDeliveryHandoverResult(DeliveryHandoverNoteOpened, DeliveryHandoverAnswer{Note: opened}), nil
 }
 
 // Assign 把一件作业实物归入开放的交接单（ADR-0212 决定三「成员」）。次序：交接单在这个节点看得见 → 同一归入事实已在册就按内容分

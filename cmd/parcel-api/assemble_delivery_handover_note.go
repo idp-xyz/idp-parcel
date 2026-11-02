@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
 // deliveryHandoverNoteFaces 是送站交接单五口在本装配点的件（ADR-0212 决定三；票 ps-external-mark-relations/12）：作业事实登记面
@@ -60,6 +62,7 @@ func (faces deliveryHandoverNoteFaces) conclusionIntake() nodeopshttp.DeliveryHa
 // 是同一组，铸造器无状态，分开建与共用一只答的是同一组格。客户结论口用提交口那一只首方铸造器（首方族一个进程一只）。
 func buildDeliveryHandoverNoteFaces(
 	db *bentopg.DB,
+	assigner *docnumber.Assigner,
 	verifier accessidentity.OperatorCredentialVerifier,
 	operators accessidentity.OperatorRegistry,
 	devices accessidentity.DeviceRegistry,
@@ -74,7 +77,7 @@ func buildDeliveryHandoverNoteFaces(
 	if err != nil {
 		return deliveryHandoverNoteFaces{}, err
 	}
-	handler, err := buildDeliveryHandoverNoteOrchestration(db)
+	handler, err := buildDeliveryHandoverNoteOrchestration(db, assigner)
 	if err != nil {
 		return deliveryHandoverNoteFaces{}, err
 	}
@@ -114,8 +117,8 @@ func buildCustomerHandoverConclusionIntake(minter *accessidentity.CustomerClient
 
 // buildDeliveryHandoverNoteOrchestration 装五口背后的真编排（UC-NO-006 应用流程步骤 3 至 6）：交接单册、收寄库（归入取实物锁那一
 // 问）、授权交付判断经本上下文的防腐适配器问 party-commercial 的真库读口（票 10 立的那一对，装配在这里）、「交付范围成立」门铃写
-// outbox。
-func buildDeliveryHandoverNoteOrchestration(db *bentopg.DB) (nodeopshttp.DeliveryHandoverNoteHandler, error) {
+// outbox、开立时取单据号要的取号编排与网点业务时区（buildDeliveryScopeDocumentNumbering）。
+func buildDeliveryHandoverNoteOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (nodeopshttp.DeliveryHandoverNoteHandler, error) {
 	notes, err := nopostgres.NewDeliveryHandoverNotes(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery handover notes: %w", err)
@@ -141,12 +144,17 @@ func buildDeliveryHandoverNoteOrchestration(db *bentopg.DB) (nodeopshttp.Deliver
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery scope doorbell: %w", err)
 	}
+	numbers, err := buildDeliveryScopeDocumentNumbering(db, assigner)
+	if err != nil {
+		return nil, err
+	}
 	handler, err := nodeopsapp.NewDeliveryHandoverNoteHandler(nodeopsapp.DeliveryHandoverDeps{
 		Notes:              notes,
 		Receptions:         receptions,
 		AuthorizedDelivery: authorized,
 		Doorbell:           doorbell,
 		Clock:              clock,
+		DocumentNumbers:    numbers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery handover orchestration: %w", err)
@@ -155,7 +163,7 @@ func buildDeliveryHandoverNoteOrchestration(db *bentopg.DB) (nodeopshttp.Deliver
 }
 
 // transactionalDeliveryHandoverNotes 把五口的每次调用包进一笔事务：交接单册的写口无事务即拒；归入的实物锁、结论的交接单锁、落下的
-// 成员或结论与它的门铃必须同生共死。
+// 成员或结论与它的门铃必须同生共死。开立答编号规则撞号时整笔回滚、答案照交（errNumberingCollisionRollsBack）。
 type transactionalDeliveryHandoverNotes struct {
 	transactor bentoapp.Transactor
 	inner      *nodeopsapp.DeliveryHandoverNoteHandler
@@ -176,8 +184,14 @@ func withinHandoverTransaction[Command any](
 			return handleErr
 		}
 		result = handled
+		if handled.Outcome() == nodeopsapp.DeliveryHandoverNumberingRuleCollision {
+			return errNumberingCollisionRollsBack
+		}
 		return nil
 	})
+	if errors.Is(err, errNumberingCollisionRollsBack) {
+		return result, nil
+	}
 	if err != nil {
 		return nodeopsapp.DeliveryHandoverResult{}, err
 	}

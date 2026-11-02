@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -45,9 +46,59 @@ func NewNetworkCatalog(db *bentopg.DB) (*NetworkCatalog, error) {
 // parcel-pricing-register 对两个登记用例的钉法）。行类型、快照与封闭枚举的定义在
 // ports 侧（登记用例与证据视图的折叠都在应用层，而应用层不得依赖适配器）。
 var (
-	_ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
-	_ ports.NetworkCatalogRead     = (*NetworkCatalog)(nil)
+	_ ports.NetworkCatalogRegistry   = (*NetworkCatalog)(nil)
+	_ ports.NetworkCatalogRead       = (*NetworkCatalog)(nil)
+	_ ports.NodeBusinessTimezoneRead = (*NetworkCatalog)(nil)
 )
+
+// FindNodeBusinessTimezoneAt 答一个节点在 at 生效的那一版业务时区。取两行：取到第二行就是两版同时适用，答
+// ErrAmbiguousNetworkCatalog，与 LoadDefinitionsAt 对节点族的兜错同一个哨兵。走 ReadExecutor：在调用方的开立事务里调时与开立
+// 读的是同一份快照。
+func (catalog *NetworkCatalog) FindNodeBusinessTimezoneAt(
+	ctx context.Context,
+	tenant domain.TenantID,
+	node string,
+	at time.Time,
+) (string, bool, error) {
+	if tenant.String() == "" || strings.TrimSpace(node) == "" {
+		return "", false, fmt.Errorf("find node business timezone: tenant and node are required")
+	}
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("find node business timezone: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT business_timezone
+		   FROM network_routing.logistics_node_version
+		  WHERE tenant_id = $1 AND node_code = $2 AND effective_from <= $3
+		    AND (effective_to IS NULL OR effective_to > $3)
+		  LIMIT 2`,
+		tenant.String(), node, at,
+	)
+	if err != nil {
+		return "", false, fmt.Errorf("find node business timezone: %w", err)
+	}
+	defer rows.Close()
+	var zones []string
+	for rows.Next() {
+		var zone string
+		if err := rows.Scan(&zone); err != nil {
+			return "", false, fmt.Errorf("find node business timezone: %w", err)
+		}
+		zones = append(zones, zone)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, fmt.Errorf("find node business timezone: %w", err)
+	}
+	switch len(zones) {
+	case 0:
+		return "", false, nil
+	case 1:
+		return zones[0], true, nil
+	default:
+		return "", false, fmt.Errorf("find node business timezone: %w：节点 %q", ErrAmbiguousNetworkCatalog, node)
+	}
+}
 
 // LoadDefinitionsAt 按判断时点取回目录。三格与证据视图同形（ADR-0052）：快照在场即
 // 定义；第二格 false 即**这个租户从未登记过任何网络定义**（未配置）；error 只表示

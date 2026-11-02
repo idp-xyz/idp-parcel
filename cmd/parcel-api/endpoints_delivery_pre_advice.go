@@ -30,7 +30,7 @@ func init() {
 			if err != nil {
 				return deliveryPreAdviceWiring{}, err
 			}
-			deliveryPreAdvices, err := buildDeliveryPreAdviceOrchestration(sources.db)
+			deliveryPreAdvices, err := buildDeliveryPreAdviceOrchestration(sources.db, sources.documentNumbers.Assigner)
 			return deliveryPreAdviceWiring{customerPreAdvice: customerPreAdvice, deliveryPreAdvices: deliveryPreAdvices}, err
 		},
 		mount: func(_ endpointChannels, wiring deliveryPreAdviceWiring) []httpapi.BusinessEndpoint {

@@ -46,8 +46,18 @@ func (outcome DeliveryScopeAppendOutcome) String() string {
 
 // DeliveryPreAdviceRegister 是送站预报册。写口要求环境事务。
 type DeliveryPreAdviceRegister interface {
-	// RecordDeliveryPreAdvice 落一份预报。同一（租户，来源，来源请求键）已在册时答已在册，回显那一份——它带着当初签发的标识与内容
-	// 摘要，调用方据摘要分重放与来源冲突。
+	// LockDeliveryPreAdviceSource 在本事务里锁住（租户，客户端，来源请求键）到事务结束，再读回在册的那一份；found=false 即这一来源
+	// 还没落过预报。要求环境事务。
+	//
+	// 它为单据号而立（ADR-0355 决定三「取号只发生在确定要落单的那一步」）：落册是「撞键即回显」，若先取号再落册，重放那一笔取到的
+	// 号随事务提交就成了空号。锁住来源再读，同一来源并发交来的几笔排成一队，后到的读得到先到那一笔落下的预报，于是只有真要落单的
+	// 那一笔去取号。
+	LockDeliveryPreAdviceSource(ctx context.Context, tenant domain.TenantID, source domain.CustomerRequestSource) (domain.DeliveryPreAdvice, bool, error)
+	// DeliveryPreAdviceDocumentNumberUsed 答本租户是否已有预报用了这个单据号；取号编排在同一事务里经它判撞（ADR-0355 决定八）。
+	DeliveryPreAdviceDocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
+	// RecordDeliveryPreAdvice 落一份预报。同一（租户，来源，来源请求键）已在册时答已在册，回显那一份——它带着当初签发的标识、内容
+	// 摘要与单据号，调用方据摘要分重放与来源冲突。预报的单据号这一格必须已定（domain.DocumentNumbering.Decided）：号码与原因都空的新行读回
+	// 来就成了上线前开立，册拒收而不是替它落成那样。
 	RecordDeliveryPreAdvice(ctx context.Context, preAdvice domain.DeliveryPreAdvice) (domain.DeliveryPreAdvice, DeliveryScopeAppendOutcome, error)
 	// RecordDeliveryPreAdviceWithdrawal 落一份撤回。预报不在本租户、或不属撤回方的客户账户，答查无此预报；同一来源请求键已在册时
 	// 回显那一份撤回，否则这份预报已撤回时回显它的撤回（撤回是终态）。
@@ -58,7 +68,13 @@ type DeliveryPreAdviceRegister interface {
 
 // DeliveryHandoverNoteRegister 是送站交接单册：交接单、成员、关闭与绑定结论。写口要求环境事务。
 type DeliveryHandoverNoteRegister interface {
-	// OpenDeliveryHandoverNote 落一张交接单；同一标识已在册时回显册上那一张。
+	// LockDeliveryHandoverNoteOpening 在本事务里锁住（租户，交接单标识）到事务结束，再读回在册的那一张；found=false 即这个标识还没
+	// 开立过。要求环境事务。理由同 DeliveryPreAdviceRegister.LockDeliveryPreAdviceSource：同一开立重投不取第二个号。
+	LockDeliveryHandoverNoteOpening(ctx context.Context, tenant domain.TenantID, id domain.DeliveryHandoverNoteID) (domain.DeliveryHandoverNote, bool, error)
+	// DeliveryHandoverNoteDocumentNumberUsed 答本租户是否已有交接单用了这个单据号；取号编排在同一事务里经它判撞（ADR-0355 决定八）。
+	DeliveryHandoverNoteDocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
+	// OpenDeliveryHandoverNote 落一张交接单；同一标识已在册时回显册上那一张。交接单的单据号这一格必须已定，理由同
+	// DeliveryPreAdviceRegister.RecordDeliveryPreAdvice。
 	OpenDeliveryHandoverNote(ctx context.Context, note domain.DeliveryHandoverNote) (domain.DeliveryHandoverNote, DeliveryScopeAppendOutcome, error)
 	// AppendDeliveryHandoverMember 落一个成员。同一（租户，形成方式，事实身份）已在册时回显那一个；交接单不在册答查无此单，已关闭答
 	// 已关闭。关闭与加成员在同一张交接单上串行：关闭之后不会再落进成员。

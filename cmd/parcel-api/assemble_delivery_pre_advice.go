@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -14,6 +15,7 @@ import (
 	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
 // buildCustomerPreAdviceIntake 装配预报两口的首方 Intake（ADR-0212 决定二；ADR-0139 决定四；票 ps-external-mark-relations/09）。铸造器
@@ -44,7 +46,7 @@ func customerPreAdviceIntakes(intake *nodeopshttp.CustomerPreAdviceIntake) (node
 }
 
 // transactionalDeliveryPreAdvices 把预报的每次提交与撤回包进一笔事务，理由随 transactionalPreAdviceWindowRegistrar：预报册的写口按
-// 框架合同无事务即拒，事务边界归装配点。
+// 框架合同无事务即拒，事务边界归装配点。提交答编号规则撞号时整笔回滚、答案照交（errNumberingCollisionRollsBack）。
 type transactionalDeliveryPreAdvices struct {
 	transactor bentoapp.Transactor
 	inner      *nodeopsapp.DeliveryPreAdviceHandler
@@ -63,8 +65,14 @@ func (handler transactionalDeliveryPreAdvices) Submit(
 			return handleErr
 		}
 		result = handled
+		if handled.Outcome() == nodeopsapp.DeliveryPreAdviceNumberingRuleCollision {
+			return errNumberingCollisionRollsBack
+		}
 		return nil
 	})
+	if errors.Is(err, errNumberingCollisionRollsBack) {
+		return result, nil
+	}
 	if err != nil {
 		return nodeopsapp.DeliveryPreAdviceSubmissionResult{}, err
 	}
@@ -90,9 +98,10 @@ func (handler transactionalDeliveryPreAdvices) Withdraw(
 	return result, nil
 }
 
-// buildDeliveryPreAdviceOrchestration 装配预报两口背后的真编排（UC-NO-006 应用流程步骤 2）。缝——预报册、预报标识签发与时钟——全接
-// 真；没有意图交付：预报是本上下文判交付范围时自己读的证据，没有下游要通知（ADR-0212 决定六「预报没有触发」）。
-func buildDeliveryPreAdviceOrchestration(db *bentopg.DB) (nodeopshttp.DeliveryPreAdviceHandler, error) {
+// buildDeliveryPreAdviceOrchestration 装配预报两口背后的真编排（UC-NO-006 应用流程步骤 2）。缝——预报册、预报标识签发、时钟、取号编排与网点
+// 业务时区——全接真；没有意图交付：预报是本上下文判交付范围时自己读的证据，没有下游要通知（ADR-0212 决定六「预报没有触发」）。取号编排
+// 与预报册接在同一个 db 上：取号必须在开立事务里，框架按 DB 认事务归属。
+func buildDeliveryPreAdviceOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (nodeopshttp.DeliveryPreAdviceHandler, error) {
 	register, err := nopostgres.NewDeliveryPreAdvices(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery pre-advices: %w", err)
@@ -101,10 +110,15 @@ func buildDeliveryPreAdviceOrchestration(db *bentopg.DB) (nodeopshttp.DeliveryPr
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery pre-advice IDs: %w", err)
 	}
+	numbers, err := buildDeliveryScopeDocumentNumbering(db, assigner)
+	if err != nil {
+		return nil, err
+	}
 	handler, err := nodeopsapp.NewDeliveryPreAdviceHandler(nodeopsapp.DeliveryPreAdviceDeps{
-		Register: register,
-		IDs:      ids,
-		Clock:    systemClock{},
+		Register:        register,
+		IDs:             ids,
+		Clock:           systemClock{},
+		DocumentNumbers: numbers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: delivery pre-advice orchestration: %w", err)

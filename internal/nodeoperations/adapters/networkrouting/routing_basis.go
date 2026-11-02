@@ -1,5 +1,5 @@
-// Package networkrouting 是 node-operations 消费 network-routing 的适配器位置（ADR-0025 消费方侧）。今天只有方向
-// 依据记录的路由依据那一格要问 NR，而 NR 还没有可问的读口，这里因此只有一只显式未配置的口。
+// Package networkrouting 是 node-operations 消费 network-routing 的适配器位置（ADR-0025 消费方侧）：方向依据记录的路由依据那一格
+// （NR 还没有可问的读口，这里是一只显式未配置的口）；送站预报、送站交接单取单据号要问的开立网点业务时区（NodeBusinessTimeZones）。
 package networkrouting
 
 import (

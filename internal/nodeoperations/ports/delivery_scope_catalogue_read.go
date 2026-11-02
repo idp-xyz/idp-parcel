@@ -19,10 +19,14 @@ import (
 
 // DeliveryScopeCatalogueFilter 是两本册列表的筛选：节点逐字比，零值即不按节点筛；From、Until 是业务时刻（预报的预计送达、交接单的开立）
 // 的左闭右开区间，各自零值即那一端不设界。「一日」从哪一刻起算随看的人所在的时区，所以读口只收瞬间，不收日期。
+//
+// DocumentNumber 按单据号逐字找（ADR-0355 决定十一「可按单据号检索」），零值即不按单据号筛。没有单据号的单据（上线前开立、开立时
+// 单据编号时区未配置）按单据号永远找不到——越权风险点 3 说的就是这一格，读口不拿标识去顶。
 type DeliveryScopeCatalogueFilter struct {
-	Node  domain.NodeReference
-	From  time.Time
-	Until time.Time
+	Node           domain.NodeReference
+	From           time.Time
+	Until          time.Time
+	DocumentNumber domain.DocumentNumber
 }
 
 // DeliveryHandoverNoteCatalogueRow 是交接单列表的一行：交接单此刻的证据状态（开立、关闭、各账户的结论），与名下的成员数。成员逐件不在

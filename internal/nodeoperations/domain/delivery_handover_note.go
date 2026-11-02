@@ -43,6 +43,7 @@ type DeliveryHandoverNote struct {
 	deliveringParty DeliveringPartyReference
 	claimed         []CustomerAccountReference
 	openedAt        time.Time
+	numbering       DocumentNumbering
 }
 
 // OpenDeliveryHandoverNote 立一张交接单。声称至少一个、逐字不重复。
@@ -79,6 +80,16 @@ func (note DeliveryHandoverNote) DeliveringParty() DeliveringPartyReference {
 	return note.deliveringParty
 }
 func (note DeliveryHandoverNote) OpenedAt() time.Time { return note.openedAt }
+
+// DocumentNumbering 交回交接单的单据号或无号原因。零值即还没定——只在开立编排取号之前出现。
+func (note DeliveryHandoverNote) DocumentNumbering() DocumentNumbering { return note.numbering }
+
+// WithDocumentNumbering 交回记下了单据号（或无号原因）的这一张交接单。单据号是服务端收下开立时另取的（ADR-0355 决定二），不替代
+// 设备签发的标识，也不进重放比对：同一标识同一内容再投，答的是第一次那一张连同它的号。
+func (note DeliveryHandoverNote) WithDocumentNumbering(numbering DocumentNumbering) DeliveryHandoverNote {
+	note.numbering = numbering
+	return note
+}
 
 // ClaimedAccounts 交回声称的客户账户的副本，按标识定序。
 func (note DeliveryHandoverNote) ClaimedAccounts() []CustomerAccountReference {

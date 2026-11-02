@@ -169,14 +169,14 @@ Status: Confirmed
 ### 送站预报
 
 - 客户账户经客户渠道提交 → 已登记：本上下文签发预报标识，固定提交的客户账户、节点、预计送达时刻、所列客户包裹件号与交付方线索；同一接入请求原样重投答原结果。号码逐字保存、逐字比对，与 `parcel-shipment` 的身份核对同一口径。
-- 进入已登记时，预报在同一事务内取得预报[单据号](../GLOSSARY.md#单据号)（类型 `DELIVERY_PRE_ADVICE`），与预报标识一起答回客户；同一接入请求原样重投答原号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
+- 进入已登记时，预报在同一事务内取得预报[单据号](../GLOSSARY.md#单据号)（类型 `DELIVERY_PRE_ADVICE`），与预报标识一起答回客户；同一接入请求原样重投答原号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。单据号里的日期按预报指名的网点在登记那一刻生效的业务时区（`network-routing` 网络目录里的节点版本）；那一刻网点没有生效版本时，按租户的单据编号时区。
 - 已登记 → 已撤回：客户账户经客户渠道撤回。撤回是终态；此后的收寄与重核不再据它成立范围，此前据它形成的关联不回滚。
 - 有效时窗不是状态：预报对一次送站算不算数，按那次送站的业务时间是否落在预计送达时刻前后的租户取值区间里判。区间没有登记时答未配置，不推定任何默认时长。
 
 ### 送站交接单
 
 - 节点开立 → 开放：固定节点、交付方线索、声称的客户账户与开立时刻；标识由设备签发。
-- 服务端收下节点开立时，交接单在同一事务内取得交接单[单据号](../GLOSSARY.md#单据号)（类型 `DELIVERY_HANDOVER_NOTE`）；标识仍由设备签发，单据号不替代它，同一开立重投答原号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
+- 服务端收下节点开立时，交接单在同一事务内取得交接单[单据号](../GLOSSARY.md#单据号)（类型 `DELIVERY_HANDOVER_NOTE`）；标识仍由设备签发，单据号不替代它，同一开立重投答原号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。单据号里的日期按服务端收下开立的那一刻、开立网点那一刻生效的业务时区（`network-routing` 网络目录里的节点版本），不按设备声明的开立时刻；那一刻网点没有生效版本时，按租户的单据编号时区。
 - 开放期间：收寄带它的标识的作业实物成为它的成员；同一节点上当前有效版本属于重核对象（定义见「待识别实物与身份关联」）的作业实物可以归入。一件作业实物的交付范围依据取它最后归入的送站交接单，没有归入过的取收寄来源里的引用；归入是追加的事实，不改写来源。
 - 开放 → 已关闭：成员冻结。
 - 每个声称的客户账户的绑定：待确认 → 已确认，由该客户账户经客户渠道确认（只对已关闭的交接单），或由持「送站交接确认」运营决定授予的人依 `party-commercial` 的授权交付关系确认（交付方就是该客户账户所属参与方本身时不需登记）；待确认 → 已否认，由该客户账户经客户渠道否认。已确认、已否认都是终态。授权交付关系在本租户没有登记时，运营决定确认答未配置。
