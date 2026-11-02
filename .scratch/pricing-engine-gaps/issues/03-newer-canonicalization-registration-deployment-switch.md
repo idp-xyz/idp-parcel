@@ -1,7 +1,7 @@
 # 03 登记 PPC-6 价卡没有代码里的门——滚动发布时旧进程遇到新卡整笔失败，只靠文档约束
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-ppc6gate（代码 `9441f27e6`，其后文档一笔）。
+Status: resolved——2026-11-01 进 main（全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-ppc6gate（代码 `9441f27e6`，其后文档一笔）。
 Blocked by: 无（接 pricing-engine-gaps/02 即 ADR-0348、price-card-import/08 即 ADR-0349，均已在 main）
 
 ## 现象
@@ -71,3 +71,12 @@ Blocked by: 无（接 pricing-engine-gaps/02 即 ADR-0348、price-card-import/08
 - 非阻断 2：ADR-0352 越权风险点补第 6 条——开关关着时导入仍能把 `PPC-6` 草稿存进 `price_card_draft`，滚动窗口里旧构建 `ListPriceCardDrafts` 遇错整批返回会让该租户草稿列表整页失败；本门明示不管，由发布顺序兜。
 - 非阻断 3：`docs/design/synthetic-demo-journey-script.md` 起后端那段环境变量补上开关（共享预览进程仍由协调方改）。
 - 复验：`go build ./cmd/parcel-api`、`gofmt -l` 无输出；`adr-index -check` 仍只报生成物不一致，试跑生成器标签不变后还原。
+
+## 评审记录（2026-11-01，隔离子代理，首轮钉 `a074aee72`，复评钉 `2a3bad68b`）
+
+首轮 Spec 0 阻断、Standards 1 阻断；复评阻断清零。门的覆盖：生产代码里构造 `RegisterPriceCardHandler` 的只有登记口、草稿发布、受控 CLI，全部注入开关；非测试代码没有绕过 `Handle` 直接调价卡仓储 `Register` 的路径，`INSERT INTO price_card_version` 只在 `PriceCards.Register`。判据写成「不等于 `domain.CurrentCanonicalizationVersion()`」，未写死 `PPC-6`；版本号伪造不了（方案合法性要求规范化版本等于所用结构要求的那一版），`PPC-5` 卡零变化。开关去首尾空白后恰为 `true` 才开、零值即关；拒答在仓储之前、不发交接、重放也拒；发布被拒答 `PUBLICATION_NOT_LANDED`、草稿留在已批准、开关打开后同一份批准可再发布（真库用例）。HTTP 答 200 带新码，CLI 退出码 4、`-h` 与 stderr 有怎么开。种子实测 FULL-02 为 `PPC-5`、只有 FULL-03 为 `PPC-6`，只在 165 设开关正确；`demo-run/up.sh` 设开关站得住。首轮阻断：ADR-0101 决定五列举答案代数六格「一格不改」，本票加第七格属部分停用而缺前向指针——修订轮补齐，复评逐字核引文命中正文。首轮非阻断（跨文件计数、草稿列表残余风险、演示脚本开关）修订轮均已处理；开关变量名在两个 cmd 各写一份，协调方裁保持现状。
+
+## 进 main 记录（2026-11-01，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-ppc6gate` tip `2a3bad68b` 作出处；隔离树把 `5907d4cde..2a3bad68b` cherry-pick 到 main `5907d4cde`，无冲突；重生成 ADR 索引、AT 盘点计数与机制清点各成一笔，两项 `-check` 退 0；对 `73886cc72` 跑全量 164 ok / 0 FAIL（含 PG）；种子一次性库 `seed_ppc6gate` 退 0 后删库。本笔票面与冻结清单簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- 共享预览（`:19080`）的 `parcel-api` 由协调方另加开关环境变量，见冻结清单同日一条。
