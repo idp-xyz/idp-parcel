@@ -152,17 +152,29 @@ func serveSupplierBillReceptions(
 	}
 	bodies := make([]supplierBillReceptionBody, 0, len(rows))
 	for _, row := range rows {
+		classifications := make(map[string]int64, len(row.ClassificationCounts))
+		for classification, lines := range row.ClassificationCounts {
+			classifications[classification] = lines
+		}
 		bodies = append(bodies, supplierBillReceptionBody{
-			Claim:                    row.Claim,
-			ClaimVersion:             row.ClaimVersion,
-			Supplier:                 row.Supplier,
-			LegalEntity:              row.LegalEntity,
-			Period:                   row.Period,
-			Currency:                 row.Currency,
-			LineCount:                row.LineCount,
-			MatchCount:               row.MatchCount,
-			AuditAuthorityConfigured: row.AuditAuthorityConfigured,
-			RecordedAt:               rfc3339(row.RecordedAt),
+			Claim:                      row.Claim,
+			ClaimVersion:               row.ClaimVersion,
+			Supplier:                   row.Supplier,
+			LegalEntity:                row.LegalEntity,
+			Period:                     row.Period,
+			Currency:                   row.Currency,
+			LineCount:                  row.LineCount,
+			MatchCount:                 row.MatchCount,
+			TotalClaimedAmount:         minorAmount(row.TotalClaimedMinor),
+			ClassificationCounts:       classifications,
+			PayableLineCount:           row.PayableLineCount,
+			PayableAmount:              minorAmount(row.PayableMinor),
+			MatchedWithoutPayableCount: row.MatchedWithoutPayableCount,
+			AuditAuthorityConfigured:   row.AuditAuthorityConfigured,
+			ReceivedAt:                 rfc3339(row.ReceivedAt),
+			SupplementsClaim:           row.Supplements,
+			OperationEvidence:          row.OperationEvidence,
+			RecordedAt:                 rfc3339(row.RecordedAt),
 		})
 	}
 	writeJSON(response, http.StatusOK, supplierBillReceptionListResponse{
@@ -242,17 +254,29 @@ type supplierBillReceptionListResponse struct {
 // auditAuthorityConfigured 照实转写而不折成「可审核」：授权未配置时审核停在未决，
 // 不默认放行也不虚构授权人（UC-SA-004）；把它译成一个动作可用性，就是在读面上替
 // 审核步骤做了那个判断。
+//
+// 账单册的几样汇总（票 document-numbering/11）照 ports.SupplierBillReceptionCatalogueRow 转写：classificationCounts 以逐行匹配
+// 分类原名作键，没有那一类就没有那个键；matchedWithoutPayableCount 说的是已匹配而还没有应付的行数，不说它们可审核。金额同
+// 本包其余读口，是最小币单位的整数串。supplementsClaim 与 operationEvidence 缺席即没有被追加的原主张、这一份不记提交方。
 type supplierBillReceptionBody struct {
-	Claim                    string `json:"claim"`
-	ClaimVersion             string `json:"claimVersion"`
-	Supplier                 string `json:"supplier"`
-	LegalEntity              string `json:"legalEntity"`
-	Period                   string `json:"period"`
-	Currency                 string `json:"currency"`
-	LineCount                int64  `json:"lineCount"`
-	MatchCount               int64  `json:"matchCount"`
-	AuditAuthorityConfigured bool   `json:"auditAuthorityConfigured"`
-	RecordedAt               string `json:"recordedAt"`
+	Claim                      string           `json:"claim"`
+	ClaimVersion               string           `json:"claimVersion"`
+	Supplier                   string           `json:"supplier"`
+	LegalEntity                string           `json:"legalEntity"`
+	Period                     string           `json:"period"`
+	Currency                   string           `json:"currency"`
+	LineCount                  int64            `json:"lineCount"`
+	MatchCount                 int64            `json:"matchCount"`
+	TotalClaimedAmount         string           `json:"totalClaimedAmount"`
+	ClassificationCounts       map[string]int64 `json:"classificationCounts"`
+	PayableLineCount           int64            `json:"payableLineCount"`
+	PayableAmount              string           `json:"payableAmount"`
+	MatchedWithoutPayableCount int64            `json:"matchedWithoutPayableCount"`
+	AuditAuthorityConfigured   bool             `json:"auditAuthorityConfigured"`
+	ReceivedAt                 string           `json:"receivedAt"`
+	SupplementsClaim           string           `json:"supplementsClaim,omitempty"`
+	OperationEvidence          string           `json:"operationEvidence,omitempty"`
+	RecordedAt                 string           `json:"recordedAt"`
 }
 
 // —— 挂着未了结争议的客户对账单 ——

@@ -1952,7 +1952,8 @@ func (unwiredSettlementCharges) ListSupplierExpectedCosts(
 	return nil, errOrchestrationNotWired
 }
 
-// unwiredSettlementStatements 的方法表与 settlementports.StatementCatalogueRead、DisputedStatementRead 逐一对上。
+// unwiredSettlementStatements 的方法表与 settlementports.StatementCatalogueRead、DisputedStatementRead、StatementLineRead、
+// SupplierBillLineRead、AuditedPayableCatalogueRead 逐一对上。
 type unwiredSettlementStatements struct{}
 
 func (unwiredSettlementStatements) ListCustomerStatements(
@@ -1985,6 +1986,24 @@ func (unwiredSettlementStatements) ListDisputedCustomerStatements(
 	int,
 ) (settlementports.DisputedCustomerStatements, error) {
 	return settlementports.DisputedCustomerStatements{}, errOrchestrationNotWired
+}
+
+func (unwiredSettlementStatements) FindSupplierBillLines(
+	context.Context,
+	settlementdomain.TenantID,
+	string,
+	string,
+) (settlementports.SupplierBillLines, bool, error) {
+	return settlementports.SupplierBillLines{}, false, errOrchestrationNotWired
+}
+
+func (unwiredSettlementStatements) ListAuditedPayables(
+	context.Context,
+	settlementdomain.TenantID,
+	settlementports.AuditedPayableFilter,
+	int,
+) ([]settlementports.AuditedPayableCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
 }
 
 // unwiredSettlementFundsApplications 的方法表与 settlementports.FundsApplicationCatalogueRead

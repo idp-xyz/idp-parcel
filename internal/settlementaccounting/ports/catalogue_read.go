@@ -195,23 +195,43 @@ type CustomerStatementCatalogueRow struct {
 // SupplierBillReceptionCatalogueRow 是供应商账单接收册上列的一行：主张身份与版本、
 // 供应商、责任法人、账期、币种、主张行数与匹配数，以及该范围的审核授权是否已配置。
 //
-// 逐行匹配与主张明细不在目录行上（同 CustomerStatementCatalogueRow 那句），只上行数：
-// 「有几行未匹配」是详情面的问题，目录先要能分开「这份主张有行」与「一行都没有」。
+// 逐行匹配与主张明细不在目录行上（同 CustomerStatementCatalogueRow 那句），各行归详情面（ports.SupplierBillLineRead）；
+// 目录行只上计数与求和，先要能分开「这份主张有行」与「一行都没有」。
 //
 // AuditAuthorityConfigured 照实转写而不是折成`可审核`：授权未配置时审核停在未决，
 // 不默认放行也不虚构授权人（UC-SA-004）；把它译成一个动作可用性，就是在读面上替
 // 审核步骤做了那个判断。
+//
+// 账单册（票 document-numbering/11）在目录行上加几样汇总，都只是求和与计数，不判这份账单「对上了没有」：
+//   - TotalClaimedMinor 是各行主张金额之和；
+//   - ClassificationCounts 按逐行匹配分类（domain.MatchClassification 的 String()）计行数，分类原样作键，不折成已匹配 / 部分匹配 /
+//     未匹配三格——领域里逐行的走向是五值，三格那一层只在 UC 的结果语义里，读面替它归并就是替匹配门再判一次；
+//   - PayableLineCount 与 PayableMinor 是这一版各行上已形成审核应付的行数与金额之和（应付按主张与行回指，不带主张版本，
+//     所以同一主张各版本上同一行的应付是同一份）；
+//   - MatchedWithoutPayableCount 是分类为已匹配、却还没有审核应付的行数。它说的是事实，不说这些行「可审核」：审核授权、
+//     应付归集账户与越权上限都可能没登，那由审核步骤答。
+//
+// ReceivedAt 是账单到达的业务时刻（录入的人照来件写），RecordedAt 是接收落库时刻，两者不同。Supplements 为空即不是追加
+// 主张。OperationEvidence 是经运营决定口接收这一份的操作者（ADR-0340 决定三），为空读作这一份不记提交方。
 type SupplierBillReceptionCatalogueRow struct {
-	Claim                    string
-	ClaimVersion             string
-	Supplier                 string
-	LegalEntity              string
-	Period                   string
-	Currency                 string
-	LineCount                int64
-	MatchCount               int64
-	AuditAuthorityConfigured bool
-	RecordedAt               time.Time
+	Claim                      string
+	ClaimVersion               string
+	Supplier                   string
+	LegalEntity                string
+	Period                     string
+	Currency                   string
+	LineCount                  int64
+	MatchCount                 int64
+	TotalClaimedMinor          int64
+	ClassificationCounts       map[string]int64
+	PayableLineCount           int64
+	PayableMinor               int64
+	MatchedWithoutPayableCount int64
+	AuditAuthorityConfigured   bool
+	ReceivedAt                 time.Time
+	Supplements                string
+	OperationEvidence          string
+	RecordedAt                 time.Time
 }
 
 // StatementCatalogueRead 是对账页的伴生列表读端口：客户对账单册（UC-SA-003）与供应商

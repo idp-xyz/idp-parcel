@@ -322,6 +322,55 @@ func TestSupplierBillReceptionQueryTranscribesCountsAndAuthority(t *testing.T) {
 	}
 }
 
+// Covers: AT-SA-232 — 账单册的汇总逐格透出：主张金额之和、按匹配分类原名计的行数（没有的分类没有键，空也答 {} 不答 null）、
+// 已形成应付的行数与金额、已匹配而没有应付的行数、到达时刻；被追加的原主张与接收操作者缺席即不出键。
+func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
+	register := &stubStatementCatalogue{
+		receptions: []ports.SupplierBillReceptionCatalogueRow{
+			{
+				Claim: "SYN-SUP-01/INV-1", ClaimVersion: "1", Supplier: "SYN-SUP-01", LegalEntity: "SYN-LE-01", Period: "2026-08",
+				Currency: "CNY", LineCount: 3, MatchCount: 3, TotalClaimedMinor: 3300,
+				ClassificationCounts: map[string]int64{"MATCHED": 2, "PRICE_VARIANCE": 1},
+				PayableLineCount:     1, PayableMinor: 1000, MatchedWithoutPayableCount: 1, AuditAuthorityConfigured: true,
+				ReceivedAt: catalogueBaseAt.Add(-time.Hour), Supplements: "SYN-SUP-01/INV-0", OperationEvidence: "OPERATOR/syn#clerk",
+				RecordedAt: catalogueBaseAt,
+			},
+			{Claim: "SYN-SUP-01/INV-2", ClaimVersion: "1", Supplier: "SYN-SUP-01", LegalEntity: "SYN-LE-01", Period: "2026-08",
+				Currency: "CNY", ReceivedAt: catalogueBaseAt, RecordedAt: catalogueBaseAt},
+		},
+	}
+	response := serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception")
+	var body struct {
+		Receptions []map[string]json.RawMessage `json:"receptions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Receptions) != 2 {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	summary, bare := body.Receptions[0], body.Receptions[1]
+	for key, want := range map[string]string{
+		"totalClaimedAmount":         `"3300"`,
+		"classificationCounts":       `{"MATCHED":2,"PRICE_VARIANCE":1}`,
+		"payableLineCount":           `1`,
+		"payableAmount":              `"1000"`,
+		"matchedWithoutPayableCount": `1`,
+		"receivedAt":                 `"` + catalogueBaseAt.Add(-time.Hour).Format(time.RFC3339Nano) + `"`,
+		"supplementsClaim":           `"SYN-SUP-01/INV-0"`,
+		"operationEvidence":          `"OPERATOR/syn#clerk"`,
+	} {
+		if got := string(summary[key]); got != want {
+			t.Fatalf("%s = %s, want %s：%s", key, got, want, response.Body.String())
+		}
+	}
+	if got := string(bare["classificationCounts"]); got != `{}` {
+		t.Fatalf("没有匹配的分类计数要答 {}：%s", got)
+	}
+	for _, absent := range []string{"supplementsClaim", "operationEvidence"} {
+		if _, present := bare[absent]; present {
+			t.Fatalf("缺席的 %q 不该出键：%s", absent, response.Body.String())
+		}
+	}
+}
+
 // Covers: ADR-0077 Decision 四 — 两本册子空册各自是 2xx + 空数组。
 func TestEmptyStatementRegistersAnswerEmptyArrays(t *testing.T) {
 	endpoint := statementsEndpoint(&stubStatementCatalogue{})

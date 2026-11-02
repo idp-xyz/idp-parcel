@@ -16,7 +16,7 @@ import (
 
 // StatementCatalogue 实现 ports.StatementCatalogueRead：已发布对账单册与供应商账单
 // 接收册的列表读面（ADR-0077，票 admin-skeleton-closure-batch/04）。读的就是 0002 与
-// 0007 的本表。
+// 0007 的本表；供应商账单详情与审核应付册（0016）也挂在它上面，见 supplier_bill_catalogue.go。
 //
 // 对账单一行**一条语句取回**单面、异议与后续纳入（同一快照，理由同 ChargeCatalogue）。
 // 异议与纳入各走一个相关子查询 json_agg，各聚各的，不互相做笛卡尔积。
@@ -286,16 +286,47 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	}
 
 	// 主张身份与版本同键排序：同一主张的多个版本相邻，版本冲突在页面上才看得出来。
+	//
+	// 汇总都在库内一条语句里求（同一快照）：行金额之和与分类计数各展开一次 jsonb；应付只数落在这一版各行上的那几笔——
+	// 应付不带主张版本，同一主张的另一版若多出一行，那一行的应付不算进这一版。「已匹配却没有应付」按行逐条看应付在不在，
+	// 已匹配那个分类的字面取自领域（$3），不在 SQL 里另写一份。
 	rows, err := querier.Query(ctx,
-		`SELECT claim_id, claim_version, supplier_ref, legal_entity, period_ref, currency,
-		        jsonb_array_length(claim -> 'lines')::bigint,
-		        jsonb_array_length(matches)::bigint,
-		        audit_authority_configured, recorded_at
-		   FROM settlement_accounting.supplier_bill_reception
-		  WHERE tenant_id = $1
-		  ORDER BY claim_id, claim_version
+		`SELECT r.claim_id, r.claim_version, r.supplier_ref, r.legal_entity, r.period_ref, r.currency,
+		        jsonb_array_length(r.claim -> 'lines')::bigint,
+		        jsonb_array_length(r.matches)::bigint,
+		        (SELECT COALESCE(sum((l ->> 'claimed_minor')::bigint), 0)::bigint
+		           FROM jsonb_array_elements(r.claim -> 'lines') AS l),
+		        (SELECT COALESCE(jsonb_object_agg(c.classification, c.lines), '{}'::jsonb)
+		           FROM (SELECT m ->> 'classification' AS classification, count(*)::bigint AS lines
+		                   FROM jsonb_array_elements(r.matches) AS m
+		                  GROUP BY 1) AS c),
+		        payables.lines, payables.minor,
+		        (SELECT count(*)::bigint
+		           FROM jsonb_array_elements(r.matches) AS m
+		          WHERE m ->> 'classification' = $3
+		            AND NOT EXISTS (
+		                SELECT 1
+		                  FROM settlement_accounting.audited_payable AS p
+		                 WHERE p.tenant_id = r.tenant_id
+		                   AND p.claim_id = r.claim_id
+		                   AND p.line_ref = m ->> 'line')),
+		        r.audit_authority_configured,
+		        (r.claim ->> 'received_at')::timestamptz,
+		        r.claim ->> 'supplements',
+		        r.operation_evidence,
+		        r.recorded_at
+		   FROM settlement_accounting.supplier_bill_reception AS r
+		  CROSS JOIN LATERAL (
+		        SELECT count(*)::bigint AS lines, COALESCE(sum(p.amount_minor), 0)::bigint AS minor
+		          FROM settlement_accounting.audited_payable AS p
+		         WHERE p.tenant_id = r.tenant_id
+		           AND p.claim_id = r.claim_id
+		           AND p.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
+		       ) AS payables
+		  WHERE r.tenant_id = $1
+		  ORDER BY r.claim_id, r.claim_version
 		  LIMIT $2`,
-		tenant.String(), limit,
+		tenant.String(), limit, domain.LineMatched.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
@@ -305,17 +336,29 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	entries := make([]ports.SupplierBillReceptionCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row        ports.SupplierBillReceptionCatalogueRow
-			recordedAt time.Time
+			row               ports.SupplierBillReceptionCatalogueRow
+			classificationsJS []byte
+			receivedAt        time.Time
+			supplements       *string
+			evidence          *string
+			recordedAt        time.Time
 		)
 		if err := rows.Scan(
 			&row.Claim, &row.ClaimVersion, &row.Supplier, &row.LegalEntity,
 			&row.Period, &row.Currency,
 			&row.LineCount, &row.MatchCount,
-			&row.AuditAuthorityConfigured, &recordedAt,
+			&row.TotalClaimedMinor, &classificationsJS,
+			&row.PayableLineCount, &row.PayableMinor, &row.MatchedWithoutPayableCount,
+			&row.AuditAuthorityConfigured, &receivedAt, &supplements, &evidence, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier bill receptions: %w", err)
 		}
+		if err := json.Unmarshal(classificationsJS, &row.ClassificationCounts); err != nil {
+			return nil, fmt.Errorf("list supplier bill receptions: 分类计数解码：%w", err)
+		}
+		row.ReceivedAt = receivedAt.UTC()
+		row.Supplements = catalogueText(supplements)
+		row.OperationEvidence = catalogueText(evidence)
 		row.RecordedAt = recordedAt.UTC()
 		entries = append(entries, row)
 	}
