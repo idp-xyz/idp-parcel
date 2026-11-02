@@ -105,8 +105,7 @@ export const claimPrerequisiteRegistrationTitles: Record<ClaimPrerequisiteKind, 
 export const claimPrerequisiteSnapshotHints: Record<ClaimPrerequisiteKind, string> = {
   CLAIM_ELIGIBILITY:
     '请填 version（这一版的编号，换版时给新编号）、approvedBy（批准人）、contract（客户合同编号）、customer（客户编码）、' +
-    'coveredKinds（这份合同可以索赔的类型，如 LOSS 丢失、DAMAGE 破损，至少一项）。' +
-    '某份合同还没设定时，客户在它名下的索赔会先等待设定，而不是直接不予受理。',
+    'coveredKinds（这份合同可以索赔的类型，如 LOSS 丢失、DAMAGE 破损，至少一项；还没想好覆盖哪些类型就先不设定）。',
   CLAIM_AUTHORIZATION:
     '请填 version（这一版的编号）、approvedBy（批准人）、customer（客户编码）、applicants（可以代这个客户提索赔的申请人编码）。' +
     '不允许任何人代提时填 []，那是一个明确的决定；漏掉 applicants 这一项不会被当成「不允许」。',
