@@ -47,9 +47,9 @@ import {
 
 // 供应商账单与应付（主责上下文 settlement-accounting「供应商主张与审核应付」，UC-SA-004；票 document-numbering/11）。两签：
 // 供应商账单（GET /settlement-statements?registry=supplier-bill-reception，右栏读 GET /settlement-supplier-bill-lines）与审核应付
-// （GET /settlement-audited-payables）。写入口是页头「登记供应商账单」与右栏逐行「审核通过」，各按自己那一种运营决定授予收起
-// （ADR-0315、ADR-0340）。账单号是供应商的外部标识，从主张标识里取回（supplier-bills.ts 的 billNumberOf）；应付以应付单号为主列
-// （ADR-0355 决定十一），应付标识进技术详情。
+// （GET /settlement-audited-payables）。写入口是页头「登记供应商账单」与右栏逐行「审核这一行」「核实后再审」，各按自己那一种运营
+// 决定授予收起（ADR-0315、ADR-0340、ADR-0357）。账单号是供应商的外部标识，取服务端账单号册上的、旧行从主张标识里取回
+// （supplier-bills.ts 的 billNumberOf）；应付以应付单号为主列（ADR-0355 决定十一），应付标识进技术详情。
 const info = moduleInfoById['supplier-bills'];
 
 /** 公司主体编码 → 名称；读不到就显编码，不补假名。 */
@@ -211,7 +211,7 @@ function SupplierBillsWorkbench({
         rowKey={billKey}
         selectedKey={selectedKey}
         onSelect={setSelectedKey}
-        rowAttention={(row) => row.matchedWithoutPayableCount > 0}
+        rowAttention={(row) => row.undecidedAmount !== '0' || row.openDisputeAmount !== '0'}
         sort={sort}
         onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
         noMatchText="当前筛选条件下没有匹配的账单"
@@ -288,7 +288,7 @@ function payableColumns(names: PartyNames): WorkbenchColumn<AuditedPayableRecord
       header: '账单号 · 行',
       render: (row) => (
         <span className="truncate font-mono text-xs text-idpxyz-breadcrumb" title={row.claim}>
-          {billNumberOf(row.claim, row.supplier) ?? row.claim} · 第 {row.line} 行
+          {billNumberOf(row) ?? row.claim} · 第 {row.line} 行
         </span>
       ),
     },
@@ -332,9 +332,12 @@ function PayableDetail({
       subtitle={`审核于 ${formatInstant(row.auditedAt)}`}
       facts={[
         { label: '供应商', value: namedRef(names.party(row.supplier), row.supplier).primary },
-        { label: '账单号', value: <span className="font-mono">{billNumberOf(row.claim, row.supplier) ?? row.claim}</span> },
+        { label: '账单号', value: <span className="font-mono">{billNumberOf(row) ?? row.claim}</span> },
         { label: '账单上第几行', value: `第 ${row.line} 行` },
         { label: '金额', value: formatMoney(row.amount, row.currency) },
+        ...(row.rangeFrom !== undefined && row.rangeTo !== undefined
+          ? [{ label: '通过的那一段', value: `${row.resolvesDispute ? '争议再审通过 · ' : ''}区间 ${row.rangeFrom}–${row.rangeTo}` }]
+          : []),
         { label: '账期', value: row.period },
         { label: '本公司主体', value: legalEntityName ?? row.legalEntity },
         { label: '应付归集账户', value: <span className="font-mono">{row.account}</span> },
@@ -432,7 +435,7 @@ function AuditedPayablesWorkbench({
           row.documentNumber,
           row.payable,
           row.claim,
-          billNumberOf(row.claim, row.supplier),
+          billNumberOf(row),
           row.supplier,
           names.party(row.supplier),
           row.period,

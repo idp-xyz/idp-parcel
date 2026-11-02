@@ -26,8 +26,10 @@ import {
 } from './api';
 import { instantToLocalInput, localInputToInstant } from './dispute-forms';
 import { formatMoney } from './ops-ui';
+import { newClaimId } from './supplier-bill-audit';
 import {
   billLabel,
+  claimIdForBill,
   classificationChoices,
   currentExpectedCosts,
   hasReceptionProblems,
@@ -42,7 +44,9 @@ import {
 
 // 「登记供应商账单」任务式表单（ADR-0340 决定一；票 document-numbering/11）：照供应商来件逐格录一份账单，并逐行说清对的是哪一笔
 // 预期成本、对上了没有。按 UC-SA-004 输入语义收：供应商、开给本公司哪个主体、供应商的账单号与版本、账期、币种、收到的时间、
-// 各行金额与依据；被追加的原账单可缺。主张标识由页面从供应商与账单号生成（supplier-bills.ts 的 claimIdFor），不让人填。
+// 各行金额与依据；被追加的原账单可缺。供应商的账单号单放一格交给服务端，按外部标识记、按（供应商，账单号）查重（ADR-0357
+// 决定一）；主张标识是内部标识，页面在表单开出来时随机生成一个，同一家供应商的同一个账单号已在册上就沿用那一份的
+// （supplier-bills.ts 的 claimIdForBill），不让人填。
 // 入口按「供应商账单接收」授予收起，在页面里判（ADR-0315）。
 
 const fieldClass =
@@ -124,6 +128,8 @@ function ReceptionForm({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [answer, setAnswer] = useState<{ result: ApiResult<SupplierBillReceptionResponseBody>; billNumber: string } | null>(null);
+  // 这张表单的新主张标识：开出来时定下，重发与改正后再交都用它，网络重发落回同一份；再登一张时换新的。
+  const [freshClaim, setFreshClaim] = useState(() => newClaimId(new Date(), Math.random().toString(36).slice(2)));
 
   const costsByVersion = useMemo(() => new Map(catalogues.costs.map((cost) => [cost.version, cost])), [catalogues.costs]);
   const options = useMemo(() => currentExpectedCosts(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
@@ -158,7 +164,7 @@ function ReceptionForm({
     setTouched(true);
     if (blocked) return;
     setPending(true);
-    const payload = receptionPayload(fullDraft, costsByVersion);
+    const payload = receptionPayload(fullDraft, costsByVersion, claimIdForBill(bills, draft.supplier, draft.billNumber, freshClaim));
     const result = await receiveSupplierBill(payload);
     setPending(false);
     setAnswer({ result, billNumber: draft.billNumber });
@@ -190,6 +196,7 @@ function ReceptionForm({
             setDraft(emptyDraft());
             setAnswer(null);
             setTouched(false);
+            setFreshClaim(newClaimId(new Date(), Math.random().toString(36).slice(2)));
           }}
         >
           再登一张
