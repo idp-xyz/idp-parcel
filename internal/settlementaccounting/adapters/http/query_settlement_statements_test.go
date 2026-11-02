@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -30,10 +31,14 @@ func (stub *stubStatementCatalogue) ListCustomerStatements(
 	return stub.statements, stub.err
 }
 
+// ListSupplierBillReceptions 像真读口一样截在 limit：端点多取一行判页外有没有，替身不截就证不了那一判。
 func (stub *stubStatementCatalogue) ListSupplierBillReceptions(
 	_ context.Context, tenant domain.TenantID, limit int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	if len(stub.receptions) > limit {
+		return stub.receptions[:limit], stub.err
+	}
 	return stub.receptions, stub.err
 }
 
@@ -331,7 +336,8 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 				Claim: "SYN-SUP-01/INV-1", ClaimVersion: "1", Supplier: "SYN-SUP-01", LegalEntity: "SYN-LE-01", Period: "2026-08",
 				Currency: "CNY", LineCount: 3, MatchCount: 3, TotalClaimedMinor: 3300,
 				ClassificationCounts: map[string]int64{"MATCHED": 2, "PRICE_VARIANCE": 1},
-				PayableLineCount:     1, PayableMinor: 1000, MatchedWithoutPayableCount: 1, AuditAuthorityConfigured: true,
+				PayableLineCount:     1, PayableMinor: 1000, MatchedWithoutPayableCount: 1,
+				AuditAuthorityConfigured: false, AuditAuthorityConfiguredNow: true,
 				ReceivedAt: catalogueBaseAt.Add(-time.Hour), Supplements: "SYN-SUP-01/INV-0", OperationEvidence: "OPERATOR/syn#clerk",
 				RecordedAt: catalogueBaseAt,
 			},
@@ -356,6 +362,9 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 		"receivedAt":                 `"` + catalogueBaseAt.Add(-time.Hour).Format(time.RFC3339Nano) + `"`,
 		"supplementsClaim":           `"SYN-SUP-01/INV-0"`,
 		"operationEvidence":          `"OPERATOR/syn#clerk"`,
+		// 接收时没登、后来补登了：快照与现状各说各的，不合成一格。
+		"auditAuthorityConfigured":    `false`,
+		"auditAuthorityConfiguredNow": `true`,
 	} {
 		if got := string(summary[key]); got != want {
 			t.Fatalf("%s = %s, want %s：%s", key, got, want, response.Body.String())
@@ -368,6 +377,43 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 		if _, present := bare[absent]; present {
 			t.Fatalf("缺席的 %q 不该出键：%s", absent, response.Body.String())
 		}
+	}
+}
+
+// Covers: AT-SA-232 — 账单册超过一页时答 truncated，只列一页；不到一页答 false。端点向读口多要一行判页外有没有，那一行不上列。
+func TestSupplierBillReceptionQueryFlagsAPageCut(t *testing.T) {
+	rows := func(count int) []ports.SupplierBillReceptionCatalogueRow {
+		receptions := make([]ports.SupplierBillReceptionCatalogueRow, 0, count)
+		for index := range count {
+			receptions = append(receptions, ports.SupplierBillReceptionCatalogueRow{
+				Claim: fmt.Sprintf("SYN-SUP-01/INV-%03d", index), ClaimVersion: "1", ReceivedAt: catalogueBaseAt, RecordedAt: catalogueBaseAt,
+			})
+		}
+		return receptions
+	}
+	for _, probe := range []struct {
+		name      string
+		stored    int
+		listed    int
+		truncated bool
+	}{
+		{"多于一页", 30, 25, true},
+		{"正好一页", 25, 25, false},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			register := &stubStatementCatalogue{receptions: rows(probe.stored)}
+			response := serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception")
+			var body struct {
+				Truncated  *bool             `json:"truncated"`
+				Receptions []json.RawMessage `json:"receptions"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+			}
+			if register.gotLimit != 26 || body.Truncated == nil || *body.Truncated != probe.truncated || len(body.Receptions) != probe.listed {
+				t.Fatalf("limit=%d truncated=%v listed=%d：%s", register.gotLimit, body.Truncated, len(body.Receptions), response.Body.String())
+			}
+		})
 	}
 }
 

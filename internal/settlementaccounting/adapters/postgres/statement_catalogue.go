@@ -285,7 +285,11 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
 	}
 
-	// 主张身份与版本同键排序：同一主张的多个版本相邻，版本冲突在页面上才看得出来。
+	// 按到达的业务时刻倒序截页（同刻按主张身份与版本，排序才确定）：页大小截掉的必须是最早收到的那些。按主张身份排再截，
+	// 超过一页之后截掉的是主张身份排在后面的账单，最新收到的那一份可能根本不在页上，页面再怎么按收到时间排也补不回来。
+	//
+	// 审核授权有两格：audit_authority_configured 是接收时写下的快照，另一格读这一刻审核授权册上有没有这一组——审核步骤在
+	// 审核那一刻读的正是这本册（理由见 ports.SupplierBillReceptionCatalogueRow）。
 	//
 	// 汇总都在库内一条语句里求（同一快照）：行金额之和与分类计数各展开一次 jsonb；应付只数落在这一版各行上的那几笔——
 	// 应付不带主张版本，同一主张的另一版若多出一行，那一行的应付不算进这一版。「已匹配却没有应付」按行逐条看应付在不在，
@@ -311,6 +315,12 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		                   AND p.claim_id = r.claim_id
 		                   AND p.line_ref = m ->> 'line')),
 		        r.audit_authority_configured,
+		        EXISTS (
+		            SELECT 1
+		              FROM settlement_accounting.supplier_audit_authority AS a
+		             WHERE a.tenant_id = r.tenant_id
+		               AND a.supplier_id = r.supplier_ref
+		               AND a.legal_entity_id = r.legal_entity),
 		        (r.claim ->> 'received_at')::timestamptz,
 		        r.claim ->> 'supplements',
 		        r.operation_evidence,
@@ -324,7 +334,7 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		           AND p.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
 		       ) AS payables
 		  WHERE r.tenant_id = $1
-		  ORDER BY r.claim_id, r.claim_version
+		  ORDER BY (r.claim ->> 'received_at')::timestamptz DESC, r.claim_id, r.claim_version
 		  LIMIT $2`,
 		tenant.String(), limit, domain.LineMatched.String(),
 	)
@@ -349,7 +359,7 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 			&row.LineCount, &row.MatchCount,
 			&row.TotalClaimedMinor, &classificationsJS,
 			&row.PayableLineCount, &row.PayableMinor, &row.MatchedWithoutPayableCount,
-			&row.AuditAuthorityConfigured, &receivedAt, &supplements, &evidence, &recordedAt,
+			&row.AuditAuthorityConfigured, &row.AuditAuthorityConfiguredNow, &receivedAt, &supplements, &evidence, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier bill receptions: %w", err)
 		}

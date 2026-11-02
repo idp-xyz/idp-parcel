@@ -43,7 +43,7 @@ type SupplierBillLineEntry struct {
 }
 
 // SupplierBillLines 是一份已接收的供应商账单主张的全貌：主张身份与版本、供应商、法人、账期、币种、到达与落库时刻、被追加的
-// 原主张、审核授权是否已配置、接收操作者，以及按主张原序排列的各行。
+// 原主张、接收那一刻审核授权是否已配置（快照，理由见 SupplierBillReceptionCatalogueRow）、接收操作者，以及按主张原序排列的各行。
 type SupplierBillLines struct {
 	Claim                    string
 	ClaimVersion             string
@@ -102,6 +102,9 @@ type AuditedPayableFilter struct {
 }
 
 // AuditedPayableCatalogueRead 按租户上列审核应付，新形成的在前（按审核时刻倒序、同刻按应付标识）；Limit 必须为正。
+//
+// 一笔应付找不到它所属主张的接收记录是册上矛盾，答错误。按供应商检索时也一样：这一笔属不属于那家供应商无从判断，当它
+// 不属于而滤掉，就是带不带供应商检索两种答法——不带时答错误，带了却悄悄少一笔。
 type AuditedPayableCatalogueRead interface {
 	ListAuditedPayables(
 		ctx context.Context,
