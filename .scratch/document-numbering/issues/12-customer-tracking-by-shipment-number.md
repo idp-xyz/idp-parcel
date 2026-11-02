@@ -1,9 +1,9 @@
 # 12 客户追踪按运单号（委托的单据号）查
 
 Category: enhancement
-Status: blocked——2026-11-02 文档半边已起草（ADR-0356 草案，UC-VE-008、VE / PS CONTEXT、CONTEXT-MAP 与 AT 盘点同笔），分支 `claude-docnum12`；实现等 ADR-0356 接受
+Status: ready-for-agent——2026-11-02 用户过目 ADR-0356 草案并同意，ADR-0356 已接受（Accepted）；文档半边（ADR-0356、UC-VE-008、VE / PS CONTEXT、CONTEXT-MAP 与 AT 盘点）在分支 `claude-docnum12`。此前 blocked——同日文档半边起草，实现等 ADR-0356 接受
 父票：[spec](../spec.md)
-Blocked by: ADR-0356 待用户接受（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md) 现为 Proposed，用户过目后由协调方改为 Accepted）
+Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md) 已接受）
 出处：票 [10](./10-wrap-up-references-labels-and-tracking-by-shipment-number.md) 第 4 条查清「机制做得到、挡住的是 ADR 级取舍」；用户 2026-11-02 裁定「客户追踪支持按运单号查，先写 ADR」。
 
 ## 要做的
