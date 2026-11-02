@@ -147,7 +147,7 @@ func buildReferenceCatalogueRegistrationOrchestration(db *bentopg.DB) (transacti
 // 只有恰为 `true` 才开——拼错、`1`、`yes` 都按关读，开错的代价（旧进程读到新卡整笔失败）远大于没开（登记答未启用、可重试）。
 const pricingRegisterNewerCanonicalizationEnv = "IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION"
 
-// pricingRegisterNewerCanonicalization 在进程里只读一次：登记口与草稿发布口装同一个值，两口不会对同一张卡给出两个答案。
+// pricingRegisterNewerCanonicalization 在进程里只读一次：登记口与草稿发布口装同一个值，同一张卡在各口得到同一个答案。
 func pricingRegisterNewerCanonicalization(getenv func(string) string) bool {
 	return strings.TrimSpace(getenv(pricingRegisterNewerCanonicalizationEnv)) == "true"
 }
