@@ -68,23 +68,23 @@ export const evidenceLevelLabels: Record<string, string> = {
 
 // 运营试算（ADR-0152 决定七）：`outcome` 只说编排，逐卡评价自己的状态用上面的 evaluationStatusLabels，不折进这里。
 export const estimateOutcomeLabels: Record<string, string> = {
-  FORMED: '已形成（逐卡并列，卡与卡之间不排序、不标首选）',
-  PRICE_CARD_NOT_CONFIGURED: '价卡未配置（此范围、方向、时点下没有适用价卡）',
-  PRICE_CARD_APPLICABILITY_CONFLICT: '价卡适用冲突（同一方案两版同时适用，交价卡治理责任方裁，本页不挑）',
-  NOT_ACCEPTED: '未受理（声明不成形，改声明后再试）',
-  UNDECIDED: '未决（依赖读不回，形成与否未知，稍后重试）',
+  FORMED: '已算出：每张适用的价卡各算一份，并排列出，不分先后',
+  PRICE_CARD_NOT_CONFIGURED: '价卡未配置：这个范围、方向和时间下还没有适用的价卡',
+  PRICE_CARD_APPLICABILITY_CONFLICT: '价卡冲突：同一张价卡有两个版本同时有效，请价卡负责人处理后再试；本页不替你挑',
+  NOT_ACCEPTED: '包裹信息不完整或格式不对，改好后再试',
+  UNDECIDED: '这次没算完（有数据没读回来），稍后再试',
 };
 
 export const estimateAnswerLabels: Record<string, string> = {
-  EVALUATED: '已评价',
-  INPUT_INCOMPLETE: '输入不全',
+  EVALUATED: '已算出',
+  INPUT_INCOMPLETE: '信息不够',
 };
 
 // 缺项按卡的目录绑定定：绑了分区目录的卡要邮编路线、没绑的卡要分区（ADR-0152 决定五）。
 export const estimateMissingLabels: Record<string, string> = {
-  ZONE: '分区（这张卡没绑分区目录，要发起方给分区）',
-  POSTAL_ROUTE: '邮编路线（这张卡按邮编路线查分区或偏远档位目录）',
-  ADDRESS_NATURE: '收件地址性质（这张卡有规则按商业 / 住宅判定，要发起方声明，不套默认）',
+  ZONE: '分区（这张价卡不按邮编查分区，要直接填分区）',
+  POSTAL_ROUTE: '始发与目的邮编（这张价卡按邮编查分区或偏远地区）',
+  ADDRESS_NATURE: '收件地址性质（这张价卡对商业 / 住宅地址收费不同，要选一个，系统不替你假定）',
 };
 
 // 收件地址性质（ADR-0347 决定四）：封闭词，声明由发起方给，计价不推断。
@@ -94,9 +94,9 @@ export const addressNatureLabels: Record<string, string> = {
 };
 
 export const estimateReasonLabels: Record<string, string> = {
-  PRICE_CARD_LOAD_UNAVAILABLE: '停在取适用价卡',
-  CONFLICT_CANDIDATES_UNAVAILABLE: '停在取冲突候选',
-  READING_COMPLETION_UNAVAILABLE: '停在补齐序列或目录读数',
+  PRICE_CARD_LOAD_UNAVAILABLE: '读适用价卡时没读回来',
+  CONFLICT_CANDIDATES_UNAVAILABLE: '读冲突的价卡版本时没读回来',
+  READING_COMPLETION_UNAVAILABLE: '读汇率、费率或分区目录时没读回来',
 };
 
 export const problemCodeNotes: Record<string, string> = {

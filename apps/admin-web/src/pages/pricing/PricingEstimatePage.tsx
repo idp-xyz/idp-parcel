@@ -2,6 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails, httpRows } from '../../components/TechnicalDetails';
+import { lengthUnitLabels, weightUnitLabels } from '../../vocabulary/price-card';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
@@ -21,7 +24,6 @@ import {
   estimateMissingLabels,
   estimateOutcomeLabels,
   estimateReasonLabels,
-  evaluationStatusLabels,
   evidenceLevelLabels,
   labelOf,
   problemNote,
@@ -89,17 +91,17 @@ export function PricingEstimatePage() {
       <div className="mb-3">
         <h2 className="text-[15px] font-medium text-idpxyz-text">{info.title}</h2>
         <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">
-          按一件假设包裹，看此刻在用的每一张适用价卡各怎么计价。试算不形成承诺、不进结算、不入册；多张卡并列，不排序、不标首选。
+          客户问价、核对价卡时用：填一件假设的包裹，看适用的每张价卡各收多少钱。试算只是看看，不报价、不记账、不留记录；几张价卡并排列出，不分先后。
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>试算声明</CardTitle>
+          <CardTitle>包裹信息</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Field label="主要范围 *" hint="价卡按范围、方向与时点取适用版本">
+            <Field label="适用范围 *" hint="按范围、方向与时间找出当时有效的价卡">
               <Input
                 list="pricing-estimate-scopes"
                 className="font-mono"
@@ -113,17 +115,17 @@ export function PricingEstimatePage() {
                 ))}
               </datalist>
             </Field>
-            <Field label="价格方向 *" hint="计算目的由领域按方向成对取得">
+            <Field label="价格方向 *" hint="售价是向客户收的，成本是供应商向我们收的">
               <select className={selectClass} value={draft.direction} onChange={(event) => patch({ direction: event.target.value })}>
-                <option value="">选择方向</option>
+                <option value="">请选择</option>
                 {Object.entries(directionLabels).map(([code, word]) => (
                   <option key={code} value={code}>
-                    {word}（{code}）
+                    {word}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="计价基准时点 *" hint={`本地墙钟（${timeZone}）`} problem={problems.basisAt}>
+            <Field label="按哪个时间计价 *" hint={`按当地时间（${timeZone}）填`} problem={problems.basisAt}>
               <Input type="datetime-local" value={draft.basisAt} onChange={(event) => patch({ basisAt: event.target.value })} />
             </Field>
 
@@ -134,13 +136,13 @@ export function PricingEstimatePage() {
                   <option value="">单位</option>
                   {WEIGHT_UNITS.map((unit) => (
                     <option key={unit} value={unit}>
-                      {unit}
+                      {labelOf(weightUnitLabels, unit)}
                     </option>
                   ))}
                 </select>
               </div>
             </Field>
-            <Field label="尺寸（可缺）" hint="长、宽、高与单位一起填" problem={problems.dimensions}>
+            <Field label="尺寸（可不填）" hint="长、宽、高与单位一起填" problem={problems.dimensions}>
               <div className="flex gap-2">
                 <Input value={draft.length} placeholder="长" onChange={(event) => patch({ length: event.target.value })} />
                 <Input value={draft.width} placeholder="宽" onChange={(event) => patch({ width: event.target.value })} />
@@ -149,13 +151,13 @@ export function PricingEstimatePage() {
                   <option value="">单位</option>
                   {LENGTH_UNITS.map((unit) => (
                     <option key={unit} value={unit}>
-                      {unit}
+                      {labelOf(lengthUnitLabels, unit)}
                     </option>
                   ))}
                 </select>
               </div>
             </Field>
-            <Field label="结算币种（可缺）" hint="卡需要而没给，评价如实落待判断">
+            <Field label="结算币种（可不填）" hint="价卡要换算币种而这里没填时，结果会标出缺这一项">
               <Input
                 className="font-mono"
                 value={draft.settlementCurrency}
@@ -164,20 +166,20 @@ export function PricingEstimatePage() {
               />
             </Field>
 
-            <Field label="分区（可缺）" hint="没绑分区目录的卡用它">
+            <Field label="分区（可不填）" hint="价卡不按邮编查分区时用它">
               <Input className="font-mono" value={draft.zone} placeholder="如 Z1" onChange={(event) => patch({ zone: event.target.value })} />
             </Field>
-            <Field label="收件地址性质（可不选）" hint="有规则按商业 / 住宅判定的卡用它；不选就如实点名缺项，不套默认">
+            <Field label="收件地址性质（可不选）" hint="有的价卡对商业 / 住宅地址收费不同；不选时，这类价卡会标出缺这一项">
               <select className={selectClass} value={draft.addressNature} onChange={(event) => patch({ addressNature: event.target.value })}>
                 <option value="">不选</option>
                 {ADDRESS_NATURE_CODES.map((code) => (
                   <option key={code} value={code}>
-                    {labelOf(addressNatureLabels, code)}（{code}）
+                    {labelOf(addressNatureLabels, code)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="邮编路线（可缺）" hint="绑了分区或偏远档位目录的卡用它查目录" problem={problems.postalRoute}>
+            <Field label="邮编（可不填）" hint="价卡按邮编查分区或偏远地区时用它" problem={problems.postalRoute}>
               <div className="flex gap-2">
                 <Input className="font-mono" value={draft.origin} placeholder="始发邮编" onChange={(event) => patch({ origin: event.target.value })} />
                 <Input
@@ -198,7 +200,7 @@ export function PricingEstimatePage() {
             >
               {submitting ? '试算中…' : '试算'}
             </Button>
-            <span className="text-[12px] text-idpxyz-textMuted">必需格空着也能送：服务端逐格点名缺什么，页面不另拦。</span>
+            <span className="text-[12px] text-idpxyz-textMuted">必填项空着也能试算：结果里会逐项说明缺什么。</span>
           </div>
         </CardContent>
       </Card>
@@ -218,9 +220,9 @@ function EstimateAnswer({ answer }: { answer: ApiResult<EstimateResponseBody> })
       return <EstimateBody body={answer.body} />;
     case 'unconfigured':
       return (
+        // 渠道未配置是诚实答案（ADR-0055）：不是「没有价格」，改声明或重试都不会变。
         <p className="text-[12px] text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）：试算端点（POST /pricing-estimates）已建立并装配，操作者身份的接入渠道尚未接上，
-          服务端如实拒绝。这不是「没有价格」，改声明或重试都不会改变结果；操作者渠道接上后由装配侧换真 Intake 即放行。
+          访问通道尚未配置（403），这次没有试算；这不代表没有价格。改包裹信息或重试都不会变，请管理员先配置访问通道。
         </p>
       );
     case 'loginRequired':
@@ -228,19 +230,23 @@ function EstimateAnswer({ answer }: { answer: ApiResult<EstimateResponseBody> })
       return <OperatorRefusalNote kind={answer.kind} what="试算" className="text-[12px] text-idpxyz-textMuted" />;
     case 'callerProblem':
       return (
-        <p className="text-[12px] text-idpxyz-danger">
-          声明不成形（HTTP {answer.status}）：{problemNote(answer.code)}
-          {answer.detail ? ` ${answer.detail}` : ''}
-        </p>
+        <div className="text-[12px] text-idpxyz-danger">
+          <p>
+            没能试算：{problemNote(answer.code)}
+            {answer.detail ? ` ${answer.detail}` : ''}
+          </p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} className="mt-1 text-idpxyz-text" />
+        </div>
       );
     case 'noAnswer':
       return (
-        <p className="text-[12px] text-idpxyz-danger">
-          服务端未形成试算答案（HTTP {answer.status}）：{problemNote(answer.code)}；可稍后重试。
-        </p>
+        <div className="text-[12px] text-idpxyz-danger">
+          <p>这次试算没算完：{problemNote(answer.code)}</p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} className="mt-1 text-idpxyz-text" />
+        </div>
       );
     case 'transport':
-      return <p className="text-[12px] text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-[12px] text-idpxyz-danger">连不上系统，没能试算（{answer.message}）；检查网络后重试。</p>;
   }
 }
 
@@ -254,8 +260,9 @@ function EstimateBody({ body }: { body: EstimateResponseBody }) {
       {body.conflict.length > 0 ? (
         <ul className="text-[12px] text-idpxyz-textMuted">
           {body.conflict.map((reference) => (
-            <li key={`${reference.id}@${reference.version}`} className="font-mono">
-              候选 {reference.id}@{reference.version}
+            <li key={`${reference.id}@${reference.version}`}>
+              同时有效的版本：<span className="font-mono">{reference.id}</span> 版本{' '}
+              <span className="font-mono">{reference.version}</span>
             </li>
           ))}
         </ul>
@@ -274,9 +281,8 @@ function CandidateCard({ candidate }: { candidate: EstimateCandidateRecord }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          <span className="font-mono">
-            {candidate.plan.id}@{candidate.plan.version}
-          </span>
+          <span className="font-mono">{candidate.plan.id}</span>
+          <span className="ml-1 text-[12px] font-normal text-idpxyz-textMuted">版本 {candidate.plan.version}</span>
           <span className="ml-2 text-[12px] font-normal text-idpxyz-textMuted">{labelOf(estimateAnswerLabels, candidate.answer)}</span>
         </CardTitle>
       </CardHeader>
@@ -298,11 +304,10 @@ function CandidateCard({ candidate }: { candidate: EstimateCandidateRecord }) {
 function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord }) {
   return (
     <div className="flex flex-col gap-2 text-[12px] text-idpxyz-text">
-      <p>
-        评价状态：{labelOf(evaluationStatusLabels, evaluation.status)}
-        <span className="ml-2 text-idpxyz-textMuted">
-          {labelOf(directionLabels, evaluation.direction)} · {labelOf(purposeLabels, evaluation.purpose)} · 证据层级{' '}
-          {evaluation.evidence}（{labelOf(evidenceLevelLabels, evaluation.evidence)}）
+      <p className="flex items-center gap-2">
+        <StatusPill code={evaluation.status} scope="pricing-evaluation" />
+        <span className="text-idpxyz-textMuted">
+          {labelOf(directionLabels, evaluation.direction)} · {labelOf(purposeLabels, evaluation.purpose)}
         </span>
       </p>
       <p className="text-[15px] font-medium">
@@ -311,7 +316,7 @@ function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord
             {evaluation.total.amount} {evaluation.total.currency}
           </span>
         ) : (
-          <span className="text-[12px] font-normal text-idpxyz-textMuted">没有合计（评价未完成；不以零金额顶替）</span>
+          <span className="text-[12px] font-normal text-idpxyz-textMuted">没有合计：这一份没算完，不显示金额，也不会用 0 代替</span>
         )}
       </p>
       {evaluation.chargeLines.length > 0 ? (
@@ -325,9 +330,9 @@ function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord
           <tbody>
             {evaluation.chargeLines.map((line, index) => (
               <tr key={`${line.code}-${index}`} className="border-t border-idpxyz-border align-top">
-                <td className="py-1">
-                  <div>{chargeLineName(line)}</div>
-                  <div className="font-mono text-[10px] text-idpxyz-textMuted">{line.code}</div>
+                {/* 费用代码不上屏，悬停可见；全部代码另在下方技术详情里。 */}
+                <td className="py-1" title={line.code}>
+                  {chargeLineName(line)}
                 </td>
                 <td className="py-1 text-right font-mono">
                   {line.amount.amount} {line.amount.currency}
@@ -350,28 +355,32 @@ function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord
       {evaluation.issues.length > 0 ? (
         <ul className="text-idpxyz-textMuted">
           {evaluation.issues.map((issue) => (
-            <li key={issue.code}>
-              <span className="font-mono">{issue.code}</span>：{issue.message}
+            <li key={issue.code} title={issue.code}>
+              {issue.message}
             </li>
           ))}
         </ul>
       ) : null}
-      <details>
-        <summary className="cursor-pointer text-idpxyz-textMuted">解释与版本清单</summary>
-        <ul className="mt-1 list-disc pl-4 text-idpxyz-textMuted">
-          {evaluation.explanation.map((line, index) => (
-            <li key={index}>{line}</li>
-          ))}
-        </ul>
-        <ul className="mt-1 font-mono text-idpxyz-textMuted">
-          {evaluation.manifest.map((entry) => (
-            <li key={`${entry.kind}:${entry.id}@${entry.version}`}>
-              {entry.kind} · {entry.id}@{entry.version}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-1 font-mono text-idpxyz-textMuted">评价标识 {evaluation.evaluationId}</p>
-      </details>
+      {evaluation.explanation.length > 0 ? (
+        <details>
+          <summary className="cursor-pointer text-idpxyz-textMuted">怎么算的</summary>
+          <ul className="mt-1 list-disc pl-4 text-idpxyz-textMuted">
+            {evaluation.explanation.map((line, index) => (
+              <li key={index}>{line}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {/* 用到的各版本清单、计费编号、状态码、费用代码与证据层级只在对账与排障时用，收进技术详情。 */}
+      <TechnicalDetails
+        rows={[
+          { label: '计费编号', value: evaluation.evaluationId },
+          { label: '结果码', value: evaluation.status },
+          { label: '证据层级', value: `${evaluation.evidence}（${labelOf(evidenceLevelLabels, evaluation.evidence)}）` },
+          ...evaluation.chargeLines.map((line) => ({ label: chargeLineName(line), value: line.code })),
+          ...evaluation.manifest.map((entry) => ({ label: entry.kind, value: `${entry.id}@${entry.version}` })),
+        ]}
+      />
     </div>
   );
 }
