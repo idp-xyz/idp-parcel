@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal, match, ok } from 'node:assert/strict';
-import { lookUpShipmentRef, resolveShipmentRef, shipmentRefProblem, shipmentRefText } from './shipment-ref';
+import { lookUpShipmentRef, resolveShipmentRef, shipmentDetailSourceOf, shipmentRefProblem, shipmentRefText } from './shipment-ref';
 import type { ApiResult, ShipmentRequestDetail, ShipmentRequestSummary, ViewDetailResponseBody, ViewsListResponseBody } from './api';
 
 // 本文件钉撤回与取消表单「哪一票运单」那一格的解析:按运单号查与按委托标识查两份答案合成——解析成一份、没有、不止一份、
@@ -114,4 +114,40 @@ test('同时问两口,去两端空白后原样去问', async () => {
   });
   ok(asked.includes('number:P20261102000001') && asked.includes('id:P20261102000001'));
   equal(resolution.kind, 'resolved');
+});
+
+// 运单详情的地址第二段是屏上那个号(有号是运单号,老运单是委托标识),打开时两口一起认出是哪一份,再定详情从哪来。
+
+test('详情地址是运单号:按号对上一份,再按它的委托标识读详情', () => {
+  const source = shipmentDetailSourceOf('P20261102000001', listed(summary({ shipmentRequestId: 'SHR-9', documentNumber: 'P20261102000001' })), notVisible);
+  deepEqual(source, { kind: 'byId', shipmentRequestId: 'SHR-9' });
+});
+
+test('详情地址是委托标识(老运单或从前收藏的地址):按标识读到的那一份就是详情,不再读', () => {
+  const byId = found(detail({ shipmentRequestId: 'SHR-OLD', documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }));
+  deepEqual(shipmentDetailSourceOf('SHR-OLD', listed(), byId), { kind: 'detail', answer: byId });
+  const numbered = found(detail({ shipmentRequestId: 'SHR-1', documentNumber: 'P20261102000001' }));
+  deepEqual(shipmentDetailSourceOf('SHR-1', listed(), numbered), { kind: 'detail', answer: numbered });
+});
+
+test('详情地址两边都对不上:交回「看不见」那一格,与按委托标识查无同一说法', () => {
+  deepEqual(shipmentDetailSourceOf('P404', listed(), notVisible), { kind: 'detail', answer: notVisible });
+});
+
+test('详情读不动:交回读不动的那一口,页面按它的格说', () => {
+  const down: ApiResult<ViewDetailResponseBody> = { kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' };
+  deepEqual(shipmentDetailSourceOf('P1', listed(), down), { kind: 'detail', answer: down });
+  deepEqual(shipmentDetailSourceOf('P1', { kind: 'transport', message: 'fetch failed' }, notVisible), {
+    kind: 'detail',
+    answer: { kind: 'transport', message: 'fetch failed' },
+  });
+});
+
+test('详情地址对上不止一份:不替人选', () => {
+  const source = shipmentDetailSourceOf(
+    'X-1',
+    listed(summary({ shipmentRequestId: 'SHR-A', documentNumber: 'X-1' })),
+    found(detail({ shipmentRequestId: 'X-1' })),
+  );
+  equal(source.kind, 'ambiguous');
 });

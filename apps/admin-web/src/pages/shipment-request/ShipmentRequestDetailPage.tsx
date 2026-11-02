@@ -14,18 +14,22 @@ import { objectNouns } from '../../vocabulary/objects';
 import { problemNote } from './presentation';
 import {
   findShipmentRequestView,
+  findShipmentRequestViewsByDocumentNumber,
   REQUEST_NOT_VISIBLE_CODE,
   type ApiResult,
   type ShipmentRequestDetail,
   type ViewDetailResponseBody,
 } from './api';
+import { shipmentDetailSourceOf, type ShipmentRef } from './shipment-ref';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
-// 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。
+// 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。地址第二段是屏上那个号——有运单号
+// 是运单号、老运单是委托标识，壳层的标签、状态栏与最近打开照地址写字（shipment-ref.ts 的 shipmentDetailSourceOf），打开时先按
+// 运单号与委托标识两口一起认出是哪一份。
 //
 // 字段与区块跟已落地的查询契约走（api.ts 的 ShipmentRequestDetail 镜像），读模型没有的东西（目的地、收件人、接受基线快照）
 // 不虚构；那些查阅面扩进读模型时，先扩 ports 的记录与端点响应，再回来加区块。
@@ -169,9 +173,31 @@ function FieldRow({ label, value, mono }: { label: string; value: React.ReactNod
   );
 }
 
+/** 打开详情读到的东西：详情答案，或地址里那个号对上了不止一张运单。 */
+type DetailLoad = { kind: 'detail'; answer: ApiResult<ViewDetailResponseBody> } | { kind: 'ambiguous'; candidates: ShipmentRef[] };
+
+async function loadShipmentDetail(shipmentRef: string): Promise<DetailLoad> {
+  const [byNumber, byId] = await Promise.all([
+    findShipmentRequestViewsByDocumentNumber(shipmentRef),
+    findShipmentRequestView(shipmentRef),
+  ]);
+  const source = shipmentDetailSourceOf(shipmentRef, byNumber, byId);
+  if (source.kind === 'byId') return { kind: 'detail', answer: await findShipmentRequestView(source.shipmentRequestId) };
+  return source;
+}
+
 // 取数答案 → 模板页面态。不可见走空态（终局答案、无重试）；其余错误格与列表页同款。
-function viewStateOf(answer: ApiResult<ViewDetailResponseBody> | null, retry: () => void): TemplateViewState {
-  if (answer === null) return { kind: 'loading' };
+function viewStateOf(loaded: DetailLoad | null, shipmentRef: string, retry: () => void): TemplateViewState {
+  if (loaded === null) return { kind: 'loading' };
+  if (loaded.kind === 'ambiguous') {
+    return {
+      kind: 'error',
+      title: '对上了不止一张运单',
+      description: `「${shipmentRef}」既是一张运单的${documentTypeWords.SHIPMENT.numberName}，又是另一张的委托标识，没法替你选。请从运单列表重新打开。`,
+      technical: loaded.candidates.map((candidate) => ({ label: '委托标识', value: candidate.shipmentRequestId })),
+    };
+  }
+  const answer = loaded.answer;
   switch (answer.kind) {
     case 'outcome':
       return { kind: 'ready' };
@@ -224,34 +250,34 @@ function viewStateOf(answer: ApiResult<ViewDetailResponseBody> | null, retry: ()
 }
 
 export function ShipmentRequestDetailPage({
-  shipmentRequestId,
+  shipmentRef,
   onBack,
 }: {
-  /** 要查阅的委托标识（地址里带的是它，不是运单号）；本页自取数，标识只定位对象，不单独证明查询权限。 */
-  shipmentRequestId: string;
+  /** 地址里带的号：有运单号是运单号，老运单是委托标识。本页自取数，号只定位对象，不单独证明查询权限。 */
+  shipmentRef: string;
   onBack?: () => void;
 }) {
-  const [answer, setAnswer] = useState<ApiResult<ViewDetailResponseBody> | null>(null);
+  const [loaded, setLoaded] = useState<DetailLoad | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const names = useCustomerNames();
 
   useEffect(() => {
     let cancelled = false;
-    setAnswer(null);
-    void findShipmentRequestView(shipmentRequestId).then((result) => {
-      if (!cancelled) setAnswer(result);
+    setLoaded(null);
+    void loadShipmentDetail(shipmentRef).then((result) => {
+      if (!cancelled) setLoaded(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [shipmentRequestId, reloadToken]);
+  }, [shipmentRef, reloadToken]);
 
-  const view = answer?.kind === 'outcome' ? answer.body.request : undefined;
+  const view = loaded?.kind === 'detail' && loaded.answer.kind === 'outcome' ? loaded.answer.body.request : undefined;
 
   return (
     <DetailPageTemplate
       title={objectNouns.shipment}
-      identifier={view ? shipmentDisplayNoOf(view) : shipmentRequestId}
+      identifier={view ? shipmentDisplayNoOf(view) : shipmentRef}
       status={view ? <StatusPill code={view.state} /> : undefined}
       description="这张运单的客户、件数、受理进度与决定。物流动态在「物流动态」页按包裹号查。"
       headerActions={
@@ -272,7 +298,7 @@ export function ShipmentRequestDetailPage({
       // 签只有「概要」（基本信息 + 现有区块）：委托的事件流与审计留痕都没有面向 UI 的读口，「时间线」「审计」两签无内容不出，
       // 不为凑签造读口。
       tabs={[]}
-      viewState={viewStateOf(answer, () => setReloadToken((token) => token + 1))}
+      viewState={viewStateOf(loaded, shipmentRef, () => setReloadToken((token) => token + 1))}
     />
   );
 }

@@ -94,6 +94,42 @@ export async function lookUpShipmentRef(raw: string, lookups: ShipmentRefLookups
   return resolveShipmentRef(input, byNumber, byId);
 }
 
+/**
+ * 运单详情从哪来。详情地址第二段是屏上那个号——有运单号是运单号,老运单是委托标识(ShipmentRequestListPage 的 detailHash),
+ * 壳层的标签、状态栏与最近打开都按地址第二段写字,写出来就是运单号。打开时照表单那样两口一起问,再定详情:
+ *   - 按委托标识就读到了那一份:用这份详情,不再读;
+ *   - 按运单号对上一份:按它的委托标识再读一次详情;
+ *   - 两边都没有:交回按委托标识查的那一格「看不见」,与原先按委托标识打开查无同一说法;
+ *   - 读不动:交回读不动的那一份,页面按它的格说;
+ *   - 对上不止一份:另说,不替人选。
+ */
+export type ShipmentDetailSource =
+  | { kind: 'detail'; answer: ApiResult<ViewDetailResponseBody> }
+  | { kind: 'byId'; shipmentRequestId: string }
+  | { kind: 'ambiguous'; candidates: ShipmentRef[] };
+
+export function shipmentDetailSourceOf(
+  input: string,
+  byNumber: ApiResult<ViewsListResponseBody>,
+  byId: ApiResult<ViewDetailResponseBody>,
+): ShipmentDetailSource {
+  const resolution = resolveShipmentRef(input, byNumber, byId);
+  switch (resolution.kind) {
+    case 'resolved':
+      return byId.kind === 'outcome' && byId.body.request.shipmentRequestId === resolution.ref.shipmentRequestId
+        ? { kind: 'detail', answer: byId }
+        : { kind: 'byId', shipmentRequestId: resolution.ref.shipmentRequestId };
+    case 'notFound':
+      return { kind: 'detail', answer: byId };
+    case 'ambiguous':
+      return { kind: 'ambiguous', candidates: resolution.candidates };
+    case 'unreadable':
+      // 读不动的是哪一口就交回哪一口;两口的非业务答案都不带体,换个体类型照样成立。
+      if (unreadableReason(byId) !== null) return { kind: 'detail', answer: byId };
+      return byNumber.kind === 'outcome' ? { kind: 'detail', answer: byId } : { kind: 'detail', answer: byNumber };
+  }
+}
+
 /** 解析没成时表单格旁那一句;解析成了交回 undefined。 */
 export function shipmentRefProblem(input: string, resolution: ShipmentRefResolution): string | undefined {
   switch (resolution.kind) {
