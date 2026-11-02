@@ -121,6 +121,7 @@ func TestTriageDemandsItsRuleVersion(t *testing.T) {
 func TestACaseWalksItsLeanLifecycleAndMergesControlled(t *testing.T) {
 	exceptionCase, err := domain.EstablishCase(
 		mustValue(t, domain.NewCaseID, "case-1"),
+		documentNumber(t, "EX-20260801-0001"),
 		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		mustValue(t, domain.NewImpactScopeReference, "impact-scope/v1"),
 		mustValue(t, domain.NewResponsibleTeamReference, "ops-team-1"),
@@ -145,6 +146,7 @@ func TestACaseWalksItsLeanLifecycleAndMergesControlled(t *testing.T) {
 
 	duplicate, err := domain.EstablishCase(
 		mustValue(t, domain.NewCaseID, "case-2"),
+		documentNumber(t, "EX-20260801-0002"),
 		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		mustValue(t, domain.NewImpactScopeReference, "impact-scope/v1"),
 		mustValue(t, domain.NewResponsibleTeamReference, "ops-team-1"),

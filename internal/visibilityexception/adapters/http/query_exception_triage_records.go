@@ -143,18 +143,19 @@ func serveDispositionRequests(
 	bodies := make([]dispositionRequestBody, 0, len(rows))
 	for _, row := range rows {
 		body := dispositionRequestBody{
-			RequestID:     row.RequestID,
-			CaseID:        row.CaseID,
-			TargetContext: row.TargetContext,
-			Action:        row.Action,
-			Scope:         row.Scope,
-			Reason:        row.Reason,
-			Evidence:      row.Evidence,
-			IntentVersion: row.IntentVersion,
-			SentAt:        catalogueInstant(row.SentAt),
-			Judgment:      row.Judgment,
-			Cancellation:  row.Cancellation,
-			SupersededBy:  row.SupersededBy,
+			RequestID:          row.RequestID,
+			CaseID:             row.CaseID,
+			CaseDocumentNumber: row.CaseDocumentNumber,
+			TargetContext:      row.TargetContext,
+			Action:             row.Action,
+			Scope:              row.Scope,
+			Reason:             row.Reason,
+			Evidence:           row.Evidence,
+			IntentVersion:      row.IntentVersion,
+			SentAt:             catalogueInstant(row.SentAt),
+			Judgment:           row.Judgment,
+			Cancellation:       row.Cancellation,
+			SupersededBy:       row.SupersededBy,
 		}
 		if row.AcceptanceWindow != nil {
 			body.AcceptanceWindow = catalogueInstant(*row.AcceptanceWindow)
@@ -222,20 +223,21 @@ type dispositionRequestListResponse struct {
 // judgment 两键成对缺席表示源上下文尚无答复（封闭四走向）；cancellation 只在已判断
 // 后可能在场；supersededBy 在场即这行已被替代——替代不是删除（0005），原请求照列，
 // 版本链在册面上完整可见。实际执行结果没有键：那是目标上下文按事实返回的东西，
-// 行内没有它的字段，代填会把请求演成结果。
+// 行内没有它的字段，代填会把请求演成结果。caseDocumentNumber 是所属案件的单据号，案件没有号时缺席，不拿 caseId 顶。
 type dispositionRequestBody struct {
-	RequestID        string `json:"requestId"`
-	CaseID           string `json:"caseId"`
-	TargetContext    string `json:"targetContext"`
-	Action           string `json:"action"`
-	Scope            string `json:"scope"`
-	Reason           string `json:"reason"`
-	Evidence         string `json:"evidence"`
-	IntentVersion    int64  `json:"intentVersion"`
-	SentAt           string `json:"sentAt"`
-	AcceptanceWindow string `json:"acceptanceWindow,omitempty"`
-	Judgment         string `json:"judgment,omitempty"`
-	JudgedAt         string `json:"judgedAt,omitempty"`
-	Cancellation     string `json:"cancellation,omitempty"`
-	SupersededBy     string `json:"supersededBy,omitempty"`
+	RequestID          string `json:"requestId"`
+	CaseID             string `json:"caseId"`
+	CaseDocumentNumber string `json:"caseDocumentNumber,omitempty"`
+	TargetContext      string `json:"targetContext"`
+	Action             string `json:"action"`
+	Scope              string `json:"scope"`
+	Reason             string `json:"reason"`
+	Evidence           string `json:"evidence"`
+	IntentVersion      int64  `json:"intentVersion"`
+	SentAt             string `json:"sentAt"`
+	AcceptanceWindow   string `json:"acceptanceWindow,omitempty"`
+	Judgment           string `json:"judgment,omitempty"`
+	JudgedAt           string `json:"judgedAt,omitempty"`
+	Cancellation       string `json:"cancellation,omitempty"`
+	SupersededBy       string `json:"supersededBy,omitempty"`
 }

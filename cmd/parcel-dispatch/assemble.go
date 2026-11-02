@@ -75,6 +75,7 @@ import (
 	vetf "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件是派发进程的组合根。它是全仓依赖面最宽的包，而这是 ADR-0049 认下的代价：
@@ -720,12 +721,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: inbox store: %w", err)
 	}
-	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock)
+	documentNumbers, err := buildDocumentNumbers(db, settings)
 	if err != nil {
 		return nil, err
 	}
-
-	documentNumbers, err := buildDocumentNumbers(db, settings)
+	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock, documentNumbers)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +755,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, err
 	}
-	return cycleCutBeat{dispatch: dispatcher, cycles: cycles, transactor: db.Transactor()}, nil
+	caseNumberingRedrive, err := veapplication.NewCaseNumberingRedrive(projectionDerive.caseCollisions, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: case numbering redrive: %w", err)
+	}
+	return caseNumberingRedriveBeat{
+		inner:      cycleCutBeat{dispatch: dispatcher, cycles: cycles, transactor: db.Transactor()},
+		derive:     projectionDerive,
+		redrive:    caseNumberingRedrive,
+		transactor: db.Transactor(),
+	}, nil
 }
 
 // logDeliveryFailure 是 ADR-0095 Decision 二那个观察口在本装配点的实现。
@@ -1926,10 +1935,14 @@ func (derive *tenantBoundCustomerViewDerive) Handle(
 
 // newTenantBoundProjectionDerive 让 routes_*.go 里经 sources.projectionDerive 取用的各投影路
 // 共用一份事实/投影/交接仓储。映射仍按每次 Handle 的租户现绑，不要为每一路再各复制一份包装。
+//
+// numbers 是本进程那一套编号组件（buildDocumentNumbers）：分诊自动建案在派生事务里给案件取单据号，取号编排与派生事务
+// 必须接在同一个 db 上。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
 	clock systemClock,
+	numbers docnumbering.Components,
 ) (*tenantBoundProjectionDerive, error) {
 	facts, err := vepostgres.NewAcceptedFacts(db)
 	if err != nil {
@@ -1961,6 +1974,17 @@ func newTenantBoundProjectionDerive(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: exception case identities: %w", err)
 	}
+	if numbers.Assigner == nil {
+		return nil, errors.New("parcel-dispatch: exception case numbers need the document numbering components")
+	}
+	caseNumbers, err := vepostgres.NewDocumentNumbers(db, numbers.Assigner)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: exception case document numbers: %w", err)
+	}
+	caseCollisions, err := vepostgres.NewCaseNumberingCollisions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: case numbering collisions: %w", err)
+	}
 	triageHandoff, err := vepostgres.NewOutboxTriageHandoff(db, outboxStore, clock)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: triage handoff: %w", err)
@@ -1973,6 +1997,8 @@ func newTenantBoundProjectionDerive(
 		episodes:          episodes,
 		episodeIdentities: episodeIdentities,
 		caseIdentities:    caseIdentities,
+		caseNumbers:       caseNumbers,
+		caseCollisions:    caseCollisions,
 		triageHandoff:     triageHandoff,
 		downstream:        downstream,
 		clock:             clock,
@@ -1994,6 +2020,8 @@ type tenantBoundProjectionDerive struct {
 	episodes          *vepostgres.SignalEpisodes
 	episodeIdentities *veidentity.SignalEpisodes
 	caseIdentities    *veidentity.ExceptionCases
+	caseNumbers       *vepostgres.DocumentNumbers
+	caseCollisions    *vepostgres.CaseNumberingCollisions
 	triageHandoff     *vepostgres.OutboxTriageHandoff
 	downstream        *vepostgres.OutboxProjectionHandoff
 	clock             systemClock
@@ -2033,14 +2061,7 @@ func (derive *tenantBoundProjectionDerive) Handle(
 	}
 	// 冲突信号走真的信号编排进分诊：与派生同一事务（两边都按 RequireExecutor 落库），
 	// 分叉双方留在投影里的那一笔与它们的信号发作期同生共死。
-	signals := veapplication.NewRaiseSignalHandler(veapplication.RaiseSignalDeps{
-		Episodes:   derive.episodes,
-		Triage:     triage,
-		Identities: derive.episodeIdentities,
-		Cases:      derive.caseIdentities,
-		Downstream: derive.triageHandoff,
-		Clock:      derive.clock,
-	})
+	signals := derive.signalsFor(triage)
 	return veapplication.NewDeriveProjectionHandler(veapplication.DeriveProjectionDeps{
 		Facts:         derive.facts,
 		Mapping:       mapping,
@@ -2051,6 +2072,21 @@ func (derive *tenantBoundProjectionDerive) Handle(
 		Downstream:    derive.downstream,
 		Clock:         derive.clock,
 	}).Handle(ctx, command)
+}
+
+// signalsFor 用本派生那一套发作期库、身份签发、案件取号、撞号册与分诊意图，加上已按租户绑好的分诊规则，装一只信号编排
+// （UC-VE-004 的入口）。冲突信号、出发门禁阻断信号与案件撞号重驱都经它，各处不各装一份。
+func (derive *tenantBoundProjectionDerive) signalsFor(triage veports.TriageRuleView) *veapplication.RaiseSignalHandler {
+	return veapplication.NewRaiseSignalHandler(veapplication.RaiseSignalDeps{
+		Episodes:    derive.episodes,
+		Triage:      triage,
+		Identities:  derive.episodeIdentities,
+		Cases:       derive.caseIdentities,
+		CaseNumbers: derive.caseNumbers,
+		Collisions:  derive.caseCollisions,
+		Downstream:  derive.triageHandoff,
+		Clock:       derive.clock,
+	})
 }
 
 // adoptOffsitePickupConsumer 接 UC-PS-003 的另一个合格物理来源：TF 对象级场外揽收登记

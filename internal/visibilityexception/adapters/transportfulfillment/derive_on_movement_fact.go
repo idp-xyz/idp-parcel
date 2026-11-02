@@ -281,6 +281,9 @@ func raiseDepartureGateSignals(
 			}
 		case veapplication.DepartureGateSignalRuleNotConfigured:
 			// 租户没登记这一类信号规则：如实不形成，入账。等不来——规则登记不会回头触发这封信。
+		case veapplication.DepartureGateSignalCaseNumberingCollided:
+			// 自动建案的案件单据号撞号：命中已记进案件撞号册，等租户换格式由重驱再分诊；这封信入账，投影照落。整封回滚重放
+			// 改变不了结果，只会占着分区烧到 ABANDONED、连同命中一起丢掉。
 		case veapplication.DepartureGateSignalDeferred:
 			return fmt.Errorf("%w: object %q", ErrDepartureGateSignalUndecided, finding.Object())
 		default:

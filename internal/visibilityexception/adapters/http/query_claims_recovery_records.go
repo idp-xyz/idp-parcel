@@ -144,24 +144,26 @@ func serveClaimItems(
 	bodies := make([]claimItemBody, 0, len(rows))
 	for _, row := range rows {
 		body := claimItemBody{
-			Batch:            row.Batch,
-			ItemID:           row.ItemID,
-			Customer:         row.Customer,
-			Applicant:        row.Applicant,
-			Contract:         row.Contract,
-			Target:           row.Target,
-			Kind:             row.Kind,
-			Revision:         row.Revision,
-			SubmittedAt:      catalogueInstant(row.SubmittedAt),
-			Screen:           row.Screen,
-			ScreenBasis:      row.ScreenBasis,
-			MissingMaterials: row.MissingMaterials,
-			SupplementScope:  row.SupplementScope,
-			SupplementNotice: row.SupplementNotice,
-			DeadlineVersions: row.DeadlineVersions,
-			Conclusion:       row.Conclusion,
-			PriorConclusion:  row.PriorConclusion,
-			Withdrawn:        row.Withdrawn,
+			Batch:                 row.Batch,
+			ItemID:                row.ItemID,
+			DocumentNumber:        row.DocumentNumber,
+			DocumentNumberAbsence: row.DocumentNumberAbsence,
+			Customer:              row.Customer,
+			Applicant:             row.Applicant,
+			Contract:              row.Contract,
+			Target:                row.Target,
+			Kind:                  row.Kind,
+			Revision:              row.Revision,
+			SubmittedAt:           catalogueInstant(row.SubmittedAt),
+			Screen:                row.Screen,
+			ScreenBasis:           row.ScreenBasis,
+			MissingMaterials:      row.MissingMaterials,
+			SupplementScope:       row.SupplementScope,
+			SupplementNotice:      row.SupplementNotice,
+			DeadlineVersions:      row.DeadlineVersions,
+			Conclusion:            row.Conclusion,
+			PriorConclusion:       row.PriorConclusion,
+			Withdrawn:             row.Withdrawn,
 		}
 		if row.SupplementDeadline != nil {
 			body.SupplementDeadline = catalogueInstant(*row.SupplementDeadline)
@@ -198,15 +200,16 @@ func serveRecoveryMatters(
 	bodies := make([]recoveryMatterBody, 0, len(rows))
 	for _, row := range rows {
 		body := recoveryMatterBody{
-			MatterID:     row.MatterID,
-			CaseID:       row.CaseID,
-			Counterparty: row.Counterparty,
-			Scope:        row.Scope,
-			Basis:        row.Basis,
-			LegalEntity:  row.LegalEntity,
-			Evidence:     row.Evidence,
-			OpenedAt:     catalogueInstant(row.OpenedAt),
-			Deadline:     catalogueInstant(row.Deadline),
+			MatterID:           row.MatterID,
+			CaseID:             row.CaseID,
+			CaseDocumentNumber: row.CaseDocumentNumber,
+			Counterparty:       row.Counterparty,
+			Scope:              row.Scope,
+			Basis:              row.Basis,
+			LegalEntity:        row.LegalEntity,
+			Evidence:           row.Evidence,
+			OpenedAt:           catalogueInstant(row.OpenedAt),
+			Deadline:           catalogueInstant(row.Deadline),
 		}
 		if row.PreliminaryNotice != nil {
 			body.PreliminaryNotice = recoveryActionBodyOf(*row.PreliminaryNotice)
@@ -262,29 +265,34 @@ type claimItemListResponse struct {
 // 客户撤回登记，撤回不删行。首次索赔期限（首索期限如何裁决）在项行上没有登记格，
 // 结构上不存在（票 06 Comments 记明）。材料收讫册（0021）是资格审核的证据面，
 // 不在本页三签之列，未透出。
+//
+// documentNumber / documentNumberAbsence 同异常案件那一行（exceptionCaseBody）。batch 与 itemId 是客户自己的批次号与项标识，
+// 单据号不取代它们。
 type claimItemBody struct {
-	Batch              string `json:"batch"`
-	ItemID             string `json:"itemId"`
-	Customer           string `json:"customer"`
-	Applicant          string `json:"applicant,omitempty"`
-	Contract           string `json:"contract"`
-	Target             string `json:"target"`
-	Kind               string `json:"kind"`
-	SubmittedAt        string `json:"submittedAt"`
-	Revision           int64  `json:"revision"`
-	Screen             string `json:"screen,omitempty"`
-	ScreenBasis        string `json:"screenBasis,omitempty"`
-	MissingMaterials   string `json:"missingMaterials,omitempty"`
-	SupplementScope    string `json:"supplementScope,omitempty"`
-	SupplementNotice   string `json:"supplementNotice,omitempty"`
-	SupplementDeadline string `json:"supplementDeadline,omitempty"`
-	DeadlineVersions   int64  `json:"deadlineVersions"`
-	Conclusion         string `json:"conclusion,omitempty"`
-	ConcludedAt        string `json:"concludedAt,omitempty"`
-	ReviewBy           string `json:"reviewBy,omitempty"`
-	PriorConclusion    string `json:"priorConclusion,omitempty"`
-	Withdrawn          bool   `json:"withdrawn"`
-	WithdrawnAt        string `json:"withdrawnAt,omitempty"`
+	Batch                 string `json:"batch"`
+	ItemID                string `json:"itemId"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	Customer              string `json:"customer"`
+	Applicant             string `json:"applicant,omitempty"`
+	Contract              string `json:"contract"`
+	Target                string `json:"target"`
+	Kind                  string `json:"kind"`
+	SubmittedAt           string `json:"submittedAt"`
+	Revision              int64  `json:"revision"`
+	Screen                string `json:"screen,omitempty"`
+	ScreenBasis           string `json:"screenBasis,omitempty"`
+	MissingMaterials      string `json:"missingMaterials,omitempty"`
+	SupplementScope       string `json:"supplementScope,omitempty"`
+	SupplementNotice      string `json:"supplementNotice,omitempty"`
+	SupplementDeadline    string `json:"supplementDeadline,omitempty"`
+	DeadlineVersions      int64  `json:"deadlineVersions"`
+	Conclusion            string `json:"conclusion,omitempty"`
+	ConcludedAt           string `json:"concludedAt,omitempty"`
+	ReviewBy              string `json:"reviewBy,omitempty"`
+	PriorConclusion       string `json:"priorConclusion,omitempty"`
+	Withdrawn             bool   `json:"withdrawn"`
+	WithdrawnAt           string `json:"withdrawnAt,omitempty"`
 }
 
 type recoveryMatterListResponse struct {
@@ -297,19 +305,20 @@ type recoveryMatterListResponse struct {
 // preliminaryNotice / formalAssertion 各取该类行动的最新一节（行动序列 0004 追加，
 // attempt 递增），缺席即该类行动尚未发生。对方响应与对外责任结论在事项与行动两表
 // 都没有登记格，结构上不存在（票 06 Comments 记明）——追偿的对外结论要等结论类
-// 登记进来，不由查阅面替谈判结果下判断。
+// 登记进来，不由查阅面替谈判结果下判断。caseDocumentNumber 是关联案件的单据号，没有就缺席。
 type recoveryMatterBody struct {
-	MatterID          string              `json:"matterId"`
-	CaseID            string              `json:"caseId"`
-	Counterparty      string              `json:"counterparty"`
-	Scope             string              `json:"scope"`
-	Basis             string              `json:"basis"`
-	LegalEntity       string              `json:"legalEntity"`
-	Evidence          string              `json:"evidence"`
-	Deadline          string              `json:"deadline"`
-	OpenedAt          string              `json:"openedAt"`
-	PreliminaryNotice *recoveryActionBody `json:"preliminaryNotice,omitempty"`
-	FormalAssertion   *recoveryActionBody `json:"formalAssertion,omitempty"`
+	MatterID           string              `json:"matterId"`
+	CaseID             string              `json:"caseId"`
+	CaseDocumentNumber string              `json:"caseDocumentNumber,omitempty"`
+	Counterparty       string              `json:"counterparty"`
+	Scope              string              `json:"scope"`
+	Basis              string              `json:"basis"`
+	LegalEntity        string              `json:"legalEntity"`
+	Evidence           string              `json:"evidence"`
+	Deadline           string              `json:"deadline"`
+	OpenedAt           string              `json:"openedAt"`
+	PreliminaryNotice  *recoveryActionBody `json:"preliminaryNotice,omitempty"`
+	FormalAssertion    *recoveryActionBody `json:"formalAssertion,omitempty"`
 }
 
 type recoveryActionBody struct {

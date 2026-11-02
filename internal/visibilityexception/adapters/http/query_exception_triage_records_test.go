@@ -259,20 +259,21 @@ func TestExceptionTriageRecordsListDispositionRequestsVerbatim(t *testing.T) {
 	reader := &triageReaderDouble{
 		requests: []ports.DispositionRequestCatalogueRow{
 			{
-				RequestID:        "request-1",
-				CaseID:           "case-1",
-				TargetContext:    "transport-fulfillment",
-				Action:           "HOLD",
-				Scope:            "parcel-1",
-				Reason:           "damage suspected",
-				Evidence:         "evidence/1",
-				IntentVersion:    2,
-				SentAt:           operationsBaseAt,
-				AcceptanceWindow: &window,
-				Judgment:         "PARTIALLY_ACCEPTED",
-				JudgedAt:         &judgedAt,
-				Cancellation:     "CANCELLED_CONFIRMED",
-				SupersededBy:     "request-2",
+				RequestID:          "request-1",
+				CaseID:             "case-1",
+				CaseDocumentNumber: "EX-20260801-0001",
+				TargetContext:      "transport-fulfillment",
+				Action:             "HOLD",
+				Scope:              "parcel-1",
+				Reason:             "damage suspected",
+				Evidence:           "evidence/1",
+				IntentVersion:      2,
+				SentAt:             operationsBaseAt,
+				AcceptanceWindow:   &window,
+				Judgment:           "PARTIALLY_ACCEPTED",
+				JudgedAt:           &judgedAt,
+				Cancellation:       "CANCELLED_CONFIRMED",
+				SupersededBy:       "request-2",
 			},
 			{
 				RequestID:     "request-3",
@@ -296,17 +297,18 @@ func TestExceptionTriageRecordsListDispositionRequestsVerbatim(t *testing.T) {
 	var body struct {
 		Outcome  string `json:"outcome"`
 		Requests []struct {
-			RequestID        string `json:"requestId"`
-			CaseID           string `json:"caseId"`
-			TargetContext    string `json:"targetContext"`
-			Action           string `json:"action"`
-			IntentVersion    int64  `json:"intentVersion"`
-			SentAt           string `json:"sentAt"`
-			AcceptanceWindow any    `json:"acceptanceWindow"`
-			Judgment         any    `json:"judgment"`
-			JudgedAt         any    `json:"judgedAt"`
-			Cancellation     any    `json:"cancellation"`
-			SupersededBy     any    `json:"supersededBy"`
+			RequestID          string `json:"requestId"`
+			CaseID             string `json:"caseId"`
+			CaseDocumentNumber any    `json:"caseDocumentNumber"`
+			TargetContext      string `json:"targetContext"`
+			Action             string `json:"action"`
+			IntentVersion      int64  `json:"intentVersion"`
+			SentAt             string `json:"sentAt"`
+			AcceptanceWindow   any    `json:"acceptanceWindow"`
+			Judgment           any    `json:"judgment"`
+			JudgedAt           any    `json:"judgedAt"`
+			Cancellation       any    `json:"cancellation"`
+			SupersededBy       any    `json:"supersededBy"`
 		} `json:"requests"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -326,6 +328,9 @@ func TestExceptionTriageRecordsListDispositionRequestsVerbatim(t *testing.T) {
 		t.Fatalf("已判断行走样：%+v", judged)
 	}
 	pending := body.Requests[1]
+	if judged.CaseDocumentNumber != "EX-20260801-0001" || pending.CaseDocumentNumber != nil {
+		t.Fatalf("所属案件的单据号走样（没号时不得拿案件标识顶）：%+v / %+v", judged, pending)
+	}
 	// 尚无答复的请求：judgment/cancellation/supersededBy 全缺席——部分接受也是四走向
 	// 之一，读面不把「还没答」演成任何一种。
 	if pending.RequestID != "request-3" || pending.Judgment != nil ||

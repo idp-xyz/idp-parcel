@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
@@ -34,6 +36,11 @@ type transactionalClaims struct {
 
 var _ visibilityhttp.ClaimReceiver = transactionalClaims{}
 
+// errDiscardIssuing 让受理事务回滚而答案照交：编排取到了索赔单据号却没落下索赔（DiscardIssuing），提交就把那个号留成
+// 空号（ADR-0355 决定三）。
+var errDiscardIssuing = errors.New("parcel-api: the claim was not recorded, roll back the issued document number")
+
+// ReceiveClaim 是索赔受理的开立事务：取号与落索赔同一笔（ADR-0355 决定三），编排说本轮取了号却没落单时回滚。
 func (claims transactionalClaims) ReceiveClaim(
 	ctx context.Context,
 	command visibilityapp.ReceiveClaimCommand,
@@ -45,9 +52,12 @@ func (claims transactionalClaims) ReceiveClaim(
 			return handleErr
 		}
 		result = handled
+		if handled.DiscardIssuing() {
+			return errDiscardIssuing
+		}
 		return nil
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, errDiscardIssuing) {
 		return visibilityapp.HandleClaimResult{}, err
 	}
 	return result, nil
@@ -86,10 +96,20 @@ func (claims transactionalClaims) ScreenClaim(
 // 资格缝的首次索赔期限与最低材料两维由消费侧适配器叠在 VE 自己的册上、从 PC 客户服务
 // 规则正文读（票 ve-claims-read-seams/03）；按哪一版读，由目标包裹所属委托接受时固定的商业
 // 解析回指决定（ADR-0136），装配见 buildClaimEligibilityRules。
-func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
+//
+// 索赔单据号经 numbers 的取号编排取（ADR-0355 决定四）：numbers 必须是在同一个 db 上装的那一套，受理事务由 db 的
+// 事务器开，取号在里面才认得出事务归属。
+func buildClaimsOrchestration(db *bentopg.DB, numbers docnumbering.Components) (transactionalClaims, error) {
 	claimStore, err := vepostgres.NewClaims(db)
 	if err != nil {
 		return transactionalClaims{}, fmt.Errorf("parcel-api: claim store: %w", err)
+	}
+	if numbers.Assigner == nil {
+		return transactionalClaims{}, errors.New("parcel-api: claims need the document numbering components")
+	}
+	claimNumbers, err := vepostgres.NewDocumentNumbers(db, numbers.Assigner)
+	if err != nil {
+		return transactionalClaims{}, fmt.Errorf("parcel-api: claim document numbers: %w", err)
 	}
 	clock := systemClock{}
 	eligibility, err := buildClaimEligibilityRules(db)
@@ -117,13 +137,14 @@ func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
 		return transactionalClaims{}, fmt.Errorf("parcel-api: liability handoff: %w", err)
 	}
 	handler := visibilityapp.NewHandleClaimHandler(visibilityapp.HandleClaimDeps{
-		Claims:      claimStore,
-		Eligibility: eligibility,
-		Evidence:    evidence,
-		Recoveries:  recoveries,
-		Identities:  identities,
-		Settlement:  settlement,
-		Clock:       clock,
+		Claims:       claimStore,
+		ClaimNumbers: claimNumbers,
+		Eligibility:  eligibility,
+		Evidence:     evidence,
+		Recoveries:   recoveries,
+		Identities:   identities,
+		Settlement:   settlement,
+		Clock:        clock,
 	})
 	return transactionalClaims{transactor: db.Transactor(), inner: handler}, nil
 }

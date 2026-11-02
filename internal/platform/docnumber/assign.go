@@ -57,8 +57,9 @@ const (
 	// 无号原因记「单据编号时区未配置」（ADR-0355 决定七）；序列一个值也没动。
 	NumberingTimeZoneNotConfigured AssignmentOutcome = "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
 	// NumberingRuleCollision：从序列取了 MaxSkippedNumbers 个值，渲染出的号全都已用（ADR-0355 决定八）。这一次开立
-	// 不落单，调用方必须回滚开立事务：取过的那些值都没出号，事务一提交它们就全成了空号，而决定三只许随单落定的跳号
-	// 成为空号。回滚连同它们一起释放，下一次开立还会撞上同一段，直到规则册换了格式——这正是要页面指到规则册的原因。
+	// 不落单，调用方必须让取过的流水不提交：回滚开立事务，或在取号那一步包保存点只退号。取过的那些值都没出号，随事务
+	// 提交就全成了空号，而决定三只许随单落定的跳号成为空号。退回之后下一次开立还会撞上同一段，直到规则册换了格式——
+	// 这正是要页面指到规则册的原因。
 	NumberingRuleCollision AssignmentOutcome = "NUMBERING_RULE_COLLISION"
 )
 
@@ -125,7 +126,7 @@ func NewAssigner(deps AssignerDeps) (*Assigner, error) {
 // 算周期 → 经平台序列取（租户，类型代码，周期）的下一个值 → 渲染 → 经调用方的「是否已用」判撞，撞了取下一个值。
 //
 // 调用方按答案办：取到号就随单落库；答单据编号时区未配置，单据照常开立、不带号，记无号原因；答编号规则撞号或交回
-// 错误，必须回滚开立事务——撞号时已取的流水只有回滚才释放（见 NumberingRuleCollision）。
+// 错误，必须让取过的流水不提交：回滚开立事务，或在取号那一步包保存点只退号（见 NumberingRuleCollision）。
 //
 // 先判事务、后读规则：单据编号时区未配置那一格不碰序列，若放在事务判之前，事务外调用就会在那一格上「成功」，
 // 而同一个调用方换个租户才失败。

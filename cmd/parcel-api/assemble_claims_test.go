@@ -17,6 +17,7 @@ import (
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
@@ -40,7 +41,7 @@ func TestTheWiredClaimsAnswerHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	claims, err := buildClaimsOrchestration(db)
+	claims, err := buildClaimsOrchestration(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配索赔编排：%v", err)
 	}
@@ -227,7 +228,7 @@ func TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment(t *te
 	scope := mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-1")
 
 	// 生产装配本身就是被测对象：`buildClaimsOrchestration` 接的读面与 `buildClaimEligibilityRules` 同一份。
-	claims, err := buildClaimsOrchestration(db)
+	claims, err := buildClaimsOrchestration(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配索赔编排：%v", err)
 	}

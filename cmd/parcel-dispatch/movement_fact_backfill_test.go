@@ -430,7 +430,11 @@ func redeliveryParts(t *testing.T, fixture *synVerticalFixture) (*tenantBoundPro
 	if err != nil {
 		t.Fatalf("构造 Outbox Store：%v", err)
 	}
-	derive, err := newTenantBoundProjectionDerive(fixture.db, store, systemClock{})
+	numbers, err := buildDocumentNumbers(fixture.db, dispatchSettings{})
+	if err != nil {
+		t.Fatalf("构造编号组件：%v", err)
+	}
+	derive, err := newTenantBoundProjectionDerive(fixture.db, store, systemClock{}, numbers)
 	if err != nil {
 		t.Fatalf("构造派生：%v", err)
 	}

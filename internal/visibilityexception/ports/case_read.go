@@ -69,21 +69,25 @@ type SignalEpisodeFactBasisRow struct {
 // SupersededBy 在场即这行已被替代——替代不是删除（0005），原请求与其判断原样在册，
 // 版本链因此完整可见。实际执行结果不在本册：那是目标上下文按事实返回的东西，行内
 // 没有它的字段。
+//
+// CaseDocumentNumber 是请求所属案件的单据号，按（租户，案件标识）从案件册上带过来：页面拿它指认案件，案件标识进技术
+// 详情。案件没有单据号（上线前开立、时区未配置）或案件册上没有这件时是空串，不拿案件标识顶。
 type DispositionRequestCatalogueRow struct {
-	RequestID        string
-	CaseID           string
-	TargetContext    string
-	Action           string
-	Scope            string
-	Reason           string
-	Evidence         string
-	IntentVersion    int64
-	SentAt           time.Time
-	AcceptanceWindow *time.Time
-	Judgment         string
-	JudgedAt         *time.Time
-	Cancellation     string
-	SupersededBy     string
+	RequestID          string
+	CaseID             string
+	CaseDocumentNumber string
+	TargetContext      string
+	Action             string
+	Scope              string
+	Reason             string
+	Evidence           string
+	IntentVersion      int64
+	SentAt             time.Time
+	AcceptanceWindow   *time.Time
+	Judgment           string
+	JudgedAt           *time.Time
+	Cancellation       string
+	SupersededBy       string
 }
 
 // ExceptionCaseCatalogueRow 是异常案件册上列的一行：案件身份、根对象、影响范围、
@@ -95,17 +99,22 @@ type DispositionRequestCatalogueRow struct {
 // 条件、严重度、处置优先级与响应周期（首次响应之外的时限版本）在存储上没有登记格
 // ——0008 刻意只落精简主生命周期，工作条件多一格就等于默许扩成互斥主状态；本行
 // 不带那几键，也不代填（票 06 Comments 记明）。
+//
+// DocumentNumber 是案件的单据号（ADR-0355）；没有号时为空串，DocumentNumberAbsence 说为什么（domain.DocumentNumberAbsence 的
+// 封闭两值：上线前开立、开立时单据编号时区未配置），有号时 DocumentNumberAbsence 为空串。
 type ExceptionCaseCatalogueRow struct {
-	CaseID          string
-	RootParcel      string
-	ImpactScope     string
-	ResponsibleTeam string
-	Phase           string
-	EstablishedAt   time.Time
-	FirstResponse   *time.Time
-	ClosedAt        *time.Time
-	Conclusion      string
-	MergedInto      string
+	CaseID                string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	RootParcel            string
+	ImpactScope           string
+	ResponsibleTeam       string
+	Phase                 string
+	EstablishedAt         time.Time
+	FirstResponse         *time.Time
+	ClosedAt              *time.Time
+	Conclusion            string
+	MergedInto            string
 }
 
 // NotificationMilestoneNode 是通知过程的一个节点：封闭六值（GENERATED /
@@ -152,29 +161,34 @@ type CustomerNotificationCatalogueRow struct {
 // 页面「首次索赔期限」栏在存储上没有登记格（行上只有提交时刻与结论复核截止，首次
 // 索赔期限是合同侧口径），本行不带那一键（票 06 Comments 记明）。**没有金额键**是
 // 边界不是遗漏：赔付与追偿金额由 settlement-accounting 形成，本上下文只有索赔项本体。
+//
+// DocumentNumber 与 DocumentNumberAbsence 同 ExceptionCaseCatalogueRow。Batch 与 ItemID 是客户自己的批次号与项标识（外部
+// 标识），单据号不取代它们。
 type ClaimItemCatalogueRow struct {
-	Batch              string
-	ItemID             string
-	Customer           string
-	Applicant          string
-	Contract           string
-	Target             string
-	Kind               string
-	SubmittedAt        time.Time
-	Revision           int64
-	Screen             string
-	ScreenBasis        string
-	MissingMaterials   string
-	SupplementScope    string
-	SupplementNotice   string
-	SupplementDeadline *time.Time
-	DeadlineVersions   int64
-	Conclusion         string
-	ConcludedAt        *time.Time
-	ReviewBy           *time.Time
-	PriorConclusion    string
-	Withdrawn          bool
-	WithdrawnAt        *time.Time
+	Batch                 string
+	ItemID                string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	Customer              string
+	Applicant             string
+	Contract              string
+	Target                string
+	Kind                  string
+	SubmittedAt           time.Time
+	Revision              int64
+	Screen                string
+	ScreenBasis           string
+	MissingMaterials      string
+	SupplementScope       string
+	SupplementNotice      string
+	SupplementDeadline    *time.Time
+	DeadlineVersions      int64
+	Conclusion            string
+	ConcludedAt           *time.Time
+	ReviewBy              *time.Time
+	PriorConclusion       string
+	Withdrawn             bool
+	WithdrawnAt           *time.Time
 }
 
 // RecoveryActionCell 是追偿事项行上某一动作种类的最近过程节点：节点封闭七值
@@ -195,18 +209,21 @@ type RecoveryActionCell struct {
 // 过程节点逐行历史属详情读口，列面只取最近。页面「对方响应」与「外部责任结论」两栏
 // 在存储上没有登记格（0004 的事项行与动作行都没有响应/结论列），本行不带那两键，
 // 也不把「无响应」代判成拒绝（票 06 Comments 记明）。
+//
+// CaseDocumentNumber 同 DispositionRequestCatalogueRow：关联案件的单据号，没有就是空串。
 type RecoveryMatterCatalogueRow struct {
-	MatterID          string
-	CaseID            string
-	Counterparty      string
-	Scope             string
-	Basis             string
-	LegalEntity       string
-	Evidence          string
-	Deadline          time.Time
-	OpenedAt          time.Time
-	PreliminaryNotice *RecoveryActionCell
-	FormalAssertion   *RecoveryActionCell
+	MatterID           string
+	CaseID             string
+	CaseDocumentNumber string
+	Counterparty       string
+	Scope              string
+	Basis              string
+	LegalEntity        string
+	Evidence           string
+	Deadline           time.Time
+	OpenedAt           time.Time
+	PreliminaryNotice  *RecoveryActionCell
+	FormalAssertion    *RecoveryActionCell
 }
 
 // TriageReviewRead 是异常分诊与处置协调页（exception-triage）的伴生列表读端口。

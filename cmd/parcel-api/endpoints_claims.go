@@ -25,7 +25,7 @@ func init() {
 			},
 		},
 		build: func(sources endpointSources) (claimsWiring, error) {
-			claims, err := buildClaimsOrchestration(sources.db)
+			claims, err := buildClaimsOrchestration(sources.db, sources.documentNumbers)
 			if err != nil {
 				return claimsWiring{claims: claims}, err
 			}

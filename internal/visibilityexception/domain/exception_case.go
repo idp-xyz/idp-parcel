@@ -368,8 +368,12 @@ func (phase CasePhase) String() string {
 
 // ExceptionCase 是围绕同一因果链和处置范围建立的业务案件。根对象与版本化影响范围
 // 在建立时固定；归并关闭保留原案件（关联主案件，历史不删不重置）。
+//
+// 单据号随建立固定（CONTEXT「异常案件」：建立案件时取得案件单据号）：本类型上没有改它的方法，接单、关闭、归并都不碰
+// 它，于是「重开不换号」「归并不改两边各自的号」由结构担保；拆出的关联新案件走 EstablishCase，自然取新号。
 type ExceptionCase struct {
 	id            CaseID
+	number        DocumentNumber
 	root          TrackedParcelReference
 	scope         ImpactScopeReference
 	team          ResponsibleTeamReference
@@ -381,19 +385,24 @@ type ExceptionCase struct {
 	mergedInto    CaseID
 }
 
-// EstablishCase 建立案件：固定根对象、初始影响范围与责任团队，主状态待响应。
+// EstablishCase 建立案件：固定单据号、根对象、初始影响范围与责任团队，主状态待响应。
+//
+// 单据号那一格必须是开立这一刻形成的（取到的号，或单据编号时区未配置）：零值是「上线前开立」，新建案件带着它就把
+// 「这次没取号」说成了「上线前开立」。
 func EstablishCase(
 	id CaseID,
+	number DocumentNumber,
 	root TrackedParcelReference,
 	scope ImpactScopeReference,
 	team ResponsibleTeamReference,
 	at time.Time,
 ) (*ExceptionCase, error) {
-	if !id.valid() || !root.valid() || !scope.valid() || !team.valid() || at.IsZero() {
+	if !id.valid() || !number.issuedAtOpening() || !root.valid() || !scope.valid() || !team.valid() || at.IsZero() {
 		return nil, ErrInvalidCase
 	}
 	return &ExceptionCase{
 		id:            id,
+		number:        number,
 		root:          root,
 		scope:         scope,
 		team:          team,
@@ -404,6 +413,11 @@ func EstablishCase(
 
 func (exceptionCase *ExceptionCase) ID() CaseID {
 	return exceptionCase.id
+}
+
+// DocumentNumber 交回案件的单据号那一格（ADR-0355）。
+func (exceptionCase *ExceptionCase) DocumentNumber() DocumentNumber {
+	return exceptionCase.number
 }
 
 func (exceptionCase *ExceptionCase) Phase() CasePhase {
@@ -427,31 +441,33 @@ func (exceptionCase *ExceptionCase) MergedInto() (CaseID, bool) {
 // ExceptionCaseSnapshot 是持久化层落案件所需的全量状态。与 SignalEpisodeSnapshot 同一
 // 形状纪律：已发生的事实（建立、接单、关闭、归并）随快照携带，不由持久化层重演转移。
 type ExceptionCaseSnapshot struct {
-	ID            CaseID
-	Root          TrackedParcelReference
-	Scope         ImpactScopeReference
-	Team          ResponsibleTeamReference
-	Phase         CasePhase
-	EstablishedAt time.Time
-	FirstResponse time.Time
-	ClosedAt      time.Time
-	Conclusion    string
-	MergedInto    CaseID
+	ID             CaseID
+	DocumentNumber DocumentNumber
+	Root           TrackedParcelReference
+	Scope          ImpactScopeReference
+	Team           ResponsibleTeamReference
+	Phase          CasePhase
+	EstablishedAt  time.Time
+	FirstResponse  time.Time
+	ClosedAt       time.Time
+	Conclusion     string
+	MergedInto     CaseID
 }
 
 // Snapshot 折出案件的全量状态供持久化。
 func (exceptionCase *ExceptionCase) Snapshot() ExceptionCaseSnapshot {
 	return ExceptionCaseSnapshot{
-		ID:            exceptionCase.id,
-		Root:          exceptionCase.root,
-		Scope:         exceptionCase.scope,
-		Team:          exceptionCase.team,
-		Phase:         exceptionCase.phase,
-		EstablishedAt: exceptionCase.establishedAt,
-		FirstResponse: exceptionCase.firstResponse,
-		ClosedAt:      exceptionCase.closedAt,
-		Conclusion:    exceptionCase.conclusion,
-		MergedInto:    exceptionCase.mergedInto,
+		ID:             exceptionCase.id,
+		DocumentNumber: exceptionCase.number,
+		Root:           exceptionCase.root,
+		Scope:          exceptionCase.scope,
+		Team:           exceptionCase.team,
+		Phase:          exceptionCase.phase,
+		EstablishedAt:  exceptionCase.establishedAt,
+		FirstResponse:  exceptionCase.firstResponse,
+		ClosedAt:       exceptionCase.closedAt,
+		Conclusion:     exceptionCase.conclusion,
+		MergedInto:     exceptionCase.mergedInto,
 	}
 }
 

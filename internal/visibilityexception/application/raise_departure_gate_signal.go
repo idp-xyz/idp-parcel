@@ -13,8 +13,9 @@ import (
 // 走到未受理只能是实现坏了；上抛而不吸收成某一格。
 var ErrUnexpectedDepartureGateSignalOutcome = errors.New("visibility exception: unexpected departure gate signal outcome")
 
-// DepartureGateSignalOutcome 是一件被阻断出发对象在信号这一步落到了哪里。三格的恢复动作各不相同：已进分诊什么都不必做；
-// 规则未配置等租户登记 `PAR-VIS-04`；搁置的要整封重放（规则视图调不通，或分诊那一侧本轮停在未决）。
+// DepartureGateSignalOutcome 是一件被阻断出发对象在信号这一步落到了哪里。各格的恢复动作各不相同：已进分诊什么都不必做；
+// 规则未配置等租户登记 `PAR-VIS-04`；搁置的要整封重放（规则视图调不通，或分诊那一侧本轮停在未决）；案件单据号撞号的等
+// 租户换格式，命中已记进案件撞号册、由重驱再分诊，信封入账。
 type DepartureGateSignalOutcome uint8
 
 const (
@@ -22,6 +23,9 @@ const (
 	DepartureGateSignalRaised
 	DepartureGateSignalRuleNotConfigured
 	DepartureGateSignalDeferred
+	// DepartureGateSignalCaseNumberingCollided：分诊走向是自动建案，案件单据号撞号（RaiseSignal 的 CaseNumberingCollided）。
+	// 单独一格而不折进搁置：搁置整封重放会自愈，这一格重放多少次都一样，折进去就是占着分区烧到 ABANDONED。
+	DepartureGateSignalCaseNumberingCollided
 )
 
 func (outcome DepartureGateSignalOutcome) String() string {
@@ -32,6 +36,8 @@ func (outcome DepartureGateSignalOutcome) String() string {
 		return "SIGNAL_RULE_NOT_CONFIGURED"
 	case DepartureGateSignalDeferred:
 		return "SIGNAL_DEFERRED"
+	case DepartureGateSignalCaseNumberingCollided:
+		return "CASE_NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -127,6 +133,9 @@ func (handler *RaiseDepartureGateSignalHandler) Handle(
 		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalRaised, handoffRef: raised.HandoffReference()}, nil
 	case RaiseSignalUndecided:
 		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalDeferred}, nil
+	case CaseNumberingCollided:
+		// 撞上的格式记在案件撞号册上（重驱的日志会带出来），这一格不另带一份。
+		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalCaseNumberingCollided}, nil
 	default:
 		return RaiseDepartureGateSignalResult{}, fmt.Errorf("%w: %q", ErrUnexpectedDepartureGateSignalOutcome, raised.Outcome())
 	}

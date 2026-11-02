@@ -117,16 +117,9 @@ func (signals tenantBoundDepartureGateSignals) Handle(
 		return veapplication.RaiseDepartureGateSignalResult{}, err
 	}
 	handler, err := veapplication.NewRaiseDepartureGateSignalHandler(veapplication.RaiseDepartureGateSignalDeps{
-		Rules: rules,
-		Signals: veapplication.NewRaiseSignalHandler(veapplication.RaiseSignalDeps{
-			Episodes:   derive.episodes,
-			Triage:     triage,
-			Identities: derive.episodeIdentities,
-			Cases:      derive.caseIdentities,
-			Downstream: derive.triageHandoff,
-			Clock:      derive.clock,
-		}),
-		Clock: derive.clock,
+		Rules:   rules,
+		Signals: derive.signalsFor(triage),
+		Clock:   derive.clock,
 	})
 	if err != nil {
 		return veapplication.RaiseDepartureGateSignalResult{}, err

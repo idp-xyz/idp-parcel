@@ -35,10 +35,19 @@ const (
 	SignalEpisodeReopened
 	RaiseSignalUndecided
 	RaiseSignalNotAccepted
+	// CaseNumberingCollided：走向是`自动建案`，案件单据号却撞上已用的号到了跳号上限（ADR-0355 决定八）。这一轮发作期、
+	// 结论与案件一样都不落——结论「自动建案」与案件必须同一提交；命中记进案件撞号册（ports.CaseNumberingCollisionRecorder），
+	// 由重驱（CaseNumberingRedrive）等规则册换了格式再分诊。
+	//
+	// 它是业务答案，不是未决：未决等的是依赖回来，原样重投会自愈；撞号等的是人去「设置 → 单据编号」换格式，重投多少次都
+	// 一样。做成未决，信封就占着分区重投到失败预算耗尽、落 ABANDONED，命中跟着丢——所以调用方按它入账，恢复交给撞号册。
+	CaseNumberingCollided
 )
 
 func (outcome RaiseSignalOutcome) String() string {
 	switch outcome {
+	case CaseNumberingCollided:
+		return "CASE_NUMBERING_RULE_COLLISION"
 	case SignalEpisodeOpened:
 		return "EPISODE_OPENED"
 	case SignalHitRecorded:
@@ -152,6 +161,10 @@ type RaiseSignalDeps struct {
 	Triage     ports.TriageRuleView
 	Identities ports.SignalEpisodeIdentityFactory
 	Cases      ports.CaseIdentityFactory
+	// CaseNumbers 为自动建立的案件取单据号；只在走向为`自动建案`的那一轮调。
+	CaseNumbers ports.CaseNumberIssuer
+	// Collisions 是案件撞号册：每一轮开头锁住这一原因在册上的那一行，撞号时记下那一次命中。
+	Collisions ports.CaseNumberingCollisionRecorder
 	Downstream ports.TriageHandoff
 	Clock      ports.Clock
 }
@@ -167,8 +180,8 @@ func NewRaiseSignalHandler(deps RaiseSignalDeps) *RaiseSignalHandler {
 // Handle 把一次信号命中推进到发作期与分诊：受理（命中事实缺一即未受理，不读依赖）→
 // 按对象+类型+因果条件找最近发作期 → 活跃则记命中不建重复、不重新分诊、不重复建案 → 已结束或
 // 无既往则分诊（规则未配置即人工复核格，如实不自动建案）→ 开启或重开（重开指回前
-// 发作期）→ 走向为`自动建案`时建立案件（根对象取信号对象、责任团队取规则条目登记的
-// 那个、主状态待响应）→ 发作期、分诊结论与案件同一提交 → 发布意图。
+// 发作期）→ 走向为`自动建案`时取案件单据号并建立案件（根对象取信号对象、责任团队取规则条目登记的
+// 那个、主状态待响应；单据号撞号则整轮不落、命中记进撞号册）→ 发作期、分诊结论与案件同一提交 → 发布意图。
 //
 // 信号与案件始终是两个对象（CONTEXT）：案件有自己的标识与生命周期，这里只做「结论说
 // 建案就当场建」这一步，接单、关闭、归并与重开都不在本编排；关联既有案件那一走向
@@ -181,6 +194,14 @@ func (handler *RaiseSignalHandler) Handle(
 	// 先判命中事实再读依赖：规则版本、可信度、因果条件或事实依据立不起来的输入构不成信号，而一次已经发出的查询收不回来。
 	if command.TenantID.String() == "" || !command.hit().Complete() {
 		return RaiseSignalResult{outcome: RaiseSignalNotAccepted}, nil
+	}
+
+	// 先锁这一原因在案件撞号册上的那一行（若有），再找发作期：重驱与正常命中对同一原因交叠时，后到的要等先到的提交后再看
+	// 发作期，才不会两边都以为「没有发作期」各开一期、各立一案（ports.CaseNumberingCollisionRecorder）。
+	if err := handler.deps.Collisions.HoldCaseNumberingCollision(ctx, ports.CaseNumberingCollisionKey{
+		Tenant: command.TenantID, Parcel: command.Parcel, Kind: command.Kind, Cause: command.Cause,
+	}); err != nil {
+		return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 	}
 
 	latest, found, err := handler.deps.Episodes.FindLatestForCause(
@@ -249,7 +270,27 @@ func (handler *RaiseSignalHandler) Handle(
 
 	var exceptionCase *domain.ExceptionCase
 	if verdict.outcome == domain.AutoEstablishCase {
-		exceptionCase, err = establishCaseFor(caseID, command.Parcel, verdict.team, now)
+		// 单据号在建案这一步、写库之前取（CONTEXT「异常案件」：建立案件时在同一事务内取得）：走向已定、标识已签、发作期与
+		// 结论都已立起，往下只剩落库——取号排在这里，答业务答案却照常提交的分支里就没有已取的号。人工立案日后也只经
+		// EstablishCase 一个门，取号随门走，不另开一处。
+		issue, err := handler.deps.CaseNumbers.IssueCaseNumber(ctx, command.TenantID)
+		if err != nil {
+			return RaiseSignalResult{}, fmt.Errorf("issue case document number: %w", err)
+		}
+		number, collided, err := documentNumberOf(issue)
+		if err != nil {
+			return RaiseSignalResult{}, err
+		}
+		if collided {
+			// 取号那一步已把取过的流水退回；这里只把命中记下，本轮别的都不落。
+			if err := handler.deps.Collisions.RecordCaseNumberingCollision(ctx, ports.CaseNumberingCollision{
+				Tenant: command.TenantID, Hit: command.hit(), Template: issue.Template, At: now,
+			}); err != nil {
+				return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
+			}
+			return RaiseSignalResult{outcome: CaseNumberingCollided}, nil
+		}
+		exceptionCase, err = establishCaseFor(caseID, number, command.Parcel, verdict.team, now)
 		if err != nil {
 			return RaiseSignalResult{}, err
 		}
@@ -348,6 +389,7 @@ func (handler *RaiseSignalHandler) triage(
 // 硬句），这一格没有任何东西可供推导。
 func establishCaseFor(
 	id domain.CaseID,
+	number domain.DocumentNumber,
 	root domain.TrackedParcelReference,
 	team domain.ResponsibleTeamReference,
 	at time.Time,
@@ -356,7 +398,7 @@ func establishCaseFor(
 	if err != nil {
 		return nil, fmt.Errorf("fix initial impact scope: %w", err)
 	}
-	exceptionCase, err := domain.EstablishCase(id, root, scope, team, at)
+	exceptionCase, err := domain.EstablishCase(id, number, root, scope, team, at)
 	if err != nil {
 		return nil, fmt.Errorf("establish exception case: %w", err)
 	}

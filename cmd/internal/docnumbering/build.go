@@ -20,8 +20,8 @@ type Components struct {
 	Registrations Registrations
 	// Reader 答规则册的读与预览，不读也不占序列。
 	Reader *docnumber.Reader
-	// Assigner 是取号编排。开立单据的上下文经自己的消费侧端口接它，在开立事务的 ctx 里调；收到撞号或错误必须回滚
-	// 开立事务（见 docnumber.NumberingRuleCollision）。
+	// Assigner 是取号编排。开立单据的上下文经自己的消费侧端口接它，在开立事务的 ctx 里调；收到撞号或错误必须让取过的
+	// 流水不提交：回滚开立事务，或在取号那一步包保存点只退号（见 docnumber.NumberingRuleCollision）。
 	Assigner *docnumber.Assigner
 }
 

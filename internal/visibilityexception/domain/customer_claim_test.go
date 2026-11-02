@@ -13,14 +13,15 @@ var claimSubmittedAt = time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
 func receivedClaim(t *testing.T) *domain.ClaimItem {
 	t.Helper()
 	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
-		ID:          mustValue(t, domain.NewClaimItemID, "claim-1"),
-		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
-		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
-		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
-		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
-		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1"),
-		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
-		SubmittedAt: claimSubmittedAt,
+		ID:             mustValue(t, domain.NewClaimItemID, "claim-1"),
+		Batch:          mustValue(t, domain.NewClaimBatchReference, "batch-1"),
+		DocumentNumber: documentNumber(t, "CLM-202608-00001"),
+		Customer:       mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:      mustValue(t, domain.NewApplicantReference, "applicant-1"),
+		Contract:       mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
+		Target:         mustValue(t, domain.NewRequestScopeReference, "parcel-1"),
+		Kind:           mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
+		SubmittedAt:    claimSubmittedAt,
 	})
 	if err != nil {
 		t.Fatalf("receive claim item: %v", err)
@@ -40,13 +41,14 @@ func TestAClaimCarriesItsApplicantAndLegacyRowsRebuildWithoutOne(t *testing.T) {
 	}
 
 	missing := domain.ClaimItemSpec{
-		ID:          mustValue(t, domain.NewClaimItemID, "claim-2"),
-		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
-		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
-		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
-		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-2"),
-		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
-		SubmittedAt: claimSubmittedAt,
+		ID:             mustValue(t, domain.NewClaimItemID, "claim-2"),
+		Batch:          mustValue(t, domain.NewClaimBatchReference, "batch-1"),
+		DocumentNumber: documentNumber(t, "CLM-202608-00002"),
+		Customer:       mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:       mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
+		Target:         mustValue(t, domain.NewRequestScopeReference, "parcel-2"),
+		Kind:           mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
+		SubmittedAt:    claimSubmittedAt,
 	}
 	if _, err := domain.ReceiveClaimItem(missing); !errors.Is(err, domain.ErrInvalidClaim) {
 		t.Fatalf("err = %v; 不带申请人的提交被受理了", err)

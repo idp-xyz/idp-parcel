@@ -253,13 +253,14 @@ func (double *liabilityDownstreamDouble) HandOffLiability(
 }
 
 type claimFixture struct {
-	handler     *application.HandleClaimHandler
-	claims      *claimStoreDouble
-	eligibility *eligibilityRuleDouble
-	evidence    *evidenceViewDouble
-	recoveries  *recoveryStoreDouble
-	identities  *recoveryIdentityDouble
-	settlement  *liabilityDownstreamDouble
+	handler      *application.HandleClaimHandler
+	claims       *claimStoreDouble
+	claimNumbers *documentNumberDouble
+	eligibility  *eligibilityRuleDouble
+	evidence     *evidenceViewDouble
+	recoveries   *recoveryStoreDouble
+	identities   *recoveryIdentityDouble
+	settlement   *liabilityDownstreamDouble
 }
 
 // registeredRules 是每一维都登记齐备、且事实都对得上的那份规则：合同覆盖该类型、
@@ -297,7 +298,8 @@ func registeredRules(t *testing.T) ports.EligibilityRules {
 func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 	fixture := &claimFixture{
-		claims: newClaimStore(),
+		claims:       newClaimStore(),
+		claimNumbers: newDocumentNumbers("CLM-202608"),
 		eligibility: &eligibilityRuleDouble{
 			rules:    registeredRules(t),
 			declared: true,
@@ -308,13 +310,14 @@ func newClaimFixture(t *testing.T) *claimFixture {
 		settlement: &liabilityDownstreamDouble{},
 	}
 	fixture.handler = application.NewHandleClaimHandler(application.HandleClaimDeps{
-		Claims:      fixture.claims,
-		Eligibility: fixture.eligibility,
-		Evidence:    fixture.evidence,
-		Recoveries:  fixture.recoveries,
-		Identities:  fixture.identities,
-		Settlement:  fixture.settlement,
-		Clock:       fixedClock{at: claimSubmittedAt.Add(time.Hour)},
+		Claims:       fixture.claims,
+		ClaimNumbers: fixture.claimNumbers,
+		Eligibility:  fixture.eligibility,
+		Evidence:     fixture.evidence,
+		Recoveries:   fixture.recoveries,
+		Identities:   fixture.identities,
+		Settlement:   fixture.settlement,
+		Clock:        fixedClock{at: claimSubmittedAt.Add(time.Hour)},
 	})
 	return fixture
 }
@@ -1058,13 +1061,14 @@ func TestAReviewAfterTheWindowIsRefusedKeepingTheOriginalConclusion(t *testing.T
 	late := newClaimFixture(t)
 	late.claims = fixture.claims
 	late.handler = application.NewHandleClaimHandler(application.HandleClaimDeps{
-		Claims:      fixture.claims,
-		Eligibility: fixture.eligibility,
-		Evidence:    fixture.evidence,
-		Recoveries:  fixture.recoveries,
-		Identities:  fixture.identities,
-		Settlement:  fixture.settlement,
-		Clock:       fixedClock{at: claimSubmittedAt.Add(2 * time.Hour)},
+		Claims:       fixture.claims,
+		ClaimNumbers: fixture.claimNumbers,
+		Eligibility:  fixture.eligibility,
+		Evidence:     fixture.evidence,
+		Recoveries:   fixture.recoveries,
+		Identities:   fixture.identities,
+		Settlement:   fixture.settlement,
+		Clock:        fixedClock{at: claimSubmittedAt.Add(2 * time.Hour)},
 	})
 	result, err := late.handler.ReviewClaim(ctx, application.ReviewClaimCommand{
 		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
@@ -1275,14 +1279,15 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 	ctx := context.Background()
 
 	winner, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
-		ID:          mustValue(t, domain.NewClaimItemID, "item-1"),
-		Batch:       mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
-		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
-		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
-		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
-		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
-		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
-		SubmittedAt: claimSubmittedAt.Add(-time.Hour),
+		ID:             mustValue(t, domain.NewClaimItemID, "item-1"),
+		Batch:          mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		DocumentNumber: claimDocumentNumber(t, "CLM-202608-00099"),
+		Customer:       mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:      mustValue(t, domain.NewApplicantReference, "applicant-1"),
+		Contract:       mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:         mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+		Kind:           mustValue(t, domain.NewClaimKindReference, "LOSS"),
+		SubmittedAt:    claimSubmittedAt.Add(-time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("构造赢家索赔：%v", err)
@@ -1303,6 +1308,10 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 	}
 	if !claim.SubmittedAt().Equal(claimSubmittedAt.Add(-time.Hour)) {
 		t.Fatalf("交出的是本方那份而不是赢家：submittedAt = %v", claim.SubmittedAt())
+	}
+	// 本方取到的号没随单落下：答赢家与赢家的号，并要调用方回滚把本方那个号退回去（ADR-0355 决定三）。
+	if number, _ := claim.DocumentNumber().Number(); number != "CLM-202608-00099" || !result.DiscardIssuing() {
+		t.Fatalf("number = %q discard = %v", number, result.DiscardIssuing())
 	}
 }
 
