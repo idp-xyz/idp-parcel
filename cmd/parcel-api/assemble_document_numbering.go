@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberhttp"
 )
 
-// documentNumberingHandlers 是规则册四口（ADR-0355 决定六）装好的处理器。
+// documentNumberingHandlers 是规则册各口（ADR-0355 决定六）装好的处理器。
 type documentNumberingHandlers struct {
 	read                 http.Handler
 	preview              http.Handler
@@ -19,7 +19,7 @@ type documentNumberingHandlers struct {
 	timeZoneRegistration http.Handler
 }
 
-// buildDocumentNumberingHandlers 装规则册四口。规则册不属任何限界上下文，认证件由本特性从生产共享的操作者铸造器自建
+// buildDocumentNumberingHandlers 装规则册各口。规则册不属任何限界上下文，认证件由本特性从生产共享的操作者铸造器自建
 // （同基础数据目录）：读口与预览口挂主数据与运营查阅读，两个登记口挂登记册配置写；都不判准入范围——登记一行不形成
 // 生产事实（ADR-0100 决定四）。共享接入身份的答复格译成 docnumberhttp 的格这一步放在组合根：platform 不得导入
 // accessidentity。编号组件本身由 assembleProductionEndpoints 装一次、经 endpointSources 交来，开立单据的特性取同一套。

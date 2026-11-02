@@ -121,7 +121,7 @@ type endpointSources struct {
 	customerClientMinter *accessidentity.CustomerClientMinter
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），价卡登记口与草稿发布口共读这一格。
 	registerNewerCanonicalization bool
-	// documentNumbers 是编号组件（ADR-0355 决定四、六）：规则册四口与各类单据的开立取同一套，规则册、序列与开立事务
+	// documentNumbers 是编号组件（ADR-0355 决定四、六）：规则册各口与各类单据的开立取同一套，规则册、序列与开立事务
 	// 都在上面那个 db 上。
 	documentNumbers docnumbering.Components
 }

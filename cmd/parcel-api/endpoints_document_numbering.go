@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// 单据编号规则册四口（ADR-0355 决定六）：规则册是编号技术组件的配置，不属任何限界上下文，所以不经 endpointChannels 里
+// 单据编号规则册各口（ADR-0355 决定六）：规则册是编号技术组件的配置，不属任何限界上下文，所以不经 endpointChannels 里
 // 某个上下文的 Intake，认证件由本特性从生产共享的操作者铸造器自建（ownIntake），装配测试里恒为未配置即拒；授予、凭证与
 // 租户取自信封的用例在 assemble_document_numbering_test.go 对真铸造器另证。预览口不写册、不占号，同试算挂查阅读。
 

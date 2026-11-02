@@ -80,7 +80,7 @@ func documentNumberingBody(t *testing.T, response *httptest.ResponseRecorder) ma
 	return body
 }
 
-// Covers: ADR-0355 决定六、ADR-0100 决定四、ADR-0055——四口接在操作者渠道上：发行方未配置答未配置；没带令牌答凭证被拒；
+// Covers: ADR-0355 决定六、ADR-0100 决定四、ADR-0055——规则册各口接在操作者渠道上：发行方未配置答未配置；没带令牌答凭证被拒；
 // 读口与预览口只认查阅读授予、登记口只认登记写授予，持另一面授予的答未授予。
 func TestDocumentNumberingEndpointsAnswerFromTheOperatorChannel(t *testing.T) {
 	db := documentNumberingDB(t)

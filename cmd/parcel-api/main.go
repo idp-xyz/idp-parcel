@@ -301,7 +301,7 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return nil, err
 	}
-	// 编号组件（ADR-0355 决定四、六）在这里装一次：规则册四口与开立单据的各特性取同一套。
+	// 编号组件（ADR-0355 决定四、六）在这里装一次：规则册各口与开立单据的各特性取同一套。
 	documentNumbers, err := docnumbering.Build(db, startup.scrambleSecrets)
 	if err != nil {
 		return nil, err
