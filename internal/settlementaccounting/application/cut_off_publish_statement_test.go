@@ -139,6 +139,8 @@ func (double *inclusionStoreDouble) Save(
 type disputeStoreDouble struct {
 	records map[string]ports.DisputeRecord
 	findErr error
+	// raceWinner 不为空时，下一次 Replace 先把它落成库上的那一份再答 false：读与写之间另一人先落了终局。
+	raceWinner *ports.DisputeRecord
 }
 
 func newDisputeStore() *disputeStoreDouble {
@@ -176,6 +178,11 @@ func (double *disputeStoreDouble) Replace(
 	record ports.DisputeRecord,
 ) (bool, error) {
 	if _, exists := double.records[disputeKey(record.Key)]; !exists {
+		return false, nil
+	}
+	if winner := double.raceWinner; winner != nil {
+		double.raceWinner = nil
+		double.records[disputeKey(record.Key)] = *winner
 		return false, nil
 	}
 	double.records[disputeKey(record.Key)] = record
@@ -620,6 +627,51 @@ func TestDisputesAreIndependentAndResolvedOnce(t *testing.T) {
 			t.Fatalf("outcome = %q, want DISPUTE_ALREADY_RESOLVED（终局不二裁）", again.Outcome())
 		}
 	})
+}
+
+// Covers: AT-SA-229（编排半边）——读到未处理、写时另一人已落终局：答已处理并交回那一份终局，不答未受理；处理人记成操作证据，
+// 登记人那一格不被处理改写。
+func TestAResolutionLosingTheRaceToAFinalAnswersAlreadyResolved(t *testing.T) {
+	fixture := newStatementFixture(t)
+	if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	tenant, _ := domain.NewTenantID("tenant-1")
+	opened, err := fixture.handler.OpenDispute(context.Background(), application.OpenDisputeCommand{
+		TenantID: tenant, Dispute: "dispute-race", Number: "STMT-2026-08-001", ChargeID: "charge-A",
+		DisputedMinor: 100, Reason: "weight", OpenedAt: statementPublishAt.Add(time.Hour), OperationEvidence: "OPERATOR/iss#clerk",
+	})
+	if err != nil || opened.Outcome() != application.DisputeOpened {
+		t.Fatalf("open: %v %q", err, opened.Outcome())
+	}
+	record, _ := opened.Dispute()
+	if record.OperationEvidence != "OPERATOR/iss#clerk" {
+		t.Fatalf("登记人没记下：%+v", record)
+	}
+
+	winnerDispute, err := record.Dispute.Resolve(domain.DisputeRejected,
+		billValue(t, domain.NewDisputeBasisReference, "first-finance"), statementPublishAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	winner := record
+	winner.Dispute = winnerDispute
+	winner.ResolutionEvidence = "OPERATOR/iss#finance-a"
+	fixture.disputes.raceWinner = &winner
+
+	late, err := fixture.handler.ResolveDispute(context.Background(), application.ResolveDisputeCommand{
+		TenantID: tenant, Dispute: "dispute-race", Kind: domain.DisputeAccepted, Basis: "second-finance",
+		ResolvedAt: statementPublishAt.Add(3 * time.Hour), OperationEvidence: "OPERATOR/iss#finance-b",
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	got, has := late.Dispute()
+	kind, _, _, _ := got.Dispute.Resolution()
+	if late.Outcome() != application.DisputeAlreadyResolved || !has || kind != domain.DisputeRejected ||
+		got.ResolutionEvidence != "OPERATOR/iss#finance-a" || got.OperationEvidence != "OPERATOR/iss#clerk" {
+		t.Fatalf("outcome = %q，交回 %+v", late.Outcome(), got)
+	}
 }
 
 // Covers: ADR-0029（依赖故障归未决且指名等谁）、ADR-0031（写入代数封闭）与 ADR-0043

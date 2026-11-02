@@ -189,7 +189,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 （`POST /node-operations/collaboration-executions`），不需要另一种操作者授予，要的是在用设备、作业范围授予与这一节登的事实类型 `NODE_COLLABORATION_EXECUTION`
 的准入对照。种子不作任何承接、不登记任何执行事实。证据只记 `S`。
 
-配置员另持四种结算运营决定（ADR-0339 决定一、二，ADR-0340 决定一、二）：「费用确认」发向 `POST /settlement-charge-confirmations`，点名一笔客户费用补拍确认；「对账单发布」发向 `/settlement-statement-publications`，列一期费用、报合计发布一张客户对账单；「供应商账单接收」发向 `/settlement-supplier-bill-receptions`，照来件录一份供应商账单并逐行裁决匹配；「审核应付」发向 `/settlement-supplier-bill-audits`，对一行形成审核应付。四种分开授予，授予、准入对照与权威区间由步骤 `510` 登（`data/access/34`、`35`，`data/governance/69`–`72`）；查阅员答 `403 OPERATOR_NOT_GRANTED`。确认与截单两口先过结算时点门，演示租户两个时点都采用了；登了日截周期，dispatch 在每天上海 18:00 截单时刻之后，把刚关上的那一期自动截成一张单。
+配置员另持四种结算运营决定（ADR-0339 决定一、二，ADR-0340 决定一、二）：「费用确认」发向 `POST /settlement-charge-confirmations`，点名一笔客户费用补拍确认；「对账单发布」发向 `/settlement-statement-publications`，列一期费用、报合计发布一张客户对账单；「供应商账单接收」发向 `/settlement-supplier-bill-receptions`，照来件录一份供应商账单并逐行裁决匹配；「审核应付」发向 `/settlement-supplier-bill-audits`，对一行形成审核应付。四种分开授予，授予、准入对照与权威区间由步骤 `510` 登（`data/access/34`、`35`，`data/governance/69`–`72`）；客户对账单争议另有两种（ADR-0353）：「登记争议」发向 `/settlement-statement-disputes`，照客户来电或来信代登记一项争议，「处理争议」发向 `/settlement-statement-dispute-resolutions`，核实后处理成接受、部分接受、拒绝或待复核，两种也分开授予、也由步骤 `510` 登（`data/governance/75`、`76`）；查阅员答 `403 OPERATOR_NOT_GRANTED`。确认与截单两口先过结算时点门，演示租户两个时点都采用了；登了日截周期，dispatch 在每天上海 18:00 截单时刻之后，把刚关上的那一期自动截成一张单。
 
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。

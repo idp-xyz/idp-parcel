@@ -822,6 +822,11 @@ type DisputeRecord struct {
 	ContentDigest string
 	Dispute       domain.StatementDispute
 	RecordedAt    time.Time
+	// OperationEvidence 记经哪个渠道、由谁代登记这一项争议；ResolutionEvidence 记由谁形成当前那一次处理（运营决定口是
+	// `OPERATOR/<发行方>#<sub>`，ADR-0353 决定四）。只作审计：不进摘要、不进重放比对，也不进任何门；编排直调与存量行为空，
+	// 读作「这一份不记提交方」。待复核再处理时 ResolutionEvidence 跟着裁定三件一起换成后一位，前一位不留。
+	OperationEvidence  string
+	ResolutionEvidence string
 }
 
 type DisputeSaveOutcome uint8

@@ -46,6 +46,8 @@ const (
 	StatementUndecided
 	StatementNoChargeInPeriod
 	StatementCutUnconfigured
+	// DisputeOnVoidedStatement：对一张已作废的单登记争议（ADR-0353 决定三）。是答案不是故障：单已不应继续有效，异议要对着替代单提。
+	DisputeOnVoidedStatement
 )
 
 func (outcome StatementOutcome) String() string {
@@ -92,6 +94,8 @@ func (outcome StatementOutcome) String() string {
 		return "NO_CHARGE_IN_PERIOD"
 	case StatementCutUnconfigured:
 		return "STATEMENT_CUT_UNCONFIGURED"
+	case DisputeOnVoidedStatement:
+		return "STATEMENT_VOIDED_TAKES_NO_DISPUTE"
 	default:
 		return ""
 	}
@@ -228,6 +232,9 @@ type OpenDisputeCommand struct {
 	DisputedMinor int64
 	Reason        string
 	OpenedAt      time.Time
+	// OperationEvidence 记经哪个渠道、由谁代登记（运营决定口是 `OPERATOR/<发行方>#<sub>`，ADR-0353 决定四）。只作审计：不进摘要、
+	// 不进重放比对；编排直调与存量行为空。
+	OperationEvidence string
 }
 
 // ResolveDisputeCommand 携带异议裁定。
@@ -237,6 +244,8 @@ type ResolveDisputeCommand struct {
 	Kind       domain.DisputeResolutionKind
 	Basis      string
 	ResolvedAt time.Time
+	// OperationEvidence 记由谁形成这一次处理，判据同 OpenDisputeCommand 的同名格。
+	OperationEvidence string
 }
 
 type StatementResult struct {
@@ -791,6 +800,9 @@ func (handler *CutOffPublishStatementHandler) OpenDispute(
 
 	dispute, err := domain.OpenStatementDispute(
 		statementRecord.Statement, chargeID, command.DisputedMinor, reason, disputeID, command.OpenedAt)
+	if errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
+		return StatementResult{outcome: DisputeOnVoidedStatement}, nil
+	}
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
@@ -811,7 +823,10 @@ func (handler *CutOffPublishStatementHandler) OpenDispute(
 		return StatementResult{outcome: DisputeExistingResult, dispute: existing, hasRecord: true}, nil
 	}
 
-	record := ports.DisputeRecord{Key: key, ContentDigest: digest, Dispute: dispute, RecordedAt: handler.deps.Clock.Now()}
+	record := ports.DisputeRecord{
+		Key: key, ContentDigest: digest, Dispute: dispute, RecordedAt: handler.deps.Clock.Now(),
+		OperationEvidence: command.OperationEvidence,
+	}
 	saved, err := handler.deps.Disputes.Save(ctx, record)
 	if err != nil {
 		return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
@@ -864,12 +879,22 @@ func (handler *CutOffPublishStatementHandler) ResolveDispute(
 
 	existing.Dispute = resolved
 	existing.RecordedAt = handler.deps.Clock.Now()
+	existing.ResolutionEvidence = command.OperationEvidence
 	ok, err := handler.deps.Disputes.Replace(ctx, existing)
 	if err != nil {
 		return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
 	}
 	if !ok {
-		return StatementResult{outcome: StatementNotAccepted}, nil
+		// 读与写之间另一人先落了终局：库上的条件挡住了这一笔，答那一份终局，与读时就已终局同一个答案——不答未受理，
+		// 那会让后到的人以为自己的输入有错。
+		winner, found, err := handler.deps.Disputes.FindByKey(ctx, key)
+		if err != nil || !found {
+			return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
+		}
+		if kind, _, _, resolved := winner.Dispute.Resolution(); resolved && kind != domain.DisputePendingReview {
+			return StatementResult{outcome: DisputeAlreadyResolved, dispute: winner, hasRecord: true}, nil
+		}
+		return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
 	}
 	return StatementResult{outcome: DisputeResolvedOutcome, dispute: existing, hasRecord: true}, nil
 }

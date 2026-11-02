@@ -15,6 +15,8 @@ type settlementDecisionsWiring struct {
 	publisher settlementhttp.StatementPublisher
 	receiver  settlementhttp.SupplierBillReceiver
 	auditor   settlementhttp.SupplierBillAuditor
+	opener    settlementhttp.StatementDisputeOpener
+	resolver  settlementhttp.StatementDisputeResolver
 }
 
 func init() {
@@ -32,12 +34,19 @@ func init() {
 			"/settlement-supplier-bill-audits": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionSupplierBillAudit),
 			},
+			"/settlement-statement-disputes": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStatementDisputeRegistration),
+			},
+			"/settlement-statement-dispute-resolutions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStatementDisputeResolution),
+			},
 		},
 		build: func(sources endpointSources) (settlementDecisionsWiring, error) {
 			orchestrations, err := buildSettlementOrchestrations(sources.db)
 			return settlementDecisionsWiring{
 				confirmer: orchestrations, publisher: orchestrations,
 				receiver: supplierBillReceiver{orchestrations}, auditor: supplierBillAuditor{orchestrations},
+				opener: orchestrations, resolver: orchestrations,
 			}, err
 		},
 		mount: func(channels endpointChannels, wiring settlementDecisionsWiring) []httpapi.BusinessEndpoint {
@@ -49,6 +58,9 @@ func init() {
 				// 供应商账单接收口与审核口（ADR-0340 决定一、二）：进的是同一只接收编排，审核是它的 Audit。
 				{Pattern: "/settlement-supplier-bill-receptions", Handler: settlementhttp.NewReceiveSupplierBillEndpoint(channels.operatorDecisions.settlement, wiring.receiver)},
 				{Pattern: "/settlement-supplier-bill-audits", Handler: settlementhttp.NewAuditSupplierBillEndpoint(channels.operatorDecisions.settlement, wiring.auditor)},
+				// 登记争议口与处理争议口（ADR-0353 决定一、二）：进的是截单编排上的开立与处理，各包一笔事务，不过结算时点那一道门。
+				{Pattern: "/settlement-statement-disputes", Handler: settlementhttp.NewRegisterStatementDisputeEndpoint(channels.operatorDecisions.settlement, wiring.opener)},
+				{Pattern: "/settlement-statement-dispute-resolutions", Handler: settlementhttp.NewResolveStatementDisputeEndpoint(channels.operatorDecisions.settlement, wiring.resolver)},
 			}
 		},
 	})

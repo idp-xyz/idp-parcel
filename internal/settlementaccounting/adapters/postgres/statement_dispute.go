@@ -40,18 +40,19 @@ func (repository *StatementDisputes) FindByKey(
 	var statement, charge, reason, digest string
 	var disputed int64
 	var openedAt, recordedAt time.Time
-	var resolution, resolutionRef *string
+	var resolution, resolutionRef, openedBy, resolvedBy *string
 	var resolvedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT statement_number, charge_id, disputed_minor, reason_ref, opened_at,
-		        resolution, resolution_ref, resolved_at, content_digest, recorded_at
+		        resolution, resolution_ref, resolved_at, content_digest, recorded_at,
+		        operation_evidence, resolution_evidence
 		   FROM settlement_accounting.statement_dispute
 		  WHERE tenant_id = $1
 		    AND dispute_id = $2`,
 		key.TenantID.String(),
 		key.Dispute.String(),
 	).Scan(&statement, &charge, &disputed, &reason, &openedAt,
-		&resolution, &resolutionRef, &resolvedAt, &digest, &recordedAt)
+		&resolution, &resolutionRef, &resolvedAt, &digest, &recordedAt, &openedBy, &resolvedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DisputeRecord{}, false, nil
 	}
@@ -64,10 +65,12 @@ func (repository *StatementDisputes) FindByKey(
 		return ports.DisputeRecord{}, false, fmt.Errorf("find statement dispute: %w", err)
 	}
 	return ports.DisputeRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Dispute:       dispute,
-		RecordedAt:    recordedAt.UTC(),
+		Key:                key,
+		ContentDigest:      digest,
+		Dispute:            dispute,
+		RecordedAt:         recordedAt.UTC(),
+		OperationEvidence:  catalogueText(openedBy),
+		ResolutionEvidence: catalogueText(resolvedBy),
 	}, true, nil
 }
 
@@ -86,8 +89,8 @@ func (repository *StatementDisputes) Save(
 		`INSERT INTO settlement_accounting.statement_dispute
 			(tenant_id, dispute_id, statement_number, charge_id, disputed_minor,
 			 reason_ref, opened_at, resolution, resolution_ref, resolved_at,
-			 content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 content_digest, recorded_at, operation_evidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Dispute.String(),
@@ -101,6 +104,7 @@ func (repository *StatementDisputes) Save(
 		optionalTime(resolvedAt, resolved),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalText(record.OperationEvidence),
 	)
 	if err != nil {
 		return ports.DisputeSaveOutcomeInvalid, fmt.Errorf("save statement dispute: %w", err)
@@ -123,7 +127,7 @@ var finalDisputeResolutions = func() []string {
 	return words
 }()
 
-// Replace 只承担裁定：UPDATE 只写裁定三列与 digest/recorded_at。对账单号、费用、
+// Replace 只承担裁定：UPDATE 只写裁定三列、处理人的操作证据与 digest/recorded_at。对账单号、费用、
 // 争议金额不在语句里。WHERE 允许未裁定或非终局的处理（待复核）再处理；终局答 false。
 func (repository *StatementDisputes) Replace(
 	ctx context.Context,
@@ -142,7 +146,7 @@ func (repository *StatementDisputes) Replace(
 	tag, err := executor.Exec(ctx,
 		`UPDATE settlement_accounting.statement_dispute
 		    SET resolution = $3, resolution_ref = $4, resolved_at = $5,
-		        content_digest = $6, recorded_at = $7
+		        content_digest = $6, recorded_at = $7, resolution_evidence = $12
 		  WHERE tenant_id = $1
 		    AND dispute_id = $2
 		    AND statement_number = $8
@@ -160,6 +164,7 @@ func (repository *StatementDisputes) Replace(
 		record.Dispute.Charge().String(),
 		record.Dispute.DisputedMinor(),
 		finalDisputeResolutions,
+		optionalText(record.ResolutionEvidence),
 	)
 	if err != nil {
 		return false, fmt.Errorf("replace statement dispute: %w", err)

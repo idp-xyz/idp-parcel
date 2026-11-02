@@ -6,5 +6,7 @@ func init() {
 		publisher: unwiredStatementPublication{},
 		receiver:  unwiredSupplierBill{},
 		auditor:   unwiredSupplierBill{},
+		opener:    unwiredStatementDisputes{},
+		resolver:  unwiredStatementDisputes{},
 	})
 }
