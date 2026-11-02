@@ -39,7 +39,7 @@ func buildCaseClosure(db *bentopg.DB) (customsDecisionTransaction[customsapp.Clo
 	})
 	return customsDecisionTransaction[customsapp.CloseCustomsCaseCommand, customsapp.CloseCustomsCaseResult]{
 		transactor: db.Transactor(), handle: handler.Handle,
-		undecided: func(result customsapp.CloseCustomsCaseResult) bool {
+		rollBack: func(result customsapp.CloseCustomsCaseResult) bool {
 			return result.Outcome() == customsapp.CloseCaseUndecided
 		},
 	}, nil

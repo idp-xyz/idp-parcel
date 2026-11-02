@@ -48,7 +48,7 @@ func buildReleaseGateVerification(db *bentopg.DB) (customsDecisionTransaction[cu
 	}
 	return customsDecisionTransaction[customsapp.VerifyReleaseGateCommand, customsapp.VerifyReleaseGateResult]{
 		transactor: db.Transactor(), handle: handler.Handle,
-		undecided: func(result customsapp.VerifyReleaseGateResult) bool {
+		rollBack: func(result customsapp.VerifyReleaseGateResult) bool {
 			return result.Outcome() == customsapp.GateVerificationUndecided
 		},
 	}, nil

@@ -487,6 +487,7 @@ const (
 // CustomsCaseStore 按身份键找回并保存案件（写入代数同 ADR-0031）。FindByID 是按铸造
 // 标识的反查读口（ADR-0073 决定五）：提交链写入前核案件存在靠它——库侧
 // customs_case_id_unique 唯一约束现成，范围键的职责收敛为建案幂等（ADR-0069 决定三）。
+// Save 只收单据号已落定的案件（domain.CustomsCase.NumberingSettled）。
 type CustomsCaseStore interface {
 	FindByKey(ctx context.Context, key CustomsCaseKey) (domain.CustomsCase, bool, error)
 	FindByID(ctx context.Context, tenant domain.TenantID, id domain.CustomsCaseID) (domain.CustomsCase, bool, error)
@@ -496,6 +497,33 @@ type CustomsCaseStore interface {
 // CaseIdentityFactory 为新案件签发标识。
 type CaseIdentityFactory interface {
 	MintCaseID(ctx context.Context) (domain.CustomsCaseID, error)
+}
+
+// CaseNumberOutcome 是一次案件取号的答案。
+type CaseNumberOutcome uint8
+
+const (
+	CaseNumberOutcomeInvalid CaseNumberOutcome = iota
+	// CaseNumberAssigned：取到了号，随案件落库。
+	CaseNumberAssigned
+	// CaseNumberingTimeZoneNotConfigured：租户此刻没有生效的单据编号时区。案件照常建立、不带号（ADR-0355 决定七）。
+	CaseNumberingTimeZoneNotConfigured
+	// CaseNumberingRuleCollision：按此刻生效的规则连取到上限个号都已被用过（ADR-0355 决定八）。这一次建案不落单，
+	// 事务必须回滚——取过的流水只有回滚才释放。
+	CaseNumberingRuleCollision
+)
+
+// CaseNumberAssignment 是一次案件取号的结果；Number 只在 CaseNumberAssigned 时非空。
+type CaseNumberAssignment struct {
+	Outcome CaseNumberOutcome
+	Number  string
+}
+
+// CaseDocumentNumbers 是建案取单据号的消费侧端口（ADR-0025、ADR-0355 决定三）：在建案事务的 ctx 里调，号与案件同一
+// 事务落库，回滚即释放。关务案件的开立方没有业务时区，日期一律按租户的单据编号时区出，所以这里只交租户；判撞查的是
+// 本上下文自己的案件表，由实现接上，编排不经手。交回 error 时事务同样必须回滚。
+type CaseDocumentNumbers interface {
+	AssignCaseNumber(ctx context.Context, tenant domain.TenantID) (CaseNumberAssignment, error)
 }
 
 // CustomsCaseHandoffIntent 把案件建立交给适用下游（申报链与 VE 案件视图消费）。意图

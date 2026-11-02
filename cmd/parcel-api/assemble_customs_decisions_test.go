@@ -3,19 +3,23 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -50,6 +54,8 @@ type customsDecisionFixture struct {
 	db        *bentopg.DB
 	operators *aipg.OperatorRegistry
 	endpoints map[string]http.Handler
+	// numbers 是装进建案编排的那一套编号组件，用例经它的登记口为租户登单据编号时区或规则。
+	numbers docnumbering.Components
 }
 
 // registerOperator 把一个合成操作者绑到演示委托所在的租户，并按给定区间逐种登运营决定授予，交回各笔授予号。断言在事务闭包外。
@@ -137,7 +143,11 @@ func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	faces, err := buildCustomsDecisionFaces(db)
+	numbers, err := docnumbering.Build(db, docnumber.SecretTable{})
+	if err != nil {
+		t.Fatalf("装配编号组件：%v", err)
+	}
+	faces, err := buildCustomsDecisionFaces(db, numbers)
 	if err != nil {
 		t.Fatalf("装配：%v", err)
 	}
@@ -158,7 +168,7 @@ func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 	if len(endpoints) != 3 {
 		t.Fatalf("关务三口没按登记处挂上：%v", endpoints)
 	}
-	return &customsDecisionFixture{db: db, operators: operators, endpoints: endpoints}
+	return &customsDecisionFixture{db: db, operators: operators, endpoints: endpoints, numbers: numbers}
 }
 
 func (fixture *customsDecisionFixture) post(t *testing.T, pattern, operator, body string) (int, map[string]any) {
@@ -430,5 +440,152 @@ func TestExpiredOrRevokedCustomsGrantsNoLongerOpenTheFaces(t *testing.T) {
 	if n := fixture.count(t, `SELECT (SELECT count(*) FROM customs_compliance.customs_case) + (SELECT count(*) FROM customs_compliance.submission_authority)
 		+ (SELECT count(*) FROM customs_compliance.declaration_submission)`); n != 0 {
 		t.Fatalf("过期或撤销的授予写下了 %d 行", n)
+	}
+}
+
+// exec 在一笔事务里执行一句写，要求恰好动了一行——用例直接在库里摆出「换格式之前已发出的号」那种现场。
+func (fixture *customsDecisionFixture) exec(t *testing.T, statement string, args ...any) {
+	t.Helper()
+	var affected int64
+	err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		executor, err := fixture.db.RequireExecutor(txCtx)
+		if err != nil {
+			return err
+		}
+		tag, err := executor.Exec(txCtx, statement, args...)
+		affected = tag.RowsAffected()
+		return err
+	})
+	if err != nil || affected != 1 {
+		t.Fatalf("%s：%v（动了 %d 行）", statement, err, affected)
+	}
+}
+
+// customsCaseBodyFor 是同一件已接受包裹、换一个法定义务范围的建案载荷——范围键换了就是另一个案件。
+func customsCaseBodyFor(obligation string) string {
+	return strings.Replace(customsCaseBody, `"obligation":"SYN-OBL-CN-EXPORT"`, `"obligation":"`+obligation+`"`, 1)
+}
+
+// registerCaseNumbering 经装进建案编排的那一套编号组件为本用例的租户登单据编号时区与一版不带日期的关务案件规则：
+// 号不随测试跑的日子变，撞号用例才能事先占住要撞的那一段。
+func (fixture *customsDecisionFixture) registerCaseNumbering(t *testing.T) {
+	t.Helper()
+	since := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	zone, err := fixture.numbers.Registrations.RegisterTimeZone(t.Context(), docnumber.RegisterTimeZoneCommand{
+		Tenant: customsDecisionTenant, TimeZone: "Asia/Shanghai", EffectiveFrom: since, RegisteredBy: "SYN-TEST-CC07",
+	})
+	if err != nil || zone.Outcome != docnumber.VersionRegistered {
+		t.Fatalf("登单据编号时区：%+v %v", zone, err)
+	}
+	rule, err := fixture.numbers.Registrations.RegisterRule(t.Context(), docnumber.RegisterRuleCommand{
+		Tenant: customsDecisionTenant, Type: ccdomain.CustomsCaseDocumentNumberType.Code, Template: "SYN-CC-{seq:4}",
+		EffectiveFrom: since, RegisteredBy: "SYN-TEST-CC07",
+	})
+	if err != nil || rule.Outcome != docnumber.VersionRegistered {
+		t.Fatalf("登关务案件规则：%+v %v", rule, err)
+	}
+}
+
+// Covers: AT-CC-459、AT-CC-460、AT-CC-461（生产装配半边）；AT-CC-462（生产装配的并发半边）——经生产建案口：租户没登单据编号时区时
+// 照常建案、不带号并答无号情形；登了之后建案在同一事务里取号、答复带号，重放答原号；渲染出的号一路撞到上限答编号规则撞号、
+// 说人话指到规则册、不落案件，事务壳回滚、流水释放（腾出一个号后下一次建案取到的正是它）；同一范围并发建案只落一个案件、
+// 输家答原号，之后的新案件号段连续。
+func TestACaseIsNumberedInItsEstablishingTransactionThroughTheProductionFace(t *testing.T) {
+	fixture := newCustomsDecisionFixture(t)
+	saveAcceptedLabelChannelRequest(t, fixture.db)
+	fixture.registerCaseRequirement(t)
+
+	status, unnumbered := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-0"))
+	if _, numbered := unnumbered["documentNumber"]; status != http.StatusCreated || unnumbered["outcome"] != "ESTABLISHED" || numbered ||
+		unnumbered["documentNumberAbsence"] != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+		t.Fatalf("没登时区的建案：%d %v", status, unnumbered)
+	}
+
+	fixture.registerCaseNumbering(t)
+	status, established := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-1"))
+	if status != http.StatusCreated || established["documentNumber"] != "SYN-CC-0001" {
+		t.Fatalf("建案取号：%d %v", status, established)
+	}
+	if _, absent := established["documentNumberAbsence"]; absent {
+		t.Fatalf("带号的答复还带了无号情形：%v", established)
+	}
+	status, replayed := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-1"))
+	if status != http.StatusOK || replayed["outcome"] != "EXISTING" || replayed["documentNumber"] != "SYN-CC-0001" {
+		t.Fatalf("重放：%d %v", status, replayed)
+	}
+	status, stillUnnumbered := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-0"))
+	if _, numbered := stillUnnumbered["documentNumber"]; status != http.StatusOK || numbered ||
+		stillUnnumbered["documentNumberAbsence"] != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+		t.Fatalf("补登时区之后旧案件被补了号：%d %v", status, stillUnnumbered)
+	}
+
+	// 换格式之前已发出的号恰好占住 SYN-CC-0002 起的整整一段。
+	for i := 2; i <= docnumber.MaxSkippedNumbers+1; i++ {
+		fixture.exec(t, `INSERT INTO customs_compliance.customs_case
+			    (tenant_id, jurisdiction_ref, direction, procedure_ref, obligation_ref, case_id, parcels, roles, established_at, document_number)
+			VALUES ($1, 'SYN-JUR-OLD', 'EXPORT', 'SYN-PROC-OLD', $2, $2,
+			        '[{"parcel":"P-OLD","customer":"SYN-CUSTOMER-LC-RES","sourceRef":"PS/P-OLD"}]', '[]', now(), $3)`,
+			customsDecisionTenant, fmt.Sprintf("SYN-OLD-%02d", i), fmt.Sprintf("SYN-CC-%04d", i))
+	}
+	status, collision := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-2"))
+	detail, _ := collision["detail"].(string)
+	if status != http.StatusOK || collision["outcome"] != "NUMBERING_RULE_COLLISION" || !strings.Contains(detail, "设置 → 单据编号") {
+		t.Fatalf("撞号：%d %v", status, collision)
+	}
+	if _, present := collision["caseId"]; present {
+		t.Fatalf("撞号的答复带了案件：%v", collision)
+	}
+	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.customs_case WHERE tenant_id = $1 AND obligation_ref = 'SYN-OBL-CC07-2'`,
+		customsDecisionTenant); n != 0 {
+		t.Fatalf("撞号落了 %d 个案件", n)
+	}
+	fixture.exec(t, `DELETE FROM customs_compliance.customs_case WHERE tenant_id = $1 AND document_number = 'SYN-CC-0009'`,
+		customsDecisionTenant)
+	status, freed := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-2"))
+	if status != http.StatusCreated || freed["documentNumber"] != "SYN-CC-0009" {
+		t.Fatalf("撞号回滚没释放流水（应从 2 起跳到腾出的 0009）：%d %v", status, freed)
+	}
+
+	const racers = 4
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		answers []map[string]any
+	)
+	for range racers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			request := httptest.NewRequest(http.MethodPost, "/customs-cases", strings.NewReader(customsCaseBodyFor("SYN-OBL-CC07-RACE")))
+			request.Header.Set("Authorization", "Bearer "+customsCaseOfficer)
+			response := httptest.NewRecorder()
+			fixture.endpoints["/customs-cases"].ServeHTTP(response, request)
+			var answer map[string]any
+			_ = json.Unmarshal(response.Body.Bytes(), &answer)
+			mu.Lock()
+			answers = append(answers, answer)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	established = nil
+	for _, answer := range answers {
+		if answer["outcome"] == "ESTABLISHED" {
+			if established != nil {
+				t.Fatalf("同一范围并发建出了两个案件：%v", answers)
+			}
+			established = answer
+		} else if answer["outcome"] != "EXISTING" {
+			t.Fatalf("并发建案：%v", answers)
+		}
+	}
+	for _, answer := range answers {
+		if established == nil || answer["documentNumber"] != established["documentNumber"] {
+			t.Fatalf("并发建案答了不同的号：%v", answers)
+		}
+	}
+	status, next := fixture.post(t, "/customs-cases", customsCaseOfficer, customsCaseBodyFor("SYN-OBL-CC07-NEXT"))
+	if raced, _ := established["documentNumber"].(string); status != http.StatusCreated || raced != "SYN-CC-0022" || next["documentNumber"] != "SYN-CC-0023" {
+		t.Fatalf("并发输家没释放流水：并发那一个 %v，下一个 %d %v", established["documentNumber"], status, next)
 	}
 }
