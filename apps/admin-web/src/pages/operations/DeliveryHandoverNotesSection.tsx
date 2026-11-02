@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ListColumn, TemplateViewState } from '../../templates';
-import { RouteWorkbench } from '../network/route-workbench';
+import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-workbench';
+import { useCustomerNames } from '../shipment-request/use-customer-names';
 import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
@@ -106,21 +107,23 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
       searchCells={(row) => Object.values(row.values)}
       searchPlaceholder="在结果里搜交接单 / 网点 / 客户"
       columns={workbenchColumnsOf(columns, { labelKey: 'state' })}
-      renderDetail={(row, close) => (
-        <div className="h-full overflow-y-auto bg-idpxyz-bg p-4">
-          <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />
-        </div>
-      )}
+      renderDetail={(row, close) => <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />}
       onRefresh={retry}
       viewState={viewState}
     />
   );
 }
 
+/**
+ * 一张交接单的右栏，形状同本区其余几页（事实格 + 正文 + 技术详情）：单子开放还是关闭、送货范围成立没有、几件、客户确认进度是事实格；
+ * 单上自称的每个客户各一行（结论、途径与确认按钮），名下成员一列在正文；交接单号、网点编码、关闭事实、确认人与来源单据、成员的
+ * 事实身份进技术详情。确认是运营决定（送站交接确认，UC-NO-006 步骤 5B），表单在栏内展开。
+ */
 function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onClose: () => void; onLanded: () => void }) {
   const [answer, setAnswer] = useState<ApiResult<DeliveryHandoverNoteFoundResponseBody> | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [draft, setDraft] = useState<ConfirmationDraft | null>(null);
+  const names = useCustomerNames();
   useEffect(() => {
     let cancelled = false;
     void readDeliveryHandoverNote(noteId).then((result) => {
@@ -134,115 +137,97 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
   const note = answer?.kind === 'outcome' ? answer.body : null;
   const claims = note ? claimRowsOf(note.handoverNote) : [];
   const members = note ? note.members.map(handoverMemberRowOf) : [];
+  const row = note ? handoverNoteRowOf(note.handoverNote) : null;
+  const customer = (account: string) => names.get(account) ?? <span className="font-mono">{account}</span>;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          送货交接单 <span className="font-mono">{noteId}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-xs">
-        {answer === null ? <p className="text-idpxyz-textMuted">读取中…</p> : null}
-        {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查看送货交接单" /> : null}
-        {note ? (
-          <>
-            <p className="text-idpxyz-textMuted">
-              {handoverNoteRowOf(note.handoverNote).values.state} · 谁来送{' '}
-              <span className="font-mono">{note.handoverNote.deliveringParty}</span>（只是线索，不影响送货范围的判断）· 送货范围：
-              {handoverNoteRowOf(note.handoverNote).values.scope}
-            </p>
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-idpxyz-textMuted">
-                  <th className="py-1 pr-2 font-normal">自称的客户</th>
-                  <th className="py-1 pr-2 font-normal">结论</th>
-                  <th className="py-1 pr-2 font-normal">途径</th>
-                  <th className="py-1 pr-2 font-normal">谁确认的 · 时间</th>
-                  <th className="py-1 pr-2 font-normal">送货人 · 来源单据</th>
-                  <th className="py-1 font-normal">动作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {claims.map((claim) => (
-                  <tr key={claim.key} className="align-top border-t border-idpxyz-border">
-                    <td className="py-1 pr-2 font-mono">{claim.values.customerAccount}</td>
-                    <td className="py-1 pr-2">{claim.values.conclusion}</td>
-                    <td className="py-1 pr-2">{claim.values.route || '—'}</td>
-                    <td className="py-1 pr-2 font-mono">{claim.values.concluded || '—'}</td>
-                    <td className="py-1 pr-2 font-mono">{claim.values.evidence || '—'}</td>
-                    <td className="py-1">
-                      {claim.confirm.kind === 'available' ? (
-                        <Button
-                          variant="outline"
-                          disabled={draft !== null}
-                          onClick={() => {
-                            if (claim.confirm.kind !== 'available') return;
-                            setDraft({
-                              noteId: claim.confirm.noteId,
-                              customerAccount: claim.confirm.customerAccount,
-                              deliveringParticipant: '',
-                              basis: '',
-                            });
-                          }}
-                        >
-                          确认
-                        </Button>
-                      ) : (
-                        <span className="text-idpxyz-textMuted">{claim.confirm.reason}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {draft ? (
-              <ConfirmationForm
-                draft={draft}
-                onChange={setDraft}
-                onClose={() => setDraft(null)}
-                onLanded={() => {
-                  setReloadKey((value) => value + 1);
-                  onLanded();
-                }}
-              />
-            ) : null}
-            <div>
-              <p className="text-idpxyz-textMuted">名下成员（{members.length}）：收寄带来的与归入的都算；关闭冻结成员</p>
-              {members.length === 0 ? (
-                <p className="text-idpxyz-textMuted">名下还没有作业实物。</p>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-idpxyz-textMuted">
-                      <th className="py-1 pr-2 font-normal">作业实物</th>
-                      <th className="py-1 pr-2 font-normal">形成方式</th>
-                      <th className="py-1 pr-2 font-normal">事实身份</th>
-                      <th className="py-1 font-normal">业务时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {members.map((member) => (
-                      <tr key={member.key} className="border-t border-idpxyz-border">
-                        <td className="py-1 pr-2 font-mono">{member.values.unit}</td>
-                        <td className="py-1 pr-2">{member.values.membership}</td>
-                        <td className="py-1 pr-2 font-mono">{member.values.factId}</td>
-                        <td className="py-1 font-mono">{member.values.formedAt}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </>
-        ) : null}
-        <div>
-          <Button variant="outline" onClick={onClose}>
-            收起
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <RecordDetailPanel
+      title={noteId}
+      status={note ? { label: note.handoverNote.closed ? '已关闭' : '开放', tone: note.handoverNote.closed ? 'muted' : 'info' } : undefined}
+      subtitle="送货交接单"
+      facts={
+        note && row
+          ? [
+              { label: '网点', value: <span className="font-mono">{note.handoverNote.node}</span> },
+              { label: '开单时间', value: row.values.openedAt },
+              { label: '送货范围', value: row.values.scope },
+              { label: '件数', value: row.values.members },
+              { label: '客户确认进度', value: row.values.bindings },
+              { label: '谁来送（只是线索）', value: <span className="font-mono">{note.handoverNote.deliveringParty}</span> },
+            ]
+          : []
+      }
+      technical={techRows([
+        { label: '交接单号', value: noteId },
+        { label: '网点编码', value: note?.handoverNote.node },
+        { label: '关闭事实', value: note?.handoverNote.closureFactId },
+        ...claims.map((claim) => ({ label: `${claim.values.customerAccount} 确认`, value: [claim.values.concluded, claim.values.evidence].filter(Boolean).join(' · ') })),
+        ...members.map((member) => ({ label: `${member.values.unit}`, value: member.values.factId })),
+      ])}
+      onClose={onClose}
+    >
+      {answer === null ? <p>读取中…</p> : null}
+      {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查看送货交接单" /> : null}
+      {note ? (
+        <>
+          <p className="font-medium text-idpxyz-text">自称的客户</p>
+          <ul className="space-y-1.5">
+            {claims.map((claim) => (
+              <li key={claim.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-idpxyz-text">{customer(claim.values.customerAccount)}</span>
+                <span>{claim.values.conclusion}</span>
+                {claim.values.route ? <span>· {claim.values.route}</span> : null}
+                {claim.confirm.kind === 'available' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={draft !== null}
+                    onClick={() => {
+                      if (claim.confirm.kind !== 'available') return;
+                      setDraft({
+                        noteId: claim.confirm.noteId,
+                        customerAccount: claim.confirm.customerAccount,
+                        deliveringParticipant: '',
+                        basis: '',
+                      });
+                    }}
+                  >
+                    确认
+                  </Button>
+                ) : (
+                  <span className="basis-full text-[11px]">{claim.confirm.reason}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {draft ? (
+            <ConfirmationForm
+              draft={draft}
+              onChange={setDraft}
+              onClose={() => setDraft(null)}
+              onLanded={() => {
+                setReloadKey((value) => value + 1);
+                onLanded();
+              }}
+            />
+          ) : null}
+          <p className="font-medium text-idpxyz-text">名下的货（{members.length}）</p>
+          <p>收货带来的与后来归入的都算；单子关闭后不再变。</p>
+          {members.length === 0 ? (
+            <p>名下还没有货。</p>
+          ) : (
+            <ul className="space-y-0.5">
+              {members.map((member) => (
+                <li key={member.key}>
+                  <span className="font-mono text-idpxyz-text">{member.values.unit}</span> · {member.values.membership} ·{' '}
+                  <span className="font-mono">{member.values.formedAt}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+    </RecordDetailPanel>
   );
 }
 

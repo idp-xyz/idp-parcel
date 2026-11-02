@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
 import type { ListColumn, TemplateViewState } from '../../templates';
-import { RouteWorkbench } from '../network/route-workbench';
+import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-workbench';
+import { codeStatus } from '../visibility/exception-list';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
 import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
@@ -107,19 +107,20 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
       searchCells={(row) => Object.values(row.values)}
       searchPlaceholder="在结果里搜预报号 / 客户 / 网点"
       columns={workbenchColumnsOf(columnsWith(names), { labelKey: 'withdrawal' })}
-      renderDetail={(row, close) => (
-        <div className="h-full overflow-y-auto bg-idpxyz-bg p-4">
-          <PreAdviceDetail key={row.preAdviceId} preAdviceId={row.preAdviceId} onClose={close} />
-        </div>
-      )}
+      renderDetail={(row, close) => <PreAdviceDetail key={row.preAdviceId} preAdviceId={row.preAdviceId} onClose={close} />}
       onRefresh={retry}
       viewState={viewState}
     />
   );
 }
 
+/**
+ * 一份预报的右栏，形状同本区其余几页：客户、送到哪个网点、预计几点到、谁来送、撤回了没有是事实格；包裹号清单在正文，逐字显示；
+ * 预报号、客户与网点编码、收到与撤回的时刻进技术详情。
+ */
 function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClose: () => void }) {
   const [answer, setAnswer] = useState<ApiResult<DeliveryPreAdviceFoundResponseBody> | null>(null);
+  const names = useCustomerNames();
   useEffect(() => {
     let cancelled = false;
     void readDeliveryPreAdvice(preAdviceId).then((result) => {
@@ -130,49 +131,46 @@ function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClos
     };
   }, [preAdviceId]);
 
+  const advice = answer?.kind === 'outcome' ? answer.body.preAdvice : null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          客户送货预报 <span className="font-mono">{preAdviceId}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-xs">
-        {answer === null ? <p className="text-idpxyz-textMuted">读取中…</p> : null}
-        {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查看送货预报" /> : null}
-        {answer?.kind === 'outcome' ? (
-          <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1">
-            <dt className="text-idpxyz-textMuted">客户</dt>
-            <dd className="font-mono">{answer.body.preAdvice.customerAccount}</dd>
-            <dt className="text-idpxyz-textMuted">送到哪个网点</dt>
-            <dd className="font-mono">{answer.body.preAdvice.node}</dd>
-            <dt className="text-idpxyz-textMuted">预计送达</dt>
-            <dd className="font-mono">{formatInstant(answer.body.preAdvice.expectedArrivalAt)}</dd>
-            <dt className="text-idpxyz-textMuted">谁来送</dt>
-            <dd className="font-mono">{answer.body.preAdvice.deliveringParty ?? '（没写）——只是线索，不影响送货范围的判断'}</dd>
-            <dt className="text-idpxyz-textMuted">撤回</dt>
-            <dd>
-              {answer.body.preAdvice.withdrawn
-                ? `已撤回${answer.body.preAdvice.withdrawnAt ? ` · ${formatInstant(answer.body.preAdvice.withdrawnAt)}` : ''}——之后收货不再按它认送货范围，之前按它认下的不撤销`
-                : '未撤回'}
-            </dd>
-            <dt className="text-idpxyz-textMuted">客户的包裹号</dt>
-            <dd>
-              <ul className="font-mono">
-                {answer.body.preAdvice.customerParcelNumbers.map((number) => (
-                  <li key={number}>{JSON.stringify(number)}</li>
-                ))}
-              </ul>
-              <span className="text-idpxyz-textMuted">号码逐字保存、逐字比对；带引号显示，好看出多余的空格</span>
-            </dd>
-          </dl>
-        ) : null}
-        <div>
-          <Button variant="outline" onClick={onClose}>
-            收起
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <RecordDetailPanel
+      title={preAdviceId}
+      status={advice ? (advice.withdrawn ? codeStatus('WITHDRAWN') : { label: '未撤回', tone: 'info' }) : undefined}
+      subtitle="客户送货预报"
+      facts={
+        advice
+          ? [
+              { label: '客户', value: names.get(advice.customerAccount) ?? <span className="font-mono">{advice.customerAccount}</span> },
+              { label: '送到哪个网点', value: <span className="font-mono">{advice.node}</span> },
+              { label: '预计送达', value: formatInstant(advice.expectedArrivalAt) },
+              { label: '谁来送', value: advice.deliveringParty ? <span className="font-mono">{advice.deliveringParty}</span> : '没写' },
+            ]
+          : []
+      }
+      technical={techRows([
+        { label: '预报号', value: preAdviceId },
+        { label: '客户编码', value: advice?.customerAccount },
+        { label: '网点编码', value: advice?.node },
+        { label: '收到预报', value: advice ? formatInstant(advice.formedAt) : undefined },
+        { label: '撤回时间', value: advice?.withdrawnAt ? formatInstant(advice.withdrawnAt) : undefined },
+      ])}
+      onClose={onClose}
+    >
+      {answer === null ? <p>读取中…</p> : null}
+      {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查看送货预报" /> : null}
+      {advice ? (
+        <>
+          {advice.withdrawn ? <p>客户已撤回这份预报：之后收货不再按它认送货范围，之前按它认下的不撤销。</p> : null}
+          <p>「谁来送」只是线索，不影响送货范围的判断。</p>
+          <p className="font-medium text-idpxyz-text">客户的包裹号（{advice.customerParcelNumbers.length}）</p>
+          <ul className="font-mono text-idpxyz-text">
+            {advice.customerParcelNumbers.map((number) => (
+              <li key={number}>{JSON.stringify(number)}</li>
+            ))}
+          </ul>
+          <p>号码逐字保存、逐字比对；带引号显示，好看出多余的空格。</p>
+        </>
+      ) : null}
+    </RecordDetailPanel>
   );
 }
