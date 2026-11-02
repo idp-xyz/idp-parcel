@@ -32,6 +32,9 @@ const (
 	PriceCardRegistrationNotAccepted
 	// PriceCardRegistrationUndecided：依赖故障，登记与否未知，原因随错误交回。
 	PriceCardRegistrationUndecided
+	// PriceCardRegistrationNewerCanonicalizationNotEnabled：方案记的规范化版本不是基础版，而本部署没开登记较新版本
+	// 的开关；未到达仓储，什么都没写。续办是升级全部读价卡的进程后由运维开开关再重试，不是改卡。
+	PriceCardRegistrationNewerCanonicalizationNotEnabled
 )
 
 func (outcome RegisterPriceCardOutcome) String() string {
@@ -48,6 +51,8 @@ func (outcome RegisterPriceCardOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case PriceCardRegistrationUndecided:
 		return "UNDECIDED"
+	case PriceCardRegistrationNewerCanonicalizationNotEnabled:
+		return "NEWER_CANONICALIZATION_NOT_ENABLED"
 	default:
 		return ""
 	}
@@ -61,9 +66,14 @@ type RegisterPriceCardCommand struct {
 
 // RegisterPriceCardDeps 是价卡登记的依赖。Registered 交「参数已登记」：结算那一侧停在没卡、卡上没声明取整或评价采用
 // 不了的请求，补登一版卡之后由它续办（ADR-0229 决定五）。缺了它登记照样成功，停着的请求却再也等不来续办，所以必备。
+//
+// NewerCanonicalizationEnabled 是部署开关「允许登记基础版之外的规范化版本」，由装配从环境读一次后交进来，零值即关。
+// 只认基础版的旧进程读到较新版本的卡会停在「不认这一版」，租户级的序列与目录登记 / 复核还会整笔失败；所以第一张
+// 较新版本的卡入册之前，所有读价卡的进程必须已是新构建——这件事只有部署方知道，产品不替它猜（ADR-0352）。
 type RegisterPriceCardDeps struct {
-	Catalog    ports.PriceCardCatalog
-	Registered ports.PricingParameterRegisteredHandoff
+	Catalog                      ports.PriceCardCatalog
+	Registered                   ports.PricingParameterRegisteredHandoff
+	NewerCanonicalizationEnabled bool
 }
 
 // ErrPriceCardRegistrationHandoffMissing 说明装配没给价卡登记接「参数已登记」交接口。
@@ -92,6 +102,13 @@ func (handler *RegisterPriceCardHandler) Handle(
 	}
 	if handler.deps.Registered == nil {
 		return PriceCardRegistrationUndecided, ErrPriceCardRegistrationHandoffMissing
+	}
+	// 门在仓储之前、只看卡本身：开关关着时，同一版已在册的重放也拒。代价是重放拿不到`已在册`；换来的是门不读库，
+	// 关着的部署里任何较新版本的登记都不碰登记册、不发「参数已登记」交接（ADR-0352）。写成「不是基础版」而不是
+	// 「是 PPC-6」：再有新版时同此办，不必回来改门。
+	if command.Registration.Plan().CanonicalizationVersion() != domain.CurrentCanonicalizationVersion() &&
+		!handler.deps.NewerCanonicalizationEnabled {
+		return PriceCardRegistrationNewerCanonicalizationNotEnabled, nil
 	}
 
 	saved, err := handler.deps.Catalog.Register(ctx, command.Registration)

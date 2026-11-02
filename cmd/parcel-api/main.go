@@ -121,6 +121,17 @@ func run(logger *slog.Logger) error {
 		logger.Info("First-party customer channel not configured (ADR-0139): issuer parameters unset, customer-facing lines on the first-party channel answer ACCESS_CHANNEL_NOT_CONFIGURED")
 	}
 
+	// 登记较新规范化版本价卡的部署开关（ADR-0352）开没开都出声：关着时管理台上的发布答「尚未允许登记」，与卡本身有错
+	// 看上去都是没登进去，启动日志是分辨两者的第一处；开着则是运维断言了所有读价卡的进程都已升级，事后要查得出哪一次启动开的。
+	registerNewerCanonicalization := pricingRegisterNewerCanonicalization(os.Getenv)
+	if registerNewerCanonicalization {
+		logger.Info("Price cards in a newer canonicalization may be registered (ADR-0352): every process reading price cards is asserted to be on this build",
+			"env", pricingRegisterNewerCanonicalizationEnv)
+	} else {
+		logger.Info("Price cards in a newer canonicalization are not registered (ADR-0352): such registrations answer NEWER_CANONICALIZATION_NOT_ENABLED until the switch is set to true",
+			"env", pricingRegisterNewerCanonicalizationEnv)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -134,12 +145,13 @@ func run(logger *slog.Logger) error {
 	defer closeDB()
 
 	endpoints, err := assembleProductionEndpoints(db, startupChannels{
-		isolatedRead:              isolatedRead,
-		isolatedWrite:             isolatedWrite,
-		selfAuthority:             selfAuthority,
-		operatorVerifier:          operatorVerifier,
-		integrationClientVerifier: integrationClientVerifier,
-		customerClientVerifier:    customerClientVerifier,
+		isolatedRead:                  isolatedRead,
+		isolatedWrite:                 isolatedWrite,
+		selfAuthority:                 selfAuthority,
+		operatorVerifier:              operatorVerifier,
+		integrationClientVerifier:     integrationClientVerifier,
+		customerClientVerifier:        customerClientVerifier,
+		registerNewerCanonicalization: registerNewerCanonicalization,
 	})
 	if err != nil {
 		return err
@@ -178,7 +190,7 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方。它们在 run 里带启动日志解析，
+// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方与价卡登记的版本开关。它们在 run 里带启动日志解析，
 // 参数不合规时在开池之前就带原因退出。
 type startupChannels struct {
 	isolatedRead              *isolatedReadIntakes
@@ -187,6 +199,8 @@ type startupChannels struct {
 	operatorVerifier          accessidentity.OperatorCredentialVerifier
 	integrationClientVerifier accessidentity.IntegrationClientCredentialVerifier
 	customerClientVerifier    accessidentity.CustomerClientCredentialVerifier
+	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），在 run 里带启动日志读一次。
+	registerNewerCanonicalization bool
 }
 
 // assembleProductionEndpoints 是开池之后的那一段生产装配：先建各族接入渠道，再装只为启动即查的几只编排，最后展开端点
@@ -276,15 +290,16 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 		return nil, err
 	}
 	return assembleBusinessEndpoints(endpointSources{
-		db:                   db,
-		isolatedWrite:        startup.isolatedWrite,
-		selfAuthority:        startup.selfAuthority,
-		operatorVerifier:     startup.operatorVerifier,
-		operatorRegistry:     operatorRegistry,
-		deviceRegistry:       deviceRegistry,
-		admission:            admission,
-		operatorMinter:       operatorMinter,
-		customerClientMinter: customerClientMinter,
+		db:                            db,
+		isolatedWrite:                 startup.isolatedWrite,
+		selfAuthority:                 startup.selfAuthority,
+		operatorVerifier:              startup.operatorVerifier,
+		operatorRegistry:              operatorRegistry,
+		deviceRegistry:                deviceRegistry,
+		admission:                     admission,
+		operatorMinter:                operatorMinter,
+		customerClientMinter:          customerClientMinter,
+		registerNewerCanonicalization: startup.registerNewerCanonicalization,
 	}, endpointChannels{
 		isolatedRead:       startup.isolatedRead,
 		customerSubmission: customerSubmission,

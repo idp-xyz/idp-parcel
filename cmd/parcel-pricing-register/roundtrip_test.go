@@ -26,7 +26,7 @@ func TestTheControlledReviewsGoThroughTheTenantRuleAgainstARealDatabase(t *testi
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	wired, err := assemble(db)
+	wired, err := assemble(db, false)
 	if err != nil {
 		t.Fatalf("装配：%v", err)
 	}

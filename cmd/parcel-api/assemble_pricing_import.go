@@ -137,8 +137,8 @@ func buildPriceCardDraftApproval(db *bentopg.DB) (transactionalPriceCardDraftApp
 }
 
 // buildPriceCardDraftPublication 装配 `/pricing-price-card-draft-publications` 的真编排：发布转交的是与登记口同一种装法的
-// 价卡登记用例（真库价卡册），不另立第二条登记路径。
-func buildPriceCardDraftPublication(db *bentopg.DB) (transactionalPriceCardDraftPublication, error) {
+// 价卡登记用例（真库价卡册、同一个部署开关），不另立第二条登记路径。
+func buildPriceCardDraftPublication(db *bentopg.DB, newerCanonicalization bool) (transactionalPriceCardDraftPublication, error) {
 	drafts, err := pppostgres.NewPriceCardDrafts(db)
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: price card draft register: %w", err)
@@ -151,7 +151,9 @@ func buildPriceCardDraftPublication(db *bentopg.DB) (transactionalPriceCardDraft
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, err
 	}
-	registrar := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog, Registered: registered})
+	registrar := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{
+		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+	})
 	handler, err := pricingapp.NewPublishPriceCardDraftHandler(drafts, registrar, systemClock{})
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: price card draft publication: %w", err)

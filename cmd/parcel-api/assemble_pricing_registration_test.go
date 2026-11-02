@@ -27,7 +27,7 @@ func TestTheWiredPricingRegistrationsRecordAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	cards, err := buildPriceCardRegistrationOrchestration(db)
+	cards, err := buildPriceCardRegistrationOrchestration(db, false)
 	if err != nil {
 		t.Fatalf("装配价卡登记编排：%v", err)
 	}

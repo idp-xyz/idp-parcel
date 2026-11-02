@@ -46,7 +46,7 @@ func init() {
 			if err != nil {
 				return none, err
 			}
-			priceCardDraftPublication, err := buildPriceCardDraftPublication(sources.db)
+			priceCardDraftPublication, err := buildPriceCardDraftPublication(sources.db, sources.registerNewerCanonicalization)
 			if err != nil {
 				return none, err
 			}
