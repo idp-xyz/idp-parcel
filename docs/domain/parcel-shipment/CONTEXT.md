@@ -248,7 +248,7 @@ _Avoid in this context_: 范围内包裹、按客户过滤、客户匹配
 ### 委托
 
 - 草稿 → 已提交：客户确认并提交服务请求；提交不代表运营企业已经接受。
-- 草稿 → 已提交时，委托在同一提交事务内按[单据编号规则](../GLOSSARY.md#单据编号规则)取得运单[单据号](../GLOSSARY.md#单据号)（类型 `SHIPMENT`）；同一提交重放答原号，已提交期间形成的新提交版本不换号。运单单据号不是委托标识，也不是客户单号等外部标识（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
+- 草稿 → 已提交时，委托在同一提交事务内按[单据编号规则](../GLOSSARY.md#单据编号规则)取得[单据号](../GLOSSARY.md#单据号)（类型 `SHIPMENT`；管理台与客户面前的界面词是「运单号」）；同一提交重放答原号，已提交期间形成的新提交版本不换号。委托的单据号不是委托标识，也不是客户单号等外部标识（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
 - 已提交期间形成新提交版本：只允许仍属于同一委托边界的纠错或补充；新版本成为唯一待判断版本，旧版本及其判断历史继续保留。被取代版本的接受已确定不成立，它已成立各项的占用按原业务关联释放，且先于新版本的接受前财务控制：旧占用没放掉之前新版本不判。成员重组或共享约束变化不形成新提交版本：客户撤回原委托后提交关联新委托（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)）。
 - 已提交 → 已接受：当前提交版本的商业有效性、服务适用性、必要资料、成员基线及适用财务控制全部通过，且规则要求的人工复核已经完成；此时固定完整成员接受基线并形成预计承诺。
 - 已提交 → 已拒绝：版本化规则确定接受条件不成立，或授权角色依据结构化原因和证据决定不承担该服务请求；拒绝不产生实物责任起点，也不得原地重开为已提交。

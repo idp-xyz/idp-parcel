@@ -278,7 +278,7 @@ Status: Confirmed
 
 - 草稿：依据当前截单范围生成，可以在发布前重新计算、加入或移除尚未发布的适用费用。
 - 草稿 → 已发布：固定对账单号、结算账户、周期、截单快照、费用范围和金额。
-- 对账单号就是对账单的[单据号](../GLOSSARY.md#单据号)，在发布事务内按[单据编号规则](../GLOSSARY.md#单据编号规则)分配（类型 `CUSTOMER_STATEMENT`）。发布幂等按发布意图：同一结算账户、周期与截止版本的发布重放答原单与原号，不分配第二个号；作废后的替代单取新号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定九）。
+- 对账单号就是对账单的[单据号](../GLOSSARY.md#单据号)，在发布事务内按[单据编号规则](../GLOSSARY.md#单据编号规则)分配（类型 `CUSTOMER_STATEMENT`）。发布幂等按发布意图：同一结算账户、周期与截止版本的发布，内容相同的重放答原单与原号、不分配第二个号，内容不同答发布意图冲突、不落单；作废后的替代单取新号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定九）。
 - 已发布 → 已作废：只适用于整单不应继续有效的明确情况；原单继续保留并记录作废依据。
 - 已作废 → 已替代：需要重新出具时形成新对账单并关联原单，不能复用原单身份覆盖内容。
 - 待确认、部分确认、已确认或存在争议属于对账维度；未结清、部分结清或已结清属于结清维度，两者都不改变单据生命周期。
