@@ -248,9 +248,12 @@ type versionListResponse[Body any] struct {
 // 不为区间完整补一个编造的「无限远」时刻。字段词取 CONTEXT 原词的既有英文转写
 // （ports 行类型同名字段），内容列（地理覆盖、日历、策略正文）今天不存在（PAR-NET-14），
 // 不发明。
+//
+// 节点行的 displayName 缺席即这一版没登名称（ADR-0353 决定二）：读者照旧以 code 称呼它，不答空串、不拿 code 顶。
 type nodeVersionBody struct {
 	Code             string `json:"code"`
 	Version          int32  `json:"version"`
+	DisplayName      string `json:"displayName,omitempty"`
 	BusinessTimezone string `json:"businessTimezone"`
 	EffectiveFrom    string `json:"effectiveFrom"`
 	EffectiveTo      string `json:"effectiveTo,omitempty"`
@@ -260,6 +263,7 @@ func nodeVersionBodyOf(row ports.NodeDefinitionVersion) nodeVersionBody {
 	return nodeVersionBody{
 		Code:             row.Code,
 		Version:          row.Version,
+		DisplayName:      row.DisplayName.String(),
 		BusinessTimezone: row.BusinessTimezone,
 		EffectiveFrom:    utcText(row.EffectiveFrom),
 		EffectiveTo:      optionalUTCText(row.EffectiveTo, row.HasEffectiveTo),

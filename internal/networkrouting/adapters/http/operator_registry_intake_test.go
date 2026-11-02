@@ -137,6 +137,25 @@ func TestNetworkOperatorRegistryAnswerGrades(t *testing.T) {
 	}
 }
 
+// Covers: AT-NR-111（在线口半边）——在线登记口带名称的节点行译成带名称的命令；名称不合格答 400 MALFORMED_REQUEST，
+// 走不到登记编排，与依据格写坏同一格。
+func TestTheOnlineNodeRegistrationCarriesTheDisplayNameAndRefusesAMalformedOne(t *testing.T) {
+	intake := operatorIntake(t, operatorAuthenticator{})
+	named := strings.Replace(onlineRegistrationRows["node"], "{", `{"display_name": "上海枢纽", `, 1)
+	command, err := intake.IntakeNodeVersionRegistration(context.Background(), operatorRegistration("t", strings.NewReader(named)))
+	if err != nil || command.Node.DisplayName.String() != "上海枢纽" {
+		t.Fatalf("带名称的在线登记：name=%q err=%v", command.Node.DisplayName.String(), err)
+	}
+
+	endpoint := registrationEndpoints(intake, unreachableRegistrar(t))["node"]
+	malformed := strings.Replace(onlineRegistrationRows["node"], "{", `{"display_name": " 上海枢纽", `, 1)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, operatorRegistration("t", strings.NewReader(malformed)))
+	if code := problemCode(t, recorder); recorder.Code != http.StatusBadRequest || code != "MALFORMED_REQUEST" {
+		t.Fatalf("名称首尾带空白：答 %d %q，想要 400 MALFORMED_REQUEST", recorder.Code, code)
+	}
+}
+
 // readCounter 数批文被读了几次。
 type readCounter struct {
 	reader io.Reader

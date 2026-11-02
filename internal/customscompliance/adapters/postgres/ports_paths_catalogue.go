@@ -47,7 +47,7 @@ func (catalogue *PortsPathsCatalogue) ListCandidatePorts(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT port_ref, applies_from, applies_until
+		`SELECT port_ref, applies_from, applies_until, display_name
 		   FROM customs_compliance.candidate_port
 		  WHERE tenant_id = $1
 		  ORDER BY port_ref, applies_from DESC
@@ -64,7 +64,8 @@ func (catalogue *PortsPathsCatalogue) ListCandidatePorts(
 		var portRaw string
 		var appliesFrom time.Time
 		var appliesUntil *time.Time
-		if err := rows.Scan(&portRaw, &appliesFrom, &appliesUntil); err != nil {
+		var displayName *string
+		if err := rows.Scan(&portRaw, &appliesFrom, &appliesUntil, &displayName); err != nil {
 			return nil, fmt.Errorf("list candidate ports: %w", err)
 		}
 		// 坏行走构造门拦下上抛，不进查阅答案（判据同 RuleCatalogue 的逐行重建）。
@@ -72,7 +73,11 @@ func (catalogue *PortsPathsCatalogue) ListCandidatePorts(
 		if err != nil {
 			return nil, fmt.Errorf("rebuild candidate port: %w", err)
 		}
-		entry := ports.CandidatePortEntry{Port: port, AppliesFrom: appliesFrom.UTC()}
+		name, err := portDisplayNameOf(displayName)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild candidate port: %w", err)
+		}
+		entry := ports.CandidatePortEntry{Port: port, DisplayName: name, AppliesFrom: appliesFrom.UTC()}
 		// NULL 终点即开放版：零值照端口约定透出，不代填「无限远」的编造时刻。
 		if appliesUntil != nil {
 			entry.AppliesUntil = appliesUntil.UTC()

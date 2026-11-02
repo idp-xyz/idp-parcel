@@ -12,8 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/referenceconfig"
 )
 
-// 本文件是采用参考配置的那一半（ADR-0147 决定四）：带 adopt 的一行登记只给身份、修订号与生效时点，内容取自它点名
-// 的那一版网络目录参考配置，依据格由这里写成引用串。采用行之后走的是与直接登记同一个登记用例、同一套受理门，内容格
+// 本文件是采用参考配置的那一半（ADR-0147 决定四）：带 adopt 的一行登记只给身份、修订号与生效时点（节点另可给显示名称，
+// ADR-0353 决定四），内容取自它点名的那一版网络目录参考配置，依据格由这里写成引用串。采用行之后走的是与直接登记同一个登记用例、同一套受理门，内容格
 // 的翻译也是同一段（各族的 *Content 类型），参考配置因此过的是与直接登记同一道门（ADR-0147 决定五）。不带 adopt，
 // 参考配置就不进任何租户的目录。
 
@@ -41,11 +41,15 @@ type adoptionRow struct {
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
 	Adopt         string     `json:"adopt"`
+	// DisplayName 只在节点族的采用行上许出现（nodeAdoptionKeys）：名称是租户取值，与修订号、生效时点一样由采用行给，
+	// 参考配置不带它（ADR-0353 决定四）。
+	DisplayName *string `json:"display_name"`
 }
 
-// 采用行允许出现的键。身份键按族不同：日历是适用对象类别加对象身份，其余各族是 code。
+// 采用行允许出现的键。身份键按族不同：日历是适用对象类别加对象身份，其余各族是 code；节点另许可选的显示名称。
 var (
 	codeAdoptionKeys     = adoptionKeys("code")
+	nodeAdoptionKeys     = adoptionKeys("code", "display_name")
 	calendarAdoptionKeys = adoptionKeys("target_kind", "target_code")
 )
 

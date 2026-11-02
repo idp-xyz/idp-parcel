@@ -200,6 +200,8 @@ export type PortsPathsRegistry = 'candidate-port' | 'declaration-path';
  */
 export interface CandidatePortRecord {
   port: string;
+  /** 这一版口岸的显示名称（ADR-0353）；没登即缺席，照旧以 port 称呼。 */
+  displayName?: string;
   appliesFrom: string;
   /** 缺席即尚无终点(开放版),不是已失效;终点在后继版本登记时落定(换版)。 */
   appliesUntil?: string;

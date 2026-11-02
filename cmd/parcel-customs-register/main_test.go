@@ -345,13 +345,14 @@ func (book *fakePortsPathsBook) RegisterCandidatePort(
 	_ context.Context,
 	tenant domain.TenantID,
 	port domain.CustomsPortReference,
+	displayName domain.CustomsPortDisplayName,
 	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	key := portsPathsVersionKey(tenant, port.String(), appliesFrom)
 	if _, exists := book.portsByKey[key]; exists {
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
-	book.portsByKey[key] = ports.CandidatePortEntry{Port: port, AppliesFrom: appliesFrom}
+	book.portsByKey[key] = ports.CandidatePortEntry{Port: port, DisplayName: displayName, AppliesFrom: appliesFrom}
 	return ports.CaseConfigurationRegistered, nil
 }
 

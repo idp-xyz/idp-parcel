@@ -45,6 +45,7 @@ func (double *portsPathsStoreDouble) RegisterCandidatePort(
 	_ context.Context,
 	tenant domain.TenantID,
 	port domain.CustomsPortReference,
+	displayName domain.CustomsPortDisplayName,
 	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	if double.registerErr != nil {
@@ -66,7 +67,7 @@ func (double *portsPathsStoreDouble) RegisterCandidatePort(
 	}
 	double.portRows = append(double.portRows, portsPathsPortRow{
 		tenant: tenant.String(),
-		entry:  ports.CandidatePortEntry{Port: port, AppliesFrom: appliesFrom},
+		entry:  ports.CandidatePortEntry{Port: port, DisplayName: displayName, AppliesFrom: appliesFrom},
 	})
 	return ports.CaseConfigurationRegistered, nil
 }
@@ -330,5 +331,67 @@ func TestPortsPathsDependencyFailuresAreUndecided(t *testing.T) {
 	outcome, err = handler.RegisterDeclarationPath(t.Context(), pathCommand(t, "SYN-PORT-01", portsPathsBaseAt))
 	if err != nil || outcome != application.ConfigurationUndecided {
 		t.Fatalf("已在册但读不回该未决：err=%v outcome=%v", err, outcome)
+	}
+}
+
+// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」与 ADR-0353 决定六——名称是这一版的登记内容，同一起点重登时
+// 并入逐字段比对：两边都没登（迁移之前登下的版本就是这一格）或名称逐字相同是`已存在`；名称不同、给没登名称的旧版补名称、
+// 给登了名称的版本去掉名称都是`内容冲突`，册面纹丝不动；改名走登记更晚起点的新版本，前版照留旧名称并落终点。
+func TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison(t *testing.T) {
+	named := func(text string, appliesFrom time.Time) application.RegisterCandidatePortCommand {
+		command := portCommand(t, appliesFrom)
+		command.DisplayName = configValue(t, domain.NewCustomsPortDisplayName, text)
+		return command
+	}
+	register := func(handler *application.RegisterPortsPathsHandler, command application.RegisterCandidatePortCommand) application.CaseConfigurationOutcome {
+		t.Helper()
+		outcome, err := handler.RegisterCandidatePort(t.Context(), command)
+		if err != nil {
+			t.Fatalf("登记口岸：%v", err)
+		}
+		return outcome
+	}
+
+	unnamedStore := &portsPathsStoreDouble{}
+	unnamed := newPortsPathsHandler(unnamedStore)
+	if outcome := register(unnamed, portCommand(t, portsPathsBaseAt)); outcome != application.ConfigurationRegistered {
+		t.Fatalf("不带名称首登：%v", outcome)
+	}
+	if outcome := register(unnamed, portCommand(t, portsPathsBaseAt)); outcome != application.ConfigurationExisting {
+		t.Fatalf("不带名称原样重登该是`已存在`：%v", outcome)
+	}
+	if outcome := register(unnamed, named("深圳湾口岸", portsPathsBaseAt)); outcome != application.ConfigurationContentConflict {
+		t.Fatalf("给没登名称的版本补名称该是`内容冲突`：%v", outcome)
+	}
+	if unnamedStore.portRows[0].entry.DisplayName.Registered() {
+		t.Fatal("冲突之后旧版被补上了名称")
+	}
+
+	namedStore := &portsPathsStoreDouble{}
+	withName := newPortsPathsHandler(namedStore)
+	if outcome := register(withName, named("深圳湾口岸", portsPathsBaseAt)); outcome != application.ConfigurationRegistered {
+		t.Fatalf("带名称首登：%v", outcome)
+	}
+	if outcome := register(withName, named("深圳湾口岸", portsPathsBaseAt)); outcome != application.ConfigurationExisting {
+		t.Fatalf("同名重登该是`已存在`：%v", outcome)
+	}
+	if outcome := register(withName, named("皇岗口岸", portsPathsBaseAt)); outcome != application.ConfigurationContentConflict {
+		t.Fatalf("同一起点换名称该是`内容冲突`：%v", outcome)
+	}
+	if outcome := register(withName, portCommand(t, portsPathsBaseAt)); outcome != application.ConfigurationContentConflict {
+		t.Fatalf("同一起点去掉名称该是`内容冲突`：%v", outcome)
+	}
+
+	renamedAt := portsPathsBaseAt.Add(30 * 24 * time.Hour)
+	if outcome := register(withName, named("皇岗口岸", renamedAt)); outcome != application.ConfigurationRegistered {
+		t.Fatalf("改名走更晚起点的新版本：%v", outcome)
+	}
+	if len(namedStore.portRows) != 2 {
+		t.Fatalf("册上应有两版，实得 %+v", namedStore.portRows)
+	}
+	earlier, later := namedStore.portRows[0].entry, namedStore.portRows[1].entry
+	if earlier.DisplayName.String() != "深圳湾口岸" || !earlier.AppliesUntil.Equal(renamedAt) ||
+		later.DisplayName.String() != "皇岗口岸" || !later.AppliesUntil.IsZero() {
+		t.Fatalf("改名之后：前版 %+v，新版 %+v", earlier, later)
 	}
 }

@@ -206,6 +206,41 @@ func TestCandidatePortListTranscribesVersionIntervalsVerbatim(t *testing.T) {
 	}
 }
 
+// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」（读口半边）——登了名称的版本行带 displayName，没登的（含迁移
+// 之前登下的）行上没有这个键，不答空串、不拿 port 顶。
+func TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered(t *testing.T) {
+	register := &stubPortsPaths{
+		portEntries: []ports.CandidatePortEntry{
+			{
+				Port:        endpointValue(t, domain.NewCustomsPortReference, "SYN-PORT-01"),
+				DisplayName: endpointValue(t, domain.NewCustomsPortDisplayName, "深圳湾口岸"),
+				AppliesFrom: catalogueBaseAt,
+			},
+			{
+				Port:        endpointValue(t, domain.NewCustomsPortReference, "SYN-PORT-02"),
+				AppliesFrom: catalogueBaseAt,
+			},
+		},
+	}
+	endpoint := customshttp.NewQueryPortsPathsEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, portsPathsRequest(t, "?registry=candidate-port"))
+	var body struct {
+		Ports []map[string]any `json:"ports"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Ports) != 2 {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Ports[0]["displayName"] != "深圳湾口岸" {
+		t.Fatalf("登了名称的行走样：%v", body.Ports[0])
+	}
+	if _, present := body.Ports[1]["displayName"]; present || len(body.Ports[1]) != 2 {
+		t.Fatalf("没登名称的行只该有 port 与 appliesFrom：%v", body.Ports[1])
+	}
+}
+
 // Covers: 路径三维逐格转写 — 口岸、方向、申报模式与生效区间原样透出，registry 分派
 // 各答各的结果格。
 func TestDeclarationPathListTranscribesTheRouteVerbatim(t *testing.T) {

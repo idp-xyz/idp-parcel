@@ -1,6 +1,7 @@
 {
   "tenant_id": "SYN-TENANT-01",
   "code": "SYN-NODE-SHA-HUB",
+  "display_name": "上海枢纽",
   "version": 2,
   "business_timezone": "Asia/Shanghai",
   "effective_from": "2026-06-01T00:00:00Z",

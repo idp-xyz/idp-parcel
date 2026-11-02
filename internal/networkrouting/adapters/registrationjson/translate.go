@@ -116,7 +116,7 @@ func NodeVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (applicati
 
 func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterNodeVersionCommand, error) {
 	none := application.RegisterNodeVersionCommand{}
-	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
+	adoption, adopting, err := adoptionOf(raw, nodeAdoptionKeys)
 	if err != nil {
 		return none, err
 	}
@@ -129,7 +129,13 @@ func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 		if !found {
 			return none, notInReference(adoption.Adopt, "节点", adoption.Code)
 		}
-		return application.RegisterNodeVersionCommand{TenantID: tenant, Node: entry.row(header)}, nil
+		name, err := displayNameFrom(adoption.DisplayName)
+		if err != nil {
+			return none, err
+		}
+		row := entry.row(header)
+		row.DisplayName = name
+		return application.RegisterNodeVersionCommand{TenantID: tenant, Node: row}, nil
 	}
 	var payload nodePayload
 	if err := decodeStrict(raw, &payload); err != nil {
@@ -143,7 +149,22 @@ func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 	if err != nil {
 		return none, err
 	}
-	return application.RegisterNodeVersionCommand{TenantID: tenant, Node: payload.row(header)}, nil
+	name, err := displayNameFrom(payload.DisplayName)
+	if err != nil {
+		return none, err
+	}
+	row := payload.row(header)
+	row.DisplayName = name
+	return application.RegisterNodeVersionCommand{TenantID: tenant, Node: row}, nil
+}
+
+// displayNameFrom 译节点一行上可选的显示名称格（ADR-0353 决定二）。缺席或 null 即没登；给了就过领域构造门，空白串是写坏了
+// 不是没给。名称不放进 nodeContent：那一段与参考配置共用，而名称是租户取值，参考配置不带（决定四）。
+func displayNameFrom(raw *string) (domain.NodeDisplayName, error) {
+	if raw == nil {
+		return domain.NodeDisplayName{}, nil
+	}
+	return domain.NewNodeDisplayName(*raw)
 }
 
 // ConnectionVersionFromJSON 是受控批量口那一路。
@@ -512,6 +533,7 @@ func (content nodeContent) row(header versionHeader) ports.NodeDefinitionVersion
 type nodePayload struct {
 	versionFields
 	nodeContent
+	DisplayName *string `json:"display_name"`
 }
 
 type connectionContent struct {

@@ -40,6 +40,8 @@ export interface ServiceAreaCoverage {
 export interface NetworkVersionRecord {
   code?: string;
   version: number;
+  /** 网点（物流节点）这一版的显示名称（ADR-0353）；没登即缺席，照旧以 code 称呼。只有网点族带这一格。 */
+  displayName?: string;
   businessTimezone?: string;
   effectiveFrom?: string;
   effectiveTo?: string;

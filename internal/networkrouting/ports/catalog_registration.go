@@ -106,6 +106,8 @@ func AvailabilityAdjustmentKindFrom(raw string) (AvailabilityAdjustmentKind, err
 // 稳定定义各族（临时调整族除外，它只记来源）的版本行各带一格 Basis：这一版的登记依据
 // （domain.CatalogBasisReference）。选版读口 LoadDefinitionsAt 不取它——折叠证据用不到依据，读它的是
 // 运营查阅上列。
+//
+// DisplayName 是这一版可选的显示名称（ADR-0353），零值即没登。选版读口同样不取它：名称不进路由判断的任何依据。
 type NodeDefinitionVersion struct {
 	Code             string
 	Version          int32
@@ -114,6 +116,7 @@ type NodeDefinitionVersion struct {
 	EffectiveTo      time.Time
 	HasEffectiveTo   bool
 	Basis            domain.CatalogBasisReference
+	DisplayName      domain.NodeDisplayName
 }
 
 // ConnectionDefinitionVersion 是一条有向网络连接的适用版本行。

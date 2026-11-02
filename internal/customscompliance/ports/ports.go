@@ -909,8 +909,12 @@ type GateConditionCatalogueRead interface {
 // 两件——所属区域与适用性判断都不在册（区域维未建模，适用性是判断链的产物）。
 // AppliesUntil 零值即尚无终点（开放版），与 InterpretationRuleEntry 同约定——终点
 // 不是登记输入，它在后继版本登记时落定。
+//
+// DisplayName 是这一版可选的显示名称（ADR-0353），零值即没登。它是登记内容的一格，不是目录事实：关务适用性判断的快照
+// 读口不取它。
 type CandidatePortEntry struct {
 	Port         domain.CustomsPortReference
+	DisplayName  domain.CustomsPortDisplayName
 	AppliesFrom  time.Time
 	AppliesUntil time.Time
 }
@@ -937,6 +941,7 @@ type PortsPathsRegistry interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		port domain.CustomsPortReference,
+		displayName domain.CustomsPortDisplayName,
 		appliesFrom time.Time,
 	) (CaseConfigurationSaveOutcome, error)
 	RegisterDeclarationPath(

@@ -584,10 +584,11 @@ func (catalog *NetworkCatalog) RegisterNodeVersion(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.logistics_node_version
-			(tenant_id, node_code, version, business_timezone, effective_from, effective_to, basis_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			(tenant_id, node_code, version, business_timezone, effective_from, effective_to, basis_ref, display_name)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tenant.String(), row.Code, row.Version, row.BusinessTimezone,
 		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), basisColumn(row.Basis),
+		optionalString(row.DisplayName.String(), row.DisplayName.Registered()),
 	); err != nil {
 		return fmt.Errorf("register node version: %w", err)
 	}
@@ -962,4 +963,12 @@ func basisOf(raw *string) (domain.CatalogBasisReference, error) {
 		return domain.CatalogBasisReference{}, nil
 	}
 	return domain.NewCatalogBasisReference(*raw)
+}
+
+// nodeDisplayNameOf 读回节点一版的显示名称：NULL 即没登（迁移 0033 之前登下的版本都是这一格），读回的串照样过领域构造门。
+func nodeDisplayNameOf(raw *string) (domain.NodeDisplayName, error) {
+	if raw == nil {
+		return domain.NodeDisplayName{}, nil
+	}
+	return domain.NewNodeDisplayName(*raw)
 }
