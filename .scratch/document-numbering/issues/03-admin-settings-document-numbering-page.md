@@ -22,7 +22,7 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 
 ## 完成记录（2026-11-02，作者，分支 `claude-docnum03`，从 origin/main `3a408b7b0` 起）
 
-两笔代码提交：`725dda240`（页面、词典、用例）、`ddb65f648`（浏览器核验后的修订），加本记录一笔。diff 只在 `apps/admin-web/src/**` 与本票面。
+三笔代码提交：`725dda240`（页面、词典、用例）、`ddb65f648`（浏览器核验后的修订）、`8afe62dc3`（注释不数类数），加本记录两笔。diff 只在 `apps/admin-web/src/**` 与本票面。
 
 ### 做了什么
 
