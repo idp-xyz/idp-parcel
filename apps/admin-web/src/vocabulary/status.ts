@@ -369,6 +369,20 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   CHANNEL_REFUND: muted('渠道退款'),
   REPLACEMENT: info('替代'),
   RETRY: info('重试'),
+
+  // —— 追踪规则与通知披露（设置区）· visibility-exception 的开放引用，参考译法 ——
+  // 事实类型、信号类型、可信度、通知渠道与义务判据都是租户登记的开放引用；这里先译演示租户登记的码（ADR-0150），
+  // 别的租户的新码如实露码并告警。可信度与渠道不是状态，归中性灰。
+  'handover-handed-over': good('已交接'),
+  'movement-departure': info('已发出'),
+  ETA_GAP: warn('时效缺口'),
+  SOURCE_FACT_CONFLICT: warn('动态互相矛盾'),
+  CARRIER_CONFIRMED: muted('承运商确认'),
+  SOURCE_CONFIRMED: muted('来源方确认'),
+  MONITOR_DERIVED: muted('系统监测得出'),
+  HEURISTIC: muted('推测'),
+  EMAIL: muted('邮件'),
+  CUSTOMER_NOTIFIED: muted('通知送达客户'),
 };
 
 /**
