@@ -117,6 +117,9 @@ func bookingHandler(t *testing.T) *application.CommissionTransportHandler {
 		Agreements:           agreementCheckStub{supplier: trunkCarrier},
 		Downstream:           commissionHandoffStub{},
 		Clock:                fixedCommissionClock{},
+		Numbers:              &documentNumberStub{},
+		CommissionNumbers:    commissions,
+		BookingNumbers:       bookings,
 	})
 	tenant, err := domain.NewTenantID(operatorTenant)
 	if err != nil {

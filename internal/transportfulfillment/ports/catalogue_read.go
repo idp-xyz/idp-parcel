@@ -250,6 +250,10 @@ type BookingRequestCatalogueRow struct {
 	// SubmittedBy 与 CancelledBy 是提交、取消这次订舱的操作者（ADR-0303 复核记录），只进审计；缺席即没记下是谁。
 	SubmittedBy string
 	CancelledBy string
+	// DocumentNumber 是这次订舱的单据号或无号原因；CommissionDocumentNumber 是所属委托的单据号，委托没有号时为空串（ADR-0355
+	// 决定十一）。
+	DocumentNumber           domain.DocumentNumbering
+	CommissionDocumentNumber string
 }
 
 // BookingAnswerCatalogueRow 是一份承运答复照行转写：答复标识、五值之一（domain.CarrierAcceptanceOutcome 的词）、接受量（只在接受时

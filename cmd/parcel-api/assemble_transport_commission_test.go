@@ -18,6 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/adapters/registrationjson"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -90,7 +91,7 @@ func publishSeededSupplierAgreements(t *testing.T, db *bentopg.DB) map[string]re
 // 提交这一种决定。与生产装配的差别只在核验方与操作者册是替身。
 func commissionSubmissionEndpointForTest(t *testing.T, db *bentopg.DB) http.Handler {
 	t.Helper()
-	submitter, err := buildTransportCommissionSubmission(db)
+	submitter, err := buildTransportCommissionSubmission(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配委托提交编排：%v", err)
 	}

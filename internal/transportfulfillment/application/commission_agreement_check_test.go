@@ -143,13 +143,15 @@ func TestAConcurrentFirstSubmissionLoserIsJudgedByContent(t *testing.T) {
 			fixture := newCommissionFixture(t)
 			racing := &racingCommissionStore{commissionStoreDouble: newCommissionStore(), winner: winner}
 			handler := application.NewCommissionTransportHandler(application.CommissionTransportDeps{
-				Commissions: racing,
-				Bookings:    fixture.bookings,
-				Answers:     fixture.answers,
-				Schedules:   fixture.schedules,
-				Agreements:  fixture.agreements,
-				Downstream:  fixture.handoff,
-				Clock:       commissionClock{at: commissionNowAt},
+				Commissions:       racing,
+				Bookings:          fixture.bookings,
+				Answers:           fixture.answers,
+				Schedules:         fixture.schedules,
+				Agreements:        fixture.agreements,
+				Downstream:        fixture.handoff,
+				Clock:             commissionClock{at: commissionNowAt},
+				Numbers:           fixture.numbers,
+				CommissionNumbers: racing,
 			})
 			result, err := handler.SubmitCommission(context.Background(), submitCommissionCommand(t))
 			if err != nil {
@@ -157,6 +159,10 @@ func TestAConcurrentFirstSubmissionLoserIsJudgedByContent(t *testing.T) {
 			}
 			if result.Outcome() != testCase.want {
 				t.Fatalf("outcome = %q, want %q", result.Outcome(), testCase.want)
+			}
+			// AT-TF-373：并发首交的输家在 Save 上就答了，一个号也不取——先取号再落库，输家的号会随它那笔答复提交成空号。
+			if len(fixture.numbers.asked) != 0 {
+				t.Fatalf("并发首交的输家取了号：%d 次", len(fixture.numbers.asked))
 			}
 		})
 	}

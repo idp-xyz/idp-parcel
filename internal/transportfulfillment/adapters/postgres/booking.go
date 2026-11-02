@@ -106,11 +106,11 @@ func (repository *BookingRequests) FindBookingWithProvider(
 }
 
 const bookingRequestColumns = `commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at, content_digest, recorded_at,
-		        submitted_by, cancelled_by`
+		        submitted_by, cancelled_by, document_number, document_number_absence`
 
 const qualifiedBookingRequestColumns = `booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
 		        booking.requested_at, booking.cancelled_at, booking.content_digest, booking.recorded_at,
-		        booking.submitted_by, booking.cancelled_by`
+		        booking.submitted_by, booking.cancelled_by, booking.document_number, booking.document_number_absence`
 
 // bookingRequestRow 是订舱申请一行的列，次序同 bookingRequestColumns。
 type bookingRequestRow struct {
@@ -119,10 +119,12 @@ type bookingRequestRow struct {
 	requestedAt, recordedAt                time.Time
 	cancelledAt                            *time.Time
 	submittedBy, cancelledBy               *string
+	documentNumber, documentNumberAbsence  *string
 }
 
 func (row *bookingRequestRow) targets() []any {
-	return []any{&row.commissionID, &row.scheduleID, &row.quantity, &row.unit, &row.requestedAt, &row.cancelledAt, &row.digest, &row.recordedAt, &row.submittedBy, &row.cancelledBy}
+	return []any{&row.commissionID, &row.scheduleID, &row.quantity, &row.unit, &row.requestedAt, &row.cancelledAt, &row.digest, &row.recordedAt,
+		&row.submittedBy, &row.cancelledBy, &row.documentNumber, &row.documentNumberAbsence}
 }
 
 func (row bookingRequestRow) rehydrate(key ports.BookingKey) (ports.BookingRecord, error) {
@@ -163,13 +165,18 @@ func (row bookingRequestRow) rehydrate(key ports.BookingKey) (ports.BookingRecor
 	if err != nil {
 		return ports.BookingRecord{}, err
 	}
+	numbering, err := documentNumberingFromColumns(row.documentNumber, row.documentNumberAbsence)
+	if err != nil {
+		return ports.BookingRecord{}, err
+	}
 	return ports.BookingRecord{
-		Key:           key,
-		ContentDigest: row.digest,
-		Booking:       booking,
-		RecordedAt:    row.recordedAt.UTC(),
-		SubmittedBy:   submitter,
-		CancelledBy:   canceller,
+		Key:            key,
+		ContentDigest:  row.digest,
+		Booking:        booking,
+		RecordedAt:     row.recordedAt.UTC(),
+		SubmittedBy:    submitter,
+		CancelledBy:    canceller,
+		DocumentNumber: numbering,
 	}, nil
 }
 
@@ -216,6 +223,69 @@ func (repository *BookingRequests) Save(
 		return ports.BookingAlreadyRegistered, nil
 	}
 	return ports.BookingSaved, nil
+}
+
+var _ ports.BookingNumbers = (*BookingRequests)(nil)
+
+// BookingDocumentNumberUsed 答本租户的订舱里是否已有这个单据号（ADR-0355 决定八），理由同
+// TransportCommissions.CommissionDocumentNumberUsed。
+func (repository *BookingRequests) BookingDocumentNumberUsed(
+	ctx context.Context,
+	tenant domain.TenantID,
+	number domain.DocumentNumber,
+) (bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check booking document number: %w", err)
+	}
+	var used bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1
+		                  FROM transport_fulfillment.booking_request
+		                 WHERE tenant_id = $1
+		                   AND document_number = $2)`,
+		tenant.String(),
+		number.String(),
+	).Scan(&used); err != nil {
+		return false, fmt.Errorf("check booking document number: %w", err)
+	}
+	return used, nil
+}
+
+// RecordBookingDocumentNumber 给刚落库的那次订舱记下单据号或无号原因，只记一次，理由同
+// TransportCommissions.RecordCommissionDocumentNumber。
+func (repository *BookingRequests) RecordBookingDocumentNumber(
+	ctx context.Context,
+	key ports.BookingKey,
+	numbering domain.DocumentNumbering,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record booking document number: %w", err)
+	}
+	number, absence, err := documentNumberingColumns(numbering)
+	if err != nil {
+		return fmt.Errorf("record booking document number: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.booking_request
+		    SET document_number = $3, document_number_absence = $4
+		  WHERE tenant_id = $1
+		    AND booking_id = $2
+		    AND document_number IS NULL
+		    AND document_number_absence IS NULL`,
+		key.TenantID.String(),
+		key.Booking.String(),
+		number,
+		absence,
+	)
+	if err != nil {
+		return fmt.Errorf("record booking document number: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("record booking document number: %w", errDocumentNumberNotRecordable)
+	}
+	return nil
 }
 
 var _ ports.BookingCancellationStore = (*BookingRequests)(nil)

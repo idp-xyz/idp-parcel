@@ -279,6 +279,9 @@ type TransportCommissionRecord struct {
 	// CancelledBy 是经运营决定口取消这份委托的操作者（ADR-0303 复核记录）：与 SubmittedBy 同一待遇，只进审计。取消那一次
 	// Replace 才写它；开始是段采用带出的转换，不是一位操作者的决定，Replace 开始时不碰它。可缺。
 	CancelledBy domain.RegistrantReference
+	// DocumentNumber 是委托进入已提交时取得的单据号，或没有号的原因（ADR-0355）。不进内容摘要，Save 不写它——号在委托
+	// 落库之后、同一事务里经 TransportCommissionNumbers 记下；Replace 也不碰它，换版、取消、开始都不换号。
+	DocumentNumber domain.DocumentNumbering
 }
 
 type CommissionSaveOutcome uint8
@@ -314,6 +317,9 @@ type BookingRecord struct {
 	RecordedAt    time.Time
 	SubmittedBy   domain.RegistrantReference
 	CancelledBy   domain.RegistrantReference
+	// DocumentNumber 是订舱申请登记时取得的单据号，或没有号的原因（ADR-0355），待遇同委托那一格：Save 不写它，订舱落库
+	// 之后同一事务里经 BookingNumbers 记下，取消不碰它。
+	DocumentNumber domain.DocumentNumbering
 }
 
 type BookingSaveOutcome uint8

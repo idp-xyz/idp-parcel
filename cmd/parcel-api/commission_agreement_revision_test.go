@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -56,7 +57,7 @@ func revisionFacesForTest(t *testing.T, db *bentopg.DB, kinds ...accessidentity.
 	if err != nil {
 		t.Fatal(err)
 	}
-	submitter, err := buildTransportCommissionSubmission(db)
+	submitter, err := buildTransportCommissionSubmission(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配委托提交：%v", err)
 	}

@@ -19,6 +19,7 @@ import (
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -221,11 +222,11 @@ func bookingFacesForTest(t *testing.T, db *bentopg.DB) bookingFaceEndpoints {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commission, err := buildTransportCommissionSubmission(db)
+	commission, err := buildTransportCommissionSubmission(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配委托提交：%v", err)
 	}
-	faces, err := buildBookingFaces(db)
+	faces, err := buildBookingFaces(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配订舱两口：%v", err)
 	}

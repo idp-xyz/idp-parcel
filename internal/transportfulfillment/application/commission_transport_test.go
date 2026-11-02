@@ -331,6 +331,7 @@ type commissionFixture struct {
 	schedules    *scheduleReaderDouble
 	agreements   *agreementSourceDouble
 	handoff      *commissionHandoffDouble
+	numbers      *documentNumberIssuerDouble
 	handler      *application.CommissionTransportHandler
 }
 
@@ -344,6 +345,7 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		schedules:   &scheduleReaderDouble{registered: map[string]bool{"tenant-1|schedule-1": true}},
 		agreements:  &agreementSourceDouble{check: registeredAgreement(t)},
 		handoff:     &commissionHandoffDouble{},
+		numbers:     newDocumentNumberIssuer(),
 	}
 	fixture.withProvider = &bookingWithProviderDouble{bookings: fixture.bookings, commissions: fixture.commissions}
 	fixture.handler = application.NewCommissionTransportHandler(application.CommissionTransportDeps{
@@ -357,6 +359,9 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		Agreements:           fixture.agreements,
 		Downstream:           fixture.handoff,
 		Clock:                commissionClock{at: commissionNowAt},
+		Numbers:              fixture.numbers,
+		CommissionNumbers:    fixture.commissions,
+		BookingNumbers:       fixture.bookings,
 	})
 	return fixture
 }

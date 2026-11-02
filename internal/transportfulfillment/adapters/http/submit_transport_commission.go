@@ -76,18 +76,21 @@ func NewSubmitTransportCommissionEndpoint(intake TransportCommissionSubmissionIn
 // transportCommissionSubmissionResponse 是委托提交口的封闭响应形状。协议核对不过的各格各自成格，续办两两不同（去
 // party-commercial 发布或补正文 / 换一版此刻生效的 / 取得新协议 / 改服务方），传输层不合并。`agreementSupplier` 只随
 // `PROVIDER_MISMATCH` 出现，是那一版协议约定的供应商。`handoffReference` 非空说明委托已提交而意图还没交出去，原样重交
-// 会重发同一份。
+// 会重发同一份。`numberingRule` 只随 `NUMBERING_RULE_COLLISION` 出现，是撞了的那一类单据的类型代码，续办是去规则册（设置
+// → 单据编号）换这一类的格式（ADR-0355 决定八）。
 type transportCommissionSubmissionResponse struct {
 	Outcome               string                   `json:"outcome"`
 	UndecidedReason       string                   `json:"undecidedReason,omitempty"`
 	ContinuationReference string                   `json:"continuationReference,omitempty"`
 	HandoffReference      string                   `json:"handoffReference,omitempty"`
 	AgreementSupplier     string                   `json:"agreementSupplier,omitempty"`
+	NumberingRule         string                   `json:"numberingRule,omitempty"`
 	Commission            *transportCommissionBody `json:"commission,omitempty"`
 }
 
 // transportCommissionBody 逐字段透出在册那一份委托：`agreement` 是 party-commercial 拼出的协议快照指称，`legalEntity`
 // 是从那一版协议快照下来的采购责任法人。重放与已有委托回显的是在册那一份，不是这次送来的。时间一律 RFC 3339 UTC。
+// `commission` 是登记方生成的幂等键；单据号与无号原因两键见 documentNumberKeys。
 type transportCommissionBody struct {
 	Commission     string   `json:"commission"`
 	Provider       string   `json:"provider"`
@@ -99,6 +102,7 @@ type transportCommissionBody struct {
 	Members        []string `json:"members"`
 	SubmittedAt    string   `json:"submittedAt"`
 	RecordedAt     string   `json:"recordedAt"`
+	documentNumberKeys
 }
 
 func writeTransportCommissionSubmissionOutcome(response http.ResponseWriter, result application.CommissionResult) {
@@ -116,6 +120,9 @@ func writeTransportCommissionSubmissionOutcome(response http.ResponseWriter, res
 	if supplier, named := result.AgreementSupplier(); named {
 		body.AgreementSupplier = supplier.String()
 	}
+	if rule, named := result.NumberingRule(); named {
+		body.NumberingRule = string(rule)
+	}
 	if record, present := result.Commission(); present {
 		commission := record.Commission
 		members := make([]string, 0, len(commission.Members()))
@@ -123,16 +130,17 @@ func writeTransportCommissionSubmissionOutcome(response http.ResponseWriter, res
 			members = append(members, member.String())
 		}
 		body.Commission = &transportCommissionBody{
-			Commission:     commission.Commission().String(),
-			Provider:       commission.Provider().String(),
-			Agreement:      commission.Agreement().String(),
-			LegalEntity:    commission.LegalEntity().String(),
-			Conditions:     commission.Conditions().String(),
-			Role:           commission.Role().String(),
-			Responsibility: commission.Responsibility().String(),
-			Members:        members,
-			SubmittedAt:    rfc3339(commission.SubmittedAt()),
-			RecordedAt:     rfc3339(record.RecordedAt),
+			Commission:         commission.Commission().String(),
+			Provider:           commission.Provider().String(),
+			Agreement:          commission.Agreement().String(),
+			LegalEntity:        commission.LegalEntity().String(),
+			Conditions:         commission.Conditions().String(),
+			Role:               commission.Role().String(),
+			Responsibility:     commission.Responsibility().String(),
+			Members:            members,
+			SubmittedAt:        rfc3339(commission.SubmittedAt()),
+			RecordedAt:         rfc3339(record.RecordedAt),
+			documentNumberKeys: documentNumberKeysOf(record.DocumentNumber),
 		}
 	}
 	// ADR-0022：只有新提交了一份委托用 201；已有委托、冲突、协议核对不过的各格、未受理、未决都是形成了的答案（200）。

@@ -500,6 +500,8 @@ func (catalogue *ReviewCatalogue) ListDeliveryDispatchPendings(
 // ListBookingRequests 上列订舱册（票 demo-chain-gaps/48）：新申请的在前，同刻按订舱标识稳定排序。先按页截出订舱，再把每一次
 // 订舱名下的全部承运答复聚合进同一行，一条语句读出，订舱与答复取自同一个快照。答复按答复时刻、落库先后排，与答复编排判先后
 // （BookingAnswers.FindAnswersForUpdate）同一个次序；排序键末尾的答复标识只为让几列聚合逐位对齐。
+//
+// 订舱与它所属委托的单据号各随一行带出（ADR-0355 决定十一）：委托以左连接取，委托行读不回时那一格缺席，不拿委托标识顶。
 func (catalogue *ReviewCatalogue) ListBookingRequests(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -516,12 +518,16 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 	rows, err := querier.Query(ctx,
 		`SELECT booking.booking_id, booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
 		        booking.requested_at, booking.cancelled_at, booking.recorded_at, booking.submitted_by, booking.cancelled_by,
+		        booking.document_number, booking.document_number_absence, commission.document_number,
 		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded
 		   FROM (SELECT *
 		           FROM transport_fulfillment.booking_request
 		          WHERE tenant_id = $1
 		          ORDER BY requested_at DESC, booking_id
 		          LIMIT $2) AS booking
+		   LEFT JOIN transport_fulfillment.transport_commission AS commission
+		     ON commission.tenant_id = booking.tenant_id
+		    AND commission.commission_id = booking.commission_id
 		   LEFT JOIN LATERAL (
 		        SELECT array_agg(answer.acceptance_id ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS ids,
 		               array_agg(answer.outcome ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS outcomes,
@@ -544,19 +550,30 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 	list := make([]ports.BookingRequestCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row                      ports.BookingRequestCatalogueRow
-			cancelledAt              *time.Time
-			submittedBy, cancelledBy *string
-			ids, outcomes, bases     []string
-			quantities               []int64
-			decidedTimes, recordedAt []time.Time
+			row                                   ports.BookingRequestCatalogueRow
+			cancelledAt                           *time.Time
+			submittedBy, cancelledBy              *string
+			documentNumber, documentNumberAbsence *string
+			commissionDocumentNumber              *string
+			ids, outcomes, bases                  []string
+			quantities                            []int64
+			decidedTimes, recordedAt              []time.Time
 		)
 		if err := rows.Scan(
 			&row.Booking, &row.Commission, &row.Schedule, &row.Quantity, &row.Unit,
 			&row.RequestedAt, &cancelledAt, &row.RecordedAt, &submittedBy, &cancelledBy,
+			&documentNumber, &documentNumberAbsence, &commissionDocumentNumber,
 			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list booking requests: %w", err)
+		}
+		numbering, err := documentNumberingFromColumns(documentNumber, documentNumberAbsence)
+		if err != nil {
+			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
+		}
+		row.DocumentNumber = numbering
+		if commissionDocumentNumber != nil {
+			row.CommissionDocumentNumber = *commissionDocumentNumber
 		}
 		if cancelledAt != nil {
 			utc := cancelledAt.UTC()

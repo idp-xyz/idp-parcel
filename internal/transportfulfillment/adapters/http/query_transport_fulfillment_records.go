@@ -538,19 +538,21 @@ func serveBookingRequests(
 		}
 		body := bookingRequestRowBody{
 			bookingRequestBody: bookingRequestBody{
-				Booking:     row.Booking,
-				Commission:  row.Commission,
-				Schedule:    row.Schedule,
-				Quantity:    row.Quantity,
-				Unit:        row.Unit,
-				RequestedAt: rfc3339(row.RequestedAt),
-				CancelledAt: optionalInstant(row.CancelledAt),
-				RecordedAt:  rfc3339(row.RecordedAt),
+				Booking:            row.Booking,
+				Commission:         row.Commission,
+				Schedule:           row.Schedule,
+				Quantity:           row.Quantity,
+				Unit:               row.Unit,
+				RequestedAt:        rfc3339(row.RequestedAt),
+				CancelledAt:        optionalInstant(row.CancelledAt),
+				RecordedAt:         rfc3339(row.RecordedAt),
+				documentNumberKeys: documentNumberKeysOf(row.DocumentNumber),
 			},
-			Standing:    row.Standing,
-			Answers:     answers,
-			SubmittedBy: row.SubmittedBy,
-			CancelledBy: row.CancelledBy,
+			Standing:                 row.Standing,
+			Answers:                  answers,
+			SubmittedBy:              row.SubmittedBy,
+			CancelledBy:              row.CancelledBy,
+			CommissionDocumentNumber: row.CommissionDocumentNumber,
 		}
 		if row.Current != nil {
 			current := bookingAnswerRowBody(row.Booking, *row.Current)
@@ -629,6 +631,8 @@ type bookingRequestRowBody struct {
 	// 决定四不回操作证据。没记下时整键缺席。
 	SubmittedBy string `json:"submittedBy,omitempty"`
 	CancelledBy string `json:"cancelledBy,omitempty"`
+	// CommissionDocumentNumber 是所属委托的单据号（ADR-0355 决定十一）；委托没有号时整键缺席，页面照旧显示委托标识。
+	CommissionDocumentNumber string `json:"commissionDocumentNumber,omitempty"`
 }
 
 type bookingAnswerBounceListResponse struct {

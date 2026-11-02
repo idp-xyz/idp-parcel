@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -80,13 +78,7 @@ func (fixedCommissionClock) Now() time.Time { return time.Date(2026, 10, 19, 9, 
 
 func commissionSubmissionEndpoint(t *testing.T) http.Handler {
 	t.Helper()
-	handler := application.NewCommissionTransportHandler(application.CommissionTransportDeps{
-		Commissions: &commissionRegistryDouble{records: map[string]ports.TransportCommissionRecord{}},
-		Agreements:  agreementCheckStub{supplier: "SYN-PARTY-CARRIER-TRUNK-01"},
-		Downstream:  commissionHandoffStub{},
-		Clock:       fixedCommissionClock{},
-	})
-	return tfhttp.NewSubmitTransportCommissionEndpoint(operatorIntake(t, authenticatorFake{}), handler)
+	return numberedCommissionEndpoint(t, &documentNumberStub{})
 }
 
 const trunkCommissionBody = `{"commission": "SYN-COMMISSION-01", "provider": "SYN-PARTY-CARRIER-TRUNK-01",
