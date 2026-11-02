@@ -94,7 +94,7 @@ func (rig *redriveRig) command(t *testing.T, hit domain.SignalHit) application.R
 	}
 }
 
-// collide 让这一原因撞一次号：先把格式接下来要出的二十个号都占上（流水从不留空号，接着库里最大的号数），走一次真分诊，
+// collide 让这一原因撞一次号：先把格式接下来要出的 docnumber.MaxSkippedNumbers 个号都占上（流水从不留空号，接着库里最大的号数），走一次真分诊，
 // 再腾出旧号，撞号册留一行等重驱。
 func (rig *redriveRig) collide(t *testing.T, hits ...domain.SignalHit) {
 	t.Helper()
