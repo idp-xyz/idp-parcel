@@ -23,8 +23,8 @@ export const seriesKindLabels: Record<string, string> = {
 // 键取 domain.SeriesEvidenceGrade 原词（库上 CHECK 同一组）。此前这里写的是 ASSERTION，与服务端
 // 的 ASSERTED 对不上，断言强度那一格一直原样显示英文——票 08 顺手改正。
 export const evidenceGradeLabels: Record<string, string> = {
-  VERIFIABLE: '可复核',
-  ASSERTED: '断言强度',
+  VERIFIABLE: '有凭证可查',
+  ASSERTED: '仅声明、无凭证',
 };
 
 // 复核结论封闭两格（domain.SeriesReviewDecision 原词）。
@@ -36,17 +36,17 @@ export const reviewDecisionLabels: Record<string, string> = {
 // ---- 登记前预览（票 pricing-reference-series-operations/08）----
 
 export const previewOutcomeLabels: Record<string, string> = {
-  PREVIEWED: '已预览（未登记；等级、内容摘要与逐期差异如下）',
-  NOT_ACCEPTED: '请求不受理（登记本体立不起来，什么也没算）',
-  UNDECIDED: '未决（取对照版本时依赖故障，可重试）',
+  PREVIEWED: '预览通过，还没登记；核对下面的内容后再点「登记」',
+  NOT_ACCEPTED: '内容有误，没法登记；按提示改好后重新预览',
+  UNDECIDED: '这次没查完（对照版本没取回来），稍后重新预览',
 };
 
 // 对照那一格的四种下场：三种「没比出来」按续办动作分格，不折成一句「无差异」。
 export const comparisonOutcomeLabels: Record<string, string> = {
-  NOT_REQUESTED: '未要求对照（不是更正、也没指名对照版本）',
-  COMPARED: '已与对照版本逐期比对',
-  BASE_UNKNOWN: '对照版本不在册（查版本号）',
-  BASE_INCOMPARABLE: '对照版本在册但不是同一条序列（种类不同——查绑错了哪条）',
+  NOT_REQUESTED: '没有指定对照版本，不做比对',
+  COMPARED: '已和对照版本逐期比对',
+  BASE_UNKNOWN: '找不到对照版本，检查版本号是否填对',
+  BASE_INCOMPARABLE: '对照版本属于另一种数值（种类不同），检查是不是填错了哪一条',
 };
 
 export const periodChangeKindLabels: Record<string, string> = {
@@ -108,14 +108,14 @@ export const estimateReasonLabels: Record<string, string> = {
 };
 
 export const problemCodeNotes: Record<string, string> = {
-  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
-  MALFORMED_REQUEST: '请求构造不出查询,重发同样的内容不会改变结果。',
-  INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
-  NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
+  METHOD_NOT_ALLOWED: '页面与系统版本不一致，请刷新页面后再试；仍不行请联系管理员。',
+  MALFORMED_REQUEST: '请求内容的格式不对，原样重发不会变；请检查填写的内容后再试。',
+  INTAKE_FAILED: '系统这次没能处理请求，没有任何改动；请稍后重试。',
+  NO_ANSWER_FORMED: '系统这次没能处理完，没有任何改动；请稍后重试。',
 };
 
 export function problemNote(code: string): string {
-  return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
+  return problemCodeNotes[code] ?? `出了没预料到的问题（问题码 ${code}）；请把这个问题码告诉管理员。`;
 }
 
 export function labelOf(table: Record<string, string>, code: string): string {

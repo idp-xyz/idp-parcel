@@ -5,6 +5,7 @@ import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refu
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
 import { OperatorRefusalNote } from '../../components/states';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import {
   listQuoteBasisCandidates,
   previewReferenceSeries,
@@ -17,6 +18,7 @@ import {
 } from './api';
 import {
   comparisonOutcomeLabels,
+  directionLabels,
   evidenceGradeLabels,
   labelOf,
   periodChangeKindLabels,
@@ -128,28 +130,29 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
           {correcting ? (
             <>
               更正 <span className="font-mono text-[13px]">{draft.seriesId}</span>
-              <span className="font-mono text-[13px] text-idpxyz-textMuted">@{draft.correction?.priorVersion}</span>
-              <span className="text-[13px] text-idpxyz-textMuted">（登记为新版本，原版本一字不动）</span>
+              <span className="text-[13px] text-idpxyz-textMuted"> 版本 {draft.correction?.priorVersion}</span>
+              <span className="text-[13px] text-idpxyz-textMuted">（另登一个新版本，原版本保持不变）</span>
             </>
           ) : (
-            '登记参考序列版本'
+            '登记汇率或费率'
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* 登记人由接入渠道给，表单不收也不送；凭证等级、内容摘要都由后端算，页面只呈现（ADR-0101 决定四）。 */}
         <p className="text-xs text-idpxyz-textMuted">
-          先「预览」：服务端过领域构造门，答回证据等级、内容摘要与逐期差异，<strong>不写库</strong>；
-          预览过的就是眼前这一份时才能「登记」，改任何一格预览作废。登记责任方与租户由接入渠道给，
-          表单不收也不送；证据等级、内容摘要与引用令牌都由服务端算，页面只呈现。
+          填好后先点「预览」核对：系统会检查内容、列出与对照版本的逐期差异，这一步不会保存。预览通过后再点「登记」；
+          预览之后改了任何一格，要重新预览。登记后要有人复核通过，这一版才参与计价。
         </p>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className={fieldLabel}>序列标识 *</span>
+            <span className={fieldLabel}>名称 *</span>
             <Input
               value={draft.seriesId}
               readOnly={correcting}
               className="font-mono text-[13px]"
+              placeholder="如 FX-CNY-SGD，以后每期都登在这个名称下"
               onChange={(event) => patch({ seriesId: event.target.value })}
             />
           </label>
@@ -158,7 +161,7 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             <Input
               value={draft.seriesVersion}
               className="font-mono text-[13px]"
-              placeholder={correcting ? `不同于 ${draft.correction?.priorVersion ?? ''}` : ''}
+              placeholder={correcting ? `换一个，不能再用 ${draft.correction?.priorVersion ?? ''}` : '如 v1'}
               onChange={(event) => patch({ seriesVersion: event.target.value })}
             />
           </label>
@@ -177,11 +180,11 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             />
           </div>
           <label className="block">
-            <span className={fieldLabel}>序列来源标识 *</span>
+            <span className={fieldLabel}>数据来源 *</span>
             <Input
               value={draft.sourceIdentifier}
               className="font-mono text-[13px]"
-              placeholder="外部来源的标识，如 cfets-daily（ADR-0013：本册只登记不生产数值）"
+              placeholder="数值是谁公布的，如 cfets-daily"
               onChange={(event) => patch({ sourceIdentifier: event.target.value })}
             />
           </label>
@@ -200,7 +203,7 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             <Input
               value={draft.currency}
               className="font-mono text-[13px]"
-              placeholder="三位大写代码；须与引用它的定价方案一致（ADR-0110）"
+              placeholder="三位大写代码，如 CNY；与用到它的价格表一致"
               onChange={(event) => patch({ currency: event.target.value.toUpperCase() })}
             />
           </label>
@@ -216,14 +219,14 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
         {correcting && draft.correction ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-idpxyz-textMuted">
-              更正回指 <span className="font-mono">{draft.seriesId}@{draft.correction.priorVersion}</span>
-              （引用 digest 原样带回，服务端照实回指）。更正依据是硬句：凭什么更正要写清。
+              这一版登记后会标明是更正 <span className="font-mono">{draft.seriesId}</span> 版本{' '}
+              <span className="font-mono">{draft.correction.priorVersion}</span>。请写清为什么更正，复核的同事会看。
             </p>
             <Textarea
               value={draft.correction.basis}
               rows={3}
               className="text-xs"
-              placeholder="更正依据（必填）"
+              placeholder="更正理由（必填）：例如「第 2 期数值录错，按来源公布值改正」"
               onChange={(event) =>
                 patch({ correction: draft.correction ? { ...draft.correction, basis: event.target.value } : null })
               }
@@ -232,11 +235,11 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
         ) : null}
 
         <label className="block">
-          <span className={fieldLabel}>预览时对照的版本（可选）</span>
+          <span className={fieldLabel}>和哪一版对照（可不填）</span>
           <Input
             value={draft.compareWithVersion}
             className="font-mono text-[13px] max-w-[280px]"
-            placeholder={correcting ? '默认对照被更正的那一版' : '留空即不比对'}
+            placeholder={correcting ? '不填就和被更正的那一版比' : '不填就不比对'}
             onChange={(event) => patch({ compareWithVersion: event.target.value })}
           />
         </label>
@@ -262,9 +265,9 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             className={primaryActionClass}
             onClick={runRegister}
             disabled={!previewAccepted || registration.kind === 'submitting' || recorded}
-            title={previewAccepted ? undefined : '先预览；预览过的必须就是眼前这一份'}
+            title={previewAccepted ? undefined : '先预览通过，再登记'}
           >
-            {registration.kind === 'submitting' ? '登记中…' : correcting ? '登记为更正版本' : '登记'}
+            {registration.kind === 'submitting' ? '登记中…' : correcting ? '登记更正版本' : '登记'}
           </Button>
           {onClose ? (
             <Button variant="outline" onClick={onClose}>
@@ -274,7 +277,7 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
         </div>
 
         {preview.kind === 'previewed' && currentPreview === null ? (
-          <p className="text-xs text-idpxyz-textMuted">草稿已改动，上一次预览作废；请重新预览。</p>
+          <p className="text-xs text-idpxyz-textMuted">内容改过了，请重新预览。</p>
         ) : null}
         {currentPreview ? <PreviewNote answer={currentPreview} /> : null}
         {registration.kind === 'answered' ? <RegistrationNote answer={registration.answer} /> : null}
@@ -341,7 +344,7 @@ function QuoteBasisField({
   if (candidates?.kind === 'outcome') {
     return (
       <label className="block">
-        <span className={fieldLabel}>汇率口径（声明了 fx 口径的商业价格政策版本）*</span>
+        <span className={fieldLabel}>汇率口径（定了汇率口径的价格政策）*</span>
         <select
           className={selectClass}
           value={selected}
@@ -350,17 +353,16 @@ function QuoteBasisField({
             onChange(policyId && policyVersion ? { policyId, policyVersion } : null);
           }}
         >
-          <option value="">未选</option>
+          <option value="">请选择</option>
           {usable.map((policy) => (
             <option key={`${policy.objectId}@${policy.version}`} value={`${policy.objectId}@${policy.version}`}>
-              {policy.objectId}@{policy.version} · {policy.direction} · {policy.caliber?.fx?.quoteType}/
-              {policy.caliber?.fx?.asOfSemantics}
+              {policy.objectId} 版本 {policy.version} · {labelOf(directionLabels, policy.direction)}
             </option>
           ))}
         </select>
         {usable.length === 0 ? (
           <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-            当前租户没有声明了 fx 口径的价格政策版本；先在商业政策册声明口径，再登记汇率序列。
+            还没有定了汇率口径的价格政策；先到「商业规则」页的价格政策里定好汇率口径，再来登记汇率。
           </span>
         ) : null}
       </label>
@@ -369,29 +371,29 @@ function QuoteBasisField({
 
   return (
     <div>
-      <span className={fieldLabel}>汇率口径（商业价格政策版本）*</span>
+      <span className={fieldLabel}>汇率口径（价格政策）*</span>
       <div className="grid grid-cols-2 gap-3">
         <Input
           value={value?.policyId ?? ''}
           className="font-mono text-[13px]"
-          placeholder="政策标识"
+          placeholder="价格政策编号"
           onChange={(event) => onChange({ policyId: event.target.value, policyVersion: value?.policyVersion ?? '' })}
         />
         <Input
           value={value?.policyVersion ?? ''}
           className="font-mono text-[13px]"
-          placeholder="政策版本"
+          placeholder="版本，如 v1"
           onChange={(event) => onChange({ policyId: value?.policyId ?? '', policyVersion: event.target.value })}
         />
       </div>
       <span className="block text-[11px] text-idpxyz-textMuted mt-1">
         {candidates === null
-          ? '正在读商业政策候选…'
+          ? '正在读取价格政策…'
           : candidates.kind === 'unconfigured'
-            ? '商业政策候选读口在接入渠道未配置那堵墙前（403），先手填；口径是否声明由服务端登记时判。'
+            ? '价格政策列表没读到（访问通道尚未配置），请手填编号与版本；预览时会检查它有没有定汇率口径。'
             : isOperatorRefusal(candidates)
-              ? `商业政策候选读口答${accessRefusalHeadline(candidates.kind)}，先手填；口径是否声明由服务端登记时判。`
-              : '商业政策候选读不到，先手填；口径是否声明由服务端登记时判。'}
+              ? `价格政策列表没读到（${accessRefusalHeadline(candidates.kind)}），请手填编号与版本；预览时会检查它有没有定汇率口径。`
+              : '价格政策列表没读到，请手填编号与版本；预览时会检查它有没有定汇率口径。'}
       </span>
     </div>
   );
@@ -411,15 +413,14 @@ function PeriodsEditor({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className={fieldLabel}>期次（起点 / 止点 / 取值 / 凭证引用）*</span>
+        <span className={fieldLabel}>每期数值（起点 / 止点 / 数值 / 凭证编号）*</span>
         <Button variant="outline" onClick={onAdd}>
           加一期
         </Button>
       </div>
       <p className="text-[11px] text-idpxyz-textMuted mb-2">
-        时刻填 RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）；止点留空即无上界，只许末期。
-        凭证引用留空即该期只有断言强度——全期都有可复核凭证才是「可复核」，那一格由服务端裁。
-        期次重叠、更正不得换序列身份之类的领域规则由服务端构造门判，本地不重写。
+        日期填 2026-11-01（按当天零点 UTC 算）或带时刻的 2026-11-01T00:00:00Z；只有最后一期的止点可以留空，表示长期。
+        凭证编号填来源公告或文件的编号，可不填；每期都有凭证，这一版才算「有凭证可查」。期次有没有重叠，预览时会检查。
       </p>
       <div className="flex flex-col gap-2">
         {periods.map((period, index) => (
@@ -433,24 +434,24 @@ function PeriodsEditor({
             <Input
               value={period.endsAt}
               className="font-mono text-[12px]"
-              placeholder="止点（末期可留空）"
+              placeholder="止点（最后一期可空）"
               onChange={(event) => onChange(index, { endsAt: event.target.value })}
             />
             <Input
               value={period.value}
               inputMode="decimal"
               className="font-mono text-[12px]"
-              placeholder="取值"
+              placeholder="数值"
               onChange={(event) => onChange(index, { value: event.target.value })}
             />
             <Input
               value={period.evidenceRef}
               className="font-mono text-[12px]"
-              placeholder="凭证引用（可空）"
+              placeholder="凭证编号（可空）"
               onChange={(event) => onChange(index, { evidenceRef: event.target.value })}
             />
             <Button variant="outline" disabled={periods.length <= 1} onClick={() => onRemove(index)}>
-              删
+              删除
             </Button>
           </div>
         ))}
@@ -464,11 +465,7 @@ function PreviewNote({ answer }: { answer: ApiResult<SeriesPreviewResponseBody> 
     <AnswerNote
       answer={answer}
       what="预览"
-      unconfiguredNote={
-        '预览端点已建立并装配，但操作者身份的接入渠道尚未登记，服务端按 ADR-0055 如实拒绝——' +
-        '这是诚实答案不是尚未实现，改请求或重试都不会改变结果。登记接入渠道认证参数（PAR-INT-01，' +
-        '实例半边）后由装配侧换上真 Intake 即放行；此前登记仍走受控登记 CLI。'
-      }
+      unconfiguredNote="这次没能预览，重试也不会变；请管理员先配置访问通道。"
     >
       {(body) => <PreviewBody body={body} />}
     </AnswerNote>
@@ -480,16 +477,20 @@ function PreviewBody({ body }: { body: SeriesPreviewResponseBody }) {
   return (
     <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
       <p>
-        预览答复：<span className="font-mono">{outcome}</span> —— {labelOf(previewOutcomeLabels, outcome)}
+        {labelOf(previewOutcomeLabels, outcome)}
       </p>
       {outcome === 'PREVIEWED' ? (
         <>
           <p>
-            证据等级：<strong>{labelOf(evidenceGradeLabels, body.evidenceGrade ?? '')}</strong>
-            {' · '}规范化：<span className="font-mono">{body.canonicalization}</span>
+            凭证：<strong>{labelOf(evidenceGradeLabels, body.evidenceGrade ?? '')}</strong>
           </p>
-          {/* 内容摘要整串显示不截断：它就是登记后册上那一格，操作者要拿它去对。 */}
-          <p className="font-mono break-all">内容摘要：{body.contentDigest}</p>
+          {/* 内容摘要整串显示不截断：它就是登记后列表技术详情里那一格，对账的人要拿它去对。 */}
+          <TechnicalDetails
+            rows={[
+              { label: '内容摘要', value: body.contentDigest ?? '' },
+              { label: '规范化版本', value: body.canonicalization ?? '' },
+            ]}
+          />
           {body.comparison ? <ComparisonBody comparison={body.comparison} /> : null}
         </>
       ) : null}
@@ -501,7 +502,6 @@ function ComparisonBody({ comparison }: { comparison: NonNullable<SeriesPreviewR
   return (
     <div className="mt-1">
       <p>
-        对照：<span className="font-mono">{comparison.outcome}</span> ——{' '}
         {labelOf(comparisonOutcomeLabels, comparison.outcome)}
         {comparison.baseVersion ? (
           <>
@@ -511,15 +511,15 @@ function ComparisonBody({ comparison }: { comparison: NonNullable<SeriesPreviewR
       </p>
       {comparison.outcome === 'COMPARED' ? (
         comparison.changes.length === 0 ? (
-          <p>逐期比对无差异。</p>
+          <p>每一期都和对照版本一样。</p>
         ) : (
           <table className="mt-1 w-full text-[11px]">
             <thead>
               <tr className="text-left text-idpxyz-textMuted">
                 <th className="pr-2 font-normal">起点</th>
                 <th className="pr-2 font-normal">变化</th>
-                <th className="pr-2 font-normal">对照版</th>
-                <th className="pr-2 font-normal">拟登记</th>
+                <th className="pr-2 font-normal">对照版本</th>
+                <th className="pr-2 font-normal">这次登记</th>
               </tr>
             </thead>
             <tbody>
@@ -544,7 +544,7 @@ function changeLabel(change: SeriesPeriodChangeRecord): string {
   const base = labelOf(periodChangeKindLabels, change.kind);
   if (change.kind !== 'CHANGED') return base;
   const parts = [
-    change.valueChanged ? '取值' : null,
+    change.valueChanged ? '数值' : null,
     change.endChanged ? '止点' : null,
     change.evidenceChanged ? '凭证' : null,
   ].filter((part): part is string => part !== null);
@@ -553,7 +553,7 @@ function changeLabel(change: SeriesPeriodChangeRecord): string {
 
 function periodText(period: SeriesPeriodChangeRecord['base']): string {
   if (!period) return '—';
-  const end = period.endsAt ?? '开放';
+  const end = period.endsAt ?? '长期';
   const evidence = period.evidenceRef ? ` · ${period.evidenceRef}` : '';
   return `${period.value} → ${end}${evidence}`;
 }
@@ -563,17 +563,10 @@ function RegistrationNote({ answer }: { answer: ApiResult<RegistrationResponseBo
     <AnswerNote
       answer={answer}
       what="登记"
-      unconfiguredNote={
-        '登记端点已建立并装配，但操作者身份的接入渠道尚未登记，服务端按 ADR-0055 如实拒绝——' +
-        '这是诚实答案不是尚未实现。登记接入渠道认证参数（PAR-INT-01，实例半边）后由装配侧换上' +
-        '真 Intake 即放行；此前登记仍走受控登记 CLI。'
-      }
+      unconfiguredNote="这次没有登记，重试也不会变；请管理员先配置访问通道。"
     >
       {(body) => (
-        <p className="text-xs text-idpxyz-textMuted">
-          登记册答复：<span className="font-mono">{body.outcome}</span> ——{' '}
-          {registrationOutcomeLabels[body.outcome] ?? body.outcome}
-        </p>
+        <p className="text-xs text-idpxyz-textMuted">{registrationOutcomeLabels[body.outcome] ?? body.outcome}</p>
       )}
     </AnswerNote>
   );
@@ -599,9 +592,8 @@ function AnswerNote<Body>({
       return <>{children(answer.body)}</>;
     case 'unconfigured':
       return (
-        <p className="text-xs text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。{unconfiguredNote}
-        </p>
+        // 渠道未配置是诚实答案不是尚未实现（ADR-0055）：改请求或重试都不会变，续办在配置接入渠道。
+        <p className="text-xs text-idpxyz-textMuted">访问通道尚未配置：{unconfiguredNote}</p>
       );
     case 'loginRequired':
     case 'notGranted':
@@ -609,16 +601,16 @@ function AnswerNote<Body>({
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">
-          {what}调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
+          没能{what}：{problemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className="text-xs text-idpxyz-danger">
-          服务端未形成{what}答案（HTTP {answer.status}）：{problemNote(answer.code)}；可稍后重试。
+          这次{what}没处理完：{problemNote(answer.code)}
         </p>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-xs text-idpxyz-danger">连不上系统，没能{what}（{answer.message}）；检查网络后重试。</p>;
   }
 }

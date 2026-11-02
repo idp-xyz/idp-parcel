@@ -101,18 +101,18 @@ test('更正预填遇到不认识的种类时留空而不硬塞', () => {
 // Covers: 空草稿的结构缺格逐条点名；完整草稿零问题。
 test('空草稿逐条点名结构缺格，完整草稿零问题', () => {
   const problems = draftProblems(emptySeriesDraft());
-  ok(problems.includes('序列标识未填'));
-  ok(problems.includes('版本号未填'));
-  ok(problems.includes('种类未选'));
-  ok(problems.includes('来源标识未填'));
+  ok(problems.includes('请填名称'));
+  ok(problems.includes('请填版本号'));
+  ok(problems.includes('请选种类'));
+  ok(problems.includes('请填数据来源'));
   ok(problems.some((line) => line.startsWith('第 1 期起点')));
-  ok(problems.some((line) => line.startsWith('第 1 期取值')));
+  ok(problems.some((line) => line.startsWith('第 1 期数值')));
   deepEqual(draftProblems(completeDraft()), []);
 });
 
 // Covers: 汇率必须选口径（领域硬句「不接受未声明口径的裸汇率」的必然 400 那半），燃油不要口径。
 test('汇率缺口径是结构缺格，燃油不要口径', () => {
-  ok(draftProblems(completeDraft({ kind: 'EXCHANGE_RATE' })).some((line) => line.startsWith('汇率必须选')));
+  ok(draftProblems(completeDraft({ kind: 'EXCHANGE_RATE' })).some((line) => line.startsWith('汇率要选')));
   deepEqual(
     draftProblems(completeDraft({ kind: 'EXCHANGE_RATE', quoteBasis: { policyId: 'PP-FX', policyVersion: '2' } })),
     [],
@@ -123,7 +123,7 @@ test('汇率缺口径是结构缺格，燃油不要口径', () => {
 // Covers: 取值只认十进制文本；指数记法在服务端 ParseDecimal 入口会被拒，所以本地就拦。
 test('取值拒指数记法与非数字，接受带符号与小数', () => {
   const bad = completeDraft({ periods: [{ startsAt: '2026-08-01', endsAt: '', value: '1e3', evidenceRef: '' }] });
-  ok(draftProblems(bad).some((line) => line.includes('取值不是十进制文本')));
+  ok(draftProblems(bad).some((line) => line.includes('数值要填普通小数')));
   const good = completeDraft({
     periods: [
       { startsAt: '2026-08-01', endsAt: '2026-08-02', value: '-0.5', evidenceRef: '' },
@@ -140,10 +140,10 @@ test('更正必须回指、写依据、且新版本号不同于被更正版本',
     correction: { priorVersion: 'v3', priorFingerprint: '', basis: '' },
   });
   const problems = draftProblems(draft);
-  ok(problems.some((line) => line.startsWith('更正依据未填')));
+  ok(problems.some((line) => line.startsWith('请写更正理由')));
   ok(problems.includes('新版本号不能与被更正的版本相同'));
   const noPrior = completeDraft({ correction: { priorVersion: '', priorFingerprint: '', basis: 'x' } });
-  ok(draftProblems(noPrior).includes('更正必须回指被更正的版本'));
+  ok(draftProblems(noPrior).includes('更正要指明是更正哪一版'));
 });
 
 // Covers: 领域规则**不在本地重写**——两期重叠、无上界不在末期，本地都是零命中；那是领域构造门

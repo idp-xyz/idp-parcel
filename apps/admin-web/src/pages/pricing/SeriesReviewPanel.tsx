@@ -74,20 +74,17 @@ export function SeriesReviewPanel({
       <CardHeader>
         <CardTitle>
           复核 <span className="font-mono text-[13px]">{target.seriesId}</span>
-          <span className="font-mono text-[13px] text-idpxyz-textMuted">
-            @{target.seriesVersion}
-          </span>
+          <span className="text-[13px] text-idpxyz-textMuted"> 版本 {target.seriesVersion}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {/* 复核责任方与授予由接入渠道给，表单不收也不送——从浏览器收一个上去就是自报身份（ADR-0262 决定一）。 */}
         <p className="text-xs text-idpxyz-textMuted">
-          复核是追加在版本之旁的独立事实，不改原登记一列；结论为通过时，该版本自复核时刻起
-          在用（ADR-0099 决定二、三）。
+          核对这一版的每期数值与外部来源公布的是否一致。通过后，这一版从现在起参与计价；退回后，登记人要更正再登一版。
+          复核只是另记一条结论，原来登记的数值不会被改。
           <br />
-          复核责任方与他的授予由接入渠道给，本表单不收也不送——自报即失效。该版本的登记责任方是{' '}
-          <span className="font-mono">{target.registrant}</span>；租户的参考复核职责规则若要求不同主体，
-          <strong>同一个人复核会被拒</strong>；规则若要求某一格授予，没有它的人复核会被拒；租户还没登规则时，
-          谁来复核都答未配置。
+          这一版的登记人是 <span className="font-mono">{target.registrant}</span>。贵公司如果规定登记人不能自己复核，
+          请换一位同事来做。
         </p>
 
         <div className="flex items-center gap-2">
@@ -109,7 +106,7 @@ export function SeriesReviewPanel({
         <Textarea
           value={basis}
           onChange={(event) => setBasis(event.target.value)}
-          placeholder="复核依据：凭什么作出这个结论（必填）"
+          placeholder="理由（必填）：例如「已与来源公布的数值逐期核对一致」"
           rows={4}
           className="text-xs"
         />
@@ -121,7 +118,7 @@ export function SeriesReviewPanel({
             onClick={send}
             disabled={!ready || state.kind === 'submitting'}
           >
-            {state.kind === 'submitting' ? '提交中…' : '提交复核'}
+            {state.kind === 'submitting' ? '提交中…' : '提交复核结论'}
           </Button>
           <Button variant="outline" onClick={onClose}>
             收起
@@ -140,22 +137,14 @@ function ReviewAnswerNote({ state }: { state: PanelState }) {
   switch (answer.kind) {
     case 'outcome': {
       const outcome = answer.body.outcome;
-      // 未收录的 outcome 原样示出英文原名：服务端新增一格时，宁可显示原名也不把它归进某个
-      // 既有中文说法——那会让一种新答案冒充另一种。
-      return (
-        <p className="text-xs text-idpxyz-textMuted">
-          复核册答复：<span className="font-mono">{outcome}</span> ——{' '}
-          {seriesReviewOutcomeLabels[outcome] ?? outcome}
-        </p>
-      );
+      // 未收录的 outcome 原样示出原名：新增一格时宁可显示原名，也不把它归进某个既有中文说法——那会让一种新答案冒充另一种。
+      return <p className="text-xs text-idpxyz-textMuted">{seriesReviewOutcomeLabels[outcome] ?? outcome}</p>;
     }
     case 'unconfigured':
+      // 渠道未配置是诚实答案不是尚未实现（ADR-0055）：改请求或重试都不会变，续办在配置接入渠道。
       return (
         <p className="text-xs text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。复核端点已建立并装配，但操作者
-          身份的接入渠道尚未登记，服务端按 ADR-0055 如实拒绝——<strong>这是诚实答案不是尚未
-          实现</strong>，改请求或重试都不会改变结果。登记接入渠道认证参数（PAR-INT-01，实例
-          半边）后由装配侧换上真 Intake 即放行；此前复核仍走受控登记 CLI。
+          访问通道尚未配置，这次复核没有记下；重试也不会变。请管理员先配置访问通道。
         </p>
       );
     case 'loginRequired':
@@ -163,18 +152,15 @@ function ReviewAnswerNote({ state }: { state: PanelState }) {
       return <OperatorRefusalNote kind={answer.kind} what="复核" />;
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-        </p>
+        <p className="text-xs text-idpxyz-danger">复核没有记下：{problemNote(answer.code)}</p>
       );
     case 'noAnswer':
       return (
         <p className="text-xs text-idpxyz-danger">
-          服务端未形成答案（HTTP {answer.status}）：{problemNote(answer.code)}；复核记没记上
-          未知，可稍后重试。
+          这次没处理完，复核记没记上还不确定；稍后刷新列表确认，再决定要不要重提。（问题码 {answer.code}）
         </p>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-xs text-idpxyz-danger">连不上系统，复核没有提交（{answer.message}）；检查网络后重试。</p>;
   }
 }

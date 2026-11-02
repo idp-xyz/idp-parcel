@@ -33,12 +33,12 @@ export type { ApiResult } from '../catalogue-api';
  * 业务结论，原行不被顶替，续办属治理裁决——页面照实呈现，不折成「提交失败」。
  */
 export const registrationOutcomeLabels: Record<string, string> = {
-  RECORDED: '已入册',
-  ALREADY_REGISTERED: '已在册（同版本同内容，幂等重放）',
-  CONTENT_CONFLICT: '版本内容冲突（原行不被顶替，续办属治理裁决）',
-  CANONICALIZATION_DIFFERS: '规范化版本不可比（既不是冲突也不是重放）',
-  NOT_ACCEPTED: '请求不受理（登记本体立不起来，未到达登记册）',
-  UNDECIDED: '未决（依赖故障，登记与否未知）',
+  RECORDED: '已登记',
+  ALREADY_REGISTERED: '这一版早已登记过、内容相同，这次没有重复登记',
+  CONTENT_CONFLICT: '这个版本号已经登记过不同的内容；要改内容，请换一个新版本号',
+  CANONICALIZATION_DIFFERS: '这个版本号已按另一种格式登记过，两份没法比较；请换一个新版本号',
+  NOT_ACCEPTED: '内容有误，没有登记；按提示改好后再提交',
+  UNDECIDED: '这次没处理完，登没登上还不确定；稍后刷新列表确认',
 };
 
 export function registerPriceCard(
@@ -314,15 +314,15 @@ export interface SeriesReviewRequest {
  * 一条。合表会让其中一种顶着另一种的中文显示出来。
  */
 export const seriesReviewOutcomeLabels: Record<string, string> = {
-  RECORDED: '复核已追加（结论为通过时，该版本自复核时刻起在用）',
-  ALREADY_RECORDED: '同键同内容已在册（幂等重放，没有造第二条复核）',
-  CONFLICT: '同键在册而结论或依据不同（原行不顶替；改主意请另追加一条）',
-  VERSION_UNKNOWN: '被复核的版本不在册（先去登记该版本）',
-  NEEDS_ANOTHER_REVIEWER: '租户的复核职责规则要求不同主体，而复核责任方就是登记责任方（换一个人来，不是改字段）',
-  NOT_CONFIGURED: '租户还没有登记参考复核职责规则，复核不放行（先登规则；换人、改字段都不会变）',
-  REVIEWER_NOT_QUALIFIED: '复核职责规则要求的那一格授予你没有（换一个持有它的人来复核，或由租户改规则）',
-  NOT_ACCEPTED: '请求不受理（结论不在封闭集或缺依据；未到达复核册）',
-  UNDECIDED: '未决（依赖故障，记录与否未知，可重试）',
+  RECORDED: '复核已记下；结论是通过的，这一版从现在起参与计价',
+  ALREADY_RECORDED: '同样的复核早已记过，这次没有重复记',
+  CONFLICT: '这一版已有一条结论或理由不同的复核；改主意请另记一条，原记录不改',
+  VERSION_UNKNOWN: '找不到要复核的这一版；先去登记它',
+  NEEDS_ANOTHER_REVIEWER: '贵公司规定登记人不能自己复核；请换一位同事来复核',
+  NOT_CONFIGURED: '贵公司还没设置谁可以复核汇率与费率，暂时不能复核；请管理员先设置复核规则',
+  REVIEWER_NOT_QUALIFIED: '你没有复核这类数值的权限；请让有权限的同事来复核，或请管理员调整复核规则',
+  NOT_ACCEPTED: '结论或理由没填好，没有记下；选好结论、写明理由后再提交',
+  UNDECIDED: '这次没处理完，记没记上还不确定；稍后刷新列表确认，再决定要不要重提',
 };
 
 export function reviewReferenceSeries(

@@ -71,5 +71,5 @@ test('有数时逐种类透出，总数按种类相加', () => {
     { kind: 'EXCHANGE_RATE', evaluationCount: 1 },
     { kind: 'FUEL_RATE', evaluationCount: 2 },
   ]);
-  match(pendingEvaluationsNote(cell), /按序列种类计.*3/);
+  match(pendingEvaluationsNote(cell), /3 条，按种类/);
 });

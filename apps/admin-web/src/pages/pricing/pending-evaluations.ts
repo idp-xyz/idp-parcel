@@ -52,16 +52,17 @@ export function pendingEvaluationsCellOf(
 export function pendingEvaluationsNote(cell: PendingEvaluationsCell): string {
   switch (cell.state) {
     case 'unasked':
-      return '挂起评价数：尚未取到。';
+      return `${PENDING_LEAD}：正在查。`;
     case 'unavailable':
       if (cell.reason === 'unconfigured') {
-        return '挂起评价数未取到：接入渠道未配置（403）。这是「今天没问到」，不是「没有挂起评价」。';
+        return `${PENDING_LEAD}：没查到，访问通道尚未配置（403）。这是今天没问到，不是零条。`;
       }
-      if (cell.reason === 'failed') return '挂起评价数未取到；这是「今天没问到」，不是「没有挂起评价」。';
-      return `挂起评价数未取到：${accessRefusalHeadline(cell.reason)}。这是「今天没问到」，不是「没有挂起评价」。`;
+      if (cell.reason === 'failed') return `${PENDING_LEAD}：没查到，稍后刷新再看。这是今天没问到，不是零条。`;
+      return `${PENDING_LEAD}：没查到，${accessRefusalHeadline(cell.reason)}。这是今天没问到，不是零条。`;
     case 'counted':
-      return cell.total === 0
-        ? '因序列未解析而待判断的评价：没有。'
-        : `因序列未解析而待判断的评价（按序列种类计）：${cell.total}`;
+      return cell.total === 0 ? `${PENDING_LEAD}：没有。` : `${PENDING_LEAD}：${cell.total} 条，按种类：`;
   }
 }
+
+// 一线叫法：评价 → 计费，「因序列未解析而挂起」→ 缺数值暂未算出。
+const PENDING_LEAD = '因缺汇率或费率而暂未算出的计费';

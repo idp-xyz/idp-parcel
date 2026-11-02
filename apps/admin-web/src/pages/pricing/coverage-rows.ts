@@ -108,12 +108,12 @@ export function coverageRowOf(
 export function coverageNote(cell: CoverageCell): string {
   switch (cell.kind) {
     case 'open':
-      return '在用版本无终点';
+      return '长期可用';
     case 'bounded':
       return cell.remainingDays !== undefined && cell.remainingDays < 0
-        ? `在用版本已于 ${-cell.remainingDays} 天前到期`
-        : `在用版本还盖 ${cell.remainingDays} 天`;
+        ? `已过期 ${-cell.remainingDays} 天`
+        : `还能用 ${cell.remainingDays} 天`;
     case 'none':
-      return '今天没有在用版本';
+      return '今天没有可用的数值';
   }
 }

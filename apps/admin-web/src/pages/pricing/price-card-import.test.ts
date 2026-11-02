@@ -149,13 +149,13 @@ test('发布交给了登记时，登记那一格的原名与中文接在发布�
     status: 201,
     body: { outcome: 'DRAFT_PUBLISHED', registration: 'RECORDED' },
   });
-  equal(landed.text, '发布（HTTP 201）：DRAFT_PUBLISHED —— 已发布（登记落定，草稿转已发布）；登记：RECORDED —— 已入册');
+  equal(landed.text, '发布（HTTP 201）：DRAFT_PUBLISHED —— 已发布（登记落定，草稿转已发布）；登记：RECORDED —— 已登记');
   const conflict = draftActionNoteOf('publish', {
     kind: 'outcome',
     status: 200,
     body: { outcome: 'PUBLICATION_NOT_LANDED', registration: 'CONTENT_CONFLICT' },
   });
-  match(conflict.text, /PUBLICATION_NOT_LANDED —— 登记没有落定.*；登记：CONTENT_CONFLICT —— 版本内容冲突/);
+  match(conflict.text, /PUBLICATION_NOT_LANDED —— 登记没有落定.*；登记：CONTENT_CONFLICT —— 这个版本号已经登记过不同的内容/);
   const notApproved = draftActionNoteOf('publish', { kind: 'outcome', status: 200, body: { outcome: 'DRAFT_NOT_APPROVED' } });
   ok(!/登记：/.test(notApproved.text));
 });
