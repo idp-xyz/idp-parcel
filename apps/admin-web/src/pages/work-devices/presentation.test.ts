@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
 import { moduleInfoById } from '../../navigation';
-import { workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
+import { countWorkDevices, filterWorkDevices, workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
 
 test('状态与作业范围经词典译成一线的词，集外取值原样显示', () => {
   equal(workDeviceStatusLabel('REGISTERED'), '在用');
@@ -50,4 +50,24 @@ test('有行则是就绪，未配置与未授予各自一格', () => {
   equal(ready.kind, 'ready');
   equal(workDeviceViewState({ kind: 'unconfigured' }, 0, () => undefined, module).kind, 'unconfigured');
   equal(workDeviceViewState({ kind: 'notGranted' }, 0, () => undefined, module).kind, 'notGranted');
+});
+
+test('胶囊筛按状态，检索认设备号、地点编号与地点种类的中文词', () => {
+  const devices = [
+    { deviceId: 'SYN-DEVICE-SHA-HUB-01', workScopeKind: 'NODE', workScopeRef: 'SYN-NODE-SHA-HUB', status: 'REGISTERED' },
+    {
+      deviceId: 'SYN-DEVICE-OFFSITE-01',
+      workScopeKind: 'OFFSITE',
+      workScopeRef: 'SYN-OFFSITE-CN-EAST',
+      status: 'DEACTIVATED',
+      deactivatedAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+  equal(filterWorkDevices(devices, { search: '', status: 'DEACTIVATED' }).length, 1);
+  equal(filterWorkDevices(devices, { search: '场外', status: 'ALL' })[0].deviceId, 'SYN-DEVICE-OFFSITE-01');
+  equal(filterWorkDevices(devices, { search: 'sha-hub', status: 'ALL' }).length, 1);
+  const counts = countWorkDevices(devices);
+  equal(counts.ALL, 2);
+  equal(counts.REGISTERED, 1);
+  equal(counts.DEACTIVATED, 1);
 });

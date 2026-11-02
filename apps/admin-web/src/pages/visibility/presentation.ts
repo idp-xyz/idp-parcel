@@ -1,9 +1,7 @@
-// 运营追踪与目录查阅的结果词表。词取 CONTEXT.md 与传输层的原词,不自造译法。
+// 运营追踪与目录查阅的结果词表：源环节、传输层错误、目录签词、登记签标题与提示、登记答复。各页只引用，不另抄。
 //
-// 刻意没有的几张表:事实类型(kind)与标准里程碑都是原词直示——kind 是源上下文
-// 拥有的开放词表,里程碑目录及其映射属版本化登记的实例参数(CONTEXT「追踪投影与
-// 里程碑」),本页翻译任何一个都是替租户造第二套口径。同理,分诊规则的信号类型与
-// 可信度、通知策略的渠道与义务判据、索赔前置的种类与申请人都是开放引用,原词转写。
+// 事实类型、里程碑、信号类型、可信度、渠道、义务判据这类开放引用不在这里译：它们是租户登记的实例参数，
+// 界面词走用语词典（vocabulary/status.ts）的参考译法，查不到的码原样显示。
 
 import type { VisibilityCatalogueKind, VisibilityRegistrableCatalogueKind } from './catalogue-api';
 
@@ -44,32 +42,21 @@ export function problemNote(code: string): string {
 // ---- 各类目录查阅（/visibility-catalogues,票 admin-web-page-wiring-frontier/02）----
 
 /**
- * 目录种类的页签词。种类命名册子(与登记写口同词根),中文取 CONTEXT 原词。
- * 「异常披露规则」与「披露策略」是相邻两册(0023 / 0012),签词里的「规则」「策略」就是分册
- * 记号,不缩成同一个词。
+ * 目录种类的签词，查阅签、登记签与计数摘要共用，全管理台只此一处。追踪规则与通知与披露两页的六本册按**管什么事**
+ * 称呼（改版第二轮）：配置员认的是「动态归成哪个状态」「客户能看到什么」，不是册名；领域册名原词（里程碑映射、
+ * 披露策略……）留在代码与 CONTEXT，界面上进右栏审计（rule-books.ts 的 ruleBookDomainNames）。
+ * 「对客户显示」（披露策略，0012）与「异常告知」（异常披露规则，0023）是相邻两本册，签名各说各的事，不缩成同一个词。
  */
 export const visibilityCatalogueKindLabels: Record<VisibilityCatalogueKind, string> = {
-  MILESTONE_MAPPING: '里程碑映射',
-  TRIAGE_RULE: '分诊规则',
-  NOTIFICATION_POLICY: '通知策略',
+  MILESTONE_MAPPING: '状态归类',
+  TRIAGE_RULE: '异常分流',
+  NOTIFICATION_POLICY: '通知时限',
   CLAIM_ELIGIBILITY: '索赔资格',
   CLAIM_AUTHORIZATION: '索赔授权',
-  DISCLOSURE_POLICY: '披露策略',
-  EXCEPTION_DISCLOSURE_RULE: '异常披露规则',
-  CONFLICT_SIGNAL_RULE: '冲突信号规则',
+  DISCLOSURE_POLICY: '对客户显示',
+  EXCEPTION_DISCLOSURE_RULE: '异常告知',
+  CONFLICT_SIGNAL_RULE: '动态矛盾',
 };
-
-/**
- * 异常披露规则条目两个布尔列的词(0023 头注原话):disclosable 是「披露条件成不成立」,
- * auto_release 是「批准范围允不允许自动发布」。是布尔就只有两词,不是词表没收录的开放码。
- */
-export function disclosableLabel(value: boolean): string {
-  return value ? '成立' : '不成立';
-}
-
-export function autoReleaseLabel(value: boolean): string {
-  return value ? '允许' : '不允许';
-}
 
 /**
  * 分诊结果封闭四格(domain TriageOutcome)。中文取 CONTEXT 语言:「自动建立或关联
@@ -82,13 +69,6 @@ export const triageOutcomeLabels: Record<string, string> = {
   NO_CASE: '不立案',
 };
 
-/** 披露维态封闭三格(domain DimensionState,0012)。 */
-export const disclosureStateLabels: Record<string, string> = {
-  SHOWN: '展示',
-  PENDING_CONFIRMATION: '待确认',
-  NOT_DISCLOSED: '不披露',
-};
-
 /** 词表没收录的码原样示码,不猜词——开放集扩了、页面还没跟上时如实露码。 */
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
@@ -97,22 +77,21 @@ export function labelOf(table: Record<string, string>, code: string): string {
 // ---- 各类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d;异常披露规则与
 // 冲突信号规则两册随票 ve-disclosure-policy-view/02 步二加入）----
 
-// 以下三张表覆盖有在线登记写面的每一册(VisibilityRegistrableCatalogueKind)。
+// 以下几张表覆盖有在线登记写面的每一册,登记签与登记答复只认这里。
 
 /**
- * 登记签的标题。册名取读签同一个词;有无版本抬头照各册实情说,不给通知策略补一个,也不给
- * 冲突信号规则补一个——那册一租户一条,version 是识别规则版本引用而不是目录版本抬头。
- * 异常披露规则那册标题带「规则」,与「登记披露策略版本」并列时两字就是分册记号。
+ * 登记签的标题：说这个任务做什么,不叫「登记 ×× 版本」。冲突信号规则一租户一条,所以是「设定」不是「新增」。
+ * 索赔两册由索赔前置页摆,措辞随那一页。
  */
 export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, string> = {
-  MILESTONE_MAPPING: '登记里程碑映射版本',
-  TRIAGE_RULE: '登记分诊规则版本',
-  NOTIFICATION_POLICY: '登记通知策略',
+  MILESTONE_MAPPING: '新增状态归类规则',
+  TRIAGE_RULE: '新增异常分流规则',
+  NOTIFICATION_POLICY: '新增通知时限',
   CLAIM_ELIGIBILITY: '登记索赔资格声明',
   CLAIM_AUTHORIZATION: '登记申请人授权名单',
-  DISCLOSURE_POLICY: '登记披露策略版本',
-  EXCEPTION_DISCLOSURE_RULE: '登记异常披露规则版本',
-  CONFLICT_SIGNAL_RULE: '登记冲突信号规则',
+  DISCLOSURE_POLICY: '新增对客户显示规则',
+  EXCEPTION_DISCLOSURE_RULE: '新增异常告知规则',
+  CONFLICT_SIGNAL_RULE: '设定动态矛盾规则',
 };
 
 /**
@@ -130,8 +109,7 @@ const registrationCommands: Record<VisibilityRegistrableCatalogueKind, string> =
   CONFLICT_SIGNAL_RULE: 'conflict-signal-rule',
 };
 
-// 登记快照形状的提示句。各册只差命令名一词,所以由一处拼出:逐册抄写会让「不逐字段建
-// 表单」这条理由在其中一遍被改动时悄悄分叉。
+// 索赔两册的形状提示,措辞随索赔前置页（本轮不改那一页的话）。
 function snapshotHint(kind: VisibilityRegistrableCatalogueKind, particulars?: string): string {
   return (
     `登记快照 JSON 的形状与受控登记口 parcel-ve-register ${registrationCommands[kind]} -input <file> 吃的同一份` +
@@ -141,25 +119,45 @@ function snapshotHint(kind: VisibilityRegistrableCatalogueKind, particulars?: st
   );
 }
 
-/**
- * 各册登记快照的形状提示。带封闭集或带反直觉判据的册把话说出来:那几件打错之后,受理门
- * 给的是一句指名拒绝,而从册名上看不出来自己错在哪。
- */
+// 规则册六本的填写提示：只说填什么、填错了会怎样。形状与命令行工具吃的同一份,这一句留给对接的人。
+function taskHint(kind: VisibilityRegistrableCatalogueKind, fields: string): string {
+  return `${fields} 内容与命令行工具（${registrationCommands[kind]}）吃的同一份；所属公司由系统记下，不用填。写错的字段名会被退回，不会当成没填。`;
+}
+
+/** 各册的填写提示。带封闭集或带反直觉判据的册把话说出来：那几件写错之后,从册名上看不出自己错在哪。 */
 export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKind, string> = {
-  MILESTONE_MAPPING: snapshotHint(
+
+  MILESTONE_MAPPING: taskHint(
     'MILESTONE_MAPPING',
-    '源上下文取封闭五词 PARCEL_SHIPMENT / NETWORK_ROUTING / NODE_OPERATIONS / TRANSPORT_FULFILLMENT / CUSTOMS_COMPLIANCE;' +
-      '标准里程碑是租户自己的实例参数,登记口不校对词表。',
+    '请填 version（这一版的编号）、approvedBy（批准人）、effectiveFrom（从何时起用）和 entries（至少一条）；每条填 source（环节：' +
+      'PARCEL_SHIPMENT 运单 / NETWORK_ROUTING 路线 / NODE_OPERATIONS 网点 / TRANSPORT_FULFILLMENT 运输 / CUSTOMS_COMPLIANCE 清关）、' +
+      'factKind（动态类型）、milestone（归成的状态）。同一版里同一环节的同一动态只能写一条。',
   ),
-  TRIAGE_RULE: snapshotHint(
+  TRIAGE_RULE: taskHint(
     'TRIAGE_RULE',
-    '分诊走向取封闭四词 AUTO_ESTABLISH / ATTACH_TO_EXISTING / MANUAL_REVIEW / NO_CASE;' +
-      '信号类型与可信度是开放引用,原词收下。',
+    '请填 version、approvedBy、effectiveFrom 和 entries（至少一条）；每条填 kind（信号类型）、confidence（可信度）、outcome（处理方式：' +
+      'AUTO_ESTABLISH 自动立案 / ATTACH_TO_EXISTING 并入已有案件 / MANUAL_REVIEW 转人工复核 / NO_CASE 不立案），自动立案时可填 team（负责团队）。',
   ),
-  NOTIFICATION_POLICY: snapshotHint(
+  CONFLICT_SIGNAL_RULE: taskHint(
+    'CONFLICT_SIGNAL_RULE',
+    '请填 signalKind（记成哪类信号）、version（识别规则的版本）、confidence（可信度依据）、approvedBy（批准人），四项都必填。' +
+      '每家公司只有一条：已经设定过时再提交会被退回，要换规则请联系管理员。',
+  ),
+  NOTIFICATION_POLICY: taskHint(
     'NOTIFICATION_POLICY',
-    '这册没有版本抬头:版本化由披露策略引用本身承担,换版即换引用。时限收 Go 时长字面(如 "72h")' +
-      '且必须为正——非正时限算出的截止点在披露决定之前,那样的通知一生成就已逾期。',
+    '请填 policy（对应的客户显示规则版本）、channel（通知渠道）、deadlineAfter（多久之内，如 "72h"，必须大于零）、' +
+      'obligation（怎样算通知到）、approvedBy（批准人）。要换时限就登一条新的，旧的仍保留。',
+  ),
+  DISCLOSURE_POLICY: taskHint(
+    'DISCLOSURE_POLICY',
+    '请填 version、approvedBy、effectiveFrom 和 entries（每个客户一条）；每条填 customer（客户编码），以及 milestones（状态）、eta（预计送达）、' +
+      'final（最终结果）、note（备注）四项，每项写 state（SHOWN 显示 / PENDING_CONFIRMATION 待确认 / NOT_DISCLOSED 不显示），只有显示时才填 content（文案）。',
+  ),
+  EXCEPTION_DISCLOSURE_RULE: taskHint(
+    'EXCEPTION_DISCLOSURE_RULE',
+    '请填 version、approvedBy、effectiveFrom 和 entries；每条填 customer（客户编码）、signalKind（异常类型）、confidence（可信度）、' +
+      'disclosable（要不要告诉客户，true / false）、autoRelease（能不能自动发出，只有要告诉客户时才能为 true）；要告诉客户时必填 content（文案），不告诉时不填。' +
+      '同一版里同一客户、同一异常类型、同一可信度只能写一条。',
   ),
   CLAIM_ELIGIBILITY: snapshotHint(
     'CLAIM_ELIGIBILITY',
@@ -171,54 +169,50 @@ export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKin
     '申请人名单字段必须在场:不授权任何人写 [],那是「此账户当前不授权任何人代提」的显式决定;' +
       '整个字段缺席是漏填,两者恢复动作不同,登记口不压成一格。',
   ),
-  DISCLOSURE_POLICY: snapshotHint(
-    'DISCLOSURE_POLICY',
-    '四维各取封闭三态 SHOWN / PENDING_CONFIRMATION / NOT_DISCLOSED;内容只在 SHOWN 时在场,' +
-      '另两态带了内容即矛盾输入,登记口拒收而不是替登记方丢掉那半句声明。',
-  ),
-  EXCEPTION_DISCLOSURE_RULE: snapshotHint(
-    'EXCEPTION_DISCLOSURE_RULE',
-    '这册与披露策略是相邻两册,条目键是客户 × 信号类型 × 可信度三维(0023 主键),同一版里同键两条即撞键;' +
-      '两条成对纪律在受理门就拒:disclosable 为真必带 content、为假必不带,autoRelease 只在 disclosable 为真时才可为真' +
-      '——违背任一条答 ENTRY_INCOMPLETE,不会落到库上的 CHECK 变成依赖故障。',
-  ),
-  CONFLICT_SIGNAL_RULE: snapshotHint(
-    'CONFLICT_SIGNAL_RULE',
-    '这册一租户一条、没有版本抬头与生效区间:version 是识别规则版本引用,signalKind / version / confidence 三件任缺答 ENTRY_INCOMPLETE,' +
-      '缺 approvedBy 答 APPROVAL_MISSING;租户已有一行时再登答 VERSION_NOT_OVERWRITABLE——换版是治理动作,原行不被顶替。',
-  ),
 };
 
 /**
- * 登记答案代数（`application.RegisterCatalogOutcome` 原名）,两格中文。
+ * 登记答案（`application.RegisterCatalogOutcome` 原名）。
  *
  * 本口没有「未决」格:目录登记是租户的管理动作,依赖调不通时没有一个如实的中间答案可记,
  * 那一路由传输层答「没形成答案」(5xx),不冒充一种业务答案。
  */
 export const registrationOutcomeLabels: Record<string, string> = {
-  REGISTERED: '已登记',
-  REFUSED: '未登记——拒绝理由逐格指名;原行不被顶替',
+  REGISTERED: '已保存，切回列表就能看到。',
+  REFUSED: '没有保存，原因见下；已有的规则没有被改动。',
 };
 
 /**
- * 拒绝理由（`application.CatalogRefusalReason` 原名）,逐格中文。
- *
- * 逐格分开而不折成一句「内容不合法」:各格的续办动作不同——缺版本号要给一个,缺发布批准
- * 责任要走审批,条目撞键要改内容,版本号已登记要换号。末两格更是登记册的治理答案而不是
- * 打错字,受控登记口正按这条界线分退出码 2 与 1 两路。
+ * 退回的理由（`application.CatalogRefusalReason` 原名）,逐格说怎么改。逐格分开而不折成一句「内容不合法」:各格的
+ * 续办动作不同。末两格不是填错,是已有规则挡着,要换版本号或改生效时间（受控登记口按这条界线分退出码 2 与 1）。
  */
 export const registrationRefusalReasonLabels: Record<string, string> = {
   SCOPE_MISSING:
-    '缺管辖或身份维——目录行只在租户内唯一;索赔资格与索赔授权两册还要指出合同责任范围或客户账户,通知策略要指出策略引用',
-  VERSION_MISSING: '缺版本号——版本由登记方给,登记口不代拟',
-  APPROVAL_MISSING: '缺发布批准责任——册面记的是「登记者声明了谁批准」,不代填',
-  EFFECTIVE_RANGE_MISSING: '缺生效时间——零时刻不是能用的生效边界,拿它登记等于这一版从公元元年起适用',
-  EFFECTIVE_RANGE_REVERSED: '生效区间倒序或为空——半开区间两端相等即不覆盖任何时点',
-  ENTRIES_MISSING: '缺条目——空册不当作一版收;索赔资格的空覆盖集尤其通向永久的「不予受理」',
-  ENTRY_INCOMPLETE: '条目缺件——某一条没说全;通知策略的非正时限也落这一格',
-  ENTRY_DUPLICATED: '条目撞键——同一版里两条落在同一个键上,说不出以哪条为准',
-  VERSION_NOT_OVERWRITABLE:
-    '该版本号已登记——登记册不比对内容,同号再登一律不覆盖;换个版本号续办（治理答案,不是失败）',
-  VERSION_OVERLAPS_EXISTING:
-    '同一时点已有另一适用版本——原行未被顶替,人工核对后改区间续办（治理答案,不是失败）',
+    '缺少对象：通知时限要写对应的显示规则版本（policy），索赔资格要写合同、索赔授权要写客户，其余规则按提示写客户或类型。',
+  VERSION_MISSING: '缺少版本号（version），请给这一版起一个编号。',
+  APPROVAL_MISSING: '缺少批准人（approvedBy），请写上谁批准了这份规则。',
+  EFFECTIVE_RANGE_MISSING: '缺少起用时间（effectiveFrom），请写从什么时候开始用。',
+  EFFECTIVE_RANGE_REVERSED: '起止时间写反了或首尾相同，请改成先起用、后截止。',
+  ENTRIES_MISSING: '一条都没写（条目为空），请至少写一条；索赔资格至少要覆盖一种索赔。',
+  ENTRY_INCOMPLETE: '有一条没写全；通知时限必须大于零，要告诉客户的异常必须带文案、不告诉的不能带。',
+  ENTRY_DUPLICATED: '同一版里有两条管的是同一件事，请删掉或合并其中一条。',
+  VERSION_NOT_OVERWRITABLE: '这个版本号已经用过了，已有的不会被覆盖；请换一个新的版本号。',
+  VERSION_OVERLAPS_EXISTING: '同一时间已经有另一版在用，请先核对已有的，再调整起用时间。',
 };
+
+/**
+ * 登记签上的传输层错误码（不是业务答复）：说哪里错、怎么办。与上面 problemNote 分开,是因为那一份同时给查阅口用
+ * （物流动态、索赔前置的列表），措辞得两边都说得通；登记签只有「这次保存没成」这一种语境。
+ */
+const registrationProblemNotes: Record<string, string> = {
+  METHOD_NOT_ALLOWED: '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。',
+  MALFORMED_REQUEST: '填写的内容格式不对，系统读不出一份完整的规则；请按提示检查字段名和取值后再提交。',
+  INTAKE_FAILED: '登录信息没能核对通过，这次什么都没有保存；请稍后重试。',
+  NO_ANSWER_FORMED: '系统暂时没能处理，这次是否保存还不确定；请稍后刷新列表查看。',
+  UNNAMED_OUTCOME: '系统返回了无法识别的结果，请联系系统管理员；重试不会好。',
+  UNNAMED_REFUSAL_REASON: '被退回了，但系统没说明原因，请联系系统管理员；重试不会好。',
+};
+
+export function registrationProblemNote(code: string): string {
+  return registrationProblemNotes[code] ?? `这次没有成功（错误码 ${code}）；请记下页面上的技术详情联系系统管理员。`;
+}

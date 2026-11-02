@@ -8,7 +8,10 @@ import {
   draftFacts,
   draftKeyOf,
   draftSearchText,
+  draftTechnicalRows,
+  matchesPendingStatus,
   pendingCountSummary,
+  pendingCountsOf,
   pendingRowsOf,
   unreadableRecovery,
 } from './pending-publications';
@@ -55,18 +58,24 @@ test('批准与发布按状态词各亮各的', () => {
   deepEqual(decisionsOf('SOMETHING_NEW'), { approve: false, publish: false });
 });
 
-// Covers: AT-PC-068——抽屉复述版本壳与指名引用、状态、录入痕迹与完整的两个摘要；批准与发布的痕迹在场才出现。
-test('事实带出版本壳、痕迹与完整摘要', () => {
+// Covers: AT-PC-068——详情复述版本壳与指名引用、状态、提交痕迹；批准与发布的痕迹在场才出现。摘要、范围引用与主体全串
+// 进技术详情，不在核对用的事实里。
+test('事实带出版本壳与痕迹，摘要与引用进技术详情', () => {
   const pending = draftFacts(record(), 'UTC');
   const labels = pending.map((fact) => fact.label);
-  deepEqual(labels, ['类别', '对象', '版本号', '适用范围', '生效起点', '生效止点', '状态', '录入者', '录入时刻', '内容摘要', '壳摘要']);
+  deepEqual(labels, ['类别', '对象', '版本号', '生效起点', '生效止点', '状态', '提交人', '提交时间']);
   equal(pending.find((fact) => fact.label === '状态')?.value, '待批准');
-  equal(pending.find((fact) => fact.label === '内容摘要')?.value, 'PCC-1:abc123（算法 PCC-1）');
   equal(pending.find((fact) => fact.label === '生效止点')?.value, '持续有效');
+  equal(pending.find((fact) => fact.label === '提交人')?.value, 'op-1');
 
-  equal(pending.find((fact) => fact.label === '壳摘要')?.value, 'PCS-1:def456');
+  const technical = draftTechnicalRows(record());
+  equal(technical.find((row) => row.label === '内容摘要')?.value, 'PCC-1:abc123');
+  equal(technical.find((row) => row.label === '版本壳摘要')?.value, 'PCS-1:def456');
+  equal(technical.find((row) => row.label === '适用范围')?.value, 'SYN-SCOPE-01');
+  equal(technical.find((row) => row.label === '提交人')?.value, 'dex#op-1');
+  equal(technical.find((row) => row.label === '状态码')?.value, 'PENDING_APPROVAL');
 
-  // 指名引用在壳上、不在文档里，抽屉按类别逐条列出。
+  // 指名引用在壳上、不在文档里，详情按类别逐条列出。
   const referencing = draftFacts(record({ references: [{ kind: 'PRICE_RULE', objectId: 'PRICE-1' }] }), 'UTC');
   equal(referencing.find((fact) => fact.label === '引用商业价格政策')?.value, 'PRICE-1');
 
@@ -74,9 +83,9 @@ test('事实带出版本壳、痕迹与完整摘要', () => {
     record({ status: 'APPROVED', approver: 'dex#op-2', approvedAt: '2026-10-26T09:00:00Z' }),
     'UTC',
   );
-  equal(approved.find((fact) => fact.label === '批准者')?.value, 'dex#op-2');
-  equal(approved.some((fact) => fact.label === '批准时刻'), true);
-  equal(approved.some((fact) => fact.label === '发布时刻'), false);
+  equal(approved.find((fact) => fact.label === '批准人')?.value, 'op-2');
+  equal(approved.some((fact) => fact.label === '批准时间'), true);
+  equal(approved.some((fact) => fact.label === '发布时间'), false);
 });
 
 // Covers: AT-PC-068——规范化文档只排版；文档不在场（列表行）是空串，不是 "undefined"。
@@ -85,7 +94,7 @@ test('规范化文档缩进排版，缺席为空串', () => {
   equal(canonicalDocumentText(undefined), '');
 });
 
-// Covers: AT-PC-068——检索命中类别中文名、对象、版本、范围、状态词与录入者；大小写不分。
+// Covers: AT-PC-068——检索命中类别中文名、编号、版本、范围、状态词与提交人；大小写不分。
 test('检索串覆盖各列', () => {
   const text = draftSearchText(record({ approver: 'dex#op-2', status: 'APPROVED' }), '信用政策');
   for (const needle of ['信用政策', 'cp-syn-1', 'v2', 'syn-scope-01', '已批准', 'dex#op-1', 'dex#op-2']) {
@@ -97,7 +106,7 @@ test('检索串覆盖各列', () => {
 test('计数摘要分待批准与已批准', () => {
   equal(
     pendingCountSummary([record(), record({ objectId: 'B' }), record({ objectId: 'C', status: 'APPROVED' })]),
-    '当前返回 3 份尚未发布的载体（待批准 2，已批准 1）',
+    '共 3 份：待批准 2，已批准待发布 1',
   );
 });
 
@@ -113,7 +122,7 @@ test('读不回的载体不摆批准与发布，读得回的照状态', () => {
 // Covers: AT-PC-071——恢复动作随状态：待批准的按同一版本号重录，已批准的换版本号，已发布的无需处理；陌生状态词不替服务端猜。
 test('读不回的恢复动作按状态说，陌生状态不猜', () => {
   equal(unreadableRecovery('PENDING_APPROVAL').includes('同一版本号重新录入'), true);
-  equal(unreadableRecovery('APPROVED').includes('换新的版本号'), true);
+  equal(unreadableRecovery('APPROVED').includes('新的版本号'), true);
   equal(unreadableRecovery('PUBLISHED').includes('不需要处理'), true);
   equal(unreadableRecovery('SOMETHING_NEW'), '');
 });
@@ -121,8 +130,24 @@ test('读不回的恢复动作按状态说，陌生状态不猜', () => {
 // Covers: AT-PC-071——计数摘要把读不回的另报；搜「读不回」能找到它们；没有读不回的行时摘要与从前同形。
 test('计数摘要另报读不回的，检索认得读不回', () => {
   const records = [record(), record({ objectId: 'CP-2', readable: false, canonicalization: 'PCC-9', contentDigest: 'PCC-9:x' })];
-  equal(pendingCountSummary(records), '当前返回 2 份尚未发布的载体（待批准 2，已批准 0，其中 1 份本构建读不回）');
-  equal(pendingCountSummary([record()]), '当前返回 1 份尚未发布的载体（待批准 1，已批准 0）');
-  equal(draftSearchText(records[1], '信用政策').includes('读不回'), true);
-  equal(draftSearchText(records[0], '信用政策').includes('读不回'), false);
+  equal(pendingCountSummary(records), '共 2 份：待批准 2，已批准待发布 0，其中 1 份内容读不出');
+  equal(pendingCountSummary([record()]), '共 1 份：待批准 1，已批准待发布 0');
+  equal(draftSearchText(records[1], '信用政策').includes('内容读不出'), true);
+  equal(draftSearchText(records[0], '信用政策').includes('内容读不出'), false);
+});
+
+// 胶囊筛：读不出的单列一格，且仍按状态算进「待批准」——计数与筛选同一判据。
+test('胶囊筛按状态与读不出各算各的', () => {
+  const unreadable = record({ readable: false });
+  equal(matchesPendingStatus(unreadable, 'UNREADABLE'), true);
+  equal(matchesPendingStatus(unreadable, 'PENDING_APPROVAL'), true);
+  equal(matchesPendingStatus(record(), 'UNREADABLE'), false);
+  equal(matchesPendingStatus(record({ status: 'APPROVED' }), 'APPROVED'), true);
+  equal(matchesPendingStatus(record({ status: 'APPROVED' }), 'ALL'), true);
+  deepEqual(pendingCountsOf([record(), unreadable, record({ status: 'APPROVED' })]), {
+    total: 3,
+    pending: 2,
+    approved: 1,
+    unreadable: 1,
+  });
 });

@@ -28,12 +28,12 @@ const info = moduleInfoById['recent-objects'];
 const columns: ListColumn<RecentObject>[] = [
   {
     id: 'object',
-    header: '对象',
+    header: '编号',
     render: (row) => <span className="font-mono text-[12px]">{row.objectId}</span>,
   },
   {
     id: 'module',
-    header: '页面',
+    header: '所在页面',
     render: (row) => moduleTitleOf(row.moduleId),
   },
   {
@@ -77,9 +77,9 @@ export function RecentObjectsPage() {
             清空历史
           </Button>
         }
-        search={{ value: keyword, onChange: setKeyword, placeholder: '搜索对象标识或标题' }}
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜编号' }}
         filters={<ModuleChips moduleIds={recentModuleIds(list)} value={moduleId} onChange={setModuleId} />}
-        filterSummary={`本机记录 ${list.length} 条`}
+        filterSummary={`这台电脑上共 ${list.length} 条`}
         columns={columns}
         rows={rows}
         rowKey={(row) => `${row.moduleId}/${row.objectId}`}
@@ -100,7 +100,7 @@ export function RecentObjectsPage() {
         renderFooter={confirmDialogFooter}
         open={confirmingClear}
         title="清空最近打开"
-        message={`将删除这台浏览器上的 ${list.length} 条打开历史。删的只是历史记录，对象本身不受影响。`}
+        message={`将删除这台电脑上的 ${list.length} 条打开记录。删的只是记录，运单、客户等本身不受影响。`}
         confirmLabel="清空"
         cancelLabel="取消"
         tone="warning"

@@ -1,12 +1,14 @@
-// 「待批准发布」页的纯逻辑（ADR-0314 决定三）：把列表读口交回的载体折成行、给详情抽屉复述的几项、批准与发布各在哪个状态
-// 下可做。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftDrawer.tsx 只负责摆。
+// 「审批与发布」页的纯逻辑（ADR-0314 决定三）：把列表读口交回的载体折成行、给详情抽屉复述的几项、批准与发布各在哪个状态
+// 下可做、胶囊筛与计数。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftDrawer.tsx 只负责摆。
 //
 // **本文件不算摘要、不判谁能批准**：摘要原样取自服务端的读回，批准职责由服务端的审批职责规则判。这里只按状态词决定按钮
 // 亮不亮——状态词是服务端的，亮了按下去服务端仍会答它的结果。
 
-import { labelOf } from './presentation';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
+import { shortPrincipalRef } from '../../components/principal-ref';
+import { labelFor } from '../../vocabulary/status';
 import { momentText, publicationKindLabels, publicationSummary, type PublicationFact } from './publication-summary';
-import { draftStatusLabels, type PublicationDraftListResponseBody, type PublicationDraftRecord } from './publication-draft-api';
+import type { PublicationDraftListResponseBody, PublicationDraftRecord } from './publication-draft-api';
 
 /** 表里的一行：键是（类别 × 对象 × 版本）三元，与读回路径同一个身份。 */
 export interface PendingDraftRow {
@@ -33,36 +35,36 @@ export function decisionsOf(status: string): DraftDecisions {
   return { approve: status === 'PENDING_APPROVAL', publish: status === 'APPROVED' };
 }
 
-/** 读不回的载体（本构建折不回它的正文）没有可批准或发布的内容：两个动作都不摆，其余照状态。 */
+/** 读不出内容的改动（本版系统折不回它的正文）没有可批准或发布的内容：两个动作都不摆，其余照状态。 */
 export function draftDecisions(record: Pick<PublicationDraftRecord, 'status' | 'readable'>): DraftDecisions {
   return record.readable ? decisionsOf(record.status) : { approve: false, publish: false };
 }
 
 /**
- * 读不回的载体按状态各自的恢复动作。读不回只有两类成因（规范化版本本构建不认得，或含本构建的构造门收紧后拒绝的内容），
- * 新录入的摘要必与读不回行列上的不同，所以`待批准`的行可被同一版本号的重新录入替换；`已批准`的内容已固定，只能换版本号；
- * `已发布`的版本已在册，不需要动作。陌生状态词不替服务端猜动作，只说读不回。
+ * 读不出内容的改动按状态各自的恢复动作。读不出只有两类成因（内容格式是本版系统不认得的，或含本版系统已不再接受的内容），
+ * 新录入的摘要必与读不出那一行的不同，所以`待批准`的行可被同一版本号的重新录入替换；`已批准`的内容已固定，只能换版本号；
+ * `已发布`的版本已在册，不需要动作。陌生状态词不替服务端猜动作，只说读不出。
  */
 export function unreadableRecovery(status: string): string {
   switch (status) {
     case 'PENDING_APPROVAL':
-      return '待批准的发布稿可以按同一版本号重新录入，新录入的内容会替换这一份，之后照常批准。';
+      return '请在原来的页面按同一版本号重新录入一次，新内容会替换这一份，之后照常批准。';
     case 'APPROVED':
-      return '已批准的发布稿内容已固定，不能按同一版本号重新录入；要发布，请换新的版本号重新录入、批准、发布。';
+      return '已批准的内容不能再改；要发布，请换一个新的版本号重新录入、批准、发布。';
     case 'PUBLISHED':
-      return '这一版已经发布，在册的版本不受影响，不需要处理。';
+      return '这一版已经发布，已生效的内容不受影响，不需要处理。';
     default:
       return '';
   }
 }
 
 /**
- * 抽屉里复述的事实：版本壳（与发布前的「将要发布」同一份），加录入与批准的痕迹，加完整的内容摘要——批准者拿它去对。
- * 录入者与批准者是操作者主体引用原串，原样示出。
+ * 详情里给人核对的事实：改的是什么（类别、编号、版本、生效期），谁提交、谁批准、各在什么时候。适用范围引用、两个摘要、
+ * 主体引用全串与状态原码只有排查与对接时才用，归 draftTechnicalRows 进「技术详情」——批准者核对的是内容本身。
  */
 export function draftFacts(record: PublicationDraftRecord, timeZone: string): PublicationFact[] {
-  const facts = publicationSummary(record, timeZone);
-  // 指名引用在壳上、不在规范化文档里：批准的是它们连同范围与区间一起，抽屉里要看得见。
+  const facts = publicationSummary(record, timeZone).filter((fact) => fact.label !== '适用范围');
+  // 指名引用在壳上、不在内容里：批准的是它们连同生效期一起，详情里要看得见。
   for (const reference of record.references) {
     facts.push({
       label: `引用${publicationKindLabels[reference.kind] ?? reference.kind}`,
@@ -70,26 +72,39 @@ export function draftFacts(record: PublicationDraftRecord, timeZone: string): Pu
     });
   }
   facts.push(
-    { label: '状态', value: labelOf(draftStatusLabels, record.status) },
-    { label: '录入者', value: record.submitter },
-    { label: '录入时刻', value: momentText(record.submittedAt, timeZone) },
+    { label: '状态', value: labelFor(record.status) },
+    { label: '提交人', value: shortPrincipalRef(record.submitter) },
+    { label: '提交时间', value: momentText(record.submittedAt, timeZone) },
   );
-  if (record.approver) facts.push({ label: '批准者', value: record.approver });
-  if (record.approvedAt) facts.push({ label: '批准时刻', value: momentText(record.approvedAt, timeZone) });
-  if (record.publishedAt) facts.push({ label: '发布时刻', value: momentText(record.publishedAt, timeZone) });
-  facts.push(
-    { label: '内容摘要', value: `${record.contentDigest}（算法 ${record.canonicalization}）` },
-    { label: '壳摘要', value: record.shellDigest },
-  );
+  if (record.approver) facts.push({ label: '批准人', value: shortPrincipalRef(record.approver) });
+  if (record.approvedAt) facts.push({ label: '批准时间', value: momentText(record.approvedAt, timeZone) });
+  if (record.publishedAt) facts.push({ label: '发布时间', value: momentText(record.publishedAt, timeZone) });
   return facts;
 }
 
-/** 规范化文档的缩进文本。文档是服务端按册折出的、摘要盖住的那一份；这里只排版，键序沿用解析后的对象，值不动。 */
+/** 「技术详情」折叠区的几行：摘要整串不截断——它就是批准与发布时带上去的那一份，对日志的人要拿它去对。 */
+export function draftTechnicalRows(record: PublicationDraftRecord): TechnicalRow[] {
+  return [
+    { label: '适用范围', value: record.scope },
+    { label: '状态码', value: record.status },
+    { label: '提交人', value: record.submitter },
+    { label: '批准人', value: record.approver ?? '' },
+    { label: '内容摘要', value: record.contentDigest },
+    { label: '摘要算法', value: record.canonicalization },
+    { label: '版本壳摘要', value: record.shellDigest },
+    { label: '读不出的原因', value: record.unreadableCause ?? '' },
+  ];
+}
+
+/** 提交内容的缩进文本。内容是服务端按册折出的、摘要盖住的那一份；这里只排版，键序沿用解析后的对象，值不动。 */
 export function canonicalDocumentText(content: unknown): string {
   return content === undefined ? '' : JSON.stringify(content, null, 2);
 }
 
-/** 检索用的一串：各格拼起来小写比较，搜类别、对象、版本、范围、状态与录入者都能命中。 */
+/** 读不出的行在搜索与筛选里叫的那个词；列表与详情同一个说法。 */
+export const unreadableWord = '内容读不出';
+
+/** 检索用的一串：各格拼起来小写比较，搜类别、编号、版本、状态与提交人都能命中。 */
 export function draftSearchText(record: PublicationDraftRecord, kindLabel: string): string {
   return [
     kindLabel,
@@ -97,20 +112,43 @@ export function draftSearchText(record: PublicationDraftRecord, kindLabel: strin
     record.objectId,
     record.version,
     record.scope,
-    labelOf(draftStatusLabels, record.status),
+    labelFor(record.status),
     record.submitter,
     record.approver ?? '',
-    record.readable ? '' : '读不回',
+    record.readable ? '' : unreadableWord,
   ]
     .join(' ')
     .toLowerCase();
 }
 
-/** 计数摘要：只在拿到业务答案后用；分状态数，让批准者一眼看出多少在等，读不回的另报，免得它们被当成能批的。 */
+/** 胶囊筛：全部、按状态码，或只看读不出的。读不出的单列一格，免得混在「待批准」里被当成能批的。 */
+export type PendingStatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'UNREADABLE';
+
+export function matchesPendingStatus(record: PublicationDraftRecord, filter: PendingStatusFilter): boolean {
+  if (filter === 'ALL') return true;
+  if (filter === 'UNREADABLE') return !record.readable;
+  return record.status === filter;
+}
+
+export interface PendingCounts {
+  total: number;
+  pending: number;
+  approved: number;
+  unreadable: number;
+}
+
+export function pendingCountsOf(records: readonly PublicationDraftRecord[]): PendingCounts {
+  return {
+    total: records.length,
+    pending: records.filter((record) => record.status === 'PENDING_APPROVAL').length,
+    approved: records.filter((record) => record.status === 'APPROVED').length,
+    unreadable: records.filter((record) => !record.readable).length,
+  };
+}
+
+/** 计数摘要：只在拿到业务答案后用；分状态数，让批准者一眼看出多少在等，读不出的另报，免得它们被当成能批的。 */
 export function pendingCountSummary(records: readonly PublicationDraftRecord[]): string {
-  const pending = records.filter((record) => record.status === 'PENDING_APPROVAL').length;
-  const approved = records.filter((record) => record.status === 'APPROVED').length;
-  const unreadable = records.filter((record) => !record.readable).length;
-  const tail = unreadable > 0 ? `，其中 ${unreadable} 份本构建读不回` : '';
-  return `当前返回 ${records.length} 份尚未发布的载体（待批准 ${pending}，已批准 ${approved}${tail}）`;
+  const counts = pendingCountsOf(records);
+  const tail = counts.unreadable > 0 ? `，其中 ${counts.unreadable} 份${unreadableWord}` : '';
+  return `共 ${counts.total} 份：待批准 ${counts.pending}，已批准待发布 ${counts.approved}${tail}`;
 }

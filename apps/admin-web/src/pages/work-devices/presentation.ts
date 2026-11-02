@@ -2,7 +2,7 @@ import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState } from '../catalogue-view';
 import type { ApiResult } from '../catalogue-api';
-import type { WorkDeviceListResponseBody } from './api';
+import type { WorkDeviceListResponseBody, WorkDeviceRecord } from './api';
 
 import { labelFor } from '../../vocabulary/status';
 
@@ -28,6 +28,32 @@ export function workDeviceViewState(
     module,
     endpoint: 'GET /work-devices',
     emptyTitle: '还没有登记扫描设备',
-    emptyDescription: '网点和场外作业用的扫描设备登记后在这里出现；登记与停用由管理员用登记工具完成，本页只看。',
+    emptyDescription: '网点和场外作业用的扫描设备登记后会出现在这里。新增或停用设备请联系管理员。',
   });
+}
+
+/** 胶囊筛：全部、在用、已停用。码取线上状态词，词经 work-device 分册。 */
+export type WorkDeviceStatusFilter = 'ALL' | 'REGISTERED' | 'DEACTIVATED';
+
+export interface WorkDeviceFilter {
+  search: string;
+  status: WorkDeviceStatusFilter;
+}
+
+/** 检索命中设备号、地点编号与地点种类的中文词；状态由胶囊筛，不进检索。 */
+export function filterWorkDevices(devices: readonly WorkDeviceRecord[], filter: WorkDeviceFilter): WorkDeviceRecord[] {
+  const needle = filter.search.trim().toLowerCase();
+  return devices.filter((row) => {
+    if (filter.status !== 'ALL' && row.status !== filter.status) return false;
+    if (needle === '') return true;
+    return [row.deviceId, row.workScopeRef, labelFor(row.workScopeKind)].some((value) => value.toLowerCase().includes(needle));
+  });
+}
+
+export function countWorkDevices(devices: readonly WorkDeviceRecord[]): Record<WorkDeviceStatusFilter, number> {
+  return {
+    ALL: devices.length,
+    REGISTERED: devices.filter((row) => row.status === 'REGISTERED').length,
+    DEACTIVATED: devices.filter((row) => row.status === 'DEACTIVATED').length,
+  };
 }

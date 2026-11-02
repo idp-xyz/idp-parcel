@@ -4,6 +4,7 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
+import { pageTitleById } from '../../navigation';
 import { publicationBodySummary } from './publication-body-summary';
 import { publicationSummary, type PublicationFact } from './publication-summary';
 import { DraftNote, FactList, PreviewNote, PublicationNote } from './PublicationAnswerNotes';
@@ -47,6 +48,9 @@ import {
   type FlowStep,
   type PublicationFlowState,
 } from './publication-draft-flow';
+
+// 页名取导航的唯一来源：页改名时这几句跟着变，不留旧名。
+const pendingPageTitle = pageTitleById['pending-publications'];
 
 /**
  * 商业发布五步组件「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」（票 admin-write-faces/16 落，子票
@@ -288,9 +292,9 @@ export function PublicationDraftFlow({
               <>
                 <p className="text-xs text-idpxyz-textMuted">
                   {changed === 'approve'
-                    ? '要采用别人改后的内容，去「待批准发布」页读回现在的内容后在那里批；要以表单上这份为准，重新存为待批准——' +
-                      '册上那份会改回眼前这份（待批准期间修订），别人的改动随之覆盖，然后再批。'
-                    : '去「待批准发布」页读回现在的内容，核对后在那里发布。这一版已批准、内容固定，表单上这份不能再存回去。'}
+                    ? `要采用别人改后的内容，去「${pendingPageTitle}」页查看现在的内容后在那里批；要以表单上这份为准，重新存为待批准——` +
+                      '存下的会改回眼前这份，别人的改动随之被覆盖，然后再批。'
+                    : `去「${pendingPageTitle}」页查看现在的内容，核对后在那里发布。这一版已批准、内容固定，表单上这份不能再存回去。`}
                 </p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <Button
@@ -300,7 +304,7 @@ export function PublicationDraftFlow({
                       window.location.hash = pendingPublicationsHash(payload.objectId);
                     }}
                   >
-                    去「待批准发布」页核对
+                    去「{pendingPageTitle}」页核对
                   </Button>
                   {changed === 'approve' ? (
                     <Button variant="outline" disabled={busy !== null} onClick={resubmit}>
