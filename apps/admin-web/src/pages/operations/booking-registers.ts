@@ -39,6 +39,16 @@ export const carrierAnswerLabels: Record<string, string> = {
   WAITLISTED: '候补',
 };
 
+/**
+ * 没有单据号的单据在技术详情里注明的原因（ADR-0355 决定十一）：按单据上记下的原因分开写，不一律写成「上线前开立」——
+ * 开立时单据编号时区未配置的那一类，续办是去「设置 → 单据编号」登时区，而上线前开立的那一类没有续办。读口给了不认识的
+ * 原因就原样示码，不猜。
+ */
+export const documentNumberAbsenceNotes: Record<string, string> = {
+  ISSUED_BEFORE_NUMBERING: '上线前开立，无单据号',
+  NUMBERING_TIME_ZONE_NOT_CONFIGURED: '开立时单据编号时区未配置，无单据号',
+};
+
 /** 挡回依据两格（TF CONTEXT「承运答复挡回」词条；ports.BookingAnswerBounceBasis）。 */
 export const bounceBasisLabels: Record<string, string> = {
   BOOKING_NOT_REGISTERED: '订舱不在册',
@@ -67,13 +77,24 @@ export function unitWord(unit: string): string {
   return weightUnitLabels[unit] ?? unit;
 }
 
+/**
+ * 订舱册一行。主列「订舱号」是单据号，没有号的照旧显示订舱标识；订舱标识总进技术详情（承运方答复认的是它），无号原因也进
+ * 技术详情。所属委托同理：有委托单据号就显号、委托标识另进技术详情，没有就显委托标识。
+ */
 export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
   const current = record.currentAnswer;
   return {
     key: `booking:${record.booking}`,
     values: {
-      booking: record.booking,
-      commission: record.commission,
+      booking: record.documentNumber ?? record.booking,
+      bookingId: record.booking,
+      // 原因只照读口给的写：读口有号与原因总给其一，两者都缺席时不替它补一个「上线前开立」。
+      numberNote:
+        !record.documentNumber && record.documentNumberAbsence
+          ? labelOr(documentNumberAbsenceNotes, record.documentNumberAbsence)
+          : '',
+      commission: record.commissionDocumentNumber ?? record.commission,
+      commissionId: record.commissionDocumentNumber ? record.commission : '',
       schedule: record.schedule,
       requested: `${record.quantity} ${unitWord(record.unit)}`,
       requestedAt: formatInstant(record.requestedAt),

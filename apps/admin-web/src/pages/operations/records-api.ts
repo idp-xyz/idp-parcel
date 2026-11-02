@@ -316,6 +316,10 @@ export interface BookingAnswerRecord {
 /**
  * 一次订舱（bookingRequestRowBody）。standing 是读口派生的状态词，页面原词示文、不另算；取消不进 standing，
  * cancelledAt 缺席即没有取消。submittedBy / cancelledBy 没记下时整键缺席（票 180）。
+ *
+ * booking 与 commission 是订舱、委托的标识（登记方生成的幂等键；booking 也是承运答复认单的键）。documentNumber 是订舱的
+ * 单据号，没有号时缺席、改由 documentNumberAbsence 说原因（ISSUED_BEFORE_NUMBERING / NUMBERING_TIME_ZONE_NOT_CONFIGURED）；
+ * commissionDocumentNumber 是所属委托的单据号，委托没有号时缺席（ADR-0355 决定十一）。
  */
 export interface BookingRequestRecord {
   booking: string;
@@ -331,6 +335,9 @@ export interface BookingRequestRecord {
   answers: BookingAnswerRecord[];
   submittedBy?: string;
   cancelledBy?: string;
+  documentNumber?: string;
+  documentNumberAbsence?: string;
+  commissionDocumentNumber?: string;
 }
 
 /** 挡回册一行。basis 两格封闭词（BOOKING_NOT_REGISTERED / SOURCE_NOT_SERVICE_PROVIDER）；count 是十进制计数串。 */

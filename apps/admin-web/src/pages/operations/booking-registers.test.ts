@@ -7,6 +7,7 @@ import {
   bookingStandingLabels,
   bounceBasisLabels,
   bounceRowOf,
+  documentNumberAbsenceNotes,
   transportRecordsPathOf,
 } from './booking-registers';
 import type { BookingAnswerBounceRecord, BookingRequestRecord } from './records-api';
@@ -71,6 +72,31 @@ test('取消时刻单列，不并进状态词；提交人、取消人有就示�
   equal(plain.values.cancelledAt, '');
   equal(plain.values.submittedBy, '');
   equal(plain.values.cancelledBy, '');
+});
+
+test('订舱号是单据号、订舱标识进技术详情；所属委托有号显号、标识另列', () => {
+  const row = bookingRowOf(
+    booking({ documentNumber: 'BK-202611-00009', commissionDocumentNumber: 'TC-202611-00004' }),
+  );
+  equal(row.values.booking, 'BK-202611-00009');
+  equal(row.values.bookingId, 'SYN-BOOKING-1');
+  equal(row.values.numberNote, '');
+  equal(row.values.commission, 'TC-202611-00004');
+  equal(row.values.commissionId, 'SYN-COMMISSION-1');
+  equal(row.key, 'booking:SYN-BOOKING-1');
+});
+
+test('没有单据号的订舱照旧显示订舱标识，技术详情按记下的原因分别注明，不一律写成上线前开立', () => {
+  const legacy = bookingRowOf(booking({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }));
+  equal(legacy.values.booking, 'SYN-BOOKING-1');
+  equal(legacy.values.numberNote, '上线前开立，无单据号');
+  equal(legacy.values.commission, 'SYN-COMMISSION-1');
+  equal(legacy.values.commissionId, '');
+  const unconfigured = bookingRowOf(booking({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }));
+  equal(unconfigured.values.numberNote, '开立时单据编号时区未配置，无单据号');
+  equal(bookingRowOf(booking({ documentNumberAbsence: 'SOMETHING_NEW' })).values.numberNote, 'SOMETHING_NEW');
+  equal(bookingRowOf(booking()).values.numberNote, '');
+  deepEqual(Object.keys(documentNumberAbsenceNotes), ['ISSUED_BEFORE_NUMBERING', 'NUMBERING_TIME_ZONE_NOT_CONFIGURED']);
 });
 
 test('挡回两种依据照 CONTEXT 词条示文', () => {

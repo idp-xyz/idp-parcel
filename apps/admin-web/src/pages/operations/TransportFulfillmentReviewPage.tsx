@@ -27,6 +27,7 @@ import {
 import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
 import { labelFor } from '../../vocabulary/status';
+import { objectNouns } from '../../vocabulary/objects';
 import { bookingRowOf, bounceRowOf, unitWord, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -270,8 +271,9 @@ const sections: ReviewSection[] = [
     status: { labelKey: 'standing' },
     // 一次订舱一行。状态词由读口按名下当前那一份承运答复读出，页面原词示文、不另算；取消是运营的决定
     // 不是承运答复，取消时刻与取消人单列，不并进状态（CONTEXT「订舱」）。提交人、取消人没记下时留空。
+    // 主列是订舱的单据号，没有号的照旧显示订舱标识；订舱标识与无号原因进技术详情（ADR-0355 决定十一，booking-registers）。
     columns: [
-      col('booking', '订舱号', { mono: true }),
+      col('booking', objectNouns.bookingNumber, { mono: true }),
       col('schedule', '班次', { mono: true }),
       col('requested', '订了多少', { align: 'right', mono: true }),
       col('requestedAt', '订舱时间', { mono: true }),
@@ -280,7 +282,10 @@ const sections: ReviewSection[] = [
       col('acceptedQuantity', '接受了多少', { align: 'right', mono: true }),
       col('cancelledAt', '取消时间', { mono: true }),
       techCol([
-        ['运输委托', 'commission'],
+        ['订舱标识', 'bookingId'],
+        ['单据号', 'numberNote'],
+        [objectNouns.transportCommissionNumber, 'commission'],
+        ['运输委托标识', 'commissionId'],
         ['答复时间', 'currentAnsweredAt'],
         ['提交人', 'submittedBy'],
         ['取消人', 'cancelledBy'],
@@ -293,9 +298,10 @@ const sections: ReviewSection[] = [
     registry: 'booking-answer-bounce',
     // 挡回册是台账不是事实来源：挡回不形成承运接受，订舱的状态词不读它。依据两词（订舱不在册 /
     // 不是服务提供方）对答复方是同一格答复，只有这里分得开（CONTEXT「承运答复挡回」）。
+    // 订舱一列是承运方答复里点名的订舱标识（承运答复照旧按它认单），不是订舱号——没在册的标识本来就没有号。
     columns: [
       col('source', '谁答复的', { mono: true }),
-      col('booking', '订舱号', { mono: true }),
+      col('booking', '订舱标识', { mono: true }),
       col('basis', '为什么挡回'),
       col('firstBouncedAt', '第一次', { mono: true }),
       col('lastBouncedAt', '最近一次', { mono: true }),
@@ -507,7 +513,7 @@ export function TransportFulfillmentReviewPage() {
     setBounceDraft({ booking: next.booking ?? '', source: next.source ?? '' });
     setBounceFilter({ booking: next.booking?.trim() ?? '', source: next.source?.trim() ?? '' });
   };
-  // 订舱区的一行链到挡回区按那一单筛出的结果；答复方筛选清空，只见这一单。
+  // 订舱区的一行链到挡回区按那一单筛出的结果；答复方筛选清空，只见这一单。挡回册按订舱标识记，所以带标识、不带订舱号。
   const jumpToBounces = (booking: string) => {
     applyBounceFilter({ booking, source: '' });
     setSectionId('booking-answer-bounces');
@@ -546,9 +552,9 @@ export function TransportFulfillmentReviewPage() {
   ) : isBounces ? (
     <span className="inline-flex items-center gap-2">
       <input
-        aria-label="按订舱号筛"
+        aria-label="按订舱标识筛"
         className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[12px]"
-        placeholder="按订舱号筛"
+        placeholder="按订舱标识筛"
         value={bounceDraft.booking ?? ''}
         onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
       />
@@ -595,7 +601,7 @@ export function TransportFulfillmentReviewPage() {
           onClose={close}
           actions={
             section.id === 'booking-requests' ? (
-              <Button variant="outline" size="sm" onClick={() => jumpToBounces(row.values.booking)}>
+              <Button variant="outline" size="sm" onClick={() => jumpToBounces(row.values.bookingId)}>
                 看这笔订舱被挡回的答复
               </Button>
             ) : undefined
