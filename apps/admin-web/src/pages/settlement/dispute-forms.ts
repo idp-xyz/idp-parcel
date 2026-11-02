@@ -3,7 +3,7 @@
 //
 // 话照「说人话」写：答复的业务判别由服务端给（outcome），这里只把它译成一句操作者看得懂的话，不另判业务。
 
-import { labelFor } from '../../vocabulary/status';
+import { documentNumberAbsenceNote, documentTypeWords, numberingCollisionNote } from '../../vocabulary/document-numbering';
 import type { CustomerStatementRecord, DisputeDecisionResponseBody, StatementDisputeRecord, StatementLinesResponseBody } from './api';
 
 /**
@@ -17,8 +17,11 @@ export function disputeLabel(dispute: Pick<StatementDisputeRecord, 'dispute' | '
 /** 没有争议号时技术详情里注明的那一句，按争议上记下的原因说，不一律写成「上线前开立」；有号时没有这一句。 */
 export function disputeNumberAbsenceNote(dispute: Pick<StatementDisputeRecord, 'documentNumber' | 'documentNumberAbsence'>): string | undefined {
   if (dispute.documentNumber || !dispute.documentNumberAbsence) return undefined;
-  return labelFor(dispute.documentNumberAbsence, 'document-number-absence');
+  return documentNumberAbsenceNote(dispute.documentNumberAbsence);
 }
+
+/** 争议号在界面上的叫法，取单据编号词典那一份（ADR-0355 决定十一），不在各页另写。 */
+export const disputeNumberName = documentTypeWords.STATEMENT_DISPUTE.numberName;
 
 /** 一张单上可以被提出异议的一笔费用：费用号、金额（与单上同一写法）与币种。 */
 export interface StatementChargeOption {
@@ -58,12 +61,13 @@ export function openDisputesOf(statement: Pick<CustomerStatementRecord, 'dispute
 
 /**
  * 争议标识由页面在第一次提交前定下：同一张表单因网络重发，落回的是同一项（服务端答「已登记过」），而不是又开一项。
- * 时间到秒加一段随机串，同一秒两个人各开一项也撞不上。
+ * 时间到秒加一段随机串，同一秒两个人各开一项也撞不上。前缀不与任何单据号默认格式的前缀相同：争议号默认是 `DSP-` 起头，
+ * 内部标识也用它，技术详情里两串就难分。已登记的旧标识不动。
  */
 export function newDisputeId(now: Date, random: string): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
-  return `DSP-${stamp}-${random.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+  return `DISPUTE-${stamp}-${random.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
 }
 
 /** 争议金额的本地检查：与单上金额同一写法的正整数，且不超过这笔费用。服务端照样会判，这里只让人少跑一趟。 */
@@ -133,7 +137,7 @@ export function registrationAnswerText(body: DisputeDecisionResponseBody): strin
     case 'SOURCE_NOT_ACCEPTED':
       return '没有登记：对账单、费用、金额或时间对不上——费用要在这张单上，金额不超过这笔费用，客户提出的时间不早于单子发出、也不晚于现在。';
     case 'NUMBERING_RULE_COLLISION':
-      return '没有登记：按现在的争议号格式，接下来的号都已经被用过了。请到「设置 → 单据编号」改一下争议的编号格式，再回来登记。';
+      return numberingCollisionNote(body.documentType);
     default:
       return `服务端答 ${body.outcome}`;
   }

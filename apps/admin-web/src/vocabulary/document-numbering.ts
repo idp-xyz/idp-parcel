@@ -46,6 +46,9 @@ export const resetPeriodWords: Readonly<Record<string, { short: string; sentence
  */
 export const issuerWordsByType: Readonly<Record<string, string>> = {
   CUSTOMER_STATEMENT: '结算账户',
+  // 争议按被争对账单那个结算账户、审核应付按应付归入的结算账户（settlement-accounting CONTEXT，票 document-numbering/05）。
+  STATEMENT_DISPUTE: '结算账户',
+  AUDITED_PAYABLE: '结算账户',
   DELIVERY_PRE_ADVICE: '网点',
   DELIVERY_HANDOVER_NOTE: '网点',
 };

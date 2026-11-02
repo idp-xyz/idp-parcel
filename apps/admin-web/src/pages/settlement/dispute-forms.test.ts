@@ -46,7 +46,7 @@ test('还在等人处理的争议：未处理与待复核；终局三种不列',
 });
 
 test('争议编号由页面定下，带时间与一段随机串，只用字母数字', () => {
-  equal(newDisputeId(new Date('2026-11-01T09:05:07Z'), 'a1-b2c3d4e5'), 'DSP-20261101-090507-A1B2C3');
+  equal(newDisputeId(new Date('2026-11-01T09:05:07Z'), 'a1-b2c3d4e5'), 'DISPUTE-20261101-090507-A1B2C3');
 });
 
 test('金额：正整数、与单上同一写法、不超过这笔费用', () => {
@@ -78,8 +78,8 @@ test('答复译成一句人话，负向答案不说成功', () => {
 });
 
 test('争议以争议号为主标识；没有争议号的显示争议标识，并按记下的原因注明', () => {
-  equal(disputeLabel({ dispute: 'DSP-20261101-090507-A1B2C3', documentNumber: 'DSP-202611-00001' }), 'DSP-202611-00001');
-  equal(disputeLabel({ dispute: 'DSP-20261101-090507-A1B2C3' }), 'DSP-20261101-090507-A1B2C3');
+  equal(disputeLabel({ dispute: 'DISPUTE-20261101-090507-A1B2C3', documentNumber: 'DSP-202611-00001' }), 'DSP-202611-00001');
+  equal(disputeLabel({ dispute: 'DISPUTE-20261101-090507-A1B2C3' }), 'DISPUTE-20261101-090507-A1B2C3');
   equal(disputeNumberAbsenceNote({ documentNumber: 'DSP-202611-00001' }), undefined);
   equal(disputeNumberAbsenceNote({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }), '上线前开立，无单据号');
   equal(disputeNumberAbsenceNote({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }), '开立时单据编号时区未配置，无单据号');
@@ -94,5 +94,6 @@ test('登记答复说争议号；没号的说为什么；撞号指到规则册',
     registrationAnswerText({ outcome: 'DISPUTE_OPENED', dispute: 'X', documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }),
     '已登记争议 X（开立时单据编号时区未配置，无单据号），等财务核实处理。',
   );
-  equal(registrationAnswerText({ outcome: 'NUMBERING_RULE_COLLISION', documentType: 'STATEMENT_DISPUTE' }).includes('设置 → 单据编号'), true);
+  const collided = registrationAnswerText({ outcome: 'NUMBERING_RULE_COLLISION', documentType: 'STATEMENT_DISPUTE' });
+  equal(collided.includes('设置 → 单据编号') && collided.includes('争议号'), true);
 });

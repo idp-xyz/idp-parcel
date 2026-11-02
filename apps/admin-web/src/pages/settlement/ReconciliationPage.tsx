@@ -22,7 +22,7 @@ import { accountCounterparties } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 import { disputedOnlyOf, reconciliationHash, reconciliationTabOf, type ReconciliationTab } from './reconciliation-address';
 import { StatementDisputePanel } from './StatementDisputePanel';
-import { disputeLabel, openDisputesOf } from './dispute-forms';
+import { disputeLabel, disputeNumberName, openDisputesOf } from './dispute-forms';
 
 // 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。两签都接 GET /settlement-statements 按 registry 分派；
 // 客户对账单签另有「只看有未了结异议的」，换接 GET /settlement-disputed-statements。
@@ -200,7 +200,7 @@ function CustomerStatementsTable({
               ? '单上至少一项异议还没有处理结果，或处理为待复核；接受、部分接受、拒绝都算处理完'
               : '已发给客户的对账单；有异议另记在单上，不改单的金额'
           }
-          search={{ value: search, onChange: setSearch, placeholder: '搜对账单号、争议号、客户、账期' }}
+          search={{ value: search, onChange: setSearch, placeholder: `搜对账单号、${disputeNumberName}、客户、账期` }}
           filterSummary={answer?.kind === 'outcome' ? summary : undefined}
           columns={customerStatementColumns(accountOwners, names)}
           rows={visibleStatements}

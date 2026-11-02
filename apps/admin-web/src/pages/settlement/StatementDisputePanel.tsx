@@ -21,6 +21,7 @@ import {
   chargesOnStatement,
   disputeLabel,
   disputeNumberAbsenceNote,
+  disputeNumberName,
   instantToLocalInput,
   localInputToInstant,
   newDisputeId,
@@ -308,7 +309,7 @@ function DisputeList({ statement }: { statement: CustomerStatementRecord }) {
             className="mt-1"
             rows={technicalRows([
               { label: '争议标识', value: item.dispute },
-              { label: '争议号', value: disputeNumberAbsenceNote(item) },
+              { label: disputeNumberName, value: disputeNumberAbsenceNote(item) },
             ])}
           />
         </li>

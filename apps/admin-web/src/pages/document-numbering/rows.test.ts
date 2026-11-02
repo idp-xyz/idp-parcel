@@ -135,6 +135,9 @@ test('日期所用时区那一句', () => {
   equal(issuer.withoutNumber, false);
   equal(issuer.short, '网点的业务时区');
   equal(dateZoneOf(typeRecord({ documentType: 'CUSTOMER_STATEMENT', dateTimeZone: { source: 'ISSUER_BUSINESS_TIME_ZONE', numberingTimeZoneStatus: 'CONFIGURED', numberingTimeZone: 'UTC' } })).short, '结算账户的业务时区');
+  for (const settled of ['STATEMENT_DISPUTE', 'AUDITED_PAYABLE']) {
+    equal(dateZoneOf(typeRecord({ documentType: settled, dateTimeZone: { source: 'ISSUER_BUSINESS_TIME_ZONE', numberingTimeZoneStatus: 'CONFIGURED', numberingTimeZone: 'UTC' } })).short, '结算账户的业务时区');
+  }
   equal(dateZoneOf(typeRecord({ documentType: 'LATER_KIND', dateTimeZone: { source: 'ISSUER_BUSINESS_TIME_ZONE', numberingTimeZoneStatus: 'CONFIGURED', numberingTimeZone: 'UTC' } })).short, '开立方的业务时区');
 
   const rows = ruleRowsOf(
