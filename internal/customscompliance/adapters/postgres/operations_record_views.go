@@ -441,10 +441,22 @@ var unadmittedAnswers = func() []string {
 	return words
 }()
 
-// ListUnadmittedObjects 每个对象看它动作时点最晚的那一刻：那一刻上只要有一份判断不让动作过门，这个对象就算卡关，只计一次。
-// 「最近」按动作时点而不按判断时刻：执行方晚报的一次早先动作不该盖过它之后那次动作的答复。同一刻上可以有几份判断（同一时点
-// 问了交出又问了出发，标识里带着意图，各成一行）；其中一份被挡，那一刻就有一件事没做成，不让同一刻的另一份放行把它盖掉。
-// 每个对象交回的是那一刻上不过门的判断里判断时刻最晚的一份。
+// answerSeverity 是封闭五格的库上词形，按 domain.AdmissionAnswers 的次序（压制次序，轻在前、阻断在末）：同一刻几份都不过门时，
+// 交回位次最大的那一份。
+var answerSeverity = func() []string {
+	var words []string
+	for _, answer := range domain.AdmissionAnswers() {
+		words = append(words, answer.String())
+	}
+	return words
+}()
+
+// ListUnadmittedObjects 每个对象看它动作时点最晚的那一刻。那一刻上每一次请求（意图、节点、去向，与动作时点一起就是
+// ports.ActionAdmissionJudgementID 派生标识时用的请求那几格）只取判断时刻最晚的一份——同一请求三源变了重判另记一行（ADR-0206 决定
+// 六），出发前问询之后同参出发也是同一请求（ADR-0219），旧的那份已被新的取代；再看这些当前答复里有没有不过门的，有就算卡关，只计一次。
+// 同一刻不同请求各算各的：交出被挡、出发放行，那一刻就有一件事没做成，不让另一请求的放行把它盖掉。
+// 「最近」按动作时点而不按判断时刻：执行方晚报的一次早先动作不该盖过它之后那次动作的答复。
+// 每个对象交回不过门的当前答复里最重的一份（压制次序，见 answerSeverity），同样重时交判断时刻最晚的。
 //
 // 件数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，件数是全部卡关对象而不是这一页；分两条语句求，
 // 两次读之间进来的判断会让件数与这一页对不上。没有卡关对象时一行都没有，件数如实是 0。
@@ -460,22 +472,29 @@ func (views *OperationsRecordViews) ListUnadmittedObjects(
 		      WHERE tenant_id = $1
 		      GROUP BY object_ref
 		 ),
-		 stuck AS (
-		     SELECT DISTINCT ON (j.object_ref)
+		 current AS (
+		     SELECT DISTINCT ON (j.object_ref, j.intent_kind, j.node_ref, j.onward_node_ref)
 		            j.judgement_id, j.object_ref, j.intent_kind, j.node_ref, j.onward_node_ref, j.action_at,
 		            j.cross_zone, j.answer, j.zones, j.findings, j.judged_at
 		       FROM customs_compliance.action_admission_judgement AS j
 		       JOIN latest_at AS l ON l.object_ref = j.object_ref AND l.action_at = j.action_at
 		      WHERE j.tenant_id = $1
-		        AND j.answer = ANY($2)
-		      ORDER BY j.object_ref, j.judged_at DESC, j.judgement_id DESC
+		      ORDER BY j.object_ref, j.intent_kind, j.node_ref, j.onward_node_ref, j.judged_at DESC, j.judgement_id DESC
+		 ),
+		 stuck AS (
+		     SELECT DISTINCT ON (object_ref)
+		            judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
+		            cross_zone, answer, zones, findings, judged_at
+		       FROM current
+		      WHERE answer = ANY($2)
+		      ORDER BY object_ref, array_position($4::text[], answer) DESC, judged_at DESC, judgement_id DESC
 		 )
 		 SELECT judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
 		        cross_zone, answer, zones, findings, judged_at, count(*) OVER ()
 		   FROM stuck
 		  ORDER BY action_at, object_ref
 		  LIMIT $3`,
-		tenant.String(), unadmittedAnswers, limit)
+		tenant.String(), unadmittedAnswers, limit, answerSeverity)
 	if err != nil {
 		return ports.UnadmittedObjects{}, err
 	}
