@@ -32,6 +32,17 @@ type NetworkCatalogRead interface {
 	LoadDefinitionsAt(ctx context.Context, tenant domain.TenantID, asOf time.Time) (NetworkCatalogSnapshot, bool, error)
 }
 
+// NodeBusinessTimezoneRead 按节点身份答它在 at 生效的那一版业务时区（CONTEXT「每个节点……必须明确业务时区」）。给按网点出
+// 日期的别的上下文用——node-operations 的送站预报、送站交接单按开立网点的业务时区出单据号里的日期（ADR-0355 决定七）。
+//
+// 只答时区一格：问的是「这个网点此刻按哪个时区过日子」，不是一次判断，所以不取目录修订、不折叠、不交版本行的其余内容；
+// 整份快照（NetworkCatalogRead）要读七族，开立一张单据为一格时区去读七族是浪费。选版口径与 LoadDefinitionsAt 的节点族同一：
+// [effective_from, effective_to) 含 at，生效当刻属新版。found=false 即这个租户没有这个节点在 at 生效的版本（没登记、还没
+// 生效或已闭）——调用方据此退到自己的来路，本口不拿别的版本或默认时区顶；两版同时适用是目录坏了，答 error，不挑一版。
+type NodeBusinessTimezoneRead interface {
+	FindNodeBusinessTimezoneAt(ctx context.Context, tenant domain.TenantID, node string, at time.Time) (string, bool, error)
+}
+
 // OperationsCatalogRead 是版本化网络目录的运营查阅上列读面(ADR-0077 Decision 一):
 // 给管理台网络目录与服务区域两页供数,按族列版本行原文——含已闭区间的历史版本与
 // 尚未生效的未来版本,临时调整族列整条历史链。查阅不触发判断、决定或披露,所以它
