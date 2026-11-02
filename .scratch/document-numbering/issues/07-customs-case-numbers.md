@@ -1,7 +1,7 @@
 # 07 关务案件的单据号
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum07`（完成记录见文末）；待非作者评审与进 main
+Status: resolved——2026-11-02 进 main（全量 170 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum07`（完成记录见文末）；待非作者评审与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二；UC-CC-001
@@ -76,3 +76,12 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 6. **口径核对**：`documentNumber`、`documentNumberAbsence`（`ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`）、`NUMBERING_RULE_COLLISION` 与全批定的一致，未改。
 
 修订后自验见协调方汇报；这一轮没有重灌种子、没有重做浏览器核验（行为改动只在关闭核对签的降级与技术详情，由前端用例钉住）。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `a47ebbdfd`，复评钉 `a05c3f251`）
+
+首轮两条阻断都是文字级：`customsDecisionTransaction` 注释在数并抄另一包 `EstablishCaseResult.RollsBack` 的回滚情形；UC-CC-001 结果表与首发结果码表缺 `NUMBERING_RULE_COLLISION`、未决原因缺 `CASE_NUMBERING_UNAVAILABLE`。代码行为评审逐处核实：事务壳 `undecided` 改名 `rollBack` 后案件关闭、内部限制、放行门禁核对等既有路径判据函数体逐字未变，`RollsBack` 只多出撞号与并发输家两支（原先也无写入），假事务器探针与三条既有路径的真库生产装配用例都过；迁移 0032 施加于有旧数据的库，旧行不变、约束生效；取号在领域建立之后、`Save` 之前同一事务，各路拒答不取号，并发后下一号连续。修订轮（`a05c3f251`，含并入 main 的合并 `24fee7daa`）清掉两条阻断，并修两条非阻断：「关闭核对」签只看关闭目录读口、清关单读口没答时只降级号那一格；「报关批次」技术详情补内部标识与无号情形；管理台用词改取共用词典（本票原先在 `status.ts` 开的册已删）。复评阻断清零。余下非阻断：建案答复 `detail` 的撞号说法 Go 与 TS 各写一份、未钉一致（记此）；完成记录「留给协调方 → 共享面」那条已被「评审修订」更正，以后者为准。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum07` tip `a05c3f251` 已含 main `620847516`，在其上重算 AT 盘点总览计数、重生成机制清点各成一笔（ADR 索引无变化），两项 `-check` 退 0；对 `93d9296f9` 跑全量 170 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum07` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA，main 快进。
+
