@@ -35,7 +35,7 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 ### 做了什么
 
 - **开立点与时区**：异常案件在分诊自动建案那一步（`RaiseSignalHandler.Handle`，走向已定、标识已签、写库之前）取号；客户索赔项在受理编排里（批次、项）未在案、要落单的那一步取号（`HandleClaimHandler.ReceiveClaim`，早于资格审核）。两类单据的开立方都没有业务时区，按租户的单据编号时区（类型声明 02 已写 `DateTimeZoneFromTenant`，不另传 `IssuerTimeZone`），这句写进了 VE CONTEXT 两条规则。人工立案今天没有入口，日后也只经 `EstablishCase` 一个门；`EstablishCase` 与 `ReceiveClaimItem` 都要求开立这一刻形成的单据号那一格（号，或时区未配置），零值只留给重建的旧行。
-- **消费侧端口与适配器**：`ports.CaseNumberIssuer`、`ports.ClaimNumberIssuer`；`vepostgres.DocumentNumbers` 接 `docnumbering.Components.Assigner`，「是否已用」查本上下文自己的表。parcel-api 的 `buildClaimsOrchestration`、parcel-dispatch 的 `newTenantBoundProjectionDerive`（冲突信号与出发门禁阻断信号两条自动建案的路都经它）都接同一个 DB 上装的那一套。
+- **消费侧端口与适配器**：`ports.CaseNumberIssuer`、`ports.ClaimNumberIssuer`；`vepostgres.DocumentNumbers` 接 `docnumbering.Components.Assigner`，「是否已用」查本上下文自己的表。parcel-api 的 `buildClaimsOrchestration`、parcel-dispatch 的 `newTenantBoundProjectionDerive`（冲突信号与出发门禁阻断信号的自动建案都经它）都接同一个 DB 上装的那一套。
 - **落库**：VE 迁移 `0033`，两表各加可空的 `document_number`、`numberless_reason`（只认 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`，不与号同在），（租户，单据号）唯一；旧行两格都空即上线前开立，不回填。号随单同一条 INSERT 落下，不进索赔的更新集。
 - **答复与读口**：案件册、索赔册带 `documentNumber`，没号时不带它、带 `numberlessReason`（`ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`）；处置请求册、追偿册带所属案件的 `caseDocumentNumber`（没号缺席）。首方索赔回执新增 `documentNumber` / `numberlessReason`，撞号答 `200 NUMBERING_RULE_COLLISION`、不带回执，`docs/api/first-party-api-contract.md` 已写。
 - **管理台**：异常案件页（首页「今日待办」异常格点进来的那一页）案件号为主列、可检索，案件内部标识进技术详情；异常处理页的处置请求签与索赔与追偿页的追偿签以案件号指认案件；客户索赔签索赔号为主列、可检索，客户自己的索赔项编号与批次号留在技术详情。没号的行主列照旧显标识，技术详情按读口给的原因说「上线前开立，无单据号」或「开立时单据编号时区未配置，无单据号」（`document-number.ts` 一处）。用语词典追加「案件号」「索赔号」。
@@ -54,7 +54,7 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 ### 验证（本机 PG `127.0.0.1:55432`）
 
 - `go build ./...`、`go vet ./...` 退 0；改过的 `.go` 跑 `gofmt -l` 无输出。
-- `go test -count=1 -p 1 ./internal/visibilityexception/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/...` 全绿（51 个包 ok，含 PG）；`-v` 抽查新真库用例（`vepostgres` 的单据号十二条、parcel-dispatch 两条、parcel-api 两条）全 PASS、无 SKIP。覆盖：重放答原号、并发不撞号（不同项各一个号连成一段；同一项只落一次、输家退号）、租户隔离、周期重置（案件按日、索赔按月，按上海时区跨日）、开立回滚释放号码、撞号答案与退号、事务外拒、唯一约束与原因取值域、`0033` 在有数据的库上施加不回填。
+- `go test -count=1 -p 1 ./internal/visibilityexception/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/...` 全绿（含 PG，实测于 `9696f51cf`）；`-v` 抽查新真库用例（`vepostgres` 的 `document_numbers_test.go`、parcel-dispatch 的 `exception_case_number_test.go`、parcel-api 的 `assemble_claims_document_number_test.go` 与改过的索赔口用例）全 PASS、无 SKIP。覆盖：重放答原号、并发不撞号（不同项各一个号连成一段；同一项只落一次、输家退号）、租户隔离、周期重置（案件按日、索赔按月，按上海时区跨日）、开立回滚释放号码、撞号答案与退号、事务外拒、唯一约束与原因取值域、`0033` 在有数据的库上施加不回填。
 - 前端：`npx tsc -b`、`pnpm test`（1042 pass）、`npx vite build` 退 0。
 - 种子：一次性库 `docnum06_seed` 灌 `scripts/demo-seeds/seed.sh` 退 0；**种子不开立异常案件与客户索赔项**（两表零行，单据编号时区一版在册），所以「种子开立的这几类都带号」无可查之行。用后删库。
 - 浏览器：自编 parcel-api 起在 `19096` 连 `docnum06_seed`，前端 `5196`。为了有行可看，经真编排（`RaiseSignalHandler` + `HandleClaimHandler` + 真取号）在库里立了两件自动建案（`EX-20261102-0001/0002`）与两项索赔（`CLM-202611-00001/00002`），另用 SQL 摆了上线前开立与时区未配置的案件、索赔各一行和引用它们的处置请求、追偿事项。`innerText` 核过：首页「今日待办」异常格点进异常案件页，主列是案件号、旧行显内部标识；按案件号检索命中一行；详情技术详情分别写「上线前开立，无单据号」「开立时单据编号时区未配置，无单据号」；处置请求签与追偿签以案件号指认、可按案件号检索；客户索赔签索赔号为主列、可检索，技术详情列客户的索赔项编号与批次。过程中无写请求。进程已停，库已删。
