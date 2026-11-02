@@ -16,7 +16,7 @@ import { labelOf } from './presentation';
 export const initialRouteTieStateLabels: Record<string, string> = {
   PENDING: '待裁决',
   DECIDED: '已裁决',
-  FORMED_OTHERWISE: '已另行形成初始路由——并列之后重判选出了唯一一条',
+  FORMED_OTHERWISE: '已另定路线——重新判断时选出了唯一一条',
 };
 
 /** 裁决口结果代数（application DecideInitialRouteOutcome）。 */
@@ -28,7 +28,7 @@ export const initialRouteTieOutcomeLabels: Record<string, string> = {
   CANDIDATE_RESTRICTED: '所择候选此刻被有效硬限制淘汰——只有限制的来源责任方解除得了，未形成计划',
   CANDIDATE_NOT_QUALIFIED: '所择候选此刻已不合格——另择一家，未形成计划',
   CANDIDATE_EVIDENCE_UNKNOWN: '所择候选此刻证据未知——等登记补齐，未形成计划',
-  INITIAL_ROUTE_EVIDENCE_NOT_CONFIGURED: '判断时点没有适用的网络证据——等租户登记，未形成计划',
+  INITIAL_ROUTE_EVIDENCE_NOT_CONFIGURED: '判断时点没有适用的网络证据——等补登网络资料，未形成计划',
   UNDECIDED: '依赖暂时读不动——未形成计划，可稍后重试',
 };
 
@@ -44,17 +44,17 @@ export const initialRouteTieUndecidedReasonLabels: Record<string, string> = {
 };
 
 const problemNotes: Record<string, string> = {
-  MALFORMED_REQUEST: '载荷构造不出裁决（缺格、空白或带了身份键），重发同样的内容不会改变结果。',
-  OUTSIDE_ADMISSION_SCOPE: '这笔生产写不在治理登记的生产权威区间内——要先登准入对照与区间。',
-  IDENTITY_DEPENDENCY_UNAVAILABLE: '身份依赖（发行方公钥或操作者册）暂时读不动，可稍后重试。',
-  INTAKE_FAILED: '接入解析未能完成，本次没有形成任何业务答案，可稍后重试。',
-  NO_ANSWER_FORMED: '服务端处理未能完成，本次没有形成任何业务答案，可稍后重试。',
-  UNNAMED_OUTCOME: '服务端交回了没有名字的结果，这是实现缺陷，请携带时间查询服务端记录。',
-  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题，不是业务答案。',
+  MALFORMED_REQUEST: '提交的内容不完整（漏选了路线或没写依据）；补齐后再提交。',
+  OUTSIDE_ADMISSION_SCOPE: '当前阶段还没有放开这项决定；什么都没有保存，请联系负责阶段管理的同事。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '暂时无法核对登录身份，请稍后重试。',
+  INTAKE_FAILED: '登录信息没能核对通过，这次什么都没有保存；请稍后重试。',
+  NO_ANSWER_FORMED: '系统暂时没能处理，结果还不确定；请稍后刷新查看，必要时重新提交。',
+  UNNAMED_OUTCOME: '系统返回了无法识别的结果；请记下时间联系系统管理员。',
+  METHOD_NOT_ALLOWED: '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。',
 };
 
 export function initialRouteTieProblemNote(code: string): string {
-  return problemNotes[code] ?? `未知错误码 ${code}。请携带时间查询服务端记录。`;
+  return problemNotes[code] ?? `这次没有成功（错误码 ${code}）；请记下错误码与时间联系系统管理员。`;
 }
 
 /** 并列的那几家：授权角色只能在它们之间择（ADR-0309 决定二「所择不在并列里」）。 */

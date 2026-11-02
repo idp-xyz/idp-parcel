@@ -28,9 +28,9 @@ test('停运与恢复的起止', () => {
 test('路线一句话', () => {
   equal(
     routeSummaryOf([
-      { reference: 'P#1', kind: 'BETWEEN_NODES', from: 'SHA', to: 'SZX', responsible: 'C1' },
-      { reference: 'P#2', kind: 'BETWEEN_NODES', from: 'SZX', to: 'SIN', responsible: 'C2' },
-      { reference: 'P#3', kind: 'DELIVERY', from: 'SIN', to: 'AREA-SG@1', responsible: 'AREA-SG@1' },
+      { reference: 'P#1', kind: 'BETWEEN_NODES', from: 'SHA', to: 'SZX', responsible: 'C1', earliest: '', latest: '', windowBasis: '' },
+      { reference: 'P#2', kind: 'BETWEEN_NODES', from: 'SZX', to: 'SIN', responsible: 'C2', earliest: '', latest: '', windowBasis: '' },
+      { reference: 'P#3', kind: 'DELIVERY', from: 'SIN', to: 'AREA-SG@1', responsible: 'AREA-SG@1', earliest: '', latest: '', windowBasis: '' },
     ]),
     'SHA → SZX → SIN → 末端派送',
   );

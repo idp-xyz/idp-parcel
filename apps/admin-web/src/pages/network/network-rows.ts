@@ -56,9 +56,9 @@ export interface RouteLeg {
   from: string;
   to: string;
   responsible: string;
-  earliest?: string;
-  latest?: string;
-  windowBasis?: string;
+  earliest: string;
+  latest: string;
+  windowBasis: string;
 }
 
 /**

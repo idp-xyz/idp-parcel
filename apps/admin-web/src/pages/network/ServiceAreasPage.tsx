@@ -9,6 +9,7 @@ import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 import { technicalRows } from '../settlement/ops-ui';
 import {
   listNetworkCatalog,
@@ -99,6 +100,7 @@ function ServiceAreasTable() {
   const conditions = networkCatalogConditions('service-area', { q: useSettledKeyword(keyword) });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
   const areas = answer?.kind === 'outcome' ? answer.body.versions : [];
+  const mayWrite = useMayWriteRegistry();
 
   return (
     <ListPageTemplate<NetworkVersionRecord>
@@ -122,7 +124,7 @@ function ServiceAreasTable() {
         module: info,
         endpoint: 'GET /network-catalog?family=service-area',
         emptyTitle: '还没有登记服务区域',
-        emptyDescription: '在「新增或更新」签里登记服务区域后，会在这里出现；没有服务区域之前，路线规划找不到派送范围。',
+        emptyDescription: entryHint(mayWrite, '在「新增或更新」签里登记服务区域后，会在这里出现；没有服务区域之前，路线规划找不到派送范围。'),
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />

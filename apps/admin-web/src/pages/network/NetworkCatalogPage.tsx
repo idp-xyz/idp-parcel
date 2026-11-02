@@ -10,6 +10,7 @@ import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
 import { technicalRows } from '../settlement/ops-ui';
 import {
   listNetworkCatalog,
@@ -195,6 +196,7 @@ function NetworkCatalogTable() {
   const [keyword, setKeyword] = useAddressKeyword();
   const conditions = networkCatalogConditions(familyId, { q: useSettledKeyword(keyword) });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
+  const mayWrite = useMayWriteRegistry();
   // 手上的答复认的是此刻这一问的条件签名(族在其中),答的一定是当前族,不会把上一族的行套进这一族的列。
   const rows = answer?.kind === 'outcome' ? answer.body.versions.map((record) => rowOf(familyId, record)) : [];
 
@@ -237,7 +239,7 @@ function NetworkCatalogTable() {
         module: info,
         endpoint: `GET /network-catalog?family=${familyId}`,
         emptyTitle: `还没有登记${familyLabels[familyId]}`,
-        emptyDescription: `在「新增或更新」签里登记${familyLabels[familyId]}后，会在这里出现。`,
+        emptyDescription: entryHint(mayWrite, `在「新增或更新」签里登记${familyLabels[familyId]}后，会在这里出现。`),
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />

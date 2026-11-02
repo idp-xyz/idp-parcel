@@ -5,6 +5,11 @@ import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
+import { useMayMakeDecision } from '../use-operator-grants';
+import { ShipmentNo } from '../shipment-request/refs';
+import { parcelNoOf } from '../shipment-request/ref-no';
 import {
   decideInitialRouteTie,
   listInitialRouteTies,
@@ -34,6 +39,8 @@ const info = moduleInfoById['route-plans'];
  * 锁里按此刻的证据重判，本页的状态只是读到时的大概。
  */
 export function InitialRouteTiesView({ header, keyword }: { header: RoutePlansHeader; keyword: string }) {
+  // 两个决定口认同一种运营决定授予（授权改路）；明确没有时只显状态、不摆按钮（ADR-0315）。
+  const mayDecide = useMayMakeDecision('AUTHORIZED_REROUTE');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<InitialRouteTieListResponseBody> | null>(null);
   const [deciding, setDeciding] = useState<InitialRouteTieRecord | null>(null);
@@ -59,21 +66,26 @@ export function InitialRouteTiesView({ header, keyword }: { header: RoutePlansHe
 
   const columns: ListColumn<InitialRouteTieRecord>[] = [
     {
-      id: 'declared-parcel',
-      header: '申报包裹',
-      className: 'font-mono text-xs',
-      render: (row) => <span className="text-idpxyz-accent">{row.declaredParcelId}</span>,
+      id: 'parcel',
+      header: '运单',
+      render: (row) => (
+        <div className="flex min-w-0 flex-col items-start gap-0.5">
+          <ShipmentNo shipmentRequestId={row.shipmentRequestId} />
+          <span className="text-[11px] text-idpxyz-textMuted">
+            包裹 <span className="font-mono">{parcelNoOf(row.declaredParcelId)}</span>
+          </span>
+        </div>
+      ),
     },
-    { id: 'baseline', header: '接受基线', className: 'font-mono text-xs', render: (row) => row.acceptanceBaseline },
     {
       id: 'tied',
-      header: '并列的候选与打平的金额',
+      header: '并列的路线与相同的成本',
       className: 'min-w-56 font-mono text-xs',
       render: (row) => tiedAmountText(row),
     },
     {
       id: 'candidates',
-      header: '全部候选（入账时）',
+      header: '全部备选路线',
       className: 'min-w-56 text-xs',
       render: (row) => (
         <ul>
@@ -86,24 +98,42 @@ export function InitialRouteTiesView({ header, keyword }: { header: RoutePlansHe
         </ul>
       ),
     },
-    { id: 'settled-at', header: '入账时点', className: 'min-w-44 font-mono text-xs', render: (row) => formatInstant(row.settledAt) },
+    { id: 'settled-at', header: '发现并列的时间', className: 'min-w-44 font-mono text-xs', render: (row) => formatInstant(row.settledAt) },
     {
       id: 'state',
       header: '状态',
       className: 'min-w-44 text-xs',
       render: (row) => {
         const availability = initialRouteTieAvailabilityOf(row);
-        return availability.kind === 'available' ? (
+        return availability.kind === 'available' && mayDecide ? (
           <Button variant="outline" disabled={deciding !== null} onClick={() => setDeciding(row)}>
             {labelOf(initialRouteTieStateLabels, row.state)} · 裁决
           </Button>
         ) : (
           <span>
             {labelOf(initialRouteTieStateLabels, row.state)}
-            <span className="block text-idpxyz-textMuted">{availability.reason}</span>
+            {availability.kind === 'available' ? null : <span className="block text-idpxyz-textMuted">{availability.reason}</span>}
           </span>
         );
       },
+    },
+    {
+      id: 'technical',
+      header: '',
+      className: 'align-top',
+      render: (row) => (
+        <TechnicalDetails
+          className="max-w-md open:min-w-[18rem]"
+          rows={technicalRows([
+            { label: '运单标识', value: row.shipmentRequestId },
+            { label: '包裹标识', value: row.declaredParcelId },
+            { label: '客户编码', value: row.customerAccountId },
+            { label: '受理基线', value: row.acceptanceBaseline },
+            { label: '服务目的', value: row.servicePurpose },
+            { label: '状态码', value: row.state },
+          ])}
+        />
+      ),
     },
   ];
 
@@ -111,15 +141,15 @@ export function InitialRouteTiesView({ header, keyword }: { header: RoutePlansHe
     <>
       <ListPageTemplate<InitialRouteTieRecord>
         {...header}
-        filterSummary={answer?.kind === 'outcome' ? `最低成本并列 ${ties.length} 件` : undefined}
+        filterSummary={answer?.kind === 'outcome' ? `共 ${ties.length} 件` : undefined}
         columns={columns}
         rows={visible}
         rowKey={(row) => `${row.shipmentRequestId}/${row.acceptanceBaseline}/${row.declaredParcelId}/${row.servicePurpose}`}
         viewState={catalogueViewState(answer, ties.length, retry, {
           module: info,
           endpoint: 'GET /route-initial-route-ties',
-          emptyTitle: '当前租户没有停在最低成本并列的包裹',
-          emptyDescription: '并列由初始路由在合格候选成本打平时入账；没有这样的包裹，册就是空的，本页不预置数据。',
+          emptyTitle: '没有等裁决的成本并列',
+          emptyDescription: '定路线时几条备选路线成本一样、选不出唯一一条时，会停在这里等你选一条。',
         })}
       />
       {deciding ? (
@@ -172,15 +202,15 @@ function InitialRouteTieCard({
   return (
     <Card className="mx-4 mb-4">
       <CardHeader>
-        <CardTitle>并列裁决</CardTitle>
+        <CardTitle>选定路线</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-xs">
         <p className="text-idpxyz-textMuted">
-          包裹 <span className="font-mono">{tie.declaredParcelId}</span> 的合格候选在成本上打平。在并列的那几家里择一家：服务端按此刻的证据重判它，
-          成立时形成这件包裹的首个计划，从决定的时刻起生效；此刻被限制淘汰、已不合格或证据未知，都不成立。决定方是登录的操作者，本表单不收也不送。
+          包裹 <span className="font-mono">{tie.declaredParcelId}</span> 有几条备选路线成本一样。从并列的那几条里选一条：系统按此刻的情况再核一遍，
+          通过就定下这件包裹的路线，从决定的时刻起生效；这条路线此刻被限制、已不合格或依据不明时不会生效。决定人记为当前登录的你。
         </p>
         <fieldset>
-          <legend className="text-idpxyz-textMuted">所择候选</legend>
+          <legend className="text-idpxyz-textMuted">选哪条路线</legend>
           {candidates.map((candidate) => (
             <label key={candidate} className="mr-4 inline-flex items-center gap-1 font-mono">
               <input
@@ -244,7 +274,7 @@ function TieAnswerNote({ state }: { state: SubmissionState }) {
     case 'unconfigured':
       return (
         <p className="text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。裁决口已建立并装配，操作者渠道的发行方参数未设，服务端如实拒绝。
+          操作入口还没有配置好，这次什么都没有保存；重试也不会改变结果，请联系系统管理员完成配置。
         </p>
       );
     case 'loginRequired':
@@ -253,16 +283,16 @@ function TieAnswerNote({ state }: { state: SubmissionState }) {
     case 'callerProblem':
       return (
         <p className="text-idpxyz-danger">
-          调用方式问题（HTTP {answer.status}）：{initialRouteTieProblemNote(answer.code)}
+          没有保存：{initialRouteTieProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className="text-idpxyz-danger">
-          服务端未形成答案（HTTP {answer.status}）：{initialRouteTieProblemNote(answer.code)}
+          结果还不确定：{initialRouteTieProblemNote(answer.code)}
         </p>
       );
     case 'transport':
-      return <p className="text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-idpxyz-danger">连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
   }
 }
