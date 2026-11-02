@@ -196,9 +196,9 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 		t.Fatalf("无路可走行长出了适用性：%v", noRoute)
 	}
 
-	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性与段链、一无路可走，
-	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。段链 legs（ADR-0217）随票
-	// demo-chain-gaps/72 进夹具：任一侧改段的键名，两侧的契约测试都红。
+	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性与段链（ADR-0217，一段
+	// 节点间、一段交付）、一无路可走，可缺席键因此各出场一次，前端对着它校类型时每一格都有实例
+	// 可核，段行的每个键也在其中——任一侧改段的键名，两侧的契约测试都红。
 	assertContractFixture(t, "route_plans_initial_route.json", recorder.Body.Bytes())
 }
 

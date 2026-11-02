@@ -7,7 +7,8 @@ import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
-import { catalogueViewState } from '../catalogue-view';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { useMayMakeDecision } from '../use-operator-grants';
 import { listBusinessParties, type BusinessPartyListResponseBody } from '../party/api';
 import {
   confirmDeliveryHandover,
@@ -124,6 +125,8 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
   const [reloadKey, setReloadKey] = useState(0);
   const [draft, setDraft] = useState<ConfirmationDraft | null>(null);
   const names = useCustomerNames();
+  // 确认是运营决定「送站交接确认」：明确知道没有这一种授予时不摆确认按钮，答不出授予时照摆、让服务端去答（ADR-0315）。
+  const mayConfirm = useMayMakeDecision('DELIVERY_HANDOVER_CONFIRMATION');
   useEffect(() => {
     let cancelled = false;
     void readDeliveryHandoverNote(noteId).then((result) => {
@@ -150,6 +153,8 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
           ? [
               { label: '网点', value: <span className="font-mono">{note.handoverNote.node}</span> },
               { label: '开单时间', value: row.values.openedAt },
+              // 状态胶囊只说开放 / 已关闭，关闭时刻放这一格；没关的单子这一格说还开着。
+              { label: '关闭时间', value: note.handoverNote.closedAt ? formatInstant(note.handoverNote.closedAt) : '还开着' },
               { label: '送货范围', value: row.values.scope },
               { label: '件数', value: row.values.members },
               { label: '客户确认进度', value: row.values.bindings },
@@ -177,7 +182,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
                 <span className="text-idpxyz-text">{customer(claim.values.customerAccount)}</span>
                 <span>{claim.values.conclusion}</span>
                 {claim.values.route ? <span>· {claim.values.route}</span> : null}
-                {claim.confirm.kind === 'available' ? (
+                {claim.confirm.kind === 'available' && !mayConfirm ? null : claim.confirm.kind === 'available' ? (
                   <Button
                     variant="outline"
                     size="sm"

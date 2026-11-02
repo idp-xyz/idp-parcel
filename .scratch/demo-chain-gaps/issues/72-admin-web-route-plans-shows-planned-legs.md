@@ -40,3 +40,16 @@ S
 - **自验**：`go build ./...`、`go vet ./internal/networkrouting/...`、`gofmt -l internal/networkrouting/` 都干净；`go test -count=1 -p 1 ./internal/networkrouting/...`（带 `IDP_PARCEL_POSTGRES_DSN`）全过；`apps/admin-web` 的 `tsc -b`、`pnpm test`、`vite build` 都过。
 - **两侧都红的探针**：把夹具里段的 `windowBasis` 改名为 `windowRef`，Go 夹具用例红、前端契约测试红；还原后两侧都绿。
 - **浏览器（只读）**：5181 接 19080 的演示库，路线规划页首行右栏列出四段，末段终点为「末端派送」（`SYN-AREA-SG@1`），技术详情里逐段有段引用。证据层级 `S`。
+
+### 同分支的前端改动
+
+同一分支还带两笔不属本票地盘的前端改动，都只动 `apps/admin-web/src/pages/**`。它们与本票同是协调方「线路与运力区不留尾巴」那一轮派下的三件事，一起派、一起评，所以走同一个分支，不另开票：
+
+- **网点与口岸不设名称栏**：network-routing 的网点、customs-compliance 的合规候选口岸都只有编码这一身份，领域与读口都没有名称。名称是册级缺席，所以页面不设名称栏、行首显编码，只在两页的页头说明里用册级说法交代「网点目录只登编码，不登名称」「口岸目录只登编码，不登名称」。首版曾在行下与右栏写「未登记名称」，评审指出那是行级缺席的词（读的人会去催一个登不进的字段），口岸页还会和关务适用性的不可用理由「口岸未登记」撞词，已在修订轮删去。
+- **送货预报、送货交接单的右栏**改成本区其余几页统一的「事实格 + 正文 + 技术详情」：客户显名称，包裹号清单、自称的客户与名下的货进正文，预报号、编码、确认人、来源单据与成员事实身份进技术详情。交接单的关闭时刻在事实格「关闭时间」里。交接单的「确认」按运营决定授予收起：前端授予表直接认 `/operator-grants` 答回的决定原词，`DELIVERY_HANDOVER_CONFIRMATION`（`accessidentity.DecisionDeliveryHandoverConfirmation`）不用另补映射；明确没有这一种授予时不摆按钮，答不出授予时照摆（ADR-0315）。基线上这个按钮从来没按授予收起，这一笔一并补上。
+
+### 修订轮（评审钉 `febab728b`：Spec 0 阻断，Standards 1 阻断）
+
+- 阻断 S1「未登记名称」不诚实：删掉右栏「名称」格、行下的「未登记名称」与 `unregisteredNameWord`，改成页头的册级说法（见上节）。
+- 非阻断：夹具用例注释改成说夹具钉的是什么形状，不写变更叙事；交接单右栏补回关闭时刻；交接单确认按授予收起；本节与上节写进票面。
+- 自验重跑：`apps/admin-web` 的 `tsc -b`、`pnpm test`、`vite build` 都过；`gofmt -l internal/networkrouting/` 干净，`go vet` 与 `go test -count=1 ./internal/networkrouting/adapters/http/` 通过。浏览器（5181 接 19080，只读）：两页页头显册级说明，行首与右栏不再有「未登记名称」。交接单库里没有数据，确认按钮的收起只过了类型与单测，没在浏览器里看过。
