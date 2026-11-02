@@ -8,7 +8,7 @@ import { formatInstant } from '../moment';
 import { sourceContextLabels } from './presentation';
 import { currentStatusLabelOf, type TrackingRow } from './tracking-list';
 
-// 物流动态工作台的详情栏：头部运单号 + 当前状态胶囊，三格事实（更新时间 / 动态条数 / 被替代条数），正文按服务链顺序列各源
+// 物流动态工作台的详情栏：头部包裹号 + 当前状态胶囊，三格事实（更新时间 / 动态条数 / 被替代条数），正文按服务链顺序列各源
 // 最后一步——「节点 · 已收寄 · 时刻」每条一句人话；投影版本、前身、里程碑原码与各源事实引用进底部「技术详情」。
 // 内容全部取自投影读模型，不为详情栏另开读口；时间轴跨源合并的读口是第二步的事（设计源第八节）。
 

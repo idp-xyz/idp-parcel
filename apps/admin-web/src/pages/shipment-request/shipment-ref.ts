@@ -8,6 +8,7 @@
 
 import { accessRefusalHeadline } from '../../auth/access-refusal';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { shipmentRequestIdsOfDisplay } from './ref-no';
 import {
   REQUEST_NOT_VISIBLE_CODE,
   type ApiResult,
@@ -92,6 +93,57 @@ export async function lookUpShipmentRef(raw: string, lookups: ShipmentRefLookups
   const input = raw.trim();
   const [byNumber, byId] = await Promise.all([lookups.byNumber(input), lookups.byId(input)]);
   return resolveShipmentRef(input, byNumber, byId);
+}
+
+/**
+ * 运单详情从哪来。详情地址第二段是屏上那个号——有运单号是运单号,老运单是去前缀的委托标识(与列表上显的同一个,
+ * ShipmentRequestListPage 的 detailHash),壳层的标签、状态栏与最近打开都按地址第二段写字。打开时问按运单号那一口,
+ * 再按这个号可能对应的委托标识(shipmentRequestIdsOfDisplay)各问一次单份查阅,合起来定详情:
+ *   - 只命中一份:用它——按委托标识命中的那份详情已在手,直接用;按运单号命中的再按它的委托标识读一次。别的口读不动不妨碍,
+ *     命中一份就已经认出是哪一张;
+ *   - 命中不止一份:另说,不替人选;
+ *   - 没有命中而有一口读不动:交回读不动的那一份,页面按它的格说——这时说「找不到」可能是错的;
+ *   - 没有命中、各口都答了:「看不见」,与原先按委托标识打开查无同一说法。
+ * 这里与撤回、取消表单的 resolveShipmentRef 有意不同:表单接着要发命令,一口读不动就不解析;详情只是看,认得出就给看。
+ */
+export type ShipmentDetailSource =
+  | { kind: 'detail'; answer: ApiResult<ViewDetailResponseBody> }
+  | { kind: 'byId'; shipmentRequestId: string }
+  | { kind: 'ambiguous'; candidates: ShipmentRef[] };
+
+const notVisibleAnswer: ApiResult<ViewDetailResponseBody> = { kind: 'callerProblem', status: 404, code: REQUEST_NOT_VISIBLE_CODE };
+
+/** byIds 与 shipmentRequestIdsOfDisplay(input) 一一对应、同序。 */
+export function shipmentDetailSourceOf(
+  input: string,
+  byNumber: ApiResult<ViewsListResponseBody>,
+  byIds: readonly ApiResult<ViewDetailResponseBody>[],
+): ShipmentDetailSource {
+  const askedIds = new Set(shipmentRequestIdsOfDisplay(input));
+  const hits = new Map<string, { ref: ShipmentRef; detail?: ApiResult<ViewDetailResponseBody> }>();
+  if (byNumber.kind === 'outcome') {
+    for (const row of byNumber.body.requests) {
+      if (row.documentNumber === input) hits.set(row.shipmentRequestId, { ref: refOf(row) });
+    }
+  }
+  for (const byId of byIds) {
+    if (byId.kind === 'outcome' && askedIds.has(byId.body.request.shipmentRequestId)) {
+      hits.set(byId.body.request.shipmentRequestId, { ref: refOf(byId.body.request), detail: byId });
+    }
+  }
+
+  const found = [...hits.values()];
+  if (found.length > 1) return { kind: 'ambiguous', candidates: found.map((hit) => hit.ref) };
+  if (found.length === 1) {
+    const [hit] = found;
+    return hit.detail ? { kind: 'detail', answer: hit.detail } : { kind: 'byId', shipmentRequestId: hit.ref.shipmentRequestId };
+  }
+  // 读不动的哪一口都行;两口的非业务答案都不带体,换个体类型照样成立。
+  for (const byId of byIds) {
+    if (unreadableReason(byId) !== null) return { kind: 'detail', answer: byId };
+  }
+  if (byNumber.kind !== 'outcome') return { kind: 'detail', answer: byNumber };
+  return { kind: 'detail', answer: notVisibleAnswer };
 }
 
 /** 解析没成时表单格旁那一句;解析成了交回 undefined。 */
