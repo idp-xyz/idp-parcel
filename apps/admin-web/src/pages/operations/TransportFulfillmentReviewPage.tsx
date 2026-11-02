@@ -5,7 +5,7 @@ import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { parcelNoOf } from '../shipment-request/ref-no';
 import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
-import { placePairLabel, type PlaceNameIndex } from '../network/place-names';
+import { usePartyNames } from '../settlement/party-names';
 import { usePlaceNames } from '../network/use-place-names';
 import {
   ReviewDetail,
@@ -332,17 +332,18 @@ const masterDocumentStandingLabels: Record<string, string> = {
 };
 
 /**
- * 册行转写。班次两端与交接的交出方、接收方里的网点按此刻生效那一版显名称（use-place-names）；交接两端也可能是承运商或场外地点，
- * 那些查不到名称、照显编码。两端原编码各进技术详情。
+ * 册行转写。班次两端与交接的交出方、接收方按 label 换成屏上写法：网点按此刻生效那一版的名称（use-place-names），承运商等参与方
+ * 按往来单位册的名称（settlement/party-names），场外地点没有任何册登名称、照显编码。两端原编码各进技术详情。
  */
-function rowsOf(body: TransportFulfillmentListResponseBody, places: PlaceNameIndex): ReviewRow[] {
+function rowsOf(body: TransportFulfillmentListResponseBody, label: (code: string) => string): ReviewRow[] {
+  const pair = (from: string | undefined, to: string | undefined) => `${from ? label(from) : '—'} → ${to ? label(to) : '—'}`;
   switch (body.outcome) {
     case 'TRANSPORT_SCHEDULES_LISTED':
       return body.schedules.map((record) => ({
         key: `schedule:${record.scheduleId}`,
         values: {
           scheduleId: record.scheduleId,
-          leg: record.fromNode || record.toNode ? placePairLabel(places, record.fromNode, record.toNode) : '',
+          leg: record.fromNode || record.toNode ? pair(record.fromNode, record.toNode) : '',
           legCodes: record.fromNode || record.toNode ? `${record.fromNode ?? '—'} → ${record.toNode ?? '—'}` : '',
           departsAt: formatInstant(record.departsAt),
           arrivesAt: record.arrivesAt ? formatInstant(record.arrivesAt) : '',
@@ -373,7 +374,7 @@ function rowsOf(body: TransportFulfillmentListResponseBody, places: PlaceNameInd
         values: {
           object: record.object,
           // 交接边界由交出方与接收方两个参与方引用表达,组合成「A → B」是呈现的事。
-          boundary: placePairLabel(places, record.releasedBy, record.receivedBy),
+          boundary: pair(record.releasedBy, record.receivedBy),
           boundaryCodes: `${record.releasedBy} → ${record.receivedBy}`,
           verdict: labelOf(handoverVerdictLabels, record.verdict),
           verdictCode: record.verdict,
@@ -449,6 +450,7 @@ export function TransportFulfillmentReviewPage() {
     answer: ApiResult<HandoverScopeSummaryResponseBody>;
   } | null>(null);
   const places = usePlaceNames();
+  const parties = usePartyNames();
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
   const registry = section.registry;
   const isScopeSummary = section.scopeSummary === true;
@@ -497,7 +499,7 @@ export function TransportFulfillmentReviewPage() {
       ? scopeSummaryRowsOf(summaryBody)
       : []
     : body
-      ? rowsOf(body, places)
+      ? rowsOf(body, (code) => places.get(code) ?? parties.party(code) ?? code)
       : [];
   // 汇总区至多一行，本地检索对它没有意义——检索框在那一区是范围入参，不是过滤词。
   const retry = () => setReloadKey((value) => value + 1);
