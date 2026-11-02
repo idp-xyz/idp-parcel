@@ -467,7 +467,7 @@ export function setOptionsOf(state: VocabularyState, name: VocabularySetName): S
 
 export const ruleCategoryLabels: Record<string, string> = {
   MINIMUM_INGRESS_IDENTITY: '最小入口身份',
-  SHIPMENT_INVARIANT: '委托不变量',
+  SHIPMENT_INVARIANT: '运单基本校验',
   PRODUCT_AND_CONTRACT_DOCUMENT: '产品与合同单证',
   REGULATORY_SOURCE_DOCUMENT: '监管原始资料',
   CROSS_FIELD_CONDITION: '跨字段条件',

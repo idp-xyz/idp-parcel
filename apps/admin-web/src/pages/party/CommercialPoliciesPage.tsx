@@ -172,7 +172,7 @@ function PolicyRegisters({
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索规则、对象或引用',
+          placeholder: '搜规则编号、服务产品、客户合同',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
@@ -187,7 +187,7 @@ function PolicyRegisters({
             />
           ) : undefined
         }
-        emptyRowsNote="这组条件下没有匹配的行"
+        emptyRowsNote="没有匹配的规则"
         columns={withNewVersionAction(detailColumns, {
           enabled: mayWrite,
           // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。

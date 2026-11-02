@@ -143,7 +143,7 @@ test('封闭集四格未选即空串照送，不代填；选项码是领域原�
   equal(body.planDirection, '');
   equal(body.conversion, '');
   equal(body.caliber!.taxDisposition, '');
-  deepEqual(priceDirectionOptions.map((option) => option.value), ['BUY', 'SELL', 'INTERNAL']);
+  deepEqual(priceDirectionOptions.map((option) => option.value), ['SELL', 'BUY', 'INTERNAL']);
   deepEqual(planBindingConversionOptions.map((option) => option.value), ['NONE', 'FROZEN_BUY_EVALUATION']);
   deepEqual(taxDispositionOptions.map((option) => option.value), ['TAX_INCLUSIVE', 'TAX_EXCLUSIVE', 'TAX_NOT_APPLICABLE']);
   for (const option of [...priceDirectionOptions, ...planBindingConversionOptions, ...taxDispositionOptions]) {

@@ -99,7 +99,7 @@ test('接受前财务控制策略册：chip 词表、列集与「谁喂它」都
       '状态',
       '正文',
       '共同通过条件',
-      '控制项(顺序. 种类@费用范围 → 失败处置;责任)',
+      '控制项',
       '有效期',
       '发布时间',
     ],
@@ -197,8 +197,8 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
       '适用对象',
       '责任方',
       '规则范围',
-      '索赔期限(种类 · 起算事件 · 天数 · 日历)',
-      '最低材料(索赔类型:材料清单)',
+      '索赔期限',
+      '最低材料',
       '有效期',
       '发布时间',
     ],
@@ -297,7 +297,7 @@ test('登了正文的客户服务规则按后端顺序逐项列出期限与材�
 
   equal(product.values.appliesTo, '服务产品:product-1');
   // 空数组是正文说出的真话，不是坏数据，也不是「未登记正文」；挂产品的那一版无行，索赔那一维答未登记（ADR-0176 决定二）。
-  equal(product.values.claimDeadlines, '无行·索赔答未登记');
+  equal(product.values.claimDeadlines, '未登记');
   equal(product.values.minimumMaterials, 'claim-damage:material-photo');
 });
 
@@ -310,7 +310,7 @@ test('挂合同的客户服务规则版本子表为空读作继承产品版，�
   } as CommercialPolicyListResponseBody);
 
   equal(contractTier.values.appliesTo, '客户合同:contract-1');
-  equal(contractTier.values.minimumMaterials, '无行·继承产品版');
+  equal(contractTier.values.minimumMaterials, '沿用产品上的规定');
 });
 
 test('客户服务规则布尔说已登记而正文节缺了是响应不合契约，如实点名而不是显示成空', () => {
@@ -440,12 +440,12 @@ const pricePolicies: CommercialPolicyListResponseBody = {
 test('商业价格政策册多一列口径：两段各显自己的真话，历史体积系数标不参与计价，没口径的行列为「未登记」而不是空', () => {
   deepEqual(
     kindColumns.PRICE_POLICY.map((column) => column.header),
-    ['政策', '政策方向', '价格表', '方案方向', '绑定转换', '适用范围', '计价口径（税务;汇率）', '有效期', '登记时间'],
+    ['政策', '方向', '价格表', '价格表方向', '绑定转换', '适用范围', '计价口径', '有效期', '登记时间'],
   );
   const [withFx, plain, bare] = rowsOf(pricePolicies);
   equal(withFx.key, 'price:price-fx@v1');
-  equal(withFx.values.direction, '卖价');
-  equal(withFx.values.planDirection, '买价');
+  equal(withFx.values.direction, '售价');
+  equal(withFx.values.planDirection, '成本');
   equal(
     withFx.values.caliber,
     '税务 未税@vat-standard;汇率 boc-cash-selling/AT_ORDER_DATE/asof-policy/v3;历史体积系数 5000（不参与计价）',
