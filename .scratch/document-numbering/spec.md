@@ -21,7 +21,7 @@ Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继�
 2. **编号能力用平台库。** `go.idp.xyz/idp-platform-go` 的 `numbering` 是公司级技术组件（CONTEXT-MAP：产品只复用有版本与兼容约束的公司级技术组件，技术组件不拥有本产品领域对象）。本仓只经消费侧适配器调它的公开 API；它的序列技术表按 ADR-0143 的方式作为独立平台 schema 接入迁移计划，资产不改写。
 3. **单据号归单据所属的上下文。** 每类单据在它自己的开立事务内取号、随单据落库，开立后不可改。同一开立意图重放答原号（号存在单据上，重放读回，不再取号）；开立回滚则号码随之释放（平台库担保：已提交编号不重复、无空洞）。
 4. **编号规则 = 单据类型 + 模板，产品内置默认、租户可改。**
-   - 每类单据随产品带一个默认模板（产品策略，ADR-0146）。租户没登记自己的规则时就用它，开箱即用。
+   - 每类单据随产品带一个默认模板（产品策略，ADR-0146）。租户没登记自己的规则时就用它，开箱即用。（模板开箱即用；日期所需的时区若开立方没有，要租户先登单据编号时区，见第 11 条）
    - 租户可以为某类单据登记自己的模板（租户取值），带生效时刻；新规则只影响之后开立的单据，已开立的单据号不变。
    - 加扰序列（`{seqx}`，让人猜不出业务量）的密钥属租户取值，不进仓库、无默认；租户模板用了加扰而没配密钥，登记即拒。
 5. **规则册是编号技术组件的配置。** 一张册，按（租户，单据类型）存各版模板，只认单据类型代码，不拥有任何单据。单据类型代码及其默认模板由所属上下文声明（类型与默认在同一处定义）。管理台「设置 → 单据编号」查阅、预览下一个号（只渲染不占号）、登记新规则。
@@ -36,7 +36,7 @@ Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继�
 
 | 单据 | 上下文 | 开立时点（用例） | 类型代码 | 默认模板 | 样例 | 重置 |
 |---|---|---|---|---|---|---|
-| 运单（委托） | parcel-shipment | 委托已提交（UC-PS-001） | `SHIPMENT` | `P{yyyy}{mm}{dd}{seq:6}` | `P20261102000123` | 日 |
+| 委托（界面词：运单） | parcel-shipment | 委托已提交（UC-PS-001） | `SHIPMENT` | `P{yyyy}{mm}{dd}{seq:6}` | `P20261102000123` | 日 |
 | 对账单 | settlement-accounting | 发布（UC-SA-003） | `CUSTOMER_STATEMENT` | `STMT-{yyyy}{mm}-{seq:5}` | `STMT-202611-00007` | 月 |
 | 费用争议 | settlement-accounting | 登记（UC-SA-003） | `STATEMENT_DISPUTE` | `DSP-{yyyy}{mm}-{seq:5}` | `DSP-202611-00012` | 月 |
 | 审核应付 | settlement-accounting | 审核形成应付（UC-SA-004） | `AUDITED_PAYABLE` | `AP-{yyyy}{mm}-{seq:5}` | `AP-202611-00031` | 月 |
@@ -68,7 +68,7 @@ Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继�
 | [01](./issues/01-adr-glossary-context-and-use-case-handoffs.md) | ADR-0355、GLOSSARY「单据号」「单据编号规则」、六个上下文 CONTEXT 规则句、八份 UC 交接 | 纯文档（改现行规则，要非作者评审） | — | in-progress |
 | [02](./issues/02-platform-numbering-adoption-and-rule-register.md) | 接入平台库与编号规则册：依赖、平台 schema 迁移、取号编排、规则册存储 / 读口 / 登记口 / 预览口、十一类类型声明 | 后端 | 01；平台库发版与 vanity 部署（用户动作） | ready-for-agent |
 | [03](./issues/03-admin-settings-document-numbering-page.md) | 管理台「设置 → 单据编号」 | 前端切片 | 02 | ready-for-agent |
-| [04](./issues/04-shipment-numbers.md) | 委托（运单）单据号，含首方接口答复与查询 | 后端 + 前端 | 02 | ready-for-agent |
+| [04](./issues/04-shipment-numbers.md) | 委托的单据号（界面词「运单号」），含首方接口答复与查询 | 后端 + 前端 | 02 | ready-for-agent |
 | [05](./issues/05-statement-dispute-and-payable-numbers.md) | 对账单、费用争议、审核应付 | 后端 + 前端 | 02 | ready-for-agent |
 | [06](./issues/06-exception-case-and-claim-numbers.md) | 异常案件、客户索赔项 | 后端 + 前端 | 02 | ready-for-agent |
 | [07](./issues/07-customs-case-numbers.md) | 关务案件 | 后端 + 前端 | 02 | ready-for-agent |
