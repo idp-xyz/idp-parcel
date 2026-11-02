@@ -1,7 +1,7 @@
 # 03 管理台「设置 → 单据编号」
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum03`（完成记录见文末）；待协调方核验与进 main
+Status: resolved——2026-11-02 进 main（前端切片，协调方核验：tsc、pnpm test 1058 / 0、vite build 过），见文末「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum03`（完成记录见文末）；待协调方核验与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定五、六
@@ -69,4 +69,8 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - 共享草稿区 `…/scratchpad/bin/parcel-api` 在 04:16 被本票的 `go build ./cmd/parcel-api` 覆盖（Go 代码即 `3a408b7b0`，本分支没有 Go 改动）；若那里原本放的是别的版本，请重编。
 - `ddb65f648` 的提交说明里「部件说明里的位数说法去掉字母 N」一句其实已在 `725dda240` 里，说明多写了一条；照「不改写已推历史」未改。
 - 自起后端上壳层侧栏的两条计数读（`/acceptance-review-queue`、`/authorized-disposition-queue`）答 403，与本页无关，未查。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 前端切片（diff 只在 `apps/admin-web/src/**` 与本票票面），照 workflow「前端切片」不需非作者评审；协调方核过分支基于 main `3a408b7b0` 可快进、tsc 过、`pnpm test` 1058 / 0、`vite build` 过，词典里委托的号名为「运单号」（ADR-0355 决定十一）、运输委托的号名为「委托号」。分支 `claude-docnum03` tip `0ae15db91` 快进进 main，本笔票面簿记叠在其上。
 
