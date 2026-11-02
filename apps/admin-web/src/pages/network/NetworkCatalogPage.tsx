@@ -29,7 +29,7 @@ import {
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
-import { adjustmentWindowOf, timeZoneLabel, unregisteredNameWord, validityOf, versionWord } from './network-rows';
+import { adjustmentWindowOf, timeZoneLabel, validityOf, versionWord } from './network-rows';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows, type DetailFact, type RowStatus } from './route-workbench';
 
 const info = moduleInfoById['network-catalog'];
@@ -60,9 +60,7 @@ function identityCell(row: Row, family: NetworkCatalogFamily) {
         ? row.targetKind
           ? labelFor(row.targetKind)
           : ''
-        : family === 'node'
-          ? `${unregisteredNameWord} · ${versionWord(row.version)}`
-          : versionWord(row.version);
+        : versionWord(row.version);
   return (
     <div className="min-w-0">
       <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{code ?? '—'}</div>
@@ -168,11 +166,7 @@ function factsOf(family: NetworkCatalogFamily, row: Row): DetailFact[] {
     case 'service-calendar':
       return [{ label: '适用对象', value: row.targetKind ? labelFor(row.targetKind) : '—' }, period];
     default:
-      return [
-        { label: '名称', value: <span className="font-normal text-idpxyz-breadcrumb">{unregisteredNameWord}</span> },
-        { label: '时区', value: timeZoneLabel(row.businessTimezone) },
-        period,
-      ];
+      return [{ label: '时区', value: timeZoneLabel(row.businessTimezone) }, period];
   }
 }
 
@@ -224,7 +218,9 @@ function NetworkCatalogTable() {
       // 换族重挂：上一族的状态筛选与选中行不带进下一族。
       key={familyId}
       title={info.title}
-      subtitle="公司的网点、网点之间的运输连接、由连接串成的线路，以及服务日历、停运与恢复、路线策略。"
+      // 网络目录是册级不登名称（network-routing 的网点只有编码这一身份，CONTEXT 不定义名称），所以不设名称栏、行首显编码，
+      // 只在页头用册级说法交代一句——行级的「未登记」会让人去催一个登不进的字段。
+      subtitle="公司的网点、网点之间的运输连接、由连接串成的线路，以及服务日历、停运与恢复、路线策略。网点目录只登编码，不登名称。"
       sections={
         <SectionTabs
           sections={networkCatalogFamilies.map((family) => ({ id: family, label: familyLabels[family] }))}
