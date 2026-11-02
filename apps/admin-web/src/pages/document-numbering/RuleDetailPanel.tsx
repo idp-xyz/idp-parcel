@@ -105,7 +105,7 @@ export function RuleDetailPanel({
           {row.sample ? <p className="mt-1 text-idpxyz-breadcrumb">样例按单据编号时区与第一个流水出，只示号的形状，不占号。</p> : null}
         </div>
 
-        {formOpen ? <NewFormatForm row={row} onRegistered={onRegistered} onClose={() => setFormOpen(false)} /> : null}
+        {formOpen ? <NewFormatForm row={row} readAt={at} onRegistered={onRegistered} onClose={() => setFormOpen(false)} /> : null}
 
         <section>
           <h3 className="text-[13px] font-semibold text-idpxyz-textBright">历次规则版本</h3>

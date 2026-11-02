@@ -17,7 +17,6 @@ import {
 } from '../../vocabulary/document-numbering';
 import { matchesSearch } from '../party/list-order';
 import { formatInstant } from '../moment';
-import { timeZoneLabel } from '../network/network-rows';
 import type {
   ApiResult,
   DocumentNumberingReadBody,
@@ -108,9 +107,22 @@ export function templateReading(template: string): string {
 
 // —— 时区与登记人 ——
 
-/** 「中国标准时间」；拿不到中文名时原样交回 IANA 名（时区是租户取值，产品不另建城市表）。 */
-export function zoneWords(zone: string | undefined): string {
-  return timeZoneLabel(zone);
+/**
+ * 「中国标准时间」；拿不到中文名时原样交回 IANA 名（时区是租户取值，产品不另建城市表）。名字按 at 那一刻取：同一个区
+ * 冬夏叫法不同，几十年前的叫法也可能对不上今天的偏移，所以不拿一个固定的老时刻去问。ICU 给不出中文名时答的是
+ * 「GMT-11:00」一类偏移串，那不是名字，同样交回 IANA 名。
+ */
+export function zoneWords(zone: string | undefined, at: Date = new Date()): string {
+  if (!zone) return '—';
+  try {
+    const name = new Intl.DateTimeFormat('zh-CN', { timeZone: zone, timeZoneName: 'long' })
+      .formatToParts(at)
+      .find((part) => part.type === 'timeZoneName')?.value;
+    if (!name || name === zone || /^(GMT|UTC)([+-]|$)/.test(name)) return zone;
+    return name;
+  } catch {
+    return zone;
+  }
 }
 
 /** 登记人：受控登记命令说「受控登记命令」，操作者取短名（全文由调用处放进 title）。 */

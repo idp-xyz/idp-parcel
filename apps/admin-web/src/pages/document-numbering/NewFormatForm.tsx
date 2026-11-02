@@ -125,7 +125,18 @@ function PreviewPanel({
   );
 }
 
-export function NewFormatForm({ row, onRegistered, onClose }: { row: RuleRow; onRegistered: () => void; onClose: () => void }) {
+export function NewFormatForm({
+  row,
+  readAt,
+  onRegistered,
+  onClose,
+}: {
+  row: RuleRow;
+  /** 规则册这一份答复的时刻。册一重读（例如刚登了单据编号时区）预览就要重问，哪怕格式与生效时刻都没动。 */
+  readAt: string;
+  onRegistered: () => void;
+  onClose: () => void;
+}) {
   const displayZone = currentDisplayTimeZone();
   const [template, setTemplate] = useState(row.template);
   const [wallTime, setWallTime] = useState('');
@@ -160,7 +171,7 @@ export function NewFormatForm({ row, onRegistered, onClose }: { row: RuleRow; on
     return () => window.clearTimeout(timer);
     // previewKey 由 template 与 effectiveFrom 拼成，二者变它才变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewKey, row.code]);
+  }, [previewKey, row.code, readAt]);
 
   // 换了格式就要重新确认重叠：确认的是看过的那一份提示。
   useEffect(() => setOverlapConfirmed(false), [previewKey]);
@@ -195,7 +206,11 @@ export function NewFormatForm({ row, onRegistered, onClose }: { row: RuleRow; on
     setPending(false);
     const next = ruleRegistrationAnswerOf(result, row.type);
     setAnswer(next);
-    if (next.landed) onRegistered();
+    if (next.landed) {
+      // 登上了：表单留着答复与刚登的格式，不再拿「与此刻相同」之类的本地检查去红它。
+      setTouched(false);
+      onRegistered();
+    }
   };
 
   return (
@@ -245,7 +260,7 @@ export function NewFormatForm({ row, onRegistered, onClose }: { row: RuleRow; on
             {entry.token.includes(':N') ? `${digits} 位${entry.label}` : entry.label}
           </Button>
         ))}
-        <label className="ml-1 inline-flex items-center gap-1 text-idpxyz-breadcrumb">
+        <label className="ml-1 inline-flex items-center gap-1 whitespace-nowrap text-idpxyz-breadcrumb">
           流水位数
           <input
             className={`${fieldClass} w-14 py-0.5`}

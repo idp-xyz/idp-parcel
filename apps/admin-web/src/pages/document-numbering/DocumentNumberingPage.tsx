@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
+import { primaryActionClass } from '../../components/primary-action';
 import { StatusPill } from '../../components/StatusPill';
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn, type WorkbenchKpi } from '../../templates';
@@ -131,7 +132,7 @@ function MissingZoneBanner({ body, mayWrite, onOpen }: { body: DocumentNumbering
         )}
       </span>
       {mayWrite ? (
-        <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={onOpen}>
+        <Button size="sm" variant="default" className={`${primaryActionClass} h-7 text-[12px]`} onClick={onOpen}>
           登记单据编号时区
         </Button>
       ) : (
@@ -207,7 +208,7 @@ export function DocumentNumberingPage() {
           body ? (
             <Button variant="ghost" size="sm" className="gap-1.5 text-[12px] text-idpxyz-accent" onClick={() => setZoneDialogOpen(true)}>
               <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-              单据编号时区
+              {mayWrite ? '登记单据编号时区' : '单据编号时区的历次登记'}
             </Button>
           ) : null
         }

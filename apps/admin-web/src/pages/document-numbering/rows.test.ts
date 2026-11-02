@@ -24,6 +24,7 @@ import {
   timeZoneRegistrationAnswerOf,
   tokenWithDigits,
   wallTimeIn,
+  zoneWords,
 } from './rows';
 
 // 本文件钉「设置 → 单据编号」页的纯逻辑：格式读给人听、行与来源、日期时区那一句、历次版本的处境、表单的本地检查与
@@ -317,4 +318,15 @@ test('时区候选', () => {
     ['America/New_York', 'Europe/London', 'UTC', 'Asia/Shanghai'],
   );
   ok(options.every((option) => option.label.includes(option.zone)));
+});
+
+// Covers: 时区的中文叫法按此刻取；认不出的区名与 ICU 只给得出偏移串的区原样交回 IANA 名，不把「GMT-11:00」当名字。
+test('时区的中文叫法', () => {
+  equal(zoneWords('Asia/Shanghai', new Date('2026-11-02T00:00:00Z')), '中国标准时间');
+  equal(zoneWords('Not/AZone'), 'Not/AZone');
+  equal(zoneWords(undefined), '—');
+  for (const zone of ['Pacific/Midway', 'America/Nome', 'Etc/GMT+5']) {
+    const words = zoneWords(zone);
+    ok(words === zone || !/^(GMT|UTC)[+-]/.test(words), `${zone} 答了偏移串「${words}」`);
+  }
 });

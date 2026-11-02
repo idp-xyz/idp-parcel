@@ -86,7 +86,10 @@ function RegistrationForm({ onRegistered }: { onRegistered: () => void }) {
     setPending(false);
     const next = timeZoneRegistrationAnswerOf(result);
     setAnswer(next);
-    if (next.landed) onRegistered();
+    if (next.landed) {
+      setTouched(false);
+      onRegistered();
+    }
   };
 
   return (
