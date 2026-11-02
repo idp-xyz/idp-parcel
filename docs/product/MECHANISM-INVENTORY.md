@@ -9,7 +9,7 @@
 | accessidentity | 41 | 57 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
-| customscompliance | 148 | 150 | 28 | 50 | 10 | 23 |
+| customscompliance | 149 | 153 | 28 | 50 | 10 | 23 |
 | networkrouting | 97 | 116 | 11 | 19 | 2 | 10 |
 | nodeoperations | 116 | 121 | 15 | 30 | 4 | 18 |
 | parcelpricing | 157 | 166 | 20 | 20 | 1 | 27 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 255 | 204 | 43 | 73 | 13 | 13 |
 | transportfulfillment | 308 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 134 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1803 | 1833 | 240 | 403 | 69 | 246 |
+| **合计** | 1804 | 1836 | 240 | 403 | 69 | 246 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 277、测试 449。
 
@@ -80,13 +80,13 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：13 个模块共 362 份 SQL
+## 迁移：13 个模块共 363 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 37 |
 | collection_remittance | 4 |
-| customs_compliance | 31 |
+| customs_compliance | 32 |
 | document_numbering | 1 |
 | network_routing | 33 |
 | node_operations | 23 |
@@ -148,7 +148,7 @@
 | （未归类） | 1 |
 | **合计** | 45 |
 
-## 端口：声明 663 个；基线口径缺 44，精确口径缺 2
+## 端口：声明 664 个；基线口径缺 44，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
