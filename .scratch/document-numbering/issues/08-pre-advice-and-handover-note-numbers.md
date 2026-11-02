@@ -39,7 +39,7 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - **业务时区**：两类都取开立网点那一刻（编排时钟，即服务端时刻）在网络目录里生效的节点版本的 `business_timezone`，经新端口 `ports.IssuingNodeTimeZones` → `adapters/networkrouting.NodeBusinessTimeZones` → network-routing 新立的窄读口 `NodeBusinessTimezoneRead.FindNodeBusinessTimezoneAt`（`NetworkCatalog` 实现，取两行、两版同时适用答 `ErrAmbiguousNetworkCatalog`）。网点没有生效版本交空串，取号编排退到租户的单据编号时区；都没有则照常开立、记 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`。离线开立的交接单按服务端收下那一刻出日期，设备声明的 `openedAt` 照旧只作业务时间。
 - **落库**：迁移 `node_operations/0026`：两表各加 `document_number`、`document_number_absence`（只收 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`），两格不同在，（租户，单据号）唯一；旧行两格都空即上线前开立，不回填。册的写口拒收单据号没定的新单据（否则新行读回来就成了上线前开立）。
 - **撞号**：结果代数各加 `NUMBERING_RULE_COLLISION`（`DeliveryPreAdviceNumberingRuleCollision`、`DeliveryHandoverNumberingRuleCollision`），答案不带单据；parcel-api 的两只事务外壳见到这一格交给事务器一个回滚信号（`errNumberingCollisionRollsBack`），回滚后照交答案。HTTP 答 200 只带 `outcome`。
-- **答复与读口**：首方预报答复的 `preAdvice`、作业事实开立答复的 `handoverNote`、两本册的列表与详情读口带 `documentNumber`；没有号时不带它，改带 `documentNumberAbsence`（`ISSUED_BEFORE_DOCUMENT_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`）。两本册列表收 `documentNumber` 查询键，按（租户，单据号）逐字找。首方契约说明（`docs/api/first-party-api-contract.md`）补了预报答复这一格与撞号答复；生成器尚未落（ADR-0140 的 code/82），字段以处理器结构体为准。
+- **答复与读口**：首方预报答复的 `preAdvice`、作业事实开立答复的 `handoverNote`、两本册的列表与详情读口带 `documentNumber`；没有号时不带它，改带 `documentNumberAbsence`（`ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`）。两本册列表收 `documentNumber` 查询键，按（租户，单据号）逐字找。首方契约说明（`docs/api/first-party-api-contract.md`）补了预报答复这一格与撞号答复；生成器尚未落（ADR-0140 的 code/82），字段以处理器结构体为准。
 - **管理台**：网点作业页「客户送货预报」「送货交接单」两区主列改为预报单号 / 交接单号（用语词典追加 `preAdviceNumber`、`handoverNoteNumber`），没有单据号的照旧显内部标识；筛选条加单据号一格（交服务端检索，不是在页内搜）；详情标题用单据号，技术详情首行是单据号或按原因分开的「上线前开立，无单据号」「开立时单据编号时区未配置，无单据号」，内部标识（交接单写「交接单标识（设备签发）」）随后。
 - **文档**：CONTEXT 两句规则写明时区来路；CONTEXT-MAP 的 `network-routing → node-operations` 补一句只读节点业务时区；UC-NO-006 结果契约补单据号与「编号规则撞号」、立 `AT-NO-135`–`137`、交接那一行改「已补」；AT 盘点①追加三行与追记（总览计数未改）。`submit-one-pre-advice.sh` 的说明行带出单据号。
 
@@ -67,8 +67,18 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 ### 留给协调方
 
 - 推送方在 main tip 上重算 AT 盘点总览（本票加了三行①）、重生成机制清点（新端口与适配器：`ports.DocumentNumberIssuer`、`ports.IssuingNodeTimeZones`、NR `NodeBusinessTimezoneRead`、`adapters/documentnumbers`）。
-- **跨票口径待统一**：答复字段名 `documentNumber` / `documentNumberAbsence` 与原因码 `ISSUED_BEFORE_DOCUMENT_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`、撞号 outcome `NUMBERING_RULE_COLLISION`，04–09 各票若另起名字，合并时宜取一套。管理台的无号原因说法在 `pages/operations/delivery-pre-advice.ts` 的 `documentNumberDetailOf`，若别票也写一份，宜提到共享处。
+- **跨票口径待统一**：答复字段名 `documentNumber` / `documentNumberAbsence` 与原因码 `ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`、撞号 outcome `NUMBERING_RULE_COLLISION`，04–09 各票若另起名字，合并时宜取一套。管理台的无号原因说法在 `pages/operations/delivery-pre-advice.ts` 的 `documentNumberDetailOf`，若别票也写一份，宜提到共享处。
 - NR 的 `NodeBusinessTimezoneRead` 是本票新立的；票 04 若核定委托用发件网点业务时区，可直接复用，不必另立。
 - 待裁：客户确认口答复是否带交接单号（见上「现状」）。
 
 估计用量：约 45 万 token。
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `d2d5b461b`、两轴阻断为零）
+
+1. **并入 main**：`git merge origin/main`（`620847516`，含票 03 设置页与单据编号词典），无冲突。
+2. **全批统一口径**：无号原因码 `ISSUED_BEFORE_DOCUMENT_NUMBERING` 改为 `ISSUED_BEFORE_NUMBERING`（领域 `IssuedBeforeNumbering` 的线上名、HTTP 注释、首方契约说明、Go 与管理台测试；迁移 0026 的 CHECK 只收 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`，上线前开立不入库，原文不涉这个码，未改）。上文「完成记录」里的旧码名是当时的写法，以本节为准。字段 `documentNumber` / `documentNumberAbsence`、撞号 `NUMBERING_RULE_COLLISION` 原已一致。
+3. **共用词典**：管理台无号说法改取 `vocabulary/document-numbering.ts` 的 `documentNumberAbsenceNote`，号名取 `documentTypeWords.DELIVERY_PRE_ADVICE / DELIVERY_HANDOVER_NOTE.numberName`（预报区的号名因此由「预报单号」变为词典里的「预报号」）；`delivery-pre-advice.ts` 的 `documentNumberDetailOf` 只剩「有号显号、没号取词典说法」的组装；删去 `objects.ts` 里追加的两个同义号名。
+4. **客户确认答复带交接单号**（协调方裁定，ADR-0355 决定十一）：`POST /v1/node-operations/delivery-handover-conclusions` 的答复新增 `documentNumber` / `documentNumberAbsence`，其余各格不变。用例：HTTP 面 `TestTheCustomerConclusionAnswerCarriesTheHandoverNoteNumber`（有号、无号两种，仍不回显声称），编排面在 `TestOpeningAHandoverNoteIssuesItsDocumentNumberOnTheServersReceipt` 里补客户确认答的交接单带原号、不再取号。首方契约说明、UC-NO-006 交接一行与 `AT-NO-136`、AT 盘点那一行随之改。上文「设备侧与客户确认环节的现状」里客户确认那一条已由本条改掉。
+5. **计数与序数**：`NodeBusinessTimezoneRead`（「要读七族」→「全部定义族」）、`routing_basis.go` 包注释、`DocumentNumberAbsence` 与其测试 Covers、`assemble_delivery_scope_document_numbers_test.go` 文件头（改引票面那一条的原文）与撞号用例里的「二十」（改指 `docnumber.MaxSkippedNumbers`）、`issuer_test.go` 与 `issuer.go`、三处 build 函数注释与 `DocumentNumberingDeps`、端口文件头，以及各处「两格都空」「两本册」一类跨文件的数，都改成按名说。
+
+修订后自验（本机 PG）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出，`go mod tidy -diff` 无输出；`go test -count=1 -p 1` 覆盖 architecture、platform、cmd、nodeoperations、networkrouting、migrations、tests 全绿（含 PG）；管理台 `tsc -b`、`pnpm test`（1062 pass）、`vite build` 退 0；种子灌一次性库 `docnum08_seed2` 退 0（两表 0 行、0026 的约束在册），用后删库。
