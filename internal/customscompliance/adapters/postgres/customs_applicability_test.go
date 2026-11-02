@@ -48,7 +48,7 @@ func registerSynPort(t *testing.T, fixture *viewFixture, registry *adapter.Ports
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 		return registry.RegisterCandidatePort(ctx,
 			viewValue(t, domain.NewTenantID, tenant),
-			viewValue(t, domain.NewCustomsPortReference, port), appliesFrom)
+			viewValue(t, domain.NewCustomsPortReference, port), domain.CustomsPortDisplayName{}, appliesFrom)
 	}); err != nil {
 		t.Fatalf("登记口岸 %s：%v", port, err)
 	}

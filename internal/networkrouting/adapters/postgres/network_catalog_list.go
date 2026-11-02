@@ -28,7 +28,7 @@ import (
 //
 // 翻页、排序与筛选照 ADR-0144：按「排序维值 + 行标识」取游标之后的行，决胜键是主键里租户之后的列、
 // 与排序同向；缺省序与其理由写在 ports 的各族声明上。total 与本页用同一组筛选与 q 条件另数一次。
-// q 在各族的这些列上做不分大小写的字面包含匹配：节点 node_code；连接 connection_code、
+// q 在各族的这些列上做不分大小写的字面包含匹配：节点 node_code、display_name（没登名称的行只按代码匹配）；连接 connection_code、
 // from_node_code、to_node_code；线路 line_code；服务区域 area_code；服务日历 target_code；
 // 调整 adjustment_code、target_code、source；路由策略 strategy_code。limit 非正是调用方编程
 // 错误——静默答一页会把「忘了传」变成一个没人决定过的页大小。
@@ -132,25 +132,28 @@ var byEffectiveFrom = keyColumn{"effective_from", cataloguepage.Instant}
 var nodeFamily = catalogFamily[ports.NodeDefinitionVersion]{
 	operation: "list node versions",
 	table:     "network_routing.logistics_node_version",
-	selection: "node_code, version, business_timezone, effective_from, effective_to, basis_ref",
+	selection: "node_code, version, business_timezone, effective_from, effective_to, basis_ref, display_name",
 	sorts: map[string]keyColumn{
 		"code":          {"node_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
 	},
 	identity: codeAndVersion("node_code"),
 	filters:  map[string]string{"code": "node_code"},
-	keyword:  []string{"node_code"},
+	keyword:  []string{"node_code", "display_name"},
 	scan: func(rows pgx.Rows) (ports.NodeDefinitionVersion, error) {
 		var row ports.NodeDefinitionVersion
 		var effectiveTo *time.Time
-		var basis *string
+		var basis, displayName *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.BusinessTimezone,
-			&row.EffectiveFrom, &effectiveTo, &basis); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &basis, &displayName); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
 		var err error
-		row.Basis, err = basisOf(basis)
+		if row.Basis, err = basisOf(basis); err != nil {
+			return row, err
+		}
+		row.DisplayName, err = nodeDisplayNameOf(displayName)
 		return row, err
 	},
 	sortValues: func(row ports.NodeDefinitionVersion) map[string]string {

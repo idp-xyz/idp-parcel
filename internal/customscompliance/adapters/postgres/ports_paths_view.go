@@ -57,23 +57,28 @@ func (view *PortsPathsPointView) LoadCandidatePort(
 	var (
 		appliesFrom  time.Time
 		appliesUntil *time.Time
+		displayName  *string
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT applies_from, applies_until
+		`SELECT applies_from, applies_until, display_name
 		   FROM customs_compliance.candidate_port
 		  WHERE tenant_id = $1 AND port_ref = $2
 		    AND applies_from <= $3
 		    AND (applies_until IS NULL OR applies_until > $3)`,
 		tenant.String(), port.String(), evaluatedAt.UTC(),
-	).Scan(&appliesFrom, &appliesUntil)
+	).Scan(&appliesFrom, &appliesUntil, &displayName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
 	if err != nil {
 		return none, false, fmt.Errorf("load candidate port: %w", err)
 	}
+	name, err := portDisplayNameOf(displayName)
+	if err != nil {
+		return none, false, fmt.Errorf("load candidate port: %w", err)
+	}
 
-	entry := ports.CandidatePortEntry{Port: port, AppliesFrom: appliesFrom.UTC()}
+	entry := ports.CandidatePortEntry{Port: port, DisplayName: name, AppliesFrom: appliesFrom.UTC()}
 	if appliesUntil != nil {
 		entry.AppliesUntil = appliesUntil.UTC()
 	}

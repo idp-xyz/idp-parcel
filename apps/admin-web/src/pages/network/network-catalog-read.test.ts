@@ -29,3 +29,35 @@ test('网络目录读口把族、检索词与游标一起带上', async () => {
   await listNetworkCatalog(networkCatalogConditions('connection', { q: ' SIN ' }), 'c1');
   deepEqual(urls, ['/network-catalog?family=node', '/network-catalog?family=connection&q=SIN&after=c1']);
 });
+
+// Covers: ADR-0353 决定二的读口契约——网点版本行登了名称带 displayName，没登的行上没有这个键；api 层原样交出，不补空串、
+// 不拿 code 顶（页面怎么称呼由页面定，不在 api 层）。
+test('网点版本行的显示名称原样交出，没登的行不带这一格', async () => {
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        outcome: 'NODE_VERSIONS_LISTED',
+        versions: [
+          { code: 'SYN-NODE-SHA-HUB', version: 1, businessTimezone: 'Asia/Shanghai', effectiveFrom: '2026-01-01T00:00:00Z' },
+          {
+            code: 'SYN-NODE-SHA-HUB',
+            version: 2,
+            displayName: '上海枢纽',
+            businessTimezone: 'Asia/Shanghai',
+            effectiveFrom: '2026-06-01T00:00:00Z',
+          },
+        ],
+        page: { size: 2, next: null, total: 2 },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )) as typeof fetch;
+  const result = await listNetworkCatalog(networkCatalogConditions('node'));
+  if (result.kind !== 'outcome') throw new Error(`读口答 ${result.kind}`);
+  deepEqual(
+    result.body.versions.map((version) => ['displayName' in version, version.displayName]),
+    [
+      [false, undefined],
+      [true, '上海枢纽'],
+    ],
+  );
+});

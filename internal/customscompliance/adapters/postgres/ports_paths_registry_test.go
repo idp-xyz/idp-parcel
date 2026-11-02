@@ -43,7 +43,7 @@ func registerPort(
 	return register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 		return registry.RegisterCandidatePort(ctx,
 			viewValue(t, domain.NewTenantID, "tenant-a"),
-			viewValue(t, domain.NewCustomsPortReference, "SYN-PORT-01"), appliesFrom)
+			viewValue(t, domain.NewCustomsPortReference, "SYN-PORT-01"), domain.CustomsPortDisplayName{}, appliesFrom)
 	})
 }
 
@@ -251,7 +251,7 @@ func TestPortsPathsWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := registry.RegisterCandidatePort(ctx,
 		viewValue(t, domain.NewTenantID, "tenant-a"),
 		viewValue(t, domain.NewCustomsPortReference, "SYN-PORT-01"),
-		registryBaseAt); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		domain.CustomsPortDisplayName{}, registryBaseAt); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记口岸应返回 ErrTransactionRequired，实得：%v", err)
 	}
 	route := synRoute(t, "SYN-PORT-01", "SYN-MODE-GENERAL", domain.ImportManifest)

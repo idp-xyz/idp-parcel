@@ -49,7 +49,7 @@ func (harness *criterionHarness) port(t *testing.T, tenant, port string, applies
 	harness.mustRegister(t, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 		return harness.registry.RegisterCandidatePort(ctx,
 			viewValue(t, domain.NewTenantID, tenant),
-			viewValue(t, domain.NewCustomsPortReference, port), appliesFrom)
+			viewValue(t, domain.NewCustomsPortReference, port), domain.CustomsPortDisplayName{}, appliesFrom)
 	})
 }
 

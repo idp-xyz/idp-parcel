@@ -105,6 +105,7 @@ func serveCandidatePorts(
 	for _, entry := range entries {
 		body := candidatePortBody{
 			Port:        entry.Port.String(),
+			DisplayName: entry.DisplayName.String(),
 			AppliesFrom: entry.AppliesFrom.UTC().Format(time.RFC3339Nano),
 		}
 		// 终点零值即尚无终点（开放版）：缺席是真话不是缺陷，不为区间完整补一个
@@ -162,10 +163,13 @@ type declarationPathListResponse struct {
 	Paths   []declarationPathBody `json:"paths"`
 }
 
-// candidatePortBody 逐字段透出一版口岸合规候选：口岸标识与生效区间。目录事实只有
-// 这两件——所属区域与适用性判断都不在册（0013 自注），传输层不为它们造空列。
+// candidatePortBody 逐字段透出一版口岸合规候选：口岸标识、可选的显示名称与生效区间。
+// 目录事实只有口岸与区间——所属区域与适用性判断都不在册（0013 自注），传输层不为它们
+// 造空列。displayName 缺席即这一版没登名称（ADR-0353 决定二）：读者照旧以 port 称呼
+// 它，不答空串、不拿 port 顶。
 type candidatePortBody struct {
 	Port         string `json:"port"`
+	DisplayName  string `json:"displayName,omitempty"`
 	AppliesFrom  string `json:"appliesFrom"`
 	AppliesUntil string `json:"appliesUntil,omitempty"`
 }

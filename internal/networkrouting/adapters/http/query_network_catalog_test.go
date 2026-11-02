@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -329,6 +330,59 @@ func TestNodeVersionsAreListedVerbatim(t *testing.T) {
 	if closed.Version != 1 || closed.EffectiveTo != endpointBaseAt.Format(time.RFC3339Nano) {
 		t.Fatalf("已闭版转写走样：%+v", closed)
 	}
+}
+
+// Covers: AT-NR-111（读口半边）、AT-NR-112（读口半边）——登了名称的版本行带 displayName，没登的（含迁移之前登下的）
+// 行上没有这个键，不答空串、不拿 code 顶；其余各键与没有名称这一格之前逐字节相同。
+func TestNodeVersionsCarryTheirDisplayNameOnlyWhenRegistered(t *testing.T) {
+	named, err := domain.NewNodeDisplayName("上海枢纽")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &stubCatalogReader{
+		nodes: []ports.NodeDefinitionVersion{
+			{Code: "node-hub", Version: 1, BusinessTimezone: "Asia/Shanghai", EffectiveFrom: endpointBaseAt},
+			{Code: "node-hub", Version: 2, BusinessTimezone: "Asia/Shanghai", EffectiveFrom: endpointBaseAt, DisplayName: named},
+		},
+	}
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, reader,
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=node"))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Versions []map[string]any `json:"versions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if len(body.Versions) != 2 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	unnamed, withName := body.Versions[0], body.Versions[1]
+	if _, present := unnamed["displayName"]; present {
+		t.Fatalf("没登名称的版本行不该带 displayName：%v", unnamed)
+	}
+	wantKeys := []string{"businessTimezone", "code", "effectiveFrom", "version"}
+	if keys := sortedKeys(unnamed); strings.Join(keys, ",") != strings.Join(wantKeys, ",") {
+		t.Fatalf("没登名称的版本行键集 = %v，想要 %v", keys, wantKeys)
+	}
+	if withName["displayName"] != "上海枢纽" || withName["code"] != "node-hub" {
+		t.Fatalf("登了名称的版本行走样：%v", withName)
+	}
+}
+
+func sortedKeys(object map[string]any) []string {
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Covers: 线路段链按序转写；调整族的封闭枚举词与解除时间逐字段透出（未解除缺席）。

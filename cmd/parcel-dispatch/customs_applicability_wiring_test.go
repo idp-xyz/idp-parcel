@@ -113,7 +113,7 @@ func seedWiringCustomsCatalog(t *testing.T, db *bentopg.DB, tenant string, withI
 	type registration func(ctx context.Context) (ccports.CaseConfigurationSaveOutcome, error)
 	port := func(ref string, from time.Time) registration {
 		return func(ctx context.Context) (ccports.CaseConfigurationSaveOutcome, error) {
-			return registry.RegisterCandidatePort(ctx, id, mustCC(t, ccdomain.NewCustomsPortReference, ref), from)
+			return registry.RegisterCandidatePort(ctx, id, mustCC(t, ccdomain.NewCustomsPortReference, ref), ccdomain.CustomsPortDisplayName{}, from)
 		}
 	}
 	path := func(ref, portRef string, direction ccdomain.ManifestDirection, mode string) registration {

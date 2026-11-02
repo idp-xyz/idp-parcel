@@ -544,6 +544,7 @@ func caseRequirementFromJSON(raw []byte, tenantSource tenantOf) (application.Reg
 type candidatePortDocument struct {
 	TenantID    string    `json:"tenantId"`
 	PortRef     string    `json:"portRef"`
+	DisplayName *string   `json:"displayName"`
 	AppliesFrom time.Time `json:"appliesFrom"`
 }
 
@@ -579,9 +580,17 @@ func candidatePortFromJSON(raw []byte, tenantSource tenantOf) (application.Regis
 	if document.AppliesFrom.IsZero() {
 		return none, fmt.Errorf("口岸目录登记缺 appliesFrom——生效起点没有默认值")
 	}
+	// 显示名称缺席或 null 即没登；给了就过领域构造门，空白串是写坏了不是没给（ADR-0353 决定二）。
+	var name domain.CustomsPortDisplayName
+	if document.DisplayName != nil {
+		if name, err = domain.NewCustomsPortDisplayName(*document.DisplayName); err != nil {
+			return none, err
+		}
+	}
 	return application.RegisterCandidatePortCommand{
 		TenantID:    tenant,
 		Port:        port,
+		DisplayName: name,
 		AppliesFrom: document.AppliesFrom,
 	}, nil
 }

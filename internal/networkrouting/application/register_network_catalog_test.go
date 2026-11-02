@@ -478,6 +478,27 @@ func TestCatalogRegistrationRequiresARegistry(t *testing.T) {
 
 func minutes(value int) *int { return &value }
 
+// Covers: AT-NR-111（应用半边）——受理门不看名称：带名称的节点行原样到写入口，名称一格不改；没登名称的行照旧登记，
+// 不补默认名称、也不因缺名称被拒。
+func TestCatalogRegistrationCarriesTheNodeDisplayNameUntouched(t *testing.T) {
+	double := &catalogRegistryDouble{}
+	service := newCatalogRegistration(t, double)
+	tenant := catalogTenant(t)
+
+	named := validNode()
+	named.DisplayName = value(t, domain.NewNodeDisplayName, "上海枢纽")
+	result, err := service.RegisterNodeVersion(t.Context(), application.RegisterNodeVersionCommand{TenantID: tenant, Node: named})
+	if err != nil || result.Outcome() != application.CatalogRegistered || double.node != named {
+		t.Fatalf("带名称：outcome=%v err=%v 到达写入口 %+v", result.Outcome(), err, double.node)
+	}
+
+	unnamed := validNode()
+	result, err = service.RegisterNodeVersion(t.Context(), application.RegisterNodeVersionCommand{TenantID: tenant, Node: unnamed})
+	if err != nil || result.Outcome() != application.CatalogRegistered || double.node.DisplayName.Registered() {
+		t.Fatalf("不带名称：outcome=%v err=%v 到达写入口 %+v", result.Outcome(), err, double.node)
+	}
+}
+
 // Covers: 登记依据与日历三格是这一版的内容，过门后一字不改地到达写入口；日历登了 0 就是 0，不与没登混成一格
 // （ADR-0175 决定一）。
 func TestCatalogRegistrationCarriesBasisAndCalendarContentUntouched(t *testing.T) {

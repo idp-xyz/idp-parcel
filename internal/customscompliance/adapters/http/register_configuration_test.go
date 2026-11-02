@@ -128,7 +128,7 @@ type stubPortsPathsRegistry struct {
 }
 
 func (stub stubPortsPathsRegistry) RegisterCandidatePort(
-	context.Context, domain.TenantID, domain.CustomsPortReference, time.Time,
+	context.Context, domain.TenantID, domain.CustomsPortReference, domain.CustomsPortDisplayName, time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	return stub.outcome, stub.err
 }

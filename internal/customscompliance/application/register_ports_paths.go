@@ -20,11 +20,12 @@ import (
 // 事务由进程级入口给出。
 
 // RegisterCandidatePortCommand 携带一次口岸合规候选版本登记。键是（租户，口岸，
-// 生效起点），无内容格——目录事实就是「该口岸自该起点是合规候选」；终点不是输入，
-// 后继版本登记时落定（换版）。
+// 生效起点）；目录事实就是「该口岸自该起点是合规候选」，唯一的内容格是可选的显示
+// 名称（ADR-0353），零值即没登。终点不是输入，后继版本登记时落定（换版）。
 type RegisterCandidatePortCommand struct {
 	TenantID    domain.TenantID
 	Port        domain.CustomsPortReference
+	DisplayName domain.CustomsPortDisplayName
 	AppliesFrom time.Time
 }
 
@@ -51,8 +52,10 @@ func NewRegisterPortsPathsHandler(deps RegisterPortsPathsDeps) *RegisterPortsPat
 	return &RegisterPortsPathsHandler{deps: deps}
 }
 
-// RegisterCandidatePort 登记一版口岸合规候选。已在册时按请求起点读回：起点相同即
-// 重放（口岸册没有别的内容格）；读不回或起点不同即撞上了别的区间——冲突。
+// RegisterCandidatePort 登记一版口岸合规候选。已在册时按请求起点读回：起点与显示名称
+// 都相同即重放；读不回、起点不同即撞上了别的区间，名称不同即同一版换了内容——都是冲突。
+// 名称两边都没登算相同，迁移之前登下的版本就是这一格，原样重登照旧答`已存在`；给旧版
+// 补名称不是重放，改名走登记更晚起点的新版本（ADR-0353 决定六）。
 func (handler *RegisterPortsPathsHandler) RegisterCandidatePort(
 	ctx context.Context,
 	command RegisterCandidatePortCommand,
@@ -64,7 +67,7 @@ func (handler *RegisterPortsPathsHandler) RegisterCandidatePort(
 	}
 
 	saved, err := handler.deps.Registry.RegisterCandidatePort(
-		ctx, command.TenantID, command.Port, command.AppliesFrom)
+		ctx, command.TenantID, command.Port, command.DisplayName, command.AppliesFrom)
 	if err != nil {
 		return ConfigurationUndecided, nil
 	}
@@ -77,7 +80,7 @@ func (handler *RegisterPortsPathsHandler) RegisterCandidatePort(
 	if err != nil {
 		return ConfigurationUndecided, nil
 	}
-	if !found || !existing.AppliesFrom.Equal(command.AppliesFrom) {
+	if !found || !existing.AppliesFrom.Equal(command.AppliesFrom) || existing.DisplayName != command.DisplayName {
 		return ConfigurationContentConflict, nil
 	}
 	return ConfigurationExisting, nil

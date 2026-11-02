@@ -38,6 +38,7 @@ func (registry *PortsPathsRegistrations) RegisterCandidatePort(
 	ctx context.Context,
 	tenant domain.TenantID,
 	port domain.CustomsPortReference,
+	displayName domain.CustomsPortDisplayName,
 	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	if appliesFrom.IsZero() {
@@ -63,10 +64,10 @@ func (registry *PortsPathsRegistrations) RegisterCandidatePort(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.candidate_port
-			(tenant_id, port_ref, applies_from)
-		 VALUES ($1, $2, $3)
+			(tenant_id, port_ref, applies_from, display_name)
+		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT DO NOTHING`,
-		tenant.String(), port.String(), appliesFrom.UTC(),
+		tenant.String(), port.String(), appliesFrom.UTC(), portDisplayNameColumn(displayName),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register candidate port: %w", err)
@@ -126,4 +127,22 @@ func (registry *PortsPathsRegistrations) RegisterDeclarationPath(
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
 	return ports.CaseConfigurationRegistered, nil
+}
+
+// portDisplayNameColumn 把没登的显示名称落 NULL：空串与 NULL 是两格，库上 CHECK 拒空白，领域零值只能落 NULL。
+func portDisplayNameColumn(name domain.CustomsPortDisplayName) *string {
+	if !name.Registered() {
+		return nil
+	}
+	text := name.String()
+	return &text
+}
+
+// portDisplayNameOf 是 portDisplayNameColumn 的镜像：NULL 即没登（迁移 0031 之前登下的版本都是这一格），读回的串照样
+// 过领域构造门——库里一串不成形的名称是数据坏了，报错而不是吸收成没登。
+func portDisplayNameOf(raw *string) (domain.CustomsPortDisplayName, error) {
+	if raw == nil {
+		return domain.CustomsPortDisplayName{}, nil
+	}
+	return domain.NewCustomsPortDisplayName(*raw)
 }
