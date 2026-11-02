@@ -3,7 +3,9 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ListColumn, TemplateViewState } from '../../templates';
 import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-workbench';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
-import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
+import { reviewStatusOf, withPlaceNames, workbenchColumnsOf } from './review-workbench';
+import { usePlaceNames } from '../network/use-place-names';
+import { placeLabel } from '../network/place-names';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
@@ -48,7 +50,7 @@ function col(id: string, header: string, mono = false): ListColumn<HandoverNoteR
 
 const columns: ListColumn<HandoverNoteReviewRow>[] = [
   col('noteId', '交接单', true),
-  col('node', '网点', true),
+  col('node', '网点'),
   col('deliveringParty', '谁来送', true),
   col('openedAt', '开单时间', true),
   col('state', '状态'),
@@ -82,7 +84,8 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
 
   const answer = path !== null && loaded?.path === path ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? body.handoverNotes.map(handoverNoteRowOf) : [];
+  const places = usePlaceNames();
+  const rows = body ? withPlaceNames(body.handoverNotes.map(handoverNoteRowOf), ['node'], places) : [];
   const retry = () => setReloadKey((value) => value + 1);
   const narrowed = filter.node.trim() !== '' || filter.day !== '';
   const viewState: TemplateViewState =
@@ -129,6 +132,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
   const names = useCustomerNames();
   // 确认是运营决定「送站交接确认」：明确知道没有这一种授予时不摆确认按钮，答不出授予时照摆、让服务端去答（ADR-0315）。
   const mayConfirm = useMayMakeDecision(deliveryHandoverConfirmationDecision);
+  const places = usePlaceNames();
   useEffect(() => {
     let cancelled = false;
     void readDeliveryHandoverNote(noteId).then((result) => {
@@ -153,7 +157,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
       facts={
         note && row
           ? [
-              { label: '网点', value: <span className="font-mono">{note.handoverNote.node}</span> },
+              { label: '网点', value: placeLabel(places, note.handoverNote.node) },
               { label: '开单时间', value: row.values.openedAt },
               // 状态胶囊只说开放 / 已关闭，关闭时刻放这一格；没关的单子这一格说还开着。
               { label: '关闭时间', value: note.handoverNote.closedAt ? formatInstant(note.handoverNote.closedAt) : '还开着' },

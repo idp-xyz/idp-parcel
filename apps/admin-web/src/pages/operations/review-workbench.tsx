@@ -4,6 +4,7 @@ import { toneForLabel } from '../../vocabulary/status';
 import { parcelNoOf } from '../shipment-request/ref-no';
 import { codeStatus } from '../visibility/exception-list';
 import { RecordDetailPanel, techRows, type RowStatus } from '../network/route-workbench';
+import { placeLabel, type PlaceNameIndex } from '../network/place-names';
 
 // 网点作业与运输班次两页的册行是「键 + 一袋已转写好的格」（各册行形状互不相同，转写在各自的 rowsOf 里）。这里把两页沿用的
 // 列定义接到工作台上：列定义里带 techPairs 的那一格不上表，挪进右栏的「技术详情」；第一格是行首，也是右栏的标题；其余格在右栏
@@ -89,4 +90,21 @@ export function ReviewDetail<Row extends ReviewRow>({
       {children}
     </RecordDetailPanel>
   );
+}
+
+/**
+ * 把行上几格网点（或口岸）编码换成屏上写法：按此刻生效那一版查名，查不到即编码本身；原编码挪到同名加 `Code` 的那一格，
+ * 由列定义的技术详情点名带出。只换上屏的格，行键与检索照旧认编码（检索两格都搜）。
+ */
+export function withPlaceNames<Row extends ReviewRow>(rows: readonly Row[], keys: readonly string[], names: PlaceNameIndex): Row[] {
+  return rows.map((row) => {
+    const values: Record<string, string> = { ...row.values };
+    for (const key of keys) {
+      const code = row.values[key];
+      if (code === undefined || code === '') continue;
+      values[key] = placeLabel(names, code);
+      values[`${key}Code`] = code;
+    }
+    return { ...row, values };
+  });
 }

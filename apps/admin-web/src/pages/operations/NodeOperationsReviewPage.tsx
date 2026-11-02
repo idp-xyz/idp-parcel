@@ -4,7 +4,8 @@ import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
-import { ReviewDetail, reviewStatusOf, workbenchColumnsOf, type ReviewColumn, type ReviewStatusSpec } from './review-workbench';
+import { usePlaceNames } from '../network/use-place-names';
+import { ReviewDetail, reviewStatusOf, withPlaceNames, workbenchColumnsOf, type ReviewColumn, type ReviewStatusSpec } from './review-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { hiddenDecisionHint, pendingIdentityRecheckDecision } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
@@ -139,12 +140,13 @@ const sections: ReviewSection[] = [
     columns: [
       col('unit', '货物标签', { mono: true }),
       pillCol('kind', '收寄', 'kindCode'),
-      col('node', '网点', { mono: true }),
+      col('node', '网点'),
       col('deliveredBy', '交货人', { mono: true }),
       col('receivedAt', '收货时间', { mono: true }),
       col('control', '现在'),
       col('serviceMarkers', '取消或终局'),
       techCol([
+        ['网点编码', 'nodeCode'],
         ['作业来源', 'sourceId'],
         ['收寄结论码', 'kindCode'],
         ['控制来源码', 'controlKind'],
@@ -246,7 +248,7 @@ const sections: ReviewSection[] = [
     // 交付范围核对一列是这一版判断时记下的推导，附恢复动作；依据一列是来源里上报的依据与此刻最后归入的交接单。
     columns: [
       col('unit', '货物标签', { mono: true }),
-      col('node', '网点', { mono: true }),
+      col('node', '网点'),
       col('pendingCause', '为什么认不出'),
       col('externalMark', '扫到的号（原样）', { mono: true }),
       col('candidates', '可能是哪件'),
@@ -257,6 +259,7 @@ const sections: ReviewSection[] = [
       col('deliveryScope', '送货范围核对'),
       col('receivedAt', '收到时间', { mono: true }),
       techCol([
+        ['网点编码', 'nodeCode'],
         ['范围依据 · 此刻归入', 'deliveryScopeBasis'],
         ['已关联包裹', 'association'],
         ['判断版本', 'judgmentVersion'],
@@ -326,7 +329,9 @@ export function NodeOperationsReviewPage() {
 
   const answer = registry && loaded?.registry === registry ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? rowsOf(body) : [];
+  const places = usePlaceNames();
+  // 网点一格按此刻生效那一版显名称，编码进技术详情（review-workbench 的 withPlaceNames）。
+  const rows = body ? withPlaceNames(rowsOf(body), ['node'], places) : [];
   const retry = () => setReloadKey((value) => value + 1);
   const startRecheck = (judgmentVersion: string) => {
     setRecheck({ kind: 'submitting', judgmentVersion });

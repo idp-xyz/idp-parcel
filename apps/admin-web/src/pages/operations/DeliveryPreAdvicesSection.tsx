@@ -4,7 +4,9 @@ import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-wo
 import { codeStatus } from '../visibility/exception-list';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
-import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
+import { reviewStatusOf, withPlaceNames, workbenchColumnsOf } from './review-workbench';
+import { usePlaceNames } from '../network/use-place-names';
+import { placeLabel } from '../network/place-names';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -46,7 +48,7 @@ function columnsWith(names: CustomerNameIndex): ListColumn<PreAdviceReviewRow>[]
 const columns: ListColumn<PreAdviceReviewRow>[] = [
   col('preAdviceId', '预报号', true),
   col('customerAccount', '客户', true),
-  col('node', '送到哪个网点', true),
+  col('node', '送到哪个网点'),
   col('expectedArrivalAt', '预计送达', true),
   col('numbers', '客户的包裹号'),
   col('deliveringParty', '谁来送', true),
@@ -79,7 +81,8 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
 
   const answer = path !== null && loaded?.path === path ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? body.preAdvices.map(preAdviceRowOf) : [];
+  const places = usePlaceNames();
+  const rows = body ? withPlaceNames(body.preAdvices.map(preAdviceRowOf), ['node'], places) : [];
   const retry = () => setReloadKey((value) => value + 1);
   const narrowed = filter.node.trim() !== '' || filter.day !== '';
   const viewState: TemplateViewState =
@@ -121,6 +124,7 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
 function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClose: () => void }) {
   const [answer, setAnswer] = useState<ApiResult<DeliveryPreAdviceFoundResponseBody> | null>(null);
   const names = useCustomerNames();
+  const places = usePlaceNames();
   useEffect(() => {
     let cancelled = false;
     void readDeliveryPreAdvice(preAdviceId).then((result) => {
@@ -141,7 +145,7 @@ function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClos
         advice
           ? [
               { label: '客户', value: names.get(advice.customerAccount) ?? <span className="font-mono">{advice.customerAccount}</span> },
-              { label: '送到哪个网点', value: <span className="font-mono">{advice.node}</span> },
+              { label: '送到哪个网点', value: placeLabel(places, advice.node) },
               { label: '预计送达', value: formatInstant(advice.expectedArrivalAt) },
               { label: '谁来送', value: advice.deliveringParty ? <span className="font-mono">{advice.deliveringParty}</span> : '没写' },
             ]
