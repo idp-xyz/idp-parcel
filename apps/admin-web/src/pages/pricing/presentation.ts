@@ -2,17 +2,9 @@
 
 import { chargeCodeLabel } from '../../vocabulary/status';
 
-export const directionLabels: Record<string, string> = {
-  BUY: '买价',
-  SELL: '卖价',
-  INTERNAL: '内部',
-};
-
-export const purposeLabels: Record<string, string> = {
-  SUPPLIER_COST: '供应商成本',
-  CUSTOMER_CHARGE: '客户计费',
-  INTERNAL_TRANSFER: '内部划转',
-};
+// 价格方向与计算目的的界面词只在用语词典定义一处（vocabulary/price-card 的 priceDirectionLabels、priceCardPurposeLabels）；
+// 这里转出给本目录沿用旧名的几页，不另抄一份——此前这里另有一套「买价 / 卖价」，与价格表页的「成本 / 售价」打架。
+export { priceDirectionLabels as directionLabels, priceCardPurposeLabels as purposeLabels } from '../../vocabulary/price-card';
 
 export const seriesKindLabels: Record<string, string> = {
   FUEL_RATE: '燃油费率',

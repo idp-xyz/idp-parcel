@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
@@ -34,7 +35,7 @@ const info = moduleInfoById['price-card-catalog'];
 const columns: WorkbenchColumn<PriceCardRecord>[] = [
   {
     key: 'plan',
-    header: '定价方案',
+    header: '价卡',
     render: (row) => (
       <div className="min-w-36">
         <div className="break-all font-medium text-[color:var(--ds-text-link-hover)]">{row.planId}</div>
@@ -86,7 +87,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
  * 筛选只在已取回的这一页上做：读口一页答完，不下推查询参数。导入签与草稿签今天在发行方未设时答 403
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
-function PriceCardCatalogTable() {
+function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCreate: () => void }) {
   const { answer, retry, pending } = useRegisterList(listPriceCards);
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
@@ -113,12 +114,19 @@ function PriceCardCatalogTable() {
   return (
     <WorkbenchPageTemplate<PriceCardRecord>
       title={info.title}
-      subtitle="对客户与对供应商的价格表：点开一行，看这张价格表收哪些费、怎么收、什么时候收"
+      subtitle="对客户的售价与对供应商的成本价：点开一张价卡，看它收哪些费、怎么收、什么时候收"
       onRefresh={retry}
       refreshing={pending}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索定价方案或适用范围…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜价卡编号或适用范围…' }}
       statusChips={statusChips}
       toolbarRight={answered ? priceCardCountSummary(rows.length, visible.length) : undefined}
+      primaryAction={
+        mayWrite ? (
+          <Button variant="default" className={primaryActionClass} onClick={onCreate}>
+            新建价卡
+          </Button>
+        ) : undefined
+      }
       columns={columns}
       rows={visible}
       rowKey={priceCardRowKey}
@@ -137,38 +145,41 @@ function PriceCardCatalogTable() {
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /pricing-price-cards',
-        emptyTitle: '当前租户内还没有价卡',
-        emptyDescription: '没有价卡不是故障；经「导入价卡」或受控登记口登记之后，本页即可见。',
+        emptyTitle: '还没有价卡',
+        emptyDescription: mayWrite
+          ? '点「新建价卡」逐项填写，或在「导入价卡」签上传 Excel；批准、发布后就会出现在这里。'
+          : '请有价卡维护权限的同事新建或导入价卡；批准、发布后就会出现在这里。',
       })}
     />
   );
 }
 
 export function PriceCardCatalogPage() {
-  // 没有登记册配置写授予的操作者不摆「新建价卡」：写口照旧在服务端判授予，这里只是呈现（ADR-0315）。
+  // 没有登记册配置写授予的操作者不摆「新建价卡」与导入入口：写口照旧自己判授予，这里只是呈现（ADR-0315）。
   const mayWrite = useMayWriteRegistry();
   const [tab, setTab] = useState('catalog');
   // 授予答出来之后才知道没有写授予：停在「新建价卡」的话回到目录，不留一个空签。
+  // 导入签与高级签同属写入口，一并收起；草稿签是查阅面，留着（批准 / 发布按钮在签内另按授予收起）。
   useEffect(() => {
-    if (!mayWrite && tab === 'create') setTab('catalog');
+    if (!mayWrite && (tab === 'create' || tab === 'import' || tab === 'advanced')) setTab('catalog');
   }, [mayWrite, tab]);
-  // 「新建价卡」存下草稿后让「草稿」签重取一次：签的内容不卸载，不通知就停在旧册上。
+  // 「新建价卡」存下草稿后让「草稿与审批」签重取一次：签的内容不卸载，不通知就停在旧册上。
   const [draftsSignal, setDraftsSignal] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="catalog">价卡目录</TabsTrigger>
+          <TabsTrigger value="catalog">全部价卡</TabsTrigger>
           {mayWrite ? <TabsTrigger value="create">新建价卡</TabsTrigger> : null}
-          <TabsTrigger value="import">导入价卡</TabsTrigger>
-          <TabsTrigger value="drafts">草稿</TabsTrigger>
-          <TabsTrigger value="advanced">高级：JSON 快照</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="import">导入价卡</TabsTrigger> : null}
+          <TabsTrigger value="drafts">草稿与审批</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="advanced">高级：JSON 导入</TabsTrigger> : null}
         </TabsList>
         <TabsContent
           value="catalog"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PriceCardCatalogTable />
+          <PriceCardCatalogTable mayWrite={mayWrite} onCreate={() => setTab('create')} />
         </TabsContent>
         {mayWrite ? (
           // forceMount：切到别的签时表单不卸载，填了一半的内容与预览结果留着，切回来接着填。
@@ -180,32 +191,37 @@ export function PriceCardCatalogPage() {
             <PriceCardEditorPanel onOpenDrafts={() => setTab('drafts')} onDraftSaved={() => setDraftsSignal((value) => value + 1)} />
           </TabsContent>
         ) : null}
-        <TabsContent
-          value="import"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <PriceCardImportPanel />
-        </TabsContent>
+        {mayWrite ? (
+          <TabsContent
+            value="import"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <PriceCardImportPanel />
+          </TabsContent>
+        ) : null}
         <TabsContent
           value="drafts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <PriceCardDraftsPanel refreshSignal={draftsSignal} />
         </TabsContent>
-        <TabsContent
-          value="advanced"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationPanel
-            moduleId="price-card-catalog"
-            title="高级：价卡 JSON 快照"
-            endpoint="POST /pricing-price-card-registrations"
-            snapshotHint="这不是运营配置员的主路径。形状与受控登记口 parcel-pricing-register -kind price-card -file 同一份，由产品定义（ADR-0101），不是等 PAR-INT-01 才有的渠道契约。主路径在「导入价卡」。"
-            submit={registerPriceCard}
-            outcomeLabels={registrationOutcomeLabels}
-            problemNote={problemNote}
-          />
-        </TabsContent>
+        {mayWrite ? (
+          <TabsContent
+            value="advanced"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            {/* 形状与受控登记口 parcel-pricing-register -kind price-card 同一份，由产品定义（ADR-0101）。 */}
+            <RegistrationPanel
+              moduleId="price-card-catalog"
+              title="高级：用 JSON 直接登记价卡"
+              endpoint="POST /pricing-price-card-registrations"
+              snapshotHint="给系统对接或批量迁移用：贴入整份价卡 JSON 直接登记，跳过草稿与审批，格式与命令行导入工具相同。日常新建或修改价卡，请用「新建价卡」或「导入价卡」。"
+              submit={registerPriceCard}
+              outcomeLabels={registrationOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );

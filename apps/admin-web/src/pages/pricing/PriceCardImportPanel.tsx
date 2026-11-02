@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
-import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
-import { labelOf, problemNote, directionLabels, purposeLabels } from './presentation';
+import { labelOf, problemNote } from './presentation';
+import { priceCardPurposeLabels, priceDirectionLabels } from '../../vocabulary/price-card';
+import { TechnicalDetails, httpRows } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
 import {
   previewPriceCardImport,
-  priceCardDraftPath,
-  priceCardPreviewPath,
   priceCardTemplateFileName,
   priceCardTemplateHref,
   submitPriceCardDraft,
@@ -25,8 +25,6 @@ import {
   priceCardPreviewOutcomeLabels,
   sortPriceCardProblems,
 } from './price-card-import';
-
-const info = moduleInfoById['price-card-catalog'];
 
 type Phase = 'idle' | 'previewing' | 'saving';
 
@@ -71,12 +69,10 @@ export function PriceCardImportPanel() {
           <CardTitle>导入价卡</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* 预览与存草稿打的是同一份字节（预览过的就是存下的那份）；录入人由接入渠道给，表单不收。 */}
           <p className="text-xs text-idpxyz-textMuted">
-            下载空白模板，填完后上传。先打{' '}
-            <span className="font-mono">{priceCardPreviewPath}</span> 看校验结果与摘要，再把
-            <span className="font-mono">同一份字节</span> 打到{' '}
-            <span className="font-mono">{priceCardDraftPath}</span> 存为草稿。两口都不收租户或录入者，
-            身份在操作者信封里。
+            适合已经在 Excel 里做好的价卡：下载模板，按模板填好后上传，先「检查并预览」，没有问题再「存为草稿」。
+            存下的草稿到「草稿与审批」签里批准、发布。
           </p>
           <p className="text-xs">
             <a className="text-idpxyz-accent underline" href={priceCardTemplateHref} download={priceCardTemplateFileName}>
@@ -84,7 +80,7 @@ export function PriceCardImportPanel() {
             </a>
           </p>
           <label className="text-xs text-idpxyz-textMuted">
-            价卡工作簿
+            选择填好的 Excel 文件
             <input
               className="mt-1 block text-xs text-idpxyz-text"
               type="file"
@@ -94,7 +90,7 @@ export function PriceCardImportPanel() {
           </label>
           <div className="flex items-center gap-3">
             <Button onClick={() => void previewFile()} disabled={!file || phase !== 'idle'}>
-              {phase === 'previewing' ? '校验中…' : '校验并预览'}
+              {phase === 'previewing' ? '检查中…' : '检查并预览'}
             </Button>
             <Button
               variant="default"
@@ -106,7 +102,7 @@ export function PriceCardImportPanel() {
             </Button>
           </div>
           <p className="text-xs text-idpxyz-textMuted">
-            存草稿要先看到这一份文件的预览。换文件之后预览作废，避免把上一份的摘要存成这一份。
+            先预览这份文件才能存为草稿；换了文件要重新预览。
           </p>
           {preview ? (
             <ReadingAnswer
@@ -138,26 +134,29 @@ function ReadingAnswer({
   return (
     <section className="flex flex-col gap-2 text-xs">
       <p>
-        {title}：<span className="font-mono">{reading.outcome}</span> —— {labelOf(labels, reading.outcome)}
-        {reading.templateVersion ? (
-          <>
-            {' '}
-            · 模板 <span className="font-mono">{reading.templateVersion}</span>
-          </>
-        ) : null}
+        {title}：{labelOf(labels, reading.outcome)}
       </p>
-      {reading.sourceFile ? (
-        <p className="font-mono text-idpxyz-textMuted">
-          {reading.sourceFile.name} · {reading.sourceFile.sha256}
-        </p>
-      ) : null}
       {reading.plan ? (
         <p>
-          方案 <span className="font-mono">{reading.plan.id}@{reading.plan.version}</span>
+          价卡 <span className="font-mono">{reading.plan.id}</span> · 版本 <span className="font-mono">{reading.plan.version}</span>
         </p>
       ) : null}
       {reading.content ? <ContentSummary content={reading.content} /> : null}
       <ProblemTable problems={sortPriceCardProblems(reading.problems ?? [])} />
+      <TechnicalDetails
+        rows={technicalRows([
+          { label: '结果码', value: reading.outcome },
+          { label: '模板版本', value: reading.templateVersion },
+          { label: '文件名', value: reading.sourceFile?.name },
+          { label: '文件指纹', value: reading.sourceFile?.sha256 },
+          { label: '内容摘要', value: reading.content?.contentDigest },
+          { label: '规范化版本', value: reading.content?.canonicalization },
+          {
+            label: '价表',
+            value: reading.content ? `${reading.content.rateTable.id}@${reading.content.rateTable.version}` : undefined,
+          },
+        ])}
+      />
     </section>
   );
 }
@@ -169,23 +168,25 @@ function DraftAnswer({ answer }: { answer: ApiResult<PriceCardDraftSubmissionBod
   const body = answer.body;
   return (
     <section className="flex flex-col gap-2 text-xs">
-      <p>
-        存草稿（HTTP {answer.status}）：<span className="font-mono">{body.outcome}</span> ——{' '}
-        {labelOf(priceCardDraftOutcomeLabels, body.outcome)}
-      </p>
+      <p>存草稿：{labelOf(priceCardDraftOutcomeLabels, body.outcome)}</p>
       {body.draft ? (
         <p>
-          册上这一行：<span className="font-mono">{body.draft.status}</span> ——{' '}
-          {labelOf(priceCardDraftStatusLabels, body.draft.status)} ·{' '}
-          <span className="font-mono">
-            {body.draft.plan.id}@{body.draft.plan.version}
-          </span>{' '}
-          · 录入者 <span className="font-mono">{body.draft.submitter}</span> · {formatInstant(body.draft.submittedAt)}
+          草稿现在是「{labelOf(priceCardDraftStatusLabels, body.draft.status)}」 ·{' '}
+          <span className="font-mono">{body.draft.plan.id}</span> 版本 <span className="font-mono">{body.draft.plan.version}</span> ·
+          录入于 {formatInstant(body.draft.submittedAt)}
         </p>
       ) : (
-        <p className="text-idpxyz-textMuted">这次没有写下册上的行。册上此刻是什么由草稿查阅口答。</p>
+        <p className="text-idpxyz-textMuted">这次没有改动草稿；草稿现在的样子到「草稿与审批」签里看。</p>
       )}
-      <ReadingAnswer title="这次读法" answer={{ kind: 'outcome', status: answer.status, body: body.reading }} labels={priceCardPreviewOutcomeLabels} />
+      <TechnicalDetails
+        rows={technicalRows([
+          { label: 'HTTP 状态', value: String(answer.status) },
+          { label: '结果码', value: body.outcome },
+          { label: '草稿状态码', value: body.draft?.status },
+          { label: '录入人', value: body.draft?.submitter },
+        ])}
+      />
+      <ReadingAnswer title="这次检查" answer={{ kind: 'outcome', status: answer.status, body: body.reading }} labels={priceCardPreviewOutcomeLabels} />
     </section>
   );
 }
@@ -193,22 +194,16 @@ function DraftAnswer({ answer }: { answer: ApiResult<PriceCardDraftSubmissionBod
 function ContentSummary({ content }: { content: PriceCardImportContent }) {
   return (
     <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-idpxyz-textMuted">
-      <dt>方向 / 目的</dt>
+      <dt>方向</dt>
       <dd>
-        {labelOf(directionLabels, content.direction)} · {labelOf(purposeLabels, content.purpose)}
+        {labelOf(priceDirectionLabels, content.direction)} · {labelOf(priceCardPurposeLabels, content.purpose)}
       </dd>
       <dt>适用范围</dt>
       <dd className="font-mono">{content.scope}</dd>
-      <dt>适用期起</dt>
-      <dd className="font-mono">{content.startsAt}</dd>
-      <dt>内容摘要</dt>
-      <dd className="font-mono break-all">{content.contentDigest}</dd>
-      <dt>规范化版本</dt>
-      <dd className="font-mono">{content.canonicalization}</dd>
+      <dt>生效自</dt>
+      <dd className="font-mono">{content.startsAt.includes('T') ? formatInstant(content.startsAt) : content.startsAt}</dd>
       <dt>价表</dt>
-      <dd className="font-mono">
-        {content.rateTable.id}@{content.rateTable.version} · {content.rateTable.rows} 行
-      </dd>
+      <dd>{content.rateTable.rows} 行</dd>
     </dl>
   );
 }
@@ -216,17 +211,16 @@ function ContentSummary({ content }: { content: PriceCardImportContent }) {
 /** 逐格问题表；草稿签展开`草稿`行时用同一张，同一格问题两签摆法一样。 */
 export function ProblemTable({ problems }: { problems: PriceCardProblem[] }) {
   if (problems.length === 0) {
-    return <p className="text-idpxyz-textMuted">没有逐格问题。</p>;
+    return <p className="text-idpxyz-textMuted">没有发现问题。</p>;
   }
   return (
     <table className="w-full text-left text-xs">
       <thead className="text-idpxyz-textMuted">
         <tr>
-          <th className="py-1 pr-3 font-normal">表</th>
+          <th className="py-1 pr-3 font-normal">工作表</th>
           <th className="py-1 pr-3 font-normal">行</th>
           <th className="py-1 pr-3 font-normal">列</th>
-          <th className="py-1 pr-3 font-normal">码</th>
-          <th className="py-1 font-normal">说明</th>
+          <th className="py-1 font-normal">问题</th>
         </tr>
       </thead>
       <tbody>
@@ -235,8 +229,10 @@ export function ProblemTable({ problems }: { problems: PriceCardProblem[] }) {
             <td className="py-1 pr-3 font-mono">{problem.sheet}</td>
             <td className="py-1 pr-3 font-mono">{problem.row}</td>
             <td className="py-1 pr-3 font-mono">{problem.column}</td>
-            <td className="py-1 pr-3 font-mono">{problem.code}</td>
-            <td className="py-1">{problem.message}</td>
+            {/* 问题码不上屏，悬停可见：对接模板规则时要它。 */}
+            <td className="py-1" title={problem.code}>
+              {problem.message}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -250,10 +246,9 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
       return null;
     case 'unconfigured':
       return (
+        // 渠道未配置是诚实答案（ADR-0055）：改文件或重试都不会变，页面也不拿演示数据顶替。
         <p className="text-xs text-idpxyz-textMuted">
-          {title}：接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。{info.owner}
-          的操作者渠道发行方尚未登记，服务端按 ADR-0055 如实拒绝。这是诚实答案，改文件或重试不会改变结果。
-          发行方参数到位后由装配侧换上真核验即放行。此前不要拿演示数据填这张表。
+          {title}：访问通道尚未配置（403），这次没有处理；改文件或重试都不会变，请管理员先配置访问通道。
         </p>
       );
     case 'loginRequired':
@@ -261,21 +256,27 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
       return <OperatorRefusalNote kind={answer.kind} what={title} />;
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          {title}：调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-          {answer.detail ? ` 原因：${answer.detail}` : ''}
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>
+            {title}没成功：{problemNote(answer.code)}
+            {answer.detail ? ` 原因：${answer.detail}` : ''}
+          </p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} className="mt-1 text-idpxyz-text" />
+        </div>
       );
     case 'noAnswer':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          {title}：服务端未形成答案（HTTP {answer.status}）：{problemNote(answer.code)}；可稍后重试。
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>
+            {title}这次没处理完：{problemNote(answer.code)}
+          </p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} className="mt-1 text-idpxyz-text" />
+        </div>
       );
     case 'transport':
       return (
         <p className="text-xs text-idpxyz-danger">
-          {title}：请求未到达 parcel-api：{answer.message}
+          {title}：连不上系统（{answer.message}）；检查网络后重试。
         </p>
       );
   }
