@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FilePlus2 } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { feedbackFor } from '../../components/action-feedback';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
@@ -36,10 +37,12 @@ import {
   billProgress,
   matchSummary,
   operatorWords,
+  pageCountSummary,
   payableLabel,
   payableNumberAbsenceNote,
   payableNumberName,
   payableNumberState,
+  withExactHits,
 } from './supplier-bills';
 
 // 供应商账单与应付（主责上下文 settlement-accounting「供应商主张与审核应付」，UC-SA-004；票 document-numbering/11）。两签：
@@ -167,6 +170,7 @@ function SupplierBillsWorkbench({
   };
   const answered = answer?.kind === 'outcome';
   const rows = answer?.kind === 'outcome' ? answer.body.receptions : [];
+  const truncated = answer?.kind === 'outcome' && answer.body.truncated;
   const entityName = (id: string) => legalEntities.find((entity) => entity.id === id)?.name;
   const counts = countByStatus(rows, billProgress);
   const visible = sortRowsBy(
@@ -201,7 +205,7 @@ function SupplierBillsWorkbench({
         }
         search={{ value: search, onChange: setSearch, placeholder: '搜账单号、供应商、账期…' }}
         statusChips={filter?.chips}
-        toolbarRight={answered ? `共 ${rows.length} 份，当前显示 ${visible.length} 份` : undefined}
+        toolbarRight={answered ? pageCountSummary(rows.length, visible.length, truncated, '份', '收到') : undefined}
         columns={billColumns(names)}
         rows={visible}
         rowKey={billKey}
@@ -375,6 +379,9 @@ function AuditedPayablesWorkbench({
   const [answer, setAnswer] = useState<ApiResult<AuditedPayableListResponseBody> | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // 检索词同时当应付单号去服务端全册精确检索：页只取最近的那些，页外的应付只有这一问找得到（ADR-0355 决定十一）。
+  const term = search.trim();
+  const [exact, setExact] = useState<{ term: string; result: ApiResult<AuditedPayableListResponseBody> } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -389,16 +396,36 @@ function AuditedPayablesWorkbench({
     };
   }, [reloadToken, reloadKey]);
 
+  useEffect(() => {
+    if (term === '') {
+      setExact(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void listAuditedPayables({ documentNumber: term }).then((result) => {
+        if (!cancelled) setExact({ term, result });
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [term, reloadToken, reloadKey]);
+
   const retry = () => {
     setRefreshing(true);
     setReloadToken((token) => token + 1);
   };
   const answered = answer?.kind === 'outcome';
   const rows = answer?.kind === 'outcome' ? answer.body.payables : [];
+  const truncated = answer?.kind === 'outcome' && answer.body.truncated;
+  const exactNow = exact?.term === term ? exact.result : null;
+  const pool = withExactHits(rows, exactNow?.kind === 'outcome' ? exactNow.body.payables : []);
   const entityName = (id: string) => legalEntities.find((entity) => entity.id === id)?.name;
   const counts = countByStatus(rows, payableNumberState);
   const visible = sortRowsBy(
-    rows.filter(
+    pool.filter(
       (row) =>
         (status === 'ALL' || payableNumberState(row).label === status) &&
         matchesSearch(search, [
@@ -426,7 +453,17 @@ function AuditedPayablesWorkbench({
       refreshing={refreshing}
       search={{ value: search, onChange: setSearch, placeholder: `搜${payableNumberName}、账单号、供应商…` }}
       statusChips={filter?.chips}
-      toolbarRight={answered ? `共 ${rows.length} 笔，当前显示 ${visible.length} 笔` : undefined}
+      toolbarRight={
+        answered
+          ? `${pageCountSummary(rows.length, visible.length, truncated, '笔', '审核')}${
+              exactNow && exactNow.kind !== 'outcome'
+                ? `；按${payableNumberName}在全册里检索没有答出（${feedbackFor(exactNow, '检索').text}），只在这一页里找`
+                : truncated
+                  ? `；按完整的${payableNumberName}搜，页外的也找得到`
+                  : ''
+            }`
+          : undefined
+      }
       columns={payableColumns(names)}
       rows={visible}
       rowKey={(row) => row.payable}

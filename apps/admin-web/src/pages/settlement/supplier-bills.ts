@@ -3,7 +3,7 @@
 // 表单在 SupplierBillsPage.tsx 与 SupplierBillPanel.tsx。
 //
 // 话照「说人话」写：答复的业务判别由服务端给（outcome），这里只把它译成一句操作者看得懂的话，不另判业务。走到哪一步是从读口
-// 的计数派生的呈现词，不是领域状态：领域里逐行只有匹配分类与有没有审核应付两件事。
+// 的计数派生的呈现词，不是领域状态：领域里逐行只记匹配分类与有没有审核应付。
 
 import { shortPrincipalRef } from '../../components/principal-ref';
 import { documentNumberAbsenceNote, documentTypeWords, numberingCollisionNote } from '../../vocabulary/document-numbering';
@@ -77,7 +77,7 @@ export function matchedLineCount(row: Pick<SupplierBillReceptionRecord, 'classif
   return row.classificationCounts[MATCHED] ?? 0;
 }
 
-/** 没对上的行数：分类是四种差异之一，或接收记录上这一行没有匹配。 */
+/** 没对上的行数：分类不是已对上，或接收记录上这一行没有匹配。 */
 export function differingLineCount(row: Pick<SupplierBillReceptionRecord, 'lineCount' | 'classificationCounts'>): number {
   return Math.max(0, row.lineCount - matchedLineCount(row));
 }
@@ -94,14 +94,17 @@ export const differingLabel = '有差异待核实';
 export const auditedLabel = '已审完';
 
 /**
- * 一份账单走到哪一步，按先要人动手的那件说：有已对上却还没形成应付的行，就是待审核（这家供应商在这个公司主体下没登审核人时
- * 说审核人未配置——审核会停在未配置，要先去登）；否则有对不上的行，就是有差异待核实；都没有就是已审完。
+ * 一份账单走到哪一步，按先要人动手的那件说：有已对上却还没形成应付的行，就是待审核（这家供应商在这个公司主体下此刻没登审核人
+ * 时说审核人未配置——审核会停在未配置，要先去登）；否则有对不上的行，就是有差异待核实；都没有就是已审完。
+ *
+ * 审核人登没登看 auditAuthorityConfiguredNow，不看接收时的快照 auditAuthorityConfigured：审核在审核那一刻读审核授权册，租户
+ * 接收之后补登了审核人，按快照说就会一直说没登。
  */
 export function billProgress(
-  row: Pick<SupplierBillReceptionRecord, 'lineCount' | 'classificationCounts' | 'matchedWithoutPayableCount' | 'auditAuthorityConfigured'>,
+  row: Pick<SupplierBillReceptionRecord, 'lineCount' | 'classificationCounts' | 'matchedWithoutPayableCount' | 'auditAuthorityConfiguredNow'>,
 ): BillProgress {
   if (row.matchedWithoutPayableCount > 0) {
-    return row.auditAuthorityConfigured ? { label: awaitingAuditLabel, tone: 'warn' } : { label: auditorUnconfiguredLabel, tone: 'warn' };
+    return row.auditAuthorityConfiguredNow ? { label: awaitingAuditLabel, tone: 'warn' } : { label: auditorUnconfiguredLabel, tone: 'warn' };
   }
   if (differingLineCount(row) > 0) return { label: differingLabel, tone: 'warn' };
   return { label: auditedLabel, tone: 'good' };
@@ -118,6 +121,27 @@ export function matchSummary(row: Pick<SupplierBillReceptionRecord, 'lineCount' 
   const unrecorded = row.lineCount - Object.values(row.classificationCounts).reduce((sum, count) => sum + count, 0);
   if (unrecorded > 0) parts.push(`没有匹配记录 ${unrecorded}`);
   return [`对上 ${matched}/${row.lineCount} 行`, ...parts].join(' · ');
+}
+
+// —— 两本册的页与检索 ——
+
+/**
+ * 工具条右边那一句。两本册都按时间倒序截页（读口多取一行判页外有没有）：截了就不能说「共几份」，只能说列出了最近的几份——
+ * 指标与筛选也只数这些，页外的不在里面。
+ */
+export function pageCountSummary(listed: number, visible: number, truncated: boolean, unit: string, latest: string): string {
+  return truncated
+    ? `只列出最近${latest}的 ${listed} ${unit}，更早的没有列出、指标也不算它们；当前显示 ${visible} ${unit}`
+    : `共 ${listed} ${unit}，当前显示 ${visible} ${unit}`;
+}
+
+/**
+ * 应付签的检索池：取回的那一页，加上按应付单号在全册里精确检索到的那几笔（同一笔只留一份）。页外的应付只靠后者才找得到；
+ * 前者照旧给账单号、供应商这些字段做页内模糊检索。
+ */
+export function withExactHits(page: readonly AuditedPayableRecord[], hits: readonly AuditedPayableRecord[]): AuditedPayableRecord[] {
+  const listed = new Set(page.map((row) => row.payable));
+  return [...page, ...hits.filter((row) => !listed.has(row.payable))];
 }
 
 // —— 一行能不能审 ——
@@ -149,7 +173,7 @@ export function payableNumberAbsenceNote(
   return documentNumberAbsenceNote(payable.documentNumberAbsence);
 }
 
-/** 审核应付签的状态胶囊：有应付单号与没有号分开，没有号的两种原因由技术详情说。 */
+/** 审核应付签的状态胶囊：有应付单号与没有号分开，没有号的原因由技术详情说。 */
 export function payableNumberState(payable: Pick<AuditedPayableRecord, 'documentNumber'>): BillProgress {
   return payable.documentNumber ? { label: `有${payableNumberName}`, tone: 'good' } : { label: `无${payableNumberName}`, tone: 'muted' };
 }
@@ -182,7 +206,12 @@ export interface ReceptionDraft {
   lines: ReceptionLineDraft[];
 }
 
-/** 能拿来对账的预期成本：当前那一版——不是失效纠错版本、也没有后继；选了币种时只列同币种的（不同币种没有换算依据，对不上）。 */
+/**
+ * 能拿来对账的预期成本：当前那一版——不是失效纠错版本、也没有后继；选了币种时只列同币种的（不同币种没有换算依据，对不上）。
+ *
+ * 不按供应商筛：预期成本的读口与表上都没有供应商或承运方，只有它依的供应商协议（agreement），那一版协议是哪家供应商的归
+ * party-commercial。匹配门也不核供应商，误选就对到别家的预期成本——这一缺口记在 UC-SA-004「给开发的交接」，表单只能如实提醒。
+ */
 export function currentExpectedCosts(costs: readonly SupplierExpectedCostRecord[], currency: string): SupplierExpectedCostRecord[] {
   const superseded = new Set(costs.map((cost) => cost.priorVersion).filter((version): version is string => !!version));
   return costs.filter(
@@ -196,15 +225,27 @@ export interface ClassificationChoice {
   hint: string;
 }
 
-const hints: Record<string, string> = {
+/**
+ * 逐行匹配分类在本页的取值表：键是 domain.MatchClassification 的原名，值是登记表单上那一格的提示（界面词在 vocabulary/status）。
+ * 界面上要说「对不上的是哪些」时从这里取，不在句子里另列一遍：领域添一种分类，这里加一行，各句跟着变。
+ */
+export const matchClassificationHints: Readonly<Record<string, string>> = {
   MATCHED: '金额与预期成本一样，之后可以审核',
   QUANTITY_VARIANCE: '件数、重量或次数和我们记的不一样',
   PRICE_VARIANCE: '单价或费率和协议不一样',
-  DUPLICATE_BILLING: '这笔之前已经收过',
   NO_MATCHING_OCCURRENCE: '我们这边查不到这笔运输',
+  DUPLICATE_BILLING: '这笔之前已经收过',
 };
 
-const choice = (code: string): ClassificationChoice => ({ value: code, label: labelFor(code), hint: hints[code] ?? '' });
+/** 除已对上之外的各个分类的界面词，以顿号连起来，给「对不上的行（…）」那几句用。 */
+export function differingClassificationWords(): string {
+  return Object.keys(matchClassificationHints)
+    .filter((code) => code !== MATCHED)
+    .map((code) => labelFor(code))
+    .join('、');
+}
+
+const choice = (code: string): ClassificationChoice => ({ value: code, label: labelFor(code), hint: matchClassificationHints[code] ?? '' });
 
 /**
  * 一行能选的对上方式，照匹配门的形状（domain.MatchBillLine）：金额与预期成本相等才能选已对上；不等只能是数量或价格不符；
@@ -380,7 +421,7 @@ export function auditAnswerText(
     case 'PAYABLE_CONFLICT':
       return '没有形成应付：这个应付标识已经用在另一行上；刷新这张账单后重试。';
     case 'LINE_NOT_AUDITABLE':
-      return `不能审核第 ${line} 行：它和预期成本对不上（数量不符、价格不符、找不到对应运输或重复收费），要先核实差异。`;
+      return `不能审核第 ${line} 行：它和预期成本对不上（${differingClassificationWords()}之一），要先核实差异。`;
     case 'AUDIT_MUST_ESCALATE':
       return `第 ${line} 行没有形成应付：金额超过本公司登记的越权审核上限，要升级审批。升级后由谁终审还没有定，这一行先停着。`;
     case 'SOURCE_NOT_ACCEPTED':

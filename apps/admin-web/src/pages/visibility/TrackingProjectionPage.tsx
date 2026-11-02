@@ -35,7 +35,7 @@ import { formatInstant } from '../moment';
 const info = moduleInfoById['tracking-projection'];
 
 // 物流动态（领域：全程追踪投影），对 GET /tracking-projections 真实端点取数；改版第一步换成工作台形态（设计源「五、改版示意」）。
-// 列只放人要看的：运单号、当前状态（最新里程碑的中文胶囊）、进度（托运 / 路由 / 节点 / 运输 / 关务五段折成一格中文短语，缺的段
+// 列只放人要看的：包裹号（投影按包裹出）、当前状态（最新里程碑的中文胶囊）、进度（托运 / 路由 / 节点 / 运输 / 关务五段折成一格中文短语，缺的段
 // 不显）、更新时间；投影版本、前身、替代关系进右栏详情底部的「技术详情」。
 //
 // 作用域裁决已落：运营查阅走独立读口消费投影库，不复用客户隔离读口（ADR-0076）。作用域是租户级、无客户维，由服务端接入面从
@@ -55,7 +55,7 @@ const kpiToneClass: Partial<Record<StatusTone, string>> = {
 const columns: WorkbenchColumn<TrackingRow>[] = [
   {
     key: 'parcel',
-    header: objectNouns.shipmentNumber,
+    header: objectNouns.parcelNumber,
     sortKey: 'parcel',
     render: (row) => (
       <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.parcelId}>
@@ -212,7 +212,7 @@ export function TrackingProjectionPage() {
       kpis={kpis}
       onRefresh={retry}
       refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜运单号…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜包裹号…' }}
       statusChips={statusChips}
       toolbarRight={answered ? trackingCountSummary(rows.length, visible.length) : undefined}
       columns={columns}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -40,10 +41,14 @@ type stubAuditedPayables struct {
 	gotLimit  int
 }
 
+// ListAuditedPayables 像真读口一样截在 limit，理由同 stubStatementCatalogue。
 func (stub *stubAuditedPayables) ListAuditedPayables(
 	_ context.Context, tenant domain.TenantID, filter ports.AuditedPayableFilter, limit int,
 ) ([]ports.AuditedPayableCatalogueRow, error) {
 	stub.gotTenant, stub.gotFilter, stub.gotLimit = tenant.String(), filter, limit
+	if len(stub.rows) > limit {
+		return stub.rows[:limit], stub.err
+	}
 	return stub.rows, stub.err
 }
 
@@ -142,7 +147,7 @@ func TestSupplierBillLinesQuerySeparatesMissingFromUnanswered(t *testing.T) {
 }
 
 // Covers: AT-SA-232、AT-SA-231 — 审核应付册逐笔透出应付单号或无号原因（恰出其一）、所属主张与行、供应商与账期、审核授权方与
-// 点审核的人；检索维原样交给读口，不认的参数不采信；空册答空数组；读不回答 NO_ANSWER_FORMED。
+// 点审核的人；检索维原样交给读口，不认的参数不采信；多于一页答 truncated、只列一页；空册答空数组；读不回答 NO_ANSWER_FORMED。
 func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 	stub := &stubAuditedPayables{rows: []ports.AuditedPayableCatalogueRow{
 		{Payable: "PAYABLE-1", DocumentNumber: "AP-202608-00001", Claim: "SYN-SUP-01/INV-1", Line: "1", ExpectedVersion: "SYN-EXP-1",
@@ -155,20 +160,22 @@ func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 	}}
 	response := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), stub),
 		"/settlement-audited-payables?documentNumber=AP-202608-00001&claim=SYN-SUP-01%2FINV-1&supplier=SYN-SUP-01&tenant=TENANT-9")
-	if response.Code != http.StatusOK || stub.gotTenant != "TENANT-1" || stub.gotLimit != 25 {
+	// 向读口多要一行，只为判页外还有没有。
+	if response.Code != http.StatusOK || stub.gotTenant != "TENANT-1" || stub.gotLimit != 26 {
 		t.Fatalf("status = %d tenant = %q limit = %d", response.Code, stub.gotTenant, stub.gotLimit)
 	}
 	if stub.gotFilter != (ports.AuditedPayableFilter{DocumentNumber: "AP-202608-00001", Claim: "SYN-SUP-01/INV-1", Supplier: "SYN-SUP-01"}) {
 		t.Fatalf("检索维没原样交给读口：%+v", stub.gotFilter)
 	}
 	var body struct {
-		Outcome  string              `json:"outcome"`
-		Payables []map[string]string `json:"payables"`
+		Outcome   string              `json:"outcome"`
+		Truncated *bool               `json:"truncated"`
+		Payables  []map[string]string `json:"payables"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Outcome != "AUDITED_PAYABLES_LISTED" || len(body.Payables) != 2 {
+	if body.Outcome != "AUDITED_PAYABLES_LISTED" || len(body.Payables) != 2 || body.Truncated == nil || *body.Truncated {
 		t.Fatalf("应付册走样：%s", response.Body.String())
 	}
 	numbered, before := body.Payables[0], body.Payables[1]
@@ -186,6 +193,19 @@ func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 		if _, present := before[absent]; present {
 			t.Fatalf("没号、不记提交方的那一笔不该带 %q：%v", absent, before)
 		}
+	}
+
+	many := make([]ports.AuditedPayableCatalogueRow, 30)
+	for index := range many {
+		many[index] = ports.AuditedPayableCatalogueRow{Payable: fmt.Sprintf("PAYABLE-%03d", index), AuditedAt: catalogueBaseAt, RecordedAt: catalogueBaseAt}
+	}
+	cut := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), &stubAuditedPayables{rows: many}), "/settlement-audited-payables")
+	var cutBody struct {
+		Truncated bool              `json:"truncated"`
+		Payables  []json.RawMessage `json:"payables"`
+	}
+	if err := json.Unmarshal(cut.Body.Bytes(), &cutBody); err != nil || !cutBody.Truncated || len(cutBody.Payables) != 25 {
+		t.Fatalf("多于一页要答 truncated、只列一页：%s", cut.Body.String())
 	}
 
 	empty := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), &stubAuditedPayables{}), "/settlement-audited-payables")

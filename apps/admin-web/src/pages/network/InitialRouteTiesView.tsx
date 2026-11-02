@@ -8,12 +8,21 @@ import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { authorizedRerouteDecision, hiddenDecisionHint } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
-import { shipmentNoOf } from '../shipment-request/ref-no';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
+import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { StatusTone } from '../../vocabulary/status';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
-import { parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
+import {
+  parcelCell,
+  parcelColumnHeader,
+  parcelSearchCells,
+  parcelSubtitle,
+  parcelTitle,
+  shipmentTechnicalRows,
+  type RoutePlansHeader,
+  type ShipmentNumberOf,
+} from './route-plan-cells';
 import {
   decideInitialRouteTie,
   listInitialRouteTies,
@@ -67,9 +76,10 @@ export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
 
   const retry = () => setReloadKey((value) => value + 1);
   const ties = answer?.kind === 'outcome' ? answer.body.ties : [];
+  const numberOf = useShipmentNumbers(ties.map((row) => row.shipmentRequestId), reloadKey);
 
   const columns: WorkbenchColumn<InitialRouteTieRecord>[] = [
-    { key: 'parcel', header: '运单', render: parcelCell },
+    { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
     { key: 'state', header: '状态', render: (row) => <RowStatusPill status={tieStatus(row)} /> },
     { key: 'tied', header: '并列的路线', hideWhenDetailOpen: true, render: (row) => `${row.tied.length} 条` },
     {
@@ -89,12 +99,12 @@ export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
       rowKey={tieKey}
       statusOf={tieStatus}
       rowAttention={(row) => row.state === 'PENDING'}
-      searchCells={(row) => parcelSearchCells(row, names)}
+      searchCells={(row) => parcelSearchCells(row, names, numberOf)}
       searchPlaceholder="搜运单号 / 包裹号 / 客户"
       columns={columns}
       sortAccessors={{ 'settled-at': { value: (row) => row.settledAt, instant: true } }}
       defaultSort={{ key: 'settled-at', dir: -1 }}
-      renderDetail={(row, close) => <TieDetail key={tieKey(row)} row={row} names={names} onClose={close} onLanded={retry} />}
+      renderDetail={(row, close) => <TieDetail key={tieKey(row)} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={retry} />}
       onRefresh={retry}
       viewState={catalogueViewState(answer, ties.length, retry, {
         module: info,
@@ -110,11 +120,13 @@ export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
 function TieDetail({
   row,
   names,
+  numberOf,
   onClose,
   onLanded,
 }: {
   row: InitialRouteTieRecord;
   names: Parameters<typeof parcelSubtitle>[1];
+  numberOf: ShipmentNumberOf;
   onClose: () => void;
   onLanded: () => void;
 }) {
@@ -124,7 +136,7 @@ function TieDetail({
   const availability = initialRouteTieAvailabilityOf(row);
   return (
     <RecordDetailPanel
-      title={shipmentNoOf(row.shipmentRequestId)}
+      title={parcelTitle(row, numberOf)}
       status={tieStatus(row)}
       subtitle={parcelSubtitle(row, names)}
       facts={[
@@ -134,7 +146,7 @@ function TieDetail({
         { label: '裁决', value: row.decision ? row.decision.candidate : '还没有' },
       ]}
       technical={techRows([
-        { label: '运单标识', value: row.shipmentRequestId },
+        ...shipmentTechnicalRows(row, numberOf),
         { label: '包裹标识', value: row.declaredParcelId },
         { label: '客户编码', value: row.customerAccountId },
         { label: '受理基线', value: row.acceptanceBaseline },

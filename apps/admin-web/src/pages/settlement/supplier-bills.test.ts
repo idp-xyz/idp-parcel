@@ -8,21 +8,24 @@ import {
   claimIdFor,
   classificationChoices,
   currentExpectedCosts,
+  differingClassificationWords,
   hasReceptionProblems,
   lineDisposition,
   matchSummary,
   newPayableId,
   NO_EXPECTED_COST,
   operatorWords,
+  pageCountSummary,
   payableLabel,
   payableNumberAbsenceNote,
   payableNumberName,
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
+  withExactHits,
   type ReceptionDraft,
 } from './supplier-bills';
-import type { SupplierBillReceptionRecord, SupplierExpectedCostRecord } from './api';
+import type { AuditedPayableRecord, SupplierBillReceptionRecord, SupplierExpectedCostRecord } from './api';
 
 const bill = (overrides: Partial<SupplierBillReceptionRecord> = {}): SupplierBillReceptionRecord => ({
   claim: 'SYN-PARTY-CARRIER-TRUNK-01/INV-2610-001',
@@ -39,6 +42,7 @@ const bill = (overrides: Partial<SupplierBillReceptionRecord> = {}): SupplierBil
   payableAmount: '1000',
   matchedWithoutPayableCount: 1,
   auditAuthorityConfigured: true,
+  auditAuthorityConfiguredNow: true,
   receivedAt: '2026-10-31T08:00:00Z',
   recordedAt: '2026-11-01T08:00:00Z',
   ...overrides,
@@ -64,7 +68,10 @@ test('应付标识页面生成，前缀不是应付单号的 AP-', () => {
 
 test('账单走到哪一步：先说要人动手的那件', () => {
   equal(billProgress(bill()).label, '待审核');
-  equal(billProgress(bill({ auditAuthorityConfigured: false })).label, '审核人未配置');
+  equal(billProgress(bill({ auditAuthorityConfiguredNow: false })).label, '审核人未配置');
+  // 审核人登没登看此刻的审核授权册：接收时没登、后来补登了，就是待审核，不再说未配置；接收时登了、后来册上没有了，照此刻说。
+  equal(billProgress(bill({ auditAuthorityConfigured: false, auditAuthorityConfiguredNow: true })).label, '待审核');
+  equal(billProgress(bill({ auditAuthorityConfigured: true, auditAuthorityConfiguredNow: false })).label, '审核人未配置');
   equal(billProgress(bill({ matchedWithoutPayableCount: 0 })).label, '有差异待核实');
   const done = billProgress(bill({ matchedWithoutPayableCount: 0, classificationCounts: { MATCHED: 3 } }));
   deepEqual(done, { label: '已审完', tone: 'good' });
@@ -229,4 +236,48 @@ test('审核答复说人话：交回应付单号；越权上限、撞号、三�
   match(auditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'PAYABLE_ACCOUNT_UNCONFIGURED' }, '1'), /应付归集账户/);
   match(auditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'AUDIT_ESCALATION_UNCONFIGURED' }, '1'), /越权审核上限（未配置）/);
   match(auditAnswerText({ outcome: 'LINE_NOT_AUDITABLE' }, '3'), /先核实差异/);
+  match(auditAnswerText({ outcome: 'LINE_NOT_AUDITABLE' }, '3'), new RegExp(differingClassificationWords()));
+});
+
+test('对不上的分类从取值表取界面词：不含已对上，不出英文码', () => {
+  const words = differingClassificationWords();
+  ok(words.includes('价格不符') && words.includes('找不到对应运输'));
+  equal(words.includes('已对上'), false);
+  equal(/[A-Z_]{4,}/.test(words), false);
+});
+
+test('两本册截了页就不说「共几份」，只说列出了最近的几份、指标不算页外的', () => {
+  equal(pageCountSummary(3, 2, false, '份', '收到'), '共 3 份，当前显示 2 份');
+  const cut = pageCountSummary(200, 12, true, '份', '收到');
+  match(cut, /只列出最近收到的 200 份/);
+  match(cut, /指标也不算它们/);
+  equal(cut.includes('共 '), false);
+});
+
+test('应付签的检索池：页上那些加上按应付单号在全册里检索到的页外那一笔，同一笔不重复', () => {
+  const payable = (id: string, number?: string): AuditedPayableRecord => ({
+    payable: id,
+    ...(number ? { documentNumber: number } : {}),
+    claim: 'C',
+    line: '1',
+    expectedVersion: 'V1',
+    supplier: 'S',
+    period: '2026-10',
+    legalEntity: 'LE',
+    account: 'ACC',
+    currency: 'CNY',
+    amount: '1',
+    auditor: 'A',
+    auditedAt: '2026-10-31T08:00:00Z',
+    recordedAt: '2026-10-31T08:00:00Z',
+  });
+  const page = [payable('P-1', 'AP-202611-00002'), payable('P-2', 'AP-202611-00001')];
+  deepEqual(
+    withExactHits(page, [payable('P-OLD', 'AP-202501-00001')]).map((row) => row.payable),
+    ['P-1', 'P-2', 'P-OLD'],
+  );
+  deepEqual(
+    withExactHits(page, [payable('P-1', 'AP-202611-00002')]).map((row) => row.payable),
+    ['P-1', 'P-2'],
+  );
 });

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -52,6 +53,11 @@ type ShipmentRequestViewsReader interface {
 		scope domain.AuthorizedQueryScope,
 		number domain.ShipmentDocumentNumber,
 	) ([]ports.ShipmentRequestSummaryRecord, error)
+	ListVisibleByIDs(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		requestIDs []domain.ShipmentRequestID,
+	) ([]ports.ShipmentRequestSummaryRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
@@ -78,6 +84,10 @@ const codeRequestNotVisible = "SHIPMENT_REQUEST_NOT_VISIBLE"
 // 列表分支另收 `documentNumber`（运单号，ADR-0355 决定十一「可按单据号检索」）：带了就只答单据号逐字等于它的那几行，
 // 仍是 LISTED——没有是空数组，不是 404：管理台拿运单号解析委托标识，要分得出「没有这个运单号」与「读不动」。作用域与
 // 不带参数时同一份（Intake 的列表查询），值在 Intake 之后才读，未配置的渠道照旧先答 403。
+//
+// 列表分支还收 `shipmentRequestIds`（逗号分隔的一组委托标识，至多 maxShipmentRequestIDsPerLookup 个）：别的上下文的页面
+// 上出现委托标识时，管理台按页上那几份一次取回运单号（ADR-0355 决定十一），引用方的读模型不复制单据号。作用域仍是列表
+// 查询那一份，与 `shipmentRequestId` 单份查阅同一套；作用域外的与查无的都不出现，仍答 LISTED。两种筛选不并用。
 func NewQueryShipmentRequestViewsEndpoint(
 	intake ShipmentRequestViewsIntake,
 	reader ShipmentRequestViewsReader,
@@ -109,15 +119,27 @@ func serveList(
 		return
 	}
 
+	values := request.URL.Query()
 	var records []ports.ShipmentRequestSummaryRecord
-	if request.URL.Query().Has("documentNumber") {
-		number, parseErr := domain.NewShipmentDocumentNumber(request.URL.Query().Get("documentNumber"))
+	switch {
+	case values.Has("documentNumber") && values.Has("shipmentRequestIds"):
+		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		return
+	case values.Has("documentNumber"):
+		number, parseErr := domain.NewShipmentDocumentNumber(values.Get("documentNumber"))
 		if parseErr != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
 		records, err = reader.ListVisibleByDocumentNumber(request.Context(), query.Scope, number)
-	} else {
+	case values.Has("shipmentRequestIds"):
+		requestIDs, parsed := shipmentRequestIDsOf(values["shipmentRequestIds"])
+		if !parsed {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		records, err = reader.ListVisibleByIDs(request.Context(), query.Scope, requestIDs)
+	default:
 		records, err = reader.ListVisible(request.Context(), query.Scope, query.Limit)
 	}
 	if err != nil {
@@ -134,6 +156,37 @@ func serveList(
 		Outcome:  outcomeListed,
 		Requests: summaries,
 	})
+}
+
+// maxShipmentRequestIDsPerLookup 是一次按标识集合查阅最多带几个委托标识。上限按请求行定：委托标识三十来个字符，一百个连同
+// 分隔符约三千字节，留在常见代理对请求行的限度之内；调用方一页的行多时按这个数分批问。超出是坏请求、不截断——截断会让
+// 调用方把没问到的那几份当成看不见。
+const maxShipmentRequestIDsPerLookup = 100
+
+// shipmentRequestIDsOf 解开 `shipmentRequestIds`：只认一格、逗号分隔、每段都是委托标识，重复的去重；空段、多给一格或
+// 超出上限都答不成立。
+func shipmentRequestIDsOf(raw []string) ([]domain.ShipmentRequestID, bool) {
+	if len(raw) != 1 {
+		return nil, false
+	}
+	parts := strings.Split(raw[0], ",")
+	if len(parts) > maxShipmentRequestIDsPerLookup {
+		return nil, false
+	}
+	seen := make(map[string]bool, len(parts))
+	requestIDs := make([]domain.ShipmentRequestID, 0, len(parts))
+	for _, part := range parts {
+		requestID, err := domain.NewShipmentRequestID(part)
+		if err != nil {
+			return nil, false
+		}
+		if seen[requestID.String()] {
+			continue
+		}
+		seen[requestID.String()] = true
+		requestIDs = append(requestIDs, requestID)
+	}
+	return requestIDs, true
 }
 
 func serveDetail(

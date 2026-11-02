@@ -103,6 +103,64 @@ func TestTheDocumentNumberIsReadBackWithTheRequestAndTheViews(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0355 决定十一——别的上下文的页面按一组委托标识取回运单号：作用域内的那几份带号或带无号情形交回，作用域外的
+// （别的账户、别的租户）与查无此标识的都不出现，重复的标识只命中一行；空组不读也不错。
+//
+// Covers: `AT-PS-180`。
+func TestASetOfShipmentRequestIDsIsLookedUpWithinTheScope(t *testing.T) {
+	views, repository, transactor := newShipmentRequestViews(t)
+	ctx := t.Context()
+
+	numbered := scopedSubmittedRequest(t, "tenant-1", "customer-1", "key-numbered", "request-numbered", submittedAtFixture)
+	numbered, err := numbered.RecordDocumentNumbering(numberedShipmentDocument(t, "P20260906000001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := numbered.CurrentSubmissionVersion().SourceSubmission().Identity()
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		if _, err := repository.Insert(txCtx, identity, numbered); err != nil {
+			return err
+		}
+		return repository.RecordShipmentDocumentNumbering(txCtx, identity, numbered)
+	})
+	legacy := scopedSubmittedRequest(t, "tenant-1", "customer-1", "key-legacy", "request-legacy", submittedAtFixture.Add(-1))
+	mustInsert(t, transactor, ctx, repository, legacy)
+	otherAccount := scopedSubmittedRequest(t, "tenant-1", "customer-2", "key-other-account", "request-other-account", submittedAtFixture)
+	mustInsert(t, transactor, ctx, repository, otherAccount)
+	otherTenant := scopedSubmittedRequest(t, "tenant-2", "customer-1", "key-other-tenant", "request-other-tenant", submittedAtFixture)
+	mustInsert(t, transactor, ctx, repository, otherTenant)
+
+	ids := []domain.ShipmentRequestID{
+		numbered.ShipmentRequestID(),
+		legacy.ShipmentRequestID(),
+		otherAccount.ShipmentRequestID(),
+		otherTenant.ShipmentRequestID(),
+		mustBuild(t, domain.NewShipmentRequestID, "request-missing"),
+		numbered.ShipmentRequestID(),
+	}
+	found, err := views.ListVisibleByIDs(ctx, viewScope(t, "tenant-1", "customer-1"), ids)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("按标识集合：%d 行，%v", len(found), err)
+	}
+	if found[0].ShipmentRequestID != numbered.ShipmentRequestID() || found[1].ShipmentRequestID != legacy.ShipmentRequestID() {
+		t.Fatalf("交回的行不是作用域内那两份：%v、%v", found[0].ShipmentRequestID, found[1].ShipmentRequestID)
+	}
+	if number, present := found[0].DocumentNumbering.Number(); !present || number.String() != "P20260906000001" {
+		t.Fatalf("有号那一份的单据号 = %q（%v）", number, present)
+	}
+	if reason, absent := found[1].DocumentNumbering.Absence(); !absent || reason != domain.IssuedBeforeDocumentNumbering {
+		t.Fatalf("上线前那一份的无号情形 = %v（%v）", reason, absent)
+	}
+
+	wider, err := views.ListVisibleByIDs(ctx, viewScope(t, "tenant-1", "customer-1", "customer-2"), ids)
+	if err != nil || len(wider) != 3 {
+		t.Fatalf("可见账户放宽到两个：%d 行，%v", len(wider), err)
+	}
+	if empty, err := views.ListVisibleByIDs(ctx, viewScope(t, "tenant-1", "customer-1"), nil); err != nil || len(empty) != 0 {
+		t.Fatalf("空组：%v %v", empty, err)
+	}
+}
+
 // Covers: ADR-0355 决定七——开立时单据编号时区未配置的委托记下这个原因，读回与查阅都如实说是这一种，不并成上线前开立。
 //
 // Covers: `AT-PS-178`。

@@ -13,7 +13,7 @@ Blocked by: 无
    - 审核应付册：列出审核应付，带应付单号（`documentNumber` / `documentNumberAbsence`，ADR-0355）、所属主张与行、金额、审核人；可按应付单号、主张、供应商检索。
    - 只读、租户隔离、读不到答 500 不报空；照 UC-SA-004 的结果语义契约取词，不另造状态。
 2. **管理台「账务 → 供应商账单与应付」页**（工作台形态，照改版样板）：两签——供应商账单、审核应付。主列用业务字段（供应商名经往来单位册、账单号、账期、金额、状态胶囊），应付签以应付单号为主列（号名与无号说法取 `vocabulary/document-numbering.ts`），内部标识进技术详情；右栏看明细；检索与指标即筛；诚实态分开。
-3. **接收表单「登记供应商账单」**：任务式，按 UC-SA-004 输入语义契约逐格收（供应商、账单号、账期、币种、各行金额与依据等）。供应商自己的账单号是外部标识（GLOSSARY「外部标识」），按外部标识收与显示；本方内部的主张标识由页面在首次提交前生成做幂等键（ADR-0355 决定十），不让人填。答复说人话（受理、待解析、未受理及理由）。
+3. **接收表单「登记供应商账单」**：任务式，按 UC-SA-004 输入语义契约逐格收（供应商、账单号、账期、币种、各行金额与依据等）。供应商自己的账单号是外部标识（GLOSSARY「外部标识」），按外部标识收与显示；本方内部的主张标识由页面在首次提交前生成做幂等键（接收口载荷里的账单身份由调用方给，ADR-0340 决定一；原票面挂在 ADR-0355 决定十名下是引错了——决定十列的是订舱、运输委托、审核应付与手工发布对账单，没有供应商账单），不让人填。答复说人话（受理、待解析、未受理及理由）。
 4. **审核表单「审核这张账单」**：在账单右栏，按行给出通过 / 争议 / 拒绝与金额范围、依据；审核载荷里的应付标识由页面生成做幂等键（ADR-0340、ADR-0355 决定十）；答复里交回应付单号并在应付签可见；越权上限、编号规则撞号（`numberingCollisionNote('AUDITED_PAYABLE')`）、时区未配置各说人话。
 5. 两张表单都按各自的运营决定授予收起（`SUPPLIER_BILL_RECEPTION`、`SUPPLIER_BILL_AUDIT`；`useMayMakeDecision`，ADR-0315）。
 
@@ -66,4 +66,30 @@ Blocked by: 无
 4. **共享面**：`vocabulary/status.ts` 在总表末尾追加五个匹配分类码；`operator-grants.ts` 追加两个决定原词；`cmd/parcel-api/endpoints_settlement_catalogue.go` 追加两行与两只依赖；`.scratch/at-coverage-inventory.md` 追加一行与一条追记。`AT-SA-232` 若与别的分支撞号，以先进 main 的为准、本票改号。
 5. API 可见改动：账单接收册目录行多出汇总各格（只增不改）；新增两个只读口。对账单页的「供应商账单」签撤掉、移到新页。
 6. 推送方在 main 的 tip 上重生成 AT 盘点总览计数（①、SA 各 +1）与机制清点。
+
+## 评审修订（2026-11-02，作者，钉 `64cfae0c0` 的非作者评审）
+
+提交：合并 `9b208dfd4`、后端 `2546a25f9`、管理台 `0d4a459b8`，加文档与本节一笔。先合 origin/main `3b4720283`（票 10 已进）：`.scratch/at-coverage-inventory.md` 追记两边各加一行，两行都留，票 10 在前、票 11 在后。
+
+**Standards 1（注释数别处的东西）**：`ports.SupplierBillReceptionCatalogueRow` 头注改说「领域里逐行的走向是 `domain.MatchClassification` 的各个取值」，UC 那一层也不再数格；`vocabulary/status.ts` 改说「除它之外的分类」；`supplier-bills.ts` 的 `differingLineCount` 改说「分类不是已对上」、`payableNumberState` 改说「没有号的原因」。顺手清了同类的几处（`SupplierBillPanel` 头注「只有一种」、`seedAuditedPayable` 与用例头注里数形状的词）。分类码不再写进界面句子：`supplier-bills.ts` 立 `matchClassificationHints` 取值表（原 `hints`，登记表单的提示也从它取），`differingClassificationWords()` 从表里取除已对上之外的界面词；`SupplierBillPanel`「对不上的行（…）」与审核答复 `LINE_NOT_AUDITABLE` 那一句都用它。
+
+**Standards 2（变更说明）**：`reconciliation-address.ts` 头注改说地址里为何只有「只看待对账」一项；`ReconciliationPage.tsx` 头注改说供应商账单接收册为何只在「供应商账单与应付」页列（两处列同一本册就各说一套状态与指标）。
+
+**Standards 3（孤儿应付带供应商检索被滤掉）**：`ListAuditedPayables` 的供应商条件改为 `r.supplier_ref IS NULL OR r.supplier_ref = $4`——找不到接收记录的那一笔不因对不上供应商被滤掉，照样走到扫描时的矛盾检查，带不带供应商检索都答错误。`TestAnAuditedPayableWithoutItsReceptionIsAnError` 加三种情形（不检索、按那家供应商、按另一家供应商）都答错误，另证按应付单号点名有接收记录的那一笔照常答。
+
+**Spec 1（审核人未配置是接收时的快照）**：取第一种改法——读口带出此刻的配置，不改快照语义。理由：审核步骤在审核那一刻读审核授权册（`ReceiveSupplierBillHandler.Audit` 调 `LoadSupplierAuditAuthority`），页面要说「现在审核会不会停在未配置」，该看的就是这本册此刻有没有这一组；只把横幅改成「接收时」又不据此说审核结果，租户补登审核人之后状态胶囊就永远说不出「待审核」。账单册目录行加 `AuditAuthorityConfiguredNow`（JSON `auditAuthorityConfiguredNow`，只增），同一条语句里 `EXISTS` 查 `supplier_audit_authority` 的（租户、供应商、责任法人）；`auditAuthorityConfigured` 照旧是接收时写下的快照、语义不动。页面 `billProgress` 与右栏横幅改看此刻那一格，快照进技术详情「接收时审核授权」。真库 `TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow`（后来补登的：快照 false、此刻 true；别的租户、别的责任法人登的不算），前端用例补快照与此刻相反的两种。
+
+**Spec 2（两本册截在 200 行）**：账单册服务端改按到达的业务时刻倒序截页（同刻按主张身份与版本），最新收到的总在页上；两个列表端点向读口多要一行判页外有没有，答复加 `truncated`（只增），多出的那一行不上列。页面工具条截了就不说「共几份」，改说「只列出最近收到的 N 份，更早的没有列出、指标也不算它们」（应付签同理，按审核时间）。应付签的检索词同时当应付单号走服务端精确检索维（`listAuditedPayables({ documentNumber })`，250 毫秒防抖），命中的那一笔并进检索池（`withExactHits`），页外的应付也搜得到；这一问没答出时工具条明说只在这一页里找。真库 `TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage`（主张身份排最前的那份收到最早，截页后不在页上），端点 `TestSupplierBillReceptionQueryFlagsAPageCut` 与应付册用例里的截页一段，前端用例证工具条那句与检索池。
+
+**Spec 3（登记表单的预期成本不按供应商筛）**：查了，**没有可用的格，没做，记缺口**。预期成本的读口（`ports.SupplierExpectedCostCatalogueRow`）与表（迁移 `settlement_accounting/0008` 的 `supplier_expected_cost`）都没有供应商或承运方，领域 `SupplierExpectedCostSpec` 与 `TransportChargeOccurrence` 也没有；唯一沾边的是 `agreement_ref`——它依的那一版供应商协议的版本标签，协议是哪家供应商的归 party-commercial（管理台的 `/commercial-supplier-agreements` 只在协议内容已登记时带供应商，同一标签在 PC 一侧还可能比中不止一版，见 `ErrSupplierAgreementLabelAmbiguous`）。要按供应商筛，得在结算这边新记一格或跨上下文对一次协议，都超出本票「不新增领域概念」的界，按吩咐不硬做。UC-SA-004「给开发的交接」加一行缺口（不挂票号，去处「待立票」）；`currentExpectedCosts` 注释写明为何不筛；登记表单在「账单各行」说明里如实提醒录入的人：预期成本上只记了协议、没记供应商，这里不筛、登记时也不核，选之前看清协议是不是这家的。
+
+**引文纠正**：票面「要做的」第 3 条把「主张标识由页面生成」挂在 ADR-0355 决定十名下，改为 ADR-0340 决定一（载荷里的账单身份由调用方给），并注明原引错了；代码注释与完成记录里没有这处引用。主张标识编码供应商账单号这一权宜做法本身没动（票 13 另行替换）。
+
+**文档**：UC-SA-004 `AT-SA-232` 补截页与 `truncated`、审核授权两格、全册检索、按供应商检索时孤儿也答未形成；交接加上面那一行缺口。AT 盘点 `AT-SA-232` 那一行补三条新用例名。
+
+### 修订后的验证（2026-11-02，本机 PG `127.0.0.1:55432`）
+
+- `go build ./...`、`go vet ./...` 退 0；改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/settlementaccounting/... ./internal/architecture/... ./cmd/... ./migrations/...` 34 个包 ok、0 FAIL（含 PG）；`-v` 抽查真库与装配用例全 PASS、无 SKIP（含新的 `TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage`、`TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow`、改过的 `TestAnAuditedPayableWithoutItsReceptionIsAnError` 与 parcel-api `TestTheSupplierBillBooksShowTheAuditedPayableNumber`）。
+- 前端：`npx tsc -b` 无输出，`pnpm test` 1115 pass / 0 fail，`npx vite build` 退 0。
+- 没有迁移，不另起一次性库；`go run ./tools/at-coverage-counts -check` 仍只差总览计数（合并 origin/main 前后同样），留推送方重生成。本轮没有重走浏览器。
 

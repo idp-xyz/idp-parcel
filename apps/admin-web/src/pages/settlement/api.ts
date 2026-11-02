@@ -194,7 +194,8 @@ export interface CustomerStatementRecord {
 /**
  * 一份供应商账单主张。auditAuthorityConfigured 照实转写而不折成「可审核」：授权未配置时
  * 审核停在未决，不默认放行也不虚构授权人；译成一个动作可用性就是在读面上替审核步骤
- * 做了那个判断。
+ * 做了那个判断。它是接收那一刻的快照，之后不更新；auditAuthorityConfiguredNow 是读这一刻审核授权册上有没有这一组——审核步骤
+ * 在审核那一刻读的是后者，所以「现在审核会不会停在授权未配置」看它。
  *
  * 账单册的几样汇总（票 document-numbering/11）只是求和与计数：classificationCounts 以逐行匹配分类原名作键（MATCHED、
  * QUANTITY_VARIANCE……，界面词经 vocabulary/status），没有的分类没有键；matchedWithoutPayableCount 是已对上而还没有审核应付的
@@ -216,6 +217,7 @@ export interface SupplierBillReceptionRecord {
   payableAmount: string;
   matchedWithoutPayableCount: number;
   auditAuthorityConfigured: boolean;
+  auditAuthorityConfiguredNow: boolean;
   /** 账单到达的业务时刻（录入的人照来件写），不是落库时刻。 */
   receivedAt: string;
   /** 被追加的原主张；缺席即不是追加主张。 */
@@ -230,8 +232,10 @@ export interface CustomerStatementListResponseBody {
   statements: CustomerStatementRecord[];
 }
 
+/** 账单册按收到时间倒序截页；truncated 为真即页外还有更早收到的账单。 */
 export interface SupplierBillReceptionListResponseBody {
   outcome: 'SUPPLIER_BILL_RECEPTIONS_LISTED';
+  truncated: boolean;
   receptions: SupplierBillReceptionRecord[];
 }
 
@@ -633,14 +637,22 @@ export interface AuditedPayableRecord {
   recordedAt: string;
 }
 
+/** 审核应付册按审核时间倒序截页；truncated 为真即同样的检索维之下页外还有更早形成的应付。 */
 export interface AuditedPayableListResponseBody {
   outcome: 'AUDITED_PAYABLES_LISTED';
+  truncated: boolean;
   payables: AuditedPayableRecord[];
 }
 
-/** 审核应付册。读口还收 documentNumber / claim / supplier 几个精确检索维；本页整册取回在页面里检索，不用它们。 */
-export function listAuditedPayables(): Promise<ApiResult<AuditedPayableListResponseBody>> {
-  return exchangeMasterData<AuditedPayableListResponseBody>('/settlement-audited-payables');
+/**
+ * 审核应付册。documentNumber 给了就按应付单号精确检索：服务端在全册里筛，页外的那一笔也找得到（ADR-0355 决定十一「可按单据号
+ * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收 claim / supplier 两维，本页不用。
+ */
+export function listAuditedPayables(filter: { documentNumber?: string } = {}): Promise<ApiResult<AuditedPayableListResponseBody>> {
+  const number = filter.documentNumber?.trim();
+  return exchangeMasterData<AuditedPayableListResponseBody>(
+    number ? `/settlement-audited-payables?documentNumber=${encodeURIComponent(number)}` : '/settlement-audited-payables',
+  );
 }
 
 /** 接收口的载荷（registrationjson.SupplierBillReceptionFromJSONForTenant）：未知字段按坏报文拒，可缺的几格缺就不写。 */

@@ -20,6 +20,14 @@ export function shipmentNoOf(shipmentRequestId: string): string {
   return shipmentRequestId.startsWith(shipmentPrefix) ? shipmentRequestId.slice(shipmentPrefix.length) : shipmentRequestId;
 }
 
+/**
+ * 屏上一个号可能对应的委托标识:原样那一个,以及它若是去了前缀的短写法,补回前缀的那一个。shipmentNoOf 不替没有前缀的
+ * 标识猜结构、原样交回,所以原样那一个也要问——补前缀只是多问一处,不是断定它就是短写法。
+ */
+export function shipmentRequestIdsOfDisplay(display: string): string[] {
+  return display.startsWith(shipmentPrefix) ? [display] : [display, shipmentPrefix + display];
+}
+
 /** 一张运单在屏上的运单号:有单据号显单据号(原样,不裁前缀);没有就显去前缀的委托标识。 */
 export function shipmentDisplayNoOf(shipment: { shipmentRequestId: string; documentNumber?: string }): string {
   return shipment.documentNumber ?? shipmentNoOf(shipment.shipmentRequestId);

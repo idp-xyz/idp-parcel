@@ -37,7 +37,7 @@ func seedSupplierBill(t *testing.T, fixture *catalogueFixture, tenant, claim, ve
 		tenant, claim, version, supplier, recordedAt, operationEvidence)
 }
 
-// seedAuditedPayable 播一笔应付。number 与 absence 照库上两列的三种形状给：有号、时区未配置、两列都空（上线前开立）。
+// seedAuditedPayable 播一笔应付。number 与 absence 照库上两列能有的形状给：有号、时区未配置、两列都空（上线前开立）。
 func seedAuditedPayable(t *testing.T, fixture *catalogueFixture, tenant, payable, claim, line string, amount int64, number, absence any, auditedAt time.Time) {
 	t.Helper()
 	fixture.seed(t,
@@ -66,7 +66,7 @@ func TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables(t *testing.T) 
 	}
 	audited, pending := rows[0], rows[1]
 	if audited.Claim != "SYN-SUP-01/INV-1" || pending.Claim != "SYN-SUP-01/INV-2" {
-		t.Fatalf("按主张身份排序走样：%+v", rows)
+		t.Fatalf("同一收到时刻要按主张身份排：%+v", rows)
 	}
 	if audited.TotalClaimedMinor != 3300 || audited.LineCount != 3 || audited.MatchCount != 3 {
 		t.Fatalf("主张金额之和或行数走样（要 3300、3、3）：%+v", audited)
@@ -127,7 +127,7 @@ func TestSupplierBillLinesCarryMatchAndPayablePerLine(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-232、AT-SA-231 — 审核应付册新形成的在前，带应付单号或无号原因（有号、时区未配置、上线前开立三种分开）、
+// Covers: AT-SA-232、AT-SA-231 — 审核应付册新形成的在前，带应付单号或无号原因（有号、时区未配置、上线前开立各自分开）、
 // 所属主张与行、供应商与账期（取接收记录）、审核授权方与点审核的人；按应付单号、主张、供应商精确检索，几维同给取交集；
 // 只列本租户。
 func TestAuditedPayableCatalogueListsNumbersAndFilters(t *testing.T) {
@@ -195,11 +195,88 @@ func TestAuditedPayableCatalogueListsNumbersAndFilters(t *testing.T) {
 }
 
 // Covers: AT-SA-232 — 一笔应付找不到它所属主张的接收记录是册上矛盾，答错误（端点答 NO_ANSWER_FORMED），不把它当成没有供应商
-// 上列，也不从列表里悄悄漏掉。
+// 上列，也不从列表里悄悄漏掉；按供应商检索时也答错误，不因为对不上供应商就把它滤掉、只交回其余几笔。
 func TestAnAuditedPayableWithoutItsReceptionIsAnError(t *testing.T) {
 	fixture := newCatalogueFixture(t)
+	seedSupplierBill(t, fixture, catalogueTenant, "SYN-SUP-01/INV-1", "1", "SYN-SUP-01", "", catalogueBaseAt)
+	seedAuditedPayable(t, fixture, catalogueTenant, "SYN-PAYABLE-1", "SYN-SUP-01/INV-1", "L1", 1000, "AP-202608-00001", nil, catalogueBaseAt)
 	seedAuditedPayable(t, fixture, catalogueTenant, "SYN-PAYABLE-ORPHAN", "SYN-SUP-01/INV-404", "L1", 1000, "AP-202608-00009", nil, catalogueBaseAt)
-	if _, err := fixture.statement.ListAuditedPayables(t.Context(), catalogueTenantID(t, catalogueTenant), ports.AuditedPayableFilter{}, 10); err == nil {
-		t.Fatal("没有接收记录的应付要答错误")
+	tenant := catalogueTenantID(t, catalogueTenant)
+	for name, filter := range map[string]ports.AuditedPayableFilter{
+		"不检索":       {},
+		"按那家供应商检索":  {Supplier: "SYN-SUP-01"},
+		"按另一家供应商检索": {Supplier: "SYN-SUP-02"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if rows, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, filter, 10); err == nil {
+				t.Fatalf("没有接收记录的应付要答错误，却交回了 %+v", rows)
+			}
+		})
+	}
+	// 按应付单号或主张检索点名的是有接收记录的那一笔，孤儿不在检索范围里，照常答。
+	rows, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{DocumentNumber: "AP-202608-00001"}, 10)
+	if err != nil || len(rows) != 1 || rows[0].Payable != "SYN-PAYABLE-1" {
+		t.Fatalf("按应付单号检索有接收记录的那一笔要照常答：err=%v rows=%+v", err, rows)
+	}
+}
+
+// seedReceptionReceivedAt 播一份一行的账单，到达时刻与接收时的审核授权快照由调用方给。
+func seedReceptionReceivedAt(t *testing.T, fixture *catalogueFixture, claim, supplier string, receivedAt time.Time, authorityAtReception bool) {
+	t.Helper()
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.supplier_bill_reception
+			(tenant_id, claim_id, claim_version, supplier_ref, legal_entity, period_ref,
+			 currency, content_digest, claim, matches, audit_authority_configured, recorded_at)
+		 VALUES ($1, $2, '1', $3, 'SYN-LE-01', 'SYN-PER-2608', 'CNY', 'SYN-DIGEST',
+		         jsonb_build_object('lines', '[{"line":"L1","fee_item":"SYN-FEE-01","claimed_minor":1000}]'::jsonb,
+		                            'received_at', $4::timestamptz),
+		         '[{"line":"L1","classification":"MATCHED","expected":"SYN-EXP-1","claimed_minor":1000,
+		            "expected_minor":1000,"matched_at":"2026-08-30T09:00:00Z"}]'::jsonb,
+		         $5, $6)`,
+		catalogueTenant, claim, supplier, receivedAt, authorityAtReception, catalogueBaseAt)
+}
+
+// Covers: AT-SA-232 — 账单册按到达的业务时刻倒序上列、按页大小截：截掉的是最早收到的，最新收到的那一份总在页上，与主张身份
+// 怎么排无关。
+func TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	// 主张身份排在最前的那一份收到得最早：按主张身份截页，它会挤掉最新收到的那一份。
+	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/A-OLDEST", "SYN-SUP-01", catalogueBaseAt.Add(-48*time.Hour), true)
+	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/Z-LATEST", "SYN-SUP-01", catalogueBaseAt, true)
+	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/M-MIDDLE", "SYN-SUP-01", catalogueBaseAt.Add(-24*time.Hour), true)
+
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), 2)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
+	}
+	if rows[0].Claim != "SYN-SUP-01/Z-LATEST" || rows[1].Claim != "SYN-SUP-01/M-MIDDLE" {
+		t.Fatalf("要按收到时间倒序截页、最新收到的在前：%s、%s", rows[0].Claim, rows[1].Claim)
+	}
+}
+
+// Covers: AT-SA-232 — 审核授权分两格：接收时的快照照实转写，另一格是读这一刻审核授权册上有没有这家供应商与这个责任法人那一组。
+// 接收时没登、后来补登了，现状说已配置、快照仍说没配；接收时登了的，快照不被现状改写。
+func TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/LATER-REGISTERED", "SYN-SUP-01", catalogueBaseAt, false)
+	seedReceptionReceivedAt(t, fixture, "SYN-SUP-02/STILL-MISSING", "SYN-SUP-02", catalogueBaseAt.Add(-time.Hour), false)
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.supplier_audit_authority (tenant_id, supplier_id, legal_entity_id, auditor_id, registered_at)
+		 VALUES ($1, 'SYN-SUP-01', 'SYN-LE-01', 'SYN-AUDITOR-ROLE', $2),
+		        ('tenant-b', 'SYN-SUP-02', 'SYN-LE-01', 'SYN-AUDITOR-ROLE', $2),
+		        ($1, 'SYN-SUP-02', 'SYN-LE-OTHER', 'SYN-AUDITOR-ROLE', $2)`,
+		catalogueTenant, catalogueBaseAt.Add(time.Hour))
+
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
+	}
+	registered, missing := rows[0], rows[1]
+	if registered.AuditAuthorityConfigured || !registered.AuditAuthorityConfiguredNow {
+		t.Fatalf("后来补登的：快照要仍是 false、现状要是 true：%+v", registered)
+	}
+	// 别的租户登的、本租户别的责任法人登的，都不是这一组。
+	if missing.AuditAuthorityConfigured || missing.AuditAuthorityConfiguredNow {
+		t.Fatalf("这一组一直没登，两格都要是 false：%+v", missing)
 	}
 }

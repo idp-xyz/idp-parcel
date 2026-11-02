@@ -144,6 +144,9 @@ func (catalogue *StatementCatalogue) FindSupplierBillLines(
 // ListAuditedPayables 上列审核应付，新形成的在前。供应商与账期取这份主张最早落库的那一版接收记录（见
 // ports.AuditedPayableCatalogueRow）；一笔应付找不到它的接收记录就是册上矛盾——审核只从接收记录起步——答错误，不把它当作
 // 「没有供应商」上列，也不悄悄从列表里漏掉。
+//
+// 供应商检索维放过找不到接收记录的那几笔（r.supplier_ref IS NULL），让它们照样走到扫描时的矛盾检查：供应商只能从接收记录
+// 取，用 join 出来的供应商去比，孤儿在比较这一步就被滤掉了，带不带供应商检索就成了两种答法。
 func (catalogue *StatementCatalogue) ListAuditedPayables(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -173,7 +176,7 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 		  WHERE p.tenant_id = $1
 		    AND ($2::text = '' OR p.document_number = $2)
 		    AND ($3::text = '' OR p.claim_id = $3)
-		    AND ($4::text = '' OR r.supplier_ref = $4)
+		    AND ($4::text = '' OR r.supplier_ref IS NULL OR r.supplier_ref = $4)
 		  ORDER BY p.audited_at DESC, p.payable_id
 		  LIMIT $5`,
 		tenant.String(), filter.DocumentNumber, filter.Claim, filter.Supplier, limit,

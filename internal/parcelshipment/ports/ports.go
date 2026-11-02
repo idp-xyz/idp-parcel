@@ -1770,6 +1770,14 @@ type ShipmentRequestViews interface {
 		scope domain.AuthorizedQueryScope,
 		number domain.ShipmentDocumentNumber,
 	) ([]ShipmentRequestSummaryRecord, error)
+	// ListVisibleByIDs 按一组委托标识在作用域内取回概要：别的上下文的页面上出现委托标识时，管理台经它取回运单号
+	// （ADR-0355 决定十一）——委托与它的单据号归本上下文，引用方的读模型不复制。作用域外的与查无此标识的同样不出现，
+	// 交回的行因此不说明缺的那几份是哪一种。
+	ListVisibleByIDs(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		requestIDs []domain.ShipmentRequestID,
+	) ([]ShipmentRequestSummaryRecord, error)
 }
 
 // AcceptanceReviewQueueRecord 是复核队列上的一行：一份当前停在「等待人工复核」的

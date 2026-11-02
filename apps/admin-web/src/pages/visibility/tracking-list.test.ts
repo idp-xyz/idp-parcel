@@ -78,7 +78,7 @@ test('当前状态取最后一条已归类条目的里程碑经词典；一条�
   equal(currentStatusLabelOf(trackingRowOf(record([entry({})]))), '未归类');
 });
 
-test('搜索命中运单号或投影版本；状态胶囊按词筛；默认更新时间新→旧', () => {
+test('搜索命中包裹号或投影版本；状态胶囊按词筛；默认更新时间新→旧', () => {
   const rows = [
     trackingRowOf(record([entry({ milestone: 'DELIVERED' })], { parcel: 'DPCL-A', version: 'PRJ-A', derivedAt: '2026-10-28T10:00:00Z' })),
     trackingRowOf(record([entry({ milestone: 'IN_TRANSIT' })], { parcel: 'DPCL-B', version: 'PRJ-B', derivedAt: '2026-10-28T11:00:00Z' })),

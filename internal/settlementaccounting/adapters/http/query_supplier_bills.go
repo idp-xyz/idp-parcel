@@ -152,9 +152,12 @@ var _ AuditedPayableCatalogueReader = ports.AuditedPayableCatalogueRead(nil)
 // 空册仍是 LISTED：「还没有形成过审核应付」是如实答案。
 const outcomeAuditedPayablesListed = "AUDITED_PAYABLES_LISTED"
 
+// auditedPayableListResponse 的 truncated 为真：同样的检索维之下，页外还有更早形成的应付。检索维在库里对全册筛，不是在这一页
+// 里筛，所以按应付单号检索，页外的那一笔照样找得到。
 type auditedPayableListResponse struct {
-	Outcome  string               `json:"outcome"`
-	Payables []auditedPayableBody `json:"payables"`
+	Outcome   string               `json:"outcome"`
+	Truncated bool                 `json:"truncated"`
+	Payables  []auditedPayableBody `json:"payables"`
 }
 
 // auditedPayableBody 逐字段透出一笔审核应付。documentNumber 与 documentNumberAbsence 恰出其一，理由同 supplierBillPayableBody；
@@ -194,10 +197,15 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 		if !ok {
 			return
 		}
-		rows, err := reader.ListAuditedPayables(request.Context(), query.Scope.Tenant(), filter, query.Limit)
+		// 多取一行只为判页外还有没有，理由同账单册。
+		rows, err := reader.ListAuditedPayables(request.Context(), query.Scope.Tenant(), filter, query.Limit+1)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
+		}
+		truncated := len(rows) > query.Limit
+		if truncated {
+			rows = rows[:query.Limit]
 		}
 		bodies := make([]auditedPayableBody, 0, len(rows))
 		for _, row := range rows {
@@ -209,6 +217,8 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 				AuditedAt: rfc3339(row.AuditedAt), RecordedAt: rfc3339(row.RecordedAt),
 			})
 		}
-		writeJSON(response, http.StatusOK, auditedPayableListResponse{Outcome: outcomeAuditedPayablesListed, Payables: bodies})
+		writeJSON(response, http.StatusOK, auditedPayableListResponse{
+			Outcome: outcomeAuditedPayablesListed, Truncated: truncated, Payables: bodies,
+		})
 	})
 }

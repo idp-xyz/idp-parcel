@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +128,26 @@ type viewsReaderDouble struct {
 	// byNumber 是按单据号查到的行；asked 记下被问的那个号（没问过为空）。
 	byNumber []ports.ShipmentRequestSummaryRecord
 	asked    string
+	// byIDs 是按标识集合查到的行；askedIDs 记下被问的那一组（没问过为 nil），askedScope 记下随它递来的作用域。
+	byIDs      []ports.ShipmentRequestSummaryRecord
+	askedIDs   []string
+	askedScope domain.AuthorizedQueryScope
+}
+
+func (double *viewsReaderDouble) ListVisibleByIDs(
+	_ context.Context,
+	scope domain.AuthorizedQueryScope,
+	requestIDs []domain.ShipmentRequestID,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	double.askedIDs = []string{}
+	for _, requestID := range requestIDs {
+		double.askedIDs = append(double.askedIDs, requestID.String())
+	}
+	double.askedScope = scope
+	if double.listErr != nil {
+		return nil, double.listErr
+	}
+	return double.byIDs, nil
 }
 
 func (double *viewsReaderDouble) ListVisibleByDocumentNumber(
@@ -317,6 +339,77 @@ func TestViewsListFiltersByTheDocumentNumber(t *testing.T) {
 		t.Fatalf("空号 = %d", blank.Code)
 	}
 	if failed := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{listErr: errors.New("down")}, http.MethodGet, "/shipment-request-views?documentNumber=P1"); failed.Code != http.StatusInternalServerError {
+		t.Fatalf("读不动 = %d", failed.Code)
+	}
+}
+
+// Covers: `AT-PS-180`；ADR-0355 决定十一——别的上下文的页面按页上那几份委托标识一次取回运单号：`shipmentRequestIds` 逗号分隔、
+// 去重后逐个递给读口，作用域是列表查询那一份，答 LISTED 带各行的单据号；问到的委托一份也不可见时是空数组不是 404；空段、
+// 多给一格、超出上限、与 `documentNumber` 并用都是坏请求且不读；读不动是 5xx。
+func TestViewsListLooksUpASetOfShipmentRequestIDs(t *testing.T) {
+	numbered := viewSummaryRecord(t, "REQ-7")
+	numbering, err := domain.NumberedShipment(mustValue(t, domain.NewShipmentDocumentNumber, "P20261102000007"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	numbered.DocumentNumbering = numbering
+	scope := viewsScope(t)
+	reader := &viewsReaderDouble{byIDs: []ports.ShipmentRequestSummaryRecord{numbered}, rows: []ports.ShipmentRequestSummaryRecord{viewSummaryRecord(t, "REQ-1")}}
+	response := getViews(t, &viewsIntakeDouble{scope: scope}, reader, http.MethodGet, "/shipment-request-views?shipmentRequestIds=REQ-7,REQ-404,REQ-7")
+	var body struct {
+		Outcome  string `json:"outcome"`
+		Requests []struct {
+			ShipmentRequestID string `json:"shipmentRequestId"`
+			DocumentNumber    string `json:"documentNumber"`
+		} `json:"requests"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if response.Code != http.StatusOK || body.Outcome != "LISTED" || len(body.Requests) != 1 ||
+		body.Requests[0].ShipmentRequestID != "REQ-7" || body.Requests[0].DocumentNumber != "P20261102000007" {
+		t.Fatalf("按标识集合查 = %d %s", response.Code, response.Body.Bytes())
+	}
+	if strings.Join(reader.askedIDs, ",") != "REQ-7,REQ-404" {
+		t.Fatalf("读口收到的标识 = %v", reader.askedIDs)
+	}
+	if !reflect.DeepEqual(reader.askedScope, scope) {
+		t.Fatalf("读口收到的作用域不是列表查询那一份：%+v", reader.askedScope)
+	}
+
+	none := getViews(t, &viewsIntakeDouble{scope: scope}, &viewsReaderDouble{}, http.MethodGet, "/shipment-request-views?shipmentRequestIds=REQ-404")
+	var emptyBody map[string]json.RawMessage
+	if err := json.Unmarshal(none.Body.Bytes(), &emptyBody); err != nil || none.Code != http.StatusOK || string(emptyBody["requests"]) != "[]" {
+		t.Fatalf("一份也不可见 = %d %s", none.Code, none.Body.Bytes())
+	}
+
+	atLimit := make([]string, 100)
+	for index := range atLimit {
+		atLimit[index] = fmt.Sprintf("REQ-%d", index)
+	}
+	limitReader := &viewsReaderDouble{}
+	if limit := getViews(t, &viewsIntakeDouble{scope: scope}, limitReader, http.MethodGet, "/shipment-request-views?shipmentRequestIds="+strings.Join(atLimit, ",")); limit.Code != http.StatusOK || len(limitReader.askedIDs) != 100 {
+		t.Fatalf("恰到上限 = %d，问了 %d 个", limit.Code, len(limitReader.askedIDs))
+	}
+
+	for name, target := range map[string]string{
+		"空段":     "/shipment-request-views?shipmentRequestIds=REQ-1,,REQ-2",
+		"空白段":    "/shipment-request-views?shipmentRequestIds=REQ-1,%20",
+		"空值":     "/shipment-request-views?shipmentRequestIds=",
+		"多给一格":   "/shipment-request-views?shipmentRequestIds=REQ-1&shipmentRequestIds=REQ-2",
+		"超出上限":   "/shipment-request-views?shipmentRequestIds=" + strings.Join(append(atLimit, "REQ-100"), ","),
+		"与运单号并用": "/shipment-request-views?shipmentRequestIds=REQ-1&documentNumber=P1",
+	} {
+		malformedReader := &viewsReaderDouble{}
+		if malformed := getViews(t, &viewsIntakeDouble{scope: scope}, malformedReader, http.MethodGet, target); malformed.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d，要 400", name, malformed.Code)
+		}
+		if malformedReader.askedIDs != nil || malformedReader.asked != "" {
+			t.Fatalf("%s：坏请求读了读口", name)
+		}
+	}
+
+	if failed := getViews(t, &viewsIntakeDouble{scope: scope}, &viewsReaderDouble{listErr: errors.New("down")}, http.MethodGet, "/shipment-request-views?shipmentRequestIds=REQ-1"); failed.Code != http.StatusInternalServerError {
 		t.Fatalf("读不动 = %d", failed.Code)
 	}
 }
