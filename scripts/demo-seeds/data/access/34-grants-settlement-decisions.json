@@ -36,6 +36,24 @@
       "decisionKind": "SUPPLIER_BILL_AUDIT",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-SUPPLIER-BILL-AUDIT-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-STATEMENT-DISPUTE-REGISTRATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STATEMENT_DISPUTE_REGISTRATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-STATEMENT-DISPUTE-REGISTRATION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-STATEMENT-DISPUTE-RESOLUTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STATEMENT_DISPUTE_RESOLUTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-STATEMENT-DISPUTE-RESOLUTION-01"
     }
   ]
 }

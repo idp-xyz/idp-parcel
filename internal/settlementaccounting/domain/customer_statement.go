@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 )
@@ -30,6 +31,9 @@ var (
 	ErrInclusionBackfillsPeriod = errors.New("settlement accounting: an inclusion cannot backfill the original period")
 	ErrInvalidDispute           = errors.New("settlement accounting: invalid statement dispute")
 	ErrDisputeResolved          = errors.New("settlement accounting: the dispute is already resolved")
+	// ErrDisputeOnVoidedStatement：已作废的单不收新争议（ADR-0353 决定三）。整单已不应继续有效，其中的费用要在替代单上再出具，
+	// 对着作废单提的异议没有一张有效的单可以落；作废之前已开的争议照旧在，等人处理。
+	ErrDisputeOnVoidedStatement = errors.New("settlement accounting: a voided statement takes no new dispute")
 )
 
 // StatementNumber 是对账单的固定单号：同一发布意图不得生成两个单号，作废后替代单
@@ -534,6 +538,16 @@ const (
 	DisputePendingReview
 )
 
+// DisputeResolutionKindFromName 按字面取值认处理走向，给运营决定口的载荷用。
+func DisputeResolutionKindFromName(name string) (DisputeResolutionKind, error) {
+	for kind := DisputeAccepted; kind <= DisputePendingReview; kind++ {
+		if kind.String() == name {
+			return kind, nil
+		}
+	}
+	return DisputeResolutionKindInvalid, fmt.Errorf("%w: dispute resolution %q", ErrBlankValue, name)
+}
+
 func (kind DisputeResolutionKind) valid() bool {
 	return slices.Contains(DisputeResolutionKinds(), kind)
 }
@@ -591,6 +605,13 @@ func OpenStatementDispute(
 ) (StatementDispute, error) {
 	if !statement.number.valid() || !dispute.valid() || !reason.valid() || openedAt.IsZero() {
 		return StatementDispute{}, ErrInvalidDispute
+	}
+	// 争议针对的是已经发给客户的那张单：提出时刻早于发布，说的就不是这张单。
+	if openedAt.Before(statement.PublishedAt()) {
+		return StatementDispute{}, ErrInvalidDispute
+	}
+	if _, _, voided := statement.Voided(); voided {
+		return StatementDispute{}, ErrDisputeOnVoidedStatement
 	}
 	line, found := statement.LineFor(charge)
 	if !found {

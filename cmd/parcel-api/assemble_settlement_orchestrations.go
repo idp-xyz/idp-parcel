@@ -293,6 +293,41 @@ func (orchestrations settlementOrchestrations) AuditSupplierBill(
 	return result, nil
 }
 
+// OpenDispute 在一笔事务里代登记一项争议。争议不过结算时点那一道门：门管确认与截单什么时候能动，客户什么时候提出异议不由它定
+// （ADR-0353 决定一）。
+func (orchestrations settlementOrchestrations) OpenDispute(
+	ctx context.Context,
+	command saapplication.OpenDisputeCommand,
+) (saapplication.StatementResult, error) {
+	var result saapplication.StatementResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		opened, handleErr := orchestrations.cutoff.OpenDispute(txCtx, command)
+		result = opened
+		return handleErr
+	})
+	if err != nil {
+		return saapplication.StatementResult{}, err
+	}
+	return result, nil
+}
+
+// ResolveDispute 在一笔事务里对一项争议形成处理（ADR-0353 决定二）。
+func (orchestrations settlementOrchestrations) ResolveDispute(
+	ctx context.Context,
+	command saapplication.ResolveDisputeCommand,
+) (saapplication.StatementResult, error) {
+	var result saapplication.StatementResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		resolved, handleErr := orchestrations.cutoff.ResolveDispute(txCtx, command)
+		result = resolved
+		return handleErr
+	})
+	if err != nil {
+		return saapplication.StatementResult{}, err
+	}
+	return result, nil
+}
+
 // occupationConversion 装费用确认同笔的占用收口（ADR-0343）：冻结与暴露账本、控制作用域锁、转出册，以及重算入账余额与已确认未结
 // 的那一口（与客户收款映射同一个 CustomerReceiptPostings、同一个求法）。parcel-api 与 parcel-dispatch 的确认入口装的是同一组册，
 // 两个进程各装一份，答案不因从哪个进程进来而不同。

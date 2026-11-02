@@ -57,4 +57,27 @@ func TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately(t *testing.T)
 			t.Fatalf("%s 没有原样读回", kind)
 		}
 	}
+
+	// Covers: AT-SA-228、AT-SA-229（接入身份半边）——登记争议与处理争议两种授予登得进（access_identity 0037），各是各的一种：
+	// 能代客户登记的不因此能处理（ADR-0353 决定一、二）。
+	for index, kind := range []accessidentity.DecisionKind{
+		accessidentity.DecisionStatementDisputeRegistration, accessidentity.DecisionStatementDisputeResolution,
+	} {
+		holder := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-DISPUTE-"+string(rune('A'+index)))
+		expectOutcome(t, "bind dispute", register.bind(t, bindingOf(t, holder, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+		grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-DISPUTE-"+string(rune('A'+index)), holder,
+			kind, interval, "SYN-GRANT-BASIS")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectOutcome(t, kind.String(), register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+		standing := register.standing(t, holder)
+		other := accessidentity.DecisionStatementDisputeResolution
+		if kind == other {
+			other = accessidentity.DecisionStatementDisputeRegistration
+		}
+		if !standing.HoldsDecisionAt(kind, at) || standing.HoldsDecisionAt(other, at) {
+			t.Fatalf("%s 没有原样读回，或读成了也持另一种：%+v", kind, standing.Grants())
+		}
+	}
 }

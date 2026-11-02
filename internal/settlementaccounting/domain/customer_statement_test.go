@@ -571,3 +571,26 @@ func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
 		t.Fatalf("error = %v; 回填原周期从重建门溜过", err)
 	}
 }
+
+// Covers: AT-SA-228（领域半边）——争议对着已经发给客户的那张单：提出时刻早于发布的不收；已作废的单不收新争议，答的是作废那一格
+// 而不是笼统的无效（ADR-0353 决定三），作废之前已开的争议不受影响。
+func TestADisputeNeedsAStillValidStatementPublishedBeforeItWasRaised(t *testing.T) {
+	statement := publishedStatement(t)
+	charge := settlementValue(t, domain.NewCustomerChargeID, "charge-1")
+	reason := settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-1")
+	id := settlementValue(t, domain.NewDisputeID, "dispute-v")
+
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidDispute) {
+		t.Fatalf("提出早于发布：error = %v", err)
+	}
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt); err != nil {
+		t.Fatalf("发布那一刻就提出应当收：%v", err)
+	}
+	voided, err := statement.Void(settlementValue(t, domain.NewStatementVoidBasisReference, "void-basis-1"), statementPublishedAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("作废：%v", err)
+	}
+	if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, statementPublishedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
+		t.Fatalf("已作废的单：error = %v", err)
+	}
+}

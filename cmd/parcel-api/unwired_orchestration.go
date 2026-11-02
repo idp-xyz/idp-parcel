@@ -2102,6 +2102,22 @@ func (unwiredSupplierBill) Audit(
 	return settlementapp.AuditResult{}, errOrchestrationNotWired
 }
 
+type unwiredStatementDisputes struct{}
+
+func (unwiredStatementDisputes) OpenDispute(
+	context.Context,
+	settlementapp.OpenDisputeCommand,
+) (settlementapp.StatementResult, error) {
+	return settlementapp.StatementResult{}, errOrchestrationNotWired
+}
+
+func (unwiredStatementDisputes) ResolveDispute(
+	context.Context,
+	settlementapp.ResolveDisputeCommand,
+) (settlementapp.StatementResult, error) {
+	return settlementapp.StatementResult{}, errOrchestrationNotWired
+}
+
 type unwiredTechnicalReceipts struct{}
 
 func (unwiredTechnicalReceipts) Handle(

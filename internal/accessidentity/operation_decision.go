@@ -181,6 +181,13 @@ const (
 // 其后各方读回承接情况的依据。谁持有是租户取值，未登记时没有人能登记。
 const DecisionPostIntakeManualItemHandling DecisionKind = "POST_INTAKE_MANUAL_ITEM_HANDLING"
 
+// 客户对账单争议的两种运营决定（ADR-0353 决定一、二）：照客户来电或来信代登记一项争议，与核实后形成处理结果。UC-SA-003 要求争议
+// 处理单独授权；登记的通常是客服、处理的是财务，能代客户提出异议的人不因此能裁定它，能裁定的人也不因此能替客户提出。
+const (
+	DecisionStatementDisputeRegistration DecisionKind = "STATEMENT_DISPUTE_REGISTRATION"
+	DecisionStatementDisputeResolution   DecisionKind = "STATEMENT_DISPUTE_RESOLUTION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -212,6 +219,7 @@ var decisionKinds = []DecisionKind{
 	DecisionChargeConfirmation, DecisionStatementPublication,
 	DecisionSupplierBillReception, DecisionSupplierBillAudit,
 	DecisionPostIntakeManualItemHandling,
+	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

@@ -32,6 +32,22 @@
       "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-STATEMENT-DISPUTE-REGISTRATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "STATEMENT_DISPUTE_REGISTRATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-STATEMENT-DISPUTE-RESOLUTION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "STATEMENT_DISPUTE_RESOLUTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
     }
   ]
 }
