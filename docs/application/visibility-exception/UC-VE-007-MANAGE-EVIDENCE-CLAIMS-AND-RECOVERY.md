@@ -131,6 +131,8 @@
 | `AT-VE-210` | 同一（批次、项）再次到达，或另一账户撞上同一对键 | 同账户内容相同答已在案的原项，内容不同答未受理并写明原因、不带原项；他账户答未受理、不带原项；接入请求标识只管传输重放 |
 | `AT-VE-211` | 首方索赔口的授予与准入 | 别族令牌、无授予、不在准入范围、依赖不可用各答各的格；首方族三件不设时仍答未配置、不读载荷 |
 | `AT-VE-212` | 合同责任范围声明登记 | 声明归属一个货主客户账户；资格规则按账户读，他账户的合同答声明不在场 |
+| `AT-VE-229` | 客户提交被记录，租户已登单据编号时区 | 索赔项在同一事务内取得索赔单据号（早于资格审核），回执带它；客户自己的项标识与批次号照旧；同一（批次、项）重放答原号不再取号；同一项并发提交只落一项、只占一个号，输家取过的号随它的事务退回；并发提交的不同项各拿一个号、互不相同；两个租户各数各的，按月重置 |
+| `AT-VE-230` | 记录索赔时租户没登单据编号时区，或单据号撞上已用的号到了跳号上限，或开立事务回滚 | 没登时区照常记录、不带号、回执与册面说「单据编号时区未配置」；撞号这一次不记录，答「编号规则撞号」，取过的流水全部退回；回滚的那一次号随之退回，下一次开立拿到它 |
 
 ## 给开发的交接
 
@@ -138,4 +140,4 @@
 
 完成本用例只证明 VE 的资格、外部动作和责任链可追溯，不证明赔付或追偿金额已经形成，更不证明资金已经收付或核销。
 
-单据号：CONTEXT「客户索赔项」规定客户提交被记录时取得索赔单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），今天记录不取号；承接 [document-numbering/06](../../../.scratch/document-numbering/issues/06-exception-case-and-claim-numbers.md)。
+单据号：CONTEXT「客户索赔项」规定客户提交被记录时取得索赔单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），已补（[document-numbering/06](../../../.scratch/document-numbering/issues/06-exception-case-and-claim-numbers.md)）：受理编排在（批次、项）未在案、要落单的那一步经本上下文的取号端口（`ClaimNumberIssuer`，适配器 `vepostgres.DocumentNumbers`）取号，号随索赔项同一条记录落库（VE 迁移 0033），三判与撤回不换号；parcel-api 的受理事务即开立事务，取了号却没落单（写库失败、并发受理输给另一方）时回滚退号。首方索赔回执新增 `documentNumber`（没有号时带 `numberlessReason`），撞号答 `NUMBERING_RULE_COLLISION`；索赔册与追偿册分别带索赔号与关联案件的案件号，管理台索赔与追偿页以它们指认。

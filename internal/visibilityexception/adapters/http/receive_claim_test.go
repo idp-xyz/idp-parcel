@@ -208,7 +208,7 @@ func serveClaim(t *testing.T, intake visibilityhttp.ClaimIntake, receiver visibi
 	return recorder
 }
 
-// Covers: UC-VE-007「先保留原始提交事实」经 HTTP 面——受理成立 201 带回执（批次、项、
+// Covers: AT-VE-229 HTTP 半边、UC-VE-007「先保留原始提交事实」经 HTTP 面——受理成立 201 带回执（批次、项、
 // 索赔单据号、提交时间），重放同一提交 200 返已有、带原号；**响应体结构上没有资格与结论字段**（三判分步，
 // 受理端点不暴露审核进度）。
 func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
@@ -263,7 +263,7 @@ func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定七、八经 HTTP 面——单据编号时区未配置时照常受理（201），回执不带 documentNumber（不答空串）、
+// Covers: AT-VE-230 HTTP 半边、ADR-0355 决定七、八经 HTTP 面——单据编号时区未配置时照常受理（201），回执不带 documentNumber（不答空串）、
 // numberlessReason 说为什么；撞号是已形成的业务答案：200 NUMBERING_RULE_COLLISION，不带回执。
 func TestAClaimReceiptSaysWhyItHasNoNumberAndACollisionIsAFormedAnswer(t *testing.T) {
 	unnumbered := serveClaim(t, claimIntakeDouble{command: claimCommandOf(t)},

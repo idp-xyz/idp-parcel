@@ -17,7 +17,7 @@ const (
 	// 不另落一个值——旧行没有被迁移改写过。
 	IssuedBeforeNumbering NumberlessReason = "ISSUED_BEFORE_NUMBERING"
 	// NumberingTimeZoneNotConfigured：开立时租户没有生效的单据编号时区，单据照常开立、不带号（ADR-0355 决定七）。异常案件
-	// 与客户索赔项的开立方都没有业务时区，日期只能按租户的单据编号时区，这一格因此对两类单据都可能出现。
+	// 与客户索赔项的开立方都没有业务时区，日期只能按租户的单据编号时区，这一格因此对这两类单据都可能出现。
 	NumberingTimeZoneNotConfigured NumberlessReason = "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
 )
 

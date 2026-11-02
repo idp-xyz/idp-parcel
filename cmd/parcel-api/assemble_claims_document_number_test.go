@@ -13,7 +13,7 @@ import (
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// Covers: CONTEXT「客户索赔项」生产装配半边（document-numbering/06，证据 S）——`/v1/claims` 的受理事务即开立事务：同一（批次+项）
+// Covers: AT-VE-229、AT-VE-230 生产装配半边、CONTEXT「客户索赔项」（document-numbering/06，证据 S）——`/v1/claims` 的受理事务即开立事务：同一（批次+项）
 // 并发受理只落一项、只占一个号，输掉建行竞争的那一方答赢家与赢家的号，本方取过的号随受理事务回滚退回（DiscardIssuing 由
 // transactionalClaims 兑现），下一项紧接着数；没登单据编号时区的租户照常受理、不带号。
 func TestTheWiredClaimsIssueOneNumberPerRecordedClaimAndRollBackTheLosersNumber(t *testing.T) {

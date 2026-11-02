@@ -61,7 +61,7 @@ func TestADocumentNumberCellRebuildsItsThreeShapesAndRefusesTheRest(t *testing.T
 	}
 }
 
-// Covers: CONTEXT「异常案件」——建立案件时取得案件单据号：新建案件带着号或「单据编号时区未配置」，不能带着「上线前开立」的
+// Covers: AT-VE-227（领域半边）、CONTEXT「异常案件」——建立案件时取得案件单据号：新建案件带着号或「单据编号时区未配置」，不能带着「上线前开立」的
 // 零值建；接单、关闭、归并都不换号，归并不改主案件与被归并案件各自的号。
 func TestACaseIsEstablishedWithItsNumberAndKeepsItThroughItsLifecycle(t *testing.T) {
 	establish := func(id string, number domain.DocumentNumber) (*domain.ExceptionCase, error) {
@@ -103,7 +103,7 @@ func TestACaseIsEstablishedWithItsNumberAndKeepsItThroughItsLifecycle(t *testing
 	}
 }
 
-// Covers: CONTEXT「客户索赔项」——记录提交时取得索赔单据号，客户自己的项标识与批次号照旧在：新受理的索赔不能带着「上线前
+// Covers: AT-VE-229（领域半边）、CONTEXT「客户索赔项」——记录提交时取得索赔单据号，客户自己的项标识与批次号照旧在：新受理的索赔不能带着「上线前
 // 开立」的零值受理；快照往返带着号；上线前受理的存量行（零值）照旧重建，不补号。
 func TestAClaimCarriesItsNumberNextToTheCustomersOwnIdentifiers(t *testing.T) {
 	claim := receivedClaim(t)

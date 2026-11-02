@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// ErrUnexpectedDocumentNumberIssue 说明取号端口交回了封闭三格以外的答案，或说取到了号却没给号。上抛而不译成业务结果：
+// ErrUnexpectedDocumentNumberIssue 说明取号端口交回了封闭集合以外的答案，或说取到了号却没给号。上抛而不译成业务结果：
 // 照「没取到号」落单会造出一份无号原因不实的单据，照撞号不落单则把一次本该成立的开立吞掉。
 var ErrUnexpectedDocumentNumberIssue = errors.New("visibility exception: unexpected document number issue")
 

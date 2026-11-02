@@ -65,7 +65,7 @@ func caseNumberOf(t *testing.T, fixture *synVerticalFixture, parcel string) (str
 	return number, reason
 }
 
-// Covers: CONTEXT「异常案件」派发半边（document-numbering/06，证据 S）——分诊自动建案经生产路由在派生事务里取案件单据号：
+// Covers: AT-VE-227 派发半边、CONTEXT「异常案件」（document-numbering/06，证据 S）——分诊自动建案经生产路由在派生事务里取案件单据号：
 // 租户登了单据编号时区，案件按产品默认模板 `EX-{yyyy}{mm}{dd}-{seq:4}`、以该时区下的服务端日期出号；取号编排与派生事务是
 // 本进程同一个库上装的那一套。
 func TestAnAutoEstablishedCaseTakesItsNumberThroughTheProductionRoute(t *testing.T) {
@@ -106,7 +106,7 @@ func TestAnAutoEstablishedCaseTakesItsNumberThroughTheProductionRoute(t *testing
 	}
 }
 
-// Covers: ADR-0355 决定七派发半边——租户没登单据编号时区：分诊照常自动建案，案件不带单据号，记「单据编号时区未配置」。
+// Covers: AT-VE-228 派发半边、ADR-0355 决定七——租户没登单据编号时区：分诊照常自动建案，案件不带单据号，记「单据编号时区未配置」。
 func TestAnAutoEstablishedCaseWithoutANumberingTimeZoneIsEstablishedWithoutANumber(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	registerDemoDepartureGateSignalRule(t, fixture)

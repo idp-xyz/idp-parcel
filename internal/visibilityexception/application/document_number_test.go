@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// Covers: CONTEXT「异常案件」——建立案件时在同一事务内取得案件单据号：自动建案那一轮取一次号、号随案件进同一份记录；
+// Covers: AT-VE-227（编排半边）、CONTEXT「异常案件」——建立案件时在同一事务内取得案件单据号：自动建案那一轮取一次号、号随案件进同一份记录；
 // 同一连续影响期的重复命中不建案、不取号（同一开立意图重放不再取号）；不建案的走向不取号。
 func TestAnAutoEstablishedCaseTakesOneNumberAndARepeatHitTakesNone(t *testing.T) {
 	fixture := newRaiseFixture(t)
@@ -55,7 +55,7 @@ func TestAnAutoEstablishedCaseTakesOneNumberAndARepeatHitTakesNone(t *testing.T)
 	}
 }
 
-// Covers: ADR-0355 决定七——单据编号时区未配置时案件照常建立、不带单据号，记无号原因。
+// Covers: AT-VE-228（编排半边）、ADR-0355 决定七——单据编号时区未配置时案件照常建立、不带单据号，记无号原因。
 func TestACaseOpenedWithoutANumberingTimeZoneIsEstablishedWithoutANumber(t *testing.T) {
 	fixture := newRaiseFixture(t)
 	fixture.caseNumbers.outcome = ports.DocumentNumberingTimeZoneNotConfigured
@@ -74,7 +74,7 @@ func TestACaseOpenedWithoutANumberingTimeZoneIsEstablishedWithoutANumber(t *test
 	}
 }
 
-// Covers: ADR-0355 决定八——案件单据号撞号：这一轮发作期、结论与案件都不落、不交分诊意图，答未决并指名「案件单据号撞号」；
+// Covers: AT-VE-228（编排半边）、ADR-0355 决定八——案件单据号撞号：这一轮发作期、结论与案件都不落、不交分诊意图，答未决并指名「案件单据号撞号」；
 // 取号端口出错则上抛，不译成业务答案。
 func TestACaseNumberCollisionLandsNothingAndAnIssuerFailureIsRaised(t *testing.T) {
 	fixture := newRaiseFixture(t)
@@ -108,7 +108,7 @@ func TestACaseNumberCollisionLandsNothingAndAnIssuerFailureIsRaised(t *testing.T
 	}
 }
 
-// Covers: CONTEXT「客户索赔项」——客户提交被记录时取得索赔单据号：新项取一次号、号随项落库；同一（批次+项）重放答原项与
+// Covers: AT-VE-229（编排半边）、CONTEXT「客户索赔项」——客户提交被记录时取得索赔单据号：新项取一次号、号随项落库；同一（批次+项）重放答原项与
 // 原号，不再取号；要件不全的提交不取号。
 func TestAReceivedClaimTakesOneNumberAndAReplayAnswersTheOriginal(t *testing.T) {
 	fixture := newClaimFixture(t)
@@ -151,7 +151,7 @@ func TestAReceivedClaimTakesOneNumberAndAReplayAnswersTheOriginal(t *testing.T) 
 	}
 }
 
-// Covers: ADR-0355 决定七、八——单据编号时区未配置时索赔照常记录、不带号；撞号时这一次提交不记下、答「编号规则撞号」，
+// Covers: AT-VE-230（编排半边）、ADR-0355 决定七、八——单据编号时区未配置时索赔照常记录、不带号；撞号时这一次提交不记下、答「编号规则撞号」，
 // 不并进未决；取号出错上抛。
 func TestAClaimWithoutATimeZoneIsRecordedAndACollisionRecordsNothing(t *testing.T) {
 	ctx := context.Background()
@@ -187,7 +187,7 @@ func TestAClaimWithoutATimeZoneIsRecordedAndACollisionRecordsNothing(t *testing.
 	}
 }
 
-// Covers: ADR-0355 决定三——取到号却没落单的受理分支（写库失败、并发受理输给另一方）要调用方回滚，号不留成空号；
+// Covers: AT-VE-229、AT-VE-230（编排半边）、ADR-0355 决定三——取到号却没落单的受理分支（写库失败、并发受理输给另一方）要调用方回滚，号不留成空号；
 // 时区未配置那一格没动序列，输掉竞争也不要求回滚。
 func TestAReceiptThatTookANumberButLandedNothingAsksForARollback(t *testing.T) {
 	ctx := context.Background()

@@ -17,7 +17,7 @@ type DocumentNumberAssigner interface {
 	Assign(ctx context.Context, request docnumber.IssueRequest) (docnumber.Assignment, error)
 }
 
-// DocumentNumbers 实现 ports.CaseNumberIssuer 与 ports.ClaimNumberIssuer：把本上下文的两类单据接到编号组件的取号编排上
+// DocumentNumbers 实现 ports.CaseNumberIssuer 与 ports.ClaimNumberIssuer：把本上下文的异常案件与客户索赔项接到编号组件的取号编排上
 // （ADR-0355 决定四），「这个号是否已用」查本上下文自己的单据表。
 //
 // 取号包在一个保存点里，撞号或出错就退回保存点：编排撞号时已经从序列取过跳号上限那么多个值，提交就全成空号（决定三只许

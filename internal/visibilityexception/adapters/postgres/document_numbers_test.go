@@ -63,7 +63,7 @@ type numberingFixture struct {
 }
 
 // newNumberingFixture 照 cmd/internal/docnumbering.Build 的装法在同一个 DB 上装规则册、序列与取号编排（那个包只许 cmd 导入，
-// 这里按同一组公开构造现装），类型声明只取本上下文的两类。
+// 这里按同一组公开构造现装），类型声明只取本上下文自己的（domain.DocumentNumberTypes）。
 func newNumberingFixture(t *testing.T) *numberingFixture {
 	t.Helper()
 	pool := pgtest.Pool(t)
@@ -198,7 +198,7 @@ func numberOfReceipt(t *testing.T, result application.HandleClaimResult) string 
 	return number
 }
 
-// Covers: CONTEXT「客户索赔项」真库半边——记录提交时在同一事务内取得索赔单据号（按产品默认 `CLM-{yyyy}{mm}-{seq:5}`、租户
+// Covers: AT-VE-229 真库半边、CONTEXT「客户索赔项」——记录提交时在同一事务内取得索赔单据号（按产品默认 `CLM-{yyyy}{mm}-{seq:5}`、租户
 // 单据编号时区下的服务端日期），号随项落库、按（批次+项）读回带着号；同一（批次+项）重放答原号，不再取号——下一项接着数。
 func TestAReceivedClaimTakesItsNumberInTheReceivingTransactionAndAReplayAnswersIt(t *testing.T) {
 	fixture := newNumberingFixture(t)
@@ -235,7 +235,7 @@ func (fixture *numberingFixture) loadClaim(t *testing.T, tenant, item string) *d
 	return claim
 }
 
-// Covers: ADR-0355 决定三——并发开立不撞号：同一租户同一周期里并发受理的各项各拿一个号，互不相同、连成一段，不留空号。
+// Covers: AT-VE-229 真库半边、ADR-0355 决定三——并发开立不撞号：同一租户同一周期里并发受理的各项各拿一个号，互不相同、连成一段，不留空号。
 func TestConcurrentReceiptsNeverShareANumber(t *testing.T) {
 	fixture := newNumberingFixture(t)
 	fixture.registerTimeZone(t, "SYN-TENANT-01")
@@ -273,7 +273,7 @@ func TestConcurrentReceiptsNeverShareANumber(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定三——同一（批次+项）并发受理：只落一项、只占一个号；输掉建行竞争的那一方答赢家与赢家的号，
+// Covers: AT-VE-229 真库半边、ADR-0355 决定三——同一（批次+项）并发受理：只落一项、只占一个号；输掉建行竞争的那一方答赢家与赢家的号，
 // 它取过的号随它的事务回滚退回（DiscardIssuing），下一项接着数、不留空号。
 func TestConcurrentReceiptsOfOneItemLandOnceAndLeaveNoGap(t *testing.T) {
 	fixture := newNumberingFixture(t)
@@ -322,7 +322,7 @@ func TestConcurrentReceiptsOfOneItemLandOnceAndLeaveNoGap(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定五（序列键含租户）与 ADR-0003——两个租户各数各的：都从 00001 起，另一个租户用过同一个号不算已用；
+// Covers: AT-VE-229、AT-VE-230 真库半边、ADR-0355 决定五（序列键含租户）与 ADR-0003——两个租户各数各的：都从 00001 起，另一个租户用过同一个号不算已用；
 // 没登单据编号时区的租户照常受理、不带号。
 func TestNumbersAreCountedPerTenant(t *testing.T) {
 	fixture := newNumberingFixture(t)
@@ -346,7 +346,7 @@ func TestNumbersAreCountedPerTenant(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定五——重置周期随模板最细的日期部件：案件按日、索赔按月，周期一换流水从 1 起；周期用租户单据编号时区
+// Covers: AT-VE-227、AT-VE-229 真库半边、ADR-0355 决定五——重置周期随模板最细的日期部件：案件按日、索赔按月，周期一换流水从 1 起；周期用租户单据编号时区
 // 下的服务端日期算（UTC 前一天 16:00 之后已是上海的次日）。
 func TestTheSequenceResetsWithThePeriodInTheTenantsTimeZone(t *testing.T) {
 	fixture := newNumberingFixture(t)
@@ -391,7 +391,7 @@ func TestTheSequenceResetsWithThePeriodInTheTenantsTimeZone(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定三——开立回滚释放号码：取了号、落了单的事务回滚，号随之退回，下一次开立拿到的还是它，库里没有那一项。
+// Covers: AT-VE-230 真库半边、ADR-0355 决定三——开立回滚释放号码：取了号、落了单的事务回滚，号随之退回，下一次开立拿到的还是它，库里没有那一项。
 func TestARolledBackReceiptReleasesItsNumber(t *testing.T) {
 	fixture := newNumberingFixture(t)
 	fixture.registerTimeZone(t, "SYN-TENANT-01")
@@ -410,7 +410,7 @@ func TestARolledBackReceiptReleasesItsNumber(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定八——撞号：租户换的格式渲染出的号连着撞上已用的号到了跳号上限，这一次提交不记下、答「编号规则撞号」；
+// Covers: AT-VE-228、AT-VE-230 真库半边、ADR-0355 决定八——撞号：租户换的格式渲染出的号连着撞上已用的号到了跳号上限，这一次提交不记下、答「编号规则撞号」；
 // 取过的流水在取号那一步自己的保存点里退回，同一笔开立事务照常提交也不留空号——腾出一个旧号之后，下一次开立拿到的正是
 // 第一个流水。案件那一类同理：撞号时同一事务里别的写入照常提交。
 func TestACollisionAnswersAndReleasesEverythingItTook(t *testing.T) {
@@ -516,7 +516,7 @@ func TestACollisionAnswersAndReleasesEverythingItTook(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「异常案件」真库半边——案件单据号与案件同一条记录落库、同生共死：事务回滚，号与案件一起不在，下一件拿到
+// Covers: AT-VE-227 真库半边、CONTEXT「异常案件」——案件单据号与案件同一条记录落库、同生共死：事务回滚，号与案件一起不在，下一件拿到
 // 退回的那个号。
 func TestACaseNumberLandsWithItsCaseAndRollsBackWithIt(t *testing.T) {
 	fixture := newNumberingFixture(t)
@@ -639,7 +639,7 @@ func TestTheTablesKeepNumbersUniquePerTenantAndReasonsClosed(t *testing.T) {
 	}
 }
 
-// Covers: 案件侧三页读面的单据号——案件册与索赔册按行带号或无号原因（两格都空的旧行读成「上线前开立」），处置请求册与
+// Covers: AT-VE-227、AT-VE-229 读面半边——案件侧查阅页读面的单据号——案件册与索赔册按行带号或无号原因（两格都空的旧行读成「上线前开立」），处置请求册与
 // 追偿册带所属案件的单据号，案件没号就缺这一格、不拿案件标识顶。
 func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 	fixture := newCaseReviewFixture(t)
