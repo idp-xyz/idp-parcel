@@ -1,6 +1,6 @@
 # ADR-0356：客户追踪可按委托的单据号（运单号）查——经 `parcel-shipment` 按（租户，客户账户，单据号）找委托，号查无与属别的账户同答；委托已接受才逐件列当前有效包裹，每件照按包裹查的单件三格作答；另开一口，不改按包裹定位
 
-Status: Accepted（2026-11-02，Claude Code 会话起草，用户经会话过目并同意：四项选择——另开新口、拒绝与撤回并一格、被替代的来源包裹不单列而后继带 `replaces`、任一读失败整页 500——逐项同意，其余各格（待接受不列包裹、一页 50 件、每件带回追踪答复等）未提异议、照草案；代 VE、PS owner 决（代决），用户过目不是 owner 复核。此前 Proposed——草案，同日起草；起草出处是用户 2026-11-02 裁定客户追踪支持「按运单号（委托的单据号）查」、先写 ADR。票 [document-numbering/12](../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md)，出处是票 document-numbering/10 第 4 条的调查。部分停用 [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 决定四一句与 [ADR-0246](./0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一一句，回答 ADR-0246 越权风险点 2 与 ADR-0223 越权风险点 6 的后继一半（被停原句与适用场景见两者的 Status 行）；两者正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 VE owner 复核，第 2、4 点同时待 PS owner 会签。）<!-- 索引注记 -->｜**新口**：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>`，首方客户族、与按包裹查同一项追踪查阅授予。**整单四格**：`PARCELS_LISTED`（委托已接受，含其后派生的已取消、已完成）、`AWAITING_ACCEPTANCE`（已提交未决定）、`CLOSED_WITHOUT_SERVICE`（已拒绝或已撤回）、`SHIPMENT_NOT_FOUND`（号查无、属别的账户、别的租户，没有单据号的委托按号也落这里，同一副字节）。**逐件**：只列当前有效包裹，被替代的来源包裹不单列、后继带 `replaces`；每件 `parcelId` 与提交答复同号，答复与同一时刻按包裹查逐字相同；游标分页，一页至多 50 件。**隔离在键上**：账户是 `parcel-shipment` 读口的查询条件，「存在但不是你的」这一位不出提供方；单据号与成员关系不复制进 `visibility-exception`
+Status: Accepted（2026-11-02，Claude Code 会话起草，用户经会话过目并同意：四项选择——另开新口、拒绝与撤回并一格、被替代的来源包裹不单列而后继带 `replaces`、任一读失败整页 500——逐项同意，其余各格（待接受不列包裹、一页 50 件、每件带回追踪答复等）未提异议、照草案；代 VE、PS owner 决（代决），用户过目不是 owner 复核。此前 Proposed——草案，同日起草；起草出处是用户 2026-11-02 裁定客户追踪支持「按运单号（委托的单据号）查」、先写 ADR。票 [document-numbering/12](../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md)，出处是票 document-numbering/10「第 4 条停在哪（向协调方报）」一节的调查。部分停用 [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 决定四一句与 [ADR-0246](./0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一一句，回答 ADR-0246 越权风险点 2 与 ADR-0223 越权风险点 6 的后继一半（被停原句与适用场景见两者的 Status 行）；两者正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 VE owner 复核，第 2、4 点同时待 PS owner 会签。）<!-- 索引注记 -->｜**新口**：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>`，首方客户族，另立能力词 `CUSTOMER_SHIPMENT_TRACKING_QUERY`（一口一词）。**整单四格**：`PARCELS_LISTED`（委托已接受，含其后派生的已取消、已完成）、`AWAITING_ACCEPTANCE`（已提交未决定）、`CLOSED_WITHOUT_SERVICE`（已拒绝或已撤回）、`SHIPMENT_NOT_FOUND`（号查无、属别的账户、别的租户，没有单据号的委托按号也落这里，同一副字节）。**逐件**：只列当前有效包裹，被替代的来源包裹不单列、后继带 `replaces`；每件 `parcelId` 与提交答复同号，答复与同一时刻按包裹查逐字相同；游标分页，一页至多 50 件。**隔离在键上**：账户是 `parcel-shipment` 读口的查询条件，「存在但不是你的」这一位不出提供方；单据号与成员关系不复制进 `visibility-exception`
 Date: 2026-11-02
 
 ## Context
@@ -17,7 +17,7 @@ Date: 2026-11-02
   - ADR-0246 决定一：「客户追踪查询的业务结果是三格。」一单多件要另一种答复形。
   - ADR-0246 决定五与越权风险点 2：首方客户今天没有别的口读得到委托是否已接受，`NO_VISIBLE_RESULT` 是唯一一条路；「PS 将来若给首方客户开读委托接受状态的口，两处语义得对齐」。
 - **ADR-0223 的否决理由管的是另一种需要。** 它要解决的是提交答复丢失后怎么取回号，原样重发就够。本记录要解决的是：只持有运单号的一方怎么查到这单下的包裹。例如客户的客服、只记了运单号的客户系统、收件方转来的询问。还有拆分合并后的后继包裹：它们的号从来没有答复可带（ADR-0223 越权风险点 6「拆分合并不是提交，没有答复可带」）。
-- **机制上做得到**（票 document-numbering/10 第 4 条的调查）：
+- **机制上做得到**（票 document-numbering/10「第 4 条停在哪（向协调方报）」一节的调查）：
   - `visibility-exception` 已有问 `parcel-shipment` 的消费侧适配器（`adapters/parcelshipment` 的 `ParcelCustomerAccountLookup`，[ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)）。
   - 委托上存着单据号与无号原因（`domain.ShipmentDocumentNumbering`，逐字保存、不做大小写或空白折算）。（租户，类型代码，单据号）唯一（ADR-0355 决定八）。
   - 操作者族的委托查阅已能按 `?documentNumber=` 查，作用域是隔离读注入的可见账户。
@@ -31,7 +31,7 @@ Date: 2026-11-02
 **一、首方客户族新开一口：按委托的单据号查。**（机制）
 
 - `GET /v1/customer-shipment-tracking?documentNumber=<运单号>[&after=<游标>]`。`documentNumber` 就是首方提交答复里的那一格。
-- 能力授予与按包裹查同一项：追踪视图查阅（`CUSTOMER_TRACKING_VIEW_QUERY`，ADR-0139 决定四）。同一用例 UC-VE-008，同一份授权；能逐件查视图的客户端，也能按自己的运单号把这些件一次列出来。不另立授予。
+- 能力授予另立一个词：客户追踪按运单号查询（`CUSTOMER_SHIPMENT_TRACKING_QUERY`）。客户面能力词表一口一词（票 first-party-api/00「代决」一节「客户面能力词表一口一词」），按包裹查的 `CUSTOMER_TRACKING_VIEW_QUERY` 钉在 `/v1/customer-tracking-view` 那一口上，新口要新词。两口同属 UC-VE-008，授予各格的形状相同（`401`、`403`、`503`），只有按包裹查授予的客户端调本口答 `403 CUSTOMER_CLIENT_NOT_GRANTED`。词本身是产品策略，随产品的能力词表发布（ADR-0139 决定二）；哪个客户端被授予它是租户取值（客户渠道册，`PAR-INT-13`），演示租户以 `SYN-` 授予，证据只记 `S`。
 - 租户与货主客户账户只取自客户渠道册的绑定。查询串封闭：`documentNumber` 恰一格，`after` 至多一格；自报账户、租户或多给任何一格都答 `400`（同 `AT-VE-171`）。
 - 号逐字比，不做大小写或空白折算：号是编号规则渲染出来的，折算就是另出了一个号。值立不起来答 `400`。这一判只看输入，与号存不存在无关。
 - **另开一口，不在 `/v1/customer-tracking-view` 上加参数。** 两种定位答的是两种形状：单件一格，与整单一格加逐件列表。一个端点一份成功响应形状、一套 `outcome` 词表（ADR-0140 决定一的描述符）。按包裹定位那一口的路径、参数、三格与字节一个不动，ADR-0223 决定三对它的承诺照旧成立。
@@ -49,7 +49,7 @@ Date: 2026-11-02
 - **待接受不列包裹。** 接受之前声明的包裹不是正式包裹（PS CONTEXT），本上下文没有客户归属可核，逐件只会全是 `VIEW_NOT_FOUND`（ADR-0246 决定五）。客户系统要的声明件号已在提交答复里。
 - **拒绝与撤回并一格。** 对追踪查询，两者的续办相同：停止追踪这个号。拒绝原因不是追踪查询的内容。
 - **整单级不带委托完成汇总。** 已完成、已取消归 `parcel-shipment` 的汇总，也只是派生；每一件的服务终局已在各件视图的终局一维。
-- **读不动答未形成。** 委托读不动，或成页所需的任一读不动，整页答 `500 NO_ANSWER_FORMED`（ADR-0022；UC-VE-008 `AT-VE-168`），不降成 `SHIPMENT_NOT_FOUND`，也不降成某一件的业务格，不出半页。理由：依赖故障的续办是整页退避重发；逐件另立「未形成」一格，客户系统就要多处置一种逐件状态。UC-VE-008「批量查询逐对象返回结果」说的是授权与冲突这些业务结果逐件独立，下文决定三照办。
+- **读不动答未形成。** 委托读不动，或成页所需的任一读不动，整页答 `500 NO_ANSWER_FORMED`（ADR-0022；UC-VE-008 `AT-VE-168`），不降成 `SHIPMENT_NOT_FOUND`，也不降成某一件的业务格，不出半页。理由：依赖故障的续办是整页退避重发；逐件另立「未形成」一格，客户系统就要多处置一种逐件状态。UC-VE-008 规则「批量查询逐对象返回结果，一个对象冲突或失败不扩大其他对象授权，也不回滚合法结果」，本口在读失败上是它的例外：成页所需的任一读失败整页未形成，不按对象分开答；授权与冲突这些业务结果仍逐件独立，下文决定三照办。UC-VE-008 那句规则同时写明这一例外。
 
 **三、逐件：只列当前有效包裹，每件照单件三格作答。**（产品策略；判据是机制）
 
@@ -59,11 +59,11 @@ Date: 2026-11-02
   - `parcelId`：ADR-0223 的定位标识，同一个值可直接用于 `/v1/customer-tracking-view?parcel=`。
   - `customerParcelReference`：该件在委托上声明的客户包裹件号，与提交答复同一格、同一取值（ADR-0223 决定一）。后继包裹与没声明件号的件整键缺席。
   - `replaces`：只在后继包裹上出现。
-  - `outcome` 与 `view`：取值、判据与形状与按包裹查完全相同（ADR-0246 决定一至四）。
+  - `outcome` 与 `view`：取值是 ADR-0246 决定一的三格，判据照决定二至五，形状与按包裹查完全相同。
 - **不变式：同一件、同一时刻，列表里那一格与按包裹查答的逐字相同。**
   - 逐件的视图读与归属反查照 ADR-0246 决定二，不因整单已核过账户就省掉。委托是请求方的，不等于这件包裹此刻唯一归属请求方，例如另有已接受委托同时声明它（标识冲突）。所以请求方自己的已接受委托里，某一件可能答 `VIEW_NOT_FOUND`（ADR-0246 越权风险点 6 同一来由）。
   - 单件的判据只在一处定义。按号查是把按包裹查逐件编排起来，不是第二套判据。
-- **次序。** 接受基线的成员次序，即首个提交版本的次序，与提交答复的 `parcels` 同序。后继包裹按谱系形成的先后排在后面。次序是附带承诺，配对靠 `parcelId` 或 `customerParcelReference`。
+- **次序。** 与首方提交答复的 `parcels` 同序，即首个提交版本的成员次序。接受基线只核成员集合、不定次序：补充形成的新版本只要求成员集合等值，次序可以与首个版本不同，不按它排。后继包裹按谱系形成的先后排在后面。次序是附带承诺，配对靠 `parcelId` 或 `customerParcelReference`。
 - **分页。**
   - 照 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 的游标形状：请求 `after`，答复 `page`（`size`、`next`、`total`）。不开排序、筛选与 `q`。
   - 页大小由首方渠道契约定，调用方不给：一页至多 50 件（产品策略，随首方契约发布）。`total` 是这份委托此刻的当前有效包裹件数。
@@ -107,7 +107,7 @@ Date: 2026-11-02
 - 不另设限流。照首方族的限流（ADR-0140 决定三，票 first-party-api/02）。
 - 不改操作者族的委托查阅读口。
 
-三类：决定二、三是**产品策略**（整单四格与续办、逐件沿用单件三格、只列当前有效包裹、次序、一页 50 件）；决定一、四是**机制**；客户渠道册上谁绑哪个账户、谁有追踪查阅授予，以及单据编号时区，都是**租户取值**（`PAR-INT-13`；ADR-0355 决定七），演示租户以 `SYN-` 登记，证据只记 `S`。
+三类：决定二、三是**产品策略**（整单四格与续办、逐件沿用单件三格、只列当前有效包裹、次序、一页 50 件），决定一里新口的能力词 `CUSTOMER_SHIPMENT_TRACKING_QUERY` 也是；决定一的路径、查询串与键，与决定四，是**机制**；客户渠道册上谁绑哪个账户、谁有按运单号查询的授予，以及单据编号时区，都是**租户取值**（`PAR-INT-13`；ADR-0355 决定七），演示租户以 `SYN-` 登记，证据只记 `S`。
 
 **对已接受记录的作用。** 部分停用 ADR-0223 决定四「不另开按委托号读回逐件号的首方读面。」一句，适用场景是按委托的单据号、经本记录的一口、委托已接受时列当前有效包裹的 `parcelId`；同条按委托标识读回逐件号仍不开，答复丢失照旧靠原样重发取回。部分停用（收窄）ADR-0246 决定一「客户追踪查询的业务结果是三格。」一句，三格收窄为按包裹定位的查询，与按单据号查时列出的每一件；按单据号的查询在整单级另答决定二的四格。回答 ADR-0246 越权风险点 2，两处语义对齐：`PARCELS_LISTED` 与逐件的 `NO_VISIBLE_RESULT` 都只在委托已接受时出现。ADR-0246 决定五「首方客户今天没有别的口读得到委托是否已接受」是写下时的现状；它的决定（接受前按包裹查答 `VIEW_NOT_FOUND`）不变。回答 ADR-0223 越权风险点 6 的后继一半：客户凭运单号能拿到后继包裹的号，凭旧号经 `replaces` 对到新号。
 
@@ -116,7 +116,8 @@ Date: 2026-11-02
 - 代码（票 document-numbering/12）：
   - `parcel-shipment`：按（租户，客户账户，单据号）读委托阶段与当前有效包裹的端口、应用读口与 pg 实现，账户在查询条件里。
   - `visibility-exception`：消费方端口、`adapters/parcelshipment` 的适配器（全函数翻译）、按号查的编排（逐件复用按包裹查的判据，不复制）、新 Intake 与处理器。
-  - `cmd/parcel-api`：首方族端点表加一行，挂同一项授予。
+  - `cmd/parcel-api`：首方族端点表加一行，挂新能力词的授予。
+  - `accessidentity`：客户面能力词表加 `CUSTOMER_SHIPMENT_TRACKING_QUERY`，迁移里那条 CHECK 同笔改；演示种子给 `SYN-` 渠道授这一项。
   - 无迁移。（租户，单据号）唯一约束已在（ADR-0355 决定八）。
 - 文档：UC-VE-008 结果语义「查询标识」一行加委托的单据号，另立「按单据号的整单结果」一行与验收行。VE、PS CONTEXT 各一句规则，CONTEXT-MAP 的 PS → VE 关系补一句。首方契约说明（`docs/api/first-party-api-contract.md`）的「首方族今天开着的口」与演示动线「客户追踪视图」一节，随实现票改。
 - 管理台没有客户视角的追踪页：操作者控制台不持客户令牌（票 first-party-api/05）。演示走种子脚本。
@@ -141,7 +142,8 @@ Date: 2026-11-02
 
 1. **号可猜，隔离只靠键**（VE owner）。
    - 默认模板是明文流水，同一租户的任何客户都能试邻号。别人的号、不存在的号、别的租户的号，答复同一副字节、读次数相同。
-   - 剩下的旁路是时延：行存在而账户不符，与行不存在。实现须把账户放进同一条查询的条件里，不得先按号读出再在消费方比账户，两种情形才都只是一次索引探查。本记录不加常数时间，与 ADR-0246 越权风险点 3 同一立场。
+   - 实现须把账户放进同一条查询的条件里，不得先按号读出再在消费方比账户：那样「存在但不是你的」这一位就出了提供方。
+   - 剩下的旁路是时延，没有拉平：（租户，单据号）唯一约束不含账户列，本记录也不加迁移，号属别的账户时比号不存在多一次取行、再按账户筛掉。本记录不加常数时间，与 ADR-0246 越权风险点 3 同一立场。
    - 但这里比 ADR-0246 更值得盯：随机包裹号探中别人对象的概率近于零，明文流水探中的概率很高。介意的租户可登加扰模板（ADR-0355 决定五）。
 2. **这一口成了首方客户得知委托接受、拒绝或撤回的路**（VE owner；同时待 PS owner 会签）。
    - `visibility-exception` 不定义委托阶段，只把 `parcel-shipment` 的状态译成三种续办。
@@ -168,7 +170,8 @@ Date: 2026-11-02
 - [ADR-0246](./0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)：部分停用（收窄）决定一「客户追踪查询的业务结果是三格。」一句（三格只管按包裹定位与按号查时列出的每一件）；回答越权风险点 2；逐件判据（决定二至五）原样沿用
 - [ADR-0355](./0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)：委托的单据号与界面词「运单号」；（租户，类型代码，单据号）唯一；默认模板是明文流水；无号的两种情形
 - [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md)：首方契约的描述符、`/v1`、兼容性基线、限流；正文不改
-- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：决定四，客户账户只取自客户渠道册的绑定、追踪查阅授予
+- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：决定四，客户账户只取自客户渠道册的绑定；决定二，能力词表归产品策略
+- 票 first-party-api/00「代决」一节「客户面能力词表一口一词」：新口另立能力词的出处
 - [ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)：跨上下文适配器在消费侧、翻译全函数
 - [ADR-0003](./0003-group-tenant-legal-entity-customer-account.md)：租户与货主客户账户的隔离边界
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：按续办分格
@@ -177,4 +180,4 @@ Date: 2026-11-02
 - [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)：查询标识、按单据号的整单结果、`AT-VE-231` 至 `AT-VE-236`
 - [visibility-exception CONTEXT](../domain/visibility-exception/CONTEXT.md)「客户可见性与通知」；[parcel-shipment CONTEXT](../domain/parcel-shipment/CONTEXT.md)「委托」生命周期与身份谱系各条
 - [GLOSSARY](../domain/GLOSSARY.md)「单据号」「委托」「当前有效包裹」「包裹身份谱系」「客户归属」
-- 票 [document-numbering/12](../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md)（实现）；出处票 document-numbering/10 第 4 条
+- 票 [document-numbering/12](../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md)（实现）；出处票 document-numbering/10「第 4 条停在哪（向协调方报）」一节
