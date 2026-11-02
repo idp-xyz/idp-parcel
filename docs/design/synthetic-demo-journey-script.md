@@ -366,6 +366,17 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 > 2026-10-19 实走（票 demo-chain-gaps/96 作者子代理，`79ad6122` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `dcg96_demo`，`seed.sh` 退 0，查阅那一格授予答 `RECORDED`。共享的集成客户端发行方仍不认合成货主系统，另起一只私有 Dex：同一份 `integration-dex.yaml`，宿主端口 5596，`iss` 不变。`submit-one-shipment.sh` 经首方口提交 `SHR-TCTWPC4IVFG5JV2HZUZ4S5XILY`，答 `SUBMITTED`。dispatch 几拍之后，VE 在 `SYN-ACCOUNT-01` 名下形成包裹 `DPCL-HZGZRSETALCQU3RUXADEQGJNOM` 的视图 `CVW-Y6LB5VLNUWLJBOMIUIENS4XLIY`。`customer-token.sh` 取令牌查它，答 `200 CURRENT_VIEW`：里程碑与 ETA `SHOWN`，终局 `PENDING_CONFIRMATION`，说明 `NOT_DISCLOSED`。别账户对照：库里用 SQL 直插一行 `SYN-ACCOUNT-02` 名下的视图（包裹 `SYN-PARCEL-DCG96-ACCOUNT-02`）。同一令牌查它、查一件不存在的包裹，都答 `200 {"outcome":"VIEW_NOT_FOUND"}`。查询串自报 `customerAccount` 答 `400`。不带令牌、配置员令牌、合成报关服务商的集成客户端令牌，都答 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`。用 `parcel-access-register customer-client-revoke` 撤掉这一格授予之后，答 `403 CUSTOMER_CLIENT_NOT_GRANTED`。走完已停进程、删容器、删库。
 
+**按运单号查。** 只记了运单号的一方（客户的客服、客户系统、收件方转来的询问）凭提交答复里的 `documentNumber` 查这一单下的包裹：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>`（[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)；票 [document-numbering/12](../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md)）。同一台合成货主系统、同一枚首方令牌，授予是这一口自己的词 `CUSTOMER_SHIPMENT_TRACKING_QUERY`，种子 `steps/488-access-customer-shipment-tracking.sh` 登它。`submit-one-shipment.sh` 提交之后立即按号查一次，断言 `AWAITING_ACCEPTANCE`，末行带出运单号；`demo-run/chain.sh` 的 `ch_submit` 等到委托`已接受`之后再查一次，断言 `PARCELS_LISTED`、列出的那一件就是提交答复的 `parcelId` 且件号对上。
+
+| 请求 | 答复 |
+|---|---|
+| 本账户的号，委托`已提交`未决定 | `200 AWAITING_ACCEPTANCE`，只有 `outcome` |
+| 本账户的号，委托`已接受` | `200 PARCELS_LISTED`：`parcels` 逐件带 `parcelId`、`customerParcelReference` 与按包裹查同一份 `outcome` / `view`；`page` 的 `size` 50、`total` 件数、`next` 末页为 `null` |
+| 本账户的号，委托`已拒绝`或`已撤回` | `200 CLOSED_WITHOUT_SERVICE` |
+| 别的账户的号、本租户没有的号、没有运单号的委托拿委托标识当号 | `200 SHIPMENT_NOT_FOUND`，几种字节相同 |
+| 自报 `customerAccount`、带 `sort` / `q` / `parcel`、缺号、解不开或别的号的游标 | `400 MALFORMED_REQUEST`，不读委托 |
+| 只持 `CUSTOMER_TRACKING_VIEW_QUERY` 的客户端 | `403 CUSTOMER_CLIENT_NOT_GRANTED` |
+
 ## 对照组：证明门是真的
 
 演示里最容易被质疑的一句是「你们这个 403 是写死的吧」。下面几行对照可以当场答掉，每行只动一处：
