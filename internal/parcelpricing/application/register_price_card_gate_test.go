@@ -18,7 +18,7 @@ func gatedRegisterHandler(catalog *priceCardCatalogDouble, handoff *pricingParam
 	})
 }
 
-// Covers: ADR-0352「基础版之外要开关」——开关关 / 开 × 基础版 / 较新版四格：基础版的卡两种开关下都照常入册并交
+// Covers: AT-PP-048，ADR-0352「基础版之外要开关」——开关关 / 开 × 基础版 / 较新版四格：基础版的卡两种开关下都照常入册并交
 // 「参数已登记」；较新版的卡开关关着答 NEWER_CANONICALIZATION_NOT_ENABLED，仓储与交接口一次都不被叫到；开着照常入册。
 func TestRegisteringANewerCanonicalizationNeedsTheDeploymentSwitch(t *testing.T) {
 	cases := []struct {
@@ -58,7 +58,7 @@ func TestRegisteringANewerCanonicalizationNeedsTheDeploymentSwitch(t *testing.T)
 	}
 }
 
-// Covers: ADR-0352 的明示取舍「门不看库」——同一版较新的卡已在册，开关关着时重放也拒：仓储就算会答已在册也不被问到，
+// Covers: AT-PP-048，ADR-0352 的明示取舍「门不看库」——同一版较新的卡已在册，开关关着时重放也拒：仓储就算会答已在册也不被问到，
 // 不补发交接。开关打开后同一份重放照常答已在册。
 func TestAReplayOfANewerCanonicalizationIsRefusedWhileTheSwitchIsOff(t *testing.T) {
 	registration := registrationFixtureOf(t, totalBoundedPlan(t))
@@ -79,7 +79,7 @@ func TestAReplayOfANewerCanonicalizationIsRefusedWhileTheSwitchIsOff(t *testing.
 	}
 }
 
-// Covers: ADR-0352 对批准并发布的约束——登记被门拒时发布答 PUBLICATION_NOT_LANDED、登记那一格原样交回，草稿留在
+// Covers: AT-PP-049，ADR-0352 对批准并发布的约束——登记被门拒时发布答 PUBLICATION_NOT_LANDED、登记那一格原样交回，草稿留在
 // `已批准`不推进；开关打开后同一份批准再发布即落定，不用重批。
 func TestAPublicationRefusedByTheSwitchCanBeRetriedOnceItIsOn(t *testing.T) {
 	approved := approvedPriceCardDraftOf(t, totalBoundedPlan(t))

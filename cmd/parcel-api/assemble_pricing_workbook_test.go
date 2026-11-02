@@ -352,7 +352,7 @@ func TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase(t *testing.T
 	}
 }
 
-// Covers: `AT-PP-045`，ADR-0349 决定二、四——用到新结构（总额下限、按偏远档位查表）的页面表单草稿走完批准与发布：草稿是 PPC-6 的已校验草稿，
+// Covers: `AT-PP-045`、`AT-PP-049`，ADR-0349 决定二、四——用到新结构（总额下限、按偏远档位查表）的页面表单草稿走完批准与发布：草稿是 PPC-6 的已校验草稿，
 // 批准后发布登进价卡册（RECORDED），册上读回的规范化版本是 PPC-6、摘要等于种子 FULL-03 的摘要。导入这一条路从此能造出 PPC-6 的卡，
 // 所以发布要过部署开关（ADR-0352）：开关关着的那次发布答 PUBLICATION_NOT_LANDED / NEWER_CANONICALIZATION_NOT_ENABLED，册上
 // 没有这张卡、草稿仍是已批准；同一份批准在开关打开后再发布即落定。输入是隔离合成，只记 `S`。
