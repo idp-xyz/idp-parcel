@@ -3,7 +3,7 @@
 Category: enhancement
 Status: in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-placenames（最后一笔见「完成记录」）
 Blocked by: 无
-地盘：`internal/networkrouting`（domain、ports、registrationjson、http、postgres 与各自用例）、`internal/customscompliance`（同上，加登记编排）、两处测试替身的签名（`cmd/parcel-customs-register`、`cmd/parcel-dispatch`）、迁移 `network_routing/0033`、`customs_compliance/0031`、`scripts/demo-seeds`（网络与口岸种子、README 两处）、`apps/admin-web` 的两份 `api.ts` 类型与网络目录读口契约用例、ADR-0353、两份 CONTEXT、GLOSSARY「物流节点」、UC-NR-001（`AT-NR-111`、`AT-NR-112` 与交接一行）、AT 盘点、本票。
+地盘：`internal/networkrouting`（domain、ports、registrationjson、http、postgres 与各自用例）、`internal/customscompliance`（同上，加登记编排）、两处测试替身的签名（`cmd/parcel-customs-register`、`cmd/parcel-dispatch`）、迁移 `network_routing/0033`、`customs_compliance/0031`、`scripts/demo-seeds`（网络与口岸种子、README 两处）、`apps/admin-web` 的两份 `api.ts` 类型与网络目录读口契约用例、ADR-0353、两份 CONTEXT、GLOSSARY「物流节点」、UC-NR-001（`AT-NR-111`、`AT-NR-112` 与交接一行）、UC-CC-003（`AT-CC-457`、`AT-CC-458` 与新立「给开发的交接」一节，修订轮）、AT 盘点、本票。
 出处：用户 2026-11-01 裁定，原话选项「网点、口岸各加一个可选的显示名称，随版本登记；没登名称的照旧显示编码。演示种子补上名称，页面行首显示名称、编码进技术详情」；协调方派单。页面显示名称不在本票，协调方另派。
 
 ## 要做的
@@ -43,7 +43,7 @@ Blocked by: 无
 | `AT-NR-111`、`112` | 读口登了带、没登不带，其余键集不变 | `http::TestNodeVersionsCarryTheirDisplayNameOnlyWhenRegistered` |
 | `AT-NR-111`、`112` | 真库：逐版带名、前版接续闭合照留、检索匹配名称、同修订号主键挡、选版快照不含名称 | `postgres::TestNodeDisplayNamesAreRegisteredPerVersionAndStayOutOfTheSnapshot` |
 | `AT-NR-112` | 迁移在有数据的库上不改旧行、CHECK 第二道网 | `postgres::TestMigration0033LeavesExistingNodeVersionsUnnamedAndUnchanged` |
-| 关务 CONTEXT 口岸名称句 | 领域、翻译、编排比对、读口、真库往返与比对、适用性不受影响、迁移 | `domain::TestACustomsPortDisplayNameIsTakenAsWrittenOrRefused`、`registrationjson::TestACandidatePortRowCarriesAnOptionalDisplayName`、`application::TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison`、`http::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered`、`postgres::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison`、`::TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment`、`::TestMigration0031LeavesExistingCandidatePortsUnnamedAndUnchanged` |
+| `AT-CC-457`、`AT-CC-458`（修订轮前引关务 CONTEXT 口岸名称句） | 领域、翻译、编排比对、读口、真库往返与比对、适用性不受影响、迁移 | `domain::TestACustomsPortDisplayNameIsTakenAsWrittenOrRefused`、`registrationjson::TestACandidatePortRowCarriesAnOptionalDisplayName`、`application::TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison`、`http::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered`、`postgres::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison`、`::TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment`、`::TestMigration0031LeavesExistingCandidatePortsUnnamedAndUnchanged` |
 | 前端读口契约 | 名称原样交出，没登不带 | `apps/admin-web/src/pages/network/network-catalog-read.test.ts` 新增一例 |
 
 AT 号 111、112 核过 origin 各分支与主工作树无撞；盘点①桶在 `AT-NR-110` 之后加两行、文末加追记。口岸那一半没有 UC 承载（见「留给协调方」），用例 `Covers:` 引关务 CONTEXT 规则句，照 CC 的既有口径。
@@ -54,13 +54,23 @@ AT 号 111、112 核过 origin 各分支与主工作树无撞；盘点①桶在 
 
 ### 留给协调方
 
-- **口岸目录没有 UC。** 口岸与申报路径两册是票 admin-remainder-mechanism-batch/03 落的，`docs/application/customs-compliance` 下没有哪份 UC 承载它的 AT 与「给开发的交接」；关务 CONTEXT 新加的「运营查阅以名称称呼口岸」那半句在代码里还没到（管理台口岸页），差距无处可记，暂记在这里。要不要给两册立 UC 或挂到哪份既有 UC，请裁。
+- ~~**口岸目录没有 UC。**~~ 修订轮已按协调方裁定处理，见下。 口岸与申报路径两册是票 admin-remainder-mechanism-batch/03 落的，`docs/application/customs-compliance` 下没有哪份 UC 承载它的 AT 与「给开发的交接」；关务 CONTEXT 新加的「运营查阅以名称称呼口岸」那半句在代码里还没到（管理台口岸页），差距无处可记，暂记在这里。要不要给两册立 UC 或挂到哪份既有 UC，请裁。
 - **页面显示**：网点页、口岸页行首显示名称、编码进技术详情另派；连接、线路、服务区域等引用节点编码的地方要不要也换成名称（读口今天只在节点族带名称，别处要按编码对照），一并裁。
 - **`demo_live`**：存量演示库没有名称，要 `seed.sh --reset` 重灌才有（派单禁碰，我没动）。
 - 生成物（ADR 索引、AT 盘点计数）没重生成，`-check` 只报过期。
+
+### 修订轮（2026-11-01 作者，应协调方评审，评审钉 `738b37a89`、两轴阻断 0 条、四条要修）
+
+1. **口岸交接与 AT 挂处**：customs-compliance 下没有一份 UC 直接承载「关务适用性判断」（它的执行器只被 NR 消费）；在既有 CC UC 里唯一谈到口岸适用性、并以当前口岸作门禁的是 UC-CC-003，挂在那里。UC-CC-003 原无「给开发的交接」，照 UC-NR-001 的形新立一节，一行：运营查阅以名称称呼口岸，后端已带 `displayName`，口岸页由前端票补。口岸用例改挂新号 `AT-CC-457`（登记与读法）、`AT-CC-458`（重放比对、改名、旧版、不进适用性判断）——`AT-CC-456` 已被 `claude-hometodo` 占用，跳过；`Covers:` 改指新号，盘点①桶在 `AT-CC-455` 之后加两行、追记改写。
+2. **CHECK 只守 ASCII 空白**：两份迁移头注与 ADR-0353 决定三如实写明「第二道网，只守 ASCII 空白与长度，宽严随库 ctype；完整校验以领域门为准」，点名 U+0085 / U+00A0 / U+2007 / U+202F。CHECK 本身不改（只改注释，迁移 SQL 语句一字未动）。
+3. **别的族采用行带 `display_name`**：`adoptionOf` 对这一键单独答 `ErrDisplayNameOnlyOnNodeAdoption`「只有物流节点的采用行可以带显示名称，这一族没有名称这一格」，不再落进 `ErrAdoptedContentGiven`「由参考配置与采用路径给出」那一句；用例钉住连接与日历两族，断言新错误、新文案，且不是旧错误、不含「由参考配置」。ADR 决定四同步改写。
+4. **UC-NR-001 `AT-NR-111`**：补上采用行那一路——别的族的采用行带名称拒登并答上面那句，直接行按未知键拒。
+
+自验：`go build ./...`；`go vet ./internal/networkrouting/... ./internal/customscompliance/... ./cmd/...`；改过的 `.go` `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/networkrouting/... ./internal/customscompliance/... ./internal/architecture/... ./migrations/... ./cmd/parcel-dispatch/... ./cmd/parcel-customs-register/... ./cmd/parcel-network-register/... ./tools/...` 全 ok（含 PG）。种子未重灌：种子数据与迁移语句都没动。
 
 ### 提交
 
 - `77febb747` 代码、迁移、用例、管理台类型与契约用例、演示种子
 - `2a5091b48` 文档：ADR-0353、两份 CONTEXT、GLOSSARY、UC-NR-001、AT 盘点、本票
-- 其后一笔只改本票提交清单
+- `738b37a89` 本票提交清单
+- 修订轮一笔（本节之后），其后一笔只改本票提交清单

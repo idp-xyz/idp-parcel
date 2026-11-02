@@ -206,7 +206,7 @@ func TestCandidatePortListTranscribesVersionIntervalsVerbatim(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」（读口半边）——登了名称的版本行带 displayName，没登的（含迁移
+// Covers: AT-CC-457、AT-CC-458（读口半边）——登了名称的版本行带 displayName，没登的（含迁移
 // 之前登下的）行上没有这个键，不答空串、不拿 port 顶。
 func TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered(t *testing.T) {
 	register := &stubPortsPaths{

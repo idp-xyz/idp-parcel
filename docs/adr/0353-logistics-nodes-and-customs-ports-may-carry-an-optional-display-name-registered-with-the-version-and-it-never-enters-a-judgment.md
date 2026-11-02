@@ -34,11 +34,11 @@ Date: 2026-11-01
 - 不含控制字符（C0、C1、DEL）、格式字符（Unicode Cf，含零宽字符与双向覆盖符）与行段分隔符（U+2028、U+2029）。前两类在列表里看不出差别，却让两个看起来相同的名称不相等；双向覆盖符能让显示出来的字序与存下的不同。
 - 不规范化：不改大小写、不做全半角或 Unicode 规范化。比较按存下的串逐字相同。
 - 不要求唯一：两个节点可以叫同一个名字，身份仍是编码。名称不是检索之外任何读口的键。
-- 库上加一条 CHECK 作第二道网（长度、非空白、首尾无空白、POSIX 控制字符）；格式字符与行段分隔符只由领域构造门拒。
+- 库上加一条 CHECK 作第二道网，只守 ASCII 空白与长度，宽严随库 ctype；完整校验以领域构造门为准。在 C.UTF-8 之类的 ctype 下，CHECK 里的 `\s` 与 `[[:cntrl:]]` 不认 U+0085、U+00A0、U+2007、U+202F 等非 ASCII 空白，以不换行空格打头的名称过得了它；格式字符与行段分隔符也只由领域门拒。不为此把 CHECK 改严：绕过领域门直接写库本不是登记路径。
 
 **四、名称是租户取值；参考配置不带，节点的采用行可以随行给。**（机制，取值属租户）
 
-名称是某个租户给自己网络里某个节点或口岸起的称呼，属 ADR-0146 三类里的租户取值。参考配置不带名称——它与租户、修订号、生效时点同理，不进参考配置的原文。采用一个参考配置节点时，采用行可以带 `display_name`，与它带的修订号、生效时点一样是采用方给的那几格；内容（业务时区）照旧只取自参考配置。别的族没有名称这一格：采用行带它答 `ErrAdoptedContentGiven`，直接登记行带它按未知键拒。
+名称是某个租户给自己网络里某个节点或口岸起的称呼，属 ADR-0146 三类里的租户取值。参考配置不带名称——它与租户、修订号、生效时点同理，不进参考配置的原文。采用一个参考配置节点时，采用行可以带 `display_name`，与它带的修订号、生效时点一样是采用方给的那几格；内容（业务时区）照旧只取自参考配置。别的族没有名称这一格：采用行带它答「只有物流节点的采用行可以带显示名称」（`ErrDisplayNameOnlyOnNodeAdoption`，不归「由参考配置与采用路径给出」的 `ErrAdoptedContentGiven`——参考配置不带名称），直接登记行带它按未知键拒。
 
 **五、名称不进任何判断，也不进出处。**（机制）
 
@@ -109,3 +109,4 @@ Date: 2026-11-01
 - [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：演示租户按真实租户对待
 - [网络与路由 CONTEXT](../domain/network-routing/CONTEXT.md)、[关务 CONTEXT](../domain/customs-compliance/CONTEXT.md)、[GLOSSARY「物流节点」](../domain/GLOSSARY.md#物流节点)
 - [UC-NR-001](../application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)：`AT-NR-111`、`AT-NR-112`
+- [UC-CC-003](../application/customs-compliance/UC-CC-003-ASSESS-DECLARATION-READINESS.md)：`AT-CC-457`、`AT-CC-458` 与「给开发的交接」口岸那一行

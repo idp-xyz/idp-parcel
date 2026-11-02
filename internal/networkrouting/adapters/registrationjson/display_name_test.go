@@ -42,7 +42,8 @@ func TestADirectNodeRowCarriesAnOptionalDisplayName(t *testing.T) {
 }
 
 // Covers: AT-NR-111（采用半边，ADR-0353 决定四）——名称是租户取值：节点的采用行可以随行给名称，内容照旧取自参考配置；
-// 参考配置不带名称，不给就没登。别的族没有名称这一格：采用行带它按另写内容拒，直接登记行带它按未知键拒。
+// 参考配置不带名称，不给就没登。别的族没有名称这一格：采用行带它答「只有物流节点的采用行可以带显示名称」（不归「由参考
+// 配置给出」那一句——参考配置不带名称），直接登记行带它按未知键拒。
 func TestAnAdoptedNodeMayBeGivenItsDisplayNameByTheAdoptionRow(t *testing.T) {
 	adopt := func(extra string) (string, error) {
 		command, err := registrationjson.NodeVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
@@ -68,8 +69,15 @@ func TestAnAdoptedNodeMayBeGivenItsDisplayNameByTheAdoptionRow(t *testing.T) {
 
 	if _, err := registrationjson.ConnectionVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
 		"code": "SYN-CONN-SHA-SZX", "version": 1, "effective_from": "2026-01-01T00:00:00Z",
-		"adopt": "` + demoNetwork + `", "display_name": "沪深干线"}`)); !errors.Is(err, registrationjson.ErrAdoptedContentGiven) {
-		t.Fatalf("连接的采用行带名称：err=%v，想要 ErrAdoptedContentGiven", err)
+		"adopt": "` + demoNetwork + `", "display_name": "沪深干线"}`)); !errors.Is(err, registrationjson.ErrDisplayNameOnlyOnNodeAdoption) ||
+		errors.Is(err, registrationjson.ErrAdoptedContentGiven) || !strings.Contains(err.Error(), "只有物流节点的采用行可以带显示名称") ||
+		strings.Contains(err.Error(), "由参考配置") {
+		t.Fatalf("连接的采用行带名称：err=%v，想要 ErrDisplayNameOnlyOnNodeAdoption 及其文案", err)
+	}
+	if _, err := registrationjson.ServiceCalendarVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"target_kind": "NODE", "target_code": "SYN-NODE-SHA-HUB", "version": 1, "effective_from": "2026-01-01T00:00:00Z",
+		"adopt": "` + demoNetwork + `", "display_name": "上海枢纽"}`)); !errors.Is(err, registrationjson.ErrDisplayNameOnlyOnNodeAdoption) {
+		t.Fatalf("日历的采用行带名称：err=%v，想要 ErrDisplayNameOnlyOnNodeAdoption", err)
 	}
 	if _, err := registrationjson.ConnectionVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
 		"code": "SYN-CONN-A-B", "version": 1, "from_node": "SYN-NODE-A", "to_node": "SYN-NODE-B",

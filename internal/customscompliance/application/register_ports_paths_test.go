@@ -334,7 +334,7 @@ func TestPortsPathsDependencyFailuresAreUndecided(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」与 ADR-0353 决定六——名称是这一版的登记内容，同一起点重登时
+// Covers: AT-CC-458（应用半边，ADR-0353 决定六）——名称是这一版的登记内容，同一起点重登时
 // 并入逐字段比对：两边都没登（迁移之前登下的版本就是这一格）或名称逐字相同是`已存在`；名称不同、给没登名称的旧版补名称、
 // 给登了名称的版本去掉名称都是`内容冲突`，册面纹丝不动；改名走登记更晚起点的新版本，前版照留旧名称并落终点。
 func TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison(t *testing.T) {
