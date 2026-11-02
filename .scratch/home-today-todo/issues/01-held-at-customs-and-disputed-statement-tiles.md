@@ -1,7 +1,7 @@
 # 01 首页今日待办补「卡关」「待对账」两格：各补一个只读计数口，点进去落到筛好的列表
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工，评审（钉 `c58a7f6c5`）与复评（钉 `e56df3cf7`）阻断为零，两轮修订已做，待进 main，分支 claude-hometodo（最后一笔见「完成记录·提交」）。本票动了 Go，是后端票：作者只做「进 main 的步骤」第 1 步
+Status: resolved——2026-11-01 进 main（全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-01 作者完工，评审（钉 `c58a7f6c5`）与复评（钉 `e56df3cf7`）阻断为零，两轮修订已做，待进 main，分支 claude-hometodo（最后一笔见「完成记录·提交」）。本票动了 Go，是后端票：作者只做「进 main 的步骤」第 1 步
 父票：无（设计源「九、怎么落地」第三步：今日待办是待受理、待处置、卡关、异常、待对账各一格，点进去就是筛好的列表）
 Blocked by: 无
 地盘：`internal/customscompliance/{ports,adapters/postgres,adapters/http}` 的判断册读面、`internal/settlementaccounting/{ports,adapters/postgres,adapters/http}` 的对账单读面、`cmd/parcel-api` 两个特性文件及其未接线占位、`apps/admin-web` 首页与清关单、对账单两页、UC-CC-013 与 UC-SA-003 各一行验收、AT 盘点两行、本票。
@@ -103,3 +103,12 @@ Blocked by: 无
 - `c58a7f6c5` 本票提交清单
 - `e56df3cf7` 修订轮
 - 第二修订轮一笔（见 git log，紧接 `e56df3cf7`）
+
+## 评审记录（2026-11-01，隔离子代理，首轮钉 `c58a7f6c5`，复评钉 `e56df3cf7`、`56d99e52f`）
+
+三轮阻断均为零。首轮核实：两口挂 `operationsReadFace()`、租户只取 `query.Scope.Tenant()`，件数用 `count(*) OVER ()` 与这一页同一条语句求，`truncated = Count > len(行)`，空库答 0、读不到答 500 `NO_ANSWER_FORMED`；`Admits` 与 `transportfulfillment` 的 `answerFor` 同一口径，`Final` 与 UC-SA-003 一致；「来源变化不后台重算」出处核实于 CC CONTEXT「动作准入判断」（ADR-0206）；`cmd/` 下无人调 `OpenDispute`、`ResolveDispute` 属实。首轮非阻断由协调方裁定、两轮修订处理：同一最晚时点多份判断——首轮修订裁「任一份不过门即算」，复评探针 T（同一请求先挡后重判放行，ADR-0206 决定六）证此字面会把已放行的请求留在列里，二轮改为「先按请求（意图 + 节点 + 去向，即 `ActionAdmissionJudgementID` 的请求格）取当前答复，再看有无不过门」，同刻多份不过门按 `AdmissionAnswers()` 压制次序交回最重；`Replace` 与待对账读面共用 `finalDisputeResolutions`；两个 `valid()` 查全集、包内用例对齐全集 / valid / String；两处跨文件计数注释、票面措辞、对账单页「这一页里」作废张数。二轮复评九形状真库探针（P、Q、R、S、T、U、V、W、他租户、截断）全部符合，请求取键无漏无多。末条非阻断（领域折叠与读面两处压制次序未钉在一起）由协调方补一句 `slices.IsSorted(AdmissionAnswers())`（`5d07c5926`，只加测试）。
+
+## 进 main 记录（2026-11-01，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-hometodo` tip `5d07c5926` 作出处；隔离树把 `b2c1505c7..5d07c5926` cherry-pick 到 main `f58658e57`，`.scratch/at-coverage-inventory.md` 一处冲突（与 place-display-names/01 同处加行，AT-CC-456 与 457/458 按号取并集）；重生成 AT 盘点计数与机制清点各成一笔，两项 `-check` 退 0；对 `9c74e0bf5` 跑全量 164 ok / 0 FAIL（含 PG）；种子一次性库 `seed_hometodo` 退 0 后删库；管理台 `tsc -b` 过、`pnpm test` 1016 / 0。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- 用户裁定（2026-11-01）：卡关口径阻断、未决、未配置三种都算；争议做管理台入口（票 [03](./03-statement-dispute-registration-and-resolution-faces.md)，分支 `claude-disputes` 在做），客户确认不做。
