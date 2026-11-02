@@ -638,7 +638,7 @@ export interface AuditedPayableListResponseBody {
   payables: AuditedPayableRecord[];
 }
 
-/** 审核应付册。读口还收 documentNumber / claim / supplier 三个精确检索维；本页整册取回在页面里检索，不用它们。 */
+/** 审核应付册。读口还收 documentNumber / claim / supplier 几个精确检索维；本页整册取回在页面里检索，不用它们。 */
 export function listAuditedPayables(): Promise<ApiResult<AuditedPayableListResponseBody>> {
   return exchangeMasterData<AuditedPayableListResponseBody>('/settlement-audited-payables');
 }

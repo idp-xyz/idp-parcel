@@ -44,7 +44,7 @@ import {
 
 // 供应商账单与应付（主责上下文 settlement-accounting「供应商主张与审核应付」，UC-SA-004；票 document-numbering/11）。两签：
 // 供应商账单（GET /settlement-statements?registry=supplier-bill-reception，右栏读 GET /settlement-supplier-bill-lines）与审核应付
-// （GET /settlement-audited-payables）。写入口两处：页头「登记供应商账单」与右栏逐行「审核通过」，各按自己那一种运营决定授予收起
+// （GET /settlement-audited-payables）。写入口是页头「登记供应商账单」与右栏逐行「审核通过」，各按自己那一种运营决定授予收起
 // （ADR-0315、ADR-0340）。账单号是供应商的外部标识，从主张标识里取回（supplier-bills.ts 的 billNumberOf）；应付以应付单号为主列
 // （ADR-0355 决定十一），应付标识进技术详情。
 const info = moduleInfoById['supplier-bills'];

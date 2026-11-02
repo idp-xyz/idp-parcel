@@ -179,7 +179,7 @@ type auditedPayableBody struct {
 	RecordedAt            string `json:"recordedAt"`
 }
 
-// NewQueryAuditedPayablesEndpoint 交回审核应付册的 HTTP 入口（GET /settlement-audited-payables）。三个可选检索维 documentNumber、
+// NewQueryAuditedPayablesEndpoint 交回审核应付册的 HTTP 入口（GET /settlement-audited-payables）。可选检索维 documentNumber、
 // claim、supplier 各自精确相等、同给取交集（ports.AuditedPayableFilter）；不收别的参数，理由同 NewQuerySettlementStatementsEndpoint。
 func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader AuditedPayableCatalogueReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

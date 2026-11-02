@@ -93,8 +93,8 @@ type AuditedPayableCatalogueRow struct {
 	RecordedAt            time.Time
 }
 
-// AuditedPayableFilter 是审核应付册的三个检索维：应付单号、主张身份、供应商，各自精确相等；空串即不按这一维筛，几维同给取交集。
-// 只收这三维（票 document-numbering/11）：查阅面不收任何处置参数，理由同本包其余读口。
+// AuditedPayableFilter 是审核应付册的检索维：应付单号、主张身份、供应商，各自精确相等；空串即不按这一维筛，几维同给取交集。
+// 只收这几维（票 document-numbering/11）：查阅面不收任何处置参数，理由同本包其余读口。
 type AuditedPayableFilter struct {
 	DocumentNumber string
 	Claim          string

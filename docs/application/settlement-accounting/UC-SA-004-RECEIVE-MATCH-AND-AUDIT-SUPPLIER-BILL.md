@@ -133,6 +133,7 @@
 | `AT-SA-225` | 持`账单接收`授予的人照来件录一份供应商账单，并逐行给出匹配裁决 | 接收与匹配一笔做完、答已接收，重放答已存在；接收行记下提交操作者，不进摘要；审核授权没登时接收照样成立、答复点明审核会停；分类写错或金额写坏当场拒、不进编排；不持这一种授予答未授予（[ADR-0340](../../adr/0340-supplier-bill-reception-and-audit-are-two-operator-decisions-and-each-records-the-operator.md) 决定一、三） |
 | `AT-SA-226` | 持`审核应付`授予的人对已接收账单的一行点审核 | 在越权升级上限内形成审核应付、答已形成并带金额，重放答已存在；应付行记下点审核的人，`auditor_ref` 仍是审核授权册上那一方；审核授权、应付归集账户或上限没登答未配置、不形成应付；不持这一种授予答未授予（ADR-0340 决定二、三） |
 | `AT-SA-231` | 持`审核应付`授予的人对已接收账单的一行点审核，金额在越权升级上限内 | 形成审核应付的同一事务内取得应付单据号，日期按应付归入的结算账户对账安排的业务时区、该账户没登对账安排时按租户的单据编号时区，审核答复带回；载荷里的应付标识仍是调用方生成的幂等键；重放答原号、不再取号；行不可审、要升级、未配置都不取号；并发审核不撞号；两种时区都没有时照常形成、不带号并记下原因；跳号到上限仍撞答编号规则撞号、不形成应付，取过的流水随回滚释放（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、七、八、十） |
+| `AT-SA-232` | 持查阅授予的人看供应商账单与审核应付 | 账单册每份账单带主张金额之和、按逐行匹配分类原名计的行数（不归并成已匹配 / 部分匹配 / 未匹配）、已形成应付的行数与金额、已匹配而没有应付的行数；单份账单的各行带匹配分类、所引预期成本与差额、依据和挂在行上的审核应付；审核应付册以应付单号列出、新形成的在前、可按应付单号、主张、供应商精确检索，没有号的带无号原因；只列本租户；读不回答未形成、不答空，找不到接收记录的应付也答未形成（票 [document-numbering/11](../../../.scratch/document-numbering/issues/11-supplier-bill-and-audited-payable-admin-pages.md)） |
 
 ## 生产参数与待决风险
 
@@ -152,4 +153,6 @@
 
 | 规则 | 现状 | 去处 |
 |---|---|---|
-| CONTEXT「供应商主张与审核应付」：审核应付形成时取得应付单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），`AT-SA-231` | 已补：越权上限判过、确定形成应付时在审核事务内按 `AUDITED_PAYABLE` 取应付号，日期按应付账户对账安排的业务时区、没登按租户单据编号时区；应付号或无号原因随应付落库（迁移 `settlement_accounting/0053`），审核答复带出；载荷里的应付标识照旧是调用方生成的幂等键。管理台没有列审核应付的页，应付号今天只在审核答复里看得到；规则不变 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |
+| CONTEXT「供应商主张与审核应付」：审核应付形成时取得应付单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），`AT-SA-231` | 已补：越权上限判过、确定形成应付时在审核事务内按 `AUDITED_PAYABLE` 取应付号，日期按应付账户对账安排的业务时区、没登按租户单据编号时区；应付号或无号原因随应付落库（迁移 `settlement_accounting/0053`），审核答复带出；载荷里的应付标识照旧是调用方生成的幂等键（管理台在首次提交前生成）。应付号在审核应付册（`GET /settlement-audited-payables`）与账单各行（`GET /settlement-supplier-bill-lines`）里读得到，管理台「账务 → 供应商账单与应付」以它为主列、可按它检索（`AT-SA-232`）；规则不变 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md)、[document-numbering/11](../../../.scratch/document-numbering/issues/11-supplier-bill-and-audited-payable-admin-pages.md) |
+| 结果语义契约「差异/争议」：差异范围有处理入口；CONTEXT「供应商主张与审核应付」：已匹配金额分别形成通过审核、存在争议或拒绝结果 | 只有「通过」形成审核应付有口（ADR-0340 决定二）；供应商账单行的争议、拒绝与贷项没有口（ADR-0340 越权风险点一），管理台对差异行只说要先核实，不摆按钮 | 待立票（[document-numbering/11](../../../.scratch/document-numbering/issues/11-supplier-bill-and-audited-payable-admin-pages.md) 完成记录「留给协调方」） |
+| 输入语义契约「供应商主张」与 GLOSSARY「外部标识」：供应商的账单号是外部标识，记录标识类型、分配方与适用范围 | 接收口载荷与接收行没有单放供应商账单号的一格；管理台在首次提交前把主张标识生成为「供应商/账单号」，读面再从主张标识里取回账单号显示——外部标识与主张身份借同一格 | 待裁（[document-numbering/11](../../../.scratch/document-numbering/issues/11-supplier-bill-and-audited-payable-admin-pages.md) 完成记录「留给协调方」） |

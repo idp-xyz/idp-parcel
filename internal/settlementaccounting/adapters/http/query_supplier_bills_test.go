@@ -142,7 +142,7 @@ func TestSupplierBillLinesQuerySeparatesMissingFromUnanswered(t *testing.T) {
 }
 
 // Covers: AT-SA-232、AT-SA-231 — 审核应付册逐笔透出应付单号或无号原因（恰出其一）、所属主张与行、供应商与账期、审核授权方与
-// 点审核的人；三个检索维原样交给读口，不认的参数不采信；空册答空数组；读不回答 NO_ANSWER_FORMED。
+// 点审核的人；检索维原样交给读口，不认的参数不采信；空册答空数组；读不回答 NO_ANSWER_FORMED。
 func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 	stub := &stubAuditedPayables{rows: []ports.AuditedPayableCatalogueRow{
 		{Payable: "PAYABLE-1", DocumentNumber: "AP-202608-00001", Claim: "SYN-SUP-01/INV-1", Line: "1", ExpectedVersion: "SYN-EXP-1",

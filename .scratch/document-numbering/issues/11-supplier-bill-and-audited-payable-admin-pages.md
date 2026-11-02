@@ -1,7 +1,7 @@
 # 11 管理台补「供应商账单与应付」：账单册与应付册读口、查阅页、接收与审核两张任务式表单
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：票 05 记下「管理台没有列审核应付的页，应付号只在审核答复里看得到」；协调方核实整个供应商账单接收与审核在管理台都没有页面、后端只有两个写口（`POST /settlement-supplier-bill-receptions`、`POST /settlement-supplier-bill-audits`，ADR-0340）。用户 2026-11-02 裁定「补全套：查阅加接收 / 审核表单」。
@@ -24,3 +24,46 @@ Blocked by: 无
 ## 完成判据
 
 读口有 HTTP 与真库用例（含租户隔离）；UC-SA-004 交接与 AT 照惯例补；管理台 `tsc -b`、`pnpm test`、`vite build` 过；浏览器在自起后端连一次性库（灌种子后经两张表单真登一张账单、审一次）核过两签、右栏、两张表单、收起；后端部分照「进 main 的步骤」第 1 步交评审。
+
+## 完成记录（2026-11-02，作者，分支 `claude-docnum11`，从 origin/main `060a6e72f` 起）
+
+三笔提交：`faeff46d0`（后端读口与各层用例）、`906218b92`（管理台），加文档与本记录一笔。
+
+### 做了什么
+
+1. **账单册汇总**：没另立第二个列表口，扩 `GET /settlement-statements?registry=supplier-bill-reception` 那一本的目录行（`ports.SupplierBillReceptionCatalogueRow`）：主张金额之和、按逐行匹配分类原名计的行数（`classificationCounts`，不归并成已匹配 / 部分匹配 / 未匹配）、这一版各行上已形成应付的行数与金额、已匹配而没有应付的行数、到达时刻、被追加的原主张、接收操作者（ADR-0340 越权风险点三说的「操作证据只写不读」，接收与应付两处现在读得到）。一条语句、同一快照；「已匹配」的字面由领域交给 SQL，不在 SQL 里另写。
+2. **账单各行** `GET /settlement-supplier-bill-lines?claim=&version=`（`ports.SupplierBillLineRead`）：各行按主张原序，带匹配分类、所引预期成本、差额（主张减预期）、依据、匹配时刻，以及挂在这一行上的审核应付（应付标识、应付单号或无号原因恰出其一、金额、审核授权方、点审核的人、审核时刻）。不在本租户册上答 `SUPPLIER_BILL_NOT_FOUND`（200），缺 claim 或 version 答 400。
+3. **审核应付册** `GET /settlement-audited-payables`（`ports.AuditedPayableCatalogueRead`）：新形成的在前；带应付单号或无号原因（有号、时区未配置、上线前开立三种分开）、所属主张与行、预期成本版本、供应商与账期（取这份主张最早落库的那一版接收记录）、法人、应付归集账户、审核授权方与点审核的人；`documentNumber`、`claim`、`supplier` 三个可选精确检索维，同给取交集。找不到接收记录的应付是册上矛盾，答 `NO_ANSWER_FORMED`，不当成没有供应商上列、也不悄悄漏掉。
+4. 两个新口挂主数据与运营查阅读面（`endpoints_settlement_catalogue.go` 追加两行），与对账单册同一个适配器（`StatementCatalogue`）；未接线占位同步。
+5. **管理台「账务 → 供应商账单与应付」**（`SupplierBillsPage`）：两签工作台。供应商账单签：账单号、供应商名（往来单位册）、账期、金额、对上情况、状态胶囊（待审核 / 审核人未配置 / 有差异待核实 / 已审完，是从计数派生的呈现词，不是领域状态）、收到时间；指标即筛、表头排序、右栏看账单全貌与各行去向。审核应付签：应付单号为主列（号名与无号说法取 `vocabulary/document-numbering.ts`），没号显应付标识并悬停说原因；右栏分开「点审核的人」与「有权审核的一方」，应付标识、主张标识、操作证据进技术详情。
+6. **登记供应商账单**（页头按钮 → 对话框，`SupplierBillReceptionDialog`）：按 UC-SA-004 输入逐格收——供应商、开给本公司哪个主体、供应商的账单号与版本、账期、币种、收到时间、被追加的原账单（可缺）；逐行选对的预期成本（只列同币种、当前那一版：去掉失效纠错版本与有后继的）或「找不到对应运输」，对上方式只给匹配门收的那几种（金额相等才能选已对上），差异带依据。答复逐格说人话。
+7. **审核这张账单**（右栏 `SupplierBillPanel`）：已对上、还没有应付的行摆「审核通过，形成应付」；应付标识页面在首次提交前生成（`PAYABLE-<时间>-<随机>`，前缀避开应付单号默认的 `AP-`），同一行重发落回同一份；答复交回应付单号并可一键跳到应付签按号检索；越权上限、撞号（`numberingCollisionNote('AUDITED_PAYABLE')`）、审核授权 / 应付归集账户 / 越权上限三种未配置、行不可审各说各的。
+8. 两处写入口各按 `SUPPLIER_BILL_RECEPTION`、`SUPPLIER_BILL_AUDIT` 授予收起（`useMayMakeDecision`，ADR-0315），收起时原处说只对持哪种授予的人显示。
+9. **对账单页**去掉原来的「供应商账单」签（移到新页，两处列同一本册只会各说一套），地址里不再写签，`reconciliation-address` 只留「只看待对账」；首页待对账格的地址不变。导航「账务」在「对账单」后加一条，对账单页的一句话说明改为客户对账单与争议。
+10. **文档**：UC-SA-004 新立 `AT-SA-232`，交接里 `AT-SA-231` 那一行改说应付号在哪里读得到，另加两行缺口（见下）；AT 盘点加一行与追记（总览计数未动）。
+
+### 关键取舍与理由
+
+- **主张标识取「供应商/账单号」而不取随机串**（票面写「页面生成做幂等键」，这里仍是页面在首次提交前生成，只是确定地生成）：接收口载荷与接收行都没有单放供应商账单号的一格，票面又不许改载荷；随机串会把账单号丢掉、主列无号可显，而且同一张纸面账单两个人各录一遍就成两份主张、可以对同一份预期成本对上两次账（编排不跨主张查重）。确定地生成，同一家供应商同一个号不论谁录都落回同一个主张（重放答已存在，内容不同答版本冲突，AT-SA-092/093 在人工录入下也成立）；带上供应商，两家供应商同号不撞。读面从主张标识里取回账单号显示，取不到（接口或演示脚本送入的主张）就照旧显主张标识。这是借法，见「留给协调方」第 1 条。
+- **审核只有「通过」**：ADR-0340 只开了形成审核应付的口，供应商账单行的争议与拒绝没有口（越权风险点一）；票面第 4 条的「争议 / 拒绝与金额范围、依据」在领域与写口里都不存在，没有自造按钮或状态，对差异行只说要先核实。金额范围也不收：审核不改数字，应付金额就是这一行的主张金额（`domain.FormAuditedPayable`）。
+- **匹配汇总不归并**：UC 结果语义里的「未匹配 / 部分匹配 / 已匹配」三格在领域里是逐行五值分类；读口按原名计数，管理台经用语词典逐类说中文（词典追加五个码），归并成三格就是读面替匹配门再判一次。
+- **账单列表不另立口**：扩既有的接收册目录行，不在 `/settlement-supplier-bills` 另开一本同表的列表；详情与应付册各开一口。
+- **应付册的供应商取接收记录**：应付行不带供应商与账期，按主张回指；同一主张多个版本取最早落库那一版（供应商与账期是主张身份的一部分）。
+
+### 验证（2026-11-02，本机 PG `127.0.0.1:55432`）
+
+- `go build ./...`、`go vet ./...` 退 0；改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/... ./internal/settlementaccounting/... ./internal/accessidentity/...` 55 个包 ok、0 FAIL（含 PG）；`bash scripts/ci/generated-artifacts-pr.sh` 退 0（AT 计数、机制清点过期，留推送方）。`-v` 抽查新真库用例全 PASS、无 SKIP：`TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables`、`TestSupplierBillLinesCarryMatchAndPayablePerLine`、`TestAuditedPayableCatalogueListsNumbersAndFilters`（四种检索、页大小、租户隔离）、`TestAnAuditedPayableWithoutItsReceptionIsAnError`、parcel-api `TestTheSupplierBillBooksShowTheAuditedPayableNumber`（经两口真登真审后三本册读回同一个应付单号）。
+- 前端：`npx tsc -b` 无输出，`pnpm test` 1099 pass / 0 fail，`npx vite build` 退 0。
+- `go run ./tools/at-coverage-counts -check` 只差总览计数（①、合计、SA 各 +1），表行与 UC 对得上，留推送方重生成。
+- **种子**：一次性库 `docnum11_seed` 上 `scripts/demo-seeds/seed.sh` 退 0；种子不开立供应商账单与审核应付（两表 0 行），也没有供应商预期成本，「种子开立的都带号」无对象可查——往库里直写两版预期成本（8500、12000 CNY）后由下面的浏览器核验真登真审。
+- **浏览器**：自编 parcel-api 起在 :19101 连 `docnum11_seed`，前端 :5201（Dex 回调照 rd-ops/shots.js 浏览器侧改写），`innerText` 核：配置员空态页头有「登记供应商账单」；经对话框登记 `INV-2610-001`（第 1 行对 8500 已对上自动选上，第 2 行对 12000、写 13000 选价格不符带依据）答「已登记账单 INV-2610-001，对上的行可以在右栏审核。」；列表一行、状态「待审核」、对上情况「对上 1/2 行 · 价格不符 1」，右栏两行各自去向，差异行说先核实；第 1 行点审核答「第 1 行审核通过，形成应付 AP-202611-00001，金额 8500 CNY。」，审后右栏挂上应付单号、状态变「有差异待核实」；点「在「审核应付」里看」落到应付签、按号筛出那一笔，主列 `AP-202611-00001`，右栏分开点审核的人与 `SYN-AUDITOR-SETTLEMENT-01`，技术详情是应付标识 `PAYABLE-…`；对账单页只剩客户对账单。再登一张 `INV-2610-002`（只一行已对上、不审）：配置员右栏有 1 个审核按钮；查阅员登录后页头说「登记供应商账单入口只对持供应商账单接收授予的操作者显示。」、右栏说「审核入口只对持供应商账单审核授予的操作者显示。」，两个按钮都是 0 个。验完停了两个进程、删了库。
+
+### 留给协调方
+
+1. **供应商账单号没有自己的一格**（要裁）：接收口载荷与 `supplier_bill_reception` 都没有单放供应商账单号（外部标识，GLOSSARY 要记标识类型、分配方、适用范围）的位置；本票按票面「不改写口载荷」，让页面把主张标识生成为「供应商/账单号」、读面再从中取回显示。要正经记外部标识，需改 ADR-0340 决定一的载荷（加 `supplierBillNumber` 一类的格）与接收行一列，属写口契约变更，另立票；届时 `supplier-bills.ts` 的 `claimIdFor` / `billNumberOf` 换掉即可。UC-SA-004 交接已记这一行。
+2. **供应商账单行的争议与拒绝没有口**：UC-SA-004 结果语义与 SA CONTEXT 要「通过 / 争议 / 拒绝」三种结果，ADR-0340 只开了通过（越权风险点一）。管理台对差异行只说先核实，没造按钮；要补得先有领域决定与写口，另立票。UC-SA-004 交接已记。
+3. 同一张账单换个收到时间重录，内容摘要不同（摘要含到达时刻），答「版本冲突」——这是现行摘要口径的诚实结果，页面答复说清了「先核对已登记的那份」；若要「同号同内容仅时间不同算重放」，是摘要口径的事，不在本票。
+4. **共享面**：`vocabulary/status.ts` 在总表末尾追加五个匹配分类码；`operator-grants.ts` 追加两个决定原词；`cmd/parcel-api/endpoints_settlement_catalogue.go` 追加两行与两只依赖；`.scratch/at-coverage-inventory.md` 追加一行与一条追记。`AT-SA-232` 若与别的分支撞号，以先进 main 的为准、本票改号。
+5. API 可见改动：账单接收册目录行多出汇总各格（只增不改）；新增两个只读口。对账单页的「供应商账单」签撤掉、移到新页。
+6. 推送方在 main 的 tip 上重生成 AT 盘点总览计数（①、SA 各 +1）与机制清点。
+
