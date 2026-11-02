@@ -14,7 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: ADR-0352 开关语义——只有恰为 `true` 才开；缺省、空白、大小写不同、`1`、`yes` 都按关读。
+// Covers: AT-PP-048，ADR-0352 开关语义——只有恰为 `true` 才开；缺省、空白、大小写不同、`1`、`yes` 都按关读。
 func TestTheNewerCanonicalizationSwitchOpensOnlyOnTrue(t *testing.T) {
 	cases := map[string]bool{"": false, "true": true, " true ": true, "TRUE": false, "True": false, "1": false, "yes": false, "false": false}
 	for value, want := range cases {
@@ -33,7 +33,7 @@ func TestTheNewerCanonicalizationSwitchOpensOnlyOnTrue(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0352 在 `/pricing-price-card-registrations` 真编排上的那一面——种子 FULL-03（PPC-6）在开关关着时答
+// Covers: AT-PP-048，ADR-0352 在 `/pricing-price-card-registrations` 真编排上的那一面——种子 FULL-03（PPC-6）在开关关着时答
 // NEWER_CANONICALIZATION_NOT_ENABLED、册上没有它；同一份在开关打开的编排上入册。输入是隔离合成，只记 `S`。
 func TestTheWiredPriceCardRegistrationHonoursTheNewerCanonicalizationSwitch(t *testing.T) {
 	pool := pgtest.Pool(t)

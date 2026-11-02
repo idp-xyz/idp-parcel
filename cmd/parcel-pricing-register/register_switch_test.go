@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: ADR-0352 在受控登记口上的那一面——未启用较新规范化版本单列退出码 4，不并进治理答案 2 或未决 3；开关只认
+// Covers: AT-PP-048，ADR-0352 在受控登记口上的那一面——未启用较新规范化版本单列退出码 4，不并进治理答案 2 或未决 3；开关只认
 // 恰为 `true`。
 func TestTheNewerCanonicalizationRefusalHasItsOwnExitCode(t *testing.T) {
 	codes := map[application.RegisterPriceCardOutcome]int{
@@ -39,7 +39,7 @@ func TestTheNewerCanonicalizationRefusalHasItsOwnExitCode(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0352——种子 FULL-03（PPC-6）经受控登记口：开关关着退 4、册上没有这张卡；开关打开退 0 入册；基础版的种子卡
+// Covers: AT-PP-048，ADR-0352——种子 FULL-03（PPC-6）经受控登记口：开关关着退 4、册上没有这张卡；开关打开退 0 入册；基础版的种子卡
 // 在开关关着时照常退 0。真库，输入是隔离合成，只记 `S`。
 func TestTheControlledRegistrationOfANewerCanonicalizationWaitsForTheSwitch(t *testing.T) {
 	pool := pgtest.Pool(t)

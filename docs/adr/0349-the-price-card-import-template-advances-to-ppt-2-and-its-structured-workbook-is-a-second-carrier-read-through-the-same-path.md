@@ -1,6 +1,6 @@
 # ADR-0349：价卡导入模板进位 PPT-2，补上最低 / 最高收费与按偏远档位查价表；页面表单提交的结构化工作簿是同一模板的第二种载体，译成同一个内部表示、走同一条读取路径；模板规格由读取模板的同一张列定义生成并经只读口交出
 
-Status: Accepted（2026-10-29，Claude Code 会话代产品 owner、PP owner 决（代决）：价卡配置编辑器的后端第一步，起因是 ADR-0348 刚补的两处结构经导入接不进来，而编辑器要直接提交结构化数据、照规格画表单；设计由协调方派单、作者落笔，用户未逐条过目，越权风险点待 PP owner 复核。）<!-- 索引注记 -->｜**判据**：模板新增 `total_bounds` 表（最低 / 最高收费）与 `calculations` 的计算类型 `TABLE_LOOKUP_BY_REMOTE_TIER`（价表行的 `zone` 列写偏远档位），模板版本进位 `PPT-2` 且只增不改，`PPT-1` 文件照旧接受、读出与此前逐位相同；只有用到新结构的方案写 `PPC-6`；`application/json` 的请求体是结构化工作簿，译成与读电子表格同一个内部表示再走同一套译码与校验，来源标识为 `form:` 加规范化工作簿 SHA-256 前 12 位，草稿读口标明来自页面表单；`GET /pricing-price-card-template/spec` 由读取模板的同一张列定义生成规格；JSON 载体边解边数、超结构上限即停，问题清单有总数上限；本记录停用 ADR-0348 决定六首项「导入暂不支持」的说法
+Status: Accepted（2026-10-29，Claude Code 会话代产品 owner、PP owner 决（代决）：价卡配置编辑器的后端第一步，起因是 ADR-0348 刚补的两处结构经导入接不进来，而编辑器要直接提交结构化数据、照规格画表单；设计由协调方派单、作者落笔，用户未逐条过目，越权风险点待 PP owner 复核。）<!-- 索引注记 -->｜**判据**：模板新增 `total_bounds` 表（最低 / 最高收费）与 `calculations` 的计算类型 `TABLE_LOOKUP_BY_REMOTE_TIER`（价表行的 `zone` 列写偏远档位），模板版本进位 `PPT-2` 且只增不改，`PPT-1` 文件照旧接受、读出与此前逐位相同；只有用到新结构的方案写 `PPC-6`；`application/json` 的请求体是结构化工作簿，译成与读电子表格同一个内部表示再走同一套译码与校验，来源标识为 `form:` 加规范化工作簿 SHA-256 前 12 位，草稿读口标明来自页面表单；`GET /pricing-price-card-template/spec` 由读取模板的同一张列定义生成规格；JSON 载体边解边数、超结构上限即停，问题清单有总数上限；本记录停用 ADR-0348 决定六首项「导入暂不支持」的说法｜**回答**（2026-11-01）：越权风险点 5 由 [ADR-0352](./0352-registering-a-price-card-in-a-canonicalization-newer-than-the-base-one-needs-an-explicit-deployment-switch-that-is-off-by-default.md) 回答，无条款停用——登记方案记着 `PPC-6` 的价卡（含经导入、批准、发布走到登记的）要部署显式打开开关，默认关
 
 Date: 2026-10-29
 
@@ -118,3 +118,4 @@ Date: 2026-10-29
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：形状没过的工作簿答整份不收（200 加问题码），不是 4xx；只有请求本身读不进来才是 400
 - [价卡导入模板与校验规范](../design/pp-price-card-import-template-and-validation-spec.md)：模板的表、列与格的读法；「结构化工作簿：第二种载体」与「模板规格只读口」两节是本记录的两个新面
 - 票 [price-card-import/08](../../.scratch/price-card-import/issues/08-template-ppt-2-structured-workbook-and-spec-face.md)
+- [ADR-0352](./0352-registering-a-price-card-in-a-canonicalization-newer-than-the-base-one-needs-an-explicit-deployment-switch-that-is-off-by-default.md)：回答越权风险点 5，登记 `PPC-6` 价卡前要部署开关；无条款停用
