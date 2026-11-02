@@ -86,6 +86,51 @@ func (views *ShipmentRequestViews) ListVisible(
 	return records, nil
 }
 
+// ListVisibleByDocumentNumber 按（作用域 + 单据号）取回概要，逐字比对、不折算大小写或空白（号由编号规则渲染，折算就是另一个号）。
+// 作用域过滤同在 WHERE 上，作用域外的同号委托与没有同一个答案。
+func (views *ShipmentRequestViews) ListVisibleByDocumentNumber(
+	ctx context.Context,
+	scope domain.AuthorizedQueryScope,
+	number domain.ShipmentDocumentNumber,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	querier, err := views.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+summaryColumns+`
+		   FROM parcel_shipment.shipment_request
+		  WHERE tenant_id = $1
+		    AND customer_account_id = ANY($2)
+		    AND document_number = $3
+		  ORDER BY submitted_at DESC, shipment_request_id DESC`,
+		scope.TenantID().String(),
+		visibleAccounts(scope),
+		number.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+	}
+	defer rows.Close()
+
+	var records []ports.ShipmentRequestSummaryRecord
+	for rows.Next() {
+		var row summaryRow
+		if err := rows.Scan(row.targets()...); err != nil {
+			return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+		}
+		record, err := row.record()
+		if err != nil {
+			return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+	}
+	return records, nil
+}
+
 // FindVisibleByID 按（作用域 + 委托标识）取回查阅详情。作用域过滤与标识同在 WHERE 上，
 // 零行即不可见——「不存在」与「属别的作用域」在这条 SQL 里天然同答。
 func (views *ShipmentRequestViews) FindVisibleByID(

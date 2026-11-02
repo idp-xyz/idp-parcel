@@ -121,7 +121,7 @@ func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler Submissio
 // `documentNumber` 是所指名委托的单据号（客户面前叫运单号，ADR-0355 决定十一），随 `shipmentRequestId` 指名委托时在场：首次建成
 // 答刚开立的号，重放读回原号。新增字段，既有各格的名字与语义不动（ADR-0140）。委托没有单据号时这一格整键不出现，不答空串、
 // 不拿委托标识顶——顶了，客户系统会把内部标识记成运单号；`documentNumberAbsence` 如实说是哪一种：`ISSUED_BEFORE_NUMBERING`
-// （单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户的单据编号时区未配置），两种都事后不补号。
+// （单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户的单据编号时区未配置），哪一种都事后不补号。
 type submitResponse struct {
 	Outcome               string                `json:"outcome"`
 	PriorOutcome          string                `json:"priorOutcome,omitempty"`

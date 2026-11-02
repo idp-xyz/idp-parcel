@@ -279,7 +279,7 @@ type SubmissionContinuationGuard interface {
 	Exclusively(ctx context.Context, identity domain.SourceIdentity, fn func(context.Context) error) error
 }
 
-// ShipmentDocumentNumberIssueOutcome 是一次取委托单据号的答案（ADR-0355 决定三、七、八），封闭三格。
+// ShipmentDocumentNumberIssueOutcome 是一次取委托单据号的答案（ADR-0355 决定三、七、八），封闭集合。
 type ShipmentDocumentNumberIssueOutcome uint8
 
 const (
@@ -1763,6 +1763,13 @@ type ShipmentRequestViews interface {
 		scope domain.AuthorizedQueryScope,
 		requestID domain.ShipmentRequestID,
 	) (ShipmentRequestDetailRecord, bool, error)
+	// ListVisibleByDocumentNumber 按单据号（界面上的运单号）在作用域内找委托，逐字比对（ADR-0355 决定十一「可按单据号检索」）。
+	// 交回列表而不是单份：调用方要分得出「没有」与「不止一份」，而后者由（租户，单据号）唯一约束担保不出现、不由本签名担保。
+	ListVisibleByDocumentNumber(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		number domain.ShipmentDocumentNumber,
+	) ([]ShipmentRequestSummaryRecord, error)
 }
 
 // AcceptanceReviewQueueRecord 是复核队列上的一行：一份当前停在「等待人工复核」的

@@ -9,7 +9,8 @@ import (
 )
 
 // 本文件让 ShipmentRequests 实现 ports.ShipmentDocumentNumberRecorder，并给取号编排的「是否已用」查询（ADR-0355 决定八）。
-// 单据号在 shipment_request 行上占两列（迁移 0035）：document_number 与 document_number_absence，两列皆空即上线前开立。
+// 单据号在 shipment_request 行上占两列：document_number 与 document_number_absence（约束 shipment_request_document_number_or_absence
+// 让两者互斥），两列皆空即上线前开立。
 
 var _ ports.ShipmentDocumentNumberRecorder = (*ShipmentRequests)(nil)
 
@@ -41,8 +42,8 @@ func (columns documentNumberingColumns) numbering() (domain.ShipmentDocumentNumb
 	}
 }
 
-// columnsOf 是写的那一半。上线前开立不写成值（迁移 0035 只收「单据编号时区未配置」一格），所以记它是编程错误：开立路径只会
-// 交来有号或时区未配置。
+// columnsOf 是写的那一半。上线前开立不写成值（约束 shipment_request_document_number_absence_closed 只收「单据编号时区未配置」），
+// 所以记它是编程错误：开立路径只会交来有号或时区未配置。
 func columnsOf(numbering domain.ShipmentDocumentNumbering) (documentNumberingColumns, error) {
 	if number, numbered := numbering.Number(); numbered {
 		value := number.String()

@@ -58,6 +58,7 @@ func (clock *movableClock) set(at time.Time) {
 }
 
 type numberingFixture struct {
+	db            *bentopg.DB
 	pool          *pgxpool.Pool
 	clock         *movableClock
 	handler       *shipmentapp.SubmitShipmentRequestHandler
@@ -142,7 +143,7 @@ func newNumberingFixture(t *testing.T, wrapRecorder func(ports.ShipmentDocumentN
 		issuer,
 		recorder,
 	)
-	return &numberingFixture{pool: pool, clock: clock, handler: handler, registrations: numbers.Registrations}
+	return &numberingFixture{db: db, pool: pool, clock: clock, handler: handler, registrations: numbers.Registrations}
 }
 
 func (fixture *numberingFixture) registerTimeZone(t *testing.T, tenant string) {
@@ -412,5 +413,58 @@ func TestANumberingRuleCollisionRollsTheSubmissionBack(t *testing.T) {
 	resumed := fixture.submit(t, "SYN-TENANT-A", "NEW-1")
 	if resumed.Outcome() != shipmentapp.OutcomeSubmitted || numberOf(t, resumed) != "Q000001" {
 		t.Fatalf("换格式后重发：%s %s——撞号两次取过的流水都该随回滚释放", resumed.Outcome(), numberOf(t, resumed))
+	}
+}
+
+// Covers: `AT-PS-177`；PS CONTEXT「委托」草稿 → 已提交那一句「已提交期间形成的新提交版本不换号」——经生产的受控补充编排形成新
+// 提交版本之后，委托行上的单据号与无号原因一字不变，原提交重放答的仍是原号、带的是新版本；有号与时区未配置两种都钉。
+func TestASupplementedSubmissionVersionKeepsTheDocumentNumbering(t *testing.T) {
+	for _, registered := range []bool{true, false} {
+		t.Run(fmt.Sprintf("numbering time zone registered=%v", registered), func(t *testing.T) {
+			fixture := newNumberingFixture(t, nil)
+			command := submissionCommand(t)
+			tenant := command.Identity.TenantID().String()
+			key := command.Identity.RequestKey().String()
+			if registered {
+				fixture.registerTimeZone(t, tenant)
+			}
+			submitted, err := fixture.handler.Handle(t.Context(), command)
+			if err != nil || submitted.Outcome() != shipmentapp.OutcomeSubmitted {
+				t.Fatalf("提交：%v %v", submitted.Outcome(), err)
+			}
+			numberBefore, absenceBefore, _ := fixture.stored(t, tenant, key)
+			if registered && numberBefore != "P20261102000001" || !registered && absenceBefore != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+				t.Fatalf("提交后的两列 = %q / %q", numberBefore, absenceBefore)
+			}
+			basis, _ := submitted.SubmissionVersionID()
+
+			supplement, err := buildCustomerSupplementOrchestration(fixture.db)
+			if err != nil {
+				t.Fatalf("装配受控补充编排：%v", err)
+			}
+			formed, err := supplement.Handle(t.Context(), supplementCommand(t, basis, key+"-SUPPLEMENT", "syn-digest-2"))
+			if err != nil || formed.Outcome() != shipmentapp.SupplementRecorded {
+				t.Fatalf("受控补充：%v %v", formed.Outcome(), err)
+			}
+
+			numberAfter, absenceAfter, _ := fixture.stored(t, tenant, key)
+			if numberAfter != numberBefore || absenceAfter != absenceBefore {
+				t.Fatalf("新提交版本换了单据号这一格：%q / %q → %q / %q", numberBefore, absenceBefore, numberAfter, absenceAfter)
+			}
+			replay, err := fixture.handler.Handle(t.Context(), command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			version, _ := replay.SubmissionVersionID()
+			if version == basis {
+				t.Fatal("重放带的仍是补充前的版本，补充没有形成新版本")
+			}
+			if number, _ := replay.DocumentNumbering().Number(); number.String() != numberBefore {
+				t.Fatalf("补充之后重放答的号 = %q, want 原号 %q", number, numberBefore)
+			}
+			if reason, absent := replay.DocumentNumbering().Absence(); absent != !registered || (absent && reason.String() != absenceBefore) {
+				t.Fatalf("补充之后重放的无号原因 = %v（%v）", reason, absent)
+			}
+		})
 	}
 }

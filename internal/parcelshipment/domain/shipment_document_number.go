@@ -23,8 +23,8 @@ func NewShipmentDocumentNumber(value string) (ShipmentDocumentNumber, error) {
 	return ShipmentDocumentNumber{required}, err
 }
 
-// DocumentNumberAbsence 是委托没有单据号时的那一种情形。GLOSSARY「单据号」列了两种，开立都照常：没有单据号的委托
-// 记下是哪一种，管理台按它注明，不一律写成「上线前开立」。
+// DocumentNumberAbsence 是委托没有单据号时的那一种情形。GLOSSARY「单据号」列的无号情形——上线前开立、单据编号时区未配置——
+// 开立都照常：没有单据号的委托记下是哪一种，管理台按它注明，不一律写成「上线前开立」。
 type DocumentNumberAbsence uint8
 
 const (

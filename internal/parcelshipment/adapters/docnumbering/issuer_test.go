@@ -41,7 +41,7 @@ func tenant(t *testing.T) domain.TenantID {
 	return value
 }
 
-// Covers: ADR-0025「翻译必须是全函数」——取号编排的三格各有落点；请求按委托的类型声明取`SHIPMENT`、不交开立方业务时区，
+// Covers: ADR-0025「翻译必须是全函数」——取号编排的每一种答案（取到号、单据编号时区未配置、编号规则撞号）各有落点；请求按委托的类型声明取`SHIPMENT`、不交开立方业务时区，
 // 判撞查询按同一租户查本上下文的表。
 func TestTheIssuerTranslatesEveryAssignmentOutcome(t *testing.T) {
 	cases := []struct {

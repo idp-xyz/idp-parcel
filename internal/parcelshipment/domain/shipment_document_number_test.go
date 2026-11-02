@@ -20,7 +20,7 @@ func numberedShipment(t *testing.T, raw string) domain.ShipmentDocumentNumbering
 	return numbering
 }
 
-// Covers: PS CONTEXT「委托」草稿 → 已提交时取得单据号；GLOSSARY「单据号」两种无号情形各记一格；ADR-0355 决定三
+// Covers: PS CONTEXT「委托」草稿 → 已提交时取得单据号；GLOSSARY「单据号」的无号情形（上线前开立、单据编号时区未配置）各记各的；ADR-0355 决定三
 // 「开立后不变、事后不补号」——刚建成的委托这一格是空的，记一次之后再记就拒，读回的上线前委托也拒。
 func TestShipmentDocumentNumberingIsRecordedOnceOnTheFreshRequest(t *testing.T) {
 	fresh := submitted(t)

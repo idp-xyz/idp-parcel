@@ -630,7 +630,7 @@ func (double *shipmentRequestRepositoryDouble) RecordShipmentDocumentNumbering(
 	return nil
 }
 
-// documentNumberIssuerDouble 扮演平台编号组件：默认出一个固定的号，outcome 设成另两格时答那一格。
+// documentNumberIssuerDouble 扮演平台编号组件：默认出一个固定的号，outcome 设成时区未配置或撞号时答那一种。
 type documentNumberIssuerDouble struct {
 	outcome ports.ShipmentDocumentNumberIssueOutcome
 }

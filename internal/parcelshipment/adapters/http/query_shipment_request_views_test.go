@@ -123,6 +123,21 @@ type viewsReaderDouble struct {
 	detail  ports.ShipmentRequestDetailRecord
 	found   bool
 	findErr error
+	// byNumber 是按单据号查到的行；asked 记下被问的那个号（没问过为空）。
+	byNumber []ports.ShipmentRequestSummaryRecord
+	asked    string
+}
+
+func (double *viewsReaderDouble) ListVisibleByDocumentNumber(
+	_ context.Context,
+	_ domain.AuthorizedQueryScope,
+	number domain.ShipmentDocumentNumber,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	double.asked = number.String()
+	if double.listErr != nil {
+		return nil, double.listErr
+	}
+	return double.byNumber, nil
 }
 
 func (double *viewsReaderDouble) ListVisible(
@@ -260,6 +275,49 @@ func TestViewsListCarriesTheDocumentNumberOrWhyThereIsNone(t *testing.T) {
 		if string(body.Requests[index]["documentNumberAbsence"]) != want {
 			t.Fatalf("row %d absence = %s, want %s", index, body.Requests[index]["documentNumberAbsence"], want)
 		}
+	}
+}
+
+// Covers: `AT-PS-178`；ADR-0355 决定十一「可按单据号检索」——列表带 `documentNumber` 只问按号查的那一口、逐字递给读口，答 LISTED；
+// 没查到是空数组不是 404；空号是坏请求；读不动是 5xx。
+func TestViewsListFiltersByTheDocumentNumber(t *testing.T) {
+	numbered := viewSummaryRecord(t, "REQ-7")
+	numbering, err := domain.NumberedShipment(mustValue(t, domain.NewShipmentDocumentNumber, "P20261102000007"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	numbered.DocumentNumbering = numbering
+	reader := &viewsReaderDouble{byNumber: []ports.ShipmentRequestSummaryRecord{numbered}, rows: []ports.ShipmentRequestSummaryRecord{viewSummaryRecord(t, "REQ-1")}}
+	response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, reader, http.MethodGet, "/shipment-request-views?documentNumber=P20261102000007")
+	var body struct {
+		Outcome  string `json:"outcome"`
+		Requests []struct {
+			ShipmentRequestID string `json:"shipmentRequestId"`
+			DocumentNumber    string `json:"documentNumber"`
+		} `json:"requests"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if response.Code != http.StatusOK || body.Outcome != "LISTED" || len(body.Requests) != 1 ||
+		body.Requests[0].ShipmentRequestID != "REQ-7" || body.Requests[0].DocumentNumber != "P20261102000007" {
+		t.Fatalf("按号查 = %d %s", response.Code, response.Body.Bytes())
+	}
+	if reader.asked != "P20261102000007" {
+		t.Fatalf("读口收到的号 = %q", reader.asked)
+	}
+
+	none := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{}, http.MethodGet, "/shipment-request-views?documentNumber=P404")
+	var emptyBody map[string]json.RawMessage
+	if err := json.Unmarshal(none.Body.Bytes(), &emptyBody); err != nil || none.Code != http.StatusOK || string(emptyBody["requests"]) != "[]" {
+		t.Fatalf("没查到 = %d %s", none.Code, none.Body.Bytes())
+	}
+
+	if blank := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{}, http.MethodGet, "/shipment-request-views?documentNumber=%20"); blank.Code != http.StatusBadRequest {
+		t.Fatalf("空号 = %d", blank.Code)
+	}
+	if failed := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{listErr: errors.New("down")}, http.MethodGet, "/shipment-request-views?documentNumber=P1"); failed.Code != http.StatusInternalServerError {
+		t.Fatalf("读不动 = %d", failed.Code)
 	}
 }
 

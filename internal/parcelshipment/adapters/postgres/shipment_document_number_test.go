@@ -22,7 +22,7 @@ func numberedShipmentDocument(t *testing.T, raw string) domain.ShipmentDocumentN
 }
 
 // Covers: ADR-0355 决定三、十一——单据号与建单同一笔落在委托行上，按来源身份读回与查阅列表、单份都带它；没记号的那一行
-// （迁移 0035 之前建的委托）读回是「上线前开立」，不是零值，也不是空号。
+// （单据号上线之前建的委托）读回是「上线前开立」，不是零值，也不是空号。
 //
 // Covers: `AT-PS-178`。
 func TestTheDocumentNumberIsReadBackWithTheRequestAndTheViews(t *testing.T) {
@@ -75,6 +75,24 @@ func TestTheDocumentNumberIsReadBackWithTheRequestAndTheViews(t *testing.T) {
 	}
 	if reason, _ := listed[1].DocumentNumbering.Absence(); reason != domain.IssuedBeforeDocumentNumbering {
 		t.Fatalf("列表旧行无号情形 = %v", reason)
+	}
+	// 按单据号检索（运单号）：作用域内逐字命中那一份；作用域外的账户与没有这个号同答空。
+	byNumber, err := views.ListVisibleByDocumentNumber(ctx, viewScope(t, "tenant-1", "customer-1"), mustBuild(t, domain.NewShipmentDocumentNumber, "P20260906000001"))
+	if err != nil || len(byNumber) != 1 || byNumber[0].ShipmentRequestID != numbered.ShipmentRequestID() {
+		t.Fatalf("按单据号检索：%+v %v", byNumber, err)
+	}
+	for name, probe := range map[string]struct {
+		scope  domain.AuthorizedQueryScope
+		number string
+	}{
+		"other account": {viewScope(t, "tenant-1", "customer-2"), "P20260906000001"},
+		"other tenant":  {viewScope(t, "tenant-2", "customer-1"), "P20260906000001"},
+		"case folded":   {viewScope(t, "tenant-1", "customer-1"), "p20260906000001"},
+	} {
+		found, err := views.ListVisibleByDocumentNumber(ctx, probe.scope, mustBuild(t, domain.NewShipmentDocumentNumber, probe.number))
+		if err != nil || len(found) != 0 {
+			t.Fatalf("%s：%+v %v", name, found, err)
+		}
 	}
 	detail, visible, err := views.FindVisibleByID(ctx, viewScope(t, "tenant-1", "customer-1"), numbered.ShipmentRequestID())
 	if err != nil || !visible {

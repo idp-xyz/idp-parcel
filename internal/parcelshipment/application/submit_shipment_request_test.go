@@ -1066,7 +1066,7 @@ func (double *submissionAnswersDouble) recordedFor(identity domain.SourceIdentit
 // sequentialGuard 直接调 fn：内存替身的用例一次只走一路；守卫真的排队由 cmd/parcel-api 的真库并发用例取证。
 type sequentialGuard struct{}
 
-// documentNumberIssuerDouble 扮演平台编号组件：默认按次序出号；outcome 设成另两格时答那一格，failNext 让下一次取号失败。
+// documentNumberIssuerDouble 扮演平台编号组件：默认按次序出号；outcome 设成时区未配置或撞号时答那一种，failNext 让下一次取号失败。
 type documentNumberIssuerDouble struct {
 	record   func(string)
 	issued   int
