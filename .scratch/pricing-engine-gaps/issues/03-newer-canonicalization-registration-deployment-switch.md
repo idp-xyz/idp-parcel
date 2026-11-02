@@ -63,3 +63,11 @@ Blocked by: 无（接 pricing-engine-gaps/02 即 ADR-0348、price-card-import/08
 - 冻结清单 2026-10-29 两条里「登记 PPC-6 价卡前要求显式部署开关」进 main 后可标已处理；同条其余各格（试算费用行方向、导入暂不支持等）不在本票。
 - 进 main 时重生成 ADR 索引、AT 盘点计数（新增 2 行，均入①）与机制清点。
 - 冻结清单里「读 `ADDRESS_NATURE` 的方案也写 PPC-6」若日后落地，FULL-02 会变成 `PPC-6`，届时 161 那步也要设开关。
+
+## 修订轮（2026-11-01 作者，应协调方转来的隔离评审意见，评审钉 `a074aee72`、Standards 阻断 1 条）
+
+- **阻断（已修）**：ADR-0101 决定五列举答案代数六格「一格不改」，本票加了第七格，属部分停用。ADR-0101 `Status` 行索引注记与 Links 各加指向 ADR-0352 的前向指针（被停的是六格列举那一句），正文不动；ADR-0352 前段去向补「部分停用 ADR-0101 决定五一句」，决定三标题注明，Links 里转述 0101 的那句改掉。
+- 非阻断 1：ADR-0352 决定一、Alternatives 与 `assemble_pricing_registration.go` 注释里的跨文件计数改成按名列举或去掉数字；ADR-0348 / 0352 里指 0348 风险点 6 被停句子的「三句」改成「那几句」。
+- 非阻断 2：ADR-0352 越权风险点补第 6 条——开关关着时导入仍能把 `PPC-6` 草稿存进 `price_card_draft`，滚动窗口里旧构建 `ListPriceCardDrafts` 遇错整批返回会让该租户草稿列表整页失败；本门明示不管，由发布顺序兜。
+- 非阻断 3：`docs/design/synthetic-demo-journey-script.md` 起后端那段环境变量补上开关（共享预览进程仍由协调方改）。
+- 复验：`go build ./cmd/parcel-api`、`gofmt -l` 无输出；`adr-index -check` 仍只报生成物不一致，试跑生成器标签不变后还原。
