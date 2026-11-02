@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 )
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」（登记形状半边，ADR-0353 决定二）——displayName 缺席或 null 即
+// Covers: AT-CC-457（登记形状半边，ADR-0353 决定二）——displayName 缺席或 null 即
 // 没登；给了就原样随这一版登记；不合格整行拒（领域构造门的错误原样上抛），不截断不改写、也不落成没登。
 func TestACandidatePortRowCarriesAnOptionalDisplayName(t *testing.T) {
 	row := func(extra string) string {

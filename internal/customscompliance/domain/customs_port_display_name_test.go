@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」（领域半边，ADR-0353 决定三、八）——与物流节点同一组边界：名称给了就要成形：恰在上限照收、原样保留；空白、首尾空白、超长、控制 / 格式 / 行段
+// Covers: AT-CC-457（领域半边，ADR-0353 决定三、八）——与物流节点同一组边界：名称给了就要成形：恰在上限照收、原样保留；空白、首尾空白、超长、控制 / 格式 / 行段
 // 分隔字符、坏 UTF-8 一律拒，不截断不改写。零值即没登。
 func TestACustomsPortDisplayNameIsTakenAsWrittenOrRefused(t *testing.T) {
 	accepted := []string{

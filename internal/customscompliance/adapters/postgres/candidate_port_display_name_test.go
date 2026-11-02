@@ -17,7 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/migrations"
 )
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」与 ADR-0353 决定六（真库半边）——登记编排经真写口与真读口：
+// Covers: AT-CC-457、AT-CC-458（真库半边，ADR-0353 决定六）——登记编排经真写口与真读口：
 // 名称原样落库、点读与上列都读回；同一起点重登时名称并入比对（同名`已存在`、换名与补名`内容冲突`、册面不动），没登名称
 // 的版本原样重登照旧`已存在`；改名走更晚起点的新版本，前版照留旧名称。
 func TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison(t *testing.T) {
@@ -90,7 +90,7 @@ func TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison(t *testing
 	}
 }
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」——名称不进关务适用性判断：两个租户登同一份口岸与路径、只差
+// Covers: AT-CC-458（适用性半边）——名称不进关务适用性判断：两个租户登同一份口岸与路径、只差
 // 名称，同一候选的作答、不可用理由与目录版本引用逐格相同。
 func TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment(t *testing.T) {
 	registry, _, fixture := newPortsPathsRegistry(t)
@@ -124,7 +124,7 @@ func TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment(t *testing.T
 	}
 }
 
-// Covers: CONTEXT「口岸目录的一版可以带一个可选的显示名称」（迁移半边）——迁移 0031 施加在已有口岸版本的库上：不回填、不改写，
+// Covers: AT-CC-458（迁移半边）——迁移 0031 施加在已有口岸版本的库上：不回填、不改写，
 // 旧行的名称为 NULL（读成没登），其余各列逐格不变；之后库上 CHECK 作为第二道网拒空白、首尾空白、超长与控制字符。
 func TestMigration0031LeavesExistingCandidatePortsUnnamedAndUnchanged(t *testing.T) {
 	ctx := t.Context()

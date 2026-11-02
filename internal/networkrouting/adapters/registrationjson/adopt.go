@@ -27,6 +27,9 @@ var (
 	ErrAdoptedContentGiven = errors.New("network registration: an adopt row gives identity, revision and effective time only")
 	// ErrNotNetworkCatalogReference 表示 adopt 点名的不是网络目录的参考配置。
 	ErrNotNetworkCatalogReference = errors.New("network registration: the adopted reference is not a network catalog reference configuration")
+	// ErrDisplayNameOnlyOnNodeAdoption 表示别的族的采用行带了 display_name。显示名称只有物流节点有，由节点的采用行随行给；
+	// 它不是参考配置的内容（参考配置不带名称，ADR-0353 决定四），所以不归 ErrAdoptedContentGiven 那一句。
+	ErrDisplayNameOnlyOnNodeAdoption = errors.New("network registration: only an adopt row of a logistics node may give a display name")
 	// ErrNotInReference 表示点名的那一版参考配置里没有这一族的这个身份。
 	ErrNotInReference = errors.New("network registration: the adopted reference has no entry for this identity")
 )
@@ -46,10 +49,13 @@ type adoptionRow struct {
 	DisplayName *string `json:"display_name"`
 }
 
+// displayNameKey 是显示名称在登记行上的键。
+const displayNameKey = "display_name"
+
 // 采用行允许出现的键。身份键按族不同：日历是适用对象类别加对象身份，其余各族是 code；节点另许可选的显示名称。
 var (
 	codeAdoptionKeys     = adoptionKeys("code")
-	nodeAdoptionKeys     = adoptionKeys("code", "display_name")
+	nodeAdoptionKeys     = adoptionKeys("code", displayNameKey)
 	calendarAdoptionKeys = adoptionKeys("target_kind", "target_code")
 )
 
@@ -77,7 +83,11 @@ func adoptionOf(raw []byte, allowed map[string]bool) (adoptionRow, bool, error) 
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		if !allowed[key] {
+		switch {
+		case allowed[key]:
+		case key == displayNameKey:
+			return adoptionRow{}, true, fmt.Errorf("%w：只有物流节点的采用行可以带显示名称，这一族没有名称这一格", ErrDisplayNameOnlyOnNodeAdoption)
+		default:
 			return adoptionRow{}, true, fmt.Errorf("%w: %s 由参考配置与采用路径给出，采用行不另写", ErrAdoptedContentGiven, key)
 		}
 	}
