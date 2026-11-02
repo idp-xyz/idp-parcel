@@ -1,15 +1,17 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { technicalRows } from '../settlement/ops-ui';
 import { useMayMakeDecision } from '../use-operator-grants';
-import { ShipmentNo } from '../shipment-request/refs';
-import { parcelNoOf } from '../shipment-request/ref-no';
+import { shipmentNoOf } from '../shipment-request/ref-no';
+import { useCustomerNames } from '../shipment-request/use-customer-names';
+import type { StatusTone } from '../../vocabulary/status';
+import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
+import { parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
 import {
   decideReroute,
   listRerouteSuggestions,
@@ -31,25 +33,22 @@ import {
 
 const info = moduleInfoById['route-plans'];
 
-/** 与路由计划页两册共用的列表页头：标题、说明、检索与切册 chip。 */
-export interface RoutePlansHeader {
-  title: string;
-  description: string;
-  search: { value: string; onChange: (value: string) => void; placeholder: string };
-  filters: ReactNode;
-}
-
 /**
  * 路由计划页「改路建议」一册（ADR-0284 决定六）：复核在原计划失效后形成的改路建议，逐份列阻塞、候选与状态；待决定的那几份可择一
  * 合格候选、填决定依据，经授权改路决定口提交（ADR-0284 决定一）。决定方是登录的操作者，本页不收也不送；成不成立由服务端在判断键
  * 锁里按此刻的证据重判，本页的状态只是读到时的大概。
  */
-export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlansHeader; keyword: string }) {
-  // 两个决定口认同一种运营决定授予（授权改路）；明确没有时只显状态、不摆按钮（ADR-0315）。
-  const mayDecide = useMayMakeDecision('AUTHORIZED_REROUTE');
+const stateTone: Record<string, StatusTone> = { PENDING: 'warn', DECIDED: 'good', SUPERSEDED: 'muted' };
+
+/** 建议状态：词取本册的词表（待决定 / 已决定 / 已过时），色调待决定琥珀、已决定绿、已过时灰。 */
+function suggestionStatus(row: RerouteSuggestionRecord): RowStatus {
+  return { label: labelOf(rerouteSuggestionStateLabels, row.state).split('——')[0], tone: stateTone[row.state] ?? 'muted' };
+}
+
+export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<RerouteSuggestionListResponseBody> | null>(null);
-  const [deciding, setDeciding] = useState<RerouteSuggestionRecord | null>(null);
+  const names = useCustomerNames();
 
   useEffect(() => {
     let cancelled = false;
@@ -63,115 +62,124 @@ export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlans
 
   const retry = () => setReloadKey((value) => value + 1);
   const suggestions = answer?.kind === 'outcome' ? answer.body.suggestions : [];
-  const needle = keyword.trim().toLowerCase();
-  const visible = needle
-    ? suggestions.filter((row) =>
-        [row.correlationId, row.shipmentRequestId, row.declaredParcelId, row.customerAccountId, row.reviewedPlan ?? ''].some(
-          (value) => value.toLowerCase().includes(needle),
-        ),
-      )
-    : suggestions;
 
-  const columns: ListColumn<RerouteSuggestionRecord>[] = [
+  const columns: WorkbenchColumn<RerouteSuggestionRecord>[] = [
+    { key: 'parcel', header: '运单', render: parcelCell },
+    { key: 'state', header: '状态', render: (row) => <RowStatusPill status={suggestionStatus(row)} /> },
     {
-      id: 'parcel',
-      header: '运单',
-      render: (row) => (
-        <div className="flex min-w-0 flex-col items-start gap-0.5">
-          <ShipmentNo shipmentRequestId={row.shipmentRequestId} />
-          <span className="text-[11px] text-idpxyz-textMuted">
-            包裹 <span className="font-mono">{parcelNoOf(row.declaredParcelId)}</span>
-          </span>
-        </div>
-      ),
+      key: 'candidates',
+      header: '合格的备选路线',
+      hideWhenDetailOpen: true,
+      render: (row) => String(row.candidates.filter((candidate) => candidate.outcome === 'QUALIFIED').length) + ' 条',
     },
     {
-      id: 'blockers',
-      header: '为什么没自动改路',
-      className: 'font-mono text-xs',
-      render: (row) => (row.blockers.length > 0 ? row.blockers.join('、') : '—'),
-    },
-    {
-      id: 'candidates',
-      header: '备选路线（建议时）',
-      className: 'min-w-56 text-xs',
-      render: (row) => (
-        <ul>
-          {row.candidates.map((candidate) => (
-            <li key={candidate.id}>
-              <span className="font-mono">{candidate.id}</span> {labelOf(suggestionCandidateOutcomeLabels, candidate.outcome)}
-              {candidate.reason ? <span className="text-idpxyz-textMuted">（{candidate.reason}）</span> : null}
-            </li>
-          ))}
-        </ul>
-      ),
-    },
-    { id: 'suggested-at', header: '建议时间', className: 'min-w-44 font-mono text-xs', render: (row) => formatInstant(row.suggestedAt) },
-    {
-      id: 'state',
-      header: '状态',
-      className: 'min-w-44 text-xs',
-      render: (row) => {
-        const availability = rerouteDecisionAvailabilityOf(row);
-        return availability.kind === 'available' && mayDecide ? (
-          <Button variant="outline" disabled={deciding !== null} onClick={() => setDeciding(row)}>
-            {labelOf(rerouteSuggestionStateLabels, row.state)} · 决定
-          </Button>
-        ) : (
-          <span>
-            {labelOf(rerouteSuggestionStateLabels, row.state)}
-            {availability.kind === 'available' ? null : <span className="block text-idpxyz-textMuted">{availability.reason}</span>}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'technical',
-      header: '',
-      className: 'align-top',
-      render: (row) => (
-        <TechnicalDetails
-          className="max-w-md open:min-w-[18rem]"
-          rows={technicalRows([
-            { label: '运单标识', value: row.shipmentRequestId },
-            { label: '包裹标识', value: row.declaredParcelId },
-            { label: '客户编码', value: row.customerAccountId },
-            { label: '所在复核', value: row.correlationId },
-            { label: '失效的计划', value: row.reviewedPlan },
-            { label: '失效依据', value: row.lapseBasis },
-            { label: '状态码', value: row.state },
-          ])}
-        />
-      ),
+      key: 'suggested-at',
+      header: '建议时间',
+      sortKey: 'suggested-at',
+      render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{formatInstant(row.suggestedAt)}</span>,
     },
   ];
 
   return (
-    <>
-      <ListPageTemplate<RerouteSuggestionRecord>
-        {...header}
-        filterSummary={answer?.kind === 'outcome' ? `共 ${suggestions.length} 份` : undefined}
-        columns={columns}
-        rows={visible}
-        rowKey={(row) => row.correlationId}
-        viewState={catalogueViewState(answer, suggestions.length, retry, {
-          module: info,
-          endpoint: 'GET /route-reroute-suggestions',
-          emptyTitle: '没有待处理的改路建议',
-          emptyDescription: '运输途中路线失效、又不能自动改路时，系统会在这里给出改路建议，等你选一条备选路线。',
-        })}
-      />
-      {deciding ? (
-        <RerouteDecisionCard
-          suggestion={deciding}
-          onClose={() => setDeciding(null)}
-          onLanded={() => {
-            setDeciding(null);
-            retry();
-          }}
-        />
-      ) : null}
-    </>
+    <RouteWorkbench<RerouteSuggestionRecord>
+      {...header}
+      answered={answer?.kind === 'outcome'}
+      noun="份"
+      rows={suggestions}
+      rowKey={(row) => row.correlationId}
+      statusOf={suggestionStatus}
+      rowAttention={(row) => row.state === 'PENDING'}
+      searchCells={(row) => [...parcelSearchCells(row, names), row.correlationId, row.reviewedPlan]}
+      searchPlaceholder="搜运单号 / 包裹号 / 客户"
+      columns={columns}
+      sortAccessors={{ 'suggested-at': { value: (row) => row.suggestedAt, instant: true } }}
+      defaultSort={{ key: 'suggested-at', dir: -1 }}
+      renderDetail={(row, close) => <SuggestionDetail key={row.correlationId} row={row} names={names} onClose={close} onLanded={retry} />}
+      onRefresh={retry}
+      viewState={catalogueViewState(answer, suggestions.length, retry, {
+        module: info,
+        endpoint: 'GET /route-reroute-suggestions',
+        emptyTitle: '没有待处理的改路建议',
+        emptyDescription: '运输途中路线失效、又不能自动改路时，系统会在这里给出改路建议，等你选一条备选路线。',
+      })}
+    />
+  );
+}
+
+/**
+ * 一份改路建议的右栏：阻塞、各备选在建议时的结局；待决定且有合格备选时摆「决定改路」，点开在栏内填决定。换一份建议时由调用方
+ * 给新 key 重挂，上一份的草稿不带过来。
+ */
+function SuggestionDetail({
+  row,
+  names,
+  onClose,
+  onLanded,
+}: {
+  row: RerouteSuggestionRecord;
+  names: Parameters<typeof parcelSubtitle>[1];
+  onClose: () => void;
+  onLanded: () => void;
+}) {
+  // 两个决定口认同一种运营决定授予（授权改路）；明确没有时只显状态、不摆按钮（ADR-0315）。
+  const mayDecide = useMayMakeDecision('AUTHORIZED_REROUTE');
+  const [deciding, setDeciding] = useState(false);
+  const availability = rerouteDecisionAvailabilityOf(row);
+  return (
+    <RecordDetailPanel
+      title={shipmentNoOf(row.shipmentRequestId)}
+      status={suggestionStatus(row)}
+      subtitle={parcelSubtitle(row, names)}
+      facts={[
+        { label: '建议时间', value: formatInstant(row.suggestedAt) },
+        { label: '触发时间', value: row.triggerOccurredAt ? formatInstant(row.triggerOccurredAt) : '—' },
+        { label: '为什么没自动改路', value: row.blockers.length > 0 ? <span className="font-mono">{row.blockers.join('、')}</span> : '—' },
+        { label: '决定', value: row.decision ? `${row.decision.candidate}（${formatInstant(row.decision.decidedAt)}）` : '还没有' },
+      ]}
+      technical={techRows([
+        { label: '运单标识', value: row.shipmentRequestId },
+        { label: '包裹标识', value: row.declaredParcelId },
+        { label: '客户编码', value: row.customerAccountId },
+        { label: '所在复核', value: row.correlationId },
+        { label: '失效的计划', value: row.reviewedPlan },
+        { label: '失效依据', value: row.lapseBasis },
+        { label: '新计划版本', value: row.decision?.newPlanVersion },
+        { label: '决定人', value: row.decision?.decidedBy },
+        { label: '决定依据', value: row.decision?.basis },
+        { label: '状态码', value: row.state },
+      ])}
+      actions={
+        availability.kind === 'available' && mayDecide ? (
+          deciding ? (
+            <RerouteDecisionCard
+              suggestion={row}
+              onClose={() => setDeciding(false)}
+              onLanded={() => {
+                setDeciding(false);
+                onLanded();
+              }}
+            />
+          ) : (
+            <Button variant="outline" onClick={() => setDeciding(true)}>
+              决定改路
+            </Button>
+          )
+        ) : availability.kind === 'unavailable' ? (
+          <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>
+        ) : null
+      }
+      onClose={onClose}
+    >
+      <p>备选路线（建议时的评估，不是此刻的）：</p>
+      <ul className="space-y-0.5">
+        {row.candidates.map((candidate) => (
+          <li key={candidate.id}>
+            <span className="font-mono text-idpxyz-text">{candidate.id}</span> {labelOf(suggestionCandidateOutcomeLabels, candidate.outcome)}
+            {candidate.reason ? <span>（{candidate.reason}）</span> : null}
+          </li>
+        ))}
+      </ul>
+    </RecordDetailPanel>
   );
 }
 
@@ -209,7 +217,7 @@ function RerouteDecisionCard({
   };
 
   return (
-    <Card className="mx-4 mb-4">
+    <Card>
       <CardHeader>
         <CardTitle>决定改路</CardTitle>
       </CardHeader>
