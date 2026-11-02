@@ -78,6 +78,8 @@
 | `POST /v1/claims` | [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) 索赔提交 | `CLAIM_SUBMISSION` |
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
+- 提交答复指名委托时（`SUBMITTED` 与重放的 `EXISTING_RESULT`）带 `documentNumber`：委托的单据号，即报给收件方与客服的运单号，建单那一刻按租户的单据编号规则开立，此后不变，重放读回同一个号（[ADR-0355](../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、十一）。它是新增字段，`shipmentRequestId` 等既有各格不变；后续命令（补充、撤回、资料修订、取消）照旧以 `shipmentRequestId` 指名委托，不收运单号。委托没有单据号时 `documentNumber` 整键不出现（不答空串，也不拿 `shipmentRequestId` 顶），改带 `documentNumberAbsence` 说是哪一种：`ISSUED_BEFORE_NUMBERING`（单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户还没登单据编号时区）；两种都事后不补号。客户追踪视图仍按 `parcelId` 定位，不收运单号。
+- 提交口的 `outcome` 新增 `NUMBERING_RULE_COLLISION`（`200`，不带 `shipmentRequestId`）：租户的单据编号规则渲染出的运单号连续撞上已用的号，这一次没有建单。它不是故障，重发前要租户运营在规则册换格式；换好之后同一 `accessRequestId` 原样重发即建单。不认识这一格的调用方按「遇到不认识的 `outcome`」那一条出队交人即可。
 - 接入请求标识不得以保留命令前缀（`withdrawal:`、`parcel-cancellation:`、`source-data-amendment:`、`supplement:`、`claim:`）开头；提交口收到这样的标识答 400（推导不出）。
 - 提交答复在指名委托时同带 `submissionVersionId`（该委托此刻的当前提交版本标识，随 `shipmentRequestId` 同在同缺；重放在补充之后读回的是补充形成的当前版本）。客户下一次补充以它为基准载荷带回，基准过期答 `SUPPLEMENT_BASIS_STALE`（[ADR-0310](../adr/0310-first-party-customer-command-five-faces-launch-with-direct-customer-one-to-one-and-command-prefixed-request-keys.md) 取舍 E）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
