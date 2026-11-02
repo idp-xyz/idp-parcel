@@ -5,7 +5,7 @@ import type { ApiResult } from '../catalogue-api';
 import { deliveryScopeReadProblemNote, type DeliveryScopeListFilter } from './delivery-pre-advice';
 
 /**
- * 送站预报区与送站交接单区共用的筛选条：区切换的 chip、单据号、节点与日子三格。日子用浏览器的日期控件，换成哪两个瞬间在 delivery-pre-advice
+ * 送站预报区与送站交接单区共用的筛选条：区切换的 chip、单据号、节点与日子。日子用浏览器的日期控件，换成哪两个瞬间在 delivery-pre-advice
  * 的 localDayBoundsOf——一日按看的人所在的时区起算。单据号交服务端逐字找，不是在这一页里搜。
  */
 export function DeliveryScopeFilters({

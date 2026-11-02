@@ -190,6 +190,6 @@ test('交接单行：主列有交接单号显号，没有的显设备签发的�
   const numbered = handoverNoteRowOf(note({ documentNumber: 'HO-20261102-00018', claims: [{ customerAccount: 'SYN-ACCOUNT-01' }] }));
   equal(numbered.values.documentNumber, 'HO-20261102-00018');
   equal(numbered.values.noteId, 'SYN-HN-PSXM13-1');
-  const legacy = handoverNoteRowOf(note({ documentNumberAbsence: 'ISSUED_BEFORE_DOCUMENT_NUMBERING', claims: [{ customerAccount: 'SYN-ACCOUNT-01' }] }));
+  const legacy = handoverNoteRowOf(note({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING', claims: [{ customerAccount: 'SYN-ACCOUNT-01' }] }));
   equal(legacy.values.documentNumber, 'SYN-HN-PSXM13-1');
 });

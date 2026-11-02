@@ -12,6 +12,7 @@ import {
   handoverNoteFilterKeys,
 } from './delivery-pre-advice';
 import type { DeliveryPreAdviceRecord } from './delivery-scope-api';
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 
 // 送站预报区（票 ps-external-mark-relations/13「做什么」的「查阅读口」）。最容易错的是「预计送达日」：读口只收瞬间，一日从哪一刻起算随看的人
 // 所在的时区，页面把日子换成那一日本地零点到次日零点的左闭右开区间；换错一格，零点那一份就落进前一日。
@@ -99,17 +100,18 @@ test('读口问题码：看不见、坏筛选与没形成答案各有一句', ()
   ok(deliveryScopeReadProblemNote('SOMETHING_NEW').includes('SOMETHING_NEW'));
 });
 
-// ADR-0355 决定十一：主列有单据号显单据号，没有的照旧显内部标识；技术详情按单据上记下的原因分开说「上线前开立」与「单据编号时区未配置」，
-// 不一律写成前者。
-test('单据号：主列有号显号、没号显内部标识；技术详情两种无号原因分开说', () => {
+// ADR-0355 决定十一：主列有单据号显单据号，没有的照旧显内部标识；技术详情按单据上记下的原因取单据编号词典的说法，「上线前开立」与
+// 「单据编号时区未配置」分开说，不一律写成前者。
+test('单据号：主列有号显号、没号显内部标识；技术详情按无号原因分开说', () => {
   const numbered = preAdvice({ documentNumber: 'PA-20261102-00045' });
   equal(preAdviceRowOf(numbered).values.documentNumber, 'PA-20261102-00045');
   equal(preAdviceRowOf(numbered).values.preAdviceId, 'SYN-PREADV-PSXM13-1');
-  equal(documentNumberCellOf({ documentNumberAbsence: 'ISSUED_BEFORE_DOCUMENT_NUMBERING' }, 'SYN-PREADV-OLD'), 'SYN-PREADV-OLD');
+  equal(documentNumberCellOf({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }, 'SYN-PREADV-OLD'), 'SYN-PREADV-OLD');
 
   equal(documentNumberDetailOf(numbered), 'PA-20261102-00045');
-  equal(documentNumberDetailOf({ documentNumberAbsence: 'ISSUED_BEFORE_DOCUMENT_NUMBERING' }), '上线前开立，无单据号');
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }), documentNumberAbsenceNote('ISSUED_BEFORE_NUMBERING'));
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }), '上线前开立，无单据号');
   equal(documentNumberDetailOf({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }), '开立时单据编号时区未配置，无单据号');
-  equal(documentNumberDetailOf({ documentNumberAbsence: 'SOMETHING_NEW' }), '无单据号（SOMETHING_NEW）');
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'SOMETHING_NEW' }), documentNumberAbsenceNote('SOMETHING_NEW'));
   equal(documentNumberDetailOf({}), undefined);
 });

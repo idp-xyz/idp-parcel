@@ -101,10 +101,6 @@ export const objectNouns = {
   recovery: '追偿',
   notification: '通知',
   disclosure: '披露',
-
-  // —— 送货到网点（领域：送站预报 / 送站交接单的单据号，ADR-0355；内部标识进技术详情）——
-  preAdviceNumber: '预报单号',
-  handoverNoteNumber: '交接单号',
 } as const satisfies Record<string, string>;
 
 export type ObjectNoun = keyof typeof objectNouns;

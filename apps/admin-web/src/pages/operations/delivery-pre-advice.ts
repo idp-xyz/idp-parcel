@@ -4,6 +4,7 @@
 // 本地零点的左闭右开区间；换错一格，零点那一份就落进前一日。页面组件要 React 与 DOM，这几格是纯函数就能拿 node:test 钉住。
 
 import { formatInstant } from '../catalogue-view';
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 import type { DeliveryPreAdviceRecord, DocumentNumberFields } from './delivery-scope-api';
 
 /** 一本册列表认的那一对业务时刻键：预报是预计送达，交接单是开立。键名与 query_delivery_scope_records.go 同字。 */
@@ -68,22 +69,13 @@ export function documentNumberCellOf(fields: DocumentNumberFields, internalId: s
 }
 
 /**
- * 技术详情里「单据号」那一格：有号显号；没有号按单据上记下的原因说，两种原因分开说——上线前开立没有续办，单据编号时区未配置是租户漏登了
- * 「设置 → 单据编号」里的时区（ADR-0355 决定七），一律写成前者会把后者藏起来。原因认不出时原样露码（labelOf 的约定）。
+ * 技术详情里「单据号」那一格：有号显号；没有号按单据上记下的原因取单据编号词典的说法（vocabulary/document-numbering 的
+ * documentNumberAbsenceNote）——「上线前开立」与「时区未配置」分开说，说法只在词典一处。号码与原因都缺席时这一格不显。
  */
 export function documentNumberDetailOf(fields: DocumentNumberFields): string | undefined {
   if (fields.documentNumber) return fields.documentNumber;
-  switch (fields.documentNumberAbsence) {
-    case 'ISSUED_BEFORE_DOCUMENT_NUMBERING':
-      return '上线前开立，无单据号';
-    case 'NUMBERING_TIME_ZONE_NOT_CONFIGURED':
-      return '开立时单据编号时区未配置，无单据号';
-    case undefined:
-    case '':
-      return undefined;
-    default:
-      return `无单据号（${fields.documentNumberAbsence}）`;
-  }
+  if (fields.documentNumberAbsence) return documentNumberAbsenceNote(fields.documentNumberAbsence);
+  return undefined;
 }
 
 export interface PreAdviceReviewRow {

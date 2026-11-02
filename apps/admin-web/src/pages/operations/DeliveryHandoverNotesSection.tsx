@@ -10,7 +10,7 @@ import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { nounOf } from '../../vocabulary/objects';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { deliveryHandoverConfirmationDecision, hiddenDecisionHint } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
@@ -44,6 +44,8 @@ import {
 import { DeliveryScopeFilters, DeliveryScopeReadNote } from './DeliveryScopeFilters';
 
 const info = moduleInfoById['node-operations-review'];
+// 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
+const numberName = documentTypeWords.DELIVERY_HANDOVER_NOTE.numberName;
 const listBase = '/node-operations-delivery-handover-notes';
 
 function col(id: string, header: string, mono = false): ListColumn<HandoverNoteReviewRow> {
@@ -54,9 +56,9 @@ function col(id: string, header: string, mono = false): ListColumn<HandoverNoteR
   };
 }
 
-// 主列是交接单号（服务端收下开立时取的单据号，ADR-0355 决定二、十一）；没有单据号的照旧显设备签发的交接单标识，原因在技术详情。
+// 主列是交接单的单据号（服务端收下开立时取的，ADR-0355 决定二、十一）；没有单据号的照旧显设备签发的交接单标识，原因在技术详情。
 const columns: ListColumn<HandoverNoteReviewRow>[] = [
-  col('documentNumber', nounOf('handoverNoteNumber'), true),
+  col('documentNumber', numberName, true),
   col('node', '网点'),
   col('deliveringParty', '谁来送', true),
   col('openedAt', '开单时间', true),
@@ -111,14 +113,14 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
       title={info.title}
       subtitle="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立；待确认的客户可以在右栏里确认。"
       sections={sections}
-      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={nounOf('handoverNoteNumber')} onChange={setFilter} />}
+      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={numberName} onChange={setFilter} />}
       answered={body !== null}
       noun="张"
       rows={rows}
       rowKey={(row) => row.key}
       statusOf={(row) => reviewStatusOf(row, { labelKey: 'state' })}
       searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder="在结果里搜交接单号 / 网点 / 客户"
+      searchPlaceholder={`在结果里搜${numberName} / 网点 / 客户`}
       columns={workbenchColumnsOf(columns, { labelKey: 'state' })}
       renderDetail={(row, close) => <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />}
       onRefresh={retry}
@@ -129,8 +131,8 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
 
 /**
  * 一张交接单的右栏，形状同本区其余几页（事实格 + 正文 + 技术详情）：单子开放还是关闭、送货范围成立没有、几件、客户确认进度是事实格；
- * 单上自称的每个客户各一行（结论、途径与确认按钮），名下成员一列在正文；交接单号（没有时注明为什么没有）、设备签发的交接单标识、网点编码、
- * 关闭事实、确认人与来源单据、成员的事实身份进技术详情。标题是交接单号，没有单据号的照旧用交接单标识。确认是运营决定（送站交接确认，
+ * 单上自称的每个客户各一行（结论、途径与确认按钮），名下成员一列在正文；单据号（没有时按词典注明为什么没有）、设备签发的交接单标识、网点编码、
+ * 关闭事实、确认人与来源单据、成员的事实身份进技术详情。标题是单据号，没有单据号的照旧用交接单标识。确认是运营决定（送站交接确认，
  * UC-NO-006 步骤 5B），表单在栏内展开。
  */
 function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onClose: () => void; onLanded: () => void }) {
@@ -177,7 +179,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
           : []
       }
       technical={techRows([
-        { label: nounOf('handoverNoteNumber'), value: note ? documentNumberDetailOf(note.handoverNote) : undefined },
+        { label: numberName, value: note ? documentNumberDetailOf(note.handoverNote) : undefined },
         // 设备签发的标识（ADR-0023）：作业端与客户确认都按它寻址，单据号不替代它。
         { label: '交接单标识（设备签发）', value: noteId },
         { label: '网点编码', value: note?.handoverNote.node },

@@ -8,8 +8,8 @@ import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue
 export type { ApiResult } from '../catalogue-api';
 
 /**
- * 一份单据上的单据号两键（ADR-0355 决定十一）：有号只带 documentNumber；没有号只带 documentNumberAbsence，取 ISSUED_BEFORE_DOCUMENT_NUMBERING
- * （上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED（开立时单据编号时区未配置）。两键都不会是空串，也不会拿内部标识顶。
+ * 一份单据上的单据号与无号原因（ADR-0355 决定十一）：有号只带 documentNumber；没有号只带 documentNumberAbsence，取 ISSUED_BEFORE_NUMBERING
+ * （上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED（开立时单据编号时区未配置）。都不会是空串，也不会拿内部标识顶。
  */
 export interface DocumentNumberFields {
   documentNumber?: string;
