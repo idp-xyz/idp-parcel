@@ -117,6 +117,7 @@ func (fixture ratioBaseFixture) publish(
 		Key:           ports.StatementKey{TenantID: saTenant(t, tenant), Number: saValue(t, domain.NewStatementNumber, number)},
 		ContentDigest: "digest-" + number,
 		Statement:     statement,
+		DraftVersion:  saValue(t, domain.NewStatementDraftVersion, "v-"+number),
 		RecordedAt:    publishedAt,
 	}
 	saWithin(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {

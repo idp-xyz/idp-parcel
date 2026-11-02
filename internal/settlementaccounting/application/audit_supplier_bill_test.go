@@ -20,6 +20,8 @@ type payableStoreDouble struct {
 	findErr error
 	saveErr error
 	saves   int
+	// calls 依次记下排队与按身份读的调用，钉住「先排队、再查重」的次序。
+	calls []string
 }
 
 func newPayableStore() *payableStoreDouble {
@@ -30,10 +32,30 @@ func payableStoreKey(key ports.AuditedPayableKey) string {
 	return key.TenantID.String() + "|" + key.Payable.String()
 }
 
+func (double *payableStoreDouble) LockIssuance(
+	_ context.Context,
+	key ports.AuditedPayableKey,
+	claim domain.BillClaimID,
+	line domain.BillLineReference,
+) error {
+	double.calls = append(double.calls, "lock "+key.Payable.String()+" "+claim.String()+"/"+line.String())
+	return nil
+}
+
+func (double *payableStoreDouble) DocumentNumberUsed(_ context.Context, tenant domain.TenantID, number string) (bool, error) {
+	for _, record := range double.records {
+		if issued, numbered := record.Numbering.Number(); record.Key.TenantID == tenant && numbered && issued.String() == number {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (double *payableStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.AuditedPayableKey,
 ) (ports.AuditedPayableRecord, bool, error) {
+	double.calls = append(double.calls, "find "+key.Payable.String())
 	if double.findErr != nil {
 		return ports.AuditedPayableRecord{}, false, double.findErr
 	}
@@ -303,12 +325,12 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 		arrange func(*billFixture)
 		reason  application.AuditUndecidedReason
 	}{
-		"authority unconfigured":   {func(f *billFixture) { f.authority.configured = false }, application.AuditAuthorityUnconfigured},
-		"authority unavailable":    {func(f *billFixture) { f.authority.err = errors.New("authority down") }, application.AuditAuthorityUnavailable},
-		"account unconfigured":     {func(f *billFixture) { f.accounts.configured = false }, application.PayableAccountUnconfigured},
-		"account unavailable":      {func(f *billFixture) { f.accounts.err = errors.New("accounts down") }, application.PayableAccountUnavailable},
-		"reception store down":     {func(f *billFixture) { f.store.findErr = errors.New("store down") }, application.AuditBillStoreUnavailable},
-		"payable store save fails": {func(f *billFixture) { f.payables.saveErr = errors.New("payables down") }, application.PayableStoreUnavailable},
+		"authority unconfigured":  {func(f *billFixture) { f.authority.configured = false }, application.AuditAuthorityUnconfigured},
+		"authority unavailable":   {func(f *billFixture) { f.authority.err = errors.New("authority down") }, application.AuditAuthorityUnavailable},
+		"account unconfigured":    {func(f *billFixture) { f.accounts.configured = false }, application.PayableAccountUnconfigured},
+		"account unavailable":     {func(f *billFixture) { f.accounts.err = errors.New("accounts down") }, application.PayableAccountUnavailable},
+		"reception store down":    {func(f *billFixture) { f.store.findErr = errors.New("store down") }, application.AuditBillStoreUnavailable},
+		"arrangement unavailable": {func(f *billFixture) { f.arrangements.err = errors.New("arrangements down") }, application.AuditArrangementViewUnavailable},
 	}
 	for name, stop := range stops {
 		t.Run(name, func(t *testing.T) {
@@ -327,6 +349,16 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 		})
 	}
 
+	t.Run("a save failing after the number was taken rolls the audit back", func(t *testing.T) {
+		// 号已取走：答未决让事务照常提交，这个号就成了空号（ADR-0355 决定三），所以交回错误让调用方回滚。
+		fixture := receivedFixture(t)
+		fixture.payables.saveErr = errors.New("payables down")
+		_, err := fixture.handler.Audit(context.Background(), auditCommand(t, "bill-1", "line-1", "payable-1"))
+		if !errors.Is(err, application.ErrNumberedIssueInterrupted) || len(fixture.payables.records) != 0 {
+			t.Fatalf("err = %v records = %d", err, len(fixture.payables.records))
+		}
+	})
+
 	t.Run("a handoff failure keeps the payable and leaves a continuation", func(t *testing.T) {
 		fixture := receivedFixture(t)
 		fixture.handoff.err = errors.New("downstream unavailable")
@@ -344,7 +376,7 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 		for _, reason := range []application.AuditUndecidedReason{
 			application.AuditBillStoreUnavailable, application.AuditAuthorityUnavailable, application.AuditAuthorityUnconfigured,
 			application.PayableAccountUnavailable, application.PayableAccountUnconfigured, application.PayableStoreUnavailable,
-			application.AuditEscalationViewUnavailable, application.AuditEscalationUnconfigured,
+			application.AuditEscalationViewUnavailable, application.AuditEscalationUnconfigured, application.AuditArrangementViewUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -352,11 +384,11 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 8 {
+		if len(labels) != 9 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.AuditUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第十个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

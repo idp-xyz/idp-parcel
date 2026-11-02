@@ -42,7 +42,8 @@ func statementsEndpoint(register *stubStatementCatalogue) http.Handler {
 }
 
 // Covers: 逐格转写 — 单号、账户、周期、总额与两个计数原样透出；异议与后续纳入以各自
-// 数组挂在单上；未裁定的异议不带裁定三键（不代填「待处理」）；纳入行没有金额键。
+// 数组挂在单上；未裁定的异议不带裁定三键（不代填「待处理」）；纳入行没有金额键。`AT-SA-230`（读口半边）：
+// 每项争议带争议号，或带它为什么没有。
 func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 	resolvedAt := catalogueBaseAt.Add(72 * time.Hour)
 	register := &stubStatementCatalogue{
@@ -58,21 +59,23 @@ func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 				PublishedAt:     catalogueBaseAt,
 				Disputes: []ports.StatementDisputeEntry{
 					{
-						Dispute:       "SYN-DISP-RESOLVED",
-						Charge:        "SYN-CHG-01",
-						DisputedMinor: 12000,
-						Reason:        "WEIGHT_MISMATCH",
-						OpenedAt:      catalogueBaseAt.Add(24 * time.Hour),
-						Resolution:    "UPHELD",
-						ResolutionRef: "SYN-RES-01",
-						ResolvedAt:    &resolvedAt,
+						Dispute:        "SYN-DISP-RESOLVED",
+						DocumentNumber: "DSP-202607-00003",
+						Charge:         "SYN-CHG-01",
+						DisputedMinor:  12000,
+						Reason:         "WEIGHT_MISMATCH",
+						OpenedAt:       catalogueBaseAt.Add(24 * time.Hour),
+						Resolution:     "UPHELD",
+						ResolutionRef:  "SYN-RES-01",
+						ResolvedAt:     &resolvedAt,
 					},
 					{
-						Dispute:       "SYN-DISP-OPEN",
-						Charge:        "SYN-CHG-02",
-						DisputedMinor: 8000,
-						Reason:        "RATE_DISPUTE",
-						OpenedAt:      catalogueBaseAt.Add(24 * time.Hour),
+						Dispute:               "SYN-DISP-OPEN",
+						DocumentNumberAbsence: "ISSUED_BEFORE_NUMBERING",
+						Charge:                "SYN-CHG-02",
+						DisputedMinor:         8000,
+						Reason:                "RATE_DISPUTE",
+						OpenedAt:              catalogueBaseAt.Add(24 * time.Hour),
 					},
 				},
 				SubsequentInclusions: []ports.SubsequentInclusionEntry{
@@ -148,7 +151,15 @@ func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 		string(resolved["disputedAmount"]) != `"12000"` {
 		t.Fatalf("已裁定异议转写走样：%s", response.Body.String())
 	}
+	// 争议号与无号原因恰出其一（ADR-0355 决定十一）：有号的不带原因；没号的不出空串、不拿争议标识顶，改带原因。
+	if string(resolved["documentNumber"]) != `"DSP-202607-00003"` || resolved["documentNumberAbsence"] != nil {
+		t.Fatalf("有争议号的那一项转写走样：%s", response.Body.String())
+	}
 	open := statement.Disputes[1]
+	if open["documentNumber"] != nil || string(open["documentNumberAbsence"]) != `"ISSUED_BEFORE_NUMBERING"` ||
+		string(open["dispute"]) != `"SYN-DISP-OPEN"` {
+		t.Fatalf("没有争议号的那一项转写走样：%s", response.Body.String())
+	}
 	for _, absent := range []string{"resolution", "resolutionRef", "resolvedAt"} {
 		if _, present := open[absent]; present {
 			t.Fatalf("未裁定的异议不该带 %q（那会写成一个看起来已有人处置的结论）：%s",

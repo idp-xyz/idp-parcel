@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
@@ -41,7 +44,15 @@ type settlementDecisionsFixture struct {
 	db        *bentopg.DB
 	tenant    sadomain.TenantID
 	endpoints map[string]http.Handler
+	// numbers 是与生产同一份装配（docnumbering.Build）在同一个库上装出的编号组件，发布、争议与审核在各自的开立事务里经它取号。
+	numbers docnumbering.Components
+	// published 是 newPublishedStatementFixture 发出的那张单的单号：由服务端在发布事务里按编号规则取，载荷不带。
+	published string
 }
+
+// statementNumberPattern 是对账单产品默认模板 STMT-{yyyy}{mm}-{seq:5} 渲染出的形状（ADR-0355 决定五）。用例比形状不比年月：年月取服务端
+// 此刻在结算账户业务时区里的那一个月，用例另算一遍会在月末那一秒与服务端各说一个月。
+var statementNumberPattern = regexp.MustCompile(`^STMT-\d{6}-\d{5}$`)
 
 func newSettlementDecisionsFixture(t *testing.T) *settlementDecisionsFixture {
 	t.Helper()
@@ -67,12 +78,16 @@ func newSettlementDecisionsFixture(t *testing.T) *settlementDecisionsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	numbers, err := docnumbering.Build(db, docnumber.SecretTable{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	endpoints := map[string]http.Handler{}
 	for _, feature := range endpointRegistry {
 		if feature.wiringKey != any((*settlementDecisionsWiring)(nil)) {
 			continue
 		}
-		mounted, err := feature.production(endpointSources{db: db}, endpointChannels{operatorDecisions: decisions})
+		mounted, err := feature.production(endpointSources{db: db, documentNumbers: numbers}, endpointChannels{operatorDecisions: decisions})
 		if err != nil {
 			t.Fatalf("装配：%v", err)
 		}
@@ -85,7 +100,9 @@ func newSettlementDecisionsFixture(t *testing.T) *settlementDecisionsFixture {
 			t.Fatalf("%s 没按登记处挂上", pattern)
 		}
 	}
-	fixture := &settlementDecisionsFixture{db: db, tenant: mustSettlementValue(t, sadomain.NewTenantID, decisionsTenant), endpoints: endpoints}
+	fixture := &settlementDecisionsFixture{
+		db: db, tenant: mustSettlementValue(t, sadomain.NewTenantID, decisionsTenant), endpoints: endpoints, numbers: numbers,
+	}
 	fixture.seedCharge(t)
 	return fixture
 }
@@ -338,7 +355,7 @@ func TestTheStatementPublicationFacePublishesAListedPeriod(t *testing.T) {
 	last := time.Now().In(time.FixedZone("CST", 8*3600)).AddDate(0, 0, 1).Format("2006-01-02")
 	cutOffAt := time.Now().UTC().Format(time.RFC3339)
 	publication := func(total string) string {
-		return `{"number":"SYN-STMT-PSB22-1","account":"` + decisionsAccount + `","period":"SYN-PERIOD-2026-10","version":"v1",` +
+		return `{"account":"` + decisionsAccount + `","period":"SYN-PERIOD-2026-10","version":"v1",` +
 			`"currency":"CNY","charges":["` + decisionsCharge + `"],"lastAttributionDate":"` + last + `","declaredTotal":"` + total + `",` +
 			`"cutOffAt":"` + cutOffAt + `"}`
 	}
@@ -357,8 +374,10 @@ func TestTheStatementPublicationFacePublishesAListedPeriod(t *testing.T) {
 		t.Fatalf("合计不平 = %d %v", status, answer)
 	}
 	status, answer := fixture.post(t, statementPublicationFace, decisionsPublisher, publication("9600"))
-	if status != http.StatusCreated || answer["outcome"] != "STATEMENT_PUBLISHED" || answer["statement"] != "SYN-STMT-PSB22-1" ||
-		answer["total"] != "9600" {
+	number, _ := answer["statement"].(string)
+	// 单号由服务端在发布事务里按编号规则取（ADR-0355 决定九）：勾稽不平那一次没有先取号，这一张是本月第一个流水。
+	if status != http.StatusCreated || answer["outcome"] != "STATEMENT_PUBLISHED" || !statementNumberPattern.MatchString(number) ||
+		!strings.HasSuffix(number, "-00001") || answer["total"] != "9600" {
 		t.Fatalf("发布 = %d %v", status, answer)
 	}
 	if lines, _ := answer["lines"].([]any); len(lines) != 1 || lines[0] != decisionsCharge {
@@ -370,12 +389,23 @@ func TestTheStatementPublicationFacePublishesAListedPeriod(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, err := catalogue.ListCustomerCharges(t.Context(), fixture.tenant, 10)
-	if err != nil || len(rows) != 1 || rows[0].AttributionDate != last || rows[0].BilledOn != "SYN-STMT-PSB22-1" {
-		t.Fatalf("读口 = %+v err = %v，want 归属日 %s、所在单 SYN-STMT-PSB22-1", rows, err, last)
+	if err != nil || len(rows) != 1 || rows[0].AttributionDate != last || rows[0].BilledOn != number {
+		t.Fatalf("读口 = %+v err = %v，want 归属日 %s、所在单 %s", rows, err, last, number)
 	}
+	// 同一发布意图（账户、账期、截止版本）同内容重放答原单原号，不取第二个号；换了内容答发布意图冲突。
 	if status, answer := fixture.post(t, statementPublicationFace, decisionsPublisher, publication("9600")); status != http.StatusOK ||
-		answer["outcome"] != "EXISTING_STATEMENT" {
+		answer["outcome"] != "EXISTING_STATEMENT" || answer["statement"] != number {
 		t.Fatalf("重放 = %d %v", status, answer)
+	}
+	if status, answer := fixture.post(t, statementPublicationFace, decisionsPublisher, strings.Replace(publication("9600"), `"cutOffAt":"`+cutOffAt, `"cutOffAt":"2026-01-01T00:00:00Z`, 1)); status != http.StatusOK ||
+		answer["outcome"] != "PUBLICATION_INTENT_CONFLICT" {
+		t.Fatalf("同一意图换内容 = %d %v", status, answer)
+	}
+	if count := fixture.text(t, `SELECT count(*)::text FROM settlement_accounting.customer_statement WHERE tenant_id = $1`, decisionsTenant); count != "1" {
+		t.Fatalf("库上对账单 %s 张，同一意图只该有一张", count)
+	}
+	if status, answer := fixture.post(t, statementPublicationFace, decisionsPublisher, strings.Replace(publication("9600"), `{"account"`, `{"number":"SYN-STMT-1","account"`, 1)); status != http.StatusBadRequest {
+		t.Fatalf("载荷带单号 = %d %v，want 400（单号不由人填）", status, answer)
 	}
 	if status, _ := fixture.post(t, statementPublicationFace, decisionsPublisher, strings.Replace(publication("9600"), `"9600"`, `9600`, 1)); status != http.StatusBadRequest {
 		t.Fatalf("合计写成数字 = %d，want 400", status)

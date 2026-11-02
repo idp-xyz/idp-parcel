@@ -410,6 +410,7 @@ func formedDisputeRecord(t *testing.T, tenant, id string, resolved bool) ports.D
 		ContentDigest: digest,
 		Dispute:       dispute,
 		RecordedAt:    recorded,
+		Numbering:     numberedDocument(t, "DSP-"+id),
 	}
 }
 

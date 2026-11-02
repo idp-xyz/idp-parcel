@@ -29,8 +29,11 @@ func NewAuditedPayables(db *bentopg.DB) (*AuditedPayables, error) {
 
 var _ ports.AuditedPayableStore = (*AuditedPayables)(nil)
 
+const auditedPayableTable = "settlement_accounting.audited_payable"
+
 const auditedPayableColumns = `payable_id, claim_id, line_ref, expected_version, legal_entity,
-	        account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at`
+	        account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at,
+	        document_number, document_number_absence`
 
 // FindByKey 按幂等键取回一份应付。否定结果只回 false，不区分「不存在」与「属于另一个租户」。
 func (repository *AuditedPayables) FindByKey(
@@ -80,12 +83,51 @@ func (repository *AuditedPayables) findOne(
 	if err != nil {
 		return ports.AuditedPayableRecord{}, false, fmt.Errorf("find audited payable: %w", err)
 	}
+	numbering, err := numberingFrom(row.documentNumber, row.numberAbsence)
+	if err != nil {
+		return ports.AuditedPayableRecord{}, false, fmt.Errorf("find audited payable: %w", err)
+	}
 	return ports.AuditedPayableRecord{
 		Key:           ports.AuditedPayableKey{TenantID: tenant, Payable: payable.Payable()},
 		ContentDigest: row.digest,
 		Payable:       payable,
 		RecordedAt:    row.recordedAt.UTC(),
+		Numbering:     numbering,
 	}, true, nil
+}
+
+// LockIssuance 以两把事务级咨询锁把同一应付身份、同一行主张的审核排成一队（见 ports.AuditedPayableStore）。先身份后行，
+// 次序固定：每笔审核各只拿一个身份与一行，按同一次序取就不会互等成环。
+func (repository *AuditedPayables) LockIssuance(
+	ctx context.Context,
+	key ports.AuditedPayableKey,
+	claim domain.BillClaimID,
+	line domain.BillLineReference,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock audited payable issuance: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.audited_payable.identity'), hashtext($1 || chr(31) || $2))`,
+		key.TenantID.String(), key.Payable.String()); err != nil {
+		return fmt.Errorf("lock audited payable issuance: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.audited_payable.line'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		key.TenantID.String(), claim.String(), line.String()); err != nil {
+		return fmt.Errorf("lock audited payable issuance: %w", err)
+	}
+	return nil
+}
+
+// DocumentNumberUsed 答一个应付号是否已在本租户的审核应付册上。
+func (repository *AuditedPayables) DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error) {
+	used, err := documentNumberUsed(ctx, repository.db, auditedPayableTable, tenant, number)
+	if err != nil {
+		return false, fmt.Errorf("audited payable number used: %w", err)
+	}
+	return used, nil
 }
 
 // Save 写下一份审核应付。同身份或同一行已有应付时答`已有记录`——业务答案不是错误
@@ -104,12 +146,17 @@ func (repository *AuditedPayables) Save(
 		return ports.AuditedPayableSaveOutcomeInvalid, fmt.Errorf(
 			"save audited payable: record key disagrees with the payable's identity")
 	}
+	number, absence, err := numberingColumns(record.Numbering)
+	if err != nil {
+		return ports.AuditedPayableSaveOutcomeInvalid, fmt.Errorf("save audited payable: %w", err)
+	}
 	currency, minor := payable.Amount()
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.audited_payable
 			(tenant_id, payable_id, claim_id, line_ref, expected_version, legal_entity,
-			 account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at, operation_evidence)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			 account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at, operation_evidence,
+			 document_number, document_number_absence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		payable.Payable().String(),
@@ -125,6 +172,8 @@ func (repository *AuditedPayables) Save(
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
 		optionalText(record.OperationEvidence),
+		number,
+		absence,
 	)
 	if err != nil {
 		return ports.AuditedPayableSaveOutcomeInvalid, fmt.Errorf("save audited payable: %w", err)
@@ -144,6 +193,7 @@ type payableRow struct {
 	auditedAt                      time.Time
 	digest                         string
 	recordedAt                     time.Time
+	documentNumber, numberAbsence  *string
 }
 
 func (row *payableRow) scanTargets() []any {
@@ -151,6 +201,7 @@ func (row *payableRow) scanTargets() []any {
 		&row.payable, &row.claim, &row.line, &row.expected,
 		&row.legalEntity, &row.account, &row.currency, &row.amountMinor,
 		&row.auditor, &row.auditedAt, &row.digest, &row.recordedAt,
+		&row.documentNumber, &row.numberAbsence,
 	}
 }
 

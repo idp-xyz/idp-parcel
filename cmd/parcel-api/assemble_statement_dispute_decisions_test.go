@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -24,10 +25,13 @@ const (
 
 	statementDisputeFace           = "/settlement-statement-disputes"
 	statementDisputeResolutionFace = "/settlement-statement-dispute-resolutions"
-	disputedStatement              = "SYN-STMT-DISPUTE-1"
 )
 
-// newPublishedStatementFixture 发一张只有一笔 9600 费用的对账单，再给客服与财务各登一种争议授予。
+// disputeNumberPattern 是争议产品默认模板 DSP-{yyyy}{mm}-{seq:5} 渲染出的形状（ADR-0355 决定五），比形状不比年月，理由同
+// statementNumberPattern。
+var disputeNumberPattern = regexp.MustCompile(`^DSP-\d{6}-\d{5}$`)
+
+// newPublishedStatementFixture 发一张只有一笔 9600 费用的对账单，再给客服与财务各登一种争议授予。单号由服务端取，记在 published 上。
 func newPublishedStatementFixture(t *testing.T) (*settlementDecisionsFixture, time.Time) {
 	t.Helper()
 	fixture := newSettlementDecisionsFixture(t)
@@ -54,15 +58,16 @@ func newPublishedStatementFixture(t *testing.T) (*settlementDecisionsFixture, ti
 	}
 	last := time.Now().In(time.FixedZone("CST", 8*3600)).AddDate(0, 0, 1).Format("2006-01-02")
 	status, answer := fixture.post(t, statementPublicationFace, decisionsPublisher,
-		`{"number":"`+disputedStatement+`","account":"`+decisionsAccount+`","period":"SYN-PERIOD-2026-11","version":"v1",`+
+		`{"account":"`+decisionsAccount+`","period":"SYN-PERIOD-2026-11","version":"v1",`+
 			`"currency":"CNY","charges":["`+decisionsCharge+`"],"lastAttributionDate":"`+last+`","declaredTotal":"9600",`+
 			`"cutOffAt":"`+time.Now().UTC().Format(time.RFC3339)+`"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("发布 = %d %v", status, answer)
 	}
+	fixture.published, _ = answer["statement"].(string)
 	publishedAt, err := time.Parse(time.RFC3339Nano, fixture.text(t,
 		`SELECT to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') FROM settlement_accounting.customer_statement
-		  WHERE tenant_id = $1 AND statement_number = $2`, decisionsTenant, disputedStatement))
+		  WHERE tenant_id = $1 AND statement_number = $2`, decisionsTenant, fixture.published))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,8 +82,8 @@ func raisedAfter(at time.Time) time.Time {
 	return raised
 }
 
-func disputeBodyOf(id, amount string, openedAt time.Time) string {
-	return `{"dispute":"` + id + `","statement":"` + disputedStatement + `","charge":"` + decisionsCharge + `","disputedAmount":"` + amount +
+func (fixture *settlementDecisionsFixture) disputeBodyOf(id, amount string, openedAt time.Time) string {
+	return `{"dispute":"` + id + `","statement":"` + fixture.published + `","charge":"` + decisionsCharge + `","disputedAmount":"` + amount +
 		`","reason":"客户来电：重量按 1.2 kg 计","openedAt":"` + openedAt.UTC().Format(time.RFC3339) + `"}`
 }
 
@@ -88,28 +93,31 @@ func disputeBodyOf(id, amount string, openedAt time.Time) string {
 func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
 	openedAt := raisedAfter(publishedAt)
-	body := disputeBodyOf("SYN-DSP-1", "1600", openedAt)
+	body := fixture.disputeBodyOf("SYN-DSP-1", "1600", openedAt)
 
 	if status, answer := fixture.post(t, statementDisputeFace, disputeFinance, body); status != http.StatusForbidden {
 		t.Fatalf("持处理授予的人登记 = %d %v，want 403", status, answer)
 	}
 	status, answer := fixture.post(t, statementDisputeFace, disputeClerk, body)
+	number, _ := answer["documentNumber"].(string)
 	if status != http.StatusCreated || answer["outcome"] != "DISPUTE_OPENED" || answer["disputedAmount"] != "1600" ||
-		answer["statement"] != disputedStatement || answer["resolution"] != nil {
-		t.Fatalf("登记 = %d %v", status, answer)
+		answer["statement"] != fixture.published || answer["resolution"] != nil || answer["dispute"] != "SYN-DSP-1" ||
+		!disputeNumberPattern.MatchString(number) || !strings.HasSuffix(number, "-00001") || answer["documentNumberAbsence"] != nil {
+		t.Fatalf("登记 = %d %v（争议号由服务端在登记事务里取，争议标识仍是载荷里那一个）", status, answer)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, body); status != http.StatusOK || answer["outcome"] != "EXISTING_DISPUTE" {
-		t.Fatalf("重放 = %d %v", status, answer)
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, body); status != http.StatusOK || answer["outcome"] != "EXISTING_DISPUTE" ||
+		answer["documentNumber"] != number {
+		t.Fatalf("重放 = %d %v，要答原来那个争议号", status, answer)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-1", "1700", openedAt)); status != http.StatusOK ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-1", "1700", openedAt)); status != http.StatusOK ||
 		answer["outcome"] != "DISPUTE_CONFLICT" {
 		t.Fatalf("同标识换金额 = %d %v", status, answer)
 	}
 	for name, raw := range map[string]string{
-		"金额越行":   disputeBodyOf("SYN-DSP-2", "9601", openedAt),
-		"单号不在册":  strings.Replace(disputeBodyOf("SYN-DSP-3", "100", openedAt), disputedStatement, "SYN-STMT-NONE", 1),
-		"提出早于发布": disputeBodyOf("SYN-DSP-4", "100", publishedAt.Add(-time.Hour)),
-		"提出晚于登记": disputeBodyOf("SYN-DSP-6", "100", time.Now().Add(time.Hour)),
+		"金额越行":   fixture.disputeBodyOf("SYN-DSP-2", "9601", openedAt),
+		"单号不在册":  strings.Replace(fixture.disputeBodyOf("SYN-DSP-3", "100", openedAt), fixture.published, "SYN-STMT-NONE", 1),
+		"提出早于发布": fixture.disputeBodyOf("SYN-DSP-4", "100", publishedAt.Add(-time.Hour)),
+		"提出晚于登记": fixture.disputeBodyOf("SYN-DSP-6", "100", time.Now().Add(time.Hour)),
 	} {
 		if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, raw); status != http.StatusOK || answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
 			t.Fatalf("%s = %d %v", name, status, answer)
@@ -128,17 +136,21 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 		}
 		_, err = executor.Exec(ctx, `UPDATE settlement_accounting.customer_statement
 		    SET void_basis = 'SYN-VOID-1', voided_at = $3 WHERE tenant_id = $1 AND statement_number = $2`,
-			decisionsTenant, disputedStatement, openedAt)
+			decisionsTenant, fixture.published, openedAt)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-5", "100", raisedAfter(openedAt))); status != http.StatusOK ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-5", "100", raisedAfter(openedAt))); status != http.StatusOK ||
 		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_DISPUTE" {
 		t.Fatalf("单已作废 = %d %v", status, answer)
 	}
 	if count := fixture.text(t, `SELECT count(*)::text FROM settlement_accounting.statement_dispute WHERE tenant_id = $1`, decisionsTenant); count != "1" {
 		t.Fatalf("库上争议 %s 项，want 只有作废前那一项", count)
+	}
+	if stored := fixture.text(t, `SELECT document_number FROM settlement_accounting.statement_dispute
+		 WHERE tenant_id = $1 AND dispute_id = 'SYN-DSP-1'`, decisionsTenant); stored != number {
+		t.Fatalf("库上争议号 = %q，want %s（未受理、冲突、作废那几次都没取号）", stored, number)
 	}
 }
 
@@ -147,7 +159,7 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 func TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
 	openedAt := raisedAfter(publishedAt)
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-1", "1600", openedAt)); status != http.StatusCreated {
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-1", "1600", openedAt)); status != http.StatusCreated {
 		t.Fatalf("先登记 = %d %v", status, answer)
 	}
 	resolution := func(kind string, at time.Time) string {
@@ -199,7 +211,7 @@ func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
 			go func(index int) {
 				defer done.Done()
 				start.Wait()
-				statuses[index], answers[index] = fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf(id, amounts[index], openedAt))
+				statuses[index], answers[index] = fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf(id, amounts[index], openedAt))
 			}(index)
 		}
 		start.Done()
@@ -231,6 +243,15 @@ func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
 			!(outcomes[1] == "DISPUTE_OPENED" && outcomes[0] == "EXISTING_DISPUTE") {
 			t.Fatalf("第 %d 轮同内容：%v", round, same)
 		}
+		if same[0]["documentNumber"] != same[1]["documentNumber"] {
+			t.Fatalf("第 %d 轮同内容两份答了两个争议号：%v", round, same)
+		}
+	}
+	// 每轮恰开立两项（不同金额一项、同内容一项），争议号逐项不重、一个空号也没有：输家在登记锁上排队，没先取号再撞主键。
+	if count, distinct, highest := fixture.text(t, `SELECT count(*)::text FROM settlement_accounting.statement_dispute WHERE tenant_id = $1`, decisionsTenant),
+		fixture.text(t, `SELECT count(DISTINCT document_number)::text FROM settlement_accounting.statement_dispute WHERE tenant_id = $1`, decisionsTenant),
+		fixture.text(t, `SELECT max(right(document_number, 5)) FROM settlement_accounting.statement_dispute WHERE tenant_id = $1`, decisionsTenant); count != "16" || distinct != "16" || highest != "00016" {
+		t.Fatalf("争议 %s 项、争议号 %s 个、最大流水 %s，want 16、16、00016", count, distinct, highest)
 	}
 }
 
@@ -239,7 +260,7 @@ func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
 func TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
 	openedAt := raisedAfter(publishedAt)
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-EARLY", "100", openedAt)); status != http.StatusCreated {
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-EARLY", "100", openedAt)); status != http.StatusCreated {
 		t.Fatalf("作废前登记 = %d %v", status, answer)
 	}
 	// 作废时刻取恰在早先那一项提出的那一刻：提出时刻都要不晚于登记时刻（服务端此刻），作废之后提出的那一项也得在此刻之前。
@@ -251,16 +272,16 @@ func TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve(t *
 		}
 		_, err = executor.Exec(ctx, `UPDATE settlement_accounting.customer_statement
 		    SET void_basis = 'SYN-VOID-1', voided_at = $3 WHERE tenant_id = $1 AND statement_number = $2`,
-			decisionsTenant, disputedStatement, voidAt)
+			decisionsTenant, fixture.published, voidAt)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-LATE-ENTRY", "100", voidAt)); status != http.StatusCreated ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-LATE-ENTRY", "100", voidAt)); status != http.StatusCreated ||
 		answer["outcome"] != "DISPUTE_OPENED" {
 		t.Fatalf("作废前提出、作废后登记 = %d %v", status, answer)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-AFTER", "100", raisedAfter(voidAt))); status != http.StatusOK ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, fixture.disputeBodyOf("SYN-DSP-AFTER", "100", raisedAfter(voidAt))); status != http.StatusOK ||
 		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_DISPUTE" {
 		t.Fatalf("作废后提出 = %d %v", status, answer)
 	}

@@ -49,7 +49,7 @@ func decisionRequest(body string) *http.Request {
 	return request
 }
 
-const publicationBody = `{"number":"SYN-STMT-1","account":"SYN-ACCT-1","period":"SYN-PERIOD-1","version":"v1","currency":"CNY",` +
+const publicationBody = `{"account":"SYN-ACCT-1","period":"SYN-PERIOD-1","version":"v1","currency":"CNY",` +
 	`"charges":["SYN-CHARGE-1"],"lastAttributionDate":"2026-10-31","declaredTotal":"9600","cutOffAt":"2026-10-31T16:00:00Z"}`
 
 // Covers: AT-SA-221（Intake 半边）——确认口按 CHARGE_CONFIRMATION 认证，命令只带认证出的租户与点名的费用；时点没登答 200 原名。
@@ -101,7 +101,7 @@ func TestTheChargeConfirmationFaceAuthenticatesItsOwnDecisionAndAnswersTheMoment
 }
 
 // Covers: AT-SA-222（Intake 半边）——发布口按 STATEMENT_PUBLICATION 认证；载荷逐格到命令，合计按最小币单位的整数串收，发布时刻取端点
-// 时钟、不从载荷收；合计写成数字、不列费用、自报租户都答 400。
+// 时钟、不从载荷收；载荷不收单号（ADR-0355 决定九），带了单号与合计写成数字、不列费用、自报租户一样答 400。
 func TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock(t *testing.T) {
 	var asked []settlementhttp.OperatorDecision
 	intake := operatorDecisionIntakeForTest(t, decisionAuthenticator{asked: &asked})
@@ -118,7 +118,7 @@ func TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock(t *testing.T
 		t.Fatalf("认证的决定种类 = %v", asked)
 	}
 	command := publisher.calls[0]
-	if command.Number != "SYN-STMT-1" || command.Account != "SYN-ACCT-1" || command.DeclaredTotalMinor != 9600 ||
+	if command.Account != "SYN-ACCT-1" || command.Version != "v1" || command.DeclaredTotalMinor != 9600 ||
 		len(command.ChargeIDs) != 1 || command.LastAttributionDate != "2026-10-31" || !command.PublishedAt.Equal(at) ||
 		!command.CutOffAt.Equal(time.Date(2026, 10, 31, 16, 0, 0, 0, time.UTC)) || command.TenantID.String() != clientTenant {
 		t.Fatalf("命令 = %+v", command)
@@ -127,11 +127,12 @@ func TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock(t *testing.T
 	for name, body := range map[string]string{
 		"合计写成数字": strings.Replace(publicationBody, `"9600"`, `9600`, 1),
 		"不列费用":   strings.Replace(publicationBody, `["SYN-CHARGE-1"]`, `[]`, 1),
-		"自报租户":   strings.Replace(publicationBody, `{"number"`, `{"tenantId":"SYN-TENANT-02","number"`, 1),
-		"带发布时刻":  strings.Replace(publicationBody, `{"number"`, `{"publishedAt":"2026-10-01T00:00:00Z","number"`, 1),
+		"自报租户":   strings.Replace(publicationBody, `{"account"`, `{"tenantId":"SYN-TENANT-02","account"`, 1),
+		"带发布时刻":  strings.Replace(publicationBody, `{"account"`, `{"publishedAt":"2026-10-01T00:00:00Z","account"`, 1),
+		"带单号":    strings.Replace(publicationBody, `{"account"`, `{"number":"SYN-STMT-1","account"`, 1),
 		"合计带正号":  strings.Replace(publicationBody, `"9600"`, `"+9600"`, 1),
 		"合计带前导零": strings.Replace(publicationBody, `"9600"`, `"09600"`, 1),
-		"单号空白":   strings.Replace(publicationBody, `"SYN-STMT-1"`, `" "`, 1),
+		"截止版本空白": strings.Replace(publicationBody, `"v1"`, `" "`, 1),
 		"归属日写坏":  strings.Replace(publicationBody, `"2026-10-31"`, `"2026-10-32"`, 1),
 	} {
 		response := httptest.NewRecorder()

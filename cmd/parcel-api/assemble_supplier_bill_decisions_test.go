@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"net/http"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -152,8 +155,13 @@ func TestTheSupplierBillReceptionFaceReceivesAndRecordsTheClerk(t *testing.T) {
 	}
 }
 
+// payableNumberPattern 是审核应付产品默认模板 AP-{yyyy}{mm}-{seq:5} 渲染出的形状（ADR-0355 决定五），比形状不比年月，理由同
+// statementNumberPattern。
+var payableNumberPattern = regexp.MustCompile(`^AP-\d{6}-\d{5}$`)
+
 // Covers: AT-SA-226（ADR-0340 决定二、三）——持审核授予的人点一行：在上限内形成审核应付、答 201 带金额，重放答已存在；应付行记下点审核的
-// 人，auditor_ref 仍是审核授权册上那一方；持接收授予的人打审核口答未授予。
+// 人，auditor_ref 仍是审核授权册上那一方；持接收授予的人打审核口答未授予。`AT-SA-231`（生产装配半边）：应付号由服务端在审核事务里
+// 按编号规则取、随应付落库，重放答原号；载荷里的应付标识照旧是幂等键。
 func TestTheSupplierBillAuditFaceFormsAPayableAndRecordsTheAuditor(t *testing.T) {
 	fixture := newSupplierBillFixture(t)
 	seedSupplierBillRegisters(t, fixture, true)
@@ -165,12 +173,18 @@ func TestTheSupplierBillAuditFaceFormsAPayableAndRecordsTheAuditor(t *testing.T)
 		t.Fatalf("持接收授予的人审核 = %d %v，want 403", status, answer)
 	}
 	status, answer := fixture.post(t, supplierBillAuditFace, billAuditor, supplierBillAuditBody)
-	if status != http.StatusCreated || answer["outcome"] != "PAYABLE_FORMED" || answer["amount"] != "8500" || answer["currency"] != "CNY" {
+	number, _ := answer["documentNumber"].(string)
+	if status != http.StatusCreated || answer["outcome"] != "PAYABLE_FORMED" || answer["amount"] != "8500" || answer["currency"] != "CNY" ||
+		answer["payable"] != "SYN-PAYABLE-PSB22-1" || !payableNumberPattern.MatchString(number) || !strings.HasSuffix(number, "-00001") {
 		t.Fatalf("审核 = %d %v", status, answer)
 	}
 	if status, answer := fixture.post(t, supplierBillAuditFace, billAuditor, supplierBillAuditBody); status != http.StatusOK ||
-		answer["outcome"] != "EXISTING_PAYABLE" {
-		t.Fatalf("重放 = %d %v", status, answer)
+		answer["outcome"] != "EXISTING_PAYABLE" || answer["documentNumber"] != number {
+		t.Fatalf("重放 = %d %v，要答原来那个应付号", status, answer)
+	}
+	if stored := fixture.text(t, `SELECT document_number FROM settlement_accounting.audited_payable
+		 WHERE tenant_id = $1 AND payable_id = 'SYN-PAYABLE-PSB22-1'`, decisionsTenant); stored != number {
+		t.Fatalf("库上应付号 = %q，want %s", stored, number)
 	}
 	if evidence := fixture.text(t, `SELECT operation_evidence FROM settlement_accounting.audited_payable
 		 WHERE tenant_id = $1 AND payable_id = 'SYN-PAYABLE-PSB22-1'`, decisionsTenant); evidence != operatorEvidenceOf(billAuditor) {
@@ -193,5 +207,61 @@ func TestAnUnconfiguredAuditAuthorityIsAnAnswer(t *testing.T) {
 	if status, answer := fixture.post(t, supplierBillAuditFace, billAuditor, supplierBillAuditBody); status != http.StatusOK ||
 		answer["outcome"] != "AUDIT_UNDECIDED" || answer["undecidedReason"] != "AUDIT_AUTHORITY_UNCONFIGURED" {
 		t.Fatalf("审核 = %d %v", status, answer)
+	}
+}
+
+// Covers: `AT-SA-231`（生产装配半边）——租户换了一份编号格式，新格式下的前二十个号都已被换格式前的应付占用：审核答「编号规则撞号」、
+// 带出该改哪一类的编号规则，不形成应付；生产事务壳整笔回滚、取过的流水随之释放——腾出第一个号之后再审，拿到的正是它。
+func TestAPayableNumberCollisionFormsNothingAndReleasesTheSequence(t *testing.T) {
+	fixture := newSupplierBillFixture(t)
+	seedSupplierBillRegisters(t, fixture, true)
+	if status, answer := fixture.post(t, supplierBillReceptionFace, billClerk, supplierBillBody); status != http.StatusCreated {
+		t.Fatalf("先接收 = %d %v", status, answer)
+	}
+	if _, err := fixture.numbers.Registrations.RegisterRule(t.Context(), docnumber.RegisterRuleCommand{
+		Tenant: decisionsTenant, Type: sadomain.AuditedPayableDocumentNumberType.Code, Template: "OLDAP{seq:2}",
+		EffectiveFrom: time.Now().Add(-time.Hour), RegisteredBy: "SYN-TEST",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		executor, err := fixture.db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, `INSERT INTO settlement_accounting.audited_payable
+			(tenant_id, payable_id, claim_id, line_ref, expected_version, legal_entity, account_id, currency, amount_minor,
+			 auditor_ref, audited_at, content_digest, recorded_at, document_number)
+			SELECT $1, 'SYN-PAYABLE-OLD-' || n, 'SYN-BILL-OLD', 'L' || n, 'SYN-COST-OLD', 'SYN-LE-01', $2, 'CNY', 100,
+			       'SYN-AUDITOR-ROLE-01', now(), 'digest-old-' || n, now(), 'OLDAP' || lpad(n::text, 2, '0')
+			  FROM generate_series(1, $3::int) AS n`, decisionsTenant, decisionsAccount, docnumber.MaxSkippedNumbers)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	status, answer := fixture.post(t, supplierBillAuditFace, billAuditor, supplierBillAuditBody)
+	if status != http.StatusOK || answer["outcome"] != "NUMBERING_RULE_COLLISION" || answer["documentType"] != "AUDITED_PAYABLE" ||
+		answer["payable"] != nil {
+		t.Fatalf("撞号 = %d %v", status, answer)
+	}
+	if count := fixture.text(t, `SELECT count(*)::text FROM settlement_accounting.audited_payable
+		 WHERE tenant_id = $1 AND payable_id = 'SYN-PAYABLE-PSB22-1'`, decisionsTenant); count != "0" {
+		t.Fatalf("撞号还形成了应付：%s", count)
+	}
+
+	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		executor, err := fixture.db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, `DELETE FROM settlement_accounting.audited_payable WHERE tenant_id = $1 AND document_number = 'OLDAP01'`, decisionsTenant)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status, answer := fixture.post(t, supplierBillAuditFace, billAuditor, supplierBillAuditBody); status != http.StatusCreated ||
+		answer["documentNumber"] != "OLDAP01" {
+		t.Fatalf("腾出第一个号之后 = %d %v，撞号那一次取过的流水没随回滚释放", status, answer)
 	}
 }

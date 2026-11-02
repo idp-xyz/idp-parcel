@@ -36,6 +36,9 @@ const (
 	AuditMustEscalate
 	AuditNotAccepted
 	AuditUndecided
+	// PayableNumberingRuleCollision：形成审核应付时单据编号规则跳号到上限仍撞上已用的号（ADR-0355 决定八）。是答案不是故障：
+	// 这一次不形成应付，要去规则册改格式；调用方必须回滚这一笔事务，取过的流水才释放。
+	PayableNumberingRuleCollision
 )
 
 func (outcome AuditOutcome) String() string {
@@ -54,6 +57,8 @@ func (outcome AuditOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case AuditUndecided:
 		return "AUDIT_UNDECIDED"
+	case PayableNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -75,6 +80,8 @@ const (
 	PayableStoreUnavailable
 	AuditEscalationViewUnavailable
 	AuditEscalationUnconfigured
+	// AuditArrangementViewUnavailable：读不动应付账户的对账安排，定不了应付单据号的日期时区。
+	AuditArrangementViewUnavailable
 )
 
 func (reason AuditUndecidedReason) String() string {
@@ -95,6 +102,8 @@ func (reason AuditUndecidedReason) String() string {
 		return "AUDIT_ESCALATION_VIEW_UNAVAILABLE"
 	case AuditEscalationUnconfigured:
 		return "AUDIT_ESCALATION_UNCONFIGURED"
+	case AuditArrangementViewUnavailable:
+		return "ARRANGEMENT_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -102,7 +111,8 @@ func (reason AuditUndecidedReason) String() string {
 
 // AuditBillLineCommand 指名要审核哪份接收里的哪一行，以及本次应付的稳定身份。刻意没有
 // 金额、账户与审核人：金额从匹配取，账户与审核人从已登记实例取——命令带得了它们，
-// 「供应商不能直接写入审核结果」就只剩一句话。
+// 「供应商不能直接写入审核结果」就只剩一句话。Payable 是调用方（管理台在首次提交前）生成的幂等键，
+// 不是给人编的号：应付的单据号由形成时按编号规则取（ADR-0355 决定十）。
 type AuditBillLineCommand struct {
 	TenantID domain.TenantID
 	Claim    domain.BillClaimID
@@ -144,15 +154,21 @@ func (result AuditResult) PayableHandoffReference() string {
 	return result.handoff
 }
 
-// Audit 对一份已接收主张的一行形成审核应付（UC-SA-004 步 5）：找回接收 → 找到那一行的
-// 匹配 → 同身份重放/冲突、同一行已有应付读回先到者 → 审核授权与结算账户从已登记实例取
-// （未配置停在未决）→ FormAuditedPayable（只收`已匹配`，其余四格 → 行不可审）→ 提交 →
-// 发布应付引用。每次只审一行：批量含通过、争议与拒绝时逐范围返回，合法通过行不被局部
-// 失败回滚（AT-SA-099）。
+// Audit 对一份已接收主张的一行形成审核应付（UC-SA-004 步 5）：排队同一应付身份与同一行 →
+// 找回接收 → 找到那一行的匹配 → 同身份重放/冲突、同一行已有应付读回先到者 → 审核授权与结算账户
+// 从已登记实例取（未配置停在未决）→ FormAuditedPayable（只收`已匹配`，其余四格 → 行不可审）→
+// 越权上限 → 取应付单据号 → 提交 → 发布应付引用。每次只审一行：批量含通过、争议与拒绝时逐范围
+// 返回，合法通过行不被局部失败回滚（AT-SA-099）。
+//
+// 单据号只在确定要形成应付的那一步取（ADR-0355 决定三）：重放读回原应付连同它的号；行不可审、要升级、
+// 未配置都答业务答案而不落单，那几路不取号。
 func (handler *ReceiveSupplierBillHandler) Audit(
 	ctx context.Context,
 	command AuditBillLineCommand,
 ) (AuditResult, error) {
+	if handler.deps.Numbers == nil || handler.deps.Arrangements == nil {
+		return AuditResult{}, fmt.Errorf("%w: audit needs document numbers and statement arrangements", ErrNilDependency)
+	}
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
 		command.Claim.String() == "" || command.Version.String() == "" ||
 		command.Line.String() == "" || command.Payable.String() == "" {
@@ -161,6 +177,11 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 
 	payableKey := ports.AuditedPayableKey{TenantID: command.TenantID, Payable: command.Payable}
 	digest := auditDigest(command)
+	// 同一应付身份、同一行的两笔并发审核在这里排队：后到者往下读时先到者已提交，读到它就按身份或按行答原应付，
+	// 不会两笔都取了号、输家再撞唯一约束。
+	if err := handler.deps.Payables.LockIssuance(ctx, payableKey, command.Claim, command.Line); err != nil {
+		return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
+	}
 	existing, found, err := handler.deps.Payables.FindByKey(ctx, payableKey)
 	if err != nil {
 		return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
@@ -232,15 +253,25 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 		return stopped, nil
 	}
 
+	numbering, stopped, stop, err := handler.numberPayable(ctx, command, account)
+	if err != nil || stop {
+		return stopped, err
+	}
+
 	record := ports.AuditedPayableRecord{
 		Key:               payableKey,
 		ContentDigest:     digest,
 		Payable:           payable,
 		RecordedAt:        handler.deps.Clock.Now(),
 		OperationEvidence: command.OperationEvidence,
+		Numbering:         numbering,
 	}
+	_, numbered := numbering.Number()
 	saved, err := handler.deps.Payables.Save(ctx, record)
 	if err != nil {
+		if numbered {
+			return AuditResult{}, fmt.Errorf("%w: save payable %s: %w", ErrNumberedIssueInterrupted, command.Payable, err)
+		}
 		return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
 	}
 	switch saved {
@@ -249,7 +280,11 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 		result.handoff = handler.handOffPayable(ctx, record)
 		return result, nil
 	case ports.AuditedPayableAlreadyRecorded:
-		// 并发下另一方先审了这一行（或先用了这个身份）：按行读回赢家，不覆盖。
+		// 同一身份与同一行已在 LockIssuance 上排过队，走到这里说明有人没排队就写了库。取到了号就交回错误整笔回滚——读回
+		// 赢家作答会让这个号随事务提交成为空号；没取到号时照旧按行读回赢家，不覆盖。
+		if numbered {
+			return AuditResult{}, fmt.Errorf("%w: payable %s was saved by another transaction", ErrNumberedIssueInterrupted, command.Payable)
+		}
 		winner, found, err := handler.deps.Payables.FindByLine(ctx, command.TenantID, command.Claim, command.Line)
 		if err != nil || !found {
 			return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
@@ -258,6 +293,38 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 	default:
 		return AuditResult{}, fmt.Errorf("%w: %d", ErrUnexpectedPayableSave, saved)
 	}
+}
+
+// numberPayable 在审核事务里给应付取单据号。日期按应付归入的结算账户对账安排的业务时区，账户没登对账安排就交空，由
+// 编号组件退到租户的单据编号时区（domain.AuditedPayableDocumentNumberType）。交回的布尔为真时审核就此作答。
+func (handler *ReceiveSupplierBillHandler) numberPayable(
+	ctx context.Context,
+	command AuditBillLineCommand,
+	account domain.SettlementAccountID,
+) (domain.DocumentNumbering, AuditResult, bool, error) {
+	zone := ""
+	arrangement, arranged, err := handler.deps.Arrangements.LoadStatementArrangement(ctx, command.TenantID, account)
+	if err != nil {
+		return domain.DocumentNumbering{}, auditUndecided(AuditArrangementViewUnavailable, command.Payable.String()), true, nil
+	}
+	if arranged {
+		zone = arrangement.TimeZone()
+	}
+	numbering, collided, err := issueDocumentNumber(ctx, handler.deps.Numbers, ports.DocumentNumberRequest{
+		Tenant:         command.TenantID,
+		Type:           domain.AuditedPayableDocumentNumberType.Code,
+		IssuerTimeZone: zone,
+		IsUsed: func(ctx context.Context, number string) (bool, error) {
+			return handler.deps.Payables.DocumentNumberUsed(ctx, command.TenantID, number)
+		},
+	})
+	if err != nil {
+		return domain.DocumentNumbering{}, AuditResult{}, true, fmt.Errorf("settlement accounting: number payable %s: %w", command.Payable, err)
+	}
+	if collided {
+		return domain.DocumentNumbering{}, AuditResult{outcome: PayableNumberingRuleCollision}, true, nil
+	}
+	return numbering, AuditResult{}, false, nil
 }
 
 func matchForLine(record ports.BillReceptionRecord, line domain.BillLineReference) (domain.BillLineMatch, bool) {

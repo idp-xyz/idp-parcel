@@ -1,7 +1,7 @@
 # 05 对账单、费用争议、审核应付的单据号
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-02 作者在分支 `claude-docnum05` 上实现（从 origin/main `3a408b7b0` 起）
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、九、十；UC-SA-003、UC-SA-004

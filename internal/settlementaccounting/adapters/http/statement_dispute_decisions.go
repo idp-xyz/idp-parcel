@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
@@ -134,17 +135,23 @@ func NewResolveStatementDisputeEndpoint(intake StatementDisputeResolutionIntake,
 
 // disputeResponse 透出答复连同那一项争议此刻的样子：重放、冲突与「已经处理过了」都带上库里那一份，操作者看得到自己撞上的是什么。
 // 处理三件同在或同缺，未处理时不出现，不代填「待处理」。
+//
+// documentNumber 是争议号，登记时由服务端按编号规则取（ADR-0355）；没有争议号时不出这一格（不答空串、不拿争议标识顶），
+// 改出 documentNumberAbsence 说为什么没有。documentType 只在撞号时出现，指名规则册上该改哪一类单据的编号规则。
 type disputeResponse struct {
-	Outcome        string `json:"outcome"`
-	Dispute        string `json:"dispute,omitempty"`
-	Statement      string `json:"statement,omitempty"`
-	Charge         string `json:"charge,omitempty"`
-	DisputedAmount string `json:"disputedAmount,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	OpenedAt       string `json:"openedAt,omitempty"`
-	Resolution     string `json:"resolution,omitempty"`
-	Basis          string `json:"basis,omitempty"`
-	ResolvedAt     string `json:"resolvedAt,omitempty"`
+	Outcome               string `json:"outcome"`
+	Dispute               string `json:"dispute,omitempty"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	DocumentType          string `json:"documentType,omitempty"`
+	Statement             string `json:"statement,omitempty"`
+	Charge                string `json:"charge,omitempty"`
+	DisputedAmount        string `json:"disputedAmount,omitempty"`
+	Reason                string `json:"reason,omitempty"`
+	OpenedAt              string `json:"openedAt,omitempty"`
+	Resolution            string `json:"resolution,omitempty"`
+	Basis                 string `json:"basis,omitempty"`
+	ResolvedAt            string `json:"resolvedAt,omitempty"`
 }
 
 // writeDisputeAnswer 与本包其余写口同一条判据（writeFundsAnswer 头注）：状态码只答有没有形成答案，业务判别在 outcome。formed 是
@@ -160,6 +167,9 @@ func writeDisputeAnswer(response http.ResponseWriter, result application.Stateme
 		return
 	}
 	body := disputeResponse{Outcome: name}
+	if result.Outcome() == application.StatementNumberingRuleCollision {
+		body.DocumentType = string(domain.StatementDisputeDocumentNumberType.Code)
+	}
 	if record, has := result.Dispute(); has {
 		fillDispute(&body, record)
 	}
@@ -173,6 +183,7 @@ func writeDisputeAnswer(response http.ResponseWriter, result application.Stateme
 func fillDispute(body *disputeResponse, record ports.DisputeRecord) {
 	dispute := record.Dispute
 	body.Dispute = dispute.Dispute().String()
+	body.DocumentNumber, body.DocumentNumberAbsence = numberingWords(record.Numbering)
 	body.Statement = dispute.Statement().String()
 	body.Charge = dispute.Charge().String()
 	body.DisputedAmount = minorAmount(dispute.DisputedMinor())

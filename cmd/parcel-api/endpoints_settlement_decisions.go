@@ -42,7 +42,7 @@ func init() {
 			},
 		},
 		build: func(sources endpointSources) (settlementDecisionsWiring, error) {
-			orchestrations, err := buildSettlementOrchestrations(sources.db)
+			orchestrations, err := buildSettlementOrchestrations(sources.db, sources.documentNumbers.Assigner)
 			return settlementDecisionsWiring{
 				confirmer: orchestrations, publisher: orchestrations,
 				receiver: supplierBillReceiver{orchestrations}, auditor: supplierBillAuditor{orchestrations},

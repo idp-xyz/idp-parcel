@@ -158,8 +158,11 @@ type ReceiveSupplierBillDeps struct {
 	Escalation  ports.AuditEscalationCeilingView
 	Payables    ports.AuditedPayableStore
 	CreditNotes ports.SupplierCreditNoteStore
-	Downstream  ports.SupplierBillHandoff
-	Clock       ports.Clock
+	// Numbers 给审核应付取单据号；Arrangements 给它定日期所用的应付账户业务时区（审核半程用，接收与贷项不碰）。
+	Numbers      ports.DocumentNumberAssigner
+	Arrangements ports.StatementArrangementView
+	Downstream   ports.SupplierBillHandoff
+	Clock        ports.Clock
 }
 
 type ReceiveSupplierBillHandler struct {

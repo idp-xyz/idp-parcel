@@ -104,7 +104,7 @@ func TestACutWithNothingInPeriodFormsNoDraftAndNamesEachCharge(t *testing.T) {
 	}
 	intents := len(fixture.handoff.intents)
 	command := publishCommand(t)
-	command.Number = "STMT-2026-08-002"
+	command.Version = "draft/v2"
 	command.ChargeIDs = []string{"charge-later", "charge-A"}
 	command.DeclaredTotalMinor = 0
 
@@ -157,7 +157,7 @@ func TestACutJudgesAnUnattributedChargeInTheAccountsTimeZoneAndRecordsIt(t *test
 	// 换成 UTC 的一版再截：已形成的归属日照旧只读不判，仍是 9 月 1 日。
 	fixture.arrangements.register(t, "ACCOUNT/syn-1", "UTC", 23*60+59)
 	again := command
-	again.Number = "STMT-2026-08-002"
+	again.Version = "draft/v2"
 	again.ChargeIDs = []string{"charge-unattributed"}
 	again.DeclaredTotalMinor = 0
 	result, err = fixture.handler.Publish(context.Background(), again)
@@ -258,14 +258,18 @@ func TestChargesOnAVoidedStatementCanBeBilledAgain(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// 替代单是新的发布意图（换了截止版本），取新号（ADR-0355 决定九）。
 	replacement := publishCommand(t)
-	replacement.Number = "STMT-2026-08-001R"
+	replacement.Version = "draft/v2"
 	result, err := fixture.handler.Publish(context.Background(), replacement)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Outcome() != application.StatementPublished || len(result.Exclusions()) != 0 {
 		t.Fatalf("outcome = %s exclusions = %+v", result.Outcome(), exclusionsOf(result))
+	}
+	if record, _ := result.Statement(); record.Key.Number.String() != "STMT-2026-08-002" {
+		t.Fatalf("替代单单号 = %s，要取新号", record.Key.Number)
 	}
 }
 
@@ -282,20 +286,15 @@ func TestBillingLocksAreTakenInChargeOrder(t *testing.T) {
 	}
 }
 
-// 同单号的另一笔截单在本笔读单号之后、加锁之前提交：本笔读到的「已出账」就在同一张单上，这是并发重放，
-// 按那张单作答，不答本期无费用。
-func TestARacingReplayOfTheSameNumberAnswersTheExistingStatement(t *testing.T) {
+// 同一发布意图的两笔截单在意图锁上排队：先锁、再按意图查重，后到的那一笔查到的就是先到者的单。次序反过来，两笔都会在
+// 查重时落空、各取一个号，输家再撞库时号已从序列取走。
+func TestThePublicationIntentIsLockedBeforeItIsLookedUp(t *testing.T) {
 	fixture := newStatementFixture(t)
 	if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
 		t.Fatal(err)
 	}
-	fixture.statements.missFinds = 1
-	result, err := fixture.handler.Publish(context.Background(), publishCommand(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Outcome() != application.StatementExistingResult {
-		t.Fatalf("outcome = %s, want EXISTING_STATEMENT", result.Outcome())
+	if !reflect.DeepEqual(fixture.statements.calls[:2], []string{"lock draft/v1", "find draft/v1"}) {
+		t.Fatalf("calls = %v", fixture.statements.calls)
 	}
 }
 
@@ -484,7 +483,7 @@ func TestAChargeWithoutItsSourceInstantIsExcludedByName(t *testing.T) {
 
 	t.Run("alone it is nothing in period, not unconfigured", func(t *testing.T) {
 		alone := command
-		alone.Number = "STMT-2026-08-002"
+		alone.Version = "draft/v2"
 		alone.ChargeIDs = []string{"charge-no-instant"}
 		alone.DeclaredTotalMinor = 0
 		result, err := fixture.handler.Publish(context.Background(), alone)

@@ -37,7 +37,8 @@ var (
 )
 
 // StatementNumber 是对账单的固定单号：同一发布意图不得生成两个单号，作废后替代单
-// 使用新身份。
+// 使用新身份。它就是对账单的单据号（ADR-0355 决定九），在发布事务里按编号规则取得，
+// 不另带一个 DocumentNumber；本决定之前发布的单照旧是当时的单号。
 type StatementNumber struct{ requiredValue }
 
 func NewStatementNumber(value string) (StatementNumber, error) {
@@ -255,6 +256,18 @@ type PublishedStatement struct {
 	voidedAt    time.Time
 }
 
+// CheckPublication 判这份草稿能不能按声明总额在 publishedAt 发布，不要单号：单号在发布事务里取，而取号只放在
+// 确定要落单的那一步（ADR-0355 决定三）——勾稽不平答业务答案、不落单，那一路不得先取号留下空号。
+func (draft StatementDraft) CheckPublication(declaredTotalMinor int64, publishedAt time.Time) error {
+	if !draft.account.valid() || publishedAt.IsZero() || publishedAt.Before(draft.cutOffAt) {
+		return ErrInvalidStatement
+	}
+	if declaredTotalMinor != draft.NetTotalMinor() {
+		return ErrStatementImbalance
+	}
+	return nil
+}
+
 // PublishStatement 从草稿发布快照。声明总额必须与行勾稽——不一致即阻断，不修正为
 // 「约等于」（AT-SA-065）。
 func PublishStatement(
@@ -263,11 +276,11 @@ func PublishStatement(
 	declaredTotalMinor int64,
 	publishedAt time.Time,
 ) (PublishedStatement, error) {
-	if !draft.account.valid() || !number.valid() || publishedAt.IsZero() || publishedAt.Before(draft.cutOffAt) {
+	if !number.valid() {
 		return PublishedStatement{}, ErrInvalidStatement
 	}
-	if declaredTotalMinor != draft.NetTotalMinor() {
-		return PublishedStatement{}, ErrStatementImbalance
+	if err := draft.CheckPublication(declaredTotalMinor, publishedAt); err != nil {
+		return PublishedStatement{}, err
 	}
 	statement := PublishedStatement{
 		number:      number,

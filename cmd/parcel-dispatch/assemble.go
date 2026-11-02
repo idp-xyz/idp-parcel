@@ -751,7 +751,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: dispatcher: %w", err)
 	}
-	cycles, err := cutOffStatementsOnCycle(db, outboxStore, clock)
+	cycles, err := cutOffStatementsOnCycle(db, outboxStore, clock, documentNumbers.Assigner)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
 // 供应商账单接收口与审核口（ADR-0340 决定一、二）：操作者渠道「运营决定」能力面上的两种账单决定，进的是 parcel-api 已装配的那一只
@@ -180,9 +181,14 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	writeJSON(response, status, body)
 }
 
+// auditResponse 的 payable 是调用方生成的应付标识（幂等键）；documentNumber 是服务端形成应付时按编号规则取的应付单据号
+// （ADR-0355 决定十），没有时不出这一格，改出 documentNumberAbsence。documentType 只在撞号时出现。
 type auditResponse struct {
 	Outcome               string `json:"outcome"`
 	Payable               string `json:"payable,omitempty"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	DocumentType          string `json:"documentType,omitempty"`
 	Amount                string `json:"amount,omitempty"`
 	Currency              string `json:"currency,omitempty"`
 	UndecidedReason       string `json:"undecidedReason,omitempty"`
@@ -208,9 +214,13 @@ func writeAuditAnswer(response http.ResponseWriter, result application.AuditResu
 	body := auditResponse{
 		Outcome: name, UndecidedReason: result.UndecidedReason().String(), ContinuationReference: result.ContinuationReference(),
 	}
+	if result.Outcome() == application.PayableNumberingRuleCollision {
+		body.DocumentType = string(domain.AuditedPayableDocumentNumberType.Code)
+	}
 	if record, has := result.Payable(); has {
 		currency, minor := record.Payable.Amount()
 		body.Payable, body.Currency, body.Amount = record.Payable.Payable().String(), currency.String(), minorAmount(minor)
+		body.DocumentNumber, body.DocumentNumberAbsence = numberingWords(record.Numbering)
 	}
 	status := http.StatusOK
 	if result.Outcome() == application.PayableFormed {

@@ -45,14 +45,16 @@ var (
 // 裁定三件与纳入的调整回指在库上可空，词形跟着留指针格——把它们折成空串会在解码
 // 这一层就把「未裁定」与「裁定为空串」混掉，而库上的非空白门只管非 NULL 的那一侧。
 type statementDisputeDocument struct {
-	Dispute       string     `json:"dispute"`
-	Charge        string     `json:"charge"`
-	DisputedMinor int64      `json:"disputedMinor"`
-	Reason        string     `json:"reason"`
-	OpenedAt      time.Time  `json:"openedAt"`
-	Resolution    *string    `json:"resolution"`
-	ResolutionRef *string    `json:"resolutionRef"`
-	ResolvedAt    *time.Time `json:"resolvedAt"`
+	Dispute        string     `json:"dispute"`
+	DocumentNumber *string    `json:"documentNumber"`
+	NumberAbsence  *string    `json:"documentNumberAbsence"`
+	Charge         string     `json:"charge"`
+	DisputedMinor  int64      `json:"disputedMinor"`
+	Reason         string     `json:"reason"`
+	OpenedAt       time.Time  `json:"openedAt"`
+	Resolution     *string    `json:"resolution"`
+	ResolutionRef  *string    `json:"resolutionRef"`
+	ResolvedAt     *time.Time `json:"resolvedAt"`
 }
 
 type subsequentInclusionDocument struct {
@@ -75,6 +77,8 @@ const customerStatementColumns = `s.statement_number, s.account_id, s.period_ref
 		                    json_agg(
 		                        json_build_object(
 		                            'dispute',       d.dispute_id,
+		                            'documentNumber', d.document_number,
+		                            'documentNumberAbsence', d.document_number_absence,
 		                            'charge',        d.charge_id,
 		                            'disputedMinor', d.disputed_minor,
 		                            'reason',        d.reason_ref,
@@ -228,15 +232,22 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 	}
 	disputes := make([]ports.StatementDisputeEntry, 0, len(disputeDocuments))
 	for _, document := range disputeDocuments {
+		numbering, err := numberingFrom(document.DocumentNumber, document.NumberAbsence)
+		if err != nil {
+			return ports.CustomerStatementCatalogueRow{}, fmt.Errorf("异议 %s 的争议号：%w", document.Dispute, err)
+		}
+		number, absence := numberingWords(numbering)
 		disputes = append(disputes, ports.StatementDisputeEntry{
-			Dispute:       document.Dispute,
-			Charge:        document.Charge,
-			DisputedMinor: document.DisputedMinor,
-			Reason:        document.Reason,
-			OpenedAt:      document.OpenedAt.UTC(),
-			Resolution:    catalogueText(document.Resolution),
-			ResolutionRef: catalogueText(document.ResolutionRef),
-			ResolvedAt:    catalogueInstant(document.ResolvedAt),
+			Dispute:               document.Dispute,
+			DocumentNumber:        number,
+			DocumentNumberAbsence: absence,
+			Charge:                document.Charge,
+			DisputedMinor:         document.DisputedMinor,
+			Reason:                document.Reason,
+			OpenedAt:              document.OpenedAt.UTC(),
+			Resolution:            catalogueText(document.Resolution),
+			ResolutionRef:         catalogueText(document.ResolutionRef),
+			ResolvedAt:            catalogueInstant(document.ResolvedAt),
 		})
 	}
 	row.Disputes = disputes

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -21,6 +20,10 @@ var ErrCycleCutUnconfigured = errors.New("settlement accounting: cycle cut stopp
 // ErrCycleCutUndecided 说明这一户这一拍停在依赖上（读写不动、截单未决、对账单信封没交出去）：调用方回滚这一户的事务，下一拍
 // 再截。
 var ErrCycleCutUndecided = errors.New("settlement accounting: cycle cut stalled on a dependency")
+
+// ErrCycleCutNumberingCollision 说明这一户截单发布时对账单号按编号规则撞号（ADR-0355 决定八）：这一户整笔回滚、不记截止日，
+// 取过的流水随之释放。与等依赖分开：规则册换格式之前每拍都会撞在同一段上，要人去改规则册，不是等它自愈。
+var ErrCycleCutNumberingCollision = errors.New("settlement accounting: cycle cut stopped on a document numbering rule collision")
 
 // StatementCutter 是截单发布那一口：先问截单时点，再截单发布。到点截单与运营发布口进的是同一道门、同一只编排。调用方给环境事务。
 type StatementCutter interface {
@@ -196,8 +199,8 @@ func (handler *CutOffStatementsOnCycleHandler) cutClosing(
 	}
 	command := PublishStatementCommand{
 		TenantID: tenant,
-		// 单号与账期都从截止日派生：同一户同一个截止日只会有一张单，重截一次是同一份命令的重放。
-		Number:              cycleStatementNumber(account.ID(), closing),
+		// 账期从截止日派生、截止版本固定 v1：同一户同一个截止日就是同一个发布意图，重截一次是同一份命令的重放，答原单与
+		// 原号。单号不再从截止日拼，由截单编排在发布事务里按编号规则取（ADR-0355 决定九）。
 		Account:             account.ID().String(),
 		Period:              "CYCLE/" + closing.String(),
 		Version:             "v1",
@@ -227,20 +230,21 @@ func (handler *CutOffStatementsOnCycleHandler) cutClosing(
 	if published.Outcome() == StatementUndecided {
 		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: statement cut %s", ErrCycleCutUndecided, published.UndecidedReason())
 	}
+	if published.Outcome() == StatementNumberingRuleCollision {
+		// 撞号不照记截止日：取过的流水只有整笔回滚才释放，记下截止日就得提交，那些流水全成空号（ADR-0355 决定三）。
+		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: closing %s", ErrCycleCutNumberingCollision, closing)
+	}
 	if published.StatementHandoffReference() != "" {
 		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: statement handoff pending %s", ErrCycleCutUndecided,
 			published.StatementHandoffReference())
 	}
-	// 发布、已存在之外的格（勾稽不平、单号冲突、本期无费用等）照记：截止日记下了就不再每拍重问，人从截止记录与对账单读口看到它。
+	// 发布、已存在之外的格（勾稽不平、发布意图冲突、本期无费用等）照记：截止日记下了就不再每拍重问，人从截止记录与对账单读口看到它。
+	// 这几格在截单编排里都答在取号之前，照记提交不留空号。
 	cut := ports.StatementCycleCut{Closing: closing, Outcome: published.Outcome().String(), CutAt: now}
 	if record, has := published.Statement(); has {
 		cut.Statement = record.Statement.Number().String()
 	}
 	return cut, true, nil
-}
-
-func cycleStatementNumber(account domain.SettlementAccountID, closing domain.AttributionDate) string {
-	return "STMT/" + account.String() + "/" + strings.ReplaceAll(closing.String(), "-", "")
 }
 
 // attributePending 给这一户确认时判不出归属日的费用当场补判，判出即落库，此后照常进候选。判不出是缺册：这一户这一拍停住、不记

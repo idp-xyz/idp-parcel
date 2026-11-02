@@ -512,6 +512,7 @@ func statementRecord(t *testing.T, tenant, number, digest string) ports.Statemen
 		},
 		ContentDigest: digest,
 		Statement:     statement,
+		DraftVersion:  saValue(t, domain.NewStatementDraftVersion, "v-"+number),
 		RecordedAt:    statementCutAt.Add(time.Hour),
 	}
 }
