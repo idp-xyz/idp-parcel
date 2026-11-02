@@ -25,7 +25,7 @@ type DocumentNumberRequest struct {
 	IsUsed func(ctx context.Context, number string) (bool, error)
 }
 
-// DocumentNumberOutcome 是取号的答案，三格封闭。
+// DocumentNumberOutcome 是取号的答案：取到号、单据编号时区未配置、编号规则撞号，封闭集。
 type DocumentNumberOutcome uint8
 
 const (

@@ -70,8 +70,9 @@ func TestTheDispatchBeatCutsADueCycleIntoAPublishedStatement(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-224（撞号那一格）——租户换了一份编号格式，新格式下的前二十个号都已被换格式前的单占用：到点截单答编号规则撞号，这一户整笔
-// 回滚——不出单、不记截止日、不落补判的归属日，取过的流水随之释放；日志分类是撞号。腾出第一个号之后下一拍照常截出那一期，单号正是它。
+// Covers: AT-SA-224（撞号那一格）——租户换了一份编号格式，新格式下跳号上限（docnumber.MaxSkippedNumbers）以内的号都已被换格式前的单
+// 占用：到点截单答编号规则撞号，按停在依赖上办——这一户整笔回滚，不出单、不记截止日、不落补判的归属日，取过的流水随之释放，下一拍
+// 重截；日志单独一类。腾出第一个号之后下一拍照常截出那一期，单号正是它。
 func TestADispatchCycleCutStopsOnANumberingCollisionAndReleasesTheSequence(t *testing.T) {
 	beat, db, dayBeforeYesterday := dueCycleCut(t)
 	numbers, err := docnumbering.Build(db, docnumber.SecretTable{})
@@ -99,8 +100,9 @@ func TestADispatchCycleCutStopsOnANumberingCollisionAndReleasesTheSequence(t *te
 	})
 
 	_, err = beat.DispatchOnce(t.Context())
-	if !errors.Is(err, saapplication.ErrCycleCutNumberingCollision) || !strings.Contains(err.Error(), "document numbering rule collision") {
-		t.Fatalf("撞号那一拍 = %v，want 按撞号分类", err)
+	if !errors.Is(err, saapplication.ErrCycleCutNumberingCollision) || !errors.Is(err, saapplication.ErrCycleCutUndecided) ||
+		!strings.Contains(err.Error(), "stalled on a document numbering rule collision") {
+		t.Fatalf("撞号那一拍 = %v，want 停在依赖上、日志单独按撞号分类", err)
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.customer_statement WHERE account_id = 'SYN-SA-SHIPPER-01-RECEIVABLE'`); n != 0 {
 		t.Fatalf("撞号还出了 %d 张单", n)

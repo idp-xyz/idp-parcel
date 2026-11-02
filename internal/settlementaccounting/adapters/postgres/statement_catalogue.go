@@ -236,7 +236,7 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 		if err != nil {
 			return ports.CustomerStatementCatalogueRow{}, fmt.Errorf("异议 %s 的争议号：%w", document.Dispute, err)
 		}
-		number, absence := numberingWords(numbering)
+		number, absence := numbering.Words()
 		disputes = append(disputes, ports.StatementDisputeEntry{
 			Dispute:               document.Dispute,
 			DocumentNumber:        number,

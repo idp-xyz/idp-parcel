@@ -67,9 +67,12 @@ func (numbering DocumentNumbering) Absence() (DocumentNumberAbsence, bool) {
 	return numbering.absence, !numbering.number.valid() && numbering.absence.String() != ""
 }
 
-// Valid 答这一格是否由取号那一步给出过（有号，或有一个具名的无号原因）。
-func (numbering DocumentNumbering) Valid() bool {
-	_, numbered := numbering.Number()
-	_, absent := numbering.Absence()
-	return numbered || absent
+// Words 把这一格写成答复与读口的两格：有号时只有号，没号时只有原因的词形（ADR-0355 决定十一：没有单据号的不出空串、
+// 不拿内部标识顶）。零值两格都空。
+func (numbering DocumentNumbering) Words() (string, string) {
+	if number, numbered := numbering.Number(); numbered {
+		return number.String(), ""
+	}
+	absence, _ := numbering.Absence()
+	return "", absence.String()
 }

@@ -21,8 +21,9 @@ var ErrCycleCutUnconfigured = errors.New("settlement accounting: cycle cut stopp
 // 再截。
 var ErrCycleCutUndecided = errors.New("settlement accounting: cycle cut stalled on a dependency")
 
-// ErrCycleCutNumberingCollision 说明这一户截单发布时对账单号按编号规则撞号（ADR-0355 决定八）：这一户整笔回滚、不记截止日，
-// 取过的流水随之释放。与等依赖分开：规则册换格式之前每拍都会撞在同一段上，要人去改规则册，不是等它自愈。
+// ErrCycleCutNumberingCollision 说明这一户截单发布时对账单号按编号规则撞号（ADR-0355 决定八）。编号规则是取号的依赖，撞号
+// 按停在依赖上办（ADR-0339 决定三）：交回的错误同时是 ErrCycleCutUndecided，这一户整笔回滚、不记截止日、下一拍重截，取过的
+// 流水随回滚释放。单独一个哨兵只为日志分得开：规则册换格式之前每拍都会撞在同一段上，要人去改规则册，不是等它自愈。
 var ErrCycleCutNumberingCollision = errors.New("settlement accounting: cycle cut stopped on a document numbering rule collision")
 
 // StatementCutter 是截单发布那一口：先问截单时点，再截单发布。到点截单与运营发布口进的是同一道门、同一只编排。调用方给环境事务。
@@ -232,7 +233,7 @@ func (handler *CutOffStatementsOnCycleHandler) cutClosing(
 	}
 	if published.Outcome() == StatementNumberingRuleCollision {
 		// 撞号不照记截止日：取过的流水只有整笔回滚才释放，记下截止日就得提交，那些流水全成空号（ADR-0355 决定三）。
-		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: closing %s", ErrCycleCutNumberingCollision, closing)
+		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: %w: closing %s", ErrCycleCutUndecided, ErrCycleCutNumberingCollision, closing)
 	}
 	if published.StatementHandoffReference() != "" {
 		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: statement handoff pending %s", ErrCycleCutUndecided,

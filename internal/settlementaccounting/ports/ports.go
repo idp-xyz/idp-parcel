@@ -751,8 +751,9 @@ const (
 // 等先到者提交之后才查，查到的就是先到者的单，答原单或意图冲突，不会两笔都取了号、输的那笔再撞库——那样输家的号
 // 已从序列取走，事务一提交就成了空号（ADR-0355 决定三只许跳号成为空号）。必须在事务里调。
 //
-// FindByIntent 按意图读出那一张单。FindUnversionedInPeriod 读本决定之前手工发布、没记下截止版本的同账户同账期的单：
-// 它们的意图只能按内容认（见截单编排）。StatementNumberUsed 在同一事务里答一个单号是否已在本租户的册上，给取号判撞。
+// FindByIntent 按意图读出那一张单。FindUnversionedInPeriod 读本决定之前手工发布、没记下截止版本的同账户同账期的单（作废的
+// 也读）：它们认不出截止版本，按内容与是否作废认（见截单编排 findPublished）。StatementNumberUsed 在同一事务里答一个单号
+// 是否已在本租户的册上，给取号判撞。
 type PublishedStatementStore interface {
 	FindByKey(ctx context.Context, key StatementKey) (StatementRecord, bool, error)
 	LockPublicationIntent(ctx context.Context, intent StatementPublicationIntent) error

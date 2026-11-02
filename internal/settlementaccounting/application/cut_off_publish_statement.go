@@ -519,9 +519,10 @@ func intentSubject(intent ports.StatementPublicationIntent) string {
 }
 
 // findPublished 按发布意图找已有的单。先按记下的截止版本找；找不到，再看本决定之前手工发布、没记下截止版本的同账户
-// 同账期的单（ADR-0355 Consequences：之前截出的单按意图同样查得到）。那几张只能按内容认：摘要里含截止版本，内容
-// 相同就是同一意图的重放；内容不同时分不出是换了截止版本还是换了内容，不当作同一意图——照新意图往下走，已出账的
-// 费用照样被逐件排除，不会两张单各收一次。
+// 同账期的单（ADR-0355 Consequences：之前截出的单按意图同样查得到）。那几张认不出截止版本，取保守：内容相同（摘要里
+// 含截止版本，相同即同一意图）就是重放，交回那一张答原单原号；内容不同而同账户同账期还有一张未作废的这种旧单，也交回
+// 它——answerExisting 比出内容不同，答发布意图冲突、不落单不取号，宁可让人换账期或先作废旧单，也不在同一账期旁边悄悄再发
+// 一张。旧单都已作废时不挡：作废之后要替代单重新出具（CONTEXT「已作废 → 已替代」）。
 func (handler *CutOffPublishStatementHandler) findPublished(
 	ctx context.Context,
 	intent ports.StatementPublicationIntent,
@@ -538,6 +539,11 @@ func (handler *CutOffPublishStatementHandler) findPublished(
 	}
 	for _, candidate := range legacy {
 		if domain.CompareStoredPublishDigest(candidate.ContentDigest, digest, sac1PublishDigest(command), unversionedPublishDigest(command)) == domain.SamePayload {
+			return candidate, true, nil
+		}
+	}
+	for _, candidate := range legacy {
+		if _, _, voided := candidate.Statement.Voided(); !voided {
 			return candidate, true, nil
 		}
 	}

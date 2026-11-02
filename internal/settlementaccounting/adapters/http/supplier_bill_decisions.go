@@ -220,7 +220,7 @@ func writeAuditAnswer(response http.ResponseWriter, result application.AuditResu
 	if record, has := result.Payable(); has {
 		currency, minor := record.Payable.Amount()
 		body.Payable, body.Currency, body.Amount = record.Payable.Payable().String(), currency.String(), minorAmount(minor)
-		body.DocumentNumber, body.DocumentNumberAbsence = numberingWords(record.Numbering)
+		body.DocumentNumber, body.DocumentNumberAbsence = record.Numbering.Words()
 	}
 	status := http.StatusOK
 	if result.Outcome() == application.PayableFormed {

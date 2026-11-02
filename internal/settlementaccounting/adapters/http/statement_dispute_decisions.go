@@ -183,7 +183,7 @@ func writeDisputeAnswer(response http.ResponseWriter, result application.Stateme
 func fillDispute(body *disputeResponse, record ports.DisputeRecord) {
 	dispute := record.Dispute
 	body.Dispute = dispute.Dispute().String()
-	body.DocumentNumber, body.DocumentNumberAbsence = numberingWords(record.Numbering)
+	body.DocumentNumber, body.DocumentNumberAbsence = record.Numbering.Words()
 	body.Statement = dispute.Statement().String()
 	body.Charge = dispute.Charge().String()
 	body.DisputedAmount = minorAmount(dispute.DisputedMinor())

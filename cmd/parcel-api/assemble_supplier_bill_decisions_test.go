@@ -210,7 +210,7 @@ func TestAnUnconfiguredAuditAuthorityIsAnAnswer(t *testing.T) {
 	}
 }
 
-// Covers: `AT-SA-231`（生产装配半边）——租户换了一份编号格式，新格式下的前二十个号都已被换格式前的应付占用：审核答「编号规则撞号」、
+// Covers: `AT-SA-231`（生产装配半边）——租户换了一份编号格式，新格式下跳号上限（docnumber.MaxSkippedNumbers）以内的号都已被换格式前的应付占用：审核答「编号规则撞号」、
 // 带出该改哪一类的编号规则，不形成应付；生产事务壳整笔回滚、取过的流水随之释放——腾出第一个号之后再审，拿到的正是它。
 func TestAPayableNumberCollisionFormsNothingAndReleasesTheSequence(t *testing.T) {
 	fixture := newSupplierBillFixture(t)

@@ -93,8 +93,8 @@ func TestAStatementTakesItsNumberOnlyWhenItIsPublished(t *testing.T) {
 	})
 }
 
-// Covers: ADR-0355 Consequences「本决定生效前截出的对账单，其意图照样能查到」——之前手工发布、没记下截止版本的单，按内容认：内容
-// 相同答原单原号、不取号；内容不同照新意图发，已在那张单上的费用照样被排除。
+// Covers: ADR-0355 Consequences「本决定生效前截出的对账单，其意图照样能查到」与 `AT-SA-222`（旧单那一格）——之前手工发布、没记下
+// 截止版本的单：内容相同答原单原号、不取号；同账户同账期还有未作废的这种旧单而内容不同，答发布意图冲突、不取号；旧单作废后不挡。
 func TestAStatementPublishedBeforeNumberingIsFoundByItsIntent(t *testing.T) {
 	fixture := newStatementFixture(t)
 	if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
@@ -126,12 +126,29 @@ func TestAStatementPublishedBeforeNumberingIsFoundByItsIntent(t *testing.T) {
 		t.Fatalf("升级前那张单按意图答原号：%s，取号 %d 次", record.Key.Number, len(fixture.numbers.requests)-taken)
 	}
 
-	changed := publishCommand(t)
-	changed.ChargeIDs = []string{"charge-A"}
-	changed.DeclaredTotalMinor = 0
-	result, err := fixture.handler.Publish(context.Background(), changed)
-	if err != nil || result.Outcome() != application.StatementNoChargeInPeriod {
-		t.Fatalf("changed content: %v %q：认不出是同一意图，照新意图走，已出账的照样排除", err, result.Outcome())
+	// 同账户同账期有一张未作废的旧单而内容不同：认不出截止版本，取保守，答发布意图冲突、不取号。连截止版本都换了也一样。
+	for _, version := range []string{"draft/v1", "draft/v9"} {
+		changed := publishCommand(t)
+		changed.Version = version
+		changed.ChargeIDs = []string{"charge-A"}
+		changed.DeclaredTotalMinor = 12000
+		result, err := fixture.handler.Publish(context.Background(), changed)
+		if err != nil || result.Outcome() != application.StatementPublicationIntentConflict || len(fixture.numbers.requests) != taken {
+			t.Fatalf("%s 换内容 = %v %q，取号 %d 次：同账期还有未作废的旧单就答意图冲突", version, err, result.Outcome(), len(fixture.numbers.requests)-taken)
+		}
+	}
+
+	// 旧单作废之后不再挡：替代单是新发布，取新号。
+	if voided, err := fixture.handler.Void(context.Background(), application.VoidStatementCommand{
+		TenantID: legacy.Key.TenantID, Number: "SYN-STMT-MANUAL-1", Basis: "void-basis-1", VoidedAt: statementPublishAt.Add(time.Hour),
+	}); err != nil || voided.Outcome() != application.StatementVoidedOutcome {
+		t.Fatalf("void: %v %q", err, voided.Outcome())
+	}
+	replacement := publishCommand(t)
+	replacement.Version = "draft/v2"
+	result, err := fixture.handler.Publish(context.Background(), replacement)
+	if err != nil || result.Outcome() != application.StatementPublished {
+		t.Fatalf("旧单作废之后替代单 = %v %q", err, result.Outcome())
 	}
 }
 

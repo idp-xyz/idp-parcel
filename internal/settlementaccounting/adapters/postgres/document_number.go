@@ -45,15 +45,6 @@ func numberingFrom(number, absence *string) (domain.DocumentNumbering, error) {
 	}
 }
 
-// numberingWords 把那一格写成读口的两格词形：有号时只有号，没号时只有原因（domain.DocumentNumberAbsence 的词形）。
-func numberingWords(numbering domain.DocumentNumbering) (string, string) {
-	if number, numbered := numbering.Number(); numbered {
-		return number.String(), ""
-	}
-	absence, _ := numbering.Absence()
-	return "", absence.String()
-}
-
 // documentNumberUsed 答一个单据号是否已在本租户的这张表上。table 只由本包的常量传入。取号编排只在开立事务里调它（事务外先被
 // 编号组件拒），读执行器随 ctx 落在那笔事务上，看得见本事务里已落下的单。
 func documentNumberUsed(ctx context.Context, db *bentopg.DB, table string, tenant domain.TenantID, number string) (bool, error) {

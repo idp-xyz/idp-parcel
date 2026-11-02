@@ -22,7 +22,7 @@ func (double *issuerDouble) Assign(_ context.Context, request docnumber.IssueReq
 	return double.answer, double.err
 }
 
-// Covers: ADR-0025 全函数翻译——编号组件的三格答案逐格落到端口的三格；请求的租户、类型、开立方业务时区与「是否已用」原样交过去；
+// Covers: ADR-0025 全函数翻译——编号组件的取到号、时区未配置、撞号逐格落到端口的同名格；请求的租户、类型、开立方业务时区与「是否已用」原样交过去；
 // 编号组件的错误原样上抛（调用方据此回滚开立事务）；多出来的一格不悄悄落到哪一格上。
 func TestTheAssignerTranslatesEveryAssignmentOutcome(t *testing.T) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")

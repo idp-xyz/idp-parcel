@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -21,6 +22,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
 // 本文件在真库上证对账单、费用争议与审核应付的单据号（ADR-0355 决定三、七、八、九；票 document-numbering/05）：编排、本上下文
@@ -327,7 +329,7 @@ func TestADisputeNumberIsIssuedInTheRegistrationTransaction(t *testing.T) {
 	})
 
 	t.Run("a collision registers nothing and releases the sequence", func(t *testing.T) {
-		// tenant-3 的前二十个号已被用掉（换格式前的旧号）：跳到上限仍撞，答撞号、不登记，整笔回滚。
+		// tenant-3 跳号上限（docnumber.MaxSkippedNumbers）以内的号都已被用掉（换格式前的旧号）：跳到上限仍撞，答撞号、不登记，整笔回滚。
 		for index := 1; index <= docnumber.MaxSkippedNumbers; index++ {
 			record := formedDisputeRecord(t, "tenant-3", fmt.Sprintf("dispute-old-%d", index), false)
 			record.Numbering = numberedDocument(t, fmt.Sprintf("DSP-202611-%05d", index))
@@ -652,5 +654,162 @@ func TestIssuanceLocksRefuseToRunOutsideATransaction(t *testing.T) {
 		TenantID: tenant, Payable: saValue(t, domain.NewPayableID, "payable-1"),
 	}, saValue(t, domain.NewBillClaimID, "claim-1"), saValue(t, domain.NewBillLineReference, "L1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("事务外 LockIssuance 应答 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// Covers: 迁移 settlement_accounting/0053 施加在有旧单的库上——自动截单截出的旧单按截止记录认、补上 v1；手工发布的旧单留空，
+// 单号写成 STMT/<账户>/<日> 的样子、账期也是 CYCLE/<日> 的，截止记录上没有它，同样留空；旧争议、旧应付两列都空（不回填）。
+// 从空库按序施加本上下文的迁移，停在 0053 之前落旧形状的行，再施加 0053。
+func TestTheDocumentNumberMigrationMarksOnlyCycleCutStatements(t *testing.T) {
+	ctx := t.Context()
+	conn, err := pgx.Connect(ctx, pgtest.FreshDatabase(t))
+	if err != nil {
+		t.Fatalf("连空库：%v", err)
+	}
+	defer conn.Close(context.WithoutCancel(ctx))
+	if _, err := conn.Exec(ctx, `CREATE SCHEMA settlement_accounting`); err != nil {
+		t.Fatalf("建 schema：%v", err)
+	}
+	assets, err := migrations.SettlementAccounting()
+	if err != nil {
+		t.Fatalf("读迁移：%v", err)
+	}
+	const target = "0053_document_numbers_and_statement_publication_intent"
+	var numbering *migrations.Asset
+	for index := range assets {
+		if assets[index].Name == target {
+			numbering = &assets[index]
+			break
+		}
+		if _, err := conn.Exec(ctx, assets[index].SQL); err != nil {
+			t.Fatalf("施加 %s：%v", assets[index].Name, err)
+		}
+	}
+	if numbering == nil {
+		t.Fatalf("没有找到迁移 %s", target)
+	}
+	if _, err := conn.Exec(ctx, `
+		INSERT INTO settlement_accounting.settlement_account
+			(tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency, settlement_policy_id, responsibility_basis, registered_at)
+		VALUES ('SYN-TENANT-01', 'SYN-ACC-1', 'SYN-LE-01', 'SYN-PARTY-1', 'RECEIVABLE', 'CNY', 'SYN-POLICY-1', 'SYN-CONTRACT-1', now());
+		INSERT INTO settlement_accounting.statement_cycle (tenant_id, account_id, cycle_kind, since_date, registered_at)
+		VALUES ('SYN-TENANT-01', 'SYN-ACC-1', 'DAILY', '2026-10-01', now());
+		INSERT INTO settlement_accounting.statement_cycle_cut (tenant_id, account_id, closing_date, outcome, statement_number, cut_at)
+		VALUES ('SYN-TENANT-01', 'SYN-ACC-1', '2026-10-30', 'STATEMENT_PUBLISHED', 'STMT/SYN-ACC-1/20261030', now()),
+		       ('SYN-TENANT-01', 'SYN-ACC-1', '2026-10-31', 'NO_CHARGE', NULL, now());
+		INSERT INTO settlement_accounting.customer_statement
+			(tenant_id, statement_number, account_id, period_ref, currency, total_minor, content_digest, lines, adjustment_lines, published_at, recorded_at)
+		VALUES ('SYN-TENANT-01', 'STMT/SYN-ACC-1/20261030', 'SYN-ACC-1', 'CYCLE/2026-10-30', 'CNY', 100, 'd1', '[{"charge":"C1","amount_minor":100}]', '[]', now(), now()),
+		       ('SYN-TENANT-01', 'STMT/SYN-ACC-1/20261029', 'SYN-ACC-1', 'CYCLE/2026-10-29', 'CNY', 100, 'd2', '[{"charge":"C2","amount_minor":100}]', '[]', now(), now()),
+		       ('SYN-TENANT-01', 'SYN-STMT-MANUAL-1', 'SYN-ACC-1', '2026-10', 'CNY', 100, 'd3', '[{"charge":"C3","amount_minor":100}]', '[]', now(), now());
+		INSERT INTO settlement_accounting.statement_dispute
+			(tenant_id, dispute_id, statement_number, charge_id, disputed_minor, reason_ref, opened_at, content_digest, recorded_at)
+		VALUES ('SYN-TENANT-01', 'SYN-DSP-OLD', 'SYN-STMT-MANUAL-1', 'C3', 50, 'weight', now(), 'dd', now());
+		INSERT INTO settlement_accounting.audited_payable
+			(tenant_id, payable_id, claim_id, line_ref, expected_version, legal_entity, account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at)
+		VALUES ('SYN-TENANT-01', 'SYN-PAYABLE-OLD', 'SYN-BILL-1', 'L1', 'SYN-COST-1', 'SYN-LE-01', 'SYN-ACC-2', 'CNY', 100, 'SYN-AUDITOR-1', now(), 'pd', now())`); err != nil {
+		t.Fatalf("落旧形状的行：%v", err)
+	}
+	if _, err := conn.Exec(ctx, numbering.SQL); err != nil {
+		t.Fatalf("施加 %s：%v", target, err)
+	}
+
+	versions := map[string]string{}
+	rows, err := conn.Query(ctx, `SELECT statement_number, coalesce(draft_version, '') FROM settlement_accounting.customer_statement`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var number, version string
+		if err := rows.Scan(&number, &version); err != nil {
+			t.Fatal(err)
+		}
+		versions[number] = version
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if versions["STMT/SYN-ACC-1/20261030"] != "v1" || versions["STMT/SYN-ACC-1/20261029"] != "" || versions["SYN-STMT-MANUAL-1"] != "" {
+		t.Fatalf("截止版本 = %v，want 只有截止记录上那一张补 v1", versions)
+	}
+	var unnumbered int
+	if err := conn.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM settlement_accounting.statement_dispute WHERE document_number IS NULL AND document_number_absence IS NULL) +
+		(SELECT count(*) FROM settlement_accounting.audited_payable WHERE document_number IS NULL AND document_number_absence IS NULL)`).Scan(&unnumbered); err != nil {
+		t.Fatal(err)
+	}
+	if unnumbered != 2 {
+		t.Fatalf("旧争议与旧应付两列皆空的 = %d，want 2（不回填）", unnumbered)
+	}
+}
+
+// Covers: `AT-SA-222`（旧单那一格，真库半边）——本决定之前手工发布、没记下截止版本的单占着它的账户与账期：同一账户同一账期换了
+// 内容再发，答发布意图冲突、不落单不取号；同内容重放答原单原号；那张旧单作废之后不再挡，替代单取新号。
+func TestAManualStatementBeforeNumberingHoldsItsPeriod(t *testing.T) {
+	stack := newNumberingStack(t)
+	tenant := saTenant(t, "tenant-1")
+	for _, id := range []string{"charge-1", "charge-2"} {
+		charge, err := confirmedCharge(t, id, "DELIVERY_FINALIZED/"+id).WithAttributionDate(domain.AttributionDate{Year: 2026, Month: time.October, Day: 30})
+		if err != nil {
+			t.Fatal(err)
+		}
+		saWithin(t, stack.db.Transactor(), t.Context(), func(txCtx context.Context) error {
+			_, err := stack.charges.SaveConfirmed(txCtx, tenant, charge)
+			return err
+		})
+	}
+	command := func(version string, charges ...string) application.PublishStatementCommand {
+		return application.PublishStatementCommand{
+			TenantID: tenant, Account: "ACCOUNT/syn-1", Period: "2026-10", Version: version, Currency: "CNY",
+			ChargeIDs: charges, LastAttributionDate: "2026-10-31", DeclaredTotalMinor: 45600,
+			CutOffAt: time.Date(2026, time.October, 31, 10, 0, 0, 0, time.UTC), PublishedAt: numberingNow,
+		}
+	}
+	publish := func(command application.PublishStatementCommand) (string, string) {
+		var number string
+		outcome := stack.within(t, false, func(ctx context.Context) (string, error) {
+			result, err := stack.cutoff.Publish(ctx, command)
+			if record, has := result.Statement(); has {
+				number = record.Key.Number.String()
+			}
+			return result.Outcome().String(), err
+		})
+		return outcome, number
+	}
+	if outcome, _ := publish(command("v1", "charge-1")); outcome != "STATEMENT_PUBLISHED" {
+		t.Fatalf("publish = %s", outcome)
+	}
+	// 改成升级前手工发布的样子：人填的单号、没记截止版本；序列也回到没取过号。
+	if _, err := stack.pool.Exec(t.Context(), `UPDATE settlement_accounting.customer_statement
+		SET statement_number = 'SYN-STMT-MANUAL-1', draft_version = NULL WHERE tenant_id = 'tenant-1'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stack.pool.Exec(t.Context(), `DELETE FROM platform.numbering_sequence WHERE scope = 'tenant-1'`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, version := range []string{"v1", "v2"} {
+		if outcome, _ := publish(command(version, "charge-2")); outcome != "PUBLICATION_INTENT_CONFLICT" {
+			t.Fatalf("%s 换内容 = %s，同账期还有未作废的旧单就答意图冲突", version, outcome)
+		}
+	}
+	if outcome, number := publish(command("v1", "charge-1")); outcome != "EXISTING_STATEMENT" || number != "SYN-STMT-MANUAL-1" {
+		t.Fatalf("同内容重放 = %s %s", outcome, number)
+	}
+	var taken int
+	if err := stack.pool.QueryRow(t.Context(), `SELECT count(*) FROM platform.numbering_sequence WHERE scope = 'tenant-1'`).Scan(&taken); err != nil || taken != 0 {
+		t.Fatalf("意图冲突与重放取了号：序列行 %d err %v", taken, err)
+	}
+
+	if outcome := stack.within(t, false, func(ctx context.Context) (string, error) {
+		result, err := stack.cutoff.Void(ctx, application.VoidStatementCommand{
+			TenantID: tenant, Number: "SYN-STMT-MANUAL-1", Basis: "void-basis-1", VoidedAt: numberingNow,
+		})
+		return result.Outcome().String(), err
+	}); outcome != "STATEMENT_VOIDED" {
+		t.Fatalf("void = %s", outcome)
+	}
+	if outcome, number := publish(command("v2", "charge-2")); outcome != "STATEMENT_PUBLISHED" || number != "STMT-202611-00001" {
+		t.Fatalf("旧单作废之后 = %s %s", outcome, number)
 	}
 }

@@ -1,5 +1,6 @@
 // Package documentnumber 把编号组件的取号编排接到本上下文的消费侧端口 ports.DocumentNumberAssigner 上（ADR-0025；
-// ADR-0355 决定四）。只翻译，不判断：编号组件三格答案逐格落到端口的三格，取号与判撞的规则都在编号组件那一处。
+// ADR-0355 决定四）。只翻译，不判断：编号组件的取到号、单据编号时区未配置、编号规则撞号逐格落到端口的同名格，取号与
+// 判撞的规则都在编号组件那一处。
 package documentnumber
 
 import (

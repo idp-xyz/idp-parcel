@@ -48,16 +48,17 @@ func (beat cycleCutBeat) cutDueStatements(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
-// cycleCutFailureKind 给一户的失败分个类写进日志：等依赖的下一拍多半自愈，未配置要租户补登，撞号要租户在规则册改编号格式，其余
-// 是两侧说法矛盾、要人查。各类都每拍再来一次，这一格只为让看日志的人分得开。
+// cycleCutFailureKind 给一户的失败分个类写进日志：等依赖的下一拍多半自愈，未配置要租户补登，其余是两侧说法矛盾、要人查。编号
+// 规则撞号是停在依赖上的一种（编号规则是取号的依赖），回滚与重截照那一类办，日志单独一类：它不会自愈，要租户在规则册改格式。
+// 各类都每拍再来一次，这一格只为让看日志的人分得开。
 func cycleCutFailureKind(err error) string {
 	switch {
+	case errors.Is(err, saapplication.ErrCycleCutNumberingCollision):
+		return "stalled on a document numbering rule collision"
 	case errors.Is(err, saapplication.ErrCycleCutUndecided):
 		return "stalled on a dependency"
 	case errors.Is(err, saapplication.ErrCycleCutUnconfigured):
 		return "tenant value missing"
-	case errors.Is(err, saapplication.ErrCycleCutNumberingCollision):
-		return "document numbering rule collision"
 	default:
 		return "contradiction"
 	}
