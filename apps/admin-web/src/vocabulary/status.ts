@@ -558,6 +558,9 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     GATE_CONFLICTING: muted('检查项目有冲突'),
     RELEASE_NOT_RECEIVED: muted('还没收到海关放行'),
   },
+  // 单据编号规则的来源（ADR-0355 决定五）：产品默认是随产品发布的内置格式，不是「没配置」，所以不用琥珀；本公司登过
+  // 自己的格式是蓝，提示这一类与产品默认不同。
+  'document-numbering-source': { PRODUCT_DEFAULT: muted('产品默认'), TENANT_RULE: info('本公司规则') },
 };
 
 type UnknownCodeHandler = (code: string) => void;
