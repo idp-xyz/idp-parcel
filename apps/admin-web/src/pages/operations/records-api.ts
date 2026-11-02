@@ -285,7 +285,8 @@ export interface EffectiveDeliveryRecord {
  * 一行总单版本（ADR-0113）。standing 三值封闭词（IN_FORCE / REVOKED / SUPERSEDED）；
  * supersedes 与 changedAt 成对缺席即首版——一行一版本，撤销、替代、关联重述都是新行
  * 回指前版；replacedBy 只在已替代上在场；commission / booking 是可缺引用；
- * associationCount 是关联子表的行数（十进制计数串），关联本体不在列面展开。
+ * associationCount 是关联子表的行数（十进制计数串），关联本体不在列面展开。所引委托、订舱在册时各带单据号或无号原因
+ * （…DocumentNumber / …DocumentNumberAbsence），引用为空或单据不在册时两键都缺席（ADR-0355 决定十一）。
  */
 export interface CarrierMasterDocumentRecord {
   document: string;
@@ -300,6 +301,10 @@ export interface CarrierMasterDocumentRecord {
   associationCount: string;
   changedAt?: string;
   recordedAt: string;
+  commissionDocumentNumber?: string;
+  commissionDocumentNumberAbsence?: string;
+  bookingDocumentNumber?: string;
+  bookingDocumentNumberAbsence?: string;
 }
 
 /** 订舱名下的一份承运答复（bookingAnswerBody）。quantity 是接受量，只在接受上在场；basis 可缺。 */
@@ -316,6 +321,11 @@ export interface BookingAnswerRecord {
 /**
  * 一次订舱（bookingRequestRowBody）。standing 是读口派生的状态词，页面原词示文、不另算；取消不进 standing，
  * cancelledAt 缺席即没有取消。submittedBy / cancelledBy 没记下时整键缺席（票 180）。
+ *
+ * booking 与 commission 是订舱、委托的标识（登记方生成的幂等键；booking 也是承运答复认单的键）。documentNumber 是订舱的
+ * 单据号，没有号时缺席、改由 documentNumberAbsence 说原因（ISSUED_BEFORE_NUMBERING / NUMBERING_TIME_ZONE_NOT_CONFIGURED）；
+ * commissionDocumentNumber 是所属委托的单据号，委托没有号时缺席、改由 commissionDocumentNumberAbsence 说原因；委托行没读到时
+ * 两键都缺席（ADR-0355 决定十一）。
  */
 export interface BookingRequestRecord {
   booking: string;
@@ -331,6 +341,10 @@ export interface BookingRequestRecord {
   answers: BookingAnswerRecord[];
   submittedBy?: string;
   cancelledBy?: string;
+  documentNumber?: string;
+  documentNumberAbsence?: string;
+  commissionDocumentNumber?: string;
+  commissionDocumentNumberAbsence?: string;
 }
 
 /** 挡回册一行。basis 两格封闭词（BOOKING_NOT_REGISTERED / SOURCE_NOT_SERVICE_PROVIDER）；count 是十进制计数串。 */

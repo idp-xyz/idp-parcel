@@ -276,7 +276,17 @@ func (handler *RegisterMasterDocumentHandler) commit(
 	}
 	switch saved {
 	case ports.MasterDocumentSaved:
-		return RegisterMasterDocumentResult{outcome: outcome, record: record, hasRecord: true}, nil
+		// 落了就按键读回答复：所引委托、订舱的单据号格只在读回时连读（ADR-0355 决定十一），拿手里这一份答，新登的总单就带不上号。
+		// 读回出错与读不到都交 error，不答未决：这一版已经落了，答未决是告诉登记方「什么也没落、稍后原样重交」，而装配壳只在
+		// error 时回滚，答未决就会照常提交、留下一版登记方以为没落的总单。交 error 让壳整笔回滚，登记方收 5xx 原样重交。
+		stored, found, err := handler.deps.Documents.FindByKey(ctx, record.Key)
+		if err != nil {
+			return RegisterMasterDocumentResult{}, fmt.Errorf("%w: read back saved version %s/%s: %w", ErrUnexpectedMasterDocumentSave, record.Key.Document, record.Key.Version, err)
+		}
+		if !found {
+			return RegisterMasterDocumentResult{}, fmt.Errorf("%w: saved version %s/%s is not readable", ErrUnexpectedMasterDocumentSave, record.Key.Document, record.Key.Version)
+		}
+		return RegisterMasterDocumentResult{outcome: outcome, record: stored, hasRecord: true}, nil
 	case ports.MasterDocumentAlreadyRegistered:
 		winner, found, err := handler.deps.Documents.FindByKey(ctx, record.Key)
 		if err != nil {

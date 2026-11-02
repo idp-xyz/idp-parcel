@@ -133,7 +133,45 @@ func (repository *MasterDocuments) query(
 			RecordedAt: head.recordedAt,
 		})
 	}
+	if err := attachMasterDocumentReferenceNumbers(ctx, querier, records); err != nil {
+		return nil, fmt.Errorf("%s: %w", verb, err)
+	}
 	return records, nil
+}
+
+// attachMasterDocumentReferenceNumbers 给每一版总单所引的委托、订舱连读单据号格（ADR-0355 决定十一）。各版同属一个租户（各读
+// 口都按租户筛），一类引用一条查询。
+func attachMasterDocumentReferenceNumbers(ctx context.Context, querier bentopg.Querier, records []ports.MasterDocumentRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	var commissions, bookings []string
+	for _, record := range records {
+		if commission, named := record.Document.Commission(); named {
+			commissions = append(commissions, commission.String())
+		}
+		if booking, named := record.Document.Booking(); named {
+			bookings = append(bookings, booking.String())
+		}
+	}
+	tenant := records[0].Key.TenantID
+	commissionNumbers, err := commissionDocumentNumberings(ctx, querier, tenant, commissions)
+	if err != nil {
+		return err
+	}
+	bookingNumbers, err := bookingDocumentNumberings(ctx, querier, tenant, bookings)
+	if err != nil {
+		return err
+	}
+	for index := range records {
+		if commission, named := records[index].Document.Commission(); named {
+			records[index].CommissionDocumentNumber = referencedNumbering(commissionNumbers, commission.String())
+		}
+		if booking, named := records[index].Document.Booking(); named {
+			records[index].BookingDocumentNumber = referencedNumbering(bookingNumbers, booking.String())
+		}
+	}
+	return nil
 }
 
 func scanMasterDocumentRows(rows pgx.Rows) ([]masterDocumentRow, error) {

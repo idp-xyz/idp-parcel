@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -27,6 +28,8 @@ var (
 	// ErrBookingWithoutCommission 说明在册的订舱指名的委托读不回来。订舱只在委托在册时成立，委托又不删，读不回就是库里的
 	// 数据违约；答「订舱不存在」会让承运方去核一个确实存在的订舱。
 	ErrBookingWithoutCommission = errors.New("transport fulfillment: booking names a commission that is not registered")
+	// ErrUnexpectedDocumentNumberIssue 说明取号端口交回了封闭集合以外的格，或说取到了号却没交号。
+	ErrUnexpectedDocumentNumberIssue = errors.New("transport fulfillment: unexpected document number issue")
 )
 
 // CommissionOutcome 是委托/订舱编排的应用处理结果。`运输已开始`是业务负向格——已
@@ -38,6 +41,10 @@ var (
 // 改引在册班次）、订舱不在册（找租户核对订舱标识）各自续办不同，不并进`未受理`。他租户名下的同名委托、班次与订舱按本租户
 // 的键读不回，同落「不在册」那一格。答复方不是该订舱所属委托的服务提供方也落订舱不在册，不另成格（ADR-0239 决定一）：同一
 // 租户的承运商之间常是竞争方，另成一格就让它探得出别人的订舱在不在，而它的续办同样是找租户核对。
+//
+// 编号规则撞号（`NUMBERING_RULE_COLLISION`）是委托与订舱开立两口共有的一格业务答案（ADR-0355 决定八）：取号跳过已用号到
+// 上限仍撞，这一次不落单。续办是去规则册（设置 → 单据编号）换格式，不是改载荷或稍后重交——同一格式再交还会撞上同一段，
+// 所以不并进`未受理`或`未决`。
 //
 // 取消两口沿用同一套格（ADR-0204 决定三）：委托不在册与订舱不在册各是一格，不并进`未受理`；运输已开始答
 // `TRANSPORT_ALREADY_STARTED`，与领域哨兵 ErrTransportAlreadyStarted 同名（AT-TF-092）。取消的重放另起一格
@@ -70,6 +77,7 @@ const (
 	BookingNotFound
 	BookingCancelled
 	CancellationExistingResult
+	CommissionNumberingRuleCollision
 )
 
 func (outcome CommissionOutcome) String() string {
@@ -120,6 +128,8 @@ func (outcome CommissionOutcome) String() string {
 		return "BOOKING_CANCELLED"
 	case CancellationExistingResult:
 		return "EXISTING_CANCELLATION"
+	case CommissionNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -230,6 +240,7 @@ type CommissionResult struct {
 	continuation      string
 	handoff           string
 	agreementSupplier domain.ServiceProviderReference
+	numberingRule     docnumber.TypeCode
 }
 
 func (result CommissionResult) Outcome() CommissionOutcome {
@@ -262,6 +273,11 @@ func (result CommissionResult) CommissionHandoffReference() string {
 	return result.handoff
 }
 
+// NumberingRule 只在`编号规则撞号`时有值：撞的是哪一类单据的编号规则，页面据此指到规则册上那一类。
+func (result CommissionResult) NumberingRule() (docnumber.TypeCode, bool) {
+	return result.numberingRule, result.outcome == CommissionNumberingRuleCollision
+}
+
 // AgreementSupplier 只在`服务方不符`时有值：指名的那一版协议约定的供应商。登记方据此决定改服务方还是换协议。
 func (result CommissionResult) AgreementSupplier() (domain.ServiceProviderReference, bool) {
 	return result.agreementSupplier, result.outcome == CommissionProviderMismatch
@@ -278,6 +294,10 @@ type CommissionTransportDeps struct {
 	Agreements           ports.SupplierAgreementSource
 	Downstream           ports.TransportCommissionHandoff
 	Clock                ports.Clock
+	// Numbers 与委托、订舱的号表只在开立委托或订舱的编排实例上装（ADR-0355 决定三）；取消、答复与采用不取号。
+	Numbers           ports.DocumentNumberIssuer
+	CommissionNumbers ports.TransportCommissionNumbers
+	BookingNumbers    ports.BookingNumbers
 }
 
 type CommissionTransportHandler struct {
@@ -357,6 +377,18 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 	}
 	switch saved {
 	case ports.CommissionSaved:
+		numbering, collided, err := handler.issueDocumentNumber(ctx, key.TenantID, domain.TransportCommissionDocumentNumberType,
+			handler.deps.CommissionNumbers.CommissionDocumentNumberUsed,
+			func(ctx context.Context, numbering domain.DocumentNumbering) error {
+				return handler.deps.CommissionNumbers.RecordCommissionDocumentNumber(ctx, key, numbering)
+			})
+		if err != nil {
+			return CommissionResult{}, err
+		}
+		if collided {
+			return CommissionResult{outcome: CommissionNumberingRuleCollision, numberingRule: domain.TransportCommissionDocumentNumberType.Code}, nil
+		}
+		record.DocumentNumber = numbering
 		result := CommissionResult{outcome: CommissionSubmitted, commission: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
 		return result, nil
@@ -467,6 +499,18 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	}
 	switch saved {
 	case ports.BookingSaved:
+		numbering, collided, err := handler.issueDocumentNumber(ctx, key.TenantID, domain.BookingDocumentNumberType,
+			handler.deps.BookingNumbers.BookingDocumentNumberUsed,
+			func(ctx context.Context, numbering domain.DocumentNumbering) error {
+				return handler.deps.BookingNumbers.RecordBookingDocumentNumber(ctx, key, numbering)
+			})
+		if err != nil {
+			return CommissionResult{}, err
+		}
+		if collided {
+			return CommissionResult{outcome: CommissionNumberingRuleCollision, numberingRule: domain.BookingDocumentNumberType.Code}, nil
+		}
+		record.DocumentNumber = numbering
 		return CommissionResult{outcome: BookingSubmitted, booking: record, hasRecord: true}, nil
 	case ports.BookingAlreadyRegistered:
 		// 并发首交的输家照样按摘要分重放与冲突，理由同委托：读回赢家就答「已有」会把冲突吞掉。
@@ -877,6 +921,59 @@ func commissionUndecided(reason CommissionUndecidedReason, subject string) Commi
 		outcome:      CommissionUndecided,
 		reason:       reason,
 		continuation: commissionContinuation(reason.String(), subject),
+	}
+}
+
+// issueDocumentNumber 给刚落库的那份委托或那次订舱取号并记下（ADR-0355 决定三）：declaration 是这一类的类型声明，used 查本类
+// 单据表这个号用过没有，record 把号或无号原因记到刚落的那一行上。
+//
+// 取号排在落库之后：并发首交的输家在 Save 上等赢家提交、答已登记，一个号也不取；先取号再落库，输家取到的号随它那笔「已有」
+// 答复一起提交，成了决定八之外的空号。重放在 Save 之前就答了，同样不取号——号存在单据上，重放读回原号。
+//
+// collided 为真时调用方答编号规则撞号，开立事务必须回滚：单据那一行与取过的流水一起撤掉。
+func (handler *CommissionTransportHandler) issueDocumentNumber(
+	ctx context.Context,
+	tenant domain.TenantID,
+	declaration docnumber.TypeDeclaration,
+	used func(context.Context, domain.TenantID, domain.DocumentNumber) (bool, error),
+	record func(context.Context, domain.DocumentNumbering) error,
+) (domain.DocumentNumbering, bool, error) {
+	issue, err := handler.deps.Numbers.IssueDocumentNumber(ctx, ports.DocumentNumberRequest{
+		TenantID: tenant,
+		Type:     declaration.Code,
+		IsUsed: func(ctx context.Context, number domain.DocumentNumber) (bool, error) {
+			return used(ctx, tenant, number)
+		},
+	})
+	if err != nil {
+		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: issue %s document number: %w", declaration.Code, err)
+	}
+	numbering, collided, err := numberingFrom(issue)
+	if err != nil || collided {
+		return domain.DocumentNumbering{}, collided, err
+	}
+	if err := record(ctx, numbering); err != nil {
+		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: record %s document number: %w", declaration.Code, err)
+	}
+	return numbering, false, nil
+}
+
+// numberingFrom 把取号答案译成单据上那一格。时区未配置记无号原因、照常开立（ADR-0355 决定七）；端口交回封闭集合以外的格
+// 是端口违约，交 error 让开立事务回滚，不把它当成没号。
+func numberingFrom(issue ports.DocumentNumberIssue) (domain.DocumentNumbering, bool, error) {
+	switch issue.Outcome {
+	case ports.DocumentNumberIssued:
+		numbering := domain.NumberedDocument(issue.Number)
+		if _, numbered := numbering.Number(); !numbered {
+			return domain.DocumentNumbering{}, false, fmt.Errorf("%w: issued without a number", ErrUnexpectedDocumentNumberIssue)
+		}
+		return numbering, false, nil
+	case ports.DocumentNumberTimeZoneNotConfigured:
+		return domain.UnnumberedDocument(domain.DocumentNumberingTimeZoneNotConfigured), false, nil
+	case ports.DocumentNumberRuleCollision:
+		return domain.DocumentNumbering{}, true, nil
+	default:
+		return domain.DocumentNumbering{}, false, fmt.Errorf("%w: outcome %d", ErrUnexpectedDocumentNumberIssue, issue.Outcome)
 	}
 }
 

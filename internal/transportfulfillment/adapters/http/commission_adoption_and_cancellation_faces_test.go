@@ -134,6 +134,9 @@ func newAdoptionFaces(t *testing.T) adoptionFaces {
 		Agreements:           agreementCheckStub{supplier: trunkCarrier},
 		Downstream:           commissionHandoffStub{},
 		Clock:                fixedCommissionClock{},
+		Numbers:              &documentNumberStub{},
+		CommissionNumbers:    commissions,
+		BookingNumbers:       bookings,
 	})
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
 		Adoptions:        &adoptionRegisterDouble{records: map[string]ports.SegmentCommissionAdoptionRecord{}},

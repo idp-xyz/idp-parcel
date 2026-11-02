@@ -72,20 +72,7 @@ func writeBookingRequestCancellationOutcome(response http.ResponseWriter, result
 		ContinuationReference: result.ContinuationReference(),
 	}
 	if record, present := result.Booking(); present {
-		booking := record.Booking
-		quantity, unit := booking.Quantity()
-		body.Booking = &bookingRequestBody{
-			Booking:     booking.Booking().String(),
-			Commission:  booking.Commission().String(),
-			Schedule:    booking.Schedule().String(),
-			Quantity:    quantity,
-			Unit:        unit.String(),
-			RequestedAt: rfc3339(booking.RequestedAt()),
-			RecordedAt:  rfc3339(record.RecordedAt),
-		}
-		if cancelledAt, cancelled := booking.Cancelled(); cancelled {
-			body.Booking.CancelledAt = rfc3339(cancelledAt)
-		}
+		body.Booking = bookingRequestBodyOf(record)
 	}
 	// ADR-0022：只有这次真把订舱取消了用 201；已开始、已取消的重放、不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

@@ -15,6 +15,9 @@ type SegmentCommissionAdoptionWithdrawalRecord struct {
 	Key        SegmentCommissionAdoptionKey
 	Withdrawal domain.SegmentCommissionAdoptionWithdrawal
 	RecordedAt time.Time
+	// CommissionDocumentNumber 是被解除那一代所采用委托的单据号格（ADR-0355 决定十一）：读回时连读委托表，编排新落的那一次解除
+	// 取自它读到的委托；SaveWithdrawal 不写它。nil 即没读。
+	CommissionDocumentNumber *domain.DocumentNumbering
 }
 
 // SegmentCommissionAdoptionWithdrawalStore 是解除册：只插，按（段、代次）读一次解除，按段读最近一次。

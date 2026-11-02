@@ -1,6 +1,6 @@
 # UC-TF-004 建立运输委托、订舱并取得承运接受
 
-状态：已实现（委托提交与协议核对、订舱与承运答复、委托与订舱取消、段采用与解除、委托协议换版、容量预占与释放、装载分配首版、订舱与取消发生项）；规则与实现的差距见「给开发的交接」；真实供应商协议、订舱来源、承运接受和容量授权参数待提供
+状态：已实现（委托提交与协议核对、委托与订舱取单据号、订舱与承运答复、委托与订舱取消、段采用与解除、委托协议换版、容量预占与释放、装载分配首版、订舱与取消发生项）；规则与实现的差距见「给开发的交接」；真实供应商协议、订舱来源、承运接受和容量授权参数待提供
 
 ## 目标与边界
 
@@ -78,8 +78,8 @@
 
 | 结果 | 业务含义 | 必须保留 | 禁止行为 |
 |---|---|---|---|
-| 委托已提交（`COMMISSION_SUBMITTED`） | 请求和条件已经固定，协议在提交时点核过 | 请求方、服务方、范围、条件、协议快照、采购责任法人和版本 | 不表示承运接受 |
-| 订舱已提交（`BOOKING_SUBMITTED`） | 在一份已提交的委托下就一个在册班次申请舱位 | 委托、班次、申请量与单位、申请时刻 | 不占容量，不表示承运接受 |
+| 委托已提交（`COMMISSION_SUBMITTED`） | 请求和条件已经固定，协议在提交时点核过 | 请求方、服务方、范围、条件、协议快照、采购责任法人和版本；委托单据号，或无号原因 | 不表示承运接受 |
+| 订舱已提交（`BOOKING_SUBMITTED`） | 在一份已提交的委托下就一个在册班次申请舱位 | 委托、班次、申请量与单位、申请时刻；订舱单据号，或无号原因 | 不占容量，不表示承运接受；单据号不作承运答复认单的键 |
 | 承运答复已登记（`BOOKING_ANSWERED`） | 承运方对订舱给出五值之一：接受（带不超过申请量的接受量，少于申请量即部分确认）、拒绝、失效、撤回、候补；尚无答复时订舱读作待确认 | 答复方、订舱、答复值、接受量或原因/依据、答复时刻 | 不读池、不要预占引用（[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定一）；接受不表示实物已接收，不把签约方改写为实际承运商 |
 | 取消成立（`COMMISSION_CANCELLED`、`BOOKING_CANCELLED`） | 尚未开始的委托整份取消，或尚未随运输开始而消耗的订舱取消 | 取消时刻；委托取消不往下游传 | 不删除已形成的承运答复、预占或履约事实 |
 | 运输已开始（`TRANSPORT_ALREADY_STARTED`） | 委托已开始，或订舱申请不晚于委托的开始，取消不成立 | 回显开始依据 | 不部分取消，不改写开始 |
@@ -91,6 +91,7 @@
 | 运输收费发生项已形成 | 订舱、取消或其他运输准备范围满足采用协议要求的事实条件 | 采购责任法人、服务提供方、协议、原因、主要范围、成员、数量/单位、业务时间、有效性和来源 | 不形成价格、预期成本、账单主张、审核应付或付款 |
 | 已有结果（`EXISTING_COMMISSION`、`EXISTING_BOOKING`、`EXISTING_ANSWER`、`EXISTING_CANCELLATION`） | 同一委托、订舱、答复或取消原样再交 | 回显原记录 | 不多落一份 |
 | 冲突（`COMMISSION_CONFLICT`、`BOOKING_CONFLICT`、`ANSWER_CONFLICT`） | 同一身份异内容，或定局之后又来一份答复 | 原记录不动，冲突的那一份不落册 | 不按最后消息覆盖 |
+| 编号规则撞号（`NUMBERING_RULE_COLLISION`） | 委托或订舱取号时跳过已用号到上限仍撞（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定八） | 撞的是哪一类单据的编号规则；续办是到规则册（设置 → 单据编号）换这一类的格式 | 这一次不落单、不占号，不并进未受理或未决 |
 | 未受理（`INPUT_NOT_ACCEPTED`） | 载荷自身立不起来 | 最小原因与纠正入口 | 不读不写 |
 | 未决（`COMMISSION_UNDECIDED`） | 委托册、订舱册、答复册、协议核对或班次册读不动（`COMMISSION_STORE_UNAVAILABLE`、`BOOKING_STORE_UNAVAILABLE`、`ANSWER_STORE_UNAVAILABLE`、`SUPPLIER_AGREEMENT_UNAVAILABLE`、`SCHEDULE_STORE_UNAVAILABLE`） | 已形成对象与恢复引用，原样重交 | 不伪装成业务拒绝 |
 
@@ -239,6 +240,10 @@
 | `AT-TF-351` | 运营人员经运营决定口让一段采用一份运输委托；另一位操作者原样再交，或同段换一份委托；不带操作者的采用 | 采用的那一代记下采用人，取自操作者信封；原样再交答已有采用、交回原连线，采用人不被顶替；同段换委托照旧答采用冲突；内容摘要与服务方、取消、开始先后各道判断都不读采用人，不带它照样采用；解除另有解除人，各代各记各的；回执不带采用人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 复核记录决定一、三、四） |
 | `AT-TF-352` | 运营人员经运营决定口为一个容量池作预占；另一位操作者原样重交，或带不同内容重交；之后同一池上别的预占与释放换存池 | 那一份预占记下预占人；原样重交答已有预占、不重扣，预占人不被顶替；异内容照旧答冲突；硬上限、单位与有效区间的判断都不读预占人，不带它照样预占；池按值换存（预占与释放明细整组重写）时先到的预占人原样带着；回执不带预占人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 复核记录决定一、三、四） |
 | `AT-TF-353` | 运营人员经运营决定口释放一份预占上的量；另一位操作者原样重交同一释放引用；不带操作者的释放 | 那一次释放记下释放人，与预占人各记各的；原样重交答已有释放、不重还，释放人不被顶替；守恒与有效区间各道判断不读释放人，不带它照样释放；回执不带释放人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 复核记录决定一、三、四） |
+| `AT-TF-371` | 运营人员提交一份运输委托：租户已登单据编号时区；同一份原样再交；之后取消，或经协议换版、段采用开始；租户没登单据编号时区时提交另一份 | 委托进入已提交时在同一事务内取得 `TRANSPORT_COMMISSION` 单据号（产品默认模板，日期按租户的单据编号时区），答复回显 `documentNumber`；原样再交答已有委托、回显原号，不再取号；取消、换版与开始不换号；没登时区的照常提交、不带号，答复与在册委托记无号原因「单据编号时区未配置」，事后补登也不补号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、七） |
+| `AT-TF-372` | 运营人员在已提交的委托下订舱；同一份原样再交；承运方拿订舱标识答复，或拿订舱单据号当订舱标识答复；查阅页看订舱册 | 订舱申请登记时取得 `BOOKING` 单据号，答复回显 `documentNumber`，订舱标识照旧在 `booking`；原样再交回显原号、不再取号；承运答复照旧按订舱标识认单，拿单据号当标识答订舱不在册；订舱册每行带订舱单据号与所属委托的单据号，没有号的照旧显示标识，并按记下的原因注明「上线前开立」或「开立时单据编号时区未配置」；委托无号时委托号一格按原因注明、不拿委托标识顶（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、十一，ADR-0239） |
+| `AT-TF-373` | 租户换了编号格式，新格式渲染出的号与已用号相同；跳过之后仍连撞到上限；同一租户并发提交不同委托，或同一份委托并发首交；两个租户各自开立；开立事务回滚；开立时刻跨过租户单据编号时区的月界 | 已用的号跳过、取下一个；到上限仍撞答 `NUMBERING_RULE_COLLISION` 并指名撞的那一类规则，委托或订舱不落、取过的流水随整笔回滚释放，换格式后同一份照常开立；并发开立的号两两不同、序列不留空号，同一份委托并发首交只取一个号、输家答已有委托回显那个号；两个租户各从 1 数；回滚释放的号由下一份取到；跨月从 1 重数（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、七、八） |
+| `AT-TF-374` | 运营人员看引用委托、订舱的答复与册：段采用与解除（含原样再交）、取消委托、发生项采购上下文冲突的回显、总单登记与总单册、实际履约未形成册；所引委托或订舱有号、无号，或引用指向的单据不在册 | 引用旁新增「所属单据 + 单据号」两键（`commissionDocumentNumber` / `bookingDocumentNumber`，无号时 `…DocumentNumberAbsence`），回显的委托本身带 `documentNumber`；原有的标识格不动；引用的单据不在册时两键都不带，不编一个「上线前开立」；管理台总单区的委托号、订舱号两列有号显号、没号显标识，标识与无号原因进技术详情，可按号检索到引用它的总单；新登的总单落了而读不回时整笔回滚，不答未决（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定十一） |
 
 ## 给开发的交接
 
@@ -254,6 +259,6 @@
 | 整份委托或尚未订舱的取消费 | 取消发生项只认订舱一级的取消 | 票 demo-chain-gaps/76 |
 | 装载分配的变化与撤回 | 生产上只有形成首版一口；`AT-TF-180` 的改版与撤回只在领域与存储一侧成立 | ADR-0203「补记：票 21 落地时的补充裁定」越权风险点 14 |
 | 软容量的受控超配（`AT-TF-043`） | 今天池只有一个硬上限，预占口没有软超配阈值与审批的输入格，超出一律答 `CAPACITY_EXCEEDED`（`AT-TF-139`）；`AT-TF-043` 走不到 | ADR-0203 决定四（硬上限不可越过）；软超配的阈值与审批尚未立票 |
-| CONTEXT「运输委托、订舱与承运接受」：运输委托进入已提交、订舱申请登记时各取得单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 不取号；委托与订舱标识由操作者在载荷里手填 | [document-numbering/09](../../../.scratch/document-numbering/issues/09-booking-and-transport-commission-numbers.md) |
+| CONTEXT「运输委托、订舱与承运接受」：运输委托进入已提交、订舱申请登记时各取得单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）；`AT-TF-371`–`AT-TF-374` | 已补：委托提交口与订舱提交口在开立事务里、单据落库之后经 TF 的取号端口（`ports.DocumentNumberIssuer`，消费侧适配器接编号组件）取号，号与无号原因记在委托、订舱表上（迁移 `transport_fulfillment/0057`，（租户，单据号）唯一）；撞号与取号错误整笔回滚；提交、取消答复与订舱册带单据号，订舱册另带所属委托的单据号；管理台订舱区以订舱号为主列。引用委托、订舱的各口（段采用与解除、取消委托、发生项冲突回显、总单登记与总单册、实际履约未形成册）随引用带号（`AT-TF-374`）。未补：委托没有自己的列表或详情读口；委托与订舱标识今天只经运营决定口的载荷由调用方生成，管理台没有登记这两类的表单 | [document-numbering/09](../../../.scratch/document-numbering/issues/09-booking-and-transport-commission-numbers.md) |
 
 完成本用例只证明运输准备、承运接受和运输收费发生事实可被追溯；可执行价格和纯评价由 `parcel-pricing` 形成，供应商预期成本、账单主张和审核应付由 `settlement-accounting` 形成，权威运输交接、实际承运、移动、交付和包裹终局由后续用例分别形成。

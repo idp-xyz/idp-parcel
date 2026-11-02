@@ -32,6 +32,9 @@ type masterDocumentRegistryDouble struct {
 	failFind   error
 	failSave   error
 	raceWinner *ports.MasterDocumentRecord
+	// failReadBack 非空时，Save 落下一版之后的按键读回交它：模拟落了却读不回。
+	failReadBack error
+	saved        bool
 }
 
 func (double *masterDocumentRegistryDouble) FindByKey(
@@ -40,6 +43,9 @@ func (double *masterDocumentRegistryDouble) FindByKey(
 ) (ports.MasterDocumentRecord, bool, error) {
 	if double.failFind != nil {
 		return ports.MasterDocumentRecord{}, false, double.failFind
+	}
+	if double.saved && double.failReadBack != nil {
+		return ports.MasterDocumentRecord{}, false, double.failReadBack
 	}
 	for _, record := range double.records {
 		if record.Key == key {
@@ -124,6 +130,7 @@ func (double *masterDocumentRegistryDouble) Save(
 		}
 	}
 	double.records = append(double.records, record)
+	double.saved = true
 	return ports.MasterDocumentSaved, nil
 }
 
@@ -532,5 +539,18 @@ func TestARaceThatMovedTheChainAnswersConflictWithTheCurrentVersion(t *testing.T
 	}
 	if record, has := result.Record(); !has || record.Key.Version.String() != "MDV-2" {
 		t.Fatalf("应带回链尾 MDV-2：%v %q", has, record.Key.Version)
+	}
+}
+
+// Covers: AT-TF-374（编排半边）——新登的一版落了之后按键读回作答；读回出错交 error 而不答未决：这一版已经落了，装配壳只在 error
+// 时回滚，答未决会让它照常提交、留下一版登记方以为没落的总单。
+func TestASavedMasterDocumentThatCannotBeReadBackFailsInsteadOfAnsweringUndecided(t *testing.T) {
+	registry := &masterDocumentRegistryDouble{failReadBack: errors.New("read back failed")}
+	result, err := newMasterDocumentHandler(registry).Register(context.Background(), registerMasterDocumentCommand(t, "MAWB-RB", "v1"))
+	if err == nil {
+		t.Fatalf("读回出错应交 error，得到 %s", result.Outcome())
+	}
+	if !errors.Is(err, application.ErrUnexpectedMasterDocumentSave) {
+		t.Fatalf("错误 = %v", err)
 	}
 }

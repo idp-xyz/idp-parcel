@@ -165,6 +165,10 @@ type CarrierMasterDocumentCatalogueRow struct {
 	AssociationCount int64
 	ChangedAt        *time.Time
 	RecordedAt       time.Time
+	// CommissionDocumentNumber 与 BookingDocumentNumber 是所引委托、订舱的单据号格（ADR-0355 决定十一）；引用为空或单据不在册时
+	// 为 nil。
+	CommissionDocumentNumber *domain.DocumentNumbering
+	BookingDocumentNumber    *domain.DocumentNumbering
 }
 
 // TransportPreparationCatalogueRow 是运输准备结果册上列的一行（ADR-0201 决定七）：一段计划履约段对一个载运对象按一个
@@ -250,6 +254,10 @@ type BookingRequestCatalogueRow struct {
 	// SubmittedBy 与 CancelledBy 是提交、取消这次订舱的操作者（ADR-0303 复核记录），只进审计；缺席即没记下是谁。
 	SubmittedBy string
 	CancelledBy string
+	// DocumentNumber 是这次订舱的单据号或无号原因；CommissionDocumentNumber 是所属委托的单据号格（号或无号原因），委托行读不回
+	// 时为 nil（ADR-0355 决定十一）。
+	DocumentNumber           domain.DocumentNumbering
+	CommissionDocumentNumber *domain.DocumentNumbering
 }
 
 // BookingAnswerCatalogueRow 是一份承运答复照行转写：答复标识、五值之一（domain.CarrierAcceptanceOutcome 的词）、接受量（只在接受时

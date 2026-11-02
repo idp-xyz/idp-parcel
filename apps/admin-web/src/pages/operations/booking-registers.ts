@@ -13,6 +13,7 @@ import type {
   TransportFulfillmentRegistry,
 } from './records-api';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
+import { referenceNoteOf, referencedNumberOf } from './transport-document-numbers';
 
 export interface BookingRegisterRow {
   key: string;
@@ -67,13 +68,20 @@ export function unitWord(unit: string): string {
   return weightUnitLabels[unit] ?? unit;
 }
 
+/**
+ * 订舱册一行。主列「订舱号」是单据号，没有号的照旧显示订舱标识（ADR-0355 决定十一）；订舱标识总进技术详情（承运方答复认的是它），
+ * 无号原因也进技术详情。所属委托在技术详情里：「委托号」有号显号、无号按原因注明，委托标识另列。
+ */
 export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
   const current = record.currentAnswer;
   return {
     key: `booking:${record.booking}`,
     values: {
-      booking: record.booking,
-      commission: record.commission,
+      booking: record.documentNumber ?? record.booking,
+      bookingId: record.booking,
+      numberNote: referenceNoteOf(record.documentNumber, record.documentNumberAbsence),
+      commission: referencedNumberOf(record.commissionDocumentNumber, record.commissionDocumentNumberAbsence),
+      commissionId: record.commission,
       schedule: record.schedule,
       requested: `${record.quantity} ${unitWord(record.unit)}`,
       requestedAt: formatInstant(record.requestedAt),

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 订舱提交口（UC-TF-004 步 1、3；ADR-0202 决定一、五）。运营人员在一份已提交的委托下，就一个在册的具体班次向服务提供方
@@ -69,14 +70,19 @@ func NewSubmitBookingRequestEndpoint(intake BookingRequestSubmissionIntake, subm
 // bookingRequestSubmissionResponse 是订舱提交口的封闭响应形状。委托不在册、委托已取消、班次不在册各自成格，续办两两不同
 // （去提交委托或改引用 / 另起委托 / 去登记班次或改引在册班次），传输层不合并。订舱只是申请：答复里没有承运方的任何结果，
 // 有没有被接受看承运答复口。
+//
+// `numberingRule` 只随 `NUMBERING_RULE_COLLISION` 出现，含义同委托提交口那一键。
 type bookingRequestSubmissionResponse struct {
 	Outcome               string              `json:"outcome"`
 	UndecidedReason       string              `json:"undecidedReason,omitempty"`
 	ContinuationReference string              `json:"continuationReference,omitempty"`
+	NumberingRule         string              `json:"numberingRule,omitempty"`
 	Booking               *bookingRequestBody `json:"booking,omitempty"`
 }
 
 // bookingRequestBody 逐字段透出在册那一份订舱；重放回显的是在册那一份，不是这次送来的。时间一律 RFC 3339 UTC。
+// `booking` 是登记方生成的幂等键，也是承运答复口认单的键（ADR-0202 决定二、ADR-0239）；单据号与无号原因两键见
+// documentNumberKeys——单据号给人核对，不作认单键。
 type bookingRequestBody struct {
 	Booking     string `json:"booking"`
 	Commission  string `json:"commission"`
@@ -86,6 +92,27 @@ type bookingRequestBody struct {
 	RequestedAt string `json:"requestedAt"`
 	CancelledAt string `json:"cancelledAt,omitempty"`
 	RecordedAt  string `json:"recordedAt"`
+	documentNumberKeys
+}
+
+// bookingRequestBodyOf 把在册那一份订舱写成线格式；提交口与取消口回显同一形状。
+func bookingRequestBodyOf(record ports.BookingRecord) *bookingRequestBody {
+	booking := record.Booking
+	quantity, unit := booking.Quantity()
+	body := &bookingRequestBody{
+		Booking:            booking.Booking().String(),
+		Commission:         booking.Commission().String(),
+		Schedule:           booking.Schedule().String(),
+		Quantity:           quantity,
+		Unit:               unit.String(),
+		RequestedAt:        rfc3339(booking.RequestedAt()),
+		RecordedAt:         rfc3339(record.RecordedAt),
+		documentNumberKeys: documentNumberKeysOf(record.DocumentNumber),
+	}
+	if cancelledAt, cancelled := booking.Cancelled(); cancelled {
+		body.CancelledAt = rfc3339(cancelledAt)
+	}
+	return body
 }
 
 func writeBookingRequestSubmissionOutcome(response http.ResponseWriter, result application.CommissionResult) {
@@ -99,21 +126,11 @@ func writeBookingRequestSubmissionOutcome(response http.ResponseWriter, result a
 		UndecidedReason:       result.UndecidedReason().String(),
 		ContinuationReference: result.ContinuationReference(),
 	}
+	if rule, named := result.NumberingRule(); named {
+		body.NumberingRule = string(rule)
+	}
 	if record, present := result.Booking(); present {
-		booking := record.Booking
-		quantity, unit := booking.Quantity()
-		body.Booking = &bookingRequestBody{
-			Booking:     booking.Booking().String(),
-			Commission:  booking.Commission().String(),
-			Schedule:    booking.Schedule().String(),
-			Quantity:    quantity,
-			Unit:        unit.String(),
-			RequestedAt: rfc3339(booking.RequestedAt()),
-			RecordedAt:  rfc3339(record.RecordedAt),
-		}
-		if cancelledAt, cancelled := booking.Cancelled(); cancelled {
-			body.Booking.CancelledAt = rfc3339(cancelledAt)
-		}
+		body.Booking = bookingRequestBodyOf(record)
 	}
 	// ADR-0022：只有新提交了一次订舱用 201；已有订舱、冲突、引用不在册各格、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

@@ -22,12 +22,12 @@ func init() {
 			"/transport-fulfillment/booking-answers":                  {method: http.MethodPost, face: integrationClientFace(accessidentity.FactCarrierBookingAnswer)},
 		},
 		build: func(sources endpointSources) (transportCommissionWiring, error) {
-			submission, err := buildTransportCommissionSubmission(sources.db)
+			submission, err := buildTransportCommissionSubmission(sources.db, sources.documentNumbers)
 			if err != nil {
 				return transportCommissionWiring{}, err
 			}
-			// 订舱提交与承运答复两口（ADR-0202 决定一、二、五）。
-			bookingFaces, err := buildBookingFaces(sources.db)
+			// 订舱提交与承运答复两口（ADR-0202 决定一、二、五）；委托与订舱的取号取 parcel-api 装好的那一套编号组件（ADR-0355）。
+			bookingFaces, err := buildBookingFaces(sources.db, sources.documentNumbers)
 			return transportCommissionWiring{
 				transportCommissionSubmission: submission,
 				bookingRequestSubmission:      bookingFaces,

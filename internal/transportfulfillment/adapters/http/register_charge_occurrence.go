@@ -116,6 +116,8 @@ type chargeOccurrenceCommissionBody struct {
 	AgreementVersion  string `json:"agreementVersion,omitempty"`
 	AgreementRevision int    `json:"agreementRevision,omitempty"`
 	LegalEntity       string `json:"legalEntity"`
+	// 这份委托的单据号或无号原因，与委托提交口回显的同一形状（ADR-0355 决定十一），新增字段。
+	documentNumberKeys
 }
 
 // chargeOccurrenceBody 逐字段透出一个发生项版本。occurredAt 是业务时间，recordedAt 是登记时刻，两者归属不同不合并。
@@ -206,10 +208,11 @@ func writeChargeOccurrenceOutcome(response http.ResponseWriter, result applicati
 	if record, present := result.Commission(); present {
 		commission := record.Commission
 		echoed := chargeOccurrenceCommissionBody{
-			Commission:  commission.Commission().String(),
-			Provider:    commission.Provider().String(),
-			Agreement:   commission.Agreement().String(),
-			LegalEntity: commission.LegalEntity().String(),
+			Commission:         commission.Commission().String(),
+			Provider:           commission.Provider().String(),
+			Agreement:          commission.Agreement().String(),
+			LegalEntity:        commission.LegalEntity().String(),
+			documentNumberKeys: documentNumberKeysOf(record.DocumentNumber),
 		}
 		version, recorded := commission.AgreementVersion()
 		// 冲突那一格总带着委托在这件事实的业务时间所凭的那一版（ADR-0231 决定四），回显它：登记方要对照的是那一版，不是提交那一版。

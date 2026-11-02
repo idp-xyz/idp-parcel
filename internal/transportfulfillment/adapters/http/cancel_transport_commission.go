@@ -3,10 +3,9 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 取消运输委托口（ADR-0204 决定三；ADR-0202 决定一）。运营人员停掉一份尚未开始的运输意图，是管理台上作出的生产决定，挂
@@ -63,7 +62,8 @@ type transportCommissionCancellationResponse struct {
 	Commission            *commissionTransitionBody `json:"commission,omitempty"`
 }
 
-// commissionTransitionBody 透出委托的状态转换那几格：开始的依据与时刻、取消时刻。快照各格看委托提交口的回显，这里不重复。
+// commissionTransitionBody 透出委托的状态转换那几格：开始的依据与时刻、取消时刻。快照各格看委托提交口的回显，这里不重复；
+// 单据号两键与提交口回显的同一形状（ADR-0355 决定十一），号开立后不变，转换不碰它。
 type commissionTransitionBody struct {
 	Commission   string `json:"commission"`
 	Provider     string `json:"provider"`
@@ -72,14 +72,18 @@ type commissionTransitionBody struct {
 	StartedAt    string `json:"startedAt,omitempty"`
 	CancelledAt  string `json:"cancelledAt,omitempty"`
 	RecordedAt   string `json:"recordedAt"`
+	documentNumberKeys
 }
 
-func commissionTransitionBodyOf(commission domain.TransportCommission, recordedAt time.Time) *commissionTransitionBody {
+// commissionTransitionBodyOf 取在册那一份委托：取消、采用与解除各编排交回的委托都是从委托册读回再换了转换那几列的，号格随它。
+func commissionTransitionBodyOf(record ports.TransportCommissionRecord) *commissionTransitionBody {
+	commission := record.Commission
 	body := &commissionTransitionBody{
-		Commission:  commission.Commission().String(),
-		Provider:    commission.Provider().String(),
-		SubmittedAt: rfc3339(commission.SubmittedAt()),
-		RecordedAt:  rfc3339(recordedAt),
+		Commission:         commission.Commission().String(),
+		Provider:           commission.Provider().String(),
+		SubmittedAt:        rfc3339(commission.SubmittedAt()),
+		RecordedAt:         rfc3339(record.RecordedAt),
+		documentNumberKeys: documentNumberKeysOf(record.DocumentNumber),
 	}
 	if basis, at, started := commission.TransportStarted(); started {
 		body.StartedBasis = basis.String()
@@ -103,7 +107,7 @@ func writeTransportCommissionCancellationOutcome(response http.ResponseWriter, r
 		ContinuationReference: result.ContinuationReference(),
 	}
 	if record, present := result.Commission(); present {
-		body.Commission = commissionTransitionBodyOf(record.Commission, record.RecordedAt)
+		body.Commission = commissionTransitionBodyOf(record)
 	}
 	// ADR-0022：只有这次真把委托取消了用 201；已开始、已取消的重放、不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

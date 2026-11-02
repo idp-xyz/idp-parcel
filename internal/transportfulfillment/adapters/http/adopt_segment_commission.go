@@ -90,6 +90,8 @@ type segmentCommissionAdoptionBody struct {
 	StartBasis string `json:"startBasis"`
 	StartedAt  string `json:"startedAt"`
 	RecordedAt string `json:"recordedAt"`
+	// 所采用委托的单据号或无号原因（ADR-0355 决定十一），新增字段。
+	commissionNumberKeys
 }
 
 func writeSegmentCommissionAdoptionOutcome(response http.ResponseWriter, result application.CommissionAdoptionResult) {
@@ -107,20 +109,10 @@ func writeSegmentCommissionAdoptionOutcome(response http.ResponseWriter, result 
 		body.CommissionProvider = provider.String()
 	}
 	if record, present := result.Adoption(); present {
-		adoption := record.Adoption
-		basis, startedAt := adoption.Started()
-		body.Adoption = &segmentCommissionAdoptionBody{
-			Segment:    adoption.Segment().String(),
-			Generation: record.Generation,
-			Commission: adoption.Commission().String(),
-			Provider:   adoption.Provider().String(),
-			StartBasis: basis.String(),
-			StartedAt:  rfc3339(startedAt),
-			RecordedAt: rfc3339(record.RecordedAt),
-		}
+		body.Adoption = segmentCommissionAdoptionBodyOf(record)
 	}
 	if record, present := result.Commission(); present {
-		body.Commission = commissionTransitionBodyOf(record.Commission, record.RecordedAt)
+		body.Commission = commissionTransitionBodyOf(record)
 	}
 	if basis, startedAt, present := result.SegmentStart(); present {
 		body.SegmentStart = &segmentStartBody{Basis: basis.String(), StartedAt: rfc3339(startedAt)}

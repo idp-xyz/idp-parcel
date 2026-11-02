@@ -24,6 +24,10 @@ type MasterDocumentRecord struct {
 	Key        MasterDocumentKey
 	Document   domain.MasterDocument
 	RecordedAt time.Time
+	// CommissionDocumentNumber 与 BookingDocumentNumber 是总单所引委托、订舱的单据号格（ADR-0355 决定十一）：读回时连读委托表与
+	// 订舱表，Save 不写它们。总单不核引用在不在册，引用为空或指向的单据不在册时为 nil，答复照旧只带标识。
+	CommissionDocumentNumber *domain.DocumentNumbering
+	BookingDocumentNumber    *domain.DocumentNumbering
 }
 
 // MasterDocumentSaveOutcome 是登记一个版本的结果。撞键是业务答案不是错误（ADR-0031）；撞的是主键还是链的

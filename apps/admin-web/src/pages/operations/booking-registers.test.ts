@@ -10,6 +10,7 @@ import {
   transportRecordsPathOf,
 } from './booking-registers';
 import type { BookingAnswerBounceRecord, BookingRequestRecord } from './records-api';
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 
 function booking(overrides: Partial<BookingRequestRecord> = {}): BookingRequestRecord {
   return {
@@ -71,6 +72,36 @@ test('取消时刻单列，不并进状态词；提交人、取消人有就示�
   equal(plain.values.cancelledAt, '');
   equal(plain.values.submittedBy, '');
   equal(plain.values.cancelledBy, '');
+});
+
+test('订舱号是单据号、订舱标识进技术详情；所属委托有号显号、标识另列', () => {
+  const row = bookingRowOf(
+    booking({ documentNumber: 'BK-202611-00009', commissionDocumentNumber: 'TC-202611-00004' }),
+  );
+  equal(row.values.booking, 'BK-202611-00009');
+  equal(row.values.bookingId, 'SYN-BOOKING-1');
+  equal(row.values.numberNote, '');
+  equal(row.values.commission, 'TC-202611-00004');
+  equal(row.values.commissionId, 'SYN-COMMISSION-1');
+  equal(row.key, 'booking:SYN-BOOKING-1');
+});
+
+test('没有单据号的订舱照旧显示订舱标识，技术详情按记下的原因分别注明，不一律写成上线前开立', () => {
+  const legacy = bookingRowOf(booking({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }));
+  equal(legacy.values.booking, 'SYN-BOOKING-1');
+  equal(legacy.values.numberNote, documentNumberAbsenceNote('ISSUED_BEFORE_NUMBERING'));
+  const unconfigured = bookingRowOf(booking({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }));
+  equal(unconfigured.values.numberNote, documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'));
+  equal(bookingRowOf(booking()).values.numberNote, '');
+});
+
+test('委托无号时技术详情的委托号按原因注明、不拿委托标识顶；委托没读到时留空，标识照旧另列', () => {
+  const unnumbered = bookingRowOf(booking({ commissionDocumentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }));
+  equal(unnumbered.values.commission, documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'));
+  equal(unnumbered.values.commissionId, 'SYN-COMMISSION-1');
+  const unread = bookingRowOf(booking());
+  equal(unread.values.commission, '');
+  equal(unread.values.commissionId, 'SYN-COMMISSION-1');
 });
 
 test('挡回两种依据照 CONTEXT 词条示文', () => {

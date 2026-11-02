@@ -29,6 +29,9 @@ type SegmentCommissionAdoptionRecord struct {
 	// AdoptedBy 是经运营决定口作出这一代采用的操作者（ADR-0303 复核记录），只进审计：重放与冲突只比 ContentDigest，采用的各道门
 	// 读不到它。每一代各记各的；解除另有解除人。可缺。
 	AdoptedBy domain.RegistrantReference
+	// CommissionDocumentNumber 是所采用委托的单据号格（ADR-0355 决定十一），供答复里的委托引用带号：按段读回（FindBySegment）时
+	// 连读委托表，编排新落的那一代取自它读到的委托；Save 不写它，按委托列（ListByCommission）不读它。nil 即没读。
+	CommissionDocumentNumber *domain.DocumentNumbering
 }
 
 type AdoptionSaveOutcome uint8

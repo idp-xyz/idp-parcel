@@ -66,6 +66,12 @@ func (repository *SegmentCommissionAdoptions) FindBySegment(
 	if err != nil {
 		return ports.SegmentCommissionAdoptionRecord{}, false, fmt.Errorf("find segment commission adoption: %w", err)
 	}
+	commission := record.Adoption.Commission().String()
+	numberings, err := commissionDocumentNumberings(ctx, querier, key.TenantID, []string{commission})
+	if err != nil {
+		return ports.SegmentCommissionAdoptionRecord{}, false, fmt.Errorf("find segment commission adoption: %w", err)
+	}
+	record.CommissionDocumentNumber = referencedNumbering(numberings, commission)
 	return record, true, nil
 }
 

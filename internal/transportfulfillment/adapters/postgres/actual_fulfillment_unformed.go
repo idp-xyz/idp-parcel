@@ -225,6 +225,19 @@ func (register *ActualFulfillmentUnformeds) ListActualFulfillmentUnformed(
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
 	}
+	rows.Close()
+	// 各件所在委托的单据号格另读一次（ADR-0355 决定十一），给查阅页那一格的委托引用带号。
+	commissions := make([]string, 0, len(list))
+	for _, record := range list {
+		commissions = append(commissions, record.Entry.Commission.String())
+	}
+	numberings, err := commissionDocumentNumberings(ctx, querier, tenant, commissions)
+	if err != nil {
+		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
+	}
+	for index := range list {
+		list[index].CommissionDocumentNumber = referencedNumbering(numberings, list[index].Entry.Commission.String())
+	}
 	return list, nil
 }
 

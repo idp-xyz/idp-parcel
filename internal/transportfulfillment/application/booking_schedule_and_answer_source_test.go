@@ -180,18 +180,25 @@ func TestAConcurrentBookingLoserIsJudgedByContent(t *testing.T) {
 
 			fixture := submittedCommissionFixture(t)
 			racing := &racingBookingStore{bookingStoreDouble: newBookingStore(), winner: winner}
+			asked := len(fixture.numbers.asked)
 			handler := application.NewCommissionTransportHandler(application.CommissionTransportDeps{
-				Commissions: fixture.commissions,
-				Bookings:    racing,
-				Answers:     fixture.answers,
-				Schedules:   fixture.schedules,
-				Agreements:  fixture.agreements,
-				Downstream:  fixture.handoff,
-				Clock:       commissionClock{at: commissionNowAt},
+				Commissions:    fixture.commissions,
+				Bookings:       racing,
+				Answers:        fixture.answers,
+				Schedules:      fixture.schedules,
+				Agreements:     fixture.agreements,
+				Downstream:     fixture.handoff,
+				Clock:          commissionClock{at: commissionNowAt},
+				Numbers:        fixture.numbers,
+				BookingNumbers: racing,
 			})
 			result, err := handler.SubmitBooking(context.Background(), submitBookingCommand(t))
 			if err != nil || result.Outcome() != testCase.want {
 				t.Fatalf("outcome = %q %v, want %q", result.Outcome(), err, testCase.want)
+			}
+			// AT-TF-373：并发首交的输家不取号，理由同委托那一支。
+			if len(fixture.numbers.asked) != asked {
+				t.Fatal("并发首交的订舱输家取了号")
 			}
 		})
 	}

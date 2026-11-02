@@ -45,11 +45,13 @@ func (repository *TransportCommissions) FindByKey(
 		startedAt, cancelledAt                                                     *time.Time
 		startedBasis, submittedBy, cancelledBy                                     *string
 		agreementObject, agreementVersion                                          *string
+		documentNumber, documentNumberAbsence                                      *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT provider_ref, agreement_ref, procurement_legal_entity_ref, conditions_ref, role_ref, responsibility_ref,
 		        members, submitted_at, started_at, started_basis, cancelled_at,
-		        content_digest, recorded_at, agreement_object, agreement_version, submitted_by, cancelled_by
+		        content_digest, recorded_at, agreement_object, agreement_version, submitted_by, cancelled_by,
+		        document_number, document_number_absence
 		   FROM transport_fulfillment.transport_commission
 		  WHERE tenant_id = $1
 		    AND commission_id = $2`,
@@ -57,7 +59,8 @@ func (repository *TransportCommissions) FindByKey(
 		key.Commission.String(),
 	).Scan(&provider, &agreement, &legalEntity, &conditions, &role, &responsibility,
 		&membersJSON, &submittedAt, &startedAt, &startedBasis, &cancelledAt,
-		&digest, &recordedAt, &agreementObject, &agreementVersion, &submittedBy, &cancelledBy)
+		&digest, &recordedAt, &agreementObject, &agreementVersion, &submittedBy, &cancelledBy,
+		&documentNumber, &documentNumberAbsence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportCommissionRecord{}, false, nil
 	}
@@ -81,14 +84,82 @@ func (repository *TransportCommissions) FindByKey(
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
+	numbering, err := documentNumberingFromColumns(documentNumber, documentNumberAbsence)
+	if err != nil {
+		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
+	}
 	return ports.TransportCommissionRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Commission:    commission,
-		RecordedAt:    recordedAt.UTC(),
-		SubmittedBy:   submitter,
-		CancelledBy:   canceller,
+		Key:            key,
+		ContentDigest:  digest,
+		Commission:     commission,
+		RecordedAt:     recordedAt.UTC(),
+		SubmittedBy:    submitter,
+		CancelledBy:    canceller,
+		DocumentNumber: numbering,
 	}, true, nil
+}
+
+var _ ports.TransportCommissionNumbers = (*TransportCommissions)(nil)
+
+// CommissionDocumentNumberUsed 答本租户的委托里是否已有这个单据号（ADR-0355 决定八），走（租户，单据号）唯一约束的索引。
+// 在开立事务里调：同一事务里刚落的委托还没有号，不会被它自己撞上。
+func (repository *TransportCommissions) CommissionDocumentNumberUsed(
+	ctx context.Context,
+	tenant domain.TenantID,
+	number domain.DocumentNumber,
+) (bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check commission document number: %w", err)
+	}
+	var used bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1
+		                  FROM transport_fulfillment.transport_commission
+		                 WHERE tenant_id = $1
+		                   AND document_number = $2)`,
+		tenant.String(),
+		number.String(),
+	).Scan(&used); err != nil {
+		return false, fmt.Errorf("check commission document number: %w", err)
+	}
+	return used, nil
+}
+
+// RecordCommissionDocumentNumber 给刚落库的那份委托记下单据号或无号原因。WHERE 要两列都还空：号开立后不变，一份已经
+// 记过号（或记过无号原因）的委托再记一次是编排缺陷，答错误让开立事务回滚，而不是悄悄换号。
+func (repository *TransportCommissions) RecordCommissionDocumentNumber(
+	ctx context.Context,
+	key ports.TransportCommissionKey,
+	numbering domain.DocumentNumbering,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record commission document number: %w", err)
+	}
+	number, absence, err := documentNumberingColumns(numbering)
+	if err != nil {
+		return fmt.Errorf("record commission document number: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.transport_commission
+		    SET document_number = $3, document_number_absence = $4
+		  WHERE tenant_id = $1
+		    AND commission_id = $2
+		    AND document_number IS NULL
+		    AND document_number_absence IS NULL`,
+		key.TenantID.String(),
+		key.Commission.String(),
+		number,
+		absence,
+	)
+	if err != nil {
+		return fmt.Errorf("record commission document number: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("record commission document number: %w", errDocumentNumberNotRecordable)
+	}
+	return nil
 }
 
 // Save 登记一份运输委托。同键已有记录时答`已登记`，不覆盖先到者。

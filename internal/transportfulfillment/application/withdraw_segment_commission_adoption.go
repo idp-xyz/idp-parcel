@@ -255,7 +255,9 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 	}
 
 	now := handler.deps.Clock.Now().UTC()
-	record := ports.SegmentCommissionAdoptionWithdrawalRecord{Key: key, Withdrawal: withdrawal, RecordedAt: now}
+	// 号格取自刚读到的委托（ADR-0355 决定十一）：解除册不存它，答复里的委托引用照它带号。
+	numbering := commission.DocumentNumber
+	record := ports.SegmentCommissionAdoptionWithdrawalRecord{Key: key, Withdrawal: withdrawal, RecordedAt: now, CommissionDocumentNumber: &numbering}
 	saved, err := handler.deps.Withdrawals.SaveWithdrawal(ctx, record)
 	if err != nil {
 		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), nil

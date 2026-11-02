@@ -238,6 +238,14 @@ func TestCommissionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := answers.Save(ctx, acceptedAnswer(t, booking.Booking, "acceptance-1", 10)); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 Save 应答：%v", err)
 	}
+	// 单据号只在开立事务里记（ADR-0355 决定三）：事务外记下的号回滚不释放、提交不随单。
+	number := domain.NumberedDocument(deliveryValue(t, domain.NewDocumentNumber, "TC-202611-00001"))
+	if err := commissions.RecordCommissionDocumentNumber(ctx, commission.Key, number); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记委托单据号：%v", err)
+	}
+	if err := bookings.RecordBookingDocumentNumber(ctx, booking.Key, number); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记订舱单据号：%v", err)
+	}
 }
 
 func TestCommissionRollbackLeavesNothingBehind(t *testing.T) {

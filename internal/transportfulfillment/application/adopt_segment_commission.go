@@ -278,7 +278,12 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 	}
 
 	now := handler.deps.Clock.Now()
-	record := ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now, Generation: generation, AdoptedBy: adoptedBy}
+	// 号格取自刚读到的委托（ADR-0355 决定十一）：采用册不存它，答复里的委托引用照它带号。
+	numbering := commission.DocumentNumber
+	record := ports.SegmentCommissionAdoptionRecord{
+		Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now, Generation: generation, AdoptedBy: adoptedBy,
+		CommissionDocumentNumber: &numbering,
+	}
 	saved, err := handler.deps.Adoptions.Save(ctx, record)
 	if err != nil {
 		return commissionAdoptionUndecided(CommissionAdoptionStoreUnavailable, command.Segment), nil
