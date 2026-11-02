@@ -1,7 +1,7 @@
 # 05 对账单、费用争议、审核应付的单据号
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum05`（完成记录见文末）；待非作者评审与进 main
+Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum05`；评审修订已追加（见文末「评审修订」）；待复评与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、九、十；UC-SA-003、UC-SA-004
@@ -68,3 +68,17 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - 管理台在首次提交前生成的争议标识形如 `DSP-<时间>-<随机>`，与争议号默认模板 `DSP-{yyyy}{mm}-{seq:5}` 同前缀，技术详情里两串长得像；要不要换内部标识的前缀（只动 `dispute-forms.ts` 的 `newDisputeId` 与它的用例）请裁。
 - API 可见改动：截单发布口载荷不再收 `number`；发布意图冲突的 outcome 从 `STATEMENT_CONFLICT` 改名 `PUBLICATION_INTENT_CONFLICT`（自动截单截止记录也记新名）。
 - 推送方在 main 的 tip 上重生成 AT 盘点总览计数（①、SA 各 +2）与机制清点。
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `df4da3184`）
+
+追加提交、不 rebase：`58cc313cc`（并入 main `620847516`）、`880233730`（管理台）、`214dd3a6b`（后端）、`484c04d10`（文档）、`c7f3232da`（再并入 main `e110f4137`，含 07、08，无冲突）。
+
+1. **单一权威（阻断）**：撤掉本票自加的 `status.ts` `document-number-absence` 册（并入 main 时 `status.ts` 冲突取 main 的 `document-numbering-source` 册）与 `registrationAnswerText` 里自写的撞号说法，改用 `vocabulary/document-numbering.ts` 的 `documentNumberAbsenceNote`、`numberingCollisionNote`；争议号的叫法（右栏技术详情的行名、搜索框占位）取 `documentTypeWords.STATEMENT_DISPUTE.numberName`。`issuerWordsByType` 补 `STATEMENT_DISPUTE`、`AUDITED_PAYABLE` 两条「结算账户」，`rows.test.ts` 加一行钉住。
+2. **手工旧单取保守（协调方裁定）**：`findPublished` 按记下的截止版本找不到时，同账户同账期上没记截止版本的旧单里有内容相同的就答原单原号；没有而有一张未作废的这种旧单，交回它、由 `answerExisting` 答 `PUBLICATION_INTENT_CONFLICT`，不落单不取号；旧单都已作废不挡。写进 SA CONTEXT 对账单那句与 UC-SA-003（`AT-SA-222` 预期结果、交接行）。用例：编排半边 `TestAStatementPublishedBeforeNumberingIsFoundByItsIntent`；真库 `TestAManualStatementBeforeNumberingHoldsItsPeriod`（同意图、换截止版本换内容都答冲突，序列一行没动；同内容答旧单原号；旧单作废后替代单取 `STMT-202611-00001`）。
+3. **迁移补 `v1` 改按截止记录**：0053 联查 `statement_cycle_cut`（同租户、同账户、同单号，账期是 `CYCLE/<截止日>`）补 `v1`，不再按单号形状。`TestTheDocumentNumberMigrationMarksOnlyCycleCutStatements` 从空库按序施加到 0052、落三张旧单（截止记录上的一张、单号写成 `STMT/<账户>/<日>` 而不在截止记录上的手工单一张、普通手工单一张）与旧争议、旧应付，再施加 0053：只有第一张补 `v1`，两类旧单据两列皆空。
+4. **自动截单撞号按停在依赖上办**：交回的错误同时是 `ErrCycleCutUndecided` 与 `ErrCycleCutNumberingCollision`——整户回滚、不记截止日、下一拍重截，不另立第三种回滚；`cycleCutFailureKind` 先认撞号、日志单独一类（`stalled on a document numbering rule collision`）。SA CONTEXT 对账单那句与 UC-SA-003 `AT-SA-224` 写明；dispatch 真库用例断言两个哨兵都在。
+5. **争议内部标识换前缀（协调方裁定）**：`newDisputeId` 的前缀 `DSP-` 改 `DISPUTE-`，与十一份默认模板的前缀都不同；旧标识不动。
+6. **非阻断**：包注释、端口注释与用例按名说三种结果、按 `docnumber.MaxSkippedNumbers` 说跳号上限，不数；删掉无人调用的 `DocumentNumbering.Valid`，`adapters/http` 与 `adapters/postgres` 重复的 `numberingWords` 收成 `DocumentNumbering.Words`（删 `adapters/http/document_number.go`）；补领域单测 `TestADocumentNumberingIsANumberOrANamedAbsence`、`TestAStatementDraftIsCheckedForPublicationBeforeItHasANumber`。
+7. **统一口径核对**：答复与读口字段 `documentNumber`、`documentNumberAbsence`，原因码只有 `ISSUED_BEFORE_NUMBERING`、`NUMBERING_TIME_ZONE_NOT_CONFIGURED`，撞号 `NUMBERING_RULE_COLLISION`，与并入的 07（关务案件）、08（送站预报、交接单）一致。
+
+修订后自验（本机 PG，并入 `e110f4137` 之后的树）：`go build ./...`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/... ./internal/settlementaccounting/...` 50 个包 ok、0 FAIL（含 PG），新用例 `-v` 全 PASS、无 SKIP。前端 `npx tsc -b` 无输出、`pnpm test` 1066 pass / 0 fail、`npx vite build` 退 0。种子灌一次性库 `docnum05_seed2` 退 0（三类单据 0 行，种子不开立它们），用后删库。`generated-artifacts-pr.sh` 退 0、`at-coverage-counts -check` 只差总览计数（推送方重生成）。**评审探针照原形状复跑**：一次性库先用 main 的迁移助手迁到 0052，直写一张手工旧单（`SYN-STMT-MANUAL-PROBE`）、一张单号写成 `STMT/<账户>/<日>` 形状的手工旧单与三笔已确认费用，再用本分支 `seed.sh` 施加 0053 并灌种子：两张旧单 `draft_version` 都留空；本分支 parcel-api 起在 :19095，同账户同账期换内容以 `v1`、`v7` 各发一次都答 `PUBLICATION_INTENT_CONFLICT`、序列表一行没有，换账期发单答 `STMT-202611-00001`。浏览器（:5195）复核：右栏登记答「已登记争议 DSP-202611-00001」、技术详情争议标识 `DISPUTE-…`，旧单两项分别注明「上线前开立，无单据号」「开立时单据编号时区未配置，无单据号」，按争议号检索只剩那张单；设置 → 单据编号对争议与审核应付显示「结算账户的业务时区」。进程已停、库已删。
