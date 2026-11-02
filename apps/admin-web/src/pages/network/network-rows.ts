@@ -58,13 +58,13 @@ export type RouteLeg = PlannedLegRecord;
  * 一条路线的一句话：「SYN-NODE-SHA-HUB → SYN-NODE-SZX-GATE → … → 末端派送」。段按计划给的顺序首尾相接；派送段的终点
  * 是服务区域引用，不是网点，所以说成「末端派送」而不露区域引用（引用在技术详情里）。
  */
-export function routeSummaryOf(legs: readonly RouteLeg[] | undefined): string {
+export function routeSummaryOf(legs: readonly RouteLeg[] | undefined, label: (node: string) => string = (node) => node): string {
   if (!legs || legs.length === 0) return '';
-  const stops: string[] = [];
+  // 先按编码首尾相接，再逐站换成屏上写法（如网点名称）：拿换过的字去比相接，两个同名网点会被误当成同一站。
+  const stops: { code: string; delivery: boolean }[] = [];
   for (const leg of legs) {
-    if (stops.length === 0) stops.push(leg.from);
-    else if (stops[stops.length - 1] !== leg.from) stops.push(leg.from);
-    stops.push(leg.kind === 'DELIVERY' ? '末端派送' : leg.to);
+    if (stops.length === 0 || stops[stops.length - 1].code !== leg.from) stops.push({ code: leg.from, delivery: false });
+    stops.push({ code: leg.to, delivery: leg.kind === 'DELIVERY' });
   }
-  return stops.join(' → ');
+  return stops.map((stop) => (stop.delivery ? '末端派送' : label(stop.code))).join(' → ');
 }

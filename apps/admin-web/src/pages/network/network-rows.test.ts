@@ -34,6 +34,16 @@ test('路线一句话', () => {
     ]),
     'SHA → SZX → SIN → 末端派送',
   );
+  equal(
+    routeSummaryOf(
+      [
+        { reference: 'P#1', kind: 'BETWEEN_NODES', from: 'SHA', to: 'SZX', responsible: 'C1', earliest: '', latest: '', windowBasis: '' },
+        { reference: 'P#2', kind: 'DELIVERY', from: 'SZX', to: 'AREA-SG@1', responsible: 'AREA-SG@1', earliest: '', latest: '', windowBasis: '' },
+      ],
+      (node) => ({ SHA: '上海枢纽' })[node] ?? node,
+    ),
+    '上海枢纽 → SZX → 末端派送',
+  );
   equal(routeSummaryOf([]), '');
   equal(routeSummaryOf(undefined), '');
 });

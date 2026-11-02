@@ -18,6 +18,8 @@ import {
   type RouteReassessmentRecord,
 } from './api';
 import { routeSummaryOf } from './network-rows';
+import { placeLabel, type PlaceNameIndex } from './place-names';
+import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows } from './route-workbench';
 import { customerText, parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
 import { RerouteSuggestionsView } from './RerouteSuggestionsView';
@@ -36,14 +38,15 @@ const info = moduleInfoById['route-plans'];
 // 没评估过改路，与「不许改路」分开说。路线一句话取读口随行带出的各段（network-rows 的 routeSummaryOf），不拆快照另立读法。
 
 
-const routeText = (row: InitialRouteRecord) => routeSummaryOf(row.legs) || '—';
+// 一句话路线里的网点按此刻生效那一版查名（use-place-names），没有名称的显编码；编码在右栏技术详情的逐段里。
+const routeText = (row: InitialRouteRecord, places: PlaceNameIndex) => routeSummaryOf(row.legs, (node) => placeLabel(places, node)) || '—';
 
-function initialRouteColumns(names: CustomerNameIndex): WorkbenchColumn<InitialRouteRecord>[] {
+function initialRouteColumns(names: CustomerNameIndex, places: PlaceNameIndex): WorkbenchColumn<InitialRouteRecord>[] {
   return [
     { key: 'parcel', header: '运单', render: parcelCell },
     { key: 'customer', header: '客户', render: (row) => customerText(row.customerAccountId, names) },
     { key: 'conclusion', header: '结论', render: (row) => <RowStatusPill status={codeStatus(row.conclusion)} /> },
-    { key: 'route', header: '路线', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{routeText(row)}</span> },
+    { key: 'route', header: '路线', hideWhenDetailOpen: true, render: (row) => <span className="text-[12px]">{routeText(row, places)}</span> },
     {
       key: 'recorded-at',
       header: '定路线时间',
@@ -54,14 +57,24 @@ function initialRouteColumns(names: CustomerNameIndex): WorkbenchColumn<InitialR
   ];
 }
 
-function InitialRouteDetail({ row, names, onClose }: { row: InitialRouteRecord; names: CustomerNameIndex; onClose: () => void }) {
+function InitialRouteDetail({
+  row,
+  names,
+  places,
+  onClose,
+}: {
+  row: InitialRouteRecord;
+  names: CustomerNameIndex;
+  places: PlaceNameIndex;
+  onClose: () => void;
+}) {
   return (
     <RecordDetailPanel
       title={shipmentNoOf(row.shipmentRequestId)}
       status={codeStatus(row.conclusion)}
       subtitle={parcelSubtitle(row, names)}
       facts={[
-        { label: '路线', value: <span className="font-mono">{routeText(row)}</span> },
+        { label: '路线', value: routeText(row, places) },
         {
           label: '这条路线现在',
           // 缺席两解都如实显：无路可走行本就无计划；成计划行缺席即尚无适用性登记。
@@ -96,8 +109,8 @@ function InitialRouteDetail({ row, names, onClose }: { row: InitialRouteRecord; 
         <ol className="space-y-1">
           {row.legs.map((leg) => (
             <li key={leg.reference} className="flex flex-wrap items-baseline gap-x-2">
-              <span className="font-mono text-idpxyz-text">
-                {leg.from} → {leg.kind === 'DELIVERY' ? '末端派送' : leg.to}
+              <span className="text-idpxyz-text">
+                {placeLabel(places, leg.from)} → {leg.kind === 'DELIVERY' ? '末端派送' : placeLabel(places, leg.to)}
               </span>
               <span className="font-mono">
                 {formatInstant(leg.earliest)} ~ {formatInstant(leg.latest)}
@@ -196,6 +209,7 @@ export function RoutePlansPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<LoadedAnswer | null>(null);
   const names = useCustomerNames();
+  const places = usePlaceNames();
 
   useEffect(() => {
     let cancelled = false;
@@ -237,12 +251,12 @@ export function RoutePlansPage() {
         rowKey={(row) => `${row.shipmentRequestId}#${row.servicePurpose}#${row.acceptanceBaseline}`}
         statusOf={(row) => codeStatus(row.conclusion)}
         rowAttention={(row) => row.conclusion === 'NO_CURRENT_ROUTE'}
-        searchCells={(row) => [...parcelSearchCells(row, names), routeText(row)]}
+        searchCells={(row) => [...parcelSearchCells(row, names), routeText(row, places)]}
         searchPlaceholder="搜运单号 / 包裹号 / 客户 / 网点"
-        columns={initialRouteColumns(names)}
+        columns={initialRouteColumns(names, places)}
         sortAccessors={{ 'recorded-at': { value: (row) => row.recordedAt, instant: true } }}
         defaultSort={{ key: 'recorded-at', dir: -1 }}
-        renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} onClose={close} />}
+        renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} places={places} onClose={close} />}
         onRefresh={retry}
         viewState={catalogueViewState(answer, judgments.length, retry, {
           module: info,
