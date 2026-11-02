@@ -51,8 +51,8 @@ export function prefetchPages(): void {
 }
 
 // 页面登记：导航 id → 页面组件的唯一映射。工作台不在此登记——它是外壳的
-// 总览首页而非业务模块，由 Layout 直接渲染；这样工作台可以反向读取本登记
-// 派生就绪度总览而不形成模块环。没登记的 id 落 UnwiredModule 诚实占位。
+// 首页而非业务模块，由 Layout 直接渲染，不经本登记懒加载。没登记的 id 落
+// UnwiredModule 诚实占位。
 export const pageById: Record<string, ComponentType> = {
   'recent-objects': page(loadMyWork, (m) => m.RecentObjectsPage),
   'saved-views': page(loadMyWork, (m) => m.SavedViewsPage),
