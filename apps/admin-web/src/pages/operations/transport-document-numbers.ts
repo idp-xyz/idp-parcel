@@ -7,20 +7,29 @@ import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 import type { CarrierMasterDocumentRecord } from './records-api';
 
 /**
- * 一个引用的「号」那一格：有号显号；无号按读口记下的原因注明，不拿标识顶（标识另列）；读口两键都没给（引用为空或单据不在册）
- * 时留空——不替它补一个「上线前开立」。
+ * 一个引用的无号说法：有号或读口没给原因（引用为空或单据不在册）时留空——不替它补一个「上线前开立」。
  */
-export function referencedNumberOf(number?: string, absence?: string): string {
-  if (number) return number;
-  return absence ? documentNumberAbsenceNote(absence) : '';
+export function referenceNoteOf(number?: string, absence?: string): string {
+  return !number && absence ? documentNumberAbsenceNote(absence) : '';
 }
 
-/** 总单一版所引委托、订舱的号与标识：号上列面、标识进技术详情。 */
+/**
+ * 技术详情里一个引用的「号」那一格：有号显号；无号按读口记下的原因注明，不拿标识顶（标识另列）；读口两键都没给时留空。
+ */
+export function referencedNumberOf(number?: string, absence?: string): string {
+  return number ?? referenceNoteOf(number, absence);
+}
+
+/**
+ * 总单一版所引委托、订舱：号列与主列同一条纪律——有号显号、没号显标识；标识与无号原因进技术详情。没引用的那一半留空。
+ */
 export function masterDocumentReferencesOf(record: CarrierMasterDocumentRecord): Record<string, string> {
   return {
-    commissionNumber: referencedNumberOf(record.commissionDocumentNumber, record.commissionDocumentNumberAbsence),
+    commissionNumber: record.commissionDocumentNumber ?? record.commission ?? '',
     commissionId: record.commission ?? '',
-    bookingNumber: referencedNumberOf(record.bookingDocumentNumber, record.bookingDocumentNumberAbsence),
+    commissionNote: referenceNoteOf(record.commissionDocumentNumber, record.commissionDocumentNumberAbsence),
+    bookingNumber: record.bookingDocumentNumber ?? record.booking ?? '',
     bookingId: record.booking ?? '',
+    bookingNote: referenceNoteOf(record.bookingDocumentNumber, record.bookingDocumentNumberAbsence),
   };
 }

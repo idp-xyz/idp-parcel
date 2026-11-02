@@ -73,3 +73,13 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 既有用例的一处改动：`TestTheConflictEchoNamesARevisionOnlyWhenTheCommissionWasRevised` 原先断言没换过版的委托回显恰六键，现在多了委托的单据号格，改为七键并断言那一格；它守的「换版键只在换过版时出现」不变。
 
 修订后自验（本机 PG）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/transportfulfillment/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/...` 全绿（含 PG）；`-v` 抽查新真库用例无 SKIP。前端 `tsc -b`、`pnpm test`（1065 过）、`vite build` 过。种子灌一次性库 `docnum09_seed2` 退 0；浏览器（真后端 19099、前端 5199）：经 API 真提交委托、订舱，登两份总单（一份引用两者、一份引用不在册的订舱），取消委托答复带 `documentNumber`，总单登记答复带两个引用号；总单区列面「委托号 TC-202611-00001、订舱号 BK-202611-00001」、技术详情列标识，引用不在册的那一版两列为空；检索 `TC-202611-00001` 只剩引用它的总单；手插一份无号委托与它名下的订舱，订舱区技术详情显示「委托号 上线前开立，无单据号」与委托标识。验完已停进程、删库。
+
+## 复评修订（2026-11-02，作者，复评钉 `6880f6f47`）
+
+1. **阻断：新登总单读回失败**：`RegisterMasterDocumentHandler.commit` 在已保存分支读回出错时原先答未决，而 `transactionalMasterDocumentRegistrar` 只在 error 时回滚，那一版会照常提交。改为与读不到同样交 error（包 `ErrUnexpectedMasterDocumentSave`），壳整笔回滚、登记方收 5xx 原样重交；注释照写。用例：编排半边 `TestASavedMasterDocumentThatCannotBeReadBackFailsInsteadOfAnsweringUndecided`；生产装配真库 `TestAMasterDocumentWhoseReadBackFailsIsRolledBack`——让读回在装回那一步出错（拆掉订舱表原因 CHECK、落一行原因认不得的订舱、总单引用它），事务仍健康，才分得出「答未决照常提交」与「交错误回滚」；已核过把修复退回旧写法时它答 `REGISTRATION_UNDECIDED` 而失败。（用 SQL 错误造读回失败分不出：事务已中止，旧写法提交也落不下。）
+2. TF CONTEXT 与订舱类型声明的注释把两处时区分开说：起点网点的业务时区登在 `network-routing`，但起点网点不是订舱的开立方；周期安排自己那一格时区说的是时刻表怎么读。订舱的开立方是租户的运输运营，两者都不作它的业务时区。
+3. `TransportFulfillmentReviewPage.tsx` 的两个号名常量挪出 import 区。
+4. 总单区委托号、订舱号两列照共同条款第 7 条：有号显号、没号显标识；标识与无号原因（「委托无号原因」「订舱无号原因」）进技术详情。订舱区主列本来就是这条纪律；订舱区技术详情的「委托号」仍按上轮裁定，无号时注明原因。
+
+自验同前：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；TF、architecture、platform、cmd、migrations 全量 `go test -count=1 -p 1`（含 PG）全绿；前端 `tsc -b`、`pnpm test`（1067 过）、`vite build` 过。
+

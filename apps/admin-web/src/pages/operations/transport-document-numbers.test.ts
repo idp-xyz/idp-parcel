@@ -27,7 +27,7 @@ test('引用的号：有号显号，无号按原因注明，两键都没给时�
   equal(referencedNumberOf(undefined, undefined), '');
 });
 
-test('总单所引委托、订舱：号上列面、标识进技术详情；没引用的那一半留空', () => {
+test('总单所引委托、订舱：号列有号显号、没号显标识；标识与无号原因进技术详情；没引用的那一半留空', () => {
   deepEqual(
     masterDocumentReferencesOf(
       masterDocument({
@@ -40,14 +40,18 @@ test('总单所引委托、订舱：号上列面、标识进技术详情；没�
     {
       commissionNumber: 'TC-202611-00004',
       commissionId: 'SYN-COMMISSION-1',
-      bookingNumber: documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'),
+      commissionNote: '',
+      bookingNumber: 'SYN-BOOKING-1',
       bookingId: 'SYN-BOOKING-1',
+      bookingNote: documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'),
     },
   );
   deepEqual(masterDocumentReferencesOf(masterDocument({ booking: 'SYN-BOOKING-GHOST' })), {
     commissionNumber: '',
     commissionId: '',
-    bookingNumber: '',
+    commissionNote: '',
+    bookingNumber: 'SYN-BOOKING-GHOST',
     bookingId: 'SYN-BOOKING-GHOST',
+    bookingNote: '',
   });
 });

@@ -13,7 +13,7 @@ import type {
   TransportFulfillmentRegistry,
 } from './records-api';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
-import { referencedNumberOf } from './transport-document-numbers';
+import { referenceNoteOf, referencedNumberOf } from './transport-document-numbers';
 
 export interface BookingRegisterRow {
   key: string;
@@ -79,7 +79,7 @@ export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
     values: {
       booking: record.documentNumber ?? record.booking,
       bookingId: record.booking,
-      numberNote: record.documentNumber ? '' : referencedNumberOf(undefined, record.documentNumberAbsence),
+      numberNote: referenceNoteOf(record.documentNumber, record.documentNumberAbsence),
       commission: referencedNumberOf(record.commissionDocumentNumber, record.commissionDocumentNumberAbsence),
       commissionId: record.commission,
       schedule: record.schedule,

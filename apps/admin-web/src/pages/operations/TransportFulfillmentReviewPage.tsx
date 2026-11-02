@@ -29,14 +29,14 @@ import { handoverVerdictLabels, labelOf } from './presentation';
 import { labelFor } from '../../vocabulary/status';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { masterDocumentReferencesOf } from './transport-document-numbers';
-
-// 委托、订舱的号名只取单据编号词典（ADR-0355 决定十一），不在本页另写。
-const commissionNumberName = documentTypeWords.TRANSPORT_COMMISSION.numberName;
-const bookingNumberName = documentTypeWords.BOOKING.numberName;
 import { bookingRowOf, bounceRowOf, unitWord, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['transport-fulfillment-review'];
+
+// 委托、订舱的号名只取单据编号词典（ADR-0355 决定十一），不在本页另写。
+const commissionNumberName = documentTypeWords.TRANSPORT_COMMISSION.numberName;
+const bookingNumberName = documentTypeWords.BOOKING.numberName;
 
 /**
  * 运输履约的治理查阅面。各区栏目取 transport-fulfillment CONTEXT.md 原词。本页只
@@ -254,7 +254,7 @@ const sections: ReviewSection[] = [
     // 子表的计数，关联本体(哪些集运单元、包裹、段)不在列面展开——列入总单不证明
     // 装载、交接或运输，本区不派生任何控制状态词。与监管舱单分界:监管舱单由承运商
     // 在外部形成并提交，关务经 UC-CC-012 只接受引用，不在本页。
-    // 所引委托、订舱以号上列面（无号按原因注明），标识进技术详情（ADR-0355 决定十一）；按号检索得到引用它的那几版。
+    // 所引委托、订舱的号列有号显号、没号显标识，标识与无号原因进技术详情（ADR-0355 决定十一）；按号检索得到引用它的那几版。
     columns: [
       col('document', '总单号', { mono: true }),
       col('issuer', '签发方', { mono: true }),
@@ -267,7 +267,9 @@ const sections: ReviewSection[] = [
         ['版本', 'version'],
         ['凭证范围', 'scope'],
         ['运输委托标识', 'commissionId'],
+        ['委托无号原因', 'commissionNote'],
         ['订舱标识', 'bookingId'],
+        ['订舱无号原因', 'bookingNote'],
         ['接续', 'supersedes'],
         ['被替代为', 'replacedBy'],
       ]),

@@ -200,3 +200,37 @@ func TestANewlyRegisteredMasterDocumentAnswersWithItsReferencedNumbers(t *testin
 		t.Fatal("不在册的订舱不该带号格")
 	}
 }
+
+// Covers: AT-TF-374（生产装配真库面：读回失败）——新登的一版落了而按键读回出错：登记口交错误、装配壳整笔回滚，那一版不落库；不答
+// REGISTRATION_UNDECIDED 而把它照常提交。读回错要是事务里的 SQL 错误，事务已中止、照常提交也落不下，分不出两种写法，所以这里让
+// 读回在装回那一步出错：拆掉订舱表那道原因 CHECK，落一行原因认不得的订舱，总单引用它，连读所引订舱号格时报错，事务仍健康。
+func TestAMasterDocumentWhoseReadBackFailsIsRolledBack(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrar, err := buildMasterDocumentRegistration(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		ALTER TABLE transport_fulfillment.booking_request DROP CONSTRAINT booking_request_document_number_absence_known;
+		INSERT INTO transport_fulfillment.booking_request
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at, document_number_absence)
+		VALUES ('SYN-TENANT-01', 'SYN-BOOKING-UNREADABLE', 'SYN-COMMISSION-ANY', 'SYN-SCHED-ANY', 1, 'KG', now(), 'digest', now(), 'SOMETHING_ELSE')`); err != nil {
+		t.Fatalf("落一行装不回的订舱：%v", err)
+	}
+	result, err := registrar.Register(t.Context(), tfapp.RegisterMasterDocumentCommand{
+		TenantID: mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-01"), Document: "SYN-MAWB-READBACK", Version: "SYN-MDV-READBACK-1",
+		Issuer: "SYN-CARRIER-X", Scope: "SYN-LANE-1", Booking: "SYN-BOOKING-UNREADABLE",
+	})
+	if err == nil {
+		t.Fatalf("读回失败应交错误，得到 %s", result.Outcome())
+	}
+	var rows int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.carrier_master_document
+		WHERE master_document_ref = 'SYN-MAWB-READBACK'`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("读回失败的那一版落了 %d 行 %v，want 整笔回滚", rows, err)
+	}
+}
