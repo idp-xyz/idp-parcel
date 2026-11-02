@@ -1,7 +1,7 @@
 # 06 异常案件、客户索赔项的单据号
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-02 进 main（全量 174 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二；UC-VE-004、UC-VE-007
@@ -121,3 +121,14 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - `go build ./...`、`go vet ./...` 通过，`gofmt -l` 无输出；受影响包全量测试全绿。
 - 复评探针 R1、R2a、R2b 都是发作期 1、案件 1、撞号册 0；R2a 后到的答 `SKIPPED`；R3 的发作期从首次命中那一刻开期、命中 1 次。探针跑完已删。
 - 前端 `tsc`、`pnpm test`（1079 通过）、`vite build` 都过。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `3b63bd7c8`，复评钉 `c8c7a8ceb`、`98eb107be`）
+
+三轮两轴阻断均为零，第二轮的一条非阻断由协调方按阻断级要求修。首轮真库探针 P1–P5 证保存点退号成立（撞号退回平台序列行的推进、出错后退回保存点事务仍可用、并发撞号无死锁、并发取号连号、无默认时区），协调方接受这一偏离并在平台注释与票 02 交接补「也可在取号那一步包保存点只退号」。协调方统一口径后改名 `documentNumberAbsence`、改用共用词典。案件撞号恢复：派发框架认领即扣尝试、无重新入队口，作者把撞号做成业务答案并记进撞号册 `case_numbering_collision`，信封照常入账、不烧失败预算，parcel-dispatch 每拍取到期行原样重新分诊。第二轮探针 R2 证两个派发进程并发重驱会重复立案（滚动发布时新旧进程重叠即可达），第三轮修订以 `FOR UPDATE SKIP LOCKED` 认领、正常分诊先锁同原因那一行、重驱按首次命中开期、依赖未决与出错时推后一个间隔解决；复评重跑 R1、R2a、R2b、R2b′、R2c（两进程整拍）、R3 全部为一个发作期一件案件，四种变异（去锁、改等锁、去分诊锁、恢复覆盖命中时刻）都让作者用例变红。
+
+越权风险（记此，不改代码）：多派发进程并存时，「派生为原因甲建案时持着当期案件序列行、再为原因乙分诊」与「另一进程重驱原因乙先锁撞号行、再取号等序列行」可成死锁环，PostgreSQL 约 0.7 秒内打断一方回滚：被打断的是重驱则下一步推后，是派生信封则按硬失败计一次尝试再重投；结果仍只一件案件。单进程节拍走不到。其余非阻断：重驱出错后另开一笔推后的接法没有用例覆盖（推后本身有应用层用例）；重驱建出的发作期 `hits=1`、`last_hit_at` 为首次命中，第二次撞号只计在撞号册上（与「只加次数」一致）；测试注释里跳号上限的计数由推送方改指常量（`39fa62bba`）。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum06` tip `98eb107be` 在隔离树上以合并提交并入 main `17cf82ad3`（AT 盘点文末追记冲突两段都留，`cmd/parcel-dispatch/assemble.go` 自动合并），叠一句测试注释修正；重算 AT 盘点总览计数、重生成机制清点各成一笔，两项 `-check` 退 0；对 `a536bd6d0` 跑全量 174 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum06` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+

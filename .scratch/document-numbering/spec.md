@@ -1,7 +1,7 @@
 # 单据编号：按规则给单据开立业务编号
 
 Category: enhancement
-Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继续」，「定下的几条」与默认格式照此采纳，决定落在 [ADR-0355](../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)（Accepted）；子票 01–09 已立并写明阻塞边
+Status: resolved——2026-11-02 子票 01–09 全部进 main（ADR-0355）；收尾的跨页与读口事项另立票（见各票「留给协调方」与进 main 记录）。此前 in-progress——2026-11-02 协调方起草；用户对草稿答「继续」，「定下的几条」与默认格式照此采纳，决定落在 [ADR-0355](../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)（Accepted）；子票 01–09 已立并写明阻塞边
 出处：用户 2026-11-01 问「项目中有 document number 的定义吗」，2026-11-02 答「打算加一套单据编号规则」。同日经提问裁定：覆盖下表全部十一类单据；编号能力用公司平台库 `idp-platform-go` 的 `numbering`（先给它发版再接）；规则由产品内置默认、租户可改。
 
 ## 为什么要做
@@ -65,14 +65,14 @@ Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继�
 
 | 号 | 题 | 形态 | 阻塞边 | 状态 |
 |---|---|---|---|---|
-| [01](./issues/01-adr-glossary-context-and-use-case-handoffs.md) | ADR-0355、GLOSSARY「单据号」「单据编号规则」、六个上下文 CONTEXT 规则句、八份 UC 交接 | 纯文档（改现行规则，要非作者评审） | — | in-progress |
-| [02](./issues/02-platform-numbering-adoption-and-rule-register.md) | 接入平台库与编号规则册：依赖、平台 schema 迁移、取号编排、规则册存储 / 读口 / 登记口 / 预览口、十一类类型声明 | 后端 | 01；平台库发版与 vanity 部署（用户动作） | ready-for-agent |
-| [03](./issues/03-admin-settings-document-numbering-page.md) | 管理台「设置 → 单据编号」 | 前端切片 | 02 | ready-for-agent |
-| [04](./issues/04-shipment-numbers.md) | 委托的单据号（界面词「运单号」），含首方接口答复与查询 | 后端 + 前端 | 02 | ready-for-agent |
-| [05](./issues/05-statement-dispute-and-payable-numbers.md) | 对账单、费用争议、审核应付 | 后端 + 前端 | 02 | ready-for-agent |
-| [06](./issues/06-exception-case-and-claim-numbers.md) | 异常案件、客户索赔项 | 后端 + 前端 | 02 | ready-for-agent |
-| [07](./issues/07-customs-case-numbers.md) | 关务案件 | 后端 + 前端 | 02 | ready-for-agent |
-| [08](./issues/08-pre-advice-and-handover-note-numbers.md) | 送站预报、送站交接单 | 后端 + 前端 | 02 | ready-for-agent |
-| [09](./issues/09-booking-and-transport-commission-numbers.md) | 订舱、运输委托 | 后端 + 前端 | 02 | ready-for-agent |
+| [01](./issues/01-adr-glossary-context-and-use-case-handoffs.md) | ADR-0355、GLOSSARY「单据号」「单据编号规则」、六个上下文 CONTEXT 规则句、八份 UC 交接 | 纯文档（改现行规则，要非作者评审） | — | resolved |
+| [02](./issues/02-platform-numbering-adoption-and-rule-register.md) | 接入平台库与编号规则册：依赖、平台 schema 迁移、取号编排、规则册存储 / 读口 / 登记口 / 预览口、十一类类型声明 | 后端 | 01；平台库发版与 vanity 部署（用户动作） | resolved |
+| [03](./issues/03-admin-settings-document-numbering-page.md) | 管理台「设置 → 单据编号」 | 前端切片 | 02 | resolved |
+| [04](./issues/04-shipment-numbers.md) | 委托的单据号（界面词「运单号」），含首方接口答复与查询 | 后端 + 前端 | 02 | resolved |
+| [05](./issues/05-statement-dispute-and-payable-numbers.md) | 对账单、费用争议、审核应付 | 后端 + 前端 | 02 | resolved |
+| [06](./issues/06-exception-case-and-claim-numbers.md) | 异常案件、客户索赔项 | 后端 + 前端 | 02 | resolved |
+| [07](./issues/07-customs-case-numbers.md) | 关务案件 | 后端 + 前端 | 02 | resolved |
+| [08](./issues/08-pre-advice-and-handover-note-numbers.md) | 送站预报、送站交接单 | 后端 + 前端 | 02 | resolved |
+| [09](./issues/09-booking-and-transport-commission-numbers.md) | 订舱、运输委托 | 后端 + 前端 | 02 | resolved |
 
 04–09 互不阻塞，可并行；各票动到同一份 AT 盘点与同一张端点表时按并行会话的取号规矩办。
