@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -134,6 +136,37 @@ func TestCanonicalWorkbookIdentityIgnoresWhitespaceKeyOrderAndNumberQuoting(t *t
 	sum := sha256.Sum256(first)
 	if len(hex.EncodeToString(sum[:])) != 64 {
 		t.Fatal("摘要长度")
+	}
+}
+
+// Covers: `AT-PP-046`——规范化字节里的字符串不转义 < > &：含它们的描述原样出现，提交时写成 \u003c 一类转义的同一份内容得
+// 同一份字节；来源标识取的就是这份字节。不含这三个字符的工作簿规范化字节一个字节都不变：FULL-03 golden 的规范化字节散列
+// 钉在这里，已存的表单草稿与登记的 form: 名都是照这个口径算的，它漂了，同一份内容再录就成了修订而不是重放。
+func TestCanonicalBytesKeepAngleBracketsAndAmpersandsAsWritten(t *testing.T) {
+	card := fullCard().clone()
+	card.data[sheetFixedCharges][0]["description"] = `<b>handling</b> & "packing"`
+	canonical := mustCanonical(t, card.workbookJSON(t))
+	if !strings.Contains(string(canonical), `"description":"<b>handling</b> & \"packing\""`) || strings.Contains(string(canonical), `\u00`) {
+		t.Fatalf("< > & 该原样出现：%s", canonical)
+	}
+	escaped := bytes.Replace(card.workbookJSON(t), []byte(`<b>handling</b> & `), []byte(`\u003cb\u003ehandling\u003c/b\u003e \u0026 `), 1)
+	if again := mustCanonical(t, escaped); !bytes.Equal(again, canonical) {
+		t.Fatalf("提交时转义与否该得同一份规范化字节：\n%s\n%s", again, canonical)
+	}
+	if again := mustCanonical(t, canonical); !bytes.Equal(again, canonical) {
+		t.Fatal("规范化不幂等")
+	}
+	if reading := templateReader.ReadPriceCardWorkbook(canonical); validated(t, reading).ContentDigest() != validated(t, read(t, card.bytes(t))).ContentDigest() {
+		t.Fatal("两种载体摘要不同")
+	}
+
+	golden, err := os.ReadFile(filepath.Join("testdata", full03JSONGolden))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const full03CanonicalSHA256 = "652dafb16c50d61d87dd3113ec9b41be5be8667b6dc5f45e4d8c7a48bc60643c"
+	if sum := sha256.Sum256(mustCanonical(t, golden)); hex.EncodeToString(sum[:]) != full03CanonicalSHA256 {
+		t.Fatalf("FULL-03 golden 的规范化字节散列 %x，想要 %s；改了 golden 就同步这里，改了规范化口径要先想清已存的来源标识", sum, full03CanonicalSHA256)
 	}
 }
 

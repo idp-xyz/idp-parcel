@@ -32,10 +32,15 @@ var _ ports.PriceCardWorkbookReader = Reader{}
 // JSON 载体的结构上限，与 MaxFileBytes、maxRowsPerSheet 一起构成「再大就不是一张价卡」的边界。表数与列键数远大于模板的表数
 // 与最宽那张表的列数，余量留给未知表与未知列（它们照样要被如实报出来）；列键数上限同时是行内位掩码的宽度，不能超过 64。
 // 总格数取模板里最宽的价表行表按单表行数上限铺满也装得下的规模；它同时封住「少数几行带大量不同键」那一类按行数乘列数放大的输入。
+//
+// 总行数（各表合计，空行也算）另设一个上限，取值与总格数相同。空行 {} 一格都不占，却各占一个行切片头，单表行数上限乘表数上限
+// 是六百多万行：64 张表各五万多个空行的请求体不到 10 MiB，就能让进程涨到两百兆上下。取与总格数相同的值，是因为没有空行的工作簿
+// 每行至少一格，总行数不会先于总格数到顶——这道只拦空行堆出来的形状，合法价卡碰不到它，既有各上限的边界也不动。
 const (
 	maxJSONSheets  = 64
 	maxJSONColumns = 64
 	maxJSONCells   = 1_000_000
+	maxJSONRows    = maxJSONCells
 )
 
 // workbookDoc 是校验过形状的工作簿 JSON。templateVersion 已去首尾空白：读取时 card 表里的版本格同样去空白，两边一个口径。
@@ -91,8 +96,9 @@ func tooLarge(format string, args ...any) error {
 
 // workbookParser 流式解一份工作簿 JSON，同时数表、行、列键与格。
 type workbookParser struct {
-	decoder *json.Decoder
-	cells   int
+	decoder   *json.Decoder
+	cells     int
+	totalRows int
 }
 
 func (parser *workbookParser) token() (json.Token, error) {
@@ -227,6 +233,9 @@ func (parser *workbookParser) rows(name string) (*jsonSheet, error) {
 		if len(sheet.rows) >= maxRowsPerSheet {
 			return nil, tooLarge("表 %s 超过单表 %d 行的技术上限", name, maxRowsPerSheet)
 		}
+		if parser.totalRows++; parser.totalRows > maxJSONRows {
+			return nil, tooLarge("各表行数合计超过 %d 行的技术上限（空行也算）", maxJSONRows)
+		}
 		number := len(sheet.rows) + 2
 		rowOpening, err := parser.token()
 		if err != nil {
@@ -299,10 +308,12 @@ func (parser *workbookParser) row(sheet string, number int, columns *jsonSheet, 
 	return fields, nil
 }
 
-// canonical 把形状校验过的工作簿写成规范化字节：键排序、无多余空白，数字落成字符串，行数组保持原序（行序在条件树与计算树里
-// 有意义）。直接写字节，不先造一棵树：总格数有上限，但再造一份树就是把内存翻倍。就地给各行的格按列键排序，所以 doc 用完即弃。
+// canonical 把形状校验过的工作簿写成规范化字节：键排序、无多余空白，数字落成字符串，字符串不转义 < > &，行数组保持原序（行序
+// 在条件树与计算树里有意义）。直接写字节，不先造一棵树：总格数有上限，但再造一份树就是把内存翻倍。就地给各行的格按列键排序，
+// 所以 doc 用完即弃。
 func (doc workbookDoc) canonical() []byte {
 	var out bytes.Buffer
+	writeJSONString := newJSONStringWriter()
 	names := make([]string, 0, len(doc.sheets))
 	for name := range doc.sheets {
 		names = append(names, name)
@@ -366,9 +377,19 @@ func columnRanks(columns []string) []int {
 	return rank
 }
 
-func writeJSONString(out *bytes.Buffer, text string) {
-	encoded, _ := json.Marshal(text) // 字符串编码不会失败
-	out.Write(encoded)
+// newJSONStringWriter 交回一个把字符串写成 JSON 字符串字面量的函数，不转义 < > &。规范化字节是来源标识（form: 名与来源散列）
+// 取自的那一份，规范列出的规范化只有键排序、去空白、数字落成字符串与行序不动；json.Marshal 默认把这三个字符写成 \u003c 一类，
+// 是规范没列的又一样变换，HTML 转义防的是嵌进网页，与这份字节无关。只有 Encoder 能关掉它，代价是每次在末尾多写一个换行，这里
+// 去掉。U+2028、U+2029 照样转义：encoding/json 关不掉，载体起点那版同样如此。
+func newJSONStringWriter() func(out *bytes.Buffer, text string) {
+	var scratch bytes.Buffer
+	encoder := json.NewEncoder(&scratch)
+	encoder.SetEscapeHTML(false)
+	return func(out *bytes.Buffer, text string) {
+		scratch.Reset()
+		_ = encoder.Encode(text) // 字符串编码不会失败
+		out.Write(bytes.TrimSuffix(scratch.Bytes(), []byte{'\n'}))
+	}
 }
 
 // CanonicalizePriceCardWorkbook 见 ports.PriceCardWorkbookReader。数字格在规范化时落成字符串：数字与同样字面量的字符串

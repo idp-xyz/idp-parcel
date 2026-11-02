@@ -85,15 +85,28 @@ func TestWorkbookJSONStopsAtItsStructuralLimits(t *testing.T) {
 	}
 	manySheets.WriteString(`}}`)
 	wideRows := strings.Repeat(`{"a":1,"b":1,"c":1,"d":1,"e":1,"f":1,"g":1,"h":1,"i":1,"j":1,"k":1},`, maxRowsPerSheet-1) + `{}`
+	// 各表行数合计：每张表铺满单表行数上限，铺到合计恰为上限，再在下一张表多放 extra 行。
+	rowTotal := func(extra int) string {
+		var body strings.Builder
+		body.WriteString(`{"templateVersion":"PPT-2","sheets":{`)
+		full := maxJSONRows / maxRowsPerSheet
+		for index := 0; index < full; index++ {
+			fmt.Fprintf(&body, `"s%03d":[%s{}],`, index, strings.Repeat("{},", maxRowsPerSheet-1))
+		}
+		fmt.Fprintf(&body, `"s%03d":[%s]}}`, full, strings.TrimSuffix(strings.Repeat("{},", extra), ","))
+		return body.String()
+	}
 
 	cases := map[string]struct{ body, mention string }{
-		"一行里不同列键过多":  {workbookBody("zz", distinctKeys(maxJSONColumns+1)), "不同的列键"},
-		"每行一个新键累计过多": {workbookBody("zz", oneNewKeyPerRow(maxJSONColumns+1)), "不同的列键"},
-		"表过多":        {manySheets.String(), "表超过"},
-		"行过多":        {workbookBody("zz", strings.Repeat("{},", maxRowsPerSheet)+"{}"), "单表"},
-		"总格数过多":      {workbookBody("zz", wideRows), "格数"},
-		"列键数在上限上仍收":  {workbookBody("zz", distinctKeys(maxJSONColumns)), ""},
-		"行数在上限上仍收":   {workbookBody("zz", strings.Repeat("{},", maxRowsPerSheet-1)+"{}"), ""},
+		"一行里不同列键过多":    {workbookBody("zz", distinctKeys(maxJSONColumns+1)), "不同的列键"},
+		"每行一个新键累计过多":   {workbookBody("zz", oneNewKeyPerRow(maxJSONColumns+1)), "不同的列键"},
+		"表过多":          {manySheets.String(), "表超过"},
+		"行过多":          {workbookBody("zz", strings.Repeat("{},", maxRowsPerSheet)+"{}"), "单表"},
+		"总格数过多":        {workbookBody("zz", wideRows), "格数"},
+		"列键数在上限上仍收":    {workbookBody("zz", distinctKeys(maxJSONColumns)), ""},
+		"行数在上限上仍收":     {workbookBody("zz", strings.Repeat("{},", maxRowsPerSheet-1)+"{}"), ""},
+		"各表行数合计过多":     {rowTotal(1), "行数合计"},
+		"各表行数合计在上限上仍收": {rowTotal(0), ""},
 	}
 	for name, testCase := range cases {
 		_, err := templateReader.CanonicalizePriceCardWorkbook([]byte(testCase.body))
@@ -168,6 +181,36 @@ func TestWorkbookJSONMemoryIsBoundedByTheRowLimitNotTheBody(t *testing.T) {
 	// 旧写法 90 倍上下（光把整个数组解成树就是体积的几十倍）；现在 4 倍上下，12 倍是两头都留了余量的上界。
 	if limit := uint64(len(body)) * 12; allocated > limit {
 		t.Fatalf("累计分配 %d 字节，超过体积的 12 倍（%d）；该在行数上限处停", allocated, limit)
+	}
+}
+
+// Covers: `AT-PP-046`——空行也算行数。复评探针：64 张表各 5.4 万个空行 `{}`（9.9 MiB，表数、单表行数、总格数都没到上限），
+// 每个空行一格不占却各占一个行切片头，RSS 约两百兆；现在各表行数合计到上限即停。断言在合计上限处拒、累计分配有界。
+func TestEmptyRowsCountTowardsTheRowTotal(t *testing.T) {
+	var body strings.Builder
+	body.WriteString(`{"templateVersion":"PPT-2","sheets":{`)
+	for index := 0; index < maxJSONSheets; index++ {
+		if index > 0 {
+			body.WriteByte(',')
+		}
+		fmt.Fprintf(&body, `"s%02d":[%s{}]`, index, strings.Repeat("{},", 54_000-1))
+	}
+	body.WriteString(`}}`)
+	raw := []byte(body.String())
+	if len(raw) >= MaxFileBytes {
+		t.Fatalf("探针体 %d 字节，要落在文件上限以内", len(raw))
+	}
+	var err error
+	allocated := allocatedBy(func() { _, err = templateReader.CanonicalizePriceCardWorkbook(raw) })
+	var rejection ports.PriceCardWorkbookRejection
+	if !errors.Is(err, ports.ErrPriceCardWorkbookTooLarge) || !errors.As(err, &rejection) || !strings.Contains(rejection.Detail, "行数合计") {
+		t.Fatalf("err = %v，应是各表行数合计超限", err)
+	}
+	t.Logf("体 %d 字节，累计分配 %d 字节", len(raw), allocated)
+	// 本机实测累计分配约 111 MiB（大头是流式解析逐个记号的开销），旧写法把六十四张表全攒下、约 417 MiB；192 MiB 两头都留了余量，
+	// 防的是退回「全攒下」那个量级。
+	if allocated > 192<<20 {
+		t.Fatalf("累计分配 %d 字节；该在各表行数合计上限处停", allocated)
 	}
 }
 
