@@ -139,7 +139,7 @@ export interface StatementDisputeRecord {
    * 的不答空串、不拿争议标识顶。
    */
   documentNumber?: string;
-  /** 没有争议号的原因：ISSUED_BEFORE_NUMBERING（上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED；词表 document-number-absence。 */
+  /** 没有争议号的原因：ISSUED_BEFORE_NUMBERING（上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED；界面说法取 vocabulary/document-numbering 的 documentNumberAbsenceNote。 */
   documentNumberAbsence?: string;
   charge: string;
   disputedAmount: string;
