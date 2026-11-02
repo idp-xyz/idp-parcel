@@ -91,7 +91,7 @@ export interface TrackingListFilter {
   status: 'ALL' | string;
 }
 
-/** 搜索命中运单号或投影版本；外部单号不在投影读模型上，不承诺读模型没有的定位维。 */
+/** 搜索命中包裹号或投影版本；外部单号不在投影读模型上，不承诺读模型没有的定位维。 */
 export function filterTrackingRows(rows: readonly TrackingRow[], filter: TrackingListFilter): TrackingRow[] {
   return rows.filter((row) => {
     if (filter.status !== 'ALL' && currentStatusLabelOf(row) !== filter.status) return false;

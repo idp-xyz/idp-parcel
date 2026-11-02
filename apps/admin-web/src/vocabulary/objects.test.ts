@@ -15,6 +15,9 @@ test('设计源点名的对照', () => {
   equal(nounOf('shipment'), '运单');
   equal(nounOf('customerReference'), '客户单号');
   equal(nounOf('parcelCount'), '件数');
+  // 运单号专指委托的单据号，包裹的号另有其名（ADR-0355 决定十一）。
+  equal(nounOf('shipmentNumber'), '运单号');
+  equal(nounOf('parcelNumber'), '包裹号');
   equal(nounOf('companyEntity'), '公司主体');
   equal(nounOf('changeRecord'), '变更记录');
   equal(nounOf('sourceDocument'), '来源单据');

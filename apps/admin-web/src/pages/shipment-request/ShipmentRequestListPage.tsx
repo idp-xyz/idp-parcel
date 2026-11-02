@@ -49,15 +49,20 @@ const info = moduleInfoById['shipment-request-inquiry'];
 // 栏目跟真实读模型走：读模型没有的字段（目的地、重量、收件人、预计送达）不虚构，设计源第八节记着要补的读口。
 // 检索、筛选、排序只在已取回的这一页行上做，不属于查询协议。
 
-// 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<委托标识>），与外壳的模块级 hash 路由同一约定：刷新回到同一份
+// 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<运单号>），与外壳的模块级 hash 路由同一约定：刷新回到同一份
 // 详情、后退自然收回列表、详情可收藏转发。多标签壳层拿前两段作标签 id，详情因此开成自己的一张标签、列表留在另一张。
-function selectedIdFromHash(): string | null {
+//
+// 第二段放屏上那个号（shipmentDisplayNoOf）而不是委托标识整串：壳层的标签名、状态栏位置与最近打开都按地址第二段写字
+// （shell/workspace-state 的 tabForHash、pages/my-work/recent-objects 的 recentObjectTitle），不为补名字发请求，写出来就与列表上
+// 那一格同字。有运单号是运单号——开立后不变（ADR-0355 决定三），作地址收藏转发照样稳；老运单是去前缀的委托标识。详情页按
+// 运单号与这个号可能对应的委托标识一起认（shipment-ref 的 shipmentDetailSourceOf），从前收藏的委托标识整串地址照样打得开。
+function selectedRefFromHash(): string | null {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
   return segments[0] === 'shipment-request-inquiry' && segments[1] ? decodeHashSegment(segments[1]) : null;
 }
 
-function detailHash(shipmentRequestId: string): string {
-  return `#/shipment-request-inquiry/${encodeURIComponent(shipmentRequestId)}`;
+function detailHash(row: Pick<ShipmentRequestSummary, 'shipmentRequestId' | 'documentNumber'>): string {
+  return `#/shipment-request-inquiry/${encodeURIComponent(shipmentDisplayNoOf(row))}`;
 }
 
 // 词典五档色调 → 指标数值的字色类（components/status-tone 只有四档语气，中性不着色）。
@@ -188,7 +193,7 @@ export function ShipmentRequestListPage() {
   const [search, setSearch] = useAddressKeyword();
   const tabReturn = useTabReturn();
   // 渲列表还是详情由 hash 二段定：详情地址在壳层是自己的一张标签，本组件在那张标签里渲详情。选中态的唯一来源是 hash。
-  const [detailId, setDetailId] = useState<string | null>(selectedIdFromHash);
+  const [detailRef, setDetailRef] = useState<string | null>(selectedRefFromHash);
   const [state, setState] = useState<ShipmentStateFilter>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultShipmentSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -199,7 +204,7 @@ export function ShipmentRequestListPage() {
   const names = useCustomerNames();
 
   useEffect(() => {
-    const onHashChange = () => setDetailId(selectedIdFromHash());
+    const onHashChange = () => setDetailRef(selectedRefFromHash());
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
@@ -218,8 +223,8 @@ export function ShipmentRequestListPage() {
     };
   }, [reloadToken]);
 
-  if (detailId !== null) {
-    return <ShipmentRequestDetailPage shipmentRequestId={detailId} onBack={() => tabReturn.returnTo('shipment-request-inquiry')} />;
+  if (detailRef !== null) {
+    return <ShipmentRequestDetailPage shipmentRef={detailRef} onBack={() => tabReturn.returnTo('shipment-request-inquiry')} />;
   }
 
   const retry = () => {
@@ -286,7 +291,7 @@ export function ShipmentRequestListPage() {
             names={names}
             onClose={() => setSelectedKey(null)}
             onOpenDetail={() => {
-              window.location.hash = detailHash(row.shipmentRequestId);
+              window.location.hash = detailHash(row);
             }}
           />
         ) : null;

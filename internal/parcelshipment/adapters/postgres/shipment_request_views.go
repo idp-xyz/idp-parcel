@@ -66,21 +66,8 @@ func (views *ShipmentRequestViews) ListVisible(
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views: %w", err)
 	}
-	defer rows.Close()
-
-	var records []ports.ShipmentRequestSummaryRecord
-	for rows.Next() {
-		var row summaryRow
-		if err := rows.Scan(row.targets()...); err != nil {
-			return nil, fmt.Errorf("list shipment request views: %w", err)
-		}
-		record, err := row.record()
-		if err != nil {
-			return nil, fmt.Errorf("list shipment request views: %w", err)
-		}
-		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
+	records, err := collectSummaries(rows)
+	if err != nil {
 		return nil, fmt.Errorf("list shipment request views: %w", err)
 	}
 	return records, nil
@@ -111,22 +98,69 @@ func (views *ShipmentRequestViews) ListVisibleByDocumentNumber(
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
 	}
-	defer rows.Close()
+	records, err := collectSummaries(rows)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+	}
+	return records, nil
+}
 
+// ListVisibleByIDs 按（作用域 + 一组委托标识）取回概要。作用域过滤与标识集合同在 WHERE 上：作用域外的与不存在的都是零行，
+// 读口答不出缺的那一份是哪一种。重复的标识只命中一行。一组多大由接入面按渠道契约裁决；空组不发查询。
+func (views *ShipmentRequestViews) ListVisibleByIDs(
+	ctx context.Context,
+	scope domain.AuthorizedQueryScope,
+	requestIDs []domain.ShipmentRequestID,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	if len(requestIDs) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(requestIDs))
+	for index, requestID := range requestIDs {
+		ids[index] = requestID.String()
+	}
+	querier, err := views.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by ids: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+summaryColumns+`
+		   FROM parcel_shipment.shipment_request
+		  WHERE tenant_id = $1
+		    AND customer_account_id = ANY($2)
+		    AND shipment_request_id = ANY($3)
+		  ORDER BY submitted_at DESC, shipment_request_id DESC`,
+		scope.TenantID().String(),
+		visibleAccounts(scope),
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by ids: %w", err)
+	}
+	records, err := collectSummaries(rows)
+	if err != nil {
+		return nil, fmt.Errorf("list shipment request views by ids: %w", err)
+	}
+	return records, nil
+}
+
+// collectSummaries 把一条概要查询的结果逐行过 summaryRow.record 收齐，并关掉结果集。
+func collectSummaries(rows pgx.Rows) ([]ports.ShipmentRequestSummaryRecord, error) {
+	defer rows.Close()
 	var records []ports.ShipmentRequestSummaryRecord
 	for rows.Next() {
 		var row summaryRow
 		if err := rows.Scan(row.targets()...); err != nil {
-			return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+			return nil, err
 		}
 		record, err := row.record()
 		if err != nil {
-			return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+			return nil, err
 		}
 		records = append(records, record)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
+		return nil, err
 	}
 	return records, nil
 }

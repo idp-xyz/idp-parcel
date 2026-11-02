@@ -1,7 +1,7 @@
 // 账务区把系统引用翻成运营看得懂的字的几个纯函数（管理台改版第一步，设计原则一「以运单为中心」）。抽成纯函数是为了
 // 让「哪一格翻得出、翻不出时显什么」能在 node:test 里钉住；页面只管取数与摆放。
 
-/** 包裹号（运单号）在各种引用里的形：`DPCL-` 加 Base32 大写字母数字。 */
+/** 包裹号在各种引用里的形：`DPCL-` 加 Base32 大写字母数字。 */
 const parcelPattern = /\bDPCL-[A-Z0-9]+\b/;
 
 /**
@@ -24,7 +24,7 @@ export const sourceFactFamilyLabels: Record<string, string> = {
   'route-plan': '路由计划',
 };
 
-/** 运单号认不出来时，用费用来源的中文说法顶上（如「网点收寄」）；族也认不出就原样回显整条引用。 */
+/** 包裹号认不出来时，用费用来源的中文说法顶上（如「网点收寄」）；族也认不出就原样回显整条引用。 */
 export function sourceFactLabel(ref: string | undefined): string | undefined {
   if (!ref) return undefined;
   const family = ref.split('/')[0] ?? ref;
