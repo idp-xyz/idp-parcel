@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-importharden（最后一笔见「完成记录」）
 父票：[spec](../spec.md)
 Blocked by: 无
-地盘：`internal/parcelpricing/adapters/pricecardtemplate`（代码与用例）、`docs/design/pp-price-card-import-template-and-validation-spec.md`、ADR-0349 越权风险点、本票、冻结清单那一条的处理注记、AT 盘点。`domain`、`application` 未动。
+地盘：`internal/parcelpricing/adapters/pricecardtemplate`（代码与用例）、`docs/design/pp-price-card-import-template-and-validation-spec.md`、ADR-0349 越权风险点与索引注记、UC-PP-001 的 `AT-PP-046` 一行与新行 `AT-PP-050`（修订轮获准）、本票、冻结清单那一条的处理注记、AT 盘点。`domain`、`application` 未动。
 出处：用户 2026-11-01 裁定把冻结清单 2026-10-29「价卡导入 PPT-2 评审非阻断余项」三项这轮做完；协调方派单。三项即票 [08](./08-template-ppt-2-structured-workbook-and-spec-face.md) 复评记录里的 R1、R2、N-a。
 
 ## 要做的
@@ -26,7 +26,7 @@ Blocked by: 无
 - **32 是产品策略**（ADR-0146），不是租户取值：真实价卡的条件是「若干判定的任一 / 全部」再套一两层（「（分区 A 或 B）且（实重 > 30 KG 或最长边 > 120 CM）」是三层），承运商条款逐层照抄也很少过五层；计算树领域本就只容两层。上限以内领域校验代价不超过节点数乘 32。
 - **顺带取证的第二个理由**：层数过了约五千（实测 5 200 层），这张卡照样读成 `已校验`，但登记快照的 JSON 嵌套超过 `encoding/json` 的 10 000 层上限，`RehydratePriceCardRegistration` 报 `exceeded max depth`——登记下去就读不回来。32 层的树快照来回无误（用例钉住）。
 - **领域那段平方没改**。`TriggerCondition.valid()` 递归整棵子树，构造时每层调一次；改成线性要么让组合只核操作数的种类（对包内直接写的结构体字面量放松了核对）、要么加缓存，都动语义；`Matches` 每层也调 `valid()`，一并改要再对拍评价。上限已把它压到节点数乘 32，不值。
-- 行为变化只落在超限的输入上：33 层以上的计算树此前报一条「取较大值不套取较大值」的 `CONSTRUCTION_REJECTED`，现在报层数那一条（构造走不到那里）。
+- 行为变化只落在超限的输入上：33 层以上的计算树此前报一条「取较大值不套取较大值」的 `CONSTRUCTION_REJECTED`，现在报层数那一条（构造走不到那里）。同理，第 33 层及更深的节点自己格上的问题（代码写错、必填格空……）此前会逐格报出，现在不报，与成环、父节点缺失挂着的子树一样：先把层数改对，再校验才看得到。规范条件树一节写明了这一格。
 
 **二、各表行数合计设上限 1 000 000，空行也算。**
 
@@ -39,15 +39,15 @@ Blocked by: 无
 - **已落库的依赖（查过代码，未查 `demo_live`——派单禁碰）**：规范化字节的 SHA-256 是表单录入的来源散列，前 12 位是 `form:` 名。它们落在两处：草稿册（`price_card_draft` 的 `source_file_name`、`source_file_sha256`）与登记册（`price_card_catalog` 的 `source_file_sha256` 列与快照里的 `sourceFileName` / `sourceFileSha256`）；草稿查阅、登记查阅与运营目录读它们展示。事件不带来源标识（`parcelpricing` 没有发件箱写来源）。种子不产生表单草稿（`scripts/demo-seeds` 里没有 `form:` 来源）。转义口径自票 08 进 main（`4c4056dc6`，2026-10-29）起生效，起点那版不转义、没单独上过 main。
 - **改了以后**：不含这三个字符的工作簿规范化字节逐字节不变；含它们的，同一份内容再导一次得到新的来源散列与 `form:` 名，读法、内容摘要、规范化版本都不变。已存的行照旧立得住、照旧认作来自页面表单（名称由所存散列推出，`FromForm` 只核这一点）；登记的幂等按内容摘要判，不受影响。同一份内容再录：草稿在 `草稿` / `已校验` 时答修订（行换成新来源标识，内容不变），已批准 / 已发布时答内容已固定、行不动——此前这两种情形都答重放。没有迁移，不改写旧行。影响已记入 ADR-0349 越权风险点 14。
 
-### 判据对用例（AT 号沿用，未立新号）
+### 判据对用例
 
-UC-PP-001 不在本票地盘，没有立新 AT 号；新用例按语义归到既有两行：树的纪律与票 08 的成环线性检查同在 `AT-PP-043`，载体上限与规范化同在 `AT-PP-046`。盘点 ① 桶这两行补了用例名，总览计数不变。
+层数上限立新号 `AT-PP-050`（核过 origin 各分支无撞；初版挂在 `AT-PP-043`，但那一行讲的是版本，不贴切，评审后改挂）：UC-PP-001 价卡导入那张表在 `AT-PP-047` 之后加一行，盘点 ① 桶在 `AT-PP-049` 之后加一行，三个用例的 `Covers:` 改指 050。行数合计与规范化不转义归 `AT-PP-046`：UC 那一行的情形与结果句补了这两格，盘点那一行补了用例名。PP 总数因此多一，总览计数留给进 main 时重算。
 
 | AT | 判据 | 用例 |
 |---|---|---|
-| 043 | 恰 32 层照常 `已校验`、两种载体同读法、登记快照来回无误；33 层在叶子的 `parentId` 格恰一条 `TREE_INVALID`，话里有树名、上限、节点与层数，两种载体逐字相同 | `TestAConditionTreeAtTheDepthCapIsReadAndOneLevelMoreIsRefusedAtTheNode` |
-| 043 | 计算树取较大值套到第 33 层，超限的两个节点各一条、话说计算树，不再连带构造门问题 | `TestACalculationTreeDeeperThanTheCapIsRefusedAtTheNodesPastIt` |
-| 043 | 近十万节点的单链读取有界、恰一条问题 | `TestALongConditionChainIsStoppedAtTheCapNotBuiltLevelByLevel` |
+| 050 | 恰 32 层照常 `已校验`、两种载体同读法、登记快照来回无误；33 层在叶子的 `parentId` 格恰一条 `TREE_INVALID`，话里有树名、上限、节点与层数，两种载体逐字相同 | `TestAConditionTreeAtTheDepthCapIsReadAndOneLevelMoreIsRefusedAtTheNode` |
+| 050 | 计算树取较大值套到第 33 层，超限的两个节点各一条、话说计算树，不再连带构造门问题 | `TestACalculationTreeDeeperThanTheCapIsRefusedAtTheNodesPastIt` |
+| 050 | 近十万节点的单链读取有界、恰一条问题 | `TestALongConditionChainIsStoppedAtTheCapNotBuiltLevelByLevel` |
 | 046 | 各表行数合计恰在上限照收、多一即拒（加在既有上限边界用例的表里） | `TestWorkbookJSONStopsAtItsStructuralLimits` |
 | 046 | 64 表各 5.4 万空行在合计上限处拒、累计分配有界 | `TestEmptyRowsCountTowardsTheRowTotal` |
 | 046 | 含 `<` `>` `&` 的描述规范化后原样出现、提交时转义与否同字节、幂等、两载体同摘要；FULL-03 golden 的规范化字节 SHA-256 钉住 | `TestCanonicalBytesKeepAngleBracketsAndAmpersandsAsWritten` |
@@ -70,13 +70,21 @@ UC-PP-001 不在本票地盘，没有立新 AT 号；新用例按语义归到既
 
 ### 自验
 
-`HTTPS_PROXY=http://127.0.0.1:7897`、DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`（含 PG）：`go build ./...`；`go vet ./internal/parcelpricing/... ./cmd/...`；改过与新增的 `.go` 跑 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/architecture/... ./cmd/parcel-api/...` 全绿（含 PG；`adapters/postgres` 以 `-v` 核过零 `SKIP`）；`go run ./tools/at-coverage-counts -check` 退 0（只在两行既有行里补了用例名，计数不变）。没跑全量，没碰 `:19080`、`:5173`、库 `demo_live`；没动 ADR 索引、AT 总览计数与机制清点。
+`HTTPS_PROXY=http://127.0.0.1:7897`、DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`（含 PG）：`go build ./...`；`go vet ./internal/parcelpricing/... ./cmd/...`；改过与新增的 `.go` 跑 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/architecture/... ./cmd/parcel-api/...` 全绿（含 PG；`adapters/postgres` 以 `-v` 核过零 `SKIP`）；`go run ./tools/at-coverage-counts -check` 在首版退 0；修订轮加了 `AT-PP-050` 一行之后只报生成物过期（行齐），`go run ./tools/adr-index -check` 因 ADR-0349 索引注记多一句只报索引过期——两样都留给进 main 时重生成。没跑全量，没碰 `:19080`、`:5173`、库 `demo_live`；没动 ADR 索引、AT 总览计数与机制清点。
 
 ### 留给协调方
 
-- **UC-PP-001 的 AT-PP-043 / 046 两行**不在本票地盘，没改：两行的情形与结果句没写层数上限、合计行数上限与「规范化不转义」，若要 UC 表与用例一一对应，进 main 时补一句或另开文档票。
 - **`demo_live` 里若有内容含 `<` `>` `&` 的表单草稿**，其来源标识是旧口径（派单禁碰，我没查）；影响只在「同一内容再录答修订而不是重放」，见上「三」。要不要查一遍、告诉在用演示租户的人，请协调方定。
-- 不挡的新发现（不立票，请记入冻结清单）：领域 `TriggerCondition.valid()` 在 `Matches` 里也是每层一调，评价一份 N 节点、D 层的条件是 N×D；导入已限 32 层，但直接登记的口（`adapters/http` 的 `operator_registry_intake.go`，收登记快照、经 `RehydratePriceCardRegistrationForTenant`）没有层数门，只被 `encoding/json` 的 10 000 层嵌套上限限在约五千层以内，平方代价因此有界（约两千五百万次节点校验）；要不要给领域或那扇门也加同一个层数上限，请协调方定。
+- 不挡的新发现（不立票，请记入冻结清单）：领域 `TriggerCondition.valid()` 在 `Matches` 里也是每层一调，评价一份 N 节点、D 层的条件是 N×D；导入已限 32 层，但直接登记的口（`adapters/http` 的 `operator_registry_intake.go`，收登记快照、经 `RehydratePriceCardRegistrationForTenant`）没有层数门，只被 `encoding/json` 的 10 000 层嵌套上限限在约五千层以内，平方代价因此有界（约两千五百万次节点校验）；要不要给领域或那扇门也加同一个层数上限，请协调方定。**结论（2026-11-01 协调方）：不加。** 评审实测该口收下的快照折装字节不变、嵌套深度与收进来的相同，造不出读不回来的快照，代价也小。
+
+### 修订轮（2026-11-01 作者，应隔离评审意见，评审钉 `b8b330831`、阻断 0 条、非阻断 4 条）
+
+- 1：ADR-0349 `Status` 行索引注记挂一句补注——决定四逐项列的结构上限另有各表行数合计，见越权风险点 13；正文不动。
+- 2：三处讲改动经过的注释改成不变式（`newJSONStringWriter` 的 `U+2028` 一句、两个用例头注释与分配上界的说明）。
+- 3：规范条件树一节与本票「一」写全：第 33 层及更深的节点自己格上的问题也不报，与成环、父节点缺失挂着的子树一致。
+- 4：层数用例改挂新号 `AT-PP-050`（UC 行、盘点行、`Covers:`）；`AT-PP-046` 的 UC 情形与结果句补上行数合计与规范化不转义。见上「判据对用例」。
+- 直接登记快照口的层数门：协调方裁不加，结论记在「留给协调方」那一条下。
+- 自验：受影响包 `pricecardtemplate` 的 build、vet、test 绿，`gofmt -l` 无输出；两个生成物检查只报过期，见上「自验」。
 
 ### 提交
 
