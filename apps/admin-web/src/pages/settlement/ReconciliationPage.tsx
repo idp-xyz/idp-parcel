@@ -176,6 +176,7 @@ function CustomerStatementsTable({
     if (current) setPinned(current);
   }, [current]);
   const panelStatement = current ?? (pinned?.statementNumber === selected ? pinned : undefined);
+  const panelGone = answer?.kind === 'outcome' && current === undefined && panelStatement !== undefined;
 
   const summary = disputed
     ? `共 ${disputed.disputedCount} 张有未了结异议${
@@ -233,7 +234,7 @@ function CustomerStatementsTable({
         />
       </div>
       {/* 登记或处理落定后重读这一签：单上的争议与首页待对账的件数都从读口来，页面不自己往行上补。 */}
-      <StatementDisputePanel statement={panelStatement} charges={charges} onAnswered={retry} />
+      <StatementDisputePanel statement={panelStatement} gone={panelGone} charges={charges} onAnswered={retry} />
     </div>
   );
 }
