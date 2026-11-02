@@ -6,16 +6,16 @@
 import type { VisibilityCatalogueKind, VisibilityRegistrableCatalogueKind } from './catalogue-api';
 
 /**
- * 源上下文的中文词,取 CONTEXT「全程追踪投影」定义句自己数的五源:
- * 「对节点、运输、关务、路由和托运上下文已经接受的事实进行语义化编排」。
- * 词表没收录的源(枚举扩了、页面还没跟上)由调用方原样示码,不猜词。
+ * 动态来自哪个环节（源上下文封闭五元，CONTEXT「全程追踪投影」定义句里的节点、运输、关务、路由、托运）。
+ * 词按运营认的环节说——托运是「运单」、路由是「路线」、节点是「网点」、关务是「清关」；物流动态、异常分流与
+ * 追踪规则各页共用这一份。词表没收录的源（枚举扩了、页面还没跟上）由调用方原样示码，不猜词。
  */
 export const sourceContextLabels: Record<string, string> = {
-  PARCEL_SHIPMENT: '托运',
-  NETWORK_ROUTING: '路由',
-  NODE_OPERATIONS: '节点',
+  PARCEL_SHIPMENT: '运单',
+  NETWORK_ROUTING: '路线',
+  NODE_OPERATIONS: '网点',
   TRANSPORT_FULFILLMENT: '运输',
-  CUSTOMS_COMPLIANCE: '关务',
+  CUSTOMS_COMPLIANCE: '清关',
 };
 
 // 传输层错误码说明。它们不是业务原因目录:出现即表示应用层没答过,响应体也
@@ -77,18 +77,17 @@ export function labelOf(table: Record<string, string>, code: string): string {
 // ---- 各类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d;异常披露规则与
 // 冲突信号规则两册随票 ve-disclosure-policy-view/02 步二加入）----
 
-// 以下几张表覆盖有在线登记写面的每一册,登记签与登记答复只认这里。
+// 以下几张表覆盖规则册六本的在线登记写面（追踪规则、通知与披露两页），登记签与登记答复只认这里。
+// 索赔资格与代提授权两册由索赔资格与授权页摆，标题、填写提示与登记答复只在 case-presentation.ts 定义。
+type RuleBookRegistrableKind = Exclude<VisibilityRegistrableCatalogueKind, 'CLAIM_ELIGIBILITY' | 'CLAIM_AUTHORIZATION'>;
 
 /**
  * 登记签的标题：说这个任务做什么,不叫「登记 ×× 版本」。冲突信号规则一租户一条,所以是「设定」不是「新增」。
- * 索赔两册由索赔前置页摆,措辞随那一页。
  */
-export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, string> = {
+export const registrationTitles: Record<RuleBookRegistrableKind, string> = {
   MILESTONE_MAPPING: '新增状态归类规则',
   TRIAGE_RULE: '新增异常分流规则',
   NOTIFICATION_POLICY: '新增通知时限',
-  CLAIM_ELIGIBILITY: '登记索赔资格声明',
-  CLAIM_AUTHORIZATION: '登记申请人授权名单',
   DISCLOSURE_POLICY: '新增对客户显示规则',
   EXCEPTION_DISCLOSURE_RULE: '新增异常告知规则',
   CONFLICT_SIGNAL_RULE: '设定动态矛盾规则',
@@ -98,35 +97,22 @@ export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, stri
  * 受控登记口的命令名,逐册一个;词取 cmd/parcel-ve-register 已发布的原词。分诊与异常披露
  * 规则两册在 CLI 是复数,读口 kind 与端点路径用单数,各取各入口已发布的写法。
  */
-const registrationCommands: Record<VisibilityRegistrableCatalogueKind, string> = {
+const registrationCommands: Record<RuleBookRegistrableKind, string> = {
   MILESTONE_MAPPING: 'milestone-mapping',
   TRIAGE_RULE: 'triage-rules',
   NOTIFICATION_POLICY: 'notification-policy',
-  CLAIM_ELIGIBILITY: 'claim-eligibility',
-  CLAIM_AUTHORIZATION: 'claim-authorization',
   DISCLOSURE_POLICY: 'disclosure-policy',
   EXCEPTION_DISCLOSURE_RULE: 'exception-disclosure-rules',
   CONFLICT_SIGNAL_RULE: 'conflict-signal-rule',
 };
 
-// 索赔两册的形状提示,措辞随索赔前置页（本轮不改那一页的话）。
-function snapshotHint(kind: VisibilityRegistrableCatalogueKind, particulars?: string): string {
-  return (
-    `登记快照 JSON 的形状与受控登记口 parcel-ve-register ${registrationCommands[kind]} -input <file> 吃的同一份` +
-    '(两口共用同一份译装,不是两份碰巧同形);本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」' +
-    '的翻译属渠道接入契约,随 PAR-INT-01 提供。未知字段一律拒收——打错字段名不会静默变成「没给」。' +
-    (particulars ?? '')
-  );
-}
-
 // 规则册六本的填写提示：只说填什么、填错了会怎样。形状与命令行工具吃的同一份,这一句留给对接的人。
-function taskHint(kind: VisibilityRegistrableCatalogueKind, fields: string): string {
+function taskHint(kind: RuleBookRegistrableKind, fields: string): string {
   return `${fields} 内容与命令行工具（${registrationCommands[kind]}）吃的同一份；所属公司由系统记下，不用填。写错的字段名会被退回，不会当成没填。`;
 }
 
 /** 各册的填写提示。带封闭集或带反直觉判据的册把话说出来：那几件写错之后,从册名上看不出自己错在哪。 */
-export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKind, string> = {
-
+export const registrationSnapshotHints: Record<RuleBookRegistrableKind, string> = {
   MILESTONE_MAPPING: taskHint(
     'MILESTONE_MAPPING',
     '请填 version（这一版的编号）、approvedBy（批准人）、effectiveFrom（从何时起用）和 entries（至少一条）；每条填 source（环节：' +
@@ -159,16 +145,6 @@ export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKin
       'disclosable（要不要告诉客户，true / false）、autoRelease（能不能自动发出，只有要告诉客户时才能为 true）；要告诉客户时必填 content（文案），不告诉时不填。' +
       '同一版里同一客户、同一异常类型、同一可信度只能写一条。',
   ),
-  CLAIM_ELIGIBILITY: snapshotHint(
-    'CLAIM_ELIGIBILITY',
-    '覆盖索赔种类至少一项:一份不覆盖任何种类的责任范围声明会把索赔核成永久的「不予受理」,' +
-      '所以宁可不登这份声明——没有声明行时缺一个种类是「没人声明过」,那一格还能续办。',
-  ),
-  CLAIM_AUTHORIZATION: snapshotHint(
-    'CLAIM_AUTHORIZATION',
-    '申请人名单字段必须在场:不授权任何人写 [],那是「此账户当前不授权任何人代提」的显式决定;' +
-      '整个字段缺席是漏填,两者恢复动作不同,登记口不压成一格。',
-  ),
 };
 
 /**
@@ -188,7 +164,7 @@ export const registrationOutcomeLabels: Record<string, string> = {
  */
 export const registrationRefusalReasonLabels: Record<string, string> = {
   SCOPE_MISSING:
-    '缺少对象：通知时限要写对应的显示规则版本（policy），索赔资格要写合同、索赔授权要写客户，其余规则按提示写客户或类型。',
+    '缺少对象：通知时限要写对应的显示规则版本（policy），其余规则按提示写客户或类型。',
   VERSION_MISSING: '缺少版本号（version），请给这一版起一个编号。',
   APPROVAL_MISSING: '缺少批准人（approvedBy），请写上谁批准了这份规则。',
   EFFECTIVE_RANGE_MISSING: '缺少起用时间（effectiveFrom），请写从什么时候开始用。',

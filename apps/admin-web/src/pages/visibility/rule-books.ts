@@ -4,7 +4,7 @@
 // 照旧用）；配置员认的是它们**管什么事**：动态归成哪个状态、异常怎么分流、什么时候通知客户、客户能看到什么。所以签名、
 // 列名与提示都按管的事说，册名原词与版本号、批准人、原码一起进右栏「审计」与登记签的「技术详情」。
 //
-// 签词、登记标题、填写提示与登记答复表只在 presentation.ts 定义（索赔前置页也用它们），本文件只收这两页独有的：
+// 签词、登记标题、填写提示、登记答复表与环节词只在 presentation.ts 定义，本文件只收这两页独有的：
 // 每本册一句说明、领域册名原词、行模型。
 //
 // 码一律经用语词典（vocabulary/status.ts）译成中文：事实类型、里程碑、信号类型、可信度、渠道、义务判据都是租户登记的
@@ -12,25 +12,13 @@
 
 import type { TechnicalRow } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
-import { visibilityCatalogueKindLabels } from './presentation';
+import { sourceContextLabels, visibilityCatalogueKindLabels } from './presentation';
 import { formatInstant } from '../moment';
 import type {
   DisclosureCellRecord,
   VisibilityCatalogueKind,
   VisibilityCatalogueListResponseBody,
 } from './catalogue-api';
-
-/**
- * 动态来自哪个环节（源上下文封闭五元）。词按运营认的环节说：托运是「运单」、节点是「网点」、关务是「清关」；
- * 物流动态页的 sourceContextLabels 仍是那一页的说法，不在这里改它。
- */
-export const stageLabels: Record<string, string> = {
-  PARCEL_SHIPMENT: '运单',
-  NETWORK_ROUTING: '路线',
-  NODE_OPERATIONS: '网点',
-  TRANSPORT_FULFILLMENT: '运输',
-  CUSTOMS_COMPLIANCE: '清关',
-};
 
 export type JudgmentKind = 'MILESTONE_MAPPING' | 'TRIAGE_RULE' | 'CONFLICT_SIGNAL_RULE';
 export type DisclosureKind = 'NOTIFICATION_POLICY' | 'DISCLOSURE_POLICY' | 'EXCEPTION_DISCLOSURE_RULE';
@@ -154,7 +142,7 @@ export function ruleRowsOf(
           // 条目键取登记入口的防撞键（环节 + 动态类型）。
           key: `mapping:${catalogue.version}:${entry.source}:${entry.factKind}`,
           cells: {
-            source: stageLabels[entry.source] ?? entry.source,
+            source: sourceContextLabels[entry.source] ?? entry.source,
             fact: labelFor(entry.factKind),
             milestone: entry.milestone,
             effective: range(catalogue.effectiveFrom, catalogue.effectiveTo),
