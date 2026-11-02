@@ -8,14 +8,23 @@ import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { authorizedRerouteDecision, hiddenDecisionHint } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
-import { shipmentNoOf } from '../shipment-request/ref-no';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
+import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { StatusTone } from '../../vocabulary/status';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
 import { placeLabel } from './place-names';
 import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
-import { parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
+import {
+  parcelCell,
+  parcelColumnHeader,
+  parcelSearchCells,
+  parcelSubtitle,
+  parcelTitle,
+  shipmentTechnicalRows,
+  type RoutePlansHeader,
+  type ShipmentNumberOf,
+} from './route-plan-cells';
 import {
   decideReroute,
   listRerouteSuggestions,
@@ -66,9 +75,10 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
 
   const retry = () => setReloadKey((value) => value + 1);
   const suggestions = answer?.kind === 'outcome' ? answer.body.suggestions : [];
+  const numberOf = useShipmentNumbers(suggestions.map((row) => row.shipmentRequestId));
 
   const columns: WorkbenchColumn<RerouteSuggestionRecord>[] = [
-    { key: 'parcel', header: '运单', render: parcelCell },
+    { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
     { key: 'state', header: '状态', render: (row) => <RowStatusPill status={suggestionStatus(row)} /> },
     {
       key: 'candidates',
@@ -93,12 +103,12 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
       rowKey={(row) => row.correlationId}
       statusOf={suggestionStatus}
       rowAttention={(row) => row.state === 'PENDING'}
-      searchCells={(row) => [...parcelSearchCells(row, names), row.correlationId, row.reviewedPlan]}
+      searchCells={(row) => [...parcelSearchCells(row, names, numberOf), row.correlationId, row.reviewedPlan]}
       searchPlaceholder="搜运单号 / 包裹号 / 客户"
       columns={columns}
       sortAccessors={{ 'suggested-at': { value: (row) => row.suggestedAt, instant: true } }}
       defaultSort={{ key: 'suggested-at', dir: -1 }}
-      renderDetail={(row, close) => <SuggestionDetail key={row.correlationId} row={row} names={names} onClose={close} onLanded={retry} />}
+      renderDetail={(row, close) => <SuggestionDetail key={row.correlationId} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={retry} />}
       onRefresh={retry}
       viewState={catalogueViewState(answer, suggestions.length, retry, {
         module: info,
@@ -117,11 +127,13 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
 function SuggestionDetail({
   row,
   names,
+  numberOf,
   onClose,
   onLanded,
 }: {
   row: RerouteSuggestionRecord;
   names: Parameters<typeof parcelSubtitle>[1];
+  numberOf: ShipmentNumberOf;
   onClose: () => void;
   onLanded: () => void;
 }) {
@@ -131,7 +143,7 @@ function SuggestionDetail({
   const availability = rerouteDecisionAvailabilityOf(row);
   return (
     <RecordDetailPanel
-      title={shipmentNoOf(row.shipmentRequestId)}
+      title={parcelTitle(row, numberOf)}
       status={suggestionStatus(row)}
       subtitle={parcelSubtitle(row, names)}
       facts={[
@@ -141,7 +153,7 @@ function SuggestionDetail({
         { label: '决定', value: row.decision ? `${row.decision.candidate}（${formatInstant(row.decision.decidedAt)}）` : '还没有' },
       ]}
       technical={techRows([
-        { label: '运单标识', value: row.shipmentRequestId },
+        ...shipmentTechnicalRows(row, numberOf),
         { label: '包裹标识', value: row.declaredParcelId },
         { label: '客户编码', value: row.customerAccountId },
         { label: '所在复核', value: row.correlationId },
