@@ -2,346 +2,299 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
+import { objectNouns } from '../../vocabulary/objects';
+import { formatInstant } from '../moment';
+import { matchesSearch } from '../party/list-order';
+import { TwoLine, technicalRows } from '../settlement/ops-ui';
+import { namedRef, usePartyNames, type PartyNames } from '../settlement/party-names';
 import {
   listClaimsRecoveryRecords,
   type ApiResult,
   type ClaimItemRecord,
   type CustomerNotificationRecord,
-  type NotificationMilestoneRecord,
   type RecoveryActionRecord,
   type RecoveryMatterRecord,
 } from './case-api';
-import {
-  caseLabelOf,
-  claimConclusionLabels,
-  claimScreenLabels,
-  recoveryMilestoneLabels,
-} from './case-presentation';
+import { notificationScope, recoveryMilestoneScope } from './case-presentation';
+import { RowStatusPill } from './ExceptionDetailPanel';
+import { claimStatus, countByStatus, notificationStatus, type RowStatus } from './exception-list';
+import { exceptionViewState } from './exception-view-state';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
+// 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['claims-recovery'];
 
-// 三个对象族（客户异常通知、客户索赔项、追偿事项）各有独立生命周期与栏目，
-// 分页签呈现而不是折进一张表——CONTEXT 明文客户赔付不等待追偿完成、追偿
-// 不等待客户索赔，三者没有共同主状态可以共列。
-// 全页无任何金额列：客户赔付、供应商或保险追偿及其调整的最终金额由
-// settlement-accounting 形成（UC-SA-007），三本册子的行上连金额键都不存在。
-// 三页签各接一册（GET /claims-recovery-records，票 admin-skeleton-closure-batch/06）。
+// 索赔与追偿（visibility-exception），三签各接 GET /claims-recovery-records 的一本册。改版后列只放运营要看的：运单号、客户、
+// 类型、状态胶囊、时间与期限；各种编号、合同、依据引用进每行末尾的「技术详情」。
+//
+// 三个对象各有独立的生命周期，分签而不折进一张表：客户赔付不等追偿完成，追偿也不等客户索赔。全页没有金额列——赔付与
+// 追偿的金额在账务区形成，三本册的行上连金额都没有。首次索赔期限、对方响应与外部责任结论在行上没有登记格，不上列、不代填；
+// 「对方没响应」不等于拒绝，这层真话靠不上列保住。
 
-interface ReviewRow {
-  key: string;
-  values: Readonly<Record<string, string>>;
-}
+const tabContent = 'flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden';
 
-function col(
-  id: string,
-  header: string,
-  options?: { mono?: boolean; align?: 'left' | 'center' | 'right'; className?: string },
-): ListColumn<ReviewRow> {
-  return {
-    id,
-    header,
-    align: options?.align,
-    className: options?.className,
-    render: (row) =>
-      options?.mono ? (
-        <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span>
-      ) : (
-        (row.values[id] ?? '—')
-      ),
-  };
-}
-
-/** 通用的按册取数钩子：挂载时取一次，重试换 reloadKey。 */
-function useRegistry<Body>(fetchRegistry: () => Promise<ApiResult<Body>>, reloadKey: number) {
+function useClaimsRegistry<Body>(fetchRegistry: () => Promise<ApiResult<Body>>) {
   const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setAnswer(null);
     void fetchRegistry().then((result) => {
       if (!cancelled) setAnswer(result);
     });
     return () => {
       cancelled = true;
     };
-    // fetchRegistry 是模块级函数的绑定包装，身份稳定；依赖只随 reloadKey 变。
+    // fetchRegistry 是模块级函数，身份稳定；依赖只随刷新令牌变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadKey]);
-  return answer;
+  }, [reloadToken]);
+  return { answer, retry: () => setReloadToken((token) => token + 1) };
 }
 
-function filterRows(rows: ReviewRow[], search: string): ReviewRow[] {
-  const needle = search.trim().toLowerCase();
-  if (!needle) return rows;
-  return rows.filter((row) =>
-    Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-  );
+/** 「共 n 项 · 待审核 2 · 符合条件 1」：按状态词的计数接在总数后面。 */
+function countSummary<Row>(unit: string, rows: readonly Row[], statusOf: (row: Row) => RowStatus): string {
+  const parts = countByStatus(rows, statusOf).map((item) => `${item.label} ${item.count}`);
+  return [`共 ${rows.length} ${unit}`, ...parts].join(' · ');
 }
 
-// ---- 页签一：客户异常通知 ----
-
-/**
- * 通知过程节点按种类取最新登记时刻：渠道接受、送达与客户确认分别记录，本表不把
- * 它们折成一个「已通知」——哪个结果满足通知义务由客户合同与通知策略判断。
- */
-function milestoneCell(milestones: NotificationMilestoneRecord[], kind: string): string {
-  const nodes = milestones.filter((node) => node.milestone === kind);
-  if (nodes.length === 0) return '';
-  return formatInstant(nodes[nodes.length - 1].recordedAt);
+function customerCell(names: PartyNames, account: string) {
+  const ref = namedRef(names.account(account), account);
+  return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
 }
 
-/** 送达格：无 DELIVERED 时如实示最近一次失败（原尝试保留，失败不是终局）。 */
-function deliveredCell(milestones: NotificationMilestoneRecord[]): string {
-  const delivered = milestoneCell(milestones, 'DELIVERED');
-  if (delivered) return delivered;
-  const failed = milestoneCell(milestones, 'FAILED');
-  return failed ? `失败 · ${failed}` : '';
+function technicalColumn<Row>(rowsOf: (row: Row) => { label: string; value: string | undefined }[]): ListColumn<Row> {
+  return {
+    id: 'technical',
+    header: '',
+    className: 'align-top',
+    render: (row) => <TechnicalDetails rows={technicalRows(rowsOf(row))} className="max-w-md open:min-w-[18rem]" />,
+  };
 }
 
-const noticeColumns: ListColumn<ReviewRow>[] = [
-  col('notificationId', '通知标识', { mono: true }),
-  col('customer', '目标客户', { mono: true }),
-  col('episode', '对象范围（发作期）', { mono: true }),
-  col('content', '内容快照（引用）', { mono: true }),
-  col('policy', '披露依据', { mono: true }),
-  col('channel', '适用渠道', { mono: true }),
-  col('deadline', '要求时限', { mono: true }),
-  col('channelAccepted', '渠道接受', { align: 'center', mono: true }),
-  col('delivered', '送达', { align: 'center', mono: true }),
-  col('customerConfirmed', '客户确认', { align: 'center', mono: true }),
-];
+// —— 客户索赔签 ——
 
-function noticeRowsOf(records: CustomerNotificationRecord[]): ReviewRow[] {
-  return records.map((record) => ({
-    key: `notice:${record.notificationId}`,
-    values: {
-      notificationId: record.notificationId,
-      customer: record.customer,
-      episode: record.episode,
-      content: record.content,
-      policy: record.policy,
-      channel: record.channel,
-      deadline: formatInstant(record.deadline),
-      channelAccepted: milestoneCell(record.milestones, 'CHANNEL_ACCEPTED'),
-      delivered: deliveredCell(record.milestones),
-      customerConfirmed: milestoneCell(record.milestones, 'CUSTOMER_CONFIRMED'),
+function claimDeadline(item: ClaimItemRecord): string {
+  // 补资料期限获批延期会形成新版本、原期限保留；这里只显当前那一版，版本数进技术详情。
+  if (item.supplementDeadline) return `补资料截止 ${formatInstant(item.supplementDeadline)}`;
+  if (item.reviewBy) return `可申请复核至 ${formatInstant(item.reviewBy)}`;
+  return '—';
+}
+
+function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
+  return [
+    {
+      id: 'target',
+      header: objectNouns.shipmentNumber,
+      render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.target}</span>,
     },
-  }));
-}
-
-const fetchNotifications = () => listClaimsRecoveryRecords('customer-notification');
-
-function CustomerNoticesTable() {
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const answer = useRegistry(fetchNotifications, reloadKey);
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? noticeRowsOf(body.notifications) : [];
-  const visibleRows = filterRows(rows, search);
-
-  return (
-    <ListPageTemplate<ReviewRow>
-      title="客户异常通知"
-      description={`通知决定、渠道接受、送达与客户确认分别记录；赔付与追偿金额归 settlement-accounting`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索通知标识 / 目标客户' }}
-      filterSummary={body ? `客户异常通知 ${visibleRows.length} 行` : undefined}
-      columns={noticeColumns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, () => setReloadKey((v) => v + 1), {
-        module: info,
-        endpoint: 'GET /claims-recovery-records?registry=customer-notification',
-        emptyTitle: '当前租户尚无客户异常通知',
-        emptyDescription:
-          '读取入口已配置，登记册为空——通知义务由披露决定形成，事实在接入渠道墙后面，空册是预期不是缺陷。',
-      })}
-    />
-  );
-}
-
-// ---- 页签二：客户索赔项 ----
-
-/**
- * 索赔项列面：三判分步（收到、通过资格审核、确认赔偿责任是不同判断），各判的格
- * 分别转写不压并。骨架期的「首次索赔期限」列不在本表：项行上没有该登记格（合同侧
- * 口径，票 06 Comments），列出来只能代填。本表无金额列是边界不是遗漏。
- */
-const claimColumns: ListColumn<ReviewRow>[] = [
-  col('itemId', '索赔项标识', { mono: true }),
-  col('batch', '提交批次', { mono: true }),
-  col('customer', '货主客户账户', { mono: true }),
-  col('applicant', '代提申请人', { mono: true }),
-  col('target', '目标包裹 / 服务责任范围', { mono: true }),
-  col('kind', '索赔类型', { mono: true }),
-  col('submittedAt', '提交时刻', { mono: true }),
-  col('screen', '资格审核'),
-  col('conclusion', '责任结论'),
-  col('supplementDeadline', '资料补充期限', { mono: true }),
-  col('reviewBy', '结论复核期限', { mono: true }),
-  col('withdrawn', '客户撤回', { align: 'center' }),
-];
-
-function claimRowsOf(records: ClaimItemRecord[]): ReviewRow[] {
-  return records.map((record) => ({
-    key: `claim:${record.batch}:${record.itemId}`,
-    values: {
-      itemId: record.itemId,
-      batch: record.batch,
-      customer: record.customer,
-      applicant: record.applicant ?? '',
-      target: record.target,
-      kind: record.kind,
-      submittedAt: formatInstant(record.submittedAt),
-      screen: record.screen ? caseLabelOf(claimScreenLabels, record.screen) : '',
-      // 复核换版时前版结论照示（原结论保留在前版列，不翻旧插新）。
-      conclusion: record.conclusion
-        ? `${caseLabelOf(claimConclusionLabels, record.conclusion)}${
-            record.priorConclusion
-              ? `（复核自 ${caseLabelOf(claimConclusionLabels, record.priorConclusion)}）`
-              : ''
-          }`
-        : '',
-      // 获批延期形成新期限版本，原期限保留——版本数把「从未设过」与「延过几次」分开。
-      supplementDeadline: record.supplementDeadline
-        ? `${formatInstant(record.supplementDeadline)}${
-            record.deadlineVersions > 1 ? `（第 ${record.deadlineVersions} 版）` : ''
-          }`
-        : '',
-      reviewBy: record.reviewBy ? formatInstant(record.reviewBy) : '',
-      withdrawn: record.withdrawn
-        ? `已撤回${record.withdrawnAt ? ` · ${formatInstant(record.withdrawnAt)}` : ''}`
-        : '',
-    },
-  }));
+    { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
+    { id: 'kind', header: '索赔类型', className: 'whitespace-nowrap', render: (row) => labelFor(row.kind, 'claim-kind') },
+    { id: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={claimStatus(row)} /> },
+    { id: 'submitted', header: '提交时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.submittedAt) },
+    { id: 'deadline', header: '期限', className: 'whitespace-nowrap text-xs', render: claimDeadline },
+    technicalColumn((row) => [
+      { label: '索赔项编号', value: row.itemId },
+      { label: '提交批次', value: row.batch },
+      { label: '客户编码', value: row.customer },
+      { label: '代提申请人', value: row.applicant },
+      { label: '客户合同', value: row.contract },
+      { label: '索赔类型码', value: row.kind },
+      { label: '第几次更新', value: row.revision > 1 ? `第 ${row.revision} 次` : undefined },
+      { label: '资格审核', value: row.screen ? `${labelFor(row.screen)}（${row.screen}）` : undefined },
+      { label: '审核依据', value: row.screenBasis },
+      { label: '缺少的材料', value: row.missingMaterials },
+      { label: '补充范围', value: row.supplementScope },
+      { label: '补资料通知', value: row.supplementNotice },
+      { label: '期限版本数', value: row.deadlineVersions > 1 ? String(row.deadlineVersions) : undefined },
+      { label: '责任结论', value: row.conclusion ? `${labelFor(row.conclusion)}（${row.conclusion}）` : undefined },
+      { label: '结论时间', value: row.concludedAt ? formatInstant(row.concludedAt) : undefined },
+      { label: '复核前结论', value: row.priorConclusion ? labelFor(row.priorConclusion) : undefined },
+      { label: '撤回时间', value: row.withdrawnAt ? formatInstant(row.withdrawnAt) : undefined },
+    ]),
+  ];
 }
 
 const fetchClaims = () => listClaimsRecoveryRecords('claim-item');
 
-function CustomerClaimsTable() {
+function CustomerClaimsTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const answer = useRegistry(fetchClaims, reloadKey);
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? claimRowsOf(body.items) : [];
-  const visibleRows = filterRows(rows, search);
-
+  const { answer, retry } = useClaimsRegistry(fetchClaims);
+  const rows = answer?.kind === 'outcome' ? answer.body.items : [];
+  const visible = rows.filter((row) =>
+    matchesSearch(search, [row.target, row.itemId, row.customer, names.account(row.customer), labelFor(row.kind, 'claim-kind'), claimStatus(row).label]),
+  );
   return (
-    <ListPageTemplate<ReviewRow>
-      title="客户索赔项"
-      description={`最终赔付金额由 settlement-accounting 管理，本表无金额列是边界不是遗漏；首次索赔期限在项行上无登记格，不代填`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索索赔项标识 / 货主客户账户' }}
-      filterSummary={body ? `客户索赔项 ${visibleRows.length} 行` : undefined}
-      columns={claimColumns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, () => setReloadKey((v) => v + 1), {
+    <ListPageTemplate<ClaimItemRecord>
+      title="客户索赔"
+      description="客户就丢失、破损等提出的索赔：资格审核、责任认定各走到哪一步。赔付金额在账务区。"
+      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、客户、索赔类型…' }}
+      filterSummary={answer?.kind === 'outcome' ? countSummary('项', rows, claimStatus) : undefined}
+      columns={claimColumns(names)}
+      rows={visible}
+      rowKey={(row) => `${row.batch}:${row.itemId}`}
+      emptyRowsNote="没有匹配的索赔"
+      viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /claims-recovery-records?registry=claim-item',
-        emptyTitle: '当前租户尚无客户索赔项',
-        emptyDescription:
-          '读取入口已配置，登记册为空——索赔项由客户经受理面提交（/claims），事实在接入渠道墙后面，空册是预期不是缺陷。',
+        subject: '客户索赔',
+        emptyTitle: '还没有客户索赔',
+        emptyDescription: '客户通过客户系统提交索赔后会出现在这里；哪些合同能索赔、谁能代客户提，在「索赔资格与授权」里设定。',
       })}
     />
   );
 }
 
-// ---- 页签三：追偿事项 ----
+// —— 客户通知签 ——
 
-/** 动作格：该种类最近一个过程节点（词 · 第 n 次 · 时刻）；缺席即该种类尚无动作。 */
-function actionCell(action?: RecoveryActionRecord): string {
-  if (!action) return '';
-  return `${caseLabelOf(recoveryMilestoneLabels, action.milestone)} · 第 ${action.attempt} 次 · ${formatInstant(action.occurredAt)}`;
+function notificationColumns(names: PartyNames): ListColumn<CustomerNotificationRecord>[] {
+  return [
+    { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
+    { id: 'status', header: '通知进度', render: (row) => <RowStatusPill status={notificationStatus(row)} /> },
+    { id: 'channel', header: '通知渠道', className: 'font-mono text-xs', render: (row) => row.channel },
+    { id: 'deadline', header: '要求在此前通知', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.deadline) },
+    { id: 'decided', header: '决定通知时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.decidedAt) },
+    technicalColumn((row) => [
+      { label: '通知编号', value: row.notificationId },
+      { label: '客户编码', value: row.customer },
+      { label: '异常信号', value: row.episode },
+      { label: '通知内容', value: row.content },
+      { label: '披露策略', value: row.policy },
+      { label: '通知义务', value: row.obligation },
+      ...row.milestones.map((node) => ({
+        label: labelFor(node.milestone, notificationScope),
+        value: `${formatInstant(node.recordedAt)}（${node.milestone}）`,
+      })),
+    ]),
+  ];
 }
 
-/**
- * 追偿事项列面：事项要件与两类最新动作节点照行转写。骨架期的「对方响应」与
- * 「外部责任结论」列不在本表：两表在存储上都没有响应/结论登记格（票 06 Comments），
- * 列出来只能代填——「无响应」不自动等于拒绝，这层真话靠缺席保住。
- */
-const recoveryColumns: ListColumn<ReviewRow>[] = [
-  col('matterId', '追偿事项标识', { mono: true }),
-  col('counterparty', '责任相对方', { mono: true }),
-  col('basis', '责任依据', { mono: true }),
-  col('caseId', '关联异常案件', { mono: true }),
-  col('scope', '责任范围', { mono: true }),
-  col('legalEntity', '责任法人', { mono: true }),
-  col('preliminaryNotice', '预先通知', { mono: true }),
-  col('formalAssertion', '正式主张', { mono: true }),
-  col('deadline', '适用期限', { mono: true }),
-  col('openedAt', '发起时刻', { mono: true }),
-];
+const fetchNotifications = () => listClaimsRecoveryRecords('customer-notification');
 
-function recoveryRowsOf(records: RecoveryMatterRecord[]): ReviewRow[] {
-  return records.map((record) => ({
-    key: `recovery:${record.matterId}`,
-    values: {
-      matterId: record.matterId,
-      counterparty: record.counterparty,
-      basis: record.basis,
-      caseId: record.caseId,
-      scope: record.scope,
-      legalEntity: record.legalEntity,
-      // 预先通知与正式主张是不同动作，不能合并为一个模糊的「已追偿」——两格各示
-      // 该种类最近节点，准备完成不等于已经对外提交（节点词如实转写）。
-      preliminaryNotice: actionCell(record.preliminaryNotice),
-      formalAssertion: actionCell(record.formalAssertion),
-      deadline: formatInstant(record.deadline),
-      openedAt: formatInstant(record.openedAt),
+function CustomerNoticesTable({ names }: { names: PartyNames }) {
+  const [search, setSearch] = useState('');
+  const { answer, retry } = useClaimsRegistry(fetchNotifications);
+  const rows = answer?.kind === 'outcome' ? answer.body.notifications : [];
+  const visible = rows.filter((row) =>
+    matchesSearch(search, [row.notificationId, row.customer, names.account(row.customer), row.channel, notificationStatus(row).label]),
+  );
+  return (
+    <ListPageTemplate<CustomerNotificationRecord>
+      title="客户通知"
+      // 进度只示最后一步走到哪；渠道接受、送达、客户确认在技术详情里逐条可查，哪一步算「已通知」由客户合同与通知策略定。
+      description="出了异常需要告诉客户时的通知：发出、送达、客户确认各走到哪一步，要在什么时间前通知到。"
+      search={{ value: search, onChange: setSearch, placeholder: '搜客户、通知渠道…' }}
+      filterSummary={answer?.kind === 'outcome' ? countSummary('条', rows, notificationStatus) : undefined}
+      columns={notificationColumns(names)}
+      rows={visible}
+      rowKey={(row) => row.notificationId}
+      emptyRowsNote="没有匹配的通知"
+      viewState={exceptionViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /claims-recovery-records?registry=customer-notification',
+        subject: '客户通知',
+        emptyTitle: '还没有客户通知',
+        emptyDescription: '异常按「设置 · 通知与披露」的规则决定要告诉客户时，通知会出现在这里。',
+      })}
+    />
+  );
+}
+
+// —— 追偿签 ——
+
+/** 一类追偿动作走到哪一步：节点胶囊，重试过的另注第几次；还没有动作如实说「还没有」。 */
+function actionCell(action: RecoveryActionRecord | undefined) {
+  if (!action) return <span className="text-xs text-idpxyz-breadcrumb">还没有</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <StatusPill code={action.milestone} scope={recoveryMilestoneScope(action.milestone)} />
+      <span className="font-mono text-[11px] text-idpxyz-textMuted">
+        {formatInstant(action.occurredAt)}
+        {action.attempt > 1 ? ` · 第 ${action.attempt} 次` : ''}
+      </span>
+    </span>
+  );
+}
+
+function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] {
+  return [
+    {
+      id: 'counterparty',
+      header: '向谁追偿',
+      className: 'whitespace-nowrap',
+      render: (row) => {
+        const ref = namedRef(names.party(row.counterparty), row.counterparty);
+        return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
+      },
     },
-  }));
+    // 预先通知与正式主张是两类动作，各示各的最近一步，不合并成一个「已追偿」。
+    { id: 'notice', header: '预先通知', render: (row) => actionCell(row.preliminaryNotice) },
+    { id: 'assertion', header: '正式主张', render: (row) => actionCell(row.formalAssertion) },
+    { id: 'deadline', header: '追偿期限', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.deadline) },
+    { id: 'opened', header: '发起时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.openedAt) },
+    technicalColumn((row) => [
+      { label: '追偿编号', value: row.matterId },
+      { label: '异常案件', value: row.caseId },
+      { label: '责任方编码', value: row.counterparty },
+      { label: '责任范围', value: row.scope },
+      { label: '责任依据', value: row.basis },
+      { label: objectNouns.companyEntity, value: row.legalEntity },
+      { label: '证据', value: row.evidence },
+    ]),
+  ];
 }
 
 const fetchRecoveries = () => listClaimsRecoveryRecords('recovery-matter');
 
-function RecoveryMattersTable() {
+function RecoveryMattersTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const answer = useRegistry(fetchRecoveries, reloadKey);
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? recoveryRowsOf(body.matters) : [];
-  const visibleRows = filterRows(rows, search);
-
+  const { answer, retry } = useClaimsRegistry(fetchRecoveries);
+  const rows = answer?.kind === 'outcome' ? answer.body.matters : [];
+  const visible = rows.filter((row) => matchesSearch(search, [row.matterId, row.caseId, row.counterparty, names.party(row.counterparty)]));
   return (
-    <ListPageTemplate<ReviewRow>
-      title="追偿事项"
-      description={`追偿金额由 settlement-accounting 形成；预先通知与正式主张不合并为「已追偿」；对方响应与外部结论在存储上无登记格，不代填`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索追偿事项标识 / 责任相对方' }}
-      filterSummary={body ? `追偿事项 ${visibleRows.length} 行` : undefined}
-      columns={recoveryColumns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, () => setReloadKey((v) => v + 1), {
+    <ListPageTemplate<RecoveryMatterRecord>
+      title="追偿"
+      description="异常的责任在承运商、代理或保险时，向他们追回损失：预先通知与正式主张各走到哪一步。追偿金额在账务区。"
+      search={{ value: search, onChange: setSearch, placeholder: '搜责任方、案件编号…' }}
+      filterSummary={answer?.kind === 'outcome' ? `共 ${rows.length} 项` : undefined}
+      columns={recoveryColumns(names)}
+      rows={visible}
+      rowKey={(row) => row.matterId}
+      emptyRowsNote="没有匹配的追偿"
+      viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /claims-recovery-records?registry=recovery-matter',
-        emptyTitle: '当前租户尚无追偿事项',
-        emptyDescription:
-          '读取入口已配置，登记册为空——追偿在通知或主张条件成立时由内部编排发起，事实在接入渠道墙后面，空册是预期不是缺陷。',
+        subject: '追偿',
+        emptyTitle: '还没有追偿',
+        emptyDescription: '异常案件查明责任在合作伙伴一方、需要向对方追回时，追偿会出现在这里。',
       })}
     />
   );
 }
 
 /**
- * 索赔与追偿（visibility-exception）。页签顺序按对象族在客户方向的发生序：
- * 先有披露（客户异常通知），客户才可能提出索赔项；追偿独立于两者发起。
+ * 索赔与追偿。签的顺序按客户方向的发生先后：先有客户索赔这件运营最常处理的事，再是异常通知，追偿独立发起排最后。
+ * 客户名与责任方名从往来单位册转写，读不到时显编码。
  */
 export function ClaimsRecoveryPage() {
+  const names = usePartyNames();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="notices" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs defaultValue="claims" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="notices">客户异常通知</TabsTrigger>
-          <TabsTrigger value="claims">客户索赔项</TabsTrigger>
-          <TabsTrigger value="recoveries">追偿事项</TabsTrigger>
+          <TabsTrigger value="claims">客户索赔</TabsTrigger>
+          <TabsTrigger value="notices">客户通知</TabsTrigger>
+          <TabsTrigger value="recoveries">追偿</TabsTrigger>
         </TabsList>
-        <TabsContent value="notices" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerNoticesTable />
+        <TabsContent value="claims" className={tabContent}>
+          <CustomerClaimsTable names={names} />
         </TabsContent>
-        <TabsContent value="claims" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerClaimsTable />
+        <TabsContent value="notices" className={tabContent}>
+          <CustomerNoticesTable names={names} />
         </TabsContent>
-        <TabsContent value="recoveries" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <RecoveryMattersTable />
+        <TabsContent value="recoveries" className={tabContent}>
+          <RecoveryMattersTable names={names} />
         </TabsContent>
       </Tabs>
     </div>
