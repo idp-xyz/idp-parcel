@@ -1,7 +1,7 @@
 # 72 管理台路由计划页列出计划各段，契约夹具补上 `legs`
 
 Category: enhancement
-Status: in-progress——2026-11-01 解冻：用户要求管理台改版「不要留下尾巴」，协调方派给线路与运力作者（分支 `claude-rd4-route`）。实现完成，待非作者评审；此前 ready-for-human（2026-10-27 冻结，分级 R3），再此前 needs-triage。
+Status: resolved——2026-11-01 进 main（全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-01 解冻：用户要求管理台改版「不要留下尾巴」，协调方派给线路与运力作者（分支 `claude-rd4-route`）。实现完成，待非作者评审；此前 ready-for-human（2026-10-27 冻结，分级 R3），再此前 needs-triage。
 Blocked by: [64](./64-route-plan-carries-a-delivery-leg.md)（`legs` 一键随它进 main）
 地盘：`apps/admin-web/src/pages/network/**`（`api.ts`、`route-plans.contract.test.ts` 与路由计划页）；另有后端一处：`internal/networkrouting/adapters/http/query_route_plans_test.go` 里钉契约夹具的那条用例与 `testdata/route_plans_initial_route.json`。diff 不全在 `apps/admin-web/**`，不走前端直做流程，照常开分支。
 出处：[ADR-0217](../../../docs/adr/0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 越权风险点 7。
@@ -53,3 +53,11 @@ S
 - 阻断 S1「未登记名称」不诚实：删掉右栏「名称」格、行下的「未登记名称」与 `unregisteredNameWord`，改成页头的册级说法（见上节）。
 - 非阻断：夹具用例注释改成说夹具钉的是什么形状，不写变更叙事；交接单右栏补回关闭时刻；交接单确认按授予收起；本节与上节写进票面。
 - 自验重跑：`apps/admin-web` 的 `tsc -b`、`pnpm test`、`vite build` 都过；`gofmt -l internal/networkrouting/` 干净，`go vet` 与 `go test -count=1 ./internal/networkrouting/adapters/http/` 通过。浏览器（5181 接 19080，只读）：两页页头显册级说明，行首与右栏不再有「未登记名称」。交接单库里没有数据，确认按钮的收起只过了类型与单测，没在浏览器里看过。
+
+## 评审记录（2026-11-01，隔离子代理，首轮钉 `febab728b`，复评钉 `0c9246466`）
+
+首轮 Spec 0 阻断、Standards 1 阻断；复评阻断清零。前提核实：网点（`ports.NodeDefinitionVersion`、读口 `nodeVersionBody`、登记 JSON 拒未知字段）与口岸（`domain.CustomsPortRecord`、读口 `candidatePortBody`）确实没有名称这一格，CONTEXT、GLOSSARY、ADR 里也没有。首轮阻断：「未登记名称」是行级缺席的说法，暗示租户漏填一个不存在的字段，且与 customs-compliance「口岸未登记」撞词——修订轮删去，改为两页页头的册级说明。分段夹具：段的键、取值与 `plannedLegBody`、`PlannedLegKind.String()`、`NewPlannedLegReference` 一致，`-update` 只给成计划行加了 `legs`；漂移探针（夹具改名 / 删键 / 多键、TS 侧改名）两侧测试都红。预报与交接单客户名取自客户账户册、查不到显码。非阻断均已处理：交接单关闭时刻放回事实格；交接确认按 `DELIVERY_HANDOVER_CONFIRMATION` 收起（与服务端 `accessidentity.DecisionDeliveryHandoverConfirmation` 及写口守卫一致）；本区四处决定入口的授予原词收成常量由单测钉住，收起时原处说一句谁能用（同 `hiddenEntryHint` 说法，`2f5f2adfc`，协调方核过未再派复评）；两处注释改写。留给后续：用户已裁定给网点与口岸加可选显示名称（`place-display-names/01`），那张票进 main 时须同时替换两页页头「只登编码，不登名称」的说明与注释。
+
+## 进 main 记录（2026-11-01，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-rd4-route` tip `2f5f2adfc` 作出处；隔离树把 `b2c1505c7..2f5f2adfc` cherry-pick 到 main `b2c1505c7`，无冲突；生成物重生成无变化，两项 `-check` 退 0；对 `02aa6c3d9` 跑全量 164 ok / 0 FAIL（含 PG）；种子一次性库 `seed_rd4route` 退 0 后删库；管理台 `tsc -b` 过。本笔票面与冻结清单簿记只动 `.md`，叠在验过的树上推确切 SHA。

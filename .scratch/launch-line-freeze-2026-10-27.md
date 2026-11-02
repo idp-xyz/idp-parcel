@@ -127,7 +127,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [demo-chain-gaps/issues/51-supplier-agreement-catalogue-does-not-show-charge-conditions.md](./demo-chain-gaps/issues/51-supplier-agreement-catalogue-does-not-show-charge-conditions.md) | 目录读面/规则在线登记，展示与便利 |
 | [demo-chain-gaps/issues/52-departure-gate-signal-rule-has-no-online-registration-or-catalogue-read.md](./demo-chain-gaps/issues/52-departure-gate-signal-rule-has-no-online-registration-or-catalogue-read.md) | 目录读面/规则在线登记，展示与便利 |
 | [demo-chain-gaps/issues/58-adoption-does-not-check-commission-members-against-segment-objects.md](./demo-chain-gaps/issues/58-adoption-does-not-check-commission-members-against-segment-objects.md) | 票面等用户决定，本身是范围增强 |
-| [demo-chain-gaps/issues/72-admin-web-route-plans-shows-planned-legs.md](./demo-chain-gaps/issues/72-admin-web-route-plans-shows-planned-legs.md) | 读面、展示或下游信号增强 |
+| [demo-chain-gaps/issues/72-admin-web-route-plans-shows-planned-legs.md](./demo-chain-gaps/issues/72-admin-web-route-plans-shows-planned-legs.md) | 读面、展示或下游信号增强 2026-11-01 用户点名解冻（管理台改版「不要留下尾巴」），已 resolved |
 | [demo-chain-gaps/issues/73-route-reassessments-register-lists-the-new-plan-legs.md](./demo-chain-gaps/issues/73-route-reassessments-register-lists-the-new-plan-legs.md) | 读面、展示或下游信号增强 |
 | [demo-chain-gaps/issues/76-cancellation-charge-only-registers-at-booking-level.md](./demo-chain-gaps/issues/76-cancellation-charge-only-registers-at-booking-level.md) | 票面等用户决定，本身是范围增强 |
 | [demo-chain-gaps/issues/79-admin-web-handover-register-shows-declared-nodes.md](./demo-chain-gaps/issues/79-admin-web-handover-register-shows-declared-nodes.md) | 读面、展示或下游信号增强 |
