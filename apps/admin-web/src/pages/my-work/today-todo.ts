@@ -106,7 +106,7 @@ export function pendingPublicationCount(body: { drafts: unknown[] }): number {
   return body.drafts.length;
 }
 
-/** 卡关：读口给了全部件数（每个对象最近那份放行检查没过门的），列表可能截断，用件数。 */
+/** 卡关：读口给了全部件数（每个对象最近那一刻的放行检查有一份没过门的），列表可能截断，用件数。 */
 export function unadmittedObjectCount(body: { unadmittedCount: number }): number {
   return body.unadmittedCount;
 }

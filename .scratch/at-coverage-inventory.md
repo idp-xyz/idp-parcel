@@ -579,7 +579,7 @@
 | `AT-SA-070` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-071` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-072` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
-| `AT-SA-073` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
+| `AT-SA-073` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped；internal/settlementaccounting/adapters/postgres/inventory_closeout_test.go::TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution（存储半边：待复核可再处理、终局不再改写） |
 | `AT-SA-076` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
 | `AT-SA-077` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
 | `AT-SA-079` | internal/settlementaccounting/domain/supplier_bill_test.go::TestABillClaimArrivalIsNotAPayable |

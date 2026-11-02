@@ -29,7 +29,7 @@ export function casesTabOf(hash: string): CasesTab {
   return (casesTabs as readonly string[]).includes(tab) ? (tab as CasesTab) : 'cases';
 }
 
-/** 放行记录签是否只看卡关的对象（每个对象最近那份放行检查没过门的）。 */
+/** 放行记录签是否只看卡关的对象（每个对象最近那一刻的放行检查有一份没过门的）。 */
 export function unadmittedOnlyOf(hash: string): boolean {
   return hashQueryValue(hash, CASES_ONLY_PARAM) === UNADMITTED;
 }

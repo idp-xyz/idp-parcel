@@ -149,6 +149,52 @@ func TestAStatementDisputeReplaceWritesResolutionNotTheStatement(t *testing.T) {
 	}
 }
 
+// Covers: AT-SA-073、UC-SA-003「争议处理形成接受、部分接受、拒绝或待复核结果」——待复核不是终局，Replace 让它再处理；再处理成
+// 拒绝之后是终局，再来一次答 false。可不可再处理与「挂着未了结争议」的读面从同一份终局词形判（domain.DisputeResolutionKind.Final）。
+func TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution(t *testing.T) {
+	_, disputes, _, _, transactor, _ := newCloseoutStores(t)
+	ctx := t.Context()
+
+	opened := formedDisputeRecord(t, "tenant-a", "dispute-pending", false)
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := disputes.Save(txCtx, opened)
+		return err
+	})
+	replace := func(kind domain.DisputeResolutionKind, at time.Time) bool {
+		t.Helper()
+		resolved, err := opened.Dispute.Resolve(kind, saValue(t, domain.NewDisputeBasisReference, "basis-"+kind.String()), at)
+		if err != nil {
+			t.Fatalf("构造 %s：%v", kind, err)
+		}
+		record := opened
+		record.Dispute = resolved
+		record.RecordedAt = at
+		var replaced bool
+		saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			replaced, err = disputes.Replace(txCtx, record)
+			return err
+		})
+		return replaced
+	}
+	if !replace(domain.DisputePendingReview, disputeRuled) {
+		t.Fatal("未处理的争议没能处理成待复核")
+	}
+	if !replace(domain.DisputeRejected, disputeRuled.Add(time.Hour)) {
+		t.Fatal("待复核没能再处理成拒绝")
+	}
+	if replace(domain.DisputeAccepted, disputeRuled.Add(2*time.Hour)) {
+		t.Fatal("拒绝是终局，不该再被改写")
+	}
+	after, _, err := disputes.FindByKey(ctx, opened.Key)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	if kind, _, _, resolved := after.Dispute.Resolution(); !resolved || kind != domain.DisputeRejected {
+		t.Fatalf("库上应停在拒绝：%+v", after.Dispute)
+	}
+}
+
 func TestRecoveryAndClaimAdjustmentsRoundTrip(t *testing.T) {
 	_, _, recoveries, claims, transactor, _ := newCloseoutStores(t)
 	ctx := t.Context()

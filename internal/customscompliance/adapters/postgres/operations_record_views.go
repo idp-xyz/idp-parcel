@@ -429,10 +429,11 @@ func completeAdmissionJudgement(
 
 // —— 卡关对象 ——
 
-// unadmittedAnswers 是不让动作过门的那几格的库上词形，取自 domain.AdmissionAnswer.Admits，不在 SQL 里另抄一份。
+// unadmittedAnswers 是不让动作过门的那几格的库上词形：从领域给的全集里按 domain.AdmissionAnswer.Admits 挑，不在 SQL 里另抄一份，
+// 也不依赖常量的次序。
 var unadmittedAnswers = func() []string {
 	var words []string
-	for answer := domain.AdmissionNotGuarded; answer <= domain.AdmissionBlocked; answer++ {
+	for _, answer := range domain.AdmissionAnswers() {
 		if !answer.Admits() {
 			words = append(words, answer.String())
 		}
@@ -440,8 +441,10 @@ var unadmittedAnswers = func() []string {
 	return words
 }()
 
-// ListUnadmittedObjects 每个对象取动作时点最晚的那份判断（同一时点再按判断时刻），留下不让动作过门的。
-// 「最近」按动作时点而不按判断时刻：执行方晚报的一次早先动作不该盖过它之后那次动作的答复。
+// ListUnadmittedObjects 每个对象看它动作时点最晚的那一刻：那一刻上只要有一份判断不让动作过门，这个对象就算卡关，只计一次。
+// 「最近」按动作时点而不按判断时刻：执行方晚报的一次早先动作不该盖过它之后那次动作的答复。同一刻上可以有几份判断（同一时点
+// 问了交出又问了出发，标识里带着意图，各成一行）；其中一份被挡，那一刻就有一件事没做成，不让同一刻的另一份放行把它盖掉。
+// 每个对象交回的是那一刻上不过门的判断里判断时刻最晚的一份。
 //
 // 件数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，件数是全部卡关对象而不是这一页；分两条语句求，
 // 两次读之间进来的判断会让件数与这一页对不上。没有卡关对象时一行都没有，件数如实是 0。
@@ -451,18 +454,25 @@ func (views *OperationsRecordViews) ListUnadmittedObjects(
 	limit int,
 ) (ports.UnadmittedObjects, error) {
 	rows, err := views.query(ctx, "unadmitted objects", limit,
-		`WITH latest AS (
-		     SELECT DISTINCT ON (object_ref)
-		            judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
-		            cross_zone, answer, zones, findings, judged_at
+		`WITH latest_at AS (
+		     SELECT object_ref, max(action_at) AS action_at
 		       FROM customs_compliance.action_admission_judgement
 		      WHERE tenant_id = $1
-		      ORDER BY object_ref, action_at DESC, judged_at DESC, judgement_id DESC
+		      GROUP BY object_ref
+		 ),
+		 stuck AS (
+		     SELECT DISTINCT ON (j.object_ref)
+		            j.judgement_id, j.object_ref, j.intent_kind, j.node_ref, j.onward_node_ref, j.action_at,
+		            j.cross_zone, j.answer, j.zones, j.findings, j.judged_at
+		       FROM customs_compliance.action_admission_judgement AS j
+		       JOIN latest_at AS l ON l.object_ref = j.object_ref AND l.action_at = j.action_at
+		      WHERE j.tenant_id = $1
+		        AND j.answer = ANY($2)
+		      ORDER BY j.object_ref, j.judged_at DESC, j.judgement_id DESC
 		 )
 		 SELECT judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
 		        cross_zone, answer, zones, findings, judged_at, count(*) OVER ()
-		   FROM latest
-		  WHERE answer = ANY($2)
+		   FROM stuck
 		  ORDER BY action_at, object_ref
 		  LIMIT $3`,
 		tenant.String(), unadmittedAnswers, limit)
