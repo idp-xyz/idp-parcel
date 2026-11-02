@@ -597,6 +597,14 @@ func (unwiredRequestViews) ListVisibleByDocumentNumber(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredRequestViews) ListVisibleByIDs(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	[]shipmentdomain.ShipmentRequestID,
+) ([]shipmentports.ShipmentRequestSummaryRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredManualReview struct{}
 
 func (unwiredManualReview) Handle(
