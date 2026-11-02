@@ -57,6 +57,7 @@ export function SupplierBillLineAuditForm({
   currency,
   submit,
   onSettled,
+  onDone,
   onCancel,
 }: {
   target: LineAuditTarget;
@@ -65,6 +66,8 @@ export function SupplierBillLineAuditForm({
   submit: (payload: RangedAuditPayload) => Promise<ApiResult<RangedAuditAnswer>>;
   /** 至少一段记下了（或本来就有）：重读这张账单。 */
   onSettled: () => void;
+  /** 每一段都记下了：表单收起，答复交给这一行接着说。 */
+  onDone: (answers: string[]) => void;
   onCancel: () => void;
 }) {
   const [rows, setRows] = useState<AuditRowDraft[]>(() => [firstAuditRow(context, newId())]);
@@ -118,29 +121,14 @@ export function SupplierBillLineAuditForm({
       }
     }
     setPending(false);
-    setAnswers(said);
     if (settled) onSettled();
     if (left.length === 0) {
-      setRows([]);
+      onDone(said);
       return;
     }
+    setAnswers(said);
     setRows(left);
   };
-
-  if (rows.length === 0) {
-    return (
-      <div className="mt-1.5 space-y-1">
-        {answers.map((answer, index) => (
-          <p key={index} role="status" className="rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
-            {answer}
-          </p>
-        ))}
-        <Button type="button" size="sm" variant="ghost" className="h-6 px-1.5 text-[12px] text-idpxyz-link" onClick={onCancel}>
-          收起
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <form

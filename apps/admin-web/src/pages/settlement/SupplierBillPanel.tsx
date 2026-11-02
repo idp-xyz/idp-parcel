@@ -119,6 +119,12 @@ function LineCard({
   onShowPayable: (number: string) => void;
 }) {
   const [form, setForm] = useState<OpenForm | null>(null);
+  // 上一张表单每段都记下了之后的答复：表单收起，这几句留在这一行，开下一张表单时清掉。
+  const [answers, setAnswers] = useState<string[]>([]);
+  const openForm = (next: OpenForm) => {
+    setAnswers([]);
+    setForm(next);
+  };
   const currency = row.currency;
   const disposition = lineDisposition(line);
   const headroom = passHeadroom(line.matchedAmount, line.decisions);
@@ -165,10 +171,15 @@ function LineCard({
           <p className="mt-1 text-[11px] text-idpxyz-breadcrumb">{tallyWords(line, currency)}</p>
         </>
       ) : null}
+      {answers.map((answer, index) => (
+        <p key={index} role="status" className="mt-1.5 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+          {answer}
+        </p>
+      ))}
       {mayAudit && form === null ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {disposition.auditable ? (
-            <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => setForm({ kind: 'audit' })}>
+            <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => openForm({ kind: 'audit' })}>
               审核这一行
             </Button>
           ) : null}
@@ -179,7 +190,7 @@ function LineCard({
               size="sm"
               variant="outline"
               className="h-7 text-[12px]"
-              onClick={() => setForm({ kind: 'reaudit', dispute: entry.dispute.decision })}
+              onClick={() => openForm({ kind: 'reaudit', dispute: entry.dispute.decision })}
             >
               核实后再审争议中的 {formatMoney(String(totalOf(entry.open)), currency)}
             </Button>
@@ -194,6 +205,10 @@ function LineCard({
           currency={currency}
           submit={submit}
           onSettled={onSettled}
+          onDone={(said) => {
+            setForm(null);
+            setAnswers(said);
+          }}
           onCancel={() => setForm(null)}
         />
       ) : null}
