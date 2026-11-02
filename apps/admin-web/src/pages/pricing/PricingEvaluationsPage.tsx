@@ -1,79 +1,77 @@
 import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { technicalRows } from '../settlement/ops-ui';
+import { CountChips } from './CountChips';
 import {
   listPricingEvaluations,
   type PricingEvaluationListResponseBody,
   type PricingEvaluationRecord,
 } from './api';
-import { evaluationStatusLabels, labelOf } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['pricing-evaluation'];
 
-// 本页接 GET /pricing-evaluations（票 admin-skeleton-closure-batch/03 阶段二）。
-// 上列的是评价登记册的检索列面——评价是业务事实不是主数据，册上只有引用、
-// 状态与比对列；语义细节住在评价快照（jsonb）内，属详情读法，端点不透出。
+// 计费记录（领域里叫「价格评价」）：每算一次价就留一条，争议复核时按它回放。读口只交编号、结果、两条摘要、规范化版本与
+// 登记时间——金额与算法细节住在评价快照里，列面不透出，所以本页不显示金额，也不用 0 顶替（CONTEXT 硬句「不得以金额为零的
+// 已完成评价表达不可计价」）。两条摘要与规范化版本是争议复核对账用的比对串，运营不每天看，进「技术详情」，展开后全文
+// 可复制（截半就不能比对）。
 //
-// 旧骨架各栏随对栏裁定处置（判据同结算申请页：目录事实只有本册登了什么）：
-//   评价对象、价格方向、计算目的、计价基准时点、版本清单——**全撤**。五者都住在
-//     快照内，检索列面上册级缺席；留栏就是请页面去拆 jsonb 自造第二个权威读法。
-//   结算币种金额——**全撤且不换栏**。CONTEXT 硬句「不得以金额为零的已完成评价表达
-//     不可计价」；列面不透出金额，连用 0 顶替的机会也不给。金额归详情读法。
-//   加两栏：语义摘要与计划内容摘要（ADR-0014 的双摘要比对列，争议复核按此对账）、
-//     规范化版本。摘要是 64 位十六进制，照登全文不截断——比对列截半就不能比对。
-//   分页——**撤**。端点无分页参数，一次交回注入上限内的行（与代收分户账页同款）。
+// 结果五格照词典的 pricing-evaluation 分册译：「未形成」是该重试的故障，「不可计价」是终局业务判断，两词分开、色也分开。
+
+const STATUS_SCOPE = 'pricing-evaluation';
+
+// 结果胶囊的固定顺序：先要人看的，再已完成。集外取值不进胶囊，但行照常显示、胶囊格如实露码。
+const statusOrder = ['PENDING', 'CONFLICT', 'FAILED', 'UNRATABLE', 'COMPLETED'] as const;
+
+function evaluationTechnicalRows(row: PricingEvaluationRecord) {
+  return technicalRows([
+    { label: '计费编号', value: row.evaluationId },
+    { label: '结果码', value: row.status },
+    { label: '计算内容摘要', value: row.semanticDigest },
+    { label: '价格表内容摘要', value: row.planContentDigest },
+    { label: '规范化版本', value: row.canonicalization },
+  ]);
+}
+
 const columns: ListColumn<PricingEvaluationRecord>[] = [
   {
-    id: 'evaluation-id',
-    header: '评价引用',
-    className: 'font-mono text-xs',
-    render: (row) => <span className="text-idpxyz-accent">{row.evaluationId}</span>,
+    id: 'evaluation',
+    header: '计费编号',
+    className: 'font-mono text-xs text-idpxyz-textBright',
+    render: (row) => row.evaluationId,
   },
   {
     id: 'status',
     header: '结果',
-    align: 'center',
-    className: 'w-[88px]',
-    // 封闭五格词表转写；集外取值原样显示，不代折成已知格。
-    render: (row) => labelOf(evaluationStatusLabels, row.status),
-  },
-  {
-    id: 'semantic-digest',
-    header: '语义摘要',
-    className: 'font-mono text-xs min-w-64',
-    render: (row) => row.semanticDigest,
-  },
-  {
-    id: 'plan-digest',
-    header: '计划内容摘要',
-    className: 'font-mono text-xs min-w-64',
-    render: (row) => row.planContentDigest,
-  },
-  {
-    id: 'canonicalization',
-    header: '规范化版本',
-    align: 'center',
-    className: 'w-[104px] font-mono text-xs',
-    render: (row) => row.canonicalization,
+    render: (row) => <StatusPill code={row.status} scope={STATUS_SCOPE} />,
   },
   {
     id: 'recorded-at',
-    header: '登记时间',
-    className: 'min-w-44 font-mono text-xs',
+    header: '计费时间',
+    className: 'whitespace-nowrap font-mono text-xs',
     render: (row) => formatInstant(row.recordedAt),
+  },
+  {
+    id: 'technical',
+    header: '',
+    className: 'align-top',
+    render: (row) => <TechnicalDetails rows={evaluationTechnicalRows(row)} className="max-w-md open:min-w-[22rem]" />,
   },
 ];
 
 /**
- * 价格评价：已保存评价的登记册查阅面，服务争议复核与回放场景的检索一步。
- * 页面没有「重算 / 修改」动作——已完成评价不可变；回放属「发起一次新评价」，
- * 入口归渠道墙后的评价编排，不在查阅面上。
+ * 计费记录：系统每次按价格表算价留下的记录，查争议、对账单时按编号找到那一次。
+ * 页面没有「重算 / 修改」：算过的记录不改，要重算是发起一次新的计费。
  */
 export function PricingEvaluationsPage() {
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<PricingEvaluationListResponseBody> | null>(null);
 
@@ -90,40 +88,48 @@ export function PricingEvaluationsPage() {
 
   const evaluations = answer?.kind === 'outcome' ? answer.body.evaluations : [];
   const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的行上做，不下推成查询参数——那要改端点契约。可检索字段即列面
-  // 的引用与两条摘要（比对场景手里拿的就是这三种串）。
-  const visibleEvaluations = needle
-    ? evaluations.filter((row) =>
-        [row.evaluationId, row.semanticDigest, row.planContentDigest].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
-    : evaluations;
+  // 过滤只在已取回的行上做，不下推成查询参数——那要改端点契约。比对场景手里拿的就是编号或两条摘要，三样都能搜。
+  const visibleEvaluations = evaluations.filter(
+    (row) =>
+      (status === null || row.status === status) &&
+      (needle === '' ||
+        [row.evaluationId, row.semanticDigest, row.planContentDigest].some((value) => value.toLowerCase().includes(needle))),
+  );
   const retry = () => setReloadKey((value) => value + 1);
+  const countOf = (code: string) => evaluations.filter((row) => row.status === code).length;
 
   return (
     <ListPageTemplate<PricingEvaluationRecord>
       title={info.title}
-      description={`登记册检索列面；语义细节与金额住在评价快照内，属详情读法`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索评价引用 / 语义摘要 / 计划内容摘要',
-      }}
+      description="系统每次按价格表算价都留一条记录；客户对费用有疑问、对账单对不上时，按计费编号来这里找到那一次"
+      search={{ value: search, onChange: setSearch, placeholder: '搜计费编号' }}
+      filters={
+        answer?.kind === 'outcome' && evaluations.length > 0 ? (
+          <CountChips
+            label="结果"
+            total={evaluations.length}
+            // 只摆有行的结果，加上当前选中的那一格（选中后筛空也要能点回去）。
+            chips={statusOrder
+              .filter((code) => code === status || countOf(code) > 0)
+              .map((code) => ({ id: code, label: labelFor(code, STATUS_SCOPE), count: countOf(code) }))}
+            value={status}
+            onChange={setStatus}
+          />
+        ) : undefined
+      }
       filterSummary={
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区
-        // 「这不是登记册为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome' ? `当前返回 ${evaluations.length} 条评价` : undefined
+        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区「这不是册为空」直接矛盾。
+        answer?.kind === 'outcome' ? `${visibleEvaluations.length} / ${evaluations.length} 条` : undefined
       }
       columns={columns}
       rows={visibleEvaluations}
       rowKey={(row) => row.evaluationId}
+      emptyRowsNote="没有匹配的计费记录"
       viewState={catalogueViewState(answer, evaluations.length, retry, {
         module: info,
         endpoint: 'GET /pricing-evaluations',
-        emptyTitle: '当前租户尚无已登记的价格评价',
-        emptyDescription:
-          '读取入口已配置，但评价登记册为空；评价的写入方是渠道墙后的评价编排用例，尚未接入任何进程——册空是墙拦不是缺陷，本页不预置数据。',
+        emptyTitle: '还没有计费记录',
+        emptyDescription: '运单受理、收寄后系统按价格表算价，每算一次这里就多一条；页面不会预置记录。',
       })}
     />
   );
