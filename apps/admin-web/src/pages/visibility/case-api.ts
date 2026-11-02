@@ -65,6 +65,8 @@ export interface SignalEpisodeRecord {
 export interface DispositionRequestRecord {
   requestId: string;
   caseId: string;
+  /** 所属案件的单据号；案件没有号时缺席，不拿 caseId 顶。 */
+  caseDocumentNumber?: string;
   targetContext: string;
   action: string;
   scope: string;
@@ -113,6 +115,9 @@ export function listExceptionTriageRecords<Registry extends ExceptionTriageRegis
  */
 export interface ExceptionCaseRecord {
   caseId: string;
+  /** 案件的单据号（ADR-0355）；没有号时缺席，numberlessReason 说为什么（document-number.ts）。 */
+  documentNumber?: string;
+  numberlessReason?: string;
   rootParcel: string;
   impactScope: string;
   responsibleTeam: string;
@@ -172,8 +177,12 @@ export interface CustomerNotificationRecord {
  * 与金额在行上没有登记格（票 06 Comments；金额归 settlement-accounting）。
  */
 export interface ClaimItemRecord {
+  /** batch 与 itemId 是客户自己的批次号与项标识（外部标识），单据号不取代它们。 */
   batch: string;
   itemId: string;
+  /** 索赔单据号（ADR-0355）；没有号时缺席，numberlessReason 说为什么。 */
+  documentNumber?: string;
+  numberlessReason?: string;
   customer: string;
   applicant?: string;
   contract: string;
@@ -211,6 +220,8 @@ export interface RecoveryActionRecord {
 export interface RecoveryMatterRecord {
   matterId: string;
   caseId: string;
+  /** 关联案件的单据号；案件没有号时缺席。 */
+  caseDocumentNumber?: string;
   counterparty: string;
   scope: string;
   basis: string;

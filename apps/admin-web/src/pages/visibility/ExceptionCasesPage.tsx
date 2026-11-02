@@ -13,6 +13,7 @@ import { formatInstant } from '../moment';
 import { matchesSearch } from '../party/list-order';
 import { listExceptionCaseRecords, type ApiResult, type ExceptionCaseListResponseBody, type ExceptionCaseRecord } from './case-api';
 import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
+import { numberlessNote, primaryReference } from './document-number';
 import { codeStatus, countByStatus, sortRowsBy, type SortAccessor } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
 import { statusFilterParts } from './status-filter';
@@ -21,8 +22,9 @@ import { statusFilterParts } from './status-filter';
 const info = moduleInfoById['exception-cases'];
 
 // 异常案件（visibility-exception），对 GET /exception-case-records 取数；改版换成工作台形态（设计源「五、改版示意」）。
-// 列只放人要看的：运单号（案件的根对象是包裹）、状态胶囊、处理团队、立案时间、首次响应；案件编号、影响范围、归并指向与
-// 结论原码进右栏「技术详情」。
+// 列只放人要看的：案件号（单据号，ADR-0355 决定十一）、运单号（案件的根对象是包裹）、状态胶囊、处理团队、立案时间、首次响应；
+// 案件内部标识、影响范围、归并指向与结论原码进右栏「技术详情」。没有单据号的案件主列照旧显内部标识，技术详情说为什么没有。
+// 首页「今日待办」异常那一格点进来就落在这一页。
 //
 // 严重度、处置优先级、当前工作条件与响应周期不上列：案件行在存储上刻意只落精简主生命周期（0008），那几维结构上不存在，
 // 列出来只能代填，代填会把工作条件升格成第二套主状态。归并与关闭是案件命令面的判断，本页只查阅、不推进。
@@ -31,6 +33,7 @@ const info = moduleInfoById['exception-cases'];
 const caseStatus = (record: ExceptionCaseRecord) => codeStatus(record.phase);
 
 const sortAccessors: Record<string, SortAccessor<ExceptionCaseRecord>> = {
+  number: { value: (row) => row.documentNumber ?? row.caseId },
   parcel: { value: (row) => row.rootParcel },
   established: { value: (row) => row.establishedAt, instant: true },
 };
@@ -43,6 +46,23 @@ function conclusionText(record: ExceptionCaseRecord): string | undefined {
 }
 
 const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
+  {
+    key: 'number',
+    header: objectNouns.exceptionCaseNumber,
+    sortKey: 'number',
+    render: (row) => {
+      const reference = primaryReference(row.documentNumber, row.caseId, row.numberlessReason);
+      return reference.numbered ? (
+        <span className="truncate font-mono font-medium text-idpxyz-textBright" title={reference.text}>
+          {reference.text}
+        </span>
+      ) : (
+        <span className="truncate font-mono text-[12px] text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
+          {reference.text}
+        </span>
+      );
+    },
+  },
   {
     key: 'parcel',
     header: objectNouns.shipmentNumber,
@@ -86,20 +106,23 @@ const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
 
 function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose: () => void }) {
   const conclusion = conclusionText(record);
+  const reference = primaryReference(record.documentNumber, record.caseId, record.numberlessReason);
   return (
     <ExceptionDetailPanel
-      ariaLabel={`${objectNouns.exceptionCase} ${record.rootParcel}`}
-      title={record.rootParcel}
+      ariaLabel={`${objectNouns.exceptionCase} ${reference.text}`}
+      title={reference.text}
       status={caseStatus(record)}
       subtitle={`立案于 ${formatInstant(record.establishedAt)}`}
       facts={[
+        { label: objectNouns.shipmentNumber, value: <span className="font-mono">{record.rootParcel}</span> },
         { label: '处理团队', value: <span className="font-mono">{record.responsibleTeam}</span> },
         { label: '首次响应', value: record.firstResponse ? formatInstant(record.firstResponse) : '还没有响应' },
         { label: '关闭时间', value: record.closedAt ? formatInstant(record.closedAt) : '未关闭' },
         { label: '处理结果', value: conclusion ?? '未关闭' },
       ]}
       technical={[
-        { label: '案件编号', value: record.caseId },
+        { label: objectNouns.exceptionCaseNumber, value: record.documentNumber ?? numberlessNote(record.numberlessReason) },
+        { label: '案件内部标识', value: record.caseId },
         { label: '包裹标识', value: record.rootParcel },
         { label: '影响范围', value: record.impactScope },
         { label: '团队编码', value: record.responsibleTeam },
@@ -110,7 +133,7 @@ function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose:
       onClose={onClose}
     >
       {record.mergedInto ? (
-        <p>这件案件已并入另一件案件继续处理；原案件和它的处理记录都保留，并入的案件编号在下方技术详情里。</p>
+        <p>这件案件已并入另一件案件继续处理；原案件、它的案件号和处理记录都保留，并入的案件在下方技术详情里。</p>
       ) : null}
       <p>关闭案件不会改动运单上已经发生的事；要重新处理时，案件重新打开，之前的记录都保留。</p>
     </ExceptionDetailPanel>
@@ -150,7 +173,7 @@ export function ExceptionCasesPage() {
     rows.filter(
       (row) =>
         (status === 'ALL' || caseStatus(row).label === status) &&
-        matchesSearch(search, [row.rootParcel, row.caseId, row.responsibleTeam, caseStatus(row).label]),
+        matchesSearch(search, [row.documentNumber, row.rootParcel, row.caseId, row.responsibleTeam, caseStatus(row).label]),
     ),
     sort,
     sortAccessors,
@@ -164,7 +187,7 @@ export function ExceptionCasesPage() {
       kpis={filter?.kpis}
       onRefresh={retry}
       refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、案件编号、处理团队…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、运单号、处理团队…' }}
       statusChips={filter?.chips}
       toolbarRight={answered ? `共 ${rows.length} 件，当前显示 ${visible.length} 件` : undefined}
       columns={columns}

@@ -19,6 +19,7 @@ import {
   type RecoveryMatterRecord,
 } from './case-api';
 import { notificationScope, recoveryMilestoneScope } from './case-presentation';
+import { numberlessNote, primaryReference } from './document-number';
 import { RowStatusPill } from './ExceptionDetailPanel';
 import { claimStatus, countByStatus, notificationStatus, type RowStatus } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
@@ -26,8 +27,9 @@ import { exceptionViewState } from './exception-view-state';
 // 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['claims-recovery'];
 
-// 索赔与追偿（visibility-exception），三签各接 GET /claims-recovery-records 的一本册。改版后列只放运营要看的：运单号、客户、
-// 类型、状态胶囊、时间与期限；各种编号、合同、依据引用进每行末尾的「技术详情」。
+// 索赔与追偿（visibility-exception），三签各接 GET /claims-recovery-records 的一本册。改版后列只放运营要看的：索赔号与案件号
+// （单据号，ADR-0355 决定十一）、运单号、客户、类型、状态胶囊、时间与期限；客户自己的索赔项编号与批次号、各种内部标识、
+// 合同、依据引用进每行末尾的「技术详情」。没有单据号的行照旧显标识，技术详情说为什么没有号。
 //
 // 三个对象各有独立的生命周期，分签而不折进一张表：客户赔付不等追偿完成，追偿也不等客户索赔。全页没有金额列——赔付与
 // 追偿的金额在账务区形成，三本册的行上连金额都没有。首次索赔期限、对方响应与外部责任结论在行上没有登记格，不上列、不代填；
@@ -64,6 +66,18 @@ function customerCell(names: PartyNames, account: string) {
   return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
 }
 
+/** 主列那一格：有号显号；没号照旧显标识，次要样式、悬停说为什么没有号。 */
+function referenceCell(documentNumber: string | undefined, internal: string, reason: string | undefined) {
+  const reference = primaryReference(documentNumber, internal, reason);
+  return reference.numbered ? (
+    <span className="whitespace-nowrap font-mono text-xs font-medium text-idpxyz-textBright">{reference.text}</span>
+  ) : (
+    <span className="whitespace-nowrap font-mono text-[11px] text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
+      {reference.text}
+    </span>
+  );
+}
+
 function technicalColumn<Row>(rowsOf: (row: Row) => { label: string; value: string | undefined }[]): ListColumn<Row> {
   return {
     id: 'technical',
@@ -85,6 +99,12 @@ function claimDeadline(item: ClaimItemRecord): string {
 function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
   return [
     {
+      id: 'number',
+      header: objectNouns.claimNumber,
+      // 没有索赔号的项照旧显客户自己的索赔项编号：索赔项没有另一个内部标识，（批次，项）就是它在册上的键。
+      render: (row) => referenceCell(row.documentNumber, row.itemId, row.numberlessReason),
+    },
+    {
       id: 'target',
       header: objectNouns.shipmentNumber,
       render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.target}</span>,
@@ -95,8 +115,9 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
     { id: 'submitted', header: '提交时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.submittedAt) },
     { id: 'deadline', header: '期限', className: 'whitespace-nowrap text-xs', render: claimDeadline },
     technicalColumn((row) => [
-      { label: '索赔项编号', value: row.itemId },
-      { label: '提交批次', value: row.batch },
+      { label: objectNouns.claimNumber, value: row.documentNumber ?? numberlessNote(row.numberlessReason) },
+      { label: '客户的索赔项编号', value: row.itemId },
+      { label: '客户的提交批次', value: row.batch },
       { label: '客户编码', value: row.customer },
       { label: '代提申请人', value: row.applicant },
       { label: '客户合同', value: row.contract },
@@ -123,13 +144,22 @@ function CustomerClaimsTable({ names }: { names: PartyNames }) {
   const { answer, retry } = useClaimsRegistry(fetchClaims);
   const rows = answer?.kind === 'outcome' ? answer.body.items : [];
   const visible = rows.filter((row) =>
-    matchesSearch(search, [row.target, row.itemId, row.customer, names.account(row.customer), labelFor(row.kind, 'claim-kind'), claimStatus(row).label]),
+    matchesSearch(search, [
+      row.documentNumber,
+      row.target,
+      row.itemId,
+      row.batch,
+      row.customer,
+      names.account(row.customer),
+      labelFor(row.kind, 'claim-kind'),
+      claimStatus(row).label,
+    ]),
   );
   return (
     <ListPageTemplate<ClaimItemRecord>
       title="客户索赔"
       description="客户就丢失、破损等提出的索赔：资格审核、责任认定各走到哪一步。赔付金额在账务区。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、客户、索赔类型…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索赔号、运单号、客户、索赔类型…' }}
       filterSummary={answer?.kind === 'outcome' ? countSummary('项', rows, claimStatus) : undefined}
       columns={claimColumns(names)}
       rows={visible}
@@ -220,6 +250,12 @@ function actionCell(action: RecoveryActionRecord | undefined) {
 function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] {
   return [
     {
+      id: 'case',
+      header: objectNouns.exceptionCaseNumber,
+      // 追偿册只带关联案件的号、不带案件的无号原因，没号时只说没有号，原因到异常案件页看。
+      render: (row) => referenceCell(row.caseDocumentNumber, row.caseId, undefined),
+    },
+    {
       id: 'counterparty',
       header: '向谁追偿',
       className: 'whitespace-nowrap',
@@ -235,7 +271,7 @@ function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] 
     { id: 'opened', header: '发起时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.openedAt) },
     technicalColumn((row) => [
       { label: '追偿编号', value: row.matterId },
-      { label: '异常案件', value: row.caseId },
+      { label: '案件内部标识', value: row.caseId },
       { label: '责任方编码', value: row.counterparty },
       { label: '责任范围', value: row.scope },
       { label: '责任依据', value: row.basis },
@@ -251,12 +287,14 @@ function RecoveryMattersTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
   const { answer, retry } = useClaimsRegistry(fetchRecoveries);
   const rows = answer?.kind === 'outcome' ? answer.body.matters : [];
-  const visible = rows.filter((row) => matchesSearch(search, [row.matterId, row.caseId, row.counterparty, names.party(row.counterparty)]));
+  const visible = rows.filter((row) =>
+    matchesSearch(search, [row.matterId, row.caseDocumentNumber, row.caseId, row.counterparty, names.party(row.counterparty)]),
+  );
   return (
     <ListPageTemplate<RecoveryMatterRecord>
       title="追偿"
       description="异常的责任在承运商、代理或保险时，向他们追回损失：预先通知与正式主张各走到哪一步。追偿金额在账务区。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜责任方、案件编号…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜责任方、案件号…' }}
       filterSummary={answer?.kind === 'outcome' ? `共 ${rows.length} 项` : undefined}
       columns={recoveryColumns(names)}
       rows={visible}

@@ -101,6 +101,10 @@ export const objectNouns = {
   recovery: '追偿',
   notification: '通知',
   disclosure: '披露',
+  /** 领域：异常案件的单据号（类型 `EXCEPTION_CASE`，ADR-0355）；案件的随机标识进技术详情。 */
+  exceptionCaseNumber: '案件号',
+  /** 领域：客户索赔项的单据号（类型 `CLAIM`）。客户自己的索赔项编号与批次号是外部标识，另列在技术详情里。 */
+  claimNumber: '索赔号',
 } as const satisfies Record<string, string>;
 
 export type ObjectNoun = keyof typeof objectNouns;

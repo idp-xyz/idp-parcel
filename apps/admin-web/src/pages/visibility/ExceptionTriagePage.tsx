@@ -37,7 +37,7 @@ const info = moduleInfoById['exception-triage'];
 // 改版前信号签是复核模板，四个分诊决定按钮全部禁用（分诊决定的命令端点未建）。一排永远点不动的按钮对运营只是噪音，
 // 改成右栏一句话说清楚「分诊按规则自动做，这里查看」；端点建成后再把决定区接回来。
 // 信号类型、可信度、处置动作是租户登记的开放引用，经词典分册取参考译法，查不到的码原样显示；规则、因果条件、事实依据、
-// 各种编号进右栏「技术详情」。
+// 各种编号进右栏「技术详情」。处置请求以所属案件的案件号（单据号，ADR-0355 决定十一）指认案件，案件内部标识进技术详情。
 
 const episodeKindScope = 'exception-signal';
 const confidenceScope = 'signal-confidence';
@@ -226,12 +226,26 @@ const requestSort: Record<string, SortAccessor<DispositionRequestRecord>> = {
   sent: { value: (row) => row.sentAt, instant: true },
 };
 
+/** 处置请求所属的案件：有案件号显案件号；案件没有号（上线前开立、时区未配置）照旧显案件内部标识，次要样式。 */
+function caseReference(request: DispositionRequestRecord) {
+  return request.caseDocumentNumber ? (
+    <span className="truncate font-mono text-idpxyz-textBright" title={request.caseDocumentNumber}>
+      {request.caseDocumentNumber}
+    </span>
+  ) : (
+    <span className="truncate font-mono text-[12px] text-idpxyz-breadcrumb" title={`${request.caseId}（案件无单据号）`}>
+      {request.caseId}
+    </span>
+  );
+}
+
 const requestColumns: WorkbenchColumn<DispositionRequestRecord>[] = [
   {
     key: 'action',
     header: '处置',
     render: (row) => <span className="truncate font-medium text-idpxyz-textBright">{labelFor(row.action, actionScope)}</span>,
   },
+  { key: 'case', header: objectNouns.exceptionCaseNumber, render: caseReference },
   { key: 'handler', header: '交给', render: (row) => handlerLabel(row.targetContext) },
   { key: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={dispositionStatus(row)} /> },
   {
@@ -260,6 +274,7 @@ function RequestDetail({ request, onClose }: { request: DispositionRequestRecord
       status={dispositionStatus(request)}
       subtitle={`交给${handlerLabel(request.targetContext)} · 发出于 ${formatInstant(request.sentAt)}`}
       facts={[
+        { label: objectNouns.exceptionCaseNumber, value: caseReference(request) },
         { label: '交给', value: handlerLabel(request.targetContext) },
         { label: '第几版', value: `第 ${request.intentVersion} 版` },
         { label: '对方答复时间', value: request.judgedAt ? formatInstant(request.judgedAt) : '还没有答复' },
@@ -268,7 +283,7 @@ function RequestDetail({ request, onClose }: { request: DispositionRequestRecord
       ]}
       technical={[
         { label: '请求编号', value: request.requestId },
-        { label: '案件编号', value: request.caseId },
+        { label: '案件内部标识', value: request.caseId },
         { label: '处置动作码', value: request.action },
         { label: '处置范围', value: request.scope },
         { label: '原因', value: request.reason },
@@ -298,7 +313,14 @@ function DispositionRequestsWorkbench() {
     rows.filter(
       (row) =>
         (status === 'ALL' || dispositionStatus(row).label === status) &&
-        matchesSearch(search, [row.requestId, row.caseId, row.action, labelFor(row.action, actionScope), handlerLabel(row.targetContext)]),
+        matchesSearch(search, [
+          row.requestId,
+          row.caseDocumentNumber,
+          row.caseId,
+          row.action,
+          labelFor(row.action, actionScope),
+          handlerLabel(row.targetContext),
+        ]),
     ),
     sort,
     requestSort,
@@ -312,7 +334,7 @@ function DispositionRequestsWorkbench() {
       kpis={filter?.kpis}
       onRefresh={retry}
       refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜处置、案件编号…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜处置、案件号…' }}
       statusChips={filter?.chips}
       toolbarRight={answered ? `共 ${rows.length} 项，当前显示 ${visible.length} 项` : undefined}
       columns={requestColumns}
