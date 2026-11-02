@@ -1,7 +1,7 @@
 # 04 委托的单据号（界面词「运单号」）
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum04`（完成记录见文末）；待非作者评审与进 main
+Status: resolved——2026-11-02 进 main（全量 172 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum04`（完成记录见文末）；待非作者评审与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、十一；UC-PS-001
@@ -85,3 +85,12 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 6. **口径核对**：`documentNumber`、`documentNumberAbsence` ∈ {`ISSUED_BEFORE_NUMBERING`, `NUMBERING_TIME_ZONE_NOT_CONFIGURED`}、撞号 `NUMBERING_RULE_COLLISION`——与本票已一致，未改。
 
 修订后自验（本机 PG `127.0.0.1:55432`）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./tests/... ./migrations/...` 58 个包全 ok（含 PG），新增真库用例 `-v` 全 PASS。管理台 `tsc -b` 过、`pnpm test` 1072 过 0 败、`vite build` 过。浏览器（一次性库 `docnum04_seed` 灌种子退 0，`:19094` + `:5194`，只读到确认弹层为止、点「先不撤回」，无写请求）：撤回表单填 `P20261102000001` 弹层为「将撤回运单号 P20261102000001(委托标识 SHR-…)这一票」；填一份 SQL 改成无号的老运单的委托标识，弹层为「委托标识 SHR-… 的运单(没有运单号)」；填不存在的号，格旁说「在你能看到的运单里找不到运单号或委托标识为「P20261102999999」的这一票……」。核完停进程、删库。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `102ac0c7f`，复评钉 `c8c3a1ca8`）
+
+两轮两轴阻断均为零。首轮真库探针：建单、取号、记号同在续办守卫的一笔事务；撞号后委托、提交答复、outbox 都不落，来源保全仍在，换格式后取到的号说明流水随回滚释放；同一接入请求 8 路并发只 1 路已提交、其余答已存在且同号、序列只动一次；补件形成新提交版本后两列不变。修订轮（`c8c3a1ca8`，含并入 main 的合并 `cb558458d`）照协调方裁定：撤回 / 取消表单收运单号（新开 `GET /shipment-request-views?documentNumber=`，读口 `ListVisibleByDocumentNumber`，与 `?shipmentRequestId=` 同一隔离读作用域，作用域外的同号与查无此号同答空数组、不泄露存在；前端两口一起问、恰一份才开确认、弹层同显运单号与委托标识、发出的请求仍是委托标识）；补件不换号的真库用例挂 `AT-PS-177`；改用共用词典；计数改按名说、迁移号改指约束名。复评阻断清零。余下非阻断：`AT-PS-178` 场景格补「运营按运单号检索委托」（推送方 `c0ef341fd`）；撤回 / 取消表单须先经隔离读解析，若某部署只开首方命令口不开隔离读会停在渠道未配置——今天的装配没有这种部署形态，记此。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum04` tip `c8c3a1ca8` 在隔离树上以合并提交并入 main `e110f4137`（AT 盘点文末追记冲突，两段都留），叠 `AT-PS-178` 场景格一句；重算 AT 盘点总览计数、重生成机制清点各成一笔，两项 `-check` 退 0；对 `d682653f5` 跑全量 172 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum04` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+
