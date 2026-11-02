@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
+import { Button } from '@idpxyz/ui-primitives';
+import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { technicalRows } from '../settlement/ops-ui';
 import { parcelNoOf } from '../shipment-request/ref-no';
-import { chipClass } from '../../components/registration';
+import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
+import {
+  ReviewDetail,
+  reviewStatusOf,
+  workbenchColumnsOf,
+  type ReviewColumn,
+  type ReviewRow,
+  type ReviewStatusSpec,
+} from './review-workbench';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listTransportFulfillmentRecords,
@@ -18,17 +25,7 @@ import {
 import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
 import { labelFor } from '../../vocabulary/status';
-import { weightUnitLabels } from '../../vocabulary/price-card';
-
-/**
- * 舱位与订舱的计量单位：重量单位取词典的那一册；按件计的 PCS 词典里没有重量义，这里只说「件」。查不到的单位原样显示——
- * 单位是承运商与租户登记的取值，页面不猜。
- */
-function unitWord(unit: string): string {
-  if (unit === 'PCS') return '件';
-  return weightUnitLabels[unit] ?? unit;
-}
-import { bookingRowOf, bounceRowOf, type BounceFilter } from './booking-registers';
+import { bookingRowOf, bounceRowOf, unitWord, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['transport-fulfillment-review'];
@@ -48,10 +45,6 @@ const info = moduleInfoById['transport-fulfillment-review'];
  * 票 admin-web-audit-followups/06）：它不整册上列，是按范围问一次的派生答案，因此有
  * 自己的入参、自己的四格结果代数与自己的空态措辞（判读在 handover-scope-summary.ts）。
  */
-interface ReviewRow {
-  key: string;
-  values: Readonly<Record<string, string>>;
-}
 
 // 词表词（已交接/已拒收/待确认）按共享词表着色；词表没收录的词原样示文,
 // 不猜色调。断言只桥接两个模块的类型边界,词本身同源于 CONTEXT 原词。
@@ -67,7 +60,7 @@ function pillCell(row: ReviewRow, id: string, codeKey?: string, scope?: string) 
 }
 
 /** 包裹号格：去掉线格式前缀的短写法上屏，整串在悬停与技术详情里。 */
-function parcelCol(id: string, header: string): ListColumn<ReviewRow> {
+function parcelCol(id: string, header: string): ReviewColumn<ReviewRow> {
   return {
     id,
     header,
@@ -80,18 +73,9 @@ function parcelCol(id: string, header: string): ListColumn<ReviewRow> {
 }
 
 /** 每行末尾的「技术详情」：判断版本、引用、更正指回这类排查时才用的字，空的不占格。 */
-function techCol(pairs: [label: string, key: string][]): ListColumn<ReviewRow> {
-  return {
-    id: 'technical',
-    header: '',
-    className: 'align-top',
-    render: (row) => (
-      <TechnicalDetails
-        rows={technicalRows(pairs.map(([label, key]) => ({ label, value: row.values[key] })))}
-        className="max-w-md open:min-w-[18rem]"
-      />
-    ),
-  };
+function techCol(pairs: [label: string, key: string][]): ReviewColumn<ReviewRow> {
+  // 不上表：工作台把这一格挪进右栏的「技术详情」（review-workbench 的 ReviewDetail）。
+  return { id: 'technical', header: '技术详情', render: () => null, techPairs: pairs };
 }
 
 function col(
@@ -103,7 +87,7 @@ function col(
     className?: string;
     pill?: { codeKey?: string; scope?: string };
   },
-): ListColumn<ReviewRow> {
+): ReviewColumn<ReviewRow> {
   return {
     id,
     header,
@@ -135,9 +119,11 @@ interface ReviewSection {
   word: string;
   /** 对应册名；无册区缺席（该区在存储上没有登记册，不发请求）。 */
   registry?: TransportFulfillmentRegistry;
-  columns: ListColumn<ReviewRow>[];
+  columns: ReviewColumn<ReviewRow>[];
   /** 无册区的如实呈现；与「登记册为空」严格分词。 */
   absence?: { title: string; description: string; unlock: string };
+  /** 行状态胶囊取哪两格；给了即指标即筛。 */
+  status?: ReviewStatusSpec;
   /** 汇总区：不整册上列，按范围逐次问一个派生答案（另一条读路，见下方 useEffect）。 */
   scopeSummary?: true;
 }
@@ -188,6 +174,7 @@ const sections: ReviewSection[] = [
     id: 'handover-results',
     word: '交接结果',
     registry: 'transport-handover',
+    status: { labelKey: 'verdict', codeKey: 'verdictCode', scope: 'handover' },
     // 权威运输交接结果由本上下文唯一形成,逐载运对象判断并允许部分成立(CONTEXT);
     // 结果词(已交接/已拒收/待确认)在共享词表内,按词表着色。一行一判断版本,更正
     // 是新行指回前版(更正指回列),原判断在册面上继续可见;整批、整车结论只能由
@@ -250,6 +237,7 @@ const sections: ReviewSection[] = [
     id: 'master-documents',
     word: '总单',
     registry: 'carrier-master-document',
+    status: { labelKey: 'standing', codeKey: 'standingCode' },
     // 总单是运营企业与外部运输服务提供方之间针对明确运输范围形成的主运输凭证
     // (CONTEXT)；跨上下文文本里的「承运总单」是它的别名。一行一版本：撤销、替代、
     // 关联重述都是新行回指前版(回指前版列)，原版本在册面上继续可见；关联数是关联
@@ -275,6 +263,7 @@ const sections: ReviewSection[] = [
     id: 'booking-requests',
     word: '订舱',
     registry: 'booking-request',
+    status: { labelKey: 'standing' },
     // 一次订舱一行。状态词由读口按名下当前那一份承运答复读出，页面原词示文、不另算；取消是运营的决定
     // 不是承运答复，取消时刻与取消人单列，不并进状态（CONTEXT「订舱」）。提交人、取消人没记下时留空。
     columns: [
@@ -432,7 +421,6 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
 
 export function TransportFulfillmentReviewPage() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
-  const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     registry: TransportFulfillmentRegistry;
@@ -501,12 +489,6 @@ export function TransportFulfillmentReviewPage() {
       ? rowsOf(body)
       : [];
   // 汇总区至多一行，本地检索对它没有意义——检索框在那一区是范围入参，不是过滤词。
-  const needle = isScopeSummary ? '' : keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
   const retry = () => setReloadKey((value) => value + 1);
   const applyBounceFilter = (next: BounceFilter) => {
     setBounceDraft({ booking: next.booking ?? '', source: next.source ?? '' });
@@ -517,48 +499,8 @@ export function TransportFulfillmentReviewPage() {
     applyBounceFilter({ booking, source: '' });
     setSectionId('booking-answer-bounces');
   };
-  const columns: ListColumn<ReviewRow>[] =
-    section.id === 'booking-requests'
-      ? [
-          ...section.columns,
-          {
-            id: 'answers',
-            header: '全部答复',
-            render: (row) =>
-              row.values.answerCount === '0' ? (
-                '—'
-              ) : (
-                <details>
-                  <summary className="cursor-pointer">{row.values.answerCount} 份</summary>
-                  <div className="whitespace-pre-line font-mono text-[12px]">
-                    {row.values.answers}
-                  </div>
-                </details>
-              ),
-          },
-          {
-            id: 'bounces',
-            header: '挡回',
-            render: (row) => (
-              <button
-                type="button"
-                className="text-[12px] underline"
-                onClick={() => jumpToBounces(row.values.booking)}
-              >
-                看被挡回的
-              </button>
-            ),
-          },
-        ]
-      : section.columns;
-
   const viewState: TemplateViewState = section.absence
-    ? {
-        kind: 'unconfigured',
-        title: section.absence.title,
-        description: section.absence.description,
-        facts: { owner: info.owner, source: info.source, unlock: section.absence.unlock },
-      }
+    ? { kind: 'unconfigured' }
     : isScopeSummary
       ? scopeSummaryViewState(summaryAnswer, scope, retry, {
           module: info,
@@ -573,79 +515,91 @@ export function TransportFulfillmentReviewPage() {
             : '运输作业端排班、订舱、交接、签收后，记录会出现在这里。',
         });
 
+  const filters = isScopeSummary ? (
+    // 汇总按批次问一次，不是整册上列：批次号走自己的输入框与「查询汇总」，不借工具条的检索（那是本地过滤）。
+    <span className="inline-flex items-center gap-2">
+      <input
+        aria-label="交接批次号"
+        className="h-8 w-[220px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 font-mono text-[12px]"
+        placeholder="交接批次号"
+        value={scopeDraft}
+        onChange={(event) => setScopeDraft(event.target.value)}
+        onKeyDown={(event) => event.key === 'Enter' && setScope(scopeDraft.trim())}
+      />
+      <Button variant="outline" size="sm" disabled={scopeDraft.trim() === ''} onClick={() => setScope(scopeDraft.trim())}>
+        查询汇总
+      </Button>
+    </span>
+  ) : isBounces ? (
+    <span className="inline-flex items-center gap-2">
+      <input
+        aria-label="按订舱号筛"
+        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[12px]"
+        placeholder="按订舱号筛"
+        value={bounceDraft.booking ?? ''}
+        onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
+      />
+      <input
+        aria-label="按答复的承运商筛"
+        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[12px]"
+        placeholder="按答复的承运商筛"
+        value={bounceDraft.source ?? ''}
+        onChange={(event) => setBounceDraft({ ...bounceDraft, source: event.target.value })}
+      />
+      <Button variant="outline" size="sm" onClick={() => applyBounceFilter(bounceDraft)}>
+        筛选
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => applyBounceFilter({})}>
+        清除筛选
+      </Button>
+    </span>
+  ) : undefined;
+
   return (
-    <ListPageTemplate<ReviewRow>
+    <RouteWorkbench<ReviewRow>
+      // 换册重挂（筛选条件也进键：挡回册换筛选是一次新问），上一册的状态筛选与选中行不带进下一册。
+      key={`${section.id}#${filterKey}`}
       title={info.title}
-      description="班次、舱位、订舱与承运商答复，以及货在各段交接成没成功、最后怎么签收的。这里只查看；排班、订舱与交接在运输作业端办理。"
-      search={
-        isScopeSummary
-          ? {
-              value: scopeDraft,
-              onChange: setScopeDraft,
-              placeholder: '输入交接批次号，再点「查询汇总」',
-            }
-          : {
-              value: keyword,
-              onChange: setKeyword,
-              placeholder: '搜包裹号 / 班次 / 订舱号',
-            }
+      subtitle="班次、舱位、订舱与承运商答复，以及货在各段交接成没成功、最后怎么签收的。这里只查看；排班、订舱与交接在运输作业端办理。"
+      sections={
+        <SectionTabs sections={sections.map((candidate) => ({ id: candidate.id, label: candidate.word }))} active={sectionId} onChange={setSectionId} />
       }
-      filters={
-        <>
-          {sections.map((candidate) => (
-            <button
-              key={candidate.id}
-              type="button"
-              className={chipClass(candidate.id === sectionId)}
-              onClick={() => setSectionId(candidate.id)}
-            >
-              {candidate.word}
-            </button>
-          ))}
-          {isScopeSummary && (
-            <button
-              type="button"
-              className={chipClass(scopeDraft.trim() !== '')}
-              onClick={() => setScope(scopeDraft.trim())}
-            >
-              查询汇总
-            </button>
-          )}
-          {isBounces && (
-            <>
-              <input
-                aria-label="按订舱号筛"
-                className="h-8 rounded border px-2 text-[13px]"
-                placeholder="按订舱号筛"
-                value={bounceDraft.booking ?? ''}
-                onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
-              />
-              <input
-                aria-label="按答复的承运商筛"
-                className="h-8 rounded border px-2 text-[13px]"
-                placeholder="按答复的承运商筛"
-                value={bounceDraft.source ?? ''}
-                onChange={(event) => setBounceDraft({ ...bounceDraft, source: event.target.value })}
-              />
-              <button type="button" className={chipClass(false)} onClick={() => applyBounceFilter(bounceDraft)}>
-                筛选
-              </button>
-              <button type="button" className={chipClass(false)} onClick={() => applyBounceFilter({})}>
-                清除筛选
-              </button>
-            </>
-          )}
-        </>
-      }
-      filterSummary={
-        // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。汇总区不报行数——一份
-        // 汇总不是「1 行数据」,报出来会把派生答案说成一本只有一行的册子。
-        !isScopeSummary && body ? `共 ${visibleRows.length} 条` : undefined
-      }
-      columns={columns}
-      rows={visibleRows}
+      extraFilters={filters}
+      answered={isScopeSummary ? summaryBody !== null : body !== null}
+      rows={rows}
       rowKey={(row) => row.key}
+      statusOf={section.status ? (row) => reviewStatusOf(row, section.status) : undefined}
+      rowAttention={(row) => ['REFUSED', 'PENDING_CONFIRMATION'].includes(row.values.verdictCode ?? '')}
+      searchCells={(row) => Object.values(row.values)}
+      searchPlaceholder={isScopeSummary ? '在汇总里搜…' : '搜包裹号 / 班次 / 订舱号'}
+      columns={workbenchColumnsOf(section.columns, section.status)}
+      renderDetail={(row, close) => (
+        <ReviewDetail
+          row={row}
+          columns={section.columns}
+          status={reviewStatusOf(row, section.status)}
+          subtitle={section.word}
+          onClose={close}
+          actions={
+            section.id === 'booking-requests' ? (
+              <Button variant="outline" size="sm" onClick={() => jumpToBounces(row.values.booking)}>
+                看这笔订舱被挡回的答复
+              </Button>
+            ) : undefined
+          }
+        >
+          {section.id === 'booking-requests' && row.values.answerCount !== '0' ? (
+            <>
+              <p>承运商的全部答复（{row.values.answerCount} 份，含候补与后继）：</p>
+              <p className="whitespace-pre-line font-mono">{row.values.answers}</p>
+            </>
+          ) : null}
+        </ReviewDetail>
+      )}
+      onRefresh={section.absence ? undefined : retry}
       viewState={viewState}
+      // 还没接进管理台的册：说「还不能在这里查看」，不露接入渠道的错误码（那个码说的是口没接渠道，不是册没建）。
+      stateOverride={section.absence ? notConnectedOverride(section.absence.title, section.absence.description) : undefined}
     />
   );
 }

@@ -4,6 +4,7 @@
 // 这些风险点都在纯函数里，拿 node:test 就能钉住（同 handover-scope-summary 的先例）。
 // 状态词的读法只在读口（ports.BookingStanding*），这里只做示文，不由答复值与接受量再算一遍。
 
+import { weightUnitLabels } from '../../vocabulary/price-card';
 import { formatInstant } from '../catalogue-view';
 import type {
   BookingAnswerBounceRecord,
@@ -57,6 +58,15 @@ export function answerLineOf(answer: BookingAnswerRecord): string {
   return parts.join(' · ');
 }
 
+/**
+ * 舱位与订舱的计量单位：重量单位取词典的那一册；按件计的 PCS 词典里没有重量义，这里只说「件」。查不到的单位原样显示——
+ * 单位是承运商与租户登记的取值，页面不猜。
+ */
+export function unitWord(unit: string): string {
+  if (unit === 'PCS') return '件';
+  return weightUnitLabels[unit] ?? unit;
+}
+
 export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
   const current = record.currentAnswer;
   return {
@@ -65,7 +75,7 @@ export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
       booking: record.booking,
       commission: record.commission,
       schedule: record.schedule,
-      requested: `${record.quantity} ${record.unit}`,
+      requested: `${record.quantity} ${unitWord(record.unit)}`,
       requestedAt: formatInstant(record.requestedAt),
       standing: labelOr(bookingStandingLabels, record.standing),
       currentAnswer: current ? labelOr(carrierAnswerLabels, current.outcome) : '',

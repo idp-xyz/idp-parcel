@@ -43,7 +43,7 @@ test('没有答复：当前答复三格空，名下答复 0 份', () => {
   equal(row.values.acceptedQuantity, '');
   equal(row.values.currentAnsweredAt, '');
   equal(row.values.answerCount, '0');
-  equal(row.values.requested, '10 KG');
+  equal(row.values.requested, '10 千克');
 });
 
 test('当前答复示答复值、接受量、答复时刻；名下全部答复含候补与后继', () => {
