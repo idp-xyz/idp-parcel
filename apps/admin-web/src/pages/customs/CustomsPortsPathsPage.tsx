@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
@@ -16,234 +16,212 @@ import {
 } from './api';
 import { portsPathsRegistryLabels, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { labelFor } from '../../vocabulary/status';
-import { StatusPill } from '../../components/StatusPill';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { validityOf } from '../network/network-rows';
+import { codeStatus } from '../visibility/exception-list';
+import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { RecordDetailPanel, RouteWorkbench, SectionTabs, notConnectedOverride, techRows, type RowStatus } from '../network/route-workbench';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-ports-paths'];
 
-// 本页三签（票 admin-remainder-mechanism-batch/03）：
+// 本页三本册（票 admin-remainder-mechanism-batch/03），工作台形态，册签在工具条里切：
 //
-// 已接线的是目录登记册查阅两签——「合规候选口岸」（口岸标识 + 生效区间）与「申报
-// 路径」（路径标识 + 三维路径事实 + 生效区间），都接 GET /customs-ports-paths 按
-// registry 分派。两册按（键，生效起点）版本化，全部版本连同区间原样上列，区间判读
-// 归读者（端点不收评估时点参数，裁决在 query_ports_paths.go 文件头）。
+// 「可用口岸」（口岸 + 可用期间）与「申报路径」（路径 + 经哪个口岸、方向、申报模式 + 适用期间）接
+// GET /customs-ports-paths 按 registry 分派。两册按（键，生效起点）版本化，全部版本连同区间原样上列；状态胶囊是此刻在不在期
+// （network-rows 的 validityOf，呈现判断不是选版），区间与原码进右栏。
 //
-// 「合规候选区域」保持如实占位：区域维未建模（等自己的票），本页不为它虚构列表。
-// 旧骨架里口岸行的「所属区域」「关务适用性判断」「限制及解除结果」三列随建模落地
-// 撤下——目录事实只有键与区间，适用性是判断链的产物、限制归 customs-restrictions
-// 页，都不是本册的列；申报路径的「报关服务方」同理不在三维之内（改路硬句管的是
-// 换维须重新请求适用性判断，那是判断链的规则，不是目录字段）。
+// 「可用区域」如实占位：区域维未建模（等自己的票），不为它虚构列表，也不发请求。口岸行没有「所属区域」「关务适用性判断」
+// 「限制及解除结果」：目录事实只有键与区间，适用性是判断链的产物、限制归 customs-restrictions 页，都不是本册的列。
+
+type View = 'ports' | 'paths' | 'regions';
+
+const views: { id: View; label: string }[] = [
+  { id: 'ports', label: '可用口岸' },
+  { id: 'paths', label: '申报路径' },
+  { id: 'regions', label: '可用区域' },
+];
 
 interface CatalogueRow {
   key: string;
-  values: Readonly<Record<string, string>>;
-  /** 生效区间原值：状态胶囊按此刻现算（network-rows 的 validityOf），不进检索。 */
+  /** 行首：口岸或路径。 */
+  name: string;
+  port: string;
+  direction?: string;
+  mode?: string;
   appliesFrom: string;
   appliesUntil?: string;
 }
 
-// 此刻在不在可用期：同口岸多版逐行在列时，一眼看出哪一版正在用。
-const validityColumn: ListColumn<CatalogueRow> = {
-  id: 'validity',
+function statusOf(row: CatalogueRow): RowStatus | undefined {
+  const code = validityOf(row.appliesFrom, row.appliesUntil, new Date());
+  return code ? codeStatus(code) : undefined;
+}
+
+const nameColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
+  key: 'name',
+  header,
+  sortKey: 'name',
+  render: (row) => <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.name}</span>,
+});
+const statusColumn: WorkbenchColumn<CatalogueRow> = {
+  key: 'status',
   header: '状态',
-  align: 'center',
-  className: 'w-[96px]',
   render: (row) => {
-    const code = validityOf(row.appliesFrom, row.appliesUntil, new Date());
-    return code ? <StatusPill code={code} /> : '—';
+    const status = statusOf(row);
+    return status ? <RowStatusPill status={status} /> : '—';
   },
 };
+const periodColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
+  key: 'period',
+  header,
+  hideWhenDetailOpen: true,
+  render: (row) => <span className="font-mono text-[12px]">{formatRange(row.appliesFrom, row.appliesUntil)}</span>,
+});
 
-function col(id: string, header: string, mono = false): ListColumn<CatalogueRow> {
-  return {
-    id,
-    header,
-    className: mono ? 'font-mono text-xs' : undefined,
-    render: (row) => row.values[id] ?? '—',
-  };
-}
-
-// —— 合规候选口岸签（接真面）——
-
-// 口岸册一行两件事实：哪个口岸、哪个生效区间。同口岸多版本逐行在列（当前版终点
-// 显示「持续有效」），版本序由服务端定（键升序、版本新在前），页面不重排。
-const portColumns: ListColumn<CatalogueRow>[] = [
-  col('port', '口岸', true),
-  col('applies', '可用期间', true),
-  validityColumn,
-];
+const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
+  ports: [nameColumn('口岸'), statusColumn, periodColumn('可用期间')],
+  paths: [
+    nameColumn('申报路径'),
+    statusColumn,
+    { key: 'port', header: '经哪个口岸', render: (row) => <span className="font-mono text-[12px]">{row.port}</span> },
+    { key: 'direction', header: '方向', render: (row) => (row.direction ? labelFor(row.direction) : '—') },
+    { key: 'mode', header: '申报模式', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{row.mode ?? '—'}</span> },
+  ],
+  regions: [nameColumn('区域'), statusColumn],
+};
 
 function portRows(body: CandidatePortListResponseBody): CatalogueRow[] {
+  // 行键循库主键 (tenant, port_ref, applies_from)：同口岸各版本起点唯一。版本序由服务端定（键升序、版本新在前）。
   return body.ports.map((record) => ({
-    // 行键循库主键 (tenant, port_ref, applies_from)：同口岸各版本起点唯一。
     key: `port:${record.port}:${record.appliesFrom}`,
+    name: record.port,
+    port: record.port,
     appliesFrom: record.appliesFrom,
     appliesUntil: record.appliesUntil,
-    values: {
-      port: record.port,
-      applies: formatRange(record.appliesFrom, record.appliesUntil),
-    },
   }));
 }
-
-function CandidatePortsTable() {
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CandidatePortListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listPortsPaths('candidate-port').then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const rows = answer?.kind === 'outcome' ? portRows(answer.body) : [];
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadKey((value) => value + 1);
-
-  return (
-    <ListPageTemplate<CatalogueRow>
-      title="可用口岸"
-      description="公司可以走的口岸和各自从何时起可用；路线规划只在这些口岸里选"
-      search={{ value: search, onChange: setSearch, placeholder: '搜口岸' }}
-      filterSummary={
-        answer?.kind === 'outcome'
-          ? `共 ${rows.length} 条`
-          : undefined
-      }
-      columns={portColumns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /customs-ports-paths?registry=candidate-port',
-        emptyTitle: '还没有登记可用口岸',
-        emptyDescription: '在「登记」里新增口岸后在这里出现；没登记口岸之前路线规划选不出口岸。',
-      })}
-    />
-  );
-}
-
-// —— 申报路径签（接真面）——
-
-// 路径册一行四件事实：哪条路径、经哪个口岸、按哪个方向、以哪种申报模式，外加生效
-// 区间。口岸列是标识引用——「引用的口岸此刻是否在册」是读者拿两签对照的判断，本列
-// 不代答。
-const pathColumns: ListColumn<CatalogueRow>[] = [
-  col('path', '路径', true),
-  col('port', '经哪个口岸', true),
-  col('direction', '方向'),
-  col('mode', '申报模式', true),
-  col('applies', '适用期间', true),
-  validityColumn,
-];
 
 function pathRows(body: DeclarationPathListResponseBody): CatalogueRow[] {
+  // 口岸是标识引用——「引用的口岸此刻是否在册」是读者拿两册对照的判断，本行不代答。
   return body.paths.map((record) => ({
     key: `path:${record.path}:${record.appliesFrom}`,
+    name: record.path,
+    port: record.port,
+    direction: record.direction,
+    mode: record.declarationMode,
     appliesFrom: record.appliesFrom,
     appliesUntil: record.appliesUntil,
-    values: {
-      path: record.path,
-      port: record.port,
-      direction: labelFor(record.direction),
-      mode: record.declarationMode,
-      applies: formatRange(record.appliesFrom, record.appliesUntil),
-    },
   }));
 }
 
-function DeclarationPathsTable() {
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<DeclarationPathListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listPortsPaths('declaration-path').then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const rows = answer?.kind === 'outcome' ? pathRows(answer.body) : [];
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadKey((value) => value + 1);
-
+function CatalogueDetail({ view, row, onClose }: { view: View; row: CatalogueRow; onClose: () => void }) {
+  const period = { label: view === 'ports' ? '可用期间' : '适用期间', value: <span className="font-mono">{formatRange(row.appliesFrom, row.appliesUntil)}</span> };
   return (
-    <ListPageTemplate<CatalogueRow>
-      title="申报路径"
-      description="从哪个口岸、按哪个方向、用哪种申报模式报关的组合；路线规划只在这些路径里选"
-      search={{ value: search, onChange: setSearch, placeholder: '搜路径、口岸、申报模式' }}
-      filterSummary={
-        answer?.kind === 'outcome'
-          ? `共 ${rows.length} 条`
-          : undefined
+    <RecordDetailPanel
+      title={row.name}
+      status={statusOf(row)}
+      subtitle={view === 'ports' ? '可用口岸' : '申报路径'}
+      facts={
+        view === 'ports'
+          ? [period]
+          : [
+              { label: '经哪个口岸', value: <span className="font-mono">{row.port}</span> },
+              { label: '方向', value: row.direction ? labelFor(row.direction) : '—' },
+              { label: '申报模式', value: <span className="font-mono">{row.mode ?? '—'}</span> },
+              period,
+            ]
       }
-      columns={pathColumns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /customs-ports-paths?registry=declaration-path',
-        emptyTitle: '还没有登记申报路径',
-        emptyDescription: '在「登记」里新增申报路径后在这里出现；没登记路径之前路线规划选不出申报路径。',
-      })}
-    />
+      technical={techRows([
+        { label: view === 'ports' ? '口岸标识' : '路径标识', value: row.name },
+        { label: '口岸标识', value: view === 'paths' ? row.port : undefined },
+        { label: '方向码', value: row.direction },
+        { label: '生效起点', value: row.appliesFrom },
+        { label: '截止', value: row.appliesUntil },
+      ])}
+      onClose={onClose}
+    >
+      <p>
+        {view === 'ports'
+          ? '路线规划只在可用口岸里选。要停用一个口岸，就登一版更晚起用的新版本，旧版到那时自动截止；已登的版本不会被覆盖。'
+          : '路线规划只在这些申报路径里选。拟改路要换口岸、方向或报关服务方时，必须先重新做一次关务适用性判断。'}
+      </p>
+    </RecordDetailPanel>
   );
 }
 
-// —— 合规候选区域签（如实占位）——
+type Loaded =
+  | { view: 'ports'; answer: ApiResult<CandidatePortListResponseBody> }
+  | { view: 'paths'; answer: ApiResult<DeclarationPathListResponseBody> };
 
-/**
- * 区域行字段取 CONTEXT-MAP「customs-compliance ↔ network-routing」协作句原词。
- * 区域维未建模，栏目只取那句出现过的词，不虚构字段；建模落地时以真实定义为准重谈。
- */
-const regionColumns: ListColumn<CatalogueRow>[] = [
-  col('code', '区域', true),
-  col('applicability', '能不能走'),
-  col('restrictions', '限制与解除', true),
-];
+function PortsPathsWorkbench() {
+  const [view, setView] = useState<View>('ports');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
 
-function CandidateRegionsTable() {
-  const [search, setSearch] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    if (view === 'ports') {
+      void listPortsPaths('candidate-port').then((answer) => {
+        if (!cancelled) setLoaded({ view: 'ports', answer });
+      });
+    } else if (view === 'paths') {
+      void listPortsPaths('declaration-path').then((answer) => {
+        if (!cancelled) setLoaded({ view: 'paths', answer });
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [view, reloadKey]);
+
+  const retry = () => setReloadKey((value) => value + 1);
+  // 两册答复体不同形，判读只用它的格（kind），所以在这里放宽成 unknown 体。
+  const answer: ApiResult<unknown> | null = loaded && loaded.view === view ? loaded.answer : null;
+  const rows: CatalogueRow[] =
+    loaded?.view === view && loaded.answer.kind === 'outcome'
+      ? loaded.view === 'ports'
+        ? portRows(loaded.answer.body as CandidatePortListResponseBody)
+        : pathRows(loaded.answer.body as DeclarationPathListResponseBody)
+      : [];
+
+  const viewState =
+    view === 'regions'
+      ? ({ kind: 'unconfigured' } as const)
+      : catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: `GET /customs-ports-paths?registry=${view === 'ports' ? 'candidate-port' : 'declaration-path'}`,
+          emptyTitle: view === 'ports' ? '还没有登记可用口岸' : '还没有登记申报路径',
+          emptyDescription:
+            view === 'ports'
+              ? '在「登记」里新增口岸后在这里出现；没登记口岸之前路线规划选不出口岸。'
+              : '在「登记」里新增申报路径后在这里出现；没登记路径之前路线规划选不出申报路径。',
+        });
 
   return (
-    <ListPageTemplate<CatalogueRow>
-      title="可用区域"
-      description="公司可以发往或经过的区域；路线规划只在这些区域里选"
-      search={{ value: search, onChange: setSearch, placeholder: '搜区域' }}
-      columns={regionColumns}
-      rows={[]}
+    <RouteWorkbench<CatalogueRow>
+      key={view}
+      title={info.title}
+      subtitle="公司可以走的口岸，以及从哪个口岸、按哪个方向、用哪种申报模式报关；路线规划只在这些里面选。"
+      sections={<SectionTabs sections={views} active={view} onChange={setView} />}
+      answered={view !== 'regions' && answer?.kind === 'outcome'}
+      rows={rows}
       rowKey={(row) => row.key}
-      viewState={{
-        kind: 'unconfigured',
-        title: '可用区域还不能在这里查看',
-        description: '可用区域的登记与查询还在建设中；口岸与申报路径两签已经可用。这一签不显示任何示意数据。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '区域的登记与查询上线后，这一签会自动显示',
-        },
-      }}
+      statusOf={statusOf}
+      searchCells={(row) => [row.name, row.port, row.mode, row.direction ? labelFor(row.direction) : undefined]}
+      searchPlaceholder={view === 'paths' ? '搜路径、口岸、申报模式' : '搜口岸'}
+      columns={columnsOf[view]}
+      sortAccessors={{ name: { value: (row) => row.name } }}
+      defaultSort={{ key: 'name', dir: 1 }}
+      renderDetail={(row, close) => <CatalogueDetail view={view} row={row} onClose={close} />}
+      onRefresh={view === 'regions' ? undefined : retry}
+      viewState={viewState}
+      // 区域维未建模：说「还不能在这里查看」，与「没有记录」「接入渠道未配置」都分开。
+      stateOverride={
+        view === 'regions'
+          ? notConnectedOverride('可用区域还不能在这里查看', '可用区域的登记与查询还在建设中，这不是「没有区域」；口岸与申报路径两签已经可用。')
+          : undefined
+      }
     />
   );
 }
@@ -273,7 +251,7 @@ const registrationTargets: RegistrationTarget[] = registrationKinds.map((kind) =
  * 的事；拟改路改变关务区域、口岸或报关服务方时，必须先请求新的关务适用性判断
  * （CONTEXT-MAP 原句）——那次判断的查阅口随判断链自己的票，不在本页两册之内。
  *
- * 三张读签在前（已接线两签在前，未建模的区域签如实占位），登记签在后：读写各占各的
+ * 读的三本册在工作台里切（未建模的区域如实占位），登记签在后：读写各占各的
  * 签，形同网络两页。登记签只有登记一个动作——登记册不可覆盖，更正是登一个更晚生效
  * 起点的新版（ADR-0070），所以没有行级编辑或删除面。墙降之前它必然答 403「接入渠道
  * 未配置」，那是诚实答案；墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
@@ -283,21 +261,13 @@ export function CustomsPortsPathsPage() {
   const mayWrite = useMayWriteRegistry();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="ports" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="ports">可用口岸</TabsTrigger>
-          <TabsTrigger value="paths">申报路径</TabsTrigger>
-          <TabsTrigger value="regions">可用区域</TabsTrigger>
+          <TabsTrigger value="catalog">口岸与申报路径</TabsTrigger>
           {mayWrite ? <TabsTrigger value="register">登记</TabsTrigger> : null}
         </TabsList>
-        <TabsContent value="ports" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CandidatePortsTable />
-        </TabsContent>
-        <TabsContent value="paths" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <DeclarationPathsTable />
-        </TabsContent>
-        <TabsContent value="regions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CandidateRegionsTable />
+        <TabsContent value="catalog" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <PortsPathsWorkbench />
         </TabsContent>
         {mayWrite ? (
           <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
