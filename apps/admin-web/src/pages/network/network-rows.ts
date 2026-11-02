@@ -1,8 +1,10 @@
 // 线路与运力区几页共用的纯函数：版本此刻在不在期、时区的中文叫法、版本号的屏上写法、路线的一句话。
-// 只引词典，不引 React，node:test 里直接钉。
+// 只引词典与读口类型，不引 React，node:test 里直接钉。
 //
 // 「在不在期」是管理台按此刻对一行版本的生效区间做的呈现判断，不是选版：同一对象的几版照旧逐行在列，页面不替读者挑
 // 「当前那一版」——路由该用哪一版是路由判断的事（network-routing CONTEXT 的选版规则归它）。
+
+import type { PlannedLegRecord } from './api';
 
 /** 一行版本按此刻落在区间的哪一边；码进 vocabulary/status.ts 译中文。 */
 export type ValidityCode = 'IN_FORCE' | 'NOT_YET_EFFECTIVE' | 'EXPIRED';
@@ -56,17 +58,8 @@ export function versionWord(version: number | string | undefined): string {
   return version === undefined || version === '' ? '' : `第 ${version} 版`;
 }
 
-/** 路由计划里的一段，形状同 GET /route-plans 行上的 legs（读口随行带出；缺席即本行无计划）。 */
-export interface RouteLeg {
-  reference: string;
-  kind: string;
-  from: string;
-  to: string;
-  responsible: string;
-  earliest: string;
-  latest: string;
-  windowBasis: string;
-}
+/** 路由计划里的一段：形状归读口类型（api.ts 的 PlannedLegRecord），这里只取个短名给路线一句话用。 */
+export type RouteLeg = PlannedLegRecord;
 
 /**
  * 一条路线的一句话：「SYN-NODE-SHA-HUB → SYN-NODE-SZX-GATE → … → 末端派送」。段按计划给的顺序首尾相接；派送段的终点

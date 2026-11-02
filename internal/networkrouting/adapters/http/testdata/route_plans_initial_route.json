@@ -15,6 +15,28 @@
         "basis": "SYN-REROUTE/network-lapse",
         "successor": "SYN-PLAN-1#v2"
       },
+      "legs": [
+        {
+          "reference": "SYN-PLAN-1#v1#1",
+          "kind": "BETWEEN_NODES",
+          "from": "SYN-NODE-SIN-HUB",
+          "to": "SYN-NODE-SIN-LM",
+          "responsible": "SYN-CONN-SIN-LM@1",
+          "earliest": "2026-08-20T12:00:00Z",
+          "latest": "2026-08-20T14:00:00Z",
+          "windowBasis": "CONNECTION/SYN-CONN-SIN-LM@1"
+        },
+        {
+          "reference": "SYN-PLAN-1#v1#2",
+          "kind": "DELIVERY",
+          "from": "SYN-NODE-SIN-LM",
+          "to": "SYN-AREA-SG@1",
+          "responsible": "SYN-AREA-SG@1",
+          "earliest": "2026-08-20T18:00:00Z",
+          "latest": "2026-08-20T21:00:00Z",
+          "windowBasis": "NODE/SYN-NODE-SIN-LM@2"
+        }
+      ],
       "recordedAt": "2026-08-20T12:00:00Z"
     },
     {

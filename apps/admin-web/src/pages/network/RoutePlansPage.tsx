@@ -17,7 +17,7 @@ import {
   type RouteReassessmentListResponseBody,
   type RouteReassessmentRecord,
 } from './api';
-import { routeSummaryOf, type RouteLeg } from './network-rows';
+import { routeSummaryOf } from './network-rows';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows } from './route-workbench';
 import { customerText, parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
 import { RerouteSuggestionsView } from './RerouteSuggestionsView';
@@ -35,15 +35,10 @@ const info = moduleInfoById['route-plans'];
 // 「无可用路线」与改路判定如实单列（CONTEXT 硬句）：前者是初始判断结论的封闭一格，照词呈现不折进成计划行；改路判定缺席是
 // 没评估过改路，与「不许改路」分开说。路线一句话取读口随行带出的各段（network-rows 的 routeSummaryOf），不拆快照另立读法。
 
-/**
- * 成计划行另带各段（读口 plannedLegBody，ADR-0217）。不写进 api.ts 的 InitialRouteRecord：那份类型由后端契约夹具逐键守着，
- * 而夹具今天没有带段的行，写进去契约测试就要求一个夹具里没有的实例。等夹具补上带段的行再并回去。
- */
-type InitialRouteRow = InitialRouteRecord & { legs?: RouteLeg[] };
 
-const routeText = (row: InitialRouteRow) => routeSummaryOf(row.legs) || '—';
+const routeText = (row: InitialRouteRecord) => routeSummaryOf(row.legs) || '—';
 
-function initialRouteColumns(names: CustomerNameIndex): WorkbenchColumn<InitialRouteRow>[] {
+function initialRouteColumns(names: CustomerNameIndex): WorkbenchColumn<InitialRouteRecord>[] {
   return [
     { key: 'parcel', header: '运单', render: parcelCell },
     { key: 'customer', header: '客户', render: (row) => customerText(row.customerAccountId, names) },
@@ -59,7 +54,7 @@ function initialRouteColumns(names: CustomerNameIndex): WorkbenchColumn<InitialR
   ];
 }
 
-function InitialRouteDetail({ row, names, onClose }: { row: InitialRouteRow; names: CustomerNameIndex; onClose: () => void }) {
+function InitialRouteDetail({ row, names, onClose }: { row: InitialRouteRecord; names: CustomerNameIndex; onClose: () => void }) {
   return (
     <RecordDetailPanel
       title={shipmentNoOf(row.shipmentRequestId)}
@@ -89,10 +84,11 @@ function InitialRouteDetail({ row, names, onClose }: { row: InitialRouteRow; nam
         { label: '结论码', value: row.conclusion },
         { label: '替代版本', value: row.applicability?.successor },
         { label: '状态依据', value: row.applicability?.basis },
-        ...(row.legs ?? []).map((leg) => ({
-          label: `第 ${leg.reference.split('#').pop()} 段`,
-          value: `${leg.from} → ${leg.to} · ${leg.responsible} · ${leg.windowBasis}`,
-        })),
+        // 段引用单列一行、原样可复制：末端交接声明计划段时照抄它（demo-chain-gaps/72）。
+        ...(row.legs ?? []).flatMap((leg, index) => [
+          { label: `第 ${index + 1} 段引用`, value: leg.reference },
+          { label: `第 ${index + 1} 段`, value: `${leg.kind} · ${leg.from} → ${leg.to} · ${leg.responsible} · ${leg.windowBasis}` },
+        ]),
       ])}
       onClose={onClose}
     >
@@ -229,9 +225,9 @@ export function RoutePlansPage() {
 
   if (register === 'initial-route') {
     const answer = loaded?.register === 'initial-route' ? loaded.answer : null;
-    const judgments: InitialRouteRow[] = answer?.kind === 'outcome' ? answer.body.judgments : [];
+    const judgments: InitialRouteRecord[] = answer?.kind === 'outcome' ? answer.body.judgments : [];
     return (
-      <RouteWorkbench<InitialRouteRow>
+      <RouteWorkbench<InitialRouteRecord>
         key={register}
         {...header}
         answered={answer?.kind === 'outcome'}

@@ -125,6 +125,19 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 			HasSuccessor:           true,
 			ApplicabilityChangedAt: endpointBaseAt.Add(time.Hour),
 			RecordedAt:             endpointBaseAt,
+			// 一段节点间、一段交付（ADR-0217）：两种段在夹具里各出场一次，前端对着它校段行形状。
+			Legs: []ports.RoutePlanLegCatalogueRow{
+				{
+					Reference: "SYN-PLAN-1#v1#1", Kind: "BETWEEN_NODES", From: "SYN-NODE-SIN-HUB", To: "SYN-NODE-SIN-LM",
+					Responsible: "SYN-CONN-SIN-LM@1", Earliest: endpointBaseAt, Latest: endpointBaseAt.Add(2 * time.Hour),
+					WindowBasis: "CONNECTION/SYN-CONN-SIN-LM@1",
+				},
+				{
+					Reference: "SYN-PLAN-1#v1#2", Kind: "DELIVERY", From: "SYN-NODE-SIN-LM", To: "SYN-AREA-SG@1",
+					Responsible: "SYN-AREA-SG@1", Earliest: endpointBaseAt.Add(6 * time.Hour), Latest: endpointBaseAt.Add(9 * time.Hour),
+					WindowBasis: "NODE/SYN-NODE-SIN-LM@2",
+				},
+			},
 		},
 		{
 			CustomerAccountID:  "SYN-ACC-1",
@@ -168,6 +181,9 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 		applicability["successor"] != "SYN-PLAN-1#v2" {
 		t.Fatalf("适用性组转写变形：%v", formed["applicability"])
 	}
+	if legs, ok := formed["legs"].([]any); !ok || len(legs) != 2 {
+		t.Fatalf("成计划行的段转写变形：%v", formed["legs"])
+	}
 
 	noRoute, _ := judgments[1].(map[string]any)
 	if noRoute["conclusion"] != "NO_CURRENT_ROUTE" {
@@ -180,10 +196,9 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 		t.Fatalf("无路可走行长出了适用性：%v", noRoute)
 	}
 
-	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性、一无路可走，
-	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。段链 legs 一键（ADR-0217）
-	// 例外，不进夹具：管理台的响应类型还不认它，进夹具前端契约测试当场红；类型跟上之后随票
-	// demo-chain-gaps/72 补进夹具。
+	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性与段链、一无路可走，
+	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。段链 legs（ADR-0217）随票
+	// demo-chain-gaps/72 进夹具：任一侧改段的键名，两侧的契约测试都红。
 	assertContractFixture(t, "route_plans_initial_route.json", recorder.Body.Bytes())
 }
 

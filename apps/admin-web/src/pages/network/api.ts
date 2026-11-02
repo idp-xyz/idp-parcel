@@ -192,6 +192,21 @@ export interface RoutePlanApplicability {
   successor?: string;
 }
 
+/**
+ * 成计划行上的一段（端点 plannedLegBody，ADR-0217）。kind 取 network-routing `domain.PlannedLegKind` 的原词（BETWEEN_NODES /
+ * DELIVERY）；交付段的 to 是交付范围（服务区域版本引用），不是网点。各格都是字符串，时刻是 UTC 文本。
+ */
+export interface PlannedLegRecord {
+  reference: string;
+  kind: string;
+  from: string;
+  to: string;
+  responsible: string;
+  earliest: string;
+  latest: string;
+  windowBasis: string;
+}
+
 export interface InitialRouteRecord {
   customerAccountId: string;
   shipmentRequestId: string;
@@ -202,6 +217,8 @@ export interface InitialRouteRecord {
   conclusion: string;
   /** 仅成计划行在场。 */
   planVersion?: string;
+  /** 计划各段，按计划顺序；仅成计划行在场，无路可走行缺席。 */
+  legs?: PlannedLegRecord[];
   applicability?: RoutePlanApplicability;
   recordedAt: string;
 }
