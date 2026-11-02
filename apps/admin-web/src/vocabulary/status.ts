@@ -431,6 +431,14 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   HEURISTIC: muted('推测'),
   EMAIL: muted('邮件'),
   CUSTOMER_NOTIFIED: muted('通知送达客户'),
+
+  // —— 供应商账单逐行匹配 · settlement-accounting（domain.MatchClassification，UC-SA-004；票 document-numbering/11）——
+  // 已对上的那一行才能去审核；其余四种是对不上的样子，各有依据，要先核实，不能直接审核，所以都是琥珀。
+  MATCHED: good('已对上'),
+  QUANTITY_VARIANCE: warn('数量不符'),
+  PRICE_VARIANCE: warn('价格不符'),
+  NO_MATCHING_OCCURRENCE: warn('找不到对应运输'),
+  DUPLICATE_BILLING: warn('重复收费'),
 };
 
 /**

@@ -53,6 +53,11 @@ export const statementDisputeRegistrationDecision = 'STATEMENT_DISPUTE_REGISTRAT
 /** 核实后处理对账单争议，与登记分开授予，原词取自 accessidentity.DecisionStatementDisputeResolution（ADR-0354 决定二）。 */
 export const statementDisputeResolutionDecision = 'STATEMENT_DISPUTE_RESOLUTION';
 
+/** 照来件登记一份供应商账单并逐行裁决匹配，原词取自 accessidentity.DecisionSupplierBillReception（ADR-0340 决定一）。 */
+export const supplierBillReceptionDecision = 'SUPPLIER_BILL_RECEPTION';
+/** 对账单的一行形成审核应付，与接收分开授予，原词取自 accessidentity.DecisionSupplierBillAudit（ADR-0340 决定二）。 */
+export const supplierBillAuditDecision = 'SUPPLIER_BILL_AUDIT';
+
 /** 运营决定入口摆不摆：同登记入口，明确知道没有那一种运营决定授予才收起，不知道就摆。 */
 export function mayMakeDecision(held: HeldGrants | undefined, decision: string): boolean {
   return held === undefined || held.decisions.has(decision);

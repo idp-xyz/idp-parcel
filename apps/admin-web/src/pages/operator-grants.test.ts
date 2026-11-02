@@ -4,6 +4,8 @@ import {
   authorizedRerouteDecision,
   statementDisputeRegistrationDecision,
   statementDisputeResolutionDecision,
+  supplierBillAuditDecision,
+  supplierBillReceptionDecision,
   deliveryHandoverConfirmationDecision,
   effectiveTimeJudgmentDecision,
   entryHint,
@@ -62,6 +64,8 @@ test('线路与运力区的决定授予原词与收起时的说明', () => {
   equal(authorizedRerouteDecision, 'AUTHORIZED_REROUTE');
   equal(statementDisputeRegistrationDecision, 'STATEMENT_DISPUTE_REGISTRATION');
   equal(statementDisputeResolutionDecision, 'STATEMENT_DISPUTE_RESOLUTION');
+  equal(supplierBillReceptionDecision, 'SUPPLIER_BILL_RECEPTION');
+  equal(supplierBillAuditDecision, 'SUPPLIER_BILL_AUDIT');
   equal(deliveryHandoverConfirmationDecision, 'DELIVERY_HANDOVER_CONFIRMATION');
   equal(effectiveTimeJudgmentDecision, 'EFFECTIVE_TIME_JUDGMENT');
   equal(pendingIdentityRecheckDecision, 'PENDING_IDENTITY_RECHECK');
