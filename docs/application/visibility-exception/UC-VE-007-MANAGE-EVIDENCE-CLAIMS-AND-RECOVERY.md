@@ -137,3 +137,5 @@
 把证据项、索赔批次、索赔项、三个独立期限、撤回、责任结论、追偿事项、外部通知/主张动作、对方响应、金额引用和到账/核销引用分别建模。首次索赔期限与最低材料两维取自挂客户合同的那一版而它没写某一维时，取接受时随闭包固定的那一版产品底座，已补（[code/61](../../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)）：底座此后被截止、退役或有效性更正都不改口；拼进来的每份正文核其所挂合同等于同一份闭包采用的客户合同（VE CONTEXT 索赔资格时点一条，[ADR-0268](../../adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)）。
 
 完成本用例只证明 VE 的资格、外部动作和责任链可追溯，不证明赔付或追偿金额已经形成，更不证明资金已经收付或核销。
+
+单据号：CONTEXT「客户索赔项」规定客户提交被记录时取得索赔单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），今天记录不取号；承接 [document-numbering/06](../../../.scratch/document-numbering/issues/06-exception-case-and-claim-numbers.md)。

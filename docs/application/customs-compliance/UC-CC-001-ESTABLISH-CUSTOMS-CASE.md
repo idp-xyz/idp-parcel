@@ -298,3 +298,11 @@
 8. `AT-CC-001` 至 `AT-CC-022` 的应用与领域测试骨架；真实区域、程序、角色和规则使用显式未配置状态。
 
 完成本用例只闭合关务案件建案。下一业务用例为[组建申报单元并形成正式申报资料](./UC-CC-002-FORM-DECLARATION-UNIT-AND-DATA.md)，负责形成字段级可追溯的资料准备结果；申报就绪、提交授权、实际提交和监管结果仍应继续分层实现。
+
+## 给开发的交接
+
+规则与实现的差距（规则本身见 CONTEXT 与所引 ADR，本表只记现状与去处）：
+
+| 规则 | 现状 | 去处 |
+|---|---|---|
+| CONTEXT「关务案件」：建立案件时取得案件单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 建立案件不取号，页面只显示随机案件标识 | [document-numbering/07](../../../.scratch/document-numbering/issues/07-customs-case-numbers.md) |

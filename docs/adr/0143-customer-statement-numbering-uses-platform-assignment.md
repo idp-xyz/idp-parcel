@@ -1,6 +1,6 @@
 # ADR-0143：客户对账单号由平台编号能力在发布事务内分配，外部工件先过闸门
 
-Status: Proposed（草案，2026-09-21；接受前不改变当前命令、依赖或迁移，接受与否归本仓维护者）<!-- 索引注记 -->｜**草案**：Status 为 Proposed，尚非依据；接受前不改变当前命令、依赖或迁移  
+Status: Superseded by [ADR-0355](./0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)<!-- 索引注记 -->：对账单号的平台分配路线并入一份覆盖十一类单据的单据号决定；依赖闸门、发布事务内分配、发布意图由 Parcel 持有三条照原意保留，草案自身从未接受。  
 Date: 2026-09-21
 
 ## Context

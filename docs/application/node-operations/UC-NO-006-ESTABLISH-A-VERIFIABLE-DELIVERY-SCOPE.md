@@ -152,3 +152,5 @@
 ## 给开发的交接
 
 本用例由 `.scratch/ps-external-mark-relations/issues/` 的 08 至 13 实现，2026-10-19 进 main。预报口挂首方客户渠道族，形状照票 first-party-api/00 已落地的提交口；交接单的开立、归入与关闭挂「作业事实登记」能力面；运营决定确认挂「运营决定」能力面；授权交付判断经 `node-operations` 一侧的防腐适配器问 `party-commercial`。
+
+单据号：CONTEXT「送站预报」「送站交接单」规定预报进入已登记、服务端收下交接单开立时各取得单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），今天都不取号，预报答复只带预报标识；承接 [document-numbering/08](../../../.scratch/document-numbering/issues/08-pre-advice-and-handover-note-numbers.md)。

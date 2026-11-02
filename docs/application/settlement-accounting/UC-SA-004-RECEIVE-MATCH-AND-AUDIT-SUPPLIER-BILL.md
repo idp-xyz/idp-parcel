@@ -144,3 +144,11 @@
 | `PAR-NFR-06` | 账单批处理和恢复目标 | 不能形成生产运行基线 |
 
 完成本用例只证明供应商主张与内部成本可以按金额范围匹配和审核；它不证明供应商已付款，也不把审核应付交给银行或总账。
+
+## 给开发的交接
+
+规则与实现的差距（规则本身见 CONTEXT 与所引 ADR，本表只记现状与去处）：
+
+| 规则 | 现状 | 去处 |
+|---|---|---|
+| CONTEXT「供应商主张与审核应付」：审核应付形成时取得应付单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 审核不取号，应付标识由调用方在载荷里点名 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |

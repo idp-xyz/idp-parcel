@@ -1,0 +1,29 @@
+# 02 接入平台编号能力与单据编号规则册
+
+Category: enhancement
+Status: ready-for-agent
+父票：[spec](../spec.md)
+Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库可被正式依赖——用户合并 idp-xyz/idp-platform-go#1 并打 `v0.1.0-rc.1`、合并 idp-xyz/idp-bento-go#5 并在 vanity 主机部署（用户动作），`curl -s "https://go.idp.xyz/idp-platform-go?go-get=1"` 返回平台库的 go-import 即算放行
+出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定四、五、六、七
+
+## 做什么
+
+1. **依赖**：`go.mod` 锁定 `go.idp.xyz/idp-platform-go` 的精确版本（`v0.1.0-rc.1`），`go.sum` 两行写入；取证照框架模块解析合同（`GOPRIVATE=go.idp.xyz`，不关全局校验），在空缓存里复跑一次下载与编译并记进完成记录。
+2. **迁移**：平台序列技术表作为独立的平台 schema 接入 `internal/platform/migrate` 的合并有序历史——渲染 `numberingpg.Migrations(<平台 schema>)` 的资产、按 ID 记入、像框架版本一样记录平台库精确版本；资产只增不改，不并入任何业务 schema，应用启动不自动改库。在已有数据的库（`demo_live` 的一份副本）上施加验证。
+3. **取号编排**（决定四）：一个共享的取号组件——读该租户该类型此刻生效的模板（租户版或产品默认）→ 用开立方业务时区下的开立时刻算周期 → 在调用方事务内经平台 `SequenceAllocator` 取（租户，类型代码，周期）的下一个值 → 渲染。不用 `Assigner.Assign`；加扰键的拼法照平台入口（越权风险点 1）。事务外调用即失败。
+4. **类型声明**（决定六）：十一类单据的类型代码、默认模板、日期时区来源由各所属上下文各声明一处，装配时汇总；本票把十一条声明都写上（04–09 照用，不另写）。
+5. **规则册**：本仓自有的一张册（自己的 schema，不进平台 schema），按（租户，类型代码）存规则版本：模板、生效时刻、登记人与登记时刻；只增不改；同内容重放答已存在。登记校验：模板能被平台 `Parse`、含流水令牌、用了加扰而该租户没配密钥即拒（密钥从实例配置注入，形态本票定，不进仓库、无默认）。
+6. **口**：读口（每类单据此刻生效的规则、是租户版还是产品默认、所用时区、历次版本）、登记口（登记册配置写授予）、预览口（给定类型与模板按样例流水渲染，不读也不占序列，并提示与已用号段可能重叠）。端点进端点表，挂操作者 Intake，答复形状照既有登记口。
+7. **测试**：PG 集成用例覆盖 ADR-0143 原列的证据——同一开立意图重放（由调用方在 04–09 验，本票验取号组件本身的事务参与）、并发取号不撞、租户隔离、按日 / 月 / 年 / 不重置的周期、事务回滚释放、租户换模板后同周期流水接着数；规则册的登记、重放、拒登与读口；预览不占号。
+
+## 不做
+
+不接任何具体单据的开立（04–09）；不做管理台（03）。
+
+## 完成判据
+
+上面七条都有用例；`go build ./...`、`go vet`、`gofmt -l`（判有无输出）、受影响包加 `./internal/architecture/... ./internal/platform/... ./cmd/...` 真库测试全绿；种子灌一次性库退 0。
+
+## 工作方式
+
+只做 `docs/agents/workflow.md`「进 main 的步骤」第 1 步：作者在自己的 worktree 与分支上做完、自验、推分支、写完成记录；非作者评审与进 main 由协调方做。注释中文、无行号与跨文件计数；不手改 `docs/adr/README.md`、AT 盘点总览计数、机制清点。

@@ -164,6 +164,8 @@
 | 输入契约「争议请求」的证据与请求方，`AT-SA-228` | 登记口只收单、费用、金额、一句理由与提出时刻；证据（附件、来电记录）与请求方（客户哪一位）没有格，也没有证据册；请求方只能写进理由。提出时刻是操作者陈述的业务时刻，只核落在发布与登记之间，不核真实性，作废判据据此可被往前填绕过，登记人与登记时刻留库可追查 | [ADR-0354](../../adr/0354-statement-disputes-are-registered-and-resolved-through-two-operator-decision-faces-and-counterparty-confirmation-is-not-recorded.md) 越权风险点 4、5 |
 | 「权限、隔离与审计」的决定方，`AT-SA-229` | 争议行只留当前那一次处理：待复核之后再处理，前一位处理人、走向与依据都被换掉，没有处理历史；登记人与处理人也还没在读口上透出，审计要直查库 | [ADR-0354](../../adr/0354-statement-disputes-are-registered-and-resolved-through-two-operator-decision-faces-and-counterparty-confirmation-is-not-recorded.md) 越权风险点 2、3 |
 | 结果契约「对账状态」的相对方未确认、部分确认、已确认三格，`AT-SA-074` | 本产品不记相对方确认（用户 2026-11-01 裁定不做）：没有登记口，也不在任何读面上答「待确认」；对账单册与待对账读口（`AT-SA-227`）都只答单上已记的争议，管理台首页因此不数「待确认应收」；`AT-SA-074` 的「不自动变为已确认」因此恒成立，但「未确认」也读不出来 | [ADR-0354](../../adr/0354-statement-disputes-are-registered-and-resolved-through-two-operator-decision-faces-and-counterparty-confirmation-is-not-recorded.md) 决定五 |
+| CONTEXT「对账单」：对账单号在发布事务内按编号规则分配，发布幂等按发布意图（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定九） | 手工发布由载荷带单号、按单号判重；自动截单从截止日拼 `STMT/<账户>/<YYYYMMDD>` | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |
+| CONTEXT「结算账户、对账与争议」：费用争议登记时取得争议单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 登记不取号，页面只显示争议标识 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |
 
 ## 生产参数与待决风险
 

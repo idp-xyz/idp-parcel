@@ -1,7 +1,7 @@
 # 单据编号：按规则给单据开立业务编号
 
 Category: enhancement
-Status: draft——2026-11-02 协调方起草，待用户确认本 spec 的「定下的几条」与「默认编号格式」后立 ADR 与子票
+Status: in-progress——2026-11-02 协调方起草；用户对草稿答「继续」，「定下的几条」与默认格式照此采纳，决定落在 [ADR-0355](../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)（Accepted）；子票 01–09 已立并写明阻塞边
 出处：用户 2026-11-01 问「项目中有 document number 的定义吗」，2026-11-02 答「打算加一套单据编号规则」。同日经提问裁定：覆盖下表全部十一类单据；编号能力用公司平台库 `idp-platform-go` 的 `numbering`（先给它发版再接）；规则由产品内置默认、租户可改。
 
 ## 为什么要做
@@ -32,7 +32,7 @@ Status: draft——2026-11-02 协调方起草，待用户确认本 spec 的「�
 10. **对外呈现。** 管理台各页以单据号为主列、可按单据号检索，内部标识进技术详情。首方客户接口的运单提交答复与查询带上运单单据号（新增字段，不破坏既有契约）。
 11. **日期按谁的时区。** 模板里的日期部件按开立方的业务时区渲染：网点单据按网点业务时区，对账单按结算账户的业务时区；没有业务时区的单据类型用 UTC，并在规则册上写明。具体每类以子票核定、写进 ADR。
 
-## 默认编号格式（产品策略，待用户确认）
+## 默认编号格式（产品策略，2026-11-02 采纳，权威在 ADR-0355 决定五）
 
 | 单据 | 上下文 | 开立时点（用例） | 类型代码 | 默认模板 | 样例 | 重置 |
 |---|---|---|---|---|---|---|
@@ -41,11 +41,11 @@ Status: draft——2026-11-02 协调方起草，待用户确认本 spec 的「�
 | 费用争议 | settlement-accounting | 登记（UC-SA-003） | `STATEMENT_DISPUTE` | `DSP-{yyyy}{mm}-{seq:5}` | `DSP-202611-00012` | 月 |
 | 审核应付 | settlement-accounting | 审核形成应付（UC-SA-004） | `AUDITED_PAYABLE` | `AP-{yyyy}{mm}-{seq:5}` | `AP-202611-00031` | 月 |
 | 异常案件 | visibility-exception | 立案（UC-VE-004） | `EXCEPTION_CASE` | `EX-{yyyy}{mm}{dd}-{seq:4}` | `EX-20261102-0003` | 日 |
-| 索赔 | visibility-exception | 索赔项受理（UC-VE-007） | `CLAIM` | `CLM-{yyyy}{mm}-{seq:5}` | `CLM-202611-00002` | 月 |
-| 清关案件 | customs-compliance | 建立（UC-CC-001） | `CUSTOMS_CASE` | `CC-{yyyy}{mm}{dd}-{seq:4}` | `CC-20261102-0011` | 日 |
-| 送货预报 | node-operations | 预报形成（UC-NO-002 / UC-NO-006） | `DELIVERY_PRE_ADVICE` | `PA-{yyyy}{mm}{dd}-{seq:5}` | `PA-20261102-00045` | 日 |
-| 送站交接单 | node-operations | 交接单受理（UC-NO-002 / UC-NO-006） | `DELIVERY_HANDOVER_NOTE` | `HO-{yyyy}{mm}{dd}-{seq:5}` | `HO-20261102-00018` | 日 |
-| 订舱 | transport-fulfillment | 订舱请求提交（UC-TF-003） | `BOOKING` | `BK-{yyyy}{mm}-{seq:5}` | `BK-202611-00009` | 月 |
+| 客户索赔项（索赔） | visibility-exception | 客户提交被记录（UC-VE-007） | `CLAIM` | `CLM-{yyyy}{mm}-{seq:5}` | `CLM-202611-00002` | 月 |
+| 关务案件（清关案件） | customs-compliance | 建立（UC-CC-001） | `CUSTOMS_CASE` | `CC-{yyyy}{mm}{dd}-{seq:4}` | `CC-20261102-0011` | 日 |
+| 送站预报（送货预报） | node-operations | → 已登记（UC-NO-006） | `DELIVERY_PRE_ADVICE` | `PA-{yyyy}{mm}{dd}-{seq:5}` | `PA-20261102-00045` | 日 |
+| 送站交接单 | node-operations | 服务端收下节点开立（UC-NO-006） | `DELIVERY_HANDOVER_NOTE` | `HO-{yyyy}{mm}{dd}-{seq:5}` | `HO-20261102-00018` | 日 |
+| 订舱 | transport-fulfillment | 订舱申请登记（UC-TF-004） | `BOOKING` | `BK-{yyyy}{mm}-{seq:5}` | `BK-202611-00009` | 月 |
 | 运输委托 | transport-fulfillment | 委托提交（UC-TF-004） | `TRANSPORT_COMMISSION` | `TC-{yyyy}{mm}-{seq:5}` | `TC-202611-00004` | 月 |
 
 取舍：前缀两三个字母、短横分隔、日期在前，人念得出、按字面能排序；量大的（运单、网点单据、案件）按日重置，其余按月。运单不带短横，便于条码与客户系统录入。
@@ -61,18 +61,18 @@ Status: draft——2026-11-02 协调方起草，待用户确认本 spec 的「�
 
 生产接入（子票 02 起）需平台库可被正式依赖：`idp-xyz/idp-platform-go` 合入去本地 `replace` 的改动并打 `v0.1.0-rc.1`（PR idp-xyz/idp-platform-go#1），`go.idp.xyz/idp-platform-go` 的 vanity 映射合入并在 vanity 主机部署（PR idp-xyz/idp-bento-go#5）。这两步需用户审批合并与 root 部署。ADR-0143 列的其余证据（事务合同、迁移接线、重放 / 并发 / 租户隔离 / 周期重置 / 回滚测试、CONTEXT 与 UC 同步）在子票里逐条产出。
 
-## 子票（用户确认本 spec 后立）
+## 子票
 
-| 号 | 题 | 形态 | 阻塞边 |
-|---|---|---|---|
-| 01 | ADR（吸收并取代 ADR-0143）、GLOSSARY「单据号」、各上下文 CONTEXT 一句与 UC 交接 | 纯文档 | — |
-| 02 | 接入平台库：依赖、迁移计划接平台 schema、装配编号器、规则册（存储、登记口、读口、预览口）、消费侧端口 | 后端 | 01；平台库发版与 vanity 部署 |
-| 03 | 管理台「设置 → 单据编号」 | 前端切片 | 02 |
-| 04 | 运单单据号（含首方接口答复与查询） | 后端 + 前端 | 02 |
-| 05 | 对账单、费用争议、审核应付 | 后端 + 前端 | 02 |
-| 06 | 异常案件、索赔 | 后端 + 前端 | 02 |
-| 07 | 清关案件 | 后端 + 前端 | 02 |
-| 08 | 送货预报、送站交接单 | 后端 + 前端 | 02 |
-| 09 | 订舱、运输委托 | 后端 + 前端 | 02 |
+| 号 | 题 | 形态 | 阻塞边 | 状态 |
+|---|---|---|---|---|
+| [01](./issues/01-adr-glossary-context-and-use-case-handoffs.md) | ADR-0355、GLOSSARY「单据号」「单据编号规则」、六个上下文 CONTEXT 规则句、八份 UC 交接 | 纯文档（改现行规则，要非作者评审） | — | in-progress |
+| [02](./issues/02-platform-numbering-adoption-and-rule-register.md) | 接入平台库与编号规则册：依赖、平台 schema 迁移、取号编排、规则册存储 / 读口 / 登记口 / 预览口、十一类类型声明 | 后端 | 01；平台库发版与 vanity 部署（用户动作） | ready-for-agent |
+| [03](./issues/03-admin-settings-document-numbering-page.md) | 管理台「设置 → 单据编号」 | 前端切片 | 02 | ready-for-agent |
+| [04](./issues/04-shipment-numbers.md) | 委托（运单）单据号，含首方接口答复与查询 | 后端 + 前端 | 02 | ready-for-agent |
+| [05](./issues/05-statement-dispute-and-payable-numbers.md) | 对账单、费用争议、审核应付 | 后端 + 前端 | 02 | ready-for-agent |
+| [06](./issues/06-exception-case-and-claim-numbers.md) | 异常案件、客户索赔项 | 后端 + 前端 | 02 | ready-for-agent |
+| [07](./issues/07-customs-case-numbers.md) | 关务案件 | 后端 + 前端 | 02 | ready-for-agent |
+| [08](./issues/08-pre-advice-and-handover-note-numbers.md) | 送站预报、送站交接单 | 后端 + 前端 | 02 | ready-for-agent |
+| [09](./issues/09-booking-and-transport-commission-numbers.md) | 订舱、运输委托 | 后端 + 前端 | 02 | ready-for-agent |
 
-04–09 互不阻塞，可并行。
+04–09 互不阻塞，可并行；各票动到同一份 AT 盘点与同一张端点表时按并行会话的取号规矩办。

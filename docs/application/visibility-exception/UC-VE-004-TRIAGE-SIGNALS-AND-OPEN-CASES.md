@@ -89,3 +89,5 @@
 把“信号 → 发作期 → 分诊 → 案件 → 影响范围/响应目标”分别建模，并支持不建案、待分诊、部分范围和冲突结果。完成本用例不证明源动作、客户披露、责任结论或金额完成。
 
 替代链分叉的冲突信号还没有恢复边界（`AT-VE-065` 对这一类不成立）：分叉解没解要按链头判，今天的分叉只在当前有效集里找，源上下文更正其中一支后就找不到了、两个链头却仍当前有效，据此结束发作期就是虚构一次恢复。按链头判分叉与据此结束这一类发作期同归票 [docs-consistency/code/30](../../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)。
+
+单据号：CONTEXT「异常案件」规定建立案件时取得案件单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），今天立案不取号，页面只显示随机案件标识；承接 [document-numbering/06](../../../.scratch/document-numbering/issues/06-exception-case-and-claim-numbers.md)。

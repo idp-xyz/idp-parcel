@@ -282,6 +282,7 @@ Status: Confirmed
 ### 异常案件
 
 - 建立案件 → 固定根对象、初始影响范围、责任团队、初始优先级和响应策略，主状态为待响应。
+- 建立案件时在同一事务内取得案件[单据号](../GLOSSARY.md#单据号)（类型 `EXCEPTION_CASE`）；重开不换号，拆出的关联新案件取新号，归并不改主案件与被归并案件各自的号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
 - 待响应 → 处理中：责任团队或处理人明确接单；首次响应时间形成，后续等待、监控和升级作为工作条件管理。
 - 处理中 → 已关闭：案件内必需动作已完成，问题恢复、确认无法恢复、判定不成立或剩余事项明确移交，并保存关闭结论、依据、影响范围和未决事项。
 - 已关闭 → 处理中或待响应：同一因果链和处置范围出现足以影响原结论的新事实，形成受控重开及新的响应周期；原关闭历史保留。
@@ -308,6 +309,7 @@ Status: Confirmed
 ### 客户索赔项
 
 - 客户提交 → 记录原始索赔项及所属提交批次，不自动视为已经受理。
+- 客户提交被记录时，索赔项在同一事务内取得索赔[单据号](../GLOSSARY.md#单据号)（类型 `CLAIM`），早于资格审核，客服据它与客户沟通；客户自己的索赔项标识与批次号是外部标识，不被它取代（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
 - 资格审核 → 等待补充、不予受理或进入责任审核：结果保存合同、首次索赔期限、授权、重复关系和材料依据。
 - 等待补充 → 收到材料后重新判断最低材料要求；获批延期形成新补充期限版本，原期限保留。
 - 补充期限届满 → 按适用规则复核届满后果；规则明确时形成不予受理或按现有材料继续审核，规则缺失或延期效力未决时保持待决定并升级。

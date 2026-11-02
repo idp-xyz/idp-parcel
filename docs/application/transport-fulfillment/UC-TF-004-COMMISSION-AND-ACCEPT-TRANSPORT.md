@@ -254,5 +254,6 @@
 | 整份委托或尚未订舱的取消费 | 取消发生项只认订舱一级的取消 | 票 demo-chain-gaps/76 |
 | 装载分配的变化与撤回 | 生产上只有形成首版一口；`AT-TF-180` 的改版与撤回只在领域与存储一侧成立 | ADR-0203「补记：票 21 落地时的补充裁定」越权风险点 14 |
 | 软容量的受控超配（`AT-TF-043`） | 今天池只有一个硬上限，预占口没有软超配阈值与审批的输入格，超出一律答 `CAPACITY_EXCEEDED`（`AT-TF-139`）；`AT-TF-043` 走不到 | ADR-0203 决定四（硬上限不可越过）；软超配的阈值与审批尚未立票 |
+| CONTEXT「运输委托、订舱与承运接受」：运输委托进入已提交、订舱申请登记时各取得单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 不取号；委托与订舱标识由操作者在载荷里手填 | [document-numbering/09](../../../.scratch/document-numbering/issues/09-booking-and-transport-commission-numbers.md) |
 
 完成本用例只证明运输准备、承运接受和运输收费发生事实可被追溯；可执行价格和纯评价由 `parcel-pricing` 形成，供应商预期成本、账单主张和审核应付由 `settlement-accounting` 形成，权威运输交接、实际承运、移动、交付和包裹终局由后续用例分别形成。

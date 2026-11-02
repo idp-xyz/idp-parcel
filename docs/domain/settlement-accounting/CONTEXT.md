@@ -206,6 +206,7 @@ Status: Confirmed
 - 对账单的单据状态、对账状态和结清状态分别表达。结算相对方争议不撤销对账单，收付款也不改变对账单内容。
 - 争议必须指向明确费用及金额范围。无争议部分继续确认、开票、付款或核销，不能因局部争议冻结整张对账单。
 - 争议只对已发布的对账单提出，提出时刻不早于它的发布时刻、也不晚于它的作废时刻与登记时刻：客户在作废之前提出、作废之后才登记的照收；作废之后才提出的不登记在这张单上；作废之前已开的争议照旧等人处理到终局（[ADR-0354](../../adr/0354-statement-disputes-are-registered-and-resolved-through-two-operator-decision-faces-and-counterparty-confirmation-is-not-recorded.md)）。
+- 费用争议登记时在同一事务内取得争议[单据号](../GLOSSARY.md#单据号)（类型 `STATEMENT_DISPUTE`）；登记载荷里点名的争议标识仍是幂等键，单据号不参与判重（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
 - 截单后到达的有效事实先交给金额对象的唯一创建用例判断是否形成调整；已经形成的有效调整默认进入后续对账单，并关联原费用和原账期。截单或对账用例不得自行创建调整，也不得静默重写已经发布或关闭的历史周期。
 - 确认费用、对账单、发票或税务凭证、收付款事实和核销关系分别管理。任何一个对象的存在或完成不能推导其他对象已经完成。
 
@@ -277,6 +278,7 @@ Status: Confirmed
 
 - 草稿：依据当前截单范围生成，可以在发布前重新计算、加入或移除尚未发布的适用费用。
 - 草稿 → 已发布：固定对账单号、结算账户、周期、截单快照、费用范围和金额。
+- 对账单号就是对账单的[单据号](../GLOSSARY.md#单据号)，在发布事务内按[单据编号规则](../GLOSSARY.md#单据编号规则)分配（类型 `CUSTOMER_STATEMENT`）。发布幂等按发布意图：同一结算账户、周期与截止版本的发布重放答原单与原号，不分配第二个号；作废后的替代单取新号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定九）。
 - 已发布 → 已作废：只适用于整单不应继续有效的明确情况；原单继续保留并记录作废依据。
 - 已作废 → 已替代：需要重新出具时形成新对账单并关联原单，不能复用原单身份覆盖内容。
 - 待确认、部分确认、已确认或存在争议属于对账维度；未结清、部分结清或已结清属于结清维度，两者都不改变单据生命周期。
@@ -286,6 +288,7 @@ Status: Confirmed
 - 供应商主张被接受后，按金额范围形成未匹配、部分匹配或已匹配结果；匹配关系可以连接多个内部成本范围。
 - 已匹配金额依据合同和履约事实分别形成通过审核、存在争议或拒绝结果；同一主张可以同时包含三种金额结果。
 - 通过审核的金额形成审核应付；争议解除后只处理原争议金额，不重新覆盖已经通过的范围。
+- 审核应付形成时在同一事务内取得应付[单据号](../GLOSSARY.md#单据号)（类型 `AUDITED_PAYABLE`）；审核载荷里点名的应付标识仍是幂等键，不由人编号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）。
 - 供应商更正、供应商费用贷项或追加主张形成新的关联记录，不修改原始账单主张；真实返款仍由财务、银行或支付系统形成资金退回事实。
 
 ### 资金冻结与核销

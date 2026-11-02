@@ -1,6 +1,6 @@
 # ADR-0339：费用补拍确认与客户对账单发布是两种运营决定；登了对账周期的账户在每个截止日关上之后自动截单
 
-Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的拆笔答「按你的建议开始吧」、2026-10-28 答「开」，随后对会话「首发不做到点截单」的取舍答「自动截单」，决定三据此改为到点截单；票 product-strategy-boundary/22 第 2 笔。回答 [ADR-0269](./0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 越权风险点 5「周期日历不在产品里」：登了对账周期的账户，本期最后一个归属日由到点截单照周期点名。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：确认与截单编排已装在 parcel-api，却没有任何口能调到；截单的触发策略没定。**取法**：开两个运营决定口，各一种授予；另立对账周期册，登了周期的账户由 dispatch 在每个截止日关上之后自动截单；客户费用读口多透出归属日与所在对账单，供人列清单。
+Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的拆笔答「按你的建议开始吧」、2026-10-28 答「开」，随后对会话「首发不做到点截单」的取舍答「自动截单」，决定三据此改为到点截单；票 product-strategy-boundary/22 第 2 笔。回答 [ADR-0269](./0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 越权风险点 5「周期日历不在产品里」：登了对账周期的账户，本期最后一个归属日由到点截单照周期点名。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：确认与截单编排已装在 parcel-api，却没有任何口能调到；截单的触发策略没定。**取法**：开两个运营决定口，各一种授予；另立对账周期册，登了周期的账户由 dispatch 在每个截止日关上之后自动截单；客户费用读口多透出归属日与所在对账单，供人列清单。｜其决定二「载荷照截单命令逐格收：单号、账户、账期、草稿版本、币种、费用清单、本期最后一个归属日、申报合计（按最小币单位的整数串）、截单时刻。」一句中的「单号」一格，与决定三「单号与账期从截止日派生，形如 `STMT/<账户>/<YYYYMMDD>` 与 `CYCLE/<截止日>`，版本 `v1`；截单时刻取截止日的截单时刻，发布时刻取此刻。」一句中单号那一半，已由 [ADR-0355](./0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 停用：对账单号改在发布事务内按编号规则分配，发布幂等改按发布意图；其余各条不变。
 Date: 2026-10-28
 
 ## Context
@@ -68,3 +68,4 @@ Date: 2026-10-28
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)：「对账安排」与「结算账户、对账与争议」
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-221`；[UC-SA-003](../application/settlement-accounting/UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md)：`AT-SA-222`–`224`
 - 票 [product-strategy-boundary/22](../../.scratch/product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)
+- [ADR-0355](./0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)：停用本记录决定二一句中的「单号」一格与决定三一句中单号那一半（对账单号改在发布事务内按编号规则分配）
