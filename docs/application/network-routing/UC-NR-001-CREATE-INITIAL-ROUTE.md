@@ -236,6 +236,8 @@
 | `AT-NR-062` | 运营查阅初始路由判断册 | 成计划行逐段列出段引用、种类、起讫、责任、窗口与依据，末段若是交付段则终点是交付范围；列之前整份计划过构造门重建，无路可走行没有段 |
 | `AT-NR-063` | 日历登记的派送时长为负，或登了 0 | 负值按日历内容越界拒登；0 是零分钟，交付段窗口首尾同一时刻 |
 | `AT-NR-094` | 网络连接登记时连接代码含 `+`（计划段窗口依据里各格之间的分隔符），或含 `@`、`/` | 含 `+` 的拒登，原因指名分隔符（`CONNECTION_CODE_CARRIES_BASIS_SEPARATOR`），不当作缺身份；库上同样拒。含 `@`、`/` 的照常登记，计划段窗口依据按运输准备的读法读回原代码（[ADR-0201](../../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定二） |
+| `AT-NR-111` | 节点登记带显示名称、不带名称（键缺席或 `null`），或名称不合格（空白、首尾带空白、超过 100 个字符、含控制或格式字符）；采用参考配置的节点行随行给名称 | 带名称的随这一版登下，运营查阅这一版带 `displayName`；不带的照常登记，读口不带这一格、不补空串也不拿节点身份顶；不合格的整行拒登（在线口答 `MALFORMED_REQUEST`），不截断、不改写；采用行的名称照登，内容照旧取自参考配置，参考配置不带名称；别的族带名称按未知键拒（[ADR-0353](../../adr/0353-logistics-nodes-and-customs-ports-may-carry-an-optional-display-name-registered-with-the-version-and-it-never-enters-a-judgment.md) 决定二至四） |
+| `AT-NR-112` | 节点改名：登一个更晚生效、带新名称的新版本；同一修订号带上名称再登；名称出现之前登下的版本 | 新版带新名称，前版按新版生效时间接续闭合并照留它当时的名称；同一修订号再登照旧由主键挡，先登那一行不动；旧版本读成没登名称，其余各格与此前逐字节相同。判断时点的网络证据不带名称，只差名称的两份网络折出的证据相同，路由判断的候选、计划与依据都不读它（决定五至七） |
 | `AT-NR-070` | 选路比价时某段所引的价卡绑了分区目录，请求携带了包裹的邮编路线 | 这一段的区由 `parcel-pricing` 用寄件到收件的邮编路线经在用目录读出，补齐读数与正式评价、受理前估价同一份实现；这一段登了段计价区域也不读（[ADR-0189](../../adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一） |
 | `AT-NR-071` | 绑了分区目录的卡没有邮编路线可用（请求没带地理投影，或没报收件邮编）；或没绑目录的卡这一段没登段计价区域 | 这一段待判断，候选缺成本依据；不从节点推邮编，不拿登的区或卡上唯一的区顶上，也不整判断停下。目录或序列的在用解析读不回则不是待判断：整次取数报错，判断未决 |
 | `AT-NR-072` | 某段所引的价卡要按参考序列换算（如比较币种异于卡币种时的汇率） | 序列有在用版本时按计价时点取那一期出价；没有在用版本即这一段待判断，不编取值 |
@@ -285,5 +287,6 @@
 |---|---|---|
 | 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`） | 依赖类未决的那一件仍让消费门整封回滚重投，同一交接里已判成的计划一起回滚、重投时按判断键再判 | [docs-consistency/code/78](../../../.scratch/docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md) |
 | 路由未形成「保持可续办」（结果「路由未形成」、步骤 8C） | 登记补齐或部署接入之后没有续办（最低成本并列由授权角色经并列裁决口裁，见步骤 8D，不等续办）：重驱要随请求携带的地理投影，本上下文不落它，取法待裁 | [demo-chain-gaps/154](../../../.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md) |
+| 运营查阅以名称称呼节点，没登名称时以节点身份称呼（[CONTEXT「网络结构与适用范围」](../../domain/network-routing/CONTEXT.md#网络结构与适用范围)） | 读口已带 `displayName`（`AT-NR-111`）；管理台网点页行首仍显示编码，没用名称 | 管理台另票（协调方派） |
 
 完成本用例不表示运输执行已经完成设计。班次、容量、订舱、装载和实际履约应继续在 `transport-fulfillment` 的后续应用用例中展开。
