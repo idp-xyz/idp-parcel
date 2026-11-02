@@ -29,7 +29,7 @@ import { exceptionViewState } from './exception-view-state';
 const info = moduleInfoById['claims-recovery'];
 
 // 索赔与追偿（visibility-exception），三签各接 GET /claims-recovery-records 的一本册。改版后列只放运营要看的：索赔号与案件号
-// （单据号，ADR-0355 决定十一）、运单号、客户、类型、状态胶囊、时间与期限；客户自己的索赔项编号与批次号、各种内部标识、
+// （单据号，ADR-0355 决定十一）、包裹号（索赔的目标包裹）、客户、类型、状态胶囊、时间与期限；客户自己的索赔项编号与批次号、各种内部标识、
 // 合同、依据引用进每行末尾的「技术详情」。没有单据号的行照旧显标识，技术详情说为什么没有号。
 //
 // 三个对象各有独立的生命周期，分签而不折进一张表：客户赔付不等追偿完成，追偿也不等客户索赔。全页没有金额列——赔付与
@@ -95,7 +95,7 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
     },
     {
       id: 'target',
-      header: objectNouns.shipmentNumber,
+      header: objectNouns.parcelNumber,
       render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.target}</span>,
     },
     { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
@@ -148,7 +148,7 @@ function CustomerClaimsTable({ names }: { names: PartyNames }) {
     <ListPageTemplate<ClaimItemRecord>
       title="客户索赔"
       description="客户就丢失、破损等提出的索赔：资格审核、责任认定各走到哪一步。赔付金额在账务区。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜索赔号、运单号、客户、索赔类型…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索赔号、包裹号、客户、索赔类型…' }}
       filterSummary={answer?.kind === 'outcome' ? countSummary('项', rows, claimStatus) : undefined}
       columns={claimColumns(names)}
       rows={visible}

@@ -12,6 +12,7 @@ import {
   type SupplierExpectedCostRecord,
 } from './api';
 import { labelFor } from '../../vocabulary/status';
+import { objectNouns } from '../../vocabulary/objects';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
@@ -28,17 +29,17 @@ const info = moduleInfoById['charges-billing'];
 //
 // 确认时固定的七项（责任法人、结算相对方、收付方向、结算账户、合同或责任依据、主要计费范围、来源事实，ADR-0087 决定一）
 // 未确认行整键不出现，那是「这一行还没确认」的正面形状；页面不为它们补默认值、不由别处推断。主列里只拿其中两项给人看
-// （结算相对方转写成客户名、来源事实解析成运单号），其余进技术详情。
+// （结算相对方转写成客户名、来源事实解析成包裹号），其余进技术详情。
 
 // —— 客户费用签 ——
 
-/** 运单号从来源事实或确认依据里认（两者都长成 <族>/<包裹号>/…）；都认不出就显费用来源的中文说法。 */
+/** 包裹号从来源事实或确认依据里认（两者都长成 <族>/<包裹号>/…）；都认不出就显费用来源的中文说法。 */
 function parcelCell(row: CustomerChargeRecord) {
   const parcel = parcelFromRef(row.sourceFact) ?? parcelFromRef(row.confirmationBasis);
   if (parcel) return <span className="font-mono text-xs text-idpxyz-textBright">{parcel}</span>;
   const family = sourceFactLabel(row.sourceFact);
   if (family) return <span className="text-idpxyz-text">{family}</span>;
-  // 未确认行上来源事实整键不出现：运单在确认时才随来源事实固定到这一行，不是漏登。
+  // 未确认行上来源事实整键不出现：包裹在确认时才随来源事实固定到这一行，不是漏登。
   return (
     <span className="text-idpxyz-textMuted" title="来源事实在费用确认时固定到这一行">
       确认后关联
@@ -85,7 +86,7 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
 
 function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeRecord>[] {
   return [
-    { id: 'parcel', header: '运单号', className: 'whitespace-nowrap', render: parcelCell },
+    { id: 'parcel', header: objectNouns.parcelNumber, className: 'whitespace-nowrap', render: parcelCell },
     { id: 'customer', header: '客户', className: 'whitespace-nowrap', render: (row) => customerCell(row, names) },
     { id: 'fee-item', header: '费用项目', className: 'whitespace-nowrap', render: (row) => feeItemLabel(row.feeItem) },
     {
@@ -143,7 +144,7 @@ function CustomerChargesTable({ names }: { names: PartyNames }) {
 
   const charges = answer?.kind === 'outcome' ? answer.body.charges : [];
   const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。检索的词包括转写出来的客户名与运单号。
+  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。检索的词包括转写出来的客户名与包裹号。
   const visibleCharges = needle
     ? charges.filter((row) =>
         [
@@ -167,7 +168,7 @@ function CustomerChargesTable({ names }: { names: PartyNames }) {
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜运单号、客户、费用项目',
+        placeholder: `搜${objectNouns.parcelNumber}、客户、费用项目`,
       }}
       filterSummary={
         // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区「这不是登记册为空」直接矛盾。

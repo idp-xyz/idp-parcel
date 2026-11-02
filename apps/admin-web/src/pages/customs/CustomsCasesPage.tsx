@@ -45,6 +45,7 @@ import {
   type CaseNumberCell,
 } from './record-rows';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { objectNouns } from '../../vocabulary/objects';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
 import { technicalRows } from '../settlement/ops-ui';
@@ -102,13 +103,15 @@ function recordColumns(spec: ColumnSpec[], tech?: [label: string, key: string][]
 
 // 清关单的号名与单据名取单据编号词典那一处（ADR-0355 决定十一），各页同一个叫法。
 const caseWords = documentTypeWords.CUSTOMS_CASE;
+// 清关单、报关批次与放行检查的对象都是声明包裹，列上与检索里叫包裹号；「运单号」专指委托的单据号，不用在这里。
+const parcelNumberName = objectNouns.parcelNumber;
 const caseInternalIdLabel = `${caseWords.name}内部标识`;
 
 // 清关单号一列是单据号；没有单据号的清关单照旧显案件标识，技术详情按它记下的情形说为什么没有号。
 const caseColumns = recordColumns(
   [
     { id: 'number', header: caseWords.numberName, mono: true, nowrap: true },
-    { id: 'parcels', header: '运单号', mono: true, multi: true },
+    { id: 'parcels', header: parcelNumberName, mono: true, multi: true },
     { id: 'jurisdiction', header: '辖区', mono: true, nowrap: true },
     { id: 'direction', header: '程序', nowrap: true },
     { id: 'progress', header: '最新进展', pillCode: 'progress' },
@@ -129,7 +132,7 @@ const caseColumns = recordColumns(
 const unitColumns = recordColumns(
   [
     { id: 'id', header: '批次号', mono: true, nowrap: true },
-    { id: 'members', header: '运单号', mono: true, multi: true },
+    { id: 'members', header: parcelNumberName, mono: true, multi: true },
     { id: 'jurisdiction', header: '辖区', mono: true, nowrap: true },
     { id: 'direction', header: '程序', nowrap: true },
     { id: 'formedAt', header: '形成时间', mono: true, nowrap: true },
@@ -146,7 +149,7 @@ const unitColumns = recordColumns(
 const snapshotColumns = recordColumns(
   [
     { id: 'unit', header: '批次号', mono: true, nowrap: true },
-    { id: 'members', header: '运单号', mono: true, multi: true },
+    { id: 'members', header: parcelNumberName, mono: true, multi: true },
     { id: 'current', header: '现况', nowrap: true },
     { id: 'fixedAt', header: '固定时间', mono: true, nowrap: true },
   ],
@@ -162,7 +165,7 @@ const snapshotColumns = recordColumns(
 const submissionColumns = recordColumns(
   [
     { id: 'unit', header: '批次号', mono: true, nowrap: true },
-    { id: 'members', header: '运单号', mono: true, multi: true },
+    { id: 'members', header: parcelNumberName, mono: true, multi: true },
     { id: 'latestSend', header: '发送', nowrap: true },
     { id: 'received', header: '海关接收' },
     { id: 'accepted', header: '海关受理' },
@@ -200,7 +203,7 @@ const resultColumns = recordColumns(
 
 const judgementColumns = recordColumns(
   [
-    { id: 'object', header: '运单号', mono: true, nowrap: true },
+    { id: 'object', header: parcelNumberName, mono: true, nowrap: true },
     { id: 'intent', header: '动作', nowrap: true },
     { id: 'route', header: '网点 → 去向', nowrap: true },
     { id: 'crossZone', header: '跨关区', nowrap: true },
@@ -298,7 +301,7 @@ function CustomsCasesTable() {
     <RecordTable
       title="清关单"
       description="每票出口或进口货物的清关单：走到哪一步、最近一次更新是什么时候"
-      searchPlaceholder={`搜运单号、辖区、${caseWords.numberName}`}
+      searchPlaceholder={`搜${parcelNumberName}、辖区、${caseWords.numberName}`}
       columns={caseColumns}
       rows={rows}
       answer={answer}
@@ -323,7 +326,7 @@ function DeclarationUnitsTable() {
     <RecordTable
       title="报关批次"
       description="一次向海关申报的一批运单；资料和申报记录都挂在批次上"
-      searchPlaceholder={`搜批次号、运单号、${caseWords.numberName}`}
+      searchPlaceholder={`搜批次号、${parcelNumberName}、${caseWords.numberName}`}
       columns={unitColumns}
       rows={rows}
       answer={answer}
@@ -343,7 +346,7 @@ function DeclarationSnapshotsTable() {
     <RecordTable
       title="申报资料"
       description="每次申报发出前固定下来的那份资料；发出后不再改，改了就是下一次申报"
-      searchPlaceholder="搜批次号、运单号"
+      searchPlaceholder={`搜批次号、${parcelNumberName}`}
       columns={snapshotColumns}
       rows={snapshotRows(submissions)}
       answer={answer}
@@ -366,7 +369,7 @@ function SubmissionVersionsTable() {
     <RecordTable
       title="申报记录"
       description="每次向海关申报的发送情况与海关的接收、受理结果；各层分开记，发出去不等于海关收到"
-      searchPlaceholder="搜批次号、运单号"
+      searchPlaceholder={`搜批次号、${parcelNumberName}`}
       columns={submissionColumns}
       rows={answer?.kind === 'outcome' ? submissionRows(submissions, results) : []}
       answer={answer}
@@ -402,7 +405,7 @@ function ExternalResultsTable() {
   );
 }
 
-// 放行记录按运单号查：不填则列最近的记录。记录是判断当时的结论，换了规则之后同一请求的新判断是另一行，旧行不改。
+// 放行记录按包裹号查（判断的对象是声明包裹）：不填则列最近的记录。记录是判断当时的结论，换了规则之后同一请求的新判断是另一行，旧行不改。
 // 「只看卡关」换一口读：每件运单只看它最近那一刻的放行检查，有一份没过门的（阻断、未决、未配置）才列，件数是读口答的全部
 // 件数——在判断册这一页里数「已拦截」只数得到服务端交回的那一页，也会把后来已放行的运单算进去。首页「今日待办」的卡关格点进来就落在这里。
 function AdmissionJudgementsTable({
@@ -453,14 +456,14 @@ function AdmissionJudgementsTable({
             }}
           >
             <label className="text-sm" htmlFor="admission-object">
-              按运单号查
+              按{parcelNumberName}查
             </label>
             <input
               id="admission-object"
               className="border rounded px-2 py-1 text-sm font-mono"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="运单号；留空列出最近的记录"
+              placeholder={`${parcelNumberName}；留空列出最近的记录`}
             />
             <button type="submit" className="border rounded px-3 py-1 text-sm">
               查询
@@ -472,7 +475,7 @@ function AdmissionJudgementsTable({
         <RecordTable
           title="卡关的运单"
           description="最近一次放行检查没过、还卡在关务上的运单：被拦的等限制解除或放行，待定的等补齐，缺配置的等配好；放行之后要再过一次检查才会离开这张表"
-          searchPlaceholder="在结果内搜运单号、网点、结论"
+          searchPlaceholder={`在结果内搜${parcelNumberName}、网点、结论`}
           columns={judgementColumns}
           rows={judgementRows(judgements, (node) => placeLabel(places, node))}
           answer={answer}
@@ -490,13 +493,13 @@ function AdmissionJudgementsTable({
         <RecordTable
           title="放行记录"
           description="货物出库、装车、跨关区、交付前每一次放行检查的结论；按当时的规则判，不回头改"
-          searchPlaceholder="在结果内搜运单号、网点、结论"
+          searchPlaceholder={`在结果内搜${parcelNumberName}、网点、结论`}
           columns={judgementColumns}
           rows={judgementRows(judgements, (node) => placeLabel(places, node))}
           answer={answer}
           retry={() => setReloadKey((value) => value + 1)}
           endpoint={`GET /customs-action-admission-judgements${object ? `?object=${object}` : ''}`}
-          emptyTitle={object ? `没有运单「${object}」的放行记录` : '还没有放行记录'}
+          emptyTitle={object ? `没有${parcelNumberName}「${object}」的放行记录` : '还没有放行记录'}
           emptyDescription="只有出库、装车、交付时问过放行检查才有记录；没有记录不等于被拦，也不等于可放行。"
           filterSummary={`${judgements.length} 条 · 已拦截 ${blocked} 条`}
         />

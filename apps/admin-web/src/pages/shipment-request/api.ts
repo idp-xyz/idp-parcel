@@ -784,6 +784,23 @@ export function findShipmentRequestViewsByDocumentNumber(
   );
 }
 
+/**
+ * 按一组委托标识在可见范围里取回运单概要(别的上下文的页面据此显运单号,ADR-0355 决定十一)。一次至多
+ * SHIPMENT_IDS_PER_LOOKUP 个,多了由调用方分批;看不见的与查无的都不在答复里,读口不说是哪一种。
+ */
+export function findShipmentRequestViewsByIds(
+  shipmentRequestIds: readonly string[],
+): Promise<ApiResult<ViewsListResponseBody>> {
+  // 逗号本身不编码:读口按它分段,标识里没有逗号;每个标识各自按 URI 组件编码。
+  return exchange<ViewsListResponseBody>(
+    `/shipment-request-views?shipmentRequestIds=${shipmentRequestIds.map(encodeURIComponent).join(',')}`,
+    { method: 'GET' },
+  );
+}
+
+/** 读口一次收的委托标识上限(shipmenthttp 的 maxShipmentRequestIDsPerLookup);超出是坏请求,所以分批问。 */
+export const SHIPMENT_IDS_PER_LOOKUP = 100;
+
 export function findShipmentRequestView(
   shipmentRequestId: string,
 ): Promise<ApiResult<ViewDetailResponseBody>> {

@@ -20,11 +20,11 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 1014 |
+| ① 已钉住 | 1015 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 423 |
-| 合计 | 1817 |
+| 合计 | 1818 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -34,7 +34,7 @@
 | NR | 112 | 89 | 22 | 1 | 0 |
 | PC | 77 | 63 | 14 | 0 | 0 |
 | PP | 47 | 47 | 0 | 0 | 0 |
-| PS | 177 | 150 | 24 | 2 | 1 |
+| PS | 178 | 151 | 24 | 2 | 1 |
 | SA | 227 | 117 | 91 | 19 | 0 |
 | TF | 352 | 283 | 59 | 7 | 3 |
 | VE | 227 | 93 | 0 | 15 | 119 |
@@ -565,6 +565,7 @@
 | `AT-PS-177` | cmd/parcel-api/assemble_shipment_document_number_test.go::TestASubmittedShipmentTakesItsDocumentNumberAndAReplayAnswersTheOriginal、::TestARolledBackSubmissionReleasesItsDocumentNumber、::TestConcurrentSubmissionsTakeDistinctDocumentNumbers、::TestASupplementedSubmissionVersionKeepsTheDocumentNumbering；internal/parcelshipment/application/submit_shipment_request_document_number_test.go::TestASubmittedRequestCarriesItsDocumentNumberAndAReplayAnswersTheSameOne、::TestAnInsertThatFindsTheRequestAlreadyThereIssuesNoNumber；internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitAnswerCarriesTheDocumentNumberAndTheReplayReadsItBack |
 | `AT-PS-178` | cmd/parcel-api/assemble_shipment_document_number_test.go::TestAShipmentWithoutANumberingTimeZoneIsSubmittedWithoutANumber；internal/parcelshipment/application/submit_shipment_request_document_number_test.go::TestASubmissionWithoutANumberingTimeZoneIsSubmittedWithoutANumber；internal/parcelshipment/adapters/postgres/shipment_document_number_test.go::TestTheDocumentNumberIsReadBackWithTheRequestAndTheViews、::TestATimeZoneNotConfiguredAbsenceIsReadBackAsItself；internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitAnswerWithoutANumberOmitsTheKeyAndSaysWhy；internal/parcelshipment/adapters/http/query_shipment_request_views_test.go::TestViewsListCarriesTheDocumentNumberOrWhyThereIsNone、::TestViewsListFiltersByTheDocumentNumber |
 | `AT-PS-179` | cmd/parcel-api/assemble_shipment_document_number_test.go::TestANumberingRuleCollisionRollsTheSubmissionBack；internal/parcelshipment/application/submit_shipment_request_document_number_test.go::TestANumberingRuleCollisionAnswersWithoutRecordingANumber；internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitAnswersANumberingRuleCollisionAsAnOutcome |
+| `AT-PS-180` | internal/parcelshipment/adapters/postgres/shipment_document_number_test.go::TestASetOfShipmentRequestIDsIsLookedUpWithinTheScope；internal/parcelshipment/adapters/http/query_shipment_request_views_test.go::TestViewsListLooksUpASetOfShipmentRequestIDs |
 | `AT-SA-002` | internal/settlementaccounting/application/assess_advance_recovery_test.go::TestAnAssessmentRegistersOncePerIdentity；internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-003` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-004` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
@@ -2168,5 +2169,7 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-02 追记（票 document-numbering/09 评审修订，ADR-0355 决定十一）：UC-TF-004 新立 `AT-TF-374`（引用委托、订舱的各口答复与册随引用带单据号或无号原因，总单区以号上列面），入①；`AT-TF-371` 补换版不换号的真库用例，`AT-TF-373` 补订舱撞号的真库用例。总览计数未重算，由推送方重算。
 
 2026-11-02 追记（票 document-numbering/06）：UC-VE-004 新立 `AT-VE-227`（分诊自动建案在同一事务内取案件单据号、号随案件落库，重复命中不取号，回滚退号，生命周期不换号）、`AT-VE-228`（单据编号时区未配置照常建案不带号；撞号整轮不落、答未决、取过的流水退回），UC-VE-007 新立 `AT-VE-229`（记录提交时取索赔单据号、回执带号、重放答原号、同项并发只占一个号、各租户各数、按月重置）、`AT-VE-230`（时区未配置照常记录不带号；撞号不记录答「编号规则撞号」；回滚退号）；领域、编排、真库、HTTP、派发与生产装配用例点名，四条入①。总览计数未改，由推送方重算。
+
+2026-11-02 追记（票 document-numbering/10，ADR-0355 决定十一）：UC-PS-001 新立 `AT-PS-180`（委托查阅按一组委托标识在可见范围内取回概要，作用域外与查无的不出现，超上限、空段与并用是坏请求；供别的上下文的页面显运单号、不复制单据号），入①。总览计数未动，由推送方重算。
 
 2026-11-02 追记（票 document-numbering/12 的文档半边，ADR-0356 草案）：UC-VE-008 新立 `AT-VE-231` 至 `AT-VE-236`（客户追踪按委托的单据号查：已接受委托逐件列当前有效包裹、逐件答复同按包裹查；查无与属别的账户同答；待接受与没有服务；游标分页与坏请求；拆分后列后继；读不动整页未形成），入④，等票 12 实现；`AT-VE-235` 另等包裹身份谱系落模型。总览计数未重算，由推送方重算。

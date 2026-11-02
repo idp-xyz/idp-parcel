@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { shipmentNoOf } from '../shipment-request/ref-no';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
+import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -21,7 +21,17 @@ import { routeSummaryOf } from './network-rows';
 import { placeLabel, type PlaceNameIndex } from './place-names';
 import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows } from './route-workbench';
-import { customerText, parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
+import {
+  customerText,
+  parcelCell,
+  parcelColumnHeader,
+  parcelSearchCells,
+  parcelSubtitle,
+  parcelTitle,
+  shipmentTechnicalRows,
+  type RoutePlansHeader,
+  type ShipmentNumberOf,
+} from './route-plan-cells';
 import { RerouteSuggestionsView } from './RerouteSuggestionsView';
 import { InitialRouteTiesView } from './InitialRouteTiesView';
 
@@ -32,7 +42,8 @@ const info = moduleInfoById['route-plans'];
 // GET /route-plans 按 ?register= 分派，后两册各走自己的读口与决定口（RerouteSuggestionsView、InitialRouteTiesView）。
 //
 // 行首是运营认的：哪票货（运单号，包裹号挂在下面）、哪个客户（名称从客户账户册转写，读不到显编码）、结论胶囊（即指标即筛）、
-// 路线一句话、时间。计划版本、受理基线、服务目的、复核关联、失效依据与各段明细进右栏「技术详情」。
+// 路线一句话、时间。运单号按页上的委托标识经委托查阅取回（route-plan-cells 文件头）。委托标识、计划版本、受理基线、服务目的、
+// 复核关联、失效依据与各段明细进右栏「技术详情」。
 //
 // 「无可用路线」与改路判定如实单列（CONTEXT 硬句）：前者是初始判断结论的封闭一格，照词呈现不折进成计划行；改路判定缺席是
 // 没评估过改路，与「不许改路」分开说。路线一句话取读口随行带出的各段（network-rows 的 routeSummaryOf），不拆快照另立读法。
@@ -41,9 +52,13 @@ const info = moduleInfoById['route-plans'];
 // 一句话路线里的网点按此刻生效那一版查名（use-place-names），没有名称的显编码；编码在右栏技术详情的逐段里。
 const routeText = (row: InitialRouteRecord, places: PlaceNameIndex) => routeSummaryOf(row.legs, (node) => placeLabel(places, node)) || '—';
 
-function initialRouteColumns(names: CustomerNameIndex, places: PlaceNameIndex): WorkbenchColumn<InitialRouteRecord>[] {
+function initialRouteColumns(
+  names: CustomerNameIndex,
+  places: PlaceNameIndex,
+  numberOf: ShipmentNumberOf,
+): WorkbenchColumn<InitialRouteRecord>[] {
   return [
-    { key: 'parcel', header: '运单', render: parcelCell },
+    { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
     { key: 'customer', header: '客户', render: (row) => customerText(row.customerAccountId, names) },
     { key: 'conclusion', header: '结论', render: (row) => <RowStatusPill status={codeStatus(row.conclusion)} /> },
     { key: 'route', header: '路线', hideWhenDetailOpen: true, render: (row) => <span className="text-[12px]">{routeText(row, places)}</span> },
@@ -61,16 +76,18 @@ function InitialRouteDetail({
   row,
   names,
   places,
+  numberOf,
   onClose,
 }: {
   row: InitialRouteRecord;
   names: CustomerNameIndex;
   places: PlaceNameIndex;
+  numberOf: ShipmentNumberOf;
   onClose: () => void;
 }) {
   return (
     <RecordDetailPanel
-      title={shipmentNoOf(row.shipmentRequestId)}
+      title={parcelTitle(row, numberOf)}
       status={codeStatus(row.conclusion)}
       subtitle={parcelSubtitle(row, names)}
       facts={[
@@ -88,7 +105,7 @@ function InitialRouteDetail({
         { label: '服务', value: labelFor(row.servicePurpose) },
       ]}
       technical={techRows([
-        { label: '运单标识', value: row.shipmentRequestId },
+        ...shipmentTechnicalRows(row, numberOf),
         { label: '包裹标识', value: row.declaredParcelId },
         { label: '客户编码', value: row.customerAccountId },
         { label: '计划版本', value: row.planVersion },
@@ -126,9 +143,9 @@ function InitialRouteDetail({
   );
 }
 
-function reassessmentColumns(names: CustomerNameIndex): WorkbenchColumn<RouteReassessmentRecord>[] {
+function reassessmentColumns(names: CustomerNameIndex, numberOf: ShipmentNumberOf): WorkbenchColumn<RouteReassessmentRecord>[] {
   return [
-    { key: 'parcel', header: '运单', render: parcelCell },
+    { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
     { key: 'customer', header: '客户', render: (row) => customerText(row.customerAccountId, names) },
     { key: 'conclusion', header: '复核结果', render: (row) => <RowStatusPill status={codeStatus(row.conclusion)} /> },
     {
@@ -149,10 +166,20 @@ function reassessmentColumns(names: CustomerNameIndex): WorkbenchColumn<RouteRea
   ];
 }
 
-function ReassessmentDetail({ row, names, onClose }: { row: RouteReassessmentRecord; names: CustomerNameIndex; onClose: () => void }) {
+function ReassessmentDetail({
+  row,
+  names,
+  numberOf,
+  onClose,
+}: {
+  row: RouteReassessmentRecord;
+  names: CustomerNameIndex;
+  numberOf: ShipmentNumberOf;
+  onClose: () => void;
+}) {
   return (
     <RecordDetailPanel
-      title={shipmentNoOf(row.shipmentRequestId)}
+      title={parcelTitle(row, numberOf)}
       status={codeStatus(row.conclusion)}
       subtitle={parcelSubtitle(row, names)}
       facts={[
@@ -163,7 +190,7 @@ function ReassessmentDetail({ row, names, onClose }: { row: RouteReassessmentRec
         { label: '服务', value: labelFor(row.servicePurpose) },
       ]}
       technical={techRows([
-        { label: '运单标识', value: row.shipmentRequestId },
+        ...shipmentTechnicalRows(row, numberOf),
         { label: '包裹标识', value: row.declaredParcelId },
         { label: '客户编码', value: row.customerAccountId },
         { label: '复核关联', value: row.correlationId },
@@ -198,6 +225,15 @@ type LoadedAnswer =
   | { register: 'initial-route'; answer: ApiResult<InitialRouteListResponseBody> }
   | { register: 'reassessment'; answer: ApiResult<RouteReassessmentListResponseBody> };
 
+/** 已装载那一册上出现的委托标识；没答或在读时为空。 */
+function loadedShipmentRequestIds(loaded: LoadedAnswer | null): string[] {
+  if (loaded === null) return [];
+  if (loaded.register === 'initial-route') {
+    return loaded.answer.kind === 'outcome' ? loaded.answer.body.judgments.map((row) => row.shipmentRequestId) : [];
+  }
+  return loaded.answer.kind === 'outcome' ? loaded.answer.body.reassessments.map((row) => row.shipmentRequestId) : [];
+}
+
 const emptyDescription = '运单受理后，系统会为每件包裹定路线并在运输途中复核；有了这样的记录就会出现在这里。';
 
 /**
@@ -226,6 +262,8 @@ export function RoutePlansPage() {
       cancelled = true;
     };
   }, [register, reloadKey]);
+  // 两册的行都按委托标识取运单号；hook 要在切到另两册的早退之前调。
+  const numberOf = useShipmentNumbers(loadedShipmentRequestIds(loaded), reloadKey);
 
   const retry = () => setReloadKey((value) => value + 1);
   const header: RoutePlansHeader = {
@@ -251,12 +289,12 @@ export function RoutePlansPage() {
         rowKey={(row) => `${row.shipmentRequestId}#${row.servicePurpose}#${row.acceptanceBaseline}`}
         statusOf={(row) => codeStatus(row.conclusion)}
         rowAttention={(row) => row.conclusion === 'NO_CURRENT_ROUTE'}
-        searchCells={(row) => [...parcelSearchCells(row, names), routeText(row, places)]}
+        searchCells={(row) => [...parcelSearchCells(row, names, numberOf), routeText(row, places)]}
         searchPlaceholder="搜运单号 / 包裹号 / 客户 / 网点"
-        columns={initialRouteColumns(names, places)}
+        columns={initialRouteColumns(names, places, numberOf)}
         sortAccessors={{ 'recorded-at': { value: (row) => row.recordedAt, instant: true } }}
         defaultSort={{ key: 'recorded-at', dir: -1 }}
-        renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} places={places} onClose={close} />}
+        renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} places={places} numberOf={numberOf} onClose={close} />}
         onRefresh={retry}
         viewState={catalogueViewState(answer, judgments.length, retry, {
           module: info,
@@ -280,12 +318,12 @@ export function RoutePlansPage() {
       rowKey={(row) => row.correlationId}
       statusOf={(row) => codeStatus(row.conclusion)}
       rowAttention={(row) => row.conclusion === 'PLAN_LAPSED'}
-      searchCells={(row) => parcelSearchCells(row, names)}
+      searchCells={(row) => parcelSearchCells(row, names, numberOf)}
       searchPlaceholder="搜运单号 / 包裹号 / 客户"
-      columns={reassessmentColumns(names)}
+      columns={reassessmentColumns(names, numberOf)}
       sortAccessors={{ 'reassessed-at': { value: (row) => row.reassessedAt, instant: true } }}
       defaultSort={{ key: 'reassessed-at', dir: -1 }}
-      renderDetail={(row, close) => <ReassessmentDetail row={row} names={names} onClose={close} />}
+      renderDetail={(row, close) => <ReassessmentDetail row={row} names={names} numberOf={numberOf} onClose={close} />}
       onRefresh={retry}
       viewState={catalogueViewState(answer, reassessments.length, retry, {
         module: info,
