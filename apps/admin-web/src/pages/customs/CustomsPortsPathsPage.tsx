@@ -18,6 +18,8 @@ import { portsPathsRegistryLabels, problemNote, registrationSnapshotHints, regis
 import { labelFor } from '../../vocabulary/status';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { validityOf } from '../network/network-rows';
+import { placeLabel } from '../network/place-names';
+import { usePlaceNames } from '../network/use-place-names';
 import { codeStatus } from '../visibility/exception-list';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, notConnectedOverride, techRows, type RowStatus } from '../network/route-workbench';
@@ -44,8 +46,12 @@ const views: { id: View; label: string }[] = [
 
 interface CatalogueRow {
   key: string;
-  /** 行首：口岸或路径。 */
+  /** 行首：口岸或路径的编码。 */
   name: string;
+  /** 口岸行这一版登的名称（名称是版本内容，ADR-0353）；路径行与没登名称的口岸行缺席。 */
+  displayName?: string;
+  /** 路径行上屏的口岸写法：按此刻生效那一版查到的名称，查不到即编码。 */
+  portLabel?: string;
   port: string;
   direction?: string;
   mode?: string;
@@ -62,7 +68,12 @@ const nameColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
   key: 'name',
   header,
   sortKey: 'name',
-  render: (row) => <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.name}</span>,
+  // 编码用等宽字，名称不用：没登名称的那几版一眼看得出。
+  render: (row) => (
+    <span className={`truncate font-medium text-[color:var(--ds-text-link-hover)] ${row.displayName ? '' : 'font-mono'}`.trim()}>
+      {row.displayName ?? row.name}
+    </span>
+  ),
 });
 const statusColumn: WorkbenchColumn<CatalogueRow> = {
   key: 'status',
@@ -84,7 +95,7 @@ const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
   paths: [
     nameColumn('申报路径'),
     statusColumn,
-    { key: 'port', header: '经哪个口岸', render: (row) => <span className="font-mono text-[12px]">{row.port}</span> },
+    { key: 'port', header: '经哪个口岸', render: (row) => row.portLabel ?? row.port },
     { key: 'direction', header: '方向', render: (row) => (row.direction ? labelFor(row.direction) : '—') },
     { key: 'mode', header: '申报模式', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{row.mode ?? '—'}</span> },
   ],
@@ -96,6 +107,7 @@ function portRows(body: CandidatePortListResponseBody): CatalogueRow[] {
   return body.ports.map((record) => ({
     key: `port:${record.port}:${record.appliesFrom}`,
     name: record.port,
+    displayName: record.displayName,
     port: record.port,
     appliesFrom: record.appliesFrom,
     appliesUntil: record.appliesUntil,
@@ -119,14 +131,15 @@ function CatalogueDetail({ view, row, onClose }: { view: View; row: CatalogueRow
   const period = { label: view === 'ports' ? '可用期间' : '适用期间', value: <span className="font-mono">{formatRange(row.appliesFrom, row.appliesUntil)}</span> };
   return (
     <RecordDetailPanel
-      title={row.name}
+      title={row.displayName ?? row.name}
+      mono={!row.displayName}
       status={statusOf(row)}
       subtitle={view === 'ports' ? '可用口岸' : '申报路径'}
       facts={
         view === 'ports'
           ? [period]
           : [
-              { label: '经哪个口岸', value: <span className="font-mono">{row.port}</span> },
+              { label: '经哪个口岸', value: row.portLabel ?? row.port },
               { label: '方向', value: row.direction ? labelFor(row.direction) : '—' },
               { label: '申报模式', value: <span className="font-mono">{row.mode ?? '—'}</span> },
               period,
@@ -135,6 +148,7 @@ function CatalogueDetail({ view, row, onClose }: { view: View; row: CatalogueRow
       technical={techRows([
         { label: view === 'ports' ? '口岸标识' : '路径标识', value: row.name },
         { label: '口岸标识', value: view === 'paths' ? row.port : undefined },
+        { label: '名称', value: row.displayName },
         { label: '方向码', value: row.direction },
         { label: '生效起点', value: row.appliesFrom },
         { label: '截止', value: row.appliesUntil },
@@ -156,6 +170,7 @@ type Loaded =
 
 function PortsPathsWorkbench() {
   const [view, setView] = useState<View>('ports');
+  const names = usePlaceNames();
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -182,7 +197,7 @@ function PortsPathsWorkbench() {
     loaded?.view === view && loaded.answer.kind === 'outcome'
       ? loaded.view === 'ports'
         ? portRows(loaded.answer.body as CandidatePortListResponseBody)
-        : pathRows(loaded.answer.body as DeclarationPathListResponseBody)
+        : pathRows(loaded.answer.body as DeclarationPathListResponseBody).map((row) => ({ ...row, portLabel: placeLabel(names, row.port) }))
       : [];
 
   const viewState =
@@ -202,18 +217,16 @@ function PortsPathsWorkbench() {
     <RouteWorkbench<CatalogueRow>
       key={view}
       title={info.title}
-      // 口岸目录是册级不登名称（合规候选口岸只有口岸引用这一身份），不设名称栏，页头用册级说法交代一句；不说「未登记」，
-      // 那是行级缺席的词，在这里还会和关务适用性的不可用理由「口岸未登记」撞词。
-      subtitle="公司可以走的口岸，以及从哪个口岸、按哪个方向、用哪种申报模式报关；路线规划只在这些里面选。口岸目录只登编码，不登名称。"
+      subtitle="公司可以走的口岸，以及从哪个口岸、按哪个方向、用哪种申报模式报关；路线规划只在这些里面选。"
       sections={<SectionTabs sections={views} active={view} onChange={setView} />}
       answered={view !== 'regions' && answer?.kind === 'outcome'}
       rows={rows}
       rowKey={(row) => row.key}
       statusOf={statusOf}
-      searchCells={(row) => [row.name, row.port, row.mode, row.direction ? labelFor(row.direction) : undefined]}
+      searchCells={(row) => [row.name, row.displayName, row.port, row.portLabel, row.mode, row.direction ? labelFor(row.direction) : undefined]}
       searchPlaceholder={view === 'paths' ? '搜路径、口岸、申报模式' : '搜口岸'}
       columns={columnsOf[view]}
-      sortAccessors={{ name: { value: (row) => row.name } }}
+      sortAccessors={{ name: { value: (row) => row.displayName ?? row.name } }}
       defaultSort={{ key: 'name', dir: 1 }}
       renderDetail={(row, close) => <CatalogueDetail view={view} row={row} onClose={close} />}
       onRefresh={view === 'regions' ? undefined : retry}
