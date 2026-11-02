@@ -27,7 +27,12 @@ import {
 import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
 import { labelFor } from '../../vocabulary/status';
-import { objectNouns } from '../../vocabulary/objects';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { masterDocumentReferencesOf } from './transport-document-numbers';
+
+// 委托、订舱的号名只取单据编号词典（ADR-0355 决定十一），不在本页另写。
+const commissionNumberName = documentTypeWords.TRANSPORT_COMMISSION.numberName;
+const bookingNumberName = documentTypeWords.BOOKING.numberName;
 import { bookingRowOf, bounceRowOf, unitWord, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -249,16 +254,20 @@ const sections: ReviewSection[] = [
     // 子表的计数，关联本体(哪些集运单元、包裹、段)不在列面展开——列入总单不证明
     // 装载、交接或运输，本区不派生任何控制状态词。与监管舱单分界:监管舱单由承运商
     // 在外部形成并提交，关务经 UC-CC-012 只接受引用，不在本页。
+    // 所引委托、订舱以号上列面（无号按原因注明），标识进技术详情（ADR-0355 决定十一）；按号检索得到引用它的那几版。
     columns: [
       col('document', '总单号', { mono: true }),
       col('issuer', '签发方', { mono: true }),
       col('standing', '状态', { pill: { codeKey: 'standingCode' }, className: 'w-[104px]' }),
+      col('commissionNumber', commissionNumberName, { mono: true }),
+      col('bookingNumber', bookingNumberName, { mono: true }),
       col('associationCount', '关联件数', { align: 'right', mono: true, className: 'w-[88px]' }),
       col('changedAt', '变更时间', { mono: true }),
       techCol([
         ['版本', 'version'],
         ['凭证范围', 'scope'],
-        ['运输委托 / 订舱', 'references'],
+        ['运输委托标识', 'commissionId'],
+        ['订舱标识', 'bookingId'],
         ['接续', 'supersedes'],
         ['被替代为', 'replacedBy'],
       ]),
@@ -273,7 +282,7 @@ const sections: ReviewSection[] = [
     // 不是承运答复，取消时刻与取消人单列，不并进状态（CONTEXT「订舱」）。提交人、取消人没记下时留空。
     // 主列是订舱的单据号，没有号的照旧显示订舱标识；订舱标识与无号原因进技术详情（ADR-0355 决定十一，booking-registers）。
     columns: [
-      col('booking', objectNouns.bookingNumber, { mono: true }),
+      col('booking', bookingNumberName, { mono: true }),
       col('schedule', '班次', { mono: true }),
       col('requested', '订了多少', { align: 'right', mono: true }),
       col('requestedAt', '订舱时间', { mono: true }),
@@ -284,7 +293,7 @@ const sections: ReviewSection[] = [
       techCol([
         ['订舱标识', 'bookingId'],
         ['单据号', 'numberNote'],
-        [objectNouns.transportCommissionNumber, 'commission'],
+        [commissionNumberName, 'commission'],
         ['运输委托标识', 'commissionId'],
         ['答复时间', 'currentAnsweredAt'],
         ['提交人', 'submittedBy'],
@@ -422,8 +431,7 @@ function rowsOf(body: TransportFulfillmentListResponseBody, label: (code: string
           standing: labelOf(masterDocumentStandingLabels, record.standing),
           standingCode: record.standing,
           associationCount: record.associationCount,
-          // 两个可缺引用并成一格是呈现的事；缺席的那一半不代填。
-          references: [record.commission, record.booking].filter(Boolean).join(' / '),
+          ...masterDocumentReferencesOf(record),
           supersedes: record.supersedes ?? '',
           replacedBy: record.replacedBy ?? '',
           changedAt: record.changedAt ? formatInstant(record.changedAt) : '',
@@ -590,7 +598,7 @@ export function TransportFulfillmentReviewPage() {
       statusOf={section.status ? (row) => reviewStatusOf(row, section.status) : undefined}
       rowAttention={(row) => ['REFUSED', 'PENDING_CONFIRMATION'].includes(row.values.verdictCode ?? '')}
       searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder={isScopeSummary ? '在汇总里搜…' : '搜包裹号 / 班次 / 订舱号'}
+      searchPlaceholder={isScopeSummary ? '在汇总里搜…' : `搜包裹号 / 班次 / ${bookingNumberName} / ${commissionNumberName}`}
       columns={workbenchColumnsOf(section.columns, section.status)}
       renderDetail={(row, close) => (
         <ReviewDetail

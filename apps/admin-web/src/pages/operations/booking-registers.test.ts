@@ -7,10 +7,10 @@ import {
   bookingStandingLabels,
   bounceBasisLabels,
   bounceRowOf,
-  documentNumberAbsenceNotes,
   transportRecordsPathOf,
 } from './booking-registers';
 import type { BookingAnswerBounceRecord, BookingRequestRecord } from './records-api';
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 
 function booking(overrides: Partial<BookingRequestRecord> = {}): BookingRequestRecord {
   return {
@@ -89,14 +89,19 @@ test('订舱号是单据号、订舱标识进技术详情；所属委托有号�
 test('没有单据号的订舱照旧显示订舱标识，技术详情按记下的原因分别注明，不一律写成上线前开立', () => {
   const legacy = bookingRowOf(booking({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }));
   equal(legacy.values.booking, 'SYN-BOOKING-1');
-  equal(legacy.values.numberNote, '上线前开立，无单据号');
-  equal(legacy.values.commission, 'SYN-COMMISSION-1');
-  equal(legacy.values.commissionId, '');
+  equal(legacy.values.numberNote, documentNumberAbsenceNote('ISSUED_BEFORE_NUMBERING'));
   const unconfigured = bookingRowOf(booking({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }));
-  equal(unconfigured.values.numberNote, '开立时单据编号时区未配置，无单据号');
-  equal(bookingRowOf(booking({ documentNumberAbsence: 'SOMETHING_NEW' })).values.numberNote, 'SOMETHING_NEW');
+  equal(unconfigured.values.numberNote, documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'));
   equal(bookingRowOf(booking()).values.numberNote, '');
-  deepEqual(Object.keys(documentNumberAbsenceNotes), ['ISSUED_BEFORE_NUMBERING', 'NUMBERING_TIME_ZONE_NOT_CONFIGURED']);
+});
+
+test('委托无号时技术详情的委托号按原因注明、不拿委托标识顶；委托没读到时留空，标识照旧另列', () => {
+  const unnumbered = bookingRowOf(booking({ commissionDocumentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }));
+  equal(unnumbered.values.commission, documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'));
+  equal(unnumbered.values.commissionId, 'SYN-COMMISSION-1');
+  const unread = bookingRowOf(booking());
+  equal(unread.values.commission, '');
+  equal(unread.values.commissionId, 'SYN-COMMISSION-1');
 });
 
 test('挡回两种依据照 CONTEXT 词条示文', () => {

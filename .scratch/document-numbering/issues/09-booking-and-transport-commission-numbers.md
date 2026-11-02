@@ -60,3 +60,16 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - 委托没有自己的列表与详情读口：委托单据号今天只在提交答复与订舱册（`commissionDocumentNumber`）上看得到；总单区技术详情「运输委托 / 订舱」两格与派发侧「实际履约待形成」等处仍显标识。是否另立委托册读口或给这些引用连读单据号，待裁。
 - 新增端口、适配器与迁移会让机制清点过期，由推送方在 main 的 tip 上重生成；AT 盘点总览计数未重算。
 - 共享面：`apps/admin-web/src/vocabulary/objects.ts` 在末尾追加 `bookingNumber`、`transportCommissionNumber`；`.scratch/at-coverage-inventory.md` 在 ① 的 `AT-TF-370` 之后插 `AT-TF-371`–`373`、文末追记一段；`cmd/parcel-api` 只动了 TF 自己的装配文件（`assemble_transport_commission.go`、`endpoints_transport_commission.go`），端点表未改。
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `c5b9073b0`）
+
+先并入 main `620847516`（合并提交，不 rebase）。协调方接受上轮自定两格（取号出错 5xx 回滚、撞号带 `numberingRule`）。
+
+1. **界面词单一出处（阻断）**：删掉我在 `vocabulary/objects.ts` 加的两个名词（文件回到 main 原样）；号名取 `vocabulary/document-numbering` 的 `documentTypeWords.BOOKING.numberName`、`TRANSPORT_COMMISSION.numberName`，无号说法取 `documentNumberAbsenceNote`；删掉 `booking-registers.ts` 的 `documentNumberAbsenceNotes`。订舱区与总单区共用新模块 `pages/operations/transport-document-numbers.ts`（引用的号怎么上屏）。撞号说法 `numberingCollisionNote` 本页用不上：管理台没有提交委托、订舱的表单。
+2. **引用处带号**（ADR-0355 决定十一）：引用旁新增「所属单据 + DocumentNumber」两键（`commissionDocumentNumber` / `bookingDocumentNumber`，无号时 `…DocumentNumberAbsence`），回显的委托本身带 `documentNumber`；原字段不动；引用的单据不在册时两键都不带。落在：订舱册（委托无号时补原因）、总单册与总单登记答复、实际履约未形成册、段采用与解除答复（采用体、解除体）、取消委托答复（`commissionTransitionBody`，采用与解除回显的委托同一形状）、发生项冲突回显的委托。读法：各册读回时按引用批量连读委托表、订舱表的号格（`postgres.referencedDocumentNumberings`）；编排新落的采用、解除取自它刚读到的委托；新登的总单在同一事务里按键读回再答（原先直接拿手里那一份答，带不上号）。管理台总单区加「委托号」「订舱号」两列（无号按原因注明），标识进技术详情，检索框可搜到引用该号的总单；订舱区技术详情的「委托号」委托无号时按原因注明，委托标识另列。
+3. **非阻断**：`numberCommission` / `numberBooking` 合成 `issueDocumentNumber`（传类型声明与号表两口）；UC-TF-004 的 AT 表把 `AT-TF-371`–`373` 挪到表尾、新立 `AT-TF-374`；补真库用例 `TestACommissionKeepsItsNumberAcrossAnAgreementRevision`（换版不换号）、`TestAWiredBookingThatCollidesIsRolledBackWithItsSequence`（订舱撞号整笔回滚连流水）；TF CONTEXT 那句改成「班次起点网点的时区（周期安排登的那一格）说的是时刻表怎么读，不是订舱开立方的业务时区」。
+4. **口径核对**：`documentNumber`、`documentNumberAbsence` ∈ {`ISSUED_BEFORE_NUMBERING`, `NUMBERING_TIME_ZONE_NOT_CONFIGURED`}、撞号 `NUMBERING_RULE_COLLISION`、引用字段「所属单据 + DocumentNumber」——一致。
+
+既有用例的一处改动：`TestTheConflictEchoNamesARevisionOnlyWhenTheCommissionWasRevised` 原先断言没换过版的委托回显恰六键，现在多了委托的单据号格，改为七键并断言那一格；它守的「换版键只在换过版时出现」不变。
+
+修订后自验（本机 PG）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/transportfulfillment/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/...` 全绿（含 PG）；`-v` 抽查新真库用例无 SKIP。前端 `tsc -b`、`pnpm test`（1065 过）、`vite build` 过。种子灌一次性库 `docnum09_seed2` 退 0；浏览器（真后端 19099、前端 5199）：经 API 真提交委托、订舱，登两份总单（一份引用两者、一份引用不在册的订舱），取消委托答复带 `documentNumber`，总单登记答复带两个引用号；总单区列面「委托号 TC-202611-00001、订舱号 BK-202611-00001」、技术详情列标识，引用不在册的那一版两列为空；检索 `TC-202611-00001` 只剩引用它的总单；手插一份无号委托与它名下的订舱，订舱区技术详情显示「委托号 上线前开立，无单据号」与委托标识。验完已停进程、删库。
