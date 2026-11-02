@@ -1876,6 +1876,12 @@
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-231` | C1 按本账户一份已接受委托的单据号查询，三件分别有视图、视图未形成、被另一份已接受委托同时声明 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-232` | C1 用 C2 委托的单据号、本租户没有的号、另一租户的号，或拿无号委托的委托标识当单据号查询 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-233` | C1 按本账户已提交未决定、已拒绝、已撤回的委托的单据号查询 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-234` | 按单据号查询的委托当前有效包裹多于一页；游标不符、解不开、自报账户、多余参数或缺单据号 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-235` | C1 委托中的一件包裹被真实拆分为两件后按单据号查询（等包裹身份谱系落模型） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-236` | 按单据号查询时委托读取、某一件的视图读取或客户归属读取失败 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2162,3 +2168,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-02 追记（票 document-numbering/09 评审修订，ADR-0355 决定十一）：UC-TF-004 新立 `AT-TF-374`（引用委托、订舱的各口答复与册随引用带单据号或无号原因，总单区以号上列面），入①；`AT-TF-371` 补换版不换号的真库用例，`AT-TF-373` 补订舱撞号的真库用例。总览计数未重算，由推送方重算。
 
 2026-11-02 追记（票 document-numbering/06）：UC-VE-004 新立 `AT-VE-227`（分诊自动建案在同一事务内取案件单据号、号随案件落库，重复命中不取号，回滚退号，生命周期不换号）、`AT-VE-228`（单据编号时区未配置照常建案不带号；撞号整轮不落、答未决、取过的流水退回），UC-VE-007 新立 `AT-VE-229`（记录提交时取索赔单据号、回执带号、重放答原号、同项并发只占一个号、各租户各数、按月重置）、`AT-VE-230`（时区未配置照常记录不带号；撞号不记录答「编号规则撞号」；回滚退号）；领域、编排、真库、HTTP、派发与生产装配用例点名，四条入①。总览计数未改，由推送方重算。
+
+2026-11-02 追记（票 document-numbering/12 的文档半边，ADR-0356 草案）：UC-VE-008 新立 `AT-VE-231` 至 `AT-VE-236`（客户追踪按委托的单据号查：已接受委托逐件列当前有效包裹、逐件答复同按包裹查；查无与属别的账户同答；待接受与没有服务；游标分页与坏请求；拆分后列后继；读不动整页未形成），入④，等票 12 实现；`AT-VE-235` 另等包裹身份谱系落模型。总览计数未重算，由推送方重算。
