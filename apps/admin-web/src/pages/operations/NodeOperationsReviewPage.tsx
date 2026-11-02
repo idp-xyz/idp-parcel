@@ -6,6 +6,8 @@ import { StatusPill } from '../../components/StatusPill';
 import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
 import { ReviewDetail, reviewStatusOf, workbenchColumnsOf, type ReviewColumn, type ReviewStatusSpec } from './review-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
+import { hiddenDecisionHint, pendingIdentityRecheckDecision } from '../operator-grants';
+import { labelFor } from '../../vocabulary/status';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -299,7 +301,7 @@ type RecheckState =
 export function NodeOperationsReviewPage() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
   const [recheck, setRecheck] = useState<RecheckState | null>(null);
-  const mayRecheck = useMayMakeDecision('PENDING_IDENTITY_RECHECK');
+  const mayRecheck = useMayMakeDecision(pendingIdentityRecheckDecision);
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     registry: NodeOperationsRegistry;
@@ -362,7 +364,7 @@ export function NodeOperationsReviewPage() {
     const availability = row.recheck;
     if (!availability) return undefined;
     if (availability.kind === 'unavailable') return <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>;
-    if (!mayRecheck) return undefined;
+    if (!mayRecheck) return <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('再核对', labelFor(pendingIdentityRecheckDecision))}</p>;
     const mine = recheck?.judgmentVersion === availability.judgmentVersion;
     return (
       <div className="space-y-2">

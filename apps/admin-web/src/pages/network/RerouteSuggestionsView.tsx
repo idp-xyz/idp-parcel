@@ -6,6 +6,8 @@ import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useMayMakeDecision } from '../use-operator-grants';
+import { authorizedRerouteDecision, hiddenDecisionHint } from '../operator-grants';
+import { labelFor } from '../../vocabulary/status';
 import { shipmentNoOf } from '../shipment-request/ref-no';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import type { StatusTone } from '../../vocabulary/status';
@@ -122,7 +124,7 @@ function SuggestionDetail({
   onLanded: () => void;
 }) {
   // 两个决定口认同一种运营决定授予（授权改路）；明确没有时只显状态、不摆按钮（ADR-0315）。
-  const mayDecide = useMayMakeDecision('AUTHORIZED_REROUTE');
+  const mayDecide = useMayMakeDecision(authorizedRerouteDecision);
   const [deciding, setDeciding] = useState(false);
   const availability = rerouteDecisionAvailabilityOf(row);
   return (
@@ -166,7 +168,9 @@ function SuggestionDetail({
           )
         ) : availability.kind === 'unavailable' ? (
           <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>
-        ) : null
+        ) : (
+          <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('决定改路', labelFor(authorizedRerouteDecision))}</p>
+        )
       }
       onClose={onClose}
     >
