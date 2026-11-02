@@ -23,7 +23,7 @@ import { statusFilterParts } from './status-filter';
 const info = moduleInfoById['exception-cases'];
 
 // 异常案件（visibility-exception），对 GET /exception-case-records 取数；改版换成工作台形态（设计源「五、改版示意」）。
-// 列只放人要看的：案件号（单据号，ADR-0355 决定十一）、运单号（案件的根对象是包裹）、状态胶囊、处理团队、立案时间、首次响应；
+// 列只放人要看的：案件号（单据号，ADR-0355 决定十一）、包裹号（案件的根对象是包裹）、状态胶囊、处理团队、立案时间、首次响应；
 // 案件内部标识、影响范围、归并指向与结论原码进右栏「技术详情」。没有单据号的案件主列照旧显内部标识，技术详情说为什么没有。
 // 首页「今日待办」异常那一格点进来就落在这一页。
 //
@@ -55,7 +55,7 @@ const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
   },
   {
     key: 'parcel',
-    header: objectNouns.shipmentNumber,
+    header: objectNouns.parcelNumber,
     sortKey: 'parcel',
     render: (row) => (
       <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.rootParcel}>
@@ -104,7 +104,7 @@ function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose:
       status={caseStatus(record)}
       subtitle={`立案于 ${formatInstant(record.establishedAt)}`}
       facts={[
-        { label: objectNouns.shipmentNumber, value: <span className="font-mono">{record.rootParcel}</span> },
+        { label: objectNouns.parcelNumber, value: <span className="font-mono">{record.rootParcel}</span> },
         { label: '处理团队', value: <span className="font-mono">{record.responsibleTeam}</span> },
         { label: '首次响应', value: record.firstResponse ? formatInstant(record.firstResponse) : '还没有响应' },
         { label: '关闭时间', value: record.closedAt ? formatInstant(record.closedAt) : '未关闭' },
@@ -177,7 +177,7 @@ export function ExceptionCasesPage() {
       kpis={filter?.kpis}
       onRefresh={retry}
       refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、运单号、处理团队…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、包裹号、处理团队…' }}
       statusChips={filter?.chips}
       toolbarRight={answered ? `共 ${rows.length} 件，当前显示 ${visible.length} 件` : undefined}
       columns={columns}

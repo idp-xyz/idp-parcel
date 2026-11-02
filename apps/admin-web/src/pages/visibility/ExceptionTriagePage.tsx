@@ -82,7 +82,7 @@ const episodeSort: Record<string, SortAccessor<SignalEpisodeRecord>> = {
 const episodeColumns: WorkbenchColumn<SignalEpisodeRecord>[] = [
   {
     key: 'parcel',
-    header: objectNouns.shipmentNumber,
+    header: objectNouns.parcelNumber,
     sortKey: 'parcel',
     render: (row) => (
       <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.parcel}>
@@ -191,7 +191,7 @@ function SignalEpisodesWorkbench() {
       kpis={filter?.kpis}
       onRefresh={retry}
       refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、异常类型…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜包裹号、异常类型…' }}
       statusChips={filter?.chips}
       toolbarRight={answered ? `共 ${rows.length} 条，当前显示 ${visible.length} 条` : undefined}
       columns={episodeColumns}

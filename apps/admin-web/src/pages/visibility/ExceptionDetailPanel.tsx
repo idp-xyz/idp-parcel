@@ -5,7 +5,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
 import type { RowStatus } from './exception-list';
 
-// 异常处理与异常案件两页工作台的右栏详情：头部是运单号与状态胶囊，下面几格业务事实，正文一段人话，底部「技术详情」
+// 异常处理与异常案件两页工作台的右栏详情：头部是包裹号与状态胶囊，下面几格业务事实，正文一段人话，底部「技术详情」
 // 收各种编号与原码。形状照物流动态页的 TrackingDetailPanel，两页共用这一个壳，各页只交内容。
 
 export interface DetailFact {
