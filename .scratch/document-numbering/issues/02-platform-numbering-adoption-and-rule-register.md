@@ -1,7 +1,7 @@
 # 02 接入平台编号能力与单据编号规则册
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum02`（完成记录见文末）；待非作者评审与进 main
+Status: resolved——2026-11-02 进 main（全量 169 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum02`（完成记录见文末）；待非作者评审与进 main
 父票：[spec](../spec.md)
 Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库可被正式依赖——用户合并 idp-xyz/idp-platform-go#1 并打 `v0.1.0-rc.1`、合并 idp-xyz/idp-bento-go#5 并在 vanity 主机部署（用户动作），`curl -s "https://go.idp.xyz/idp-platform-go?go-get=1"` 返回平台库的 go-import 即算放行
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定四、五、六、七
@@ -92,3 +92,13 @@ Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库
 - **按答案办**：`NUMBER_ASSIGNED` → 号随单落库，`Skipped` 个空号随之落定；`NUMBERING_TIME_ZONE_NOT_CONFIGURED` → 单据照常开立、不带单据号，单据上记无号原因「单据编号时区未配置」，事后不补；`NUMBERING_RULE_COLLISION` 或任何错误 → 回滚开立事务、这一次不落单，撞号答复说人话并指到规则册（「设置 → 单据编号」）。
 - **开立方业务时区由调用方传**：类型声明为「开立方有业务时区」的（对账单、送站预报、送站交接单），调用方把开立方已登记的业务时区（IANA 名）放进 `IssueRequest.IssuerTimeZone`；开立方没登就留空，退到租户的单据编号时区。声明为「没有」的类型传了业务时区是编程错误（`ErrIssuerTimeZoneNotDeclared`）——若实现票核定该类其实有，先改本上下文那一处声明。
 - **判撞**：`IssueRequest.IsUsed` 在同一事务里查本上下文单据表（租户，单据号）是否已用；表上照样建（租户，单据号）唯一约束作最后一道保险。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `8648fe1a2`，复评钉 `aa431d128`）
+
+两轮阻断均为零。首轮真库探针 7 条全过：事务外与另一 DB 实例的事务都被拒；未来才生效的时区此刻答未配置；40 笔并发取号 8 笔回滚，提交 32 笔、无重号、序列值 32；加扰号与平台 `Assigner.Assign` 逐字相同（上海时区、跨午夜）；粒度变了从 1 起、粒度不变换模板接着数；时区与密钥没有任何默认或兜底（`Local`、大小写错、带空格的名字都拒，`UTC` 只在租户明说时收）。迁移：既有资产未改，`platform` schema 只有 `numbering_sequence`，基线 362 步的旧形状历史库上施加 2 步、重跑 0 步，平台校验和与重新渲染逐字相同；`go.sum` 两串与协调方空缓存实测一致。首轮非阻断由协调方裁定、修订轮处理：撞号后调用方必须回滚、跳号计数与取过的值数一致（复评重跑：20 个都已用答撞号且 `IsUsed` 恰调 20 次、回滚后无序列行；30 笔并发 10 笔回滚提交 20 笔无重号）；跨周期自撞的模板以观察式拒登（复评 42 份模板与 800 天 × 133 流水暴力枚举对拍一致，十一份默认模板全过，`{yy}` 不误拒）；装配挪进 `cmd/internal/docnumbering`，parcel-api、受控登记口、parcel-dispatch 共用，dispatch 开池前读同一项密钥配置、未接任何单据开立；参数登记册补 `PAR-COM-19/20/21`；跨包计数删去。复评余下一条非阻断（`main.go`、`endpoints.go` 等处「规则册四口」的跨文件计数）由协调方改为「各口」（`2d3f24cb3`，只改注释）。协调方接受作者自定四格：生效时刻可早于登记时刻；`{site}{owner}{region}{le}{check}` 拒登；预览口挂查阅读面；开立方业务时区的声明除对账单、送站预报、送站交接单外留 04、05 核定。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum02` tip `2d3f24cb3` 作出处；隔离树逐笔 cherry-pick 到 main `02c694238`，原 `373405a2d`（单独检出编译不过）与 `f3859081d` 合成一笔，提交信息注明；重放后的树与分支 tip 逐字节相同，main 上逐笔检出 `go build ./...` 都过。重生成机制清点成一笔（ADR 索引、AT 计数无变化），两项 `-check` 退 0；对 `f36ec6805` 跑全量 169 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum02` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- 未做（留给后续票）：向平台库提议能传模板与时刻的取号入口（ADR-0355 越权风险点 1）——平台库跨仓改动，记此待议。
+
