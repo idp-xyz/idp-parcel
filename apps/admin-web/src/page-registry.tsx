@@ -18,6 +18,7 @@ const loadCustoms = () => import('./pages/customs');
 const loadParty = () => import('./pages/party');
 const loadWorkDevices = () => import('./pages/work-devices');
 const loadReferenceData = () => import('./pages/reference-data');
+const loadDocumentNumbering = () => import('./pages/document-numbering');
 
 const domainLoaders = [
   loadMyWork,
@@ -35,6 +36,7 @@ const domainLoaders = [
   loadParty,
   loadWorkDevices,
   loadReferenceData,
+  loadDocumentNumbering,
 ];
 
 // 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
@@ -103,6 +105,7 @@ export const pageById: Record<string, ComponentType> = {
   'pending-publications': page(loadParty, (m) => m.PendingPublicationsPage),
   'work-devices': page(loadWorkDevices, (m) => m.WorkDeviceCataloguePage),
   'reference-data': page(loadReferenceData, (m) => m.ReferenceDataPage),
+  'document-numbering': page(loadDocumentNumbering, (m) => m.DocumentNumberingPage),
 };
 
 /**
@@ -160,6 +163,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'channel-selection-decisions',
   'work-devices',
   'reference-data',
+  'document-numbering',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',
