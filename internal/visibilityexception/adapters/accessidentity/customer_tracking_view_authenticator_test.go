@@ -155,3 +155,41 @@ func TestTrackingViewAuthenticatorNeedsAMinter(t *testing.T) {
 		t.Fatal("没有铸造器的认证方构造出来了")
 	}
 }
+
+func shipmentTrackingAuthenticator(t *testing.T, verifier identity.CustomerClientCredentialVerifier, register customerRegister) *veaccess.CustomerShipmentTrackingAuthenticator {
+	t.Helper()
+	minter, err := identity.NewCustomerClientMinter(verifier, register, refusingAdmission{}, func() time.Time { return customerNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := veaccess.NewCustomerShipmentTrackingAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
+}
+
+// Covers: ADR-0356 决定一「新口要新词」的认证半边——持按运单号查询授予的客户端认证到册上绑定的（租户，客户账户），准入范围答不在
+// 范围照样过；只持按包裹查授予的客户端在这一口答未授予；令牌不过、册读不动各译成 visibilityhttp 自己的格，与按包裹查同形。
+func TestShipmentTrackingQueryAuthenticatesOnItsOwnWord(t *testing.T) {
+	presented := visibilityhttp.PresentedCustomerCredential{Token: "presented.customer.token"}
+	own := customerRegister{capabilities: []identity.CustomerCapability{identity.CustomerCapabilityShipmentTrackingQuery}}
+	viewer, err := shipmentTrackingAuthenticator(t, customerVerifier{}, own).AuthenticateShipmentTrackingQuery(context.Background(), presented)
+	if err != nil || viewer.Tenant.String() != customerTenant || viewer.Customer.String() != customerAccount {
+		t.Fatalf("持按运单号查询授予：(%q, %q) err=%v", viewer.Tenant.String(), viewer.Customer.String(), err)
+	}
+
+	for name, testCase := range map[string]struct {
+		verifier identity.CustomerClientCredentialVerifier
+		register customerRegister
+		want     error
+	}{
+		"only the by-parcel grant": {customerVerifier{}, customerRegister{capabilities: []identity.CustomerCapability{identity.CustomerCapabilityTrackingViewQuery}}, visibilityhttp.ErrCustomerClientNotGranted},
+		"token rejected":           {customerVerifier{err: identity.ErrCredentialRejected}, own, visibilityhttp.ErrCustomerClientCredentialRejected},
+		"register unreadable":      {customerVerifier{}, customerRegister{err: errors.New("connection refused")}, visibilityhttp.ErrIdentityDependencyUnavailable},
+	} {
+		if _, err := shipmentTrackingAuthenticator(t, testCase.verifier, testCase.register).AuthenticateShipmentTrackingQuery(context.Background(), presented); !errors.Is(err, testCase.want) {
+			t.Errorf("%s：err = %v, want %v", name, err, testCase.want)
+		}
+	}
+}
