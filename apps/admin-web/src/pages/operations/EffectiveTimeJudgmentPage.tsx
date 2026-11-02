@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { chipClass } from '../../components/registration';
 import { OperatorRefusalNote } from '../../components/states';
-import { StatusPill } from '../../components/StatusPill';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { technicalRows } from '../settlement/ops-ui';
+import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows, type RowStatus } from '../network/route-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
 import {
   judgeEffectiveTime,
@@ -38,83 +36,31 @@ const info = moduleInfoById['effective-time-judgment'];
  * 页面不算不裁，只呈现后端答复。写口今天挂的是字面量 UnconfiguredIntake{}，提交必然答 403
  * 「接入渠道未配置」——机制在，墙也在，页面要说清这不是「尚未实现」。
  */
-function col(
-  id: string,
-  header: string,
-  options?: { mono?: boolean; className?: string },
-): ListColumn<FactRow> {
-  return {
-    id,
-    header,
-    className: options?.className,
-    render: (row) => {
-      const value = row.values[id] ?? '—';
-      return options?.mono ? <span className="font-mono text-[12px]">{value}</span> : value;
-    },
-  };
+// 工作台形态。行首是货物，状态胶囊是确认方式（待确认琥珀，人工或按规则确认绿）——即指标即筛；承运商的说法是源的原始状态
+// 词，原样示出不译（ADR-0102 决定五）。轨迹编号、记录版本、源事件、凭据、规则版本与接续关系进右栏「技术详情」。
+function factStatus(row: FactRow): RowStatus {
+  return { label: row.values.effectiveBasis, tone: row.values.effectiveBasis === '待确认' ? 'warn' : 'good' };
 }
 
-// 列只放判断时要看的：哪件货、承运商说了什么（源的原始状态词原样示出不译，ADR-0102 决定五）、它说的发生时间、我们收到的
-// 时间、怎么确认的、从何时起算。轨迹编号、记录版本、源事件、凭据、规则版本与接续关系进每行末尾的「技术详情」。
-const columns: ListColumn<FactRow>[] = [
-  col('object', '货物', { mono: true }),
-  col('status', '承运商的说法（原词）', { mono: true }),
-  col('occurredAt', '承运商说的发生时间', { mono: true }),
-  col('receivedAt', '我们收到的时间', { mono: true }),
+const mono = (value: string | undefined) => <span className="font-mono text-[12px]">{value ?? '—'}</span>;
+
+const columns: WorkbenchColumn<FactRow>[] = [
   {
-    id: 'effectiveBasis',
-    header: '确认方式',
-    align: 'center',
-    className: 'w-[132px]',
-    render: (row) => <StatusPill label={row.values.effectiveBasis} tone={row.values.effectiveBasis === '待确认' ? 'warn' : 'good'} />,
+    key: 'object',
+    header: '货物',
+    sortKey: 'object',
+    render: (row) => <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.values.object}</span>,
   },
-  col('effectiveAt', '从何时起算', { mono: true }),
-  {
-    id: 'technical',
-    header: '',
-    className: 'align-top',
-    render: (row) => (
-      <TechnicalDetails
-        className="max-w-md open:min-w-[18rem]"
-        rows={technicalRows([
-          { label: '轨迹编号', value: row.values.fact },
-          { label: '记录版本', value: row.values.version },
-          { label: '来源事件', value: row.values.sourceEvent === '—' ? '' : row.values.sourceEvent },
-          { label: '凭据', value: row.values.credential },
-          { label: '规则版本', value: row.values.basisDetail },
-          { label: '接续', value: row.values.supersedes },
-          { label: '记录来源', value: row.values.origin },
-        ])}
-      />
-    ),
-  },
+  { key: 'basis', header: '确认方式', render: (row) => <RowStatusPill status={factStatus(row)} /> },
+  { key: 'status', header: '承运商的说法（原词）', render: (row) => mono(row.values.status) },
+  { key: 'occurred', header: '承运商说的发生时间', hideWhenDetailOpen: true, render: (row) => mono(row.values.occurredAt) },
+  { key: 'effective', header: '从何时起算', hideWhenDetailOpen: true, render: (row) => mono(row.values.effectiveAt) },
 ];
 
-// 行动作列单独拼装：它要 setState，而上面那张表是模块级常量。动作只有「判断」——判断是回指前版的
-// 新版本，原版本与原判断一字不动；页面上因此没有「编辑」或「改时间」。
-function columnsWithActions(onJudge: (row: FactRow) => void, mayJudge: boolean): ListColumn<FactRow>[] {
-  // 写入口按授予收起（ADR-0315）：明确没有外部轨迹时间确认授予时整列不摆。
-  if (!mayJudge) return columns;
-  return [
-    ...columns,
-    {
-      id: 'actions',
-      header: '动作',
-      align: 'center',
-      className: 'w-[96px]',
-      render: (row) => (
-        <Button variant="outline" onClick={() => onJudge(row)}>
-          确认时间
-        </Button>
-      ),
-    },
-  ];
-}
-
-const viewWords: Record<ExternalTrackingFactView, string> = {
-  pending: '待确认',
-  current: '全部轨迹',
-};
+const viewWords: { id: ExternalTrackingFactView; label: string }[] = [
+  { id: 'pending', label: '待确认' },
+  { id: 'current', label: '全部轨迹' },
+];
 
 /** 判断面板的目标：从行上带来的当前版摘要，让面板在提交前就摆出「这一条判过没有、按哪个依据」。 */
 interface JudgmentTarget {
@@ -126,7 +72,6 @@ interface JudgmentTarget {
 }
 
 export function EffectiveTimeJudgmentPage() {
-  // 源入参分两格：输入框里的草稿与已提交的那一个。合成一格就会逐键触发查询，而每问一次都是一次真请求。
   const [sourceDraft, setSourceDraft] = useState('');
   const [source, setSource] = useState('');
   const [view, setView] = useState<ExternalTrackingFactView>('pending');
@@ -136,12 +81,11 @@ export function EffectiveTimeJudgmentPage() {
     view: ExternalTrackingFactView;
     answer: ApiResult<ExternalTrackingFactListResponseBody>;
   } | null>(null);
-  const [judging, setJudging] = useState<JudgmentTarget | null>(null);
+  // 页头「按轨迹编号确认」开的面板：指名一条不在当前列表里的轨迹（换了来源、或列表还没刷到）。行上的确认在右栏里。
+  const [judgingByRef, setJudgingByRef] = useState(false);
   const mayJudge = useMayMakeDecision('EFFECTIVE_TIME_JUDGMENT');
 
   useEffect(() => {
-    // 源空着不发请求：源是这个读面的必备维，缺席在服务端是 400，而那条 400 说的是「你问错了」，
-    // 与「还没问」不是一件事。
     if (source.trim() === '') return undefined;
     let cancelled = false;
     void listExternalTrackingFacts(source, view).then((answer) => {
@@ -157,73 +101,108 @@ export function EffectiveTimeJudgmentPage() {
   const rows = body ? factRowsOf(body) : [];
   const retry = () => setReloadKey((value) => value + 1);
 
-  const openJudgment = (row: FactRow) =>
-    setJudging({
-      fact: row.fact,
-      version: row.version,
-      effectiveBasis: row.values.effectiveBasis,
-      effectiveAt: row.values.effectiveAt,
-      basisDetail: row.values.basisDetail,
-    });
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <ListPageTemplate<FactRow>
+      <RouteWorkbench<FactRow>
+        key={`${source}#${view}`}
         title={info.title}
-        description="承运商回传的轨迹从什么时候起算，由我们确认后才进物流动态。输入轨迹来源查看待确认的轨迹，逐条填写起算时间；系统不替你推测时间。"
-        headerActions={
+        subtitle="承运商回传的轨迹从什么时候起算，由我们确认后才进物流动态。先输入轨迹来源，再逐条确认；系统不替你推测时间。"
+        primaryAction={
           mayJudge ? (
-            <Button variant="outline" onClick={() => setJudging({ fact: '' })}>
+            <Button variant="outline" size="sm" onClick={() => setJudgingByRef(true)}>
               按轨迹编号确认
             </Button>
-          ) : null
+          ) : undefined
         }
-        search={{
-          value: sourceDraft,
-          onChange: setSourceDraft,
-          placeholder: '输入轨迹来源（如承运商的接口编码），再点「查询」',
-        }}
-        filters={
-          <>
-            {(Object.keys(viewWords) as ExternalTrackingFactView[]).map((candidate) => (
-              <button
-                key={candidate}
-                type="button"
-                className={chipClass(candidate === view)}
-                onClick={() => setView(candidate)}
-              >
-                {viewWords[candidate]}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={chipClass(sourceDraft.trim() !== '')}
-              onClick={() => setSource(sourceDraft.trim())}
-            >
+        sections={<SectionTabs sections={viewWords} active={view} onChange={setView} />}
+        extraFilters={
+          <span className="inline-flex items-center gap-2">
+            <Input
+              value={sourceDraft}
+              className="h-8 w-[260px] font-mono text-[12px]"
+              placeholder="轨迹来源（如承运商的接口编码）"
+              aria-label="轨迹来源"
+              onChange={(event) => setSourceDraft(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && setSource(sourceDraft.trim())}
+            />
+            <Button variant="outline" size="sm" disabled={sourceDraft.trim() === ''} onClick={() => setSource(sourceDraft.trim())}>
               查询
-            </button>
-          </>
+            </Button>
+          </span>
         }
-        // 计数只在拿到业务答案后显示，未配置/未指定源不报「0 行」。
-        filterSummary={body ? `${viewWords[view]} ${rows.length} 条` : undefined}
-        columns={columnsWithActions(openJudgment, mayJudge)}
+        answered={body !== null}
         rows={rows}
         rowKey={(row) => row.key}
+        statusOf={factStatus}
+        rowAttention={(row) => row.values.effectiveBasis === '待确认'}
+        searchCells={(row) => [row.values.object, row.values.status, row.fact, row.values.sourceEvent]}
+        searchPlaceholder="在结果里搜货物、承运商的说法…"
+        columns={columns}
+        sortAccessors={{ object: { value: (row) => row.values.object } }}
+        renderDetail={(row, close) => <FactDetail key={row.key} row={row} mayJudge={mayJudge} onClose={close} onJudged={retry} />}
+        onRefresh={source.trim() === '' ? undefined : retry}
         viewState={factListViewState(answer, source, view, rows.length, retry, {
           module: info,
           endpoint: `GET /transport-fulfillment-external-tracking-facts?source=…&view=${view}`,
         })}
       />
-      {judging ? (
-        <JudgmentPanel
-          // 换一条事实时重建面板：时刻与答复是上一条的，留着会让人把 A 的时间给 B。
-          key={`${judging.fact}@${judging.version ?? ''}`}
-          target={judging}
-          onClose={() => setJudging(null)}
-          onJudged={retry}
-        />
+      {judgingByRef ? (
+        <div className="max-h-[50%] shrink-0 overflow-y-auto border-t border-idpxyz-border p-4">
+          <JudgmentPanel target={{ fact: '' }} onClose={() => setJudgingByRef(false)} onJudged={retry} />
+        </div>
       ) : null}
     </div>
+  );
+}
+
+/** 一条轨迹的右栏：两个时间、确认方式与起算时间；能确认时摆「确认时间」，点开在栏内填。 */
+function FactDetail({ row, mayJudge, onClose, onJudged }: { row: FactRow; mayJudge: boolean; onClose: () => void; onJudged: () => void }) {
+  const [judging, setJudging] = useState(false);
+  return (
+    <RecordDetailPanel
+      title={row.values.object}
+      status={factStatus(row)}
+      subtitle={<>承运商说：<span className="font-mono">{row.values.status}</span></>}
+      facts={[
+        { label: '承运商说的发生时间', value: row.values.occurredAt },
+        { label: '我们收到的时间', value: row.values.receivedAt },
+        { label: '确认方式', value: row.values.effectiveBasis },
+        { label: '从何时起算', value: row.values.effectiveAt },
+      ]}
+      technical={techRows([
+        { label: '轨迹编号', value: row.fact },
+        { label: '记录版本', value: row.version },
+        { label: '来源事件', value: row.values.sourceEvent === '—' ? '' : row.values.sourceEvent },
+        { label: '凭据', value: row.values.credential },
+        { label: '规则版本', value: row.values.basisDetail },
+        { label: '接续', value: row.values.supersedes },
+        { label: '记录来源', value: row.values.origin },
+      ])}
+      actions={
+        mayJudge ? (
+          judging ? (
+            <JudgmentPanel
+              target={{
+                fact: row.fact,
+                version: row.version,
+                effectiveBasis: row.values.effectiveBasis,
+                effectiveAt: row.values.effectiveAt,
+                basisDetail: row.values.basisDetail,
+              }}
+              onClose={() => setJudging(false)}
+              onJudged={onJudged}
+            />
+          ) : (
+            <Button variant="outline" onClick={() => setJudging(true)}>
+              确认时间
+            </Button>
+          )
+        ) : undefined
+      }
+      onClose={onClose}
+    >
+      <p>发生时间是承运商报的，收到时间是我们收到回传的时刻；起算时间由人确认或按规则确认，系统不会默认取其中任何一个。</p>
+    </RecordDetailPanel>
   );
 }
 
@@ -269,7 +248,7 @@ function JudgmentPanel({
   };
 
   return (
-    <Card className="m-4">
+    <Card>
       <CardHeader>
         <CardTitle>
           确认起算时间
