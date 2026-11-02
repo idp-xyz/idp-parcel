@@ -51,7 +51,7 @@ export function SavedViewsPage() {
 
   const columns: ListColumn<SavedView>[] = [
     { id: 'name', header: '名称', render: (row) => row.name },
-    { id: 'module', header: '页面', render: (row) => moduleTitleOf(row.moduleId) },
+    { id: 'module', header: '所在页面', render: (row) => moduleTitleOf(row.moduleId) },
     {
       id: 'saved-at',
       header: '保存时间',
@@ -96,7 +96,7 @@ export function SavedViewsPage() {
         moduleId="saved-views"
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜索视图名称' }}
         filters={<ModuleChips moduleIds={savedViewModuleIds(list)} value={moduleId} onChange={setModuleId} />}
-        filterSummary={`本机保存 ${list.length} 个视图`}
+        filterSummary={`这台电脑上共 ${list.length} 个视图`}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.id}
@@ -108,7 +108,8 @@ export function SavedViewsPage() {
             ? {
                 kind: 'empty',
                 title: '还没有保存过视图',
-                description: '在列表页筛好条件后点「保存视图」，存下的视图会列在这里。',
+                // 列表页的「保存视图」位今天还没接通（只有模板演示页接了），空态不指一个点不动的按钮。
+                description: '列表页的「保存视图」还没开放；开放后，筛好的条件可以存下来，列在这里一键回去。',
               }
             : { kind: 'ready' }
         }
@@ -116,10 +117,10 @@ export function SavedViewsPage() {
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
         open={removing !== null}
-        title="删除保存视图"
+        title="删除这个视图"
         message={
           removing
-            ? `将删除视图「${removing.name}」（${moduleTitleOf(removing.moduleId)}）。删的只是这台浏览器上的一份筛选条件，不影响任何数据。`
+            ? `将删除视图「${removing.name}」（${moduleTitleOf(removing.moduleId)}）。删的只是这台电脑上存的一份筛选条件，不影响任何数据。`
             : ''
         }
         confirmLabel="删除"
