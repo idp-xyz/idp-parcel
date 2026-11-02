@@ -141,6 +141,8 @@ type disputeStoreDouble struct {
 	findErr error
 	// raceWinner 不为空时，下一次 Replace 先把它落成库上的那一份再答 false：读与写之间另一人先落了终局。
 	raceWinner *ports.DisputeRecord
+	// raceOpened 不为空时，下一次 Save 先把它落成库上的那一份再答已开立：读与写之间另一份同编号的登记先落了库。
+	raceOpened *ports.DisputeRecord
 }
 
 func newDisputeStore() *disputeStoreDouble {
@@ -166,6 +168,11 @@ func (double *disputeStoreDouble) Save(
 	_ context.Context,
 	record ports.DisputeRecord,
 ) (ports.DisputeSaveOutcome, error) {
+	if winner := double.raceOpened; winner != nil {
+		double.raceOpened = nil
+		double.records[disputeKey(record.Key)] = *winner
+		return ports.DisputeAlreadyOpened, nil
+	}
 	if _, exists := double.records[disputeKey(record.Key)]; exists {
 		return ports.DisputeAlreadyOpened, nil
 	}
@@ -627,6 +634,51 @@ func TestDisputesAreIndependentAndResolvedOnce(t *testing.T) {
 			t.Fatalf("outcome = %q, want DISPUTE_ALREADY_RESOLVED（终局不二裁）", again.Outcome())
 		}
 	})
+}
+
+// Covers: AT-SA-228（编排半边）——读时不在册、落库时另一份同编号的登记先到：内容不同答冲突、不带回对方那一份；内容相同答已存在。
+func TestARegistrationLosingTheRaceIsJudgedByContent(t *testing.T) {
+	fixture := newStatementFixture(t)
+	if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	tenant, _ := domain.NewTenantID("tenant-1")
+	command := func(id string, amount int64) application.OpenDisputeCommand {
+		return application.OpenDisputeCommand{
+			TenantID: tenant, Dispute: id, Number: "STMT-2026-08-001", ChargeID: "charge-A",
+			DisputedMinor: amount, Reason: "weight", OpenedAt: statementPublishAt.Add(time.Hour),
+		}
+	}
+	// 先在另一个夹具里开出「赢家」那一份，取它的记录（含内容摘要）当作并发先落库的那一份。
+	winnerFixture := newStatementFixture(t)
+	if _, err := winnerFixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name          string
+		winnerAmount  int64
+		loserAmount   int64
+		want          application.StatementOutcome
+		wantHasRecord bool
+	}{
+		{"不同金额", 100, 200, application.DisputeConflict, false},
+		{"同内容", 300, 300, application.DisputeExistingResult, true},
+	} {
+		id := "dispute-race-" + tc.name
+		won, err := winnerFixture.handler.OpenDispute(context.Background(), command(id, tc.winnerAmount))
+		if err != nil || won.Outcome() != application.DisputeOpened {
+			t.Fatalf("%s 赢家：%v %q", tc.name, err, won.Outcome())
+		}
+		winner, _ := won.Dispute()
+		fixture.disputes.raceOpened = &winner
+		lost, err := fixture.handler.OpenDispute(context.Background(), command(id, tc.loserAmount))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, has := lost.Dispute(); lost.Outcome() != tc.want || has != tc.wantHasRecord {
+			t.Fatalf("%s：outcome = %q，带回记录 %v", tc.name, lost.Outcome(), has)
+		}
+	}
 }
 
 // Covers: AT-SA-229（编排半边）——读到未处理、写时另一人已落终局：答已处理并交回那一份终局，不答未受理；处理人记成操作证据，

@@ -91,6 +91,13 @@ func (stub unreachableCatalogues) ListDisputedCustomerStatements(
 	return ports.DisputedCustomerStatements{}, nil
 }
 
+func (stub unreachableCatalogues) FindStatementLines(
+	context.Context, domain.TenantID, string,
+) (ports.StatementLines, bool, error) {
+	stub.refuse("statement lines")
+	return ports.StatementLines{}, false, nil
+}
+
 func (stub unreachableCatalogues) ListSupplierBillReceptions(
 	context.Context, domain.TenantID, int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
@@ -145,6 +152,11 @@ func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQuer
 			name:    "disputed-statements",
 			target:  "/settlement-disputed-statements",
 			handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(intake, unreachable),
+		},
+		{
+			name:    "statement-lines",
+			target:  "/settlement-statement-lines?statement=SYN-STMT-01",
+			handler: settlementhttp.NewQueryStatementLinesEndpoint(intake, unreachable),
 		},
 		{
 			name:    "funds-applications",

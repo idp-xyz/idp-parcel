@@ -3,26 +3,31 @@
 //
 // 话照「说人话」写：答复的业务判别由服务端给（outcome），这里只把它译成一句操作者看得懂的话，不另判业务。
 
-import type { CustomerChargeRecord, CustomerStatementRecord, DisputeDecisionResponseBody, StatementDisputeRecord } from './api';
+import type { CustomerStatementRecord, DisputeDecisionResponseBody, StatementDisputeRecord, StatementLinesResponseBody } from './api';
 
 /** 一张单上可以被提出异议的一笔费用：费用号、金额（与单上同一写法）与币种。 */
 export interface StatementChargeOption {
   charge: string;
   amount: string;
   currency: string;
-  feeItem: string;
 }
 
-/** 这张单上的费用：按客户费用读口上的「所在对账单」认，读口没透出的费用不猜。 */
-export function chargesOnStatement(charges: readonly CustomerChargeRecord[], statementNumber: string): StatementChargeOption[] {
-  return charges
-    .filter((charge) => charge.billedOn === statementNumber)
-    .map((charge) => ({
-      charge: charge.charge,
-      amount: charge.settlementAmount,
-      currency: charge.settlementCurrency,
-      feeItem: charge.feeItem,
-    }));
+/** 这张单上的费用：取单自己的费用行（不可覆盖快照），不从按页上列的费用册反查——页外的费用与作废单上的行在那里都找不到。 */
+export function chargesOnStatement(lines: StatementLinesResponseBody): StatementChargeOption[] {
+  if (lines.outcome !== 'STATEMENT_LINES_LISTED') return [];
+  return (lines.lines ?? []).map((line) => ({ charge: line.charge, amount: line.amount, currency: lines.currency ?? '' }));
+}
+
+/**
+ * 提出时刻的本地检查：不早于发布、不晚于作废（ADR-0354 决定三）。作废之前提出、作废之后才登记的照收；服务端照样会判。
+ * 两个时刻都是 RFC 3339；读不出的不在这里拦。
+ */
+export function openedAtProblem(openedAt: string, publishedAt: string | undefined, voidedAt: string | undefined): string | null {
+  const at = Date.parse(openedAt);
+  if (Number.isNaN(at)) return null;
+  if (publishedAt && at < Date.parse(publishedAt)) return '客户提出的时间早于这张单发出，说的不是这张单';
+  if (voidedAt && at > Date.parse(voidedAt)) return '这张单已作废，作废之后提出的异议不再登记在这张单上';
+  return null;
 }
 
 /** 还在等人处理的争议：没有处理结果，或处理为待复核（待复核可再处理，其余三种是终局）。 */
@@ -96,7 +101,7 @@ export function registrationAnswerText(body: DisputeDecisionResponseBody): strin
     case 'DISPUTE_CONFLICT':
       return '这个争议编号已经登记过另一份内容；刷新表单重新填一次。';
     case 'STATEMENT_VOIDED_TAKES_NO_DISPUTE':
-      return '这张单已经作废，不再收新的争议；请对着替代单登记。';
+      return '没有登记：这张单已作废，作废之后提出的异议不再登记在这张单上。';
     case 'SOURCE_NOT_ACCEPTED':
       return '没有登记：对账单、费用、金额或时间对不上——费用要在这张单上，金额不超过这笔费用，客户提出的时间不早于单子发出。';
     default:

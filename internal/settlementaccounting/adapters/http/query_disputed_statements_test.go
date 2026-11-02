@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
@@ -98,5 +99,58 @@ func TestDisputedStatementQueryAnswersZeroOnlyWhenTheReadAnswersZero(t *testing.
 	failing := serveDisputed(t, &stubDisputedStatements{err: errors.New("down")}, "/settlement-disputed-statements")
 	if failing.Code != http.StatusInternalServerError || problemCode(t, failing) != "NO_ANSWER_FORMED" {
 		t.Fatalf("读不回必须答未形成：%d %s", failing.Code, failing.Body.String())
+	}
+}
+
+type stubStatementLines struct {
+	found     ports.StatementLines
+	has       bool
+	err       error
+	gotNumber string
+}
+
+func (stub *stubStatementLines) FindStatementLines(_ context.Context, _ domain.TenantID, number string) (ports.StatementLines, bool, error) {
+	stub.gotNumber = number
+	return stub.found, stub.has, stub.err
+}
+
+// Covers: AT-SA-228（读口半边）——按单号读一张单的费用行：金额照最小币单位整数串转写；单不在册答 STATEMENT_NOT_FOUND（200）；缺单号
+// 是坏请求；读不回答未形成。
+func TestStatementLinesQueryAnswersTheStatementsOwnLines(t *testing.T) {
+	stub := &stubStatementLines{has: true, found: ports.StatementLines{
+		StatementNumber: "SYN-STMT-01", Currency: "CNY", PublishedAt: catalogueBaseAt,
+		Lines: []ports.StatementLineEntry{{Charge: "SYN-CHG-01", AmountMinor: 9600}},
+	}}
+	serve := func(target string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		settlementhttp.NewQueryStatementLinesEndpoint(grantedIntake(), stub).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		return response
+	}
+	response := serve("/settlement-statement-lines?statement=SYN-STMT-01")
+	var body struct {
+		Outcome string `json:"outcome"`
+		Lines   []struct {
+			Charge string `json:"charge"`
+			Amount string `json:"amount"`
+		} `json:"lines"`
+		VoidedAt string `json:"voidedAt"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || stub.gotNumber != "SYN-STMT-01" || body.Outcome != "STATEMENT_LINES_LISTED" ||
+		len(body.Lines) != 1 || body.Lines[0].Amount != "9600" || body.VoidedAt != "" {
+		t.Fatalf("费用行走样：%d %s", response.Code, response.Body.String())
+	}
+	stub.has = false
+	if missing := serve("/settlement-statement-lines?statement=SYN-STMT-09"); missing.Code != http.StatusOK || !strings.Contains(missing.Body.String(), "STATEMENT_NOT_FOUND") {
+		t.Fatalf("不在册：%d %s", missing.Code, missing.Body.String())
+	}
+	if bad := serve("/settlement-statement-lines"); bad.Code != http.StatusBadRequest {
+		t.Fatalf("缺单号：%d", bad.Code)
+	}
+	stub.err = errors.New("down")
+	if failing := serve("/settlement-statement-lines?statement=SYN-STMT-01"); failing.Code != http.StatusInternalServerError {
+		t.Fatalf("读不回：%d", failing.Code)
 	}
 }

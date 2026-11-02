@@ -1963,6 +1963,14 @@ func (unwiredSettlementStatements) ListSupplierBillReceptions(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredSettlementStatements) FindStatementLines(
+	context.Context,
+	settlementdomain.TenantID,
+	string,
+) (settlementports.StatementLines, bool, error) {
+	return settlementports.StatementLines{}, false, errOrchestrationNotWired
+}
+
 func (unwiredSettlementStatements) ListDisputedCustomerStatements(
 	context.Context,
 	settlementdomain.TenantID,

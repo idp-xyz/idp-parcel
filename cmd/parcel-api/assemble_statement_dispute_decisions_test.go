@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -170,5 +172,90 @@ func TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider(t *testin
 	if clerk := fixture.text(t, `SELECT operation_evidence FROM settlement_accounting.statement_dispute
 		 WHERE tenant_id = $1 AND dispute_id = 'SYN-DSP-1'`, decisionsTenant); clerk != operatorEvidenceOf(disputeClerk) {
 		t.Fatalf("登记人被处理改写成 %q", clerk)
+	}
+}
+
+// Covers: AT-SA-228（ADR-0354 决定一）——同一编号、金额不同的两份登记并发到达：恰一份开立（201），另一份按内容判答冲突，不答已存在、
+// 也不带回赢家的金额；同一编号同内容的两份并发，输的那份答已存在。逐轮换编号，跑几轮让输家走到落库撞主键那一支。
+func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
+	fixture, publishedAt := newPublishedStatementFixture(t)
+	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	race := func(id string, amounts [2]string) [2]map[string]any {
+		var answers [2]map[string]any
+		var statuses [2]int
+		var start, done sync.WaitGroup
+		start.Add(1)
+		for index := range amounts {
+			done.Add(1)
+			go func(index int) {
+				defer done.Done()
+				start.Wait()
+				statuses[index], answers[index] = fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf(id, amounts[index], openedAt))
+			}(index)
+		}
+		start.Done()
+		done.Wait()
+		for index := range answers {
+			answers[index]["status"] = statuses[index]
+		}
+		return answers
+	}
+	for round := 0; round < 8; round++ {
+		answers := race(fmt.Sprintf("SYN-DSP-RACE-%d", round), [2]string{"100", "200"})
+		opened, conflicts := 0, 0
+		for _, answer := range answers {
+			switch answer["outcome"] {
+			case "DISPUTE_OPENED":
+				opened++
+			case "DISPUTE_CONFLICT":
+				conflicts++
+			default:
+				t.Fatalf("第 %d 轮不同金额：答 %v（输家不得答已存在、不得带回赢家的金额）", round, answers)
+			}
+		}
+		if opened != 1 || conflicts != 1 {
+			t.Fatalf("第 %d 轮不同金额：%v", round, answers)
+		}
+
+		same := race(fmt.Sprintf("SYN-DSP-SAME-%d", round), [2]string{"300", "300"})
+		if outcomes := []any{same[0]["outcome"], same[1]["outcome"]}; !(outcomes[0] == "DISPUTE_OPENED" && outcomes[1] == "EXISTING_DISPUTE") &&
+			!(outcomes[1] == "DISPUTE_OPENED" && outcomes[0] == "EXISTING_DISPUTE") {
+			t.Fatalf("第 %d 轮同内容：%v", round, same)
+		}
+	}
+}
+
+// Covers: AT-SA-228（ADR-0354 决定三）——单作废之后：提出时刻在作废之前的照收（客户作废前来电、客服作废后才登记），作废前已开的那项
+// 仍能处理到终局。
+func TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve(t *testing.T) {
+	fixture, publishedAt := newPublishedStatementFixture(t)
+	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-EARLY", "100", openedAt)); status != http.StatusCreated {
+		t.Fatalf("作废前登记 = %d %v", status, answer)
+	}
+	voidAt := openedAt.Add(10 * time.Minute)
+	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		executor, err := fixture.db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, `UPDATE settlement_accounting.customer_statement
+		    SET void_basis = 'SYN-VOID-1', voided_at = $3 WHERE tenant_id = $1 AND statement_number = $2`,
+			decisionsTenant, disputedStatement, voidAt)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-LATE-ENTRY", "100", voidAt.Add(-time.Minute))); status != http.StatusCreated ||
+		answer["outcome"] != "DISPUTE_OPENED" {
+		t.Fatalf("作废前提出、作废后登记 = %d %v", status, answer)
+	}
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-AFTER", "100", voidAt.Add(time.Minute))); status != http.StatusOK ||
+		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_DISPUTE" {
+		t.Fatalf("作废后提出 = %d %v", status, answer)
+	}
+	resolve := `{"dispute":"SYN-DSP-EARLY","resolution":"REJECTED","basis":"核过磅单","resolvedAt":"` + voidAt.Add(time.Hour).UTC().Format(time.RFC3339) + `"}`
+	if status, answer := fixture.post(t, statementDisputeResolutionFace, disputeFinance, resolve); status != http.StatusCreated || answer["resolution"] != "REJECTED" {
+		t.Fatalf("作废前已开的那项处理到终局 = %d %v", status, answer)
 	}
 }

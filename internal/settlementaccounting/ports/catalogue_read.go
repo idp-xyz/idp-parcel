@@ -239,6 +239,27 @@ type DisputedCustomerStatements struct {
 	Statements []CustomerStatementCatalogueRow
 }
 
+// StatementLineEntry 是一张已发布对账单上的一行费用：费用与它入单时的结算金额（最小币单位），照单上快照转写。
+type StatementLineEntry struct {
+	Charge      string
+	AmountMinor int64
+}
+
+// StatementLines 是一张已发布对账单自己的费用行，连同币种、发布与作废时刻：登记争议要从单上选费用、核金额不越行、核提出时刻
+// 落在发布与作废之间（ADR-0354 决定一、三）。行取自单上的不可覆盖快照，不从费用册反查——费用册按页上列、也不认作废单。
+type StatementLines struct {
+	StatementNumber string
+	Currency        string
+	PublishedAt     time.Time
+	VoidedAt        *time.Time
+	Lines           []StatementLineEntry
+}
+
+// StatementLineRead 按租户与单号读一张单的费用行；单不在册答 false。
+type StatementLineRead interface {
+	FindStatementLines(ctx context.Context, tenant domain.TenantID, number string) (StatementLines, bool, error)
+}
+
 // DisputedStatementRead 按租户上列挂着未了结争议的客户对账单，按单号排。
 type DisputedStatementRead interface {
 	ListDisputedCustomerStatements(

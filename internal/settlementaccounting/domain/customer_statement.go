@@ -31,8 +31,8 @@ var (
 	ErrInclusionBackfillsPeriod = errors.New("settlement accounting: an inclusion cannot backfill the original period")
 	ErrInvalidDispute           = errors.New("settlement accounting: invalid statement dispute")
 	ErrDisputeResolved          = errors.New("settlement accounting: the dispute is already resolved")
-	// ErrDisputeOnVoidedStatement：已作废的单不收新争议（ADR-0354 决定三）。整单已不应继续有效，其中的费用要在替代单上再出具，
-	// 对着作废单提的异议没有一张有效的单可以落；作废之前已开的争议照旧在，等人处理。
+	// ErrDisputeOnVoidedStatement：提出时刻在作废之后的争议不登记在这张单上（ADR-0354 决定三）。作废之后整单已不应继续有效，
+	// 那之后才提出的异议没有一张有效的单可以落；作废之前提出的照收，已开的争议照旧等人处理。
 	ErrDisputeOnVoidedStatement = errors.New("settlement accounting: a voided statement takes no new dispute")
 )
 
@@ -610,7 +610,8 @@ func OpenStatementDispute(
 	if openedAt.Before(statement.PublishedAt()) {
 		return StatementDispute{}, ErrInvalidDispute
 	}
-	if _, _, voided := statement.Voided(); voided {
+	// 按提出时刻比作废时刻：作废之前提出、作废之后才登记的，说的是当时有效的那张单，照收（ADR-0354 决定三）。
+	if _, voidedAt, voided := statement.Voided(); voided && openedAt.After(voidedAt) {
 		return StatementDispute{}, ErrDisputeOnVoidedStatement
 	}
 	line, found := statement.LineFor(charge)

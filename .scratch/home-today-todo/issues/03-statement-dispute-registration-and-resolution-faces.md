@@ -1,7 +1,7 @@
 # 03 客户对账单争议的管理台入口：客服代登记、财务核实后处理
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工，待隔离评审与进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
+Status: in-progress——2026-11-01 作者完工；评审（钉 `679392eaf`）阻断 3 条，修订轮已做，待复评与进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
 父票：无。由票 [02](./02-statement-confirmation-and-disputes-have-no-production-face.md)（在 `claude-hometodo` 上）转来：02 列的两条缺口里，「争议的提出与处理没有生产口」由本票做；「相对方确认不记」用户裁定不做（ADR-0354 决定五），02 收口时指向本票。
 Blocked by: 无
 地盘：`internal/accessidentity` 两种决定种类与迁移 `access_identity/0037`；`internal/settlementaccounting/{domain,application,ports,adapters/postgres,adapters/registrationjson,adapters/http}` 的争议开立与处理、迁移 `settlement_accounting/0052`；`cmd/parcel-api` 结算决定特性文件、编排包事务与未接线占位；`apps/admin-web` 对账单页与授予常量；演示种子步骤 `510`、`data/access/34`、`35`、`data/governance/75`、`76`、种子 README；ADR-0354；SA CONTEXT 一句；UC-SA-003 一句规则、两条 AT、交接一行；AT 盘点两行；本票。
@@ -20,9 +20,10 @@ Blocked by: 无
 ### 怎么做的，为什么
 
 - **两个写口**（ADR-0354 决定一、二）：`POST /settlement-statement-disputes`（`STATEMENT_DISPUTE_REGISTRATION`）与 `POST /settlement-statement-dispute-resolutions`（`STATEMENT_DISPUTE_RESOLUTION`），挂运营决定能力面，进 parcel-api 已装配的截单编排上的 `OpenDispute`、`ResolveDispute`，各包一笔事务。不过结算时点门：门管确认与截单什么时候能动，客户什么时候提异议不由它定。登记与处理分开授予——UC-SA-003 要求争议处理单独授权，客服与财务不是同一批人。
-- **「已作废的单不收新争议」是本票新加的规则**，出处与理由：
+- **「作废之后提出的争议不登记在这张单上」是本票新加的规则**（初版是「作废的单不收新争议」，修订轮按协调方裁定改为比提出时刻与作废时刻），出处与理由：
   - 出处：SA CONTEXT 生命周期「对账单」——「已发布 → 已作废：只适用于整单不应继续有效的明确情况；原单继续保留并记录作废依据」「已作废 → 已替代：需要重新出具时形成新对账单并关联原单」；规则「整单无效时保留原单并建立作废和替代关系」。UC-SA-003 输入契约「争议请求」要求争议「指向明确范围」，CONTEXT「费用争议」词条说争议「只影响所指金额」。
-  - 理由：作废说的是这张单整单不应继续有效；对着它新提的异议没有一张有效的单可以落，财务处理完也落不到替代单里——那笔费用要在替代单上再出具，异议应对着替代单提。作废之前已开的争议不受影响：作废不了结争议（待对账读口照数它，`AT-SA-227`）。
+  - 理由：作废说的是这张单从作废那一刻起整单不应继续有效；作废之后才提出的异议没有一张有效的单可以落，替代关系今天也还没做（`AT-SA-069` 交接行），不能转到哪张单上。作废之前提出的照收——客户作废前来电、客服作废后才录入，异议说的是当时有效的那张单。作废之前已开的争议不受影响、照旧能处理到终局（待对账读口照数它，`AT-SA-227`）。
+  - 归类（ADR-0146）：这是机制，不是租户取值，对每个租户都一样；UC-SA-003 的 `PAR-SET-09`「争议规则」是租户参数，与它分开。
   - 它不越出 CONTEXT：CONTEXT 没有说作废单可以收新争议，也没有说不可以；本票把这一格定下来，并按「改领域语言才动 CONTEXT」的规矩在 SA CONTEXT「结算账户、对账与争议」补一句、在 ADR-0354 决定三写明，越权风险点 1 留给 SA owner 复核。评审若判它不忠于 CONTEXT，改法是删掉领域里那道门与 CONTEXT 那一句，接口形状不变。
 - **失败边界照 UC**：同一份重放答 `EXISTING_DISPUTE`、同标识换内容答 `DISPUTE_CONFLICT`（既有编排）；费用不在单上、金额越行、单号不在册答 `SOURCE_NOT_ACCEPTED`（既有领域门）。新加两道：提出时刻早于发布不收（说的就不是这张单）；**已作废的单不收新争议**（`STATEMENT_VOIDED_TAKES_NO_DISPUTE`，ADR-0354 决定三，SA CONTEXT 同笔补一句），作废前已开的照旧。处理：待复核可再处理、终局后答 `DISPUTE_ALREADY_RESOLVED` 交回那一份（既有）；新加**读写之间另一人先落终局**时同样答已处理，不再答未受理（原先 `Replace` 答 false 一律落成未受理）。
 - **争议编号由调用方给**：重发要落回同一项，编号得在第一次发出前定下；管理台在表单打开时铸一个、提交成功或换单才换。
@@ -64,6 +65,20 @@ Blocked by: 无
 - ADR 改号 0354（文件名、标题、正文、CONTEXT、UC、票面、注释与迁移头注），`git grep -n 0353` 只剩名称票那一张与它的引用。
 - 参数位：真库用例 `TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution` 补断言处理人那一列（待复核 → 拒绝 → 终局后再来一次，库上处理人停在落下拒绝的那一位）；把 `$11`、`$12` 对调一次实测为红（pgx 拒把终局词形编进 text 列），已还原。
 - 换基后自验：Go 受影响包 + architecture + cmd/parcel-api 真库全绿；前端 `tsc -b`、`pnpm test`（1023 过 / 0 败）、`vite build` 通过；种子 `seed.sh` 灌一次性库 `seed_disputes` 退 0，配置员两种争议授予在册，验完删库。
+
+### 修订轮（2026-11-01 作者，应评审意见，评审钉 `679392eaf`、阻断 3 条；协调方裁定非阻断一并修）
+
+- **S1** 种子 README 两处本该指 ADR-0353（显示名称）的引用被换基改号误改成 0354，改回；`git diff 0a88def13 -- .` 里删去含 0353 的行核过一遍，别处没有同类误改。
+- **P1** 登记落库撞主键（同一编号的另一份先落了库）那一支原先一律答 `EXISTING_DISPUTE` 并带回赢家，不比内容；改成与读时在册同一个判法（`CompareStoredDigest`）：同内容已存在、不同内容冲突。真库用例 `TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent`：8 轮各并发一对金额不同、一对内容相同的登记；去掉这道比对时实测为红（输家答已存在并带回赢家的金额）。编排用例 `TestARegistrationLosingTheRaceIsJudgedByContent`。
+- **P2**（协调方裁：改 ADR 贴合代码）ADR-0354 决定二删去「依据空白答 `SOURCE_NOT_ACCEPTED`」，另起一段写明两口的形状写坏一律在入口答 `400 MALFORMED_REQUEST`、不进编排。
+- **P3** 作废判据改按提出时刻比作废时刻：提出在作废之后才拒，之前（含恰在作废那一刻）照收。领域、ADR-0354 决定三（含候选与反方、越权风险点 1）、SA CONTEXT 那一句、UC-SA-003 规则与 `AT-SA-228` 一并改；领域用例覆盖两边，真库用例 `TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve` 覆盖作废前提出、作废后登记照收与作废后提出拒收。
+- **P4** 前端不再说「请对着替代单登记」（替代关系还没做）：改成「这张单已作废，作废之后提出的异议不再登记在这张单上」；作废单上照摆登记表单，并说明作废时刻与这条规则，提出时间在作废之后的本地就提示。
+- **S3** ADR-0354 决定三按 ADR-0146 写明这条属机制，与 `PAR-SET-09`「争议规则」（租户参数）分开。
+- **S2** UC-SA-003「给开发的交接」补两行：输入契约的证据与请求方没有格；审计的决定方只留最后一位、没有处理历史，登记人与处理人还没在读口透出（ADR-0354 越权风险点 2–4）。
+- **P6** 真库用例补作废前已开的争议仍能处理到终局（同上那条用例的后半）。
+- **P7** 登记表单的费用改取这张单自己的费用行：对账单目录行只带行数、不能按单过滤，费用册按页上列且认不出作废单，所以在 SA 读面补 `GET /settlement-statement-lines?statement=`（运营查阅读面，单上的不可覆盖快照，连同币种、发布与作废时刻；单不在册答 `STATEMENT_NOT_FOUND`），真库与端点用例各一，并入目录口拒绝共用组。处理答「已处理」（含终局后再处理）与登记答「已存在」时也重读这一签，右栏不留旧的待处理项。
+
+自验（修订轮）：Go `build`、`vet`、`gofmt -l` 干净，settlement、accessidentity、architecture、cmd/parcel-api 真库全绿；前端 `tsc -b`、`pnpm test`（1024 过 / 0 败）、`vite build` 通过；`seed.sh` 灌一次性库 `seed_disputes2` 退 0、验完删库；`at-coverage-counts -check` 只报生成物过期（行齐）。没碰 `:5173`、`:19080`、`demo_live`。
 
 ### 提交
 

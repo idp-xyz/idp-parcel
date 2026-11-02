@@ -508,3 +508,18 @@ export function registerStatementDispute(payload: DisputeRegistrationPayload): P
 export function resolveStatementDispute(payload: DisputeResolutionPayload): Promise<ApiResult<DisputeDecisionResponseBody>> {
   return postMasterData<DisputeDecisionResponseBody>('/settlement-statement-dispute-resolutions', payload);
 }
+
+/** 一张对账单自己的费用行（GET /settlement-statement-lines）：登记争议从这里选费用，不从按页上列的费用册反查。 */
+export interface StatementLinesResponseBody {
+  outcome: 'STATEMENT_LINES_LISTED' | 'STATEMENT_NOT_FOUND';
+  statement?: string;
+  currency?: string;
+  publishedAt?: string;
+  /** 缺席即未作废。 */
+  voidedAt?: string;
+  lines?: { charge: string; amount: string }[];
+}
+
+export function getStatementLines(statement: string): Promise<ApiResult<StatementLinesResponseBody>> {
+  return exchangeMasterData<StatementLinesResponseBody>(`/settlement-statement-lines?statement=${encodeURIComponent(statement)}`);
+}

@@ -3,6 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import {
   amountProblem,
   chargesOnStatement,
+  openedAtProblem,
   localInputToInstant,
   newDisputeId,
   openDisputesOf,
@@ -10,27 +11,22 @@ import {
   resolutionAnswerText,
   textProblem,
 } from './dispute-forms';
-import type { CustomerChargeRecord } from './api';
-
-const charge = (id: string, billedOn?: string): CustomerChargeRecord => ({
-  charge: id,
-  feeItem: 'SYN-FEE',
-  evaluation: 'E',
-  stage: 'CONFIRMED',
-  originalCurrency: 'CNY',
-  originalAmount: '9600',
-  settlementCurrency: 'CNY',
-  settlementAmount: '9600',
-  formedAt: '2026-11-01T00:00:00Z',
-  confirmationBases: [],
-  billedOn,
+test('一张单上的费用取单自己的行；单不在册就没有可选的', () => {
+  deepEqual(
+    chargesOnStatement({ outcome: 'STATEMENT_LINES_LISTED', currency: 'CNY', lines: [{ charge: 'A', amount: '9600' }] }),
+    [{ charge: 'A', amount: '9600', currency: 'CNY' }],
+  );
+  deepEqual(chargesOnStatement({ outcome: 'STATEMENT_NOT_FOUND' }), []);
 });
 
-test('一张单上的费用按读口的所在对账单认，没出账的与别的单上的不列', () => {
-  deepEqual(
-    chargesOnStatement([charge('A', 'S1'), charge('B', 'S2'), charge('C')], 'S1').map((option) => option.charge),
-    ['A'],
-  );
+test('提出时间：不早于发出，不晚于作废；作废之前提出的照收', () => {
+  const published = '2026-11-01T08:00:00Z';
+  const voided = '2026-11-01T10:00:00Z';
+  equal(openedAtProblem('2026-11-01T07:00:00Z', published, voided) !== null, true);
+  equal(openedAtProblem('2026-11-01T09:00:00Z', published, voided), null);
+  equal(openedAtProblem('2026-11-01T10:00:00Z', published, voided), null);
+  equal(openedAtProblem('2026-11-01T11:00:00Z', published, voided), '这张单已作废，作废之后提出的异议不再登记在这张单上');
+  equal(openedAtProblem('2026-11-01T11:00:00Z', published, undefined), null);
 });
 
 test('还在等人处理的争议：未处理与待复核；终局三种不列', () => {
@@ -69,7 +65,8 @@ test('本地时间到分换成 UTC 到秒；写坏的不猜', () => {
 
 test('答复译成一句人话，负向答案不说成功', () => {
   equal(registrationAnswerText({ outcome: 'DISPUTE_OPENED', dispute: 'D1' }).startsWith('已登记'), true);
-  equal(registrationAnswerText({ outcome: 'STATEMENT_VOIDED_TAKES_NO_DISPUTE' }).includes('作废'), true);
+  equal(registrationAnswerText({ outcome: 'STATEMENT_VOIDED_TAKES_NO_DISPUTE' }).includes('替代单'), false);
+  equal(registrationAnswerText({ outcome: 'STATEMENT_VOIDED_TAKES_NO_DISPUTE' }).includes('作废之后提出'), true);
   equal(registrationAnswerText({ outcome: 'SOURCE_NOT_ACCEPTED' }).startsWith('没有登记'), true);
   equal(resolutionAnswerText({ outcome: 'DISPUTE_RESOLVED', resolution: 'REJECTED' }), '已处理：拒绝。');
   equal(resolutionAnswerText({ outcome: 'DISPUTE_ALREADY_RESOLVED', resolution: 'ACCEPTED' }), '这一项已经处理完了（接受），不能再改。');
