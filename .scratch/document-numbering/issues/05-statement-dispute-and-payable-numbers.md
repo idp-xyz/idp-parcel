@@ -1,7 +1,7 @@
 # 05 对账单、费用争议、审核应付的单据号
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum05`；评审修订已追加（见文末「评审修订」）；待复评与进 main
+Status: resolved——2026-11-02 进 main（全量 174 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum05`；评审修订已追加（见文末「评审修订」）；待复评与进 main
 父票：[spec](../spec.md)
 Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 出处：spec 子票表；[ADR-0355](../../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、九、十；UC-SA-003、UC-SA-004
@@ -82,3 +82,13 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 7. **统一口径核对**：答复与读口字段 `documentNumber`、`documentNumberAbsence`，原因码只有 `ISSUED_BEFORE_NUMBERING`、`NUMBERING_TIME_ZONE_NOT_CONFIGURED`，撞号 `NUMBERING_RULE_COLLISION`，与并入的 07（关务案件）、08（送站预报、交接单）一致。
 
 修订后自验（本机 PG，并入 `e110f4137` 之后的树）：`go build ./...`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/... ./internal/settlementaccounting/...` 50 个包 ok、0 FAIL（含 PG），新用例 `-v` 全 PASS、无 SKIP。前端 `npx tsc -b` 无输出、`pnpm test` 1066 pass / 0 fail、`npx vite build` 退 0。种子灌一次性库 `docnum05_seed2` 退 0（三类单据 0 行，种子不开立它们），用后删库。`generated-artifacts-pr.sh` 退 0、`at-coverage-counts -check` 只差总览计数（推送方重生成）。**评审探针照原形状复跑**：一次性库先用 main 的迁移助手迁到 0052，直写一张手工旧单（`SYN-STMT-MANUAL-PROBE`）、一张单号写成 `STMT/<账户>/<日>` 形状的手工旧单与三笔已确认费用，再用本分支 `seed.sh` 施加 0053 并灌种子：两张旧单 `draft_version` 都留空；本分支 parcel-api 起在 :19095，同账户同账期换内容以 `v1`、`v7` 各发一次都答 `PUBLICATION_INTENT_CONFLICT`、序列表一行没有，换账期发单答 `STMT-202611-00001`。浏览器（:5195）复核：右栏登记答「已登记争议 DSP-202611-00001」、技术详情争议标识 `DISPUTE-…`，旧单两项分别注明「上线前开立，无单据号」「开立时单据编号时区未配置，无单据号」，按争议号检索只剩那张单；设置 → 单据编号对争议与审核应付显示「结算账户的业务时区」。进程已停、库已删。
+
+## 评审记录（2026-11-02，隔离子代理，首轮钉 `df4da3184`，复评钉 `257747cf8`）
+
+首轮按基线零阻断，合入面一条（`status.ts` 另立无号说法册、自写撞号说法，与 main 共用词典重复）；修订轮清掉，复评两轴阻断清零。协调方裁定并经复评真库探针重跑证实：发布幂等按发布意图（账户、账期、截止版本），新意图 6 路并发只发一张、同一个号；升级前手工旧单（无截止版本）同账户同账期取保守——同内容答原单原号、异内容答 `PUBLICATION_INTENT_CONFLICT` 不落单不取号（4 路并发换内容全答冲突、序列不动），旧单作废后的替代单与新账期不被误挡；迁移 0053 补 `v1` 改为联查 `statement_cycle_cut`，手工旧单号写成 `STMT/<账户>/<日>` 形状不被误补；自动截单撞号归 ADR-0339 决定三第 4 条「停在依赖上」一类（整户回滚、不记截止日、下一拍重截、日志单独一类），未另立第三种回滚；`STATEMENT_CONFLICT` 改名全仓无残留；手工发布口带 `number` 答 400；争议内部标识前缀改 `DISPUTE-`；设置页对争议与应付说「结算账户的业务时区」。余下非阻断：`pages/settlement/api.ts` 一句过期注释（推送方 `7e6f58334` 改指共用词典）；合并提交 `58cc313cc` 单独检出时 `dispute-forms.test.ts` 会红、到 `880233730` 恢复——以合并提交进 main，main 的第一父链逐笔绿，记此。
+
+## 进 main 记录（2026-11-02，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-docnum05` tip `257747cf8` 在隔离树上以合并提交并入 main `f9115d6f6`（无冲突），叠一句注释修正；重算 AT 盘点总览计数、重生成机制清点各成一笔，两项 `-check` 退 0；对 `12a5d0957` 跑全量 174 ok / 0 FAIL（含 PG）；种子一次性库 `seed_docnum05` 退 0 后删库。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- API 可见改动（已写进 UC-SA-003 与 ADR-0355 决定九）：手工截单发布口载荷不再收单号；发布意图冲突的答复码由 `STATEMENT_CONFLICT` 改为 `PUBLICATION_INTENT_CONFLICT`。
+
