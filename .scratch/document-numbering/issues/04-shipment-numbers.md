@@ -72,3 +72,16 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - 物流动态、异常、清关、计费等页把**包裹号**标成「运单号」（`objectNouns.shipmentNumber` 或字面量）——自本票起「运单号」专指委托单据号，这些标签应另票改成「包裹号」。
 - 壳层多标签里详情标签名取 hash 里的委托标识，不是运单号（壳层地盘，本票未动）。
 - 撞号文案指向「设置 → 单据编号」，那一页属票 03。
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `102ac0c7f`、两轴阻断为零）
+
+追加提交、不 rebase：并入 origin/main `620847516`（`cb558458d`，含票 03 设置页与单据编号词典），后端 `742fb15d3`，管理台 `d6d88d453`，加本记录一笔。
+
+1. **并入 main**：`git merge origin/main`，无冲突。
+2. **共用词典**：管理台无号说法改取 `vocabulary/document-numbering.ts` 的 `documentNumberAbsenceNote(code)`，撞号说法取 `numberingCollisionNote('SHIPMENT')`，号名取 `documentTypeWords.SHIPMENT.numberName`（运单号签、各页技术详情、复核与释放未受理册的业务行、新建运单结果卡）；`ref-no.ts` 与 `presentation.ts` 里自写的同义说法删去。读口没带无号情形时（释放未受理册上读不到的那份委托）不再默认说「上线前开立」，不替读口猜。
+3. **撤回 / 取消按运单号办**：两张表单那一格叫「运单号（或委托标识）」。提交前同时问委托查阅的两口——新开的 `GET /shipment-request-views?documentNumber=`（读口 `ListVisibleByDocumentNumber`，作用域内逐字命中，没有是空数组）与既有的 `?shipmentRequestId=`——两边对上的委托去重后恰好一份才开确认（`shipment-ref.ts` 的 `resolveShipmentRef`）；确认弹层同时写出运单号与委托标识，老运单如实说「没有运单号」；找不到、不止一票、读不动（未登录、渠道未配置、5xx、没连上）各说一句人话。请求里送的仍是解析出的委托标识（首方后续命令不收运单号）。单测 `shipment-ref.test.ts` 八条覆盖解析各格；HTTP 与真库各补按号检索的用例。
+4. **补件不换号**：`TestASupplementedSubmissionVersionKeepsTheDocumentNumbering`（真库，经生产受控补充编排）——有号与时区未配置两种，形成新提交版本后两列一字不变，原提交重放答原号、带新版本；挂 `AT-PS-177`（UC 行与 AT 盘点同步）。
+5. **非阻断**：`adapters/docnumbering` 包注释与用例、领域 `DocumentNumberAbsence` 注释、端口结果注释、两个替身注释改为按名说、不数；`adapters/postgres/shipment_document_number.go` 与其用例、UC-PS-001 交接行改指约束名（`shipment_request_document_number_or_absence`、`shipment_request_document_number_absence_closed`、`shipment_request_document_number_unique`），不写迁移号。
+6. **口径核对**：`documentNumber`、`documentNumberAbsence` ∈ {`ISSUED_BEFORE_NUMBERING`, `NUMBERING_TIME_ZONE_NOT_CONFIGURED`}、撞号 `NUMBERING_RULE_COLLISION`——与本票已一致，未改。
+
+修订后自验（本机 PG `127.0.0.1:55432`）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/architecture/... ./internal/platform/... ./cmd/... ./tests/... ./migrations/...` 58 个包全 ok（含 PG），新增真库用例 `-v` 全 PASS。管理台 `tsc -b` 过、`pnpm test` 1072 过 0 败、`vite build` 过。浏览器（一次性库 `docnum04_seed` 灌种子退 0，`:19094` + `:5194`，只读到确认弹层为止、点「先不撤回」，无写请求）：撤回表单填 `P20261102000001` 弹层为「将撤回运单号 P20261102000001(委托标识 SHR-…)这一票」；填一份 SQL 改成无号的老运单的委托标识，弹层为「委托标识 SHR-… 的运单(没有运单号)」；填不存在的号，格旁说「在你能看到的运单里找不到运单号或委托标识为「P20261102999999」的这一票……」。核完停进程、删库。
