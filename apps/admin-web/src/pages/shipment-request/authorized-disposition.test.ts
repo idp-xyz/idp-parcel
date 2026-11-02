@@ -88,6 +88,10 @@ test('有项时队列行与受限项文案说运营的话,原码进技术详情'
   const row = dispositionQueueRowOf(entry);
   equal(row.id, 'SHR-REQ1');
   equal(row.title, 'REQ1');
+  // 有单据号时队列行的标题是单据号（ADR-0355 决定十一），行 id 仍是委托标识。
+  const numbered = dispositionQueueRowOf(entryOf({ documentNumber: 'P20261102000007' }));
+  equal(numbered.id, 'SHR-REQ1');
+  equal(numbered.title, 'P20261102000007');
   match(row.subtitle, /客户 CUST-1/);
   match(row.subtitle, /2 件/);
   equal(row.statusText, '1 项未通过');

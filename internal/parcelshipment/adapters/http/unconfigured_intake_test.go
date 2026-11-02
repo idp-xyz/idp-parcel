@@ -218,6 +218,15 @@ func (reader unreachableViewsReader) ListVisible(
 	return nil, nil
 }
 
+func (reader unreachableViewsReader) ListVisibleByDocumentNumber(
+	context.Context,
+	domain.AuthorizedQueryScope,
+	domain.ShipmentDocumentNumber,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
+	return nil, nil
+}
+
 func (reader unreachableViewsReader) FindVisibleByID(
 	context.Context,
 	domain.AuthorizedQueryScope,

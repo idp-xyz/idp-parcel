@@ -73,6 +73,7 @@ func preAdviseAtNodeOnRealDatabase(t *testing.T, db *bentopg.DB, node, customer 
 	if err != nil {
 		t.Fatalf("预报：%v", err)
 	}
+	preAdvice = preAdvice.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 	var windowOutcome, preAdviceOutcome noports.DeliveryScopeAppendOutcome
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		var err error
@@ -147,6 +148,7 @@ func confirmedHandoverNoteOnRealDatabase(t *testing.T, db *bentopg.DB, customer 
 	if err != nil {
 		t.Fatalf("交接单：%v", err)
 	}
+	note = note.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 	binding, err := nodomain.FormDeliveryHandoverBinding(nodomain.DeliveryHandoverBindingSpec{
 		TenantID:         tenant,
 		Note:             note.ID(),

@@ -59,15 +59,16 @@ func (repository *CustomsCases) FindByKey(
 		caseID               string
 		parcelsRaw, rolesRaw []byte
 		establishedAt        time.Time
+		number, absence      *string
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT case_id, parcels, roles, established_at
+		`SELECT case_id, parcels, roles, established_at, document_number, document_number_absence
 		   FROM customs_compliance.customs_case
 		  WHERE tenant_id = $1 AND jurisdiction_ref = $2 AND direction = $3
 		    AND procedure_ref = $4 AND obligation_ref = $5`,
 		key.TenantID.String(), key.Jurisdiction.String(), key.Direction.String(),
 		key.Procedure.String(), key.Obligation.String(),
-	).Scan(&caseID, &parcelsRaw, &rolesRaw, &establishedAt)
+	).Scan(&caseID, &parcelsRaw, &rolesRaw, &establishedAt, &number, &absence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CustomsCase{}, false, nil
 	}
@@ -81,7 +82,7 @@ func (repository *CustomsCases) FindByKey(
 	}
 	customsCase, err := rebuildCustomsCase(
 		id, key.Jurisdiction, key.Direction, key.Procedure, key.Obligation,
-		parcelsRaw, rolesRaw, establishedAt)
+		parcelsRaw, rolesRaw, establishedAt, number, absence)
 	if err != nil {
 		return domain.CustomsCase{}, false, err
 	}
@@ -104,14 +105,15 @@ func (repository *CustomsCases) FindByID(
 		jurisdiction, direction, procedure, obligation string
 		parcelsRaw, rolesRaw                           []byte
 		establishedAt                                  time.Time
+		number, absence                                *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT jurisdiction_ref, direction, procedure_ref, obligation_ref,
-		        parcels, roles, established_at
+		        parcels, roles, established_at, document_number, document_number_absence
 		   FROM customs_compliance.customs_case
 		  WHERE tenant_id = $1 AND case_id = $2`,
 		tenant.String(), id.String(),
-	).Scan(&jurisdiction, &direction, &procedure, &obligation, &parcelsRaw, &rolesRaw, &establishedAt)
+	).Scan(&jurisdiction, &direction, &procedure, &obligation, &parcelsRaw, &rolesRaw, &establishedAt, &number, &absence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CustomsCase{}, false, nil
 	}
@@ -137,7 +139,7 @@ func (repository *CustomsCases) FindByID(
 	}
 	customsCase, err := rebuildCustomsCase(
 		id, jurisdictionRef, directionValue, procedureRef, obligationRef,
-		parcelsRaw, rolesRaw, establishedAt)
+		parcelsRaw, rolesRaw, establishedAt, number, absence)
 	if err != nil {
 		return domain.CustomsCase{}, false, err
 	}
@@ -145,7 +147,7 @@ func (repository *CustomsCases) FindByID(
 }
 
 // rebuildCustomsCase 把行状态折回案件聚合，两个读口共用：读回经 EstablishCustomsCase
-// 整门重验，坏行在这里炸成错误不进编排。
+// 整门重验，坏行在这里炸成错误不进编排。单据号两格皆空是迁移之前建立的旧行，读成「上线前开立」。
 func rebuildCustomsCase(
 	id domain.CustomsCaseID,
 	jurisdiction domain.RegulatoryJurisdictionReference,
@@ -154,6 +156,7 @@ func rebuildCustomsCase(
 	obligation domain.ObligationScopeReference,
 	parcelsRaw, rolesRaw []byte,
 	establishedAt time.Time,
+	number, absence *string,
 ) (domain.CustomsCase, error) {
 	spec := domain.CustomsCaseSpec{
 		ID:            id,
@@ -190,7 +193,57 @@ func rebuildCustomsCase(
 	if err != nil {
 		return domain.CustomsCase{}, fmt.Errorf("rebuild customs case: %w", err)
 	}
+	switch {
+	case number != nil:
+		customsCase, err = customsCase.Numbered(*number)
+	case absence == nil:
+		customsCase, err = customsCase.Unnumbered(domain.IssuedBeforeNumbering)
+	case *absence == domain.NumberingTimeZoneNotConfigured.String():
+		customsCase, err = customsCase.Unnumbered(domain.NumberingTimeZoneNotConfigured)
+	default:
+		err = fmt.Errorf("unknown document number absence %q", *absence)
+	}
+	if err != nil {
+		return domain.CustomsCase{}, fmt.Errorf("rebuild customs case: document number: %w", err)
+	}
 	return customsCase, nil
+}
+
+// caseNumberColumns 把案件落定的单据号这一格拆成两列。新落库的案件只可能带号，或因单据编号时区未配置而无号；
+// 「上线前开立」只是旧行两格皆空的读法，写进来就是在冒充旧行，没落定的案件写进来读回也会成了它——两样都拒。
+func caseNumberColumns(customsCase domain.CustomsCase) (number, absence *string, err error) {
+	if value, present := customsCase.DocumentNumber(); present {
+		return &value, nil, nil
+	}
+	if customsCase.DocumentNumberAbsence() == domain.NumberingTimeZoneNotConfigured {
+		reason := domain.NumberingTimeZoneNotConfigured.String()
+		return nil, &reason, nil
+	}
+	return nil, nil, fmt.Errorf("case %s has no settled document number (absence %q)",
+		customsCase.ID().String(), customsCase.DocumentNumberAbsence().String())
+}
+
+// CaseNumberUsed 答（租户，单据号）是否已被某个案件用过——取号编排判撞时在建案事务里问它（ADR-0355 决定八）。
+// 库侧 customs_case_document_number_unique 是最后一道保险，这一问让撞号在落库之前就被跳过，而不是以唯一约束报错收场。
+func (repository *CustomsCases) CaseNumberUsed(
+	ctx context.Context,
+	tenant domain.TenantID,
+	number string,
+) (bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check customs case number: %w", err)
+	}
+	var used bool
+	if err := executor.QueryRow(ctx,
+		`SELECT EXISTS (
+		     SELECT 1 FROM customs_compliance.customs_case
+		      WHERE tenant_id = $1 AND document_number = $2)`,
+		tenant.String(), number,
+	).Scan(&used); err != nil {
+		return false, fmt.Errorf("check customs case number: %w", err)
+	}
+	return used, nil
 }
 
 // Save 写下一个案件。同一法律行为已有案件时答`已有记录`——业务答案不是错误
@@ -236,12 +289,18 @@ func (repository *CustomsCases) Save(
 	if err != nil {
 		return ports.CustomsCaseSaveOutcomeInvalid, fmt.Errorf("save customs case: %w", err)
 	}
+	number, absence, err := caseNumberColumns(customsCase)
+	if err != nil {
+		return ports.CustomsCaseSaveOutcomeInvalid, fmt.Errorf("save customs case: %w", err)
+	}
 
+	// ON CONFLICT 只认范围键：单据号撞了唯一约束照样报错。号在同一事务里刚判过未用，撞上只可能是绕过取号编排写进来的
+	// 行，那不是「已有记录」这一业务答案，不能吞成它。
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.customs_case
 			(tenant_id, jurisdiction_ref, direction, procedure_ref, obligation_ref,
-			 case_id, parcels, roles, established_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 case_id, parcels, roles, established_at, document_number, document_number_absence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT (tenant_id, jurisdiction_ref, direction, procedure_ref, obligation_ref)
 		 DO NOTHING`,
 		key.TenantID.String(),
@@ -253,6 +312,8 @@ func (repository *CustomsCases) Save(
 		parcelsRaw,
 		rolesRaw,
 		customsCase.EstablishedAt(),
+		number,
+		absence,
 	)
 	if err != nil {
 		return ports.CustomsCaseSaveOutcomeInvalid, fmt.Errorf("save customs case: %w", err)

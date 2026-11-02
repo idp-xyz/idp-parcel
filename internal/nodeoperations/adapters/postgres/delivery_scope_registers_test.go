@@ -78,6 +78,7 @@ func registerPreAdvice(t *testing.T, id, account, requestKey, digest string, num
 	if err != nil {
 		t.Fatalf("form pre-advice: %v", err)
 	}
+	preAdvice = preAdvice.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	return preAdvice
 }
 
@@ -192,6 +193,7 @@ func openNote(t *testing.T, id string, accounts ...string) domain.DeliveryHandov
 	if err != nil {
 		t.Fatal(err)
 	}
+	note = note.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	return note
 }
 
@@ -507,6 +509,10 @@ func TestDeliveryScopeRegistersRefuseWritesOutsideATransaction(t *testing.T) {
 	if _, _, err := preAdvices.RecordDeliveryPreAdvice(ctx, preAdvice); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("RecordDeliveryPreAdvice: err = %v", err)
 	}
+	// 锁住来源要在开立事务里：事务外的咨询锁随语句即放，锁不住并发重投的那一笔（单据号就会取两次）。
+	if _, _, err := preAdvices.LockDeliveryPreAdviceSource(ctx, tenant, preAdvice.Source()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("LockDeliveryPreAdviceSource: err = %v", err)
+	}
 	if _, _, err := preAdvices.RecordDeliveryPreAdviceWithdrawal(ctx, withdrawalOf(t, "SYN-PREADV-PSXM08-NOTX", "SYN-ACCOUNT-01", "SYN-REQ-NOTX-W")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("RecordDeliveryPreAdviceWithdrawal: err = %v", err)
 	}
@@ -517,6 +523,9 @@ func TestDeliveryScopeRegistersRefuseWritesOutsideATransaction(t *testing.T) {
 	note := openNote(t, "SYN-HANDOVER-PSXM08-NOTX", "SYN-ACCOUNT-01")
 	if _, _, err := notes.OpenDeliveryHandoverNote(ctx, note); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("OpenDeliveryHandoverNote: err = %v", err)
+	}
+	if _, _, err := notes.LockDeliveryHandoverNoteOpening(ctx, tenant, note.ID()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("LockDeliveryHandoverNoteOpening: err = %v", err)
 	}
 	if _, _, err := notes.AppendDeliveryHandoverMember(ctx, memberOf(t, "SYN-HANDOVER-PSXM08-NOTX", "SYN-UNIT-NOTX", domain.MembershipByAssignment, "SYN-FACT-NOTX", at)); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("AppendDeliveryHandoverMember: err = %v", err)

@@ -86,7 +86,8 @@ func (views *OperationsRecordViews) ListCustomsCases(
 	limit int,
 ) ([]ports.CustomsCaseRecord, error) {
 	rows, err := views.query(ctx, "customs cases", limit,
-		`SELECT c.case_id, c.jurisdiction_ref, c.direction, c.procedure_ref, c.obligation_ref,
+		`SELECT c.case_id, c.document_number, c.document_number_absence,
+		        c.jurisdiction_ref, c.direction, c.procedure_ref, c.obligation_ref,
 		        c.established_at, c.parcels, c.roles,
 		        (SELECT COALESCE(json_agg(json_build_object(
 		                    'unit', u.unit_id, 'procedure', u.procedure_ref, 'members', u.members,
@@ -115,12 +116,14 @@ func (views *OperationsRecordViews) ListCustomsCases(
 	for rows.Next() {
 		var (
 			record                                 ports.CustomsCaseRecord
+			number, absence                        *string
 			parcelsRaw, rolesRaw, unitsRaw, closed []byte
 		)
-		if err := rows.Scan(&record.Case, &record.Jurisdiction, &record.Direction, &record.Procedure,
+		if err := rows.Scan(&record.Case, &number, &absence, &record.Jurisdiction, &record.Direction, &record.Procedure,
 			&record.Obligation, &record.EstablishedAt, &parcelsRaw, &rolesRaw, &unitsRaw, &closed); err != nil {
 			return nil, fmt.Errorf("list customs cases: %w", err)
 		}
+		record.DocumentNumber, record.DocumentNumberAbsence = caseNumberRecord(number, absence)
 		record.EstablishedAt = record.EstablishedAt.UTC()
 		var parcels []caseParcelRow
 		if err := json.Unmarshal(parcelsRaw, &parcels); err != nil {
@@ -166,6 +169,19 @@ func (views *OperationsRecordViews) ListCustomsCases(
 		return nil, fmt.Errorf("list customs cases: %w", err)
 	}
 	return records, nil
+}
+
+// caseNumberRecord 转述单据号两列：两列皆空是迁移之前建立的旧行，转述成「上线前开立」——查阅面不重建领域对象，
+// 这一格的读法与案件库的 rebuildCustomsCase 是同一句话。
+func caseNumberRecord(number, absence *string) (string, string) {
+	switch {
+	case number != nil:
+		return *number, ""
+	case absence != nil:
+		return "", *absence
+	default:
+		return "", domain.IssuedBeforeNumbering.String()
+	}
 }
 
 // —— 提交版本 ——

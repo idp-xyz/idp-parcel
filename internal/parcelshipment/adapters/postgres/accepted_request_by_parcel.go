@@ -33,7 +33,7 @@ func (repository *ShipmentRequests) findAcceptedRequestCoveringParcel(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT revision, state, snapshot
+		`SELECT revision, state, snapshot, document_number, document_number_absence
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
 		    AND state = $2
@@ -49,14 +49,15 @@ func (repository *ShipmentRequests) findAcceptedRequestCoveringParcel(
 	defer rows.Close()
 
 	type hit struct {
-		revision int64
-		state    uint8
-		raw      []byte
+		revision  int64
+		state     uint8
+		raw       []byte
+		numbering documentNumberingColumns
 	}
 	var hits []hit
 	for rows.Next() {
 		var row hit
-		if err := rows.Scan(&row.revision, &row.state, &row.raw); err != nil {
+		if err := rows.Scan(&row.revision, &row.state, &row.raw, &row.numbering.number, &row.numbering.absence); err != nil {
 			return none, false, err
 		}
 		hits = append(hits, row)
@@ -75,7 +76,7 @@ func (repository *ShipmentRequests) findAcceptedRequestCoveringParcel(
 	if err := json.Unmarshal(hits[0].raw, &document); err != nil {
 		return none, false, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
 	}
-	spec, err := document.rehydrationSpec(hits[0].revision, domain.ShipmentRequestState(hits[0].state))
+	spec, err := document.rehydrationSpec(hits[0].revision, domain.ShipmentRequestState(hits[0].state), hits[0].numbering)
 	if err != nil {
 		return none, false, err
 	}

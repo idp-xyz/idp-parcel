@@ -29,7 +29,8 @@ import {
   type RefusalHandlingNote,
 } from './control-release-refusals';
 import { ShipmentNo } from './refs';
-import { shipmentNoOf } from './ref-no';
+import { shipmentDisplayNoOf } from './ref-no';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 页面标题取导航登记的那一份;主责上下文(parcel-shipment)只在代码里出现,屏上不说系统的话。
 const info = moduleInfoById['control-release-refusals'];
@@ -44,7 +45,7 @@ const actionDecisions: ReviewDecisionOption<ControlReleaseRefusalAction>[] = ref
 
 function detailFieldsOf(row: ControlReleaseRefusalRow): DetailField[] {
   return [
-    { label: '运单号', value: <ShipmentNo shipmentRequestId={row.shipmentRequestId} /> },
+    { label: documentTypeWords.SHIPMENT.numberName, value: <ShipmentNo shipmentRequestId={row.shipmentRequestId} documentNumber={row.documentNumber} /> },
     { label: '客户', value: row.customerAccountId },
     { label: '占用在哪', value: refusalScopeText(row) },
     { label: '登记时间', value: formatInstant(row.recordedAt) },
@@ -61,7 +62,7 @@ interface PendingMark {
 // 却会让接受链此后不再为这一笔停下——所以说清它不会替人把钱放掉。
 function markConfirmText({ row, basis }: PendingMark): string {
   return (
-    `将把运单 ${shipmentNoOf(row.shipmentRequestId)}(客户 ${row.customerAccountId})被结算侧拒绝释放的那笔占用标记为已处理。` +
+    `将把运单 ${shipmentDisplayNoOf(row)}(客户 ${row.customerAccountId})被结算侧拒绝释放的那笔占用标记为已处理。` +
     '标记只记一笔,不会动账、不会替你放掉这笔钱;之后系统不再为这一笔停下,会接着处理这票运单。' +
     `记录不能撤销。依据:${basis}。`
   );

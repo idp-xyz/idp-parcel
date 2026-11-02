@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -23,9 +24,33 @@ type preAdviceRegisterDouble struct {
 	err         error
 }
 
+func (register *preAdviceRegisterDouble) LockDeliveryPreAdviceSource(_ context.Context, tenant domain.TenantID, source domain.CustomerRequestSource) (domain.DeliveryPreAdvice, bool, error) {
+	if register.err != nil {
+		return domain.DeliveryPreAdvice{}, false, register.err
+	}
+	for _, recorded := range register.preAdvices {
+		if recorded.TenantID() == tenant && recorded.Source().Channel == source.Channel && recorded.Source().RequestKey == source.RequestKey {
+			return recorded, true, nil
+		}
+	}
+	return domain.DeliveryPreAdvice{}, false, nil
+}
+
+func (register *preAdviceRegisterDouble) DeliveryPreAdviceDocumentNumberUsed(_ context.Context, tenant domain.TenantID, number string) (bool, error) {
+	for _, recorded := range register.preAdvices {
+		if value, numbered := recorded.DocumentNumbering().Number(); recorded.TenantID() == tenant && numbered && value.String() == number {
+			return true, nil
+		}
+	}
+	return false, register.err
+}
+
 func (register *preAdviceRegisterDouble) RecordDeliveryPreAdvice(_ context.Context, preAdvice domain.DeliveryPreAdvice) (domain.DeliveryPreAdvice, ports.DeliveryScopeAppendOutcome, error) {
 	if register.err != nil {
 		return domain.DeliveryPreAdvice{}, ports.DeliveryScopeAppendInvalid, register.err
+	}
+	if !preAdvice.DocumentNumbering().Decided() {
+		return domain.DeliveryPreAdvice{}, ports.DeliveryScopeAppendInvalid, errors.New("the document number is not decided")
 	}
 	for _, recorded := range register.preAdvices {
 		if recorded.TenantID() == preAdvice.TenantID() && recorded.Source().Channel == preAdvice.Source().Channel &&
@@ -131,10 +156,22 @@ func withdrawCommand(t *testing.T, account, requestKey, preAdvice string) applic
 
 func preAdviceHandler(t *testing.T, register ports.DeliveryPreAdviceRegister, ids ports.DeliveryPreAdviceIdentityFactory) *application.DeliveryPreAdviceHandler {
 	t.Helper()
+	return preAdviceHandlerNumberedBy(t, register, ids, newDocumentNumbers(), &nodeTimeZonesDouble{})
+}
+
+func preAdviceHandlerNumberedBy(
+	t *testing.T,
+	register ports.DeliveryPreAdviceRegister,
+	ids ports.DeliveryPreAdviceIdentityFactory,
+	issuer ports.DocumentNumberIssuer,
+	nodes ports.IssuingNodeTimeZones,
+) *application.DeliveryPreAdviceHandler {
+	t.Helper()
 	handler, err := application.NewDeliveryPreAdviceHandler(application.DeliveryPreAdviceDeps{
-		Register: register,
-		IDs:      ids,
-		Clock:    fixedClock{at: preAdviceNow},
+		Register:        register,
+		IDs:             ids,
+		Clock:           fixedClock{at: preAdviceNow},
+		DocumentNumbers: documentNumberingDeps(issuer, nodes),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -286,13 +323,111 @@ func TestWithdrawingAPreAdviceTouchesOnlyTheEnvelopesOwnAccount(t *testing.T) {
 }
 
 func TestDeliveryPreAdviceHandlerRefusesMissingDependencies(t *testing.T) {
+	numbers := documentNumberingDeps(newDocumentNumbers(), &nodeTimeZonesDouble{})
 	for name, deps := range map[string]application.DeliveryPreAdviceDeps{
-		"register": {IDs: &preAdviceIDs{}, Clock: fixedClock{at: preAdviceNow}},
-		"ids":      {Register: &preAdviceRegisterDouble{}, Clock: fixedClock{at: preAdviceNow}},
-		"clock":    {Register: &preAdviceRegisterDouble{}, IDs: &preAdviceIDs{}},
+		"register":     {IDs: &preAdviceIDs{}, Clock: fixedClock{at: preAdviceNow}, DocumentNumbers: numbers},
+		"ids":          {Register: &preAdviceRegisterDouble{}, Clock: fixedClock{at: preAdviceNow}, DocumentNumbers: numbers},
+		"clock":        {Register: &preAdviceRegisterDouble{}, IDs: &preAdviceIDs{}, DocumentNumbers: numbers},
+		"issuer":       {Register: &preAdviceRegisterDouble{}, IDs: &preAdviceIDs{}, Clock: fixedClock{at: preAdviceNow}, DocumentNumbers: documentNumberingDeps(nil, &nodeTimeZonesDouble{})},
+		"node zones":   {Register: &preAdviceRegisterDouble{}, IDs: &preAdviceIDs{}, Clock: fixedClock{at: preAdviceNow}, DocumentNumbers: documentNumberingDeps(newDocumentNumbers(), nil)},
+		"no numbering": {Register: &preAdviceRegisterDouble{}, IDs: &preAdviceIDs{}, Clock: fixedClock{at: preAdviceNow}},
 	} {
 		if _, err := application.NewDeliveryPreAdviceHandler(deps); err == nil {
 			t.Fatalf("缺 %s 也建起来了", name)
 		}
+	}
+}
+
+// Covers: AT-NO-135（编排半边）——进入已登记时取预报单据号（ADR-0355 决定二、三）：类型取本上下文的声明，业务时区取预报指名的网点
+// 此刻（编排时钟）生效的那一版；同一接入请求原样重投、换内容都答在册那一份连同原号，取号编排一次也不再被问到。
+func TestRegisteringAPreAdviceIssuesItsDocumentNumberOnceAndReplaysIt(t *testing.T) {
+	register := &preAdviceRegisterDouble{}
+	issuer := newDocumentNumbers()
+	nodes := &nodeTimeZonesDouble{zones: map[string]string{"SYN-NODE-SHA-HUB": "Asia/Shanghai"}}
+	handler := preAdviceHandlerNumberedBy(t, register, &preAdviceIDs{values: []string{"PREADV-SYN-0001", "PREADV-SYN-0002", "PREADV-SYN-0003", "PREADV-SYN-0004"}}, issuer, nodes)
+	ctx := context.Background()
+
+	first, err := handler.Submit(ctx, submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001"))
+	if err != nil || first.Outcome() != application.DeliveryPreAdviceRegistered {
+		t.Fatalf("首次 = %s, %v", first.Outcome(), err)
+	}
+	number, numbered := first.PreAdvice().DocumentNumbering().Number()
+	if !numbered || number.String() != "DELIVERY_PRE_ADVICE-0001" {
+		t.Fatalf("单据号 = %q %v", number, numbered)
+	}
+	if len(issuer.asked) != 1 || issuer.asked[0].Type != domain.DeliveryPreAdviceDocumentNumberType.Code ||
+		issuer.asked[0].IssuerTimeZone != "Asia/Shanghai" || issuer.asked[0].Tenant.String() != "SYN-TENANT-01" {
+		t.Fatalf("取号请求 = %+v", issuer.asked)
+	}
+	if len(nodes.asked) != 1 || !nodes.asked[0].Equal(preAdviceNow) {
+		t.Fatalf("网点业务时区按 %v 选版，want 编排时钟 %v", nodes.asked, preAdviceNow)
+	}
+
+	for name, command := range map[string]application.SubmitDeliveryPreAdviceCommand{
+		"原样重投": submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001"),
+		"换内容":  submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0009"),
+	} {
+		replay, err := handler.Submit(ctx, command)
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if again, _ := replay.PreAdvice().DocumentNumbering().Number(); again != number {
+			t.Fatalf("%s 答的单据号 %q，want 原号 %q", name, again, number)
+		}
+	}
+	if len(issuer.asked) != 1 {
+		t.Fatalf("重放又取了号：%d 次", len(issuer.asked))
+	}
+
+	second, err := handler.Submit(ctx, submitCommand(t, accountTwo, "SYN-ACCESS-REQUEST-PA-0002", "SYN-PCL-PA-0001"))
+	if next, _ := second.PreAdvice().DocumentNumbering().Number(); err != nil || next.String() != "DELIVERY_PRE_ADVICE-0002" {
+		t.Fatalf("另一份 = %q, %v", next, err)
+	}
+}
+
+// Covers: AT-NO-135 的无号与撞号（ADR-0355 决定七、八）——网点此刻没有业务时区交空串、由取号编排退到租户的单据编号时区；两者都
+// 没有答单据编号时区未配置，预报照常登记、记无号原因；撞号答编号规则撞号，册上什么也没落；取号或网点时区读不动原样交回、什么也不落。
+func TestAPreAdviceWithoutANumberStillRegistersAndACollisionLandsNothing(t *testing.T) {
+	ctx := context.Background()
+
+	fallback := newDocumentNumbers()
+	fallback.outcome = ports.DocumentNumberTimeZoneNotConfigured
+	register := &preAdviceRegisterDouble{}
+	withheld, err := preAdviceHandlerNumberedBy(t, register, &preAdviceIDs{values: []string{"PREADV-SYN-0001"}}, fallback, &nodeTimeZonesDouble{}).
+		Submit(ctx, submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001"))
+	if err != nil || withheld.Outcome() != application.DeliveryPreAdviceRegistered {
+		t.Fatalf("单据编号时区未配置 = %s, %v", withheld.Outcome(), err)
+	}
+	if absence, absent := withheld.PreAdvice().DocumentNumbering().Absence(); !absent || absence != domain.NumberingTimeZoneNotConfigured {
+		t.Fatalf("无号原因 = %v %v", absence, absent)
+	}
+	if fallback.asked[0].IssuerTimeZone != "" {
+		t.Fatalf("网点没有业务时区却交了 %q", fallback.asked[0].IssuerTimeZone)
+	}
+
+	collided := newDocumentNumbers()
+	collided.outcome = ports.DocumentNumberRuleCollision
+	register = &preAdviceRegisterDouble{}
+	result, err := preAdviceHandlerNumberedBy(t, register, &preAdviceIDs{values: []string{"PREADV-SYN-0001"}}, collided, &nodeTimeZonesDouble{}).
+		Submit(ctx, submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001"))
+	if err != nil || result.Outcome() != application.DeliveryPreAdviceNumberingRuleCollision || result.Outcome().String() != "NUMBERING_RULE_COLLISION" {
+		t.Fatalf("撞号 = %s, %v", result.Outcome(), err)
+	}
+	if result.PreAdvice().ID().String() != "" || len(register.preAdvices) != 0 {
+		t.Fatalf("撞号也落了预报：%d 份", len(register.preAdvices))
+	}
+
+	broken := fmt.Errorf("sequence table unreachable")
+	failing := newDocumentNumbers()
+	failing.err = broken
+	register = &preAdviceRegisterDouble{}
+	if _, err := preAdviceHandlerNumberedBy(t, register, &preAdviceIDs{values: []string{"PREADV-SYN-0001"}}, failing, &nodeTimeZonesDouble{}).
+		Submit(ctx, submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001")); !errors.Is(err, broken) || len(register.preAdvices) != 0 {
+		t.Fatalf("取号读不动：err = %v，落了 %d 份", err, len(register.preAdvices))
+	}
+	catalogue := fmt.Errorf("network catalogue unreachable")
+	if _, err := preAdviceHandlerNumberedBy(t, register, &preAdviceIDs{values: []string{"PREADV-SYN-0001"}}, newDocumentNumbers(), &nodeTimeZonesDouble{err: catalogue}).
+		Submit(ctx, submitCommand(t, accountOne, "SYN-ACCESS-REQUEST-PA-0001", "SYN-PCL-PA-0001")); !errors.Is(err, catalogue) || len(register.preAdvices) != 0 {
+		t.Fatalf("网点时区读不动：err = %v，落了 %d 份", err, len(register.preAdvices))
 	}
 }

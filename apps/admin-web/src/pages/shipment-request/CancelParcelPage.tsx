@@ -5,10 +5,14 @@ import { pendingText } from '../../components/action-feedback';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import {
   cancelParcel,
+  findShipmentRequestView,
+  findShipmentRequestViewsByDocumentNumber,
   type ApiResult,
   type CancellationDraft,
   type CancellationResponseBody,
 } from './api';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { lookUpShipmentRef, shipmentRefProblem, shipmentRefText, type ShipmentRef } from './shipment-ref';
 import { cancellationOutcomeViews, cancellationPendingReasonViews, type OutcomeView } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
 import { ParcelNo } from './refs';
@@ -26,12 +30,17 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 // 逐件呈现结果,部分成功由此自然表达;一件的结果不回滚其他件已合法形成的决定。已收寄包裹这里绝不提供改回
 // 「已取消」的口子:边界后的走向是待处置或明确拒绝,由服务端裁决,页面不预判。
 //
-// 屏上的话按运营的说法:「运单号」是委托标识,「客户单号」是原提交的来源请求键;边界规则不摆在表单上讲,
+// 屏上的话按运营的说法:指名委托的那一格收运单号(单据号,ADR-0355 决定十一),也收委托标识(上线前的老运单没有运单号);
+// 取消口照首方契约按委托标识找委托,提交前先经委托查阅解析(shipment-ref.ts),确认弹层两样都写出来。「客户单号」是
+// 原提交的来源请求键;边界规则不摆在表单上讲,
 // 结果卡里按答案说。出处:parcel-shipment CONTEXT.md「包裹取消决定」「收寄后服务处置决定」与 UC-PS-006 决定矩阵。
+
+const shipmentNumberName = documentTypeWords.SHIPMENT.numberName;
 
 interface CancellationFormState {
   originalRequestKey: string;
-  shipmentRequestId: string;
+  /** 运单号或委托标识,提交前解析成委托标识。 */
+  shipmentRef: string;
   /** 每行一件包裹号;逐件分发时按行序受理。 */
   parcelIds: string;
   requesterReference: string;
@@ -40,7 +49,7 @@ interface CancellationFormState {
 
 const emptyForm: CancellationFormState = {
   originalRequestKey: '',
-  shipmentRequestId: '',
+  shipmentRef: '',
   parcelIds: '',
   requesterReference: '',
   reasonReference: '',
@@ -69,7 +78,7 @@ function parcelIdsOf(form: CancellationFormState): string[] {
 // 缺一即构造不出取消请求(服务端同判 REQUEST_NOT_ACCEPTED)。授权判定属服务端,页面不判。
 function validate(form: CancellationFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写运单号。';
+  if (!form.shipmentRef.trim()) errors.shipmentRef = `请填写${shipmentNumberName}或委托标识。`;
   if (!form.originalRequestKey.trim()) errors.originalRequestKey = '请填写客户单号。';
   if (parcelIdsOf(form).length === 0) errors.parcelIds = '至少填写一个包裹号。';
   if (!form.requesterReference.trim()) errors.requesterReference = '请填写是谁提出取消。';
@@ -77,10 +86,10 @@ function validate(form: CancellationFormState): Record<string, string> {
   return errors;
 }
 
-function buildDraft(form: CancellationFormState, parcelId: string): CancellationDraft {
+function buildDraft(form: CancellationFormState, ref: ShipmentRef, parcelId: string): CancellationDraft {
   return {
     originalRequestKey: form.originalRequestKey.trim(),
-    shipmentRequestId: form.shipmentRequestId.trim(),
+    shipmentRequestId: ref.shipmentRequestId,
     parcelId,
     requesterReference: form.requesterReference.trim(),
     reasonReference: form.reasonReference.trim(),
@@ -89,10 +98,10 @@ function buildDraft(form: CancellationFormState, parcelId: string): Cancellation
 
 // 确认弹层的正文(票 admin-web-workspace-form/05 第 3 条,蓝图 21.2):逐件列出要取消的包裹、影响什么、以谁的名义,
 // 不写「确定吗」。边界句取 UC-PS-006 的口径:逐件裁决允许部分成功;已收寄的包裹不回退为「已取消」,转货物处置。
-function cancellationConfirmText(form: CancellationFormState): string {
+function cancellationConfirmText(form: CancellationFormState, ref: ShipmentRef): string {
   const parcels = parcelIdsOf(form);
   return (
-    `运单 ${form.shipmentRequestId.trim()}(客户单号 ${form.originalRequestKey.trim()})里的 ${parcels.length} 件包裹将逐件申请取消:` +
+    `${shipmentRefText(ref)}这一票(客户单号 ${form.originalRequestKey.trim()})里的 ${parcels.length} 件包裹将逐件申请取消:` +
     `${parcels.join('、')}。每件单独判,可能只取消一部分;已经收寄的包裹取消不了,会转到货物处置。` +
     `申请人 ${form.requesterReference.trim()},原因:${form.reasonReference.trim()}。`
   );
@@ -103,31 +112,51 @@ export function CancelParcelPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // 确认弹层与逐件请求用的是同一份解析结果:确认时看到的委托标识就是取消指名的那一个。
+  const [resolved, setResolved] = useState<ShipmentRef | null>(null);
   const [entries, setEntries] = useState<ParcelCancellationEntry[] | null>(null);
 
   const setField = (field: keyof CancellationFormState) => (value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
 
   // 先校验再开确认:确认层问的是「要不要取消这几件」,不是「填全了没」——两问挤在一层,没填全会被读成取消被拒。
-  function requestCancel() {
+  async function requestCancel() {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setEntries(null);
       return;
     }
-    setConfirming(true);
+    setPending(true);
+    try {
+      const resolution = await lookUpShipmentRef(form.shipmentRef, {
+        byNumber: findShipmentRequestViewsByDocumentNumber,
+        byId: findShipmentRequestView,
+      });
+      const problem = shipmentRefProblem(form.shipmentRef.trim(), resolution);
+      if (resolution.kind !== 'resolved' || problem !== undefined) {
+        setErrors({ shipmentRef: problem ?? '' });
+        setEntries(null);
+        return;
+      }
+      setResolved(resolution.ref);
+      setConfirming(true);
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleCancel() {
     setConfirming(false);
+    if (resolved === null) return;
+    const ref = resolved;
     const parcels = parcelIdsOf(form);
     setPending(true);
     setEntries([]);
     try {
       // 顺序逐件受理:每件独立请求独立作答,先答的结果当场入列,后件失败不动前件。
       for (const parcelId of parcels) {
-        const result = await cancelParcel(buildDraft(form, parcelId));
+        const result = await cancelParcel(buildDraft(form, ref, parcelId));
         setEntries((current) => [...(current ?? []), { parcelId, result }]);
       }
     } finally {
@@ -148,14 +177,19 @@ export function CancelParcelPage() {
 
         <Section title="哪一票运单">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="运单号" required error={errors.shipmentRequestId} hint="受理时给客户的运单号。">
+            <Field
+              label={`${shipmentNumberName}(或委托标识)`}
+              required
+              error={errors.shipmentRef}
+              hint={`填${shipmentNumberName};上线前的老运单没有${shipmentNumberName},填运单详情技术详情里的委托标识(SHR- 开头)。`}
+            >
               <input
                 className={`${inputClass} font-mono`}
-                value={form.shipmentRequestId}
-                onChange={(event) => setField('shipmentRequestId')(event.target.value)}
+                value={form.shipmentRef}
+                onChange={(event) => setField('shipmentRef')(event.target.value)}
               />
             </Field>
-            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与运单号一起才能找到这票运单。">
+            <Field label="客户单号" required error={errors.originalRequestKey} hint={`客户下单时自己的单号;与${shipmentNumberName}一起才能找到这票运单。`}>
               <input
                 className={`${inputClass} font-mono`}
                 value={form.originalRequestKey}
@@ -198,7 +232,7 @@ export function CancelParcelPage() {
           <button
             type="button"
             disabled={pending}
-            onClick={requestCancel}
+            onClick={() => void requestCancel()}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
             {pending ? pendingText('取消') : '取消列出的包裹'}
@@ -234,7 +268,7 @@ export function CancelParcelPage() {
           open={confirming}
           tone="danger"
           title="取消这些包裹"
-          message={cancellationConfirmText(form)}
+          message={resolved ? cancellationConfirmText(form, resolved) : ''}
           confirmLabel="确认取消"
           cancelLabel="先不取消"
           onConfirm={handleCancel}

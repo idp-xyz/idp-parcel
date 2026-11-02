@@ -11,7 +11,7 @@ import {
 } from './shipment-request-list';
 import type { ShipmentRequestSummary } from './api';
 
-// 本文件钉运单工作台的纯逻辑：客户名称从客户账户册转写、转写不到显编码；搜索命中运单号 / 客户单号 / 客户名；
+// 本文件钉运单工作台的纯逻辑：客户名称从客户账户册转写、转写不到显编码；搜索命中运单号（单据号）/ 客户单号 / 客户名；
 // 默认提交时间新→旧；状态计数只列出现过的码且词经词典。
 
 const row = (overrides: Partial<ShipmentRequestSummary>): ShipmentRequestSummary => ({
@@ -79,6 +79,18 @@ test('搜索命中运单号、客户单号、客户编码或客户名称；状�
   equal(filterShipments(rows, { search: 'account-02', state: 'ALL' }, names).length, 1);
   equal(filterShipments(rows, { search: '', state: 'ACCEPTED' }, names)[0].shipmentRequestId, 'SHR-2');
   equal(filterShipments(rows, { search: '', state: 'ALL' }, names).length, 2);
+});
+
+test('运单号即单据号：按单据号能搜到，委托标识照旧可搜；按运单号排序排的是屏上那一格', () => {
+  const rows = [
+    row({ shipmentRequestId: 'SHR-1', documentNumber: 'P20261102000002' }),
+    row({ shipmentRequestId: 'SHR-2', documentNumber: 'P20261102000001' }),
+    row({ shipmentRequestId: 'SHR-0OLD', documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }),
+  ];
+  deepEqual(filterShipments(rows, { search: 'p20261102000001', state: 'ALL' }, names).map((r) => r.shipmentRequestId), ['SHR-2']);
+  deepEqual(filterShipments(rows, { search: 'SHR-0OLD', state: 'ALL' }, names).map((r) => r.shipmentRequestId), ['SHR-0OLD']);
+  // 没有单据号的那一行屏上显的是去前缀的委托标识（0OLD），按它排进去。
+  deepEqual(sortShipments(rows, { key: 'shipment-id', dir: 1 }, names).map((r) => r.shipmentRequestId), ['SHR-0OLD', 'SHR-2', 'SHR-1']);
 });
 
 test('默认按提交时间新→旧；件数与客户名可排', () => {

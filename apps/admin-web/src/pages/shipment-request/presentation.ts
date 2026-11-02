@@ -5,6 +5,7 @@ import type {
   SubmitOutcome,
   WithdrawalOutcome,
 } from './api';
+import { documentTypeWords, numberingCollisionNote } from '../../vocabulary/document-numbering';
 
 // outcome 与领域状态的中文标签。标签取 UC-PS-001 / UC-PS-005 / UC-PS-006 结果语义
 // 的原词,不自造译法;note 讲操作员的下一步,措辞守住各结果的「禁止行为」——尤其是
@@ -54,6 +55,11 @@ export const submitOutcomeViews: Record<SubmitOutcome, OutcomeView> = {
   LINK_INELIGIBLE: {
     label: '原委托状态不承认该关联',
     note: '原委托已找到且属于当前客户,但其状态不支持这个关联方向。请改走资料修订,或等待其决定形成。',
+  },
+  // ADR-0355 决定八:撞号是租户编号规则的问题,不是故障也不是客户的错——重发在换格式之前仍撞,所以指到规则册。说法取单据编号词典。
+  NUMBERING_RULE_COLLISION: {
+    label: `${documentTypeWords.SHIPMENT.numberName}撞号`,
+    note: numberingCollisionNote('SHIPMENT'),
   },
 };
 

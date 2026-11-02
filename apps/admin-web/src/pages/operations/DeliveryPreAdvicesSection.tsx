@@ -9,6 +9,7 @@ import { usePlaceNames } from '../network/use-place-names';
 import { placeLabel } from '../network/place-names';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import {
   listDeliveryPreAdvices,
   readDeliveryPreAdvice,
@@ -18,6 +19,7 @@ import {
 } from './delivery-scope-api';
 import {
   deliveryScopeListPathOf,
+  documentNumberDetailOf,
   preAdviceFilterKeys,
   preAdviceRowOf,
   type DeliveryScopeListFilter,
@@ -26,6 +28,8 @@ import {
 import { DeliveryScopeFilters, DeliveryScopeReadNote } from './DeliveryScopeFilters';
 
 const info = moduleInfoById['node-operations-review'];
+// 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
+const numberName = documentTypeWords.DELIVERY_PRE_ADVICE.numberName;
 const listBase = '/node-operations-delivery-pre-advices';
 
 function col(id: string, header: string, mono = false): ListColumn<PreAdviceReviewRow> {
@@ -45,8 +49,9 @@ function columnsWith(names: CustomerNameIndex): ListColumn<PreAdviceReviewRow>[]
   );
 }
 
+// 主列是预报的单据号（ADR-0355 决定十一）；上线前开立、开立时单据编号时区未配置的预报没有单据号，这一格照旧显内部标识，原因在技术详情。
 const columns: ListColumn<PreAdviceReviewRow>[] = [
-  col('preAdviceId', '预报号', true),
+  col('documentNumber', numberName, true),
   col('customerAccount', '客户', true),
   col('node', '送到哪个网点'),
   col('expectedArrivalAt', '预计送达', true),
@@ -62,7 +67,7 @@ const columns: ListColumn<PreAdviceReviewRow>[] = [
  * 时窗与号码逐条判（ADR-0212 决定二），这一区不预判。
  */
 export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode }) {
-  const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '' });
+  const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{ path: string; answer: ApiResult<DeliveryPreAdviceListResponseBody> } | null>(null);
   const names = useCustomerNames();
@@ -84,7 +89,7 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
   const places = usePlaceNames();
   const rows = body ? withPlaceNames(body.preAdvices.map(preAdviceRowOf), ['node'], places) : [];
   const retry = () => setReloadKey((value) => value + 1);
-  const narrowed = filter.node.trim() !== '' || filter.day !== '';
+  const narrowed = filter.node.trim() !== '' || filter.day !== '' || (filter.documentNumber ?? '').trim() !== '';
   const viewState: TemplateViewState =
     path === null
       ? { kind: 'error', title: '预计送达日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
@@ -101,14 +106,14 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
       title={info.title}
       subtitle="客户送货到网点之前交来的到货计划：送到哪个网点、预计几点到、送哪些包裹。这里只查看；点一行看包裹号清单。"
       sections={sections}
-      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="预计送达日" onChange={setFilter} />}
+      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="预计送达日" numberLabel={numberName} onChange={setFilter} />}
       answered={body !== null}
       noun="份"
       rows={rows}
       rowKey={(row) => row.key}
       statusOf={(row) => reviewStatusOf(row, { labelKey: 'withdrawal' })}
       searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder="在结果里搜预报号 / 客户 / 网点"
+      searchPlaceholder={`在结果里搜${numberName} / 客户 / 网点`}
       columns={workbenchColumnsOf(columnsWith(names), { labelKey: 'withdrawal' })}
       renderDetail={(row, close) => <PreAdviceDetail key={row.preAdviceId} preAdviceId={row.preAdviceId} onClose={close} />}
       onRefresh={retry}
@@ -119,7 +124,7 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
 
 /**
  * 一份预报的右栏，形状同本区其余几页：客户、送到哪个网点、预计几点到、谁来送、撤回了没有是事实格；包裹号清单在正文，逐字显示；
- * 预报号、客户与网点编码、收到与撤回的时刻进技术详情。
+ * 单据号（没有时按词典注明为什么没有）、预报标识、客户与网点编码、收到与撤回的时刻进技术详情。标题是单据号，没有单据号的照旧用预报标识。
  */
 function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClose: () => void }) {
   const [answer, setAnswer] = useState<ApiResult<DeliveryPreAdviceFoundResponseBody> | null>(null);
@@ -138,7 +143,7 @@ function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClos
   const advice = answer?.kind === 'outcome' ? answer.body.preAdvice : null;
   return (
     <RecordDetailPanel
-      title={preAdviceId}
+      title={advice?.documentNumber ?? preAdviceId}
       status={advice ? (advice.withdrawn ? codeStatus('WITHDRAWN') : { label: '未撤回', tone: 'info' }) : undefined}
       subtitle="客户送货预报"
       facts={
@@ -152,7 +157,8 @@ function PreAdviceDetail({ preAdviceId, onClose }: { preAdviceId: string; onClos
           : []
       }
       technical={techRows([
-        { label: '预报号', value: preAdviceId },
+        { label: numberName, value: advice ? documentNumberDetailOf(advice) : undefined },
+        { label: '预报标识', value: preAdviceId },
         { label: '客户编码', value: advice?.customerAccount },
         { label: '网点编码', value: advice?.node },
         { label: '收到预报', value: advice ? formatInstant(advice.formedAt) : undefined },

@@ -93,6 +93,7 @@ type DeliveryPreAdvice struct {
 	deliveringParty   DeliveringPartyReference
 	source            CustomerRequestSource
 	formedAt          time.Time
+	documentNumbering DocumentNumbering
 }
 
 // FormDeliveryPreAdvice 立一份送站预报。号码集合非空、逐字不重复，照交来的顺序保存：顺序本身不承载意义，保存它只为原样回显。
@@ -139,6 +140,18 @@ func (preAdvice DeliveryPreAdvice) Node() NodeReference           { return preAd
 func (preAdvice DeliveryPreAdvice) ExpectedArrivalAt() time.Time  { return preAdvice.expectedArrivalAt }
 func (preAdvice DeliveryPreAdvice) Source() CustomerRequestSource { return preAdvice.source }
 func (preAdvice DeliveryPreAdvice) FormedAt() time.Time           { return preAdvice.formedAt }
+
+// DocumentNumbering 交回预报的单据号或无号原因。零值即还没定——只在开立编排取号之前出现。
+func (preAdvice DeliveryPreAdvice) DocumentNumbering() DocumentNumbering {
+	return preAdvice.documentNumbering
+}
+
+// WithDocumentNumbering 交回记下了单据号（或无号原因）的这一份预报。单据号不进内容摘要、不参与重放判重（ADR-0355 决定一）：
+// 它是开立时另取的，同一份内容第二次交来答的是第一次那一份连同它的号。
+func (preAdvice DeliveryPreAdvice) WithDocumentNumbering(numbering DocumentNumbering) DeliveryPreAdvice {
+	preAdvice.documentNumbering = numbering
+	return preAdvice
+}
 
 // Numbers 交回所列号码的副本，照交来的顺序。
 func (preAdvice DeliveryPreAdvice) Numbers() []PreAdvisedParcelNumber {

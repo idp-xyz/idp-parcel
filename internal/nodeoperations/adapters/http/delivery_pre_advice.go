@@ -237,7 +237,8 @@ func (UnconfiguredIntake) IntakeDeliveryPreAdviceWithdrawal(context.Context, *ht
 }
 
 // NewSubmitDeliveryPreAdviceEndpoint 交回预报提交的 HTTP 入口。按 ADR-0022 映射：首次形成答 201；已有结果与来源冲突都是形成了的
-// 答案，答 200 带 outcome 并回显在册那一份。编排拒形答坏载荷；编排读写不动答没形成答案，册上什么也没落。
+// 答案，答 200 带 outcome 并回显在册那一份。编号规则撞号也是形成了的答案（ADR-0355 决定八），答 200 只带 outcome：预报没落，没有
+// 一份可回显，同一接入请求在租户换了编号格式之后重交即可。编排拒形答坏载荷；编排读写不动答没形成答案，册上什么也没落。
 func NewSubmitDeliveryPreAdviceEndpoint(intake DeliveryPreAdviceSubmissionIntake, handler DeliveryPreAdviceHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		problem := problemDetails(response, request)
@@ -256,8 +257,11 @@ func NewSubmitDeliveryPreAdviceEndpoint(intake DeliveryPreAdviceSubmissionIntake
 			answerPreAdviceFailure(problem, err)
 			return
 		}
-		writePreAdviceOutcome(response, problem, result.Outcome(), deliveryPreAdviceResponse{PreAdvice: preAdviceBodyOf(result.PreAdvice())},
-			application.DeliveryPreAdviceRegistered)
+		body := deliveryPreAdviceResponse{}
+		if preAdvice := result.PreAdvice(); preAdvice.ID().String() != "" {
+			body.PreAdvice = preAdviceBodyOf(preAdvice)
+		}
+		writePreAdviceOutcome(response, problem, result.Outcome(), body, application.DeliveryPreAdviceRegistered)
 	})
 }
 
@@ -320,10 +324,16 @@ type deliveryPreAdviceResponse struct {
 	Withdrawal *deliveryPreAdviceWithdrawalBody `json:"withdrawal,omitempty"`
 }
 
-// deliveryPreAdviceBody 回显一份预报：签发的标识（送站时随交付出示）与客户交来的内容。来源请求键与内容摘要不回显：客户手里本来
-// 就有接入请求标识，摘要是本上下文判重用的。
+// deliveryPreAdviceBody 回显一份预报：签发的标识（送站时随交付出示）、单据号与客户交来的内容。来源请求键与内容摘要不回显：客户手里
+// 本来就有接入请求标识，摘要是本上下文判重用的。
+//
+// documentNumber 是预报的单据号（ADR-0355 决定二，首方契约的新增字段，ADR-0140）：有号才在场，没有号时整键缺席，不答空串、不拿
+// 预报标识顶。没有号时 documentNumberAbsence 说为什么——ISSUED_BEFORE_NUMBERING（单据号规则生效之前登记的）或
+// NUMBERING_TIME_ZONE_NOT_CONFIGURED（登记时网点没有业务时区、租户也没登单据编号时区）；两者事后都不补号。
 type deliveryPreAdviceBody struct {
 	PreAdviceID           string   `json:"preAdviceId"`
+	DocumentNumber        string   `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string   `json:"documentNumberAbsence,omitempty"`
 	CustomerAccount       string   `json:"customerAccount"`
 	Node                  string   `json:"node"`
 	ExpectedArrivalAt     string   `json:"expectedArrivalAt"`
@@ -346,6 +356,7 @@ func preAdviceBodyOf(preAdvice domain.DeliveryPreAdvice) *deliveryPreAdviceBody 
 		CustomerParcelNumbers: []string{},
 		FormedAt:              rfc3339(preAdvice.FormedAt()),
 	}
+	body.DocumentNumber, body.DocumentNumberAbsence = documentNumberingFields(preAdvice.DocumentNumbering())
 	for _, number := range preAdvice.Numbers() {
 		body.CustomerParcelNumbers = append(body.CustomerParcelNumbers, number.String())
 	}

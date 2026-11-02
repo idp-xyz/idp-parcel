@@ -91,7 +91,7 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 	if err != nil {
 		t.Fatalf("装配首方提交 Intake：%v", err)
 	}
-	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}

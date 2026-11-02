@@ -102,7 +102,7 @@ func submitThroughProductionForm(t *testing.T, db *bentopg.DB, tenant string) *h
 	if err != nil {
 		t.Fatal(err)
 	}
-	submission, err := buildSubmissionOrchestration(db, nil, isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, nil, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}

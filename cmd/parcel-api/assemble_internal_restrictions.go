@@ -49,10 +49,10 @@ func buildInternalRestrictionFaces(db *bentopg.DB) (internalRestrictionFaces, er
 	transactor := db.Transactor()
 	return internalRestrictionFaces{
 		establishment: customsDecisionTransaction[customsapp.EstablishInternalRestrictionCommand, customsapp.InternalRestrictionResult]{
-			transactor: transactor, handle: handler.Establish, undecided: undecided,
+			transactor: transactor, handle: handler.Establish, rollBack: undecided,
 		},
 		decision: customsDecisionTransaction[customsapp.DecideInternalRestrictionCommand, customsapp.InternalRestrictionResult]{
-			transactor: transactor, handle: handler.Decide, undecided: undecided,
+			transactor: transactor, handle: handler.Decide, rollBack: undecided,
 		},
 	}, nil
 }

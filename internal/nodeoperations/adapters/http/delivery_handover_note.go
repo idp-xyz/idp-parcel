@@ -414,7 +414,8 @@ func handoverEndpoint[Command any](
 	})
 }
 
-// NewOpenDeliveryHandoverNoteEndpoint 交回开立口。首次开立答 201；已有结果与来源冲突答 200 带 outcome，回显在册那一张。
+// NewOpenDeliveryHandoverNoteEndpoint 交回开立口。首次开立答 201；已有结果与来源冲突答 200 带 outcome，回显在册那一张。编号规则撞号
+// 答 200 只带 outcome：交接单没落（ADR-0355 决定八），设备在租户换了编号格式之后原样重投。
 func NewOpenDeliveryHandoverNoteEndpoint(intake DeliveryHandoverNoteOpeningIntake, handler DeliveryHandoverNoteHandler) http.Handler {
 	return handoverEndpoint(intake.IntakeDeliveryHandoverNoteOpening, handler.Open, writeOperatorHandoverAnswer[application.OpenDeliveryHandoverNoteCommand], legacyProblems)
 }
@@ -472,14 +473,18 @@ type deliveryHandoverResponse struct {
 	ScopeEstablishedAt string                       `json:"scopeEstablishedAt,omitempty"`
 }
 
+// deliveryHandoverNoteBody 的 documentNumber 是服务端收下开立时取的单据号，有号才在场；没有号时 documentNumberAbsence 说为什么，
+// 单据号与无号原因的读法同 deliveryPreAdviceBody。noteId 仍是设备签发的标识，单据号不替代它（ADR-0023、ADR-0355 决定二）。
 type deliveryHandoverNoteBody struct {
-	NoteID          string   `json:"noteId"`
-	Node            string   `json:"node"`
-	DeliveringParty string   `json:"deliveringParty"`
-	ClaimedAccounts []string `json:"claimedAccounts"`
-	OpenedAt        string   `json:"openedAt"`
-	ClosureFactID   string   `json:"closureFactId,omitempty"`
-	ClosedAt        string   `json:"closedAt,omitempty"`
+	NoteID                string   `json:"noteId"`
+	DocumentNumber        string   `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string   `json:"documentNumberAbsence,omitempty"`
+	Node                  string   `json:"node"`
+	DeliveringParty       string   `json:"deliveringParty"`
+	ClaimedAccounts       []string `json:"claimedAccounts"`
+	OpenedAt              string   `json:"openedAt"`
+	ClosureFactID         string   `json:"closureFactId,omitempty"`
+	ClosedAt              string   `json:"closedAt,omitempty"`
 }
 
 type deliveryHandoverMemberBody struct {
@@ -509,6 +514,7 @@ func writeOperatorHandoverAnswer[Command any](response http.ResponseWriter, _ Co
 			ClaimedAccounts: []string{},
 			OpenedAt:        rfc3339(note.OpenedAt()),
 		}
+		body.HandoverNote.DocumentNumber, body.HandoverNote.DocumentNumberAbsence = documentNumberingFields(note.DocumentNumbering())
 		for _, account := range note.ClaimedAccounts() {
 			body.HandoverNote.ClaimedAccounts = append(body.HandoverNote.ClaimedAccounts, account.String())
 		}
@@ -531,13 +537,18 @@ func writeOperatorHandoverAnswer[Command any](response http.ResponseWriter, _ Co
 	writeJSON(response, handoverStatus(result.Outcome()), body)
 }
 
-// deliveryHandoverConclusionResponse 是客户面那一口的封闭响应形状：只回显交接单标识与信封里那个客户账户的结论。不回显声称了谁、
-// 成员与范围成立没有——那几格会让一个客户账户看到别的客户账户在不在声称之列、确认没有（UC-NO-006「权限、隔离与审计」）。
+// deliveryHandoverConclusionResponse 是客户面那一口的封闭响应形状：只回显交接单标识、交接单号与信封里那个客户账户的结论。不回显声称
+// 了谁、成员与范围成立没有——那几格会让一个客户账户看到别的客户账户在不在声称之列、确认没有（UC-NO-006「权限、隔离与审计」）。
+//
+// documentNumber / documentNumberAbsence 是交接单的单据号或无号原因（ADR-0355 决定十一，首方契约的新增字段，ADR-0140），读法同
+// deliveryHandoverNoteBody：客户对着纸面或现场说的交接单号确认，答复里要看得到它。单据号是交接单自己的，不泄露别的客户账户的任何事。
 type deliveryHandoverConclusionResponse struct {
-	Outcome       string                       `json:"outcome"`
-	StateMismatch string                       `json:"stateMismatch,omitempty"`
-	NoteID        string                       `json:"noteId"`
-	Binding       *deliveryHandoverBindingBody `json:"binding,omitempty"`
+	Outcome               string                       `json:"outcome"`
+	StateMismatch         string                       `json:"stateMismatch,omitempty"`
+	NoteID                string                       `json:"noteId"`
+	DocumentNumber        string                       `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string                       `json:"documentNumberAbsence,omitempty"`
+	Binding               *deliveryHandoverBindingBody `json:"binding,omitempty"`
 }
 
 func writeCustomerHandoverAnswer(response http.ResponseWriter, command application.ConcludeDeliveryHandoverCommand, result application.DeliveryHandoverResult) {
@@ -545,6 +556,9 @@ func writeCustomerHandoverAnswer(response http.ResponseWriter, command applicati
 		Outcome:       result.Outcome().String(),
 		StateMismatch: result.StateMismatch().String(),
 		NoteID:        command.Note.String(),
+	}
+	if note := result.Note(); note.ID() == command.Note {
+		body.DocumentNumber, body.DocumentNumberAbsence = documentNumberingFields(note.DocumentNumbering())
 	}
 	if binding, present := result.Binding(); present && binding.Account() == command.CustomerAccount {
 		body.Binding = bindingBodyOf(binding)

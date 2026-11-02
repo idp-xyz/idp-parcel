@@ -1,5 +1,6 @@
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { CodeRef } from '../../components/CodeRef';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { parcelNoOf, shipmentNoOf } from './ref-no';
 
 // 号码签:短写法上屏、整串随复制。纯函数在 ref-no.ts,这里只有 React。
@@ -32,7 +33,20 @@ export function ParcelNo({ parcelId, className }: { parcelId: string; className?
   return <RefNo value={parcelNoOf(parcelId)} full={parcelId} label="包裹号" className={className} />;
 }
 
-/** 运单号签:短写法上屏,整串随复制。 */
-export function ShipmentNo({ shipmentRequestId, className }: { shipmentRequestId: string; className?: string }) {
-  return <RefNo value={shipmentNoOf(shipmentRequestId)} full={shipmentRequestId} label="运单号" className={className} />;
+/**
+ * 运单号签:有单据号显单据号、复制的也是它(ADR-0355 决定十一);没有单据号的委托照旧显去前缀的委托标识、复制整串。
+ */
+export function ShipmentNo({
+  shipmentRequestId,
+  documentNumber,
+  className,
+}: {
+  shipmentRequestId: string;
+  documentNumber?: string;
+  className?: string;
+}) {
+  if (documentNumber !== undefined) {
+    return <RefNo value={documentNumber} full={documentNumber} label={documentTypeWords.SHIPMENT.numberName} className={className} />;
+  }
+  return <RefNo value={shipmentNoOf(shipmentRequestId)} full={shipmentRequestId} label={documentTypeWords.SHIPMENT.numberName} className={className} />;
 }

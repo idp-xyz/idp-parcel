@@ -275,6 +275,9 @@ type ShipmentRequest struct {
 	// customerParcelNumbers 挂在委托上而不在提交版本上：号码标识的是成员，新版本的成员集合必须与当前版本相等，
 	// 所以它首次提交时固定、不随版本重报（ADR-0184 决定四）。接受时据它形成外部标识关联。
 	customerParcelNumbers []CustomerParcelNumberDeclaration
+	// documentNumbering 是委托的单据号这一格（ADR-0355）。它不进快照文档，随两列读回：号在建单那一笔事务里开立、此后
+	// 不变，转移与保存都不碰它。
+	documentNumbering ShipmentDocumentNumbering
 }
 
 // SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或

@@ -57,6 +57,9 @@ const (
 	DeliveryPreAdviceExistingResult
 	// DeliveryPreAdviceSourceConflict：同一接入请求换了内容，回显在册那一份，什么也没落。
 	DeliveryPreAdviceSourceConflict
+	// DeliveryPreAdviceNumberingRuleCollision：取单据号跳过到上限仍撞上已用的号（ADR-0355 决定八），这一份预报不落，答案不带预报。
+	// 进程级入口见到这一格必须回滚开立事务：取过的流水只有回滚才释放。同一接入请求在规则册换了格式之后重交即可，什么也没占用。
+	DeliveryPreAdviceNumberingRuleCollision
 )
 
 func (outcome DeliveryPreAdviceOutcome) String() string {
@@ -69,6 +72,8 @@ func (outcome DeliveryPreAdviceOutcome) String() string {
 		return "EXISTING_RESULT"
 	case DeliveryPreAdviceSourceConflict:
 		return "SOURCE_CONFLICT"
+	case DeliveryPreAdviceNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -114,6 +119,8 @@ type DeliveryPreAdviceDeps struct {
 	Register ports.DeliveryPreAdviceRegister
 	IDs      ports.DeliveryPreAdviceIdentityFactory
 	Clock    ports.Clock
+	// DocumentNumbers 是进入已登记时取预报单据号要的取号编排与网点业务时区（ADR-0355 决定二）。
+	DocumentNumbers DocumentNumberingDeps
 }
 
 type DeliveryPreAdviceHandler struct {
@@ -122,15 +129,18 @@ type DeliveryPreAdviceHandler struct {
 
 // NewDeliveryPreAdviceHandler 构造期拒缺件：漏装的册到第一份预报才暴露，会被当成一次依赖故障。
 func NewDeliveryPreAdviceHandler(deps DeliveryPreAdviceDeps) (*DeliveryPreAdviceHandler, error) {
-	if deps.Register == nil || deps.IDs == nil || deps.Clock == nil {
-		return nil, errors.New("node operations: delivery pre-advice needs a register, an ID factory and a clock")
+	if deps.Register == nil || deps.IDs == nil || deps.Clock == nil || !deps.DocumentNumbers.complete() {
+		return nil, errors.New("node operations: delivery pre-advice needs a register, an ID factory, a clock, a document number issuer and node time zones")
 	}
 	return &DeliveryPreAdviceHandler{deps: deps}, nil
 }
 
-// Submit 形成一份预报并登记。重放与冲突按来源请求键认（UC-NO-006「一致性、幂等与并发」）：册按（租户，客户端，来源请求键）回显在册
-// 那一份，本编排比内容摘要——同一份答已有结果，另一份答来源冲突，册上那一份都不被顶替。标识先签后落：撞上在册那一份时这一次签的
-// 号作废，客户拿到的永远是第一次签的那个。
+// Submit 形成一份预报并登记。重放与冲突按来源请求键认（UC-NO-006「一致性、幂等与并发」）：先锁住（租户，客户端，来源请求键）读在册
+// 那一份，本编排比内容摘要——同一份答已有结果，另一份答来源冲突，册上那一份连同它的单据号都不被顶替。标识先签后落：撞上在册那一
+// 份时这一次签的标识作废，客户拿到的永远是第一次签的那个。
+//
+// 单据号只在确定要落单之后取（ADR-0355 决定三）：锁住来源、读过没有在册的那一份，才去取号；重放那一笔一个号也不碰。取号答撞号时
+// 不落单，答编号规则撞号——进程级入口据此回滚事务。
 func (handler *DeliveryPreAdviceHandler) Submit(ctx context.Context, command SubmitDeliveryPreAdviceCommand) (DeliveryPreAdviceSubmissionResult, error) {
 	_, digest, err := domain.CanonicalizeDeliveryPreAdviceSubmissionPayload(command.Node, command.ExpectedArrivalAt, command.Numbers, command.DeliveringParty)
 	if err != nil {
@@ -158,22 +168,36 @@ func (handler *DeliveryPreAdviceHandler) Submit(ctx context.Context, command Sub
 	if err != nil {
 		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("%w: %v", ErrDeliveryPreAdviceRejected, err)
 	}
-	recorded, outcome, err := handler.deps.Register.RecordDeliveryPreAdvice(ctx, preAdvice)
+	recorded, found, err := handler.deps.Register.LockDeliveryPreAdviceSource(ctx, command.TenantID, source)
+	if err != nil {
+		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: %w", err)
+	}
+	if found {
+		replay, err := replayOutcome(recorded.Source().ContentDigest, digest)
+		if err != nil {
+			return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: %w", err)
+		}
+		return NewDeliveryPreAdviceSubmissionResult(replay, recorded), nil
+	}
+	issued, err := issueDocumentNumber(ctx, handler.deps.DocumentNumbers, command.TenantID, domain.DeliveryPreAdviceDocumentNumberType,
+		command.Node, handler.deps.Clock, handler.deps.Register.DeliveryPreAdviceDocumentNumberUsed)
+	if err != nil {
+		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: %w", err)
+	}
+	if issued.collided {
+		return NewDeliveryPreAdviceSubmissionResult(DeliveryPreAdviceNumberingRuleCollision, domain.DeliveryPreAdvice{}), nil
+	}
+	recorded, outcome, err := handler.deps.Register.RecordDeliveryPreAdvice(ctx, preAdvice.WithDocumentNumbering(issued.numbering))
 	if err != nil {
 		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: %w", err)
 	}
 	switch outcome {
 	case ports.DeliveryScopeAppended:
 		return NewDeliveryPreAdviceSubmissionResult(DeliveryPreAdviceRegistered, recorded), nil
-	case ports.DeliveryScopeAlreadyRecorded:
-		replay, err := replayOutcome(recorded.Source().ContentDigest, digest)
-		if err != nil {
-			return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: %w", err)
-		}
-		return NewDeliveryPreAdviceSubmissionResult(replay, recorded), nil
 	default:
-		// 预报册的提交口只该答上面两格；答别的格是实现坏了，不是业务答案。
-		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: unexpected register outcome %q", outcome)
+		// 来源已在本事务里锁住、读过没有在册的那一份，册不该再答已在册；答了就是有写入绕过了那把锁，这一次取到的号若随事务提交
+		// 就成了空号，所以不形成答案、让事务回滚。
+		return DeliveryPreAdviceSubmissionResult{}, fmt.Errorf("submit delivery pre-advice: unexpected register outcome %q after the source was locked", outcome)
 	}
 }
 

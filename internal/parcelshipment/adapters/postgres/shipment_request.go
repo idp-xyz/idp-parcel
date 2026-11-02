@@ -55,8 +55,9 @@ func (repository *ShipmentRequests) FindBySourceIdentity(
 	var revision int64
 	var state uint8
 	var raw []byte
+	var numbering documentNumberingColumns
 	err = querier.QueryRow(ctx,
-		`SELECT revision, state, snapshot
+		`SELECT revision, state, snapshot, document_number, document_number_absence
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
@@ -66,7 +67,7 @@ func (repository *ShipmentRequests) FindBySourceIdentity(
 		identity.CustomerAccountID().String(),
 		identity.Source().String(),
 		identity.RequestKey().String(),
-	).Scan(&revision, &state, &raw)
+	).Scan(&revision, &state, &raw, &numbering.number, &numbering.absence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ShipmentRequest{}, false, nil
 	}
@@ -78,7 +79,7 @@ func (repository *ShipmentRequests) FindBySourceIdentity(
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: 快照不是本适配器写下的形状：%w", err)
 	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state))
+	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
 	if err != nil {
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
 	}
@@ -645,11 +646,17 @@ func taskStateOf(task domain.AcceptanceDecisionTask) uint8 {
 }
 
 // rehydrationSpec 把文档逐字段过领域构造函数拼回重建规格。任何一个构造函数拒绝都说明
-// 这一行不是本适配器写下的形状（或写它的版本有 bug），错误如实上抛。
+// 这一行不是本适配器写下的形状（或写它的版本有 bug），错误如实上抛。单据号两列不在文档里，由读那一行的查询一并取来交进来：
+// 漏读它们，委托会被读成上线前开立。
 func (document requestDocument) rehydrationSpec(
 	revision int64,
 	state domain.ShipmentRequestState,
+	numbering documentNumberingColumns,
 ) (domain.RehydrateShipmentRequestSpec, error) {
+	documentNumbering, err := numbering.numbering()
+	if err != nil {
+		return domain.RehydrateShipmentRequestSpec{}, err
+	}
 	requestID, err := domain.NewShipmentRequestID(document.ShipmentRequestID)
 	if err != nil {
 		return domain.RehydrateShipmentRequestSpec{}, err
@@ -674,6 +681,7 @@ func (document requestDocument) rehydrationSpec(
 		SubmittedAt:       document.SubmittedAt,
 		CurrentVersion:    currentVersion,
 		AcceptanceTask:    acceptanceTask,
+		DocumentNumbering: documentNumbering,
 	}
 	for _, prior := range document.PriorVersions {
 		priorSpec, err := prior.spec()

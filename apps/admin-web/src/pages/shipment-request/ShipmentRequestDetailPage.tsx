@@ -22,6 +22,8 @@ import {
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
+import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。
 //
@@ -30,6 +32,7 @@ import { formatInstant } from '../moment';
 //
 // 改版第一步（设计原则三、四）：首屏只放人要看的——客户、客户单号、件数、状态、几个时刻；委托标识、客户账户编码、提交批次、
 // 提交主体、来源请求键、提交版本、续办引用、决定标识全部折进页末的「技术详情」。状态经用语词典成中文胶囊，不再带英文原码后缀。
+// 页头的号是运单号即单据号（ADR-0355 决定十一）；没有单据号的委托页头照旧显委托标识，技术详情首行注明为什么没有。
 //
 // 「统一不可见结果」（CONTEXT.md）：单份查阅的 404 SHIPMENT_REQUEST_NOT_VISIBLE 是终局业务答案，不存在、越权与其他租户对象同一
 // 语义——本页对它只说「找不到」，不按取数失败原因分辨呈现「不存在」与「无权查看」，也不提供重试。
@@ -65,7 +68,9 @@ function buildBasicFields(view: ShipmentRequestDetail, names: CustomerNameIndex)
 }
 
 function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
+  const absenceNote = documentNumberAbsenceNoteOf(view);
   return [
+    ...(absenceNote ? [{ label: documentTypeWords.SHIPMENT.numberName, value: absenceNote }] : []),
     { label: '委托标识', value: view.shipmentRequestId },
     { label: '客户账户编码', value: view.customerAccountId },
     { label: '提交批次', value: view.batchId },
@@ -184,7 +189,7 @@ function viewStateOf(answer: ApiResult<ViewDetailResponseBody> | null, retry: ()
         return {
           kind: 'empty',
           title: '找不到这张运单',
-          description: '在你能看到的范围内没有这个运单号。请核对运单号；不存在与无权查看在这里是同一个答案。',
+          description: '在你能看到的范围内找不到这张运单。请从运单列表重新打开；不存在与无权查看在这里是同一个答案。',
         };
       }
       return {
@@ -222,7 +227,7 @@ export function ShipmentRequestDetailPage({
   shipmentRequestId,
   onBack,
 }: {
-  /** 要查阅的运单号（委托标识）；本页自取数，标识只定位对象，不单独证明查询权限。 */
+  /** 要查阅的委托标识（地址里带的是它，不是运单号）；本页自取数，标识只定位对象，不单独证明查询权限。 */
   shipmentRequestId: string;
   onBack?: () => void;
 }) {
@@ -246,9 +251,9 @@ export function ShipmentRequestDetailPage({
   return (
     <DetailPageTemplate
       title={objectNouns.shipment}
-      identifier={view?.shipmentRequestId ?? shipmentRequestId}
+      identifier={view ? shipmentDisplayNoOf(view) : shipmentRequestId}
       status={view ? <StatusPill code={view.state} /> : undefined}
-      description="这张运单的客户、件数、受理进度与决定。物流动态在「物流动态」页按运单号查。"
+      description="这张运单的客户、件数、受理进度与决定。物流动态在「物流动态」页按包裹号查。"
       headerActions={
         onBack ? (
           <button

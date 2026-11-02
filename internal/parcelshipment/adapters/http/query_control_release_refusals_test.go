@@ -72,6 +72,37 @@ func refusalRow(t *testing.T, request, version string, scoped bool) ports.Contro
 	return row
 }
 
+// Covers: ADR-0355 决定十一——册行带上所指委托的单据号；读口没给那份委托的单据号这一格时，这一行不带运单号两格。
+func TestTheRefusalQueryCarriesTheDocumentNumberOfEachRowsRequest(t *testing.T) {
+	numbering, err := domain.NumberedShipment(mustValue(t, domain.NewShipmentDocumentNumber, "P20261026000001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &refusalCatalogueDouble{listed: ports.UnhandledControlReleaseRefusals{
+		Refusals: []ports.ControlReleaseRefusal{refusalRow(t, "REQUEST-1", "VERSION-1", false), refusalRow(t, "REQUEST-2", "VERSION-1", false)},
+		Count:    2,
+		DocumentNumbers: map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering{
+			mustValue(t, domain.NewShipmentRequestID, "REQUEST-1"): numbering,
+		},
+	}}
+	response := getRefusals(t, refusalIntakeDouble{tenant: mustValue(t, domain.NewTenantID, "TENANT-1"), limit: 10}, reader, http.MethodGet)
+	var body struct {
+		Refusals []map[string]json.RawMessage `json:"refusals"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Refusals) != 2 {
+		t.Fatalf("响应：%v %s", err, response.Body.String())
+	}
+	if string(body.Refusals[0]["documentNumber"]) != `"P20261026000001"` {
+		t.Fatalf("第一行运单号 = %s", body.Refusals[0]["documentNumber"])
+	}
+	if _, present := body.Refusals[1]["documentNumber"]; present {
+		t.Fatalf("读不到委托的那一行带了运单号：%s", response.Body.String())
+	}
+	if _, present := body.Refusals[1]["documentNumberAbsence"]; present {
+		t.Fatalf("读不到委托的那一行替它说了无号情形：%s", response.Body.String())
+	}
+}
+
 func getRefusals(t *testing.T, intake shipmenthttp.ControlReleaseRefusalQueryIntake, reader shipmenthttp.ControlReleaseRefusalCatalogueReader, method string) *httptest.ResponseRecorder {
 	t.Helper()
 	response := httptest.NewRecorder()

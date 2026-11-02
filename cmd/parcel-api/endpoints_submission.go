@@ -18,7 +18,7 @@ func init() {
 			"/v1/shipment-requests": {method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityShipmentRequestSubmission)},
 		},
 		build: func(sources endpointSources) (submissionWiring, error) {
-			submission, err := buildSubmissionOrchestration(sources.db, sources.isolatedWrite, sources.selfAuthority)
+			submission, err := buildSubmissionOrchestration(sources.db, sources.isolatedWrite, sources.selfAuthority, sources.documentNumbers.Assigner)
 			return submissionWiring{submission: submission}, err
 		},
 		mount: func(channels endpointChannels, wiring submissionWiring) []httpapi.BusinessEndpoint {

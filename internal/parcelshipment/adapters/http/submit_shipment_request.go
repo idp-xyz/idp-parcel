@@ -117,14 +117,21 @@ func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler Submissio
 //
 // `priorOutcome` 只随 `EXISTING_RESULT` 在场，取原处理答出的那一格原名（UC-PS-001「已有结果」一行「原接入处理结果」）：
 // 原来被拒（输入未受理、原委托不可见、关联不适用）的重发没有归属决定可带，少了这一格客户只知道办过了。
+//
+// `documentNumber` 是所指名委托的单据号（客户面前叫运单号，ADR-0355 决定十一），随 `shipmentRequestId` 指名委托时在场：首次建成
+// 答刚开立的号，重放读回原号。新增字段，既有各格的名字与语义不动（ADR-0140）。委托没有单据号时这一格整键不出现，不答空串、
+// 不拿委托标识顶——顶了，客户系统会把内部标识记成运单号；`documentNumberAbsence` 如实说是哪一种：`ISSUED_BEFORE_NUMBERING`
+// （单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户的单据编号时区未配置），哪一种都事后不补号。
 type submitResponse struct {
-	Outcome             string                `json:"outcome"`
-	PriorOutcome        string                `json:"priorOutcome,omitempty"`
-	ShipmentRequestID   string                `json:"shipmentRequestId,omitempty"`
-	SubmissionVersionID string                `json:"submissionVersionId,omitempty"`
-	Parcels             []submittedParcelView `json:"parcels,omitempty"`
-	ProductionOwnership *ownershipView        `json:"productionOwnership,omitempty"`
-	GateBlockReasons    []string              `json:"gateBlockReasons,omitempty"`
+	Outcome               string                `json:"outcome"`
+	PriorOutcome          string                `json:"priorOutcome,omitempty"`
+	ShipmentRequestID     string                `json:"shipmentRequestId,omitempty"`
+	DocumentNumber        string                `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string                `json:"documentNumberAbsence,omitempty"`
+	SubmissionVersionID   string                `json:"submissionVersionId,omitempty"`
+	Parcels               []submittedParcelView `json:"parcels,omitempty"`
+	ProductionOwnership   *ownershipView        `json:"productionOwnership,omitempty"`
+	GateBlockReasons      []string              `json:"gateBlockReasons,omitempty"`
 }
 
 // submittedParcelView 是答复里的一件（ADR-0223 决定一）。`customerParcelReference` 与草案 `parcels[]` 那一格同名，客户系统
@@ -192,6 +199,13 @@ func writeOutcome(response http.ResponseWriter, problem problemWriter, result ap
 	}
 	if requestID, present := result.ShipmentRequestID(); present {
 		body.ShipmentRequestID = requestID.String()
+		numbering := result.DocumentNumbering()
+		if number, numbered := numbering.Number(); numbered {
+			body.DocumentNumber = number.String()
+		}
+		if absence, absent := numbering.Absence(); absent {
+			body.DocumentNumberAbsence = absence.String()
+		}
 	}
 	if versionID, present := result.SubmissionVersionID(); present {
 		body.SubmissionVersionID = versionID.String()

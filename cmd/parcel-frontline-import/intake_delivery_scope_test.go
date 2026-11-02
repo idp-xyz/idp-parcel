@@ -153,6 +153,7 @@ func preAdviseForImport(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("预报：%v", err)
 	}
+	preAdvice = preAdvice.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	window, err := domain.FormPreAdviceValidityWindow(domain.PreAdviceValidityWindowSpec{
 		TenantID: tenant, Lead: 24 * time.Hour, Grace: 12 * time.Hour,
 		EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Basis: "SYN-WINDOW-BASIS-PSXM11",

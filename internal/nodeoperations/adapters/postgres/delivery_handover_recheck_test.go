@@ -97,6 +97,7 @@ func handoverNoteAt(t *testing.T, tenant, id, node string, accounts ...string) d
 	if err != nil {
 		t.Fatal(err)
 	}
+	note = note.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	return note
 }
 

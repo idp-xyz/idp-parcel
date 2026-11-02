@@ -86,7 +86,9 @@ pre_advice_id = pre_advice.get("preAdviceId") or ""
 if not pre_advice_id:
     sys.exit("答复里没有 preAdviceId。应答：\n" + raw)
 numbers = "、".join(pre_advice.get("customerParcelNumbers") or [])
-print(f"{outcome}：预报 {pre_advice_id}，节点 {pre_advice.get('node')}，预计送达 {pre_advice.get('expectedArrivalAt')}，"
+# 预报单据号（ADR-0355）：有号带号，没有号带原因——网点与租户都没有时区时预报照常登记、不带号。
+document_number = pre_advice.get("documentNumber") or f"无单据号（{pre_advice.get('documentNumberAbsence')}）"
+print(f"{outcome}：预报 {pre_advice_id}，单据号 {document_number}，节点 {pre_advice.get('node')}，预计送达 {pre_advice.get('expectedArrivalAt')}，"
       f"号码 {numbers}，接入请求标识 {access_request}", file=sys.stderr)
 print(pre_advice_id)
 PY

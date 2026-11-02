@@ -10,6 +10,7 @@ import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { deliveryHandoverConfirmationDecision, hiddenDecisionHint } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
@@ -23,7 +24,12 @@ import {
   type DeliveryHandoverNoteFoundResponseBody,
   type DeliveryHandoverNoteListResponseBody,
 } from './delivery-scope-api';
-import { deliveryScopeListPathOf, handoverNoteFilterKeys, type DeliveryScopeListFilter } from './delivery-pre-advice';
+import {
+  deliveryScopeListPathOf,
+  documentNumberDetailOf,
+  handoverNoteFilterKeys,
+  type DeliveryScopeListFilter,
+} from './delivery-pre-advice';
 import {
   claimRowsOf,
   confirmationProblemNote,
@@ -38,6 +44,8 @@ import {
 import { DeliveryScopeFilters, DeliveryScopeReadNote } from './DeliveryScopeFilters';
 
 const info = moduleInfoById['node-operations-review'];
+// 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
+const numberName = documentTypeWords.DELIVERY_HANDOVER_NOTE.numberName;
 const listBase = '/node-operations-delivery-handover-notes';
 
 function col(id: string, header: string, mono = false): ListColumn<HandoverNoteReviewRow> {
@@ -48,8 +56,9 @@ function col(id: string, header: string, mono = false): ListColumn<HandoverNoteR
   };
 }
 
+// 主列是交接单的单据号（服务端收下开立时取的，ADR-0355 决定二、十一）；没有单据号的照旧显设备签发的交接单标识，原因在技术详情。
 const columns: ListColumn<HandoverNoteReviewRow>[] = [
-  col('noteId', '交接单', true),
+  col('documentNumber', numberName, true),
   col('node', '网点'),
   col('deliveringParty', '谁来送', true),
   col('openedAt', '开单时间', true),
@@ -66,7 +75,7 @@ const columns: ListColumn<HandoverNoteReviewRow>[] = [
  * 依据引用，服务端向参与方与商业问授权交付判断，是即确认，否或未配置不落结论。开立、归入、关闭是一线作业端的作业事实，不在这里。
  */
 export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode }) {
-  const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '' });
+  const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{ path: string; answer: ApiResult<DeliveryHandoverNoteListResponseBody> } | null>(null);
   const path = deliveryScopeListPathOf(listBase, handoverNoteFilterKeys, filter);
@@ -87,7 +96,7 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
   const places = usePlaceNames();
   const rows = body ? withPlaceNames(body.handoverNotes.map(handoverNoteRowOf), ['node'], places) : [];
   const retry = () => setReloadKey((value) => value + 1);
-  const narrowed = filter.node.trim() !== '' || filter.day !== '';
+  const narrowed = filter.node.trim() !== '' || filter.day !== '' || (filter.documentNumber ?? '').trim() !== '';
   const viewState: TemplateViewState =
     path === null
       ? { kind: 'error', title: '开单日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
@@ -104,14 +113,14 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
       title={info.title}
       subtitle="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立；待确认的客户可以在右栏里确认。"
       sections={sections}
-      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" onChange={setFilter} />}
+      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={numberName} onChange={setFilter} />}
       answered={body !== null}
       noun="张"
       rows={rows}
       rowKey={(row) => row.key}
       statusOf={(row) => reviewStatusOf(row, { labelKey: 'state' })}
       searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder="在结果里搜交接单 / 网点 / 客户"
+      searchPlaceholder={`在结果里搜${numberName} / 网点 / 客户`}
       columns={workbenchColumnsOf(columns, { labelKey: 'state' })}
       renderDetail={(row, close) => <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />}
       onRefresh={retry}
@@ -122,8 +131,9 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
 
 /**
  * 一张交接单的右栏，形状同本区其余几页（事实格 + 正文 + 技术详情）：单子开放还是关闭、送货范围成立没有、几件、客户确认进度是事实格；
- * 单上自称的每个客户各一行（结论、途径与确认按钮），名下成员一列在正文；交接单号、网点编码、关闭事实、确认人与来源单据、成员的
- * 事实身份进技术详情。确认是运营决定（送站交接确认，UC-NO-006 步骤 5B），表单在栏内展开。
+ * 单上自称的每个客户各一行（结论、途径与确认按钮），名下成员一列在正文；单据号（没有时按词典注明为什么没有）、设备签发的交接单标识、网点编码、
+ * 关闭事实、确认人与来源单据、成员的事实身份进技术详情。标题是单据号，没有单据号的照旧用交接单标识。确认是运营决定（送站交接确认，
+ * UC-NO-006 步骤 5B），表单在栏内展开。
  */
 function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onClose: () => void; onLanded: () => void }) {
   const [answer, setAnswer] = useState<ApiResult<DeliveryHandoverNoteFoundResponseBody> | null>(null);
@@ -151,7 +161,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
 
   return (
     <RecordDetailPanel
-      title={noteId}
+      title={note?.handoverNote.documentNumber ?? noteId}
       status={note ? { label: note.handoverNote.closed ? '已关闭' : '开放', tone: note.handoverNote.closed ? 'muted' : 'info' } : undefined}
       subtitle="送货交接单"
       facts={
@@ -169,7 +179,9 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
           : []
       }
       technical={techRows([
-        { label: '交接单号', value: noteId },
+        { label: numberName, value: note ? documentNumberDetailOf(note.handoverNote) : undefined },
+        // 设备签发的标识（ADR-0023）：作业端与客户确认都按它寻址，单据号不替代它。
+        { label: '交接单标识（设备签发）', value: noteId },
         { label: '网点编码', value: note?.handoverNote.node },
         { label: '关闭事实', value: note?.handoverNote.closureFactId },
         ...claims.map((claim) => ({ label: `${claim.values.customerAccount} 确认`, value: [claim.values.concluded, claim.values.evidence].filter(Boolean).join(' · ') })),

@@ -37,8 +37,9 @@ func (repository *ShipmentRequests) LoadSubmissionVersionDeclaration(
 	var revision int64
 	var state uint8
 	var raw []byte
+	var numbering documentNumberingColumns
 	err = querier.QueryRow(ctx,
-		`SELECT revision, state, snapshot
+		`SELECT revision, state, snapshot, document_number, document_number_absence
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
@@ -47,7 +48,7 @@ func (repository *ShipmentRequests) LoadSubmissionVersionDeclaration(
 		shipmentRequestID.String(),
 		uint8(domain.ShipmentRequestSubmitted),
 		uint8(domain.ShipmentRequestAccepted),
-	).Scan(&revision, &state, &raw)
+	).Scan(&revision, &state, &raw, &numbering.number, &numbering.absence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -59,7 +60,7 @@ func (repository *ShipmentRequests) LoadSubmissionVersionDeclaration(
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return none, false, fmt.Errorf("load submission version declaration: 快照不是本适配器写下的形状：%w", err)
 	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state))
+	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
 	if err != nil {
 		return none, false, fmt.Errorf("load submission version declaration: %w", err)
 	}

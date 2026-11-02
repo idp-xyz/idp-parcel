@@ -94,10 +94,12 @@ type ControlReleaseRefusalHandlings interface {
 }
 
 // UnhandledControlReleaseRefusals 是一个租户册上还没有被处理的行：最早登记的在前，至多 limit 行；Count 是未处理的全部行数，
-// 大于 len(Refusals) 即清单被页大小截断。
+// 大于 len(Refusals) 即清单被页大小截断。DocumentNumbers 是清单上各行所指委托的单据号这一格（ADR-0355 决定十一），按委托标识
+// 查；册行指的委托读不到时不在其中——那一行只能显委托标识，不拿「上线前开立」替它说。
 type UnhandledControlReleaseRefusals struct {
-	Refusals []ControlReleaseRefusal
-	Count    int
+	Refusals        []ControlReleaseRefusal
+	Count           int
+	DocumentNumbers map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering
 }
 
 // ControlReleaseRefusalCatalogue 是释放未受理册的运营查阅读口：按租户列未处理的行加计数。租户条件进每条语句，否定结果不区分
