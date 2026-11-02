@@ -24,12 +24,12 @@ import { shipmentDetailSourceOf, type ShipmentRef } from './shipment-ref';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
-import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
+import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。地址第二段是屏上那个号——有运单号
-// 是运单号、老运单是委托标识，壳层的标签、状态栏与最近打开照地址写字（shipment-ref.ts 的 shipmentDetailSourceOf），打开时先按
-// 运单号与委托标识两口一起认出是哪一份。
+// 是运单号、老运单是去前缀的委托标识，壳层的标签、状态栏与最近打开照地址写字；打开时按运单号与这个号可能对应的委托标识一起
+// 认出是哪一份（shipment-ref.ts 的 shipmentDetailSourceOf）。
 //
 // 字段与区块跟已落地的查询契约走（api.ts 的 ShipmentRequestDetail 镜像），读模型没有的东西（目的地、收件人、接受基线快照）
 // 不虚构；那些查阅面扩进读模型时，先扩 ports 的记录与端点响应，再回来加区块。
@@ -177,11 +177,11 @@ function FieldRow({ label, value, mono }: { label: string; value: React.ReactNod
 type DetailLoad = { kind: 'detail'; answer: ApiResult<ViewDetailResponseBody> } | { kind: 'ambiguous'; candidates: ShipmentRef[] };
 
 async function loadShipmentDetail(shipmentRef: string): Promise<DetailLoad> {
-  const [byNumber, byId] = await Promise.all([
+  const [byNumber, byIds] = await Promise.all([
     findShipmentRequestViewsByDocumentNumber(shipmentRef),
-    findShipmentRequestView(shipmentRef),
+    Promise.all(shipmentRequestIdsOfDisplay(shipmentRef).map((id) => findShipmentRequestView(id))),
   ]);
-  const source = shipmentDetailSourceOf(shipmentRef, byNumber, byId);
+  const source = shipmentDetailSourceOf(shipmentRef, byNumber, byIds);
   if (source.kind === 'byId') return { kind: 'detail', answer: await findShipmentRequestView(source.shipmentRequestId) };
   return source;
 }
@@ -190,11 +190,17 @@ async function loadShipmentDetail(shipmentRef: string): Promise<DetailLoad> {
 function viewStateOf(loaded: DetailLoad | null, shipmentRef: string, retry: () => void): TemplateViewState {
   if (loaded === null) return { kind: 'loading' };
   if (loaded.kind === 'ambiguous') {
+    // 从列表再点「打开详情」写的还是这个号，会回到这一格；完整委托标识（SHR- 开头）只对得上一张，所以指那条路。
     return {
       kind: 'error',
       title: '对上了不止一张运单',
-      description: `「${shipmentRef}」既是一张运单的${documentTypeWords.SHIPMENT.numberName}，又是另一张的委托标识，没法替你选。请从运单列表重新打开。`,
-      technical: loaded.candidates.map((candidate) => ({ label: '委托标识', value: candidate.shipmentRequestId })),
+      description:
+        `「${shipmentRef}」对上了不止一张运单（例如一张的${documentTypeWords.SHIPMENT.numberName}与另一张的委托标识写出来相同），没法替你选。` +
+        '下面技术详情列出了这几张的完整委托标识（SHR- 开头）：把地址栏最后一段换成其中一个即可打开那一张。',
+      technical: loaded.candidates.map((candidate) => ({
+        label: candidate.documentNumber ? `委托标识（${documentTypeWords.SHIPMENT.numberName} ${candidate.documentNumber}）` : '委托标识',
+        value: candidate.shipmentRequestId,
+      })),
     };
   }
   const answer = loaded.answer;

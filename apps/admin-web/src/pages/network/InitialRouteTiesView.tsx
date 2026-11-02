@@ -76,7 +76,7 @@ export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
 
   const retry = () => setReloadKey((value) => value + 1);
   const ties = answer?.kind === 'outcome' ? answer.body.ties : [];
-  const numberOf = useShipmentNumbers(ties.map((row) => row.shipmentRequestId));
+  const numberOf = useShipmentNumbers(ties.map((row) => row.shipmentRequestId), reloadKey);
 
   const columns: WorkbenchColumn<InitialRouteTieRecord>[] = [
     { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },

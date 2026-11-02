@@ -52,17 +52,17 @@ const info = moduleInfoById['shipment-request-inquiry'];
 // 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<运单号>），与外壳的模块级 hash 路由同一约定：刷新回到同一份
 // 详情、后退自然收回列表、详情可收藏转发。多标签壳层拿前两段作标签 id，详情因此开成自己的一张标签、列表留在另一张。
 //
-// 第二段放屏上那个号而不是委托标识：壳层的标签名、状态栏位置与最近打开都按地址第二段写字（shell/workspace-state 的
-// tabForHash、pages/my-work/recent-objects 的 recentObjectTitle），不为补名字发请求。运单号开立后不变（ADR-0355 决定三），
-// 作地址收藏转发照样稳；没有运单号的老运单放委托标识，与它们屏上显的同一个。详情页两口一起认（shipment-ref 的
-// shipmentDetailSourceOf），所以从前收藏的委托标识地址照样打得开。
+// 第二段放屏上那个号（shipmentDisplayNoOf）而不是委托标识整串：壳层的标签名、状态栏位置与最近打开都按地址第二段写字
+// （shell/workspace-state 的 tabForHash、pages/my-work/recent-objects 的 recentObjectTitle），不为补名字发请求，写出来就与列表上
+// 那一格同字。有运单号是运单号——开立后不变（ADR-0355 决定三），作地址收藏转发照样稳；老运单是去前缀的委托标识。详情页按
+// 运单号与这个号可能对应的委托标识一起认（shipment-ref 的 shipmentDetailSourceOf），从前收藏的委托标识整串地址照样打得开。
 function selectedRefFromHash(): string | null {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
   return segments[0] === 'shipment-request-inquiry' && segments[1] ? decodeHashSegment(segments[1]) : null;
 }
 
 function detailHash(row: Pick<ShipmentRequestSummary, 'shipmentRequestId' | 'documentNumber'>): string {
-  return `#/shipment-request-inquiry/${encodeURIComponent(row.documentNumber ?? row.shipmentRequestId)}`;
+  return `#/shipment-request-inquiry/${encodeURIComponent(shipmentDisplayNoOf(row))}`;
 }
 
 // 词典五档色调 → 指标数值的字色类（components/status-tone 只有四档语气，中性不着色）。

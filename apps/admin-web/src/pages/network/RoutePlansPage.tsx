@@ -263,7 +263,7 @@ export function RoutePlansPage() {
     };
   }, [register, reloadKey]);
   // 两册的行都按委托标识取运单号；hook 要在切到另两册的早退之前调。
-  const numberOf = useShipmentNumbers(loadedShipmentRequestIds(loaded));
+  const numberOf = useShipmentNumbers(loadedShipmentRequestIds(loaded), reloadKey);
 
   const retry = () => setReloadKey((value) => value + 1);
   const header: RoutePlansHeader = {

@@ -75,7 +75,7 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
 
   const retry = () => setReloadKey((value) => value + 1);
   const suggestions = answer?.kind === 'outcome' ? answer.body.suggestions : [];
-  const numberOf = useShipmentNumbers(suggestions.map((row) => row.shipmentRequestId));
+  const numberOf = useShipmentNumbers(suggestions.map((row) => row.shipmentRequestId), reloadKey);
 
   const columns: WorkbenchColumn<RerouteSuggestionRecord>[] = [
     { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
