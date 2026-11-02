@@ -369,6 +369,45 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   CHANNEL_REFUND: muted('渠道退款'),
   REPLACEMENT: info('替代'),
   RETRY: info('重试'),
+
+  // —— 线路与运力 · network-routing 目录（网络与网点、服务区域、路线规划三页）——
+  // 版本此刻在不在期（页面按生效区间现算的呈现判断，见 pages/network/network-rows.ts 的 validityOf）。
+  IN_FORCE: good('生效中'),
+  NOT_YET_EFFECTIVE: info('未生效'),
+  LIFTED: muted('已解除'),
+  // 服务形态（线路与路由判断的适用范围、服务目的）。
+  NETWORK_SERVICE: muted('网络运输服务'),
+  LABEL_CHANNEL_SERVICE: muted('面单渠道服务'),
+  // 路线策略的排序形态。
+  COST_SINGLE_DIMENSION: muted('成本最低优先'),
+  // 服务日历与停运调整的适用对象类别（NODE 已在扫描设备一段）。
+  CONNECTION: muted('运输连接'),
+  LINE: muted('线路'),
+  // 网络可用性调整四种：停运与关闭要人留意，恢复是好消息，范围调整是中性推进。
+  SUSPENSION: warn('临时停运'),
+  CLOSURE: bad('关闭'),
+  RESUMPTION: good('恢复'),
+  SCOPE_ADJUSTMENT: info('范围调整'),
+  // 初始路由判断结论：无可用路线是明确判断，不是空行。
+  ROUTE_FORMED: good('已定路线'),
+  NO_CURRENT_ROUTE: bad('无可用路线'),
+  // 路由复核走向。
+  STILL_APPLICABLE: good('路线仍可用'),
+  PLAN_LAPSED: warn('路线失效'),
+  FIRST_PLAN_FORMED: good('首次定路线'),
+  REROUTED: info('已改路'),
+  // 复核时的备选评估与改路判定。
+  CANDIDATES_AVAILABLE: info('有备选路线'),
+  NO_QUALIFIED_CANDIDATES: bad('无合格备选'),
+  CANDIDATE_REVIEW_UNDECIDED: warn('备选待评审'),
+  AUTOMATIC_ALLOWED: info('可自动改路'),
+  SUGGESTION_ONLY: warn('只出建议'),
+  BARRED: bad('不许改路'),
+  // 改路建议的状态与建议里各候选的结局。
+  DECIDED: good('已决定'),
+  QUALIFIED: good('合格'),
+  ELIMINATED: muted('淘汰'),
+  EVIDENCE_UNKNOWN: warn('依据不明'),
 };
 
 /**
