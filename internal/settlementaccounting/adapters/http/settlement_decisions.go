@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
 // 运营确认口与截单发布口（ADR-0339 决定一、二）：操作者渠道「运营决定」能力面上的两种结算决定。两口进的都是 parcel-api 已装配的
@@ -185,9 +186,12 @@ func businessUndecidedConfirmation(reason application.ConfirmUndecidedReason) bo
 	return reason == application.ConditionUnconfigured || reason == application.ConfirmationFactsUnconfigured
 }
 
+// publicationResponse 的 statement 是这一次发布（或同一发布意图那一张原单）的单号，由服务端在发布事务里按编号规则取
+// （ADR-0355 决定九），载荷不带。documentType 只在撞号时出现，指名规则册上该改哪一类单据的编号规则。
 type publicationResponse struct {
 	Outcome               string                   `json:"outcome"`
 	Statement             string                   `json:"statement,omitempty"`
+	DocumentType          string                   `json:"documentType,omitempty"`
 	Total                 string                   `json:"total,omitempty"`
 	Lines                 []string                 `json:"lines,omitempty"`
 	Exclusions            []statementExclusionBody `json:"exclusions,omitempty"`
@@ -233,6 +237,9 @@ func writePublicationAnswer(
 		return
 	}
 	body := publicationResponse{Outcome: name, ContinuationReference: result.ContinuationReference()}
+	if result.Outcome() == application.StatementNumberingRuleCollision {
+		body.DocumentType = string(domain.CustomerStatementDocumentNumberType.Code)
+	}
 	if record, has := result.Statement(); has {
 		statement := record.Statement
 		body.Statement = statement.Number().String()

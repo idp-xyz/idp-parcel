@@ -9,6 +9,8 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
+	sadocnumber "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/documentnumber"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -46,10 +48,13 @@ func (beat cycleCutBeat) cutDueStatements(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
-// cycleCutFailureKind 给一户的失败分个类写进日志：等依赖的下一拍多半自愈，未配置要租户补登，其余是两侧说法矛盾、要人查。三类都
-// 每拍再来一次，这一格只为让看日志的人分得开。
+// cycleCutFailureKind 给一户的失败分个类写进日志：等依赖的下一拍多半自愈，未配置要租户补登，其余是两侧说法矛盾、要人查。编号
+// 规则撞号是停在依赖上的一种（编号规则是取号的依赖），回滚与重截照那一类办，日志单独一类：它不会自愈，要租户在规则册改格式。
+// 各类都每拍再来一次，这一格只为让看日志的人分得开。
 func cycleCutFailureKind(err error) string {
 	switch {
+	case errors.Is(err, saapplication.ErrCycleCutNumberingCollision):
+		return "stalled on a document numbering rule collision"
 	case errors.Is(err, saapplication.ErrCycleCutUndecided):
 		return "stalled on a dependency"
 	case errors.Is(err, saapplication.ErrCycleCutUnconfigured):
@@ -78,8 +83,21 @@ func (cutter cycleStatementCutter) CutOff(
 	return admitted, result, err
 }
 
-// cutOffStatementsOnCycle 装到点截单。截单编排的依赖照 parcel-api 的 buildSettlementOrchestrations 那一段接，册与信封交接同一套。
-func cutOffStatementsOnCycle(db *bentopg.DB, outboxStore *outbox.Store, clock systemClock) (*saapplication.CutOffStatementsOnCycleHandler, error) {
+// cutOffStatementsOnCycle 装到点截单。截单编排的依赖照 parcel-api 的 buildSettlementOrchestrations 那一段接，册与信封交接同一套；
+// issuer 是本进程装好的编号组件取号编排（dispatchSources.documentNumbers），自动截单的对账单在这一户的事务里经它取单号。
+func cutOffStatementsOnCycle(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	issuer *docnumber.Assigner,
+) (*saapplication.CutOffStatementsOnCycleHandler, error) {
+	if issuer == nil {
+		return nil, errors.New("parcel-dispatch: cycle cut needs the document numbering assigner")
+	}
+	numbers, err := sadocnumber.NewAssigner(issuer)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: statement document numbers: %w", err)
+	}
 	charges, err := sapostgres.NewCustomerCharges(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: customer charges for cycle cut: %w", err)
@@ -119,7 +137,7 @@ func cutOffStatementsOnCycle(db *bentopg.DB, outboxStore *outbox.Store, clock sy
 	cutoff, err := saapplication.NewCutOffPublishStatementHandler(saapplication.CutOffPublishStatementDeps{
 		Statements: statements, Charges: charges, Billing: statements, Attributions: attributions,
 		AttributionDates: charges, Adjustments: adjustments, Inclusions: inclusions,
-		Disputes: disputes, Downstream: statementHandoff, Clock: clock,
+		Disputes: disputes, Numbers: numbers, Arrangements: arrangements, Downstream: statementHandoff, Clock: clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: cut-off publish statement: %w", err)

@@ -352,7 +352,7 @@ func statementUnversionedCase(t *testing.T) unversionedDigestCase {
 			changed.ChargeIDs = []string{"charge-A"}
 			changed.DeclaredTotalMinor = 12000
 			result, err := fixture.handler.Publish(context.Background(), changed)
-			wantOutcome(t, result.Outcome(), err, application.StatementConflict)
+			wantOutcome(t, result.Outcome(), err, application.StatementPublicationIntentConflict)
 		},
 	}
 }

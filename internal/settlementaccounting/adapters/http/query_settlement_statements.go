@@ -98,14 +98,16 @@ func customerStatementBodyOf(row ports.CustomerStatementCatalogueRow) customerSt
 	disputes := make([]statementDisputeBody, 0, len(row.Disputes))
 	for _, dispute := range row.Disputes {
 		disputes = append(disputes, statementDisputeBody{
-			Dispute:        dispute.Dispute,
-			Charge:         dispute.Charge,
-			DisputedAmount: minorAmount(dispute.DisputedMinor),
-			Reason:         dispute.Reason,
-			OpenedAt:       rfc3339(dispute.OpenedAt),
-			Resolution:     dispute.Resolution,
-			ResolutionRef:  dispute.ResolutionRef,
-			ResolvedAt:     optionalInstant(dispute.ResolvedAt),
+			Dispute:               dispute.Dispute,
+			DocumentNumber:        dispute.DocumentNumber,
+			DocumentNumberAbsence: dispute.DocumentNumberAbsence,
+			Charge:                dispute.Charge,
+			DisputedAmount:        minorAmount(dispute.DisputedMinor),
+			Reason:                dispute.Reason,
+			OpenedAt:              rfc3339(dispute.OpenedAt),
+			Resolution:            dispute.Resolution,
+			ResolutionRef:         dispute.ResolutionRef,
+			ResolvedAt:            optionalInstant(dispute.ResolvedAt),
 		})
 	}
 	inclusions := make([]subsequentInclusionBody, 0, len(row.SubsequentInclusions))
@@ -201,15 +203,20 @@ type customerStatementBody struct {
 // statementDisputeBody 逐字段透出一项异议。裁定三件（结论、依据、时刻）同在或同缺；
 // 未裁定时三键皆不出现，不代填「待处理」——那会把「还没人裁」写成一个看起来已经有人
 // 处置过的结论。无争议部分继续确认、开票、付款或核销，故异议挂在单上而不改单的总额。
+//
+// documentNumber 是争议号；没有争议号的不出这一格（不答空串、不拿争议标识顶），改出 documentNumberAbsence：
+// ISSUED_BEFORE_NUMBERING（上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED（开立时单据编号时区未配置），ADR-0355 决定十一。
 type statementDisputeBody struct {
-	Dispute        string `json:"dispute"`
-	Charge         string `json:"charge"`
-	DisputedAmount string `json:"disputedAmount"`
-	Reason         string `json:"reason"`
-	OpenedAt       string `json:"openedAt"`
-	Resolution     string `json:"resolution,omitempty"`
-	ResolutionRef  string `json:"resolutionRef,omitempty"`
-	ResolvedAt     string `json:"resolvedAt,omitempty"`
+	Dispute               string `json:"dispute"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	Charge                string `json:"charge"`
+	DisputedAmount        string `json:"disputedAmount"`
+	Reason                string `json:"reason"`
+	OpenedAt              string `json:"openedAt"`
+	Resolution            string `json:"resolution,omitempty"`
+	ResolutionRef         string `json:"resolutionRef,omitempty"`
+	ResolvedAt            string `json:"resolvedAt,omitempty"`
 }
 
 // subsequentInclusionBody 逐字段透出一笔后续账期纳入。没有金额键——金额永远在费用或

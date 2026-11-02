@@ -132,6 +132,7 @@
 | `AT-SA-211` | 账单一行点名的预期成本版本已撤下（发生项失效之后的失效纠错版本），或已有后继（被纠正过） | 答 `EXPECTED_COST_NOT_CURRENT`，带出行、版本、撤下与否与后继；不落账单、不交意图，不按带着全额的失效纠错版本对账（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定七） |
 | `AT-SA-225` | 持`账单接收`授予的人照来件录一份供应商账单，并逐行给出匹配裁决 | 接收与匹配一笔做完、答已接收，重放答已存在；接收行记下提交操作者，不进摘要；审核授权没登时接收照样成立、答复点明审核会停；分类写错或金额写坏当场拒、不进编排；不持这一种授予答未授予（[ADR-0340](../../adr/0340-supplier-bill-reception-and-audit-are-two-operator-decisions-and-each-records-the-operator.md) 决定一、三） |
 | `AT-SA-226` | 持`审核应付`授予的人对已接收账单的一行点审核 | 在越权升级上限内形成审核应付、答已形成并带金额，重放答已存在；应付行记下点审核的人，`auditor_ref` 仍是审核授权册上那一方；审核授权、应付归集账户或上限没登答未配置、不形成应付；不持这一种授予答未授予（ADR-0340 决定二、三） |
+| `AT-SA-231` | 持`审核应付`授予的人对已接收账单的一行点审核，金额在越权升级上限内 | 形成审核应付的同一事务内取得应付单据号，日期按应付归入的结算账户对账安排的业务时区、该账户没登对账安排时按租户的单据编号时区，审核答复带回；载荷里的应付标识仍是调用方生成的幂等键；重放答原号、不再取号；行不可审、要升级、未配置都不取号；并发审核不撞号；两种时区都没有时照常形成、不带号并记下原因；跳号到上限仍撞答编号规则撞号、不形成应付，取过的流水随回滚释放（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、七、八、十） |
 
 ## 生产参数与待决风险
 
@@ -151,4 +152,4 @@
 
 | 规则 | 现状 | 去处 |
 |---|---|---|
-| CONTEXT「供应商主张与审核应付」：审核应付形成时取得应付单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 审核不取号，应付标识由调用方在载荷里点名 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |
+| CONTEXT「供应商主张与审核应付」：审核应付形成时取得应付单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)），`AT-SA-231` | 已补：越权上限判过、确定形成应付时在审核事务内按 `AUDITED_PAYABLE` 取应付号，日期按应付账户对账安排的业务时区、没登按租户单据编号时区；应付号或无号原因随应付落库（迁移 `settlement_accounting/0053`），审核答复带出；载荷里的应付标识照旧是调用方生成的幂等键。管理台没有列审核应付的页，应付号今天只在审核答复里看得到；规则不变 | [document-numbering/05](../../../.scratch/document-numbering/issues/05-statement-dispute-and-payable-numbers.md) |

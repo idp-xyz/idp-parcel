@@ -408,6 +408,8 @@ type AuditedPayableRecord struct {
 	RecordedAt    time.Time
 	// OperationEvidence 记由谁点下这一次审核，判据同 BillReceptionRecord 的同名格。auditor_ref 是审核授权册上登的那一方，不是它。
 	OperationEvidence string
+	// Numbering 是应付的单据号，或为什么没有（ADR-0355）。形成时在同一事务里取得，此后不变；重放读回这一格，不再取号。
+	Numbering domain.DocumentNumbering
 }
 
 type AuditedPayableSaveOutcome uint8
@@ -421,6 +423,10 @@ const (
 // AuditedPayableStore 按幂等键找回并保存审核应付（写入代数同 ADR-0031）。FindByLine 是第二
 // 个读法：一行主张只成立一份应付（AT-SA-089 的「其他范围保持原状态」反过来说就是通过的那一
 // 格不再第二次通过），撞上同一行的第二份应付时编排要读回先到的那份作答。
+//
+// LockIssuance 把同一应付身份、同一行主张的审核排成一队，到本事务结束才放：两份应付各有一道唯一（身份、行），后到者
+// 要在取号之前就看见先到者，理由同 PublishedStatementStore.LockPublicationIntent。DocumentNumberUsed 答一个应付号是否
+// 已在本租户的册上，给取号判撞。
 type AuditedPayableStore interface {
 	FindByKey(ctx context.Context, key AuditedPayableKey) (AuditedPayableRecord, bool, error)
 	FindByLine(
@@ -429,6 +435,13 @@ type AuditedPayableStore interface {
 		claim domain.BillClaimID,
 		line domain.BillLineReference,
 	) (AuditedPayableRecord, bool, error)
+	LockIssuance(
+		ctx context.Context,
+		key AuditedPayableKey,
+		claim domain.BillClaimID,
+		line domain.BillLineReference,
+	) error
+	DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
 	Save(ctx context.Context, record AuditedPayableRecord) (AuditedPayableSaveOutcome, error)
 }
 
@@ -697,18 +710,30 @@ type AdvanceRecoveryHandoff interface {
 	HandOffAdvanceRecovery(ctx context.Context, intent AdvanceRecoveryIntent) error
 }
 
-// StatementKey 是已发布对账单的幂等键：同一单号只发布一次；作废以 Replace 换值，
-// 替代单用新单号。
+// StatementKey 是已发布对账单的寻址键：（租户，单号）。单号在发布事务里按编号规则取得（ADR-0355 决定九），作废、
+// 纳入与争议都按它找单；作废以 Replace 换值，替代单取新单号。发布的幂等不在这里，见 StatementPublicationIntent。
 type StatementKey struct {
 	TenantID domain.TenantID
 	Number   domain.StatementNumber
 }
 
-// StatementRecord 是一次对账单发布越过提交边界留下的东西。
+// StatementPublicationIntent 是对账单发布的幂等键（ADR-0355 决定九）：同一结算账户、周期与截止版本（截单命令里的
+// 草稿版本）的发布，内容相同的重放答原单与原号，内容不同答发布意图冲突。意图到单号的关系由本上下文持有，记在
+// 对账单行上。
+type StatementPublicationIntent struct {
+	TenantID domain.TenantID
+	Account  domain.SettlementAccountID
+	Period   domain.BillingPeriodReference
+	Version  domain.StatementDraftVersion
+}
+
+// StatementRecord 是一次对账单发布越过提交边界留下的东西。DraftVersion 是发布意图里的截止版本；本决定之前手工发布的
+// 单当时没有记下它，读回是零值（自动截单的单由迁移按它固定的 v1 补上了）。
 type StatementRecord struct {
 	Key           StatementKey
 	ContentDigest string
 	Statement     domain.PublishedStatement
+	DraftVersion  domain.StatementDraftVersion
 	RecordedAt    time.Time
 }
 
@@ -720,9 +745,26 @@ const (
 	StatementAlreadyPublished
 )
 
-// PublishedStatementStore 按幂等键找回并保存已发布对账单（写入代数同 ADR-0031）。
+// PublishedStatementStore 按单号找回、按发布意图查重并保存已发布对账单（写入代数同 ADR-0031）。
+//
+// LockPublicationIntent 把同一发布意图的发布排成一队，到本事务结束才放：先锁、再按意图查、再取号落单，后到的那一笔
+// 等先到者提交之后才查，查到的就是先到者的单，答原单或意图冲突，不会两笔都取了号、输的那笔再撞库——那样输家的号
+// 已从序列取走，事务一提交就成了空号（ADR-0355 决定三只许跳号成为空号）。必须在事务里调。
+//
+// FindByIntent 按意图读出那一张单。FindUnversionedInPeriod 读本决定之前手工发布、没记下截止版本的同账户同账期的单（作废的
+// 也读）：它们认不出截止版本，按内容与是否作废认（见截单编排 findPublished）。StatementNumberUsed 在同一事务里答一个单号
+// 是否已在本租户的册上，给取号判撞。
 type PublishedStatementStore interface {
 	FindByKey(ctx context.Context, key StatementKey) (StatementRecord, bool, error)
+	LockPublicationIntent(ctx context.Context, intent StatementPublicationIntent) error
+	FindByIntent(ctx context.Context, intent StatementPublicationIntent) (StatementRecord, bool, error)
+	FindUnversionedInPeriod(
+		ctx context.Context,
+		tenant domain.TenantID,
+		account domain.SettlementAccountID,
+		period domain.BillingPeriodReference,
+	) ([]StatementRecord, error)
+	StatementNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
 	Save(ctx context.Context, record StatementRecord) (StatementSaveOutcome, error)
 	Replace(ctx context.Context, record StatementRecord) (bool, error)
 }
@@ -827,6 +869,8 @@ type DisputeRecord struct {
 	// 读作「这一份不记提交方」。待复核再处理时 ResolutionEvidence 跟着裁定三件一起换成后一位，前一位不留。
 	OperationEvidence  string
 	ResolutionEvidence string
+	// Numbering 是争议的单据号，或为什么没有（ADR-0355）。登记时在同一事务里取得，此后不变；重放读回这一格，不再取号。
+	Numbering domain.DocumentNumbering
 }
 
 type DisputeSaveOutcome uint8
@@ -837,9 +881,13 @@ const (
 	DisputeAlreadyOpened
 )
 
-// StatementDisputeStore 按幂等键找回并保存异议（写入代数同 ADR-0031）。
+// StatementDisputeStore 按幂等键找回并保存异议（写入代数同 ADR-0031）。LockRegistration 把同一争议标识的登记排成一队，
+// 到本事务结束才放，理由同 PublishedStatementStore.LockPublicationIntent：后到者先看见先到者的那一项，按内容答已存在
+// 或冲突，不在取了号之后才撞主键。DocumentNumberUsed 答一个争议号是否已在本租户的册上，给取号判撞。
 type StatementDisputeStore interface {
 	FindByKey(ctx context.Context, key DisputeKey) (DisputeRecord, bool, error)
+	LockRegistration(ctx context.Context, key DisputeKey) error
+	DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
 	Save(ctx context.Context, record DisputeRecord) (DisputeSaveOutcome, error)
 	Replace(ctx context.Context, record DisputeRecord) (bool, error)
 }

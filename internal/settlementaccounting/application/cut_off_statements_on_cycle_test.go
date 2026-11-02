@@ -12,8 +12,9 @@ import (
 )
 
 // 钉到点截单的编排分格（ADR-0339 决定三）：对账安排没登不截；截止日按周期与「此刻已关上的最后一天」推，从截止记录之后起；本期
-// 没有费用只记截止日；有费用就照候选组一份截单命令——单号与账期从截止日派生、合计是候选的结算金额之和、截单时刻是截止日的截单
-// 时刻；截单时点没登不截也不记；时点册读不动与截单未名都交回错误。发布那一格由 cmd/parcel-dispatch 的真库用例钉。
+// 没有费用只记截止日；有费用就照候选组一份截单命令——账期从截止日派生、截止版本固定 v1、命令里没有单号（单号由截单编排在发布
+// 事务里按编号规则取，ADR-0355 决定九）、合计是候选的结算金额之和、截单时刻是截止日的截单时刻；截单时点没登不截也不记；时点册
+// 读不动与截单未名都交回错误。发布与撞号两格由 cmd/parcel-dispatch 的真库用例钉。
 
 type cycleLedgerDouble struct {
 	last     domain.AttributionDate
@@ -145,7 +146,7 @@ func TestACycleCutRecordsEmptyClosingsAndComposesTheCommandFromTheCandidates(t *
 		t.Fatalf("截单命令 = %d 份", len(fixture.cutter.commands))
 	}
 	command := fixture.cutter.commands[0]
-	if command.Number != "STMT/SYN-ACCT-1/20261030" || command.Period != "CYCLE/2026-10-30" || command.Version != "v1" ||
+	if command.Period != "CYCLE/2026-10-30" || command.Version != "v1" ||
 		command.Currency != "CNY" || command.LastAttributionDate != "2026-10-30" || command.DeclaredTotalMinor != 10000 ||
 		len(command.ChargeIDs) != 2 || !command.CutOffAt.Equal(time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)) ||
 		!command.PublishedAt.Equal(time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)) {

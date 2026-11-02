@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
+	sadocnumber "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/documentnumber"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -16,6 +19,10 @@ import (
 // 本文件把票面点名的结算编排接进生产装配。审核没有单独的构造函数，它是
 // ReceiveSupplierBillHandler.Audit。确认与截单先问触发册：没登记答未配置，不调用编排。
 // 账期不在这本册里。
+
+// errDocumentNumberingCollided 只在本壳里流转：发布对账单、登记争议、形成审核应付答「编号规则撞号」时回调交它，逼事务回滚——
+// 取号编排取过的流水只有回滚才释放，照常提交就全成了空号（ADR-0355 决定三、八）。回滚之后认出它，交回编排那一份答复。
+var errDocumentNumberingCollided = errors.New("parcel-api: document numbering rule collided; transaction rolled back")
 
 type settlementOrchestrations struct {
 	transactor bentoapp.Transactor
@@ -28,10 +35,19 @@ type settlementOrchestrations struct {
 	claims     *saapplication.SettleClaimAmountsHandler
 }
 
-func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, error) {
+// buildSettlementOrchestrations 装结算编排。issuer 是编号组件的取号编排（endpointSources.documentNumbers 那一套，接在同一个 db
+// 上）：对账单、争议与审核应付在各自的开立事务里经本上下文的消费侧端口取号。
+func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (settlementOrchestrations, error) {
 	none := settlementOrchestrations{}
 	if db == nil {
 		return none, fmt.Errorf("parcel-api: settlement orchestrations: db is nil")
+	}
+	if issuer == nil {
+		return none, fmt.Errorf("parcel-api: settlement orchestrations: document numbering is not built")
+	}
+	numbers, err := sadocnumber.NewAssigner(issuer)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: settlement document numbers: %w", err)
 	}
 	clock := systemClock{}
 	store, err := outbox.NewStore(db)
@@ -174,7 +190,7 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 	cutoff, err := saapplication.NewCutOffPublishStatementHandler(saapplication.CutOffPublishStatementDeps{
 		Statements: statements, Charges: charges, Billing: statements, Attributions: attributions,
 		AttributionDates: charges, Adjustments: adjustments, Inclusions: inclusions,
-		Disputes: disputes, Downstream: statementHandoff, Clock: clock,
+		Disputes: disputes, Numbers: numbers, Arrangements: arrangements, Downstream: statementHandoff, Clock: clock,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: cut-off publish statement: %w", err)
@@ -192,7 +208,8 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 		}),
 		supplier: saapplication.NewReceiveSupplierBillHandler(saapplication.ReceiveSupplierBillDeps{
 			Receptions: receptions, Costs: costs, Successions: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
-			Payables: payables, CreditNotes: creditNotes, Downstream: billHandoff, Clock: clock,
+			Payables: payables, CreditNotes: creditNotes, Numbers: numbers, Arrangements: arrangements,
+			Downstream: billHandoff, Clock: clock,
 		}),
 		claims: saapplication.NewSettleClaimAmountsHandler(saapplication.SettleClaimAmountsDeps{
 			Amounts: claimAmounts, Receivables: receivables, Acknowledgements: acknowledgements,
@@ -230,7 +247,7 @@ func (orchestrations settlementOrchestrations) Confirm(
 	return outcome, result, nil
 }
 
-// CutOff 在截单触发已登记时才调用截单发布。没登记答未配置。账期仍在命令里，这里不填。
+// CutOff 在截单触发已登记时才调用截单发布。没登记答未配置。账期仍在命令里，这里不填。单号撞号时整笔回滚再交回答复。
 func (orchestrations settlementOrchestrations) CutOff(
 	ctx context.Context,
 	command saapplication.PublishStatementCommand,
@@ -251,8 +268,14 @@ func (orchestrations settlementOrchestrations) CutOff(
 			return publishErr
 		}
 		result = published
+		if published.Outcome() == saapplication.StatementNumberingRuleCollision {
+			return errDocumentNumberingCollided
+		}
 		return nil
 	})
+	if errors.Is(err, errDocumentNumberingCollided) {
+		return outcome, result, nil
+	}
 	if err != nil {
 		return 0, saapplication.StatementResult{}, err
 	}
@@ -276,7 +299,7 @@ func (orchestrations settlementOrchestrations) ReceiveSupplierBill(
 	return result, nil
 }
 
-// AuditSupplierBill 在一笔事务里审核一行：应付行与发布意图同生同灭。
+// AuditSupplierBill 在一笔事务里审核一行：应付行、应付单据号与发布意图同生同灭；应付号撞号时整笔回滚再交回答复。
 func (orchestrations settlementOrchestrations) AuditSupplierBill(
 	ctx context.Context,
 	command saapplication.AuditBillLineCommand,
@@ -285,8 +308,14 @@ func (orchestrations settlementOrchestrations) AuditSupplierBill(
 	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		audited, auditErr := orchestrations.supplier.Audit(txCtx, command)
 		result = audited
+		if auditErr == nil && audited.Outcome() == saapplication.PayableNumberingRuleCollision {
+			return errDocumentNumberingCollided
+		}
 		return auditErr
 	})
+	if errors.Is(err, errDocumentNumberingCollided) {
+		return result, nil
+	}
 	if err != nil {
 		return saapplication.AuditResult{}, err
 	}
@@ -294,7 +323,7 @@ func (orchestrations settlementOrchestrations) AuditSupplierBill(
 }
 
 // OpenDispute 在一笔事务里代登记一项争议。争议不过结算时点那一道门：门管确认与截单什么时候能动，客户什么时候提出异议不由它定
-// （ADR-0354 决定一）。
+// （ADR-0354 决定一）。争议号撞号时整笔回滚再交回答复。
 func (orchestrations settlementOrchestrations) OpenDispute(
 	ctx context.Context,
 	command saapplication.OpenDisputeCommand,
@@ -303,8 +332,14 @@ func (orchestrations settlementOrchestrations) OpenDispute(
 	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		opened, handleErr := orchestrations.cutoff.OpenDispute(txCtx, command)
 		result = opened
+		if handleErr == nil && opened.Outcome() == saapplication.StatementNumberingRuleCollision {
+			return errDocumentNumberingCollided
+		}
 		return handleErr
 	})
+	if errors.Is(err, errDocumentNumberingCollided) {
+		return result, nil
+	}
 	if err != nil {
 		return saapplication.StatementResult{}, err
 	}

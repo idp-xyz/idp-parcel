@@ -14,10 +14,14 @@ import (
 )
 
 // StatementDisputes 实现 ports.StatementDisputeStore。Save 开立；Replace 只写裁定
-// 三列，不改对账单号、费用与争议金额。
+// 三列，不改对账单号、费用、争议金额与争议号。
 type StatementDisputes struct {
 	db *bentopg.DB
 }
+
+var _ ports.StatementDisputeStore = (*StatementDisputes)(nil)
+
+const statementDisputeTable = "settlement_accounting.statement_dispute"
 
 func NewStatementDisputes(db *bentopg.DB) (*StatementDisputes, error) {
 	if db == nil {
@@ -40,19 +44,19 @@ func (repository *StatementDisputes) FindByKey(
 	var statement, charge, reason, digest string
 	var disputed int64
 	var openedAt, recordedAt time.Time
-	var resolution, resolutionRef, openedBy, resolvedBy *string
+	var resolution, resolutionRef, openedBy, resolvedBy, number, absence *string
 	var resolvedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT statement_number, charge_id, disputed_minor, reason_ref, opened_at,
 		        resolution, resolution_ref, resolved_at, content_digest, recorded_at,
-		        operation_evidence, resolution_evidence
+		        operation_evidence, resolution_evidence, document_number, document_number_absence
 		   FROM settlement_accounting.statement_dispute
 		  WHERE tenant_id = $1
 		    AND dispute_id = $2`,
 		key.TenantID.String(),
 		key.Dispute.String(),
 	).Scan(&statement, &charge, &disputed, &reason, &openedAt,
-		&resolution, &resolutionRef, &resolvedAt, &digest, &recordedAt, &openedBy, &resolvedBy)
+		&resolution, &resolutionRef, &resolvedAt, &digest, &recordedAt, &openedBy, &resolvedBy, &number, &absence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DisputeRecord{}, false, nil
 	}
@@ -64,6 +68,10 @@ func (repository *StatementDisputes) FindByKey(
 	if err != nil {
 		return ports.DisputeRecord{}, false, fmt.Errorf("find statement dispute: %w", err)
 	}
+	numbering, err := numberingFrom(number, absence)
+	if err != nil {
+		return ports.DisputeRecord{}, false, fmt.Errorf("find statement dispute: %w", err)
+	}
 	return ports.DisputeRecord{
 		Key:                key,
 		ContentDigest:      digest,
@@ -71,7 +79,31 @@ func (repository *StatementDisputes) FindByKey(
 		RecordedAt:         recordedAt.UTC(),
 		OperationEvidence:  catalogueText(openedBy),
 		ResolutionEvidence: catalogueText(resolvedBy),
+		Numbering:          numbering,
 	}, true, nil
+}
+
+// LockRegistration 以事务级咨询锁把同一争议标识的登记排成一队（见 ports.StatementDisputeStore）。
+func (repository *StatementDisputes) LockRegistration(ctx context.Context, key ports.DisputeKey) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock statement dispute registration: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.statement_dispute.registration'), hashtext($1 || chr(31) || $2))`,
+		key.TenantID.String(), key.Dispute.String()); err != nil {
+		return fmt.Errorf("lock statement dispute registration: %w", err)
+	}
+	return nil
+}
+
+// DocumentNumberUsed 答一个争议号是否已在本租户的争议册上。
+func (repository *StatementDisputes) DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error) {
+	used, err := documentNumberUsed(ctx, repository.db, statementDisputeTable, tenant, number)
+	if err != nil {
+		return false, fmt.Errorf("statement dispute number used: %w", err)
+	}
+	return used, nil
 }
 
 // Save 写下一次开立。同标识已有记录时答`已开立`，不覆盖先到者。
@@ -84,13 +116,17 @@ func (repository *StatementDisputes) Save(
 		return ports.DisputeSaveOutcomeInvalid, fmt.Errorf("save statement dispute: %w", err)
 	}
 
+	number, absence, err := numberingColumns(record.Numbering)
+	if err != nil {
+		return ports.DisputeSaveOutcomeInvalid, fmt.Errorf("save statement dispute: %w", err)
+	}
 	kind, basis, resolvedAt, resolved := record.Dispute.Resolution()
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.statement_dispute
 			(tenant_id, dispute_id, statement_number, charge_id, disputed_minor,
 			 reason_ref, opened_at, resolution, resolution_ref, resolved_at,
-			 content_digest, recorded_at, operation_evidence)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 content_digest, recorded_at, operation_evidence, document_number, document_number_absence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Dispute.String(),
@@ -105,6 +141,8 @@ func (repository *StatementDisputes) Save(
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
 		optionalText(record.OperationEvidence),
+		number,
+		absence,
 	)
 	if err != nil {
 		return ports.DisputeSaveOutcomeInvalid, fmt.Errorf("save statement dispute: %w", err)

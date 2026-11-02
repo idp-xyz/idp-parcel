@@ -19,8 +19,8 @@ func TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision(t *testing.T) {
 	}{
 		"SHIPMENT":               {"P{yyyy}{mm}{dd}{seq:6}", numbering.Daily, docnumber.DateTimeZoneFromTenant},
 		"CUSTOMER_STATEMENT":     {"STMT-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromIssuer},
-		"STATEMENT_DISPUTE":      {"DSP-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
-		"AUDITED_PAYABLE":        {"AP-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
+		"STATEMENT_DISPUTE":      {"DSP-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromIssuer},
+		"AUDITED_PAYABLE":        {"AP-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromIssuer},
 		"EXCEPTION_CASE":         {"EX-{yyyy}{mm}{dd}-{seq:4}", numbering.Daily, docnumber.DateTimeZoneFromTenant},
 		"CLAIM":                  {"CLM-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
 		"CUSTOMS_CASE":           {"CC-{yyyy}{mm}{dd}-{seq:4}", numbering.Daily, docnumber.DateTimeZoneFromTenant},

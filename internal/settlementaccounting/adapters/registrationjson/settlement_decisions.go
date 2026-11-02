@@ -29,8 +29,9 @@ func ChargeConfirmationFromJSONForTenant(raw []byte, tenant domain.TenantID) (ap
 	return application.ConfirmChargeCommand{TenantID: tenant, ChargeID: document.Charge}, nil
 }
 
+// statementPublicationDocument 没有单号一格：单号在发布事务里按编号规则取（ADR-0355 决定九、十），载荷再带一个就是让人
+// 编号；自报单号照未知字段拒。账户、账期与草稿版本三格就是发布意图。
 type statementPublicationDocument struct {
-	Number              string   `json:"number"`
 	Account             string   `json:"account"`
 	Period              string   `json:"period"`
 	Version             string   `json:"version"`
@@ -59,7 +60,6 @@ func StatementPublicationFromJSONForTenant(
 	}
 	// 各格的构造门在这里先过一遍：形状写坏的答坏报文，不落进编排去答一个不带原因的未受理。
 	for name, check := range map[string]error{
-		"number":              firstErr(domain.NewStatementNumber(document.Number)),
 		"account":             firstErr(domain.NewSettlementAccountID(document.Account)),
 		"period":              firstErr(domain.NewBillingPeriodReference(document.Period)),
 		"version":             firstErr(domain.NewStatementDraftVersion(document.Version)),
@@ -84,7 +84,6 @@ func StatementPublicationFromJSONForTenant(
 	}
 	return application.PublishStatementCommand{
 		TenantID:            tenant,
-		Number:              document.Number,
 		Account:             document.Account,
 		Period:              document.Period,
 		Version:             document.Version,

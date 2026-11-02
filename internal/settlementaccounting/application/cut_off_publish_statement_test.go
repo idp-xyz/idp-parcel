@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,8 +21,10 @@ var (
 type statementStoreDouble struct {
 	records map[string]ports.StatementRecord
 	findErr error
-	// missFinds 让接下来这么多次 FindByKey 答查无此单：模拟另一笔同单号截单在本笔读单号之后才提交。
-	missFinds int
+	// calls 依次记下锁意图与按意图查的调用，钉住「先排队、再查重」的次序。
+	calls []string
+	// raceSaved 为真时下一次 Save 答已发布：模拟有人没在意图锁上排队就先写了库。
+	raceSaved bool
 }
 
 func newStatementStore() *statementStoreDouble {
@@ -39,12 +42,59 @@ func (double *statementStoreDouble) FindByKey(
 	if double.findErr != nil {
 		return ports.StatementRecord{}, false, double.findErr
 	}
-	if double.missFinds > 0 {
-		double.missFinds--
-		return ports.StatementRecord{}, false, nil
-	}
 	record, found := double.records[statementKey(key)]
 	return record, found, nil
+}
+
+func (double *statementStoreDouble) LockPublicationIntent(_ context.Context, intent ports.StatementPublicationIntent) error {
+	double.calls = append(double.calls, "lock "+intent.Version.String())
+	return nil
+}
+
+func sameIntent(record ports.StatementRecord, intent ports.StatementPublicationIntent) bool {
+	return record.Key.TenantID == intent.TenantID && record.Statement.Account() == intent.Account &&
+		record.Statement.Period() == intent.Period && record.DraftVersion == intent.Version
+}
+
+func (double *statementStoreDouble) FindByIntent(
+	_ context.Context,
+	intent ports.StatementPublicationIntent,
+) (ports.StatementRecord, bool, error) {
+	double.calls = append(double.calls, "find "+intent.Version.String())
+	if double.findErr != nil {
+		return ports.StatementRecord{}, false, double.findErr
+	}
+	for _, record := range double.records {
+		if sameIntent(record, intent) {
+			return record, true, nil
+		}
+	}
+	return ports.StatementRecord{}, false, nil
+}
+
+func (double *statementStoreDouble) FindUnversionedInPeriod(
+	_ context.Context,
+	tenant domain.TenantID,
+	account domain.SettlementAccountID,
+	period domain.BillingPeriodReference,
+) ([]ports.StatementRecord, error) {
+	var legacy []ports.StatementRecord
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Statement.Account() == account && record.Statement.Period() == period &&
+			record.DraftVersion.String() == "" {
+			legacy = append(legacy, record)
+		}
+	}
+	return legacy, nil
+}
+
+func (double *statementStoreDouble) StatementNumberUsed(_ context.Context, tenant domain.TenantID, number string) (bool, error) {
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Key.Number.String() == number {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // billingLockDouble 照 ports.ChargeBillingLock 读同一份对账单册：费用在一张未作废的已发布单上就算已出账。
@@ -83,8 +133,19 @@ func (double *statementStoreDouble) Save(
 	_ context.Context,
 	record ports.StatementRecord,
 ) (ports.StatementSaveOutcome, error) {
+	if double.raceSaved {
+		double.raceSaved = false
+		return ports.StatementAlreadyPublished, nil
+	}
 	if _, exists := double.records[statementKey(record.Key)]; exists {
 		return ports.StatementAlreadyPublished, nil
+	}
+	for _, existing := range double.records {
+		if sameIntent(existing, ports.StatementPublicationIntent{
+			TenantID: record.Key.TenantID, Account: record.Statement.Account(), Period: record.Statement.Period(), Version: record.DraftVersion,
+		}) {
+			return ports.StatementAlreadyPublished, nil
+		}
 	}
 	double.records[statementKey(record.Key)] = record
 	return ports.StatementSaved, nil
@@ -139,6 +200,7 @@ func (double *inclusionStoreDouble) Save(
 type disputeStoreDouble struct {
 	records map[string]ports.DisputeRecord
 	findErr error
+	locked  []string
 	// raceWinner 不为空时，下一次 Replace 先把它落成库上的那一份再答 false：读与写之间另一人先落了终局。
 	raceWinner *ports.DisputeRecord
 	// raceOpened 不为空时，下一次 Save 先把它落成库上的那一份再答已开立：读与写之间另一份同编号的登记先落了库。
@@ -162,6 +224,20 @@ func (double *disputeStoreDouble) FindByKey(
 	}
 	record, found := double.records[disputeKey(key)]
 	return record, found, nil
+}
+
+func (double *disputeStoreDouble) LockRegistration(_ context.Context, key ports.DisputeKey) error {
+	double.locked = append(double.locked, key.Dispute.String())
+	return nil
+}
+
+func (double *disputeStoreDouble) DocumentNumberUsed(_ context.Context, tenant domain.TenantID, number string) (bool, error) {
+	for _, record := range double.records {
+		if issued, numbered := record.Numbering.Number(); record.Key.TenantID == tenant && numbered && issued.String() == number {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (double *disputeStoreDouble) Save(
@@ -225,6 +301,7 @@ type statementFixture struct {
 	adjustments  *adjustmentViewDouble
 	inclusions   *inclusionStoreDouble
 	disputes     *disputeStoreDouble
+	numbers      *documentNumbersDouble
 	handoff      *statementHandoffDouble
 	// clock 是编排读的那只时钟；用例可以往后拨（如客户提出异议在发布之后一天，登记只能更晚）。
 	clock   *statementClock
@@ -241,6 +318,7 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		adjustments:  newAdjustmentView(),
 		inclusions:   newInclusionStore(),
 		disputes:     newDisputeStore(),
+		numbers:      newDocumentNumbers(),
 		handoff:      &statementHandoffDouble{},
 		clock:        &statementClock{at: statementNowAt},
 	}
@@ -254,6 +332,8 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		Adjustments:      fixture.adjustments,
 		Inclusions:       fixture.inclusions,
 		Disputes:         fixture.disputes,
+		Numbers:          fixture.numbers,
+		Arrangements:     fixture.arrangements,
 		Downstream:       fixture.handoff,
 		Clock:            fixture.clock,
 	})
@@ -335,7 +415,6 @@ func publishCommand(t *testing.T) application.PublishStatementCommand {
 	}
 	return application.PublishStatementCommand{
 		TenantID:            tenant,
-		Number:              "STMT-2026-08-001",
 		Account:             "ACCOUNT/syn-1",
 		Period:              "2026-08",
 		Version:             "draft/v1",
@@ -350,7 +429,8 @@ func publishCommand(t *testing.T) application.PublishStatementCommand {
 
 // Covers: `AT-SA-065`「申报总额与行勾稽不平即阻断，不修正为约等于」与 UC-SA-003
 // 「截单快照只纳已确认费用」的编排面——费用从库读回（未确认 → CHARGE_NOT_CONFIRMED
-// 业务负向）；同一单号只发布一次，重放返原、异集合冲突（替代走作废+新单号）。
+// 业务负向）；`AT-SA-068`、`AT-SA-222` 编排半边：同一发布意图只发布一次，单号在发布时
+// 取（ADR-0355 决定九），重放返原单原号、异集合答发布意图冲突（替代走作废+新意图）。
 func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 	fixture := newStatementFixture(t)
 	command := publishCommand(t)
@@ -375,7 +455,6 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 		// 另起一套夹具：同一批费用已出账在 STMT-2026-08-001 上，再截就成了本期无费用。
 		fresh := newStatementFixture(t)
 		imbalanced := publishCommand(t)
-		imbalanced.Number = "STMT-2026-08-002"
 		imbalanced.DeclaredTotalMinor = 19999
 		result, err := fresh.handler.Publish(context.Background(), imbalanced)
 		if err != nil {
@@ -388,7 +467,7 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 
 	t.Run("an estimated charge cannot enter the cut-off", func(t *testing.T) {
 		estimated := publishCommand(t)
-		estimated.Number = "STMT-2026-08-003"
+		estimated.Version = "draft/v3"
 		estimated.ChargeIDs = []string{"charge-A", "charge-estimated"}
 		estimated.DeclaredTotalMinor = 12500
 		result, err := fixture.handler.Publish(context.Background(), estimated)
@@ -401,6 +480,7 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 	})
 
 	t.Run("a replay returns the original statement", func(t *testing.T) {
+		taken := len(fixture.numbers.requests)
 		replay, err := fixture.handler.Publish(context.Background(), command)
 		if err != nil {
 			t.Fatalf("replay: %v", err)
@@ -408,12 +488,16 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 		if replay.Outcome() != application.StatementExistingResult {
 			t.Fatalf("outcome = %q", replay.Outcome())
 		}
+		if again, _ := replay.Statement(); again.Key.Number != record.Key.Number || len(fixture.numbers.requests) != taken {
+			t.Fatalf("重放答 %s、又取了 %d 次号：同一发布意图不得生成两个单号", again.Key.Number, len(fixture.numbers.requests)-taken)
+		}
 		if len(fixture.handoff.intents) != 2 {
 			t.Fatalf("intents = %d（重放重发同一份）", len(fixture.handoff.intents))
 		}
 	})
 
-	t.Run("a different cut-off set under the same number is a conflict", func(t *testing.T) {
+	t.Run("a different cut-off set under the same intent is a conflict", func(t *testing.T) {
+		taken := len(fixture.numbers.requests)
 		flipped := publishCommand(t)
 		flipped.ChargeIDs = []string{"charge-A"}
 		flipped.DeclaredTotalMinor = 12000
@@ -421,8 +505,11 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("conflict publish: %v", err)
 		}
-		if result.Outcome() != application.StatementConflict {
+		if result.Outcome() != application.StatementPublicationIntentConflict || result.Outcome().String() != "PUBLICATION_INTENT_CONFLICT" {
 			t.Fatalf("outcome = %q（替代走作废+新单号，不顶替快照）", result.Outcome())
+		}
+		if len(fixture.numbers.requests) != taken {
+			t.Fatal("发布意图冲突不落单，却取了号")
 		}
 	})
 }
@@ -641,12 +728,15 @@ func TestDisputesAreIndependentAndResolvedOnce(t *testing.T) {
 	})
 }
 
-// Covers: AT-SA-228（编排半边）——读时不在册、落库时另一份同编号的登记先到：内容不同答冲突、不带回对方那一份；内容相同答已存在。
+// Covers: AT-SA-228（编排半边）——同一争议标识的登记先在 LockRegistration 上排队再按标识查重（真库上的并发见 cmd/parcel-api
+// 的 TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent）。排了队仍在落库时撞上另一份：没取到号（时区未配置）时内容不同
+// 答冲突、不带回对方那一份，内容相同答已存在；取到了号就交回错误让事务回滚，号随之释放（ADR-0355 决定三）。
 func TestARegistrationLosingTheRaceIsJudgedByContent(t *testing.T) {
 	fixture := newStatementFixture(t)
 	if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
+	fixture.numbers.outcome = ports.DocumentNumberTimeZoneUnconfigured
 	tenant, _ := domain.NewTenantID("tenant-1")
 	command := func(id string, amount int64) application.OpenDisputeCommand {
 		return application.OpenDisputeCommand{
@@ -684,6 +774,25 @@ func TestARegistrationLosingTheRaceIsJudgedByContent(t *testing.T) {
 			t.Fatalf("%s：outcome = %q，带回记录 %v", tc.name, lost.Outcome(), has)
 		}
 	}
+	if !reflect.DeepEqual(fixture.disputes.locked, []string{"dispute-race-不同金额", "dispute-race-同内容"}) {
+		t.Fatalf("登记前没有排队：%v", fixture.disputes.locked)
+	}
+
+	t.Run("a numbered registration losing the race rolls back", func(t *testing.T) {
+		numbered := newStatementFixture(t)
+		if _, err := numbered.handler.Publish(context.Background(), publishCommand(t)); err != nil {
+			t.Fatal(err)
+		}
+		won, err := winnerFixture.handler.OpenDispute(context.Background(), command("dispute-race-numbered", 400))
+		if err != nil || won.Outcome() != application.DisputeOpened {
+			t.Fatalf("赢家：%v %q", err, won.Outcome())
+		}
+		winner, _ := won.Dispute()
+		numbered.disputes.raceOpened = &winner
+		if _, err := numbered.handler.OpenDispute(context.Background(), command("dispute-race-numbered", 400)); !errors.Is(err, application.ErrNumberedIssueInterrupted) {
+			t.Fatalf("取了号又撞库：err = %v，要交回错误让事务回滚", err)
+		}
+	})
 }
 
 // Covers: AT-SA-229（编排半边）——读到未处理、写时另一人已落终局：答已处理并交回那一份终局，不答未受理；处理人记成操作证据，
@@ -782,6 +891,7 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 			application.StatementStoreUnavailable, application.StatementChargeStoreUnavailable,
 			application.InclusionStoreUnavailable, application.DisputeStoreUnavailable,
 			application.AdjustmentViewUnavailable, application.StatementAttributionViewUnavailable,
+			application.StatementArrangementViewUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -789,7 +899,7 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 6 {
+		if len(labels) != 7 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.StatementUndecidedReason(len(labels)+1).String() != "" {

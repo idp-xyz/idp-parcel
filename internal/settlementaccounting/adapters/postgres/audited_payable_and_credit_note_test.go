@@ -365,6 +365,7 @@ func payableRecord(t *testing.T, tenant, payableID, claimID, line, digest string
 		ContentDigest: digest,
 		Payable:       payable,
 		RecordedAt:    payableRecordedAt,
+		Numbering:     numberedDocument(t, "AP-"+payableID),
 	}
 }
 

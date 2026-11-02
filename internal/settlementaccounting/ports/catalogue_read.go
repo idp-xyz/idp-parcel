@@ -136,15 +136,20 @@ type ChargeCatalogueRead interface {
 // 转写。裁定三件（结论、依据、时刻）同在或同缺，库上 statement_dispute_resolution_coupled
 // 守着这一条；未裁定时三件皆空，读面不代填`待处理`——那会把「还没人裁」写成一个看起来
 // 已经有人处置过的结论。
+//
+// DocumentNumber 与 DocumentNumberAbsence 恰有其一：有争议号就没有无号原因；没号时原因是上线前开立或单据编号时区
+// 未配置（domain.DocumentNumberAbsence 的词形），读面不拿内部标识顶争议号（ADR-0355 决定十一）。
 type StatementDisputeEntry struct {
-	Dispute       string
-	Charge        string
-	DisputedMinor int64
-	Reason        string
-	OpenedAt      time.Time
-	Resolution    string
-	ResolutionRef string
-	ResolvedAt    *time.Time
+	Dispute               string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	Charge                string
+	DisputedMinor         int64
+	Reason                string
+	OpenedAt              time.Time
+	Resolution            string
+	ResolutionRef         string
+	ResolvedAt            *time.Time
 }
 
 // SubsequentInclusionEntry 是一笔进入后续账期的纳入关系，照 subsequent_inclusion
