@@ -64,6 +64,10 @@ export interface CustomerChargeRecord {
   formedAt: string;
   confirmedAt?: string;
   requiredBasisKind?: string;
+  /** 结算归属日；确认时形成，此后不变（ADR-0269）。 */
+  attributionDate?: string;
+  /** 所在的未作废对账单号；缺席即还没出账。登记争议时按它列出一张单上的费用。 */
+  billedOn?: string;
   confirmationBases: ChargeConfirmationBasisRecord[];
 }
 
@@ -459,3 +463,48 @@ export const fundsRegistrationOutcomeLabels: Record<string, string> = {
   FUNDS_FACT_CONFLICT: '同一笔收付款已经登记过，但内容不一样；请先核对已登记的那笔，金额要改请用「更正金额」。',
   SOURCE_NOT_ACCEPTED: '没有登记：请检查流水号是否填了、金额是否大于零、更正时版本号是否指向当前版本。',
 };
+
+// —— 对账单争议的两个写口（ADR-0353）——
+
+/**
+ * 两口的答复。outcome 是业务判别：DISPUTE_OPENED / DISPUTE_RESOLVED 是这次落了新东西；EXISTING_DISPUTE、DISPUTE_CONFLICT、
+ * DISPUTE_ALREADY_RESOLVED、SOURCE_NOT_ACCEPTED、STATEMENT_VOIDED_TAKES_NO_DISPUTE 都是答案。带了争议的那几格就是库上此刻那一项。
+ */
+export interface DisputeDecisionResponseBody {
+  outcome: string;
+  dispute?: string;
+  statement?: string;
+  charge?: string;
+  disputedAmount?: string;
+  reason?: string;
+  openedAt?: string;
+  resolution?: string;
+  basis?: string;
+  resolvedAt?: string;
+}
+
+export interface DisputeRegistrationPayload {
+  dispute: string;
+  statement: string;
+  charge: string;
+  /** 与对账单读口同一写法：最小币单位的整数串。 */
+  disputedAmount: string;
+  reason: string;
+  /** 客户提出异议的时刻（RFC 3339，秒），不是录入时刻。 */
+  openedAt: string;
+}
+
+export interface DisputeResolutionPayload {
+  dispute: string;
+  resolution: 'ACCEPTED' | 'PARTIALLY_ACCEPTED' | 'REJECTED' | 'PENDING_REVIEW';
+  basis: string;
+  resolvedAt: string;
+}
+
+export function registerStatementDispute(payload: DisputeRegistrationPayload): Promise<ApiResult<DisputeDecisionResponseBody>> {
+  return postMasterData<DisputeDecisionResponseBody>('/settlement-statement-disputes', payload);
+}
+
+export function resolveStatementDispute(payload: DisputeResolutionPayload): Promise<ApiResult<DisputeDecisionResponseBody>> {
+  return postMasterData<DisputeDecisionResponseBody>('/settlement-statement-dispute-resolutions', payload);
+}

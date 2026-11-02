@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import { equal, ok } from 'node:assert/strict';
 import {
   authorizedRerouteDecision,
+  statementDisputeRegistrationDecision,
+  statementDisputeResolutionDecision,
   deliveryHandoverConfirmationDecision,
   effectiveTimeJudgmentDecision,
   entryHint,
@@ -58,6 +60,8 @@ test('指向写入口的文案跟着入口走：摆着时说它在哪，收起�
 // 与 hiddenEntryHint 同一个说法。
 test('线路与运力区的决定授予原词与收起时的说明', () => {
   equal(authorizedRerouteDecision, 'AUTHORIZED_REROUTE');
+  equal(statementDisputeRegistrationDecision, 'STATEMENT_DISPUTE_REGISTRATION');
+  equal(statementDisputeResolutionDecision, 'STATEMENT_DISPUTE_RESOLUTION');
   equal(deliveryHandoverConfirmationDecision, 'DELIVERY_HANDOVER_CONFIRMATION');
   equal(effectiveTimeJudgmentDecision, 'EFFECTIVE_TIME_JUDGMENT');
   equal(pendingIdentityRecheckDecision, 'PENDING_IDENTITY_RECHECK');

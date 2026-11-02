@@ -11,6 +11,7 @@ import {
   listDisputedCustomerStatements,
   listSettlementCharges,
   listSettlementStatements,
+  type CustomerChargeRecord,
   type CustomerStatementListResponseBody,
   type DisputedCustomerStatementListResponseBody,
   type CustomerStatementRecord,
@@ -21,6 +22,8 @@ import { TwoLine, formatMoney, technicalRows } from './ops-ui';
 import { accountCounterparties } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 import { disputedOnlyOf, reconciliationHash, reconciliationTabOf, type ReconciliationTab } from './reconciliation-address';
+import { StatementDisputePanel } from './StatementDisputePanel';
+import { openDisputesOf } from './dispute-forms';
 
 // 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。两签都接 GET /settlement-statements 按 registry 分派；
 // 客户对账单签另有「只看有未了结异议的」，换接 GET /settlement-disputed-statements。
@@ -88,11 +91,11 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
       header: '状态',
       align: 'center',
       // 二态由作废留痕渲染，不另造第二个布尔。作废不删行不改总额、替代单用新单号，所以「已作废」是留痕不是消失。
-      // 「有异议待裁」只说单上挂着没裁的异议，不说对账成不成——那是读面替人下的结论。
+      // 「有异议待裁」只说单上挂着还没处理完的异议（未处理或待复核），不说对账成不成——那是读面替人下的结论。
       render: (row) =>
         row.voidBasis ? (
           <StatusPill label="已作废" tone="muted" />
-        ) : row.disputes.some((dispute) => !dispute.resolution) ? (
+        ) : openDisputesOf(row).length > 0 ? (
           <StatusPill label="有异议待裁" tone="warn" />
         ) : (
           <StatusPill code="PUBLISHED" />
@@ -130,6 +133,9 @@ function CustomerStatementsTable({
     null,
   );
   const [accountOwners, setAccountOwners] = useState<Map<string, string>>(() => new Map());
+  // 客户费用两用：名称转写的「账户 → 相对方」，与右栏登记争议时按「所在对账单」列出一张单上的费用。
+  const [charges, setCharges] = useState<CustomerChargeRecord[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +146,10 @@ function CustomerStatementsTable({
     });
     // 账户归谁的对应只是名称转写的辅助一问：它不成也不影响对账单本身的呈现，列上退回显账户号。
     void listSettlementCharges('customer-charge').then((next) => {
-      if (!cancelled && next.kind === 'outcome') setAccountOwners(accountCounterparties(next.body.charges));
+      if (!cancelled && next.kind === 'outcome') {
+        setAccountOwners(accountCounterparties(next.body.charges));
+        setCharges(next.body.charges);
+      }
     });
     return () => {
       cancelled = true;
@@ -160,6 +169,13 @@ function CustomerStatementsTable({
     : statements;
   const retry = () => setReloadKey((value) => value + 1);
   const voided = statements.filter((row) => row.voidBasis).length;
+  // 登记或处理之后重读这一签时列表先清空：右栏留着上一次读到的那张单，表单与刚才的答复不随之卸掉。
+  const current = statements.find((row) => row.statementNumber === selected);
+  const [pinned, setPinned] = useState<CustomerStatementRecord | undefined>(undefined);
+  useEffect(() => {
+    if (current) setPinned(current);
+  }, [current]);
+  const panelStatement = current ?? (pinned?.statementNumber === selected ? pinned : undefined);
 
   const summary = disputed
     ? `共 ${disputed.disputedCount} 张有未了结异议${
@@ -168,51 +184,56 @@ function CustomerStatementsTable({
     : `${statements.length} 张 · 已作废 ${voided} 张`;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
-        <label className="flex items-center gap-1.5 text-sm">
-          <input type="checkbox" checked={disputedOnly} onChange={(event) => onDisputedOnlyChange(event.target.checked)} />
-          只看待对账
-        </label>
-        <span className="text-xs text-idpxyz-textMuted">
-          {disputedOnly
-            ? '只列有异议还没处理完（未处理或待复核）的单；客户确认没确认本系统不记，不在这里筛'
-            : '勾上只看有异议还没处理完的单'}
-        </span>
+    <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={disputedOnly} onChange={(event) => onDisputedOnlyChange(event.target.checked)} />
+            只看待对账
+          </label>
+          <span className="text-xs text-idpxyz-textMuted">
+            {disputedOnly
+              ? '只列有异议还没处理完（未处理或待复核）的单；客户确认没确认本系统不记，不在这里筛'
+              : '勾上只看有异议还没处理完的单'}
+          </span>
+        </div>
+        <ListPageTemplate<CustomerStatementRecord>
+          title={disputedOnly ? '待对账的客户对账单' : '客户对账单'}
+          description={
+            disputedOnly
+              ? '单上至少一项异议还没有处理结果，或处理为待复核；接受、部分接受、拒绝都算处理完'
+              : '已发给客户的对账单；有异议另记在单上，不改单的金额'
+          }
+          search={{ value: search, onChange: setSearch, placeholder: '搜对账单号、客户、账期' }}
+          filterSummary={answer?.kind === 'outcome' ? summary : undefined}
+          columns={customerStatementColumns(accountOwners, names)}
+          rows={visibleStatements}
+          // 行键即对账单号：发布后固定，替代单用新单号。
+          rowKey={(row) => row.statementNumber}
+          onRowClick={(row) => setSelected(row.statementNumber)}
+          emptyRowsNote="没有匹配的对账单"
+          viewState={catalogueViewState(
+            answer,
+            statements.length,
+            retry,
+            disputedOnly
+              ? {
+                  module: info,
+                  endpoint: 'GET /settlement-disputed-statements',
+                  emptyTitle: '没有待对账的单',
+                  emptyDescription: '已发布的对账单上没有还没处理完的异议。',
+                }
+              : {
+                  module: info,
+                  endpoint: 'GET /settlement-statements?registry=customer-statement',
+                  emptyTitle: '还没有发布过对账单',
+                  emptyDescription: '费用确认后按账期归集成对账单，发布后在这里出现；页面不会预置对账单。',
+                },
+          )}
+        />
       </div>
-      <ListPageTemplate<CustomerStatementRecord>
-        title={disputedOnly ? '待对账的客户对账单' : '客户对账单'}
-        description={
-          disputedOnly
-            ? '单上至少一项异议还没有处理结果，或处理为待复核；接受、部分接受、拒绝都算处理完'
-            : '已发给客户的对账单；有异议另记在单上，不改单的金额'
-        }
-        search={{ value: search, onChange: setSearch, placeholder: '搜对账单号、客户、账期' }}
-        filterSummary={answer?.kind === 'outcome' ? summary : undefined}
-        columns={customerStatementColumns(accountOwners, names)}
-        rows={visibleStatements}
-        // 行键即对账单号：发布后固定，替代单用新单号。
-        rowKey={(row) => row.statementNumber}
-        emptyRowsNote="没有匹配的对账单"
-        viewState={catalogueViewState(
-          answer,
-          statements.length,
-          retry,
-          disputedOnly
-            ? {
-                module: info,
-                endpoint: 'GET /settlement-disputed-statements',
-                emptyTitle: '没有待对账的单',
-                emptyDescription: '已发布的对账单上没有还没处理完的异议。',
-              }
-            : {
-                module: info,
-                endpoint: 'GET /settlement-statements?registry=customer-statement',
-                emptyTitle: '还没有发布过对账单',
-                emptyDescription: '费用确认后按账期归集成对账单，发布后在这里出现；页面不会预置对账单。',
-              },
-        )}
-      />
+      {/* 登记或处理落定后重读这一签：单上的争议与首页待对账的件数都从读口来，页面不自己往行上补。 */}
+      <StatementDisputePanel statement={panelStatement} charges={charges} onAnswered={retry} />
     </div>
   );
 }
