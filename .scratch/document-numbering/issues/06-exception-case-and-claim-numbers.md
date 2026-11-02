@@ -97,3 +97,27 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - 评审探针 `zz_review_probe_test.go` 放进 `vepostgres` 跑 `-run TestReviewProbe` 全过，跑完删除。
 - 前端 `npx tsc -b`、`pnpm test`（1063 通过）、`npx vite build` 都过。
 - `tools/at-coverage-counts -check` 只报总览过期，表行与 UC 立号对得上；总览计数与机制清点留给推送方重生成。
+
+## 复评修订（2026-11-02，作者，应协调方转来的复评意见，复评钉 `c8c7a8ceb`，R2 并发重复立案按阻断级修）
+
+先并入 origin/main `f9d2b059c`（AT 盘点追记冲突取并集），再追加提交：
+
+1. **并发重驱去重**：
+   - 重驱先用 `ClaimDueCaseNumberingCollision` 抢册上那一行（`FOR UPDATE SKIP LOCKED`，且仍到期）。抢到的是此刻库里那一行，不是取页时那一份；抢不到答 `CaseNumberingRedriveSkipped`，不等也不分诊。
+   - 分诊编排每一轮在找发作期之前，先用 `HoldCaseNumberingCollision`（`FOR UPDATE`，会等）锁住这一原因在撞号册上的那一行（若有）。重驱与同一原因的正常命中交叠时，后到的等先到的提交，再读发作期就看见它，只记一次命中；先到的在 `SaveRaised` 同笔销账。
+   - 不靠唯一约束兜：发作期表上没有按因果条件的唯一约束，加一条会牵动既有的重开语义，超出本票。
+   - 真库用例 `case_numbering_redrive_test.go`：两笔重驱交叠、正常命中先到、重驱先到，三种都只落一个发作期、一件案件，撞号册清空。
+   - 变异检验：去掉锁行，「重驱先到」那一格答 `EPISODE_OPENED`、重复立案；去掉 `SKIP LOCKED`，后到的重驱等在锁上（用例给了期限）。两种都会让用例失败。
+2. **原样 = 首次命中**：同一原因再撞，`RecordCaseNumberingCollision` 只加撞号次数、换成最近撞上的格式、立刻到期，首次命中的规则版本、可信度、事实依据、判断时间都不动。重驱建出的发作期按首次命中开期、命中一次。用例照探针 R3 的形状。
+3. **页首饿死**：重驱停在依赖上或出错时，那一笔事务回滚，派发再另开一笔 `Defer`，推后同一个 `CaseNumberingRedriveInterval`。取舍：撞号命中已经等过了，晚一个间隔建案不改变什么；不推后，读不动的几件到期时刻不变、每拍排在页首，页一满后面能建成的就永远轮不到。没有改成按到期时刻轮转：推后本身就让它们退到队尾，效果相同，而且只需一处。
+4. **非阻断各条**：
+   - `NumberlessForUnconfiguredTimeZone` 改名 `DocumentNumberAbsentForUnconfiguredTimeZone`。
+   - `document-number.ts` 头注去掉计数。
+   - 删掉没有生产读者的 `CollidedTemplate()`（编排结果与出发门禁结果两处）。撞上的格式只记在撞号册上，重驱的日志会带出来。
+   - 票 02「按答案办」补了一句「也可在取号那一步包保存点只退号」。
+   - UC-VE-004 交接补写并发、首次命中与推后，AT 盘点 `AT-VE-228` 行加了新用例。
+
+自验（本机 PG）：
+- `go build ./...`、`go vet ./...` 通过，`gofmt -l` 无输出；受影响包全量测试全绿。
+- 复评探针 R1、R2a、R2b 都是发作期 1、案件 1、撞号册 0；R2a 后到的答 `SKIPPED`；R3 的发作期从首次命中那一刻开期、命中 1 次。探针跑完已删。
+- 前端 `tsc`、`pnpm test`（1079 通过）、`vite build` 都过。
