@@ -377,6 +377,8 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 | 自报 `customerAccount`、带 `sort` / `q` / `parcel`、缺号、解不开或别的号的游标 | `400 MALFORMED_REQUEST`，不读委托 |
 | 只持 `CUSTOMER_TRACKING_VIEW_QUERY` 的客户端 | `403 CUSTOMER_CLIENT_NOT_GRANTED` |
 
+> 2026-11-02 实走（票 document-numbering/12 作者子代理，`3e2bc443d` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `docnum12_demo`，`up.sh`（API `:19102`）灌种子退 0，`steps/488` 那一笔授予答 `RECORDED`。`10-main-chain.sh` 退 0：`submit-one-shipment.sh` 提交 `SHR-5T3RZQXWMRMEMRQJHQGCLPNDC4`，运单号 `P20261102000001`，接受之前按号查答 `200 AWAITING_ACCEPTANCE`；dispatch 接受之后答 `200 PARCELS_LISTED`，列出的那一件是 `DPCL-DCGSUY55H2PNYQGXIEVGVY3CSM`、件号 `SYN-PCLREF-20261102T145311Z`，逐件 `NO_VISIBLE_RESULT`，`page` 为 `size` 50、`total` 1、`next` 为 `null`。主链走完之后同一个号仍答 `PARCELS_LISTED`，那一件 `CURRENT_VIEW`，去掉 `parcelId` 与件号后与同一时刻按包裹查的答复逐字相同。`P20261102999999`、小写的号、拿委托标识当号都答 `200 SHIPMENT_NOT_FOUND`；自报 `customerAccount`、带 `sort`、坏游标答 `400 MALFORMED_REQUEST`；配置员令牌答 `401`。走完 `down.sh --drop-db`，已停进程、删库。
+
 ## 对照组：证明门是真的
 
 演示里最容易被质疑的一句是「你们这个 403 是写死的吧」。下面几行对照可以当场答掉，每行只动一处：
