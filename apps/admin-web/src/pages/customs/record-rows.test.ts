@@ -70,13 +70,19 @@ test('外部结果：归属不上不猜版本；放行带范围与条件', () =>
 
 // Covers: UC-CC-013 — 整次答复与逐动作答复分列，逐动作带依据来源。
 test('判断册行：整次答复与逐动作答复分列', () => {
-  const [row] = judgementRows([{
+  const row0 = {
     judgement: 'J-1', object: 'PCL-1', intent: 'HANDOVER', node: 'A', onwardNode: 'B', actionAt: at,
     crossZone: 'CROSSING', answer: 'ADMITTED', zones: [], judgedAt: at,
     findings: [{ action: 'CROSS_CUSTOMS_MOVEMENT', answer: 'ADMITTED', bases: [{ cause: 'RELEASE_OUTCOME', sources: ['RES-REL'] }] }],
-  }]);
+  };
+  const [row] = judgementRows([row0]);
   equal(row.values.answer, '可放行');
   equal(row.values.route, 'A → B');
+  equal(row.values.routeCodes, 'A → B');
+  // 网点按页面给的查名换成名称，原编码留在 routeCodes。
+  const [named] = judgementRows([{ ...row0 }], (node) => ({ A: '上海枢纽' })[node] ?? node);
+  equal(named.values.route, '上海枢纽 → B');
+  equal(named.values.routeCodes, 'A → B');
   ok(row.values.findings.includes('跨关区移动：可放行') && row.values.findings.includes('RES-REL'));
 });
 

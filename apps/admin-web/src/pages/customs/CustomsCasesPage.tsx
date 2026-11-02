@@ -28,6 +28,8 @@ import {
 } from './api';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { credentialRows, type RegisterRow } from './register-rows';
+import { placeLabel } from '../network/place-names';
+import { usePlaceNames } from '../network/use-place-names';
 import { caseRows, externalResultRows, judgementRows, snapshotRows, submissionRows, unitRows } from './record-rows';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
@@ -177,7 +179,7 @@ const judgementColumns = recordColumns(
   [
     { id: 'object', header: '运单号', mono: true, nowrap: true },
     { id: 'intent', header: '动作', nowrap: true },
-    { id: 'route', header: '网点 → 去向', mono: true, nowrap: true },
+    { id: 'route', header: '网点 → 去向', nowrap: true },
     { id: 'crossZone', header: '跨关区', nowrap: true },
     { id: 'answer', header: '结论', pillCode: 'answerCode' },
     { id: 'findings', header: '逐项检查', multi: true },
@@ -185,6 +187,7 @@ const judgementColumns = recordColumns(
   ],
   [
     ['判断标识', 'id'],
+    ['网点编码', 'routeCodes'],
     ['判断时间', 'judgedAt'],
   ],
 );
@@ -393,6 +396,8 @@ function AdmissionJudgementsTable() {
     };
   }, [object, reloadKey]);
   const judgements = answer?.kind === 'outcome' ? answer.body.judgements : [];
+  // 网点一格按此刻生效那一版显名称，原编码进技术详情（record-rows 的 judgementRows 收查名）。
+  const places = usePlaceNames();
   const blocked = judgements.filter((judgement) => judgement.answer === 'BLOCKED').length;
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -422,7 +427,7 @@ function AdmissionJudgementsTable() {
         description="货物出库、装车、跨关区、交付前每一次放行检查的结论；按当时的规则判，不回头改"
         searchPlaceholder="在结果内搜运单号、网点、结论"
         columns={judgementColumns}
-        rows={judgementRows(judgements)}
+        rows={judgementRows(judgements, (node) => placeLabel(places, node))}
         answer={answer}
         retry={() => setReloadKey((value) => value + 1)}
         endpoint={`GET /customs-action-admission-judgements${object ? `?object=${object}` : ''}`}

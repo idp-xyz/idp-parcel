@@ -220,14 +220,16 @@ export function externalResultRows(results: ExternalResultBody[]): RegisterRow[]
   }));
 }
 
-export function judgementRows(judgements: AdmissionJudgementBody[]): RegisterRow[] {
+/** label 把网点编码换成屏上写法（页面传按此刻生效那一版查名的那一问）；缺省原样显编码。原编码另在 routeCodes 一格。 */
+export function judgementRows(judgements: AdmissionJudgementBody[], label: (node: string) => string = (node) => node): RegisterRow[] {
   return judgements.map((judgement) => ({
     key: `judgement:${judgement.judgement}`,
     values: {
       id: judgement.judgement,
       object: judgement.object,
       intent: labelFor(judgement.intent),
-      route: judgement.onwardNode ? `${judgement.node} → ${judgement.onwardNode}` : judgement.node,
+      route: judgement.onwardNode ? `${label(judgement.node)} → ${label(judgement.onwardNode)}` : label(judgement.node),
+      routeCodes: judgement.onwardNode ? `${judgement.node} → ${judgement.onwardNode}` : judgement.node,
       crossZone: labelFor(judgement.crossZone),
       answerCode: judgement.answer,
       answer: labelFor(judgement.answer),
