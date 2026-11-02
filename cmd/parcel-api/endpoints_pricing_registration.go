@@ -28,7 +28,7 @@ func init() {
 			none := pricingRegistrationWiring{}
 			// 价卡与序列登记写面编排（ADR-0085，票 admin-write-faces/01）：接真不等墙降——
 			// 未配置 Intake 拒在编排之前，墙降那笔工作在装配点换的只是 Intake。
-			priceCardRegistration, err := buildPriceCardRegistrationOrchestration(sources.db)
+			priceCardRegistration, err := buildPriceCardRegistrationOrchestration(sources.db, sources.registerNewerCanonicalization)
 			if err != nil {
 				return none, err
 			}

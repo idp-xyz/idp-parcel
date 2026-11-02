@@ -130,6 +130,9 @@ section "起进程"
   export IDP_PARCEL_OPERATOR_OIDC_JWKS_URL='http://127.0.0.1:5556/dex/keys'
   export IDP_PARCEL_OPERATOR_OIDC_AUDIENCE='idp-parcel-admin-web'
   export IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
+  # 允许登记 PPC-6 价卡（ADR-0352）：本脚本起的进程出自上面同一次编译，没有旧构建在读价卡，开关在这里成立；
+  # 不设的话，管理台导入编辑器做出的 PPC-6 卡发布会答「尚未允许登记」。
+  export IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION=true
   # 集成客户端渠道（ADR-0149）与首方客户渠道（ADR-0139）：iss 串逐字比，JWKS 取实际可达的那只
   export IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER='http://127.0.0.1:5558/dex'
   export IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL="$integration_jwks"
@@ -167,7 +170,7 @@ if [[ -z "${ready:-}" ]]; then
 fi
 kill -0 "$(cat "$RUN_DIR/parcel-dispatch.pid")" 2>/dev/null || { printf 'parcel-dispatch 已退出，日志：\n' >&2; tail -20 "$RUN_DIR/parcel-dispatch.log" >&2; exit 1; }
 echo "parcel-api ${API_BASE}（PID $(cat "$RUN_DIR/parcel-api.pid")）、parcel-dispatch（PID $(cat "$RUN_DIR/parcel-dispatch.pid")）已起"
-grep -E 'Operator channel|Governance self|Isolated read|Isolated write|Integration client|Customer' "$RUN_DIR/parcel-api.log" | cut -c1-200 | sed 's/^/  日志 /' || true
+grep -E 'Operator channel|Governance self|newer canonicalization|Isolated read|Isolated write|Integration client|Customer' "$RUN_DIR/parcel-api.log" | cut -c1-200 | sed 's/^/  日志 /' || true
 
 "$DEMO_DIR/topup-funds.sh" 100000 01
 printf '\n演示环境就绪：库 %s，API %s。接着按 README 的顺序跑分段。\n' "$db" "$API_BASE"

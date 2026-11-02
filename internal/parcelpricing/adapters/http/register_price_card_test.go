@@ -118,6 +118,8 @@ func TestRegisterPriceCardEndpointTranscribesAnswersVerbatim(t *testing.T) {
 		{application.PriceCardRegistrationConflict, http.StatusOK, "CONTENT_CONFLICT"},
 		{application.PriceCardRegistrationIncomparable, http.StatusOK, "CANONICALIZATION_DIFFERS"},
 		{application.PriceCardRegistrationNotAccepted, http.StatusOK, "NOT_ACCEPTED"},
+		// ADR-0352：部署开关关着时的较新规范化版本是业务答复，与治理答案同取 200，不是 4xx 也不是 500。
+		{application.PriceCardRegistrationNewerCanonicalizationNotEnabled, http.StatusOK, "NEWER_CANONICALIZATION_NOT_ENABLED"},
 	}
 	for _, testCase := range cases {
 		endpoint := pricinghttp.NewRegisterPriceCardEndpoint(

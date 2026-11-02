@@ -113,7 +113,11 @@ func subject(t *testing.T, reference string, grants ...string) domain.OperatorSu
 // validatedPriceCardDraft 是一份读通了的草稿：录入者 SYN-OPERATOR-01，方案与方向授权齐备。
 func validatedPriceCardDraft(t *testing.T) domain.PriceCardDraft {
 	t.Helper()
-	plan := minimalPlan(t)
+	return validatedPriceCardDraftOf(t, minimalPlan(t))
+}
+
+func validatedPriceCardDraftOf(t *testing.T, plan domain.PricingPlanVersion) domain.PriceCardDraft {
+	t.Helper()
 	source, err := domain.NewSourceFileIdentity(draftSourceName, draftSourceSHA)
 	if err != nil {
 		t.Fatalf("构造源文件身份：%v", err)
@@ -152,8 +156,13 @@ func problemPriceCardDraft(t *testing.T, plan domain.VersionReference) domain.Pr
 
 func approvedPriceCardDraft(t *testing.T) domain.PriceCardDraft {
 	t.Helper()
+	return approvedPriceCardDraftOf(t, minimalPlan(t))
+}
+
+func approvedPriceCardDraftOf(t *testing.T, plan domain.PricingPlanVersion) domain.PriceCardDraft {
+	t.Helper()
 	rule := configuredRule(t, true, "")
-	approved, err := validatedPriceCardDraft(t).Approve(subject(t, draftApprover), rule.rule, progressClockAt)
+	approved, err := validatedPriceCardDraftOf(t, plan).Approve(subject(t, draftApprover), rule.rule, progressClockAt)
 	if err != nil {
 		t.Fatalf("批准：%v", err)
 	}

@@ -102,7 +102,7 @@ func TestTheWiredPriceCardDraftApprovalAndPublicationRecordAgainstARealDatabase(
 	if err != nil {
 		t.Fatalf("装配批准编排：%v", err)
 	}
-	publication, err := buildPriceCardDraftPublication(db)
+	publication, err := buildPriceCardDraftPublication(db, false)
 	if err != nil {
 		t.Fatalf("装配发布编排：%v", err)
 	}

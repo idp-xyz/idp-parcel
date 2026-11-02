@@ -24,10 +24,15 @@
 //
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
+// 价卡的方案若记着基础版（PPC-5）之外的规范化版本（今天是 PPC-6），登记要部署开关：环境变量
+// IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION=true 才登，缺省或别的值一律答
+// NEWER_CANONICALIZATION_NOT_ENABLED、什么都不写（ADR-0352）。先把所有读价卡的进程升级到认这一版的构建，
+// 再在跑本工具的那一次设上它；与 parcel-api 的同名开关各读各的。
+//
 // 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 登记册
 // 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/须换人复核/复核职责规则未配置/
 // 复核者不合格/规则内容冲突/收尾不成立——原行未被顶替，人工续办）；3 = 未决（依赖故障，
-// 登记与否未知）。
+// 登记与否未知）；4 = 较新规范化版本的价卡未启用登记（部署开关没开，什么都没写；开关打开后原样重跑）。
 package main
 
 import (
@@ -39,6 +44,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,7 +63,17 @@ const (
 	exitUsage      = 1
 	exitGovernance = 2
 	exitUndecided  = 3
+	// exitNotEnabled 单列一个码而不并进 2：2 是登记册的治理答案、续办靠人裁；这一格什么都没问登记册，续办是运维开开关后
+	// 原样重跑，种子与批量脚本要能把两者分开处理。
+	exitNotEnabled = 4
 )
+
+// newerCanonicalizationEnv 与 parcel-api 的同名开关同一个名字、同一套语义（ADR-0352）：只有恰为 `true` 才开。
+const newerCanonicalizationEnv = "IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION"
+
+func newerCanonicalizationEnabled(getenv func(string) string) bool {
+	return strings.TrimSpace(getenv(newerCanonicalizationEnv)) == "true"
+}
 
 const (
 	kindPriceCard                = "price-card"
@@ -195,6 +211,7 @@ func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, 
 func main() {
 	kind := flag.String("kind", "", "登记种类：price-card、price-card-cut、price-card-retirement、reference-series、reference-series-review、reference-catalogue、reference-catalogue-review 或 reference-review-duty-rule")
 	file := flag.String("file", "", "登记快照 JSON 路径")
+	flag.Usage = usage
 	flag.Parse()
 
 	dsn := os.Getenv("IDP_PARCEL_POSTGRES_DSN")
@@ -224,7 +241,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造框架 DB：%v\n", err)
 		os.Exit(exitUndecided)
 	}
-	wired, err := assemble(db)
+	wired, err := assemble(db, newerCanonicalizationEnabled(os.Getenv))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(exitUndecided)
@@ -241,7 +258,28 @@ func main() {
 		message, code = execute(ctx, *kind, raw, wired.cards, wired.series, wired.reviewer, wired.catalogues, db.Transactor())
 	}
 	fmt.Println(message)
+	if code == exitNotEnabled {
+		fmt.Fprintf(os.Stderr, "这张价卡用了基础版之外的规范化版本，本次未登记。先确认所有读价卡的进程都已升级到认这一版的构建，再设 %s=true 重跑。\n",
+			newerCanonicalizationEnv)
+	}
 	os.Exit(code)
+}
+
+// usage 把环境变量与退出码也印进 -h：较新规范化版本的开关是唯一一个「答了却没写、开了就能原样重跑」的格，操作员在
+// 帮助里就该看得到怎么开。
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintln(out, "用法：parcel-pricing-register -kind <登记种类> -file <JSON 路径>")
+	flag.PrintDefaults()
+	fmt.Fprintf(out, `
+环境变量：
+  IDP_PARCEL_POSTGRES_DSN  登记册所在库的连接串（必填）
+  %s
+                           设为 true 才允许登记方案记着基础版（%s）之外规范化版本的价卡；缺省或别的值一律不登，
+                           答 NEWER_CANONICALIZATION_NOT_ENABLED。先把所有读价卡的进程升级到认这一版的构建，再设它。
+
+退出码：0 已登记或幂等重放；1 用法或输入不合法；2 登记册治理答案；3 未决；4 较新规范化版本未启用登记（什么都没写）
+`, newerCanonicalizationEnv, domain.CurrentCanonicalizationVersion())
 }
 
 // assembly 是本工具消费的各用例，装配与 main 分开，真库用例拿同一份装配走随产品发出的那条接线。
@@ -257,7 +295,7 @@ type assembly struct {
 // assemble 在一只 db 上装各用例。「参数已登记」交接口与登记册同一只 db：价卡登记与序列、目录复核通过的那一行与信封落在
 // execute 给的同一笔事务里，结算那一侧停着的评价请求等的就是这封信（ADR-0229 决定五）。序列与目录两只复核读同一本参考
 // 复核职责规则册，也是规则登记写的那一本。
-func assemble(db *bentopg.DB) (assembly, error) {
+func assemble(db *bentopg.DB, newerCanonicalization bool) (assembly, error) {
 	cards, err := adapter.NewPriceCards(db)
 	if err != nil {
 		return assembly{}, fmt.Errorf("构造价卡仓储：%w", err)
@@ -301,7 +339,9 @@ func assemble(db *bentopg.DB) (assembly, error) {
 		return assembly{}, fmt.Errorf("构造规则登记用例：%w", err)
 	}
 	return assembly{
-		cards:  application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards, Registered: registered}),
+		cards: application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
+			Catalog: cards, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+		}),
 		series: application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
 		reviewer: application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
 			Versions: series, Reviews: reviews, DutyRules: dutyRules, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
@@ -465,6 +505,8 @@ func priceCardExitCode(outcome application.RegisterPriceCardOutcome) int {
 		return exitGovernance
 	case application.PriceCardRegistrationNotAccepted:
 		return exitUsage
+	case application.PriceCardRegistrationNewerCanonicalizationNotEnabled:
+		return exitNotEnabled
 	default:
 		return exitUndecided
 	}

@@ -44,6 +44,11 @@ func (double *priceCardCatalogDouble) LoadApplicable(
 
 func registrationFixture(t *testing.T) domain.PriceCardRegistration {
 	t.Helper()
+	return registrationFixtureOf(t, minimalPlan(t))
+}
+
+func registrationFixtureOf(t *testing.T, plan domain.PricingPlanVersion) domain.PriceCardRegistration {
+	t.Helper()
 	source, err := domain.NewSourceFileIdentity(
 		"SYN-PRC-CARD-260820.xlsx",
 		"9edaf27ef93004e00f73a65471897f2cf7064d5d4df05014934ef7ac5861d33d")
@@ -57,7 +62,7 @@ func registrationFixture(t *testing.T) domain.PriceCardRegistration {
 	}
 	registration, err := domain.NewPriceCardRegistration(
 		mustValue(t, domain.NewTenantID, "tenant-1"),
-		minimalPlan(t),
+		plan,
 		source,
 		grant,
 		"SYN-PRC-GOVERNANCE",

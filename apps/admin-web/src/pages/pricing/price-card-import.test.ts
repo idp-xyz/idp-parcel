@@ -160,6 +160,17 @@ test('发布交给了登记时，登记那一格的原名与中文接在发布�
   ok(!/登记：/.test(notApproved.text));
 });
 
+// Covers: ADR-0352——登记较新计价结构的部署开关没开时，发布答没落定，登记那一格说的是环境尚未允许、续办找运维，不是卡有错。
+test('部署开关没开时，发布的登记那一格说环境尚未允许登记，并指明先升级再请运维开开关', () => {
+  const note = draftActionNoteOf('publish', {
+    kind: 'outcome',
+    status: 200,
+    body: { outcome: 'PUBLICATION_NOT_LANDED', registration: 'NEWER_CANONICALIZATION_NOT_ENABLED' },
+  });
+  match(note.text, /；登记：NEWER_CANONICALIZATION_NOT_ENABLED —— 这张价卡用了较新的计价结构，当前环境尚未允许登记。/);
+  match(note.text, /升级到新版本，再请运维开启开关后重试/);
+});
+
 // Covers: 渠道那一格三态与故障各说各的；发布没形成答案时登记与否未知。
 test('渠道那一格与故障各说各的：未配置、需要登录、没有授予、未形成答案', () => {
   const unconfigured = draftActionNoteOf('approve', { kind: 'unconfigured' });
