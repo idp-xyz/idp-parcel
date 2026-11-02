@@ -9,8 +9,8 @@
 | accessidentity | 41 | 57 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
-| customscompliance | 146 | 144 | 28 | 50 | 10 | 23 |
-| networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
+| customscompliance | 147 | 147 | 28 | 50 | 10 | 23 |
+| networkrouting | 97 | 116 | 11 | 19 | 2 | 10 |
 | nodeoperations | 115 | 121 | 15 | 30 | 4 | 18 |
 | parcelpricing | 157 | 166 | 20 | 20 | 1 | 27 |
 | parcelshipment | 272 | 267 | 28 | 54 | 13 | 32 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 252 | 199 | 43 | 73 | 13 | 12 |
 | transportfulfillment | 307 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1784 | 1805 | 240 | 403 | 69 | 245 |
+| **合计** | 1786 | 1811 | 240 | 403 | 69 | 245 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 271、测试 442。
 
@@ -80,14 +80,14 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：12 个模块共 357 份 SQL
+## 迁移：12 个模块共 359 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 36 |
 | collection_remittance | 4 |
-| customs_compliance | 30 |
-| network_routing | 32 |
+| customs_compliance | 31 |
+| network_routing | 33 |
 | node_operations | 23 |
 | parcel_pricing | 14 |
 | parcel_shipment | 34 |
