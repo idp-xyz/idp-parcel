@@ -4,6 +4,8 @@ import { formatInstant } from '../catalogue-view';
 import {
   deliveryScopeListPathOf,
   deliveryScopeReadProblemNote,
+  documentNumberCellOf,
+  documentNumberDetailOf,
   localDayBoundsOf,
   preAdviceFilterKeys,
   preAdviceRowOf,
@@ -55,6 +57,15 @@ test('列表路径：只带填了的格；节点去两端空白；日子换成�
     deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '2026-10-20' }),
     `/node-operations-delivery-pre-advices?expectedArrivalFrom=${encodeURIComponent(bounds.from)}&expectedArrivalUntil=${encodeURIComponent(bounds.until)}`,
   );
+  // 单据号交服务端逐字找：去两端空白，只填空格即不按单据号筛。
+  equal(
+    deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '', documentNumber: ' PA-20261102-00045 ' }),
+    '/node-operations-delivery-pre-advices?documentNumber=PA-20261102-00045',
+  );
+  equal(
+    deliveryScopeListPathOf('/node-operations-delivery-handover-notes', handoverNoteFilterKeys, { node: '', day: '', documentNumber: '  ' }),
+    '/node-operations-delivery-handover-notes',
+  );
   // 认不出的日子不发半截条件：宁可不筛，也不把「坏日子」读成「这一日」。
   equal(deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '2026-02-30' }), null);
 });
@@ -64,6 +75,7 @@ test('预报行：撤回与否、号码数、交付方线索缺席各写各的�
     key: 'pre-advice:SYN-PREADV-PSXM13-1',
     preAdviceId: 'SYN-PREADV-PSXM13-1',
     values: {
+      documentNumber: 'SYN-PREADV-PSXM13-1',
       preAdviceId: 'SYN-PREADV-PSXM13-1',
       customerAccount: 'SYN-ACCOUNT-01',
       node: 'SYN-NODE-PSXM13',
@@ -85,4 +97,19 @@ test('读口问题码：看不见、坏筛选与没形成答案各有一句', ()
   ok(deliveryScopeReadProblemNote('MALFORMED_REQUEST').includes('筛选'));
   ok(deliveryScopeReadProblemNote('NO_ANSWER_FORMED').includes('重试'));
   ok(deliveryScopeReadProblemNote('SOMETHING_NEW').includes('SOMETHING_NEW'));
+});
+
+// ADR-0355 决定十一：主列有单据号显单据号，没有的照旧显内部标识；技术详情按单据上记下的原因分开说「上线前开立」与「单据编号时区未配置」，
+// 不一律写成前者。
+test('单据号：主列有号显号、没号显内部标识；技术详情两种无号原因分开说', () => {
+  const numbered = preAdvice({ documentNumber: 'PA-20261102-00045' });
+  equal(preAdviceRowOf(numbered).values.documentNumber, 'PA-20261102-00045');
+  equal(preAdviceRowOf(numbered).values.preAdviceId, 'SYN-PREADV-PSXM13-1');
+  equal(documentNumberCellOf({ documentNumberAbsence: 'ISSUED_BEFORE_DOCUMENT_NUMBERING' }, 'SYN-PREADV-OLD'), 'SYN-PREADV-OLD');
+
+  equal(documentNumberDetailOf(numbered), 'PA-20261102-00045');
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'ISSUED_BEFORE_DOCUMENT_NUMBERING' }), '上线前开立，无单据号');
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }), '开立时单据编号时区未配置，无单据号');
+  equal(documentNumberDetailOf({ documentNumberAbsence: 'SOMETHING_NEW' }), '无单据号（SOMETHING_NEW）');
+  equal(documentNumberDetailOf({}), undefined);
 });

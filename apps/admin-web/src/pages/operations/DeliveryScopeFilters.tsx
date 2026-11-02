@@ -5,23 +5,32 @@ import type { ApiResult } from '../catalogue-api';
 import { deliveryScopeReadProblemNote, type DeliveryScopeListFilter } from './delivery-pre-advice';
 
 /**
- * 送站预报区与送站交接单区共用的筛选条：区切换的 chip、节点与日子两格。日子用浏览器的日期控件，换成哪两个瞬间在 delivery-pre-advice 的
- * localDayBoundsOf——一日按看的人所在的时区起算。
+ * 送站预报区与送站交接单区共用的筛选条：区切换的 chip、单据号、节点与日子三格。日子用浏览器的日期控件，换成哪两个瞬间在 delivery-pre-advice
+ * 的 localDayBoundsOf——一日按看的人所在的时区起算。单据号交服务端逐字找，不是在这一页里搜。
  */
 export function DeliveryScopeFilters({
   chips,
   filter,
   dayLabel,
+  numberLabel,
   onChange,
 }: {
   chips?: ReactNode;
   filter: DeliveryScopeListFilter;
   dayLabel: string;
+  numberLabel: string;
   onChange: (filter: DeliveryScopeListFilter) => void;
 }) {
   return (
     <>
       {chips}
+      <Input
+        value={filter.documentNumber ?? ''}
+        className="h-8 w-[200px] font-mono text-[12px]"
+        placeholder={`${numberLabel}（逐字，空即不限）`}
+        aria-label={numberLabel}
+        onChange={(event) => onChange({ ...filter, documentNumber: event.target.value })}
+      />
       <Input
         value={filter.node}
         className="h-8 w-[200px] font-mono text-[12px]"

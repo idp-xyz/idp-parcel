@@ -15,6 +15,7 @@ import type {
   HandoverMemberRecord,
 } from './delivery-scope-api';
 import { labelOf } from './presentation';
+import { documentNumberCellOf } from './delivery-pre-advice';
 
 /** 绑定结论的封闭词表（domain HandoverBindingConclusion）；没有结论的写「待确认」，那是 UC-NO-006 未决结束的原词，不是领域里的第三个结论。 */
 export const bindingConclusionLabels: Record<string, string> = {
@@ -72,6 +73,7 @@ export function handoverNoteRowOf(record: DeliveryHandoverNoteRecord): HandoverN
     key: `handover-note:${record.noteId}`,
     noteId: record.noteId,
     values: {
+      documentNumber: documentNumberCellOf(record, record.noteId),
       noteId: record.noteId,
       node: record.node,
       deliveringParty: record.deliveringParty,
