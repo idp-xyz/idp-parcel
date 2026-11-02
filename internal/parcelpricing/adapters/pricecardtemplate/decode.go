@@ -202,6 +202,8 @@ type treeNode struct {
 	parent   string
 	rec      record
 	children []*treeNode
+	// tooDeep：节点在树里超过 maxTreeDepth 层，问题已在 readForest 报过；构造走到它即停，它以下的节点不再看。
+	tooDeep bool
 }
 
 type forest struct {
@@ -941,7 +943,51 @@ func (t *translation) readForest(name string) forest {
 			d.at(node.rec.get("parentId"), ports.TemplateTreeInvalid, "节点 %s 的祖先链成环", node.id)
 		}
 	}
+	t.markTooDeep(&trees)
 	return trees
+}
+
+// maxTreeDepth 是条件树与计算树的层数上限（根是第 1 层），产品策略（ADR-0146），不是租户取值。
+//
+// 为什么要有：领域的组合条件在构造时把整棵子树校验一遍，一条长链从叶子往上逐层构造，代价是层数的平方——十万节点的单链读取
+// 要近三分钟；而且层数过了约五千，登记快照的 JSON 嵌套超过 encoding/json 的上限，登记下去的卡读不回来。在进领域构造之前按层数
+// 拦住，平方那一段就跑不起来：上限以内，校验代价不超过节点数乘上限。
+//
+// 为什么取 32：真实价卡的条件是「若干判定的任一 / 全部」再套一两层，如「（分区为 A 或 B）且（实重超过 30 KG 或最长边超过
+// 120 CM）」是三层；承运商条款逐层照抄也很少过五层。计算树领域只容两层（取较大值不套取较大值）。32 对条件树是常见深度的六倍
+// 以上，对计算树只是统一的结构门，两层的语义门照旧由领域构造报。
+const maxTreeDepth = 32
+
+// markTooDeep 从各个根往下按层走，第 maxTreeDepth+1 层的节点各报一条树结构问题并标上 tooDeep，不再往下走。每个节点至多
+// 走一次（一个节点只有一个父节点；成环的节点从根走不到），代价是节点数。问题落在该节点的 parentId 格：要改的是把它挂到
+// 哪里。
+func (t *translation) markTooDeep(trees *forest) {
+	tree := "条件树"
+	if trees.sheet == sheetCalculations {
+		tree = "计算树"
+	}
+	for _, root := range trees.order {
+		if root.parent != "" {
+			continue
+		}
+		level := []*treeNode{root}
+		for depth := 1; len(level) > 0; depth++ {
+			if depth > maxTreeDepth {
+				for _, node := range level {
+					node.tooDeep = true
+					t.d.at(node.rec.get("parentId"), ports.TemplateTreeInvalid,
+						"%s最多 %d 层（根是第 1 层），节点 %s 已在第 %d 层；把这一支改浅，例如把同一种组合的连续几层并成一层",
+						tree, maxTreeDepth, node.id, depth)
+				}
+				break
+			}
+			var next []*treeNode
+			for _, node := range level {
+				next = append(next, node.children...)
+			}
+			level = next
+		}
+	}
 }
 
 // loopingNodes 答哪些节点的祖先链成环：沿父节点一路走会回到走过的节点（环上的与通到环里去的）都算。逐个节点各走一遍祖先链是
@@ -1003,6 +1049,9 @@ func (t *translation) conditionRoot(f field) (domain.TriggerCondition, bool) {
 }
 
 func (t *translation) condition(node *treeNode) (domain.TriggerCondition, bool) {
+	if node.tooDeep {
+		return domain.TriggerCondition{}, false
+	}
 	if built, done := t.conditionValues[node.id]; done {
 		return built.value, built.ok
 	}
@@ -1177,6 +1226,9 @@ func (t *translation) calculationRoot(f field) (domain.SurchargeCalculation, boo
 }
 
 func (t *translation) calculation(node *treeNode) (domain.SurchargeCalculation, bool) {
+	if node.tooDeep {
+		return domain.SurchargeCalculation{}, false
+	}
 	if built, done := t.calculationValues[node.id]; done {
 		return built.value, built.ok
 	}
