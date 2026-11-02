@@ -25,7 +25,7 @@ export function ModuleChips({
 }) {
   if (moduleIds.length === 0) return null;
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="按模块筛选">
+    <div className="flex items-center gap-1" role="group" aria-label="按页面筛选">
       <Button
         type="button"
         size="sm"
