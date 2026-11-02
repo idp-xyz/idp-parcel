@@ -22,6 +22,8 @@ import {
   type SignalEpisodeRecord,
 } from './case-api';
 import { handlerLabel } from './case-presentation';
+import { caseNumberName } from './document-number';
+import { DocumentNumberCell } from './DocumentNumberCell';
 import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
 import { countByStatus, dispositionStatus, episodeStatus, sortRowsBy, type SortAccessor } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
@@ -226,17 +228,9 @@ const requestSort: Record<string, SortAccessor<DispositionRequestRecord>> = {
   sent: { value: (row) => row.sentAt, instant: true },
 };
 
-/** 处置请求所属的案件：有案件号显案件号；案件没有号（上线前开立、时区未配置）照旧显案件内部标识，次要样式。 */
+/** 处置请求所属的案件：有案件号显案件号；案件没有号照旧显案件内部标识。 */
 function caseReference(request: DispositionRequestRecord) {
-  return request.caseDocumentNumber ? (
-    <span className="truncate font-mono text-idpxyz-textBright" title={request.caseDocumentNumber}>
-      {request.caseDocumentNumber}
-    </span>
-  ) : (
-    <span className="truncate font-mono text-[12px] text-idpxyz-breadcrumb" title={`${request.caseId}（案件无单据号）`}>
-      {request.caseId}
-    </span>
-  );
+  return <DocumentNumberCell documentNumber={request.caseDocumentNumber} internal={request.caseId} />;
 }
 
 const requestColumns: WorkbenchColumn<DispositionRequestRecord>[] = [
@@ -245,7 +239,7 @@ const requestColumns: WorkbenchColumn<DispositionRequestRecord>[] = [
     header: '处置',
     render: (row) => <span className="truncate font-medium text-idpxyz-textBright">{labelFor(row.action, actionScope)}</span>,
   },
-  { key: 'case', header: objectNouns.exceptionCaseNumber, render: caseReference },
+  { key: 'case', header: caseNumberName, render: caseReference },
   { key: 'handler', header: '交给', render: (row) => handlerLabel(row.targetContext) },
   { key: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={dispositionStatus(row)} /> },
   {
@@ -274,7 +268,7 @@ function RequestDetail({ request, onClose }: { request: DispositionRequestRecord
       status={dispositionStatus(request)}
       subtitle={`交给${handlerLabel(request.targetContext)} · 发出于 ${formatInstant(request.sentAt)}`}
       facts={[
-        { label: objectNouns.exceptionCaseNumber, value: caseReference(request) },
+        { label: caseNumberName, value: caseReference(request) },
         { label: '交给', value: handlerLabel(request.targetContext) },
         { label: '第几版', value: `第 ${request.intentVersion} 版` },
         { label: '对方答复时间', value: request.judgedAt ? formatInstant(request.judgedAt) : '还没有答复' },

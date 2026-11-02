@@ -156,6 +156,7 @@ type raiseFixture struct {
 	identities  *episodeIdentityDouble
 	cases       *caseIdentityDouble
 	caseNumbers *documentNumberDouble
+	collisions  *collisionBookDouble
 	downstream  *triageDownstreamDouble
 }
 
@@ -176,6 +177,7 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 		identities:  &episodeIdentityDouble{},
 		cases:       &caseIdentityDouble{},
 		caseNumbers: newDocumentNumbers("EX-20260810"),
+		collisions:  newCollisionBook(),
 		downstream:  &triageDownstreamDouble{},
 	}
 	fixture.handler = application.NewRaiseSignalHandler(application.RaiseSignalDeps{
@@ -184,6 +186,7 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 		Identities:  fixture.identities,
 		Cases:       fixture.cases,
 		CaseNumbers: fixture.caseNumbers,
+		Collisions:  fixture.collisions,
 		Downstream:  fixture.downstream,
 		Clock:       fixedClock{at: signalHitAt.Add(time.Minute)},
 	})

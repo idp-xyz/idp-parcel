@@ -97,13 +97,13 @@ type claimResponse struct {
 
 // claimReceipt 的 documentNumber 是记录提交时取得的索赔单据号（ADR-0355，新增字段，不改既有字段与语义——ADR-0140）：
 // 客服据它与客户沟通；batch 与 item 是客户自己的批次号与项标识，照旧回显。没有单据号时 documentNumber 缺席、
-// numberlessReason 说为什么（上线前受理的索赔重放，或记录时租户的单据编号时区未配置），不答空串。
+// documentNumberAbsence 说为什么（上线前受理的索赔重放，或记录时租户的单据编号时区未配置），不答空串。
 type claimReceipt struct {
-	Batch            string `json:"batch"`
-	Item             string `json:"item"`
-	DocumentNumber   string `json:"documentNumber,omitempty"`
-	NumberlessReason string `json:"numberlessReason,omitempty"`
-	SubmittedAt      string `json:"submittedAt"`
+	Batch                 string `json:"batch"`
+	Item                  string `json:"item"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	SubmittedAt           string `json:"submittedAt"`
 }
 
 func writeClaimOutcome(response http.ResponseWriter, request *http.Request, result application.HandleClaimResult) {
@@ -131,7 +131,7 @@ func writeClaimOutcome(response http.ResponseWriter, request *http.Request, resu
 		if numbered {
 			body.Claim.DocumentNumber = number
 		} else {
-			body.Claim.NumberlessReason = string(claim.DocumentNumber().NumberlessReason())
+			body.Claim.DocumentNumberAbsence = string(claim.DocumentNumber().Absence())
 		}
 	}
 

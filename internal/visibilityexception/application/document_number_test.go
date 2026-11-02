@@ -69,27 +69,44 @@ func TestACaseOpenedWithoutANumberingTimeZoneIsEstablishedWithoutANumber(t *test
 		t.Fatalf("outcome = %q case = %v；时区未配置不该挡住建案", result.Outcome(), present)
 	}
 	if _, numbered := established.DocumentNumber().Number(); numbered ||
-		established.DocumentNumber().NumberlessReason() != domain.NumberingTimeZoneNotConfigured {
-		t.Fatalf("无号原因 = %q", established.DocumentNumber().NumberlessReason())
+		established.DocumentNumber().Absence() != domain.NumberingTimeZoneNotConfigured {
+		t.Fatalf("无号原因 = %q", established.DocumentNumber().Absence())
 	}
 }
 
-// Covers: AT-VE-228（编排半边）、ADR-0355 决定八——案件单据号撞号：这一轮发作期、结论与案件都不落、不交分诊意图，答未决并指名「案件单据号撞号」；
-// 取号端口出错则上抛，不译成业务答案。
-func TestACaseNumberCollisionLandsNothingAndAnIssuerFailureIsRaised(t *testing.T) {
+// Covers: AT-VE-228（编排半边）、ADR-0355 决定八——案件单据号撞号：这一轮发作期、结论与案件都不落、不交分诊意图，答业务答案
+// 「案件单据号撞号」（不是未决），那一次命中连同撞上的格式记进案件撞号册；记不下才答未决；取号端口出错上抛，不译成业务答案。
+func TestACaseNumberCollisionLandsNothingButRecordsTheHit(t *testing.T) {
 	fixture := newRaiseFixture(t)
 	fixture.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	fixture.caseNumbers.number = ""
+	command := raiseCommand(t, signalHitAt)
 
-	result, err := fixture.handler.Handle(context.Background(), raiseCommand(t, signalHitAt))
+	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if result.Outcome() != application.RaiseSignalUndecided || result.UndecidedReason() != application.CaseNumberingRuleCollision ||
-		result.UndecidedReason().String() != "CASE_NUMBERING_RULE_COLLISION" {
-		t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+	if result.Outcome() != application.CaseNumberingCollided || result.Outcome().String() != "CASE_NUMBERING_RULE_COLLISION" {
+		t.Fatalf("outcome = %q", result.Outcome())
 	}
 	if fixture.episodes.raisedSaves != 0 || len(fixture.downstream.intents) != 0 {
 		t.Fatal("撞号那一轮落了记录或交了意图")
+	}
+	if len(fixture.collisions.recorded) != 1 {
+		t.Fatalf("撞号册记了 %d 条", len(fixture.collisions.recorded))
+	}
+	recorded := fixture.collisions.recorded[0]
+	if recorded.Tenant != command.TenantID || recorded.Hit.Parcel != command.Parcel || recorded.Hit.Cause != command.Cause ||
+		!recorded.Hit.At.Equal(command.HitAt) || len(recorded.Hit.Basis) != 1 || recorded.At.IsZero() {
+		t.Fatalf("记下的命中走样：%+v", recorded)
+	}
+
+	unrecorded := newRaiseFixture(t)
+	unrecorded.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	unrecorded.collisions.recordErr = errors.New("collision book unavailable")
+	if result, err := unrecorded.handler.Handle(context.Background(), raiseCommand(t, signalHitAt)); err != nil ||
+		result.Outcome() != application.RaiseSignalUndecided || result.UndecidedReason() != application.SignalEpisodeStoreUnavailable {
+		t.Fatalf("撞号册记不下：%v %q", err, result.Outcome())
 	}
 
 	failing := newRaiseFixture(t)
@@ -97,7 +114,7 @@ func TestACaseNumberCollisionLandsNothingAndAnIssuerFailureIsRaised(t *testing.T
 	if _, err := failing.handler.Handle(context.Background(), raiseCommand(t, signalHitAt)); err == nil {
 		t.Fatal("取号出错被吞成了业务答案")
 	}
-	if failing.episodes.raisedSaves != 0 {
+	if failing.episodes.raisedSaves != 0 || len(failing.collisions.recorded) != 0 {
 		t.Fatal("取号出错仍落了记录")
 	}
 
@@ -105,6 +122,125 @@ func TestACaseNumberCollisionLandsNothingAndAnIssuerFailureIsRaised(t *testing.T
 	odd.caseNumbers.outcome = ports.DocumentNumberIssueOutcomeInvalid
 	if _, err := odd.handler.Handle(context.Background(), raiseCommand(t, signalHitAt)); !errors.Is(err, application.ErrUnexpectedDocumentNumberIssue) {
 		t.Fatalf("封闭集合外的取号答案没有上抛：%v", err)
+	}
+}
+
+// Covers: AT-VE-228（编排半边）——出发门禁阻断那一路不丢撞号原因：答单独一格「案件单据号撞号」（不折进搁置），带撞上的格式；
+// 冲突信号那一路记为单独的去向，派生照常。
+func TestBothSignalRoutesKeepTheCaseNumberingCollisionAsItsOwnAnswer(t *testing.T) {
+	gate, _, raise := newDepartureGateSignalFixture(t)
+	raise.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	raise.caseNumbers.number = ""
+	raise.caseNumbers.template = "SYN-{seq:5}"
+	result, err := gate.Handle(context.Background(), departureGateSignalCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.DepartureGateSignalCaseNumberingCollided || result.CollidedTemplate() != "SYN-{seq:5}" ||
+		result.Outcome().String() != "CASE_NUMBERING_RULE_COLLISION" {
+		t.Fatalf("outcome = %q template = %q", result.Outcome(), result.CollidedTemplate())
+	}
+	if len(raise.collisions.recorded) != 1 {
+		t.Fatal("出发门禁那一路撞号没记进撞号册")
+	}
+
+	derive := newDeriveFixture(t)
+	derive.signals.triage.answer = ports.TriageAnswer{
+		Outcome: domain.AutoEstablishCase,
+		Rule:    mustValue(t, domain.NewSignalRuleVersionReference, "triage-rules/v2"),
+		Team:    mustValue(t, domain.NewResponsibleTeamReference, "team/exception-ops"),
+	}
+	derive.signals.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	forkTwice(t, derive)
+	forked, err := derive.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2b", "handover/v1"))
+	if err != nil {
+		t.Fatalf("right successor handle: %v", err)
+	}
+	conflicts := forked.Conflicts()
+	if forked.Outcome() != application.ProjectionDerived || len(conflicts) != 1 ||
+		conflicts[0].Disposition() != application.ConflictSignalCaseNumberingCollided ||
+		conflicts[0].Disposition().String() != "CASE_NUMBERING_RULE_COLLISION" {
+		t.Fatalf("outcome = %q conflicts = %+v", forked.Outcome(), conflicts)
+	}
+	if len(derive.signals.collisions.recorded) != 1 {
+		t.Fatal("冲突信号那一路撞号没留痕")
+	}
+}
+
+// signalRaiserDouble 记下重驱交来的分诊命令，答错误。
+type signalRaiserDouble struct {
+	err      error
+	commands []application.RaiseSignalCommand
+}
+
+func (double *signalRaiserDouble) Handle(_ context.Context, command application.RaiseSignalCommand) (application.RaiseSignalResult, error) {
+	double.commands = append(double.commands, command)
+	return application.RaiseSignalResult{}, double.err
+}
+
+// Covers: AT-VE-228（重驱半边）——撞号册上到期的命中按原样再交分诊：仍撞就推后一个重驱间隔、留在册上；走通了（建案，或
+// 这回不建案，或这一原因已有活跃发作期）就销掉；分诊停在依赖上答未决错误、册上原样留着。
+func TestTheRedriveRetriesACollidedHitAsItWasRecorded(t *testing.T) {
+	ctx := context.Background()
+	raise := newRaiseFixture(t)
+	raise.caseNumbers.outcome = ports.DocumentNumberingRuleCollision
+	command := raiseCommand(t, signalHitAt)
+	if _, err := raise.handler.Handle(ctx, command); err != nil {
+		t.Fatal(err)
+	}
+	book := raise.collisions
+	clock := fixedClock{at: signalHitAt.Add(time.Hour)}
+	redrive, err := application.NewCaseNumberingRedrive(book, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	due, err := redrive.Due(ctx, 10)
+	if err != nil || len(due) != 1 {
+		t.Fatalf("到期 %d 件 %v，want 撞号那一刻就到期的一件", len(due), err)
+	}
+
+	// 格式没换：真编排又撞，推后一个间隔。
+	outcome, err := redrive.Redrive(ctx, raise.handler, due[0])
+	if err != nil || outcome != application.CaseNumberingStillColliding {
+		t.Fatalf("仍撞：%v %q", err, outcome)
+	}
+	if next := book.next[due[0].Key()]; !next.Equal(clock.at.Add(application.CaseNumberingRedriveInterval)) {
+		t.Fatalf("推后到 %v", next)
+	}
+	if again, _ := redrive.Due(ctx, 10); len(again) != 0 {
+		t.Fatal("推后之后仍算到期")
+	}
+
+	// 换了格式：同一只真编排这回取到号，建案、销账；重建的命令就是当初那一次命中。
+	raise.caseNumbers.outcome = ports.DocumentNumberAssigned
+	outcome, err = redrive.Redrive(ctx, raise.handler, due[0])
+	if err != nil || outcome != application.CaseNumberingRedriven || len(raise.episodes.cases) != 1 {
+		t.Fatalf("换格式后：%v %q 案件 %d", err, outcome, len(raise.episodes.cases))
+	}
+	if len(book.resolved) != 1 || len(book.rows) != 0 {
+		t.Fatal("建成之后撞号册上那一行没销掉")
+	}
+
+	// 分诊停在依赖上：答未决错误，册上那一行原样留着（调用方回滚这一笔）。
+	stalled := newRaiseFixture(t)
+	stalled.episodes.findErr = errors.New("episode store unavailable")
+	book.rows[due[0].Key()] = due[0]
+	if _, err := redrive.Redrive(ctx, stalled.handler, due[0]); !errors.Is(err, application.ErrCaseNumberingRedriveUndecided) {
+		t.Fatalf("分诊未决时应答未决错误：%v", err)
+	}
+	if _, present := book.rows[due[0].Key()]; !present {
+		t.Fatal("未决那一回把册上那一行销掉了")
+	}
+
+	// 交给分诊的就是当初那一次命中。
+	recorder := &signalRaiserDouble{err: errors.New("stop here")}
+	if _, err := redrive.Redrive(ctx, recorder, due[0]); err == nil {
+		t.Fatal("分诊报错被吞了")
+	}
+	if got := recorder.commands[0]; got.Cause != command.Cause || !got.HitAt.Equal(command.HitAt) || got.TenantID != command.TenantID ||
+		got.Rule != command.Rule || got.Confidence != command.Confidence || len(got.Basis) != len(command.Basis) {
+		t.Fatalf("重驱交的命令不是当初那一次命中：%+v", got)
 	}
 }
 
@@ -163,7 +299,7 @@ func TestAClaimWithoutATimeZoneIsRecordedAndACollisionRecordsNothing(t *testing.
 		t.Fatalf("receive: %v", err)
 	}
 	claim, _ := result.Claim()
-	if result.Outcome() != application.ClaimReceived || claim.DocumentNumber().NumberlessReason() != domain.NumberingTimeZoneNotConfigured {
+	if result.Outcome() != application.ClaimReceived || claim.DocumentNumber().Absence() != domain.NumberingTimeZoneNotConfigured {
 		t.Fatalf("outcome = %q", result.Outcome())
 	}
 

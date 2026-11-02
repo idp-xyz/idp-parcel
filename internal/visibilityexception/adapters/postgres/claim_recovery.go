@@ -57,7 +57,7 @@ func (repository *Claims) FindByBatchItem(
 		withdrawn                                           bool
 		missingMaterials, supplementScope, supplementNotice *string
 		supplementDeadline                                  *time.Time
-		documentNumber, numberlessReason                    string
+		documentNumber, documentNumberAbsence               string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT revision, customer_ref, applicant_ref, contract_ref, target_ref, kind_ref, submitted_at,
@@ -65,7 +65,7 @@ func (repository *Claims) FindByBatchItem(
 		        prior_conclusion, withdrawn, withdrawn_at,
 		        missing_materials_ref, supplement_scope_ref, supplement_notice_ref,
 		        supplement_deadline,
-		        COALESCE(document_number, ''), COALESCE(numberless_reason, '')
+		        COALESCE(document_number, ''), COALESCE(document_number_absence, '')
 		   FROM visibility_exception.claim_item
 		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
 		tenant.String(), batch.String(), item.String(),
@@ -73,7 +73,7 @@ func (repository *Claims) FindByBatchItem(
 		&screen, &screenBasis, &conclusion, &concludedAt, &reviewBy,
 		&priorConclusion, &withdrawn, &withdrawnAt,
 		&missingMaterials, &supplementScope, &supplementNotice, &supplementDeadline,
-		&documentNumber, &numberlessReason)
+		&documentNumber, &documentNumberAbsence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -91,7 +91,7 @@ func (repository *Claims) FindByBatchItem(
 	if snapshot.Customer, err = domain.NewCustomerAccountReference(customer); err != nil {
 		return nil, false, fmt.Errorf("rebuild claim item: %w", err)
 	}
-	if snapshot.DocumentNumber, err = domain.RehydrateDocumentNumber(documentNumber, numberlessReason); err != nil {
+	if snapshot.DocumentNumber, err = domain.RehydrateDocumentNumber(documentNumber, documentNumberAbsence); err != nil {
 		return nil, false, fmt.Errorf("rebuild claim item: %w", err)
 	}
 	// NULL 即申请人维接通前受理的存量行：快照留零值，重建门容缺，授权维如实答核不了。
@@ -276,7 +276,7 @@ func (repository *Claims) Save(
 			 submitted_at, screen, screen_basis, conclusion, concluded_at, review_by,
 			 prior_conclusion, withdrawn, withdrawn_at,
 			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline,
-			 revision, applicant_ref, document_number, numberless_reason)
+			 revision, applicant_ref, document_number, document_number_absence)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
 			 $21 + 1, $22, $23, $24)
 		 ON CONFLICT (tenant_id, batch_ref, item_id) DO UPDATE SET
@@ -317,7 +317,7 @@ func (repository *Claims) Save(
 		snapshot.Revision,
 		applicantRef,
 		nullIfBlank(documentNumber),
-		nullIfBlank(snapshot.DocumentNumber.StoredNumberlessReason()),
+		nullIfBlank(snapshot.DocumentNumber.StoredAbsence()),
 	)
 	if err != nil {
 		return ports.ClaimSaveOutcomeInvalid, fmt.Errorf("save claim item: %w", err)

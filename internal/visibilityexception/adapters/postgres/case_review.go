@@ -207,7 +207,7 @@ func (review *CaseReview) ListExceptionCases(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT case_id, COALESCE(document_number, ''), COALESCE(numberless_reason, ''),
+		`SELECT case_id, COALESCE(document_number, ''), COALESCE(document_number_absence, ''),
 		        root_parcel, impact_scope, responsible_team, phase,
 		        established_at, first_response, closed_at,
 		        COALESCE(conclusion, ''), COALESCE(merged_into, '')
@@ -226,20 +226,20 @@ func (review *CaseReview) ListExceptionCases(
 	list := make([]ports.ExceptionCaseCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row                      ports.ExceptionCaseCatalogueRow
-			number, numberlessReason string
-			firstResponse            *time.Time
-			closedAt                 *time.Time
+			row                           ports.ExceptionCaseCatalogueRow
+			number, documentNumberAbsence string
+			firstResponse                 *time.Time
+			closedAt                      *time.Time
 		)
 		if err := rows.Scan(
-			&row.CaseID, &number, &numberlessReason,
+			&row.CaseID, &number, &documentNumberAbsence,
 			&row.RootParcel, &row.ImpactScope, &row.ResponsibleTeam, &row.Phase,
 			&row.EstablishedAt, &firstResponse, &closedAt,
 			&row.Conclusion, &row.MergedInto,
 		); err != nil {
 			return nil, fmt.Errorf("list exception cases: %w", err)
 		}
-		if row.DocumentNumber, row.NumberlessReason, err = documentNumberColumns(number, numberlessReason); err != nil {
+		if row.DocumentNumber, row.DocumentNumberAbsence, err = documentNumberColumns(number, documentNumberAbsence); err != nil {
 			return nil, fmt.Errorf("list exception cases: case %s: %w", row.CaseID, err)
 		}
 		if firstResponse != nil {
@@ -343,7 +343,7 @@ func (review *CaseReview) ListClaimItems(
 
 	rows, err := querier.Query(ctx,
 		`SELECT i.batch_ref, i.item_id,
-		        COALESCE(i.document_number, ''), COALESCE(i.numberless_reason, ''),
+		        COALESCE(i.document_number, ''), COALESCE(i.document_number_absence, ''),
 		        i.customer_ref,
 		        COALESCE(i.applicant_ref, ''), i.contract_ref,
 		        i.target_ref, i.kind_ref, i.submitted_at, i.revision,
@@ -379,15 +379,15 @@ func (review *CaseReview) ListClaimItems(
 	list := make([]ports.ClaimItemCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row                      ports.ClaimItemCatalogueRow
-			number, numberlessReason string
-			supplementDeadline       *time.Time
-			concludedAt              *time.Time
-			reviewBy                 *time.Time
-			withdrawnAt              *time.Time
+			row                           ports.ClaimItemCatalogueRow
+			number, documentNumberAbsence string
+			supplementDeadline            *time.Time
+			concludedAt                   *time.Time
+			reviewBy                      *time.Time
+			withdrawnAt                   *time.Time
 		)
 		if err := rows.Scan(
-			&row.Batch, &row.ItemID, &number, &numberlessReason,
+			&row.Batch, &row.ItemID, &number, &documentNumberAbsence,
 			&row.Customer, &row.Applicant, &row.Contract,
 			&row.Target, &row.Kind, &row.SubmittedAt, &row.Revision,
 			&row.Screen, &row.ScreenBasis,
@@ -400,7 +400,7 @@ func (review *CaseReview) ListClaimItems(
 		); err != nil {
 			return nil, fmt.Errorf("list claim items: %w", err)
 		}
-		if row.DocumentNumber, row.NumberlessReason, err = documentNumberColumns(number, numberlessReason); err != nil {
+		if row.DocumentNumber, row.DocumentNumberAbsence, err = documentNumberColumns(number, documentNumberAbsence); err != nil {
 			return nil, fmt.Errorf("list claim items: %s/%s: %w", row.Batch, row.ItemID, err)
 		}
 		if supplementDeadline != nil {
@@ -530,11 +530,11 @@ func recoveryCell(milestone *string, attempt *int32, occurredAt *time.Time) *por
 
 // documentNumberColumns 把库里单据号两格转写成读行的两格：有号交号；没号交无号原因——两格都空的旧行说成「上线前开立」，
 // 这一层约定只在领域的 RehydrateDocumentNumber 一处，读面经它转写，不另写一份。
-func documentNumberColumns(number, numberlessReason string) (string, string, error) {
-	documentNumber, err := domain.RehydrateDocumentNumber(number, numberlessReason)
+func documentNumberColumns(number, documentNumberAbsence string) (string, string, error) {
+	documentNumber, err := domain.RehydrateDocumentNumber(number, documentNumberAbsence)
 	if err != nil {
 		return "", "", err
 	}
 	assigned, _ := documentNumber.Number()
-	return assigned, string(documentNumber.NumberlessReason()), nil
+	return assigned, string(documentNumber.Absence()), nil
 }

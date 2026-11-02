@@ -24,7 +24,7 @@ func TestADocumentNumberCellRebuildsItsThreeShapesAndRefusesTheRest(t *testing.T
 	if err != nil {
 		t.Fatalf("legacy: %v", err)
 	}
-	if _, numbered := legacy.Number(); numbered || legacy.NumberlessReason() != domain.IssuedBeforeNumbering || legacy.StoredNumberlessReason() != "" {
+	if _, numbered := legacy.Number(); numbered || legacy.Absence() != domain.IssuedBeforeNumbering || legacy.StoredAbsence() != "" {
 		t.Fatalf("两格都空应读成上线前开立、落库仍是空：%+v", legacy)
 	}
 
@@ -32,8 +32,8 @@ func TestADocumentNumberCellRebuildsItsThreeShapesAndRefusesTheRest(t *testing.T
 	if err != nil {
 		t.Fatalf("unconfigured: %v", err)
 	}
-	if unconfigured.NumberlessReason() != domain.NumberingTimeZoneNotConfigured ||
-		unconfigured.StoredNumberlessReason() != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" ||
+	if unconfigured.Absence() != domain.NumberingTimeZoneNotConfigured ||
+		unconfigured.StoredAbsence() != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" ||
 		domain.NumberlessForUnconfiguredTimeZone() != unconfigured {
 		t.Fatalf("时区未配置那一格读回不对：%+v", unconfigured)
 	}
@@ -42,7 +42,7 @@ func TestADocumentNumberCellRebuildsItsThreeShapesAndRefusesTheRest(t *testing.T
 	if err != nil {
 		t.Fatalf("assigned: %v", err)
 	}
-	if number, numbered := assigned.Number(); !numbered || number != "EX-20261102-0003" || assigned.NumberlessReason() != "" || assigned.StoredNumberlessReason() != "" {
+	if number, numbered := assigned.Number(); !numbered || number != "EX-20261102-0003" || assigned.Absence() != "" || assigned.StoredAbsence() != "" {
 		t.Fatalf("有号那一格读回不对：%+v", assigned)
 	}
 
@@ -98,7 +98,7 @@ func TestACaseIsEstablishedWithItsNumberAndKeepsItThroughItsLifecycle(t *testing
 	if number, numbered := main.DocumentNumber().Number(); !numbered || number != "EX-20260811-0001" || main.Snapshot().DocumentNumber != main.DocumentNumber() {
 		t.Fatalf("主案件的号变了：%+v", main.DocumentNumber())
 	}
-	if duplicate.DocumentNumber().NumberlessReason() != domain.NumberingTimeZoneNotConfigured {
+	if duplicate.DocumentNumber().Absence() != domain.NumberingTimeZoneNotConfigured {
 		t.Fatalf("被归并案件的无号原因变了：%+v", duplicate.DocumentNumber())
 	}
 }
@@ -132,8 +132,8 @@ func TestAClaimCarriesItsNumberNextToTheCustomersOwnIdentifiers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("时区未配置的索赔照常受理：%v", err)
 	}
-	if unnumbered.DocumentNumber().NumberlessReason() != domain.NumberingTimeZoneNotConfigured {
-		t.Fatalf("无号原因 = %q", unnumbered.DocumentNumber().NumberlessReason())
+	if unnumbered.DocumentNumber().Absence() != domain.NumberingTimeZoneNotConfigured {
+		t.Fatalf("无号原因 = %q", unnumbered.DocumentNumber().Absence())
 	}
 
 	snapshot := claim.Snapshot()
@@ -144,7 +144,7 @@ func TestAClaimCarriesItsNumberNextToTheCustomersOwnIdentifiers(t *testing.T) {
 	}
 	snapshot.DocumentNumber = domain.DocumentNumber{}
 	legacy, err := domain.RehydrateClaimItem(snapshot)
-	if err != nil || legacy.DocumentNumber().NumberlessReason() != domain.IssuedBeforeNumbering {
+	if err != nil || legacy.DocumentNumber().Absence() != domain.IssuedBeforeNumbering {
 		t.Fatalf("存量行重建不了或被补了号：%v", err)
 	}
 }

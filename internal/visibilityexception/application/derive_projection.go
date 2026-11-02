@@ -81,9 +81,10 @@ type DeriveProjectionCommand struct {
 	Fact     domain.AcceptedSourceFactSpec
 }
 
-// ConflictSignalDisposition 说明一处无法裁决的冲突在信号那一步落到了哪里。三格的恢复
+// ConflictSignalDisposition 说明一处无法裁决的冲突在信号那一步落到了哪里。各格的恢复
 // 动作各不相同：已进分诊什么都不必做；规则未配置等租户登记 `PAR-VIS-04`；被搁置的要
-// 重放本轮（规则视图调不通，或分诊那一侧本轮停在未决）。
+// 重放本轮（规则视图调不通，或分诊那一侧本轮停在未决）；案件单据号撞号的等租户换格式，
+// 由案件撞号册的重驱再分诊。
 type ConflictSignalDisposition uint8
 
 const (
@@ -91,6 +92,9 @@ const (
 	ConflictSignalRaised
 	ConflictSignalRuleNotConfigured
 	ConflictSignalDeferred
+	// ConflictSignalCaseNumberingCollided：分诊走向是自动建案、案件单据号撞号；命中已记进案件撞号册，由重驱等租户换格式再
+	// 分诊。与搁置分开：搁置留给重放，这一格重放改变不了，留痕在撞号册上。
+	ConflictSignalCaseNumberingCollided
 )
 
 func (disposition ConflictSignalDisposition) String() string {
@@ -101,6 +105,8 @@ func (disposition ConflictSignalDisposition) String() string {
 		return "SIGNAL_RULE_NOT_CONFIGURED"
 	case ConflictSignalDeferred:
 		return "SIGNAL_DEFERRED"
+	case ConflictSignalCaseNumberingCollided:
+		return "CASE_NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -385,6 +391,8 @@ func (handler *DeriveProjectionHandler) raiseConflict(
 	switch raised.Outcome() {
 	case SignalEpisodeOpened, SignalHitRecorded, SignalEpisodeReopened:
 		conflict.disposition = ConflictSignalRaised
+	case CaseNumberingCollided:
+		conflict.disposition = ConflictSignalCaseNumberingCollided
 	default:
 		// 分诊那一侧停在未决或未受理：信号形成了但没进去，留给重放。
 		conflict.disposition = ConflictSignalDeferred

@@ -100,13 +100,13 @@ func TestExceptionCaseRecordsListVerbatim(t *testing.T) {
 				MergedInto:      "case-9",
 			},
 			{
-				CaseID:           "case-2",
-				NumberlessReason: "ISSUED_BEFORE_NUMBERING",
-				RootParcel:       "parcel-2",
-				ImpactScope:      "BATCH",
-				ResponsibleTeam:  "ops-team-2",
-				Phase:            "AWAITING_RESPONSE",
-				EstablishedAt:    operationsBaseAt,
+				CaseID:                "case-2",
+				DocumentNumberAbsence: "ISSUED_BEFORE_NUMBERING",
+				RootParcel:            "parcel-2",
+				ImpactScope:           "BATCH",
+				ResponsibleTeam:       "ops-team-2",
+				Phase:                 "AWAITING_RESPONSE",
+				EstablishedAt:         operationsBaseAt,
 			},
 		},
 	}
@@ -118,20 +118,20 @@ func TestExceptionCaseRecordsListVerbatim(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Cases   []struct {
-			CaseID           string `json:"caseId"`
-			DocumentNumber   any    `json:"documentNumber"`
-			NumberlessReason any    `json:"numberlessReason"`
-			RootParcel       string `json:"rootParcel"`
-			ImpactScope      string `json:"impactScope"`
-			ResponsibleTeam  string `json:"responsibleTeam"`
-			Phase            string `json:"phase"`
-			EstablishedAt    string `json:"establishedAt"`
-			FirstResponse    any    `json:"firstResponse"`
-			ClosedAt         any    `json:"closedAt"`
-			Conclusion       any    `json:"conclusion"`
-			MergedInto       any    `json:"mergedInto"`
-			Severity         any    `json:"severity"`
-			Priority         any    `json:"priority"`
+			CaseID                string `json:"caseId"`
+			DocumentNumber        any    `json:"documentNumber"`
+			DocumentNumberAbsence any    `json:"documentNumberAbsence"`
+			RootParcel            string `json:"rootParcel"`
+			ImpactScope           string `json:"impactScope"`
+			ResponsibleTeam       string `json:"responsibleTeam"`
+			Phase                 string `json:"phase"`
+			EstablishedAt         string `json:"establishedAt"`
+			FirstResponse         any    `json:"firstResponse"`
+			ClosedAt              any    `json:"closedAt"`
+			Conclusion            any    `json:"conclusion"`
+			MergedInto            any    `json:"mergedInto"`
+			Severity              any    `json:"severity"`
+			Priority              any    `json:"priority"`
 		} `json:"cases"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -156,8 +156,8 @@ func TestExceptionCaseRecordsListVerbatim(t *testing.T) {
 		t.Fatalf("开立行不得带关闭键：%+v", open)
 	}
 	// 单据号：有号的行带号、不带无号原因；没号的行不答空串、不拿案件标识顶，只说为什么没号。
-	if closed.DocumentNumber != "EX-20260801-0001" || closed.NumberlessReason != nil ||
-		open.DocumentNumber != nil || open.NumberlessReason != "ISSUED_BEFORE_NUMBERING" {
+	if closed.DocumentNumber != "EX-20260801-0001" || closed.DocumentNumberAbsence != nil ||
+		open.DocumentNumber != nil || open.DocumentNumberAbsence != "ISSUED_BEFORE_NUMBERING" {
 		t.Fatalf("单据号两格走样：%+v / %+v", closed, open)
 	}
 	// 页面模板的严重度/优先级在存储上没有登记格：键结构上不存在，不是空值。

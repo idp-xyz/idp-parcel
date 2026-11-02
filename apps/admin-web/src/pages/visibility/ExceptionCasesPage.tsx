@@ -13,7 +13,8 @@ import { formatInstant } from '../moment';
 import { matchesSearch } from '../party/list-order';
 import { listExceptionCaseRecords, type ApiResult, type ExceptionCaseListResponseBody, type ExceptionCaseRecord } from './case-api';
 import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
-import { numberlessNote, primaryReference } from './document-number';
+import { absenceText, caseNumberName, primaryReference } from './document-number';
+import { DocumentNumberCell } from './DocumentNumberCell';
 import { codeStatus, countByStatus, sortRowsBy, type SortAccessor } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
 import { statusFilterParts } from './status-filter';
@@ -48,20 +49,9 @@ function conclusionText(record: ExceptionCaseRecord): string | undefined {
 const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
   {
     key: 'number',
-    header: objectNouns.exceptionCaseNumber,
+    header: caseNumberName,
     sortKey: 'number',
-    render: (row) => {
-      const reference = primaryReference(row.documentNumber, row.caseId, row.numberlessReason);
-      return reference.numbered ? (
-        <span className="truncate font-mono font-medium text-idpxyz-textBright" title={reference.text}>
-          {reference.text}
-        </span>
-      ) : (
-        <span className="truncate font-mono text-[12px] text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
-          {reference.text}
-        </span>
-      );
-    },
+    render: (row) => <DocumentNumberCell documentNumber={row.documentNumber} internal={row.caseId} absence={row.documentNumberAbsence} />,
   },
   {
     key: 'parcel',
@@ -106,7 +96,7 @@ const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
 
 function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose: () => void }) {
   const conclusion = conclusionText(record);
-  const reference = primaryReference(record.documentNumber, record.caseId, record.numberlessReason);
+  const reference = primaryReference(record.documentNumber, record.caseId, record.documentNumberAbsence);
   return (
     <ExceptionDetailPanel
       ariaLabel={`${objectNouns.exceptionCase} ${reference.text}`}
@@ -121,7 +111,7 @@ function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose:
         { label: '处理结果', value: conclusion ?? '未关闭' },
       ]}
       technical={[
-        { label: objectNouns.exceptionCaseNumber, value: record.documentNumber ?? numberlessNote(record.numberlessReason) },
+        { label: caseNumberName, value: record.documentNumber ?? absenceText(record.documentNumberAbsence) },
         { label: '案件内部标识', value: record.caseId },
         { label: '包裹标识', value: record.rootParcel },
         { label: '影响范围', value: record.impactScope },

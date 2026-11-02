@@ -223,18 +223,18 @@ func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Claim   struct {
-			Batch            string `json:"batch"`
-			Item             string `json:"item"`
-			DocumentNumber   string `json:"documentNumber"`
-			NumberlessReason string `json:"numberlessReason"`
-			SubmittedAt      string `json:"submittedAt"`
+			Batch                 string `json:"batch"`
+			Item                  string `json:"item"`
+			DocumentNumber        string `json:"documentNumber"`
+			DocumentNumberAbsence string `json:"documentNumberAbsence"`
+			SubmittedAt           string `json:"submittedAt"`
 		} `json:"claim"`
 	}
 	if err := json.Unmarshal(first.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if body.Outcome != "CLAIM_RECEIVED" || body.Claim.Batch != "claim-batch-9" || body.Claim.Item != "item-9" ||
-		body.Claim.DocumentNumber != "CLM-202608-00009" || body.Claim.NumberlessReason != "" {
+		body.Claim.DocumentNumber != "CLM-202608-00009" || body.Claim.DocumentNumberAbsence != "" {
 		t.Fatalf("body = %+v, want a CLAIM_RECEIVED receipt carrying the claim number", body)
 	}
 	if body.Claim.SubmittedAt == "" {
@@ -264,7 +264,7 @@ func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 }
 
 // Covers: AT-VE-230 HTTP 半边、ADR-0355 决定七、八经 HTTP 面——单据编号时区未配置时照常受理（201），回执不带 documentNumber（不答空串）、
-// numberlessReason 说为什么；撞号是已形成的业务答案：200 NUMBERING_RULE_COLLISION，不带回执。
+// documentNumberAbsence 说为什么；撞号是已形成的业务答案：200 NUMBERING_RULE_COLLISION，不带回执。
 func TestAClaimReceiptSaysWhyItHasNoNumberAndACollisionIsAFormedAnswer(t *testing.T) {
 	unnumbered := serveClaim(t, claimIntakeDouble{command: claimCommandOf(t)},
 		newClaimReceiverIssuing(newHTTPClaimStore(), ports.DocumentNumberIssue{Outcome: ports.DocumentNumberingTimeZoneNotConfigured}), http.MethodPost)
@@ -272,7 +272,7 @@ func TestAClaimReceiptSaysWhyItHasNoNumberAndACollisionIsAFormedAnswer(t *testin
 		t.Fatalf("status = %d, want 201", unnumbered.Code)
 	}
 	if strings.Contains(unnumbered.Body.String(), `"documentNumber"`) ||
-		!strings.Contains(unnumbered.Body.String(), `"numberlessReason":"NUMBERING_TIME_ZONE_NOT_CONFIGURED"`) {
+		!strings.Contains(unnumbered.Body.String(), `"documentNumberAbsence":"NUMBERING_TIME_ZONE_NOT_CONFIGURED"`) {
 		t.Fatalf("body = %s", unnumbered.Body.String())
 	}
 

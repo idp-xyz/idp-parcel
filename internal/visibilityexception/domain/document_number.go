@@ -9,16 +9,16 @@ import (
 // ErrInvalidDocumentNumber 表示单据号那一格立不起来：号是空白，或读回的无号原因不在封闭集合里，或号与无号原因同时在场。
 var ErrInvalidDocumentNumber = errors.New("visibility exception: invalid document number")
 
-// NumberlessReason 说一份单据为什么没有单据号（GLOSSARY「单据号」：没有单据号的单据记下是哪一种情形，事后都不补号）。
-type NumberlessReason string
+// DocumentNumberAbsence 说一份单据为什么没有单据号（GLOSSARY「单据号」：没有单据号的单据记下是哪一种情形，事后都不补号）。
+type DocumentNumberAbsence string
 
 const (
 	// IssuedBeforeNumbering：单据在本上下文开始取号之前就已开立（ADR-0355 决定三：不补号）。库里两格都空的旧行就是它，
 	// 不另落一个值——旧行没有被迁移改写过。
-	IssuedBeforeNumbering NumberlessReason = "ISSUED_BEFORE_NUMBERING"
+	IssuedBeforeNumbering DocumentNumberAbsence = "ISSUED_BEFORE_NUMBERING"
 	// NumberingTimeZoneNotConfigured：开立时租户没有生效的单据编号时区，单据照常开立、不带号（ADR-0355 决定七）。异常案件
 	// 与客户索赔项的开立方都没有业务时区，日期只能按租户的单据编号时区，这一格因此对这两类单据都可能出现。
-	NumberingTimeZoneNotConfigured NumberlessReason = "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
+	NumberingTimeZoneNotConfigured DocumentNumberAbsence = "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
 )
 
 // DocumentNumber 是一份单据上的单据号那一格：开立时取到的号，或者没有号以及为什么没有。
@@ -49,25 +49,25 @@ func NumberlessForUnconfiguredTimeZone() DocumentNumber {
 func RehydrateDocumentNumber(number, reason string) (DocumentNumber, error) {
 	switch {
 	case number != "" && reason != "":
-		return DocumentNumber{}, fmt.Errorf("%w: both a number and a numberless reason", ErrInvalidDocumentNumber)
+		return DocumentNumber{}, fmt.Errorf("%w: both a number and an absence", ErrInvalidDocumentNumber)
 	case number != "":
 		return NewDocumentNumber(number)
 	case reason == "":
 		return DocumentNumber{}, nil
-	case NumberlessReason(reason) == NumberingTimeZoneNotConfigured:
+	case DocumentNumberAbsence(reason) == NumberingTimeZoneNotConfigured:
 		return NumberlessForUnconfiguredTimeZone(), nil
 	default:
-		return DocumentNumber{}, fmt.Errorf("%w: numberless reason %q", ErrInvalidDocumentNumber, reason)
+		return DocumentNumber{}, fmt.Errorf("%w: document number absence %q", ErrInvalidDocumentNumber, reason)
 	}
 }
 
-// Number 交回单据号；第二个返回值为 false 时这份单据没有号，原因看 NumberlessReason。
+// Number 交回单据号；第二个返回值为 false 时这份单据没有号，原因看 Absence。
 func (documentNumber DocumentNumber) Number() (string, bool) {
 	return documentNumber.number, documentNumber.number != ""
 }
 
-// NumberlessReason 只在没有号时有意义；有号时交回空串。
-func (documentNumber DocumentNumber) NumberlessReason() NumberlessReason {
+// Absence 说这份单据为什么没有号；有号时交回空串。
+func (documentNumber DocumentNumber) Absence() DocumentNumberAbsence {
 	switch {
 	case documentNumber.number != "":
 		return ""
@@ -78,8 +78,8 @@ func (documentNumber DocumentNumber) NumberlessReason() NumberlessReason {
 	}
 }
 
-// StoredNumberlessReason 是落库的那一格：只有「单据编号时区未配置」落值，有号与上线前开立都落空。
-func (documentNumber DocumentNumber) StoredNumberlessReason() string {
+// StoredAbsence 是落库的那一格：只有「单据编号时区未配置」落值，有号与上线前开立都落空。
+func (documentNumber DocumentNumber) StoredAbsence() string {
 	if documentNumber.number == "" && documentNumber.timeZoneNotConfigured {
 		return string(NumberingTimeZoneNotConfigured)
 	}

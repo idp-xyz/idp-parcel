@@ -261,7 +261,7 @@ func (repository *SignalEpisodes) SaveRaised(
 			`INSERT INTO visibility_exception.exception_case
 				(tenant_id, case_id, root_parcel, impact_scope, responsible_team, phase,
 				 established_at, first_response, closed_at, conclusion, merged_into,
-				 document_number, numberless_reason)
+				 document_number, document_number_absence)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 			record.Tenant.String(),
 			exceptionCase.ID.String(),
@@ -275,10 +275,17 @@ func (repository *SignalEpisodes) SaveRaised(
 			nullIfBlank(exceptionCase.Conclusion),
 			nullIfBlank(exceptionCase.MergedInto.String()),
 			nullIfBlank(documentNumber),
-			nullIfBlank(exceptionCase.DocumentNumber.StoredNumberlessReason()),
+			nullIfBlank(exceptionCase.DocumentNumber.StoredAbsence()),
 		); err != nil {
 			return fmt.Errorf("save raised signal: case: %w", err)
 		}
+	}
+	// 这一原因有了发作期，案件撞号册上它那一行（若有）就算分诊过了：重驱建成的、或另一份命中赶在重驱之前走通的，一样销掉，
+	// 免得重驱再把同一次命中交进来、在新发作期上多记一次命中。
+	if err := resolveCaseNumberingCollision(ctx, executor, ports.CaseNumberingCollisionKey{
+		Tenant: record.Tenant, Parcel: record.Parcel, Kind: record.Kind, Cause: snapshot.Cause,
+	}); err != nil {
+		return fmt.Errorf("save raised signal: %w", err)
 	}
 	return nil
 }

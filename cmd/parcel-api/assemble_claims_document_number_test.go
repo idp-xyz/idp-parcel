@@ -98,7 +98,7 @@ func TestTheWiredClaimsIssueOneNumberPerRecordedClaimAndRollBackTheLosersNumber(
 		t.Fatalf("没登时区的租户：%v %q %q", err, unconfigured.Outcome(), numberOf(unconfigured))
 	}
 	claim, _ := unconfigured.Claim()
-	if claim.DocumentNumber().NumberlessReason() != visibilitydomain.NumberingTimeZoneNotConfigured {
-		t.Fatalf("无号原因 = %q", claim.DocumentNumber().NumberlessReason())
+	if claim.DocumentNumber().Absence() != visibilitydomain.NumberingTimeZoneNotConfigured {
+		t.Fatalf("无号原因 = %q", claim.DocumentNumber().Absence())
 	}
 }

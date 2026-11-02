@@ -115,9 +115,9 @@ export function listExceptionTriageRecords<Registry extends ExceptionTriageRegis
  */
 export interface ExceptionCaseRecord {
   caseId: string;
-  /** 案件的单据号（ADR-0355）；没有号时缺席，numberlessReason 说为什么（document-number.ts）。 */
+  /** 案件的单据号（ADR-0355）；没有号时缺席，documentNumberAbsence 说为什么（document-number.ts）。 */
   documentNumber?: string;
-  numberlessReason?: string;
+  documentNumberAbsence?: string;
   rootParcel: string;
   impactScope: string;
   responsibleTeam: string;
@@ -180,9 +180,9 @@ export interface ClaimItemRecord {
   /** batch 与 itemId 是客户自己的批次号与项标识（外部标识），单据号不取代它们。 */
   batch: string;
   itemId: string;
-  /** 索赔单据号（ADR-0355）；没有号时缺席，numberlessReason 说为什么。 */
+  /** 索赔单据号（ADR-0355）；没有号时缺席，documentNumberAbsence 说为什么。 */
   documentNumber?: string;
-  numberlessReason?: string;
+  documentNumberAbsence?: string;
   customer: string;
   applicant?: string;
   contract: string;

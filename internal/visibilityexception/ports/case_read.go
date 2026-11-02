@@ -100,21 +100,21 @@ type DispositionRequestCatalogueRow struct {
 // ——0008 刻意只落精简主生命周期，工作条件多一格就等于默许扩成互斥主状态；本行
 // 不带那几键，也不代填（票 06 Comments 记明）。
 //
-// DocumentNumber 是案件的单据号（ADR-0355）；没有号时为空串，NumberlessReason 说为什么（domain.NumberlessReason 的
-// 封闭两值：上线前开立、开立时单据编号时区未配置），有号时 NumberlessReason 为空串。
+// DocumentNumber 是案件的单据号（ADR-0355）；没有号时为空串，DocumentNumberAbsence 说为什么（domain.DocumentNumberAbsence 的
+// 封闭两值：上线前开立、开立时单据编号时区未配置），有号时 DocumentNumberAbsence 为空串。
 type ExceptionCaseCatalogueRow struct {
-	CaseID           string
-	DocumentNumber   string
-	NumberlessReason string
-	RootParcel       string
-	ImpactScope      string
-	ResponsibleTeam  string
-	Phase            string
-	EstablishedAt    time.Time
-	FirstResponse    *time.Time
-	ClosedAt         *time.Time
-	Conclusion       string
-	MergedInto       string
+	CaseID                string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	RootParcel            string
+	ImpactScope           string
+	ResponsibleTeam       string
+	Phase                 string
+	EstablishedAt         time.Time
+	FirstResponse         *time.Time
+	ClosedAt              *time.Time
+	Conclusion            string
+	MergedInto            string
 }
 
 // NotificationMilestoneNode 是通知过程的一个节点：封闭六值（GENERATED /
@@ -162,33 +162,33 @@ type CustomerNotificationCatalogueRow struct {
 // 索赔期限是合同侧口径），本行不带那一键（票 06 Comments 记明）。**没有金额键**是
 // 边界不是遗漏：赔付与追偿金额由 settlement-accounting 形成，本上下文只有索赔项本体。
 //
-// DocumentNumber 与 NumberlessReason 同 ExceptionCaseCatalogueRow。Batch 与 ItemID 是客户自己的批次号与项标识（外部
+// DocumentNumber 与 DocumentNumberAbsence 同 ExceptionCaseCatalogueRow。Batch 与 ItemID 是客户自己的批次号与项标识（外部
 // 标识），单据号不取代它们。
 type ClaimItemCatalogueRow struct {
-	Batch              string
-	ItemID             string
-	DocumentNumber     string
-	NumberlessReason   string
-	Customer           string
-	Applicant          string
-	Contract           string
-	Target             string
-	Kind               string
-	SubmittedAt        time.Time
-	Revision           int64
-	Screen             string
-	ScreenBasis        string
-	MissingMaterials   string
-	SupplementScope    string
-	SupplementNotice   string
-	SupplementDeadline *time.Time
-	DeadlineVersions   int64
-	Conclusion         string
-	ConcludedAt        *time.Time
-	ReviewBy           *time.Time
-	PriorConclusion    string
-	Withdrawn          bool
-	WithdrawnAt        *time.Time
+	Batch                 string
+	ItemID                string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	Customer              string
+	Applicant             string
+	Contract              string
+	Target                string
+	Kind                  string
+	SubmittedAt           time.Time
+	Revision              int64
+	Screen                string
+	ScreenBasis           string
+	MissingMaterials      string
+	SupplementScope       string
+	SupplementNotice      string
+	SupplementDeadline    *time.Time
+	DeadlineVersions      int64
+	Conclusion            string
+	ConcludedAt           *time.Time
+	ReviewBy              *time.Time
+	PriorConclusion       string
+	Withdrawn             bool
+	WithdrawnAt           *time.Time
 }
 
 // RecoveryActionCell 是追偿事项行上某一动作种类的最近过程节点：节点封闭七值

@@ -257,15 +257,15 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 				WithdrawnAt:        &withdrawnAt,
 			},
 			{
-				Batch:            "batch-2",
-				ItemID:           "item-2",
-				NumberlessReason: "NUMBERING_TIME_ZONE_NOT_CONFIGURED",
-				Customer:         "CUST-02",
-				Contract:         "CONTRACT-02",
-				Target:           "parcel-2",
-				Kind:             "LOSS",
-				SubmittedAt:      operationsBaseAt,
-				Revision:         1,
+				Batch:                 "batch-2",
+				ItemID:                "item-2",
+				DocumentNumberAbsence: "NUMBERING_TIME_ZONE_NOT_CONFIGURED",
+				Customer:              "CUST-02",
+				Contract:              "CONTRACT-02",
+				Target:                "parcel-2",
+				Kind:                  "LOSS",
+				SubmittedAt:           operationsBaseAt,
+				Revision:              1,
 			},
 		},
 	}
@@ -278,26 +278,26 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Items   []struct {
-			Batch              string `json:"batch"`
-			ItemID             string `json:"itemId"`
-			DocumentNumber     any    `json:"documentNumber"`
-			NumberlessReason   any    `json:"numberlessReason"`
-			Customer           string `json:"customer"`
-			Applicant          any    `json:"applicant"`
-			Kind               string `json:"kind"`
-			SubmittedAt        string `json:"submittedAt"`
-			Revision           int64  `json:"revision"`
-			Screen             any    `json:"screen"`
-			MissingMaterials   any    `json:"missingMaterials"`
-			SupplementDeadline any    `json:"supplementDeadline"`
-			DeadlineVersions   int64  `json:"deadlineVersions"`
-			Conclusion         any    `json:"conclusion"`
-			ConcludedAt        any    `json:"concludedAt"`
-			ReviewBy           any    `json:"reviewBy"`
-			PriorConclusion    any    `json:"priorConclusion"`
-			Withdrawn          bool   `json:"withdrawn"`
-			WithdrawnAt        any    `json:"withdrawnAt"`
-			Amount             any    `json:"amount"`
+			Batch                 string `json:"batch"`
+			ItemID                string `json:"itemId"`
+			DocumentNumber        any    `json:"documentNumber"`
+			DocumentNumberAbsence any    `json:"documentNumberAbsence"`
+			Customer              string `json:"customer"`
+			Applicant             any    `json:"applicant"`
+			Kind                  string `json:"kind"`
+			SubmittedAt           string `json:"submittedAt"`
+			Revision              int64  `json:"revision"`
+			Screen                any    `json:"screen"`
+			MissingMaterials      any    `json:"missingMaterials"`
+			SupplementDeadline    any    `json:"supplementDeadline"`
+			DeadlineVersions      int64  `json:"deadlineVersions"`
+			Conclusion            any    `json:"conclusion"`
+			ConcludedAt           any    `json:"concludedAt"`
+			ReviewBy              any    `json:"reviewBy"`
+			PriorConclusion       any    `json:"priorConclusion"`
+			Withdrawn             bool   `json:"withdrawn"`
+			WithdrawnAt           any    `json:"withdrawnAt"`
+			Amount                any    `json:"amount"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -321,8 +321,8 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 		t.Fatalf("满生命周期行走样：%+v", full)
 	}
 	// 单据号与客户自己的批次号、项标识并列；没号的行不答空串，只说为什么没号。
-	if full.DocumentNumber != "CLM-202608-00001" || full.NumberlessReason != nil || full.Batch != "batch-1" ||
-		body.Items[1].DocumentNumber != nil || body.Items[1].NumberlessReason != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+	if full.DocumentNumber != "CLM-202608-00001" || full.DocumentNumberAbsence != nil || full.Batch != "batch-1" ||
+		body.Items[1].DocumentNumber != nil || body.Items[1].DocumentNumberAbsence != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
 		t.Fatalf("单据号两格走样：%+v / %+v", full, body.Items[1])
 	}
 	// 金额键结构上不存在：赔付金额由 settlement-accounting 形成，本册连键都不带。

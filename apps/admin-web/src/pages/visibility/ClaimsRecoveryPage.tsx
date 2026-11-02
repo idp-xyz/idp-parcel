@@ -19,7 +19,8 @@ import {
   type RecoveryMatterRecord,
 } from './case-api';
 import { notificationScope, recoveryMilestoneScope } from './case-presentation';
-import { numberlessNote, primaryReference } from './document-number';
+import { absenceText, caseNumberName, claimNumberName } from './document-number';
+import { DocumentNumberCell } from './DocumentNumberCell';
 import { RowStatusPill } from './ExceptionDetailPanel';
 import { claimStatus, countByStatus, notificationStatus, type RowStatus } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
@@ -66,18 +67,6 @@ function customerCell(names: PartyNames, account: string) {
   return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
 }
 
-/** 主列那一格：有号显号；没号照旧显标识，次要样式、悬停说为什么没有号。 */
-function referenceCell(documentNumber: string | undefined, internal: string, reason: string | undefined) {
-  const reference = primaryReference(documentNumber, internal, reason);
-  return reference.numbered ? (
-    <span className="whitespace-nowrap font-mono text-xs font-medium text-idpxyz-textBright">{reference.text}</span>
-  ) : (
-    <span className="whitespace-nowrap font-mono text-[11px] text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
-      {reference.text}
-    </span>
-  );
-}
-
 function technicalColumn<Row>(rowsOf: (row: Row) => { label: string; value: string | undefined }[]): ListColumn<Row> {
   return {
     id: 'technical',
@@ -100,9 +89,9 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
   return [
     {
       id: 'number',
-      header: objectNouns.claimNumber,
+      header: claimNumberName,
       // 没有索赔号的项照旧显客户自己的索赔项编号：索赔项没有另一个内部标识，（批次，项）就是它在册上的键。
-      render: (row) => referenceCell(row.documentNumber, row.itemId, row.numberlessReason),
+      render: (row) => <DocumentNumberCell documentNumber={row.documentNumber} internal={row.itemId} absence={row.documentNumberAbsence} />,
     },
     {
       id: 'target',
@@ -115,7 +104,7 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
     { id: 'submitted', header: '提交时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.submittedAt) },
     { id: 'deadline', header: '期限', className: 'whitespace-nowrap text-xs', render: claimDeadline },
     technicalColumn((row) => [
-      { label: objectNouns.claimNumber, value: row.documentNumber ?? numberlessNote(row.numberlessReason) },
+      { label: claimNumberName, value: row.documentNumber ?? absenceText(row.documentNumberAbsence) },
       { label: '客户的索赔项编号', value: row.itemId },
       { label: '客户的提交批次', value: row.batch },
       { label: '客户编码', value: row.customer },
@@ -251,9 +240,9 @@ function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] 
   return [
     {
       id: 'case',
-      header: objectNouns.exceptionCaseNumber,
+      header: caseNumberName,
       // 追偿册只带关联案件的号、不带案件的无号原因，没号时只说没有号，原因到异常案件页看。
-      render: (row) => referenceCell(row.caseDocumentNumber, row.caseId, undefined),
+      render: (row) => <DocumentNumberCell documentNumber={row.caseDocumentNumber} internal={row.caseId} />,
     },
     {
       id: 'counterparty',

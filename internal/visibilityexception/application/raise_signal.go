@@ -35,10 +35,19 @@ const (
 	SignalEpisodeReopened
 	RaiseSignalUndecided
 	RaiseSignalNotAccepted
+	// CaseNumberingCollided：走向是`自动建案`，案件单据号却撞上已用的号到了跳号上限（ADR-0355 决定八）。这一轮发作期、
+	// 结论与案件一样都不落——结论「自动建案」与案件必须同一提交；命中记进案件撞号册（ports.CaseNumberingCollisionRecorder），
+	// 由重驱（CaseNumberingRedrive）等规则册换了格式再分诊。
+	//
+	// 它是业务答案，不是未决：未决等的是依赖回来，原样重投会自愈；撞号等的是人去「设置 → 单据编号」换格式，重投多少次都
+	// 一样。做成未决，信封就占着分区重投到失败预算耗尽、落 ABANDONED，命中跟着丢——所以调用方按它入账，恢复交给撞号册。
+	CaseNumberingCollided
 )
 
 func (outcome RaiseSignalOutcome) String() string {
 	switch outcome {
+	case CaseNumberingCollided:
+		return "CASE_NUMBERING_RULE_COLLISION"
 	case SignalEpisodeOpened:
 		return "EPISODE_OPENED"
 	case SignalHitRecorded:
@@ -63,10 +72,6 @@ const (
 	TriageRuleUnavailable
 	SignalEpisodeIdentityUnavailable
 	CaseIdentityUnavailable
-	// CaseNumberingRuleCollision：走向是`自动建案`，案件单据号却撞上已用的号到了跳号上限（ADR-0355 决定八）。这一轮
-	// 发作期、结论与案件一样都不落——结论「自动建案」与案件必须同一提交。规则册换了格式之前重放还会撞，这正是要人去看
-	// 「设置 → 单据编号」的那一格，不是依赖调不通。
-	CaseNumberingRuleCollision
 )
 
 func (reason RaiseSignalUndecidedReason) String() string {
@@ -79,8 +84,6 @@ func (reason RaiseSignalUndecidedReason) String() string {
 		return "SIGNAL_EPISODE_IDENTITY_UNAVAILABLE"
 	case CaseIdentityUnavailable:
 		return "CASE_IDENTITY_UNAVAILABLE"
-	case CaseNumberingRuleCollision:
-		return "CASE_NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -121,6 +124,8 @@ type RaiseSignalResult struct {
 	exceptionCase *domain.ExceptionCase
 	reason        RaiseSignalUndecidedReason
 	handoffRef    string
+	// collidedTemplate 只在 CaseNumberingCollided 时在场：撞上旧号的那份格式。
+	collidedTemplate string
 }
 
 func (result RaiseSignalResult) Outcome() RaiseSignalOutcome {
@@ -148,6 +153,11 @@ func (result RaiseSignalResult) UndecidedReason() RaiseSignalUndecidedReason {
 	return result.reason
 }
 
+// CollidedTemplate 只在 CaseNumberingCollided 时非空：撞上旧号的那份格式，给日志与册面指认。
+func (result RaiseSignalResult) CollidedTemplate() string {
+	return result.collidedTemplate
+}
+
 // HandoffReference 非空说明分诊结论已落库但意图还没交出去，重放会重发同一份。
 func (result RaiseSignalResult) HandoffReference() string {
 	return result.handoffRef
@@ -160,8 +170,10 @@ type RaiseSignalDeps struct {
 	Cases      ports.CaseIdentityFactory
 	// CaseNumbers 为自动建立的案件取单据号；只在走向为`自动建案`的那一轮调。
 	CaseNumbers ports.CaseNumberIssuer
-	Downstream  ports.TriageHandoff
-	Clock       ports.Clock
+	// Collisions 记下案件单据号撞号的那一次命中；只在撞号时调。
+	Collisions ports.CaseNumberingCollisionRecorder
+	Downstream ports.TriageHandoff
+	Clock      ports.Clock
 }
 
 type RaiseSignalHandler struct {
@@ -176,7 +188,7 @@ func NewRaiseSignalHandler(deps RaiseSignalDeps) *RaiseSignalHandler {
 // 按对象+类型+因果条件找最近发作期 → 活跃则记命中不建重复、不重新分诊、不重复建案 → 已结束或
 // 无既往则分诊（规则未配置即人工复核格，如实不自动建案）→ 开启或重开（重开指回前
 // 发作期）→ 走向为`自动建案`时取案件单据号并建立案件（根对象取信号对象、责任团队取规则条目登记的
-// 那个、主状态待响应；单据号撞号则整轮不落、答未决）→ 发作期、分诊结论与案件同一提交 → 发布意图。
+// 那个、主状态待响应；单据号撞号则整轮不落、命中记进撞号册）→ 发作期、分诊结论与案件同一提交 → 发布意图。
 //
 // 信号与案件始终是两个对象（CONTEXT）：案件有自己的标识与生命周期，这里只做「结论说
 // 建案就当场建」这一步，接单、关闭、归并与重开都不在本编排；关联既有案件那一走向
@@ -269,7 +281,13 @@ func (handler *RaiseSignalHandler) Handle(
 			return RaiseSignalResult{}, err
 		}
 		if collided {
-			return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: CaseNumberingRuleCollision}, nil
+			// 取号那一步已把取过的流水退回；这里只把命中记下，本轮别的都不落。
+			if err := handler.deps.Collisions.RecordCaseNumberingCollision(ctx, ports.CaseNumberingCollision{
+				Tenant: command.TenantID, Hit: command.hit(), Template: issue.Template, At: now,
+			}); err != nil {
+				return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
+			}
+			return RaiseSignalResult{outcome: CaseNumberingCollided, collidedTemplate: issue.Template}, nil
 		}
 		exceptionCase, err = establishCaseFor(caseID, number, command.Parcel, verdict.team, now)
 		if err != nil {

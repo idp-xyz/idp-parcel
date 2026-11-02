@@ -144,26 +144,26 @@ func serveClaimItems(
 	bodies := make([]claimItemBody, 0, len(rows))
 	for _, row := range rows {
 		body := claimItemBody{
-			Batch:            row.Batch,
-			ItemID:           row.ItemID,
-			DocumentNumber:   row.DocumentNumber,
-			NumberlessReason: row.NumberlessReason,
-			Customer:         row.Customer,
-			Applicant:        row.Applicant,
-			Contract:         row.Contract,
-			Target:           row.Target,
-			Kind:             row.Kind,
-			Revision:         row.Revision,
-			SubmittedAt:      catalogueInstant(row.SubmittedAt),
-			Screen:           row.Screen,
-			ScreenBasis:      row.ScreenBasis,
-			MissingMaterials: row.MissingMaterials,
-			SupplementScope:  row.SupplementScope,
-			SupplementNotice: row.SupplementNotice,
-			DeadlineVersions: row.DeadlineVersions,
-			Conclusion:       row.Conclusion,
-			PriorConclusion:  row.PriorConclusion,
-			Withdrawn:        row.Withdrawn,
+			Batch:                 row.Batch,
+			ItemID:                row.ItemID,
+			DocumentNumber:        row.DocumentNumber,
+			DocumentNumberAbsence: row.DocumentNumberAbsence,
+			Customer:              row.Customer,
+			Applicant:             row.Applicant,
+			Contract:              row.Contract,
+			Target:                row.Target,
+			Kind:                  row.Kind,
+			Revision:              row.Revision,
+			SubmittedAt:           catalogueInstant(row.SubmittedAt),
+			Screen:                row.Screen,
+			ScreenBasis:           row.ScreenBasis,
+			MissingMaterials:      row.MissingMaterials,
+			SupplementScope:       row.SupplementScope,
+			SupplementNotice:      row.SupplementNotice,
+			DeadlineVersions:      row.DeadlineVersions,
+			Conclusion:            row.Conclusion,
+			PriorConclusion:       row.PriorConclusion,
+			Withdrawn:             row.Withdrawn,
 		}
 		if row.SupplementDeadline != nil {
 			body.SupplementDeadline = catalogueInstant(*row.SupplementDeadline)
@@ -266,33 +266,33 @@ type claimItemListResponse struct {
 // 结构上不存在（票 06 Comments 记明）。材料收讫册（0021）是资格审核的证据面，
 // 不在本页三签之列，未透出。
 //
-// documentNumber / numberlessReason 同异常案件那一行（exceptionCaseBody）。batch 与 itemId 是客户自己的批次号与项标识，
+// documentNumber / documentNumberAbsence 同异常案件那一行（exceptionCaseBody）。batch 与 itemId 是客户自己的批次号与项标识，
 // 单据号不取代它们。
 type claimItemBody struct {
-	Batch              string `json:"batch"`
-	ItemID             string `json:"itemId"`
-	DocumentNumber     string `json:"documentNumber,omitempty"`
-	NumberlessReason   string `json:"numberlessReason,omitempty"`
-	Customer           string `json:"customer"`
-	Applicant          string `json:"applicant,omitempty"`
-	Contract           string `json:"contract"`
-	Target             string `json:"target"`
-	Kind               string `json:"kind"`
-	SubmittedAt        string `json:"submittedAt"`
-	Revision           int64  `json:"revision"`
-	Screen             string `json:"screen,omitempty"`
-	ScreenBasis        string `json:"screenBasis,omitempty"`
-	MissingMaterials   string `json:"missingMaterials,omitempty"`
-	SupplementScope    string `json:"supplementScope,omitempty"`
-	SupplementNotice   string `json:"supplementNotice,omitempty"`
-	SupplementDeadline string `json:"supplementDeadline,omitempty"`
-	DeadlineVersions   int64  `json:"deadlineVersions"`
-	Conclusion         string `json:"conclusion,omitempty"`
-	ConcludedAt        string `json:"concludedAt,omitempty"`
-	ReviewBy           string `json:"reviewBy,omitempty"`
-	PriorConclusion    string `json:"priorConclusion,omitempty"`
-	Withdrawn          bool   `json:"withdrawn"`
-	WithdrawnAt        string `json:"withdrawnAt,omitempty"`
+	Batch                 string `json:"batch"`
+	ItemID                string `json:"itemId"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	Customer              string `json:"customer"`
+	Applicant             string `json:"applicant,omitempty"`
+	Contract              string `json:"contract"`
+	Target                string `json:"target"`
+	Kind                  string `json:"kind"`
+	SubmittedAt           string `json:"submittedAt"`
+	Revision              int64  `json:"revision"`
+	Screen                string `json:"screen,omitempty"`
+	ScreenBasis           string `json:"screenBasis,omitempty"`
+	MissingMaterials      string `json:"missingMaterials,omitempty"`
+	SupplementScope       string `json:"supplementScope,omitempty"`
+	SupplementNotice      string `json:"supplementNotice,omitempty"`
+	SupplementDeadline    string `json:"supplementDeadline,omitempty"`
+	DeadlineVersions      int64  `json:"deadlineVersions"`
+	Conclusion            string `json:"conclusion,omitempty"`
+	ConcludedAt           string `json:"concludedAt,omitempty"`
+	ReviewBy              string `json:"reviewBy,omitempty"`
+	PriorConclusion       string `json:"priorConclusion,omitempty"`
+	Withdrawn             bool   `json:"withdrawn"`
+	WithdrawnAt           string `json:"withdrawnAt,omitempty"`
 }
 
 type recoveryMatterListResponse struct {

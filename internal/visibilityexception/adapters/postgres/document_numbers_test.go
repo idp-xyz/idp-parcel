@@ -341,7 +341,7 @@ func TestNumbersAreCountedPerTenant(t *testing.T) {
 	}
 	claim, _ := unconfigured.Claim()
 	if _, numbered := claim.DocumentNumber().Number(); numbered ||
-		fixture.loadClaim(t, "SYN-TENANT-03", "item-1").DocumentNumber().NumberlessReason() != domain.NumberingTimeZoneNotConfigured {
+		fixture.loadClaim(t, "SYN-TENANT-03", "item-1").DocumentNumber().Absence() != domain.NumberingTimeZoneNotConfigured {
 		t.Fatal("没登单据编号时区的租户的索赔没记下无号原因")
 	}
 }
@@ -499,8 +499,8 @@ func TestACollisionAnswersAndReleasesEverythingItTook(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("撞号那一笔事务没能照常提交：%v", err)
 	}
-	if issue.Outcome != ports.DocumentNumberingRuleCollision {
-		t.Fatalf("案件撞号答 %+v", issue)
+	if issue.Outcome != ports.DocumentNumberingRuleCollision || issue.Template != "SYN-{seq:5}" {
+		t.Fatalf("案件撞号答 %+v，want 撞号并带上撞的那份格式", issue)
 	}
 	fixture.loadClaim(t, "SYN-TENANT-01", "bystander")
 	if _, err := fixture.pool.Exec(t.Context(),
@@ -571,7 +571,7 @@ func TestACaseNumberLandsWithItsCaseAndRollsBackWithIt(t *testing.T) {
 		t.Fatalf("回滚之后下一件拿到 %q（%v），want 退回的那个号", number, err)
 	}
 	rows, err := fixture.review.ListExceptionCases(t.Context(), tenant, 10)
-	if err != nil || len(rows) != 1 || rows[0].CaseID != "case-ep-kept" || rows[0].DocumentNumber != "EX-20261102-0001" || rows[0].NumberlessReason != "" {
+	if err != nil || len(rows) != 1 || rows[0].CaseID != "case-ep-kept" || rows[0].DocumentNumber != "EX-20261102-0001" || rows[0].DocumentNumberAbsence != "" {
 		t.Fatalf("案件册 = %+v %v", rows, err)
 	}
 }
@@ -600,7 +600,7 @@ func TestTheTablesKeepNumbersUniquePerTenantAndReasonsClosed(t *testing.T) {
 	insertCase := func(tenant, id string, number, reason any) error {
 		_, err := fixture.pool.Exec(t.Context(),
 			`INSERT INTO visibility_exception.exception_case
-				(tenant_id, case_id, root_parcel, impact_scope, responsible_team, phase, established_at, document_number, numberless_reason)
+				(tenant_id, case_id, root_parcel, impact_scope, responsible_team, phase, established_at, document_number, document_number_absence)
 			 VALUES ($1, $2, 'SYN-PARCEL', 'SYN-PARCEL', 'SYN-TEAM', 'AWAITING_RESPONSE', $3, $4, $5)`,
 			tenant, id, numberingNow, number, reason)
 		return err
@@ -608,7 +608,7 @@ func TestTheTablesKeepNumbersUniquePerTenantAndReasonsClosed(t *testing.T) {
 	insertClaim := func(tenant, item string, number, reason any) error {
 		_, err := fixture.pool.Exec(t.Context(),
 			`INSERT INTO visibility_exception.claim_item
-				(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref, submitted_at, document_number, numberless_reason)
+				(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref, submitted_at, document_number, document_number_absence)
 			 VALUES ($1, 'SYN-BATCH-1', $2, 'SYN-ACCOUNT-01', 'SYN-CONTRACT-01', 'SYN-PARCEL', 'LOSS', $3, $4, $5)`,
 			tenant, item, numberingNow, number, reason)
 		return err
@@ -653,7 +653,7 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 		 WHERE tenant_id = 'tenant-a' AND case_id = 'case-1'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.pool.Exec(ctx, `UPDATE visibility_exception.exception_case SET numberless_reason = 'NUMBERING_TIME_ZONE_NOT_CONFIGURED'
+	if _, err := fixture.pool.Exec(ctx, `UPDATE visibility_exception.exception_case SET document_number_absence = 'NUMBERING_TIME_ZONE_NOT_CONFIGURED'
 		 WHERE tenant_id = 'tenant-a' AND case_id = 'case-2'`); err != nil {
 		t.Fatal(err)
 	}
@@ -665,9 +665,9 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 	for _, row := range cases {
 		byID[row.CaseID] = row
 	}
-	if byID["case-1"].DocumentNumber != "EX-20260302-0001" || byID["case-1"].NumberlessReason != "" ||
-		byID["case-2"].DocumentNumber != "" || byID["case-2"].NumberlessReason != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" ||
-		byID["case-3"].DocumentNumber != "" || byID["case-3"].NumberlessReason != "ISSUED_BEFORE_NUMBERING" {
+	if byID["case-1"].DocumentNumber != "EX-20260302-0001" || byID["case-1"].DocumentNumberAbsence != "" ||
+		byID["case-2"].DocumentNumber != "" || byID["case-2"].DocumentNumberAbsence != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" ||
+		byID["case-3"].DocumentNumber != "" || byID["case-3"].DocumentNumberAbsence != "ISSUED_BEFORE_NUMBERING" {
 		t.Fatalf("案件册的单据号两格：%+v", byID)
 	}
 
@@ -715,7 +715,7 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 		return err
 	})
 	items, err := fixture.review.ListClaimItems(ctx, tenant, 10)
-	if err != nil || len(items) != 1 || items[0].DocumentNumber != "CLM-202603-00001" || items[0].NumberlessReason != "" ||
+	if err != nil || len(items) != 1 || items[0].DocumentNumber != "CLM-202603-00001" || items[0].DocumentNumberAbsence != "" ||
 		items[0].Batch != "batch-1" || items[0].ItemID != "item-1" {
 		t.Fatalf("索赔册：%+v %v", items, err)
 	}
@@ -765,7 +765,7 @@ func TestTheDocumentNumberMigrationLeavesExistingRowsUnnumbered(t *testing.T) {
 	}
 	for _, table := range []string{"exception_case", "claim_item"} {
 		var numbered, reasoned int
-		if err := conn.QueryRow(ctx, `SELECT count(document_number), count(numberless_reason) FROM visibility_exception.`+table).
+		if err := conn.QueryRow(ctx, `SELECT count(document_number), count(document_number_absence) FROM visibility_exception.`+table).
 			Scan(&numbered, &reasoned); err != nil || numbered != 0 || reasoned != 0 {
 			t.Fatalf("%s 的旧行被回填了：号 %d 行、原因 %d 行 %v", table, numbered, reasoned, err)
 		}

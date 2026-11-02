@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -37,17 +38,19 @@ func (outcome DocumentNumberIssueOutcome) String() string {
 	}
 }
 
-// DocumentNumberIssue 是一次取号的结果。Number 只在取到号时非空。
+// DocumentNumberIssue 是一次取号的结果。Number 只在取到号时非空；Template 是这一次所用的模板原文，撞号时据它说清是
+// 哪一份格式撞上了旧号。
 type DocumentNumberIssue struct {
-	Outcome DocumentNumberIssueOutcome
-	Number  string
+	Outcome  DocumentNumberIssueOutcome
+	Number   string
+	Template string
 }
 
 // CaseNumberIssuer 为一件要建立的异常案件取单据号（类型 `EXCEPTION_CASE`，日期按租户的单据编号时区）。
 //
 // 只许在开立事务里、在确定要落案件的那一步调（ADR-0355 决定三）。答撞号时，实现已把这一次从序列取过的值全部退回——
 // 开立事务里同时落着别的东西（发作期派生、投影），不能为一件案件撞号就让整笔回滚，所以退回放在取号这一步自己身上；
-// 调用方只需不落案件。交回错误时调用方必须回滚开立事务。
+// 调用方只需不落案件、把命中记进案件撞号册（CaseNumberingCollisionRecorder）。交回错误时调用方必须回滚开立事务。
 type CaseNumberIssuer interface {
 	IssueCaseNumber(ctx context.Context, tenant domain.TenantID) (DocumentNumberIssue, error)
 }
@@ -55,4 +58,43 @@ type CaseNumberIssuer interface {
 // ClaimNumberIssuer 为一项要记录的客户索赔取单据号（类型 `CLAIM`，日期按租户的单据编号时区）。契约同 CaseNumberIssuer。
 type ClaimNumberIssuer interface {
 	IssueClaimNumber(ctx context.Context, tenant domain.TenantID) (DocumentNumberIssue, error)
+}
+
+// CaseNumberingCollision 是一次因案件单据号撞号而没建成案件的分诊命中（ADR-0355 决定八）。撞号时发作期、结论与案件一样
+// 都不落，命中却不能丢：信号多半只来一次（一次违规出发、一处分叉），没有谁会再把它送进来，所以本上下文把它记下，等规则册
+// 换了格式（或周期换了、旧号让出）再按原样重新分诊。Template 是撞上的那份格式，给看日志、查册的人指认。
+type CaseNumberingCollision struct {
+	Tenant   domain.TenantID
+	Hit      domain.SignalHit
+	Template string
+	// At 是撞号那一刻的服务端时刻。
+	At time.Time
+}
+
+// CaseNumberingCollisionKey 是案件撞号册的键：与发作期定位同一把（租户、对象、类型、因果条件）——同一原因再撞一次是同一
+// 件事，不另起一行。
+type CaseNumberingCollisionKey struct {
+	Tenant domain.TenantID
+	Parcel domain.TrackedParcelReference
+	Kind   domain.ExceptionSignalKindReference
+	Cause  domain.CausalConditionReference
+}
+
+// Key 交回这次撞号在册上的键。
+func (collision CaseNumberingCollision) Key() CaseNumberingCollisionKey {
+	return CaseNumberingCollisionKey{Tenant: collision.Tenant, Parcel: collision.Hit.Parcel, Kind: collision.Hit.Kind, Cause: collision.Hit.Cause}
+}
+
+// CaseNumberingCollisionRecorder 在开立事务里记下一次撞号：同键再撞覆盖成最近这一次，并让它马上到期——下一次重驱就会再试
+// 一回，撞着的那一刻有人看得见。写库失败按端口惯例交回错误。
+type CaseNumberingCollisionRecorder interface {
+	RecordCaseNumberingCollision(ctx context.Context, collision CaseNumberingCollision) error
+}
+
+// CaseNumberingCollisionQueue 是重驱那一侧看见的案件撞号册：交出到期的、按时推后、重驱成了就销掉。到期判据只看服务端
+// 时刻，跨租户取——重驱在派发进程里统一跑，每一行自带租户。
+type CaseNumberingCollisionQueue interface {
+	DueCaseNumberingCollisions(ctx context.Context, at time.Time, limit int) ([]CaseNumberingCollision, error)
+	PostponeCaseNumberingCollision(ctx context.Context, key CaseNumberingCollisionKey, until time.Time) error
+	ResolveCaseNumberingCollision(ctx context.Context, key CaseNumberingCollisionKey) error
 }

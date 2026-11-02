@@ -102,7 +102,7 @@ func (numbers *DocumentNumbers) issue(
 		if _, err := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+documentNumberSavepoint); err != nil {
 			return ports.DocumentNumberIssue{}, fmt.Errorf("issue %s number: release the collided sequence values: %w", code, err)
 		}
-		issue = ports.DocumentNumberIssue{Outcome: ports.DocumentNumberingRuleCollision}
+		issue = ports.DocumentNumberIssue{Outcome: ports.DocumentNumberingRuleCollision, Template: assignment.Template}
 	default:
 		_, _ = executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+documentNumberSavepoint)
 		return ports.DocumentNumberIssue{}, fmt.Errorf("issue %s number: unexpected assignment outcome %q", code, assignment.Outcome)
