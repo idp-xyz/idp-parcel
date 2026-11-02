@@ -37,9 +37,9 @@ Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库
 
 1. **依赖**：`go.mod` 直接依赖 `go.idp.xyz/idp-platform-go v0.1.0-rc.1`，`go.sum` 两行 `h1:o+oytSOn+EC5/3iiiSWOdL+CzXTwUeol1Br0ERLH1VQ=` 与 `/go.mod h1:GNtiWs3x+t02hdq6QfuTCKebZwGrlcNiWK5QyEhnTks=`，无 `replace` 与 `go.work`。`internal/platform/migrate` 的 `TestPlatformVersionIsTheOneGoModPins` 比对 go.mod 锁定版本、go.sum 两串与迁移计划登记的 `migrate.PlatformVersion`。
 2. **迁移**：`migrate.SchemaPlatform`（`platform`）上渲染 `numberingpg.Migrations`，步骤 ID `platform/<资产 ID>`、来源 `PLATFORM`、记 `PlatformVersion`，排在框架之后、业务之前。平台库只交 ID 与 SQL、不交校验和清单，校验和对渲染后的 SQL 算（schema 是常量，同一版本逐字不变；平台库若改写已发布资产，已部署的库以 `ErrChecksumDrift` 拦下）。历史表以追加形状 `historyPlatformDDL` 加 `platform_version` 一列与两条约束，新库旧库走同一条路。规则册迁移 `migrations/document_numbering/0001_document_numbering_rule_register.sql` 照本仓迁移写法并入（schema `document_numbering`，不进平台 schema、不进任何业务 schema）。应用启动不改库，照旧。
-3. **取号编排** `docnumber.Assigner.Assign`（`internal/platform/docnumber/assign.go`）：先判事务（事务外答 `ErrTransactionRequired`，单据编号时区未配置那一格也不例外）→ 读此刻生效的模板（租户版或产品默认）→ 定时区（调用方给的开立方业务时区；没有取租户此刻的单据编号时区；都没有答 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`，序列不动）→ 服务端此刻在该时区下算周期 → 经平台 `SequenceAllocator` 取（租户，类型代码，周期）→ `Render` → 调用方的 `IsUsed` 判撞，已用取下一个值，跳过 `MaxSkippedNumbers` 个仍撞答 `NUMBERING_RULE_COLLISION`。不用 `Assigner.Assign`；加扰键照平台入口拼成 `密钥|租户|类型代码`，用例 `TestScrambledNumbersMatchThePlatformAssigner` 对同一输入与平台 `Assigner.Assign` 逐字相同。
+3. **取号编排** `docnumber.Assigner.Assign`（`internal/platform/docnumber/assign.go`）：先判事务（事务外答 `ErrTransactionRequired`，单据编号时区未配置那一格也不例外）→ 读此刻生效的模板（租户版或产品默认）→ 定时区（调用方给的开立方业务时区；没有取租户此刻的单据编号时区；都没有答 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`，序列不动）→ 服务端此刻在该时区下算周期 → 经平台 `SequenceAllocator` 取（租户，类型代码，周期）→ `Render` → 调用方的 `IsUsed` 判撞，已用取下一个值，一次最多从序列取 `MaxSkippedNumbers` 个值，全都已用答 `NUMBERING_RULE_COLLISION`（评审修订后的口径，见文末）。不用 `Assigner.Assign`；加扰键照平台入口拼成 `密钥|租户|类型代码`，用例 `TestScrambledNumbersMatchThePlatformAssigner` 对同一输入与平台 `Assigner.Assign` 逐字相同。
 4. **演示种子**：`scripts/demo-seeds/steps/050-document-numbering-time-zone.sh` 经新受控登记口为 `SYN-TENANT-01` 登单据编号时区 `Asia/Shanghai`（2026-01-01 起，演示租户取值，记 `S`），不登模板；排在开立单据的各节之前。`seed.sh` 编译清单加新 CLI，README 组成表加行。
-5. **类型声明**：六个上下文各在 `domain/document_number_types.go` 声明本上下文的类型（变量 `XxxDocumentNumberType` 加 `DocumentNumberTypes()`），04–09 直接引用；`cmd/internal/docnumbertypes.Catalogue()` 汇总，parcel-api 与受控登记口共用这一份汇总。`TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision` 对照 ADR-0355 决定二、五。
+5. **类型声明**：六个上下文各在 `domain/document_number_types.go` 声明本上下文的类型（变量 `XxxDocumentNumberType` 加 `DocumentNumberTypes()`），04–09 直接引用；`cmd/internal/docnumbering.Catalogue()` 汇总（评审修订时由 `docnumbertypes` 并入 `docnumbering`），取号与登记的各进程共用这一份汇总。`TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision` 对照 ADR-0355 决定二、五。
 6. **规则册**（`register.go`、`docnumberpg/store.go`）：规则版本按（租户，类型代码，生效时刻）为键存模板、登记人、登记时刻；单据编号时区版本按（租户，生效时刻）存 IANA 名；只增不改，同内容重放答 `VERSION_EXISTING`，同一生效时刻异内容答 `EFFECTIVE_FROM_TAKEN`。登记校验：类型须已声明、模板须过平台 `Parse`、含流水令牌、用了加扰而该租户没配密钥即拒；时区只收 IANA 名（空串、`Local` 拒）。
 7. **口**（`docnumberhttp`，端点表 `cmd/parcel-api/endpoints_document_numbering.go`，自建操作者 Intake，同基础数据目录）：`GET /document-numbering/rules`（查阅读）、`POST /document-numbering/previews`（查阅读，同试算）、`POST /document-numbering/rule-registrations` 与 `POST /document-numbering/time-zone-registrations`（登记册配置写）。答复形状照节点作业登记口：成功 `{"outcome",...}`，失败 `{"error":{"code"}}`；契约写在 `docnumberhttp` 包注释。登记人取信封，写成 `OPERATOR/<发行方>#<sub>`；受控登记口记 `CONTROLLED-CLI/parcel-document-numbering-register`。
 8. **测试**：见下「验证」。
@@ -65,7 +65,30 @@ Blocked by: [01](./01-adr-glossary-context-and-use-case-handoffs.md)；平台库
 
 ### 留给协调方
 
-- **04–09 的接法**：在 cmd/parcel-api 经 `buildDocumentNumbering(db, sources.scrambleSecrets).assigner` 取编排，接到各上下文的消费侧端口；`Assign` 必须在开立事务的 ctx 里调，且与开立同一个 `*bentopg.DB`（框架按 DB 认事务归属）；`IsUsed` 查本上下文的单据表；类型代码用本上下文 `domain` 里的声明变量。
-- **时区来源待实现票核定**：`STATEMENT_DISPUTE`、`AUDITED_PAYABLE` 是否取结算账户业务时区（05），`SHIPMENT` 是否有可用的发件网点业务时区（04）；改法是改本上下文那一处声明，`cmd/internal/docnumbertypes` 的对照用例随之改。
-- **待裁**：参数登记册是否为「单据编号时区」「加扰密钥」两项租户取值补行（本票未动 `docs/product/PILOT-PARAMETER-REGISTER.md`）；ADR-0355 越权风险点 1 所说「向平台库提议能传模板与时刻的取号入口」本票未提。
+- **04–09 的接法**：见文末「给 04–09 的交接：怎么接」（评审修订时改写，原先指的 `buildDocumentNumbering` 已挪进 `cmd/internal/docnumbering.Build`）。
+- **时区来源待实现票核定**：`STATEMENT_DISPUTE`、`AUDITED_PAYABLE` 是否取结算账户业务时区（05），`SHIPMENT` 是否有可用的发件网点业务时区（04）；改法是改本上下文那一处声明，`cmd/internal/docnumbering` 的对照用例随之改。
+- **待裁**：ADR-0355 越权风险点 1 所说「向平台库提议能传模板与时刻的取号入口」本票未提。参数登记册三行已在评审修订时补上（见文末）。
 - 新增 CLI、端口与适配器会让机制清点过期，由推送方在 main 的 tip 上重生成；本票未立 AT 行。
+
+## 评审修订（2026-11-02，作者，应协调方转来的隔离评审意见，评审钉 `8648fe1a2`、阻断为零）
+
+协调方接受作者自定的四格（生效时刻可早于登记、上下文令牌与 `{check}` 拒登、预览挂查阅读、业务时区声明留 04 / 05 核定），要求以下各条不留尾巴，追加提交、不 rebase：
+
+1. **撞号后必须回滚、计数对上**（`373405a2d`）：评审探针一次撞号取 21 个流水而 `Skipped` 报 20。改为一次取号最多从序列取 `MaxSkippedNumbers` 个值，全都已用答撞号，此时 `Skipped` 恰是取过的值数；取到号时 `Skipped` 是号之前弃掉的那几个。`Assign`、`NumberingRuleCollision`、`Assignment.Skipped` 的注释写明：收到撞号或错误必须回滚开立事务，否则取过的流水全成空号（决定三只许随单落定的跳号成为空号）；回滚后下一次开立仍撞同一段，直到规则册换格式。用例 `TestAssignSkipsUsedNumbersUpToTheLimit` 钉住「第 20 个仍出号」「撞号时取值数 = `Skipped` = 20」，`cmd/internal/docnumbering` 的真库用例钉住「撞号回滚后第一个值仍空着」。
+2. **跨周期自撞的模板拒登**（`373405a2d`）：选观察式——在检查时刻与相隔一天、一月、一季、一年的同一时刻按位比形状（与预览重叠提示同一套），落在不同重置周期而形状逐位相交即拒，答 `TEMPLATE_REPEATS_ACROSS_PERIODS`，错误正文说明「流水每个周期从 1 重数、缺了比重置周期更粗的日期部件」。不数令牌的理由：令牌文法只在平台库一处；而且观察式判的就是要防的那件事——数令牌看不出「加扰流水按周期换键，十一月的号仍可能撞上去年十一月」，按形状两样都看得见。只有流水、不分周期的模板序列从不重数，不在此列。用例覆盖 `M{mm}-{seq:2}`、`{dd}{seq}`、`D{yyyy}{dd}-{seq:4}`、`Q{q}-{seq:4}`、`S{mm}{seqx:6}`、`H{mm}{dd}{hh}{seq:3}` 拒，`Y{yy}{mm}-{seq:4}`、`T{yyyy}{mm}{dd}{hh}{mi}-{seq:3}`、`S{yyyy}{mm}{seqx:6}` 收；十一份默认模板全部能过（汇总时同一道检查）。
+3. **装配挪到共享处**（`f3859081d`）：`cmd/internal/docnumbering` 收类型汇总、`Build`（同一个 DB 上装出包进事务的登记 `Registrations`、`Reader`、`Assigner`）与 `LoadScrambleSecrets`（读同一项配置并出声）。parcel-api 在 `assembleProductionEndpoints` 装一次、经 `endpointSources.documentNumbers` 交给规则册四口；parcel-dispatch 在开池之前读密钥配置（配错即退）、`wireDispatcher` 经 `buildDocumentNumbers` 装好放进 `dispatchSources.documentNumbers`，不接任何单据的开立；受控登记口同一装配。dispatch 装配用例：密钥文件不合规时开池前即退；配了合规密钥文件整个派发器装得起来；装出的取号编排在 dispatch 自己的库与事务里给对账单（按交来的业务时区）与异常案件（按单据编号时区）出号，事务外即拒。
+4. **跨包计数**（`f3859081d`）：包注释改为「开立单据、登记规则的各个进程都要同一份汇总」，不数进程。
+5. **参数登记册**：`docs/product/PILOT-PARAMETER-REGISTER.md` 第一节补 `PAR-COM-19` 单据编号时区、`PAR-COM-20` 单据编号规则（租户版本）、`PAR-COM-21` 单据编号加扰密钥，照既有体例：册的列由产品定、值归租户、无默认，未登时的产品行为（开立不带号并记原因 / 用产品默认模板 / 加扰模板拒登），出处 ADR-0355；只写配置项名与说明，不写任何取值。加扰密钥配置项的注释与种子步骤各引对应的登记册行（`PAR-COM-21`、`PAR-COM-19`）。
+6. 交接见下一节。
+
+修订后自验（本机 PG `127.0.0.1:55432`）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出，`go mod tidy -diff` 无输出；`go test -count=1 -p 1` 覆盖 `./internal/architecture/... ./internal/platform/... ./cmd/... ./migrations/... ./tests/...` 与六个上下文的 `domain` 包，全绿（含 PG）；`-v` 抽查 `cmd/internal/docnumbering`、`docnumberpg`、受控登记口、parcel-dispatch 新增三条与 parcel-api 文档编号各条全 PASS、无 SKIP。种子灌一次性库 `docnum02_seed2` 退 0（050 答 `VERSION_REGISTERED`），用后删库。
+
+另：`373405a2d` 误把 `git mv` 已暂存的包目录改名（`docnumbertypes` → `docnumbering`）一并带进去了，那一笔单独检出编译不过（parcel-api 仍引旧路径），下一笔 `f3859081d` 起恢复；照「不 rebase」未改写，推送方重放时如需逐笔可编译，可把这两笔压成一笔。
+
+### 给 04–09 的交接：怎么接
+
+- **取装配**：parcel-api 的特性 build 从 `endpointSources.documentNumbers`、parcel-dispatch 的路由特性从 `dispatchSources.documentNumbers` 取 `docnumbering.Components`，用其中的 `Assigner`；别处再装一套就是第二份类型汇总与第二个 DB。各上下文立自己的消费侧端口（ADR-0025），在组合根把 `Assigner` 接上去；类型代码用本上下文 `domain` 里的声明变量（如 `ShipmentDocumentNumberType.Code`），不另写字符串。
+- **事务与 DB**：`Assign` 必须在开立事务的 ctx 里调，且那笔事务由同一个 `*bentopg.DB` 的事务器开——框架按 DB 认事务归属，事务外或别的 DB 开的事务里调一律答 `ErrTransactionRequired`。只在确定要落单的那一步调（决定三）：答业务答案而不落单、事务却照常提交的分支不得先取号。
+- **按答案办**：`NUMBER_ASSIGNED` → 号随单落库，`Skipped` 个空号随之落定；`NUMBERING_TIME_ZONE_NOT_CONFIGURED` → 单据照常开立、不带单据号，单据上记无号原因「单据编号时区未配置」，事后不补；`NUMBERING_RULE_COLLISION` 或任何错误 → 回滚开立事务、这一次不落单，撞号答复说人话并指到规则册（「设置 → 单据编号」）。
+- **开立方业务时区由调用方传**：类型声明为「开立方有业务时区」的（对账单、送站预报、送站交接单），调用方把开立方已登记的业务时区（IANA 名）放进 `IssueRequest.IssuerTimeZone`；开立方没登就留空，退到租户的单据编号时区。声明为「没有」的类型传了业务时区是编程错误（`ErrIssuerTimeZoneNotDeclared`）——若实现票核定该类其实有，先改本上下文那一处声明。
+- **判撞**：`IssueRequest.IsUsed` 在同一事务里查本上下文单据表（租户，单据号）是否已用；表上照样建（租户，单据号）唯一约束作最后一道保险。
