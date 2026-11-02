@@ -29,8 +29,13 @@ export function PreviewNote({ answer }: { answer: ApiResult<PublicationPreviewRe
           <p>
             <OutcomeText labels={previewOutcomeLabels} outcome={body.outcome} />
           </p>
-          {body.outcome === 'PREVIEWED' ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
           {body.cause ? <p>原因：{body.cause}</p> : null}
+          <TechnicalDetails
+            rows={[
+              { label: '结果码', value: body.outcome },
+              ...(body.outcome === 'PREVIEWED' ? digestRows(body.canonicalization, body.contentDigest) : []),
+            ]}
+          />
         </div>
       )}
     </FlowAnswerNote>
@@ -53,13 +58,15 @@ export function DraftNote({
           <p>
             <OutcomeText labels={labels} outcome={body.outcome} />
           </p>
-          {body.status ? (
-            <p>
-              发布稿状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
-            </p>
-          ) : null}
-          {body.contentDigest ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
+          {body.status ? <p>现在的状态：{labelOf(draftStatusLabels, body.status)}</p> : null}
           {body.cause ? <p>原因：{body.cause}</p> : null}
+          <TechnicalDetails
+            rows={[
+              { label: '结果码', value: body.outcome },
+              { label: '状态码', value: body.status ?? '' },
+              ...(body.contentDigest ? digestRows(body.canonicalization, body.contentDigest) : []),
+            ]}
+          />
         </div>
       )}
     </FlowAnswerNote>
@@ -72,15 +79,17 @@ export function PublicationNote({ answer }: { answer: ApiResult<PublicationDraft
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            发布答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(publishOutcomeLabels, body.outcome)}
+            <OutcomeText labels={publishOutcomeLabels} outcome={body.outcome} />
           </p>
           {body.publication ? <EmbeddedPublication publication={body.publication} /> : null}
-          {body.status ? (
-            <p>
-              发布稿状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
-            </p>
-          ) : null}
+          {body.status ? <p>现在的状态：{labelOf(draftStatusLabels, body.status)}</p> : null}
           {body.cause ? <p>原因：{body.cause}</p> : null}
+          <TechnicalDetails
+            rows={[
+              { label: '结果码', value: body.outcome },
+              { label: '状态码', value: body.status ?? '' },
+            ]}
+          />
         </div>
       )}
     </FlowAnswerNote>
@@ -97,11 +106,13 @@ function EmbeddedPublication({ publication }: { publication: CommercialPublicati
       </p>
       {publication.pendingCause ? <p>未完成的原因：{publication.pendingCause}</p> : null}
       {publication.cause ? <p>原因：{publication.cause}</p> : null}
-      {publication.declaredDigest || publication.computedDigest ? (
-        <p className="font-mono break-all">
-          提交的内容摘要 {publication.declaredDigest ?? '—'} · 服务端算出的内容摘要 {publication.computedDigest ?? '—'}
-        </p>
-      ) : null}
+      <TechnicalDetails
+        rows={[
+          { label: '发布结果码', value: publication.outcome },
+          { label: '提交的摘要', value: publication.declaredDigest ?? '' },
+          { label: '核算的摘要', value: publication.computedDigest ?? '' },
+        ]}
+      />
       {publication.declarations && publication.declarations.length > 0 ? (
         <p>
           随版本登记的正文：
@@ -117,17 +128,11 @@ function EmbeddedPublication({ publication }: { publication: CommercialPublicati
 }
 
 /**
- * 答复一行：先中文结论，原码作次要信息跟在后面，给要对日志的人。未收录的原码照样显出原名——服务端新增一格时
- * 宁可显示原名，也不把它归进既有中文说法——那时不再重复显一遍。
+ * 答复一行只说中文结论；原码进各答复底部的「技术详情」，给要对日志的人。未收录的原码照样显出原名——服务端新增一格时
+ * 宁可显示原名，也不把它归进既有中文说法。
  */
 function OutcomeText({ labels, outcome }: { labels: Record<string, string>; outcome: string }) {
-  const label = labelOf(labels, outcome);
-  return (
-    <>
-      {label}
-      {label !== outcome ? <span className="ml-1 font-mono text-idpxyz-breadcrumb">{outcome}</span> : null}
-    </>
-  );
+  return <>{labelOf(labels, outcome)}</>;
 }
 
 // 摘要整串显示不截断：它就是载体与册上那一格，操作者要拿它去对。
@@ -144,12 +149,11 @@ export function FactList({ facts }: { facts: readonly PublicationFact[] }) {
   );
 }
 
-function DigestLine({ canonicalization, digest }: { canonicalization?: string; digest?: string }) {
-  return (
-    <p className="font-mono break-all">
-      内容摘要 {digest ?? '—'}（算法 {canonicalization ?? '—'}）
-    </p>
-  );
+function digestRows(canonicalization?: string, digest?: string): { label: string; value: string }[] {
+  return [
+    { label: '内容摘要', value: digest ?? '' },
+    { label: '摘要算法', value: canonicalization ?? '' },
+  ];
 }
 
 /**
@@ -181,7 +185,7 @@ export function FlowAnswerNote<Body>({
       return (
         <div className="text-xs text-idpxyz-danger">
           <p>
-            {what}调用方式问题：{problemNote(answer.code)}
+            {what}没有被接受：{problemNote(answer.code)}
             {answer.detail ? ` ${answer.detail}` : ''}
           </p>
           <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
@@ -190,11 +194,16 @@ export function FlowAnswerNote<Body>({
     case 'noAnswer':
       return (
         <div className="text-xs text-idpxyz-danger">
-          <p>服务端没有形成{what}答案：{problemNote(answer.code)}；可稍后重试。</p>
+          <p>系统这次没有处理完{what}：{problemNote(answer.code)}；请稍后重试。</p>
           <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
         </div>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return (
+        <div className="text-xs text-idpxyz-danger">
+          <p>连不上服务，{what}没有完成；请确认网络与服务在运行后重试。</p>
+          <TechnicalDetails rows={[{ label: '传输层', value: answer.message }]} />
+        </div>
+      );
   }
 }

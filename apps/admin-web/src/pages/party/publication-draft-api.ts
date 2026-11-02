@@ -555,7 +555,7 @@ export const draftNotReadableWords = '这份发布稿的内容本构建读不回
 
 /** 预览答案代数（`application.PreviewCommercialPublicationOutcome` 原名）。 */
 export const previewOutcomeLabels: Record<string, string> = {
-  PREVIEWED: '预览通过，还没有保存。下面是按内容算出的内容摘要，之后批准和发布的必须是这同一份内容。',
+  PREVIEWED: '预览通过，还没有保存。之后批准和发布的必须是这同一份内容。',
   NOT_ACCEPTED: '没有通过：有几格填得不对，见各格下方的红字。没有保存任何内容。',
 };
 
@@ -590,7 +590,7 @@ export const approveOutcomeLabels: Record<string, string> = {
   APPROVER_NOT_QUALIFIED: '你的授权层级不够：审批职责规则要求更高层级的批准人。',
   DRAFT_ALREADY_APPROVED: '这份发布稿已经批准过，可以直接发布。',
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
-  DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份（别的操作者改动过），这次没有批准。请核对现在的内容后再批，内容可在「待批准发布」页读回。',
+  DRAFT_CHANGED: '这份改动的内容已经不是你看到的那份（有同事改过），这次没有批准。请核对现在的内容后再批。',
   DRAFT_NOT_READABLE: draftNotReadableWords,
 };
 
@@ -609,7 +609,7 @@ export const publishOutcomeLabels: Record<string, string> = {
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
   DRAFT_AWAITS_EFFECTIVE_START: '还没到生效起点：到生效起点之后再来发布。这不是失败，发布稿保持已批准。',
   PUBLICATION_NOT_LANDED: '发布没有完成，原因见下。发布稿保持已批准。',
-  DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份，这次没有发布。请核对现在的内容后再发，内容可在「待批准发布」页读回。',
+  DRAFT_CHANGED: '这份改动的内容已经不是你看到的那份（有同事改过），这次没有发布。请核对现在的内容后再发。',
   DRAFT_NOT_READABLE: draftNotReadableWords,
 };
 
