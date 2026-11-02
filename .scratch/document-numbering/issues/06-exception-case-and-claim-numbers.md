@@ -65,3 +65,35 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - AT 盘点总览计数（`tools/at-coverage-counts -check` 只报总览过期，表行与 UC 立号对得上）与机制清点由推送方在 main 的 tip 上重生成。
 - 共享面：`cmd/parcel-dispatch/assemble.go` 的 `wireDispatcher` 里把 `buildDocumentNumbers` 挪到 `newTenantBoundProjectionDerive` 之前（后者要用它）；`newTenantBoundProjectionDerive` 多了一个参数，两个既有测试随之改了调用。`apps/admin-web/src/vocabulary/objects.ts` 只在「异常与索赔」段末追加两词。
 - `EstablishCase` 与 `ReceiveClaimItem` 的签名或入参变了：别的票若在 VE 里新建案件或索赔，要交单据号那一格。
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `3b63bd7c8`、两轴阻断为零）
+
+协调方接受保存点退号的偏离。以下各条追加提交，未 rebase：
+
+1. **并入 main**：`git merge origin/main`（`620847516`，含票 03 与单据编号词典）。
+2. **平台注释**：`docnumber.NumberingRuleCollision`、`Assigner.Assign`、`docnumbering.Components.Assigner` 改成「必须让取过的流水不提交：回滚开立事务，或在取号那一步包保存点只退号」。
+3. **统一口径**：读口与首方回执的 `numberlessReason` 改名 `documentNumberAbsence`；迁移 0033 的列 `numberless_reason` 改名 `document_number_absence`；Go 侧随之改名（`domain.DocumentNumberAbsence`、`DocumentNumber.Absence()` / `StoredAbsence()`、读行的 `DocumentNumberAbsence`）；首方契约、`case-api.ts` 同改。
+4. **共用词典**：删掉 `numberlessNote` 与 `objectNouns.exceptionCaseNumber` / `claimNumber`，号名取 `documentTypeWords.EXCEPTION_CASE` / `CLAIM` 的 `numberName`，无号说法取 `documentNumberAbsenceNote`。三页的「有号 / 无号」显示收成 `pages/visibility/DocumentNumberCell.tsx` 一个组件（分支逻辑在 `document-number.ts::primaryReference`，node:test 钉着）。这几页都不开立单据、没有开立答复可显示，`numberingCollisionNote` 在本票没有调用点。
+5. **案件撞号的可见与恢复**（取舍见下）：
+   - 撞号从未决原因改成业务答案 `CaseNumberingCollided`（`CASE_NUMBERING_RULE_COLLISION`）。编排把那一次命中记进案件撞号册（迁移 0033 的 `case_numbering_collision`，键是租户、对象、类型、因果条件，存够重建一次命中的各样与撞上的格式）。
+   - 出发门禁那一路答单独一格 `DepartureGateSignalCaseNumberingCollided`，带撞上的格式；冲突信号那一路记成单独的去向 `ConflictSignalCaseNumberingCollided`。两路的信封都照常入账、投影照落。
+   - 恢复由 parcel-dispatch 的 `caseNumberingRedriveBeat` 做：每拍在派发之后取撞号册上到期的命中，用同一只信号编排原样再分诊。仍撞就推后 `CaseNumberingRedriveInterval`（五分钟，产品策略，理由写在常量注释上），走通即建案并销账；这一原因的发作期一落，`SaveRaised` 同一笔销掉那一行。仍撞的那几件作为本拍错误交给循环记成 `dispatch beat failed`，错误正文以 `exception case numbering rule collision` 起头，带租户、包裹、信号类型与撞上的格式，单列一类（`ErrCaseNumberingRuleCollision`）。
+   - 索赔侧 `ClaimNumberingRuleCollision` 与案件侧都写明「不是未决」，以及恢复路为何不同：索赔有提交方，答案回给客户，客户原样重发即可；案件的命中没有提交方，所以记进撞号册、由重驱再分诊。
+6. **AT-VE-228 撞号那一半的生产路由用例**：`cmd/parcel-dispatch/exception_case_number_test.go::TestACaseNumberCollisionSettlesTheEnvelopeAndTheRedriveEstablishesTheCaseAfterTheFormatChanges`。租户登一份会与旧号重复的格式，经生产路由：信封 `PUBLISHED`、失败零次，投影在，案件与发作期都不落，撞号册一行；同一拍报 `ErrCaseNumberingRuleCollision`，推后期间下一拍不出声。换格式、到了重试时刻后的下一拍建案，号是新格式的首号，撞号册清空。撞号册另有真库用例：读回、覆盖、推后、销账、`SaveRaised` 销账、事务外拒。重驱与两路去向有编排用例。
+
+### 恢复做法的取舍（两种都没选，请协调方裁）
+
+协调方给的两种做法在派发框架上都做不成：
+
+- **现有机制把耗尽预算的那条再处理**：框架没有这个口。认领时就 `attempt + 1`，`attempt >= MaxAttempts` 当场落 `ABANDONED` 并推进分区，`Store` 只有 `Claim`、`MarkPublished`、`RecordFailure`、`Abandon`，没有把 `ABANDONED` 重新入队的口。本仓文档也没有手工救回的操作，各 ADR 都把 `ABANDONED` 当终态。
+- **撞号不计入 `MaxAttempts`、原样重投**：预算是在认领时扣的，不是失败时扣的；不改框架就没法让一条信封不耗预算地重投。即便能，也会让出发信封所在的分区（同一对象的后续信封）一直堵到租户换格式为止，正是 ADR-0235 记过的那种病。
+
+所以按本仓既有的「重投改变不了的就入账，另给续办」那一路做（ADR-0094 决定四、ADR-0106、ADR-0235）：撞号是业务答案，信封入账；命中进撞号册；派发进程每拍定时重驱，形状照 `cycleCutBeat`（按截止日截单）。实际效果对得上协调方要的「不烧失败预算」「换格式后能重新驱动」，而且不用任何人工操作。没有做「规则册登记新版时发信封触发重驱」：那要平台编号组件在登记事务里交 outbox 信封、派发再登一条路，跨票 02 的地盘；五分钟一次的到期重试已能兜住换格式、换周期、旧号让出三种情形。若要改成登记即触发，另起一票。
+
+### 修订后自验（本机 PG）
+
+- `go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出。
+- 受影响包加 architecture、platform、`cmd/...`、migrations 的 `go test -count=1 -p 1` 全绿，含 PG；新用例无 SKIP。
+- 评审探针 `zz_review_probe_test.go` 放进 `vepostgres` 跑 `-run TestReviewProbe` 全过，跑完删除。
+- 前端 `npx tsc -b`、`pnpm test`（1063 通过）、`npx vite build` 都过。
+- `tools/at-coverage-counts -check` 只报总览过期，表行与 UC 立号对得上；总览计数与机制清点留给推送方重生成。
