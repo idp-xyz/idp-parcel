@@ -12,7 +12,7 @@ import (
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 本文件对真实 PostgreSQL 证登记争议口与处理争议口的生产装配（ADR-0353 决定一至四；票 home-today-todo/03）：两口按特性登记处那一份
+// 本文件对真实 PostgreSQL 证登记争议口与处理争议口的生产装配（ADR-0354 决定一至四；票 home-today-todo/03）：两口按特性登记处那一份
 // build 与 mount 装上，进的是 buildSettlementOrchestrations 装的截单编排上的开立与处理。对账单经确认口与发布口真发一张，不直写库。
 // 证据只记 `S`。
 
@@ -72,7 +72,7 @@ func disputeBodyOf(id, amount string, openedAt time.Time) string {
 		`","reason":"客户来电：重量按 1.2 kg 计","openedAt":"` + openedAt.UTC().Format(time.RFC3339) + `"}`
 }
 
-// Covers: AT-SA-228（ADR-0353 决定一、三、四）——持登记授予的客服代登记一项争议：答 201；同一份重放答已存在，同标识换了金额答冲突；金额
+// Covers: AT-SA-228（ADR-0354 决定一、三、四）——持登记授予的客服代登记一项争议：答 201；同一份重放答已存在，同标识换了金额答冲突；金额
 // 越行、单号不在册、提出早于发布答未受理；行上记下登记人；持处理授予的财务打登记口答未授予；单作废之后新争议答作废那一格，已开的那项
 // 照旧在。
 func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
@@ -131,7 +131,7 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-229（ADR-0353 决定二、四）——持处理授予的财务先处理成待复核（201），再处理成拒绝（201），之后再处理答已处理并交回拒绝那
+// Covers: AT-SA-229（ADR-0354 决定二、四）——持处理授予的财务先处理成待复核（201），再处理成拒绝（201），之后再处理答已处理并交回拒绝那
 // 一份（200）；行上记下最后那一次处理人，登记人不变；持登记授予的客服打处理口答未授予；不在册的争议答未受理。
 func TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)

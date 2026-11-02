@@ -23,7 +23,7 @@ echo "== 费用确认、到点截单与供应商账单审核的演示租户取�
   -input "$SEEDS/settlement/19-supplier-audit-authority-carrier-trunk.json"
 "$BIN/parcel-settlement-register" audit-escalation-ceiling \
   -input "$SEEDS/settlement/20-audit-escalation-ceiling-carrier-trunk.json"
-# 结算运营决定由配置员持有：费用确认、对账单发布、供应商账单接收、审核应付，以及代登记与处理客户对账单争议（ADR-0353）。照 477 那一节的约定，每一种登一行准入对照、一段权威
+# 结算运营决定由配置员持有：费用确认、对账单发布、供应商账单接收、审核应付，以及代登记与处理客户对账单争议（ADR-0354）。照 477 那一节的约定，每一种登一行准入对照、一段权威
 # 区间——少一行，授予齐备也答 OUTSIDE_ADMISSION_SCOPE。谁持有是租户取值，这里登的是演示租户的取值。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/69-authority-interval-operation-decision-charge-confirmation.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/70-authority-interval-operation-decision-statement-publication.json"

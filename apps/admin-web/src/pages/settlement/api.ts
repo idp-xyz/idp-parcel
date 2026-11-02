@@ -464,7 +464,7 @@ export const fundsRegistrationOutcomeLabels: Record<string, string> = {
   SOURCE_NOT_ACCEPTED: '没有登记：请检查流水号是否填了、金额是否大于零、更正时版本号是否指向当前版本。',
 };
 
-// —— 对账单争议的两个写口（ADR-0353）——
+// —— 对账单争议的两个写口（ADR-0354）——
 
 /**
  * 两口的答复。outcome 是业务判别：DISPUTE_OPENED / DISPUTE_RESOLVED 是这次落了新东西；EXISTING_DISPUTE、DISPUTE_CONFLICT、

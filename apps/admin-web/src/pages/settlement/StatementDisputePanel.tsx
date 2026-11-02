@@ -28,7 +28,7 @@ import {
 } from './dispute-forms';
 import { formatMoney } from './ops-ui';
 
-// 对账单页右栏：客服照客户来电或来信代登记一项争议，财务核实后处理（ADR-0353）。两张表单各按自己那一种授予收起（ADR-0315）：
+// 对账单页右栏：客服照客户来电或来信代登记一项争议，财务核实后处理（ADR-0354）。两张表单各按自己那一种授予收起（ADR-0315）：
 // 只在明确知道没有授予时收起，不知道就摆，服务端照旧每次判。表单只对左边选中的那一张单；单的全貌与已有争议在左边的行与技术详情里。
 
 const fieldClass = 'w-full rounded border border-idpxyz-border bg-idpxyz-editor px-2 py-1 text-[12px] text-idpxyz-text';

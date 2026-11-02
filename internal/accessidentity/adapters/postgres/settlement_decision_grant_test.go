@@ -59,7 +59,7 @@ func TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately(t *testing.T)
 	}
 
 	// Covers: AT-SA-228、AT-SA-229（接入身份半边）——登记争议与处理争议两种授予登得进（access_identity 0037），各是各的一种：
-	// 能代客户登记的不因此能处理（ADR-0353 决定一、二）。
+	// 能代客户登记的不因此能处理（ADR-0354 决定一、二）。
 	for index, kind := range []accessidentity.DecisionKind{
 		accessidentity.DecisionStatementDisputeRegistration, accessidentity.DecisionStatementDisputeResolution,
 	} {

@@ -31,7 +31,7 @@ var (
 	ErrInclusionBackfillsPeriod = errors.New("settlement accounting: an inclusion cannot backfill the original period")
 	ErrInvalidDispute           = errors.New("settlement accounting: invalid statement dispute")
 	ErrDisputeResolved          = errors.New("settlement accounting: the dispute is already resolved")
-	// ErrDisputeOnVoidedStatement：已作废的单不收新争议（ADR-0353 决定三）。整单已不应继续有效，其中的费用要在替代单上再出具，
+	// ErrDisputeOnVoidedStatement：已作废的单不收新争议（ADR-0354 决定三）。整单已不应继续有效，其中的费用要在替代单上再出具，
 	// 对着作废单提的异议没有一张有效的单可以落；作废之前已开的争议照旧在，等人处理。
 	ErrDisputeOnVoidedStatement = errors.New("settlement accounting: a voided statement takes no new dispute")
 )

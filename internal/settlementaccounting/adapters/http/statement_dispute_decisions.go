@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 登记争议口与处理争议口（ADR-0353 决定一、二）：操作者渠道「运营决定」能力面上的两种客户对账单争议决定，进的是 parcel-api 已装配的
+// 登记争议口与处理争议口（ADR-0354 决定一、二）：操作者渠道「运营决定」能力面上的两种客户对账单争议决定，进的是 parcel-api 已装配的
 // 截单编排上的 OpenDispute 与 ResolveDispute（ADR-0170 决定一）。争议不过结算时点那一道门：门管的是确认与截单什么时候能动，客户
 // 什么时候提出异议不由它定。提交操作者记成操作证据，只进审计（决定四）。
 

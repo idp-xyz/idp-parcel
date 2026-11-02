@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 钉登记争议口与处理争议口的 Intake 那一层（ADR-0353 决定一、二、四）：各按自己那一种决定认证，租户取认证结果，提交操作者记成命令上的
+// 钉登记争议口与处理争议口的 Intake 那一层（ADR-0354 决定一、二、四）：各按自己那一种决定认证，租户取认证结果，提交操作者记成命令上的
 // 操作证据；载荷形状不对答 400、不进编排。编排各格的答复由 cmd/parcel-api 的真库用例钉。
 
 type capturingDisputes struct {
