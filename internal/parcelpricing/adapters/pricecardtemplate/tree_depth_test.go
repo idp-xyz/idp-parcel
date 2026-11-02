@@ -35,7 +35,7 @@ func conditionChainCard(levels int) (card filled, leafRow int) {
 	return card, len(kept) + 1
 }
 
-// Covers: `AT-PP-043`——条件树恰在层数上限上照常读通（两种载体同一个摘要），登记快照读得回来；多一层即在超限的节点上报
+// Covers: `AT-PP-050`——条件树恰在层数上限上照常读通（两种载体同一个摘要），登记快照读得回来；多一层即在超限的节点上报
 // TREE_INVALID，不再交领域构造，所以没有连带的构造门问题，两种载体的问题清单逐字相同。
 func TestAConditionTreeAtTheDepthCapIsReadAndOneLevelMoreIsRefusedAtTheNode(t *testing.T) {
 	atCap, _ := conditionChainCard(maxTreeDepth)
@@ -69,7 +69,7 @@ func TestAConditionTreeAtTheDepthCapIsReadAndOneLevelMoreIsRefusedAtTheNode(t *t
 	}
 }
 
-// Covers: `AT-PP-043`——计算树同一道门：取较大值一层套一层到第 33 层，超限的两个节点各报一条，话里说的是计算树；领域那道
+// Covers: `AT-PP-050`——计算树同一道门：取较大值一层套一层到第 33 层，超限的两个节点各报一条，话里说的是计算树；领域那道
 // 「取较大值不套取较大值」的构造门不再跑，因为构造走到超限的节点就停了。
 func TestACalculationTreeDeeperThanTheCapIsRefusedAtTheNodesPastIt(t *testing.T) {
 	card := fullCard().clone()
@@ -109,8 +109,8 @@ func TestACalculationTreeDeeperThanTheCapIsRefusedAtTheNodesPastIt(t *testing.T)
 	}
 }
 
-// Covers: `AT-PP-043`——层数上限把领域那段平方压住。评审探针：十万节点的条件树单链（请求体 5 MB 多），每层构造都把整棵子树
-// 校验一遍，读取约三分钟、RSS 九百多兆，而且读通了（`已校验`）。现在第 33 层即拦，读取在一秒上下。
+// Covers: `AT-PP-050`——层数上限把领域那段平方压住：领域每层构造都把整棵子树校验一遍，一条近十万节点的条件树单链若逐层
+// 构造是节点数的平方；在第 33 层即拦，读取的代价跟着节点数走，不随链长平方增长。
 func TestALongConditionChainIsStoppedAtTheCapNotBuiltLevelByLevel(t *testing.T) {
 	card, _ := conditionChainCard(maxRowsPerSheet - len(fullCard().data[sheetConditions]))
 	body := compactJSON(t, card.workbookJSON(t))

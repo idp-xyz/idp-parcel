@@ -380,7 +380,7 @@ func columnRanks(columns []string) []int {
 // newJSONStringWriter 交回一个把字符串写成 JSON 字符串字面量的函数，不转义 < > &。规范化字节是来源标识（form: 名与来源散列）
 // 取自的那一份，规范列出的规范化只有键排序、去空白、数字落成字符串与行序不动；json.Marshal 默认把这三个字符写成 \u003c 一类，
 // 是规范没列的又一样变换，HTML 转义防的是嵌进网页，与这份字节无关。只有 Encoder 能关掉它，代价是每次在末尾多写一个换行，这里
-// 去掉。U+2028、U+2029 照样转义：encoding/json 关不掉，载体起点那版同样如此。
+// 去掉。U+2028、U+2029 照样转义：encoding/json 关不掉。
 func newJSONStringWriter() func(out *bytes.Buffer, text string) {
 	var scratch bytes.Buffer
 	encoder := json.NewEncoder(&scratch)

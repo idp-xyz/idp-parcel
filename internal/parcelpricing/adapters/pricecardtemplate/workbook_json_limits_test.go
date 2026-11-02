@@ -184,8 +184,8 @@ func TestWorkbookJSONMemoryIsBoundedByTheRowLimitNotTheBody(t *testing.T) {
 	}
 }
 
-// Covers: `AT-PP-046`——空行也算行数。复评探针：64 张表各 5.4 万个空行 `{}`（9.9 MiB，表数、单表行数、总格数都没到上限），
-// 每个空行一格不占却各占一个行切片头，RSS 约两百兆；现在各表行数合计到上限即停。断言在合计上限处拒、累计分配有界。
+// Covers: `AT-PP-046`——空行也算行数。64 张表各 5.4 万个空行 `{}`（9.9 MiB，表数、单表行数、总格数都没到上限）：每个空行一格
+// 不占却各占一个行切片头，要在各表行数合计到上限处即停。断言在合计上限处拒、累计分配有界。
 func TestEmptyRowsCountTowardsTheRowTotal(t *testing.T) {
 	var body strings.Builder
 	body.WriteString(`{"templateVersion":"PPT-2","sheets":{`)
@@ -207,8 +207,8 @@ func TestEmptyRowsCountTowardsTheRowTotal(t *testing.T) {
 		t.Fatalf("err = %v，应是各表行数合计超限", err)
 	}
 	t.Logf("体 %d 字节，累计分配 %d 字节", len(raw), allocated)
-	// 本机实测累计分配约 111 MiB（大头是流式解析逐个记号的开销），旧写法把六十四张表全攒下、约 417 MiB；192 MiB 两头都留了余量，
-	// 防的是退回「全攒下」那个量级。
+	// 停在合计上限时累计分配约 111 MiB（大头是流式解析逐个记号的开销）；把六十四张表全攒下是它的近四倍。192 MiB 两头都留了
+	// 余量，防的是退回「全攒下」那个量级。
 	if allocated > 192<<20 {
 		t.Fatalf("累计分配 %d 字节；该在各表行数合计上限处停", allocated)
 	}
