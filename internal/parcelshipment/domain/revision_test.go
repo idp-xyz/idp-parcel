@@ -77,6 +77,18 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		"FormNewSubmissionVersion": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.FormNewSubmissionVersion(supersessionSpecFor(t, "parcel-1"))
 		},
+		// 单据号在建单那一笔事务里记上，记完与委托行同一笔提交；它不推进版本，保存靠的仍是建单写下的那个版本。
+		"RecordDocumentNumbering": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			number, err := domain.NewShipmentDocumentNumber("P20261102000001")
+			if err != nil {
+				t.Fatalf("document number: %v", err)
+			}
+			numbering, err := domain.NumberedShipment(number)
+			if err != nil {
+				t.Fatalf("numbering: %v", err)
+			}
+			return request.RecordDocumentNumbering(numbering)
+		},
 	}
 
 	classified := classifyAggregateTransitions(reflect.TypeOf(domain.ShipmentRequest{}))
@@ -392,6 +404,8 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"sourceDataVersions": true,
 		// 撤回决定：门开到 WITHDRAWN 后必须随快照往返（ADR-0286），其余三个状态下由 validForRehydration 拒绝携带。
 		"withdrawal": true,
+		// 单据号这一格（ADR-0355）：不进快照文档，随两列读回；漏带回，重放答不出原号。
+		"documentNumbering": true,
 	}
 
 	aggregate := reflect.TypeOf(domain.ShipmentRequest{})

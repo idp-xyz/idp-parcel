@@ -47,6 +47,11 @@ type ShipmentRequestViewsReader interface {
 		scope domain.AuthorizedQueryScope,
 		requestID domain.ShipmentRequestID,
 	) (ports.ShipmentRequestDetailRecord, bool, error)
+	ListVisibleByDocumentNumber(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		number domain.ShipmentDocumentNumber,
+	) ([]ports.ShipmentRequestSummaryRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
@@ -69,6 +74,10 @@ const codeRequestNotVisible = "SHIPMENT_REQUEST_NOT_VISIBLE"
 // 列表与单份共用一个端点，按 `shipmentRequestId` 查询参数分派：参数是否在场属传输形状
 // （与方法检查同级，先于 Intake），读它不构成读业务内容——未配置 Intake 对两条分支同答
 // 403，分支选择不泄露任何东西。
+//
+// 列表分支另收 `documentNumber`（运单号，ADR-0355 决定十一「可按单据号检索」）：带了就只答单据号逐字等于它的那几行，
+// 仍是 LISTED——没有是空数组，不是 404：管理台拿运单号解析委托标识，要分得出「没有这个运单号」与「读不动」。作用域与
+// 不带参数时同一份（Intake 的列表查询），值在 Intake 之后才读，未配置的渠道照旧先答 403。
 func NewQueryShipmentRequestViewsEndpoint(
 	intake ShipmentRequestViewsIntake,
 	reader ShipmentRequestViewsReader,
@@ -100,7 +109,17 @@ func serveList(
 		return
 	}
 
-	records, err := reader.ListVisible(request.Context(), query.Scope, query.Limit)
+	var records []ports.ShipmentRequestSummaryRecord
+	if request.URL.Query().Has("documentNumber") {
+		number, parseErr := domain.NewShipmentDocumentNumber(request.URL.Query().Get("documentNumber"))
+		if parseErr != nil {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		records, err = reader.ListVisibleByDocumentNumber(request.Context(), query.Scope, number)
+	} else {
+		records, err = reader.ListVisible(request.Context(), query.Scope, query.Limit)
+	}
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
@@ -190,15 +209,20 @@ type viewDetailResponse struct {
 	Request *requestDetailBody `json:"request"`
 }
 
+// requestSummaryBody 的 `documentNumber` 是委托的单据号（管理台叫运单号，ADR-0355 决定十一），没有号时整键不出现、不拿委托标识
+// 顶；`documentNumberAbsence` 只在没有号时在场，说是哪一种（ISSUED_BEFORE_NUMBERING / NUMBERING_TIME_ZONE_NOT_CONFIGURED），
+// 管理台按它在技术详情里注明，不一律写成上线前开立。
 type requestSummaryBody struct {
-	ShipmentRequestID   string `json:"shipmentRequestId"`
-	CustomerAccountID   string `json:"customerAccountId"`
-	Source              string `json:"source"`
-	SourceRequestKey    string `json:"sourceRequestKey"`
-	State               string `json:"state"`
-	SubmissionVersionID string `json:"submissionVersionId"`
-	DeclaredParcelCount int    `json:"declaredParcelCount"`
-	SubmittedAt         string `json:"submittedAt"`
+	ShipmentRequestID     string `json:"shipmentRequestId"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	CustomerAccountID     string `json:"customerAccountId"`
+	Source                string `json:"source"`
+	SourceRequestKey      string `json:"sourceRequestKey"`
+	State                 string `json:"state"`
+	SubmissionVersionID   string `json:"submissionVersionId"`
+	DeclaredParcelCount   int    `json:"declaredParcelCount"`
+	SubmittedAt           string `json:"submittedAt"`
 }
 
 type requestDetailBody struct {
@@ -242,7 +266,7 @@ type decisionBody struct {
 }
 
 func summaryBodyOf(record ports.ShipmentRequestSummaryRecord) requestSummaryBody {
-	return requestSummaryBody{
+	body := requestSummaryBody{
 		ShipmentRequestID:   record.ShipmentRequestID.String(),
 		CustomerAccountID:   record.CustomerAccountID.String(),
 		Source:              record.Source.String(),
@@ -252,6 +276,13 @@ func summaryBodyOf(record ports.ShipmentRequestSummaryRecord) requestSummaryBody
 		DeclaredParcelCount: record.DeclaredParcelCount,
 		SubmittedAt:         record.SubmittedAt.UTC().Format(time.RFC3339Nano),
 	}
+	if number, numbered := record.DocumentNumbering.Number(); numbered {
+		body.DocumentNumber = number.String()
+	}
+	if absence, absent := record.DocumentNumbering.Absence(); absent {
+		body.DocumentNumberAbsence = absence.String()
+	}
+	return body
 }
 
 func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {

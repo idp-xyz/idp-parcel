@@ -26,7 +26,10 @@ func TestSubmitEstablishesSubmittedRequestAfterPreservingSource(t *testing.T) {
 	if result.Outcome() != application.OutcomeSubmitted {
 		t.Fatalf("outcome = %q, want SUBMITTED", result.Outcome())
 	}
-	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "record-ownership", "insert-request"}; !slices.Equal(got, want) {
+	// 取号排在建单答「已建成」之后（ADR-0355 决定三「取号只发生在确定要落单的那一步」），记号与建单同在守卫那一笔里。
+	if got, want := fixture.calls, []string{
+		"preserve-source", "decide-ownership", "record-ownership", "insert-request", "issue-document-number", "record-document-number",
+	}; !slices.Equal(got, want) {
 		t.Fatalf("call order = %v, want %v", got, want)
 	}
 
@@ -556,6 +559,7 @@ type fixture struct {
 	ownership *ownershipAuthorityDouble
 	answers   *submissionAnswersDouble
 	handoff   *handoffChannelDouble
+	numbers   *documentNumberIssuerDouble
 	calls     []string
 }
 
@@ -574,6 +578,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	value.answers = &submissionAnswersDouble{record: record}
 	value.handoff = &handoffChannelDouble{t: t, record: record}
+	value.numbers = &documentNumberIssuerDouble{record: record}
 	value.handler = application.NewSubmitShipmentRequestHandler(
 		value.sources,
 		value.requests,
@@ -583,6 +588,8 @@ func newFixture(t *testing.T) *fixture {
 		value.handoff,
 		&identityFactoryDouble{},
 		fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
+		value.numbers,
+		value.requests,
 	)
 	return value
 }
@@ -886,6 +893,21 @@ func (double *shipmentRequestRepositoryDouble) Save(
 	return ports.ShipmentRequestSaved, nil
 }
 
+// RecordShipmentDocumentNumbering 扮演把开立结果记在刚建成的委托上：生产仓储只写那两列，替身整份换上带号的聚合，读回
+// 时带着号，重放据它答原号。
+func (double *shipmentRequestRepositoryDouble) RecordShipmentDocumentNumbering(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) error {
+	double.record("record-document-number")
+	if _, found := double.records[identity]; !found {
+		return errors.New("document numbering recorded on a request that was never inserted")
+	}
+	double.records[identity] = request
+	return nil
+}
+
 func (double *shipmentRequestRepositoryDouble) stored(
 	t *testing.T,
 	identity domain.SourceIdentity,
@@ -1043,6 +1065,34 @@ func (double *submissionAnswersDouble) recordedFor(identity domain.SourceIdentit
 
 // sequentialGuard 直接调 fn：内存替身的用例一次只走一路；守卫真的排队由 cmd/parcel-api 的真库并发用例取证。
 type sequentialGuard struct{}
+
+// documentNumberIssuerDouble 扮演平台编号组件：默认按次序出号；outcome 设成时区未配置或撞号时答那一种，failNext 让下一次取号失败。
+type documentNumberIssuerDouble struct {
+	record   func(string)
+	issued   int
+	outcome  ports.ShipmentDocumentNumberIssueOutcome
+	failNext error
+}
+
+func (double *documentNumberIssuerDouble) IssueShipmentDocumentNumber(
+	context.Context,
+	domain.TenantID,
+) (ports.ShipmentDocumentNumberIssue, error) {
+	double.record("issue-document-number")
+	if err := double.failNext; err != nil {
+		double.failNext = nil
+		return ports.ShipmentDocumentNumberIssue{}, err
+	}
+	if double.outcome != ports.ShipmentDocumentNumberIssueOutcomeInvalid && double.outcome != ports.ShipmentDocumentNumberAssigned {
+		return ports.ShipmentDocumentNumberIssue{Outcome: double.outcome}, nil
+	}
+	double.issued++
+	number, err := domain.NewShipmentDocumentNumber("P20260807" + strconv.Itoa(100000+double.issued))
+	if err != nil {
+		return ports.ShipmentDocumentNumberIssue{}, err
+	}
+	return ports.ShipmentDocumentNumberIssue{Outcome: ports.ShipmentDocumentNumberAssigned, Number: number}, nil
+}
 
 func (sequentialGuard) Exclusively(ctx context.Context, _ domain.SourceIdentity, fn func(context.Context) error) error {
 	return fn(ctx)

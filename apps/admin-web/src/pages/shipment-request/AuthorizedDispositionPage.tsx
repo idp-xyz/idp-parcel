@@ -26,7 +26,7 @@ import {
 } from './authorized-disposition';
 import { recordedJudgmentsBlock } from './recorded-judgments';
 import { caseBusinessFields, caseFailureText, caseTechnicalRows } from './review-case';
-import { shipmentNoOf } from './ref-no';
+import { shipmentDisplayNoOf } from './ref-no';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // 页面标题取导航登记的那一份;主责上下文(parcel-shipment)只在代码里出现,屏上不说系统的话。
@@ -53,7 +53,7 @@ interface PendingRejection {
 // 「拒绝」是对受限委托形成的去向决定(ADR-0132 决定一),不是对受限控制的表决——正文照这条说,不说「驳回」。
 function rejectionConfirmText({ entry, reason }: PendingRejection): string {
   return (
-    `将拒绝运单 ${shipmentNoOf(entry.shipmentRequestId)}(客户 ${entry.customerAccountId},${entry.declaredParcelCount} 件)。` +
+    `将拒绝运单 ${shipmentDisplayNoOf(entry)}(客户 ${entry.customerAccountId},${entry.declaredParcelCount} 件)。` +
     `拒绝立即生效,之后不会再回到等待处置,也不会变成受理;理由:${reason}。`
   );
 }

@@ -14,7 +14,7 @@ const problemMessages: Record<string, string> = {
   INTAKE_FAILED: '这次没有提交成功,可以稍后再试。',
   NO_ANSWER_FORMED: '这次没有处理成功,可以稍后再试;重试不会重复建单。',
   UNNAMED_OUTCOME: '系统交回了认不出的结果,已按没有处理成功对待,可以稍后再试。',
-  SHIPMENT_REQUEST_NOT_VISIBLE: '按填写的运单号、客户单号与包裹号找不到这票运单。请核对后再提交。',
+  SHIPMENT_REQUEST_NOT_VISIBLE: '按填写的委托标识、客户单号与包裹号找不到这票运单。请核对后再提交;运单号不能代替委托标识。',
   SHIPMENT_REQUEST_NOT_YET_ACCEPTED: '这票运单还没受理,改不了资料;受理前要改请走补充。',
   ACCESS_CHANNEL_NOT_CONFIGURED: '这台管理台还没接上操作者登录渠道,请部署的人配置后再试。',
 };

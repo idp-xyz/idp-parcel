@@ -75,7 +75,16 @@ func NewQueryControlReleaseRefusalsEndpoint(
 		// 空列表交回空数组而不是 null：调用方判「没有积压」不该先判「有没有字段」。
 		bodies := make([]controlReleaseRefusalBody, 0, len(listed.Refusals))
 		for _, refusal := range listed.Refusals {
-			bodies = append(bodies, controlReleaseRefusalBodyOf(refusal))
+			body := controlReleaseRefusalBodyOf(refusal)
+			if numbering, found := listed.DocumentNumbers[refusal.ShipmentRequestID]; found {
+				if number, numbered := numbering.Number(); numbered {
+					body.DocumentNumber = number.String()
+				}
+				if absence, absent := numbering.Absence(); absent {
+					body.DocumentNumberAbsence = absence.String()
+				}
+			}
+			bodies = append(bodies, body)
 		}
 		writeJSON(response, http.StatusOK, controlReleaseRefusalsResponse{
 			Outcome:        outcomeControlReleaseRefusalsListed,
@@ -95,15 +104,19 @@ type controlReleaseRefusalsResponse struct {
 
 // controlReleaseRefusalBody 逐字段透出册上一行。occupationScope 只在存下了作用域时在场：缺席即施加时还不存作用域的存量行，scopeRecorded
 // 把这一点显式交代，页面不必靠「字段不在」去猜。reason 是提供方给的（或本上下文译不动答复时自有的）稳定原因引用，原样透出。
+// documentNumber 是行所指委托的单据号（管理台叫运单号，ADR-0355 决定十一），没有号时整键不出现、改带 documentNumberAbsence；
+// 委托读不到时两格都不出现。
 type controlReleaseRefusalBody struct {
-	ShipmentRequestID   string               `json:"shipmentRequestId"`
-	SubmissionVersionID string               `json:"submissionVersionId"`
-	ControlResultID     string               `json:"controlResultId"`
-	CustomerAccountID   string               `json:"customerAccountId"`
-	ScopeRecorded       bool                 `json:"scopeRecorded"`
-	OccupationScope     *occupationScopeBody `json:"occupationScope,omitempty"`
-	Reason              string               `json:"reason"`
-	RecordedAt          string               `json:"recordedAt"`
+	ShipmentRequestID     string               `json:"shipmentRequestId"`
+	DocumentNumber        string               `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string               `json:"documentNumberAbsence,omitempty"`
+	SubmissionVersionID   string               `json:"submissionVersionId"`
+	ControlResultID       string               `json:"controlResultId"`
+	CustomerAccountID     string               `json:"customerAccountId"`
+	ScopeRecorded         bool                 `json:"scopeRecorded"`
+	OccupationScope       *occupationScopeBody `json:"occupationScope,omitempty"`
+	Reason                string               `json:"reason"`
+	RecordedAt            string               `json:"recordedAt"`
 }
 
 type occupationScopeBody struct {

@@ -33,13 +33,14 @@ import {
   type ShipmentStateFilter,
 } from './shipment-request-list';
 import { formatInstant } from '../moment';
+import { shipmentDisplayNoOf } from './ref-no';
 
 // 页面标题、一句话与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['shipment-request-inquiry'];
 
 // 运单（领域：委托查阅），对 GET /shipment-request-views 真实端点取数；改版第一步换成工作台形态（设计源「五、改版示意 · 运单」）：
 // 列只放人要看的——运单号（下一行客户单号）、客户（名称从参与方册转写）、件数、状态、提交时间；来源主体与各种 ID 进右栏
-// 详情底部的「技术详情」。
+// 详情底部的「技术详情」。运单号是委托的单据号（ADR-0355 决定十一），委托标识进技术详情；没有单据号的委托照旧显委托标识。
 //
 // 两条查询语义红线（出处均为 CONTEXT.md）在接线后的落点：「授权查询作用域」——作用域整组由服务端接入面从认证与授权结果
 // 裁决，本页不送任何自报身份参数，也不自建跨客户查询层；「统一不可见结果」——列表的空结果是正常业务答案（LISTED + 空数组，
@@ -76,8 +77,8 @@ function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSum
       render: (row) => (
         <div className="min-w-0">
           {/* 标识取主题的链接色 text.link.hover：强调色落在画布与选中行上对比度不够（集团与法人页同一判据）。 */}
-          <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.shipmentRequestId}>
-            {row.shipmentRequestId}
+          <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={shipmentDisplayNoOf(row)}>
+            {shipmentDisplayNoOf(row)}
           </div>
           <div className="truncate text-[12px] text-idpxyz-breadcrumb" title={row.sourceRequestKey}>
             {objectNouns.customerReference} <span className="font-mono">{row.sourceRequestKey}</span>

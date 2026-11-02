@@ -37,6 +37,10 @@ const (
 	// 普通资料纠错走同一委托的新提交版本；重组先撤回原委托，再以撤回重提方向关联
 	// （ADR-0255）。与「查无」分格：两者的续办动作不同。
 	OutcomeLinkIneligible
+	// OutcomeNumberingRuleCollision 说委托本可建成，只是租户的单据编号规则渲染出的运单号连续撞上已用的号、到了跳号
+	// 上限（ADR-0355 决定八）。这一次没有建单：建单那一笔整笔回滚，答案不记，原样重发接着办——规则册换了格式之前，
+	// 重发还会撞上同一段，所以它不是一次可以靠重试解开的故障，要人去改规则册。
+	OutcomeNumberingRuleCollision
 )
 
 func (outcome SubmitOutcome) String() string {
@@ -59,6 +63,8 @@ func (outcome SubmitOutcome) String() string {
 		return "PRIOR_REQUEST_NOT_FOUND"
 	case OutcomeLinkIneligible:
 		return "LINK_INELIGIBLE"
+	case OutcomeNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -127,9 +133,12 @@ type SubmitShipmentRequestResult struct {
 	// （FormNewSubmissionVersionCommand.BasisVersion），回执带回，客户不必另读。随 hasRequest 同在场。
 	submissionVersionID domain.SubmissionVersionID
 	parcels             []SubmittedParcel
-	ownershipDecision   domain.ProductionOwnershipDecision
-	hasDecision         bool
-	gateBlockReasons    []domain.FutureSubmissionBlockReason
+	// documentNumbering 是所指名委托的单据号这一格（ADR-0355 决定十一），随 hasRequest 同在场：首次建成答刚开立的号，
+	// 重放读回原号，不再取号。
+	documentNumbering domain.ShipmentDocumentNumbering
+	ownershipDecision domain.ProductionOwnershipDecision
+	hasDecision       bool
+	gateBlockReasons  []domain.FutureSubmissionBlockReason
 }
 
 // SubmittedParcel 是结果所指名委托上的一件声明包裹：它的内部标识，配上客户为它声明的包裹件号（ADR-0184 决定四；没声明
@@ -177,6 +186,7 @@ func (result SubmitShipmentRequestResult) naming(request domain.ShipmentRequest)
 	result.hasRequest = true
 	result.submissionVersionID = request.CurrentSubmissionVersion().VersionID()
 	result.parcels = submittedParcelsOf(request)
+	result.documentNumbering = request.DocumentNumbering()
 	return result
 }
 
@@ -198,6 +208,11 @@ func submittedParcelsOf(request domain.ShipmentRequest) []SubmittedParcel {
 		parcels = append(parcels, SubmittedParcel{parcel: member, customerNumber: number, hasNumber: declared})
 	}
 	return parcels
+}
+
+// DocumentNumbering 交回所指名委托的单据号这一格；没有指名委托时为零值（Recorded 答 false）。
+func (result SubmitShipmentRequestResult) DocumentNumbering() domain.ShipmentDocumentNumbering {
+	return result.documentNumbering
 }
 
 // PriorOutcome 交回`已有结果`所指的原处理结果；别的结果没有这一格。
@@ -222,6 +237,8 @@ type SubmitShipmentRequestHandler struct {
 	handoff    ports.OtherProductionAuthorityChannel
 	identities ports.SubmissionIdentityFactory
 	clock      ports.Clock
+	numbers    ports.ShipmentDocumentNumberIssuer
+	numbering  ports.ShipmentDocumentNumberRecorder
 }
 
 func NewSubmitShipmentRequestHandler(
@@ -233,6 +250,8 @@ func NewSubmitShipmentRequestHandler(
 	handoff ports.OtherProductionAuthorityChannel,
 	identities ports.SubmissionIdentityFactory,
 	clock ports.Clock,
+	numbers ports.ShipmentDocumentNumberIssuer,
+	numbering ports.ShipmentDocumentNumberRecorder,
 ) *SubmitShipmentRequestHandler {
 	return &SubmitShipmentRequestHandler{
 		sources:    sources,
@@ -243,6 +262,8 @@ func NewSubmitShipmentRequestHandler(
 		handoff:    handoff,
 		identities: identities,
 		clock:      clock,
+		numbers:    numbers,
+		numbering:  numbering,
 	}
 }
 
@@ -321,11 +342,19 @@ func (handler *SubmitShipmentRequestHandler) resolveExclusively(
 		result, err = handler.proceed(ctx, command, preserved)
 		return err
 	})
+	if errors.Is(err, errNumberingRuleCollision) {
+		// 守卫那一笔已经整笔回滚：答案、委托、信封与取过的流水一起消失，来源保全在守卫之外、照旧在册。答案不记，重发接着办。
+		return SubmitShipmentRequestResult{outcome: OutcomeNumberingRuleCollision}, nil
+	}
 	if err != nil {
 		return SubmitShipmentRequestResult{}, err
 	}
 	return result, nil
 }
+
+// errNumberingRuleCollision 是编号规则撞号在守卫里的传法：它是一个业务答案，却必须让守卫那一笔回滚——撞号时已从序列取过的
+// 流水只有回滚才释放（ADR-0355 决定八）。守卫只认错误才回滚，所以借错误出去，在守卫外译回答案。
+var errNumberingRuleCollision = errors.New("parcel shipment: document numbering rule collision")
 
 // submissionStanding 是一份来源身份此刻的站位：settled 为真时 result 就是答复；否则 answer 是最近一次答案（answered 为假即什么
 // 都没留下），由守卫里那一段决定怎么接着办。
@@ -481,6 +510,10 @@ func (handler *SubmitShipmentRequestHandler) proceed(
 	}
 	switch inserted {
 	case ports.ShipmentRequestInserted:
+		request, err = handler.issueDocumentNumber(ctx, command.Identity, request)
+		if err != nil {
+			return SubmitShipmentRequestResult{}, err
+		}
 		return SubmitShipmentRequestResult{
 			outcome:           OutcomeSubmitted,
 			ownershipDecision: decision,
@@ -494,6 +527,45 @@ func (handler *SubmitShipmentRequestHandler) proceed(
 		return SubmitShipmentRequestResult{}, ErrUnexpectedInsertOutcome
 	}
 }
+
+// issueDocumentNumber 在委托落库之后、同一笔事务里为它开立单据号（ADR-0355 决定三；PS CONTEXT「委托」草稿 → 已提交）。
+// 放在建单答「已建成」之后而不是之前：建单答「已存在」时这一笔不落单、事务照常提交，先取了号就是一个空号。取到号或
+// 答单据编号时区未配置，都同一笔记在委托上；撞号交回 errNumberingRuleCollision，让守卫整笔回滚。
+func (handler *SubmitShipmentRequestHandler) issueDocumentNumber(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) (domain.ShipmentRequest, error) {
+	issue, err := handler.numbers.IssueShipmentDocumentNumber(ctx, identity.TenantID())
+	if err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("issue shipment document number: %w", err)
+	}
+	var numbering domain.ShipmentDocumentNumbering
+	switch issue.Outcome {
+	case ports.ShipmentDocumentNumberAssigned:
+		numbering, err = domain.NumberedShipment(issue.Number)
+	case ports.ShipmentDocumentNumberingTimeZoneNotConfigured:
+		numbering, err = domain.UnnumberedShipment(domain.DocumentNumberingTimeZoneNotConfigured)
+	case ports.ShipmentDocumentNumberRuleCollision:
+		return domain.ShipmentRequest{}, errNumberingRuleCollision
+	default:
+		return domain.ShipmentRequest{}, fmt.Errorf("%w: %d", ErrUnexpectedDocumentNumberIssue, issue.Outcome)
+	}
+	if err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("issue shipment document number: %w", err)
+	}
+	numbered, err := request.RecordDocumentNumbering(numbering)
+	if err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("record shipment document number: %w", err)
+	}
+	if err := handler.numbering.RecordShipmentDocumentNumbering(ctx, identity, numbered); err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("record shipment document number: %w", err)
+	}
+	return numbered, nil
+}
+
+// ErrUnexpectedDocumentNumberIssue 说明取号端口交回了封闭集合以外的答复。上抛而不译成业务结果，理由同 ErrUnexpectedInsertOutcome。
+var ErrUnexpectedDocumentNumberIssue = errors.New("parcel shipment: unexpected shipment document number issue outcome")
 
 // ErrUnexpectedInsertOutcome 说明建单仓储交回了封闭集合以外的答复。上抛而不译成业务结果：
 // 集合外的取值没有恢复动作可派。

@@ -67,7 +67,11 @@ func (catalogue *ControlReleaseRefusalCatalogue) ListUnhandledControlReleaseRefu
 	}
 	defer rows.Close()
 
-	listed := ports.UnhandledControlReleaseRefusals{Refusals: []ports.ControlReleaseRefusal{}, Count: count}
+	listed := ports.UnhandledControlReleaseRefusals{
+		Refusals:        []ports.ControlReleaseRefusal{},
+		Count:           count,
+		DocumentNumbers: map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering{},
+	}
 	for rows.Next() {
 		var (
 			requestRaw, version, resultID, account, reason string
@@ -91,5 +95,52 @@ func (catalogue *ControlReleaseRefusalCatalogue) ListUnhandledControlReleaseRefu
 	if err := rows.Err(); err != nil {
 		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
 	}
+	if err := catalogue.readDocumentNumbers(ctx, querier, tenant, &listed); err != nil {
+		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+	}
 	return listed, nil
+}
+
+// readDocumentNumbers 按清单上出现的委托另读一次单据号两列（ADR-0355 决定十一）。另起一句而不连进清单那一句：册行的过滤
+// 与计数共用一段 FROM … WHERE，连表要把它拆开，两句的行集就得各自守一致。读不到的委托不进表，那一行只显委托标识。
+func (catalogue *ControlReleaseRefusalCatalogue) readDocumentNumbers(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	listed *ports.UnhandledControlReleaseRefusals,
+) error {
+	if len(listed.Refusals) == 0 {
+		return nil
+	}
+	requests := make([]string, 0, len(listed.Refusals))
+	for _, refusal := range listed.Refusals {
+		requests = append(requests, refusal.ShipmentRequestID.String())
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT shipment_request_id, document_number, document_number_absence
+		   FROM parcel_shipment.shipment_request
+		  WHERE tenant_id = $1
+		    AND shipment_request_id = ANY($2)`,
+		tenant.String(), requests)
+	if err != nil {
+		return fmt.Errorf("document numbers: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var requestRaw string
+		var columns documentNumberingColumns
+		if err := rows.Scan(&requestRaw, &columns.number, &columns.absence); err != nil {
+			return fmt.Errorf("document numbers: %w", err)
+		}
+		requestID, err := domain.NewShipmentRequestID(requestRaw)
+		if err != nil {
+			return fmt.Errorf("document numbers: %w", err)
+		}
+		numbering, err := columns.numbering()
+		if err != nil {
+			return fmt.Errorf("document numbers: %w", err)
+		}
+		listed.DocumentNumbers[requestID] = numbering
+	}
+	return rows.Err()
 }

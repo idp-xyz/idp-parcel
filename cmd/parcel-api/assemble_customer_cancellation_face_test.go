@@ -98,7 +98,7 @@ func newCancellationFace(t *testing.T) *cancellationFace {
 	if err != nil {
 		t.Fatal(err)
 	}
-	submissionOrchestration, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	submissionOrchestration, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}

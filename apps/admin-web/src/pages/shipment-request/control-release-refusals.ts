@@ -11,7 +11,7 @@ import {
   type ControlReleaseRefusalListResponseBody,
   type ControlReleaseRefusalRow,
 } from './api';
-import { shipmentNoOf } from './ref-no';
+import { shipmentDisplayNoOf } from './ref-no';
 import { commandNoteOf, type OperatorNote } from './words';
 
 // 资金释放待处理页(释放未受理册,ADR-0293)的呈现逻辑,与页面组件分开住:这一层没有 React,测试能直接钉动作集、
@@ -54,7 +54,7 @@ export function refusalKeyOf(row: ControlReleaseRefusalRow): string {
 
 export interface RefusalQueueRow {
   id: string;
-  /** 屏上的运单号(去前缀)。 */
+  /** 屏上的运单号:单据号;没有单据号时去前缀的委托标识。 */
   title: string;
   subtitle: string;
   statusText: string;
@@ -64,7 +64,7 @@ export interface RefusalQueueRow {
 export function refusalQueueRowOf(row: ControlReleaseRefusalRow): RefusalQueueRow {
   return {
     id: refusalKeyOf(row),
-    title: shipmentNoOf(row.shipmentRequestId),
+    title: shipmentDisplayNoOf(row),
     subtitle: `客户 ${row.customerAccountId}`,
     statusText: row.scopeRecorded ? '待处理' : '老数据,只能手工处理',
     meta: formatInstant(row.recordedAt),
