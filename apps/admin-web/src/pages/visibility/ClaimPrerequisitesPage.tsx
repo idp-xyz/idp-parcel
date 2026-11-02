@@ -12,8 +12,8 @@ import {
   type VisibilityCatalogueListResponseBody,
 } from './catalogue-api';
 import {
-  problemNote,
   registrationOutcomeLabels,
+  registrationProblemNote,
   registrationRefusalReasonLabels,
   registrationSnapshotHints,
   registrationTitles,
@@ -213,7 +213,7 @@ export function ClaimPrerequisitesPage() {
           <MultiRegistrationPanel
             moduleId="claim-prerequisites"
             targets={registrationTargets}
-            problemNote={problemNote}
+            problemNote={registrationProblemNote}
           />
         </TabsContent>
       </Tabs>

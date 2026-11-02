@@ -1,14 +1,15 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import { labelFor } from '../../vocabulary/status';
+import { registrationSnapshotHints, visibilityCatalogueKindLabels } from './presentation';
 import {
   customerText,
   deadlineText,
+  disclosureKinds,
+  judgmentKinds,
   disclosureCellText,
   lifecycleAt,
-  ruleBookLabels,
   ruleCountSummary,
-  ruleRegistrationHints,
   ruleRowMatches,
   ruleRowsOf,
 } from './rule-books';
@@ -158,9 +159,9 @@ test('通知时限与动态矛盾两册没有生效期，计数只报条数', ()
 });
 
 test('签名与填写提示每册都有，提示不出现系统术语', () => {
-  for (const [kind, label] of Object.entries(ruleBookLabels)) {
-    equal(label.length > 0, true, kind);
-    const hint = ruleRegistrationHints[kind as keyof typeof ruleRegistrationHints];
+  for (const kind of [...judgmentKinds, ...disclosureKinds]) {
+    equal(visibilityCatalogueKindLabels[kind].length > 0, true, kind);
+    const hint = registrationSnapshotHints[kind];
     for (const word of ['服务端', '租户', '快照', '译装', '受控登记口']) {
       equal(hint.includes(word), false, `${kind} 的提示含「${word}」`);
     }

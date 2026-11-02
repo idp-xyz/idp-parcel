@@ -19,14 +19,16 @@ import {
   type VisibilityCatalogueListResponseBody,
 } from './catalogue-api';
 import {
-  ruleBookLabels,
+  registrationOutcomeLabels,
+  registrationProblemNote,
+  registrationRefusalReasonLabels,
+  registrationSnapshotHints,
+  registrationTitles,
+  visibilityCatalogueKindLabels,
+} from './presentation';
+import {
   ruleBookNotes,
   ruleCountSummary,
-  ruleProblemNote,
-  ruleRefusalReasonLabels,
-  ruleRegistrationHints,
-  ruleRegistrationOutcomeLabels,
-  ruleRegistrationTitles,
   ruleRowMatches,
   ruleRowsOf,
   type RuleBookKind,
@@ -134,7 +136,7 @@ function inspectorOf(kind: RuleBookKind, row: RuleRow): InspectorContent {
       : []),
   ];
   return {
-    title: ruleBookLabels[kind],
+    title: visibilityCatalogueKindLabels[kind],
     sections: [
       {
         kind: 'summary',
@@ -197,7 +199,7 @@ function RuleBookTable({
               aria-pressed={candidate === kind}
               onClick={() => setKind(candidate)}
             >
-              {ruleBookLabels[candidate]}
+              {visibilityCatalogueKindLabels[candidate]}
             </button>
           ))}
         </>
@@ -212,7 +214,7 @@ function RuleBookTable({
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /visibility-catalogues?kind=${kind}`,
-        emptyTitle: `还没有「${ruleBookLabels[kind]}」规则`,
+        emptyTitle: `还没有「${visibilityCatalogueKindLabels[kind]}」规则`,
         // 空册就是没登记：系统不会替公司生成默认规则（租户取值留给租户）。
         emptyDescription: `${ruleBookNotes[kind]}${entryHint(mayWrite, '在旁边的登记签里新增后会出现在这里；', hiddenRuleEntryHint)}系统不会自带默认规则。`,
       })}
@@ -243,13 +245,13 @@ export function RuleBookPage({
   const mayWrite = useMayWriteRegistry();
   const targets: RegistrationTarget[] = kinds.map((candidate) => ({
     id: candidate,
-    label: ruleBookLabels[candidate],
-    title: ruleRegistrationTitles[candidate],
+    label: visibilityCatalogueKindLabels[candidate],
+    title: registrationTitles[candidate],
     endpoint: `POST ${visibilityRegistrationEndpoints[candidate]}`,
-    snapshotHint: ruleRegistrationHints[candidate],
+    snapshotHint: registrationSnapshotHints[candidate],
     submit: (snapshot) => registerVisibilityCatalogue(candidate, snapshot),
-    outcomeLabels: ruleRegistrationOutcomeLabels,
-    refusalReasonLabels: ruleRefusalReasonLabels,
+    outcomeLabels: registrationOutcomeLabels,
+    refusalReasonLabels: registrationRefusalReasonLabels,
   }));
 
   return (
@@ -264,7 +266,7 @@ export function RuleBookPage({
         </TabsContent>
         {mayWrite ? (
           <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <MultiRegistrationPanel moduleId={moduleId} targets={targets} problemNote={ruleProblemNote} />
+            <MultiRegistrationPanel moduleId={moduleId} targets={targets} problemNote={registrationProblemNote} />
           </TabsContent>
         ) : null}
       </Tabs>
