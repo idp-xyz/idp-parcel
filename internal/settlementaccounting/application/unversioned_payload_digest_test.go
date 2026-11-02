@@ -445,6 +445,8 @@ func disputeUnversionedCase(t *testing.T) unversionedDigestCase {
 		first: func(t *testing.T) (string, func(string)) {
 			published, err := fixture.handler.Publish(context.Background(), publishCommand(t))
 			wantOutcome(t, published.Outcome(), err, application.StatementPublished)
+			// 登记在客户提出之后（提出时刻不得晚于登记时刻）；摘要按载荷算，不随登记时刻变。
+			fixture.clock.at = command.OpenedAt.Add(time.Hour)
 			result, err := fixture.handler.OpenDispute(context.Background(), command)
 			wantOutcome(t, result.Outcome(), err, application.DisputeOpened)
 			return onlyDigest(t, fixture.disputes.records,

@@ -443,6 +443,7 @@ func TestADisputeIsIndependentAndScoped(t *testing.T) {
 		settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-1"),
 		settlementValue(t, domain.NewDisputeID, "dispute-1"),
 		statementPublishedAt.Add(24*time.Hour),
+		disputeRegisteredAt,
 	)
 	if err != nil {
 		t.Fatalf("open dispute: %v", err)
@@ -457,6 +458,7 @@ func TestADisputeIsIndependentAndScoped(t *testing.T) {
 			settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-2"),
 			settlementValue(t, domain.NewDisputeID, "dispute-x"),
 			statementPublishedAt.Add(24*time.Hour),
+			disputeRegisteredAt,
 		); !errors.Is(err, domain.ErrInvalidDispute) {
 			t.Fatalf("error = %v; 争议金额超过了该行", err)
 		}
@@ -468,6 +470,7 @@ func TestADisputeIsIndependentAndScoped(t *testing.T) {
 			settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-3"),
 			settlementValue(t, domain.NewDisputeID, "dispute-y"),
 			statementPublishedAt.Add(24*time.Hour),
+			disputeRegisteredAt,
 		); !errors.Is(err, domain.ErrInvalidDispute) {
 			t.Fatalf("error = %v; 整单笼统异议要求补充明确范围", err)
 		}
@@ -527,6 +530,7 @@ func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
 		settlementValue(t, domain.NewDisputeBasisReference, "weight-mismatch"),
 		settlementValue(t, domain.NewDisputeID, "dispute-1"),
 		statementPublishedAt.Add(24*time.Hour),
+		disputeRegisteredAt,
 	)
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -574,28 +578,46 @@ func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
 
 // Covers: AT-SA-228（领域半边）——争议对着已经发给客户的那张单：提出时刻早于发布的不收；提出时刻在作废之后的不收，答的是作废那一格
 // 而不是笼统的无效；提出时刻在作废之前（或恰在作废那一刻）的照收（ADR-0354 决定三）。
+// disputeRegisteredAt 是领域用例里登记落下的时刻：晚于各用例的提出时刻，只有专钉上限那一条另给。
+var disputeRegisteredAt = statementPublishedAt.Add(1000 * time.Hour)
+
 func TestADisputeNeedsAStillValidStatementPublishedBeforeItWasRaised(t *testing.T) {
 	statement := publishedStatement(t)
 	charge := settlementValue(t, domain.NewCustomerChargeID, "charge-1")
 	reason := settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-1")
 	id := settlementValue(t, domain.NewDisputeID, "dispute-v")
 
-	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidDispute) {
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt.Add(-time.Minute), disputeRegisteredAt); !errors.Is(err, domain.ErrInvalidDispute) {
 		t.Fatalf("提出早于发布：error = %v", err)
 	}
-	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt); err != nil {
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, statementPublishedAt, disputeRegisteredAt); err != nil {
 		t.Fatalf("发布那一刻就提出应当收：%v", err)
 	}
 	voided, err := statement.Void(settlementValue(t, domain.NewStatementVoidBasisReference, "void-basis-1"), statementPublishedAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("作废：%v", err)
 	}
-	if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, statementPublishedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
+	if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, statementPublishedAt.Add(2*time.Hour), disputeRegisteredAt); !errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
 		t.Fatalf("作废之后提出：error = %v", err)
 	}
 	for _, raised := range []time.Time{statementPublishedAt.Add(30 * time.Minute), statementPublishedAt.Add(time.Hour)} {
-		if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, raised); err != nil {
+		if _, err := domain.OpenStatementDispute(voided, charge, 100, reason, id, raised, disputeRegisteredAt); err != nil {
 			t.Fatalf("作废之前（%s）提出、之后才登记的应当收：%v", raised, err)
 		}
+	}
+}
+
+// Covers: AT-SA-228（领域半边）——提出时刻不得晚于登记时刻：客户提出在先、登记在后；恰在登记那一刻提出的照收（ADR-0354 决定一）。
+func TestADisputeCannotBeRaisedAfterItIsRegistered(t *testing.T) {
+	statement := publishedStatement(t)
+	charge := settlementValue(t, domain.NewCustomerChargeID, "charge-1")
+	reason := settlementValue(t, domain.NewDisputeBasisReference, "customer-claim-1")
+	id := settlementValue(t, domain.NewDisputeID, "dispute-f")
+	registered := statementPublishedAt.Add(2 * time.Hour)
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, registered.Add(time.Second), registered); !errors.Is(err, domain.ErrInvalidDispute) {
+		t.Fatalf("提出晚于登记：error = %v", err)
+	}
+	if _, err := domain.OpenStatementDispute(statement, charge, 100, reason, id, registered, registered); err != nil {
+		t.Fatalf("恰在登记那一刻提出应当收：%v", err)
 	}
 }

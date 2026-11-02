@@ -27,6 +27,9 @@ test('提出时间：不早于发出，不晚于作废；作废之前提出的�
   equal(openedAtProblem('2026-11-01T10:00:00Z', published, voided), null);
   equal(openedAtProblem('2026-11-01T11:00:00Z', published, voided), '这张单已作废，作废之后提出的异议不再登记在这张单上');
   equal(openedAtProblem('2026-11-01T11:00:00Z', published, undefined), null);
+  const now = Date.parse('2026-11-01T12:00:00Z');
+  equal(openedAtProblem('2026-11-01T12:00:00Z', published, undefined, now), null);
+  equal(openedAtProblem('2026-11-01T12:01:00Z', published, undefined, now), '客户提出的时间不能晚于现在：先有客户提出，才有这次登记');
 });
 
 test('还在等人处理的争议：未处理与待复核；终局三种不列', () => {

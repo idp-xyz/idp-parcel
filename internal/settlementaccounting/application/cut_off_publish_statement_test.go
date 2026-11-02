@@ -226,7 +226,9 @@ type statementFixture struct {
 	inclusions   *inclusionStoreDouble
 	disputes     *disputeStoreDouble
 	handoff      *statementHandoffDouble
-	handler      *application.CutOffPublishStatementHandler
+	// clock 是编排读的那只时钟；用例可以往后拨（如客户提出异议在发布之后一天，登记只能更晚）。
+	clock   *statementClock
+	handler *application.CutOffPublishStatementHandler
 }
 
 func newStatementFixture(t *testing.T) *statementFixture {
@@ -240,6 +242,7 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		inclusions:   newInclusionStore(),
 		disputes:     newDisputeStore(),
 		handoff:      &statementHandoffDouble{},
+		clock:        &statementClock{at: statementNowAt},
 	}
 	fixture.billing = &billingLockDouble{statements: fixture.statements}
 	handler, err := application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{
@@ -252,7 +255,7 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		Inclusions:       fixture.inclusions,
 		Disputes:         fixture.disputes,
 		Downstream:       fixture.handoff,
-		Clock:            statementClock{at: statementNowAt},
+		Clock:            fixture.clock,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -569,6 +572,8 @@ func TestDisputesAreIndependentAndResolvedOnce(t *testing.T) {
 		Reason:        "service-not-rendered",
 		OpenedAt:      statementPublishAt.Add(24 * time.Hour),
 	}
+	// 登记在客户提出之后：提出时刻不得晚于登记时刻（ADR-0354 决定一）。
+	fixture.clock.at = statementPublishAt.Add(25 * time.Hour)
 
 	opened, err := fixture.handler.OpenDispute(context.Background(), open)
 	if err != nil {

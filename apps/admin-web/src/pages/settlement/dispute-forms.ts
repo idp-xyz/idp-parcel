@@ -19,12 +19,18 @@ export function chargesOnStatement(lines: StatementLinesResponseBody): Statement
 }
 
 /**
- * 提出时刻的本地检查：不早于发布、不晚于作废（ADR-0354 决定三）。作废之前提出、作废之后才登记的照收；服务端照样会判。
- * 两个时刻都是 RFC 3339；读不出的不在这里拦。
+ * 提出时刻的本地检查：不晚于现在（登记时刻）、不早于发布、不晚于作废（ADR-0354 决定一、三）。作废之前提出、作废之后才登记的照收；
+ * 服务端照样会判，登记时刻以服务端此刻为准。几个时刻都是 RFC 3339；读不出的不在这里拦。
  */
-export function openedAtProblem(openedAt: string, publishedAt: string | undefined, voidedAt: string | undefined): string | null {
+export function openedAtProblem(
+  openedAt: string,
+  publishedAt: string | undefined,
+  voidedAt: string | undefined,
+  now: number = Date.now(),
+): string | null {
   const at = Date.parse(openedAt);
   if (Number.isNaN(at)) return null;
+  if (at > now) return '客户提出的时间不能晚于现在：先有客户提出，才有这次登记';
   if (publishedAt && at < Date.parse(publishedAt)) return '客户提出的时间早于这张单发出，说的不是这张单';
   if (voidedAt && at > Date.parse(voidedAt)) return '这张单已作废，作废之后提出的异议不再登记在这张单上';
   return null;
@@ -103,7 +109,7 @@ export function registrationAnswerText(body: DisputeDecisionResponseBody): strin
     case 'STATEMENT_VOIDED_TAKES_NO_DISPUTE':
       return '没有登记：这张单已作废，作废之后提出的异议不再登记在这张单上。';
     case 'SOURCE_NOT_ACCEPTED':
-      return '没有登记：对账单、费用、金额或时间对不上——费用要在这张单上，金额不超过这笔费用，客户提出的时间不早于单子发出。';
+      return '没有登记：对账单、费用、金额或时间对不上——费用要在这张单上，金额不超过这笔费用，客户提出的时间不早于单子发出、也不晚于现在。';
     default:
       return `服务端答 ${body.outcome}`;
   }

@@ -594,7 +594,7 @@ type StatementDispute struct {
 }
 
 // OpenStatementDispute 开立争议。费用范围必须指明且在单内（整单笼统异议要求补充
-// 明确范围，AT-SA-071）；争议金额不得超过该行金额。
+// 明确范围，AT-SA-071）；争议金额不得超过该行金额。registeredAt 是这一次登记落下的时刻（编排取服务端此刻）。
 func OpenStatementDispute(
 	statement PublishedStatement,
 	charge CustomerChargeID,
@@ -602,8 +602,14 @@ func OpenStatementDispute(
 	reason DisputeBasisReference,
 	dispute DisputeID,
 	openedAt time.Time,
+	registeredAt time.Time,
 ) (StatementDispute, error) {
-	if !statement.number.valid() || !dispute.valid() || !reason.valid() || openedAt.IsZero() {
+	if !statement.number.valid() || !dispute.valid() || !reason.valid() || openedAt.IsZero() || registeredAt.IsZero() {
+		return StatementDispute{}, ErrInvalidDispute
+	}
+	// 客户提出在先、登记在后：提出时刻晚于登记时刻，说的是一件还没发生的事。不留时钟容差，同本仓别的操作者陈述的业务时刻
+	// （如参与方关系的结束时刻不得晚于登记时刻）一个口径（ADR-0354 决定一）。
+	if openedAt.After(registeredAt) {
 		return StatementDispute{}, ErrInvalidDispute
 	}
 	// 争议针对的是已经发给客户的那张单：提出时刻早于发布，说的就不是这张单。

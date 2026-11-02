@@ -314,12 +314,6 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	return entries, nil
 }
 
-// statementLineDocument 是 customer_statement.lines 里一行的词形（截单发布落库时写的那一份）。
-type statementLineDocument struct {
-	Charge      string `json:"charge"`
-	AmountMinor int64  `json:"amount_minor"`
-}
-
 // FindStatementLines 读一张已发布对账单自己的费用行（单上的不可覆盖快照），连同币种、发布与作废时刻；单不在册答 false。
 func (catalogue *StatementCatalogue) FindStatementLines(
 	ctx context.Context,
@@ -350,7 +344,8 @@ func (catalogue *StatementCatalogue) FindStatementLines(
 	}
 	found.PublishedAt = publishedAt.UTC()
 	found.VoidedAt = catalogueInstant(voidedAt)
-	var documents []statementLineDocument
+	// 行模型与写侧同一份（customer_statement.go 的 statementLineRow）：写侧改键名，这里跟着改，不会静默读空。
+	var documents []statementLineRow
 	if err := json.Unmarshal(linesJSON, &documents); err != nil {
 		return ports.StatementLines{}, false, fmt.Errorf("find statement lines: 费用行解码：%w", err)
 	}
