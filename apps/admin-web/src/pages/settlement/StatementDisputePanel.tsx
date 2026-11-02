@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { feedbackFor } from '../../components/action-feedback';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import { formatInstant } from '../catalogue-view';
@@ -18,6 +19,8 @@ import {
 import {
   amountProblem,
   chargesOnStatement,
+  disputeLabel,
+  disputeNumberAbsenceNote,
   instantToLocalInput,
   localInputToInstant,
   newDisputeId,
@@ -28,7 +31,7 @@ import {
   resolutionOptions,
   textProblem,
 } from './dispute-forms';
-import { formatMoney } from './ops-ui';
+import { formatMoney, technicalRows } from './ops-ui';
 
 // 对账单页右栏：客服照客户来电或来信代登记一项争议，财务核实后处理（ADR-0354）。两张表单各按自己那一种授予收起（ADR-0315）：
 // 只在明确知道没有授予时收起，不知道就摆，服务端照旧每次判。表单只对左边选中的那一张单；单的全貌与已有争议在左边的行与技术详情里。
@@ -250,7 +253,7 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
           <option value="">选一项</option>
           {open.map((item) => (
             <option key={item.dispute} value={item.dispute}>
-              {item.charge} · 不认 {item.disputedAmount} · {formatInstant(item.openedAt)}
+              {disputeLabel(item)} · {item.charge} · 不认 {item.disputedAmount} · {formatInstant(item.openedAt)}
               {item.resolution === 'PENDING_REVIEW' ? ' · 待复核' : ''}
             </option>
           ))}
@@ -282,6 +285,35 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
       </Button>
       <AnswerNote answer={answer} verb="处理" words={resolutionAnswerText} />
     </form>
+  );
+}
+
+/**
+ * 这张单上已登记的争议：以争议号为主标识（ADR-0355 决定十一），争议标识与没有争议号的原因进技术详情。没有争议号的照旧显示争议标识，
+ * 原因按争议上记下的那一种注明，不一律写成「上线前开立」。
+ */
+function DisputeList({ statement }: { statement: CustomerStatementRecord }) {
+  if (statement.disputes.length === 0) {
+    return <p className="text-[12px] text-idpxyz-textMuted">这张单上还没有登记过争议。</p>;
+  }
+  return (
+    <ul className="space-y-2">
+      {statement.disputes.map((item) => (
+        <li key={item.dispute} className="rounded border border-idpxyz-border px-2 py-1.5">
+          <p className="font-mono text-[12px] text-idpxyz-textBright">{disputeLabel(item)}</p>
+          <p className="text-[11px] leading-4 text-idpxyz-textMuted">
+            {item.charge} · 不认 {item.disputedAmount} · {item.resolution ? labelFor(item.resolution, 'dispute') : '还没有处理结果'}
+          </p>
+          <TechnicalDetails
+            className="mt-1"
+            rows={technicalRows([
+              { label: '争议标识', value: item.dispute },
+              { label: '争议号', value: disputeNumberAbsenceNote(item) },
+            ])}
+          />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -325,6 +357,10 @@ export function StatementDisputePanel({
       ) : statement ? (
         <>
           <section className="mt-4">
+            <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">这张单上的争议</h3>
+            <DisputeList statement={statement} />
+          </section>
+          <section className="mt-5">
             <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">登记争议</h3>
             <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">客户来电或来信说某笔费用不对，照他的话登记下来，等财务核实。</p>
             {mayRegister ? (

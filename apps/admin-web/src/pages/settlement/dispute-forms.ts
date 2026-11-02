@@ -1,9 +1,24 @@
-// 对账单页右栏两张争议表单的判读（ADR-0354）：客服照客户来电或来信代登记一项争议，财务核实后处理。纯函数、只做类型导入，
-// node:test 直接跑；取数与表单在 ReconciliationPage.tsx。
+// 对账单页右栏两张争议表单的判读（ADR-0354）：客服照客户来电或来信代登记一项争议，财务核实后处理。纯函数、只引类型与界面用语
+// 词典，node:test 直接跑；取数与表单在 ReconciliationPage.tsx。
 //
 // 话照「说人话」写：答复的业务判别由服务端给（outcome），这里只把它译成一句操作者看得懂的话，不另判业务。
 
+import { labelFor } from '../../vocabulary/status';
 import type { CustomerStatementRecord, DisputeDecisionResponseBody, StatementDisputeRecord, StatementLinesResponseBody } from './api';
+
+/**
+ * 一项争议在页面上的主标识：争议号（ADR-0355 决定十一）。没有争议号的（上线前开立，或开立时单据编号时区未配置）照旧显示争议标识，
+ * 为什么没有由 disputeNumberAbsenceNote 在技术详情里注明。
+ */
+export function disputeLabel(dispute: Pick<StatementDisputeRecord, 'dispute' | 'documentNumber'>): string {
+  return dispute.documentNumber ?? dispute.dispute;
+}
+
+/** 没有争议号时技术详情里注明的那一句，按争议上记下的原因说，不一律写成「上线前开立」；有号时没有这一句。 */
+export function disputeNumberAbsenceNote(dispute: Pick<StatementDisputeRecord, 'documentNumber' | 'documentNumberAbsence'>): string | undefined {
+  if (dispute.documentNumber || !dispute.documentNumberAbsence) return undefined;
+  return labelFor(dispute.documentNumberAbsence, 'document-number-absence');
+}
 
 /** 一张单上可以被提出异议的一笔费用：费用号、金额（与单上同一写法）与币种。 */
 export interface StatementChargeOption {
@@ -97,19 +112,28 @@ const resolutionWord: Record<string, string> = {
   PENDING_REVIEW: '待复核',
 };
 
+/** 答复里那一项争议怎么称呼：有争议号说号；没有的照旧说争议标识，并带上为什么没号。 */
+function answeredDispute(body: DisputeDecisionResponseBody): string {
+  const label = body.documentNumber ?? body.dispute ?? '';
+  const note = disputeNumberAbsenceNote(body);
+  return note ? `${label}（${note}）` : label;
+}
+
 /** 登记口答复的那一句。 */
 export function registrationAnswerText(body: DisputeDecisionResponseBody): string {
   switch (body.outcome) {
     case 'DISPUTE_OPENED':
-      return `已登记争议 ${body.dispute ?? ''}，等财务核实处理。`;
+      return `已登记争议 ${answeredDispute(body)}，等财务核实处理。`;
     case 'EXISTING_DISPUTE':
-      return `这一项已经登记过了（${body.dispute ?? ''}），没有重复登记。`;
+      return `这一项已经登记过了（${answeredDispute(body)}），没有重复登记。`;
     case 'DISPUTE_CONFLICT':
       return '这个争议编号已经登记过另一份内容；刷新表单重新填一次。';
     case 'STATEMENT_VOIDED_TAKES_NO_DISPUTE':
       return '没有登记：这张单已作废，作废之后提出的异议不再登记在这张单上。';
     case 'SOURCE_NOT_ACCEPTED':
       return '没有登记：对账单、费用、金额或时间对不上——费用要在这张单上，金额不超过这笔费用，客户提出的时间不早于单子发出、也不晚于现在。';
+    case 'NUMBERING_RULE_COLLISION':
+      return '没有登记：按现在的争议号格式，接下来的号都已经被用过了。请到「设置 → 单据编号」改一下争议的编号格式，再回来登记。';
     default:
       return `服务端答 ${body.outcome}`;
   }

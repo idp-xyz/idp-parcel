@@ -3,6 +3,8 @@ import { deepEqual, equal } from 'node:assert/strict';
 import {
   amountProblem,
   chargesOnStatement,
+  disputeLabel,
+  disputeNumberAbsenceNote,
   openedAtProblem,
   localInputToInstant,
   newDisputeId,
@@ -73,4 +75,24 @@ test('答复译成一句人话，负向答案不说成功', () => {
   equal(registrationAnswerText({ outcome: 'SOURCE_NOT_ACCEPTED' }).startsWith('没有登记'), true);
   equal(resolutionAnswerText({ outcome: 'DISPUTE_RESOLVED', resolution: 'REJECTED' }), '已处理：拒绝。');
   equal(resolutionAnswerText({ outcome: 'DISPUTE_ALREADY_RESOLVED', resolution: 'ACCEPTED' }), '这一项已经处理完了（接受），不能再改。');
+});
+
+test('争议以争议号为主标识；没有争议号的显示争议标识，并按记下的原因注明', () => {
+  equal(disputeLabel({ dispute: 'DSP-20261101-090507-A1B2C3', documentNumber: 'DSP-202611-00001' }), 'DSP-202611-00001');
+  equal(disputeLabel({ dispute: 'DSP-20261101-090507-A1B2C3' }), 'DSP-20261101-090507-A1B2C3');
+  equal(disputeNumberAbsenceNote({ documentNumber: 'DSP-202611-00001' }), undefined);
+  equal(disputeNumberAbsenceNote({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }), '上线前开立，无单据号');
+  equal(disputeNumberAbsenceNote({ documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }), '开立时单据编号时区未配置，无单据号');
+});
+
+test('登记答复说争议号；没号的说为什么；撞号指到规则册', () => {
+  equal(
+    registrationAnswerText({ outcome: 'DISPUTE_OPENED', dispute: 'X', documentNumber: 'DSP-202611-00001' }),
+    '已登记争议 DSP-202611-00001，等财务核实处理。',
+  );
+  equal(
+    registrationAnswerText({ outcome: 'DISPUTE_OPENED', dispute: 'X', documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }),
+    '已登记争议 X（开立时单据编号时区未配置，无单据号），等财务核实处理。',
+  );
+  equal(registrationAnswerText({ outcome: 'NUMBERING_RULE_COLLISION', documentType: 'STATEMENT_DISPUTE' }).includes('设置 → 单据编号'), true);
 });

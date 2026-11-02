@@ -132,7 +132,15 @@ export type StatementRegistry = 'customer-statement' | 'supplier-bill-reception'
  * 单的总额：无争议部分继续确认、开票、付款或核销。
  */
 export interface StatementDisputeRecord {
+  /** 争议标识：页面在首次提交前生成的幂等键，进技术详情，不当争议号给人看。 */
   dispute: string;
+  /**
+   * 争议号（ADR-0355）：服务端登记时按单据编号规则取的单据号，页面以它为主标识。与 documentNumberAbsence 恰出其一——没有争议号
+   * 的不答空串、不拿争议标识顶。
+   */
+  documentNumber?: string;
+  /** 没有争议号的原因：ISSUED_BEFORE_NUMBERING（上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED；词表 document-number-absence。 */
+  documentNumberAbsence?: string;
   charge: string;
   disputedAmount: string;
   reason: string;
@@ -468,11 +476,17 @@ export const fundsRegistrationOutcomeLabels: Record<string, string> = {
 
 /**
  * 两口的答复。outcome 是业务判别：DISPUTE_OPENED / DISPUTE_RESOLVED 是这次落了新东西；EXISTING_DISPUTE、DISPUTE_CONFLICT、
- * DISPUTE_ALREADY_RESOLVED、SOURCE_NOT_ACCEPTED、STATEMENT_VOIDED_TAKES_NO_DISPUTE 都是答案。带了争议的那几格就是库上此刻那一项。
+ * DISPUTE_ALREADY_RESOLVED、SOURCE_NOT_ACCEPTED、STATEMENT_VOIDED_TAKES_NO_DISPUTE、NUMBERING_RULE_COLLISION 都是答案。带了争议的那几格
+ * 就是库上此刻那一项。
  */
 export interface DisputeDecisionResponseBody {
   outcome: string;
   dispute?: string;
+  /** 争议号与无号原因恰出其一，见 StatementDisputeRecord。 */
+  documentNumber?: string;
+  documentNumberAbsence?: string;
+  /** 只在 NUMBERING_RULE_COLLISION 时出现：规则册上该改哪一类单据的编号规则（此处是 STATEMENT_DISPUTE）。 */
+  documentType?: string;
   statement?: string;
   charge?: string;
   disputedAmount?: string;

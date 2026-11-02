@@ -40,12 +40,14 @@ fi
 
 step "费用确认补拍（运营确认口）" "$OP" POST /settlement-charge-confirmations "$(pj charge="$MAIN_CHARGE")" "200:ALREADY_CONFIRMED" charge
 
+# 单号不在载荷里：服务端在发布事务里按单据编号规则取（ADR-0355 决定九），从答复读回。账户、账期与版本三格就是发布意图。
 step "发布对账单" "$OP" POST /settlement-statement-publications \
-  "$(pj number="SYN-STMT-DEMO-${stamp}" account=SYN-SETTLEMENT-ACCOUNT-01 period="SYN-PERIOD-DEMO-${stamp}" version=v1 currency=CNY \
+  "$(pj account=SYN-SETTLEMENT-ACCOUNT-01 period="SYN-PERIOD-DEMO-${stamp}" version=v1 currency=CNY \
       charges:='["'"$MAIN_CHARGE"'"]' lastAttributionDate="$attrdate" declaredTotal="$amount" cutOffAt="$(now_utc)")" \
   201:STATEMENT_PUBLISHED statement total
+statement="$(jget "$LAST" statement)"
 step "读对账单册" "$OP" GET "/settlement-statements?registry=customer-statement" - 200:*
-python3 - "$LAST" "SYN-STMT-DEMO-${stamp}" <<'PY'
+python3 - "$LAST" "$statement" <<'PY'
 import json, sys
 body = json.load(open(sys.argv[1]))
 rows = [r for r in next((v for v in body.values() if isinstance(v, list)), []) if sys.argv[2] in json.dumps(r)]
@@ -60,8 +62,9 @@ step "供应商账单接收（逐行 MATCHED）" "$OP" POST /settlement-supplier
       lines:='[{"line":"L1","feeItem":"'"$MAIN_COST_FEE"'","claimed":"'"$MAIN_COST_AMOUNT"'"}]' receivedAt="$(now_utc)" \
       directives:='[{"line":"L1","classification":"MATCHED","expectedVersion":"'"$MAIN_COST"'"}]')" \
   201:BILL_RECEIVED auditAuthority
+# 应付标识是幂等键（这里照演示约定生成）；应付单据号由服务端形成时取，从答复读。
 step "审核成应付" "$OP" POST /settlement-supplier-bill-audits \
-  "$(pj claim="$bill" version=v1 line=L1 payable="SYN-PAYABLE-DEMO-${stamp}")" 201:PAYABLE_FORMED payable amount currency
+  "$(pj claim="$bill" version=v1 line=L1 payable="SYN-PAYABLE-DEMO-${stamp}")" 201:PAYABLE_FORMED documentNumber payable amount currency
 step "读供应商账单接收册" "$OP" GET "/settlement-statements?registry=supplier-bill-reception" - 200:*
 printf '%-34s → %s\n' "  接收册读回" "$(head -c 300 "$LAST")"
 
