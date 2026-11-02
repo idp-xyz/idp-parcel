@@ -12,7 +12,7 @@ import type {
   RestrictedControlItemRecord,
 } from './api';
 import { authorizedDispositionOutcomeViews, controlFailureDispositionLabels, dispositionChoiceLabels } from './presentation';
-import { shipmentNoOf } from './ref-no';
+import { shipmentDisplayNoOf } from './ref-no';
 import { commandNoteOf, type OperatorNote } from './words';
 
 // 授权处置页的呈现逻辑,与页面组件分开住:这一层没有 React,测试能直接钉三态与决定集
@@ -37,7 +37,7 @@ export const dispositionChoiceOptions: readonly DispositionChoiceOption[] = [
 
 export interface DispositionQueueRow {
   id: string;
-  /** 屏上的运单号(去前缀)。 */
+  /** 屏上的运单号:单据号;没有单据号时去前缀的委托标识。 */
   title: string;
   subtitle: string;
   /** 队列行右侧的状态字:受限项数;受限项为空数组时改说数据异常。 */
@@ -54,7 +54,7 @@ export function dispositionQueueRowOf(entry: AuthorizedDispositionQueueEntry): D
   const count = entry.restrictedItems.length;
   return {
     id: entry.shipmentRequestId,
-    title: shipmentNoOf(entry.shipmentRequestId),
+    title: shipmentDisplayNoOf(entry),
     subtitle: `客户 ${entry.customerAccountId} · ${entry.declaredParcelCount} 件`,
     statusText: count === 0 ? '没有受限项(数据异常)' : `${count} 项未通过`,
     badData: count === 0,

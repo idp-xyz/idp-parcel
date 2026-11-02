@@ -26,7 +26,8 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 // 逐件呈现结果,部分成功由此自然表达;一件的结果不回滚其他件已合法形成的决定。已收寄包裹这里绝不提供改回
 // 「已取消」的口子:边界后的走向是待处置或明确拒绝,由服务端裁决,页面不预判。
 //
-// 屏上的话按运营的说法:「运单号」是委托标识,「客户单号」是原提交的来源请求键;边界规则不摆在表单上讲,
+// 屏上的话按运营的说法:指名委托的那一格是委托标识而不是运单号(运单号是单据号,ADR-0355 决定十一;取消口照旧按委托
+// 标识找委托),「客户单号」是原提交的来源请求键;边界规则不摆在表单上讲,
 // 结果卡里按答案说。出处:parcel-shipment CONTEXT.md「包裹取消决定」「收寄后服务处置决定」与 UC-PS-006 决定矩阵。
 
 interface CancellationFormState {
@@ -69,7 +70,7 @@ function parcelIdsOf(form: CancellationFormState): string[] {
 // 缺一即构造不出取消请求(服务端同判 REQUEST_NOT_ACCEPTED)。授权判定属服务端,页面不判。
 function validate(form: CancellationFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写运单号。';
+  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写委托标识。';
   if (!form.originalRequestKey.trim()) errors.originalRequestKey = '请填写客户单号。';
   if (parcelIdsOf(form).length === 0) errors.parcelIds = '至少填写一个包裹号。';
   if (!form.requesterReference.trim()) errors.requesterReference = '请填写是谁提出取消。';
@@ -92,7 +93,7 @@ function buildDraft(form: CancellationFormState, parcelId: string): Cancellation
 function cancellationConfirmText(form: CancellationFormState): string {
   const parcels = parcelIdsOf(form);
   return (
-    `运单 ${form.shipmentRequestId.trim()}(客户单号 ${form.originalRequestKey.trim()})里的 ${parcels.length} 件包裹将逐件申请取消:` +
+    `委托标识 ${form.shipmentRequestId.trim()}(客户单号 ${form.originalRequestKey.trim()})里的 ${parcels.length} 件包裹将逐件申请取消:` +
     `${parcels.join('、')}。每件单独判,可能只取消一部分;已经收寄的包裹取消不了,会转到货物处置。` +
     `申请人 ${form.requesterReference.trim()},原因:${form.reasonReference.trim()}。`
   );
@@ -148,14 +149,14 @@ export function CancelParcelPage() {
 
         <Section title="哪一票运单">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="运单号" required error={errors.shipmentRequestId} hint="受理时给客户的运单号。">
+            <Field label="委托标识" required error={errors.shipmentRequestId} hint="运单详情「技术详情」里的委托标识(SHR- 开头)。运单号不能代替它:取消按委托标识找这票运单。">
               <input
                 className={`${inputClass} font-mono`}
                 value={form.shipmentRequestId}
                 onChange={(event) => setField('shipmentRequestId')(event.target.value)}
               />
             </Field>
-            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与运单号一起才能找到这票运单。">
+            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与委托标识一起才能找到这票运单。">
               <input
                 className={`${inputClass} font-mono`}
                 value={form.originalRequestKey}

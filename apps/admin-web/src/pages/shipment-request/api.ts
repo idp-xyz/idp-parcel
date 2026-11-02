@@ -44,7 +44,8 @@ export type SubmitOutcome =
   | 'OWNERSHIP_UNRESOLVED'
   | 'ADMISSION_PAUSED'
   | 'PRIOR_REQUEST_NOT_FOUND'
-  | 'LINK_INELIGIBLE';
+  | 'LINK_INELIGIBLE'
+  | 'NUMBERING_RULE_COLLISION';
 
 // 归属决定本身而不只是结论字符串:非本产品归属要报当前权威方与交接结果,归属未决
 // 要报缺口与安全续办引用,少了它们调用方不知道该找治理还是找客户。
@@ -62,9 +63,18 @@ export interface ProductionOwnershipView {
   suspensionReference?: string;
 }
 
+/**
+ * 委托没有单据号时记下的那一种情形(ADR-0355 决定七):单据号上线之前建的,或建单时租户的单据编号时区未配置。
+ * 读口只在没有单据号时带它;两种都事后不补号。
+ */
+export type DocumentNumberAbsence = 'ISSUED_BEFORE_NUMBERING' | 'NUMBERING_TIME_ZONE_NOT_CONFIGURED';
+
 export interface SubmitResponseBody {
   outcome: SubmitOutcome;
   shipmentRequestId?: string;
+  /** 委托的单据号,屏上叫运单号;指名委托且有号时在场,没有号时整键不出现、改带 documentNumberAbsence。 */
+  documentNumber?: string;
+  documentNumberAbsence?: DocumentNumberAbsence;
   productionOwnership?: ProductionOwnershipView;
   gateBlockReasons?: string[];
 }
@@ -134,6 +144,9 @@ export const REQUEST_NOT_VISIBLE_CODE = 'SHIPMENT_REQUEST_NOT_VISIBLE';
 
 export interface ShipmentRequestSummary {
   shipmentRequestId: string;
+  /** 委托的单据号,屏上叫运单号(ADR-0355 决定十一)。没有号时整键不出现,不拿委托标识顶。 */
+  documentNumber?: string;
+  documentNumberAbsence?: DocumentNumberAbsence;
   customerAccountId: string;
   source: string;
   sourceRequestKey: string;
@@ -362,6 +375,9 @@ export interface AuthorizedDispositionResponseBody {
 /** 册上一行被拒收的占用。occupationScope 缺席即施加时还不存作用域的存量行(scopeRecorded=false)。 */
 export interface ControlReleaseRefusalRow {
   shipmentRequestId: string;
+  /** 行所指委托的单据号(运单号);没有号或读不到那份委托时整键不出现。 */
+  documentNumber?: string;
+  documentNumberAbsence?: DocumentNumberAbsence;
   submissionVersionId: string;
   controlResultId: string;
   customerAccountId: string;

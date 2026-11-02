@@ -21,7 +21,7 @@ import {
 import { recordedJudgmentsBlock } from './recorded-judgments';
 import { manualReviewCompletionDraftOf } from './manual-review-completion';
 import { caseBusinessFields, caseFailureText, caseTechnicalRows } from './review-case';
-import { shipmentNoOf } from './ref-no';
+import { shipmentDisplayNoOf } from './ref-no';
 import { activeRejectionOutcomeText, commandNoteOf, manualReviewOutcomeText, type OperatorNote } from './words';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
@@ -56,7 +56,7 @@ interface PendingRejection {
 // 「主动拒绝」在自己的命令事务里当场形成决定、不发续办信封(ADR-0086 Decision 三)——正文照这条说,与「记录复核完成」分开。
 function rejectionConfirmText({ entry, reason }: PendingRejection): string {
   return (
-    `将拒绝运单 ${shipmentNoOf(entry.shipmentRequestId)}(客户 ${entry.customerAccountId},${entry.declaredParcelCount} 件)。` +
+    `将拒绝运单 ${shipmentDisplayNoOf(entry)}(客户 ${entry.customerAccountId},${entry.declaredParcelCount} 件)。` +
     `拒绝立即生效,之后不会再变成受理;理由:${reason}。`
   );
 }
@@ -200,7 +200,7 @@ export function AcceptanceReviewPage() {
         queueTitle="等待复核的运单"
         queue={entries.map((entry) => ({
           id: entry.shipmentRequestId,
-          title: shipmentNoOf(entry.shipmentRequestId),
+          title: shipmentDisplayNoOf(entry),
           subtitle: `客户 ${entry.customerAccountId} · ${entry.declaredParcelCount} 件`,
           status: queueStatusOf(entry),
           meta: formatInstant(entry.submittedAt),

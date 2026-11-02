@@ -10,6 +10,7 @@ import type { CustomerAccountListResponseBody } from '../party/api';
 import type { ApiResult as CatalogueApiResult } from '../catalogue-api';
 import { labelFor } from '../../vocabulary/status';
 import type { ShipmentRequestSummary } from './api';
+import { shipmentDisplayNoOf } from './ref-no';
 
 /** 客户账户编码 → 客户名称。只收转写得到名称的账户；查不到的编码由页面原样显编码。 */
 export type CustomerNameIndex = ReadonlyMap<string, string>;
@@ -41,7 +42,10 @@ export interface ShipmentListFilter {
   state: ShipmentStateFilter;
 }
 
-/** 搜索是包含匹配、不分大小写，命中运单号 / 客户单号 / 客户编码 / 客户名称任一格。 */
+/**
+ * 搜索是包含匹配、不分大小写，命中运单号 / 客户单号 / 客户编码 / 客户名称任一格。运单号即单据号（ADR-0355 决定十一）；
+ * 委托标识照旧可搜：没有单据号的委托屏上显的就是它，对日志、对协议也用它。
+ */
 export function filterShipments(
   rows: readonly ShipmentRequestSummary[],
   filter: ShipmentListFilter,
@@ -50,6 +54,7 @@ export function filterShipments(
   return rows.filter((row) => {
     if (filter.state !== 'ALL' && row.state !== filter.state) return false;
     return matchesSearch(filter.search, [
+      row.documentNumber,
       row.shipmentRequestId,
       row.sourceRequestKey,
       row.customerAccountId,
@@ -81,7 +86,7 @@ function comparatorOf(
 ): ((left: ShipmentRequestSummary, right: ShipmentRequestSummary) => number) | null {
   switch (key) {
     case 'shipment-id':
-      return (left, right) => byString(left.shipmentRequestId, right.shipmentRequestId);
+      return (left, right) => byString(shipmentDisplayNoOf(left), shipmentDisplayNoOf(right));
     case 'customer':
       return (left, right) => byString(customerDisplayOf(left, names).text, customerDisplayOf(right, names).text);
     case 'parcel-count':

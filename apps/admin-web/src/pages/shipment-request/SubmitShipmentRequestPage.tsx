@@ -5,6 +5,7 @@ import { submitShipmentRequest, type ApiResult, type DeclaredParcelDraft, type S
 import { admissionControlLabels, authorityLabels, submitOutcomeViews, type OutcomeView } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
 import { ShipmentNo } from './refs';
+import { documentNumberAbsenceNoteOf } from './ref-no';
 import { ResultPanel } from './ResultPanel';
 
 // 新建运单(UC-PS-001 提交表单页)。字段只覆盖输入语义契约里「客户可声明」的各组;来源信封
@@ -416,7 +417,7 @@ function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status:
           <div className="flex gap-2 text-[12px] leading-5">
             <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">运单号</dt>
             <dd>
-              <ShipmentNo shipmentRequestId={body.shipmentRequestId} />
+              <ShipmentNo shipmentRequestId={body.shipmentRequestId} documentNumber={body.documentNumber} />
             </dd>
           </div>
         ) : null}
@@ -434,6 +435,8 @@ function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status:
         rows={[
           { label: 'HTTP 状态', value: String(status) },
           { label: '结果码', value: body.outcome },
+          // 指名了委托却没有单据号时注明是哪一种情形;没指名委托(没建单)就没有这一行。
+          ...(body.shipmentRequestId ? [{ label: '运单号', value: documentNumberAbsenceNoteOf(body) ?? body.documentNumber ?? '' }] : []),
           { label: '委托标识', value: body.shipmentRequestId ?? '' },
           { label: '生产归属判断', value: ownership?.decisionId ?? '' },
           { label: '权威身份', value: ownership?.authority ?? '' },

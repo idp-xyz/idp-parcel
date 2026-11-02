@@ -6,7 +6,6 @@ import { StatusPill } from '../../components/StatusPill';
 import { withdrawShipmentRequest, type ApiResult, type WithdrawalDraft, type WithdrawalResponseBody } from './api';
 import { withdrawalOutcomeViews, type OutcomeView } from './presentation';
 import { Field, inputClass, NoticeCard, Section } from './controls';
-import { shipmentNoOf } from './ref-no';
 import { ResultPanel } from './ResultPanel';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
@@ -16,7 +15,8 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 //
 // 撤回请求自己的来源信封与原提交分开(合用会被判成原提交的重放),两者都由接入
 // 适配器从认证结果铸造;页面只声明客户可声明的部分:指名哪份委托、谁在请求、
-// 依据什么原因。屏上「运单号」是委托标识,「客户单号」是原提交的来源请求键。
+// 依据什么原因。指名委托的那一格是委托标识而不是运单号:运单号是单据号(ADR-0355 决定十一),撤回口照旧按委托标识
+// 找委托,填运单号进去会答找不到;「客户单号」是原提交的来源请求键。
 
 interface WithdrawalFormState {
   originalRequestKey: string;
@@ -38,7 +38,7 @@ const emptyForm: WithdrawalFormState = {
 // 原因缺一即构造不出撤回请求。授权判定属服务端,页面不判。
 function validate(form: WithdrawalFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写运单号。';
+  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写委托标识。';
   if (!form.originalRequestKey.trim()) errors.originalRequestKey = '请填写客户单号。';
   if (!form.requesterReference.trim()) errors.requesterReference = '请填写是谁提出撤回。';
   if (!form.reasonReference.trim()) errors.reasonReference = '请填写撤回原因。';
@@ -61,7 +61,7 @@ function buildDraft(form: WithdrawalFormState): WithdrawalDraft {
 function withdrawalConfirmText(form: WithdrawalFormState): string {
   const draft = buildDraft(form);
   return (
-    `将撤回运单 ${shipmentNoOf(draft.shipmentRequestId)}(客户单号 ${draft.originalRequestKey})整票:` +
+    `将撤回委托标识 ${draft.shipmentRequestId}(客户单号 ${draft.originalRequestKey})的这票运单:` +
     `它不再等受理;录过的内容与记录都保留,撤回本身也记在案。` +
     `申请人 ${draft.requesterReference},原因:${draft.reasonReference}。`
   );
@@ -109,10 +109,10 @@ export function WithdrawShipmentRequestPage() {
 
         <Section title="哪一票运单">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="运单号" required error={errors.shipmentRequestId} hint="提交时给客户的运单号。">
+            <Field label="委托标识" required error={errors.shipmentRequestId} hint="运单详情「技术详情」里的委托标识(SHR- 开头)。运单号不能代替它:撤回按委托标识找这票运单。">
               <input className={`${inputClass} font-mono`} value={form.shipmentRequestId} onChange={(event) => setField('shipmentRequestId')(event.target.value)} />
             </Field>
-            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与运单号一起才能找到这票运单。">
+            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与委托标识一起才能找到这票运单。">
               <input className={`${inputClass} font-mono`} value={form.originalRequestKey} onChange={(event) => setField('originalRequestKey')(event.target.value)} />
             </Field>
             <Field label="哪一版" hint="客户改过资料时才需要填版本;不填就按最新一版。">

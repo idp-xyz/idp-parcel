@@ -8,10 +8,12 @@ import { objectNouns } from '../../vocabulary/objects';
 import { formatInstant } from '../moment';
 import type { ShipmentRequestSummary } from './api';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
+import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
 
 // 运单工作台的详情栏（设计源「五、改版示意 · 运单」）：头部运单号 + 状态胶囊 + 一行副题（客户 · 客户单号），主动作「打开详情」，
 // 三格事实，最底下一格「技术详情」收各种 ID——委托标识、客户账户编码、提交主体、来源请求键、提交版本。首屏只放人要看的，
-// 系统字段折叠（设计原则三）。内容全部取自行里已有的读模型字段，不为详情栏另开读口。
+// 系统字段折叠（设计原则三）。内容全部取自行里已有的读模型字段，不为详情栏另开读口。头部的运单号是单据号；没有单据号的
+// 委托头部照旧显委托标识，技术详情按记下的情形注明为什么没有（ADR-0355 决定十一）。
 
 export function ShipmentRequestDetailPanel({
   row,
@@ -25,14 +27,16 @@ export function ShipmentRequestDetailPanel({
   onOpenDetail: () => void;
 }) {
   const customer = customerDisplayOf(row, names);
+  const shipmentNo = shipmentDisplayNoOf(row);
+  const absenceNote = documentNumberAbsenceNoteOf(row);
   return (
-    <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`${objectNouns.shipment} ${row.shipmentRequestId}`}>
+    <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`${objectNouns.shipment} ${shipmentNo}`}>
       <div className="space-y-3 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright" title={row.shipmentRequestId}>
-                {row.shipmentRequestId}
+              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright" title={shipmentNo}>
+                {shipmentNo}
               </h2>
               <StatusPill code={row.state} />
             </div>
@@ -78,6 +82,7 @@ export function ShipmentRequestDetailPanel({
         <TechnicalDetails
           className="mt-4"
           rows={[
+            ...(absenceNote ? [{ label: objectNouns.shipmentNumber, value: absenceNote }] : []),
             { label: '委托标识', value: row.shipmentRequestId },
             { label: '客户账户编码', value: row.customerAccountId },
             { label: '提交主体', value: row.source },

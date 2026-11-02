@@ -55,6 +55,11 @@ export const submitOutcomeViews: Record<SubmitOutcome, OutcomeView> = {
     label: '原委托状态不承认该关联',
     note: '原委托已找到且属于当前客户,但其状态不支持这个关联方向。请改走资料修订,或等待其决定形成。',
   },
+  // ADR-0355 决定八:撞号是租户编号规则的问题,不是故障也不是客户的错——重发在换格式之前仍撞,所以指到规则册。
+  NUMBERING_RULE_COLLISION: {
+    label: '运单号撞号,这一次没有建单',
+    note: '按当前的单据编号规则排出的运单号连续撞上已经用过的号,系统没有建这张运单,也没有占号。请到「设置 → 单据编号」查看运单号的规则、换一种不会撞上旧号的格式,再原样提交一次。',
+  },
 };
 
 export const withdrawalOutcomeViews: Record<WithdrawalOutcome, OutcomeView> = {
