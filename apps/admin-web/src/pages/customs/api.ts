@@ -527,8 +527,14 @@ export interface CaseClosureBody {
   reopenCount: number;
 }
 
+/** 单据上记下的无号情形（ADR-0355 决定七、十一）；有单据号的单据不带这一格。 */
+export type DocumentNumberAbsence = 'ISSUED_BEFORE_NUMBERING' | 'NUMBERING_TIME_ZONE_NOT_CONFIGURED';
+
 export interface CustomsCaseBody {
   case: string;
+  /** 清关单的单据号；没有单据号的清关单不带这一格（不答空串，也不拿 case 顶），由 documentNumberAbsence 说是哪一种情形。 */
+  documentNumber?: string;
+  documentNumberAbsence?: DocumentNumberAbsence;
   jurisdiction: string;
   direction: string;
   procedure: string;

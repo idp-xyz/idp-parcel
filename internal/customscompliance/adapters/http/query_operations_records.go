@@ -93,17 +93,21 @@ func instantIfSet(at time.Time) string {
 
 // —— 案件 ——
 
+// customsCaseBody 的 documentNumber 与 documentNumberAbsence 恰有其一：没有单据号的案件不带 documentNumber 这一格，
+// 不答空串、不拿 case 顶，另由 documentNumberAbsence 说是哪一种情形（ADR-0355 决定十一）。
 type customsCaseBody struct {
-	Case          string                `json:"case"`
-	Jurisdiction  string                `json:"jurisdiction"`
-	Direction     string                `json:"direction"`
-	Procedure     string                `json:"procedure"`
-	Obligation    string                `json:"obligation"`
-	EstablishedAt string                `json:"establishedAt"`
-	Parcels       []caseParcelBody      `json:"parcels"`
-	Roles         []caseRoleBody        `json:"roles"`
-	Units         []declarationUnitBody `json:"units"`
-	Closure       *caseClosureBody      `json:"closure,omitempty"`
+	Case                  string                `json:"case"`
+	DocumentNumber        string                `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string                `json:"documentNumberAbsence,omitempty"`
+	Jurisdiction          string                `json:"jurisdiction"`
+	Direction             string                `json:"direction"`
+	Procedure             string                `json:"procedure"`
+	Obligation            string                `json:"obligation"`
+	EstablishedAt         string                `json:"establishedAt"`
+	Parcels               []caseParcelBody      `json:"parcels"`
+	Roles                 []caseRoleBody        `json:"roles"`
+	Units                 []declarationUnitBody `json:"units"`
+	Closure               *caseClosureBody      `json:"closure,omitempty"`
 }
 
 type caseParcelBody struct {
@@ -143,7 +147,8 @@ func NewQueryCustomsCasesEndpoint(intake CatalogueQueryIntake, reader CustomsCas
 		reader.ListCustomsCases,
 		func(record ports.CustomsCaseRecord) customsCaseBody {
 			body := customsCaseBody{
-				Case: record.Case, Jurisdiction: record.Jurisdiction, Direction: record.Direction,
+				Case: record.Case, DocumentNumber: record.DocumentNumber, DocumentNumberAbsence: record.DocumentNumberAbsence,
+				Jurisdiction: record.Jurisdiction, Direction: record.Direction,
 				Procedure: record.Procedure, Obligation: record.Obligation, EstablishedAt: instant(record.EstablishedAt),
 				Parcels: make([]caseParcelBody, 0, len(record.Parcels)),
 				Roles:   make([]caseRoleBody, 0, len(record.Roles)),

@@ -53,6 +53,7 @@ test('交接单行：开放与关闭、成员数、绑定进度与范围成立�
     key: 'handover-note:SYN-HN-PSXM13-1',
     noteId: 'SYN-HN-PSXM13-1',
     values: {
+      documentNumber: 'SYN-HN-PSXM13-1',
       noteId: 'SYN-HN-PSXM13-1',
       node: 'SYN-NODE-PSXM13',
       deliveringParty: 'SYN-DRIVER-PSXM13',
@@ -182,4 +183,13 @@ test('交付方参与方：取参与方目录，按标识排；停用与未生�
       { value: 'SYN-PARTY-SHIPPER-01', label: 'SYN 货主（SYN-PARTY-SHIPPER-01）' },
     ],
   );
+});
+
+// ADR-0355 决定二、十一：交接单号是服务端收下开立时取的单据号，主列有号显号；没有的照旧显设备签发的标识，标识另留在行值里，检索照样命中。
+test('交接单行：主列有交接单号显号，没有的显设备签发的标识', () => {
+  const numbered = handoverNoteRowOf(note({ documentNumber: 'HO-20261102-00018', claims: [{ customerAccount: 'SYN-ACCOUNT-01' }] }));
+  equal(numbered.values.documentNumber, 'HO-20261102-00018');
+  equal(numbered.values.noteId, 'SYN-HN-PSXM13-1');
+  const legacy = handoverNoteRowOf(note({ documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING', claims: [{ customerAccount: 'SYN-ACCOUNT-01' }] }));
+  equal(legacy.values.documentNumber, 'SYN-HN-PSXM13-1');
 });

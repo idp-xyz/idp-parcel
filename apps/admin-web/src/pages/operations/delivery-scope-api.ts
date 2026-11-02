@@ -8,9 +8,18 @@ import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue
 export type { ApiResult } from '../catalogue-api';
 
 /**
+ * 一份单据上的单据号与无号原因（ADR-0355 决定十一）：有号只带 documentNumber；没有号只带 documentNumberAbsence，取 ISSUED_BEFORE_NUMBERING
+ * （上线前开立）或 NUMBERING_TIME_ZONE_NOT_CONFIGURED（开立时单据编号时区未配置）。都不会是空串，也不会拿内部标识顶。
+ */
+export interface DocumentNumberFields {
+  documentNumber?: string;
+  documentNumberAbsence?: string;
+}
+
+/**
  * 一份送站预报。号码照客户交来的顺序；交付方线索没给即缺席；withdrawn 恒在场，withdrawnAt 只随已撤回出现。来源请求键与内容摘要不回显。
  */
-export interface DeliveryPreAdviceRecord {
+export interface DeliveryPreAdviceRecord extends DocumentNumberFields {
   preAdviceId: string;
   customerAccount: string;
   node: string;
@@ -47,8 +56,8 @@ export interface HandoverClaimRecord {
   basis?: string;
 }
 
-/** 一张送站交接单。closed 与 scopeEstablished 恒在场；关闭两键随已关闭、scopeEstablishedAt 随范围成立出现。 */
-export interface DeliveryHandoverNoteRecord {
+/** 一张送站交接单。closed 与 scopeEstablished 恒在场；关闭两键随已关闭、scopeEstablishedAt 随范围成立出现。noteId 是设备签发的标识。 */
+export interface DeliveryHandoverNoteRecord extends DocumentNumberFields {
   noteId: string;
   node: string;
   deliveringParty: string;

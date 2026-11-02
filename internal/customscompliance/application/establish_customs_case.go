@@ -15,9 +15,13 @@ import (
 // ErrUnexpectedCaseSave 说明案件库交回了封闭集合以外的写入结果。
 var ErrUnexpectedCaseSave = errors.New("customs compliance: unexpected customs case save outcome")
 
+// ErrUnexpectedCaseNumber 说明取号端口交回了封闭集合以外的答案，或交回的号不成号。
+var ErrUnexpectedCaseNumber = errors.New("customs compliance: unexpected customs case number assignment")
+
 // EstablishCaseOutcome 是建案请求的应用处理结果（UC-CC-001 的裁决分格：已建立、重复、
 // 冲突、不适用、未受理、未决各占一格）。`包裹未接受`是未受理里单拆出来的一格：恢复动作不同——
 // 改请求换不来它，要等那件包裹所在的委托被接受（UC-CC-001 启动条件），或指名对包裹。
+// `编号规则撞号`是业务答案不是故障（ADR-0355 决定八）：改请求、重试都换不来它，要租户在规则册换格式。
 type EstablishCaseOutcome uint8
 
 const (
@@ -29,6 +33,7 @@ const (
 	EstablishCaseNotAccepted
 	EstablishCaseUndecided
 	CaseParcelNotAccepted
+	CaseNumberingRuleCollision
 )
 
 func (outcome EstablishCaseOutcome) String() string {
@@ -47,6 +52,8 @@ func (outcome EstablishCaseOutcome) String() string {
 		return "UNDECIDED"
 	case CaseParcelNotAccepted:
 		return "PARCEL_NOT_ACCEPTED"
+	case CaseNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	default:
 		return ""
 	}
@@ -63,6 +70,7 @@ const (
 	CaseStoreUnavailable
 	CaseIdentityUnavailable
 	AcceptedParcelSourceUnavailable
+	CaseNumberingUnavailable
 )
 
 func (reason EstablishCaseUndecidedReason) String() string {
@@ -77,6 +85,8 @@ func (reason EstablishCaseUndecidedReason) String() string {
 		return "CASE_IDENTITY_UNAVAILABLE"
 	case AcceptedParcelSourceUnavailable:
 		return "ACCEPTED_PARCEL_SOURCE_UNAVAILABLE"
+	case CaseNumberingUnavailable:
+		return "CASE_NUMBERING_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -102,6 +112,8 @@ type EstablishCaseResult struct {
 	basis       string
 	handoffRef  string
 	unaccepted  []string
+	// numberTaken 记「这一次问过编号却没落下新案件」：撞号，或取号之后才发现同一范围已被并发建案抢先。
+	numberTaken bool
 }
 
 func (result EstablishCaseResult) Outcome() EstablishCaseOutcome {
@@ -132,10 +144,18 @@ func (result EstablishCaseResult) HandoffReference() string {
 	return result.handoffRef
 }
 
+// RollsBack 答这一份答复所在的事务能不能提交。未决不能：读口可能已在事务里报了 SQL 错误。撞号与「取过号才发现被并发
+// 建案抢先」也不能：取过的流水没有随案件落下，事务一提交它们就成了空号，而 ADR-0355 决定三只许随单落定的跳号成为
+// 空号——只有回滚才释放它们。装配点按它回滚，再交回这一份答复。
+func (result EstablishCaseResult) RollsBack() bool {
+	return result.outcome == EstablishCaseUndecided || result.numberTaken
+}
+
 type EstablishCaseDeps struct {
 	Requirement ports.CaseRequirementView
 	Store       ports.CustomsCaseStore
 	Identity    ports.CaseIdentityFactory
+	Numbers     ports.CaseDocumentNumbers
 	Downstream  ports.CustomsCaseHandoff
 	Clock       ports.Clock
 }
@@ -151,7 +171,10 @@ func NewEstablishCaseHandler(deps EstablishCaseDeps) *EstablishCaseHandler {
 // Handle 把一次建案请求推进到固定监管范围的责任容器：要不要建案先判（规则未登记
 // 未决——不是「不要求」；明确不要求是不适用格带依据）→ 幂等按身份键四维（同一法律
 // 行为一案：同键同包裹集重放返原，同键异包裹集是范围冲突不顶替——同袋同总单同班次
-// 都不能自动证明同一案件，扩大范围要走案件自己的变更）→ 领域建立 → 提交与意图。
+// 都不能自动证明同一案件，扩大范围要走案件自己的变更）→ 领域建立 → 取单据号 → 提交与意图。
+//
+// 取号排在领域建立之后、落库之前：领域门拒收的请求答未受理而事务照常提交，先取号就留下空号（ADR-0355 决定三）。
+// 重放走已有案件那一支，读回的是原号，不再取号；关联的后续案件换了监管范围键，走的是新建这一支，取新号。
 func (handler *EstablishCaseHandler) Handle(
 	ctx context.Context,
 	command EstablishCaseCommand,
@@ -208,6 +231,24 @@ func (handler *EstablishCaseHandler) Handle(
 		return EstablishCaseResult{outcome: EstablishCaseNotAccepted}, nil
 	}
 
+	assignment, err := handler.deps.Numbers.AssignCaseNumber(ctx, command.TenantID)
+	if err != nil {
+		return establishUndecided(CaseNumberingUnavailable), nil
+	}
+	switch assignment.Outcome {
+	case ports.CaseNumberAssigned:
+		customsCase, err = customsCase.Numbered(assignment.Number)
+	case ports.CaseNumberingTimeZoneNotConfigured:
+		customsCase, err = customsCase.Unnumbered(domain.NumberingTimeZoneNotConfigured)
+	case ports.CaseNumberingRuleCollision:
+		return EstablishCaseResult{outcome: CaseNumberingRuleCollision, numberTaken: true}, nil
+	default:
+		return EstablishCaseResult{}, fmt.Errorf("%w: outcome %d", ErrUnexpectedCaseNumber, assignment.Outcome)
+	}
+	if err != nil {
+		return EstablishCaseResult{}, fmt.Errorf("%w: %w", ErrUnexpectedCaseNumber, err)
+	}
+
 	saved, err := handler.deps.Store.Save(ctx, key, customsCase)
 	if err != nil {
 		return establishUndecided(CaseStoreUnavailable), nil
@@ -222,7 +263,10 @@ func (handler *EstablishCaseHandler) Handle(
 		if err != nil || !found {
 			return establishUndecided(CaseStoreUnavailable), nil
 		}
-		return handler.settleAgainstExisting(winner, command), nil
+		// 并发建案的另一笔先落下了：答复照重放办（原案件连同它的原号），这一笔取过的号没随案件落下，要回滚释放。
+		settled := handler.settleAgainstExisting(winner, command)
+		settled.numberTaken = true
+		return settled, nil
 	default:
 		return EstablishCaseResult{}, fmt.Errorf("%w: %d", ErrUnexpectedCaseSave, saved)
 	}

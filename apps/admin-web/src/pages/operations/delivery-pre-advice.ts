@@ -4,7 +4,8 @@
 // 本地零点的左闭右开区间；换错一格，零点那一份就落进前一日。页面组件要 React 与 DOM，这几格是纯函数就能拿 node:test 钉住。
 
 import { formatInstant } from '../catalogue-view';
-import type { DeliveryPreAdviceRecord } from './delivery-scope-api';
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
+import type { DeliveryPreAdviceRecord, DocumentNumberFields } from './delivery-scope-api';
 
 /** 一本册列表认的那一对业务时刻键：预报是预计送达，交接单是开立。键名与 query_delivery_scope_records.go 同字。 */
 export interface DeliveryScopeFilterKeys {
@@ -15,10 +16,14 @@ export interface DeliveryScopeFilterKeys {
 export const preAdviceFilterKeys: DeliveryScopeFilterKeys = { from: 'expectedArrivalFrom', until: 'expectedArrivalUntil' };
 export const handoverNoteFilterKeys: DeliveryScopeFilterKeys = { from: 'openedFrom', until: 'openedUntil' };
 
-/** 页面上人填的两格：节点与日子（`<input type="date">` 的 YYYY-MM-DD，空即不按日筛）。 */
+/**
+ * 页面上人填的几格：节点、日子（`<input type="date">` 的 YYYY-MM-DD，空即不按日筛）与单据号（逐字找，空即不按单据号筛）。单据号在服务端
+ * 按（租户，单据号）找，不在已读出的这一页里找：列表一页只有几十份，旧单据不在页里也要找得到（ADR-0355 决定十一「可按单据号检索」）。
+ */
 export interface DeliveryScopeListFilter {
   node: string;
   day: string;
+  documentNumber?: string;
 }
 
 /**
@@ -44,6 +49,8 @@ export function deliveryScopeListPathOf(
   const query = new URLSearchParams();
   const node = filter.node.trim();
   if (node !== '') query.set('node', node);
+  const documentNumber = (filter.documentNumber ?? '').trim();
+  if (documentNumber !== '') query.set('documentNumber', documentNumber);
   if (filter.day !== '') {
     const bounds = localDayBoundsOf(filter.day);
     if (!bounds) return null;
@@ -52,6 +59,23 @@ export function deliveryScopeListPathOf(
   }
   const encoded = query.toString();
   return encoded === '' ? path : `${path}?${encoded}`;
+}
+
+/**
+ * 列表主列那一格：有单据号显单据号；没有的照旧显内部标识（ADR-0355 决定十一）——上线前开立的、开立时单据编号时区未配置的单据只有它。
+ */
+export function documentNumberCellOf(fields: DocumentNumberFields, internalId: string): string {
+  return fields.documentNumber ?? internalId;
+}
+
+/**
+ * 技术详情里「单据号」那一格：有号显号；没有号按单据上记下的原因取单据编号词典的说法（vocabulary/document-numbering 的
+ * documentNumberAbsenceNote）——「上线前开立」与「时区未配置」分开说，说法只在词典一处。号码与原因都缺席时这一格不显。
+ */
+export function documentNumberDetailOf(fields: DocumentNumberFields): string | undefined {
+  if (fields.documentNumber) return fields.documentNumber;
+  if (fields.documentNumberAbsence) return documentNumberAbsenceNote(fields.documentNumberAbsence);
+  return undefined;
 }
 
 export interface PreAdviceReviewRow {
@@ -69,6 +93,7 @@ export function preAdviceRowOf(record: DeliveryPreAdviceRecord): PreAdviceReview
     key: `pre-advice:${record.preAdviceId}`,
     preAdviceId: record.preAdviceId,
     values: {
+      documentNumber: documentNumberCellOf(record, record.preAdviceId),
       preAdviceId: record.preAdviceId,
       customerAccount: record.customerAccount,
       node: record.node,
@@ -91,7 +116,7 @@ export function deliveryScopeReadProblemNote(code: string): string {
     case 'DELIVERY_HANDOVER_NOTE_NOT_VISIBLE':
       return '找不到这张交接单；刷新列表再选。';
     case 'MALFORMED_REQUEST':
-      return '筛选条件写得不对（网点不能空，日期要前早后晚）；改正后再查。';
+      return '筛选条件写得不对（网点、单据号不能只填空格，日期要前早后晚）；改正后再查。';
     case 'METHOD_NOT_ALLOWED':
       return '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。';
     case 'INTAKE_FAILED':

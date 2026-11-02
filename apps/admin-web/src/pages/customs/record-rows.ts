@@ -13,6 +13,7 @@ import type {
 } from './api';
 import { formatInstant } from '../catalogue-view';
 import { labelFor } from '../../vocabulary/status';
+import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 import type { RegisterRow } from './register-rows';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 
@@ -68,10 +69,51 @@ export function caseUpdatedAt(record: CustomsCaseBody, submissions: SubmissionVe
   return sorted[sorted.length - 1] ?? record.establishedAt;
 }
 
+/**
+ * 清关单在页面上的号（ADR-0355 决定十一）：有单据号显单据号；没有就照旧显案件标识——上线前开立的、开立时单据编号时区
+ * 未配置的清关单都没有号，事后也不补，案件标识是它唯一能被找到的号。
+ */
+export function caseNumberOf(record: Pick<CustomsCaseBody, 'case' | 'documentNumber'>): string {
+  return record.documentNumber ?? record.case;
+}
+
+/**
+ * 没有单据号时技术详情里那一句，按清关单上记下的情形说，不一律写成「上线前开立」；有号时为空串（技术详情不列这一行）。
+ * 读口两格都没带只会是升级之前的服务端，那时的清关单都是上线前开立的。
+ */
+export function caseNumberNote(record: Pick<CustomsCaseBody, 'documentNumber' | 'documentNumberAbsence'>): string {
+  if (record.documentNumber) return '';
+  return documentNumberAbsenceNote(record.documentNumberAbsence ?? 'ISSUED_BEFORE_NUMBERING');
+}
+
+/** 引到清关单处的一格：显的号，与技术详情里关于这个号的那一句（没有可说的为空串）。 */
+export interface CaseNumberCell {
+  number: string;
+  note: string;
+}
+
+/**
+ * 别的读口（如关闭核对目录）只带案件标识时，按清关单读口那一页把它换成清关单号。cases 为 null 是清关单读口没答：
+ * 只让号这一格降级——显案件标识并注明读不到，不拖垮引用它的那一签。不在那一页里的案件照旧显标识，不另作说明。
+ */
+export function caseNumberReader(cases: CustomsCaseBody[] | null): (caseRef: string) => CaseNumberCell {
+  if (cases === null) {
+    const unreadable = `${documentTypeWords.CUSTOMS_CASE.numberName}读不到（清关单列表没有答复），暂显内部标识`;
+    return (caseRef) => ({ number: caseRef, note: unreadable });
+  }
+  const byCase = new Map(cases.map((record) => [record.case, record]));
+  return (caseRef) => {
+    const record = byCase.get(caseRef);
+    return record ? { number: caseNumberOf(record), note: caseNumberNote(record) } : { number: caseRef, note: '' };
+  };
+}
+
 export function caseRows(cases: CustomsCaseBody[], submissions: SubmissionVersionBody[] = [], results: ExternalResultBody[] = []): RegisterRow[] {
   return cases.map((record) => ({
     key: `case:${record.case}`,
     values: {
+      number: caseNumberOf(record),
+      numberNote: caseNumberNote(record),
       id: record.case,
       parcels: parcelList(record.parcels.map((parcel) => parcel.parcel)),
       customers: record.parcels.map((parcel) => parcel.customer).join('\n') || dash,
@@ -98,7 +140,9 @@ export function unitRows(cases: CustomsCaseBody[]): RegisterRow[] {
       key: `unit:${unit.unit}`,
       values: {
         id: unit.unit,
-        caseRef: record.case,
+        caseRef: caseNumberOf(record),
+        caseId: record.case,
+        caseNumberNote: caseNumberNote(record),
         jurisdiction: record.jurisdiction,
         direction: labelFor(record.direction),
         procedure: unit.procedure,

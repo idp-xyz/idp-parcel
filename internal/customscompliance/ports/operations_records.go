@@ -48,18 +48,21 @@ type CaseClosureRecord struct {
 	ReopenCount int
 }
 
-// CustomsCaseRecord 是一个关务案件连同其申报单元与关闭记录（如有）。
+// CustomsCaseRecord 是一个关务案件连同其申报单元与关闭记录（如有）。DocumentNumber 与 DocumentNumberAbsence 恰有
+// 一格非空：有号答号；没有号答 domain.DocumentNumberAbsence 的码（上线前开立，或建案时单据编号时区未配置）。
 type CustomsCaseRecord struct {
-	Case          string
-	Jurisdiction  string
-	Direction     string
-	Procedure     string
-	Obligation    string
-	EstablishedAt time.Time
-	Parcels       []CaseParcelRecord
-	Roles         []CaseRoleRecord
-	Units         []DeclarationUnitRecord
-	Closure       *CaseClosureRecord
+	Case                  string
+	DocumentNumber        string
+	DocumentNumberAbsence string
+	Jurisdiction          string
+	Direction             string
+	Procedure             string
+	Obligation            string
+	EstablishedAt         time.Time
+	Parcels               []CaseParcelRecord
+	Roles                 []CaseRoleRecord
+	Units                 []DeclarationUnitRecord
+	Closure               *CaseClosureRecord
 }
 
 // CustomsCaseRecordRead 按租户上列案件。case 非空时只答该案件（单份读回）。

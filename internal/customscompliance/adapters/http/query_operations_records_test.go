@@ -81,3 +81,33 @@ func TestFailingCustomsCaseReadIsNoAnswer(t *testing.T) {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 }
+
+// Covers: ADR-0355 决定十一——案件读口带单据号；没有单据号的案件不带 documentNumber 这一格（不答空串、不拿案件标识顶），
+// 另由 documentNumberAbsence 说是上线前开立还是建案时单据编号时区未配置。点名 `AT-CC-459`、`AT-CC-460`（读口半边）。
+func TestCustomsCaseRecordsCarryTheDocumentNumberOrItsAbsence(t *testing.T) {
+	stub := &stubCaseRecords{records: []ports.CustomsCaseRecord{
+		{Case: "CASE-1", DocumentNumber: "CC-20261102-0001"},
+		{Case: "CASE-2", DocumentNumberAbsence: "NUMBERING_TIME_ZONE_NOT_CONFIGURED"},
+		{Case: "CASE-3", DocumentNumberAbsence: "ISSUED_BEFORE_NUMBERING"},
+	}}
+	handler := customshttp.NewQueryCustomsCasesEndpoint(grantedCatalogueIntake{tenant: "T1", limit: 5}, stub)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-case-records", nil))
+	var body struct {
+		Cases []map[string]any `json:"cases"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || response.Code != http.StatusOK || len(body.Cases) != 3 {
+		t.Fatalf("%d %s %v", response.Code, response.Body.String(), err)
+	}
+	if body.Cases[0]["documentNumber"] != "CC-20261102-0001" {
+		t.Fatalf("有号的案件：%v", body.Cases[0])
+	}
+	if _, absent := body.Cases[0]["documentNumberAbsence"]; absent {
+		t.Fatalf("有号的案件带了无号情形：%v", body.Cases[0])
+	}
+	for i, want := range map[int]string{1: "NUMBERING_TIME_ZONE_NOT_CONFIGURED", 2: "ISSUED_BEFORE_NUMBERING"} {
+		if _, present := body.Cases[i]["documentNumber"]; present || body.Cases[i]["documentNumberAbsence"] != want {
+			t.Fatalf("无号的案件 %d：%v", i, body.Cases[i])
+		}
+	}
+}

@@ -39,15 +39,64 @@ var (
 	_ ports.HandoverReceptionMembership  = (*DeliveryHandoverNotes)(nil)
 )
 
-const handoverNoteColumns = `note_id, node_ref, delivering_party, claimed_account_ids, opened_at`
+const handoverNoteColumns = `note_id, node_ref, delivering_party, claimed_account_ids, opened_at, document_number, document_number_absence`
 
-// OpenDeliveryHandoverNote 落一张交接单；同一标识已在册时回显册上那一张。
+// LockDeliveryHandoverNoteOpening 取（租户，交接单标识）的事务级咨询锁，再按标识读回在册那一张。锁的理由同
+// DeliveryPreAdvices.LockDeliveryPreAdviceSource：同一张交接单的开立并发重投，后一笔读得到前一笔落下的那一张，不取第二个号。不用
+// 行锁：开立之前那一行还不存在，锁不住。
+func (register *DeliveryHandoverNotes) LockDeliveryHandoverNoteOpening(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.DeliveryHandoverNoteID,
+) (domain.DeliveryHandoverNote, bool, error) {
+	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.DeliveryHandoverNote{}, false, fmt.Errorf("lock delivery handover note opening: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('node_operations.delivery_handover_note.opening'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), id.String(),
+	); err != nil {
+		return domain.DeliveryHandoverNote{}, false, fmt.Errorf("lock delivery handover note opening: %w", err)
+	}
+	recorded, found, err := scanHandoverNote(executor.QueryRow(ctx,
+		`SELECT `+handoverNoteColumns+` FROM node_operations.delivery_handover_note WHERE tenant_id = $1 AND note_id = $2`,
+		tenant.String(), id.String(),
+	), tenant)
+	if err != nil {
+		return domain.DeliveryHandoverNote{}, false, fmt.Errorf("lock delivery handover note opening: read back: %w", err)
+	}
+	return recorded, found, nil
+}
+
+// DeliveryHandoverNoteDocumentNumberUsed 按（租户，单据号）查，走唯一约束带出的索引。
+func (register *DeliveryHandoverNotes) DeliveryHandoverNoteDocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error) {
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("delivery handover note document number used: %w", err)
+	}
+	var used bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM node_operations.delivery_handover_note WHERE tenant_id = $1 AND document_number = $2)`,
+		tenant.String(), number,
+	).Scan(&used); err != nil {
+		return false, fmt.Errorf("delivery handover note document number used: %w", err)
+	}
+	return used, nil
+}
+
+// OpenDeliveryHandoverNote 落一张交接单；同一标识已在册时回显册上那一张。撞的若是（租户，单据号）唯一键（取号编排之外有写入占了
+// 这个号），按标识读不到，如实报错，开立事务随之回滚。
 func (register *DeliveryHandoverNotes) OpenDeliveryHandoverNote(
 	ctx context.Context,
 	note domain.DeliveryHandoverNote,
 ) (domain.DeliveryHandoverNote, ports.DeliveryScopeAppendOutcome, error) {
 	none := domain.DeliveryHandoverNote{}
 	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("open delivery handover note: %w", err)
+	}
+	documentNumber, documentNumberAbsence, err := documentNumberingColumns(note.DocumentNumbering())
 	if err != nil {
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("open delivery handover note: %w", err)
 	}
@@ -58,9 +107,10 @@ func (register *DeliveryHandoverNotes) OpenDeliveryHandoverNote(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.delivery_handover_note
 			(tenant_id, `+handoverNoteColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT DO NOTHING`,
 		note.TenantID().String(), note.ID().String(), note.Node().String(), note.DeliveringParty().String(), claimed, note.OpenedAt(),
+		documentNumber, documentNumberAbsence,
 	)
 	if err != nil {
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("open delivery handover note: %w", err)
@@ -73,7 +123,7 @@ func (register *DeliveryHandoverNotes) OpenDeliveryHandoverNote(
 		note.TenantID().String(), note.ID().String(),
 	), note.TenantID())
 	if err != nil || !found {
-		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("open delivery handover note: read back: found=%v: %w", found, err)
+		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("open delivery handover note: read back (the document number may be taken): found=%v: %w", found, err)
 	}
 	return recorded, ports.DeliveryScopeAlreadyRecorded, nil
 }
@@ -411,11 +461,12 @@ func (register *DeliveryHandoverNotes) FindLastAssignedHandoverNote(
 
 func scanHandoverNote(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHandoverNote, bool, error) {
 	var (
-		id, node, party string
-		claimed         []string
-		openedAt        time.Time
+		id, node, party                       string
+		claimed                               []string
+		openedAt                              time.Time
+		documentNumber, documentNumberAbsence *string
 	)
-	err := row.Scan(&id, &node, &party, &claimed, &openedAt)
+	err := row.Scan(&id, &node, &party, &claimed, &openedAt, &documentNumber, &documentNumberAbsence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DeliveryHandoverNote{}, false, nil
 	}
@@ -443,7 +494,11 @@ func scanHandoverNote(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHando
 	if err != nil {
 		return domain.DeliveryHandoverNote{}, false, err
 	}
-	return note, true, nil
+	numbering, err := domain.RehydrateDocumentNumbering(stringOrEmpty(documentNumber), stringOrEmpty(documentNumberAbsence))
+	if err != nil {
+		return domain.DeliveryHandoverNote{}, false, err
+	}
+	return note.WithDocumentNumbering(numbering), true, nil
 }
 
 func scanHandoverMember(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHandoverMember, bool, error) {

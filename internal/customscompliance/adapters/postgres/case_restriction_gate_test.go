@@ -84,7 +84,18 @@ func caseKey(t *testing.T, tenant string) ports.CustomsCaseKey {
 	}
 }
 
+// establishedCase 交回单据号已落定的案件——案件库只收落定了的。号取 `CC-` 加案件标识，同库里不同标识不撞号。
 func establishedCase(t *testing.T, key ports.CustomsCaseKey, caseID string, roles []domain.CaseRoleSnapshot) domain.CustomsCase {
+	t.Helper()
+	numbered, err := unnumberedCase(t, key, caseID, roles).Numbered("CC-" + caseID)
+	if err != nil {
+		t.Fatalf("案件取号：%v", err)
+	}
+	return numbered
+}
+
+// unnumberedCase 交回刚建立、单据号还没落定的案件。
+func unnumberedCase(t *testing.T, key ports.CustomsCaseKey, caseID string, roles []domain.CaseRoleSnapshot) domain.CustomsCase {
 	t.Helper()
 	customsCase, err := domain.EstablishCustomsCase(domain.CustomsCaseSpec{
 		ID:           crgValue(t, domain.NewCustomsCaseID, caseID),

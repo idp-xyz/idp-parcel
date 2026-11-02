@@ -9,8 +9,12 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
+	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	nodocnumbers "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/documentnumbers"
 	noidentity "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
 	noinbox "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/inbox"
+	nonetwork "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/networkrouting"
 	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopc "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/partycommercial"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
@@ -22,6 +26,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
 // 本文件对真实 PostgreSQL 16 证「交付范围成立」门铃经生产装配续得上（ADR-0212 决定六；票 ps-external-mark-relations/12，UC-NO-006
@@ -85,8 +90,25 @@ func handoverHandlerForDispatch(t *testing.T, db *bentopg.DB) *noapplication.Del
 	if err != nil {
 		t.Fatal(err)
 	}
+	numbers, err := docnumbering.Build(db, docnumber.SecretTable{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := nodocnumbers.NewIssuer(numbers.Assigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, err := nonetwork.NewNodeBusinessTimeZones(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler, err := noapplication.NewDeliveryHandoverNoteHandler(noapplication.DeliveryHandoverDeps{
 		Notes: notes, Receptions: receptions, AuthorizedDelivery: authorized, Doorbell: doorbell, Clock: systemClock{},
+		DocumentNumbers: noapplication.DocumentNumberingDeps{Issuer: issuer, Nodes: nodes},
 	})
 	if err != nil {
 		t.Fatal(err)
