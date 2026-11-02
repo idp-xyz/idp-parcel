@@ -37,6 +37,17 @@ export const postIntakeDispositionDecision = 'POST_INTAKE_SERVICE_DISPOSITION';
 /** 待人工处理项登记的授予，与处置决定分开授予（ADR-0341 决定三），原词取自 accessidentity.DecisionPostIntakeManualItemHandling。 */
 export const postIntakeManualItemDecision = 'POST_INTAKE_MANUAL_ITEM_HANDLING';
 
+// 线路与运力区几个决定入口的授予原词，各取自 accessidentity 同名的 DecisionKind。写成常量、在单测里钉住等于服务端原词：
+// 拼错一个字，持这一种授予的人会悄悄看不到按钮，而服务端那边照常放行，没有任何地方会报。
+/** 授权改路，原词取自 accessidentity.DecisionAuthorizedReroute；改路建议与初始路由成本并列两个决定口认同一种。 */
+export const authorizedRerouteDecision = 'AUTHORIZED_REROUTE';
+/** 送站交接确认，原词取自 accessidentity.DecisionDeliveryHandoverConfirmation。 */
+export const deliveryHandoverConfirmationDecision = 'DELIVERY_HANDOVER_CONFIRMATION';
+/** 外部轨迹有效时间判断，原词取自 accessidentity.DecisionEffectiveTimeJudgment。 */
+export const effectiveTimeJudgmentDecision = 'EFFECTIVE_TIME_JUDGMENT';
+/** 待识别复核，原词取自 accessidentity.DecisionPendingIdentityRecheck。 */
+export const pendingIdentityRecheckDecision = 'PENDING_IDENTITY_RECHECK';
+
 /** 运营决定入口摆不摆：同登记入口，明确知道没有那一种运营决定授予才收起，不知道就摆。 */
 export function mayMakeDecision(held: HeldGrants | undefined, decision: string): boolean {
   return held === undefined || held.decisions.has(decision);
@@ -56,4 +67,12 @@ export const hiddenEntryHint = '登记与发布入口只对持登记册配置写
  */
 export function entryHint(mayWrite: boolean, pointer: string, whenHidden: string = hiddenEntryHint): string {
   return mayWrite ? pointer : whenHidden;
+}
+
+/**
+ * 运营决定入口按授予收起时，原处改说的那一句：说这个动作只对持哪一种授予的人显示，与 hiddenEntryHint 同一个说法，不让人以为
+ * 页面坏了、也不指去一个看不见的按钮。授予的中文名由调用方取用语词典（本文件只做类型导入，不引词典）。
+ */
+export function hiddenDecisionHint(action: string, grant: string): string {
+  return `${action}入口只对持${grant}授予的操作者显示。`;
 }

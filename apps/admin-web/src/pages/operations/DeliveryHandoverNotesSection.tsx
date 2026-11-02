@@ -9,6 +9,8 @@ import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useMayMakeDecision } from '../use-operator-grants';
+import { deliveryHandoverConfirmationDecision, hiddenDecisionHint } from '../operator-grants';
+import { labelFor } from '../../vocabulary/status';
 import { listBusinessParties, type BusinessPartyListResponseBody } from '../party/api';
 import {
   confirmDeliveryHandover,
@@ -126,7 +128,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
   const [draft, setDraft] = useState<ConfirmationDraft | null>(null);
   const names = useCustomerNames();
   // 确认是运营决定「送站交接确认」：明确知道没有这一种授予时不摆确认按钮，答不出授予时照摆、让服务端去答（ADR-0315）。
-  const mayConfirm = useMayMakeDecision('DELIVERY_HANDOVER_CONFIRMATION');
+  const mayConfirm = useMayMakeDecision(deliveryHandoverConfirmationDecision);
   useEffect(() => {
     let cancelled = false;
     void readDeliveryHandoverNote(noteId).then((result) => {
@@ -182,7 +184,9 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
                 <span className="text-idpxyz-text">{customer(claim.values.customerAccount)}</span>
                 <span>{claim.values.conclusion}</span>
                 {claim.values.route ? <span>· {claim.values.route}</span> : null}
-                {claim.confirm.kind === 'available' && !mayConfirm ? null : claim.confirm.kind === 'available' ? (
+                {claim.confirm.kind === 'available' && !mayConfirm ? (
+                  <span className="basis-full text-[11px]">{hiddenDecisionHint('确认', labelFor(deliveryHandoverConfirmationDecision))}</span>
+                ) : claim.confirm.kind === 'available' ? (
                   <Button
                     variant="outline"
                     size="sm"

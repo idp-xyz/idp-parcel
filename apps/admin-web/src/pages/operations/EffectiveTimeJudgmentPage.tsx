@@ -7,6 +7,8 @@ import { OperatorRefusalNote } from '../../components/states';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows, type RowStatus } from '../network/route-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
+import { effectiveTimeJudgmentDecision, hiddenDecisionHint } from '../operator-grants';
+import { labelFor } from '../../vocabulary/status';
 import {
   judgeEffectiveTime,
   listExternalTrackingFacts,
@@ -83,7 +85,7 @@ export function EffectiveTimeJudgmentPage() {
   } | null>(null);
   // 页头「按轨迹编号确认」开的面板：指名一条不在当前列表里的轨迹（换了来源、或列表还没刷到）。行上的确认在右栏里。
   const [judgingByRef, setJudgingByRef] = useState(false);
-  const mayJudge = useMayMakeDecision('EFFECTIVE_TIME_JUDGMENT');
+  const mayJudge = useMayMakeDecision(effectiveTimeJudgmentDecision);
 
   useEffect(() => {
     if (source.trim() === '') return undefined;
@@ -197,7 +199,9 @@ function FactDetail({ row, mayJudge, onClose, onJudged }: { row: FactRow; mayJud
               确认时间
             </Button>
           )
-        ) : undefined
+        ) : (
+          <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('确认时间', labelFor(effectiveTimeJudgmentDecision))}</p>
+        )
       }
       onClose={onClose}
     >

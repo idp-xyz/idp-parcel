@@ -1,6 +1,18 @@
 import { test } from 'node:test';
 import { equal, ok } from 'node:assert/strict';
-import { entryHint, heldGrantsOf, hiddenEntryHint, mayWriteRegistry, type OperatorGrantsResponseBody } from './operator-grants';
+import {
+  authorizedRerouteDecision,
+  deliveryHandoverConfirmationDecision,
+  effectiveTimeJudgmentDecision,
+  entryHint,
+  heldGrantsOf,
+  hiddenDecisionHint,
+  hiddenEntryHint,
+  mayMakeDecision,
+  mayWriteRegistry,
+  pendingIdentityRecheckDecision,
+  type OperatorGrantsResponseBody,
+} from './operator-grants';
 
 // 本文件钉授予自查答复的判读与「摆不摆写入口」的口径（ADR-0315）：只有业务成格才算拿到；明确没有登记册配置写授予才收起
 // 入口，各种答不出一律当不知道、入口照摆——摆不摆只是呈现，服务端仍是裁决方。
@@ -40,4 +52,17 @@ test('指向写入口的文案跟着入口走：摆着时说它在哪，收起�
   equal(entryHint(true, '在「登记」页签登记第一个。'), '在「登记」页签登记第一个。');
   equal(entryHint(false, '在「登记」页签登记第一个。'), hiddenEntryHint);
   equal(entryHint(false, '录入在各册的发布页签。', ''), '');
+});
+
+// Covers: 线路与运力区决定入口的授予原词逐字等于 accessidentity 的 DecisionKind——拼错了持授予的人会悄悄看不到按钮；收起时那一句
+// 与 hiddenEntryHint 同一个说法。
+test('线路与运力区的决定授予原词与收起时的说明', () => {
+  equal(authorizedRerouteDecision, 'AUTHORIZED_REROUTE');
+  equal(deliveryHandoverConfirmationDecision, 'DELIVERY_HANDOVER_CONFIRMATION');
+  equal(effectiveTimeJudgmentDecision, 'EFFECTIVE_TIME_JUDGMENT');
+  equal(pendingIdentityRecheckDecision, 'PENDING_IDENTITY_RECHECK');
+  const held = { faces: new Set<string>(), decisions: new Set([deliveryHandoverConfirmationDecision]) };
+  equal(mayMakeDecision(held, deliveryHandoverConfirmationDecision), true);
+  equal(mayMakeDecision(held, authorizedRerouteDecision), false);
+  equal(hiddenDecisionHint('确认', '交付交接确认'), '确认入口只对持交付交接确认授予的操作者显示。');
 });
