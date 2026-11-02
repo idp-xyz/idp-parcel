@@ -408,6 +408,13 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   QUALIFIED: good('合格'),
   ELIMINATED: muted('淘汰'),
   EVIDENCE_UNKNOWN: warn('依据不明'),
+
+  // —— 线路与运力 · transport-fulfillment（运输班次页）——
+  // 签收方式是开放词表（承运商回传），这里收演示租户已登的码作参考译法，别的码如实露码并告警。
+  HANDED_TO_RECIPIENT: muted('交给收件人'),
+  // 订舱状态与承运商答复里总表还没有的几格。
+  WAITLISTED: warn('候补'),
+  PARTIALLY_CONFIRMED: warn('部分确认'),
 };
 
 /**

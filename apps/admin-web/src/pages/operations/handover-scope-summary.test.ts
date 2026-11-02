@@ -97,7 +97,7 @@ test('未决：带成因与续办引用，可重试；不冒充「这个范围�
 
   equal(state.kind, 'error');
   ok(state.kind === 'error');
-  ok(state.description?.includes('交接登记册读不回来'), state.description);
+  ok(state.description?.includes('交接记录暂时读不出来'), state.description);
   ok(state.description?.includes('CONT-abc123'), state.description);
   ok(typeof state.onRetry === 'function', '未决要给重试——它不是终局答案');
 });
@@ -119,7 +119,7 @@ test('范围未填不发请求，且与「问过了、这个范围还没有交�
   const idle = scopeSummaryViewState(null, '   ', noRetry, options);
   equal(idle.kind, 'empty');
   ok(idle.kind === 'empty');
-  ok(idle.title?.includes('尚未指定'), idle.title);
+  ok(idle.title?.includes('先输入'), idle.title);
 
   // 填了范围但答案还没回来是加载中，不是空。
   equal(scopeSummaryViewState(null, 'scope-1', noRetry, options).kind, 'loading');
