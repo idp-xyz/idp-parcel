@@ -30,6 +30,8 @@ import {
   registrationTitles,
 } from './presentation';
 import { adjustmentWindowOf, timeZoneLabel, validityOf, versionWord } from './network-rows';
+import { placeLabel, placePairLabel, type PlaceNameIndex } from './place-names';
+import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows, type DetailFact, type RowStatus } from './route-workbench';
 
 const info = moduleInfoById['network-catalog'];
@@ -50,9 +52,21 @@ function statusOf(family: NetworkCatalogFamily, row: Row): RowStatus | undefined
   return code ? codeStatus(code) : undefined;
 }
 
-/** 行首格：编码在上，第几版在下。日历的行首是它适用的对象。 */
-function identityCell(row: Row, family: NetworkCatalogFamily) {
-  const code = family === 'service-calendar' || family === 'availability-adjustment' ? row.targetCode : row.code;
+/**
+ * 行首的字：网点行显这一版自己登的名称（名称是版本内容，旧版没登就显编码，不拿新版的名称顶）；日历与停运的行首是它适用的
+ * 对象，对象是网点时按此刻生效那一版查名；其余显编码。编码都在右栏技术详情里。
+ */
+function identityText(row: Row, family: NetworkCatalogFamily, names: PlaceNameIndex): string {
+  if (family === 'node') return row.displayName ?? row.code ?? '—';
+  if (family === 'service-calendar' || family === 'availability-adjustment') {
+    return row.targetKind === 'NODE' ? placeLabel(names, row.targetCode) : (row.targetCode ?? '—');
+  }
+  return row.code ?? '—';
+}
+
+/** 行首格：对象在上，第几版（或对象类别）在下。 */
+function identityCell(row: Row, family: NetworkCatalogFamily, names: PlaceNameIndex) {
+  const code = identityText(row, family, names);
   const second =
     family === 'service-calendar'
       ? `${row.targetKind ? labelFor(row.targetKind) : ''} · ${versionWord(row.version)}`
@@ -63,7 +77,10 @@ function identityCell(row: Row, family: NetworkCatalogFamily) {
         : versionWord(row.version);
   return (
     <div className="min-w-0">
-      <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{code ?? '—'}</div>
+      {/* 编码用等宽字，名称不用：一列里两种字形，读的人一眼分得出哪几行还没有名称。 */}
+      <div className={`truncate font-medium text-[color:var(--ds-text-link-hover)] ${code === (row.code ?? row.targetCode) ? 'font-mono' : ''}`.trim()}>
+        {code}
+      </div>
       <div className="text-[11px] text-idpxyz-breadcrumb">{second}</div>
     </div>
   );
@@ -81,8 +98,8 @@ const identityHeaders: Record<NetworkCatalogFamily, string> = {
 
 const periodText = (row: Row) => (row.effectiveFrom ? formatRange(row.effectiveFrom, row.effectiveTo) : '—');
 
-function columnsOf(family: NetworkCatalogFamily): WorkbenchColumn<Row>[] {
-  const identity: WorkbenchColumn<Row> = { key: 'code', header: identityHeaders[family], sortKey: 'code', render: (row) => identityCell(row, family) };
+function columnsOf(family: NetworkCatalogFamily, names: PlaceNameIndex): WorkbenchColumn<Row>[] {
+  const identity: WorkbenchColumn<Row> = { key: 'code', header: identityHeaders[family], sortKey: 'code', render: (row) => identityCell(row, family, names) };
   const status: WorkbenchColumn<Row> = {
     key: 'status',
     header: '状态',
@@ -101,7 +118,7 @@ function columnsOf(family: NetworkCatalogFamily): WorkbenchColumn<Row>[] {
   const scope: WorkbenchColumn<Row> = { key: 'scope', header: '适用服务', render: (row) => (row.applicableScope ? labelFor(row.applicableScope) : '—') };
   switch (family) {
     case 'connection':
-      return [identity, { key: 'endpoints', header: '从 → 到', render: (row) => mono(`${row.fromNode ?? '—'} → ${row.toNode ?? '—'}`) }, status, zone, period];
+      return [identity, { key: 'endpoints', header: '从 → 到', render: (row) => placePairLabel(names, row.fromNode, row.toNode) }, status, zone, period];
     case 'line':
       return [identity, { key: 'segments', header: '途经的运输连接', render: (row) => mono((row.segments ?? []).join(' → ') || '—') }, status, scope, period];
     case 'availability-adjustment':
@@ -133,13 +150,13 @@ function columnsOf(family: NetworkCatalogFamily): WorkbenchColumn<Row>[] {
   }
 }
 
-function factsOf(family: NetworkCatalogFamily, row: Row): DetailFact[] {
+function factsOf(family: NetworkCatalogFamily, row: Row, names: PlaceNameIndex): DetailFact[] {
   const period: DetailFact = { label: '有效期', value: <span className="font-mono">{periodText(row)}</span> };
   switch (family) {
     case 'connection':
       return [
-        { label: '出发网点', value: <span className="font-mono">{row.fromNode ?? '—'}</span> },
-        { label: '到达网点', value: <span className="font-mono">{row.toNode ?? '—'}</span> },
+        { label: '出发网点', value: placeLabel(names, row.fromNode) },
+        { label: '到达网点', value: placeLabel(names, row.toNode) },
         { label: '时区', value: timeZoneLabel(row.businessTimezone) },
         period,
       ];
@@ -170,16 +187,21 @@ function factsOf(family: NetworkCatalogFamily, row: Row): DetailFact[] {
   }
 }
 
-function NetworkDetail({ family, row, onClose }: { family: NetworkCatalogFamily; row: Row; onClose: () => void }) {
-  const title = (family === 'service-calendar' || family === 'availability-adjustment' ? row.targetCode : row.code) ?? '—';
+function NetworkDetail({ family, row, names, onClose }: { family: NetworkCatalogFamily; row: Row; names: PlaceNameIndex; onClose: () => void }) {
+  const title = identityText(row, family, names);
   return (
     <RecordDetailPanel
       title={title}
+      // 名称不是编码，标题换成名称时不用等宽字。
+      mono={title === (row.code ?? row.targetCode)}
       status={statusOf(family, row)}
       subtitle={`${familyLabels[family]} · ${versionWord(row.version)}`}
-      facts={factsOf(family, row)}
+      facts={factsOf(family, row, names)}
       technical={techRows([
         { label: '编码', value: row.code },
+        { label: '对象编码', value: row.targetCode },
+        { label: '出发网点编码', value: row.fromNode },
+        { label: '到达网点编码', value: row.toNode },
         { label: '版本号', value: String(row.version) },
         { label: '时区', value: row.businessTimezone },
         { label: '适用服务码', value: row.applicableScope },
@@ -210,6 +232,7 @@ function NetworkCatalogTable() {
   const conditions = networkCatalogConditions(familyId, { q: useSettledKeyword(keyword) });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
   const mayWrite = useMayWriteRegistry();
+  const names = usePlaceNames();
   // 手上的答复认的是此刻这一问的条件签名(族在其中),答的一定是当前族,不会把上一族的行套进这一族的列。
   const rows = answer?.kind === 'outcome' ? answer.body.versions.map((record) => rowOf(familyId, record)) : [];
 
@@ -218,9 +241,7 @@ function NetworkCatalogTable() {
       // 换族重挂：上一族的状态筛选与选中行不带进下一族。
       key={familyId}
       title={info.title}
-      // 网络目录是册级不登名称（network-routing 的网点只有编码这一身份，CONTEXT 不定义名称），所以不设名称栏、行首显编码，
-      // 只在页头用册级说法交代一句——行级的「未登记」会让人去催一个登不进的字段。
-      subtitle="公司的网点、网点之间的运输连接、由连接串成的线路，以及服务日历、停运与恢复、路线策略。网点目录只登编码，不登名称。"
+      subtitle="公司的网点、网点之间的运输连接、由连接串成的线路，以及服务日历、停运与恢复、路线策略。"
       sections={
         <SectionTabs
           sections={networkCatalogFamilies.map((family) => ({ id: family, label: familyLabels[family] }))}
@@ -235,10 +256,10 @@ function NetworkCatalogTable() {
       searchCells={() => []}
       search={{ value: keyword, onChange: setKeyword, pushedDown: true }}
       searchPlaceholder={keywordPlaceholders[familyId]}
-      columns={columnsOf(familyId)}
+      columns={columnsOf(familyId, names)}
       sortAccessors={{ code: { value: (row) => row.code ?? row.targetCode } }}
       defaultSort={{ key: 'code', dir: 1 }}
-      renderDetail={(row, close) => <NetworkDetail family={familyId} row={row} onClose={close} />}
+      renderDetail={(row, close) => <NetworkDetail family={familyId} row={row} names={names} onClose={close} />}
       onRefresh={retry}
       pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
