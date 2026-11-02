@@ -799,7 +799,7 @@ func (handler *CutOffPublishStatementHandler) OpenDispute(
 	}
 
 	dispute, err := domain.OpenStatementDispute(
-		statementRecord.Statement, chargeID, command.DisputedMinor, reason, disputeID, command.OpenedAt)
+		statementRecord.Statement, chargeID, command.DisputedMinor, reason, disputeID, command.OpenedAt, handler.deps.Clock.Now())
 	if errors.Is(err, domain.ErrDisputeOnVoidedStatement) {
 		return StatementResult{outcome: DisputeOnVoidedStatement}, nil
 	}

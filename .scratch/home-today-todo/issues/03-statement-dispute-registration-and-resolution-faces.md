@@ -1,7 +1,7 @@
 # 03 客户对账单争议的管理台入口：客服代登记、财务核实后处理
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工；评审（钉 `679392eaf`）阻断 3 条，修订轮已做，待复评与进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
+Status: in-progress——2026-11-01 作者完工；评审（钉 `679392eaf`）阻断 3 条已修，复评（钉 `7eb16d2aa`）阻断清零，收尾两条已做，待进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
 父票：无。由票 [02](./02-statement-confirmation-and-disputes-have-no-production-face.md)（在 `claude-hometodo` 上）转来：02 列的两条缺口里，「争议的提出与处理没有生产口」由本票做；「相对方确认不记」用户裁定不做（ADR-0354 决定五），02 收口时指向本票。
 Blocked by: 无
 地盘：`internal/accessidentity` 两种决定种类与迁移 `access_identity/0037`；`internal/settlementaccounting/{domain,application,ports,adapters/postgres,adapters/registrationjson,adapters/http}` 的争议开立与处理、迁移 `settlement_accounting/0052`；`cmd/parcel-api` 结算决定特性文件、编排包事务与未接线占位；`apps/admin-web` 对账单页与授予常量；演示种子步骤 `510`、`data/access/34`、`35`、`data/governance/75`、`76`、种子 README；ADR-0354；SA CONTEXT 一句；UC-SA-003 一句规则、两条 AT、交接一行；AT 盘点两行；本票。
@@ -80,9 +80,19 @@ Blocked by: 无
 
 自验（修订轮）：Go `build`、`vet`、`gofmt -l` 干净，settlement、accessidentity、architecture、cmd/parcel-api 真库全绿；前端 `tsc -b`、`pnpm test`（1024 过 / 0 败）、`vite build` 通过；`seed.sh` 灌一次性库 `seed_disputes2` 退 0、验完删库；`at-coverage-counts -check` 只报生成物过期（行齐）。没碰 `:5173`、`:19080`、`demo_live`。
 
+### 收尾一笔（2026-11-01，复评钉 `7eb16d2aa` 阻断清零后协调方再收两条）
+
+- **N1** 费用行读口不再另立一份行模型：`FindStatementLines` 直接用写侧 `customer_statement.go` 的 `statementLineRow` 解码，删掉同形状的 `statementLineDocument`——写侧改键名时读口跟着改，不会静默读空。
+- **N2** 提出时刻加上限：不得晚于登记时刻（编排取服务端此刻，`OpenStatementDispute` 多一个 `registeredAt` 参数）。不留时钟容差——本仓别的操作者陈述的业务时刻（参与方关系的结束时刻不得晚于登记时刻）就是这样判的，没有容差惯例。超出答 `SOURCE_NOT_ACCEPTED`，前端答复话里补「也不晚于现在」，表单本地同一边界先拦。领域用例 `TestADisputeCannotBeRaisedAfterItIsRegistered`（恰在登记那一刻照收），真库用例在登记口那条里加「提出晚于登记」；既有真库用例的提出时刻改成已经过去的整秒（`raisedAfter`），编排夹具的时钟改成可拨，原有用例的数据与摘要金样不变。ADR-0354 决定一与越权风险点 5（提出时刻是操作者陈述的、不核真实性，作废判据可被往前填绕过，登记人与 `recorded_at` 留库可追查，与仓里同类业务时刻同一信任口径）、SA CONTEXT 那一句、UC-SA-003 规则、`AT-SA-228` 与交接「证据与请求方」那一行同步。
+- 自验同前：Go 受影响包 + architecture + cmd/parcel-api 真库全绿；前端 tsc / test / build 通过；种子灌一次性库一次退 0、已删库。
+
 ### 提交
 
-- `8d9efbb5a` 后端两口、领域与编排、迁移、种子与用例
-- `0320186fe` 文档：ADR-0354、UC-SA-003、SA CONTEXT、AT 盘点、本票立票
-- `2a9083de4` 管理台两张表单
-- 其后一笔：右栏在单出列时不按旧数据摆表单、留住刚才的答复；本票完成记录
+换基到 `0a88def13` 之前的那四笔（`8d9efbb5a`、`0320186fe`、`2a9083de4`、`9a12d0acc`）已被换基取代。现行：
+- `34ec3d3e1` 后端两口、领域与编排、迁移、种子与用例
+- `cc4b13a17` 文档：ADR、UC-SA-003、SA CONTEXT、AT 盘点、本票立票
+- `afc024a2d` 管理台两张表单
+- `ebf05445b` 右栏在单出列时不按旧数据摆表单、留住刚才的答复；本票完成记录
+- `679392eaf` ADR 改号 0354、参数位用例、本票换基记录与新规则的出处
+- `7eb16d2aa` 修订轮
+- 收尾一笔（见 git log，紧接 `7eb16d2aa`）

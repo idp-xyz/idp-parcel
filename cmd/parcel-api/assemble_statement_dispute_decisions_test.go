@@ -69,17 +69,25 @@ func newPublishedStatementFixture(t *testing.T) (*settlementDecisionsFixture, ti
 	return fixture, publishedAt
 }
 
+// raisedAfter 交回一个晚于 at 的整秒时刻（载荷按秒写），并等到服务端此刻过了它：提出时刻不得晚于登记时刻（ADR-0354 决定一），
+// 用例里的提出时刻都得是已经过去的一刻。
+func raisedAfter(at time.Time) time.Time {
+	raised := at.Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(raised) + 20*time.Millisecond)
+	return raised
+}
+
 func disputeBodyOf(id, amount string, openedAt time.Time) string {
 	return `{"dispute":"` + id + `","statement":"` + disputedStatement + `","charge":"` + decisionsCharge + `","disputedAmount":"` + amount +
 		`","reason":"客户来电：重量按 1.2 kg 计","openedAt":"` + openedAt.UTC().Format(time.RFC3339) + `"}`
 }
 
 // Covers: AT-SA-228（ADR-0354 决定一、三、四）——持登记授予的客服代登记一项争议：答 201；同一份重放答已存在，同标识换了金额答冲突；金额
-// 越行、单号不在册、提出早于发布答未受理；行上记下登记人；持处理授予的财务打登记口答未授予；单作废之后新争议答作废那一格，已开的那项
+// 越行、单号不在册、提出早于发布、提出晚于登记答未受理；行上记下登记人；持处理授予的财务打登记口答未授予；单作废之后新争议答作废那一格，已开的那项
 // 照旧在。
 func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
-	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	openedAt := raisedAfter(publishedAt)
 	body := disputeBodyOf("SYN-DSP-1", "1600", openedAt)
 
 	if status, answer := fixture.post(t, statementDisputeFace, disputeFinance, body); status != http.StatusForbidden {
@@ -101,6 +109,7 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 		"金额越行":   disputeBodyOf("SYN-DSP-2", "9601", openedAt),
 		"单号不在册":  strings.Replace(disputeBodyOf("SYN-DSP-3", "100", openedAt), disputedStatement, "SYN-STMT-NONE", 1),
 		"提出早于发布": disputeBodyOf("SYN-DSP-4", "100", publishedAt.Add(-time.Hour)),
+		"提出晚于登记": disputeBodyOf("SYN-DSP-6", "100", time.Now().Add(time.Hour)),
 	} {
 		if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, raw); status != http.StatusOK || answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
 			t.Fatalf("%s = %d %v", name, status, answer)
@@ -119,12 +128,12 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 		}
 		_, err = executor.Exec(ctx, `UPDATE settlement_accounting.customer_statement
 		    SET void_basis = 'SYN-VOID-1', voided_at = $3 WHERE tenant_id = $1 AND statement_number = $2`,
-			decisionsTenant, disputedStatement, publishedAt.Add(2*time.Minute))
+			decisionsTenant, disputedStatement, openedAt)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-5", "100", openedAt.Add(5*time.Minute))); status != http.StatusOK ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-5", "100", raisedAfter(openedAt))); status != http.StatusOK ||
 		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_DISPUTE" {
 		t.Fatalf("单已作废 = %d %v", status, answer)
 	}
@@ -137,7 +146,7 @@ func TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk(t *testing.T) {
 // 一份（200）；行上记下最后那一次处理人，登记人不变；持登记授予的客服打处理口答未授予；不在册的争议答未受理。
 func TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
-	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	openedAt := raisedAfter(publishedAt)
 	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-1", "1600", openedAt)); status != http.StatusCreated {
 		t.Fatalf("先登记 = %d %v", status, answer)
 	}
@@ -179,7 +188,7 @@ func TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider(t *testin
 // 也不带回赢家的金额；同一编号同内容的两份并发，输的那份答已存在。逐轮换编号，跑几轮让输家走到落库撞主键那一支。
 func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
-	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	openedAt := raisedAfter(publishedAt)
 	race := func(id string, amounts [2]string) [2]map[string]any {
 		var answers [2]map[string]any
 		var statuses [2]int
@@ -225,15 +234,16 @@ func TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-228（ADR-0354 决定三）——单作废之后：提出时刻在作废之前的照收（客户作废前来电、客服作废后才登记），作废前已开的那项
+// Covers: AT-SA-228（ADR-0354 决定三）——单作废之后：提出时刻不晚于作废的照收（客户作废前来电、客服作废后才登记；这里取恰在作废那一刻），作废前已开的那项
 // 仍能处理到终局。
 func TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve(t *testing.T) {
 	fixture, publishedAt := newPublishedStatementFixture(t)
-	openedAt := publishedAt.Add(time.Minute).Truncate(time.Second).Add(time.Second)
+	openedAt := raisedAfter(publishedAt)
 	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-EARLY", "100", openedAt)); status != http.StatusCreated {
 		t.Fatalf("作废前登记 = %d %v", status, answer)
 	}
-	voidAt := openedAt.Add(10 * time.Minute)
+	// 作废时刻取恰在早先那一项提出的那一刻：提出时刻都要不晚于登记时刻（服务端此刻），作废之后提出的那一项也得在此刻之前。
+	voidAt := openedAt
 	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		executor, err := fixture.db.RequireExecutor(ctx)
 		if err != nil {
@@ -246,11 +256,11 @@ func TestADisputeRaisedBeforeTheVoidIsStillRegisteredAndOpenOnesStillResolve(t *
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-LATE-ENTRY", "100", voidAt.Add(-time.Minute))); status != http.StatusCreated ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-LATE-ENTRY", "100", voidAt)); status != http.StatusCreated ||
 		answer["outcome"] != "DISPUTE_OPENED" {
 		t.Fatalf("作废前提出、作废后登记 = %d %v", status, answer)
 	}
-	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-AFTER", "100", voidAt.Add(time.Minute))); status != http.StatusOK ||
+	if status, answer := fixture.post(t, statementDisputeFace, disputeClerk, disputeBodyOf("SYN-DSP-AFTER", "100", raisedAfter(voidAt))); status != http.StatusOK ||
 		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_DISPUTE" {
 		t.Fatalf("作废后提出 = %d %v", status, answer)
 	}
