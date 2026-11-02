@@ -21,7 +21,7 @@ import (
 // 检出编译不过（`no matching files found`）——本行已两度因跨会话卷带断过远端构建，
 // 新模块的目录、本行与模块函数必须同一笔提交一起落。
 //
-//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment all:pilot_governance all:party_commercial all:parcel_pricing all:collection_remittance all:access_identity
+//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment all:pilot_governance all:party_commercial all:parcel_pricing all:collection_remittance all:access_identity all:document_numbering
 var assets embed.FS
 
 // Asset 是一份业务迁移。SQL 只读，校验和对文件原始内容计算——一份已施加的迁移
@@ -93,6 +93,12 @@ func CollectionRemittance() ([]Asset, error) {
 // 限界上下文（ADR-0072 一），但操作者册的数据归它，照样独占一个 schema。
 func AccessIdentity() ([]Asset, error) {
 	return assetsForModule("access_identity")
+}
+
+// DocumentNumbering 返回单据编号规则册（internal/platform/docnumber）的迁移，按文件名序排列。它不是限界上下文，
+// 是编号技术组件的配置（ADR-0355 决定六），册的数据仍归本仓，照样独占一个 schema。
+func DocumentNumbering() ([]Asset, error) {
+	return assetsForModule("document_numbering")
 }
 
 func assetsForModule(module string) ([]Asset, error) {

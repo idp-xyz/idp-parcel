@@ -27,6 +27,22 @@ CREATE TABLE IF NOT EXISTS ` + SchemaHistory + `.applied_migration (
         CHECK (origin <> 'FRAMEWORK' OR framework_version IS NOT NULL)
 )`
 
+// historyPlatformDDL 给历史表追加平台来源那一格：平台库版本一列，以及来源取值与「平台步骤必带平台库版本」两条
+// 约束（ADR-0355 决定四：平台序列表的资产版本要像框架版本一样记下）。
+//
+// 写成对 historyDDL 的追加而不是改那段 CREATE：已部署的库里历史表早已按首版建好，CREATE TABLE IF NOT EXISTS
+// 碰不到它；新库与旧库都走「先首版、再追加」这一条路，表的形状就只有一种来历。每次运行都重放一遍：列用 IF NOT
+// EXISTS，约束先删后加，在迁移锁之下对一张小表做，代价可忽略，换来不必另记「追加过没有」。
+const historyPlatformDDL = `
+ALTER TABLE ` + SchemaHistory + `.applied_migration
+    ADD COLUMN IF NOT EXISTS platform_version text,
+    DROP CONSTRAINT IF EXISTS applied_migration_origin_known,
+    ADD CONSTRAINT applied_migration_origin_known
+        CHECK (origin IN ('FRAMEWORK', 'PARCEL', 'PLATFORM')),
+    DROP CONSTRAINT IF EXISTS applied_migration_platform_version_present,
+    ADD CONSTRAINT applied_migration_platform_version_present
+        CHECK (origin <> 'PLATFORM' OR platform_version IS NOT NULL)`
+
 // advisoryLockKey 让并发的迁移作业排队而不是各跑各的。取值任意但必须稳定，
 // 换一个值等于换一把锁，两边就都拿得到。
 const advisoryLockKey int64 = 6_820_251_101
@@ -80,7 +96,8 @@ func Run(ctx context.Context, conn *pgx.Conn, logger *slog.Logger) error {
 	}
 
 	logger.Info("迁移计划完成",
-		"steps", len(plan), "applied", applied, "framework_version", FrameworkVersion)
+		"steps", len(plan), "applied", applied, "framework_version", FrameworkVersion,
+		"platform_version", PlatformVersion)
 	return nil
 }
 
@@ -93,6 +110,9 @@ func prepare(ctx context.Context, conn *pgx.Conn) error {
 	}
 	if _, err := conn.Exec(ctx, historyDDL); err != nil {
 		return fmt.Errorf("migrate: 创建迁移历史表：%w", err)
+	}
+	if _, err := conn.Exec(ctx, historyPlatformDDL); err != nil {
+		return fmt.Errorf("migrate: 给迁移历史表追加平台来源：%w", err)
 	}
 	return nil
 }
@@ -157,16 +177,20 @@ func applyStep(ctx context.Context, conn *pgx.Conn, sequence int, step Step) err
 		return fmt.Errorf("migrate: 施加 %s：%w", step.ID, err)
 	}
 
-	var frameworkVersion *string
-	if step.Origin == OriginFramework {
+	var frameworkVersion, platformVersion *string
+	switch step.Origin {
+	case OriginFramework:
 		version := step.FrameworkVersion
 		frameworkVersion = &version
+	case OriginPlatform:
+		version := step.PlatformVersion
+		platformVersion = &version
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO `+SchemaHistory+`.applied_migration
-			(migration_id, sequence, origin, canonical_checksum, framework_version, target_schema)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		step.ID, sequence, string(step.Origin), step.Checksum, frameworkVersion, step.Schema,
+			(migration_id, sequence, origin, canonical_checksum, framework_version, platform_version, target_schema)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		step.ID, sequence, string(step.Origin), step.Checksum, frameworkVersion, platformVersion, step.Schema,
 	); err != nil {
 		return fmt.Errorf("migrate: 记录 %s：%w", step.ID, err)
 	}

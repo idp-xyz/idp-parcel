@@ -9,6 +9,7 @@ require github.com/go-chi/chi/v5 v5.3.1
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	go.idp.xyz/idp-bento-go v0.1.0-rc.2
+	go.idp.xyz/idp-platform-go v0.1.0-rc.1
 )
 
 require (

@@ -48,9 +48,10 @@ func TestFrameworkMigrationsApplyAndSchemaCheckPasses(t *testing.T) {
 // 而不只是「跑过了」。缺了 checksum 与框架版本，一个已部署的库就无法与某个精确候选
 // 对上。
 //
-// 两种来源分别验，且期望不同：框架步骤的 checksum 取自框架清单并必须带框架版本；
-// 业务步骤的 checksum 由 Parcel 自己对文件内容算，且**不得**带框架版本——业务 SQL
-// 不属于任何框架候选，给它记一个版本号会让追溯指向一个它并不来自的工件。
+// 三种来源分别验，且期望不同：框架步骤的 checksum 取自框架清单并必须带框架版本；
+// 平台步骤必须带平台库版本、不带框架版本；业务步骤的 checksum 由 Parcel 自己对文件
+// 内容算，且**不得**带任何一种版本——业务 SQL 不属于任何候选，给它记一个版本号会让
+// 追溯指向一个它并不来自的工件。
 func TestHistoryRecordsEachArtifactIdentity(t *testing.T) {
 	dsn := pgtest.FreshDatabase(t)
 	ctx := t.Context()
@@ -65,20 +66,17 @@ func TestHistoryRecordsEachArtifactIdentity(t *testing.T) {
 		t.Fatalf("取迁移计划：%v", err)
 	}
 	expected := make(map[string]migrate.Step, len(plan))
-	frameworkCount := 0
+	origins := map[migrate.Origin]int{}
 	for _, step := range plan {
 		expected[step.ID] = step
-		if step.Origin == migrate.OriginFramework {
-			frameworkCount++
-		}
+		origins[step.Origin]++
 	}
-	if frameworkCount == 0 || len(expected) == frameworkCount {
-		t.Fatalf("计划里框架步骤 %d 条、总计 %d 条；两种来源都要有，否则本用例只验到一半",
-			frameworkCount, len(expected))
+	if origins[migrate.OriginFramework] == 0 || origins[migrate.OriginPlatform] == 0 || origins[migrate.OriginParcel] == 0 {
+		t.Fatalf("计划里各来源的步骤数为 %v；三种来源都要有，否则本用例只验到一部分", origins)
 	}
 
 	rows, err := conn.Query(ctx,
-		`SELECT migration_id, canonical_checksum, framework_version, target_schema
+		`SELECT migration_id, canonical_checksum, framework_version, platform_version, target_schema
 		   FROM `+migrate.SchemaHistory+`.applied_migration`)
 	if err != nil {
 		t.Fatalf("读迁移历史：%v", err)
@@ -88,8 +86,8 @@ func TestHistoryRecordsEachArtifactIdentity(t *testing.T) {
 	seen := 0
 	for rows.Next() {
 		var id, checksum, schema string
-		var frameworkVersion *string
-		if err := rows.Scan(&id, &checksum, &frameworkVersion, &schema); err != nil {
+		var frameworkVersion, platformVersion *string
+		if err := rows.Scan(&id, &checksum, &frameworkVersion, &platformVersion, &schema); err != nil {
 			t.Fatalf("扫描迁移历史：%v", err)
 		}
 		step, known := expected[id]
@@ -108,9 +106,19 @@ func TestHistoryRecordsEachArtifactIdentity(t *testing.T) {
 			if frameworkVersion == nil || *frameworkVersion != migrate.FrameworkVersion {
 				t.Errorf("%s 记录的框架版本为 %v，应为 %q", id, frameworkVersion, migrate.FrameworkVersion)
 			}
-		case migrate.OriginParcel:
+			if platformVersion != nil {
+				t.Errorf("%s 是框架迁移却记了平台库版本 %q", id, *platformVersion)
+			}
+		case migrate.OriginPlatform:
+			if platformVersion == nil || *platformVersion != migrate.PlatformVersion {
+				t.Errorf("%s 记录的平台库版本为 %v，应为 %q", id, platformVersion, migrate.PlatformVersion)
+			}
 			if frameworkVersion != nil {
-				t.Errorf("%s 是业务迁移却记了框架版本 %q", id, *frameworkVersion)
+				t.Errorf("%s 是平台迁移却记了框架版本 %q", id, *frameworkVersion)
+			}
+		case migrate.OriginParcel:
+			if frameworkVersion != nil || platformVersion != nil {
+				t.Errorf("%s 是业务迁移却记了版本 %v / %v", id, frameworkVersion, platformVersion)
 			}
 		}
 		seen++
@@ -226,4 +234,52 @@ func countHistory(t *testing.T, conn *pgx.Conn) int {
 
 func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// TestHistoryWrittenBeforeThePlatformOriginStillMigrates 证已部署的库能接上平台来源：历史表按首版形状建好、已记过
+// 一条框架迁移（来源只认 FRAMEWORK 与 PARCEL、没有平台库版本一列），再跑本计划要能补上那一列与约束、施加平台步骤
+// 并如实记下平台库版本，而不是撞在旧的来源约束上。
+func TestHistoryWrittenBeforeThePlatformOriginStillMigrates(t *testing.T) {
+	dsn := pgtest.FreshDatabase(t)
+	ctx := t.Context()
+	conn := connect(t, dsn)
+
+	for _, statement := range []string{
+		`CREATE SCHEMA ` + migrate.SchemaHistory,
+		`CREATE TABLE ` + migrate.SchemaHistory + `.applied_migration (
+		    migration_id       text        NOT NULL PRIMARY KEY,
+		    sequence           integer     NOT NULL,
+		    origin             text        NOT NULL,
+		    canonical_checksum text        NOT NULL,
+		    framework_version  text,
+		    target_schema      text        NOT NULL,
+		    applied_at         timestamptz NOT NULL DEFAULT now(),
+		    CONSTRAINT applied_migration_origin_known
+		        CHECK (origin IN ('FRAMEWORK', 'PARCEL')),
+		    CONSTRAINT applied_migration_framework_version_present
+		        CHECK (origin <> 'FRAMEWORK' OR framework_version IS NOT NULL))`,
+	} {
+		if _, err := conn.Exec(ctx, statement); err != nil {
+			t.Fatalf("建首版历史表：%v", err)
+		}
+	}
+
+	if err := migrate.Run(ctx, conn, quietLogger()); err != nil {
+		t.Fatalf("在首版历史表上施加计划：%v", err)
+	}
+	var platformSteps int
+	if err := conn.QueryRow(ctx,
+		`SELECT count(*) FROM `+migrate.SchemaHistory+`.applied_migration
+		  WHERE origin = 'PLATFORM' AND platform_version = $1`, migrate.PlatformVersion).Scan(&platformSteps); err != nil {
+		t.Fatalf("读平台步骤：%v", err)
+	}
+	if platformSteps == 0 {
+		t.Fatal("首版历史表上没记下任何带平台库版本的平台步骤")
+	}
+	if _, err := conn.Exec(ctx,
+		`INSERT INTO `+migrate.SchemaHistory+`.applied_migration
+		   (migration_id, sequence, origin, canonical_checksum, target_schema)
+		 VALUES ('probe', 0, 'PLATFORM', 'sha256:probe', 'platform')`); err == nil {
+		t.Fatal("不带平台库版本的平台步骤被历史表收下了")
+	}
 }
