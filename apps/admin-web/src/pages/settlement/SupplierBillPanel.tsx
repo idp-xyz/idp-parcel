@@ -26,6 +26,7 @@ import {
   billLabel,
   billNumberOf,
   billProgress,
+  differingClassificationWords,
   lineDisposition,
   matchSummary,
   newPayableId,
@@ -39,7 +40,7 @@ import {
 // 一行点审核通过，形成审核应付（ADR-0340 决定二）。审核入口按「供应商账单审核」授予收起（ADR-0315）：只在明确知道没有授予
 // 时收起，不知道就摆，服务端照旧每次判。
 //
-// 审核只有「通过」一种：领域里供应商账单行的争议与拒绝没有口（ADR-0340 越权风险点一），对不上的行这里只说要先核实，不另造
+// 审核只摆「通过」：领域里供应商账单行的争议与拒绝没有口（ADR-0340 越权风险点一），对不上的行这里只说要先核实，不另造
 // 一个按钮。审核也不改数字：应付金额就是这一行的主张金额（domain.FormAuditedPayable）。
 
 /** 差额是主张减预期：正为账单多收，负为少收；没有差额不说。 */
@@ -201,14 +202,16 @@ export function SupplierBillPanel({
         { label: '供应商编码', value: row.supplier },
         { label: '公司主体编码', value: row.legalEntity },
         { label: '被追加的主张', value: row.supplementsClaim },
+        { label: '接收时审核授权', value: row.auditAuthorityConfigured ? '已配置' : '未配置' },
         { label: '接收操作证据', value: row.operationEvidence },
         { label: '登记时间', value: formatInstant(row.recordedAt) },
       ])}
       onClose={onClose}
     >
-      {!row.auditAuthorityConfigured ? (
+      {/* 看的是此刻的审核授权册（auditAuthorityConfiguredNow），审核那一刻读的也是它；接收时的快照只进技术详情。 */}
+      {!row.auditAuthorityConfiguredNow ? (
         <p className={`rounded border px-3 py-2 text-idpxyz-text ${statusToneBanner.warning}`}>
-          这家供应商在这个公司主体下还没有登记审核人（审核授权未配置）：点审核会答未配置，不形成应付。登了审核人再审。
+          这家供应商在这个公司主体下现在还没有登记审核人（审核授权未配置）：审核会停在未配置，不形成应付。登了审核人再审。
         </p>
       ) : null}
       <section className="space-y-1.5">
@@ -239,7 +242,7 @@ export function SupplierBillPanel({
         <h3 className="text-[12px] font-bold text-idpxyz-textBright">审核这张账单</h3>
         {mayAudit ? (
           <p>
-            对上了的行逐行审核：通过就形成审核应付，交回{payableNumberName}；对不上的行（{['QUANTITY_VARIANCE', 'PRICE_VARIANCE', 'NO_MATCHING_OCCURRENCE', 'DUPLICATE_BILLING'].map((code) => labelFor(code)).join('、')}）要先核实，不能在这里审核。
+            对上了的行逐行审核：通过就形成审核应付，交回{payableNumberName}；对不上的行（{differingClassificationWords()}）要先核实，不能在这里审核。
           </p>
         ) : (
           <p>{hiddenDecisionHint('审核', labelFor(supplierBillAuditDecision))}</p>

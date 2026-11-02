@@ -22,8 +22,8 @@ import { StatementDisputePanel } from './StatementDisputePanel';
 import { disputeLabel, disputeNumberName, openDisputesOf } from './dispute-forms';
 
 // 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。客户对账单接 GET /settlement-statements?registry=customer-statement；
-// 「只看有未了结异议的」换接 GET /settlement-disputed-statements。供应商账单原是本页第二签，已移到「供应商账单与应付」页
-// （SupplierBillsPage，票 document-numbering/11），两处列同一本册只会各说一套。
+// 「只看有未了结异议的」换接 GET /settlement-disputed-statements。供应商账单接收册只在「供应商账单与应付」页（SupplierBillsPage）列：
+// 两处列同一本册，就会各说一套状态与指标。
 const info = moduleInfoById['reconciliation'];
 
 // 列上只有单据状态一栏：册上有作废留痕（依据与时刻成对），二态在库上完备。刻意没有「对账状态」与「结清状态」——

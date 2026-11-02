@@ -273,6 +273,7 @@ function ReceptionForm({
         <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">
           每一行说清对的是我们记的哪一笔预期成本、对上了没有。金额按最小币单位写整数（例如 12.34 元写 1234），与本页其他金额同一写法。
           {draft.currency === '' ? '先选币种，预期成本只列同币种的。' : `只列 ${draft.currency} 的当前预期成本；不同币种没有换算依据，对不上。`}
+          预期成本上只记了它依的供应商协议、没有记供应商，这里不按所选供应商筛，登记时也不核供应商：选之前看清协议是不是这家供应商的。
         </p>
         {touched && problems.fields.lines ? <p className={`text-[11px] ${statusToneText.warning}`}>{problems.fields.lines}</p> : null}
         {draft.lines.map((line, index) => {
