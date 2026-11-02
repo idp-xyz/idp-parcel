@@ -106,12 +106,17 @@ test('收寄行整行转写：服务标记一格经同一判读，其余各列�
     key: 'reception:SYN-SRC-1',
     values: {
       unit: 'SYN-UNIT-1',
-      kind: '已形成收寄',
+      kind: '已收寄',
       node: 'SYN-NODE-1',
       deliveredBy: 'SYN-PARTY-1',
       receivedAt: formatInstant('2026-10-19T02:00:00Z'),
-      control: '节点收寄 · 控制中',
+      control: '在网点（网点收寄）',
       serviceMarkers: serviceMarkersCellOf(unreadable),
+      kindCode: 'INTAKE_FORMED',
+      sourceId: 'SYN-SRC-1',
+      controlKind: 'NODE_INTAKE',
+      releasedTo: '',
+      recordedAt: formatInstant(unreadable.recordedAt),
     },
   });
 
@@ -120,7 +125,8 @@ test('收寄行整行转写：服务标记一格经同一判读，其余各列�
   );
   equal(
     released.values.control,
-    `节点收寄 · 已转出 SYN-HANDOVER-1 · ${formatInstant('2026-10-19T03:00:00Z')}`,
+    `已转出 · ${formatInstant('2026-10-19T03:00:00Z')}`,
   );
+  equal(released.values.releasedTo, 'SYN-HANDOVER-1');
   equal(receptionRowOf(pending()).values.kind, '待识别');
 });

@@ -106,7 +106,8 @@ export interface RecheckNote {
 }
 
 export function describeRecheckAnswer(body: IdentityRecheckResponseBody): RecheckNote {
-  const headline = `重核口答复：${body.outcome} —— ${labelOf(recheckOutcomeLabels, body.outcome)}`;
+  // 英文结果码不上屏：查得到的显中文，查不到的原样露码（labelOf 的约定），原码进不进技术详情由页面定。
+  const headline = labelOf(recheckOutcomeLabels, body.outcome);
   const rechecked = `被重核的那一版 ${body.recheckedVersion}`;
   switch (body.outcome) {
     case 'INTAKE_FORMED':

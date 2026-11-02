@@ -96,7 +96,7 @@ test('不重核的三格与已有结果、仍查无此号都是形成了的答�
     ok(note.details.length > 0, outcome);
   }
   const existing = describeRecheckAnswer(answer({ outcome: 'EXISTING_RESULT', currentVersion: 'SYN-INTAKEV-NRS03-NEXT', recordedOutcome: 'INTAKE_FORMED' }));
-  ok(existing.details[0].includes('SYN-INTAKEV-NRS03-NEXT') && existing.details[0].includes('已形成收寄'), existing.details[0]);
+  ok(existing.details[0].includes('SYN-INTAKEV-NRS03-NEXT') && existing.details[0].includes('已收寄'), existing.details[0]);
 });
 
 test('未收录的 outcome 原样示码，不归进既有说法', () => {

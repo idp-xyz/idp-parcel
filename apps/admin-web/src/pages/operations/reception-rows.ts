@@ -42,7 +42,10 @@ export function serviceMarkersCellOf(
   return `服务结果核对态 ${record.serviceResultCheck}（页面未收录）：${ABSENCE_PROVES_NOTHING}`;
 }
 
-/** 一行收寄登记转写成节点收寄区的一行。 */
+/**
+ * 一行收寄登记转写成收货记录区的一行。「现在」一格只说在不在网点：released 两键成对缺席即实物仍在网点控制中（传输层在场
+ * 规则）；转出照登记示时刻，转给谁的引用与控制来源码进技术详情（kindCode 之后几格），不代判「在库 / 出库」一类派生词。
+ */
 export function receptionRowOf(record: ReceptionRecord): ReceptionReviewRow {
   return {
     key: `reception:${record.sourceId}`,
@@ -52,14 +55,15 @@ export function receptionRowOf(record: ReceptionRecord): ReceptionReviewRow {
       node: record.node,
       deliveredBy: record.deliveredBy,
       receivedAt: formatInstant(record.receivedAt),
-      // released 两键成对缺席即实物仍在节点控制中（传输层在场规则）；转出行
-      // 照登记示引用与时刻，不代判「在库/出库」。
       control: record.controlReleasedBy
-        ? `${labelOf(controlKindLabels, record.controlKind)} · 已转出 ${record.controlReleasedBy}${
-            record.controlReleasedAt ? ` · ${formatInstant(record.controlReleasedAt)}` : ''
-          }`
-        : `${labelOf(controlKindLabels, record.controlKind)} · 控制中`,
+        ? `已转出${record.controlReleasedAt ? ` · ${formatInstant(record.controlReleasedAt)}` : ''}`
+        : `在网点（${labelOf(controlKindLabels, record.controlKind)}）`,
       serviceMarkers: serviceMarkersCellOf(record),
+      kindCode: record.kind,
+      sourceId: record.sourceId,
+      controlKind: record.controlKind,
+      releasedTo: record.controlReleasedBy ?? '',
+      recordedAt: formatInstant(record.recordedAt),
     },
   };
 }

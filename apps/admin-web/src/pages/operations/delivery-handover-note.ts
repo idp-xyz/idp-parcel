@@ -195,7 +195,8 @@ function bindingSummaryOf(binding: HandoverBindingRecord): string {
 }
 
 export function describeConfirmationAnswer(body: DeliveryHandoverConfirmationResponseBody): ConfirmationNote {
-  const headline = `确认口答复：${body.outcome} —— ${labelOf(confirmationOutcomeLabels, body.outcome)}`;
+  // 英文结果码不上屏：查得到的显中文，查不到的原样露码（labelOf 的约定），原码进不进技术详情由页面定。
+  const headline = labelOf(confirmationOutcomeLabels, body.outcome);
   const recorded = body.binding ? [`在册的结论：${bindingSummaryOf(body.binding)}`] : [];
   const scope = body.scopeEstablishedAt
     ? `声称的账户已全部确认，可验证交付范围已成立（${formatInstant(body.scopeEstablishedAt)}）；名下仍待识别的实物会自动重核`

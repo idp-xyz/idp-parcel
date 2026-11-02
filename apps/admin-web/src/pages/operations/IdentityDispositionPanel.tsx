@@ -33,7 +33,7 @@ export function IdentityDispositionPanel({ units, onLanded }: { units: IdentityR
   return (
     <Card className="mx-4 mb-4">
       <CardHeader>
-        <CardTitle>按实物看各链当前有效版本 · 身份冲突处置</CardTitle>
+        <CardTitle>处理身份冲突的货</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {rows.length === 0 ? (

@@ -42,14 +42,14 @@ function col(id: string, header: string, mono = false): ListColumn<HandoverNoteR
 
 const columns: ListColumn<HandoverNoteReviewRow>[] = [
   col('noteId', '交接单', true),
-  col('node', '物流节点', true),
-  col('deliveringParty', '交付方线索', true),
-  col('openedAt', '开立时刻', true),
-  col('state', '开放 / 关闭'),
-  col('members', '成员', true),
-  col('claims', '声称的客户账户', true),
-  col('bindings', '绑定'),
-  col('scope', '可验证交付范围'),
+  col('node', '网点', true),
+  col('deliveringParty', '谁来送', true),
+  col('openedAt', '开单时间', true),
+  col('state', '状态'),
+  col('members', '件数', true),
+  col('claims', '自称的客户', true),
+  col('bindings', '客户确认进度'),
+  col('scope', '送货范围成立没有'),
 ];
 
 /**
@@ -82,12 +82,12 @@ export function DeliveryHandoverNotesSection({ chips }: { chips: ReactNode }) {
   const narrowed = filter.node.trim() !== '' || filter.day !== '';
   const viewState: TemplateViewState =
     path === null
-      ? { kind: 'error', title: '开立日认不出', description: '日期格不是一个日历上存在的日子；改正后才发请求，页面不发半截条件。' }
+      ? { kind: 'error', title: '开单日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
       : catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET ${listBase}`,
-          emptyTitle: '当前租户尚无送站交接单',
-          emptyDescription: '读取入口已配置，交接单册为空——交接单由一线作业端在节点当场开立；页面不含合成数据。',
+          emptyTitle: '还没有送货交接单',
+          emptyDescription: '客户或司机到网点送货时，网点在作业终端上当场开交接单，开了之后会出现在这里。',
           narrowed,
         });
 
@@ -95,9 +95,9 @@ export function DeliveryHandoverNotesSection({ chips }: { chips: ReactNode }) {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<HandoverNoteReviewRow>
         title={info.title}
-        description={`送站交接单由节点当场开立，声称的客户账户全部确认才成立可验证交付范围。点一行看各账户的结论与名下成员；待确认的账户可由持「送站交接确认」授予的运营操作者依授权交付关系确认。`}
+        description="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立。点一行看每个客户的确认情况与名下包裹；待确认的客户可以在这里确认。"
         filters={<DeliveryScopeFilters chips={chips} filter={filter} dayLabel="开立日" onChange={setFilter} />}
-        filterSummary={body ? `送站交接单 ${rows.length} 行` : undefined}
+        filterSummary={body ? `共 ${rows.length} 张` : undefined}
         emptyRowsNote={narrowed ? '当前筛选条件下没有交接单' : undefined}
         columns={columns}
         rows={rows}

@@ -89,7 +89,7 @@ test('重核答复仍带歧义信号：形成了的答案、没追加、不重�
   });
   equal(note.tone, 'answered');
   equal(note.landed, false);
-  ok(note.headline.includes('STILL_AMBIGUOUS') && note.headline.includes('同号声明'), note.headline);
+  ok(!/[A-Za-z]/.test(note.headline) && note.headline.includes('同号声明'), note.headline);
   ok(!note.headline.includes('查无此号'), note.headline);
   ok(note.details.some((line) => line.includes('SYN-INTAKEV-NRI07') && line.includes('当前有效版本')), JSON.stringify(note.details));
   ok(note.details.some((line) => line.includes('拒绝或撤回')), JSON.stringify(note.details));

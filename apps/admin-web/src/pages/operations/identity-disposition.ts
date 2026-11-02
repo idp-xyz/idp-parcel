@@ -186,7 +186,8 @@ export interface DispositionNote {
 }
 
 export function describeDispositionAnswer(body: IdentityDispositionResponseBody): DispositionNote {
-  const headline = `处置口答复：${body.outcome} —— ${labelOf(dispositionOutcomeLabels, body.outcome)}`;
+  // 英文结果码不上屏：查得到的显中文，查不到的原样露码（labelOf 的约定），原码进不进技术详情由页面定。
+  const headline = labelOf(dispositionOutcomeLabels, body.outcome);
   const target = `${body.unit} 的 ${body.disposedVersion}`;
   const recorded = body.disposition ? [`在册的处置：${dispositionSummaryOf(body.disposition)}`] : [];
   switch (body.outcome) {
