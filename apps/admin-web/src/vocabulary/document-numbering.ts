@@ -16,7 +16,7 @@ export interface DocumentTypeWords {
   numberName: string;
 }
 
-/** 十一类单据（ADR-0355 决定二）。单据名取管理台各页已在用的叫法，不另造。 */
+/** ADR-0355 决定二所列的单据。单据名取管理台各页已在用的叫法，不另造。 */
 export const documentTypeWords: Readonly<Record<string, DocumentTypeWords>> = {
   SHIPMENT: { name: '运单', numberName: '运单号' },
   CUSTOMER_STATEMENT: { name: '客户对账单', numberName: '对账单号' },

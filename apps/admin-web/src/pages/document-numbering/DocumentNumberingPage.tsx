@@ -31,11 +31,11 @@ const info = moduleInfoById['document-numbering'];
 
 const SOURCE_SCOPE = 'document-numbering-source';
 
-// 设置 → 单据编号（ADR-0355 决定五、六；票 document-numbering/03）：十一类单据各一行，此刻用的格式与样例号、来源、
+// 设置 → 单据编号（ADR-0355 决定五、六；票 document-numbering/03）：每类单据一行，此刻用的格式与样例号、来源、
 // 重置方式与日期所用时区；右栏是这一类的历次规则版本与「改用新的编号格式」。页头是本公司的单据编号时区——没登时醒目地
 // 说哪些单据此刻开立不带号。规则册是编号技术组件的配置，不属任何限界上下文；单据号本身归各单据所属的上下文。
 //
-// 读口一问答全册（十一类的此刻规则、历次版本与单据编号时区），页面不分页、不另开读口。
+// 读口一问答全册（各类的此刻规则、历次版本与单据编号时区），页面不分页、不另开读口。
 
 function useRulebook() {
   const [answer, setAnswer] = useState<ApiResult<DocumentNumberingReadBody> | null>(null);
@@ -240,7 +240,7 @@ export function DocumentNumberingPage() {
           module: info,
           endpoint: 'GET /document-numbering/rules',
           emptyTitle: '规则册没有答出任何单据类型',
-          // 十一类单据的默认格式随产品发布，空表只可能是读口出了毛病，不是「还没登记」。
+          // 各类单据的默认格式随产品发布，空表只可能是读口出了毛病，不是「还没登记」。
           emptyDescription: '各类单据的默认编号格式随产品发布，不该为空；这不是“还没登记”，请联系产品支持。',
         })}
       />
