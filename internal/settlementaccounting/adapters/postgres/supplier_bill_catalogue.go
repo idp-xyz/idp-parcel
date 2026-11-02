@@ -13,30 +13,40 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 供应商账单详情与审核应付册的读面（票 document-numbering/11），挂在 StatementCatalogue 上：读的是 0002、0016 两张表，
-// 与接收册同一个适配器，装配点一处构造。
+// 供应商账单详情与审核应付册的读面（票 document-numbering/11、13），挂在 StatementCatalogue 上：读的是 0002、0016 与 0054 的
+// 几张表，与接收册同一个适配器，装配点一处构造。
 
 var (
 	_ ports.SupplierBillLineRead        = (*StatementCatalogue)(nil)
 	_ ports.AuditedPayableCatalogueRead = (*StatementCatalogue)(nil)
 )
 
-// linePayableDocument 是挂在主张上的应付在聚合里的临时词形。单据号两列与操作证据在库上可空，词形留指针格，理由同
+// lineDecisionDocument 是挂在主张上的一份审核决定连同它形成的应付（通过才有）在聚合里的临时词形。可空的列留指针格，理由同
 // statementDisputeDocument。
-type linePayableDocument struct {
-	Payable           string    `json:"payable"`
+type lineDecisionDocument struct {
+	Decision          string    `json:"decision"`
 	Line              string    `json:"line"`
-	DocumentNumber    *string   `json:"documentNumber"`
-	NumberAbsence     *string   `json:"documentNumberAbsence"`
-	AmountMinor       int64     `json:"amountMinor"`
-	Currency          string    `json:"currency"`
+	Verdict           string    `json:"verdict"`
+	RangeFrom         int64     `json:"rangeFrom"`
+	RangeTo           int64     `json:"rangeTo"`
+	Version           *string   `json:"version"`
+	Basis             *string   `json:"basis"`
+	Resolves          *string   `json:"resolves"`
 	Auditor           string    `json:"auditor"`
 	OperationEvidence *string   `json:"operationEvidence"`
 	AuditedAt         time.Time `json:"auditedAt"`
+	Payable           *string   `json:"payable"`
+	DocumentNumber    *string   `json:"documentNumber"`
+	NumberAbsence     *string   `json:"documentNumberAbsence"`
+	AmountMinor       *int64    `json:"amountMinor"`
+	Currency          *string   `json:"currency"`
 }
 
-// FindSupplierBillLines 一条语句读回一份主张、它的逐行匹配与挂在它上面的审核应付（同一快照）。各行按主张原序排；
-// 匹配与应付按行对上。主张不在本租户的册上答 false。
+// FindSupplierBillLines 一条语句读回一份主张、它的逐行匹配、挂在它上面的审核决定连同各自形成的应付，与它的供应商账单号（同一
+// 快照）。各行按主张原序排；匹配与决定按行对上，决定按落库先后。主张不在本租户的册上答 false。
+//
+// 已匹配金额与四个和取领域那一处定义：决定经重建门回来交给 domain.TallyLineDecisions，已匹配金额经 domain.MatchedAmountFor——
+// 读面另写一份求法，就会和审核门各说一套。
 func (catalogue *StatementCatalogue) FindSupplierBillLines(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -48,41 +58,53 @@ func (catalogue *StatementCatalogue) FindSupplierBillLines(
 		return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: %w", err)
 	}
 	var (
-		found        ports.SupplierBillLines
-		claimJSON    []byte
-		matchesJSON  []byte
-		payablesJSON []byte
-		evidence     *string
-		recordedAt   time.Time
+		found         ports.SupplierBillLines
+		billNumber    *string
+		claimJSON     []byte
+		matchesJSON   []byte
+		decisionsJSON []byte
+		evidence      *string
+		recordedAt    time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT r.supplier_ref, r.legal_entity, r.period_ref, r.currency, r.claim, r.matches,
+		`SELECT r.supplier_ref, n.bill_number, r.legal_entity, r.period_ref, r.currency, r.claim, r.matches,
 		        r.audit_authority_configured, r.operation_evidence, r.recorded_at,
 		        (SELECT COALESCE(
 		                    json_agg(
 		                        json_build_object(
+		                            'decision',              d.decision_id,
+		                            'line',                  d.line_ref,
+		                            'verdict',               d.verdict,
+		                            'rangeFrom',             d.range_from_minor,
+		                            'rangeTo',               d.range_to_minor,
+		                            'version',               d.claim_version,
+		                            'basis',                 d.basis_ref,
+		                            'resolves',              d.resolves_decision,
+		                            'auditor',               d.auditor_ref,
+		                            'operationEvidence',     d.operation_evidence,
+		                            'auditedAt',             d.audited_at,
 		                            'payable',               p.payable_id,
-		                            'line',                  p.line_ref,
 		                            'documentNumber',        p.document_number,
 		                            'documentNumberAbsence', p.document_number_absence,
 		                            'amountMinor',           p.amount_minor,
-		                            'currency',              p.currency,
-		                            'auditor',               p.auditor_ref,
-		                            'operationEvidence',     p.operation_evidence,
-		                            'auditedAt',             p.audited_at
+		                            'currency',              p.currency
 		                        )
-		                        ORDER BY p.line_ref
+		                        ORDER BY d.recorded_at, d.decision_id
 		                    ),
 		                    '[]'::json
 		                )
-		           FROM settlement_accounting.audited_payable AS p
-		          WHERE p.tenant_id = r.tenant_id
-		            AND p.claim_id = r.claim_id)
+		           FROM settlement_accounting.supplier_bill_audit_decision AS d
+		           LEFT JOIN settlement_accounting.audited_payable AS p
+		             ON p.tenant_id = d.tenant_id AND p.payable_id = d.decision_id
+		          WHERE d.tenant_id = r.tenant_id
+		            AND d.claim_id = r.claim_id)
 		   FROM settlement_accounting.supplier_bill_reception AS r
+		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
+		     ON n.tenant_id = r.tenant_id AND n.claim_id = r.claim_id
 		  WHERE r.tenant_id = $1 AND r.claim_id = $2 AND r.claim_version = $3`,
 		tenant.String(), claim, version,
-	).Scan(&found.Supplier, &found.LegalEntity, &found.Period, &found.Currency, &claimJSON, &matchesJSON,
-		&found.AuditAuthorityConfigured, &evidence, &recordedAt, &payablesJSON)
+	).Scan(&found.Supplier, &billNumber, &found.LegalEntity, &found.Period, &found.Currency, &claimJSON, &matchesJSON,
+		&found.AuditAuthorityConfigured, &evidence, &recordedAt, &decisionsJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.SupplierBillLines{}, false, nil
 	}
@@ -90,6 +112,7 @@ func (catalogue *StatementCatalogue) FindSupplierBillLines(
 		return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: %w", err)
 	}
 	found.Claim, found.ClaimVersion = claim, version
+	found.SupplierBillNumber = catalogueText(billNumber)
 	found.OperationEvidence = catalogueText(evidence)
 	found.RecordedAt = recordedAt.UTC()
 
@@ -102,9 +125,9 @@ func (catalogue *StatementCatalogue) FindSupplierBillLines(
 	if err := json.Unmarshal(matchesJSON, &matches); err != nil {
 		return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 匹配解码：%w", err)
 	}
-	var payables []linePayableDocument
-	if err := json.Unmarshal(payablesJSON, &payables); err != nil {
-		return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 应付解码：%w", err)
+	var decisions []lineDecisionDocument
+	if err := json.Unmarshal(decisionsJSON, &decisions); err != nil {
+		return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 审核决定解码：%w", err)
 	}
 	found.ReceivedAt = document.ReceivedAt.UTC()
 	found.Supplements = document.Supplements
@@ -113,32 +136,75 @@ func (catalogue *StatementCatalogue) FindSupplierBillLines(
 	for _, match := range matches {
 		matchByLine[match.Line] = match
 	}
-	payableByLine := make(map[string]*ports.SupplierBillLinePayable, len(payables))
-	for _, payable := range payables {
-		numbering, err := numberingFrom(payable.DocumentNumber, payable.NumberAbsence)
+	entriesByLine := make(map[string][]ports.SupplierBillLineDecision, len(decisions))
+	domainByLine := make(map[string][]domain.BillLineAuditDecision, len(decisions))
+	for _, decision := range decisions {
+		entry, rebuilt, err := lineDecisionOf(claim, decision)
 		if err != nil {
-			return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 应付 %s 的应付单号：%w", payable.Payable, err)
+			return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 审核决定 %s：%w", decision.Decision, err)
 		}
-		number, absence := numbering.Words()
-		payableByLine[payable.Line] = &ports.SupplierBillLinePayable{
-			Payable: payable.Payable, DocumentNumber: number, DocumentNumberAbsence: absence,
-			AmountMinor: payable.AmountMinor, Currency: payable.Currency, AuditorRef: payable.Auditor,
-			OperationEvidence: catalogueText(payable.OperationEvidence), AuditedAt: payable.AuditedAt.UTC(),
-		}
+		entriesByLine[decision.Line] = append(entriesByLine[decision.Line], entry)
+		domainByLine[decision.Line] = append(domainByLine[decision.Line], rebuilt)
 	}
 	found.Lines = make([]ports.SupplierBillLineEntry, 0, len(document.Lines))
 	for _, line := range document.Lines {
+		tally := domain.TallyLineDecisions(line.ClaimedMinor, domainByLine[line.Line])
 		entry := ports.SupplierBillLineEntry{
-			Line: line.Line, FeeItem: line.FeeItem, ClaimedMinor: line.ClaimedMinor, Payable: payableByLine[line.Line],
+			Line: line.Line, FeeItem: line.FeeItem, ClaimedMinor: line.ClaimedMinor, Decisions: entriesByLine[line.Line],
+			PassedMinor: tally.PassedMinor, RejectedMinor: tally.RejectedMinor,
+			OpenDisputeMinor: tally.OpenDisputeMinor, UndecidedMinor: tally.UndecidedMinor,
 		}
 		if match, matched := matchByLine[line.Line]; matched {
+			classification, err := domain.MatchClassificationFromName(match.Classification)
+			if err != nil {
+				return ports.SupplierBillLines{}, false, fmt.Errorf("find supplier bill lines: 第 %s 行：%w", line.Line, err)
+			}
 			matchedAt := match.MatchedAt.UTC()
 			entry.Classification, entry.ExpectedVersion, entry.ExpectedMinor = match.Classification, match.Expected, match.ExpectedMinor
 			entry.Basis, entry.MatchedAt = match.Basis, &matchedAt
+			entry.MatchedMinor = domain.MatchedAmountFor(classification, line.ClaimedMinor, match.ExpectedMinor)
 		}
 		found.Lines = append(found.Lines, entry)
 	}
 	return found, true, nil
+}
+
+// lineDecisionOf 把聚合里的一份决定转写成读口的词形，同时经重建门（RehydrateBillLineAuditDecision）回成领域决定给求和用——一份
+// 坏写入在读回处暴露，不被求成一个看似合理的和。通过的那一份带它的应付；应付的号与无号原因经 numberingFrom 复验。
+func lineDecisionOf(claim string, document lineDecisionDocument) (ports.SupplierBillLineDecision, domain.BillLineAuditDecision, error) {
+	entry := ports.SupplierBillLineDecision{
+		Decision: document.Decision, Verdict: document.Verdict, RangeFromMinor: document.RangeFrom, RangeToMinor: document.RangeTo,
+		Basis: catalogueText(document.Basis), ResolvesDispute: catalogueText(document.Resolves), ClaimVersion: catalogueText(document.Version),
+		AuditorRef: document.Auditor, OperationEvidence: catalogueText(document.OperationEvidence), AuditedAt: document.AuditedAt.UTC(),
+	}
+	row := auditDecisionRow{
+		decision: document.Decision, claim: claim, version: document.Version, line: document.Line, verdict: document.Verdict,
+		from: document.RangeFrom, to: document.RangeTo, basis: document.Basis, resolves: document.Resolves,
+		auditor: document.Auditor, auditedAt: document.AuditedAt,
+	}
+	rebuilt, err := rebuildAuditDecision(row)
+	if err != nil {
+		return ports.SupplierBillLineDecision{}, domain.BillLineAuditDecision{}, err
+	}
+	if document.Payable != nil {
+		numbering, err := numberingFrom(document.DocumentNumber, document.NumberAbsence)
+		if err != nil {
+			return ports.SupplierBillLineDecision{}, domain.BillLineAuditDecision{}, fmt.Errorf("应付单号：%w", err)
+		}
+		number, absence := numbering.Words()
+		entry.Payable = &ports.SupplierBillLinePayable{
+			Payable: *document.Payable, DocumentNumber: number, DocumentNumberAbsence: absence,
+			AmountMinor: valueOr(document.AmountMinor), Currency: catalogueText(document.Currency),
+		}
+	}
+	return entry, rebuilt, nil
+}
+
+func valueOr(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // ListAuditedPayables 上列审核应付，新形成的在前。供应商与账期取这份主张最早落库的那一版接收记录（见
@@ -163,8 +229,13 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 	rows, err := querier.Query(ctx,
 		`SELECT p.payable_id, p.document_number, p.document_number_absence, p.claim_id, p.line_ref, p.expected_version,
 		        r.supplier_ref, r.period_ref, p.legal_entity, p.account_id, p.currency, p.amount_minor,
-		        p.auditor_ref, p.operation_evidence, p.audited_at, p.recorded_at
+		        p.auditor_ref, p.operation_evidence, p.audited_at, p.recorded_at,
+		        d.range_from_minor, d.range_to_minor, d.resolves_decision, n.bill_number
 		   FROM settlement_accounting.audited_payable AS p
+		   LEFT JOIN settlement_accounting.supplier_bill_audit_decision AS d
+		     ON d.tenant_id = p.tenant_id AND d.decision_id = p.payable_id
+		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
+		     ON n.tenant_id = p.tenant_id AND n.claim_id = p.claim_id
 		   LEFT JOIN LATERAL (
 		        SELECT b.supplier_ref, b.period_ref
 		          FROM settlement_accounting.supplier_bill_reception AS b
@@ -194,11 +265,13 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 			supplier, period    *string
 			evidence            *string
 			auditedAt, recorded time.Time
+			resolves, billNo    *string
 		)
 		if err := rows.Scan(
 			&row.Payable, &number, &absence, &row.Claim, &row.Line, &row.ExpectedVersion,
 			&supplier, &period, &row.LegalEntity, &row.Account, &row.Currency, &row.AmountMinor,
 			&row.AuditorRef, &evidence, &auditedAt, &recorded,
+			&row.RangeFromMinor, &row.RangeToMinor, &resolves, &billNo,
 		); err != nil {
 			return nil, fmt.Errorf("list audited payables: %w", err)
 		}
@@ -212,6 +285,7 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 		row.DocumentNumber, row.DocumentNumberAbsence = numbering.Words()
 		row.Supplier, row.Period = *supplier, *period
 		row.OperationEvidence = catalogueText(evidence)
+		row.ResolvesDispute, row.SupplierBillNumber = catalogueText(resolves), catalogueText(billNo)
 		row.AuditedAt, row.RecordedAt = auditedAt.UTC(), recorded.UTC()
 		entries = append(entries, row)
 	}

@@ -52,20 +52,28 @@ func (stub *stubAuditedPayables) ListAuditedPayables(
 	return stub.rows, stub.err
 }
 
-// Covers: AT-SA-232 — 一份账单的各行逐格透出：匹配分类原名、所引预期成本与差额、依据、挂在这一行上的应付（应付单号与无号原因
-// 恰出其一、审核授权方与点审核的人分开）；没有对应发生项的行不出预期与差额，没有应付的行不出 payable；租户只取自接入面。
+// Covers: AT-SA-232、AT-SA-234 — 一份账单的各行逐格透出：匹配分类原名、所引预期成本与差额、依据、已匹配金额与四个和、这一行上
+// 的各份审核决定（结果、范围与金额、所解争议、审核授权方与点审核的人分开；通过的带应付，应付单号与无号原因恰出其一）；没有对应
+// 发生项的行不出预期与差额，没有决定的行 decisions 是空数组；供应商账单号照实透出；租户只取自接入面。
 func TestSupplierBillLinesQueryTranscribesMatchAndPayable(t *testing.T) {
 	matchedAt := catalogueBaseAt.Add(time.Minute)
 	stub := &stubSupplierBillLines{has: true, found: ports.SupplierBillLines{
-		Claim: "SYN-SUP-01/INV-1", ClaimVersion: "1", Supplier: "SYN-SUP-01", LegalEntity: "SYN-LE-01", Period: "2026-08",
+		Claim: "SYN-SUP-01/INV-1", ClaimVersion: "1", Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-1", LegalEntity: "SYN-LE-01", Period: "2026-08",
 		Currency: "CNY", ReceivedAt: catalogueBaseAt, AuditAuthorityConfigured: false, RecordedAt: catalogueBaseAt,
 		Lines: []ports.SupplierBillLineEntry{
 			{
 				Line: "1", FeeItem: "SYN-FEE-01", ClaimedMinor: 1000, Classification: "MATCHED", ExpectedVersion: "SYN-EXP-1",
-				ExpectedMinor: 1000, MatchedAt: &matchedAt,
-				Payable: &ports.SupplierBillLinePayable{
-					Payable: "PAYABLE-1", DocumentNumber: "AP-202608-00001", AmountMinor: 1000, Currency: "CNY",
-					AuditorRef: "SYN-AUDITOR-ROLE", OperationEvidence: "OPERATOR/syn#auditor", AuditedAt: matchedAt,
+				ExpectedMinor: 1000, MatchedAt: &matchedAt, MatchedMinor: 1000, PassedMinor: 600, OpenDisputeMinor: 400,
+				Decisions: []ports.SupplierBillLineDecision{
+					{
+						Decision: "PAYABLE-1", Verdict: "PASSED", RangeFromMinor: 0, RangeToMinor: 600, ClaimVersion: "1",
+						AuditorRef: "SYN-AUDITOR-ROLE", OperationEvidence: "OPERATOR/syn#auditor", AuditedAt: matchedAt,
+						Payable: &ports.SupplierBillLinePayable{Payable: "PAYABLE-1", DocumentNumber: "AP-202608-00001", AmountMinor: 600, Currency: "CNY"},
+					},
+					{
+						Decision: "AUDIT-2", Verdict: "DISPUTED", RangeFromMinor: 600, RangeToMinor: 1000, Basis: "重量待核",
+						AuditorRef: "SYN-AUDITOR-ROLE", AuditedAt: matchedAt,
+					},
 				},
 			},
 			{Line: "2", FeeItem: "SYN-FEE-02", ClaimedMinor: 2000, Classification: "PRICE_VARIANCE", ExpectedVersion: "SYN-EXP-2",
@@ -81,13 +89,15 @@ func TestSupplierBillLinesQueryTranscribesMatchAndPayable(t *testing.T) {
 	}
 	var body struct {
 		Outcome                  string `json:"outcome"`
+		SupplierBillNumber       string `json:"supplierBillNumber"`
 		AuditAuthorityConfigured *bool  `json:"auditAuthorityConfigured"`
 		Lines                    []map[string]json.RawMessage
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Outcome != "SUPPLIER_BILL_LINES_LISTED" || body.AuditAuthorityConfigured == nil || *body.AuditAuthorityConfigured || len(body.Lines) != 3 {
+	if body.Outcome != "SUPPLIER_BILL_LINES_LISTED" || body.SupplierBillNumber != "INV-1" || body.AuditAuthorityConfigured == nil ||
+		*body.AuditAuthorityConfigured || len(body.Lines) != 3 {
 		t.Fatalf("账单面走样（审核授权没配也要说出 false）：%s", response.Body.String())
 	}
 	text := func(line map[string]json.RawMessage, key string) string {
@@ -101,24 +111,43 @@ func TestSupplierBillLinesQueryTranscribesMatchAndPayable(t *testing.T) {
 	if text(matched, "classification") != "MATCHED" || text(matched, "expectedAmount") != "1000" || text(matched, "varianceAmount") != "0" {
 		t.Fatalf("已匹配行走样：%s", response.Body.String())
 	}
-	var payable map[string]string
-	if err := json.Unmarshal(matched["payable"], &payable); err != nil {
-		t.Fatalf("已匹配行要带应付：%s", response.Body.String())
+	if text(matched, "matchedAmount") != "1000" || text(matched, "passedAmount") != "600" || text(matched, "openDisputeAmount") != "400" ||
+		text(matched, "undecidedAmount") != "0" {
+		t.Fatalf("已匹配金额或四个和走样：%s", response.Body.String())
 	}
-	if payable["documentNumber"] != "AP-202608-00001" || payable["amount"] != "1000" || payable["auditor"] != "SYN-AUDITOR-ROLE" ||
-		payable["operationEvidence"] != "OPERATOR/syn#auditor" || payable["payable"] != "PAYABLE-1" {
-		t.Fatalf("应付走样：%v", payable)
+	var decisions []struct {
+		Decision          string            `json:"decision"`
+		Verdict           string            `json:"verdict"`
+		RangeFrom         string            `json:"rangeFrom"`
+		RangeTo           string            `json:"rangeTo"`
+		Amount            string            `json:"amount"`
+		Basis             string            `json:"basis"`
+		Auditor           string            `json:"auditor"`
+		OperationEvidence string            `json:"operationEvidence"`
+		Payable           map[string]string `json:"payable"`
 	}
-	if _, present := payable["documentNumberAbsence"]; present {
-		t.Fatalf("有号就不出无号原因：%v", payable)
+	if err := json.Unmarshal(matched["decisions"], &decisions); err != nil || len(decisions) != 2 {
+		t.Fatalf("已匹配行要带两份决定：%s", response.Body.String())
+	}
+	passed, disputed := decisions[0], decisions[1]
+	if passed.Verdict != "PASSED" || passed.RangeFrom != "0" || passed.RangeTo != "600" || passed.Amount != "600" ||
+		passed.Auditor != "SYN-AUDITOR-ROLE" || passed.OperationEvidence != "OPERATOR/syn#auditor" ||
+		passed.Payable["documentNumber"] != "AP-202608-00001" || passed.Payable["payable"] != "PAYABLE-1" || passed.Payable["amount"] != "600" {
+		t.Fatalf("通过那一份走样：%+v", passed)
+	}
+	if _, present := passed.Payable["documentNumberAbsence"]; present {
+		t.Fatalf("有号就不出无号原因：%v", passed.Payable)
+	}
+	if disputed.Verdict != "DISPUTED" || disputed.Basis != "重量待核" || disputed.Payable != nil || disputed.OperationEvidence != "" {
+		t.Fatalf("争议那一份走样：%+v", disputed)
 	}
 	if text(variance, "varianceAmount") != "200" || text(variance, "basis") != "合同价 18 元" {
 		t.Fatalf("价差行的差额要是主张减预期：%s", response.Body.String())
 	}
-	if _, present := variance["payable"]; present {
-		t.Fatalf("没有应付的行不出 payable：%s", response.Body.String())
+	if string(variance["decisions"]) != "[]" {
+		t.Fatalf("没有决定的行 decisions 要是空数组：%s", response.Body.String())
 	}
-	for _, absent := range []string{"expectedVersion", "expectedAmount", "varianceAmount", "payable"} {
+	for _, absent := range []string{"expectedVersion", "expectedAmount", "varianceAmount"} {
 		if _, present := missing[absent]; present {
 			t.Fatalf("没有对应发生项的行不该带 %q：%s", absent, response.Body.String())
 		}

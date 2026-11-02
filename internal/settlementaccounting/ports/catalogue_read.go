@@ -216,8 +216,13 @@ type CustomerStatementCatalogueRow struct {
 //   - MatchedWithoutPayableCount 是分类为已匹配、却还没有审核应付的行数。它说的是事实，不说这些行「可审核」：审核授权、
 //     应付归集账户与越权上限都可能没登，那由审核步骤答。
 //
+// 审核按行按金额范围给结果（ADR-0357 决定二至四），目录行另带这一版各行上的三个和，同是求和、不判，求法与
+// domain.TallyLineDecisions 一致：RejectedMinor 是已拒绝的金额，OpenDisputeMinor 是直接给的争议减去点名它们的再审、仍在争议中的
+// 金额，UndecidedMinor 是各行主张金额减去直接给的各段、还没有任何结果的金额（逐行算、不小于零）。已通过的就是 PayableMinor。
+//
 // ReceivedAt 是账单到达的业务时刻（录入的人照来件写），RecordedAt 是接收落库时刻，两者不同。Supplements 为空即不是追加
-// 主张。OperationEvidence 是经运营决定口接收这一份的操作者（ADR-0340 决定三），为空读作这一份不记提交方。
+// 主张。OperationEvidence 是经运营决定口接收这一份的操作者（ADR-0340 决定三），为空读作这一份不记提交方。SupplierBillNumber 是
+// 这份主张在供应商账单号册上的号（ADR-0357 决定一，不论哪一版带来），为空读作未记——不从主张标识里拆。
 type SupplierBillReceptionCatalogueRow struct {
 	Claim                       string
 	ClaimVersion                string
@@ -232,6 +237,10 @@ type SupplierBillReceptionCatalogueRow struct {
 	PayableLineCount            int64
 	PayableMinor                int64
 	MatchedWithoutPayableCount  int64
+	RejectedMinor               int64
+	OpenDisputeMinor            int64
+	UndecidedMinor              int64
+	SupplierBillNumber          string
 	AuditAuthorityConfigured    bool
 	AuditAuthorityConfiguredNow bool
 	ReceivedAt                  time.Time
