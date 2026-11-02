@@ -138,13 +138,17 @@ export interface RerouteDecisionAnswerNote {
 }
 
 /** 读决定口的业务答案。成立与已决定都带决定；拒的几格带依据；未决带原因与续办引用。 */
-export function describeRerouteDecisionAnswer(body: RerouteDecisionResponseBody): RerouteDecisionAnswerNote {
+/** placeLabel 把生效起点的网点编码换成屏上写法（页面传按此刻生效那一版查名的那一问）；缺省原样显编码。 */
+export function describeRerouteDecisionAnswer(
+  body: RerouteDecisionResponseBody,
+  placeLabel: (node: string) => string = (node) => node,
+): RerouteDecisionAnswerNote {
   const headline = labelOf(rerouteDecisionOutcomeLabels, body.outcome);
   const details: string[] = [];
   if (body.decision) {
     const decision = body.decision;
     details.push(`所择候选 ${decision.candidate}，新计划 ${decision.newPlanVersion}（替代 ${decision.originalPlan}）`);
-    details.push(`自 ${decision.effectiveFromNode} 起、${formatInstant(decision.effectiveFrom)} 生效`);
+    details.push(`自 ${placeLabel(decision.effectiveFromNode)} 起、${formatInstant(decision.effectiveFrom)} 生效`);
     details.push(`决定方 ${decision.decidedBy}，依据 ${decision.basis}`);
   }
   if (body.candidateReason) {

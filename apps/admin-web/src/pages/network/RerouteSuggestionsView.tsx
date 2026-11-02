@@ -12,6 +12,8 @@ import { shipmentNoOf } from '../shipment-request/ref-no';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import type { StatusTone } from '../../vocabulary/status';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { placeLabel } from './place-names';
+import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
 import { parcelCell, parcelSearchCells, parcelSubtitle, type RoutePlansHeader } from './route-plan-cells';
 import {
@@ -269,6 +271,8 @@ function RerouteDecisionCard({
 }
 
 function DecisionAnswerNote({ state }: { state: SubmissionState }) {
+  // 决定生效的那个网点显名称（按此刻生效那一版），查不到即编码。
+  const places = usePlaceNames();
   switch (state.kind) {
     case 'idle':
     case 'submitting':
@@ -279,7 +283,7 @@ function DecisionAnswerNote({ state }: { state: SubmissionState }) {
   const answer = state.answer;
   switch (answer.kind) {
     case 'outcome': {
-      const note = describeRerouteDecisionAnswer(answer.body);
+      const note = describeRerouteDecisionAnswer(answer.body, (node) => placeLabel(places, node));
       return (
         <div className={note.tone === 'answered' ? 'text-idpxyz-textMuted' : 'text-idpxyz-danger'}>
           <p>{note.headline}</p>
