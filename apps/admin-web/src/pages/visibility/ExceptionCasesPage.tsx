@@ -1,212 +1,195 @@
 import { useEffect, useState } from 'react';
 import {
-  ListPageTemplate,
-  presentFields,
+  WorkbenchPageTemplate,
+  toggleWorkbenchSort,
   useAddressKeyword,
-  type InspectorContent,
-  type ListColumn,
+  type WorkbenchColumn,
+  type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import {
-  StatusBadgeFor,
-  domainStatusTones,
-  type DomainStatus,
-} from '../../domain/status';
-import { catalogueViewState, formatInstant } from '../catalogue-view';
-import {
-  listExceptionCaseRecords,
-  type ApiResult,
-  type ExceptionCaseListResponseBody,
-} from './case-api';
-import { caseLabelOf, casePhaseLabels } from './case-presentation';
+import { labelFor } from '../../vocabulary/status';
+import { objectNouns } from '../../vocabulary/objects';
+import { formatInstant } from '../moment';
+import { matchesSearch } from '../party/list-order';
+import { listExceptionCaseRecords, type ApiResult, type ExceptionCaseListResponseBody, type ExceptionCaseRecord } from './case-api';
+import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
+import { codeStatus, countByStatus, sortRowsBy, type SortAccessor } from './exception-list';
+import { exceptionViewState } from './exception-view-state';
+import { statusFilterParts } from './status-filter';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
+// 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['exception-cases'];
 
-/**
- * 异常案件册的列表行（GET /exception-case-records，票 admin-skeleton-closure-batch/06）。
- *
- * 骨架期的「当前工作条件」「严重度」「处置优先级」「响应周期」四列不在本表：案件行
- * 在存储上刻意只落精简主生命周期（0008），那四键结构上不存在——列出来只能代填，
- * 代填会把工作条件升格成第二套主状态（票 06 Comments 记明）。那几维登记落地后随
- * 查询契约扩列。
- */
-interface CaseRow {
-  key: string;
-  values: Readonly<Record<string, string>>;
+// 异常案件（visibility-exception），对 GET /exception-case-records 取数；改版换成工作台形态（设计源「五、改版示意」）。
+// 列只放人要看的：运单号（案件的根对象是包裹）、状态胶囊、处理团队、立案时间、首次响应；案件编号、影响范围、归并指向与
+// 结论原码进右栏「技术详情」。
+//
+// 严重度、处置优先级、当前工作条件与响应周期不上列：案件行在存储上刻意只落精简主生命周期（0008），那几维结构上不存在，
+// 列出来只能代填，代填会把工作条件升格成第二套主状态。归并与关闭是案件命令面的判断，本页只查阅、不推进。
+// 改版前的「导出所选（CSV）」随列表模板一起退场：工作台没有多选。
+
+const caseStatus = (record: ExceptionCaseRecord) => codeStatus(record.phase);
+
+const sortAccessors: Record<string, SortAccessor<ExceptionCaseRecord>> = {
+  parcel: { value: (row) => row.rootParcel },
+  established: { value: (row) => row.establishedAt, instant: true },
+};
+
+const defaultSort: WorkbenchSort = { key: 'established', dir: -1 };
+
+/** 关闭结论：并入其他案件经词典；其余结论是开放引用，词典查不到就原样显示。 */
+function conclusionText(record: ExceptionCaseRecord): string | undefined {
+  return record.conclusion ? labelFor(record.conclusion, 'case-conclusion') : undefined;
 }
 
-// 主状态词（待响应/处理中/已关闭）与共享词表同词，按词表着色；词表没收录的词
-// 原样示文，不猜色调。
-function toneWordOrText(value: string) {
-  return value in domainStatusTones ? (
-    <StatusBadgeFor status={value as DomainStatus} />
-  ) : (
-    value
+const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
+  {
+    key: 'parcel',
+    header: objectNouns.shipmentNumber,
+    sortKey: 'parcel',
+    render: (row) => (
+      <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.rootParcel}>
+        {row.rootParcel}
+      </span>
+    ),
+  },
+  { key: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={caseStatus(row)} /> },
+  {
+    key: 'team',
+    header: '处理团队',
+    render: (row) => <span className="truncate font-mono text-[12px] text-idpxyz-text">{row.responsibleTeam}</span>,
+  },
+  {
+    key: 'established',
+    header: '立案时间',
+    sortKey: 'established',
+    render: (row) => (
+      <time className="font-mono text-idpxyz-breadcrumb" dateTime={row.establishedAt}>
+        {formatInstant(row.establishedAt)}
+      </time>
+    ),
+  },
+  {
+    key: 'first-response',
+    header: '首次响应',
+    hideWhenDetailOpen: true,
+    render: (row) =>
+      row.firstResponse ? (
+        <time className="font-mono text-idpxyz-breadcrumb" dateTime={row.firstResponse}>
+          {formatInstant(row.firstResponse)}
+        </time>
+      ) : (
+        <span className="text-idpxyz-breadcrumb">还没有响应</span>
+      ),
+  },
+];
+
+function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose: () => void }) {
+  const conclusion = conclusionText(record);
+  return (
+    <ExceptionDetailPanel
+      ariaLabel={`${objectNouns.exceptionCase} ${record.rootParcel}`}
+      title={record.rootParcel}
+      status={caseStatus(record)}
+      subtitle={`立案于 ${formatInstant(record.establishedAt)}`}
+      facts={[
+        { label: '处理团队', value: <span className="font-mono">{record.responsibleTeam}</span> },
+        { label: '首次响应', value: record.firstResponse ? formatInstant(record.firstResponse) : '还没有响应' },
+        { label: '关闭时间', value: record.closedAt ? formatInstant(record.closedAt) : '未关闭' },
+        { label: '处理结果', value: conclusion ?? '未关闭' },
+      ]}
+      technical={[
+        { label: '案件编号', value: record.caseId },
+        { label: '包裹标识', value: record.rootParcel },
+        { label: '影响范围', value: record.impactScope },
+        { label: '团队编码', value: record.responsibleTeam },
+        { label: '状态码', value: record.phase },
+        { label: '结论码', value: record.conclusion ?? '' },
+        { label: '并入案件', value: record.mergedInto ?? '' },
+      ]}
+      onClose={onClose}
+    >
+      {record.mergedInto ? (
+        <p>这件案件已并入另一件案件继续处理；原案件和它的处理记录都保留，并入的案件编号在下方技术详情里。</p>
+      ) : null}
+      <p>关闭案件不会改动运单上已经发生的事；要重新处理时，案件重新打开，之前的记录都保留。</p>
+    </ExceptionDetailPanel>
   );
 }
 
-function col(
-  id: string,
-  header: string,
-  options?: {
-    mono?: boolean;
-    align?: 'left' | 'center' | 'right';
-    className?: string;
-    toneWord?: boolean;
-  },
-): ListColumn<CaseRow> {
-  return {
-    id,
-    header,
-    align: options?.align,
-    className: options?.className,
-    render: (row) => {
-      const value = row.values[id] ?? '—';
-      if (options?.toneWord) return toneWordOrText(value);
-      if (options?.mono) return <span className="font-mono text-[12px]">{value}</span>;
-      return value;
-    },
-  };
-}
-
-// 关闭结论只随已关闭在场（0008 成对约束）；归并指向在场即受控归并——被并入的
-// 案件不从册面消失，原编号照列（归并是登记事实不是删除）。
-const columns: ListColumn<CaseRow>[] = [
-  col('caseId', '案件标识', { mono: true }),
-  col('rootParcel', '根对象', { mono: true }),
-  col('impactScope', '影响范围', { mono: true }),
-  col('phase', '主状态', { toneWord: true, className: 'w-[96px]' }),
-  col('responsibleTeam', '责任团队', { mono: true }),
-  col('establishedAt', '建立时间', { mono: true }),
-  col('firstResponse', '首次响应', { mono: true }),
-  col('closedAt', '关闭时间', { mono: true }),
-  col('conclusion', '关闭结论', { mono: true }),
-  col('mergedInto', '归并指向', { mono: true }),
-];
-
-// 「导出所选（CSV）」按列取字：行上 values 已是按列 id 备好的字面量（主状态那格是词表词，与徽章同词），直接取；
-// 没登记的格导出为空，不代填「—」——那个破折号是屏幕上的留白记号，不是数据。
-const csvCellText = (row: CaseRow, column: ListColumn<CaseRow>) => row.values[column.id] ?? '';
-
-// 右侧检查器的内容（票 admin-web-workspace-form/02 第 4 条）：全部取自行上已备好的 values，不发第二个请求。
-// 状态只有主状态一枚——严重度 / 优先级在案件行上无登记格（见 CaseRow 头注），检查器同样不代填；快速动作只有「转到异常分诊」——
-// 落在模块页，分诊页列的是信号发作期与处置请求、没有按案件的地址，动作名不说「打开」免得暗示落到这件案子；
-// 归并 / 关闭是命令面的判断、端点未建，不列一个禁用的假动作；关联对象没有——根对象是包裹身份、本管理台没有它的对象地址；
-// 审计取建立 / 首次响应 / 关闭 / 关闭结论 / 归并指向，空的格不进（presentFields）。
-function inspectorOf(row: CaseRow): InspectorContent {
-  const v = row.values;
-  return {
-    title: '异常案件',
-    subtitle: v.caseId,
-    sections: [
-      {
-        kind: 'summary',
-        fields: presentFields([
-          { label: '根对象', value: v.rootParcel, mono: true },
-          { label: '影响范围', value: v.impactScope, mono: true },
-          { label: '责任团队', value: v.responsibleTeam, mono: true },
-        ]),
-      },
-      { kind: 'status', items: [{ label: '主状态', word: v.phase }] },
-      {
-        kind: 'actions',
-        actions: [
-          {
-            label: '转到异常分诊',
-            onRun: () => {
-              window.location.hash = '#/exception-triage';
-            },
-          },
-        ],
-      },
-      {
-        kind: 'audit',
-        fields: presentFields([
-          { label: '建立时间', value: v.establishedAt, mono: true },
-          { label: '首次响应', value: v.firstResponse, mono: true },
-          { label: '关闭时间', value: v.closedAt, mono: true },
-          { label: '关闭结论', value: v.conclusion, mono: true },
-          { label: '归并指向', value: v.mergedInto, mono: true },
-        ]),
-      },
-    ],
-  };
-}
-
-/**
- * 异常案件（visibility-exception）。行对象是围绕同一因果链和处置范围建立的
- * 业务案件。案件关闭不修改源事实、不解除来源限制；查阅不推进阶段、不合并、
- * 不关闭——那些是案件命令面的判断，本页只消费存储读面。
- */
 export function ExceptionCasesPage() {
-  // 检索词在地址里（`?q=`）：切到别的标签再回来仍在（票 admin-web-workspace-form/06）。
   const [search, setSearch] = useAddressKeyword();
-  // 多选集（票 admin-web-workspace-form/04）：按行键记，改检索词不清。批量动作只有导出所选——案件的归并 / 关闭是命令面的判断，
-  // 本仓今天没有对一批案件的命令端点，不传 extra。
-  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
-  const [reloadKey, setReloadKey] = useState(0);
+  const [status, setStatus] = useState<string>('ALL');
+  const [sort, setSort] = useState<WorkbenchSort>(defaultSort);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [answer, setAnswer] = useState<ApiResult<ExceptionCaseListResponseBody> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
     void listExceptionCaseRecords().then((result) => {
-      if (!cancelled) setAnswer(result);
+      if (cancelled) return;
+      setAnswer(result);
+      setRefreshing(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadToken]);
 
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows: CaseRow[] = body
-    ? body.cases.map((record) => ({
-        key: `case:${record.caseId}`,
-        values: {
-          caseId: record.caseId,
-          rootParcel: record.rootParcel,
-          impactScope: record.impactScope,
-          phase: caseLabelOf(casePhaseLabels, record.phase),
-          responsibleTeam: record.responsibleTeam,
-          establishedAt: formatInstant(record.establishedAt),
-          firstResponse: record.firstResponse ? formatInstant(record.firstResponse) : '',
-          closedAt: record.closedAt ? formatInstant(record.closedAt) : '',
-          conclusion: record.conclusion ?? '',
-          mergedInto: record.mergedInto ?? '',
-        },
-      }))
-    : [];
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadKey((value) => value + 1);
+  const retry = () => {
+    setRefreshing(true);
+    setReloadToken((token) => token + 1);
+  };
+  const answered = answer?.kind === 'outcome';
+  const rows = answer?.kind === 'outcome' ? answer.body.cases : [];
+  const counts = countByStatus(rows, caseStatus);
+  const visible = sortRowsBy(
+    rows.filter(
+      (row) =>
+        (status === 'ALL' || caseStatus(row).label === status) &&
+        matchesSearch(search, [row.rootParcel, row.caseId, row.responsibleTeam, caseStatus(row).label]),
+    ),
+    sort,
+    sortAccessors,
+  );
+  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
 
   return (
-    <ListPageTemplate<CaseRow>
+    <WorkbenchPageTemplate<ExceptionCaseRecord>
       title={info.title}
-      // 页头携带归并与重开的共同底线：两者都以追加表达，不删除历史。
-      description={`受控归并以「已归并」关闭并关联主案件（原编号照列），均不删除历史；严重度、优先级与工作条件在案件行上无登记格，本表不代填`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索案件标识 / 根对象',
-      }}
-      filterSummary={body ? `异常案件 ${visibleRows.length} 行` : undefined}
+      subtitle="已立案的异常：哪票货出了问题、谁在处理、处理到哪一步。待响应的案件行首亮灯。"
+      kpis={filter?.kpis}
+      onRefresh={retry}
+      refreshing={refreshing}
+      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、案件编号、处理团队…' }}
+      statusChips={filter?.chips}
+      toolbarRight={answered ? `共 ${rows.length} 件，当前显示 ${visible.length} 件` : undefined}
       columns={columns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      selection={{ selected: checked, onChange: setChecked }}
-      bulkActions={{ csv: { fileName: 'exception-cases.csv', cellText: csvCellText } }}
-      inspector={inspectorOf}
-      viewState={catalogueViewState(answer, rows.length, retry, {
+      rows={visible}
+      rowKey={(row) => row.caseId}
+      selectedKey={selectedKey}
+      onSelect={setSelectedKey}
+      rowAttention={(row) => row.phase === 'AWAITING_RESPONSE'}
+      sort={sort}
+      onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
+      noMatchText="当前筛选条件下没有匹配的案件"
+      onClearFilters={() => {
+        setSearch('');
+        setStatus('ALL');
+      }}
+      renderDetail={(key) => {
+        const record = visible.find((row) => row.caseId === key);
+        return record ? <CaseDetail record={record} onClose={() => setSelectedKey(null)} /> : null;
+      }}
+      viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /exception-case-records',
-        emptyTitle: '当前租户尚无异常案件',
-        emptyDescription:
-          '读取入口已配置，登记册为空——案件由信号、分诊、建案的编排形成，事实在接入渠道墙后面，空册是预期不是缺陷。',
+        subject: '异常案件',
+        emptyTitle: '还没有异常案件',
+        emptyDescription: '异常信号经分诊决定立案后会出现在这里；要看刚进来的异常信号，去「异常处理」。',
       })}
     />
   );

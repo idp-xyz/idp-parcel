@@ -435,6 +435,41 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     INTERNAL_RETRY: info('系统重试中'),
     OPERATOR_REGISTRATION: warn('等运营登记'),
   },
+  // —— 异常与索赔区 · visibility-exception ——
+  // 异常信号类型与可信度是租户登记的开放引用（分诊规则册里的键）：这里是随产品发布的参考译法，演示租户的码先译好，
+  // 别的租户的新码如实露码并告警，同 charge-code 一册的做法。
+  'exception-signal': {
+    DELIVERY_FAILED: bad('派送失败'),
+    CUSTOMS_HOLD: warn('海关查验'),
+    ETA_GAP: warn('轨迹超时未更新'),
+    SOURCE_FACT_CONFLICT: warn('各方信息不一致'),
+    DEPARTURE_GATE_BLOCKED: bad('放行检查拦下出发'),
+  },
+  'signal-confidence': {
+    CARRIER_CONFIRMED: muted('承运商已确认'),
+    SOURCE_CONFIRMED: muted('来源已确认'),
+    MONITOR_DERIVED: muted('系统监测推算'),
+    HEURISTIC: muted('系统推测'),
+  },
+  // 案件关闭结论：受控归并以 MERGED 关闭（并入主案件继续处理），其余结论是开放引用。
+  'case-conclusion': { MERGED: muted('已并入其他案件') },
+  // 处置请求的接收方判断：ACCEPTED 是对方接下了这项处置，不是运单受理。
+  'disposition-judgment': { ACCEPTED: good('已接受') },
+  // 客户异常通知的过程节点（封闭六值）：DELIVERED 是通知送达客户，不是包裹签收；FAILED 是这一次没送到。
+  'customer-notification': {
+    GENERATED: warn('待发送'),
+    DELIVERED: good('已送达'),
+    FAILED: bad('送达失败'),
+    CUSTOMER_CONFIRMED: good('客户已确认'),
+  },
+  // 追偿动作的送达失败：送的是给责任方的通知或主张，不是派送包裹；其余节点词在 claim-recovery 一册。
+  'recovery-action': { DELIVERY_FAILED: bad('送达失败') },
+  // 索赔类型是合同责任范围里登记的开放引用；参考译法同上。
+  'claim-kind': {
+    LOSS: muted('丢失'),
+    DAMAGE: muted('破损'),
+    DELAY: muted('延误'),
+  },
 };
 
 type UnknownCodeHandler = (code: string) => void;
