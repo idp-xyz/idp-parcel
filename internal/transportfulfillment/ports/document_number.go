@@ -17,14 +17,15 @@ type DocumentNumberIssuer interface {
 }
 
 // DocumentNumberRequest 是一次取号：哪个租户、哪一类单据，以及在同一事务里查本类单据表「这个号用过没有」的那一问。
-// 委托与订舱的开立方都没有业务时区（domain 里两类的声明），所以这里没有业务时区那一格。
+// 委托与订舱的开立方都没有业务时区（domain.TransportCommissionDocumentNumberType 与 domain.BookingDocumentNumberType 的
+// 声明），所以这里没有业务时区那一格。
 type DocumentNumberRequest struct {
 	TenantID domain.TenantID
 	Type     docnumber.TypeCode
 	IsUsed   func(ctx context.Context, number domain.DocumentNumber) (bool, error)
 }
 
-// DocumentNumberIssueOutcome 是取号的三种答案。
+// DocumentNumberIssueOutcome 是取号的答案。
 type DocumentNumberIssueOutcome uint8
 
 const (

@@ -33,7 +33,7 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 
 ### 做了什么
 
-- **开立点**：委托在 `CommissionTransportHandler.SubmitCommission`、订舱在 `SubmitBooking`，两处都在 `Save` 答已保存之后、同一笔开立事务里经 TF 自己的消费侧端口 `ports.DocumentNumberIssuer`（适配器 `internal/transportfulfillment/adapters/docnumber`，接 `docnumbering.Components.Assigner`）取号，再经 `ports.TransportCommissionNumbers` / `ports.BookingNumbers` 把号或无号原因记到刚落的那一行上。parcel-api 的 `buildTransportCommissionSubmission`、`buildBookingFaces` 从 `endpointSources.documentNumbers` 取那一套编号组件；两只事务壳（`transactionalTransportCommissionSubmitter`、`transactionalBookingFaces`）对 `NUMBERING_RULE_COLLISION` 与`未决`一样整笔回滚。取消、答复、段采用三只编排实例不装取号。
+- **开立点**：委托在 `CommissionTransportHandler.SubmitCommission`、订舱在 `SubmitBooking`，两处都在 `Save` 答已保存之后、同一笔开立事务里经 TF 自己的消费侧端口 `ports.DocumentNumberIssuer`（适配器 `internal/transportfulfillment/adapters/docnumber`，接 `docnumbering.Components.Assigner`）取号，再经 `ports.TransportCommissionNumbers` / `ports.BookingNumbers` 把号或无号原因记到刚落的那一行上。parcel-api 的 `buildTransportCommissionSubmission`、`buildBookingFaces` 从 `endpointSources.documentNumbers` 取那一套编号组件；事务壳 `transactionalTransportCommissionSubmitter`、`transactionalBookingFaces` 对 `NUMBERING_RULE_COLLISION` 与`未决`一样整笔回滚（`rollsBackCommissionFace`）。取消、答复与段采用的编排实例不装取号。
 - **业务时区**：核过，没有可用的开立方业务时区——委托与订舱都由租户的运输运营提出，开立方不是网点、也不是带对账安排的结算账户；订舱指名的班次若出自周期安排，那份时区说的是时刻表怎么读，临时班次连这一格都没有。两类照 02 的声明按租户单据编号时区，声明处与 TF CONTEXT「运输委托、订舱与承运接受」那句规则写明理由。
 - **落库**：迁移 `transport_fulfillment/0057`，`transport_commission`、`booking_request` 各加 `document_number`、`document_number_absence` 两列（可空、旧行不回填，两列都空读作上线前开立），（租户，单据号）唯一，号不空白、原因只认 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`、两者互斥。
 - **答复与读口**：委托提交答复、订舱提交与取消答复、订舱册各带 `documentNumber`，没号时改带 `documentNumberAbsence`（`ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`），不答空串、不拿标识顶；订舱册另带 `commissionDocumentNumber`。撞号答 200 `NUMBERING_RULE_COLLISION`，带 `numberingRule`（撞的那一类的类型代码），不回显单据。承运答复口不变，照旧按订舱标识认单；`docs/api/carrier-booking-answer-integration.md` 补了单据号与订舱标识的关系。
@@ -59,4 +59,4 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 
 - 委托没有自己的列表与详情读口：委托单据号今天只在提交答复与订舱册（`commissionDocumentNumber`）上看得到；总单区技术详情「运输委托 / 订舱」两格与派发侧「实际履约待形成」等处仍显标识。是否另立委托册读口或给这些引用连读单据号，待裁。
 - 新增端口、适配器与迁移会让机制清点过期，由推送方在 main 的 tip 上重生成；AT 盘点总览计数未重算。
-- 共享面：`apps/admin-web/src/vocabulary/objects.ts` 在末尾追加两词；`.scratch/at-coverage-inventory.md` 在 ① 的 `AT-TF-370` 之后插三行、文末追记一段；`cmd/parcel-api` 只动了 TF 自己的装配文件（`assemble_transport_commission.go`、`endpoints_transport_commission.go`），端点表未改。
+- 共享面：`apps/admin-web/src/vocabulary/objects.ts` 在末尾追加 `bookingNumber`、`transportCommissionNumber`；`.scratch/at-coverage-inventory.md` 在 ① 的 `AT-TF-370` 之后插 `AT-TF-371`–`373`、文末追记一段；`cmd/parcel-api` 只动了 TF 自己的装配文件（`assemble_transport_commission.go`、`endpoints_transport_commission.go`），端点表未改。

@@ -294,7 +294,7 @@ type CommissionTransportDeps struct {
 	Agreements           ports.SupplierAgreementSource
 	Downstream           ports.TransportCommissionHandoff
 	Clock                ports.Clock
-	// Numbers 与两类单据的号表只在开立委托、订舱的那两只实例上装（ADR-0355 决定三）；取消、答复与采用不取号。
+	// Numbers 与委托、订舱的号表只在开立委托或订舱的编排实例上装（ADR-0355 决定三）；取消、答复与采用不取号。
 	Numbers           ports.DocumentNumberIssuer
 	CommissionNumbers ports.TransportCommissionNumbers
 	BookingNumbers    ports.BookingNumbers
