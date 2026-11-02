@@ -1,0 +1,481 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "profiles": [
+    {
+      "legalEntityId": "SYN-LE-CN-SH-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PROFILE-CN-SH-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registeredAddress": {
+        "country": "CN",
+        "lines": [
+          "中国上海市浦东新区（模拟）",
+          "演示临港路 168 号 IDP 科技园 A 座 12 层（模拟地址）",
+          "邮编：200000（演示）"
+        ]
+      },
+      "officeAddress": {
+        "country": "CN",
+        "lines": [
+          "中国上海市浦东新区（模拟）",
+          "演示临港路 168 号 IDP 科技园 B 座 8 层（模拟地址）",
+          "邮编：200000（演示）"
+        ]
+      },
+      "correspondenceAddress": {
+        "country": "CN",
+        "lines": [
+          "中国上海市浦东新区（模拟）",
+          "演示临港路 168 号 IDP 科技园行政收发室（模拟地址）",
+          "邮编：200000（演示）"
+        ]
+      },
+      "taxRegistrationNumbers": [
+        {
+          "typeCode": "SYN-CN-TAX",
+          "number": "SYN-CN-TAX-0101"
+        }
+      ],
+      "invoiceTitle": "IDP物流科技（上海）有限公司（演示）",
+      "representative": {
+        "kind": "LEGAL_REPRESENTATIVE",
+        "name": "陈亦航（模拟）"
+      },
+      "contacts": [
+        {
+          "name": "林知远（模拟）",
+          "email": "business.cn-sh-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0101（模拟）",
+          "department": "商务发展部",
+          "position": "商务经理",
+          "purposes": [
+            "BUSINESS",
+            "GENERAL"
+          ],
+          "primaryFor": [
+            "BUSINESS",
+            "GENERAL"
+          ]
+        },
+        {
+          "name": "周雨桐（模拟）",
+          "email": "finance.cn-sh-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0102（模拟）",
+          "department": "财务管理部",
+          "position": "财务经理",
+          "purposes": [
+            "FINANCE"
+          ],
+          "primaryFor": [
+            "FINANCE"
+          ]
+        },
+        {
+          "name": "沈嘉禾（模拟）",
+          "email": "operations.cn-sh-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0103（模拟）",
+          "department": "网络运营部",
+          "position": "运营主管",
+          "purposes": [
+            "OPERATIONS"
+          ],
+          "primaryFor": [
+            "OPERATIONS"
+          ]
+        },
+        {
+          "name": "许安宁（模拟）",
+          "email": "legal.cn-sh-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0104（模拟）",
+          "department": "法务合规部",
+          "position": "法务经理",
+          "purposes": [
+            "LEGAL"
+          ],
+          "primaryFor": [
+            "LEGAL"
+          ]
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-HK-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PROFILE-HK-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registeredAddress": {
+        "country": "HK",
+        "lines": [
+          "中国香港九龙湾（模拟）",
+          "SYN Parcel Centre, 28 SYN Logistics Road, 18/F（模拟地址）"
+        ]
+      },
+      "officeAddress": {
+        "country": "HK",
+        "lines": [
+          "中国香港葵涌（模拟）",
+          "SYN Distribution Hub, Block B, 6/F（模拟地址）"
+        ]
+      },
+      "correspondenceAddress": {
+        "country": "HK",
+        "lines": [
+          "中国香港九龙湾（模拟）",
+          "SYN Parcel Centre, 18/F, Administration Desk（模拟地址）"
+        ]
+      },
+      "taxRegistrationNumbers": [
+        {
+          "typeCode": "SYN-HK-TAX",
+          "number": "SYN-HK-TAX-0201"
+        }
+      ],
+      "invoiceTitle": "IDP Parcel Hong Kong Limited（演示）",
+      "representative": {
+        "kind": "RESPONSIBLE_PERSON",
+        "name": "梁景行（模拟）"
+      },
+      "contacts": [
+        {
+          "name": "何思朗（模拟）",
+          "email": "business.hk-01@idp-parcel.example.invalid",
+          "phone": "+852 0000 0101（模拟）",
+          "department": "商务发展部",
+          "position": "商务经理",
+          "purposes": [
+            "BUSINESS",
+            "GENERAL"
+          ],
+          "primaryFor": [
+            "BUSINESS",
+            "GENERAL"
+          ]
+        },
+        {
+          "name": "梁芷晴（模拟）",
+          "email": "finance.hk-01@idp-parcel.example.invalid",
+          "phone": "+852 0000 0102（模拟）",
+          "department": "财务管理部",
+          "position": "财务经理",
+          "purposes": [
+            "FINANCE"
+          ],
+          "primaryFor": [
+            "FINANCE"
+          ]
+        },
+        {
+          "name": "郑文昊（模拟）",
+          "email": "operations.hk-01@idp-parcel.example.invalid",
+          "phone": "+852 0000 0103（模拟）",
+          "department": "网络运营部",
+          "position": "运营主管",
+          "purposes": [
+            "OPERATIONS"
+          ],
+          "primaryFor": [
+            "OPERATIONS"
+          ]
+        },
+        {
+          "name": "叶舒雅（模拟）",
+          "email": "legal.hk-01@idp-parcel.example.invalid",
+          "phone": "+852 0000 0104（模拟）",
+          "department": "法务合规部",
+          "position": "法务经理",
+          "purposes": [
+            "LEGAL"
+          ],
+          "primaryFor": [
+            "LEGAL"
+          ]
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-US-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PROFILE-US-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registeredAddress": {
+        "country": "US",
+        "lines": [
+          "Jersey City, New Jersey（模拟）",
+          "1200 SYN Logistics Drive, Suite 800（模拟地址）",
+          "NJ 07302, United States（演示）"
+        ]
+      },
+      "officeAddress": {
+        "country": "US",
+        "lines": [
+          "Newark, New Jersey（模拟）",
+          "280 SYN Parcel Avenue, Building B（模拟地址）",
+          "NJ 07102, United States（演示）"
+        ]
+      },
+      "correspondenceAddress": {
+        "country": "US",
+        "lines": [
+          "Jersey City, New Jersey（模拟）",
+          "1200 SYN Logistics Drive, Suite 800, Administration（模拟地址）",
+          "NJ 07302, United States（演示）"
+        ]
+      },
+      "taxRegistrationNumbers": [
+        {
+          "typeCode": "SYN-US-TAX",
+          "number": "SYN-US-TAX-0301"
+        }
+      ],
+      "invoiceTitle": "IDP Parcel USA Inc.（演示）",
+      "representative": {
+        "kind": "RESPONSIBLE_PERSON",
+        "name": "Alex Morgan（模拟）"
+      },
+      "contacts": [
+        {
+          "name": "Ethan Parker（模拟）",
+          "email": "business.us-01@idp-parcel.example.invalid",
+          "phone": "+1 201 555 0101（模拟）",
+          "department": "商务发展部",
+          "position": "商务经理",
+          "purposes": [
+            "BUSINESS",
+            "GENERAL"
+          ],
+          "primaryFor": [
+            "BUSINESS",
+            "GENERAL"
+          ]
+        },
+        {
+          "name": "Olivia Bennett（模拟）",
+          "email": "finance.us-01@idp-parcel.example.invalid",
+          "phone": "+1 201 555 0102（模拟）",
+          "department": "财务管理部",
+          "position": "财务经理",
+          "purposes": [
+            "FINANCE"
+          ],
+          "primaryFor": [
+            "FINANCE"
+          ]
+        },
+        {
+          "name": "Noah Carter（模拟）",
+          "email": "operations.us-01@idp-parcel.example.invalid",
+          "phone": "+1 201 555 0103（模拟）",
+          "department": "网络运营部",
+          "position": "运营主管",
+          "purposes": [
+            "OPERATIONS"
+          ],
+          "primaryFor": [
+            "OPERATIONS"
+          ]
+        },
+        {
+          "name": "Emma Hayes（模拟）",
+          "email": "legal.us-01@idp-parcel.example.invalid",
+          "phone": "+1 201 555 0104（模拟）",
+          "department": "法务合规部",
+          "position": "法务经理",
+          "purposes": [
+            "LEGAL"
+          ],
+          "primaryFor": [
+            "LEGAL"
+          ]
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-CN-SZ-01",
+      "revision": 1,
+      "basis": "SYN-COMPANY-DEMO-PROFILE-CN-SZ-01-V1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registeredAddress": {
+        "country": "CN",
+        "lines": [
+          "中国广东省深圳市宝安区（模拟）",
+          "演示航港路 88 号 IDP 供应链大厦 10 层（模拟地址）",
+          "邮编：518100（演示）"
+        ]
+      },
+      "officeAddress": {
+        "country": "CN",
+        "lines": [
+          "中国广东省深圳市宝安区（模拟）",
+          "演示航港路 88 号 IDP 华南运营中心 3 层（模拟地址）",
+          "邮编：518100（演示）"
+        ]
+      },
+      "correspondenceAddress": {
+        "country": "CN",
+        "lines": [
+          "中国广东省深圳市宝安区（模拟）",
+          "演示航港路 88 号 IDP 供应链大厦行政前台（模拟地址）",
+          "邮编：518100（演示）"
+        ]
+      },
+      "taxRegistrationNumbers": [
+        {
+          "typeCode": "SYN-CN-TAX",
+          "number": "SYN-CN-TAX-0102"
+        }
+      ],
+      "invoiceTitle": "IDP供应链（深圳）有限公司（演示）",
+      "representative": {
+        "kind": "LEGAL_REPRESENTATIVE",
+        "name": "程远洲（模拟）"
+      },
+      "contacts": [
+        {
+          "name": "顾承泽（模拟）",
+          "email": "business.cn-sz-01@idp-parcel.example.invalid",
+          "phone": "+86 755 0000 0101（模拟）",
+          "department": "商务发展部",
+          "position": "商务经理",
+          "purposes": [
+            "BUSINESS",
+            "GENERAL"
+          ],
+          "primaryFor": [
+            "BUSINESS",
+            "GENERAL"
+          ]
+        },
+        {
+          "name": "苏若涵（模拟）",
+          "email": "finance.cn-sz-01@idp-parcel.example.invalid",
+          "phone": "+86 755 0000 0102（模拟）",
+          "department": "财务管理部",
+          "position": "财务经理",
+          "purposes": [
+            "FINANCE"
+          ],
+          "primaryFor": [
+            "FINANCE"
+          ]
+        },
+        {
+          "name": "江以南（模拟）",
+          "email": "operations.cn-sz-01@idp-parcel.example.invalid",
+          "phone": "+86 755 0000 0103（模拟）",
+          "department": "网络运营部",
+          "position": "运营主管",
+          "purposes": [
+            "OPERATIONS"
+          ],
+          "primaryFor": [
+            "OPERATIONS"
+          ]
+        },
+        {
+          "name": "唐书宁（模拟）",
+          "email": "legal.cn-sz-01@idp-parcel.example.invalid",
+          "phone": "+86 755 0000 0104（模拟）",
+          "department": "法务合规部",
+          "position": "法务经理",
+          "purposes": [
+            "LEGAL"
+          ],
+          "primaryFor": [
+            "LEGAL"
+          ]
+        }
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-01",
+      "revision": 3,
+      "basis": "SYN-COMPANY-DEMO-PROFILE-OPERATOR-01-V3",
+      "effectiveFrom": "2026-10-01T00:00:00Z",
+      "registeredAddress": {
+        "country": "CN",
+        "lines": [
+          "合成市合成区演示路 1 号（演示）"
+        ]
+      },
+      "officeAddress": {
+        "country": "CN",
+        "lines": [
+          "合成市合成区演示路 1 号运营中心 6 层（模拟地址）"
+        ]
+      },
+      "correspondenceAddress": {
+        "country": "CN",
+        "lines": [
+          "合成市合成区演示路 1 号行政收发室（模拟地址）"
+        ]
+      },
+      "taxRegistrationNumbers": [
+        {
+          "typeCode": "SYN-CN-TAX",
+          "number": "SYN-CN-TAX-0001"
+        }
+      ],
+      "invoiceTitle": "合成运营方一号（演示）",
+      "representative": {
+        "kind": "LEGAL_REPRESENTATIVE",
+        "name": "傅明川（模拟）"
+      },
+      "contacts": [
+        {
+          "name": "陆星河（模拟）",
+          "email": "business.operator-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0101（模拟）",
+          "department": "商务发展部",
+          "position": "商务经理",
+          "purposes": [
+            "BUSINESS",
+            "GENERAL"
+          ],
+          "primaryFor": [
+            "BUSINESS",
+            "GENERAL"
+          ]
+        },
+        {
+          "name": "宋知夏（模拟）",
+          "email": "finance.operator-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0102（模拟）",
+          "department": "财务管理部",
+          "position": "财务经理",
+          "purposes": [
+            "FINANCE"
+          ],
+          "primaryFor": [
+            "FINANCE"
+          ]
+        },
+        {
+          "name": "方景明（模拟）",
+          "email": "operations.operator-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0103（模拟）",
+          "department": "网络运营部",
+          "position": "运营主管",
+          "purposes": [
+            "OPERATIONS"
+          ],
+          "primaryFor": [
+            "OPERATIONS"
+          ]
+        },
+        {
+          "name": "温书瑶（模拟）",
+          "email": "legal.operator-01@idp-parcel.example.invalid",
+          "phone": "+86 21 0000 0104（模拟）",
+          "department": "法务合规部",
+          "position": "法务经理",
+          "purposes": [
+            "LEGAL"
+          ],
+          "primaryFor": [
+            "LEGAL"
+          ]
+        }
+      ]
+    }
+  ]
+}

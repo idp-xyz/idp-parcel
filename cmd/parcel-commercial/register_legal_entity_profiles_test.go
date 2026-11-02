@@ -60,6 +60,21 @@ func profileBatchOf(rest string) string {
 	return `{"tenantId": "tenant-1", "profiles": [{"legalEntityId": "legal-acme", "revision": 1, "basis": "SYN-PROFILE-BASIS-01", ` + rest + `}]}`
 }
 
+func TestLegalEntityProfileBatchPreservesExtendedDetails(t *testing.T) {
+	commands, err := legalEntityProfileBatchFromJSON([]byte(profileBatchOf(validProfileRest + `,
+"representative":{"kind":"RESPONSIBLE_PERSON","name":"SYN 负责人"},
+"officeAddress":{"country":"SG","lines":["SYN 办公地址"]},
+"correspondenceAddress":{"country":"CN","lines":["SYN 通信地址"]},
+"contacts":[{"name":"SYN 财务联系人","department":"SYN 财务部","position":"SYN 经理","purposes":["FINANCE"],"primaryFor":["FINANCE"],"socialAccounts":[{"platform":"Telegram","account":"SYN-TG-01"}]}]`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := commands[0].command
+	if command.Supplement.Representative.Name() != "SYN 负责人" || command.Supplement.OfficeAddress.Country().String() != "SG" || command.Supplement.CorrespondenceAddress.Lines()[0] != "SYN 通信地址" || command.Contacts[0].Details().Department != "SYN 财务部" || len(command.Contacts[0].Details().PrimaryFor) != 1 || command.Contacts[0].Details().SocialAccounts[0].Account != "SYN-TG-01" {
+		t.Fatalf("CLI 扩展资料丢失：%+v", command)
+	}
+}
+
 // singleLegalEntityProfile 造一份单项批：entity 的第 revision 笔，地址落在 country。
 func singleLegalEntityProfile(entity, revision, country, line string) string {
 	return `{
@@ -123,16 +138,18 @@ func TestLegalEntityProfileBatchTranslationRefusesBeforeTouchingTheDatabase(t *t
 		t.Fatalf("基准项应译得出，否则下面的拒收证不了各自那一处：%v", err)
 	}
 	cases := map[string]string{
-		"未知字段":   profileBatchOf(validProfileRest + `, "nickname": "x"`),
-		"缺注册地址":  profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z"`),
-		"空地址行":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "CN", "lines": []}`),
-		"小写国家":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "xa", "lines": ["SYN 一号路 1 号"]}`),
-		"缺生效时点":  profileBatchOf(`"registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]}`),
-		"空抬头":    profileBatchOf(validProfileRest + `, "invoiceTitle": ""`),
-		"联系人没名字": profileBatchOf(validProfileRest + `, "contacts": [{"email": "syn@example.invalid"}]`),
-		"税号缺类型":  profileBatchOf(validProfileRest + `, "taxRegistrationNumbers": [{"number": "SYN-TAX-0001"}]`),
-		"空批":     `{"tenantId": "tenant-1"}`,
-		"空数组":    `{"tenantId": "tenant-1", "profiles": []}`,
+		"社交账号缺平台": profileBatchOf(validProfileRest + `, "contacts":[{"name":"SYN","socialAccounts":[{"account":"SYN-01"}]}]`),
+		"重复社交账号":  profileBatchOf(validProfileRest + `, "contacts":[{"name":"SYN","socialAccounts":[{"platform":"微信","account":"SYN-01"},{"platform":"微信","account":"SYN-01"}]}]`),
+		"未知字段":    profileBatchOf(validProfileRest + `, "nickname": "x"`),
+		"缺注册地址":   profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z"`),
+		"空地址行":    profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "CN", "lines": []}`),
+		"小写国家":    profileBatchOf(`"effectiveFrom": "2026-01-02T00:00:00Z", "registeredAddress": {"country": "xa", "lines": ["SYN 一号路 1 号"]}`),
+		"缺生效时点":   profileBatchOf(`"registeredAddress": {"country": "CN", "lines": ["SYN 一号路 1 号"]}`),
+		"空抬头":     profileBatchOf(validProfileRest + `, "invoiceTitle": ""`),
+		"联系人没名字":  profileBatchOf(validProfileRest + `, "contacts": [{"email": "syn@example.invalid"}]`),
+		"税号缺类型":   profileBatchOf(validProfileRest + `, "taxRegistrationNumbers": [{"number": "SYN-TAX-0001"}]`),
+		"空批":      `{"tenantId": "tenant-1"}`,
+		"空数组":     `{"tenantId": "tenant-1", "profiles": []}`,
 	}
 	for name, body := range cases {
 		if _, err := legalEntityProfileBatchFromJSON([]byte(body)); err == nil {

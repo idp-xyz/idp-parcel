@@ -71,6 +71,7 @@ type RegisterLegalEntityProfileCommand struct {
 	TaxNumbers    []domain.TaxRegistrationNumber
 	Invoicing     *domain.InvoicingDetails
 	Contacts      []domain.LegalEntityContact
+	Supplement    domain.LegalEntityProfileSupplement
 }
 
 // RegisterLegalEntityProfileHandler 是法人资料的写侧编排：领域门 → 修订连续性 → 资料门（法人在册且未停用、
@@ -95,7 +96,7 @@ func (handler *RegisterLegalEntityProfileHandler) Register(
 	ctx context.Context,
 	command RegisterLegalEntityProfileCommand,
 ) (LegalEntityProfileResult, error) {
-	content, err := domain.NewLegalEntityProfileContent(command.Address, command.TaxNumbers, command.Invoicing, command.Contacts)
+	content, err := domain.NewLegalEntityProfileContentWithSupplement(command.Address, command.TaxNumbers, command.Invoicing, command.Contacts, command.Supplement)
 	if err != nil {
 		return legalEntityProfileNotAccepted(err), nil
 	}

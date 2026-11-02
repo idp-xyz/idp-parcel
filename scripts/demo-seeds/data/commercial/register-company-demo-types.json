@@ -1,0 +1,55 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "types": [
+    {
+      "countryCode": "CN",
+      "typeCode": "SYN-CN-REG",
+      "revision": 1,
+      "name": "模拟注册号（仅演示，非真实证照格式）",
+      "layer": "IDENTITY",
+      "format": "SYN-CN-REG-[0-9]{4}",
+      "basis": "SYN-COMPANY-DEMO-TYPE-CN-REG-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "HK",
+      "typeCode": "SYN-HK-REG",
+      "revision": 1,
+      "name": "模拟注册号（仅演示，非真实证照格式）",
+      "layer": "IDENTITY",
+      "format": "SYN-HK-REG-[0-9]{4}",
+      "basis": "SYN-COMPANY-DEMO-TYPE-HK-REG-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "HK",
+      "typeCode": "SYN-HK-TAX",
+      "revision": 1,
+      "name": "模拟税务登记号（仅演示，非真实证照格式）",
+      "layer": "PROFILE",
+      "format": "SYN-HK-TAX-[0-9]{4}",
+      "basis": "SYN-COMPANY-DEMO-TYPE-HK-TAX-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "US",
+      "typeCode": "SYN-US-REG",
+      "revision": 1,
+      "name": "模拟注册号（仅演示，非真实证照格式）",
+      "layer": "IDENTITY",
+      "format": "SYN-US-REG-[0-9]{4}",
+      "basis": "SYN-COMPANY-DEMO-TYPE-US-REG-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "US",
+      "typeCode": "SYN-US-TAX",
+      "revision": 1,
+      "name": "模拟税务登记号（仅演示，非真实证照格式）",
+      "layer": "PROFILE",
+      "format": "SYN-US-TAX-[0-9]{4}",
+      "basis": "SYN-COMPANY-DEMO-TYPE-US-TAX-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

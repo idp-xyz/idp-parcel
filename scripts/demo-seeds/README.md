@@ -7,6 +7,8 @@
 不写生产默认值。本目录下任何脚本都**不得指向生产库**；`--reset` 与 `-reset` 是破坏性动作，
 只属于隔离演示库。
 
+公司主体完整资料演示由 `steps/800-company-subject-demo.sh` 追加：上海、香港、美国新泽西、深圳的模拟法人各有代表人 / 登记负责人、注册 / 办公 / 通信地址、模拟注册号和税号、开票抬头、商务 / 财务 / 运营 / 法务联系人。原演示法人 `SYN-LE-01` 追加资料修订，也配置多位联系人；身份及原资料修订保留。对应输入是 `data/commercial/register-company-demo-{types,parties,profiles}.json`，`register-company-demo-social-profiles.json` 再追加含 SYN- 社交账号的新资料修订，不回写旧版。新模拟注册号类型明确以 `SYN-` 编号，不冒用真实证照；邮箱使用 `.invalid` 保留域，电话与地址均标为模拟。公司名称仅参考用户提供的示例，全部为演示主体。币种仍归结算政策，不写进法人资料。
+
 ## 用法
 
 ```bash

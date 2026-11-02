@@ -13,6 +13,7 @@ import {
   type TabReturnController,
 } from './templates';
 import { pageById, prefetchPages } from './page-registry';
+import { WorkspaceViewStateProvider } from './templates/workspace-view-state';
 import { PageChunkBoundary, PageLoading } from './shell/PageChunkBoundary';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
@@ -88,7 +89,7 @@ import {
 // 标签，上面「答成同一张」的前提不变。
 // 三条互斥各自为何：不双写——若点标签既 setState 又写 hash，两条路对同一件事各答一次，失配时没人知道哪个对；
 // 不在标签里存页内状态——第二段之后与查询串归页面（详情钻取、保存视图的 `?view=`、检索词的 `?q=`），标签至多记「上次停在
-// 哪个地址」，页面状态仍只从地址读、页面卸载即丢；
+// 哪个地址」。可转发的状态仍从地址读；筛选、选中与分栏等临时呈现状态由 WorkspaceViewStateProvider 按标签保留；
 // 关标签写 hash——关掉活动标签后「现在在哪」这一问仍由 hash 答，标签集只是算出该落到哪个邻居，再把答案写回地址。
 // 工作台不是标签而是 EditorGroup 的 emptyStateContent：activeTabId 为 null 即显示工作台，理由见 workspace-state.ts 文件头。
 // 非活动标签卸载（preserveInactiveTabContent 关）：每张页各自 fetch，留着会攒请求——myshop-web 的演示数据无此顾虑，我们有。
@@ -336,6 +337,7 @@ export function Layout() {
             Provider 只包主区：检查器的内容只能来自主区里的页面。 */}
         <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor min-w-0" data-density={density}>
           <InspectorProvider value={inspectorController}>
+          <WorkspaceViewStateProvider tabIds={workspace.tabs.map((tab) => tab.id)}>
           <TabReturnProvider value={tabReturn}>
           <EditorGroup
             group={{ id: MAIN_EDITOR_GROUP_ID, tabs: workspace.tabs, activeTab: workspace.activeTabId ?? '' }}
@@ -364,6 +366,7 @@ export function Layout() {
             preserveInactiveTabContent={false}
           />
           </TabReturnProvider>
+          </WorkspaceViewStateProvider>
           </InspectorProvider>
         </main>
         {/* 不供检查器内容的页（多数列表页、工作台页、对象页）右边什么都不留：常驻一条只写「本页没有内容」的空栏

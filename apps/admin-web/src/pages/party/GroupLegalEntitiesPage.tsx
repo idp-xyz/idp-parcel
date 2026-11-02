@@ -34,6 +34,7 @@ import { LegalEntityDetailPage } from './LegalEntityDetailPage';
 import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
 import { filterSelectClass, Instant, UnknownPartyName } from './detail-primitives';
 import { StatusPill } from '../../components/StatusPill';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { useRegisterList } from './register-list';
 import {
   countLegalEntities,
@@ -60,6 +61,7 @@ interface LegalEntityFilterItem {
   label: string;
   count: number;
   active: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }
 
@@ -69,7 +71,7 @@ function LegalEntityFilterButton({ item }: { item: LegalEntityFilterItem }) {
       type="button"
       onClick={item.onClick}
       aria-pressed={item.active}
-      disabled={item.count === 0 && !item.active}
+      disabled={item.disabled ?? (item.count === 0 && !item.active)}
       className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent text-[12px] leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
         item.active
           ? 'border-b-idpxyz-accent font-semibold text-idpxyz-textBright'
@@ -154,7 +156,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
   {
     key: 'identity-layer',
     header: '注册地与注册号',
-    hideWhenDetailOpen: true,
+    minListWidth: 680,
     render: (row) => <IdentityLayerCell row={row} />,
   },
   {
@@ -176,7 +178,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'effective-from',
     header: '生效时间',
     sortKey: 'effective-from',
-    hideWhenDetailOpen: true,
+    minListWidth: 960,
     // 待生效配一个琥珀色时钟而不是把时刻标琥珀色：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08
     // 评审），图标是非文字，门槛 3:1。
     render: (row) => (
@@ -192,7 +194,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'registered-at',
     header: '登记时间',
     sortKey: 'registered-at',
-    hideWhenDetailOpen: true,
+    minListWidth: 1240,
     render: (row) => (
       <span className="font-mono text-idpxyz-breadcrumb">
         <Instant value={row.registeredAt} />
@@ -248,13 +250,13 @@ export function GroupLegalEntitiesPage() {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
-  const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
-  const [registrationCountry, setRegistrationCountry] = useState('ALL');
-  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [status, setStatus] = useTabViewState<LegalEntityStatusFilter>('legal-entities.status', 'ALL');
+  const [registrationCountry, setRegistrationCountry] = useTabViewState('legal-entities.registration-country', 'ALL');
+  const [attentionOnly, setAttentionOnly] = useTabViewState('legal-entities.attention-only', false);
   const [helpOpen, setHelpOpen] = useState(false);
   const helpButtonRef = useRef<HTMLButtonElement>(null);
-  const [sort, setSort] = useState<WorkbenchSort>(defaultLegalEntitySort);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [sort, setSort] = useTabViewState<WorkbenchSort>('legal-entities.sort', defaultLegalEntitySort);
+  const [selectedKey, setSelectedKey] = useTabViewState<string | null>('legal-entities.selected', null);
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash);
@@ -353,6 +355,18 @@ export function GroupLegalEntitiesPage() {
   const counts = countLegalEntities(entities);
   const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
 
+  const allFilter: LegalEntityFilterItem | undefined = answered
+    ? {
+        label: '全部',
+        count: counts.total,
+        active: status === 'ALL' && !attentionOnly,
+        disabled: false,
+        onClick: () => {
+          setStatus('ALL');
+          setAttentionOnly(false);
+        },
+      }
+    : undefined;
   const attentionFilter: LegalEntityFilterItem | undefined = answered
     ? {
         label: '待处理',
@@ -395,6 +409,7 @@ export function GroupLegalEntitiesPage() {
     <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
       <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
+      viewStateKey="legal-entities"
       subtitle="我方签约、开票与结算使用的法人；身份登记和开票资料分别留存修订"
       onRefresh={retry}
       refreshing={pending}
@@ -425,6 +440,7 @@ export function GroupLegalEntitiesPage() {
       extraFilters={
         answered ? (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {allFilter ? <LegalEntityFilterButton item={allFilter} /> : null}
             {attentionFilter ? (
               <div role="group" aria-label="待处理事项筛选" className="flex items-center">
                 <LegalEntityFilterButton item={attentionFilter} />

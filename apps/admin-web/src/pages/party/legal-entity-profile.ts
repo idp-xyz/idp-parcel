@@ -7,6 +7,9 @@
 // （legal-entity-form.ts 文件头）。
 
 import type {
+  ContactPurpose,
+  ContactSocialAccountRecord,
+  LegalEntityRepresentativeRecord,
   LegalEntityContactRecord,
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
@@ -24,10 +27,23 @@ export interface TaxNumberDraft {
   number: string;
 }
 
+export const contactPurposeLabels: Record<ContactPurpose, string> = {
+  GENERAL: '通用联系',
+  BUSINESS: '商务',
+  OPERATIONS: '运营',
+  FINANCE: '财务',
+  LEGAL: '法务',
+};
+
 export interface ContactDraft {
   name: string;
   email: string;
   phone: string;
+  department?: string;
+  position?: string;
+  purposes?: ContactPurpose[];
+  primaryFor?: ContactPurpose[];
+  socialAccounts?: ContactSocialAccountRecord[];
 }
 
 export interface LegalEntityProfileDraft {
@@ -45,6 +61,12 @@ export interface LegalEntityProfileDraft {
   /** 开票抬头；留空即这笔不带开票资料（键缺席）——空串服务端照样拒，不当缺席。 */
   invoiceTitle: string;
   contacts: ContactDraft[];
+  representativeKind: '' | LegalEntityRepresentativeRecord['kind'];
+  representativeName: string;
+  officeCountry: string;
+  officeLines: string;
+  correspondenceCountry: string;
+  correspondenceLines: string;
 }
 
 export interface LegalEntityProfileItem {
@@ -56,6 +78,9 @@ export interface LegalEntityProfileItem {
   taxRegistrationNumbers?: TaxRegistrationNumberRecord[];
   invoiceTitle?: string;
   contacts?: LegalEntityContactRecord[];
+  representative?: LegalEntityRepresentativeRecord;
+  officeAddress?: RegisteredAddressRecord;
+  correspondenceAddress?: RegisteredAddressRecord;
 }
 
 export interface LegalEntityProfilePayload {
@@ -73,6 +98,12 @@ export function emptyLegalEntityProfileDraft(legalEntityId: string): LegalEntity
     taxNumbers: [],
     invoiceTitle: '',
     contacts: [],
+    representativeKind: '',
+    representativeName: '',
+    officeCountry: '',
+    officeLines: '',
+    correspondenceCountry: '',
+    correspondenceLines: '',
   };
 }
 
@@ -80,7 +111,10 @@ export function emptyLegalEntityProfileDraft(legalEntityId: string): LegalEntity
  * 草稿 → 载荷。各格去首尾空白后原样带；可缺的键留空即缺席、不送空串（Intake 对它们「给了就得立得住」，空串会被当成
  * 给了而答形状错；缺席才轮到用例按 ADR-0145 答「未受理」并点名）。注册地址国家与各行全空才算没给，填了一部分照带。
  */
-export function legalEntityProfilePayloadOf(draft: LegalEntityProfileDraft, timeZone: string): LegalEntityProfilePayload {
+export function legalEntityProfilePayloadOf(
+  draft: LegalEntityProfileDraft,
+  timeZone: string,
+): LegalEntityProfilePayload {
   const item: LegalEntityProfileItem = { legalEntityId: draft.legalEntityId.trim(), basis: draft.basis.trim() };
   const revision = revisionOf(draft.revision);
   if (revision !== undefined) item.revision = revision;
@@ -100,23 +134,32 @@ export function legalEntityProfilePayloadOf(draft: LegalEntityProfileDraft, time
   if (taxes.length > 0) item.taxRegistrationNumbers = taxes;
   const title = draft.invoiceTitle.trim();
   if (title !== '') item.invoiceTitle = title;
-  const contacts = draft.contacts
-    .map((row) => ({ name: row.name.trim(), email: row.email.trim(), phone: row.phone.trim() }))
-    .filter((row) => row.name !== '' || row.email !== '' || row.phone !== '')
-    .map((row) => {
-      const contact: LegalEntityContactRecord = { name: row.name };
-      if (row.email !== '') contact.email = row.email;
-      if (row.phone !== '') contact.phone = row.phone;
-      return contact;
-    });
+  const contacts = draft.contacts.flatMap((row) => {
+    const contact: LegalEntityContactRecord = { name: row.name.trim() };
+    if (row.email.trim()) contact.email = row.email.trim();
+    if (row.phone.trim()) contact.phone = row.phone.trim();
+    if (row.department?.trim()) contact.department = row.department.trim();
+    if (row.position?.trim()) contact.position = row.position.trim();
+    if (row.purposes?.length) contact.purposes = [...row.purposes];
+    if (row.primaryFor?.length) contact.primaryFor = [...row.primaryFor];
+    const accounts = (row.socialAccounts ?? []).map(({ platform, account }) => ({ platform: platform.trim(), account: account.trim() }));
+    if (accounts.length) contact.socialAccounts = accounts;
+    return Object.values(contact).some((value) => (Array.isArray(value) ? value.length > 0 : value !== ''))
+      ? [contact]
+      : [];
+  });
   if (contacts.length > 0) item.contacts = contacts;
+  if (draft.representativeKind && draft.representativeName.trim()) {
+    item.representative = { kind: draft.representativeKind, name: draft.representativeName.trim() };
+  }
+  const office = addressPayload(draft.officeCountry, draft.officeLines);
+  const correspondence = addressPayload(draft.correspondenceCountry, draft.correspondenceLines);
+  if (office) item.officeAddress = office;
+  if (correspondence) item.correspondenceAddress = correspondence;
   return { profiles: [item] };
 }
 
-/**
- * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。三种：修订号编不进正整数、生效时刻换不成 RFC 3339、
- * 税务登记号有一行只填了类型或只填了号（半行编不成 Intake 要的一项）。其余一律是服务端的话。
- */
+/** 本地提示编码、成对输入与联系人分工问题；是否受理仍由服务端领域规则裁决。 */
 export function legalEntityProfileLocalProblems(
   draft: LegalEntityProfileDraft,
   timeZone: string,
@@ -133,6 +176,47 @@ export function legalEntityProfileLocalProblems(
     .filter((row) => (row.typeCode === '') !== (row.number === ''));
   if (halfRows.length > 0) {
     problems['profiles[0].taxRegistrationNumbers'] = halfRows.map((row) => `第 ${row.index + 1} 行：类型与号要成对填`);
+  }
+  if (Boolean(draft.representativeKind) !== Boolean(draft.representativeName.trim())) {
+    problems['profiles[0].representative'] = ['身份类型与姓名需要成对填写'];
+  }
+  for (const [key, country, lines] of [
+    ['officeAddress', draft.officeCountry, draft.officeLines],
+    ['correspondenceAddress', draft.correspondenceCountry, draft.correspondenceLines],
+  ]) {
+    if (Boolean(country.trim()) !== Boolean(lines.trim()))
+      problems[`profiles[0].${key}`] = ['国家 / 地区与地址需要一起填写'];
+  }
+  const primary = new Set<ContactPurpose>();
+  for (const [index, row] of draft.contacts.entries()) {
+    const path = `profiles[0].contacts[${index}]`;
+    if (
+      !row.name.trim() &&
+      (row.email.trim() ||
+        row.phone.trim() ||
+        row.department?.trim() ||
+        row.position?.trim() ||
+        row.purposes?.length ||
+        row.primaryFor?.length ||
+        row.socialAccounts?.length)
+    ) {
+      problems[path] = ['请填写联系人姓名'];
+    }
+    const seenAccounts = new Set<string>();
+    for (const [accountIndex, social] of (row.socialAccounts ?? []).entries()) {
+      const socialPath = `${path}.socialAccounts[${accountIndex}]`;
+      const platform = social.platform.trim();
+      const account = social.account.trim();
+      const key = JSON.stringify([platform.toLowerCase(), account]);
+      if (!platform || !account) problems[socialPath] = ['平台与账号需要成对填写；不需要的行请移除'];
+      else if (seenAccounts.has(key)) problems[socialPath] = ['此平台与账号已经填写'];
+      seenAccounts.add(key);
+    }
+    for (const purpose of row.primaryFor ?? []) {
+      if (!(row.purposes ?? []).includes(purpose)) problems[path] = ['主要联系用途需要先选为联系用途'];
+      if (primary.has(purpose)) problems[path] = [`${contactPurposeLabels[purpose]}已指名其他主要联系人`];
+      primary.add(purpose);
+    }
   }
   return problems;
 }
@@ -209,6 +293,13 @@ export function legalEntityProfileStatusOf(
 export function profileContentLines(content: LegalEntityProfileContent): ProfileContentLine[] {
   const address = [content.registeredAddress.country, ...content.registeredAddress.lines].filter((part) => part !== '');
   return [
+    ...(content.representative
+      ? [{ label: representativeLabel(content.representative.kind), value: content.representative.name }]
+      : []),
+    ...(content.officeAddress ? [{ label: '办公地址', value: addressText(content.officeAddress) }] : []),
+    ...(content.correspondenceAddress
+      ? [{ label: '通信地址', value: addressText(content.correspondenceAddress) }]
+      : []),
     { label: '注册地址', value: address.length === 0 ? '未配置' : address.join(' · ') },
     {
       label: '税务登记号',
@@ -219,7 +310,7 @@ export function profileContentLines(content: LegalEntityProfileContent): Profile
     },
     {
       label: '开票抬头',
-      value: content.invoicingRegistered ? (content.invoiceTitle || '未配置') : '未登开票资料',
+      value: content.invoicingRegistered ? content.invoiceTitle || '未配置' : '未登开票资料',
     },
     {
       label: '联系人',
@@ -230,7 +321,15 @@ export function profileContentLines(content: LegalEntityProfileContent): Profile
 
 function contactText(contact: LegalEntityContactRecord): string {
   const reach = [contact.email, contact.phone].filter((part): part is string => part !== undefined && part !== '');
-  return reach.length === 0 ? contact.name : `${contact.name}（${reach.join('，')}）`;
+  const details = [
+    contact.department,
+    contact.position,
+    ...(contact.purposes ?? []).map((purpose) => contactPurposeLabels[purpose] ?? purpose),
+    ...(contact.primaryFor ?? []).map((purpose) => `${contactPurposeLabels[purpose] ?? purpose}主要联系人`),
+    ...reach,
+    ...(contact.socialAccounts ?? []).map(({ platform, account }) => `${platform}：${account}`),
+  ].filter(Boolean);
+  return details.length === 0 ? contact.name : `${contact.name}（${details.join('，')}）`;
 }
 
 /**
@@ -246,10 +345,9 @@ export function profileRevisionTimeline(
     .map((row) => ({
       id: `r${row.revision}`,
       title: `${profileRevisionLabel(row.revision)} · 生效自 ${format(row.effectiveFrom)}`,
-      description: [
-        ...profileContentLines(row).map((line) => `${line.label} ${line.value}`),
-        `依据 ${row.basis}`,
-      ].join(' · '),
+      description: [...profileContentLines(row).map((line) => `${line.label} ${line.value}`), `依据 ${row.basis}`].join(
+        ' · ',
+      ),
       timestamp: format(row.registeredAt),
       variant: 'default' as const,
     }));
@@ -268,4 +366,82 @@ export function profileRevisionHistoryNote(count: number): string {
 export function resolutionInstantOf(wallTime: string, timeZone: string, now: Date): string | null {
   if (wallTime.trim() === '') return now.toISOString();
   return wallTimeToRfc3339(wallTime, timeZone);
+}
+
+export function representativeLabel(kind: string): string {
+  return kind === 'LEGAL_REPRESENTATIVE' ? '法定代表人' : kind === 'RESPONSIBLE_PERSON' ? '登记负责人' : kind;
+}
+
+function addressPayload(country: string, lines: string): RegisteredAddressRecord | undefined {
+  const value = {
+    country: country.trim(),
+    lines: lines
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  };
+  return value.country || value.lines.length ? value : undefined;
+}
+
+export function addressText(address?: RegisteredAddressRecord): string {
+  return address ? [address.country, ...address.lines].filter(Boolean).join(' · ') : '未配置';
+}
+
+export function legalEntityContactCountOf(resolution: LegalEntityProfileResolutionResponseBody | undefined): number | undefined {
+  if (!resolution || !resolution.effectiveRevision) return undefined;
+  if (resolution.outcome === 'RESOLVED' ||
+      (resolution.outcome === 'PROFILE_INCOMPLETE' && resolution.incompleteCause === 'NO_INVOICING_DETAILS')) {
+    return resolution.effectiveRevision.contacts.length;
+  }
+  return undefined;
+}
+
+export function profileMaintenanceNotes(content: LegalEntityProfileContent): string[] {
+  const notes: string[] = [];
+  if (!content.representative) notes.push('法定代表人 / 登记负责人未配置');
+  if (!content.contacts.some((row) => row.email || row.phone || row.socialAccounts?.length)) notes.push('未配置可联系的邮箱、电话或社交账号');
+  const purposes = new Set(content.contacts.flatMap((row) => row.purposes ?? []));
+  for (const purpose of purposes) {
+    if (!content.contacts.some((row) => row.primaryFor?.includes(purpose)))
+      notes.push(`${contactPurposeLabels[purpose] ?? purpose}主要联系人未指名`);
+  }
+  return notes;
+}
+
+export function profileDraftContentOf(
+  content: LegalEntityProfileContent,
+): Pick<
+  LegalEntityProfileDraft,
+  | 'addressCountry'
+  | 'addressLines'
+  | 'invoiceTitle'
+  | 'taxNumbers'
+  | 'contacts'
+  | 'representativeKind'
+  | 'representativeName'
+  | 'officeCountry'
+  | 'officeLines'
+  | 'correspondenceCountry'
+  | 'correspondenceLines'
+> {
+  return {
+    addressCountry: content.registeredAddress.country,
+    addressLines: content.registeredAddress.lines.join('\n'),
+    invoiceTitle: content.invoicingRegistered ? (content.invoiceTitle ?? '') : '',
+    taxNumbers: content.taxRegistrationNumbers.map((row) => ({ ...row })),
+    contacts: content.contacts.map((row) => ({
+      ...row,
+      email: row.email ?? '',
+      phone: row.phone ?? '',
+      purposes: [...(row.purposes ?? [])],
+      primaryFor: [...(row.primaryFor ?? [])],
+      socialAccounts: row.socialAccounts?.map((account) => ({ ...account })),
+    })),
+    representativeKind: content.representative?.kind ?? '',
+    representativeName: content.representative?.name ?? '',
+    officeCountry: content.officeAddress?.country ?? '',
+    officeLines: content.officeAddress?.lines.join('\n') ?? '',
+    correspondenceCountry: content.correspondenceAddress?.country ?? '',
+    correspondenceLines: content.correspondenceAddress?.lines.join('\n') ?? '',
+  };
 }

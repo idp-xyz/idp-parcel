@@ -393,10 +393,26 @@ export interface TaxRegistrationNumberRecord {
   number: string;
 }
 
+export type ContactPurpose = 'GENERAL' | 'BUSINESS' | 'OPERATIONS' | 'FINANCE' | 'LEGAL';
+export interface LegalEntityRepresentativeRecord {
+  kind: 'LEGAL_REPRESENTATIVE' | 'RESPONSIBLE_PERSON';
+  name: string;
+}
+
+export interface ContactSocialAccountRecord {
+  platform: string;
+  account: string;
+}
+
 export interface LegalEntityContactRecord {
   name: string;
   email?: string;
   phone?: string;
+  department?: string;
+  position?: string;
+  purposes?: ContactPurpose[];
+  primaryFor?: ContactPurpose[];
+  socialAccounts?: ContactSocialAccountRecord[];
 }
 
 export interface LegalEntityProfileContent {
@@ -408,6 +424,9 @@ export interface LegalEntityProfileContent {
   invoicingRegistered: boolean;
   invoiceTitle?: string;
   contacts: LegalEntityContactRecord[];
+  representative?: LegalEntityRepresentativeRecord;
+  officeAddress?: RegisteredAddressRecord;
+  correspondenceAddress?: RegisteredAddressRecord;
 }
 
 export interface LegalEntityProfileRevisionRecord extends LegalEntityProfileContent {

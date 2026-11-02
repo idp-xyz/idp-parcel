@@ -11,14 +11,47 @@ import {
 // ESM-only 的 @idpxyz 原语，run-tests 的 CommonJS 发射加载不了它（05 / 06 票面有实测），组件层在这里钉不住。
 // Content 用字串代替 ReactNode——归并对内容是什么不感兴趣，只管谁在谁前。
 
-// Covers: 六个签的 id、顺序与中文词由固定表钉住（手册「Main Content Tabs 稳定命名」）——换产品不换签名，
+// Covers: 签的 id、顺序与中文词由固定表钉住——换产品不换签名，
 // 调用方给不了新 id，也改不了词与顺序。
-test('固定表：六个签按手册顺序、词一一对应', () => {
-  deepEqual([...workspaceTabOrder], ['summary', 'timeline', 'related', 'exceptions', 'documents', 'audit']);
+test('固定表：签按统一顺序、词一一对应', () => {
+  deepEqual([...workspaceTabOrder], ['summary', 'contacts', 'profile-versions', 'identity-revisions', 'timeline', 'related', 'exceptions', 'documents', 'audit']);
   deepEqual(
     workspaceTabOrder.map((id) => workspaceTabLabels[id]),
-    ['概要', '时间线', '关联', '异常', '文档', '审计'],
+    ['概要', '联系人', '资料版本', '身份修订', '时间线', '关联', '异常', '文档', '审计'],
   );
+});
+
+test('公司资料与身份各有历史页签，不挤进概要且不替换其他页面的时间线', () => {
+  const company = resolveWorkspaceTabs({ summary: ['current-profile'] }, [
+    { id: 'identity-revisions', content: 'identity-history' },
+    { id: 'profile-versions', content: 'profile-history-and-editor', keepMounted: true },
+    { id: 'contacts', content: 'people', count: 4 },
+  ]);
+  deepEqual(company.map((tab) => [tab.id, tab.label]), [
+    ['summary', '概要'],
+    ['contacts', '联系人'],
+    ['profile-versions', '资料版本'],
+    ['identity-revisions', '身份修订'],
+  ]);
+  deepEqual(company[0].contents, ['current-profile']);
+  equal(company[2].keepMounted, true);
+  equal(company[0].keepMounted, undefined);
+  deepEqual(resolveWorkspaceTabs({ summary: ['basic'] }, [
+    { id: 'timeline', content: 'events' },
+    { id: 'audit', content: 'audit' },
+  ]).map((tab) => tab.id), ['summary', 'timeline', 'audit']);
+});
+
+test('联系人签按需显示在概要之后，不改变没有联系人内容的既有页面', () => {
+  const existing = [
+    { id: 'timeline' as const, content: 'history' },
+    { id: 'audit' as const, content: 'audit' },
+  ];
+  deepEqual(resolveWorkspaceTabs({ summary: ['basic'] }, existing).map((tab) => tab.id), ['summary', 'timeline', 'audit']);
+  const withContacts = resolveWorkspaceTabs({ summary: ['basic'] }, [...existing, { id: 'contacts', content: 'people', count: 4 }]);
+  deepEqual(withContacts.map((tab) => tab.id), ['summary', 'contacts', 'timeline', 'audit']);
+  equal(withContacts[1].label, '联系人');
+  equal(withContacts[1].count, 4);
 });
 
 // Covers: 调用方传进来的顺序不算数——签按固定序排，与传入次序无关。

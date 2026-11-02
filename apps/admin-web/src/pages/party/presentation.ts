@@ -355,7 +355,7 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
   ),
   'legal-entity-profile': snapshotHint(
     'profiles 数组里一项的键：legalEntityId、revision、basis、effectiveFrom，可选 registeredAddress{country, lines}、' +
-      'taxRegistrationNumbers[{typeCode, number}]、invoiceTitle、contacts[{name, email, phone}]。新修订从它的生效时点起' +
+      'taxRegistrationNumbers[{typeCode, number}]、invoiceTitle、contacts[{name, email, phone, department, position, purposes, primaryFor}]、representative{kind, name}、officeAddress 与 correspondenceAddress{country, lines}。新修订从它的生效时点起' +
       '取代前一修订，可以登记未来生效的修订；注册地址的国家须与法人身份上的注册国家 / 地区一致。不填 invoiceTitle 表示' +
       '这一笔不带开票资料，填空字符串会被拒。',
     { tenantGridFilledByChannel: true },

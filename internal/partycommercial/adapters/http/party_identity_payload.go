@@ -391,14 +391,17 @@ type legalEntityProfileBatchDocument struct {
 // 注册地址键可缺：缺即没给，由用例答`未受理`（判据同身份层三格）；给了就得立得住。invoiceTitle 缺席即这笔修订不带开票资料，
 // 给了空串照样拒，不当缺席。
 type legalEntityProfileDocument struct {
-	LegalEntityID          string                      `json:"legalEntityId"`
-	Revision               int                         `json:"revision"`
-	Basis                  string                      `json:"basis"`
-	EffectiveFrom          time.Time                   `json:"effectiveFrom"`
-	RegisteredAddress      *registeredAddressBody      `json:"registeredAddress,omitempty"`
-	TaxRegistrationNumbers []taxRegistrationNumberBody `json:"taxRegistrationNumbers,omitempty"`
-	InvoiceTitle           *string                     `json:"invoiceTitle,omitempty"`
-	Contacts               []legalEntityContactBody    `json:"contacts,omitempty"`
+	LegalEntityID          string                         `json:"legalEntityId"`
+	Revision               int                            `json:"revision"`
+	Basis                  string                         `json:"basis"`
+	EffectiveFrom          time.Time                      `json:"effectiveFrom"`
+	RegisteredAddress      *registeredAddressBody         `json:"registeredAddress,omitempty"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody    `json:"taxRegistrationNumbers,omitempty"`
+	InvoiceTitle           *string                        `json:"invoiceTitle,omitempty"`
+	Contacts               []legalEntityContactBody       `json:"contacts,omitempty"`
+	Representative         *legalEntityRepresentativeBody `json:"representative,omitempty"`
+	OfficeAddress          *registeredAddressBody         `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *registeredAddressBody         `json:"correspondenceAddress,omitempty"`
 }
 
 // command 把一次管理台登记的资料项译成法人资料修订登记命令（票 legal-entity-profile/05）。形状级失败包 ErrMalformedRequest；
@@ -458,11 +461,38 @@ func (item legalEntityProfileDocument) command(tenant domain.TenantID) (applicat
 		command.Invoicing = &details
 	}
 	for index, contact := range item.Contacts {
-		built, err := domain.NewLegalEntityContact(contact.Name, contact.Email, contact.Phone)
+		built, err := domain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, domain.LegalEntityContactDetails{Department: contact.Department, Position: contact.Position, Purposes: contact.Purposes, PrimaryFor: contact.PrimaryFor, SocialAccounts: contact.SocialAccounts})
 		if err != nil {
 			return none, fmt.Errorf("%w: profiles[0].contacts[%d]: %v", ErrMalformedRequest, index, err)
 		}
 		command.Contacts = append(command.Contacts, built)
+	}
+	if item.Representative != nil {
+		value, err := domain.NewLegalEntityRepresentative(item.Representative.Kind, item.Representative.Name)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].representative: %v", ErrMalformedRequest, err)
+		}
+		command.Supplement.Representative = &value
+	}
+	for _, entry := range []struct {
+		path   string
+		raw    *registeredAddressBody
+		target **domain.RegisteredAddress
+	}{
+		{"officeAddress", item.OfficeAddress, &command.Supplement.OfficeAddress}, {"correspondenceAddress", item.CorrespondenceAddress, &command.Supplement.CorrespondenceAddress},
+	} {
+		if entry.raw == nil {
+			continue
+		}
+		country, err := domain.NewRegistrationCountryCode(entry.raw.Country)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].%s: %v", ErrMalformedRequest, entry.path, err)
+		}
+		address, err := domain.NewRegisteredAddress(country, entry.raw.Lines)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].%s: %v", ErrMalformedRequest, entry.path, err)
+		}
+		*entry.target = &address
 	}
 	return command, nil
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
@@ -6,6 +6,7 @@ import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { skeletonOf } from './loading-shape';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
+import { useTabViewRef } from './workspace-view-state';
 
 /** 命令头里的一格指标。可点即筛选，active 表示它正是当前筛选。custom 替换数值位（如进度条）。 */
 export interface WorkbenchKpi {
@@ -36,12 +37,16 @@ export interface WorkbenchColumn<Row> {
   right?: boolean;
   /** 详情栏打开时收起的次要列，让列表在窄栏里仍读得清主身份与状态。 */
   hideWhenDetailOpen?: boolean;
+  /** 列表可用宽度达到此像素值才展示；随分栏拖动和窗口缩放更新，与详情是否打开无关。 */
+  minListWidth?: number;
   width?: string;
   render: (row: Row) => ReactNode;
 }
 
 export interface WorkbenchPageTemplateProps<Row> {
   title: string;
+  /** 页面内工作台的稳定键；给出时在工作区标签往返中恢复分栏与滚动，多个工作台分别命名。 */
+  viewStateKey?: string;
   subtitle?: string;
   kpis?: WorkbenchKpi[];
   /** 刷新钮；refreshing 由调用方按「有没有一问在途」给，收尾时模板报 toast。 */
@@ -95,6 +100,7 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
  */
 export function WorkbenchPageTemplate<Row>({
   title,
+  viewStateKey,
   subtitle,
   kpis,
   onRefresh,
@@ -120,12 +126,45 @@ export function WorkbenchPageTemplate<Row>({
 }: WorkbenchPageTemplateProps<Row>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const [listWidth, setListWidth] = useState<number | null>(null);
+  const hasResponsiveColumns = columns.some((column) => column.minListWidth !== undefined);
+  useLayoutEffect(() => {
+    if (!hasResponsiveColumns) return;
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      // 隐藏容器的零宽不能覆盖最后一次有效测量。
+      if (list.clientWidth > 0) setListWidth(list.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [hasResponsiveColumns]);
   const split = useSplitResize('horizontal');
+  const layoutSnapshot = useTabViewRef(
+    viewStateKey ? `workbench.${viewStateKey}.layout` : null,
+    () => ({ ratio: 50, scrollTop: 0, scrollLeft: 0 }),
+  );
+  const splitRestored = useRef(false);
+  useLayoutEffect(() => {
+    split.setRatio(layoutSnapshot.current.ratio);
+  }, [split.setRatio, layoutSnapshot]);
+  useLayoutEffect(() => {
+    if (!splitRestored.current && split.ratio !== layoutSnapshot.current.ratio) return;
+    splitRestored.current = true;
+    layoutSnapshot.current.ratio = split.ratio;
+  }, [split.ratio, layoutSnapshot]);
   const tabPanel = useWorkspaceTabPanel();
   const activeTab = tabPanel?.isActiveTab ?? true;
   const { addToast } = useToast();
   const ready = viewState.kind === 'ready';
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
+  useLayoutEffect(() => {
+    if (!ready || !listRef.current) return;
+    listRef.current.scrollTop = layoutSnapshot.current.scrollTop;
+    listRef.current.scrollLeft = layoutSnapshot.current.scrollLeft;
+  }, [ready, layoutSnapshot]);
 
   // 刷新收尾报一次 toast：只报用户按钮触发的那一次，且要先看到在途再看到结束，免得首取或别处触发的重取也冒一句。
   const refreshRequested = useRef(false);
@@ -185,7 +224,11 @@ export function WorkbenchPageTemplate<Row>({
     row?.scrollIntoView({ block: 'nearest' });
   }, [selectedKey]);
 
-  const visibleColumns = columns.filter((column) => !(detailOpen && column.hideWhenDetailOpen));
+  const visibleColumns = columns.filter(
+    (column) =>
+      !(detailOpen && column.hideWhenDetailOpen) &&
+      (column.minListWidth === undefined || listWidth === null || listWidth >= column.minListWidth),
+  );
 
   const SortIcon = ({ sortKey }: { sortKey: string }) =>
     !sort || sort.key !== sortKey ? (
@@ -406,7 +449,15 @@ export function WorkbenchPageTemplate<Row>({
           className="flex min-h-0 min-w-0 flex-col bg-idpxyz-panelBg"
           style={detailOpen ? { flex: `0 0 ${split.ratio}%` } : { flex: '1 1 100%' }}
         >
-          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
+          <div
+            ref={listRef}
+            className="min-h-0 flex-1 overflow-auto"
+            onScroll={(event) => {
+              if (!ready) return;
+              layoutSnapshot.current.scrollTop = event.currentTarget.scrollTop;
+              layoutSnapshot.current.scrollLeft = event.currentTarget.scrollLeft;
+            }}
+          >
             {ready ? (
               table
             ) : viewState.kind === 'loading' && skeletonOf(viewState.shape) === 'table' ? (
