@@ -15,6 +15,7 @@ import {
   listCustomsCases,
   listExternalResults,
   listSubmissionVersions,
+  listUnadmittedObjects,
   registerCustomsConfiguration,
   registrationOutcomeLabels,
   type AdmissionJudgementListResponseBody,
@@ -25,7 +26,9 @@ import {
   type ReadinessJudgmentListResponseBody,
   type SubmissionAuthorityRecord,
   type SubmissionAuthorityListResponseBody,
+  type UnadmittedObjectListResponseBody,
 } from './api';
+import { casesHash, casesTabOf, casesTabs, unadmittedOnlyOf, type CasesTab } from './cases-address';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { credentialRows, type RegisterRow } from './register-rows';
 import { placeLabel } from '../network/place-names';
@@ -380,61 +383,104 @@ function ExternalResultsTable() {
 }
 
 // 放行记录按运单号查：不填则列最近的记录。记录是判断当时的结论，换了规则之后同一请求的新判断是另一行，旧行不改。
-function AdmissionJudgementsTable() {
+// 「只看卡关」换一口读：每件运单只看它最近那一刻的放行检查，有一份没过门的（阻断、未决、未配置）才列，件数是读口答的全部
+// 件数——在判断册这一页里数「已拦截」只数得到服务端交回的那一页，也会把后来已放行的运单算进去。首页「今日待办」的卡关格点进来就落在这里。
+function AdmissionJudgementsTable({
+  unadmittedOnly,
+  onUnadmittedOnlyChange,
+}: {
+  unadmittedOnly: boolean;
+  onUnadmittedOnlyChange: (next: boolean) => void;
+}) {
   const [draft, setDraft] = useState('');
   const [object, setObject] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<AdmissionJudgementListResponseBody> | null>(null);
+  const [answer, setAnswer] = useState<ApiResult<AdmissionJudgementListResponseBody | UnadmittedObjectListResponseBody> | null>(
+    null,
+  );
   useEffect(() => {
     let cancelled = false;
     setAnswer(null);
-    void listAdmissionJudgements(object).then((result) => {
+    const load = unadmittedOnly ? listUnadmittedObjects() : listAdmissionJudgements(object);
+    void load.then((result: ApiResult<AdmissionJudgementListResponseBody | UnadmittedObjectListResponseBody>) => {
       if (!cancelled) setAnswer(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [object, reloadKey]);
-  const judgements = answer?.kind === 'outcome' ? answer.body.judgements : [];
+  }, [object, unadmittedOnly, reloadKey]);
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const judgements = body ? body.judgements : [];
   // 网点一格按此刻生效那一版显名称，原编码进技术详情（record-rows 的 judgementRows 收查名）。
   const places = usePlaceNames();
   const blocked = judgements.filter((judgement) => judgement.answer === 'BLOCKED').length;
+  const unadmitted = body && 'unadmittedCount' in body ? body : null;
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <form
-        className="flex items-center gap-2 px-4 py-2 shrink-0"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setObject(draft.trim());
-        }}
-      >
-        <label className="text-sm" htmlFor="admission-object">
-          按运单号查
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={unadmittedOnly} onChange={(event) => onUnadmittedOnlyChange(event.target.checked)} />
+          只看卡关
         </label>
-        <input
-          id="admission-object"
-          className="border rounded px-2 py-1 text-sm font-mono"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="运单号；留空列出最近的记录"
+        {unadmittedOnly ? (
+          <span className="text-xs text-idpxyz-textMuted">每件运单只看最近那一刻的放行检查，有一项没过的（被拦、待定、缺配置）就列，卡得最久的在前</span>
+        ) : (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setObject(draft.trim());
+            }}
+          >
+            <label className="text-sm" htmlFor="admission-object">
+              按运单号查
+            </label>
+            <input
+              id="admission-object"
+              className="border rounded px-2 py-1 text-sm font-mono"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="运单号；留空列出最近的记录"
+            />
+            <button type="submit" className="border rounded px-3 py-1 text-sm">
+              查询
+            </button>
+          </form>
+        )}
+      </div>
+      {unadmittedOnly ? (
+        <RecordTable
+          title="卡关的运单"
+          description="最近一次放行检查没过、还卡在关务上的运单：被拦的等限制解除或放行，待定的等补齐，缺配置的等配好；放行之后要再过一次检查才会离开这张表"
+          searchPlaceholder="在结果内搜运单号、网点、结论"
+          columns={judgementColumns}
+          rows={judgementRows(judgements, (node) => placeLabel(places, node))}
+          answer={answer}
+          retry={() => setReloadKey((value) => value + 1)}
+          endpoint="GET /customs-unadmitted-objects"
+          emptyTitle="没有卡关的运单"
+          emptyDescription="每件问过放行检查的运单，最近一次都过了或本就不受关务门禁。"
+          filterSummary={
+            unadmitted
+              ? `共 ${unadmitted.unadmittedCount} 件卡关${unadmitted.truncated ? ` · 只列出卡得最久的 ${judgements.length} 件` : ''}`
+              : undefined
+          }
         />
-        <button type="submit" className="border rounded px-3 py-1 text-sm">
-          查询
-        </button>
-      </form>
-      <RecordTable
-        title="放行记录"
-        description="货物出库、装车、跨关区、交付前每一次放行检查的结论；按当时的规则判，不回头改"
-        searchPlaceholder="在结果内搜运单号、网点、结论"
-        columns={judgementColumns}
-        rows={judgementRows(judgements, (node) => placeLabel(places, node))}
-        answer={answer}
-        retry={() => setReloadKey((value) => value + 1)}
-        endpoint={`GET /customs-action-admission-judgements${object ? `?object=${object}` : ''}`}
-        emptyTitle={object ? `没有运单「${object}」的放行记录` : '还没有放行记录'}
-        emptyDescription="只有出库、装车、交付时问过放行检查才有记录；没有记录不等于被拦，也不等于可放行。"
-        filterSummary={`${judgements.length} 条 · 已拦截 ${blocked} 条`}
-      />
+      ) : (
+        <RecordTable
+          title="放行记录"
+          description="货物出库、装车、跨关区、交付前每一次放行检查的结论；按当时的规则判，不回头改"
+          searchPlaceholder="在结果内搜运单号、网点、结论"
+          columns={judgementColumns}
+          rows={judgementRows(judgements, (node) => placeLabel(places, node))}
+          answer={answer}
+          retry={() => setReloadKey((value) => value + 1)}
+          endpoint={`GET /customs-action-admission-judgements${object ? `?object=${object}` : ''}`}
+          emptyTitle={object ? `没有运单「${object}」的放行记录` : '还没有放行记录'}
+          emptyDescription="只有出库、装车、交付时问过放行检查才有记录；没有记录不等于被拦，也不等于可放行。"
+          filterSummary={`${judgements.length} 条 · 已拦截 ${blocked} 条`}
+        />
+      )}
     </div>
   );
 }
@@ -723,10 +769,42 @@ function CredentialsTable() {
  * 之后是申报前的两道准备（申报准备、监管凭证）与凭证的登记签。本页只有凭证一本册有在线登记口：就绪、授权与关闭核对改的
  * 是案上此刻的事实，不进写面。
  */
+/** 签与「只看卡关」的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
+function useCasesPlace(): [CasesTab, boolean, (tab: CasesTab, unadmittedOnly: boolean) => void] {
+  const [tab, setTab] = useState<CasesTab>(() => casesTabOf(window.location.hash));
+  const [unadmittedOnly, setUnadmittedOnly] = useState(() => unadmittedOnlyOf(window.location.hash));
+
+  useEffect(() => {
+    // 本签已开着时从首页点卡关格进来，地址变了而页不重挂载，要跟着地址走。
+    const onHashChange = () => {
+      setTab(casesTabOf(window.location.hash));
+      setUnadmittedOnly(unadmittedOnlyOf(window.location.hash));
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const place = (nextTab: CasesTab, nextUnadmittedOnly: boolean) => {
+    setTab(nextTab);
+    setUnadmittedOnly(nextUnadmittedOnly);
+    const hash = window.location.hash;
+    if (!hash.startsWith('#/')) return;
+    window.history.replaceState(window.history.state, '', casesHash(hash, { tab: nextTab, unadmittedOnly: nextUnadmittedOnly }));
+  };
+  return [tab, unadmittedOnly, place];
+}
+
 export function CustomsCasesPage() {
+  const [tab, unadmittedOnly, place] = useCasesPlace();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="cases" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if ((casesTabs as readonly string[]).includes(value)) place(value as CasesTab, unadmittedOnly);
+        }}
+        className="flex-1 flex flex-col overflow-hidden gap-0"
+      >
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="cases">清关单</TabsTrigger>
           <TabsTrigger value="units">报关批次</TabsTrigger>
@@ -755,7 +833,7 @@ export function CustomsCasesPage() {
           <ExternalResultsTable />
         </TabsContent>
         <TabsContent value="admission" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <AdmissionJudgementsTable />
+          <AdmissionJudgementsTable unadmittedOnly={unadmittedOnly} onUnadmittedOnlyChange={(next) => place('admission', next)} />
         </TabsContent>
         <TabsContent value="closure-obligations" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ClosureObligationsTable />

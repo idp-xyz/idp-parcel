@@ -86,50 +86,54 @@ func serveCustomerStatements(
 	}
 	bodies := make([]customerStatementBody, 0, len(rows))
 	for _, row := range rows {
-		disputes := make([]statementDisputeBody, 0, len(row.Disputes))
-		for _, dispute := range row.Disputes {
-			disputes = append(disputes, statementDisputeBody{
-				Dispute:        dispute.Dispute,
-				Charge:         dispute.Charge,
-				DisputedAmount: minorAmount(dispute.DisputedMinor),
-				Reason:         dispute.Reason,
-				OpenedAt:       rfc3339(dispute.OpenedAt),
-				Resolution:     dispute.Resolution,
-				ResolutionRef:  dispute.ResolutionRef,
-				ResolvedAt:     optionalInstant(dispute.ResolvedAt),
-			})
-		}
-		inclusions := make([]subsequentInclusionBody, 0, len(row.SubsequentInclusions))
-		for _, inclusion := range row.SubsequentInclusions {
-			inclusions = append(inclusions, subsequentInclusionBody{
-				Inclusion:        inclusion.Inclusion,
-				Kind:             inclusion.Kind,
-				OriginalPeriod:   inclusion.OriginalPeriod,
-				SubsequentPeriod: inclusion.SubsequentPeriod,
-				Charge:           inclusion.Charge,
-				Adjustment:       inclusion.Adjustment,
-				IncludedAt:       rfc3339(inclusion.IncludedAt),
-			})
-		}
-		bodies = append(bodies, customerStatementBody{
-			StatementNumber:      row.StatementNumber,
-			Account:              row.Account,
-			Period:               row.Period,
-			Currency:             row.Currency,
-			TotalAmount:          minorAmount(row.TotalMinor),
-			LineCount:            row.LineCount,
-			AdjustmentCount:      row.AdjustmentCount,
-			PublishedAt:          rfc3339(row.PublishedAt),
-			VoidBasis:            row.VoidBasis,
-			VoidedAt:             optionalInstant(row.VoidedAt),
-			Disputes:             disputes,
-			SubsequentInclusions: inclusions,
-		})
+		bodies = append(bodies, customerStatementBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, customerStatementListResponse{
 		Outcome:    outcomeCustomerStatementsListed,
 		Statements: bodies,
 	})
+}
+
+func customerStatementBodyOf(row ports.CustomerStatementCatalogueRow) customerStatementBody {
+	disputes := make([]statementDisputeBody, 0, len(row.Disputes))
+	for _, dispute := range row.Disputes {
+		disputes = append(disputes, statementDisputeBody{
+			Dispute:        dispute.Dispute,
+			Charge:         dispute.Charge,
+			DisputedAmount: minorAmount(dispute.DisputedMinor),
+			Reason:         dispute.Reason,
+			OpenedAt:       rfc3339(dispute.OpenedAt),
+			Resolution:     dispute.Resolution,
+			ResolutionRef:  dispute.ResolutionRef,
+			ResolvedAt:     optionalInstant(dispute.ResolvedAt),
+		})
+	}
+	inclusions := make([]subsequentInclusionBody, 0, len(row.SubsequentInclusions))
+	for _, inclusion := range row.SubsequentInclusions {
+		inclusions = append(inclusions, subsequentInclusionBody{
+			Inclusion:        inclusion.Inclusion,
+			Kind:             inclusion.Kind,
+			OriginalPeriod:   inclusion.OriginalPeriod,
+			SubsequentPeriod: inclusion.SubsequentPeriod,
+			Charge:           inclusion.Charge,
+			Adjustment:       inclusion.Adjustment,
+			IncludedAt:       rfc3339(inclusion.IncludedAt),
+		})
+	}
+	return customerStatementBody{
+		StatementNumber:      row.StatementNumber,
+		Account:              row.Account,
+		Period:               row.Period,
+		Currency:             row.Currency,
+		TotalAmount:          minorAmount(row.TotalMinor),
+		LineCount:            row.LineCount,
+		AdjustmentCount:      row.AdjustmentCount,
+		PublishedAt:          rfc3339(row.PublishedAt),
+		VoidBasis:            row.VoidBasis,
+		VoidedAt:             optionalInstant(row.VoidedAt),
+		Disputes:             disputes,
+		SubsequentInclusions: inclusions,
+	}
 }
 
 func serveSupplierBillReceptions(
@@ -242,4 +246,63 @@ type supplierBillReceptionBody struct {
 	MatchCount               int64  `json:"matchCount"`
 	AuditAuthorityConfigured bool   `json:"auditAuthorityConfigured"`
 	RecordedAt               string `json:"recordedAt"`
+}
+
+// —— 挂着未了结争议的客户对账单 ——
+
+// DisputedStatementReader 是挂着未了结争议的对账单查阅消费的读口。
+type DisputedStatementReader interface {
+	ListDisputedCustomerStatements(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) (ports.DisputedCustomerStatements, error)
+}
+
+var _ DisputedStatementReader = ports.DisputedStatementRead(nil)
+
+// 空清单仍是 LISTED：「此刻没有挂着未了结争议的单」是如实答案，张数 0 只在读口真答了 0 时出现。
+const outcomeDisputedCustomerStatementsListed = "DISPUTED_CUSTOMER_STATEMENTS_LISTED"
+
+type disputedCustomerStatementsResponse struct {
+	Outcome       string                  `json:"outcome"`
+	DisputedCount int                     `json:"disputedCount"`
+	Truncated     bool                    `json:"truncated"`
+	Statements    []customerStatementBody `json:"statements"`
+}
+
+// NewQueryDisputedCustomerStatementsEndpoint 交回挂着未了结争议的客户对账单查阅的 HTTP 入口
+// （GET /settlement-disputed-statements），连同全部张数与是否截断。何为未了结、为何不数相对方待确认，见
+// ports.DisputedCustomerStatements。行形与对账单册同一份，对账单页按同一套列读它。
+//
+// 不另立裁定参数，理由同 NewQuerySettlementStatementsEndpoint：争议怎样处理由裁定用例形成，查阅面只答哪些单还在等。
+func NewQueryDisputedCustomerStatementsEndpoint(
+	intake CatalogueQueryIntake,
+	reader DisputedStatementReader,
+) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if !guardGet(response, request) {
+			return
+		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
+		listed, err := reader.ListDisputedCustomerStatements(request.Context(), query.Scope.Tenant(), query.Limit)
+		if err != nil {
+			// 读不回不伪装成 0 张：首页把 0 读成「没有待对账的」，等人裁的异议就没人看见了。
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		bodies := make([]customerStatementBody, 0, len(listed.Statements))
+		for _, row := range listed.Statements {
+			bodies = append(bodies, customerStatementBodyOf(row))
+		}
+		writeJSON(response, http.StatusOK, disputedCustomerStatementsResponse{
+			Outcome:       outcomeDisputedCustomerStatementsListed,
+			DisputedCount: listed.Count,
+			Truncated:     listed.Count > len(listed.Statements),
+			Statements:    bodies,
+		})
+	})
 }

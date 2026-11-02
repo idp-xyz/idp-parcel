@@ -20,22 +20,22 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 990 |
+| ① 已钉住 | 992 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 423 |
-| 合计 | 1793 |
+| 合计 | 1795 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
-| CC | 454 | 70 | 0 | 88 | 296 |
+| CC | 455 | 71 | 0 | 88 | 296 |
 | CR | 27 | 12 | 13 | 0 | 2 |
 | NO | 109 | 82 | 20 | 5 | 2 |
 | NR | 112 | 89 | 22 | 1 | 0 |
 | PC | 77 | 63 | 14 | 0 | 0 |
 | PP | 47 | 47 | 0 | 0 | 0 |
 | PS | 174 | 147 | 24 | 2 | 1 |
-| SA | 222 | 112 | 91 | 19 | 0 |
+| SA | 223 | 113 | 91 | 19 | 0 |
 | TF | 348 | 279 | 59 | 7 | 3 |
 | VE | 223 | 89 | 0 | 15 | 119 |
 <!-- 总览两表完 -->
@@ -112,6 +112,7 @@
 | `AT-CC-453` | internal/customscompliance/domain/submission_send_test.go::TestADeclarationChannelOnlyTakesHTTPSOrALoopback（领域半边）；internal/customscompliance/adapters/postgres/submission_send_test.go::TestADeclarationChannelRegistersOnce（持久化半边） |
 | `AT-CC-454` | internal/customscompliance/application/send_declaration_test.go::TestAPendingSendAttemptGoesOutOnceThroughItsChannel、::TestOnlyACertainNonSendIsRetried（编排半边）；internal/customscompliance/adapters/declarationchannel/http_sender_test.go::TestTheHTTPSenderSpeaksTheProductWireFormat（连接器半边）；internal/customscompliance/adapters/postgres/submission_send_test.go::TestSendFactsAndReceiptsAppendWithoutOverwriting（持久化半边） |
 | `AT-CC-455` | internal/customscompliance/domain/submission_send_test.go::TestTheCurrentTechnicalJudgmentFoldsTheSendFactAndTheReceipts（领域半边）；internal/customscompliance/application/send_declaration_test.go::TestTechnicalReceiptsAttachByChannelMessageAndFoldTheCurrentJudgment（编排半边）；internal/customscompliance/adapters/http/technical_receipt_test.go::TestIntegrationClientIntakeTranslatesATechnicalReceipt（Intake 半边）；internal/customscompliance/adapters/postgres/submission_send_test.go::TestSendFactsAndReceiptsAppendWithoutOverwriting（持久化半边） |
+| `AT-CC-456` | internal/customscompliance/adapters/postgres/operations_record_views_test.go::TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit（读口半边，真库）；internal/customscompliance/adapters/http/query_unadmitted_objects_test.go::TestUnadmittedObjectQueryCarriesTheWholeCountAndMarksTruncation、::TestUnadmittedObjectQueryAnswersZeroOnlyWhenTheReadAnswersZero（端点半边） |
 | `AT-CC-457` | internal/customscompliance/domain/customs_port_display_name_test.go::TestACustomsPortDisplayNameIsTakenAsWrittenOrRefused（领域半边）；internal/customscompliance/adapters/registrationjson/candidate_port_display_name_test.go::TestACandidatePortRowCarriesAnOptionalDisplayName；internal/customscompliance/adapters/http/query_ports_paths_test.go::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered；internal/customscompliance/adapters/postgres/candidate_port_display_name_test.go::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison |
 | `AT-CC-458` | internal/customscompliance/application/register_ports_paths_test.go::TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison；internal/customscompliance/adapters/postgres/candidate_port_display_name_test.go::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison、::TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment、::TestMigration0031LeavesExistingCandidatePortsUnnamedAndUnchanged；internal/customscompliance/adapters/http/query_ports_paths_test.go::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered（读口半边） |
 | `AT-CR-006` | internal/collectionremittance/application/instruction_principal_test.go::TestOnlyTheChannelReportOfThreeLayersPostsThePrincipal；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
@@ -578,7 +579,7 @@
 | `AT-SA-070` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-071` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-072` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
-| `AT-SA-073` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
+| `AT-SA-073` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped；internal/settlementaccounting/adapters/postgres/inventory_closeout_test.go::TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution（存储半边：待复核可再处理、终局不再改写） |
 | `AT-SA-076` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
 | `AT-SA-077` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
 | `AT-SA-079` | internal/settlementaccounting/domain/supplier_bill_test.go::TestABillClaimArrivalIsNotAPayable |
@@ -666,6 +667,7 @@
 | `AT-SA-224` | internal/settlementaccounting/domain/statement_cycle_test.go::TestAStatementCycleNamesItsClosings、::TestAClosingClosesAtTheArrangementCutoff；internal/settlementaccounting/application/cut_off_statements_on_cycle_test.go::TestACycleCutRecordsEmptyClosingsAndComposesTheCommandFromTheCandidates、::TestACycleCutStopsWhereATenantValueIsMissing；internal/settlementaccounting/adapters/postgres/statement_cycle_test.go::TestAStatementCycleRegistersOnceAndTheLedgerReadsTheLastClosing；cmd/parcel-settlement-register/settlement_account_command_test.go::TestTheConditionAndCycleCommandsTranslateBeforeTheTransaction；cmd/parcel-dispatch/cycle_cut_test.go::TestTheDispatchBeatCutsADueCycleIntoAPublishedStatement |
 | `AT-SA-225` | cmd/parcel-api/assemble_supplier_bill_decisions_test.go::TestTheSupplierBillReceptionFaceReceivesAndRecordsTheClerk、::TestAnUnconfiguredAuditAuthorityIsAnAnswer；internal/settlementaccounting/adapters/http/supplier_bill_decisions_test.go::TestTheSupplierBillReceptionIntakeTranslatesTheBillAndRecordsTheClerk；internal/settlementaccounting/application/receive_supplier_bill_test.go（two directives on one line are not accepted）；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
 | `AT-SA-226` | cmd/parcel-api/assemble_supplier_bill_decisions_test.go::TestTheSupplierBillAuditFaceFormsAPayableAndRecordsTheAuditor、::TestAnUnconfiguredAuditAuthorityIsAnAnswer；internal/settlementaccounting/adapters/http/supplier_bill_decisions_test.go::TestTheSupplierBillAuditIntakeAuthenticatesItsOwnDecision；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
+| `AT-SA-227` | internal/settlementaccounting/adapters/postgres/disputed_statements_test.go::TestDisputedStatementsAreThoseWithADisputeAwaitingAFinalResolution（读口半边，真库）；internal/settlementaccounting/adapters/http/query_disputed_statements_test.go::TestDisputedStatementQueryCarriesTheWholeCountAndMarksTruncation、::TestDisputedStatementQueryAnswersZeroOnlyWhenTheReadAnswersZero（端点半边） |
 | `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
 | `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
 | `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired、::TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing（事项本体缺动作、缺对象、缺起止责任各答带原因的待补充，ADR-0337） |

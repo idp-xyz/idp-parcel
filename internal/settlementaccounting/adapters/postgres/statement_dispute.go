@@ -111,8 +111,20 @@ func (repository *StatementDisputes) Save(
 	return ports.DisputeSaved, nil
 }
 
+// finalDisputeResolutions 是终局走向的库上词形：从领域给的全集里按 domain.DisputeResolutionKind.Final 挑，不在 SQL 里另抄一份，
+// 也不依赖常量的次序。Replace 的「还能不能再处理」与挂着未了结争议的单那一读都从这一份判，两处说的是同一件事。
+var finalDisputeResolutions = func() []string {
+	var words []string
+	for _, kind := range domain.DisputeResolutionKinds() {
+		if kind.Final() {
+			words = append(words, kind.String())
+		}
+	}
+	return words
+}()
+
 // Replace 只承担裁定：UPDATE 只写裁定三列与 digest/recorded_at。对账单号、费用、
-// 争议金额不在语句里。WHERE 允许未裁定或`待复核`再处理；终局三格答 false。
+// 争议金额不在语句里。WHERE 允许未裁定或非终局的处理（待复核）再处理；终局答 false。
 func (repository *StatementDisputes) Replace(
 	ctx context.Context,
 	record ports.DisputeRecord,
@@ -136,7 +148,7 @@ func (repository *StatementDisputes) Replace(
 		    AND statement_number = $8
 		    AND charge_id = $9
 		    AND disputed_minor = $10
-		    AND (resolved_at IS NULL OR resolution IS NOT DISTINCT FROM 'PENDING_REVIEW')`,
+		    AND (resolved_at IS NULL OR resolution <> ALL($11))`,
 		record.Key.TenantID.String(),
 		record.Key.Dispute.String(),
 		kind.String(),
@@ -147,6 +159,7 @@ func (repository *StatementDisputes) Replace(
 		record.Dispute.Statement().String(),
 		record.Dispute.Charge().String(),
 		record.Dispute.DisputedMinor(),
+		finalDisputeResolutions,
 	)
 	if err != nil {
 		return false, fmt.Errorf("replace statement dispute: %w", err)

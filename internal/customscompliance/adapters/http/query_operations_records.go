@@ -357,34 +357,90 @@ type admissionBasisBody struct {
 // 不拿「此刻」的登记册覆盖当时的答案——换了登记册之后同一请求的新判断是另一行。
 func NewQueryActionAdmissionJudgementsEndpoint(intake CatalogueQueryIntake, reader ActionAdmissionJudgementReader) http.Handler {
 	return serveRecordList(intake, "object", outcomeAdmissionJudgementsListed, "judgements",
-		reader.ListActionAdmissionJudgements,
-		func(record ports.ActionAdmissionJudgementRecord) admissionJudgementBody {
-			body := admissionJudgementBody{
-				Judgement: record.Judgement, Object: record.Object, Intent: record.Intent, Node: record.Node,
-				OnwardNode: record.OnwardNode, ActionAt: instant(record.ActionAt), CrossZone: record.CrossZone,
-				Answer: record.Answer, JudgedAt: instant(record.JudgedAt),
-				Zones:    make([]admissionZoneBody, 0, len(record.Zones)),
-				Findings: make([]admissionFindingBody, 0, len(record.Findings)),
+		reader.ListActionAdmissionJudgements, admissionJudgementBodyOf)
+}
+
+func admissionJudgementBodyOf(record ports.ActionAdmissionJudgementRecord) admissionJudgementBody {
+	body := admissionJudgementBody{
+		Judgement: record.Judgement, Object: record.Object, Intent: record.Intent, Node: record.Node,
+		OnwardNode: record.OnwardNode, ActionAt: instant(record.ActionAt), CrossZone: record.CrossZone,
+		Answer: record.Answer, JudgedAt: instant(record.JudgedAt),
+		Zones:    make([]admissionZoneBody, 0, len(record.Zones)),
+		Findings: make([]admissionFindingBody, 0, len(record.Findings)),
+	}
+	for _, zone := range record.Zones {
+		body.Zones = append(body.Zones, admissionZoneBody(zone))
+	}
+	for _, finding := range record.Findings {
+		entry := admissionFindingBody{
+			Action: finding.Action, Answer: finding.Answer,
+			Bases: make([]admissionBasisBody, 0, len(finding.Bases)),
+		}
+		for _, basis := range finding.Bases {
+			sources := basis.Sources
+			if sources == nil {
+				sources = []string{}
 			}
-			for _, zone := range record.Zones {
-				body.Zones = append(body.Zones, admissionZoneBody(zone))
-			}
-			for _, finding := range record.Findings {
-				entry := admissionFindingBody{
-					Action: finding.Action, Answer: finding.Answer,
-					Bases: make([]admissionBasisBody, 0, len(finding.Bases)),
-				}
-				for _, basis := range finding.Bases {
-					sources := basis.Sources
-					if sources == nil {
-						sources = []string{}
-					}
-					entry.Bases = append(entry.Bases, admissionBasisBody{
-						Cause: basis.Cause, Scope: basis.Scope, Procedure: basis.Procedure, Sources: sources,
-					})
-				}
-				body.Findings = append(body.Findings, entry)
-			}
-			return body
+			entry.Bases = append(entry.Bases, admissionBasisBody{
+				Cause: basis.Cause, Scope: basis.Scope, Procedure: basis.Procedure, Sources: sources,
+			})
+		}
+		body.Findings = append(body.Findings, entry)
+	}
+	return body
+}
+
+// —— 卡关对象 ——
+
+// UnadmittedObjectReader 是卡关对象查阅消费的读口。
+type UnadmittedObjectReader interface {
+	ListUnadmittedObjects(ctx context.Context, tenant domain.TenantID, limit int) (ports.UnadmittedObjects, error)
+}
+
+var _ UnadmittedObjectReader = ports.UnadmittedObjectRead(nil)
+
+// 空清单仍是 LISTED：「此刻没有卡关的对象」是如实答案，件数 0 只在读口真答了 0 时出现。
+const outcomeUnadmittedObjectsListed = "UNADMITTED_OBJECTS_LISTED"
+
+type unadmittedObjectsResponse struct {
+	Outcome         string                   `json:"outcome"`
+	UnadmittedCount int                      `json:"unadmittedCount"`
+	Truncated       bool                     `json:"truncated"`
+	Judgements      []admissionJudgementBody `json:"judgements"`
+}
+
+// NewQueryUnadmittedObjectsEndpoint 交回卡关对象查阅的 HTTP 入口（GET /customs-unadmitted-objects）：每个对象最晚
+// 那一刻上有一份动作准入判断不让动作过门的，连同全部件数与是否截断。哪一格算「不过门」与「最近」怎么取，见
+// ports.UnadmittedObjects。行形与判断册同一份，列表页按同一套列读它。
+//
+// 不收过滤参数：这口回答的就是一问，按对象查归判断册那一口。
+func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader UnadmittedObjectReader) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			response.Header().Set("Allow", http.MethodGet)
+			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		listed, err := reader.ListUnadmittedObjects(request.Context(), query.Scope.Tenant(), query.Limit)
+		if err != nil {
+			// 读不回不伪装成 0 件：首页把 0 读成「没有卡关的」，卡住的包裹就更没人看见了。
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		bodies := make([]admissionJudgementBody, 0, len(listed.Judgements))
+		for _, record := range listed.Judgements {
+			bodies = append(bodies, admissionJudgementBodyOf(record))
+		}
+		writeJSON(response, http.StatusOK, unadmittedObjectsResponse{
+			Outcome:         outcomeUnadmittedObjectsListed,
+			UnadmittedCount: listed.Count,
+			Truncated:       listed.Count > len(listed.Judgements),
+			Judgements:      bodies,
 		})
+	})
 }

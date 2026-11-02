@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"testing"
+	"time"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -192,6 +193,103 @@ func TestOperationsViewsEmptyRegistersAnswerEmptyAndRejectNonPositiveLimit(t *te
 		t.Fatalf("空库案件：%v %+v", err, cases)
 	}
 	if _, err := views.ListSubmissionVersions(t.Context(), tenant, "", 0); err == nil {
+		t.Fatal("limit 为 0 必须拒")
+	}
+}
+
+// rejudge 把一份判断的判断时刻挪到 at：同一请求晚些时候重判的那一份。
+func rejudge(t *testing.T, fixture *viewFixture, tenant, id string, at time.Time) {
+	t.Helper()
+	fixture.seed(t,
+		`UPDATE customs_compliance.action_admission_judgement SET judged_at = $3 WHERE tenant_id = $1 AND judgement_id = $2`,
+		tenant, id, at)
+}
+
+// seedJudgement 播一份出发的动作准入判断；answer 是整次答复，逐动作答复取同一格，依据只为让 jsonb 成形。
+func seedJudgement(t *testing.T, fixture *viewFixture, tenant, id, object string, actionAt time.Time, answer string) {
+	t.Helper()
+	seedIntentJudgement(t, fixture, tenant, id, object, "DEPARTURE", actionAt, answer)
+}
+
+func seedIntentJudgement(t *testing.T, fixture *viewFixture, tenant, id, object, intent string, actionAt time.Time, answer string) {
+	t.Helper()
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.action_admission_judgement
+			(tenant_id, judgement_id, object_ref, intent_kind, node_ref, onward_node_ref, action_at,
+			 cross_zone, answer, zones, findings, judged_at)
+		 VALUES ($1, $2, $3, $6, 'NODE-A', 'NODE-B', $4, 'CROSSING', $5, '[]',
+		         jsonb_build_array(jsonb_build_object('action', 'LOADING_DEPARTURE', 'answer', $5::text, 'bases', '[]'::jsonb)),
+		         $4)`,
+		tenant, id, object, actionAt, answer, intent)
+}
+
+// Covers: AT-CC-456 — 每个对象只看动作时点最晚的那一刻，那一刻上每一次请求取判断时刻最晚的当前答复：有一份阻断、未决或未配置
+// 就算卡关，只计一次，放行、不受门禁不算；先被挡后放行的不算，先放行后被挡的算；同一刻交出被挡、出发放行的算（被挡那份交回）；
+// 同一请求同一刻先挡后重判放行的不算；同一刻阻断与未决并存交回阻断；晚报的早先动作不盖过之后那次；卡得最久的在前；件数不受页
+// 大小截断；他租户的判断不进来。
+func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T) {
+	views, fixture := newOperationsRecordViews(t)
+	tenant := "SYN-TENANT-01"
+	at := func(hours int) time.Time { return viewBaseAt.Add(time.Duration(hours) * time.Hour) }
+	seedJudgement(t, fixture, tenant, "J-A1", "PCL-A", at(1), "BLOCKED")
+	seedJudgement(t, fixture, tenant, "J-A2", "PCL-A", at(5), "ADMITTED")
+	seedJudgement(t, fixture, tenant, "J-B1", "PCL-B", at(1), "ADMITTED")
+	seedJudgement(t, fixture, tenant, "J-B2", "PCL-B", at(4), "BLOCKED")
+	seedJudgement(t, fixture, tenant, "J-C1", "PCL-C", at(2), "UNDECIDED")
+	seedJudgement(t, fixture, tenant, "J-D1", "PCL-D", at(3), "NOT_CONFIGURED")
+	seedJudgement(t, fixture, tenant, "J-E1", "PCL-E", at(3), "NOT_GUARDED")
+	// PCL-F 的阻断是执行方晚报的一次早先动作：动作时点早于那次放行，判断时刻虽晚也不算最近。
+	seedJudgement(t, fixture, tenant, "J-F1", "PCL-F", at(6), "ADMITTED")
+	fixture.seed(t,
+		`UPDATE customs_compliance.action_admission_judgement SET judged_at = $2 WHERE judgement_id = 'J-F1' AND tenant_id = $1`,
+		tenant, at(6))
+	seedJudgement(t, fixture, tenant, "J-F0", "PCL-F", at(2), "BLOCKED")
+	fixture.seed(t,
+		`UPDATE customs_compliance.action_admission_judgement SET judged_at = $2 WHERE judgement_id = 'J-F0' AND tenant_id = $1`,
+		tenant, at(9))
+	// PCL-G 同一动作时点问了交出又问了出发：交出被挡、出发放行。那一刻有一件事没做成，同刻的放行不把它盖掉。
+	seedIntentJudgement(t, fixture, tenant, "J-G1", "PCL-G", "HANDOVER", at(7), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-G2", "PCL-G", "DEPARTURE", at(7), "ADMITTED")
+	// PCL-H 同一刻两份都不过门（阻断、未决），只计一次，交回最重的阻断——标识与判断时刻都排在未决后面也一样。
+	seedIntentJudgement(t, fixture, tenant, "J-H2", "PCL-H", "DEPARTURE", at(8), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-H9", "PCL-H", "HANDOVER", at(8), "UNDECIDED")
+	rejudge(t, fixture, tenant, "J-H9", at(9))
+	// PCL-T 同一请求在同一动作时点先判阻断、三源变了重判放行（另记一行）：当前答复是放行，不算卡关。
+	seedIntentJudgement(t, fixture, tenant, "J-T1", "PCL-T", "DEPARTURE", at(9), "BLOCKED")
+	seedIntentJudgement(t, fixture, tenant, "J-T2", "PCL-T", "DEPARTURE", at(9), "ADMITTED")
+	rejudge(t, fixture, tenant, "J-T2", at(10))
+	seedJudgement(t, fixture, "SYN-TENANT-02", "J-X1", "PCL-X", at(1), "BLOCKED")
+
+	listed, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 10)
+	if err != nil {
+		t.Fatalf("上列卡关对象：%v", err)
+	}
+	var objects []string
+	for _, judgement := range listed.Judgements {
+		objects = append(objects, judgement.Object+"/"+judgement.Judgement)
+	}
+	want := []string{"PCL-C/J-C1", "PCL-D/J-D1", "PCL-B/J-B2", "PCL-G/J-G1", "PCL-H/J-H2"}
+	if listed.Count != len(want) || len(objects) != len(want) {
+		t.Fatalf("件数或清单走样：count=%d rows=%v，要 %v", listed.Count, objects, want)
+	}
+	for index := range want {
+		if objects[index] != want[index] {
+			t.Fatalf("清单走样（卡得最久的在前）：%v，要 %v", objects, want)
+		}
+	}
+	if len(listed.Judgements[0].Findings) != 1 || listed.Judgements[0].OnwardNode != "NODE-B" {
+		t.Fatalf("判断行形与判断册不同：%+v", listed.Judgements[0])
+	}
+
+	page, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 1)
+	if err != nil || page.Count != len(want) || len(page.Judgements) != 1 || page.Judgements[0].Object != "PCL-C" {
+		t.Fatalf("件数必须是全部而不是这一页：err=%v %+v", err, page)
+	}
+	none, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, "SYN-TENANT-03"), 10)
+	if err != nil || none.Count != 0 || len(none.Judgements) != 0 {
+		t.Fatalf("没有判断的租户答 0 件：err=%v %+v", err, none)
+	}
+	if _, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 0); err == nil {
 		t.Fatal("limit 为 0 必须拒")
 	}
 }

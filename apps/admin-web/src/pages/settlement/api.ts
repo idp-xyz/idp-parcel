@@ -218,6 +218,22 @@ export function listSettlementStatements<Registry extends StatementRegistry>(
   );
 }
 
+/**
+ * 挂着未了结争议的客户对账单：至少挂着一项还没有终局结果（未处理或待复核）的争议的单。disputedCount 是全部张数，不受页大小截断；
+ * statements 是其中一页，行形与对账单册同一份。何为未了结、为何不数相对方待确认，以 internal/settlementaccounting/ports
+ * 的 DisputedCustomerStatements 为准，此处只做镜像。
+ */
+export interface DisputedCustomerStatementListResponseBody {
+  outcome: 'DISPUTED_CUSTOMER_STATEMENTS_LISTED';
+  disputedCount: number;
+  truncated: boolean;
+  statements: CustomerStatementRecord[];
+}
+
+export function listDisputedCustomerStatements(): Promise<ApiResult<DisputedCustomerStatementListResponseBody>> {
+  return exchangeMasterData<DisputedCustomerStatementListResponseBody>('/settlement-disputed-statements');
+}
+
 // —— 收付款核销页（GET /settlement-funds-applications）——
 
 /**

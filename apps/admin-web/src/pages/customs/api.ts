@@ -682,3 +682,19 @@ export function listAdmissionJudgements(
     `/customs-action-admission-judgements${query}`,
   );
 }
+
+/**
+ * 卡关对象：每个对象最近那一刻的放行检查（动作准入判断）里有一份没让动作过门的（阻断、未决、未配置）。unadmittedCount 是全部件数，
+ * 不受页大小截断；judgements 是其中一页，每个对象一行、卡得最久的在前，行形与判断册同一份。哪一格算不过门、「最近」怎么取，
+ * 以 internal/customscompliance/ports 的 UnadmittedObjects 为准，此处只做镜像。
+ */
+export interface UnadmittedObjectListResponseBody {
+  outcome: 'UNADMITTED_OBJECTS_LISTED';
+  unadmittedCount: number;
+  truncated: boolean;
+  judgements: AdmissionJudgementBody[];
+}
+
+export function listUnadmittedObjects(): Promise<ApiResult<UnadmittedObjectListResponseBody>> {
+  return exchangeMasterData<UnadmittedObjectListResponseBody>('/customs-unadmitted-objects');
+}

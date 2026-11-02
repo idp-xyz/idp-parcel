@@ -11,6 +11,7 @@ import (
 type settlementCatalogueWiring struct {
 	settlementCharges           settlementhttp.ChargeCatalogueReader
 	settlementStatements        settlementhttp.StatementCatalogueReader
+	settlementDisputed          settlementhttp.DisputedStatementReader
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader
 	settlementOperatingResults  settlementhttp.OperatingCatalogueReader
 }
@@ -18,10 +19,11 @@ type settlementCatalogueWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[settlementCatalogueWiring]{
 		lines: map[string]endpointLine{
-			"/settlement-charges":            {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-charges?registry=customer-charge"},
-			"/settlement-statements":         {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statements?registry=customer-statement"},
-			"/settlement-funds-applications": {method: http.MethodGet, face: operationsReadFace()},
-			"/settlement-operating-results":  {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
+			"/settlement-charges":             {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-charges?registry=customer-charge"},
+			"/settlement-statements":          {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statements?registry=customer-statement"},
+			"/settlement-disputed-statements": {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-funds-applications":  {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-operating-results":   {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
 		},
 		build: func(sources endpointSources) (settlementCatalogueWiring, error) {
 			none := settlementCatalogueWiring{}
@@ -44,8 +46,10 @@ func init() {
 				return none, err
 			}
 			return settlementCatalogueWiring{
-				settlementCharges:           settlementCharges,
-				settlementStatements:        settlementStatements,
+				settlementCharges:    settlementCharges,
+				settlementStatements: settlementStatements,
+				// 存在争议的单读的是对账单册同一张表、同一套列，同一个适配器两口共用。
+				settlementDisputed:          settlementStatements,
 				settlementFundsApplications: settlementFundsApplications,
 				settlementOperatingResults:  settlementOperatingResults,
 			}, nil
@@ -59,6 +63,7 @@ func init() {
 				// 资金冻结与运营结算余额为何不在其中，裁决在各构造函数的注释，此处不复述。
 				{Pattern: "/settlement-charges", Handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementCatalogueIntake, wiring.settlementCharges)},
 				{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, wiring.settlementStatements)},
+				{Pattern: "/settlement-disputed-statements", Handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(settlementCatalogueIntake, wiring.settlementDisputed)},
 				{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, wiring.settlementFundsApplications)},
 				{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, wiring.settlementOperatingResults)},
 			}

@@ -33,7 +33,10 @@ func NewStatementCatalogue(db *bentopg.DB) (*StatementCatalogue, error) {
 	return &StatementCatalogue{db: db}, nil
 }
 
-var _ ports.StatementCatalogueRead = (*StatementCatalogue)(nil)
+var (
+	_ ports.StatementCatalogueRead = (*StatementCatalogue)(nil)
+	_ ports.DisputedStatementRead  = (*StatementCatalogue)(nil)
+)
 
 // statementDisputeDocument 与 subsequentInclusionDocument 是两个聚合的临时词形。
 // 裁定三件与纳入的调整回指在库上可空，词形跟着留指针格——把它们折成空串会在解码
@@ -59,21 +62,9 @@ type subsequentInclusionDocument struct {
 	IncludedAt       time.Time `json:"includedAt"`
 }
 
-func (catalogue *StatementCatalogue) ListCustomerStatements(
-	ctx context.Context,
-	tenant domain.TenantID,
-	limit int,
-) ([]ports.CustomerStatementCatalogueRow, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list customer statements: limit must be positive, got %d", limit)
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list customer statements: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT s.statement_number, s.account_id, s.period_ref, s.currency, s.total_minor,
+// customerStatementColumns 是对账单册一行的列：单面、两个行数、发布与作废留痕、异议集与后续纳入集。对账单册与
+// 挂着未了结争议的单两口同列同解码，同一张单两口读出来必须一样。
+const customerStatementColumns = `s.statement_number, s.account_id, s.period_ref, s.currency, s.total_minor,
 		        jsonb_array_length(s.lines)::bigint,
 		        jsonb_array_length(s.adjustment_lines)::bigint,
 		        s.published_at, s.void_basis, s.voided_at,
@@ -113,7 +104,23 @@ func (catalogue *StatementCatalogue) ListCustomerStatements(
 		                )
 		           FROM settlement_accounting.subsequent_inclusion AS i
 		          WHERE i.tenant_id = s.tenant_id
-		            AND i.statement_number = s.statement_number)
+		            AND i.statement_number = s.statement_number)`
+
+func (catalogue *StatementCatalogue) ListCustomerStatements(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CustomerStatementCatalogueRow, error) {
+	if limit < 1 {
+		return nil, fmt.Errorf("list customer statements: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list customer statements: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT `+customerStatementColumns+`
 		   FROM settlement_accounting.customer_statement AS s
 		  WHERE s.tenant_id = $1
 		  ORDER BY s.statement_number
@@ -127,69 +134,128 @@ func (catalogue *StatementCatalogue) ListCustomerStatements(
 
 	entries := make([]ports.CustomerStatementCatalogueRow, 0, limit)
 	for rows.Next() {
-		var (
-			row            ports.CustomerStatementCatalogueRow
-			publishedAt    time.Time
-			voidBasis      *string
-			voidedAt       *time.Time
-			disputesJSON   []byte
-			inclusionsJSON []byte
-		)
-		if err := rows.Scan(
-			&row.StatementNumber, &row.Account, &row.Period, &row.Currency, &row.TotalMinor,
-			&row.LineCount, &row.AdjustmentCount,
-			&publishedAt, &voidBasis, &voidedAt,
-			&disputesJSON, &inclusionsJSON,
-		); err != nil {
+		row, err := scanCustomerStatement(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("list customer statements: %w", err)
 		}
-		row.PublishedAt = publishedAt.UTC()
-		row.VoidBasis = catalogueText(voidBasis)
-		row.VoidedAt = catalogueInstant(voidedAt)
-
-		var disputeDocuments []statementDisputeDocument
-		if err := json.Unmarshal(disputesJSON, &disputeDocuments); err != nil {
-			return nil, fmt.Errorf("list customer statements: 异议集解码：%w", err)
-		}
-		disputes := make([]ports.StatementDisputeEntry, 0, len(disputeDocuments))
-		for _, document := range disputeDocuments {
-			disputes = append(disputes, ports.StatementDisputeEntry{
-				Dispute:       document.Dispute,
-				Charge:        document.Charge,
-				DisputedMinor: document.DisputedMinor,
-				Reason:        document.Reason,
-				OpenedAt:      document.OpenedAt.UTC(),
-				Resolution:    catalogueText(document.Resolution),
-				ResolutionRef: catalogueText(document.ResolutionRef),
-				ResolvedAt:    catalogueInstant(document.ResolvedAt),
-			})
-		}
-		row.Disputes = disputes
-
-		var inclusionDocuments []subsequentInclusionDocument
-		if err := json.Unmarshal(inclusionsJSON, &inclusionDocuments); err != nil {
-			return nil, fmt.Errorf("list customer statements: 后续纳入集解码：%w", err)
-		}
-		inclusions := make([]ports.SubsequentInclusionEntry, 0, len(inclusionDocuments))
-		for _, document := range inclusionDocuments {
-			inclusions = append(inclusions, ports.SubsequentInclusionEntry{
-				Inclusion:        document.Inclusion,
-				Kind:             document.Kind,
-				OriginalPeriod:   document.OriginalPeriod,
-				SubsequentPeriod: document.SubsequentPeriod,
-				Charge:           document.Charge,
-				Adjustment:       catalogueText(document.Adjustment),
-				IncludedAt:       document.IncludedAt.UTC(),
-			})
-		}
-		row.SubsequentInclusions = inclusions
-
 		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list customer statements: %w", err)
 	}
 	return entries, nil
+}
+
+// ListDisputedCustomerStatements 上列至少挂着一项没有终局结果的争议的对账单（见 ports.DisputedCustomerStatements）。张数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，张数是全部而不是这一页，
+// 也不会与这一页分属两个快照；一张都没有时一行都不回，张数如实是 0。
+func (catalogue *StatementCatalogue) ListDisputedCustomerStatements(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) (ports.DisputedCustomerStatements, error) {
+	if limit < 1 {
+		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT `+customerStatementColumns+`, count(*) OVER ()
+		   FROM settlement_accounting.customer_statement AS s
+		  WHERE s.tenant_id = $1
+		    AND EXISTS (
+		        SELECT 1
+		          FROM settlement_accounting.statement_dispute AS o
+		         WHERE o.tenant_id = s.tenant_id
+		           AND o.statement_number = s.statement_number
+		           AND (o.resolved_at IS NULL OR o.resolution <> ALL($2)))
+		  ORDER BY s.statement_number
+		  LIMIT $3`,
+		tenant.String(), finalDisputeResolutions, limit,
+	)
+	if err != nil {
+		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+	}
+	defer rows.Close()
+
+	listed := ports.DisputedCustomerStatements{Statements: make([]ports.CustomerStatementCatalogueRow, 0, limit)}
+	for rows.Next() {
+		var count int64
+		row, err := scanCustomerStatement(rows.Scan, &count)
+		if err != nil {
+			return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+		}
+		listed.Count = int(count)
+		listed.Statements = append(listed.Statements, row)
+	}
+	if err := rows.Err(); err != nil {
+		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+	}
+	return listed, nil
+}
+
+// scanCustomerStatement 按 customerStatementColumns 的列序解一行；extra 接在这些列之后（如窗口计数）。
+func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.CustomerStatementCatalogueRow, error) {
+	var (
+		row            ports.CustomerStatementCatalogueRow
+		publishedAt    time.Time
+		voidBasis      *string
+		voidedAt       *time.Time
+		disputesJSON   []byte
+		inclusionsJSON []byte
+	)
+	dest := append([]any{
+		&row.StatementNumber, &row.Account, &row.Period, &row.Currency, &row.TotalMinor,
+		&row.LineCount, &row.AdjustmentCount,
+		&publishedAt, &voidBasis, &voidedAt,
+		&disputesJSON, &inclusionsJSON,
+	}, extra...)
+	if err := scan(dest...); err != nil {
+		return ports.CustomerStatementCatalogueRow{}, err
+	}
+	row.PublishedAt = publishedAt.UTC()
+	row.VoidBasis = catalogueText(voidBasis)
+	row.VoidedAt = catalogueInstant(voidedAt)
+
+	var disputeDocuments []statementDisputeDocument
+	if err := json.Unmarshal(disputesJSON, &disputeDocuments); err != nil {
+		return ports.CustomerStatementCatalogueRow{}, fmt.Errorf("异议集解码：%w", err)
+	}
+	disputes := make([]ports.StatementDisputeEntry, 0, len(disputeDocuments))
+	for _, document := range disputeDocuments {
+		disputes = append(disputes, ports.StatementDisputeEntry{
+			Dispute:       document.Dispute,
+			Charge:        document.Charge,
+			DisputedMinor: document.DisputedMinor,
+			Reason:        document.Reason,
+			OpenedAt:      document.OpenedAt.UTC(),
+			Resolution:    catalogueText(document.Resolution),
+			ResolutionRef: catalogueText(document.ResolutionRef),
+			ResolvedAt:    catalogueInstant(document.ResolvedAt),
+		})
+	}
+	row.Disputes = disputes
+
+	var inclusionDocuments []subsequentInclusionDocument
+	if err := json.Unmarshal(inclusionsJSON, &inclusionDocuments); err != nil {
+		return ports.CustomerStatementCatalogueRow{}, fmt.Errorf("后续纳入集解码：%w", err)
+	}
+	inclusions := make([]ports.SubsequentInclusionEntry, 0, len(inclusionDocuments))
+	for _, document := range inclusionDocuments {
+		inclusions = append(inclusions, ports.SubsequentInclusionEntry{
+			Inclusion:        document.Inclusion,
+			Kind:             document.Kind,
+			OriginalPeriod:   document.OriginalPeriod,
+			SubsequentPeriod: document.SubsequentPeriod,
+			Charge:           document.Charge,
+			Adjustment:       catalogueText(document.Adjustment),
+			IncludedAt:       document.IncludedAt.UTC(),
+		})
+	}
+	row.SubsequentInclusions = inclusions
+	return row, nil
 }
 
 func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
