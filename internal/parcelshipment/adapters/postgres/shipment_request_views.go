@@ -66,21 +66,8 @@ func (views *ShipmentRequestViews) ListVisible(
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views: %w", err)
 	}
-	defer rows.Close()
-
-	var records []ports.ShipmentRequestSummaryRecord
-	for rows.Next() {
-		var row summaryRow
-		if err := rows.Scan(row.targets()...); err != nil {
-			return nil, fmt.Errorf("list shipment request views: %w", err)
-		}
-		record, err := row.record()
-		if err != nil {
-			return nil, fmt.Errorf("list shipment request views: %w", err)
-		}
-		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
+	records, err := collectSummaries(rows)
+	if err != nil {
 		return nil, fmt.Errorf("list shipment request views: %w", err)
 	}
 	return records, nil
