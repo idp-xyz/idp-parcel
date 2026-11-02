@@ -127,28 +127,30 @@ function parsableMoment(raw: string): boolean {
  */
 export function draftProblems(draft: SeriesDraft): string[] {
   const problems: string[] = [];
-  if (draft.seriesId.trim() === '') problems.push('序列标识未填');
-  if (draft.seriesVersion.trim() === '') problems.push('版本号未填');
-  if (draft.kind === '') problems.push('种类未选');
-  if (draft.sourceIdentifier.trim() === '') problems.push('来源标识未填');
+  if (draft.seriesId.trim() === '') problems.push('请填名称');
+  if (draft.seriesVersion.trim() === '') problems.push('请填版本号');
+  if (draft.kind === '') problems.push('请选种类');
+  if (draft.sourceIdentifier.trim() === '') problems.push('请填数据来源');
   if (draft.kind === 'EXCHANGE_RATE' && draft.quoteBasis === null) {
-    problems.push('汇率必须选一版声明了口径的商业价格政策（不接受未声明口径的裸汇率）');
+    problems.push('汇率要选一版定了汇率口径的价格政策');
   }
   if (draft.kind === 'PUBLISHED_AMOUNT' && !currencyCode.test(draft.currency.trim())) {
-    problems.push('按期公布金额的序列必须填币种（三位大写代码，与引用它的定价方案一致）');
+    problems.push('按期公布的金额要填币种（三位大写代码，如 CNY，与用到它的价格表一致）');
   }
-  if (draft.periods.length === 0) problems.push('至少要一期取值');
+  if (draft.periods.length === 0) problems.push('至少填一期数值');
   draft.periods.forEach((period, index) => {
     const label = `第 ${index + 1} 期`;
-    if (!parsableMoment(period.startsAt)) problems.push(`${label}起点不是可解的时刻（RFC 3339 或 YYYY-MM-DD）`);
+    if (period.startsAt.trim() === '') problems.push(`${label}起点要填`);
+    else if (!parsableMoment(period.startsAt)) problems.push(`${label}起点格式不对，填成 2026-11-01 或 2026-11-01T00:00:00Z`);
     if (period.endsAt.trim() !== '' && !parsableMoment(period.endsAt)) {
-      problems.push(`${label}止点不是可解的时刻（留空即无上界，只许末期）`);
+      problems.push(`${label}止点格式不对，填成 2026-11-01 或 2026-11-01T00:00:00Z（最后一期可留空表示长期）`);
     }
-    if (!decimalText.test(period.value.trim())) problems.push(`${label}取值不是十进制文本（不接受指数记法）`);
+    if (period.value.trim() === '') problems.push(`${label}数值要填`);
+    else if (!decimalText.test(period.value.trim())) problems.push(`${label}数值要填普通小数，如 0.1875`);
   });
   if (draft.correction !== null) {
-    if (draft.correction.priorVersion.trim() === '') problems.push('更正必须回指被更正的版本');
-    if (draft.correction.basis.trim() === '') problems.push('更正依据未填（更正是新版本，凭什么更正要写清）');
+    if (draft.correction.priorVersion.trim() === '') problems.push('更正要指明是更正哪一版');
+    if (draft.correction.basis.trim() === '') problems.push('请写更正理由');
     if (
       draft.correction.priorVersion.trim() !== '' &&
       draft.correction.priorVersion.trim() === draft.seriesVersion.trim()

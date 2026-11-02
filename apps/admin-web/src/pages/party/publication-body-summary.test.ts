@@ -184,7 +184,7 @@ test('价格政策：方向与转换翻成中文；没有口径节说「未声�
     effectiveStartsAt: '2026-01-01T00:00:00Z',
   };
   const without = publicationBodySummary(payload('PRICE_RULE', { pricePolicy: base }), tz);
-  equal(valueOf(without, '政策方向'), '卖价');
+  equal(valueOf(without, '政策方向'), '售价');
   equal(valueOf(without, '价格口径'), '未声明');
   const withCaliber = publicationBodySummary(
     payload('PRICE_RULE', { pricePolicy: { ...base, caliber: { taxDisposition: 'TAX_INCLUSIVE', taxClassification: 'VAT6' } } }),

@@ -131,31 +131,34 @@ test('推进成功带回的那一行就地换上，其余行与没带行的答�
   deepEqual(withProgressedDraft([validated, other], { kind: 'notGranted' }), [validated, other]);
 });
 
-// Covers: 要做的 2「未配置的审批职责规则、主体相同、授予不足」各是答案，原名与中文并列；没收录的原名过线。
+// Covers: 要做的 2「未配置的审批职责规则、主体相同、授予不足」各是答案；正文只说中文，原名进技术详情；没收录的原名过线。
 test('批准门的负向各格如实呈现为答案：审批职责规则未配置、主体相同、授予不足', () => {
   const note = (outcome: string) => draftActionNoteOf('approve', { kind: 'outcome', status: 200, body: { outcome } });
   const notConfigured = note('NOT_CONFIGURED');
   equal(notConfigured.tone, 'answered');
-  match(notConfigured.text, /^批准（HTTP 200）：NOT_CONFIGURED —— 审批职责规则未配置/);
-  match(note('NEEDS_ANOTHER_APPROVER').text, /NEEDS_ANOTHER_APPROVER —— 主体相同/);
-  match(note('APPROVER_NOT_QUALIFIED').text, /APPROVER_NOT_QUALIFIED —— 授予不足/);
-  match(note('SOMETHING_NEW').text, /SOMETHING_NEW —— SOMETHING_NEW$/);
+  match(notConfigured.text, /^批准：审批规则未配置/);
+  ok(!/NOT_CONFIGURED/.test(notConfigured.text));
+  ok(notConfigured.tone === 'answered' && notConfigured.technical.some((row) => row.value === 'NOT_CONFIGURED'));
+  match(note('NEEDS_ANOTHER_APPROVER').text, /录入人不能自己批准/);
+  match(note('APPROVER_NOT_QUALIFIED').text, /没有批准权限/);
+  match(note('SOMETHING_NEW').text, /批准：SOMETHING_NEW$/);
 });
 
-// Covers: 要做的 2「登记用例的各格答复」——发布交给了登记时，登记那一格原名与中文接在后面；没交给登记就不接。
+// Covers: 要做的 2「登记用例的各格答复」——发布交给了登记时，登记那一格的中文接在后面、原名进技术详情；没交给登记就不接。
 test('发布交给了登记时，登记那一格的原名与中文接在发布答案之后', () => {
   const landed = draftActionNoteOf('publish', {
     kind: 'outcome',
     status: 201,
     body: { outcome: 'DRAFT_PUBLISHED', registration: 'RECORDED' },
   });
-  equal(landed.text, '发布（HTTP 201）：DRAFT_PUBLISHED —— 已发布（登记落定，草稿转已发布）；登记：RECORDED —— 已入册');
+  equal(landed.text, '发布：已发布，「全部价卡」里可以看到了；登记：已登记');
+  ok(landed.tone === 'answered' && landed.technical.some((row) => row.label === '登记结果码' && row.value === 'RECORDED'));
   const conflict = draftActionNoteOf('publish', {
     kind: 'outcome',
     status: 200,
     body: { outcome: 'PUBLICATION_NOT_LANDED', registration: 'CONTENT_CONFLICT' },
   });
-  match(conflict.text, /PUBLICATION_NOT_LANDED —— 登记没有落定.*；登记：CONTENT_CONFLICT —— 版本内容冲突/);
+  match(conflict.text, /没有发布成功.*；登记：这个版本号已经登记过不同的内容/);
   const notApproved = draftActionNoteOf('publish', { kind: 'outcome', status: 200, body: { outcome: 'DRAFT_NOT_APPROVED' } });
   ok(!/登记：/.test(notApproved.text));
 });
@@ -164,7 +167,7 @@ test('发布交给了登记时，登记那一格的原名与中文接在发布�
 test('渠道那一格与故障各说各的：未配置、需要登录、没有授予、未形成答案', () => {
   const unconfigured = draftActionNoteOf('approve', { kind: 'unconfigured' });
   equal(unconfigured.tone, 'unconfigured');
-  match(unconfigured.text, /403 ACCESS_CHANNEL_NOT_CONFIGURED/);
+  match(unconfigured.text, /访问通道尚未配置（403）/);
   const login = draftActionNoteOf('publish', { kind: 'loginRequired' });
   ok(login.tone === 'refused' && login.kind === 'loginRequired');
   match(login.text, /^发布：需要登录（401 OPERATOR_CREDENTIAL_REJECTED）。/);
@@ -172,8 +175,8 @@ test('渠道那一格与故障各说各的：未配置、需要登录、没有�
   ok(grant.tone === 'refused' && grant.kind === 'notGranted');
   const noAnswer = draftActionNoteOf('publish', { kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' });
   equal(noAnswer.tone, 'problem');
-  match(noAnswer.text, /登记与否未知/);
-  ok(!/登记与否未知/.test(draftActionNoteOf('approve', { kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }).text));
+  match(noAnswer.text, /发没发布成功还不确定/);
+  ok(!/发没发布成功/.test(draftActionNoteOf('approve', { kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }).text));
 });
 
 // Covers: 要做的 3「四态如实，同 05」——空册是空态；未配置说的是草稿查阅读口、不是册为空；渠道另两态各成一态。
@@ -186,8 +189,8 @@ test('草稿册的页面态：空册是空态，未配置说的是草稿查阅�
   equal(listed([draftRow({})]).kind, 'ready');
   const unconfigured = draftListViewState({ kind: 'unconfigured' }, retry, pricingModule);
   ok(unconfigured.kind === 'unconfigured');
-  match(unconfigured.description ?? '', /GET \/pricing-price-card-draft-views/);
-  match(unconfigured.description ?? '', /不是「册上没有草稿」/);
+  ok(unconfigured.kind === 'unconfigured' && unconfigured.facts?.endpoint === 'GET /pricing-price-card-draft-views');
+  match(unconfigured.description ?? '', /不代表没有草稿/);
   equal(draftListViewState({ kind: 'loginRequired' }, retry, pricingModule).kind, 'loginRequired');
   equal(draftListViewState({ kind: 'notGranted' }, retry, pricingModule).kind, 'notGranted');
 });
@@ -197,12 +200,12 @@ test('草稿册没形成答案时说的是草稿册，不是目录，仍可重�
   const retry = () => {};
   const failed = draftListViewState({ kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }, retry, pricingModule);
   ok(failed.kind === 'error');
-  match(failed.description ?? '', /草稿册读不回/);
+  match(failed.description ?? '', /草稿读不出来/);
   ok(!/目录/.test(failed.description ?? ''));
   equal(failed.onRetry, retry);
   const intake = draftListViewState({ kind: 'noAnswer', status: 500, code: 'INTAKE_FAILED' }, retry, pricingModule);
   ok(intake.kind === 'error');
-  match(intake.description ?? '', /没有读草稿册/);
+  match(intake.description ?? '', /没有读草稿/);
   ok(!/目录/.test(intake.description ?? ''));
   const identity = draftListViewState({ kind: 'noAnswer', status: 503, code: 'IDENTITY_DEPENDENCY_UNAVAILABLE' }, retry, pricingModule);
   ok(identity.kind === 'error');

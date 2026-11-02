@@ -33,7 +33,7 @@ test('无终点、有止点、没有在用版本是三种答案，不是两种',
   );
   equal(open.coverage.kind, 'open');
   equal(open.coverage.remainingDays, undefined);
-  equal(coverageNote(open.coverage), '在用版本无终点');
+  equal(coverageNote(open.coverage), '长期可用');
 
   const bounded = coverageRowOf(
     record({
@@ -52,7 +52,7 @@ test('无终点、有止点、没有在用版本是三种答案，不是两种',
 
   const none = coverageRowOf(record({ inForceResolved: false }), asOf);
   equal(none.coverage.kind, 'none');
-  equal(coverageNote(none.coverage), '今天没有在用版本');
+  equal(coverageNote(none.coverage), '今天没有可用的数值');
   // 三句话逐句不同——这一条就是本文件的题目。
   ok(coverageNote(open.coverage) !== coverageNote(none.coverage));
 });
@@ -73,7 +73,7 @@ test('在用版本已过期时剩余为负，并如实说过期了几天', () =>
     asOf,
   );
   equal(expired.coverage.remainingDays, -3);
-  equal(coverageNote(expired.coverage), '在用版本已于 3 天前到期');
+  equal(coverageNote(expired.coverage), '已过期 3 天');
 });
 
 // Covers: 先看布尔再看子对象。布尔说有而子对象没序列化出来，是响应不合契约——按「今天没有

@@ -7,9 +7,6 @@ import { formatInstant } from '../catalogue-view';
 import {
   approvePriceCardDraft,
   listPriceCardDrafts,
-  priceCardDraftApprovalPath,
-  priceCardDraftPublicationPath,
-  priceCardDraftViewsPath,
   publishPriceCardDraft,
   type ApiResult,
   type PriceCardDraftListResponseBody,
@@ -29,12 +26,15 @@ import {
   type DraftActionNote,
   type PriceCardDraftAction,
 } from './price-card-import';
-import { labelOf } from './presentation';
 import { PrincipalRef } from '../../components/PrincipalRef';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 const info = moduleInfoById['price-card-catalog'];
 
-const columnCount = 7;
+const columnCount = 6;
 
 const noteClass: Record<DraftActionNote['tone'], string> = {
   answered: 'text-idpxyz-text',
@@ -51,6 +51,8 @@ const noteClass: Record<DraftActionNote['tone'], string> = {
  * 端点今天在部署没设发行方参数时答 403，页面只呈现未配置，不拿演示数据顶替。
  */
 export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: number }) {
+  // 没有登记册写授予的操作者只看不摆批准 / 发布：写口照旧自己判授予，这里只是呈现（ADR-0315）。
+  const mayWrite = useMayWriteRegistry();
   const [answer, setAnswer] = useState<ApiResult<PriceCardDraftListResponseBody> | null>(null);
   const [rows, setRows] = useState<PriceCardDraftRow[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
@@ -108,31 +110,29 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
     <div className="flex-1 overflow-auto p-4">
       <Card>
         <CardHeader>
-          <CardTitle>价卡草稿</CardTitle>
+          <CardTitle>草稿与审批</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {/* 批准者是谁、须不须另一人由审批职责规则在写口判，页面不预判（ADR-0101 决定五）。 */}
           <p className="text-xs text-idpxyz-textMuted">
-            草稿册按 <span className="font-mono">GET {priceCardDraftViewsPath}</span> 读。已校验的那一版可以批准（
-            <span className="font-mono">{priceCardDraftApprovalPath}</span>），已批准的可以发布（
-            <span className="font-mono">{priceCardDraftPublicationPath}</span>）；两口的载荷只有方案标识与版本，租户与批准者在
-            操作者信封里。批准者须不须是另一人、须持哪一格授予，由本租户的价卡发布审批职责规则定，页面不代判。
+            新建或导入的价卡先存成草稿。检查通过的可以批准，批准后再发布；发布后就出现在「全部价卡」里，开始参与计价。
+            谁可以批准、录入人能不能自己批准，按贵公司的审批规则。
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={reload} disabled={answer === null || pending !== null}>
               刷新
             </Button>
-            {answer?.kind === 'outcome' ? <span className="text-xs text-idpxyz-textMuted">共 {rows.length} 版</span> : null}
+            {answer?.kind === 'outcome' ? <span className="text-xs text-idpxyz-textMuted">共 {rows.length} 个版本</span> : null}
           </div>
           {viewState.kind === 'ready' ? (
             <table className="w-full text-left text-xs">
               <thead className="text-idpxyz-textMuted">
                 <tr>
-                  <th className="py-1 pr-3 font-normal">定价方案</th>
+                  <th className="py-1 pr-3 font-normal">价卡</th>
                   <th className="py-1 pr-3 font-normal">状态</th>
-                  <th className="py-1 pr-3 font-normal">源文件身份</th>
-                  <th className="py-1 pr-3 font-normal">内容摘要</th>
-                  <th className="py-1 pr-3 font-normal">录入者</th>
-                  <th className="py-1 pr-3 font-normal">批准者</th>
+                  <th className="py-1 pr-3 font-normal">来源</th>
+                  <th className="py-1 pr-3 font-normal">录入人</th>
+                  <th className="py-1 pr-3 font-normal">批准人</th>
                   <th className="py-1 font-normal">操作</th>
                 </tr>
               </thead>
@@ -147,6 +147,7 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
                         open={expanded.has(key)}
                         pending={pending === key}
                         locked={pending !== null}
+                        mayWrite={mayWrite}
                         onToggle={() => toggle(key)}
                         onAct={(action) => void act(row, action)}
                       />
@@ -166,6 +167,9 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
                                 <ReloginButton size="inline" />
                               ) : null}
                             </p>
+                            {note.tone === 'answered' || note.tone === 'problem' ? (
+                              <TechnicalDetails rows={note.technical} className="mt-1" />
+                            ) : null}
                           </td>
                         </tr>
                       ) : null}
@@ -190,6 +194,7 @@ function DraftRow({
   open,
   pending,
   locked,
+  mayWrite,
   onToggle,
   onAct,
 }: {
@@ -197,6 +202,7 @@ function DraftRow({
   open: boolean;
   pending: boolean;
   locked: boolean;
+  mayWrite: boolean;
   onToggle: () => void;
   onAct: (action: PriceCardDraftAction) => void;
 }) {
@@ -205,33 +211,29 @@ function DraftRow({
   return (
     <tr className="border-t border-idpxyz-border align-top">
       <td className="py-1.5 pr-3">
-        <div className="font-mono text-idpxyz-accent">{row.plan.id}</div>
-        <div className="font-mono text-[11px] text-idpxyz-textMuted">{row.plan.version}</div>
+        <div className="font-mono text-idpxyz-textBright">{row.plan.id}</div>
+        <div className="text-[11px] text-idpxyz-textMuted">版本 {row.plan.version}</div>
       </td>
       <td className="py-1.5 pr-3">
-        <div>{labelOf(priceCardDraftStatusLabels, row.status)}</div>
-        <div className="font-mono text-[11px] text-idpxyz-textMuted">{row.status}</div>
+        {/* 草稿四态的词取 priceCardDraftStatusLabels 那一份（编辑器预览也用它），色调按词反查词典。 */}
+        <StatusPill label={priceCardDraftStatusLabels[row.status] ?? row.status} code={row.status} />
         {row.publishedAt ? (
           <div className="text-[11px] text-idpxyz-textMuted">发布于 {formatInstant(row.publishedAt)}</div>
         ) : null}
       </td>
       <td className="py-1.5 pr-3">
-        <div>{row.sourceOrigin === 'FORM' ? '页面表单' : row.sourceFile.name}</div>
-        <div className="font-mono text-[11px] text-idpxyz-textMuted" title={row.sourceFile.sha256}>
-          {row.sourceFile.sha256.slice(0, 12)}…
-        </div>
-      </td>
-      <td className="py-1.5 pr-3">
-        {row.content ? (
-          <>
-            <div className="font-mono" title={row.content.contentDigest}>
-              {row.content.contentDigest.slice(0, 16)}…
-            </div>
-            <div className="font-mono text-[11px] text-idpxyz-textMuted">{row.content.canonicalization}</div>
-          </>
-        ) : (
-          <span className="text-idpxyz-textMuted">—（没过构造门，没有摘要）</span>
-        )}
+        <div>{row.sourceOrigin === 'FORM' ? '页面新建' : row.sourceFile.name}</div>
+        {/* 源文件指纹与内容摘要是对账用的比对串；没过检查的草稿没有内容摘要，那一行就不出。 */}
+        <TechnicalDetails
+          className="mt-0.5 max-w-xs"
+          rows={technicalRows([
+            { label: '文件名', value: row.sourceFile.name },
+            { label: '文件指纹', value: row.sourceFile.sha256 },
+            { label: '内容摘要', value: row.content?.contentDigest },
+            { label: '规范化版本', value: row.content?.canonicalization },
+            { label: '状态码', value: row.status },
+          ])}
+        />
       </td>
       <td className="py-1.5 pr-3">
         <div><PrincipalRef value={row.submitter} /></div>
@@ -246,16 +248,16 @@ function DraftRow({
             ) : null}
           </>
         ) : (
-          <span className="text-idpxyz-textMuted">—（未批准）</span>
+          <span className="text-idpxyz-textMuted">未批准</span>
         )}
       </td>
       <td className="py-1.5">
         {row.status === 'DRAFT' ? (
           <button type="button" className="text-idpxyz-accent underline" onClick={onToggle}>
-            {open ? '收起逐格问题' : `展开逐格问题（${problems.length} 条）`}
+            {open ? '收起问题' : `查看问题（${problems.length} 条）`}
           </button>
         ) : null}
-        {action ? (
+        {action && mayWrite ? (
           <Button size="sm" onClick={() => onAct(action)} disabled={locked}>
             {pending ? `${priceCardDraftActionLabels[action]}中…` : priceCardDraftActionLabels[action]}
           </Button>

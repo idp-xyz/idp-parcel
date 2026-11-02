@@ -2,6 +2,7 @@
 
 import type { CommercialPolicyKind, CommercialRegistrationKind } from './api';
 import { labelFor } from '../../vocabulary/status';
+import { priceDirectionLabels } from '../../vocabulary/price-card';
 
 // 服务形态封闭集今天两格。LABEL_CHANNEL_SERVICE 此前在这里列过又被撤下,因为那时服务端
 // 产生不出来:domain.ServiceProductForm 只认 NETWORK_SERVICE,填进快照会被受理门拒绝。
@@ -62,12 +63,12 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
  * 会被读成这一册自己的版本。
  */
 export const policyKindSources: Record<CommercialPolicyKind, string> = {
-  ACCEPTANCE_RULE_PACKAGE: '接单规则包的各个版本及其正文：组装规则、允许的收寄来源、收寄资格与终局规则。',
+  ACCEPTANCE_RULE_PACKAGE: '接单时按哪些规则检查一票货：要核对的资料、允许从哪里收寄、收寄资格，以及怎样算服务完结。',
   PRE_ACCEPTANCE_CONTROL:
     '每份客户合同对「接受前要不要做财务控制」的声明。它随合同一起发布，「版本」列是所属合同的版本；控制具体怎么做，看「接受前财务控制策略」册。',
   PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY:
     '接受前财务控制策略的各个版本：要执行哪些控制项、怎样算共同通过。合同上「明确不做控制」的声明不在这里，看「接受前财务控制」册。',
-  PRICE_POLICY: '商业价格政策：每个价格方向绑定哪一个定价方案。它随价格规则的版本一起发布。',
+  PRICE_POLICY: '售价、成本各用哪一张价卡，以及含税与否、汇率怎么取。',
   SETTLEMENT_POLICY: '结算政策的各个版本及其正文。',
   AS_OF_POLICY:
     '接受判断时点选择策略：每类接受判断按哪个时点取依据。它随接单规则包一起发布，「版本」列是所属规则包的版本。',
@@ -77,13 +78,9 @@ export const policyKindSources: Record<CommercialPolicyKind, string> = {
     '客户服务规则的各个版本：适用于哪个服务产品或客户合同、责任方、索赔期限与最低材料。索赔类型、材料与起算事件的解释在可见性与异常那边，这里照原词显示。',
 };
 
-// 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
-// 概念不因出现在不同页而换名。
-export const commercialDirectionLabels: Record<string, string> = {
-  BUY: '买价',
-  SELL: '卖价',
-  INTERNAL: '内部',
-};
+// 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向概念不因出现在不同页而换名,
+// 所以直接取用语词典那一份(vocabulary/price-card 的 priceDirectionLabels),不另抄。
+export const commercialDirectionLabels: Readonly<Record<string, string>> = priceDirectionLabels;
 
 // 税务口径封闭三格（domain TaxDisposition，CONTEXT「必须声明含税、未税或税务不适用」）。没有第四格：缺席是「未声明」，
 // 由服务端点名，不折成不适用。

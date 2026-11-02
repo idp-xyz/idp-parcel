@@ -198,17 +198,17 @@ function ReferencesEditor({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className={fieldLabel}>指名引用（被引对象类别 → 对象标识；可不填）</span>
+        <span className={fieldLabel}>关联的其他对象（可不填）</span>
         <Button variant="outline" disabled={locked} onClick={onAdd}>
           加一行
         </Button>
       </div>
       {/* 类别是不是集合内的词由预览逐格点名；被引对象发布了没有由发布那一步答（发布未决）。 */}
       <p className="text-[11px] text-idpxyz-textMuted mb-2">
-        左格填被引对象的类别（原词），右格填该对象的标识；两格都空的行不会提交。类别填错时预览会指出；被引对象还没发布时，这一版暂时发布不了，先发布被引对象再来。
+        左格填对象的类别，右格填它的编号；两格都空的行不会提交。类别填错时预览会指出；关联的对象还没发布时，这一版暂时发布不了，先发布它再来。
       </p>
       {rows.length === 0 ? (
-        <p className="text-[11px] text-idpxyz-textMuted">暂无引用。服务产品版本可以不指名任何对象。</p>
+        <p className="text-[11px] text-idpxyz-textMuted">没有关联对象。服务产品可以不关联任何对象。</p>
       ) : (
         <div className="flex flex-col gap-2">
           {rows.map((row, index) => (
@@ -218,14 +218,14 @@ function ReferencesEditor({
                   value={row.kind}
                   readOnly={locked}
                   className="font-mono text-[12px]"
-                  placeholder="被引对象类别（原词）"
+                  placeholder="对象类别"
                   onChange={(event) => onChange(index, { kind: event.target.value })}
                 />
                 <Input
                   value={row.objectId}
                   readOnly={locked}
                   className="font-mono text-[12px]"
-                  placeholder="对象标识"
+                  placeholder="对象编号"
                   onChange={(event) => onChange(index, { objectId: event.target.value })}
                 />
                 <Button variant="outline" disabled={locked} onClick={() => onRemove(index)}>

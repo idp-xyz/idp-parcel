@@ -139,10 +139,10 @@ function ProductChannelMappingTable() {
   const selected = (revisionNo !== null ? chain?.find((row) => row.revision === revisionNo) : null) ?? latest;
   const historyNote =
     revisions?.mappingId !== selectedId
-      ? '正在读取历史修订…'
+      ? '正在读取变更记录…'
       : chain === null
-        ? '没能读到历史修订，稍后重新打开这条映射再看。'
-        : '这个映射还没有历史修订。';
+        ? '没能读到变更记录，稍后重新打开这个产品的渠道设置再看。'
+        : '这个产品的渠道设置还没有改过。';
 
   return (
     <>

@@ -6,6 +6,7 @@ import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
+import { httpRows, type TechnicalRow } from '../../components/TechnicalDetails';
 import {
   priceCardDraftViewsPath,
   registrationOutcomeLabels,
@@ -19,17 +20,17 @@ import {
 import { labelOf, problemNote } from './presentation';
 
 export const priceCardPreviewOutcomeLabels: Record<string, string> = {
-  VALIDATED: '已校验（带内容摘要与方案概要；这一步不写草稿册）',
-  HAS_PROBLEMS: '有逐格问题（没过构造门）',
-  NOT_ACCEPTED: '未受理（连方案身份都读不出来，不落行）',
+  VALIDATED: '检查通过，可以存为草稿',
+  HAS_PROBLEMS: '有问题：按下表逐格改好，再重新上传',
+  NOT_ACCEPTED: '读不出这是哪张价卡（方案编号或版本没填），请用模板重新填写',
 };
 
 export const priceCardDraftOutcomeLabels: Record<string, string> = {
-  DRAFT_SUBMITTED: '已存为草稿（本次写下了那一行）',
-  DRAFT_REPLAYED: '同版同内容重放（册上那一行没有被换掉）',
-  DRAFT_REVISED: '已批准之前换了内容，替换了那一行',
-  CONTENT_FIXED: '已批准之后内容已固定（这次没有改册）',
-  NOT_ACCEPTED: '未受理（没有行可落）',
+  DRAFT_SUBMITTED: '已存为草稿，到「草稿与审批」签里批准、发布',
+  DRAFT_REPLAYED: '同一版、同样的内容早已存过，这次没有变化',
+  DRAFT_REVISED: '这一版还没批准，已换成这次上传的内容',
+  CONTENT_FIXED: '这一版已经批准，内容不能再改；要改请换一个新版本号',
+  NOT_ACCEPTED: '没能存为草稿，请先按预览里的问题改好',
 };
 
 export const priceCardDraftStatusLabels: Record<string, string> = {
@@ -69,24 +70,24 @@ export function sortPriceCardProblems(problems: readonly PriceCardProblem[]): Pr
  * 审批职责规则没登记、主体相同、授予不足各有各的续办，折成一句「批准失败」会让人以为重试有用。
  */
 export const priceCardApprovalOutcomeLabels: Record<string, string> = {
-  DRAFT_APPROVED: '已批准（记下了批准者与批准时刻，可以发布了）',
-  NOT_CONFIGURED: '审批职责规则未配置：本租户还没登记价卡发布审批职责规则，批准不放行，也不默认单人或双人',
-  NEEDS_ANOTHER_APPROVER: '主体相同：审批职责规则要求批准者不是录入者，换一位批准者',
-  APPROVER_NOT_QUALIFIED: '授予不足：批准者不持审批职责规则要求的那一格授予',
-  DRAFT_NOT_VALIDATED: '这一版还是草稿（没过构造门），不能批准；改好模板重新导入',
-  DRAFT_ALREADY_APPROVED: '这一版已经批准过，不重批',
-  DRAFT_ALREADY_PUBLISHED: '这一版已经发布，不再批准',
-  DRAFT_CHANGED: '批准那一刻这一行刚被替换（有人重新导入），这次没有批准；刷新后按册上那一行再看',
-  DRAFT_NOT_FOUND: '册上没有这一版草稿',
+  DRAFT_APPROVED: '已批准，可以发布了',
+  NOT_CONFIGURED: '审批规则未配置：贵公司还没设置价卡由谁批准，暂时不能批准；请管理员先设置审批规则',
+  NEEDS_ANOTHER_APPROVER: '录入人不能自己批准：按贵公司的审批规则，请换一位同事批准',
+  APPROVER_NOT_QUALIFIED: '没有批准权限：请让有价卡审批权限的同事批准',
+  DRAFT_NOT_VALIDATED: '这一版检查没通过，不能批准；改好后重新导入',
+  DRAFT_ALREADY_APPROVED: '这一版已经批准过了',
+  DRAFT_ALREADY_PUBLISHED: '这一版已经发布了',
+  DRAFT_CHANGED: '批准时这一版刚被人重新导入替换，这次没有批准；刷新后再看',
+  DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
 };
 
 /** 发布口的答案代数（`application.PublishPriceCardDraftOutcome` 原名）。登记那一格另按登记答案代数呈现。 */
 export const priceCardPublicationOutcomeLabels: Record<string, string> = {
-  DRAFT_PUBLISHED: '已发布（登记落定，草稿转已发布）',
-  PUBLICATION_NOT_LANDED: '登记没有落定，草稿留在已批准',
+  DRAFT_PUBLISHED: '已发布，「全部价卡」里可以看到了',
+  PUBLICATION_NOT_LANDED: '没有发布成功，草稿仍是已批准',
   DRAFT_NOT_APPROVED: '这一版还没批准，不能发布',
-  DRAFT_ALREADY_PUBLISHED: '这一版已经发布，不重交登记',
-  DRAFT_NOT_FOUND: '册上没有这一版草稿',
+  DRAFT_ALREADY_PUBLISHED: '这一版已经发布了',
+  DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
 };
 
 export type PriceCardDraftAction = 'approve' | 'publish';
@@ -130,14 +131,15 @@ export function withProgressedDraft(
 
 /** 一次动作的答复。`refused` 多带那一格，页面据它在需要登录时接一颗重新登录。 */
 export type DraftActionNote =
-  | { tone: 'answered'; text: string }
+  | { tone: 'answered'; text: string; technical: TechnicalRow[] }
   | { tone: 'unconfigured'; text: string }
   | { tone: 'refused'; kind: OperatorRefusalKind; text: string }
-  | { tone: 'problem'; text: string };
+  | { tone: 'problem'; text: string; technical: TechnicalRow[] };
 
 /**
- * 答复逐格如实呈现：业务答案带状态码、outcome 原名与中文，发布交给了登记时另接登记那一格的原名与中文；未收录的原名
- * 原样过线，不归进既有说法。渠道那一格与调用方问题、未形成答案、传输失败各说各的，不折成一句「失败」。
+ * 答复逐格如实呈现：正文只说中文，发布交给了登记时另接登记那一格的中文；状态码与 outcome 原名进技术详情（改版第一步：
+ * 英文枚举不上屏）。未收录的原名原样过线，不归进既有说法。渠道那一格与调用方问题、未形成答案、传输失败各说各的，
+ * 不折成一句「失败」。
  */
 export function draftActionNoteOf(
   action: PriceCardDraftAction,
@@ -148,18 +150,22 @@ export function draftActionNoteOf(
     case 'outcome': {
       const labels = action === 'approve' ? priceCardApprovalOutcomeLabels : priceCardPublicationOutcomeLabels;
       const { outcome, registration } = answer.body;
-      const head = `${verb}（HTTP ${answer.status}）：${outcome} —— ${labelOf(labels, outcome)}`;
+      const head = `${verb}：${labelOf(labels, outcome)}`;
       return {
         tone: 'answered',
-        text: registration
-          ? `${head}；登记：${registration} —— ${labelOf(registrationOutcomeLabels, registration)}`
-          : head,
+        text: registration ? `${head}；登记：${labelOf(registrationOutcomeLabels, registration)}` : head,
+        technical: [
+          { label: 'HTTP 状态', value: String(answer.status) },
+          { label: '结果码', value: outcome },
+          ...(registration ? [{ label: '登记结果码', value: registration }] : []),
+        ],
       };
     }
     case 'unconfigured':
       return {
         tone: 'unconfigured',
-        text: `${verb}：接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。这一口挂的是操作者渠道，部署没设发行方参数时如实拒绝；重试不会改变结果。`,
+        // 渠道未配置是诚实答案（ADR-0055）：部署没设发行方参数时如实拒绝，重试不会变。
+        text: `${verb}：访问通道尚未配置（403），这次没有${verb}；重试也不会变，请管理员先配置访问通道。`,
       };
     case 'loginRequired':
     case 'notGranted':
@@ -167,15 +173,17 @@ export function draftActionNoteOf(
     case 'callerProblem':
       return {
         tone: 'problem',
-        text: `${verb}被拒（HTTP ${answer.status}）：${problemNote(answer.code)}${answer.detail ? ` 原因：${answer.detail}` : ''}`,
+        text: `没能${verb}：${problemNote(answer.code)}${answer.detail ? ` 原因：${answer.detail}` : ''}`,
+        technical: httpRows(answer.status, answer.code),
       };
     case 'noAnswer':
       return {
         tone: 'problem',
-        text: `${verb}未形成答案（HTTP ${answer.status}）：${problemNote(answer.code)}；${action === 'publish' ? '登记与否未知，' : ''}可稍后重试。`,
+        text: `这次${verb}没处理完${action === 'publish' ? '，发没发布成功还不确定' : ''}：${problemNote(answer.code)}`,
+        technical: httpRows(answer.status, answer.code),
       };
     case 'transport':
-      return { tone: 'problem', text: `${verb}的请求未到达 parcel-api：${answer.message}` };
+      return { tone: 'problem', text: `连不上系统，没能${verb}（${answer.message}）；检查网络后重试。`, technical: [] };
   }
 }
 
@@ -184,8 +192,8 @@ export function draftActionNoteOf(
  * 没出问题的读口。没收录的码照目录页原样。
  */
 const draftRegisterNoAnswerNotes: Record<string, string> = {
-  NO_ANSWER_FORMED: '草稿册读不回（含某一行过不了重建门），这次没有形成答案；这不是「册上没有草稿」，可稍后重试。',
-  INTAKE_FAILED: '接入面未能形成授权查询作用域；服务端没有读草稿册。',
+  NO_ANSWER_FORMED: '草稿读不出来，这不代表没有草稿；请稍后重试。',
+  INTAKE_FAILED: '系统这次没能处理请求，没有读草稿；请稍后重试。',
 };
 
 /**
@@ -201,9 +209,8 @@ export function draftListViewState(
   const state = catalogueViewState(answer, answer?.kind === 'outcome' ? answer.body.drafts.length : 0, retry, {
     module,
     endpoint: `GET ${priceCardDraftViewsPath}`,
-    emptyTitle: '当前租户的价卡草稿册是空的',
-    emptyDescription:
-      '空册是正常业务答案（PRICE_CARD_DRAFTS_LISTED），不是故障；在「导入价卡」签存为草稿之后，这里即可见。',
+    emptyTitle: '还没有价卡草稿',
+    emptyDescription: '在「新建价卡」或「导入价卡」签里存为草稿后，会出现在这里等批准与发布。',
   });
   if (answer?.kind === 'noAnswer' && state.kind === 'error') {
     const description = draftRegisterNoAnswerNotes[answer.code];
@@ -212,14 +219,13 @@ export function draftListViewState(
   if (state.kind !== 'unconfigured') return state;
   return {
     kind: 'unconfigured',
-    title: '接入渠道未配置',
-    description:
-      `草稿查阅读口（GET ${priceCardDraftViewsPath}）挂的是操作者渠道，部署没设发行方参数时如实答 403 ` +
-      'ACCESS_CHANNEL_NOT_CONFIGURED。这不是「册上没有草稿」；页面不拿演示数据顶替。',
+    title: '访问通道尚未配置',
+    description: '草稿暂时读不到。这不代表没有草稿；页面不会用演示数据代替。',
     facts: {
       owner: module.owner,
       source: module.source,
-      unlock: '部署设好操作者渠道的发行方参数即放行；导入、批准、发布各口同属这一族，同时放行。',
+      endpoint: `GET ${priceCardDraftViewsPath}`,
+      unlock: '请管理员配置访问通道；配置后导入、批准、发布一起可用。',
     },
   };
 }

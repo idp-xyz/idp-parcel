@@ -118,7 +118,7 @@ export function StepPreview({
   return (
     <div className="space-y-5">
       <p className="text-[12px] text-idpxyz-text">
-        预览会把这张价卡完整检查一遍，但不会保存。通过之后再「存为草稿」，草稿要到「草稿」签批准、发布后才生效。
+        预览会把这张价卡完整检查一遍，但不会保存。通过之后再「存为草稿」，草稿要到「草稿与审批」签批准、发布后才生效。
       </p>
 
       {localIssues.length > 0 ? (

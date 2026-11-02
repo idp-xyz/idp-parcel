@@ -30,6 +30,7 @@ import {
   taxDispositionLabels,
 } from './presentation';
 import type { RowRefs } from './ref-links';
+import { judgmentTypeLabels, ruleCategoryLabels } from './acceptance-rule-package-form';
 import type { VersionFacts } from './version-groups';
 
 /**
@@ -74,10 +75,10 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('contract', '客户合同', true),
     col('legalEntity', '公司主体', true),
     col('scope', '适用范围', true),
-    col('rules', '组装规则(类别:引用)', true),
+    col('rules', '组装规则', true),
     col('allowedIntakeSources', '允许收寄来源'),
-    col('intakeQualifications', '收寄硬资格', true),
-    col('finalRules', '终局规则(结果:分类)', true),
+    col('intakeQualifications', '收寄资格', true),
+    col('finalRules', '完结规则', true),
     col('effective', '有效期', true),
     col('declaredAt', '声明时间', true),
   ],
@@ -89,12 +90,12 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
   ],
   PRICE_POLICY: [
     col('identity', '政策', true),
-    col('direction', '政策方向'),
+    col('direction', '方向'),
     col('planRef', '价格表', true),
-    col('planDirection', '方案方向'),
+    col('planDirection', '价格表方向'),
     col('bindingConversion', '绑定转换', true),
     col('policyScope', '适用范围', true),
-    col('caliber', '计价口径（税务;汇率）', true),
+    col('caliber', '计价口径', true),
     col('effective', '有效期', true),
     col('registeredAt', '登记时间', true),
   ],
@@ -111,9 +112,9 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
   ],
   AS_OF_POLICY: [
     col('package', '规则包', true),
-    col('judgmentType', '判断类型', true),
-    col('semanticsRef', '时点语义引用', true),
-    col('policyVersion', '时点政策版本', true),
+    col('judgmentType', '判断类型'),
+    col('semanticsRef', '判断时点规则', true),
+    col('policyVersion', '规则版本', true),
     col('declaredAt', '声明时间', true),
   ],
   // 两个请求方各占一列,不并成「取消授权」一栏:「客户可取消」与「运营可取消」是两条
@@ -147,7 +148,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('status', '状态'),
     col('contentRegistered', '正文'),
     col('jointPassCondition', '共同通过条件'),
-    col('controls', '控制项(顺序. 种类@费用范围 → 失败处置;责任)', true),
+    col('controls', '控制项', true),
     col('effective', '有效期', true),
     col('publishedAt', '发布时间', true),
   ],
@@ -164,8 +165,8 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('appliesTo', '适用对象', true),
     col('responsibleParty', '责任方', true),
     col('ruleScope', '规则范围', true),
-    col('claimDeadlines', '索赔期限(种类 · 起算事件 · 天数 · 日历)', true),
-    col('minimumMaterials', '最低材料(索赔类型:材料清单)', true),
+    col('claimDeadlines', '索赔期限', true),
+    col('minimumMaterials', '最低材料', true),
     col('effective', '有效期', true),
     col('publishedAt', '发布时间', true),
   ],
@@ -243,8 +244,8 @@ export function serviceRuleClaimDeadlinesCell(record: CustomerServiceRuleRecord)
 }
 
 function serviceRuleEmptyTableCell(record: CustomerServiceRuleRecord): string {
-  if (record.content?.customerContract !== undefined) return '无行·继承产品版';
-  return '无行·索赔答未登记';
+  if (record.content?.customerContract !== undefined) return '沿用产品上的规定';
+  return '未登记';
 }
 
 export function serviceRuleMinimumMaterialsCell(record: CustomerServiceRuleRecord): string {
@@ -325,7 +326,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           legalEntity: record.legalEntity,
           scope: record.scope,
           rules: record.rules
-            .map((rule) => `${rule.category}:${rule.reference}`)
+            .map((rule) => `${labelOf(ruleCategoryLabels, rule.category)}：${rule.reference}`)
             .join('、'),
           allowedIntakeSources: declaredList(
             record.intakeQualificationDeclared,
@@ -335,12 +336,12 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           intakeQualifications: declaredList(
             record.intakeQualificationDeclared,
             record.intakeQualificationRefs,
-            '已声明,无硬资格',
+            '不设收寄资格',
           ),
           finalRules: declaredList(
             record.finalRulesDeclared,
             record.finalRules.map(
-              (final) => `${labelOf(finalOutcomeLabels, final.outcome)}:${final.finalKind}`,
+              (final) => `${labelOf(finalOutcomeLabels, final.outcome)}：${final.finalKind}`,
             ),
             '已声明,正文为空',
           ),
@@ -410,7 +411,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
         version: { objectId: record.rulePackageObjectId, version: record.rulePackageVersion },
         values: {
           package: `${record.rulePackageObjectId}@${record.rulePackageVersion}`,
-          judgmentType: record.judgmentType,
+          judgmentType: labelOf(judgmentTypeLabels, record.judgmentType),
           semanticsRef: record.semanticsRef,
           policyVersion: record.policyVersion,
           declaredAt: formatInstant(record.declaredAt),

@@ -10,7 +10,8 @@ import {
 import { coverageNote, coverageRowOf, type CoverageRow } from './coverage-rows';
 import { sameSeries, type SeriesKey } from './catalogue-filter';
 import { pendingEvaluationsCellOf, pendingEvaluationsNote } from './pending-evaluations';
-import { labelOf, seriesKindLabels } from './presentation';
+import { labelOf, reviewDecisionLabels, seriesKindLabels } from './presentation';
+import { formatInstant } from '../moment';
 
 interface CoverageSummaryBarProps {
   /**
@@ -74,10 +75,10 @@ export function CoverageSummaryBar({
     return (
       <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
         {answer.kind === 'unconfigured'
-          ? '覆盖摘要未取到：接入渠道未配置（403）。这是诚实答案不是「本册无缺口」——今天没有问到。'
+          ? '各项数值还能用多久：没查到，访问通道尚未配置（403）。这是今天没问到，不等于都够用。'
           : isOperatorRefusal(answer)
-            ? `覆盖摘要未取到：${accessRefusalHeadline(answer.kind)}。这是诚实答案不是「本册无缺口」——今天没有问到。`
-            : '覆盖摘要未取到；下方目录仍如实呈现各版本。'}
+            ? `各项数值还能用多久：没查到，${accessRefusalHeadline(answer.kind)}。这是今天没问到，不等于都够用。`
+            : '各项数值还能用多久：没查到，稍后刷新再看；下方列表照常显示各版本。'}
         <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
     );
@@ -88,7 +89,7 @@ export function CoverageSummaryBar({
   if (rows.length === 0) {
     return (
       <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
-        当前租户内尚无参考序列，覆盖摘要为空——空是正常业务答案，不是故障。
+        还没有登记任何汇率或燃油费率；在「登记数值」签里登记第一条。
         <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
     );
@@ -98,8 +99,8 @@ export function CoverageSummaryBar({
     <div className="shrink-0 px-4 pt-3">
       <div className="flex items-baseline justify-between">
         <span className="text-xs text-idpxyz-textMuted">
-          覆盖地平线 —— 一条序列一格
-          {onSelectSeries ? (focusedSeries ? '；下方目录只看所选' : '；点一格只看它') : null}
+          各项数值还能用多久 —— 一项一格
+          {onSelectSeries ? (focusedSeries ? '；下方列表只看所选' : '；点一格只看它的各版本') : null}
           {onSelectSeries && focusedSeries ? (
             <button
               type="button"
@@ -110,8 +111,8 @@ export function CoverageSummaryBar({
             </button>
           ) : null}
         </span>
-        <span className="font-mono text-[11px] text-idpxyz-textMuted">
-          在用判定基准时刻 asOf {asOf}
+        <span className="text-[11px] text-idpxyz-textMuted">
+          截至 <span className="font-mono">{formatInstant(asOf)}</span>
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -134,8 +135,7 @@ export function CoverageSummaryBar({
       </div>
       <PendingEvaluationsCell answer={pendingAnswer} />
       <p className="mt-2 text-[11px] text-idpxyz-textMuted">
-        告警阈值未配置（实例半边）：本条只把数摆出来，不判紧急、不标色——「剩余低于几天算
-        告警」属租户治理参数，产品不替它定一个默认值。
+        提醒天数未配置：还剩几天该提醒补登下一期，贵公司还没设置，所以这里只列天数、不标颜色。
       </p>
     </div>
   );
@@ -169,7 +169,7 @@ function PendingEvaluationsCell({
         </span>
       ) : null}
       {cell.state === 'counted' ? (
-        <span className="ml-1 font-mono">（asOf {cell.asOf}；只计 ADR-0105 子表落地后写入的评价，不回填）</span>
+        <span className="ml-1">（截至 <span className="font-mono">{formatInstant(cell.asOf)}</span>；更早的计费不在这个数里）</span>
       ) : null}
     </div>
   );
@@ -188,26 +188,26 @@ function CoverageChip({
     <>
       <div className="font-mono text-[12px] text-idpxyz-accent">{row.seriesId}</div>
       <div className="text-[11px] text-idpxyz-textMuted">
-        {labelOf(seriesKindLabels, row.kind)} · 已登记 {row.registeredVersionCount} 版
+        {labelOf(seriesKindLabels, row.kind)} · 共 {row.registeredVersionCount} 个版本
       </div>
       <div className="mt-1">
         {coverageNote(row.coverage)}
         {row.coverage.inForceVersion ? (
           <span className="ml-1 font-mono text-[11px] text-idpxyz-textMuted">
-            （{row.coverage.inForceVersion}）
+            （在用 {row.coverage.inForceVersion}）
           </span>
         ) : null}
       </div>
       {row.pending.attention ? (
         <div className="mt-1 text-[11px] text-idpxyz-textMuted">
           {/* 两格分列而不是相加：一格等复核人、一格等登记方更正。 */}
-          待复核 {row.pending.unreviewed} 版 · 已退回待更正 {row.pending.returned} 版
+          待复核 {row.pending.unreviewed} 个版本 · 已退回待更正 {row.pending.returned} 个版本
         </div>
       ) : null}
       <div className="mt-1 text-[11px] text-idpxyz-textMuted">
         {row.lastReview
-          ? `最近复核 ${row.lastReview.at}（${row.lastReview.decision}）`
-          : '尚无复核记录'}
+          ? `最近复核 ${formatInstant(row.lastReview.at)}（${labelOf(reviewDecisionLabels, row.lastReview.decision)}）`
+          : '还没有人复核过'}
       </div>
     </>
   );
@@ -223,7 +223,7 @@ function CoverageChip({
       className={frame}
       onClick={onSelect}
       aria-pressed={focused}
-      title={focused ? '取消只看这条序列' : '在下方目录中只看这条序列'}
+      title={focused ? '取消只看这一项' : '在下方列表里只看这一项'}
     >
       {body}
     </button>
