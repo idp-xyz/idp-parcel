@@ -21,13 +21,17 @@ import {
 } from './api';
 import { keywordPlaceholders, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { validityOf, versionWord } from './network-rows';
+import { placeLabel, type PlaceNameIndex } from './place-names';
+import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
 
 const info = moduleInfoById['service-areas'];
 
 // 工作台形态：行首是区域编码（第几版挂在下面），状态胶囊是此刻在不在期，覆盖一格说国家与邮编段；揽收 / 派送网点、有效期
 // 与版本号进右栏。覆盖缺席是这一版没登覆盖（老版本或只登了骨架），如实说「没登覆盖」，不当成「覆盖全部」。
-const nodesText = (nodes: string[] | undefined) => (nodes && nodes.length > 0 ? nodes.join('、') : '—');
+// 揽收 / 派送网点按此刻生效那一版查名（use-place-names），没有名称的显编码；编码原值在右栏技术详情。
+const nodesText = (nodes: string[] | undefined, names: PlaceNameIndex) =>
+  nodes && nodes.length > 0 ? nodes.map((node) => placeLabel(names, node)).join('、') : '—';
 const periodText = (row: NetworkVersionRecord) => (row.effectiveFrom ? formatRange(row.effectiveFrom, row.effectiveTo) : '—');
 const prefixText = (row: NetworkVersionRecord) =>
   row.coverage?.postalPrefixes && row.coverage.postalPrefixes.length > 0 ? `邮编以 ${row.coverage.postalPrefixes.join('、')} 开头` : '全境';
@@ -47,7 +51,7 @@ const coverageCell = (row: NetworkVersionRecord) =>
     <span className="text-idpxyz-breadcrumb">没登覆盖</span>
   );
 
-const columns: WorkbenchColumn<NetworkVersionRecord>[] = [
+const columnsOf = (names: PlaceNameIndex): WorkbenchColumn<NetworkVersionRecord>[] => [
   {
     key: 'area',
     header: '服务区域',
@@ -61,11 +65,11 @@ const columns: WorkbenchColumn<NetworkVersionRecord>[] = [
   },
   { key: 'status', header: '状态', render: (row) => { const status = statusOf(row); return status ? <RowStatusPill status={status} /> : '—'; } },
   { key: 'coverage', header: '覆盖', render: coverageCell },
-  { key: 'origin', header: '揽收网点', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{nodesText(row.coverage?.originNodes)}</span> },
-  { key: 'destination', header: '派送网点', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{nodesText(row.coverage?.destinationNodes)}</span> },
+  { key: 'origin', header: '揽收网点', hideWhenDetailOpen: true, render: (row) => nodesText(row.coverage?.originNodes, names) },
+  { key: 'destination', header: '派送网点', hideWhenDetailOpen: true, render: (row) => nodesText(row.coverage?.destinationNodes, names) },
 ];
 
-function AreaDetail({ row, onClose }: { row: NetworkVersionRecord; onClose: () => void }) {
+function AreaDetail({ row, names, onClose }: { row: NetworkVersionRecord; names: PlaceNameIndex; onClose: () => void }) {
   return (
     <RecordDetailPanel
       title={row.code ?? '—'}
@@ -74,10 +78,12 @@ function AreaDetail({ row, onClose }: { row: NetworkVersionRecord; onClose: () =
       facts={[
         { label: '覆盖', value: coverageCell(row) },
         { label: '有效期', value: <span className="font-mono">{periodText(row)}</span> },
-        { label: '揽收网点', value: <span className="font-mono">{nodesText(row.coverage?.originNodes)}</span> },
-        { label: '派送网点', value: <span className="font-mono">{nodesText(row.coverage?.destinationNodes)}</span> },
+        { label: '揽收网点', value: nodesText(row.coverage?.originNodes, names) },
+        { label: '派送网点', value: nodesText(row.coverage?.destinationNodes, names) },
       ]}
       technical={techRows([
+        { label: '揽收网点编码', value: row.coverage?.originNodes?.join(', ') },
+        { label: '派送网点编码', value: row.coverage?.destinationNodes?.join(', ') },
         { label: '区域编码', value: row.code },
         { label: '版本号', value: String(row.version) },
         { label: '国家代码', value: row.coverage?.country },
@@ -99,6 +105,7 @@ function ServiceAreasTable() {
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
   const areas = answer?.kind === 'outcome' ? answer.body.versions : [];
   const mayWrite = useMayWriteRegistry();
+  const names = usePlaceNames();
 
   return (
     <RouteWorkbench<NetworkVersionRecord>
@@ -111,10 +118,10 @@ function ServiceAreasTable() {
       searchCells={() => []}
       search={{ value: keyword, onChange: setKeyword, pushedDown: true }}
       searchPlaceholder={keywordPlaceholders['service-area']}
-      columns={columns}
+      columns={columnsOf(names)}
       sortAccessors={{ area: { value: (row) => row.code } }}
       defaultSort={{ key: 'area', dir: 1 }}
-      renderDetail={(row, close) => <AreaDetail row={row} onClose={close} />}
+      renderDetail={(row, close) => <AreaDetail row={row} names={names} onClose={close} />}
       onRefresh={retry}
       pagination={pagination}
       viewState={catalogueViewState(answer, areas.length, retry, {
