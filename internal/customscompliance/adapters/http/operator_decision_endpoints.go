@@ -81,9 +81,10 @@ type caseEstablishmentResponse struct {
 	Detail                string   `json:"detail,omitempty"`
 }
 
-// numberingRuleCollisionDetail 是撞号那一格的人话：指到规则册，因为重试与改请求都换不来号，要换的是格式。
-const numberingRuleCollisionDetail = "按此刻生效的关务案件编号规则（CUSTOMS_CASE）连续取到的号都已被用过，这一次没有建立清关单。" +
-	"请到「设置 → 单据编号」查看关务案件的规则，登记一版不与已用号段重叠的格式后再建。"
+// numberingRuleCollisionDetail 是撞号那一格的人话：指到规则册，因为重试与改请求都换不来号，要换的是格式。措辞照管理台
+// 单据编号词典 numberingCollisionNote 给清关单的那一句写，调接口的人与看页面的人读到同一个说法。
+const numberingRuleCollisionDetail = "这一次没有开立：按本公司的编号规则出的清关单号与已有的号重复了。" +
+	"请到「设置 → 单据编号」换一个不会与旧号重复的格式后再试。"
 
 // writeCaseEstablishment 逐名转写。未决也是形成了的答案（200 带原因）：规则未配置要租户去登，依赖读不动要运维去救，响应体
 // 里的原因分得开在等谁——与外部结果接收口同一写法。

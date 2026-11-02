@@ -65,3 +65,14 @@ Blocked by: [02](./02-platform-numbering-adoption-and-rule-register.md)
 - **共享面**：`apps/admin-web/src/vocabulary/status.ts` 末尾新开 `document-number-absence` 一册，04–09 若各自开了同名册，合并时取一份；`cmd/parcel-api` 只动了关务装配与 `endpoints_customs_decisions.go` 里取 `sources.documentNumbers` 的那一句，没动端点表行。
 - 规格表（`spec.md` 子票表）里本票的状态未改。
 
+
+## 评审修订（2026-11-02，作者，应协调方转来的评审意见，评审钉 `a47ebbdfd`）
+
+1. **并入 main**（`620847516`，含票 03 的设置页与单据编号词典）：`status.ts` 冲突两册都保留后，本票那一册随下一条删去。
+2. **统一用词典**：删去 `status.ts` 里本票开的 `document-number-absence` 册；清关单页的无号说法改取 `vocabulary/document-numbering.ts` 的 `documentNumberAbsenceNote`，「清关单号」与「清关单」取 `documentTypeWords.CUSTOMS_CASE` 的 `numberName` / `name`（列头、技术详情标签、搜索提示）。管理台没有建案表单，撞号说法不在页上出现；建案口答复的 `detail` 改照 `numberingCollisionNote` 给清关单的那一句写。
+3. **事务壳注释**（Standards）：`customsDecisionTransaction` 的注释只指 `EstablishCaseResult.RollsBack`，不再数、不再列它的回滚情形。
+4. **UC-CC-001**（Spec）：「结果语义契约」表加「编号规则撞号」一行，「已建立」「已有案件」两行补单据号或无号情形；「首发结果码」表加 `NUMBERING_RULE_COLLISION`，未形成案件那一行的未决原因补 `CASE_NUMBERING_UNAVAILABLE`。
+5. **非阻断**：「关闭核对」签的视图状态只由关闭目录读口定，清关单读口没答只让号那一格降级——显案件标识，技术详情注明读不到（`record-rows.ts` 的 `caseNumberReader`，有用例）；关闭核对与「报关批次」两签的技术详情都列清关单内部标识，无号的另按情形注明。
+6. **口径核对**：`documentNumber`、`documentNumberAbsence`（`ISSUED_BEFORE_NUMBERING` / `NUMBERING_TIME_ZONE_NOT_CONFIGURED`）、`NUMBERING_RULE_COLLISION` 与全批定的一致，未改。
+
+修订后自验见协调方汇报；这一轮没有重灌种子、没有重做浏览器核验（行为改动只在关闭核对签的降级与技术详情，由前端用例钉住）。

@@ -22,9 +22,8 @@ import (
 // 案件与它的单据号、发布意图，提交版本与首次尝试和发布意图各同笔落地。
 //
 // 编排答未决时整笔回滚、再交回那一份答复：未决可能是读口在事务里报了 SQL 错误，PostgreSQL 已把整笔置为 aborted，照常提交只
-// 换回提交错误；提交执行在单元行落下之后才停的那几格，回滚也只是让重试从头再来。建案另有两格要回滚：编号规则撞号，与取过号
-// 才发现同一范围已被并发建案抢先——取过的流水没随案件落下，只有回滚才释放（ADR-0355 决定三，见 EstablishCaseResult.RollsBack）。
-// 其余各格照常提交——它们要么本无写入，要么是编排已经说清的业务答案。编排交回 error 时整笔回滚、原样上抛。
+// 换回提交错误；提交执行在单元行落下之后才停的那几格，回滚也只是让重试从头再来。建案口的判据是 EstablishCaseResult.RollsBack，
+// 哪些答复要回滚由它定。其余各格照常提交——它们要么本无写入，要么是编排已经说清的业务答案。编排交回 error 时整笔回滚、原样上抛。
 type customsDecisionTransaction[C, R any] struct {
 	transactor bentoapp.Transactor
 	handle     func(context.Context, C) (R, error)

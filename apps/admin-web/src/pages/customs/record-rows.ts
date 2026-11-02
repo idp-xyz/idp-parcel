@@ -13,6 +13,7 @@ import type {
 } from './api';
 import { formatInstant } from '../catalogue-view';
 import { labelFor } from '../../vocabulary/status';
+import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 import type { RegisterRow } from './register-rows';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 
@@ -82,7 +83,29 @@ export function caseNumberOf(record: Pick<CustomsCaseBody, 'case' | 'documentNum
  */
 export function caseNumberNote(record: Pick<CustomsCaseBody, 'documentNumber' | 'documentNumberAbsence'>): string {
   if (record.documentNumber) return '';
-  return labelFor(record.documentNumberAbsence ?? 'ISSUED_BEFORE_NUMBERING', 'document-number-absence');
+  return documentNumberAbsenceNote(record.documentNumberAbsence ?? 'ISSUED_BEFORE_NUMBERING');
+}
+
+/** 引到清关单处的一格：显的号，与技术详情里关于这个号的那一句（没有可说的为空串）。 */
+export interface CaseNumberCell {
+  number: string;
+  note: string;
+}
+
+/**
+ * 别的读口（如关闭核对目录）只带案件标识时，按清关单读口那一页把它换成清关单号。cases 为 null 是清关单读口没答：
+ * 只让号这一格降级——显案件标识并注明读不到，不拖垮引用它的那一签。不在那一页里的案件照旧显标识，不另作说明。
+ */
+export function caseNumberReader(cases: CustomsCaseBody[] | null): (caseRef: string) => CaseNumberCell {
+  if (cases === null) {
+    const unreadable = `${documentTypeWords.CUSTOMS_CASE.numberName}读不到（清关单列表没有答复），暂显内部标识`;
+    return (caseRef) => ({ number: caseRef, note: unreadable });
+  }
+  const byCase = new Map(cases.map((record) => [record.case, record]));
+  return (caseRef) => {
+    const record = byCase.get(caseRef);
+    return record ? { number: caseNumberOf(record), note: caseNumberNote(record) } : { number: caseRef, note: '' };
+  };
 }
 
 export function caseRows(cases: CustomsCaseBody[], submissions: SubmissionVersionBody[] = [], results: ExternalResultBody[] = []): RegisterRow[] {
@@ -118,6 +141,8 @@ export function unitRows(cases: CustomsCaseBody[]): RegisterRow[] {
       values: {
         id: unit.unit,
         caseRef: caseNumberOf(record),
+        caseId: record.case,
+        caseNumberNote: caseNumberNote(record),
         jurisdiction: record.jurisdiction,
         direction: labelFor(record.direction),
         procedure: unit.procedure,

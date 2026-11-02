@@ -1,7 +1,17 @@
 import { test } from 'node:test';
-import { equal, ok } from 'node:assert/strict';
+import { deepEqual, equal, ok } from 'node:assert/strict';
 import type { ExternalResultBody, SubmissionVersionBody } from './api';
-import { caseNumberNote, caseNumberOf, caseProgress, caseRows, externalResultRows, judgementRows, submissionRows, unitRows } from './record-rows';
+import {
+  caseNumberNote,
+  caseNumberOf,
+  caseNumberReader,
+  caseProgress,
+  caseRows,
+  externalResultRows,
+  judgementRows,
+  submissionRows,
+  unitRows,
+} from './record-rows';
 import type { CustomsCaseBody } from './api';
 
 // 钉的是哪一格不得被译顺：分层外部结果各占各的列、缺层写「尚无结果」、归属不上的响应不被猜版本。
@@ -140,5 +150,23 @@ test('清关单号：有号显单据号，无号显案件标识并按情形注�
   equal(unconfiguredRow.values.number, 'CASE-2');
   equal(unconfiguredRow.values.numberNote, '开立时单据编号时区未配置，无单据号');
   equal(unitRows([numbered])[0].values.caseRef, 'CC-20261102-0001');
+  equal(unitRows([numbered])[0].values.caseId, 'CASE-1');
   equal(unitRows([unconfigured])[0].values.caseRef, 'CASE-2');
+  equal(unitRows([unconfigured])[0].values.caseNumberNote, '开立时单据编号时区未配置，无单据号');
+});
+
+// Covers: 关闭核对等只带案件标识的读口按清关单那一页换号；清关单读口没答只让号这一格降级（显标识并注明读不到），
+// 不在那一页里的案件照旧显标识。
+test('引到清关单处：按清关单列表换号，列表读不到只降级号这一格', () => {
+  const record: CustomsCaseBody = {
+    case: 'CASE-1', documentNumber: 'CC-20261102-0001', jurisdiction: 'J', direction: 'EXPORT', procedure: 'proc-1',
+    obligation: 'obl', establishedAt: at, parcels: [], roles: [], units: [],
+  };
+  const read = caseNumberReader([record, { ...record, case: 'CASE-2', documentNumber: undefined, documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }]);
+  deepEqual(read('CASE-1'), { number: 'CC-20261102-0001', note: '' });
+  deepEqual(read('CASE-2'), { number: 'CASE-2', note: '上线前开立，无单据号' });
+  deepEqual(read('CASE-ELSEWHERE'), { number: 'CASE-ELSEWHERE', note: '' });
+  const unreadable = caseNumberReader(null)('CASE-1');
+  equal(unreadable.number, 'CASE-1');
+  ok(unreadable.note.includes('读不到'), unreadable.note);
 });
