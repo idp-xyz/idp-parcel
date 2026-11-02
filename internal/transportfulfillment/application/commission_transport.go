@@ -377,7 +377,11 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 	}
 	switch saved {
 	case ports.CommissionSaved:
-		numbering, collided, err := handler.numberCommission(ctx, key)
+		numbering, collided, err := handler.issueDocumentNumber(ctx, key.TenantID, domain.TransportCommissionDocumentNumberType,
+			handler.deps.CommissionNumbers.CommissionDocumentNumberUsed,
+			func(ctx context.Context, numbering domain.DocumentNumbering) error {
+				return handler.deps.CommissionNumbers.RecordCommissionDocumentNumber(ctx, key, numbering)
+			})
 		if err != nil {
 			return CommissionResult{}, err
 		}
@@ -495,7 +499,11 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	}
 	switch saved {
 	case ports.BookingSaved:
-		numbering, collided, err := handler.numberBooking(ctx, key)
+		numbering, collided, err := handler.issueDocumentNumber(ctx, key.TenantID, domain.BookingDocumentNumberType,
+			handler.deps.BookingNumbers.BookingDocumentNumberUsed,
+			func(ctx context.Context, numbering domain.DocumentNumbering) error {
+				return handler.deps.BookingNumbers.RecordBookingDocumentNumber(ctx, key, numbering)
+			})
 		if err != nil {
 			return CommissionResult{}, err
 		}
@@ -916,56 +924,36 @@ func commissionUndecided(reason CommissionUndecidedReason, subject string) Commi
 	}
 }
 
-// numberCommission 给刚落库的那份委托取号并记下（ADR-0355 决定三）。取号排在落库之后：并发首交的输家在 Save 上等赢家
-// 提交、答已登记，一个号也不取；先取号再落库，输家取到的号随它那笔「已有委托」的答复一起提交，成了决定八之外的空号。
-// 重放在 Save 之前就答了，同样不取号——号存在委托上，重放读回原号。
+// issueDocumentNumber 给刚落库的那份委托或那次订舱取号并记下（ADR-0355 决定三）：declaration 是这一类的类型声明，used 查本类
+// 单据表这个号用过没有，record 把号或无号原因记到刚落的那一行上。
 //
-// collided 为真时调用方答编号规则撞号，开立事务必须回滚：委托那一行与取过的流水一起撤掉。
-func (handler *CommissionTransportHandler) numberCommission(
+// 取号排在落库之后：并发首交的输家在 Save 上等赢家提交、答已登记，一个号也不取；先取号再落库，输家取到的号随它那笔「已有」
+// 答复一起提交，成了决定八之外的空号。重放在 Save 之前就答了，同样不取号——号存在单据上，重放读回原号。
+//
+// collided 为真时调用方答编号规则撞号，开立事务必须回滚：单据那一行与取过的流水一起撤掉。
+func (handler *CommissionTransportHandler) issueDocumentNumber(
 	ctx context.Context,
-	key ports.TransportCommissionKey,
+	tenant domain.TenantID,
+	declaration docnumber.TypeDeclaration,
+	used func(context.Context, domain.TenantID, domain.DocumentNumber) (bool, error),
+	record func(context.Context, domain.DocumentNumbering) error,
 ) (domain.DocumentNumbering, bool, error) {
 	issue, err := handler.deps.Numbers.IssueDocumentNumber(ctx, ports.DocumentNumberRequest{
-		TenantID: key.TenantID,
-		Type:     domain.TransportCommissionDocumentNumberType.Code,
+		TenantID: tenant,
+		Type:     declaration.Code,
 		IsUsed: func(ctx context.Context, number domain.DocumentNumber) (bool, error) {
-			return handler.deps.CommissionNumbers.CommissionDocumentNumberUsed(ctx, key.TenantID, number)
+			return used(ctx, tenant, number)
 		},
 	})
 	if err != nil {
-		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: issue commission document number: %w", err)
+		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: issue %s document number: %w", declaration.Code, err)
 	}
 	numbering, collided, err := numberingFrom(issue)
 	if err != nil || collided {
 		return domain.DocumentNumbering{}, collided, err
 	}
-	if err := handler.deps.CommissionNumbers.RecordCommissionDocumentNumber(ctx, key, numbering); err != nil {
-		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: record commission document number: %w", err)
-	}
-	return numbering, false, nil
-}
-
-// numberBooking 给刚落库的那次订舱取号并记下，取号排在落库之后的理由同 numberCommission。
-func (handler *CommissionTransportHandler) numberBooking(
-	ctx context.Context,
-	key ports.BookingKey,
-) (domain.DocumentNumbering, bool, error) {
-	issue, err := handler.deps.Numbers.IssueDocumentNumber(ctx, ports.DocumentNumberRequest{
-		TenantID: key.TenantID,
-		Type:     domain.BookingDocumentNumberType.Code,
-		IsUsed: func(ctx context.Context, number domain.DocumentNumber) (bool, error) {
-			return handler.deps.BookingNumbers.BookingDocumentNumberUsed(ctx, key.TenantID, number)
-		},
-	})
-	if err != nil {
-		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: issue booking document number: %w", err)
-	}
-	numbering, collided, err := numberingFrom(issue)
-	if err != nil || collided {
-		return domain.DocumentNumbering{}, collided, err
-	}
-	if err := handler.deps.BookingNumbers.RecordBookingDocumentNumber(ctx, key, numbering); err != nil {
-		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: record booking document number: %w", err)
+	if err := record(ctx, numbering); err != nil {
+		return domain.DocumentNumbering{}, false, fmt.Errorf("transport fulfillment: record %s document number: %w", declaration.Code, err)
 	}
 	return numbering, false, nil
 }

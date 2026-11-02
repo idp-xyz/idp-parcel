@@ -258,8 +258,12 @@ func TestCommissionAndBookingNumbersAreIssuedInTheIssuingTransaction(t *testing.
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("订舱册：%v %d", err, len(rows))
 	}
-	if number, _ := rows[0].DocumentNumber.Number(); number.String() != "BK-202611-00001" || rows[0].CommissionDocumentNumber != "TC-202611-00001" {
-		t.Fatalf("订舱册那一行：%s / %s", number, rows[0].CommissionDocumentNumber)
+	if rows[0].CommissionDocumentNumber == nil {
+		t.Fatal("订舱册那一行没带委托号格")
+	}
+	commissionNumber, _ := rows[0].CommissionDocumentNumber.Number()
+	if number, _ := rows[0].DocumentNumber.Number(); number.String() != "BK-202611-00001" || commissionNumber.String() != "TC-202611-00001" {
+		t.Fatalf("订舱册那一行：%s / %s", number, commissionNumber)
 	}
 }
 
@@ -358,5 +362,94 @@ func TestTheDocumentNumberColumnsGuardUniquenessAndShape(t *testing.T) {
 	booked, _, err := bookings.FindByKey(ctx, bookingKey)
 	if absence, ok := booked.DocumentNumber.Absence(); err != nil || !ok || absence != domain.DocumentNumberingTimeZoneNotConfigured {
 		t.Fatalf("订舱无号原因读回 %s %v %v", absence, ok, err)
+	}
+}
+
+// Covers: AT-TF-374（真库面）——引用委托、订舱的册读回时连读所引单据的号格：总单按键读、读当前版与查阅页列册都带所引委托的号与所引
+// 订舱的无号原因，所引订舱不在册时那一格为 nil（不编一个「上线前开立」）；未形成册列册时带所在委托的号。
+func TestRegistersThatReferToACommissionOrBookingReadItsNumber(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	transactor := db.Transactor()
+	commissions, _ := adapter.NewTransportCommissions(db)
+	bookings, _ := adapter.NewBookingRequests(db)
+	documents, _ := adapter.NewMasterDocuments(db)
+	catalogue, _ := adapter.NewReviewCatalogue(db)
+	unformeds, _ := adapter.NewActualFulfillmentUnformeds(db)
+
+	commission := submittedCommission(t, "tenant-1", "commission-1")
+	booking := submittedBookingRecord(t, "tenant-1", "booking-1")
+	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		if _, err := commissions.Save(txCtx, commission); err != nil {
+			return err
+		}
+		if err := commissions.RecordCommissionDocumentNumber(txCtx, commission.Key,
+			domain.NumberedDocument(deliveryValue(t, domain.NewDocumentNumber, "TC-202611-00004"))); err != nil {
+			return err
+		}
+		if _, err := bookings.Save(txCtx, booking); err != nil {
+			return err
+		}
+		return bookings.RecordBookingDocumentNumber(txCtx, booking.Key, domain.UnnumberedDocument(domain.DocumentNumberingTimeZoneNotConfigured))
+	})
+	withNumbers := masterDocumentRecord(t, masterDocumentFixtureOptions{document: "MAWB-1", version: "v1", commission: "commission-1", booking: "booking-1"})
+	withGhost := masterDocumentRecord(t, masterDocumentFixtureOptions{document: "MAWB-2", version: "v1", commission: "commission-1", booking: "booking-ghost"})
+	mustSaveMasterDocument(t, transactor, ctx, documents, withNumbers)
+	mustSaveMasterDocument(t, transactor, ctx, documents, withGhost)
+
+	check := func(name string, commissionNumbering, bookingNumbering *domain.DocumentNumbering, wantBooking bool) {
+		t.Helper()
+		if commissionNumbering == nil {
+			t.Fatalf("%s：所引委托没带号格", name)
+		}
+		if number, _ := commissionNumbering.Number(); number.String() != "TC-202611-00004" {
+			t.Fatalf("%s：所引委托号 = %s", name, number)
+		}
+		if !wantBooking {
+			if bookingNumbering != nil {
+				t.Fatalf("%s：不在册的订舱不该带号格", name)
+			}
+			return
+		}
+		if bookingNumbering == nil {
+			t.Fatalf("%s：所引订舱没带号格", name)
+		}
+		if absence, ok := bookingNumbering.Absence(); !ok || absence != domain.DocumentNumberingTimeZoneNotConfigured {
+			t.Fatalf("%s：所引订舱无号原因 = %s %v", name, absence, ok)
+		}
+	}
+	found, _, err := documents.FindByKey(ctx, withNumbers.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("按键读", found.CommissionDocumentNumber, found.BookingDocumentNumber, true)
+	current, _, err := documents.FindCurrent(ctx, withGhost.Key.TenantID, withGhost.Key.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("读当前版（订舱不在册）", current.CommissionDocumentNumber, current.BookingDocumentNumber, false)
+	rows, err := catalogue.ListCarrierMasterDocuments(ctx, withNumbers.Key.TenantID, 10)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("总单册：%v %d", err, len(rows))
+	}
+	for _, row := range rows {
+		check("总单册 "+row.Document, row.CommissionDocumentNumber, row.BookingDocumentNumber, row.Document == "MAWB-1")
+	}
+
+	key := unformedKey(t, "tenant-1", "SEG-A", "parcel-1")
+	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return unformeds.RecordUnformed(txCtx, unformedEntry(t, key, time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC), ports.UnformedNotConfigured),
+			time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC))
+	})
+	listed, err := catalogue.ListActualFulfillmentUnformed(ctx, key.TenantID, 10)
+	if err != nil || len(listed) != 1 || listed[0].CommissionDocumentNumber == nil {
+		t.Fatalf("未形成册：%v %d", err, len(listed))
+	}
+	if number, _ := listed[0].CommissionDocumentNumber.Number(); number.String() != "TC-202611-00004" {
+		t.Fatalf("未形成册的委托号 = %s", number)
 	}
 }

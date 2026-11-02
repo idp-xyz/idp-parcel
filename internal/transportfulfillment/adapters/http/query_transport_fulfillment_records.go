@@ -409,18 +409,20 @@ func serveCarrierMasterDocuments(
 	bodies := make([]carrierMasterDocumentBody, 0, len(rows))
 	for _, row := range rows {
 		bodies = append(bodies, carrierMasterDocumentBody{
-			Document:         row.Document,
-			Version:          row.Version,
-			Issuer:           row.Issuer,
-			Scope:            row.Scope,
-			Commission:       row.Commission,
-			Booking:          row.Booking,
-			Standing:         row.Standing,
-			Supersedes:       row.Supersedes,
-			ReplacedBy:       row.ReplacedBy,
-			AssociationCount: quantity(row.AssociationCount),
-			ChangedAt:        optionalInstant(row.ChangedAt),
-			RecordedAt:       rfc3339(row.RecordedAt),
+			Document:             row.Document,
+			Version:              row.Version,
+			Issuer:               row.Issuer,
+			Scope:                row.Scope,
+			Commission:           row.Commission,
+			Booking:              row.Booking,
+			Standing:             row.Standing,
+			Supersedes:           row.Supersedes,
+			ReplacedBy:           row.ReplacedBy,
+			AssociationCount:     quantity(row.AssociationCount),
+			ChangedAt:            optionalInstant(row.ChangedAt),
+			RecordedAt:           rfc3339(row.RecordedAt),
+			commissionNumberKeys: commissionNumberKeysOf(row.CommissionDocumentNumber),
+			bookingNumberKeys:    bookingNumberKeysOf(row.BookingDocumentNumber),
 		})
 	}
 	writeJSON(response, http.StatusOK, carrierMasterDocumentListResponse{
@@ -548,11 +550,11 @@ func serveBookingRequests(
 				RecordedAt:         rfc3339(row.RecordedAt),
 				documentNumberKeys: documentNumberKeysOf(row.DocumentNumber),
 			},
-			Standing:                 row.Standing,
-			Answers:                  answers,
-			SubmittedBy:              row.SubmittedBy,
-			CancelledBy:              row.CancelledBy,
-			CommissionDocumentNumber: row.CommissionDocumentNumber,
+			Standing:             row.Standing,
+			Answers:              answers,
+			SubmittedBy:          row.SubmittedBy,
+			CancelledBy:          row.CancelledBy,
+			commissionNumberKeys: commissionNumberKeysOf(row.CommissionDocumentNumber),
 		}
 		if row.Current != nil {
 			current := bookingAnswerRowBody(row.Booking, *row.Current)
@@ -631,8 +633,8 @@ type bookingRequestRowBody struct {
 	// 决定四不回操作证据。没记下时整键缺席。
 	SubmittedBy string `json:"submittedBy,omitempty"`
 	CancelledBy string `json:"cancelledBy,omitempty"`
-	// CommissionDocumentNumber 是所属委托的单据号（ADR-0355 决定十一）；委托没有号时整键缺席，页面照旧显示委托标识。
-	CommissionDocumentNumber string `json:"commissionDocumentNumber,omitempty"`
+	// 所属委托的单据号或无号原因（ADR-0355 决定十一）；委托行读不回时两键都不出，页面照旧显示委托标识。
+	commissionNumberKeys
 }
 
 type bookingAnswerBounceListResponse struct {
@@ -807,7 +809,8 @@ type carrierMasterDocumentListResponse struct {
 // standing 是三值封闭词（IN_FORCE / REVOKED / SUPERSEDED），原样透出不折并；supersedes 与
 // changedAt 成对缺席表示首版——一行一版本，撤销、替代、关联重述都是新行回指前版，原
 // 版本在册面上继续可见；replacedBy 只在已替代上在场。commission 与 booking 是可缺引用，
-// 缺席即不带键。associationCount 是关联子表的行数（十进制计数串，理由同容量四量）——
+// 缺席即不带键；所引的委托、订舱在册时各带单据号或无号原因（ADR-0355 决定十一），不在册时那两键也不带。
+// associationCount 是关联子表的行数（十进制计数串，理由同容量四量）——
 // 关联本体不在列面展开，哪些集运单元、包裹、段列入了这一版按键与版本走登记册读口。
 type carrierMasterDocumentBody struct {
 	Document         string `json:"document"`
@@ -822,6 +825,8 @@ type carrierMasterDocumentBody struct {
 	AssociationCount string `json:"associationCount"`
 	ChangedAt        string `json:"changedAt,omitempty"`
 	RecordedAt       string `json:"recordedAt"`
+	commissionNumberKeys
+	bookingNumberKeys
 }
 
 // serveDeliveryDispatchPendings 上列派送待形成的那几件（ADR-0230 决定三）：哪个段里的哪个对象、凭哪条入场依据、缺哪几件、首次
@@ -901,17 +906,18 @@ func serveActualFulfillmentUnformed(
 	for _, row := range rows {
 		entry := row.Entry
 		bodies = append(bodies, actualFulfillmentUnformedBody{
-			Segment:            entry.Key.Segment.String(),
-			Object:             entry.Key.Object.String(),
-			Commission:         entry.Commission.String(),
-			CommissionRevision: entry.Revision,
-			Reason:             entry.Reason.String(),
-			AgreementObject:    entry.Agreement.Object(),
-			AgreementVersion:   entry.Agreement.Version(),
-			Defect:             entry.Defect,
-			EndedAt:            rfc3339(entry.EndedAt),
-			FirstAnsweredAt:    rfc3339(row.FirstAnsweredAt),
-			LastAnsweredAt:     rfc3339(row.LastAnsweredAt),
+			Segment:              entry.Key.Segment.String(),
+			Object:               entry.Key.Object.String(),
+			Commission:           entry.Commission.String(),
+			commissionNumberKeys: commissionNumberKeysOf(row.CommissionDocumentNumber),
+			CommissionRevision:   entry.Revision,
+			Reason:               entry.Reason.String(),
+			AgreementObject:      entry.Agreement.Object(),
+			AgreementVersion:     entry.Agreement.Version(),
+			Defect:               entry.Defect,
+			EndedAt:              rfc3339(entry.EndedAt),
+			FirstAnsweredAt:      rfc3339(row.FirstAnsweredAt),
+			LastAnsweredAt:       rfc3339(row.LastAnsweredAt),
 		})
 	}
 	writeJSON(response, http.StatusOK, actualFulfillmentUnformedListResponse{
@@ -929,9 +935,11 @@ type actualFulfillmentUnformedListResponse struct {
 // 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。defect 只随 FORMATION_DEFECT，是类别码连同完整错误原文；那一格停在登记
 // 答复之前，commissionRevision 与协议两键随之不出现。
 type actualFulfillmentUnformedBody struct {
-	Segment            string `json:"segment"`
-	Object             string `json:"object"`
-	Commission         string `json:"commission"`
+	Segment    string `json:"segment"`
+	Object     string `json:"object"`
+	Commission string `json:"commission"`
+	// 那份委托的单据号或无号原因（ADR-0355 决定十一），新增字段。
+	commissionNumberKeys
 	CommissionRevision int    `json:"commissionRevision,omitempty"`
 	Reason             string `json:"reason"`
 	AgreementObject    string `json:"agreementObject,omitempty"`

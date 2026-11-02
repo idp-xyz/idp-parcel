@@ -81,6 +81,8 @@ type adoptionWithdrawalBody struct {
 	StartAfterBasis  string `json:"startAfterBasis,omitempty"`
 	StartAfterAt     string `json:"startAfterAt,omitempty"`
 	RecordedAt       string `json:"recordedAt"`
+	// 所解那一代所采用委托的单据号或无号原因（ADR-0355 决定十一），新增字段。
+	commissionNumberKeys
 }
 
 func writeAdoptionWithdrawalOutcome(response http.ResponseWriter, result application.AdoptionWithdrawalResult) {
@@ -101,7 +103,7 @@ func writeAdoptionWithdrawalOutcome(response http.ResponseWriter, result applica
 		body.Adoption = segmentCommissionAdoptionBodyOf(record)
 	}
 	if record, present := result.Commission(); present {
-		body.Commission = commissionTransitionBodyOf(record.Commission, record.RecordedAt)
+		body.Commission = commissionTransitionBodyOf(record)
 	}
 	for _, record := range result.FormedOccurrences() {
 		body.FormedOccurrences = append(body.FormedOccurrences, chargeOccurrenceBodyOf(record))
@@ -118,14 +120,15 @@ func adoptionWithdrawalBodyOf(record ports.SegmentCommissionAdoptionWithdrawalRe
 	withdrawal := record.Withdrawal
 	beforeBasis, beforeAt := withdrawal.StartBefore()
 	echoed := adoptionWithdrawalBody{
-		Segment:          withdrawal.Segment().String(),
-		Generation:       withdrawal.Generation(),
-		Commission:       withdrawal.Commission().String(),
-		WithdrawnBy:      withdrawal.WithdrawnBy().String(),
-		StartBeforeBasis: beforeBasis.String(),
-		StartBeforeAt:    rfc3339(beforeAt),
-		StartChange:      withdrawal.StartChange().String(),
-		RecordedAt:       rfc3339(record.RecordedAt),
+		Segment:              withdrawal.Segment().String(),
+		Generation:           withdrawal.Generation(),
+		Commission:           withdrawal.Commission().String(),
+		WithdrawnBy:          withdrawal.WithdrawnBy().String(),
+		StartBeforeBasis:     beforeBasis.String(),
+		StartBeforeAt:        rfc3339(beforeAt),
+		StartChange:          withdrawal.StartChange().String(),
+		RecordedAt:           rfc3339(record.RecordedAt),
+		commissionNumberKeys: commissionNumberKeysOf(record.CommissionDocumentNumber),
 	}
 	if afterBasis, afterAt, present := withdrawal.StartAfter(); present {
 		echoed.StartAfterBasis, echoed.StartAfterAt = afterBasis.String(), rfc3339(afterAt)
@@ -137,12 +140,13 @@ func segmentCommissionAdoptionBodyOf(record ports.SegmentCommissionAdoptionRecor
 	adoption := record.Adoption
 	basis, startedAt := adoption.Started()
 	return &segmentCommissionAdoptionBody{
-		Segment:    adoption.Segment().String(),
-		Generation: record.Generation,
-		Commission: adoption.Commission().String(),
-		Provider:   adoption.Provider().String(),
-		StartBasis: basis.String(),
-		StartedAt:  rfc3339(startedAt),
-		RecordedAt: rfc3339(record.RecordedAt),
+		Segment:              adoption.Segment().String(),
+		Generation:           record.Generation,
+		Commission:           adoption.Commission().String(),
+		Provider:             adoption.Provider().String(),
+		StartBasis:           basis.String(),
+		StartedAt:            rfc3339(startedAt),
+		RecordedAt:           rfc3339(record.RecordedAt),
+		commissionNumberKeys: commissionNumberKeysOf(record.CommissionDocumentNumber),
 	}
 }

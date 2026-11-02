@@ -101,12 +101,6 @@ export const objectNouns = {
   recovery: '追偿',
   notification: '通知',
   disclosure: '披露',
-
-  // —— 订舱与运输委托的单据号（领域：单据号，ADR-0355）——
-  /** 订舱的单据号。承运方答复里的订舱号是外部标识，不是它；订舱标识（承运答复认单的键）进技术详情。 */
-  bookingNumber: '订舱号',
-  /** 运输委托的单据号；委托标识进技术详情。 */
-  transportCommissionNumber: '运输委托号',
 } as const satisfies Record<string, string>;
 
 export type ObjectNoun = keyof typeof objectNouns;

@@ -276,7 +276,16 @@ func (handler *RegisterMasterDocumentHandler) commit(
 	}
 	switch saved {
 	case ports.MasterDocumentSaved:
-		return RegisterMasterDocumentResult{outcome: outcome, record: record, hasRecord: true}, nil
+		// 落了就按键读回答复：所引委托、订舱的单据号格只在读回时连读（ADR-0355 决定十一），拿手里这一份答，新登的总单就带不上号。
+		// 同一事务里读得到刚落的那一行；读不到是册违约，读不动答未决（装配点整笔回滚）。
+		stored, found, err := handler.deps.Documents.FindByKey(ctx, record.Key)
+		if err != nil {
+			return masterDocumentRegistryUndecided(record.Key), nil
+		}
+		if !found {
+			return RegisterMasterDocumentResult{}, fmt.Errorf("%w: saved version %s/%s is not readable", ErrUnexpectedMasterDocumentSave, record.Key.Document, record.Key.Version)
+		}
+		return RegisterMasterDocumentResult{outcome: outcome, record: stored, hasRecord: true}, nil
 	case ports.MasterDocumentAlreadyRegistered:
 		winner, found, err := handler.deps.Documents.FindByKey(ctx, record.Key)
 		if err != nil {

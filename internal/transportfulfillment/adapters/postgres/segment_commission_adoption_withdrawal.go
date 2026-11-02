@@ -95,7 +95,14 @@ func (repository *SegmentCommissionAdoptions) findWithdrawal(
 	if err != nil {
 		return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, fmt.Errorf("find segment commission adoption withdrawal: %w", err)
 	}
-	return ports.SegmentCommissionAdoptionWithdrawalRecord{Key: key, Withdrawal: withdrawal, RecordedAt: recordedAt.UTC()}, true, nil
+	numberings, err := commissionDocumentNumberings(ctx, querier, key.TenantID, []string{commissionID})
+	if err != nil {
+		return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, fmt.Errorf("find segment commission adoption withdrawal: %w", err)
+	}
+	return ports.SegmentCommissionAdoptionWithdrawalRecord{
+		Key: key, Withdrawal: withdrawal, RecordedAt: recordedAt.UTC(),
+		CommissionDocumentNumber: referencedNumbering(numberings, commissionID),
+	}, true, nil
 }
 
 // SaveWithdrawal 写下一次解除。同段同代已有解除答`已登记`，不覆盖先到者；外键不满足（那一代采用不在册）是编排核过之后的违约，照实报错。

@@ -142,8 +142,12 @@ func TestTheConflictEchoNamesARevisionOnlyWhenTheCommissionWasRevised(t *testing
 		t.Fatalf("没换过版的委托回显了 agreementRevision：%v", plain)
 	}
 	if string(plain["agreementVersion"]) != `"v2"` || string(plain["agreement"]) != `"SYN-SUPPLIER-TRUNK-CN-SG-01/v2"` ||
-		string(plain["legalEntity"]) != `"SYN-LE-01"` || len(plain) != 6 {
+		string(plain["legalEntity"]) != `"SYN-LE-01"` || len(plain) != 7 {
 		t.Fatalf("没换过版的回显 = %v", plain)
+	}
+	// 第七键是委托的单据号格（ADR-0355 决定十一，新增字段）：替身委托没记过号，读作上线前开立。
+	if string(plain["documentNumberAbsence"]) != `"ISSUED_BEFORE_NUMBERING"` {
+		t.Fatalf("回显的委托没带单据号格：%v", plain)
 	}
 
 	revised := echoed(true)

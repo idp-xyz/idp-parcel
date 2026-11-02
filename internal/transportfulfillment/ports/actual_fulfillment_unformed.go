@@ -112,6 +112,9 @@ type ActualFulfillmentUnformedRecord struct {
 	// NotChargedBy 只在不计费时给出：作答的那一版协议快照。
 	NotChargedBy string
 	SettledAt    time.Time
+	// CommissionDocumentNumber 是那份委托的单据号格（ADR-0355 决定十一），列册（ListActualFulfillmentUnformed）时连读；按键读与
+	// 补形成写册的各口不读也不写它。nil 即没读。
+	CommissionDocumentNumber *domain.DocumentNumbering
 }
 
 // ActualFulfillmentUnformedRegister 是补形成写册的各口，都要环境事务：册上那一行与那一拍的其余写入同笔。

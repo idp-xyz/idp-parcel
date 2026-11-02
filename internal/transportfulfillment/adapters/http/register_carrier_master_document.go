@@ -170,6 +170,9 @@ type masterDocumentResponse struct {
 	Supersedes            string                           `json:"supersedes,omitempty"`
 	ReplacedBy            string                           `json:"replacedBy,omitempty"`
 	Associations          *[]masterDocumentAssociationBody `json:"associations,omitempty"`
+	// 所引委托、订舱的单据号或无号原因（ADR-0355 决定十一），新增字段；引用的单据不在册时两组都不带。
+	commissionNumberKeys
+	bookingNumberKeys
 }
 
 func writeMasterDocumentOutcome(response http.ResponseWriter, result application.RegisterMasterDocumentResult) {
@@ -196,6 +199,8 @@ func writeMasterDocumentOutcome(response http.ResponseWriter, result application
 		if booking, has := document.Booking(); has {
 			body.Booking = booking.String()
 		}
+		body.commissionNumberKeys = commissionNumberKeysOf(record.CommissionDocumentNumber)
+		body.bookingNumberKeys = bookingNumberKeysOf(record.BookingDocumentNumber)
 		body.Standing = document.Standing().String()
 		if changedAt, changed := document.ChangedAt(); changed {
 			body.ChangedAt = rfc3339(changedAt)

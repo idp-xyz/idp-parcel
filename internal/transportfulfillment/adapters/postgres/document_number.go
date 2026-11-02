@@ -1,8 +1,11 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"fmt"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
@@ -45,4 +48,66 @@ func documentNumberingFromColumns(number, absence *string) (domain.DocumentNumbe
 	default:
 		return domain.DocumentNumbering{}, errUnknownDocumentNumberAbsence
 	}
+}
+
+// referencedDocumentNumberings 连读一批被引用的委托或订舱的单据号格（ADR-0355 决定十一）：引用委托、订舱的各册读回时用它给
+// 引用带号，答复与查阅页以号为主、标识另列。只读不在场就不进结果——引用指向的单据不在册（总单的引用不核在册）时，读口照旧只带
+// 标识，不替它编一个「上线前开立」。table 与 idColumn 只取本文件的两组常量，不拼外来串。
+func referencedDocumentNumberings(
+	ctx context.Context,
+	querier bentopg.Querier,
+	table, idColumn string,
+	tenant domain.TenantID,
+	ids []string,
+) (map[string]domain.DocumentNumbering, error) {
+	numberings := map[string]domain.DocumentNumbering{}
+	if len(ids) == 0 {
+		return numberings, nil
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+idColumn+`, document_number, document_number_absence
+		   FROM transport_fulfillment.`+table+`
+		  WHERE tenant_id = $1
+		    AND `+idColumn+` = ANY($2)`,
+		tenant.String(), ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("read referenced document numbers: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var number, absence *string
+		if err := rows.Scan(&id, &number, &absence); err != nil {
+			return nil, fmt.Errorf("read referenced document numbers: %w", err)
+		}
+		numbering, err := documentNumberingFromColumns(number, absence)
+		if err != nil {
+			return nil, fmt.Errorf("read referenced document numbers: %s %q: %w", table, id, err)
+		}
+		numberings[id] = numbering
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read referenced document numbers: %w", err)
+	}
+	return numberings, nil
+}
+
+// commissionDocumentNumberings 连读一批委托的单据号格，键是委托标识。
+func commissionDocumentNumberings(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, ids []string) (map[string]domain.DocumentNumbering, error) {
+	return referencedDocumentNumberings(ctx, querier, "transport_commission", "commission_id", tenant, ids)
+}
+
+// bookingDocumentNumberings 连读一批订舱的单据号格，键是订舱标识。
+func bookingDocumentNumberings(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, ids []string) (map[string]domain.DocumentNumbering, error) {
+	return referencedDocumentNumberings(ctx, querier, "booking_request", "booking_id", tenant, ids)
+}
+
+// referencedNumbering 从连读结果里取一个引用的号格；引用为空或单据不在册答 nil。
+func referencedNumbering(numberings map[string]domain.DocumentNumbering, id string) *domain.DocumentNumbering {
+	numbering, found := numberings[id]
+	if id == "" || !found {
+		return nil
+	}
+	return &numbering
 }

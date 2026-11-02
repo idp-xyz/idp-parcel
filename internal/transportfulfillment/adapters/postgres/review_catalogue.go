@@ -424,6 +424,25 @@ func (catalogue *ReviewCatalogue) ListCarrierMasterDocuments(
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list carrier master documents: %w", err)
 	}
+	rows.Close()
+	// 所引委托、订舱的单据号格另读一次（ADR-0355 决定十一）：放进上面那条聚合查询就得把号列也排进 GROUP BY。
+	var commissions, bookings []string
+	for _, row := range list {
+		commissions = append(commissions, row.Commission)
+		bookings = append(bookings, row.Booking)
+	}
+	commissionNumbers, err := commissionDocumentNumberings(ctx, querier, tenant, commissions)
+	if err != nil {
+		return nil, fmt.Errorf("list carrier master documents: %w", err)
+	}
+	bookingNumbers, err := bookingDocumentNumberings(ctx, querier, tenant, bookings)
+	if err != nil {
+		return nil, fmt.Errorf("list carrier master documents: %w", err)
+	}
+	for index := range list {
+		list[index].CommissionDocumentNumber = referencedNumbering(commissionNumbers, list[index].Commission)
+		list[index].BookingDocumentNumber = referencedNumbering(bookingNumbers, list[index].Booking)
+	}
 	return list, nil
 }
 
@@ -501,7 +520,8 @@ func (catalogue *ReviewCatalogue) ListDeliveryDispatchPendings(
 // 订舱名下的全部承运答复聚合进同一行，一条语句读出，订舱与答复取自同一个快照。答复按答复时刻、落库先后排，与答复编排判先后
 // （BookingAnswers.FindAnswersForUpdate）同一个次序；排序键末尾的答复标识只为让几列聚合逐位对齐。
 //
-// 订舱与它所属委托的单据号各随一行带出（ADR-0355 决定十一）：委托以左连接取，委托行读不回时那一格缺席，不拿委托标识顶。
+// 订舱与它所属委托的单据号格（号或无号原因）各随一行带出（ADR-0355 决定十一）：委托以左连接取，委托行读不回时那一格缺席，
+// 不拿委托标识顶。
 func (catalogue *ReviewCatalogue) ListBookingRequests(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -518,7 +538,8 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 	rows, err := querier.Query(ctx,
 		`SELECT booking.booking_id, booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
 		        booking.requested_at, booking.cancelled_at, booking.recorded_at, booking.submitted_by, booking.cancelled_by,
-		        booking.document_number, booking.document_number_absence, commission.document_number,
+		        booking.document_number, booking.document_number_absence,
+		        commission.commission_id IS NOT NULL, commission.document_number, commission.document_number_absence,
 		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded
 		   FROM (SELECT *
 		           FROM transport_fulfillment.booking_request
@@ -554,7 +575,8 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 			cancelledAt                           *time.Time
 			submittedBy, cancelledBy              *string
 			documentNumber, documentNumberAbsence *string
-			commissionDocumentNumber              *string
+			commissionFound                       bool
+			commissionNumber, commissionAbsence   *string
 			ids, outcomes, bases                  []string
 			quantities                            []int64
 			decidedTimes, recordedAt              []time.Time
@@ -562,7 +584,7 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 		if err := rows.Scan(
 			&row.Booking, &row.Commission, &row.Schedule, &row.Quantity, &row.Unit,
 			&row.RequestedAt, &cancelledAt, &row.RecordedAt, &submittedBy, &cancelledBy,
-			&documentNumber, &documentNumberAbsence, &commissionDocumentNumber,
+			&documentNumber, &documentNumberAbsence, &commissionFound, &commissionNumber, &commissionAbsence,
 			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list booking requests: %w", err)
@@ -572,8 +594,12 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
 		}
 		row.DocumentNumber = numbering
-		if commissionDocumentNumber != nil {
-			row.CommissionDocumentNumber = *commissionDocumentNumber
+		if commissionFound {
+			commissionNumbering, err := documentNumberingFromColumns(commissionNumber, commissionAbsence)
+			if err != nil {
+				return nil, fmt.Errorf("list booking requests: commission %q: %w", row.Commission, err)
+			}
+			row.CommissionDocumentNumber = &commissionNumbering
 		}
 		if cancelledAt != nil {
 			utc := cancelledAt.UTC()
