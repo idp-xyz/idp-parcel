@@ -68,10 +68,29 @@ export function caseUpdatedAt(record: CustomsCaseBody, submissions: SubmissionVe
   return sorted[sorted.length - 1] ?? record.establishedAt;
 }
 
+/**
+ * 清关单在页面上的号（ADR-0355 决定十一）：有单据号显单据号；没有就照旧显案件标识——上线前开立的、开立时单据编号时区
+ * 未配置的清关单都没有号，事后也不补，案件标识是它唯一能被找到的号。
+ */
+export function caseNumberOf(record: Pick<CustomsCaseBody, 'case' | 'documentNumber'>): string {
+  return record.documentNumber ?? record.case;
+}
+
+/**
+ * 没有单据号时技术详情里那一句，按清关单上记下的情形说，不一律写成「上线前开立」；有号时为空串（技术详情不列这一行）。
+ * 读口两格都没带只会是升级之前的服务端，那时的清关单都是上线前开立的。
+ */
+export function caseNumberNote(record: Pick<CustomsCaseBody, 'documentNumber' | 'documentNumberAbsence'>): string {
+  if (record.documentNumber) return '';
+  return labelFor(record.documentNumberAbsence ?? 'ISSUED_BEFORE_NUMBERING', 'document-number-absence');
+}
+
 export function caseRows(cases: CustomsCaseBody[], submissions: SubmissionVersionBody[] = [], results: ExternalResultBody[] = []): RegisterRow[] {
   return cases.map((record) => ({
     key: `case:${record.case}`,
     values: {
+      number: caseNumberOf(record),
+      numberNote: caseNumberNote(record),
       id: record.case,
       parcels: parcelList(record.parcels.map((parcel) => parcel.parcel)),
       customers: record.parcels.map((parcel) => parcel.customer).join('\n') || dash,
@@ -98,7 +117,7 @@ export function unitRows(cases: CustomsCaseBody[]): RegisterRow[] {
       key: `unit:${unit.unit}`,
       values: {
         id: unit.unit,
-        caseRef: record.case,
+        caseRef: caseNumberOf(record),
         jurisdiction: record.jurisdiction,
         direction: labelFor(record.direction),
         procedure: unit.procedure,

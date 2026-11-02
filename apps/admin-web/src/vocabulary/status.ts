@@ -558,6 +558,12 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     GATE_CONFLICTING: muted('检查项目有冲突'),
     RELEASE_NOT_RECEIVED: muted('还没收到海关放行'),
   },
+  // 单据没有单据号时技术详情里那一句（ADR-0355 决定十一）：码是单据上记下的无号情形，各类单据共用这一册。上线前开立的
+  // 什么也不用做，故中性；时区未配置的要租户去登单据编号时区，故琥珀。两种都不补号，词里不许诺「稍后生成」。
+  'document-number-absence': {
+    ISSUED_BEFORE_NUMBERING: muted('上线前开立，无单据号'),
+    NUMBERING_TIME_ZONE_NOT_CONFIGURED: warn('开立时单据编号时区未配置，无单据号'),
+  },
 };
 
 type UnknownCodeHandler = (code: string) => void;

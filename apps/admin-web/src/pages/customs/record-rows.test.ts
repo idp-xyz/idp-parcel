@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { equal, ok } from 'node:assert/strict';
 import type { ExternalResultBody, SubmissionVersionBody } from './api';
-import { caseProgress, externalResultRows, judgementRows, submissionRows } from './record-rows';
+import { caseNumberNote, caseNumberOf, caseProgress, caseRows, externalResultRows, judgementRows, submissionRows, unitRows } from './record-rows';
 import type { CustomsCaseBody } from './api';
 
 // 钉的是哪一格不得被译顺：分层外部结果各占各的列、缺层写「尚无结果」、归属不上的响应不被猜版本。
@@ -111,4 +111,34 @@ test('清关单最新进展：按已有事实取最靠后的一层', () => {
     caseProgress({ ...base, closure: { decidedBy: 'x', cutoffAt: at, verifiedAt: at, closedAt: at, itemCount: 1, reopenCount: 0 } }, [sent], []),
     'CUSTOMS_CASE_CLOSED',
   );
+});
+
+// Covers: ADR-0355 决定十一，点名 `AT-CC-459`、`AT-CC-460`（管理台半边）——清关单号一列显单据号、案件标识进技术详情；没有单据号的
+// 清关单照旧显案件标识，技术详情按它记下的情形注明，不一律写成「上线前开立」；报关批次引到清关单处同样显单据号。
+test('清关单号：有号显单据号，无号显案件标识并按情形注明', () => {
+  const base: CustomsCaseBody = {
+    case: 'CASE-1', jurisdiction: 'J', direction: 'EXPORT', procedure: 'proc-1', obligation: 'obl', establishedAt: at,
+    parcels: [], roles: [], units: [{ unit: 'UNIT-1', procedure: 'proc-1', members: ['PCL-1'], formedAt: at }],
+  };
+  const numbered = { ...base, documentNumber: 'CC-20261102-0001' };
+  const unconfigured: CustomsCaseBody = { ...base, case: 'CASE-2', documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' };
+  const legacy: CustomsCaseBody = { ...base, case: 'CASE-3', documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' };
+
+  equal(caseNumberOf(numbered), 'CC-20261102-0001');
+  equal(caseNumberNote(numbered), '');
+  equal(caseNumberOf(unconfigured), 'CASE-2');
+  equal(caseNumberNote(unconfigured), '开立时单据编号时区未配置，无单据号');
+  equal(caseNumberOf(legacy), 'CASE-3');
+  equal(caseNumberNote(legacy), '上线前开立，无单据号');
+  // 升级之前的服务端两格都不带：那时的清关单都是上线前开立的。
+  equal(caseNumberNote({}), '上线前开立，无单据号');
+
+  const [row, unconfiguredRow] = caseRows([numbered, unconfigured]);
+  equal(row.values.number, 'CC-20261102-0001');
+  equal(row.values.id, 'CASE-1');
+  equal(row.values.numberNote, '');
+  equal(unconfiguredRow.values.number, 'CASE-2');
+  equal(unconfiguredRow.values.numberNote, '开立时单据编号时区未配置，无单据号');
+  equal(unitRows([numbered])[0].values.caseRef, 'CC-20261102-0001');
+  equal(unitRows([unconfigured])[0].values.caseRef, 'CASE-2');
 });
