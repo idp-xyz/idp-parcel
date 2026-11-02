@@ -31,7 +31,7 @@ export function IdentityDispositionPanel({ units, onLanded }: { units: IdentityR
   const editing = draft ? rows.find((row) => row.unit === draft.unit) : undefined;
 
   return (
-    <Card className="mx-4 mb-4">
+    <Card>
       <CardHeader>
         <CardTitle>处理身份冲突的货</CardTitle>
       </CardHeader>

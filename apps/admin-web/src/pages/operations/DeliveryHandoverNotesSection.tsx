@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
+import type { ListColumn, TemplateViewState } from '../../templates';
+import { RouteWorkbench } from '../network/route-workbench';
+import { reviewStatusOf, workbenchColumnsOf } from './review-workbench';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
@@ -57,11 +59,10 @@ const columns: ListColumn<HandoverNoteReviewRow>[] = [
  * 每个账户的结论与途径、名下成员与各自的形成方式。写动作只有一样——对待确认的账户「确认」，是运营决定（送站交接确认）：指名交付方参与方与
  * 依据引用，服务端向参与方与商业问授权交付判断，是即确认，否或未配置不落结论。开立、归入、关闭是一线作业端的作业事实，不在这里。
  */
-export function DeliveryHandoverNotesSection({ chips }: { chips: ReactNode }) {
+export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode }) {
   const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{ path: string; answer: ApiResult<DeliveryHandoverNoteListResponseBody> } | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const path = deliveryScopeListPathOf(listBase, handoverNoteFilterKeys, filter);
 
   useEffect(() => {
@@ -92,23 +93,27 @@ export function DeliveryHandoverNotesSection({ chips }: { chips: ReactNode }) {
         });
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <ListPageTemplate<HandoverNoteReviewRow>
-        title={info.title}
-        description="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立。点一行看每个客户的确认情况与名下包裹；待确认的客户可以在这里确认。"
-        filters={<DeliveryScopeFilters chips={chips} filter={filter} dayLabel="开立日" onChange={setFilter} />}
-        filterSummary={body ? `共 ${rows.length} 张` : undefined}
-        emptyRowsNote={narrowed ? '当前筛选条件下没有交接单' : undefined}
-        columns={columns}
-        rows={rows}
-        rowKey={(row) => row.key}
-        onRowClick={(row) => setSelected(row.noteId)}
-        viewState={viewState}
-      />
-      {selected ? (
-        <HandoverNoteDetail key={selected} noteId={selected} onClose={() => setSelected(null)} onLanded={retry} />
-      ) : null}
-    </div>
+    <RouteWorkbench<HandoverNoteReviewRow>
+      title={info.title}
+      subtitle="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立；待确认的客户可以在右栏里确认。"
+      sections={sections}
+      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" onChange={setFilter} />}
+      answered={body !== null}
+      noun="张"
+      rows={rows}
+      rowKey={(row) => row.key}
+      statusOf={(row) => reviewStatusOf(row, { labelKey: 'state' })}
+      searchCells={(row) => Object.values(row.values)}
+      searchPlaceholder="在结果里搜交接单 / 网点 / 客户"
+      columns={workbenchColumnsOf(columns, { labelKey: 'state' })}
+      renderDetail={(row, close) => (
+        <div className="h-full overflow-y-auto bg-idpxyz-bg p-4">
+          <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />
+        </div>
+      )}
+      onRefresh={retry}
+      viewState={viewState}
+    />
   );
 }
 
@@ -131,30 +136,30 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
   const members = note ? note.members.map(handoverMemberRowOf) : [];
 
   return (
-    <Card className="mx-4 mb-4">
+    <Card>
       <CardHeader>
         <CardTitle>
-          送站交接单 <span className="font-mono">{noteId}</span>
+          送货交接单 <span className="font-mono">{noteId}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-xs">
         {answer === null ? <p className="text-idpxyz-textMuted">读取中…</p> : null}
-        {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查阅送站交接单" /> : null}
+        {answer !== null && answer.kind !== 'outcome' ? <DeliveryScopeReadNote answer={answer} what="查看送货交接单" /> : null}
         {note ? (
           <>
             <p className="text-idpxyz-textMuted">
-              {handoverNoteRowOf(note.handoverNote).values.state} · 交付方线索{' '}
-              <span className="font-mono">{note.handoverNote.deliveringParty}</span>（只是线索，不参与范围判断）· 可验证交付范围：
+              {handoverNoteRowOf(note.handoverNote).values.state} · 谁来送{' '}
+              <span className="font-mono">{note.handoverNote.deliveringParty}</span>（只是线索，不影响送货范围的判断）· 送货范围：
               {handoverNoteRowOf(note.handoverNote).values.scope}
             </p>
             <table className="w-full">
               <thead>
                 <tr className="text-left text-idpxyz-textMuted">
-                  <th className="py-1 pr-2 font-normal">声称的客户账户</th>
+                  <th className="py-1 pr-2 font-normal">自称的客户</th>
                   <th className="py-1 pr-2 font-normal">结论</th>
                   <th className="py-1 pr-2 font-normal">途径</th>
-                  <th className="py-1 pr-2 font-normal">作结论方 · 时刻</th>
-                  <th className="py-1 pr-2 font-normal">交付方参与方 · 依据引用</th>
+                  <th className="py-1 pr-2 font-normal">谁确认的 · 时间</th>
+                  <th className="py-1 pr-2 font-normal">送货人 · 来源单据</th>
                   <th className="py-1 font-normal">动作</th>
                 </tr>
               </thead>

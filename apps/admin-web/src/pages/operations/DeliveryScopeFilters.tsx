@@ -14,7 +14,7 @@ export function DeliveryScopeFilters({
   dayLabel,
   onChange,
 }: {
-  chips: ReactNode;
+  chips?: ReactNode;
   filter: DeliveryScopeListFilter;
   dayLabel: string;
   onChange: (filter: DeliveryScopeListFilter) => void;
@@ -25,8 +25,8 @@ export function DeliveryScopeFilters({
       <Input
         value={filter.node}
         className="h-8 w-[200px] font-mono text-[12px]"
-        placeholder="物流节点（逐字，空即全部）"
-        aria-label="物流节点"
+        placeholder="网点编码（空即全部网点）"
+        aria-label="网点"
         onChange={(event) => onChange({ ...filter, node: event.target.value })}
       />
       <label className="inline-flex items-center gap-1 text-xs text-idpxyz-textMuted">
@@ -47,23 +47,23 @@ export function DeliveryScopeReadNote({ answer, what }: { answer: Exclude<ApiRes
   const frame = 'text-xs';
   switch (answer.kind) {
     case 'unconfigured':
-      return <p className={`${frame} text-idpxyz-textMuted`}>接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）：读口已装配，操作者渠道的发行方参数未设。</p>;
+      return <p className={`${frame} text-idpxyz-textMuted`}>查看入口还没有配置好，重试也不会改变结果；请联系系统管理员完成配置。</p>;
     case 'loginRequired':
     case 'notGranted':
       return <OperatorRefusalNote kind={answer.kind} what={what} className={`${frame} text-idpxyz-textMuted`} />;
     case 'callerProblem':
       return (
         <p className={`${frame} text-idpxyz-danger`}>
-          HTTP {answer.status}：{deliveryScopeReadProblemNote(answer.code)}
+          没有读出来：{deliveryScopeReadProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className={`${frame} text-idpxyz-danger`}>
-          服务端未形成答案（HTTP {answer.status}）：{deliveryScopeReadProblemNote(answer.code)}
+          暂时没有读出来：{deliveryScopeReadProblemNote(answer.code)}
         </p>
       );
     case 'transport':
-      return <p className={`${frame} text-idpxyz-danger`}>请求未到达 parcel-api：{answer.message}</p>;
+      return <p className={`${frame} text-idpxyz-danger`}>连不上服务，请检查网络后重试（{answer.message}）</p>;
   }
 }

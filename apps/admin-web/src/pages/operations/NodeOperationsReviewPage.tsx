@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
+import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { chipClass } from '../../components/registration';
 import { StatusPill } from '../../components/StatusPill';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { technicalRows } from '../settlement/ops-ui';
+import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
+import { ReviewDetail, reviewStatusOf, workbenchColumnsOf, type ReviewColumn, type ReviewStatusSpec } from './review-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -60,7 +59,7 @@ function col(
   id: string,
   header: string,
   options?: { mono?: boolean; align?: 'left' | 'center' | 'right'; className?: string },
-): ListColumn<ReviewRow> {
+): ReviewColumn<ReviewRow> {
   return {
     id,
     header,
@@ -76,7 +75,7 @@ function col(
 }
 
 /** 状态胶囊格：词取行上已译好的那一格，色调按码（codeKey 那一格）查词典。 */
-function pillCol(id: string, header: string, codeKey: string, scope?: string): ListColumn<ReviewRow> {
+function pillCol(id: string, header: string, codeKey: string, scope?: string): ReviewColumn<ReviewRow> {
   return {
     id,
     header,
@@ -92,18 +91,9 @@ function pillCol(id: string, header: string, codeKey: string, scope?: string): L
 }
 
 /** 每行末尾的「技术详情」：来源标识、判断版本、关联引用这类排查时才用的字，空的不占格。 */
-function techCol(pairs: [label: string, key: string][]): ListColumn<ReviewRow> {
-  return {
-    id: 'technical',
-    header: '',
-    className: 'align-top',
-    render: (row) => (
-      <TechnicalDetails
-        rows={technicalRows(pairs.map(([label, key]) => ({ label, value: row.values[key] })))}
-        className="max-w-md open:min-w-[18rem]"
-      />
-    ),
-  };
+function techCol(pairs: [label: string, key: string][]): ReviewColumn<ReviewRow> {
+  // 不上表：工作台把这一格挪进右栏的「技术详情」（review-workbench 的 ReviewDetail）。
+  return { id: 'technical', header: '技术详情', render: () => null, techPairs: pairs };
 }
 
 type SectionId =
@@ -128,9 +118,11 @@ interface ReviewSection {
   word: string;
   /** 对应册名；无册区缺席（该区在存储上没有登记册，不发请求）。 */
   registry?: NodeOperationsRegistry;
-  columns: ListColumn<ReviewRow>[];
+  columns: ReviewColumn<ReviewRow>[];
   /** 无册区的如实呈现；与「登记册为空」严格分词。 */
   absence?: { title: string; description: string; unlock: string };
+  /** 行状态胶囊取哪两格；给了即指标即筛。 */
+  status?: ReviewStatusSpec;
 }
 
 const sections: ReviewSection[] = [
@@ -138,6 +130,7 @@ const sections: ReviewSection[] = [
     id: 'node-intake',
     word: '收货记录',
     registry: 'reception',
+    status: { labelKey: 'kind', codeKey: 'kindCode' },
     // 节点收寄=客户或其授权交付方在节点直接交付作业实物,节点完成明确接收并取得
     // 控制(CONTEXT);到站扫描、卸载或发现实物本身都不等于节点收寄——本册由服务端
     // 只列带收寄判断与控制在场的登记行,这些事实混不进来。
@@ -162,6 +155,7 @@ const sections: ReviewSection[] = [
     id: 'consolidation-units',
     word: '集包',
     registry: 'consolidation-unit',
+    status: { labelKey: 'phase', codeKey: 'phaseCode', scope: 'consolidation' },
     // 集运单元实例贯穿一次使用周期,同一实体载具的下一次使用必须创建新实例
     // (CONTEXT);实例阶段封闭三相(开放装入/已封装/已关闭)。集运成员列的是当前
     // 成员数不是清单;封签取最近一次快照,封装次数把「从未封装」与「重新封装过」
@@ -231,6 +225,7 @@ const sections: ReviewSection[] = [
     id: 'unidentified-items',
     word: '待识别货物',
     registry: 'unidentified-item',
+    status: { labelKey: 'pendingCause' },
     // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。正式包裹及其身份由
     // parcel-shipment 给出,「正式包裹关联」一列只放登记时已有的关联引用;识别成功不回写本行
     // (行是永久作业记录),缺席说的是「登记那一刻还没有」。
@@ -297,34 +292,6 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
   }
 }
 
-// 「重核」动作列单独拼装：它要 setState，而上面的区定义是模块级常量。不能发起的行照列为什么，不给一个必然答「不重核」的按钮。
-function recheckColumn(onRecheck: (judgmentVersion: string) => void, busy: string | null, mayRecheck: boolean): ListColumn<ReviewRow> {
-  return {
-    id: 'recheck',
-    header: '动作',
-    align: 'center',
-    className: 'w-[160px]',
-    render: (row) => {
-      const recheck = row.recheck;
-      if (!recheck) return '—';
-      if (recheck.kind === 'unavailable') {
-        return <span className="text-xs text-idpxyz-textMuted">{recheck.reason}</span>;
-      }
-      // 写入口按授予收起（ADR-0315）：明确没有「待识别复核」授予时不摆按钮。
-      if (!mayRecheck) return '—';
-      return (
-        <Button
-          variant="outline"
-          disabled={busy !== null}
-          onClick={() => onRecheck(recheck.judgmentVersion)}
-        >
-          {busy === recheck.judgmentVersion ? '核对中…' : '再核对一次'}
-        </Button>
-      );
-    },
-  };
-}
-
 type RecheckState =
   | { kind: 'submitting'; judgmentVersion: string }
   | { kind: 'answered'; judgmentVersion: string; answer: ApiResult<IdentityRecheckResponseBody> };
@@ -333,7 +300,6 @@ export function NodeOperationsReviewPage() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
   const [recheck, setRecheck] = useState<RecheckState | null>(null);
   const mayRecheck = useMayMakeDecision('PENDING_IDENTITY_RECHECK');
-  const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     registry: NodeOperationsRegistry;
@@ -359,12 +325,6 @@ export function NodeOperationsReviewPage() {
   const answer = registry && loaded?.registry === registry ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const rows = body ? rowsOf(body) : [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
   const retry = () => setReloadKey((value) => value + 1);
   const startRecheck = (judgmentVersion: string) => {
     setRecheck({ kind: 'submitting', judgmentVersion });
@@ -374,35 +334,19 @@ export function NodeOperationsReviewPage() {
       if (answer.kind === 'outcome' && describeRecheckAnswer(answer.body).landed) retry();
     });
   };
-  const columns =
-    section.id === 'unidentified-items'
-      ? [...section.columns, recheckColumn(startRecheck, recheck?.kind === 'submitting' ? recheck.judgmentVersion : null, mayRecheck)]
-      : section.columns;
 
-  const chips = (
-    <>
-      {[...sections, ...deliverySections].map((candidate) => (
-        <button
-          key={candidate.id}
-          type="button"
-          className={chipClass(candidate.id === sectionId)}
-          onClick={() => setSectionId(candidate.id)}
-        >
-          {candidate.word}
-        </button>
-      ))}
-    </>
+  const tabs = (
+    <SectionTabs
+      sections={[...sections, ...deliverySections].map((candidate) => ({ id: candidate.id, label: candidate.word }))}
+      active={sectionId}
+      onChange={setSectionId}
+    />
   );
-  if (delivery?.id === 'delivery-pre-advices') return <DeliveryPreAdvicesSection chips={chips} />;
-  if (delivery?.id === 'delivery-handover-notes') return <DeliveryHandoverNotesSection chips={chips} />;
+  if (delivery?.id === 'delivery-pre-advices') return <DeliveryPreAdvicesSection key={delivery.id} sections={tabs} />;
+  if (delivery?.id === 'delivery-handover-notes') return <DeliveryHandoverNotesSection key={delivery.id} sections={tabs} />;
 
   const viewState: TemplateViewState = section.absence
-    ? {
-        kind: 'unconfigured',
-        title: section.absence.title,
-        description: section.absence.description,
-        facts: { owner: info.owner, source: info.source, unlock: section.absence.unlock },
-      }
+    ? { kind: 'unconfigured' }
     : catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /node-operations-records?registry=${registry ?? ''}`,
@@ -410,31 +354,61 @@ export function NodeOperationsReviewPage() {
         emptyDescription: '网点现场扫描、收货后，记录会出现在这里。',
       });
 
+  /**
+   * 待识别货物的右栏动作：「再核对一次」（重核）。不能发起的行照说为什么，不给一个必然答「不重核」的按钮；明确没有「待识别复核」
+   * 授予时不摆按钮（ADR-0315）。答复挂在按钮下面，只对被重核的那一行显示。
+   */
+  const recheckActions = (row: ReviewRow) => {
+    const availability = row.recheck;
+    if (!availability) return undefined;
+    if (availability.kind === 'unavailable') return <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>;
+    if (!mayRecheck) return undefined;
+    const mine = recheck?.judgmentVersion === availability.judgmentVersion;
+    return (
+      <div className="space-y-2">
+        <Button variant="outline" disabled={recheck?.kind === 'submitting'} onClick={() => startRecheck(availability.judgmentVersion)}>
+          {recheck?.kind === 'submitting' && mine ? '核对中…' : '再核对一次'}
+        </Button>
+        {mine && recheck?.kind === 'answered' ? <RecheckAnswerNote judgmentVersion={recheck.judgmentVersion} answer={recheck.answer} /> : null}
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <ListPageTemplate<ReviewRow>
+      <RouteWorkbench<ReviewRow>
+        key={section.id}
         title={info.title}
-        description="网点收了哪些货、货现在还在不在网点、哪些货认不出是谁的。扫描与装卸在网点的作业终端上完成，这里查看结果，并处理认不出身份的货。"
-        search={{
-          value: keyword,
-          onChange: setKeyword,
-          placeholder: '搜货物标签 / 网点 / 交货人',
-        }}
-        filters={chips}
-        filterSummary={
-          // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。
-          body ? `共 ${visibleRows.length} 条` : undefined
-        }
-        columns={columns}
-        rows={visibleRows}
+        subtitle="网点收了哪些货、货现在还在不在网点、哪些货认不出是谁的。扫描与装卸在网点的作业终端上完成，这里查看结果，并处理认不出身份的货。"
+        sections={tabs}
+        answered={body !== null}
+        rows={rows}
         rowKey={(row) => row.key}
+        statusOf={section.status ? (row) => reviewStatusOf(row, section.status) : undefined}
+        rowAttention={(row) => row.values.identityConflict === '有冲突'}
+        searchCells={(row) => Object.values(row.values)}
+        searchPlaceholder="搜货物标签 / 网点 / 交货人"
+        columns={workbenchColumnsOf(section.columns, section.status)}
+        renderDetail={(row, close) => (
+          <ReviewDetail
+            row={row}
+            columns={section.columns}
+            status={reviewStatusOf(row, section.status)}
+            subtitle={section.word}
+            actions={section.id === 'unidentified-items' ? recheckActions(row) : undefined}
+            onClose={close}
+          />
+        )}
+        onRefresh={section.absence ? undefined : retry}
         viewState={viewState}
+        // 还没接进管理台的册：说「还不能在这里查看」，不露接入渠道的错误码（那个码说的是口没接渠道，不是册没建）。
+        stateOverride={section.absence ? notConnectedOverride(section.absence.title, section.absence.description) : undefined}
       />
-      {section.id === 'unidentified-items' && recheck?.kind === 'answered' ? (
-        <RecheckAnswerNote judgmentVersion={recheck.judgmentVersion} answer={recheck.answer} />
-      ) : null}
-      {section.id === 'unidentified-items' && body?.outcome === 'UNIDENTIFIED_ITEMS_LISTED' ? (
-        <IdentityDispositionPanel units={body.units ?? []} onLanded={retry} />
+      {section.id === 'unidentified-items' && body?.outcome === 'UNIDENTIFIED_ITEMS_LISTED' && (body.units ?? []).length > 0 ? (
+        // 身份冲突处置按实物看各链当前有效版本（一件实物可能横跨几行），不是按行，所以留在列表下方而不进右栏。
+        <div className="max-h-[45%] shrink-0 overflow-y-auto border-t border-idpxyz-border p-4">
+          <IdentityDispositionPanel units={body.units ?? []} onLanded={retry} />
+        </div>
       ) : null}
     </div>
   );
@@ -447,7 +421,7 @@ function RecheckAnswerNote({
   judgmentVersion: string;
   answer: ApiResult<IdentityRecheckResponseBody>;
 }) {
-  const frame = 'mx-4 mb-4 text-xs';
+  const frame = 'text-xs';
   switch (answer.kind) {
     case 'outcome': {
       const note = describeRecheckAnswer(answer.body);
