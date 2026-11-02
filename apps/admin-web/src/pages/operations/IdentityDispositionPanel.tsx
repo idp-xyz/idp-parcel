@@ -258,7 +258,7 @@ function DispositionAnswerNote({
     case 'unconfigured':
       return (
         <p className={`${frame} text-idpxyz-textMuted`}>
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。处置端点已建立并装配，操作者渠道的发行方参数未设，服务端如实拒绝。
+          操作入口还没有配置好，这次什么都没有保存；重试也不会改变结果，请联系系统管理员完成配置。
         </p>
       );
     case 'loginRequired':
@@ -267,16 +267,16 @@ function DispositionAnswerNote({
     case 'callerProblem':
       return (
         <p className={`${frame} text-idpxyz-danger`}>
-          调用方式问题（HTTP {answer.status}）：{dispositionProblemNote(answer.code)}
+          没有保存：{dispositionProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className={`${frame} text-idpxyz-danger`}>
-          服务端未形成答案（HTTP {answer.status}）：{dispositionProblemNote(answer.code)}
+          结果还不确定：{dispositionProblemNote(answer.code)}
         </p>
       );
     case 'transport':
-      return <p className={`${frame} text-idpxyz-danger`}>请求未到达 parcel-api：{answer.message}</p>;
+      return <p className={`${frame} text-idpxyz-danger`}>连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
   }
 }

@@ -73,7 +73,7 @@ test('判断册行：整次答复与逐动作答复分列', () => {
   const row0 = {
     judgement: 'J-1', object: 'PCL-1', intent: 'HANDOVER', node: 'A', onwardNode: 'B', actionAt: at,
     crossZone: 'CROSSING', answer: 'ADMITTED', zones: [], judgedAt: at,
-    findings: [{ action: 'CROSS_CUSTOMS_MOVEMENT', answer: 'ADMITTED', bases: [{ cause: 'RELEASE_OUTCOME', sources: ['RES-REL'] }] }],
+    findings: [{ action: 'CROSS_CUSTOMS_MOVEMENT', answer: 'ADMITTED', bases: [{ cause: 'RELEASED_IN_FULL', sources: ['RES-REL'] }] }],
   };
   const [row] = judgementRows([row0]);
   equal(row.values.answer, '可放行');
@@ -84,6 +84,8 @@ test('判断册行：整次答复与逐动作答复分列', () => {
   equal(named.values.route, '上海枢纽 → B');
   equal(named.values.routeCodes, 'A → B');
   ok(row.values.findings.includes('跨关区移动：可放行') && row.values.findings.includes('RES-REL'));
+  // 依据种类经词典译中文、不露原码；依据来源是引用，原样列。
+  ok(row.values.findings.includes('海关已全部放行') && !row.values.findings.includes('RELEASED_IN_FULL'), row.values.findings);
 });
 
 // Covers: 清关单的「最新进展」取已有事实里最靠后的一层；没有批次就是待申报，只有发送就是已发送，有放行就是已放行，关案盖过一切。

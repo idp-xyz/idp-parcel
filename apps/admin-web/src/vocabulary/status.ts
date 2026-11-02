@@ -530,6 +530,32 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     DAMAGE: muted('破损'),
     DELAY: muted('延误'),
   },
+  // 放行检查答复的依据种类（customs-compliance 的 AdmissionCause 封闭集），只在放行记录「逐项检查」一格里作说明用，故一律中性色；
+  // 是哪一格答复由旁边的结论胶囊说，这里不再着色。
+  'admission-cause': {
+    GATE_NOT_APPLICABLE: muted('这一步不用检查'),
+    OUTSIDE_CUSTOMS_BOOKS: muted('不在关务范围内'),
+    RELEASED_IN_FULL: muted('海关已全部放行'),
+    CUSTOMS_SCOPE_UNRESOLVED: muted('申报范围未定'),
+    DECLARATION_UNIT_NOT_FORMED: muted('报关批次未形成'),
+    DUTY_VERIFICATION_ABSENT: muted('税费未核对'),
+    DUTY_VERIFICATION_PENDING: muted('税费核对中'),
+    RELEASE_PARTIAL_ONLY: muted('海关只部分放行'),
+    RELEASE_CONDITIONAL_ONLY: muted('海关附条件放行'),
+    GATE_RELEASE_DISCREPANCY: muted('检查结果与海关放行对不上'),
+    INTERNAL_RESTRICTION_UNCONFIRMED: muted('内部限制待确认'),
+    INTERNAL_RESTRICTION_CONFLICTING: muted('内部限制有冲突'),
+    NODE_ZONE_NOT_REGISTERED: muted('网点所属关区未登记'),
+    GATE_CATALOG_NOT_REGISTERED: muted('放行检查项目未登记'),
+    DUTY_PAYMENT_RULE_NOT_REGISTERED: muted('税费付款规则未登记'),
+    DUTY_PAYMENT_FINDING_BESIDE_RULE: muted('税费付款结论与规则不符'),
+    RESTRICTION_IN_FORCE: muted('监管限制生效中'),
+    INTERNAL_RESTRICTION_IN_FORCE: muted('内部限制生效中'),
+    GATE_UNMET: muted('检查项目未满足'),
+    GATE_PARTIALLY_MET: muted('检查项目部分满足'),
+    GATE_CONFLICTING: muted('检查项目有冲突'),
+    RELEASE_NOT_RECEIVED: muted('还没收到海关放行'),
+  },
 };
 
 type UnknownCodeHandler = (code: string) => void;

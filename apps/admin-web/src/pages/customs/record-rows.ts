@@ -233,13 +233,13 @@ export function judgementRows(judgements: AdmissionJudgementBody[], label: (node
       crossZone: labelFor(judgement.crossZone),
       answerCode: judgement.answer,
       answer: labelFor(judgement.answer),
-      // 逐动作答复与依据原样列出，整次答复已在左一列；依据来源不再翻译。
+      // 逐动作答复与依据列出，整次答复已在左一列；依据种类经词典 admission-cause 一册译中文（查不到才露码），依据来源是引用、原样列。
       findings: judgement.findings
         .map(
           (finding) =>
             `${labelFor(finding.action)}：${labelFor(finding.answer)}` +
             (finding.bases.length > 0
-              ? `（依据 ${finding.bases.map((basis) => `${basis.cause}${basis.sources.length ? ` ${basis.sources.join('、')}` : ''}`).join('；')}）`
+              ? `（依据 ${finding.bases.map((basis) => `${labelFor(basis.cause, 'admission-cause')}${basis.sources.length ? ` ${basis.sources.join('、')}` : ''}`).join('；')}）`
               : ''),
         )
         .join('\n'),
