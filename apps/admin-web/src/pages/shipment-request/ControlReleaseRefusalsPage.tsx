@@ -30,6 +30,7 @@ import {
 } from './control-release-refusals';
 import { ShipmentNo } from './refs';
 import { shipmentDisplayNoOf } from './ref-no';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 页面标题取导航登记的那一份;主责上下文(parcel-shipment)只在代码里出现,屏上不说系统的话。
 const info = moduleInfoById['control-release-refusals'];
@@ -44,7 +45,7 @@ const actionDecisions: ReviewDecisionOption<ControlReleaseRefusalAction>[] = ref
 
 function detailFieldsOf(row: ControlReleaseRefusalRow): DetailField[] {
   return [
-    { label: '运单号', value: <ShipmentNo shipmentRequestId={row.shipmentRequestId} documentNumber={row.documentNumber} /> },
+    { label: documentTypeWords.SHIPMENT.numberName, value: <ShipmentNo shipmentRequestId={row.shipmentRequestId} documentNumber={row.documentNumber} /> },
     { label: '客户', value: row.customerAccountId },
     { label: '占用在哪', value: refusalScopeText(row) },
     { label: '登记时间', value: formatInstant(row.recordedAt) },

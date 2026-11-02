@@ -774,6 +774,16 @@ export function listShipmentRequestViews(): Promise<ApiResult<ViewsListResponseB
   return exchange<ViewsListResponseBody>('/shipment-request-views', { method: 'GET' });
 }
 
+/** 按运单号(单据号)在可见范围里找运单:逐字比,没有是空列表(ADR-0355 决定十一「可按单据号检索」)。 */
+export function findShipmentRequestViewsByDocumentNumber(
+  documentNumber: string,
+): Promise<ApiResult<ViewsListResponseBody>> {
+  return exchange<ViewsListResponseBody>(
+    `/shipment-request-views?documentNumber=${encodeURIComponent(documentNumber)}`,
+    { method: 'GET' },
+  );
+}
+
 export function findShipmentRequestView(
   shipmentRequestId: string,
 ): Promise<ApiResult<ViewDetailResponseBody>> {

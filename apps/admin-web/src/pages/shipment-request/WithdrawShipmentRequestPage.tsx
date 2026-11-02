@@ -3,7 +3,16 @@ import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { pendingText } from '../../components/action-feedback';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
-import { withdrawShipmentRequest, type ApiResult, type WithdrawalDraft, type WithdrawalResponseBody } from './api';
+import {
+  findShipmentRequestView,
+  findShipmentRequestViewsByDocumentNumber,
+  withdrawShipmentRequest,
+  type ApiResult,
+  type WithdrawalDraft,
+  type WithdrawalResponseBody,
+} from './api';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { lookUpShipmentRef, shipmentRefProblem, shipmentRefText, type ShipmentRef } from './shipment-ref';
 import { withdrawalOutcomeViews, type OutcomeView } from './presentation';
 import { Field, inputClass, NoticeCard, Section } from './controls';
 import { ResultPanel } from './ResultPanel';
@@ -15,12 +24,16 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 //
 // 撤回请求自己的来源信封与原提交分开(合用会被判成原提交的重放),两者都由接入
 // 适配器从认证结果铸造;页面只声明客户可声明的部分:指名哪份委托、谁在请求、
-// 依据什么原因。指名委托的那一格是委托标识而不是运单号:运单号是单据号(ADR-0355 决定十一),撤回口照旧按委托标识
-// 找委托,填运单号进去会答找不到;「客户单号」是原提交的来源请求键。
+// 依据什么原因。指名委托的那一格收运单号(单据号,ADR-0355 决定十一),也收委托标识(上线前的老运单没有运单号):撤回口
+// 照首方契约按委托标识找委托,所以提交前先经委托查阅把它解析成委托标识(shipment-ref.ts),确认弹层两样都写出来;
+// 「客户单号」是原提交的来源请求键。
+
+const shipmentNumberName = documentTypeWords.SHIPMENT.numberName;
 
 interface WithdrawalFormState {
   originalRequestKey: string;
-  shipmentRequestId: string;
+  /** 运单号或委托标识,提交前解析成委托标识。 */
+  shipmentRef: string;
   submissionVersionId: string;
   requesterReference: string;
   reasonReference: string;
@@ -28,7 +41,7 @@ interface WithdrawalFormState {
 
 const emptyForm: WithdrawalFormState = {
   originalRequestKey: '',
-  shipmentRequestId: '',
+  shipmentRef: '',
   submissionVersionId: '',
   requesterReference: '',
   reasonReference: '',
@@ -38,18 +51,18 @@ const emptyForm: WithdrawalFormState = {
 // 原因缺一即构造不出撤回请求。授权判定属服务端,页面不判。
 function validate(form: WithdrawalFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!form.shipmentRequestId.trim()) errors.shipmentRequestId = '请填写委托标识。';
+  if (!form.shipmentRef.trim()) errors.shipmentRef = `请填写${shipmentNumberName}或委托标识。`;
   if (!form.originalRequestKey.trim()) errors.originalRequestKey = '请填写客户单号。';
   if (!form.requesterReference.trim()) errors.requesterReference = '请填写是谁提出撤回。';
   if (!form.reasonReference.trim()) errors.reasonReference = '请填写撤回原因。';
   return errors;
 }
 
-function buildDraft(form: WithdrawalFormState): WithdrawalDraft {
+function buildDraft(form: WithdrawalFormState, ref: ShipmentRef): WithdrawalDraft {
   const version = form.submissionVersionId.trim();
   return {
     originalRequestKey: form.originalRequestKey.trim(),
-    shipmentRequestId: form.shipmentRequestId.trim(),
+    shipmentRequestId: ref.shipmentRequestId,
     submissionVersionId: version === '' ? undefined : version,
     requesterReference: form.requesterReference.trim(),
     reasonReference: form.reasonReference.trim(),
@@ -58,10 +71,10 @@ function buildDraft(form: WithdrawalFormState): WithdrawalDraft {
 
 // 确认弹层的正文(票 admin-web-workspace-form/05 第 3 条,蓝图 21.2):写明撤的是哪票运单、影响什么、以谁的名义,
 // 不写「确定吗」。边界句取 UC-PS-005 的口径:撤回终止整份尚未决定的委托,不删除原始提交与判断历史。
-function withdrawalConfirmText(form: WithdrawalFormState): string {
-  const draft = buildDraft(form);
+function withdrawalConfirmText(form: WithdrawalFormState, ref: ShipmentRef): string {
+  const draft = buildDraft(form, ref);
   return (
-    `将撤回委托标识 ${draft.shipmentRequestId}(客户单号 ${draft.originalRequestKey})的这票运单:` +
+    `将撤回${shipmentRefText(ref)}这一票,客户单号 ${draft.originalRequestKey}:` +
     `它不再等受理;录过的内容与记录都保留,撤回本身也记在案。` +
     `申请人 ${draft.requesterReference},原因:${draft.reasonReference}。`
   );
@@ -72,26 +85,45 @@ export function WithdrawShipmentRequestPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // 确认弹层与发出的请求用的是同一份解析结果:确认时看到的委托标识就是撤回指名的那一个。
+  const [resolved, setResolved] = useState<ShipmentRef | null>(null);
   const [result, setResult] = useState<ApiResult<WithdrawalResponseBody> | null>(null);
 
   const setField = (field: keyof WithdrawalFormState) => (value: string) => setForm((current) => ({ ...current, [field]: value }));
 
   // 先校验再开确认:确认层问的是「要不要撤」,不是「填全了没」——两问挤在一层,没填全会被读成撤回被拒。
-  function requestWithdraw() {
+  async function requestWithdraw() {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setResult(null);
       return;
     }
-    setConfirming(true);
+    setPending(true);
+    try {
+      const resolution = await lookUpShipmentRef(form.shipmentRef, {
+        byNumber: findShipmentRequestViewsByDocumentNumber,
+        byId: findShipmentRequestView,
+      });
+      const problem = shipmentRefProblem(form.shipmentRef.trim(), resolution);
+      if (resolution.kind !== 'resolved' || problem !== undefined) {
+        setErrors({ shipmentRef: problem ?? '' });
+        setResult(null);
+        return;
+      }
+      setResolved(resolution.ref);
+      setConfirming(true);
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleWithdraw() {
     setConfirming(false);
+    if (resolved === null) return;
     setPending(true);
     try {
-      setResult(await withdrawShipmentRequest(buildDraft(form)));
+      setResult(await withdrawShipmentRequest(buildDraft(form, resolved)));
     } finally {
       setPending(false);
     }
@@ -109,10 +141,15 @@ export function WithdrawShipmentRequestPage() {
 
         <Section title="哪一票运单">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="委托标识" required error={errors.shipmentRequestId} hint="运单详情「技术详情」里的委托标识(SHR- 开头)。运单号不能代替它:撤回按委托标识找这票运单。">
-              <input className={`${inputClass} font-mono`} value={form.shipmentRequestId} onChange={(event) => setField('shipmentRequestId')(event.target.value)} />
+            <Field
+              label={`${shipmentNumberName}(或委托标识)`}
+              required
+              error={errors.shipmentRef}
+              hint={`填${shipmentNumberName};上线前的老运单没有${shipmentNumberName},填运单详情技术详情里的委托标识(SHR- 开头)。`}
+            >
+              <input className={`${inputClass} font-mono`} value={form.shipmentRef} onChange={(event) => setField('shipmentRef')(event.target.value)} />
             </Field>
-            <Field label="客户单号" required error={errors.originalRequestKey} hint="客户下单时自己的单号;与委托标识一起才能找到这票运单。">
+            <Field label="客户单号" required error={errors.originalRequestKey} hint={`客户下单时自己的单号;与${shipmentNumberName}一起才能找到这票运单。`}>
               <input className={`${inputClass} font-mono`} value={form.originalRequestKey} onChange={(event) => setField('originalRequestKey')(event.target.value)} />
             </Field>
             <Field label="哪一版" hint="客户改过资料时才需要填版本;不填就按最新一版。">
@@ -136,7 +173,7 @@ export function WithdrawShipmentRequestPage() {
           <button
             type="button"
             disabled={pending}
-            onClick={requestWithdraw}
+            onClick={() => void requestWithdraw()}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
             {pending ? pendingText('撤回') : '撤回这票运单'}
@@ -152,7 +189,7 @@ export function WithdrawShipmentRequestPage() {
           open={confirming}
           tone="danger"
           title="撤回这票运单"
-          message={withdrawalConfirmText(form)}
+          message={resolved ? withdrawalConfirmText(form, resolved) : ''}
           confirmLabel="确认撤回"
           cancelLabel="先不撤回"
           onConfirm={handleWithdraw}

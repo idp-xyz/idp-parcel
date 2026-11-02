@@ -23,6 +23,7 @@ import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-li
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。
 //
@@ -69,7 +70,7 @@ function buildBasicFields(view: ShipmentRequestDetail, names: CustomerNameIndex)
 function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
   const absenceNote = documentNumberAbsenceNoteOf(view);
   return [
-    ...(absenceNote ? [{ label: objectNouns.shipmentNumber, value: absenceNote }] : []),
+    ...(absenceNote ? [{ label: documentTypeWords.SHIPMENT.numberName, value: absenceNote }] : []),
     { label: '委托标识', value: view.shipmentRequestId },
     { label: '客户账户编码', value: view.customerAccountId },
     { label: '提交批次', value: view.batchId },

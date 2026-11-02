@@ -1,6 +1,6 @@
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { CodeRef } from '../../components/CodeRef';
-import { objectNouns } from '../../vocabulary/objects';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { parcelNoOf, shipmentNoOf } from './ref-no';
 
 // 号码签:短写法上屏、整串随复制。纯函数在 ref-no.ts,这里只有 React。
@@ -46,7 +46,7 @@ export function ShipmentNo({
   className?: string;
 }) {
   if (documentNumber !== undefined) {
-    return <RefNo value={documentNumber} full={documentNumber} label={objectNouns.shipmentNumber} className={className} />;
+    return <RefNo value={documentNumber} full={documentNumber} label={documentTypeWords.SHIPMENT.numberName} className={className} />;
   }
-  return <RefNo value={shipmentNoOf(shipmentRequestId)} full={shipmentRequestId} label={objectNouns.shipmentNumber} className={className} />;
+  return <RefNo value={shipmentNoOf(shipmentRequestId)} full={shipmentRequestId} label={documentTypeWords.SHIPMENT.numberName} className={className} />;
 }

@@ -5,6 +5,8 @@
 // 运单号是委托的单据号(ADR-0355 决定十一),不是委托标识:有单据号就显它;没有单据号的委托(上线前建的,或建单时
 // 单据编号时区未配置)照旧显去前缀的委托标识,技术详情按记下的情形注明为什么没有。
 
+import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
+
 const parcelPrefix = 'DPCL-';
 const shipmentPrefix = 'SHR-';
 
@@ -24,12 +26,10 @@ export function shipmentDisplayNoOf(shipment: { shipmentRequestId: string; docum
 }
 
 /**
- * 没有单据号时技术详情里那一句;有号时交回 undefined。读口没带情形(旧版后端)时按上线前开立说——那正是两列皆空的意思。
- * 两种情形分开说:「时区未配置」要租户去规则册登时区,「上线前开立」什么也不用做,并成一句会让人去做没用的事。
+ * 没有单据号时技术详情里那一句,说法取单据编号词典(各类单据共用一处);有号时交回 undefined。读口没带无号情形(例如
+ * 释放未受理册上读不到的那份委托)时也交回 undefined——不替读口猜是哪一种。
  */
 export function documentNumberAbsenceNoteOf(shipment: { documentNumber?: string; documentNumberAbsence?: string }): string | undefined {
-  if (shipment.documentNumber !== undefined) return undefined;
-  return shipment.documentNumberAbsence === 'NUMBERING_TIME_ZONE_NOT_CONFIGURED'
-    ? '开立时单据编号时区未配置，无单据号'
-    : '上线前开立，无单据号';
+  if (shipment.documentNumber !== undefined || shipment.documentNumberAbsence === undefined) return undefined;
+  return documentNumberAbsenceNote(shipment.documentNumberAbsence);
 }

@@ -9,6 +9,7 @@ import { formatInstant } from '../moment';
 import type { ShipmentRequestSummary } from './api';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf } from './ref-no';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 
 // 运单工作台的详情栏（设计源「五、改版示意 · 运单」）：头部运单号 + 状态胶囊 + 一行副题（客户 · 客户单号），主动作「打开详情」，
 // 三格事实，最底下一格「技术详情」收各种 ID——委托标识、客户账户编码、提交主体、来源请求键、提交版本。首屏只放人要看的，
@@ -82,7 +83,7 @@ export function ShipmentRequestDetailPanel({
         <TechnicalDetails
           className="mt-4"
           rows={[
-            ...(absenceNote ? [{ label: objectNouns.shipmentNumber, value: absenceNote }] : []),
+            ...(absenceNote ? [{ label: documentTypeWords.SHIPMENT.numberName, value: absenceNote }] : []),
             { label: '委托标识', value: row.shipmentRequestId },
             { label: '客户账户编码', value: row.customerAccountId },
             { label: '提交主体', value: row.source },
