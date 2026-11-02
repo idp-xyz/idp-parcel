@@ -564,6 +564,9 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     ISSUED_BEFORE_NUMBERING: muted('上线前开立，无单据号'),
     NUMBERING_TIME_ZONE_NOT_CONFIGURED: warn('开立时单据编号时区未配置，无单据号'),
   },
+  // 单据编号规则的来源（ADR-0355 决定五）：产品默认是随产品发布的内置格式，不是「没配置」，所以不用琥珀；本公司登过
+  // 自己的格式是蓝，提示这一类与产品默认不同。
+  'document-numbering-source': { PRODUCT_DEFAULT: muted('产品默认'), TENANT_RULE: info('本公司规则') },
 };
 
 type UnknownCodeHandler = (code: string) => void;

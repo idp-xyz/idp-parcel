@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Globe,
   Handshake,
+  Hash,
   History,
   LayoutDashboard,
   Landmark,
@@ -168,6 +169,9 @@ export const navigationSections: NavigationSection[] = [
       { id: 'group-legal-entities', label: '公司主体', icon: 'group-legal-entities' },
       { id: 'tracking-judgment-rules', label: '追踪规则', icon: 'tracking-judgment-rules' },
       { id: 'disclosure-policies', label: '通知与披露', icon: 'disclosure-policies' },
+      // 单据编号规则册是编号技术组件的配置（ADR-0355 决定六），不属任何限界上下文；本公司可改格式、登单据编号时区，与上面
+      // 两组规则同是公司自己登记的配置，所以排在它们后面。
+      { id: 'document-numbering', label: '单据编号', icon: 'document-numbering' },
       // 作业设备册是登记式目录，不是现场作业，也不做设备管理（ADR-0149 越权风险点 2）。
       { id: 'work-devices', label: '扫描设备', icon: 'work-devices' },
       { id: 'pending-publications', label: '审批与发布', icon: 'pending-publications' },
@@ -216,6 +220,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'customs-restrictions': ShieldAlert,
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
+  'document-numbering': Hash,
   'claim-prerequisites': BadgeCheck,
   'work-devices': TabletSmartphone,
   'reference-data': BookOpen,
@@ -567,6 +572,15 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '产品内置基础数据（platform/refdata；不是限界上下文）；启用范围登记归参与方与商业（party-commercial）',
     source:
       'docs/adr/0335-countries-currencies-and-units-are-product-built-in-read-only-reference-data-released-with-the-code-and-unit-conversion-keeps-precision-and-is-not-yet-wired-into-pricing.md 决定一、三、六、七；启用范围见 docs/adr/0345-tenant-enablement-of-countries-and-currencies-is-a-tenant-value-registered-in-party-commercial-and-new-write-entries-accept-only-catalogue-codes.md',
+  },
+
+  // —— 设置 · 单据编号（编号技术组件的配置；不是限界上下文）——
+  'document-numbering': {
+    title: '单据编号',
+    summary: '运单、对账单、异常案件等各类单据的号怎么出：此刻的格式与样例号，改用新格式，登记单据编号时区。',
+    owner: '编号技术组件（platform/docnumber；不是限界上下文）；单据号归各单据所属的上下文',
+    source:
+      'docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md 决定五、六、七、八；票 .scratch/document-numbering/issues/03-admin-settings-document-numbering-page.md',
   },
 
   // —— 设置 · 试点治理（pilotgovernance）——
