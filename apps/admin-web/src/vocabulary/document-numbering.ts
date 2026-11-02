@@ -143,3 +143,26 @@ export const templateTokenWords: Readonly<Record<string, string>> = {
   le: '法人',
   check: '校验位',
 };
+
+/**
+ * 单据没有单据号的两种情形（ADR-0355 决定三、七；GLOSSARY「单据号」）：读口答 `documentNumberAbsence` 时取这里的说法。
+ * 各页的技术详情都从这一处取，不各写一份——「上线前开立」与「时区未配置」要分开说，不能一律写成前者。
+ */
+export const documentNumberAbsenceWords: Readonly<Record<string, string>> = {
+  ISSUED_BEFORE_NUMBERING: '上线前开立，无单据号',
+  NUMBERING_TIME_ZONE_NOT_CONFIGURED: '开立时单据编号时区未配置，无单据号',
+};
+
+/** 无号原因的界面说法；认不出的原因码如实露出，不猜。 */
+export function documentNumberAbsenceNote(code: string): string {
+  return documentNumberAbsenceWords[code] ?? `无单据号（原因码 ${code}，界面还没有这一种的说法）`;
+}
+
+/**
+ * 开立答「编号规则撞号」（`NUMBERING_RULE_COLLISION`，ADR-0355 决定八）时的说法：这一次没有开立，指到规则册。
+ * `documentType` 是撞号那一类的类型代码，用来说出号名；认不出就泛说「单据号」。
+ */
+export function numberingCollisionNote(documentType?: string): string {
+  const numberName = (documentType && documentTypeWords[documentType]?.numberName) || '单据号';
+  return `这一次没有开立：按本公司的编号规则出的${numberName}与已有的号重复了。请到「设置 → 单据编号」换一个不会与旧号重复的格式后再试。`;
+}

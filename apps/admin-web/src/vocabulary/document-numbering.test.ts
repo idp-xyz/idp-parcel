@@ -1,7 +1,9 @@
 import { test } from 'node:test';
-import { deepEqual, equal, ok } from 'node:assert/strict';
+import { deepEqual, equal, match, ok } from 'node:assert/strict';
 import {
+  documentNumberAbsenceNote,
   documentTypeWords,
+  numberingCollisionNote,
   registrationOutcomeWords,
   registrationRejectionWords,
   resetPeriodWords,
@@ -72,4 +74,17 @@ test('规则来源胶囊', () => {
   equal(labelFor('PRODUCT_DEFAULT', 'document-numbering-source'), '产品默认');
   equal(labelFor('TENANT_RULE', 'document-numbering-source'), '本公司规则');
   equal(toneFor('PRODUCT_DEFAULT', 'document-numbering-source'), 'muted');
+});
+
+test('无号原因两种说法分开，认不出的原因码如实露出', () => {
+  equal(documentNumberAbsenceNote('ISSUED_BEFORE_NUMBERING'), '上线前开立，无单据号');
+  equal(documentNumberAbsenceNote('NUMBERING_TIME_ZONE_NOT_CONFIGURED'), '开立时单据编号时区未配置，无单据号');
+  match(documentNumberAbsenceNote('SOMETHING_NEW'), /SOMETHING_NEW/);
+});
+
+test('撞号说法带上那一类的号名，认不出类型就泛说单据号', () => {
+  match(numberingCollisionNote('BOOKING'), /订舱号与已有的号重复/);
+  match(numberingCollisionNote('TRANSPORT_COMMISSION'), /委托号/);
+  match(numberingCollisionNote(), /单据号与已有的号重复/);
+  match(numberingCollisionNote('BOOKING'), /设置 → 单据编号/);
 });
