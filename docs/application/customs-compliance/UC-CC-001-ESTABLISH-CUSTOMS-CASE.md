@@ -268,6 +268,10 @@
 | `AT-CC-022` | 建案后出现不同监管方向、程序或独立法定义务 | 建立有关联的新案件并保留原案；不得修改原案件四项固定身份吸收新义务 |
 | `AT-CC-437` | 运营人员经建案命令面指名已接受包裹与固定监管范围四维，请求不带客户归属与来源资料引用 | 服务端按包裹查当前已接受委托，取其客户账户与（委托、当前提交版本）作关联后建案；请求带这两格即拒为坏报文、不进编排；同包裹集重放返回已有案件（[ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md)） |
 | `AT-CC-438` | 建案请求里有包裹不在任何当前已接受委托里，或该监管范围的建案要求规则尚未登记 | 前者返回`包裹未接受`并逐件列出，后者返回`建案要求未配置`（未决并指名规则未配置）；都不建占位案件，不把未登记解释为不要求 |
+| `AT-CC-459` | 租户已登单据编号时区，运营人员建立一个新案件；之后同一建案请求重放，再为同一包裹的另一项法定义务建立关联的后续案件 | 案件在建案事务内按 `CUSTOMS_CASE` 此刻生效的规则取得单据号，答复、案件列表与单份读回带号，案件标识照旧；重放返回原案件与原号，不再取号；后续案件取新号；不适用、未受理与范围冲突都不取号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） |
+| `AT-CC-460` | 租户没登单据编号时区时建立案件；或读回单据号规则生效前建立的案件 | 前者照常建案、不带单据号并记下「单据编号时区未配置」，事后补登时区不补号；后者读成「上线前开立」；两者的答复与读口都不带单据号这一格、不拿案件标识顶，另说是哪一种情形，管理台按情形注明 |
+| `AT-CC-461` | 按此刻生效的规则渲染出的号连续撞上已用的号，直到跳过上限 | 返回`编号规则撞号`并指到规则册；不落案件，建案事务回滚、取过的流水全部释放；不是故障，重试换不来号 |
+| `AT-CC-462` | 同租户多个建案并发、同一范围的建案并发、两个租户各自建案、租户单据编号时区跨过午夜、建案事务回滚 | 号互不相同且不留空号（同一范围只落一个案件，输掉的答原号并释放取过的流水）；流水按租户分开计；号里的日期按租户单据编号时区、过了午夜从 1 起；回滚的那一笔不占号 |
 
 ## 生产参数与待决风险
 
@@ -305,4 +309,4 @@
 
 | 规则 | 现状 | 去处 |
 |---|---|---|
-| CONTEXT「关务案件」：建立案件时取得案件单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 建立案件不取号，页面只显示随机案件标识 | [document-numbering/07](../../../.scratch/document-numbering/issues/07-customs-case-numbers.md) |
+| CONTEXT「关务案件」：建立案件时取得案件单据号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)）；`AT-CC-459`–`AT-CC-462` | 已补：建案编排在领域建立之后、落库之前经消费侧端口 `CaseDocumentNumbers` 取号（适配器 `customscompliance/adapters/docnumbering` 接编号组件的取号编排，判撞查案件表），号或无号情形随案件同一行落下（迁移 `customs_compliance/0032`，（租户，单据号）唯一，旧行不回填）；撞号与「取过号才发现被并发建案抢先」由建案口的事务壳回滚；建案答复与案件读口带 `documentNumber` 或 `documentNumberAbsence`；管理台清关单页以清关单号为主列，报关批次与关闭核对引到案件处同显单据号，案件标识进技术详情；CONTEXT 那句规则补写了日期所用的时区（租户单据编号时区） | [document-numbering/07](../../../.scratch/document-numbering/issues/07-customs-case-numbers.md) |
