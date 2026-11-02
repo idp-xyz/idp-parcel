@@ -187,6 +187,6 @@ test('没落版的六格都是形成了的答案，不是失败，也不重读�
 
 test('问题码：404 指名不到与 403 不在准入范围各有说法', () => {
   ok(dispositionProblemNote('JUDGMENT_NOT_VISIBLE').includes('刷新列表'));
-  ok(dispositionProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('生产权威区间'));
-  equal(dispositionProblemNote('SOMETHING_ELSE'), '服务端问题码：SOMETHING_ELSE');
+  ok(dispositionProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('阶段'));
+  ok(dispositionProblemNote('SOMETHING_ELSE').includes('SOMETHING_ELSE'));
 });

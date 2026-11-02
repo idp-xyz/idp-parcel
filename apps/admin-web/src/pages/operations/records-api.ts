@@ -211,9 +211,21 @@ export type TransportFulfillmentRegistry =
  */
 export interface TransportScheduleRecord {
   scheduleId: string;
-  direction: string;
+  /** 旧读面的运行方向；今天的读面改带两端网点，这一键缺席。 */
+  direction?: string;
   departsAt: string;
   recordedAt: string;
+  // 以下各键是读面随班次行带出的（按模板生成的班次带模板与运行日）；缺席即这一行没有，页面显「—」不补。
+  version?: number;
+  connection?: string;
+  fromNode?: string;
+  toNode?: string;
+  arrivesAt?: string;
+  serviceScope?: string;
+  origin?: string;
+  template?: string;
+  templateVersion?: number;
+  runningDate?: string;
 }
 
 /**

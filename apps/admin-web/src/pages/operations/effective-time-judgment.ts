@@ -17,29 +17,29 @@ import { labelOf } from './presentation';
 
 /** 有效时间依据封闭三格（transportfulfillment domain EffectiveTimeBasis），中文取 CONTEXT 原词。 */
 export const effectiveBasisLabels: Record<string, string> = {
-  PENDING: '待判断',
-  JUDGED_EXPLICITLY: '所有者显式判断',
-  JUDGED_BY_RULE: '按已登记规则判断',
+  PENDING: '待确认',
+  JUDGED_EXPLICITLY: '人工确认',
+  JUDGED_BY_RULE: '按规则自动确认',
 };
 
 /** 版本来源封闭两格（domain VersionOrigin）：素材到达形成的版本 / 一次判断形成的版本。 */
 export const versionOriginLabels: Record<string, string> = {
-  MATERIAL: '素材到达',
-  JUDGMENT: '判断形成',
+  MATERIAL: '承运商回传',
+  JUDGMENT: '确认形成',
 };
 
 /** 判断口结果代数四格（application EffectiveTimeJudgmentOutcome）。 */
 export const judgmentOutcomeLabels: Record<string, string> = {
-  EFFECTIVE_TIME_JUDGED: '已判断——新版本回指前版，已交 visibility-exception',
-  ALREADY_JUDGED_AS_GIVEN: '已按同值判过——交回既有判断版本，不再落新版',
-  INPUT_NOT_ACCEPTED: '未受理——事实不存在于本租户，或事实引用 / 有效时间不成形',
-  JUDGMENT_UNDECIDED: '未决——依赖故障，判断与否未知',
+  EFFECTIVE_TIME_JUDGED: '已确认起算时间',
+  ALREADY_JUDGED_AS_GIVEN: '这一条已经按同一时间确认过，没有重复记录',
+  INPUT_NOT_ACCEPTED: '没有确认：找不到这条轨迹，或时间格式不对',
+  JUDGMENT_UNDECIDED: '结果还不确定：系统暂时出了问题，可稍后重试',
 };
 
 /** 未决成因（application TrackingAdoptionUndecidedReason 里判断会用到的两格）。 */
 export const judgmentUndecidedReasonLabels: Record<string, string> = {
-  TRACKING_FACT_REGISTRY_UNAVAILABLE: '事实登记册读不回来',
-  TRACKING_IDENTITY_UNAVAILABLE: '版本签发不可用',
+  TRACKING_FACT_REGISTRY_UNAVAILABLE: '轨迹记录暂时读不出来',
+  TRACKING_IDENTITY_UNAVAILABLE: '暂时无法生成新记录',
 };
 
 export interface FactRow {
@@ -105,22 +105,19 @@ export function factListViewState(
   if (trimmed === '') {
     return {
       kind: 'empty',
-      title: '尚未指定轨迹源',
-      description:
-        '外部承运轨迹事实按（租户，轨迹源）上列——规则按源登记、回填按源重判，判断人也按源看；未指定源时页面不发请求。',
+      title: '先选一个轨迹来源',
+      description: '承运商回传的轨迹按来源分开查看：在上方输入轨迹来源（如承运商的接口编码），再点「查询」。',
     };
   }
   const empty =
     view === 'pending'
       ? {
-          title: `轨迹源 ${trimmed} 此刻没有待判断的事实`,
-          description:
-            '读取入口已配置，这一格是真答案：要么该源尚无被认领的轨迹，要么全部已判断（显式或按已登记规则）。切到「全部当前版」可看已判断的版本及其依据。',
+          title: `${trimmed} 现在没有待确认的轨迹`,
+          description: '要么这个来源还没有回传轨迹，要么全部已确认（人工或按规则）。切到「全部轨迹」可以看已确认的那些。',
         }
       : {
-          title: `轨迹源 ${trimmed} 此刻没有任何当前版`,
-          description:
-            '读取入口已配置，这家源还没有被认领的外部承运轨迹事实——认领由收编执行器按源的拉取节拍进行，页面不含合成数据。',
+          title: `${trimmed} 还没有回传任何轨迹`,
+          description: '系统会按约定的频率向这个来源拉取轨迹，拉到后会出现在这里。请核对来源编码是否写对。',
         };
   return catalogueViewState(answer, rowCount, retry, {
     module: options.module,
@@ -146,7 +143,8 @@ export interface JudgmentNote {
 }
 
 export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody): JudgmentNote {
-  const headline = `判断口答复：${body.outcome} —— ${labelOf(judgmentOutcomeLabels, body.outcome)}`;
+  // 英文结果码不上屏：查得到的显中文，查不到的原样露码（labelOf 的约定），原码进不进技术详情由页面定。
+  const headline = labelOf(judgmentOutcomeLabels, body.outcome);
   switch (body.outcome) {
     case 'EFFECTIVE_TIME_JUDGED':
       return {
@@ -155,7 +153,7 @@ export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody):
         canRetry: false,
         headline,
         details: [
-          `新版本 ${body.version ?? '—'} 回指 ${body.supersedes ?? '—'}`,
+          `新记录 ${body.version ?? '—'} 接续 ${body.supersedes ?? '—'}`,
           basisLine(body),
           handoffLine(body),
         ],
@@ -167,8 +165,8 @@ export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody):
         canRetry: false,
         headline,
         details: [
-          `这一条已经判过：版本 ${body.version ?? '—'}，${basisLine(body)}`,
-          ...(body.supersedes ? [`该版本回指 ${body.supersedes}`] : []),
+          `这一条已经确认过：记录 ${body.version ?? '—'}，${basisLine(body)}`,
+          ...(body.supersedes ? [`接续 ${body.supersedes}`] : []),
           handoffLine(body),
         ],
       };
@@ -178,7 +176,7 @@ export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody):
         landed: false,
         canRetry: false,
         headline,
-        details: ['同样的输入重试仍是同一个答案：请核对事实引用是否属本租户、有效时间是否为 RFC 3339 时刻。'],
+        details: ['原样重试还是同一个结果：请核对轨迹编号是否抄对，时间是否写成 2026-09-04T06:05:00Z 这样的格式。'],
       };
     case 'JUDGMENT_UNDECIDED':
       return {
@@ -187,7 +185,7 @@ export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody):
         canRetry: true,
         headline,
         details: [
-          `${labelOf(judgmentUndecidedReasonLabels, body.undecidedReason ?? '')}；续办引用 ${body.continuationReference ?? '—'}。这不是「判断被拒」，重试可能得到答案。`,
+          `${labelOf(judgmentUndecidedReasonLabels, body.undecidedReason ?? '')}；这不是被拒，稍后重试即可（续办引用 ${body.continuationReference ?? '—'}）。`,
         ],
       };
     default:
@@ -201,15 +199,15 @@ export function describeJudgmentAnswer(body: EffectiveTimeJudgmentResponseBody):
 export function judgmentProblemNote(code: string): string {
   switch (code) {
     case 'METHOD_NOT_ALLOWED':
-      return '端点不接受当前 HTTP 方法；请检查前端与服务端版本是否一致。';
+      return '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。';
     case 'MALFORMED_REQUEST':
-      return '载荷不是服务端接受的形状（只有事实引用与 RFC 3339 时刻两键，且不得带身份键）；请检查前端与服务端版本是否一致。';
+      return '提交的内容系统读不懂（只需要轨迹编号和时间两项）；请刷新页面后重试，仍然不行请联系系统管理员。';
     case 'INTAKE_FAILED':
-      return '接入面未能形成操作者身份；服务端未读取判断内容。';
+      return '登录信息没能核对通过，这次什么都没有保存；请稍后重试。';
     case 'NO_ANSWER_FORMED':
-      return '判断编排未能形成答案，可稍后重试。';
+      return '系统暂时没能处理，可稍后重试。';
     default:
-      return `服务端问题码：${code}`;
+      return `这次没有成功（错误码 ${code}）；请记下错误码联系系统管理员。`;
   }
 }
 
@@ -220,11 +218,11 @@ function basisLine(body: EffectiveTimeJudgmentResponseBody): string {
     body.effectiveRule && body.effectiveRuleVersion
       ? `（规则 ${body.effectiveRule}@${body.effectiveRuleVersion}）`
       : '';
-  return `依据：${basis}${rule}${at}`;
+  return `确认方式：${basis}${rule}${at}`;
 }
 
 function handoffLine(body: EffectiveTimeJudgmentResponseBody): string {
   return body.handoffReference
-    ? `意图尚未交出 visibility-exception，续办引用 ${body.handoffReference}；重放同一判断会重发。`
-    : '意图已交 visibility-exception，客户可见面随派发进程更新。';
+    ? `还没同步到物流动态（续办引用 ${body.handoffReference}）；重新提交同一确认会再发一次。`
+    : '已同步到物流动态，客户看到的轨迹会随之更新。';
 }

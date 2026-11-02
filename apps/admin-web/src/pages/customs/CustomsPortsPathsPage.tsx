@@ -16,6 +16,9 @@ import {
 } from './api';
 import { portsPathsRegistryLabels, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { labelFor } from '../../vocabulary/status';
+import { StatusPill } from '../../components/StatusPill';
+import { useMayWriteRegistry } from '../use-operator-grants';
+import { validityOf } from '../network/network-rows';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-ports-paths'];
@@ -36,7 +39,22 @@ const info = moduleInfoById['customs-ports-paths'];
 interface CatalogueRow {
   key: string;
   values: Readonly<Record<string, string>>;
+  /** 生效区间原值：状态胶囊按此刻现算（network-rows 的 validityOf），不进检索。 */
+  appliesFrom: string;
+  appliesUntil?: string;
 }
+
+// 此刻在不在可用期：同口岸多版逐行在列时，一眼看出哪一版正在用。
+const validityColumn: ListColumn<CatalogueRow> = {
+  id: 'validity',
+  header: '状态',
+  align: 'center',
+  className: 'w-[96px]',
+  render: (row) => {
+    const code = validityOf(row.appliesFrom, row.appliesUntil, new Date());
+    return code ? <StatusPill code={code} /> : '—';
+  },
+};
 
 function col(id: string, header: string, mono = false): ListColumn<CatalogueRow> {
   return {
@@ -54,12 +72,15 @@ function col(id: string, header: string, mono = false): ListColumn<CatalogueRow>
 const portColumns: ListColumn<CatalogueRow>[] = [
   col('port', '口岸', true),
   col('applies', '可用期间', true),
+  validityColumn,
 ];
 
 function portRows(body: CandidatePortListResponseBody): CatalogueRow[] {
   return body.ports.map((record) => ({
     // 行键循库主键 (tenant, port_ref, applies_from)：同口岸各版本起点唯一。
     key: `port:${record.port}:${record.appliesFrom}`,
+    appliesFrom: record.appliesFrom,
+    appliesUntil: record.appliesUntil,
     values: {
       port: record.port,
       applies: formatRange(record.appliesFrom, record.appliesUntil),
@@ -98,7 +119,7 @@ function CandidatePortsTable() {
       search={{ value: search, onChange: setSearch, placeholder: '搜口岸' }}
       filterSummary={
         answer?.kind === 'outcome'
-          ? `${portsPathsRegistryLabels['candidate-port']} ${rows.length} 版`
+          ? `共 ${rows.length} 条`
           : undefined
       }
       columns={portColumns}
@@ -125,11 +146,14 @@ const pathColumns: ListColumn<CatalogueRow>[] = [
   col('direction', '方向'),
   col('mode', '申报模式', true),
   col('applies', '适用期间', true),
+  validityColumn,
 ];
 
 function pathRows(body: DeclarationPathListResponseBody): CatalogueRow[] {
   return body.paths.map((record) => ({
     key: `path:${record.path}:${record.appliesFrom}`,
+    appliesFrom: record.appliesFrom,
+    appliesUntil: record.appliesUntil,
     values: {
       path: record.path,
       port: record.port,
@@ -171,7 +195,7 @@ function DeclarationPathsTable() {
       search={{ value: search, onChange: setSearch, placeholder: '搜路径、口岸、申报模式' }}
       filterSummary={
         answer?.kind === 'outcome'
-          ? `${portsPathsRegistryLabels['declaration-path']} ${rows.length} 版`
+          ? `共 ${rows.length} 条`
           : undefined
       }
       columns={pathColumns}
@@ -212,12 +236,12 @@ function CandidateRegionsTable() {
       rowKey={(row) => row.key}
       viewState={{
         kind: 'unconfigured',
-        title: '这一签的数据还没有接通',
-        description: '可用区域的登记与查询还在建设中；口岸与申报路径两签已经可用。本签不发请求，也不显示任何示意数据。',
+        title: '可用区域还不能在这里查看',
+        description: '可用区域的登记与查询还在建设中；口岸与申报路径两签已经可用。这一签不显示任何示意数据。',
         facts: {
           owner: info.owner,
           source: info.source,
-          unlock: '区域维建模落地、查询端点建成并经 ADR-0017 准入闸门放行后接线',
+          unlock: '区域的登记与查询上线后，这一签会自动显示',
         },
       }}
     />
@@ -255,6 +279,8 @@ const registrationTargets: RegistrationTarget[] = registrationKinds.map((kind) =
  * 未配置」，那是诚实答案；墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
  */
 export function CustomsPortsPathsPage() {
+  // 写入口按授予收起（ADR-0315）：明确没有登记册写授予时不摆登记签。
+  const mayWrite = useMayWriteRegistry();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="ports" className="flex-1 flex flex-col overflow-hidden gap-0">
@@ -262,7 +288,7 @@ export function CustomsPortsPathsPage() {
           <TabsTrigger value="ports">可用口岸</TabsTrigger>
           <TabsTrigger value="paths">申报路径</TabsTrigger>
           <TabsTrigger value="regions">可用区域</TabsTrigger>
-          <TabsTrigger value="register">登记</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">登记</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="ports" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CandidatePortsTable />
@@ -273,13 +299,11 @@ export function CustomsPortsPathsPage() {
         <TabsContent value="regions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CandidateRegionsTable />
         </TabsContent>
-        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <MultiRegistrationPanel
-            moduleId="customs-ports-paths"
-            targets={registrationTargets}
-            problemNote={problemNote}
-          />
-        </TabsContent>
+        {mayWrite ? (
+          <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <MultiRegistrationPanel moduleId="customs-ports-paths" targets={registrationTargets} problemNote={problemNote} />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );

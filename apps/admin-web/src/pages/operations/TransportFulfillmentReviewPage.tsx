@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import {
-  StatusBadgeFor,
-  domainStatusTones,
-  type DomainStatus,
-} from '../../domain/status';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
+import { parcelNoOf } from '../shipment-request/ref-no';
 import { chipClass } from '../../components/registration';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -18,6 +17,17 @@ import {
 } from './records-api';
 import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
+import { labelFor } from '../../vocabulary/status';
+import { weightUnitLabels } from '../../vocabulary/price-card';
+
+/**
+ * 舱位与订舱的计量单位：重量单位取词典的那一册；按件计的 PCS 词典里没有重量义，这里只说「件」。查不到的单位原样显示——
+ * 单位是承运商与租户登记的取值，页面不猜。
+ */
+function unitWord(unit: string): string {
+  if (unit === 'PCS') return '件';
+  return weightUnitLabels[unit] ?? unit;
+}
 import { bookingRowOf, bounceRowOf, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -45,12 +55,43 @@ interface ReviewRow {
 
 // 词表词（已交接/已拒收/待确认）按共享词表着色；词表没收录的词原样示文,
 // 不猜色调。断言只桥接两个模块的类型边界,词本身同源于 CONTEXT 原词。
-function toneWordOrText(value: string) {
-  return value in domainStatusTones ? (
-    <StatusBadgeFor status={value as DomainStatus} />
-  ) : (
-    value
-  );
+/**
+ * 状态格：词取行上已译好的那一格；codeKey 给了就按码查词典色调（同码异义的册经 scope 分开），没给按词反查。
+ * 原先这里走 domain/status 的旧徽章，只认得它自己那几个词；改走全站的状态胶囊，词典改一个词全站一起变。
+ */
+function pillCell(row: ReviewRow, id: string, codeKey?: string, scope?: string) {
+  const word = row.values[id];
+  if (!word) return '—';
+  const code = codeKey ? row.values[codeKey] : undefined;
+  return code ? <StatusPill code={code} scope={scope} label={word} /> : <StatusPill label={word} />;
+}
+
+/** 包裹号格：去掉线格式前缀的短写法上屏，整串在悬停与技术详情里。 */
+function parcelCol(id: string, header: string): ListColumn<ReviewRow> {
+  return {
+    id,
+    header,
+    render: (row) => (
+      <span className="font-mono text-[12px]" title={row.values[id]}>
+        {parcelNoOf(row.values[id] ?? '')}
+      </span>
+    ),
+  };
+}
+
+/** 每行末尾的「技术详情」：判断版本、引用、更正指回这类排查时才用的字，空的不占格。 */
+function techCol(pairs: [label: string, key: string][]): ListColumn<ReviewRow> {
+  return {
+    id: 'technical',
+    header: '',
+    className: 'align-top',
+    render: (row) => (
+      <TechnicalDetails
+        rows={technicalRows(pairs.map(([label, key]) => ({ label, value: row.values[key] })))}
+        className="max-w-md open:min-w-[18rem]"
+      />
+    ),
+  };
 }
 
 function col(
@@ -60,7 +101,7 @@ function col(
     mono?: boolean;
     align?: 'left' | 'center' | 'right';
     className?: string;
-    toneWord?: boolean;
+    pill?: { codeKey?: string; scope?: string };
   },
 ): ListColumn<ReviewRow> {
   return {
@@ -70,7 +111,7 @@ function col(
     className: options?.className,
     render: (row) => {
       const value = row.values[id] ?? '—';
-      if (options?.toneWord) return toneWordOrText(value);
+      if (options?.pill) return pillCell(row, id, options.pill.codeKey, options.pill.scope);
       if (options?.mono) return <span className="font-mono text-[12px]">{value}</span>;
       return value;
     },
@@ -111,79 +152,98 @@ const sections: ReviewSection[] = [
     // 到达…)在班次行上没有登记格——缺席说的是「无处可登」,本区不代填「未出发」
     // 一类派生状态列(票 05 Comments)。
     columns: [
-      col('scheduleId', '班次标识', { mono: true }),
-      col('direction', '运行方向', { mono: true }),
-      col('departsAt', '出发时刻', { mono: true }),
+      col('scheduleId', '班次', { mono: true }),
+      col('leg', '从 → 到', { mono: true }),
+      col('departsAt', '出发时间', { mono: true }),
+      col('arrivesAt', '到达时间', { mono: true }),
+      col('runningDate', '运行日', { mono: true }),
+      techCol([
+        ['运输连接', 'connection'],
+        ['服务范围', 'serviceScope'],
+        ['班次模板', 'template'],
+        ['运行方向', 'direction'],
+        ['登记时间', 'recordedAt'],
+      ]),
     ],
   },
   {
     id: 'capacity-pools',
-    word: '容量池',
+    word: '舱位',
     registry: 'capacity-pool',
     // 容量池只启用适用维度,不强制换算成一个数值(CONTEXT);有效容量、已预占、
     // 已释放、实际使用分别维护,各占一列,页面不互相抵扣算「可用量」——那是领域
     // 按时点算的判断。
+    // 四个量各自照实列出，不互相抵扣成「剩余」：可用量是领域按时点算的判断，读面不代算（records-api 的 CapacityPoolRecord）。
     columns: [
-      col('poolId', '容量池', { mono: true }),
-      col('schedule', '关联班次', { mono: true }),
-      col('unit', '容量单位', { mono: true, className: 'w-[104px]' }),
-      col('capacity', '有效容量', { align: 'right', mono: true }),
-      col('reserved', '已预占', { align: 'right', mono: true }),
+      col('schedule', '班次', { mono: true }),
+      col('unit', '按什么计', { mono: true, className: 'w-[96px]' }),
+      col('capacity', '总舱位', { align: 'right', mono: true }),
+      col('reserved', '已预订', { align: 'right', mono: true }),
       col('released', '已释放', { align: 'right', mono: true }),
-      col('consumed', '实际使用', { align: 'right', mono: true }),
+      col('consumed', '已装载', { align: 'right', mono: true }),
+      techCol([['舱位池', 'poolId']]),
     ],
   },
   {
     id: 'handover-results',
-    word: '权威交接结果',
+    word: '交接结果',
     registry: 'transport-handover',
     // 权威运输交接结果由本上下文唯一形成,逐载运对象判断并允许部分成立(CONTEXT);
     // 结果词(已交接/已拒收/待确认)在共享词表内,按词表着色。一行一判断版本,更正
     // 是新行指回前版(更正指回列),原判断在册面上继续可见;整批、整车结论只能由
     // 对象级结果派生,本区行粒度就是载运对象。
     columns: [
-      col('object', '载运对象', { mono: true }),
-      col('boundary', '交接边界', { mono: true }),
-      col('verdict', '结果', { toneWord: true, className: 'w-[104px]' }),
-      col('basis', '依据', { mono: true }),
-      col('judgedAt', '判断时间', { mono: true }),
-      col('version', '判断版本', { mono: true }),
-      col('corrects', '更正指回', { mono: true }),
+      parcelCol('object', '包裹'),
+      col('boundary', '从谁交给谁', { mono: true }),
+      col('verdict', '结果', { pill: { codeKey: 'verdictCode', scope: 'handover' }, className: 'w-[104px]' }),
+      col('judgedAt', '交接时间', { mono: true }),
+      techCol([
+        ['包裹标识', 'object'],
+        ['交接批次', 'scope'],
+        ['判断版本', 'version'],
+        ['依据', 'basis'],
+        ['更正了', 'corrects'],
+      ]),
     ],
   },
   {
     id: 'handover-scope-summary',
-    word: '交接范围汇总',
+    word: '交接批次汇总',
     scopeSummary: true,
     // 整批/整车/整袋结论只能由对象级结果派生(CONTEXT);本区因此不是第六本册,是上一区
     // 那本册的派生问答——一个范围问一次,答的是「各裁决各有多少」。三格计数与`全部已
     // 交接`都取服务端派生的那一份,页面不相加也不比对:自己算就是为同一条规则立第二个
     // 口径,领域改一次判据、页面这份会悄悄漂移。
     columns: [
-      col('scope', '交接范围', { mono: true }),
+      col('scope', '交接批次', { mono: true }),
       col('handedOver', '已交接', { align: 'right', mono: true }),
       col('refused', '已拒收', { align: 'right', mono: true }),
       col('unconfirmed', '待确认', { align: 'right', mono: true }),
-      col('total', '成员合计', { align: 'right', mono: true }),
-      col('allHandedOver', '全部已交接', { align: 'center', className: 'w-[104px]' }),
+      col('total', '合计', { align: 'right', mono: true }),
+      col('allHandedOver', '全部交接了没有', { align: 'center', className: 'w-[120px]' }),
     ],
   },
   {
     id: 'delivery-proofs',
-    word: '交付证明',
+    word: '签收记录',
     registry: 'effective-delivery',
     // 有效交付结果必须关联载运对象、履约尝试、业务时间、地点、交付方式、接收对象
     // 和符合当时规则的交付证明(CONTEXT);「已签收」不是可直接修改的状态,证明列
     // 是引用不是证据内容,更正走新判断版本(更正指回列),本册只列当前版。
     columns: [
-      col('object', '载运对象', { mono: true }),
-      col('attempt', '履约尝试', { mono: true }),
-      col('method', '交付方式', { mono: true }),
-      col('recipient', '接收对象', { mono: true }),
-      col('place', '交付地点', { mono: true }),
-      col('occurredAt', '业务时间', { mono: true }),
-      col('proof', '交付证明（引用）', { mono: true }),
-      col('corrects', '更正指回', { mono: true }),
+      parcelCol('object', '包裹'),
+      col('method', '怎么签收的'),
+      col('recipient', '签收人', { mono: true }),
+      col('place', '签收地点', { mono: true }),
+      col('occurredAt', '签收时间', { mono: true }),
+      techCol([
+        ['包裹标识', 'object'],
+        ['派送尝试', 'attempt'],
+        ['签收凭证', 'proof'],
+        ['判断版本', 'version'],
+        ['签收方式码', 'methodCode'],
+        ['更正了', 'corrects'],
+      ]),
     ],
   },
   {
@@ -197,16 +257,18 @@ const sections: ReviewSection[] = [
     // 装载、交接或运输，本区不派生任何控制状态词。与监管舱单分界:监管舱单由承运商
     // 在外部形成并提交，关务经 UC-CC-012 只接受引用，不在本页。
     columns: [
-      col('document', '总单引用', { mono: true }),
-      col('version', '版本', { mono: true }),
+      col('document', '总单号', { mono: true }),
       col('issuer', '签发方', { mono: true }),
-      col('scope', '主运输凭证范围', { mono: true }),
-      col('standing', '适用状态', { className: 'w-[104px]' }),
-      col('associationCount', '关联数', { align: 'right', mono: true, className: 'w-[72px]' }),
-      col('references', '运输委托 / 订舱', { mono: true }),
-      col('supersedes', '回指前版', { mono: true }),
-      col('replacedBy', '替代者', { mono: true }),
-      col('changedAt', '改变时间', { mono: true }),
+      col('standing', '状态', { pill: { codeKey: 'standingCode' }, className: 'w-[104px]' }),
+      col('associationCount', '关联件数', { align: 'right', mono: true, className: 'w-[88px]' }),
+      col('changedAt', '变更时间', { mono: true }),
+      techCol([
+        ['版本', 'version'],
+        ['凭证范围', 'scope'],
+        ['运输委托 / 订舱', 'references'],
+        ['接续', 'supersedes'],
+        ['被替代为', 'replacedBy'],
+      ]),
     ],
   },
   {
@@ -216,34 +278,36 @@ const sections: ReviewSection[] = [
     // 一次订舱一行。状态词由读口按名下当前那一份承运答复读出，页面原词示文、不另算；取消是运营的决定
     // 不是承运答复，取消时刻与取消人单列，不并进状态（CONTEXT「订舱」）。提交人、取消人没记下时留空。
     columns: [
-      col('booking', '订舱', { mono: true }),
-      col('commission', '运输委托', { mono: true }),
+      col('booking', '订舱号', { mono: true }),
       col('schedule', '班次', { mono: true }),
-      col('requested', '申请量', { align: 'right', mono: true }),
-      col('requestedAt', '申请时刻', { mono: true }),
-      col('standing', '状态', { className: 'w-[96px]' }),
-      col('currentAnswer', '当前答复', { className: 'w-[88px]' }),
-      col('acceptedQuantity', '接受量', { align: 'right', mono: true }),
-      col('currentAnsweredAt', '答复时刻', { mono: true }),
-      col('cancelledAt', '取消时刻', { mono: true }),
-      col('submittedBy', '提交人', { mono: true }),
-      col('cancelledBy', '取消人', { mono: true }),
+      col('requested', '订了多少', { align: 'right', mono: true }),
+      col('requestedAt', '订舱时间', { mono: true }),
+      col('standing', '状态', { pill: {}, className: 'w-[96px]' }),
+      col('currentAnswer', '承运商答复', { className: 'w-[96px]' }),
+      col('acceptedQuantity', '接受了多少', { align: 'right', mono: true }),
+      col('cancelledAt', '取消时间', { mono: true }),
+      techCol([
+        ['运输委托', 'commission'],
+        ['答复时间', 'currentAnsweredAt'],
+        ['提交人', 'submittedBy'],
+        ['取消人', 'cancelledBy'],
+      ]),
     ],
   },
   {
     id: 'booking-answer-bounces',
-    word: '承运答复挡回',
+    word: '被挡回的答复',
     registry: 'booking-answer-bounce',
     // 挡回册是台账不是事实来源：挡回不形成承运接受，订舱的状态词不读它。依据两词（订舱不在册 /
     // 不是服务提供方）对答复方是同一格答复，只有这里分得开（CONTEXT「承运答复挡回」）。
     columns: [
-      col('source', '答复方', { mono: true }),
-      col('booking', '订舱', { mono: true }),
-      col('answer', '答复标识', { mono: true }),
-      col('basis', '依据'),
-      col('firstBouncedAt', '首次挡回', { mono: true }),
-      col('lastBouncedAt', '最近一次挡回', { mono: true }),
+      col('source', '谁答复的', { mono: true }),
+      col('booking', '订舱号', { mono: true }),
+      col('basis', '为什么挡回'),
+      col('firstBouncedAt', '第一次', { mono: true }),
+      col('lastBouncedAt', '最近一次', { mono: true }),
       col('count', '次数', { align: 'right', mono: true, className: 'w-[72px]' }),
+      techCol([['答复标识', 'answer']]),
     ],
   },
   {
@@ -253,23 +317,23 @@ const sections: ReviewSection[] = [
     // 它在存储上仍没有登记册；总单立册(ADR-0113)后本区单独成格，不再与总单共用
     // 一份「无登记册」文案。
     columns: [
-      col('manifestId', '舱单标识', { mono: true }),
-      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('relatedScope', '关联班次 / 实际履约段', { mono: true }),
-      col('businessTime', '业务时间', { mono: true }),
+      col('manifestId', '舱单号', { mono: true }),
+      col('relatedScope', '班次 / 运段', { mono: true }),
+      col('businessTime', '时间', { mono: true }),
     ],
+    // 存储上没有运输舱单登记表，查询端点的册名封闭集刻意不含本区（票 admin-skeleton-closure-batch/05 Comments）：没有表就没有
+    // 读法，答一份恒空的册子会把「无处可登」演成「登记册为空」。总单已另立登记册（ADR-0113）。
     absence: {
-      title: '运输舱单在存储上还没有登记册',
-      description:
-        'transport-fulfillment 目前没有运输舱单登记表，查询端点的册名封闭集刻意不含本区——没有表就没有读法，答一份恒空的册子会把「无处可登」演成「登记册为空」（票 admin-skeleton-closure-batch/05 Comments）。总单已另立登记册（ADR-0113），见「总单」区。',
-      unlock: '运输舱单登记表落地后随查询契约扩册接线；本区不发请求、不含合成数据。',
+      title: '运输舱单还不能在这里查看',
+      description: '运输舱单还没有接入管理台，这不是「没有舱单」。承运商总单在「总单」签里查看。',
+      unlock: '运输舱单接入后，这一签会自动显示',
     },
   },
 ];
 
 // 总单适用状态的三值封闭词按 CONTEXT 原词示文；词不在集合内原样示文，不猜。
 const masterDocumentStandingLabels: Record<string, string> = {
-  IN_FORCE: '有效',
+  IN_FORCE: '生效中',
   REVOKED: '已撤销',
   SUPERSEDED: '已替代',
 };
@@ -281,8 +345,15 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
         key: `schedule:${record.scheduleId}`,
         values: {
           scheduleId: record.scheduleId,
-          direction: record.direction,
+          leg: record.fromNode || record.toNode ? `${record.fromNode ?? '—'} → ${record.toNode ?? '—'}` : '',
           departsAt: formatInstant(record.departsAt),
+          arrivesAt: record.arrivesAt ? formatInstant(record.arrivesAt) : '',
+          runningDate: record.runningDate ?? '',
+          connection: record.connection ?? '',
+          serviceScope: record.serviceScope ?? '',
+          template: record.template ? `${record.template}${record.templateVersion ? ` · 第 ${record.templateVersion} 版` : ''}` : '',
+          direction: record.direction ?? '',
+          recordedAt: formatInstant(record.recordedAt),
         },
       }));
     case 'CAPACITY_POOLS_LISTED':
@@ -291,7 +362,7 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
         values: {
           poolId: record.poolId,
           schedule: record.schedule,
-          unit: record.unit,
+          unit: unitWord(record.unit),
           capacity: record.capacity,
           reserved: record.reserved,
           released: record.released,
@@ -306,6 +377,8 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
           // 交接边界由交出方与接收方两个参与方引用表达,组合成「A → B」是呈现的事。
           boundary: `${record.releasedBy} → ${record.receivedBy}`,
           verdict: labelOf(handoverVerdictLabels, record.verdict),
+          verdictCode: record.verdict,
+          scope: record.scope,
           basis: record.basis ?? '',
           judgedAt: formatInstant(record.judgedAt),
           version: record.version,
@@ -320,7 +393,9 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
         values: {
           object: record.object,
           attempt: record.attempt,
-          method: record.method,
+          method: labelFor(record.method),
+          methodCode: record.method,
+          version: record.version,
           recipient: record.recipient,
           place: record.place,
           occurredAt: formatInstant(record.occurredAt),
@@ -339,6 +414,7 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
           issuer: record.issuer,
           scope: record.scope,
           standing: labelOf(masterDocumentStandingLabels, record.standing),
+          standingCode: record.standing,
           associationCount: record.associationCount,
           // 两个可缺引用并成一格是呈现的事；缺席的那一半不代填。
           references: [record.commission, record.booking].filter(Boolean).join(' / '),
@@ -447,7 +523,7 @@ export function TransportFulfillmentReviewPage() {
           ...section.columns,
           {
             id: 'answers',
-            header: '名下全部答复',
+            header: '全部答复',
             render: (row) =>
               row.values.answerCount === '0' ? (
                 '—'
@@ -469,7 +545,7 @@ export function TransportFulfillmentReviewPage() {
                 className="text-[12px] underline"
                 onClick={() => jumpToBounces(row.values.booking)}
               >
-                查看挡回
+                看被挡回的
               </button>
             ),
           },
@@ -491,27 +567,27 @@ export function TransportFulfillmentReviewPage() {
       : catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET /transport-fulfillment-records?registry=${registry ?? ''}`,
-          emptyTitle: `当前租户尚无${section.word}登记`,
+          emptyTitle: isBounces ? '没有被挡回的承运答复' : `还没有${section.word}`,
           emptyDescription: isBounces
-            ? '读取入口已配置，登记册为空——还没有承运答复被挡回；挡回册是台账，页面不含合成数据。'
-            : '读取入口已配置，登记册为空——履约判断与事实的写入方在接入渠道墙后面，空册是预期不是缺陷；页面不含合成数据。',
+            ? '承运商的答复对不上订舱、或不是该班次的承运商发来时会被挡回，记在这里供核对。'
+            : '运输作业端排班、订舱、交接、签收后，记录会出现在这里。',
         });
 
   return (
     <ListPageTemplate<ReviewRow>
       title={info.title}
-      description={`治理查阅面，只读履约判断与事实；实时现场作业属一线作业端（ADR-0021）。`}
+      description="班次、舱位、订舱与承运商答复，以及货在各段交接成没成功、最后怎么签收的。这里只查看；排班、订舱与交接在运输作业端办理。"
       search={
         isScopeSummary
           ? {
               value: scopeDraft,
               onChange: setScopeDraft,
-              placeholder: '输入交接范围，再点「查询汇总」',
+              placeholder: '输入交接批次号，再点「查询汇总」',
             }
           : {
               value: keyword,
               onChange: setKeyword,
-              placeholder: '按载运对象或班次标识检索',
+              placeholder: '搜包裹号 / 班次 / 订舱号',
             }
       }
       filters={
@@ -538,16 +614,16 @@ export function TransportFulfillmentReviewPage() {
           {isBounces && (
             <>
               <input
-                aria-label="按订舱筛"
+                aria-label="按订舱号筛"
                 className="h-8 rounded border px-2 text-[13px]"
-                placeholder="按订舱筛"
+                placeholder="按订舱号筛"
                 value={bounceDraft.booking ?? ''}
                 onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
               />
               <input
-                aria-label="按答复方筛"
+                aria-label="按答复的承运商筛"
                 className="h-8 rounded border px-2 text-[13px]"
-                placeholder="按答复方筛"
+                placeholder="按答复的承运商筛"
                 value={bounceDraft.source ?? ''}
                 onChange={(event) => setBounceDraft({ ...bounceDraft, source: event.target.value })}
               />
@@ -564,7 +640,7 @@ export function TransportFulfillmentReviewPage() {
       filterSummary={
         // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。汇总区不报行数——一份
         // 汇总不是「1 行数据」,报出来会把派生答案说成一本只有一行的册子。
-        !isScopeSummary && body ? `${section.word} ${visibleRows.length} 行` : undefined
+        !isScopeSummary && body ? `共 ${visibleRows.length} 条` : undefined
       }
       columns={columns}
       rows={visibleRows}

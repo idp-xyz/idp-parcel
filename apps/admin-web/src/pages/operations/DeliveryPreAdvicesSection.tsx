@@ -31,14 +31,14 @@ function col(id: string, header: string, mono = false): ListColumn<PreAdviceRevi
 }
 
 const columns: ListColumn<PreAdviceReviewRow>[] = [
-  col('preAdviceId', '预报标识', true),
-  col('customerAccount', '客户账户', true),
-  col('node', '物流节点', true),
+  col('preAdviceId', '预报号', true),
+  col('customerAccount', '客户', true),
+  col('node', '送到哪个网点', true),
   col('expectedArrivalAt', '预计送达', true),
-  col('numbers', '客户包裹件号'),
-  col('deliveringParty', '交付方线索', true),
-  col('withdrawal', '撤回'),
-  col('formedAt', '登记时刻', true),
+  col('numbers', '客户的包裹号'),
+  col('deliveringParty', '谁来送', true),
+  col('withdrawal', '撤回了没有'),
+  col('formedAt', '收到预报的时间', true),
 ];
 
 /**
@@ -71,12 +71,12 @@ export function DeliveryPreAdvicesSection({ chips }: { chips: ReactNode }) {
   const narrowed = filter.node.trim() !== '' || filter.day !== '';
   const viewState: TemplateViewState =
     path === null
-      ? { kind: 'error', title: '预计送达日认不出', description: '日期格不是一个日历上存在的日子；改正后才发请求，页面不发半截条件。' }
+      ? { kind: 'error', title: '预计送达日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
       : catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET ${listBase}`,
-          emptyTitle: '当前租户尚无送站预报',
-          emptyDescription: '读取入口已配置，预报册为空——预报由客户账户经首方客户渠道交来；页面不含合成数据。',
+          emptyTitle: '还没有客户送货预报',
+          emptyDescription: '客户在送货到网点之前提交预报（送到哪个网点、几点到、送哪些包裹），提交后会出现在这里。',
           narrowed,
         });
 
@@ -84,9 +84,9 @@ export function DeliveryPreAdvicesSection({ chips }: { chips: ReactNode }) {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<PreAdviceReviewRow>
         title={info.title}
-        description={`送站预报是客户账户在送站之前交来的到货计划：送到哪个节点、预计何时送达、送来哪些客户包裹件号。本区只读；点一行看号码集合。`}
+        description="客户送货到网点之前交来的到货计划：送到哪个网点、预计几点到、送哪些包裹。这里只查看；点一行看包裹号清单。"
         filters={<DeliveryScopeFilters chips={chips} filter={filter} dayLabel="预计送达日" onChange={setFilter} />}
-        filterSummary={body ? `送站预报 ${rows.length} 行` : undefined}
+        filterSummary={body ? `共 ${rows.length} 份` : undefined}
         emptyRowsNote={narrowed ? '当前筛选条件下没有预报' : undefined}
         columns={columns}
         rows={rows}

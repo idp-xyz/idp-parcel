@@ -19,7 +19,7 @@ export interface ScopeSummaryRow {
 
 /** 未决成因封闭集（application HandoverScopeUndecidedReason）。 */
 export const scopeUndecidedReasonLabels: Record<string, string> = {
-  HANDOVER_REGISTRY_UNAVAILABLE: '交接登记册读不回来',
+  HANDOVER_REGISTRY_UNAVAILABLE: '交接记录暂时读不出来',
 };
 
 /**
@@ -74,9 +74,9 @@ export function scopeSummaryViewState(
   if (scope.trim() === '') {
     return {
       kind: 'empty',
-      title: '尚未指定交接范围',
+      title: '先输入一个交接批次号',
       description:
-        '汇总是按范围派生的答案，不是一本可以整册上列的登记册；未指定范围时页面不发请求。',
+        '按交接批次汇总这一批交接了几件、拒收几件、待确认几件；在上方输入交接批次号，再点「查询汇总」。',
     };
   }
   if (!answer) return { kind: 'loading' };
@@ -98,9 +98,9 @@ export function scopeSummaryViewState(
       // 「这个范围还没有交接」——后端刻意不带 summary 键正是为了不让这两件事同形。
       return {
         kind: 'empty',
-        title: `范围 ${scope} 还没有交接`,
+        title: `批次 ${scope} 还没有交接`,
         description:
-          '这个范围下一条交接判断都没有登记，因此派生不出汇总——它不等于「三格都是 0」，那种答案说的是这个范围有交接而某一格为空。',
+          '这个批次还没有任何一件交接记录，所以汇总不出来；这和「三格都是 0」不一样。',
       };
     case 'SCOPE_UNDECIDED':
       return {
@@ -113,7 +113,7 @@ export function scopeSummaryViewState(
       return {
         kind: 'error',
         title: '输入未受理',
-        description: '服务端未受理这个交接范围——同样的输入重试仍是同一个答案，请检查范围标识。',
+        description: '没有查到这个交接批次；原样重试还是同一个结果，请核对批次号。',
       };
   }
 }

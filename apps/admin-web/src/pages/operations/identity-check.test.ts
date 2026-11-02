@@ -76,5 +76,5 @@ test('重核把未核对那一件问到了、仍查无此号：追加了一版�
   equal(note.tone, 'answered');
   equal(note.landed, true);
   ok(note.details.some((line) => line.includes('SYN-INTAKEV-NRS05-CHECKED') && line.includes('SYN-INTAKEV-NRS05')));
-  ok(note.headline.includes('IDENTITY_NOW_CHECKED'));
+  ok(!/[A-Za-z]/.test(note.headline), note.headline);
 });

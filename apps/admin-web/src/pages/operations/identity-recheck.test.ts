@@ -96,7 +96,7 @@ test('不重核的三格与已有结果、仍查无此号都是形成了的答�
     ok(note.details.length > 0, outcome);
   }
   const existing = describeRecheckAnswer(answer({ outcome: 'EXISTING_RESULT', currentVersion: 'SYN-INTAKEV-NRS03-NEXT', recordedOutcome: 'INTAKE_FORMED' }));
-  ok(existing.details[0].includes('SYN-INTAKEV-NRS03-NEXT') && existing.details[0].includes('已形成收寄'), existing.details[0]);
+  ok(existing.details[0].includes('SYN-INTAKEV-NRS03-NEXT') && existing.details[0].includes('已收寄'), existing.details[0]);
 });
 
 test('未收录的 outcome 原样示码，不归进既有说法', () => {
@@ -107,6 +107,6 @@ test('未收录的 outcome 原样示码，不归进既有说法', () => {
 
 test('问题码：404 指名不到与 403 不在准入范围各有说法', () => {
   ok(recheckProblemNote('JUDGMENT_NOT_VISIBLE').includes('刷新列表'));
-  ok(recheckProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('生产权威区间'));
-  equal(recheckProblemNote('SOMETHING_ELSE'), '服务端问题码：SOMETHING_ELSE');
+  ok(recheckProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('阶段'));
+  ok(recheckProblemNote('SOMETHING_ELSE').includes('SOMETHING_ELSE'));
 });

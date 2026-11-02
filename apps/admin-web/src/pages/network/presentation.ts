@@ -1,30 +1,31 @@
-// 网络目录查阅词表。族名与登记口 kind 同词;中文取 network-routing CONTEXT 原词。
+// 网络目录的界面词。族键与登记口 kind 同词（代码引用用），界面上说一线的叫法：节点叫网点，网络连接叫运输连接，
+// 网络可用性调整叫停运与恢复（network-routing CONTEXT 的原词在代码与注释里）。
 
 import type { NetworkCatalogFamily } from './api';
 
 export const familyLabels: Record<NetworkCatalogFamily, string> = {
-  node: '物流节点',
-  connection: '网络连接',
+  node: '网点',
+  connection: '运输连接',
   line: '线路',
   'service-area': '服务区域',
   'service-calendar': '服务日历',
-  'availability-adjustment': '网络可用性调整',
-  'route-strategy': '路由策略版本',
+  'availability-adjustment': '停运与恢复',
+  'route-strategy': '路线策略',
 };
 
 // 检索框的提示:各族的 q 落在哪几格(ADR-0144 决定四:只在该册点名的文本列上做包含匹配),照 networkrouting postgres 读面
 // 各族 catalogFamily 的 keyword 列写。只写那边点了名的格,不写「代码等」这种兜底——检索已下推,提示里多说一格,人就会去搜一格搜不到的。
 export const keywordPlaceholders: Record<NetworkCatalogFamily, string> = {
-  node: '按节点代码检索',
-  connection: '按连接代码或两端节点代码检索',
-  line: '按线路代码检索',
-  'service-area': '按区域代码检索',
-  'service-calendar': '按适用对象代码检索',
-  'availability-adjustment': '按调整代码、适用对象代码或来源检索',
-  'route-strategy': '按策略代码检索',
+  node: '搜网点编码',
+  connection: '搜连接编码或两端网点',
+  line: '搜线路编码',
+  'service-area': '搜服务区域编码',
+  'service-calendar': '搜网点、连接或线路编码',
+  'availability-adjustment': '搜调整编码、对象编码或来源',
+  'route-strategy': '搜策略编码',
 };
 
-/** 网络目录页 chip:六族,不露服务区域(专页承担)。 */
+/** 网络与网点页的六个签:服务区域另有专页,这里不露。 */
 export const networkCatalogFamilies: NetworkCatalogFamily[] = [
   'node',
   'connection',
@@ -34,66 +35,42 @@ export const networkCatalogFamilies: NetworkCatalogFamily[] = [
   'route-strategy',
 ];
 
-// 日历与可用性调整的适用对象类别,封闭三类(ports 的 CatalogTargetKind);中文与
-// familyLabels 同词,同一个对象不因出现在不同列而换名。
-export const targetKindLabels: Record<string, string> = {
-  NODE: '物流节点',
-  CONNECTION: '网络连接',
-  LINE: '线路',
-};
+// ——以下为登记签的页面口径(ADR-0085)。标题说这个任务做什么,不叫「登记 ×× 版本」。
 
-// 调整种类封闭四格,中文取 CONTEXT 原词(临时停运、关闭、恢复、适用范围调整)。
-export const adjustmentKindLabels: Record<string, string> = {
-  SUSPENSION: '临时停运',
-  CLOSURE: '关闭',
-  RESUMPTION: '恢复',
-  SCOPE_ADJUSTMENT: '适用范围调整',
-};
-
-// ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02a)。
-
-/**
- * 各族登记签的标题。族名与 familyLabels 同词——同一本册不因换到写签而换名;
- * 「路由策略版本」与「服务日历」的词表值本身带不带「版本」不一,所以逐族写死而不拼。
- */
 export const registrationTitles: Record<NetworkCatalogFamily, string> = {
-  node: '登记物流节点版本',
-  connection: '登记网络连接版本',
-  line: '登记线路版本',
-  'service-area': '登记服务区域版本',
-  'service-calendar': '登记服务日历版本',
-  'availability-adjustment': '登记网络可用性调整',
-  'route-strategy': '登记路由策略版本',
+  node: '新增或更新网点',
+  connection: '新增或更新运输连接',
+  line: '新增或更新线路',
+  'service-area': '新增或更新服务区域',
+  'service-calendar': '新增或更新服务日历',
+  'availability-adjustment': '登记停运或恢复',
+  'route-strategy': '新增或更新路线策略',
 };
 
-// 登记快照形状的提示句。各族只差 -kind 一词(族词与 ?family= 同字),所以由一处拼出:
-// 抄七遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
-function snapshotHint(family: NetworkCatalogFamily, closedSets?: string): string {
+// 填写提示:只说填什么、怎么改。形状与受控登记命令 parcel-network-register -kind <族> 吃的同一份,这一句留给对接的人。
+// 各族只差那个族词,所以由一处拼出:抄七遍会让同一句在其中一遍被改动时悄悄分叉。
+function snapshotHint(family: NetworkCatalogFamily, fields: string): string {
   return (
-    `登记快照 JSON 的形状与受控登记口 parcel-network-register -kind ${family} -file 吃的同一份;` +
-    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
-    (closedSets ?? '')
+    `请粘贴一份 JSON，${fields}` +
+    '要改一条已有的，就用同一个编码登一个更大的版本号、填新的生效时间，旧版到那时自动截止；已登的版本不会被覆盖。' +
+    `（格式与命令行 parcel-network-register -kind ${family} 用的同一份。）`
   );
 }
 
-/**
- * 各族登记快照的形状提示。带封闭集的两族把词列出来:那两个词打错会被受理门以
- * TARGET_KIND_UNKNOWN / ADJUSTMENT_KIND_UNKNOWN 指名拒绝,而从 -kind 的族名上看不出来。
- */
 export const registrationSnapshotHints: Record<NetworkCatalogFamily, string> = {
-  node: snapshotHint('node'),
-  connection: snapshotHint('connection'),
-  line: snapshotHint('line'),
-  'service-area': snapshotHint('service-area'),
+  node: snapshotHint('node', '写明网点编码、版本号、所在时区（如 Asia/Shanghai）和从何时起生效。'),
+  connection: snapshotHint('connection', '写明连接编码、版本号、出发网点与到达网点（两端不能相同）、时区和从何时起生效；编码里不要带「+」。'),
+  line: snapshotHint('line', '写明线路编码、版本号、按顺序排列的运输连接、适用服务、时区和从何时起生效。'),
+  'service-area': snapshotHint('service-area', '写明区域编码、版本号和从何时起生效；可以带覆盖的国家（两位代码）、邮编前缀，以及揽收、派送网点。'),
   'service-calendar': snapshotHint(
     'service-calendar',
-    '适用对象类别取封闭三词 NODE / CONNECTION / LINE。',
+    '写明适用对象（NODE 网点 / CONNECTION 运输连接 / LINE 线路）与它的编码、版本号、截单时间与各段时长，以及从何时起生效。',
   ),
   'availability-adjustment': snapshotHint(
     'availability-adjustment',
-    '适用对象类别取 NODE / CONNECTION / LINE,调整种类取 SUSPENSION / CLOSURE / RESUMPTION / SCOPE_ADJUSTMENT。',
+    '写明调整编码、版本号、适用对象（NODE 网点 / CONNECTION 运输连接 / LINE 线路）与编码、调整种类（SUSPENSION 临时停运 / CLOSURE 关闭 / RESUMPTION 恢复 / SCOPE_ADJUSTMENT 范围调整）、消息来源和开始时间；已知何时解除可一并填上。',
   ),
-  'route-strategy': snapshotHint('route-strategy'),
+  'route-strategy': snapshotHint('route-strategy', '写明策略编码、版本号、适用服务、排序方式（COST_SINGLE_DIMENSION 成本最低优先，可不填）和从何时起生效。'),
 };
 
 // ——以下为路由判断两册的词表(票 admin-skeleton-closure-batch/03 阶段二)。
@@ -147,15 +124,14 @@ export const rerouteStateLabels: Record<string, string> = {
 };
 
 export const problemCodeNotes: Record<string, string> = {
-  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
-  MALFORMED_REQUEST:
-    '请求构造不出查询(family 缺席或不在封闭集),重发同样的内容不会改变结果。',
-  INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
-  NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
+  METHOD_NOT_ALLOWED: '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。',
+  MALFORMED_REQUEST: '这次查询或提交的内容系统读不懂；请刷新页面后重试，仍然不行请联系系统管理员。',
+  INTAKE_FAILED: '登录信息没能核对通过，这次什么都没有保存；请稍后重试。',
+  NO_ANSWER_FORMED: '系统暂时没能处理，结果还不确定；请稍后刷新查看，必要时重新提交同一份。',
 };
 
 export function problemNote(code: string): string {
-  return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
+  return problemCodeNotes[code] ?? `这次没有成功（错误码 ${code}）；请记下错误码联系系统管理员。`;
 }
 
 export function labelOf(table: Record<string, string>, code: string): string {

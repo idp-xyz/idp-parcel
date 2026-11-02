@@ -5,6 +5,10 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { OperatorRefusalNote } from '../../components/states';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
+import { useMayMakeDecision } from '../use-operator-grants';
 import {
   judgeEffectiveTime,
   listExternalTrackingFacts,
@@ -50,25 +54,47 @@ function col(
   };
 }
 
+// 列只放判断时要看的：哪件货、承运商说了什么（源的原始状态词原样示出不译，ADR-0102 决定五）、它说的发生时间、我们收到的
+// 时间、怎么确认的、从何时起算。轨迹编号、记录版本、源事件、凭据、规则版本与接续关系进每行末尾的「技术详情」。
 const columns: ListColumn<FactRow>[] = [
-  col('fact', '事实', { mono: true }),
-  col('version', '当前版', { mono: true }),
-  col('object', '载运对象', { mono: true }),
-  col('sourceEvent', '源事件', { mono: true }),
-  // 源的原始状态词，原样示出不译（ADR-0102 决定五）；「它对本仓意味着什么」是另一份登记的事。
-  col('status', '状态词（源原词）', { mono: true }),
-  col('occurredAt', '发生时间（源给）', { mono: true }),
-  col('receivedAt', '接收时间', { mono: true }),
-  col('effectiveBasis', '有效时间依据', { className: 'w-[140px]' }),
-  col('effectiveAt', '有效时间', { mono: true }),
-  col('basisDetail', '规则版本', { mono: true }),
-  col('supersedes', '回指前版', { mono: true }),
-  col('origin', '版本来源', { className: 'w-[88px]' }),
+  col('object', '货物', { mono: true }),
+  col('status', '承运商的说法（原词）', { mono: true }),
+  col('occurredAt', '承运商说的发生时间', { mono: true }),
+  col('receivedAt', '我们收到的时间', { mono: true }),
+  {
+    id: 'effectiveBasis',
+    header: '确认方式',
+    align: 'center',
+    className: 'w-[132px]',
+    render: (row) => <StatusPill label={row.values.effectiveBasis} tone={row.values.effectiveBasis === '待确认' ? 'warn' : 'good'} />,
+  },
+  col('effectiveAt', '从何时起算', { mono: true }),
+  {
+    id: 'technical',
+    header: '',
+    className: 'align-top',
+    render: (row) => (
+      <TechnicalDetails
+        className="max-w-md open:min-w-[18rem]"
+        rows={technicalRows([
+          { label: '轨迹编号', value: row.values.fact },
+          { label: '记录版本', value: row.values.version },
+          { label: '来源事件', value: row.values.sourceEvent === '—' ? '' : row.values.sourceEvent },
+          { label: '凭据', value: row.values.credential },
+          { label: '规则版本', value: row.values.basisDetail },
+          { label: '接续', value: row.values.supersedes },
+          { label: '记录来源', value: row.values.origin },
+        ])}
+      />
+    ),
+  },
 ];
 
 // 行动作列单独拼装：它要 setState，而上面那张表是模块级常量。动作只有「判断」——判断是回指前版的
 // 新版本，原版本与原判断一字不动；页面上因此没有「编辑」或「改时间」。
-function columnsWithActions(onJudge: (row: FactRow) => void): ListColumn<FactRow>[] {
+function columnsWithActions(onJudge: (row: FactRow) => void, mayJudge: boolean): ListColumn<FactRow>[] {
+  // 写入口按授予收起（ADR-0315）：明确没有外部轨迹时间确认授予时整列不摆。
+  if (!mayJudge) return columns;
   return [
     ...columns,
     {
@@ -78,7 +104,7 @@ function columnsWithActions(onJudge: (row: FactRow) => void): ListColumn<FactRow
       className: 'w-[96px]',
       render: (row) => (
         <Button variant="outline" onClick={() => onJudge(row)}>
-          判断
+          确认时间
         </Button>
       ),
     },
@@ -86,8 +112,8 @@ function columnsWithActions(onJudge: (row: FactRow) => void): ListColumn<FactRow
 }
 
 const viewWords: Record<ExternalTrackingFactView, string> = {
-  pending: '待判断',
-  current: '全部当前版',
+  pending: '待确认',
+  current: '全部轨迹',
 };
 
 /** 判断面板的目标：从行上带来的当前版摘要，让面板在提交前就摆出「这一条判过没有、按哪个依据」。 */
@@ -111,6 +137,7 @@ export function EffectiveTimeJudgmentPage() {
     answer: ApiResult<ExternalTrackingFactListResponseBody>;
   } | null>(null);
   const [judging, setJudging] = useState<JudgmentTarget | null>(null);
+  const mayJudge = useMayMakeDecision('EFFECTIVE_TIME_JUDGMENT');
 
   useEffect(() => {
     // 源空着不发请求：源是这个读面的必备维，缺席在服务端是 400，而那条 400 说的是「你问错了」，
@@ -143,16 +170,18 @@ export function EffectiveTimeJudgmentPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<FactRow>
         title={info.title}
-        description={`所有者就一条外部承运轨迹事实显式给出「从何时起对本仓有效」（ADR-0102 决定三）；页面不解释状态词、不建议时间。`}
+        description="承运商回传的轨迹从什么时候起算，由我们确认后才进物流动态。输入轨迹来源查看待确认的轨迹，逐条填写起算时间；系统不替你推测时间。"
         headerActions={
-          <Button variant="outline" onClick={() => setJudging({ fact: '' })}>
-            判断指名事实
-          </Button>
+          mayJudge ? (
+            <Button variant="outline" onClick={() => setJudging({ fact: '' })}>
+              按轨迹编号确认
+            </Button>
+          ) : null
         }
         search={{
           value: sourceDraft,
           onChange: setSourceDraft,
-          placeholder: '输入轨迹源引用，再点「查询」',
+          placeholder: '输入轨迹来源（如承运商的接口编码），再点「查询」',
         }}
         filters={
           <>
@@ -176,8 +205,8 @@ export function EffectiveTimeJudgmentPage() {
           </>
         }
         // 计数只在拿到业务答案后显示，未配置/未指定源不报「0 行」。
-        filterSummary={body ? `${viewWords[view]} ${rows.length} 行` : undefined}
-        columns={columnsWithActions(openJudgment)}
+        filterSummary={body ? `${viewWords[view]} ${rows.length} 条` : undefined}
+        columns={columnsWithActions(openJudgment, mayJudge)}
         rows={rows}
         rowKey={(row) => row.key}
         viewState={factListViewState(answer, source, view, rows.length, retry, {
@@ -229,7 +258,7 @@ function JudgmentPanel({
     // 本地就能判的畸形不送上去：解析不了的时刻送上去回来的 400 会与服务端的业务答案挤在同一格里，
     // 而两者的续办动作不同。这里只判「是不是一个时刻」，不替判断人改它。
     if (Number.isNaN(Date.parse(instant))) {
-      setState({ kind: 'malformed', message: `「${instant}」不是可解析的 RFC 3339 时刻` });
+      setState({ kind: 'malformed', message: `「${instant}」不是能识别的时间，请写成 2026-09-04T06:05:00Z 这样的格式` });
       return;
     }
     setState({ kind: 'submitting' });
@@ -243,42 +272,38 @@ function JudgmentPanel({
     <Card className="m-4">
       <CardHeader>
         <CardTitle>
-          判断有效时间
-          {target.version ? (
-            <span className="font-mono text-[13px] text-idpxyz-textMuted"> · 当前版 {target.version}</span>
-          ) : null}
+          确认起算时间
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-idpxyz-textMuted">
-          判断形成回指当前版的新版本，原版本与原判断保留；判断过的版本交 visibility-exception 进客户可见面。
-          判断人身份由接入渠道给，本表单不收也不送。
+          确认后会新记一条，原来的记录照留；确认过的时间会同步到物流动态，客户看到的轨迹随之更新。确认人记为当前登录的你。
           {target.version ? (
-            // 再判之前先把「这一条判过没有、按哪个依据」摆出来（票 21 红线）；待判断行如实说待判断。
+            // 再判之前先把「这一条判过没有、按哪个依据」摆出来（票 21 红线）；待确认行如实说待确认。
             <>
               <br />
-              该当前版：{target.effectiveBasis}
-              {target.effectiveAt && target.effectiveAt !== '—' ? `，有效时间 ${target.effectiveAt}` : ''}
+              这一条现在：{target.effectiveBasis}
+              {target.effectiveAt && target.effectiveAt !== '—' ? `，起算时间 ${target.effectiveAt}` : ''}
               {target.basisDetail ? `，规则 ${target.basisDetail}` : ''}。
             </>
           ) : null}
         </p>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-xs text-idpxyz-textMuted">事实引用 *</span>
+            <span className="text-xs text-idpxyz-textMuted">轨迹编号 *</span>
             <Input
               value={fact}
               className="font-mono text-[13px]"
-              placeholder="本上下文铸的事实身份，如列表「事实」一列"
+              placeholder="从列表那一行的「技术详情」里复制"
               onChange={(event) => setFact(event.target.value)}
             />
           </label>
           <label className="block">
-            <span className="text-xs text-idpxyz-textMuted">从何时起有效（RFC 3339）*</span>
+            <span className="text-xs text-idpxyz-textMuted">从何时起算 *</span>
             <Input
               value={effectiveAt}
               className="font-mono text-[13px]"
-              placeholder="例：2026-09-04T06:05:00Z（不预填，页面不建议时间）"
+              placeholder="如 2026-09-04T06:05:00Z 或 2026-09-04T14:05:00+08:00"
               onChange={(event) => setEffectiveAt(event.target.value)}
             />
           </label>
@@ -290,7 +315,7 @@ function JudgmentPanel({
             onClick={send}
             disabled={!ready || state.kind === 'submitting'}
           >
-            {state.kind === 'submitting' ? '提交中…' : '提交判断'}
+            {state.kind === 'submitting' ? '提交中…' : '确认'}
           </Button>
           <Button variant="outline" onClick={onClose}>
             收起
@@ -305,7 +330,7 @@ function JudgmentPanel({
 function JudgmentAnswerNote({ state }: { state: PanelState }) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
   if (state.kind === 'malformed') {
-    return <p className="text-xs text-idpxyz-danger">未提交：{state.message}</p>;
+    return <p className="text-xs text-idpxyz-danger">没有提交：{state.message}</p>;
   }
 
   const answer = state.answer;
@@ -329,29 +354,26 @@ function JudgmentAnswerNote({ state }: { state: PanelState }) {
     case 'unconfigured':
       return (
         <p className="text-xs text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。判断端点已建立并装配，但操作者身份的
-          接入渠道尚未登记，服务端按 ADR-0055 如实拒绝——<strong>这是诚实答案不是尚未实现</strong>，
-          改请求或重试都不会改变结果。登记接入渠道认证参数（PAR-INT-01，实例半边）后由装配侧换上真
-          Intake 即放行；此前该事实继续留为待判断、不进客户可见面（ADR-0102 Consequences）。
+          操作入口还没有配置好，这次什么都没有保存；重试也不会改变结果，请联系系统管理员完成配置。在那之前这条轨迹仍是待确认，
+          不会进物流动态。
         </p>
       );
     case 'loginRequired':
     case 'notGranted':
-      return <OperatorRefusalNote kind={answer.kind} what="判断" />;
+      return <OperatorRefusalNote kind={answer.kind} what="确认起算时间" />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">
-          调用方式问题（HTTP {answer.status}）：{judgmentProblemNote(answer.code)}
+          没有确认：{judgmentProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className="text-xs text-idpxyz-danger">
-          服务端未形成答案（HTTP {answer.status}）：{judgmentProblemNote(answer.code)}；判断落没落上
-          未知，可稍后重试——重放同一判断无害。
+          结果还不确定：{judgmentProblemNote(answer.code)}；稍后刷新看这一条确认上没有，重新提交同一时间不会重复记录。
         </p>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-xs text-idpxyz-danger">连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
   }
 }

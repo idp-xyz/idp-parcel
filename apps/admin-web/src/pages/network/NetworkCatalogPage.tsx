@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
+import { StatusPill } from '../../components/StatusPill';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { useMayWriteRegistry } from '../use-operator-grants';
+import { entryHint } from '../operator-grants';
+import { technicalRows } from '../settlement/ops-ui';
 import {
   listNetworkCatalog,
   networkCatalogConditions,
@@ -17,161 +23,169 @@ import {
   type NetworkVersionRecord,
 } from './api';
 import {
-  adjustmentKindLabels,
   familyLabels,
   keywordPlaceholders,
-  labelOf,
   networkCatalogFamilies,
   problemNote,
   registrationSnapshotHints,
   registrationTitles,
-  targetKindLabels,
 } from './presentation';
+import { adjustmentWindowOf, timeZoneLabel, validityOf, versionWord } from './network-rows';
 
 const info = moduleInfoById['network-catalog'];
 
-interface CatalogRow {
-  key: string;
-  values: Readonly<Record<string, string>>;
-}
+// 列只放运营认的：哪个网点 / 连接 / 线路、从哪到哪、什么时区、有效期、此刻在不在期。版本号与原码进每行末尾的「技术详情」。
+// 读面有的上列，读面没有的不上列（MCP-3 裁决总则）：网点名称、日历正文今天读面不带，不发明列。
+type Row = NetworkVersionRecord & { key: string };
 
-function col(
-  id: string,
-  header: string,
-  options?: { mono?: boolean; align?: 'left' | 'center' | 'right'; className?: string },
-): ListColumn<CatalogRow> {
+const mono = (value: ReactNode) => <span className="font-mono text-[12px]">{value}</span>;
+
+function codeCol(header: string): ListColumn<Row> {
   return {
-    id,
+    id: 'code',
     header,
-    align: options?.align,
-    className: options?.className,
-    render: (row) =>
-      options?.mono ? (
-        <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span>
-      ) : (
-        row.values[id] ?? '—'
-      ),
+    render: (row) => (
+      <div className="min-w-0">
+        <div className="truncate font-mono text-[12px] font-medium text-idpxyz-textBright">{row.code ?? '—'}</div>
+        <div className="text-[11px] text-idpxyz-textMuted">{versionWord(row.version)}</div>
+      </div>
+    ),
   };
 }
 
-// 列向与传输层各族行体同形(MCP-3 裁决总则:读面有的上列,读面没有的不上列)。
-// 日历正文、策略正文等内容列今天不存在(PAR-NET-14),不发明列。
-const familyColumns: Record<NetworkCatalogFamily, ListColumn<CatalogRow>[]> = {
-  node: [
-    col('code', '节点代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('businessTimezone', '业务时区', { mono: true }),
-    col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
-  ],
+const zoneCol: ListColumn<Row> = {
+  id: 'zone',
+  header: '时区',
+  render: (row) => <span title={row.businessTimezone}>{timeZoneLabel(row.businessTimezone)}</span>,
+};
+
+const periodCol: ListColumn<Row> = {
+  id: 'period',
+  header: '有效期',
+  className: 'min-w-64',
+  render: (row) => mono(row.effectiveFrom ? formatRange(row.effectiveFrom, row.effectiveTo) : '—'),
+};
+
+const validityCol: ListColumn<Row> = {
+  id: 'validity',
+  header: '状态',
+  align: 'center',
+  className: 'w-[96px]',
+  render: (row) => {
+    const code = validityOf(row.effectiveFrom, row.effectiveTo, new Date());
+    return code ? <StatusPill code={code} /> : '—';
+  },
+};
+
+function techCol(rowsOf: (row: Row) => { label: string; value: string | undefined }[]): ListColumn<Row> {
+  return {
+    id: 'technical',
+    header: '',
+    className: 'align-top',
+    render: (row) => <TechnicalDetails rows={technicalRows(rowsOf(row))} className="max-w-md open:min-w-[18rem]" />,
+  };
+}
+
+const versionTech = (row: Row) => [
+  { label: '版本号', value: String(row.version) },
+  { label: '时区', value: row.businessTimezone },
+];
+
+const familyColumns: Record<NetworkCatalogFamily, ListColumn<Row>[]> = {
+  node: [codeCol('网点'), zoneCol, periodCol, validityCol, techCol(versionTech)],
   connection: [
-    col('code', '连接代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('endpoints', '端点节点', { mono: true }),
-    col('businessTimezone', '业务时区', { mono: true }),
-    col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
+    codeCol('运输连接'),
+    { id: 'endpoints', header: '从 → 到', render: (row) => mono(`${row.fromNode ?? '—'} → ${row.toNode ?? '—'}`) },
+    zoneCol,
+    periodCol,
+    validityCol,
+    techCol(versionTech),
   ],
   line: [
-    col('code', '线路代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('segments', '组成段(按序)', { mono: true, className: 'min-w-64' }),
-    col('applicableScope', '适用范围', { mono: true }),
-    col('businessTimezone', '业务时区', { mono: true }),
-    col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
+    codeCol('线路'),
+    { id: 'segments', header: '途经的运输连接', className: 'min-w-64', render: (row) => mono((row.segments ?? []).join(' → ') || '—') },
+    { id: 'scope', header: '适用服务', render: (row) => (row.applicableScope ? labelFor(row.applicableScope) : '—') },
+    periodCol,
+    validityCol,
+    techCol((row) => [...versionTech(row), { label: '适用服务码', value: row.applicableScope }]),
   ],
-  // 服务区域族由专页承担(裁决③),本页 chip 不含它;封闭集类型要求键在场,列表留空。
+  // 服务区域由专页承担，本页签里不含它；封闭集类型要求键在场，列表留空。
   'service-area': [],
   'service-calendar': [
-    col('targetKind', '适用对象类别'),
-    col('targetCode', '适用对象代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
+    {
+      id: 'target',
+      header: '适用于',
+      render: (row) => (
+        <div className="min-w-0">
+          <div className="truncate font-mono text-[12px] font-medium text-idpxyz-textBright">{row.targetCode ?? '—'}</div>
+          <div className="text-[11px] text-idpxyz-textMuted">
+            {row.targetKind ? labelFor(row.targetKind) : ''} · {versionWord(row.version)}
+          </div>
+        </div>
+      ),
+    },
+    periodCol,
+    validityCol,
+    techCol((row) => [
+      { label: '版本号', value: String(row.version) },
+      { label: '对象类别码', value: row.targetKind },
+    ]),
   ],
   'availability-adjustment': [
-    col('code', '调整代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('targetKind', '适用对象类别'),
-    col('targetCode', '适用对象代码', { mono: true }),
-    col('adjustmentKind', '调整种类'),
-    col('source', '来源', { mono: true }),
-    col('window', '生效/解除', { mono: true, className: 'min-w-64' }),
+    {
+      id: 'target',
+      header: '哪里',
+      render: (row) => (
+        <div className="min-w-0">
+          <div className="truncate font-mono text-[12px] font-medium text-idpxyz-textBright">{row.targetCode ?? '—'}</div>
+          <div className="text-[11px] text-idpxyz-textMuted">{row.targetKind ? labelFor(row.targetKind) : ''}</div>
+        </div>
+      ),
+    },
+    { id: 'kind', header: '调整', align: 'center', render: (row) => (row.kind ? <StatusPill code={row.kind} /> : '—') },
+    { id: 'source', header: '消息来源', render: (row) => mono(row.source ?? '—') },
+    {
+      id: 'window',
+      header: '起止',
+      className: 'min-w-64',
+      render: (row) => mono(`${row.effectiveAt ? formatInstant(row.effectiveAt) : '—'} → ${row.liftedAt ? formatInstant(row.liftedAt) : '未解除'}`),
+    },
+    {
+      id: 'validity',
+      header: '状态',
+      align: 'center',
+      className: 'w-[96px]',
+      render: (row) => {
+        const code = adjustmentWindowOf(row.effectiveAt, row.liftedAt, new Date());
+        return code ? <StatusPill code={code} /> : '—';
+      },
+    },
+    techCol((row) => [
+      { label: '调整编码', value: row.code },
+      { label: '版本号', value: String(row.version) },
+      { label: '调整种类码', value: row.kind },
+      { label: '对象类别码', value: row.targetKind },
+    ]),
   ],
   'route-strategy': [
-    col('code', '策略代码', { mono: true }),
-    col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-    col('applicableScope', '适用范围', { mono: true }),
-    col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
+    codeCol('路线策略'),
+    { id: 'scope', header: '适用服务', render: (row) => (row.applicableScope ? labelFor(row.applicableScope) : '—') },
+    // 排序方式缺席是登记方没声明，不是「成本最低」；如实说未声明。
+    { id: 'ranking', header: '怎么选路线', render: (row) => (row.rankingForm ? labelFor(row.rankingForm) : <span className="text-idpxyz-textMuted">未声明</span>) },
+    periodCol,
+    validityCol,
+    techCol((row) => [
+      { label: '版本号', value: String(row.version) },
+      { label: '适用服务码', value: row.applicableScope },
+      { label: '排序方式码', value: row.rankingForm },
+    ]),
   ],
 };
 
-// 行体是七族字段并集上的可选字段(与 api.ts 的 NetworkVersionRecord 同形),这里按
-// 当前族取值;缺席字段如实显「—」,不为区间完整编造时刻。
-function rowValues(family: NetworkCatalogFamily, record: NetworkVersionRecord): CatalogRow {
-  const effective = record.effectiveFrom
-    ? formatRange(record.effectiveFrom, record.effectiveTo)
-    : '—';
-  switch (family) {
-    case 'connection':
-      return {
-        key: `connection:${record.code}@${record.version}`,
-        values: {
-          code: record.code ?? '—',
-          version: String(record.version),
-          endpoints: `${record.fromNode ?? '—'} → ${record.toNode ?? '—'}`,
-          businessTimezone: record.businessTimezone ?? '—',
-          effective,
-        },
-      };
-    case 'line':
-      return {
-        key: `line:${record.code}@${record.version}`,
-        values: {
-          code: record.code ?? '—',
-          version: String(record.version),
-          segments: (record.segments ?? []).join(' → '),
-          applicableScope: record.applicableScope ?? '—',
-          businessTimezone: record.businessTimezone ?? '—',
-          effective,
-        },
-      };
-    case 'service-calendar':
-      return {
-        key: `service-calendar:${record.targetKind}:${record.targetCode}@${record.version}`,
-        values: {
-          targetKind: labelOf(targetKindLabels, record.targetKind ?? ''),
-          targetCode: record.targetCode ?? '—',
-          version: String(record.version),
-          effective,
-        },
-      };
-    case 'availability-adjustment':
-      return {
-        key: `availability:${record.code}@${record.version}`,
-        values: {
-          code: record.code ?? '—',
-          version: String(record.version),
-          targetKind: labelOf(targetKindLabels, record.targetKind ?? ''),
-          targetCode: record.targetCode ?? '—',
-          adjustmentKind: labelOf(adjustmentKindLabels, record.kind ?? ''),
-          source: record.source ?? '—',
-          window: `${record.effectiveAt ? formatInstant(record.effectiveAt) : '—'} → ${
-            record.liftedAt ? formatInstant(record.liftedAt) : '未解除'
-          }`,
-        },
-      };
-    default:
-      // node 与 route-strategy 同为「代码 + 版本 + 区间」骨架;route-strategy 另有
-      // 适用范围列,值缺席时由列渲染兜「—」。
-      return {
-        key: `${family}:${record.code}@${record.version}`,
-        values: {
-          code: record.code ?? '—',
-          version: String(record.version),
-          businessTimezone: record.businessTimezone ?? '—',
-          applicableScope: record.applicableScope ?? '—',
-          effective,
-        },
-      };
-  }
+// 行键：各族的唯一键不同（日历按对象，其余按编码），版本号一起进键。
+function rowOf(family: NetworkCatalogFamily, record: NetworkVersionRecord): Row {
+  const identity = family === 'service-calendar' ? `${record.targetKind}:${record.targetCode}` : record.code;
+  return { ...record, key: `${family}:${identity}@${record.version}` };
 }
 
 // 逐族查阅版本原文;chip 六族不含服务区域(MCP-3 裁决③,服务区域由专页承担)。
@@ -182,16 +196,14 @@ function NetworkCatalogTable() {
   const [keyword, setKeyword] = useAddressKeyword();
   const conditions = networkCatalogConditions(familyId, { q: useSettledKeyword(keyword) });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
+  const mayWrite = useMayWriteRegistry();
   // 手上的答复认的是此刻这一问的条件签名(族在其中),答的一定是当前族,不会把上一族的行套进这一族的列。
-  const rows =
-    answer?.kind === 'outcome'
-      ? answer.body.versions.map((record) => rowValues(familyId, record))
-      : [];
+  const rows = answer?.kind === 'outcome' ? answer.body.versions.map((record) => rowOf(familyId, record)) : [];
 
   return (
-    <ListPageTemplate<CatalogRow>
+    <ListPageTemplate<Row>
       title={info.title}
-      description={`逐族查阅版本原文,不选版、不折叠为路由判断`}
+      description="公司的网点、网点之间的运输连接、由连接串成的线路，以及服务日历、停运与恢复、路线策略。同一对象改过几次就有几版，逐版列出。"
       search={{
         value: keyword,
         onChange: setKeyword,
@@ -215,19 +227,19 @@ function NetworkCatalogTable() {
         // 计数只在拿到业务答案后显示:未配置/错误态下「0 个版本」会与状态区
         // 「这不是目录为空」的说明自相矛盾(与 pricing 两页同一守卫)。
         answer?.kind === 'outcome'
-          ? `${familyLabels[familyId]} 本页 ${rows.length} 个版本`
+          ? `${familyLabels[familyId]} 本页 ${rows.length} 条`
           : undefined
       }
       columns={familyColumns[familyId]}
       rows={rows}
       rowKey={(row) => row.key}
-      emptyRowsNote={`当前检索条件下没有匹配的${familyLabels[familyId]}版本`}
+      emptyRowsNote={`没有符合条件的${familyLabels[familyId]}；换个关键词试试`}
       pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /network-catalog?family=${familyId}`,
-        emptyTitle: `当前租户尚无${familyLabels[familyId]}版本`,
-        emptyDescription: '读取入口已配置,但该目录族为空;页面不会借其他族的数据补位。',
+        emptyTitle: `还没有登记${familyLabels[familyId]}`,
+        emptyDescription: entryHint(mayWrite, `在「新增或更新」签里登记${familyLabels[familyId]}后，会在这里出现。`),
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
@@ -248,38 +260,28 @@ const registrationTargets: RegistrationTarget[] = networkCatalogFamilies.map((fa
 }));
 
 /**
- * 版本化网络目录:逐族查阅版本原文,外加登记签(ADR-0085,票 admin-write-faces/02
- * 切片 02a)。
+ * 网络与网点：逐族查阅版本，外加登记签（ADR-0085）。
  *
- * 登记签不是「新建版本」的表单:目录修订按笔推进,新版翻旧插新、不覆盖行,停用由
- * 可用性调整另族陈述——所以这里只有登记一个动作,没有行级编辑或删除面。墙降之前它
- * 必然答 403「接入渠道未配置」,那是诚实答案;墙降当天在装配点换真 Intake 即点亮,
- * 本页一行不用改。
+ * 登记签不是「编辑」表单：目录按版推进，新版翻旧插新、不覆盖行，停用由停运与恢复另族陈述——所以只有登记一个动作，
+ * 没有行级编辑或删除。写入口按授予收起（ADR-0315）：明确没有登记册写授予时不摆这一签。
  */
 export function NetworkCatalogPage() {
+  const mayWrite = useMayWriteRegistry();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="catalog">网络目录</TabsTrigger>
-          <TabsTrigger value="register">登记网络目录</TabsTrigger>
+          <TabsTrigger value="catalog">网络与网点</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">新增或更新</TabsTrigger> : null}
         </TabsList>
-        <TabsContent
-          value="catalog"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
+        <TabsContent value="catalog" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <NetworkCatalogTable />
         </TabsContent>
-        <TabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <MultiRegistrationPanel
-            moduleId="network-catalog"
-            targets={registrationTargets}
-            problemNote={problemNote}
-          />
-        </TabsContent>
+        {mayWrite ? (
+          <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <MultiRegistrationPanel moduleId="network-catalog" targets={registrationTargets} problemNote={problemNote} />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );

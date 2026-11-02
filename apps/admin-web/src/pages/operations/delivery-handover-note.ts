@@ -39,8 +39,8 @@ export const confirmationOutcomeLabels: Record<string, string> = {
   BINDING_CONFIRMED: '绑定已确认',
   EXISTING_RESULT: '同一结论已在册——未再落',
   EXISTING_CONCLUSION: '这个账户已有不同的结论——未覆盖',
-  NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP: '不在授权交付关系内——未落结论',
-  AUTHORIZED_DELIVERY_NOT_CONFIGURED: '授权交付关系未配置——未落结论',
+  NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP: '送货人没有替这个客户送货的授权，没有确认',
+  AUTHORIZED_DELIVERY_NOT_CONFIGURED: '还没登记授权代送关系，没有确认',
   HANDOVER_NOTE_STATE_MISMATCH: '交接单状态不符——未落结论',
 };
 
@@ -195,7 +195,8 @@ function bindingSummaryOf(binding: HandoverBindingRecord): string {
 }
 
 export function describeConfirmationAnswer(body: DeliveryHandoverConfirmationResponseBody): ConfirmationNote {
-  const headline = `确认口答复：${body.outcome} —— ${labelOf(confirmationOutcomeLabels, body.outcome)}`;
+  // 英文结果码不上屏：查得到的显中文，查不到的原样露码（labelOf 的约定），原码进不进技术详情由页面定。
+  const headline = labelOf(confirmationOutcomeLabels, body.outcome);
   const recorded = body.binding ? [`在册的结论：${bindingSummaryOf(body.binding)}`] : [];
   const scope = body.scopeEstablishedAt
     ? `声称的账户已全部确认，可验证交付范围已成立（${formatInstant(body.scopeEstablishedAt)}）；名下仍待识别的实物会自动重核`
@@ -223,8 +224,8 @@ export function describeConfirmationAnswer(body: DeliveryHandoverConfirmationRes
         landed: false,
         headline,
         details: [
-          '参与方与商业答：这位交付方参与方在开立时刻、开立节点没有替这个客户账户送站的授权交付关系；未落结论',
-          '换一位有授权交付关系的交付方参与方再确认，或先在参与方与商业登记这段授权交付关系；也可由客户账户经客户渠道自己确认',
+          '这位送货人在开单时、在这个网点，没有替这个客户送货的授权代送关系；没有确认',
+          '换一位有授权的送货人再确认，或先在往来单位里登记这段授权代送关系；也可以让客户自己在客户端确认',
         ],
       };
     case 'AUTHORIZED_DELIVERY_NOT_CONFIGURED':
@@ -233,8 +234,8 @@ export function describeConfirmationAnswer(body: DeliveryHandoverConfirmationRes
         landed: false,
         headline,
         details: [
-          '本租户一条授权交付关系都没登记，交付方又不是这个客户账户所属的参与方本身；未落结论，服务端不默认放行',
-          '租户先在参与方与商业登记授权交付关系（租户取值，PAR-NET-17）；若交付的就是账户所属参与方本身，选它即可确认',
+          '一条授权代送关系都还没登记，送货人又不是这个客户本身；没有确认，系统不会默认放行',
+          '先在往来单位里登记授权代送关系；如果送货的就是这个客户本身，选它即可确认',
         ],
       };
     case 'HANDOVER_NOTE_STATE_MISMATCH':
@@ -254,20 +255,20 @@ export function describeConfirmationAnswer(body: DeliveryHandoverConfirmationRes
 export function confirmationProblemNote(code: string): string {
   switch (code) {
     case 'DELIVERY_HANDOVER_NOTE_NOT_VISIBLE':
-      return '本租户查无这张交接单，或这个客户账户不在它的声称之列（两种同答）；刷新详情再确认。';
+      return '找不到这张交接单，或这个客户不在单上；刷新详情再确认。';
     case 'OUTSIDE_ADMISSION_SCOPE':
-      return '这笔生产写不在治理登记的生产权威区间内，要阶段治理去登记区间；重试不会好。';
+      return '当前阶段还没有放开这项操作，什么都没有改；重试也不会好，请联系负责阶段管理的同事。';
     case 'MALFORMED_REQUEST':
-      return '载荷不是服务端接受的形状（交接单、客户账户、交付方参与方与依据引用四格必填，且不得带身份键）；请检查前端与服务端版本是否一致。';
+      return '提交的内容系统读不懂；请刷新页面后重试，仍然不行请联系系统管理员。';
     case 'METHOD_NOT_ALLOWED':
-      return '端点不接受当前 HTTP 方法；请检查前端与服务端版本是否一致。';
+      return '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。';
     case 'INTAKE_FAILED':
-      return '接入面未能形成操作者身份；服务端未读取确认内容。';
+      return '登录信息没能核对通过，这次什么都没有保存；请稍后重试。';
     case 'IDENTITY_DEPENDENCY_UNAVAILABLE':
-      return '接入身份依赖读不动，可稍后重试。';
+      return '暂时无法核对登录身份，请稍后重试。';
     case 'NO_ANSWER_FORMED':
-      return '确认未形成答案（授权交付判断读不动，或落册与门铃入队失败），未落结论，可稍后重试。';
+      return '系统暂时没能处理（查不到授权代送关系，或保存失败），这次没有确认；请稍后重试。';
     default:
-      return `服务端问题码：${code}`;
+      return `这次没有成功（错误码 ${code}）；请记下错误码联系系统管理员。`;
   }
 }

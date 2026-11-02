@@ -4,13 +4,13 @@
 
 /** 收寄判断封闭两格（nodeoperations domain ReceptionKind）。 */
 export const receptionKindLabels: Record<string, string> = {
-  INTAKE_FORMED: '已形成收寄',
+  INTAKE_FORMED: '已收寄',
   PENDING_IDENTIFICATION: '待识别',
 };
 
 /** 实物控制建立来源封闭两格（nodeoperations domain PhysicalControl）。 */
 export const controlKindLabels: Record<string, string> = {
-  NODE_INTAKE: '节点收寄',
+  NODE_INTAKE: '网点收寄',
   HANDOVER_IN: '交接转入',
 };
 

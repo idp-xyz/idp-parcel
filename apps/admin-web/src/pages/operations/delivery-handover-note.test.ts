@@ -147,8 +147,8 @@ test('确认答复：「不在授权交付关系内」与「未配置」是答�
   for (const note of [outside, unconfigured]) {
     equal(note.tone, 'answered');
     equal(note.landed, false);
-    ok(note.details.some((line) => line.includes('未落结论')), note.details.join(' | '));
-    ok(note.details.some((line) => line.includes('授权交付关系')), note.details.join(' | '));
+    ok(note.details.some((line) => line.includes('没有确认')), note.details.join(' | '));
+    ok(note.details.some((line) => line.includes('授权代送关系')), note.details.join(' | '));
   }
   ok(outside.details.some((line) => line.includes('换')), outside.details.join(' | '));
   ok(unconfigured.details.some((line) => line.includes('一条') && line.includes('登记')), unconfigured.details.join(' | '));
@@ -159,10 +159,10 @@ test('确认答复：「不在授权交付关系内」与「未配置」是答�
 });
 
 test('确认口问题码：看不见、准入范围、坏载荷与没形成答案各有一句', () => {
-  ok(confirmationProblemNote('DELIVERY_HANDOVER_NOTE_NOT_VISIBLE').includes('声称'));
-  ok(confirmationProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('区间'));
-  ok(confirmationProblemNote('MALFORMED_REQUEST').includes('载荷'));
-  ok(confirmationProblemNote('NO_ANSWER_FORMED').includes('授权交付判断'));
+  ok(confirmationProblemNote('DELIVERY_HANDOVER_NOTE_NOT_VISIBLE').includes('不在单上'));
+  ok(confirmationProblemNote('OUTSIDE_ADMISSION_SCOPE').includes('阶段'));
+  ok(confirmationProblemNote('MALFORMED_REQUEST').includes('读不懂'));
+  ok(confirmationProblemNote('NO_ANSWER_FORMED').includes('授权代送关系'));
   ok(confirmationProblemNote('SOMETHING_NEW').includes('SOMETHING_NEW'));
 });
 

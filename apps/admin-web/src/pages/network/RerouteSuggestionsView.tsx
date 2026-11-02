@@ -5,6 +5,11 @@ import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { technicalRows } from '../settlement/ops-ui';
+import { useMayMakeDecision } from '../use-operator-grants';
+import { ShipmentNo } from '../shipment-request/refs';
+import { parcelNoOf } from '../shipment-request/ref-no';
 import {
   decideReroute,
   listRerouteSuggestions,
@@ -40,6 +45,8 @@ export interface RoutePlansHeader {
  * 锁里按此刻的证据重判，本页的状态只是读到时的大概。
  */
 export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlansHeader; keyword: string }) {
+  // 两个决定口认同一种运营决定授予（授权改路）；明确没有时只显状态、不摆按钮（ADR-0315）。
+  const mayDecide = useMayMakeDecision('AUTHORIZED_REROUTE');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<RerouteSuggestionListResponseBody> | null>(null);
   const [deciding, setDeciding] = useState<RerouteSuggestionRecord | null>(null);
@@ -67,22 +74,26 @@ export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlans
 
   const columns: ListColumn<RerouteSuggestionRecord>[] = [
     {
-      id: 'declared-parcel',
-      header: '申报包裹',
-      className: 'font-mono text-xs',
-      render: (row) => <span className="text-idpxyz-accent">{row.declaredParcelId}</span>,
+      id: 'parcel',
+      header: '运单',
+      render: (row) => (
+        <div className="flex min-w-0 flex-col items-start gap-0.5">
+          <ShipmentNo shipmentRequestId={row.shipmentRequestId} />
+          <span className="text-[11px] text-idpxyz-textMuted">
+            包裹 <span className="font-mono">{parcelNoOf(row.declaredParcelId)}</span>
+          </span>
+        </div>
+      ),
     },
-    { id: 'correlation', header: '建议所在复核', className: 'font-mono text-xs', render: (row) => row.correlationId },
-    { id: 'reviewed-plan', header: '失效的计划', className: 'font-mono text-xs', render: (row) => row.reviewedPlan ?? '—' },
     {
       id: 'blockers',
-      header: '为什么没自动',
+      header: '为什么没自动改路',
       className: 'font-mono text-xs',
       render: (row) => (row.blockers.length > 0 ? row.blockers.join('、') : '—'),
     },
     {
       id: 'candidates',
-      header: '候选（建议形成时）',
+      header: '备选路线（建议时）',
       className: 'min-w-56 text-xs',
       render: (row) => (
         <ul>
@@ -95,24 +106,43 @@ export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlans
         </ul>
       ),
     },
-    { id: 'suggested-at', header: '建议时点', className: 'min-w-44 font-mono text-xs', render: (row) => formatInstant(row.suggestedAt) },
+    { id: 'suggested-at', header: '建议时间', className: 'min-w-44 font-mono text-xs', render: (row) => formatInstant(row.suggestedAt) },
     {
       id: 'state',
       header: '状态',
       className: 'min-w-44 text-xs',
       render: (row) => {
         const availability = rerouteDecisionAvailabilityOf(row);
-        return availability.kind === 'available' ? (
+        return availability.kind === 'available' && mayDecide ? (
           <Button variant="outline" disabled={deciding !== null} onClick={() => setDeciding(row)}>
             {labelOf(rerouteSuggestionStateLabels, row.state)} · 决定
           </Button>
         ) : (
           <span>
             {labelOf(rerouteSuggestionStateLabels, row.state)}
-            <span className="block text-idpxyz-textMuted">{availability.reason}</span>
+            {availability.kind === 'available' ? null : <span className="block text-idpxyz-textMuted">{availability.reason}</span>}
           </span>
         );
       },
+    },
+    {
+      id: 'technical',
+      header: '',
+      className: 'align-top',
+      render: (row) => (
+        <TechnicalDetails
+          className="max-w-md open:min-w-[18rem]"
+          rows={technicalRows([
+            { label: '运单标识', value: row.shipmentRequestId },
+            { label: '包裹标识', value: row.declaredParcelId },
+            { label: '客户编码', value: row.customerAccountId },
+            { label: '所在复核', value: row.correlationId },
+            { label: '失效的计划', value: row.reviewedPlan },
+            { label: '失效依据', value: row.lapseBasis },
+            { label: '状态码', value: row.state },
+          ])}
+        />
+      ),
     },
   ];
 
@@ -120,15 +150,15 @@ export function RerouteSuggestionsView({ header, keyword }: { header: RoutePlans
     <>
       <ListPageTemplate<RerouteSuggestionRecord>
         {...header}
-        filterSummary={answer?.kind === 'outcome' ? `改路建议 ${suggestions.length} 份` : undefined}
+        filterSummary={answer?.kind === 'outcome' ? `共 ${suggestions.length} 份` : undefined}
         columns={columns}
         rows={visible}
         rowKey={(row) => row.correlationId}
         viewState={catalogueViewState(answer, suggestions.length, retry, {
           module: info,
           endpoint: 'GET /route-reroute-suggestions',
-          emptyTitle: '当前租户尚无改路建议',
-          emptyDescription: '改路建议由复核在原计划失效、又不满足自动改路条件时形成；没有这样的复核，册就是空的，本页不预置数据。',
+          emptyTitle: '没有待处理的改路建议',
+          emptyDescription: '运输途中路线失效、又不能自动改路时，系统会在这里给出改路建议，等你选一条备选路线。',
         })}
       />
       {deciding ? (
@@ -181,17 +211,16 @@ function RerouteDecisionCard({
   return (
     <Card className="mx-4 mb-4">
       <CardHeader>
-        <CardTitle>授权改路决定</CardTitle>
+        <CardTitle>决定改路</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-xs">
         <p className="text-idpxyz-textMuted">
           包裹 <span className="font-mono">{suggestion.declaredParcelId}</span> 的原计划{' '}
-          <span className="font-mono">{suggestion.reviewedPlan ?? '—'}</span> 已失效。择一条建议里合格的候选：服务端按此刻的证据重判它，
-          成立时形成改路决定与新计划，从决定的时刻起生效；建议之后又有复核、或此刻被限制淘汰，都不成立。决定方是登录的操作者，本表单
-          不收也不送。
+          <span className="font-mono">{suggestion.reviewedPlan ?? '—'}</span> 已失效。从建议里合格的备选路线中选一条：系统按此刻的
+          情况再核一遍，通过就改走新路线，从决定的时刻起生效；如果建议之后又复核过、或这条路线此刻被限制，就不会生效。决定人记为当前登录的你。
         </p>
         <fieldset>
-          <legend className="text-idpxyz-textMuted">所择候选</legend>
+          <legend className="text-idpxyz-textMuted">选哪条路线</legend>
           {candidates.map((candidate) => (
             <label key={candidate} className="mr-4 inline-flex items-center gap-1 font-mono">
               <input
@@ -255,7 +284,7 @@ function DecisionAnswerNote({ state }: { state: SubmissionState }) {
     case 'unconfigured':
       return (
         <p className="text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。决定口已建立并装配，操作者渠道的发行方参数未设，服务端如实拒绝。
+          操作入口还没有配置好，这次什么都没有保存；重试也不会改变结果，请联系系统管理员完成配置。
         </p>
       );
     case 'loginRequired':
@@ -264,16 +293,16 @@ function DecisionAnswerNote({ state }: { state: SubmissionState }) {
     case 'callerProblem':
       return (
         <p className="text-idpxyz-danger">
-          调用方式问题（HTTP {answer.status}）：{rerouteDecisionProblemNote(answer.code)}
+          没有保存：{rerouteDecisionProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
         <p className="text-idpxyz-danger">
-          服务端未形成答案（HTTP {answer.status}）：{rerouteDecisionProblemNote(answer.code)}
+          结果还不确定：{rerouteDecisionProblemNote(answer.code)}
         </p>
       );
     case 'transport':
-      return <p className="text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;
+      return <p className="text-idpxyz-danger">连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
   }
 }

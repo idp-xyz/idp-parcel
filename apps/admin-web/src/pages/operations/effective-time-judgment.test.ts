@@ -63,11 +63,11 @@ test('待判断行：三个时间只有两个在场，有效时间与依据明�
   equal(row.key, 'fact:EXTF-1@EXTV-1');
   equal(row.fact, 'EXTF-1');
   equal(row.values.status, 'DELIVERED');
-  equal(row.values.effectiveBasis, '待判断');
+  equal(row.values.effectiveBasis, '待确认');
   equal(row.values.effectiveAt, '—');
   equal(row.values.basisDetail, '');
   equal(row.values.supersedes, '');
-  equal(row.values.origin, '素材到达');
+  equal(row.values.origin, '承运商回传');
   ok(row.values.occurredAt.startsWith('2026-09-04 06:00:00'), row.values.occurredAt);
   ok(row.values.receivedAt.startsWith('2026-09-04 06:01:30'), row.values.receivedAt);
 });
@@ -78,10 +78,10 @@ test('判断版本行：依据、规则版本与前版原样上列，状态词�
     facts: [judgedByRuleFact],
   });
 
-  equal(row.values.effectiveBasis, '按已登记规则判断');
+  equal(row.values.effectiveBasis, '按规则自动确认');
   equal(row.values.basisDetail, 'aggregator-a@ETR-1');
   equal(row.values.supersedes, 'EXTV-2a');
-  equal(row.values.origin, '判断形成');
+  equal(row.values.origin, '确认形成');
   equal(row.values.sourceEvent, '—');
   ok(row.values.effectiveAt.startsWith('2026-09-04 06:10:00'), row.values.effectiveAt);
 });
@@ -98,7 +98,7 @@ test('源未填不发请求，与「问过了、这家源没有待判断的事�
   const idle = factListViewState(null, '  ', 'pending', 0, noRetry, options);
   equal(idle.kind, 'empty');
   ok(idle.kind === 'empty');
-  ok(idle.title?.includes('尚未指定'), idle.title);
+  ok(idle.title?.includes('先选'), idle.title);
 
   equal(factListViewState(null, 'aggregator-a', 'pending', 0, noRetry, options).kind, 'loading');
 });
@@ -112,8 +112,8 @@ test('待判断视图空册：点名源，说清它是真答案而不是渠道�
   equal(state.kind, 'empty');
   ok(state.kind === 'empty');
   ok(state.title?.includes('aggregator-a'), state.title);
-  ok(state.title?.includes('待判断'), state.title);
-  ok(state.description?.includes('已判断'), `空态说明要把「全部已判断」这一种空摘出来：${state.description}`);
+  ok(state.title?.includes('待确认'), state.title);
+  ok(state.description?.includes('已确认'), `空态说明要把「全部已确认」这一种空摘出来：${state.description}`);
 });
 
 test('全部当前版视图空册：措辞与待判断空册分开——这家源还没有被认领的轨迹', () => {
@@ -124,8 +124,8 @@ test('全部当前版视图空册：措辞与待判断空册分开——这家�
   const state = factListViewState(outcome(body), 'aggregator-a', 'current', 0, noRetry, options);
   equal(state.kind, 'empty');
   ok(state.kind === 'empty');
-  ok(state.title?.includes('当前版'), state.title);
-  ok(!state.title?.includes('待判断'), `全部当前版的空册不该说成待判断：${state.title}`);
+  ok(state.title?.includes('还没有回传'), state.title);
+  ok(!state.title?.includes('待确认'), `全部轨迹的空册不该说成待确认：${state.title}`);
 });
 
 test('有行即就绪；未配置与未形成答案走全站那套 HTTP 代数', () => {
@@ -175,10 +175,10 @@ test('已判断：新版本回指前版、依据是所有者显式判断、意�
   const note = describeJudgmentAnswer(body);
   equal(note.tone, 'answered');
   equal(note.landed, true);
-  ok(note.headline.includes('EFFECTIVE_TIME_JUDGED'), note.headline);
+  ok(!/[A-Za-z]/.test(note.headline), note.headline);
   ok(note.details.some((line) => line.includes('EXTV-J1') && line.includes('EXTV-1')), note.details.join('|'));
-  ok(note.details.some((line) => line.includes('所有者显式判断')), note.details.join('|'));
-  ok(!note.details.some((line) => line.includes('尚未交出')), '意图已交出时不得说欠着');
+  ok(note.details.some((line) => line.includes('人工确认')), note.details.join('|'));
+  ok(!note.details.some((line) => line.includes('还没同步')), '意图已交出时不得说欠着');
 });
 
 test('已按同值判过：不是失败，摆出既有版本的依据与有效时间（票 21 红线）', () => {
@@ -193,7 +193,7 @@ test('已按同值判过：不是失败，摆出既有版本的依据与有效�
   const note = describeJudgmentAnswer(body);
   equal(note.tone, 'answered');
   equal(note.landed, false);
-  ok(note.details.some((line) => line.includes('已经判过') && line.includes('所有者显式判断')), note.details.join('|'));
+  ok(note.details.some((line) => line.includes('已经确认过') && line.includes('人工确认')), note.details.join('|'));
   ok(note.details.some((line) => line.includes('2026-09-04 06:05:00')), note.details.join('|'));
 });
 
@@ -208,7 +208,7 @@ test('意图没交出去：判断照样落地，但要把 handoffReference 摆�
     handoffReference: 'CONT-h4nd0ff',
   });
   equal(note.landed, true);
-  ok(note.details.some((line) => line.includes('尚未交出') && line.includes('CONT-h4nd0ff')), note.details.join('|'));
+  ok(note.details.some((line) => line.includes('还没同步') && line.includes('CONT-h4nd0ff')), note.details.join('|'));
 });
 
 test('未受理：不给重试；未决：带成因与续办引用、可重试', () => {
@@ -223,7 +223,7 @@ test('未受理：不给重试；未决：带成因与续办引用、可重试',
   });
   equal(undecided.tone, 'undecided');
   equal(undecided.canRetry, true);
-  ok(undecided.details.some((line) => line.includes('事实登记册读不回来')), undecided.details.join('|'));
+  ok(undecided.details.some((line) => line.includes('轨迹记录暂时读不出来')), undecided.details.join('|'));
   ok(undecided.details.some((line) => line.includes('CONT-abc123')), undecided.details.join('|'));
 });
 

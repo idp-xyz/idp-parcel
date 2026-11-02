@@ -29,6 +29,14 @@ export type NetworkCatalogOutcome =
   | 'AVAILABILITY_ADJUSTMENTS_LISTED'
   | 'ROUTE_STRATEGY_VERSIONS_LISTED';
 
+/** 服务区域覆盖：一个国家，可带邮编前缀与揽收（始发）、派送（目的）网点。 */
+export interface ServiceAreaCoverage {
+  country: string;
+  postalPrefixes?: string[];
+  originNodes?: string[];
+  destinationNodes?: string[];
+}
+
 export interface NetworkVersionRecord {
   code?: string;
   version: number;
@@ -39,6 +47,10 @@ export interface NetworkVersionRecord {
   toNode?: string;
   segments?: string[];
   applicableScope?: string;
+  /** 路线策略的排序形态；登记方没声明即缺席。 */
+  rankingForm?: string;
+  /** 服务区域的地理覆盖；没登覆盖即缺席。 */
+  coverage?: ServiceAreaCoverage;
   targetKind?: string;
   targetCode?: string;
   kind?: string;
@@ -128,48 +140,43 @@ export function registerNetworkCatalogVersion(
  * 的退出码同样没有治理那一路）。所以两格之外的一切都不是登记册的判断。
  */
 export const registrationOutcomeLabels: Record<string, string> = {
-  REGISTERED: '已登记',
-  REFUSED: '受理门拒绝（缺件已指名，补齐后重登；原行不被顶替）',
+  REGISTERED: '已保存',
+  REFUSED: '没有保存：内容缺了或填错了一项（见下方原因），改好后重新提交；已有的版本不受影响',
 };
 
 /**
  * 受理门拒绝理由（`application.CatalogRefusalReason` 原名），逐格中文。
  *
  * 逐格分开呈现而不折成一句「内容不合法」：各格的续办动作不同——缺时区要去补时区，两端
- * 相同要改端点，段链缺环要重给顺序，折成一格会让登记方去补错东西。
+ * 相同要改端点，段链缺环要重给顺序，折成一格会让登记方去补错东西。每句先说哪里错、再说怎么改。
  */
 export const registrationRefusalReasonLabels: Record<string, string> = {
-  TENANT_MISSING: '缺租户——目录行只在租户内唯一，管辖没给就登不进',
-  IDENTITY_MISSING: '缺身份码——没说清登的是哪个对象',
-  VERSION_MISSING: '缺版本号——版本由登记方给，登记口不代拟',
-  TIMEZONE_MISSING: '缺业务时区——节点、网络连接与适用线路必须明确业务时区',
-  ENDPOINT_MISSING: '缺端点节点——网络连接要指出从哪到哪',
-  ENDPOINTS_NOT_DISTINCT: '两端节点相同——没有方向可言，不成其为网络连接',
-  CONNECTION_CODE_CARRIES_BASIS_SEPARATOR:
-    '连接代码含 +——+ 是计划段窗口依据里各格之间的分隔符，带它的连接运输准备读不回或读成另一条；换一个不带 + 的代码',
-  SEGMENTS_MISSING: '缺组成段——线路由一个或多个网络连接按明确顺序组成',
-  SEGMENT_BLANK: '段链里有空身份——序即语义，缺一环链就断',
-  APPLICABLE_SCOPE_MISSING: '缺适用范围——这一版没说清自己管哪里',
-  EFFECTIVE_TIME_MISSING: '缺生效时间——零时刻不是一个能用的生效边界',
-  EFFECTIVE_RANGE_REVERSED: '生效区间倒序或为空——半开区间两端相等即不覆盖任何时点',
-  TARGET_KIND_UNKNOWN: '适用对象类别不在封闭集（NODE / CONNECTION / LINE）',
+  TENANT_MISSING: '没写本公司的编号；补上后重新提交',
+  IDENTITY_MISSING: '没写编码，看不出登的是哪一个；补上编码',
+  VERSION_MISSING: '没写版本号；第一次登填 1，以后每改一次加 1',
+  TIMEZONE_MISSING: '没写时区；网点、运输连接和线路都要写所在时区，如 Asia/Shanghai',
+  ENDPOINT_MISSING: '运输连接缺出发网点或到达网点；两端都要写',
+  ENDPOINTS_NOT_DISTINCT: '出发网点和到达网点是同一个；改成两个不同的网点',
+  CONNECTION_CODE_CARRIES_BASIS_SEPARATOR: '连接编码里带了「+」；换一个不带「+」的编码',
+  SEGMENTS_MISSING: '线路没写由哪些运输连接组成；按先后顺序列出',
+  SEGMENT_BLANK: '线路的运输连接里有一项是空的；补上或删掉那一项',
+  APPLICABLE_SCOPE_MISSING: '没写适用服务；补上这一版管哪类服务',
+  EFFECTIVE_TIME_MISSING: '没写生效时间；补上从何时起生效',
+  EFFECTIVE_RANGE_REVERSED: '截止时间不晚于生效时间；把截止时间改到生效时间之后，或不填截止时间',
+  TARGET_KIND_UNKNOWN: '适用对象类别写错了；只能填 NODE（网点）、CONNECTION（运输连接）或 LINE（线路）',
   ADJUSTMENT_KIND_UNKNOWN:
-    '调整种类不在封闭集（SUSPENSION / CLOSURE / RESUMPTION / SCOPE_ADJUSTMENT）',
-  SOURCE_MISSING: '缺来源——调整必须记录来源，否则这条陈述说不出自己凭什么',
-  RANKING_FORM_UNKNOWN: '排序形态不在封闭集——路由策略版本声明了族外的排序形态；改成族内的一种，或不声明',
-  COVERAGE_MALFORMED:
-    '覆盖不成形——国家码或邮编前缀写法不对，或没登覆盖国家却带了前缀；改覆盖那一格',
-  COVERAGE_COUNTRY_NOT_IN_CATALOGUE:
-    '覆盖国家不在国家和地区目录里——换成目录里的两位代码；目录可在“基础数据”页查看',
-  NODE_ROLE_BLANK: '节点角色里有空白节点——补上节点身份',
-  NODE_ROLE_DUPLICATED: '同一角色里一个节点登了两次——删掉重复的那一个',
-  NODE_ROLES_WITHOUT_COVERAGE: '没登覆盖却登了节点角色——先登覆盖，再挂节点角色',
-  CALENDAR_CONTENT_OUT_OF_RANGE:
-    '日历取值越界——截单不在本地当日的分钟范围内，或处理时长、衔接缓冲、派送时长为负；改那个数',
-  COST_BASIS_MALFORMED:
-    '逐段成本依据不成形——段号不在段链内、同一段写了两条、种类不在封闭两类或引用空白；改依据那一行',
-  LEG_ZONE_MALFORMED: '段计价区域不成形——没给段、段号为负、同一段写了两次、区域或依据空白；改那一行',
-  LEG_ZONE_WITHOUT_COST_BASIS: '要登区域的段没挂成本依据，或线路版本不在册——先给这一段挂成本依据',
+    '调整种类写错了；只能填 SUSPENSION（临时停运）、CLOSURE（关闭）、RESUMPTION（恢复）或 SCOPE_ADJUSTMENT（范围调整）',
+  SOURCE_MISSING: '停运或恢复没写消息来源；补上是谁通知的',
+  RANKING_FORM_UNKNOWN: '排序方式写错了；填 COST_SINGLE_DIMENSION（成本最低优先），或不填',
+  COVERAGE_MALFORMED: '覆盖范围写法不对：国家要用两位代码，邮编前缀要配国家一起写；改覆盖那一项',
+  COVERAGE_COUNTRY_NOT_IN_CATALOGUE: '覆盖国家不在国家和地区目录里；换成目录里的两位代码，目录可在“基础数据”页查看',
+  NODE_ROLE_BLANK: '揽收或派送网点里有一项是空的；补上网点编码',
+  NODE_ROLE_DUPLICATED: '同一个网点在揽收或派送里写了两次；删掉重复的那一个',
+  NODE_ROLES_WITHOUT_COVERAGE: '没写覆盖国家就写了揽收或派送网点；先写覆盖国家',
+  CALENDAR_CONTENT_OUT_OF_RANGE: '日历里有数不对：截单时间要在当天之内，处理、衔接和派送时长不能是负数；改那个数',
+  COST_BASIS_MALFORMED: '逐段成本写法不对：段号要在线路之内、同一段只写一条、种类与引用都要填；改那一行',
+  LEG_ZONE_MALFORMED: '段计价区域写法不对：段号不能为负、同一段只写一次、区域与依据都要填；改那一行',
+  LEG_ZONE_WITHOUT_COST_BASIS: '给一段写了计价区域，但这一段没挂成本，或线路版本还没登；先给这一段挂上成本',
 };
 
 // ——以下为路由判断两册的检索列面(GET /route-plans,票 admin-skeleton-closure-batch/03)。
