@@ -91,6 +91,7 @@ Status: Confirmed
 - 网络连接必须表达相邻节点之间的明确方向；线路由一个或多个网络连接按顺序组成。线路变化形成新版本，不改写既有路由计划、班次或履约事实。
 - 客户地址继续由 `parcel-shipment` 保存。`network-routing` 只保存服务区域、节点覆盖版本和当次解析依据，不把客户地址建立成物流节点。当次解析依据是判断对象引用、所用服务区域版本，以及所携地理解析投影的版本化内容摘要；地址本体不入库，也不另建读取小包托运地址的端口；受理之后不由小包托运请求触发的复核除外，那一类复核没有请求可随带投影，由本上下文的消费侧适配器只取受理基线那一版提交的地理投影，只取用地理维，地址本体与身份内容不取用、不落库（[ADR-0215](../../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)）；授权角色据复核建议形成改路决定同样没有请求可随带投影，取法同此（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)）；授权角色裁初始路由最低成本并列同样，取法同此（[ADR-0309](../../adr/0309-an-authorized-role-decides-an-initial-route-lowest-cost-tie-through-the-operator-decision-face-forming-the-first-plan-from-the-decision-moment.md)）。
 - 物理节点、网络连接和线路身份可以在集团租户内共享；节点经营方、线路责任方、可使用法人、服务产品范围、合同资格和有效期必须分别表达。计划责任依据不能替代实际履约责任。
+- 物流节点的一版可以带一个可选的显示名称，随那一版登记；改名是登一个新版本，旧版本照留它当时的名称。名称只供人辨认：不是节点身份、不要求唯一，不进可达性与路由判断的任何依据、候选或计划。运营查阅以名称称呼节点，没登名称时以节点身份称呼，不拿别的顶。名称是租户取值，参考配置不带；约束与采用行的写法见 [ADR-0353](../../adr/0353-logistics-nodes-and-customs-ports-may-carry-an-optional-display-name-registered-with-the-version-and-it-never-enters-a-judgment.md)。
 - 稳定网络定义和临时网络可用性调整必须分离。临时关闭、暂停或恢复不能覆盖节点、连接、线路或服务日历历史；限制解除只恢复候选资格，不自动把已经改路或无路由的包裹切回原线路。
 - 网络服务的路由计划覆盖运营企业责任范围内的揽收、始发、转运、关务衔接、干线、尾程注入和交付段，每段可以自营或外包。
 - 仅提供面单渠道服务时，不得虚构运营企业不控制的端到端网络路由。外包合作方内部网络未知时使用外部不透明履约段，只记录可靠已知的边界和责任。

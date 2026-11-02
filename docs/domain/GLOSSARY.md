@@ -1027,6 +1027,7 @@ Status: Confirmed
 
 - 所有者：`network-routing` 拥有节点的网络身份及适用关系；`node-operations` 和 `transport-fulfillment` 分别拥有节点内作业及到达、出发等实际事实。
 - 节点身份可以在集团租户内共享，但经营方、责任方、可使用法人和有效资格必须分别表达。
+- 节点身份之外可以登一个只供人辨认的显示名称，它不是身份；规则见 [network-routing「网络结构与适用范围」](./network-routing/CONTEXT.md#网络结构与适用范围)。
 - 避免使用：客户地址、仓库组织、扫描地点。
 
 ### 服务区域
