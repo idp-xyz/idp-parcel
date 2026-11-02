@@ -22,6 +22,7 @@ import {
   type ClosureObligationCatalogueRecord,
   type ClosureObligationListResponseBody,
   type CredentialListResponseBody,
+  type CustomsCaseListResponseBody,
   type ReadinessJudgmentRecord,
   type ReadinessJudgmentListResponseBody,
   type SubmissionAuthorityRecord,
@@ -33,7 +34,17 @@ import { problemNote, registrationSnapshotHints, registrationTitles } from './pr
 import { credentialRows, type RegisterRow } from './register-rows';
 import { placeLabel } from '../network/place-names';
 import { usePlaceNames } from '../network/use-place-names';
-import { caseRows, externalResultRows, judgementRows, snapshotRows, submissionRows, unitRows } from './record-rows';
+import {
+  caseNumberReader,
+  caseRows,
+  externalResultRows,
+  judgementRows,
+  snapshotRows,
+  submissionRows,
+  unitRows,
+  type CaseNumberCell,
+} from './record-rows';
+import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
 import { technicalRows } from '../settlement/ops-ui';
@@ -89,8 +100,14 @@ function recordColumns(spec: ColumnSpec[], tech?: [label: string, key: string][]
   return columns;
 }
 
+// 清关单的号名与单据名取单据编号词典那一处（ADR-0355 决定十一），各页同一个叫法。
+const caseWords = documentTypeWords.CUSTOMS_CASE;
+const caseInternalIdLabel = `${caseWords.name}内部标识`;
+
+// 清关单号一列是单据号；没有单据号的清关单照旧显案件标识，技术详情按它记下的情形说为什么没有号。
 const caseColumns = recordColumns(
   [
+    { id: 'number', header: caseWords.numberName, mono: true, nowrap: true },
     { id: 'parcels', header: '运单号', mono: true, multi: true },
     { id: 'jurisdiction', header: '辖区', mono: true, nowrap: true },
     { id: 'direction', header: '程序', nowrap: true },
@@ -98,7 +115,8 @@ const caseColumns = recordColumns(
     { id: 'updatedAt', header: '最后更新', mono: true, nowrap: true },
   ],
   [
-    ['清关单号', 'id'],
+    ['内部标识', 'id'],
+    ['单据号', 'numberNote'],
     ['客户账户', 'customers'],
     ['监管程序', 'procedure'],
     ['法定义务', 'obligation'],
@@ -117,7 +135,9 @@ const unitColumns = recordColumns(
     { id: 'formedAt', header: '形成时间', mono: true, nowrap: true },
   ],
   [
-    ['清关单号', 'caseRef'],
+    [caseWords.numberName, 'caseRef'],
+    [caseInternalIdLabel, 'caseId'],
+    ['单据号', 'caseNumberNote'],
     ['监管程序', 'procedure'],
     ['替代批次', 'replaces'],
   ],
@@ -278,7 +298,7 @@ function CustomsCasesTable() {
     <RecordTable
       title="清关单"
       description="每票出口或进口货物的清关单：走到哪一步、最近一次更新是什么时候"
-      searchPlaceholder="搜运单号、辖区、清关单号"
+      searchPlaceholder={`搜运单号、辖区、${caseWords.numberName}`}
       columns={caseColumns}
       rows={rows}
       answer={answer}
@@ -303,7 +323,7 @@ function DeclarationUnitsTable() {
     <RecordTable
       title="报关批次"
       description="一次向海关申报的一批运单；资料和申报记录都挂在批次上"
-      searchPlaceholder="搜批次号、运单号、清关单号"
+      searchPlaceholder={`搜批次号、运单号、${caseWords.numberName}`}
       columns={unitColumns}
       rows={rows}
       answer={answer}
@@ -608,7 +628,7 @@ function SubmissionPreconditionsTable() {
 // 目录行与义务项是两条独立信息：有义务项的目录逐项成行；目录已登记而清单为空占一行写明——它与「目录未登记 → 未决」
 // 含义相反，后者根本不在本列（空册文案另说）。
 const closureColumns: ListColumn<CatalogueRow>[] = [
-  col('caseRef', '清关单号', true, true),
+  col('caseRef', caseWords.numberName, true, true),
   col('obligation', '核对事项'),
   col('state', '处理情况', false, true),
   col('handedTo', '承接方', true, true),
@@ -620,6 +640,8 @@ const closureColumns: ListColumn<CatalogueRow>[] = [
     render: (row) => (
       <TechnicalDetails
         rows={technicalRows([
+          { label: caseInternalIdLabel, value: row.values.caseId },
+          { label: '单据号', value: row.values.caseNumberNote },
           { label: '适用范围', value: row.values.scope },
           { label: '依据', value: row.values.basis },
           { label: '截止', value: row.values.appliesUntil },
@@ -631,9 +653,16 @@ const closureColumns: ListColumn<CatalogueRow>[] = [
   },
 ];
 
-function closureRows(catalogues: ClosureObligationCatalogueRecord[]): CatalogueRow[] {
+/** numberOf 把关闭核对引到的案件标识换成清关单号（见 caseNumberReader）。 */
+function closureRows(catalogues: ClosureObligationCatalogueRecord[], numberOf: (caseRef: string) => CaseNumberCell): CatalogueRow[] {
   return catalogues.flatMap((catalogue) => {
-    const base = { caseRef: catalogue.case, registeredAt: formatInstant(catalogue.registeredAt) };
+    const cell = numberOf(catalogue.case);
+    const base = {
+      caseRef: cell.number,
+      caseId: catalogue.case,
+      caseNumberNote: cell.note,
+      registeredAt: formatInstant(catalogue.registeredAt),
+    };
     if (catalogue.items.length === 0) {
       return [{ key: `catalogue:${catalogue.case}`, values: { ...base, obligation: '清单已登记，当前没有要核对的事项' } }];
     }
@@ -654,23 +683,29 @@ function closureRows(catalogues: ClosureObligationCatalogueRecord[]): CatalogueR
   });
 }
 
+// 关闭核对引到的清关单按清关单号显（ADR-0355 决定十一），号取清关单读口那一页。视图状态只由关闭目录读口定：清关单
+// 读口没答只让号那一格降级（显案件标识并注明读不到），不拖垮这一签——核对事项本身照样读得到。
 function ClosureObligationsTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<ClosureObligationListResponseBody> | null>(null);
+  const [loaded, setLoaded] = useState<{
+    catalogues: ApiResult<ClosureObligationListResponseBody>;
+    cases: ApiResult<CustomsCaseListResponseBody>;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listCaseRegisters('closure-obligation').then((result) => {
-      if (!cancelled) setAnswer(result);
+    void Promise.all([listCaseRegisters('closure-obligation'), listCustomsCases()]).then(([catalogues, cases]) => {
+      if (!cancelled) setLoaded({ catalogues, cases });
     });
     return () => {
       cancelled = true;
     };
   }, [reloadKey]);
 
+  const answer = loaded?.catalogues ?? null;
   const catalogues = answer?.kind === 'outcome' ? answer.body.catalogues : [];
-  const rows = closureRows(catalogues);
+  const rows = closureRows(catalogues, caseNumberReader(loaded?.cases.kind === 'outcome' ? loaded.cases.body.cases : null));
   const needle = search.trim().toLowerCase();
   const visibleRows = needle ? rows.filter((row) => Object.values(row.values).some((value) => value.toLowerCase().includes(needle))) : rows;
   const retry = () => setReloadKey((value) => value + 1);
@@ -680,7 +715,7 @@ function ClosureObligationsTable() {
     <ListPageTemplate<CatalogueRow>
       title="关闭核对"
       description="清关单关案前要逐项核对的事项：哪些已了结、哪些交给了别人、哪些还没解决"
-      search={{ value: search, onChange: setSearch, placeholder: '搜清关单号、事项' }}
+      search={{ value: search, onChange: setSearch, placeholder: `搜${caseWords.numberName}、事项` }}
       filterSummary={answer?.kind === 'outcome' ? `${catalogues.length} 张清关单 · 未解决 ${unresolved} 项` : undefined}
       columns={closureColumns}
       rows={visibleRows}
@@ -688,7 +723,7 @@ function ClosureObligationsTable() {
       emptyRowsNote="没有匹配的事项"
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
-        endpoint: 'GET /customs-case-registers?registry=closure-obligation',
+        endpoint: 'GET /customs-case-registers?registry=closure-obligation 与 /customs-case-records',
         emptyTitle: '还没有关闭核对清单',
         emptyDescription: '清关单登记了关闭核对清单后在这里出现；没登记清单的清关单关不了案。',
       })}

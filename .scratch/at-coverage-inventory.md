@@ -20,15 +20,15 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 994 |
+| ① 已钉住 | 998 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 423 |
-| 合计 | 1797 |
+| 合计 | 1801 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
-| CC | 455 | 71 | 0 | 88 | 296 |
+| CC | 459 | 75 | 0 | 88 | 296 |
 | CR | 27 | 12 | 13 | 0 | 2 |
 | NO | 109 | 82 | 20 | 5 | 2 |
 | NR | 112 | 89 | 22 | 1 | 0 |
@@ -115,6 +115,10 @@
 | `AT-CC-456` | internal/customscompliance/adapters/postgres/operations_record_views_test.go::TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit（读口半边，真库）；internal/customscompliance/adapters/http/query_unadmitted_objects_test.go::TestUnadmittedObjectQueryCarriesTheWholeCountAndMarksTruncation、::TestUnadmittedObjectQueryAnswersZeroOnlyWhenTheReadAnswersZero（端点半边） |
 | `AT-CC-457` | internal/customscompliance/domain/customs_port_display_name_test.go::TestACustomsPortDisplayNameIsTakenAsWrittenOrRefused（领域半边）；internal/customscompliance/adapters/registrationjson/candidate_port_display_name_test.go::TestACandidatePortRowCarriesAnOptionalDisplayName；internal/customscompliance/adapters/http/query_ports_paths_test.go::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered；internal/customscompliance/adapters/postgres/candidate_port_display_name_test.go::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison |
 | `AT-CC-458` | internal/customscompliance/application/register_ports_paths_test.go::TestTheCandidatePortDisplayNameIsPartOfTheReplayComparison；internal/customscompliance/adapters/postgres/candidate_port_display_name_test.go::TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison、::TestCandidatePortDisplayNamesStayOutOfTheApplicabilityJudgment、::TestMigration0031LeavesExistingCandidatePortsUnnamedAndUnchanged；internal/customscompliance/adapters/http/query_ports_paths_test.go::TestCandidatePortListCarriesTheDisplayNameOnlyWhenRegistered（读口半边） |
+| `AT-CC-459` | internal/customscompliance/application/establish_customs_case_test.go::TestACaseTakesItsNumberOnceAndAReplayAnswersTheOriginal（编排半边）；internal/customscompliance/adapters/docnumbering/case_numbers_test.go::TestAReplayedEstablishmentAnswersTheOriginalNumber（真库）；internal/customscompliance/adapters/http/query_operations_records_test.go::TestCustomsCaseRecordsCarryTheDocumentNumberOrItsAbsence（读口半边）；apps/admin-web/src/pages/customs/record-rows.test.ts「清关单号：有号显单据号，无号显案件标识并按情形注明」（管理台半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestACaseIsNumberedInItsEstablishingTransactionThroughTheProductionFace（生产装配半边） |
+| `AT-CC-460` | internal/customscompliance/domain/customs_case_number_test.go::TestACaseNumberIsSettledOnceAndNeverReplaced（领域半边）；internal/customscompliance/application/establish_customs_case_test.go::TestACaseIsEstablishedWithoutANumberWhenTheNumberingTimeZoneIsMissing（编排半边）；internal/customscompliance/adapters/docnumbering/case_numbers_test.go::TestACaseWithoutANumberingTimeZoneStaysUnnumbered（真库）；internal/customscompliance/adapters/postgres/customs_case_number_test.go::TestACaseNumberAndItsAbsenceAreReadBackByBothReads（持久化半边）；internal/customscompliance/adapters/http/query_operations_records_test.go::TestCustomsCaseRecordsCarryTheDocumentNumberOrItsAbsence（读口半边）；apps/admin-web/src/pages/customs/record-rows.test.ts「清关单号：有号显单据号，无号显案件标识并按情形注明」（管理台半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestACaseIsNumberedInItsEstablishingTransactionThroughTheProductionFace（生产装配半边） |
+| `AT-CC-461` | internal/customscompliance/application/establish_customs_case_test.go::TestANumberingCollisionOrFailureLandsNoCaseAndRollsBack（编排半边）；internal/customscompliance/adapters/docnumbering/case_numbers_test.go::TestANumberingCollisionLandsNothingAndReleasesTheSequence（真库）；cmd/parcel-api/assemble_customs_decisions_test.go::TestACaseIsNumberedInItsEstablishingTransactionThroughTheProductionFace（生产装配半边） |
+| `AT-CC-462` | internal/customscompliance/adapters/docnumbering/case_numbers_test.go::TestConcurrentEstablishmentsNeverCollideOrLeaveGaps、::TestCaseNumbersAreCountedPerTenant、::TestCaseNumbersResetAtTheNumberingTimeZoneMidnight、::TestARolledBackEstablishmentReleasesItsNumber（真库）；internal/customscompliance/application/establish_customs_case_test.go::TestALosingConcurrentEstablishmentAnswersTheWinnerAndRollsBack（编排半边）；internal/customscompliance/adapters/postgres/customs_case_number_test.go::TestCaseNumbersAreUniquePerTenantAndTheUsedQueryNeedsATransaction（唯一约束半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestACaseIsNumberedInItsEstablishingTransactionThroughTheProductionFace（生产装配的并发半边） |
 | `AT-CR-006` | internal/collectionremittance/application/instruction_principal_test.go::TestOnlyTheChannelReportOfThreeLayersPostsThePrincipal；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
 | `AT-CR-007` | internal/collectionremittance/application/instruction_principal_test.go::TestAnArrivalCannotBorrowAnotherInstructionsInTransit；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
 | `AT-CR-008` | internal/collectionremittance/application/instruction_principal_test.go::TestPostingAFactAgainUnderAnotherPostingIDIsAConflict；internal/collectionremittance/adapters/postgres/instruction_principal_test.go::TestTheDatabaseKeepsOnePostingPerCollectionFact（库约束半边）；cmd/parcel-collection-register/concurrency_test.go::TestAFactPostedConcurrentlyOutsideTheLockAnswersConflict（并发半边）；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
@@ -2134,6 +2138,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-29 追记（票 reference-data/02，基础数据第二轮 A）：UC-PC-001 新立 `AT-PC-073`–`077`（启用范围登记册：登记 / 重放 / 冲突 / 连续性、目录外码被拒、最新生效导出与未配置、认证信封与租户隔离、新登记入口收紧到目录成员而读回不动），ADR-0345；五条均有领域、编排、真库、传输面与生产装配用例点名，入①，PC 加 5，②③④不变。总览计数未重算，由推送方重算。
 
 2026-11-01 追记（票 place-display-names/01，ADR-0353）：UC-NR-001 新立 `AT-NR-111`（节点登记的可选显示名称：直接行与节点采用行、缺席即没登、不合格整行拒、读口没登不带这一格）与 `AT-NR-112`（改名登新版本、同一修订号照旧由主键挡、迁移之前的旧版读成没登、名称不进判断时点的网络证据），两行都进①。UC-CC-003 新立 `AT-CC-457`（口岸目录登记的可选显示名称与读法）与 `AT-CC-458`（同一起点重登的名称比对、改名新版本、迁移之前的旧版、名称不进关务适用性判断），两行都进①（`AT-CC-456` 已被 home-today-todo 那条分支占用，跳过）。
+
+2026-11-02 追记（票 document-numbering/07，ADR-0355）：UC-CC-001 新立 `AT-CC-459`（建案事务内取得案件单据号、答复与读口带号、重放答原号、关联后续案件取新号、不落单的各格不取号）、`AT-CC-460`（租户没登单据编号时区时照常建案不带号并记情形、上线前建立的旧案件读成上线前开立，两者不拿案件标识顶号）、`AT-CC-461`（编号规则撞号：不落案件、回滚释放流水、指到规则册）、`AT-CC-462`（并发不撞号不留空号、租户隔离、按租户单据编号时区的日界重置、回滚释放），四行都进①。总览计数未改，由推送方重算。
 
 2026-11-02 追记（票 document-numbering/09，ADR-0355）：UC-TF-004 新立 `AT-TF-371`（运输委托进入已提交时取 `TRANSPORT_COMMISSION` 单据号、重放答原号、取消与开始不换号、没登单据编号时区照常提交记无号原因）、`AT-TF-372`（订舱登记时取 `BOOKING` 单据号，承运答复照旧按订舱标识认单，订舱册带订舱与委托两个号或无号原因）、`AT-TF-373`（跳号、编号规则撞号整笔回滚、并发不撞号不留空号、租户隔离、周期重置、回滚释放号码）；编排、消费侧适配器、传输面、真库存储与生产装配真库用例点名，三条入①。总览计数未重算，由推送方重算。
 

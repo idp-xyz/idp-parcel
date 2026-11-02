@@ -199,6 +199,10 @@ func recordEstablishedCustomsCase(t *testing.T, fixture *synVerticalFixture) str
 	if err != nil {
 		t.Fatalf("建立关务案件：%v", err)
 	}
+	// 案件库只收单据号已落定的案件（ADR-0355）；本用例证的是投影，号取一个合成值。
+	if customsCase, err = customsCase.Numbered("CC-SYN-CASE-0001"); err != nil {
+		t.Fatalf("案件取号：%v", err)
+	}
 
 	key := ccports.CustomsCaseKey{
 		TenantID:     tenant,

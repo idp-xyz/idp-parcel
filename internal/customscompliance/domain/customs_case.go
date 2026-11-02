@@ -2,7 +2,9 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
+	"unicode"
 )
 
 var ErrInvalidCustomsCase = errors.New("customs compliance: invalid customs case")
@@ -80,6 +82,9 @@ type CustomsCase struct {
 	parcels       []CaseParcelAssociation
 	roles         []CaseRoleSnapshot
 	establishedAt time.Time
+	// documentNumber 与 numberAbsence 至多一格非零；两格皆零是案件刚在内存里建立、还没走到取号那一步。
+	documentNumber string
+	numberAbsence  DocumentNumberAbsence
 }
 
 // EstablishCustomsCase 建立案件。四维监管范围与包裹关联集缺一不可（包裹不重——同一
@@ -145,3 +150,65 @@ func (customsCase CustomsCase) Roles() []CaseRoleSnapshot {
 }
 
 func (customsCase CustomsCase) EstablishedAt() time.Time { return customsCase.establishedAt }
+
+// DocumentNumberAbsence 说一个案件为什么没有单据号。没有单据号的单据要记下是哪一种情形，事后都不补号（GLOSSARY
+// 「单据号」）；两种情形的续办人不同——上线前开立的什么也不用做，时区未配置的要租户去登单据编号时区，之后开立的才有号。
+type DocumentNumberAbsence uint8
+
+const (
+	// DocumentNumberAbsenceNone 不是一种无号情形：案件有号，或还没走到取号那一步。
+	DocumentNumberAbsenceNone DocumentNumberAbsence = iota
+	// IssuedBeforeNumbering：单据号规则生效之前建立的案件。迁移不回填，旧行两格皆空即读成这一格。
+	IssuedBeforeNumbering
+	// NumberingTimeZoneNotConfigured：建立时租户还没有生效的单据编号时区。关务案件的开立方没有业务时区，日期只能按
+	// 租户的单据编号时区出（ADR-0355 决定七），没有它就开立不带号。
+	NumberingTimeZoneNotConfigured
+)
+
+func (absence DocumentNumberAbsence) String() string {
+	switch absence {
+	case IssuedBeforeNumbering:
+		return "ISSUED_BEFORE_NUMBERING"
+	case NumberingTimeZoneNotConfigured:
+		return "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
+	default:
+		return ""
+	}
+}
+
+// Numbered 交回带上单据号的案件。单据号开立后不变：已经落定了号或无号情形的案件再取号是编程错误，不覆盖。
+// 号由编号组件渲染，这里只挡空白与首尾空白、控制字符——那样的号进不了管理台的检索，也不是给人念的号。
+func (customsCase CustomsCase) Numbered(number string) (CustomsCase, error) {
+	if customsCase.NumberingSettled() || number == "" || strings.TrimSpace(number) != number ||
+		strings.IndexFunc(number, unicode.IsControl) >= 0 {
+		return CustomsCase{}, ErrInvalidCustomsCase
+	}
+	customsCase.documentNumber = number
+	return customsCase, nil
+}
+
+// Unnumbered 交回记下无号情形的案件。同 Numbered，已经落定的案件不再改。
+func (customsCase CustomsCase) Unnumbered(absence DocumentNumberAbsence) (CustomsCase, error) {
+	if customsCase.NumberingSettled() ||
+		(absence != IssuedBeforeNumbering && absence != NumberingTimeZoneNotConfigured) {
+		return CustomsCase{}, ErrInvalidCustomsCase
+	}
+	customsCase.numberAbsence = absence
+	return customsCase, nil
+}
+
+// DocumentNumber 交回案件的单据号；没有单据号时 present 为 false，不拿案件标识顶。
+func (customsCase CustomsCase) DocumentNumber() (number string, present bool) {
+	return customsCase.documentNumber, customsCase.documentNumber != ""
+}
+
+// DocumentNumberAbsence 只在案件落定为无号时非零。
+func (customsCase CustomsCase) DocumentNumberAbsence() DocumentNumberAbsence {
+	return customsCase.numberAbsence
+}
+
+// NumberingSettled 答案件在单据号这一格上是否已落定（有号，或记下了无号情形）。没落定的案件不能落库：落成两格皆空的
+// 行，读回来就成了「上线前开立」，冒充了一种它不是的情形。
+func (customsCase CustomsCase) NumberingSettled() bool {
+	return customsCase.documentNumber != "" || customsCase.numberAbsence != DocumentNumberAbsenceNone
+}

@@ -28,7 +28,7 @@ func init() {
 			},
 		},
 		build: func(sources endpointSources) (customsDecisionsWiring, error) {
-			faces, err := buildCustomsDecisionFaces(sources.db)
+			faces, err := buildCustomsDecisionFaces(sources.db, sources.documentNumbers)
 			return customsDecisionsWiring{
 				caseEstablishment:       faces.caseEstablishment,
 				submissionAuthorization: faces.submissionAuthorization,

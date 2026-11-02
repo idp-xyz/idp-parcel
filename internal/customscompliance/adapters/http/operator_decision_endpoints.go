@@ -66,14 +66,25 @@ func decisionEndpoint[C, R any](
 }
 
 // caseEstablishmentResponse 是建案口的封闭响应形状。未决原因、未接受包裹、不适用依据与续办引用各只在对应格出现。
+//
+// documentNumber 与 documentNumberAbsence 只随案件在场、二者至多其一（ADR-0355 决定七、十一）：有号答号；没有号答
+// 是哪一种情形，不答空串，也不拿 caseId 顶。detail 只随编号规则撞号在场，是给人看的散文，客户端按 outcome 分支。
 type caseEstablishmentResponse struct {
-	Outcome           string   `json:"outcome"`
-	CaseID            string   `json:"caseId,omitempty"`
-	Basis             string   `json:"basis,omitempty"`
-	UndecidedReason   string   `json:"undecidedReason,omitempty"`
-	UnacceptedParcels []string `json:"unacceptedParcels,omitempty"`
-	HandoffReference  string   `json:"handoffReference,omitempty"`
+	Outcome               string   `json:"outcome"`
+	CaseID                string   `json:"caseId,omitempty"`
+	DocumentNumber        string   `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string   `json:"documentNumberAbsence,omitempty"`
+	Basis                 string   `json:"basis,omitempty"`
+	UndecidedReason       string   `json:"undecidedReason,omitempty"`
+	UnacceptedParcels     []string `json:"unacceptedParcels,omitempty"`
+	HandoffReference      string   `json:"handoffReference,omitempty"`
+	Detail                string   `json:"detail,omitempty"`
 }
+
+// numberingRuleCollisionDetail 是撞号那一格的人话：指到规则册，因为重试与改请求都换不来号，要换的是格式。措辞照管理台
+// 单据编号词典 numberingCollisionNote 给清关单的那一句写，调接口的人与看页面的人读到同一个说法。
+const numberingRuleCollisionDetail = "这一次没有开立：按本公司的编号规则出的清关单号与已有的号重复了。" +
+	"请到「设置 → 单据编号」换一个不会与旧号重复的格式后再试。"
 
 // writeCaseEstablishment 逐名转写。未决也是形成了的答案（200 带原因）：规则未配置要租户去登，依赖读不动要运维去救，响应体
 // 里的原因分得开在等谁——与外部结果接收口同一写法。
@@ -92,6 +103,11 @@ func writeCaseEstablishment(response http.ResponseWriter, result application.Est
 	}
 	if customsCase, present := result.Case(); present {
 		body.CaseID = customsCase.ID().String()
+		body.DocumentNumber, _ = customsCase.DocumentNumber()
+		body.DocumentNumberAbsence = customsCase.DocumentNumberAbsence().String()
+	}
+	if result.Outcome() == application.CaseNumberingRuleCollision {
+		body.Detail = numberingRuleCollisionDetail
 	}
 	status := http.StatusOK
 	if result.Outcome() == application.CaseEstablished {
