@@ -148,6 +148,7 @@ func seedDeliveryScopeRegisters(t *testing.T, db *bentopg.DB) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		preAdvice = preAdvice.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 		return preAdvice
 	}
 	noteIn := func(tenant, id string, accounts ...string) nodomain.DeliveryHandoverNote {
@@ -166,6 +167,7 @@ func seedDeliveryScopeRegisters(t *testing.T, db *bentopg.DB) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		note = note.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 		return note
 	}
 	confirmed, err := nodomain.FormDeliveryHandoverBinding(nodomain.DeliveryHandoverBindingSpec{

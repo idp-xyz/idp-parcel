@@ -316,7 +316,7 @@ func TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase(t *
 	assertScopeUnverifiedOnRealAssembly(t, unadvised, "UNVERIFIED/NO_BASIS/", "SYN-PARCEL-HANDOVER-1")
 	pending, _ := unadvised.Record()
 
-	handover, err := buildDeliveryHandoverNoteOrchestration(db)
+	handover, err := buildDeliveryHandoverNoteOrchestration(db, testDocumentNumberAssigner(t, db))
 	if err != nil {
 		t.Fatalf("装配交接单编排：%v", err)
 	}
@@ -424,7 +424,7 @@ func TestAReceptionCarryingAClosedNoteIsNotApplicableUnlessItIsAMemberAgainstARe
 	}
 	registerCustomerAccountInPartyCommercial(t, db, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-PARTY-OWNER-PSXM12")
 
-	handover, err := buildDeliveryHandoverNoteOrchestration(db)
+	handover, err := buildDeliveryHandoverNoteOrchestration(db, testDocumentNumberAssigner(t, db))
 	if err != nil {
 		t.Fatalf("装配交接单编排：%v", err)
 	}

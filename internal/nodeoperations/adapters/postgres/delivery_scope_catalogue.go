@@ -40,8 +40,8 @@ func NewDeliveryScopeCatalogue(db *bentopg.DB) (*DeliveryScopeCatalogue, error) 
 	return &DeliveryScopeCatalogue{db: db, preAdvices: preAdvices, notes: notes}, nil
 }
 
-// catalogueFilterArgs 把筛选译成可空的三个参数：零值传 NULL，语句里「参数为空即不设这一界」。
-func catalogueFilterArgs(filter ports.DeliveryScopeCatalogueFilter) (node *string, from, until *time.Time) {
+// catalogueFilterArgs 把筛选译成可空的四个参数：零值传 NULL，语句里「参数为空即不设这一界」。
+func catalogueFilterArgs(filter ports.DeliveryScopeCatalogueFilter) (node *string, from, until *time.Time, documentNumber *string) {
 	if value := filter.Node.String(); value != "" {
 		node = &value
 	}
@@ -51,7 +51,10 @@ func catalogueFilterArgs(filter ports.DeliveryScopeCatalogueFilter) (node *strin
 	if !filter.Until.IsZero() {
 		until = &filter.Until
 	}
-	return node, from, until
+	if value := filter.DocumentNumber.String(); value != "" {
+		documentNumber = &value
+	}
+	return node, from, until, documentNumber
 }
 
 // ListDeliveryPreAdvices 按预计送达倒序列预报，同刻按标识；再按这一页的标识取各自的撤回。
@@ -68,7 +71,7 @@ func (catalogue *DeliveryScopeCatalogue) ListDeliveryPreAdvices(
 	if err != nil {
 		return nil, fmt.Errorf("list delivery pre-advices: %w", err)
 	}
-	node, from, until := catalogueFilterArgs(filter)
+	node, from, until, documentNumber := catalogueFilterArgs(filter)
 	rows, err := querier.Query(ctx,
 		`SELECT `+preAdviceColumns+`
 		   FROM node_operations.delivery_pre_advice
@@ -76,9 +79,10 @@ func (catalogue *DeliveryScopeCatalogue) ListDeliveryPreAdvices(
 		    AND ($2::text IS NULL OR node_ref = $2)
 		    AND ($3::timestamptz IS NULL OR expected_arrival_at >= $3)
 		    AND ($4::timestamptz IS NULL OR expected_arrival_at < $4)
+		    AND ($6::text IS NULL OR document_number = $6)
 		  ORDER BY expected_arrival_at DESC, pre_advice_id
 		  LIMIT $5`,
-		tenant.String(), node, from, until, limit,
+		tenant.String(), node, from, until, limit, documentNumber,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list delivery pre-advices: %w", err)
@@ -154,9 +158,10 @@ func (catalogue *DeliveryScopeCatalogue) ListDeliveryHandoverNotes(
 	if err != nil {
 		return nil, fmt.Errorf("list delivery handover notes: %w", err)
 	}
-	node, from, until := catalogueFilterArgs(filter)
+	node, from, until, documentNumber := catalogueFilterArgs(filter)
 	rows, err := querier.Query(ctx,
 		`SELECT note.note_id, note.node_ref, note.delivering_party, note.claimed_account_ids, note.opened_at,
+		        note.document_number, note.document_number_absence,
 		        (SELECT count(*) FROM node_operations.delivery_handover_member AS member
 		          WHERE member.tenant_id = note.tenant_id AND member.note_id = note.note_id)
 		   FROM node_operations.delivery_handover_note AS note
@@ -164,9 +169,10 @@ func (catalogue *DeliveryScopeCatalogue) ListDeliveryHandoverNotes(
 		    AND ($2::text IS NULL OR note.node_ref = $2)
 		    AND ($3::timestamptz IS NULL OR note.opened_at >= $3)
 		    AND ($4::timestamptz IS NULL OR note.opened_at < $4)
+		    AND ($6::text IS NULL OR note.document_number = $6)
 		  ORDER BY note.opened_at DESC, note.note_id
 		  LIMIT $5`,
-		tenant.String(), node, from, until, limit,
+		tenant.String(), node, from, until, limit, documentNumber,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list delivery handover notes: %w", err)

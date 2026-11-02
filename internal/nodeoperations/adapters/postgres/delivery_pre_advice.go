@@ -29,16 +29,68 @@ func NewDeliveryPreAdvices(db *bentopg.DB) (*DeliveryPreAdvices, error) {
 var _ ports.DeliveryPreAdviceRegister = (*DeliveryPreAdvices)(nil)
 
 const preAdviceColumns = `pre_advice_id, customer_account_id, node_ref, expected_arrival_at, parcel_numbers, delivering_party,
-	source_channel, source_request_key, content_digest, formed_at`
+	source_channel, source_request_key, content_digest, formed_at, document_number, document_number_absence`
 
-// RecordDeliveryPreAdvice 落一份预报。无 conflict target 的 DO NOTHING 同时吃主键与来源唯一键；撞上后按来源请求键读回——撞的若是
-// 主键（签发的标识重了，128 位随机下不该发生），按来源读不到，如实报错，不拿别人的预报回显。
+// LockDeliveryPreAdviceSource 取（租户，客户端，来源请求键）的事务级咨询锁，再按来源读回在册那一份。锁到事务结束：同一来源并发的
+// 两笔，后一笔等前一笔提交或回滚之后才读，读到的就是前一笔落下的那一份（或前一笔回滚后的空），不会两笔都以为没人落过而各取一个号。
+// 键里用 chr(31) 分隔，免得「a」+「bc」与「ab」+「c」拼成同一个键。
+func (register *DeliveryPreAdvices) LockDeliveryPreAdviceSource(
+	ctx context.Context,
+	tenant domain.TenantID,
+	source domain.CustomerRequestSource,
+) (domain.DeliveryPreAdvice, bool, error) {
+	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.DeliveryPreAdvice{}, false, fmt.Errorf("lock delivery pre-advice source: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('node_operations.delivery_pre_advice.source'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		tenant.String(), source.Channel, source.RequestKey,
+	); err != nil {
+		return domain.DeliveryPreAdvice{}, false, fmt.Errorf("lock delivery pre-advice source: %w", err)
+	}
+	recorded, found, err := scanPreAdvice(executor.QueryRow(ctx,
+		`SELECT `+preAdviceColumns+`
+		   FROM node_operations.delivery_pre_advice
+		  WHERE tenant_id = $1 AND source_channel = $2 AND source_request_key = $3`,
+		tenant.String(), source.Channel, source.RequestKey,
+	), tenant)
+	if err != nil {
+		return domain.DeliveryPreAdvice{}, false, fmt.Errorf("lock delivery pre-advice source: read back: %w", err)
+	}
+	return recorded, found, nil
+}
+
+// DeliveryPreAdviceDocumentNumberUsed 按（租户，单据号）查，走唯一约束带出的索引。
+func (register *DeliveryPreAdvices) DeliveryPreAdviceDocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error) {
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("delivery pre-advice document number used: %w", err)
+	}
+	var used bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM node_operations.delivery_pre_advice WHERE tenant_id = $1 AND document_number = $2)`,
+		tenant.String(), number,
+	).Scan(&used); err != nil {
+		return false, fmt.Errorf("delivery pre-advice document number used: %w", err)
+	}
+	return used, nil
+}
+
+// RecordDeliveryPreAdvice 落一份预报。无 conflict target 的 DO NOTHING 同时吃主键、来源唯一键与（租户，单据号）唯一键；撞上后按来源
+// 请求键读回——撞的若是主键（签发的标识重了，128 位随机下不该发生）或单据号（取号编排之外有写入占了这个号），按来源读不到，如实
+// 报错，不拿别人的预报回显，开立事务随之回滚。
 func (register *DeliveryPreAdvices) RecordDeliveryPreAdvice(
 	ctx context.Context,
 	preAdvice domain.DeliveryPreAdvice,
 ) (domain.DeliveryPreAdvice, ports.DeliveryScopeAppendOutcome, error) {
 	none := domain.DeliveryPreAdvice{}
 	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: %w", err)
+	}
+	documentNumber, documentNumberAbsence, err := documentNumberingColumns(preAdvice.DocumentNumbering())
 	if err != nil {
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: %w", err)
 	}
@@ -55,11 +107,11 @@ func (register *DeliveryPreAdvices) RecordDeliveryPreAdvice(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.delivery_pre_advice
 			(tenant_id, `+preAdviceColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		preAdvice.TenantID().String(), preAdvice.ID().String(), preAdvice.CustomerAccount().String(), preAdvice.Node().String(),
 		preAdvice.ExpectedArrivalAt(), numbers, deliveringParty,
-		source.Channel, source.RequestKey, source.ContentDigest, preAdvice.FormedAt(),
+		source.Channel, source.RequestKey, source.ContentDigest, preAdvice.FormedAt(), documentNumber, documentNumberAbsence,
 	)
 	if err != nil {
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: %w", err)
@@ -77,7 +129,7 @@ func (register *DeliveryPreAdvices) RecordDeliveryPreAdvice(
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: read back: %w", err)
 	}
 	if !found {
-		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: the pre-advice ID %q is already taken", preAdvice.ID())
+		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery pre-advice: the pre-advice ID %q or its document number is already taken", preAdvice.ID())
 	}
 	return recorded, ports.DeliveryScopeAlreadyRecorded, nil
 }
@@ -181,8 +233,10 @@ func scanPreAdvice(row pgx.Row, tenant domain.TenantID) (domain.DeliveryPreAdvic
 		expectedAt, formedAt                           time.Time
 		numbers                                        []string
 		deliveringParty                                *string
+		documentNumber, documentNumberAbsence          *string
 	)
-	err := row.Scan(&id, &account, &node, &expectedAt, &numbers, &deliveringParty, &channel, &requestKey, &digest, &formedAt)
+	err := row.Scan(&id, &account, &node, &expectedAt, &numbers, &deliveringParty, &channel, &requestKey, &digest, &formedAt,
+		&documentNumber, &documentNumberAbsence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DeliveryPreAdvice{}, false, nil
 	}
@@ -220,7 +274,11 @@ func scanPreAdvice(row pgx.Row, tenant domain.TenantID) (domain.DeliveryPreAdvic
 	if err != nil {
 		return domain.DeliveryPreAdvice{}, false, err
 	}
-	return preAdvice, true, nil
+	numbering, err := domain.RehydrateDocumentNumbering(stringOrEmpty(documentNumber), stringOrEmpty(documentNumberAbsence))
+	if err != nil {
+		return domain.DeliveryPreAdvice{}, false, err
+	}
+	return preAdvice.WithDocumentNumbering(numbering), true, nil
 }
 
 func scanWithdrawal(row pgx.Row, tenant domain.TenantID) (domain.DeliveryPreAdviceWithdrawal, bool, error) {

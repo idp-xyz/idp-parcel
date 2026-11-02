@@ -84,6 +84,7 @@ func preAdviceForCatalogue(t *testing.T, tenant, id, node string, expected time.
 	if err != nil {
 		t.Fatalf("form pre-advice %s: %v", id, err)
 	}
+	preAdvice = preAdvice.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	return preAdvice
 }
 
@@ -235,6 +236,7 @@ func noteForCatalogue(t *testing.T, tenant, id, node string, opened time.Time, a
 	if err != nil {
 		t.Fatal(err)
 	}
+	note = note.WithDocumentNumbering(domain.UnnumberedForMissingTimeZone())
 	return note
 }
 

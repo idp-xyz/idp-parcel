@@ -73,8 +73,8 @@ type catalogueFilterKeys struct {
 	until string
 }
 
-// catalogueFilterOf 读列表的筛选。键封闭：认不出的键、重复的键、空白节点、读不成 RFC 3339 的时刻、起点不早于终点都答坏请求——静默丢掉
-// 一个拼错的键，人会把全租户的列表当成按条件筛过的。
+// catalogueFilterOf 读列表的筛选。键封闭：认不出的键、重复的键、空白节点或单据号、读不成 RFC 3339 的时刻、起点不早于终点都答坏请求
+// ——静默丢掉一个拼错的键，人会把全租户的列表当成按条件筛过的。documentNumber 按单据号逐字找（ADR-0355 决定十一），两本册同一个键。
 func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.DeliveryScopeCatalogueFilter, bool) {
 	var filter ports.DeliveryScopeCatalogueFilter
 	for key, values := range query {
@@ -88,6 +88,12 @@ func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.Delive
 				return ports.DeliveryScopeCatalogueFilter{}, false
 			}
 			filter.Node = node
+		case "documentNumber":
+			number, err := domain.NewDocumentNumber(values[0])
+			if err != nil {
+				return ports.DeliveryScopeCatalogueFilter{}, false
+			}
+			filter.DocumentNumber = number
 		case keys.from, keys.until:
 			at, err := time.Parse(time.RFC3339Nano, values[0])
 			if err != nil {
@@ -122,8 +128,8 @@ func scopeReadEndpoint(intake CatalogueQueryIntake, serve func(http.ResponseWrit
 	})
 }
 
-// NewQueryDeliveryPreAdvicesEndpoint 交回预报列表（GET /node-operations-delivery-pre-advices）：按节点（node）与预计送达区间
-// （expectedArrivalFrom 闭、expectedArrivalUntil 开）筛，新近在前。空册答 200 + []。
+// NewQueryDeliveryPreAdvicesEndpoint 交回预报列表（GET /node-operations-delivery-pre-advices）：按节点（node）、预计送达区间
+// （expectedArrivalFrom 闭、expectedArrivalUntil 开）与单据号（documentNumber）筛，新近在前。空册答 200 + []。
 func NewQueryDeliveryPreAdvicesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
 		filter, ok := catalogueFilterOf(request.URL.Query(), preAdviceFilterKeys)
@@ -165,8 +171,8 @@ func NewQueryDeliveryPreAdviceEndpoint(intake CatalogueQueryIntake, reader Deliv
 	})
 }
 
-// NewQueryDeliveryHandoverNotesEndpoint 交回交接单列表（GET /node-operations-delivery-handover-notes）：按节点（node）与开立区间
-// （openedFrom 闭、openedUntil 开）筛，新近在前。空册答 200 + []。
+// NewQueryDeliveryHandoverNotesEndpoint 交回交接单列表（GET /node-operations-delivery-handover-notes）：按节点（node）、开立区间
+// （openedFrom 闭、openedUntil 开）与单据号（documentNumber）筛，新近在前。空册答 200 + []。
 func NewQueryDeliveryHandoverNotesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
 		filter, ok := catalogueFilterOf(request.URL.Query(), handoverNoteFilterKeys)
@@ -256,21 +262,23 @@ type handoverNoteFoundResponse struct {
 	Members      []deliveryHandoverMemberBody `json:"members"`
 }
 
-// handoverNoteCatalogueBody 是查阅读里的一张交接单。交付方线索照开立时的原样；closed 恒在场，关闭的事实身份与时刻只随已关闭出现；
-// claims 是声称的每个客户账户各一格，按标识定序；scopeEstablished 恒在场，取领域按结论派生的那一格（声称的全部已确认），成立才带
-// scopeEstablishedAt。
+// handoverNoteCatalogueBody 是查阅读里的一张交接单。单据号两格的读法同 deliveryHandoverNoteBody；交付方线索照开立时的原样；closed
+// 恒在场，关闭的事实身份与时刻只随已关闭出现；claims 是声称的每个客户账户各一格，按标识定序；scopeEstablished 恒在场，取领域按结论
+// 派生的那一格（声称的全部已确认），成立才带 scopeEstablishedAt。
 type handoverNoteCatalogueBody struct {
-	NoteID             string                    `json:"noteId"`
-	Node               string                    `json:"node"`
-	DeliveringParty    string                    `json:"deliveringParty"`
-	OpenedAt           string                    `json:"openedAt"`
-	Closed             bool                      `json:"closed"`
-	ClosureFactID      string                    `json:"closureFactId,omitempty"`
-	ClosedAt           string                    `json:"closedAt,omitempty"`
-	MemberCount        int64                     `json:"memberCount"`
-	Claims             []handoverClaimReviewBody `json:"claims"`
-	ScopeEstablished   bool                      `json:"scopeEstablished"`
-	ScopeEstablishedAt string                    `json:"scopeEstablishedAt,omitempty"`
+	NoteID                string                    `json:"noteId"`
+	DocumentNumber        string                    `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string                    `json:"documentNumberAbsence,omitempty"`
+	Node                  string                    `json:"node"`
+	DeliveringParty       string                    `json:"deliveringParty"`
+	OpenedAt              string                    `json:"openedAt"`
+	Closed                bool                      `json:"closed"`
+	ClosureFactID         string                    `json:"closureFactId,omitempty"`
+	ClosedAt              string                    `json:"closedAt,omitempty"`
+	MemberCount           int64                     `json:"memberCount"`
+	Claims                []handoverClaimReviewBody `json:"claims"`
+	ScopeEstablished      bool                      `json:"scopeEstablished"`
+	ScopeEstablishedAt    string                    `json:"scopeEstablishedAt,omitempty"`
 }
 
 // handoverClaimReviewBody 是一个声称的客户账户与它的绑定结论。没有结论（待确认）的只带账户，其余各格整键缺席：缺席就是「还没有人作
@@ -298,6 +306,7 @@ func handoverNoteCatalogueBodyOf(state domain.DeliveryHandoverNoteState, memberC
 		Claims:           []handoverClaimReviewBody{},
 		ScopeEstablished: state.ScopeEstablished(),
 	}
+	body.DocumentNumber, body.DocumentNumberAbsence = documentNumberingFields(note.DocumentNumbering())
 	if state.Closed() {
 		body.ClosureFactID, body.ClosedAt = state.Closure.FactID(), rfc3339(state.Closure.ClosedAt())
 	}
@@ -325,4 +334,15 @@ func deliveryScopeBasisBodyOf(basis domain.UnitDeliveryScopeBasis) (*deliverySco
 		source = &deliveryScopeBasisDocument{Kind: basis.Source.Kind().String(), ID: basis.Source.Identifier()}
 	}
 	return source, basis.LastAssignedNote.String()
+}
+
+// documentNumberingFields 把单据号这一格译成线上两键：有号只给号；没有号只给原因。还没定的（不该出现在读回与答复里）两键都缺席。
+func documentNumberingFields(numbering domain.DocumentNumbering) (number, absence string) {
+	if value, numbered := numbering.Number(); numbered {
+		return value.String(), ""
+	}
+	if reason, absent := numbering.Absence(); absent {
+		return "", reason.String()
+	}
+	return "", ""
 }

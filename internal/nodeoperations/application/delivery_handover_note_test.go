@@ -34,9 +34,29 @@ func newHandoverRegister() *handoverRegisterDouble {
 	}
 }
 
+func (double *handoverRegisterDouble) LockDeliveryHandoverNoteOpening(_ context.Context, _ domain.TenantID, id domain.DeliveryHandoverNoteID) (domain.DeliveryHandoverNote, bool, error) {
+	if double.err != nil {
+		return domain.DeliveryHandoverNote{}, false, double.err
+	}
+	recorded, found := double.notes[id.String()]
+	return recorded, found, nil
+}
+
+func (double *handoverRegisterDouble) DeliveryHandoverNoteDocumentNumberUsed(_ context.Context, _ domain.TenantID, number string) (bool, error) {
+	for _, recorded := range double.notes {
+		if value, numbered := recorded.DocumentNumbering().Number(); numbered && value.String() == number {
+			return true, nil
+		}
+	}
+	return false, double.err
+}
+
 func (double *handoverRegisterDouble) OpenDeliveryHandoverNote(_ context.Context, note domain.DeliveryHandoverNote) (domain.DeliveryHandoverNote, ports.DeliveryScopeAppendOutcome, error) {
 	if double.err != nil {
 		return domain.DeliveryHandoverNote{}, ports.DeliveryScopeAppendInvalid, double.err
+	}
+	if !note.DocumentNumbering().Decided() {
+		return domain.DeliveryHandoverNote{}, ports.DeliveryScopeAppendInvalid, errors.New("the document number is not decided")
 	}
 	if recorded, found := double.notes[note.ID().String()]; found {
 		return recorded, ports.DeliveryScopeAlreadyRecorded, nil
@@ -176,6 +196,8 @@ type handoverFixture struct {
 	notes      *handoverRegisterDouble
 	authorized *authorizedDeliveryDouble
 	scopeBells *scopeDoorbellDouble
+	numbers    *documentNumbersDouble
+	nodeZones  *nodeTimeZonesDouble
 	handover   *application.DeliveryHandoverNoteHandler
 }
 
@@ -187,6 +209,8 @@ func newHandoverFixture(t *testing.T) *handoverFixture {
 		notes:            reception.handover,
 		authorized:       &authorizedDeliveryDouble{answer: ports.DeliveryAuthorized},
 		scopeBells:       &scopeDoorbellDouble{},
+		numbers:          newDocumentNumbers(),
+		nodeZones:        &nodeTimeZonesDouble{},
 	}
 	handler, err := application.NewDeliveryHandoverNoteHandler(fixture.deps())
 	if err != nil {
@@ -203,6 +227,7 @@ func (fixture *handoverFixture) deps() application.DeliveryHandoverDeps {
 		AuthorizedDelivery: fixture.authorized,
 		Doorbell:           fixture.scopeBells,
 		Clock:              fixedClock{at: deliveredAt.Add(2 * time.Hour)},
+		DocumentNumbers:    documentNumberingDeps(fixture.numbers, fixture.nodeZones),
 	}
 }
 
@@ -692,6 +717,8 @@ func TestDeliveryHandoverNoteHandlerRefusesMissingDependencies(t *testing.T) {
 		"授权交付判断": func(deps *application.DeliveryHandoverDeps) { deps.AuthorizedDelivery = nil },
 		"门铃":     func(deps *application.DeliveryHandoverDeps) { deps.Doorbell = nil },
 		"时钟":     func(deps *application.DeliveryHandoverDeps) { deps.Clock = nil },
+		"取号编排":   func(deps *application.DeliveryHandoverDeps) { deps.DocumentNumbers.Issuer = nil },
+		"网点业务时区": func(deps *application.DeliveryHandoverDeps) { deps.DocumentNumbers.Nodes = nil },
 	} {
 		deps := fixture.deps()
 		mutate(&deps)
@@ -701,6 +728,87 @@ func TestDeliveryHandoverNoteHandlerRefusesMissingDependencies(t *testing.T) {
 	}
 	if application.DeliveryHandoverOutcomeInvalid.String() != "" {
 		t.Fatal("无效结果答出了名字")
+	}
+}
+
+// Covers: AT-NO-136（编排半边）——服务端收下开立时取交接单单据号（ADR-0355 决定二、三、七）：标识仍是设备签的那一个，单据号另成一格；
+// 类型取本上下文的声明，业务时区取信封里的开立网点此刻（编排时钟，不是设备声明的开立时刻）生效的那一版；同一开立重投、同一标识换
+// 内容都答在册那一张连同原号，取号编排不再被问到；归入、关闭、确认都不取号。
+func TestOpeningAHandoverNoteIssuesItsDocumentNumberOnTheServersReceipt(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	fixture.nodeZones.zones = map[string]string{handoverNode: "Asia/Singapore"}
+	ctx := context.Background()
+
+	opened, err := fixture.handover.Open(ctx, openCommand(t, "SYN-HANDOVER-80", handoverAccount))
+	if err != nil || opened.Outcome() != application.DeliveryHandoverNoteOpened {
+		t.Fatalf("开立 = %s, %v", opened.Outcome(), err)
+	}
+	if opened.Note().ID().String() != "SYN-HANDOVER-80" {
+		t.Fatalf("标识被换成了 %q", opened.Note().ID())
+	}
+	number, numbered := opened.Note().DocumentNumbering().Number()
+	if !numbered || number.String() != "DELIVERY_HANDOVER_NOTE-0001" {
+		t.Fatalf("单据号 = %q %v", number, numbered)
+	}
+	asked := fixture.numbers.asked
+	if len(asked) != 1 || asked[0].Type != domain.DeliveryHandoverNoteDocumentNumberType.Code || asked[0].IssuerTimeZone != "Asia/Singapore" {
+		t.Fatalf("取号请求 = %+v", asked)
+	}
+	if serverNow := deliveredAt.Add(2 * time.Hour); len(fixture.nodeZones.asked) != 1 || !fixture.nodeZones.asked[0].Equal(serverNow) {
+		t.Fatalf("网点业务时区按 %v 选版，want 服务端此刻 %v（不是设备声明的开立时刻）", fixture.nodeZones.asked, serverNow)
+	}
+
+	for name, command := range map[string]application.OpenDeliveryHandoverNoteCommand{
+		"原样重投":    openCommand(t, "SYN-HANDOVER-80", handoverAccount),
+		"同一标识换内容": openCommand(t, "SYN-HANDOVER-80", handoverAccount, otherAccount),
+	} {
+		replay, err := fixture.handover.Open(ctx, command)
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if again, _ := replay.Note().DocumentNumbering().Number(); again != number {
+			t.Fatalf("%s 答的单据号 %q，want 原号 %q", name, again, number)
+		}
+	}
+	if _, err := fixture.handover.Close(ctx, closeCommand(t, "SYN-CLOSE-80", "SYN-HANDOVER-80")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.handover.ConfirmByOperationDecision(ctx, confirmCommand(t, "SYN-HANDOVER-80", handoverAccount)); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.numbers.asked) != 1 {
+		t.Fatalf("重投、关闭或确认又取了号：%d 次", len(fixture.numbers.asked))
+	}
+}
+
+// Covers: AT-NO-136 的无号与撞号两格（ADR-0355 决定七、八）——单据编号时区未配置时交接单照常开立、记无号原因；撞号答编号规则撞号，
+// 册上没有这张交接单，设备原样重投时才再取号。
+func TestAHandoverNoteWithoutANumberStillOpensAndACollisionLandsNothing(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	ctx := context.Background()
+
+	fixture.numbers.outcome = ports.DocumentNumberTimeZoneNotConfigured
+	withheld, err := fixture.handover.Open(ctx, openCommand(t, "SYN-HANDOVER-81", handoverAccount))
+	if err != nil || withheld.Outcome() != application.DeliveryHandoverNoteOpened {
+		t.Fatalf("单据编号时区未配置 = %s, %v", withheld.Outcome(), err)
+	}
+	if absence, absent := withheld.Note().DocumentNumbering().Absence(); !absent || absence != domain.NumberingTimeZoneNotConfigured {
+		t.Fatalf("无号原因 = %v %v", absence, absent)
+	}
+
+	fixture.numbers.outcome = ports.DocumentNumberRuleCollision
+	collided, err := fixture.handover.Open(ctx, openCommand(t, "SYN-HANDOVER-82", handoverAccount))
+	if err != nil || collided.Outcome() != application.DeliveryHandoverNumberingRuleCollision || collided.Outcome().String() != "NUMBERING_RULE_COLLISION" {
+		t.Fatalf("撞号 = %s, %v", collided.Outcome(), err)
+	}
+	if _, landed := fixture.notes.notes["SYN-HANDOVER-82"]; landed || collided.Note().ID().String() != "" {
+		t.Fatal("撞号也落了交接单")
+	}
+
+	fixture.numbers.outcome = ports.DocumentNumberIssued
+	retried, err := fixture.handover.Open(ctx, openCommand(t, "SYN-HANDOVER-82", handoverAccount))
+	if err != nil || retried.Outcome() != application.DeliveryHandoverNoteOpened {
+		t.Fatalf("换格式后原样重投 = %s, %v", retried.Outcome(), err)
 	}
 }
 

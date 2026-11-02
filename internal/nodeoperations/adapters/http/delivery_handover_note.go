@@ -414,7 +414,8 @@ func handoverEndpoint[Command any](
 	})
 }
 
-// NewOpenDeliveryHandoverNoteEndpoint 交回开立口。首次开立答 201；已有结果与来源冲突答 200 带 outcome，回显在册那一张。
+// NewOpenDeliveryHandoverNoteEndpoint 交回开立口。首次开立答 201；已有结果与来源冲突答 200 带 outcome，回显在册那一张。编号规则撞号
+// 答 200 只带 outcome：交接单没落（ADR-0355 决定八），设备在租户换了编号格式之后原样重投。
 func NewOpenDeliveryHandoverNoteEndpoint(intake DeliveryHandoverNoteOpeningIntake, handler DeliveryHandoverNoteHandler) http.Handler {
 	return handoverEndpoint(intake.IntakeDeliveryHandoverNoteOpening, handler.Open, writeOperatorHandoverAnswer[application.OpenDeliveryHandoverNoteCommand], legacyProblems)
 }
@@ -472,14 +473,18 @@ type deliveryHandoverResponse struct {
 	ScopeEstablishedAt string                       `json:"scopeEstablishedAt,omitempty"`
 }
 
+// deliveryHandoverNoteBody 的 documentNumber 是服务端收下开立时取的单据号，有号才在场；没有号时 documentNumberAbsence 说为什么，
+// 两格的读法同 deliveryPreAdviceBody。noteId 仍是设备签发的标识，单据号不替代它（ADR-0023、ADR-0355 决定二）。
 type deliveryHandoverNoteBody struct {
-	NoteID          string   `json:"noteId"`
-	Node            string   `json:"node"`
-	DeliveringParty string   `json:"deliveringParty"`
-	ClaimedAccounts []string `json:"claimedAccounts"`
-	OpenedAt        string   `json:"openedAt"`
-	ClosureFactID   string   `json:"closureFactId,omitempty"`
-	ClosedAt        string   `json:"closedAt,omitempty"`
+	NoteID                string   `json:"noteId"`
+	DocumentNumber        string   `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string   `json:"documentNumberAbsence,omitempty"`
+	Node                  string   `json:"node"`
+	DeliveringParty       string   `json:"deliveringParty"`
+	ClaimedAccounts       []string `json:"claimedAccounts"`
+	OpenedAt              string   `json:"openedAt"`
+	ClosureFactID         string   `json:"closureFactId,omitempty"`
+	ClosedAt              string   `json:"closedAt,omitempty"`
 }
 
 type deliveryHandoverMemberBody struct {
@@ -509,6 +514,7 @@ func writeOperatorHandoverAnswer[Command any](response http.ResponseWriter, _ Co
 			ClaimedAccounts: []string{},
 			OpenedAt:        rfc3339(note.OpenedAt()),
 		}
+		body.HandoverNote.DocumentNumber, body.HandoverNote.DocumentNumberAbsence = documentNumberingFields(note.DocumentNumbering())
 		for _, account := range note.ClaimedAccounts() {
 			body.HandoverNote.ClaimedAccounts = append(body.HandoverNote.ClaimedAccounts, account.String())
 		}

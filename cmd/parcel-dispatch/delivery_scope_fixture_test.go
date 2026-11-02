@@ -76,6 +76,7 @@ func preAdviseForDispatch(
 	if err != nil {
 		t.Fatalf("预报：%v", err)
 	}
+	preAdvice = preAdvice.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		_, _, err := preAdvices.RecordDeliveryPreAdvice(txCtx, preAdvice)
 		return err
@@ -116,6 +117,7 @@ func confirmedHandoverNoteForDispatch(
 	if err != nil {
 		t.Fatalf("交接单：%v", err)
 	}
+	note = note.WithDocumentNumbering(nodomain.UnnumberedForMissingTimeZone())
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		if _, _, err := notes.OpenDeliveryHandoverNote(txCtx, note); err != nil {
 			return err

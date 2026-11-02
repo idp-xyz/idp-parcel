@@ -330,7 +330,7 @@ func TestACustomerClientSubmitsAndWithdrawsAPreAdviceAgainstARealDatabase(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	orchestration, err := buildDeliveryPreAdviceOrchestration(db)
+	orchestration, err := buildDeliveryPreAdviceOrchestration(db, testDocumentNumberAssigner(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}
