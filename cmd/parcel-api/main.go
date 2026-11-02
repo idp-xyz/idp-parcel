@@ -12,6 +12,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
@@ -133,19 +134,11 @@ func run(logger *slog.Logger) error {
 			"env", pricingRegisterNewerCanonicalizationEnv)
 	}
 
-	// 单据号加扰密钥（ADR-0355 决定五）与各族信任锚同处开池之前：配了而读不动或不合规要带原因退出。配没配都出声，只说配了
-	// 几个租户，不说是谁、更不说密钥——没配时用加扰的模板登记答 SCRAMBLE_SECRET_NOT_CONFIGURED，启动日志是分辨「没配」与
-	// 「配了但不含这个租户」的第一处。
-	scrambleSecrets, scrambleSecretsConfigured, err := docnumber.LoadScrambleSecrets(os.Getenv, os.ReadFile)
+	// 单据号加扰密钥（ADR-0355 决定五）与各族信任锚同处开池之前：配了而读不动或不合规要带原因退出。读法与出声在
+	// docnumbering 一处，各取号进程读的是同一项配置。
+	scrambleSecrets, err := docnumbering.LoadScrambleSecrets(os.Getenv, os.ReadFile, logger)
 	if err != nil {
 		return err
-	}
-	if scrambleSecretsConfigured {
-		logger.Info("Document number scramble secrets configured (ADR-0355): scrambled templates may be registered for the listed tenants",
-			"env", docnumber.ScrambleSecretsFileEnv, "tenants", scrambleSecrets.Tenants())
-	} else {
-		logger.Info("Document number scramble secrets not configured (ADR-0355): registrations of scrambled templates answer SCRAMBLE_SECRET_NOT_CONFIGURED",
-			"env", docnumber.ScrambleSecretsFileEnv)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -308,6 +301,11 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return nil, err
 	}
+	// 编号组件（ADR-0355 决定四、六）在这里装一次：规则册四口与开立单据的各特性取同一套。
+	documentNumbers, err := docnumbering.Build(db, startup.scrambleSecrets)
+	if err != nil {
+		return nil, err
+	}
 	return assembleBusinessEndpoints(endpointSources{
 		db:                            db,
 		isolatedWrite:                 startup.isolatedWrite,
@@ -319,7 +317,7 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 		operatorMinter:                operatorMinter,
 		customerClientMinter:          customerClientMinter,
 		registerNewerCanonicalization: startup.registerNewerCanonicalization,
-		scrambleSecrets:               startup.scrambleSecrets,
+		documentNumbers:               documentNumbers,
 	}, endpointChannels{
 		isolatedRead:       startup.isolatedRead,
 		customerSubmission: customerSubmission,

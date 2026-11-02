@@ -1,9 +1,9 @@
-// Package docnumbertypes 汇总各上下文的单据编号类型声明（ADR-0355 决定六：类型与默认模板由所属上下文各声明一处，
-// 装配时汇总）。
+// Package docnumbering 是编号组件在组合根一侧的共享装配（ADR-0355 决定四、六）：汇总各上下文的单据编号类型声明、
+// 读加扰密钥那一项实例配置，并按同一份汇总、同一本册装出登记、读与取号编排。
 //
-// 汇总只能落在组合根一侧：编号组件在 internal/platform 下，不得反过来导入任何上下文。放在 cmd/internal 而不是写进
-// parcel-api：在线口与受控登记口两个 main 包都要同一份汇总，各写一遍就是两张会各自漏登的清单。
-package docnumbertypes
+// 它只能落在组合根一侧：编号组件在 internal/platform 下，不得反过来导入任何上下文。放在 cmd/internal 而不是写进
+// 某一个进程：开立单据、登记规则的各个进程都要同一份汇总与同一项密钥配置，各写一遍就是几张会各自漏登的清单。
+package docnumbering
 
 import (
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"

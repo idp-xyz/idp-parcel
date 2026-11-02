@@ -397,7 +397,7 @@ func shapesMeet(candidate, previous []segmentShape, sharedSequence bool) bool {
 // RejectionReason 从登记或模板检查的错误里取出拒因哨兵，预览答复与登记答复用同一组码；认不出时原样交回。
 func RejectionReason(err error) error {
 	for _, reason := range []error{
-		ErrTemplateUnparseable, ErrTemplateWithoutSequence, ErrTemplateNeedsUnsuppliedValue, ErrTemplateUnrenderable,
+		ErrTemplateUnparseable, ErrTemplateWithoutSequence, ErrTemplateNeedsUnsuppliedValue, ErrTemplateUnrenderable, ErrTemplateRepeatsAcrossPeriods,
 		ErrTypeNotDeclared, ErrScrambleSecretNotConfigured, ErrTimeZoneNotRecognized, ErrRegistrationIncomplete,
 	} {
 		if errors.Is(err, reason) {

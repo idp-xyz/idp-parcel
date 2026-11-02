@@ -9,6 +9,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberhttp"
@@ -48,6 +49,15 @@ func documentNumberingDB(t *testing.T) *bentopg.DB {
 		t.Fatal(err)
 	}
 	return db
+}
+
+func documentNumberingComponents(t *testing.T, db *bentopg.DB, secrets docnumber.SecretTable) docnumbering.Components {
+	t.Helper()
+	numbers, err := docnumbering.Build(db, secrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return numbers
 }
 
 func documentNumberingRequest(t *testing.T, handler http.Handler, method, target, token, body string) *httptest.ResponseRecorder {
@@ -118,7 +128,7 @@ func TestDocumentNumberingEndpointsAnswerFromTheOperatorChannel(t *testing.T) {
 		}
 		for _, testCase := range cases {
 			t.Run(line.path+" "+testCase.name, func(t *testing.T) {
-				handlers, err := buildDocumentNumberingHandlers(db, testCase.minter, docnumber.SecretTable{})
+				handlers, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, docnumber.SecretTable{}), testCase.minter)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -129,7 +139,7 @@ func TestDocumentNumberingEndpointsAnswerFromTheOperatorChannel(t *testing.T) {
 			})
 		}
 		t.Run(line.path+" granted", func(t *testing.T) {
-			handlers, err := buildDocumentNumberingHandlers(db, line.granted, docnumber.SecretTable{})
+			handlers, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, docnumber.SecretTable{}), line.granted)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -140,7 +150,7 @@ func TestDocumentNumberingEndpointsAnswerFromTheOperatorChannel(t *testing.T) {
 		})
 	}
 
-	if _, err := buildDocumentNumberingHandlers(db, nil, docnumber.SecretTable{}); err == nil {
+	if _, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, docnumber.SecretTable{}), nil); err == nil {
 		t.Fatal("nil minter was accepted")
 	}
 }
@@ -159,11 +169,11 @@ func TestDocumentNumberingRegisterRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	secrets := docnumber.SecretTable{}
-	readHandlers, err := buildDocumentNumberingHandlers(db, reader, secrets)
+	readHandlers, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, secrets), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeHandlers, err := buildDocumentNumberingHandlers(db, writer, secrets)
+	writeHandlers, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, secrets), writer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +211,7 @@ func TestDocumentNumberingRegisterRoundTrip(t *testing.T) {
 	if response := documentNumberingRequest(t, writeHandlers.ruleRegistration, http.MethodPost, docnumberhttp.RuleRegistrationsPath, token, scrambled); response.Code != http.StatusBadRequest || problemCode(t, response) != "SCRAMBLE_SECRET_NOT_CONFIGURED" {
 		t.Fatalf("scrambled without a secret: %d %s", response.Code, response.Body.String())
 	}
-	withSecret, err := buildDocumentNumberingHandlers(db, writer, docnumber.SecretTable{"SYN-TENANT-01": "syn-scramble-secret-0123456789abcdef"})
+	withSecret, err := buildDocumentNumberingHandlers(documentNumberingComponents(t, db, docnumber.SecretTable{"SYN-TENANT-01": "syn-scramble-secret-0123456789abcdef"}), writer)
 	if err != nil {
 		t.Fatal(err)
 	}

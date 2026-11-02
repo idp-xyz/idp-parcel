@@ -21,6 +21,10 @@ var (
 	ErrTemplateNeedsUnsuppliedValue = errors.New("document numbering: template uses a value the assignment cannot supply")
 	// ErrTemplateUnrenderable：模板渲染不出一个可用的号——渲染出错、过长，或含空白与控制字符。
 	ErrTemplateUnrenderable = errors.New("document numbering: template does not render a usable number")
+	// ErrTemplateRepeatsAcrossPeriods：模板在两个不同的重置周期能渲染出同一个号。流水每个周期从 1 重数，缺了比重置
+	// 周期更粗的日期部件（按月重置却不带年、按日重置却不带月或年），下一周期就会撞上一周期已出的号，而 ADR-0355
+	// 决定八的跳号只为吸收换格式之前的旧号，不为一份模板自己跟自己撞。
+	ErrTemplateRepeatsAcrossPeriods = errors.New("document numbering: template renders the same number in different reset periods")
 )
 
 // maxTemplateLength 与 maxNumberLength 是产品策略的上限：单据号要进条码、表格主列与客户系统的录入框，默认
@@ -101,7 +105,50 @@ func checkTemplate(code TypeCode, raw string) (checkedTemplate, error) {
 			break
 		}
 	}
+	if err := refuseRepeatsAcrossPeriods(code, template); err != nil {
+		return checkedTemplate{}, err
+	}
 	return checkedTemplate{template: template, scrambled: scrambled}, nil
+}
+
+// periodProbeInstants 是查跨周期自撞时比的几个时刻：检查时刻本身，与它隔一天、一个月、一个季度、一年的同一时刻。
+// 同日不同月、同月不同年，正是缺月、缺年的模板渲染得一样的那几对。
+var periodProbeInstants = []time.Time{
+	probeInstant,
+	probeInstant.AddDate(0, 0, 1),
+	probeInstant.AddDate(0, 1, 0),
+	probeInstant.AddDate(0, 3, 0),
+	probeInstant.AddDate(1, 0, 0),
+}
+
+// refuseRepeatsAcrossPeriods 拒在两个不同重置周期能出同一个号的模板。
+//
+// 用观察式而不是数令牌：在上面几个时刻各按位比形状的方法（shapesOf）渲染，凡两个时刻落在不同周期、而两边的号
+// 形状逐位相交，即流水重数之后可能撞上一周期的号。理由同 checkTemplate——令牌文法只在平台库一处；而且它判的正是
+// 要防的那件事本身：数令牌说得出「缺年」，说不出「加扰流水按周期换了键，十一月的号仍可能撞上去年十一月」，按形状
+// 比两样都看得见。不分周期的模板（只有流水）周期键恒为空串，序列从不重数，不在此列。
+func refuseRepeatsAcrossPeriods(code TypeCode, template *numbering.Template) error {
+	shapes := make([][]segmentShape, len(periodProbeInstants))
+	for index, at := range periodProbeInstants {
+		probed, err := shapesOf(template, code, "probe", at)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrTemplateUnrenderable, err)
+		}
+		shapes[index] = probed
+	}
+	for left := range periodProbeInstants {
+		for right := left + 1; right < len(periodProbeInstants); right++ {
+			leftPeriod, rightPeriod := template.PeriodKey(periodProbeInstants[left]), template.PeriodKey(periodProbeInstants[right])
+			if leftPeriod == rightPeriod {
+				continue
+			}
+			if shapesMeet(shapes[left], shapes[right], false) {
+				return fmt.Errorf("%w：流水每个周期从 1 重数，而这份模板在 %s 与 %s 两个周期能渲染出同一个号——它缺了比重置周期更粗的日期部件（例如按月重置却不带年，按日重置却不带月）",
+					ErrTemplateRepeatsAcrossPeriods, leftPeriod, rightPeriod)
+			}
+		}
+	}
+	return nil
 }
 
 func probeInput(code TypeCode) numbering.RenderInput {

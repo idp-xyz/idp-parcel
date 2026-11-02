@@ -10,7 +10,8 @@ import (
 	"go.idp.xyz/idp-platform-go/numbering"
 )
 
-// MaxSkippedNumbers 是一次取号里最多连续跳过的已用号数（ADR-0355 决定八：产品策略）。
+// MaxSkippedNumbers 是一次取号里最多跳过的已用号数（ADR-0355 决定八：产品策略）。一次取号最多从序列取这么多个值：
+// 前面哪一个没被用过就出那一个；这么多个全都已用，就不再取下一个，答「编号规则撞号」。
 //
 // 取 20：撞号只可能撞上换格式之前已用的号。零星撞几个（旧号在新格式下恰好散落成同形）由跳过吸收；成片地撞，
 // 说明新模板与旧号段整段重叠，那是规则册该改的格式问题，跳得再多也只是把一整段流水烧成空号——而空号是审计
@@ -55,7 +56,9 @@ const (
 	// NumberingTimeZoneNotConfigured：开立方没交业务时区、租户也没有生效的单据编号时区。单据照常开立、不带号，
 	// 无号原因记「单据编号时区未配置」（ADR-0355 决定七）；序列一个值也没动。
 	NumberingTimeZoneNotConfigured AssignmentOutcome = "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
-	// NumberingRuleCollision：连续跳过 MaxSkippedNumbers 个已用号仍撞（ADR-0355 决定八）。这一次开立不落单。
+	// NumberingRuleCollision：从序列取了 MaxSkippedNumbers 个值，渲染出的号全都已用（ADR-0355 决定八）。这一次开立
+	// 不落单，调用方必须回滚开立事务：取过的那些值都没出号，事务一提交它们就全成了空号，而决定三只许随单落定的跳号
+	// 成为空号。回滚连同它们一起释放，下一次开立还会撞上同一段，直到规则册换了格式——这正是要页面指到规则册的原因。
 	NumberingRuleCollision AssignmentOutcome = "NUMBERING_RULE_COLLISION"
 )
 
@@ -77,7 +80,8 @@ type Assignment struct {
 	TimeZone string
 	// IssuedAt 是取号所用的服务端时刻（ADR-0355 决定七：开立时刻取服务端落单那一刻）。
 	IssuedAt time.Time
-	// Skipped 是这一次跳过的已用号数，跳过的流水成为空号。
+	// Skipped 是这一次从序列取到、因已用而弃掉的值数。取到号时是号之前那几个，随单提交成为空号（决定八唯一许可的
+	// 空号）；答撞号时等于 MaxSkippedNumbers，即取过的每一个值——调用方回滚后它们一个也不留。
 	Skipped int
 }
 
@@ -119,6 +123,9 @@ func NewAssigner(deps AssignerDeps) (*Assigner, error) {
 
 // Assign 在调用方的开立事务内取一个号：读此刻生效的模板（租户版或产品默认）→ 定时区 → 用服务端此刻在该时区下
 // 算周期 → 经平台序列取（租户，类型代码，周期）的下一个值 → 渲染 → 经调用方的「是否已用」判撞，撞了取下一个值。
+//
+// 调用方按答案办：取到号就随单落库；答单据编号时区未配置，单据照常开立、不带号，记无号原因；答编号规则撞号或交回
+// 错误，必须回滚开立事务——撞号时已取的流水只有回滚才释放（见 NumberingRuleCollision）。
 //
 // 先判事务、后读规则：单据编号时区未配置那一格不碰序列，若放在事务判之前，事务外调用就会在那一格上「成功」，
 // 而同一个调用方换个租户才失败。
@@ -172,7 +179,7 @@ func (assigner *Assigner) Assign(ctx context.Context, request IssueRequest) (Ass
 	template := checked.template
 	at := now.In(location)
 	key := numbering.SequenceKey{Scope: request.Tenant, DocType: string(request.Type), Period: template.PeriodKey(at)}
-	for attempt := 0; attempt <= MaxSkippedNumbers; attempt++ {
+	for skipped := 0; skipped < MaxSkippedNumbers; skipped++ {
 		seq, err := assigner.sequences.Next(ctx, key)
 		if err != nil {
 			return Assignment{}, fmt.Errorf("document numbering: allocate %s/%s: %w", request.Tenant, request.Type, err)
@@ -186,7 +193,7 @@ func (assigner *Assigner) Assign(ctx context.Context, request IssueRequest) (Ass
 			return Assignment{}, fmt.Errorf("document numbering: check whether %s is used: %w", number, err)
 		}
 		if !used {
-			result.Outcome, result.Number, result.Skipped = NumberAssigned, number, attempt
+			result.Outcome, result.Number, result.Skipped = NumberAssigned, number, skipped
 			return result, nil
 		}
 	}

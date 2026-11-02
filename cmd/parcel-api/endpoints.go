@@ -5,6 +5,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
@@ -15,7 +16,6 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
-	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -121,8 +121,9 @@ type endpointSources struct {
 	customerClientMinter *accessidentity.CustomerClientMinter
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），价卡登记口与草稿发布口共读这一格。
 	registerNewerCanonicalization bool
-	// scrambleSecrets 是各租户的单据号加扰密钥（ADR-0355 决定五），从实例配置读一次；零值即一个租户都没配。
-	scrambleSecrets docnumber.SecretTable
+	// documentNumbers 是编号组件（ADR-0355 决定四、六）：规则册四口与各类单据的开立取同一套，规则册、序列与开立事务
+	// 都在上面那个 db 上。
+	documentNumbers docnumbering.Components
 }
 
 // endpointChannels 是各特性共用的接入渠道。生产装配与装配测试各给一份；装配测试换其中哪几格，那几格的答复格就由哪条用例钉。

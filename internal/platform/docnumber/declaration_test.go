@@ -41,8 +41,9 @@ func TestCatalogueRefusesInconsistentDeclarations(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0355 决定五——模板须能被平台 Parse、含流水令牌；编排给不出取值的令牌（上下文值、校验位）、渲染出空白
-// 或过长的号都拒；加扰与其余令牌照收，并认得出用了加扰。
+// Covers: ADR-0355 决定五、八——模板须能被平台 Parse、含流水令牌；编排给不出取值的令牌（上下文值、校验位）、渲染出
+// 空白或过长的号都拒；在两个重置周期能出同一个号的模板拒（缺年、缺月，加扰换了键也一样）；加扰与其余令牌照收，并
+// 认得出用了加扰。
 func TestTemplateCheck(t *testing.T) {
 	cases := []struct {
 		template  string
@@ -66,6 +67,15 @@ func TestTemplateCheck(t *testing.T) {
 		{"P\t{seq:6}", ErrTemplateUnrenderable, false},
 		{"P{seq:50}", ErrTemplateUnrenderable, false},
 		{"P{seqx:30}", ErrTemplateUnrenderable, false},
+		{"M{mm}-{seq:2}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"{dd}{seq}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"D{yyyy}{dd}-{seq:4}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"Q{q}-{seq:4}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"S{mm}{seqx:6}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"H{mm}{dd}{hh}{seq:3}", ErrTemplateRepeatsAcrossPeriods, false},
+		{"Y{yy}{mm}-{seq:4}", nil, false},
+		{"T{yyyy}{mm}{dd}{hh}{mi}-{seq:3}", nil, false},
+		{"S{yyyy}{mm}{seqx:6}", nil, true},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.template, func(t *testing.T) {

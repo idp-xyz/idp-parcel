@@ -81,6 +81,7 @@ var reasonCodes = []struct {
 	{docnumber.ErrTemplateWithoutSequence, "TEMPLATE_WITHOUT_SEQUENCE"},
 	{docnumber.ErrTemplateNeedsUnsuppliedValue, "TEMPLATE_NEEDS_UNSUPPLIED_VALUE"},
 	{docnumber.ErrTemplateUnrenderable, "TEMPLATE_UNRENDERABLE"},
+	{docnumber.ErrTemplateRepeatsAcrossPeriods, "TEMPLATE_REPEATS_ACROSS_PERIODS"},
 	{docnumber.ErrScrambleSecretNotConfigured, "SCRAMBLE_SECRET_NOT_CONFIGURED"},
 	{docnumber.ErrTimeZoneNotRecognized, "TIME_ZONE_NOT_RECOGNIZED"},
 	{docnumber.ErrRegistrationIncomplete, codeMalformedRequest},

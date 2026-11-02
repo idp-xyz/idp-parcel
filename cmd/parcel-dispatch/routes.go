@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 )
 
@@ -55,6 +56,9 @@ type dispatchSources struct {
 	settings         dispatchSettings
 	clock            systemClock
 	projectionDerive *tenantBoundProjectionDerive
+	// documentNumbers 是编号组件（ADR-0355 决定四、六）。本进程要开立的单据（自动截单的对账单、自动立案的异常案件等）
+	// 由各自的实现票经所属上下文的消费侧端口接它的 Assigner，在开立事务里取号。
+	documentNumbers docnumbering.Components
 }
 
 // routeRegistry 只由各特性文件的 init 追加；init 里不构造任何东西，构造发生在 wireDispatcher 开好存储之后。

@@ -63,7 +63,7 @@ func TestTheDemoTimeZoneSeedRegistersOnARealDatabase(t *testing.T) {
 }
 
 // Covers: ADR-0029 退出码分格——同一生效时刻改登另一个时区答 2（版本只增不改，要人另选生效时刻）；不认识的时区、缺生效
-// 时刻、未知字段、未知登记族答 1；规则族：首登 0，用加扰而该租户没配密钥答 1，配了答 0。
+// 时刻、未知字段、未知登记族答 1；规则族：首登 0，下一年同期会撞上今年号的模板答 1，用加扰而该租户没配密钥答 1，配了答 0。
 func TestExitCodesFollowTheRecoveryAction(t *testing.T) {
 	built, _ := newRegistrar(t, docnumber.SecretTable{"SYN-TENANT-02": "syn-scramble-secret-0123456789abcdef"})
 	ctx := t.Context()
@@ -81,6 +81,7 @@ func TestExitCodesFollowTheRecoveryAction(t *testing.T) {
 		{"unknown field", kindTimeZone, `{"tenantId":"SYN-TENANT-01","timeZone":"Asia/Shanghai","effectiveFrom":"2026-02-01T00:00:00Z","zone":"x"}`, exitUsage},
 		{"no tenant", kindTimeZone, `{"timeZone":"Asia/Shanghai","effectiveFrom":"2026-02-01T00:00:00Z"}`, exitUsage},
 		{"rule", kindRule, `{"tenantId":"SYN-TENANT-01","documentType":"BOOKING","template":"SYN-BK-{yyyy}{mm}-{seq:5}","effectiveFrom":"2026-02-01T00:00:00Z"}`, exitRegistered},
+		{"repeats in the next year", kindRule, `{"tenantId":"SYN-TENANT-01","documentType":"BOOKING","template":"BK-{mm}-{seq:3}","effectiveFrom":"2026-03-01T00:00:00Z"}`, exitUsage},
 		{"undeclared type", kindRule, `{"tenantId":"SYN-TENANT-01","documentType":"INVOICE","template":"INV-{seq:5}","effectiveFrom":"2026-02-01T00:00:00Z"}`, exitUsage},
 		{"scrambled without a secret", kindRule, `{"tenantId":"SYN-TENANT-01","documentType":"CLAIM","template":"CLM-{seqx:6}","effectiveFrom":"2026-02-01T00:00:00Z"}`, exitUsage},
 		{"scrambled with a secret", kindRule, `{"tenantId":"SYN-TENANT-02","documentType":"CLAIM","template":"CLM-{seqx:6}","effectiveFrom":"2026-02-01T00:00:00Z"}`, exitRegistered},

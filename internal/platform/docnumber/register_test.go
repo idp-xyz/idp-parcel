@@ -70,6 +70,7 @@ func TestRegisterRuleRejections(t *testing.T) {
 		{"unparseable", func(c *RegisterRuleCommand) { c.Template = "P{nope}{seq}" }, ErrTemplateUnparseable},
 		{"no sequence", func(c *RegisterRuleCommand) { c.Template = "P{yyyy}{rand:6}" }, ErrTemplateWithoutSequence},
 		{"unsupplied context", func(c *RegisterRuleCommand) { c.Template = "{region}{seq:6}" }, ErrTemplateNeedsUnsuppliedValue},
+		{"repeats next year", func(c *RegisterRuleCommand) { c.Template = "M{mm}-{seq:2}" }, ErrTemplateRepeatsAcrossPeriods},
 		{"scrambled without secret", func(c *RegisterRuleCommand) { c.Template = "P{yyyy}{seqx:6}" }, ErrScrambleSecretNotConfigured},
 		{"no tenant", func(c *RegisterRuleCommand) { c.Tenant = " " }, ErrRegistrationIncomplete},
 		{"no registrant", func(c *RegisterRuleCommand) { c.RegisteredBy = "" }, ErrRegistrationIncomplete},

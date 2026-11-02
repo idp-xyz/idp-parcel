@@ -1,4 +1,4 @@
-package docnumbertypes
+package docnumbering
 
 import (
 	"testing"

@@ -133,8 +133,8 @@ func TestAssignRefusesOutsideTheIssuingTransactionAndMalformedRequests(t *testin
 	}
 }
 
-// Covers: ADR-0355 决定八——渲染出的号已用就跳过、取同一周期的下一个流水；连续跳过到上限仍撞答「编号规则撞号」，
-// 一共取了上限加一个值。
+// Covers: ADR-0355 决定八——渲染出的号已用就跳过、取同一周期的下一个流水；一次取号最多从序列取 MaxSkippedNumbers
+// 个值，第 MaxSkippedNumbers 个仍出号、再多一个已用就答「编号规则撞号」，此时 Skipped 恰是取过的值数。
 func TestAssignSkipsUsedNumbersUpToTheLimit(t *testing.T) {
 	fixture := newAssignerFixture()
 	fixture.registerZone("Asia/Shanghai")
@@ -151,7 +151,24 @@ func TestAssignSkipsUsedNumbersUpToTheLimit(t *testing.T) {
 		t.Fatalf("want the third number after two skips, got %+v", assignment)
 	}
 
+	// 前 MaxSkippedNumbers-1 个都已用，最后一个可取值仍出号。
 	before := len(fixture.sequences.keys)
+	remaining := MaxSkippedNumbers - 1
+	lastChance, err := assigner.Assign(t.Context(), IssueRequest{Tenant: testTenant, Type: "SHIPMENT", IsUsed: func(context.Context, string) (bool, error) {
+		if remaining > 0 {
+			remaining--
+			return true, nil
+		}
+		return false, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lastChance.Outcome != NumberAssigned || lastChance.Skipped != MaxSkippedNumbers-1 || len(fixture.sequences.keys)-before != MaxSkippedNumbers {
+		t.Fatalf("the last allowed value should still be issued: %+v after %d draws", lastChance, len(fixture.sequences.keys)-before)
+	}
+
+	before = len(fixture.sequences.keys)
 	collision, err := assigner.Assign(t.Context(), IssueRequest{Tenant: testTenant, Type: "SHIPMENT", IsUsed: func(context.Context, string) (bool, error) {
 		return true, nil
 	}})
@@ -161,8 +178,8 @@ func TestAssignSkipsUsedNumbersUpToTheLimit(t *testing.T) {
 	if collision.Outcome != NumberingRuleCollision || collision.Number != "" || collision.Skipped != MaxSkippedNumbers {
 		t.Fatalf("want a collision answer, got %+v", collision)
 	}
-	if drawn := len(fixture.sequences.keys) - before; drawn != MaxSkippedNumbers+1 {
-		t.Fatalf("drew %d values, want %d", drawn, MaxSkippedNumbers+1)
+	if drawn := len(fixture.sequences.keys) - before; drawn != collision.Skipped {
+		t.Fatalf("drew %d values but reported %d skipped", drawn, collision.Skipped)
 	}
 
 	failing := errors.New("lookup failed")

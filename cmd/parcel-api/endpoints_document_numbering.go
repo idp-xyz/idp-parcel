@@ -24,7 +24,7 @@ func init() {
 			"/document-numbering/time-zone-registrations": {method: http.MethodPost, face: registryWriteFace(), ownIntake: true},
 		},
 		build: func(sources endpointSources) (documentNumberingWiring, error) {
-			handlers, err := buildDocumentNumberingHandlers(sources.db, sources.operatorMinter, sources.scrambleSecrets)
+			handlers, err := buildDocumentNumberingHandlers(sources.documentNumbers, sources.operatorMinter)
 			return documentNumberingWiring{handlers: handlers}, err
 		},
 		mount: func(_ endpointChannels, wiring documentNumberingWiring) []httpapi.BusinessEndpoint {

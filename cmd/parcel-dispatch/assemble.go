@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
@@ -51,6 +53,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	sacustoms "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/customscompliance"
 	saidentity "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/identity"
@@ -95,6 +98,9 @@ type dispatchSettings struct {
 	purpose         nrdomain.ServicePurpose
 	deliveryTimeout time.Duration
 	config          dispatch.Config
+	// scrambleSecrets 是单据号加扰密钥（ADR-0355 决定五），与 parcel-api 读同一项实例配置；零值即一个租户都没配，
+	// 不是必填——没配时用加扰模板的租户登记不进来，默认模板不用加扰。
+	scrambleSecrets docnumber.SecretTable
 }
 
 const (
@@ -202,6 +208,10 @@ func assembleDispatcher(
 	settings, err := settingsFromEnv(getenv)
 	if err != nil {
 		return nil, nil, err
+	}
+	// 加扰密钥与其余部署形态同处开池之前：配了而读不动或不合规，进程带原因退出，不先连上库再发现。
+	if settings.scrambleSecrets, err = docnumbering.LoadScrambleSecrets(getenv, os.ReadFile, logger); err != nil {
+		return nil, nil, fmt.Errorf("parcel-dispatch: %w", err)
 	}
 	pool, err := pgxpool.New(ctx, settings.databaseDSN)
 	if err != nil {
@@ -715,6 +725,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, err
 	}
 
+	documentNumbers, err := buildDocumentNumbers(db, settings)
+	if err != nil {
+		return nil, err
+	}
+
 	routes, err := assembleRoutes(dispatchSources{
 		db:               db,
 		outbox:           outboxStore,
@@ -722,6 +737,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		settings:         settings,
 		clock:            clock,
 		projectionDerive: projectionDerive,
+		documentNumbers:  documentNumbers,
 	})
 	if err != nil {
 		return nil, err

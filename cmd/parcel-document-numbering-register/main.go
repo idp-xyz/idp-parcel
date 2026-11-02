@@ -30,13 +30,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
-	"go.idp.xyz/idp-parcel/cmd/internal/docnumbertypes"
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberhttp"
-	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberpg"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
@@ -57,14 +55,8 @@ const registeredBy = "CONTROLLED-CLI/parcel-document-numbering-register"
 
 var supportedKinds = []string{kindTimeZone, kindRule}
 
-type systemClock struct{}
-
-func (systemClock) Now() time.Time { return time.Now().UTC() }
-
-type registrar struct {
-	inner      *docnumber.Registrar
-	transactor bentoapp.Transactor
-}
+// registrar 是本口转交的登记：与 parcel-api 的登记口是同一个包进事务的编排。
+type registrar = docnumbering.Registrations
 
 func main() {
 	kind := flag.String("kind", "", "登记族："+strings.Join(supportedKinds, " / "))
@@ -85,7 +77,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "读取登记行：%v\n", err)
 		os.Exit(exitUsage)
 	}
-	secrets, _, err := docnumber.LoadScrambleSecrets(os.Getenv, os.ReadFile)
+	secrets, err := docnumbering.LoadScrambleSecrets(os.Getenv, os.ReadFile, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取加扰密钥：%v\n", err)
 		os.Exit(exitUsage)
@@ -114,21 +106,14 @@ func main() {
 	os.Exit(code)
 }
 
-// buildRegistrar 装本口的编排，与 parcel-api 的 buildDocumentNumbering 装的是同一个：同一份类型汇总、同一本册。
+// buildRegistrar 装本口的编排，与 parcel-api 装的是同一个（docnumbering.Build）：同一份类型汇总、同一本册、同一项
+// 加扰密钥配置。
 func buildRegistrar(db *bentopg.DB, secrets docnumber.ScrambleSecrets) (registrar, error) {
-	catalogue, err := docnumbertypes.Catalogue()
+	numbers, err := docnumbering.Build(db, secrets)
 	if err != nil {
-		return registrar{}, fmt.Errorf("汇总单据编号类型：%w", err)
+		return registrar{}, fmt.Errorf("装配编号组件：%w", err)
 	}
-	store, err := docnumberpg.NewStore(db)
-	if err != nil {
-		return registrar{}, fmt.Errorf("构造规则册：%w", err)
-	}
-	inner, err := docnumber.NewRegistrar(docnumber.RegistrarDeps{Catalogue: catalogue, Book: store, Secrets: secrets, Clock: systemClock{}})
-	if err != nil {
-		return registrar{}, fmt.Errorf("构造登记编排：%w", err)
-	}
-	return registrar{inner: inner, transactor: db.Transactor()}, nil
+	return numbers.Registrations, nil
 }
 
 // timeZoneInput 与 ruleInput 是本口两族的输入：在线口的载荷类型原样嵌入，另加 tenantId。载荷翻成命令只走在线口那一份
@@ -155,12 +140,7 @@ func execute(ctx context.Context, kind string, raw []byte, built registrar) (str
 		if err != nil {
 			return fmt.Sprintf("%s: 译装被拒：%v", kind, err), exitUsage
 		}
-		var result docnumber.TimeZoneRegistration
-		err = built.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			handled, err := built.inner.RegisterTimeZone(txCtx, command)
-			result = handled
-			return err
-		})
+		result, err := built.RegisterTimeZone(ctx, command)
 		if message, code, done := failure(kind, err); done {
 			return message, code
 		}
@@ -174,12 +154,7 @@ func execute(ctx context.Context, kind string, raw []byte, built registrar) (str
 		if err != nil {
 			return fmt.Sprintf("%s: 译装被拒：%v", kind, err), exitUsage
 		}
-		var result docnumber.RuleRegistration
-		err = built.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			handled, err := built.inner.RegisterRule(txCtx, command)
-			result = handled
-			return err
-		})
+		result, err := built.RegisterRule(ctx, command)
 		if message, code, done := failure(kind, err); done {
 			return message, code
 		}
