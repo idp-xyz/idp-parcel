@@ -16,8 +16,8 @@ export const familyLabels: Record<NetworkCatalogFamily, string> = {
 // 检索框的提示:各族的 q 落在哪几格(ADR-0144 决定四:只在该册点名的文本列上做包含匹配),照 networkrouting postgres 读面
 // 各族 catalogFamily 的 keyword 列写。只写那边点了名的格,不写「代码等」这种兜底——检索已下推,提示里多说一格,人就会去搜一格搜不到的。
 export const keywordPlaceholders: Record<NetworkCatalogFamily, string> = {
-  node: '搜网点编码',
-  connection: '搜连接编码或两端网点',
+  node: '搜网点编码或名称',
+  connection: '搜连接编码或两端网点编码',
   line: '搜线路编码',
   'service-area': '搜服务区域编码',
   'service-calendar': '搜网点、连接或线路编码',
