@@ -48,6 +48,11 @@ export const effectiveTimeJudgmentDecision = 'EFFECTIVE_TIME_JUDGMENT';
 /** 待识别复核，原词取自 accessidentity.DecisionPendingIdentityRecheck。 */
 export const pendingIdentityRecheckDecision = 'PENDING_IDENTITY_RECHECK';
 
+/** 代客户登记对账单争议，原词取自 accessidentity.DecisionStatementDisputeRegistration（ADR-0353 决定一）。 */
+export const statementDisputeRegistrationDecision = 'STATEMENT_DISPUTE_REGISTRATION';
+/** 核实后处理对账单争议，与登记分开授予，原词取自 accessidentity.DecisionStatementDisputeResolution（ADR-0353 决定二）。 */
+export const statementDisputeResolutionDecision = 'STATEMENT_DISPUTE_RESOLUTION';
+
 /** 运营决定入口摆不摆：同登记入口，明确知道没有那一种运营决定授予才收起，不知道就摆。 */
 export function mayMakeDecision(held: HeldGrants | undefined, decision: string): boolean {
   return held === undefined || held.decisions.has(decision);

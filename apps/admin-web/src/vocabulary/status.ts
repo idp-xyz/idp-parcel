@@ -339,6 +339,8 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   STATEMENT_PUBLICATION: muted('对账单发布'),
   SUPPLIER_BILL_RECEPTION: muted('供应商账单接收'),
   SUPPLIER_BILL_AUDIT: muted('供应商账单审核'),
+  STATEMENT_DISPUTE_REGISTRATION: muted('登记对账单争议'),
+  STATEMENT_DISPUTE_RESOLUTION: muted('处理对账单争议'),
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
   EXTERNAL_FUNDS_FACT_ADOPTION: muted('收付款登记'),
   CLAIM_SUBMISSION: muted('索赔提交'),
