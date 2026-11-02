@@ -190,7 +190,7 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         headline,
         details: [
           `${rechecked}照旧是当前有效版本，身份冲突照留；parcel-shipment 仍只答候选 ${(body.candidates ?? []).join('、') || '—'}，同时号码还被另一份已提交、未决的委托报着`,
-          '那份委托被拒绝或撤回之后，parcel-shipment 会交出声明撤除，服务端自动再核一次；也可届时再点重核。现在就要定，用下方「处置」。',
+          '那份委托被拒绝或撤回之后，parcel-shipment 会交出声明撤除，系统会自动再核对一次；也可届时再点重核。现在就要定，用下方「处置」。',
         ],
       };
     case 'SOURCE_NOT_PRESERVED':
@@ -217,21 +217,21 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
 export function recheckProblemNote(code: string): string {
   switch (code) {
     case 'JUDGMENT_NOT_VISIBLE':
-      return '本租户的收寄册上没有这一版判断；刷新列表再指名。';
+      return '找不到这一版记录；刷新列表再选。';
     case 'OUTSIDE_ADMISSION_SCOPE':
-      return '这笔生产写不在治理登记的生产权威区间内，要阶段治理去登记区间；重试不会好。';
+      return '当前阶段还没有放开这项操作，什么都没有改；重试也不会好，请联系负责阶段管理的同事。';
     case 'MALFORMED_REQUEST':
-      return '载荷不是服务端接受的形状（只有判断版本一键，且不得带身份键）；请检查前端与服务端版本是否一致。';
+      return '提交的内容系统读不懂；请刷新页面后重试，仍然不行请联系系统管理员。';
     case 'METHOD_NOT_ALLOWED':
-      return '端点不接受当前 HTTP 方法；请检查前端与服务端版本是否一致。';
+      return '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。';
     case 'INTAKE_FAILED':
-      return '接入面未能形成操作者身份；服务端未读取重核内容。';
+      return '登录信息没能核对通过，这次什么都没有保存；请稍后重试。';
     case 'IDENTITY_DEPENDENCY_UNAVAILABLE':
-      return '接入身份依赖读不动，可稍后重试。';
+      return '暂时无法核对登录身份，请稍后重试。';
     case 'NO_ANSWER_FORMED':
-      return '重核未形成答案（身份核对读不动，或落册与意图入队失败），册上未追加，可稍后重试。';
+      return '系统暂时没能核对（查不到包裹身份，或保存失败），这次没有改动；请稍后重试。';
     default:
-      return `服务端问题码：${code}`;
+      return `这次没有成功（错误码 ${code}）；请记下错误码联系系统管理员。`;
   }
 }
 
@@ -242,7 +242,7 @@ function withRecovery(cell: string, recovery: string): string {
 /** 追加了冲突版之后那一句「怎么解」：随这一版记下的来由走（ADR-0211 决定二）。 */
 function conflictReleaseLine(cause: string | undefined): string {
   if (cause === ambiguityOnlyCause) {
-    return '来由只因歧义信号：声明同号的那份委托被拒绝或撤回之后，服务端会自动再核；也可用下方「处置」直接定。';
+    return '来由只因歧义信号：声明同号的那份委托被拒绝或撤回之后，系统会自动再核对；也可用下方「处置」直接定。';
   }
   return `这一来由（${identityConflictCauseShortOf(cause)}）只经下方「处置」解除，再重核不会解开。`;
 }

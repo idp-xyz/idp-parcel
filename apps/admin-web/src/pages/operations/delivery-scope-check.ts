@@ -48,7 +48,7 @@ export function deliveryScopeCheckCellOf(record: ScopeCheckFields): string {
   const state = record.deliveryScopeCheck;
   if (state === undefined || state === '') return '未记：这一版没做范围推导（不等于未证）';
   if (state === 'VERIFIED') return '已证';
-  if (state === 'UNCONFIGURED') return '未配置：本租户没登记这一刻生效的预报有效时窗';
+  if (state === 'UNCONFIGURED') return '未配置：还没设定这一刻适用的预报有效时间窗';
   if (state !== 'UNVERIFIED') return `核对态 ${state}（页面未收录）`;
   const reason = record.deliveryScopeUnverifiedReason ?? '';
   const reasonText = deliveryScopeReasonLabels[reason] ?? `原因 ${reason || '未带'}（页面未收录）`;
@@ -68,7 +68,7 @@ const ASSIGN_TO_OPEN_NOTE = '把它归入本节点一张开放的送站交接单
 export function deliveryScopeRecoveryOf(record: ScopeCheckFields): string {
   switch (record.deliveryScopeCheck) {
     case 'UNCONFIGURED':
-      return '租户登记预报有效时窗（登记册配置写面）后，人工重核这一版';
+      return '设定预报有效时间窗后，再核对一次这一版';
     case 'UNVERIFIED':
       break;
     default:

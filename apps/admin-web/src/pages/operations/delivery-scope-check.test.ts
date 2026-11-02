@@ -77,8 +77,8 @@ test('交付范围核对：已证、未证附原因与细分、未配置、没�
   ok(deliveryScopeCheckCellOf(unverified('A_NEW_REASON')).includes('A_NEW_REASON'));
 });
 
-test('恢复动作：未配置指向租户登记时窗，未证按原因指向确认绑定或归入交接单，已证与没记不给动作', () => {
-  ok(deliveryScopeRecoveryOf({ deliveryScopeCheck: 'UNCONFIGURED' }).includes('预报有效时窗'));
+test('恢复动作：未配置指向设定时间窗，未证按原因指向确认绑定或归入交接单，已证与没记不给动作', () => {
+  ok(deliveryScopeRecoveryOf({ deliveryScopeCheck: 'UNCONFIGURED' }).includes('预报有效时间窗'));
   ok(deliveryScopeRecoveryOf(unverified('BINDINGS_NOT_ALL_CONFIRMED')).includes('确认'));
   for (const reason of ['NO_BASIS', 'NUMBER_NOT_PRE_ADVISED']) {
     ok(deliveryScopeRecoveryOf(unverified(reason)).includes('归入'), reason);

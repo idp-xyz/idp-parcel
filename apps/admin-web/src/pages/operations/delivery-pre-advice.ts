@@ -87,20 +87,20 @@ export function preAdviceRowOf(record: DeliveryPreAdviceRecord): PreAdviceReview
 export function deliveryScopeReadProblemNote(code: string): string {
   switch (code) {
     case 'DELIVERY_PRE_ADVICE_NOT_VISIBLE':
-      return '本租户查无这份预报（别的租户的同名预报也是这一句）；刷新列表再选。';
+      return '找不到这份预报；刷新列表再选。';
     case 'DELIVERY_HANDOVER_NOTE_NOT_VISIBLE':
-      return '本租户查无这张交接单（别的租户的同名交接单也是这一句）；刷新列表再选。';
+      return '找不到这张交接单；刷新列表再选。';
     case 'MALFORMED_REQUEST':
-      return '筛选条件不是服务端接受的形状（节点不得空白，日子换成的两端须前早后晚）；请检查前端与服务端版本是否一致。';
+      return '筛选条件写得不对（网点不能空，日期要前早后晚）；改正后再查。';
     case 'METHOD_NOT_ALLOWED':
-      return '端点不接受当前 HTTP 方法；请检查前端与服务端版本是否一致。';
+      return '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。';
     case 'INTAKE_FAILED':
-      return '接入面未能形成操作者身份；服务端未读册。';
+      return '登录信息没能核对通过，这次什么都没有保存；请稍后重试。';
     case 'IDENTITY_DEPENDENCY_UNAVAILABLE':
-      return '接入身份依赖读不动，可稍后重试。';
+      return '暂时无法核对登录身份，请稍后重试。';
     case 'NO_ANSWER_FORMED':
-      return '读册未形成答案，可稍后重试；这不是「册为空」。';
+      return '系统暂时没能读出记录，请稍后重试；这不是「没有记录」。';
     default:
-      return `服务端问题码：${code}`;
+      return `这次没有成功（错误码 ${code}）；请记下错误码联系系统管理员。`;
   }
 }

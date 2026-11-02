@@ -80,8 +80,8 @@ test('预报行：撤回与否、号码数、交付方线索缺席各写各的�
 });
 
 test('读口问题码：看不见、坏筛选与没形成答案各有一句', () => {
-  ok(deliveryScopeReadProblemNote('DELIVERY_PRE_ADVICE_NOT_VISIBLE').includes('查无'));
-  ok(deliveryScopeReadProblemNote('DELIVERY_HANDOVER_NOTE_NOT_VISIBLE').includes('查无'));
+  ok(deliveryScopeReadProblemNote('DELIVERY_PRE_ADVICE_NOT_VISIBLE').includes('找不到'));
+  ok(deliveryScopeReadProblemNote('DELIVERY_HANDOVER_NOTE_NOT_VISIBLE').includes('找不到'));
   ok(deliveryScopeReadProblemNote('MALFORMED_REQUEST').includes('筛选'));
   ok(deliveryScopeReadProblemNote('NO_ANSWER_FORMED').includes('重试'));
   ok(deliveryScopeReadProblemNote('SOMETHING_NEW').includes('SOMETHING_NEW'));
