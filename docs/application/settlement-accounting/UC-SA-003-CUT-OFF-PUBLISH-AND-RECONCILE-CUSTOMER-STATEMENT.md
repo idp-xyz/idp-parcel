@@ -151,12 +151,15 @@
 | `AT-SA-222` | 持`对账单发布`授予的人经截单发布口列一期费用、报申报合计、点名本期最后一个归属日 | 先过截单时点门：没登答 `SETTLEMENT_MOMENT_UNCONFIGURED`、不调截单；登了照截单编排逐件判入不入本期，合计与入本期的行勾稽，平了发布并给单号与入本期的费用，不平答勾稽不平、不发；同一份重放答已存在；发布时刻取服务端时钟，不从请求收（[ADR-0339](../../adr/0339-charge-confirmation-and-statement-publication-are-operator-decisions-and-a-registered-statement-cycle-cuts-on-its-closing-dates.md) 决定二） |
 | `AT-SA-223` | 授权人员列下一期清单之前读客户费用 | 每笔已确认费用透出已形成的归属日与所在的未作废对账单号；截单不读这两格、照旧当场判（ADR-0339 决定三） |
 | `AT-SA-224` | 结算账户登了对账周期（日截、周截或月截）与对账安排，也登了截单时点；一个截止日在业务时区里那一天的截单时刻过去 | 到点截单收已确认、归属日不晚于截止日、尚未出账的费用，按截止日派生单号与账期、以它们的结算金额之和作申报合计发一期单；确认时判不出归属日的已确认费用先当场补判、判出即落库，判不出（缺对账安排或归属日形态）这一户停住、不记截止日、报未配置；本期没有费用只记截止日、不发单；同一个截止日只截一次；周期或截单时点没登什么都不做；截单停在依赖上下一拍重截、不多出单（[ADR-0339](../../adr/0339-charge-confirmation-and-statement-publication-are-operator-decisions-and-a-registered-statement-cycle-cuts-on-its-closing-dates.md) 决定三） |
+| `AT-SA-227` | 运营查阅待对账的客户对账单（首页「今日待办」待对账一格与对账单页「只看待对账」）；租户的已发布单上：一张挂两项未处理的争议，一张一项处理为待复核，一张两项分别接受与拒绝，一张一项部分接受、一项未处理，一张已作废但挂一项未处理的争议，一张没有争议 | 至少挂着一项没有终局结果（未处理或待复核）的争议的单列出，接受、部分接受、拒绝算终局；一单多项只算一张；已作废的单照列（作废不了结争议）；没有争议的单不列；这是按单上已记的争议筛，不是对账状态，不数相对方待确认；行形与对账单册同一份（单上的争议整份带出）；张数是全部，不受页大小截断，页比张数短标截断；他租户的单不进来；读不动答未形成，不答 0 张 |
 
 ## 给开发的交接
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 生命周期「需要重新出具时创建新单并关联旧单」，`AT-SA-069` | 作废只留作废痕，新单与原单之间没有替代关系；本行预期结果不变 | [code/13](../../../.scratch/docs-consistency/code/13-voided-statement-has-no-replacement-relation.md) |
+| 结果契约「对账状态」的相对方未确认、部分确认、已确认三格，`AT-SA-074` | 本产品不记相对方确认：没有登记口，也没有读口；对账单册与待对账读口（`AT-SA-227`）都只答单上已记的争议，答不出哪些单还在等客户确认，管理台首页因此不数「待确认应收」 | [home-today-todo/02](../../../.scratch/home-today-todo/issues/02-statement-confirmation-and-disputes-have-no-production-face.md) |
+| 输入契约「争议请求」，`AT-SA-070`–`073` | 争议的提出与处理只到编排（`OpenDispute`、`ResolveDispute`），生产装配上没有口调用；生产库上没有争议，待对账读口如实答 0 张；本组预期结果不变 | [home-today-todo/02](../../../.scratch/home-today-todo/issues/02-statement-confirmation-and-disputes-have-no-production-face.md) |
 
 ## 生产参数与待决风险
 
