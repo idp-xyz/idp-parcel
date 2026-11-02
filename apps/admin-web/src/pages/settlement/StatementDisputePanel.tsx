@@ -62,7 +62,7 @@ function RegisterDisputeForm({
 }: {
   statement: CustomerStatementRecord;
   charges: readonly CustomerChargeRecord[];
-  onAnswered: () => void;
+  onAnswered: (text: string) => void;
 }) {
   const options = useMemo(() => chargesOnStatement(charges, statement.statementNumber), [charges, statement.statementNumber]);
   const [charge, setCharge] = useState('');
@@ -112,7 +112,7 @@ function RegisterDisputeForm({
       setAmount('');
       setReason('');
       setTouched(false);
-      onAnswered();
+      onAnswered(registrationAnswerText(result.body));
     }
   };
 
@@ -161,7 +161,7 @@ function RegisterDisputeForm({
   );
 }
 
-function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStatementRecord; onAnswered: () => void }) {
+function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStatementRecord; onAnswered: (text: string) => void }) {
   const open = openDisputesOf(statement);
   const [dispute, setDispute] = useState('');
   const [resolution, setResolution] = useState<DisputeResolutionPayload['resolution'] | ''>('');
@@ -202,7 +202,7 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
       setResolution('');
       setBasis('');
       setTouched(false);
-      onAnswered();
+      onAnswered(resolutionAnswerText(result.body));
     }
   };
 
@@ -262,18 +262,28 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
   );
 }
 
-/** 对账单页右栏。statement 为空时只说先选一张单。 */
+/**
+ * 对账单页右栏。statement 为空时只说先选一张单。gone 为真：最近一次重读的列表里已经没有这张单（比如列表只列还有争议在等的单，
+ * 刚处理完的那张就出列了）——手上那一份是旧的，表单不再按它摆，只留刚才那一次的答复。
+ */
 export function StatementDisputePanel({
   statement,
+  gone = false,
   charges,
   onAnswered,
 }: {
   statement: CustomerStatementRecord | undefined;
+  gone?: boolean;
   charges: readonly CustomerChargeRecord[];
   onAnswered: () => void;
 }) {
   const mayRegister = useMayMakeDecision(statementDisputeRegistrationDecision);
   const mayResolve = useMayMakeDecision(statementDisputeResolutionDecision);
+  const [lastAnswer, setLastAnswer] = useState<{ statement: string; text: string } | null>(null);
+  const answered = (text: string) => {
+    if (statement) setLastAnswer({ statement: statement.statementNumber, text });
+    onAnswered();
+  };
   return (
     <aside className="w-full shrink-0 overflow-y-auto border-t border-idpxyz-border p-4 lg:w-[360px] lg:border-l lg:border-t-0">
       <h2 className="text-[13px] font-bold text-idpxyz-textBright">客户对账单争议</h2>
@@ -282,13 +292,22 @@ export function StatementDisputePanel({
       ) : (
         <p className="mt-1 text-[12px] leading-5 text-idpxyz-textMuted">先在左边点一张对账单，再登记客户提出的争议或处理已有的争议。</p>
       )}
-      {statement ? (
+      {statement && gone ? (
+        <>
+          {lastAnswer?.statement === statement.statementNumber ? (
+            <p role="status" className="mt-3 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+              {lastAnswer.text}
+            </p>
+          ) : null}
+          <p className="mt-3 text-[12px] leading-5 text-idpxyz-textMuted">这张单已不在当前列表里；要再登记或处理，换个筛选后重新点它。</p>
+        </>
+      ) : statement ? (
         <>
           <section className="mt-4">
             <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">登记争议</h3>
             <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">客户来电或来信说某笔费用不对，照他的话登记下来，等财务核实。</p>
             {mayRegister ? (
-              <RegisterDisputeForm statement={statement} charges={charges} onAnswered={onAnswered} />
+              <RegisterDisputeForm statement={statement} charges={charges} onAnswered={answered} />
             ) : (
               <p className="text-[12px] text-idpxyz-textMuted">{hiddenDecisionHint('登记争议', labelFor(statementDisputeRegistrationDecision))}</p>
             )}
@@ -297,7 +316,7 @@ export function StatementDisputePanel({
             <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">处理争议</h3>
             <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">核实之后给出结论。接受与部分接受不在这里改金额，费用调整另做。</p>
             {mayResolve ? (
-              <ResolveDisputeForm statement={statement} onAnswered={onAnswered} />
+              <ResolveDisputeForm statement={statement} onAnswered={answered} />
             ) : (
               <p className="text-[12px] text-idpxyz-textMuted">{hiddenDecisionHint('处理争议', labelFor(statementDisputeResolutionDecision))}</p>
             )}
