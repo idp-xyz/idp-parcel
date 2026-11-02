@@ -1,7 +1,7 @@
 # 01 网点（物流节点）与口岸各加一个可选的显示名称，随版本登记
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-placenames（最后一笔见「完成记录」）
+Status: resolved——2026-11-01 进 main（全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-01 作者完工，待隔离评审与进 main，分支 claude-placenames（最后一笔见「完成记录」）
 Blocked by: 无
 地盘：`internal/networkrouting`（domain、ports、registrationjson、http、postgres 与各自用例）、`internal/customscompliance`（同上，加登记编排）、两处测试替身的签名（`cmd/parcel-customs-register`、`cmd/parcel-dispatch`）、迁移 `network_routing/0033`、`customs_compliance/0031`、`scripts/demo-seeds`（网络与口岸种子、README 两处）、`apps/admin-web` 的两份 `api.ts` 类型与网络目录读口契约用例、ADR-0353、两份 CONTEXT、GLOSSARY「物流节点」、UC-NR-001（`AT-NR-111`、`AT-NR-112` 与交接一行）、UC-CC-003（`AT-CC-457`、`AT-CC-458` 与新立「给开发的交接」一节，修订轮）、AT 盘点、本票。
 出处：用户 2026-11-01 裁定，原话选项「网点、口岸各加一个可选的显示名称，随版本登记；没登名称的照旧显示编码。演示种子补上名称，页面行首显示名称、编码进技术详情」；协调方派单。页面显示名称不在本票，协调方另派。
@@ -75,3 +75,12 @@ AT 号 111、112 核过 origin 各分支与主工作树无撞；盘点①桶在 
 - `738b37a89` 本票提交清单
 - `6c4c3f9bb` 修订轮四条
 - 其后一笔只改本票提交清单
+
+## 评审记录（2026-11-01，隔离子代理，钉 `738b37a89`）
+
+两轴阻断为零。ADR-0267 判「不适用」站得住：节点版本与口岸都不进任何摘要、指纹或 outbox 正文，`LoadDefinitionsAt` 的 jsonb 选列与关务适用性快照 SQL 两树无差，两登记口的载荷摘要尚未落地，判断快照不序列化节点版本。没登名称的行两树读出逐字节相同（探针对拍 `nodeVersionBodyOf`、`serveCandidatePorts`，含闭区间与开区间）；全仓无 `SELECT *`，旧构建连迁移后的库照常可用。校验口径逐码点对拍（U+0001–U+10FFFF 四种位置加 100 / 101 字符边界）：库拒领域收 0 条，库收领域拒 691 条且都是 Cf、Zl/Zp 与非 ASCII 空白，两份领域门结论相同；恰 100 码点收、101 拒，null 与缺键为没登、空串拒。口岸重放比对与网点主键行为、滚动发布那一格如 ADR 所写。非阻断四条由协调方裁定、修订轮 `6c4c3f9bb` 处理：口岸那条 CONTEXT 规则的交接挂 UC-CC-003 并立 AT-CC-457/458（AT-CC-456 已被 home-today-todo 分支占）；迁移头注与 ADR-0353 决定三如实写明库上 CHECK 只守 ASCII 空白、完整校验以领域门为准；别的族采用行带名称单独答 `ErrDisplayNameOnlyOnNodeAdoption`；AT-NR-111 补采用行那一路。修订只多一个专门的拒答与文档，协调方核过 diff 后未再派复评。
+
+## 进 main 记录（2026-11-01，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-placenames` tip `b0e4ca40a` 作出处；隔离树把 `b2c1505c7..b0e4ca40a` cherry-pick 到 main `4aade8e49`，无冲突；重生成 ADR 索引、AT 盘点计数与机制清点各成一笔，两项 `-check` 退 0；对 `3cfdb0cfa` 跑全量 164 ok / 0 FAIL（含 PG）；种子一次性库 `seed_placenames` 退 0 后删库；管理台 `tsc -b` 过。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- 留给后续（协调方已排）：管理台各处显示节点 / 口岸名称（含替换网络与网点、口岸与申报路径两页页头「只登编码，不登名称」的说明）另派前端票；共享演示库 `demo_live` 走领域本来的路补名称（节点登新版本、口岸登新一版），不 `--reset`。
