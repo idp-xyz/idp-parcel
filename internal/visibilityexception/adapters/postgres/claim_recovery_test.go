@@ -68,14 +68,15 @@ func claimValue[T any](t *testing.T, construct func(string) (T, error), raw stri
 func receivedClaim(t *testing.T, batch, item string) *domain.ClaimItem {
 	t.Helper()
 	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
-		ID:          claimValue(t, domain.NewClaimItemID, item),
-		Batch:       claimValue(t, domain.NewClaimBatchReference, batch),
-		Customer:    claimValue(t, domain.NewCustomerAccountReference, "customer-1"),
-		Applicant:   claimValue(t, domain.NewApplicantReference, "applicant-1"),
-		Contract:    claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
-		Target:      claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
-		Kind:        claimValue(t, domain.NewClaimKindReference, "LOSS"),
-		SubmittedAt: claimBaseAt,
+		ID:             claimValue(t, domain.NewClaimItemID, item),
+		Batch:          claimValue(t, domain.NewClaimBatchReference, batch),
+		DocumentNumber: claimValue(t, domain.NewDocumentNumber, "CLM-"+batch+"-"+item),
+		Customer:       claimValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:      claimValue(t, domain.NewApplicantReference, "applicant-1"),
+		Contract:       claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:         claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+		Kind:           claimValue(t, domain.NewClaimKindReference, "LOSS"),
+		SubmittedAt:    claimBaseAt,
 	})
 	if err != nil {
 		t.Fatalf("受理索赔：%v", err)
@@ -582,14 +583,15 @@ func TestALegacyClaimRowWithoutApplicantStillLoads(t *testing.T) {
 func scopedClaim(t *testing.T, batch, item, customer, target, kind string) *domain.ClaimItem {
 	t.Helper()
 	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
-		ID:          claimValue(t, domain.NewClaimItemID, item),
-		Batch:       claimValue(t, domain.NewClaimBatchReference, batch),
-		Customer:    claimValue(t, domain.NewCustomerAccountReference, customer),
-		Applicant:   claimValue(t, domain.NewApplicantReference, "applicant-1"),
-		Contract:    claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
-		Target:      claimValue(t, domain.NewRequestScopeReference, target),
-		Kind:        claimValue(t, domain.NewClaimKindReference, kind),
-		SubmittedAt: claimBaseAt,
+		ID:             claimValue(t, domain.NewClaimItemID, item),
+		Batch:          claimValue(t, domain.NewClaimBatchReference, batch),
+		DocumentNumber: claimValue(t, domain.NewDocumentNumber, "CLM-"+batch+"-"+item),
+		Customer:       claimValue(t, domain.NewCustomerAccountReference, customer),
+		Applicant:      claimValue(t, domain.NewApplicantReference, "applicant-1"),
+		Contract:       claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:         claimValue(t, domain.NewRequestScopeReference, target),
+		Kind:           claimValue(t, domain.NewClaimKindReference, kind),
+		SubmittedAt:    claimBaseAt,
 	})
 	if err != nil {
 		t.Fatalf("受理索赔：%v", err)

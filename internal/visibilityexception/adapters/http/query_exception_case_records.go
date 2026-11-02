@@ -52,14 +52,16 @@ func NewQueryExceptionCaseRecordsEndpoint(
 		bodies := make([]exceptionCaseBody, 0, len(rows))
 		for _, row := range rows {
 			body := exceptionCaseBody{
-				CaseID:          row.CaseID,
-				RootParcel:      row.RootParcel,
-				ImpactScope:     row.ImpactScope,
-				ResponsibleTeam: row.ResponsibleTeam,
-				Phase:           row.Phase,
-				EstablishedAt:   catalogueInstant(row.EstablishedAt),
-				Conclusion:      row.Conclusion,
-				MergedInto:      row.MergedInto,
+				CaseID:           row.CaseID,
+				DocumentNumber:   row.DocumentNumber,
+				NumberlessReason: row.NumberlessReason,
+				RootParcel:       row.RootParcel,
+				ImpactScope:      row.ImpactScope,
+				ResponsibleTeam:  row.ResponsibleTeam,
+				Phase:            row.Phase,
+				EstablishedAt:    catalogueInstant(row.EstablishedAt),
+				Conclusion:       row.Conclusion,
+				MergedInto:       row.MergedInto,
 			}
 			if row.FirstResponse != nil {
 				body.FirstResponse = catalogueInstant(*row.FirstResponse)
@@ -89,15 +91,20 @@ type exceptionCaseListResponse struct {
 // 优先级是分诊/处置侧的判断词，案件表不复述；工作状况若从 phase 推导就是替调用方
 // 下结论。三键结构上不存在，缺席即答案（票 06 Comments 记明）。conclusion 只在
 // 关闭时在场（0008 成对约束）。
+//
+// documentNumber 是案件的单据号（ADR-0355），没有号时缺席——不答空串，也不拿 caseId 顶；那时 numberlessReason 在场，
+// 说是上线前开立（ISSUED_BEFORE_NUMBERING）还是开立时单据编号时区未配置（NUMBERING_TIME_ZONE_NOT_CONFIGURED）。
 type exceptionCaseBody struct {
-	CaseID          string `json:"caseId"`
-	RootParcel      string `json:"rootParcel"`
-	ImpactScope     string `json:"impactScope"`
-	ResponsibleTeam string `json:"responsibleTeam"`
-	Phase           string `json:"phase"`
-	EstablishedAt   string `json:"establishedAt"`
-	FirstResponse   string `json:"firstResponse,omitempty"`
-	ClosedAt        string `json:"closedAt,omitempty"`
-	Conclusion      string `json:"conclusion,omitempty"`
-	MergedInto      string `json:"mergedInto,omitempty"`
+	CaseID           string `json:"caseId"`
+	DocumentNumber   string `json:"documentNumber,omitempty"`
+	NumberlessReason string `json:"numberlessReason,omitempty"`
+	RootParcel       string `json:"rootParcel"`
+	ImpactScope      string `json:"impactScope"`
+	ResponsibleTeam  string `json:"responsibleTeam"`
+	Phase            string `json:"phase"`
+	EstablishedAt    string `json:"establishedAt"`
+	FirstResponse    string `json:"firstResponse,omitempty"`
+	ClosedAt         string `json:"closedAt,omitempty"`
+	Conclusion       string `json:"conclusion,omitempty"`
+	MergedInto       string `json:"mergedInto,omitempty"`
 }

@@ -161,15 +161,27 @@ func (double erroringReceiver) ReceiveClaim(
 	return application.HandleClaimResult{}, double.err
 }
 
+// httpClaimNumbers 照一格答取号：缺省取到一个固定号。
+type httpClaimNumbers struct{ issue ports.DocumentNumberIssue }
+
+func (numbers httpClaimNumbers) IssueClaimNumber(_ context.Context, _ domain.TenantID) (ports.DocumentNumberIssue, error) {
+	return numbers.issue, nil
+}
+
 func newClaimReceiver(store *httpClaimStore) *application.HandleClaimHandler {
+	return newClaimReceiverIssuing(store, ports.DocumentNumberIssue{Outcome: ports.DocumentNumberAssigned, Number: "CLM-202608-00009"})
+}
+
+func newClaimReceiverIssuing(store *httpClaimStore, issue ports.DocumentNumberIssue) *application.HandleClaimHandler {
 	return application.NewHandleClaimHandler(application.HandleClaimDeps{
-		Claims:      store,
-		Eligibility: inertEligibility{},
-		Evidence:    inertEvidence{},
-		Recoveries:  inertRecoveries{},
-		Identities:  inertRecoveryIdentities{},
-		Settlement:  inertSettlement{},
-		Clock:       httpClock{at: claimHTTPSubmittedAt.Add(time.Minute)},
+		Claims:       store,
+		ClaimNumbers: httpClaimNumbers{issue: issue},
+		Eligibility:  inertEligibility{},
+		Evidence:     inertEvidence{},
+		Recoveries:   inertRecoveries{},
+		Identities:   inertRecoveryIdentities{},
+		Settlement:   inertSettlement{},
+		Clock:        httpClock{at: claimHTTPSubmittedAt.Add(time.Minute)},
 	})
 }
 
@@ -197,7 +209,7 @@ func serveClaim(t *testing.T, intake visibilityhttp.ClaimIntake, receiver visibi
 }
 
 // Covers: UC-VE-007「先保留原始提交事实」经 HTTP 面——受理成立 201 带回执（批次、项、
-// 提交时间），重放同一提交 200 返已有；**响应体结构上没有资格与结论字段**（三判分步，
+// 索赔单据号、提交时间），重放同一提交 200 返已有、带原号；**响应体结构上没有资格与结论字段**（三判分步，
 // 受理端点不暴露审核进度）。
 func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 	store := newHTTPClaimStore()
@@ -211,16 +223,19 @@ func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Claim   struct {
-			Batch       string `json:"batch"`
-			Item        string `json:"item"`
-			SubmittedAt string `json:"submittedAt"`
+			Batch            string `json:"batch"`
+			Item             string `json:"item"`
+			DocumentNumber   string `json:"documentNumber"`
+			NumberlessReason string `json:"numberlessReason"`
+			SubmittedAt      string `json:"submittedAt"`
 		} `json:"claim"`
 	}
 	if err := json.Unmarshal(first.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Outcome != "CLAIM_RECEIVED" || body.Claim.Batch != "claim-batch-9" || body.Claim.Item != "item-9" {
-		t.Fatalf("body = %+v, want a CLAIM_RECEIVED receipt", body)
+	if body.Outcome != "CLAIM_RECEIVED" || body.Claim.Batch != "claim-batch-9" || body.Claim.Item != "item-9" ||
+		body.Claim.DocumentNumber != "CLM-202608-00009" || body.Claim.NumberlessReason != "" {
+		t.Fatalf("body = %+v, want a CLAIM_RECEIVED receipt carrying the claim number", body)
 	}
 	if body.Claim.SubmittedAt == "" {
 		t.Fatal("the receipt lost the original submission time")
@@ -236,12 +251,38 @@ func TestAClaimSubmissionIsReceivedOnceWithItsReceipt(t *testing.T) {
 	}
 	var replayed struct {
 		Outcome string `json:"outcome"`
+		Claim   struct {
+			DocumentNumber string `json:"documentNumber"`
+		} `json:"claim"`
 	}
 	if err := json.Unmarshal(replay.Body.Bytes(), &replayed); err != nil {
 		t.Fatalf("decode replay: %v", err)
 	}
-	if replayed.Outcome != "CLAIM_EXISTING_RESULT" {
-		t.Fatalf("outcome = %q, want CLAIM_EXISTING_RESULT", replayed.Outcome)
+	if replayed.Outcome != "CLAIM_EXISTING_RESULT" || replayed.Claim.DocumentNumber != "CLM-202608-00009" {
+		t.Fatalf("replay = %+v, want CLAIM_EXISTING_RESULT with the original number", replayed)
+	}
+}
+
+// Covers: ADR-0355 决定七、八经 HTTP 面——单据编号时区未配置时照常受理（201），回执不带 documentNumber（不答空串）、
+// numberlessReason 说为什么；撞号是已形成的业务答案：200 NUMBERING_RULE_COLLISION，不带回执。
+func TestAClaimReceiptSaysWhyItHasNoNumberAndACollisionIsAFormedAnswer(t *testing.T) {
+	unnumbered := serveClaim(t, claimIntakeDouble{command: claimCommandOf(t)},
+		newClaimReceiverIssuing(newHTTPClaimStore(), ports.DocumentNumberIssue{Outcome: ports.DocumentNumberingTimeZoneNotConfigured}), http.MethodPost)
+	if unnumbered.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", unnumbered.Code)
+	}
+	if strings.Contains(unnumbered.Body.String(), `"documentNumber"`) ||
+		!strings.Contains(unnumbered.Body.String(), `"numberlessReason":"NUMBERING_TIME_ZONE_NOT_CONFIGURED"`) {
+		t.Fatalf("body = %s", unnumbered.Body.String())
+	}
+
+	collided := serveClaim(t, claimIntakeDouble{command: claimCommandOf(t)},
+		newClaimReceiverIssuing(newHTTPClaimStore(), ports.DocumentNumberIssue{Outcome: ports.DocumentNumberingRuleCollision}), http.MethodPost)
+	if collided.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", collided.Code)
+	}
+	if strings.TrimSpace(collided.Body.String()) != `{"outcome":"NUMBERING_RULE_COLLISION"}` {
+		t.Fatalf("body = %q", collided.Body.String())
 	}
 }
 

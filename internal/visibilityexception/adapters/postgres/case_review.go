@@ -123,7 +123,7 @@ func (review *CaseReview) ListSignalEpisodes(
 }
 
 // ListDispositionRequests 上列处置请求册：新近发送在前，同刻按请求标识稳定排序。
-// 被替代的行照列——替代不是删除，版本链在册面上完整可见。
+// 被替代的行照列——替代不是删除，版本链在册面上完整可见。所属案件的单据号按（租户，案件标识）左联带出。
 func (review *CaseReview) ListDispositionRequests(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -138,13 +138,17 @@ func (review *CaseReview) ListDispositionRequests(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT request_id, case_id, target_context, action_ref, scope_ref,
-		        reason, evidence_ref, intent_version, sent_at, acceptance_window,
-		        COALESCE(judgment, ''), judged_at,
-		        COALESCE(cancellation, ''), COALESCE(superseded_by, '')
-		   FROM visibility_exception.disposition_request
-		  WHERE tenant_id = $1
-		  ORDER BY sent_at DESC, request_id
+		`SELECT r.request_id, r.case_id, COALESCE(c.document_number, ''),
+		        r.target_context, r.action_ref, r.scope_ref,
+		        r.reason, r.evidence_ref, r.intent_version, r.sent_at, r.acceptance_window,
+		        COALESCE(r.judgment, ''), r.judged_at,
+		        COALESCE(r.cancellation, ''), COALESCE(r.superseded_by, '')
+		   FROM visibility_exception.disposition_request r
+		   LEFT JOIN visibility_exception.exception_case c
+		     ON c.tenant_id = r.tenant_id
+		    AND c.case_id = r.case_id
+		  WHERE r.tenant_id = $1
+		  ORDER BY r.sent_at DESC, r.request_id
 		  LIMIT $2`,
 		tenant.String(),
 		limit,
@@ -163,7 +167,7 @@ func (review *CaseReview) ListDispositionRequests(
 			judgedAt         *time.Time
 		)
 		if err := rows.Scan(
-			&row.RequestID, &row.CaseID, &row.TargetContext, &row.Action, &row.Scope,
+			&row.RequestID, &row.CaseID, &row.CaseDocumentNumber, &row.TargetContext, &row.Action, &row.Scope,
 			&row.Reason, &row.Evidence, &intentVersion, &row.SentAt, &acceptanceWindow,
 			&row.Judgment, &judgedAt,
 			&row.Cancellation, &row.SupersededBy,
@@ -203,7 +207,8 @@ func (review *CaseReview) ListExceptionCases(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT case_id, root_parcel, impact_scope, responsible_team, phase,
+		`SELECT case_id, COALESCE(document_number, ''), COALESCE(numberless_reason, ''),
+		        root_parcel, impact_scope, responsible_team, phase,
 		        established_at, first_response, closed_at,
 		        COALESCE(conclusion, ''), COALESCE(merged_into, '')
 		   FROM visibility_exception.exception_case
@@ -221,16 +226,21 @@ func (review *CaseReview) ListExceptionCases(
 	list := make([]ports.ExceptionCaseCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row           ports.ExceptionCaseCatalogueRow
-			firstResponse *time.Time
-			closedAt      *time.Time
+			row                      ports.ExceptionCaseCatalogueRow
+			number, numberlessReason string
+			firstResponse            *time.Time
+			closedAt                 *time.Time
 		)
 		if err := rows.Scan(
-			&row.CaseID, &row.RootParcel, &row.ImpactScope, &row.ResponsibleTeam, &row.Phase,
+			&row.CaseID, &number, &numberlessReason,
+			&row.RootParcel, &row.ImpactScope, &row.ResponsibleTeam, &row.Phase,
 			&row.EstablishedAt, &firstResponse, &closedAt,
 			&row.Conclusion, &row.MergedInto,
 		); err != nil {
 			return nil, fmt.Errorf("list exception cases: %w", err)
+		}
+		if row.DocumentNumber, row.NumberlessReason, err = documentNumberColumns(number, numberlessReason); err != nil {
+			return nil, fmt.Errorf("list exception cases: case %s: %w", row.CaseID, err)
 		}
 		if firstResponse != nil {
 			utc := firstResponse.UTC()
@@ -332,7 +342,9 @@ func (review *CaseReview) ListClaimItems(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT i.batch_ref, i.item_id, i.customer_ref,
+		`SELECT i.batch_ref, i.item_id,
+		        COALESCE(i.document_number, ''), COALESCE(i.numberless_reason, ''),
+		        i.customer_ref,
 		        COALESCE(i.applicant_ref, ''), i.contract_ref,
 		        i.target_ref, i.kind_ref, i.submitted_at, i.revision,
 		        COALESCE(i.screen, ''), COALESCE(i.screen_basis, ''),
@@ -367,14 +379,16 @@ func (review *CaseReview) ListClaimItems(
 	list := make([]ports.ClaimItemCatalogueRow, 0, limit)
 	for rows.Next() {
 		var (
-			row                ports.ClaimItemCatalogueRow
-			supplementDeadline *time.Time
-			concludedAt        *time.Time
-			reviewBy           *time.Time
-			withdrawnAt        *time.Time
+			row                      ports.ClaimItemCatalogueRow
+			number, numberlessReason string
+			supplementDeadline       *time.Time
+			concludedAt              *time.Time
+			reviewBy                 *time.Time
+			withdrawnAt              *time.Time
 		)
 		if err := rows.Scan(
-			&row.Batch, &row.ItemID, &row.Customer, &row.Applicant, &row.Contract,
+			&row.Batch, &row.ItemID, &number, &numberlessReason,
+			&row.Customer, &row.Applicant, &row.Contract,
 			&row.Target, &row.Kind, &row.SubmittedAt, &row.Revision,
 			&row.Screen, &row.ScreenBasis,
 			&row.MissingMaterials, &row.SupplementScope, &row.SupplementNotice,
@@ -385,6 +399,9 @@ func (review *CaseReview) ListClaimItems(
 			&row.Withdrawn, &withdrawnAt,
 		); err != nil {
 			return nil, fmt.Errorf("list claim items: %w", err)
+		}
+		if row.DocumentNumber, row.NumberlessReason, err = documentNumberColumns(number, numberlessReason); err != nil {
+			return nil, fmt.Errorf("list claim items: %s/%s: %w", row.Batch, row.ItemID, err)
 		}
 		if supplementDeadline != nil {
 			utc := supplementDeadline.UTC()
@@ -413,7 +430,7 @@ func (review *CaseReview) ListClaimItems(
 
 // ListRecoveryMatters 上列追偿事项册：新近发起在前，同刻按事项标识稳定排序。两个
 // 动作种类各取最近一个过程节点（LATERAL 按到达序取末行）——预先通知与正式主张
-// 不合并，尚无动作的种类成对缺席。
+// 不合并，尚无动作的种类成对缺席。关联案件的单据号按（租户，案件标识）左联带出。
 func (review *CaseReview) ListRecoveryMatters(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -428,7 +445,7 @@ func (review *CaseReview) ListRecoveryMatters(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT m.matter_id, m.case_id, m.counterparty_ref, m.scope_ref,
+		`SELECT m.matter_id, m.case_id, COALESCE(c.document_number, ''), m.counterparty_ref, m.scope_ref,
 		        m.basis_ref, m.legal_entity_ref, m.evidence_ref,
 		        m.deadline, m.opened_at,
 		        pre.milestone, pre.attempt, pre.occurred_at,
@@ -452,6 +469,9 @@ func (review *CaseReview) ListRecoveryMatters(
 		         ORDER BY a.seq DESC
 		         LIMIT 1
 		   ) formal ON TRUE
+		   LEFT JOIN visibility_exception.exception_case c
+		     ON c.tenant_id = m.tenant_id
+		    AND c.case_id = m.case_id
 		  WHERE m.tenant_id = $1
 		  ORDER BY m.opened_at DESC, m.matter_id
 		  LIMIT $2`,
@@ -475,7 +495,7 @@ func (review *CaseReview) ListRecoveryMatters(
 			formOccurredAt *time.Time
 		)
 		if err := rows.Scan(
-			&row.MatterID, &row.CaseID, &row.Counterparty, &row.Scope,
+			&row.MatterID, &row.CaseID, &row.CaseDocumentNumber, &row.Counterparty, &row.Scope,
 			&row.Basis, &row.LegalEntity, &row.Evidence,
 			&row.Deadline, &row.OpenedAt,
 			&preMilestone, &preAttempt, &preOccurredAt,
@@ -506,4 +526,15 @@ func recoveryCell(milestone *string, attempt *int32, occurredAt *time.Time) *por
 		Attempt:    int64(*attempt),
 		OccurredAt: occurredAt.UTC(),
 	}
+}
+
+// documentNumberColumns 把库里单据号两格转写成读行的两格：有号交号；没号交无号原因——两格都空的旧行说成「上线前开立」，
+// 这一层约定只在领域的 RehydrateDocumentNumber 一处，读面经它转写，不另写一份。
+func documentNumberColumns(number, numberlessReason string) (string, string, error) {
+	documentNumber, err := domain.RehydrateDocumentNumber(number, numberlessReason)
+	if err != nil {
+		return "", "", err
+	}
+	assigned, _ := documentNumber.Number()
+	return assigned, string(documentNumber.NumberlessReason()), nil
 }

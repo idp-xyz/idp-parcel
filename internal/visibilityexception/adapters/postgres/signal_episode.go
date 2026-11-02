@@ -253,13 +253,16 @@ func (repository *SignalEpisodes) SaveRaised(
 
 	if record.Case != nil {
 		// 案件按聚合完整形状落 0008 那张表：新建案件只有待响应格的列在场，接单、关闭与
-		// 归并的列由各自的转移日后回填。案件标识是新键新行，撞键同发作期的处置。
+		// 归并的列由各自的转移日后回填。案件标识是新键新行，撞键同发作期的处置。单据号随
+		// 案件同一条 INSERT 落下（0033）：号是在本事务里取的，与案件同生共死。
 		exceptionCase := record.Case.Snapshot()
+		documentNumber, _ := exceptionCase.DocumentNumber.Number()
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO visibility_exception.exception_case
 				(tenant_id, case_id, root_parcel, impact_scope, responsible_team, phase,
-				 established_at, first_response, closed_at, conclusion, merged_into)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+				 established_at, first_response, closed_at, conclusion, merged_into,
+				 document_number, numberless_reason)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 			record.Tenant.String(),
 			exceptionCase.ID.String(),
 			exceptionCase.Root.String(),
@@ -271,6 +274,8 @@ func (repository *SignalEpisodes) SaveRaised(
 			nullIfZeroTime(exceptionCase.ClosedAt),
 			nullIfBlank(exceptionCase.Conclusion),
 			nullIfBlank(exceptionCase.MergedInto.String()),
+			nullIfBlank(documentNumber),
+			nullIfBlank(exceptionCase.DocumentNumber.StoredNumberlessReason()),
 		); err != nil {
 			return fmt.Errorf("save raised signal: case: %w", err)
 		}

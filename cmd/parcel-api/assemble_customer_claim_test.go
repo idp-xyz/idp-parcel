@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
@@ -164,7 +165,14 @@ func TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabas
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := productionClaimLine(t, endpointSources{db: db, customerClientMinter: minter})
+	// 演示租户登了单据编号时区（合成取值）：索赔受理在同一笔事务里按产品默认模板取索赔单据号，回执带着它。
+	numbers := documentNumberingComponents(t, db, docnumber.SecretTable{})
+	if registered, err := numbers.Registrations.RegisterTimeZone(t.Context(), docnumber.RegisterTimeZoneCommand{
+		Tenant: "SYN-TENANT-01", TimeZone: "Asia/Shanghai", EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), RegisteredBy: "SYN-TEST",
+	}); err != nil || registered.Outcome != docnumber.VersionRegistered {
+		t.Fatalf("登单据编号时区：%+v %v", registered, err)
+	}
+	endpoint := productionClaimLine(t, endpointSources{db: db, customerClientMinter: minter, documentNumbers: numbers})
 	owner := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
 	other := issuer.token(t, syntheticCustomerAudience, claimOtherSubject)
 
@@ -195,13 +203,16 @@ func TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabas
 		t.Fatalf("原样重投 = %d %s, want 200 CLAIM_EXISTING_RESULT", replay.Code, replay.Body.String())
 	}
 	var firstBody, replayBody struct {
-		Claim struct{ Batch, Item, SubmittedAt string } `json:"claim"`
+		Claim struct{ Batch, Item, DocumentNumber, SubmittedAt string } `json:"claim"`
 	}
 	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
 		t.Fatal(err)
 	}
 	if err := json.Unmarshal(replay.Body.Bytes(), &replayBody); err != nil || firstBody != replayBody || firstBody.Claim.Item == "" {
 		t.Fatalf("重放读回的不是同一项：%s 对 %s", first.Body.String(), replay.Body.String())
+	}
+	if !strings.HasPrefix(firstBody.Claim.DocumentNumber, "CLM-") || !strings.HasSuffix(firstBody.Claim.DocumentNumber, "-00001") {
+		t.Fatalf("回执的索赔单据号 = %q，want 产品默认模板出的首号（重放答同一个）", firstBody.Claim.DocumentNumber)
 	}
 	if rows := countClaimItems(); rows != 1 {
 		t.Fatalf("重放之后有 %d 项, want 1", rows)
@@ -276,7 +287,7 @@ func TestClaimLineRefusesOtherFamiliesAndJudgesAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := productionClaimLine(t, endpointSources{db: db, customerClientMinter: minter})
+	endpoint := productionClaimLine(t, endpointSources{db: db, customerClientMinter: minter, documentNumbers: documentNumberingComponents(t, db, docnumber.SecretTable{})})
 	body := claimBody("SYN-ACCESS-REQUEST-CL-0001", "SYN-ITEM-FPA09-01", claimOwnContract, claimParcel)
 	for name, testCase := range map[string]struct {
 		token  string

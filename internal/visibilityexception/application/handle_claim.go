@@ -38,10 +38,16 @@ const (
 	RecoveryActionRecorded
 	HandleClaimUndecided
 	HandleClaimNotAccepted
+	// ClaimNumberingRuleCollision：索赔单据号撞上已用的号到了跳号上限（ADR-0355 决定八），这一次提交没有记下。它是业务
+	// 答案不是故障，也不并进未决：未决等的是依赖回来，这一格等的是有人去「设置 → 单据编号」换格式——不换，原样重发
+	// 还会撞。
+	ClaimNumberingRuleCollision
 )
 
 func (outcome HandleClaimOutcome) String() string {
 	switch outcome {
+	case ClaimNumberingRuleCollision:
+		return "NUMBERING_RULE_COLLISION"
 	case ClaimReceived:
 		return "CLAIM_RECEIVED"
 	case ClaimExistingResult:
@@ -238,6 +244,8 @@ type HandleClaimResult struct {
 	handoffRef string
 	// notAcceptedReason 只在未受理且有可说的原因时在场。
 	notAcceptedReason HandleClaimNotAcceptedReason
+	// discardIssuing 见 DiscardIssuing。
+	discardIssuing bool
 }
 
 func (result HandleClaimResult) Outcome() HandleClaimOutcome {
@@ -272,14 +280,23 @@ func (result HandleClaimResult) HandoffReference() string {
 	return result.handoffRef
 }
 
+// DiscardIssuing 为真时，这一轮在开立事务里取到了单据号、索赔却没有落下（写库失败，或并发受理的另一方先落了同一对键），
+// 开立事务必须回滚而不是提交：提交就把那个号留成空号，而 ADR-0355 决定三只许跳号成为空号。答案照常交给调用方——回滚丢的
+// 只是本方取号那一笔，读回的赢家是另一笔已提交的事务落下的。
+func (result HandleClaimResult) DiscardIssuing() bool {
+	return result.discardIssuing
+}
+
 type HandleClaimDeps struct {
-	Claims      ports.ClaimStore
-	Eligibility ports.EligibilityRuleView
-	Evidence    ports.ClaimEvidenceView
-	Recoveries  ports.RecoveryStore
-	Identities  ports.RecoveryIdentityFactory
-	Settlement  ports.LiabilityHandoff
-	Clock       ports.Clock
+	Claims ports.ClaimStore
+	// ClaimNumbers 为记录提交的索赔项取单据号；只在受理一项新索赔时调。
+	ClaimNumbers ports.ClaimNumberIssuer
+	Eligibility  ports.EligibilityRuleView
+	Evidence     ports.ClaimEvidenceView
+	Recoveries   ports.RecoveryStore
+	Identities   ports.RecoveryIdentityFactory
+	Settlement   ports.LiabilityHandoff
+	Clock        ports.Clock
 }
 
 type HandleClaimHandler struct {
@@ -314,25 +331,43 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	if found {
+		// 重放答原项连同它的原号，不再取号（ADR-0355 决定三）。
 		return answerExistingClaim(existing, command), nil
 	}
 
+	// 单据号在记录提交这一步取，早于资格审核（CONTEXT「客户索赔项」）：要件已核、（批次+项）未在案，往下只剩落库。
+	issue, err := handler.deps.ClaimNumbers.IssueClaimNumber(ctx, command.TenantID)
+	if err != nil {
+		return HandleClaimResult{}, fmt.Errorf("issue claim document number: %w", err)
+	}
+	number, collided, err := documentNumberOf(issue)
+	if err != nil {
+		return HandleClaimResult{}, err
+	}
+	if collided {
+		return HandleClaimResult{outcome: ClaimNumberingRuleCollision}, nil
+	}
+
 	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
-		ID:          command.Item,
-		Batch:       command.Batch,
-		Customer:    command.Customer,
-		Applicant:   command.Applicant,
-		Contract:    command.Contract,
-		Target:      command.Target,
-		Kind:        command.Kind,
-		SubmittedAt: command.SubmittedAt,
+		ID:             command.Item,
+		Batch:          command.Batch,
+		DocumentNumber: number,
+		Customer:       command.Customer,
+		Applicant:      command.Applicant,
+		Contract:       command.Contract,
+		Target:         command.Target,
+		Kind:           command.Kind,
+		SubmittedAt:    command.SubmittedAt,
 	})
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("receive claim item: %w", err)
 	}
+	// 从这里起，凡是索赔没落下的分支都带 DiscardIssuing：本方取到的那个号没有随单落下，要调用方回滚开立事务把它退回去。
+	// 时区未配置那一格没动序列，没有要退的。
+	_, assigned := number.Number()
 	saved, err := handler.deps.Claims.Save(ctx, command.TenantID, claim)
 	if err != nil {
-		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable, discardIssuing: assigned}, nil
 	}
 	switch saved {
 	case ports.ClaimSaved:
@@ -344,9 +379,11 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		existing, found, err := handler.deps.Claims.FindByBatchItem(
 			ctx, command.TenantID, command.Batch, command.Item)
 		if err != nil || !found {
-			return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+			return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable, discardIssuing: assigned}, nil
 		}
-		return answerExistingClaim(existing, command), nil
+		answer := answerExistingClaim(existing, command)
+		answer.discardIssuing = assigned
+		return answer, nil
 	default:
 		return HandleClaimResult{}, fmt.Errorf("receive claim: unexpected save outcome %d", saved)
 	}

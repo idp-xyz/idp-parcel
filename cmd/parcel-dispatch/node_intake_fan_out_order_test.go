@@ -37,7 +37,11 @@ func registeredLegsOn(t *testing.T, event eventing.EventType) []routeLeg {
 		t.Fatalf("构造 Inbox Store：%v", err)
 	}
 	clock := systemClock{}
-	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock)
+	documentNumbers, err := buildDocumentNumbers(db, dispatchSettings{})
+	if err != nil {
+		t.Fatalf("构造编号组件：%v", err)
+	}
+	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock, documentNumbers)
 	if err != nil {
 		t.Fatalf("构造投影派生：%v", err)
 	}
@@ -46,7 +50,7 @@ func registeredLegsOn(t *testing.T, event eventing.EventType) []routeLeg {
 		t.Fatalf("服务目的：%v", err)
 	}
 	sources := dispatchSources{
-		db: db, outbox: outboxStore, inbox: inboxStore, clock: clock, projectionDerive: projectionDerive,
+		db: db, outbox: outboxStore, inbox: inboxStore, clock: clock, projectionDerive: projectionDerive, documentNumbers: documentNumbers,
 		settings: dispatchSettings{
 			purpose: purpose, deliveryTimeout: 5 * time.Second,
 			config: dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second},

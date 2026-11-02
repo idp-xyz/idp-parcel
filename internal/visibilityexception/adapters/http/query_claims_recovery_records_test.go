@@ -234,6 +234,7 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 			{
 				Batch:              "batch-1",
 				ItemID:             "item-1",
+				DocumentNumber:     "CLM-202608-00001",
 				Customer:           "CUST-01",
 				Applicant:          "applicant-7",
 				Contract:           "CONTRACT-01",
@@ -256,14 +257,15 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 				WithdrawnAt:        &withdrawnAt,
 			},
 			{
-				Batch:       "batch-2",
-				ItemID:      "item-2",
-				Customer:    "CUST-02",
-				Contract:    "CONTRACT-02",
-				Target:      "parcel-2",
-				Kind:        "LOSS",
-				SubmittedAt: operationsBaseAt,
-				Revision:    1,
+				Batch:            "batch-2",
+				ItemID:           "item-2",
+				NumberlessReason: "NUMBERING_TIME_ZONE_NOT_CONFIGURED",
+				Customer:         "CUST-02",
+				Contract:         "CONTRACT-02",
+				Target:           "parcel-2",
+				Kind:             "LOSS",
+				SubmittedAt:      operationsBaseAt,
+				Revision:         1,
 			},
 		},
 	}
@@ -278,6 +280,8 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 		Items   []struct {
 			Batch              string `json:"batch"`
 			ItemID             string `json:"itemId"`
+			DocumentNumber     any    `json:"documentNumber"`
+			NumberlessReason   any    `json:"numberlessReason"`
 			Customer           string `json:"customer"`
 			Applicant          any    `json:"applicant"`
 			Kind               string `json:"kind"`
@@ -316,6 +320,11 @@ func TestClaimsRecoveryRecordsListClaimItemsVerbatim(t *testing.T) {
 		!full.Withdrawn || full.WithdrawnAt != withdrawnAt.Format(time.RFC3339Nano) {
 		t.Fatalf("满生命周期行走样：%+v", full)
 	}
+	// 单据号与客户自己的批次号、项标识并列；没号的行不答空串，只说为什么没号。
+	if full.DocumentNumber != "CLM-202608-00001" || full.NumberlessReason != nil || full.Batch != "batch-1" ||
+		body.Items[1].DocumentNumber != nil || body.Items[1].NumberlessReason != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+		t.Fatalf("单据号两格走样：%+v / %+v", full, body.Items[1])
+	}
 	// 金额键结构上不存在：赔付金额由 settlement-accounting 形成，本册连键都不带。
 	if full.Amount != nil {
 		t.Fatalf("索赔项行不得带金额键：%+v", full)
@@ -340,15 +349,16 @@ func TestClaimsRecoveryRecordsListRecoveryMattersVerbatim(t *testing.T) {
 	reader := &claimsReaderDouble{
 		matters: []ports.RecoveryMatterCatalogueRow{
 			{
-				MatterID:     "matter-1",
-				CaseID:       "case-1",
-				Counterparty: "carrier-x",
-				Scope:        "leg/CN-DE",
-				Basis:        "contract/carriage-7",
-				LegalEntity:  "entity-1",
-				Evidence:     "evidence/9",
-				Deadline:     deadline,
-				OpenedAt:     operationsBaseAt,
+				MatterID:           "matter-1",
+				CaseID:             "case-1",
+				CaseDocumentNumber: "EX-20260801-0001",
+				Counterparty:       "carrier-x",
+				Scope:              "leg/CN-DE",
+				Basis:              "contract/carriage-7",
+				LegalEntity:        "entity-1",
+				Evidence:           "evidence/9",
+				Deadline:           deadline,
+				OpenedAt:           operationsBaseAt,
 				PreliminaryNotice: &ports.RecoveryActionCell{
 					Milestone: "DELIVERED", Attempt: 2, OccurredAt: noticeAt,
 				},
@@ -378,14 +388,15 @@ func TestClaimsRecoveryRecordsListRecoveryMattersVerbatim(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Matters []struct {
-			MatterID          string `json:"matterId"`
-			CaseID            string `json:"caseId"`
-			Counterparty      string `json:"counterparty"`
-			Scope             string `json:"scope"`
-			Basis             string `json:"basis"`
-			Deadline          string `json:"deadline"`
-			OpenedAt          string `json:"openedAt"`
-			PreliminaryNotice *struct {
+			MatterID           string `json:"matterId"`
+			CaseID             string `json:"caseId"`
+			CaseDocumentNumber any    `json:"caseDocumentNumber"`
+			Counterparty       string `json:"counterparty"`
+			Scope              string `json:"scope"`
+			Basis              string `json:"basis"`
+			Deadline           string `json:"deadline"`
+			OpenedAt           string `json:"openedAt"`
+			PreliminaryNotice  *struct {
 				Milestone  string `json:"milestone"`
 				Attempt    int64  `json:"attempt"`
 				OccurredAt string `json:"occurredAt"`
@@ -408,6 +419,9 @@ func TestClaimsRecoveryRecordsListRecoveryMattersVerbatim(t *testing.T) {
 		acted.Deadline != deadline.Format(time.RFC3339Nano) ||
 		acted.OpenedAt != operationsBaseAt.Format(time.RFC3339Nano) {
 		t.Fatalf("事项行走样：%+v", acted)
+	}
+	if acted.CaseDocumentNumber != "EX-20260801-0001" || body.Matters[1].CaseDocumentNumber != nil {
+		t.Fatalf("关联案件的单据号走样（没号时不得拿案件标识顶）：%+v / %+v", acted, body.Matters[1])
 	}
 	if acted.PreliminaryNotice == nil || acted.PreliminaryNotice.Milestone != "DELIVERED" ||
 		acted.PreliminaryNotice.Attempt != 2 ||

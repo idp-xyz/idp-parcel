@@ -204,15 +204,19 @@ func (conclusion LiabilityConclusion) String() string {
 // ClaimItemSpec 是受理一项索赔所需的全部输入：一个货主客户账户、合同责任范围、目标
 // 范围与索赔类型逐项固定（CONTEXT「目标包裹或明确服务范围及索赔类型」）；申请人随提交事实到达——
 // 资格审核的授权维（CONTEXT「再按申请人授权、客户账户」）核的就是它，受理时缺席的话那一维永远无从核起。
+//
+// DocumentNumber 是记录提交时在同一事务里取得的索赔单据号那一格（CONTEXT「客户索赔项」）。ID 与 Batch 是客户自己的项
+// 标识与批次号——外部标识，单据号不取代它们，幂等照旧按（批次+项）。
 type ClaimItemSpec struct {
-	ID          ClaimItemID
-	Batch       ClaimBatchReference
-	Customer    CustomerAccountReference
-	Applicant   ApplicantReference
-	Contract    ContractScopeReference
-	Target      RequestScopeReference
-	Kind        ClaimKindReference
-	SubmittedAt time.Time
+	ID             ClaimItemID
+	Batch          ClaimBatchReference
+	DocumentNumber DocumentNumber
+	Customer       CustomerAccountReference
+	Applicant      ApplicantReference
+	Contract       ContractScopeReference
+	Target         RequestScopeReference
+	Kind           ClaimKindReference
+	SubmittedAt    time.Time
 }
 
 // ClaimItem 是一项客户索赔。收到、通过资格审核和确认赔偿责任是三个不同判断
@@ -225,6 +229,7 @@ type ClaimItem struct {
 	revision        int64
 	id              ClaimItemID
 	batch           ClaimBatchReference
+	number          DocumentNumber
 	customer        CustomerAccountReference
 	applicant       ApplicantReference
 	contract        ContractScopeReference
@@ -245,10 +250,12 @@ type ClaimItem struct {
 
 // ReceiveClaimItem 受理一项索赔：先保留原始提交事实，资格判断是下一步（不在这里）。
 // 申请人必备——它是提交事实的一格，事后补不上；缺席受理会造出一项授权维永远核不了
-// 的索赔，出路只能是按正确申请人重提。
+// 的索赔，出路只能是按正确申请人重提。单据号那一格同理必须是记录这一刻形成的（取到的号，或单据编号时区未配置），
+// 零值是「上线前开立」，新受理的索赔不是。
 func ReceiveClaimItem(spec ClaimItemSpec) (*ClaimItem, error) {
 	if !spec.ID.valid() ||
 		!spec.Batch.valid() ||
+		!spec.DocumentNumber.issuedAtOpening() ||
 		!spec.Customer.valid() ||
 		!spec.Applicant.valid() ||
 		!spec.Contract.valid() ||
@@ -260,6 +267,7 @@ func ReceiveClaimItem(spec ClaimItemSpec) (*ClaimItem, error) {
 	return &ClaimItem{
 		id:          spec.ID,
 		batch:       spec.Batch,
+		number:      spec.DocumentNumber,
 		customer:    spec.Customer,
 		applicant:   spec.Applicant,
 		contract:    spec.Contract,
@@ -278,6 +286,11 @@ func (claim *ClaimItem) ID() ClaimItemID {
 // 这一格与调用方本该递的那个值恒等，再开一个入参只会造出第二个来源。
 func (claim *ClaimItem) Revision() int64 {
 	return claim.revision
+}
+
+// DocumentNumber 交回索赔单据号那一格（ADR-0355）。它随记录提交固定，三判与撤回都不动它。
+func (claim *ClaimItem) DocumentNumber() DocumentNumber {
+	return claim.number
 }
 
 func (claim *ClaimItem) Customer() CustomerAccountReference {
@@ -353,7 +366,9 @@ type ClaimItemSnapshot struct {
 	Revision int64
 	ID       ClaimItemID
 	Batch    ClaimBatchReference
-	Customer CustomerAccountReference
+	// DocumentNumber 允许零值：本规则生效前受理的索赔没有单据号，读回如实是「上线前开立」，不补号。
+	DocumentNumber DocumentNumber
+	Customer       CustomerAccountReference
 	// Applicant 允许缺席：本格落地前受理的存量行没有它，重建不因此拒——拒了那些行
 	// 连读都读不回来。新受理一律带，由 ReceiveClaimItem 把门。
 	Applicant       ApplicantReference
@@ -379,6 +394,7 @@ func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
 		Revision:        claim.revision,
 		ID:              claim.id,
 		Batch:           claim.batch,
+		DocumentNumber:  claim.number,
 		Customer:        claim.customer,
 		Applicant:       claim.applicant,
 		Contract:        claim.contract,
@@ -465,6 +481,7 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 		revision:        snapshot.Revision,
 		id:              snapshot.ID,
 		batch:           snapshot.Batch,
+		number:          snapshot.DocumentNumber,
 		customer:        snapshot.Customer,
 		applicant:       snapshot.Applicant,
 		contract:        snapshot.Contract,

@@ -150,12 +150,13 @@ func (double *triageDownstreamDouble) HandOffTriage(
 }
 
 type raiseFixture struct {
-	handler    *application.RaiseSignalHandler
-	episodes   *episodeStoreDouble
-	triage     *triageRuleDouble
-	identities *episodeIdentityDouble
-	cases      *caseIdentityDouble
-	downstream *triageDownstreamDouble
+	handler     *application.RaiseSignalHandler
+	episodes    *episodeStoreDouble
+	triage      *triageRuleDouble
+	identities  *episodeIdentityDouble
+	cases       *caseIdentityDouble
+	caseNumbers *documentNumberDouble
+	downstream  *triageDownstreamDouble
 }
 
 func newRaiseFixture(t *testing.T) *raiseFixture {
@@ -172,17 +173,19 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 			},
 			configured: true,
 		},
-		identities: &episodeIdentityDouble{},
-		cases:      &caseIdentityDouble{},
-		downstream: &triageDownstreamDouble{},
+		identities:  &episodeIdentityDouble{},
+		cases:       &caseIdentityDouble{},
+		caseNumbers: newDocumentNumbers("EX-20260810"),
+		downstream:  &triageDownstreamDouble{},
 	}
 	fixture.handler = application.NewRaiseSignalHandler(application.RaiseSignalDeps{
-		Episodes:   fixture.episodes,
-		Triage:     fixture.triage,
-		Identities: fixture.identities,
-		Cases:      fixture.cases,
-		Downstream: fixture.downstream,
-		Clock:      fixedClock{at: signalHitAt.Add(time.Minute)},
+		Episodes:    fixture.episodes,
+		Triage:      fixture.triage,
+		Identities:  fixture.identities,
+		Cases:       fixture.cases,
+		CaseNumbers: fixture.caseNumbers,
+		Downstream:  fixture.downstream,
+		Clock:       fixedClock{at: signalHitAt.Add(time.Minute)},
 	})
 	return fixture
 }

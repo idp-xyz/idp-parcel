@@ -398,6 +398,7 @@ func establishedCase(t *testing.T, id, root string, at time.Time) *domain.Except
 	t.Helper()
 	exceptionCase, err := domain.EstablishCase(
 		factValue(t, domain.NewCaseID, id),
+		factValue(t, domain.NewDocumentNumber, "EX-"+id),
 		factValue(t, domain.NewTrackedParcelReference, root),
 		factValue(t, domain.NewImpactScopeReference, root),
 		factValue(t, domain.NewResponsibleTeamReference, "team/exception-ops"),

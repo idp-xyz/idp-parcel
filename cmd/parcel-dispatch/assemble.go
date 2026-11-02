@@ -720,12 +720,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: inbox store: %w", err)
 	}
-	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock)
+	documentNumbers, err := buildDocumentNumbers(db, settings)
 	if err != nil {
 		return nil, err
 	}
-
-	documentNumbers, err := buildDocumentNumbers(db, settings)
+	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock, documentNumbers)
 	if err != nil {
 		return nil, err
 	}
@@ -1926,10 +1925,14 @@ func (derive *tenantBoundCustomerViewDerive) Handle(
 
 // newTenantBoundProjectionDerive 让 routes_*.go 里经 sources.projectionDerive 取用的各投影路
 // 共用一份事实/投影/交接仓储。映射仍按每次 Handle 的租户现绑，不要为每一路再各复制一份包装。
+//
+// numbers 是本进程那一套编号组件（buildDocumentNumbers）：分诊自动建案在派生事务里给案件取单据号，取号编排与派生事务
+// 必须接在同一个 db 上。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
 	clock systemClock,
+	numbers docnumbering.Components,
 ) (*tenantBoundProjectionDerive, error) {
 	facts, err := vepostgres.NewAcceptedFacts(db)
 	if err != nil {
@@ -1961,6 +1964,13 @@ func newTenantBoundProjectionDerive(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: exception case identities: %w", err)
 	}
+	if numbers.Assigner == nil {
+		return nil, errors.New("parcel-dispatch: exception case numbers need the document numbering components")
+	}
+	caseNumbers, err := vepostgres.NewDocumentNumbers(db, numbers.Assigner)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: exception case document numbers: %w", err)
+	}
 	triageHandoff, err := vepostgres.NewOutboxTriageHandoff(db, outboxStore, clock)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: triage handoff: %w", err)
@@ -1973,6 +1983,7 @@ func newTenantBoundProjectionDerive(
 		episodes:          episodes,
 		episodeIdentities: episodeIdentities,
 		caseIdentities:    caseIdentities,
+		caseNumbers:       caseNumbers,
 		triageHandoff:     triageHandoff,
 		downstream:        downstream,
 		clock:             clock,
@@ -1994,6 +2005,7 @@ type tenantBoundProjectionDerive struct {
 	episodes          *vepostgres.SignalEpisodes
 	episodeIdentities *veidentity.SignalEpisodes
 	caseIdentities    *veidentity.ExceptionCases
+	caseNumbers       *vepostgres.DocumentNumbers
 	triageHandoff     *vepostgres.OutboxTriageHandoff
 	downstream        *vepostgres.OutboxProjectionHandoff
 	clock             systemClock
@@ -2034,12 +2046,13 @@ func (derive *tenantBoundProjectionDerive) Handle(
 	// 冲突信号走真的信号编排进分诊：与派生同一事务（两边都按 RequireExecutor 落库），
 	// 分叉双方留在投影里的那一笔与它们的信号发作期同生共死。
 	signals := veapplication.NewRaiseSignalHandler(veapplication.RaiseSignalDeps{
-		Episodes:   derive.episodes,
-		Triage:     triage,
-		Identities: derive.episodeIdentities,
-		Cases:      derive.caseIdentities,
-		Downstream: derive.triageHandoff,
-		Clock:      derive.clock,
+		Episodes:    derive.episodes,
+		Triage:      triage,
+		Identities:  derive.episodeIdentities,
+		Cases:       derive.caseIdentities,
+		CaseNumbers: derive.caseNumbers,
+		Downstream:  derive.triageHandoff,
+		Clock:       derive.clock,
 	})
 	return veapplication.NewDeriveProjectionHandler(veapplication.DeriveProjectionDeps{
 		Facts:         derive.facts,

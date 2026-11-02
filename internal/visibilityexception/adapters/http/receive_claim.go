@@ -82,9 +82,11 @@ func writeClaimIntakeProblem(response http.ResponseWriter, request *http.Request
 	}
 }
 
-// claimResponse 是本端点的封闭响应形状。受理回执只带批次、项与提交时间——资格与
+// claimResponse 是本端点的封闭响应形状。受理回执只带批次、项、索赔单据号与提交时间——资格与
 // 结论字段结构上不存在：已有项重放读回的索赔即便已过审，提交面也只答「已受理在案」，
 // 审核进度是另一个授权面的事。
+//
+// 单据号撞号（NUMBERING_RULE_COLLISION）不带回执：这一次提交没有记下，租户换了编号格式之前原样重发还会撞。
 type claimResponse struct {
 	Outcome         string `json:"outcome"`
 	UndecidedReason string `json:"undecidedReason,omitempty"`
@@ -93,10 +95,15 @@ type claimResponse struct {
 	Claim             *claimReceipt `json:"claim,omitempty"`
 }
 
+// claimReceipt 的 documentNumber 是记录提交时取得的索赔单据号（ADR-0355，新增字段，不改既有字段与语义——ADR-0140）：
+// 客服据它与客户沟通；batch 与 item 是客户自己的批次号与项标识，照旧回显。没有单据号时 documentNumber 缺席、
+// numberlessReason 说为什么（上线前受理的索赔重放，或记录时租户的单据编号时区未配置），不答空串。
 type claimReceipt struct {
-	Batch       string `json:"batch"`
-	Item        string `json:"item"`
-	SubmittedAt string `json:"submittedAt"`
+	Batch            string `json:"batch"`
+	Item             string `json:"item"`
+	DocumentNumber   string `json:"documentNumber,omitempty"`
+	NumberlessReason string `json:"numberlessReason,omitempty"`
+	SubmittedAt      string `json:"submittedAt"`
 }
 
 func writeClaimOutcome(response http.ResponseWriter, request *http.Request, result application.HandleClaimResult) {
@@ -115,10 +122,16 @@ func writeClaimOutcome(response http.ResponseWriter, request *http.Request, resu
 		body.NotAcceptedReason = result.NotAcceptedReason().String()
 	}
 	if claim, present := result.Claim(); present {
+		number, numbered := claim.DocumentNumber().Number()
 		body.Claim = &claimReceipt{
 			Batch:       claim.Batch().String(),
 			Item:        claim.ID().String(),
 			SubmittedAt: claim.SubmittedAt().UTC().Format(time.RFC3339Nano),
+		}
+		if numbered {
+			body.Claim.DocumentNumber = number
+		} else {
+			body.Claim.NumberlessReason = string(claim.DocumentNumber().NumberlessReason())
 		}
 	}
 

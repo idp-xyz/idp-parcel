@@ -13,6 +13,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
@@ -37,7 +38,7 @@ func TestTheWiredClaimsInheritTheRowsAContractTierRuleLeavesToTheProductBase(t *
 	tenant := mustValue(t, pcdomain.NewTenantID, "SYN-TENANT-1")
 	scope := mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-1")
 
-	claims, err := buildClaimsOrchestration(db)
+	claims, err := buildClaimsOrchestration(db, documentNumberingComponents(t, db, docnumber.SecretTable{}))
 	if err != nil {
 		t.Fatalf("装配索赔编排：%v", err)
 	}
