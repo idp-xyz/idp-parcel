@@ -46,7 +46,7 @@ const (
 	StatementUndecided
 	StatementNoChargeInPeriod
 	StatementCutUnconfigured
-	// DisputeOnVoidedStatement：对一张已作废的单登记争议（ADR-0353 决定三）。是答案不是故障：单已不应继续有效，异议要对着替代单提。
+	// DisputeOnVoidedStatement：对一张已作废的单登记争议（ADR-0354 决定三）。是答案不是故障：单已不应继续有效，异议要对着替代单提。
 	DisputeOnVoidedStatement
 )
 
@@ -232,7 +232,7 @@ type OpenDisputeCommand struct {
 	DisputedMinor int64
 	Reason        string
 	OpenedAt      time.Time
-	// OperationEvidence 记经哪个渠道、由谁代登记（运营决定口是 `OPERATOR/<发行方>#<sub>`，ADR-0353 决定四）。只作审计：不进摘要、
+	// OperationEvidence 记经哪个渠道、由谁代登记（运营决定口是 `OPERATOR/<发行方>#<sub>`，ADR-0354 决定四）。只作审计：不进摘要、
 	// 不进重放比对；编排直调与存量行为空。
 	OperationEvidence string
 }

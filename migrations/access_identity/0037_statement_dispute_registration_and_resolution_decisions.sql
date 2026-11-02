@@ -1,4 +1,4 @@
--- 「运营决定」能力面加两种客户对账单争议决定：代客户登记争议与形成处理结果（ADR-0353 决定一、二；票 home-today-todo/03）。与
+-- 「运营决定」能力面加两种客户对账单争议决定：代客户登记争议与形成处理结果（ADR-0354 决定一、二；票 home-today-todo/03）。与
 -- accessidentity.DecisionStatementDisputeRegistration、DecisionStatementDisputeResolution 同笔放开（0001 头注那条约定）。本迁移不种
 -- 任何行：谁被授予登记、谁被授予处理是租户取值。
 --

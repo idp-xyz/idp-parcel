@@ -573,7 +573,7 @@ func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
 }
 
 // Covers: AT-SA-228（领域半边）——争议对着已经发给客户的那张单：提出时刻早于发布的不收；已作废的单不收新争议，答的是作废那一格
-// 而不是笼统的无效（ADR-0353 决定三），作废之前已开的争议不受影响。
+// 而不是笼统的无效（ADR-0354 决定三），作废之前已开的争议不受影响。
 func TestADisputeNeedsAStillValidStatementPublishedBeforeItWasRaised(t *testing.T) {
 	statement := publishedStatement(t)
 	charge := settlementValue(t, domain.NewCustomerChargeID, "charge-1")

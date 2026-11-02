@@ -294,7 +294,7 @@ func (orchestrations settlementOrchestrations) AuditSupplierBill(
 }
 
 // OpenDispute 在一笔事务里代登记一项争议。争议不过结算时点那一道门：门管确认与截单什么时候能动，客户什么时候提出异议不由它定
-// （ADR-0353 决定一）。
+// （ADR-0354 决定一）。
 func (orchestrations settlementOrchestrations) OpenDispute(
 	ctx context.Context,
 	command saapplication.OpenDisputeCommand,
@@ -311,7 +311,7 @@ func (orchestrations settlementOrchestrations) OpenDispute(
 	return result, nil
 }
 
-// ResolveDispute 在一笔事务里对一项争议形成处理（ADR-0353 决定二）。
+// ResolveDispute 在一笔事务里对一项争议形成处理（ADR-0354 决定二）。
 func (orchestrations settlementOrchestrations) ResolveDispute(
 	ctx context.Context,
 	command saapplication.ResolveDisputeCommand,

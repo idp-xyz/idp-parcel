@@ -169,6 +169,7 @@ func TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution(t *testing
 		record := opened
 		record.Dispute = resolved
 		record.RecordedAt = at
+		record.ResolutionEvidence = "OPERATOR/iss#" + kind.String()
 		var replaced bool
 		saWithin(t, transactor, ctx, func(txCtx context.Context) error {
 			var err error
@@ -192,6 +193,11 @@ func TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution(t *testing
 	}
 	if kind, _, _, resolved := after.Dispute.Resolution(); !resolved || kind != domain.DisputeRejected {
 		t.Fatalf("库上应停在拒绝：%+v", after.Dispute)
+	}
+	// 处理人那一列与终局词形同在一条 UPDATE 的参数表里（ADR-0354 决定四）：参数位错一格，处理人会落成别的值、或终局判读失灵，
+	// 两处同时钉住。
+	if after.ResolutionEvidence != "OPERATOR/iss#REJECTED" {
+		t.Fatalf("处理人应是落下拒绝的那一位，终局之后的那次不改它：%q", after.ResolutionEvidence)
 	}
 }
 
