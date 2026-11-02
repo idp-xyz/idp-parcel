@@ -1,7 +1,7 @@
 # 02 对账的两件人工事在生产上都没有口：相对方确认不记，争议的提出与处理没有接线
 
 Category: enhancement
-Status: in-progress——2026-11-01 协调方分诊，用户裁定：争议的提出与处理做管理台入口（客服代登记、财务核实后处理、按授予收起），由票 03 承接（分支 `claude-disputes`）；相对方确认本产品不记，设计源「待确认应收」一格不做。03 进 main 时本票随之收口。此前 needs-triage——2026-11-01 由票 [01](./01-held-at-customs-and-disputed-statement-tiles.md) 作者立，待协调方分诊
+Status: resolved——2026-11-01 随票 [03](./03-statement-dispute-registration-and-resolution-faces.md) 进 main 收口：争议的登记与处理有了管理台入口（ADR-0354）；相对方确认按用户裁定不做（ADR-0354 决定五）。此前 in-progress——2026-11-01 协调方分诊，用户裁定：争议的提出与处理做管理台入口（客服代登记、财务核实后处理、按授予收起），由票 03 承接（分支 `claude-disputes`）；相对方确认本产品不记，设计源「待确认应收」一格不做。03 进 main 时本票随之收口。此前 needs-triage——2026-11-01 由票 [01](./01-held-at-customs-and-disputed-statement-tiles.md) 作者立，待协调方分诊
 Blocked by: 无（做不做、谁来提出与确认是一项用户决定）
 出处：首页「今日待办」待对账一格。设计源在待对账旁写的是「待确认应收」（客户对账单待客户确认）；票 01 只数得出单上未了结的争议，而争议今天在生产上又造不出来。
 

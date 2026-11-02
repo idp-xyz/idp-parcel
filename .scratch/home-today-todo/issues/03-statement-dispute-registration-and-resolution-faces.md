@@ -1,7 +1,7 @@
 # 03 客户对账单争议的管理台入口：客服代登记、财务核实后处理
 
 Category: enhancement
-Status: in-progress——2026-11-01 作者完工；评审（钉 `679392eaf`）阻断 3 条已修，复评（钉 `7eb16d2aa`）阻断清零，收尾两条已做，待进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
+Status: resolved——2026-11-01 进 main（全量 164 ok / 0 FAIL，种子退 0），见文末「评审记录」「进 main 记录」。此前 in-progress——2026-11-01 作者完工；评审（钉 `679392eaf`）阻断 3 条已修，复评（钉 `7eb16d2aa`）阻断清零，收尾两条已做，待进 main（后端票，作者只做「进 main 的步骤」第 1 步），分支 claude-disputes（从 origin/main `4aade8e49` 起，最后一笔见「完成记录·提交」）
 父票：无。由票 [02](./02-statement-confirmation-and-disputes-have-no-production-face.md)（在 `claude-hometodo` 上）转来：02 列的两条缺口里，「争议的提出与处理没有生产口」由本票做；「相对方确认不记」用户裁定不做（ADR-0354 决定五），02 收口时指向本票。
 Blocked by: 无
 地盘：`internal/accessidentity` 两种决定种类与迁移 `access_identity/0037`；`internal/settlementaccounting/{domain,application,ports,adapters/postgres,adapters/registrationjson,adapters/http}` 的争议开立与处理、迁移 `settlement_accounting/0052`；`cmd/parcel-api` 结算决定特性文件、编排包事务与未接线占位；`apps/admin-web` 对账单页与授予常量；演示种子步骤 `510`、`data/access/34`、`35`、`data/governance/75`、`76`、种子 README；ADR-0354；SA CONTEXT 一句；UC-SA-003 一句规则、两条 AT、交接一行；AT 盘点两行；本票。
@@ -96,3 +96,12 @@ Blocked by: 无
 - `679392eaf` ADR 改号 0354、参数位用例、本票换基记录与新规则的出处
 - `7eb16d2aa` 修订轮
 - 收尾一笔（见 git log，紧接 `7eb16d2aa`）
+
+## 评审记录（2026-11-01，隔离子代理，首轮钉 `679392eaf`，复评钉 `7eb16d2aa`）
+
+首轮阻断 3 条，复评清零。首轮阻断：S1 换基改号把种子 README 里两处指显示名称（ADR-0353）的引用误改成 0354；P1 `OpenDispute` 的 `DisputeAlreadyOpened` 分支不比内容，真库探针同编号金额 100 / 200 并发 10 轮输家都答 `EXISTING_DISPUTE` 并带回赢家金额，违背 UC-SA-003 与 ADR-0354 决定一；P2 ADR-0354 决定二对空白依据的答法与代码不一致（协调方裁改 ADR 原句贴合代码：形状错误入口答 400）。修订轮 `7eb16d2aa` 全数处理：撞主键分支走同一份 `CompareStoredDigest`（复评重跑并发探针 10+10 轮，异内容每轮答 `DISPUTE_CONFLICT`、同内容每轮答已存在）；作废判据改按提出时刻比作废时刻（协调方裁，复评真库三格核过，CONTEXT、ADR 决定三、UC、AT-SA-228 四处同一说法）；作废单已开争议处理到终局有真库用例；新补单张费用行读口 `GET /settlement-statement-lines`（守卫与同文件目录口一致、租户隔离、读不到答 500、不在册答 `STATEMENT_NOT_FOUND`、走主键）；ADR 决定三写明属机制、与 `PAR-SET-09` 分开；UC 交接补证据 / 请求方与决定方历史两格；前端不再指向尚未存在的替代单。复评非阻断两条由收尾笔 `67699d74a` 处理（协调方核过 diff 未再派复评）：读口改用写侧 `statementLineRow`；提出时刻不得晚于登记时刻（同参与方关系结束时刻的口径），ADR-0354 越权风险点 5 写明提出时刻是操作者陈述、系统不核实、可经登记人与 `recorded_at` 追查。「作废单不收新争议」复评判为忠于 SA CONTEXT（CONTEXT 未写作废单收不收新争议，无冲突句；AT-SA-227「作废不了结争议」只管已开争议）。
+
+## 进 main 记录（2026-11-01，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-disputes` tip `67699d74a` 作出处；隔离树把 `0a88def13..67699d74a` cherry-pick 到 main `a69eafec6`，无冲突；重生成 ADR 索引、AT 盘点计数与机制清点各成一笔，两项 `-check` 退 0；对 `7cd3e6b58` 跑全量 164 ok / 0 FAIL（含 PG）；种子一次性库 `seed_disputes` 退 0 后删库；管理台 `tsc -b` 过、`pnpm test` 1040 / 0。本笔票面簿记只动 `.md`，叠在验过的树上推确切 SHA。
+- 重放来的前几笔提交信息里写的是「ADR-0353」，是换号之前写的；本票的 ADR 是 **0354**（换号那一笔与票面「换基记录」有说明），0353 是 place-display-names/01 的显示名称。提交信息不改写。
