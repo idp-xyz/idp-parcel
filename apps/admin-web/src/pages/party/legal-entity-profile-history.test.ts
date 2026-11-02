@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { LegalEntityContactRecord, LegalEntityProfileRevisionRecord } from './api';
+import { contactPurposeLabels } from './legal-entity-profile';
 import {
   compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
   profileRevisionState, selectedProfileRevision,
@@ -102,4 +103,9 @@ test('地址开票独立比较，版本时间和依据元数据不混入资料�
   deepEqual(changed(a, b).map((row) => row.field), ['办公地址', '开票抬头']);
   equal(profileComparisonSummary(compareLegalEntityProfiles(a, { ...a, revision: 99, basis: 'NEW' })), '资料内容无变化');
   equal(profileComparisonSummary(), '首次登记');
+});
+
+test('完整资料快照数据保留主要联系人用途', () => {
+  const row = revision({ contacts: [contact({ primaryFor: ['FINANCE'] })] });
+  equal(row.contacts[0].primaryFor?.map((purpose) => contactPurposeLabels[purpose]).join('、'), '财务');
 });
