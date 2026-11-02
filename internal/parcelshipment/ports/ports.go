@@ -279,6 +279,42 @@ type SubmissionContinuationGuard interface {
 	Exclusively(ctx context.Context, identity domain.SourceIdentity, fn func(context.Context) error) error
 }
 
+// ShipmentDocumentNumberIssueOutcome 是一次取委托单据号的答案（ADR-0355 决定三、七、八），封闭三格。
+type ShipmentDocumentNumberIssueOutcome uint8
+
+const (
+	ShipmentDocumentNumberIssueOutcomeInvalid ShipmentDocumentNumberIssueOutcome = iota
+	// ShipmentDocumentNumberAssigned：取到了号，随委托同一笔落库。
+	ShipmentDocumentNumberAssigned
+	// ShipmentDocumentNumberingTimeZoneNotConfigured：委托的开立方没有业务时区、租户也没登单据编号时区。委托照常建成、
+	// 不带号，记下这个无号原因（决定七）。
+	ShipmentDocumentNumberingTimeZoneNotConfigured
+	// ShipmentDocumentNumberRuleCollision：编号规则渲染出的号连续撞上已用的号到了跳号上限（决定八）。这一次不建单：
+	// 编排必须让建单那一笔事务回滚——取过的流水只有回滚才释放，提交了就全成空号。
+	ShipmentDocumentNumberRuleCollision
+)
+
+// ShipmentDocumentNumberIssue 是取号的结果。Number 只在 ShipmentDocumentNumberAssigned 时在场。
+type ShipmentDocumentNumberIssue struct {
+	Outcome ShipmentDocumentNumberIssueOutcome
+	Number  domain.ShipmentDocumentNumber
+}
+
+// ShipmentDocumentNumberIssuer 是委托取单据号的消费侧端口（ADR-0025；ADR-0355 决定四）：编号能力属平台编号组件，
+// 本上下文只说要一个`SHIPMENT`的号。
+//
+// 它只能在建单那一笔事务里调——取号与委托落库同一事务，回滚即释放号码（决定三）；事务外调用即失败，不得替调用方另开
+// 事务。只在委托确定落库之后调：建单答了「已存在」而没落单、事务照常提交的那一路不取号，否则留下空号。
+type ShipmentDocumentNumberIssuer interface {
+	IssueShipmentDocumentNumber(ctx context.Context, tenant domain.TenantID) (ShipmentDocumentNumberIssue, error)
+}
+
+// ShipmentDocumentNumberRecorder 把开立结果（号或无号原因）记在刚建成的委托上，与建单同一笔事务。它只写还没有结果的
+// 那一行：号开立后不变、事后不补（决定三），所以不是一次可重复的保存，也不推进委托版本。
+type ShipmentDocumentNumberRecorder interface {
+	RecordShipmentDocumentNumbering(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
+}
+
 // ProductionHandoffDelivery 是向已判为当前权威的他方投递完整拟受理范围的那一次尝试。
 //
 // 它只携带范围与对方是谁，不携带治理侧的停写证据：那份证据回答的是「前任停笔了没有」，是本方
@@ -1651,6 +1687,9 @@ type ShipmentRequestSummaryRecord struct {
 	SubmissionVersionID domain.SubmissionVersionID
 	DeclaredParcelCount int
 	SubmittedAt         time.Time
+	// DocumentNumbering 是委托的单据号这一格（ADR-0355 决定十一）：有号，或记下的无号情形——管理台按它注明是
+	// 上线前开立还是单据编号时区未配置，不一律写成前者。
+	DocumentNumbering domain.ShipmentDocumentNumbering
 }
 
 // DeclaredParcelViewRecord 是详情里的一件声明包裹。测量值保持客户引用原样的字符串

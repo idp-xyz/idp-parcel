@@ -375,7 +375,7 @@ func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +466,7 @@ func TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}

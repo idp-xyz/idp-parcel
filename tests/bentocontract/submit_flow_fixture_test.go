@@ -12,11 +12,14 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	psdocnumbering "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/docnumbering"
 	psadapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberpg"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -261,6 +264,37 @@ func (identities *contractSubmissionIdentities) NextAcceptanceDecisionTaskID(
 	return domain.NewAcceptanceDecisionTaskID(fmt.Sprintf("PBC-TASK-%03d", identities.counter.Add(1)))
 }
 
+// shipmentDocumentNumberIssuer 装委托的取号适配器（ADR-0355）：取号编排、平台序列与规则册都是生产件，接在同一个 db 上，取号
+// 并进续办守卫那一笔。类型汇总在 cmd 一侧、本包导入不到，这里只汇总委托这一类——管线只开立委托。合成租户没登单据编号时区，
+// 委托照常建成、记「单据编号时区未配置」，序列不动。
+func shipmentDocumentNumberIssuer(t *testing.T, db *bentopg.DB, requests *psadapter.ShipmentRequests) psdocnumbering.Issuer {
+	t.Helper()
+	catalogue, err := docnumber.NewCatalogue(domain.DocumentNumberTypes())
+	if err != nil {
+		t.Fatalf("汇总单据编号类型:%v", err)
+	}
+	book, err := docnumberpg.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造规则册:%v", err)
+	}
+	sequences, err := docnumberpg.NewSequences(db)
+	if err != nil {
+		t.Fatalf("构造平台序列:%v", err)
+	}
+	assigner, err := docnumber.NewAssigner(docnumber.AssignerDeps{
+		Catalogue: catalogue, Book: book, Sequences: sequences, Transactions: book,
+		Secrets: docnumber.SecretTable{}, Clock: fixedContractClock{at: submitFlowSubmittedAt},
+	})
+	if err != nil {
+		t.Fatalf("构造取号编排:%v", err)
+	}
+	issuer, err := psdocnumbering.NewIssuer(assigner, requests)
+	if err != nil {
+		t.Fatalf("构造取号适配器:%v", err)
+	}
+	return issuer
+}
+
 type submitFlowFixture struct {
 	pool     *pgxpool.Pool
 	store    *outbox.Store
@@ -310,6 +344,7 @@ func newSubmitFlowFixture(
 		submitBase = wrapSubmitTransactor(submitBase)
 	}
 	submits := &countingTransactor{inner: submitBase}
+	issuer := shipmentDocumentNumberIssuer(t, db, requests)
 
 	handler := psapplication.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
@@ -320,6 +355,8 @@ func newSubmitFlowFixture(
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&contractSubmissionIdentities{},
 		fixedContractClock{at: submitFlowSubmittedAt},
+		issuer,
+		requests,
 	)
 
 	return &submitFlowFixture{

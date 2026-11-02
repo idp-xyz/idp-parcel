@@ -340,7 +340,8 @@ func declareTheMarkInAnotherRequest(t *testing.T, fixture *synVerticalFixture, s
 		t.Fatalf("构造归属答案仓储：%v", err)
 	}
 	handler := psapplication.NewSubmitShipmentRequestHandler(sources, fixture.requests, &synSProductionOwnership{t: t}, answers, sequentialSubmissionGuard{},
-		pshandoff.UnconfiguredOtherProductionAuthorityChannel{}, declaringRequestIdentities{suffix: suffix}, systemClock{})
+		pshandoff.UnconfiguredOtherProductionAuthorityChannel{}, declaringRequestIdentities{suffix: suffix}, systemClock{},
+		shipmentDocumentNumberIssuerForTest(t, fixture.db, fixture.requests), fixture.requests)
 	identity, err := psdomain.NewSourceIdentity(
 		fixture.identity.TenantID(),
 		mustPS(t, psdomain.NewCustomerAccountID, "SYN-CUSTOMER-NRI07-"+suffix),

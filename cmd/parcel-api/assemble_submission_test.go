@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	psdocnumbering "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/docnumbering"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
@@ -46,7 +47,7 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, nil, "")
+	submission, err := buildSubmissionOrchestration(db, nil, "", documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -86,7 +87,7 @@ func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testin
 	}
 	appendIsolatedAuthorityInterval(t, db)
 
-	submission, err := buildSubmissionOrchestration(db, nil, isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, nil, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -114,7 +115,7 @@ func TestARefusedSubmissionStillPreservesItsSource(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, nil, "")
+	submission, err := buildSubmissionOrchestration(db, nil, "", documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -283,7 +284,7 @@ func TestIsolatedSubmissionCrossesOwnershipOnceTheRegisterHasAMatchingInterval(t
 	}
 	appendIsolatedAuthorityInterval(t, db)
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}
@@ -321,7 +322,7 @@ func TestIsolatedSubmissionStillAnswersUnresolvedOnAnEmptyRegister(t *testing.T)
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority)
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}
@@ -617,6 +618,10 @@ func submissionAssembledThrough(
 	if wrapHandoff != nil {
 		downstream = wrapHandoff(handoff)
 	}
+	issuer, err := psdocnumbering.NewIssuer(documentAssignerForTest(t, db), requests)
+	if err != nil {
+		t.Fatalf("构造取号适配器：%v", err)
+	}
 	return shipmentapp.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
@@ -626,6 +631,8 @@ func submissionAssembledThrough(
 		channel,
 		identities,
 		clock,
+		issuer,
+		requests,
 	), store
 }
 

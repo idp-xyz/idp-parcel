@@ -36,9 +36,7 @@ func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT customer_account_id, source, source_request_key,
-		        shipment_request_id, state, submitted_at,
-		        current_submission_version_id, cardinality(declared_parcel_ids),
+		`SELECT `+summaryColumns+`,
 		        snapshot->'acceptanceTask'
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
@@ -62,12 +60,7 @@ func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 	for rows.Next() {
 		var row summaryRow
 		var rawTask []byte
-		if err := rows.Scan(
-			&row.customerAccountID, &row.source, &row.sourceRequestKey,
-			&row.shipmentRequestID, &row.state, &row.submittedAt,
-			&row.submissionVersionID, &row.declaredParcelCount,
-			&rawTask,
-		); err != nil {
+		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
 			return nil, fmt.Errorf("list authorized disposition queue: %w", err)
 		}
 		summary, err := row.record()

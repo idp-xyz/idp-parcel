@@ -53,9 +53,7 @@ func (views *ShipmentRequestViews) ListVisible(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT customer_account_id, source, source_request_key,
-		        shipment_request_id, state, submitted_at,
-		        current_submission_version_id, cardinality(declared_parcel_ids)
+		`SELECT `+summaryColumns+`
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
 		    AND customer_account_id = ANY($2)
@@ -73,11 +71,7 @@ func (views *ShipmentRequestViews) ListVisible(
 	var records []ports.ShipmentRequestSummaryRecord
 	for rows.Next() {
 		var row summaryRow
-		if err := rows.Scan(
-			&row.customerAccountID, &row.source, &row.sourceRequestKey,
-			&row.shipmentRequestID, &row.state, &row.submittedAt,
-			&row.submissionVersionID, &row.declaredParcelCount,
-		); err != nil {
+		if err := rows.Scan(row.targets()...); err != nil {
 			return nil, fmt.Errorf("list shipment request views: %w", err)
 		}
 		record, err := row.record()
@@ -107,9 +101,7 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 	var row summaryRow
 	var raw []byte
 	err = querier.QueryRow(ctx,
-		`SELECT customer_account_id, source, source_request_key,
-		        shipment_request_id, state, submitted_at,
-		        current_submission_version_id, cardinality(declared_parcel_ids),
+		`SELECT `+summaryColumns+`,
 		        snapshot
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
@@ -118,12 +110,7 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 		scope.TenantID().String(),
 		visibleAccounts(scope),
 		requestID.String(),
-	).Scan(
-		&row.customerAccountID, &row.source, &row.sourceRequestKey,
-		&row.shipmentRequestID, &row.state, &row.submittedAt,
-		&row.submissionVersionID, &row.declaredParcelCount,
-		&raw,
-	)
+	).Scan(append(row.targets(), &raw)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ShipmentRequestDetailRecord{}, false, nil
 	}
@@ -156,7 +143,13 @@ func visibleAccounts(scope domain.AuthorizedQueryScope) []string {
 	return values
 }
 
-// summaryRow 是两条查询共用的列面。逐字段过领域构造函数（record）：库里一行坏数据在
+// summaryColumns 是委托概要的列面，查阅列表、单份与各队列共用；扫描目标由 summaryRow.targets 按同一顺序给出，两处一起改。
+const summaryColumns = `customer_account_id, source, source_request_key,
+		        shipment_request_id, state, submitted_at,
+		        current_submission_version_id, cardinality(declared_parcel_ids),
+		        document_number, document_number_absence`
+
+// summaryRow 是各条查询共用的列面。逐字段过领域构造函数（record）：库里一行坏数据在
 // 这道门上暴露，不会变成一条看起来合法的概要——与仓储读回侧同一条纪律（ADR-0028）。
 type summaryRow struct {
 	customerAccountID   string
@@ -167,6 +160,17 @@ type summaryRow struct {
 	submittedAt         time.Time
 	submissionVersionID string
 	declaredParcelCount int
+	documentNumbering   documentNumberingColumns
+}
+
+// targets 是 summaryColumns 的扫描目标，顺序与它逐列对应。
+func (row *summaryRow) targets() []any {
+	return []any{
+		&row.customerAccountID, &row.source, &row.sourceRequestKey,
+		&row.shipmentRequestID, &row.state, &row.submittedAt,
+		&row.submissionVersionID, &row.declaredParcelCount,
+		&row.documentNumbering.number, &row.documentNumbering.absence,
+	}
 }
 
 func (row summaryRow) record() (ports.ShipmentRequestSummaryRecord, error) {
@@ -194,7 +198,12 @@ func (row summaryRow) record() (ports.ShipmentRequestSummaryRecord, error) {
 	if state.String() == "" {
 		return ports.ShipmentRequestSummaryRecord{}, fmt.Errorf("状态列不是本上下文的取值：%d", row.state)
 	}
+	numbering, err := row.documentNumbering.numbering()
+	if err != nil {
+		return ports.ShipmentRequestSummaryRecord{}, err
+	}
 	return ports.ShipmentRequestSummaryRecord{
+		DocumentNumbering:   numbering,
 		CustomerAccountID:   customer,
 		Source:              source,
 		SourceRequestKey:    requestKey,

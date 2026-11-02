@@ -219,6 +219,50 @@ func TestViewsListReportsRowsAndAnEmptyListAlike(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0355 决定十一——列表行带单据号；没有号的行不带 `documentNumber` 键（不答空串、不拿委托标识顶），只带
+// `documentNumberAbsence` 说是上线前开立还是单据编号时区未配置。
+//
+// Covers: `AT-PS-178`。
+func TestViewsListCarriesTheDocumentNumberOrWhyThereIsNone(t *testing.T) {
+	numbered := viewSummaryRecord(t, "REQ-3")
+	numbering, err := domain.NumberedShipment(mustValue(t, domain.NewShipmentDocumentNumber, "P20260906000003"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	numbered.DocumentNumbering = numbering
+	unconfigured := viewSummaryRecord(t, "REQ-2")
+	unconfigured.DocumentNumbering, err = domain.UnnumberedShipment(domain.DocumentNumberingTimeZoneNotConfigured)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := viewSummaryRecord(t, "REQ-1")
+	legacy.DocumentNumbering, err = domain.UnnumberedShipment(domain.IssuedBeforeDocumentNumbering)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)},
+		&viewsReaderDouble{rows: []ports.ShipmentRequestSummaryRecord{numbered, unconfigured, legacy}},
+		http.MethodGet, "/shipment-request-views")
+	var body struct {
+		Requests []map[string]json.RawMessage `json:"requests"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Requests) != 3 {
+		t.Fatalf("decode: %v %s", err, response.Body.Bytes())
+	}
+	if string(body.Requests[0]["documentNumber"]) != `"P20260906000003"` || body.Requests[0]["documentNumberAbsence"] != nil {
+		t.Fatalf("numbered row = %s", response.Body.Bytes())
+	}
+	for index, want := range map[int]string{1: `"NUMBERING_TIME_ZONE_NOT_CONFIGURED"`, 2: `"ISSUED_BEFORE_NUMBERING"`} {
+		if _, present := body.Requests[index]["documentNumber"]; present {
+			t.Fatalf("row %d carried a documentNumber key: %s", index, response.Body.Bytes())
+		}
+		if string(body.Requests[index]["documentNumberAbsence"]) != want {
+			t.Fatalf("row %d absence = %s, want %s", index, body.Requests[index]["documentNumberAbsence"], want)
+		}
+	}
+}
+
 // Covers: 单份查阅按 `shipmentRequestId` 参数分派到详情分支；已形成的详情整份透出，
 // 决定词汇与撤回端点同一套（ACCEPTED），无画像成员测量字段如实缺席。
 func TestViewsDetailReportsTheWholeView(t *testing.T) {

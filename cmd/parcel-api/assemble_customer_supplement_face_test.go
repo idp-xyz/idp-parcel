@@ -172,7 +172,7 @@ func TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase(
 	if err != nil {
 		t.Fatal(err)
 	}
-	submissionOrchestration, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	submissionOrchestration, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority, documentAssignerForTest(t, db))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,14 +10,17 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	psdocnumbering "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/docnumbering"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -263,6 +266,8 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&synSSubmissionIdentities{},
 		systemClock{},
+		shipmentDocumentNumberIssuerForTest(t, db, requests),
+		requests,
 	)
 	fixture.formHandler = psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
 		Requests:     requests,
@@ -701,6 +706,21 @@ var (
 // sequentialSubmissionGuard 直接调 fn：本包的提交都在用例自己的事务里一次一路地走，没有要排队的另一路；守卫真的排队由
 // cmd/parcel-api 的真库并发用例取证。
 type sequentialSubmissionGuard struct{}
+
+// shipmentDocumentNumberIssuerForTest 装生产同款的委托取号适配器（ADR-0355）。这里的提交都在用例自己开的那一笔事务里跑，取号与
+// 记号随之并进去；演示租户之外的合成租户没登单据编号时区，委托照常建成、记「单据编号时区未配置」。
+func shipmentDocumentNumberIssuerForTest(t *testing.T, db *bentopg.DB, requests *pspostgres.ShipmentRequests) psdocnumbering.Issuer {
+	t.Helper()
+	numbers, err := docnumbering.Build(db, docnumber.SecretTable{})
+	if err != nil {
+		t.Fatalf("装配编号组件：%v", err)
+	}
+	issuer, err := psdocnumbering.NewIssuer(numbers.Assigner, requests)
+	if err != nil {
+		t.Fatalf("构造取号适配器：%v", err)
+	}
+	return issuer
+}
 
 func (sequentialSubmissionGuard) Exclusively(ctx context.Context, _ psdomain.SourceIdentity, fn func(context.Context) error) error {
 	return fn(ctx)

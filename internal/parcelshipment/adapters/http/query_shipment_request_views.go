@@ -190,15 +190,20 @@ type viewDetailResponse struct {
 	Request *requestDetailBody `json:"request"`
 }
 
+// requestSummaryBody 的 `documentNumber` 是委托的单据号（管理台叫运单号，ADR-0355 决定十一），没有号时整键不出现、不拿委托标识
+// 顶；`documentNumberAbsence` 只在没有号时在场，说是哪一种（ISSUED_BEFORE_NUMBERING / NUMBERING_TIME_ZONE_NOT_CONFIGURED），
+// 管理台按它在技术详情里注明，不一律写成上线前开立。
 type requestSummaryBody struct {
-	ShipmentRequestID   string `json:"shipmentRequestId"`
-	CustomerAccountID   string `json:"customerAccountId"`
-	Source              string `json:"source"`
-	SourceRequestKey    string `json:"sourceRequestKey"`
-	State               string `json:"state"`
-	SubmissionVersionID string `json:"submissionVersionId"`
-	DeclaredParcelCount int    `json:"declaredParcelCount"`
-	SubmittedAt         string `json:"submittedAt"`
+	ShipmentRequestID     string `json:"shipmentRequestId"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
+	CustomerAccountID     string `json:"customerAccountId"`
+	Source                string `json:"source"`
+	SourceRequestKey      string `json:"sourceRequestKey"`
+	State                 string `json:"state"`
+	SubmissionVersionID   string `json:"submissionVersionId"`
+	DeclaredParcelCount   int    `json:"declaredParcelCount"`
+	SubmittedAt           string `json:"submittedAt"`
 }
 
 type requestDetailBody struct {
@@ -242,7 +247,7 @@ type decisionBody struct {
 }
 
 func summaryBodyOf(record ports.ShipmentRequestSummaryRecord) requestSummaryBody {
-	return requestSummaryBody{
+	body := requestSummaryBody{
 		ShipmentRequestID:   record.ShipmentRequestID.String(),
 		CustomerAccountID:   record.CustomerAccountID.String(),
 		Source:              record.Source.String(),
@@ -252,6 +257,13 @@ func summaryBodyOf(record ports.ShipmentRequestSummaryRecord) requestSummaryBody
 		DeclaredParcelCount: record.DeclaredParcelCount,
 		SubmittedAt:         record.SubmittedAt.UTC().Format(time.RFC3339Nano),
 	}
+	if number, numbered := record.DocumentNumbering.Number(); numbered {
+		body.DocumentNumber = number.String()
+	}
+	if absence, absent := record.DocumentNumbering.Absence(); absent {
+		body.DocumentNumberAbsence = absence.String()
+	}
+	return body
 }
 
 func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {

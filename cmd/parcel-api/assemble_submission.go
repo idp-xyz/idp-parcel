@@ -12,6 +12,7 @@ import (
 
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
+	psdocnumbering "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/docnumbering"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
@@ -21,6 +22,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
@@ -279,11 +281,19 @@ func (boundary submissionBoundary) Save(
 // 面向他方生产权威的出向通道同属实例半边（`PAR-GOV-05..07`），两种形态都放未配置适配器：
 // 归属判为`其他权威`时它如实答`通道未配置`，编排据以落 OWNERSHIP_UNRESOLVED 并给出续办引用
 // （ADR-0128 决定三）；恢复动作是「接一条真通道」，不是登记，也不是重试。
+//
+// 委托的单据号（ADR-0355 决定三、四）用 numbers——main 在同一个 db 上装的那一套取号编排，不在这里另装：另装就是第二份类型
+// 汇总，且框架按 DB 认事务归属，换一个 DB 构造的序列在守卫那一笔里会被拒。取号与记号都不套事务壳：它们只能并进守卫那一笔，
+// 套了壳，守卫之外的调用会自己开一笔事务取号，号就不随委托落定了；不套壳，那样的调用在事务判上就失败。
 func buildSubmissionOrchestration(
 	db *bentopg.DB,
 	isolated *isolatedWriteAdmission,
 	selfAuthority string,
+	numbers *docnumber.Assigner,
 ) (shipmenthttp.SubmissionHandler, error) {
+	if numbers == nil {
+		return nil, fmt.Errorf("parcel-api: shipment document numbering is not assembled")
+	}
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)
@@ -313,6 +323,10 @@ func buildSubmissionOrchestration(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment request submitted handoff: %w", err)
 	}
+	issuer, err := psdocnumbering.NewIssuer(numbers, requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment document number issuer: %w", err)
+	}
 	handler := shipmentapp.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
@@ -322,6 +336,8 @@ func buildSubmissionOrchestration(
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
+		issuer,
+		requests,
 	)
 	return handler, nil
 }

@@ -58,6 +58,10 @@ type RehydrateShipmentRequestSpec struct {
 	Baseline           RehydrateAcceptanceBaselineSpec
 	Commitment         RehydrateExpectedCommitmentSpec
 	SourceDataVersions []CustomerSourceDataVersion
+	// DocumentNumbering 是委托的单据号这一格（ADR-0355），收成品类型：包外只能经 NumberedShipment / UnnumberedShipment
+	// 造它。仓储读库里两列皆空的行写 IssuedBeforeDocumentNumbering，不留零值——零值是「还没开立」，读回一份那样的委托
+	// 就能被补上号；零值只留给不经库的重建（测试夹具）。
+	DocumentNumbering ShipmentDocumentNumbering
 	// Withdrawal 是撤回决定在库里的样子，只在`已撤回`下在场。撤回自带槽位而不写进 Decision：撤回不是接受
 	// 也不是拒绝，塞进去会让一次客户取消读成运营拒绝。漏带回，一份已撤回委托重建后只剩一个状态码，
 	// PS CONTEXT 要求保留的撤回决定标识、授权、请求方与原因全部丢失，重复撤回也答不出原撤回。
@@ -270,6 +274,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			formedAt: snapshot.Commitment.FormedAt,
 		},
 		sourceDataVersions: append([]CustomerSourceDataVersion(nil), snapshot.SourceDataVersions...),
+		documentNumbering:  snapshot.DocumentNumbering,
 	}
 	if err := request.validForRehydration(); err != nil {
 		return ShipmentRequest{}, err

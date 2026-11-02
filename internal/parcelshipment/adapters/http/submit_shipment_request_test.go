@@ -55,6 +55,62 @@ func TestSubmitReceiptNamesTheCurrentSubmissionVersion(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0355 决定十一、ADR-0140——提交答复新增 `documentNumber`：建成答刚开立的号，重放读回同一个号；既有各格不动。
+//
+// Covers: `AT-PS-177`。
+func TestSubmitAnswerCarriesTheDocumentNumberAndTheReplayReadsItBack(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.intake.commands = append(fixture.intake.commands, fixture.intake.commands[0])
+
+	first := decodeBody(t, fixture.post(t))
+	replay := decodeBody(t, fixture.post(t))
+
+	if first.Outcome != "SUBMITTED" || first.DocumentNumber != "P20260807000001" || first.DocumentNumberAbsence != "" {
+		t.Fatalf("first = %+v", first)
+	}
+	if replay.Outcome != "EXISTING_RESULT" || replay.DocumentNumber != first.DocumentNumber || replay.ShipmentRequestID != first.ShipmentRequestID {
+		t.Fatalf("replay = %+v", replay)
+	}
+}
+
+// Covers: ADR-0355 决定七、十一——没有单据号时 `documentNumber` 整键不出现（不答空串、不拿委托标识顶），`documentNumberAbsence`
+// 如实说是单据编号时区未配置。
+//
+// Covers: `AT-PS-178`。
+func TestSubmitAnswerWithoutANumberOmitsTheKeyAndSaysWhy(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.numbers.outcome = ports.ShipmentDocumentNumberingTimeZoneNotConfigured
+
+	response := fixture.post(t)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := fields["documentNumber"]; present {
+		t.Fatalf("an unnumbered request carried a documentNumber key: %s", response.Body.Bytes())
+	}
+	if body := decodeBody(t, response); body.Outcome != "SUBMITTED" || body.DocumentNumberAbsence != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" {
+		t.Fatalf("body = %+v", body)
+	}
+}
+
+// Covers: ADR-0355 决定八、ADR-0022——编号规则撞号是一个业务答案：200、`outcome` 是 NUMBERING_RULE_COLLISION，不指名委托、不带号。
+//
+// Covers: `AT-PS-179`。
+func TestSubmitAnswersANumberingRuleCollisionAsAnOutcome(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.numbers.outcome = ports.ShipmentDocumentNumberRuleCollision
+
+	response := fixture.post(t)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	body := decodeBody(t, response)
+	if body.Outcome != "NUMBERING_RULE_COLLISION" || body.ShipmentRequestID != "" || body.DocumentNumber != "" {
+		t.Fatalf("body = %+v", body)
+	}
+}
+
 // Covers: ADR-0022 「业务判别一律进响应体」 — 六种没有建单的答案都是答案，因此都是 200；
 // 状态码不区分它们，`outcome` 区分。
 func TestSubmitReportsOKForEveryAnswerThatBuiltNoRequest(t *testing.T) {
@@ -333,12 +389,14 @@ func TestSubmitRejectsOtherMethods(t *testing.T) {
 }
 
 type responseBody struct {
-	Outcome             string         `json:"outcome"`
-	PriorOutcome        string         `json:"priorOutcome"`
-	ShipmentRequestID   string         `json:"shipmentRequestId"`
-	SubmissionVersionID string         `json:"submissionVersionId"`
-	GateBlockReasons    []string       `json:"gateBlockReasons"`
-	ProductionOwnership *ownershipBody `json:"productionOwnership"`
+	Outcome               string         `json:"outcome"`
+	PriorOutcome          string         `json:"priorOutcome"`
+	ShipmentRequestID     string         `json:"shipmentRequestId"`
+	DocumentNumber        string         `json:"documentNumber"`
+	DocumentNumberAbsence string         `json:"documentNumberAbsence"`
+	SubmissionVersionID   string         `json:"submissionVersionId"`
+	GateBlockReasons      []string       `json:"gateBlockReasons"`
+	ProductionOwnership   *ownershipBody `json:"productionOwnership"`
 }
 
 // ownershipBody 逐字钉响应体里归属决定那一节的字段名：它是 JSON 契约，管理台按名读。
@@ -380,6 +438,7 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
+	numbers   *documentNumberIssuerDouble
 }
 
 // newFixture 的出向通道给完整确认（handoffChannelDouble）：表驱动那格 OTHER_PRODUCTION_AUTHORITY
@@ -395,6 +454,7 @@ func newFixtureHandingOffThrough(t *testing.T, handoff ports.OtherProductionAuth
 		sources:   &sourceRepositoryDouble{records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{}},
 		requests:  &shipmentRequestRepositoryDouble{records: map[domain.SourceIdentity]domain.ShipmentRequest{}},
 		ownership: &ownershipAuthorityDouble{t: t, authority: domain.ProductionAuthorityIDPParcel, control: domain.AdmissionControlOpen},
+		numbers:   &documentNumberIssuerDouble{},
 	}
 	value.intake = &intakeDouble{commands: []application.SubmitShipmentRequestCommand{value.command(t)}}
 	value.handler = shipmenthttp.NewSubmitShipmentRequestEndpoint(
@@ -408,6 +468,8 @@ func newFixtureHandingOffThrough(t *testing.T, handoff ports.OtherProductionAuth
 			handoff,
 			&identityFactoryDouble{},
 			fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
+			value.numbers,
+			value.requests,
 		),
 	)
 	return value
@@ -557,6 +619,31 @@ func (double *shipmentRequestRepositoryDouble) Save(
 ) (ports.ShipmentRequestSaveOutcome, error) {
 	double.records[identity] = request
 	return ports.ShipmentRequestSaved, nil
+}
+
+func (double *shipmentRequestRepositoryDouble) RecordShipmentDocumentNumbering(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) error {
+	double.records[identity] = request
+	return nil
+}
+
+// documentNumberIssuerDouble 扮演平台编号组件：默认出一个固定的号，outcome 设成另两格时答那一格。
+type documentNumberIssuerDouble struct {
+	outcome ports.ShipmentDocumentNumberIssueOutcome
+}
+
+func (double *documentNumberIssuerDouble) IssueShipmentDocumentNumber(
+	context.Context,
+	domain.TenantID,
+) (ports.ShipmentDocumentNumberIssue, error) {
+	if double.outcome != ports.ShipmentDocumentNumberIssueOutcomeInvalid && double.outcome != ports.ShipmentDocumentNumberAssigned {
+		return ports.ShipmentDocumentNumberIssue{Outcome: double.outcome}, nil
+	}
+	number, err := domain.NewShipmentDocumentNumber("P20260807000001")
+	return ports.ShipmentDocumentNumberIssue{Outcome: ports.ShipmentDocumentNumberAssigned, Number: number}, err
 }
 
 type ownershipAuthorityDouble struct {
