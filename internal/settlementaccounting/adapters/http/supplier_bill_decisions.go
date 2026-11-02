@@ -18,7 +18,8 @@ import (
 const (
 	// OperatorDecisionSupplierBillReception 是接收一份供应商账单并裁决逐行匹配。
 	OperatorDecisionSupplierBillReception OperatorDecision = "SUPPLIER_BILL_RECEPTION"
-	// OperatorDecisionSupplierBillAudit 是对账单的一行形成审核应付。
+	// OperatorDecisionSupplierBillAudit 是对账单一行上的一段给出审核结果：通过（形成审核应付）、争议或拒绝，含争议的再审
+	// （ADR-0357 决定二；争议决定与审核同一种授予是它的越权风险点）。
 	OperatorDecisionSupplierBillAudit OperatorDecision = "SUPPLIER_BILL_AUDIT"
 )
 
@@ -131,12 +132,16 @@ func NewAuditSupplierBillEndpoint(intake SupplierBillAuditIntake, auditor Suppli
 	})
 }
 
+// receptionResponse 的 registeredClaim 与 registeredSupplierBillNumber 只在账单号冲突时出现、恰出其一：前者是这个号已标识的那份
+// 主张，后者是这份主张已登记的那个号（ADR-0357 决定一）。
 type receptionResponse struct {
-	Outcome               string                  `json:"outcome"`
-	UndecidedReason       string                  `json:"undecidedReason,omitempty"`
-	ContinuationReference string                  `json:"continuationReference,omitempty"`
-	AuditAuthority        string                  `json:"auditAuthority,omitempty"`
-	NotCurrent            *expectedNotCurrentBody `json:"notCurrent,omitempty"`
+	Outcome                      string                  `json:"outcome"`
+	UndecidedReason              string                  `json:"undecidedReason,omitempty"`
+	ContinuationReference        string                  `json:"continuationReference,omitempty"`
+	AuditAuthority               string                  `json:"auditAuthority,omitempty"`
+	NotCurrent                   *expectedNotCurrentBody `json:"notCurrent,omitempty"`
+	RegisteredClaim              string                  `json:"registeredClaim,omitempty"`
+	RegisteredSupplierBillNumber string                  `json:"registeredSupplierBillNumber,omitempty"`
 }
 
 type expectedNotCurrentBody struct {
@@ -168,6 +173,9 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	if result.AuditUndecided() {
 		body.AuditAuthority = "UNCONFIGURED"
 	}
+	if conflict, has := result.NumberConflict(); has {
+		body.RegisteredClaim, body.RegisteredSupplierBillNumber = conflict.RegisteredClaim.String(), conflict.RegisteredNumber.String()
+	}
 	if notCurrent, has := result.NotCurrent(); has {
 		body.NotCurrent = &expectedNotCurrentBody{
 			Line: notCurrent.Line.String(), Version: notCurrent.Version.String(),
@@ -181,22 +189,31 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	writeJSON(response, status, body)
 }
 
-// auditResponse 的 payable 是调用方生成的应付标识（幂等键）；documentNumber 是服务端形成应付时按编号规则取的应付单据号
-// （ADR-0355 决定十），没有时不出这一格，改出 documentNumberAbsence。documentType 只在撞号时出现。
+// auditResponse 的 decision 是调用方生成的审核决定标识（幂等键），verdict 与 rangeFrom、rangeTo 是这份决定给的结果与那一段；
+// 通过的那一份另带 payable（就是决定标识，ADR-0357 决定三）、金额与币种，documentNumber 是服务端形成应付时按编号规则取的应付
+// 单据号（ADR-0355 决定十），没有时不出这一格，改出 documentNumberAbsence。documentType 只在撞号时出现。matchedAmount 与
+// passedAmount 只在这一行不可审核时出现：这一行的已匹配金额与此前已通过的金额，好让人知道还能通过多少。
 type auditResponse struct {
 	Outcome               string `json:"outcome"`
+	Decision              string `json:"decision,omitempty"`
+	Verdict               string `json:"verdict,omitempty"`
+	RangeFrom             string `json:"rangeFrom,omitempty"`
+	RangeTo               string `json:"rangeTo,omitempty"`
+	ResolvesDispute       string `json:"resolvesDispute,omitempty"`
 	Payable               string `json:"payable,omitempty"`
 	DocumentNumber        string `json:"documentNumber,omitempty"`
 	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
 	DocumentType          string `json:"documentType,omitempty"`
 	Amount                string `json:"amount,omitempty"`
 	Currency              string `json:"currency,omitempty"`
+	MatchedAmount         string `json:"matchedAmount,omitempty"`
+	PassedAmount          string `json:"passedAmount,omitempty"`
 	UndecidedReason       string `json:"undecidedReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 }
 
 // writeAuditAnswer 判据同上。审核授权、应付归集账户、越权升级上限三册没登是租户取值缺席，答 200 带原因；超上限要升级、这一行不可
-// 审核都是答案；其余未决是册读不动。
+// 审核、范围已裁决、冲突都是答案；形成应付、记下争议或拒绝答 201；其余未决是册读不动。
 func writeAuditAnswer(response http.ResponseWriter, result application.AuditResult) {
 	name := result.Outcome().String()
 	if name == "" {
@@ -217,13 +234,26 @@ func writeAuditAnswer(response http.ResponseWriter, result application.AuditResu
 	if result.Outcome() == application.PayableNumberingRuleCollision {
 		body.DocumentType = string(domain.AuditedPayableDocumentNumberType.Code)
 	}
+	if decision, has := result.Decision(); has {
+		span := decision.Decision.Span()
+		body.Decision, body.Verdict = decision.Key.Decision.String(), decision.Decision.Verdict().String()
+		body.RangeFrom, body.RangeTo = minorAmount(span.From()), minorAmount(span.To())
+		if resolves, resolving := decision.Decision.Resolves(); resolving {
+			body.ResolvesDispute = resolves.String()
+		}
+	}
 	if record, has := result.Payable(); has {
 		currency, minor := record.Payable.Amount()
 		body.Payable, body.Currency, body.Amount = record.Payable.Payable().String(), currency.String(), minorAmount(minor)
 		body.DocumentNumber, body.DocumentNumberAbsence = record.Numbering.Words()
 	}
+	if result.Outcome() == application.LineNotAuditable {
+		matched, passed := result.MatchedAmounts()
+		body.MatchedAmount, body.PassedAmount = minorAmount(matched), minorAmount(passed)
+	}
 	status := http.StatusOK
-	if result.Outcome() == application.PayableFormed {
+	switch result.Outcome() {
+	case application.PayableFormed, application.AuditDisputeRecorded, application.AuditRejectionRecorded:
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, body)

@@ -13,9 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// AuditedPayables 实现 ports.AuditedPayableStore。主键（租户+应付身份）与唯一约束（租户+
-// 主张+行）都由 ON CONFLICT DO NOTHING 加零行判定翻译成`已有记录`（ADR-0031），撞哪一个都
-// 不把事务打进中止态——编排还要同事务按行读回赢家作答。
+// AuditedPayables 实现 ports.AuditedPayableStore。主键（租户+应付身份）由 ON CONFLICT DO NOTHING 加零行判定翻译成`已有记录`
+// （ADR-0031），不把事务打进中止态。一行可以有几份应付（0054 撤下了按行的唯一约束），同一行的审核在审核决定册上排队。
 type AuditedPayables struct {
 	db *bentopg.DB
 }
@@ -42,17 +41,6 @@ func (repository *AuditedPayables) FindByKey(
 ) (ports.AuditedPayableRecord, bool, error) {
 	return repository.findOne(ctx, key.TenantID,
 		`WHERE tenant_id = $1 AND payable_id = $2`, key.TenantID.String(), key.Payable.String())
-}
-
-// FindByLine 按（主张+行）取回那一行的应付——一行只成立一份，所以最多一条。
-func (repository *AuditedPayables) FindByLine(
-	ctx context.Context,
-	tenant domain.TenantID,
-	claim domain.BillClaimID,
-	line domain.BillLineReference,
-) (ports.AuditedPayableRecord, bool, error) {
-	return repository.findOne(ctx, tenant,
-		`WHERE tenant_id = $1 AND claim_id = $2 AND line_ref = $3`, tenant.String(), claim.String(), line.String())
 }
 
 func (repository *AuditedPayables) findOne(
@@ -96,31 +84,6 @@ func (repository *AuditedPayables) findOne(
 	}, true, nil
 }
 
-// LockIssuance 以两把事务级咨询锁把同一应付身份、同一行主张的审核排成一队（见 ports.AuditedPayableStore）。先身份后行，
-// 次序固定：每笔审核各只拿一个身份与一行，按同一次序取就不会互等成环。
-func (repository *AuditedPayables) LockIssuance(
-	ctx context.Context,
-	key ports.AuditedPayableKey,
-	claim domain.BillClaimID,
-	line domain.BillLineReference,
-) error {
-	executor, err := repository.db.RequireExecutor(ctx)
-	if err != nil {
-		return fmt.Errorf("lock audited payable issuance: %w", err)
-	}
-	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.audited_payable.identity'), hashtext($1 || chr(31) || $2))`,
-		key.TenantID.String(), key.Payable.String()); err != nil {
-		return fmt.Errorf("lock audited payable issuance: %w", err)
-	}
-	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.audited_payable.line'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
-		key.TenantID.String(), claim.String(), line.String()); err != nil {
-		return fmt.Errorf("lock audited payable issuance: %w", err)
-	}
-	return nil
-}
-
 // DocumentNumberUsed 答一个应付号是否已在本租户的审核应付册上。
 func (repository *AuditedPayables) DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error) {
 	used, err := documentNumberUsed(ctx, repository.db, auditedPayableTable, tenant, number)
@@ -130,8 +93,7 @@ func (repository *AuditedPayables) DocumentNumberUsed(ctx context.Context, tenan
 	return used, nil
 }
 
-// Save 写下一份审核应付。同身份或同一行已有应付时答`已有记录`——业务答案不是错误
-// （ADR-0031），编排据此按行读回赢家。
+// Save 写下一份审核应付。同身份已有应付时答`已有记录`——业务答案不是错误（ADR-0031）。
 func (repository *AuditedPayables) Save(
 	ctx context.Context,
 	record ports.AuditedPayableRecord,

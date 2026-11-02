@@ -81,9 +81,9 @@ func RehydrateBillLineMatch(spec RehydrateBillLineMatchSpec) (BillLineMatch, err
 	}, nil
 }
 
-// RehydrateAuditedPayableSpec 是应付行在库里的样子。FormAuditedPayable 要一份匹配本体才能
-// 拒非`已匹配`行——行里只有审核结果，那道门是写入时判过的；重建门复验的是结果自证的那
-// 几件：身份与依据齐备、预期成本在场（`已匹配`行必有它）、金额恒正、审核时点在场。
+// RehydrateAuditedPayableSpec 是应付行在库里的样子。FormAuditedPayable 要匹配本体与一份通过的审核决定才能判这一段该不该付
+// ——行里只有审核结果，那道门是写入时判过的；重建门复验的是结果自证的那几件：身份与依据齐备、预期成本在场（已匹配金额
+// 为正的行必有它）、金额恒正、审核时点在场。
 type RehydrateAuditedPayableSpec struct {
 	Payable     PayableID
 	Claim       BillClaimID

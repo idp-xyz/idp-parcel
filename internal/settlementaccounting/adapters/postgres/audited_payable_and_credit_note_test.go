@@ -18,7 +18,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证 UC-SA-004 步 5–7 的两张判断库：审核应付整行往返后经重建门
-// 复验、一行主张只成立一份应付（库内唯一约束）、同身份撞写答`已有记录`且事务保持可用
+// 复验、一行主张可以有几份应付（一段一份，0054 撤下了按行的唯一约束）、同身份撞写答`已有记录`且事务保持可用
 // （ADR-0031）；供应商费用贷项按（身份+版本）追加、回指原应付而不改它；两者租户隔离、
 // 无事务拒、回滚无痕、金额与依据由库内 CHECK 钉住。
 
@@ -28,7 +28,7 @@ var (
 	creditNoteIssuedAt = time.Date(2026, 9, 12, 9, 0, 0, 0, time.UTC)
 )
 
-func TestAnAuditedPayableRoundTripsAndOneLineFormsOnePayable(t *testing.T) {
+func TestAnAuditedPayableRoundTripsAndALineMayHoldSeveral(t *testing.T) {
 	payables, _, transactor, _ := newPayableStores(t)
 	ctx := t.Context()
 
@@ -52,29 +52,17 @@ func TestAnAuditedPayableRoundTripsAndOneLineFormsOnePayable(t *testing.T) {
 		t.Fatalf("金额往返变形：%s %d", currency, minor)
 	}
 
-	byLine, present, err := payables.FindByLine(ctx, record.Key.TenantID,
-		saValue(t, domain.NewBillClaimID, "claim-1"), saValue(t, domain.NewBillLineReference, "L1"))
-	if err != nil || !present || byLine.Key.Payable.String() != "payable-1" {
-		t.Fatalf("按行读回：present=%v err=%v key=%s", present, err, byLine.Key.Payable)
-	}
-
-	// 同一行第二份应付：库内唯一约束拦下，答`已有记录`，先到者不动，撞键后同事务仍可读。
+	// 同一行第二份应付（另一段通过）：照常落库，先到者不动。范围不重叠由审核决定册担保，不在这张表上。
 	var secondOutcome ports.AuditedPayableSaveOutcome
-	var lineWinner ports.AuditedPayableRecord
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
 		secondOutcome, err = payables.Save(txCtx, payableRecord(t, "tenant-1", "payable-2", "claim-1", "L1", "digest-2"))
-		if err != nil {
-			return err
-		}
-		lineWinner, _, err = payables.FindByLine(txCtx, record.Key.TenantID,
-			saValue(t, domain.NewBillClaimID, "claim-1"), saValue(t, domain.NewBillLineReference, "L1"))
 		return err
 	})
-	if secondOutcome != ports.AuditedPayableAlreadyRecorded {
-		t.Fatalf("second payable outcome = %d, want ALREADY_RECORDED（一行只成立一份应付）", secondOutcome)
+	if secondOutcome != ports.AuditedPayableSaved {
+		t.Fatalf("second payable outcome = %d, want SAVED（一行可以有几份应付）", secondOutcome)
 	}
-	if lineWinner.Key.Payable.String() != "payable-1" {
+	if first, _, _ := payables.FindByKey(ctx, record.Key); first.ContentDigest != "digest-1" {
 		t.Fatal("同一行的第二份应付顶替了先到者")
 	}
 
@@ -156,10 +144,6 @@ func TestPayableAndCreditNoteScopesAreInvisibleToEachOther(t *testing.T) {
 		TenantID: saTenant(t, "tenant-b"), Payable: saValue(t, domain.NewPayableID, "payable-1"),
 	}); err != nil || present {
 		t.Errorf("他租户按同名键读到了本租户的应付：present=%v err=%v", present, err)
-	}
-	if _, present, err := payables.FindByLine(ctx, saTenant(t, "tenant-b"),
-		saValue(t, domain.NewBillClaimID, "claim-1"), saValue(t, domain.NewBillLineReference, "L1")); err != nil || present {
-		t.Errorf("他租户按同一行读到了本租户的应付：present=%v err=%v", present, err)
 	}
 	if _, present, err := notes.FindByKey(ctx, ports.SupplierCreditNoteKey{
 		TenantID: saTenant(t, "tenant-b"),

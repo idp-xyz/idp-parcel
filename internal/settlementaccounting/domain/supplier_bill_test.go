@@ -275,8 +275,8 @@ func TestLineMatchingClassifiesDifferencesPerLine(t *testing.T) {
 }
 
 // Covers: `AT-SA-089`「只对通过金额形成审核应付」与 `AT-SA-086`「差异不自动接受」——
-// 应付只由`已匹配`经授权审核形成；四种差异格进不来；金额币种从匹配取；应付类型上
-// 没有付款/净额字段（应付≠已付款）。
+// 应付只由一份通过的审核决定形成，金额是那一段的长度，币种从匹配取；争议与拒绝形成不了应付；
+// 应付类型上没有付款/净额字段（应付≠已付款）。
 func TestOnlyAuditedMatchesBecomePayables(t *testing.T) {
 	payableType := reflect.TypeOf(domain.AuditedPayable{})
 	for index := 0; index < payableType.NumField(); index++ {
@@ -295,52 +295,44 @@ func TestOnlyAuditedMatchesBecomePayables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("match: %v", err)
 	}
+	passed := decide(t, matched, nil, "payable-1", domain.AuditPassed, 0, 9000, "", "")
 
-	payable, err := domain.FormAuditedPayable(
-		matched,
-		settlementValue(t, domain.NewPayableID, "payable-1"),
+	payable, err := domain.FormAuditedPayable(matched, passed,
 		settlementValue(t, domain.NewLegalEntityReference, "legal-1"),
-		settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-		settlementValue(t, domain.NewAuditorReference, "auditor-1"),
-		billMatchedAt.Add(time.Hour),
-	)
+		settlementValue(t, domain.NewSettlementAccountID, "account-1"))
 	if err != nil {
 		t.Fatalf("form payable: %v", err)
 	}
 	currency, amount := payable.Amount()
-	if currency.String() != "USD" || amount != 12000 {
-		t.Fatalf("amount = %s %d（金额币种只能从匹配取）", currency, amount)
+	if currency.String() != "USD" || amount != 9000 {
+		t.Fatalf("amount = %s %d（金额取通过那一段的长度，币种从匹配取）", currency, amount)
+	}
+	if payable.Payable().String() != "payable-1" || payable.Auditor().String() != "auditor-1" {
+		t.Fatalf("应付身份 %s、审核方 %s 应取自审核决定", payable.Payable(), payable.Auditor())
 	}
 
-	t.Run("a variance cannot be audited into a payable", func(t *testing.T) {
-		variance, err := domain.MatchBillLine(claim, line1, domain.PriceVariance,
-			expectedCost(t, "cost/v1", 11000),
-			settlementValue(t, domain.NewMatchBasisReference, "price-evidence-1"), billMatchedAt)
-		if err != nil {
-			t.Fatalf("variance match: %v", err)
-		}
-		if _, err := domain.FormAuditedPayable(
-			variance,
-			settlementValue(t, domain.NewPayableID, "payable-x"),
-			settlementValue(t, domain.NewLegalEntityReference, "legal-1"),
-			settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-			settlementValue(t, domain.NewAuditorReference, "auditor-1"),
-			billMatchedAt.Add(time.Hour),
-		); !errors.Is(err, domain.ErrNotAuditable) {
-			t.Fatalf("error = %v, want ErrNotAuditable（超额差异不得被顺手接受）", err)
+	t.Run("a dispute or a rejection forms no payable", func(t *testing.T) {
+		for _, verdict := range []domain.AuditVerdict{domain.AuditDisputed, domain.AuditRejected} {
+			decision := decide(t, matched, nil, "decision-x", verdict, 0, 1000, "basis-1", "")
+			if _, err := domain.FormAuditedPayable(matched, decision,
+				settlementValue(t, domain.NewLegalEntityReference, "legal-1"),
+				settlementValue(t, domain.NewSettlementAccountID, "account-1")); !errors.Is(err, domain.ErrNotAuditable) {
+				t.Fatalf("%s: error = %v, want ErrNotAuditable", verdict, err)
+			}
 		}
 	})
 
-	t.Run("an audit without its auditor is refused", func(t *testing.T) {
-		if _, err := domain.FormAuditedPayable(
-			matched,
-			settlementValue(t, domain.NewPayableID, "payable-y"),
+	t.Run("a decision on another line is refused", func(t *testing.T) {
+		line2 := settlementValue(t, domain.NewBillLineReference, "line-2")
+		other, err := domain.MatchBillLine(claim, line2, domain.LineMatched,
+			expectedCost(t, "cost/v2", 3000), domain.MatchBasisReference{}, billMatchedAt)
+		if err != nil {
+			t.Fatalf("match line-2: %v", err)
+		}
+		if _, err := domain.FormAuditedPayable(other, passed,
 			settlementValue(t, domain.NewLegalEntityReference, "legal-1"),
-			settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-			domain.AuditorReference{},
-			billMatchedAt.Add(time.Hour),
-		); !errors.Is(err, domain.ErrInvalidAuditedPayable) {
-			t.Fatalf("error = %v; 无授权不得人工接受", err)
+			settlementValue(t, domain.NewSettlementAccountID, "account-1")); !errors.Is(err, domain.ErrInvalidAuditedPayable) {
+			t.Fatalf("error = %v, want ErrInvalidAuditedPayable", err)
 		}
 	})
 }

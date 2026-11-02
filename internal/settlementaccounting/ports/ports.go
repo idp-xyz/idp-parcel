@@ -207,9 +207,28 @@ const (
 
 // BillReceptionStore 按幂等键找回并保存账单接收（写入代数同 ADR-0031：并发落败读回
 // 赢家，不覆盖）。
+//
+// 供应商账单号是主张的外部标识，记在供应商账单号册上（ADR-0357 决定一）：Save 在主张带号时连同写下这层关系；FindByKey 读回
+// 的主张带的是这份主张的号（不论哪一版带来的）。FindBillNumberHolder 答（供应商，账单号）标识的是哪份主张，FindClaimBillNumber
+// 答一份主张已以哪个号登记；LockBillNumber 把同一主张（带号时还有同一供应商的同一账单号）的接收排成一队到本事务结束，查与写
+// 之间不漏并发——理由同 AuditDecisionStore.LockLine。number 为零值即这次来件没带号，只按主张排队。
 type BillReceptionStore interface {
 	FindByKey(ctx context.Context, key BillReceptionKey) (BillReceptionRecord, bool, error)
 	Save(ctx context.Context, record BillReceptionRecord) (BillSaveOutcome, error)
+	LockBillNumber(
+		ctx context.Context,
+		tenant domain.TenantID,
+		supplier domain.SupplierPartyReference,
+		number domain.SupplierBillNumber,
+		claim domain.BillClaimID,
+	) error
+	FindBillNumberHolder(
+		ctx context.Context,
+		tenant domain.TenantID,
+		supplier domain.SupplierPartyReference,
+		number domain.SupplierBillNumber,
+	) (domain.BillClaimID, bool, error)
+	FindClaimBillNumber(ctx context.Context, tenant domain.TenantID, claim domain.BillClaimID) (domain.SupplierBillNumber, bool, error)
 }
 
 // ExpectedCostView 按版本取回供应商预期成本供逐行匹配引用。found=false 表示该版本
@@ -420,29 +439,54 @@ const (
 	AuditedPayableAlreadyRecorded
 )
 
-// AuditedPayableStore 按幂等键找回并保存审核应付（写入代数同 ADR-0031）。FindByLine 是第二
-// 个读法：一行主张只成立一份应付（AT-SA-089 的「其他范围保持原状态」反过来说就是通过的那一
-// 格不再第二次通过），撞上同一行的第二份应付时编排要读回先到的那份作答。
-//
-// LockIssuance 把同一应付身份、同一行主张的审核排成一队，到本事务结束才放：两份应付各有一道唯一（身份、行），后到者
-// 要在取号之前就看见先到者，理由同 PublishedStatementStore.LockPublicationIntent。DocumentNumberUsed 答一个应付号是否
-// 已在本租户的册上，给取号判撞。
+// AuditedPayableStore 按幂等键找回并保存审核应付（写入代数同 ADR-0031）。一行可以有几份应付，各对应一段通过的范围
+// （ADR-0357 决定三）；同一行的审核在 AuditDecisionStore.LockLine 上排队，范围守恒由审核决定册担保，这里不再按行找。
+// DocumentNumberUsed 答一个应付号是否已在本租户的册上，给取号判撞。
 type AuditedPayableStore interface {
 	FindByKey(ctx context.Context, key AuditedPayableKey) (AuditedPayableRecord, bool, error)
-	FindByLine(
+	DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
+	Save(ctx context.Context, record AuditedPayableRecord) (AuditedPayableSaveOutcome, error)
+}
+
+// AuditDecisionKey 是审核决定的幂等键：同一决定身份只形成一次。通过时它也是所形成审核应付的身份。
+type AuditDecisionKey struct {
+	TenantID domain.TenantID
+	Decision domain.AuditDecisionID
+}
+
+// AuditDecisionRecord 是一次审核决定越过提交边界留下的东西：通过、争议或拒绝哪一种，落在哪一行的哪一段，依据与所解争议。
+// OperationEvidence 记由谁点下这一次，判据同 BillReceptionRecord 的同名格；审核授权方在决定本体上。
+type AuditDecisionRecord struct {
+	Key               AuditDecisionKey
+	ContentDigest     string
+	Decision          domain.BillLineAuditDecision
+	RecordedAt        time.Time
+	OperationEvidence string
+}
+
+type AuditDecisionSaveOutcome uint8
+
+const (
+	AuditDecisionSaveOutcomeInvalid AuditDecisionSaveOutcome = iota
+	AuditDecisionSaved
+	AuditDecisionAlreadyRecorded
+)
+
+// AuditDecisionStore 按幂等键找回并保存审核决定（写入代数同 ADR-0031）。ListByLine 读同一主张同一行上的全部决定（不分版本，
+// 含迁移回填的旧应付），审核门要在这一行的完整历史上判范围守恒。
+//
+// LockLine 把同一决定身份、同一行主张的审核排成一队，到本事务结束才放：后到者要在取号之前就看见先到者，同一行上的范围
+// 才判得准，理由同 PublishedStatementStore.LockPublicationIntent。Save 撞主键或撞库上的范围排他约束都答`已有记录`。
+type AuditDecisionStore interface {
+	LockLine(ctx context.Context, key AuditDecisionKey, claim domain.BillClaimID, line domain.BillLineReference) error
+	FindByKey(ctx context.Context, key AuditDecisionKey) (AuditDecisionRecord, bool, error)
+	ListByLine(
 		ctx context.Context,
 		tenant domain.TenantID,
 		claim domain.BillClaimID,
 		line domain.BillLineReference,
-	) (AuditedPayableRecord, bool, error)
-	LockIssuance(
-		ctx context.Context,
-		key AuditedPayableKey,
-		claim domain.BillClaimID,
-		line domain.BillLineReference,
-	) error
-	DocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
-	Save(ctx context.Context, record AuditedPayableRecord) (AuditedPayableSaveOutcome, error)
+	) ([]AuditDecisionRecord, error)
+	Save(ctx context.Context, record AuditDecisionRecord) (AuditDecisionSaveOutcome, error)
 }
 
 // SupplierCreditNoteKey 是供应商费用贷项的幂等键：同一贷项身份与版本只形成一次。

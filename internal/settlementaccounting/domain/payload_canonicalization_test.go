@@ -101,6 +101,14 @@ func TestCommandPayloadsRoundTripAsSAC1(t *testing.T) {
 			},
 		},
 		{
+			name:     "audit range",
+			document: `{"canonicalization":"SAC-1","face":"AUDIT_BILL_LINE_RANGE","claim":"CL","version":"V1","line":"L1","verdict":"DISPUTED","range_from":100,"range_to":250,"basis":"WHY","resolves":"D0"}`,
+			digest:   "SAC-1:ab53273f0f6a8a72c532ed54e4a54bdff2a1f454fc36bbb768e78fabb9dbaba3",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeAuditBillLineRangePayload("CL", "V1", "L1", "DISPUTED", 100, 250, "WHY", "D0")
+			},
+		},
+		{
 			name:     "credit note",
 			document: `{"canonicalization":"SAC-1","face":"FORM_SUPPLIER_CREDIT_NOTE","payable":"PAY","amount_minor":5,"reason":"WHY","issued_at":"2026-03-05T02:11:12.345678901Z"}`,
 			digest:   "SAC-1:af4a99cf2abdaa1a7d2878d2b6b0ce34eeedbd89f8f679887e2e504f7c1b209c",

@@ -67,22 +67,26 @@ func (repository *BillReceptions) FindByKey(
 
 	var (
 		supplier, legalEntity, period, currency string
+		billNumber                              *string
 		digest                                  string
 		claimJSON, matchesJSON                  []byte
 		auditConfigured                         bool
 		recordedAt                              time.Time
 	)
+	// 账单号标识的是主张而不是某一版：取这份主张在账单号册上的号，不论哪一版带来（ADR-0357 决定一）。
 	err = querier.QueryRow(ctx,
-		`SELECT supplier_ref, legal_entity, period_ref, currency,
-		        content_digest, claim, matches, audit_authority_configured, recorded_at
-		   FROM settlement_accounting.supplier_bill_reception
-		  WHERE tenant_id = $1
-		    AND claim_id = $2
-		    AND claim_version = $3`,
+		`SELECT r.supplier_ref, r.legal_entity, r.period_ref, r.currency, n.bill_number,
+		        r.content_digest, r.claim, r.matches, r.audit_authority_configured, r.recorded_at
+		   FROM settlement_accounting.supplier_bill_reception AS r
+		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
+		     ON n.tenant_id = r.tenant_id AND n.claim_id = r.claim_id
+		  WHERE r.tenant_id = $1
+		    AND r.claim_id = $2
+		    AND r.claim_version = $3`,
 		key.TenantID.String(),
 		key.Claim.String(),
 		key.Version.String(),
-	).Scan(&supplier, &legalEntity, &period, &currency,
+	).Scan(&supplier, &legalEntity, &period, &currency, &billNumber,
 		&digest, &claimJSON, &matchesJSON, &auditConfigured, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.BillReceptionRecord{}, false, nil
@@ -93,6 +97,7 @@ func (repository *BillReceptions) FindByKey(
 
 	claim, err := rebuildClaim(key, billClaimColumns{
 		supplier:    supplier,
+		billNumber:  catalogueText(billNumber),
 		legalEntity: legalEntity,
 		period:      period,
 		currency:    currency,
@@ -168,6 +173,9 @@ func (repository *BillReceptions) Save(
 	if err != nil {
 		return ports.BillSaveOutcomeInvalid, fmt.Errorf("save bill reception: %w", err)
 	}
+	if err := registerBillNumber(ctx, executor, record); err != nil {
+		return ports.BillSaveOutcomeInvalid, fmt.Errorf("save bill reception: %w", err)
+	}
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.supplier_bill_reception
@@ -199,8 +207,146 @@ func (repository *BillReceptions) Save(
 	return ports.BillSaved, nil
 }
 
+// registerBillNumber 在接收行之前写下账单号这层关系：主张没带号就不写。同一主张同一号已登（新版本带同号）撞主键什么也不做；
+// 撞上另一份主张或这份主张的另一个号是编排没排队就来写——查重归编排（它先按号与主张排队、再查），这里只核写下去的那一行确实是
+// 这份主张的这个号，不是就交回错误：这时接收行还没写，回滚不留半份。
+func registerBillNumber(ctx context.Context, executor bentopg.Executor, record ports.BillReceptionRecord) error {
+	number, numbered := record.Claim.BillNumber()
+	if !numbered {
+		return nil
+	}
+	tenant, supplier, claim := record.Key.TenantID.String(), record.Claim.Supplier().String(), record.Claim.Claim().String()
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO settlement_accounting.supplier_bill_number
+			(tenant_id, supplier_ref, bill_number, claim_id, claim_version, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT DO NOTHING`,
+		tenant, supplier, number.String(), claim, record.Key.Version.String(), record.RecordedAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("register supplier bill number: %w", err)
+	}
+	var holder string
+	err := executor.QueryRow(ctx,
+		`SELECT claim_id FROM settlement_accounting.supplier_bill_number
+		  WHERE tenant_id = $1 AND supplier_ref = $2 AND bill_number = $3`,
+		tenant, supplier, number.String(),
+	).Scan(&holder)
+	if err != nil {
+		return fmt.Errorf("register supplier bill number: %w", err)
+	}
+	if holder != claim {
+		return fmt.Errorf("register supplier bill number: %s 已标识主张 %s", number, holder)
+	}
+	registered, found, err := findClaimBillNumber(ctx, executor, record.Key.TenantID, record.Claim.Claim())
+	if err != nil {
+		return fmt.Errorf("register supplier bill number: %w", err)
+	}
+	if !found || registered != number {
+		return fmt.Errorf("register supplier bill number: 主张 %s 已以另一个号登记", claim)
+	}
+	return nil
+}
+
+// LockBillNumber 以事务级咨询锁把同一主张、带号时还有同一供应商的同一账单号的接收排成一队（见 ports.BillReceptionStore）。先主张后
+// 号，次序固定：每笔接收各只拿一个主张与至多一个号，按同一次序取就不会互等成环。
+func (repository *BillReceptions) LockBillNumber(
+	ctx context.Context,
+	tenant domain.TenantID,
+	supplier domain.SupplierPartyReference,
+	number domain.SupplierBillNumber,
+	claim domain.BillClaimID,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock supplier bill reception: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.supplier_bill_reception.claim'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), claim.String()); err != nil {
+		return fmt.Errorf("lock supplier bill reception: %w", err)
+	}
+	if number.String() == "" {
+		return nil
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.supplier_bill_number'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		tenant.String(), supplier.String(), number.String()); err != nil {
+		return fmt.Errorf("lock supplier bill reception: %w", err)
+	}
+	return nil
+}
+
+// FindBillNumberHolder 答（供应商，账单号）标识的是哪份主张。
+func (repository *BillReceptions) FindBillNumberHolder(
+	ctx context.Context,
+	tenant domain.TenantID,
+	supplier domain.SupplierPartyReference,
+	number domain.SupplierBillNumber,
+) (domain.BillClaimID, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.BillClaimID{}, false, fmt.Errorf("find supplier bill number holder: %w", err)
+	}
+	var holder string
+	err = querier.QueryRow(ctx,
+		`SELECT claim_id FROM settlement_accounting.supplier_bill_number
+		  WHERE tenant_id = $1 AND supplier_ref = $2 AND bill_number = $3`,
+		tenant.String(), supplier.String(), number.String(),
+	).Scan(&holder)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.BillClaimID{}, false, nil
+	}
+	if err != nil {
+		return domain.BillClaimID{}, false, fmt.Errorf("find supplier bill number holder: %w", err)
+	}
+	claim, err := domain.NewBillClaimID(holder)
+	if err != nil {
+		return domain.BillClaimID{}, false, fmt.Errorf("find supplier bill number holder: %w", err)
+	}
+	return claim, true, nil
+}
+
+// FindClaimBillNumber 答一份主张已以哪个号登记。
+func (repository *BillReceptions) FindClaimBillNumber(
+	ctx context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierBillNumber, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
+	}
+	number, found, err := findClaimBillNumber(ctx, querier, tenant, claim)
+	if err != nil {
+		return domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
+	}
+	return number, found, nil
+}
+
+func findClaimBillNumber(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierBillNumber, bool, error) {
+	var raw string
+	err := querier.QueryRow(ctx,
+		`SELECT bill_number FROM settlement_accounting.supplier_bill_number WHERE tenant_id = $1 AND claim_id = $2`,
+		tenant.String(), claim.String(),
+	).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SupplierBillNumber{}, false, nil
+	}
+	if err != nil {
+		return domain.SupplierBillNumber{}, false, err
+	}
+	number, err := domain.NewSupplierBillNumber(raw)
+	return number, err == nil, err
+}
+
 type billClaimColumns struct {
 	supplier    string
+	billNumber  string
 	legalEntity string
 	period      string
 	currency    string
@@ -255,6 +401,11 @@ func rebuildClaim(
 	}
 	if document.Supplements != "" {
 		if spec.SupplementsClaim, err = domain.NewBillClaimID(document.Supplements); err != nil {
+			return domain.SupplierBillClaim{}, err
+		}
+	}
+	if columns.billNumber != "" {
+		if spec.BillNumber, err = domain.NewSupplierBillNumber(columns.billNumber); err != nil {
 			return domain.SupplierBillClaim{}, err
 		}
 	}
