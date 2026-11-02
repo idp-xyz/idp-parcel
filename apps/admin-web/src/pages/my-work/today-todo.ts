@@ -1,8 +1,8 @@
 // 工作台首页「今日待办」的格子与判读（设计源「九、怎么落地」第三步：首页改成今日待办，各一格可点进去）。纯函数，node:test 钉着；
 // 取数在 Workbench.tsx。
 //
-// 每一格只数服务端读口**已经答出来**的「在等人处理」的件数，不自造统计：队列读口给什么，这里数什么；读口给了总数（pendingCount /
-// unhandledCount）就用它，没给就数行。读不到不报 0——未配置、无权查看、暂时读不到三种各显各的，0 只在读口真答了 0 时出现。
+// 每一格只数服务端读口**已经答出来**的「在等人处理」的件数，不自造统计：队列读口给什么，这里数什么；读口给了总数就用它（列表
+// 可能截断），没给就数行。读不到不报 0——未配置、无权查看、暂时读不到三种各显各的，0 只在读口真答了 0 时出现。
 // 页名一律取导航（pageTitleById），不在这里另起一套名字。
 
 /** 一格背后的读口答复，只看判读要用的那一点；与各域 ApiResult 的五格同构，避免首页静态引入各域的 api 模块。 */
@@ -104,4 +104,14 @@ export function openExceptionCaseCount(body: { cases: { closedAt?: string }[] })
 /** 审批与发布：列表里的每一份都还没发布（待批准或已批准待发布）。 */
 export function pendingPublicationCount(body: { drafts: unknown[] }): number {
   return body.drafts.length;
+}
+
+/** 卡关：读口给了全部件数（每个对象最近那份放行检查没过门的），列表可能截断，用件数。 */
+export function unadmittedObjectCount(body: { unadmittedCount: number }): number {
+  return body.unadmittedCount;
+}
+
+/** 待对账：读口给了挂着未了结异议的客户对账单的全部张数，列表可能截断，用张数。 */
+export function disputedStatementCount(body: { disputedCount: number }): number {
+  return body.disputedCount;
 }

@@ -6,10 +6,13 @@ import { statusToneText } from '../components/status-tone';
 import { listRecentObjects, recentObjectHash, type RecentObject } from './my-work/recent-objects';
 import { listSavedViews, savedViewHash, type SavedView } from './my-work/saved-views';
 import { InstantCell, moduleTitleOf } from './my-work/shared';
+import { unadmittedObjectsHash } from './customs/cases-address';
+import { disputedStatementsHash } from './settlement/reconciliation-address';
 import {
   acceptanceReviewCount,
   authorizedDispositionCount,
   controlReleaseCount,
+  disputedStatementCount,
   openExceptionCaseCount,
   pendingPublicationCount,
   postIntakeDispositionCount,
@@ -17,14 +20,23 @@ import {
   todoNoteText,
   todoStateOf,
   todoValueText,
+  unadmittedObjectCount,
   type TodoTileState,
 } from './my-work/today-todo';
 
 // 工作台首页 = 今日待办 + 我的工作（最近打开、保存的视图）+ 全部功能入口（设计源「九、怎么落地」第三步）。
 //
-// 今日待办每格读一个已有的队列读口，数「在等人处理」的件数（判读在 my-work/today-todo.ts）；点一格进那张列表。读口按格动态
-// 引入：首页在入口块里，静态引各域的 api 会把它们钉回入口块。读不到的格如实说未接通 / 无权查看 / 读不到，不报 0。
-// 「卡关」「待对账」两格设计源里有，但今天没有一个读口直接答「哪些在卡关」「哪些待对账」，不拿别的数凑，等读口有了再加。
+// 今日待办每格读一个队列读口，数「在等人处理」的件数（判读在 my-work/today-todo.ts）；点一格进那张列表，列表页能按地址筛的
+// 就带上筛选落在筛好的那一签。读口按格动态引入：首页在入口块里，静态引各域的 api 会把它们钉回入口块。读不到的格如实说
+// 未接通 / 无权查看 / 读不到，不报 0。
+//
+// 设计源列的是待受理、待处置、卡关、异常、待对账各一格。待处置在今天是几张各有主人的队列（受限运单、收寄后处置、资金释放），
+// 合成一格就得替几个读口加总、点进去也落不到一张列表，所以各占一格；合同与价格的审批发布不在设计源那一列里，但它同样是
+// 在等人处理的一张队列，留着。卡关与待对账是加出来的，不替换哪一格；各格按设计源的次序排。
+//
+// 卡关数的是每件运单最近一次放行检查（动作准入判断）没过门的——阻断、未决、未配置；待对账数的是挂着未了结异议的客户对账单——
+// 至少一项争议还没有终局结果。两问的定义在各自上下文的读口（关务的 UnadmittedObjects、结算的 DisputedCustomerStatements），
+// 首页只拿件数。设计源在待对账旁写的「待确认应收」本产品今天答不出：相对方确认不入账，没有记录不等于客户还没确认，不数。
 //
 // 原来的「模块就绪度总览」（已接线 / 页面骨架 / 规划占位）是给开发看的，不是给运营看的，首页不再摆；档位仍由
 // page-registry 的 readinessOf 派生，要用的工具照常取。我的工作两块读本机浏览器的记录，不发请求。页名一律取导航
@@ -33,6 +45,10 @@ import {
 interface TodoTile {
   /** 点进去的页 id；格子标题取这页在导航里的名字。 */
   id: string;
+  /** 点进去落在筛好的那一签的地址；缺席即只开页。 */
+  hash?: string;
+  /** 带筛选的格在页名后标出筛的是哪一类（设计源的叫法），与页上那个筛选开关同名。 */
+  filterLabel?: string;
   /** 有件数时格子下方那一句：这些件在等什么。 */
   waiting: string;
   load: () => Promise<TodoTileState>;
@@ -72,11 +88,31 @@ const todoTiles: TodoTile[] = [
     },
   },
   {
+    id: 'customs-cases',
+    hash: unadmittedObjectsHash,
+    filterLabel: '卡关',
+    waiting: '运单最近一次放行检查没过，卡在关务上',
+    load: async () => {
+      const api = await import('./customs/api');
+      return todoStateOf(await api.listUnadmittedObjects(), unadmittedObjectCount);
+    },
+  },
+  {
     id: 'exception-cases',
     waiting: '异常还没处理完',
     load: async () => {
       const api = await import('./visibility/case-api');
       return todoStateOf(await api.listExceptionCaseRecords(), openExceptionCaseCount);
+    },
+  },
+  {
+    id: 'reconciliation',
+    hash: disputedStatementsHash,
+    filterLabel: '待对账',
+    waiting: '客户对账单上有异议，等核实或处置',
+    load: async () => {
+      const api = await import('./settlement/api');
+      return todoStateOf(await api.listDisputedCustomerStatements(), disputedStatementCount);
     },
   },
   {
@@ -122,7 +158,7 @@ function TodoGrid({ onNavigate }: { onNavigate?: (id: string) => void }) {
           刷新
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {todoTiles.map((tile) => {
           const state = states[tile.id] ?? { kind: 'loading' };
           const attention = todoNeedsAttention(state);
@@ -131,12 +167,24 @@ function TodoGrid({ onNavigate }: { onNavigate?: (id: string) => void }) {
             <button
               key={tile.id}
               type="button"
-              onClick={onNavigate ? () => onNavigate(tile.id) : undefined}
+              onClick={
+                tile.hash
+                  ? () => {
+                      // 带筛选的格直接写 hash：与「我的工作」行点同一条路，外壳经 hashchange 回流开签。
+                      window.location.hash = tile.hash as string;
+                    }
+                  : onNavigate
+                    ? () => onNavigate(tile.id)
+                    : undefined
+              }
               className={`rounded border p-3 text-left hover:bg-idpxyz-hover ${
                 attention ? 'border-[color:var(--ds-status-warning-border)]' : 'border-idpxyz-border'
               }`}
             >
-              <span className="block text-[12px] text-idpxyz-textMuted">{pageTitleById[tile.id] ?? tile.id}</span>
+              <span className="block text-[12px] text-idpxyz-textMuted">
+                {pageTitleById[tile.id] ?? tile.id}
+                {tile.filterLabel ? ` · ${tile.filterLabel}` : null}
+              </span>
               <span
                 className={`mt-1 block font-bold ${counted ? 'text-[22px]' : 'text-[14px]'} ${
                   attention ? statusToneText.warning : counted ? 'text-idpxyz-textBright' : 'text-idpxyz-textMuted'

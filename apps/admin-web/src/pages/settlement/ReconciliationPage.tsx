@@ -8,9 +8,11 @@ import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
+  listDisputedCustomerStatements,
   listSettlementCharges,
   listSettlementStatements,
   type CustomerStatementListResponseBody,
+  type DisputedCustomerStatementListResponseBody,
   type CustomerStatementRecord,
   type SupplierBillReceptionListResponseBody,
   type SupplierBillReceptionRecord,
@@ -18,8 +20,10 @@ import {
 import { TwoLine, formatMoney, technicalRows } from './ops-ui';
 import { accountCounterparties } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
+import { disputedOnlyOf, reconciliationHash, reconciliationTabOf, type ReconciliationTab } from './reconciliation-address';
 
-// 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。两签都接 GET /settlement-statements 按 registry 分派。
+// 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。两签都接 GET /settlement-statements 按 registry 分派；
+// 客户对账单签另有「只看有未了结异议的」，换接 GET /settlement-disputed-statements。
 const info = moduleInfoById['reconciliation'];
 
 // 列上只有单据状态一栏：册上有作废留痕（依据与时刻成对），二态在库上完备。刻意没有「对账状态」与「结清状态」——
@@ -109,16 +113,29 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
   ];
 }
 
-function CustomerStatementsTable({ names }: { names: PartyNames }) {
+// 「只看有未了结异议的」是按单上已记的异议筛（至少一项还没有终局结果），不是给单下对账状态：对账状态要连相对方确认一起判，
+// 本产品不记相对方确认。张数取读口答的全部张数——在全册里自己数只数得到前两百张。首页「今日待办」的待对账格点进来就落在这里。
+function CustomerStatementsTable({
+  names,
+  disputedOnly,
+  onDisputedOnlyChange,
+}: {
+  names: PartyNames;
+  disputedOnly: boolean;
+  onDisputedOnlyChange: (next: boolean) => void;
+}) {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CustomerStatementListResponseBody> | null>(null);
+  const [answer, setAnswer] = useState<ApiResult<CustomerStatementListResponseBody | DisputedCustomerStatementListResponseBody> | null>(
+    null,
+  );
   const [accountOwners, setAccountOwners] = useState<Map<string, string>>(() => new Map());
 
   useEffect(() => {
     let cancelled = false;
     setAnswer(null);
-    void listSettlementStatements('customer-statement').then((next) => {
+    const load = disputedOnly ? listDisputedCustomerStatements() : listSettlementStatements('customer-statement');
+    void load.then((next: ApiResult<CustomerStatementListResponseBody | DisputedCustomerStatementListResponseBody>) => {
       if (!cancelled) setAnswer(next);
     });
     // 账户归谁的对应只是名称转写的辅助一问：它不成也不影响对账单本身的呈现，列上退回显账户号。
@@ -128,9 +145,11 @@ function CustomerStatementsTable({ names }: { names: PartyNames }) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [disputedOnly, reloadKey]);
 
-  const statements = answer?.kind === 'outcome' ? answer.body.statements : [];
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const statements = body ? body.statements : [];
+  const disputed = body && 'disputedCount' in body ? body : null;
   const needle = search.trim().toLowerCase();
   const visibleStatements = needle
     ? statements.filter((row) =>
@@ -142,24 +161,57 @@ function CustomerStatementsTable({ names }: { names: PartyNames }) {
   const retry = () => setReloadKey((value) => value + 1);
   const voided = statements.filter((row) => row.voidBasis).length;
 
+  const summary = disputed
+    ? `共 ${disputed.disputedCount} 张有未了结异议${disputed.truncated ? ` · 只列出前 ${statements.length} 张` : ''} · 其中已作废 ${voided} 张`
+    : `${statements.length} 张 · 已作废 ${voided} 张`;
+
   return (
-    <ListPageTemplate<CustomerStatementRecord>
-      title="客户对账单"
-      description="已发给客户的对账单；有异议另记在单上，不改单的金额"
-      search={{ value: search, onChange: setSearch, placeholder: '搜对账单号、客户、账期' }}
-      filterSummary={answer?.kind === 'outcome' ? `${statements.length} 张 · 已作废 ${voided} 张` : undefined}
-      columns={customerStatementColumns(accountOwners, names)}
-      rows={visibleStatements}
-      // 行键即对账单号：发布后固定，替代单用新单号。
-      rowKey={(row) => row.statementNumber}
-      emptyRowsNote="没有匹配的对账单"
-      viewState={catalogueViewState(answer, statements.length, retry, {
-        module: info,
-        endpoint: 'GET /settlement-statements?registry=customer-statement',
-        emptyTitle: '还没有发布过对账单',
-        emptyDescription: '费用确认后按账期归集成对账单，发布后在这里出现；页面不会预置对账单。',
-      })}
-    />
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={disputedOnly} onChange={(event) => onDisputedOnlyChange(event.target.checked)} />
+          只看待对账
+        </label>
+        <span className="text-xs text-idpxyz-textMuted">
+          {disputedOnly
+            ? '只列有异议还没处理完（未处理或待复核）的单；客户确认没确认本系统不记，不在这里筛'
+            : '勾上只看有异议还没处理完的单'}
+        </span>
+      </div>
+      <ListPageTemplate<CustomerStatementRecord>
+        title={disputedOnly ? '待对账的客户对账单' : '客户对账单'}
+        description={
+          disputedOnly
+            ? '单上至少一项异议还没有处理结果，或处理为待复核；接受、部分接受、拒绝都算处理完'
+            : '已发给客户的对账单；有异议另记在单上，不改单的金额'
+        }
+        search={{ value: search, onChange: setSearch, placeholder: '搜对账单号、客户、账期' }}
+        filterSummary={answer?.kind === 'outcome' ? summary : undefined}
+        columns={customerStatementColumns(accountOwners, names)}
+        rows={visibleStatements}
+        // 行键即对账单号：发布后固定，替代单用新单号。
+        rowKey={(row) => row.statementNumber}
+        emptyRowsNote="没有匹配的对账单"
+        viewState={catalogueViewState(
+          answer,
+          statements.length,
+          retry,
+          disputedOnly
+            ? {
+                module: info,
+                endpoint: 'GET /settlement-disputed-statements',
+                emptyTitle: '没有待对账的单',
+                emptyDescription: '已发布的对账单上没有还没处理完的异议。',
+              }
+            : {
+                module: info,
+                endpoint: 'GET /settlement-statements?registry=customer-statement',
+                emptyTitle: '还没有发布过对账单',
+                emptyDescription: '费用确认后按账期归集成对账单，发布后在这里出现；页面不会预置对账单。',
+              },
+        )}
+      />
+    </div>
   );
 }
 
@@ -277,17 +329,47 @@ function SupplierBillReceptionsTable({ names }: { names: PartyNames }) {
  * 独立成页（SettlementApplicationPage）——收付款事实与核销关系同对账单分别管理，收付款不改变对账单内容。
  * 本页是查阅面，不设发布、作废或异议裁定动作——那些各由自己的唯一创建用例形成。
  */
+/** 签与「只看待对账」的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
+function useReconciliationPlace(): [ReconciliationTab, boolean, (tab: ReconciliationTab, disputedOnly: boolean) => void] {
+  const [tab, setTab] = useState<ReconciliationTab>(() => reconciliationTabOf(window.location.hash));
+  const [disputedOnly, setDisputedOnly] = useState(() => disputedOnlyOf(window.location.hash));
+
+  useEffect(() => {
+    // 本签已开着时从首页点待对账格进来，地址变了而页不重挂载，要跟着地址走。
+    const onHashChange = () => {
+      setTab(reconciliationTabOf(window.location.hash));
+      setDisputedOnly(disputedOnlyOf(window.location.hash));
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const place = (nextTab: ReconciliationTab, nextDisputedOnly: boolean) => {
+    setTab(nextTab);
+    setDisputedOnly(nextDisputedOnly);
+    const hash = window.location.hash;
+    if (!hash.startsWith('#/')) return;
+    window.history.replaceState(window.history.state, '', reconciliationHash(hash, { tab: nextTab, disputedOnly: nextDisputedOnly }));
+  };
+  return [tab, disputedOnly, place];
+}
+
 export function ReconciliationPage() {
   const names = usePartyNames();
+  const [tab, disputedOnly, place] = useReconciliationPlace();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="customer" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => place(value === 'supplier' ? 'supplier' : 'customer', disputedOnly)}
+        className="flex-1 flex flex-col overflow-hidden gap-0"
+      >
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="customer">客户对账单</TabsTrigger>
           <TabsTrigger value="supplier">供应商账单</TabsTrigger>
         </TabsList>
         <TabsContent value="customer" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerStatementsTable names={names} />
+          <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={(next) => place('customer', next)} />
         </TabsContent>
         <TabsContent value="supplier" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SupplierBillReceptionsTable names={names} />

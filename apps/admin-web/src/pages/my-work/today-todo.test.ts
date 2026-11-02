@@ -2,11 +2,13 @@ import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
 import {
   acceptanceReviewCount,
+  disputedStatementCount,
   openExceptionCaseCount,
   todoNeedsAttention,
   todoNoteText,
   todoStateOf,
   todoValueText,
+  unadmittedObjectCount,
 } from './today-todo';
 
 // 本文件钉首页「今日待办」的判读：读口答了才有数，读不到不报 0，三种读不到分开说。
@@ -34,4 +36,9 @@ test('未接通、无权查看、读不到三种分开，不折成 0', () => {
 test('各格数的是在等人处理的那几件', () => {
   equal(acceptanceReviewCount({ entries: [{ reviewCompleted: false }, { reviewCompleted: true }] }), 1);
   equal(openExceptionCaseCount({ cases: [{}, { closedAt: '2026-10-28T00:00:00Z' }] }), 1);
+});
+
+test('卡关与待对账用读口答的全部件数，不数截断后的那一页', () => {
+  equal(unadmittedObjectCount({ unadmittedCount: 250 }), 250);
+  equal(disputedStatementCount({ disputedCount: 0 }), 0);
 });
