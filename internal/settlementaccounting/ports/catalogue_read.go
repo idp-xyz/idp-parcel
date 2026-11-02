@@ -225,6 +225,29 @@ type StatementCatalogueRead interface {
 	) ([]SupplierBillReceptionCatalogueRow, error)
 }
 
+// DisputedCustomerStatements 是「待对账」那一问的答案：挂着未了结争议的已发布客户对账单——单上的费用争议至少
+// 一项还没有终局结果（未处理，或处理为待复核，见 domain.DisputeResolutionKind.Final），即还在等人核实或处置。
+// 已作废的单不排除：作废不了结争议。
+//
+// 这是按单上已记的争议事实筛，不是替单下对账状态。对账状态（待确认、部分确认、已确认、存在争议）要连相对方确认
+// 一起判，而本产品今天不记相对方确认，所以也不数「待确认」：把未作废的单都当待确认，就是拿「没有记录」冒充
+// 「客户还没确认」。
+//
+// Count 是这样的单的全部张数，不受页大小截断；Statements 是其中一页，行形与对账单册同一份。
+type DisputedCustomerStatements struct {
+	Count      int
+	Statements []CustomerStatementCatalogueRow
+}
+
+// DisputedStatementRead 按租户上列挂着未了结争议的客户对账单，按单号排。
+type DisputedStatementRead interface {
+	ListDisputedCustomerStatements(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) (DisputedCustomerStatements, error)
+}
+
 // FundsMappingEntry 是一条真实收付映射：把某笔外部资金事实指向一个未结项，照
 // funds_mapping 转写。目标种类是封闭集，词表即 domain.SettlementTargetKind 的 String()。
 // 映射不是核销——事实接收、金额责任确认、真实到账与核销是不同结果（CONTEXT

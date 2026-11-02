@@ -13,6 +13,7 @@ func init() {
 		submissions: unwiredSubmissionRecords{},
 		results:     unwiredExternalResultViews{},
 		judgements:  unwiredAdmissionJudgementViews{},
+		unadmitted:  unwiredUnadmittedObjects{},
 	})
 }
 
@@ -46,4 +47,12 @@ func (unwiredAdmissionJudgementViews) ListActionAdmissionJudgements(
 	context.Context, customsdomain.TenantID, string, int,
 ) ([]customsports.ActionAdmissionJudgementRecord, error) {
 	return nil, errOrchestrationNotWired
+}
+
+type unwiredUnadmittedObjects struct{}
+
+func (unwiredUnadmittedObjects) ListUnadmittedObjects(
+	context.Context, customsdomain.TenantID, int,
+) (customsports.UnadmittedObjects, error) {
+	return customsports.UnadmittedObjects{}, errOrchestrationNotWired
 }

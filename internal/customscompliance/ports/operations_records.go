@@ -211,3 +211,23 @@ type ActionAdmissionJudgementRead interface {
 		limit int,
 	) ([]ActionAdmissionJudgementRecord, error)
 }
+
+// UnadmittedObjects 是「卡关」那一问的答案：每个对象只看动作时点最晚的那份动作准入判断，答复不让动作过门的
+// （domain.AdmissionAnswer.Admits 为假）就是卡在关务门禁上、等人处理的对象。来源变化不后台重算，放行到了而没人
+// 再过门的对象仍在这里——过门要人再问一次，这正是它还在等的那件事。
+//
+// Count 是这样的对象的全部件数，不受页大小截断；Judgements 是其中一页，每个对象一份（它最近的那份判断）。
+// 首页只拿件数，列表页拿这一页；件数若由调用方数这一页，过了页大小就会少报。
+type UnadmittedObjects struct {
+	Count      int
+	Judgements []ActionAdmissionJudgementRecord
+}
+
+// UnadmittedObjectRead 按租户上列卡在关务门禁上的对象，卡得最久的在前。
+type UnadmittedObjectRead interface {
+	ListUnadmittedObjects(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) (UnadmittedObjects, error)
+}
