@@ -1,332 +1,364 @@
 import { useEffect, useState } from 'react';
-import { Ban, FolderPlus, Link2, Search } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import {
-  ReviewFlowTemplate,
-  ListPageTemplate,
-  type DetailField,
-  type ListColumn,
-  type ReviewDecisionOption,
+  WorkbenchPageTemplate,
+  toggleWorkbenchSort,
+  useAddressKeyword,
+  type WorkbenchColumn,
+  type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { chipClass } from '../../components/registration';
-import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { StatusPill } from '../../components/StatusPill';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
+import { objectNouns } from '../../vocabulary/objects';
+import { formatInstant } from '../moment';
+import { matchesSearch } from '../party/list-order';
 import {
   listExceptionTriageRecords,
   type ApiResult,
   type DispositionRequestRecord,
-  type ExceptionTriageListResponseBody,
   type ExceptionTriageRegistry,
   type SignalEpisodeRecord,
 } from './case-api';
-import {
-  caseLabelOf,
-  dispositionCancellationLabels,
-  dispositionJudgmentLabels,
-} from './case-presentation';
-import { labelOf, sourceContextLabels, triageOutcomeLabels } from './presentation';
+import { handlerLabel } from './case-presentation';
+import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
+import { countByStatus, dispositionStatus, episodeStatus, sortRowsBy, type SortAccessor } from './exception-list';
+import { exceptionViewState } from './exception-view-state';
+import { statusFilterParts } from './status-filter';
+import { sourceContextLabels } from './presentation';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
+// 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['exception-triage'];
 
-/** 分诊结果的决定 id。四结果名单出自 visibility-exception CONTEXT.md「异常分诊」定义。 */
-type TriageDecisionId =
-  | 'link-existing-case'
-  | 'auto-establish-case'
-  | 'route-manual-review'
-  | 'no-case';
+// 异常处理（visibility-exception「异常识别、分诊与分级」与处置协调），对 GET /exception-triage-records 两本册取数，
+// 改版换成两签工作台：「异常信号」是进来的信号连同分诊结论，「处置请求」是案件发给各环节的处置。
+//
+// 改版前信号签是复核模板，四个分诊决定按钮全部禁用（分诊决定的命令端点未建）。一排永远点不动的按钮对运营只是噪音，
+// 改成右栏一句话说清楚「分诊按规则自动做，这里查看」；端点建成后再把决定区接回来。
+// 信号类型、可信度、处置动作是租户登记的开放引用，经词典分册取参考译法，查不到的码原样显示；规则、因果条件、事实依据、
+// 各种编号进右栏「技术详情」。
 
-/**
- * 分诊决定集。标签逐字取 CONTEXT.md「异常分诊」的四结果原词，不自造变体、
- * 不折叠为二元「建立案件 / 不建案」。
- *
- * 四项决定全部如实呈现为不可用：本页已接的是查阅面（GET /exception-triage-records，
- * 票 admin-skeleton-closure-batch/06），分诊决定的命令端点未建——查阅面收下决定
- * 就等于让读口长出第二种「处置」语义。依赖说明只挂第一项，避免同一句话渲染四行。
- */
-const triageDecisions: ReviewDecisionOption<TriageDecisionId>[] = [
-  {
-    id: 'link-existing-case',
-    label: '关联既有案件',
-    variant: 'secondary',
-    icon: <Link2 size={13} />,
-    disabled: true,
-    disabledReason:
-      '四项分诊决定共用的命令端点未建；本页当前为查阅面（票 06 阶段一只开查询），决定端点就绪后随接线开放。',
-  },
-  {
-    id: 'auto-establish-case',
-    label: '自动建立案件',
-    variant: 'default',
-    icon: <FolderPlus size={13} />,
-    disabled: true,
-  },
-  {
-    id: 'route-manual-review',
-    label: '进入人工复核',
-    variant: 'secondary',
-    icon: <Search size={13} />,
-    disabled: true,
-  },
-  {
-    id: 'no-case',
-    label: '不建案',
-    variant: 'danger',
-    icon: <Ban size={13} />,
-    disabled: true,
-  },
-];
-
-type TriageView = 'episodes' | 'requests';
-
-const registryOf: Record<TriageView, ExceptionTriageRegistry> = {
-  episodes: 'signal-episode',
-  requests: 'disposition-request',
-};
-
-// 存量发作期的因果条件（VE 迁移 0029 回填的那一格）。
+const episodeKindScope = 'exception-signal';
+const confidenceScope = 'signal-confidence';
+const actionScope = 'disposition-action';
+// 存量发作期的因果条件（VE 迁移 0029 回填的那一格）：不是一个真条件，不进技术详情。
 const recordedBeforeCauses = 'RECORDED_BEFORE_CAUSAL_CONDITION';
 
-/** 发作期详情：逐字段照实转写，缺席按端点在场规则给词（成对缺席即仍活跃/未分诊）。 */
-function episodeDetailFields(episode: SignalEpisodeRecord): DetailField[] {
-  const fields: DetailField[] = [
-    { label: '发作期标识', value: <span className="font-mono">{episode.episodeId}</span> },
-    { label: '目标包裹', value: <span className="font-mono">{episode.parcel}</span> },
-    { label: '信号类型', value: <span className="font-mono">{episode.kind}</span> },
-    {
-      label: '因果条件',
-      value:
-        episode.causalCondition === recordedBeforeCauses ? (
-          '登记于因果条件之前（存量）'
-        ) : (
-          <span className="font-mono">{episode.causalCondition}</span>
-        ),
-    },
-    {
-      label: '事实依据',
-      value:
-        episode.factBasis.length === 0 ? (
-          '无（登记于因果条件之前）'
-        ) : (
-          <span className="font-mono">
-            {episode.factBasis
-              .map(
-                (basis) =>
-                  `${labelOf(sourceContextLabels, basis.source)} · ${basis.fact} · ${basis.version}` +
-                  (basis.judgement ? ` · 判断 ${basis.judgement}` : ''),
-              )
-              .join('；')}
-          </span>
-        ),
-    },
-    { label: '判定规则', value: <span className="font-mono">{episode.rule}</span> },
-    { label: '可信度', value: <span className="font-mono">{episode.confidence}</span> },
-    { label: '命中次数', value: String(episode.hits) },
-    { label: '开始时间', value: formatInstant(episode.startedAt) },
-    { label: '最近命中', value: formatInstant(episode.lastHitAt) },
-    {
-      label: '发作期结束',
-      value: episode.endedAt
-        ? `${formatInstant(episode.endedAt)}${episode.releaseBasis ? `（依据 ${episode.releaseBasis}）` : ''}`
-        : '仍活跃（未结束）',
-    },
-  ];
-  if (episode.priorEpisode) {
-    fields.push({
-      label: '前一发作期',
-      value: <span className="font-mono">{episode.priorEpisode}</span>,
-    });
-  }
-  fields.push({
-    label: '分诊结论',
-    value: episode.triage
-      ? `${labelOf(triageOutcomeLabels, episode.triage.outcome)} · 规则 ${episode.triage.rule} · ${formatInstant(episode.triage.triagedAt)}`
-      : '尚未分诊',
-  });
-  return fields;
-}
-
-interface RequestRow {
-  key: string;
-  values: Readonly<Record<string, string>>;
-}
-
-function requestCol(
-  id: string,
-  header: string,
-  options?: { mono?: boolean; align?: 'left' | 'center' | 'right'; className?: string },
-): ListColumn<RequestRow> {
-  return {
-    id,
-    header,
-    align: options?.align,
-    className: options?.className,
-    render: (row) =>
-      options?.mono ? (
-        <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span>
-      ) : (
-        (row.values[id] ?? '—')
-      ),
-  };
-}
-
-// 处置请求册的列面：请求六要件、发送与判断、取消与替代照行转写。实际执行结果没有
-// 列——那是目标上下文按事实返回的东西，行内没有它的字段（端点注释同句）。
-const requestColumns: ListColumn<RequestRow>[] = [
-  requestCol('requestId', '请求标识', { mono: true }),
-  requestCol('caseId', '关联案件', { mono: true }),
-  requestCol('targetContext', '接收上下文', { className: 'w-[88px]' }),
-  requestCol('action', '处置动作', { mono: true }),
-  requestCol('scope', '处置范围', { mono: true }),
-  requestCol('intentVersion', '意图版本', { align: 'right', className: 'w-[72px]', mono: true }),
-  requestCol('sentAt', '发送时刻', { mono: true }),
-  requestCol('judgment', '源上下文判断'),
-  requestCol('cancellation', '取消答复'),
-  requestCol('supersededBy', '被替代为', { mono: true }),
-];
-
-function requestRowsOf(requests: DispositionRequestRecord[]): RequestRow[] {
-  return requests.map((record) => ({
-    key: `request:${record.requestId}`,
-    values: {
-      requestId: record.requestId,
-      caseId: record.caseId,
-      targetContext: labelOf(sourceContextLabels, record.targetContext),
-      action: record.action,
-      scope: record.scope,
-      intentVersion: String(record.intentVersion),
-      sentAt: formatInstant(record.sentAt),
-      // 判断两键成对在场；尚无答复整格缺席——「还没答」不演成四走向里的任何一种。
-      judgment: record.judgment
-        ? `${caseLabelOf(dispositionJudgmentLabels, record.judgment)}${
-            record.judgedAt ? ` · ${formatInstant(record.judgedAt)}` : ''
-          }`
-        : '',
-      cancellation: record.cancellation
-        ? caseLabelOf(dispositionCancellationLabels, record.cancellation)
-        : '',
-      supersededBy: record.supersededBy ?? '',
-    },
-  }));
-}
-
-/**
- * 异常分诊与处置协调。队列语义取 visibility-exception CONTEXT.md「异常识别、分诊
- * 与分级」：本页列信号发作期册（连同各自的分诊结论）与处置请求册两本登记册
- * （GET /exception-triage-records，票 admin-skeleton-closure-batch/06）。查阅不
- * 分诊、不建案、不发处置请求——决定区如实禁用，等分诊命令端点。
- */
-export function ExceptionTriagePage() {
-  const [view, setView] = useState<TriageView>('episodes');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{
-    registry: ExceptionTriageRegistry;
-    answer: ApiResult<ExceptionTriageListResponseBody>;
-  } | null>(null);
-  const registry = registryOf[view];
-
+/** 一本册的取数：挂载取一次，刷新时保留上一份答案不闪空。两册行形状不同，Body 由调用方按册给。 */
+function useTriageRegistry<Body>(registry: ExceptionTriageRegistry) {
+  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    void listExceptionTriageRecords(registry).then((answer) => {
-      if (!cancelled) setLoaded({ registry, answer });
+    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
+    void listExceptionTriageRecords(registry).then((result) => {
+      if (cancelled) return;
+      setAnswer(result as ApiResult<Body>);
+      setRefreshing(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [registry, reloadKey]);
+  }, [registry, reloadToken]);
+  const retry = () => {
+    setRefreshing(true);
+    setReloadToken((token) => token + 1);
+  };
+  return { answer, retry, refreshing };
+}
 
-  const answer = loaded?.registry === registry ? loaded.answer : null;
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const retry = () => setReloadKey((value) => value + 1);
+// —— 异常信号签 ——
 
-  const viewChips = (
-    <>
-      <button
-        type="button"
-        className={chipClass(view === 'episodes')}
-        onClick={() => setView('episodes')}
-      >
-        信号发作期
-      </button>
-      <button
-        type="button"
-        className={chipClass(view === 'requests')}
-        onClick={() => setView('requests')}
-      >
-        处置请求
-      </button>
-    </>
-  );
+const episodeSort: Record<string, SortAccessor<SignalEpisodeRecord>> = {
+  parcel: { value: (row) => row.parcel },
+  started: { value: (row) => row.startedAt, instant: true },
+  'last-hit': { value: (row) => row.lastHitAt, instant: true },
+};
 
-  if (view === 'requests') {
-    const rows =
-      body && body.outcome === 'DISPOSITION_REQUESTS_LISTED' ? requestRowsOf(body.requests) : [];
-    const needle = search.trim().toLowerCase();
-    const visibleRows = needle
-      ? rows.filter((row) =>
-          Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-        )
-      : rows;
-    return (
-      <ListPageTemplate<RequestRow>
-        title={info.title}
-        description={`处置请求册：请求一行一版本，被替代的行照列（替代不是删除）；实际执行结果由目标上下文按事实返回，本册无该列`}
-        headerActions={viewChips}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: '搜索请求标识 / 案件 / 处置动作',
-        }}
-        filterSummary={body ? `处置请求 ${visibleRows.length} 行` : undefined}
-        columns={requestColumns}
-        rows={visibleRows}
-        rowKey={(row) => row.key}
-        viewState={catalogueViewState(answer, rows.length, retry, {
-          module: info,
-          endpoint: 'GET /exception-triage-records?registry=disposition-request',
-          emptyTitle: '当前租户尚无处置请求',
-          emptyDescription:
-            '读取入口已配置，登记册为空——处置请求由案件编排发出，事实在接入渠道墙后面，空册是预期不是缺陷。',
-        })}
-      />
-    );
-  }
+const episodeColumns: WorkbenchColumn<SignalEpisodeRecord>[] = [
+  {
+    key: 'parcel',
+    header: objectNouns.shipmentNumber,
+    sortKey: 'parcel',
+    render: (row) => (
+      <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.parcel}>
+        {row.parcel}
+      </span>
+    ),
+  },
+  { key: 'kind', header: objectNouns.exception, render: (row) => <StatusPill code={row.kind} scope={episodeKindScope} /> },
+  { key: 'status', header: '分诊', render: (row) => <RowStatusPill status={episodeStatus(row)} /> },
+  {
+    key: 'started',
+    header: '发生时间',
+    sortKey: 'started',
+    render: (row) => (
+      <time className="font-mono text-idpxyz-breadcrumb" dateTime={row.startedAt}>
+        {formatInstant(row.startedAt)}
+      </time>
+    ),
+  },
+  {
+    key: 'last-hit',
+    header: '最近一次',
+    sortKey: 'last-hit',
+    hideWhenDetailOpen: true,
+    render: (row) => (
+      <span className="text-idpxyz-breadcrumb">
+        <time className="font-mono" dateTime={row.lastHitAt}>
+          {formatInstant(row.lastHitAt)}
+        </time>
+        {row.hits > 1 ? ` · 共 ${row.hits} 次` : ''}
+      </span>
+    ),
+  },
+];
 
-  const episodes = body && body.outcome === 'SIGNAL_EPISODES_LISTED' ? body.episodes : [];
-  const selected = episodes.find((episode) => episode.episodeId === selectedId) ?? null;
+function episodeTechnical(episode: SignalEpisodeRecord): TechnicalRow[] {
+  return [
+    { label: '信号编号', value: episode.episodeId },
+    { label: '包裹标识', value: episode.parcel },
+    { label: '异常类型码', value: episode.kind },
+    { label: '可信度码', value: episode.confidence },
+    { label: '识别规则', value: episode.rule },
+    { label: '因果条件', value: episode.causalCondition === recordedBeforeCauses ? '' : episode.causalCondition },
+    ...episode.factBasis.map((basis) => ({
+      label: `${sourceContextLabels[basis.source] ?? basis.source}事实`,
+      value: `${basis.fact} @ ${basis.version}${basis.judgement ? ` · 判断 ${basis.judgement}` : ''}`,
+    })),
+    { label: '上一次信号', value: episode.priorEpisode ?? '' },
+    { label: '结束依据', value: episode.releaseBasis ?? '' },
+    { label: '分诊规则', value: episode.triage?.rule ?? '' },
+    { label: '分诊结果码', value: episode.triage?.outcome ?? '' },
+  ];
+}
+
+function EpisodeDetail({ episode, onClose }: { episode: SignalEpisodeRecord; onClose: () => void }) {
+  const status = episodeStatus(episode);
   return (
-    <ReviewFlowTemplate<TriageDecisionId>
+    <ExceptionDetailPanel
+      ariaLabel={`${objectNouns.exception} ${episode.parcel}`}
+      title={episode.parcel}
+      status={status}
+      subtitle={`${labelFor(episode.kind, episodeKindScope)} · 开始于 ${formatInstant(episode.startedAt)}`}
+      facts={[
+        { label: '可信度', value: labelFor(episode.confidence, confidenceScope) },
+        { label: '发生次数', value: `${episode.hits} 次` },
+        { label: '最近一次', value: formatInstant(episode.lastHitAt) },
+        { label: '是否还在发生', value: episode.endedAt ? `已于 ${formatInstant(episode.endedAt)} 结束` : '仍在发生' },
+        { label: '分诊时间', value: episode.triage ? formatInstant(episode.triage.triagedAt) : '还没有分诊' },
+      ]}
+      technical={episodeTechnical(episode)}
+      onClose={onClose}
+    >
+      <p>
+        {episode.triage ? `分诊结论：${status.label}。` : '这条信号还没有分诊结论。'}
+        信号按「设置 · 追踪规则」里的分诊规则自动分诊；管理台里还不能手工分诊，这里只能查看。
+      </p>
+      {episode.factBasis.length === 0 ? <p>这条信号记录得较早，当时没有保存它依据的业务事实。</p> : null}
+    </ExceptionDetailPanel>
+  );
+}
+
+function SignalEpisodesWorkbench() {
+  const [search, setSearch] = useAddressKeyword();
+  const [status, setStatus] = useState<string>('ALL');
+  const [sort, setSort] = useState<WorkbenchSort>({ key: 'started', dir: -1 });
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const { answer, retry, refreshing } = useTriageRegistry<{ episodes: SignalEpisodeRecord[] }>('signal-episode');
+  const answered = answer?.kind === 'outcome';
+  const rows = answer?.kind === 'outcome' ? answer.body.episodes : [];
+  const counts = countByStatus(rows, episodeStatus);
+  const visible = sortRowsBy(
+    rows.filter(
+      (row) =>
+        (status === 'ALL' || episodeStatus(row).label === status) &&
+        matchesSearch(search, [row.parcel, row.episodeId, row.kind, labelFor(row.kind, episodeKindScope)]),
+    ),
+    sort,
+    episodeSort,
+  );
+  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+
+  return (
+    <WorkbenchPageTemplate<SignalEpisodeRecord>
       title={info.title}
-      description={`信号发作期册连同各自的分诊结论；分诊决定命令端点未建，决定区如实禁用`}
-      headerActions={viewChips}
-      queueTitle="进入分诊的信号"
-      queue={episodes.map((episode) => ({
-        id: episode.episodeId,
-        title: episode.parcel,
-        subtitle: `${episode.kind} · ${episode.confidence}`,
-        // 已分诊示结论原词，未分诊如实说「尚未分诊」——不折成布尔，也不代判。
-        status: (
-          <span className="shrink-0 text-[11px] text-idpxyz-textMuted">
-            {episode.triage ? labelOf(triageOutcomeLabels, episode.triage.outcome) : '尚未分诊'}
-          </span>
-        ),
-        meta: formatInstant(episode.startedAt),
-      }))}
-      selectedId={selectedId}
-      onSelect={setSelectedId}
-      detailTitle="发作期详情"
-      detailFields={selected ? episodeDetailFields(selected) : undefined}
-      decisions={triageDecisions}
-      // 四项决定全部 disabled，本回调不可达；分诊命令端点就绪后替换为应用端口调用。
-      onDecide={() => {}}
-      viewState={catalogueViewState(answer, episodes.length, retry, {
+      subtitle="运输、清关、派送中识别出的异常信号，以及每条信号的分诊结论。待分诊的信号行首亮灯。"
+      kpis={filter?.kpis}
+      onRefresh={retry}
+      refreshing={refreshing}
+      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、异常类型…' }}
+      statusChips={filter?.chips}
+      toolbarRight={answered ? `共 ${rows.length} 条，当前显示 ${visible.length} 条` : undefined}
+      columns={episodeColumns}
+      rows={visible}
+      rowKey={(row) => row.episodeId}
+      selectedKey={selectedKey}
+      onSelect={setSelectedKey}
+      rowAttention={(row) => !row.triage}
+      sort={sort}
+      onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
+      noMatchText="当前筛选条件下没有匹配的异常信号"
+      onClearFilters={() => {
+        setSearch('');
+        setStatus('ALL');
+      }}
+      renderDetail={(key) => {
+        const episode = visible.find((row) => row.episodeId === key);
+        return episode ? <EpisodeDetail episode={episode} onClose={() => setSelectedKey(null)} /> : null;
+      }}
+      viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /exception-triage-records?registry=signal-episode',
-        emptyTitle: '当前租户尚无信号发作期',
-        emptyDescription:
-          '读取入口已配置，登记册为空——信号来自运行时业务事实，事实在接入渠道墙后面，空册是预期不是缺陷。',
+        subject: '异常信号',
+        emptyTitle: '还没有异常信号',
+        emptyDescription: '派送失败、海关查验、轨迹超时这类情况被识别出来后，信号会出现在这里并按规则分诊。',
       })}
     />
+  );
+}
+
+// —— 处置请求签 ——
+
+const requestSort: Record<string, SortAccessor<DispositionRequestRecord>> = {
+  sent: { value: (row) => row.sentAt, instant: true },
+};
+
+const requestColumns: WorkbenchColumn<DispositionRequestRecord>[] = [
+  {
+    key: 'action',
+    header: '处置',
+    render: (row) => <span className="truncate font-medium text-idpxyz-textBright">{labelFor(row.action, actionScope)}</span>,
+  },
+  { key: 'handler', header: '交给', render: (row) => handlerLabel(row.targetContext) },
+  { key: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={dispositionStatus(row)} /> },
+  {
+    key: 'sent',
+    header: '发出时间',
+    sortKey: 'sent',
+    render: (row) => (
+      <time className="font-mono text-idpxyz-breadcrumb" dateTime={row.sentAt}>
+        {formatInstant(row.sentAt)}
+      </time>
+    ),
+  },
+  {
+    key: 'cancellation',
+    header: '取消',
+    hideWhenDetailOpen: true,
+    render: (row) => (row.cancellation ? <StatusPill code={row.cancellation} /> : <span className="text-idpxyz-breadcrumb">—</span>),
+  },
+];
+
+function RequestDetail({ request, onClose }: { request: DispositionRequestRecord; onClose: () => void }) {
+  return (
+    <ExceptionDetailPanel
+      ariaLabel={`处置请求 ${request.requestId}`}
+      title={labelFor(request.action, actionScope)}
+      status={dispositionStatus(request)}
+      subtitle={`交给${handlerLabel(request.targetContext)} · 发出于 ${formatInstant(request.sentAt)}`}
+      facts={[
+        { label: '交给', value: handlerLabel(request.targetContext) },
+        { label: '第几版', value: `第 ${request.intentVersion} 版` },
+        { label: '对方答复时间', value: request.judgedAt ? formatInstant(request.judgedAt) : '还没有答复' },
+        { label: '答复期限', value: request.acceptanceWindow ? formatInstant(request.acceptanceWindow) : '未设定' },
+        { label: '取消', value: request.cancellation ? labelFor(request.cancellation) : '没有取消' },
+      ]}
+      technical={[
+        { label: '请求编号', value: request.requestId },
+        { label: '案件编号', value: request.caseId },
+        { label: '处置动作码', value: request.action },
+        { label: '处置范围', value: request.scope },
+        { label: '原因', value: request.reason },
+        { label: '证据', value: request.evidence },
+        { label: '答复码', value: request.judgment ?? '' },
+        { label: '取消答复码', value: request.cancellation ?? '' },
+        { label: '被替代为', value: request.supersededBy ?? '' },
+      ]}
+      onClose={onClose}
+    >
+      {request.supersededBy ? <p>这项处置已经被新的一版替代，原请求保留在这里备查。</p> : null}
+      <p>对方答复的是接不接这项处置；实际办成没有，由接手的环节按实际情况回报，在运单的物流动态里看。</p>
+    </ExceptionDetailPanel>
+  );
+}
+
+function DispositionRequestsWorkbench() {
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<string>('ALL');
+  const [sort, setSort] = useState<WorkbenchSort>({ key: 'sent', dir: -1 });
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const { answer, retry, refreshing } = useTriageRegistry<{ requests: DispositionRequestRecord[] }>('disposition-request');
+  const answered = answer?.kind === 'outcome';
+  const rows = answer?.kind === 'outcome' ? answer.body.requests : [];
+  const counts = countByStatus(rows, dispositionStatus);
+  const visible = sortRowsBy(
+    rows.filter(
+      (row) =>
+        (status === 'ALL' || dispositionStatus(row).label === status) &&
+        matchesSearch(search, [row.requestId, row.caseId, row.action, labelFor(row.action, actionScope), handlerLabel(row.targetContext)]),
+    ),
+    sort,
+    requestSort,
+  );
+  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+
+  return (
+    <WorkbenchPageTemplate<DispositionRequestRecord>
+      title="处置请求"
+      subtitle="异常案件发给运单、网点、运输、清关等环节的处置，以及对方接不接。被新版替代的请求保留备查。"
+      kpis={filter?.kpis}
+      onRefresh={retry}
+      refreshing={refreshing}
+      search={{ value: search, onChange: setSearch, placeholder: '搜处置、案件编号…' }}
+      statusChips={filter?.chips}
+      toolbarRight={answered ? `共 ${rows.length} 项，当前显示 ${visible.length} 项` : undefined}
+      columns={requestColumns}
+      rows={visible}
+      rowKey={(row) => row.requestId}
+      selectedKey={selectedKey}
+      onSelect={setSelectedKey}
+      rowAttention={(row) => row.judgment === 'SUPPLEMENT_REQUIRED'}
+      sort={sort}
+      onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
+      noMatchText="当前筛选条件下没有匹配的处置请求"
+      onClearFilters={() => {
+        setSearch('');
+        setStatus('ALL');
+      }}
+      renderDetail={(key) => {
+        const request = visible.find((row) => row.requestId === key);
+        return request ? <RequestDetail request={request} onClose={() => setSelectedKey(null)} /> : null;
+      }}
+      viewState={exceptionViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /exception-triage-records?registry=disposition-request',
+        subject: '处置请求',
+        emptyTitle: '还没有处置请求',
+        emptyDescription: '异常案件需要别的环节动手（改路、退运、补资料）时，发出的请求会出现在这里。',
+      })}
+    />
+  );
+}
+
+/** 异常处理：两签各接一本册。只查阅——不分诊、不建案、不发处置请求（案件命令面的判断，命令端点未建）。 */
+export function ExceptionTriagePage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="signals" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="signals">异常信号</TabsTrigger>
+          <TabsTrigger value="requests">处置请求</TabsTrigger>
+        </TabsList>
+        <TabsContent value="signals" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <SignalEpisodesWorkbench />
+        </TabsContent>
+        <TabsContent value="requests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <DispositionRequestsWorkbench />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
