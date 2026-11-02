@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 )
 
-// errDocumentNumberingUndecided 说明交来落册的单据还没定单据号：开立编排漏了取号那一步。两格都空的新行读回来就成了「上线前开立」，
+// errDocumentNumberingUndecided 说明交来落册的单据还没定单据号：开立编排漏了取号那一步。号码与原因都空的新行读回来就成了「上线前开立」，
 // 册拒收而不是替它落成那样（迁移 0026 头注）。
 var errDocumentNumberingUndecided = errors.New("the document number of a newly issued document is not decided")
 

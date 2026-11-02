@@ -117,7 +117,7 @@ func buildCustomerHandoverConclusionIntake(minter *accessidentity.CustomerClient
 
 // buildDeliveryHandoverNoteOrchestration 装五口背后的真编排（UC-NO-006 应用流程步骤 3 至 6）：交接单册、收寄库（归入取实物锁那一
 // 问）、授权交付判断经本上下文的防腐适配器问 party-commercial 的真库读口（票 10 立的那一对，装配在这里）、「交付范围成立」门铃写
-// outbox、开立时取单据号的两样（buildDeliveryScopeDocumentNumbering）。
+// outbox、开立时取单据号要的取号编排与网点业务时区（buildDeliveryScopeDocumentNumbering）。
 func buildDeliveryHandoverNoteOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (nodeopshttp.DeliveryHandoverNoteHandler, error) {
 	notes, err := nopostgres.NewDeliveryHandoverNotes(db)
 	if err != nil {

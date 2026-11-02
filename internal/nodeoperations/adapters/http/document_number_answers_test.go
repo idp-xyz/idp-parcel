@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -12,7 +13,7 @@ import (
 )
 
 // 本文件证送站预报与送站交接单在线上的单据号（ADR-0355 决定二、八、十一；ADR-0140 新增字段；票 document-numbering/08）：答复与读口
-// 有号带 documentNumber、没号只带 documentNumberAbsence 说为什么，两格都不答空串、不拿标识顶；编号规则撞号答 200 只带 outcome；列表
+// 有号带 documentNumber、没号只带 documentNumberAbsence 说为什么，都不答空串、不拿标识顶；编号规则撞号答 200 只带 outcome；列表
 // 按 documentNumber 逐字检索。
 
 func numberedAs(t *testing.T, value string) domain.DocumentNumbering {
@@ -98,7 +99,40 @@ func TestTheHandoverOpeningAnswerCarriesItsDocumentNumber(t *testing.T) {
 	}
 }
 
-// Covers: AT-NO-137（传输半边）——两本册的列表收 documentNumber 逐字检索，空白答 400、读口不被触到；列表与详情行有号带号，上线前开立
+// Covers: AT-NO-136 的客户确认一格（ADR-0355 决定十一，协调方裁定）——客户确认口的答复在交接单标识之外带交接单号；没有号的带无号
+// 原因；原有各格不变，不因此回显声称了谁。
+func TestTheCustomerConclusionAnswerCarriesTheHandoverNoteNumber(t *testing.T) {
+	note, closure := handoverHTTPNote(t, true)
+	binding, err := domain.FormDeliveryHandoverBinding(domain.DeliveryHandoverBindingSpec{
+		TenantID: note.TenantID(), Note: note.ID(), Account: adapterValue(t, domain.NewCustomerAccountReference, "SYN-ACCOUNT-01"),
+		Conclusion: domain.BindingConfirmed, Route: domain.ConcludedViaCustomerChannel, Concluder: "SYN-CLIENT",
+		SourceRequestKey: "SYN-KEY-CONFIRM-01", ConcludedAt: note.OpenedAt().Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := handoverLines["conclude"]
+	for name, testCase := range map[string]struct {
+		numbering domain.DocumentNumbering
+		field     string
+		want      string
+	}{
+		"有号":        {numberedAs(t, "HO-20261102-00018"), "documentNumber", `"HO-20261102-00018"`},
+		"单据编号时区未配置": {domain.UnnumberedForMissingTimeZone(), "documentNumberAbsence", `"NUMBERING_TIME_ZONE_NOT_CONFIGURED"`},
+	} {
+		handler := &handoverHandlerDouble{result: application.NewDeliveryHandoverResult(application.DeliveryHandoverBindingConfirmed,
+			application.DeliveryHandoverAnswer{Note: note.WithDocumentNumbering(testCase.numbering), Closure: closure, Binding: binding})}
+		response := httptest.NewRecorder()
+		line.endpoint(t, handler, nil).ServeHTTP(response, handoverRequest(line, line.body))
+		body := rawFields(t, response.Body.Bytes())
+		if response.Code != http.StatusCreated || string(body[testCase.field]) != testCase.want || string(body["noteId"]) != `"SYN-HANDOVER-HTTP-01"` ||
+			body["binding"] == nil || body["handoverNote"] != nil || body["claims"] != nil {
+			t.Fatalf("%s：%d %s", name, response.Code, response.Body.String())
+		}
+	}
+}
+
+// Covers: AT-NO-137（传输半边）——送站预报与送站交接单的列表收 documentNumber 逐字检索，空白答 400、读口不被触到；列表与详情行有号带号，上线前开立
 // 与单据编号时区未配置各带各的无号原因。
 func TestDeliveryScopeReadsCarryAndSearchByDocumentNumber(t *testing.T) {
 	for _, read := range []scopeRead{scopeReads[0], scopeReads[2]} {
@@ -134,8 +168,8 @@ func TestDeliveryScopeReadsCarryAndSearchByDocumentNumber(t *testing.T) {
 		t.Fatalf("预报列表 = %s", response.Body.String())
 	}
 	if string(listed.PreAdvices[0]["documentNumber"]) != `"PA-20261102-00045"` || listed.PreAdvices[0]["documentNumberAbsence"] != nil ||
-		listed.PreAdvices[1]["documentNumber"] != nil || string(listed.PreAdvices[1]["documentNumberAbsence"]) != `"ISSUED_BEFORE_DOCUMENT_NUMBERING"` {
-		t.Fatalf("预报列表的单据号两格 = %s", response.Body.String())
+		listed.PreAdvices[1]["documentNumber"] != nil || string(listed.PreAdvices[1]["documentNumberAbsence"]) != `"ISSUED_BEFORE_NUMBERING"` {
+		t.Fatalf("预报列表的单据号与无号原因 = %s", response.Body.String())
 	}
 
 	note, _ := handoverHTTPNote(t, false)

@@ -56,7 +56,7 @@ type DeliveryPreAdviceRegister interface {
 	// DeliveryPreAdviceDocumentNumberUsed 答本租户是否已有预报用了这个单据号；取号编排在同一事务里经它判撞（ADR-0355 决定八）。
 	DeliveryPreAdviceDocumentNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
 	// RecordDeliveryPreAdvice 落一份预报。同一（租户，来源，来源请求键）已在册时答已在册，回显那一份——它带着当初签发的标识、内容
-	// 摘要与单据号，调用方据摘要分重放与来源冲突。预报的单据号这一格必须已定（domain.DocumentNumbering.Decided）：两格都空的新行读回
+	// 摘要与单据号，调用方据摘要分重放与来源冲突。预报的单据号这一格必须已定（domain.DocumentNumbering.Decided）：号码与原因都空的新行读回
 	// 来就成了上线前开立，册拒收而不是替它落成那样。
 	RecordDeliveryPreAdvice(ctx context.Context, preAdvice domain.DeliveryPreAdvice) (domain.DeliveryPreAdvice, DeliveryScopeAppendOutcome, error)
 	// RecordDeliveryPreAdviceWithdrawal 落一份撤回。预报不在本租户、或不属撤回方的客户账户，答查无此预报；同一来源请求键已在册时

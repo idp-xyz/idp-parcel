@@ -22,7 +22,7 @@ func (double *assignerDouble) Assign(_ context.Context, request docnumber.IssueR
 	return double.assignment, double.err
 }
 
-// Covers: 取号编排的三格答案逐一译回本上下文的词，请求原样交过去（租户、类型、开立网点的业务时区、判撞那一问）；编排的错误原样交回；
+// Covers: 取号编排的各格答案逐一译回本上下文的词，请求原样交过去（租户、类型、开立网点的业务时区、判撞那一问）；编排的错误原样交回；
 // 编排答出词表之外的格是实现坏了，交回错误而不是猜一格。
 func TestTheIssuerTranslatesTheAssignersAnswers(t *testing.T) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")

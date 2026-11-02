@@ -474,7 +474,7 @@ type deliveryHandoverResponse struct {
 }
 
 // deliveryHandoverNoteBody 的 documentNumber 是服务端收下开立时取的单据号，有号才在场；没有号时 documentNumberAbsence 说为什么，
-// 两格的读法同 deliveryPreAdviceBody。noteId 仍是设备签发的标识，单据号不替代它（ADR-0023、ADR-0355 决定二）。
+// 单据号与无号原因的读法同 deliveryPreAdviceBody。noteId 仍是设备签发的标识，单据号不替代它（ADR-0023、ADR-0355 决定二）。
 type deliveryHandoverNoteBody struct {
 	NoteID                string   `json:"noteId"`
 	DocumentNumber        string   `json:"documentNumber,omitempty"`
@@ -537,13 +537,18 @@ func writeOperatorHandoverAnswer[Command any](response http.ResponseWriter, _ Co
 	writeJSON(response, handoverStatus(result.Outcome()), body)
 }
 
-// deliveryHandoverConclusionResponse 是客户面那一口的封闭响应形状：只回显交接单标识与信封里那个客户账户的结论。不回显声称了谁、
-// 成员与范围成立没有——那几格会让一个客户账户看到别的客户账户在不在声称之列、确认没有（UC-NO-006「权限、隔离与审计」）。
+// deliveryHandoverConclusionResponse 是客户面那一口的封闭响应形状：只回显交接单标识、交接单号与信封里那个客户账户的结论。不回显声称
+// 了谁、成员与范围成立没有——那几格会让一个客户账户看到别的客户账户在不在声称之列、确认没有（UC-NO-006「权限、隔离与审计」）。
+//
+// documentNumber / documentNumberAbsence 是交接单的单据号或无号原因（ADR-0355 决定十一，首方契约的新增字段，ADR-0140），读法同
+// deliveryHandoverNoteBody：客户对着纸面或现场说的交接单号确认，答复里要看得到它。单据号是交接单自己的，不泄露别的客户账户的任何事。
 type deliveryHandoverConclusionResponse struct {
-	Outcome       string                       `json:"outcome"`
-	StateMismatch string                       `json:"stateMismatch,omitempty"`
-	NoteID        string                       `json:"noteId"`
-	Binding       *deliveryHandoverBindingBody `json:"binding,omitempty"`
+	Outcome               string                       `json:"outcome"`
+	StateMismatch         string                       `json:"stateMismatch,omitempty"`
+	NoteID                string                       `json:"noteId"`
+	DocumentNumber        string                       `json:"documentNumber,omitempty"`
+	DocumentNumberAbsence string                       `json:"documentNumberAbsence,omitempty"`
+	Binding               *deliveryHandoverBindingBody `json:"binding,omitempty"`
 }
 
 func writeCustomerHandoverAnswer(response http.ResponseWriter, command application.ConcludeDeliveryHandoverCommand, result application.DeliveryHandoverResult) {
@@ -551,6 +556,9 @@ func writeCustomerHandoverAnswer(response http.ResponseWriter, command applicati
 		Outcome:       result.Outcome().String(),
 		StateMismatch: result.StateMismatch().String(),
 		NoteID:        command.Note.String(),
+	}
+	if note := result.Note(); note.ID() == command.Note {
+		body.DocumentNumber, body.DocumentNumberAbsence = documentNumberingFields(note.DocumentNumbering())
 	}
 	if binding, present := result.Binding(); present && binding.Account() == command.CustomerAccount {
 		body.Binding = bindingBodyOf(binding)

@@ -25,7 +25,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL、经生产装配的同一组构造函数（buildDeliveryPreAdviceOrchestration、buildDeliveryHandoverNoteOrchestration）证
-// 送站预报与送站交接单的单据号（ADR-0355 决定三、七、八；票 document-numbering/08「每类单据都要做到」第 8 条）：同一开立重放答原号、
+// 送站预报与送站交接单的单据号（ADR-0355 决定三、七、八；票 document-numbering/08「每类单据都要做到」里「真库用例覆盖同一开立重放答原号……撞号答案」那一条）：同一开立重放答原号、
 // 并发开立不撞号也不为重投多取号、租户隔离、周期重置、开立回滚释放号码、撞号答案；日期按开立网点的业务时区（网络目录节点版本），
 // 网点没有时退到租户的单据编号时区，都没有照常开立不带号。取号编排换一只可拨的时钟——生产上它就是服务端时钟（docnumbering.Build），
 // 拨钟只为在一个用例里跨日。合成租户、网点与号码只记 `S`。
@@ -291,8 +291,8 @@ func TestPreAdviceDocumentNumbersOnARealDatabase(t *testing.T) {
 	}
 }
 
-// Covers: AT-NO-135 的撞号一格（真库）——当日的前二十个号都已被别的写入占了，提交答编号规则撞号：册上没有这份预报，整笔回滚，序列
-// 上取过的二十个值一个也不留；规则册换了格式之后（这里是让出一个号）同一接入请求重交即登记，拿到的是那一个空着的号。
+// Covers: AT-NO-135 的撞号一格（真库）——当日序列前 docnumber.MaxSkippedNumbers 个值渲染出的号都已被别的写入占了，提交答编号规则撞号：册上没有这份预报，整笔回滚，序列
+// 上取过的那些值一个也不留；规则册换了格式之后（这里是让出一个号）同一接入请求重交即登记，拿到的是那一个空着的号。
 func TestAPreAdviceNumberingCollisionRollsBackOnARealDatabase(t *testing.T) {
 	rig := newDocumentNumberRig(t)
 	const tenant = "SYN-TENANT-DN-1"
@@ -335,7 +335,7 @@ func TestAPreAdviceNumberingCollisionRollsBackOnARealDatabase(t *testing.T) {
 }
 
 // Covers: AT-NO-136（真库）——服务端收下开立时取交接单单据号：设备声明的开立时刻是前一日，号按服务端此刻、开立网点的业务时区出；
-// 标识仍是设备签的那一个；同一开立重投答原号、不再取号；并发重投同一张只开一张、只取一个号，并发开八张各得一号、连成一段；当日号段
+// 标识仍是设备签的那一个；同一开立重投答原号、不再取号；并发重投同一张只开一张、只取一个号，并发另开几张各得一号、互不相同；当日号段
 // 被占满时答编号规则撞号、交接单不落、序列回滚。
 func TestHandoverNoteDocumentNumbersOnARealDatabase(t *testing.T) {
 	rig := newDocumentNumberRig(t)

@@ -60,7 +60,7 @@ func (issuer *Issuer) IssueDocumentNumber(ctx context.Context, request ports.Doc
 	case docnumber.NumberingRuleCollision:
 		return ports.DocumentNumberIssue{Outcome: ports.DocumentNumberRuleCollision}, nil
 	default:
-		// 编排只该答上面三格；答别的格是实现坏了，不是业务答案。
+		// 编排答出上面各 case 之外的格是实现坏了，不是业务答案。
 		return ports.DocumentNumberIssue{}, fmt.Errorf("issue %s document number: unexpected outcome %q", request.Type, assignment.Outcome)
 	}
 }

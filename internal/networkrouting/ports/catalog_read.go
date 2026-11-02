@@ -36,7 +36,7 @@ type NetworkCatalogRead interface {
 // 日期的别的上下文用——node-operations 的送站预报、送站交接单按开立网点的业务时区出单据号里的日期（ADR-0355 决定七）。
 //
 // 只答时区一格：问的是「这个网点此刻按哪个时区过日子」，不是一次判断，所以不取目录修订、不折叠、不交版本行的其余内容；
-// 整份快照（NetworkCatalogRead）要读七族，开立一张单据为一格时区去读七族是浪费。选版口径与 LoadDefinitionsAt 的节点族同一：
+// 整份快照（NetworkCatalogRead）要读目录的全部定义族，开立一张单据只为一格时区去读整份目录是浪费。选版口径与 LoadDefinitionsAt 的节点族同一：
 // [effective_from, effective_to) 含 at，生效当刻属新版。found=false 即这个租户没有这个节点在 at 生效的版本（没登记、还没
 // 生效或已闭）——调用方据此退到自己的来路，本口不拿别的版本或默认时区顶；两版同时适用是目录坏了，答 error，不挑一版。
 type NodeBusinessTimezoneRead interface {

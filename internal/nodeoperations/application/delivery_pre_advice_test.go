@@ -385,7 +385,7 @@ func TestRegisteringAPreAdviceIssuesItsDocumentNumberOnceAndReplaysIt(t *testing
 	}
 }
 
-// Covers: AT-NO-135 的无号与撞号两格（ADR-0355 决定七、八）——网点此刻没有业务时区交空串、由取号编排退到租户的单据编号时区；两者都
+// Covers: AT-NO-135 的无号与撞号（ADR-0355 决定七、八）——网点此刻没有业务时区交空串、由取号编排退到租户的单据编号时区；两者都
 // 没有答单据编号时区未配置，预报照常登记、记无号原因；撞号答编号规则撞号，册上什么也没落；取号或网点时区读不动原样交回、什么也不落。
 func TestAPreAdviceWithoutANumberStillRegistersAndACollisionLandsNothing(t *testing.T) {
 	ctx := context.Background()

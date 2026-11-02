@@ -18,7 +18,7 @@ import (
 // 跳号成为空号（docnumber.NumberingRuleCollision 的注释）。外壳收到这个信号就把答案原样交回，不当错误。
 var errNumberingCollisionRollsBack = errors.New("parcel-api: the issuing transaction rolls back on a numbering rule collision")
 
-// buildDeliveryScopeDocumentNumbering 装送站预报与送站交接单取单据号的两样（ADR-0355 决定二、七）：取号编排是组合根装出的那一只
+// buildDeliveryScopeDocumentNumbering 装送站预报与送站交接单取单据号要的取号编排与网点业务时区（ADR-0355 决定二、七）：取号编排是组合根装出的那一只
 // （endpointSources.documentNumbers.Assigner，与规则册各口同一份类型汇总、同一个库）；开立网点的业务时区经本上下文的防腐适配器问
 // network-routing 网络目录的窄读口。
 //

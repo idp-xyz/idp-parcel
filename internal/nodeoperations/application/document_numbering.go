@@ -10,11 +10,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
-// 送站预报与送站交接单开立时取单据号的那一段（NO CONTEXT「送站预报」「送站交接单」；ADR-0355 决定三、七、八）。两类单据都由网点开立：
+// 送站预报与送站交接单开立时取单据号的那一段（NO CONTEXT「送站预报」「送站交接单」；ADR-0355 决定三、七、八）。送站预报与送站交接单都由网点开立：
 // 预报指名送到哪个网点，交接单在网点当场开立，日期都按开立网点此刻生效的业务时区出；网点在网络目录里此刻没有生效版本，退到租户的
 // 单据编号时区，两者都没有则不带号照常开立（决定七）。
 
-// DocumentNumberingDeps 是取号要的两样：取号编排与网点的业务时区。送站预报与送站交接单的编排各收一份。
+// DocumentNumberingDeps 是取号要的取号编排与网点的业务时区。送站预报与送站交接单的编排各收一份。
 type DocumentNumberingDeps struct {
 	Issuer ports.DocumentNumberIssuer
 	Nodes  ports.IssuingNodeTimeZones

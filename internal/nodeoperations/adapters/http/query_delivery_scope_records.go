@@ -74,7 +74,7 @@ type catalogueFilterKeys struct {
 }
 
 // catalogueFilterOf 读列表的筛选。键封闭：认不出的键、重复的键、空白节点或单据号、读不成 RFC 3339 的时刻、起点不早于终点都答坏请求
-// ——静默丢掉一个拼错的键，人会把全租户的列表当成按条件筛过的。documentNumber 按单据号逐字找（ADR-0355 决定十一），两本册同一个键。
+// ——静默丢掉一个拼错的键，人会把全租户的列表当成按条件筛过的。documentNumber 按单据号逐字找（ADR-0355 决定十一），预报与交接单的列表同一个键。
 func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.DeliveryScopeCatalogueFilter, bool) {
 	var filter ports.DeliveryScopeCatalogueFilter
 	for key, values := range query {
@@ -262,7 +262,7 @@ type handoverNoteFoundResponse struct {
 	Members      []deliveryHandoverMemberBody `json:"members"`
 }
 
-// handoverNoteCatalogueBody 是查阅读里的一张交接单。单据号两格的读法同 deliveryHandoverNoteBody；交付方线索照开立时的原样；closed
+// handoverNoteCatalogueBody 是查阅读里的一张交接单。单据号与无号原因的读法同 deliveryHandoverNoteBody；交付方线索照开立时的原样；closed
 // 恒在场，关闭的事实身份与时刻只随已关闭出现；claims 是声称的每个客户账户各一格，按标识定序；scopeEstablished 恒在场，取领域按结论
 // 派生的那一格（声称的全部已确认），成立才带 scopeEstablishedAt。
 type handoverNoteCatalogueBody struct {

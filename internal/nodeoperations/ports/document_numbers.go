@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
-// 本文件是送站预报与送站交接单取单据号的两个消费侧端口（ADR-0025；ADR-0355 决定三、七、八；票 document-numbering/08）：取号编排
+// 本文件是送站预报与送站交接单取单据号的消费侧端口（ADR-0025；ADR-0355 决定三、七、八；票 document-numbering/08）：取号编排
 // 与开立网点的业务时区。取号编排是编号技术组件（internal/platform/docnumber），网点的业务时区归 network-routing 的网络目录；两者都
 // 经本上下文的适配器接进来，编排只认这里的词。
 

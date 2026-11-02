@@ -13,8 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证两本册上的单据号（迁移 0026；ADR-0355 决定三、七、八；票 document-numbering/08）：号随单落、读回原样；
-// 没有单据号的分两种原因读回；单据号这一格没定的新单据册拒收；（租户，单据号）唯一兜住绕过取号编排的写入；判撞的那一问按租户分。
+// 本文件对真实 PostgreSQL 证送站预报册与送站交接单册上的单据号（迁移 0026；ADR-0355 决定三、七、八；票 document-numbering/08）：号随单落、读回原样；
+// 没有单据号的按原因读回；单据号这一格没定的新单据册拒收；（租户，单据号）唯一兜住绕过取号编排的写入；判撞的那一问按租户分。
 // 夹具全为合成（S 级）。
 
 func numbered(t *testing.T, value string) domain.DocumentNumbering {
@@ -23,7 +23,7 @@ func numbered(t *testing.T, value string) domain.DocumentNumbering {
 }
 
 // Covers: AT-NO-135、AT-NO-136 的落库半边与 AT-NO-137 的读口半边——单据号随预报、交接单同一行落下并原样读回（按标识读、锁住重放
-// 身份读、列表行）；单据编号时区未配置记那一个原因，迁移之前的旧行（两格都空）读作上线前开立；单据号没定的新单据不落；同租户同号第二
+// 身份读、列表行）；单据编号时区未配置记那一个原因，迁移之前的旧行（号码与原因都空）读作上线前开立；单据号没定的新单据不落；同租户同号第二
 // 份不落；判撞与按单据号检索都只看本租户。
 func TestDeliveryScopeRegistersKeepTheDocumentNumber(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -81,7 +81,7 @@ func TestDeliveryScopeRegistersKeepTheDocumentNumber(t *testing.T) {
 	}
 	for id, want := range map[string]domain.DocumentNumberAbsence{
 		"SYN-PREADV-DN-02":  domain.NumberingTimeZoneNotConfigured,
-		"SYN-PREADV-DN-OLD": domain.IssuedBeforeDocumentNumbering,
+		"SYN-PREADV-DN-OLD": domain.IssuedBeforeNumbering,
 	} {
 		state, _, err := preAdvices.FindDeliveryPreAdvice(ctx, tenant, must(t, domain.NewDeliveryPreAdviceID, id))
 		if absence, absent := state.PreAdvice.DocumentNumbering().Absence(); err != nil || !absent || absence != want {

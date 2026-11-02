@@ -328,7 +328,7 @@ type deliveryPreAdviceResponse struct {
 // 本来就有接入请求标识，摘要是本上下文判重用的。
 //
 // documentNumber 是预报的单据号（ADR-0355 决定二，首方契约的新增字段，ADR-0140）：有号才在场，没有号时整键缺席，不答空串、不拿
-// 预报标识顶。没有号时 documentNumberAbsence 说为什么——ISSUED_BEFORE_DOCUMENT_NUMBERING（单据号规则生效之前登记的）或
+// 预报标识顶。没有号时 documentNumberAbsence 说为什么——ISSUED_BEFORE_NUMBERING（单据号规则生效之前登记的）或
 // NUMBERING_TIME_ZONE_NOT_CONFIGURED（登记时网点没有业务时区、租户也没登单据编号时区）；两者事后都不补号。
 type deliveryPreAdviceBody struct {
 	PreAdviceID           string   `json:"preAdviceId"`

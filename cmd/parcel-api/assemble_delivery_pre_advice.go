@@ -98,8 +98,8 @@ func (handler transactionalDeliveryPreAdvices) Withdraw(
 	return result, nil
 }
 
-// buildDeliveryPreAdviceOrchestration 装配预报两口背后的真编排（UC-NO-006 应用流程步骤 2）。缝——预报册、预报标识签发、时钟与取单据号
-// 的两样——全接真；没有意图交付：预报是本上下文判交付范围时自己读的证据，没有下游要通知（ADR-0212 决定六「预报没有触发」）。取号编排
+// buildDeliveryPreAdviceOrchestration 装配预报两口背后的真编排（UC-NO-006 应用流程步骤 2）。缝——预报册、预报标识签发、时钟、取号编排与网点
+// 业务时区——全接真；没有意图交付：预报是本上下文判交付范围时自己读的证据，没有下游要通知（ADR-0212 决定六「预报没有触发」）。取号编排
 // 与预报册接在同一个 db 上：取号必须在开立事务里，框架按 DB 认事务归属。
 func buildDeliveryPreAdviceOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (nodeopshttp.DeliveryPreAdviceHandler, error) {
 	register, err := nopostgres.NewDeliveryPreAdvices(db)

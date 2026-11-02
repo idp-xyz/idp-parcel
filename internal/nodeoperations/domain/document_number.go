@@ -19,22 +19,22 @@ func NewDocumentNumber(value string) (DocumentNumber, error) {
 	return DocumentNumber{required}, err
 }
 
-// DocumentNumberAbsence 是一份单据没有单据号的原因。GLOSSARY「单据号」只认两种情形，事后都不补号；两者的续办不同——前者没有续办，
-// 后者是租户漏登了单据编号时区——所以记下是哪一种，页面据此分开说，不一律写成「上线前开立」。
+// DocumentNumberAbsence 是一份单据没有单据号的原因，取 GLOSSARY「单据号」列出的无号情形，事后都不补号。上线前开立没有续办，单据编号
+// 时区未配置是租户漏登了时区，续办不同，所以记下是哪一种，页面据此分开说，不一律写成「上线前开立」。
 type DocumentNumberAbsence uint8
 
 const (
 	DocumentNumberAbsenceInvalid DocumentNumberAbsence = iota
-	// IssuedBeforeDocumentNumbering：单据号规则生效之前开立。库里号码与原因两格都空的旧行就是这一格，它只从读回来，开立不会写出它。
-	IssuedBeforeDocumentNumbering
+	// IssuedBeforeNumbering：单据号规则生效之前开立。库里号码与原因都空的旧行就是这一格，它只从读回来，开立不会写出它。
+	IssuedBeforeNumbering
 	// NumberingTimeZoneNotConfigured：开立时开立网点没有生效的业务时区，租户也没登单据编号时区（ADR-0355 决定七）。单据照常开立。
 	NumberingTimeZoneNotConfigured
 )
 
 func (absence DocumentNumberAbsence) String() string {
 	switch absence {
-	case IssuedBeforeDocumentNumbering:
-		return "ISSUED_BEFORE_DOCUMENT_NUMBERING"
+	case IssuedBeforeNumbering:
+		return "ISSUED_BEFORE_NUMBERING"
 	case NumberingTimeZoneNotConfigured:
 		return "NUMBERING_TIME_ZONE_NOT_CONFIGURED"
 	default:
@@ -43,7 +43,7 @@ func (absence DocumentNumberAbsence) String() string {
 }
 
 // DocumentNumbering 是一份单据上记下的单据号，或没有它的原因——两者恰有其一。零值即「还没定」：开立编排取号之前的那一刻，册的写口
-// 拒收这样的单据，免得新单据落成两格都空、读回来被当成上线前开立。
+// 拒收这样的单据，免得新单据落成号码与原因都空、读回来被当成上线前开立。
 type DocumentNumbering struct {
 	number  DocumentNumber
 	absence DocumentNumberAbsence
@@ -59,7 +59,7 @@ func UnnumberedForMissingTimeZone() DocumentNumbering {
 	return DocumentNumbering{absence: NumberingTimeZoneNotConfigured}
 }
 
-// RehydrateDocumentNumbering 从库里那两格还原：号码在场就是有号；两格都空是上线前开立；只有原因的按原因还原。号码与原因同在、原因
+// RehydrateDocumentNumbering 从库里的号码与原因还原：号码在场就是有号；都空是上线前开立；只有原因的按原因还原。号码与原因同在、原因
 // 认不出，都是那一行坏了。
 func RehydrateDocumentNumbering(number, absence string) (DocumentNumbering, error) {
 	switch {
@@ -72,7 +72,7 @@ func RehydrateDocumentNumbering(number, absence string) (DocumentNumbering, erro
 		}
 		return NumberedDocument(parsed), nil
 	case absence == "":
-		return DocumentNumbering{absence: IssuedBeforeDocumentNumbering}, nil
+		return DocumentNumbering{absence: IssuedBeforeNumbering}, nil
 	case absence == NumberingTimeZoneNotConfigured.String():
 		return UnnumberedForMissingTimeZone(), nil
 	default:

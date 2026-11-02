@@ -733,7 +733,7 @@ func TestDeliveryHandoverNoteHandlerRefusesMissingDependencies(t *testing.T) {
 
 // Covers: AT-NO-136（编排半边）——服务端收下开立时取交接单单据号（ADR-0355 决定二、三、七）：标识仍是设备签的那一个，单据号另成一格；
 // 类型取本上下文的声明，业务时区取信封里的开立网点此刻（编排时钟，不是设备声明的开立时刻）生效的那一版；同一开立重投、同一标识换
-// 内容都答在册那一张连同原号，取号编排不再被问到；归入、关闭、确认都不取号。
+// 内容都答在册那一张连同原号，取号编排不再被问到；关闭、运营确认、客户确认都不取号，客户确认答的交接单带着原号。
 func TestOpeningAHandoverNoteIssuesItsDocumentNumberOnTheServersReceipt(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	fixture.nodeZones.zones = map[string]string{handoverNode: "Asia/Singapore"}
@@ -776,12 +776,17 @@ func TestOpeningAHandoverNoteIssuesItsDocumentNumberOnTheServersReceipt(t *testi
 	if _, err := fixture.handover.ConfirmByOperationDecision(ctx, confirmCommand(t, "SYN-HANDOVER-80", handoverAccount)); err != nil {
 		t.Fatal(err)
 	}
+	// 客户确认口的答复要带交接单号（协调方裁定，ADR-0355 决定十一）：编排交回的交接单就是在册那一张、带着它的号。
+	concluded, err := fixture.handover.ConcludeByCustomer(ctx, concludeCommand(t, "SYN-HANDOVER-80", handoverAccount, "SYN-KEY-80", domain.BindingConfirmed))
+	if again, _ := concluded.Note().DocumentNumbering().Number(); err != nil || again != number {
+		t.Fatalf("客户确认答的交接单 = %q, %v", again, err)
+	}
 	if len(fixture.numbers.asked) != 1 {
-		t.Fatalf("重投、关闭或确认又取了号：%d 次", len(fixture.numbers.asked))
+		t.Fatalf("重投、关闭、确认或客户确认又取了号：%d 次", len(fixture.numbers.asked))
 	}
 }
 
-// Covers: AT-NO-136 的无号与撞号两格（ADR-0355 决定七、八）——单据编号时区未配置时交接单照常开立、记无号原因；撞号答编号规则撞号，
+// Covers: AT-NO-136 的无号与撞号（ADR-0355 决定七、八）——单据编号时区未配置时交接单照常开立、记无号原因；撞号答编号规则撞号，
 // 册上没有这张交接单，设备原样重投时才再取号。
 func TestAHandoverNoteWithoutANumberStillOpensAndACollisionLandsNothing(t *testing.T) {
 	fixture := newHandoverFixture(t)
