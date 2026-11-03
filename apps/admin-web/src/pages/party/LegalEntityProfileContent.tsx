@@ -12,7 +12,7 @@ export function LegalEntityProfileContent({
 }: {
   content?: ProfileContent;
   includeContacts?: boolean;
-  /** 税务登记号的类型码 → 目录译名（按注册地址国家查）；不给或查不到按码显。码留在 title 里给要对照的人。 */
+  /** 监管登记号的类型码 → 目录译名（按注册地址国家查）；不给或查不到按码显。码留在 title 里给要对照的人。 */
   typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
@@ -38,7 +38,7 @@ export function LegalEntityProfileContent({
         <ProfileReadoutGrid>
           <ProfileReadoutField label="开票抬头" value={content?.invoicingRegistered ? content.invoiceTitle : undefined} emphasized />
           <ProfileReadoutField
-            label="税务登记号"
+            label="监管登记号（税务 / 海关）"
             value={
               content?.taxRegistrationNumbers.length
                 ? content.taxRegistrationNumbers.map((row, index) => (

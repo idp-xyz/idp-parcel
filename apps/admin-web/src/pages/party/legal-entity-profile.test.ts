@@ -318,7 +318,7 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
   );
   equal(halfContact.contacts.length, 2);
 
-  // 给了目录查法，税务登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
+  // 给了目录查法，监管登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
   const typeNameOf = (country: string, typeCode: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' ? 'SYN 税号' : undefined);
   const taxChanged = compareLegalEntityProfiles(
     base,
@@ -327,7 +327,7 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
   );
   deepEqual(
     taxChanged.fields.filter((row) => row.kind !== 'unchanged').map((row) => [row.field, row.before, row.after]),
-    [['税务登记号', 'SYN 税号 SYN-CN-TAX-0101', 'SYN 税号 SYN-CN-TAX-0102；SYN-OTHER 9']],
+    [['监管登记号（税务 / 海关）', 'SYN 税号 SYN-CN-TAX-0101', 'SYN 税号 SYN-CN-TAX-0102；SYN-OTHER 9']],
   );
 });
 
@@ -352,7 +352,7 @@ test('必填未填按表单次序列出，并进问题表', () => {
 });
 
 // Covers（第 6 项）：候选只取资料层（PROFILE）且国家相符的类型，显目录译名、已停用括注；身份层与别国不收；没有即空。
-test('税务登记号类型候选来自目录的资料层', () => {
+test('监管登记号类型候选来自目录的资料层', () => {
   const type = (over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord => ({
     tenantId: 'SYN-TENANT-01', countryCode: 'CN', typeCode: 'SYN-CN-TAX', revision: 1, typeName: 'SYN 税号',
     layer: 'PROFILE', formatPattern: '', basis: 'SYN', status: 'EFFECTIVE', effectiveFrom: '2026-01-01T00:00:00Z',

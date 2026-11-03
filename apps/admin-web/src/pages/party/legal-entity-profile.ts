@@ -2,7 +2,7 @@
 // 本地编码层问题、修订号建议、资料状态判读，以及表单预填与保存前差异预览要的两个方向的折算（票 company-subject-ux/04）。
 // 全部是纯函数，node:test 钉着；组件 LegalEntityProfileSection.tsx 只负责摆。
 //
-// **不算校验结论**（票面「不做」）：公司主体在不在册、地址国家与身份上的注册国家对不对得上、税号合不合目录、修订连不连续，
+// **不算校验结论**（票面「不做」）：公司主体在不在册、地址国家与身份上的注册国家对不对得上、登记号合不合目录、修订连不连续，
 // 一律送上去让服务端答。本地只多一类「必填未填」的编码层提示（legalEntityProfileMissingFields），那是在说格空着，不是在判
 // 领域规则。载荷镜像受控 CLI `register-legal-entity-profiles` 的一项、不带租户格——理由同法人登记表单（legal-entity-form.ts 文件头）。
 
@@ -317,7 +317,7 @@ export function legalEntityProfileStatusOf(
   return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的资料状态。' };
 }
 
-/** 资料层（税务登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */
+/** 资料层（监管登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */
 export function profileTaxTypeOptions(
   types: readonly RegistrationNumberTypeRecord[],
   country: string,

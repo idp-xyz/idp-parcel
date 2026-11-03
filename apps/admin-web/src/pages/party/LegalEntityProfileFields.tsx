@@ -35,7 +35,7 @@ export function LegalEntityProfileFields({
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
   problems: Record<string, string[]>;
   locked: boolean;
-  /** 注册号类型目录的答案（税务登记号类型候选从里面取资料层）；还在读为 null。 */
+  /** 注册号类型目录的答案（监管登记号类型候选从里面取资料层）；还在读为 null。 */
   typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 表单里的站内链接要离开本页时交给调用方：有没提交的输入时先确认再走，不让一个链接把表单静默关掉。 */
   onLeave: (href: string) => void;
@@ -142,7 +142,7 @@ export function LegalEntityProfileFields({
           」按公司主体、相对方与合同解析。
         </p>
         <div className="md:col-span-2">
-          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">税务登记号</p>
+          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">监管登记号（税务 / 海关）</p>
           {draft.taxNumbers.map((row, index) => (
             <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3">
               <TaxTypeField
@@ -156,8 +156,8 @@ export function LegalEntityProfileFields({
               />
               <Field label="号码" path={`profiles[0].taxRegistrationNumbers[${index}].number`} problems={problems}>
                 <Input
-                  aria-label={`税务登记号 ${index + 1} 号码`}
-                  placeholder="税务登记号原样填"
+                  aria-label={`监管登记号 ${index + 1} 号码`}
+                  placeholder="登记号原样填"
                   className="font-mono text-[13px]"
                   value={row.number}
                   readOnly={locked}
@@ -180,10 +180,12 @@ export function LegalEntityProfileFields({
             disabled={locked}
             onClick={() => patch({ taxNumbers: [...draft.taxNumbers, { typeCode: '', number: '' }] })}
           >
-            添加税务登记号
+            添加监管登记号
           </Button>
+          {/* 税务与海关的号不分两组（ADR-0359 决定一）：判法一样——类型与格式由目录按注册地说，号属税务还是海关也由类型说。 */}
           <p className="mt-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
-            跨境开票常用：中国税号、香港 BR、美国 EIN、欧盟 VAT / IOSS / EORI——按注册地配置后在这里选。
+            税务、海关等监管机关发给公司、可后办可变的登记号都登在这里：税号、海关注册编码、AEO 认证编号、VAT / IOSS / EORI；
+            类型按注册地在「基础数据 › 注册号类型」配置后在这里选。
           </p>
         </div>
       </FormGroup>
@@ -323,7 +325,7 @@ export function LegalEntityProfileFields({
 }
 
 /**
- * 税务登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
+ * 监管登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
  * 码进载荷。目录里这一国家没有资料层类型、或目录读不到时退回手填类型码并指路——要加类型得先到基础数据配置，
  * 表单不替目录造码。选出来的只是类型码，合不合目录仍由服务端登记时判。
  */
@@ -364,7 +366,7 @@ function TaxTypeField({
   return (
     <Field label="类型" path={path} problems={problems}>
       <Input
-        aria-label={`税务登记号 ${index + 1} 类型`}
+        aria-label={`监管登记号 ${index + 1} 类型`}
         placeholder="类型码"
         className="font-mono text-[13px]"
         value={value}
