@@ -83,6 +83,8 @@ export interface IdentityDeactivationFormProps {
    * 与 preset 的差别：预填是起点、人可以改；锁定不可改。
    */
   locked?: DeactivationPreset | null;
+  /** 锁定对象在确认框里叫什么（公司主体页传「公司主体」）；不给就用种类词表。 */
+  subjectLabel?: string;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -206,6 +208,7 @@ export function IdentityDeactivationForm({
   preset = null,
   onUnsavedChange,
   locked = null,
+  subjectLabel,
 }: IdentityDeactivationFormProps) {
   const [confirming, setConfirming] = useState(false);
   // 本表单自读那一册的答案，连同是哪一册（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连
@@ -280,7 +283,7 @@ export function IdentityDeactivationForm({
   const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
   // 确认框里复述名称：候选取自同一份册答案，没取到就只报标识，不另读。
   const selectedName = selected === null ? null : pairedLabelOf(selected, draft.id);
-  const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName);
+  const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName, subjectLabel ?? null);
   const pickerProps = {
     label: '停用哪一个 *',
     path: 'deactivations[0].id',

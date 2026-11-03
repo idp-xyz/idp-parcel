@@ -21,7 +21,6 @@ import {
 } from './api';
 import { identityLayerAbsentNote, partyNameUnknownNote } from './presentation';
 import {
-  DateCell,
   LegalEntityBanners,
   LegalEntityLifecycle,
   LegalEntityMoreMenu,
@@ -34,11 +33,12 @@ import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
 import { legalEntityContactCountOf } from './legal-entity-profile';
-import { identityLayerCellsOf } from './legal-entity-identity';
+import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences, type LegalEntityReferences } from './LegalEntityReferencesSection';
-import { profileStatusCellOf, referencedCount, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
+import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
+import { Instant } from './detail-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -48,17 +48,21 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['group-legal-entities'];
 
 /**
- * 对象页与工作台详情栏共用身份修订历史的判读。
- * 模块级常量——load 进 effect 依赖。
+ * 对象页与工作台详情栏共用身份修订历史的判读。按注册号类型目录译名的那一份随页面传进来（票 01 备好的
+ * `legalEntityRevisionTimeline` 第三参）；`load` 仍是模块级函数——只有它进 effect 依赖，每帧新造的壳不会触发重取。
  */
-export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
-  subject: '法人',
-  endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
-  load: listLegalEntityRevisions,
-  echoedSubjectId: (body) => body.legalEntityId,
-  timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant),
-  noteOf: revisionHistoryNote,
-};
+export function legalEntityRevisionHistoryOf(
+  typeNameOf?: RegistrationNumberTypeNameOf,
+): RevisionHistoryRegister<LegalEntityRevisionListResponseBody> {
+  return {
+    subject: '法人',
+    endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
+    load: listLegalEntityRevisions,
+    echoedSubjectId: (body) => body.legalEntityId,
+    timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant, typeNameOf),
+    noteOf: revisionHistoryNote,
+  };
+}
 
 function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
@@ -66,8 +70,9 @@ function muted(text: string): ReactNode {
 
 // 身份事实留在头部，当前资料归概要，资料版本与身份修订各用自己的历史链。
 
-function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
-  const identity = identityLayerCellsOf(row);
+function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberTypeNameOf): DetailMeta[] {
+  // 注册号的类型码经目录译成名（统一社会信用代码），目录没读到就按码显——译名是锦上添花，号本身在答复里。
+  const identity = identityLayerCellsOf(row, typeNameOf);
   return [
     {
       label: '国家',
@@ -88,21 +93,24 @@ const statValue = 'text-[16px] font-medium';
  * 「未停用」不占格。生命周期条与往来单位页同位（BusinessPartyDetailPage 的 buildSummary）。
  */
 function buildSummary(row: GroupLegalEntityRecord, profileCell: ProfileStatusCell, references: LegalEntityReferences): DetailSummaryStat[] {
-  const referenced = referencedCount(references.agreements, references.policies);
+  const referenced = referencedCount(references.states);
+  const day = (value: string) => (
+    <span className={`${statValue} font-mono`}>
+      <Instant value={value} precision="day" />
+    </span>
+  );
   return [
-    { label: '生效日期', value: <DateCell value={row.effectiveFrom} className={`${statValue} font-mono`} /> },
+    { label: '生效日期', value: day(row.effectiveFrom) },
     { label: '资料状态', value: <ProfileStatusValue cell={profileCell} /> },
     {
       label: '被引用',
       value: (
-        <span className={`${statValue} font-mono`} title="供应商协议的在用版本与结算政策的版本之和；任一册读不到显「—」">
+        <span className={`${statValue} font-mono`} title={referencedCountNote}>
           {referencedCountText(referenced)}
         </span>
       ),
     },
-    ...(row.deactivatedAt
-      ? [{ label: '停用日期', value: <DateCell value={row.deactivatedAt} className={`${statValue} font-mono`} /> }]
-      : []),
+    ...(row.deactivatedAt ? [{ label: '停用日期', value: day(row.deactivatedAt) }] : []),
     { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
   ];
 }
@@ -171,6 +179,7 @@ export function LegalEntityDetailPage({
   listAnswer,
   retry,
   onBack,
+  typeNameOf,
 }: {
   legalEntityId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -178,6 +187,8 @@ export function LegalEntityDetailPage({
   listAnswer: ApiResult<GroupLegalEntityListResponseBody> | null;
   retry: () => void;
   onBack: () => void;
+  /** 注册号类型目录的译名（列表页读一次传进来）；不给就按码显。 */
+  typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   const [tab, setTab] = useTabViewState<WorkspaceTabId>('legal-entity.object-tab', 'summary');
   // 旧对象页把身份历史放在时间线签，保留工作区已记住的历史查看位置。
@@ -229,7 +240,7 @@ export function LegalEntityDetailPage({
           </Button>
         </>
       }
-      meta={row ? buildMeta(row) : []}
+      meta={row ? buildMeta(row, typeNameOf) : []}
       summary={row ? buildSummary(row, profileCell, references) : undefined}
       basicTitle="概要"
       basicFields={row ? buildBasicFields(row) : []}
@@ -291,7 +302,7 @@ export function LegalEntityDetailPage({
                 id: 'identity-revisions',
                 content: (
                   <RevisionHistorySection
-                    register={legalEntityRevisionHistory}
+                    register={legalEntityRevisionHistoryOf(typeNameOf)}
                     subjectId={row.legalEntityId}
                     revision={row.revision}
                   />

@@ -1,9 +1,15 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
-import type { LegalEntityProfileResolutionResponseBody, SettlementPolicyRecord, SupplierAgreementRecord } from './api';
+import type {
+  CreditPolicyRecord,
+  LegalEntityProfileResolutionResponseBody,
+  RulePackageRecord,
+  SettlementPolicyRecord,
+  SupplierAgreementRecord,
+} from './api';
 import {
-  displayDateOf,
+  creditPoliciesOfLegalEntity,
   inUseCount,
   profileStatusCellOf,
   referenceLineText,
@@ -11,11 +17,13 @@ import {
   referenceRowHash,
   referencedCount,
   referencedCountText,
+  rulePackagesOfLegalEntity,
   settlementPoliciesOfLegalEntity,
   supplierAgreementsOfLegalEntity,
+  type LegalEntityReferenceStates,
 } from './legal-entity-references';
 
-// 本文件钉公司主体「关联」签与首屏三格（票 company-subject-ux/03）的判读：只按法人标识在已取回的行上关联，不下推查询；
+// 本文件钉公司主体「关联」签与首屏两格（票 company-subject-ux/03）的判读：只按法人标识在已取回的行上关联，不下推查询；
 // 在用只看服务端答的状态；读不到的册说读不到、不显 0；被引用少一册就是「—」。
 
 const SELF = 'SYN-LE-01';
@@ -51,6 +59,54 @@ function policy(over: Partial<SettlementPolicyRecord>): SettlementPolicyRecord {
   };
 }
 
+function credit(over: Partial<CreditPolicyRecord>): CreditPolicyRecord {
+  return {
+    objectId: 'SYN-CREDIT-01',
+    version: 'v1',
+    legalEntity: SELF,
+    authorityLevel: 'OPERATIONS',
+    chargeType: 'FREIGHT',
+    limitMinor: 100000,
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    registeredAt: '2025-12-01T00:00:00Z',
+    ...over,
+  };
+}
+
+function rulePackage(over: Partial<RulePackageRecord>): RulePackageRecord {
+  return {
+    objectId: 'SYN-RULEPKG-01',
+    version: 'v1',
+    serviceProduct: 'SYN-PROD-A',
+    contract: 'SYN-CONTRACT-01',
+    legalEntity: SELF,
+    scope: 'SYN-SCOPE-01',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    declaredAt: '2025-12-01T00:00:00Z',
+    rules: [],
+    intakeQualificationDeclared: false,
+    allowedIntakeSources: [],
+    intakeQualificationRefs: [],
+    finalRulesDeclared: false,
+    finalRules: [],
+    ...over,
+  };
+}
+
+function answered<Row>(rows: Row[]): { kind: 'answered'; rows: Row[] } {
+  return { kind: 'answered', rows };
+}
+
+function states(over: Partial<LegalEntityReferenceStates>): LegalEntityReferenceStates {
+  return {
+    agreements: answered([agreement({}), agreement({ version: 'v2', status: 'RETIRED' })]),
+    settlement: answered([policy({}), policy({ objectId: 'SYN-SETTLEMENT-PREPAID-02' })]),
+    credit: answered([credit({})]),
+    rulePackages: answered([rulePackage({})]),
+    ...over,
+  };
+}
+
 // Covers: 只收责任法人是本公司且正文已登记的版本；壳在正文缺的版本没有法人一格，不列；按对象标识再按版本排。
 test('供应商协议按责任法人在已取回的行上关联，正文未登记的不列', () => {
   const rows = supplierAgreementsOfLegalEntity(SELF, [
@@ -66,16 +122,30 @@ test('供应商协议按责任法人在已取回的行上关联，正文未登�
   );
 });
 
-// Covers: 结算政策按责任法人一格关联，别家的不列；同一公司多份全列。
-test('结算政策按责任法人关联', () => {
-  const rows = settlementPoliciesOfLegalEntity(SELF, [
-    policy({ objectId: 'SYN-SETTLEMENT-PREPAID-02' }),
-    policy({ objectId: 'SYN-SETTLEMENT-OTHER', legalEntity: 'SYN-LE-02' }),
-    policy({ objectId: 'SYN-SETTLEMENT-PREPAID-01' }),
-  ]);
+// Covers: 三本政策册都按责任法人一格关联，别家的不列；同一公司多份全列，按标识与版本排。
+test('结算政策、信用政策、接单规则包按责任法人关联', () => {
   deepEqual(
-    rows.map((row) => row.objectId),
+    settlementPoliciesOfLegalEntity(SELF, [
+      policy({ objectId: 'SYN-SETTLEMENT-PREPAID-02' }),
+      policy({ objectId: 'SYN-SETTLEMENT-OTHER', legalEntity: 'SYN-LE-02' }),
+      policy({ objectId: 'SYN-SETTLEMENT-PREPAID-01' }),
+    ]).map((row) => row.objectId),
     ['SYN-SETTLEMENT-PREPAID-01', 'SYN-SETTLEMENT-PREPAID-02'],
+  );
+  deepEqual(
+    creditPoliciesOfLegalEntity(SELF, [
+      credit({ version: 'v2' }),
+      credit({ objectId: 'SYN-CREDIT-OTHER', legalEntity: 'SYN-LE-02' }),
+      credit({ version: 'v1' }),
+    ]).map((row) => `${row.objectId}@${row.version}`),
+    ['SYN-CREDIT-01@v1', 'SYN-CREDIT-01@v2'],
+  );
+  deepEqual(
+    rulePackagesOfLegalEntity(SELF, [
+      rulePackage({ objectId: 'SYN-RULEPKG-OTHER', legalEntity: 'SYN-LE-02' }),
+      rulePackage({}),
+    ]).map((row) => row.objectId),
+    ['SYN-RULEPKG-01'],
   );
 });
 
@@ -98,33 +168,29 @@ test('referenceLineText 按册的读取状态与有无状态措辞', () => {
   equal(referenceLineText('结算政策', { kind: 'transport', message: 'x' }, false), '结算政策 读不到');
 });
 
-// Covers: 被引用 = 协议在用版本数 + 政策版本数；任一册没答到就是 null → 「—」，不拿读到的那一册冒充和。
-test('referencedCount 两册都答到才有数', () => {
-  const agreements = { kind: 'answered' as const, rows: [agreement({}), agreement({ version: 'v2', status: 'RETIRED' })] };
-  const policies = { kind: 'answered' as const, rows: [policy({}), policy({ objectId: 'SYN-SETTLEMENT-PREPAID-02' })] };
-  equal(referencedCount(agreements, policies), 3);
-  equal(referencedCount({ kind: 'loading' }, policies), null);
-  equal(referencedCount(agreements, { kind: 'notGranted' }), null);
+// Covers: 被引用 = 协议在用版本数 + 三本政策册的版本数；任一册没答到就是 null → 「—」，不拿读到的那几册冒充和。
+test('referencedCount 四册都答到才有数', () => {
+  equal(referencedCount(states({})), 1 + 2 + 1 + 1);
+  equal(referencedCount(states({ agreements: { kind: 'loading' } })), null);
+  equal(referencedCount(states({ settlement: { kind: 'notGranted' } })), null);
+  equal(referencedCount(states({ credit: { kind: 'unconfigured' } })), null);
+  equal(referencedCount(states({ rulePackages: { kind: 'transport', message: 'x' } })), null);
+  equal(referencedCount(states({ credit: answered([]), rulePackages: answered([]) })), 3);
   equal(referencedCountText(3), '3');
   equal(referencedCountText(0), '0');
   equal(referencedCountText(null), '—');
 });
 
-// Covers: 点行去对象所在的页并带对象标识作检索词；结算政策落在商业规则页的结算政策册上；段首链接带公司标识。
+// Covers: 点行去对象所在的页并带对象标识作检索词；三本政策册都落在商业规则页、按册定位；段首链接带公司标识。
 test('引用的去处带检索词', () => {
   equal(referenceRowHash('supplier-agreement', 'SYN-SUPPLIER-TRUNK-CN-SG-01'), '#/supplier-agreements?q=SYN-SUPPLIER-TRUNK-CN-SG-01');
   equal(
     referenceRowHash('settlement-policy', 'SYN-SETTLEMENT-PREPAID-01'),
     '#/commercial-policies?register=SETTLEMENT_POLICY&q=SYN-SETTLEMENT-PREPAID-01',
   );
+  equal(referenceRowHash('credit-policy', 'SYN-CREDIT-01'), '#/commercial-policies?register=CREDIT_POLICY&q=SYN-CREDIT-01');
+  equal(referenceRowHash('rule-package', 'SYN-RULEPKG-01'), '#/commercial-policies?q=SYN-RULEPKG-01');
   equal(referenceRegisterHash('supplier-agreement', SELF), '#/supplier-agreements?q=SYN-LE-01');
-});
-
-// Covers: 日期按呈现时区取墙钟日，不是 ISO 串的前十位；解析不了原样交回。
-test('displayDateOf 按呈现时区取日', () => {
-  equal(displayDateOf('2026-01-01T20:00:00Z', 'Asia/Shanghai'), '2026-01-02');
-  equal(displayDateOf('2026-01-01T20:00:00Z', 'UTC'), '2026-01-01');
-  equal(displayDateOf('not-a-time', 'UTC'), 'not-a-time');
 });
 
 // Covers: 资料状态格——还没读到是占位；读不到或答的是别家公司显「—」；答到了词与色调取 legalEntityProfileStatusOf。

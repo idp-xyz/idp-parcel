@@ -12,9 +12,8 @@ import type { GroupLegalEntityRecord } from './api';
 import { StatusPill } from '../../components/StatusPill';
 import { TabCountBadge } from '../../components/TabCountBadge';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { identityLayerCellsOf } from './legal-entity-identity';
+import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import {
-  DateCell,
   LegalEntityBanners,
   LegalEntityLifecycle,
   LegalEntityMoreMenu,
@@ -25,13 +24,14 @@ import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
 import { legalEntityContactCountOf } from './legal-entity-profile';
-import { legalEntityRevisionHistory, legalEntityTechnicalRows } from './LegalEntityDetailPage';
+import { legalEntityRevisionHistoryOf, legalEntityTechnicalRows } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
-import { profileStatusCellOf, referencedCount, referencedCountText } from './legal-entity-references';
+import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText } from './legal-entity-references';
 import {
   Fact,
   FactStrip,
+  Instant,
   RefChip,
   UnknownPartyName,
   useCopyToClipboard,
@@ -60,12 +60,15 @@ export function LegalEntityDetailPanel({
   onClose,
   onOpenObjectPage,
   onChanged,
+  typeNameOf,
 }: {
   row: GroupLegalEntityRecord;
   onClose: () => void;
   onOpenObjectPage: () => void;
   /** 停用落册后回调；列表页借它重取法人册（GroupLegalEntitiesPage 的 renderDetail 传 retry）。 */
   onChanged?: () => void;
+  /** 注册号类型目录的译名（列表页读过的那一份）；不给就按码显。 */
+  typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   const [tab, setTab] = useTabViewState<PanelTab>('legal-entity.panel-tab', 'overview');
   // 去过的签留着挂载（隐藏而不卸载）：Radix 默认卸掉非活动签，法人资料与修订历史两区每切回来一次就重取一次、闪一次加载态。
@@ -84,9 +87,10 @@ export function LegalEntityDetailPanel({
   // 两册一栏只读一次：事实条「被引用」与「关联」签用同一份答案；方向键换行只换关联、不重读。
   const references = useLegalEntityReferences(row.legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row.legalEntityId);
-  const referenced = referencedCount(references.agreements, references.policies);
+  const referenced = referencedCount(references.states);
   const copy = useCopyToClipboard();
-  const identity = identityLayerCellsOf(row);
+  // 注册号的类型码经目录译成名；目录没读到就按码显。
+  const identity = identityLayerCellsOf(row, typeNameOf);
   const selectTab = (next: PanelTab) => {
     setTab(next);
     setVisited((previous) => (previous.has(next) ? previous : new Set(previous).add(next)));
@@ -142,17 +146,17 @@ export function LegalEntityDetailPanel({
 
       <FactStrip>
         <Fact label="生效日期">
-          <DateCell value={row.effectiveFrom} />
+          <Instant value={row.effectiveFrom} precision="day" />
         </Fact>
         <Fact label="资料状态">
           <ProfileStatusValue cell={profileCell} />
         </Fact>
         <Fact label="被引用">
-          <span title="供应商协议的在用版本与结算政策的版本之和；任一册读不到显「—」">{referencedCountText(referenced)}</span>
+          <span title={referencedCountNote}>{referencedCountText(referenced)}</span>
         </Fact>
         {row.deactivatedAt ? (
           <Fact label="停用日期">
-            <DateCell value={row.deactivatedAt} />
+            <Instant value={row.deactivatedAt} precision="day" />
           </Fact>
         ) : null}
       </FactStrip>
@@ -214,7 +218,7 @@ export function LegalEntityDetailPanel({
               forceMount={visited.has('history') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
             >
-              <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
+              <RevisionHistorySection register={legalEntityRevisionHistoryOf(typeNameOf)} subjectId={row.legalEntityId} revision={row.revision} />
             </TabsContent>
             <TabsContent value="related" className="mt-0">
               <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />

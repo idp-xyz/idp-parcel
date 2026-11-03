@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Button, Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@idpxyz/ui-primitives';
 import type { GroupLegalEntityRecord } from './api';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
+import { nounOf } from '../../vocabulary/objects';
 
 /**
  * 公司主体页的停用对话框（票 company-subject-ux/03）：停用留在这家公司自己的页上，不再把人送去往来单位页的停用表单。
@@ -28,7 +29,7 @@ export function LegalEntityDeactivationDialog({
       <DialogContent size="xl" className="max-h-[85vh] overflow-y-auto">
         <DialogHeader className="items-start">
           <div>
-            <DialogTitle>停用公司主体 {name}</DialogTitle>
+            <DialogTitle>停用{nounOf('companyEntity')} {name}</DialogTitle>
             <DialogDescription className="mt-1">从停用时间起，新的签约、开票不再用它；已有记录保留，停用后不能撤回。</DialogDescription>
           </div>
           <Button type="button" variant="ghost" size="icon" aria-label="关闭" onClick={() => onOpenChange(false)}>
@@ -41,6 +42,8 @@ export function LegalEntityDeactivationDialog({
             // 参与方册的答案只在种类为业务参与方时用得上；这里种类锁死为法人，法人册由表单自己读一次（候选与版本号建议同一份）。
             parties={null}
             locked={{ kind: 'LEGAL_ENTITY', id: row.legalEntityId }}
+            // 确认框里只说「公司主体」：词表的「责任法人」只在解释概念时出现（spec 统一用语）。
+            subjectLabel={nounOf('companyEntity')}
             onDeactivated={() => {
               onOpenChange(false);
               onDeactivated();

@@ -168,21 +168,22 @@ test('认领的路径表', () => {
 });
 
 // 票 party-commercial-uiux/06：停用是终态，按下前复述要停的是谁、从何时起、凭什么。
-test('停用确认框复述种类、名称与标识、本地与 UTC 两份时点、依据与修订号，并说清不能撤回', () => {
-  const confirmation = deactivationConfirmation(
-    { kind: 'LEGAL_ENTITY', id: 'SYN-LE-01', revision: '2', basis: 'SYN-DEREG-01', at: '2026-11-01T09:30' },
-    'Asia/Shanghai',
-    '合成运营方一号（演示） · SYN-LE-01 · 已生效',
-  );
+test('停用确认框复述种类、名称与标识、本地与 UTC 两份时点、来源单据与版本号，并说清不能撤回', () => {
+  const draft = { kind: 'LEGAL_ENTITY', id: 'SYN-LE-01', revision: '2', basis: 'SYN-DEREG-01', at: '2026-11-01T09:30' };
+  const confirmation = deactivationConfirmation(draft, 'Asia/Shanghai', '合成运营方一号（演示） · SYN-LE-01 · 已生效');
   equal(confirmation.title, '停用这个责任法人？');
   equal(confirmation.message.includes('不能撤回'), true);
   deepEqual(confirmation.facts, [
     { label: '身份种类', value: '责任法人' },
     { label: '身份', value: '合成运营方一号（演示） · SYN-LE-01 · 已生效' },
     { label: '停用时点', value: '2026-11-01 09:30:00 UTC+8（UTC 2026-11-01T01:30:00Z）' },
-    { label: '停用依据', value: 'SYN-DEREG-01' },
-    { label: '修订号', value: 'r2' },
+    { label: '停用来源单据', value: 'SYN-DEREG-01' },
+    { label: '版本号', value: '第 2 版' },
   ]);
+  // 公司主体页的对话框把主语换成「公司主体」，词表的「责任法人」不露出（票 company-subject-ux/03）。
+  const asCompany = deactivationConfirmation(draft, 'Asia/Shanghai', null, '公司主体');
+  equal(asCompany.title, '停用这个公司主体？');
+  equal(asCompany.facts[0].value, '公司主体');
 });
 
 test('停用确认框对未填的格照实说未填，不替表单判', () => {
