@@ -233,6 +233,9 @@ type BillReceptionStore interface {
 		tenant domain.TenantID,
 		claim domain.BillClaimID,
 	) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error)
+	// FindClaimSupplier 答一份主张已接收的版本是哪家供应商的（最早落库的那一版）；还没有任何版本答 false。同一份主张的各版本
+	// 供应商不变（ADR-0357 决定一），编排拿它挡换了供应商的新版本。
+	FindClaimSupplier(ctx context.Context, tenant domain.TenantID, claim domain.BillClaimID) (domain.SupplierPartyReference, bool, error)
 }
 
 // ExpectedCostView 按版本取回供应商预期成本供逐行匹配引用。found=false 表示该版本

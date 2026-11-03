@@ -263,7 +263,7 @@ export function listSettlementStatements<Registry extends StatementRegistry>(
 }
 
 /**
- * 账单册的精确检索（读口的 claim、supplier、supplierBillNumber 三维，逐字比，在全册里找）：登记表单找页外更早的原账单、新登的账单
+ * 账单册的精确检索（按主张、供应商、供应商账单号，逐字比，在全册里找；给了账单号时供应商比的是号的分配方）：登记表单找页外更早的原账单、新登的账单
  * 不在页上时右栏读回它，都用它——只在取回的那一页里筛，册一超过一页就会静默找不到。账单号只认服务端的账单号册：票 11 期间
  * 「供应商/账单号」形的旧主张没进册，要按主张身份找。
  */
@@ -734,9 +734,10 @@ export interface SupplierBillReceptionResponseBody {
   continuationReference?: string;
   auditAuthority?: string;
   notCurrent?: { line: string; version: string; withdrawn: boolean; successor?: string };
-  /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号（连同它的分配方，即供应商）。 */
+  /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号。 */
   registeredClaim?: string;
   registeredSupplierBillNumber?: string;
+  /** 只在 CLAIM_SUPPLIER_CONFLICT 时出现：这份主张原先的供应商（同一份主张的各版本供应商不变）。 */
   registeredSupplier?: string;
 }
 

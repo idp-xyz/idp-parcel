@@ -389,6 +389,22 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 		}
 	}
 
+	// 存量里各版本供应商不一的主张（编排今天会挡，这里直写一版另一家供应商的）：按（另一家，号）检索不命中——供应商比的是号册上的
+	// 分配方；只按另一家供应商检索，照接收行的供应商找得到那一版。
+	seedSupplierBill(t, fixture, catalogueTenant, claim, "2", "SYN-SUP-02", "", catalogueBaseAt)
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 0 {
+		t.Fatalf("另一家供应商加这个号不该命中：err=%v %+v", err, found)
+	}
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 2 {
+		t.Fatalf("分配方加号要命中这份主张的两版：err=%v %+v", err, found)
+	}
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", Claim: claim}, 10); err != nil || len(found) != 1 || found[0].ClaimVersion != "2" {
+		t.Fatalf("不给号时按接收行的供应商比：err=%v %+v", err, found)
+	}
+
 	payables, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{Claim: claim}, 10)
 	if err != nil || len(payables) != 3 {
 		t.Fatalf("应付册：err=%v rows=%+v", err, payables)

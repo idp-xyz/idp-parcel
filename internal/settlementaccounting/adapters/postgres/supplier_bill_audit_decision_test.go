@@ -165,7 +165,8 @@ func TestConcurrentAuditsOfOneLineFormOnePayable(t *testing.T) {
 	}
 }
 
-// Covers: 审核决定册的库面兜底——没排队的写者撞上同一行已有的段、同一争议已有的再审都答`已有记录`，首尾相接照常落；事务外 Save 拒（ErrTransactionRequired）；争议不带依据、
+// Covers: 审核决定册与账单号册的库面兜底——没排队的写者撞上同一行已有的段、同一争议已有的再审都答`已有记录`，首尾相接照常落；
+// 号册拒首尾空白、控制字符与格式字符；事务外 Save 拒（ErrTransactionRequired）；争议不带依据、
 // 再审写成争议、范围倒置由 CHECK 拒；他租户读不到。
 func TestTheAuditDecisionRegisterGuardsRangesInTheDatabase(t *testing.T) {
 	stack := newNumberingStack(t)
@@ -249,11 +250,29 @@ func TestTheAuditDecisionRegisterGuardsRangesInTheDatabase(t *testing.T) {
 			t.Fatalf("%s 落了库", name)
 		}
 	}
+
+	// 账单号册的库面兜底（领域 NewSupplierBillNumber 之外）：首尾空白、控制字符与格式字符落不进；中间的普通空格与小写照收。
+	register := func(number string) error {
+		_, err := stack.pool.Exec(ctx, `INSERT INTO settlement_accounting.supplier_bill_number
+			(tenant_id, supplier_ref, bill_number, claim_id, claim_version, recorded_at)
+			VALUES ('tenant-1', 'supplier-1', $1, 'claim-'||md5($1), 'v1', now())`, number)
+		return err
+	}
+	for _, number := range []string{"INV-9 ", " INV-9", "INV-9\u3000", "INV\t9", "INV\u200b9", "\ufeffINV-9", "INV-9\u202e", "INV\U000E00419"} {
+		if register(number) == nil {
+			t.Fatalf("账单号 %q 落进了号册", number)
+		}
+	}
+	for _, number := range []string{"INV 9", "inv-9", "账单-9"} {
+		if err := register(number); err != nil {
+			t.Fatalf("账单号 %q 应照收：%v", number, err)
+		}
+	}
 }
 
 // Covers: `AT-SA-233`（真库半边）——账单号随接收写进账单号册，主张读回带号（不论哪一版带来）；两笔并发接收同一供应商同一号、不同主张：
-// 一笔接收、另一笔答账单号冲突，册上只有一份主张；新版本换了供应商而号不变答账单号冲突；另一家供应商同号照常；没排队的写者撞号
-// 交回错误、接收行不落。
+// 一笔接收、另一笔答账单号冲突，册上只有一份主张；新版本换了供应商，带不带号都答主张供应商冲突；另一家供应商同号照常；没排队的
+// 写者撞号交回错误、接收行不落。
 func TestASupplierBillNumberIsRegisteredOncePerSupplier(t *testing.T) {
 	stack := newNumberingStack(t)
 	ctx := t.Context()
@@ -322,12 +341,16 @@ func TestASupplierBillNumberIsRegisteredOncePerSupplier(t *testing.T) {
 	if number, has := found.Claim.BillNumber(); err != nil || !present || !has || number.String() != "INV-001" {
 		t.Fatalf("v2 读回的号 = %v %v（号标识主张，不论哪一版带来）", number, has)
 	}
-	// 同一份主张的新版本换了供应商、号不变：（另一家供应商，同一个号）是另一个外部标识，答账单号冲突、带出已登记的号与分配方，
-	// 不再落成号册上的一致性错误（未形成答案）。
-	outcome, switched := receive(command(winner, "v3", "supplier-2", "INV-001"))
-	if conflict, _ := switched.NumberConflict(); outcome != "SUPPLIER_BILL_NUMBER_CONFLICT" || conflict.RegisteredNumber.String() != "INV-001" ||
-		conflict.RegisteredSupplier.String() != "supplier-1" {
-		t.Fatalf("换供应商的新版本 = %s %+v", outcome, conflict)
+	// 同一份主张的新版本换了供应商，带不带号都答主张供应商冲突、带出原先的供应商，不再落成号册上的一致性错误（未形成答案），
+	// 也不在号册分配方之外另起一个供应商。
+	for _, number := range []string{"INV-001", ""} {
+		outcome, switched := receive(command(winner, "v3", "supplier-2", number))
+		if conflict, _ := switched.NumberConflict(); outcome != "CLAIM_SUPPLIER_CONFLICT" || conflict.RegisteredSupplier.String() != "supplier-1" {
+			t.Fatalf("换供应商的新版本（号 %q）= %s %+v", number, outcome, conflict)
+		}
+	}
+	if count := countRows(t, stack, `SELECT count(*) FROM settlement_accounting.supplier_bill_reception WHERE supplier_ref = 'supplier-2' AND claim_id = '`+winner+`'`); count != 0 {
+		t.Fatal("换供应商的新版本落了库")
 	}
 	if outcome, _ := receive(command("claim-c", "v1", "supplier-2", "INV-001")); outcome != "BILL_RECEIVED" {
 		t.Fatalf("另一家供应商同号 = %s", outcome)

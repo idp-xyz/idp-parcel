@@ -222,10 +222,7 @@ test('接收答复说人话：受理、审核人未配置、重复、版本冲�
     '没有登记：第 2 行选的预期成本 V1 已经被更正过（现在是 V2），改选当前那一版再登记。',
   );
   match(receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredClaim: 'BILL-OLD' }, 'INV-1'), /账单号 INV-1 已经登记过/);
-  match(
-    receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredSupplierBillNumber: 'INV-1', registeredSupplier: 'SUP-A' }, 'INV-1', () => '甲公司'),
-    /以甲公司的账单号 INV-1 登记过/,
-  );
+  match(receptionAnswerText({ outcome: 'CLAIM_SUPPLIER_CONFLICT', registeredSupplier: 'SUP-A' }, 'INV-1', () => '甲公司'), /是甲公司的，同一份账单的新版本不能换供应商/);
 });
 
 test('对不上的分类从取值表取界面词：不含已对上，不出英文码', () => {

@@ -342,18 +342,25 @@ export function rangedAuditAnswerText(
 }
 
 /**
- * 接收口答「账单号冲突」时的那一句（ADR-0357 决定一）：号已标识另一份主张，或这份主张已以另一个号登记——号相同而供应商不同也是
- * 另一个号（号的分配方是供应商）。supplierName 把供应商编码说成名字，由调用方交进来。
+ * 接收口答「主张供应商冲突」时的那一句（ADR-0357 决定一）：同一份主张的新版本换了供应商。supplierName 把供应商编码说成名字，由调用方
+ * 交进来。
  */
-export function billNumberConflictText(
-  body: { registeredClaim?: string; registeredSupplierBillNumber?: string; registeredSupplier?: string },
-  billNumber: string,
-  claimLabel: (claim: string) => string = (claim) => claim,
+export function claimSupplierConflictText(
+  body: { registeredSupplier?: string },
   supplierName: (supplier: string) => string = (supplier) => supplier,
 ): string {
+  const original = body.registeredSupplier ? `是${supplierName(body.registeredSupplier)}的` : '是另一家供应商的';
+  return `没有登记：这份账单之前登记的版本${original}，同一份账单的新版本不能换供应商。换了供应商的来件是另一家的账单，另登一张。`;
+}
+
+/** 接收口答「账单号冲突」时的那一句（ADR-0357 决定一）：号已标识另一份主张，或这份主张已以另一个号登记。 */
+export function billNumberConflictText(
+  body: { registeredClaim?: string; registeredSupplierBillNumber?: string },
+  billNumber: string,
+  claimLabel: (claim: string) => string = (claim) => claim,
+): string {
   if (body.registeredSupplierBillNumber) {
-    const owner = body.registeredSupplier ? `${supplierName(body.registeredSupplier)}的` : '';
-    return `没有登记：这份账单已经以${owner}账单号 ${body.registeredSupplierBillNumber} 登记过；同一份账单的新版本不能换账单号，也不能换供应商。照来件核对。`;
+    return `没有登记：这份账单已经以账单号 ${body.registeredSupplierBillNumber} 登记过，同一份账单的新版本不能换账单号；照来件核对。`;
   }
   const registered = body.registeredClaim ? `（${claimLabel(body.registeredClaim)}）` : '';
   return `没有登记：这家供应商的账单号 ${billNumber.trim()} 已经登记过${registered}。去看已登记的那份；供应商更正后重发的，在那一份上以新版本登记。`;

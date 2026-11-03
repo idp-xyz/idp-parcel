@@ -299,7 +299,8 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	//
 	// 审核决定的三个和（已拒绝、仍在争议中、还没有任何结果）也只数这一版各行上的决定，求法与 domain.TallyLineDecisions 一致：
 	// 仍在争议中 = 直接给的争议之和减去全部再审之和，还没有结果 = 逐行主张金额减去直接给的各段之和、不小于零。结果的字面取自
-	// 领域（$4、$5）。账单号取账单号册，不论哪一版带来。
+	// 领域（$4、$5）。账单号取账单号册，不论哪一版带来。按账单号检索时，供应商比的是号册上的分配方（$7 对 n.supplier_ref）：
+	// 号是那家供应商分配的；存量里各版本供应商不一的主张，按接收行的供应商比就会让另一家的检索命中这个号。
 	rows, err := querier.Query(ctx,
 		`SELECT r.claim_id, r.claim_version, r.supplier_ref, r.legal_entity, r.period_ref, r.currency,
 		        jsonb_array_length(r.claim -> 'lines')::bigint,
@@ -366,7 +367,7 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		       ) AS audits
 		  WHERE r.tenant_id = $1
 		    AND ($6::text = '' OR r.claim_id = $6)
-		    AND ($7::text = '' OR r.supplier_ref = $7)
+		    AND ($7::text = '' OR ($8::text = '' AND r.supplier_ref = $7) OR ($8::text <> '' AND n.supplier_ref = $7))
 		    AND ($8::text = '' OR n.bill_number = $8)
 		  ORDER BY (r.claim ->> 'received_at')::timestamptz DESC, r.claim_id, r.claim_version
 		  LIMIT $2`,
