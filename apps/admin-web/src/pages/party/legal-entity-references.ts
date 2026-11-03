@@ -8,6 +8,7 @@
 
 import type { ApiResult } from '../catalogue-api';
 import type {
+  BusinessPartyListResponseBody,
   CommercialPolicyKind,
   CreditPolicyRecord,
   LegalEntityProfileResolutionResponseBody,
@@ -20,6 +21,7 @@ import { policiesHash } from './commercial-policies-address';
 import { byString } from './list-order';
 import { legalEntityProfileStatusOf, type LegalEntityProfileStatus } from './legal-entity-profile';
 import { overviewSectionHash, type OverviewSectionState } from './party-overview';
+import { updateOrdinalLabel } from './presentation';
 
 const byObjectVersion = (
   left: { objectId: string; version: string },
@@ -112,6 +114,29 @@ export function referencedCountText(count: number | null): string {
 
 /** 「被引用」格悬停那句，说清口径——三本政策册按版本数计，不是在用数。 */
 export const referencedCountNote = '供应商协议的在用版本，加结算政策、信用政策、接单规则包的版本数；任一册读不到显「—」';
+
+/** 按参与方标识查名称；查不到交回 undefined，行上照显标识。 */
+export type PartyNameOf = (partyId: string) => string | undefined;
+
+/**
+ * 行上的供应商与客户是参与方标识，经往来单位册译成名称（票 company-subject-ux/07）。册没读到、读不到、或册上没有这个
+ * 标识一律查不到——名称是帮人认的，译不到只是这一次没译成，不是引用错了，所以不报错、不显占位。名为空串的也当查不到：
+ * 空名上屏等于把标识藏掉。
+ */
+export function partyNameOfAnswer(answer: ApiResult<BusinessPartyListResponseBody> | null): PartyNameOf {
+  if (answer === null || answer.kind !== 'outcome') return () => undefined;
+  const names = new Map(answer.body.parties.map((party) => [party.partyId, party.partyName]));
+  return (partyId) => names.get(partyId) || undefined;
+}
+
+/**
+ * 版本标识给人看的写法：`v1` 拆成「第 1 版」放状态旁，主键只留对象标识（它才是对象名）。版本标识在领域里只要求非空
+ * （CommercialVersionLabel），不限 `v` 加数字；拆不出序数的照显原串，不硬编一个。
+ */
+export function versionOrdinalText(version: string): string {
+  const match = /^v(\d+)$/i.exec(version.trim());
+  return match ? updateOrdinalLabel(Number(match[1])) : version;
+}
 
 export type ReferenceRowKind = 'supplier-agreement' | 'settlement-policy' | 'credit-policy' | 'rule-package';
 

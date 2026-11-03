@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
 import type {
+  BusinessPartyListResponseBody,
   CreditPolicyRecord,
   LegalEntityProfileResolutionResponseBody,
   RulePackageRecord,
@@ -11,6 +12,7 @@ import type {
 import {
   creditPoliciesOfLegalEntity,
   inUseCount,
+  partyNameOfAnswer,
   profileStatusCellOf,
   referenceLineText,
   referenceRegisterHash,
@@ -20,11 +22,13 @@ import {
   rulePackagesOfLegalEntity,
   settlementPoliciesOfLegalEntity,
   supplierAgreementsOfLegalEntity,
+  versionOrdinalText,
   type LegalEntityReferenceStates,
 } from './legal-entity-references';
 
 // 本文件钉公司主体「关联」签与首屏两格（票 company-subject-ux/03）的判读：只按法人标识在已取回的行上关联，不下推查询；
-// 在用只看服务端答的状态；读不到的册说读不到、不显 0；被引用少一册就是「—」。
+// 在用只看服务端答的状态；读不到的册说读不到、不显 0；被引用少一册就是「—」。行上的供应商与客户经往来单位册译名、
+// 版本标识拆成「第 N 版」是票 company-subject-ux/07 加的。
 
 const SELF = 'SYN-LE-01';
 
@@ -212,4 +216,54 @@ test('profileStatusCellOf 只在答到这家公司时出状态', () => {
   const cell = profileStatusCellOf(incomplete, SELF);
   equal(cell.kind, 'status');
   if (cell.kind === 'status') equal(cell.status.tone, 'warn');
+});
+
+// Covers: 往来单位册答到了按标识取名；册没读到、读不到、册上没有这个标识、名为空串，一律查不到——行上照显标识，不报错。
+test('partyNameOfAnswer 只在册答到且有名时译名', () => {
+  const listed: ApiResult<BusinessPartyListResponseBody> = {
+    kind: 'outcome',
+    status: 200,
+    body: {
+      outcome: 'BUSINESS_PARTIES_LISTED',
+      parties: [
+        {
+          tenantId: 'SYN-TENANT-01',
+          partyId: 'SYN-PARTY-CARRIER-LM-01',
+          partyName: '合成末端承运方（演示）',
+          status: 'EFFECTIVE',
+          revision: 1,
+          basis: 'SYN-BASIS',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          registeredAt: '2026-01-01T00:00:00Z',
+        },
+        {
+          tenantId: 'SYN-TENANT-01',
+          partyId: 'SYN-PARTY-BLANK',
+          partyName: '',
+          status: 'EFFECTIVE',
+          revision: 1,
+          basis: 'SYN-BASIS',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          registeredAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    },
+  };
+  const nameOf = partyNameOfAnswer(listed);
+  equal(nameOf('SYN-PARTY-CARRIER-LM-01'), '合成末端承运方（演示）');
+  equal(nameOf('SYN-PARTY-UNKNOWN'), undefined);
+  equal(nameOf('SYN-PARTY-BLANK'), undefined);
+  equal(partyNameOfAnswer(null)('SYN-PARTY-CARRIER-LM-01'), undefined);
+  equal(partyNameOfAnswer({ kind: 'notGranted' })('SYN-PARTY-CARRIER-LM-01'), undefined);
+  equal(partyNameOfAnswer({ kind: 'transport', message: 'x' })('SYN-PARTY-CARRIER-LM-01'), undefined);
+});
+
+// Covers: `v1` 拆成「第 1 版」（大小写与首尾空白不计较）；不是 v 加数字的版本标识照显原串，不硬编序数。
+test('versionOrdinalText 只把 v 加数字拆成第 N 版', () => {
+  equal(versionOrdinalText('v1'), '第 1 版');
+  equal(versionOrdinalText('V12'), '第 12 版');
+  equal(versionOrdinalText(' v3 '), '第 3 版');
+  equal(versionOrdinalText('2026-Q1'), '2026-Q1');
+  equal(versionOrdinalText('v1a'), 'v1a');
+  equal(versionOrdinalText(''), '');
 });
