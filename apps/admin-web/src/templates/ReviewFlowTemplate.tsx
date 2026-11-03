@@ -193,9 +193,11 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
                     type="button"
                     onClick={() => handleSelect(item.id)}
                     className={`block w-full border-b border-idpxyz-border px-3 py-2.5 text-left transition-colors ${
+                      // 只在选中时上底色与左竖线，鼠标经过不变（用户 2026-11-03 裁定「完全去掉悬停」）；底色用实色令牌——
+                      // var() 写的颜色生不出 `/10` 透明度变体，原先的选中底色一直没有生效。
                       item.id === selectedId
-                        ? 'bg-idpxyz-activeItem/10 border-l-2 border-l-idpxyz-accent'
-                        : 'hover:bg-idpxyz-hover border-l-2 border-l-transparent'
+                        ? 'bg-idpxyz-activeItem border-l-2 border-l-idpxyz-accent'
+                        : 'border-l-2 border-l-transparent'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">

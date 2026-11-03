@@ -410,7 +410,7 @@ export function ListPageTemplate<Row>({
   const { density } = useDensity();
   const cellPadding = densityRowPadding(density);
 
-  // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。没接任何回调时 className 为 undefined。
+  // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。
   // 接了 inspector 的行也是可单击的——单击把它交给检查器。
   const interaction = rowInteraction({
     click: onRowClick !== undefined || inspector !== undefined,
@@ -559,7 +559,7 @@ export function ListPageTemplate<Row>({
         <div
           role="toolbar"
           aria-label="批量动作"
-          className={`flex shrink-0 items-center gap-2 border-b border-idpxyz-accent/30 bg-idpxyz-accent/10 px-4 ${cellPadding}`}
+          className={`flex shrink-0 items-center gap-2 border-b border-idpxyz-border bg-idpxyz-activeItem px-4 ${cellPadding}`}
         >
           <span className="text-[11px] font-medium text-idpxyz-accent">已选 {selectedCount} 项</span>
           <span aria-hidden="true" className="mx-1 h-3 w-px bg-idpxyz-border" />
@@ -632,9 +632,15 @@ export function ListPageTemplate<Row>({
                       return (
                         <TableRow
                           key={key}
-                          // 原语 TableRow 自带悬停底色，这里压回透明：行只在选中（右栏在说它）时上底色，鼠标经过不变——
-                          // 与工作台列表同一条（用户 2026-11-03 裁定「完全去掉悬停」）。
-                          className={[rowClass ?? '', inspected ? 'bg-idpxyz-accent/10 hover:bg-idpxyz-accent/10' : 'hover:bg-transparent']
+                          // 原语 TableRow 自带悬停底色，这里压回：行只在选中（右栏在说它）时上底色与左竖线，鼠标经过不变——
+                          // 与工作台列表同一条（用户 2026-11-03 裁定「完全去掉悬停」）。底色用主题实色令牌：本仓颜色令牌是
+                          // var() 写的，Tailwind 生不出 `/10` 这类透明度变体，原先的 `bg-idpxyz-accent/10` 一直没有生效。
+                          className={[
+                            rowClass ?? '',
+                            inspected
+                              ? 'bg-idpxyz-activeItem shadow-[inset_2px_0_0_0_var(--idpxyz-accent)] hover:bg-idpxyz-activeItem'
+                              : 'hover:bg-transparent',
+                          ]
                             .filter((part) => part !== '')
                             .join(' ')}
                           data-inspected={inspected ? 'true' : undefined}
