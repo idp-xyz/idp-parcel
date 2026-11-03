@@ -1,16 +1,22 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { LegalEntityProfileRevisionRecord } from './api';
+import type { LegalEntityProfileRevisionRecord, RegistrationNumberTypeRecord } from './api';
+import { compareLegalEntityProfiles } from './legal-entity-profile-history';
 import {
+  addressText,
   emptyLegalEntityProfileDraft,
+  legalEntityProfileDraftBasedOn,
   legalEntityProfileLocalProblems,
+  legalEntityProfileMissingFields,
   legalEntityProfilePayloadOf,
   legalEntityProfileStatusOf,
   legalEntityContactCountOf,
+  problemsWithMissing,
+  profileComparisonContentOf,
+  profileDateOf,
   profileDraftContentOf,
   profileMaintenanceNotes,
-  profileContentLines,
-  profileRevisionTimeline,
+  profileTaxTypeOptions,
   resolutionInstantOf,
   suggestedProfileRevision,
   type LegalEntityProfileDraft,
@@ -213,47 +219,23 @@ test('修订号建议', () => {
   equal(suggestedProfileRevision(null, 'SYN-LE-01'), 1);
 });
 
-// Covers: 内容照答复原样转写；缺少的资料明示未配置；开票资料看显式布尔；联系人带上给了的联络方式。
-test('资料内容转写', () => {
-  deepEqual(profileContentLines(revision({})), [
-    { label: '注册地址', value: 'CN · SYN 地址' },
-    { label: '税务登记号', value: '未配置' },
-    { label: '开票抬头', value: '未登开票资料' },
-    { label: '联系人', value: '未配置' },
-  ]);
-  deepEqual(
-    profileContentLines(
-      revision({
-        taxRegistrationNumbers: [
-          { typeCode: 'SYN-VAT', number: '1' },
-          { typeCode: 'SYN-GST', number: '2' },
-        ],
-        invoicingRegistered: true,
-        invoiceTitle: 'SYN 抬头',
-        contacts: [{ name: 'SYN 甲', email: 'a@example.invalid', phone: '100' }, { name: 'SYN 乙' }],
-      }),
-    ).slice(1),
-    [
-      { label: '税务登记号', value: 'SYN-VAT 1；SYN-GST 2' },
-      { label: '开票抬头', value: 'SYN 抬头' },
-      { label: '联系人', value: 'SYN 甲（a@example.invalid，100）；SYN 乙' },
-    ],
-  );
-  deepEqual(profileContentLines(revision({ registeredAddress: { country: '', lines: [] } })).slice(0, 1), [
-    { label: '注册地址', value: '未配置' },
-  ]);
+// Covers: 空地址显「—」（spec 空值规则），有地址国家与各行以「 · 」连。
+test('地址转写：没有即「—」', () => {
+  equal(addressText(undefined), '—');
+  equal(addressText({ country: 'CN', lines: ['SYN 一行', 'SYN 二行'] }), 'CN · SYN 一行 · SYN 二行');
 });
 
-test('法人资料状态按当前解析结果区分未配置、资料不全与可开票', () => {
+test('资料状态按当前查询结果区分未登记资料、资料不全与可开票，词照统一用语', () => {
   deepEqual(legalEntityProfileStatusOf({ outcome: 'RESOLVED', effectiveRevision: revision({}) }), {
-    label: '开票资料可用',
+    label: '可开票',
     tone: 'good',
-    description: '当前时点有生效资料，且已登记开票资料。',
+    description: '当前有生效资料且开票资料齐全。',
   });
   equal(
     legalEntityProfileStatusOf({ outcome: 'PROFILE_INCOMPLETE', incompleteCause: 'NO_EFFECTIVE_REVISION' }).label,
-    '未配置',
+    '未登记资料',
   );
+  equal(legalEntityProfileStatusOf({ outcome: 'LEGAL_ENTITY_NOT_EFFECTIVE' }).label, '主体未生效');
   equal(
     legalEntityProfileStatusOf({
       outcome: 'PROFILE_INCOMPLETE',
@@ -271,18 +253,120 @@ test('法人资料状态按当前解析结果区分未配置、资料不全与�
   equal(legalEntityProfileStatusOf({ outcome: 'RESOLVED' }).label, '状态未识别');
 });
 
-// Covers: 历史从新到旧；标题点名是资料修订（与身份修订分得开，票 group-legal-entities-uiux/01）并带生效时点，
-// 未来生效的那笔看标题就分得出。
-test('资料修订历史从新到旧、标题带生效时点', () => {
-  const items = profileRevisionTimeline(
-    [revision({}), revision({ revision: 2, effectiveFrom: '2027-01-01T00:00:00Z' })],
-    (iso) => `<${iso}>`,
+// Covers（票 company-subject-ux/04 第 1 项）：基于一版预填只带内容格，来源单据 / 生效时间 / 版本号空着；没有基线即空白草稿。
+test('表单草稿基于一版预填：内容格带入，这一次更新的三格空着', () => {
+  const base = revision({ invoicingRegistered: true, invoiceTitle: 'SYN 抬头', contacts: [{ name: 'SYN 甲', email: 'a@example.invalid' }] });
+  const based = legalEntityProfileDraftBasedOn('SYN-LE-01', base);
+  equal(based.legalEntityId, 'SYN-LE-01');
+  equal(based.invoiceTitle, 'SYN 抬头');
+  equal(based.addressCountry, 'CN');
+  deepEqual(based.contacts.map((row) => row.name), ['SYN 甲']);
+  equal(based.basis, '');
+  equal(based.effectiveFrom, '');
+  equal(based.revision, '');
+  deepEqual(legalEntityProfileDraftBasedOn('SYN-LE-01', null), emptyLegalEntityProfileDraft('SYN-LE-01'));
+});
+
+// Covers（第 2 项）：预填后不动直接折回去与基线无差异；改一格只列那一格；清空开票抬头在预览里是「移除 开票抬头」，
+// 空白项移除旧值由预览直接显示；折算经载荷——去空白、半空联系人行丢掉。
+test('草稿折成资料内容与基线比：不动无差异、改一格列一格、清空抬头是移除', () => {
+  const base = revision({
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    taxRegistrationNumbers: [{ typeCode: 'SYN-CN-TAX', number: 'SYN-CN-TAX-0101' }],
+    representative: { kind: 'LEGAL_REPRESENTATIVE', name: 'SYN 代表人' },
+    officeAddress: { country: 'CN', lines: ['SYN 办公'] },
+    contacts: [
+      { name: 'SYN 甲', email: 'a@example.invalid', phone: '100', department: 'SYN 财务', purposes: ['FINANCE'], primaryFor: ['FINANCE'] },
+      { name: 'SYN 乙', socialAccounts: [{ platform: '微信', account: 'SYN-WX' }] },
+    ],
+  });
+  const untouched = legalEntityProfileDraftBasedOn('SYN-LE-01', base);
+  const same = compareLegalEntityProfiles(base, profileComparisonContentOf(untouched, 'UTC'));
+  deepEqual(same.fields.filter((row) => row.kind !== 'unchanged'), []);
+  equal(same.contactMatchingLimited, false);
+
+  const oneChange = compareLegalEntityProfiles(
+    base,
+    profileComparisonContentOf({ ...untouched, representativeName: ' SYN 新代表人 ' }, 'UTC'),
   );
   deepEqual(
-    items.map((item) => item.title),
-    ['资料 r2 · 生效自 <2027-01-01T00:00:00Z>', '资料 r1 · 生效自 <2026-01-01T00:00:00Z>'],
+    oneChange.fields.filter((row) => row.kind !== 'unchanged').map((row) => [row.field, row.kind, row.after]),
+    [['代表人 / 负责人', 'modified', '法定代表人：SYN 新代表人']],
   );
-  equal(items[1].timestamp, '<2026-01-01T00:00:00Z>');
+
+  const cleared = profileComparisonContentOf({ ...untouched, invoiceTitle: '  ' }, 'UTC');
+  equal(cleared.invoicingRegistered, false);
+  equal('invoiceTitle' in cleared, false);
+  deepEqual(
+    compareLegalEntityProfiles(base, cleared).fields.filter((row) => row.kind !== 'unchanged').map((row) => [row.field, row.kind]),
+    [['开票资料', 'modified'], ['开票抬头', 'removed']],
+  );
+
+  const blank = profileComparisonContentOf(emptyLegalEntityProfileDraft('SYN-LE-01'), 'UTC');
+  deepEqual(blank, {
+    revision: 0,
+    basis: '',
+    effectiveFrom: '',
+    registeredAddress: { country: '', lines: [] },
+    taxRegistrationNumbers: [],
+    invoicingRegistered: false,
+    contacts: [],
+  });
+  const halfContact = profileComparisonContentOf(
+    { ...untouched, contacts: [...untouched.contacts, { name: '', email: '', phone: '' }] },
+    'UTC',
+  );
+  equal(halfContact.contacts.length, 2);
+});
+
+// Covers（第 4 项）：缺项按表单次序列出，路径与各格认领问题的路径一致；联系人整行空着也算；齐了为空；并进问题表只加一句。
+test('必填未填按表单次序列出，并进问题表', () => {
+  const blank = emptyLegalEntityProfileDraft('SYN-LE-01');
+  deepEqual(legalEntityProfileMissingFields(blank), [
+    { path: 'profiles[0].registeredAddress', label: '注册地址国家 / 地区' },
+    { path: 'profiles[0].registeredAddress.lines', label: '注册地址' },
+    { path: 'profiles[0].basis', label: '来源单据' },
+    { path: 'profiles[0].effectiveFrom', label: '生效时间' },
+  ]);
+  deepEqual(
+    legalEntityProfileMissingFields(draft({ addressCountry: 'CN', addressLines: 'SYN 地址', contacts: [{ name: 'SYN 甲', email: '', phone: '' }, { name: ' ', email: '', phone: '' }] })),
+    [{ path: 'profiles[0].contacts[1]', label: '联系人 2 姓名' }],
+  );
+  deepEqual(legalEntityProfileMissingFields(draft({ addressCountry: 'CN', addressLines: 'SYN 地址' })), []);
+  deepEqual(problemsWithMissing({ 'profiles[0].basis': ['服务端的话'] }, [{ path: 'profiles[0].basis', label: '来源单据' }, { path: 'profiles[0].effectiveFrom', label: '生效时间' }]), {
+    'profiles[0].basis': ['服务端的话', '必填未填'],
+    'profiles[0].effectiveFrom': ['必填未填'],
+  });
+});
+
+// Covers（第 6 项）：候选只取资料层（PROFILE）且国家相符的类型，显目录译名、已停用括注；身份层与别国不收；没有即空。
+test('税务登记号类型候选来自目录的资料层', () => {
+  const type = (over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord => ({
+    tenantId: 'SYN-TENANT-01', countryCode: 'CN', typeCode: 'SYN-CN-TAX', revision: 1, typeName: 'SYN 税号',
+    layer: 'PROFILE', formatPattern: '', basis: 'SYN', status: 'EFFECTIVE', effectiveFrom: '2026-01-01T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z', ...over,
+  });
+  const types = [
+    type({}),
+    type({ typeCode: 'USCC', typeName: '统一社会信用代码', layer: 'IDENTITY' }),
+    type({ countryCode: 'SG', typeCode: 'SYN-SG-TAX', typeName: 'SYN 新加坡税号' }),
+    type({ countryCode: 'SG', typeCode: 'SYN-SG-TAX-OLD', typeName: 'SYN 旧税号', deactivatedAt: '2026-06-30T00:00:00Z' }),
+  ];
+  deepEqual(profileTaxTypeOptions(types, ' CN '), [{ value: 'SYN-CN-TAX', label: 'SYN 税号' }]);
+  deepEqual(profileTaxTypeOptions(types, 'SG'), [
+    { value: 'SYN-SG-TAX', label: 'SYN 新加坡税号' },
+    { value: 'SYN-SG-TAX-OLD', label: 'SYN 旧税号（已停用）' },
+  ]);
+  deepEqual(profileTaxTypeOptions(types, 'HK'), []);
+  deepEqual(profileTaxTypeOptions(types, ''), []);
+});
+
+// Covers: 日期只到天、按显示时区折；解析不了的原样交回。
+test('时刻显示到日期', () => {
+  equal(profileDateOf('2026-10-29T16:00:00Z', 'Asia/Shanghai'), '2026-10-30');
+  equal(profileDateOf('2026-10-29T16:00:00Z', 'UTC'), '2026-10-29');
+  equal(profileDateOf('someday', 'UTC'), 'someday');
 });
 
 // Covers: 按时点解析要问的时刻——留空即此刻（取调用方给的 now），填了按时区换 UTC，换不出来交 null 不发请求。

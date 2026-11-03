@@ -14,7 +14,6 @@ import {
   listLegalEntityProfileRevisions,
   resolveLegalEntityProfile,
   type LegalEntityProfileResolutionResponseBody,
-  type LegalEntityProfileRevisionListResponseBody,
   type LegalEntityProfileRevisionRecord,
 } from './api';
 import {
@@ -33,14 +32,11 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import { advancedGroupOpen } from './registration-form';
-import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import {
   emptyLegalEntityProfileDraft,
   legalEntityProfileLocalProblems,
   legalEntityProfilePayloadOf,
   profileDraftContentOf,
-  profileRevisionHistoryNote,
-  profileRevisionTimeline,
   resolutionInstantOf,
   suggestedProfileRevision,
   type LegalEntityProfileDraft,
@@ -59,15 +55,6 @@ const kind = 'legal-entity-profile';
 const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
 // 资料表单收在高级组里的那一格；组里有问题时组一律展开。
 const profileAdvancedPaths = ['profiles[0].revision'];
-
-const profileRevisionHistory: RevisionHistoryRegister<LegalEntityProfileRevisionListResponseBody> = {
-  subject: '法人',
-  endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/profile-revisions',
-  load: listLegalEntityProfileRevisions,
-  echoedSubjectId: (body) => body.legalEntityId,
-  timelineOf: (body) => profileRevisionTimeline(body.revisions, (iso) => formatInstant(iso)),
-  noteOf: profileRevisionHistoryNote,
-};
 
 export function LegalEntityProfileSection({
   legalEntityId,

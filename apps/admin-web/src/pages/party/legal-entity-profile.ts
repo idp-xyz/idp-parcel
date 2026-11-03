@@ -1,10 +1,10 @@
-// 法人详情「法人资料」区的纯逻辑（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：登记表单的草稿 → 载荷、
-// 本地编码层问题、修订号建议，以及当前有效、修订历史两处共用的内容转写。全部是纯函数，node:test 钉着；组件
-// LegalEntityProfileSection.tsx 只负责摆。
+// 公司主体详情「公司资料」区的纯逻辑（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：登记表单的草稿 → 载荷、
+// 本地编码层问题、修订号建议、资料状态判读，以及表单预填与保存前差异预览要的两个方向的折算（票 company-subject-ux/04）。
+// 全部是纯函数，node:test 钉着；组件 LegalEntityProfileSection.tsx 只负责摆。
 //
-// **不算校验结论**（票面「不做」）：法人在不在册、地址国家与身份上的注册国家对不对得上、税号合不合目录、修订连不连续，
-// 一律送上去让服务端答。载荷镜像受控 CLI `register-legal-entity-profiles` 的一项、不带租户格——理由同法人登记表单
-// （legal-entity-form.ts 文件头）。
+// **不算校验结论**（票面「不做」）：公司主体在不在册、地址国家与身份上的注册国家对不对得上、税号合不合目录、修订连不连续，
+// 一律送上去让服务端答。本地只多一类「必填未填」的编码层提示（legalEntityProfileMissingFields），那是在说格空着，不是在判
+// 领域规则。载荷镜像受控 CLI `register-legal-entity-profiles` 的一项、不带租户格——理由同法人登记表单（legal-entity-form.ts 文件头）。
 
 import type {
   ContactPurpose,
@@ -15,12 +15,11 @@ import type {
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
   RegisteredAddressRecord,
+  RegistrationNumberTypeRecord,
   TaxRegistrationNumberRecord,
 } from './api';
-import { wallTimeToRfc3339 } from '../moment';
-import { profileRevisionLabel } from './presentation';
+import { formatInstant, wallTimeToRfc3339 } from '../moment';
 import { revisionOf } from './registration-form';
-import type { RevisionTimelineItem } from './revision-timeline';
 
 export interface TaxNumberDraft {
   typeCode: string;
@@ -28,7 +27,7 @@ export interface TaxNumberDraft {
 }
 
 export const contactPurposeLabels: Record<ContactPurpose, string> = {
-  GENERAL: '通用联系',
+  GENERAL: '日常联系',
   BUSINESS: '商务',
   OPERATIONS: '运营',
   FINANCE: '财务',
@@ -159,6 +158,39 @@ export function legalEntityProfilePayloadOf(
   return { profiles: [item] };
 }
 
+/** 表单里一格「必填未填」：路径是那一格认领问题的 JSON 路径，标签给按钮旁的缺项清单。 */
+export interface ProfileMissingField {
+  path: string;
+  label: string;
+}
+
+/**
+ * 必填未填的格，按表单从上到下的次序：注册地址国家 / 地区与地址、各联系人的姓名、来源单据、生效时间。只看格空没空，
+ * 国家对不对得上身份、时间连不连续仍由服务端答。联系人行整行空着也算：行是操作者加的，格上标着「姓名 *」，静默丢掉
+ * 会让人以为登上去了。
+ */
+export function legalEntityProfileMissingFields(draft: LegalEntityProfileDraft): ProfileMissingField[] {
+  const missing: ProfileMissingField[] = [];
+  if (draft.addressCountry.trim() === '') missing.push({ path: 'profiles[0].registeredAddress', label: '注册地址国家 / 地区' });
+  if (draft.addressLines.trim() === '') missing.push({ path: 'profiles[0].registeredAddress.lines', label: '注册地址' });
+  draft.contacts.forEach((row, index) => {
+    if (row.name.trim() === '') missing.push({ path: `profiles[0].contacts[${index}]`, label: `联系人 ${index + 1} 姓名` });
+  });
+  if (draft.basis.trim() === '') missing.push({ path: 'profiles[0].basis', label: '来源单据' });
+  if (draft.effectiveFrom.trim() === '') missing.push({ path: 'profiles[0].effectiveFrom', label: '生效时间' });
+  return missing;
+}
+
+/** 把缺项并进问题表，让各格在自己底下也显出来；只在操作者点过保存之后才并，之前空着的格不该一片红。 */
+export function problemsWithMissing(
+  problems: Record<string, string[]>,
+  missing: readonly ProfileMissingField[],
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = { ...problems };
+  for (const field of missing) merged[field.path] = [...(merged[field.path] ?? []), '必填未填'];
+  return merged;
+}
+
 /** 本地提示编码、成对输入与联系人分工问题；是否受理仍由服务端领域规则裁决。 */
 export function legalEntityProfileLocalProblems(
   draft: LegalEntityProfileDraft,
@@ -236,11 +268,6 @@ export function suggestedProfileRevision(
   return latest + 1;
 }
 
-export interface ProfileContentLine {
-  label: string;
-  value: string;
-}
-
 export type LegalEntityProfileStatusTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 
 export interface LegalEntityProfileStatus {
@@ -249,114 +276,68 @@ export interface LegalEntityProfileStatus {
   description: string;
 }
 
+/**
+ * 资料状态的词与一句说明，词照 company-subject-ux spec「统一用语」：可开票 / 资料不全 / 未登记资料 / 主体未生效 / 主体已停用。
+ * 资料不全是明确的非成功——开立方据此拒开，这里不拿默认值补齐，说明句直接说后果。
+ */
 export function legalEntityProfileStatusOf(
   resolution: Pick<LegalEntityProfileResolutionResponseBody, 'outcome' | 'incompleteCause' | 'effectiveRevision'>,
 ): LegalEntityProfileStatus {
   if (resolution.outcome === 'RESOLVED') {
     if (resolution.effectiveRevision === undefined) {
-      return { label: '状态未识别', tone: 'bad', description: '解析结果没有返回当前生效的法人资料修订。' };
+      return { label: '状态未识别', tone: 'bad', description: '查询结果没有返回当前生效的资料版本。' };
     }
     return {
-      label: '开票资料可用',
+      label: '可开票',
       tone: 'good',
-      description: '当前时点有生效资料，且已登记开票资料。',
+      description: '当前有生效资料且开票资料齐全。',
     };
   }
   if (resolution.outcome === 'PROFILE_INCOMPLETE') {
     if (resolution.incompleteCause === 'NO_EFFECTIVE_REVISION') {
-      return { label: '未配置', tone: 'warn', description: '当前时点没有已生效的法人资料修订。' };
+      return { label: '未登记资料', tone: 'warn', description: '这个日期没有生效的资料。' };
     }
     if (resolution.incompleteCause === 'NO_INVOICING_DETAILS') {
       if (resolution.effectiveRevision === undefined) {
-        return { label: '状态未识别', tone: 'bad', description: '资料不全的解析结果没有返回对应的生效修订。' };
+        return { label: '状态未识别', tone: 'bad', description: '资料不全的查询结果没有返回对应的生效版本。' };
       }
-      return { label: '资料不全', tone: 'warn', description: '当前生效修订没有登记开票资料。' };
+      return { label: '资料不全', tone: 'warn', description: '缺开票抬头，开票会被拒：生效的那一版没有开票抬头。' };
     }
-    return { label: '状态未识别', tone: 'bad', description: '资料不全的解析结果没有返回可识别原因。' };
+    return { label: '状态未识别', tone: 'bad', description: '资料不全的查询结果没有返回可识别原因。' };
   }
   if (resolution.outcome === 'LEGAL_ENTITY_NOT_EFFECTIVE') {
-    return { label: '主体尚未生效', tone: 'info', description: '法人身份在当前时点尚未生效。' };
+    return { label: '主体未生效', tone: 'info', description: '公司主体在这个日期还没有生效。' };
   }
   if (resolution.outcome === 'LEGAL_ENTITY_DEACTIVATED') {
-    return { label: '主体已停用', tone: 'muted', description: '法人身份已停用，不能用于新的签约或开票。' };
+    return { label: '主体已停用', tone: 'muted', description: '公司主体已停用，不能再用于签约或开票。' };
   }
   if (resolution.outcome === 'LEGAL_ENTITY_NOT_REGISTERED') {
-    return { label: '法人不在册', tone: 'bad', description: '当前租户的法人册中没有这个法人。' };
+    return { label: '主体不在册', tone: 'bad', description: '当前租户没有登记这个公司主体。' };
   }
-  return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的法人资料状态。' };
+  return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的资料状态。' };
 }
 
 /**
- * 一笔资料的内容照答复原样转写：国家码、地址各行、税号类型码都不译不补。开票资料看 invoicingRegistered 那个显式布尔，
- * 为假就写「未登开票资料」——按时点解析会据此答资料不全，这里不拿抬头缺席去推。
+ * 主数据页的时刻显示到日期；完整时刻与时区由调用方放进 title。时区只在测试里显式给，页面照全局显示时区。
+ * 解析不了的串原样交回，理由同 formatInstant：那是服务端给的值，页面不替它圆。
  */
-export function profileContentLines(content: LegalEntityProfileContent): ProfileContentLine[] {
-  const address = [content.registeredAddress.country, ...content.registeredAddress.lines].filter((part) => part !== '');
-  return [
-    ...(content.representative
-      ? [{ label: representativeLabel(content.representative.kind), value: content.representative.name }]
-      : []),
-    ...(content.officeAddress ? [{ label: '办公地址', value: addressText(content.officeAddress) }] : []),
-    ...(content.correspondenceAddress
-      ? [{ label: '通信地址', value: addressText(content.correspondenceAddress) }]
-      : []),
-    { label: '注册地址', value: address.length === 0 ? '未配置' : address.join(' · ') },
-    {
-      label: '税务登记号',
-      value:
-        content.taxRegistrationNumbers.length === 0
-          ? '未配置'
-          : content.taxRegistrationNumbers.map((entry) => `${entry.typeCode} ${entry.number}`).join('；'),
-    },
-    {
-      label: '开票抬头',
-      value: content.invoicingRegistered ? content.invoiceTitle || '未配置' : '未登开票资料',
-    },
-    {
-      label: '联系人',
-      value: content.contacts.length === 0 ? '未配置' : content.contacts.map(contactText).join('；'),
-    },
-  ];
+export function profileDateOf(iso: string, timeZone?: string): string {
+  if (Number.isNaN(new Date(iso).getTime())) return iso;
+  return formatInstant(iso, timeZone === undefined ? {} : { timeZone }).slice(0, 10);
 }
 
-function contactText(contact: LegalEntityContactRecord): string {
-  const reach = [contact.email, contact.phone].filter((part): part is string => part !== undefined && part !== '');
-  const details = [
-    contact.department,
-    contact.position,
-    ...(contact.purposes ?? []).map((purpose) => contactPurposeLabels[purpose] ?? purpose),
-    ...(contact.primaryFor ?? []).map((purpose) => `${contactPurposeLabels[purpose] ?? purpose}主要联系人`),
-    ...reach,
-    ...(contact.socialAccounts ?? []).map(({ platform, account }) => `${platform}：${account}`),
-  ].filter(Boolean);
-  return details.length === 0 ? contact.name : `${contact.name}（${details.join('，')}）`;
-}
-
-/**
- * 修订历史的时间线条目：按修订号从新到旧。标题带生效时点——资料按生效时点取代前一修订，未来生效的那笔也在链上，
- * 看标题就分得出哪笔还没到。
- */
-export function profileRevisionTimeline(
-  revisions: readonly LegalEntityProfileRevisionRecord[],
-  format: (iso: string) => string,
-): RevisionTimelineItem[] {
-  return [...revisions]
-    .sort((left, right) => right.revision - left.revision)
-    .map((row) => ({
-      id: `r${row.revision}`,
-      title: `${profileRevisionLabel(row.revision)} · 生效自 ${format(row.effectiveFrom)}`,
-      description: [...profileContentLines(row).map((line) => `${line.label} ${line.value}`), `依据 ${row.basis}`].join(
-        ' · ',
-      ),
-      timestamp: format(row.registeredAt),
-      variant: 'default' as const,
+/** 资料层（税务登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */
+export function profileTaxTypeOptions(
+  types: readonly RegistrationNumberTypeRecord[],
+  country: string,
+): { value: string; label: string }[] {
+  const code = country.trim();
+  return types
+    .filter((type) => type.layer === 'PROFILE' && type.countryCode === code)
+    .map((type) => ({
+      value: type.typeCode,
+      label: `${type.typeName}${type.deactivatedAt !== undefined ? '（已停用）' : ''}`,
     }));
-}
-
-export function profileRevisionHistoryNote(count: number): string {
-  return count === 0
-    ? '这个法人还没有登记过资料。法人可以先登记，资料之后再补。'
-    : `共 ${count} 笔资料修订，从新到旧；新修订自其生效时点起取代前一修订，登记过的不被覆盖。`;
 }
 
 /**
@@ -383,8 +364,9 @@ function addressPayload(country: string, lines: string): RegisteredAddressRecord
   return value.country || value.lines.length ? value : undefined;
 }
 
+/** 没有地址显「—」（spec「统一用语」的空值规则）：空值不是结论句，不配一句话。 */
 export function addressText(address?: RegisteredAddressRecord): string {
-  return address ? [address.country, ...address.lines].filter(Boolean).join(' · ') : '未配置';
+  return address ? [address.country, ...address.lines].filter(Boolean).join(' · ') : '—';
 }
 
 export function legalEntityContactCountOf(resolution: LegalEntityProfileResolutionResponseBody | undefined): number | undefined {
@@ -406,6 +388,41 @@ export function profileMaintenanceNotes(content: LegalEntityProfileContent): str
       notes.push(`${contactPurposeLabels[purpose] ?? purpose}主要联系人未指名`);
   }
   return notes;
+}
+
+/**
+ * 表单打开时的草稿：基于一版已登记的内容（当前生效的那一版，或操作者另选的）预填内容格；来源单据、生效时间与版本号
+ * 不沿用——那三格说的是「这一次更新」，不是资料内容。没有基线就是空白草稿。
+ */
+export function legalEntityProfileDraftBasedOn(
+  legalEntityId: string,
+  base: LegalEntityProfileContent | null,
+): LegalEntityProfileDraft {
+  const empty = emptyLegalEntityProfileDraft(legalEntityId);
+  return base === null ? empty : { ...empty, ...profileDraftContentOf(base) };
+}
+
+/**
+ * 草稿折成资料内容的形状，给保存前的差异预览与当前生效版比（compareLegalEntityProfiles）。经载荷折一遍而不直接读草稿：
+ * 预览要说的是「将要送上去的」，去空白、空行不送、半空的联系人行丢掉，都与载荷一致；开票抬头缺席即这一版不带开票资料，
+ * 与服务端对载荷的读法同一条。版本号、来源单据与生效时间不参与比较，照载荷带着只为凑齐形状。
+ */
+export function profileComparisonContentOf(draft: LegalEntityProfileDraft, timeZone: string): LegalEntityProfileContent {
+  const item = legalEntityProfilePayloadOf(draft, timeZone).profiles[0];
+  const content: LegalEntityProfileContent = {
+    revision: item.revision ?? 0,
+    basis: item.basis,
+    effectiveFrom: item.effectiveFrom ?? '',
+    registeredAddress: item.registeredAddress ?? { country: '', lines: [] },
+    taxRegistrationNumbers: item.taxRegistrationNumbers ?? [],
+    invoicingRegistered: item.invoiceTitle !== undefined,
+    contacts: item.contacts ?? [],
+  };
+  if (item.invoiceTitle !== undefined) content.invoiceTitle = item.invoiceTitle;
+  if (item.representative) content.representative = item.representative;
+  if (item.officeAddress) content.officeAddress = item.officeAddress;
+  if (item.correspondenceAddress) content.correspondenceAddress = item.correspondenceAddress;
+  return content;
 }
 
 export function profileDraftContentOf(
