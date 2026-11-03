@@ -147,11 +147,12 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
       <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
         <caption className="sr-only">收款账户清单</caption>
         {/* 列宽按内容的常见长度分（票 company-subject-ux/12 第 4 条）：户名与开户行（带地址）最长，币种与备注最短；
-            账号一列要装下 IBAN 的长度，等宽字再按字符折。 */}
+            账号一列要装下 IBAN 的长度，等宽字再按字符折。币种列取 15 而不是票面的 14：详情栏拖到 2000 宽时表约 840px，
+            14% 装不下「人民币（CNY）」一行，会在「（」前折开；那 1% 从最宽的开户行列出。 */}
         <colgroup>
-          <col className="w-[14%]" />
+          <col className="w-[15%]" />
           <col className="w-[24%]" />
-          <col className="w-[26%]" />
+          <col className="w-[25%]" />
           <col className="w-[22%]" />
           <col className="w-[14%]" />
         </colgroup>
