@@ -21,3 +21,29 @@ Blocked by: 无
 ## 完成判据
 
 - 三道门退 0；截图里四张卡边界清楚、标题带图标；「资料版本 6」「登记记录 1」「关联 6」三个签带数；对象页与详情栏同形。
+
+## 完成记录（2026-11-03，分支 `claude-csux-09`，代码两笔 `a2f636f8e`、`538e5ab7d`）
+
+落点：
+
+- `LegalEntityProfileReadout.tsx`：新 `ProfileReadoutCard`——细边框、浅底标题条（`bg-idpxyz-editor`，工作区那层冷灰；不用 hover 色，浅色主题里它是选中蓝）、lucide 图标 3.5 单位弱显 + 13px 半粗标题、可选小字计数。自己用 Tailwind 排，不用 ui-primitives 的 `Card`：它带悬停投影与过渡，是给可点的卡的。
+- `LegalEntityProfileContent.tsx`：四张卡——代表人与地址（`UserRound`）、税务与开票（`Receipt`）、收款账户（`Landmark`，空时一行「未登记收款账户」）、联系人（`Contact`，`includeContacts=false` 的概要签不画）；卡间 `gap-3`（12px），不再画横线分节。主抬头语言仍跟在开票抬头后弱显、不另起一格（票 08 的取舍，本票列的是卡内内容，没有推翻它）。资料维护提示留在卡组之后，形式不变。
+- `legal-entity-profile-readout.css`：只改注释（容器仍是卡组外框，网格在卡内两侧各少 1rem；两列阈值 44rem 不变）。
+- 新 `legal-entity-tab-counts.ts`：`revisionCountOf`（答到了且回显的是所问公司才是条数，读不到或慢答案后到都没数，0 照显）与 `useLegalEntityTabCounts`（各读一次 `listLegalEntityProfileRevisions` / `listLegalEntityRevisions`，钥匙与当前资料读口同一把）；`legal-entity-tab-counts.test.ts` 钉 `revisionCountOf` 五种情形。
+- `LegalEntityDetailPanel.tsx`：资料版本 / 登记记录 / 关联三签带 `TabCountBadge`；`LegalEntityDetailPage.tsx`：三签给模板 `count`（非联系人签模板显小字，不是徽章；`templates/*` 不动）。
+
+计数来源：资料版本 = 资料修订链的行数；登记记录 = 身份修订链的行数；关联 = `referencedCount(references.states)`，与首屏「被引用」同一份答案。页面此前没为事实行读过这两条链（事实行的「资料版本 第 N 版」来自按时点解析），所以各读一次；签里的区去到时照旧自己读。
+
+判据：
+
+- ✅ 三道门退 0：`tsc -b --noEmit`、`run-tests.mjs`（1168 pass，含新 5 例）、`vite build`。
+- ✅ 卡边界清楚、标题带图标：截图 `scratchpad/csux09/after-list-panel-{1440,2000}.png`、`after-page-SYN-LE-CN-SH-01-{1440,2000}.png`；DOM 探针读到标题条 `代表人与地址 / 税务与开票 / 收款账户 N 个`，图标 class `lucide-user-round / lucide-receipt / lucide-landmark`；2000 宽卡内两列、1440 宽一列。
+- ✅ 签带数：详情栏 SYN-LE-01 探针读到 `["概要","联系人 4","资料版本 6","登记记录 1","关联 6"]`；对象页 SYN-LE-CN-SH-01 读到 `["概要","联系人 4","资料版本 3","登记记录 1","关联 0"]`。
+- ✅ 对象页与详情栏同形：同一份 `LegalEntityProfileContent`。
+- ✅ 脚本断言零写请求、零 pageerror。
+
+未验：
+
+- 联系人卡只在「资料版本」签「查看某个日期的资料」的读出里出现（`includeContacts` 默认 true），没截图；与概要签同一份代码。
+- 暗色主题下标题条底色没截。
+- 资料更新落册后签上计数重读（钥匙与当前资料读口同一把）没在浏览器里走——核验脚本只读。

@@ -30,7 +30,8 @@
   grid-column: 1 / -1;
 }
 
-/* 两列只在正文够宽时启用：窄于 44rem 时两列各剩不到 20rem，地址与抬头都要折两三行。 */
+/* 两列只在正文够宽时启用：容器是卡组的外框，网格在卡内、两侧各少 1rem 内边距，窄于 44rem 时两列各剩不到 20rem，
+   地址与抬头都要折两三行。 */
 @container legal-entity-profile (min-width: 44rem) {
   .legal-entity-readout-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
