@@ -1,7 +1,39 @@
 import { Fragment, type ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import type { RegisteredAddressRecord } from './api';
 import { CountryLabel } from '../refdata-labels';
 import './legal-entity-profile-readout.css';
+
+/**
+ * 读出的一张卡（票 company-subject-ux/09，照 WMS「ASN 管理」详情栏的「供应商与来源 / 物流与预约」）：细边框、浅底标题条
+ * （图标 + 半粗标题），卡内才是标签 / 值网格或表。此前各组只靠标题与间距分开，宽屏上几组读出摊成一面，眼睛找不到组的
+ * 边界；卡把边界画出来，标题条的浅底与图标让人一眼认出这一块讲什么。图标与头区 LegalEntityHeaderParts 同一套画法
+ * （lucide、3.5 单位、弱显）。标题条取工作区那层冷灰（bg-idpxyz-editor），不取 hover 色——浅色主题里 hover 色就是选中蓝，
+ * 会把标题条读成被选中的一行。不用 ui-primitives 的 Card：它带悬停投影与过渡，是给可点的卡的；读出卡不可点。
+ */
+export function ProfileReadoutCard({
+  icon: Icon,
+  title,
+  extra,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  /** 标题后的小字（「2 个」「4 位」），弱显。 */
+  extra?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-bg">
+      <div className="flex items-center gap-2 border-b border-idpxyz-border bg-idpxyz-editor px-4 py-2">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+        <h4 className="text-[13px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
+        {extra ? <span className="text-[12px] leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
+      </div>
+      <div className="px-4 py-3">{children}</div>
+    </section>
+  );
+}
 
 export function ProfileReadoutGrid({ children }: { children: ReactNode }) {
   return <dl className="legal-entity-readout-grid">{children}</dl>;

@@ -1,11 +1,24 @@
 import type { ReactNode } from 'react';
+import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
-import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, ProfileReadoutPairs, absentValueMark } from './LegalEntityProfileReadout';
+import {
+  ProfileReadoutAddress,
+  ProfileReadoutCard,
+  ProfileReadoutField,
+  ProfileReadoutGrid,
+  ProfileReadoutPairs,
+  absentValueMark,
+} from './LegalEntityProfileReadout';
 import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
+/**
+ * 当前资料的读出，四张卡（票 company-subject-ux/09）：代表人与地址、税务与开票、收款账户、联系人。代表人与地址并成
+ * 一张——代表人只有一格，单独成卡是一条标题条带一行字。详情栏概要签、对象页概要签与按日期查询的读出都是这一份；
+ * 概要签不带联系人卡（联系人有自己的签），按日期查询带。卡之间只留间距，不再画横线分节。
+ */
 export function LegalEntityProfileContent({
   content,
   includeContacts = true,
@@ -17,25 +30,23 @@ export function LegalEntityProfileContent({
   typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
+  const bankAccounts = content?.bankAccounts ?? [];
+  const contacts = content?.contacts ?? [];
   return (
-    <div className="legal-entity-profile-readout mt-2">
-      <ProfileGroup title="代表人信息">
+    <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
+      <ProfileReadoutCard icon={UserRound} title="代表人与地址">
         <ProfileReadoutGrid>
           <ProfileReadoutField
             label={content?.representative ? representativeLabel(content.representative.kind) : '代表人 / 负责人'}
             value={content?.representative?.name}
             emphasized
           />
-        </ProfileReadoutGrid>
-      </ProfileGroup>
-      <ProfileGroup title="地址信息">
-        <ProfileReadoutGrid>
           <ProfileReadoutField label="注册地址" value={addressOf(content?.registeredAddress)} />
           <ProfileReadoutField label="办公地址" value={addressOf(content?.officeAddress)} />
           <ProfileReadoutField label="通信地址" value={addressOf(content?.correspondenceAddress)} />
         </ProfileReadoutGrid>
-      </ProfileGroup>
-      <ProfileGroup title="税务与开票">
+      </ProfileReadoutCard>
+      <ProfileReadoutCard icon={Receipt} title="税务与开票">
         <ProfileReadoutGrid>
           {/* 主抬头仍是「可开票」的判据，语言只是它的标注，所以跟在抬头后面弱化显，不另起一格。 */}
           <ProfileReadoutField
@@ -86,20 +97,17 @@ export function LegalEntityProfileContent({
             }
           />
         </ProfileReadoutGrid>
-        <div className="mt-3">
-          <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
-            收款账户{content?.bankAccounts?.length ? <span className="ml-2">{content.bankAccounts.length} 个</span> : null}
-          </p>
-          <LegalEntityBankAccountsTable accounts={content?.bankAccounts ?? []} />
-        </div>
-      </ProfileGroup>
+      </ProfileReadoutCard>
+      <ProfileReadoutCard icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined}>
+        <LegalEntityBankAccountsTable accounts={bankAccounts} />
+      </ProfileReadoutCard>
       {includeContacts ? (
-        <ProfileGroup title="联系人" extra={content?.contacts.length ? `${content.contacts.length} 位` : undefined}>
-          <LegalEntityContactsTable contacts={content?.contacts ?? []} />
-        </ProfileGroup>
+        <ProfileReadoutCard icon={Contact} title="联系人" extra={contacts.length ? `${contacts.length} 位` : undefined}>
+          <LegalEntityContactsTable contacts={contacts} />
+        </ProfileReadoutCard>
       ) : null}
       {notes.length ? (
-        <div className="mt-5 border-t border-idpxyz-border pt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <div className="mt-2 border-t border-idpxyz-border pt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">
           <p className="font-medium text-idpxyz-text">资料维护提示</p>
           <ul className="mt-1 list-disc pl-4">
             {notes.map((note) => (
@@ -117,7 +125,7 @@ export function LegalEntityProfileContent({
  * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
-  if (!accounts.length) return <p className="text-[13px] text-idpxyz-breadcrumb">未登记收款账户</p>;
+  if (!accounts.length) return <p className="text-[13px] leading-5 text-idpxyz-breadcrumb">未登记收款账户</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
@@ -168,18 +176,4 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
 // 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家并进行末）排。
 function addressOf(address?: RegisteredAddressRecord): ReactNode {
   return address ? <ProfileReadoutAddress address={address} /> : undefined;
-}
-
-// 节与节之间只用间距（票 company-subject-ux/08 第 4 条）：标题 13px 半粗、上 20px 下 8px，不再每节一条长横线——
-// 宽屏上横线横贯 52rem，比标题还显眼。
-function ProfileGroup({ title, extra, children }: { title: string; extra?: string; children: ReactNode }) {
-  return (
-    <section className="mt-5 first:mt-3">
-      <div className="mb-2 flex items-baseline gap-2">
-        <h4 className="text-[13px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
-        {extra ? <span className="text-[12px] text-idpxyz-breadcrumb">{extra}</span> : null}
-      </div>
-      {children}
-    </section>
-  );
 }
