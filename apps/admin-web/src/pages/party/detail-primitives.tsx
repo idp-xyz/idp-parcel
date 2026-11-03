@@ -3,7 +3,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { domainStatusTones, type StatusTone as DomainStatusTone } from '../../domain/status';
 import { statusToneSurface } from '../../components/status-tone';
-import { CodeRef, codeRefTitle } from '../../components/CodeRef';
+import { CodeRef } from '../../components/CodeRef';
 import { StatusPill } from '../../components/StatusPill';
 import { toneFor, toneForLabel, type StatusTone } from '../../vocabulary/status';
 import { formatInstant, type InstantPrecision } from '../moment';
@@ -125,35 +125,9 @@ export function RefChip({
   return <CodeRef label={label} value={value} title={title} onCopy={onCopy} />;
 }
 
-/**
- * 引用签的纯文本形（票 company-subject-ux/08）：头区 meta 行是一行小字，摆不下三枚胶囊，号只以等宽字显、点按照旧复制，
- * 悬停那句与 CodeRef 同一句。`name` 进 title 与 toast。
- */
-export function RefText({
-  value,
-  name,
-  onCopy,
-  className,
-}: {
-  value: string;
-  name: string;
-  onCopy: (label: string, value: string) => void;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={codeRefTitle(name, value)}
-      onClick={(event) => {
-        event.stopPropagation();
-        onCopy(name, value);
-      }}
-      className={`select-all font-mono text-idpxyz-text hover:text-idpxyz-accent ${className ?? ''}`.trim()}
-    >
-      {value}
-    </button>
-  );
-}
+// 号码类的 RefText 与文本类的 CopyAside 在 copy-affordance.tsx（票 company-subject-ux/14）：那一份不引 @idpxyz/*，
+// node:test 才 require 得到；这里原样转出，页面仍从本文件引。
+export { CopyAside, RefText } from './copy-affordance';
 
 /**
  * 详情栏事实条里的一格。缺省是标签在上、等宽值在下的卡；`inline` 是一行小字的形（票 company-subject-ux/08）：标签弱显在前、

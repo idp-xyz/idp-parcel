@@ -33,7 +33,6 @@ import {
   FactStrip,
   RefText,
   UnknownPartyName,
-  useCopyToClipboard,
   DetailRow,
 } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -93,7 +92,6 @@ export function LegalEntityDetailPanel({
   const references = useLegalEntityReferences(row.legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row.legalEntityId);
   const referenced = referencedCount(references.states);
-  const copy = useCopyToClipboard();
   // 注册号的类型码经目录译成名；目录没读到就按码显。
   const identity = identityLayerCellsOf(row, typeNameOf);
   const selectTab = (next: PanelTab) => {
@@ -136,21 +134,22 @@ export function LegalEntityDetailPanel({
           </div>
         </div>
 
-        {/* 头区第二行是一行小字的 meta（票 company-subject-ux/08）：编码、注册地、注册号纯文本一行，号仍可点按复制；
+        {/* 头区第二行是一行小字的 meta（票 company-subject-ux/08）：编码、注册地、注册号纯文本一行，号是号码类、点击即复制
+            （RefText，票 company-subject-ux/14）；
             注册地与注册号是业务事实，留在头部，登记依据与各标识收进概要签底部的「技术详情」。类型名跟在号前面而不进 title
             ——一行小字放得下，胶囊那套「截断只显号」的取舍不再需要。不摆生命周期步进：公司主体只有「待生效 → 已生效」
             加一个旁支「已停用」，状态药丸已经说了现在在哪一格，停用另有横幅带时点，步进是第二遍（用户 2026-11-03 裁定）。 */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
           <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
             <Fact inline label="编码">
-              <RefText value={row.legalEntityId} name="编码" onCopy={copy} />
+              <RefText value={row.legalEntityId} name="编码" />
             </Fact>
             <Fact inline label="注册地">
               {identity ? <CountryLabel code={identity.country} /> : <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>}
             </Fact>
             {identity?.numberCells.map((cell, index) => (
               <Fact inline label="注册号" key={`${cell.number}#${index}`}>
-                <span className="text-idpxyz-breadcrumb">{cell.typeName}</span> <RefText value={cell.number} name={cell.typeName} onCopy={copy} />
+                <span className="text-idpxyz-breadcrumb">{cell.typeName}</span> <RefText value={cell.number} name={cell.typeName} />
               </Fact>
             ))}
           </dl>
