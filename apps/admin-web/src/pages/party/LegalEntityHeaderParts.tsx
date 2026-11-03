@@ -14,9 +14,31 @@ import {
 } from './legal-entity-lifecycle';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { StatusPill } from '../../components/StatusPill';
+import { currentDisplayTimeZone, formatInstant } from '../moment';
+import { displayDateOf, type ProfileStatusCell } from './legal-entity-references';
 
-// 责任法人头区的三件：生命周期条、停用与待补横幅、「更多」菜单。工作台详情栏与对象页各摆一份同样的头区
-// （票 group-legal-entities-uiux/09：同一法人两处结构一致），件只在这里写一遍，两处各自排版。
+// 责任法人头区的几件：生命周期条、停用与待补横幅、「更多」菜单，以及首屏指标带的两种格（日期、资料状态）。工作台详情栏
+// 与对象页各摆一份同样的头区（票 group-legal-entities-uiux/09：同一法人两处结构一致），件只在这里写一遍，两处各自排版。
+
+/**
+ * 主数据页的日期格（spec「统一用语」：生效 / 登记 / 停用显示到日期，完整时刻与时区放 title）。不用 `<time>`：详情栏
+ * 事实条按 `time` 元素把长时刻缩成 12px，日期短，不该跟着缩。
+ */
+export function DateCell({ value, className }: { value: string; className?: string }) {
+  return (
+    <span className={className} title={formatInstant(value)}>
+      {displayDateOf(value, currentDisplayTimeZone())}
+    </span>
+  );
+}
+
+/** 首屏「资料状态」格：答到了用状态胶囊，还没读到显占位，读不到显「—」——判读在 profileStatusCellOf。 */
+export function ProfileStatusValue({ cell }: { cell: ProfileStatusCell }) {
+  if (cell.kind === 'pending') return <span className="text-idpxyz-breadcrumb">…</span>;
+  if (cell.kind === 'unavailable') return <span className="text-idpxyz-breadcrumb">—</span>;
+  return <StatusPill label={cell.status.label} tone={cell.status.tone} className="font-sans" />;
+}
 
 const stageDotClass: Record<LifecycleStageState, string> = {
   done: statusToneBanner.success,
