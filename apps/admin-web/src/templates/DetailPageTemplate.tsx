@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Check, ChevronRight, Copy } from 'lucide-react';
 import {
   PageHeader,
@@ -31,6 +31,7 @@ import { WorkspaceTabLabel } from './workspace-tab-icons';
 import {
   activeSectionAt,
   bottomSpacerHeight,
+  headerCollapsedAfterScroll,
   sectionElementId,
   sectionExpanded,
   sectionScrollTop,
@@ -406,8 +407,10 @@ function WorkspaceTabs({
 }
 
 /**
- * 分区版式（票 company-subject-ux/13）：头区 + meta 行与指标带 + 单页滚动的分区。头区标题行的 JSX 与上面对象工作区
+ * 分区版式（票 company-subject-ux/13）：头区 + 可收起的 meta 行与指标带 + 单页滚动的分区。头区标题行的 JSX 与上面对象工作区
  * 头区那一支重复而不抽成共用片段，理由同文件里保留旧形态头区的那条注释——让「传 'tabs' 时逐字节同」能对着代码读出来。
+ * 收起态由滚动容器报上来（WorkspaceSections），这里只管把 meta 行与指标带折起来；非 ready 态头区一律展开——
+ * 没有内容可滚，收着的头没有东西能把它放回来。
  */
 function SectionsWorkspace({
   title,
@@ -438,6 +441,12 @@ function SectionsWorkspace({
   onActiveTabChange?: (tab: WorkspaceTabId) => void;
   stateSlot: ReactNode;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const metaRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  // 收起阈值即 meta 行与指标带此刻的高度：只在展开时读（收起时它们量出来是 0，而收起态只问「回没回到页首」）。
+  const collapseThresholdOf = () => (metaRef.current?.offsetHeight ?? 0) + (summaryRef.current?.offsetHeight ?? 0);
+  const headerCollapsed = collapsed && ready;
   return (
     <>
       <PageHeader className="items-start">
@@ -456,21 +465,26 @@ function SectionsWorkspace({
             {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
           </div>
           {meta !== undefined && meta.length > 0 && (
-            <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
-              {meta.map((item) => (
-                <div key={item.label} className="flex gap-1">
-                  <dt className="text-idpxyz-textMuted">{item.label}</dt>
-                  <dd className="text-idpxyz-text">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
+            <CollapsibleRows collapsed={headerCollapsed} innerRef={metaRef}>
+              {/* 标题行与 meta 行的间距放在可收起块里面而不是 flex gap 上：块收成 0 高时 gap 还会留一道空。 */}
+              <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
+                {meta.map((item) => (
+                  <div key={item.label} className="flex gap-1">
+                    <dt className="text-idpxyz-textMuted">{item.label}</dt>
+                    <dd className="text-idpxyz-text">{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CollapsibleRows>
           )}
         </PageHeaderContent>
         {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
       </PageHeader>
 
       {ready && summary !== undefined && summary.length > 0 && (
-        <SummaryStrip stats={summary} />
+        <CollapsibleRows collapsed={headerCollapsed} innerRef={summaryRef}>
+          <SummaryStrip stats={summary} />
+        </CollapsibleRows>
       )}
 
       {ready ? (
@@ -479,11 +493,43 @@ function SectionsWorkspace({
           aside={aside}
           activeTab={activeTab}
           onActiveTabChange={onActiveTabChange}
+          headerCollapsed={collapsed}
+          onHeaderCollapsedChange={setCollapsed}
+          collapseThresholdOf={collapseThresholdOf}
         />
       ) : (
         stateSlot
       )}
     </>
+  );
+}
+
+/**
+ * 随头部收起的一块：高度在 1fr 与 0fr 之间过渡、透明度随之，只用 transition、不量高度——grid 行的 fr 过渡让内容块
+ * 从真实高度收到 0 而不用先知道它多高（max-height 那条路要么量、要么猜个上限）。里层 min-h-0 + overflow-hidden 是
+ * 这个技法的另一半：没有它 grid 项按内容撑开、行收不下去。收起时整块 inert：meta 行里有可复制的号（按钮），
+ * 只裁掉高度的话 Tab 键还能落到看不见的按钮上，读屏也还能读到。
+ */
+function CollapsibleRows({
+  collapsed,
+  innerRef,
+  children,
+}: {
+  collapsed: boolean;
+  innerRef: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`grid w-full shrink-0 transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        collapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'
+      }`}
+      inert={collapsed}
+    >
+      <div ref={innerRef} className="min-h-0 overflow-hidden">
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -523,11 +569,17 @@ function WorkspaceSections({
   aside,
   activeTab,
   onActiveTabChange,
+  headerCollapsed,
+  onHeaderCollapsedChange,
+  collapseThresholdOf,
 }: {
   tabs: ResolvedWorkspaceTab<ReactNode>[];
   aside: ReactNode;
   activeTab?: WorkspaceTabId;
   onActiveTabChange?: (tab: WorkspaceTabId) => void;
+  headerCollapsed: boolean;
+  onHeaderCollapsedChange: (collapsed: boolean) => void;
+  collapseThresholdOf: () => number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -595,6 +647,9 @@ function WorkspaceSections({
     return () => observer.disconnect();
   }, [tabs.length]);
 
+  // 卸载（页面态离开 ready）时把头放回来：没有滚动容器就没有人能再报「回到页首」。
+  useEffect(() => () => onHeaderCollapsedChange(false), [onHeaderCollapsedChange]);
+
   const onScroll = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
@@ -603,6 +658,8 @@ function WorkspaceSections({
       setActive(next);
       report(next);
     }
+    const collapsed = headerCollapsedAfterScroll(headerCollapsed, scroller.scrollTop, collapseThresholdOf());
+    if (collapsed !== headerCollapsed) onHeaderCollapsedChange(collapsed);
   };
 
   if (tabs.length === 0) return <div className="flex-1 overflow-auto" />;

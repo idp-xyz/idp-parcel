@@ -53,6 +53,16 @@ export function bottomSpacerHeight(
 }
 
 /**
+ * 头部收起态随滚动怎么变（Dynamic Page 的 snap）：展开着的头在滚过阈值（meta 行与事实行的高度）后收起；
+ * 收起的头只在回到页首时恢复。两边不用同一条线是为了不抖：收起时头矮了、滚动容器随之长高，scrollTop 可能被夹回
+ * 阈值以下，用同一条线判会立刻又展开、再收起。
+ */
+export function headerCollapsedAfterScroll(collapsed: boolean, scrollTop: number, threshold: number): boolean {
+  if (collapsed) return scrollTop > 0;
+  return scrollTop > threshold;
+}
+
+/**
  * 一个分区此刻展不展开：操作者点过就听点过的，没点过听调用方的默认（`collapsed` 为真即默认折起）。
  * 不可折叠的分区（调用方没给 `collapsed`）永远展开，点也点不折。
  */

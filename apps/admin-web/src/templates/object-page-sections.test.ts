@@ -3,12 +3,13 @@ import { equal } from 'node:assert/strict';
 import {
   activeSectionAt,
   bottomSpacerHeight,
+  headerCollapsedAfterScroll,
   sectionElementId,
   sectionExpanded,
   sectionScrollTop,
 } from './object-page-sections';
 
-// 本文件钉的是对象页「分区」版式的纯判读（票 company-subject-ux/13）：当前锚点、滚动偏移、末尾垫高与折叠态。
+// 本文件钉的是对象页「分区」版式的纯判读（票 company-subject-ux/13）：当前锚点、滚动偏移、末尾垫高、头部收起与折叠态。
 // 渲染件 DetailPageTemplate 引 ESM-only 的 @idpxyz 原语，run-tests 的 CommonJS 发射加载不了它，组件层在这里钉不住。
 
 const sections = [
@@ -40,6 +41,14 @@ test('末尾垫高：最后一个分区到不了顶才垫，够高垫 0', () => 
   // 栏 36，视口 800，最后一个分区在 1500、内容总高 1716：要滚到 1464 得有 2264 高，差 548。
   equal(bottomSpacerHeight(1500, 36, 800, 1716), 548);
   equal(bottomSpacerHeight(100, 36, 800, 3000), 0);
+});
+
+// Covers: 头部随滚动收起——展开的头滚过阈值才收，收起的头只在回到页首才展，两条线不同所以不抖。
+test('头部收起：过阈值收起，回到页首才恢复', () => {
+  equal(headerCollapsedAfterScroll(false, 40, 48), false);
+  equal(headerCollapsedAfterScroll(false, 49, 48), true);
+  equal(headerCollapsedAfterScroll(true, 20, 48), true);
+  equal(headerCollapsedAfterScroll(true, 0, 48), false);
 });
 
 // Covers: 折叠态归并——没点过听调用方的默认，点过听点过的；没声明可折叠的分区永远展开。
