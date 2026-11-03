@@ -894,7 +894,7 @@ function ResolutionAnswer({
           <dt className="text-idpxyz-breadcrumb">生效版本</dt>
           <dd>
             {profileRevisionLabel(effective.revision)} · <Instant value={effective.effectiveFrom} precision="day" /> 起生效 · 来源单据{' '}
-            <span className="font-mono">{effective.basis}</span>
+            <span className="font-mono text-[13px]">{effective.basis}</span>
           </dd>
         </dl>
       ) : null}

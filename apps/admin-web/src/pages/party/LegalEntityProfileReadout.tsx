@@ -120,6 +120,7 @@ export function ProfileReadoutAddresses({
 /**
  * 值格里的两列小表（票 company-subject-ux/08 第 5 条）：左列是类型名或语言（弱显），右列是号或抬头。几个号用分号串成一段
  * 扫不出来，一行一个才认得出哪个号是哪种。左列最多占一半宽，长类型名折行而不是把号挤掉；等宽字体只给号。
+ * 两列同一字号、只以灰色分主次（票 company-subject-ux/12 第 3 条）：一行里两种字号，读的人以为是两层信息。
  */
 export function ProfileReadoutPairs({
   rows,
@@ -136,10 +137,10 @@ export function ProfileReadoutPairs({
     <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <dt className={`text-[12px] leading-5 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
+          <dt className={`text-[13px] leading-5 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
             {row.head}
           </dt>
-          <dd className={`min-w-0 leading-5 text-idpxyz-text ${mono ? 'select-text font-mono text-[12px]' : ''}`}>{row.value}</dd>
+          <dd className={`min-w-0 text-[13px] leading-5 text-idpxyz-text ${mono ? 'select-text font-mono' : ''}`}>{row.value}</dd>
         </Fragment>
       ))}
     </dl>

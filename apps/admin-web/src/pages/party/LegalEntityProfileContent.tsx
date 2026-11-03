@@ -137,6 +137,7 @@ function PrimaryTitleMark() {
 /**
  * 收款账户表，一行一个账户、币种打头（ADR-0359 决定三「按币种登记」，开单方按单据币种挑账户）。没有账户是结论句
  * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
+ * 等宽的号与备注都取表的正文字号（票 company-subject-ux/12 第 3 条）：同一行三种字号，号显得比户名矮一截。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
   if (!accounts.length) return <p className="text-[13px] leading-5 text-idpxyz-breadcrumb">未登记收款账户</p>;
@@ -172,11 +173,11 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
                 <span className="block text-idpxyz-text">{account.bankName}</span>
                 {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb">{account.bankAddress}</span> : null}
               </td>
-              <td className="px-3 py-2.5 font-mono text-[12px]">
+              <td className="px-3 py-2.5 font-mono">
                 <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
                 {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
               </td>
-              <td className="break-words py-2.5 pl-3 text-[12px]">
+              <td className="break-words py-2.5 pl-3">
                 {account.note ? <span className="text-idpxyz-text">{account.note}</span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
               </td>
             </tr>
