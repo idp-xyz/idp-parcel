@@ -192,8 +192,9 @@ export function LegalEntityDetailPanel({
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-          {/* 正文最宽 52rem、靠左（票 company-subject-ux/08 第 4 条）：栏拖到 850px 以上时标签列与值列之间不再空一大片。 */}
-          <div className="w-full max-w-[52rem]">
+          {/* 正文撑满栏宽：卡随栏的宽度排一列或两列（legal-entity-profile-readout.css 的容器查询），不另设上限——
+              设了上限，栏拖宽之后卡停在上限处、右边空出一条。标签列与值列的间距由卡内两列各自收住，不靠限宽。 */}
+          <div className="w-full">
             <TabsContent value="overview" className="mt-0">
               {row.deactivationBasis ? (
                 <dl className="mb-4">
