@@ -17,7 +17,7 @@ import {
   LegalEntityBanners,
   LegalEntityLifecycle,
   LegalEntityMoreMenu,
-  ProfileStatusValue,
+  legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
@@ -27,11 +27,10 @@ import { legalEntityContactCountOf } from './legal-entity-profile';
 import { legalEntityRevisionHistoryOf, legalEntityTechnicalRows } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
-import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText } from './legal-entity-references';
+import { profileStatusCellOf, referencedCount } from './legal-entity-references';
 import {
   Fact,
   FactStrip,
-  Instant,
   RefText,
   UnknownPartyName,
   useCopyToClipboard,
@@ -50,8 +49,8 @@ const tabTriggerClass = 'px-0 text-[12px] font-medium text-idpxyz-breadcrumb dat
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
  * 头部两行（名称 + 状态徽章；一行小字 meta + 生命周期小步进）· 主动作 + 「更多」菜单 + 关闭 · 关键事实一行 · 页签。
  *
- * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：事实条三格是生效日期、资料状态、被引用（已停用时多一格
- * 停用日期，票 company-subject-ux/03），国家、注册号归引用签，参与方名称归标题；身份版本只在「登记记录」签看。
+ * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：事实行的格在 legalEntityHeaderFacts 一处定义（与对象页
+ * 同一份），编码、注册地、注册号归 meta 行，参与方名称归标题；身份版本只在「登记记录」签看。
  * 概要签补充当前公司资料摘要，技术标识、依据与往来单位档案收进技术详情。
  *
  * 内容只取行上已有的与几个既有区块（公司资料、登记记录、关联各自取数），不为详情栏另开读口。横幅与「更多」菜单
@@ -156,21 +155,12 @@ export function LegalEntityDetailPanel({
         <LegalEntityBanners row={row} />
       </div>
 
-      <FactStrip>
-        <Fact label="生效日期">
-          <Instant value={row.effectiveFrom} precision="day" />
-        </Fact>
-        <Fact label="资料状态">
-          <ProfileStatusValue cell={profileCell} />
-        </Fact>
-        <Fact label="被引用">
-          <span title={referencedCountNote}>{referencedCountText(referenced)}</span>
-        </Fact>
-        {row.deactivatedAt ? (
-          <Fact label="停用日期">
-            <Instant value={row.deactivatedAt} precision="day" />
+      <FactStrip inline>
+        {legalEntityHeaderFacts(row, profileCell, referenced).map((fact) => (
+          <Fact inline key={fact.label} label={fact.label} title={fact.title}>
+            {fact.value}
           </Fact>
-        ) : null}
+        ))}
       </FactStrip>
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">

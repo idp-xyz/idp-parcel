@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
 import { statusToneBanner, statusToneSurface, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
-import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote } from './presentation';
+import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote, profileRevisionLabel } from './presentation';
 import {
   legalEntityLifecycle,
   lifecycleConnectorReached,
@@ -15,9 +15,9 @@ import {
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { StatusPill } from '../../components/StatusPill';
-import type { ProfileStatusCell } from './legal-entity-references';
+import { referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
 
-// 责任法人头区的几件：生命周期条、停用与待补横幅、「更多」菜单，以及首屏指标带的「资料状态」格。工作台详情栏
+// 责任法人头区的几件：生命周期小步进、停用与待补横幅、「更多」菜单，以及头区下那一行关键事实。工作台详情栏
 // 与对象页各摆一份同样的头区（票 group-legal-entities-uiux/09：同一法人两处结构一致），件只在这里写一遍，两处各自排版。
 
 /** 首屏「资料状态」格：答到了用状态胶囊，还没读到显占位，读不到显「—」——判读在 profileStatusCellOf。 */
@@ -25,6 +25,40 @@ export function ProfileStatusValue({ cell }: { cell: ProfileStatusCell }) {
   if (cell.kind === 'pending') return <span className="text-idpxyz-breadcrumb">…</span>;
   if (cell.kind === 'unavailable') return <span className="text-idpxyz-breadcrumb">—</span>;
   return <StatusPill label={cell.status.label} tone={cell.status.tone} className="font-sans" />;
+}
+
+/** 首屏「资料版本」格：这一刻生效的那一版的短写「第 N 版」（轴名由标签承担）；没有生效版本显「—」。 */
+function ProfileVersionValue({ cell }: { cell: ProfileStatusCell }) {
+  if (cell.kind === 'pending') return <span className="text-idpxyz-breadcrumb">…</span>;
+  if (cell.kind === 'unavailable' || cell.effectiveRevision === undefined) return <span className="text-idpxyz-breadcrumb">—</span>;
+  return <span className="tabular-nums">{profileRevisionLabel(cell.effectiveRevision)}</span>;
+}
+
+export interface LegalEntityHeaderFact {
+  label: string;
+  value: ReactNode;
+  /** 悬停说明（口径）。 */
+  title?: string;
+}
+
+/**
+ * 头区下那一行关键事实（票 company-subject-ux/08 第 2 条），详情栏与对象页同一份：生效（已停用时多一格停用）、资料状态、
+ * 资料版本、被引用。一个事实首屏只出现一处（票 group-legal-entities-uiux/06）：编码、注册地、注册号在 meta 行，名称是标题，
+ * 身份版本只在「登记记录」签看。详情栏把它摆成 FactStrip inline，对象页接在模板 meta 行后面——模板在头区与签之间只留了
+ * 指标卡那一格，一行小字只能走 meta。
+ */
+export function legalEntityHeaderFacts(
+  row: GroupLegalEntityRecord,
+  profileCell: ProfileStatusCell,
+  referenced: number | null,
+): LegalEntityHeaderFact[] {
+  return [
+    { label: '生效', value: <Instant value={row.effectiveFrom} precision="day" /> },
+    ...(row.deactivatedAt ? [{ label: '停用', value: <Instant value={row.deactivatedAt} precision="day" /> }] : []),
+    { label: '资料状态', value: <ProfileStatusValue cell={profileCell} /> },
+    { label: '资料版本', value: <ProfileVersionValue cell={profileCell} /> },
+    { label: '被引用', value: referencedCountText(referenced), title: referencedCountNote },
+  ];
 }
 
 // 圆点小面积实色取语气前景色（status-tone.ts 的 statusToneSurface 那一档）；没走到的段只画一圈描边。
