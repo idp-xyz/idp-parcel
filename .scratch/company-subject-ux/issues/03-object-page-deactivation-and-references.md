@@ -69,3 +69,12 @@ Blocked by: 无
 
 - 停用的提交路径没在浏览器上走（不发写请求）；落册后「关对话框 + 重取列表」的链路以 `deactivationLandedActions` 的 node:test 与代码为证。
 - 「停用日期」格与「停用来源单据」行只在已停用主体上出现，演示租户没有已停用主体，没截到图；是条件 JSX，判读在同一处。
+
+### 追加（2026-11-03，按协调方裁定与票 01 / 04 进 main 后）
+
+- **(b) 信用政策与接单规则包进「关联」签与「被引用」**（`7b759a8a3`）：同一只 `useLegalEntityReferences` 读四册（供应商协议、结算政策、信用政策、接单规则包），段与行同形；`referencedCount` 收四册状态，任一册没答到仍「—」；三本政策册按版本数计（裁定 c），口径句在 `referencedCountNote`。演示租户 SYN-LE-01 的「被引用」由 4 变 6（2 + 2 + 1 + 1）。测试：`legal-entity-references.test.ts` 加信用 / 规则包关联、四册求和、去处。
+- **接上票 01 的词源**：头部「注册号」经 `registrationNumberTypeNamesOf` 译成目录名（浏览器核到「统一社会信用代码 9100…」），列表页把 `typeNameOf` 传进对象页与详情栏（`GroupLegalEntitiesPage.tsx` 再加一个 prop，协调方裁定允许），登记记录时间线用同一份译名（`legalEntityRevisionHistoryOf(typeNameOf)`）；生效 / 停用日期改用 `Instant precision="day"`，自写的 `displayDateOf` 与 `DateCell` 删掉；详情栏「登记记录」签字面已改。
+- **停用对话框不露「责任法人」**：`deactivationConfirmation` 加可换主语参数，公司主体页传对象词典的「公司主体」（浏览器核到确认框「停用这个公司主体？」「身份种类 公司主体」，`03b-object-deactivation-confirm.png`）；确认框两格按 spec 改「停用来源单据」「版本号 · 第 N 版」（往来单位页的同一确认框随之同词，spec 是唯一权威）。
+- **合并**：`origin/main` 合了两次——票 01 之后（`5bc6ff32e`，无冲突）、票 04 之后（`72784f838`，无冲突；04 动的是资料表单那几份文件，本票没碰）。合并后三道门：tsc 0、node:test 1157/1157、vite build 通过；页头按钮两处都是「更新公司资料」。
+- **合并后浏览器复核**（不发写请求）：首屏「资料状态」已显票 04 的新词「可开票」；其余判据同上。
+- (a) 客户合同 / 客户账户：按裁定不改票面，签底一句保留，等后端票透出责任法人再接。(d) 资料状态的词等票 04——已进 main，本票只调用，已显新词。
