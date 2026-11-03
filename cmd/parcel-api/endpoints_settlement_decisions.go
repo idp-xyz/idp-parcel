@@ -32,7 +32,7 @@ func init() {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionSupplierBillReception),
 			},
 			"/settlement-supplier-bill-audits": {
-				method: http.MethodPost, face: decisionFace(accessidentity.DecisionSupplierBillAudit),
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionSupplierBillAudit, accessidentity.DecisionSupplierBillDisputeDecision),
 			},
 			"/settlement-statement-disputes": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStatementDisputeRegistration),

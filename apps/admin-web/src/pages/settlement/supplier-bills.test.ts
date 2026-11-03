@@ -1,18 +1,20 @@
 import { test } from 'node:test';
 import { deepEqual, equal, match, ok } from 'node:assert/strict';
 import {
-  auditAnswerText,
+  billKey,
   billLabel,
   billNumberOf,
   billProgress,
-  claimIdFor,
+  claimIdForBill,
+  claimOfBillKey,
   classificationChoices,
   currentExpectedCosts,
   differingClassificationWords,
   hasReceptionProblems,
+  legacyBillNumberOf,
+  linesForSupplier,
   lineDisposition,
   matchSummary,
-  newPayableId,
   NO_EXPECTED_COST,
   operatorWords,
   pageCountSummary,
@@ -22,6 +24,7 @@ import {
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
+  unrecordedSupplierCount,
   withExactHits,
   type ReceptionDraft,
 } from './supplier-bills';
@@ -41,6 +44,9 @@ const bill = (overrides: Partial<SupplierBillReceptionRecord> = {}): SupplierBil
   payableLineCount: 1,
   payableAmount: '1000',
   matchedWithoutPayableCount: 1,
+  rejectedAmount: '0',
+  openDisputeAmount: '0',
+  undecidedAmount: '2300',
   auditAuthorityConfigured: true,
   auditAuthorityConfiguredNow: true,
   receivedAt: '2026-10-31T08:00:00Z',
@@ -48,22 +54,23 @@ const bill = (overrides: Partial<SupplierBillReceptionRecord> = {}): SupplierBil
   ...overrides,
 });
 
-test('主张标识由供应商与账单号生成，取得回账单号；别处送入的主张取不到就照旧显主张标识', () => {
-  const claim = claimIdFor('SYN-PARTY-CARRIER-TRUNK-01', '  INV/2610-001 ');
-  equal(claim, 'SYN-PARTY-CARRIER-TRUNK-01/INV/2610-001');
-  equal(billNumberOf(claim, 'SYN-PARTY-CARRIER-TRUNK-01'), 'INV/2610-001');
-  equal(billNumberOf('SYN-BILL-DEMO-1', 'SYN-PARTY-CARRIER-TRUNK-01'), undefined);
-  equal(billNumberOf('SYN-PARTY-CARRIER-TRUNK-01/', 'SYN-PARTY-CARRIER-TRUNK-01'), undefined);
+test('账单号：先取服务端账单号册上的；旧行（主张标识形如「供应商/账单号」）从主张标识取回，取不到照旧显主张标识', () => {
+  equal(billNumberOf({ claim: 'BILL-20261102-1', supplier: 'S', supplierBillNumber: 'INV-9' }), 'INV-9');
+  equal(billNumberOf({ claim: 'SYN-PARTY-CARRIER-TRUNK-01/INV/2610-001', supplier: 'SYN-PARTY-CARRIER-TRUNK-01' }), 'INV/2610-001');
+  equal(legacyBillNumberOf('SYN-BILL-DEMO-1', 'SYN-PARTY-CARRIER-TRUNK-01'), undefined);
+  equal(legacyBillNumberOf('SYN-PARTY-CARRIER-TRUNK-01/', 'SYN-PARTY-CARRIER-TRUNK-01'), undefined);
   equal(billLabel({ claim: 'SYN-BILL-DEMO-1', supplier: 'SYN-PARTY-CARRIER-TRUNK-01' }), 'SYN-BILL-DEMO-1');
-  // 同一家供应商同一个账单号不论谁录都落回同一个主张；两家供应商同号不撞。
-  equal(claimIdFor('A', 'INV-1'), claimIdFor('A', 'INV-1'));
-  ok(claimIdFor('A', 'INV-1') !== claimIdFor('B', 'INV-1'));
 });
 
-test('应付标识页面生成，前缀不是应付单号的 AP-', () => {
-  const id = newPayableId(new Date('2026-11-02T03:04:05Z'), 'ab-c9z12345');
-  equal(id, 'PAYABLE-20261102-030405-ABC9Z1');
-  ok(!id.startsWith('AP-'));
+test('主张标识：同一家供应商同一个账单号已在册上就沿用那份主张（新号旧号都认），否则用新生成的；两家供应商同号不混', () => {
+  const rows = [
+    { claim: 'BILL-OLD-1', supplier: 'A', supplierBillNumber: 'INV-1' },
+    { claim: 'A/INV-2', supplier: 'A' },
+  ];
+  equal(claimIdForBill(rows, 'A', ' INV-1 ', 'BILL-NEW'), 'BILL-OLD-1');
+  equal(claimIdForBill(rows, 'A', 'INV-2', 'BILL-NEW'), 'A/INV-2');
+  equal(claimIdForBill(rows, 'B', 'INV-1', 'BILL-NEW'), 'BILL-NEW');
+  equal(claimIdForBill(rows, 'A', 'INV-3', 'BILL-NEW'), 'BILL-NEW');
 });
 
 test('账单走到哪一步：先说要人动手的那件', () => {
@@ -72,11 +79,9 @@ test('账单走到哪一步：先说要人动手的那件', () => {
   // 审核人登没登看此刻的审核授权册：接收时没登、后来补登了，就是待审核，不再说未配置；接收时登了、后来册上没有了，照此刻说。
   equal(billProgress(bill({ auditAuthorityConfigured: false, auditAuthorityConfiguredNow: true })).label, '待审核');
   equal(billProgress(bill({ auditAuthorityConfigured: true, auditAuthorityConfiguredNow: false })).label, '审核人未配置');
-  equal(billProgress(bill({ matchedWithoutPayableCount: 0 })).label, '有差异待核实');
-  const done = billProgress(bill({ matchedWithoutPayableCount: 0, classificationCounts: { MATCHED: 3 } }));
-  deepEqual(done, { label: '已审完', tone: 'good' });
-  // 接收记录上没有匹配的行也算没对上，不当成审完。
-  equal(billProgress(bill({ matchedWithoutPayableCount: 0, classificationCounts: { MATCHED: 2 }, matchCount: 2 })).label, '有差异待核实');
+  // 都给过结果但还有争议没解；争议解完（或一段争议都没有）即已审完，拒绝的那几段也算审完。
+  equal(billProgress(bill({ undecidedAmount: '0', openDisputeAmount: '500' })).label, '有争议待再审');
+  deepEqual(billProgress(bill({ undecidedAmount: '0', openDisputeAmount: '0', rejectedAmount: '300' })), { label: '已审完', tone: 'good' });
 });
 
 test('对上情况：分类经用语词典说中文，不出英文码', () => {
@@ -87,11 +92,10 @@ test('对上情况：分类经用语词典说中文，不出英文码', () => {
   equal(matchSummary(bill({ lineCount: 2, classificationCounts: { MATCHED: 1 } })), '对上 1/2 行 · 没有匹配记录 1');
 });
 
-test('一行能不能审：已对上且还没有应付才摆审核；差异行不摆', () => {
-  equal(lineDisposition({ classification: 'MATCHED' }).auditable, true);
-  equal(lineDisposition({ classification: 'MATCHED', payable: { payable: 'P', amount: '1', currency: 'CNY', auditor: 'A', auditedAt: 'x' } }).auditable, false);
-  equal(lineDisposition({ classification: 'PRICE_VARIANCE' }).auditable, false);
-  equal(lineDisposition({}).label, '没有匹配记录');
+test('一行走到哪一步：还有没审的金额就摆审核；只剩争议说待再审；都给过结果说已审完', () => {
+  deepEqual(lineDisposition({ undecidedAmount: '300', openDisputeAmount: '0' }), { label: '待审核', tone: 'warn', auditable: true });
+  deepEqual(lineDisposition({ undecidedAmount: '0', openDisputeAmount: '200' }), { label: '有争议待再审', tone: 'warn', auditable: false });
+  equal(lineDisposition({ undecidedAmount: '0', openDisputeAmount: '0' }).label, '已审完');
 });
 
 test('应付以应付单号为主标识；没号照旧显应付标识，按记下的原因说', () => {
@@ -126,21 +130,42 @@ const cost = (overrides: Partial<SupplierExpectedCostRecord>): SupplierExpectedC
   ...overrides,
 });
 
-test('能拿来对账的预期成本只列当前那一版、同币种的', () => {
+test('能拿来对账的预期成本只列所选供应商的、当前那一版、同币种的', () => {
   const costs = [
-    cost({ version: 'V1' }),
-    cost({ version: 'V2', priorVersion: 'V1', correctionReason: 'R' }),
-    cost({ version: 'W1', withdrawn: true }),
-    cost({ version: 'U1', settlementCurrency: 'USD' }),
+    cost({ version: 'V1', supplier: 'TRUNK' }),
+    cost({ version: 'V2', priorVersion: 'V1', correctionReason: 'R', supplier: 'TRUNK' }),
+    cost({ version: 'W1', withdrawn: true, supplier: 'TRUNK' }),
+    cost({ version: 'U1', settlementCurrency: 'USD', supplier: 'TRUNK' }),
+    cost({ version: 'L1', supplier: 'LM' }),
+    cost({ version: 'OLD' }),
   ];
   deepEqual(
-    currentExpectedCosts(costs, 'CNY').map((item) => item.version),
+    currentExpectedCosts(costs, 'CNY', 'TRUNK').map((item) => item.version),
     ['V2'],
   );
   deepEqual(
-    currentExpectedCosts(costs, '').map((item) => item.version),
+    currentExpectedCosts(costs, '', 'TRUNK').map((item) => item.version),
     ['V2', 'U1'],
   );
+  deepEqual(
+    currentExpectedCosts(costs, 'CNY', 'LM').map((item) => item.version),
+    ['L1'],
+  );
+  // 没选供应商一份都不列；没记供应商的旧行哪一家都不列，只计数。
+  deepEqual(currentExpectedCosts(costs, 'CNY', ''), []);
+  equal(unrecordedSupplierCount(costs, 'CNY'), 1);
+  equal(unrecordedSupplierCount(costs, 'USD'), 0);
+});
+
+test('换了供应商，各行选的别家预期成本连同对上方式清掉，找不到对应运输与本家的留着', () => {
+  const line = (expected: string, classification: string) => ({ expected, classification, claimed: '8500', feeItem: '', basis: '' });
+  const lines = [line('V2', 'MATCHED'), line('L1', 'MATCHED'), line(NO_EXPECTED_COST, 'NO_MATCHING_OCCURRENCE'), line('', '')];
+  deepEqual(linesForSupplier(lines, [cost({ version: 'V2', supplier: 'TRUNK' })]), [
+    line('V2', 'MATCHED'),
+    line('', ''),
+    line(NO_EXPECTED_COST, 'NO_MATCHING_OCCURRENCE'),
+    line('', ''),
+  ]);
 });
 
 test('对上方式照匹配门的形状给：金额相等才能选已对上，没有预期成本只能选找不到对应运输', () => {
@@ -192,9 +217,10 @@ test('登记表单的本地检查：缺格、金额写法、对上方式与依�
   ok(lines[3].feeItem, '找不到对应运输要人填费用项目');
 });
 
-test('接收载荷：主张标识由页面生成、行号从 1 起、已对上不带依据、可缺的格缺就不写', () => {
-  const payload = receptionPayload(draft(), costs);
-  equal(payload.claim, 'SYN-PARTY-CARRIER-TRUNK-01/INV-2610-001');
+test('接收载荷：主张标识由调用方交进来、账单号单放一格、行号从 1 起、已对上不带依据、可缺的格缺就不写', () => {
+  const payload = receptionPayload(draft(), costs, 'BILL-20261102-030405-ABC');
+  equal(payload.claim, 'BILL-20261102-030405-ABC');
+  equal(payload.supplierBillNumber, 'INV-2610-001');
   deepEqual(payload.lines, [
     { line: '1', feeItem: 'FEE-TRUNK', claimed: '8500' },
     { line: '2', feeItem: 'FEE-OTHER', claimed: '300' },
@@ -204,7 +230,7 @@ test('接收载荷：主张标识由页面生成、行号从 1 起、已对上�
     { line: '2', classification: 'NO_MATCHING_OCCURRENCE', basis: '查过 10 月干线' },
   ]);
   equal('supplementsClaim' in payload, false);
-  equal(receptionPayload(draft({ supplementsClaim: 'X/INV-0' }), costs).supplementsClaim, 'X/INV-0');
+  equal(receptionPayload(draft({ supplementsClaim: 'X/INV-0' }), costs, 'BILL-1').supplementsClaim, 'X/INV-0');
 });
 
 test('接收答复说人话：受理、审核人未配置、重复、版本冲突、未受理、未配置、预期成本不是当前版', () => {
@@ -218,25 +244,36 @@ test('接收答复说人话：受理、审核人未配置、重复、版本冲�
     receptionAnswerText({ outcome: 'EXPECTED_COST_NOT_CURRENT', notCurrent: { line: '2', version: 'V1', withdrawn: false, successor: 'V2' } }, 'INV-1'),
     '没有登记：第 2 行选的预期成本 V1 已经被更正过（现在是 V2），改选当前那一版再登记。',
   );
+  match(receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredClaim: 'BILL-OLD' }, 'INV-1'), /账单号 INV-1 已经登记过/);
+  match(receptionAnswerText({ outcome: 'CLAIM_SUPPLIER_CONFLICT', registeredSupplier: 'SUP-A' }, 'INV-1', () => '甲公司'), /是甲公司的，同一份账单的新版本不能换供应商/);
 });
 
-test('审核答复说人话：交回应付单号；越权上限、撞号、三种未配置各说各的', () => {
+test('接收答复说人话：选了别家供应商的预期成本、选了没记供应商的预期成本（ADR-0358）', () => {
+  const names: Record<string, string> = { 'SYN-PARTY-CARRIER-LM-01': '合成末端承运方' };
+  const supplierName = (id: string) => names[id] ?? id;
   equal(
-    auditAnswerText({ outcome: 'PAYABLE_FORMED', payable: 'PAYABLE-1', documentNumber: 'AP-202611-00001', amount: '8500', currency: 'CNY' }, '1'),
-    '第 1 行审核通过，形成应付 AP-202611-00001，金额 8500 CNY。',
+    receptionAnswerText(
+      { outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH', expectedCostSupplier: { line: '1', version: 'L1', supplier: 'SYN-PARTY-CARRIER-LM-01' } },
+      'INV-1',
+      supplierName,
+    ),
+    '没有登记：第 1 行选的预期成本 L1 是合成末端承运方的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。',
   );
+  // 取不到名称时退回标识。
   match(
-    auditAnswerText({ outcome: 'PAYABLE_FORMED', payable: 'PAYABLE-1', documentNumberAbsence: 'NUMBERING_TIME_ZONE_NOT_CONFIGURED' }, '1'),
-    /PAYABLE-1（开立时单据编号时区未配置，无单据号）/,
+    receptionAnswerText(
+      { outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH', expectedCostSupplier: { line: '1', version: 'L1', supplier: 'SYN-PARTY-UNKNOWN' } },
+      'INV-1',
+      supplierName,
+    ),
+    /是SYN-PARTY-UNKNOWN的/,
   );
-  match(auditAnswerText({ outcome: 'EXISTING_PAYABLE', documentNumber: 'AP-202611-00001' }, '1'), /已经形成过应付 AP-202611-00001/);
-  match(auditAnswerText({ outcome: 'AUDIT_MUST_ESCALATE' }, '2'), /越权审核上限/);
-  match(auditAnswerText({ outcome: 'NUMBERING_RULE_COLLISION', documentType: 'AUDITED_PAYABLE' }, '1'), /应付单号与已有的号重复/);
-  match(auditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'AUDIT_AUTHORITY_UNCONFIGURED' }, '1'), /审核授权未配置/);
-  match(auditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'PAYABLE_ACCOUNT_UNCONFIGURED' }, '1'), /应付归集账户/);
-  match(auditAnswerText({ outcome: 'AUDIT_UNDECIDED', undecidedReason: 'AUDIT_ESCALATION_UNCONFIGURED' }, '1'), /越权审核上限（未配置）/);
-  match(auditAnswerText({ outcome: 'LINE_NOT_AUDITABLE' }, '3'), /先核实差异/);
-  match(auditAnswerText({ outcome: 'LINE_NOT_AUDITABLE' }, '3'), new RegExp(differingClassificationWords()));
+  match(receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH' }, 'INV-1'), /别家供应商/);
+  match(
+    receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_UNRECORDED', expectedCostSupplier: { line: '2', version: 'OLD' } }, 'INV-1'),
+    /第 2 行选的预期成本 OLD 还没记是哪家供应商的.*补记/,
+  );
+  equal(/[A-Z_]{8,}/.test(receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_UNRECORDED' }, 'INV-1')), false);
 });
 
 test('对不上的分类从取值表取界面词：不含已对上，不出英文码', () => {
@@ -280,4 +317,9 @@ test('应付签的检索池：页上那些加上按应付单号在全册里检�
     withExactHits(page, [payable('P-1', 'AP-202611-00002')]).map((row) => row.payable),
     ['P-1', 'P-2'],
   );
+});
+
+test('选中的账单不在页上时按主张读回：从 billKey 取回主张身份，主张标识里带斜杠也取得对', () => {
+  const key = billKey({ claim: 'SYN-PARTY-1/INV/2610-001', claimVersion: '2' });
+  equal(claimOfBillKey(key), 'SYN-PARTY-1/INV/2610-001');
 });

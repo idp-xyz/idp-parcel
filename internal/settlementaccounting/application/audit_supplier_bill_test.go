@@ -20,8 +20,6 @@ type payableStoreDouble struct {
 	findErr error
 	saveErr error
 	saves   int
-	// calls 依次记下排队与按身份读的调用，钉住「先排队、再查重」的次序。
-	calls []string
 }
 
 func newPayableStore() *payableStoreDouble {
@@ -30,16 +28,6 @@ func newPayableStore() *payableStoreDouble {
 
 func payableStoreKey(key ports.AuditedPayableKey) string {
 	return key.TenantID.String() + "|" + key.Payable.String()
-}
-
-func (double *payableStoreDouble) LockIssuance(
-	_ context.Context,
-	key ports.AuditedPayableKey,
-	claim domain.BillClaimID,
-	line domain.BillLineReference,
-) error {
-	double.calls = append(double.calls, "lock "+key.Payable.String()+" "+claim.String()+"/"+line.String())
-	return nil
 }
 
 func (double *payableStoreDouble) DocumentNumberUsed(_ context.Context, tenant domain.TenantID, number string) (bool, error) {
@@ -55,29 +43,11 @@ func (double *payableStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.AuditedPayableKey,
 ) (ports.AuditedPayableRecord, bool, error) {
-	double.calls = append(double.calls, "find "+key.Payable.String())
 	if double.findErr != nil {
 		return ports.AuditedPayableRecord{}, false, double.findErr
 	}
 	record, found := double.records[payableStoreKey(key)]
 	return record, found, nil
-}
-
-func (double *payableStoreDouble) FindByLine(
-	_ context.Context,
-	tenant domain.TenantID,
-	claim domain.BillClaimID,
-	line domain.BillLineReference,
-) (ports.AuditedPayableRecord, bool, error) {
-	if double.findErr != nil {
-		return ports.AuditedPayableRecord{}, false, double.findErr
-	}
-	for _, record := range double.records {
-		if record.Key.TenantID == tenant && record.Payable.Claim() == claim && record.Payable.Line() == line {
-			return record, true, nil
-		}
-	}
-	return ports.AuditedPayableRecord{}, false, nil
 }
 
 func (double *payableStoreDouble) Save(
@@ -91,14 +61,94 @@ func (double *payableStoreDouble) Save(
 	if _, exists := double.records[payableStoreKey(record.Key)]; exists {
 		return ports.AuditedPayableAlreadyRecorded, nil
 	}
-	for _, existing := range double.records {
-		// 同一行第二份应付：库上的唯一约束答`已有记录`，让编排读回赢家。
-		if existing.Payable.Claim() == record.Payable.Claim() && existing.Payable.Line() == record.Payable.Line() {
-			return ports.AuditedPayableAlreadyRecorded, nil
-		}
-	}
 	double.records[payableStoreKey(record.Key)] = record
 	return ports.AuditedPayableSaved, nil
+}
+
+// decisionStoreDouble 照真册：主键是（租户，决定身份），同一行上直接给的各段、同一争议的各份再审互不重叠（库上的排他约束）。
+type decisionStoreDouble struct {
+	records map[string]ports.AuditDecisionRecord
+	order   []string
+	findErr error
+	saveErr error
+	saves   int
+	// calls 依次记下排队与按身份读的调用，钉住「先排队、再查重」的次序。
+	calls []string
+}
+
+func newDecisionStore() *decisionStoreDouble {
+	return &decisionStoreDouble{records: map[string]ports.AuditDecisionRecord{}}
+}
+
+func decisionStoreKey(key ports.AuditDecisionKey) string {
+	return key.TenantID.String() + "|" + key.Decision.String()
+}
+
+func (double *decisionStoreDouble) LockLine(
+	_ context.Context,
+	key ports.AuditDecisionKey,
+	claim domain.BillClaimID,
+	line domain.BillLineReference,
+) error {
+	double.calls = append(double.calls, "lock "+key.Decision.String()+" "+claim.String()+"/"+line.String())
+	return nil
+}
+
+func (double *decisionStoreDouble) FindByKey(
+	_ context.Context,
+	key ports.AuditDecisionKey,
+) (ports.AuditDecisionRecord, bool, error) {
+	double.calls = append(double.calls, "find "+key.Decision.String())
+	if double.findErr != nil {
+		return ports.AuditDecisionRecord{}, false, double.findErr
+	}
+	record, found := double.records[decisionStoreKey(key)]
+	return record, found, nil
+}
+
+func (double *decisionStoreDouble) ListByLine(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+	line domain.BillLineReference,
+) ([]ports.AuditDecisionRecord, error) {
+	if double.findErr != nil {
+		return nil, double.findErr
+	}
+	var records []ports.AuditDecisionRecord
+	for _, key := range double.order {
+		record := double.records[key]
+		if record.Key.TenantID == tenant && record.Decision.Claim() == claim && record.Decision.Line() == line {
+			records = append(records, record)
+		}
+	}
+	return records, nil
+}
+
+func (double *decisionStoreDouble) Save(
+	_ context.Context,
+	record ports.AuditDecisionRecord,
+) (ports.AuditDecisionSaveOutcome, error) {
+	double.saves++
+	if double.saveErr != nil {
+		return ports.AuditDecisionSaveOutcomeInvalid, double.saveErr
+	}
+	key := decisionStoreKey(record.Key)
+	if _, exists := double.records[key]; exists {
+		return ports.AuditDecisionAlreadyRecorded, nil
+	}
+	resolves, _ := record.Decision.Resolves()
+	for _, existing := range double.records {
+		earlier, _ := existing.Decision.Resolves()
+		if existing.Key.TenantID == record.Key.TenantID && existing.Decision.Claim() == record.Decision.Claim() &&
+			existing.Decision.Line() == record.Decision.Line() && earlier == resolves &&
+			existing.Decision.Span().Overlaps(record.Decision.Span()) {
+			return ports.AuditDecisionAlreadyRecorded, nil
+		}
+	}
+	double.records[key] = record
+	double.order = append(double.order, key)
+	return ports.AuditDecisionSaved, nil
 }
 
 type accountViewDouble struct {
@@ -377,6 +427,7 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 			application.AuditBillStoreUnavailable, application.AuditAuthorityUnavailable, application.AuditAuthorityUnconfigured,
 			application.PayableAccountUnavailable, application.PayableAccountUnconfigured, application.PayableStoreUnavailable,
 			application.AuditEscalationViewUnavailable, application.AuditEscalationUnconfigured, application.AuditArrangementViewUnavailable,
+			application.AuditDecisionStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -384,11 +435,11 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 9 {
+		if len(labels) != 10 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.AuditUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第十个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第十一个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

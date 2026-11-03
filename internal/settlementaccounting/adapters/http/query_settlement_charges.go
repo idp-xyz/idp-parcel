@@ -159,6 +159,7 @@ func serveSupplierExpectedCosts(
 			FeeItem:             row.FeeItem,
 			PurchaseRuleVersion: row.PurchaseRuleVersion,
 			Agreement:           row.Agreement,
+			Supplier:            row.Supplier,
 			Evaluation:          row.Evaluation,
 			OriginalCurrency:    row.OriginalCurrency,
 			OriginalAmount:      minorAmount(row.OriginalMinor),
@@ -253,14 +254,17 @@ type supplierExpectedCostBody struct {
 	FeeItem             string `json:"feeItem"`
 	PurchaseRuleVersion string `json:"purchaseRuleVersion"`
 	Agreement           string `json:"agreement"`
-	Evaluation          string `json:"evaluation"`
-	OriginalCurrency    string `json:"originalCurrency"`
-	OriginalAmount      string `json:"originalAmount"`
-	SettlementCurrency  string `json:"settlementCurrency"`
-	SettlementAmount    string `json:"settlementAmount"`
-	ConversionStep      string `json:"conversionStep,omitempty"`
-	PriorVersion        string `json:"priorVersion,omitempty"`
-	CorrectionReason    string `json:"correctionReason,omitempty"`
+	// supplier 是 agreement 那一版协议的供应商；本记录之前形成、还没补记的旧行整键不出现，读作未记——不填空串或「未知」，
+	// 登记表单凭它按供应商筛（ADR-0358 决定四）。
+	Supplier           string `json:"supplier,omitempty"`
+	Evaluation         string `json:"evaluation"`
+	OriginalCurrency   string `json:"originalCurrency"`
+	OriginalAmount     string `json:"originalAmount"`
+	SettlementCurrency string `json:"settlementCurrency"`
+	SettlementAmount   string `json:"settlementAmount"`
+	ConversionStep     string `json:"conversionStep,omitempty"`
+	PriorVersion       string `json:"priorVersion,omitempty"`
+	CorrectionReason   string `json:"correctionReason,omitempty"`
 	// withdrawn 只随失效纠错版本出现：它依的发生项已失效，这一版说的是那份成本不再成立，金额是被撤下那一笔的原样。
 	Withdrawn  bool   `json:"withdrawn,omitempty"`
 	RecordedAt string `json:"recordedAt"`

@@ -188,7 +188,7 @@ func (catalogue *ChargeCatalogue) ListSupplierExpectedCosts(
 	// 纠正的那一版分居两页会让「这是重述不是新成本」在页面上看不出来。
 	rows, err := querier.Query(ctx,
 		`SELECT version, occurrence_id, occurrence_reason, occurrence_version, occurred_at,
-		        fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
+		        fee_item, purchase_rule_version, agreement_ref, supplier_party_ref, evaluation_ref,
 		        original_currency, original_minor,
 		        settlement_currency, settlement_minor,
 		        conversion_ref, prior_version, correction_reason, withdrawn, recorded_at
@@ -207,6 +207,7 @@ func (catalogue *ChargeCatalogue) ListSupplierExpectedCosts(
 	for rows.Next() {
 		var (
 			row              ports.SupplierExpectedCostCatalogueRow
+			supplier         *string
 			conversionStep   *string
 			priorVersion     *string
 			correctionReason *string
@@ -215,13 +216,14 @@ func (catalogue *ChargeCatalogue) ListSupplierExpectedCosts(
 		)
 		if err := rows.Scan(
 			&row.Version, &row.Occurrence, &row.OccurrenceReason, &row.OccurrenceVersion, &occurredAt,
-			&row.FeeItem, &row.PurchaseRuleVersion, &row.Agreement, &row.Evaluation,
+			&row.FeeItem, &row.PurchaseRuleVersion, &row.Agreement, &supplier, &row.Evaluation,
 			&row.OriginalCurrency, &row.OriginalMinor,
 			&row.SettlementCurrency, &row.SettlementMinor,
 			&conversionStep, &priorVersion, &correctionReason, &row.Withdrawn, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier expected costs: %w", err)
 		}
+		row.Supplier = catalogueText(supplier)
 		row.ConversionStep = catalogueText(conversionStep)
 		row.PriorVersion = catalogueText(priorVersion)
 		row.CorrectionReason = catalogueText(correctionReason)

@@ -34,8 +34,9 @@ func NewSupplierExpectedCosts(db *bentopg.DB) (*SupplierExpectedCosts, error) {
 }
 
 var (
-	_ ports.ExpectedCostView     = (*SupplierExpectedCosts)(nil)
-	_ ports.ExpectedCostRegistry = (*SupplierExpectedCosts)(nil)
+	_ ports.ExpectedCostView             = (*SupplierExpectedCosts)(nil)
+	_ ports.ExpectedCostRegistry         = (*SupplierExpectedCosts)(nil)
+	_ ports.ExpectedCostSupplierBackfill = (*SupplierExpectedCosts)(nil)
 )
 
 // LoadExpectedCost 按版本取回预期成本。found=false 是「这个版本不存在」——UC-SA-004
@@ -85,17 +86,18 @@ func (repository *SupplierExpectedCosts) loadOne(
 		originalCurrency, settlementCurrency              string
 		originalMinor, settlementMinor                    int64
 		conversion, priorVersion, correctionReason        *string
+		supplier                                          *string
 		withdrawn                                         bool
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT version, occurrence_id, occurrence_reason, occurrence_version, occurred_at,
-		        fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
+		        fee_item, purchase_rule_version, agreement_ref, supplier_party_ref, evaluation_ref,
 		        original_currency, original_minor, settlement_currency, settlement_minor,
 		        conversion_ref, prior_version, correction_reason, withdrawn
 		   FROM settlement_accounting.supplier_expected_cost `+where,
 		args...,
 	).Scan(&versionValue, &occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
-		&feeItem, &priceCardVersion, &agreement, &evaluation,
+		&feeItem, &priceCardVersion, &agreement, &supplier, &evaluation,
 		&originalCurrency, &originalMinor, &settlementCurrency, &settlementMinor,
 		&conversion, &priorVersion, &correctionReason, &withdrawn)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -118,6 +120,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 		feeItem:            feeItem,
 		priceCardVersion:   priceCardVersion,
 		agreement:          agreement,
+		supplier:           supplier,
 		evaluation:         evaluation,
 		originalCurrency:   originalCurrency,
 		originalMinor:      originalMinor,
@@ -177,14 +180,21 @@ func (repository *SupplierExpectedCosts) Save(
 		priorVersion, correctionReason = &priorValue, &reasonValue
 	}
 
+	// 失效纠错版本照搬被纠正那一版的供应商，那一版若是还没补记的旧行，这一版也就没有——照实写空，不另问。
+	var supplierRef *string
+	if supplier, recorded := cost.Supplier(); recorded {
+		value := supplier.String()
+		supplierRef = &value
+	}
+
 	occurrence := cost.Occurrence()
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.supplier_expected_cost
 			(tenant_id, version, occurrence_id, occurrence_reason, occurrence_version,
 			 occurred_at, fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
 			 original_currency, original_minor, settlement_currency, settlement_minor,
-			 conversion_ref, prior_version, correction_reason, recorded_at, withdrawn)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			 conversion_ref, prior_version, correction_reason, recorded_at, withdrawn, supplier_party_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		cost.Version().String(),
@@ -205,6 +215,7 @@ func (repository *SupplierExpectedCosts) Save(
 		correctionReason,
 		recordedAt.UTC(),
 		cost.Withdrawn(),
+		supplierRef,
 	)
 	if err != nil {
 		return ports.ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)
@@ -215,8 +226,78 @@ func (repository *SupplierExpectedCosts) Save(
 	return ports.ExpectedCostSaved, nil
 }
 
-// expectedCostColumns 是一行预期成本的原样取值。三个指针列对应库里的三个可空列：
-// 换算步骤只在跨币种时在场，回指与原因只在纠错版本上在场。
+// ListExpectedCostsAwaitingSupplier 按版本序列出这个租户还没记供应商的各版（ADR-0358 决定三）。只读这两列：补记要的只是协议，
+// 不重建整份成本——旧行别的格若有毛病，那是另一件事，不该挡住补记。
+func (repository *SupplierExpectedCosts) ListExpectedCostsAwaitingSupplier(
+	ctx context.Context,
+	tenant domain.TenantID,
+) ([]ports.ExpectedCostAwaitingSupplier, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT version, agreement_ref
+		   FROM settlement_accounting.supplier_expected_cost
+		  WHERE tenant_id = $1 AND supplier_party_ref IS NULL
+		  ORDER BY version`,
+		tenant.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+	}
+	defer rows.Close()
+	var awaiting []ports.ExpectedCostAwaitingSupplier
+	for rows.Next() {
+		var versionText, agreementText string
+		if err := rows.Scan(&versionText, &agreementText); err != nil {
+			return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+		}
+		version, err := domain.NewSupplierCostVersionID(versionText)
+		if err != nil {
+			return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+		}
+		agreement, err := domain.NewSupplierAgreementReference(agreementText)
+		if err != nil {
+			return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+		}
+		awaiting = append(awaiting, ports.ExpectedCostAwaitingSupplier{Version: version, Agreement: agreement})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list expected costs awaiting supplier: %w", err)
+	}
+	return awaiting, nil
+}
+
+// RecordExpectedCostSupplier 只在那一格仍为空时写下：条件写在 UPDATE 里，并发的两次补记只有先到的那次写成，已记的一格不改。
+// 预期成本行此外按版本只增不改；这里改的只是一格从空到有，成本本身（计价结果、来源引用）一字不动，所以不另起一版。
+func (repository *SupplierExpectedCosts) RecordExpectedCostSupplier(
+	ctx context.Context,
+	tenant domain.TenantID,
+	version domain.SupplierCostVersionID,
+	supplier domain.SupplierPartyReference,
+) (bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("record expected cost supplier: %w", err)
+	}
+	if supplier.String() == "" {
+		return false, fmt.Errorf("record expected cost supplier: version %s: supplier is required", version)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.supplier_expected_cost
+		    SET supplier_party_ref = $3
+		  WHERE tenant_id = $1 AND version = $2 AND supplier_party_ref IS NULL`,
+		tenant.String(), version.String(), supplier.String(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("record expected cost supplier: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// expectedCostColumns 是一行预期成本的原样取值。指针列对应库里的可空列：换算步骤只在跨币种时在场，回指与原因只在纠错版本上
+// 在场，供应商在本记录之前形成、还没补记的旧行上缺席（ADR-0358 决定三）。
 type expectedCostColumns struct {
 	version            domain.SupplierCostVersionID
 	occurrenceID       string
@@ -226,6 +307,7 @@ type expectedCostColumns struct {
 	feeItem            string
 	priceCardVersion   string
 	agreement          string
+	supplier           *string
 	evaluation         string
 	originalCurrency   string
 	originalMinor      int64
@@ -272,6 +354,11 @@ func expectedCostSpecOf(columns expectedCostColumns) (domain.RehydrateSupplierEx
 		return domain.RehydrateSupplierExpectedCostSpec{}, err
 	}
 
+	if columns.supplier != nil {
+		if spec.Supplier, err = domain.NewSupplierPartyReference(*columns.supplier); err != nil {
+			return domain.RehydrateSupplierExpectedCostSpec{}, err
+		}
+	}
 	if columns.conversion != nil {
 		if spec.Conversion, err = domain.NewConversionStepReference(*columns.conversion); err != nil {
 			return domain.RehydrateSupplierExpectedCostSpec{}, err

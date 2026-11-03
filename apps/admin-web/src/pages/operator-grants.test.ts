@@ -5,6 +5,7 @@ import {
   statementDisputeRegistrationDecision,
   statementDisputeResolutionDecision,
   supplierBillAuditDecision,
+  supplierBillDisputeDecision,
   supplierBillReceptionDecision,
   deliveryHandoverConfirmationDecision,
   effectiveTimeJudgmentDecision,
@@ -66,6 +67,7 @@ test('线路与运力区的决定授予原词与收起时的说明', () => {
   equal(statementDisputeResolutionDecision, 'STATEMENT_DISPUTE_RESOLUTION');
   equal(supplierBillReceptionDecision, 'SUPPLIER_BILL_RECEPTION');
   equal(supplierBillAuditDecision, 'SUPPLIER_BILL_AUDIT');
+  equal(supplierBillDisputeDecision, 'SUPPLIER_BILL_DISPUTE_DECISION');
   equal(deliveryHandoverConfirmationDecision, 'DELIVERY_HANDOVER_CONFIRMATION');
   equal(effectiveTimeJudgmentDecision, 'EFFECTIVE_TIME_JUDGMENT');
   equal(pendingIdentityRecheckDecision, 'PENDING_IDENTITY_RECHECK');

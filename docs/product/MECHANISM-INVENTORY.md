@@ -14,17 +14,17 @@
 | nodeoperations | 122 | 126 | 16 | 31 | 4 | 18 |
 | parcelpricing | 157 | 166 | 20 | 20 | 1 | 27 |
 | parcelshipment | 280 | 274 | 29 | 56 | 13 | 32 |
-| partycommercial | 184 | 211 | 16 | 44 | 1 | 44 |
+| partycommercial | 185 | 211 | 16 | 44 | 1 | 44 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
-| platform（非业务） | 39 | 34 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 263 | 211 | 44 | 75 | 13 | 14 |
+| platform（非业务） | 40 | 35 | 0 | 0 | 0 | 0 |
+| settlementaccounting | 270 | 220 | 45 | 76 | 13 | 14 |
 | transportfulfillment | 313 | 321 | 56 | 63 | 16 | 57 |
 | visibilityexception | 146 | 142 | 16 | 35 | 8 | 15 |
-| **合计** | 1842 | 1870 | 246 | 411 | 69 | 250 |
+| **合计** | 1851 | 1880 | 247 | 412 | 69 | 250 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 279、测试 457。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 281、测试 461。
 
-## 跨上下文消费缝：51 组，175 个生产文件
+## 跨上下文消费缝：51 组，176 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -64,7 +64,7 @@
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 7 |
 | settlementaccounting | parcelshipment | 3 |
-| settlementaccounting | partycommercial | 5 |
+| settlementaccounting | partycommercial | 6 |
 | settlementaccounting | transportfulfillment | 2 |
 | transportfulfillment | accessidentity | 5 |
 | transportfulfillment | customscompliance | 3 |
@@ -80,11 +80,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：13 个模块共 369 份 SQL
+## 迁移：13 个模块共 372 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 38 |
+| access_identity | 39 |
 | collection_remittance | 4 |
 | customs_compliance | 32 |
 | document_numbering | 1 |
@@ -94,7 +94,7 @@
 | parcel_shipment | 35 |
 | party_commercial | 43 |
 | pilot_governance | 8 |
-| settlement_accounting | 52 |
+| settlement_accounting | 54 |
 | transport_fulfillment | 52 |
 | visibility_exception | 33 |
 
@@ -148,7 +148,7 @@
 | （未归类） | 1 |
 | **合计** | 45 |
 
-## 端口：声明 682 个；基线口径缺 44，精确口径缺 2
+## 端口：声明 686 个；基线口径缺 44，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 

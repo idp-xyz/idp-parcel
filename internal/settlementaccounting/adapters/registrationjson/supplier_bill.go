@@ -25,20 +25,21 @@ type supplierBillDirectiveDocument struct {
 }
 
 type supplierBillReceptionDocument struct {
-	Claim            string                          `json:"claim"`
-	Version          string                          `json:"version"`
-	Supplier         string                          `json:"supplier"`
-	LegalEntity      string                          `json:"legalEntity"`
-	Period           string                          `json:"period"`
-	Currency         string                          `json:"currency"`
-	Lines            []supplierBillLineDocument      `json:"lines"`
-	ReceivedAt       string                          `json:"receivedAt"`
-	SupplementsClaim string                          `json:"supplementsClaim"`
-	Directives       []supplierBillDirectiveDocument `json:"directives"`
+	Claim              string                          `json:"claim"`
+	Version            string                          `json:"version"`
+	Supplier           string                          `json:"supplier"`
+	SupplierBillNumber string                          `json:"supplierBillNumber"`
+	LegalEntity        string                          `json:"legalEntity"`
+	Period             string                          `json:"period"`
+	Currency           string                          `json:"currency"`
+	Lines              []supplierBillLineDocument      `json:"lines"`
+	ReceivedAt         string                          `json:"receivedAt"`
+	SupplementsClaim   string                          `json:"supplementsClaim"`
+	Directives         []supplierBillDirectiveDocument `json:"directives"`
 }
 
 // SupplierBillReceptionFromJSONForTenant 译装一份账单与它的逐行匹配裁决。receivedAt 是账单到达的业务时刻，由录入的人照来件写；
-// 逐行裁决的分类只收产品认得的几种。哪一行该有裁决、裁决指的预期成本是不是当前版，由接收编排判。
+// 逐行裁决的分类只收产品认得的几种。哪一行该有裁决、裁决指的预期成本是不是当前版、账单号是不是已标识别的主张，由接收编排判。
 func SupplierBillReceptionFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.ReceiveSupplierBillCommand, error) {
 	none := application.ReceiveSupplierBillCommand{}
 	var document supplierBillReceptionDocument
@@ -55,6 +56,12 @@ func SupplierBillReceptionFromJSONForTenant(raw []byte, tenant domain.TenantID) 
 	}
 	if spec.Supplier, err = domain.NewSupplierPartyReference(document.Supplier); err != nil {
 		return none, fmt.Errorf("supplier：%w", err)
+	}
+	// 供应商账单号可缺（ADR-0357 决定一）：旧载荷没有这一格，来件没号也照收。给了就不能是空白。
+	if document.SupplierBillNumber != "" {
+		if spec.BillNumber, err = domain.NewSupplierBillNumber(document.SupplierBillNumber); err != nil {
+			return none, fmt.Errorf("supplierBillNumber：%w", err)
+		}
 	}
 	if spec.LegalEntity, err = domain.NewLegalEntityReference(document.LegalEntity); err != nil {
 		return none, fmt.Errorf("legalEntity：%w", err)
@@ -167,13 +174,23 @@ func eachLineDirectedOnce(lines []domain.BillLine, directives []application.Line
 }
 
 type supplierBillAuditDocument struct {
-	Claim   string `json:"claim"`
-	Version string `json:"version"`
-	Line    string `json:"line"`
-	Payable string `json:"payable"`
+	Claim           string `json:"claim"`
+	Version         string `json:"version"`
+	Line            string `json:"line"`
+	Payable         string `json:"payable"`
+	Decision        string `json:"decision"`
+	Verdict         string `json:"verdict"`
+	RangeFrom       string `json:"rangeFrom"`
+	RangeTo         string `json:"rangeTo"`
+	Basis           string `json:"basis"`
+	ResolvesDispute string `json:"resolvesDispute"`
 }
 
-// SupplierBillAuditFromJSONForTenant 译装一次审核：点名账单、版本、行，与要形成的应付标识。金额、上限、归集账户都在册上，载荷不带。
+// SupplierBillAuditFromJSONForTenant 译装一次审核（ADR-0357 决定五）。两种形状只能给一种：
+//   - 新形点名决定标识、结果（PASSED / DISPUTED / REJECTED）与这一行上的一段 [rangeFrom, rangeTo)，可带依据与所解争议；
+//   - 旧形只点名应付标识，读作通过这一行的整段主张金额，带了新形的任何一格都当场拒。
+//
+// 金额上限、归集账户都在册上，载荷不带；那一段该不该给这种结果由审核编排判。
 func SupplierBillAuditFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.AuditBillLineCommand, error) {
 	none := application.AuditBillLineCommand{}
 	var document supplierBillAuditDocument
@@ -191,8 +208,50 @@ func SupplierBillAuditFromJSONForTenant(raw []byte, tenant domain.TenantID) (app
 	if command.Line, err = domain.NewBillLineReference(document.Line); err != nil {
 		return none, fmt.Errorf("line：%w", err)
 	}
-	if command.Payable, err = domain.NewPayableID(document.Payable); err != nil {
-		return none, fmt.Errorf("payable：%w", err)
+	ranged := document.Decision != "" || document.Verdict != "" || document.RangeFrom != "" || document.RangeTo != "" ||
+		document.Basis != "" || document.ResolvesDispute != ""
+	if document.Payable != "" {
+		if ranged {
+			return none, fmt.Errorf("payable 是旧形载荷（通过整行），不能与 decision、verdict、范围、依据或所解争议同给")
+		}
+		if command.Payable, err = domain.NewPayableID(document.Payable); err != nil {
+			return none, fmt.Errorf("payable：%w", err)
+		}
+		return command, nil
+	}
+	if command.Decision, err = domain.NewAuditDecisionID(document.Decision); err != nil {
+		return none, fmt.Errorf("decision：%w", err)
+	}
+	if command.Verdict, err = domain.AuditVerdictFromName(document.Verdict); err != nil {
+		return none, fmt.Errorf("verdict：%w", err)
+	}
+	from, err := plainMinor(document.RangeFrom)
+	if err != nil {
+		return none, fmt.Errorf("rangeFrom：%w", err)
+	}
+	to, err := plainMinor(document.RangeTo)
+	if err != nil {
+		return none, fmt.Errorf("rangeTo：%w", err)
+	}
+	if command.Range, err = domain.NewAmountRange(from, to); err != nil {
+		return none, fmt.Errorf("rangeFrom、rangeTo：起点不小于零、终点大于起点：%w", err)
+	}
+	if document.Basis != "" {
+		if command.Basis, err = domain.NewAuditBasisReference(document.Basis); err != nil {
+			return none, fmt.Errorf("basis：%w", err)
+		}
+	}
+	if document.ResolvesDispute != "" {
+		if command.Resolves, err = domain.NewAuditDecisionID(document.ResolvesDispute); err != nil {
+			return none, fmt.Errorf("resolvesDispute：%w", err)
+		}
+	}
+	// 依据与再审的形状先在这里过一遍：写漏是录入的错，当场答坏报文，不落进编排去答一个不带原因的未受理。
+	if command.Verdict != domain.AuditPassed && command.Basis.String() == "" {
+		return none, fmt.Errorf("basis：争议与拒绝要带依据")
+	}
+	if command.Resolves.String() != "" && (command.Verdict == domain.AuditDisputed || command.Basis.String() == "") {
+		return none, fmt.Errorf("resolvesDispute：再审只能通过或拒绝，并要带依据")
 	}
 	return command, nil
 }

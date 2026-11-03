@@ -106,6 +106,7 @@ type numberingStack struct {
 	statements *adapter.CustomerStatements
 	disputes   *adapter.StatementDisputes
 	payables   *adapter.AuditedPayables
+	decisions  *adapter.SupplierBillAuditDecisions
 	receptions *adapter.BillReceptions
 	charges    *adapter.CustomerCharges
 	cutoff     *application.CutOffPublishStatementHandler
@@ -162,6 +163,8 @@ func newNumberingStack(t *testing.T) numberingStack {
 	must(err)
 	stack.payables, err = adapter.NewAuditedPayables(db)
 	must(err)
+	stack.decisions, err = adapter.NewSupplierBillAuditDecisions(db)
+	must(err)
 	stack.receptions, err = adapter.NewBillReceptions(db)
 	must(err)
 	stack.charges, err = adapter.NewCustomerCharges(db)
@@ -184,7 +187,7 @@ func newNumberingStack(t *testing.T) numberingStack {
 	instances := registeredPayableInstances{}
 	stack.supplier = application.NewReceiveSupplierBillHandler(application.ReceiveSupplierBillDeps{
 		Receptions: stack.receptions, Authority: instances, Accounts: instances, Escalation: instances, Payables: stack.payables,
-		Numbers: numbers, Arrangements: zones, Downstream: quietBillHandoff{}, Clock: stack.clock,
+		Decisions: stack.decisions, Numbers: numbers, Arrangements: zones, Downstream: quietBillHandoff{}, Clock: stack.clock,
 	})
 	return stack
 }
@@ -650,10 +653,14 @@ func TestIssuanceLocksRefuseToRunOutsideATransaction(t *testing.T) {
 	}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("事务外 LockRegistration 应答 ErrTransactionRequired，实得：%v", err)
 	}
-	if err := stack.payables.LockIssuance(t.Context(), ports.AuditedPayableKey{
-		TenantID: tenant, Payable: saValue(t, domain.NewPayableID, "payable-1"),
+	if err := stack.decisions.LockLine(t.Context(), ports.AuditDecisionKey{
+		TenantID: tenant, Decision: saValue(t, domain.NewAuditDecisionID, "payable-1"),
 	}, saValue(t, domain.NewBillClaimID, "claim-1"), saValue(t, domain.NewBillLineReference, "L1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
-		t.Fatalf("事务外 LockIssuance 应答 ErrTransactionRequired，实得：%v", err)
+		t.Fatalf("事务外 LockLine 应答 ErrTransactionRequired，实得：%v", err)
+	}
+	if err := stack.receptions.LockBillNumber(t.Context(), tenant, saValue(t, domain.NewSupplierPartyReference, "supplier-1"),
+		saValue(t, domain.NewSupplierBillNumber, "INV-1"), saValue(t, domain.NewBillClaimID, "claim-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外 LockBillNumber 应答 ErrTransactionRequired，实得：%v", err)
 	}
 }
 

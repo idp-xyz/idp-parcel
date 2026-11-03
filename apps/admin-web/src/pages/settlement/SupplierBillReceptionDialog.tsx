@@ -17,6 +17,7 @@ import { formatInstant } from '../moment';
 import { listBusinessParties, type BusinessPartyRecord } from '../party/api';
 import { listCurrencies, type CurrencyRecord } from '../reference-data/api';
 import {
+  findSupplierBillReceptions,
   listSettlementCharges,
   receiveSupplierBill,
   type ApiResult,
@@ -26,23 +27,29 @@ import {
 } from './api';
 import { instantToLocalInput, localInputToInstant } from './dispute-forms';
 import { formatMoney } from './ops-ui';
+import { newClaimId } from './supplier-bill-audit';
 import {
   billLabel,
+  claimIdForBill,
   classificationChoices,
   currentExpectedCosts,
   hasReceptionProblems,
+  linesForSupplier,
   NO_EXPECTED_COST,
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
   receptionSettled,
+  unrecordedSupplierCount,
   type ReceptionDraft,
   type ReceptionLineDraft,
 } from './supplier-bills';
 
 // 「登记供应商账单」任务式表单（ADR-0340 决定一；票 document-numbering/11）：照供应商来件逐格录一份账单，并逐行说清对的是哪一笔
 // 预期成本、对上了没有。按 UC-SA-004 输入语义收：供应商、开给本公司哪个主体、供应商的账单号与版本、账期、币种、收到的时间、
-// 各行金额与依据；被追加的原账单可缺。主张标识由页面从供应商与账单号生成（supplier-bills.ts 的 claimIdFor），不让人填。
+// 各行金额与依据；被追加的原账单可缺。供应商的账单号单放一格交给服务端，按外部标识记、按（供应商，账单号）查重（ADR-0357
+// 决定一）；主张标识是内部标识，页面在表单开出来时随机生成一个，同一家供应商的同一个账单号已在册上就沿用那一份的
+// （supplier-bills.ts 的 claimIdForBill），不让人填。
 // 入口按「供应商账单接收」授予收起，在页面里判（ADR-0315）。
 
 const fieldClass =
@@ -124,10 +131,45 @@ function ReceptionForm({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [answer, setAnswer] = useState<{ result: ApiResult<SupplierBillReceptionResponseBody>; billNumber: string } | null>(null);
+  // 这张表单的新主张标识：开出来时定下，重发与改正后再交都用它，网络重发落回同一份；再登一张时换新的。
+  const [freshClaim, setFreshClaim] = useState(() => newClaimId(new Date(), Math.random().toString(36).slice(2)));
 
   const costsByVersion = useMemo(() => new Map(catalogues.costs.map((cost) => [cost.version, cost])), [catalogues.costs]);
-  const options = useMemo(() => currentExpectedCosts(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
-  const supplementOptions = bills.filter((bill) => bill.supplier === draft.supplier);
+  const options = useMemo(
+    () => currentExpectedCosts(catalogues.costs, draft.currency, draft.supplier),
+    [catalogues.costs, draft.currency, draft.supplier],
+  );
+  const unrecorded = useMemo(() => unrecordedSupplierCount(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
+  // 被追加的原账单：页上这家供应商的那几份，加上按账单号在全册里找到的页外那几份（同一份只留一个）。页只列最近收到的，更早的
+  // 原账单不在上面，靠下面那一格去找（findSupplierBillReceptions）。
+  const [found, setFound] = useState<SupplierBillReceptionRecord[]>([]);
+  const [lookup, setLookup] = useState('');
+  const [lookupNote, setLookupNote] = useState<string | null>(null);
+  const supplementOptions = [...bills, ...found]
+    .filter((bill) => bill.supplier === draft.supplier)
+    .filter((bill, index, all) => all.findIndex((other) => other.claim === bill.claim) === index);
+  const supplierName = (id: string) => catalogues.parties.find((party) => party.partyId === id)?.partyName ?? id;
+  const findOriginal = async () => {
+    const number = lookup.trim();
+    if (draft.supplier === '' || number === '') return;
+    // 先按账单号册找；票 11 期间录的旧主张没进账单号册，再按「供应商/账单号」形的主张标识找一次。
+    let result = await findSupplierBillReceptions({ supplier: draft.supplier, supplierBillNumber: number });
+    if (result.kind === 'outcome' && result.body.receptions.length === 0) {
+      result = await findSupplierBillReceptions({ supplier: draft.supplier, claim: `${draft.supplier}/${number}` });
+    }
+    if (result.kind !== 'outcome') {
+      setLookupNote(`没有找出来：${feedbackFor(result, '检索').text}`);
+      return;
+    }
+    const hits = result.body.receptions;
+    setFound((current) => [...current, ...hits]);
+    if (hits.length > 0) {
+      set('supplementsClaim', hits[0].claim);
+      setLookupNote(`找到了，已选上账单 ${billLabel(hits[0])}（${hits[0].period}）。`);
+    } else {
+      setLookupNote(`这家供应商没有账单号是 ${number} 的账单。账单号逐字比，区分大小写。`);
+    }
+  };
   const fullDraft: ReceptionDraft = { ...draft, receivedAt: localInputToInstant(draft.receivedLocal) };
   const problems = receptionProblems(fullDraft, costsByVersion);
   const blocked = hasReceptionProblems(problems);
@@ -158,7 +200,7 @@ function ReceptionForm({
     setTouched(true);
     if (blocked) return;
     setPending(true);
-    const payload = receptionPayload(fullDraft, costsByVersion);
+    const payload = receptionPayload(fullDraft, costsByVersion, claimIdForBill(bills, draft.supplier, draft.billNumber, freshClaim));
     const result = await receiveSupplierBill(payload);
     setPending(false);
     setAnswer({ result, billNumber: draft.billNumber });
@@ -172,7 +214,7 @@ function ReceptionForm({
     answer === null
       ? null
       : answer.result.kind === 'outcome'
-        ? receptionAnswerText(answer.result.body, answer.billNumber)
+        ? receptionAnswerText(answer.result.body, answer.billNumber, supplierName)
         : feedbackFor(answer.result, '登记').text;
 
   if (settled) {
@@ -190,6 +232,7 @@ function ReceptionForm({
             setDraft(emptyDraft());
             setAnswer(null);
             setTouched(false);
+            setFreshClaim(newClaimId(new Date(), Math.random().toString(36).slice(2)));
           }}
         >
           再登一张
@@ -210,7 +253,20 @@ function ReceptionForm({
       {catalogues.problem ? <p className={`text-[12px] ${statusToneText.warning}`}>{catalogues.problem}</p> : null}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <Field label="供应商" problem={touched ? problems.fields.supplier : null}>
-          <select className={fieldClass} value={draft.supplier} onChange={(event) => set('supplier', event.target.value)}>
+          <select
+            className={fieldClass}
+            value={draft.supplier}
+            onChange={(event) => {
+              const supplier = event.target.value;
+              // 换了供应商，各行选的别家预期成本随之清掉：留着就是一个匹配门会拒的选择。
+              setDraft((current) => ({
+                ...current,
+                supplier,
+                lines: linesForSupplier(current.lines, currentExpectedCosts(catalogues.costs, current.currency, supplier)),
+              }));
+              setAnswer(null);
+            }}
+          >
             <option value="">选一家</option>
             {catalogues.parties.map((party) => (
               <option key={party.partyId} value={party.partyId}>
@@ -265,6 +321,22 @@ function ReceptionForm({
               </option>
             ))}
           </select>
+          <span className="mt-1 flex items-center gap-1.5">
+            <input
+              className={`${fieldClass} font-mono`}
+              value={lookup}
+              placeholder="列表只有最近收到的；更早的原账单按账单号找"
+              disabled={draft.supplier === ''}
+              onChange={(event) => {
+                setLookup(event.target.value);
+                setLookupNote(null);
+              }}
+            />
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-[12px]" disabled={draft.supplier === '' || lookup.trim() === ''} onClick={() => void findOriginal()}>
+              找原账单
+            </Button>
+          </span>
+          {lookupNote ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{lookupNote}</span> : null}
         </Field>
       </div>
 
@@ -272,8 +344,12 @@ function ReceptionForm({
         <legend className="mb-1 text-[12px] font-semibold text-idpxyz-textBright">账单各行</legend>
         <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">
           每一行说清对的是我们记的哪一笔预期成本、对上了没有。金额按最小币单位写整数（例如 12.34 元写 1234），与本页其他金额同一写法。
-          {draft.currency === '' ? '先选币种，预期成本只列同币种的。' : `只列 ${draft.currency} 的当前预期成本；不同币种没有换算依据，对不上。`}
-          预期成本上只记了它依的供应商协议、没有记供应商，这里不按所选供应商筛，登记时也不核供应商：选之前看清协议是不是这家供应商的。
+          {draft.supplier === ''
+            ? '先选供应商，预期成本只列这家的。'
+            : draft.currency === ''
+              ? '先选币种，预期成本只列这家供应商同币种的。'
+              : `只列这家供应商 ${draft.currency} 的当前预期成本；别家的对不上，不同币种没有换算依据也对不上。`}
+          {unrecorded > 0 ? `另有 ${unrecorded} 份预期成本还没记是哪家供应商的（较早形成的），这里不列，请运营补记之后再选。` : ''}
         </p>
         {touched && problems.fields.lines ? <p className={`text-[11px] ${statusToneText.warning}`}>{problems.fields.lines}</p> : null}
         {draft.lines.map((line, index) => {

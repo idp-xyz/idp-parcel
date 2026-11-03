@@ -122,6 +122,10 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: audited payables: %w", err)
 	}
+	decisions, err := sapostgres.NewSupplierBillAuditDecisions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: supplier bill audit decisions: %w", err)
+	}
 	creditNotes, err := sapostgres.NewSupplierCreditNotes(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: supplier credit notes: %w", err)
@@ -208,7 +212,7 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 		}),
 		supplier: saapplication.NewReceiveSupplierBillHandler(saapplication.ReceiveSupplierBillDeps{
 			Receptions: receptions, Costs: costs, Successions: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
-			Payables: payables, CreditNotes: creditNotes, Numbers: numbers, Arrangements: arrangements,
+			Payables: payables, Decisions: decisions, CreditNotes: creditNotes, Numbers: numbers, Arrangements: arrangements,
 			Downstream: billHandoff, Clock: clock,
 		}),
 		claims: saapplication.NewSettleClaimAmountsHandler(saapplication.SettleClaimAmountsDeps{
@@ -299,7 +303,8 @@ func (orchestrations settlementOrchestrations) ReceiveSupplierBill(
 	return result, nil
 }
 
-// AuditSupplierBill 在一笔事务里审核一行：应付行、应付单据号与发布意图同生同灭；应付号撞号时整笔回滚再交回答复。
+// AuditSupplierBill 在一笔事务里给一行上的一段一份审核决定：决定行、应付行、应付单据号与发布意图同生同灭；应付号撞号时整笔回滚
+// 再交回答复。
 func (orchestrations settlementOrchestrations) AuditSupplierBill(
 	ctx context.Context,
 	command saapplication.AuditBillLineCommand,

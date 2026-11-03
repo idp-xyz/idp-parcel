@@ -19,6 +19,7 @@ type StatementCatalogueReader interface {
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
+		filter ports.SupplierBillReceptionFilter,
 		limit int,
 	) ([]ports.SupplierBillReceptionCatalogueRow, error)
 }
@@ -145,8 +146,13 @@ func serveSupplierBillReceptions(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	// 多取一行只为判这一页之外还有没有：读口按收到时间倒序截，多出来的那一行是页外最新的一份，不上列。
-	rows, err := reader.ListSupplierBillReceptions(request.Context(), tenant, limit+1)
+	// 多取一行只为判这一页之外还有没有：读口按收到时间倒序截，多出来的那一行是页外最新的一份，不上列。claim、supplier、
+	// supplierBillNumber 三个可选检索维在全册里精确找（ports.SupplierBillReceptionFilter）；它们是查找，不是处置参数。
+	values := request.URL.Query()
+	filter := ports.SupplierBillReceptionFilter{
+		Claim: values.Get("claim"), Supplier: values.Get("supplier"), SupplierBillNumber: values.Get("supplierBillNumber"),
+	}
+	rows, err := reader.ListSupplierBillReceptions(request.Context(), tenant, filter, limit+1)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
@@ -175,6 +181,10 @@ func serveSupplierBillReceptions(
 			PayableLineCount:            row.PayableLineCount,
 			PayableAmount:               minorAmount(row.PayableMinor),
 			MatchedWithoutPayableCount:  row.MatchedWithoutPayableCount,
+			RejectedAmount:              minorAmount(row.RejectedMinor),
+			OpenDisputeAmount:           minorAmount(row.OpenDisputeMinor),
+			UndecidedAmount:             minorAmount(row.UndecidedMinor),
+			SupplierBillNumber:          row.SupplierBillNumber,
 			AuditAuthorityConfigured:    row.AuditAuthorityConfigured,
 			AuditAuthorityConfiguredNow: row.AuditAuthorityConfiguredNow,
 			ReceivedAt:                  rfc3339(row.ReceivedAt),
@@ -268,6 +278,10 @@ type supplierBillReceptionListResponse struct {
 // 账单册的几样汇总（票 document-numbering/11）照 ports.SupplierBillReceptionCatalogueRow 转写：classificationCounts 以逐行匹配
 // 分类原名作键，没有那一类就没有那个键；matchedWithoutPayableCount 说的是已匹配而还没有应付的行数，不说它们可审核。金额同
 // 本包其余读口，是最小币单位的整数串。supplementsClaim 与 operationEvidence 缺席即没有被追加的原主张、这一份不记提交方。
+//
+// 按范围审核之后（ADR-0357）另带：rejectedAmount、openDisputeAmount、undecidedAmount 是已拒绝、仍在争议中、还没有任何结果的金额
+// （payableAmount 即已通过的），只是求和；supplierBillNumber 是供应商账单号册上的号，缺席读作未记——页面对这种旧行照旧从主张
+// 标识取号显示，读口不拆。
 type supplierBillReceptionBody struct {
 	Claim                       string           `json:"claim"`
 	ClaimVersion                string           `json:"claimVersion"`
@@ -282,6 +296,10 @@ type supplierBillReceptionBody struct {
 	PayableLineCount            int64            `json:"payableLineCount"`
 	PayableAmount               string           `json:"payableAmount"`
 	MatchedWithoutPayableCount  int64            `json:"matchedWithoutPayableCount"`
+	RejectedAmount              string           `json:"rejectedAmount"`
+	OpenDisputeAmount           string           `json:"openDisputeAmount"`
+	UndecidedAmount             string           `json:"undecidedAmount"`
+	SupplierBillNumber          string           `json:"supplierBillNumber,omitempty"`
 	AuditAuthorityConfigured    bool             `json:"auditAuthorityConfigured"`
 	AuditAuthorityConfiguredNow bool             `json:"auditAuthorityConfiguredNow"`
 	ReceivedAt                  string           `json:"receivedAt"`

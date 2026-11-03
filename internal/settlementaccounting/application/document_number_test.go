@@ -253,8 +253,8 @@ func TestAnAuditedPayableTakesItsNumberWhenItIsFormed(t *testing.T) {
 	if requests := fixture.numbers.requestsOf(domain.AuditedPayableDocumentNumberType.Code); len(requests) != 1 || requests[0].IssuerTimeZone != "" {
 		t.Fatalf("取号请求 = %+v，应付账户没登对账安排就交空", requests)
 	}
-	if calls := fixture.payables.calls; calls[2] != "lock payable-1 bill-1/line-1" || calls[3] != "find payable-1" {
-		t.Fatalf("calls = %v，要先排队再查重", fixture.payables.calls)
+	if calls := fixture.decisions.calls; calls[2] != "lock payable-1 bill-1/line-1" || calls[3] != "find payable-1" {
+		t.Fatalf("calls = %v，要先排队再查重", fixture.decisions.calls)
 	}
 
 	replay, err := fixture.handler.Audit(context.Background(), auditCommand(t, "bill-1", "line-1", "payable-1"))

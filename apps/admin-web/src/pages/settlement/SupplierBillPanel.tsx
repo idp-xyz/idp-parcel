@@ -1,47 +1,54 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { feedbackFor } from '../../components/action-feedback';
-import { primaryActionClass } from '../../components/primary-action';
 import { StatusPill } from '../../components/StatusPill';
 import { statusToneBanner } from '../../components/status-tone';
-import { labelFor } from '../../vocabulary/status';
+import { labelFor, toneFor } from '../../vocabulary/status';
 import { formatInstant } from '../moment';
-import { hiddenDecisionHint, supplierBillAuditDecision } from '../operator-grants';
+import { hiddenDecisionHint, supplierBillAuditDecision, supplierBillDisputeDecision } from '../operator-grants';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { ExceptionDetailPanel } from '../visibility/ExceptionDetailPanel';
 import {
   auditSupplierBillLine,
   getSupplierBillLines,
   type ApiResult,
-  type SupplierBillAuditResponseBody,
+  type SupplierBillLineDecisionRecord,
   type SupplierBillLineRecord,
   type SupplierBillLinesResponseBody,
   type SupplierBillReceptionRecord,
 } from './api';
 import { formatMoney, technicalRows } from './ops-ui';
 import { namedRef, type PartyNames } from './party-names';
+import { SupplierBillLineAuditForm, type LineAuditTarget } from './SupplierBillLineAuditForm';
 import {
-  auditAnswerText,
-  auditSettled,
+  auditVerdictScope,
+  openDisputes,
+  passHeadroom,
+  totalOf,
+  undecidedRanges,
+  verdictLabel,
+  type AuditDraftContext,
+  type AuditVerdict,
+} from './supplier-bill-audit';
+import {
   billLabel,
   billNumberOf,
   billProgress,
-  differingClassificationWords,
+  legacyBillNumberOf,
   lineDisposition,
   matchSummary,
-  newPayableId,
   operatorWords,
   payableLabel,
   payableNumberAbsenceNote,
   payableNumberName,
 } from './supplier-bills';
 
-// 供应商账单与应付页「供应商账单」签的右栏：这张账单的全貌、各行与它们的去向，以及「审核这张账单」——对已对上、还没有应付的
-// 一行点审核通过，形成审核应付（ADR-0340 决定二）。审核入口按「供应商账单审核」授予收起（ADR-0315）：只在明确知道没有授予
-// 时收起，不知道就摆，服务端照旧每次判。
+// 供应商账单与应付页「供应商账单」签的右栏：这张账单的全貌、各行与各段审核结果，以及「审核这一行」与「核实后再审」——一行拆成
+// 几段分别给通过、争议或拒绝，通过的那一段形成审核应付并交回应付单号，争议的那一段核实后再审（ADR-0357）。审核入口按「供应商账单
+// 审核」授予收起（ADR-0315）：只在明确知道没有授予时收起，不知道就摆，服务端照旧每次判。
 //
-// 审核只摆「通过」：领域里供应商账单行的争议与拒绝没有口（ADR-0340 越权风险点一），对不上的行这里只说要先核实，不另造
-// 一个按钮。审核也不改数字：应付金额就是这一行的主张金额（domain.FormAuditedPayable）。
+// 审核不改数字：每段的金额是人从这一行主张金额里划出来的，通过的各段之和不超过这一行的已匹配金额（价差行只到预期成本），超出的
+// 那一段只能争议或拒绝——这一上限服务端照样判，页面先说清楚。
 
 /** 差额是主张减预期：正为账单多收，负为少收；没有差额不说。 */
 function varianceWords(variance: string | undefined, currency: string): string {
@@ -49,23 +56,112 @@ function varianceWords(variance: string | undefined, currency: string): string {
   return variance.startsWith('-') ? `，账单少收 ${formatMoney(variance.slice(1), currency)}` : `，账单多收 ${formatMoney(variance, currency)}`;
 }
 
-function LineCard({
-  line,
+/** 一行的和那一句：只说不为零的几样。 */
+function tallyWords(line: SupplierBillLineRecord, currency: string): string {
+  const parts: string[] = [];
+  if (line.passedAmount !== '0') parts.push(`已通过 ${formatMoney(line.passedAmount, currency)}`);
+  if (line.openDisputeAmount !== '0') parts.push(`争议中 ${formatMoney(line.openDisputeAmount, currency)}`);
+  if (line.rejectedAmount !== '0') parts.push(`已拒绝 ${formatMoney(line.rejectedAmount, currency)}`);
+  if (line.undecidedAmount !== '0') parts.push(`还没审 ${formatMoney(line.undecidedAmount, currency)}`);
+  return parts.join(' · ');
+}
+
+function DecisionRow({
+  decision,
   currency,
-  mayAudit,
-  pending,
-  onAudit,
   onShowPayable,
 }: {
-  line: SupplierBillLineRecord;
+  decision: SupplierBillLineDecisionRecord;
   currency: string;
-  mayAudit: boolean;
-  pending: boolean;
-  onAudit: () => void;
   onShowPayable: (number: string) => void;
 }) {
+  const note = decision.payable ? payableNumberAbsenceNote(decision.payable) : undefined;
+  return (
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+      {decision.resolvesDispute ? (
+        <StatusPill label={`再审${verdictLabel(decision.verdict)}`} tone={toneFor(decision.verdict, auditVerdictScope)} />
+      ) : (
+        <StatusPill code={decision.verdict} scope={auditVerdictScope} />
+      )}
+      <span className="font-semibold text-idpxyz-textBright">{formatMoney(decision.amount, currency)}</span>
+      <span className="text-[11px] text-idpxyz-breadcrumb">
+        区间 {decision.rangeFrom}–{decision.rangeTo} · {formatInstant(decision.auditedAt)} 由 {operatorWords(decision.operationEvidence)} 审
+      </span>
+      {decision.payable ? (
+        <span>
+          应付 <span className="font-mono font-semibold text-idpxyz-textBright">{payableLabel(decision.payable)}</span>
+          {note ? <span className="text-idpxyz-breadcrumb">（{note}）</span> : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="ml-1 h-6 px-1.5 text-[12px] text-idpxyz-link"
+            onClick={() => onShowPayable(payableLabel(decision.payable!))}
+          >
+            在「审核应付」里看
+          </Button>
+        </span>
+      ) : null}
+      {decision.basis ? <span className="basis-full text-[11px] leading-4 text-idpxyz-breadcrumb">依据：{decision.basis}</span> : null}
+    </li>
+  );
+}
+
+/** 这个人此刻持哪几种审核授予（不知道就当持有，ADR-0315）。 */
+interface AuditGrants {
+  audit: boolean;
+  dispute: boolean;
+}
+
+/** 直接审这一行时能给的结果：通过与拒绝要审核应付授予，争议要争议决定授予（ADR-0357 决定二）。 */
+function allowedVerdicts(grants: AuditGrants): AuditVerdict[] {
+  const verdicts: AuditVerdict[] = [];
+  if (grants.audit) verdicts.push('PASSED');
+  if (grants.dispute) verdicts.push('DISPUTED');
+  if (grants.audit) verdicts.push('REJECTED');
+  return verdicts;
+}
+
+/** 这一行上正开着的那张表单：直接审，或对某一段争议再审。 */
+type OpenForm = { kind: 'audit' } | { kind: 'reaudit'; dispute: string };
+
+function LineCard({
+  row,
+  line,
+  grants,
+  submit,
+  onSettled,
+  onShowPayable,
+}: {
+  row: SupplierBillReceptionRecord;
+  line: SupplierBillLineRecord;
+  grants: AuditGrants;
+  submit: (payload: Parameters<typeof auditSupplierBillLine>[0]) => ReturnType<typeof auditSupplierBillLine>;
+  onSettled: () => void;
+  onShowPayable: (number: string) => void;
+}) {
+  const [form, setForm] = useState<OpenForm | null>(null);
+  // 上一张表单每段都记下了之后的答复：表单收起，这几句留在这一行，开下一张表单时清掉。
+  const [answers, setAnswers] = useState<string[]>([]);
+  const openForm = (next: OpenForm) => {
+    setAnswers([]);
+    setForm(next);
+  };
+  const currency = row.currency;
   const disposition = lineDisposition(line);
-  const note = line.payable ? payableNumberAbsenceNote(line.payable) : undefined;
+  const headroom = passHeadroom(line.matchedAmount, line.decisions);
+  const disputes = openDisputes(line.decisions);
+  const target: LineAuditTarget = { claim: row.claim, version: row.claimVersion, line: line.line };
+  let context: AuditDraftContext | null = null;
+  if (form?.kind === 'audit') {
+    context = { free: undecidedRanges(line.claimedAmount, line.decisions), headroom, resolving: false };
+  } else if (form?.kind === 'reaudit') {
+    const open = disputes.find((entry) => entry.dispute.decision === form.dispute);
+    if (open) {
+      context = { free: open.open, headroom, resolving: true };
+      target.resolvesDispute = form.dispute;
+    }
+  }
   return (
     <li className="rounded border border-idpxyz-border px-3 py-2 text-idpxyz-text">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -84,32 +180,60 @@ function LineCard({
           : line.classification
             ? ' · 我们这边查不到对应的运输'
             : ''}
+        {` · 最多能通过 ${formatMoney(line.matchedAmount, currency)}`}
       </p>
-      {line.basis ? <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">依据：{line.basis}</p> : null}
-      {line.payable ? (
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-          <span>
-            应付 <span className="font-mono font-semibold text-idpxyz-textBright">{payableLabel(line.payable)}</span>
-            {note ? <span className="text-idpxyz-breadcrumb">（{note}）</span> : null}
-            <span className="text-idpxyz-breadcrumb"> · {formatInstant(line.payable.auditedAt)} 由 {operatorWords(line.payable.operationEvidence)} 审核</span>
-          </span>
-          <Button type="button" size="sm" variant="ghost" className="h-6 px-1.5 text-[12px] text-idpxyz-link" onClick={() => onShowPayable(payableLabel(line.payable!))}>
-            在「审核应付」里看
-          </Button>
-        </div>
-      ) : disposition.auditable ? (
-        mayAudit ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" className={`${primaryActionClass} h-7 text-[12px]`} disabled={pending} onClick={onAudit}>
-              {pending ? '审核中…' : '审核通过，形成应付'}
-            </Button>
-            <span className="text-[11px] text-idpxyz-breadcrumb">应付金额就是这一行的金额，审核不改数字。</span>
-          </div>
-        ) : null
-      ) : line.classification ? (
-        <p className="mt-1 text-[11px] leading-4 text-idpxyz-breadcrumb">
-          这一行和预期成本对不上，不能直接审核；先和供应商核实。系统里还没有登记供应商账单争议或拒绝的入口。
+      {line.basis ? <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">对账依据：{line.basis}</p> : null}
+      {line.decisions.length > 0 ? (
+        <>
+          <ul className="mt-1.5 space-y-1">
+            {line.decisions.map((decision) => (
+              <DecisionRow key={decision.decision} decision={decision} currency={currency} onShowPayable={onShowPayable} />
+            ))}
+          </ul>
+          <p className="mt-1 text-[11px] text-idpxyz-breadcrumb">{tallyWords(line, currency)}</p>
+        </>
+      ) : null}
+      {answers.map((answer, index) => (
+        <p key={index} role="status" className="mt-1.5 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+          {answer}
         </p>
+      ))}
+      {(grants.audit || grants.dispute) && form === null ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {disposition.auditable ? (
+            <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => openForm({ kind: 'audit' })}>
+              审核这一行
+            </Button>
+          ) : null}
+          {(grants.audit && grants.dispute ? disputes : []).map((entry) => (
+            <Button
+              key={entry.dispute.decision}
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-[12px]"
+              onClick={() => openForm({ kind: 'reaudit', dispute: entry.dispute.decision })}
+            >
+              核实后再审争议中的 {formatMoney(String(totalOf(entry.open)), currency)}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {form !== null && context !== null ? (
+        <SupplierBillLineAuditForm
+          key={form.kind === 'reaudit' ? form.dispute : 'audit'}
+          target={target}
+          context={context}
+          verdicts={form.kind === 'reaudit' ? ['PASSED', 'REJECTED'] : allowedVerdicts(grants)}
+          currency={currency}
+          submit={submit}
+          onSettled={onSettled}
+          onDone={(said) => {
+            setForm(null);
+            setAnswers(said);
+          }}
+          onCancel={() => setForm(null)}
+        />
       ) : null}
     </li>
   );
@@ -130,13 +254,12 @@ export function SupplierBillPanel({
   onAudited: () => void;
   onShowPayable: (number: string) => void;
 }) {
-  const mayAudit = useMayMakeDecision(supplierBillAuditDecision);
+  const grants: AuditGrants = {
+    audit: useMayMakeDecision(supplierBillAuditDecision),
+    dispute: useMayMakeDecision(supplierBillDisputeDecision),
+  };
   const [reload, setReload] = useState(0);
   const [lines, setLines] = useState<ApiResult<SupplierBillLinesResponseBody> | null>(null);
-  // 每一行的应付标识在第一次提交前定下、提交后不换：网络重发落回同一份应付。形成了（或答已形成过）那一行就不再摆审核。
-  const [payableIds, setPayableIds] = useState<Record<string, string>>({});
-  const [pendingLine, setPendingLine] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<{ line: string; result: ApiResult<SupplierBillAuditResponseBody> } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,35 +273,19 @@ export function SupplierBillPanel({
   }, [row.claim, row.claimVersion, reload]);
 
   useEffect(() => {
-    setPayableIds({});
-    setAnswer(null);
     setReload(0);
   }, [row.claim, row.claimVersion]);
 
-  const payableIdOf = (line: string) => payableIds[line] ?? newPayableId(new Date(), Math.random().toString(36).slice(2));
-
-  const audit = async (line: string) => {
-    const payable = payableIdOf(line);
-    setPayableIds((current) => ({ ...current, [line]: payable }));
-    setPendingLine(line);
-    const result = await auditSupplierBillLine({ claim: row.claim, version: row.claimVersion, line, payable });
-    setPendingLine(null);
-    setAnswer({ line, result });
-    if (result.kind === 'outcome' && auditSettled.has(result.body.outcome)) {
-      setReload((value) => value + 1);
-      onAudited();
-    }
-    // 这个应付标识已经用在另一行上：换一个新的再审。
-    if (result.kind === 'outcome' && result.body.outcome === 'PAYABLE_CONFLICT') {
-      setPayableIds((current) => ({ ...current, [line]: newPayableId(new Date(), Math.random().toString(36).slice(2)) }));
-    }
+  // 表单逐段提交、逐段说答复；至少一段记下了就重读这张账单与左边的册，表单里没记下的那几段留着改。
+  const onSettled = () => {
+    setReload((value) => value + 1);
+    onAudited();
   };
 
   const supplier = namedRef(names.party(row.supplier), row.supplier);
-  const supplements = row.supplementsClaim ? (billNumberOf(row.supplementsClaim, row.supplier) ?? row.supplementsClaim) : undefined;
+  const supplements = row.supplementsClaim ? (legacyBillNumberOf(row.supplementsClaim, row.supplier) ?? row.supplementsClaim) : undefined;
+  const billNumber = billNumberOf(row);
   const body = lines?.kind === 'outcome' ? lines.body : null;
-  const answerText =
-    answer === null ? null : answer.result.kind === 'outcome' ? auditAnswerText(answer.result.body, answer.line, formatMoney) : feedbackFor(answer.result, '审核').text;
 
   return (
     <ExceptionDetailPanel
@@ -192,17 +299,21 @@ export function SupplierBillPanel({
         { label: '账单金额', value: formatMoney(row.totalClaimedAmount, row.currency) },
         { label: '对上情况', value: matchSummary(row) },
         { label: '已形成应付', value: row.payableLineCount > 0 ? `${row.payableLineCount} 行 · ${formatMoney(row.payableAmount, row.currency)}` : '还没有' },
+        { label: '还没审', value: row.undecidedAmount !== '0' ? formatMoney(row.undecidedAmount, row.currency) : '没有' },
+        { label: '争议中', value: row.openDisputeAmount !== '0' ? formatMoney(row.openDisputeAmount, row.currency) : '没有' },
+        { label: '已拒绝', value: row.rejectedAmount !== '0' ? formatMoney(row.rejectedAmount, row.currency) : '没有' },
         { label: '收到时间', value: formatInstant(row.receivedAt) },
         { label: '登记人', value: operatorWords(row.operationEvidence) },
         { label: '追加于', value: supplements ?? '不是追加的账单' },
       ]}
       technical={technicalRows([
+        { label: '供应商账单号', value: billNumber ? (row.supplierBillNumber ? billNumber : `${billNumber}（从旧主张标识取回，未进账单号册）`) : '未记' },
         { label: '主张标识', value: row.claim },
         { label: '主张版本', value: row.claimVersion },
         { label: '供应商编码', value: row.supplier },
         { label: '公司主体编码', value: row.legalEntity },
         { label: '被追加的主张', value: row.supplementsClaim },
-        { label: '接收时审核授权', value: row.auditAuthorityConfigured ? '已配置' : '未配置' },
+        { label: '接收时审核授权', value: labelFor(row.auditAuthorityConfigured ? 'CONFIGURED' : 'NOT_CONFIGURED') },
         { label: '接收操作证据', value: row.operationEvidence },
         { label: '登记时间', value: formatInstant(row.recordedAt) },
       ])}
@@ -227,11 +338,11 @@ export function SupplierBillPanel({
             {(body.lines ?? []).map((line) => (
               <LineCard
                 key={line.line}
+                row={row}
                 line={line}
-                currency={row.currency}
-                mayAudit={mayAudit}
-                pending={pendingLine === line.line}
-                onAudit={() => void audit(line.line)}
+                grants={grants}
+                submit={auditSupplierBillLine}
+                onSettled={onSettled}
                 onShowPayable={onShowPayable}
               />
             ))}
@@ -240,18 +351,15 @@ export function SupplierBillPanel({
       </section>
       <section className="space-y-1.5">
         <h3 className="text-[12px] font-bold text-idpxyz-textBright">审核这张账单</h3>
-        {mayAudit ? (
+        {grants.audit || grants.dispute ? (
           <p>
-            对上了的行逐行审核：通过就形成审核应付，交回{payableNumberName}；对不上的行（{differingClassificationWords()}）要先核实，不能在这里审核。
-          </p>
-        ) : (
-          <p>{hiddenDecisionHint('审核', labelFor(supplierBillAuditDecision))}</p>
-        )}
-        {answerText ? (
-          <p role="status" className="rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
-            {answerText}
+            逐行审核，一行可以拆成几段分别给通过、争议或拒绝：通过的那一段形成审核应付、交回{payableNumberName}，一行通过的不超过它能通过的
+            金额；对不上的那部分记争议或拒绝，争议核实后在这一行再审。拒绝了的那一段这份账单上不再审，供应商要再收得另开追加账单。
           </p>
         ) : null}
+        {/* 通过与拒绝认审核应付授予，挂争议与再审认争议决定授予，再审两种都要（ADR-0357 决定二）：缺哪种就说哪种收起了。 */}
+        {!grants.audit ? <p>{hiddenDecisionHint('通过与拒绝', labelFor(supplierBillAuditDecision))}</p> : null}
+        {!grants.dispute ? <p>{hiddenDecisionHint('记争议与再审', labelFor(supplierBillDisputeDecision))}</p> : null}
       </section>
     </ExceptionDetailPanel>
   );

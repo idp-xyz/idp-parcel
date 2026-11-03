@@ -131,7 +131,7 @@ func newFormationFixtureTotalling(t *testing.T, request string, minor int64) *fo
 		SettlementMinor:    minor,
 	}}
 	inner := saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
-		Evaluations: view, Costs: costs, Registry: costs, Clock: formationClock{},
+		Evaluations: view, Costs: costs, Registry: costs, Suppliers: everyAgreementSupplier{}, Clock: formationClock{},
 	})
 	outer, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
 		Requests: requests, Costs: inner, Stops: requests, ZeroTotals: requests, Clock: formationClock{},
@@ -239,4 +239,15 @@ func TestABuyEvaluationTotallingZeroEndsTheRequestThroughTheGate(t *testing.T) {
 		"tenant-a", "EVREQ-SYN-1"); rows != 1 {
 		t.Fatalf("请求册上记零额、无停因的行 = %d, want 1", rows)
 	}
+}
+
+// everyAgreementSupplier 替 party-commercial 答每一版协议的供应商都是同一家：本文件证的是形成那一路，供应商怎么问另有用例
+// （ADR-0358 决定一）。
+type everyAgreementSupplier struct{}
+
+func (everyAgreementSupplier) LoadSupplierAgreementSupplier(
+	context.Context, sadomain.TenantID, sadomain.SupplierAgreementReference,
+) (sadomain.SupplierPartyReference, bool, error) {
+	supplier, err := sadomain.NewSupplierPartyReference("SYN-PARTY-CARRIER-TRUNK-01")
+	return supplier, err == nil, err
 }

@@ -23,7 +23,7 @@ var (
 	// 读不回，这两种重投不自愈，会耗尽失败预算——与 SELL 那一路同一处已知的不精确。
 	ErrEvaluationNotVisible = errors.New(
 		"settlement accounting parcelpricing adapter: buy evaluation is not yet visible")
-	// ErrSupplierCostFormationUndecided 表示形成编排停在自己的依赖上（BUY 请求册、评价读口、预期成本库答不出）：形成
+	// ErrSupplierCostFormationUndecided 表示形成编排停在自己的依赖上（BUY 请求册、评价读口、预期成本库、协议供应商读口答不出）：形成
 	// 与否未知，整笔回滚等重投。停在哪个依赖写在错误正文里，依赖的原错误一并包着。生产装配同样把它登进
 	// WithUndecidedSentinels。
 	ErrSupplierCostFormationUndecided = errors.New(

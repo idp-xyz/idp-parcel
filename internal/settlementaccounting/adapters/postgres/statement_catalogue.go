@@ -275,6 +275,7 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	ctx context.Context,
 	tenant domain.TenantID,
+	filter ports.SupplierBillReceptionFilter,
 	limit int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
 	if limit < 1 {
@@ -293,7 +294,13 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	//
 	// 汇总都在库内一条语句里求（同一快照）：行金额之和与分类计数各展开一次 jsonb；应付只数落在这一版各行上的那几笔——
 	// 应付不带主张版本，同一主张的另一版若多出一行，那一行的应付不算进这一版。「已匹配却没有应付」按行逐条看应付在不在，
-	// 已匹配那个分类的字面取自领域（$3），不在 SQL 里另写一份。
+	// 已匹配那个分类的字面取自领域（$3），不在 SQL 里另写一份。一行可以有几份应付（一段一份，ADR-0357 决定三），应付行数数的是
+	// 有应付的行，不是应付的份数。
+	//
+	// 审核决定的三个和（已拒绝、仍在争议中、还没有任何结果）也只数这一版各行上的决定，求法与 domain.TallyLineDecisions 一致：
+	// 仍在争议中 = 直接给的争议之和减去全部再审之和，还没有结果 = 逐行主张金额减去直接给的各段之和、不小于零。结果的字面取自
+	// 领域（$4、$5）。账单号取账单号册，不论哪一版带来。按账单号检索时，供应商比的是号册上的分配方（$7 对 n.supplier_ref）：
+	// 号是那家供应商分配的；存量里各版本供应商不一的主张，按接收行的供应商比就会让另一家的检索命中这个号。
 	rows, err := querier.Query(ctx,
 		`SELECT r.claim_id, r.claim_version, r.supplier_ref, r.legal_entity, r.period_ref, r.currency,
 		        jsonb_array_length(r.claim -> 'lines')::bigint,
@@ -305,6 +312,16 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		                   FROM jsonb_array_elements(r.matches) AS m
 		                  GROUP BY 1) AS c),
 		        payables.lines, payables.minor,
+		        audits.rejected, audits.open_dispute,
+		        (SELECT COALESCE(sum(GREATEST((l ->> 'claimed_minor')::bigint - COALESCE((
+		                    SELECT sum(d.range_to_minor - d.range_from_minor)
+		                      FROM settlement_accounting.supplier_bill_audit_decision AS d
+		                     WHERE d.tenant_id = r.tenant_id
+		                       AND d.claim_id = r.claim_id
+		                       AND d.line_ref = l ->> 'line'
+		                       AND d.resolves_decision IS NULL), 0), 0)), 0)::bigint
+		           FROM jsonb_array_elements(r.claim -> 'lines') AS l),
+		        n.bill_number,
 		        (SELECT count(*)::bigint
 		           FROM jsonb_array_elements(r.matches) AS m
 		          WHERE m ->> 'classification' = $3
@@ -326,17 +343,36 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		        r.operation_evidence,
 		        r.recorded_at
 		   FROM settlement_accounting.supplier_bill_reception AS r
+		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
+		     ON n.tenant_id = r.tenant_id AND n.claim_id = r.claim_id
 		  CROSS JOIN LATERAL (
-		        SELECT count(*)::bigint AS lines, COALESCE(sum(p.amount_minor), 0)::bigint AS minor
+		        SELECT count(DISTINCT p.line_ref)::bigint AS lines, COALESCE(sum(p.amount_minor), 0)::bigint AS minor
 		          FROM settlement_accounting.audited_payable AS p
 		         WHERE p.tenant_id = r.tenant_id
 		           AND p.claim_id = r.claim_id
 		           AND p.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
 		       ) AS payables
+		  CROSS JOIN LATERAL (
+		        SELECT COALESCE(sum(d.range_to_minor - d.range_from_minor) FILTER (WHERE d.verdict = $5), 0)::bigint AS rejected,
+		               GREATEST(
+		                   COALESCE(sum(d.range_to_minor - d.range_from_minor)
+		                            FILTER (WHERE d.verdict = $4 AND d.resolves_decision IS NULL), 0)
+		                 - COALESCE(sum(d.range_to_minor - d.range_from_minor)
+		                            FILTER (WHERE d.resolves_decision IS NOT NULL), 0),
+		                 0)::bigint AS open_dispute
+		          FROM settlement_accounting.supplier_bill_audit_decision AS d
+		         WHERE d.tenant_id = r.tenant_id
+		           AND d.claim_id = r.claim_id
+		           AND d.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
+		       ) AS audits
 		  WHERE r.tenant_id = $1
+		    AND ($6::text = '' OR r.claim_id = $6)
+		    AND ($7::text = '' OR ($8::text = '' AND r.supplier_ref = $7) OR ($8::text <> '' AND n.supplier_ref = $7))
+		    AND ($8::text = '' OR n.bill_number = $8)
 		  ORDER BY (r.claim ->> 'received_at')::timestamptz DESC, r.claim_id, r.claim_version
 		  LIMIT $2`,
-		tenant.String(), limit, domain.LineMatched.String(),
+		tenant.String(), limit, domain.LineMatched.String(), domain.AuditDisputed.String(), domain.AuditRejected.String(),
+		filter.Claim, filter.Supplier, filter.SupplierBillNumber,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
@@ -351,6 +387,7 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 			receivedAt        time.Time
 			supplements       *string
 			evidence          *string
+			billNumber        *string
 			recordedAt        time.Time
 		)
 		if err := rows.Scan(
@@ -358,7 +395,9 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 			&row.Period, &row.Currency,
 			&row.LineCount, &row.MatchCount,
 			&row.TotalClaimedMinor, &classificationsJS,
-			&row.PayableLineCount, &row.PayableMinor, &row.MatchedWithoutPayableCount,
+			&row.PayableLineCount, &row.PayableMinor,
+			&row.RejectedMinor, &row.OpenDisputeMinor, &row.UndecidedMinor, &billNumber,
+			&row.MatchedWithoutPayableCount,
 			&row.AuditAuthorityConfigured, &row.AuditAuthorityConfiguredNow, &receivedAt, &supplements, &evidence, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier bill receptions: %w", err)
@@ -367,6 +406,7 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 			return nil, fmt.Errorf("list supplier bill receptions: 分类计数解码：%w", err)
 		}
 		row.ReceivedAt = receivedAt.UTC()
+		row.SupplierBillNumber = catalogueText(billNumber)
 		row.Supplements = catalogueText(supplements)
 		row.OperationEvidence = catalogueText(evidence)
 		row.RecordedAt = recordedAt.UTC()

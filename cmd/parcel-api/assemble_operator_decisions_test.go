@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -223,12 +224,12 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	}
 }
 
-// swappedDecisionFaces 由登记处导出：挂操作者渠道「运营决定」能力面的各口及各自的决定种类。
-func swappedDecisionFaces() map[string]accessidentity.DecisionKind {
-	faces := map[string]accessidentity.DecisionKind{}
+// swappedDecisionFaces 由登记处导出：挂操作者渠道「运营决定」能力面的各口及各自认的决定种类（一口可以按载荷认几种）。
+func swappedDecisionFaces() map[string][]accessidentity.DecisionKind {
+	faces := map[string][]accessidentity.DecisionKind{}
 	for pattern, line := range declaredEndpointLines() {
 		if line.face.family == faceOperationDecision && !line.ownIntake {
-			faces[pattern] = line.face.decision
+			faces[pattern] = line.face.decisionKinds()
 		}
 	}
 	return faces
@@ -238,13 +239,16 @@ func swappedDecisionFaces() map[string]accessidentity.DecisionKind {
 // 运营决定、唯独没有这一口那一种的操作者，在这一口答 403 OPERATOR_NOT_GRANTED，走不到准入范围那一格，也不进编排。
 func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 	decisionFaces := swappedDecisionFaces()
-	for pattern, kind := range decisionFaces {
+	for pattern, kinds := range decisionFaces {
 		var others []accessidentity.DecisionKind
-		for _, other := range decisionFaces {
-			if other != kind {
-				others = append(others, other)
+		for _, otherKinds := range decisionFaces {
+			for _, other := range otherKinds {
+				if !slices.Contains(kinds, other) && !slices.Contains(others, other) {
+					others = append(others, other)
+				}
 			}
 		}
+		kind := kinds
 		minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: others}, admissionScopeUnset())
 		if err != nil {
 			t.Fatal(err)
@@ -265,11 +269,44 @@ func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0357 决定二、五——一口按载荷认几种决定时（供应商账单审核口），只持其中任一种的人都过得了授予那一格：准入对照没登时
+// 停在准入范围外（403 OUTSIDE_ADMISSION_SCOPE），不答未授予。一种都不持的那一格由 TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind 钉。
+func TestDecisionFacesOfSeveralKindsAdmitEitherKind(t *testing.T) {
+	several := 0
+	for pattern, kinds := range swappedDecisionFaces() {
+		if len(kinds) < 2 {
+			continue
+		}
+		several++
+		for _, kind := range kinds {
+			minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: []accessidentity.DecisionKind{kind}}, admissionScopeUnset())
+			if err != nil {
+				t.Fatal(err)
+			}
+			decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
+			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
+			request.Header.Set("Authorization", "Bearer presented.operator.token")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusForbidden || problemCode(t, response) != "OUTSIDE_ADMISSION_SCOPE" {
+				t.Fatalf("%s 只持 %s：答 %d %q，want 403 OUTSIDE_ADMISSION_SCOPE（过了授予那一格）", pattern, kind, response.Code, problemCode(t, response))
+			}
+		}
+	}
+	if several == 0 {
+		t.Fatal("没有一口按载荷认几种决定——供应商账单审核口的声明丢了")
+	}
+}
+
 func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	decisionFaces := swappedDecisionFaces()
 	var kinds []accessidentity.DecisionKind
-	for _, kind := range decisionFaces {
-		kinds = append(kinds, kind)
+	for _, faceKinds := range decisionFaces {
+		kinds = append(kinds, faceKinds...)
 	}
 	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds}, admissionScopeUnset())
 	if err != nil {

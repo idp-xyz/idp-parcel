@@ -10,6 +10,7 @@
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
+import type { RangedAuditAnswer, RangedAuditPayload } from './supplier-bill-audit';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -85,6 +86,8 @@ export interface SupplierExpectedCostRecord {
   feeItem: string;
   purchaseRuleVersion: string;
   agreement: string;
+  /** 这一版所依协议的供应商（ADR-0358 决定一）；本次改动之前形成、还没补记的旧行不带，读作未记。 */
+  supplier?: string;
   evaluation: string;
   originalCurrency: string;
   originalAmount: string;
@@ -202,7 +205,10 @@ export interface CustomerStatementRecord {
  * 行数，不说它们审得了。金额是最小币单位的整数串。
  */
 export interface SupplierBillReceptionRecord {
-  /** 主张身份：页面在首次提交前由供应商与它的账单号生成（见 supplier-bills.ts 的 claimIdFor），不是给人看的号。 */
+  /**
+   * 主张身份：内部标识与幂等键，页面在首次提交前随机生成（supplier-bill-audit.ts 的 newClaimId），不是给人看的号。票 11 期间录的
+   * 主张标识形如「供应商/账单号」，永久留在册上（ADR-0357 决定一）。
+   */
   claim: string;
   claimVersion: string;
   supplier: string;
@@ -216,6 +222,12 @@ export interface SupplierBillReceptionRecord {
   payableLineCount: number;
   payableAmount: string;
   matchedWithoutPayableCount: number;
+  /** 已拒绝、仍在争议中、还没有任何审核结果的金额（ADR-0357）；已通过的就是 payableAmount。 */
+  rejectedAmount: string;
+  openDisputeAmount: string;
+  undecidedAmount: string;
+  /** 供应商账单号（外部标识，服务端的账单号册）；缺席读作未记——旧行由 supplier-bills.ts 的 billNumberOf 从主张标识取号显示。 */
+  supplierBillNumber?: string;
   auditAuthorityConfigured: boolean;
   auditAuthorityConfiguredNow: boolean;
   /** 账单到达的业务时刻（录入的人照来件写），不是落库时刻。 */
@@ -250,6 +262,23 @@ export function listSettlementStatements<Registry extends StatementRegistry>(
   return exchangeMasterData<StatementBodyByRegistry[Registry]>(
     `/settlement-statements?registry=${encodeURIComponent(registry)}`,
   );
+}
+
+/**
+ * 账单册的精确检索（按主张、供应商、供应商账单号，逐字比，在全册里找；给了账单号时供应商比的是号的分配方）：登记表单找页外更早的原账单、新登的账单
+ * 不在页上时右栏读回它，都用它——只在取回的那一页里筛，册一超过一页就会静默找不到。账单号只认服务端的账单号册：票 11 期间
+ * 「供应商/账单号」形的旧主张没进册，要按主张身份找。
+ */
+export function findSupplierBillReceptions(filter: {
+  claim?: string;
+  supplier?: string;
+  supplierBillNumber?: string;
+}): Promise<ApiResult<SupplierBillReceptionListResponseBody>> {
+  const params = new URLSearchParams({ registry: 'supplier-bill-reception' });
+  if (filter.claim) params.set('claim', filter.claim);
+  if (filter.supplier) params.set('supplier', filter.supplier);
+  if (filter.supplierBillNumber) params.set('supplierBillNumber', filter.supplierBillNumber);
+  return exchangeMasterData<SupplierBillReceptionListResponseBody>(`/settlement-statements?${params.toString()}`);
 }
 
 /**
@@ -565,17 +594,33 @@ export function getStatementLines(statement: string): Promise<ApiResult<Statemen
 // GET /settlement-statements?registry=supplier-bill-reception（listSettlementStatements），这里不另立第二个列表口。
 
 /** 挂在一行上的审核应付。documentNumber 是应付单号，与 documentNumberAbsence 恰出其一；payable 是页面生成的应付标识（幂等键）。 */
+/** 一份通过的审核决定形成的审核应付：payable 就是决定标识（ADR-0357 决定三）。 */
 export interface SupplierBillLinePayableRecord {
   payable: string;
   documentNumber?: string;
   documentNumberAbsence?: string;
   amount: string;
   currency: string;
-  /** 审核授权册上登的审核方：谁有权审。 */
+}
+
+/**
+ * 一行上的一份审核决定（ADR-0357）：rangeFrom、rangeTo 是这一行主张金额上的那一段（最小币单位，左闭右开），amount 是它的长度；
+ * resolvesDispute 是再审所解的争议。auditor 是审核授权册上的审核方（谁有权审），operationEvidence 是点下这一次的操作者（谁点的，
+ * 缺席即不记提交方）。通过的那一份带它形成的应付。
+ */
+export interface SupplierBillLineDecisionRecord {
+  decision: string;
+  verdict: 'PASSED' | 'DISPUTED' | 'REJECTED';
+  rangeFrom: string;
+  rangeTo: string;
+  amount: string;
+  basis?: string;
+  resolvesDispute?: string;
+  claimVersion?: string;
   auditor: string;
-  /** 点下这一次审核的操作者：谁点的。缺席即不记提交方。 */
   operationEvidence?: string;
   auditedAt: string;
+  payable?: SupplierBillLinePayableRecord;
 }
 
 /**
@@ -592,7 +637,13 @@ export interface SupplierBillLineRecord {
   varianceAmount?: string;
   basis?: string;
   matchedAt?: string;
-  payable?: SupplierBillLinePayableRecord;
+  /** 这一行能通过的上限（已匹配金额）。 */
+  matchedAmount: string;
+  passedAmount: string;
+  rejectedAmount: string;
+  openDisputeAmount: string;
+  undecidedAmount: string;
+  decisions: SupplierBillLineDecisionRecord[];
 }
 
 export interface SupplierBillLinesResponseBody {
@@ -600,6 +651,7 @@ export interface SupplierBillLinesResponseBody {
   claim?: string;
   claimVersion?: string;
   supplier?: string;
+  supplierBillNumber?: string;
   legalEntity?: string;
   period?: string;
   currency?: string;
@@ -635,6 +687,11 @@ export interface AuditedPayableRecord {
   operationEvidence?: string;
   auditedAt: string;
   recordedAt: string;
+  /** 它通过的那一段与所解的争议（ADR-0357）；读不到形成它的决定时缺席。 */
+  rangeFrom?: string;
+  rangeTo?: string;
+  resolvesDispute?: string;
+  supplierBillNumber?: string;
 }
 
 /** 审核应付册按审核时间倒序截页；truncated 为真即同样的检索维之下页外还有更早形成的应付。 */
@@ -646,7 +703,7 @@ export interface AuditedPayableListResponseBody {
 
 /**
  * 审核应付册。documentNumber 给了就按应付单号精确检索：服务端在全册里筛，页外的那一笔也找得到（ADR-0355 决定十一「可按单据号
- * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收 claim / supplier 两维，本页不用。
+ * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收按主张与按供应商的检索，本页不用。
  */
 export function listAuditedPayables(filter: { documentNumber?: string } = {}): Promise<ApiResult<AuditedPayableListResponseBody>> {
   const number = filter.documentNumber?.trim();
@@ -660,6 +717,8 @@ export interface SupplierBillReceptionPayload {
   claim: string;
   version: string;
   supplier: string;
+  /** 供应商账单号（外部标识，ADR-0357 决定一）；服务端按（供应商，账单号）查重。 */
+  supplierBillNumber?: string;
   legalEntity: string;
   period: string;
   currency: string;
@@ -677,32 +736,27 @@ export interface SupplierBillReceptionResponseBody {
   continuationReference?: string;
   auditAuthority?: string;
   notCurrent?: { line: string; version: string; withdrawn: boolean; successor?: string };
+  /** 只在 EXPECTED_COST_SUPPLIER_MISMATCH 与 EXPECTED_COST_SUPPLIER_UNRECORDED 时出现；不符时带那一版记下的供应商（ADR-0358 决定二）。 */
+  expectedCostSupplier?: { line: string; version: string; supplier?: string };
+  /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号。 */
+  registeredClaim?: string;
+  registeredSupplierBillNumber?: string;
+  /** 只在 CLAIM_SUPPLIER_CONFLICT 时出现：这份主张原先的供应商（同一份主张的各版本供应商不变）。 */
+  registeredSupplier?: string;
 }
 
 export function receiveSupplierBill(payload: SupplierBillReceptionPayload): Promise<ApiResult<SupplierBillReceptionResponseBody>> {
   return postMasterData<SupplierBillReceptionResponseBody>('/settlement-supplier-bill-receptions', payload);
 }
 
-/** 审核口的载荷：点名账单、版本、行与页面生成的应付标识；金额、上限与归集账户都在册上，载荷不带。 */
-export interface SupplierBillAuditPayload {
-  claim: string;
-  version: string;
-  line: string;
-  payable: string;
-}
+/**
+ * 审核口的载荷（ADR-0357 决定五）：点名账单、版本、行，页面生成的审核决定标识，结果与这一行上的一段；金额上限与归集账户都在册上，
+ * 载荷不带。形状与判读在 supplier-bill-audit.ts。
+ */
+export type SupplierBillAuditPayload = RangedAuditPayload;
 
-/** 审核口的答复。documentNumber 与 documentNumberAbsence 恰出其一；documentType 只在 NUMBERING_RULE_COLLISION 时出现。 */
-export interface SupplierBillAuditResponseBody {
-  outcome: string;
-  payable?: string;
-  documentNumber?: string;
-  documentNumberAbsence?: string;
-  documentType?: string;
-  amount?: string;
-  currency?: string;
-  undecidedReason?: string;
-  continuationReference?: string;
-}
+/** 审核口的答复（supplier-bill-audit.ts 的 RangedAuditAnswer）。 */
+export type SupplierBillAuditResponseBody = RangedAuditAnswer;
 
 export function auditSupplierBillLine(payload: SupplierBillAuditPayload): Promise<ApiResult<SupplierBillAuditResponseBody>> {
   return postMasterData<SupplierBillAuditResponseBody>('/settlement-supplier-bill-audits', payload);

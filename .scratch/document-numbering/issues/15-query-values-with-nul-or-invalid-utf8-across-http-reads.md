@@ -1,7 +1,7 @@
 # 15 查询值含 NUL 或非法 UTF-8 的读口一律答 400、不读库
 
 Category: bug
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum15`（完成记录见文末）；评审修订已追加（见文末「评审修订」），待复评与进 main
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）；请求体同一缺陷见票 16
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：票 [12](./12-customer-tracking-by-shipment-number.md) 复评（钉 `93dfe3f06`）——操作者族 `serveCurrentProjection`（visibility-exception `query_tracking_projections.go`）的 `parcel` 含 NUL 会进读，库拒收参数答 `500`。票 12 只修了首方客户追踪两口（`refuseUnstorableQueryValue`）。
@@ -171,3 +171,15 @@ transport-fulfillment 三口原先只拦 NUL、不拦非法 UTF-8。
 - `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
 - 先红后绿：把豁免判断临时摘掉，三条用例全红——`TestExemptReadLinesAnswerExactlyAsTheirHandlersDo`（`region` 带坏值装配后答 `MALFORMED_REQUEST`）、`TestTargetCheckExemptionsNameDeclaredReadLines`、`TestEveryRegisteredReadLineCarriesTheTargetCheck`。套回去全绿。
 - 全量：`go test -count=1 -p 1 ./internal/... ./cmd/... ./migrations/...` 退 0，168 个包 ok、0 FAIL（含 PG `127.0.0.1:55432`）。跑的是 `6abe252b6` 的 Go 内容。
+
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 初评钉 `b29cf8216`：Spec 阻断 1（guard 改了六个修前不答 500 的口的既有分格）——协调方裁这六口不挂；作者请裁的认证前检查、判整条目标两处评审认为可接受；请求体 NUL 另立票 16。
+- 复评钉 `1e0019367`：两轴阻断为零。非阻断只记不追：豁免表头第二条判据宜钉成「处理器所在包的失败码集」。送站读口文件头注释过时一条，协调方进 main 时改（见下）。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `969205ae9` 上依次 `git merge --no-ff origin/claude-docnum13`（tip `70531b003`，合并提交 `329bf3beb`）、`origin/claude-docnum14`（tip `32eb59c1f`，合并提交 `7943aa513`）、`origin/claude-docnum15`（tip `1e0019367`，合并提交 `5ce46a359`），均无冲突；三票同一次全量。
+- 协调方两笔：`546861ac4`（票 13 第四轮复评非阻断——审核口所需决定种类不在已认之列时缺省答未授予，关上放行路径）、`7bc032259`（票 15 复评非阻断——送站读口门的次序注释跟上装配处的请求目标检查）。
+- main tip 上重生成 ADR 索引（`b638bb595`）、AT 盘点总览计数（`ca173b8dc`）、机制清点（`f26f0ca60`）。
+- 全量真库测试 `scripts/test-full.sh`：退 0，174 个包 ok。一次性库 `seed_docnum131415` 灌种子：退 0。

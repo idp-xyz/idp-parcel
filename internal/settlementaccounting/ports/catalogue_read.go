@@ -103,14 +103,16 @@ type SupplierExpectedCostCatalogueRow struct {
 	FeeItem             string
 	PurchaseRuleVersion string
 	Agreement           string
-	Evaluation          string
-	OriginalCurrency    string
-	OriginalMinor       int64
-	SettlementCurrency  string
-	SettlementMinor     int64
-	ConversionStep      string
-	PriorVersion        string
-	CorrectionReason    string
+	// Supplier 是 Agreement 那一版协议的供应商（ADR-0358 决定一）；本记录之前形成、还没补记的旧行为空串，读作「未记供应商」。
+	Supplier           string
+	Evaluation         string
+	OriginalCurrency   string
+	OriginalMinor      int64
+	SettlementCurrency string
+	SettlementMinor    int64
+	ConversionStep     string
+	PriorVersion       string
+	CorrectionReason   string
 	// Withdrawn 为真：这一版是失效纠错版本，它依的发生项已失效、这份成本不再成立；金额是被撤下那一笔的原样（ADR-0232 决定七）。
 	Withdrawn  bool
 	RecordedAt time.Time
@@ -216,8 +218,13 @@ type CustomerStatementCatalogueRow struct {
 //   - MatchedWithoutPayableCount 是分类为已匹配、却还没有审核应付的行数。它说的是事实，不说这些行「可审核」：审核授权、
 //     应付归集账户与越权上限都可能没登，那由审核步骤答。
 //
+// 审核按行按金额范围给结果（ADR-0357 决定二至四），目录行另带这一版各行上的三个和，同是求和、不判，求法与
+// domain.TallyLineDecisions 一致：RejectedMinor 是已拒绝的金额，OpenDisputeMinor 是直接给的争议减去点名它们的再审、仍在争议中的
+// 金额，UndecidedMinor 是各行主张金额减去直接给的各段、还没有任何结果的金额（逐行算、不小于零）。已通过的就是 PayableMinor。
+//
 // ReceivedAt 是账单到达的业务时刻（录入的人照来件写），RecordedAt 是接收落库时刻，两者不同。Supplements 为空即不是追加
-// 主张。OperationEvidence 是经运营决定口接收这一份的操作者（ADR-0340 决定三），为空读作这一份不记提交方。
+// 主张。OperationEvidence 是经运营决定口接收这一份的操作者（ADR-0340 决定三），为空读作这一份不记提交方。SupplierBillNumber 是
+// 这份主张在供应商账单号册上的号（ADR-0357 决定一，不论哪一版带来），为空读作未记——不从主张标识里拆。
 type SupplierBillReceptionCatalogueRow struct {
 	Claim                       string
 	ClaimVersion                string
@@ -232,6 +239,10 @@ type SupplierBillReceptionCatalogueRow struct {
 	PayableLineCount            int64
 	PayableMinor                int64
 	MatchedWithoutPayableCount  int64
+	RejectedMinor               int64
+	OpenDisputeMinor            int64
+	UndecidedMinor              int64
+	SupplierBillNumber          string
 	AuditAuthorityConfigured    bool
 	AuditAuthorityConfiguredNow bool
 	ReceivedAt                  time.Time
@@ -243,7 +254,8 @@ type SupplierBillReceptionCatalogueRow struct {
 // StatementCatalogueRead 是对账页的伴生列表读端口：客户对账单册（UC-SA-003）与供应商
 // 账单接收册（UC-SA-004）各上各的。
 //
-// 账单接收册按到达的业务时刻倒序上列（同刻按主张身份与版本）：页大小截掉的是最早收到的那些，最新收到的账单总在页上。
+// 账单接收册按到达的业务时刻倒序上列（同刻按主张身份与版本）：页大小截掉的是最早收到的那些，最新收到的账单总在页上。页外的
+// 那一份按 SupplierBillReceptionFilter 精确检索在全册里找。
 type StatementCatalogueRead interface {
 	ListCustomerStatements(
 		ctx context.Context,
@@ -254,8 +266,20 @@ type StatementCatalogueRead interface {
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
+		filter SupplierBillReceptionFilter,
 		limit int,
 	) ([]SupplierBillReceptionCatalogueRow, error)
+}
+
+// SupplierBillReceptionFilter 是账单接收册的检索维：主张身份、供应商、供应商账单号（取账单号册，ADR-0357 决定一），各自精确相等、
+// 逐字比；空串即不按这一维筛，几维同给取交集。登记表单要找页外更早的原账单、新登的账单不在页上时右栏要读回它，都靠它在全册里
+// 找——只在取回的那一页里筛，册一超过一页就会静默找不到。给了账单号时，Supplier 比的是号册上的分配方，不是接收行的供应商。
+// 账单号检索只认账单号册：票 11 期间「供应商/账单号」形的旧主张没进
+// 册，按主张身份检索才找得到。
+type SupplierBillReceptionFilter struct {
+	Claim              string
+	Supplier           string
+	SupplierBillNumber string
 }
 
 // DisputedCustomerStatements 是「待对账」那一问的答案：挂着未了结争议的已发布客户对账单——单上的费用争议至少

@@ -99,7 +99,7 @@ func TestEmptySettlementRegistersAnswerEmptyLists(t *testing.T) {
 	if err != nil || len(statements) != 0 {
 		t.Fatalf("空对账单册走样：err=%v rows=%+v", err, statements)
 	}
-	receptions, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, 10)
+	receptions, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, 10)
 	if err != nil || len(receptions) != 0 {
 		t.Fatalf("空账单接收册走样：err=%v rows=%+v", err, receptions)
 	}
@@ -136,7 +136,7 @@ func TestSettlementCataloguesGuardTheirLimit(t *testing.T) {
 			return err
 		},
 		"账单接收": func(limit int) error {
-			_, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, limit)
+			_, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, limit)
 			return err
 		},
 		"资金事实": func(limit int) error {
@@ -535,7 +535,7 @@ func TestSupplierBillReceptionCatalogueTranscribesCountsAndAuthority(t *testing.
 		catalogueTenant, catalogueBaseAt)
 
 	rows, err := fixture.statement.ListSupplierBillReceptions(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+		t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列账单接收走样：err=%v rows=%+v", err, rows)
 	}

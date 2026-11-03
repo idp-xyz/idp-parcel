@@ -20,8 +20,9 @@ type stubStatementCatalogue struct {
 	receptions []ports.SupplierBillReceptionCatalogueRow
 	err        error
 
-	gotTenant string
-	gotLimit  int
+	gotTenant          string
+	gotLimit           int
+	gotReceptionFilter ports.SupplierBillReceptionFilter
 }
 
 func (stub *stubStatementCatalogue) ListCustomerStatements(
@@ -33,9 +34,9 @@ func (stub *stubStatementCatalogue) ListCustomerStatements(
 
 // ListSupplierBillReceptions 像真读口一样截在 limit：端点多取一行判页外有没有，替身不截就证不了那一判。
 func (stub *stubStatementCatalogue) ListSupplierBillReceptions(
-	_ context.Context, tenant domain.TenantID, limit int,
+	_ context.Context, tenant domain.TenantID, filter ports.SupplierBillReceptionFilter, limit int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	stub.gotTenant, stub.gotLimit, stub.gotReceptionFilter = tenant.String(), limit, filter
 	if len(stub.receptions) > limit {
 		return stub.receptions[:limit], stub.err
 	}
@@ -328,7 +329,8 @@ func TestSupplierBillReceptionQueryTranscribesCountsAndAuthority(t *testing.T) {
 }
 
 // Covers: AT-SA-232 — 账单册的汇总逐格透出：主张金额之和、按匹配分类原名计的行数（没有的分类没有键，空也答 {} 不答 null）、
-// 已形成应付的行数与金额、已匹配而没有应付的行数、到达时刻；被追加的原主张与接收操作者缺席即不出键。
+// 已形成应付的行数与金额、已匹配而没有应付的行数、到达时刻；被追加的原主张与接收操作者缺席即不出键。AT-SA-233、AT-SA-234：
+// 已拒绝、仍在争议中、还没有结果三个和与供应商账单号照实透出，没有账单号不出键。
 func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 	register := &stubStatementCatalogue{
 		receptions: []ports.SupplierBillReceptionCatalogueRow{
@@ -337,6 +339,7 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 				Currency: "CNY", LineCount: 3, MatchCount: 3, TotalClaimedMinor: 3300,
 				ClassificationCounts: map[string]int64{"MATCHED": 2, "PRICE_VARIANCE": 1},
 				PayableLineCount:     1, PayableMinor: 1000, MatchedWithoutPayableCount: 1,
+				RejectedMinor: 300, OpenDisputeMinor: 200, UndecidedMinor: 1800, SupplierBillNumber: "INV-1",
 				AuditAuthorityConfigured: false, AuditAuthorityConfiguredNow: true,
 				ReceivedAt: catalogueBaseAt.Add(-time.Hour), Supplements: "SYN-SUP-01/INV-0", OperationEvidence: "OPERATOR/syn#clerk",
 				RecordedAt: catalogueBaseAt,
@@ -359,6 +362,10 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 		"payableLineCount":           `1`,
 		"payableAmount":              `"1000"`,
 		"matchedWithoutPayableCount": `1`,
+		"rejectedAmount":             `"300"`,
+		"openDisputeAmount":          `"200"`,
+		"undecidedAmount":            `"1800"`,
+		"supplierBillNumber":         `"INV-1"`,
 		"receivedAt":                 `"` + catalogueBaseAt.Add(-time.Hour).Format(time.RFC3339Nano) + `"`,
 		"supplementsClaim":           `"SYN-SUP-01/INV-0"`,
 		"operationEvidence":          `"OPERATOR/syn#clerk"`,
@@ -373,7 +380,7 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 	if got := string(bare["classificationCounts"]); got != `{}` {
 		t.Fatalf("没有匹配的分类计数要答 {}：%s", got)
 	}
-	for _, absent := range []string{"supplementsClaim", "operationEvidence"} {
+	for _, absent := range []string{"supplementsClaim", "operationEvidence", "supplierBillNumber"} {
 		if _, present := bare[absent]; present {
 			t.Fatalf("缺席的 %q 不该出键：%s", absent, response.Body.String())
 		}
@@ -450,5 +457,18 @@ func TestFailingStatementReadsAreNoAnswerRatherThanEmptyRegisters(t *testing.T) 
 			}
 			assertNoOutcome(t, response)
 		})
+	}
+}
+
+// Covers: AT-SA-233（端点半边）——账单册收 claim、supplier、supplierBillNumber 三个精确检索维，逐字转给读口；不给就是空检索。
+func TestSupplierBillReceptionQueryPassesTheExactLookup(t *testing.T) {
+	register := &stubStatementCatalogue{}
+	serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception&supplier=SYN-SUP-01&supplierBillNumber=INV%201&claim=BILL-1")
+	if register.gotReceptionFilter != (ports.SupplierBillReceptionFilter{Claim: "BILL-1", Supplier: "SYN-SUP-01", SupplierBillNumber: "INV 1"}) {
+		t.Fatalf("检索维 = %+v", register.gotReceptionFilter)
+	}
+	serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception")
+	if register.gotReceptionFilter != (ports.SupplierBillReceptionFilter{}) {
+		t.Fatalf("不给检索维 = %+v", register.gotReceptionFilter)
 	}
 }
