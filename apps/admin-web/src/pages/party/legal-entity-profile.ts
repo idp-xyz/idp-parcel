@@ -18,7 +18,7 @@ import type {
   RegistrationNumberTypeRecord,
   TaxRegistrationNumberRecord,
 } from './api';
-import { formatInstant, wallTimeToRfc3339 } from '../moment';
+import { wallTimeToRfc3339 } from '../moment';
 import { revisionOf } from './registration-form';
 
 export interface TaxNumberDraft {
@@ -315,15 +315,6 @@ export function legalEntityProfileStatusOf(
     return { label: '主体不在册', tone: 'bad', description: '当前租户没有登记这个公司主体。' };
   }
   return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的资料状态。' };
-}
-
-/**
- * 主数据页的时刻显示到日期；完整时刻与时区由调用方放进 title。时区只在测试里显式给，页面照全局显示时区。
- * 解析不了的串原样交回，理由同 formatInstant：那是服务端给的值，页面不替它圆。
- */
-export function profileDateOf(iso: string, timeZone?: string): string {
-  if (Number.isNaN(new Date(iso).getTime())) return iso;
-  return formatInstant(iso, timeZone === undefined ? {} : { timeZone }).slice(0, 10);
 }
 
 /** 资料层（税务登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */

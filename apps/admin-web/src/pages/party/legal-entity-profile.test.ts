@@ -13,7 +13,6 @@ import {
   legalEntityContactCountOf,
   problemsWithMissing,
   profileComparisonContentOf,
-  profileDateOf,
   profileDraftContentOf,
   profileMaintenanceNotes,
   profileTaxTypeOptions,
@@ -318,6 +317,18 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
     'UTC',
   );
   equal(halfContact.contacts.length, 2);
+
+  // 给了目录查法，税务登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
+  const typeNameOf = (country: string, typeCode: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' ? 'SYN 税号' : undefined);
+  const taxChanged = compareLegalEntityProfiles(
+    base,
+    profileComparisonContentOf({ ...untouched, taxNumbers: [{ typeCode: 'SYN-CN-TAX', number: 'SYN-CN-TAX-0102' }, { typeCode: 'SYN-OTHER', number: '9' }] }, 'UTC'),
+    typeNameOf,
+  );
+  deepEqual(
+    taxChanged.fields.filter((row) => row.kind !== 'unchanged').map((row) => [row.field, row.before, row.after]),
+    [['税务登记号', 'SYN 税号 SYN-CN-TAX-0101', 'SYN 税号 SYN-CN-TAX-0102；SYN-OTHER 9']],
+  );
 });
 
 // Covers（第 4 项）：缺项按表单次序列出，路径与各格认领问题的路径一致；联系人整行空着也算；齐了为空；并进问题表只加一句。
@@ -360,13 +371,6 @@ test('税务登记号类型候选来自目录的资料层', () => {
   ]);
   deepEqual(profileTaxTypeOptions(types, 'HK'), []);
   deepEqual(profileTaxTypeOptions(types, ''), []);
-});
-
-// Covers: 日期只到天、按显示时区折；解析不了的原样交回。
-test('时刻显示到日期', () => {
-  equal(profileDateOf('2026-10-29T16:00:00Z', 'Asia/Shanghai'), '2026-10-30');
-  equal(profileDateOf('2026-10-29T16:00:00Z', 'UTC'), '2026-10-29');
-  equal(profileDateOf('someday', 'UTC'), 'someday');
 });
 
 // Covers: 按时点解析要问的时刻——留空即此刻（取调用方给的 now），填了按时区换 UTC，换不出来交 null 不发请求。

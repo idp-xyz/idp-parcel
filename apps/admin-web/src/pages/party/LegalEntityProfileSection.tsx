@@ -33,8 +33,11 @@ import {
   type LegalEntityProfileRevisionRecord,
   type RegistrationNumberTypeListResponseBody,
 } from './api';
+import { profileRevisionLabel } from './presentation';
 import { problemNote } from './presentation';
 import { Field, useLoaded } from './PublicationFormFields';
+import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
+import { Instant } from './detail-primitives';
 import {
   AdvancedGroup,
   FormGroup,
@@ -57,7 +60,6 @@ import {
   legalEntityProfileStatusOf,
   problemsWithMissing,
   profileComparisonContentOf,
-  profileDateOf,
   profileDraftContentOf,
   resolutionInstantOf,
   suggestedProfileRevision,
@@ -105,6 +107,9 @@ export function LegalEntityProfileSection({
   useEffect(() => {
     if (formOpenRequest > 0) setFormOpen(true);
   }, [formOpenRequest]);
+  // 注册号类型目录读一次，给按日期查询的读出把税务登记号类型码译成目录译名；读不到按码显。抽屉自己另读一份——它是
+  // 导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
+  const typeNameOf = useTypeNameOf(useLoaded(listRegistrationNumberTypes));
   return (
     <div className="flex flex-col gap-5">
       <section>
@@ -124,7 +129,7 @@ export function LegalEntityProfileSection({
           <summary className="cursor-pointer text-[13px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">
             查看某个日期的资料
           </summary>
-          {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} landed={landed} /> : null}
+          {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} landed={landed} typeNameOf={typeNameOf} /> : null}
         </details>
       ) : (
         <section className="border-t border-idpxyz-border pt-4">
@@ -136,7 +141,7 @@ export function LegalEntityProfileSection({
               </p>
             </div>
           </div>
-          <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
+          <CurrentProfile legalEntityId={legalEntityId} landed={landed} typeNameOf={typeNameOf} />
         </section>
       )}
       {mayWrite ? (
@@ -156,6 +161,14 @@ export function LegalEntityProfileSection({
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** 目录答案折成查法；没答（还在读、读不到）就是查不到任何码的空表，调用方按码显。 */
+function useTypeNameOf(typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null): RegistrationNumberTypeNameOf {
+  return useMemo(
+    () => registrationNumberTypeNamesOf(typeCatalogue?.kind === 'outcome' ? typeCatalogue.body.registrationNumberTypes : []),
+    [typeCatalogue],
   );
 }
 
@@ -416,6 +429,7 @@ function ProfileRegistrationForm({
   const problems = attempted ? problemsWithMissing(form.problems, missing) : form.problems;
   const bodyRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ProfileComparison | null>(null);
+  const typeNameOf = useTypeNameOf(typeCatalogue);
   const save = () => {
     if (missing.length > 0) {
       setAttempted(true);
@@ -426,7 +440,7 @@ function ProfileRegistrationForm({
       form.send();
       return;
     }
-    setPreview(compareLegalEntityProfiles(current, profileComparisonContentOf(form.effectiveDraft, timeZone)));
+    setPreview(compareLegalEntityProfiles(current, profileComparisonContentOf(form.effectiveDraft, timeZone), typeNameOf));
   };
 
   const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
@@ -466,7 +480,7 @@ function ProfileRegistrationForm({
                       <option value="">{knownFailed ? '版本读取失败' : '选择资料版本'}</option>
                       {knownOptions.map((row) => (
                         <option key={row.revision} value={row.revision}>
-                          第 {row.revision} 版 · {profileDateOf(row.effectiveFrom)} 起生效
+                          {profileRevisionLabel(row.revision)} · {formatInstant(row.effectiveFrom, { precision: 'day' })} 起生效
                         </option>
                       ))}
                     </select>
@@ -621,14 +635,14 @@ function BaseLine({
   const link = 'text-idpxyz-accent underline-offset-2 hover:underline disabled:opacity-60';
   const versionOf = (content: ProfileContent) => (
     <>
-      <span className="font-medium">第 {content.revision} 版</span>（
-      <span title={formatInstant(content.effectiveFrom)}>{profileDateOf(content.effectiveFrom)}</span> 起生效）
+      <span className="font-medium">{profileRevisionLabel(content.revision)}</span>（
+      <Instant value={content.effectiveFrom} precision="day" /> 起生效）
     </>
   );
   const backToCurrent =
     current !== null && base.kind !== 'current' ? (
       <button type="button" className={link} disabled={locked} onClick={() => onSwitch({ kind: 'current' }, current)}>
-        改回基于第 {current.revision} 版
+        改回基于{profileRevisionLabel(current.revision)}
       </button>
     ) : null;
   const toBlank =
@@ -640,7 +654,7 @@ function BaseLine({
   if (base.kind === 'current' && current !== null) {
     return (
       <p className="flex flex-wrap items-center gap-x-2">
-        <span>基于 {versionOf(current)} 修改</span>
+        <span>基于 {versionOf(current)}修改</span>
         <span className="text-idpxyz-breadcrumb">·</span>
         {toBlank}
       </p>
@@ -649,7 +663,7 @@ function BaseLine({
   if (base.kind === 'revision' && baseContent !== null) {
     return (
       <p className="flex flex-wrap items-center gap-x-2">
-        <span>已带入 {versionOf(baseContent)} 的内容</span>
+        <span>已带入 {versionOf(baseContent)}的内容</span>
         <span className="text-idpxyz-breadcrumb">·</span>
         {backToCurrent}
         {backToCurrent ? <span className="text-idpxyz-breadcrumb">·</span> : null}
@@ -709,7 +723,7 @@ function ChangePreview({
       <div>
         <h3 className="text-[14px] font-semibold text-idpxyz-textBright">这次改了什么</h3>
         <p className="mt-1 text-[12px] leading-5 text-idpxyz-breadcrumb">
-          与当前生效的第 {current.revision} 版相比。确认后登记为第 {nextRevision.trim() || '?'} 版，{effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；
+          与当前生效的{profileRevisionLabel(current.revision)}相比。确认后登记为第 {nextRevision.trim() || '?'} 版，{effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；
           版本连不连续、国家对不对得上由服务端判。
         </p>
         {comparison.contactMatchingLimited ? (
@@ -720,7 +734,7 @@ function ChangePreview({
       </div>
       {changed.length === 0 ? (
         <p role="status" className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] text-idpxyz-text">
-          资料内容与第 {current.revision} 版完全相同。确认后仍会登记为新的一版，只是来源单据与生效时间换成这一次的。
+          资料内容与{profileRevisionLabel(current.revision)}完全相同。确认后仍会登记为新的一版，只是来源单据与生效时间换成这一次的。
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-idpxyz-border">
@@ -728,7 +742,7 @@ function ChangePreview({
             <thead className="bg-idpxyz-sidebar text-idpxyz-breadcrumb">
               <tr>
                 <th className="px-3 py-2 font-medium">项目</th>
-                <th className="px-3 py-2 font-medium">第 {current.revision} 版</th>
+                <th className="px-3 py-2 font-medium">{profileRevisionLabel(current.revision)}</th>
                 <th className="px-3 py-2 font-medium">这一次</th>
               </tr>
             </thead>
@@ -766,7 +780,15 @@ function ChangeRow({ field }: { field: ProfileFieldChange }) {
  * 查某个日期的资料（留空即此刻）。答资料不全照写原因——那是明确的非成功，开立方据此拒开，这里不拿默认值补。
  * 日期可改到未来，看登记了未来生效的那一版到时会不会接上。
  */
-function CurrentProfile({ legalEntityId, landed }: { legalEntityId: string; landed: number }) {
+function CurrentProfile({
+  legalEntityId,
+  landed,
+  typeNameOf,
+}: {
+  legalEntityId: string;
+  landed: number;
+  typeNameOf: RegistrationNumberTypeNameOf;
+}) {
   const timeZone = currentDisplayTimeZone();
   const [at, setAt] = useTabViewState('legal-entity.profile-at', '');
   const [answer, setAnswer] = useState<ApiResult<LegalEntityProfileResolutionResponseBody> | null>(null);
@@ -802,7 +824,7 @@ function CurrentProfile({ legalEntityId, landed }: { legalEntityId: string; land
           onChange={setAt}
         />
       </div>
-      {askable ? <ResolutionAnswer answer={answer} legalEntityId={legalEntityId} retry={retry} /> : null}
+      {askable ? <ResolutionAnswer answer={answer} legalEntityId={legalEntityId} retry={retry} typeNameOf={typeNameOf} /> : null}
     </div>
   );
 }
@@ -811,10 +833,12 @@ function ResolutionAnswer({
   answer,
   legalEntityId,
   retry,
+  typeNameOf,
 }: {
   answer: ApiResult<LegalEntityProfileResolutionResponseBody> | null;
   legalEntityId: string;
   retry: () => void;
+  typeNameOf: RegistrationNumberTypeNameOf;
 }) {
   if (answer === null) return <p className={note}>正在读取该日期的公司资料…</p>;
   if (answer.kind === 'unconfigured') {
@@ -860,8 +884,8 @@ function ResolutionAnswer({
     <div className="text-[12px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusPill label={`资料状态：${status.label}`} tone={status.tone} />
-        <span className="text-idpxyz-breadcrumb" title={formatInstant(body.at)}>
-          查询日期 {profileDateOf(body.at)}
+        <span className="text-idpxyz-breadcrumb">
+          查询日期 <Instant value={body.at} precision="day" />
         </span>
       </div>
       <p className="mt-1 text-idpxyz-breadcrumb">{status.description}</p>
@@ -869,12 +893,12 @@ function ResolutionAnswer({
         <dl className="mt-2 grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1">
           <dt className="text-idpxyz-breadcrumb">生效版本</dt>
           <dd>
-            第 {effective.revision} 版 · <span title={formatInstant(effective.effectiveFrom)}>{profileDateOf(effective.effectiveFrom)}</span>{' '}
-            起生效 · 来源单据 <span className="font-mono">{effective.basis}</span>
+            {profileRevisionLabel(effective.revision)} · <Instant value={effective.effectiveFrom} precision="day" /> 起生效 · 来源单据{' '}
+            <span className="font-mono">{effective.basis}</span>
           </dd>
         </dl>
       ) : null}
-      {effective ? <LegalEntityProfileContent content={effective} /> : null}
+      {effective ? <LegalEntityProfileContent content={effective} typeNameOf={typeNameOf} /> : null}
     </div>
   );
 }

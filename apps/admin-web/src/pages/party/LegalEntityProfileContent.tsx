@@ -3,8 +3,18 @@ import type { LegalEntityProfileContent as ProfileContent, RegisteredAddressReco
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
 import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid } from './LegalEntityProfileReadout';
 import { profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
+import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
-export function LegalEntityProfileContent({ content, includeContacts = true }: { content?: ProfileContent; includeContacts?: boolean }) {
+export function LegalEntityProfileContent({
+  content,
+  includeContacts = true,
+  typeNameOf,
+}: {
+  content?: ProfileContent;
+  includeContacts?: boolean;
+  /** 税务登记号的类型码 → 目录译名（按注册地址国家查）；不给或查不到按码显。码留在 title 里给要对照的人。 */
+  typeNameOf?: RegistrationNumberTypeNameOf;
+}) {
   const notes = content ? profileMaintenanceNotes(content) : [];
   return (
     <div className="legal-entity-profile-readout mt-5 space-y-5">
@@ -31,7 +41,15 @@ export function LegalEntityProfileContent({ content, includeContacts = true }: {
             label="税务登记号"
             value={
               content?.taxRegistrationNumbers.length
-                ? content.taxRegistrationNumbers.map((row) => `${row.typeCode} ${row.number}`).join('；')
+                ? content.taxRegistrationNumbers.map((row, index) => (
+                    <span key={`${row.typeCode}-${row.number}-${index}`}>
+                      {index > 0 ? '；' : ''}
+                      <span className="font-sans" title={row.typeCode}>
+                        {typeNameOf?.(content.registeredAddress.country, row.typeCode) ?? row.typeCode}
+                      </span>{' '}
+                      {row.number}
+                    </span>
+                  ))
                 : undefined
             }
             mono

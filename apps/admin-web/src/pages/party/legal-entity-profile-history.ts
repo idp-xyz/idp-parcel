@@ -7,6 +7,7 @@ import type {
   RegisteredAddressRecord,
 } from './api';
 import { countryLabel } from '../refdata-names';
+import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
 
 export type ProfileChangeKind = 'added' | 'modified' | 'removed' | 'unchanged';
@@ -103,9 +104,14 @@ function contactText(contact: LegalEntityContactRecord) {
   ].filter(Boolean).join(' · ');
 }
 
+/**
+ * `typeNameOf` 给了就把税务登记号的类型码译成目录译名再比（按各自的注册地址国家查）：比的是显出来的文本，所以换了国家、
+ * 同一个码译出不同名时也算一处变化——国家本来就变了，这一行跟着变不是误报。不给按码比。
+ */
 export function compareLegalEntityProfiles(
   before: LegalEntityProfileContent,
   after: LegalEntityProfileContent,
+  typeNameOf?: RegistrationNumberTypeNameOf,
 ): ProfileComparison {
   const fields: ProfileFieldChange[] = [];
   let contactMatchingLimited = false;
@@ -120,7 +126,7 @@ export function compareLegalEntityProfiles(
   const representative = (content: LegalEntityProfileContent) => content.representative
     ? `${representativeLabel(content.representative.kind)}：${content.representative.name}` : '';
   const tax = (content: LegalEntityProfileContent) => values(content.taxRegistrationNumbers
-    .map((row) => `${row.typeCode} ${row.number}`)).join('；');
+    .map((row) => `${typeNameOf?.(content.registeredAddress.country, row.typeCode) ?? row.typeCode} ${row.number}`)).join('；');
   add('representative', '代表人信息', '代表人 / 负责人', representative(before), representative(after));
   add('registered-address', '地址信息', '注册地址', address(before.registeredAddress), address(after.registeredAddress));
   add('office-address', '地址信息', '办公地址', address(before.officeAddress), address(after.officeAddress));
