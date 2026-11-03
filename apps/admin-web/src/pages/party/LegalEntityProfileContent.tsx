@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
-import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, absentValueMark } from './LegalEntityProfileReadout';
+import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, ProfileReadoutPairs, absentValueMark } from './LegalEntityProfileReadout';
 import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
@@ -52,36 +52,38 @@ export function LegalEntityProfileContent({
             }
             emphasized
           />
+          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs）；监管登记号占整行——几种号并排时半列放不下。 */}
           <ProfileReadoutField
             label="其他语言的抬头"
             value={
-              content?.invoicingRegistered && content.invoiceTitles?.length
-                ? content.invoiceTitles.map((row, index) => (
-                    <span key={`${row.language}-${index}`} className="block">
-                      <span className="text-[12px] text-idpxyz-breadcrumb">{languageTagLabel(row.language)}</span>{' '}
-                      {row.title}
-                    </span>
-                  ))
-                : undefined
+              content?.invoicingRegistered && content.invoiceTitles?.length ? (
+                <ProfileReadoutPairs
+                  rows={content.invoiceTitles.map((row, index) => ({
+                    key: `${row.language}-${index}`,
+                    head: languageTagLabel(row.language),
+                    value: row.title,
+                  }))}
+                />
+              ) : undefined
             }
           />
           <ProfileReadoutField
             label="监管登记号"
             title="税务 / 海关的监管登记号"
+            wide
             value={
-              content?.taxRegistrationNumbers.length
-                ? content.taxRegistrationNumbers.map((row, index) => (
-                    <span key={`${row.typeCode}-${row.number}-${index}`}>
-                      {index > 0 ? '；' : ''}
-                      <span className="font-sans" title={row.typeCode}>
-                        {typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode}
-                      </span>{' '}
-                      {row.number}
-                    </span>
-                  ))
-                : undefined
+              content?.taxRegistrationNumbers.length ? (
+                <ProfileReadoutPairs
+                  mono
+                  rows={content.taxRegistrationNumbers.map((row, index) => ({
+                    key: `${row.typeCode}-${row.number}-${index}`,
+                    head: typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode,
+                    headTitle: row.typeCode,
+                    value: row.number,
+                  }))}
+                />
+              ) : undefined
             }
-            mono
           />
         </ProfileReadoutGrid>
         <div className="mt-3">
@@ -163,7 +165,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
   );
 }
 
-// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家另起一行）排。
+// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家并进行末）排。
 function addressOf(address?: RegisteredAddressRecord): ReactNode {
   return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }

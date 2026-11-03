@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { RegisteredAddressRecord } from './api';
 import { CountryLabel } from '../refdata-labels';
 import './legal-entity-profile-readout.css';
@@ -41,19 +41,47 @@ export function ProfileReadoutField({
 }
 
 /**
- * 地址格：地址行在前，国家 / 地区另起一行经基础数据译名（ADR-0335 决定七）。不再把国家码当前缀——运营读地址先看街道，
- * 国家是补充信息；译成「中国（CN）」后放句首也压过了地址本身。资料读出与版本历史快照共用这一份，版式只定一处。
+ * 地址格：地址行在前，国家 / 地区经基础数据译名并进行末（ADR-0335 决定七）。不把国家码当前缀——运营读地址先看街道，
+ * 国家是补充信息，译成「中国（CN）」后放句首会压过地址本身；也不另起一行（票 company-subject-ux/08 第 5 条）——另起一行
+ * 又换一种颜色，读起来像一条链接。弱显只降不透明度、不换色。资料读出与版本历史快照共用这一份，版式只定一处。
  */
 export function ProfileReadoutAddress({ address }: { address: RegisteredAddressRecord }) {
   const lines = address.lines.filter((line) => line.trim() !== '');
   return (
     <>
-      <span className="block">{lines.length > 0 ? lines.join(' · ') : absentValueMark}</span>
+      {lines.length > 0 ? lines.join(' · ') : absentValueMark}
       {address.country ? (
-        <span className="block text-[12px] text-idpxyz-breadcrumb">
+        <span className="opacity-70">
+          {' · '}
           <CountryLabel code={address.country} />
         </span>
       ) : null}
     </>
+  );
+}
+
+/**
+ * 值格里的两列小表（票 company-subject-ux/08 第 5 条）：左列是类型名或语言（弱显），右列是号或抬头。几个号用分号串成一段
+ * 扫不出来，一行一个才认得出哪个号是哪种。左列最多占一半宽，长类型名折行而不是把号挤掉；等宽字体只给号。
+ */
+export function ProfileReadoutPairs({
+  rows,
+  mono = false,
+}: {
+  rows: readonly { key: string; head: ReactNode; headTitle?: string; value: ReactNode }[];
+  /** 右列用等宽字体（号）；抬头是文字，不用。 */
+  mono?: boolean;
+}) {
+  return (
+    <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
+      {rows.map((row) => (
+        <Fragment key={row.key}>
+          <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb" title={row.headTitle}>
+            {row.head}
+          </dt>
+          <dd className={`min-w-0 leading-5 text-idpxyz-text ${mono ? 'select-text font-mono text-[12px]' : ''}`}>{row.value}</dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }

@@ -62,13 +62,13 @@ export function profileRevisionState(
 }
 
 /**
- * 对比表里的地址文本：地址行在前用「 · 」连，国家 / 地区另起一行经基础数据译名（译名表没读回时显码）——与资料读出的
- * ProfileReadoutAddress 同一版式，表格格子按 pre-wrap 排所以用换行。没有地址交空串，调用方按「没有」比。
+ * 对比表里的地址文本：地址行在前用「 · 」连，国家 / 地区经基础数据译名（译名表没读回时显码）并在行末——与资料读出的
+ * ProfileReadoutAddress 同一版式（票 company-subject-ux/08 第 5 条起国家不再另起一行）。没有地址交空串，调用方按「没有」比。
  */
 export function profileAddressText(address?: RegisteredAddressRecord): string {
   if (!address) return '';
-  const lines = address.lines.filter((line) => line.trim() !== '').join(' · ');
-  return [lines, address.country ? countryLabel(address.country) : ''].filter(Boolean).join('\n');
+  const lines = address.lines.filter((line) => line.trim() !== '');
+  return [...lines, address.country ? countryLabel(address.country) : ''].filter(Boolean).join(' · ');
 }
 
 const values = (items: readonly string[] = []) => [...items].sort();
