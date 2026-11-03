@@ -1,7 +1,7 @@
 # 12 客户追踪按运单号（委托的单据号）查
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者实现完工、自验、推分支 `claude-docnum12`（完成记录见文末）；文档半边的评审修订已在同一分支；待非作者评审与进 main。此前 ready-for-agent——同日用户过目 ADR-0356 草案并同意，ADR-0356 已接受
+Status: in-progress——2026-11-02 作者实现完工、自验、推分支 `claude-docnum12`（完成记录见文末）；文档半边的评审修订已在同一分支；实现评审（钉 `283dca1f7`）两轴阻断为零，非阻断已在同一分支修完（见文末「评审修订」）；待进 main。此前 ready-for-agent——同日用户过目 ADR-0356 草案并同意，ADR-0356 已接受
 父票：[spec](../spec.md)
 Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md) 已接受）
 出处：票 [10](./10-wrap-up-references-labels-and-tracking-by-shipment-number.md)「第 4 条停在哪（向协调方报）」一节查清「机制做得到、挡住的是 ADR 级取舍」；用户 2026-11-02 裁定「客户追踪支持按运单号查，先写 ADR」。
@@ -125,3 +125,26 @@ Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by
 - **ADR-0356 Status 行**：过目记录的措辞没动。`｜` 之后的索引注记里「与按包裹查同一项追踪查阅授予」照评审裁定改成了新词，「第 4 条」改引小节名。ADR 索引与 AT 盘点总览由推送方重生成。
 - **ADR-0356 的两句对齐**：评审修订之后，Consequences「无迁移」与越权风险点 1「不加迁移」读起来与新词的那份迁移相抵。已在 `3e2bc443d` 改成「PS 无迁移，唯一的迁移是能力词 CHECK」与「不给唯一约束加账户列」，请评审一并看。
 - **仍待落地或复核**：`AT-VE-235` 等包裹身份谱系落模型；端口与答复已留出 `replaces`。ADR-0356 越权风险点待 VE、PS owner 复核，本票未改。
+
+## 评审修订（2026-11-02，作者，协调方转来的实现评审，钉 `283dca1f7`）
+
+两轴阻断为零。追加提交、不 rebase。
+
+0. **并入 main**（`a2d056095`）：`git merge origin/main`（`c5a9d879b`，票 11 已进）。AT 盘点追记冲突两行都留，按时间先后排：票 11、票 12 文档半边、票 12 实现半边。迁移 `access_identity/0038`、种子 `steps/488` 与 `data/access/38` 在并入后的 tip 上仍不撞号。
+1. **Standards：单据号不算外部标识**（`f19e691da`）。VE `CONTEXT.md` 改为「委托的单据号（运单号）与外部标识（如客户参考号）都只能用于定位候选对象」，与 GLOSSARY「单据号」一致。
+2. **Standards：ADR-0356 过目记录**（`f19e691da`）。Status 行补一句：用户过目之后，决定一的授予经非作者评审改为另立 `CUSTOMER_SHIPMENT_TRACKING_QUERY`；用户过目的草案写的是与按包裹查同一项授予，协调方照票 first-party-api/00「代决」一节「一口一词」裁定，不在用户过目的四项之内。
+3. **Standards：完成记录去计数**（`f19e691da`）。「`chain.sh` 既有的三处解析」改为点名 `REQ`、`PARCEL`、`PREF`。
+4. **Standards：`CustomerTrackingViewQueryEnvelope` 的名字**：照评审意见留着不改，取舍已写在它的头注里。
+5. **Spec：NUL 与非法 UTF-8 答 400**（`2492c769a`，单独一笔）。
+   - 缺陷：`documentNumber=%00` 或 `%FF` 一路带进读，库拒收参数，答成 `500 NO_ANSWER_FORMED`。按包裹查 `parcel=%FF` 是同一缺陷。先写用例复现：两口都答 500，按包裹那口读到了视图库。
+   - 修法：两口 Intake 共用 `refuseUnstorableQueryValue`，含 NUL 或不是合法 UTF-8 即坏请求，答 400，不读委托、视图与归属。
+   - **顺手修了按包裹查同一缺陷**：这是缺陷修复，契约形状不变（ADR-0223、ADR-0246 本就要求坏输入答 400）。「不做」里「不改 `/v1/customer-tracking-view`」那句旁已注明这一例外。首方契约新口那条的坏请求列举补上这两种。
+   - 用例：`TestUnstorableQueryValuesAreBadRequestsOnBothLines`，两口各 NUL、非法 UTF-8 一例，断言 400、无 outcome、一次不读。
+
+### 修订后的验证（证据只记 `S`）
+
+- 测试跑在 `2492c769a` 上（并入 main 之后）。
+- `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
+- `go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/architecture/... ./internal/platform/... ./internal/accessidentity/... ./cmd/... ./migrations/...` 全过，含 PG（`127.0.0.1:55432`）。
+- 新用例 `TestUnstorableQueryValuesAreBadRequestsOnBothLines` 修前红：两口都答 500，按包裹那口读到了视图库。修后 `-v` PASS、无 SKIP。
+- 本轮只动了 Intake 上的坏输入判断与文档，两只演示脚本与它们走的路径没动，没重跑一次性库演示。
