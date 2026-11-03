@@ -31,3 +31,9 @@ Blocked by: 无
 - 三道门退 0；新增 / 改动的纯函数有 node:test。
 - 浏览器在演示租户核：列表「注册地与注册号」显「统一社会信用代码 91000000000000001X」（SYN-LE-01）与目录译名；日期列只显日期、hover 有完整时刻；使用说明全文是运营的话；联系人表空格为「—」。
 - `templates/workspace-tabs.ts` 的改动有评审记录。
+
+## 落点之外要动的文件（动前先记）
+
+- `src/pages/party/revision-timeline.ts`（两册共用的修订时间线判读）：描述里的「依据」→「来源单据」、计数句去掉「按修订号」——这两个词在 spec 表里退役，句子却在共用件里拼，法人册的薄适配改不到；往来单位页随之同词。配套改 `business-party-revisions.test.ts` 的三处字面钉。
+- `src/pages/party/legal-entity-profile.test.ts`：`profileRevisionLabel` 改成「第 N 版」后，资料修订时间线标题的字面钉跟着换一行；`legal-entity-profile.ts` 本身不动（票 04）。
+- `src/pages/moment.ts` + `moment.test.ts`：`formatInstant` 加 `precision` 选项（`day` / `minute` / `second`，缺省 `second`）。票面第 5 条说「若已有可复用的格式选项就用它」——没有；墙钟与时区知识只在这一处，`Instant` 不在呈现件里另算一遍。
