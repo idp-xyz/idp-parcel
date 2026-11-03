@@ -1,7 +1,7 @@
 # 10 对象工作区的签统一配小图标（全站，不只公司主体）
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 问「tab 需要添加小的对应图标吗」；协调方答合适但要全站统一，用户裁「做吧」。参照：WMS「ASN 管理」详情栏的签（`scratchpad/ux-le2/wms-asn-reference.png`）。
@@ -49,3 +49,8 @@ Blocked by: 无
 
 - 异常 / 文档 / 审计三签眼下没有带数据的业务页渲它们，只经图标表与测试覆盖；`template-preview` 的工作区演示页走同一模板，未截。
 - 核验跑动中浏览器控制台出现两条 `Failed to load resource: 404`（只读 GET，图标是内联 SVG 不走网络，与本票代码路径无关），未追。
+
+## 评审与进 main 记录（2026-11-03，协调方）
+
+- 共享面 Spec 轴隔离评审钉 `faafb578d`：阻断为零。非阻断三条：概要用 `FileText` 与同页主动作「更新公司资料」及导航「供应商协议」同图——协调方改成 `AlignLeft`；暗色下非选中图标 breadcrumb 比词 textMuted 亮一档是色板漂移——改成 `text-current` 与词同色；`VersionDetailDrawer` 借 `profile-versions` 只借图标、词未漂——接受。
+- main `8bb21e3e7` 上 `git merge --no-ff origin/claude-csux-10`（tip `faafb578d`），无冲突，协调方再加一笔上述两处改正。三道门在 main 上退 0（tsc、run-tests 1164、vite build）。
