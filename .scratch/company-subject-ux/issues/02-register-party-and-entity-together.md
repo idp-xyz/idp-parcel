@@ -1,7 +1,7 @@
 # 02 建档一体化：新增公司主体时一并登记往来单位；往来单位列表标出「我方公司」
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：评估「一、概念模型与路径」第 1 条。
@@ -62,3 +62,9 @@ Blocked by: 无
 - 「我方公司」只数待生效 / 已生效的法人，已停用的法人钉的参与方不算（与角色只数在用关系同一条判据）。
 - 没动的两处（不在落点，票面也没要）：详情栏头部的类型胶囊（`BusinessPartyDetailPanel.tsx`）仍只按角色显；命令头指标没加「我方公司」一格。`往来单位` 指标数现已不含我方公司。
 - `identifierNote` 里「已在册（…）」仍经 `identityRevisionLabel` 取词，票 01 改成「登记记录 · 第 N 版」时自动跟上；合并时若票 01 删了该函数要补一处。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `eb4049625` 上 `git merge --no-ff origin/claude-csux-02`（tip `d830a0053`），无冲突；合并提交 `f427f62fd`。三道门在 main 上退 0（tsc、run-tests 1139 通过、vite build）。
+- 作者请裁四条：一并登记的往来单位版本号固定 1——接受（撞编码时服务端答内容冲突，不会悄悄改名）；「我方公司」不含已停用法人——接受；详情栏类型胶囊与命令头指标未加「我方公司」——不要求；真库两步真实答复未看——以替身探针与既有两口的契约测试为准。
+- 共享面：本票没动 `templates/*`、`shell/*`、`components/*`，不需评审。
