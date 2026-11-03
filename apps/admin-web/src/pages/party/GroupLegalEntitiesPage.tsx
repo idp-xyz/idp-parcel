@@ -116,18 +116,24 @@ const statusDotClass: Record<string, string> = {
   DEACTIVATED: 'bg-idpxyz-textMuted',
 };
 
-// 身份两格国家在上、号在下：国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，ADR-0335 决定七），
-// 类型码经注册号类型目录译成「统一社会信用代码」（查法由页面读一次目录折成，译不出原样显码，legal-entity-identity.ts）；
-// 号本身照答复原样。最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
+// 身份两格号在上、类型名与国家小字在下，与主列「名称 / 编码」两层同形（票 company-subject-ux/08 第 6 条）：号才是要认的，
+// 类型名（演示目录的长名）不该比号还显眼。国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，
+// ADR-0335 决定七），类型码经注册号类型目录译成「统一社会信用代码」（查法由页面读一次目录折成，译不出原样显码，
+// legal-entity-identity.ts）；号本身照答复原样。最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
 function IdentityLayerCell({ row, typeNameOf }: { row: GroupLegalEntityRecord; typeNameOf: RegistrationNumberTypeNameOf }) {
   const cells = identityLayerCellsOf(row, typeNameOf);
   if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
+  const country = cells.country === '' ? null : <CountryLabel code={cells.country} />;
+  if (cells.numberCells.length === 0) {
+    return <p className="min-w-40 text-[13px] leading-5 text-idpxyz-text">{country}</p>;
+  }
   return (
     <div className="min-w-40">
-      <p className="text-[13px] font-medium leading-5 text-idpxyz-text">
-        {cells.country === '' ? '' : <CountryLabel code={cells.country} />}
+      <p className="font-mono text-[13px] leading-5 text-idpxyz-text">{cells.numberCells.map((cell) => cell.number).join('；')}</p>
+      <p className="mt-0.5 truncate text-[12px] leading-4 text-idpxyz-breadcrumb" title={cells.numbers}>
+        {cells.numberCells.map((cell) => cell.typeName).join('；')}
+        {country ? <> · {country}</> : null}
       </p>
-      <p className="mt-0.5 font-mono text-[12px] leading-4 text-idpxyz-breadcrumb">{cells.numbers}</p>
     </div>
   );
 }
@@ -137,16 +143,21 @@ function IdentityLayerCell({ row, typeNameOf }: { row: GroupLegalEntityRecord; t
 // 本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格，种类进详情栏与对象页。
 //
 // 列表是函数不是常量：注册号那一列要带目录查法，目录是页面挂载后读回的；页面用 useMemo 只在查法变时重建。
+//
+// 宽屏下的列宽纪律（票 company-subject-ux/08 第 6 条）：前两列给定宽（模板只开放每列的 width，表格本身撑满列表区），
+// 多出来的宽度就落到没定宽的状态与日期列上，它们的内容靠左、紧跟前一列，不再被前两列推到右边缘。主列内容另上限 22rem：
+// 列表比各列之和还宽时浏览器会把定宽列也拉宽，名称那一格不跟着长。
 function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<GroupLegalEntityRecord>[] {
   return [
   {
     key: 'party',
     header: '公司主体',
     sortKey: 'party-name',
+    width: '22rem',
     // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
     // 主列把名称与法人标识并排成两层，方便扫描；参与方标识、修订号、登记依据仍进详情栏底部的「技术详情」。
     render: (row) => (
-      <div className="flex min-w-44 items-start gap-2">
+      <div className="flex min-w-44 max-w-[22rem] items-start gap-2">
         <span
           className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
             legalEntityNeedsAttention(row) ? 'animate-pulse' : ''
@@ -172,6 +183,7 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
     key: 'identity-layer',
     header: '注册地与注册号',
     minListWidth: 680,
+    width: '20rem',
     render: (row) => <IdentityLayerCell row={row} typeNameOf={typeNameOf} />,
   },
   {
