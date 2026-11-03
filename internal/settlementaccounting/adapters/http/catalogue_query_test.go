@@ -105,6 +105,20 @@ func (stub unreachableCatalogues) ListSupplierBillReceptions(
 	return nil, nil
 }
 
+func (stub unreachableCatalogues) FindSupplierBillLines(
+	context.Context, domain.TenantID, string, string,
+) (ports.SupplierBillLines, bool, error) {
+	stub.refuse("supplier bill lines")
+	return ports.SupplierBillLines{}, false, nil
+}
+
+func (stub unreachableCatalogues) ListAuditedPayables(
+	context.Context, domain.TenantID, ports.AuditedPayableFilter, int,
+) ([]ports.AuditedPayableCatalogueRow, error) {
+	stub.refuse("audited payable")
+	return nil, nil
+}
+
 func (stub unreachableCatalogues) ListExternalFundsFacts(
 	context.Context, domain.TenantID, int,
 ) ([]ports.ExternalFundsFactCatalogueRow, error) {
@@ -157,6 +171,16 @@ func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQuer
 			name:    "statement-lines",
 			target:  "/settlement-statement-lines?statement=SYN-STMT-01",
 			handler: settlementhttp.NewQueryStatementLinesEndpoint(intake, unreachable),
+		},
+		{
+			name:    "supplier-bill-lines",
+			target:  "/settlement-supplier-bill-lines?claim=SYN-SUP-01/INV-1&version=1",
+			handler: settlementhttp.NewQuerySupplierBillLinesEndpoint(intake, unreachable),
+		},
+		{
+			name:    "audited-payables",
+			target:  "/settlement-audited-payables",
+			handler: settlementhttp.NewQueryAuditedPayablesEndpoint(intake, unreachable),
 		},
 		{
 			name:    "funds-applications",

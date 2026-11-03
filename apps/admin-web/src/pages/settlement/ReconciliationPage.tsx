@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
@@ -14,18 +13,17 @@ import {
   type CustomerStatementListResponseBody,
   type DisputedCustomerStatementListResponseBody,
   type CustomerStatementRecord,
-  type SupplierBillReceptionListResponseBody,
-  type SupplierBillReceptionRecord,
 } from './api';
 import { TwoLine, formatMoney, technicalRows } from './ops-ui';
 import { accountCounterparties } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
-import { disputedOnlyOf, reconciliationHash, reconciliationTabOf, type ReconciliationTab } from './reconciliation-address';
+import { disputedOnlyOf, reconciliationHash } from './reconciliation-address';
 import { StatementDisputePanel } from './StatementDisputePanel';
 import { disputeLabel, disputeNumberName, openDisputesOf } from './dispute-forms';
 
-// 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。两签都接 GET /settlement-statements 按 registry 分派；
-// 客户对账单签另有「只看有未了结异议的」，换接 GET /settlement-disputed-statements。
+// 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。客户对账单接 GET /settlement-statements?registry=customer-statement；
+// 「只看有未了结异议的」换接 GET /settlement-disputed-statements。供应商账单接收册只在「供应商账单与应付」页（SupplierBillsPage）列：
+// 两处列同一本册，就会各说一套状态与指标。
 const info = moduleInfoById['reconciliation'];
 
 // 列上只有单据状态一栏：册上有作废留痕（依据与时刻成对），二态在库上完备。刻意没有「对账状态」与「结清状态」——
@@ -234,166 +232,36 @@ function CustomerStatementsTable({
   );
 }
 
-// —— 供应商账单签 ——
-
-function receptionTechnicalRows(row: SupplierBillReceptionRecord) {
-  return technicalRows([
-    { label: '账单主张', value: row.claim },
-    { label: '主张版本', value: row.claimVersion },
-    { label: '供应商编码', value: row.supplier },
-    { label: '公司主体', value: row.legalEntity },
-    { label: '账期', value: row.period },
-    { label: '币种', value: row.currency },
-    { label: '登记时间', value: formatInstant(row.recordedAt) },
-  ]);
-}
-
-function supplierBillColumns(names: PartyNames): ListColumn<SupplierBillReceptionRecord>[] {
-  return [
-    {
-      id: 'claim',
-      header: '账单号',
-      render: (row) => <TwoLine primary={row.claim} secondary={row.claimVersion} mono />,
-    },
-    {
-      id: 'supplier',
-      header: '供应商',
-      render: (row) => {
-        const ref = namedRef(names.party(row.supplier), row.supplier);
-        return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
-      },
-    },
-    { id: 'period', header: '账期', className: 'font-mono text-xs', render: (row) => row.period },
-    {
-      id: 'lines',
-      header: '明细',
-      align: 'right',
-      className: 'whitespace-nowrap text-xs',
-      // 本册没有总额，只有行数：明细行数与已对上的行数并列而不折成「匹配率」——未匹配、部分匹配与已匹配是三种结果。
-      render: (row) => `${row.lineCount} 行 · 已对上 ${row.matchCount} 行（${row.currency}）`,
-    },
-    {
-      id: 'audit',
-      header: '状态',
-      align: 'center',
-      // 照实转写审核授权有没有配，不折成「已审核」：授权未配置时审核停在未决，不默认放行也不虚构审核人。
-      render: (row) =>
-        row.auditAuthorityConfigured ? <StatusPill label="可审核" tone="info" /> : <StatusPill label="审核人未配置" tone="warn" />,
-    },
-    {
-      id: 'recorded-at',
-      header: '收到时间',
-      className: 'whitespace-nowrap font-mono text-xs',
-      render: (row) => formatInstant(row.recordedAt),
-    },
-    {
-      id: 'technical',
-      header: '',
-      className: 'align-top',
-      render: (row) => <TechnicalDetails rows={receptionTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
-    },
-  ];
-}
-
-function SupplierBillReceptionsTable({ names }: { names: PartyNames }) {
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<SupplierBillReceptionListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementStatements('supplier-bill-reception').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const receptions = answer?.kind === 'outcome' ? answer.body.receptions : [];
-  const needle = search.trim().toLowerCase();
-  const visibleReceptions = needle
-    ? receptions.filter((row) =>
-        [row.claim, row.supplier, names.party(row.supplier), row.legalEntity, row.period].some((value) =>
-          value?.toLowerCase().includes(needle),
-        ),
-      )
-    : receptions;
-  const retry = () => setReloadKey((value) => value + 1);
-
-  return (
-    <ListPageTemplate<SupplierBillReceptionRecord>
-      title="供应商账单"
-      description="供应商发来的账单；审核通过的部分才算应付，有争议或被拒的金额不算"
-      search={{ value: search, onChange: setSearch, placeholder: '搜账单号、供应商、账期' }}
-      filterSummary={answer?.kind === 'outcome' ? `${receptions.length} 份` : undefined}
-      columns={supplierBillColumns(names)}
-      rows={visibleReceptions}
-      // 行键循主张加版本：主张换版本另成一行，原版本保留。
-      rowKey={(row) => `${row.claim}:${row.claimVersion}`}
-      emptyRowsNote="没有匹配的账单"
-      viewState={catalogueViewState(answer, receptions.length, retry, {
-        module: info,
-        endpoint: 'GET /settlement-statements?registry=supplier-bill-reception',
-        emptyTitle: '还没有收到供应商账单',
-        emptyDescription: '供应商账单经接口或人工接收后在这里出现；页面不会预置账单。',
-      })}
-    />
-  );
-}
-
 /**
- * 对账单。本页承载对账单视角的两册：客户对账单（UC-SA-003）与供应商账单主张（UC-SA-004）。核销已按 UC-SA-005 口径
- * 独立成页（SettlementApplicationPage）——收付款事实与核销关系同对账单分别管理，收付款不改变对账单内容。
- * 本页是查阅面，不设发布、作废或异议裁定动作——那些各由自己的唯一创建用例形成。
+ * 对账单（UC-SA-003）。核销已按 UC-SA-005 口径独立成页（SettlementApplicationPage）——收付款事实与核销关系同对账单分别管理，
+ * 收付款不改变对账单内容。本页不设发布或作废动作；右栏登记与处理客户争议（ADR-0354）。
  */
-/** 签与「只看待对账」的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
-function useReconciliationPlace(): [ReconciliationTab, boolean, (tab: ReconciliationTab, disputedOnly: boolean) => void] {
-  const [tab, setTab] = useState<ReconciliationTab>(() => reconciliationTabOf(window.location.hash));
+/** 「只看待对账」的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
+function useDisputedOnlyPlace(): [boolean, (disputedOnly: boolean) => void] {
   const [disputedOnly, setDisputedOnly] = useState(() => disputedOnlyOf(window.location.hash));
 
   useEffect(() => {
-    // 本签已开着时从首页点待对账格进来，地址变了而页不重挂载，要跟着地址走。
-    const onHashChange = () => {
-      setTab(reconciliationTabOf(window.location.hash));
-      setDisputedOnly(disputedOnlyOf(window.location.hash));
-    };
+    // 本页已开着时从首页点待对账格进来，地址变了而页不重挂载，要跟着地址走。
+    const onHashChange = () => setDisputedOnly(disputedOnlyOf(window.location.hash));
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const place = (nextTab: ReconciliationTab, nextDisputedOnly: boolean) => {
-    setTab(nextTab);
-    setDisputedOnly(nextDisputedOnly);
+  const place = (next: boolean) => {
+    setDisputedOnly(next);
     const hash = window.location.hash;
     if (!hash.startsWith('#/')) return;
-    window.history.replaceState(window.history.state, '', reconciliationHash(hash, { tab: nextTab, disputedOnly: nextDisputedOnly }));
+    window.history.replaceState(window.history.state, '', reconciliationHash(hash, next));
   };
-  return [tab, disputedOnly, place];
+  return [disputedOnly, place];
 }
 
 export function ReconciliationPage() {
   const names = usePartyNames();
-  const [tab, disputedOnly, place] = useReconciliationPlace();
+  const [disputedOnly, place] = useDisputedOnlyPlace();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs
-        value={tab}
-        onValueChange={(value) => place(value === 'supplier' ? 'supplier' : 'customer', disputedOnly)}
-        className="flex-1 flex flex-col overflow-hidden gap-0"
-      >
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="customer">客户对账单</TabsTrigger>
-          <TabsTrigger value="supplier">供应商账单</TabsTrigger>
-        </TabsList>
-        <TabsContent value="customer" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={(next) => place('customer', next)} />
-        </TabsContent>
-        <TabsContent value="supplier" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <SupplierBillReceptionsTable names={names} />
-        </TabsContent>
-      </Tabs>
+      <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={place} />
     </div>
   );
 }
