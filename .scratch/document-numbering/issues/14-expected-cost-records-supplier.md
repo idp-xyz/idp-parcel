@@ -64,3 +64,11 @@ Blocked by: 无（从票 [13](./13-supplier-bill-number-and-ranged-audit-outcome
 3. **推送方重生成**：ADR 索引（ADR-0358 一行与 ADR-0340、ADR-0200 注记）、AT 盘点总览计数（SA +2）、机制清点。
 4. **已有库上线**：迁移之后旧预期成本读作未记、匹配答未记，要对每个租户跑一次 `parcel-settlement-register expected-cost-supplier-backfill`；`demo_live` 这类有数据的库同此。
 5. **并 main**：票 11、13 进 main 后照通知 `git merge origin/main`。
+
+## 评审修订（2026-11-02，作者；评审钉 `082162615`，两轴阻断为零，非阻断三条都修，追加提交）
+
+1. `SupplierExpectedCosts.RecordExpectedCostSupplier` 头注去掉「全仓唯一改写预期成本行的一处」那句跨文件计数，改成不计数的理由：预期成本行按版本只增不改，这里只把一格从空写到有，成本本身不动，所以不另起一版。
+2. 管理台 `receptionAnswerText` 的供应商不符分支改用 `supplierName` 说那一版供应商的名称（登记表单传入的那只取不到名称时退回标识），测试改断言名称，另加一条退回标识。
+3. PC 库里存的供应商立不成往来单位标识时，PC 读口改报具名错误 `ports.ErrSupplierAgreementSupplierMalformed`（与读不动分开），结算的消费侧适配器把它同指称歧义一样译成 `ErrSupplierAgreementSupplierUntranslatable`：形成照旧上抛落 publish_failed、不重投；补记口把那一版记为 `AGREEMENT_SUPPLIER_UNTRANSLATABLE`、留空列出、退 2，其余照写，不再整笔回滚（ADR-0358 决定三「不能为它们挡住其余的补记」）。新用例：PC 真库 `TestAMalformedStoredSupplierIsReportedAsSuch`（库上 `btrim` 只削空格，制表符过得了检查却立不成标识）、适配器 `TestAMalformedStoredSupplierIsDeterministic`，补记口真库用例加一版存制表符供应商的协议、断言它留空列出而同租户补得上的那份照写。AT 盘点 `AT-SA-237` 行补这两条用例名。ADR-0358 的「译不过来」已涵盖这一种，正文不改。
+
+验证（修订后的 tip）：`go build ./...`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/settlementaccounting/... ./internal/partycommercial/... ./internal/architecture/... ./cmd/... ./migrations/...` 40 个包 ok、0 FAIL（含 PG），新用例 `-v` 抽查 PASS；前端 `npx tsc -b` 无输出、`pnpm test` 1127 pass / 0 fail、`npx vite build` 退 0。
