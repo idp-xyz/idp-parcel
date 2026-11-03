@@ -144,3 +144,25 @@ test('收款账户按币种与账号对应：修改、移除、新增各成一�
   equal(profileComparisonSummary(compareLegalEntityProfiles(a, revision({ bankAccounts: [cny] }))), '移除收款账户 · USD SYN-USD-01');
   deepEqual(changed(revision({}), revision({ bankAccounts: [] })), []);
 });
+
+// Covers（票 company-subject-ux/06 第 3 条）：主抬头语言一行、其他语言的抬头一种语言一行（语言是键、不分大小写）：
+// 抬头变了是修改、换了语言是一移除一新增；语言经常用表译名，译不出原样。
+test('多语言抬头按语言对应：主抬头语言与各语言的抬头各成一行', () => {
+  const a = revision({ invoicingRegistered: true, invoiceTitle: 'SYN', invoiceTitleLanguage: 'zh-Hans', invoiceTitles: [
+    { language: 'en', title: 'SYN Title' }, { language: 'ja', title: 'SYN JA' },
+  ] });
+  deepEqual(changed(a, revision({ ...a, invoiceTitles: [{ language: 'JA', title: 'SYN JA' }, { language: 'en', title: 'SYN Title' }] })), []);
+  const b = revision({ ...a, invoiceTitleLanguage: 'zh-Hant', invoiceTitles: [
+    { language: 'en', title: 'SYN Title v2' }, { language: 'fr-CA', title: 'SYN FR' },
+  ] });
+  deepEqual(
+    changed(a, b).map((row) => [row.field, row.kind, row.before, row.after]),
+    [
+      ['主抬头语言', 'modified', '简体中文（zh-Hans）', '繁体中文（zh-Hant）'],
+      ['其他语言的抬头 · 英语（en）', 'modified', 'SYN Title', 'SYN Title v2'],
+      ['其他语言的抬头 · 日语（ja）', 'removed', 'SYN JA', ''],
+      ['其他语言的抬头 · fr-CA', 'added', '', 'SYN FR'],
+    ],
+  );
+  deepEqual(changed(revision({}), revision({ invoiceTitles: [] })), []);
+});

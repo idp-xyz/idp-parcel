@@ -8,6 +8,7 @@ import type { RefdataNames } from '../refdata-names';
 import {
   bankAccountCurrencyOptions,
   contactPurposeLabels,
+  invoiceTitleLanguageOptions,
   profileTaxTypeOptions,
   type BankAccountDraft,
   type ContactDraft,
@@ -45,8 +46,12 @@ export function LegalEntityProfileFields({
   onLeave: (href: string) => void;
 }) {
   const platformListId = useId();
+  // 语言标签用 datalist 而不是选单：常用的四种一点即选，别的 BCP 47 标签照样能手填（ADR-0359 决定四只锁形状）。
+  const languageListId = useId();
   // 币种候选来自产品内置的基础数据目录；订阅是为了目录读回时把手填格换成选单。
   const refdataNames = useRefdataNames();
+  const setInvoiceTitle = (index: number, change: Partial<LegalEntityProfileDraft['invoiceTitles'][number]>) =>
+    patch({ invoiceTitles: draft.invoiceTitles.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const setContact = (index: number, change: Partial<ContactDraft>) =>
     patch({ contacts: draft.contacts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const setBankAccount = (index: number, change: Partial<BankAccountDraft>) =>
@@ -57,6 +62,9 @@ export function LegalEntityProfileFields({
     <>
       <datalist id={platformListId}>
         {['微信', '企业微信', 'WhatsApp', 'Telegram', 'LINE', 'QQ', 'LinkedIn', 'Skype'].map((platform) => <option key={platform} value={platform} />)}
+      </datalist>
+      <datalist id={languageListId}>
+        {invoiceTitleLanguageOptions.map((option) => <option key={option.value} value={option.value} label={option.label} />)}
       </datalist>
       <FormGroup title="代表人 / 负责人" description="按登记资料填写；与业务联系人分别管理。">
         <Field label="身份类型" path="profiles[0].representative" problems={problems}>
@@ -125,7 +133,7 @@ export function LegalEntityProfileFields({
           </div>
         ))}
       </FormGroup>
-      <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料。">
+      <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料；其他语言的抬头挂在它上面，哪种语言印到单据上由开单方按收件方定。">
         <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
           <Input
             aria-label="开票抬头"
@@ -134,6 +142,59 @@ export function LegalEntityProfileFields({
             onChange={(event) => patch({ invoiceTitle: event.target.value })}
           />
         </Field>
+        <Field label="主抬头语言" path="profiles[0].invoiceTitleLanguage" problems={problems}>
+          <Input
+            list={languageListId}
+            aria-label="主抬头语言"
+            placeholder="如 zh-Hans、en（选填）"
+            className="font-mono text-[13px]"
+            value={draft.invoiceTitleLanguage}
+            readOnly={locked}
+            onChange={(event) => patch({ invoiceTitleLanguage: event.target.value })}
+          />
+        </Field>
+        <div className="md:col-span-2 space-y-2">
+          <p className="text-[12px] font-medium text-idpxyz-text">其他语言的抬头 <span className="font-normal text-idpxyz-breadcrumb">（选填，一种语言一行）</span></p>
+          {draft.invoiceTitles.map((row, index) => (
+            <div key={index} className="space-y-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] items-start gap-2">
+                <Input
+                  list={languageListId}
+                  aria-label={`其他语言的抬头 ${index + 1} 语言`}
+                  placeholder="语言，如 en"
+                  className="font-mono text-[13px]"
+                  value={row.language}
+                  readOnly={locked}
+                  onChange={(event) => setInvoiceTitle(index, { language: event.target.value })}
+                />
+                <Input
+                  aria-label={`其他语言的抬头 ${index + 1} 抬头`}
+                  placeholder="该语言的抬头"
+                  value={row.title}
+                  readOnly={locked}
+                  onChange={(event) => setInvoiceTitle(index, { title: event.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  aria-label={`移除其他语言的抬头 ${index + 1}`}
+                  disabled={locked}
+                  onClick={() => patch({ invoiceTitles: draft.invoiceTitles.filter((_, at) => at !== index) })}
+                >
+                  移除
+                </Button>
+              </div>
+              <Problems lines={problems[`profiles[0].invoiceTitles[${index}]`]} />
+            </div>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={locked}
+            onClick={() => patch({ invoiceTitles: [...draft.invoiceTitles, { language: '', title: '' }] })}
+          >
+            添加其他语言的抬头
+          </Button>
+        </div>
         {/* 币种不在本表单：结算政策按公司主体、相对方与合同解析，这里只指路（票 company-subject-ux/04 第 7 项）。 */}
         <p className="md:col-span-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
           开票币种不在这里定：由「

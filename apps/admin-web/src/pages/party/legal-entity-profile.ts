@@ -15,6 +15,7 @@ import type {
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
+  LocalizedInvoiceTitleRecord,
   RegisteredAddressRecord,
   RegistrationNumberTypeRecord,
   TaxRegistrationNumberRecord,
@@ -72,6 +73,10 @@ export interface LegalEntityProfileDraft {
   taxNumbers: TaxNumberDraft[];
   /** 开票抬头；留空即这笔不带开票资料（键缺席）——空串服务端照样拒，不当缺席。 */
   invoiceTitle: string;
+  /** 主抬头的语言标签（BCP 47）；留空即不标。 */
+  invoiceTitleLanguage: string;
+  /** 其他语言的抬头逐行；整行空着不送。 */
+  invoiceTitles: LocalizedInvoiceTitleRecord[];
   /** 收款账户逐行；整行空着不送，填了一部分的行由缺项判读点名，不静默丢掉。 */
   bankAccounts: BankAccountDraft[];
   contacts: ContactDraft[];
@@ -91,6 +96,8 @@ export interface LegalEntityProfileItem {
   registeredAddress?: RegisteredAddressRecord;
   taxRegistrationNumbers?: TaxRegistrationNumberRecord[];
   invoiceTitle?: string;
+  invoiceTitleLanguage?: string;
+  invoiceTitles?: LocalizedInvoiceTitleRecord[];
   bankAccounts?: LegalEntityBankAccountRecord[];
   contacts?: LegalEntityContactRecord[];
   representative?: LegalEntityRepresentativeRecord;
@@ -112,6 +119,8 @@ export function emptyLegalEntityProfileDraft(legalEntityId: string): LegalEntity
     addressLines: '',
     taxNumbers: [],
     invoiceTitle: '',
+    invoiceTitleLanguage: '',
+    invoiceTitles: [],
     bankAccounts: [],
     contacts: [],
     representativeKind: '',
@@ -150,6 +159,12 @@ export function legalEntityProfilePayloadOf(
   if (taxes.length > 0) item.taxRegistrationNumbers = taxes;
   const title = draft.invoiceTitle.trim();
   if (title !== '') item.invoiceTitle = title;
+  const titleLanguage = draft.invoiceTitleLanguage.trim();
+  if (titleLanguage !== '') item.invoiceTitleLanguage = titleLanguage;
+  const titles = draft.invoiceTitles
+    .map((row) => ({ language: row.language.trim(), title: row.title.trim() }))
+    .filter((row) => row.language !== '' || row.title !== '');
+  if (titles.length > 0) item.invoiceTitles = titles;
   const accounts = draft.bankAccounts.flatMap((row) => {
     const account = bankAccountPayload(row);
     return account ? [account] : [];
@@ -238,6 +253,24 @@ export function legalEntityProfileLocalProblems(
   }
   if (Boolean(draft.representativeKind) !== Boolean(draft.representativeName.trim())) {
     problems['profiles[0].representative'] = ['身份类型与姓名需要成对填写'];
+  }
+  // 语言版本挂在主抬头上（ADR-0359 决定四）：主抬头空着时这两格无处可挂，服务端会拒；先在格下说清，免得人以为抬头
+  // 填在「其他语言」里也算。语言不重复（主抬头的语言也算、不分大小写）同样是服务端规则，这里只省一次往返。
+  const titleRows = draft.invoiceTitles.map((row) => ({ language: row.language.trim(), title: row.title.trim() }));
+  if (draft.invoiceTitle.trim() === '' && (draft.invoiceTitleLanguage.trim() !== '' || titleRows.some((row) => row.language || row.title))) {
+    problems['profiles[0].invoiceTitle'] = ['主抬头语言与其他语言的抬头要挂在开票抬头上：先填开票抬头，或清掉它们'];
+  }
+  const seenLanguages = new Set<string>();
+  if (draft.invoiceTitleLanguage.trim()) seenLanguages.add(draft.invoiceTitleLanguage.trim().toLowerCase());
+  for (const [index, row] of titleRows.entries()) {
+    const path = `profiles[0].invoiceTitles[${index}]`;
+    if (!row.language || !row.title) {
+      if (row.language || row.title) problems[path] = ['语言与抬头需要成对填写；不需要的行请移除'];
+      continue;
+    }
+    const key = row.language.toLowerCase();
+    if (seenLanguages.has(key)) problems[path] = ['此语言已经填写'];
+    seenLanguages.add(key);
   }
   // 同一版里（币种，账号）不得重复是服务端的规则（ADR-0359 决定三）；这里只在两行填成一样时先提一句，省一次往返。
   const seenAccounts = new Set<string>();
@@ -380,6 +413,22 @@ export function representativeLabel(kind: string): string {
 }
 
 /**
+ * 抬头语言的常用候选（BCP 47）：跨境单据常见的四种。别的标签可手填，是不是 BCP 47 的形状由服务端判、在不在注册表里
+ * 谁都不判（ADR-0359 决定四）。显示时经 languageTagLabel 译成「简体中文（zh-Hans）」，译不出原样显标签。
+ */
+export const invoiceTitleLanguageOptions: readonly { value: string; label: string }[] = [
+  { value: 'zh-Hans', label: '简体中文（zh-Hans）' },
+  { value: 'zh-Hant', label: '繁体中文（zh-Hant）' },
+  { value: 'en', label: '英语（en）' },
+  { value: 'ja', label: '日语（ja）' },
+];
+
+export function languageTagLabel(tag: string): string {
+  const key = tag.trim().toLowerCase();
+  return invoiceTitleLanguageOptions.find((option) => option.value.toLowerCase() === key)?.label ?? tag.trim();
+}
+
+/**
  * 收款账户一行折成载荷：各格去首尾空白，可缺的格空着即键缺席；整行空着交 undefined 不送。必填格空着照送空串——
  * 缺项判读（legalEntityProfileMissingFields）在送之前就会点名拦下，这里不替它判。
  */
@@ -475,6 +524,8 @@ export function profileComparisonContentOf(draft: LegalEntityProfileDraft, timeZ
     contacts: item.contacts ?? [],
   };
   if (item.invoiceTitle !== undefined) content.invoiceTitle = item.invoiceTitle;
+  if (item.invoiceTitleLanguage !== undefined) content.invoiceTitleLanguage = item.invoiceTitleLanguage;
+  if (item.invoiceTitles) content.invoiceTitles = item.invoiceTitles;
   if (item.bankAccounts) content.bankAccounts = item.bankAccounts;
   if (item.representative) content.representative = item.representative;
   if (item.officeAddress) content.officeAddress = item.officeAddress;
@@ -489,6 +540,8 @@ export function profileDraftContentOf(
   | 'addressCountry'
   | 'addressLines'
   | 'invoiceTitle'
+  | 'invoiceTitleLanguage'
+  | 'invoiceTitles'
   | 'taxNumbers'
   | 'bankAccounts'
   | 'contacts'
@@ -503,6 +556,8 @@ export function profileDraftContentOf(
     addressCountry: content.registeredAddress.country,
     addressLines: content.registeredAddress.lines.join('\n'),
     invoiceTitle: content.invoicingRegistered ? (content.invoiceTitle ?? '') : '',
+    invoiceTitleLanguage: content.invoicingRegistered ? (content.invoiceTitleLanguage ?? '') : '',
+    invoiceTitles: content.invoicingRegistered ? (content.invoiceTitles ?? []).map((row) => ({ ...row })) : [],
     taxNumbers: content.taxRegistrationNumbers.map((row) => ({ ...row })),
     bankAccounts: (content.bankAccounts ?? []).map((row) => ({
       label: row.label ?? '',

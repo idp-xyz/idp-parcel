@@ -9,7 +9,7 @@ import type {
 } from './api';
 import { countryLabel, currencyLabel } from '../refdata-names';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
-import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
+import { contactPurposeLabels, languageTagLabel, representativeLabel } from './legal-entity-profile';
 
 export type ProfileChangeKind = 'added' | 'modified' | 'removed' | 'unchanged';
 export interface ProfileFieldChange {
@@ -154,6 +154,18 @@ export function compareLegalEntityProfiles(
   add('tax-numbers', '税务与开票', '监管登记号（税务 / 海关）', tax(before), tax(after));
   add('invoicing', '税务与开票', '开票资料', before.invoicingRegistered ? '已登记' : '未登记', after.invoicingRegistered ? '已登记' : '未登记');
   add('invoice-title', '税务与开票', '开票抬头', before.invoiceTitle ?? '', after.invoiceTitle ?? '');
+  add('invoice-title-language', '税务与开票', '主抬头语言',
+    languageTagLabel(before.invoiceTitleLanguage ?? ''), languageTagLabel(after.invoiceTitleLanguage ?? ''));
+  // 其他语言的抬头一种语言一行，语言是键（服务端也按语言判重复、不分大小写）：换了语言是一移除一新增，抬头变了是修改。
+  const oldTitles = new Map((before.invoiceTitles ?? []).map((row) => [row.language.trim().toLowerCase(), row]));
+  const newTitles = new Map((after.invoiceTitles ?? []).map((row) => [row.language.trim().toLowerCase(), row]));
+  let titleSequence = 0;
+  for (const key of new Set([...oldTitles.keys(), ...newTitles.keys()])) {
+    const left = oldTitles.get(key);
+    const right = newTitles.get(key);
+    add(`invoice-titles-${++titleSequence}`, '税务与开票', `其他语言的抬头 · ${languageTagLabel((right ?? left)!.language)}`,
+      left?.title.trim() ?? '', right?.title.trim() ?? '');
+  }
 
   // 账户按旧版次序列、新加的排在后面：读的人先对旧版，再看多了什么。
   const oldAccounts = new Map((before.bankAccounts ?? []).map((account) => [bankAccountKey(account), account]));

@@ -3,7 +3,7 @@ import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as Profile
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
 import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, absentValueMark } from './LegalEntityProfileReadout';
-import { profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
+import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 export function LegalEntityProfileContent({
@@ -37,7 +37,34 @@ export function LegalEntityProfileContent({
       </ProfileGroup>
       <ProfileGroup title="税务与开票">
         <ProfileReadoutGrid>
-          <ProfileReadoutField label="开票抬头" value={content?.invoicingRegistered ? content.invoiceTitle : undefined} emphasized />
+          {/* 主抬头仍是「可开票」的判据，语言只是它的标注，所以跟在抬头后面弱化显，不另起一格。 */}
+          <ProfileReadoutField
+            label="开票抬头"
+            value={
+              content?.invoicingRegistered && content.invoiceTitle ? (
+                <>
+                  {content.invoiceTitle}
+                  {content.invoiceTitleLanguage ? (
+                    <span className="ml-1.5 text-[12px] font-normal text-idpxyz-breadcrumb">{languageTagLabel(content.invoiceTitleLanguage)}</span>
+                  ) : null}
+                </>
+              ) : undefined
+            }
+            emphasized
+          />
+          <ProfileReadoutField
+            label="其他语言的抬头"
+            value={
+              content?.invoicingRegistered && content.invoiceTitles?.length
+                ? content.invoiceTitles.map((row, index) => (
+                    <span key={`${row.language}-${index}`} className="block">
+                      <span className="text-[12px] text-idpxyz-breadcrumb">{languageTagLabel(row.language)}</span>{' '}
+                      {row.title}
+                    </span>
+                  ))
+                : undefined
+            }
+          />
           <ProfileReadoutField
             label="监管登记号（税务 / 海关）"
             value={

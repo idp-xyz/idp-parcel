@@ -6,6 +6,7 @@ import {
   addressText,
   bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
+  languageTagLabel,
   legalEntityProfileDraftBasedOn,
   legalEntityProfileLocalProblems,
   legalEntityProfileMissingFields,
@@ -448,4 +449,65 @@ test('收款账户：带入与再保存保全、缺项按格点名、重复先�
     { value: 'SYN', label: 'SYN' },
   ]);
   deepEqual(bankAccountCurrencyOptions({ countries: new Map(), currencies: new Map() }), []);
+});
+
+// Covers（票 company-subject-ux/06 第 3 条）：主抬头语言与其他语言的抬头带入再保存原样保全、留空缺席、整行空着不送；
+// 半填的行与重复的语言（含主抬头的语言、不分大小写）本地先提；主抬头空着时这两格无处可挂，在开票抬头格下说。
+test('多语言抬头：带入与再保存保全、半填与重复语言先提、没有主抬头时说清', () => {
+  const source = revision({
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    invoiceTitleLanguage: 'zh-Hans',
+    invoiceTitles: [{ language: 'en', title: 'SYN Title' }, { language: 'ja', title: 'SYN タイトル' }],
+  });
+  const content = profileDraftContentOf(source);
+  equal(content.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(content.invoiceTitles, source.invoiceTitles);
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  equal(payload.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(payload.invoiceTitles, source.invoiceTitles);
+  const compared = profileComparisonContentOf(draft(content), 'UTC');
+  equal(compared.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(compared.invoiceTitles, source.invoiceTitles);
+  content.invoiceTitles[0].title = 'SYN 改过';
+  equal(source.invoiceTitles![0].title, 'SYN Title');
+
+  const trimmed = legalEntityProfilePayloadOf(
+    draft({ invoiceTitle: 'SYN', invoiceTitleLanguage: ' ', invoiceTitles: [{ language: ' en ', title: ' SYN Title ' }, { language: '', title: ' ' }] }),
+    'UTC',
+  ).profiles[0];
+  equal('invoiceTitleLanguage' in trimmed, false);
+  deepEqual(trimmed.invoiceTitles, [{ language: 'en', title: 'SYN Title' }]);
+  const blank = legalEntityProfilePayloadOf(draft({}), 'UTC').profiles[0];
+  equal('invoiceTitleLanguage' in blank, false);
+  equal('invoiceTitles' in blank, false);
+  // 没有开票资料的旧版带入：两格空着，不从别处补。
+  const old = profileDraftContentOf(revision({ invoiceTitleLanguage: 'en', invoiceTitles: [{ language: 'ja', title: 'x' }] }));
+  equal(old.invoiceTitleLanguage, '');
+  deepEqual(old.invoiceTitles, []);
+
+  deepEqual(
+    legalEntityProfileLocalProblems(
+      draft({ invoiceTitle: 'SYN', invoiceTitleLanguage: 'zh-Hans', invoiceTitles: [
+        { language: 'en', title: '' }, { language: 'ZH-hans', title: 'SYN' }, { language: 'en', title: 'A' }, { language: 'EN', title: 'B' }, { language: '', title: '' },
+      ] }),
+      'UTC',
+    ),
+    {
+      'profiles[0].invoiceTitles[0]': ['语言与抬头需要成对填写；不需要的行请移除'],
+      'profiles[0].invoiceTitles[1]': ['此语言已经填写'],
+      'profiles[0].invoiceTitles[3]': ['此语言已经填写'],
+    },
+  );
+  deepEqual(
+    legalEntityProfileLocalProblems(draft({ invoiceTitle: ' ', invoiceTitles: [{ language: 'en', title: 'SYN' }] }), 'UTC'),
+    { 'profiles[0].invoiceTitle': ['主抬头语言与其他语言的抬头要挂在开票抬头上：先填开票抬头，或清掉它们'] },
+  );
+  deepEqual(legalEntityProfileLocalProblems(draft({ invoiceTitle: '', invoiceTitleLanguage: 'en' }), 'UTC')['profiles[0].invoiceTitle']?.length, 1);
+  deepEqual(legalEntityProfileLocalProblems(draft({ invoiceTitle: '', invoiceTitles: [{ language: '', title: '' }] }), 'UTC'), {});
+
+  equal(languageTagLabel('zh-Hans'), '简体中文（zh-Hans）');
+  equal(languageTagLabel(' EN '), '英语（en）');
+  equal(languageTagLabel('fr-CA'), 'fr-CA');
+  equal(languageTagLabel(''), '');
 });

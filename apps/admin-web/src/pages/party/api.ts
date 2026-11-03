@@ -428,6 +428,12 @@ export interface LegalEntityBankAccountRecord {
   note?: string;
 }
 
+/** 开票抬头的一个语言版本（ADR-0359 决定四）：language 是 BCP 47 语言标签（zh-Hans、en、zh-Hant），title 是该语言的抬头。 */
+export interface LocalizedInvoiceTitleRecord {
+  language: string;
+  title: string;
+}
+
 export interface LegalEntityProfileContent {
   revision: number;
   basis: string;
@@ -436,6 +442,9 @@ export interface LegalEntityProfileContent {
   taxRegistrationNumbers: TaxRegistrationNumberRecord[];
   invoicingRegistered: boolean;
   invoiceTitle?: string;
+  /** 主抬头的语言与其余语言的抬头都挂在主抬头上：没有主抬头就没有开票资料，「资料不全」的判据仍只看主抬头。 */
+  invoiceTitleLanguage?: string;
+  invoiceTitles?: LocalizedInvoiceTitleRecord[];
   contacts: LegalEntityContactRecord[];
   representative?: LegalEntityRepresentativeRecord;
   officeAddress?: RegisteredAddressRecord;
