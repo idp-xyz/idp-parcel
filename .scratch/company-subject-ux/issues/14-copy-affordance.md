@@ -1,7 +1,7 @@
 # 14 复制规则统一：号码类一键复制，文本类悬停复制图标，其余不复制
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 问「所有只读点击都自动复制科学吗」；协调方答不科学并给出三类规则，用户裁「需要」。
@@ -43,3 +43,4 @@ Blocked by: 无
   - 对象页共 39 个复制按钮，读屏名覆盖：编码、注册号、来源单据、三个地址、开票抬头、两个监管登记号、户名、开户行、账号、SWIFT、联系人姓名、电话、邮箱、微信 / 企业微信账号。
   - 列表行不复制 ✅：剪贴板先写哨兵，点列表行里的编码文字后仍是哨兵。
 - 未验：「已复制」反馈的出现时长只在 node:test（`copyNoteTimer`）里钉；暗色主题。
+- 进 main：main `18b391ed6` 上 `git merge --no-ff origin/claude-csux-14`，无冲突，三道门在 main 上退 0。没动共享面（复制件放在 `pages/party/copy-affordance.tsx`），不需评审。
