@@ -177,7 +177,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
         </thead>
         <tbody className="divide-y divide-idpxyz-border">
           {accounts.map((account, index) => (
-            <tr key={`${account.currency}-${account.accountNumber}-${index}`} className="align-top hover:bg-idpxyz-hover">
+            <tr key={`${account.currency}-${account.accountNumber}-${index}`} className="align-top">
               <th scope="row" className="py-2.5 pr-3 font-medium text-idpxyz-textBright">
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
                 {account.label ? <span className="block text-[13px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}

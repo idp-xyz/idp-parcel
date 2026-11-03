@@ -632,11 +632,11 @@ export function ListPageTemplate<Row>({
                       return (
                         <TableRow
                           key={key}
-                          className={
-                            [rowClass ?? '', inspected ? 'bg-idpxyz-accent/10 hover:bg-idpxyz-accent/15' : '']
-                              .filter((part) => part !== '')
-                              .join(' ') || undefined
-                          }
+                          // 原语 TableRow 自带悬停底色，这里压回透明：行只在选中（右栏在说它）时上底色，鼠标经过不变——
+                          // 与工作台列表同一条（用户 2026-11-03 裁定「完全去掉悬停」）。
+                          className={[rowClass ?? '', inspected ? 'bg-idpxyz-accent/10 hover:bg-idpxyz-accent/10' : 'hover:bg-transparent']
+                            .filter((part) => part !== '')
+                            .join(' ')}
                           data-inspected={inspected ? 'true' : undefined}
                           tabIndex={interaction.tabIndex}
                           onClick={onRowClick || inspector ? () => handleRowClick(row, key) : undefined}

@@ -307,12 +307,14 @@ export function WorkbenchPageTemplate<Row>({
                 aria-selected={selected}
                 onClick={() => onSelect(selected ? null : key)}
                 onKeyDown={(event) => onRowKeyDown(event, key)}
+                // 行只在选中时上底色，鼠标经过不变：浅色主题里悬停与选中两种底色几乎同一个浅蓝，划过的行看着像被选中了
+                // （用户 2026-11-03 裁定「完全去掉悬停」）。点哪行由指针形状与选中后的底色和左竖线交代。
                 className={`cursor-pointer border-b border-idpxyz-border transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
                   selected
                     ? 'bg-idpxyz-activeItem shadow-[inset_2px_0_0_0_var(--idpxyz-accent)]'
                     : attention
-                      ? 'bg-orange-500/5 hover:bg-orange-500/10'
-                      : 'hover:bg-idpxyz-hover'
+                      ? 'bg-orange-500/5'
+                      : ''
                 }`}
               >
                 {visibleColumns.map((column, index) => (

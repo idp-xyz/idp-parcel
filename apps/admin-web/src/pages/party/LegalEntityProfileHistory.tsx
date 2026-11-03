@@ -235,7 +235,7 @@ function RevisionDetails({
             <div className="max-h-[min(45vh,26rem)] overflow-auto rounded-md border border-idpxyz-border">
               <Table className="min-w-[34rem] text-left text-[12px]">
                 <TableHeader className="sticky top-0 z-10 bg-idpxyz-bg">
-                  <TableRow><TableHead>项目</TableHead><TableHead>上一版 · {profileRevisionLabel(baseline.revision)}</TableHead><TableHead>当前选择 · {profileRevisionLabel(selected.revision)}</TableHead></TableRow>
+                  <TableRow className="hover:bg-transparent"><TableHead>项目</TableHead><TableHead>上一版 · {profileRevisionLabel(baseline.revision)}</TableHead><TableHead>当前选择 · {profileRevisionLabel(selected.revision)}</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{fields.map((field) => <ChangeRow key={field.id} field={field} />)}</TableBody>
               </Table>
@@ -258,7 +258,7 @@ function RevisionDetails({
  */
 function ChangeRow({ field }: { field: ProfileFieldChange }) {
   return (
-    <TableRow>
+    <TableRow className="hover:bg-transparent">
       <TableCell className="min-w-28 align-top">
         <span className="block">{field.contactKey ? `${field.subject} · ${field.field}` : field.field}</span>
         {field.contactKey && field.detail ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{field.detail}</span> : null}
