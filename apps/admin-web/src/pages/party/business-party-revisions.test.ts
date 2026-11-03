@@ -63,13 +63,13 @@ test('描述逐笔列依据、生效自、名称，停用两件只在停用那�
   const items = businessPartyRevisionTimeline(chain, tagged);
   equal(
     items[0].description,
-    '依据 SYN-REG-BASIS-PARTY-RETIRED-01 · 生效自 [2026-01-02T00:00:00Z] · 名称 合成已停用参与方',
+    '来源单据 SYN-REG-BASIS-PARTY-RETIRED-01 · 生效自 [2026-01-02T00:00:00Z] · 名称 合成已停用参与方',
   );
   equal(/停用于/.test(items[0].description), false);
   equal(
     items[1].description,
-    '依据 SYN-REG-BASIS-PARTY-RETIRED-01-R2 · 生效自 [2026-01-02T00:00:00Z] · 名称 合成已停用参与方（更名）' +
-      ' · 停用于 [2026-06-01T00:00:00Z]（依据 SYN-DEACT-PARTY-01）',
+    '来源单据 SYN-REG-BASIS-PARTY-RETIRED-01-R2 · 生效自 [2026-01-02T00:00:00Z] · 名称 合成已停用参与方（更名）' +
+      ' · 停用于 [2026-06-01T00:00:00Z]（来源单据 SYN-DEACT-PARTY-01）',
   );
   deepEqual(
     items.map((item) => item.timestamp),

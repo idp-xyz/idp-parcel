@@ -17,7 +17,7 @@ test('固定表：签按统一顺序、词一一对应', () => {
   deepEqual([...workspaceTabOrder], ['summary', 'contacts', 'profile-versions', 'identity-revisions', 'timeline', 'related', 'exceptions', 'documents', 'audit']);
   deepEqual(
     workspaceTabOrder.map((id) => workspaceTabLabels[id]),
-    ['概要', '联系人', '资料版本', '身份修订', '时间线', '关联', '异常', '文档', '审计'],
+    ['概要', '联系人', '资料版本', '登记记录', '时间线', '关联', '异常', '文档', '审计'],
   );
 });
 
@@ -31,7 +31,7 @@ test('公司资料与身份各有历史页签，不挤进概要且不替换其�
     ['summary', '概要'],
     ['contacts', '联系人'],
     ['profile-versions', '资料版本'],
-    ['identity-revisions', '身份修订'],
+    ['identity-revisions', '登记记录'],
   ]);
   deepEqual(company[0].contents, ['current-profile']);
   equal(company[2].keepMounted, true);

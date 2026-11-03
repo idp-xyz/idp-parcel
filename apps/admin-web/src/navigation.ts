@@ -562,7 +562,7 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   // —— 设置 · 公司主体（party-commercial）——
   'group-legal-entities': {
     title: '公司主体',
-    summary: '我们自己用来签约、开票与结算的法人主体。',
+    summary: '我们自己签约、开票、结算用的公司。',
     owner: '参与方与商业（party-commercial）',
     source: 'docs/domain/party-commercial/CONTEXT.md 运营企业集团及其法人、经营组织和业务身份',
   },

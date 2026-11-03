@@ -25,7 +25,9 @@ export const workspaceTabLabels: Record<WorkspaceTabId, string> = {
   summary: '概要',
   contacts: '联系人',
   'profile-versions': '资料版本',
-  'identity-revisions': '身份修订',
+  // 身份登记的版本链在界面上叫「登记记录」（spec 公司主体 UX「统一用语」）：签名只说这是一串登记，
+  // 「身份」「修订」两个领域词留给 CONTEXT 与技术详情。
+  'identity-revisions': '登记记录',
   timeline: '时间线',
   related: '关联',
   exceptions: '异常',

@@ -3,7 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { LegalEntityContactRecord, LegalEntityProfileRevisionRecord } from './api';
 import { contactPurposeLabels } from './legal-entity-profile';
 import {
-  compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
+  compareLegalEntityProfiles, orderedProfileRevisions, profileAddressText, profileComparisonSummary,
   profileRevisionState, selectedProfileRevision,
 } from './legal-entity-profile-history';
 
@@ -103,6 +103,18 @@ test('地址开票独立比较，版本时间和依据元数据不混入资料�
   deepEqual(changed(a, b).map((row) => row.field), ['办公地址', '开票抬头']);
   equal(profileComparisonSummary(compareLegalEntityProfiles(a, { ...a, revision: 99, basis: 'NEW' })), '资料内容无变化');
   equal(profileComparisonSummary(), '首次登记');
+});
+
+// Covers: 对比表里的地址行在前、国家另起一行（译名表没读回时显码），不再把国家码当前缀；空行不占位；没有地址是空串，
+// 两版都没有不算变化、一版有一版没有按新增 / 移除。
+test('地址文本行在前国家另起一行，没有地址是空串', () => {
+  equal(profileAddressText({ country: 'CN', lines: ['合成市', '', '合成路 1 号'] }), '合成市 · 合成路 1 号\nCN');
+  equal(profileAddressText({ country: '', lines: ['合成市'] }), '合成市');
+  equal(profileAddressText(undefined), '');
+  const a = revision();
+  const b = revision({ officeAddress: { country: 'CN', lines: ['SYN 办公室'] } });
+  deepEqual(changed(a, b).map((row) => [row.field, row.kind, row.after]), [['办公地址', 'added', 'SYN 办公室\nCN']]);
+  equal(changed(a, revision()).length, 0);
 });
 
 test('完整资料快照数据保留主要联系人用途', () => {
