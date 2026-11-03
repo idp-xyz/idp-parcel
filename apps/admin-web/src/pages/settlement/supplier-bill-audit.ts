@@ -6,15 +6,18 @@
 // 浮点；服务端照样判范围、已匹配金额与上限，这里只拦人能当场改的错。
 
 import { documentNumberAbsenceNote, numberingCollisionNote } from '../../vocabulary/document-numbering';
+import { labelFor } from '../../vocabulary/status';
 
 /** 审核结果的三种字面（领域 AuditVerdict）。 */
 export type AuditVerdict = 'PASSED' | 'DISPUTED' | 'REJECTED';
 
-export const verdictLabels: Record<AuditVerdict, string> = {
-  PASSED: '通过',
-  DISPUTED: '争议',
-  REJECTED: '拒绝',
-};
+/** 审核结果的界面词所在的那本用语词典分册（vocabulary/status.ts 的 scopedStatusVocabulary）。 */
+export const auditVerdictScope = 'supplier-bill-audit';
+
+/** 审核结果的界面词，取用语词典那一本分册，不在页内另写一份。 */
+export function verdictLabel(verdict: AuditVerdict): string {
+  return labelFor(verdict, auditVerdictScope);
+}
 
 /** 一行上的一份审核决定，读口逐字给（GET /settlement-supplier-bill-lines 各行的 decisions）。 */
 export interface LineAuditDecision {
@@ -338,14 +341,19 @@ export function rangedAuditAnswerText(
   }
 }
 
-/** 接收口答「账单号冲突」时的那一句（ADR-0357 决定一）：号已标识另一份主张，或这份主张已以另一个号登记。 */
+/**
+ * 接收口答「账单号冲突」时的那一句（ADR-0357 决定一）：号已标识另一份主张，或这份主张已以另一个号登记——号相同而供应商不同也是
+ * 另一个号（号的分配方是供应商）。supplierName 把供应商编码说成名字，由调用方交进来。
+ */
 export function billNumberConflictText(
-  body: { registeredClaim?: string; registeredSupplierBillNumber?: string },
+  body: { registeredClaim?: string; registeredSupplierBillNumber?: string; registeredSupplier?: string },
   billNumber: string,
   claimLabel: (claim: string) => string = (claim) => claim,
+  supplierName: (supplier: string) => string = (supplier) => supplier,
 ): string {
   if (body.registeredSupplierBillNumber) {
-    return `没有登记：这份账单已经以账单号 ${body.registeredSupplierBillNumber} 登记过，账单号不能改；照来件核对账单号。`;
+    const owner = body.registeredSupplier ? `${supplierName(body.registeredSupplier)}的` : '';
+    return `没有登记：这份账单已经以${owner}账单号 ${body.registeredSupplierBillNumber} 登记过；同一份账单的新版本不能换账单号，也不能换供应商。照来件核对。`;
   }
   const registered = body.registeredClaim ? `（${claimLabel(body.registeredClaim)}）` : '';
   return `没有登记：这家供应商的账单号 ${billNumber.trim()} 已经登记过${registered}。去看已登记的那份；供应商更正后重发的，在那一份上以新版本登记。`;

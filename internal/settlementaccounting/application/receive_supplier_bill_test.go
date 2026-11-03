@@ -76,18 +76,22 @@ func (double *billStoreDouble) FindClaimBillNumber(
 	_ context.Context,
 	tenant domain.TenantID,
 	claim domain.BillClaimID,
-) (domain.SupplierBillNumber, bool, error) {
+) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error) {
 	if double.findErr != nil {
-		return domain.SupplierBillNumber{}, false, double.findErr
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, double.findErr
 	}
 	for key, holder := range double.numbers {
 		parts := strings.SplitN(key, "|", 3)
 		if parts[0] == tenant.String() && holder == claim {
+			supplier, err := domain.NewSupplierPartyReference(parts[1])
+			if err != nil {
+				return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, err
+			}
 			number, err := domain.NewSupplierBillNumber(parts[2])
-			return number, err == nil, err
+			return supplier, number, err == nil, err
 		}
 	}
-	return domain.SupplierBillNumber{}, false, nil
+	return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, nil
 }
 
 func billStoreKey(key ports.BillReceptionKey) string {

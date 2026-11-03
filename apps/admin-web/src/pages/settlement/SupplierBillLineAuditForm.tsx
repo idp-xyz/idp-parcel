@@ -16,7 +16,7 @@ import {
   rangedAuditPayloads,
   rangedAuditSettled,
   totalOf,
-  verdictLabels,
+  verdictLabel,
   type AuditDraftContext,
   type AuditRowDraft,
   type AuditVerdict,
@@ -54,6 +54,7 @@ export interface LineAuditTarget {
 export function SupplierBillLineAuditForm({
   target,
   context,
+  verdicts,
   currency,
   submit,
   onSettled,
@@ -62,6 +63,8 @@ export function SupplierBillLineAuditForm({
 }: {
   target: LineAuditTarget;
   context: AuditDraftContext;
+  /** 这个人能给的结果（按授予，再审只有通过与拒绝）；第一段不在其中时换成其中第一种。 */
+  verdicts: readonly AuditVerdict[];
   currency: string;
   submit: (payload: RangedAuditPayload) => Promise<ApiResult<RangedAuditAnswer>>;
   /** 至少一段记下了（或本来就有）：重读这张账单。 */
@@ -70,14 +73,16 @@ export function SupplierBillLineAuditForm({
   onDone: (answers: string[]) => void;
   onCancel: () => void;
 }) {
-  const [rows, setRows] = useState<AuditRowDraft[]>(() => [firstAuditRow(context, newId())]);
+  const [rows, setRows] = useState<AuditRowDraft[]>(() => {
+    const first = firstAuditRow(context, newId());
+    return [verdicts.includes(first.verdict) ? first : { ...first, verdict: verdicts[0] ?? first.verdict }];
+  });
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [answers, setAnswers] = useState<string[]>([]);
   const problems = auditDraftProblems(rows, context);
   const amounts = rows.map((row) => (/^[1-9]\d*$/.test(row.amount.trim()) ? BigInt(row.amount.trim()) : 0n));
   const laid = useMemo(() => (amounts.every((amount) => amount > 0n) ? layoutRanges(context.free, amounts) : null), [context.free, amounts.join(',')]);
-  const verdicts: AuditVerdict[] = context.resolving ? ['PASSED', 'REJECTED'] : ['PASSED', 'DISPUTED', 'REJECTED'];
   const available = totalOf(context.free);
 
   const setRow = (index: number, patch: Partial<AuditRowDraft>) =>
@@ -86,13 +91,14 @@ export function SupplierBillLineAuditForm({
   const addRow = () => {
     const used = amounts.reduce((sum, amount) => sum + amount, 0n);
     const rest = available > used ? available - used : 0n;
-    setRows((current) => [...current, { verdict: context.resolving ? 'REJECTED' : 'DISPUTED', amount: rest > 0n ? String(rest) : '', basis: '', decision: newId() }]);
+    const next: AuditVerdict = context.resolving ? 'REJECTED' : verdicts.includes('DISPUTED') ? 'DISPUTED' : verdicts[verdicts.length - 1];
+    setRows((current) => [...current, { verdict: next, amount: rest > 0n ? String(rest) : '', basis: '', decision: newId() }]);
   };
 
   const segmentOf = (index: number) => {
     const range = laid?.[index];
     const amount = rows[index]?.amount.trim();
-    return `第 ${target.line} 行${amount ? ` ${formatMoney(amount, currency)}` : ''}${range ? `（区间 ${range.from}–${range.to}）` : ''}的${verdictLabels[rows[index].verdict]}：`;
+    return `第 ${target.line} 行${amount ? ` ${formatMoney(amount, currency)}` : ''}${range ? `（区间 ${range.from}–${range.to}）` : ''}的${verdictLabel(rows[index].verdict)}：`;
   };
 
   const onSubmit = async () => {
@@ -154,7 +160,7 @@ export function SupplierBillLineAuditForm({
               <select className={fieldClass} value={row.verdict} onChange={(event) => setRow(index, { verdict: event.target.value as AuditVerdict })}>
                 {verdicts.map((verdict) => (
                   <option key={verdict} value={verdict}>
-                    {verdictLabels[verdict]}
+                    {verdictLabel(verdict)}
                   </option>
                 ))}
               </select>

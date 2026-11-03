@@ -3,7 +3,9 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 var (
@@ -52,11 +54,23 @@ func NewBillClaimID(value string) (BillClaimID, error) {
 // SupplierBillNumber 是供应商给账单编的号：这份主张的外部标识（GLOSSARY「外部标识」），分配方是主张的供应商，被标识对象是主张
 // 身份而不是某一版，适用范围是这家供应商自己的账单号（ADR-0357 决定一）。它不是主张身份，也不是本系统分配的单据号——幂等仍按
 // 主张身份，「同一供应商同号只标识一份主张」由接收编排与账单号册判。
+//
+// 逐字保存：首尾带空白或含控制字符的不收，大小写不折算。查重是逐字比的，悄悄去掉一个空格或折一次大小写，就把一个外部分配的号
+// 改成了另一个；拒收让送号的一方看得见（ADR-0357 决定一）。
 type SupplierBillNumber struct{ requiredValue }
+
+// ErrMalformedSupplierBillNumber 说明账单号首尾带空白或含控制字符。
+var ErrMalformedSupplierBillNumber = errors.New("settlement accounting: a supplier bill number is kept verbatim and must not carry edge spaces or control characters")
 
 func NewSupplierBillNumber(value string) (SupplierBillNumber, error) {
 	required, err := newRequiredValue("supplier bill number", value)
-	return SupplierBillNumber{required}, err
+	if err != nil {
+		return SupplierBillNumber{}, err
+	}
+	if strings.TrimSpace(value) != value || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return SupplierBillNumber{}, fmt.Errorf("%w: %q", ErrMalformedSupplierBillNumber, value)
+	}
+	return SupplierBillNumber{required}, nil
 }
 
 // BillClaimVersion 是主张的版本：同一身份内容变化形成版本冲突，不按最后到达覆盖。

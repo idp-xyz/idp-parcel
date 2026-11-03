@@ -263,3 +263,23 @@ func TestAnAuditDecisionRehydratesOnlyWhenItsShapeHolds(t *testing.T) {
 		t.Fatalf("解争议的争议 error = %v", err)
 	}
 }
+
+// Covers: `AT-SA-233`（领域半边，ADR-0357 决定一）——供应商账单号逐字保存：首尾空白与控制字符拒收，大小写照收、互不相同。
+func TestASupplierBillNumberIsKeptVerbatim(t *testing.T) {
+	for _, raw := range []string{"INV-9 ", " INV-9", "INV-9\n", "INV\t9", "INV-\a9", "INV-9　"} {
+		if _, err := domain.NewSupplierBillNumber(raw); !errors.Is(err, domain.ErrMalformedSupplierBillNumber) {
+			t.Fatalf("%q 应拒，实得 %v", raw, err)
+		}
+	}
+	upper, err := domain.NewSupplierBillNumber("INV-9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lower, err := domain.NewSupplierBillNumber("inv-9")
+	if err != nil || lower == upper {
+		t.Fatalf("大小写不折算：%v %v %v", upper, lower, err)
+	}
+	if _, err := domain.NewSupplierBillNumber("INV 2610 001"); err != nil {
+		t.Fatalf("中间的空格是号的一部分：%v", err)
+	}
+}

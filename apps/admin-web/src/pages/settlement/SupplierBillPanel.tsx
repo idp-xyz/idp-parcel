@@ -3,9 +3,9 @@ import { Button } from '@idpxyz/ui-primitives';
 import { feedbackFor } from '../../components/action-feedback';
 import { StatusPill } from '../../components/StatusPill';
 import { statusToneBanner } from '../../components/status-tone';
-import { labelFor, type StatusTone } from '../../vocabulary/status';
+import { labelFor, toneFor } from '../../vocabulary/status';
 import { formatInstant } from '../moment';
-import { hiddenDecisionHint, supplierBillAuditDecision } from '../operator-grants';
+import { hiddenDecisionHint, supplierBillAuditDecision, supplierBillDisputeDecision } from '../operator-grants';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { ExceptionDetailPanel } from '../visibility/ExceptionDetailPanel';
 import {
@@ -20,7 +20,16 @@ import {
 import { formatMoney, technicalRows } from './ops-ui';
 import { namedRef, type PartyNames } from './party-names';
 import { SupplierBillLineAuditForm, type LineAuditTarget } from './SupplierBillLineAuditForm';
-import { openDisputes, passHeadroom, totalOf, undecidedRanges, verdictLabels, type AuditDraftContext } from './supplier-bill-audit';
+import {
+  auditVerdictScope,
+  openDisputes,
+  passHeadroom,
+  totalOf,
+  undecidedRanges,
+  verdictLabel,
+  type AuditDraftContext,
+  type AuditVerdict,
+} from './supplier-bill-audit';
 import {
   billLabel,
   billNumberOf,
@@ -47,12 +56,6 @@ function varianceWords(variance: string | undefined, currency: string): string {
   return variance.startsWith('-') ? `，账单少收 ${formatMoney(variance.slice(1), currency)}` : `，账单多收 ${formatMoney(variance, currency)}`;
 }
 
-const verdictTone: Record<SupplierBillLineDecisionRecord['verdict'], StatusTone> = {
-  PASSED: 'good',
-  DISPUTED: 'warn',
-  REJECTED: 'muted',
-};
-
 /** 一行的和那一句：只说不为零的几样。 */
 function tallyWords(line: SupplierBillLineRecord, currency: string): string {
   const parts: string[] = [];
@@ -75,7 +78,11 @@ function DecisionRow({
   const note = decision.payable ? payableNumberAbsenceNote(decision.payable) : undefined;
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
-      <StatusPill label={decision.resolvesDispute ? `再审${verdictLabels[decision.verdict]}` : verdictLabels[decision.verdict]} tone={verdictTone[decision.verdict]} />
+      {decision.resolvesDispute ? (
+        <StatusPill label={`再审${verdictLabel(decision.verdict)}`} tone={toneFor(decision.verdict, auditVerdictScope)} />
+      ) : (
+        <StatusPill code={decision.verdict} scope={auditVerdictScope} />
+      )}
       <span className="font-semibold text-idpxyz-textBright">{formatMoney(decision.amount, currency)}</span>
       <span className="text-[11px] text-idpxyz-breadcrumb">
         区间 {decision.rangeFrom}–{decision.rangeTo} · {formatInstant(decision.auditedAt)} 由 {operatorWords(decision.operationEvidence)} 审
@@ -100,20 +107,35 @@ function DecisionRow({
   );
 }
 
+/** 这个人此刻持哪几种审核授予（不知道就当持有，ADR-0315）。 */
+interface AuditGrants {
+  audit: boolean;
+  dispute: boolean;
+}
+
+/** 直接审这一行时能给的结果：通过与拒绝要审核应付授予，争议要争议决定授予（ADR-0357 决定二）。 */
+function allowedVerdicts(grants: AuditGrants): AuditVerdict[] {
+  const verdicts: AuditVerdict[] = [];
+  if (grants.audit) verdicts.push('PASSED');
+  if (grants.dispute) verdicts.push('DISPUTED');
+  if (grants.audit) verdicts.push('REJECTED');
+  return verdicts;
+}
+
 /** 这一行上正开着的那张表单：直接审，或对某一段争议再审。 */
 type OpenForm = { kind: 'audit' } | { kind: 'reaudit'; dispute: string };
 
 function LineCard({
   row,
   line,
-  mayAudit,
+  grants,
   submit,
   onSettled,
   onShowPayable,
 }: {
   row: SupplierBillReceptionRecord;
   line: SupplierBillLineRecord;
-  mayAudit: boolean;
+  grants: AuditGrants;
   submit: (payload: Parameters<typeof auditSupplierBillLine>[0]) => ReturnType<typeof auditSupplierBillLine>;
   onSettled: () => void;
   onShowPayable: (number: string) => void;
@@ -176,14 +198,14 @@ function LineCard({
           {answer}
         </p>
       ))}
-      {mayAudit && form === null ? (
+      {(grants.audit || grants.dispute) && form === null ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {disposition.auditable ? (
             <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => openForm({ kind: 'audit' })}>
               审核这一行
             </Button>
           ) : null}
-          {disputes.map((entry) => (
+          {(grants.audit && grants.dispute ? disputes : []).map((entry) => (
             <Button
               key={entry.dispute.decision}
               type="button"
@@ -197,11 +219,12 @@ function LineCard({
           ))}
         </div>
       ) : null}
-      {mayAudit && form !== null && context !== null ? (
+      {form !== null && context !== null ? (
         <SupplierBillLineAuditForm
           key={form.kind === 'reaudit' ? form.dispute : 'audit'}
           target={target}
           context={context}
+          verdicts={form.kind === 'reaudit' ? ['PASSED', 'REJECTED'] : allowedVerdicts(grants)}
           currency={currency}
           submit={submit}
           onSettled={onSettled}
@@ -231,7 +254,10 @@ export function SupplierBillPanel({
   onAudited: () => void;
   onShowPayable: (number: string) => void;
 }) {
-  const mayAudit = useMayMakeDecision(supplierBillAuditDecision);
+  const grants: AuditGrants = {
+    audit: useMayMakeDecision(supplierBillAuditDecision),
+    dispute: useMayMakeDecision(supplierBillDisputeDecision),
+  };
   const [reload, setReload] = useState(0);
   const [lines, setLines] = useState<ApiResult<SupplierBillLinesResponseBody> | null>(null);
 
@@ -287,7 +313,7 @@ export function SupplierBillPanel({
         { label: '供应商编码', value: row.supplier },
         { label: '公司主体编码', value: row.legalEntity },
         { label: '被追加的主张', value: row.supplementsClaim },
-        { label: '接收时审核授权', value: row.auditAuthorityConfigured ? '已配置' : '未配置' },
+        { label: '接收时审核授权', value: labelFor(row.auditAuthorityConfigured ? 'CONFIGURED' : 'NOT_CONFIGURED') },
         { label: '接收操作证据', value: row.operationEvidence },
         { label: '登记时间', value: formatInstant(row.recordedAt) },
       ])}
@@ -314,7 +340,7 @@ export function SupplierBillPanel({
                 key={line.line}
                 row={row}
                 line={line}
-                mayAudit={mayAudit}
+                grants={grants}
                 submit={auditSupplierBillLine}
                 onSettled={onSettled}
                 onShowPayable={onShowPayable}
@@ -325,14 +351,15 @@ export function SupplierBillPanel({
       </section>
       <section className="space-y-1.5">
         <h3 className="text-[12px] font-bold text-idpxyz-textBright">审核这张账单</h3>
-        {mayAudit ? (
+        {grants.audit || grants.dispute ? (
           <p>
             逐行审核，一行可以拆成几段分别给通过、争议或拒绝：通过的那一段形成审核应付、交回{payableNumberName}，一行通过的不超过它能通过的
             金额；对不上的那部分记争议或拒绝，争议核实后在这一行再审。拒绝了的那一段这份账单上不再审，供应商要再收得另开追加账单。
           </p>
-        ) : (
-          <p>{hiddenDecisionHint('审核', labelFor(supplierBillAuditDecision))}</p>
-        )}
+        ) : null}
+        {/* 通过与拒绝认审核应付授予，挂争议与再审认争议决定授予，再审两种都要（ADR-0357 决定二）：缺哪种就说哪种收起了。 */}
+        {!grants.audit ? <p>{hiddenDecisionHint('通过与拒绝', labelFor(supplierBillAuditDecision))}</p> : null}
+        {!grants.dispute ? <p>{hiddenDecisionHint('记争议与再审', labelFor(supplierBillDisputeDecision))}</p> : null}
       </section>
     </ExceptionDetailPanel>
   );

@@ -265,6 +265,23 @@ export function listSettlementStatements<Registry extends StatementRegistry>(
 }
 
 /**
+ * 账单册的精确检索（读口的 claim、supplier、supplierBillNumber 三维，逐字比，在全册里找）：登记表单找页外更早的原账单、新登的账单
+ * 不在页上时右栏读回它，都用它——只在取回的那一页里筛，册一超过一页就会静默找不到。账单号只认服务端的账单号册：票 11 期间
+ * 「供应商/账单号」形的旧主张没进册，要按主张身份找。
+ */
+export function findSupplierBillReceptions(filter: {
+  claim?: string;
+  supplier?: string;
+  supplierBillNumber?: string;
+}): Promise<ApiResult<SupplierBillReceptionListResponseBody>> {
+  const params = new URLSearchParams({ registry: 'supplier-bill-reception' });
+  if (filter.claim) params.set('claim', filter.claim);
+  if (filter.supplier) params.set('supplier', filter.supplier);
+  if (filter.supplierBillNumber) params.set('supplierBillNumber', filter.supplierBillNumber);
+  return exchangeMasterData<SupplierBillReceptionListResponseBody>(`/settlement-statements?${params.toString()}`);
+}
+
+/**
  * 挂着未了结争议的客户对账单：至少挂着一项还没有终局结果（未处理或待复核）的争议的单。disputedCount 是全部张数，不受页大小截断；
  * statements 是其中一页，行形与对账单册同一份。何为未了结、为何不数相对方待确认，以 internal/settlementaccounting/ports
  * 的 DisputedCustomerStatements 为准，此处只做镜像。
@@ -686,7 +703,7 @@ export interface AuditedPayableListResponseBody {
 
 /**
  * 审核应付册。documentNumber 给了就按应付单号精确检索：服务端在全册里筛，页外的那一笔也找得到（ADR-0355 决定十一「可按单据号
- * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收 claim / supplier 两维，本页不用。
+ * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收按主张与按供应商的检索，本页不用。
  */
 export function listAuditedPayables(filter: { documentNumber?: string } = {}): Promise<ApiResult<AuditedPayableListResponseBody>> {
   const number = filter.documentNumber?.trim();
@@ -721,9 +738,10 @@ export interface SupplierBillReceptionResponseBody {
   notCurrent?: { line: string; version: string; withdrawn: boolean; successor?: string };
   /** 只在 EXPECTED_COST_SUPPLIER_MISMATCH 与 EXPECTED_COST_SUPPLIER_UNRECORDED 时出现；不符时带那一版记下的供应商（ADR-0358 决定二）。 */
   expectedCostSupplier?: { line: string; version: string; supplier?: string };
-  /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号。 */
+  /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号（连同它的分配方，即供应商）。 */
   registeredClaim?: string;
   registeredSupplierBillNumber?: string;
+  registeredSupplier?: string;
 }
 
 export function receiveSupplierBill(payload: SupplierBillReceptionPayload): Promise<ApiResult<SupplierBillReceptionResponseBody>> {

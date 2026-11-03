@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import { deepEqual, equal, match, ok } from 'node:assert/strict';
 import {
+  billKey,
   billLabel,
   billNumberOf,
   billProgress,
   claimIdForBill,
+  claimOfBillKey,
   classificationChoices,
   currentExpectedCosts,
   differingClassificationWords,
@@ -243,6 +245,10 @@ test('接收答复说人话：受理、审核人未配置、重复、版本冲�
     '没有登记：第 2 行选的预期成本 V1 已经被更正过（现在是 V2），改选当前那一版再登记。',
   );
   match(receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredClaim: 'BILL-OLD' }, 'INV-1'), /账单号 INV-1 已经登记过/);
+  match(
+    receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredSupplierBillNumber: 'INV-1', registeredSupplier: 'SUP-A' }, 'INV-1', () => '甲公司'),
+    /以甲公司的账单号 INV-1 登记过/,
+  );
 });
 
 test('接收答复说人话：选了别家供应商的预期成本、选了没记供应商的预期成本（ADR-0358）', () => {
@@ -302,4 +308,9 @@ test('应付签的检索池：页上那些加上按应付单号在全册里检�
     withExactHits(page, [payable('P-1', 'AP-202611-00002')]).map((row) => row.payable),
     ['P-1', 'P-2'],
   );
+});
+
+test('选中的账单不在页上时按主张读回：从 billKey 取回主张身份，主张标识里带斜杠也取得对', () => {
+  const key = billKey({ claim: 'SYN-PARTY-1/INV/2610-001', claimVersion: '2' });
+  equal(claimOfBillKey(key), 'SYN-PARTY-1/INV/2610-001');
 });

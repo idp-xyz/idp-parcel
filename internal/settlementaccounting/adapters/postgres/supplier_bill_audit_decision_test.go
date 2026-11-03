@@ -252,7 +252,8 @@ func TestTheAuditDecisionRegisterGuardsRangesInTheDatabase(t *testing.T) {
 }
 
 // Covers: `AT-SA-233`（真库半边）——账单号随接收写进账单号册，主张读回带号（不论哪一版带来）；两笔并发接收同一供应商同一号、不同主张：
-// 一笔接收、另一笔答账单号冲突，册上只有一份主张；另一家供应商同号照常；没排队的写者撞号交回错误、接收行不落。
+// 一笔接收、另一笔答账单号冲突，册上只有一份主张；新版本换了供应商而号不变答账单号冲突；另一家供应商同号照常；没排队的写者撞号
+// 交回错误、接收行不落。
 func TestASupplierBillNumberIsRegisteredOncePerSupplier(t *testing.T) {
 	stack := newNumberingStack(t)
 	ctx := t.Context()
@@ -320,6 +321,13 @@ func TestASupplierBillNumberIsRegisteredOncePerSupplier(t *testing.T) {
 		TenantID: saTenant(t, "tenant-1"), Claim: saValue(t, domain.NewBillClaimID, winner), Version: saValue(t, domain.NewBillClaimVersion, "v2")})
 	if number, has := found.Claim.BillNumber(); err != nil || !present || !has || number.String() != "INV-001" {
 		t.Fatalf("v2 读回的号 = %v %v（号标识主张，不论哪一版带来）", number, has)
+	}
+	// 同一份主张的新版本换了供应商、号不变：（另一家供应商，同一个号）是另一个外部标识，答账单号冲突、带出已登记的号与分配方，
+	// 不再落成号册上的一致性错误（未形成答案）。
+	outcome, switched := receive(command(winner, "v3", "supplier-2", "INV-001"))
+	if conflict, _ := switched.NumberConflict(); outcome != "SUPPLIER_BILL_NUMBER_CONFLICT" || conflict.RegisteredNumber.String() != "INV-001" ||
+		conflict.RegisteredSupplier.String() != "supplier-1" {
+		t.Fatalf("换供应商的新版本 = %s %+v", outcome, conflict)
 	}
 	if outcome, _ := receive(command("claim-c", "v1", "supplier-2", "INV-001")); outcome != "BILL_RECEIVED" {
 		t.Fatalf("另一家供应商同号 = %s", outcome)

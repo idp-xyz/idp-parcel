@@ -167,3 +167,77 @@ func TestTheSupplierBillAuditIntakeTranslatesRangedDecisions(t *testing.T) {
 		t.Fatalf("直接通过不带依据也收：%+v", last)
 	}
 }
+
+// Covers: AT-SA-234、AT-SA-235（Intake 半边，ADR-0357 决定二）——审核口按载荷要的授予认证：争议只认争议决定，通过与拒绝只认审核应付，
+// 再审两种都认，只点名应付标识的旧形认审核应付；读不出的请求体照旧先认证、再答 400，没有授予的人先答未授予。
+func TestTheSupplierBillAuditIntakeAsksTheGrantsTheVerdictNeeds(t *testing.T) {
+	const prefix = `{"claim":"SYN-BILL-1","version":"v1","line":"L1",`
+	cases := []struct {
+		name string
+		body string
+		want []settlementhttp.OperatorDecision
+	}{
+		{"dispute", prefix + `"decision":"A1","verdict":"DISPUTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillDisputeDecision}},
+		{"pass", prefix + `"decision":"A2","verdict":"PASSED","rangeFrom":"0","rangeTo":"10"}`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
+		{"reject", prefix + `"decision":"A3","verdict":"REJECTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
+		{"re-audit pass", prefix + `"decision":"A4","verdict":"PASSED","rangeFrom":"0","rangeTo":"10","basis":"b","resolvesDispute":"A1"}`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillDisputeDecision, settlementhttp.OperatorDecisionSupplierBillAudit}},
+		{"legacy", prefix + `"payable":"P1"}`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
+		{"unreadable", `{"claim":`,
+			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var asked []settlementhttp.OperatorDecision
+			endpoint := settlementhttp.NewAuditSupplierBillEndpoint(operatorDecisionIntakeForTest(t, decisionAuthenticator{asked: &asked}), &capturingAuditor{})
+			endpoint.ServeHTTP(httptest.NewRecorder(), decisionRequest(testCase.body))
+			if len(asked) != len(testCase.want) {
+				t.Fatalf("认证 %v，want %v", asked, testCase.want)
+			}
+			for index := range asked {
+				if asked[index] != testCase.want[index] {
+					t.Fatalf("认证 %v，want %v", asked, testCase.want)
+				}
+			}
+		})
+	}
+
+	denied := httptest.NewRecorder()
+	auditor := &capturingAuditor{}
+	settlementhttp.NewAuditSupplierBillEndpoint(operatorDecisionIntakeForTest(t, decisionAuthenticator{err: settlementhttp.ErrOperatorNotGranted}), auditor).
+		ServeHTTP(denied, decisionRequest(`{"claim":`))
+	if denied.Code != http.StatusForbidden || len(auditor.calls) != 0 {
+		t.Fatalf("没有授予又读不出的请求 = %d，要先答未授予", denied.Code)
+	}
+}
+
+// Covers: AT-SA-233（Intake 半边，ADR-0357 决定一）——账单号逐字收：首尾带空白或含控制字符答 400、不进编排；大小写照收不折算。
+func TestTheSupplierBillReceptionIntakeTakesTheBillNumberVerbatim(t *testing.T) {
+	receiver := &capturingReceiver{}
+	endpoint := settlementhttp.NewReceiveSupplierBillEndpoint(operatorDecisionIntakeForTest(t, decisionAuthenticator{asked: new([]settlementhttp.OperatorDecision)}), receiver)
+	withNumber := func(number string) string {
+		return strings.Replace(receptionBody, `"supplier":"SYN-CARRIER-1",`, `"supplier":"SYN-CARRIER-1","supplierBillNumber":`+number+`,`, 1)
+	}
+	for name, number := range map[string]string{
+		"trailing space":  `"INV-9 "`,
+		"leading space":   `" INV-9"`,
+		"tab inside":      `"INV\t9"`,
+		"newline at end":  `"INV-9\n"`,
+		"control char":    `"INV-\u00079"`,
+		"full-width tail": `"INV-9　"`,
+	} {
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, decisionRequest(withNumber(number)))
+		if response.Code != http.StatusBadRequest || len(receiver.calls) != 0 {
+			t.Fatalf("%s = %d，进了编排 %v", name, response.Code, len(receiver.calls) != 0)
+		}
+	}
+	endpoint.ServeHTTP(httptest.NewRecorder(), decisionRequest(withNumber(`"inv-9"`)))
+	if len(receiver.calls) != 1 || receiver.calls[0].Claim.BillNumber.String() != "inv-9" {
+		t.Fatalf("小写照收不折算：%+v", receiver.calls)
+	}
+}

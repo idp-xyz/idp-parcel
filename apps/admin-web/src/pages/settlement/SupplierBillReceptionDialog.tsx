@@ -17,6 +17,7 @@ import { formatInstant } from '../moment';
 import { listBusinessParties, type BusinessPartyRecord } from '../party/api';
 import { listCurrencies, type CurrencyRecord } from '../reference-data/api';
 import {
+  findSupplierBillReceptions,
   listSettlementCharges,
   receiveSupplierBill,
   type ApiResult,
@@ -139,7 +140,36 @@ function ReceptionForm({
     [catalogues.costs, draft.currency, draft.supplier],
   );
   const unrecorded = useMemo(() => unrecordedSupplierCount(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
-  const supplementOptions = bills.filter((bill) => bill.supplier === draft.supplier);
+  // 被追加的原账单：页上这家供应商的那几份，加上按账单号在全册里找到的页外那几份（同一份只留一个）。页只列最近收到的，更早的
+  // 原账单不在上面，靠下面那一格去找（findSupplierBillReceptions）。
+  const [found, setFound] = useState<SupplierBillReceptionRecord[]>([]);
+  const [lookup, setLookup] = useState('');
+  const [lookupNote, setLookupNote] = useState<string | null>(null);
+  const supplementOptions = [...bills, ...found]
+    .filter((bill) => bill.supplier === draft.supplier)
+    .filter((bill, index, all) => all.findIndex((other) => other.claim === bill.claim) === index);
+  const supplierName = (id: string) => catalogues.parties.find((party) => party.partyId === id)?.partyName ?? id;
+  const findOriginal = async () => {
+    const number = lookup.trim();
+    if (draft.supplier === '' || number === '') return;
+    // 先按账单号册找；票 11 期间录的旧主张没进账单号册，再按「供应商/账单号」形的主张标识找一次。
+    let result = await findSupplierBillReceptions({ supplier: draft.supplier, supplierBillNumber: number });
+    if (result.kind === 'outcome' && result.body.receptions.length === 0) {
+      result = await findSupplierBillReceptions({ supplier: draft.supplier, claim: `${draft.supplier}/${number}` });
+    }
+    if (result.kind !== 'outcome') {
+      setLookupNote(`没有找出来：${feedbackFor(result, '检索').text}`);
+      return;
+    }
+    const hits = result.body.receptions;
+    setFound((current) => [...current, ...hits]);
+    if (hits.length > 0) {
+      set('supplementsClaim', hits[0].claim);
+      setLookupNote(`找到了，已选上账单 ${billLabel(hits[0])}（${hits[0].period}）。`);
+    } else {
+      setLookupNote(`这家供应商没有账单号是 ${number} 的账单。账单号逐字比，区分大小写。`);
+    }
+  };
   const fullDraft: ReceptionDraft = { ...draft, receivedAt: localInputToInstant(draft.receivedLocal) };
   const problems = receptionProblems(fullDraft, costsByVersion);
   const blocked = hasReceptionProblems(problems);
@@ -184,7 +214,7 @@ function ReceptionForm({
     answer === null
       ? null
       : answer.result.kind === 'outcome'
-        ? receptionAnswerText(answer.result.body, answer.billNumber)
+        ? receptionAnswerText(answer.result.body, answer.billNumber, supplierName)
         : feedbackFor(answer.result, '登记').text;
 
   if (settled) {
@@ -291,6 +321,22 @@ function ReceptionForm({
               </option>
             ))}
           </select>
+          <span className="mt-1 flex items-center gap-1.5">
+            <input
+              className={`${fieldClass} font-mono`}
+              value={lookup}
+              placeholder="列表只有最近收到的；更早的原账单按账单号找"
+              disabled={draft.supplier === ''}
+              onChange={(event) => {
+                setLookup(event.target.value);
+                setLookupNote(null);
+              }}
+            />
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-[12px]" disabled={draft.supplier === '' || lookup.trim() === ''} onClick={() => void findOriginal()}>
+              找原账单
+            </Button>
+          </span>
+          {lookupNote ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{lookupNote}</span> : null}
         </Field>
       </div>
 

@@ -20,8 +20,9 @@ type stubStatementCatalogue struct {
 	receptions []ports.SupplierBillReceptionCatalogueRow
 	err        error
 
-	gotTenant string
-	gotLimit  int
+	gotTenant          string
+	gotLimit           int
+	gotReceptionFilter ports.SupplierBillReceptionFilter
 }
 
 func (stub *stubStatementCatalogue) ListCustomerStatements(
@@ -33,9 +34,9 @@ func (stub *stubStatementCatalogue) ListCustomerStatements(
 
 // ListSupplierBillReceptions 像真读口一样截在 limit：端点多取一行判页外有没有，替身不截就证不了那一判。
 func (stub *stubStatementCatalogue) ListSupplierBillReceptions(
-	_ context.Context, tenant domain.TenantID, limit int,
+	_ context.Context, tenant domain.TenantID, filter ports.SupplierBillReceptionFilter, limit int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	stub.gotTenant, stub.gotLimit, stub.gotReceptionFilter = tenant.String(), limit, filter
 	if len(stub.receptions) > limit {
 		return stub.receptions[:limit], stub.err
 	}
@@ -456,5 +457,18 @@ func TestFailingStatementReadsAreNoAnswerRatherThanEmptyRegisters(t *testing.T) 
 			}
 			assertNoOutcome(t, response)
 		})
+	}
+}
+
+// Covers: AT-SA-233（端点半边）——账单册收 claim、supplier、supplierBillNumber 三个精确检索维，逐字转给读口；不给就是空检索。
+func TestSupplierBillReceptionQueryPassesTheExactLookup(t *testing.T) {
+	register := &stubStatementCatalogue{}
+	serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception&supplier=SYN-SUP-01&supplierBillNumber=INV%201&claim=BILL-1")
+	if register.gotReceptionFilter != (ports.SupplierBillReceptionFilter{Claim: "BILL-1", Supplier: "SYN-SUP-01", SupplierBillNumber: "INV 1"}) {
+		t.Fatalf("检索维 = %+v", register.gotReceptionFilter)
+	}
+	serveGet(statementsEndpoint(register), "/settlement-statements?registry=supplier-bill-reception")
+	if register.gotReceptionFilter != (ports.SupplierBillReceptionFilter{}) {
+		t.Fatalf("不给检索维 = %+v", register.gotReceptionFilter)
 	}
 }

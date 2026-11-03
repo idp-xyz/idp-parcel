@@ -18,6 +18,7 @@ import { ExceptionDetailPanel, RowStatusPill } from '../visibility/ExceptionDeta
 import { countByStatus, sortRowsBy, type SortAccessor } from '../visibility/exception-list';
 import { statusFilterParts } from '../visibility/status-filter';
 import {
+  findSupplierBillReceptions,
   listAuditedPayables,
   listSettlementStatements,
   type ApiResult,
@@ -32,6 +33,7 @@ import { SupplierBillPanel } from './SupplierBillPanel';
 import { SupplierBillReceptionDialog } from './SupplierBillReceptionDialog';
 import {
   billKey,
+  claimOfBillKey,
   billLabel,
   billNumberOf,
   billProgress,
@@ -171,6 +173,25 @@ function SupplierBillsWorkbench({
   const answered = answer?.kind === 'outcome';
   const rows = answer?.kind === 'outcome' ? answer.body.receptions : [];
   const truncated = answer?.kind === 'outcome' && answer.body.truncated;
+
+  // 选中的账单不在这一页上（新登的那份收到时间早于页尾，或从别处点进来）：按主张在全册里单独读回它，右栏照样有东西可看。每次
+  // 重读这一页也重读它，审过之后右栏的和跟着变。
+  const [offPage, setOffPage] = useState<SupplierBillReceptionRecord | null>(null);
+  const selectedOnPage = selectedKey !== null && rows.some((row) => billKey(row) === selectedKey);
+  useEffect(() => {
+    if (!answered || selectedKey === null || selectedOnPage) {
+      setOffPage(null);
+      return;
+    }
+    let cancelled = false;
+    void findSupplierBillReceptions({ claim: claimOfBillKey(selectedKey) }).then((result) => {
+      if (cancelled || result.kind !== 'outcome') return;
+      setOffPage(result.body.receptions.find((row) => billKey(row) === selectedKey) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [answered, answer, selectedKey, selectedOnPage]);
   const entityName = (id: string) => legalEntities.find((entity) => entity.id === id)?.name;
   const counts = countByStatus(rows, billProgress);
   const visible = sortRowsBy(
@@ -220,7 +241,10 @@ function SupplierBillsWorkbench({
           setStatus('ALL');
         }}
         renderDetail={(key) => {
-          const row = visible.find((candidate) => billKey(candidate) === key);
+          const row =
+            visible.find((candidate) => billKey(candidate) === key) ??
+            rows.find((candidate) => billKey(candidate) === key) ??
+            (offPage !== null && billKey(offPage) === key ? offPage : undefined);
           return row ? (
             <SupplierBillPanel
               row={row}
@@ -462,7 +486,7 @@ function AuditedPayablesWorkbench({
               exactNow && exactNow.kind !== 'outcome'
                 ? `；按${payableNumberName}在全册里检索没有答出（${feedbackFor(exactNow, '检索').text}），只在这一页里找`
                 : truncated
-                  ? `；按完整的${payableNumberName}搜，页外的也找得到`
+                  ? `；按完整的${payableNumberName}搜（照号原样输入，区分大小写），页外的也找得到`
                   : ''
             }`
           : undefined

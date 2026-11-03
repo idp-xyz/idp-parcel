@@ -44,7 +44,9 @@ func TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately(t *testing.T)
 		t.Fatalf("发布的授予没有原样读回：%+v", registered.Grants())
 	}
 
-	for index, kind := range []accessidentity.DecisionKind{accessidentity.DecisionSupplierBillReception, accessidentity.DecisionSupplierBillAudit} {
+	for index, kind := range []accessidentity.DecisionKind{
+		accessidentity.DecisionSupplierBillReception, accessidentity.DecisionSupplierBillAudit, accessidentity.DecisionSupplierBillDisputeDecision,
+	} {
 		holder := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-PSB22-BILL-"+string(rune('A'+index)))
 		expectOutcome(t, "bind bill", register.bind(t, bindingOf(t, holder, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
 		grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-PSB22-BILL-"+string(rune('A'+index)), holder,

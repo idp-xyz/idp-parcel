@@ -19,6 +19,7 @@ type StatementCatalogueReader interface {
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
+		filter ports.SupplierBillReceptionFilter,
 		limit int,
 	) ([]ports.SupplierBillReceptionCatalogueRow, error)
 }
@@ -145,8 +146,13 @@ func serveSupplierBillReceptions(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	// 多取一行只为判这一页之外还有没有：读口按收到时间倒序截，多出来的那一行是页外最新的一份，不上列。
-	rows, err := reader.ListSupplierBillReceptions(request.Context(), tenant, limit+1)
+	// 多取一行只为判这一页之外还有没有：读口按收到时间倒序截，多出来的那一行是页外最新的一份，不上列。claim、supplier、
+	// supplierBillNumber 三个可选检索维在全册里精确找（ports.SupplierBillReceptionFilter）；它们是查找，不是处置参数。
+	values := request.URL.Query()
+	filter := ports.SupplierBillReceptionFilter{
+		Claim: values.Get("claim"), Supplier: values.Get("supplier"), SupplierBillNumber: values.Get("supplierBillNumber"),
+	}
+	rows, err := reader.ListSupplierBillReceptions(request.Context(), tenant, filter, limit+1)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return

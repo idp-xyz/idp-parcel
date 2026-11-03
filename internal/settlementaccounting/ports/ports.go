@@ -210,7 +210,7 @@ const (
 //
 // 供应商账单号是主张的外部标识，记在供应商账单号册上（ADR-0357 决定一）：Save 在主张带号时连同写下这层关系；FindByKey 读回
 // 的主张带的是这份主张的号（不论哪一版带来的）。FindBillNumberHolder 答（供应商，账单号）标识的是哪份主张，FindClaimBillNumber
-// 答一份主张已以哪个号登记；LockBillNumber 把同一主张（带号时还有同一供应商的同一账单号）的接收排成一队到本事务结束，查与写
+// 答一份主张已以哪个号登记、那个号的分配方是哪家供应商；LockBillNumber 把同一主张（带号时还有同一供应商的同一账单号）的接收排成一队到本事务结束，查与写
 // 之间不漏并发——理由同 AuditDecisionStore.LockLine。number 为零值即这次来件没带号，只按主张排队。
 type BillReceptionStore interface {
 	FindByKey(ctx context.Context, key BillReceptionKey) (BillReceptionRecord, bool, error)
@@ -228,7 +228,11 @@ type BillReceptionStore interface {
 		supplier domain.SupplierPartyReference,
 		number domain.SupplierBillNumber,
 	) (domain.BillClaimID, bool, error)
-	FindClaimBillNumber(ctx context.Context, tenant domain.TenantID, claim domain.BillClaimID) (domain.SupplierBillNumber, bool, error)
+	FindClaimBillNumber(
+		ctx context.Context,
+		tenant domain.TenantID,
+		claim domain.BillClaimID,
+	) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error)
 }
 
 // ExpectedCostView 按版本取回供应商预期成本供逐行匹配引用。found=false 表示该版本

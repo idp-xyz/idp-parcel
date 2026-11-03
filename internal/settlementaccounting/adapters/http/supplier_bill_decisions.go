@@ -2,6 +2,7 @@ package settlementhttp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,9 +19,11 @@ import (
 const (
 	// OperatorDecisionSupplierBillReception 是接收一份供应商账单并裁决逐行匹配。
 	OperatorDecisionSupplierBillReception OperatorDecision = "SUPPLIER_BILL_RECEPTION"
-	// OperatorDecisionSupplierBillAudit 是对账单一行上的一段给出审核结果：通过（形成审核应付）、争议或拒绝，含争议的再审
-	// （ADR-0357 决定二；争议决定与审核同一种授予是它的越权风险点）。
+	// OperatorDecisionSupplierBillAudit 是对账单一行上的一段给出结论：通过（形成审核应付）或拒绝，含争议再审给出的那两种。
 	OperatorDecisionSupplierBillAudit OperatorDecision = "SUPPLIER_BILL_AUDIT"
+	// OperatorDecisionSupplierBillDisputeDecision 是把一行上的一段挂成争议，与对争议再审（ADR-0357 决定二）。再审给出通过或拒绝，
+	// 所以再审两种都要。
+	OperatorDecisionSupplierBillDisputeDecision OperatorDecision = "SUPPLIER_BILL_DISPUTE_DECISION"
 )
 
 // SupplierBillReceptionIntake 是账单接收口的 Intake。
@@ -68,17 +71,26 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillReception(
 	return command, nil
 }
 
+// IntakeSupplierBillAudit 先按载荷要的授予逐一认证，再判载荷形状：争议决定与审核应付分别授权（UC-SA-004「权限」，ADR-0357
+// 决定二），要哪几种得看这一次给的是什么结果、是不是再审，所以先粗读一遍结果与所解争议。认证排在形状之前——请求体读不出、
+// 形状不对的，没有授予的人照旧先答未授予，不借 400 探出口的形状。
 func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 	ctx context.Context,
 	request *http.Request,
 ) (application.AuditBillLineCommand, error) {
-	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionSupplierBillAudit)
-	if err != nil {
-		return application.AuditBillLineCommand{}, err
+	payload, readErr := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
+	var operator OperatorIdentity
+	for index, decision := range supplierBillAuditDecisions(payload) {
+		authenticated, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), decision)
+		if err != nil {
+			return application.AuditBillLineCommand{}, err
+		}
+		if index == 0 {
+			operator = authenticated
+		}
 	}
-	payload, err := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
-	if err != nil {
-		return application.AuditBillLineCommand{}, err
+	if readErr != nil {
+		return application.AuditBillLineCommand{}, readErr
 	}
 	command, err := registrationjson.SupplierBillAuditFromJSONForTenant(payload, operator.Tenant)
 	if err != nil {
@@ -86,6 +98,26 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 	}
 	command.OperationEvidence = operatorEvidence(operator)
 	return command, nil
+}
+
+// supplierBillAuditDecisions 说这一份审核载荷要哪几种授予（ADR-0357 决定二）：给出结论（通过、拒绝）要审核应付，挂争议与再审要争议
+// 决定，再审两种都要。只粗读结果与所解争议两格，读不出或没有结果（只点名应付标识的旧形）按通过整行算，只要审核应付——形状对不对
+// 由 registrationjson 在认证之后判。
+func supplierBillAuditDecisions(payload []byte) []OperatorDecision {
+	var glance struct {
+		Verdict         string `json:"verdict"`
+		ResolvesDispute string `json:"resolvesDispute"`
+	}
+	_ = json.Unmarshal(payload, &glance)
+	disputed := glance.Verdict == domain.AuditDisputed.String()
+	var decisions []OperatorDecision
+	if disputed || glance.ResolvesDispute != "" {
+		decisions = append(decisions, OperatorDecisionSupplierBillDisputeDecision)
+	}
+	if !disputed {
+		decisions = append(decisions, OperatorDecisionSupplierBillAudit)
+	}
+	return decisions
 }
 
 // NewReceiveSupplierBillEndpoint 交回账单接收口。
@@ -133,8 +165,8 @@ func NewAuditSupplierBillEndpoint(intake SupplierBillAuditIntake, auditor Suppli
 }
 
 // receptionResponse 的 registeredClaim 与 registeredSupplierBillNumber 只在账单号冲突时出现、恰出其一：前者是这个号已标识的那份
-// 主张，后者是这份主张已登记的那个号（ADR-0357 决定一）。expectedCostSupplier 只在供应商不符与供应商未记两格出现（ADR-0358
-// 决定二）：哪一行、点名的哪一版，不符时另带那一版记下的供应商，好让人知道它是谁的。
+// 主张，后者是这份主张已登记的那个号，连同它的分配方 registeredSupplier（ADR-0357 决定一）。expectedCostSupplier 只在供应商不符与
+// 供应商未记两格出现（ADR-0358 决定二）：哪一行、点名的哪一版，不符时另带那一版记下的供应商，好让人知道它是谁的。
 type receptionResponse struct {
 	Outcome                      string                    `json:"outcome"`
 	UndecidedReason              string                    `json:"undecidedReason,omitempty"`
@@ -143,6 +175,7 @@ type receptionResponse struct {
 	NotCurrent                   *expectedNotCurrentBody   `json:"notCurrent,omitempty"`
 	RegisteredClaim              string                    `json:"registeredClaim,omitempty"`
 	RegisteredSupplierBillNumber string                    `json:"registeredSupplierBillNumber,omitempty"`
+	RegisteredSupplier           string                    `json:"registeredSupplier,omitempty"`
 	ExpectedCostSupplier         *expectedCostSupplierBody `json:"expectedCostSupplier,omitempty"`
 }
 
@@ -183,6 +216,7 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	}
 	if conflict, has := result.NumberConflict(); has {
 		body.RegisteredClaim, body.RegisteredSupplierBillNumber = conflict.RegisteredClaim.String(), conflict.RegisteredNumber.String()
+		body.RegisteredSupplier = conflict.RegisteredSupplier.String()
 	}
 	if refusal, has := result.SupplierRefusal(); has {
 		body.ExpectedCostSupplier = &expectedCostSupplierBody{

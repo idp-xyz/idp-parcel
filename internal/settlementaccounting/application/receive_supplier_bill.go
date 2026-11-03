@@ -135,11 +135,12 @@ func (result ReceiveSupplierBillResult) SupplierRefusal() (ExpectedCostSupplierR
 	return result.supplier, result.outcome == BillExpectedCostSupplierMismatch || result.outcome == BillExpectedCostSupplierUnrecorded
 }
 
-// SupplierBillNumberConflict 说账单号冲突撞的是哪一边：RegisteredClaim 非零是号已标识另一份主张，RegisteredNumber 非零是这份
-// 主张已以另一个号登记。
+// SupplierBillNumberConflict 说账单号冲突撞的是哪一边：RegisteredClaim 非零是号已标识另一份主张；RegisteredNumber 非零是这份
+// 主张已以另一个号登记，RegisteredSupplier 是那个号的分配方——号相同而分配方不同（新版本换了供应商），也是另一个号。
 type SupplierBillNumberConflict struct {
-	RegisteredClaim  domain.BillClaimID
-	RegisteredNumber domain.SupplierBillNumber
+	RegisteredClaim    domain.BillClaimID
+	RegisteredNumber   domain.SupplierBillNumber
+	RegisteredSupplier domain.SupplierPartyReference
 }
 
 // NumberConflict 只在`账单号冲突`时有值。
@@ -339,12 +340,14 @@ func (handler *ReceiveSupplierBillHandler) billNumberConflict(
 		return ReceiveSupplierBillResult{outcome: BillNumberConflict, numbering: SupplierBillNumberConflict{RegisteredClaim: holder},
 			continuation: billContinuation("SUPPLIER_BILL_NUMBER_CONFLICT", claim.String(), number.String())}, true, nil
 	}
-	registered, has, err := handler.deps.Receptions.FindClaimBillNumber(ctx, command.TenantID, claim)
+	assigner, registered, has, err := handler.deps.Receptions.FindClaimBillNumber(ctx, command.TenantID, claim)
 	if err != nil {
 		return billStoreUndecided(claim.String()), true, err
 	}
-	if has && registered != number {
-		return ReceiveSupplierBillResult{outcome: BillNumberConflict, numbering: SupplierBillNumberConflict{RegisteredNumber: registered},
+	// 外部标识是（分配方，号）：这份主张已以另一家供应商的同一个号登记，与以另一个号登记是同一回事（ADR-0357 决定一）。
+	if has && (registered != number || assigner != command.Claim.Supplier) {
+		return ReceiveSupplierBillResult{outcome: BillNumberConflict, numbering: SupplierBillNumberConflict{
+			RegisteredNumber: registered, RegisteredSupplier: assigner},
 			continuation: billContinuation("SUPPLIER_BILL_NUMBER_CONFLICT", claim.String(), number.String())}, true, nil
 	}
 	return ReceiveSupplierBillResult{}, false, nil

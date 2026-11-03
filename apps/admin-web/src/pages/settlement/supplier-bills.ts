@@ -65,6 +65,11 @@ export function billKey(row: Pick<SupplierBillReceptionRecord, 'claim' | 'claimV
   return `${row.claim}\u0000${row.claimVersion}`;
 }
 
+/** billKey 里的主张身份：选中的账单不在页上时，按它在全册里读回。 */
+export function claimOfBillKey(key: string): string {
+  return key.split('\u0000')[0];
+}
+
 /** 操作证据 `OPERATOR/<发行方>#<sub>` 的短名；缺席即那一份不记提交方。 */
 export function operatorWords(evidence: string | undefined): string {
   if (!evidence) return '不记提交方';
@@ -386,7 +391,11 @@ export function receptionPayload(
 export const receptionSettled = new Set(['BILL_RECEIVED', 'EXISTING_RESULT']);
 
 /** 接收口答复的那一句。 */
-export function receptionAnswerText(body: SupplierBillReceptionResponseBody, billNumber: string): string {
+export function receptionAnswerText(
+  body: SupplierBillReceptionResponseBody,
+  billNumber: string,
+  supplierName: (supplier: string) => string = (supplier) => supplier,
+): string {
   const bill = billNumber.trim() === '' ? '这张账单' : `账单 ${billNumber.trim()}`;
   switch (body.outcome) {
     case 'BILL_RECEIVED':
@@ -404,7 +413,7 @@ export function receptionAnswerText(body: SupplierBillReceptionResponseBody, bil
         ? '没有登记：账单币种与所选预期成本的结算币种不同，本公司没有登记换算依据（未配置），不按当前汇率猜。'
         : `没有登记：服务端这一次没有答出结果（${body.undecidedReason ?? '原因未说'}），稍后重试。`;
     case 'SUPPLIER_BILL_NUMBER_CONFLICT':
-      return billNumberConflictText(body, billNumber);
+      return billNumberConflictText(body, billNumber, undefined, supplierName);
     case 'EXPECTED_COST_SUPPLIER_MISMATCH': {
       const refused = body.expectedCostSupplier;
       if (!refused) return '没有登记：所选的预期成本是别家供应商的，改选这家供应商的预期成本再登记。';

@@ -231,17 +231,20 @@ func registerBillNumber(ctx context.Context, executor bentopg.Executor, record p
 		  WHERE tenant_id = $1 AND supplier_ref = $2 AND bill_number = $3`,
 		tenant, supplier, number.String(),
 	).Scan(&holder)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("register supplier bill number: 主张 %s 已以另一家供应商的号登记", claim)
+	}
 	if err != nil {
 		return fmt.Errorf("register supplier bill number: %w", err)
 	}
 	if holder != claim {
 		return fmt.Errorf("register supplier bill number: %s 已标识主张 %s", number, holder)
 	}
-	registered, found, err := findClaimBillNumber(ctx, executor, record.Key.TenantID, record.Claim.Claim())
+	assigner, registered, found, err := findClaimBillNumber(ctx, executor, record.Key.TenantID, record.Claim.Claim())
 	if err != nil {
 		return fmt.Errorf("register supplier bill number: %w", err)
 	}
-	if !found || registered != number {
+	if !found || registered != number || assigner != record.Claim.Supplier() {
 		return fmt.Errorf("register supplier bill number: 主张 %s 已以另一个号登记", claim)
 	}
 	return nil
@@ -306,21 +309,21 @@ func (repository *BillReceptions) FindBillNumberHolder(
 	return claim, true, nil
 }
 
-// FindClaimBillNumber 答一份主张已以哪个号登记。
+// FindClaimBillNumber 答一份主张已以哪个号登记、号的分配方是哪家供应商。
 func (repository *BillReceptions) FindClaimBillNumber(
 	ctx context.Context,
 	tenant domain.TenantID,
 	claim domain.BillClaimID,
-) (domain.SupplierBillNumber, bool, error) {
+) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
 	}
-	number, found, err := findClaimBillNumber(ctx, querier, tenant, claim)
+	assigner, number, found, err := findClaimBillNumber(ctx, querier, tenant, claim)
 	if err != nil {
-		return domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, fmt.Errorf("find claim bill number: %w", err)
 	}
-	return number, found, nil
+	return assigner, number, found, nil
 }
 
 func findClaimBillNumber(
@@ -328,20 +331,27 @@ func findClaimBillNumber(
 	querier bentopg.Querier,
 	tenant domain.TenantID,
 	claim domain.BillClaimID,
-) (domain.SupplierBillNumber, bool, error) {
-	var raw string
+) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error) {
+	var rawSupplier, rawNumber string
 	err := querier.QueryRow(ctx,
-		`SELECT bill_number FROM settlement_accounting.supplier_bill_number WHERE tenant_id = $1 AND claim_id = $2`,
+		`SELECT supplier_ref, bill_number FROM settlement_accounting.supplier_bill_number WHERE tenant_id = $1 AND claim_id = $2`,
 		tenant.String(), claim.String(),
-	).Scan(&raw)
+	).Scan(&rawSupplier, &rawNumber)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.SupplierBillNumber{}, false, nil
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, nil
 	}
 	if err != nil {
-		return domain.SupplierBillNumber{}, false, err
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, err
 	}
-	number, err := domain.NewSupplierBillNumber(raw)
-	return number, err == nil, err
+	assigner, err := domain.NewSupplierPartyReference(rawSupplier)
+	if err != nil {
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, err
+	}
+	number, err := domain.NewSupplierBillNumber(rawNumber)
+	if err != nil {
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, err
+	}
+	return assigner, number, true, nil
 }
 
 type billClaimColumns struct {
