@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
-	"unicode/utf8"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -102,13 +100,16 @@ func (intake *CustomerTrackingViewIntake) IntakeQuery(ctx context.Context, reque
 }
 
 // refuseUnstorableQueryValue 拒收立不起一个号的查询值：含 NUL，或不是合法 UTF-8。`CustomerTrackingViewIntake` 与
-// `CustomerShipmentTrackingIntake` 都经这一处。
+// `CustomerShipmentTrackingIntake` 都经这一处，判据是 httpapi.StorableText，与 httpapi.RefuseUnstorableReadTarget 同一份。
 //
 // 这样的值放过去，会一路带进读，库拒收参数，答成 500 NO_ANSWER_FORMED——客户系统据 5xx 退避重发，而这个请求永远不会好。
 // 失败要按调用方的恢复动作分格（ADR-0029）：坏输入改了才会好，所以答 400，这一判只看输入、不读库，与号存不存在无关
 // （ADR-0356 决定一「值立不起来答 `400`。这一判只看输入，与号存不存在无关」）。
+//
+// 首方客户族判在 Intake 里、认证之后，不像操作者族那样在装配处、处理器之前：本族先认证、后读查询串，令牌不过的调用方看不到
+// 查询串校验的结果（见 CustomerTrackingViewIntake）。
 func refuseUnstorableQueryValue(name, value string) error {
-	if !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
+	if !httpapi.StorableText(value) {
 		return fmt.Errorf("%w: %s carries NUL or is not valid UTF-8", ErrMalformedRequest, name)
 	}
 	return nil
