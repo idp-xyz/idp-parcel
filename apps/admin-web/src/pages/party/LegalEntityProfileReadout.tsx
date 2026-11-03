@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { RegisteredAddressRecord } from './api';
 import { CountryLabel } from '../refdata-labels';
+import { addressLinesOf, glueBracketGroups } from './legal-entity-profile';
 import './legal-entity-profile-readout.css';
 
 /**
@@ -73,18 +74,18 @@ export function ProfileReadoutField({
 }
 
 /**
- * 地址格：地址行在前，国家 / 地区经基础数据译名并进行末（ADR-0335 决定七）。不把国家码当前缀——运营读地址先看街道，
- * 国家是补充信息，译成「中国（CN）」后放句首会压过地址本身；也不另起一行（票 company-subject-ux/08 第 5 条）——另起一行
- * 又换一种颜色，读起来像一条链接。弱显只降不透明度、不换色。资料读出与版本历史快照共用这一份，版式只定一处。
+ * 地址格：按录入的行逐行显（票 company-subject-ux/12 第 1 条），国家 / 地区经基础数据译名作末行、弱色（ADR-0335 决定七）。
+ * 不把国家码当前缀——运营读地址先看街道，国家是补充信息，译成「中国（CN）」后放句首会压过地址本身。末行取灰而不取
+ * 强调色：票 08 时担心的「另起一行像链接」出在换成链接色上，灰的末行只是退后一步。资料读出与版本历史快照共用这一份，
+ * 版式只定一处。
  */
 export function ProfileReadoutAddress({ address }: { address: RegisteredAddressRecord }) {
-  const lines = address.lines.filter((line) => line.trim() !== '');
+  const lines = addressLinesOf(address);
   return (
     <>
-      {lines.length > 0 ? lines.join(' · ') : absentValueMark}
+      {lines.length > 0 ? lines.map((line, index) => <span key={`${index}-${line}`} className="block"><ReadoutText text={line} /></span>) : <span className="block">{absentValueMark}</span>}
       {address.country ? (
-        <span className="opacity-70">
-          {' · '}
+        <span className="block text-idpxyz-breadcrumb">
           <CountryLabel code={address.country} />
         </span>
       ) : null}
@@ -93,25 +94,67 @@ export function ProfileReadoutAddress({ address }: { address: RegisteredAddressR
 }
 
 /**
+ * 三个地址并排的一行（票 company-subject-ux/12 第 1 条）：标签在上、地址在下，宽时一地址一栏、窄时纵向堆叠。地址逐行显
+ * 之后一格就有三四行高，再塞进「标签在左」的两列网格，半列宽的地址行行折、左边的标签孤零零悬在第一行；标签在上让
+ * 每栏自成一块，三个地址对着读也齐。没有的地址不画栏：画出来是一栏「—」，占掉另两栏的宽却没有信息。
+ */
+export function ProfileReadoutAddresses({
+  items,
+}: {
+  items: readonly { key: string; label: string; address?: RegisteredAddressRecord }[];
+}) {
+  return (
+    <dl className="legal-entity-readout-addresses">
+      {items.map((item) => (
+        <div key={item.key} className="min-w-0">
+          <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb">{item.label}</dt>
+          <dd className={`min-w-0 text-[13px] leading-5 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
+            {item.address ? <ProfileReadoutAddress address={item.address} /> : absentValueMark}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * 读出里会折行的一段文字（户名、抬头、地址行、备注）：全角括号组粘住前一个字不折开（glueBracketGroups 说明为什么），
+ * 其余照常。粘住的一段用 nowrap 而不是插零宽连字，复制出去的仍是原文。
+ */
+export function ReadoutText({ text }: { text: string }) {
+  return (
+    <>
+      {glueBracketGroups(text).map((segment, index) =>
+        segment.glue ? <span key={`${index}-${segment.text}`} className="whitespace-nowrap">{segment.text}</span> : <Fragment key={`${index}-${segment.text}`}>{segment.text}</Fragment>,
+      )}
+    </>
+  );
+}
+
+/**
  * 值格里的两列小表（票 company-subject-ux/08 第 5 条）：左列是类型名或语言（弱显），右列是号或抬头。几个号用分号串成一段
  * 扫不出来，一行一个才认得出哪个号是哪种。左列最多占一半宽，长类型名折行而不是把号挤掉；等宽字体只给号。
+ * 两列同一字号、只以灰色分主次（票 company-subject-ux/12 第 3 条）：一行里两种字号，读的人以为是两层信息。
  */
 export function ProfileReadoutPairs({
   rows,
   mono = false,
+  headNowrap = false,
 }: {
   rows: readonly { key: string; head: ReactNode; headTitle?: string; value: ReactNode }[];
   /** 右列用等宽字体（号）；抬头是文字，不用。 */
   mono?: boolean;
+  /** 左列不折行：给语言那种短而固定的头（「简体中文（zh-Hans）」在 zh- 处折开就认不出）；类型名可以很长，仍要折。 */
+  headNowrap?: boolean;
 }) {
   return (
     <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb" title={row.headTitle}>
+          <dt className={`text-[13px] leading-5 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
             {row.head}
           </dt>
-          <dd className={`min-w-0 leading-5 text-idpxyz-text ${mono ? 'select-text font-mono text-[12px]' : ''}`}>{row.value}</dd>
+          <dd className={`min-w-0 text-[13px] leading-5 text-idpxyz-text ${mono ? 'select-text font-mono' : ''}`}>{row.value}</dd>
         </Fragment>
       ))}
     </dl>

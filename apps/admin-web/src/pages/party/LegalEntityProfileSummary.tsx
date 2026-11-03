@@ -43,7 +43,7 @@ function ProfileSummary({
           <>
             当前资料 <span className="tabular-nums text-idpxyz-text">{profileRevisionLabel(effective.revision)}</span> ·{' '}
             <span className="text-idpxyz-text"><Instant value={effective.effectiveFrom} precision="day" /></span> 起生效 · 来源单据{' '}
-            <span className="font-mono text-idpxyz-text">{effective.basis}</span>
+            <span className="font-mono text-[13px] text-idpxyz-text">{effective.basis}</span>
           </>
         ) : (
           <>资料状态：{status.label}</>

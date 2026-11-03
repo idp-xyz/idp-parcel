@@ -1,17 +1,17 @@
-import type { ReactNode } from 'react';
 import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
-import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
+import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
 import {
-  ProfileReadoutAddress,
+  ProfileReadoutAddresses,
   ProfileReadoutCard,
   ProfileReadoutField,
   ProfileReadoutGrid,
   ProfileReadoutPairs,
+  ReadoutText,
   absentValueMark,
 } from './LegalEntityProfileReadout';
-import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
+import { invoiceTitleRowsOf, languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 /**
@@ -32,6 +32,7 @@ export function LegalEntityProfileContent({
   const notes = content ? profileMaintenanceNotes(content) : [];
   const bankAccounts = content?.bankAccounts ?? [];
   const contacts = content?.contacts ?? [];
+  const invoiceTitleRows = content ? invoiceTitleRowsOf(content) : [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
       <ProfileReadoutCard icon={UserRound} title="代表人与地址">
@@ -40,39 +41,41 @@ export function LegalEntityProfileContent({
             label={content?.representative ? representativeLabel(content.representative.kind) : '代表人 / 负责人'}
             value={content?.representative?.name}
             emphasized
+            wide
           />
-          <ProfileReadoutField label="注册地址" value={addressOf(content?.registeredAddress)} />
-          <ProfileReadoutField label="办公地址" value={addressOf(content?.officeAddress)} />
-          <ProfileReadoutField label="通信地址" value={addressOf(content?.correspondenceAddress)} />
         </ProfileReadoutGrid>
+        {/* 注册地址是资料的必填格，没有也画一栏「—」；办公 / 通信两个可缺的地址没有就不画栏。 */}
+        <div className="mt-3">
+          <ProfileReadoutAddresses
+            items={[
+              { key: 'registered', label: '注册地址', address: content?.registeredAddress },
+              ...(content?.officeAddress ? [{ key: 'office', label: '办公地址', address: content.officeAddress }] : []),
+              ...(content?.correspondenceAddress ? [{ key: 'correspondence', label: '通信地址', address: content.correspondenceAddress }] : []),
+            ]}
+          />
+        </div>
       </ProfileReadoutCard>
       <ProfileReadoutCard icon={Receipt} title="税务与开票">
         <ProfileReadoutGrid>
-          {/* 主抬头仍是「可开票」的判据，语言只是它的标注，所以跟在抬头后面弱化显，不另起一格。 */}
+          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs），两张都占整行——抬头与几种号并排时半列放不下。
+              主抬头排第一、语言格后带「主抬头」：它仍是「可开票」的判据，但与其他语言的抬头是同一类内容，不再分两格两种排法。
+              没标语言的主抬头语言格显「—」：空格一律「—」（spec「统一用语」）。 */}
           <ProfileReadoutField
             label="开票抬头"
+            wide
             value={
-              content?.invoicingRegistered && content.invoiceTitle ? (
-                <>
-                  {content.invoiceTitle}
-                  {content.invoiceTitleLanguage ? (
-                    <span className="ml-1.5 text-[12px] font-normal text-idpxyz-breadcrumb">{languageTagLabel(content.invoiceTitleLanguage)}</span>
-                  ) : null}
-                </>
-              ) : undefined
-            }
-            emphasized
-          />
-          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs）；监管登记号占整行——几种号并排时半列放不下。 */}
-          <ProfileReadoutField
-            label="其他语言的抬头"
-            value={
-              content?.invoicingRegistered && content.invoiceTitles?.length ? (
+              invoiceTitleRows.length ? (
                 <ProfileReadoutPairs
-                  rows={content.invoiceTitles.map((row, index) => ({
+                  headNowrap
+                  rows={invoiceTitleRows.map((row, index) => ({
                     key: `${row.language}-${index}`,
-                    head: languageTagLabel(row.language),
-                    value: row.title,
+                    head: (
+                      <>
+                        {row.language ? languageTagLabel(row.language) : absentValueMark}
+                        {row.primary ? <PrimaryTitleMark /> : null}
+                      </>
+                    ),
+                    value: row.primary ? <span className="font-medium text-idpxyz-textBright"><ReadoutText text={row.title} /></span> : <ReadoutText text={row.title} />,
                   }))}
                 />
               ) : undefined
@@ -121,8 +124,21 @@ export function LegalEntityProfileContent({
 }
 
 /**
+ * 「主抬头」小标，跟在主抬头那行的语言格后。画法照联系人卡的「主要」胶囊（LegalEntityContactCards）：同一块面上两种
+ * 「这是主的」记号该长一个样；不用强调色——强调色在这里读作链接。
+ */
+function PrimaryTitleMark() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded-full border border-idpxyz-border bg-idpxyz-editor px-1.5 align-[1px] text-[11px] font-medium leading-4 text-idpxyz-text">
+      主抬头
+    </span>
+  );
+}
+
+/**
  * 收款账户表，一行一个账户、币种打头（ADR-0359 决定三「按币种登记」，开单方按单据币种挑账户）。没有账户是结论句
  * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
+ * 等宽的号与备注都取表的正文字号（票 company-subject-ux/12 第 3 条）：同一行三种字号，号显得比户名矮一截。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
   if (!accounts.length) return <p className="text-[13px] leading-5 text-idpxyz-breadcrumb">未登记收款账户</p>;
@@ -130,11 +146,14 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
     <div className="overflow-x-auto">
       <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
         <caption className="sr-only">收款账户清单</caption>
+        {/* 列宽按内容的常见长度分（票 company-subject-ux/12 第 4 条）：户名与开户行（带地址）最长，币种与备注最短；
+            账号一列要装下 IBAN 的长度，等宽字再按字符折。币种列取 15 而不是票面的 14：详情栏拖到 2000 宽时表约 840px，
+            14% 装不下「人民币（CNY）」一行，会在「（」前折开；那 1% 从最宽的开户行列出。 */}
         <colgroup>
-          <col className="w-[18%]" />
-          <col className="w-[22%]" />
-          <col className="w-[22%]" />
+          <col className="w-[15%]" />
           <col className="w-[24%]" />
+          <col className="w-[25%]" />
+          <col className="w-[22%]" />
           <col className="w-[14%]" />
         </colgroup>
         <thead className="border-b border-idpxyz-border text-[12px] text-idpxyz-breadcrumb">
@@ -153,17 +172,17 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
                 {account.label ? <span className="block text-[12px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
               </th>
-              <td className="break-words px-3 py-2.5 text-idpxyz-text">{account.holderName}</td>
+              <td className="px-3 py-2.5 text-idpxyz-text"><ReadoutText text={account.holderName} /></td>
               <td className="px-3 py-2.5">
-                <span className="block text-idpxyz-text">{account.bankName}</span>
-                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb">{account.bankAddress}</span> : null}
+                <span className="block text-idpxyz-text"><ReadoutText text={account.bankName} /></span>
+                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
               </td>
-              <td className="px-3 py-2.5 font-mono text-[12px]">
+              <td className="px-3 py-2.5 font-mono">
                 <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
                 {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
               </td>
-              <td className="break-words py-2.5 pl-3 text-[12px]">
-                {account.note ? <span className="text-idpxyz-text">{account.note}</span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
+              <td className="py-2.5 pl-3">
+                {account.note ? <span className="text-idpxyz-text"><ReadoutText text={account.note} /></span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
               </td>
             </tr>
           ))}
@@ -171,9 +190,4 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
       </table>
     </div>
   );
-}
-
-// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家并进行末）排。
-function addressOf(address?: RegisteredAddressRecord): ReactNode {
-  return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }

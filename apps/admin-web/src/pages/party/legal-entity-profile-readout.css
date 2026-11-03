@@ -22,12 +22,27 @@
   white-space: nowrap;
 }
 
-.legal-entity-readout-field dd {
+/* 值格与表格的折行（票 company-subject-ux/12 第 4 条）：keep-all 让中文只在空格、闭括号与标点后折（「有限公司（演示）」
+   整体换行，不把「科技园」折成两截），配 glueBracketGroups 的粘段，折下去的行不再以全角「（」开头。长到一行装不下的
+   无标点中文名靠 overflow-wrap 在格边折——与不设 keep-all 时一样，只是这种名字才会遇到。实测记在票面。 */
+.legal-entity-readout-field dd,
+.legal-entity-readout-addresses dd,
+.legal-entity-readout-table td,
+.legal-entity-readout-table th {
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
 .legal-entity-readout-field-wide {
   grid-column: 1 / -1;
+}
+
+/* 地址行（票 company-subject-ux/12 第 1 条）：窄时一地址一行纵向堆叠；够宽时每个地址一栏并排（见下面的容器查询）。
+   行与行的间距取网格的 row-gap，三栏之间取网格的 column-gap，与标签 / 值网格同一把尺。 */
+.legal-entity-readout-addresses {
+  display: grid;
+  column-gap: 2rem;
+  row-gap: 0.5rem;
 }
 
 /* 读出表（票 company-subject-ux/11 第 2 条）：行的悬停底色从表的最左缘起，首列不留内边距时字顶在底色的边上；首末两列
@@ -55,7 +70,7 @@
 }
 
 /* 两列只在正文够宽时启用：容器是卡组的外框，宽度随详情栏拖动而变（栏宽不设上限，卡撑满栏）。网格在卡内、
-   两侧各少 1rem 内边距，窄于 48rem 时两列各剩不到 22rem，地址与双语抬头都要折两三行，不如一列。 */
+   两侧各少 1rem 内边距，窄于 48rem 时两列各剩不到 22rem，一行地址或一个抬头都要折两三行，不如一列。 */
 @container legal-entity-profile (min-width: 48rem) {
   .legal-entity-readout-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -63,6 +78,13 @@
 
   .legal-entity-contact-cards-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 有几个地址就几栏、等宽：按列流放进隐式列，不写死三栏——没有的地址不画栏（ProfileReadoutAddresses），
+     两个地址时各占一半，不留一栏空白。48rem 时三栏各剩 13rem 多，一行地址折一次，仍比两列网格里挤着的好读。 */
+  .legal-entity-readout-addresses {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
   }
 }
 

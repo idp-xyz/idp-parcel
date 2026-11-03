@@ -428,6 +428,28 @@ export function languageTagLabel(tag: string): string {
   return invoiceTitleLanguageOptions.find((option) => option.value.toLowerCase() === key)?.label ?? tag.trim();
 }
 
+export interface InvoiceTitleRow {
+  /** BCP 47 语言标签；主抬头没标语言时是空串，读出显「—」。 */
+  language: string;
+  title: string;
+  /** 主抬头——「可开票」的判据只看它（ADR-0359 决定四）。 */
+  primary: boolean;
+}
+
+/**
+ * 读出里的开票抬头清单（票 company-subject-ux/12 第 2 条）：一种语言一行，主抬头排第一，其余照登记次序。主抬头与其他
+ * 语言的抬头此前分两格、两种排法，其实是同一类内容；并成一张清单后读的人只看「语言 → 抬头」。没登记开票资料即空表。
+ */
+export function invoiceTitleRowsOf(
+  content: Pick<LegalEntityProfileContent, 'invoicingRegistered' | 'invoiceTitle' | 'invoiceTitleLanguage' | 'invoiceTitles'>,
+): InvoiceTitleRow[] {
+  if (!content.invoicingRegistered) return [];
+  const primary: InvoiceTitleRow[] = content.invoiceTitle
+    ? [{ language: content.invoiceTitleLanguage ?? '', title: content.invoiceTitle, primary: true }]
+    : [];
+  return [...primary, ...(content.invoiceTitles ?? []).map((row) => ({ language: row.language, title: row.title, primary: false }))];
+}
+
 /**
  * 收款账户一行折成载荷：各格去首尾空白，可缺的格空着即键缺席；整行空着交 undefined 不送。必填格空着照送空串——
  * 缺项判读（legalEntityProfileMissingFields）在送之前就会点名拦下，这里不替它判。
@@ -467,9 +489,64 @@ function addressPayload(country: string, lines: string): RegisteredAddressRecord
   return value.country || value.lines.length ? value : undefined;
 }
 
-/** 没有地址显「—」（spec「统一用语」的空值规则）：空值不是结论句，不配一句话。 */
+/** 没有地址显「—」（spec「统一用语」的空值规则）：空值不是结论句，不配一句话。只给 title 与对比用；读出按行走 addressLinesOf。 */
 export function addressText(address?: RegisteredAddressRecord): string {
   return address ? [address.country, ...address.lines].filter(Boolean).join(' · ') : '—';
+}
+
+/**
+ * 读出里逐行显示的地址行：地址按行录入（addressPayload 按换行拆），就按行显，不再用「 · 」串成一段——串起来的一段折到
+ * 两三行后，眼睛得在点和括号里找断句。空行与首尾空白剔掉（录入时裁过，旧数据与批量导入的未必）。国家不在这里：
+ * 它经基础数据译名（CountryLabel 是 React 件）、由读出件另作末行。
+ */
+export function addressLinesOf(address: RegisteredAddressRecord): string[] {
+  return address.lines.map((line) => line.trim()).filter((line) => line !== '');
+}
+
+export interface ReadoutTextSegment {
+  text: string;
+  /** 真即这一段不许在内部折行：前一个字 + 一组全角括号。 */
+  glue: boolean;
+}
+
+const FULLWIDTH_OPENERS = '（［【「『《〈〔｛';
+const FULLWIDTH_CLOSERS = '）］】」』》〉〕｝';
+
+/**
+ * 读出文字的折行分段（票 company-subject-ux/12 第 4 条）：全角开括号连同它前面一个字和到闭括号为止的一组，归成不许内部
+ * 折行的一段。浏览器按 UAX #14 在「司」与「（」之间折行，折下去的那行以全角「（」开头，而「（」的字形靠右半格、左半格
+ * 是空白，看着像悬挂缩进。`text-spacing-trim` / `hanging-punctuation` 都没用——微软雅黑与文泉驿都不带 halt 特性，
+ * 实测行首「（」的进距一点没收；`word-break: keep-all` 也拦不住「字（」之间的折点。把前一个字粘进去，折点只能落在更前面，
+ * 行首就不会是「（」。相邻两组（「（上海）（演示）」）并成一段；文字以开括号起头则这一组自成一段。不插零宽字符：
+ * 户名、账号要被复制去付款系统，看不见的字符会跟着走。
+ */
+export function glueBracketGroups(text: string): ReadoutTextSegment[] {
+  const segments: ReadoutTextSegment[] = [];
+  let plain = '';
+  for (let index = 0; index < text.length; index += 1) {
+    const kind = FULLWIDTH_OPENERS.indexOf(text[index]);
+    if (kind < 0) {
+      plain += text[index];
+      continue;
+    }
+    const closer = text.indexOf(FULLWIDTH_CLOSERS[kind], index + 1);
+    const end = closer < 0 ? text.length - 1 : closer;
+    const group = text.slice(index, end + 1);
+    const previous = segments[segments.length - 1];
+    if (plain === '' && previous?.glue) {
+      previous.text += group;
+    } else if (plain === '') {
+      segments.push({ text: group, glue: true });
+    } else {
+      const head = plain.slice(0, -1);
+      if (head !== '') segments.push({ text: head, glue: false });
+      segments.push({ text: plain.slice(-1) + group, glue: true });
+    }
+    plain = '';
+    index = end;
+  }
+  if (plain !== '') segments.push({ text: plain, glue: false });
+  return segments;
 }
 
 export function legalEntityContactCountOf(resolution: LegalEntityProfileResolutionResponseBody | undefined): number | undefined {
