@@ -4,7 +4,6 @@ import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import {
   DetailPageTemplate,
-  type DetailField,
   type DetailMeta,
   type DetailSummaryStat,
   type TemplateViewState,
@@ -38,7 +37,7 @@ import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences, type LegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
-import { Instant } from './detail-primitives';
+import { DetailRow, Instant } from './detail-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -112,19 +111,6 @@ function buildSummary(row: GroupLegalEntityRecord, profileCell: ProfileStatusCel
     },
     ...(row.deactivatedAt ? [{ label: '停用日期', value: day(row.deactivatedAt) }] : []),
     { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
-  ];
-}
-
-/** 与详情栏概要签同一份格：头区与指标带已经显示的不再重复；往来单位档案与各标识收进技术详情。 */
-function buildBasicFields(row: GroupLegalEntityRecord): DetailField[] {
-  return [
-    ...(row.deactivationBasis
-      ? [{ label: '停用来源单据', value: <span className="font-mono">{row.deactivationBasis}</span> }]
-      : []),
-    {
-      label: '技术详情',
-      value: <TechnicalDetails rows={legalEntityTechnicalRows(row)} />,
-    },
   ];
 }
 
@@ -242,8 +228,9 @@ export function LegalEntityDetailPage({
       }
       meta={row ? buildMeta(row, typeNameOf) : []}
       summary={row ? buildSummary(row, profileCell, references) : undefined}
-      basicTitle="概要"
-      basicFields={row ? buildBasicFields(row) : []}
+      // 头区与指标带已把身份事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
+      // 停用来源单据跟在停用横幅下。传空数组——分签形态下模板按有没有字段判要不要画这张卡，空的不画。
+      basicFields={[]}
       sections={
         row
           ? [
@@ -255,6 +242,13 @@ export function LegalEntityDetailPage({
                       content: (
                         <div className="flex flex-col gap-2">
                           <LegalEntityBanners row={row} />
+                          {row.deactivationBasis ? (
+                            <dl>
+                              <DetailRow label="停用来源单据" mono>
+                                {row.deactivationBasis}
+                              </DetailRow>
+                            </dl>
+                          ) : null}
                         </div>
                       ),
                     },
@@ -271,6 +265,7 @@ export function LegalEntityDetailPage({
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityProfileSummary query={profileQuery} />
+                    <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
                   </section>
                 ),
               },
