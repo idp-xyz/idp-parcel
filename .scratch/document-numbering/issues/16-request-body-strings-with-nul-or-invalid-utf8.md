@@ -1,7 +1,7 @@
 # 16 写口请求体（JSON）里的字符串含 NUL 或非法 UTF-8，一律答 400、不落库、不悄悄改写
 
 Category: bug
-Status: in-progress——2026-11-02 评审修订完（钉 `9fd8c17e3` 的评审：Spec 阻断 1、非阻断 1，见文末「评审修订」），待进 main。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum16`（完成记录见文末）；待非作者评审与进 main。此前 in-progress——2026-11-02 作者认领，分支 `claude-docnum16`，从票 15 的 `b29cf8216` 起
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）
 父票：[spec](../spec.md)
 Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-across-http-reads.md) 之上：共用判据 `httpapi.StorableText` 与登记处挂检查的做法都出自那一票）
 出处：
@@ -193,3 +193,16 @@ Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-acro
   - 套壳摘掉，逐行两条失败 322 格；登记口那条五口都红。
   - 文件名那道判摘掉，新用例六格红。
   - 两处套回去全绿。
+
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 初评钉 `9fd8c17e3`：Standards 阻断 0、Spec 阻断 1（`bodyNULExemptions` 按前缀放过运输履约、关务的 NUL，罩进了修前就答 500 的口——重问节奏登记与建案要求登记的 `basis`）。协调方裁删豁免、一律 400（豁免是协调方上一轮提议的，判断失误）。非阻断：价卡上传文件名可带 NUL / 非法 UTF-8 进库——作者顺手修。
+- 复评钉 `2cd60c8c0`：两轴阻断为零。非阻断：`cmd/parcel-api/storable_values_channel_test.go` 文件头与 Covers 仍说真渠道 NUL 答 200——协调方进 main 时注明端点直挂（见下）。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `0d3d23d21` 上 `git merge --no-ff origin/claude-docnum16`（tip `2cd60c8c0`），无冲突；合并提交 `7deef3b72`。
+- 协调方一笔 `659a5bebd`：真渠道 NUL 用例注明端点直挂、生产路由先由请求体检查答 400。
+- main tip 上重生成机制清点（`6b449ce6b`）；ADR 索引、AT 盘点计数无变化。
+- 全量真库测试 `scripts/test-full.sh`：退 0，174 个包 ok。一次性库 `seed_docnum16` 灌种子：退 0。
+- 无迁移；演示环境换 parcel-api 二进制。
