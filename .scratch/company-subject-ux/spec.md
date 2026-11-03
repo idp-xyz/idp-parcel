@@ -65,3 +65,7 @@ Status: resolved——2026-11-03 子票 01–07 全部进 main
 - 01–04 resolved；三道门在 main 上退 0；CI `admin-web` job 绿。
 - 浏览器在演示租户上核过：列表、详情栏四签、对象页四签、新增（含一并登记往来单位）、更新公司资料（预填当前版 + 差异预览）、停用对话框（不提交）。
 - 05 走并行会话那条路（隔离评审、全量真库测试）进 main；06 在 04、05 之后做。
+
+## 附带
+
+- CI 上 `TestTheLargestLegalWorkbookIsReadWithinBoundedTimeAndMemory`（parcel-pricing 价卡模板读取）在本批几次只改文档的提交上红（带 `-race` 的共享执行器实测 15.6–17.8 s，上限 15 s）。耗时上限按该用例「防量级退化」的本意放宽到 45 s（分支 `claude-ci-workbook-bound`，非作者评审阻断为零，全量真库测试过），与本批一起进 main。
