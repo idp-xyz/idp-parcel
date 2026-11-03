@@ -24,12 +24,14 @@ export function ProfileReadoutCard({
   extra?: string;
   children: ReactNode;
 }) {
+  // 读出的字号（票 company-subject-ux/13 第 3 条）：值 14 / 标签 13 / 等宽 13 / 卡标题 14，行高 6；联系人卡与收款账户表同一把尺。
+  // 卡自己是容器（legal-entity-readout-card）：窄于 28rem 时字段的标签改到值上面，规则在 legal-entity-profile-readout.css。
   return (
-    <section className="overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-bg">
+    <section className="legal-entity-readout-card overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-bg">
       <div className="flex items-center gap-2 border-b border-idpxyz-border bg-idpxyz-editor px-4 py-2">
         <Icon className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-        <h4 className="text-[13px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
-        {extra ? <span className="text-[12px] leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
+        <h4 className="text-[14px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
+        {extra ? <span className="text-[13px] leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
       </div>
       <div className="px-4 py-3">{children}</div>
     </section>
@@ -63,10 +65,10 @@ export function ProfileReadoutField({
   const absent = value === undefined || value === null || value === '' || value === '未配置';
   return (
     <div className={`legal-entity-readout-field ${wide ? 'legal-entity-readout-field-wide' : ''}`}>
-      <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb" title={title}>
+      <dt className="text-[13px] leading-6 text-idpxyz-breadcrumb" title={title}>
         {label}
       </dt>
-      <dd className={`min-w-0 text-[13px] leading-5 ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${mono ? 'font-mono' : ''} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
+      <dd className={`min-w-0 leading-6 ${mono ? 'font-mono text-[13px]' : 'text-[14px]'} ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
         {absent ? absentValueMark : value}
       </dd>
     </div>
@@ -107,8 +109,8 @@ export function ProfileReadoutAddresses({
     <dl className="legal-entity-readout-addresses">
       {items.map((item) => (
         <div key={item.key} className="min-w-0">
-          <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb">{item.label}</dt>
-          <dd className={`min-w-0 text-[13px] leading-5 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
+          <dt className="text-[13px] leading-6 text-idpxyz-breadcrumb">{item.label}</dt>
+          <dd className={`min-w-0 text-[14px] leading-6 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
             {item.address ? <ProfileReadoutAddress address={item.address} /> : absentValueMark}
           </dd>
         </div>
@@ -134,7 +136,8 @@ export function ReadoutText({ text }: { text: string }) {
 /**
  * 值格里的两列小表（票 company-subject-ux/08 第 5 条）：左列是类型名或语言（弱显），右列是号或抬头。几个号用分号串成一段
  * 扫不出来，一行一个才认得出哪个号是哪种。左列最多占一半宽，长类型名折行而不是把号挤掉；等宽字体只给号。
- * 两列同一字号、只以灰色分主次（票 company-subject-ux/12 第 3 条）：一行里两种字号，读的人以为是两层信息。
+ * 左列按标签那一档、右列按值那一档（票 company-subject-ux/13 第 3 条把值提到 14、等宽留在 13）：两列同一行高，
+ * 号比字小一号是等宽字本来就显大一圈，看着才齐。
  */
 export function ProfileReadoutPairs({
   rows,
@@ -151,10 +154,10 @@ export function ProfileReadoutPairs({
     <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <dt className={`text-[13px] leading-5 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
+          <dt className={`text-[13px] leading-6 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
             {row.head}
           </dt>
-          <dd className={`min-w-0 text-[13px] leading-5 text-idpxyz-text ${mono ? 'select-text font-mono' : ''}`}>{row.value}</dd>
+          <dd className={`min-w-0 leading-6 text-idpxyz-text ${mono ? 'select-text font-mono text-[13px]' : 'text-[14px]'}`}>{row.value}</dd>
         </Fragment>
       ))}
     </dl>

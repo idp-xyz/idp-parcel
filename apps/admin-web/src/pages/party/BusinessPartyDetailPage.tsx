@@ -122,6 +122,8 @@ function viewStateOf(
 /**
  * 参与方对象页（`#/business-parties/<参与方标识>`）。结构同工作台详情栏（BusinessPartyDetailPanel）。关系册答案由列表页
  * 持有、传进来（与关系册同一份），全景区不另取。签由本页记、经模板的受控签口交进去，与法人对象页同一做法。
+ * 按分区版式摆（票 company-subject-ux/13）：概要与时间线一页纵排，时间线默认折起——修订链要取数，折着时标题后
+ * 显当前第几版。指标带仍在头区，随滚动收起。
  */
 export function BusinessPartyDetailPage({
   partyId,
@@ -160,7 +162,8 @@ export function BusinessPartyDetailPage({
       }
       meta={row ? buildMeta(row) : []}
       summary={row ? buildSummary(row) : undefined}
-      basicTitle="概要"
+      // 这张卡装的是停用的来源单据与技术详情；分区版式下「概要」已是分区标题，卡再叫概要就是上下两行同一个词。
+      basicTitle="登记依据"
       basicFields={row ? buildBasicFields(row) : []}
       sections={
         row
@@ -198,8 +201,12 @@ export function BusinessPartyDetailPage({
           ? [
               {
                 id: 'timeline',
+                collapsed: true,
+                summary: `当前${updateOrdinalLabel(row.revision)}`,
                 content: (
-                  <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
+                  <section className="bg-idpxyz-bg p-5">
+                    <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
+                  </section>
                 ),
               },
             ]
@@ -207,6 +214,7 @@ export function BusinessPartyDetailPage({
       }
       activeTab={tab}
       onActiveTabChange={setTab}
+      layout="sections"
       viewState={viewState}
     />
   );

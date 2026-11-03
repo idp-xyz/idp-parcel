@@ -12,7 +12,7 @@ import './legal-entity-profile-readout.css';
  */
 export function LegalEntityContactCards({ contacts }: { contacts: readonly LegalEntityContactRecord[] }) {
   // 整张清单没有人是结论句，照旧用文字（spec 公司主体 UX「统一用语」）。
-  if (!contacts.length) return <p className="text-[13px] text-idpxyz-breadcrumb">还没有登记联系人</p>;
+  if (!contacts.length) return <p className="text-[14px] leading-6 text-idpxyz-breadcrumb">还没有登记联系人</p>;
   return (
     <div className="legal-entity-contact-cards">
       <ul className="legal-entity-contact-cards-grid" aria-label="联系人清单">
@@ -26,10 +26,11 @@ export function LegalEntityContactCards({ contacts }: { contacts: readonly Legal
 
 function ContactCardView({ card }: { card: ContactCard }) {
   const hasLines = card.phone || card.email || card.socialAccounts.length > 0;
+  // 字号与资料读出同一把尺（票 company-subject-ux/13 第 3 条）：人名与各行 14、所属与平台名 13、等宽账号 13。
   return (
     <li className="min-w-0 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-4 py-3">
-      <h5 className="break-words text-[13px] font-semibold leading-5 text-idpxyz-textBright">{card.name}</h5>
-      {card.affiliation ? <p className="mt-0.5 break-words text-[12px] leading-5 text-idpxyz-breadcrumb">{card.affiliation}</p> : null}
+      <h5 className="break-words text-[14px] font-semibold leading-6 text-idpxyz-textBright">{card.name}</h5>
+      {card.affiliation ? <p className="mt-0.5 break-words text-[13px] leading-5 text-idpxyz-breadcrumb">{card.affiliation}</p> : null}
       {card.purposes.length ? (
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="联系用途">
           {card.purposes.map((purpose) => (
@@ -52,7 +53,7 @@ function ContactCardView({ card }: { card: ContactCard }) {
         </ul>
       ) : null}
       {hasLines ? (
-        <ul className="mt-2.5 space-y-1 text-[13px] leading-5 text-idpxyz-text">
+        <ul className="mt-2.5 space-y-1 text-[14px] leading-6 text-idpxyz-text">
           {card.phone ? (
             <ContactLine icon={Phone} label="电话">
               <span className="tabular-nums">{card.phone}</span>
@@ -71,8 +72,8 @@ function ContactCardView({ card }: { card: ContactCard }) {
               <span className="grid gap-0.5">
                 {card.socialAccounts.map((account, index) => (
                   <span key={`${account.platform}-${account.account}-${index}`} className="flex min-w-0 items-baseline gap-2">
-                    <span className="w-[4.5em] shrink-0 text-idpxyz-breadcrumb">{account.platform}</span>
-                    <span className="min-w-0 select-text break-all font-mono text-[12px]">{account.account}</span>
+                    <span className="w-[4.5em] shrink-0 text-[13px] text-idpxyz-breadcrumb">{account.platform}</span>
+                    <span className="min-w-0 select-text break-all font-mono text-[13px]">{account.account}</span>
                   </span>
                 ))}
               </span>
@@ -88,7 +89,7 @@ function ContactCardView({ card }: { card: ContactCard }) {
 function ContactLine({ icon: Icon, label, title, children }: { icon: LucideIcon; label: string; title?: string; children: ReactNode }) {
   return (
     <li className="flex min-w-0 items-start gap-2" title={title}>
-      <Icon className="mt-[3px] h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+      <Icon className="mt-[5px] h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
       <span className="sr-only">{label}</span>
       <span className="min-w-0">{children}</span>
     </li>

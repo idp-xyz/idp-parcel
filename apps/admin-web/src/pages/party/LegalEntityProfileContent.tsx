@@ -110,7 +110,7 @@ export function LegalEntityProfileContent({
         </ProfileReadoutCard>
       ) : null}
       {notes.length ? (
-        <div className="mt-2 border-t border-idpxyz-border pt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <div className="mt-2 border-t border-idpxyz-border pt-4 text-[13px] leading-6 text-idpxyz-breadcrumb">
           <p className="font-medium text-idpxyz-text">资料维护提示</p>
           <ul className="mt-1 list-disc pl-4">
             {notes.map((note) => (
@@ -138,13 +138,13 @@ function PrimaryTitleMark() {
 /**
  * 收款账户表，一行一个账户、币种打头（ADR-0359 决定三「按币种登记」，开单方按单据币种挑账户）。没有账户是结论句
  * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
- * 等宽的号与备注都取表的正文字号（票 company-subject-ux/12 第 3 条）：同一行三种字号，号显得比户名矮一截。
+ * 表与读出同一把尺（票 company-subject-ux/13 第 3 条）：正文 14、表头与次要行 13、等宽 13，行高一律 6。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
-  if (!accounts.length) return <p className="text-[13px] leading-5 text-idpxyz-breadcrumb">未登记收款账户</p>;
+  if (!accounts.length) return <p className="text-[14px] leading-6 text-idpxyz-breadcrumb">未登记收款账户</p>;
   return (
     <div className="overflow-x-auto">
-      <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
+      <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[14px] leading-6">
         <caption className="sr-only">收款账户清单</caption>
         {/* 列宽按内容的常见长度分（票 company-subject-ux/12 第 4 条）：户名与开户行（带地址）最长，币种与备注最短；
             账号一列要装下 IBAN 的长度，等宽字再按字符折。币种列取 15 而不是票面的 14：详情栏拖到 2000 宽时表约 840px，
@@ -156,7 +156,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
           <col className="w-[22%]" />
           <col className="w-[14%]" />
         </colgroup>
-        <thead className="border-b border-idpxyz-border text-[12px] text-idpxyz-breadcrumb">
+        <thead className="border-b border-idpxyz-border text-[13px] text-idpxyz-breadcrumb">
           <tr>
             <th scope="col" className="py-2 pr-3 font-medium">币种 / 用途</th>
             <th scope="col" className="px-3 py-2 font-medium">户名</th>
@@ -170,14 +170,14 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
             <tr key={`${account.currency}-${account.accountNumber}-${index}`} className="align-top hover:bg-idpxyz-hover">
               <th scope="row" className="py-2.5 pr-3 font-medium text-idpxyz-textBright">
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
-                {account.label ? <span className="block text-[12px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
+                {account.label ? <span className="block text-[13px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
               </th>
               <td className="px-3 py-2.5 text-idpxyz-text"><ReadoutText text={account.holderName} /></td>
               <td className="px-3 py-2.5">
                 <span className="block text-idpxyz-text"><ReadoutText text={account.bankName} /></span>
-                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
+                {account.bankAddress ? <span className="block text-[13px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
               </td>
-              <td className="px-3 py-2.5 font-mono">
+              <td className="px-3 py-2.5 font-mono text-[13px]">
                 <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
                 {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
               </td>

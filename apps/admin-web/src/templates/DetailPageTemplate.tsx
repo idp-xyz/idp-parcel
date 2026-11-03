@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Check, ChevronRight, Copy } from 'lucide-react';
 import {
   PageHeader,
   PageHeaderContent,
@@ -28,6 +28,15 @@ import {
   type WorkspaceTabInput,
 } from './workspace-tabs';
 import { WorkspaceTabLabel } from './workspace-tab-icons';
+import {
+  activeSectionAt,
+  bottomSpacerHeight,
+  headerCollapsedAfterScroll,
+  sectionElementId,
+  sectionExpanded,
+  sectionScrollTop,
+  type SectionPosition,
+} from './object-page-sections';
 import { TabCountBadge } from '../components/TabCountBadge';
 
 /** 业务区块：一个区块渲染成一个 Panel（Card），内容由调用方组装。 */
@@ -103,6 +112,15 @@ export interface DetailPageTemplateProps {
   activeTab?: WorkspaceTabId;
   onActiveTabChange?: (tab: WorkspaceTabId) => void;
   /**
+   * 签怎么摆（票 company-subject-ux/13）。`'tabs'`（缺省）是分签：一次只显一签，对象页默认都是它。`'sections'` 是分区，
+   * 照 Fiori Object Page：签成锚点栏吸在滚动容器顶上，各签的内容按固定序全部排在一页上纵向滚动，点锚点平滑滚过去、
+   * 滚动时按视口里最靠上的分区高亮；头区的 meta 行与指标带随滚动收起（Dynamic Page），标题行与动作留着；
+   * `activeTab` / `onActiveTabChange` 在这里的含义是「当前锚点」——外部给的 id 滚到那一节。给主数据类对象（公司主体、
+   * 往来单位）：它们的签是几块都要看的资料，不是几种互斥的视图。分区版式下 `tabs` 不传按空数组算。
+   * 不传或传 `'tabs'` 时渲染与此前逐字节同：分区版式整条支路在前面提前返回，分签那条支路一字未动。
+   */
+  layout?: 'tabs' | 'sections';
+  /**
    * 可选右侧上下文（手册「可选右侧上下文」）：关联对象、说明一类由调用方组装的内容，宽 280px，
    * 只在 xl 及以上显示——窄屏上它会把主列挤没，藏起来比挤着好。不传不占位。
    * 放进来的东西在窄屏上看不见，所以只放「看不见也不缺」的辅助内容，正文归签。
@@ -131,6 +149,7 @@ export function DetailPageTemplate({
   tabs,
   activeTab,
   onActiveTabChange,
+  layout = 'tabs',
   aside,
   viewState,
   stateOverride,
@@ -185,6 +204,43 @@ export function DetailPageTemplate({
       </CardContent>
     </Card>
   );
+
+  // 分区版式整条支路在这里提前返回，下面分签与叠 Card 两条支路一字不动——「传 'tabs' 时渲染逐字节同」能对着代码读出来
+  // （与上面保留旧形态头区 JSX 是同一个理由）。模板内容归哪一签的口径与下面分签那一处相同：基本信息按有没有字段判、
+  // 审计留痕传了空数组仍算有内容。
+  if (layout === 'sections') {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+        <SectionsWorkspace
+          title={title}
+          identifier={identifier}
+          status={status}
+          description={description}
+          headerActions={headerActions}
+          meta={meta}
+          summary={summary}
+          ready={viewState.kind === 'ready'}
+          tabs={resolveWorkspaceTabs<ReactNode>(
+            {
+              summary: [...(basicFields.length > 0 ? [basicCard] : []), ...(sectionCards ?? [])],
+              audit: auditTrail ? [auditCard] : [],
+            },
+            (tabs ?? []).filter((tab) => hasRenderableContent(tab.content)),
+          )}
+          aside={aside}
+          activeTab={activeTab}
+          onActiveTabChange={onActiveTabChange}
+          stateSlot={
+            viewState.kind === 'ready' ? null : (
+              <div className="flex-1 flex items-center justify-center overflow-auto">
+                <StateSlot state={viewState} override={stateOverride} />
+              </div>
+            )
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -347,6 +403,374 @@ function WorkspaceTabs({
         </ContentColumns>
       </div>
     </Tabs>
+  );
+}
+
+/**
+ * 分区版式（票 company-subject-ux/13）：头区 + 可收起的 meta 行与指标带 + 单页滚动的分区。头区标题行的 JSX 与上面对象工作区
+ * 头区那一支重复而不抽成共用片段，理由同文件里保留旧形态头区的那条注释——让「传 'tabs' 时逐字节同」能对着代码读出来。
+ * 收起态由滚动容器报上来（WorkspaceSections），这里只管把 meta 行与指标带折起来；非 ready 态头区一律展开——
+ * 没有内容可滚，收着的头没有东西能把它放回来。
+ */
+function SectionsWorkspace({
+  title,
+  identifier,
+  status,
+  description,
+  headerActions,
+  meta,
+  summary,
+  ready,
+  tabs,
+  aside,
+  activeTab,
+  onActiveTabChange,
+  stateSlot,
+}: {
+  title: string;
+  identifier?: string;
+  status?: ReactNode;
+  description?: string;
+  headerActions?: ReactNode;
+  meta?: DetailMeta[];
+  summary?: DetailSummaryStat[];
+  ready: boolean;
+  tabs: ResolvedWorkspaceTab<ReactNode>[];
+  aside: ReactNode;
+  activeTab?: WorkspaceTabId;
+  onActiveTabChange?: (tab: WorkspaceTabId) => void;
+  stateSlot: ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const metaRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  // 收起阈值即 meta 行与指标带此刻的高度：只在展开时读（收起时它们量出来是 0，而收起态只问「回没回到页首」）。
+  const collapseThresholdOf = () => (metaRef.current?.offsetHeight ?? 0) + (summaryRef.current?.offsetHeight ?? 0);
+  const headerCollapsed = collapsed && ready;
+  return (
+    <>
+      <PageHeader className="items-start">
+        <PageHeaderContent className="flex-col items-start">
+          <div className="flex min-w-0 max-w-full items-center gap-3">
+            <PageHeaderTitle>{title}</PageHeaderTitle>
+            {identifier && (
+              <span className="inline-flex items-center gap-1">
+                <span className="select-all font-mono text-[12px] text-idpxyz-accent">
+                  {identifier}
+                </span>
+                <CopyIdentifierButton text={identifier} />
+              </span>
+            )}
+            {status}
+            {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
+          </div>
+          {meta !== undefined && meta.length > 0 && (
+            <CollapsibleRows collapsed={headerCollapsed} innerRef={metaRef}>
+              {/* 标题行与 meta 行的间距放在可收起块里面而不是 flex gap 上：块收成 0 高时 gap 还会留一道空。 */}
+              <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
+                {meta.map((item) => (
+                  <div key={item.label} className="flex gap-1">
+                    <dt className="text-idpxyz-textMuted">{item.label}</dt>
+                    <dd className="text-idpxyz-text">{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CollapsibleRows>
+          )}
+        </PageHeaderContent>
+        {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
+      </PageHeader>
+
+      {ready && summary !== undefined && summary.length > 0 && (
+        <CollapsibleRows collapsed={headerCollapsed} innerRef={summaryRef}>
+          <SummaryStrip stats={summary} />
+        </CollapsibleRows>
+      )}
+
+      {ready ? (
+        <WorkspaceSections
+          tabs={tabs}
+          aside={aside}
+          activeTab={activeTab}
+          onActiveTabChange={onActiveTabChange}
+          headerCollapsed={collapsed}
+          onHeaderCollapsedChange={setCollapsed}
+          collapseThresholdOf={collapseThresholdOf}
+        />
+      ) : (
+        stateSlot
+      )}
+    </>
+  );
+}
+
+/**
+ * 随头部收起的一块：高度在 1fr 与 0fr 之间过渡、透明度随之，只用 transition、不量高度——grid 行的 fr 过渡让内容块
+ * 从真实高度收到 0 而不用先知道它多高（max-height 那条路要么量、要么猜个上限）。里层 min-h-0 + overflow-hidden 是
+ * 这个技法的另一半：没有它 grid 项按内容撑开、行收不下去。收起时整块 inert：meta 行里有可复制的号（按钮），
+ * 只裁掉高度的话 Tab 键还能落到看不见的按钮上，读屏也还能读到。
+ */
+function CollapsibleRows({
+  collapsed,
+  innerRef,
+  children,
+}: {
+  collapsed: boolean;
+  innerRef: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`grid w-full shrink-0 transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        collapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'
+      }`}
+      inert={collapsed}
+    >
+      <div ref={innerRef} className="min-h-0 overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** 一次「滚到某分区」的要求；seq 让同一分区连点两次也再滚一遍。 */
+interface ScrollRequest {
+  id: WorkspaceTabId;
+  smooth: boolean;
+  seq: number;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+/** 各分区此刻在滚动容器内容坐标里的位置，按文档顺序。 */
+function measureSections(scroller: HTMLElement): SectionPosition<WorkspaceTabId>[] {
+  const origin = scroller.getBoundingClientRect().top - scroller.scrollTop;
+  return Array.from(scroller.querySelectorAll<HTMLElement>('[data-section-id]')).map((element) => ({
+    id: element.dataset.sectionId as WorkspaceTabId,
+    top: element.getBoundingClientRect().top - origin,
+  }));
+}
+
+/**
+ * 分区内容区：锚点栏（复用分签的 Tabs 原语，所以长得与签一样、也带 tablist 的键盘走法）吸在滚动容器顶上，
+ * 各分区按固定序排在一页上。判读（当前锚点、滚动偏移、末尾垫高、头部收起、折叠态）都在 object-page-sections.ts，
+ * 这里只量与摆。
+ *
+ * 锚点栏用受控的 Tabs 却不接 onValueChange，改在每个条目上接 onClick：Radix 只在值变了才报，点已经高亮的那条
+ * 就不会再滚回它的顶上；activationMode="manual" 让方向键只移焦点、Enter / 空格才滚。
+ *
+ * 外部给的 `activeTab`：与上次报回去的不同才算一次新的要求（滚过去、折着的展开）——自己报回去的锚点经调用方 state
+ * 回流进来时不能再滚一遍，那会在人滚动途中把分区顶边一次次拽回栏下。首次（挂载时记住的锚点）直接跳、不平滑。
+ */
+function WorkspaceSections({
+  tabs,
+  aside,
+  activeTab,
+  onActiveTabChange,
+  headerCollapsed,
+  onHeaderCollapsedChange,
+  collapseThresholdOf,
+}: {
+  tabs: ResolvedWorkspaceTab<ReactNode>[];
+  aside: ReactNode;
+  activeTab?: WorkspaceTabId;
+  onActiveTabChange?: (tab: WorkspaceTabId) => void;
+  headerCollapsed: boolean;
+  onHeaderCollapsedChange: (collapsed: boolean) => void;
+  collapseThresholdOf: () => number;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<WorkspaceTabId | undefined>(activeTab);
+  const [toggled, setToggled] = useState<Partial<Record<WorkspaceTabId, boolean>>>({});
+  const [spacer, setSpacer] = useState(0);
+  const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null);
+  const reportedRef = useRef<WorkspaceTabId | undefined>(undefined);
+
+  const report = (id: WorkspaceTabId) => {
+    if (reportedRef.current === id) return;
+    reportedRef.current = id;
+    onActiveTabChange?.(id);
+  };
+  const expand = (id: WorkspaceTabId) =>
+    setToggled((previous) => (previous[id] === true ? previous : { ...previous, [id]: true }));
+  const requestScroll = (id: WorkspaceTabId, smooth: boolean) =>
+    setScrollRequest((previous) => ({ id, smooth, seq: (previous?.seq ?? 0) + 1 }));
+  const goTo = (id: WorkspaceTabId) => {
+    expand(id);
+    setActive(id);
+    report(id);
+    requestScroll(id, true);
+  };
+
+  useEffect(() => {
+    if (activeTab === undefined || activeTab === reportedRef.current) return;
+    const first = reportedRef.current === undefined;
+    reportedRef.current = activeTab;
+    expand(activeTab);
+    setActive(activeTab);
+    // 挂载时记住的锚点就是第一个分区的话不动：页面从 0 开，不为把第一个分区顶边贴到栏下而吃掉顶上那点内边距。
+    if (!first || activeTab !== tabs[0]?.id) requestScroll(activeTab, !first);
+  }, [activeTab]);
+
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scrollRequest || !scroller) return;
+    const target = scroller.querySelector<HTMLElement>(`[data-section-id="${scrollRequest.id}"]`);
+    if (!target) return;
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTo({
+      top: sectionScrollTop(top, barRef.current?.offsetHeight ?? 0),
+      behavior: scrollRequest.smooth && !prefersReducedMotion() ? 'smooth' : 'auto',
+    });
+  }, [scrollRequest]);
+
+  // 末尾垫高随内容与容器的尺寸重算：分区展开 / 折起、读口答回来内容长高、头部收起让容器长高，都会变。
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroller || !content) return;
+    const measure = () => {
+      const positions = measureSections(scroller);
+      const last = positions[positions.length - 1];
+      const barHeight = barRef.current?.offsetHeight ?? 0;
+      setSpacer(last ? bottomSpacerHeight(last.top, barHeight, scroller.clientHeight, barHeight + content.offsetHeight) : 0);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [tabs.length]);
+
+  // 卸载（页面态离开 ready）时把头放回来：没有滚动容器就没有人能再报「回到页首」。
+  useEffect(() => () => onHeaderCollapsedChange(false), [onHeaderCollapsedChange]);
+
+  const onScroll = () => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const next = activeSectionAt(measureSections(scroller), scroller.scrollTop, barRef.current?.offsetHeight ?? 0);
+    if (next !== null && next !== active) {
+      setActive(next);
+      report(next);
+    }
+    const collapsed = headerCollapsedAfterScroll(headerCollapsed, scroller.scrollTop, collapseThresholdOf());
+    if (collapsed !== headerCollapsed) onHeaderCollapsedChange(collapsed);
+  };
+
+  if (tabs.length === 0) return <div className="flex-1 overflow-auto" />;
+  const value = active !== undefined && tabs.some((tab) => tab.id === active) ? active : tabs[0].id;
+  return (
+    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto">
+      <div ref={barRef} className="sticky top-0 z-10 bg-idpxyz-editor">
+        <Tabs value={value} activationMode="manual" className="gap-0">
+          <TabsList className="px-4 shrink-0" aria-label="分区">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                aria-controls={sectionElementId(tab.id)}
+                onClick={() => goTo(tab.id)}
+              >
+                <WorkspaceTabLabel id={tab.id}>{tab.label}</WorkspaceTabLabel>
+                {tab.count !== undefined && (
+                  tab.id === 'contacts'
+                    ? <TabCountBadge count={tab.count} />
+                    : <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+      <div ref={contentRef}>
+        <ContentColumns aside={aside}>
+          {/* 分区之间比卡之间空得多一些：分区是一级、卡是二级，间距也得分两级。 */}
+          <div className="flex flex-col gap-7">
+            {tabs.map((tab) => {
+              const expanded = sectionExpanded(tab.collapsed, toggled[tab.id]);
+              return (
+                <section
+                  key={tab.id}
+                  id={sectionElementId(tab.id)}
+                  data-section-id={tab.id}
+                  aria-labelledby={`${sectionElementId(tab.id)}-title`}
+                  className="flex flex-col gap-3"
+                >
+                  <SectionHeading
+                    tab={tab}
+                    expanded={expanded}
+                    onToggle={
+                      tab.collapsed === undefined
+                        ? undefined
+                        : () => setToggled((previous) => ({ ...previous, [tab.id]: !expanded }))
+                    }
+                  />
+                  {expanded
+                    ? tab.contents.map((content, index) => <Fragment key={index}>{content}</Fragment>)
+                    : null}
+                </section>
+              );
+            })}
+          </div>
+        </ContentColumns>
+      </div>
+      <div aria-hidden="true" style={{ height: spacer }} />
+    </div>
+  );
+}
+
+/**
+ * 分区标题行：词 + 计数，下面一道线横贯整列。它是一级标题、卡的标题条是二级：一级取 15px 半粗（与联系人区的小标题
+ * 同一档）、不装进任何底色里，二级（ProfileReadoutCard、CardTitle）更小且在卡自己的框里。可折叠的分区整个标题是一枚按钮，
+ * 前面带转向的箭头；折着时标题后面接调用方给的一句摘要。h3：页头的标题是 h2，读屏按标题跳就是一节一节跳。
+ */
+function SectionHeading({
+  tab,
+  expanded,
+  onToggle,
+}: {
+  tab: ResolvedWorkspaceTab<ReactNode>;
+  expanded: boolean;
+  onToggle?: () => void;
+}) {
+  const count =
+    tab.count !== undefined ? (
+      <span className="ml-1.5 text-[12px] font-normal tabular-nums text-idpxyz-breadcrumb">{tab.count}</span>
+    ) : null;
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-idpxyz-border pb-1.5">
+      <h3 id={`${sectionElementId(tab.id)}-title`} className="text-[15px] font-semibold leading-6 text-idpxyz-textBright">
+        {onToggle ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onToggle}
+            className="inline-flex items-center gap-1 rounded hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent"
+          >
+            <ChevronRight
+              size={16}
+              aria-hidden="true"
+              className={`shrink-0 text-idpxyz-breadcrumb transition-transform ${expanded ? 'rotate-90' : ''}`}
+            />
+            {tab.label}
+            {count}
+          </button>
+        ) : (
+          <>
+            {tab.label}
+            {count}
+          </>
+        )}
+      </h3>
+      {!expanded && tab.summary !== undefined ? (
+        <span className="text-[12px] leading-5 text-idpxyz-breadcrumb">{tab.summary}</span>
+      ) : null}
+    </div>
   );
 }
 

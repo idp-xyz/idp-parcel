@@ -38,7 +38,7 @@ function ProfileSummary({
     <section className="legal-entity-profile-readout" aria-label="当前有效公司资料">
       {/* 读出的小标题只说「读的是哪一版」（票 company-subject-ux/08 第 3 条）：资料状态那枚药丸撤掉，它已在头区事实行里，
           同一块面上出现两次是重复。没有生效版本时没有版可点名，才把结论句「资料状态：…」写在这里。 */}
-      <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
+      <p className="text-[13px] leading-6 text-idpxyz-breadcrumb">
         {effective ? (
           <>
             当前资料 <span className="tabular-nums text-idpxyz-text">{profileRevisionLabel(effective.revision)}</span> ·{' '}
@@ -50,7 +50,7 @@ function ProfileSummary({
         )}
       </p>
       {status.tone !== 'good' ? (
-        <p className="mt-1 text-[12px] leading-5 text-idpxyz-breadcrumb">{status.description}</p>
+        <p className="mt-1 text-[13px] leading-6 text-idpxyz-breadcrumb">{status.description}</p>
       ) : null}
       <LegalEntityProfileContent content={effective} includeContacts={false} typeNameOf={typeNameOf} />
       <TechnicalDetails
