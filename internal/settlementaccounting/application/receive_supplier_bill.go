@@ -115,19 +115,24 @@ type ReceiveSupplierBillResult struct {
 	handoff      string
 	notCurrent   ExpectedCostNotCurrent
 	numbering    SupplierBillNumberConflict
+	supplier     domain.SupplierPartyReference
 }
 
 // SupplierBillNumberConflict 说账单号冲突撞的是哪一边：RegisteredClaim 非零是号已标识另一份主张；RegisteredNumber 非零是这份
-// 主张已以另一个号登记。主张供应商冲突时只有 RegisteredSupplier：这份主张原先的供应商。
+// 主张已以另一个号登记。
 type SupplierBillNumberConflict struct {
-	RegisteredClaim    domain.BillClaimID
-	RegisteredNumber   domain.SupplierBillNumber
-	RegisteredSupplier domain.SupplierPartyReference
+	RegisteredClaim  domain.BillClaimID
+	RegisteredNumber domain.SupplierBillNumber
 }
 
-// NumberConflict 在`账单号冲突`与`主张供应商冲突`时有值。
+// NumberConflict 只在`账单号冲突`时有值。
 func (result ReceiveSupplierBillResult) NumberConflict() (SupplierBillNumberConflict, bool) {
-	return result.numbering, result.outcome == BillNumberConflict || result.outcome == BillClaimSupplierConflict
+	return result.numbering, result.outcome == BillNumberConflict
+}
+
+// SupplierConflict 只在`主张供应商冲突`时有值：这份主张原先的供应商。
+func (result ReceiveSupplierBillResult) SupplierConflict() (domain.SupplierPartyReference, bool) {
+	return result.supplier, result.outcome == BillClaimSupplierConflict
 }
 
 // ExpectedCostNotCurrent 说点名的那一版为什么不是当前：失效纠错版本，或已有后继（Successor）。
@@ -200,8 +205,8 @@ func NewReceiveSupplierBillHandler(deps ReceiveSupplierBillDeps) *ReceiveSupplie
 	return &ReceiveSupplierBillHandler{deps: deps}
 }
 
-// Handle 把一份供应商账单推进到接收与逐行匹配：按主张与账单号排队 → 账单号查重（ADR-0357 决定一）→ 幂等/冲突按内容指纹
-// 分界（AT-SA-092/093）→ 主张成形 → 逐行匹配（每行必须有裁决，跨币种停在待判断）→ 审核授权探查（未配置即审核未决，不铸
+// Handle 把一份供应商账单推进到接收与逐行匹配：按主张与账单号排队 → 这份主张已接收的版本是不是同一家供应商 → 账单号查重
+// （ADR-0357 决定一）→ 幂等/冲突按内容指纹分界（AT-SA-092/093）→ 主张成形 → 逐行匹配（每行必须有裁决，跨币种停在待判断）→ 审核授权探查（未配置即审核未决，不铸
 // 应付）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。
 func (handler *ReceiveSupplierBillHandler) Handle(
 	ctx context.Context,
@@ -306,7 +311,8 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 	return handler.commit(ctx, record)
 }
 
-// claimSupplierConflict 查这份主张已接收的版本是不是另一家供应商的：同一份主张的各版本供应商不变（ADR-0357 决定一）。读不动答未决。
+// claimSupplierConflict 查这份主张已接收的版本是不是另一家供应商的：同一份主张不论哪一版（新版本，或同一版本的重发）供应商都不变
+// （ADR-0357 决定一）。读不动答未决。
 func (handler *ReceiveSupplierBillHandler) claimSupplierConflict(
 	ctx context.Context,
 	command ReceiveSupplierBillCommand,
@@ -317,7 +323,7 @@ func (handler *ReceiveSupplierBillHandler) claimSupplierConflict(
 		return billStoreUndecided(claim.String()), true, err
 	}
 	if received && supplier != command.Claim.Supplier {
-		return ReceiveSupplierBillResult{outcome: BillClaimSupplierConflict, numbering: SupplierBillNumberConflict{RegisteredSupplier: supplier},
+		return ReceiveSupplierBillResult{outcome: BillClaimSupplierConflict, supplier: supplier,
 			continuation: billContinuation("CLAIM_SUPPLIER_CONFLICT", claim.String(), command.Claim.Supplier.String())}, true, nil
 	}
 	return ReceiveSupplierBillResult{}, false, nil

@@ -71,27 +71,37 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillReception(
 	return command, nil
 }
 
-// IntakeSupplierBillAudit 分三步（ADR-0357 决定五）：先认这个人持审核应付与争议决定两种授予之一——一种都不持答未授予，请求体
-// 都不读；再读请求体、判载荷形状，坏形状答 400；最后按这一次给的结果核所需授予（supplierBillAuditDecisions），不足答未授予。
-// 只持一种授予的人送来拼错的结果，得到的是 400 而不是 403：他有权进这个口，错在载荷。
+// IntakeSupplierBillAudit 分三步（ADR-0357 决定五）：
+//  1. 审核应付与争议决定两种授予都认一遍，认得过的记为已持有。一种都没认过就答这一步最能说明问题的那个错误
+//     （telling），请求体不读。
+//  2. 读请求体、判载荷形状，坏形状答 400——只持一种授予的人送来拼错的结果，错在载荷，不答 403。
+//  3. 按这一次给的结果核所需授予（supplierBillAuditDecisions）。缺的那一种答它在第一步自己的错误：准入未登就说准入未登，
+//     身份依赖不可用就说不可用，不一律折成未授予。
 func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 	ctx context.Context,
 	request *http.Request,
 ) (application.AuditBillLineCommand, error) {
 	token := httpapi.BearerToken(request)
+	var operator OperatorIdentity
 	held := map[OperatorDecision]bool{}
-	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, token, OperatorDecisionSupplierBillAudit)
-	switch {
-	case err == nil:
-		held[OperatorDecisionSupplierBillAudit] = true
-	case errors.Is(err, ErrOperatorNotGranted):
-		disputer, disputeErr := intake.authenticator.AuthenticateOperatorDecision(ctx, token, OperatorDecisionSupplierBillDisputeDecision)
-		if disputeErr != nil {
+	refused := map[OperatorDecision]error{}
+	for _, decision := range []OperatorDecision{OperatorDecisionSupplierBillAudit, OperatorDecisionSupplierBillDisputeDecision} {
+		identity, err := intake.authenticator.AuthenticateOperatorDecision(ctx, token, decision)
+		if err == nil {
+			if len(held) == 0 {
+				operator = identity
+			}
+			held[decision] = true
+			continue
+		}
+		// 令牌本身不成立、渠道没配，换哪一种决定都一样，不必再试。
+		if errors.Is(err, ErrOperatorCredentialRejected) || errors.Is(err, ErrAccessChannelNotConfigured) {
 			return application.AuditBillLineCommand{}, err
 		}
-		operator, held[OperatorDecisionSupplierBillDisputeDecision] = disputer, true
-	default:
-		return application.AuditBillLineCommand{}, err
+		refused[decision] = err
+	}
+	if len(held) == 0 {
+		return application.AuditBillLineCommand{}, telling(refused[OperatorDecisionSupplierBillAudit], refused[OperatorDecisionSupplierBillDisputeDecision])
 	}
 	payload, err := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
 	if err != nil {
@@ -102,15 +112,37 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 		return application.AuditBillLineCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	for _, decision := range supplierBillAuditDecisions(command) {
-		if held[decision] {
-			continue
-		}
-		if _, err := intake.authenticator.AuthenticateOperatorDecision(ctx, token, decision); err != nil {
-			return application.AuditBillLineCommand{}, err
+		if !held[decision] {
+			return application.AuditBillLineCommand{}, refused[decision]
 		}
 	}
 	command.OperationEvidence = operatorEvidence(operator)
 	return command, nil
+}
+
+// telling 从两种授予各自的拒因里挑最能说明问题的那个交回。次序照恢复动作排（ADR-0029），越靠前越不是「去登一份授予」能解的：
+// 身份依赖不可用（503，等依赖恢复；ADR-0022 不许把没形成答案说成一个业务判别）> 认不出的错误（照原样交回，由调用方答未形成）>
+// 准入范围外（403，要登准入对照）> 未授予（403，要登授予）。
+func telling(errs ...error) error {
+	rank := func(err error) int {
+		switch {
+		case errors.Is(err, ErrIdentityDependencyUnavailable):
+			return 0
+		case errors.Is(err, ErrOutsideAdmissionScope):
+			return 2
+		case errors.Is(err, ErrOperatorNotGranted):
+			return 3
+		default:
+			return 1
+		}
+	}
+	var chosen error
+	for _, err := range errs {
+		if err != nil && (chosen == nil || rank(err) < rank(chosen)) {
+			chosen = err
+		}
+	}
+	return chosen
 }
 
 // supplierBillAuditDecisions 说一次审核要哪几种授予（ADR-0357 决定二）：给出结论（通过、拒绝）要审核应付，挂争议与再审要争议决定，
@@ -217,7 +249,9 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	}
 	if conflict, has := result.NumberConflict(); has {
 		body.RegisteredClaim, body.RegisteredSupplierBillNumber = conflict.RegisteredClaim.String(), conflict.RegisteredNumber.String()
-		body.RegisteredSupplier = conflict.RegisteredSupplier.String()
+	}
+	if supplier, has := result.SupplierConflict(); has {
+		body.RegisteredSupplier = supplier.String()
 	}
 	if notCurrent, has := result.NotCurrent(); has {
 		body.NotCurrent = &expectedNotCurrentBody{
