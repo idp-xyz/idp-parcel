@@ -1,8 +1,10 @@
 import { Fragment, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { RegisteredAddressRecord } from './api';
-import { CountryLabel } from '../refdata-labels';
-import { addressLinesOf, glueBracketGroups } from './legal-entity-profile';
+import { countryLabel } from '../refdata-names';
+import { useRefdataNames } from '../use-refdata-names';
+import { CopyAside } from './detail-primitives';
+import { addressCopyText, addressLinesOf, glueBracketGroups } from './legal-entity-profile';
 import './legal-entity-profile-readout.css';
 
 /**
@@ -80,18 +82,31 @@ export function ProfileReadoutField({
  * 不把国家码当前缀——运营读地址先看街道，国家是补充信息，译成「中国（CN）」后放句首会压过地址本身。末行取灰而不取
  * 强调色：票 08 时担心的「另起一行像链接」出在换成链接色上，灰的末行只是退后一步。资料读出与版本历史快照共用这一份，
  * 版式只定一处。
+ *
+ * 地址是文本类（票 company-subject-ux/14）：整段挂在 CopyAside 里，复制出去按行换行、国家译名作末行（addressCopyText）。
+ * 行与行用 <br /> 隔、不再各自成块：复制图标要挂在末行的行尾，块级的行会把它挤到下一行去。国家译名在这里按名表查而不摆
+ * CountryLabel：复制出去的那一份也要同一个译名。
  */
-export function ProfileReadoutAddress({ address }: { address: RegisteredAddressRecord }) {
+export function ProfileReadoutAddress({ address, name = '地址' }: { address: RegisteredAddressRecord; name?: string }) {
   const lines = addressLinesOf(address);
+  const country = address.country ? countryLabel(address.country, useRefdataNames()) : '';
   return (
-    <>
-      {lines.length > 0 ? lines.map((line, index) => <span key={`${index}-${line}`} className="block"><ReadoutText text={line} /></span>) : <span className="block">{absentValueMark}</span>}
-      {address.country ? (
-        <span className="block text-idpxyz-breadcrumb">
-          <CountryLabel code={address.country} />
-        </span>
+    <CopyAside value={addressCopyText(address, country)} name={name}>
+      {lines.length > 0
+        ? lines.map((line, index) => (
+            <Fragment key={`${index}-${line}`}>
+              {index > 0 ? <br /> : null}
+              <ReadoutText text={line} />
+            </Fragment>
+          ))
+        : absentValueMark}
+      {country ? (
+        <>
+          {lines.length > 0 ? <br /> : null}
+          <span className="text-idpxyz-breadcrumb">{country}</span>
+        </>
       ) : null}
-    </>
+    </CopyAside>
   );
 }
 
@@ -111,7 +126,7 @@ export function ProfileReadoutAddresses({
         <div key={item.key} className="min-w-0">
           <dt className="text-[13px] leading-6 text-idpxyz-breadcrumb">{item.label}</dt>
           <dd className={`min-w-0 text-[14px] leading-6 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
-            {item.address ? <ProfileReadoutAddress address={item.address} /> : absentValueMark}
+            {item.address ? <ProfileReadoutAddress address={item.address} name={item.label} /> : absentValueMark}
           </dd>
         </div>
       ))}
