@@ -1,7 +1,7 @@
 # 09 读出分组改成带图标标题的卡、签上带计数（照 WMS ASN 详情栏）
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 拿出 WMS「ASN 管理」页（同源的 idp-prism 工作台形态）问是否可参考；协调方评估后建议搬两样，用户裁「做吧」。参照截图 `scratchpad/ux-le2/wms-asn-reference.png`。
@@ -47,3 +47,7 @@ Blocked by: 无
 - 联系人卡只在「资料版本」签「查看某个日期的资料」的读出里出现（`includeContacts` 默认 true），没截图；与概要签同一份代码。
 - 暗色主题下标题条底色没截。
 - 资料更新落册后签上计数重读（钥匙与当前资料读口同一把）没在浏览器里走——核验脚本只读。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `95724ac1f` 上 `git merge --no-ff origin/claude-csux-09`（tip `700c10772`），无冲突。三道门在 main 上退 0（tsc、run-tests 1168、vite build）。协调方看过 2000 宽的详情栏截图：四张卡、三签带数。没动共享面。
