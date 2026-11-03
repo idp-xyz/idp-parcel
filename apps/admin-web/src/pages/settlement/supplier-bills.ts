@@ -17,7 +17,7 @@ import type {
   SupplierBillReceptionResponseBody,
   SupplierExpectedCostRecord,
 } from './api';
-import { billNumberConflictText } from './supplier-bill-audit';
+import { billNumberConflictText, claimSupplierConflictText } from './supplier-bill-audit';
 
 /** 应付单号的叫法，取单据编号词典那一份（ADR-0355 决定十一），不在各页另写。 */
 export const payableNumberName = documentTypeWords.AUDITED_PAYABLE.numberName;
@@ -413,7 +413,9 @@ export function receptionAnswerText(
         ? '没有登记：账单币种与所选预期成本的结算币种不同，本公司没有登记换算依据（未配置），不按当前汇率猜。'
         : `没有登记：服务端这一次没有答出结果（${body.undecidedReason ?? '原因未说'}），稍后重试。`;
     case 'SUPPLIER_BILL_NUMBER_CONFLICT':
-      return billNumberConflictText(body, billNumber, undefined, supplierName);
+      return billNumberConflictText(body, billNumber);
+    case 'CLAIM_SUPPLIER_CONFLICT':
+      return claimSupplierConflictText(body, supplierName);
     case 'EXPECTED_COST_SUPPLIER_MISMATCH': {
       const refused = body.expectedCostSupplier;
       if (!refused) return '没有登记：所选的预期成本是别家供应商的，改选这家供应商的预期成本再登记。';

@@ -152,3 +152,34 @@ func TestTrackingViewQueryWordJoinsTheVocabularyButNotTheAdmissionMapping(t *tes
 		t.Fatalf("查阅口的词登进了准入范围对照：err = %v", err)
 	}
 }
+
+// Covers: ADR-0356 决定一「新口要新词」——按运单号查询那一口核自己的词：持它的客户端铸出册上那一行绑定；只持按包裹查授予的客户端
+// 答未授予，反过来只持按运单号查询授予的客户端在按包裹查那一口也答未授予。准入范围答不在范围，这一口照样铸出、不问它。
+func TestShipmentTrackingQueryNeedsItsOwnWord(t *testing.T) {
+	holding := func(capability accessidentity.CustomerCapability) customerRegistryFake {
+		return customerRegistryFake{standing: customerStandingHolding(t, capability), found: true}
+	}
+	unbound := customerVerifierFake{verified: verifiedCustomerToken(t, false)}
+	mintShipmentTracking := func(minter *accessidentity.CustomerClientMinter) (accessidentity.CustomerTrackingViewQueryEnvelope, error) {
+		return minter.MintShipmentTrackingQuery(context.Background(), accessidentity.NewIntegrationClientCredential("presented.customer.token", nil))
+	}
+
+	var asked []accessidentity.AdmissionRequirement
+	minter := newPreAdviceMinter(t, unbound, holding(accessidentity.CustomerCapabilityShipmentTrackingQuery), admissionProbe{admitted: false, asked: &asked})
+	envelope, err := mintShipmentTracking(minter)
+	if err != nil || !envelope.Minted() || envelope.TenantID() != customerTenant || envelope.CustomerAccountID() != customerAccount {
+		t.Fatalf("持按运单号查询授予：(%q, %q, minted %v) err=%v", envelope.TenantID(), envelope.CustomerAccountID(), envelope.Minted(), err)
+	}
+	if len(asked) != 0 {
+		t.Fatalf("按运单号查询问了准入范围：%v", asked)
+	}
+
+	_, err = mintShipmentTracking(newPreAdviceMinter(t, unbound, holding(accessidentity.CustomerCapabilityTrackingViewQuery), accessidentity.UnconfiguredAdmissionScope{}))
+	assertCustomerGrade(t, err, "not granted")
+	_, err = mintTrackingViewQuery(newPreAdviceMinter(t, unbound, holding(accessidentity.CustomerCapabilityShipmentTrackingQuery), accessidentity.UnconfiguredAdmissionScope{}))
+	assertCustomerGrade(t, err, "not granted")
+
+	if got, err := accessidentity.ParseCustomerCapability("CUSTOMER_SHIPMENT_TRACKING_QUERY"); err != nil || got != accessidentity.CustomerCapabilityShipmentTrackingQuery {
+		t.Fatalf("CUSTOMER_SHIPMENT_TRACKING_QUERY：%q, %v", got, err)
+	}
+}

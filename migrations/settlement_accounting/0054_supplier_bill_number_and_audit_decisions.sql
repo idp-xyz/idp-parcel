@@ -42,6 +42,15 @@ CREATE TABLE settlement_accounting.supplier_bill_number (
             AND btrim(bill_number) <> ''
             AND btrim(claim_id) <> ''
             AND btrim(claim_version) <> ''
+        ),
+
+    -- 账单号逐字保存（领域 NewSupplierBillNumber 的库面）：首尾不带空白——Go unicode.IsSpace 认的那几种，\s 之外逐个列出——
+    -- 中间不含控制字符（C0、C1；NUL 本就进不了 text）与格式字符（Unicode 类别 Cf，照 Unicode 15 的码位逐段列出）。查重逐字比，
+    -- 看不见的字符收进来就能让同一个号再登一次。正则用 ARE 的 \u、\U 码位写法，标准字符串里反斜杠原样交给正则。
+    CONSTRAINT supplier_bill_number_verbatim
+        CHECK (
+            bill_number !~ '^[\s\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]|[\s\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]$'
+            AND bill_number !~ '[\u0001-\u001F\u007F-\u009F\u00AD\u0600-\u0605\u061C\u06DD\u070F\u0890-\u0891\u08E2\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB\U000110BD\U000110CD\U00013430-\U0001343F\U0001BCA0-\U0001BCA3\U0001D173-\U0001D17A\U000E0001\U000E0020-\U000E007F]'
         )
 );
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -61,11 +62,14 @@ const (
 // accessFace 是一行的接入面。细分格各只对一族有意义：运营决定按决定种类认证，作业事实按作业范围种类收，集成客户端
 // 按外部事实种类授予，首方客户按客户面能力授予。
 type accessFace struct {
-	family     faceFamily
-	decision   accessidentity.DecisionKind
-	workScope  accessidentity.WorkScopeKind
-	fact       accessidentity.ExternalFactType
-	capability accessidentity.CustomerCapability
+	family   faceFamily
+	decision accessidentity.DecisionKind
+	// alsoDecisions 是同一口按载荷另认的决定种类：供应商账单审核口按这一次给的结果认审核应付或争议决定（ADR-0357 决定二），
+	// 两种都要声明在这里，换口用例才核得到持其中任一种的人进得来、两种都不持的人进不来。
+	alsoDecisions []accessidentity.DecisionKind
+	workScope     accessidentity.WorkScopeKind
+	fact          accessidentity.ExternalFactType
+	capability    accessidentity.CustomerCapability
 }
 
 func unconfiguredFace() accessFace   { return accessFace{family: faceUnconfigured} }
@@ -77,8 +81,16 @@ func customerClientFace(capability accessidentity.CustomerCapability) accessFace
 	return accessFace{family: faceCustomerClient, capability: capability}
 }
 
-func decisionFace(kind accessidentity.DecisionKind) accessFace {
-	return accessFace{family: faceOperationDecision, decision: kind}
+func decisionFace(kind accessidentity.DecisionKind, also ...accessidentity.DecisionKind) accessFace {
+	return accessFace{family: faceOperationDecision, decision: kind, alsoDecisions: also}
+}
+
+// decisionKinds 是这一口认的全部决定种类：首要的那一种在前。
+func (face accessFace) decisionKinds() []accessidentity.DecisionKind {
+	if face.decision == "" {
+		return nil
+	}
+	return append([]accessidentity.DecisionKind{face.decision}, face.alsoDecisions...)
 }
 
 func workFactFace(scope accessidentity.WorkScopeKind) accessFace {
@@ -93,7 +105,11 @@ func integrationClientFace(fact accessidentity.ExternalFactType) accessFace {
 func (face accessFace) String() string {
 	switch {
 	case face.decision != "":
-		return string(face.family) + "/" + face.decision.String()
+		kinds := make([]string, 0, 1+len(face.alsoDecisions))
+		for _, kind := range face.decisionKinds() {
+			kinds = append(kinds, kind.String())
+		}
+		return string(face.family) + "/" + strings.Join(kinds, "+")
 	case face.workScope != "":
 		return string(face.family) + "/" + string(face.workScope)
 	case face.fact != "":

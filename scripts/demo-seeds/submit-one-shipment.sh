@@ -3,6 +3,9 @@
 # 再从委托查阅把同一笔读回来。
 # 答复的 parcels 逐件带回包裹号，配草案里的客户包裹参考（ADR-0223）：本脚本断言草案那一件带回来了，末行打出包裹号——
 # 客户追踪视图 GET /v1/customer-tracking-view?parcel=<包裹号> 用的就是它，不用再经操作者渠道去读。
+# 答复的 documentNumber 是这一单的运单号（ADR-0355）。提交之后立即按运单号查一次客户追踪（GET /v1/customer-shipment-tracking，ADR-0356），
+# 断言委托还没接受时答 AWAITING_ACCEPTANCE——与下面详情断言 SUBMITTED 同一个前提：dispatch 下一拍才判接受。要这台客户端有
+# CUSTOMER_SHIPMENT_TRACKING_QUERY 授予（steps/488）。末行带出运单号；接受之后的 PARCELS_LISTED 在 demo-run/chain.sh 的 ch_submit 里查。
 #
 # 提交走首方客户渠道（票 first-party-api/00，ADR-0139）：先替合成货主系统向演示发行方取一枚客户端凭据令牌
 # （operator-channel/customer-token.sh；设了 IDP_PARCEL_CUSTOMER_TOKEN 就直接用它），再带 Bearer 令牌提交。载荷里的
@@ -100,15 +103,36 @@ if not request_id:
 parcels = body.get("parcels") or []
 if len(parcels) != 1 or parcels[0].get("customerParcelReference") != parcel_ref or not parcels[0].get("parcelId"):
     sys.exit(f"201 的 parcels 没有把草案那一件（{parcel_ref}）连同包裹号带回来。应答：\n" + raw)
-open(path, "w", encoding="utf-8").write(request_id + "\n" + ref + "\n" + parcels[0]["parcelId"] + "\n")
+document_number = body.get("documentNumber") or ""
+if not document_number:
+    sys.exit("201 里没有 documentNumber（运单号）：演示租户的单据编号时区登了没有（steps/050）。应答：\n" + raw)
+open(path, "w", encoding="utf-8").write(request_id + "\n" + ref + "\n" + parcels[0]["parcelId"] + "\n" + document_number + "\n")
 PY
 
 request_id="$(sed -n '1p' "$post_file")"
 ref="$(sed -n '2p' "$post_file")"  # 来源请求键：首方族由接入请求标识铸成
 parcel_id="$(sed -n '3p' "$post_file")"
+document_number="$(sed -n '4p' "$post_file")"
+
+tracking_file="$(mktemp)"
+trap 'rm -f "$post_file" "$tracking_file"' EXIT
+tracking_code="$(curl -sS -o "$tracking_file" -w '%{http_code}' -H "Authorization: Bearer ${token}" \
+  --get "${base}/v1/customer-shipment-tracking" --data-urlencode "documentNumber=${document_number}")"
+python3 - "$tracking_code" "$tracking_file" "$document_number" <<'PY'
+import json, sys
+code, path, number = sys.argv[1], sys.argv[2], sys.argv[3]
+raw = open(path, encoding="utf-8").read()
+if code == "403":
+    sys.exit("按运单号查 403：客户端没有 CUSTOMER_SHIPMENT_TRACKING_QUERY 授予（steps/488），或首方族未配置。本脚本不绕过。应答：\n" + raw)
+if code != "200":
+    sys.exit(f"按运单号查 HTTP {code}，要 200。应答：\n" + raw)
+outcome = json.loads(raw).get("outcome")
+if outcome != "AWAITING_ACCEPTANCE":
+    sys.exit(f"接受之前按运单号 {number} 查答 {outcome!r}，要 AWAITING_ACCEPTANCE（dispatch 已判过接受时会失败，与下面详情断言 SUBMITTED 同一个前提）。应答：\n" + raw)
+PY
 
 list_file="$(mktemp)"
-trap 'rm -f "$post_file" "$list_file"' EXIT
+trap 'rm -f "$post_file" "$tracking_file" "$list_file"' EXIT
 list_code="$(curl -sS -o "$list_file" -w '%{http_code}' "${base}/shipment-request-views")"
 python3 - "$list_code" "$list_file" "$request_id" <<'PY'
 import json, sys
@@ -127,12 +151,12 @@ if len(matched) != 1 or matched[0].get("state") != "SUBMITTED":
 PY
 
 detail_file="$(mktemp)"
-trap 'rm -f "$post_file" "$list_file" "$detail_file"' EXIT
+trap 'rm -f "$post_file" "$tracking_file" "$list_file" "$detail_file"' EXIT
 detail_code="$(curl -sS -o "$detail_file" -w '%{http_code}' \
   --get "${base}/shipment-request-views" --data-urlencode "shipmentRequestId=${request_id}")"
-python3 - "$detail_code" "$detail_file" "$request_id" "$ref" "$parcel_id" "$parcel_ref" <<'PY'
+python3 - "$detail_code" "$detail_file" "$request_id" "$ref" "$parcel_id" "$parcel_ref" "$document_number" <<'PY'
 import json, sys
-code, path, request_id, ref, parcel_id, parcel_ref = sys.argv[1:7]
+code, path, request_id, ref, parcel_id, parcel_ref, document_number = sys.argv[1:8]
 raw = open(path, encoding="utf-8").read()
 if code == "403":
     sys.exit("委托详情 403：读 Intake 仍未配置。本脚本不绕过。应答：\n" + raw)
@@ -147,5 +171,5 @@ if request.get("sourceRequestKey") != ref:
 declared = [parcel.get("parcelId") for parcel in request.get("declaredParcels") or []]
 if declared != [parcel_id]:
     sys.exit(f"详情里的声明包裹 = {declared!r}，要提交答复带回的 [{parcel_id!r}]。应答：\n" + raw)
-print(f"已提交 {request_id} 来源键 {ref}；列表与详情都读到 SUBMITTED；包裹号 {parcel_id}（客户包裹参考 {parcel_ref}）")
+print(f"已提交 {request_id} 来源键 {ref}；列表与详情都读到 SUBMITTED；包裹号 {parcel_id}（客户包裹参考 {parcel_ref}）；运单号 {document_number}（接受前按号查 AWAITING_ACCEPTANCE）")
 PY

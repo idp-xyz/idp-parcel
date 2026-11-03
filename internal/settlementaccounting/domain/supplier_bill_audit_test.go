@@ -264,9 +264,13 @@ func TestAnAuditDecisionRehydratesOnlyWhenItsShapeHolds(t *testing.T) {
 	}
 }
 
-// Covers: `AT-SA-233`（领域半边，ADR-0357 决定一）——供应商账单号逐字保存：首尾空白与控制字符拒收，大小写照收、互不相同。
+// Covers: `AT-SA-233`（领域半边，ADR-0357 决定一）——供应商账单号逐字保存：首尾空白、控制字符与格式字符拒收，大小写照收、互不相同。
 func TestASupplierBillNumberIsKeptVerbatim(t *testing.T) {
-	for _, raw := range []string{"INV-9 ", " INV-9", "INV-9\n", "INV\t9", "INV-\a9", "INV-9　"} {
+	for _, raw := range []string{
+		"INV-9 ", " INV-9", "INV-9\n", "INV\t9", "INV-\a9", "INV-9\u3000",
+		// 格式字符（Cf）：零宽空格、字节序标记、零宽连接符、自左向右嵌入、自右向左覆盖、软连字符。
+		"INV\u200b-9", "\ufeffINV-9", "INV-9\u200d", "INV\u202a-9", "INV-9\u202e", "INV\u00ad9",
+	} {
 		if _, err := domain.NewSupplierBillNumber(raw); !errors.Is(err, domain.ErrMalformedSupplierBillNumber) {
 			t.Fatalf("%q 应拒，实得 %v", raw, err)
 		}

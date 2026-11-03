@@ -55,19 +55,25 @@ func NewBillClaimID(value string) (BillClaimID, error) {
 // 身份而不是某一版，适用范围是这家供应商自己的账单号（ADR-0357 决定一）。它不是主张身份，也不是本系统分配的单据号——幂等仍按
 // 主张身份，「同一供应商同号只标识一份主张」由接收编排与账单号册判。
 //
-// 逐字保存：首尾带空白或含控制字符的不收，大小写不折算。查重是逐字比的，悄悄去掉一个空格或折一次大小写，就把一个外部分配的号
-// 改成了另一个；拒收让送号的一方看得见（ADR-0357 决定一）。
+// 逐字保存：首尾带空白、或含控制字符（Unicode 类别 Cc）与格式字符（Cf：零宽空格、字节序标记、双向控制符之类）的不收，大小写不
+// 折算。查重是逐字比的：悄悄去掉一个空格或折一次大小写，就把一个外部分配的号改成了另一个；收下看不见的字符，同一个号就能带着
+// 它再登一次。拒收让送号的一方看得见（ADR-0357 决定一）。
 type SupplierBillNumber struct{ requiredValue }
 
 // ErrMalformedSupplierBillNumber 说明账单号首尾带空白或含控制字符。
-var ErrMalformedSupplierBillNumber = errors.New("settlement accounting: a supplier bill number is kept verbatim and must not carry edge spaces or control characters")
+var ErrMalformedSupplierBillNumber = errors.New("settlement accounting: a supplier bill number is kept verbatim and must not carry edge spaces, control or format characters")
+
+// invisibleInBillNumber 认控制字符（Cc）与格式字符（Cf）。
+func invisibleInBillNumber(r rune) bool {
+	return unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r)
+}
 
 func NewSupplierBillNumber(value string) (SupplierBillNumber, error) {
 	required, err := newRequiredValue("supplier bill number", value)
 	if err != nil {
 		return SupplierBillNumber{}, err
 	}
-	if strings.TrimSpace(value) != value || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+	if strings.TrimSpace(value) != value || strings.IndexFunc(value, invisibleInBillNumber) >= 0 {
 		return SupplierBillNumber{}, fmt.Errorf("%w: %q", ErrMalformedSupplierBillNumber, value)
 	}
 	return SupplierBillNumber{required}, nil

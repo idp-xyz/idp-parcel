@@ -72,6 +72,22 @@ func (double *billStoreDouble) FindBillNumberHolder(
 	return holder, found, nil
 }
 
+func (double *billStoreDouble) FindClaimSupplier(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierPartyReference, bool, error) {
+	if double.findErr != nil {
+		return domain.SupplierPartyReference{}, false, double.findErr
+	}
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Key.Claim == claim {
+			return record.Claim.Supplier(), true, nil
+		}
+	}
+	return domain.SupplierPartyReference{}, false, nil
+}
+
 func (double *billStoreDouble) FindClaimBillNumber(
 	_ context.Context,
 	tenant domain.TenantID,

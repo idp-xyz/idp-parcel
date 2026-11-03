@@ -168,50 +168,72 @@ func TestTheSupplierBillAuditIntakeTranslatesRangedDecisions(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-234、AT-SA-235（Intake 半边，ADR-0357 决定二）——审核口按载荷要的授予认证：争议只认争议决定，通过与拒绝只认审核应付，
-// 再审两种都认，只点名应付标识的旧形认审核应付；读不出的请求体照旧先认证、再答 400，没有授予的人先答未授予。
-func TestTheSupplierBillAuditIntakeAsksTheGrantsTheVerdictNeeds(t *testing.T) {
-	const prefix = `{"claim":"SYN-BILL-1","version":"v1","line":"L1",`
-	cases := []struct {
-		name string
-		body string
-		want []settlementhttp.OperatorDecision
-	}{
-		{"dispute", prefix + `"decision":"A1","verdict":"DISPUTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillDisputeDecision}},
-		{"pass", prefix + `"decision":"A2","verdict":"PASSED","rangeFrom":"0","rangeTo":"10"}`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
-		{"reject", prefix + `"decision":"A3","verdict":"REJECTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
-		{"re-audit pass", prefix + `"decision":"A4","verdict":"PASSED","rangeFrom":"0","rangeTo":"10","basis":"b","resolvesDispute":"A1"}`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillDisputeDecision, settlementhttp.OperatorDecisionSupplierBillAudit}},
-		{"legacy", prefix + `"payable":"P1"}`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
-		{"unreadable", `{"claim":`,
-			[]settlementhttp.OperatorDecision{settlementhttp.OperatorDecisionSupplierBillAudit}},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			var asked []settlementhttp.OperatorDecision
-			endpoint := settlementhttp.NewAuditSupplierBillEndpoint(operatorDecisionIntakeForTest(t, decisionAuthenticator{asked: &asked}), &capturingAuditor{})
-			endpoint.ServeHTTP(httptest.NewRecorder(), decisionRequest(testCase.body))
-			if len(asked) != len(testCase.want) {
-				t.Fatalf("认证 %v，want %v", asked, testCase.want)
-			}
-			for index := range asked {
-				if asked[index] != testCase.want[index] {
-					t.Fatalf("认证 %v，want %v", asked, testCase.want)
-				}
-			}
-		})
-	}
+// grantingAuthenticator 只认 granted 里的那几种决定，其余答未授予；asked 依次记下问过哪几种。
+type grantingAuthenticator struct {
+	granted map[settlementhttp.OperatorDecision]bool
+	asked   *[]settlementhttp.OperatorDecision
+}
 
-	denied := httptest.NewRecorder()
-	auditor := &capturingAuditor{}
-	settlementhttp.NewAuditSupplierBillEndpoint(operatorDecisionIntakeForTest(t, decisionAuthenticator{err: settlementhttp.ErrOperatorNotGranted}), auditor).
-		ServeHTTP(denied, decisionRequest(`{"claim":`))
-	if denied.Code != http.StatusForbidden || len(auditor.calls) != 0 {
-		t.Fatalf("没有授予又读不出的请求 = %d，要先答未授予", denied.Code)
+func (fake grantingAuthenticator) AuthenticateOperatorDecision(
+	ctx context.Context,
+	bearerToken string,
+	decision settlementhttp.OperatorDecision,
+) (settlementhttp.OperatorIdentity, error) {
+	*fake.asked = append(*fake.asked, decision)
+	if !fake.granted[decision] {
+		return settlementhttp.OperatorIdentity{}, settlementhttp.ErrOperatorNotGranted
+	}
+	return decisionAuthenticator{}.AuthenticateOperatorDecision(ctx, bearerToken, decision)
+}
+
+// Covers: AT-SA-234、AT-SA-235（Intake 半边，ADR-0357 决定二、五）——审核口先认持两种授予之一，再判形状，再按结果核所需授予：只持
+// 审核应付的人给争议、再审答 403，通过、拒绝、旧形进编排；只持争议决定的人给争议进编排，通过、拒绝、再审、旧形答 403；只持一种
+// 授予的人送来拼错的结果、小写的结果或读不出的请求体答 400，不答 403；两种都不持答 403，请求体不读。
+func TestTheSupplierBillAuditIntakeChecksTheGrantsTheVerdictNeeds(t *testing.T) {
+	const prefix = `{"claim":"SYN-BILL-1","version":"v1","line":"L1",`
+	bodies := map[string]string{
+		"dispute": prefix + `"decision":"A1","verdict":"DISPUTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+		"pass":    prefix + `"decision":"A2","verdict":"PASSED","rangeFrom":"0","rangeTo":"10"}`,
+		"reject":  prefix + `"decision":"A3","verdict":"REJECTED","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+		"reaudit": prefix + `"decision":"A4","verdict":"PASSED","rangeFrom":"0","rangeTo":"10","basis":"b","resolvesDispute":"A1"}`,
+		"legacy":  prefix + `"payable":"P1"}`,
+		"typo":    prefix + `"decision":"A5","verdict":"DISPUTE","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+		"lower":   prefix + `"decision":"A6","verdict":"disputed","rangeFrom":"0","rangeTo":"10","basis":"b"}`,
+		"broken":  `{"claim":`,
+	}
+	audit, dispute := settlementhttp.OperatorDecisionSupplierBillAudit, settlementhttp.OperatorDecisionSupplierBillDisputeDecision
+	holders := map[string]map[settlementhttp.OperatorDecision]bool{
+		"audit only":   {audit: true},
+		"dispute only": {dispute: true},
+		"both":         {audit: true, dispute: true},
+		"neither":      {},
+	}
+	want := map[string]map[string]int{
+		"audit only":   {"dispute": 403, "pass": 0, "reject": 0, "reaudit": 403, "legacy": 0, "typo": 400, "lower": 400, "broken": 400},
+		"dispute only": {"dispute": 0, "pass": 403, "reject": 403, "reaudit": 403, "legacy": 403, "typo": 400, "lower": 400, "broken": 400},
+		"both":         {"dispute": 0, "pass": 0, "reject": 0, "reaudit": 0, "legacy": 0, "typo": 400, "lower": 400, "broken": 400},
+		"neither":      {"dispute": 403, "pass": 403, "reject": 403, "reaudit": 403, "legacy": 403, "typo": 403, "lower": 403, "broken": 403},
+	}
+	for holder, granted := range holders {
+		for name, body := range bodies {
+			t.Run(holder+"/"+name, func(t *testing.T) {
+				asked := []settlementhttp.OperatorDecision{}
+				auditor := &capturingAuditor{}
+				endpoint := settlementhttp.NewAuditSupplierBillEndpoint(operatorDecisionIntakeForTest(t, grantingAuthenticator{granted: granted, asked: &asked}), auditor)
+				response := httptest.NewRecorder()
+				endpoint.ServeHTTP(response, decisionRequest(body))
+				expected := want[holder][name]
+				if expected == 0 {
+					if len(auditor.calls) != 1 {
+						t.Fatalf("要进编排，实得 %d %s（问过 %v）", response.Code, response.Body.String(), asked)
+					}
+					return
+				}
+				if response.Code != expected || len(auditor.calls) != 0 {
+					t.Fatalf("status = %d，want %d；进了编排 %v（问过 %v）", response.Code, expected, len(auditor.calls) != 0, asked)
+				}
+			})
+		}
 	}
 }
 
@@ -229,6 +251,9 @@ func TestTheSupplierBillReceptionIntakeTakesTheBillNumberVerbatim(t *testing.T) 
 		"newline at end":  `"INV-9\n"`,
 		"control char":    `"INV-\u00079"`,
 		"full-width tail": `"INV-9　"`,
+		"zero width":      `"INV\u200b-9"`,
+		"byte order mark": `"\ufeffINV-9"`,
+		"bidi override":   `"INV-9\u202e"`,
 	} {
 		response := httptest.NewRecorder()
 		endpoint.ServeHTTP(response, decisionRequest(withNumber(number)))

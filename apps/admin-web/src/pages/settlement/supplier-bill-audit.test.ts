@@ -3,6 +3,7 @@ import { deepEqual, equal, match, ok } from 'node:assert/strict';
 import {
   auditDraftProblems,
   billNumberConflictText,
+  claimSupplierConflictText,
   rangedAuditAnswerText,
   firstAuditRow,
   freeRanges,
@@ -126,9 +127,6 @@ test('审核答复说人话：三种结果、超出已匹配、范围已裁决�
 test('账单号冲突说清撞的是哪一边', () => {
   match(billNumberConflictText({ registeredClaim: 'BILL-1' }, ' INV-1 ', (claim) => `主张 ${claim}`), /账单号 INV-1 已经登记过（主张 BILL-1）/);
   match(billNumberConflictText({ registeredSupplierBillNumber: 'INV-0' }, 'INV-1'), /已经以账单号 INV-0 登记过/);
-  // 号相同而供应商不同（新版本换了供应商）：说出已登记的那家供应商。
-  match(
-    billNumberConflictText({ registeredSupplierBillNumber: 'INV-1', registeredSupplier: 'SUP-A' }, 'INV-1', undefined, (id) => `${id}公司`),
-    /已经以SUP-A公司的账单号 INV-1 登记过；同一份账单的新版本不能换账单号，也不能换供应商/,
-  );
+  // 新版本换了供应商：说出原先那家供应商，带不带号都是这一句。
+  match(claimSupplierConflictText({ registeredSupplier: 'SUP-A' }, (id) => `${id}公司`), /之前登记的版本是SUP-A公司的，同一份账单的新版本不能换供应商/);
 });

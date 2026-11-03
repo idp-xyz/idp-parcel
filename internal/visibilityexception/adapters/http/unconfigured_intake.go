@@ -39,6 +39,7 @@ type UnconfiguredIntake struct{}
 
 var (
 	_ QueryIntake              = UnconfiguredIntake{}
+	_ ShipmentTrackingIntake   = UnconfiguredIntake{}
 	_ ClaimIntake              = UnconfiguredIntake{}
 	_ OperationsTrackingIntake = UnconfiguredIntake{}
 )
@@ -46,6 +47,11 @@ var (
 // IntakeQuery 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeQuery(context.Context, *http.Request) (TrackingViewQuery, error) {
 	return TrackingViewQuery{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeShipmentTrackingQuery 同 IntakeQuery：不读请求，只答未配置。
+func (UnconfiguredIntake) IntakeShipmentTrackingQuery(context.Context, *http.Request) (ShipmentTrackingQuery, error) {
+	return ShipmentTrackingQuery{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeClaim 同 IntakeQuery：不读请求，只答未配置。

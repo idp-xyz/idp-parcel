@@ -2,7 +2,7 @@ package settlementhttp
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -71,50 +71,59 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillReception(
 	return command, nil
 }
 
-// IntakeSupplierBillAudit 先按载荷要的授予逐一认证，再判载荷形状：争议决定与审核应付分别授权（UC-SA-004「权限」，ADR-0357
-// 决定二），要哪几种得看这一次给的是什么结果、是不是再审，所以先粗读一遍结果与所解争议。认证排在形状之前——请求体读不出、
-// 形状不对的，没有授予的人照旧先答未授予，不借 400 探出口的形状。
+// IntakeSupplierBillAudit 分三步（ADR-0357 决定五）：先认这个人持审核应付与争议决定两种授予之一——一种都不持答未授予，请求体
+// 都不读；再读请求体、判载荷形状，坏形状答 400；最后按这一次给的结果核所需授予（supplierBillAuditDecisions），不足答未授予。
+// 只持一种授予的人送来拼错的结果，得到的是 400 而不是 403：他有权进这个口，错在载荷。
 func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 	ctx context.Context,
 	request *http.Request,
 ) (application.AuditBillLineCommand, error) {
-	payload, readErr := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
-	var operator OperatorIdentity
-	for index, decision := range supplierBillAuditDecisions(payload) {
-		authenticated, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), decision)
-		if err != nil {
+	token := httpapi.BearerToken(request)
+	held := map[OperatorDecision]bool{}
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, token, OperatorDecisionSupplierBillAudit)
+	switch {
+	case err == nil:
+		held[OperatorDecisionSupplierBillAudit] = true
+	case errors.Is(err, ErrOperatorNotGranted):
+		disputer, disputeErr := intake.authenticator.AuthenticateOperatorDecision(ctx, token, OperatorDecisionSupplierBillDisputeDecision)
+		if disputeErr != nil {
 			return application.AuditBillLineCommand{}, err
 		}
-		if index == 0 {
-			operator = authenticated
-		}
+		operator, held[OperatorDecisionSupplierBillDisputeDecision] = disputer, true
+	default:
+		return application.AuditBillLineCommand{}, err
 	}
-	if readErr != nil {
-		return application.AuditBillLineCommand{}, readErr
+	payload, err := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
+	if err != nil {
+		return application.AuditBillLineCommand{}, err
 	}
 	command, err := registrationjson.SupplierBillAuditFromJSONForTenant(payload, operator.Tenant)
 	if err != nil {
 		return application.AuditBillLineCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
+	for _, decision := range supplierBillAuditDecisions(command) {
+		if held[decision] {
+			continue
+		}
+		if _, err := intake.authenticator.AuthenticateOperatorDecision(ctx, token, decision); err != nil {
+			return application.AuditBillLineCommand{}, err
+		}
+	}
 	command.OperationEvidence = operatorEvidence(operator)
 	return command, nil
 }
 
-// supplierBillAuditDecisions 说这一份审核载荷要哪几种授予（ADR-0357 决定二）：给出结论（通过、拒绝）要审核应付，挂争议与再审要争议
-// 决定，再审两种都要。只粗读结果与所解争议两格，读不出或没有结果（只点名应付标识的旧形）按通过整行算，只要审核应付——形状对不对
-// 由 registrationjson 在认证之后判。
-func supplierBillAuditDecisions(payload []byte) []OperatorDecision {
-	var glance struct {
-		Verdict         string `json:"verdict"`
-		ResolvesDispute string `json:"resolvesDispute"`
+// supplierBillAuditDecisions 说一次审核要哪几种授予（ADR-0357 决定二）：给出结论（通过、拒绝）要审核应付，挂争议与再审要争议决定，
+// 再审两种都要；只点名应付标识的旧形是通过整行，只要审核应付。
+func supplierBillAuditDecisions(command application.AuditBillLineCommand) []OperatorDecision {
+	if command.Payable.String() != "" {
+		return []OperatorDecision{OperatorDecisionSupplierBillAudit}
 	}
-	_ = json.Unmarshal(payload, &glance)
-	disputed := glance.Verdict == domain.AuditDisputed.String()
 	var decisions []OperatorDecision
-	if disputed || glance.ResolvesDispute != "" {
+	if command.Verdict == domain.AuditDisputed || command.Resolves.String() != "" {
 		decisions = append(decisions, OperatorDecisionSupplierBillDisputeDecision)
 	}
-	if !disputed {
+	if command.Verdict != domain.AuditDisputed {
 		decisions = append(decisions, OperatorDecisionSupplierBillAudit)
 	}
 	return decisions
@@ -165,8 +174,9 @@ func NewAuditSupplierBillEndpoint(intake SupplierBillAuditIntake, auditor Suppli
 }
 
 // receptionResponse 的 registeredClaim 与 registeredSupplierBillNumber 只在账单号冲突时出现、恰出其一：前者是这个号已标识的那份
-// 主张，后者是这份主张已登记的那个号，连同它的分配方 registeredSupplier（ADR-0357 决定一）。expectedCostSupplier 只在供应商不符与
-// 供应商未记两格出现（ADR-0358 决定二）：哪一行、点名的哪一版，不符时另带那一版记下的供应商，好让人知道它是谁的。
+// 主张，后者是这份主张已登记的那个号；registeredSupplier 只在主张供应商冲突时出现：这份主张原先的供应商（ADR-0357 决定一）。
+// expectedCostSupplier 只在供应商不符与供应商未记两格出现（ADR-0358 决定二）：哪一行、点名的哪一版，不符时另带那一版记下的
+// 供应商，好让人知道它是谁的。
 type receptionResponse struct {
 	Outcome                      string                    `json:"outcome"`
 	UndecidedReason              string                    `json:"undecidedReason,omitempty"`

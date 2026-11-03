@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	veaccess "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/accessidentity"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
@@ -53,4 +54,47 @@ func buildCustomerTrackingViewAttributions(db *bentopg.DB) (*veps.ParcelCustomer
 		return nil, fmt.Errorf("parcel-api: customer tracking view attributions: %w", err)
 	}
 	return attributions, nil
+}
+
+// buildCustomerShipmentTrackingIntake 装配按运单号查询口的首方 Intake（ADR-0356 决定一）。铸造器与查阅口同一只；认证方另一只，核的是
+// 这一口自己的词 CUSTOMER_SHIPMENT_TRACKING_QUERY（一口一词）。
+func buildCustomerShipmentTrackingIntake(minter *accessidentity.CustomerClientMinter) (*visibilityhttp.CustomerShipmentTrackingIntake, error) {
+	if minter == nil {
+		return nil, fmt.Errorf("customer shipment tracking intake needs a minter")
+	}
+	authenticator, err := veaccess.NewCustomerShipmentTrackingAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := visibilityhttp.NewCustomerShipmentTrackingIntake(authenticator)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer shipment tracking intake: %w", err)
+	}
+	return intake, nil
+}
+
+// customerShipmentTrackingQueryIntake 交回端点表那一行用的 Intake，判 nil 的理由同 customerTrackingViewQueryIntake。
+func customerShipmentTrackingQueryIntake(intake *visibilityhttp.CustomerShipmentTrackingIntake) visibilityhttp.ShipmentTrackingIntake {
+	if intake == nil {
+		return visibilityhttp.UnconfiguredIntake{}
+	}
+	return intake
+}
+
+// buildCustomerShipmentLookup 装按运单号查询时问 parcel-shipment 的整单读口（ADR-0356 决定四）：PS 的委托查阅读面经它的应用读口，
+// 由 VE 的消费侧适配器译成本上下文的四格（ADR-0025）。账户是那条读的查询条件；只读，不写 PS 的库。
+func buildCustomerShipmentLookup(db *bentopg.DB) (*veps.CustomerShipmentLookup, error) {
+	views, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer shipment tracking shipment request views: %w", err)
+	}
+	reads, err := psapplication.NewReadCustomerShipmentByDocumentNumberHandler(views)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer shipment tracking read: %w", err)
+	}
+	lookup, err := veps.NewCustomerShipmentLookup(reads)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer shipment tracking lookup: %w", err)
+	}
+	return lookup, nil
 }

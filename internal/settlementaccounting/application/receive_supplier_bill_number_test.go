@@ -30,7 +30,7 @@ func receiveOnce(t *testing.T, fixture *billFixture, command application.Receive
 
 // Covers: `AT-SA-233`（编排半边）——供应商账单号记成主张的外部标识，查重在服务端：同一供应商同一号换个主张标识再录答账单号冲突并
 // 带出已登记的主张；这份主张已以另一个号登过也答账单号冲突；另一家供应商同号照常接收；同一主张的新版本可带同号、可不带号；
-// 重放时带了号而这份主张还没有号答版本冲突；新版本换了供应商而号不变也答账单号冲突；不带号的旧载荷照收；先排队再查号。
+// 重放时带了号而这份主张还没有号答版本冲突；新版本换了供应商，不论带不带号，答主张供应商冲突；不带号的旧载荷照收；先排队再查号。
 func TestASupplierBillNumberIdentifiesOneClaimPerSupplier(t *testing.T) {
 	fixture := newBillFixture(t)
 	first := receiveOnce(t, fixture, numberedBill(t, "bill-a", "v1", "partner-1", "INV-001"))
@@ -64,12 +64,13 @@ func TestASupplierBillNumberIdentifiesOneClaimPerSupplier(t *testing.T) {
 		}
 	})
 
-	t.Run("a new version under another supplier with the same number is a conflict", func(t *testing.T) {
-		switched := receiveOnce(t, fixture, numberedBill(t, "bill-a", "v9", "partner-2", "INV-001"))
-		conflict, _ := switched.NumberConflict()
-		if switched.Outcome() != application.BillNumberConflict || conflict.RegisteredNumber.String() != "INV-001" ||
-			conflict.RegisteredSupplier.String() != "partner-1" {
-			t.Fatalf("outcome = %q conflict = %+v（号的分配方变了就是另一个号）", switched.Outcome(), conflict)
+	t.Run("a new version under another supplier is refused with or without a number", func(t *testing.T) {
+		for _, number := range []string{"INV-001", ""} {
+			switched := receiveOnce(t, fixture, numberedBill(t, "bill-a", "v9", "partner-2", number))
+			conflict, _ := switched.NumberConflict()
+			if switched.Outcome() != application.BillClaimSupplierConflict || conflict.RegisteredSupplier.String() != "partner-1" {
+				t.Fatalf("号 %q：outcome = %q conflict = %+v（同一份主张的各版本供应商不变）", number, switched.Outcome(), conflict)
+			}
 		}
 	})
 

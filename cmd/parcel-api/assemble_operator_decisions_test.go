@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -223,12 +224,12 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	}
 }
 
-// swappedDecisionFaces 由登记处导出：挂操作者渠道「运营决定」能力面的各口及各自的决定种类。
-func swappedDecisionFaces() map[string]accessidentity.DecisionKind {
-	faces := map[string]accessidentity.DecisionKind{}
+// swappedDecisionFaces 由登记处导出：挂操作者渠道「运营决定」能力面的各口及各自认的决定种类（一口可以按载荷认几种）。
+func swappedDecisionFaces() map[string][]accessidentity.DecisionKind {
+	faces := map[string][]accessidentity.DecisionKind{}
 	for pattern, line := range declaredEndpointLines() {
 		if line.face.family == faceOperationDecision && !line.ownIntake {
-			faces[pattern] = line.face.decision
+			faces[pattern] = line.face.decisionKinds()
 		}
 	}
 	return faces
@@ -238,13 +239,16 @@ func swappedDecisionFaces() map[string]accessidentity.DecisionKind {
 // 运营决定、唯独没有这一口那一种的操作者，在这一口答 403 OPERATOR_NOT_GRANTED，走不到准入范围那一格，也不进编排。
 func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 	decisionFaces := swappedDecisionFaces()
-	for pattern, kind := range decisionFaces {
+	for pattern, kinds := range decisionFaces {
 		var others []accessidentity.DecisionKind
-		for _, other := range decisionFaces {
-			if other != kind {
-				others = append(others, other)
+		for _, otherKinds := range decisionFaces {
+			for _, other := range otherKinds {
+				if !slices.Contains(kinds, other) && !slices.Contains(others, other) {
+					others = append(others, other)
+				}
 			}
 		}
+		kind := kinds
 		minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: others}, admissionScopeUnset())
 		if err != nil {
 			t.Fatal(err)
@@ -268,8 +272,8 @@ func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	decisionFaces := swappedDecisionFaces()
 	var kinds []accessidentity.DecisionKind
-	for _, kind := range decisionFaces {
-		kinds = append(kinds, kind)
+	for _, faceKinds := range decisionFaces {
+		kinds = append(kinds, faceKinds...)
 	}
 	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds}, admissionScopeUnset())
 	if err != nil {

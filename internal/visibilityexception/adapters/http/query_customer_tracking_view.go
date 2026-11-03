@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -44,17 +45,9 @@ type QueryIntake interface {
 	IntakeQuery(ctx context.Context, request *http.Request) (TrackingViewQuery, error)
 }
 
-// TrackingViewReader 是本端点消费的读口。查询不触发派生、披露或通知（CONTEXT：
-// 「客户读取或门户展示→形成查询/展示结果，不自动形成异常披露决定、主动通知、送达
-// 或客户确认」）——所以这里接存储读面，不接派生编排。
-type TrackingViewReader interface {
-	FindCurrent(
-		ctx context.Context,
-		tenant domain.TenantID,
-		customer domain.CustomerAccountReference,
-		parcel domain.TrackedParcelReference,
-	) (domain.CustomerTrackingView, bool, error)
-}
+// TrackingViewReader 是客户追踪两口消费的视图读口，就是 ports.CurrentCustomerViewReader：查询接存储读面，不接派生编排，理由在
+// 那个端口上。
+type TrackingViewReader = ports.CurrentCustomerViewReader
 
 // 传输层错误码。业务判别走 `outcome`，这里只说明为什么没有 `outcome`。
 const (
@@ -64,7 +57,8 @@ const (
 	codeNoAnswerFormed   = "NO_ANSWER_FORMED"
 )
 
-// 业务结果的封闭三格（ADR-0246 决定一），按客户系统的续办分（ADR-0029）：
+// 单件业务结果的封闭三格（ADR-0246 决定一），按客户系统的续办分（ADR-0029）；判据在 application.TrackCustomerParcel，这里只给
+// 线上的字面：
 //   - `CURRENT_VIEW`：读到请求方账户下这件包裹的当前视图。视图已形成而各维待确认或不展示也是这一格，逐维如实，
 //     不改答「当前无可见结果」（ADR-0246 决定四）。
 //   - `NO_VISIBLE_RESULT`：读不到视图，而 parcel-shipment 的当前已接受委托把这件包裹唯一归属于请求方账户。续办是
@@ -73,6 +67,8 @@ const (
 //     当前已接受委托同时声明它——同一格同一副字节，续办是核对查询标识。区分它们就是把对象存在性泄给跨账户探针
 //     （UC-VE-008：「对未授权对象的外部响应不得泄露对象是否存在或属于其他客户」）；对外不另立「冲突」一格，理由见
 //     ADR-0246 决定五。
+//
+// 按运单号查时列出的每一件答的也是这三格、同一副字节（ADR-0356 决定三），见 newParcelTrackingBody。
 const (
 	outcomeCurrentView     = "CURRENT_VIEW"
 	outcomeNoVisibleResult = "NO_VISIBLE_RESULT"
@@ -103,52 +99,34 @@ func NewQueryCustomerTrackingViewEndpoint(
 			return
 		}
 
-		view, found, err := views.FindCurrent(request.Context(), query.Tenant, query.Customer, query.Parcel)
+		tracking, err := application.TrackCustomerParcel(request.Context(), views, attributions, query.Tenant, query.Customer, query.Parcel)
 		if err != nil {
-			// 读不回是答案未形成，不是「无轨迹」也不是「无权」——伪装成后两者会让
-			// 调用方把一次该重试的故障当成终局（UC-VE-008 AT-VE-168 的半边）。
+			// 视图读不回、归属读不动都是答案未形成，不是「无轨迹」也不是「无权」——伪装成后两者会让调用方把一次该重试的故障
+			// 当成终局（UC-VE-008 AT-VE-168）。
 			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		if !found {
-			outcome, formed := outcomeWithoutView(request.Context(), attributions, query)
-			if !formed {
-				httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
-				return
-			}
-			writeJSON(response, http.StatusOK, queryResponse{Outcome: outcome})
+		body, formed := newParcelTrackingBody(tracking)
+		if !formed {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		writeJSON(response, http.StatusOK, queryResponse{
-			Outcome: outcomeCurrentView,
-			View:    newTrackingViewBody(view),
-		})
+		writeJSON(response, http.StatusOK, body)
 	})
 }
 
-// outcomeWithoutView 判一次读不到视图的查询答哪一格（ADR-0246 决定二）。归属只在这里问，读到视图的热路径不多一次读；
-// 每一次读不到视图的查询都问且只问一次，不论答出什么——问不问取决于答案的话，读的次数本身就成了探针看得见的区别
-// （决定三）。比的只是「唯一归属账户等于请求方账户」这一位，答复不带归属于谁。
-//
-// 多于一份当前已接受委托同时声明这件包裹（ports.ErrAmbiguousCustomerAccount）：派生一侧据它落未决、不择一；查询一侧它是
-// 读不到视图的又一种，答 `VIEW_NOT_FOUND`（决定五）。其余错误（反查读不动，或 ports.ErrCustomerAccountUntranslatable）都
-// 没形成归属结论，formed 为假，与视图读不回同一格——降成任何业务格都会让客户系统把一次该重试的故障当成终局（UC-VE-008
-// AT-VE-168）。
-func outcomeWithoutView(
-	ctx context.Context,
-	attributions ports.ParcelCustomerAccountView,
-	query TrackingViewQuery,
-) (outcome string, formed bool) {
-	account, attributed, err := attributions.FindCustomerAccount(ctx, query.Tenant, query.Parcel)
-	switch {
-	case errors.Is(err, ports.ErrAmbiguousCustomerAccount):
-		return outcomeViewNotFound, true
-	case err != nil:
-		return "", false
-	case attributed && account == query.Customer:
-		return outcomeNoVisibleResult, true
+// newParcelTrackingBody 把单件判据的结果写成线上的形状，按包裹查的整个答复与按运单号查时列出的每一件都经这里，两口因此逐字相同
+// （ADR-0356 决定三的不变式）。三格之外的结果是编程错误，formed 为假，调用方答未形成，不编一个业务格。
+func newParcelTrackingBody(tracking application.CustomerParcelTracking) (queryResponse, bool) {
+	switch tracking.Outcome {
+	case application.CustomerParcelCurrentView:
+		return queryResponse{Outcome: outcomeCurrentView, View: newTrackingViewBody(tracking.View)}, true
+	case application.CustomerParcelNoVisibleResult:
+		return queryResponse{Outcome: outcomeNoVisibleResult}, true
+	case application.CustomerParcelViewNotFound:
+		return queryResponse{Outcome: outcomeViewNotFound}, true
 	default:
-		return outcomeViewNotFound, true
+		return queryResponse{}, false
 	}
 }
 
@@ -243,7 +221,3 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 	response.WriteHeader(status)
 	_ = json.NewEncoder(response).Encode(value)
 }
-
-// 编译期锁缝：读口的形状必须与视图库端口保持一致——本适配器不新造查询语义，只消费
-// 编排批已经钉住的那一个读面。
-var _ TrackingViewReader = ports.CustomerViewStore(nil)

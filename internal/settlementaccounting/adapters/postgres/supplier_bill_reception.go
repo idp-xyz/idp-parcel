@@ -309,6 +309,37 @@ func (repository *BillReceptions) FindBillNumberHolder(
 	return claim, true, nil
 }
 
+// FindClaimSupplier 答一份主张最早落库的那一版是哪家供应商的。
+func (repository *BillReceptions) FindClaimSupplier(
+	ctx context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierPartyReference, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.SupplierPartyReference{}, false, fmt.Errorf("find claim supplier: %w", err)
+	}
+	var raw string
+	err = querier.QueryRow(ctx,
+		`SELECT supplier_ref FROM settlement_accounting.supplier_bill_reception
+		  WHERE tenant_id = $1 AND claim_id = $2
+		  ORDER BY recorded_at, claim_version
+		  LIMIT 1`,
+		tenant.String(), claim.String(),
+	).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SupplierPartyReference{}, false, nil
+	}
+	if err != nil {
+		return domain.SupplierPartyReference{}, false, fmt.Errorf("find claim supplier: %w", err)
+	}
+	supplier, err := domain.NewSupplierPartyReference(raw)
+	if err != nil {
+		return domain.SupplierPartyReference{}, false, fmt.Errorf("find claim supplier: %w", err)
+	}
+	return supplier, true, nil
+}
+
 // FindClaimBillNumber 答一份主张已以哪个号登记、号的分配方是哪家供应商。
 func (repository *BillReceptions) FindClaimBillNumber(
 	ctx context.Context,
