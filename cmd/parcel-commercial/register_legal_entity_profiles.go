@@ -27,6 +27,8 @@ type legalEntityProfileBatchDocument struct {
 	Profiles []legalEntityProfileItemDocument `json:"profiles"`
 }
 
+// taxRegistrationNumbers 收监管登记号（税务、海关等，ADR-0359 决定一），键名不改。invoiceTitleLanguage 与 invoiceTitles 挂在
+// 主抬头上，没带 invoiceTitle 却带了它们即拒收；bankAccounts 缺席即这一版不带收款账户，币种要在产品内置目录里（ADR-0345 决定五）。
 type legalEntityProfileItemDocument struct {
 	LegalEntityID          string                                `json:"legalEntityId"`
 	Revision               int                                   `json:"revision"`
@@ -35,10 +37,13 @@ type legalEntityProfileItemDocument struct {
 	RegisteredAddress      *legalEntityProfileAddressDocument    `json:"registeredAddress"`
 	TaxRegistrationNumbers []legalEntityProfileTaxNumberDocument `json:"taxRegistrationNumbers,omitempty"`
 	InvoiceTitle           *string                               `json:"invoiceTitle,omitempty"`
+	InvoiceTitleLanguage   *string                               `json:"invoiceTitleLanguage,omitempty"`
+	InvoiceTitles          []pcdomain.LocalizedInvoiceTitle      `json:"invoiceTitles,omitempty"`
 	Contacts               []legalEntityProfileContactDocument   `json:"contacts,omitempty"`
 	Representative         *legalEntityRepresentativeDocument    `json:"representative,omitempty"`
 	OfficeAddress          *legalEntityProfileAddressDocument    `json:"officeAddress,omitempty"`
 	CorrespondenceAddress  *legalEntityProfileAddressDocument    `json:"correspondenceAddress,omitempty"`
+	BankAccounts           []pcdomain.LegalEntityBankAccount     `json:"bankAccounts,omitempty"`
 }
 
 type legalEntityProfileAddressDocument struct {
@@ -153,11 +158,17 @@ func legalEntityProfileCommandFrom(
 		if err != nil {
 			return none, err
 		}
-		details, err := pcdomain.NewInvoicingDetails(title)
+		language := ""
+		if item.InvoiceTitleLanguage != nil {
+			language = *item.InvoiceTitleLanguage
+		}
+		details, err := pcdomain.NewInvoicingDetailsWithLocalizedTitles(title, language, item.InvoiceTitles)
 		if err != nil {
 			return none, err
 		}
 		invoicing = &details
+	} else if item.InvoiceTitleLanguage != nil || len(item.InvoiceTitles) > 0 {
+		return none, fmt.Errorf("invoiceTitleLanguage 与 invoiceTitles 挂在主抬头 invoiceTitle 上：没带主抬头就没有开票资料，这两格无处可挂")
 	}
 
 	contacts := make([]pcdomain.LegalEntityContact, 0, len(item.Contacts))
@@ -196,6 +207,14 @@ func legalEntityProfileCommandFrom(
 		}
 		*entry.target = &address
 	}
+	accounts, err := pcdomain.NewLegalEntityBankAccounts(item.BankAccounts)
+	if err != nil {
+		return none, err
+	}
+	if err := pcdomain.BankAccountCurrenciesInCatalogue(accounts); err != nil {
+		return none, fmt.Errorf("bankAccounts：%w", err)
+	}
+	supplement.BankAccounts = accounts
 	return pcapplication.RegisterLegalEntityProfileCommand{
 		Tenant:        tenant,
 		Entity:        entity,
