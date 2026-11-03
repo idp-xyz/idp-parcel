@@ -15,7 +15,6 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import {
   LegalEntityBanners,
-  LegalEntityLifecycle,
   LegalEntityMoreMenu,
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
@@ -138,8 +137,9 @@ export function LegalEntityDetailPanel({
 
         {/* 头区第二行是一行小字的 meta（票 company-subject-ux/08）：编码、注册地、注册号纯文本一行，号仍可点按复制；
             注册地与注册号是业务事实，留在头部，登记依据与各标识收进概要签底部的「技术详情」。类型名跟在号前面而不进 title
-            ——一行小字放得下，胶囊那套「截断只显号」的取舍不再需要。生命周期收成一行小步进贴在这一行末尾。 */}
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+            ——一行小字放得下，胶囊那套「截断只显号」的取舍不再需要。不摆生命周期步进：公司主体只有「待生效 → 已生效」
+            加一个旁支「已停用」，状态药丸已经说了现在在哪一格，停用另有横幅带时点，步进是第二遍（用户 2026-11-03 裁定）。 */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
           <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
             <Fact inline label="编码">
               <RefText value={row.legalEntityId} name="编码" onCopy={copy} />
@@ -153,7 +153,6 @@ export function LegalEntityDetailPanel({
               </Fact>
             ))}
           </dl>
-          <LegalEntityLifecycle row={row} />
         </div>
 
         <LegalEntityBanners row={row} />

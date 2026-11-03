@@ -20,7 +20,6 @@ import {
 import { identityLayerAbsentNote, partyNameUnknownNote } from './presentation';
 import {
   LegalEntityBanners,
-  LegalEntityLifecycle,
   LegalEntityMoreMenu,
   legalEntityHasBanners,
   legalEntityHeaderFacts,
@@ -107,7 +106,7 @@ function buildMeta(
       label: fact.label,
       value: fact.title ? <span title={fact.title}>{fact.value}</span> : fact.value,
     })),
-    { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
+    // 不摆生命周期步进：状态药丸已经说了在哪一格，停用另有横幅带时点，步进是第二遍（用户 2026-11-03 裁定）；详情栏同。
   ];
 }
 
