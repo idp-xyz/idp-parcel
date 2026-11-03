@@ -1,5 +1,5 @@
 import { CurrentLegalEntityProfile, type CurrentLegalEntityProfileQuery } from './CurrentLegalEntityProfile';
-import { LegalEntityContactsTable } from './LegalEntityContactsTable';
+import { LegalEntityContactCards } from './LegalEntityContactCards';
 import { formatInstant } from '../moment';
 import { legalEntityContactCountOf, legalEntityProfileStatusOf } from './legal-entity-profile';
 import { profileRevisionLabel } from './presentation';
@@ -23,7 +23,7 @@ export function LegalEntityContactsSection({ query }: { query: CurrentLegalEntit
                 {profileRevisionLabel(profile.revision)} · 生效自 {formatInstant(profile.effectiveFrom)}
               </span>
             </div>
-            <LegalEntityContactsTable contacts={profile.contacts} />
+            <LegalEntityContactCards contacts={profile.contacts} />
             <p className="mt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">联系人资料可通过右上方「更新法人资料」维护。</p>
           </section>
         );

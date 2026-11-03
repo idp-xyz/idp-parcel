@@ -30,10 +30,33 @@
   grid-column: 1 / -1;
 }
 
+/* 联系人卡组（票 company-subject-ux/11 第 1 条）：卡组自己就是容器——「联系人」签里没有资料读出的外框可量，概要签里
+   卡组又套在读出卡内、比外框窄两个内边距；量自己的宽，两处才按同一把尺排列。容器名与读出共用，两列的断点也共用。 */
+.legal-entity-contact-cards {
+  container: legal-entity-profile / inline-size;
+}
+
+.legal-entity-contact-cards-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
 /* 两列只在正文够宽时启用：容器是卡组的外框，宽度随详情栏拖动而变（栏宽不设上限，卡撑满栏）。网格在卡内、
    两侧各少 1rem 内边距，窄于 48rem 时两列各剩不到 22rem，地址与双语抬头都要折两三行，不如一列。 */
 @container legal-entity-profile (min-width: 48rem) {
   .legal-entity-readout-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .legal-entity-contact-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 三列只给联系人卡：一张卡最宽的一行是邮箱，三列各剩 21rem 多放得下常见长度；资料读出的地址与双语抬头放不下，仍两列。 */
+@container legal-entity-profile (min-width: 66rem) {
+  .legal-entity-contact-cards-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

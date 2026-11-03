@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
 import { CurrencyLabel } from '../refdata-labels';
-import { LegalEntityContactsTable } from './LegalEntityContactsTable';
+import { LegalEntityContactCards } from './LegalEntityContactCards';
 import {
   ProfileReadoutAddress,
   ProfileReadoutCard,
@@ -103,7 +103,7 @@ export function LegalEntityProfileContent({
       </ProfileReadoutCard>
       {includeContacts ? (
         <ProfileReadoutCard icon={Contact} title="联系人" extra={contacts.length ? `${contacts.length} 位` : undefined}>
-          <LegalEntityContactsTable contacts={contacts} />
+          <LegalEntityContactCards contacts={contacts} />
         </ProfileReadoutCard>
       ) : null}
       {notes.length ? (
