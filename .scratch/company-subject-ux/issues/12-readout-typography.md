@@ -1,7 +1,7 @@
 # 12 读出的可读性：地址按行、抬头成清单、字号统一、账户表列宽
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 看概要签读出截图（`scratchpad/ux-le2/readout-feedback.png`）问「文字、大小尺寸、布局、可阅读性好吗」；协调方诊断见下，用户认可改法。
@@ -44,3 +44,9 @@ Blocked by: 无
 - 版本对比与差异预览的 `profileAddressText` 未动 ✅；资料版本签的快照（`LegalEntityProfileHistory` 的 `Snapshot`）共用 `ProfileReadoutAddress`，随之逐行，未截图。
 
 **残留 / 未验**：详情栏窄于约 830px 时收款账户表已到 40rem 最小宽横向滚动，币种格仍折成「人民币」/「（CNY）」（`CurrencyLabel` 的字串没走粘段——粘了会在格边折成「人民币（CN」更糟）；旧 18% 时 645px 以下同样如此，不是本票新引入。备注格 14% 装不下 12 个字的「跨境美元结汇账户（演示）」，按兜底在格边折成「跨境美元结汇账」/「户（演示）」。暗色主题下的末行灰与小标底色未看；真 IBAN 长度（27 位）只按 `overflow-wrap: anywhere` 推断会在格内折；CI `admin-web` job 在分支上未看。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `fc7144f32` 上 `git merge --no-ff origin/claude-csux-12`（tip `7d8b605e9`），无冲突。三道门在 main 上退 0（tsc、run-tests 1171、vite build）。协调方看过 2000 宽对象页概要签截图：三地址并排逐行、抬头清单主抬头在前、等宽字同高、户名折行无悬挂。
+- 作者的两处出入接受：字号按本仓尺度 12 / 13（票面的 13 / 14 是缩放截图的读数）；币种列 15%。
+- 没动共享面，不需评审。
