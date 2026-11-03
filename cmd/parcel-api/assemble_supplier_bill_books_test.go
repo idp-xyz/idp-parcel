@@ -113,14 +113,19 @@ func TestTheSupplierBillBooksShowTheAuditedPayableNumber(t *testing.T) {
 		Lines   []struct {
 			Line           string `json:"line"`
 			Classification string `json:"classification"`
-			Payable        *struct {
-				DocumentNumber string `json:"documentNumber"`
-			} `json:"payable"`
+			PassedAmount   string `json:"passedAmount"`
+			Decisions      []struct {
+				Verdict string `json:"verdict"`
+				Payable *struct {
+					DocumentNumber string `json:"documentNumber"`
+				} `json:"payable"`
+			} `json:"decisions"`
 		} `json:"lines"`
 	}
 	getSettlementBook(t, books, "/settlement-supplier-bill-lines", "?claim=SYN-BILL-PSB22-1&version=v1", &lines)
 	if lines.Outcome != "SUPPLIER_BILL_LINES_LISTED" || len(lines.Lines) != 1 || lines.Lines[0].Classification != "MATCHED" ||
-		lines.Lines[0].Payable == nil || lines.Lines[0].Payable.DocumentNumber != number {
+		lines.Lines[0].PassedAmount != "8500" || len(lines.Lines[0].Decisions) != 1 || lines.Lines[0].Decisions[0].Verdict != "PASSED" ||
+		lines.Lines[0].Decisions[0].Payable == nil || lines.Lines[0].Decisions[0].Payable.DocumentNumber != number {
 		t.Fatalf("账单各行 = %+v", lines)
 	}
 

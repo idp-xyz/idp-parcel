@@ -28,7 +28,10 @@ func billValue[T interface{ String() string }](t *testing.T, construct func(stri
 }
 
 type billStoreDouble struct {
-	records     map[string]ports.BillReceptionRecord
+	records map[string]ports.BillReceptionRecord
+	// numbers 是账单号册：租户|供应商|号 → 主张。locks 记排队的调用，钉住「先排队、再查号」。
+	numbers     map[string]domain.BillClaimID
+	locks       []string
 	findErr     error
 	saveErr     error
 	saveResult  ports.BillSaveOutcome
@@ -38,7 +41,73 @@ type billStoreDouble struct {
 }
 
 func newBillStore() *billStoreDouble {
-	return &billStoreDouble{records: map[string]ports.BillReceptionRecord{}}
+	return &billStoreDouble{records: map[string]ports.BillReceptionRecord{}, numbers: map[string]domain.BillClaimID{}}
+}
+
+func billNumberKey(tenant domain.TenantID, supplier domain.SupplierPartyReference, number domain.SupplierBillNumber) string {
+	return tenant.String() + "|" + supplier.String() + "|" + number.String()
+}
+
+func (double *billStoreDouble) LockBillNumber(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SupplierPartyReference,
+	number domain.SupplierBillNumber,
+	claim domain.BillClaimID,
+) error {
+	double.locks = append(double.locks, claim.String()+"#"+number.String())
+	return nil
+}
+
+func (double *billStoreDouble) FindBillNumberHolder(
+	_ context.Context,
+	tenant domain.TenantID,
+	supplier domain.SupplierPartyReference,
+	number domain.SupplierBillNumber,
+) (domain.BillClaimID, bool, error) {
+	if double.findErr != nil {
+		return domain.BillClaimID{}, false, double.findErr
+	}
+	holder, found := double.numbers[billNumberKey(tenant, supplier, number)]
+	return holder, found, nil
+}
+
+func (double *billStoreDouble) FindClaimSupplier(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierPartyReference, bool, error) {
+	if double.findErr != nil {
+		return domain.SupplierPartyReference{}, false, double.findErr
+	}
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Key.Claim == claim {
+			return record.Claim.Supplier(), true, nil
+		}
+	}
+	return domain.SupplierPartyReference{}, false, nil
+}
+
+func (double *billStoreDouble) FindClaimBillNumber(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim domain.BillClaimID,
+) (domain.SupplierPartyReference, domain.SupplierBillNumber, bool, error) {
+	if double.findErr != nil {
+		return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, double.findErr
+	}
+	for key, holder := range double.numbers {
+		parts := strings.SplitN(key, "|", 3)
+		if parts[0] == tenant.String() && holder == claim {
+			supplier, err := domain.NewSupplierPartyReference(parts[1])
+			if err != nil {
+				return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, err
+			}
+			number, err := domain.NewSupplierBillNumber(parts[2])
+			return supplier, number, err == nil, err
+		}
+	}
+	return domain.SupplierPartyReference{}, domain.SupplierBillNumber{}, false, nil
 }
 
 func billStoreKey(key ports.BillReceptionKey) string {
@@ -75,6 +144,9 @@ func (double *billStoreDouble) Save(
 		return ports.BillAlreadyRecorded, nil
 	}
 	double.records[billStoreKey(record.Key)] = record
+	if number, numbered := record.Claim.BillNumber(); numbered {
+		double.numbers[billNumberKey(record.Key.TenantID, record.Claim.Supplier(), number)] = record.Claim.Claim()
+	}
 	return ports.BillSaved, nil
 }
 
@@ -190,6 +262,7 @@ type billFixture struct {
 	accounts     *accountViewDouble
 	escalation   *escalationCeilingDouble
 	payables     *payableStoreDouble
+	decisions    *decisionStoreDouble
 	creditNotes  *creditNoteStoreDouble
 	numbers      *documentNumbersDouble
 	arrangements *arrangementsDouble
@@ -206,6 +279,7 @@ func newBillFixture(t *testing.T) *billFixture {
 		accounts:     &accountViewDouble{configured: true},
 		escalation:   &escalationCeilingDouble{configured: true, ceiling: fixtureEscalationCeiling(t)},
 		payables:     newPayableStore(),
+		decisions:    newDecisionStore(),
 		creditNotes:  newCreditNoteStore(),
 		numbers:      newDocumentNumbers(),
 		arrangements: newArrangementsDouble(),
@@ -219,6 +293,7 @@ func newBillFixture(t *testing.T) *billFixture {
 		Accounts:     fixture.accounts,
 		Escalation:   fixture.escalation,
 		Payables:     fixture.payables,
+		Decisions:    fixture.decisions,
 		CreditNotes:  fixture.creditNotes,
 		Numbers:      fixture.numbers,
 		Arrangements: fixture.arrangements,

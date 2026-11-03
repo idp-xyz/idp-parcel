@@ -32,6 +32,13 @@ const (
 	// BillExpectedCostNotCurrent：一行点名的预期成本版本不是此刻的当前有效预期成本——它是失效纠错版本（依的发生项已失效），或已有
 	// 后继（被纠正过）。照它匹配，就会给一份已不成立、或已重述过的成本对上账（ADR-0232 决定七）。续办是改点名当前那一版，或不匹配。
 	BillExpectedCostNotCurrent
+	// BillNumberConflict：来件带的供应商账单号已标识另一份主张，或这份主张已以另一个号登记（ADR-0357 决定一）。两种的续办都是
+	// 改录入——改号，或以已登记那份主张的新版本登——所以并成一格（ADR-0029）。内容相同也答这一格：幂等键是主张标识，换一个
+	// 主张标识就是另一次提交，后录的人要知道这张账单已登记、去看那一份。
+	BillNumberConflict
+	// BillClaimSupplierConflict：同一份主张的新版本换了供应商（ADR-0357 决定一）。供应商是主张的相对方，也是账单号的分配方；换了
+	// 供应商的来件是另一家的账单，续办是另立主张登，或照原先的供应商改录入。它先于账单号的两格判，带没带号都落这一格。
+	BillClaimSupplierConflict
 )
 
 func (outcome BillReceptionOutcome) String() string {
@@ -48,6 +55,10 @@ func (outcome BillReceptionOutcome) String() string {
 		return "BILL_UNDECIDED"
 	case BillExpectedCostNotCurrent:
 		return "EXPECTED_COST_NOT_CURRENT"
+	case BillNumberConflict:
+		return "SUPPLIER_BILL_NUMBER_CONFLICT"
+	case BillClaimSupplierConflict:
+		return "CLAIM_SUPPLIER_CONFLICT"
 	default:
 		return ""
 	}
@@ -103,6 +114,25 @@ type ReceiveSupplierBillResult struct {
 	continuation string
 	handoff      string
 	notCurrent   ExpectedCostNotCurrent
+	numbering    SupplierBillNumberConflict
+	supplier     domain.SupplierPartyReference
+}
+
+// SupplierBillNumberConflict 说账单号冲突撞的是哪一边：RegisteredClaim 非零是号已标识另一份主张；RegisteredNumber 非零是这份
+// 主张已以另一个号登记。
+type SupplierBillNumberConflict struct {
+	RegisteredClaim  domain.BillClaimID
+	RegisteredNumber domain.SupplierBillNumber
+}
+
+// NumberConflict 只在`账单号冲突`时有值。
+func (result ReceiveSupplierBillResult) NumberConflict() (SupplierBillNumberConflict, bool) {
+	return result.numbering, result.outcome == BillNumberConflict
+}
+
+// SupplierConflict 只在`主张供应商冲突`时有值：这份主张原先的供应商。
+func (result ReceiveSupplierBillResult) SupplierConflict() (domain.SupplierPartyReference, bool) {
+	return result.supplier, result.outcome == BillClaimSupplierConflict
 }
 
 // ExpectedCostNotCurrent 说点名的那一版为什么不是当前：失效纠错版本，或已有后继（Successor）。
@@ -157,6 +187,8 @@ type ReceiveSupplierBillDeps struct {
 	Accounts    ports.SupplierPayableAccountView
 	Escalation  ports.AuditEscalationCeilingView
 	Payables    ports.AuditedPayableStore
+	// Decisions 记审核决定（通过、争议、拒绝），审核半程必备：范围守恒在它上面判。
+	Decisions   ports.AuditDecisionStore
 	CreditNotes ports.SupplierCreditNoteStore
 	// Numbers 给审核应付取单据号；Arrangements 给它定日期所用的应付账户业务时区（审核半程用，接收与贷项不碰）。
 	Numbers      ports.DocumentNumberAssigner
@@ -173,9 +205,9 @@ func NewReceiveSupplierBillHandler(deps ReceiveSupplierBillDeps) *ReceiveSupplie
 	return &ReceiveSupplierBillHandler{deps: deps}
 }
 
-// Handle 把一份供应商账单推进到接收与逐行匹配：幂等/冲突按内容指纹分界（AT-SA-092/093）
-// → 主张成形 → 逐行匹配（每行必须有裁决，跨币种停在待判断）→ 审核授权探查（未配置即
-// 审核未决，不铸应付）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。
+// Handle 把一份供应商账单推进到接收与逐行匹配：按主张与账单号排队 → 这份主张已接收的版本是不是同一家供应商 → 账单号查重
+// （ADR-0357 决定一）→ 幂等/冲突按内容指纹分界（AT-SA-092/093）→ 主张成形 → 逐行匹配（每行必须有裁决，跨币种停在待判断）→ 审核授权探查（未配置即审核未决，不铸
+// 应付）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。
 func (handler *ReceiveSupplierBillHandler) Handle(
 	ctx context.Context,
 	command ReceiveSupplierBillCommand,
@@ -191,6 +223,19 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 		Version:  command.Claim.Version,
 	}
 	digest := billContentDigest(command)
+	number := command.Claim.BillNumber
+	// 同一主张、同一账单号的两笔接收在这里排队：查号与写号之间不漏并发，后到者读得到先到者写下的那层关系。
+	if err := handler.deps.Receptions.LockBillNumber(ctx, command.TenantID, command.Claim.Supplier, number, command.Claim.Claim); err != nil {
+		return billStoreUndecided(command.Claim.Claim.String()), nil
+	}
+	if answer, conflicted, err := handler.claimSupplierConflict(ctx, command); err != nil || conflicted {
+		return answer, nil
+	}
+	if number.String() != "" {
+		if answer, conflicted, err := handler.billNumberConflict(ctx, command); err != nil || conflicted {
+			return answer, nil
+		}
+	}
 	existing, found, err := handler.deps.Receptions.FindByKey(ctx, key)
 	if err != nil {
 		return billStoreUndecided(command.Claim.Claim.String()), nil
@@ -203,6 +248,10 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 			return ReceiveSupplierBillResult{outcome: BillVersionConflict}, nil
 		case domain.UnknownPayloadShape:
 			return billStoreUndecided(command.Claim.Claim.String()), nil
+		}
+		if _, registered := existing.Claim.BillNumber(); number.String() != "" && !registered {
+			// 这份主张还没有号，这次却带了号：号不能借重放补登——重放答原结果就把这个号悄悄丢了。要补，以新版本登。
+			return ReceiveSupplierBillResult{outcome: BillVersionConflict}, nil
 		}
 		// 同一主张重复到达：返回原结果，不重复匹配或审核（AT-SA-092）。
 		return handler.existingResult(ctx, existing), nil
@@ -260,6 +309,50 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 	record.AuditAuthorityConfigured = configured
 
 	return handler.commit(ctx, record)
+}
+
+// claimSupplierConflict 查这份主张已接收的版本是不是另一家供应商的：同一份主张不论哪一版（新版本，或同一版本的重发）供应商都不变
+// （ADR-0357 决定一）。读不动答未决。
+func (handler *ReceiveSupplierBillHandler) claimSupplierConflict(
+	ctx context.Context,
+	command ReceiveSupplierBillCommand,
+) (ReceiveSupplierBillResult, bool, error) {
+	claim := command.Claim.Claim
+	supplier, received, err := handler.deps.Receptions.FindClaimSupplier(ctx, command.TenantID, claim)
+	if err != nil {
+		return billStoreUndecided(claim.String()), true, err
+	}
+	if received && supplier != command.Claim.Supplier {
+		return ReceiveSupplierBillResult{outcome: BillClaimSupplierConflict, supplier: supplier,
+			continuation: billContinuation("CLAIM_SUPPLIER_CONFLICT", claim.String(), command.Claim.Supplier.String())}, true, nil
+	}
+	return ReceiveSupplierBillResult{}, false, nil
+}
+
+// billNumberConflict 查来件的账单号：已标识另一份主张，或这份主张已以另一个号登记，都不落账单。读不动答未决。
+func (handler *ReceiveSupplierBillHandler) billNumberConflict(
+	ctx context.Context,
+	command ReceiveSupplierBillCommand,
+) (ReceiveSupplierBillResult, bool, error) {
+	claim, number := command.Claim.Claim, command.Claim.BillNumber
+	holder, held, err := handler.deps.Receptions.FindBillNumberHolder(ctx, command.TenantID, command.Claim.Supplier, number)
+	if err != nil {
+		return billStoreUndecided(claim.String()), true, err
+	}
+	if held && holder != claim {
+		return ReceiveSupplierBillResult{outcome: BillNumberConflict, numbering: SupplierBillNumberConflict{RegisteredClaim: holder},
+			continuation: billContinuation("SUPPLIER_BILL_NUMBER_CONFLICT", claim.String(), number.String())}, true, nil
+	}
+	assigner, registered, has, err := handler.deps.Receptions.FindClaimBillNumber(ctx, command.TenantID, claim)
+	if err != nil {
+		return billStoreUndecided(claim.String()), true, err
+	}
+	// 外部标识是（分配方，号）。供应商不变已由 claimSupplierConflict 挡过，分配方这一比是给存量里各版本供应商不一的主张兜底。
+	if has && (registered != number || assigner != command.Claim.Supplier) {
+		return ReceiveSupplierBillResult{outcome: BillNumberConflict, numbering: SupplierBillNumberConflict{RegisteredNumber: registered},
+			continuation: billContinuation("SUPPLIER_BILL_NUMBER_CONFLICT", claim.String(), number.String())}, true, nil
+	}
+	return ReceiveSupplierBillResult{}, false, nil
 }
 
 // notCurrent 判点名的那一版是不是此刻的当前有效预期成本：失效纠错版本不是，有后继的也不是。两格都不落任何行。

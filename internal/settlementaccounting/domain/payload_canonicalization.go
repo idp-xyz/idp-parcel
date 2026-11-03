@@ -429,6 +429,34 @@ func CanonicalizeAuditBillLinePayload(claim, version, line string) ([]byte, stri
 	})
 }
 
+// CanonicalizeAuditBillLineRangePayload 定形「按范围给审核决定」（ADR-0357 决定五）。它是一张新面，不是「审核账单行」那一面
+// 改形：旧载荷照旧按 AUDIT_BILL_LINE 定形，已存应付的重放照旧认得；两面互不相等，同一标识换一种形状来答冲突。
+func CanonicalizeAuditBillLineRangePayload(claim, version, line, verdict string, from, to int64, basis, resolves string) ([]byte, string, error) {
+	return marshalPayload(struct {
+		Canonicalization string `json:"canonicalization"`
+		Face             string `json:"face"`
+		Claim            string `json:"claim"`
+		Version          string `json:"version"`
+		Line             string `json:"line"`
+		Verdict          string `json:"verdict"`
+		RangeFrom        int64  `json:"range_from"`
+		RangeTo          int64  `json:"range_to"`
+		Basis            string `json:"basis"`
+		Resolves         string `json:"resolves"`
+	}{
+		Canonicalization: payloadCanonicalizationVersion,
+		Face:             "AUDIT_BILL_LINE_RANGE",
+		Claim:            claim,
+		Version:          version,
+		Line:             line,
+		Verdict:          verdict,
+		RangeFrom:        from,
+		RangeTo:          to,
+		Basis:            basis,
+		Resolves:         resolves,
+	})
+}
+
 // CanonicalizeSupplierCreditNotePayload 定形「形成供应商贷项」。
 func CanonicalizeSupplierCreditNotePayload(payable string, amountMinor int64, reason string, issuedAt time.Time) ([]byte, string, error) {
 	return marshalPayload(struct {

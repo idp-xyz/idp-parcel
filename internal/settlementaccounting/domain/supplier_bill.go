@@ -3,7 +3,9 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 var (
@@ -12,9 +14,9 @@ var (
 	// ErrCrossCurrencyMatch：账单币种与预期成本结算币不同且无换算依据时，域内直接立不成匹配；
 	// 编排答未配置（AT-SA-096），不用当前汇率猜测。
 	ErrCrossCurrencyMatch = errors.New("settlement accounting: cross-currency match needs a conversion basis")
-	// ErrNotAuditable：只有「已匹配」的无争议金额可通过审核形成应付；量差、价差、无匹配
-	// 发生项与重复计费都要先走争议/复核，不得自动接受（AT-SA-086）。
-	ErrNotAuditable          = errors.New("settlement accounting: only a matched line can form an audited payable")
+	// ErrNotAuditable：一行通过审核的各段之和超出了它的已匹配金额（BillLineMatch.MatchedMinor）。超出预期的差异那一段、
+	// 没有对应发生项与重复计费的整行都没有成本撑着，只能争议或拒绝，不得自动接受（AT-SA-086）。
+	ErrNotAuditable          = errors.New("settlement accounting: a passed range exceeds the line's matched amount")
 	ErrInvalidAuditedPayable = errors.New("settlement accounting: invalid audited payable")
 	ErrInvalidCreditNote     = errors.New("settlement accounting: invalid supplier credit note")
 )
@@ -43,6 +45,34 @@ func NewBillClaimID(value string) (BillClaimID, error) {
 	return BillClaimID{required}, err
 }
 
+// SupplierBillNumber 是供应商给账单编的号：这份主张的外部标识（GLOSSARY「外部标识」），分配方是主张的供应商，被标识对象是主张
+// 身份而不是某一版，适用范围是这家供应商自己的账单号（ADR-0357 决定一）。它不是主张身份，也不是本系统分配的单据号——幂等仍按
+// 主张身份，「同一供应商同号只标识一份主张」由接收编排与账单号册判。
+//
+// 逐字保存：首尾带空白、或含控制字符（Unicode 类别 Cc）与格式字符（Cf：零宽空格、字节序标记、双向控制符之类）的不收，大小写不
+// 折算。查重是逐字比的：悄悄去掉一个空格或折一次大小写，就把一个外部分配的号改成了另一个；收下看不见的字符，同一个号就能带着
+// 它再登一次。拒收让送号的一方看得见（ADR-0357 决定一）。
+type SupplierBillNumber struct{ requiredValue }
+
+// ErrMalformedSupplierBillNumber 说明账单号首尾带空白或含控制字符。
+var ErrMalformedSupplierBillNumber = errors.New("settlement accounting: a supplier bill number is kept verbatim and must not carry edge spaces, control or format characters")
+
+// invisibleInBillNumber 认控制字符（Cc）与格式字符（Cf）。
+func invisibleInBillNumber(r rune) bool {
+	return unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r)
+}
+
+func NewSupplierBillNumber(value string) (SupplierBillNumber, error) {
+	required, err := newRequiredValue("supplier bill number", value)
+	if err != nil {
+		return SupplierBillNumber{}, err
+	}
+	if strings.TrimSpace(value) != value || strings.IndexFunc(value, invisibleInBillNumber) >= 0 {
+		return SupplierBillNumber{}, fmt.Errorf("%w: %q", ErrMalformedSupplierBillNumber, value)
+	}
+	return SupplierBillNumber{required}, nil
+}
+
 // BillClaimVersion 是主张的版本：同一身份内容变化形成版本冲突，不按最后到达覆盖。
 type BillClaimVersion struct{ requiredValue }
 
@@ -68,11 +98,12 @@ type BillLine struct {
 }
 
 // SupplierBillClaimSpec 是接收一份供应商账单主张所需的全部输入。SupplementsClaim
-// 只在追加主张/迟到账单时给出，指向被追加的原主张。
+// 只在追加主张/迟到账单时给出，指向被追加的原主张。BillNumber 可缺：来件没有号，或旧载荷。
 type SupplierBillClaimSpec struct {
 	Claim            BillClaimID
 	Version          BillClaimVersion
 	Supplier         SupplierPartyReference
+	BillNumber       SupplierBillNumber
 	LegalEntity      LegalEntityReference
 	Period           BillingPeriodReference
 	Currency         CurrencyCode
@@ -89,6 +120,7 @@ type SupplierBillClaim struct {
 	claim       BillClaimID
 	version     BillClaimVersion
 	supplier    SupplierPartyReference
+	billNumber  SupplierBillNumber
 	legalEntity LegalEntityReference
 	period      BillingPeriodReference
 	currency    CurrencyCode
@@ -126,6 +158,7 @@ func ReceiveSupplierBillClaim(spec SupplierBillClaimSpec) (SupplierBillClaim, er
 		claim:       spec.Claim,
 		version:     spec.Version,
 		supplier:    spec.Supplier,
+		billNumber:  spec.BillNumber,
 		legalEntity: spec.LegalEntity,
 		period:      spec.Period,
 		currency:    spec.Currency,
@@ -145,6 +178,12 @@ func (claim SupplierBillClaim) Version() BillClaimVersion {
 
 func (claim SupplierBillClaim) Supplier() SupplierPartyReference {
 	return claim.supplier
+}
+
+// BillNumber 交回这份主张的供应商账单号；没有时第二个值为 false。号标识的是主张而不是某一版：接收时是这次来件带的号，从库
+// 读回时是这份主张已登记的号，不论哪一版带来。
+func (claim SupplierBillClaim) BillNumber() (SupplierBillNumber, bool) {
+	return claim.billNumber, claim.billNumber.valid()
 }
 
 func (claim SupplierBillClaim) LegalEntity() LegalEntityReference {
@@ -372,6 +411,26 @@ func (match BillLineMatch) VarianceMinor() int64 {
 	return match.claimedMinor - match.expectedMinor
 }
 
+// MatchedMinor 是这一行的已匹配金额：通过审核的各段之和的上限，也是越权升级上限比的那个数（ADR-0357 决定二）。
+func (match BillLineMatch) MatchedMinor() int64 {
+	return MatchedAmountFor(match.classification, match.claimedMinor, match.expectedMinor)
+}
+
+// MatchedAmountFor 是「已匹配金额」的唯一定义，审核门与读面都取它：
+//   - 已匹配：主张金额，它与预期相等；
+//   - 量差、价差：主张与预期两者取小——超出预期的那一段是差异，只能争议或拒绝（AT-SA-086），主张少于预期时整行都有成本撑着；
+//   - 没有对应发生项、重复计费：零——前者没有成本可撑，后者撑它的那份成本已经付过一次。
+func MatchedAmountFor(classification MatchClassification, claimedMinor, expectedMinor int64) int64 {
+	switch classification {
+	case LineMatched:
+		return claimedMinor
+	case QuantityVariance, PriceVariance:
+		return min(claimedMinor, expectedMinor)
+	default:
+		return 0
+	}
+}
+
 func (match BillLineMatch) Currency() CurrencyCode {
 	return match.currency
 }
@@ -420,25 +479,26 @@ type AuditedPayable struct {
 	auditedAt   time.Time
 }
 
-// FormAuditedPayable 只接受`已匹配`的行：到达不是应付，匹配也不是应付，审核通过才是
-// （AT-SA-089）；量差、价差、无匹配与重复计费先走争议，不得在这里被顺手接受。金额与
-// 币种从匹配取——审核改不了数字，只裁决要不要付。
+// FormAuditedPayable 从一份通过的审核决定形成审核应付：到达不是应付，匹配也不是应付，审核通过的那一段才是（AT-SA-089）。
+// 决定已经由 DecideBillLineAudit 守过范围与已匹配金额；这里只认它是这一行上的通过，应付的身份、金额、审核方与时点都取自它，
+// 币种与所引预期成本取自匹配——审核改不了数字，只裁决这一行付多少、付哪一段。
 func FormAuditedPayable(
 	match BillLineMatch,
-	payable PayableID,
+	decision BillLineAuditDecision,
 	legalEntity LegalEntityReference,
 	account SettlementAccountID,
-	auditor AuditorReference,
-	auditedAt time.Time,
 ) (AuditedPayable, error) {
-	if !match.claim.valid() {
+	if !match.claim.valid() || !decision.decision.valid() {
 		return AuditedPayable{}, ErrInvalidAuditedPayable
 	}
-	if match.classification != LineMatched {
+	if decision.verdict != AuditPassed {
 		return AuditedPayable{}, ErrNotAuditable
 	}
-	if !payable.valid() || !legalEntity.valid() || !account.valid() || !auditor.valid() ||
-		auditedAt.IsZero() || auditedAt.Before(match.matchedAt) {
+	if decision.claim != match.claim || decision.line != match.line || !match.expected.valid() {
+		return AuditedPayable{}, ErrInvalidAuditedPayable
+	}
+	payable, err := NewPayableID(decision.decision.String())
+	if err != nil || !legalEntity.valid() || !account.valid() || decision.auditedAt.Before(match.matchedAt) {
 		return AuditedPayable{}, ErrInvalidAuditedPayable
 	}
 	return AuditedPayable{
@@ -449,9 +509,9 @@ func FormAuditedPayable(
 		legalEntity: legalEntity,
 		account:     account,
 		currency:    match.currency,
-		amountMinor: match.claimedMinor,
-		auditor:     auditor,
-		auditedAt:   auditedAt.UTC(),
+		amountMinor: decision.span.Length(),
+		auditor:     decision.auditor,
+		auditedAt:   decision.auditedAt,
 	}, nil
 }
 

@@ -32,6 +32,7 @@ type supplierBillLinesResponse struct {
 	Claim                    string                 `json:"claim,omitempty"`
 	ClaimVersion             string                 `json:"claimVersion,omitempty"`
 	Supplier                 string                 `json:"supplier,omitempty"`
+	SupplierBillNumber       string                 `json:"supplierBillNumber,omitempty"`
 	LegalEntity              string                 `json:"legalEntity,omitempty"`
 	Period                   string                 `json:"period,omitempty"`
 	Currency                 string                 `json:"currency,omitempty"`
@@ -47,32 +48,54 @@ type supplierBillLinesResponse struct {
 //
 // classification 是逐行匹配分类原名；缺席即接收记录上这一行没有匹配，不补「未匹配」。expectedVersion 缺席是「没有对应
 // 发生项」的正面形状，那时也没有 expectedAmount 与 varianceAmount。varianceAmount 是主张减预期，正为供应商多收。
-// payable 缺席即这一行还没有审核应付——不代填「待审核」，这一行审不审得了由审核口答。
+//
+// matchedAmount 是这一行能通过的上限（已匹配金额，ADR-0357 决定二）；decisions 是这一行上的各份审核决定；passedAmount、
+// rejectedAmount、openDisputeAmount、undecidedAmount 是它们按结果分开的四个和。这一行还能不能审、审哪一段由审核口答，读面不代填
+// 「待审核」。
 type supplierBillLineBody struct {
-	Line            string                   `json:"line"`
-	FeeItem         string                   `json:"feeItem"`
-	ClaimedAmount   string                   `json:"claimedAmount"`
-	Classification  string                   `json:"classification,omitempty"`
-	ExpectedVersion string                   `json:"expectedVersion,omitempty"`
-	ExpectedAmount  string                   `json:"expectedAmount,omitempty"`
-	VarianceAmount  string                   `json:"varianceAmount,omitempty"`
-	Basis           string                   `json:"basis,omitempty"`
-	MatchedAt       string                   `json:"matchedAt,omitempty"`
-	Payable         *supplierBillPayableBody `json:"payable,omitempty"`
+	Line              string                     `json:"line"`
+	FeeItem           string                     `json:"feeItem"`
+	ClaimedAmount     string                     `json:"claimedAmount"`
+	Classification    string                     `json:"classification,omitempty"`
+	ExpectedVersion   string                     `json:"expectedVersion,omitempty"`
+	ExpectedAmount    string                     `json:"expectedAmount,omitempty"`
+	VarianceAmount    string                     `json:"varianceAmount,omitempty"`
+	Basis             string                     `json:"basis,omitempty"`
+	MatchedAt         string                     `json:"matchedAt,omitempty"`
+	MatchedAmount     string                     `json:"matchedAmount"`
+	PassedAmount      string                     `json:"passedAmount"`
+	RejectedAmount    string                     `json:"rejectedAmount"`
+	OpenDisputeAmount string                     `json:"openDisputeAmount"`
+	UndecidedAmount   string                     `json:"undecidedAmount"`
+	Decisions         []supplierBillDecisionBody `json:"decisions"`
 }
 
-// supplierBillPayableBody 是挂在一行上的审核应付。documentNumber 是应付单号，与 documentNumberAbsence 恰出其一（没有号的不答
-// 空串、不拿应付标识顶，ADR-0355 决定十一）。auditor 是审核授权册上的审核方，operationEvidence 是点下这一次审核的操作者，
-// 两者不是一回事（ADR-0340 决定三）。
+// supplierBillDecisionBody 是一行上的一份审核决定：verdict 是 PASSED / DISPUTED / REJECTED，rangeFrom、rangeTo 是这一行主张
+// 金额上的那一段（最小币单位，左闭右开），resolvesDispute 是再审所解的争议。auditor 是审核授权册上的审核方，operationEvidence
+// 是点下这一次的操作者，两者不是一回事（ADR-0340 决定三）。通过的那一份带 payable：它形成的审核应付。
+type supplierBillDecisionBody struct {
+	Decision          string                   `json:"decision"`
+	Verdict           string                   `json:"verdict"`
+	RangeFrom         string                   `json:"rangeFrom"`
+	RangeTo           string                   `json:"rangeTo"`
+	Amount            string                   `json:"amount"`
+	Basis             string                   `json:"basis,omitempty"`
+	ResolvesDispute   string                   `json:"resolvesDispute,omitempty"`
+	ClaimVersion      string                   `json:"claimVersion,omitempty"`
+	Auditor           string                   `json:"auditor"`
+	OperationEvidence string                   `json:"operationEvidence,omitempty"`
+	AuditedAt         string                   `json:"auditedAt"`
+	Payable           *supplierBillPayableBody `json:"payable,omitempty"`
+}
+
+// supplierBillPayableBody 是一份通过的决定形成的审核应付。documentNumber 是应付单号，与 documentNumberAbsence 恰出其一（没有号的
+// 不答空串、不拿应付标识顶，ADR-0355 决定十一）。
 type supplierBillPayableBody struct {
 	Payable               string `json:"payable"`
 	DocumentNumber        string `json:"documentNumber,omitempty"`
 	DocumentNumberAbsence string `json:"documentNumberAbsence,omitempty"`
 	Amount                string `json:"amount"`
 	Currency              string `json:"currency"`
-	Auditor               string `json:"auditor"`
-	OperationEvidence     string `json:"operationEvidence,omitempty"`
-	AuditedAt             string `json:"auditedAt"`
 }
 
 // NewQuerySupplierBillLinesEndpoint 交回一份账单各行查阅的 HTTP 入口（GET /settlement-supplier-bill-lines?claim=&version=）。账单册
@@ -103,7 +126,7 @@ func NewQuerySupplierBillLinesEndpoint(intake CatalogueQueryIntake, reader Suppl
 		configured := found.AuditAuthorityConfigured
 		body := supplierBillLinesResponse{
 			Outcome: outcomeSupplierBillLinesListed, Claim: found.Claim, ClaimVersion: found.ClaimVersion,
-			Supplier: found.Supplier, LegalEntity: found.LegalEntity, Period: found.Period, Currency: found.Currency,
+			Supplier: found.Supplier, SupplierBillNumber: found.SupplierBillNumber, LegalEntity: found.LegalEntity, Period: found.Period, Currency: found.Currency,
 			ReceivedAt: rfc3339(found.ReceivedAt), SupplementsClaim: found.Supplements, AuditAuthorityConfigured: &configured,
 			OperationEvidence: found.OperationEvidence, RecordedAt: rfc3339(found.RecordedAt),
 			Lines: make([]supplierBillLineBody, 0, len(found.Lines)),
@@ -119,18 +142,30 @@ func supplierBillLineBodyOf(line ports.SupplierBillLineEntry) supplierBillLineBo
 	body := supplierBillLineBody{
 		Line: line.Line, FeeItem: line.FeeItem, ClaimedAmount: minorAmount(line.ClaimedMinor),
 		Classification: line.Classification, ExpectedVersion: line.ExpectedVersion, Basis: line.Basis,
-		MatchedAt: optionalInstant(line.MatchedAt),
+		MatchedAt: optionalInstant(line.MatchedAt), MatchedAmount: minorAmount(line.MatchedMinor),
+		PassedAmount: minorAmount(line.PassedMinor), RejectedAmount: minorAmount(line.RejectedMinor),
+		OpenDisputeAmount: minorAmount(line.OpenDisputeMinor), UndecidedAmount: minorAmount(line.UndecidedMinor),
+		Decisions: make([]supplierBillDecisionBody, 0, len(line.Decisions)),
 	}
 	if line.ExpectedVersion != "" {
 		body.ExpectedAmount = minorAmount(line.ExpectedMinor)
 		body.VarianceAmount = minorAmount(line.ClaimedMinor - line.ExpectedMinor)
 	}
-	if payable := line.Payable; payable != nil {
-		body.Payable = &supplierBillPayableBody{
-			Payable: payable.Payable, DocumentNumber: payable.DocumentNumber, DocumentNumberAbsence: payable.DocumentNumberAbsence,
-			Amount: minorAmount(payable.AmountMinor), Currency: payable.Currency, Auditor: payable.AuditorRef,
-			OperationEvidence: payable.OperationEvidence, AuditedAt: rfc3339(payable.AuditedAt),
+	for _, decision := range line.Decisions {
+		entry := supplierBillDecisionBody{
+			Decision: decision.Decision, Verdict: decision.Verdict,
+			RangeFrom: minorAmount(decision.RangeFromMinor), RangeTo: minorAmount(decision.RangeToMinor),
+			Amount: minorAmount(decision.RangeToMinor - decision.RangeFromMinor), Basis: decision.Basis,
+			ResolvesDispute: decision.ResolvesDispute, ClaimVersion: decision.ClaimVersion, Auditor: decision.AuditorRef,
+			OperationEvidence: decision.OperationEvidence, AuditedAt: rfc3339(decision.AuditedAt),
 		}
+		if payable := decision.Payable; payable != nil {
+			entry.Payable = &supplierBillPayableBody{
+				Payable: payable.Payable, DocumentNumber: payable.DocumentNumber, DocumentNumberAbsence: payable.DocumentNumberAbsence,
+				Amount: minorAmount(payable.AmountMinor), Currency: payable.Currency,
+			}
+		}
+		body.Decisions = append(body.Decisions, entry)
 	}
 	return body
 }
@@ -161,7 +196,8 @@ type auditedPayableListResponse struct {
 }
 
 // auditedPayableBody 逐字段透出一笔审核应付。documentNumber 与 documentNumberAbsence 恰出其一，理由同 supplierBillPayableBody；
-// payable 是调用方生成的应付标识（幂等键），给技术详情，不当应付单号给人看。没有付款、收款或净额字段：审核应付不表示供应商
+// payable 是调用方生成的应付标识（幂等键，也是形成它的那份审核决定的标识），给技术详情，不当应付单号给人看。rangeFrom、rangeTo
+// 是它通过的那一段，resolvesDispute 是它解的争议（ADR-0357）；读不到那份决定时两段都缺席。没有付款、收款或净额字段：审核应付不表示供应商
 // 已付款或已收款，贷项也不净入它（UC-SA-004 结果语义）。
 type auditedPayableBody struct {
 	Payable               string `json:"payable"`
@@ -180,6 +216,10 @@ type auditedPayableBody struct {
 	OperationEvidence     string `json:"operationEvidence,omitempty"`
 	AuditedAt             string `json:"auditedAt"`
 	RecordedAt            string `json:"recordedAt"`
+	RangeFrom             string `json:"rangeFrom,omitempty"`
+	RangeTo               string `json:"rangeTo,omitempty"`
+	ResolvesDispute       string `json:"resolvesDispute,omitempty"`
+	SupplierBillNumber    string `json:"supplierBillNumber,omitempty"`
 }
 
 // NewQueryAuditedPayablesEndpoint 交回审核应付册的 HTTP 入口（GET /settlement-audited-payables）。可选检索维 documentNumber、
@@ -215,10 +255,20 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 				LegalEntity: row.LegalEntity, Account: row.Account, Currency: row.Currency, Amount: minorAmount(row.AmountMinor),
 				Auditor: row.AuditorRef, OperationEvidence: row.OperationEvidence,
 				AuditedAt: rfc3339(row.AuditedAt), RecordedAt: rfc3339(row.RecordedAt),
+				RangeFrom: optionalMinor(row.RangeFromMinor), RangeTo: optionalMinor(row.RangeToMinor),
+				ResolvesDispute: row.ResolvesDispute, SupplierBillNumber: row.SupplierBillNumber,
 			})
 		}
 		writeJSON(response, http.StatusOK, auditedPayableListResponse{
 			Outcome: outcomeAuditedPayablesListed, Truncated: truncated, Payables: bodies,
 		})
 	})
+}
+
+// optionalMinor 转写一格可缺的金额：缺席不出这一格，不拿零顶。
+func optionalMinor(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	return minorAmount(*value)
 }

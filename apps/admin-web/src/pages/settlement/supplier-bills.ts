@@ -1,16 +1,15 @@
-// 「供应商账单与应付」页的判读（UC-SA-004；ADR-0340；票 document-numbering/11）：账单号与主张标识的对应、账单走到哪一步、
-// 一行能不能审、两张表单的本地检查与载荷、两个写口答复的那一句。纯函数、只引类型与界面用语词典，node:test 直接跑；取数与
-// 表单在 SupplierBillsPage.tsx 与 SupplierBillPanel.tsx。
+// 「供应商账单与应付」页的判读（UC-SA-004；ADR-0340、ADR-0357；票 document-numbering/11、13）：账单号怎么显示、主张标识怎么定、
+// 账单与一行走到哪一步、登记表单的本地检查与载荷、接收口答复的那一句。按范围审核的判读在 supplier-bill-audit.ts。纯函数、只引
+// 类型与界面用语词典，node:test 直接跑；取数与表单在 SupplierBillsPage.tsx 与 SupplierBillPanel.tsx。
 //
 // 话照「说人话」写：答复的业务判别由服务端给（outcome），这里只把它译成一句操作者看得懂的话，不另判业务。走到哪一步是从读口
-// 的计数派生的呈现词，不是领域状态：领域里逐行只记匹配分类与有没有审核应付。
+// 的和派生的呈现词，不是领域状态：领域里逐行记的是匹配分类与各段审核决定。
 
 import { shortPrincipalRef } from '../../components/principal-ref';
-import { documentNumberAbsenceNote, documentTypeWords, numberingCollisionNote } from '../../vocabulary/document-numbering';
+import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 import { labelFor, type StatusTone } from '../../vocabulary/status';
 import type {
   AuditedPayableRecord,
-  SupplierBillAuditResponseBody,
   SupplierBillLinePayableRecord,
   SupplierBillLineRecord,
   SupplierBillReceptionPayload,
@@ -18,6 +17,7 @@ import type {
   SupplierBillReceptionResponseBody,
   SupplierExpectedCostRecord,
 } from './api';
+import { billNumberConflictText, claimSupplierConflictText } from './supplier-bill-audit';
 
 /** 应付单号的叫法，取单据编号词典那一份（ADR-0355 决定十一），不在各页另写。 */
 export const payableNumberName = documentTypeWords.AUDITED_PAYABLE.numberName;
@@ -25,26 +25,39 @@ export const payableNumberName = documentTypeWords.AUDITED_PAYABLE.numberName;
 // —— 账单号与主张标识 ——
 
 /**
- * 主张标识由页面在首次提交前生成，不让人填：取「供应商/供应商账单号」。账单号是供应商分配的外部标识（GLOSSARY「外部标识」），
- * 接收口的载荷没有单放它的一格，只能借主张标识带着它——这一借法记在票 document-numbering/11 的完成记录里，等协调方裁。
- *
- * 取成这样而不取随机串：同一家供应商的同一张账单不论谁来录、录几次，都落回同一个主张（服务端答已存在或版本冲突），不会因为
- * 两个人各录一遍就对同一份预期成本对上两次账；前面带上供应商，两家供应商用了同一个账单号也不会撞在一起。
+ * 票 11 期间，接收口还没有放供应商账单号的格，页面把主张标识生成为「供应商/账单号」、再从里面取回账单号显示。这种主张标识永久
+ * 留在册上（接收行、审核应付与交接信封都引用它），账单号册不从它拆号回填（ADR-0357 决定一）；这里只为显示取回，不进检索与查重。
+ * 不是这种形状的（随机生成的、接口送入的）取不到，答 undefined。
  */
-export function claimIdFor(supplier: string, billNumber: string): string {
-  return `${supplier}/${billNumber.trim()}`;
-}
-
-/** 从主张标识里取回供应商的账单号；不是这一页生成的（接口送入、演示脚本）就取不到，答 undefined。 */
-export function billNumberOf(claim: string, supplier: string): string | undefined {
+export function legacyBillNumberOf(claim: string, supplier: string): string | undefined {
   const prefix = `${supplier}/`;
   if (!claim.startsWith(prefix) || claim.length === prefix.length) return undefined;
   return claim.slice(prefix.length);
 }
 
+/** 一份账单的供应商账单号：服务端账单号册上的那个；没有（旧行）再从主张标识里取回；都没有答 undefined。 */
+export function billNumberOf(row: Pick<SupplierBillReceptionRecord, 'claim' | 'supplier' | 'supplierBillNumber'>): string | undefined {
+  return row.supplierBillNumber ?? legacyBillNumberOf(row.claim, row.supplier);
+}
+
+/**
+ * 登记一张账单用哪个主张标识：同一家供应商同一个账单号已在册上（新号旧号一样认），就沿用那份主张的标识——录的是它的新版本，
+ * 服务端按版本答重放、版本冲突或接收新版本；不在册上就用页面新生成的那个（fresh）。服务端照样按（供应商，账单号）查重，页面这一步
+ * 只是让「更正后重发」落回原主张，不靠它防重。
+ */
+export function claimIdForBill(
+  rows: readonly Pick<SupplierBillReceptionRecord, 'claim' | 'supplier' | 'supplierBillNumber'>[],
+  supplier: string,
+  billNumber: string,
+  fresh: string,
+): string {
+  const number = billNumber.trim();
+  return rows.find((row) => row.supplier === supplier && billNumberOf(row) === number)?.claim ?? fresh;
+}
+
 /** 一份账单在页面上的主标识：取得到账单号显账单号，取不到照旧显主张标识。 */
-export function billLabel(row: Pick<SupplierBillReceptionRecord, 'claim' | 'supplier'>): string {
-  return billNumberOf(row.claim, row.supplier) ?? row.claim;
+export function billLabel(row: Pick<SupplierBillReceptionRecord, 'claim' | 'supplier' | 'supplierBillNumber'>): string {
+  return billNumberOf(row) ?? row.claim;
 }
 
 /** 列表与右栏共用的一份账单的键：主张加版本，换版本另成一行，原版本保留。 */
@@ -52,14 +65,9 @@ export function billKey(row: Pick<SupplierBillReceptionRecord, 'claim' | 'claimV
   return `${row.claim}\u0000${row.claimVersion}`;
 }
 
-/**
- * 应付标识由页面在第一次提交前定下：同一行因网络重发，落回的是同一份应付（服务端答已形成过），而不是又形成一份。前缀不与任何
- * 单据号默认格式的前缀相同：应付单号默认是 `AP-` 起头，内部标识也用它，技术详情里两串就难分。
- */
-export function newPayableId(now: Date, random: string): string {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
-  return `PAYABLE-${stamp}-${random.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+/** billKey 里的主张身份：选中的账单不在页上时，按它在全册里读回。 */
+export function claimOfBillKey(key: string): string {
+  return key.split('\u0000')[0];
 }
 
 /** 操作证据 `OPERATOR/<发行方>#<sub>` 的短名；缺席即那一份不记提交方。 */
@@ -77,36 +85,32 @@ export function matchedLineCount(row: Pick<SupplierBillReceptionRecord, 'classif
   return row.classificationCounts[MATCHED] ?? 0;
 }
 
-/** 没对上的行数：分类不是已对上，或接收记录上这一行没有匹配。 */
-export function differingLineCount(row: Pick<SupplierBillReceptionRecord, 'lineCount' | 'classificationCounts'>): number {
-  return Math.max(0, row.lineCount - matchedLineCount(row));
-}
-
 export interface BillProgress {
   label: string;
   tone: StatusTone;
 }
 
-/** 呈现词：从读口的计数派生，不是领域状态。 */
+/** 呈现词：从读口的和派生，不是领域状态。 */
 export const awaitingAuditLabel = '待审核';
 export const auditorUnconfiguredLabel = '审核人未配置';
-export const differingLabel = '有差异待核实';
+export const disputedLabel = '有争议待再审';
 export const auditedLabel = '已审完';
 
 /**
- * 一份账单走到哪一步，按先要人动手的那件说：有已对上却还没形成应付的行，就是待审核（这家供应商在这个公司主体下此刻没登审核人
- * 时说审核人未配置——审核会停在未配置，要先去登）；否则有对不上的行，就是有差异待核实；都没有就是已审完。
+ * 一份账单走到哪一步，按先要人动手的那件说：还有没给任何审核结果的金额，就是待审核（这家供应商在这个公司主体下此刻没登审核人
+ * 时说审核人未配置——审核会停在未配置，要先去登）；都给过了但还有争议没解，就是有争议待再审；都没有就是已审完。对不上的行也在
+ * 「待审核」里：它们要审核人给争议或拒绝（ADR-0357 决定二），不再是只能核实、没有入口的那一格。
  *
  * 审核人登没登看 auditAuthorityConfiguredNow，不看接收时的快照 auditAuthorityConfigured：审核在审核那一刻读审核授权册，租户
  * 接收之后补登了审核人，按快照说就会一直说没登。
  */
 export function billProgress(
-  row: Pick<SupplierBillReceptionRecord, 'lineCount' | 'classificationCounts' | 'matchedWithoutPayableCount' | 'auditAuthorityConfiguredNow'>,
+  row: Pick<SupplierBillReceptionRecord, 'undecidedAmount' | 'openDisputeAmount' | 'auditAuthorityConfiguredNow'>,
 ): BillProgress {
-  if (row.matchedWithoutPayableCount > 0) {
+  if (BigInt(row.undecidedAmount) > 0n) {
     return row.auditAuthorityConfiguredNow ? { label: awaitingAuditLabel, tone: 'warn' } : { label: auditorUnconfiguredLabel, tone: 'warn' };
   }
-  if (differingLineCount(row) > 0) return { label: differingLabel, tone: 'warn' };
+  if (BigInt(row.openDisputeAmount) > 0n) return { label: disputedLabel, tone: 'warn' };
   return { label: auditedLabel, tone: 'good' };
 }
 
@@ -144,20 +148,20 @@ export function withExactHits(page: readonly AuditedPayableRecord[], hits: reado
   return [...page, ...hits.filter((row) => !listed.has(row.payable))];
 }
 
-// —— 一行能不能审 ——
+// —— 一行走到哪一步 ——
 
 export interface LineDisposition {
   label: string;
   tone: StatusTone;
-  /** 这一行在页面上摆不摆「审核通过」：已对上、还没有应付。摆了也照样由服务端判（授权、账户、上限都可能没登）。 */
+  /** 这一行还有没给结果的金额：页面摆「审核这一行」。摆了也照样由服务端判（授权、账户、上限都可能没登）。 */
   auditable: boolean;
 }
 
-export function lineDisposition(line: Pick<SupplierBillLineRecord, 'classification' | 'payable'>): LineDisposition {
-  if (line.payable) return { label: '已形成应付', tone: 'good', auditable: false };
-  if (line.classification === MATCHED) return { label: awaitingAuditLabel, tone: 'warn', auditable: true };
-  if (line.classification) return { label: '对不上，先核实', tone: 'warn', auditable: false };
-  return { label: '没有匹配记录', tone: 'muted', auditable: false };
+/** 一行走到哪一步，判法同 billProgress，只看这一行的和。 */
+export function lineDisposition(line: Pick<SupplierBillLineRecord, 'undecidedAmount' | 'openDisputeAmount'>): LineDisposition {
+  if (BigInt(line.undecidedAmount) > 0n) return { label: awaitingAuditLabel, tone: 'warn', auditable: true };
+  if (BigInt(line.openDisputeAmount) > 0n) return { label: disputedLabel, tone: 'warn', auditable: false };
+  return { label: auditedLabel, tone: 'good', auditable: false };
 }
 
 /** 一笔应付在页面上的主标识：应付单号（ADR-0355 决定十一）；没有号的照旧显应付标识，为什么没号由 payableNumberAbsenceNote 注明。 */
@@ -331,12 +335,14 @@ export function hasReceptionProblems(problems: ReceptionProblems): boolean {
 export function receptionPayload(
   draft: ReceptionDraft,
   costsByVersion: ReadonlyMap<string, Pick<SupplierExpectedCostRecord, 'feeItem'>>,
+  claim: string,
 ): SupplierBillReceptionPayload {
   const refOf = (index: number) => String(index + 1);
   return {
-    claim: claimIdFor(draft.supplier, draft.billNumber),
+    claim,
     version: draft.version.trim(),
     supplier: draft.supplier,
+    supplierBillNumber: draft.billNumber.trim(),
     legalEntity: draft.legalEntity,
     period: draft.period.trim(),
     currency: draft.currency,
@@ -360,7 +366,11 @@ export function receptionPayload(
 export const receptionSettled = new Set(['BILL_RECEIVED', 'EXISTING_RESULT']);
 
 /** 接收口答复的那一句。 */
-export function receptionAnswerText(body: SupplierBillReceptionResponseBody, billNumber: string): string {
+export function receptionAnswerText(
+  body: SupplierBillReceptionResponseBody,
+  billNumber: string,
+  supplierName: (supplier: string) => string = (supplier) => supplier,
+): string {
   const bill = billNumber.trim() === '' ? '这张账单' : `账单 ${billNumber.trim()}`;
   switch (body.outcome) {
     case 'BILL_RECEIVED':
@@ -377,63 +387,16 @@ export function receptionAnswerText(body: SupplierBillReceptionResponseBody, bil
       return body.undecidedReason === 'CONVERSION_UNCONFIGURED'
         ? '没有登记：账单币种与所选预期成本的结算币种不同，本公司没有登记换算依据（未配置），不按当前汇率猜。'
         : `没有登记：服务端这一次没有答出结果（${body.undecidedReason ?? '原因未说'}），稍后重试。`;
+    case 'SUPPLIER_BILL_NUMBER_CONFLICT':
+      return billNumberConflictText(body, billNumber);
+    case 'CLAIM_SUPPLIER_CONFLICT':
+      return claimSupplierConflictText(body, supplierName);
     case 'EXPECTED_COST_NOT_CURRENT': {
       const stale = body.notCurrent;
       if (!stale) return '没有登记：所选的预期成本已经不是当前那一版，改选当前那一版再登记。';
       const why = stale.withdrawn ? '已经撤下（它依的运输已失效）' : `已经被更正过（现在是 ${stale.successor ?? '新的一版'}）`;
       return `没有登记：第 ${stale.line} 行选的预期成本 ${stale.version} ${why}，改选当前那一版再登记。`;
     }
-    default:
-      return `服务端答 ${body.outcome}`;
-  }
-}
-
-// —— 审核这张账单 ——
-
-/** 审核答复里这几格说明库上已有这一行的应付或刚形成一份：重读账单与应付册。 */
-export const auditSettled = new Set(['PAYABLE_FORMED', 'EXISTING_PAYABLE']);
-
-/** 答复里那一笔应付怎么称呼：有应付单号说号；没有的照旧说应付标识，并带上为什么没号。 */
-function answeredPayable(body: SupplierBillAuditResponseBody): string {
-  const label = body.documentNumber ?? body.payable ?? '';
-  const note = body.documentNumber ? undefined : body.documentNumberAbsence ? documentNumberAbsenceNote(body.documentNumberAbsence) : undefined;
-  return note ? `${label}（${note}）` : label;
-}
-
-const undecidedAuditWords: Record<string, string> = {
-  AUDIT_AUTHORITY_UNCONFIGURED: '这家供应商在这个公司主体下还没有登记审核人（审核授权未配置）',
-  PAYABLE_ACCOUNT_UNCONFIGURED: '这家供应商在这个公司主体下还没有登记应付归集账户（未配置）',
-  AUDIT_ESCALATION_UNCONFIGURED: '本公司还没有登记越权审核上限（未配置），不默认放行',
-};
-
-/** 审核口答复的那一句。line 是表单上的行号；money 是页面的金额写法（ops-ui 的 formatMoney），由调用方交进来，本文件不引 tsx。 */
-export function auditAnswerText(
-  body: SupplierBillAuditResponseBody,
-  line: string,
-  money: (amount: string, currency: string) => string = (amount, currency) => `${amount} ${currency}`,
-): string {
-  const amount = body.amount && body.currency ? `，金额 ${money(body.amount, body.currency)}` : '';
-  switch (body.outcome) {
-    case 'PAYABLE_FORMED':
-      return `第 ${line} 行审核通过，形成应付 ${answeredPayable(body)}${amount}。`;
-    case 'EXISTING_PAYABLE':
-      return `第 ${line} 行已经形成过应付 ${answeredPayable(body)}，没有重复形成。`;
-    case 'PAYABLE_CONFLICT':
-      return '没有形成应付：这个应付标识已经用在另一行上；刷新这张账单后重试。';
-    case 'LINE_NOT_AUDITABLE':
-      return `不能审核第 ${line} 行：它和预期成本对不上（${differingClassificationWords()}之一），要先核实差异。`;
-    case 'AUDIT_MUST_ESCALATE':
-      return `第 ${line} 行没有形成应付：金额超过本公司登记的越权审核上限，要升级审批。升级后由谁终审还没有定，这一行先停着。`;
-    case 'SOURCE_NOT_ACCEPTED':
-      return '没有审核：找不到这张账单或这一行；刷新后重试。';
-    case 'AUDIT_UNDECIDED': {
-      const reason = body.undecidedReason ? undecidedAuditWords[body.undecidedReason] : undefined;
-      return reason
-        ? `第 ${line} 行没有形成应付：${reason}。登好之后再审。`
-        : `第 ${line} 行没有形成应付：服务端这一次没有答出结果（${body.undecidedReason ?? '原因未说'}），稍后重试。`;
-    }
-    case 'NUMBERING_RULE_COLLISION':
-      return numberingCollisionNote(body.documentType);
     default:
       return `服务端答 ${body.outcome}`;
   }

@@ -25,6 +25,9 @@ const (
 	billAuditor = "SYN-BILL-AUDITOR-PSB22"
 	// billSecondClerk 另持一份账单接收授予，用来看换一个人重放留下的是谁。
 	billSecondClerk = "SYN-BILL-CLERK-PSB22-B"
+	// billDisputer 只持争议决定授予，billArbiter 持审核应付与争议决定两种（ADR-0357 决定二）。
+	billDisputer = "SYN-BILL-DISPUTER-DN13"
+	billArbiter  = "SYN-BILL-ARBITER-DN13"
 
 	supplierBillReceptionFace = "/settlement-supplier-bill-receptions"
 	supplierBillAuditFace     = "/settlement-supplier-bill-audits"
@@ -44,6 +47,9 @@ func newSupplierBillFixture(t *testing.T) *settlementDecisionsFixture {
 	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billClerk, interval, accessidentity.DecisionSupplierBillReception)
 	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billAuditor, interval, accessidentity.DecisionSupplierBillAudit)
 	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billSecondClerk, interval, accessidentity.DecisionSupplierBillReception)
+	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billDisputer, interval, accessidentity.DecisionSupplierBillDisputeDecision)
+	registerOperatorIn(t, fixture.db, operators, decisionsTenant, billArbiter, interval,
+		accessidentity.DecisionSupplierBillAudit, accessidentity.DecisionSupplierBillDisputeDecision)
 	for _, pattern := range []string{supplierBillReceptionFace, supplierBillAuditFace} {
 		if fixture.endpoints[pattern] == nil {
 			t.Fatalf("%s 没按登记处挂上", pattern)

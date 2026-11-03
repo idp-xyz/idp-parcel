@@ -50,6 +50,17 @@ func seedAuditedPayable(t *testing.T, fixture *catalogueFixture, tenant, payable
 		tenant, payable, claim, line, amount, auditedAt, number, absence)
 }
 
+// seedAuditDecision 播一份审核决定；basis 与 resolves 为 nil 即不带。
+func seedAuditDecision(t *testing.T, fixture *catalogueFixture, tenant, decision, claim, line, verdict string, from, to int64, basis, resolves any, auditedAt time.Time) {
+	t.Helper()
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.supplier_bill_audit_decision
+			(tenant_id, decision_id, claim_id, claim_version, line_ref, verdict, range_from_minor, range_to_minor,
+			 basis_ref, resolves_decision, auditor_ref, operation_evidence, audited_at, content_digest, recorded_at)
+		 VALUES ($1, $2, $3, '1', $4, $5, $6, $7, $8, $9, 'SYN-AUDITOR-ROLE', 'OPERATOR/syn#auditor', $10, 'SYN-DIGEST-D', $10)`,
+		tenant, decision, claim, line, verdict, from, to, basis, resolves, auditedAt)
+}
+
 // Covers: AT-SA-232 — 账单册目录行的汇总只是求和与计数：主张金额之和、按逐行匹配分类原名计的行数、这一版各行上已形成的应付
 // 行数与金额、已匹配而还没有应付的行数；到达时刻、被追加的原主张与接收操作者照实转写，不记提交方的读作空。
 func TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables(t *testing.T) {
@@ -60,7 +71,7 @@ func TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables(t *testing.T) 
 	// 另一个租户同一主张同一行的应付不算进本租户这一份。
 	seedAuditedPayable(t, fixture, "tenant-b", "SYN-PAYABLE-1", "SYN-SUP-01/INV-2", "L1", 1000, "AP-202608-00001", nil, catalogueBaseAt)
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列账单走样：err=%v rows=%+v", err, rows)
 	}
@@ -94,6 +105,7 @@ func TestSupplierBillLinesCarryMatchAndPayablePerLine(t *testing.T) {
 	seedSupplierBill(t, fixture, catalogueTenant, "SYN-SUP-01/INV-1", "1", "SYN-SUP-01", "OPERATOR/syn#clerk", catalogueBaseAt)
 	seedSupplierBill(t, fixture, "tenant-b", "SYN-SUP-01/INV-9", "1", "SYN-SUP-01", "", catalogueBaseAt)
 	seedAuditedPayable(t, fixture, catalogueTenant, "SYN-PAYABLE-1", "SYN-SUP-01/INV-1", "L1", 1000, nil, "NUMBERING_TIME_ZONE_NOT_CONFIGURED", catalogueBaseAt.Add(time.Hour))
+	seedAuditDecision(t, fixture, catalogueTenant, "SYN-PAYABLE-1", "SYN-SUP-01/INV-1", "L1", "PASSED", 0, 1000, nil, nil, catalogueBaseAt.Add(time.Hour))
 
 	tenant := catalogueTenantID(t, catalogueTenant)
 	found, has, err := fixture.statement.FindSupplierBillLines(t.Context(), tenant, "SYN-SUP-01/INV-1", "1")
@@ -108,12 +120,16 @@ func TestSupplierBillLinesCarryMatchAndPayablePerLine(t *testing.T) {
 	if matched.Line != "L1" || matched.Classification != "MATCHED" || matched.ExpectedVersion != "SYN-EXP-1" || matched.Basis != "" {
 		t.Fatalf("已匹配那一行走样：%+v", matched)
 	}
-	if matched.Payable == nil || matched.Payable.Payable != "SYN-PAYABLE-1" || matched.Payable.DocumentNumber != "" ||
-		matched.Payable.DocumentNumberAbsence != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" || matched.Payable.AmountMinor != 1000 ||
-		matched.Payable.AuditorRef != "SYN-AUDITOR-ROLE" || matched.Payable.OperationEvidence != "OPERATOR/syn#auditor" {
-		t.Fatalf("挂在已匹配行上的应付走样：%+v", matched.Payable)
+	if len(matched.Decisions) != 1 || matched.Decisions[0].Payable == nil {
+		t.Fatalf("已匹配那一行的决定走样：%+v", matched.Decisions)
 	}
-	if variance.Classification != "PRICE_VARIANCE" || variance.ExpectedMinor != 1800 || variance.Basis != "SYN-BASIS-PRICE" || variance.Payable != nil {
+	if decision, payable := matched.Decisions[0], matched.Decisions[0].Payable; decision.Verdict != "PASSED" ||
+		decision.AuditorRef != "SYN-AUDITOR-ROLE" || decision.OperationEvidence != "OPERATOR/syn#auditor" ||
+		payable.Payable != "SYN-PAYABLE-1" || payable.DocumentNumber != "" ||
+		payable.DocumentNumberAbsence != "NUMBERING_TIME_ZONE_NOT_CONFIGURED" || payable.AmountMinor != 1000 {
+		t.Fatalf("挂在已匹配行上的应付走样：%+v %+v", decision, payable)
+	}
+	if variance.Classification != "PRICE_VARIANCE" || variance.ExpectedMinor != 1800 || variance.Basis != "SYN-BASIS-PRICE" || len(variance.Decisions) != 0 {
 		t.Fatalf("价差那一行走样：%+v", variance)
 	}
 	if missing.Classification != "NO_MATCHING_OCCURRENCE" || missing.ExpectedVersion != "" || missing.MatchedAt == nil {
@@ -245,7 +261,7 @@ func TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage(t *testin
 	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/Z-LATEST", "SYN-SUP-01", catalogueBaseAt, true)
 	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/M-MIDDLE", "SYN-SUP-01", catalogueBaseAt.Add(-24*time.Hour), true)
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), 2)
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 2)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
 	}
@@ -267,7 +283,7 @@ func TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow(t *testin
 		        ($1, 'SYN-SUP-02', 'SYN-LE-OTHER', 'SYN-AUDITOR-ROLE', $2)`,
 		catalogueTenant, catalogueBaseAt.Add(time.Hour))
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
 	}
@@ -278,5 +294,124 @@ func TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow(t *testin
 	// 别的租户登的、本租户别的责任法人登的，都不是这一组。
 	if missing.AuditAuthorityConfigured || missing.AuditAuthorityConfiguredNow {
 		t.Fatalf("这一组一直没登，两格都要是 false：%+v", missing)
+	}
+}
+
+// Covers: AT-SA-233、AT-SA-234、AT-SA-235（读面半边）——账单册、账单各行与应付册带出供应商账单号（取账单号册，不从主张标识拆）与
+// 各段审核结果：各行的已匹配金额（价差行到预期成本）、各份决定（结果、范围、依据、所解争议、通过的带应付）与四个和；目录行的
+// 已拒绝、仍在争议中、还没有结果三个和与按各行决定求的一致；同一行两份应付只算一行；应付册带范围与所解争议；账单册按主张、
+// 供应商与账单号在全册里精确检索，页外的原账单也找得到，账单号逐字比。
+func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	const claim = "SYN-BILL-RANDOM-1"
+	seedSupplierBill(t, fixture, catalogueTenant, claim, "1", "SYN-SUP-01", "", catalogueBaseAt)
+	fixture.seed(t, `INSERT INTO settlement_accounting.supplier_bill_number (tenant_id, supplier_ref, bill_number, claim_id, claim_version, recorded_at)
+		VALUES ($1, 'SYN-SUP-01', 'INV-2608-007', $2, '1', $3)`, catalogueTenant, claim, catalogueBaseAt)
+	at := catalogueBaseAt.Add(time.Hour)
+	// L1（1000，已匹配）：通过 600、拒绝 400。L2（2000，价差到 1800）：通过 1500、争议 500，争议里再审通过 300、剩 200 仍在争议。
+	// L3（300，没有对应发生项）：还没审。
+	seedAuditedPayable(t, fixture, catalogueTenant, "D-L1-PASS", claim, "L1", 600, "AP-202608-00011", nil, at)
+	seedAuditDecision(t, fixture, catalogueTenant, "D-L1-PASS", claim, "L1", "PASSED", 0, 600, nil, nil, at)
+	seedAuditDecision(t, fixture, catalogueTenant, "D-L1-REJECT", claim, "L1", "REJECTED", 600, 1000, "SYN-NOT-ORDERED", nil, at)
+	seedAuditedPayable(t, fixture, catalogueTenant, "D-L2-PASS", claim, "L2", 1500, "AP-202608-00012", nil, at)
+	seedAuditDecision(t, fixture, catalogueTenant, "D-L2-PASS", claim, "L2", "PASSED", 0, 1500, nil, nil, at)
+	seedAuditDecision(t, fixture, catalogueTenant, "D-L2-DISPUTE", claim, "L2", "DISPUTED", 1500, 2000, "SYN-PRICE-PROOF", nil, at)
+	seedAuditedPayable(t, fixture, catalogueTenant, "D-L2-REPASS", claim, "L2", 300, "AP-202608-00013", nil, at.Add(time.Hour))
+	seedAuditDecision(t, fixture, catalogueTenant, "D-L2-REPASS", claim, "L2", "PASSED", 1500, 1800, "SYN-PRICE-CONFIRMED", "D-L2-DISPUTE", at.Add(time.Hour))
+
+	tenant := catalogueTenantID(t, catalogueTenant)
+	found, has, err := fixture.statement.FindSupplierBillLines(t.Context(), tenant, claim, "1")
+	if err != nil || !has || found.SupplierBillNumber != "INV-2608-007" || len(found.Lines) != 3 {
+		t.Fatalf("账单面走样：has=%v err=%v %+v", has, err, found)
+	}
+	l1, l2, l3 := found.Lines[0], found.Lines[1], found.Lines[2]
+	if l1.MatchedMinor != 1000 || l1.PassedMinor != 600 || l1.RejectedMinor != 400 || l1.UndecidedMinor != 0 || len(l1.Decisions) != 2 {
+		t.Fatalf("L1 = %+v", l1)
+	}
+	if l2.MatchedMinor != 1800 || l2.PassedMinor != 1800 || l2.OpenDisputeMinor != 200 || l2.UndecidedMinor != 0 || len(l2.Decisions) != 3 {
+		t.Fatalf("L2 = %+v", l2)
+	}
+	byID := map[string]ports.SupplierBillLineDecision{}
+	for _, decision := range l2.Decisions {
+		byID[decision.Decision] = decision
+	}
+	if repass := byID["D-L2-REPASS"]; repass.ResolvesDispute != "D-L2-DISPUTE" || repass.Basis != "SYN-PRICE-CONFIRMED" ||
+		repass.RangeFromMinor != 1500 || repass.RangeToMinor != 1800 || repass.Payable == nil || repass.Payable.DocumentNumber != "AP-202608-00013" {
+		t.Fatalf("L2 的再审 = %+v", repass)
+	}
+	if dispute := byID["D-L2-DISPUTE"]; dispute.Payable != nil || dispute.Verdict != "DISPUTED" || dispute.Basis != "SYN-PRICE-PROOF" {
+		t.Fatalf("争议不该挂应付：%+v", dispute)
+	}
+	if l3.MatchedMinor != 0 || l3.UndecidedMinor != 300 || len(l3.Decisions) != 0 {
+		t.Fatalf("L3 = %+v", l3)
+	}
+
+	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, ports.SupplierBillReceptionFilter{}, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("账单册：err=%v rows=%+v", err, rows)
+	}
+	row := rows[0]
+	sum := func(pick func(ports.SupplierBillLineEntry) int64) int64 {
+		return pick(l1) + pick(l2) + pick(l3)
+	}
+	if row.SupplierBillNumber != "INV-2608-007" || row.PayableLineCount != 2 || row.PayableMinor != 2400 ||
+		row.RejectedMinor != sum(func(line ports.SupplierBillLineEntry) int64 { return line.RejectedMinor }) ||
+		row.OpenDisputeMinor != sum(func(line ports.SupplierBillLineEntry) int64 { return line.OpenDisputeMinor }) ||
+		row.UndecidedMinor != sum(func(line ports.SupplierBillLineEntry) int64 { return line.UndecidedMinor }) ||
+		row.RejectedMinor != 400 || row.OpenDisputeMinor != 200 || row.UndecidedMinor != 300 {
+		t.Fatalf("目录行 = %+v", row)
+	}
+
+	// 精确检索在全册里找：另登一份更晚收到的账单、页大小 1，原账单在页外，按账单号（供应商加号）与按主张都找得到；号逐字比。
+	seedSupplierBill(t, fixture, catalogueTenant, "SYN-BILL-RANDOM-2", "1", "SYN-SUP-01", "", catalogueBaseAt.Add(time.Hour))
+	fixture.seed(t, `UPDATE settlement_accounting.supplier_bill_reception
+		SET claim = jsonb_set(claim, '{received_at}', '"2026-08-31T00:00:00Z"') WHERE claim_id = 'SYN-BILL-RANDOM-2'`)
+	if page, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, ports.SupplierBillReceptionFilter{}, 1); err != nil ||
+		len(page) != 1 || page[0].Claim != "SYN-BILL-RANDOM-2" {
+		t.Fatalf("页大小 1 只该列最晚收到的那份：err=%v %+v", err, page)
+	}
+	for name, filter := range map[string]ports.SupplierBillReceptionFilter{
+		"by number":   {Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-2608-007"},
+		"by claim":    {Claim: claim},
+		"number only": {SupplierBillNumber: "INV-2608-007"},
+	} {
+		found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, filter, 1)
+		if err != nil || len(found) != 1 || found[0].Claim != claim {
+			t.Fatalf("%s：页外的原账单要找得到：err=%v %+v", name, err, found)
+		}
+	}
+	for name, filter := range map[string]ports.SupplierBillReceptionFilter{
+		"other case":     {SupplierBillNumber: "inv-2608-007"},
+		"other supplier": {Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"},
+	} {
+		if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, filter, 10); err != nil || len(found) != 0 {
+			t.Fatalf("%s 不该找到：err=%v %+v", name, err, found)
+		}
+	}
+
+	// 存量里各版本供应商不一的主张（编排今天会挡，这里直写一版另一家供应商的）：按（另一家，号）检索不命中——供应商比的是号册上的
+	// 分配方；只按另一家供应商检索，照接收行的供应商找得到那一版。
+	seedSupplierBill(t, fixture, catalogueTenant, claim, "2", "SYN-SUP-02", "", catalogueBaseAt)
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 0 {
+		t.Fatalf("另一家供应商加这个号不该命中：err=%v %+v", err, found)
+	}
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 2 {
+		t.Fatalf("分配方加号要命中这份主张的两版：err=%v %+v", err, found)
+	}
+	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
+		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", Claim: claim}, 10); err != nil || len(found) != 1 || found[0].ClaimVersion != "2" {
+		t.Fatalf("不给号时按接收行的供应商比：err=%v %+v", err, found)
+	}
+
+	payables, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{Claim: claim}, 10)
+	if err != nil || len(payables) != 3 {
+		t.Fatalf("应付册：err=%v rows=%+v", err, payables)
+	}
+	newest := payables[0]
+	if newest.Payable != "D-L2-REPASS" || newest.RangeFromMinor == nil || *newest.RangeFromMinor != 1500 || *newest.RangeToMinor != 1800 ||
+		newest.ResolvesDispute != "D-L2-DISPUTE" || newest.SupplierBillNumber != "INV-2608-007" {
+		t.Fatalf("应付册最新那一笔 = %+v", newest)
 	}
 }
