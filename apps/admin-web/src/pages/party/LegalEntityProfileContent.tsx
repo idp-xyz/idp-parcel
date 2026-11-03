@@ -73,7 +73,7 @@ export function LegalEntityProfileContent({
                     <span key={`${row.typeCode}-${row.number}-${index}`}>
                       {index > 0 ? '；' : ''}
                       <span className="font-sans" title={row.typeCode}>
-                        {typeNameOf?.(content.registeredAddress.country, row.typeCode) ?? row.typeCode}
+                        {typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode}
                       </span>{' '}
                       {row.number}
                     </span>

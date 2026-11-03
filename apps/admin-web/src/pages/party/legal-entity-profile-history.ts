@@ -146,7 +146,7 @@ export function compareLegalEntityProfiles(
   const representative = (content: LegalEntityProfileContent) => content.representative
     ? `${representativeLabel(content.representative.kind)}：${content.representative.name}` : '';
   const tax = (content: LegalEntityProfileContent) => values(content.taxRegistrationNumbers
-    .map((row) => `${typeNameOf?.(content.registeredAddress.country, row.typeCode) ?? row.typeCode} ${row.number}`)).join('；');
+    .map((row) => `${typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode} ${row.number}`)).join('；');
   add('representative', '代表人信息', '代表人 / 负责人', representative(before), representative(after));
   add('registered-address', '地址信息', '注册地址', address(before.registeredAddress), address(after.registeredAddress));
   add('office-address', '地址信息', '办公地址', address(before.officeAddress), address(after.officeAddress));

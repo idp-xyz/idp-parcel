@@ -26,24 +26,38 @@ export interface IdentityLayerCells {
   numberCells: LifetimeNumberCell[];
 }
 
-/** 按注册国家 / 地区与类型码查类型名；查不到交回 undefined，调用方原样显码。 */
-export type RegistrationNumberTypeNameOf = (country: string, typeCode: string) => string | undefined;
+/** 目录的两层（ADR-0145 决定一）：身份层登终身注册号的类型，资料层登监管登记号的类型。 */
+export type RegistrationNumberTypeLayer = 'IDENTITY' | 'PROFILE';
 
-function typeKey(country: string, typeCode: string): string {
-  return `${country}\u0000${typeCode}`;
+/**
+ * 按注册国家 / 地区与类型码查类型名；查不到交回 undefined，调用方原样显码。`layer` 说的是调用方手里的号属哪一层——
+ * 同一国同一码两层都登了时各取各的名；不交按身份层优先（终身注册号的老调用方）。
+ */
+export type RegistrationNumberTypeNameOf = (country: string, typeCode: string, layer?: RegistrationNumberTypeLayer) => string | undefined;
+
+function typeKey(country: string, typeCode: string, layer: string): string {
+  return `${country}\u0000${typeCode}\u0000${layer}`;
 }
 
 /**
- * 把注册号类型目录折成查法。目录按国家 / 地区分，同一个码在两国可以是两个名，所以键带国家。同一国同一码两层都登了时
- * 取身份层：终身注册号只会是身份层的类型（ADR-0145 决定一）。已停用的类型照样译——号是在它还在用时登的，名没有变。
+ * 把注册号类型目录折成查法。目录按国家 / 地区分，同一个码在两国可以是两个名，所以键带国家；两层各自登名，所以键也带层
+ * （票 company-subject-ux/06 第 4 条：此前同码两层都登时拿身份层的名顶资料层的号）。只登了一层的码不论问哪一层都译——
+ * 查法不替调用方判断该不该译，它只答目录里叫什么。已停用的类型照样译——号是在它还在用时登的，名没有变。
  */
 export function registrationNumberTypeNamesOf(types: readonly RegistrationNumberTypeRecord[]): RegistrationNumberTypeNameOf {
   const names = new Map<string, string>();
   for (const type of types) {
-    const key = typeKey(type.countryCode, type.typeCode);
-    if (type.layer === 'IDENTITY' || !names.has(key)) names.set(key, type.typeName);
+    const key = typeKey(type.countryCode, type.typeCode, type.layer);
+    if (!names.has(key)) names.set(key, type.typeName);
   }
-  return (country, typeCode) => names.get(typeKey(country, typeCode));
+  return (country, typeCode, layer) => {
+    const order: RegistrationNumberTypeLayer[] = layer === 'PROFILE' ? ['PROFILE', 'IDENTITY'] : ['IDENTITY', 'PROFILE'];
+    for (const candidate of order) {
+      const name = names.get(typeKey(country, typeCode, candidate));
+      if (name !== undefined) return name;
+    }
+    return undefined;
+  };
 }
 
 export function identityLayerCellsOf(
@@ -54,7 +68,7 @@ export function identityLayerCellsOf(
   const country = record.registrationCountry ?? '';
   const numberCells = lifetimeNumberCells(
     record.lifetimeRegistrationNumbers ?? [],
-    typeNameOf === undefined ? undefined : (typeCode) => typeNameOf(country, typeCode),
+    typeNameOf === undefined ? undefined : (typeCode) => typeNameOf(country, typeCode, 'IDENTITY'),
   );
   return { country, numbers: cellsText(numberCells), numberCells };
 }

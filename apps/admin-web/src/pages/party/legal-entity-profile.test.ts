@@ -321,7 +321,8 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
   equal(halfContact.contacts.length, 2);
 
   // 给了目录查法，监管登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
-  const typeNameOf = (country: string, typeCode: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' ? 'SYN 税号' : undefined);
+  // 查法收到的层是资料层（票 company-subject-ux/06 第 4 条）：同码两层都登时不拿身份层的名顶上来。
+  const typeNameOf = (country: string, typeCode: string, layer?: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' && layer === 'PROFILE' ? 'SYN 税号' : undefined);
   const taxChanged = compareLegalEntityProfiles(
     base,
     profileComparisonContentOf({ ...untouched, taxNumbers: [{ typeCode: 'SYN-CN-TAX', number: 'SYN-CN-TAX-0102' }, { typeCode: 'SYN-OTHER', number: '9' }] }, 'UTC'),
