@@ -107,8 +107,8 @@ export function LegalEntityProfileSection({
   useEffect(() => {
     if (formOpenRequest > 0) setFormOpen(true);
   }, [formOpenRequest]);
-  // 注册号类型目录读一次，给按日期查询的读出把税务登记号类型码译成目录译名；读不到按码显。抽屉自己另读一份——它是
-  // 导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
+  // 注册号类型目录读一次，给按日期查询的读出与版本历史（对比表、快照）把监管登记号类型码译成目录译名；读不到按码显。
+  // 抽屉自己另读一份——它是导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
   const typeNameOf = useTypeNameOf(useLoaded(listRegistrationNumberTypes));
   return (
     <div className="flex flex-col gap-5">
@@ -117,7 +117,7 @@ export function LegalEntityProfileSection({
           <h4 className="text-[13px] font-semibold text-idpxyz-text">资料版本历史</h4>
           <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都保留一版；当前生效的那一版显示在概要。</p>
         </div>
-        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} revision={landed} />
+        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} revision={landed} typeNameOf={typeNameOf} />
       </section>
       {collapseCurrentProfile ? (
         <details
@@ -361,7 +361,7 @@ function scrollToField(root: HTMLElement | null, path: string): void {
 
 /**
  * 登记新版本的逐字段表单。本地提示输入结构、联系人分工（legalEntityProfileLocalProblems）与必填未填
- * （legalEntityProfileMissingFields）；地址国家与身份对不对得上、税号合不合目录、版本连不连续都由服务端答，答复原样示出。
+ * （legalEntityProfileMissingFields）；地址国家与身份对不对得上、登记号合不合目录、版本连不连续都由服务端答，答复原样示出。
  *
  * 保存前先看差异（票面第 2 项）：有当前生效版时点「保存」先把草稿折成资料内容与它比，列出新增 / 修改 / 移除，预览里再点
  * 「确认保存」才发；没有当前生效版（第一版）直接发。版本号有建议值，收进高级组。

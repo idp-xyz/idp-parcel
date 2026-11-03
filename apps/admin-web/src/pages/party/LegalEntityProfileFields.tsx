@@ -3,9 +3,14 @@ import { Button, Input, Textarea } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { ContactPurpose, RegistrationNumberTypeListResponseBody } from './api';
 import { policiesHash } from './commercial-policies-address';
+import { useRefdataNames } from '../use-refdata-names';
+import type { RefdataNames } from '../refdata-names';
 import {
+  bankAccountCurrencyOptions,
   contactPurposeLabels,
+  invoiceTitleLanguageOptions,
   profileTaxTypeOptions,
+  type BankAccountDraft,
   type ContactDraft,
   type LegalEntityProfileDraft,
 } from './legal-entity-profile';
@@ -35,20 +40,31 @@ export function LegalEntityProfileFields({
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
   problems: Record<string, string[]>;
   locked: boolean;
-  /** 注册号类型目录的答案（税务登记号类型候选从里面取资料层）；还在读为 null。 */
+  /** 注册号类型目录的答案（监管登记号类型候选从里面取资料层）；还在读为 null。 */
   typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 表单里的站内链接要离开本页时交给调用方：有没提交的输入时先确认再走，不让一个链接把表单静默关掉。 */
   onLeave: (href: string) => void;
 }) {
   const platformListId = useId();
+  // 语言标签用 datalist 而不是选单：常用的四种一点即选，别的 BCP 47 标签照样能手填（ADR-0359 决定四只锁形状）。
+  const languageListId = useId();
+  // 币种候选来自产品内置的基础数据目录；订阅是为了目录读回时把手填格换成选单。
+  const refdataNames = useRefdataNames();
+  const setInvoiceTitle = (index: number, change: Partial<LegalEntityProfileDraft['invoiceTitles'][number]>) =>
+    patch({ invoiceTitles: draft.invoiceTitles.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const setContact = (index: number, change: Partial<ContactDraft>) =>
     patch({ contacts: draft.contacts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  const setBankAccount = (index: number, change: Partial<BankAccountDraft>) =>
+    patch({ bankAccounts: draft.bankAccounts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const setTaxNumber = (index: number, change: Partial<LegalEntityProfileDraft['taxNumbers'][number]>) =>
     patch({ taxNumbers: draft.taxNumbers.map((item, at) => (at === index ? { ...item, ...change } : item)) });
   return (
     <>
       <datalist id={platformListId}>
         {['微信', '企业微信', 'WhatsApp', 'Telegram', 'LINE', 'QQ', 'LinkedIn', 'Skype'].map((platform) => <option key={platform} value={platform} />)}
+      </datalist>
+      <datalist id={languageListId}>
+        {invoiceTitleLanguageOptions.map((option) => <option key={option.value} value={option.value} label={option.label} />)}
       </datalist>
       <FormGroup title="代表人 / 负责人" description="按登记资料填写；与业务联系人分别管理。">
         <Field label="身份类型" path="profiles[0].representative" problems={problems}>
@@ -117,7 +133,7 @@ export function LegalEntityProfileFields({
           </div>
         ))}
       </FormGroup>
-      <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料。">
+      <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料；其他语言的抬头挂在它上面，哪种语言印到单据上由开单方按收件方定。">
         <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
           <Input
             aria-label="开票抬头"
@@ -126,6 +142,59 @@ export function LegalEntityProfileFields({
             onChange={(event) => patch({ invoiceTitle: event.target.value })}
           />
         </Field>
+        <Field label="主抬头语言" path="profiles[0].invoiceTitleLanguage" problems={problems}>
+          <Input
+            list={languageListId}
+            aria-label="主抬头语言"
+            placeholder="如 zh-Hans、en（选填）"
+            className="font-mono text-[13px]"
+            value={draft.invoiceTitleLanguage}
+            readOnly={locked}
+            onChange={(event) => patch({ invoiceTitleLanguage: event.target.value })}
+          />
+        </Field>
+        <div className="md:col-span-2 space-y-2">
+          <p className="text-[12px] font-medium text-idpxyz-text">其他语言的抬头 <span className="font-normal text-idpxyz-breadcrumb">（选填，一种语言一行）</span></p>
+          {draft.invoiceTitles.map((row, index) => (
+            <div key={index} className="space-y-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] items-start gap-2">
+                <Input
+                  list={languageListId}
+                  aria-label={`其他语言的抬头 ${index + 1} 语言`}
+                  placeholder="语言，如 en"
+                  className="font-mono text-[13px]"
+                  value={row.language}
+                  readOnly={locked}
+                  onChange={(event) => setInvoiceTitle(index, { language: event.target.value })}
+                />
+                <Input
+                  aria-label={`其他语言的抬头 ${index + 1} 抬头`}
+                  placeholder="该语言的抬头"
+                  value={row.title}
+                  readOnly={locked}
+                  onChange={(event) => setInvoiceTitle(index, { title: event.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  aria-label={`移除其他语言的抬头 ${index + 1}`}
+                  disabled={locked}
+                  onClick={() => patch({ invoiceTitles: draft.invoiceTitles.filter((_, at) => at !== index) })}
+                >
+                  移除
+                </Button>
+              </div>
+              <Problems lines={problems[`profiles[0].invoiceTitles[${index}]`]} />
+            </div>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={locked}
+            onClick={() => patch({ invoiceTitles: [...draft.invoiceTitles, { language: '', title: '' }] })}
+          >
+            添加其他语言的抬头
+          </Button>
+        </div>
         {/* 币种不在本表单：结算政策按公司主体、相对方与合同解析，这里只指路（票 company-subject-ux/04 第 7 项）。 */}
         <p className="md:col-span-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
           开票币种不在这里定：由「
@@ -142,7 +211,7 @@ export function LegalEntityProfileFields({
           」按公司主体、相对方与合同解析。
         </p>
         <div className="md:col-span-2">
-          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">税务登记号</p>
+          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">监管登记号（税务 / 海关）</p>
           {draft.taxNumbers.map((row, index) => (
             <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3">
               <TaxTypeField
@@ -156,8 +225,8 @@ export function LegalEntityProfileFields({
               />
               <Field label="号码" path={`profiles[0].taxRegistrationNumbers[${index}].number`} problems={problems}>
                 <Input
-                  aria-label={`税务登记号 ${index + 1} 号码`}
-                  placeholder="税务登记号原样填"
+                  aria-label={`监管登记号 ${index + 1} 号码`}
+                  placeholder="登记号原样填"
                   className="font-mono text-[13px]"
                   value={row.number}
                   readOnly={locked}
@@ -180,11 +249,93 @@ export function LegalEntityProfileFields({
             disabled={locked}
             onClick={() => patch({ taxNumbers: [...draft.taxNumbers, { typeCode: '', number: '' }] })}
           >
-            添加税务登记号
+            添加监管登记号
           </Button>
+          {/* 税务与海关的号不分两组（ADR-0359 决定一）：判法一样——类型与格式由目录按注册地说，号属税务还是海关也由类型说。 */}
           <p className="mt-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
-            跨境开票常用：中国税号、香港 BR、美国 EIN、欧盟 VAT / IOSS / EORI——按注册地配置后在这里选。
+            税务、海关等监管机关发给公司、可后办可变的登记号都登在这里：税号、海关注册编码、AEO 认证编号、VAT / IOSS / EORI；
+            类型按注册地在「基础数据 › 注册号类型」配置后在这里选。
           </p>
+        </div>
+      </FormGroup>
+      <FormGroup
+        title="收款账户"
+        description="对账单与发票上印的我方银行账户，可按币种登记多个。币种只说这个账户收哪种钱，不决定结算币种。"
+      >
+        <div className="md:col-span-2 space-y-4">
+          {draft.bankAccounts.map((row, index) => (
+            <fieldset key={index} disabled={locked} className="min-w-0 border-t border-idpxyz-border pt-3">
+              <legend className="px-1 text-[13px] font-medium text-idpxyz-text">收款账户 {index + 1}</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ['label', '用途标签', '如 人民币对公、美元收款'],
+                    ['holderName', '户名 *', ''],
+                    ['bankName', '开户行 *', ''],
+                    ['accountNumber', '账号 / IBAN *', '账号原样填'],
+                    ['swiftCode', 'SWIFT / BIC', ''],
+                    ['bankAddress', '开户行地址', ''],
+                  ] as const
+                ).map(([key, label, placeholder]) => {
+                  const path = `profiles[0].bankAccounts[${index}].${key}`;
+                  const mono = key === 'accountNumber' || key === 'swiftCode';
+                  return (
+                    <FieldAnchor key={key} path={path}>
+                      <Field label={label} path={path} problems={problems}>
+                        <Input
+                          aria-label={`收款账户 ${index + 1} ${label.replace(' *', '')}`}
+                          placeholder={placeholder || undefined}
+                          className={mono ? 'font-mono text-[13px]' : undefined}
+                          value={row[key]}
+                          readOnly={locked}
+                          onChange={(event) => setBankAccount(index, { [key]: event.target.value })}
+                        />
+                      </Field>
+                    </FieldAnchor>
+                  );
+                })}
+                <BankAccountCurrencyField
+                  index={index}
+                  value={row.currency}
+                  locked={locked}
+                  problems={problems}
+                  names={refdataNames}
+                  onChange={(currency) => setBankAccount(index, { currency })}
+                />
+                <Field label="备注" path={`profiles[0].bankAccounts[${index}].note`} problems={problems}>
+                  <Input
+                    aria-label={`收款账户 ${index + 1} 备注`}
+                    value={row.note}
+                    readOnly={locked}
+                    onChange={(event) => setBankAccount(index, { note: event.target.value })}
+                  />
+                </Field>
+              </div>
+              <Problems lines={problems[`profiles[0].bankAccounts[${index}]`]} />
+              <Button
+                className="mt-2"
+                variant="ghost"
+                disabled={locked}
+                onClick={() => patch({ bankAccounts: draft.bankAccounts.filter((_, at) => at !== index) })}
+              >
+                移除此账户
+              </Button>
+            </fieldset>
+          ))}
+          <Button
+            variant="outline"
+            disabled={locked}
+            onClick={() =>
+              patch({
+                bankAccounts: [
+                  ...draft.bankAccounts,
+                  { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+                ],
+              })
+            }
+          >
+            添加收款账户
+          </Button>
         </div>
       </FormGroup>
       <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。">
@@ -323,7 +474,51 @@ export function LegalEntityProfileFields({
 }
 
 /**
- * 税务登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
+ * 收款账户的币种格：候选是产品内置币种目录（基础数据），显「人民币（CNY）」、值是码。目录读不回时退回手填并提示填
+ * ISO 4217——新登记的币种只收目录里的码由服务端判（ADR-0345 决定五），表单不替目录造码，也不在本地判形状。
+ */
+function BankAccountCurrencyField({
+  index,
+  value,
+  locked,
+  problems,
+  names,
+  onChange,
+}: {
+  index: number;
+  value: string;
+  locked: boolean;
+  problems: Record<string, string[]>;
+  names: RefdataNames;
+  onChange: (currency: string) => void;
+}) {
+  const path = `profiles[0].bankAccounts[${index}].currency`;
+  const options = bankAccountCurrencyOptions(names);
+  return (
+    <FieldAnchor path={path}>
+      <Field label="币种 *" path={path} problems={problems}>
+        {options.length > 0 ? (
+          <SearchableSelect options={options} value={value} disabled={locked} onChange={onChange} unknownNote="手填，不在目录上" />
+        ) : (
+          <>
+            <Input
+              aria-label={`收款账户 ${index + 1} 币种`}
+              placeholder="如 CNY、USD"
+              className="font-mono text-[13px]"
+              value={value}
+              readOnly={locked}
+              onChange={(event) => onChange(event.target.value)}
+            />
+            <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">币种目录暂时读不到：先手填 ISO 4217 三位字母码。</span>
+          </>
+        )}
+      </Field>
+    </FieldAnchor>
+  );
+}
+
+/**
+ * 监管登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
  * 码进载荷。目录里这一国家没有资料层类型、或目录读不到时退回手填类型码并指路——要加类型得先到基础数据配置，
  * 表单不替目录造码。选出来的只是类型码，合不合目录仍由服务端登记时判。
  */
@@ -364,7 +559,7 @@ function TaxTypeField({
   return (
     <Field label="类型" path={path} problems={problems}>
       <Input
-        aria-label={`税务登记号 ${index + 1} 类型`}
+        aria-label={`监管登记号 ${index + 1} 类型`}
         placeholder="类型码"
         className="font-mono text-[13px]"
         value={value}

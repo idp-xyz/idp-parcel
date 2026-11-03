@@ -2,29 +2,43 @@
 // 本地编码层问题、修订号建议、资料状态判读，以及表单预填与保存前差异预览要的两个方向的折算（票 company-subject-ux/04）。
 // 全部是纯函数，node:test 钉着；组件 LegalEntityProfileSection.tsx 只负责摆。
 //
-// **不算校验结论**（票面「不做」）：公司主体在不在册、地址国家与身份上的注册国家对不对得上、税号合不合目录、修订连不连续，
+// **不算校验结论**（票面「不做」）：公司主体在不在册、地址国家与身份上的注册国家对不对得上、登记号合不合目录、修订连不连续，
 // 一律送上去让服务端答。本地只多一类「必填未填」的编码层提示（legalEntityProfileMissingFields），那是在说格空着，不是在判
 // 领域规则。载荷镜像受控 CLI `register-legal-entity-profiles` 的一项、不带租户格——理由同法人登记表单（legal-entity-form.ts 文件头）。
 
 import type {
   ContactPurpose,
   ContactSocialAccountRecord,
+  LegalEntityBankAccountRecord,
   LegalEntityRepresentativeRecord,
   LegalEntityContactRecord,
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
+  LocalizedInvoiceTitleRecord,
   RegisteredAddressRecord,
   RegistrationNumberTypeRecord,
   TaxRegistrationNumberRecord,
 } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import { currencyLabel, type RefdataNames } from '../refdata-names';
 import { revisionOf } from './registration-form';
 
 export interface TaxNumberDraft {
   typeCode: string;
   number: string;
 }
+
+/** 收款账户一行的文本框原值：可缺的格空串即缺席，折成载荷时再判。 */
+export type BankAccountDraft = Record<keyof LegalEntityBankAccountRecord, string>;
+
+/** 收款账户里必填的格与它在缺项清单里的名字；次序照表单里格的次序。 */
+const bankAccountRequiredFields: readonly (readonly [keyof BankAccountDraft, string])[] = [
+  ['holderName', '户名'],
+  ['bankName', '开户行'],
+  ['accountNumber', '账号 / IBAN'],
+  ['currency', '币种'],
+];
 
 export const contactPurposeLabels: Record<ContactPurpose, string> = {
   GENERAL: '日常联系',
@@ -59,6 +73,12 @@ export interface LegalEntityProfileDraft {
   taxNumbers: TaxNumberDraft[];
   /** 开票抬头；留空即这笔不带开票资料（键缺席）——空串服务端照样拒，不当缺席。 */
   invoiceTitle: string;
+  /** 主抬头的语言标签（BCP 47）；留空即不标。 */
+  invoiceTitleLanguage: string;
+  /** 其他语言的抬头逐行；整行空着不送。 */
+  invoiceTitles: LocalizedInvoiceTitleRecord[];
+  /** 收款账户逐行；整行空着不送，填了一部分的行由缺项判读点名，不静默丢掉。 */
+  bankAccounts: BankAccountDraft[];
   contacts: ContactDraft[];
   representativeKind: '' | LegalEntityRepresentativeRecord['kind'];
   representativeName: string;
@@ -76,6 +96,9 @@ export interface LegalEntityProfileItem {
   registeredAddress?: RegisteredAddressRecord;
   taxRegistrationNumbers?: TaxRegistrationNumberRecord[];
   invoiceTitle?: string;
+  invoiceTitleLanguage?: string;
+  invoiceTitles?: LocalizedInvoiceTitleRecord[];
+  bankAccounts?: LegalEntityBankAccountRecord[];
   contacts?: LegalEntityContactRecord[];
   representative?: LegalEntityRepresentativeRecord;
   officeAddress?: RegisteredAddressRecord;
@@ -96,6 +119,9 @@ export function emptyLegalEntityProfileDraft(legalEntityId: string): LegalEntity
     addressLines: '',
     taxNumbers: [],
     invoiceTitle: '',
+    invoiceTitleLanguage: '',
+    invoiceTitles: [],
+    bankAccounts: [],
     contacts: [],
     representativeKind: '',
     representativeName: '',
@@ -133,6 +159,17 @@ export function legalEntityProfilePayloadOf(
   if (taxes.length > 0) item.taxRegistrationNumbers = taxes;
   const title = draft.invoiceTitle.trim();
   if (title !== '') item.invoiceTitle = title;
+  const titleLanguage = draft.invoiceTitleLanguage.trim();
+  if (titleLanguage !== '') item.invoiceTitleLanguage = titleLanguage;
+  const titles = draft.invoiceTitles
+    .map((row) => ({ language: row.language.trim(), title: row.title.trim() }))
+    .filter((row) => row.language !== '' || row.title !== '');
+  if (titles.length > 0) item.invoiceTitles = titles;
+  const accounts = draft.bankAccounts.flatMap((row) => {
+    const account = bankAccountPayload(row);
+    return account ? [account] : [];
+  });
+  if (accounts.length > 0) item.bankAccounts = accounts;
   const contacts = draft.contacts.flatMap((row) => {
     const contact: LegalEntityContactRecord = { name: row.name.trim() };
     if (row.email.trim()) contact.email = row.email.trim();
@@ -173,6 +210,11 @@ export function legalEntityProfileMissingFields(draft: LegalEntityProfileDraft):
   const missing: ProfileMissingField[] = [];
   if (draft.addressCountry.trim() === '') missing.push({ path: 'profiles[0].registeredAddress', label: '注册地址国家 / 地区' });
   if (draft.addressLines.trim() === '') missing.push({ path: 'profiles[0].registeredAddress.lines', label: '注册地址' });
+  draft.bankAccounts.forEach((row, index) => {
+    for (const [key, label] of bankAccountRequiredFields) {
+      if (row[key].trim() === '') missing.push({ path: `profiles[0].bankAccounts[${index}].${key}`, label: `收款账户 ${index + 1} ${label}` });
+    }
+  });
   draft.contacts.forEach((row, index) => {
     if (row.name.trim() === '') missing.push({ path: `profiles[0].contacts[${index}]`, label: `联系人 ${index + 1} 姓名` });
   });
@@ -211,6 +253,32 @@ export function legalEntityProfileLocalProblems(
   }
   if (Boolean(draft.representativeKind) !== Boolean(draft.representativeName.trim())) {
     problems['profiles[0].representative'] = ['身份类型与姓名需要成对填写'];
+  }
+  // 语言版本挂在主抬头上（ADR-0359 决定四）：主抬头空着时这两格无处可挂，服务端会拒；先在格下说清，免得人以为抬头
+  // 填在「其他语言」里也算。语言不重复（主抬头的语言也算、不分大小写）同样是服务端规则，这里只省一次往返。
+  const titleRows = draft.invoiceTitles.map((row) => ({ language: row.language.trim(), title: row.title.trim() }));
+  if (draft.invoiceTitle.trim() === '' && (draft.invoiceTitleLanguage.trim() !== '' || titleRows.some((row) => row.language || row.title))) {
+    problems['profiles[0].invoiceTitle'] = ['主抬头语言与其他语言的抬头要挂在开票抬头上：先填开票抬头，或清掉它们'];
+  }
+  const seenLanguages = new Set<string>();
+  if (draft.invoiceTitleLanguage.trim()) seenLanguages.add(draft.invoiceTitleLanguage.trim().toLowerCase());
+  for (const [index, row] of titleRows.entries()) {
+    const path = `profiles[0].invoiceTitles[${index}]`;
+    if (!row.language || !row.title) {
+      if (row.language || row.title) problems[path] = ['语言与抬头需要成对填写；不需要的行请移除'];
+      continue;
+    }
+    const key = row.language.toLowerCase();
+    if (seenLanguages.has(key)) problems[path] = ['此语言已经填写'];
+    seenLanguages.add(key);
+  }
+  // 同一版里（币种，账号）不得重复是服务端的规则（ADR-0359 决定三）；这里只在两行填成一样时先提一句，省一次往返。
+  const seenAccounts = new Set<string>();
+  for (const [index, row] of draft.bankAccounts.entries()) {
+    const key = JSON.stringify([row.currency.trim(), row.accountNumber.trim()]);
+    if (row.accountNumber.trim() === '') continue;
+    if (seenAccounts.has(key)) problems[`profiles[0].bankAccounts[${index}]`] = ['此币种与账号已经填写'];
+    seenAccounts.add(key);
   }
   for (const [key, country, lines] of [
     ['officeAddress', draft.officeCountry, draft.officeLines],
@@ -317,7 +385,7 @@ export function legalEntityProfileStatusOf(
   return { label: '状态未识别', tone: 'bad', description: '读取结果包含无法识别的资料状态。' };
 }
 
-/** 资料层（税务登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */
+/** 资料层（监管登记号）的类型候选：目录里 layer 为 PROFILE 且国家 = 注册地址国家的类型，显目录译名；已停用的照列、括注。 */
 export function profileTaxTypeOptions(
   types: readonly RegistrationNumberTypeRecord[],
   country: string,
@@ -342,6 +410,50 @@ export function resolutionInstantOf(wallTime: string, timeZone: string, now: Dat
 
 export function representativeLabel(kind: string): string {
   return kind === 'LEGAL_REPRESENTATIVE' ? '法定代表人' : kind === 'RESPONSIBLE_PERSON' ? '登记负责人' : kind;
+}
+
+/**
+ * 抬头语言的常用候选（BCP 47）：跨境单据常见的四种。别的标签可手填，是不是 BCP 47 的形状由服务端判、在不在注册表里
+ * 谁都不判（ADR-0359 决定四）。显示时经 languageTagLabel 译成「简体中文（zh-Hans）」，译不出原样显标签。
+ */
+export const invoiceTitleLanguageOptions: readonly { value: string; label: string }[] = [
+  { value: 'zh-Hans', label: '简体中文（zh-Hans）' },
+  { value: 'zh-Hant', label: '繁体中文（zh-Hant）' },
+  { value: 'en', label: '英语（en）' },
+  { value: 'ja', label: '日语（ja）' },
+];
+
+export function languageTagLabel(tag: string): string {
+  const key = tag.trim().toLowerCase();
+  return invoiceTitleLanguageOptions.find((option) => option.value.toLowerCase() === key)?.label ?? tag.trim();
+}
+
+/**
+ * 收款账户一行折成载荷：各格去首尾空白，可缺的格空着即键缺席；整行空着交 undefined 不送。必填格空着照送空串——
+ * 缺项判读（legalEntityProfileMissingFields）在送之前就会点名拦下，这里不替它判。
+ */
+function bankAccountPayload(row: BankAccountDraft): LegalEntityBankAccountRecord | undefined {
+  const value = Object.fromEntries(Object.entries(row).map(([key, text]) => [key, text.trim()])) as BankAccountDraft;
+  if (Object.values(value).every((text) => text === '')) return undefined;
+  const account: LegalEntityBankAccountRecord = {
+    holderName: value.holderName,
+    bankName: value.bankName,
+    accountNumber: value.accountNumber,
+    currency: value.currency,
+  };
+  if (value.label) account.label = value.label;
+  if (value.swiftCode) account.swiftCode = value.swiftCode;
+  if (value.bankAddress) account.bankAddress = value.bankAddress;
+  if (value.note) account.note = value.note;
+  return account;
+}
+
+/**
+ * 收款账户币种的候选：产品内置币种目录里的码，显「人民币（CNY）」。目录读不回时是空表，表单退回手填并提示填 ISO 4217；
+ * 新登记的币种只收目录里的码由服务端判（ADR-0345 决定五），这里只把目录摆出来。
+ */
+export function bankAccountCurrencyOptions(names: RefdataNames): { value: string; label: string }[] {
+  return [...names.currencies.keys()].map((code) => ({ value: code, label: currencyLabel(code, names) }));
 }
 
 function addressPayload(country: string, lines: string): RegisteredAddressRecord | undefined {
@@ -372,6 +484,8 @@ export function legalEntityContactCountOf(resolution: LegalEntityProfileResoluti
 export function profileMaintenanceNotes(content: LegalEntityProfileContent): string[] {
   const notes: string[] = [];
   if (!content.representative) notes.push('法定代表人 / 登记负责人未配置');
+  // 只在有开票抬头时提：没有开票资料的那一版本来就开不了票，再说印不出账户是重复的话。
+  if (content.invoicingRegistered && !content.bankAccounts?.length) notes.push('未登记收款账户，对账单与发票上印不出收款账户');
   if (!content.contacts.some((row) => row.email || row.phone || row.socialAccounts?.length)) notes.push('未配置可联系的邮箱、电话或社交账号');
   const purposes = new Set(content.contacts.flatMap((row) => row.purposes ?? []));
   for (const purpose of purposes) {
@@ -410,6 +524,9 @@ export function profileComparisonContentOf(draft: LegalEntityProfileDraft, timeZ
     contacts: item.contacts ?? [],
   };
   if (item.invoiceTitle !== undefined) content.invoiceTitle = item.invoiceTitle;
+  if (item.invoiceTitleLanguage !== undefined) content.invoiceTitleLanguage = item.invoiceTitleLanguage;
+  if (item.invoiceTitles) content.invoiceTitles = item.invoiceTitles;
+  if (item.bankAccounts) content.bankAccounts = item.bankAccounts;
   if (item.representative) content.representative = item.representative;
   if (item.officeAddress) content.officeAddress = item.officeAddress;
   if (item.correspondenceAddress) content.correspondenceAddress = item.correspondenceAddress;
@@ -423,7 +540,10 @@ export function profileDraftContentOf(
   | 'addressCountry'
   | 'addressLines'
   | 'invoiceTitle'
+  | 'invoiceTitleLanguage'
+  | 'invoiceTitles'
   | 'taxNumbers'
+  | 'bankAccounts'
   | 'contacts'
   | 'representativeKind'
   | 'representativeName'
@@ -436,7 +556,19 @@ export function profileDraftContentOf(
     addressCountry: content.registeredAddress.country,
     addressLines: content.registeredAddress.lines.join('\n'),
     invoiceTitle: content.invoicingRegistered ? (content.invoiceTitle ?? '') : '',
+    invoiceTitleLanguage: content.invoicingRegistered ? (content.invoiceTitleLanguage ?? '') : '',
+    invoiceTitles: content.invoicingRegistered ? (content.invoiceTitles ?? []).map((row) => ({ ...row })) : [],
     taxNumbers: content.taxRegistrationNumbers.map((row) => ({ ...row })),
+    bankAccounts: (content.bankAccounts ?? []).map((row) => ({
+      label: row.label ?? '',
+      holderName: row.holderName,
+      bankName: row.bankName,
+      accountNumber: row.accountNumber,
+      swiftCode: row.swiftCode ?? '',
+      bankAddress: row.bankAddress ?? '',
+      currency: row.currency,
+      note: row.note ?? '',
+    })),
     contacts: content.contacts.map((row) => ({
       ...row,
       email: row.email ?? '',

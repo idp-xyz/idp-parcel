@@ -1,14 +1,15 @@
 import type {
   ContactPurpose,
+  LegalEntityBankAccountRecord,
   LegalEntityContactRecord,
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
   RegisteredAddressRecord,
 } from './api';
-import { countryLabel } from '../refdata-names';
+import { countryLabel, currencyLabel } from '../refdata-names';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
-import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
+import { contactPurposeLabels, languageTagLabel, representativeLabel } from './legal-entity-profile';
 
 export type ProfileChangeKind = 'added' | 'modified' | 'removed' | 'unchanged';
 export interface ProfileFieldChange {
@@ -86,6 +87,25 @@ function socialGroups(contact: LegalEntityContactRecord) {
   return groups;
 }
 
+/**
+ * 收款账户以（币种，账号）认同一个账户——服务端也拿这一对判重复（ADR-0359 决定三），所以换了币种或账号就是移除一个、
+ * 新增一个，其余格变了才是「修改」。账号去首尾空白后原样比，IBAN 带不带空格算两个账号，与服务端同一口径。
+ */
+function bankAccountKey(account: LegalEntityBankAccountRecord) {
+  return JSON.stringify([account.currency.trim(), account.accountNumber.trim()]);
+}
+/** 对比格里一个账户的文本：币种与账号已在项目名里，这里只列其余格，空着的不列。 */
+function bankAccountText(account: LegalEntityBankAccountRecord) {
+  return [
+    account.label, account.holderName, account.bankName,
+    account.swiftCode ? `SWIFT / BIC ${account.swiftCode}` : '', account.bankAddress, account.note,
+  ].filter(Boolean).join(' · ');
+}
+/** 项目名「收款账户 · 人民币（CNY） SYN-…」：币种经基础数据译名（译名表没读回时显码），账号原样。 */
+export function bankAccountSubject(account: LegalEntityBankAccountRecord) {
+  return `收款账户 · ${currencyLabel(account.currency.trim())} ${account.accountNumber.trim()}`;
+}
+
 // 接口没有联系人标识：只有其他资料完全一致时，才将社交账号作为同一联系人的字段变更。
 function baseContactKey(contact: LegalEntityContactRecord) {
   return JSON.stringify([
@@ -105,7 +125,7 @@ function contactText(contact: LegalEntityContactRecord) {
 }
 
 /**
- * `typeNameOf` 给了就把税务登记号的类型码译成目录译名再比（按各自的注册地址国家查）：比的是显出来的文本，所以换了国家、
+ * `typeNameOf` 给了就把监管登记号的类型码译成目录译名再比（按各自的注册地址国家查）：比的是显出来的文本，所以换了国家、
  * 同一个码译出不同名时也算一处变化——国家本来就变了，这一行跟着变不是误报。不给按码比。
  */
 export function compareLegalEntityProfiles(
@@ -126,14 +146,37 @@ export function compareLegalEntityProfiles(
   const representative = (content: LegalEntityProfileContent) => content.representative
     ? `${representativeLabel(content.representative.kind)}：${content.representative.name}` : '';
   const tax = (content: LegalEntityProfileContent) => values(content.taxRegistrationNumbers
-    .map((row) => `${typeNameOf?.(content.registeredAddress.country, row.typeCode) ?? row.typeCode} ${row.number}`)).join('；');
+    .map((row) => `${typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode} ${row.number}`)).join('；');
   add('representative', '代表人信息', '代表人 / 负责人', representative(before), representative(after));
   add('registered-address', '地址信息', '注册地址', address(before.registeredAddress), address(after.registeredAddress));
   add('office-address', '地址信息', '办公地址', address(before.officeAddress), address(after.officeAddress));
   add('correspondence-address', '地址信息', '通信地址', address(before.correspondenceAddress), address(after.correspondenceAddress));
-  add('tax-numbers', '税务与开票', '税务登记号', tax(before), tax(after));
+  add('tax-numbers', '税务与开票', '监管登记号（税务 / 海关）', tax(before), tax(after));
   add('invoicing', '税务与开票', '开票资料', before.invoicingRegistered ? '已登记' : '未登记', after.invoicingRegistered ? '已登记' : '未登记');
   add('invoice-title', '税务与开票', '开票抬头', before.invoiceTitle ?? '', after.invoiceTitle ?? '');
+  add('invoice-title-language', '税务与开票', '主抬头语言',
+    languageTagLabel(before.invoiceTitleLanguage ?? ''), languageTagLabel(after.invoiceTitleLanguage ?? ''));
+  // 其他语言的抬头一种语言一行，语言是键（服务端也按语言判重复、不分大小写）：换了语言是一移除一新增，抬头变了是修改。
+  const oldTitles = new Map((before.invoiceTitles ?? []).map((row) => [row.language.trim().toLowerCase(), row]));
+  const newTitles = new Map((after.invoiceTitles ?? []).map((row) => [row.language.trim().toLowerCase(), row]));
+  let titleSequence = 0;
+  for (const key of new Set([...oldTitles.keys(), ...newTitles.keys()])) {
+    const left = oldTitles.get(key);
+    const right = newTitles.get(key);
+    add(`invoice-titles-${++titleSequence}`, '税务与开票', `其他语言的抬头 · ${languageTagLabel((right ?? left)!.language)}`,
+      left?.title.trim() ?? '', right?.title.trim() ?? '');
+  }
+
+  // 账户按旧版次序列、新加的排在后面：读的人先对旧版，再看多了什么。
+  const oldAccounts = new Map((before.bankAccounts ?? []).map((account) => [bankAccountKey(account), account]));
+  const newAccounts = new Map((after.bankAccounts ?? []).map((account) => [bankAccountKey(account), account]));
+  let accountSequence = 0;
+  for (const key of new Set([...oldAccounts.keys(), ...newAccounts.keys()])) {
+    const left = oldAccounts.get(key);
+    const right = newAccounts.get(key);
+    add(`bank-account-${++accountSequence}`, '收款账户', bankAccountSubject((right ?? left)!),
+      left ? bankAccountText(left) : '', right ? bankAccountText(right) : '');
+  }
 
   const oldGroups = new Map<string, LegalEntityContactRecord[]>();
   const newGroups = new Map<string, LegalEntityContactRecord[]>();

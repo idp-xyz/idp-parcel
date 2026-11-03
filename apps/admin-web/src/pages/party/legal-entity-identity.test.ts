@@ -99,8 +99,9 @@ test('类型码经目录译名，译不出原样显码', () => {
   equal(identityLayerCellsOf({ identityLayerRegistered: false }, typeNameOf), null);
 });
 
-// Covers: 同一国同一码两层都登了时取身份层的名，与目录行的先后无关；已停用的类型照样译。
-test('同码两层取身份层，已停用照译', () => {
+// Covers（票 company-subject-ux/06 第 4 条）: 同一国同一码两层都登了时按层各取各的名，与目录行的先后无关；不交层按身份层优先
+// （终身注册号的老调用方）；只登了一层的码不论问哪一层都译；已停用的类型照样译。
+test('同码两层按层分键，不交层取身份层，已停用照译', () => {
   const profileFirst = registrationNumberTypeNamesOf([
     numberType({ layer: 'PROFILE', typeName: '资料层同码' }),
     numberType({ typeName: '身份层同码', deactivatedAt: '2026-06-01T00:00:00Z', deactivationBasis: 'SYN-DEACT' }),
@@ -109,8 +110,17 @@ test('同码两层取身份层，已停用照译', () => {
     numberType({ typeName: '身份层同码' }),
     numberType({ layer: 'PROFILE', typeName: '资料层同码' }),
   ]);
-  equal(profileFirst('CN', 'USCC'), '身份层同码');
-  equal(identityFirst('CN', 'USCC'), '身份层同码');
+  for (const typeNameOf of [profileFirst, identityFirst]) {
+    equal(typeNameOf('CN', 'USCC'), '身份层同码');
+    equal(typeNameOf('CN', 'USCC', 'IDENTITY'), '身份层同码');
+    equal(typeNameOf('CN', 'USCC', 'PROFILE'), '资料层同码');
+  }
+  // 身份两格经 identityLayerCellsOf 问的是身份层：资料层同码的名不会顶上来。
+  equal(identityLayerCellsOf({ identityLayerRegistered: true, registrationCountry: 'CN', lifetimeRegistrationNumbers: [{ typeCode: 'USCC', number: '1' }] }, profileFirst)?.numbers, '身份层同码 1');
   // 只登了资料层的码也译：查法不替调用方判断该不该译，它只答目录里叫什么。
-  equal(registrationNumberTypeNamesOf([numberType({ layer: 'PROFILE', typeName: '资料层独有' })])('CN', 'USCC'), '资料层独有');
+  const profileOnly = registrationNumberTypeNamesOf([numberType({ layer: 'PROFILE', typeName: '资料层独有' })]);
+  equal(profileOnly('CN', 'USCC'), '资料层独有');
+  equal(profileOnly('CN', 'USCC', 'IDENTITY'), '资料层独有');
+  equal(profileOnly('CN', 'USCC', 'PROFILE'), '资料层独有');
+  equal(profileOnly('CN', 'SYN-NONE', 'PROFILE'), undefined);
 });

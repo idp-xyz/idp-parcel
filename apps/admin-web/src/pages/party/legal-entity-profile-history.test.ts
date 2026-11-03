@@ -121,3 +121,48 @@ test('完整资料快照数据保留主要联系人用途', () => {
   const row = revision({ contacts: [contact({ primaryFor: ['FINANCE'] })] });
   equal(row.contacts[0].primaryFor?.map((purpose) => contactPurposeLabels[purpose]).join('、'), '财务');
 });
+
+// Covers（票 company-subject-ux/06 第 2 条）：收款账户以（币种，账号）认同一个账户——其余格变了是「修改」，换了币种或账号是
+// 一移除一新增；次序不制造变化；项目名带币种与账号，格里只列其余格。
+test('收款账户按币种与账号对应：修改、移除、新增各成一行，次序不算变化', () => {
+  const cny = { label: '人民币对公', holderName: 'SYN 户名', bankName: 'SYN 银行', accountNumber: 'SYN-CNY-01', swiftCode: 'SYNBCNBJ', currency: 'CNY' };
+  const usd = { holderName: 'SYN Holder', bankName: 'SYN Bank', accountNumber: 'SYN-USD-01', currency: 'USD' };
+  const a = revision({ bankAccounts: [cny, usd] });
+  deepEqual(changed(a, revision({ bankAccounts: [usd, cny] })), []);
+  const b = revision({ bankAccounts: [
+    { ...cny, bankAddress: 'SYN 新地址' },
+    { ...usd, accountNumber: 'SYN-USD-02' },
+  ] });
+  deepEqual(
+    changed(a, b).map((row) => [row.group, row.field, row.kind, row.before, row.after]),
+    [
+      ['收款账户', '收款账户 · CNY SYN-CNY-01', 'modified', '人民币对公 · SYN 户名 · SYN 银行 · SWIFT / BIC SYNBCNBJ', '人民币对公 · SYN 户名 · SYN 银行 · SWIFT / BIC SYNBCNBJ · SYN 新地址'],
+      ['收款账户', '收款账户 · USD SYN-USD-01', 'removed', 'SYN Holder · SYN Bank', ''],
+      ['收款账户', '收款账户 · USD SYN-USD-02', 'added', '', 'SYN Holder · SYN Bank'],
+    ],
+  );
+  equal(profileComparisonSummary(compareLegalEntityProfiles(a, revision({ bankAccounts: [cny] }))), '移除收款账户 · USD SYN-USD-01');
+  deepEqual(changed(revision({}), revision({ bankAccounts: [] })), []);
+});
+
+// Covers（票 company-subject-ux/06 第 3 条）：主抬头语言一行、其他语言的抬头一种语言一行（语言是键、不分大小写）：
+// 抬头变了是修改、换了语言是一移除一新增；语言经常用表译名，译不出原样。
+test('多语言抬头按语言对应：主抬头语言与各语言的抬头各成一行', () => {
+  const a = revision({ invoicingRegistered: true, invoiceTitle: 'SYN', invoiceTitleLanguage: 'zh-Hans', invoiceTitles: [
+    { language: 'en', title: 'SYN Title' }, { language: 'ja', title: 'SYN JA' },
+  ] });
+  deepEqual(changed(a, revision({ ...a, invoiceTitles: [{ language: 'JA', title: 'SYN JA' }, { language: 'en', title: 'SYN Title' }] })), []);
+  const b = revision({ ...a, invoiceTitleLanguage: 'zh-Hant', invoiceTitles: [
+    { language: 'en', title: 'SYN Title v2' }, { language: 'fr-CA', title: 'SYN FR' },
+  ] });
+  deepEqual(
+    changed(a, b).map((row) => [row.field, row.kind, row.before, row.after]),
+    [
+      ['主抬头语言', 'modified', '简体中文（zh-Hans）', '繁体中文（zh-Hant）'],
+      ['其他语言的抬头 · 英语（en）', 'modified', 'SYN Title', 'SYN Title v2'],
+      ['其他语言的抬头 · 日语（ja）', 'removed', 'SYN JA', ''],
+      ['其他语言的抬头 · fr-CA', 'added', '', 'SYN FR'],
+    ],
+  );
+  deepEqual(changed(revision({}), revision({ invoiceTitles: [] })), []);
+});

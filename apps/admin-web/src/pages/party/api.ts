@@ -415,6 +415,25 @@ export interface LegalEntityContactRecord {
   socialAccounts?: ContactSocialAccountRecord[];
 }
 
+// 收款账户（ADR-0359 决定三；后端 domain.LegalEntityBankAccount）：法人自己的银行账户，随资料修订版本化。currency 是这个账户
+// 收哪种钱，不是结算币种的决定——结算币种仍由结算政策解析。可缺的格缺席即没填，读写两个方向一个样子。
+export interface LegalEntityBankAccountRecord {
+  label?: string;
+  holderName: string;
+  bankName: string;
+  accountNumber: string;
+  swiftCode?: string;
+  bankAddress?: string;
+  currency: string;
+  note?: string;
+}
+
+/** 开票抬头的一个语言版本（ADR-0359 决定四）：language 是 BCP 47 语言标签（zh-Hans、en、zh-Hant），title 是该语言的抬头。 */
+export interface LocalizedInvoiceTitleRecord {
+  language: string;
+  title: string;
+}
+
 export interface LegalEntityProfileContent {
   revision: number;
   basis: string;
@@ -423,10 +442,15 @@ export interface LegalEntityProfileContent {
   taxRegistrationNumbers: TaxRegistrationNumberRecord[];
   invoicingRegistered: boolean;
   invoiceTitle?: string;
+  /** 主抬头的语言与其余语言的抬头都挂在主抬头上：没有主抬头就没有开票资料，「资料不全」的判据仍只看主抬头。 */
+  invoiceTitleLanguage?: string;
+  invoiceTitles?: LocalizedInvoiceTitleRecord[];
   contacts: LegalEntityContactRecord[];
   representative?: LegalEntityRepresentativeRecord;
   officeAddress?: RegisteredAddressRecord;
   correspondenceAddress?: RegisteredAddressRecord;
+  /** 缺席即这一版不带收款账户；旧修订读作「未登记收款账户」，不回填（ADR-0359 决定三）。 */
+  bankAccounts?: LegalEntityBankAccountRecord[];
 }
 
 export interface LegalEntityProfileRevisionRecord extends LegalEntityProfileContent {
@@ -874,7 +898,7 @@ export const legalEntityProfileOutcomeLabels: Record<string, string> = {
   REGISTERED: '已登记：新修订从它的生效时点起取代前一修订。',
   ALREADY_REGISTERED: '已登记过同样的资料，原修订不变。',
   CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的资料。资料修订不能覆盖，要改请用下一个修订号。',
-  NOT_ACCEPTED: '未受理：法人不存在、修订号对不上、地址国家与身份不一致或税号不合要求等。没有写入任何内容。',
+  NOT_ACCEPTED: '未受理：法人不存在、修订号对不上、地址国家与身份不一致或登记号不合要求等。没有写入任何内容。',
 };
 
 /** 服务形态与产品—渠道映射的登记答案代数（`application.ProductChannelOutcome` 原名）。 */

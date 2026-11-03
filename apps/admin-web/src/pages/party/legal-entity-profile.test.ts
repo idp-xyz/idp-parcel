@@ -4,7 +4,9 @@ import type { LegalEntityProfileRevisionRecord, RegistrationNumberTypeRecord } f
 import { compareLegalEntityProfiles } from './legal-entity-profile-history';
 import {
   addressText,
+  bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
+  languageTagLabel,
   legalEntityProfileDraftBasedOn,
   legalEntityProfileLocalProblems,
   legalEntityProfileMissingFields,
@@ -78,7 +80,7 @@ test('扩展资料带入和再保存保全内容，但不沿用旧登记决定',
   deepEqual(payload.correspondenceAddress, source.correspondenceAddress);
   content.contacts[0].primaryFor!.push('BUSINESS');
   equal(source.contacts[0].primaryFor!.length, 1);
-  deepEqual(profileMaintenanceNotes(source), ['商务主要联系人未指名']);
+  deepEqual(profileMaintenanceNotes(source), ['未登记收款账户，对账单与发票上印不出收款账户', '商务主要联系人未指名']);
 });
 
 test('扩展可选格不产生默认值；半填和主要联系人冲突明确报告', () => {
@@ -318,8 +320,9 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
   );
   equal(halfContact.contacts.length, 2);
 
-  // 给了目录查法，税务登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
-  const typeNameOf = (country: string, typeCode: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' ? 'SYN 税号' : undefined);
+  // 给了目录查法，监管登记号那一行按译名显（按各自的注册地址国家查）；查不到的码原样。
+  // 查法收到的层是资料层（票 company-subject-ux/06 第 4 条）：同码两层都登时不拿身份层的名顶上来。
+  const typeNameOf = (country: string, typeCode: string, layer?: string) => (country === 'CN' && typeCode === 'SYN-CN-TAX' && layer === 'PROFILE' ? 'SYN 税号' : undefined);
   const taxChanged = compareLegalEntityProfiles(
     base,
     profileComparisonContentOf({ ...untouched, taxNumbers: [{ typeCode: 'SYN-CN-TAX', number: 'SYN-CN-TAX-0102' }, { typeCode: 'SYN-OTHER', number: '9' }] }, 'UTC'),
@@ -327,7 +330,7 @@ test('草稿折成资料内容与基线比：不动无差异、改一格列一�
   );
   deepEqual(
     taxChanged.fields.filter((row) => row.kind !== 'unchanged').map((row) => [row.field, row.before, row.after]),
-    [['税务登记号', 'SYN 税号 SYN-CN-TAX-0101', 'SYN 税号 SYN-CN-TAX-0102；SYN-OTHER 9']],
+    [['监管登记号（税务 / 海关）', 'SYN 税号 SYN-CN-TAX-0101', 'SYN 税号 SYN-CN-TAX-0102；SYN-OTHER 9']],
   );
 });
 
@@ -352,7 +355,7 @@ test('必填未填按表单次序列出，并进问题表', () => {
 });
 
 // Covers（第 6 项）：候选只取资料层（PROFILE）且国家相符的类型，显目录译名、已停用括注；身份层与别国不收；没有即空。
-test('税务登记号类型候选来自目录的资料层', () => {
+test('监管登记号类型候选来自目录的资料层', () => {
   const type = (over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord => ({
     tenantId: 'SYN-TENANT-01', countryCode: 'CN', typeCode: 'SYN-CN-TAX', revision: 1, typeName: 'SYN 税号',
     layer: 'PROFILE', formatPattern: '', basis: 'SYN', status: 'EFFECTIVE', effectiveFrom: '2026-01-01T00:00:00Z',
@@ -379,4 +382,133 @@ test('解析时刻：留空即此刻，填了换 UTC', () => {
   equal(resolutionInstantOf('', 'UTC', now), '2026-09-24T12:00:00.000Z');
   equal(resolutionInstantOf('2027-01-01T08:00', 'Asia/Shanghai', now), '2027-01-01T00:00:00Z');
   equal(resolutionInstantOf('later', 'UTC', now), null);
+});
+
+// Covers（票 company-subject-ux/06 第 2 条）：收款账户带入再保存原样保全（可缺格缺席、整行空着不送）；必填格空着进缺项清单、
+// 按格点名；两行（币种，账号）相同先在本地提一句；有开票抬头没账户提「印不出收款账户」，没有抬头或有账户都不提。
+test('收款账户：带入与再保存保全、缺项按格点名、重复先提、维护提示只在有抬头没账户时', () => {
+  const source = revision({
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    bankAccounts: [
+      { label: '人民币对公', holderName: 'SYN 户名', bankName: 'SYN 银行', accountNumber: 'SYN-CNY-01', swiftCode: 'SYNBCNBJ', bankAddress: 'SYN 地址', currency: 'CNY', note: 'SYN 备注' },
+      { holderName: 'SYN Holder', bankName: 'SYN Bank', accountNumber: 'SYN-USD-01', currency: 'USD' },
+    ],
+  });
+  const content = profileDraftContentOf(source);
+  deepEqual(content.bankAccounts[1], { label: '', holderName: 'SYN Holder', bankName: 'SYN Bank', accountNumber: 'SYN-USD-01', swiftCode: '', bankAddress: '', currency: 'USD', note: '' });
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  deepEqual(payload.bankAccounts, source.bankAccounts);
+  deepEqual(profileComparisonContentOf(draft(content), 'UTC').bankAccounts, source.bankAccounts);
+  content.bankAccounts[0].note = 'SYN 改过';
+  equal(source.bankAccounts![0].note, 'SYN 备注');
+
+  const trimmed = legalEntityProfilePayloadOf(
+    draft({ bankAccounts: [
+      { label: ' ', holderName: ' SYN 户名 ', bankName: ' SYN 银行 ', accountNumber: ' SYN-CNY-02 ', swiftCode: '', bankAddress: ' ', currency: ' CNY ', note: '' },
+      { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+    ] }),
+    'UTC',
+  ).profiles[0];
+  deepEqual(trimmed.bankAccounts, [{ holderName: 'SYN 户名', bankName: 'SYN 银行', accountNumber: 'SYN-CNY-02', currency: 'CNY' }]);
+  equal('bankAccounts' in legalEntityProfilePayloadOf(draft({}), 'UTC').profiles[0], false);
+  equal('bankAccounts' in profileComparisonContentOf(draft({}), 'UTC'), false);
+
+  const half = draft({
+    addressCountry: 'CN', addressLines: 'SYN 地址',
+    bankAccounts: [
+      { label: '', holderName: 'SYN 户名', bankName: '', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: '', note: '' },
+      { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+    ],
+  });
+  deepEqual(legalEntityProfileMissingFields(half), [
+    { path: 'profiles[0].bankAccounts[0].bankName', label: '收款账户 1 开户行' },
+    { path: 'profiles[0].bankAccounts[0].currency', label: '收款账户 1 币种' },
+    { path: 'profiles[0].bankAccounts[1].holderName', label: '收款账户 2 户名' },
+    { path: 'profiles[0].bankAccounts[1].bankName', label: '收款账户 2 开户行' },
+    { path: 'profiles[0].bankAccounts[1].accountNumber', label: '收款账户 2 账号 / IBAN' },
+    { path: 'profiles[0].bankAccounts[1].currency', label: '收款账户 2 币种' },
+  ]);
+  deepEqual(legalEntityProfileLocalProblems(half, 'UTC'), {});
+  const duplicated = legalEntityProfileLocalProblems(
+    draft({ bankAccounts: [
+      { label: '', holderName: 'A', bankName: 'B', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: 'CNY', note: '' },
+      { label: '', holderName: 'A', bankName: 'B', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: 'USD', note: '' },
+      { label: '', holderName: 'C', bankName: 'D', accountNumber: ' SYN-01 ', swiftCode: '', bankAddress: '', currency: ' CNY', note: '' },
+    ] }),
+    'UTC',
+  );
+  deepEqual(duplicated, { 'profiles[0].bankAccounts[2]': ['此币种与账号已经填写'] });
+
+  equal(profileMaintenanceNotes(source).some((note) => note.includes('收款账户')), false);
+  deepEqual(profileMaintenanceNotes(revision({ invoicingRegistered: true, invoiceTitle: 'SYN 抬头', representative: { kind: 'LEGAL_REPRESENTATIVE', name: 'SYN' }, contacts: [{ name: 'SYN', email: 'a@example.invalid' }] })), ['未登记收款账户，对账单与发票上印不出收款账户']);
+  equal(profileMaintenanceNotes(revision({})).some((note) => note.includes('收款账户')), false);
+
+  deepEqual(bankAccountCurrencyOptions({ countries: new Map(), currencies: new Map([['CNY', '人民币'], ['USD', '美元'], ['SYN', '']]) }), [
+    { value: 'CNY', label: '人民币（CNY）' },
+    { value: 'USD', label: '美元（USD）' },
+    { value: 'SYN', label: 'SYN' },
+  ]);
+  deepEqual(bankAccountCurrencyOptions({ countries: new Map(), currencies: new Map() }), []);
+});
+
+// Covers（票 company-subject-ux/06 第 3 条）：主抬头语言与其他语言的抬头带入再保存原样保全、留空缺席、整行空着不送；
+// 半填的行与重复的语言（含主抬头的语言、不分大小写）本地先提；主抬头空着时这两格无处可挂，在开票抬头格下说。
+test('多语言抬头：带入与再保存保全、半填与重复语言先提、没有主抬头时说清', () => {
+  const source = revision({
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    invoiceTitleLanguage: 'zh-Hans',
+    invoiceTitles: [{ language: 'en', title: 'SYN Title' }, { language: 'ja', title: 'SYN タイトル' }],
+  });
+  const content = profileDraftContentOf(source);
+  equal(content.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(content.invoiceTitles, source.invoiceTitles);
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  equal(payload.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(payload.invoiceTitles, source.invoiceTitles);
+  const compared = profileComparisonContentOf(draft(content), 'UTC');
+  equal(compared.invoiceTitleLanguage, 'zh-Hans');
+  deepEqual(compared.invoiceTitles, source.invoiceTitles);
+  content.invoiceTitles[0].title = 'SYN 改过';
+  equal(source.invoiceTitles![0].title, 'SYN Title');
+
+  const trimmed = legalEntityProfilePayloadOf(
+    draft({ invoiceTitle: 'SYN', invoiceTitleLanguage: ' ', invoiceTitles: [{ language: ' en ', title: ' SYN Title ' }, { language: '', title: ' ' }] }),
+    'UTC',
+  ).profiles[0];
+  equal('invoiceTitleLanguage' in trimmed, false);
+  deepEqual(trimmed.invoiceTitles, [{ language: 'en', title: 'SYN Title' }]);
+  const blank = legalEntityProfilePayloadOf(draft({}), 'UTC').profiles[0];
+  equal('invoiceTitleLanguage' in blank, false);
+  equal('invoiceTitles' in blank, false);
+  // 没有开票资料的旧版带入：两格空着，不从别处补。
+  const old = profileDraftContentOf(revision({ invoiceTitleLanguage: 'en', invoiceTitles: [{ language: 'ja', title: 'x' }] }));
+  equal(old.invoiceTitleLanguage, '');
+  deepEqual(old.invoiceTitles, []);
+
+  deepEqual(
+    legalEntityProfileLocalProblems(
+      draft({ invoiceTitle: 'SYN', invoiceTitleLanguage: 'zh-Hans', invoiceTitles: [
+        { language: 'en', title: '' }, { language: 'ZH-hans', title: 'SYN' }, { language: 'en', title: 'A' }, { language: 'EN', title: 'B' }, { language: '', title: '' },
+      ] }),
+      'UTC',
+    ),
+    {
+      'profiles[0].invoiceTitles[0]': ['语言与抬头需要成对填写；不需要的行请移除'],
+      'profiles[0].invoiceTitles[1]': ['此语言已经填写'],
+      'profiles[0].invoiceTitles[3]': ['此语言已经填写'],
+    },
+  );
+  deepEqual(
+    legalEntityProfileLocalProblems(draft({ invoiceTitle: ' ', invoiceTitles: [{ language: 'en', title: 'SYN' }] }), 'UTC'),
+    { 'profiles[0].invoiceTitle': ['主抬头语言与其他语言的抬头要挂在开票抬头上：先填开票抬头，或清掉它们'] },
+  );
+  deepEqual(legalEntityProfileLocalProblems(draft({ invoiceTitle: '', invoiceTitleLanguage: 'en' }), 'UTC')['profiles[0].invoiceTitle']?.length, 1);
+  deepEqual(legalEntityProfileLocalProblems(draft({ invoiceTitle: '', invoiceTitles: [{ language: '', title: '' }] }), 'UTC'), {});
+
+  equal(languageTagLabel('zh-Hans'), '简体中文（zh-Hans）');
+  equal(languageTagLabel(' EN '), '英语（en）');
+  equal(languageTagLabel('fr-CA'), 'fr-CA');
+  equal(languageTagLabel(''), '');
 });

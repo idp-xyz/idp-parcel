@@ -7,9 +7,9 @@ import { formatInstant } from '../moment';
 import { useRefdataNames } from '../use-refdata-names';
 import { Instant } from './detail-primitives';
 import { ProfileReadoutAddress, absentValueMark } from './LegalEntityProfileReadout';
-import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
+import { contactPurposeLabels, languageTagLabel, representativeLabel } from './legal-entity-profile';
 import {
-  compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
+  bankAccountSubject, compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
   profileRevisionState, selectedProfileRevision, type ProfileChangeKind, type ProfileFieldChange,
 } from './legal-entity-profile-history';
 import {
@@ -18,6 +18,7 @@ import {
   type LegalEntityProfileRevisionRecord,
 } from './api';
 import { problemNote, profileRevisionLabel } from './presentation';
+import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
 const kindLabels: Record<ProfileChangeKind, string> = {
@@ -30,7 +31,16 @@ const kindClasses: Record<ProfileChangeKind, string> = {
   unchanged: 'text-idpxyz-breadcrumb',
 };
 
-export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEntityId: string; revision: number }) {
+export function LegalEntityProfileHistory({
+  legalEntityId,
+  revision,
+  typeNameOf,
+}: {
+  legalEntityId: string;
+  revision: number;
+  /** 监管登记号的类型码 → 目录译名，由调用方带目录折好交进来（票 company-subject-ux/06 第 4 条）；不给或译不出按码显。 */
+  typeNameOf?: RegistrationNumberTypeNameOf;
+}) {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
   const [baselineNumber, setBaselineNumber] = useState<number | null | undefined>(undefined);
@@ -85,7 +95,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
   const baseline = baselineNumber === undefined
     ? defaultBaseline
     : revisions.find((row) => row.revision === baselineNumber);
-  const comparison = selected && baseline ? compareLegalEntityProfiles(baseline, selected) : undefined;
+  const comparison = selected && baseline ? compareLegalEntityProfiles(baseline, selected, typeNameOf) : undefined;
   const differences = comparison?.fields ?? [];
   const visibleDifferences = changedOnly ? differences.filter((field) => field.kind !== 'unchanged') : differences;
   const resolutionIsUsable = currentBody !== undefined && ['RESOLVED', 'PROFILE_INCOMPLETE'].includes(currentBody.outcome);
@@ -117,7 +127,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
           >
             {revisions.map((row, index) => {
               const rowState = profileRevisionState(row, resolutionIsUsable ? currentBody : undefined);
-              const summary = index === revisions.length - 1 ? '首次登记' : profileComparisonSummary(compareLegalEntityProfiles(revisions[index + 1], row));
+              const summary = index === revisions.length - 1 ? '首次登记' : profileComparisonSummary(compareLegalEntityProfiles(revisions[index + 1], row, typeNameOf));
               return <option key={row.revision} value={row.revision}>{profileRevisionLabel(row.revision)} · {rowState.label} · {summary}</option>;
             })}
           </select>
@@ -125,7 +135,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
             {revisions.map((row, index) => {
               const rowState = profileRevisionState(row, resolutionIsUsable ? currentBody : undefined);
               const active = selected?.revision === row.revision;
-              const summary = index === revisions.length - 1 ? '首次登记' : profileComparisonSummary(compareLegalEntityProfiles(revisions[index + 1], row));
+              const summary = index === revisions.length - 1 ? '首次登记' : profileComparisonSummary(compareLegalEntityProfiles(revisions[index + 1], row, typeNameOf));
               return (
                 <li key={row.revision}>
                   <button
@@ -158,6 +168,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
             changedOnly={changedOnly}
             onBaselineChange={(value) => setBaselineNumber(value === '' ? null : Number(value))}
             onChangedOnlyChange={setChangedOnly}
+            typeNameOf={typeNameOf}
           />
         ) : null}
       </div>
@@ -167,7 +178,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
 
 function RevisionDetails({
   selected, baseline, baselineNumber, baselineOptions, comparison, fields, changedOnly,
-  onBaselineChange, onChangedOnlyChange,
+  onBaselineChange, onChangedOnlyChange, typeNameOf,
 }: {
   selected: LegalEntityProfileRevisionRecord;
   baseline?: LegalEntityProfileRevisionRecord;
@@ -178,6 +189,7 @@ function RevisionDetails({
   changedOnly: boolean;
   onBaselineChange: (value: string) => void;
   onChangedOnlyChange: (value: boolean) => void;
+  typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   // 生效是「哪一天」，只显日期；登记时刻保留到分钟（spec 公司主体 UX「统一用语」）；完整时刻都在悬停里。
   return (
@@ -234,7 +246,7 @@ function RevisionDetails({
 
       <details className="mt-3 border-t border-idpxyz-border pt-3">
         <summary className="cursor-pointer text-[12px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">查看完整资料快照</summary>
-        <Snapshot revision={selected} />
+        <Snapshot revision={selected} typeNameOf={typeNameOf} />
       </details>
     </section>
   );
@@ -262,15 +274,18 @@ function Metadata({ label, value, wide = false }: { label: string; value: ReactN
   return <div className={`min-w-0 ${wide ? 'sm:col-span-2' : ''}`}><dt className="text-[11px] text-idpxyz-breadcrumb">{label}</dt><dd className="mt-0.5 break-words text-idpxyz-text">{value}</dd></div>;
 }
 
-function Snapshot({ revision }: { revision: LegalEntityProfileRevisionRecord }) {
+function Snapshot({ revision, typeNameOf }: { revision: LegalEntityProfileRevisionRecord; typeNameOf?: RegistrationNumberTypeNameOf }) {
   const representative = revision.representative ? `${representativeLabel(revision.representative.kind)} · ${revision.representative.name}` : absentValueMark;
+  // 类型码按这一版自己的注册地址国家查资料层的名；译不出原样显码（历史修订上的旧码）。
+  const typeName = (typeCode: string) => typeNameOf?.(revision.registeredAddress.country, typeCode, 'PROFILE') ?? typeCode;
   const contacts = [...revision.contacts].sort((a, b) => a.name.localeCompare(b.name));
   const address = (value?: LegalEntityProfileRevisionRecord['officeAddress']) => value ? <ProfileReadoutAddress address={value} /> : absentValueMark;
   return (
     <div className="mt-3 max-h-[min(50vh,30rem)] space-y-4 overflow-auto pr-1 text-[12px]">
       <section><h6 className="font-medium text-idpxyz-text">代表人信息</h6><p className="mt-1 break-words text-idpxyz-breadcrumb">{representative}</p></section>
       <section><h6 className="font-medium text-idpxyz-text">地址信息</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="注册地址" value={address(revision.registeredAddress)} /><Metadata label="办公地址" value={address(revision.officeAddress)} /><Metadata label="通信地址" value={address(revision.correspondenceAddress)} /></dl></section>
-      <section><h6 className="font-medium text-idpxyz-text">税务与开票</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="税务登记号" value={revision.taxRegistrationNumbers.map((row) => `${row.typeCode} ${row.number}`).join('；') || absentValueMark} /><Metadata label="开票资料" value={revision.invoicingRegistered ? '已登记' : '未登记'} /><Metadata label="开票抬头" value={revision.invoiceTitle || absentValueMark} /></dl></section>
+      <section><h6 className="font-medium text-idpxyz-text">税务与开票</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="监管登记号（税务 / 海关）" value={revision.taxRegistrationNumbers.map((row) => `${typeName(row.typeCode)} ${row.number}`).join('；') || absentValueMark} /><Metadata label="开票资料" value={revision.invoicingRegistered ? '已登记' : '未登记'} /><Metadata label="开票抬头" value={revision.invoiceTitle || absentValueMark} /><Metadata label="主抬头语言" value={revision.invoiceTitleLanguage ? languageTagLabel(revision.invoiceTitleLanguage) : absentValueMark} /><Metadata label="其他语言的抬头" value={revision.invoiceTitles?.length ? revision.invoiceTitles.map((row) => `${languageTagLabel(row.language)} ${row.title}`).join('；') : absentValueMark} /></dl></section>
+      <section><h6 className="font-medium text-idpxyz-text">收款账户 · {revision.bankAccounts?.length ?? 0}</h6>{revision.bankAccounts?.length ? <ul className="mt-2 space-y-2">{revision.bankAccounts.map((account, index) => <li key={`${account.currency}-${account.accountNumber}-${index}`} className="rounded-md border border-idpxyz-border p-2.5"><p className="font-medium text-idpxyz-text">{bankAccountSubject(account)}</p><p className="mt-1 break-words text-idpxyz-breadcrumb">{[account.label, account.holderName, account.bankName, account.swiftCode ? `SWIFT / BIC ${account.swiftCode}` : '', account.bankAddress, account.note].filter(Boolean).join(' · ')}</p></li>)}</ul> : <p className="mt-1 text-idpxyz-breadcrumb">未登记收款账户</p>}</section>
       <section><h6 className="font-medium text-idpxyz-text">联系人 · {contacts.length}</h6>{contacts.length ? <ul className="mt-2 space-y-2">{contacts.map((contact, index) => <li key={`${contact.name}-${contact.email ?? ''}-${contact.phone ?? ''}-${index}`} className="rounded-md border border-idpxyz-border p-2.5"><p className="font-medium text-idpxyz-text">{contact.name}</p><p className="mt-1 break-words text-idpxyz-breadcrumb">{[contact.department, contact.position, contact.email, contact.phone, (contact.purposes ?? []).map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、'), contact.primaryFor?.length ? `主要联系人：${contact.primaryFor.map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、')}` : ''].filter(Boolean).join(' · ') || absentValueMark}</p>{contact.socialAccounts?.length ? <ul className="mt-2 space-y-1">{contact.socialAccounts.map((account, accountIndex) => <li key={`${account.platform}-${account.account}-${accountIndex}`} className="break-all"><span className="text-idpxyz-breadcrumb">{account.platform}　</span><span className="text-idpxyz-text">{account.account}</span></li>)}</ul> : null}</li>)}</ul> : <p className="mt-1 text-idpxyz-breadcrumb">没有联系人</p>}</section>
     </div>
   );
