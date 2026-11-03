@@ -2,17 +2,20 @@ import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
-import { listCommercialPolicies, listSupplierAgreements } from './api';
+import { listBusinessParties, listCommercialPolicies, listSupplierAgreements } from './api';
 import { InstantRange, statusBadge } from './detail-primitives';
 import {
   creditPoliciesOfLegalEntity,
+  partyNameOfAnswer,
   referenceLineText,
   referenceRegisterHash,
   referenceRowHash,
   rulePackagesOfLegalEntity,
   settlementPoliciesOfLegalEntity,
   supplierAgreementsOfLegalEntity,
+  versionOrdinalText,
   type LegalEntityReferenceStates,
+  type PartyNameOf,
   type ReferenceRowKind,
 } from './legal-entity-references';
 import { sectionOf, type OverviewSectionState } from './party-overview';
@@ -22,6 +25,8 @@ import { useRegisterList } from './register-list';
 // 公司主体的「关联」签（票 company-subject-ux/03）：这家公司名下的供应商协议、结算政策、信用政策、接单规则包。判读全在
 // legal-entity-references.ts，这里只摆。四册在打开对象页 / 详情栏时各取一次，一册未配置或出错只影响那一段；首屏「被引用」
 // 一格用的是同一份答案（useLegalEntityReferences 由页面调一次、两处共用），不为指标另读。
+// 往来单位册是第五本，只为把行上的供应商与客户标识译成名称（票 company-subject-ux/07）：它读不到不影响任何一段，
+// 也不进「被引用」的计数，所以不占段状态、不给重试。
 
 // useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头会每次渲染重取。
 const listSettlementPolicies = () => listCommercialPolicies('SETTLEMENT_POLICY');
@@ -33,6 +38,8 @@ const note = 'text-[12px] text-idpxyz-breadcrumb';
 export interface LegalEntityReferences {
   states: LegalEntityReferenceStates;
   retry: Record<keyof LegalEntityReferenceStates, () => void>;
+  /** 行上供应商与客户的名称查法；往来单位册没读到就一律查不到，行上显标识。 */
+  partyNameOf: PartyNameOf;
 }
 
 /** 四册各读一次，按法人标识在已取回的行上关联；换一家公司不重读，只换关联。 */
@@ -41,7 +48,9 @@ export function useLegalEntityReferences(legalEntityId: string): LegalEntityRefe
   const settlement = useRegisterList(listSettlementPolicies);
   const credit = useRegisterList(listCreditPolicies);
   const rulePackages = useRegisterList(listRulePackages);
+  const parties = useRegisterList(listBusinessParties);
   return {
+    partyNameOf: partyNameOfAnswer(parties.answer),
     states: {
       agreements: sectionOf(agreements.answer, (body) => supplierAgreementsOfLegalEntity(legalEntityId, body.agreements)),
       settlement: sectionOf(settlement.answer, (body) =>
@@ -183,13 +192,31 @@ function Line({ label, children, mono = false }: { label: string; children: Reac
   );
 }
 
+/** 行上一格参与方：译到名称时名称为主、标识进括注；译不到只显标识。名称是帮人认的，不替掉标识——检索与对账用的是标识。 */
+function PartyRef({ partyId, nameOf }: { partyId: string | undefined; nameOf: PartyNameOf }) {
+  if (!partyId) return <span className="text-idpxyz-breadcrumb">—</span>;
+  const name = nameOf(partyId);
+  return name ? (
+    <>
+      <span>{name}</span>
+      <span className="font-mono text-idpxyz-breadcrumb">（{partyId}）</span>
+    </>
+  ) : (
+    <span className="font-mono">{partyId}</span>
+  );
+}
+
+/** 行首：对象标识是对象名、作主键；版本拆成「第 N 版」放状态旁，不再拼成 `标识@v1`。 */
 function VersionHead({ objectId, version, children }: { objectId: string; version: string; children?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="font-mono">
-        {objectId}@{version}
+      <span className="font-mono">{objectId}</span>
+      <span className="flex shrink-0 items-center gap-2">
+        <span className="text-idpxyz-breadcrumb" title={`版本标识 ${version}`}>
+          {versionOrdinalText(version)}
+        </span>
+        {children}
       </span>
-      {children}
     </div>
   );
 }
@@ -201,7 +228,7 @@ export function LegalEntityReferencesSection({
   legalEntityId: string;
   references: LegalEntityReferences;
 }) {
-  const { states, retry } = references;
+  const { states, retry, partyNameOf } = references;
   return (
     <div>
       <Register
@@ -222,8 +249,8 @@ export function LegalEntityReferencesSection({
               <VersionHead objectId={row.objectId} version={row.version}>
                 {statusBadge(commercialStatusLabels, row.status)}
               </VersionHead>
-              <Line label="供应商" mono>
-                {row.supplier}
+              <Line label="供应商">
+                <PartyRef partyId={row.supplier} nameOf={partyNameOf} />
               </Line>
               <Line label="有效区间" mono>
                 <InstantRange from={row.effectiveStartsAt} to={row.effectiveEndsAt} />
@@ -254,8 +281,8 @@ export function LegalEntityReferencesSection({
               <VersionHead objectId={row.objectId} version={row.version}>
                 <span>{labelOf(settlementMethodLabels, row.method)}</span>
               </VersionHead>
-              <Line label="客户" mono>
-                {row.counterparty}
+              <Line label="客户">
+                <PartyRef partyId={row.counterparty} nameOf={partyNameOf} />
               </Line>
               <Line label="合同" mono>
                 {row.contractLabel}
