@@ -217,11 +217,19 @@ export function WorkbenchPageTemplate<Row>({
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTab, selectedKey, detailOpen, onSelect, ready]);
 
-  // 选中行换了就把它滚进可视区：方向键一路按下去不该把选中行按到屏幕外。
+  // 选中行换了就把它滚进可视区：方向键一路按下去不该把选中行按到屏幕外。焦点原在列表的某一行上时，焦点也跟到新选中
+  // 的行：点过一行再按方向键，焦点框不该留在原来那行、和新行的选中底色各在一处（用户 2026-11-03 指出）。焦点在检索框、
+  // 详情栏或别处时不抢——那时按方向键本就不走这里，选中是别的路径换的。
   useEffect(() => {
     if (selectedKey === null) return;
-    const row = listRef.current?.querySelector(`[data-row-key="${CSS.escape(selectedKey)}"]`);
-    row?.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' });
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused !== row && focused.matches('tr[data-row-key]') && list?.contains(focused)) {
+      row.focus({ preventScroll: true });
+    }
   }, [selectedKey]);
 
   const visibleColumns = columns.filter(
@@ -309,12 +317,14 @@ export function WorkbenchPageTemplate<Row>({
                 onKeyDown={(event) => onRowKeyDown(event, key)}
                 // 行只在选中时上底色，鼠标经过不变：浅色主题里悬停与选中两种底色几乎同一个浅蓝，划过的行看着像被选中了
                 // （用户 2026-11-03 裁定「完全去掉悬停」）。点哪行由指针形状与选中后的底色和左竖线交代。
-                className={`cursor-pointer border-b border-idpxyz-border transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
+                // 焦点框只画在未选中的行上：方向键让焦点跟着选中走，焦点与选中落在同一行时，底色加左竖线已经说明了「在这」，
+                // 再套一圈框就是一行两个记号。Tab 进列表落在未选中的行上时框照旧出现。
+                className={`cursor-pointer border-b border-idpxyz-border transition-colors ${
                   selected
-                    ? 'bg-idpxyz-activeItem shadow-[inset_2px_0_0_0_var(--idpxyz-accent)]'
-                    : attention
-                      ? 'bg-orange-500/5'
-                      : ''
+                    ? 'bg-idpxyz-activeItem shadow-[inset_2px_0_0_0_var(--idpxyz-accent)] focus-visible:outline-none'
+                    : `focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
+                        attention ? 'bg-orange-500/5' : ''
+                      }`
                 }`}
               >
                 {visibleColumns.map((column, index) => (
