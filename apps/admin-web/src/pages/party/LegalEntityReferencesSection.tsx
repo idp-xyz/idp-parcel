@@ -32,6 +32,7 @@ import { useRegisterList } from './register-list';
 const listSettlementPolicies = () => listCommercialPolicies('SETTLEMENT_POLICY');
 const listCreditPolicies = () => listCommercialPolicies('CREDIT_POLICY');
 const listRulePackages = () => listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
+const rememberAcrossMounts = { remember: true };
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
 
@@ -42,13 +43,16 @@ export interface LegalEntityReferences {
   partyNameOf: PartyNameOf;
 }
 
-/** 四册各读一次，按法人标识在已取回的行上关联；换一家公司不重读，只换关联。 */
+/**
+ * 各册各读一次，按法人标识在已取回的行上关联；换一家公司不重读，只换关联。带着详情切走再切回时先用上次答到的那份
+ * （useRegisterList 的 remember）：否则详情栏先显「被引用 —」、关联签先没有计数，答到了再补上，又是一跳。
+ */
 export function useLegalEntityReferences(legalEntityId: string): LegalEntityReferences {
-  const agreements = useRegisterList(listSupplierAgreements);
-  const settlement = useRegisterList(listSettlementPolicies);
-  const credit = useRegisterList(listCreditPolicies);
-  const rulePackages = useRegisterList(listRulePackages);
-  const parties = useRegisterList(listBusinessParties);
+  const agreements = useRegisterList(listSupplierAgreements, rememberAcrossMounts);
+  const settlement = useRegisterList(listSettlementPolicies, rememberAcrossMounts);
+  const credit = useRegisterList(listCreditPolicies, rememberAcrossMounts);
+  const rulePackages = useRegisterList(listRulePackages, rememberAcrossMounts);
+  const parties = useRegisterList(listBusinessParties, rememberAcrossMounts);
   return {
     partyNameOf: partyNameOfAnswer(parties.answer),
     states: {

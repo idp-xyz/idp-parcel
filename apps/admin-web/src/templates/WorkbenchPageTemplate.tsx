@@ -142,6 +142,16 @@ export function WorkbenchPageTemplate<Row>({
     return () => observer.disconnect();
   }, [hasResponsiveColumns]);
   const split = useSplitResize('horizontal');
+  const ready = viewState.kind === 'ready';
+  const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
+  // 详情栏开合与分栏比例一变，列表宽就变，在绘制前重量一次。只靠 ResizeObserver 时，它回调里的 setState 排到下一帧，
+  // 这一帧先按旧宽画出全部列、下一帧再收起窄列——带着详情切回本标签时，列表先按全宽的列挤出来再收窄，看着是一闪
+  // （用户 2026-11-03 指出：打开详情再切标签回来列表会闪，不开详情没有）。布局副作用里的 setState 在绘制前同步重渲。
+  useLayoutEffect(() => {
+    if (!hasResponsiveColumns) return;
+    const list = listRef.current;
+    if (list && list.clientWidth > 0) setListWidth(list.clientWidth);
+  }, [hasResponsiveColumns, detailOpen, split.ratio]);
   const layoutSnapshot = useTabViewRef(
     viewStateKey ? `workbench.${viewStateKey}.layout` : null,
     () => ({ ratio: 50, scrollTop: 0, scrollLeft: 0 }),
@@ -158,8 +168,6 @@ export function WorkbenchPageTemplate<Row>({
   const tabPanel = useWorkspaceTabPanel();
   const activeTab = tabPanel?.isActiveTab ?? true;
   const { addToast } = useToast();
-  const ready = viewState.kind === 'ready';
-  const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
   useLayoutEffect(() => {
     if (!ready || !listRef.current) return;
     listRef.current.scrollTop = layoutSnapshot.current.scrollTop;

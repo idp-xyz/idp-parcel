@@ -47,22 +47,36 @@ export function registerListReducer<Body>(
   }
 }
 
+// 跨挂载的记忆（`remember`）：换标签时页面卸载，回来是新挂载、答案从空开始。给了 remember 的册，新挂载先拿上一次
+// 答到的业务答案、照常再问——与 registerListReducer「重取不清上一份业务答案」同一条语义，只是跨过了卸载。按 load 引用记，所以同样
+// 要求 load 是模块级函数。只记业务答案，读不到的那几态不记，理由同 registerListReducer。只在浏览器内存里：整页重载
+// 即清，登出走 logout 的整页跳转，换会话不会带过去。被作废的那一问（换了重取序号、或已卸载）答到了也不记，免得慢的
+// 旧答案盖掉新记下的那份。
+const remembered = new WeakMap<object, ApiResult<unknown>>();
+
 /**
  * 一册的列表状态：`answer` 最近一份答案、`retry` 重取、`version` 重取序号。`load` 要是稳定引用（模块级函数），
  * 写成内联箭头会每次渲染重取。未回的旧请求按 cancelled 丢，不让慢答案盖掉快答案。
  */
-export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
-  const [state, dispatch] = useReducer(registerListReducer<Body>, { answer: null, version: 0, answeredVersion: null });
+export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>, options?: { remember?: boolean }) {
+  const remember = options?.remember === true;
+  const [state, dispatch] = useReducer(registerListReducer<Body>, null, () => ({
+    answer: remember ? ((remembered.get(load) as ApiResult<Body> | undefined) ?? null) : null,
+    version: 0,
+    answeredVersion: null,
+  }));
 
   useEffect(() => {
     let cancelled = false;
     void load().then((next) => {
-      if (!cancelled) dispatch({ kind: 'answered', answer: next });
+      if (cancelled) return;
+      if (remember && next.kind === 'outcome') remembered.set(load, next);
+      dispatch({ kind: 'answered', answer: next });
     });
     return () => {
       cancelled = true;
     };
-  }, [load, state.version]);
+  }, [load, remember, state.version]);
 
   const retry = () => dispatch({ kind: 'reload' });
   return { answer: state.answer, retry, version: state.version, pending: registerListPending(state) };
