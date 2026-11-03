@@ -40,6 +40,7 @@ import { useMayWriteRegistry } from '../use-operator-grants';
 import { CountryLabel } from '../refdata-labels';
 import { identityLayerAbsentNote } from './presentation';
 import { useTabViewState } from '../../templates/workspace-view-state';
+import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 
 type PanelTab = 'overview' | 'contacts' | 'profile' | 'history' | 'related';
 
@@ -167,26 +168,28 @@ export function LegalEntityDetailPanel({
       </FactStrip>
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">
+        {/* 签的词与图标取对象工作区签的固定表（票 company-subject-ux/10）：栏上的签与对象页 LegalEntityDetailPage 的签是
+            同一种内容，一张表两处用。签的 value 仍是栏自己的 PanelTab——它存在视图状态里，换名会让旧状态失配。 */}
         <TabsList className="mx-5 mt-2 h-9 w-auto shrink-0 gap-5">
           <TabsTrigger value="overview" className={tabTriggerClass}>
-            概要
+            <WorkspaceTabLabel id="summary" />
           </TabsTrigger>
           <TabsTrigger value="contacts" className={tabTriggerClass}>
-            联系人
+            <WorkspaceTabLabel id="contacts" />
             {contactCount !== undefined ? <TabCountBadge count={contactCount} /> : null}
           </TabsTrigger>
           {/* 签上带数（票 company-subject-ux/09）：资料版本数、登记记录数各读一次修订链，关联数与首屏「被引用」同一份；
               读不到就不带，不拿 0 冒充。 */}
           <TabsTrigger value="profile" className={tabTriggerClass}>
-            资料版本
+            <WorkspaceTabLabel id="profile-versions" />
             {tabCounts.profileRevisions !== undefined ? <TabCountBadge count={tabCounts.profileRevisions} /> : null}
           </TabsTrigger>
           <TabsTrigger value="history" className={tabTriggerClass}>
-            登记记录
+            <WorkspaceTabLabel id="identity-revisions" />
             {tabCounts.identityRevisions !== undefined ? <TabCountBadge count={tabCounts.identityRevisions} /> : null}
           </TabsTrigger>
           <TabsTrigger value="related" className={tabTriggerClass}>
-            关联
+            <WorkspaceTabLabel id="related" />
             {referenced !== null ? <TabCountBadge count={referenced} /> : null}
           </TabsTrigger>
         </TabsList>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { IdCard, Network, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody } from './api';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
@@ -107,14 +108,14 @@ export function BusinessPartyDetailPanel({
       </FactStrip>
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
+        {/* 图标取对象工作区签的固定表（票 company-subject-ux/10），词照栏的口径：「全景」是这家单位的概要签，
+            「变更记录」与对象页 BusinessPartyDetailPage 放在「时间线」签的是同一条修订链——同一种内容同一个图标。 */}
         <TabsList className="mx-5 mt-3 shrink-0">
           <TabsTrigger value="overview" className="text-idpxyz-breadcrumb">
-            <Network className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            全景
+            <WorkspaceTabLabel id="summary">全景</WorkspaceTabLabel>
           </TabsTrigger>
           <TabsTrigger value="identity" className="text-idpxyz-breadcrumb">
-            <IdCard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            变更记录
+            <WorkspaceTabLabel id="timeline">变更记录</WorkspaceTabLabel>
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
