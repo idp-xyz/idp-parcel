@@ -56,6 +56,7 @@ Status: in-progress
 | [04](./issues/04-profile-form.md) | 公司资料表单：默认基于当前版本、保存前差异预览、未保存保护、缺项提示、税务登记号类型从目录选、币种指引 | `LegalEntityProfileSection.tsx`、`LegalEntityProfileFields.tsx`、`legal-entity-profile.ts`、`CurrentLegalEntityProfile.tsx`、`LegalEntityProfileSummary.tsx` | — | resolved（2026-11-03 进 main） |
 | [05](./issues/05-cross-border-profile-extensions.md) | 跨境主体资料扩展：监管登记号语言放宽、收款账户、多语言开票抬头（ADR-0359，协调方代决）——领域文档 + 后端 + 种子 | `docs/adr`、`docs/domain/party-commercial`、`internal/partycommercial`、`migrations/party_commercial`、`scripts/demo-seeds` | — | in-progress |
 | [06](./issues/06-cross-border-profile-admin-web.md) | 管理台跟上票 05：监管登记号、收款账户、多语言抬头 | `pages/party/LegalEntityProfile*`、`legal-entity-profile*.ts` | 04、05 | blocked |
+| [07](./issues/07-polish-after-landing.md) | 收尾抛光：空的概要卡、「关联」签显名称、头部注册号胶囊截断 | `LegalEntityDetailPage.tsx`、`LegalEntityDetailPanel.tsx`、`LegalEntityReferencesSection.tsx`、`legal-entity-references.ts` | — | in-progress |
 
 01–05 并行，各自只动表里的落点；落点之外的文件要改一行也先告诉协调方。进 main 顺序 01 → 02 → 03 → 04，每票进 main 前 `git merge origin/main` 再过三道门。
 
