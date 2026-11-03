@@ -180,8 +180,8 @@ test('referencedCount 四册都答到才有数', () => {
   equal(referencedCount(states({ credit: { kind: 'unconfigured' } })), null);
   equal(referencedCount(states({ rulePackages: { kind: 'transport', message: 'x' } })), null);
   equal(referencedCount(states({ credit: answered([]), rulePackages: answered([]) })), 3);
-  equal(referencedCountText(3), '3');
-  equal(referencedCountText(0), '0');
+  equal(referencedCountText(3), '3 份');
+  equal(referencedCountText(0), '0 份');
   equal(referencedCountText(null), '—');
 });
 
@@ -215,7 +215,24 @@ test('profileStatusCellOf 只在答到这家公司时出状态', () => {
   };
   const cell = profileStatusCellOf(incomplete, SELF);
   equal(cell.kind, 'status');
-  if (cell.kind === 'status') equal(cell.status.tone, 'warn');
+  if (cell.kind === 'status') {
+    equal(cell.status.tone, 'warn');
+    // 没有生效版本就没有「资料版本」格的数，键也不出：事实行据此显「—」，不拿 0 冒充第 0 版。
+    equal('effectiveRevision' in cell, false);
+  }
+  // 答到了生效版本，事实行「资料版本」格取它的版本号（票 company-subject-ux/08 第 2 条）。
+  const resolved: ApiResult<LegalEntityProfileResolutionResponseBody> = {
+    kind: 'outcome',
+    status: 200,
+    body: {
+      outcome: 'RESOLVED',
+      legalEntityId: SELF,
+      at: '2026-01-01T00:00:00Z',
+      effectiveRevision: { revision: 5 } as unknown as NonNullable<LegalEntityProfileResolutionResponseBody['effectiveRevision']>,
+    },
+  };
+  const resolvedCell = profileStatusCellOf(resolved, SELF);
+  equal(resolvedCell.kind === 'status' ? resolvedCell.effectiveRevision : undefined, 5);
 });
 
 // Covers: 往来单位册答到了按标识取名；册没读到、读不到、册上没有这个标识、名为空串，一律查不到——行上照显标识，不报错。

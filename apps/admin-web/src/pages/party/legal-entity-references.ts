@@ -108,8 +108,9 @@ export function referencedCount(states: LegalEntityReferenceStates): number | nu
   return inUseCount(agreements.rows) + settlement.rows.length + credit.rows.length + rulePackages.rows.length;
 }
 
+/** 事实行里「被引用 6 份」那一格的字：数的是版本（见 referencedCountNote），单位随数走；没数就是「—」。 */
 export function referencedCountText(count: number | null): string {
-  return count === null ? '—' : String(count);
+  return count === null ? '—' : `${count} 份`;
 }
 
 /** 「被引用」格悬停那句，说清口径——三本政策册按版本数计，不是在用数。 */
@@ -168,7 +169,12 @@ export function referenceRegisterHash(kind: ReferenceRowKind, legalEntityId: str
 export type ProfileStatusCell =
   | { kind: 'pending' }
   | { kind: 'unavailable' }
-  | { kind: 'status'; status: LegalEntityProfileStatus };
+  | {
+      kind: 'status';
+      status: LegalEntityProfileStatus;
+      /** 这一刻生效的那一版资料的版本号（事实行「资料版本」格）；没有生效版本时缺席。 */
+      effectiveRevision?: number;
+    };
 
 export function profileStatusCellOf(
   answer: ApiResult<LegalEntityProfileResolutionResponseBody> | null,
@@ -176,5 +182,10 @@ export function profileStatusCellOf(
 ): ProfileStatusCell {
   if (answer === null) return { kind: 'pending' };
   if (answer.kind !== 'outcome' || answer.body.legalEntityId !== legalEntityId) return { kind: 'unavailable' };
-  return { kind: 'status', status: legalEntityProfileStatusOf(answer.body) };
+  const effectiveRevision = answer.body.effectiveRevision?.revision;
+  return {
+    kind: 'status',
+    status: legalEntityProfileStatusOf(answer.body),
+    ...(effectiveRevision === undefined ? {} : { effectiveRevision }),
+  };
 }

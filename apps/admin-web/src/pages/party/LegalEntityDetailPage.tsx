@@ -5,7 +5,6 @@ import { primaryActionClass } from '../../components/primary-action';
 import {
   DetailPageTemplate,
   type DetailMeta,
-  type DetailSummaryStat,
   type TemplateViewState,
   type WorkspaceTabId,
 } from '../../templates';
@@ -23,8 +22,8 @@ import {
   LegalEntityBanners,
   LegalEntityLifecycle,
   LegalEntityMoreMenu,
-  ProfileStatusValue,
   legalEntityHasBanners,
+  legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { useTabViewState } from '../../templates/workspace-view-state';
@@ -35,9 +34,10 @@ import { legalEntityContactCountOf } from './legal-entity-profile';
 import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
-import { LegalEntityReferencesSection, useLegalEntityReferences, type LegalEntityReferences } from './LegalEntityReferencesSection';
-import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
-import { DetailRow, Instant } from './detail-primitives';
+import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
+import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
+import { DetailRow, RefText, useCopyToClipboard } from './detail-primitives';
+import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -69,14 +69,27 @@ function muted(text: string): ReactNode {
 
 // 身份事实留在头部，当前资料归概要，资料版本与身份修订各用自己的历史链。
 
-function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberTypeNameOf): DetailMeta[] {
-  // 注册号的类型码经目录译成名（统一社会信用代码），目录没读到就按码显——译名是锦上添花，号本身在答复里。
-  // 头部这一行只显号、类型名进 title，与详情栏头部的胶囊同一种（票 company-subject-ux/07）。
+/**
+ * 头区第二行的 meta，与详情栏头区同一形（票 company-subject-ux/08）：编码、注册地、注册号一行小字，号可点按复制；
+ * 关键事实（legalEntityHeaderFacts）接在后面，生命周期小步进贴在行末。注册号的类型码经目录译成名（统一社会信用代码），
+ * 目录没读到就按码显——译名是锦上添花，号本身在答复里；一行小字放得下类型名，就跟在号前面显而不藏进 title。
+ *
+ * 事实不再走模板的指标卡（summary 不传，模板允许）：卡在宽屏上值只占一角。模板在头区与签之间只留了指标卡那一格，
+ * 一行小字只能接在 meta 行后面，放进签里又会与概要签的「当前资料 第 N 版」挨着重复。
+ */
+function buildMeta(
+  row: GroupLegalEntityRecord,
+  typeNameOf: RegistrationNumberTypeNameOf | undefined,
+  copy: (label: string, value: string) => void,
+  profileCell: ProfileStatusCell,
+  referenced: number | null,
+): DetailMeta[] {
   const identity = identityLayerCellsOf(row, typeNameOf);
   return [
+    { label: '编码', value: <RefText value={row.legalEntityId} name="编码" onCopy={copy} /> },
     {
-      label: '国家',
-      value: identity ? <span className="font-mono">{identity.country}</span> : muted(identityLayerAbsentNote),
+      label: '注册地',
+      value: identity ? <CountryLabel code={identity.country} /> : muted(identityLayerAbsentNote),
     },
     {
       label: '注册号',
@@ -84,42 +97,15 @@ function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberT
         ? identity.numberCells.map((cell, index) => (
             <Fragment key={`${cell.number}#${index}`}>
               {index > 0 ? '；' : null}
-              <span className="font-mono" title={cell.typeName}>
-                {cell.number}
-              </span>
+              {muted(cell.typeName)} <RefText value={cell.number} name={cell.typeName} onCopy={copy} />
             </Fragment>
           ))
         : muted(identityLayerAbsentNote),
     },
-  ];
-}
-
-// 指标卡的值比模板的 text-lg 再降一级：主数据不是仪表盘，16px 够认、不抢页头。模板不给这个选项，就在值上自己定。
-const statValue = 'text-[16px] font-medium';
-
-/**
- * 首屏三格（票 company-subject-ux/03）：生效日期、资料状态、被引用；已停用时才多一格停用日期。身份版本只在「登记记录」签看，
- * 「未停用」不占格。生命周期条与往来单位页同位（BusinessPartyDetailPage 的 buildSummary）。
- */
-function buildSummary(row: GroupLegalEntityRecord, profileCell: ProfileStatusCell, references: LegalEntityReferences): DetailSummaryStat[] {
-  const referenced = referencedCount(references.states);
-  const day = (value: string) => (
-    <span className={`${statValue} font-mono`}>
-      <Instant value={value} precision="day" />
-    </span>
-  );
-  return [
-    { label: '生效日期', value: day(row.effectiveFrom) },
-    { label: '资料状态', value: <ProfileStatusValue cell={profileCell} /> },
-    {
-      label: '被引用',
-      value: (
-        <span className={`${statValue} font-mono`} title={referencedCountNote}>
-          {referencedCountText(referenced)}
-        </span>
-      ),
-    },
-    ...(row.deactivatedAt ? [{ label: '停用日期', value: day(row.deactivatedAt) }] : []),
+    ...legalEntityHeaderFacts(row, profileCell, referenced).map((fact) => ({
+      label: fact.label,
+      value: fact.title ? <span title={fact.title}>{fact.value}</span> : fact.value,
+    })),
     { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
   ];
 }
@@ -203,6 +189,7 @@ export function LegalEntityDetailPage({
   // 两册一页只读一次：首屏「被引用」与「关联」签用同一份答案。
   const references = useLegalEntityReferences(row?.legalEntityId ?? legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
+  const copy = useCopyToClipboard();
   const openProfileForm = () => {
     setTab('profile-versions');
     setFormOpenRequest((count) => count + 1);
@@ -212,7 +199,6 @@ export function LegalEntityDetailPage({
       title={info.title}
       identifier={row ? (row.partyNameKnown ? row.partyName : partyNameUnknownNote) : legalEntityId}
       status={row ? <StatusPill code={row.status} /> : undefined}
-      description={row ? `编码 ${row.legalEntityId}` : undefined}
       headerActions={
         <>
           {row ? (
@@ -236,9 +222,8 @@ export function LegalEntityDetailPage({
           </Button>
         </>
       }
-      meta={row ? buildMeta(row, typeNameOf) : []}
-      summary={row ? buildSummary(row, profileCell, references) : undefined}
-      // 头区与指标带已把身份事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
+      meta={row ? buildMeta(row, typeNameOf, copy, profileCell, referencedCount(references.states)) : []}
+      // 头区 meta 行已把身份事实与关键事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
       // 停用来源单据跟在停用横幅下。传空数组——分签形态下模板按有没有字段判要不要画这张卡，空的不画。
       basicFields={[]}
       sections={
@@ -272,10 +257,14 @@ export function LegalEntityDetailPage({
           ? [
               {
                 id: 'summary',
+                // 正文最宽 52rem、靠左，与详情栏同一宽度纪律（票 company-subject-ux/08 第 4 条）；模板的内容列是 960px，
+                // 读出在里面不撑满。
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityProfileSummary query={profileQuery} />
-                    <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
+                    <div className="max-w-[52rem]">
+                      <LegalEntityProfileSummary query={profileQuery} />
+                      <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
+                    </div>
                   </section>
                 ),
               },

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
-import { statusToneBanner, statusToneText } from '../../components/status-tone';
+import { statusToneBanner, statusToneSurface, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
-import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote } from './presentation';
+import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote, profileRevisionLabel } from './presentation';
 import {
   legalEntityLifecycle,
   lifecycleConnectorReached,
@@ -15,9 +15,9 @@ import {
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { StatusPill } from '../../components/StatusPill';
-import type { ProfileStatusCell } from './legal-entity-references';
+import { referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
 
-// 责任法人头区的几件：生命周期条、停用与待补横幅、「更多」菜单，以及首屏指标带的「资料状态」格。工作台详情栏
+// 责任法人头区的几件：生命周期小步进、停用与待补横幅、「更多」菜单，以及头区下那一行关键事实。工作台详情栏
 // 与对象页各摆一份同样的头区（票 group-legal-entities-uiux/09：同一法人两处结构一致），件只在这里写一遍，两处各自排版。
 
 /** 首屏「资料状态」格：答到了用状态胶囊，还没读到显占位，读不到显「—」——判读在 profileStatusCellOf。 */
@@ -27,44 +27,76 @@ export function ProfileStatusValue({ cell }: { cell: ProfileStatusCell }) {
   return <StatusPill label={cell.status.label} tone={cell.status.tone} className="font-sans" />;
 }
 
+/** 首屏「资料版本」格：这一刻生效的那一版的短写「第 N 版」（轴名由标签承担）；没有生效版本显「—」。 */
+function ProfileVersionValue({ cell }: { cell: ProfileStatusCell }) {
+  if (cell.kind === 'pending') return <span className="text-idpxyz-breadcrumb">…</span>;
+  if (cell.kind === 'unavailable' || cell.effectiveRevision === undefined) return <span className="text-idpxyz-breadcrumb">—</span>;
+  return <span className="tabular-nums">{profileRevisionLabel(cell.effectiveRevision)}</span>;
+}
+
+export interface LegalEntityHeaderFact {
+  label: string;
+  value: ReactNode;
+  /** 悬停说明（口径）。 */
+  title?: string;
+}
+
+/**
+ * 头区下那一行关键事实（票 company-subject-ux/08 第 2 条），详情栏与对象页同一份：生效（已停用时多一格停用）、资料状态、
+ * 资料版本、被引用。一个事实首屏只出现一处（票 group-legal-entities-uiux/06）：编码、注册地、注册号在 meta 行，名称是标题，
+ * 身份版本只在「登记记录」签看。详情栏把它摆成 FactStrip inline，对象页接在模板 meta 行后面——模板在头区与签之间只留了
+ * 指标卡那一格，一行小字只能走 meta。
+ */
+export function legalEntityHeaderFacts(
+  row: GroupLegalEntityRecord,
+  profileCell: ProfileStatusCell,
+  referenced: number | null,
+): LegalEntityHeaderFact[] {
+  return [
+    { label: '生效', value: <Instant value={row.effectiveFrom} precision="day" /> },
+    ...(row.deactivatedAt ? [{ label: '停用', value: <Instant value={row.deactivatedAt} precision="day" /> }] : []),
+    { label: '资料状态', value: <ProfileStatusValue cell={profileCell} /> },
+    { label: '资料版本', value: <ProfileVersionValue cell={profileCell} /> },
+    { label: '被引用', value: referencedCountText(referenced), title: referencedCountNote },
+  ];
+}
+
+// 圆点小面积实色取语气前景色（status-tone.ts 的 statusToneSurface 那一档）；没走到的段只画一圈描边。
 const stageDotClass: Record<LifecycleStageState, string> = {
-  done: statusToneBanner.success,
-  current: 'border-idpxyz-accent bg-idpxyz-activeItem text-idpxyz-accent',
-  skipped: 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb',
-  pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-breadcrumb',
+  done: statusToneSurface.success,
+  current: 'bg-idpxyz-accent',
+  skipped: 'border border-dashed border-idpxyz-border bg-transparent',
+  pending: 'border border-idpxyz-border bg-transparent',
 };
 
 // 旁支终态（已停用）只有两态：没停用时一圈虚线不点亮，停用了才亮成警示色。
 const terminalDotClass = (reached: boolean) =>
-  reached ? statusToneBanner.danger : 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb';
+  reached ? statusToneSurface.danger : 'border border-dashed border-idpxyz-border bg-transparent';
 
-/** 一段的圆点与名字。圆点不编号：编号会把三段读成一条必经的流程。 */
+/** 一段的圆点与名字，点在前词在后排成一行。圆点不编号：编号会把三段读成一条必经的流程。 */
 function StageMark({ stage }: { stage: LifecycleStage }) {
   const dotClass = stage.terminal ? terminalDotClass(stage.state === 'current') : stageDotClass[stage.state];
-  const reached = stage.state === 'current' || stage.state === 'done';
   return (
-    <div className="flex flex-col items-center gap-1" aria-current={stage.state === 'current' ? 'step' : undefined}>
+    <span className="inline-flex items-center gap-1.5" aria-current={stage.state === 'current' ? 'step' : undefined}>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden="true" />
       <span
-        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[12px] font-semibold ${dotClass}`}
-        aria-hidden="true"
-      >
-        {stage.state === 'done' ? '✓' : stage.state === 'skipped' ? '–' : reached ? '●' : ''}
-      </span>
-      <span
-        className={`text-[12px] font-normal leading-none ${
+        className={`whitespace-nowrap text-[12px] leading-5 ${
           stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-breadcrumb'
         }`}
       >
         {labelOf(identityStatusLabels, stage.code)}
         {stage.state === 'skipped' ? '（未经过）' : ''}
       </span>
-    </div>
+    </span>
   );
 }
 
 /**
  * 主线（已登记 → 已生效）一条，已停用隔一道虚线摆在右侧作旁支终态（票 group-legal-entities-uiux/06）：停用是例外分支，
  * 不是每个法人迟早走到的下一步。分段判读在 legal-entity-lifecycle.ts。
+ *
+ * 紧凑的一行小步进（票 company-subject-ux/08）：段与段之间只隔一小截连线，整条按内容定宽、不撑满容器——撑满时宽屏上
+ * 两点各占一端、中间一条横贯的长线，读不出这是三段。放在头区 meta 行末尾或指标格里都是同一形。
  */
 export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
   const stages = legalEntityLifecycle(row);
@@ -72,14 +104,14 @@ export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
   const main = stages.filter((stage) => !stage.terminal);
   const terminal = stages.find((stage) => stage.terminal);
   return (
-    <div className="flex items-center gap-3" role="group" aria-label="身份生命周期">
-      <ol className="flex flex-1 items-center">
+    <div className="inline-flex items-center gap-2" role="group" aria-label="身份生命周期">
+      <ol className="inline-flex items-center gap-2">
         {main.map((stage, index) => (
-          <li key={stage.code} className="flex flex-1 items-center last:flex-none">
+          <li key={stage.code} className="inline-flex items-center gap-2">
             <StageMark stage={stage} />
             {index < main.length - 1 && (
               <span
-                className={`mx-1.5 mb-3.5 h-px flex-1 ${
+                className={`h-px w-4 ${
                   lifecycleConnectorReached(stage, main[index + 1]) ? 'bg-emerald-500/40' : 'bg-idpxyz-border'
                 }`}
                 aria-hidden="true"
@@ -89,7 +121,7 @@ export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
         ))}
       </ol>
       {terminal ? (
-        <div className="border-l border-dashed border-idpxyz-border pl-3">
+        <div className="border-l border-dashed border-idpxyz-border pl-2">
           <StageMark stage={terminal} />
         </div>
       ) : null}

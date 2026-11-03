@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
-import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, absentValueMark } from './LegalEntityProfileReadout';
+import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, ProfileReadoutPairs, absentValueMark } from './LegalEntityProfileReadout';
 import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
@@ -18,7 +18,7 @@ export function LegalEntityProfileContent({
 }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
   return (
-    <div className="legal-entity-profile-readout mt-5 space-y-5">
+    <div className="legal-entity-profile-readout mt-2">
       <ProfileGroup title="代表人信息">
         <ProfileReadoutGrid>
           <ProfileReadoutField
@@ -52,39 +52,42 @@ export function LegalEntityProfileContent({
             }
             emphasized
           />
+          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs）；监管登记号占整行——几种号并排时半列放不下。 */}
           <ProfileReadoutField
             label="其他语言的抬头"
             value={
-              content?.invoicingRegistered && content.invoiceTitles?.length
-                ? content.invoiceTitles.map((row, index) => (
-                    <span key={`${row.language}-${index}`} className="block">
-                      <span className="text-[12px] text-idpxyz-breadcrumb">{languageTagLabel(row.language)}</span>{' '}
-                      {row.title}
-                    </span>
-                  ))
-                : undefined
+              content?.invoicingRegistered && content.invoiceTitles?.length ? (
+                <ProfileReadoutPairs
+                  rows={content.invoiceTitles.map((row, index) => ({
+                    key: `${row.language}-${index}`,
+                    head: languageTagLabel(row.language),
+                    value: row.title,
+                  }))}
+                />
+              ) : undefined
             }
           />
           <ProfileReadoutField
-            label="监管登记号（税务 / 海关）"
+            label="监管登记号"
+            title="税务 / 海关的监管登记号"
+            wide
             value={
-              content?.taxRegistrationNumbers.length
-                ? content.taxRegistrationNumbers.map((row, index) => (
-                    <span key={`${row.typeCode}-${row.number}-${index}`}>
-                      {index > 0 ? '；' : ''}
-                      <span className="font-sans" title={row.typeCode}>
-                        {typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode}
-                      </span>{' '}
-                      {row.number}
-                    </span>
-                  ))
-                : undefined
+              content?.taxRegistrationNumbers.length ? (
+                <ProfileReadoutPairs
+                  mono
+                  rows={content.taxRegistrationNumbers.map((row, index) => ({
+                    key: `${row.typeCode}-${row.number}-${index}`,
+                    head: typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode,
+                    headTitle: row.typeCode,
+                    value: row.number,
+                  }))}
+                />
+              ) : undefined
             }
-            mono
           />
         </ProfileReadoutGrid>
         <div className="mt-3">
-          <p className="text-[12px] leading-6 text-idpxyz-breadcrumb">
+          <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
             收款账户{content?.bankAccounts?.length ? <span className="ml-2">{content.bankAccounts.length} 个</span> : null}
           </p>
           <LegalEntityBankAccountsTable accounts={content?.bankAccounts ?? []} />
@@ -96,7 +99,7 @@ export function LegalEntityProfileContent({
         </ProfileGroup>
       ) : null}
       {notes.length ? (
-        <div className="border-t border-idpxyz-border pt-4 text-[12px] leading-6 text-idpxyz-breadcrumb">
+        <div className="mt-5 border-t border-idpxyz-border pt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">
           <p className="font-medium text-idpxyz-text">资料维护提示</p>
           <ul className="mt-1 list-disc pl-4">
             {notes.map((note) => (
@@ -162,16 +165,18 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
   );
 }
 
-// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家另起一行）排。
+// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家并进行末）排。
 function addressOf(address?: RegisteredAddressRecord): ReactNode {
   return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }
 
+// 节与节之间只用间距（票 company-subject-ux/08 第 4 条）：标题 13px 半粗、上 20px 下 8px，不再每节一条长横线——
+// 宽屏上横线横贯 52rem，比标题还显眼。
 function ProfileGroup({ title, extra, children }: { title: string; extra?: string; children: ReactNode }) {
   return (
-    <section className="border-t border-idpxyz-border pt-4">
-      <div className="mb-1 flex items-baseline gap-2">
-        <h4 className="text-[14px] font-semibold leading-6 text-idpxyz-textBright">{title}</h4>
+    <section className="mt-5 first:mt-3">
+      <div className="mb-2 flex items-baseline gap-2">
+        <h4 className="text-[13px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
         {extra ? <span className="text-[12px] text-idpxyz-breadcrumb">{extra}</span> : null}
       </div>
       {children}
