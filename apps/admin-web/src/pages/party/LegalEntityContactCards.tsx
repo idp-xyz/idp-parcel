@@ -66,12 +66,16 @@ function ContactCardView({ card }: { card: ContactCard }) {
           ) : null}
           {card.socialAccounts.length ? (
             <ContactLine icon={MessageCircle} label="社交账号" title={socialAccountsText(card.socialAccounts)}>
-              <span className="[overflow-wrap:anywhere]">
+              <span>
                 {card.socialAccounts.map((account, index) => (
                   <Fragment key={`${account.platform}-${account.account}-${index}`}>
                     {index > 0 ? <span className="text-idpxyz-breadcrumb">{socialAccountSeparator}</span> : null}
-                    {account.platform ? <span className="text-idpxyz-breadcrumb">{account.platform} </span> : null}
-                    <span className="select-text font-mono text-[12px]">{account.account}</span>
+                    {/* 「平台 账号」一组是 inline-block：放得下就整组换行，不在账号的连字符处断成「SYN-LE-01-」与「02」两截；
+                        只有一组比卡还宽时才在组内按字符折。 */}
+                    <span className="inline-block max-w-full [overflow-wrap:anywhere]">
+                      {account.platform ? <span className="text-idpxyz-breadcrumb">{account.platform} </span> : null}
+                      <span className="select-text font-mono text-[12px]">{account.account}</span>
+                    </span>
                   </Fragment>
                 ))}
               </span>
