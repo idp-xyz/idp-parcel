@@ -1,7 +1,7 @@
 # 11 管理台补「供应商账单与应付」：账单册与应付册读口、查阅页、接收与审核两张任务式表单
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）；复评非阻断四条转票 13 一并修
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：票 05 记下「管理台没有列审核应付的页，应付号只在审核答复里看得到」；协调方核实整个供应商账单接收与审核在管理台都没有页面、后端只有两个写口（`POST /settlement-supplier-bill-receptions`、`POST /settlement-supplier-bill-audits`，ADR-0340）。用户 2026-11-02 裁定「补全套：查阅加接收 / 审核表单」。
@@ -93,3 +93,20 @@ Blocked by: 无
 - 前端：`npx tsc -b` 无输出，`pnpm test` 1115 pass / 0 fail，`npx vite build` 退 0。
 - 没有迁移，不另起一次性库；`go run ./tools/at-coverage-counts -check` 仍只差总览计数（合并 origin/main 前后同样），留推送方重生成。本轮没有重走浏览器。
 
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 初评钉 `64cfae0c0`：两轴阻断为零；非阻断见上「评审修订」逐条处理。对「主张标识编码供应商账单号」的判断（契约内可行、与 GLOSSARY「外部标识」部分缺口、查重应移到服务端、旧主张标识永久存在）转给票 13，由 ADR-0357 接替。
+- 复评钉 `28a40f174`：两轴阻断为零。非阻断四条，因票 13 重写同一片代码，转票 13 一并修：
+  1. `pages/settlement/api.ts` 的 `listAuditedPayables` 头注「两维」数了 Go 读口 `ports.AuditedPayableFilter` 的维数。
+  2. `SupplierBillPanel` 技术详情「接收时审核授权」的值写死「已配置 / 未配置」，没经词典。
+  3. 截页信息没传到登记表单：`SupplierBillReceptionDialog` 的「被追加」选项取自页内账单，截页时更早的原账单选不了；新登账单若早于页尾，右栏为空。
+  4. 应付号精确检索区分大小写（服务端 `document_number = $2`，页内不分），工具条说「按完整的应付单号搜」。
+- 协调方对作者所问：两个列表答复新增 `truncated`、`auditAuthorityConfiguredNow`（只增字段）与账单册改按收到时间倒序，都是操作者族读面，接受。Spec 3 的缺口用户 2026-11-02 裁定「预期成本记下供应商」，立票 14。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `3b4720283` 上 `git merge --no-ff origin/claude-docnum11`（tip `28a40f174`，已含作者合 main 的 `9b208dfd4`），无冲突；合并提交 `e5fd624f8`。
+- main tip 上重生成 AT 盘点总览计数（`5243386f0`）、机制清点（`ded2420a0`）；ADR 索引无变化。
+- 全量真库测试 `scripts/test-full.sh`：退 0，174 个包 ok。
+- 一次性库 `seed_docnum11` 灌种子：退 0，`种子灌入完成：租户 SYN-TENANT-01`。
+- 无迁移；演示环境换 parcel-api 二进制与前端。
