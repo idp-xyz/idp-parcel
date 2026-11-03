@@ -84,14 +84,19 @@ type LegalEntityProfileRevisionRow struct {
 	AddressCountry string
 	AddressLines   []string
 	TaxNumbers     []TaxRegistrationNumberRow
-	// HasInvoicing 为假即这笔修订没带开票资料；InvoiceTitle 只在它为真时有意义。
+	// HasInvoicing 为假即这笔修订没带开票资料；InvoiceTitle、InvoiceTitleLanguage 与 InvoiceTitles 只在它为真时有意义，
+	// 后两格缺席即空串、nil（ADR-0359 决定四）。
 	HasInvoicing          bool
 	InvoiceTitle          string
+	InvoiceTitleLanguage  string
+	InvoiceTitles         []domain.LocalizedInvoiceTitle
 	Contacts              []LegalEntityContactRow
 	RegisteredAt          time.Time
 	Representative        *LegalEntityRepresentativeRow
 	OfficeAddress         *LegalEntityAddressRow
 	CorrespondenceAddress *LegalEntityAddressRow
+	// BankAccounts 为 nil 即这笔修订没带收款账户；旧修订读回就是 nil，不回填（ADR-0359 决定三）。
+	BankAccounts []domain.LegalEntityBankAccount
 }
 
 type TaxRegistrationNumberRow struct {

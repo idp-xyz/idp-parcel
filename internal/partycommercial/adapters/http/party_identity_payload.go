@@ -389,19 +389,23 @@ type legalEntityProfileBatchDocument struct {
 
 // legalEntityProfileDocument 与受控 CLI 的一项逐字同形，子格沿修订历史读口的答复体——一份资料在读写两个方向上同一个样子。
 // 注册地址键可缺：缺即没给，由用例答`未受理`（判据同身份层三格）；给了就得立得住。invoiceTitle 缺席即这笔修订不带开票资料，
-// 给了空串照样拒，不当缺席。
+// 给了空串照样拒，不当缺席。taxRegistrationNumbers 收的是监管登记号（税务、海关等，ADR-0359 决定一），键名不改。
+// invoiceTitleLanguage 与 invoiceTitles 挂在主抬头上，没带 invoiceTitle 却带了它们是形状错；bankAccounts 缺席即这一版不带收款账户。
 type legalEntityProfileDocument struct {
-	LegalEntityID          string                         `json:"legalEntityId"`
-	Revision               int                            `json:"revision"`
-	Basis                  string                         `json:"basis"`
-	EffectiveFrom          time.Time                      `json:"effectiveFrom"`
-	RegisteredAddress      *registeredAddressBody         `json:"registeredAddress,omitempty"`
-	TaxRegistrationNumbers []taxRegistrationNumberBody    `json:"taxRegistrationNumbers,omitempty"`
-	InvoiceTitle           *string                        `json:"invoiceTitle,omitempty"`
-	Contacts               []legalEntityContactBody       `json:"contacts,omitempty"`
-	Representative         *legalEntityRepresentativeBody `json:"representative,omitempty"`
-	OfficeAddress          *registeredAddressBody         `json:"officeAddress,omitempty"`
-	CorrespondenceAddress  *registeredAddressBody         `json:"correspondenceAddress,omitempty"`
+	LegalEntityID          string                          `json:"legalEntityId"`
+	Revision               int                             `json:"revision"`
+	Basis                  string                          `json:"basis"`
+	EffectiveFrom          time.Time                       `json:"effectiveFrom"`
+	RegisteredAddress      *registeredAddressBody          `json:"registeredAddress,omitempty"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody     `json:"taxRegistrationNumbers,omitempty"`
+	InvoiceTitle           *string                         `json:"invoiceTitle,omitempty"`
+	InvoiceTitleLanguage   *string                         `json:"invoiceTitleLanguage,omitempty"`
+	InvoiceTitles          []domain.LocalizedInvoiceTitle  `json:"invoiceTitles,omitempty"`
+	Contacts               []legalEntityContactBody        `json:"contacts,omitempty"`
+	Representative         *legalEntityRepresentativeBody  `json:"representative,omitempty"`
+	OfficeAddress          *registeredAddressBody          `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *registeredAddressBody          `json:"correspondenceAddress,omitempty"`
+	BankAccounts           []domain.LegalEntityBankAccount `json:"bankAccounts,omitempty"`
 }
 
 // command 把一次管理台登记的资料项译成法人资料修订登记命令（票 legal-entity-profile/05）。形状级失败包 ErrMalformedRequest；
@@ -454,12 +458,28 @@ func (item legalEntityProfileDocument) command(tenant domain.TenantID) (applicat
 		if err != nil {
 			return none, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
 		}
-		details, err := domain.NewInvoicingDetails(title)
+		language := ""
+		if item.InvoiceTitleLanguage != nil {
+			language = *item.InvoiceTitleLanguage
+		}
+		details, err := domain.NewInvoicingDetailsWithLocalizedTitles(title, language, item.InvoiceTitles)
 		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
+			return none, fmt.Errorf("%w: profiles[0].invoiceTitles: %v", ErrMalformedRequest, err)
 		}
 		command.Invoicing = &details
+	} else if item.InvoiceTitleLanguage != nil || len(item.InvoiceTitles) > 0 {
+		return none, fmt.Errorf("%w: profiles[0].invoiceTitles: localized titles hang on invoiceTitle; without a main title there are no invoicing details to carry them", ErrMalformedRequest)
 	}
+	// 收款账户：形状由领域构造门判，币种是否在产品内置目录里由这一写入边界判（ADR-0345 决定五）——目录外的码是改载荷
+	// 才会好的调用方的错，答 400。
+	accounts, err := domain.NewLegalEntityBankAccounts(item.BankAccounts)
+	if err != nil {
+		return none, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
+	}
+	if err := domain.BankAccountCurrenciesInCatalogue(accounts); err != nil {
+		return none, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
+	}
+	command.Supplement.BankAccounts = accounts
 	for index, contact := range item.Contacts {
 		built, err := domain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, domain.LegalEntityContactDetails{Department: contact.Department, Position: contact.Position, Purposes: contact.Purposes, PrimaryFor: contact.PrimaryFor, SocialAccounts: contact.SocialAccounts})
 		if err != nil {

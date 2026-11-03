@@ -109,11 +109,13 @@ func NewLegalEntityRepresentative(kind, name string) (LegalEntityRepresentative,
 func (representative LegalEntityRepresentative) Kind() string { return representative.kind }
 func (representative LegalEntityRepresentative) Name() string { return representative.name }
 
-// 缺席表示未配置；办公和通信地址不会借注册地址补齐。
+// 缺席表示未配置；办公和通信地址不会借注册地址补齐。收款账户（ADR-0359 决定三）也在这里：它与代表人、分类地址一样
+// 是随完整修订保存的可选明细，缺席即这一版不带收款账户，旧修订不回填。
 type LegalEntityProfileSupplement struct {
 	Representative        *LegalEntityRepresentative
 	OfficeAddress         *RegisteredAddress
 	CorrespondenceAddress *RegisteredAddress
+	BankAccounts          []LegalEntityBankAccount
 }
 
 func (supplement LegalEntityProfileSupplement) clone() LegalEntityProfileSupplement {
@@ -129,6 +131,7 @@ func (supplement LegalEntityProfileSupplement) clone() LegalEntityProfileSupplem
 		value := *supplement.CorrespondenceAddress
 		supplement.CorrespondenceAddress = &value
 	}
+	supplement.BankAccounts = slices.Clone(supplement.BankAccounts)
 	return supplement
 }
 
@@ -151,6 +154,11 @@ func NewLegalEntityProfileContentWithSupplement(address RegisteredAddress, taxes
 			return LegalEntityProfileContent{}, fmt.Errorf("%w: supplementary address is invalid", ErrInvalidLegalEntityProfile)
 		}
 	}
+	accounts, err := NewLegalEntityBankAccounts(supplement.BankAccounts)
+	if err != nil {
+		return LegalEntityProfileContent{}, err
+	}
 	content.supplement = supplement.clone()
+	content.supplement.BankAccounts = accounts
 	return content, nil
 }

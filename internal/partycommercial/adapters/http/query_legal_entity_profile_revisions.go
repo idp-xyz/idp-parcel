@@ -79,20 +79,23 @@ type legalEntityProfileRevisionListResponse struct {
 // legalEntityProfileRevisionBody 逐字段透出一笔资料修订。集合格总是数组（空即 []）；开票资料在不在用显式布尔
 // invoicingRegistered 说，不拿空抬头去推——缺开票资料是开立时答`资料不全`的成因之一，页面要能如实标出来。
 type legalEntityProfileRevisionBody struct {
-	TenantID               string                         `json:"tenantId"`
-	LegalEntityID          string                         `json:"legalEntityId"`
-	Revision               int                            `json:"revision"`
-	Basis                  string                         `json:"basis"`
-	EffectiveFrom          string                         `json:"effectiveFrom"`
-	RegisteredAddress      registeredAddressBody          `json:"registeredAddress"`
-	TaxRegistrationNumbers []taxRegistrationNumberBody    `json:"taxRegistrationNumbers"`
-	InvoicingRegistered    bool                           `json:"invoicingRegistered"`
-	InvoiceTitle           string                         `json:"invoiceTitle,omitempty"`
-	Contacts               []legalEntityContactBody       `json:"contacts"`
-	RegisteredAt           string                         `json:"registeredAt"`
-	Representative         *legalEntityRepresentativeBody `json:"representative,omitempty"`
-	OfficeAddress          *registeredAddressBody         `json:"officeAddress,omitempty"`
-	CorrespondenceAddress  *registeredAddressBody         `json:"correspondenceAddress,omitempty"`
+	TenantID               string                          `json:"tenantId"`
+	LegalEntityID          string                          `json:"legalEntityId"`
+	Revision               int                             `json:"revision"`
+	Basis                  string                          `json:"basis"`
+	EffectiveFrom          string                          `json:"effectiveFrom"`
+	RegisteredAddress      registeredAddressBody           `json:"registeredAddress"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody     `json:"taxRegistrationNumbers"`
+	InvoicingRegistered    bool                            `json:"invoicingRegistered"`
+	InvoiceTitle           string                          `json:"invoiceTitle,omitempty"`
+	InvoiceTitleLanguage   string                          `json:"invoiceTitleLanguage,omitempty"`
+	InvoiceTitles          []domain.LocalizedInvoiceTitle  `json:"invoiceTitles,omitempty"`
+	Contacts               []legalEntityContactBody        `json:"contacts"`
+	RegisteredAt           string                          `json:"registeredAt"`
+	Representative         *legalEntityRepresentativeBody  `json:"representative,omitempty"`
+	OfficeAddress          *registeredAddressBody          `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *registeredAddressBody          `json:"correspondenceAddress,omitempty"`
+	BankAccounts           []domain.LegalEntityBankAccount `json:"bankAccounts,omitempty"`
 }
 
 type registeredAddressBody struct {
@@ -143,6 +146,8 @@ func legalEntityProfileRevisionBodyOf(row ports.LegalEntityProfileRevisionRow) l
 	}
 	if row.HasInvoicing {
 		body.InvoiceTitle = row.InvoiceTitle
+		body.InvoiceTitleLanguage = row.InvoiceTitleLanguage
+		body.InvoiceTitles = row.InvoiceTitles
 	}
 	for _, contact := range row.Contacts {
 		body.Contacts = append(body.Contacts, legalEntityContactBody{Name: contact.Name, Email: contact.Email, Phone: contact.Phone, Department: contact.Department, Position: contact.Position, Purposes: toContactPurposes(contact.Purposes), PrimaryFor: toContactPurposes(contact.PrimaryFor), SocialAccounts: contact.SocialAccounts})
@@ -156,6 +161,7 @@ func legalEntityProfileRevisionBodyOf(row ports.LegalEntityProfileRevisionRow) l
 	if value := row.CorrespondenceAddress; value != nil {
 		body.CorrespondenceAddress = &registeredAddressBody{Country: value.Country, Lines: value.Lines}
 	}
+	body.BankAccounts = row.BankAccounts
 	return body
 }
 

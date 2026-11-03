@@ -83,17 +83,20 @@ type legalEntityProfileResolutionResponse struct {
 // legalEntityProfileEffectiveRevisionBody 逐字段透出那一笔资料修订，子格与修订历史口的行体同形（集合格恒为数组、开票资料
 // 在不在用显式布尔说）。修订引用即租户 + 法人 + 修订号：租户是作用域，法人在顶层，修订号在这里。
 type legalEntityProfileEffectiveRevisionBody struct {
-	Revision               int                            `json:"revision"`
-	Basis                  string                         `json:"basis"`
-	EffectiveFrom          string                         `json:"effectiveFrom"`
-	RegisteredAddress      registeredAddressBody          `json:"registeredAddress"`
-	TaxRegistrationNumbers []taxRegistrationNumberBody    `json:"taxRegistrationNumbers"`
-	InvoicingRegistered    bool                           `json:"invoicingRegistered"`
-	InvoiceTitle           string                         `json:"invoiceTitle,omitempty"`
-	Contacts               []legalEntityContactBody       `json:"contacts"`
-	Representative         *legalEntityRepresentativeBody `json:"representative,omitempty"`
-	OfficeAddress          *registeredAddressBody         `json:"officeAddress,omitempty"`
-	CorrespondenceAddress  *registeredAddressBody         `json:"correspondenceAddress,omitempty"`
+	Revision               int                             `json:"revision"`
+	Basis                  string                          `json:"basis"`
+	EffectiveFrom          string                          `json:"effectiveFrom"`
+	RegisteredAddress      registeredAddressBody           `json:"registeredAddress"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody     `json:"taxRegistrationNumbers"`
+	InvoicingRegistered    bool                            `json:"invoicingRegistered"`
+	InvoiceTitle           string                          `json:"invoiceTitle,omitempty"`
+	InvoiceTitleLanguage   string                          `json:"invoiceTitleLanguage,omitempty"`
+	InvoiceTitles          []domain.LocalizedInvoiceTitle  `json:"invoiceTitles,omitempty"`
+	Contacts               []legalEntityContactBody        `json:"contacts"`
+	Representative         *legalEntityRepresentativeBody  `json:"representative,omitempty"`
+	OfficeAddress          *registeredAddressBody          `json:"officeAddress,omitempty"`
+	CorrespondenceAddress  *registeredAddressBody          `json:"correspondenceAddress,omitempty"`
+	BankAccounts           []domain.LegalEntityBankAccount `json:"bankAccounts,omitempty"`
 }
 
 // legalEntityProfileResolutionBodyOf 把解析答案译成答复体；领域答出没有名字的格时交回 false，由端点答没命名的结果。
@@ -139,6 +142,8 @@ func legalEntityProfileEffectiveRevisionBodyOf(revision domain.LegalEntityProfil
 	if details, has := content.Invoicing(); has {
 		body.InvoicingRegistered = true
 		body.InvoiceTitle = details.Title().String()
+		body.InvoiceTitleLanguage = details.TitleLanguage()
+		body.InvoiceTitles = details.LocalizedTitles()
 	}
 	for _, contact := range content.Contacts() {
 		body.Contacts = append(body.Contacts,
@@ -154,5 +159,6 @@ func legalEntityProfileEffectiveRevisionBodyOf(revision domain.LegalEntityProfil
 	if value := supplement.CorrespondenceAddress; value != nil {
 		body.CorrespondenceAddress = &registeredAddressBody{Country: value.Country().String(), Lines: value.Lines()}
 	}
+	body.BankAccounts = supplement.BankAccounts
 	return body
 }

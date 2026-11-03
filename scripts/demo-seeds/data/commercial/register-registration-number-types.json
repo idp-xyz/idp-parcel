@@ -44,6 +44,62 @@
       "format": "SYN-SG-OLD-[0-9]{3}",
       "basis": "SYN-BASIS-REGNO-SG-03",
       "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "CN",
+      "typeCode": "TAXPAYER_ID",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/CN@2",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "CN",
+      "typeCode": "CUSTOMS_REG",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/CN@2",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "SG",
+      "typeCode": "GST_REG",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/SG@2",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "HK",
+      "typeCode": "BR_NO",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/HK@1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "US",
+      "typeCode": "EIN",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/US@1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "DE",
+      "typeCode": "VAT",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/DE@1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "DE",
+      "typeCode": "IOSS",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/DE@1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "countryCode": "DE",
+      "typeCode": "EORI",
+      "revision": 1,
+      "adopt": "party-commercial/registration-number-types/DE@1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
     }
   ],
   "deactivations": [
