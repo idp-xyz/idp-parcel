@@ -35,3 +35,21 @@ Blocked by: 无
 - 一次性库（名带 csux05）灌种子退 0，解析读口答出的第 N 版带收款账户与双语抬头。
 - `adr-index -check`、`at-coverage-counts -check` 只报生成物过期。
 - 照「进 main 的步骤」第 1 步交非作者评审。
+
+## 完成记录（2026-11-03，分支 `claude-csux-05`，基 main `eb4049625`）
+
+**提交**（逐笔已推）：`26cc9eb19` docs(adr)——ADR-0359 与 0145 / 0350 / 0351 的指针、CONTEXT、GLOSSARY、UC-PC-001（`AT-PC-078`）、AT 盘点加行与追记；`6bfcae0a5` feat(party)——领域、端口、postgres 快照 LEP-4 与迁移 0044、在线口写口与两个读口、受控 CLI，各层用例；`53b279264` feat(referenceconfig)——注册号类型参考表 33 份与发布清单，CLI 采用用例「未发布的版本」改指 `CN@99`；`98c8a97b8` feat(demo-seeds)——演示租户采用 8 个资料层参考类型、五家各加一版跨境资料修订；本记录一笔。
+
+**ADR-0359 关键决定**（Accepted，协调方代 PC owner 决，待 PC owner 复核、SA owner 会签）：一、资料层登记号放宽为监管登记号，`taxRegistrationNumbers` 与类型名不改（名窄于义）；二、产品随发布注册号类型参考表，只收公开规范有明确格式的类型，无格式的不随附不猜；三、收款账户是法人资料的可选版本化明细、归 PC，币种是账户属性不决定结算币种，开单方按固定的修订引用经消费侧适配器取；四、多语言抬头挂在主抬头上，`资料不全`仍只看主抬头，语言不重复（含主抬头语言）；五、快照含任一新格写 LEP-4，旧形状字节不变；六、三类归法。**部分停用**：ADR-0145 决定一「目录的每个类型标明它属身份层（终身注册号）还是资料层（税务登记号），两层各只收自己那一类。」与决定三里「税务登记号」按口解为监管登记号，决定三「开票资料首版只含开票抬头……不预设。」扩成含主抬头语言与语言版本，越权风险点 5 由它回答；ADR-0350「有扩展内容的快照写 `shape: LEP-2`……」与 ADR-0351「快照按最低可表达版本写入……写 `shape: LEP-3`……」在含收款账户 / 语言版本 / 主抬头语言时停用（LEP-4）。指针都挂在被停记录的 `Status` 注记与 Links。
+
+**迁移与快照**：`0044_legal_entity_profile_bank_accounts_and_invoice_titles.sql` 只增三可空镜像列 `bank_accounts jsonb`、`invoice_titles jsonb`、`invoice_title_language text` 与四条 CHECK（带了即非空数组、语言非空白、语言版本须有主抬头）；快照 `shape: LEP-4`、摘要 `LEP-4:<sha256>`，三格 omitempty 排在 `shape` 之前，无标记 / LEP-2 / LEP-3 字节与摘要不变；LEP-3 以下带新格、LEP-4 不带新格、没主抬头带语言版本都拒读。
+
+**读写口变化**：写口（在线口 `/commercial-legal-entity-profile-registrations`、CLI `register-legal-entity-profiles`）新收 `invoiceTitleLanguage`、`invoiceTitles[{language,title}]`、`bankAccounts[{label?,holderName,bankName,accountNumber,swiftCode?,bankAddress?,currency,note?}]`；两个读口（`profile-resolution` 的 `effectiveRevision`、`profile-revisions` 行体）同形透出，缺席不出现这三个键；目录外币种、语言重复、没主抬头带语言版本在线口答 400 `MALFORMED_REQUEST`、CLI 译装拒绝；同修订（币种，账号）重复由用例答 `NOT_ACCEPTED`。`registrationjson` 本来没有法人资料的翻译，读入落在 CLI 与 HTTP 两处。
+
+**参考类型表**：`referenceconfig/party-commercial/registration-number-types/` 下 CN@2（USCC；纳税人识别号、海关注册编码）、SG@2（UEN；GST 登记号）、HK@1（CR No.；BR No.）、US@1（EIN）、GB@1（公司编号；VAT、EORI）、JP@1（法人番号；适格请求书登记番号）、欧盟 27 国各 @1（VAT、IOSS、EORI）；发布清单在 `referenceconfig.go`。未随附：AEO 认证编号、美国州注册号、欧盟各国商业登记号（身份层）、SG 非 ACRA 的 GST 编号——各份 `note` 写明。
+
+**种子**：`register-registration-number-types.json` 经 `adopt` 登 CN@2 两类、SG@2 一类、HK@1 BR_NO、US@1 EIN、DE@1 三类；新文件 `register-company-demo-cross-border-profiles.json` 由 800 步灌，四家第 3 版、`SYN-LE-01` 第 5 版（2026-11-01 生效），各带监管登记号（全零 / 00 前缀）、主抬头语言与另一语言抬头、`SYN-` 收款账户（上海、香港各 CNY+USD / HKD+USD）；README 跟上。
+
+**验证**：`go build ./...`、`go vet ./...` 退 0，`gofmt -l` 空；`go test -count=1 -p 1 ./internal/partycommercial/... ./internal/architecture/... ./cmd/... ./migrations/...` 含 PG 全过（内部 8 包、cmd 18 包 ok，0 FAIL）；新用例 `-v` 抽查 PASS 无 SKIP（旧行读作缺席、重放答原修订、（币种，账号）重复拒、语言重复拒、0044 在有数据的库上施加）；一次性库 `demo_csux05` 经 `up.sh`（`:19105`）灌种子退 0，解析读口答 `SYN-LE-CN-SH-01` / `SYN-LE-HK-01` 第 3 版、`SYN-LE-01` 第 5 版带收款账户与双语抬头，历史口旧版不带三键；验完 `down.sh --drop-db`，进程已停；`adr-index -check`、`at-coverage-counts -check` 只报生成物过期（未重生成，归推送方）。证据只记 `S`。
+
+**留给协调方**：1. 目录机制要求每个类型带格式（`RegistrationNumberTypeSpec.Format` 必填、0033 列非空），决定 2 的「留空不猜」在目录里表达不了，本票按「无明确公开格式的不随附」落——要不要另票放宽目录格式为可选，请裁（ADR-0359 风险点 1）。2. 参考表各国格式取自对公开规范的认识、未逐国核一手原文，错了走新版本（风险点 2），请 PC owner 复核。3. 收款账户与 SA 结算账户的边界只写在 ADR 与 CONTEXT，SA 未动，待 SA owner 会签；选账户 / 选抬头归 SA 的开立票。4. 币种目录门落在法人资料写入口，ADR-0345 决定五未点名该入口（风险点 6）。5. 管理台归票 06。6. 评审与进 main（步骤 2–8）由协调方做。
