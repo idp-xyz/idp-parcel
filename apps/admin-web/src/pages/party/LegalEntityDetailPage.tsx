@@ -17,14 +17,14 @@ import {
   type GroupLegalEntityRecord,
   type LegalEntityRevisionListResponseBody,
 } from './api';
-import { identityLayerAbsentNote, partyNameUnknownNote } from './presentation';
+import { identityLayerAbsentNote, partyNameUnknownNote, profileRevisionLabel } from './presentation';
 import {
   LegalEntityBanners,
   LegalEntityMoreMenu,
   legalEntityHasBanners,
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
-import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
@@ -36,7 +36,7 @@ import { RevisionHistorySection, type RevisionHistoryRegister } from './Revision
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
-import { DetailRow, RefText, useCopyToClipboard } from './detail-primitives';
+import { DetailRow, Instant, RefText, useCopyToClipboard } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
@@ -153,7 +153,36 @@ function viewStateOf(
 }
 
 /**
- * 页头更新动作先激活资料版本，再展开表单并滚到它；受控页签保证从任何签都能到达编辑入口。
+ * 「资料版本」分区折着时标题后的一句：当前第几版、哪天起生效、共几版（票 company-subject-ux/13 第 2 条）。
+ * 哪一格没读到就不说那一格，一格都没有就不给摘要——不拿「第 ? 版」占位。
+ */
+function profileVersionsSummary(
+  effective: { revision: number; effectiveFrom: string } | undefined,
+  total: number | undefined,
+): ReactNode {
+  const parts: ReactNode[] = [];
+  if (effective) {
+    parts.push(
+      <Fragment key="effective">
+        {profileRevisionLabel(effective.revision)} · <Instant value={effective.effectiveFrom} precision="day" /> 起生效
+      </Fragment>,
+    );
+  }
+  if (total !== undefined) parts.push(<Fragment key="total">共 {total} 版</Fragment>);
+  if (parts.length === 0) return undefined;
+  return parts.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 ? ' · ' : null}
+      {part}
+    </Fragment>
+  ));
+}
+
+/**
+ * 对象页按分区版式摆（票 company-subject-ux/13）：概要、联系人、资料版本（默认折起）、登记记录（默认折起）、关联一页纵排，
+ * 签成锚点栏。页头「更新公司资料」开的是本页自己挂的抽屉，不经资料版本分区——那个分区折着时内容没挂，
+ * 经它转的「打开表单」要求到不了；抽屉落册后把分区按钥匙重挂，让它的版本历史重读。分区里底部的同名按钮照旧开分区自己的抽屉。
+ * 受控锚点仍交给模板：更新动作同时把锚点拨到资料版本，模板滚过去并把折着的分区展开。
  */
 export function LegalEntityDetailPage({
   legalEntityId,
@@ -178,18 +207,20 @@ export function LegalEntityDetailPage({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
-  const [formOpenRequest, setFormOpenRequest] = useState(0);
+  const [headerFormOpen, setHeaderFormOpen] = useState(false);
+  // 页头抽屉落册的次数：资料版本分区按它重挂（理由见函数头）；分区自己的抽屉落册不转它，不然刚保存完的抽屉会随分区一起卸掉。
+  const [headerLanded, setHeaderLanded] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
   // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
   const refreshKey = `${row?.revision}:${row?.status}:${profileRefresh}`;
   const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, refreshKey);
   // 签上的计数（票 company-subject-ux/09）：模板按 count 字段摆；读不到就不给，不拿 0 冒充。
   const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, refreshKey);
-  const contactCount = legalEntityContactCountOf(
+  const profileBody =
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row?.legalEntityId
       ? profileQuery.answer.body
-      : undefined,
-  );
+      : undefined;
+  const contactCount = legalEntityContactCountOf(profileBody);
   // 两册一页只读一次：首屏「被引用」与「关联」签用同一份答案。
   const references = useLegalEntityReferences(row?.legalEntityId ?? legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
@@ -197,7 +228,7 @@ export function LegalEntityDetailPage({
   const copy = useCopyToClipboard();
   const openProfileForm = () => {
     setTab('profile-versions');
-    setFormOpenRequest((count) => count + 1);
+    setHeaderFormOpen(true);
   };
   return (
     <DetailPageTemplate
@@ -220,6 +251,18 @@ export function LegalEntityDetailPage({
                 </Button>
               ) : null}
               <LegalEntityMoreMenu row={row} onChanged={retry} />
+              {/* 抽屉经 portal 开在页面之上，摆在动作区里只是让它跟着页头那颗按钮；关着时不占 DOM。 */}
+              {mayWrite ? (
+                <LegalEntityProfileDrawer
+                  open={headerFormOpen}
+                  onOpenChange={setHeaderFormOpen}
+                  legalEntityId={row.legalEntityId}
+                  onLanded={() => {
+                    setHeaderLanded((count) => count + 1);
+                    setProfileRefresh((value) => value + 1);
+                  }}
+                />
+              ) : null}
             </>
           ) : null}
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
@@ -283,13 +326,14 @@ export function LegalEntityDetailPage({
               {
                 id: 'profile-versions',
                 count: tabCounts.profileRevisions,
-                keepMounted: true,
+                // 默认折起：版本历史与按日期查询都要取数，来对象页的人多数只看当前资料；折着时摘要那一句够判断要不要展开。
+                collapsed: true,
+                summary: profileVersionsSummary(profileBody?.effectiveRevision, tabCounts.profileRevisions),
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityProfileSection
-                      key={row.legalEntityId}
+                      key={`${row.legalEntityId}#${headerLanded}`}
                       legalEntityId={row.legalEntityId}
-                      formOpenRequest={formOpenRequest}
                       collapseCurrentProfile
                       onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
                     />
@@ -299,17 +343,23 @@ export function LegalEntityDetailPage({
               {
                 id: 'identity-revisions',
                 count: tabCounts.identityRevisions,
+                collapsed: true,
+                summary: tabCounts.identityRevisions !== undefined ? `共 ${tabCounts.identityRevisions} 笔` : undefined,
                 content: (
-                  <RevisionHistorySection
-                    register={legalEntityRevisionHistoryOf(typeNameOf)}
-                    subjectId={row.legalEntityId}
-                    revision={row.revision}
-                  />
+                  <section className="bg-idpxyz-bg p-5">
+                    <RevisionHistorySection
+                      register={legalEntityRevisionHistoryOf(typeNameOf)}
+                      subjectId={row.legalEntityId}
+                      revision={row.revision}
+                    />
+                  </section>
                 ),
               },
               {
                 id: 'related',
                 count: referenced ?? undefined,
+                // 可折叠但默认展开：关联是来对象页常看的一块，折起来的权利留给人。
+                collapsed: false,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />
@@ -321,6 +371,7 @@ export function LegalEntityDetailPage({
       }
       activeTab={activeTab}
       onActiveTabChange={setTab}
+      layout="sections"
       viewState={viewState}
     />
   );
