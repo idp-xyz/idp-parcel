@@ -92,7 +92,7 @@
 - 提交答复在指名委托时同带 `submissionVersionId`（该委托此刻的当前提交版本标识，随 `shipmentRequestId` 同在同缺；重放在补充之后读回的是补充形成的当前版本）。客户下一次补充以它为基准载荷带回，基准过期答 `SUPPLEMENT_BASIS_STALE`（[ADR-0310](../adr/0310-first-party-customer-command-five-faces-launch-with-direct-customer-one-to-one-and-command-prefixed-request-keys.md) 取舍 E）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
 - **客户追踪按运单号查询**（[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)）：
-  - 请求：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>[&after=<游标>]`。`documentNumber` 就是提交答复里那一格，逐字比，不折大小写、不去空白。查询串只认这两格：缺号、号给两次或全空白、游标给两次、自报账户或租户、带 `sort`、`q` 或任何别的一格，都答 `400 MALFORMED_REQUEST`，这一判不读委托。
+  - 请求：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>[&after=<游标>]`。`documentNumber` 就是提交答复里那一格，逐字比，不折大小写、不去空白。查询串只认这两格：缺号、号给两次、全空白、含 NUL 或不是合法 UTF-8、游标给两次、自报账户或租户、带 `sort`、`q` 或任何别的一格，都答 `400 MALFORMED_REQUEST`，这一判不读委托。
   - 授予是这一口自己的词 `CUSTOMER_SHIPMENT_TRACKING_QUERY`（一口一词）：只持 `CUSTOMER_TRACKING_VIEW_QUERY` 的客户端调这一口答 `403 CUSTOMER_CLIENT_NOT_GRANTED`。认证与授予各格与按包裹查同形；不判准入范围。
   - `PARCELS_LISTED` 的每件：`parcelId`（同提交答复，可直接拿去按包裹查）、`customerParcelReference`（委托上为这一件声明的客户包裹件号，同提交答复；没声明整键缺席）、`replaces`（只在拆分合并形成的后继上出现，列它替代的旧 `parcelId`；包裹身份谱系还没落地，今天不会出现）、`outcome` 与 `view`（同按包裹查）。次序同提交答复的 `parcels`；次序是附带承诺，配对靠 `parcelId` 或 `customerParcelReference`。
   - 分页照目录读口的游标（ADR-0144）：答复带 `page`（`size`、`next`、`total`），一页至多 50 件，调用方不能指定；`next` 为 `null` 即末页，否则把它原样作 `after` 再查一次。`total` 是这份委托此刻的当前有效包裹件数。游标绑在本次的号上：解不开、或拿别的号的游标来翻，答 `400`；每一页都重新按号判整单，拿别人的游标换不到别人的委托。要一致快照就从第一页重读。

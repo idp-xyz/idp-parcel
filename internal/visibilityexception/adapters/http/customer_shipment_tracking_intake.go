@@ -45,7 +45,7 @@ type CustomerShipmentTrackingAuthenticator interface {
 //
 // 先认证、后读查询串，理由同 CustomerTrackingViewIntake。查询串封闭：documentNumber 与 after 之外带任何一格都答坏请求，自报的
 // 账户、租户与 ADR-0144 的 sort、q 都落在这一类——本口不开排序与筛选，悄悄忽略会让客户系统以为它们起了作用。号逐字收下：不去
-// 空白、不折大小写，全空白立不起一个号也答坏请求；这一判只看输入，与号存不存在无关。
+// 空白、不折大小写，全空白、含 NUL 或不是合法 UTF-8 都立不起一个号，也答坏请求；这一判只看输入，与号存不存在无关。
 type CustomerShipmentTrackingIntake struct {
 	authenticator CustomerShipmentTrackingAuthenticator
 }
@@ -79,6 +79,9 @@ func (intake *CustomerShipmentTrackingIntake) IntakeShipmentTrackingQuery(ctx co
 	}
 	if len(parameters[shipmentTrackingAfterParameter]) > 1 {
 		return ShipmentTrackingQuery{}, fmt.Errorf("%w: at most one %s is allowed", ErrMalformedRequest, shipmentTrackingAfterParameter)
+	}
+	if err := refuseUnstorableQueryValue(shipmentTrackingNumberParameter, numbers[0]); err != nil {
+		return ShipmentTrackingQuery{}, err
 	}
 	number, err := domain.NewShipmentDocumentNumberReference(numbers[0])
 	if err != nil {

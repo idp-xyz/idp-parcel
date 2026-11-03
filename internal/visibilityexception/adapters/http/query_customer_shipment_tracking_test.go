@@ -425,3 +425,38 @@ func TestShipmentTrackingQueryStringIsClosed(t *testing.T) {
 		t.Fatal("没有认证方的 Intake 构造出来了")
 	}
 }
+
+// Covers: ADR-0356 决定一「值立不起来答 400，这一判只看输入」，与 ADR-0223 / ADR-0246 对按包裹查坏输入的同一要求——查询值含 NUL
+// 或不是合法 UTF-8，库存不下它；两口都在 Intake 上答 400 MALFORMED_REQUEST、不带 outcome，一次都不读（委托、视图、归属）。此前这样
+// 的值一路带进读，库拒收参数，答成 500 NO_ANSWER_FORMED，引客户端退避重发一个永远不会好的请求。
+func TestUnstorableQueryValuesAreBadRequestsOnBothLines(t *testing.T) {
+	for name, raw := range map[string]string{"NUL": "P2026%00", "invalid UTF-8": "P2026%FF"} {
+		byNumber := httptest.NewRecorder()
+		visibilityhttp.NewQueryCustomerShipmentTrackingEndpoint(
+			shipmentIntake(t, shipmentViewerDouble{viewer: viewerOf(t, "customer-1")}), untouchedLocator{t}, unreachableViewReader{t}, unreachableAttributions{t},
+		).ServeHTTP(byNumber, customerQuery("/customer-shipment-tracking?documentNumber="+raw, "t"))
+		if byNumber.Code != http.StatusBadRequest || problemCode(t, byNumber) != "MALFORMED_REQUEST" {
+			t.Errorf("按运单号 %s = %d %s, want 400 MALFORMED_REQUEST", name, byNumber.Code, byNumber.Body.String())
+		}
+		assertNoOutcome(t, byNumber)
+
+		byParcel := httptest.NewRecorder()
+		visibilityhttp.NewQueryCustomerTrackingViewEndpoint(
+			customerIntake(t, viewerDouble{viewer: viewerOf(t, "customer-1")}), unreachableViewReader{t}, unreachableAttributions{t},
+		).ServeHTTP(byParcel, customerQuery("/customer-tracking-view?parcel="+raw, "t"))
+		if byParcel.Code != http.StatusBadRequest || problemCode(t, byParcel) != "MALFORMED_REQUEST" {
+			t.Errorf("按包裹 %s = %d %s, want 400 MALFORMED_REQUEST", name, byParcel.Code, byParcel.Body.String())
+		}
+		assertNoOutcome(t, byParcel)
+	}
+}
+
+// untouchedLocator 是整单读口的替身：被问一次就判失败。
+type untouchedLocator struct{ t *testing.T }
+
+func (locator untouchedLocator) LocateCustomerShipment(
+	context.Context, domain.TenantID, domain.CustomerAccountReference, domain.ShipmentDocumentNumberReference, ports.ShipmentParcelPage,
+) (ports.LocatedCustomerShipment, error) {
+	locator.t.Error("坏输入读了委托")
+	return ports.LocatedCustomerShipment{}, nil
+}

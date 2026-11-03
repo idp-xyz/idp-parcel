@@ -36,7 +36,7 @@ Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by
 
 - 不按委托标识、客户单号或其他外部标识定位（后者归票 demo-chain-gaps/119）。
 - 不在 visibility-exception 存单据号或委托–包裹映射。
-- 不改 `/v1/customer-tracking-view`、提交答复与操作者族的委托查阅读口。
+- 不改 `/v1/customer-tracking-view`、提交答复与操作者族的委托查阅读口。例外：实现评审查出按包裹查对含 NUL 或非法 UTF-8 的 `parcel` 答 `500`，与新口同一缺陷，本票一并修成 `400`、不读库——缺陷修复，契约形状不变（ADR-0223、ADR-0246 本就要求坏输入答 `400`）。
 - 不建包裹身份谱系模型。`AT-VE-235` 等谱系落地那一票；本票只让端口与答复形状留得下 `replaces`。
 - 不另设限流（首方族限流在票 first-party-api/02，冻结中）。
 
