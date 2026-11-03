@@ -57,7 +57,8 @@ Blocked by: 无
 
 ### 判据
 
-- 三道门退 0（`git merge origin/main` 后，main 仍是 `ae9a9a763`）：`tsc -b --noEmit` 0、`run-tests` 1133 / 1133、`vite build` 0 ✅
+- 三道门退 0（`git merge origin/main` 合入票 02 后的 main `39ee55742`，无冲突）：`tsc -b --noEmit` 0、`run-tests` 1145 / 1145、`vite build` 0 ✅
+- 与票 02 的两处交界：登记视图页头副题两票写的是同一句，合并后只剩一行；`LegalEntityRegistrationForm.tsx` 的 `identifierNote` 仍调 `identityRevisionLabel`（函数名未动），现读作「已在册（第 N 版）：这次保存会形成新的一版。」 ✅
 - 新增 / 改动的纯函数有 node:test：`legal-entity-identity.test.ts`（+2）、`moment.test.ts`（+1）、`legal-entity-profile-history.test.ts`（+1）、`legal-entity-revisions.test.ts`（改 4、新 2）、`workspace-tabs.test.ts`（改字面） ✅
 - 浏览器（演示租户，自起 vite :5201 + `VITE_DISPLAY_TIME_ZONE=Asia/Shanghai`，playwright 只读、零写请求、零 pageerror；截图在作者 scratchpad `csux01/`）：
   - 列表「注册地与注册号」：SYN-LE-01 显「统一社会信用代码 91000000000000001X」，另四家显目录名「模拟注册号（仅演示，非真实证照格式） SYN-CN-REG-0102」等 ✅ `01-list.png`
