@@ -207,7 +207,13 @@ PY
   }
   poll "BUY 供应商预期成本形成" 60 _cost
   COST_FEE="$(jsel "$LAST" costs version "$COST" feeItem)"; COST_AMOUNT="$(jsel "$LAST" costs version "$COST" settlementAmount)"
-  printf '%-34s → cost=%s feeItem=%s %s CNY\n' "BUY 供应商预期成本" "$COST" "$COST_FEE" "$COST_AMOUNT"
+  # 预期成本形成时记下了所依协议的供应商（ADR-0358），账单要由这一家来登才对得上。
+  COST_SUPPLIER="$(jsel "$LAST" costs version "$COST" supplier)"
+  if [[ -z "$COST_SUPPLIER" ]]; then
+    printf '[失败] 预期成本 %s 没记供应商（形成时要问 party-commercial 那一版协议的供应商）\n' "$COST" >&2
+    exit 1
+  fi
+  printf '%-34s → cost=%s feeItem=%s %s CNY supplier=%s\n' "BUY 供应商预期成本" "$COST" "$COST_FEE" "$COST_AMOUNT" "$COST_SUPPLIER"
   # 客户视图在终局之后由 dispatch 再发布一版（终局显示从待确认变已显示），等到那一版。
   _viewfinal() { curl -s -H "Authorization: Bearer $ctok" "$API_BASE/v1/customer-tracking-view?parcel=${PARCEL}" > "$LAST"; [[ "$(jget "$LAST" view.final.state)" == SHOWN ]]; }
   poll "客户视图终局显示" 60 _viewfinal

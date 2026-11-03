@@ -23,6 +23,6 @@ ch_lastmile
 ch_final
 
 state_set MAIN_REQ "$REQ"; state_set MAIN_PARCEL "$PARCEL"; state_set MAIN_PREF "$PREF"; state_set MAIN_CHARGE "$CHARGE"
-state_set MAIN_COST "$COST"; state_set MAIN_COST_FEE "$COST_FEE"; state_set MAIN_COST_AMOUNT "$COST_AMOUNT"
+state_set MAIN_COST "$COST"; state_set MAIN_COST_FEE "$COST_FEE"; state_set MAIN_COST_AMOUNT "$COST_AMOUNT"; state_set MAIN_COST_SUPPLIER "$COST_SUPPLIER"
 state_set MAIN_PLAN "$PLAN"; state_set MAIN_STAMP "$STAMP"
 printf '\n主链完成：委托 %s，包裹 %s，客户费用 %s\n' "$REQ" "$PARCEL" "$CHARGE"

@@ -10,7 +10,7 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_env
-need_state MAIN_CHARGE MAIN_COST MAIN_COST_FEE MAIN_COST_AMOUNT
+need_state MAIN_CHARGE MAIN_COST MAIN_COST_FEE MAIN_COST_AMOUNT MAIN_COST_SUPPLIER
 if [[ "${SETTLEMENT_DONE_FOR:-}" == "$MAIN_CHARGE" ]]; then
   printf '这件主链的结算已经走过（%s）。再演示请先跑 10-main-chain.sh 出一件新的\n' "$MAIN_CHARGE" >&2
   exit 1
@@ -57,8 +57,9 @@ if not rows:
 PY
 
 bill="SYN-BILL-DEMO-${stamp}"
+# 账单由预期成本记下的那一家供应商来登：匹配门核账单的供应商与所点名预期成本的供应商相同（ADR-0358 决定二）。
 step "供应商账单接收（逐行 MATCHED）" "$OP" POST /settlement-supplier-bill-receptions \
-  "$(pj claim="$bill" version=v1 supplier=SYN-PARTY-CARRIER-TRUNK-01 legalEntity=SYN-LE-01 period="SYN-PERIOD-DEMO-${stamp}" currency=CNY \
+  "$(pj claim="$bill" version=v1 supplier="$MAIN_COST_SUPPLIER" legalEntity=SYN-LE-01 period="SYN-PERIOD-DEMO-${stamp}" currency=CNY \
       lines:='[{"line":"L1","feeItem":"'"$MAIN_COST_FEE"'","claimed":"'"$MAIN_COST_AMOUNT"'"}]' receivedAt="$(now_utc)" \
       directives:='[{"line":"L1","classification":"MATCHED","expectedVersion":"'"$MAIN_COST"'"}]')" \
   201:BILL_RECEIVED auditAuthority
