@@ -5,11 +5,12 @@
 
 import type { LegalEntityRevisionRecord } from './api';
 import { countryLabel } from '../refdata-names';
-import { identityLayerCellsOf } from './legal-entity-identity';
+import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { identityLayerAbsentNote, identityRecordNoun, identityRevisionLabel } from './presentation';
 import {
   identityRevisionHistoryNote,
   identityRevisionTimeline,
+  type InstantFormatter,
   type RevisionTimelineItem,
 } from './revision-timeline';
 
@@ -19,12 +20,19 @@ export type { RevisionTimelineItem } from './revision-timeline';
  * 每笔在共用格之外显「往来单位档案 <partyId>」与身份两格：法人钉着哪个业务参与方身份、登的是哪国哪个号，都是这一笔
  * 登记的内容，两笔之间换了就在并排的描述里自己比。名称不显——它在参与方册上不随法人修订走（理由在 api.ts 的
  * LegalEntityRevisionRecord）。标题短写「第 N 版」：轴名由「登记记录」签承担（presentation.ts 的 identityRevisionLabel）。
+ * `typeNameOf` 是注册号类型目录折成的查法（legal-entity-identity.ts），不交或译不出按码显。
  */
 export function legalEntityRevisionTimeline(
   revisions: readonly LegalEntityRevisionRecord[],
-  format: (iso: string) => string,
+  format: InstantFormatter,
+  typeNameOf?: RegistrationNumberTypeNameOf,
 ): RevisionTimelineItem[] {
-  return identityRevisionTimeline(revisions, format, legalEntityRevisionContent, identityRevisionLabel);
+  return identityRevisionTimeline(
+    revisions,
+    format,
+    (row) => legalEntityRevisionContent(row, typeNameOf),
+    identityRevisionLabel,
+  );
 }
 
 /**
@@ -32,8 +40,8 @@ export function legalEntityRevisionTimeline(
  * 「历史修订两格为空时如实写」）。更正来源单据只在身份更正那一笔在场，键不在就不说。注册地经基础数据译名
  * （ADR-0335 决定七）；译名表没读回时原样显码，与列表格同一口径。
  */
-function legalEntityRevisionContent(row: LegalEntityRevisionRecord): string {
-  const cells = identityLayerCellsOf(row);
+function legalEntityRevisionContent(row: LegalEntityRevisionRecord, typeNameOf?: RegistrationNumberTypeNameOf): string {
+  const cells = identityLayerCellsOf(row, typeNameOf);
   const identity =
     cells === null
       ? `注册地与注册号：${identityLayerAbsentNote}`

@@ -12,6 +12,14 @@
 // 抽屉头上显的最新修订落在最下面一格。不做 diff——两笔之间改了什么由并排的描述让人自己比
 // （读口只交事实），这里不猜「这一笔改了名字还是换了依据」。
 
+import type { FormatInstantOptions } from '../moment';
+
+/**
+ * 页面注入的时刻格式化（moment.ts 的 formatInstant 同形）：时区由它定，显到哪一级由这里定——登记时刻到分钟、生效与
+ * 停用到日期（spec 公司主体 UX「统一用语」）。测试里的替身可以不理第二个参数。
+ */
+export type InstantFormatter = (iso: string, options?: FormatInstantOptions) => string;
+
 /** 与 @idpxyz/ui-primitives 的 TimelineItem 同形的那几格；只用到 default / warning 两种色调。 */
 export interface RevisionTimelineItem {
   id: string;
@@ -49,25 +57,25 @@ export interface IdentityRevisionRecord {
  */
 export function identityRevisionTimeline<Row extends IdentityRevisionRecord>(
   revisions: readonly Row[],
-  format: (iso: string) => string,
+  format: InstantFormatter,
   content: (row: Row) => string,
   revisionLabel: (revision: number) => string = (revision) => `r${revision}`,
 ): RevisionTimelineItem[] {
   return revisions.map((row) => {
     const deactivated = row.deactivatedAt !== undefined;
     // 「依据」上屏叫「来源单据」（spec 公司主体 UX「统一用语」）：运营的人认的是那张单，不是「依据」这个领域词。
-    let description = `来源单据 ${row.basis} · 生效自 ${format(row.effectiveFrom)} · ${content(row)}`;
+    let description = `来源单据 ${row.basis} · 生效自 ${format(row.effectiveFrom, { precision: 'day' })} · ${content(row)}`;
     if (deactivated) {
       // 停用依据在库上与停用时点成对（0015 的 paired 约束），这里仍按键在不在读，不假定一定成对。
       const basis = row.deactivationBasis !== undefined ? `（来源单据 ${row.deactivationBasis}）` : '';
-      description += ` · 停用于 ${format(row.deactivatedAt as string)}${basis}`;
+      description += ` · 停用于 ${format(row.deactivatedAt as string, { precision: 'day' })}${basis}`;
     }
     const label = revisionLabel(row.revision);
     return {
       id: `r${row.revision}`,
       title: deactivated ? `${label} · 已停用` : label,
       description,
-      timestamp: `登记于 ${format(row.registeredAt)}`,
+      timestamp: `登记于 ${format(row.registeredAt, { precision: 'minute' })}`,
       variant: deactivated ? 'warning' : 'default',
     };
   });

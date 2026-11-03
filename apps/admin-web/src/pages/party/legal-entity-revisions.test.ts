@@ -135,3 +135,33 @@ test('空修订链交回空项，注释句分得开「没有」与「没问到�
   // 「修订号」是技术详情里的词，计数句不再点它。
   equal(/修订/.test(revisionHistoryNote(3)), false);
 });
+
+// Covers: 显到哪一级由时间线定、时区由注入的格式化定（spec「统一用语」：主数据页生效 / 停用到日期，版本历史的登记时刻到
+// 分钟）——三个时刻各带 precision 交给格式化函数，页面传 moment.ts 的 formatInstant 就直接生效，不必各页自己记。
+test('登记时刻到分钟、生效与停用到日期，经注入的格式化函数', () => {
+  const leveled = (iso: string, options?: { precision?: string }) => `${options?.precision ?? 'second'}:${iso}`;
+  const items = legalEntityRevisionTimeline(chain, leveled);
+  equal(items[0].timestamp, '登记于 minute:2026-09-16T04:27:55Z');
+  equal(/生效自 day:2026-01-02T00:00:00Z/.test(items[0].description), true);
+  equal(/停用于 day:2026-06-01T00:00:00Z/.test(items[2].description), true);
+  equal(/second:/.test(items.map((item) => item.description + item.timestamp).join('')), false);
+});
+
+// Covers: 交了注册号类型目录的查法 → 注册号的类型码译成名；不交照码显（上一条用例）；译不出的码原样。
+test('注册号类型码经交进来的查法译名', () => {
+  const items = legalEntityRevisionTimeline(
+    [
+      revision({
+        identityLayerRegistered: true,
+        registrationCountry: 'CN',
+        lifetimeRegistrationNumbers: [
+          { typeCode: 'USCC', number: '91000000000000001X' },
+          { typeCode: 'SYN-OLD', number: '7' },
+        ],
+      }),
+    ],
+    tagged,
+    (country, typeCode) => (country === 'CN' && typeCode === 'USCC' ? '统一社会信用代码' : undefined),
+  );
+  equal(items[0].description.endsWith(' · 注册地 CN · 注册号 统一社会信用代码 91000000000000001X；SYN-OLD 7'), true);
+});
