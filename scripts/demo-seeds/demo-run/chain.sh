@@ -2,7 +2,7 @@
 # 一件包裹的主链各段，做成函数供分段脚本 source（票 demo-2026-10-30/03）。载荷照动线文档与 psb/05 取证各节：
 # 交接口 version 与 scope 每次各起一个（票 111 之前同版本串会让实际履约发生项认错）；已交接载荷要带 releasingEvidence、
 # receivingEvidence、rule，不带 basis；装载分配重量行写整数；干线委托先于交给干线承运商；关务包裹先放行再交干线。
-# 调用前要 source lib.sh 并 load_env；变量约定：REQ 委托号、PARCEL 包裹号、PREF 客户包裹参考、STAMP 本次戳。
+# 调用前要 source lib.sh 并 load_env；变量约定：REQ 委托号、PARCEL 包裹号、PREF 客户包裹参考、DOCNUM 运单号、STAMP 本次戳。
 # 证据只记 S。
 
 CN_EAST=(SYN-DEVICE-OFFSITE-CN-EAST-01 OFFSITE SYN-OFFSITE-CN-EAST)
@@ -15,14 +15,24 @@ ch_submit() {
   REQ="$(sed -n 's/^已提交 \([^ ]*\) .*/\1/p' <<<"$out")"
   PARCEL="$(sed -n 's/.*包裹号 \([A-Z0-9-]*\)（.*/\1/p' <<<"$out")"
   PREF="$(sed -n 's/.*客户包裹参考 \([^）]*\)）.*/\1/p' <<<"$out")"
-  [[ -n "$REQ" && -n "$PARCEL" && -n "$PREF" ]] || { printf '[失败] 解析不出提交输出：%s\n' "$out" >&2; exit 1; }
-  printf '%-34s → 201 SUBMITTED request=%s parcel=%s ref=%s\n' "提交委托（首方客户令牌）" "$REQ" "$PARCEL" "$PREF"
+  DOCNUM="$(sed -n 's/.*运单号 \([^（]*\)（.*/\1/p' <<<"$out")"
+  [[ -n "$REQ" && -n "$PARCEL" && -n "$PREF" && -n "$DOCNUM" ]] || { printf '[失败] 解析不出提交输出：%s\n' "$out" >&2; exit 1; }
+  printf '%-34s → 201 SUBMITTED request=%s parcel=%s ref=%s documentNumber=%s\n' "提交委托（首方客户令牌）" "$REQ" "$PARCEL" "$PREF" "$DOCNUM"
+  printf '%-34s → 200 AWAITING_ACCEPTANCE\n' "按运单号查（接受之前）"
   OP="$(operator_token)"
   # 供应商预期成本行不带包裹号：提交前记下已有的成本版本，终局后新出现的那一笔就是这一件的 BUY（见 ch_final）。
   COSTS_BEFORE="$(curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=supplier-expected-cost" | python3 -c 'import json,sys; print(",".join(r["version"] for r in json.load(sys.stdin).get("costs",[])))')"
   _accepted() { step "等 dispatch 接受（委托状态）" "$OP" GET "/shipment-request-views?shipmentRequestId=${REQ}" - 200:REQUEST_VIEW request.state >/dev/null 2>&1 && [[ "$(jget "$LAST" request.state)" == ACCEPTED ]]; }
   poll "委托成已接受" 90 _accepted
   printf '%-34s → request.state=ACCEPTED\n' "接受判断（dispatch 下一拍）"
+  # 接受之后按运单号查（ADR-0356）：整单答 PARCELS_LISTED，列出的那一件就是提交答复的包裹号、件号对上，total 一件、没有下一页。
+  local docnum_query
+  docnum_query="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DOCNUM")"
+  step "按运单号查（接受之后，首方客户令牌）" "$(customer_token)" GET "/v1/customer-shipment-tracking?documentNumber=${docnum_query}" - \
+    200:PARCELS_LISTED parcels.0.parcelId parcels.0.customerParcelReference parcels.0.outcome page.total page.next
+  [[ "$(jget "$LAST" parcels.0.parcelId)" == "$PARCEL" && "$(jget "$LAST" parcels.0.customerParcelReference)" == "$PREF" \
+    && "$(jget "$LAST" page.total)" == 1 && -z "$(jget "$LAST" parcels.1)" ]] \
+    || { printf '[失败] 按运单号 %s 列出的件对不上提交答复（%s / %s）：\n' "$DOCNUM" "$PARCEL" "$PREF" >&2; cat "$LAST" >&2; exit 1; }
   _routed() { curl -s -H "Authorization: Bearer $OP" "$API_BASE/route-plans?register=initial-route" > "$LAST"; [[ "$(jsel "$LAST" judgments declaredParcelId "$PARCEL" conclusion)" == ROUTE_FORMED ]]; }
   poll "初始路由" 90 _routed
   printf '%-34s → ROUTE_FORMED plan=%s\n' "初始路由" "$(jsel "$LAST" judgments declaredParcelId "$PARCEL" planVersion)"

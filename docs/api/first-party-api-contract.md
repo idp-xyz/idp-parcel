@@ -32,6 +32,13 @@
   - `VIEW_NOT_FOUND`：不存在、属别的账户、归属未定（含委托接受之前）、多份已接受委托同时声明，同答一格、同一份字节。核对你给的号。刚从提交答复拿到、委托还没接受的号也落这一格：稍后再查，或请租户客服核对（决定五）。
   - 后两格只有 `outcome`。归属读不动答 `500 NO_ANSWER_FORMED`，与视图读不回同一格，照 5xx 退避重发。
   - 查询串只认 `parcel` 一格。
+- **按运单号查客户追踪同属这一例外**（`/v1/customer-shipment-tracking`，[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)）。整单 `outcome` 四格，按续办分：
+  - `PARCELS_LISTED`：委托已接受（含其后的已取消、已完成），带 `parcels` 与 `page`，逐件看。
+  - `AWAITING_ACCEPTANCE`：委托已提交，接受或拒绝还没决定。只有 `outcome`，稍后再查。它不表示已受理。
+  - `CLOSED_WITHOUT_SERVICE`：委托已拒绝或已撤回。只有 `outcome`，这个号不会有可追踪的包裹，停止追踪。
+  - `SHIPMENT_NOT_FOUND`：本租户你的账户名下没有这个号——不存在、属别的账户或别的租户、委托没有运单号——同答一格、同一份字节。核对你给的号。
+  - 逐件：`parcels` 每件的 `outcome` 与 `view` 就是同一时刻按包裹查那一件的答复，取值仍是上面三格。同一份委托里某一件答 `VIEW_NOT_FOUND`（例如另有已接受委托同时声明它）不影响别的件。
+  - 成页所需的任一读不动，整页答 `500 NO_ANSWER_FORMED`，不出半页，照 5xx 退避重发整页。
 
 ## 问题详情
 
@@ -60,7 +67,7 @@
 
 - 同一 `accessRequestId`、同一内容再发一次，是同一请求的重放：答 `EXISTING_RESULT`，回显原来那一份。提交口的 `EXISTING_RESULT` 另带 `priorOutcome`（上一次答出的那一格）；上一次答 5xx、或停在生产归属未决的，重发接着办（[ADR-0266](../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md)）。
 - 同一 `accessRequestId` 携带不同内容，是来源冲突，答对应口的冲突 `outcome`，原请求不被覆盖。
-- 答复丢失时，用同一 `accessRequestId` 原样重发取回原结果；没有另开按委托号读回的口。
+- 答复丢失时，用同一 `accessRequestId` 原样重发取回原结果；没有按委托标识读回的口。按运单号查询（`/v1/customer-shipment-tracking`）列的是委托已接受之后的当前有效包裹，不是提交答复的读回（[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)）。
 
 ## 首方族今天开着的口
 
@@ -68,6 +75,7 @@
 |---|---|---|
 | `POST /v1/shipment-requests` | [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) 提交委托 | `SHIPMENT_REQUEST_SUBMISSION` |
 | `GET /v1/customer-tracking-view?parcel=<包裹号>` | [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md) 客户追踪视图 | `CUSTOMER_TRACKING_VIEW_QUERY` |
+| `GET /v1/customer-shipment-tracking?documentNumber=<运单号>` | UC-VE-008 客户追踪按运单号查询 | `CUSTOMER_SHIPMENT_TRACKING_QUERY` |
 | `POST /v1/node-operations/delivery-pre-advices` | [UC-NO-006](../application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 送站预报 | `DELIVERY_PRE_ADVICE_SUBMISSION` |
 | `POST /v1/node-operations/delivery-pre-advice-withdrawals` | UC-NO-006 预报撤回 | `DELIVERY_PRE_ADVICE_WITHDRAWAL` |
 | `POST /v1/shipment-requests/supplements` | [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) 委托补充（`AT-PS-036` 第一支） | `SHIPMENT_REQUEST_SUPPLEMENT` |
@@ -78,11 +86,17 @@
 | `POST /v1/claims` | [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) 索赔提交 | `CLAIM_SUBMISSION` |
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
-- 提交答复指名委托时（`SUBMITTED` 与重放的 `EXISTING_RESULT`）带 `documentNumber`：委托的单据号，即报给收件方与客服的运单号，建单那一刻按租户的单据编号规则开立，此后不变，重放读回同一个号（[ADR-0355](../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、十一）。它是新增字段，`shipmentRequestId` 等既有各格不变；后续命令（补充、撤回、资料修订、取消）照旧以 `shipmentRequestId` 指名委托，不收运单号。委托没有单据号时 `documentNumber` 整键不出现（不答空串，也不拿 `shipmentRequestId` 顶），改带 `documentNumberAbsence` 说是哪一种：`ISSUED_BEFORE_NUMBERING`（单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户还没登单据编号时区）；两种都事后不补号。客户追踪视图仍按 `parcelId` 定位，不收运单号。
+- 提交答复指名委托时（`SUBMITTED` 与重放的 `EXISTING_RESULT`）带 `documentNumber`：委托的单据号，即报给收件方与客服的运单号，建单那一刻按租户的单据编号规则开立，此后不变，重放读回同一个号（[ADR-0355](../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定三、十一）。它是新增字段，`shipmentRequestId` 等既有各格不变；后续命令（补充、撤回、资料修订、取消）照旧以 `shipmentRequestId` 指名委托，不收运单号。委托没有单据号时 `documentNumber` 整键不出现（不答空串，也不拿 `shipmentRequestId` 顶），改带 `documentNumberAbsence` 说是哪一种：`ISSUED_BEFORE_NUMBERING`（单据号上线之前建的委托）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（建单时租户还没登单据编号时区）；两种都事后不补号。按包裹查的客户追踪视图仍按 `parcelId` 定位、不收运单号；按运单号查另走下面那一口。
 - 提交口的 `outcome` 新增 `NUMBERING_RULE_COLLISION`（`200`，不带 `shipmentRequestId`）：租户的单据编号规则渲染出的运单号连续撞上已用的号，这一次没有建单。它不是故障，重发前要租户运营在规则册换格式；换好之后同一 `accessRequestId` 原样重发即建单。不认识这一格的调用方按「遇到不认识的 `outcome`」那一条出队交人即可。
 - 接入请求标识不得以保留命令前缀（`withdrawal:`、`parcel-cancellation:`、`source-data-amendment:`、`supplement:`、`claim:`）开头；提交口收到这样的标识答 400（推导不出）。
 - 提交答复在指名委托时同带 `submissionVersionId`（该委托此刻的当前提交版本标识，随 `shipmentRequestId` 同在同缺；重放在补充之后读回的是补充形成的当前版本）。客户下一次补充以它为基准载荷带回，基准过期答 `SUPPLEMENT_BASIS_STALE`（[ADR-0310](../adr/0310-first-party-customer-command-five-faces-launch-with-direct-customer-one-to-one-and-command-prefixed-request-keys.md) 取舍 E）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
+- **客户追踪按运单号查询**（[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)）：
+  - 请求：`GET /v1/customer-shipment-tracking?documentNumber=<运单号>[&after=<游标>]`。`documentNumber` 就是提交答复里那一格，逐字比，不折大小写、不去空白。查询串只认这两格：缺号、号给两次、全空白、含 NUL 或不是合法 UTF-8、游标给两次、自报账户或租户、带 `sort`、`q` 或任何别的一格，都答 `400 MALFORMED_REQUEST`，这一判不读委托。
+  - 授予是这一口自己的词 `CUSTOMER_SHIPMENT_TRACKING_QUERY`（一口一词）：只持 `CUSTOMER_TRACKING_VIEW_QUERY` 的客户端调这一口答 `403 CUSTOMER_CLIENT_NOT_GRANTED`。认证与授予各格与按包裹查同形；不判准入范围。
+  - `PARCELS_LISTED` 的每件：`parcelId`（同提交答复，可直接拿去按包裹查）、`customerParcelReference`（委托上为这一件声明的客户包裹件号，同提交答复；没声明整键缺席）、`replaces`（只在拆分合并形成的后继上出现，列它替代的旧 `parcelId`；包裹身份谱系还没落地，今天不会出现）、`outcome` 与 `view`（同按包裹查）。次序同提交答复的 `parcels`；次序是附带承诺，配对靠 `parcelId` 或 `customerParcelReference`。
+  - 分页照目录读口的游标（ADR-0144）：答复带 `page`（`size`、`next`、`total`），一页至多 50 件，调用方不能指定；`next` 为 `null` 即末页，否则把它原样作 `after` 再查一次。`total` 是这份委托此刻的当前有效包裹件数。游标绑在本次的号上：解不开、或拿别的号的游标来翻，答 `400`；每一页都重新按号判整单，拿别人的游标换不到别人的委托。要一致快照就从第一页重读。
+  - 没有运单号的委托（`documentNumberAbsence` 在场）按号查不到，答 `SHIPMENT_NOT_FOUND`，用提交答复的 `parcelId` 按包裹查。
 - 送站预报的答复在 `preAdvice` 里同带预报标识 `preAdviceId`（送站时随交付出示）与预报的单据号 `documentNumber`（新增字段，[ADR-0355](../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二）；原样重投读回的是原号。没有单据号时不带 `documentNumber`，改带 `documentNumberAbsence`：`ISSUED_BEFORE_NUMBERING`（单据号规则生效之前登记的）或 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`（登记时网点没有业务时区、租户也没登单据编号时区），两者事后都不补号。答 `200 NUMBERING_RULE_COLLISION` 时只带 `outcome`：租户的编号格式撞上了已用的号，预报没有登记，同一接入请求在租户换了格式之后重交即可。
 - 交接单的客户确认或否认的答复在 `noteId`（设备签发的交接单标识）、`outcome` 与本账户的 `binding` 之外，新增交接单的单据号 `documentNumber`（ADR-0355 决定十一）；没有单据号时改带 `documentNumberAbsence`，取值与预报答复同一套。其余各格不变，仍不回显声称了谁、范围成立没有。
 - **委托补充**（形状 `PSU-1`）：客户在`已提交`委托上重报整份内容，形成同一委托的新提交版本。载荷是提交载荷的内容字段（`customerShipmentReference`、`requestedServiceProduct`、`requestEffectiveAt`、寄收件关系 / 地址 / 邮编 / 国家码、`destinationServiceScope`、`parcels[]`），外加：`accessRequestId`（补充自己的接入请求标识）、`originalAccessRequestId`（原提交的接入请求标识，指名委托）、`shipmentRequestId` 与 `basisSubmissionVersionId`（提交回执里的委托号与 `submissionVersionId`）；`parcels[]` 每件另带回执里的 `parcelId`，成员集合须与委托当前版本一致。租户与账户取自册上绑定：委托只在信封账户名下找，他账户的委托与不存在的委托同答 `404`；载荷里自报账户、租户或操作者答 `400`。答复 `outcome`：`SUPPLEMENT_RECORDED`（`201`，带新版本的 `submissionVersionId`，下一次补充以它为基准）、`SUPPLEMENT_ALREADY_HANDLED`（`200`，重放读回原版本）、`SUPPLEMENT_BASIS_STALE`（基准不是当前版本：先读当前版本，即对原提交重放取回执）、`SUPPLEMENT_SOURCE_CONFLICT`、`SUPPLEMENT_BOUNDARY_CHANGED`（成员集合变了，改走关联新委托）、`SUPPLEMENT_DECISION_ALREADY_FORMED`、`SUPPLEMENT_UNDECIDED`。补充形成新版本之后，对原提交重放，回执读回的是新版本的 `submissionVersionId`。`shipmentRequestId` 须与 `originalAccessRequestId` 指到的委托一致，不一致按找不到答 `404`。`originalAccessRequestId` 填错答 `404` 之前，这次补充请求的来源指纹已被保全，同一 `accessRequestId` 就此被占用：改正后要换一个新的接入请求标识重试；同一 `accessRequestId` 携带不同的原提交标识、委托号或成员，答 `SUPPLEMENT_SOURCE_CONFLICT`。
