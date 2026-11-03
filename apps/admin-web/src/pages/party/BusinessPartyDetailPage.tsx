@@ -23,7 +23,6 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
-import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant } from './detail-primitives';
@@ -64,7 +63,7 @@ function buildSummary(row: BusinessPartyRecord): DetailSummaryStat[] {
     { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
     { label: '登记时间', value: <Instant value={row.registeredAt} /> },
     { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
-    { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
+    // 不摆生命周期步进：状态药丸已经说了在哪一格，停用另有时点，步进是第二遍（用户 2026-11-03 裁定，公司主体两页同）。
   ];
 }
 

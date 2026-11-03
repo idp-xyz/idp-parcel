@@ -9,8 +9,8 @@ import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 业务参与方页两册头区的件：横幅与「更多」菜单。身份册的详情栏与对象页各摆一份同样的头区（照 LegalEntityHeaderParts.tsx，
-// 票 group-legal-entities-uiux/09：同一对象两处结构一致），件只在这里写一遍，两处各自排版。生命周期条借法人那一份
-// （LegalEntityLifecycle）：两册身份同一套状态代数、同三格，不另画一条。
+// 票 group-legal-entities-uiux/09：同一对象两处结构一致），件只在这里写一遍，两处各自排版。不摆生命周期步进：状态药丸
+// 已经说了在哪一格，停用另有时点，步进是第二遍（用户 2026-11-03 裁定，与公司主体两页同）。
 // 横幅正文用正文色、语气只给描边与图标（理由在 components/status-tone.ts）。
 
 /** 这一行要不要摆横幅：停用了。参与方册是名称的来源，没有「待补」可报。 */

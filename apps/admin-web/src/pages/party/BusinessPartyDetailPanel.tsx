@@ -7,7 +7,6 @@ import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } 
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { BusinessPartyBanners, BusinessPartyMoreMenu } from './BusinessPartyHeaderParts';
-import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -92,8 +91,6 @@ export function BusinessPartyDetailPanel({
             </Button>
           </div>
         </div>
-
-        <LegalEntityLifecycle row={row} />
 
         <BusinessPartyBanners row={row} />
       </div>
