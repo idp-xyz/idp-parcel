@@ -1,12 +1,13 @@
 import type {
   ContactPurpose,
+  LegalEntityBankAccountRecord,
   LegalEntityContactRecord,
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
   RegisteredAddressRecord,
 } from './api';
-import { countryLabel } from '../refdata-names';
+import { countryLabel, currencyLabel } from '../refdata-names';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
 
@@ -86,6 +87,25 @@ function socialGroups(contact: LegalEntityContactRecord) {
   return groups;
 }
 
+/**
+ * 收款账户以（币种，账号）认同一个账户——服务端也拿这一对判重复（ADR-0359 决定三），所以换了币种或账号就是移除一个、
+ * 新增一个，其余格变了才是「修改」。账号去首尾空白后原样比，IBAN 带不带空格算两个账号，与服务端同一口径。
+ */
+function bankAccountKey(account: LegalEntityBankAccountRecord) {
+  return JSON.stringify([account.currency.trim(), account.accountNumber.trim()]);
+}
+/** 对比格里一个账户的文本：币种与账号已在项目名里，这里只列其余格，空着的不列。 */
+function bankAccountText(account: LegalEntityBankAccountRecord) {
+  return [
+    account.label, account.holderName, account.bankName,
+    account.swiftCode ? `SWIFT / BIC ${account.swiftCode}` : '', account.bankAddress, account.note,
+  ].filter(Boolean).join(' · ');
+}
+/** 项目名「收款账户 · 人民币（CNY） SYN-…」：币种经基础数据译名（译名表没读回时显码），账号原样。 */
+export function bankAccountSubject(account: LegalEntityBankAccountRecord) {
+  return `收款账户 · ${currencyLabel(account.currency.trim())} ${account.accountNumber.trim()}`;
+}
+
 // 接口没有联系人标识：只有其他资料完全一致时，才将社交账号作为同一联系人的字段变更。
 function baseContactKey(contact: LegalEntityContactRecord) {
   return JSON.stringify([
@@ -134,6 +154,17 @@ export function compareLegalEntityProfiles(
   add('tax-numbers', '税务与开票', '监管登记号（税务 / 海关）', tax(before), tax(after));
   add('invoicing', '税务与开票', '开票资料', before.invoicingRegistered ? '已登记' : '未登记', after.invoicingRegistered ? '已登记' : '未登记');
   add('invoice-title', '税务与开票', '开票抬头', before.invoiceTitle ?? '', after.invoiceTitle ?? '');
+
+  // 账户按旧版次序列、新加的排在后面：读的人先对旧版，再看多了什么。
+  const oldAccounts = new Map((before.bankAccounts ?? []).map((account) => [bankAccountKey(account), account]));
+  const newAccounts = new Map((after.bankAccounts ?? []).map((account) => [bankAccountKey(account), account]));
+  let accountSequence = 0;
+  for (const key of new Set([...oldAccounts.keys(), ...newAccounts.keys()])) {
+    const left = oldAccounts.get(key);
+    const right = newAccounts.get(key);
+    add(`bank-account-${++accountSequence}`, '收款账户', bankAccountSubject((right ?? left)!),
+      left ? bankAccountText(left) : '', right ? bankAccountText(right) : '');
+  }
 
   const oldGroups = new Map<string, LegalEntityContactRecord[]>();
   const newGroups = new Map<string, LegalEntityContactRecord[]>();

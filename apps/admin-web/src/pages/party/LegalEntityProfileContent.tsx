@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import type { LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
+import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
+import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
-import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid } from './LegalEntityProfileReadout';
+import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid, absentValueMark } from './LegalEntityProfileReadout';
 import { profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
@@ -55,6 +56,12 @@ export function LegalEntityProfileContent({
             mono
           />
         </ProfileReadoutGrid>
+        <div className="mt-3">
+          <p className="text-[12px] leading-6 text-idpxyz-breadcrumb">
+            收款账户{content?.bankAccounts?.length ? <span className="ml-2">{content.bankAccounts.length} 个</span> : null}
+          </p>
+          <LegalEntityBankAccountsTable accounts={content?.bankAccounts ?? []} />
+        </div>
       </ProfileGroup>
       {includeContacts ? (
         <ProfileGroup title="联系人" extra={content?.contacts.length ? `${content.contacts.length} 位` : undefined}>
@@ -71,6 +78,59 @@ export function LegalEntityProfileContent({
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * 收款账户表，一行一个账户、币种打头（ADR-0359 决定三「按币种登记」，开单方按单据币种挑账户）。没有账户是结论句
+ * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
+ */
+export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
+  if (!accounts.length) return <p className="text-[13px] text-idpxyz-breadcrumb">未登记收款账户</p>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
+        <caption className="sr-only">收款账户清单</caption>
+        <colgroup>
+          <col className="w-[18%]" />
+          <col className="w-[22%]" />
+          <col className="w-[22%]" />
+          <col className="w-[24%]" />
+          <col className="w-[14%]" />
+        </colgroup>
+        <thead className="border-b border-idpxyz-border text-[12px] text-idpxyz-breadcrumb">
+          <tr>
+            <th scope="col" className="py-2 pr-3 font-medium">币种 / 用途</th>
+            <th scope="col" className="px-3 py-2 font-medium">户名</th>
+            <th scope="col" className="px-3 py-2 font-medium">开户行</th>
+            <th scope="col" className="px-3 py-2 font-medium">账号 / IBAN · SWIFT / BIC</th>
+            <th scope="col" className="py-2 pl-3 font-medium">备注</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-idpxyz-border">
+          {accounts.map((account, index) => (
+            <tr key={`${account.currency}-${account.accountNumber}-${index}`} className="align-top hover:bg-idpxyz-hover">
+              <th scope="row" className="py-2.5 pr-3 font-medium text-idpxyz-textBright">
+                <span className="block"><CurrencyLabel code={account.currency} /></span>
+                {account.label ? <span className="block text-[12px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
+              </th>
+              <td className="break-words px-3 py-2.5 text-idpxyz-text">{account.holderName}</td>
+              <td className="px-3 py-2.5">
+                <span className="block text-idpxyz-text">{account.bankName}</span>
+                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb">{account.bankAddress}</span> : null}
+              </td>
+              <td className="px-3 py-2.5 font-mono text-[12px]">
+                <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
+                {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
+              </td>
+              <td className="break-words py-2.5 pl-3 text-[12px]">
+                {account.note ? <span className="text-idpxyz-text">{account.note}</span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

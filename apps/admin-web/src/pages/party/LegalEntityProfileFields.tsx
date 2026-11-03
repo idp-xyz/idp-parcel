@@ -3,9 +3,13 @@ import { Button, Input, Textarea } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { ContactPurpose, RegistrationNumberTypeListResponseBody } from './api';
 import { policiesHash } from './commercial-policies-address';
+import { useRefdataNames } from '../use-refdata-names';
+import type { RefdataNames } from '../refdata-names';
 import {
+  bankAccountCurrencyOptions,
   contactPurposeLabels,
   profileTaxTypeOptions,
+  type BankAccountDraft,
   type ContactDraft,
   type LegalEntityProfileDraft,
 } from './legal-entity-profile';
@@ -41,8 +45,12 @@ export function LegalEntityProfileFields({
   onLeave: (href: string) => void;
 }) {
   const platformListId = useId();
+  // 币种候选来自产品内置的基础数据目录；订阅是为了目录读回时把手填格换成选单。
+  const refdataNames = useRefdataNames();
   const setContact = (index: number, change: Partial<ContactDraft>) =>
     patch({ contacts: draft.contacts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  const setBankAccount = (index: number, change: Partial<BankAccountDraft>) =>
+    patch({ bankAccounts: draft.bankAccounts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const setTaxNumber = (index: number, change: Partial<LegalEntityProfileDraft['taxNumbers'][number]>) =>
     patch({ taxNumbers: draft.taxNumbers.map((item, at) => (at === index ? { ...item, ...change } : item)) });
   return (
@@ -189,6 +197,86 @@ export function LegalEntityProfileFields({
           </p>
         </div>
       </FormGroup>
+      <FormGroup
+        title="收款账户"
+        description="对账单与发票上印的我方银行账户，可按币种登记多个。币种只说这个账户收哪种钱，不决定结算币种。"
+      >
+        <div className="md:col-span-2 space-y-4">
+          {draft.bankAccounts.map((row, index) => (
+            <fieldset key={index} disabled={locked} className="min-w-0 border-t border-idpxyz-border pt-3">
+              <legend className="px-1 text-[13px] font-medium text-idpxyz-text">收款账户 {index + 1}</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ['label', '用途标签', '如 人民币对公、美元收款'],
+                    ['holderName', '户名 *', ''],
+                    ['bankName', '开户行 *', ''],
+                    ['accountNumber', '账号 / IBAN *', '账号原样填'],
+                    ['swiftCode', 'SWIFT / BIC', ''],
+                    ['bankAddress', '开户行地址', ''],
+                  ] as const
+                ).map(([key, label, placeholder]) => {
+                  const path = `profiles[0].bankAccounts[${index}].${key}`;
+                  const mono = key === 'accountNumber' || key === 'swiftCode';
+                  return (
+                    <FieldAnchor key={key} path={path}>
+                      <Field label={label} path={path} problems={problems}>
+                        <Input
+                          aria-label={`收款账户 ${index + 1} ${label.replace(' *', '')}`}
+                          placeholder={placeholder || undefined}
+                          className={mono ? 'font-mono text-[13px]' : undefined}
+                          value={row[key]}
+                          readOnly={locked}
+                          onChange={(event) => setBankAccount(index, { [key]: event.target.value })}
+                        />
+                      </Field>
+                    </FieldAnchor>
+                  );
+                })}
+                <BankAccountCurrencyField
+                  index={index}
+                  value={row.currency}
+                  locked={locked}
+                  problems={problems}
+                  names={refdataNames}
+                  onChange={(currency) => setBankAccount(index, { currency })}
+                />
+                <Field label="备注" path={`profiles[0].bankAccounts[${index}].note`} problems={problems}>
+                  <Input
+                    aria-label={`收款账户 ${index + 1} 备注`}
+                    value={row.note}
+                    readOnly={locked}
+                    onChange={(event) => setBankAccount(index, { note: event.target.value })}
+                  />
+                </Field>
+              </div>
+              <Problems lines={problems[`profiles[0].bankAccounts[${index}]`]} />
+              <Button
+                className="mt-2"
+                variant="ghost"
+                disabled={locked}
+                onClick={() => patch({ bankAccounts: draft.bankAccounts.filter((_, at) => at !== index) })}
+              >
+                移除此账户
+              </Button>
+            </fieldset>
+          ))}
+          <Button
+            variant="outline"
+            disabled={locked}
+            onClick={() =>
+              patch({
+                bankAccounts: [
+                  ...draft.bankAccounts,
+                  { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+                ],
+              })
+            }
+          >
+            添加收款账户
+          </Button>
+        </div>
+      </FormGroup>
       <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。">
         <div className="md:col-span-2 space-y-4">
           {draft.contacts.map((row, index) => (
@@ -321,6 +409,50 @@ export function LegalEntityProfileFields({
         </div>
       </FormGroup>
     </>
+  );
+}
+
+/**
+ * 收款账户的币种格：候选是产品内置币种目录（基础数据），显「人民币（CNY）」、值是码。目录读不回时退回手填并提示填
+ * ISO 4217——新登记的币种只收目录里的码由服务端判（ADR-0345 决定五），表单不替目录造码，也不在本地判形状。
+ */
+function BankAccountCurrencyField({
+  index,
+  value,
+  locked,
+  problems,
+  names,
+  onChange,
+}: {
+  index: number;
+  value: string;
+  locked: boolean;
+  problems: Record<string, string[]>;
+  names: RefdataNames;
+  onChange: (currency: string) => void;
+}) {
+  const path = `profiles[0].bankAccounts[${index}].currency`;
+  const options = bankAccountCurrencyOptions(names);
+  return (
+    <FieldAnchor path={path}>
+      <Field label="币种 *" path={path} problems={problems}>
+        {options.length > 0 ? (
+          <SearchableSelect options={options} value={value} disabled={locked} onChange={onChange} unknownNote="手填，不在目录上" />
+        ) : (
+          <>
+            <Input
+              aria-label={`收款账户 ${index + 1} 币种`}
+              placeholder="如 CNY、USD"
+              className="font-mono text-[13px]"
+              value={value}
+              readOnly={locked}
+              onChange={(event) => onChange(event.target.value)}
+            />
+            <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">币种目录暂时读不到：先手填 ISO 4217 三位字母码。</span>
+          </>
+        )}
+      </Field>
+    </FieldAnchor>
   );
 }
 

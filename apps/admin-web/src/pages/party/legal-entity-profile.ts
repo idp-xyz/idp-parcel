@@ -9,6 +9,7 @@
 import type {
   ContactPurpose,
   ContactSocialAccountRecord,
+  LegalEntityBankAccountRecord,
   LegalEntityRepresentativeRecord,
   LegalEntityContactRecord,
   LegalEntityProfileContent,
@@ -19,12 +20,24 @@ import type {
   TaxRegistrationNumberRecord,
 } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import { currencyLabel, type RefdataNames } from '../refdata-names';
 import { revisionOf } from './registration-form';
 
 export interface TaxNumberDraft {
   typeCode: string;
   number: string;
 }
+
+/** 收款账户一行的文本框原值：可缺的格空串即缺席，折成载荷时再判。 */
+export type BankAccountDraft = Record<keyof LegalEntityBankAccountRecord, string>;
+
+/** 收款账户里必填的格与它在缺项清单里的名字；次序照表单里格的次序。 */
+const bankAccountRequiredFields: readonly (readonly [keyof BankAccountDraft, string])[] = [
+  ['holderName', '户名'],
+  ['bankName', '开户行'],
+  ['accountNumber', '账号 / IBAN'],
+  ['currency', '币种'],
+];
 
 export const contactPurposeLabels: Record<ContactPurpose, string> = {
   GENERAL: '日常联系',
@@ -59,6 +72,8 @@ export interface LegalEntityProfileDraft {
   taxNumbers: TaxNumberDraft[];
   /** 开票抬头；留空即这笔不带开票资料（键缺席）——空串服务端照样拒，不当缺席。 */
   invoiceTitle: string;
+  /** 收款账户逐行；整行空着不送，填了一部分的行由缺项判读点名，不静默丢掉。 */
+  bankAccounts: BankAccountDraft[];
   contacts: ContactDraft[];
   representativeKind: '' | LegalEntityRepresentativeRecord['kind'];
   representativeName: string;
@@ -76,6 +91,7 @@ export interface LegalEntityProfileItem {
   registeredAddress?: RegisteredAddressRecord;
   taxRegistrationNumbers?: TaxRegistrationNumberRecord[];
   invoiceTitle?: string;
+  bankAccounts?: LegalEntityBankAccountRecord[];
   contacts?: LegalEntityContactRecord[];
   representative?: LegalEntityRepresentativeRecord;
   officeAddress?: RegisteredAddressRecord;
@@ -96,6 +112,7 @@ export function emptyLegalEntityProfileDraft(legalEntityId: string): LegalEntity
     addressLines: '',
     taxNumbers: [],
     invoiceTitle: '',
+    bankAccounts: [],
     contacts: [],
     representativeKind: '',
     representativeName: '',
@@ -133,6 +150,11 @@ export function legalEntityProfilePayloadOf(
   if (taxes.length > 0) item.taxRegistrationNumbers = taxes;
   const title = draft.invoiceTitle.trim();
   if (title !== '') item.invoiceTitle = title;
+  const accounts = draft.bankAccounts.flatMap((row) => {
+    const account = bankAccountPayload(row);
+    return account ? [account] : [];
+  });
+  if (accounts.length > 0) item.bankAccounts = accounts;
   const contacts = draft.contacts.flatMap((row) => {
     const contact: LegalEntityContactRecord = { name: row.name.trim() };
     if (row.email.trim()) contact.email = row.email.trim();
@@ -173,6 +195,11 @@ export function legalEntityProfileMissingFields(draft: LegalEntityProfileDraft):
   const missing: ProfileMissingField[] = [];
   if (draft.addressCountry.trim() === '') missing.push({ path: 'profiles[0].registeredAddress', label: '注册地址国家 / 地区' });
   if (draft.addressLines.trim() === '') missing.push({ path: 'profiles[0].registeredAddress.lines', label: '注册地址' });
+  draft.bankAccounts.forEach((row, index) => {
+    for (const [key, label] of bankAccountRequiredFields) {
+      if (row[key].trim() === '') missing.push({ path: `profiles[0].bankAccounts[${index}].${key}`, label: `收款账户 ${index + 1} ${label}` });
+    }
+  });
   draft.contacts.forEach((row, index) => {
     if (row.name.trim() === '') missing.push({ path: `profiles[0].contacts[${index}]`, label: `联系人 ${index + 1} 姓名` });
   });
@@ -211,6 +238,14 @@ export function legalEntityProfileLocalProblems(
   }
   if (Boolean(draft.representativeKind) !== Boolean(draft.representativeName.trim())) {
     problems['profiles[0].representative'] = ['身份类型与姓名需要成对填写'];
+  }
+  // 同一版里（币种，账号）不得重复是服务端的规则（ADR-0359 决定三）；这里只在两行填成一样时先提一句，省一次往返。
+  const seenAccounts = new Set<string>();
+  for (const [index, row] of draft.bankAccounts.entries()) {
+    const key = JSON.stringify([row.currency.trim(), row.accountNumber.trim()]);
+    if (row.accountNumber.trim() === '') continue;
+    if (seenAccounts.has(key)) problems[`profiles[0].bankAccounts[${index}]`] = ['此币种与账号已经填写'];
+    seenAccounts.add(key);
   }
   for (const [key, country, lines] of [
     ['officeAddress', draft.officeCountry, draft.officeLines],
@@ -344,6 +379,34 @@ export function representativeLabel(kind: string): string {
   return kind === 'LEGAL_REPRESENTATIVE' ? '法定代表人' : kind === 'RESPONSIBLE_PERSON' ? '登记负责人' : kind;
 }
 
+/**
+ * 收款账户一行折成载荷：各格去首尾空白，可缺的格空着即键缺席；整行空着交 undefined 不送。必填格空着照送空串——
+ * 缺项判读（legalEntityProfileMissingFields）在送之前就会点名拦下，这里不替它判。
+ */
+function bankAccountPayload(row: BankAccountDraft): LegalEntityBankAccountRecord | undefined {
+  const value = Object.fromEntries(Object.entries(row).map(([key, text]) => [key, text.trim()])) as BankAccountDraft;
+  if (Object.values(value).every((text) => text === '')) return undefined;
+  const account: LegalEntityBankAccountRecord = {
+    holderName: value.holderName,
+    bankName: value.bankName,
+    accountNumber: value.accountNumber,
+    currency: value.currency,
+  };
+  if (value.label) account.label = value.label;
+  if (value.swiftCode) account.swiftCode = value.swiftCode;
+  if (value.bankAddress) account.bankAddress = value.bankAddress;
+  if (value.note) account.note = value.note;
+  return account;
+}
+
+/**
+ * 收款账户币种的候选：产品内置币种目录里的码，显「人民币（CNY）」。目录读不回时是空表，表单退回手填并提示填 ISO 4217；
+ * 新登记的币种只收目录里的码由服务端判（ADR-0345 决定五），这里只把目录摆出来。
+ */
+export function bankAccountCurrencyOptions(names: RefdataNames): { value: string; label: string }[] {
+  return [...names.currencies.keys()].map((code) => ({ value: code, label: currencyLabel(code, names) }));
+}
+
 function addressPayload(country: string, lines: string): RegisteredAddressRecord | undefined {
   const value = {
     country: country.trim(),
@@ -372,6 +435,8 @@ export function legalEntityContactCountOf(resolution: LegalEntityProfileResoluti
 export function profileMaintenanceNotes(content: LegalEntityProfileContent): string[] {
   const notes: string[] = [];
   if (!content.representative) notes.push('法定代表人 / 登记负责人未配置');
+  // 只在有开票抬头时提：没有开票资料的那一版本来就开不了票，再说印不出账户是重复的话。
+  if (content.invoicingRegistered && !content.bankAccounts?.length) notes.push('未登记收款账户，对账单与发票上印不出收款账户');
   if (!content.contacts.some((row) => row.email || row.phone || row.socialAccounts?.length)) notes.push('未配置可联系的邮箱、电话或社交账号');
   const purposes = new Set(content.contacts.flatMap((row) => row.purposes ?? []));
   for (const purpose of purposes) {
@@ -410,6 +475,7 @@ export function profileComparisonContentOf(draft: LegalEntityProfileDraft, timeZ
     contacts: item.contacts ?? [],
   };
   if (item.invoiceTitle !== undefined) content.invoiceTitle = item.invoiceTitle;
+  if (item.bankAccounts) content.bankAccounts = item.bankAccounts;
   if (item.representative) content.representative = item.representative;
   if (item.officeAddress) content.officeAddress = item.officeAddress;
   if (item.correspondenceAddress) content.correspondenceAddress = item.correspondenceAddress;
@@ -424,6 +490,7 @@ export function profileDraftContentOf(
   | 'addressLines'
   | 'invoiceTitle'
   | 'taxNumbers'
+  | 'bankAccounts'
   | 'contacts'
   | 'representativeKind'
   | 'representativeName'
@@ -437,6 +504,16 @@ export function profileDraftContentOf(
     addressLines: content.registeredAddress.lines.join('\n'),
     invoiceTitle: content.invoicingRegistered ? (content.invoiceTitle ?? '') : '',
     taxNumbers: content.taxRegistrationNumbers.map((row) => ({ ...row })),
+    bankAccounts: (content.bankAccounts ?? []).map((row) => ({
+      label: row.label ?? '',
+      holderName: row.holderName,
+      bankName: row.bankName,
+      accountNumber: row.accountNumber,
+      swiftCode: row.swiftCode ?? '',
+      bankAddress: row.bankAddress ?? '',
+      currency: row.currency,
+      note: row.note ?? '',
+    })),
     contacts: content.contacts.map((row) => ({
       ...row,
       email: row.email ?? '',

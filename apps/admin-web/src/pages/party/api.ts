@@ -415,6 +415,19 @@ export interface LegalEntityContactRecord {
   socialAccounts?: ContactSocialAccountRecord[];
 }
 
+// 收款账户（ADR-0359 决定三；后端 domain.LegalEntityBankAccount）：法人自己的银行账户，随资料修订版本化。currency 是这个账户
+// 收哪种钱，不是结算币种的决定——结算币种仍由结算政策解析。可缺的格缺席即没填，读写两个方向一个样子。
+export interface LegalEntityBankAccountRecord {
+  label?: string;
+  holderName: string;
+  bankName: string;
+  accountNumber: string;
+  swiftCode?: string;
+  bankAddress?: string;
+  currency: string;
+  note?: string;
+}
+
 export interface LegalEntityProfileContent {
   revision: number;
   basis: string;
@@ -427,6 +440,8 @@ export interface LegalEntityProfileContent {
   representative?: LegalEntityRepresentativeRecord;
   officeAddress?: RegisteredAddressRecord;
   correspondenceAddress?: RegisteredAddressRecord;
+  /** 缺席即这一版不带收款账户；旧修订读作「未登记收款账户」，不回填（ADR-0359 决定三）。 */
+  bankAccounts?: LegalEntityBankAccountRecord[];
 }
 
 export interface LegalEntityProfileRevisionRecord extends LegalEntityProfileContent {

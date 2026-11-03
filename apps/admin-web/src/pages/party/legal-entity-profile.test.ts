@@ -4,6 +4,7 @@ import type { LegalEntityProfileRevisionRecord, RegistrationNumberTypeRecord } f
 import { compareLegalEntityProfiles } from './legal-entity-profile-history';
 import {
   addressText,
+  bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
   legalEntityProfileDraftBasedOn,
   legalEntityProfileLocalProblems,
@@ -78,7 +79,7 @@ test('扩展资料带入和再保存保全内容，但不沿用旧登记决定',
   deepEqual(payload.correspondenceAddress, source.correspondenceAddress);
   content.contacts[0].primaryFor!.push('BUSINESS');
   equal(source.contacts[0].primaryFor!.length, 1);
-  deepEqual(profileMaintenanceNotes(source), ['商务主要联系人未指名']);
+  deepEqual(profileMaintenanceNotes(source), ['未登记收款账户，对账单与发票上印不出收款账户', '商务主要联系人未指名']);
 });
 
 test('扩展可选格不产生默认值；半填和主要联系人冲突明确报告', () => {
@@ -379,4 +380,72 @@ test('解析时刻：留空即此刻，填了换 UTC', () => {
   equal(resolutionInstantOf('', 'UTC', now), '2026-09-24T12:00:00.000Z');
   equal(resolutionInstantOf('2027-01-01T08:00', 'Asia/Shanghai', now), '2027-01-01T00:00:00Z');
   equal(resolutionInstantOf('later', 'UTC', now), null);
+});
+
+// Covers（票 company-subject-ux/06 第 2 条）：收款账户带入再保存原样保全（可缺格缺席、整行空着不送）；必填格空着进缺项清单、
+// 按格点名；两行（币种，账号）相同先在本地提一句；有开票抬头没账户提「印不出收款账户」，没有抬头或有账户都不提。
+test('收款账户：带入与再保存保全、缺项按格点名、重复先提、维护提示只在有抬头没账户时', () => {
+  const source = revision({
+    invoicingRegistered: true,
+    invoiceTitle: 'SYN 抬头',
+    bankAccounts: [
+      { label: '人民币对公', holderName: 'SYN 户名', bankName: 'SYN 银行', accountNumber: 'SYN-CNY-01', swiftCode: 'SYNBCNBJ', bankAddress: 'SYN 地址', currency: 'CNY', note: 'SYN 备注' },
+      { holderName: 'SYN Holder', bankName: 'SYN Bank', accountNumber: 'SYN-USD-01', currency: 'USD' },
+    ],
+  });
+  const content = profileDraftContentOf(source);
+  deepEqual(content.bankAccounts[1], { label: '', holderName: 'SYN Holder', bankName: 'SYN Bank', accountNumber: 'SYN-USD-01', swiftCode: '', bankAddress: '', currency: 'USD', note: '' });
+  const payload = legalEntityProfilePayloadOf(draft(content), 'UTC').profiles[0];
+  deepEqual(payload.bankAccounts, source.bankAccounts);
+  deepEqual(profileComparisonContentOf(draft(content), 'UTC').bankAccounts, source.bankAccounts);
+  content.bankAccounts[0].note = 'SYN 改过';
+  equal(source.bankAccounts![0].note, 'SYN 备注');
+
+  const trimmed = legalEntityProfilePayloadOf(
+    draft({ bankAccounts: [
+      { label: ' ', holderName: ' SYN 户名 ', bankName: ' SYN 银行 ', accountNumber: ' SYN-CNY-02 ', swiftCode: '', bankAddress: ' ', currency: ' CNY ', note: '' },
+      { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+    ] }),
+    'UTC',
+  ).profiles[0];
+  deepEqual(trimmed.bankAccounts, [{ holderName: 'SYN 户名', bankName: 'SYN 银行', accountNumber: 'SYN-CNY-02', currency: 'CNY' }]);
+  equal('bankAccounts' in legalEntityProfilePayloadOf(draft({}), 'UTC').profiles[0], false);
+  equal('bankAccounts' in profileComparisonContentOf(draft({}), 'UTC'), false);
+
+  const half = draft({
+    addressCountry: 'CN', addressLines: 'SYN 地址',
+    bankAccounts: [
+      { label: '', holderName: 'SYN 户名', bankName: '', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: '', note: '' },
+      { label: '', holderName: '', bankName: '', accountNumber: '', swiftCode: '', bankAddress: '', currency: '', note: '' },
+    ],
+  });
+  deepEqual(legalEntityProfileMissingFields(half), [
+    { path: 'profiles[0].bankAccounts[0].bankName', label: '收款账户 1 开户行' },
+    { path: 'profiles[0].bankAccounts[0].currency', label: '收款账户 1 币种' },
+    { path: 'profiles[0].bankAccounts[1].holderName', label: '收款账户 2 户名' },
+    { path: 'profiles[0].bankAccounts[1].bankName', label: '收款账户 2 开户行' },
+    { path: 'profiles[0].bankAccounts[1].accountNumber', label: '收款账户 2 账号 / IBAN' },
+    { path: 'profiles[0].bankAccounts[1].currency', label: '收款账户 2 币种' },
+  ]);
+  deepEqual(legalEntityProfileLocalProblems(half, 'UTC'), {});
+  const duplicated = legalEntityProfileLocalProblems(
+    draft({ bankAccounts: [
+      { label: '', holderName: 'A', bankName: 'B', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: 'CNY', note: '' },
+      { label: '', holderName: 'A', bankName: 'B', accountNumber: 'SYN-01', swiftCode: '', bankAddress: '', currency: 'USD', note: '' },
+      { label: '', holderName: 'C', bankName: 'D', accountNumber: ' SYN-01 ', swiftCode: '', bankAddress: '', currency: ' CNY', note: '' },
+    ] }),
+    'UTC',
+  );
+  deepEqual(duplicated, { 'profiles[0].bankAccounts[2]': ['此币种与账号已经填写'] });
+
+  equal(profileMaintenanceNotes(source).some((note) => note.includes('收款账户')), false);
+  deepEqual(profileMaintenanceNotes(revision({ invoicingRegistered: true, invoiceTitle: 'SYN 抬头', representative: { kind: 'LEGAL_REPRESENTATIVE', name: 'SYN' }, contacts: [{ name: 'SYN', email: 'a@example.invalid' }] })), ['未登记收款账户，对账单与发票上印不出收款账户']);
+  equal(profileMaintenanceNotes(revision({})).some((note) => note.includes('收款账户')), false);
+
+  deepEqual(bankAccountCurrencyOptions({ countries: new Map(), currencies: new Map([['CNY', '人民币'], ['USD', '美元'], ['SYN', '']]) }), [
+    { value: 'CNY', label: '人民币（CNY）' },
+    { value: 'USD', label: '美元（USD）' },
+    { value: 'SYN', label: 'SYN' },
+  ]);
+  deepEqual(bankAccountCurrencyOptions({ countries: new Map(), currencies: new Map() }), []);
 });
