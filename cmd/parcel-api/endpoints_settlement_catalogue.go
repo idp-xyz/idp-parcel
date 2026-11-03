@@ -13,6 +13,8 @@ type settlementCatalogueWiring struct {
 	settlementStatements        settlementhttp.StatementCatalogueReader
 	settlementDisputed          settlementhttp.DisputedStatementReader
 	settlementStatementLines    settlementhttp.StatementLineReader
+	supplierBillLines           settlementhttp.SupplierBillLineReader
+	auditedPayables             settlementhttp.AuditedPayableCatalogueReader
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader
 	settlementOperatingResults  settlementhttp.OperatingCatalogueReader
 }
@@ -26,6 +28,8 @@ func init() {
 			"/settlement-statement-lines":     {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statement-lines?statement=SYN-PROBE"},
 			"/settlement-funds-applications":  {method: http.MethodGet, face: operationsReadFace()},
 			"/settlement-operating-results":   {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
+			"/settlement-supplier-bill-lines": {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-supplier-bill-lines?claim=SYN-PROBE&version=v1"},
+			"/settlement-audited-payables":    {method: http.MethodGet, face: operationsReadFace()},
 		},
 		build: func(sources endpointSources) (settlementCatalogueWiring, error) {
 			none := settlementCatalogueWiring{}
@@ -55,6 +59,9 @@ func init() {
 				settlementStatementLines:    settlementStatements,
 				settlementFundsApplications: settlementFundsApplications,
 				settlementOperatingResults:  settlementOperatingResults,
+				// 供应商账单各行与审核应付册读的是接收册与应付册两张表，同一个适配器（票 document-numbering/11）。
+				supplierBillLines: settlementStatements,
+				auditedPayables:   settlementStatements,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring settlementCatalogueWiring) []httpapi.BusinessEndpoint {
@@ -71,6 +78,9 @@ func init() {
 				{Pattern: "/settlement-statement-lines", Handler: settlementhttp.NewQueryStatementLinesEndpoint(settlementCatalogueIntake, wiring.settlementStatementLines)},
 				{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, wiring.settlementFundsApplications)},
 				{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, wiring.settlementOperatingResults)},
+				// 供应商账单与应付页（票 document-numbering/11）：一份账单的各行连同匹配与审核去向，与审核应付册。
+				{Pattern: "/settlement-supplier-bill-lines", Handler: settlementhttp.NewQuerySupplierBillLinesEndpoint(settlementCatalogueIntake, wiring.supplierBillLines)},
+				{Pattern: "/settlement-audited-payables", Handler: settlementhttp.NewQueryAuditedPayablesEndpoint(settlementCatalogueIntake, wiring.auditedPayables)},
 			}
 		},
 	})

@@ -34,6 +34,7 @@ import {
   PackageX,
   Radar,
   Receipt,
+  ReceiptText,
   Route,
   Scale,
   Send,
@@ -157,6 +158,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'charges-billing', label: '客户费用', icon: 'charges-billing' },
       { id: 'reconciliation', label: '对账单', icon: 'reconciliation' },
+      { id: 'supplier-bills', label: '供应商账单与应付', icon: 'supplier-bills' },
       { id: 'settlement-application', label: '收付款核销', icon: 'settlement-application' },
       { id: 'cod-ledger', label: '代收货款', icon: 'cod-ledger' },
       { id: 'operating-metrics', label: '经营核算', icon: 'operating-metrics' },
@@ -230,6 +232,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'claims-recovery': Megaphone,
   'charges-billing': Receipt,
   reconciliation: Scale,
+  'supplier-bills': ReceiptText,
   'settlement-application': Banknote,
   'operating-metrics': LineChart,
   'cod-ledger': Coins,
@@ -523,9 +526,16 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   },
   reconciliation: {
     title: '对账单',
-    summary: '发给客户的对账单，以及供应商送来的账单主张。',
+    summary: '发给客户的对账单，以及客户对单上费用提出的争议。',
     owner: '结算与经营核算（settlement-accounting）',
     source: 'docs/domain/settlement-accounting/CONTEXT.md「结算账户、对账与争议」对账单管理',
+  },
+  'supplier-bills': {
+    title: '供应商账单与应付',
+    summary: '登记供应商发来的账单、逐行审核，审核通过的金额形成应付。',
+    owner: '结算与经营核算（settlement-accounting）',
+    source:
+      'docs/application/settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md 与 CONTEXT.md「供应商主张与审核应付」',
   },
   'settlement-application': {
     title: '收付款核销',

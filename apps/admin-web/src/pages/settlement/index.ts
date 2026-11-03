@@ -6,3 +6,4 @@ export { ChargesBillingPage } from './ChargesBillingPage';
 export { OperatingMetricsPage } from './OperatingMetricsPage';
 export { ReconciliationPage } from './ReconciliationPage';
 export { SettlementApplicationPage } from './SettlementApplicationPage';
+export { SupplierBillsPage } from './SupplierBillsPage';

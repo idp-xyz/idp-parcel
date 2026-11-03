@@ -20,11 +20,11 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 1015 |
+| ① 已钉住 | 1016 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 423 |
-| 合计 | 1818 |
+| 合计 | 1819 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@
 | PC | 77 | 63 | 14 | 0 | 0 |
 | PP | 47 | 47 | 0 | 0 | 0 |
 | PS | 178 | 151 | 24 | 2 | 1 |
-| SA | 227 | 117 | 91 | 19 | 0 |
+| SA | 228 | 118 | 91 | 19 | 0 |
 | TF | 352 | 283 | 59 | 7 | 3 |
 | VE | 227 | 93 | 0 | 15 | 119 |
 <!-- 总览两表完 -->
@@ -683,6 +683,7 @@
 | `AT-SA-229` | cmd/parcel-api/assemble_statement_dispute_decisions_test.go::TestTheDisputeResolutionFaceResolvesOnceFinalAndRecordsTheDecider（生产装配半边，真库）；internal/settlementaccounting/application/cut_off_publish_statement_test.go::TestAResolutionLosingTheRaceToAFinalAnswersAlreadyResolved（编排半边）；internal/settlementaccounting/adapters/http/statement_dispute_decisions_test.go::TestTheDisputeResolutionIntakeAuthenticatesItsOwnDecision（Intake 半边）；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately（接入身份半边）；internal/settlementaccounting/adapters/postgres/inventory_closeout_test.go::TestAPendingReviewDisputeCanBeResolvedAgainUntilAFinalResolution（存储半边：处理人那一列与终局判读同一条 UPDATE） |
 | `AT-SA-230` | internal/settlementaccounting/application/document_number_test.go::TestADisputeTakesItsNumberWhenItIsRegistered（编排半边）；internal/settlementaccounting/adapters/postgres/document_number_test.go::TestADisputeNumberIsIssuedInTheRegistrationTransaction、::TestADisputeWithoutANumberKeepsTheReason（真库半边：重放、并发、租户隔离、按账户时区月度重置、回滚释放、撞号、唯一约束、无号原因）；cmd/parcel-api/assemble_statement_dispute_decisions_test.go::TestTheDisputeRegistrationFaceRegistersAndRecordsTheClerk、::TestConcurrentRegistrationsOfOneDisputeAreJudgedByContent（生产装配半边）；internal/settlementaccounting/adapters/http/query_settlement_statements_test.go::TestCustomerStatementQueryAttachesDisputesAndInclusions（读口半边）；apps/admin-web/src/pages/settlement/dispute-forms.test.ts（管理台半边）；internal/settlementaccounting/domain/document_number_test.go::TestADocumentNumberingIsANumberOrANamedAbsence（领域半边） |
 | `AT-SA-231` | internal/settlementaccounting/application/document_number_test.go::TestAnAuditedPayableTakesItsNumberWhenItIsFormed（编排半边）；internal/settlementaccounting/adapters/postgres/document_number_test.go::TestAnAuditedPayableNumberIsIssuedInTheAuditTransaction（真库半边）；cmd/parcel-api/assemble_supplier_bill_decisions_test.go::TestTheSupplierBillAuditFaceFormsAPayableAndRecordsTheAuditor、::TestAPayableNumberCollisionFormsNothingAndReleasesTheSequence（生产装配半边：答复带号、撞号回滚释放） |
+| `AT-SA-232` | internal/settlementaccounting/adapters/postgres/supplier_bill_catalogue_test.go::TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables、::TestSupplierBillLinesCarryMatchAndPayablePerLine、::TestAuditedPayableCatalogueListsNumbersAndFilters、::TestAnAuditedPayableWithoutItsReceptionIsAnError、::TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage、::TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow（真库半边：汇总、各行、应付册、检索、租户隔离、找不到接收记录答错误且按供应商检索时一样、按收到时间倒序截页、审核授权快照与此刻分两格）；internal/settlementaccounting/adapters/http/query_supplier_bills_test.go::TestSupplierBillLinesQueryTranscribesMatchAndPayable、::TestSupplierBillLinesQuerySeparatesMissingFromUnanswered、::TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters，internal/settlementaccounting/adapters/http/query_settlement_statements_test.go::TestSupplierBillReceptionQueryCarriesTheBillSummary、::TestSupplierBillReceptionQueryFlagsAPageCut（端点半边，含截页标记）；cmd/parcel-api/assemble_supplier_bill_books_test.go::TestTheSupplierBillBooksShowTheAuditedPayableNumber（生产装配半边：经两口真登真审后三本册读回应付单号）；apps/admin-web/src/pages/settlement/supplier-bills.test.ts（管理台半边） |
 | `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
 | `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
 | `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired、::TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing（事项本体缺动作、缺对象、缺起止责任各答带原因的待补充，ADR-0337） |
@@ -2171,6 +2172,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-02 追记（票 document-numbering/06）：UC-VE-004 新立 `AT-VE-227`（分诊自动建案在同一事务内取案件单据号、号随案件落库，重复命中不取号，回滚退号，生命周期不换号）、`AT-VE-228`（单据编号时区未配置照常建案不带号；撞号整轮不落、答未决、取过的流水退回），UC-VE-007 新立 `AT-VE-229`（记录提交时取索赔单据号、回执带号、重放答原号、同项并发只占一个号、各租户各数、按月重置）、`AT-VE-230`（时区未配置照常记录不带号；撞号不记录答「编号规则撞号」；回滚退号）；领域、编排、真库、HTTP、派发与生产装配用例点名，四条入①。总览计数未改，由推送方重算。
 
 2026-11-02 追记（票 document-numbering/10，ADR-0355 决定十一）：UC-PS-001 新立 `AT-PS-180`（委托查阅按一组委托标识在可见范围内取回概要，作用域外与查无的不出现，超上限、空段与并用是坏请求；供别的上下文的页面显运单号、不复制单据号），入①。总览计数未动，由推送方重算。
+
+2026-11-02 追记（票 document-numbering/11，ADR-0340、ADR-0355 决定十一）：UC-SA-004 新立 `AT-SA-232`（账单册汇总、账单各行连同匹配与审核去向、审核应付册以应付单号列出并可精确检索，只读、租户隔离、读不回答未形成），入①。
 
 2026-11-02 追记（票 document-numbering/12 的文档半边，ADR-0356 草案）：UC-VE-008 新立 `AT-VE-231` 至 `AT-VE-236`（客户追踪按委托的单据号查：已接受委托逐件列当前有效包裹、逐件答复同按包裹查；查无与属别的账户同答；待接受与没有服务；游标分页与坏请求；拆分后列后继；读不动整页未形成），入④，等票 12 实现；`AT-VE-235` 另等包裹身份谱系落模型。总览计数未重算，由推送方重算。
 
