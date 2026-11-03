@@ -18,6 +18,7 @@ web:
   # 对管理台本地开发源放 CORS，令牌端点因此可以直连；管理台直连还是照旧走开发代理归票 operator-channel/07。
   allowedOrigins:
     - http://localhost:5173
+    - http://127.0.0.1:5173
 
 oauth2:
   # 只开管理台用得到的两种。不开 password：那等于让客户端自己收用户口令，绕开登录页。
@@ -38,8 +39,11 @@ staticClients:
     name: 包裹网络管理台（演示）
     public: true
     redirectURIs:
-      # vite dev 只监听 ::1，浏览器按 localhost 打开（apps/admin-web/README.md）；路径是 oidc.ts 的 CALLBACK_PATH。
+      # 两个源都登：vite dev 监听哪一个回环随本机 localhost 的解析而定，Windows 浏览器经 WSL 时还要按 127.0.0.1 打开
+      # 才不付 IPv6 回落的等待（apps/admin-web/README.md 的「本机暗礁」）。回调地址按页面所在的源拼，见 oidc.ts 的
+      # redirectUri；路径是 CALLBACK_PATH。
       - http://localhost:5173/auth/callback
+      - http://127.0.0.1:5173/auth/callback
 
 enablePasswordDB: true
 

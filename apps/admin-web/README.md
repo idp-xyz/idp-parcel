@@ -51,9 +51,10 @@ pnpm test       # scripts/run-tests.mjs
 
 前端一律带 `/api` 前缀发起，`vite.config.ts` 的开发代理剥前缀转发到 `cmd/parcel-api`（代理缺省目标 `:19080`；parcel-api 自身缺省监听 `:8080`，起后端时用 `IDP_PARCEL_HTTP_ADDR=:19080` 对齐，前端用 `PARCEL_API_TARGET` 改目标）。代理链已烟测：穿过代理后端收到 `/v1/shipment-requests`（前缀已剥），403 未配置包封原样穿回。
 
-本机两处暗礁（实测 2026-08-24）：
-- **8080 被 Windows 服务（svchost）占用**——本机起 parcel-api 需 `IDP_PARCEL_HTTP_ADDR` 换端口，并给前端配同值 `PARCEL_API_TARGET`；
-- **vite dev 只监听 IPv6 `::1`**——浏览器/curl 用 `localhost:5173`，用 `127.0.0.1` 会被拒。
+本机暗礁：
+- **8080 被 Windows 服务（svchost）占用**（实测 2026-08-24）——本机起 parcel-api 需 `IDP_PARCEL_HTTP_ADDR` 换端口，并给前端配同值 `PARCEL_API_TARGET`；
+- **vite dev 只监听一个回环地址**，是哪一个随本机 `localhost` 的解析而定：2026-08-24 实测是 IPv6 `::1`（那时用 `127.0.0.1` 会被拒），2026-11-03 实测是 `127.0.0.1`。用 `ss -ltn | grep 5173` 看当下是哪个。
+- **Windows 浏览器经 WSL 打开时用 `http://127.0.0.1:5173`**，不用 `localhost`（2026-11-03 实测，WSL 镜像网络）：Windows 把 `localhost` 先投 IPv6 `::1`，这一跳到不了 WSL、也不被拒，挂到超时才回落 IPv4，每条新连接白等约 200–300ms；换标签要开几条新连接时就成了偶发的近一秒。演示发行方两个源都登了回调（`scripts/demo-seeds/operator-channel/dex.yaml`）。两个源的浏览器本地存储各一份，换源后打开的标签从头来。
 
 ## 版本与验证口径
 
