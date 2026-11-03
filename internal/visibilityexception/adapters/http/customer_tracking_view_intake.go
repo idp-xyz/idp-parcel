@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"unicode/utf8"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -89,11 +91,26 @@ func (intake *CustomerTrackingViewIntake) IntakeQuery(ctx context.Context, reque
 	if len(located) != 1 {
 		return TrackingViewQuery{}, fmt.Errorf("%w: exactly one %s is required", ErrMalformedRequest, trackingViewParcelParameter)
 	}
+	if err := refuseUnstorableQueryValue(trackingViewParcelParameter, located[0]); err != nil {
+		return TrackingViewQuery{}, err
+	}
 	parcel, err := domain.NewTrackedParcelReference(located[0])
 	if err != nil {
 		return TrackingViewQuery{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	return TrackingViewQuery{Tenant: viewer.Tenant, Customer: viewer.Customer, Parcel: parcel}, nil
+}
+
+// refuseUnstorableQueryValue 拒收立不起一个号的查询值：含 NUL，或不是合法 UTF-8。客户追踪两口的 Intake 共用这一处。
+//
+// 这样的值放过去，会一路带进读，库拒收参数，答成 500 NO_ANSWER_FORMED——客户系统据 5xx 退避重发，而这个请求永远不会好。
+// 它是调用方的坏输入，答 400，这一判只看输入、不读库，与号存不存在无关（ADR-0356 决定一；按包裹查同理，ADR-0223、ADR-0246
+// 要的也是坏输入答 400）。
+func refuseUnstorableQueryValue(name, value string) error {
+	if !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
+		return fmt.Errorf("%w: %s carries NUL or is not valid UTF-8", ErrMalformedRequest, name)
+	}
+	return nil
 }
 
 func presentedCustomerCredential(request *http.Request) PresentedCustomerCredential {
