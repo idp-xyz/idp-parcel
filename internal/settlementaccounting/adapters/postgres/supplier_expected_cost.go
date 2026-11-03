@@ -270,7 +270,7 @@ func (repository *SupplierExpectedCosts) ListExpectedCostsAwaitingSupplier(
 }
 
 // RecordExpectedCostSupplier 只在那一格仍为空时写下：条件写在 UPDATE 里，并发的两次补记只有先到的那次写成，已记的一格不改。
-// 这是全仓唯一改写预期成本行的一处，改的只是一格从空到有——成本本身（计价结果、来源引用）一字不动。
+// 预期成本行此外按版本只增不改；这里改的只是一格从空到有，成本本身（计价结果、来源引用）一字不动，所以不另起一版。
 func (repository *SupplierExpectedCosts) RecordExpectedCostSupplier(
 	ctx context.Context,
 	tenant domain.TenantID,
