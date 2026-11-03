@@ -59,8 +59,10 @@ func (address RegisteredAddress) valid() bool {
 	return address.country.valid() && len(address.lines) > 0
 }
 
-// TaxRegistrationNumber 是法人资料上的一个税务登记号：按目录里哪一类登记，以及号本身。它属资料层——可后办、
-// 可变的那类（ADR-0145 决定一、三）；号是否属该类型、格式是否合格，由写入用例按注册号类型目录判。
+// TaxRegistrationNumber 是法人资料上的一个监管登记号：按目录里哪一类登记，以及号本身。它属资料层——税务、海关等
+// 监管机关发给法人、可后办、可变的那类（ADR-0145 决定一、三；ADR-0359 决定一把这一组从税务登记号放宽到监管登记号，
+// 类型名与线上字段名不改：名窄于义，改名换不来任何判断上的差别，却要让已在册的快照与载荷都换一次字）；号是否属
+// 该类型、格式是否合格，由写入用例按注册号类型目录判。
 type TaxRegistrationNumber struct {
 	typeCode RegistrationNumberTypeCode
 	number   RegistrationNumber
@@ -93,9 +95,12 @@ func NewInvoiceTitle(value string) (InvoiceTitle, error) {
 }
 
 // InvoicingDetails 是开票资料。首版只含开票抬头；其余开票项随开立方的实施票按需增列，不预设（ADR-0145
-// 决定三）——所以单立一个类型，增列时不必改动法人资料的形状。
+// 决定三）——所以单立一个类型，增列时不必改动法人资料的形状。ADR-0359 决定四增列了主抬头的语言与其余
+// 语言版本（NewInvoicingDetailsWithLocalizedTitles）；`资料不全`仍只看主抬头有没有。
 type InvoicingDetails struct {
-	title InvoiceTitle
+	title           InvoiceTitle
+	titleLanguage   string
+	localizedTitles []LocalizedInvoiceTitle
 }
 
 func NewInvoicingDetails(title InvoiceTitle) (InvoicingDetails, error) {
@@ -189,7 +194,11 @@ func NewLegalEntityProfileContent(
 		if !invoicing.title.valid() {
 			return LegalEntityProfileContent{}, fmt.Errorf("%w: invoicing details need an invoice title", ErrInvalidLegalEntityProfile)
 		}
-		content.invoicing = *invoicing
+		checked, err := invoicing.checked()
+		if err != nil {
+			return LegalEntityProfileContent{}, err
+		}
+		content.invoicing = checked
 		content.hasInvoicing = true
 	}
 	content.contacts = make([]LegalEntityContact, len(contacts))

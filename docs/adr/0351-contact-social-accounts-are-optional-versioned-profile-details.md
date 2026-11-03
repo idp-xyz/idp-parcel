@@ -1,6 +1,6 @@
 # ADR-0351：联系人社交账号作为可选多值资料随法人资料版本保存
 
-Status: Accepted（2026-10-30，用户指出公司联系人缺少社交账号，沿本会话公司主体完整资料范围作产品实现选择；部分停用 ADR-0350 的快照形状选择句，具体作用见 Links。）
+Status: Accepted（2026-10-30，用户指出公司联系人缺少社交账号，沿本会话公司主体完整资料范围作产品实现选择；部分停用 ADR-0350 的快照形状选择句，具体作用见 Links。）<!-- 索引注记 --> 「快照按最低可表达版本写入：没有社交账号的资料沿原有无标记形状或 LEP-2，字节和摘要保持；至少一个联系人有社交账号时写 `shape: LEP-3`，摘要为 `LEP-3:<sha256>`。」一句在同时含收款账户、语言版本或主抬头语言时已由 [ADR-0359](./0359-regulatory-registration-numbers-bank-accounts-and-multilingual-invoice-titles-on-the-legal-entity-profile.md) 停用（写 LEP-4）；「LEP-3 必须包含社交账号；无标记或 LEP-2 不得包含它」照旧，其余各条不变。
 Date: 2026-10-30
 
 ## Context
@@ -27,3 +27,4 @@ Date: 2026-10-30
 
 - 部分停用 [ADR-0350](./0350-legal-entity-profile-representative-addresses-and-contact-purposes.md) 中「有扩展内容的快照写 `shape: LEP-2`，内容摘要为 `LEP-2:<sha256>`，不与旧版混比。」一句，含社交账号时按本记录的 LEP-3；其余各条不变。
 - [参与方与商业 CONTEXT](../domain/party-commercial/CONTEXT.md)
+- [ADR-0359：同时含收款账户、语言版本或主抬头语言时的快照形状 LEP-4](./0359-regulatory-registration-numbers-bank-accounts-and-multilingual-invoice-titles-on-the-legal-entity-profile.md)

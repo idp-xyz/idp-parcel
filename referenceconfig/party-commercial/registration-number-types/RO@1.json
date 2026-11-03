@@ -1,0 +1,39 @@
+{
+  "identifier": "party-commercial/registration-number-types/RO",
+  "version": 1,
+  "title": "罗马尼亚（欧盟成员国）：增值税识别号 VAT、进口一站式服务识别号 IOSS 与经济运营商注册识别号 EORI（资料层）；公开编码格式",
+  "source": "VAT：欧盟委员会 VIES「VAT 识别号结构」公布的本成员国格式（含国家前缀）；IOSS：欧盟 IOSS 增值税识别号公开格式，IM 加 10 位数字（前 3 位为识别成员国的数字代码）；EORI：欧盟海关 EORI 号公开格式，2 位 ISO 国家码加最多 15 位字母数字",
+  "note": "只随附资料层三类；本成员国的商业登记号（身份层）格式各异，本版不猜（ADR-0359 决定二），法人的终身注册号类型由租户登记。只校验编码格式，不含校验位算法；样例为合成值，全零，不指向任何真实主体；随附范围已由 ADR-0359 决定二定下（代决，待 PC owner 复核）：只收公开规范有明确格式的类型，不含校验位算法；补国家 / 地区或更正格式走新版本",
+  "types": [
+    {
+      "countryCode": "RO",
+      "typeCode": "VAT",
+      "name": "增值税识别号（VAT）",
+      "layer": "PROFILE",
+      "format": "RO[0-9]{2,10}",
+      "samples": [
+        "RO00"
+      ]
+    },
+    {
+      "countryCode": "RO",
+      "typeCode": "IOSS",
+      "name": "进口一站式服务识别号（IOSS）",
+      "layer": "PROFILE",
+      "format": "IM[0-9]{10}",
+      "samples": [
+        "IM0000000000"
+      ]
+    },
+    {
+      "countryCode": "RO",
+      "typeCode": "EORI",
+      "name": "经济运营商注册识别号（EORI）",
+      "layer": "PROFILE",
+      "format": "[A-Z]{2}[A-Za-z0-9]{1,15}",
+      "samples": [
+        "RO000000000000000"
+      ]
+    }
+  ]
+}

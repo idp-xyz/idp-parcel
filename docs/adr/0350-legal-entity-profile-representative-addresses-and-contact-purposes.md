@@ -1,6 +1,6 @@
 # ADR-0350：法人资料扩展代表人、办公与通信地址、联系人用途和按用途主要联系人
 
-Status: Accepted（2026-10-30，用户要求完善公司主体并指示「开始吧」；本轮按该范围作产品实现选择。部分停用 ADR-0145 决定三的资料内容枚举，其余规则不变。）<!-- 索引注记 --> 「有扩展内容的快照写 `shape: LEP-2`，内容摘要为 `LEP-2:<sha256>`，不与旧版混比。」一句在含社交账号时已由 [ADR-0351](./0351-contact-social-accounts-are-optional-versioned-profile-details.md) 停用；其余各条不变。
+Status: Accepted（2026-10-30，用户要求完善公司主体并指示「开始吧」；本轮按该范围作产品实现选择。部分停用 ADR-0145 决定三的资料内容枚举，其余规则不变。）<!-- 索引注记 --> 「有扩展内容的快照写 `shape: LEP-2`，内容摘要为 `LEP-2:<sha256>`，不与旧版混比。」一句在含社交账号时已由 [ADR-0351](./0351-contact-social-accounts-are-optional-versioned-profile-details.md) 停用，在含收款账户、语言版本或主抬头语言时已由 [ADR-0359](./0359-regulatory-registration-numbers-bank-accounts-and-multilingual-invoice-titles-on-the-legal-entity-profile.md) 停用（写 LEP-4）；其余各条不变。
 Date: 2026-10-30
 
 ## Context
@@ -30,6 +30,7 @@ Date: 2026-10-30
 ## Links
 
 - [ADR-0351：含社交账号时的快照形状与最低可表达版本](./0351-contact-social-accounts-are-optional-versioned-profile-details.md)
+- [ADR-0359：含收款账户、语言版本或主抬头语言时的快照形状 LEP-4](./0359-regulatory-registration-numbers-bank-accounts-and-multilingual-invoice-titles-on-the-legal-entity-profile.md)
 
 - [ADR-0145：扩展其决定三的资料内容枚举，其余各条不变](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)
 - [参与方与商业](../domain/party-commercial/CONTEXT.md)
