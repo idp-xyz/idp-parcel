@@ -16,24 +16,56 @@ import (
 // 检查在认证之前。方法门仍归处理器，错方法照旧答 405；渠道未配置时坏目标答 400 而不是 403，理由与各口把查询参数的在场与封闭集
 // 当传输形状、先于 Intake 判相同（如 /tracking-projections 两个定位参数同在即 400）。它不泄露「本端点认哪些键」：判的是整条
 // 目标，每一格一视同仁，答复与端点、与键都无关。首方客户族例外，见 unstorableTargetRefusal。
+//
+// 与 ADR-0055 决定三「答复对一切请求内容与自报身份一致」不相抵：请求目标解码后是不是文本属传输形状，与方法、与请求行能不能
+// 解析同一层，不算请求内容。未配置格对一切能解成文本的请求仍同答 403；解不成文本的请求，同 net/http 对解析不了的请求行先答
+// 400 一样，到不了任何一格 Intake。
+
+// targetCheckExemptions 是不挂检查的 GET 行，值是豁免理由。进这张表要两条同时成立：
+//
+//   - 这一行不把任何查询值或路径段带进库，修前就不答 500，检查在这里护不住任何东西；
+//   - 它的坏请求分格里没有 MALFORMED_REQUEST，挂上就凭空多一格，改掉既有分格（票面「不做」）。
+//
+// 只成立前一条的不进：坏请求分格本有 MALFORMED_REQUEST 的口，检查答的仍是它自己的一格，新加的 GET 行默认挂上。豁免只在这一处
+// 写，不散到各特性的行声明里；表里的路径必须是登记处声明过的 GET 行，由 TestTargetCheckExemptionsNameDeclaredReadLines 核。
+var targetCheckExemptions = map[string]string{
+	"/reference-data/countries":  referenceDataExemption,
+	"/reference-data/currencies": referenceDataExemption,
+	"/reference-data/units":      referenceDataExemption,
+	"/work-devices":              operatorIdentityExemption,
+	"/operator-binding":          operatorIdentityExemption,
+	"/operator-grants":           operatorIdentityExemption,
+}
+
+const (
+	referenceDataExemption = "不把查询值带进库，既有分格不动：q、region、category 只在内存目录上检索与比对；" +
+		"包头契约的失败格是 REGION_NOT_RECOGNIZED / CATEGORY_NOT_RECOGNIZED，没有 MALFORMED_REQUEST"
+	operatorIdentityExemption = "不把查询值带进库，既有分格不动：三口根本不读查询串，也没有路径参数；码集里没有 MALFORMED_REQUEST"
+)
 
 // unstorableTargetRefusal 交回一行在请求目标不是文本时答的坏请求；nil 即这一行不在装配处挂检查。
 //
-// 只挂 GET 行：命令口不读查询串，挂上去只会让一条今天照常受理的命令因为一个它不读的键被拒。首方客户族不挂：本族先认证、后读
-// 查询串，令牌不过的调用方看不到查询串校验的结果，所以它的读口在 Intake 里、认证之后判（visibilityhttp 的
-// refuseUnstorableQueryValue，判据同一份）。其余各族的处理器今天写的坏请求都是旧形状（ADR-0140 决定三迁到问题详情另立后续票）；
-// 哪一族迁了，就把它从这一格挪出去。族写漏了是编程错误，在登记处的 init 里就停。
+// 只挂 GET 行：命令口不读查询串，挂上去只会让一条今天照常受理的命令因为一个它不读的键被拒。targetCheckExemptions 里的行不挂。
+// 首方客户族不挂：本族先认证、后读查询串，令牌不过的调用方看不到查询串校验的结果，所以它的读口在 Intake 里、认证之后判
+// （visibilityhttp 的 refuseUnstorableQueryValue，判据同一份）。
+//
+// 挂旧形状的只列今天有 GET 行、处理器写的坏请求确是 {"error":{"code"}} 的族：主数据与运营查阅读、登记册配置写、隔离读。别的族
+// 哪天挂上 GET 行，先在这里定它的坏请求形状——不预先认定，族没列到就在登记处的 init 里停。哪一族迁到问题详情（ADR-0140
+// 决定三的后续票），就把它从旧形状那一格挪出去。
 func unstorableTargetRefusal(pattern string, line endpointLine) http.HandlerFunc {
 	if line.method != http.MethodGet {
+		return nil
+	}
+	if _, exempt := targetCheckExemptions[pattern]; exempt {
 		return nil
 	}
 	switch line.face.family {
 	case faceCustomerClient:
 		return nil
-	case faceUnconfigured, faceIsolatedRead, faceOperationsRead, faceRegistryWrite, faceOperationDecision, faceWorkFact, faceIntegrationClient:
+	case faceOperationsRead, faceRegistryWrite, faceIsolatedRead:
 		return writeLegacyMalformedRequest
 	}
-	panic(fmt.Sprintf("parcel-api: endpoint %s declares face family %q, whose bad-request shape is not settled here", pattern, line.face.family))
+	panic(fmt.Sprintf("parcel-api: GET endpoint %s declares face family %q, whose bad-request shape is not settled here", pattern, line.face.family))
 }
 
 // writeLegacyMalformedRequest 写旧形状的坏请求：`{"error":{"code":"MALFORMED_REQUEST"}}`，application/json，与各上下文处理器

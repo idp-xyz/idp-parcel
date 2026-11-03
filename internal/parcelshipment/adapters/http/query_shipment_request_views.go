@@ -83,7 +83,8 @@ const codeRequestNotVisible = "SHIPMENT_REQUEST_NOT_VISIBLE"
 //
 // 列表分支另收 `documentNumber`（运单号，ADR-0355 决定十一「可按单据号检索」）：带了就只答单据号逐字等于它的那几行，
 // 仍是 LISTED——没有是空数组，不是 404：管理台拿运单号解析委托标识，要分得出「没有这个运单号」与「读不动」。作用域与
-// 不带参数时同一份（Intake 的列表查询），值在 Intake 之后才读，未配置的渠道照旧先答 403。
+// 不带参数时同一份（Intake 的列表查询），值在 Intake 之后才读，未配置的渠道照旧先答 403。只有值的编码在本处理器之前判：
+// 解码后含 NUL 或不是合法 UTF-8，装配处挂的 httpapi.RefuseUnstorableReadTarget 先答 400，未配置的渠道也是（传输形状）。
 //
 // 列表分支还收 `shipmentRequestIds`（逗号分隔的一组委托标识，至多 maxShipmentRequestIDsPerLookup 个）：别的上下文的页面
 // 上出现委托标识时，管理台按页上那几份一次取回运单号（ADR-0355 决定十一），引用方的读模型不复制单据号。作用域仍是列表

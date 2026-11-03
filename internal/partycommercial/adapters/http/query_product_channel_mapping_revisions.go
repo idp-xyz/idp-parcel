@@ -54,7 +54,8 @@ func NewQueryProductChannelMappingRevisionsEndpoint(
 			return
 		}
 
-		// 路径参数在 Intake 之后读：未配置要拒在一切请求内容之前（ADR-0055），路径也是请求内容。
+		// 路径参数在 Intake 之后读：未配置要拒在一切请求内容之前（ADR-0055），路径也是请求内容。只有编码在本处理器之前判：
+		// 路径段解码后含 NUL 或不是合法 UTF-8，装配处挂的 httpapi.RefuseUnstorableReadTarget 先答 400，那是传输形状。
 		mapping, err := domain.NewProductChannelMappingID(request.PathValue(mappingIDPathValue))
 		if err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
