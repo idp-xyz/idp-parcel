@@ -1,7 +1,7 @@
 # 01 用语统一、列表页细节、签名、空值与时间精度
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：spec「统一用语」表；评估「二、内容表达」「五、视觉细节」。
@@ -77,3 +77,9 @@ Blocked by: 无
 - `identityKindLabels`（停用表单种类词「责任法人」等）未改：`identity-deactivation-form.test.ts` 钉着它，停用对话框归票 03。
 - 资料读出与快照的税务登记号仍显类型码（`SYN-CN-TAX SYN-CN-TAX-0001`）：译名要把目录查法穿过票 03 / 04 的组件，本票未接。
 - 列表搜索仍按类型码匹配，不按译名。
+
+## 评审与进 main 记录（2026-11-03，协调方）
+
+- 共享面 `templates/workspace-tabs.ts`（`55b0bfa13`）Spec 轴隔离评审：阻断为零。非阻断：详情栏 `LegalEntityDetailPanel` 的签仍「身份修订」（票 03 落点，合入 03 前消歧）；`apps/admin-web/FLOWS.md`「不改身份修订」指概念不指签名，可留。
+- main `39ee55742` 上 `git merge --no-ff origin/claude-csux-01`（`379a2b41a`，合并提交 `5bc6ff32e`）无冲突，三道门退 0（tsc、run-tests 1145、vite build）；作者之后合 main 的记录笔（`bcec9be01`）再并入（`eefaa0187`）。
+- 作者请裁：资料读出税务登记号译名与列表按译名搜索——读出译名归票 04 / 06（监管登记号改名时一并接），列表搜索按译名不做（码仍可搜，译名只是显示）。
