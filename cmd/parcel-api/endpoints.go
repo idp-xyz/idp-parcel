@@ -65,7 +65,8 @@ type accessFace struct {
 	family   faceFamily
 	decision accessidentity.DecisionKind
 	// alsoDecisions 是同一口按载荷另认的决定种类：供应商账单审核口按这一次给的结果认审核应付或争议决定（ADR-0357 决定二），
-	// 两种都要声明在这里，换口用例才核得到持其中任一种的人进得来、两种都不持的人进不来。
+	// 两种都要声明在这里。换口用例据此核两件事：只持其中任一种的人过得了授予那一格（走到准入那一格）
+	// （TestDecisionFacesOfSeveralKindsAdmitEitherKind），一种都不持的人答未授予（TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind）。
 	alsoDecisions []accessidentity.DecisionKind
 	workScope     accessidentity.WorkScopeKind
 	fact          accessidentity.ExternalFactType

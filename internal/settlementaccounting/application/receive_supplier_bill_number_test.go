@@ -64,12 +64,22 @@ func TestASupplierBillNumberIdentifiesOneClaimPerSupplier(t *testing.T) {
 		}
 	})
 
+	t.Run("the same version resent under another supplier is refused too", func(t *testing.T) {
+		resent := receiveOnce(t, fixture, numberedBill(t, "bill-a", "v1", "partner-2", ""))
+		if original, has := resent.SupplierConflict(); resent.Outcome() != application.BillClaimSupplierConflict || !has || original.String() != "partner-1" {
+			t.Fatalf("outcome = %q 原先的供应商 = %q", resent.Outcome(), original)
+		}
+	})
+
 	t.Run("a new version under another supplier is refused with or without a number", func(t *testing.T) {
 		for _, number := range []string{"INV-001", ""} {
 			switched := receiveOnce(t, fixture, numberedBill(t, "bill-a", "v9", "partner-2", number))
-			conflict, _ := switched.NumberConflict()
-			if switched.Outcome() != application.BillClaimSupplierConflict || conflict.RegisteredSupplier.String() != "partner-1" {
-				t.Fatalf("号 %q：outcome = %q conflict = %+v（同一份主张的各版本供应商不变）", number, switched.Outcome(), conflict)
+			original, _ := switched.SupplierConflict()
+			if switched.Outcome() != application.BillClaimSupplierConflict || original.String() != "partner-1" {
+				t.Fatalf("号 %q：outcome = %q 原先的供应商 = %q（同一份主张的各版本供应商不变）", number, switched.Outcome(), original)
+			}
+			if _, numberConflict := switched.NumberConflict(); numberConflict {
+				t.Fatal("供应商冲突不是账单号冲突")
 			}
 		}
 	})

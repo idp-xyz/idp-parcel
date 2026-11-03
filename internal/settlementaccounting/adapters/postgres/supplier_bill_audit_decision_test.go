@@ -341,12 +341,12 @@ func TestASupplierBillNumberIsRegisteredOncePerSupplier(t *testing.T) {
 	if number, has := found.Claim.BillNumber(); err != nil || !present || !has || number.String() != "INV-001" {
 		t.Fatalf("v2 读回的号 = %v %v（号标识主张，不论哪一版带来）", number, has)
 	}
-	// 同一份主张的新版本换了供应商，带不带号都答主张供应商冲突、带出原先的供应商，不再落成号册上的一致性错误（未形成答案），
-	// 也不在号册分配方之外另起一个供应商。
+	// 同一份主张的新版本换了供应商，带不带号都答主张供应商冲突、带出原先的供应商。不先这样挡，带号的那一笔会撞上号册的分配方、
+	// 落成一致性错误（未形成答案），不带号的那一笔会在号册分配方之外另起一个供应商。
 	for _, number := range []string{"INV-001", ""} {
 		outcome, switched := receive(command(winner, "v3", "supplier-2", number))
-		if conflict, _ := switched.NumberConflict(); outcome != "CLAIM_SUPPLIER_CONFLICT" || conflict.RegisteredSupplier.String() != "supplier-1" {
-			t.Fatalf("换供应商的新版本（号 %q）= %s %+v", number, outcome, conflict)
+		if original, _ := switched.SupplierConflict(); outcome != "CLAIM_SUPPLIER_CONFLICT" || original.String() != "supplier-1" {
+			t.Fatalf("换供应商的新版本（号 %q）= %s %q", number, outcome, original)
 		}
 	}
 	if count := countRows(t, stack, `SELECT count(*) FROM settlement_accounting.supplier_bill_reception WHERE supplier_ref = 'supplier-2' AND claim_id = '`+winner+`'`); count != 0 {

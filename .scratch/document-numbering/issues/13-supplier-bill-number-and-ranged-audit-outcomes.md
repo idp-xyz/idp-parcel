@@ -97,3 +97,15 @@ Blocked by: 无（从票 [11](./11-supplier-bill-and-audited-payable-admin-pages
 - 账单册新检索维（`claim`、`supplier`、`supplierBillNumber`）带 NUL 或非法 UTF-8 时答 500：票 15（`claude-docnum15`）在全仓 HTTP 读口共用层加的入站检查进 main 后会覆盖，本票不另修。
 - `CLAIM_SUPPLIER_CONFLICT` 是接收口新增的答复格，与账单号冲突并列；越权风险点照旧待 SA owner 复核。
 
+## 评审修订（第三轮，2026-11-02，作者；复评钉 `4435dee67`；追加提交、不 rebase）
+
+1. **两种授予各自的拒因不被吞掉**（阻断，上一轮引入）：审核口第一步把审核应付与争议决定两种授予都认一遍，认得过的记为已持有，各自的拒因按种存下。一种都认不过时答两种拒因里最能说明问题的那个（`telling`：身份依赖不可用 503 先于认不出的错误，再先于准入范围外 403，再先于未授予 403；令牌不成立、渠道没配直接答，不再试）；第三步缺哪一种就答那一种自己的拒因。由此：只持争议决定而争议那种准入未登答 403 `OUTSIDE_ADMISSION_SCOPE`、身份依赖不可用答 503；两种都持而只有审核那种准入未登的人给争议进编排，给通过答 403 `OUTSIDE_ADMISSION_SCOPE`。用例 `TestTheSupplierBillAuditIntakeKeepsEachGrantsOwnRefusal` 四格。ADR-0357 决定五写明这一次序。
+2. **同一版本换供应商**：定为覆盖——同一份主张不论哪一版（新版本或同一版本的重发）供应商都不变，同一版本重发换了供应商也答 `CLAIM_SUPPLIER_CONFLICT`（这一格先于账单号与内容比对判）。ADR-0357 决定一、CONTEXT、`AT-SA-233` 写成这样，实现本就如此；编排用例补同一版本那一格。
+3. **`CLAIM_SUPPLIER_CONFLICT` 的答复体**：端点 `TestAClaimSupplierConflictAnswersTheOriginalSupplier`（真编排、只走到查原供应商那一步的接收库替身）钉 200、`registeredSupplier`、不带账单号冲突的两格；parcel-api `TestTheReceptionFaceRegistersTheSupplierBillNumber` 补换供应商的新版本那一步。
+4. **ADR-0357 决定一的层级**：「同一主张、同一版本」「新版本可带同号」两条子项挂回主张标识那一条下面，供应商不变那一条移到它们之后。
+5. **库约束措辞**：改为「首尾空白照 Go `unicode.IsSpace` 认的那几种，C0 与 C1 控制字符，Unicode 15 的全部格式字符（Cf）码位段」。
+6. **`alsoDecisions` 注释说的那一格**：补用例 `TestDecisionFacesOfSeveralKindsAdmitEitherKind`——一口认几种决定时，只持其中任一种的人过得了授予那一格（准入没登时停在 403 `OUTSIDE_ADMISSION_SCOPE`，不答未授予）；注释改成指名两条用例各核什么。
+7. **名实**：`NumberConflict()` 只答账单号冲突，主张供应商冲突另出 `SupplierConflict()`（结果里另存原先的供应商），端点分别取；`Handle` 头注补上「这份主张已接收的版本是不是同一家供应商」那一步；真库用例注释改成反事实写法（「不先这样挡，带号的那一笔会……」）。
+
+验证：`go build`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出，`go test -count=1 -p 1 ./internal/architecture/... ./cmd/... ./migrations/... ./internal/settlementaccounting/... ./internal/accessidentity/... ./internal/platform/...` 全过（含 PG）。本轮没动前端与迁移。
+

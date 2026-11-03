@@ -269,6 +269,39 @@ func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0357 决定二、五——一口按载荷认几种决定时（供应商账单审核口），只持其中任一种的人都过得了授予那一格：准入对照没登时
+// 停在准入范围外（403 OUTSIDE_ADMISSION_SCOPE），不答未授予。一种都不持的那一格由 TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind 钉。
+func TestDecisionFacesOfSeveralKindsAdmitEitherKind(t *testing.T) {
+	several := 0
+	for pattern, kinds := range swappedDecisionFaces() {
+		if len(kinds) < 2 {
+			continue
+		}
+		several++
+		for _, kind := range kinds {
+			minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: []accessidentity.DecisionKind{kind}}, admissionScopeUnset())
+			if err != nil {
+				t.Fatal(err)
+			}
+			decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
+			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
+			request.Header.Set("Authorization", "Bearer presented.operator.token")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusForbidden || problemCode(t, response) != "OUTSIDE_ADMISSION_SCOPE" {
+				t.Fatalf("%s 只持 %s：答 %d %q，want 403 OUTSIDE_ADMISSION_SCOPE（过了授予那一格）", pattern, kind, response.Code, problemCode(t, response))
+			}
+		}
+	}
+	if several == 0 {
+		t.Fatal("没有一口按载荷认几种决定——供应商账单审核口的声明丢了")
+	}
+}
+
 func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	decisionFaces := swappedDecisionFaces()
 	var kinds []accessidentity.DecisionKind

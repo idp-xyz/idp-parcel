@@ -27,7 +27,7 @@ func rangedAuditBody(claim, decision, verdict, from, to, basis, resolves string)
 }
 
 // Covers: AT-SA-233（生产装配半边）——接收口收供应商账单号、写进账单号册（分配方是该供应商）；同一供应商同一号换个主张标识再录答
-// 200 账单号冲突、带出已登记的主张，不落第二份；不带号的旧载荷照收。
+// 200 账单号冲突、带出已登记的主张，不落第二份；不带号的旧载荷照收；新版本换了供应商答 200 主张供应商冲突、带出原先的供应商。
 func TestTheReceptionFaceRegistersTheSupplierBillNumber(t *testing.T) {
 	fixture := newSupplierBillFixture(t)
 	seedSupplierBillRegisters(t, fixture, true)
@@ -49,6 +49,14 @@ func TestTheReceptionFaceRegistersTheSupplierBillNumber(t *testing.T) {
 	}
 	if status, answer := fixture.post(t, supplierBillReceptionFace, billClerk, supplierBillBody); status != http.StatusCreated {
 		t.Fatalf("旧载荷 = %d %v", status, answer)
+	}
+	// 同一份主张的新版本换了供应商：答 200 主张供应商冲突、带出原先的供应商，不落库。
+	switched := strings.Replace(strings.Replace(numberedSupplierBillBody("SYN-BILL-RANDOM-A", "INV-2610-001"), `"version":"v1"`, `"version":"v2"`, 1),
+		`"supplier":"SYN-PARTY-CARRIER-TRUNK-01"`, `"supplier":"SYN-PARTY-CARRIER-TRUNK-02"`, 1)
+	status, answer = fixture.post(t, supplierBillReceptionFace, billClerk, switched)
+	if status != http.StatusOK || answer["outcome"] != "CLAIM_SUPPLIER_CONFLICT" || answer["registeredSupplier"] != "SYN-PARTY-CARRIER-TRUNK-01" ||
+		answer["registeredSupplierBillNumber"] != nil {
+		t.Fatalf("换供应商的新版本 = %d %v", status, answer)
 	}
 }
 
