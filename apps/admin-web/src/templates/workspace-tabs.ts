@@ -44,7 +44,7 @@ export interface WorkspaceTabInput<Content> {
   keepMounted?: boolean;
   /**
    * 只对「分区」版式有意义（票 company-subject-ux/13）：给了就是可折叠的分区，为真默认折起——折起时只显标题行与
-   * `summary`，内容等展开才挂载，重区块不白取数。分签版式不看这两格。
+   * `summary`，内容等展开才挂载，重区块不白取数；再折起即卸载，区内的查询输入与草稿不保留（要保留的放模态里）。分签版式不看这两格。
    */
   collapsed?: boolean;
   /** 折起时标题行后的一句摘要（「第 3 版 · 2026-11-01 起生效 · 共 3 版」）。 */

@@ -17,9 +17,9 @@ export function LegalEntityContactsSection({ query }: { query: CurrentLegalEntit
         return (
           <section>
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h3 className="text-[15px] font-semibold leading-6 text-idpxyz-textBright">
+              <h4 className="text-[14px] font-semibold leading-6 text-idpxyz-textBright">
                 联系人 <span className="ml-1 text-[13px] font-normal text-idpxyz-breadcrumb">{profile.contacts.length} 位</span>
-              </h3>
+              </h4>
               {/* 生效是「哪一天」，只显日期、按显示时区；完整时刻在悬停里（spec 公司主体 UX「统一用语」时间那行）。 */}
               <span className="text-[13px] leading-6 tabular-nums text-idpxyz-breadcrumb">
                 {profileRevisionLabel(profile.revision)} · 生效自 <Instant value={profile.effectiveFrom} precision="day" />

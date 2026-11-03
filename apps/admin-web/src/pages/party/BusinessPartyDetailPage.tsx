@@ -81,7 +81,7 @@ function buildBasicFields(row: BusinessPartyRecord): DetailField[] {
           rows={[
             { label: '参与方标识', value: row.partyId },
             { label: '当前修订号', value: String(row.revision) },
-            { label: '登记依据', value: row.basis },
+            { label: '来源单据', value: row.basis },
             { label: '停用依据', value: row.deactivationBasis ?? '' },
             { label: '租户', value: row.tenantId },
           ]}
@@ -163,7 +163,7 @@ export function BusinessPartyDetailPage({
       meta={row ? buildMeta(row) : []}
       summary={row ? buildSummary(row) : undefined}
       // 这张卡装的是停用的来源单据与技术详情；分区版式下「概要」已是分区标题，卡再叫概要就是上下两行同一个词。
-      basicTitle="登记依据"
+      basicTitle="来源单据"
       basicFields={row ? buildBasicFields(row) : []}
       sections={
         row

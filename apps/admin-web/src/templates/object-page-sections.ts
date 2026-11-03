@@ -49,6 +49,8 @@ export function bottomSpacerHeight(
   clientHeight: number,
   contentHeight: number,
 ): number {
+  // 内容本就不满一屏时不垫：垫了就能滚进整屏空白，还会把头部收起（评审钉 `ceb9cf9d3`）。
+  if (contentHeight <= clientHeight) return 0;
   return Math.max(0, sectionScrollTop(lastSectionTop, barHeight) + clientHeight - contentHeight);
 }
 
