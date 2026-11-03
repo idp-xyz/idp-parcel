@@ -78,3 +78,22 @@ Blocked by: 无（从票 [11](./11-supplier-bill-and-audited-payable-admin-pages
 
 验证：`go build`、`go vet ./...` 退 0，`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/architecture/... ./cmd/... ./migrations/... ./internal/settlementaccounting/... ./internal/accessidentity/... ./internal/platform/...` 全过（含 PG）。评审探针放进 `internal/settlementaccounting/adapters/postgres/` 重跑：范围与终局、上限不可拆段绕过、五笔并发守住已匹配金额、0054 回填各项照旧；换供应商的新版本由 500 变为账单号冲突；带尾空格的号在领域构造即拒（探针那一行按设计失败）；跑完删掉、不入库。前端 `tsc -b` 无输出、`pnpm test` 1125 pass、`vite build` 退 0。一次性库 `docnum13_seed2` 灌种子退 0（含 `access_identity/0039`，配置员读得回三种供应商账单授予），已删。
 
+## 评审修订（复评，2026-11-02，作者；复评钉 `437926b9a`；追加提交、不 rebase）
+
+0. **并 main**：`git merge origin/main`（`969205ae9`，票 12 已进），只有 `.scratch/at-coverage-inventory.md` 追记冲突，两边都留、按时间先后排（票 12 的两条在前，票 13 在后）。0038 与 0039 各重建各的 CHECK，互不相干。
+1. **ADR-0340 决定二首句挂指针**（阻断）：上一轮把审核口扩成按结果认两种授予，改的是 0340 决定二「`POST /settlement-supplier-bill-audits`，同一能力面，决定种类 `SUPPLIER_BILL_AUDIT`，与接收分开授予。」——0340 注记逐字引这句、写适用场景（只限供应商账单审核口；仍是运营决定能力面、仍与接收分开授予，旧载荷照旧只认 `SUPPLIER_BILL_AUDIT`）与「其余各条不变」，Links 改成「决定二三句」；0357 前段去向与 Links 同改，决定五写明认证次序。CONTEXT 与 UC 没有说审核口只认一种授予的句子（UC「权限」本就写分别授权）。
+2. **主张各版本供应商不变**：换了供应商的新版本，不论带不带号，答 `CLAIM_SUPPLIER_CONFLICT`（`200`，带 `registeredSupplier`）。没有并进账单号冲突：换供应商的来件可能一个号都没带，账单号冲突说不出撞的是哪个号；这一格先于账单号两格判。新端口方法 `FindClaimSupplier`（最早落库那一版的供应商）。账单号冲突不再带分配方。账单册按账单号检索时供应商比号册上的分配方（`n.supplier_ref`），不给号时比接收行的供应商。ADR-0357 决定一、五、六与 Alternatives、CONTEXT、`AT-SA-233` 同改。用例：编排（带号、不带号两种）、真库（两种都不落库）、读面（存量里各版本供应商不一的主张，按另一家加号不命中、按分配方加号命中两版）。管理台答复说清是哪家供应商。
+3. **格式字符**：`NewSupplierBillNumber` 同时拒 Cc 与 Cf（零宽空格、字节序标记、零宽连接符、双向控制符、软连字符……），ADR 措辞改为「控制字符（Cc）与格式字符（Cf）」。用例：领域六种 Cf、HTTP 三种。
+4. **审核口认证次序**：先认持审核应付与争议决定之一（都不持答 403，请求体不读）→ 读体、判形状（坏形状答 400）→ 按结果核所需授予（不足答 403）。顺带去掉了认证前读 1 MiB 体。用例 `TestTheSupplierBillAuditIntakeChecksTheGrantsTheVerdictNeeds` 把只持审核、只持争议、两种都持、两种都不持四种人对八种载荷（含拼错的结果、小写的结果、读不出的请求体）逐格钉住。
+5. **`findSupplierBillReceptions` 头注计数**：改为不计数的说法。
+6. **审核口的接入面声明两种决定**：`accessFace` 加 `alsoDecisions`，审核口声明 `SUPPLIER_BILL_AUDIT` 与 `SUPPLIER_BILL_DISPUTE_DECISION`；换口用例 `swappedDecisionFaces` 改为每口一组决定种类——「只缺这一口的授予」那一条现在给的是这一口那一组之外的全部种类，两种都不持才答 403。路由清单那一格写成 `运营决定/SUPPLIER_BILL_AUDIT+SUPPLIER_BILL_DISPUTE_DECISION`。
+7. **号册账单号的库约束**（0054 未进 main，直接改）：`supplier_bill_number_verbatim`——首尾不带 Go `unicode.IsSpace` 认的那几种空白，中间不含 C0、C1 控制字符与 Unicode 15 的 Cf 码位段；表在 0054 里新建，施加时是空的。真库用例钉住八种坏号落不进、中间空格与小写照收；一次性库 `docnum13_seed3` 灌种子退 0、约束在册，已删。
+8. **新检索维带 NUL / 非法 UTF-8 答 500**：不在本票修，见「留给协调方」。
+
+验证：`go build`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出，`go test -count=1 -p 1 ./internal/architecture/... ./cmd/... ./migrations/... ./internal/settlementaccounting/... ./internal/accessidentity/... ./internal/platform/...` 全过（含 PG）；前端 `tsc -b` 无输出、`pnpm test` 1125 pass、`vite build` 退 0。
+
+### 留给协调方（复评追加）
+
+- 账单册新检索维（`claim`、`supplier`、`supplierBillNumber`）带 NUL 或非法 UTF-8 时答 500：票 15（`claude-docnum15`）在全仓 HTTP 读口共用层加的入站检查进 main 后会覆盖，本票不另修。
+- `CLAIM_SUPPLIER_CONFLICT` 是接收口新增的答复格，与账单号冲突并列；越权风险点照旧待 SA owner 复核。
+
