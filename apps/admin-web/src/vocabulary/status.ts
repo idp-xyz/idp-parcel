@@ -140,6 +140,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   NOT_GUARDED: muted('无需检查'),
   ADMITTED: good('可放行'),
   NOT_CONFIGURED: warn('未配置'),
+  CONFIGURED: good('已配置'),
   BLOCKED: bad('已拦截'),
   CONCLUDED: muted('已结束'),
   HANDED_OVER: good('已交接'),
@@ -339,6 +340,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   STATEMENT_PUBLICATION: muted('对账单发布'),
   SUPPLIER_BILL_RECEPTION: muted('供应商账单接收'),
   SUPPLIER_BILL_AUDIT: muted('供应商账单审核'),
+  SUPPLIER_BILL_DISPUTE_DECISION: muted('供应商账单争议决定'),
   STATEMENT_DISPUTE_REGISTRATION: muted('登记对账单争议'),
   STATEMENT_DISPUTE_RESOLUTION: muted('处理对账单争议'),
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
@@ -464,6 +466,8 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
   'duty-coverage': { PARTIAL: warn('部分覆盖') },
   // 对账单异议的裁定：ACCEPTED 是异议被接受（客户说得对），不是运单受理。
   dispute: { ACCEPTED: good('接受'), REJECTED: bad('拒绝') },
+  // 供应商账单一段金额的审核结果（ADR-0357）：是给出的那一种结果，不是一份单据的状态——REJECTED 说「拒绝」这一段，不说「已拒绝」。
+  'supplier-bill-audit': { PASSED: good('通过'), DISPUTED: warn('争议'), REJECTED: bad('拒绝') },
   // 资金核到的目标种类：PAYABLE 是供应商审核应付这一本，不是收付方向。
   'funds-target': { PAYABLE: muted('供应商审核应付') },
   // 基础数据目录里的封闭词（ADR-0335）：大洲与计量单位类别。COUNT、VOLUME 这类通用词只在这两本册里取这个意思，不进总表。

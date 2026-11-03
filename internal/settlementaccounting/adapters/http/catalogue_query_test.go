@@ -99,7 +99,7 @@ func (stub unreachableCatalogues) FindStatementLines(
 }
 
 func (stub unreachableCatalogues) ListSupplierBillReceptions(
-	context.Context, domain.TenantID, int,
+	context.Context, domain.TenantID, ports.SupplierBillReceptionFilter, int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
 	stub.refuse("supplier bill reception")
 	return nil, nil

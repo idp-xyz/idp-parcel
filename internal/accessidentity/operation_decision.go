@@ -176,6 +176,11 @@ const (
 	DecisionSupplierBillAudit     DecisionKind = "SUPPLIER_BILL_AUDIT"
 )
 
+// DecisionSupplierBillDisputeDecision 是供应商账单的争议决定（ADR-0357 决定二）：把一行上的一段挂成争议，与核实后对争议再审。
+// UC-SA-004 要求争议决定与审核应付分别授权——能把一段挂起或解开的人不因此能放行应付或终局拒绝，那两样仍要审核应付授予；再审给出
+// 通过或拒绝，所以两种都要。
+const DecisionSupplierBillDisputeDecision DecisionKind = "SUPPLIER_BILL_DISPUTE_DECISION"
+
 // DecisionPostIntakeManualItemHandling 是待人工处理项的处理结果登记（ADR-0341 决定三）：运营人员对收寄后服务处置决定留下的一项人工请求项登记「已处理」
 // 或「无法处理」。它与收寄后服务处置（POST_INTAKE_SERVICE_DISPOSITION）分开授予——形成决定的人与在现场办完这些事的人通常不是同一批，登记的结果还是
 // 其后各方读回承接情况的依据。谁持有是租户取值，未登记时没有人能登记。
@@ -219,6 +224,7 @@ var decisionKinds = []DecisionKind{
 	DecisionChargeConfirmation, DecisionStatementPublication,
 	DecisionSupplierBillReception, DecisionSupplierBillAudit,
 	DecisionPostIntakeManualItemHandling,
+	DecisionSupplierBillDisputeDecision,
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 }
 

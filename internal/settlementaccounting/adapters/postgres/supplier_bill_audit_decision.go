@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// SupplierBillAuditDecisions 实现 ports.AuditDecisionStore，读写 0054 的审核决定册。主键（租户，决定身份）与两道范围排他约束都由
+// SupplierBillAuditDecisions 实现 ports.AuditDecisionStore，读写 0054 的审核决定册。主键（租户，决定身份）与范围排他约束都由
 // ON CONFLICT DO NOTHING 加零行判定翻译成`已有记录`（ADR-0031）：不带冲突目标的 DO NOTHING 连排他约束也接住，撞哪一道都不把
 // 事务打进中止态——编排还要同事务读回赢家作答。
 type SupplierBillAuditDecisions struct {

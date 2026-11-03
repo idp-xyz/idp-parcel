@@ -252,7 +252,8 @@ type SupplierBillReceptionCatalogueRow struct {
 // StatementCatalogueRead 是对账页的伴生列表读端口：客户对账单册（UC-SA-003）与供应商
 // 账单接收册（UC-SA-004）各上各的。
 //
-// 账单接收册按到达的业务时刻倒序上列（同刻按主张身份与版本）：页大小截掉的是最早收到的那些，最新收到的账单总在页上。
+// 账单接收册按到达的业务时刻倒序上列（同刻按主张身份与版本）：页大小截掉的是最早收到的那些，最新收到的账单总在页上。页外的
+// 那一份按 SupplierBillReceptionFilter 精确检索在全册里找。
 type StatementCatalogueRead interface {
 	ListCustomerStatements(
 		ctx context.Context,
@@ -263,8 +264,19 @@ type StatementCatalogueRead interface {
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
+		filter SupplierBillReceptionFilter,
 		limit int,
 	) ([]SupplierBillReceptionCatalogueRow, error)
+}
+
+// SupplierBillReceptionFilter 是账单接收册的检索维：主张身份、供应商、供应商账单号（取账单号册，ADR-0357 决定一），各自精确相等、
+// 逐字比；空串即不按这一维筛，几维同给取交集。登记表单要找页外更早的原账单、新登的账单不在页上时右栏要读回它，都靠它在全册里
+// 找——只在取回的那一页里筛，册一超过一页就会静默找不到。账单号检索只认账单号册：票 11 期间「供应商/账单号」形的旧主张没进
+// 册，按主张身份检索才找得到。
+type SupplierBillReceptionFilter struct {
+	Claim              string
+	Supplier           string
+	SupplierBillNumber string
 }
 
 // DisputedCustomerStatements 是「待对账」那一问的答案：挂着未了结争议的已发布客户对账单——单上的费用争议至少

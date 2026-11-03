@@ -275,6 +275,7 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 	ctx context.Context,
 	tenant domain.TenantID,
+	filter ports.SupplierBillReceptionFilter,
 	limit int,
 ) ([]ports.SupplierBillReceptionCatalogueRow, error) {
 	if limit < 1 {
@@ -364,9 +365,13 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		           AND d.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
 		       ) AS audits
 		  WHERE r.tenant_id = $1
+		    AND ($6::text = '' OR r.claim_id = $6)
+		    AND ($7::text = '' OR r.supplier_ref = $7)
+		    AND ($8::text = '' OR n.bill_number = $8)
 		  ORDER BY (r.claim ->> 'received_at')::timestamptz DESC, r.claim_id, r.claim_version
 		  LIMIT $2`,
 		tenant.String(), limit, domain.LineMatched.String(), domain.AuditDisputed.String(), domain.AuditRejected.String(),
+		filter.Claim, filter.Supplier, filter.SupplierBillNumber,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list supplier bill receptions: %w", err)

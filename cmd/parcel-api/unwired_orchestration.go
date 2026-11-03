@@ -1975,6 +1975,7 @@ func (unwiredSettlementStatements) ListCustomerStatements(
 func (unwiredSettlementStatements) ListSupplierBillReceptions(
 	context.Context,
 	settlementdomain.TenantID,
+	settlementports.SupplierBillReceptionFilter,
 	int,
 ) ([]settlementports.SupplierBillReceptionCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
