@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
-import { statusToneBanner, statusToneText } from '../../components/status-tone';
+import { statusToneBanner, statusToneSurface, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
 import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote } from './presentation';
@@ -27,44 +27,42 @@ export function ProfileStatusValue({ cell }: { cell: ProfileStatusCell }) {
   return <StatusPill label={cell.status.label} tone={cell.status.tone} className="font-sans" />;
 }
 
+// 圆点小面积实色取语气前景色（status-tone.ts 的 statusToneSurface 那一档）；没走到的段只画一圈描边。
 const stageDotClass: Record<LifecycleStageState, string> = {
-  done: statusToneBanner.success,
-  current: 'border-idpxyz-accent bg-idpxyz-activeItem text-idpxyz-accent',
-  skipped: 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb',
-  pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-breadcrumb',
+  done: statusToneSurface.success,
+  current: 'bg-idpxyz-accent',
+  skipped: 'border border-dashed border-idpxyz-border bg-transparent',
+  pending: 'border border-idpxyz-border bg-transparent',
 };
 
 // 旁支终态（已停用）只有两态：没停用时一圈虚线不点亮，停用了才亮成警示色。
 const terminalDotClass = (reached: boolean) =>
-  reached ? statusToneBanner.danger : 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb';
+  reached ? statusToneSurface.danger : 'border border-dashed border-idpxyz-border bg-transparent';
 
-/** 一段的圆点与名字。圆点不编号：编号会把三段读成一条必经的流程。 */
+/** 一段的圆点与名字，点在前词在后排成一行。圆点不编号：编号会把三段读成一条必经的流程。 */
 function StageMark({ stage }: { stage: LifecycleStage }) {
   const dotClass = stage.terminal ? terminalDotClass(stage.state === 'current') : stageDotClass[stage.state];
-  const reached = stage.state === 'current' || stage.state === 'done';
   return (
-    <div className="flex flex-col items-center gap-1" aria-current={stage.state === 'current' ? 'step' : undefined}>
+    <span className="inline-flex items-center gap-1.5" aria-current={stage.state === 'current' ? 'step' : undefined}>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden="true" />
       <span
-        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[12px] font-semibold ${dotClass}`}
-        aria-hidden="true"
-      >
-        {stage.state === 'done' ? '✓' : stage.state === 'skipped' ? '–' : reached ? '●' : ''}
-      </span>
-      <span
-        className={`text-[12px] font-normal leading-none ${
+        className={`whitespace-nowrap text-[12px] leading-5 ${
           stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-breadcrumb'
         }`}
       >
         {labelOf(identityStatusLabels, stage.code)}
         {stage.state === 'skipped' ? '（未经过）' : ''}
       </span>
-    </div>
+    </span>
   );
 }
 
 /**
  * 主线（已登记 → 已生效）一条，已停用隔一道虚线摆在右侧作旁支终态（票 group-legal-entities-uiux/06）：停用是例外分支，
  * 不是每个法人迟早走到的下一步。分段判读在 legal-entity-lifecycle.ts。
+ *
+ * 紧凑的一行小步进（票 company-subject-ux/08）：段与段之间只隔一小截连线，整条按内容定宽、不撑满容器——撑满时宽屏上
+ * 两点各占一端、中间一条横贯的长线，读不出这是三段。放在头区 meta 行末尾或指标格里都是同一形。
  */
 export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
   const stages = legalEntityLifecycle(row);
@@ -72,14 +70,14 @@ export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
   const main = stages.filter((stage) => !stage.terminal);
   const terminal = stages.find((stage) => stage.terminal);
   return (
-    <div className="flex items-center gap-3" role="group" aria-label="身份生命周期">
-      <ol className="flex flex-1 items-center">
+    <div className="inline-flex items-center gap-2" role="group" aria-label="身份生命周期">
+      <ol className="inline-flex items-center gap-2">
         {main.map((stage, index) => (
-          <li key={stage.code} className="flex flex-1 items-center last:flex-none">
+          <li key={stage.code} className="inline-flex items-center gap-2">
             <StageMark stage={stage} />
             {index < main.length - 1 && (
               <span
-                className={`mx-1.5 mb-3.5 h-px flex-1 ${
+                className={`h-px w-4 ${
                   lifecycleConnectorReached(stage, main[index + 1]) ? 'bg-emerald-500/40' : 'bg-idpxyz-border'
                 }`}
                 aria-hidden="true"
@@ -89,7 +87,7 @@ export function LegalEntityLifecycle({ row }: { row: IdentityLifecycleInput }) {
         ))}
       </ol>
       {terminal ? (
-        <div className="border-l border-dashed border-idpxyz-border pl-3">
+        <div className="border-l border-dashed border-idpxyz-border pl-2">
           <StageMark stage={terminal} />
         </div>
       ) : null}

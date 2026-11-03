@@ -32,12 +32,14 @@ import {
   Fact,
   FactStrip,
   Instant,
-  RefChip,
+  RefText,
   UnknownPartyName,
   useCopyToClipboard,
   DetailRow,
 } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { CountryLabel } from '../refdata-labels';
+import { identityLayerAbsentNote } from './presentation';
 import { useTabViewState } from '../../templates/workspace-view-state';
 
 type PanelTab = 'overview' | 'contacts' | 'profile' | 'history' | 'related';
@@ -46,7 +48,7 @@ const tabTriggerClass = 'px-0 text-[12px] font-medium text-idpxyz-breadcrumb dat
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
- * 头部（标识 + 状态徽章 + 一行副题 + 引用签 + 生命周期条）· 主动作 + 「更多」菜单 + 关闭 · 关键事实条 · 页签。
+ * 头部两行（名称 + 状态徽章；一行小字 meta + 生命周期小步进）· 主动作 + 「更多」菜单 + 关闭 · 关键事实一行 · 页签。
  *
  * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：事实条三格是生效日期、资料状态、被引用（已停用时多一格
  * 停用日期，票 company-subject-ux/03），国家、注册号归引用签，参与方名称归标题；身份版本只在「登记记录」签看。
@@ -102,25 +104,13 @@ export function LegalEntityDetailPanel({
 
   return (
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`公司主体 ${row.legalEntityId}`}>
-      <div className="space-y-3 border-b border-idpxyz-border px-5 pb-3 pt-4">
+      <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
-                {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
-              </h2>
-              <StatusPill code={row.status} />
-            </div>
-            <p className="mt-0.5 font-mono text-[12px] text-idpxyz-breadcrumb">编码 {row.legalEntityId}</p>
-            {/* 注册地与注册号是业务事实，留在头部；登记依据与各标识收进概要签底部的「技术详情」。
-                注册号一号一枚、胶囊只显号，类型名进 title（与对象页头部同一种，票 company-subject-ux/07）：胶囊会截断，
-                类型名长时挤掉的是号，而号才是要认、要复制的；复制到手的也只是号。 */}
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <RefChip label="注册地" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
-              {identity?.numberCells.map((cell, index) => (
-                <RefChip key={`${cell.number}#${index}`} label="注册号" value={cell.number} title={cell.typeName} onCopy={copy} />
-              ))}
-            </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
+              {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
+            </h2>
+            <StatusPill code={row.status} />
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {mayWrite ? (
@@ -143,7 +133,25 @@ export function LegalEntityDetailPanel({
           </div>
         </div>
 
-        <LegalEntityLifecycle row={row} />
+        {/* 头区第二行是一行小字的 meta（票 company-subject-ux/08）：编码、注册地、注册号纯文本一行，号仍可点按复制；
+            注册地与注册号是业务事实，留在头部，登记依据与各标识收进概要签底部的「技术详情」。类型名跟在号前面而不进 title
+            ——一行小字放得下，胶囊那套「截断只显号」的取舍不再需要。生命周期收成一行小步进贴在这一行末尾。 */}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+          <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+            <Fact inline label="编码">
+              <RefText value={row.legalEntityId} name="编码" onCopy={copy} />
+            </Fact>
+            <Fact inline label="注册地">
+              {identity ? <CountryLabel code={identity.country} /> : <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>}
+            </Fact>
+            {identity?.numberCells.map((cell, index) => (
+              <Fact inline label="注册号" key={`${cell.number}#${index}`}>
+                <span className="text-idpxyz-breadcrumb">{cell.typeName}</span> <RefText value={cell.number} name={cell.typeName} onCopy={copy} />
+              </Fact>
+            ))}
+          </dl>
+          <LegalEntityLifecycle row={row} />
+        </div>
 
         <LegalEntityBanners row={row} />
       </div>

@@ -3,7 +3,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { domainStatusTones, type StatusTone as DomainStatusTone } from '../../domain/status';
 import { statusToneSurface } from '../../components/status-tone';
-import { CodeRef } from '../../components/CodeRef';
+import { CodeRef, codeRefTitle } from '../../components/CodeRef';
 import { StatusPill } from '../../components/StatusPill';
 import { toneFor, toneForLabel, type StatusTone } from '../../vocabulary/status';
 import { formatInstant, type InstantPrecision } from '../moment';
@@ -125,8 +125,60 @@ export function RefChip({
   return <CodeRef label={label} value={value} title={title} onCopy={onCopy} />;
 }
 
-/** 详情栏事实条里的一格：标签在上、等宽值在下。 */
-export function Fact({ label, children }: { label: string; children: ReactNode }) {
+/**
+ * 引用签的纯文本形（票 company-subject-ux/08）：头区 meta 行是一行小字，摆不下三枚胶囊，号只以等宽字显、点按照旧复制，
+ * 悬停那句与 CodeRef 同一句。`name` 进 title 与 toast。
+ */
+export function RefText({
+  value,
+  name,
+  onCopy,
+  className,
+}: {
+  value: string;
+  name: string;
+  onCopy: (label: string, value: string) => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={codeRefTitle(name, value)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onCopy(name, value);
+      }}
+      className={`select-all font-mono text-idpxyz-text hover:text-idpxyz-accent ${className ?? ''}`.trim()}
+    >
+      {value}
+    </button>
+  );
+}
+
+/**
+ * 详情栏事实条里的一格。缺省是标签在上、等宽值在下的卡；`inline` 是一行小字的形（票 company-subject-ux/08）：标签弱显在前、
+ * 值在后，用 dt / dd——放进 FactStrip inline 或头区 meta 行的 `<dl>` 里。卡那一形别的详情栏还在用，这里不动它。
+ */
+export function Fact({
+  label,
+  children,
+  inline = false,
+  title,
+}: {
+  label: string;
+  children: ReactNode;
+  inline?: boolean;
+  /** 悬停说明（口径、完整值）；只在 inline 形上用。 */
+  title?: string;
+}) {
+  if (inline) {
+    return (
+      <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-5" title={title}>
+        <dt className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</dt>
+        <dd className="min-w-0 truncate text-idpxyz-text [&_time]:font-mono">{children}</dd>
+      </div>
+    );
+  }
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
       <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
@@ -139,8 +191,18 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
  * 事实条按栏宽在四列与两列之间二选一（票 group-legal-entities-uiux/10）：固定四列在窄栏里把「08:00:00」这样一个词拆成
  * 两半；按最小格宽自动分列又会在中间宽度排出三格加一格。minmax 的下限用 clamp 夹：栏宽过 32rem 时中间项为负、取下界
  * 25%，排四列；不到时中间项极大、取上界 50%，排两列——四格放得下每个词时才排四列。
+ *
+ * `inline` 把整条收成一行（票 company-subject-ux/08）：格是 Fact inline，按内容定宽、放不下才折行；宽屏上不再是三张
+ * 值只占一角的大卡。
  */
-export function FactStrip({ children }: { children: ReactNode }) {
+export function FactStrip({ children, inline = false }: { children: ReactNode; inline?: boolean }) {
+  if (inline) {
+    return (
+      <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-idpxyz-border bg-idpxyz-editor px-5 py-2">
+        {children}
+      </dl>
+    );
+  }
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border bg-idpxyz-editor px-5 py-3">
       {children}
