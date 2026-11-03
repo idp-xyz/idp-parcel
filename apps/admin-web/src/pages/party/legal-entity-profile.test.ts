@@ -7,6 +7,7 @@ import {
   addressText,
   bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
+  glueBracketGroups,
   invoiceTitleRowsOf,
   languageTagLabel,
   legalEntityProfileDraftBasedOn,
@@ -226,6 +227,29 @@ test('修订号建议', () => {
 test('地址转写：没有即「—」', () => {
   equal(addressText(undefined), '—');
   equal(addressText({ country: 'CN', lines: ['SYN 一行', 'SYN 二行'] }), 'CN · SYN 一行 · SYN 二行');
+});
+
+// Covers（票 company-subject-ux/12 第 4 条）：全角括号组连同前一个字归成不可折的一段；相邻两组并成一段；起头的一组自成一段；
+// 没闭括号粘到结尾；半角括号与没有括号的文字原样一段；不插任何看不见的字符（各段拼回去等于原文）。
+test('读出文字的折行分段：全角括号组粘住前一个字', () => {
+  deepEqual(glueBracketGroups('IDP物流科技（上海）有限公司（演示）'), [
+    { text: 'IDP物流科', glue: false },
+    { text: '技（上海）', glue: true },
+    { text: '有限公', glue: false },
+    { text: '司（演示）', glue: true },
+  ]);
+  deepEqual(glueBracketGroups('合成（上海）（演示）公司'), [
+    { text: '合', glue: false },
+    { text: '成（上海）（演示）', glue: true },
+    { text: '公司', glue: false },
+  ]);
+  deepEqual(glueBracketGroups('（演示）合成'), [{ text: '（演示）', glue: true }, { text: '合成', glue: false }]);
+  deepEqual(glueBracketGroups('合成【演示'), [{ text: '合', glue: false }, { text: '成【演示', glue: true }]);
+  deepEqual(glueBracketGroups('IDP Logistics (Demo)'), [{ text: 'IDP Logistics (Demo)', glue: false }]);
+  deepEqual(glueBracketGroups(''), []);
+  for (const text of ['IDP物流科技（上海）有限公司（演示）', '演示临港路 168 号 IDP 科技园 A 座 12 层（模拟地址）']) {
+    equal(glueBracketGroups(text).map((segment) => segment.text).join(''), text);
+  }
 });
 
 // Covers（票 company-subject-ux/12 第 1 条）：读出按录入的行显，空行与首尾空白剔掉、次序不动；国家不混进行里。

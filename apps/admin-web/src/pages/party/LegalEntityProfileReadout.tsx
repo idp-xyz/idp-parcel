@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { RegisteredAddressRecord } from './api';
 import { CountryLabel } from '../refdata-labels';
-import { addressLinesOf } from './legal-entity-profile';
+import { addressLinesOf, glueBracketGroups } from './legal-entity-profile';
 import './legal-entity-profile-readout.css';
 
 /**
@@ -83,7 +83,7 @@ export function ProfileReadoutAddress({ address }: { address: RegisteredAddressR
   const lines = addressLinesOf(address);
   return (
     <>
-      {lines.length > 0 ? lines.map((line, index) => <span key={`${index}-${line}`} className="block">{line}</span>) : <span className="block">{absentValueMark}</span>}
+      {lines.length > 0 ? lines.map((line, index) => <span key={`${index}-${line}`} className="block"><ReadoutText text={line} /></span>) : <span className="block">{absentValueMark}</span>}
       {address.country ? (
         <span className="block text-idpxyz-breadcrumb">
           <CountryLabel code={address.country} />
@@ -108,12 +108,26 @@ export function ProfileReadoutAddresses({
       {items.map((item) => (
         <div key={item.key} className="min-w-0">
           <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb">{item.label}</dt>
-          <dd className={`min-w-0 text-[13px] leading-5 [overflow-wrap:anywhere] ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
+          <dd className={`min-w-0 text-[13px] leading-5 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
             {item.address ? <ProfileReadoutAddress address={item.address} /> : absentValueMark}
           </dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * 读出里会折行的一段文字（户名、抬头、地址行、备注）：全角括号组粘住前一个字不折开（glueBracketGroups 说明为什么），
+ * 其余照常。粘住的一段用 nowrap 而不是插零宽连字，复制出去的仍是原文。
+ */
+export function ReadoutText({ text }: { text: string }) {
+  return (
+    <>
+      {glueBracketGroups(text).map((segment, index) =>
+        segment.glue ? <span key={`${index}-${segment.text}`} className="whitespace-nowrap">{segment.text}</span> : <Fragment key={`${index}-${segment.text}`}>{segment.text}</Fragment>,
+      )}
+    </>
   );
 }
 

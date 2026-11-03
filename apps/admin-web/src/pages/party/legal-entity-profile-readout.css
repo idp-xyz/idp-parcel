@@ -22,7 +22,14 @@
   white-space: nowrap;
 }
 
-.legal-entity-readout-field dd {
+/* 值格与表格的折行（票 company-subject-ux/12 第 4 条）：keep-all 让中文只在空格、闭括号与标点后折（「有限公司（演示）」
+   整体换行，不把「科技园」折成两截），配 glueBracketGroups 的粘段，折下去的行不再以全角「（」开头。长到一行装不下的
+   无标点中文名靠 overflow-wrap 在格边折——与不设 keep-all 时一样，只是这种名字才会遇到。实测记在票面。 */
+.legal-entity-readout-field dd,
+.legal-entity-readout-addresses dd,
+.legal-entity-readout-table td,
+.legal-entity-readout-table th {
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
 

@@ -8,6 +8,7 @@ import {
   ProfileReadoutField,
   ProfileReadoutGrid,
   ProfileReadoutPairs,
+  ReadoutText,
   absentValueMark,
 } from './LegalEntityProfileReadout';
 import { invoiceTitleRowsOf, languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
@@ -74,7 +75,7 @@ export function LegalEntityProfileContent({
                         {row.primary ? <PrimaryTitleMark /> : null}
                       </>
                     ),
-                    value: row.primary ? <span className="font-medium text-idpxyz-textBright">{row.title}</span> : row.title,
+                    value: row.primary ? <span className="font-medium text-idpxyz-textBright"><ReadoutText text={row.title} /></span> : <ReadoutText text={row.title} />,
                   }))}
                 />
               ) : undefined
@@ -145,11 +146,13 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
     <div className="overflow-x-auto">
       <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
         <caption className="sr-only">收款账户清单</caption>
+        {/* 列宽按内容的常见长度分（票 company-subject-ux/12 第 4 条）：户名与开户行（带地址）最长，币种与备注最短；
+            账号一列要装下 IBAN 的长度，等宽字再按字符折。 */}
         <colgroup>
-          <col className="w-[18%]" />
-          <col className="w-[22%]" />
-          <col className="w-[22%]" />
+          <col className="w-[14%]" />
           <col className="w-[24%]" />
+          <col className="w-[26%]" />
+          <col className="w-[22%]" />
           <col className="w-[14%]" />
         </colgroup>
         <thead className="border-b border-idpxyz-border text-[12px] text-idpxyz-breadcrumb">
@@ -168,17 +171,17 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
                 {account.label ? <span className="block text-[12px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
               </th>
-              <td className="break-words px-3 py-2.5 text-idpxyz-text">{account.holderName}</td>
+              <td className="px-3 py-2.5 text-idpxyz-text"><ReadoutText text={account.holderName} /></td>
               <td className="px-3 py-2.5">
-                <span className="block text-idpxyz-text">{account.bankName}</span>
-                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb">{account.bankAddress}</span> : null}
+                <span className="block text-idpxyz-text"><ReadoutText text={account.bankName} /></span>
+                {account.bankAddress ? <span className="block text-[12px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
               </td>
               <td className="px-3 py-2.5 font-mono">
                 <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
                 {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
               </td>
-              <td className="break-words py-2.5 pl-3">
-                {account.note ? <span className="text-idpxyz-text">{account.note}</span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
+              <td className="py-2.5 pl-3">
+                {account.note ? <span className="text-idpxyz-text"><ReadoutText text={account.note} /></span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
               </td>
             </tr>
           ))}

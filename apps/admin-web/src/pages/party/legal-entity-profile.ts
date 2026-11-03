@@ -503,6 +503,52 @@ export function addressLinesOf(address: RegisteredAddressRecord): string[] {
   return address.lines.map((line) => line.trim()).filter((line) => line !== '');
 }
 
+export interface ReadoutTextSegment {
+  text: string;
+  /** 真即这一段不许在内部折行：前一个字 + 一组全角括号。 */
+  glue: boolean;
+}
+
+const FULLWIDTH_OPENERS = '（［【「『《〈〔｛';
+const FULLWIDTH_CLOSERS = '）］】」』》〉〕｝';
+
+/**
+ * 读出文字的折行分段（票 company-subject-ux/12 第 4 条）：全角开括号连同它前面一个字和到闭括号为止的一组，归成不许内部
+ * 折行的一段。浏览器按 UAX #14 在「司」与「（」之间折行，折下去的那行以全角「（」开头，而「（」的字形靠右半格、左半格
+ * 是空白，看着像悬挂缩进。`text-spacing-trim` / `hanging-punctuation` 都没用——微软雅黑与文泉驿都不带 halt 特性，
+ * 实测行首「（」的进距一点没收；`word-break: keep-all` 也拦不住「字（」之间的折点。把前一个字粘进去，折点只能落在更前面，
+ * 行首就不会是「（」。相邻两组（「（上海）（演示）」）并成一段；文字以开括号起头则这一组自成一段。不插零宽字符：
+ * 户名、账号要被复制去付款系统，看不见的字符会跟着走。
+ */
+export function glueBracketGroups(text: string): ReadoutTextSegment[] {
+  const segments: ReadoutTextSegment[] = [];
+  let plain = '';
+  for (let index = 0; index < text.length; index += 1) {
+    const kind = FULLWIDTH_OPENERS.indexOf(text[index]);
+    if (kind < 0) {
+      plain += text[index];
+      continue;
+    }
+    const closer = text.indexOf(FULLWIDTH_CLOSERS[kind], index + 1);
+    const end = closer < 0 ? text.length - 1 : closer;
+    const group = text.slice(index, end + 1);
+    const previous = segments[segments.length - 1];
+    if (plain === '' && previous?.glue) {
+      previous.text += group;
+    } else if (plain === '') {
+      segments.push({ text: group, glue: true });
+    } else {
+      const head = plain.slice(0, -1);
+      if (head !== '') segments.push({ text: head, glue: false });
+      segments.push({ text: plain.slice(-1) + group, glue: true });
+    }
+    plain = '';
+    index = end;
+  }
+  if (plain !== '') segments.push({ text: plain, glue: false });
+  return segments;
+}
+
 export function legalEntityContactCountOf(resolution: LegalEntityProfileResolutionResponseBody | undefined): number | undefined {
   if (!resolution || !resolution.effectiveRevision) return undefined;
   if (resolution.outcome === 'RESOLVED' ||
