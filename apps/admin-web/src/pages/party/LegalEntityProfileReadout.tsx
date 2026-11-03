@@ -124,16 +124,19 @@ export function ProfileReadoutAddresses({
 export function ProfileReadoutPairs({
   rows,
   mono = false,
+  headNowrap = false,
 }: {
   rows: readonly { key: string; head: ReactNode; headTitle?: string; value: ReactNode }[];
   /** 右列用等宽字体（号）；抬头是文字，不用。 */
   mono?: boolean;
+  /** 左列不折行：给语言那种短而固定的头（「简体中文（zh-Hans）」在 zh- 处折开就认不出）；类型名可以很长，仍要折。 */
+  headNowrap?: boolean;
 }) {
   return (
     <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb" title={row.headTitle}>
+          <dt className={`text-[12px] leading-5 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
             {row.head}
           </dt>
           <dd className={`min-w-0 leading-5 text-idpxyz-text ${mono ? 'select-text font-mono text-[12px]' : ''}`}>{row.value}</dd>

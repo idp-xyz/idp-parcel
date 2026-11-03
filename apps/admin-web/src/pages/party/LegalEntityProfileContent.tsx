@@ -10,7 +10,7 @@ import {
   ProfileReadoutPairs,
   absentValueMark,
 } from './LegalEntityProfileReadout';
-import { languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
+import { invoiceTitleRowsOf, languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 /**
@@ -31,6 +31,7 @@ export function LegalEntityProfileContent({
   const notes = content ? profileMaintenanceNotes(content) : [];
   const bankAccounts = content?.bankAccounts ?? [];
   const contacts = content?.contacts ?? [];
+  const invoiceTitleRows = content ? invoiceTitleRowsOf(content) : [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
       <ProfileReadoutCard icon={UserRound} title="代表人与地址">
@@ -55,31 +56,25 @@ export function LegalEntityProfileContent({
       </ProfileReadoutCard>
       <ProfileReadoutCard icon={Receipt} title="税务与开票">
         <ProfileReadoutGrid>
-          {/* 主抬头仍是「可开票」的判据，语言只是它的标注，所以跟在抬头后面弱化显，不另起一格。 */}
+          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs），两张都占整行——抬头与几种号并排时半列放不下。
+              主抬头排第一、语言格后带「主抬头」：它仍是「可开票」的判据，但与其他语言的抬头是同一类内容，不再分两格两种排法。
+              没标语言的主抬头语言格显「—」：空格一律「—」（spec「统一用语」）。 */}
           <ProfileReadoutField
             label="开票抬头"
+            wide
             value={
-              content?.invoicingRegistered && content.invoiceTitle ? (
-                <>
-                  {content.invoiceTitle}
-                  {content.invoiceTitleLanguage ? (
-                    <span className="ml-1.5 text-[12px] font-normal text-idpxyz-breadcrumb">{languageTagLabel(content.invoiceTitleLanguage)}</span>
-                  ) : null}
-                </>
-              ) : undefined
-            }
-            emphasized
-          />
-          {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs）；监管登记号占整行——几种号并排时半列放不下。 */}
-          <ProfileReadoutField
-            label="其他语言的抬头"
-            value={
-              content?.invoicingRegistered && content.invoiceTitles?.length ? (
+              invoiceTitleRows.length ? (
                 <ProfileReadoutPairs
-                  rows={content.invoiceTitles.map((row, index) => ({
+                  headNowrap
+                  rows={invoiceTitleRows.map((row, index) => ({
                     key: `${row.language}-${index}`,
-                    head: languageTagLabel(row.language),
-                    value: row.title,
+                    head: (
+                      <>
+                        {row.language ? languageTagLabel(row.language) : absentValueMark}
+                        {row.primary ? <PrimaryTitleMark /> : null}
+                      </>
+                    ),
+                    value: row.primary ? <span className="font-medium text-idpxyz-textBright">{row.title}</span> : row.title,
                   }))}
                 />
               ) : undefined
@@ -124,6 +119,18 @@ export function LegalEntityProfileContent({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 「主抬头」小标，跟在主抬头那行的语言格后。画法照联系人卡的「主要」胶囊（LegalEntityContactCards）：同一块面上两种
+ * 「这是主的」记号该长一个样；不用强调色——强调色在这里读作链接。
+ */
+function PrimaryTitleMark() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded-full border border-idpxyz-border bg-idpxyz-editor px-1.5 align-[1px] text-[11px] font-medium leading-4 text-idpxyz-text">
+      主抬头
+    </span>
   );
 }
 

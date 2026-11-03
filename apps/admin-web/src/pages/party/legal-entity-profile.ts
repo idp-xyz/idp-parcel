@@ -428,6 +428,28 @@ export function languageTagLabel(tag: string): string {
   return invoiceTitleLanguageOptions.find((option) => option.value.toLowerCase() === key)?.label ?? tag.trim();
 }
 
+export interface InvoiceTitleRow {
+  /** BCP 47 语言标签；主抬头没标语言时是空串，读出显「—」。 */
+  language: string;
+  title: string;
+  /** 主抬头——「可开票」的判据只看它（ADR-0359 决定四）。 */
+  primary: boolean;
+}
+
+/**
+ * 读出里的开票抬头清单（票 company-subject-ux/12 第 2 条）：一种语言一行，主抬头排第一，其余照登记次序。主抬头与其他
+ * 语言的抬头此前分两格、两种排法，其实是同一类内容；并成一张清单后读的人只看「语言 → 抬头」。没登记开票资料即空表。
+ */
+export function invoiceTitleRowsOf(
+  content: Pick<LegalEntityProfileContent, 'invoicingRegistered' | 'invoiceTitle' | 'invoiceTitleLanguage' | 'invoiceTitles'>,
+): InvoiceTitleRow[] {
+  if (!content.invoicingRegistered) return [];
+  const primary: InvoiceTitleRow[] = content.invoiceTitle
+    ? [{ language: content.invoiceTitleLanguage ?? '', title: content.invoiceTitle, primary: true }]
+    : [];
+  return [...primary, ...(content.invoiceTitles ?? []).map((row) => ({ language: row.language, title: row.title, primary: false }))];
+}
+
 /**
  * 收款账户一行折成载荷：各格去首尾空白，可缺的格空着即键缺席；整行空着交 undefined 不送。必填格空着照送空串——
  * 缺项判读（legalEntityProfileMissingFields）在送之前就会点名拦下，这里不替它判。

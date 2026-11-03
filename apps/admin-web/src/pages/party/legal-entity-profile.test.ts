@@ -7,6 +7,7 @@ import {
   addressText,
   bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
+  invoiceTitleRowsOf,
   languageTagLabel,
   legalEntityProfileDraftBasedOn,
   legalEntityProfileLocalProblems,
@@ -518,4 +519,23 @@ test('多语言抬头：带入与再保存保全、半填与重复语言先提�
   equal(languageTagLabel(' EN '), '英语（en）');
   equal(languageTagLabel('fr-CA'), 'fr-CA');
   equal(languageTagLabel(''), '');
+});
+
+// Covers（票 company-subject-ux/12 第 2 条）：清单主抬头在前、其余照登记次序；主抬头没标语言留空串；没登记开票资料即空表。
+test('开票抬头清单：主抬头排第一，其余照登记次序，未登记开票资料为空', () => {
+  deepEqual(
+    invoiceTitleRowsOf({
+      invoicingRegistered: true,
+      invoiceTitle: 'SYN 主抬头',
+      invoiceTitleLanguage: 'zh-Hans',
+      invoiceTitles: [{ language: 'en', title: 'SYN Title' }, { language: 'ja', title: 'SYN 日本語' }],
+    }),
+    [
+      { language: 'zh-Hans', title: 'SYN 主抬头', primary: true },
+      { language: 'en', title: 'SYN Title', primary: false },
+      { language: 'ja', title: 'SYN 日本語', primary: false },
+    ],
+  );
+  deepEqual(invoiceTitleRowsOf({ invoicingRegistered: true, invoiceTitle: 'SYN 主抬头' }), [{ language: '', title: 'SYN 主抬头', primary: true }]);
+  deepEqual(invoiceTitleRowsOf({ invoicingRegistered: false, invoiceTitle: 'SYN 主抬头', invoiceTitles: [{ language: 'en', title: 'SYN' }] }), []);
 });
