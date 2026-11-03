@@ -1,15 +1,17 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { BusinessPartyRecord, PartyRelationshipRecord } from './api';
+import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
   businessPartyTypeFilterOptions,
+  businessPartyTypeLabel,
   countBusinessParties,
   defaultBusinessPartySort,
   filterBusinessParties,
   indexPartyRoles,
+  ourCompanyPartyIds,
   rolesOfParty,
   sortBusinessParties,
 } from './business-party-list';
@@ -211,5 +213,76 @@ test('类型筛选与计数按持有的角色', () => {
   equal(counts.byRole.CARRIER_AGENT, 1);
   equal(counts.withoutRole, 2);
   equal(businessPartyTypeFilterOptions[0].value, 'ALL');
+  equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
+});
+
+function legalEntity(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
+  return {
+    tenantId: 'SYN-TENANT-01',
+    legalEntityId: 'SYN-LE-01',
+    kind: 'RESPONSIBLE_LEGAL_ENTITY',
+    partyId: 'SYN-PARTY-OPERATOR-01',
+    partyNameKnown: true,
+    partyName: '合成运营方一号（演示）',
+    status: 'EFFECTIVE',
+    revision: 1,
+    basis: 'SYN-REG-BASIS-LE-01',
+    effectiveFrom: '2026-01-02T00:00:00Z',
+    registeredAt: '2026-01-02T00:00:00Z',
+    identityLayerRegistered: false,
+    ...over,
+  };
+}
+
+// Covers: 「我方公司」按法人册算（票 company-subject-ux/02）——法人钉着的参与方就是；只数在用（待生效 / 已生效）的法人，
+// 已停用的不算；名称转写不到的照算（钉的是标识）；法人册没取到即空集。
+test('ourCompanyPartyIds 按法人册钉着的参与方算，只数在用的法人', () => {
+  const ours = ourCompanyPartyIds([
+    legalEntity({}),
+    legalEntity({ legalEntityId: 'SYN-LE-02', partyId: 'SYN-PARTY-AGENT-04', status: 'REGISTERED' }),
+    legalEntity({ legalEntityId: 'SYN-LE-03', partyId: 'SYN-PARTY-RETIRED-01', status: 'DEACTIVATED' }),
+    legalEntity({ legalEntityId: 'SYN-LE-04', partyId: 'SYN-PARTY-DANGLING-01', partyNameKnown: false, partyName: undefined }),
+  ]);
+  deepEqual([...ours].sort(), ['SYN-PARTY-AGENT-04', 'SYN-PARTY-DANGLING-01', 'SYN-PARTY-OPERATOR-01']);
+  equal(ourCompanyPartyIds(null).size, 0);
+});
+
+// Covers: 类型列的文字——我方公司排在角色前面；不是我方公司就照角色，没角色叫「往来单位」。
+test('businessPartyTypeLabel 把我方公司排在角色前面', () => {
+  equal(businessPartyTypeLabel(true, []), '我方公司');
+  equal(businessPartyTypeLabel(true, ['CUSTOMER']), '我方公司 / 客户');
+  equal(businessPartyTypeLabel(false, ['CUSTOMER', 'SUPPLIER']), '客户 / 供应商');
+  equal(businessPartyTypeLabel(false, []), '往来单位');
+});
+
+// Covers: 筛选 OURS 只留我方公司；NONE 不再把我方公司算成「往来单位」；搜索能按「我方公司」命中；计数分出 ours、
+// withoutRole 不含我方公司；下拉里「我方公司」在「全部类型」之后、角色之前。
+test('我方公司进筛选、搜索与计数', () => {
+  const index = indexPartyRoles([relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' })]);
+  const ours = ourCompanyPartyIds([legalEntity({}), legalEntity({ legalEntityId: 'SYN-LE-02', partyId: 'SYN-PARTY-AGENT-04' })]);
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'OURS' }, index, ours)), [
+    'SYN-PARTY-OPERATOR-01',
+    'SYN-PARTY-AGENT-04',
+  ]);
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'NONE' }, index, ours)), [
+    'SYN-PARTY-CARRIER-02',
+    'SYN-PARTY-RETIRED-01',
+  ]);
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'CUSTOMER' }, index, ours)), ['SYN-PARTY-OPERATOR-01']);
+  deepEqual(ids(filterBusinessParties(rows, { search: '我方公司', status: 'ALL' }, index, ours)), [
+    'SYN-PARTY-OPERATOR-01',
+    'SYN-PARTY-AGENT-04',
+  ]);
+  // 法人册没取到：谁都不是我方公司，与此前的口径一样。
+  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'OURS' }, index)), []);
+
+  const counts = countBusinessParties(rows, index, ours);
+  equal(counts.ours, 2);
+  equal(counts.byRole.CUSTOMER, 1);
+  equal(counts.withoutRole, 2);
+  equal(countBusinessParties(rows, index).withoutRole, 3);
+
+  deepEqual(businessPartyTypeFilterOptions.slice(0, 2).map((option) => option.value), ['ALL', 'OURS']);
+  equal(businessPartyTypeFilterOptions[1].label, '我方公司');
   equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
 });

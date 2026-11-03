@@ -19,6 +19,7 @@ import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   listBusinessParties,
+  listGroupLegalEntities,
   listPartyRelationships,
   type BusinessPartyListResponseBody,
   type BusinessPartyRecord,
@@ -27,7 +28,7 @@ import {
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
 import { StatusPill } from '../../components/StatusPill';
-import { labelOf, partyRoleLabels, partyTypeLabel } from './presentation';
+import { labelOf, partyRoleLabels } from './presentation';
 import { Instant, UnknownPartyName, filterSelectClass } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
@@ -52,14 +53,17 @@ import {
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
   businessPartyTypeFilterOptions,
+  businessPartyTypeLabel,
   countBusinessParties,
   defaultBusinessPartySort,
   filterBusinessParties,
   indexPartyRoles,
+  ourCompanyPartyIds,
   rolesOfParty,
   sortBusinessParties,
   type BusinessPartyStatusFilter,
   type BusinessPartyTypeFilter,
+  type OurCompanyIndex,
   type PartyRoleIndex,
 } from './business-party-list';
 import {
@@ -100,10 +104,10 @@ const relationshipStatusDotClass: Record<string, string> = {
   SUPERSEDED: 'bg-gray-400',
 };
 
-// 身份本体册的列。主列只留运营要看的：名称、类型（按持有的角色称呼）、状态、生效时点；标识、修订号、登记依据进详情栏底部的
-// 「技术详情」。停用时点与状态同格呈现：看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——
-// 排的键看不见，操作者判不出「为什么这一条在最上面」。类型列要关系册才算得出，所以列表随索引生成。
-function identityColumnsOf(roles: PartyRoleIndex): WorkbenchColumn<BusinessPartyRecord>[] {
+// 身份本体册的列。主列只留运营要看的：名称、类型（我方公司 / 按持有的角色称呼）、状态、生效时点；标识、修订号、登记依据进详情栏
+// 底部的「技术详情」。停用时点与状态同格呈现：看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——
+// 排的键看不见，操作者判不出「为什么这一条在最上面」。类型列要关系册与法人册才算得出，所以列表随两份索引生成。
+function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): WorkbenchColumn<BusinessPartyRecord>[] {
   return [
     {
       key: 'party-name',
@@ -125,7 +129,11 @@ function identityColumnsOf(roles: PartyRoleIndex): WorkbenchColumn<BusinessParty
     {
       key: 'type',
       header: '类型',
-      render: (row) => <span className="whitespace-nowrap text-idpxyz-text">{partyTypeLabel(rolesOfParty(roles, row.partyId))}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-idpxyz-text">
+          {businessPartyTypeLabel(ours.has(row.partyId), rolesOfParty(roles, row.partyId))}
+        </span>
+      ),
     },
     {
       key: 'status',
@@ -393,6 +401,8 @@ const noUnsaved: Record<BusinessPartyRegister, boolean> = {
 export function BusinessPartiesPage() {
   const parties = useRegisterList(listBusinessParties);
   const relationships = useRegisterList(listPartyRelationships);
+  // 法人册只为类型列的「我方公司」读（business-party-list.ts 文件头）；读不到就没有一行按我方公司显，列表照常。
+  const entities = useRegisterList(listGroupLegalEntities);
   // 页名下的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户；答不出就不显，不拿列表行上的 tenantId 顶。
   const boundTenant = useBoundTenant();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
@@ -504,9 +514,11 @@ export function BusinessPartiesPage() {
   const knownRelationships = relationships.answer?.kind === 'outcome' ? relationships.answer.body.relationships : null;
   const partyRows = knownParties ?? [];
   const relationshipRows = knownRelationships ?? [];
-  // 类型列按关系册算（business-party-list.ts 文件头）；关系册没取到时所有行先按「往来单位」显，取到后自动补上。
+  // 类型列按关系册与法人册算（business-party-list.ts 文件头）；哪一册没取到时所有行先按「往来单位」显，取到后自动补上。
+  const knownEntities = entities.answer?.kind === 'outcome' ? entities.answer.body.entities : null;
   const roleIndex = useMemo(() => indexPartyRoles(knownRelationships), [knownRelationships]);
-  const identityColumns = useMemo(() => identityColumnsOf(roleIndex), [roleIndex]);
+  const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
+  const identityColumns = useMemo(() => identityColumnsOf(roleIndex, ourCompanies), [roleIndex, ourCompanies]);
 
   if (view.kind === 'object') {
     const row = partyRows.find((party) => party.partyId === view.partyId) ?? null;
@@ -628,8 +640,8 @@ export function BusinessPartiesPage() {
 
   if (book === 'identities') {
     // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
-    const visible = sortBusinessParties(filterBusinessParties(partyRows, { search, status, type }, roleIndex), sort);
-    const counts = countBusinessParties(partyRows, roleIndex);
+    const visible = sortBusinessParties(filterBusinessParties(partyRows, { search, status, type }, roleIndex, ourCompanies), sort);
+    const counts = countBusinessParties(partyRows, roleIndex, ourCompanies);
     const toggleStatus = (code: BusinessPartyStatusFilter) => setStatus(status === code ? 'ALL' : code);
     const toggleType = (code: BusinessPartyTypeFilter) => setType(type === code ? 'ALL' : code);
 
@@ -697,7 +709,11 @@ export function BusinessPartiesPage() {
           title={info.title}
           subtitle="与我们有业务往来的客户、承运商、代理等单位：在这里登记、查看状态，并建立合作关系"
           kpis={kpis}
-          onRefresh={parties.retry}
+          // 刷新连法人册一起重取：刚在「公司主体」页登完的公司，回到这里按一下就该显成「我方公司」。
+          onRefresh={() => {
+            parties.retry();
+            entities.retry();
+          }}
           refreshing={parties.pending}
           primaryAction={primaryAction}
           search={{ value: search, onChange: setSearch, placeholder: '搜索名称、编码或类型…' }}
