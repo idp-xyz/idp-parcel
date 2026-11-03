@@ -183,7 +183,8 @@ export function LegalEntityDetailPanel({
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-          <div className="w-full max-w-[1120px]">
+          {/* 正文最宽 52rem、靠左（票 company-subject-ux/08 第 4 条）：栏拖到 850px 以上时标签列与值列之间不再空一大片。 */}
+          <div className="w-full max-w-[52rem]">
             <TabsContent value="overview" className="mt-0">
               {row.deactivationBasis ? (
                 <dl className="mb-4">

@@ -18,7 +18,7 @@ export function LegalEntityProfileContent({
 }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
   return (
-    <div className="legal-entity-profile-readout mt-5 space-y-5">
+    <div className="legal-entity-profile-readout mt-2">
       <ProfileGroup title="代表人信息">
         <ProfileReadoutGrid>
           <ProfileReadoutField
@@ -66,7 +66,8 @@ export function LegalEntityProfileContent({
             }
           />
           <ProfileReadoutField
-            label="监管登记号（税务 / 海关）"
+            label="监管登记号"
+            title="税务 / 海关的监管登记号"
             value={
               content?.taxRegistrationNumbers.length
                 ? content.taxRegistrationNumbers.map((row, index) => (
@@ -84,7 +85,7 @@ export function LegalEntityProfileContent({
           />
         </ProfileReadoutGrid>
         <div className="mt-3">
-          <p className="text-[12px] leading-6 text-idpxyz-breadcrumb">
+          <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
             收款账户{content?.bankAccounts?.length ? <span className="ml-2">{content.bankAccounts.length} 个</span> : null}
           </p>
           <LegalEntityBankAccountsTable accounts={content?.bankAccounts ?? []} />
@@ -96,7 +97,7 @@ export function LegalEntityProfileContent({
         </ProfileGroup>
       ) : null}
       {notes.length ? (
-        <div className="border-t border-idpxyz-border pt-4 text-[12px] leading-6 text-idpxyz-breadcrumb">
+        <div className="mt-5 border-t border-idpxyz-border pt-4 text-[12px] leading-5 text-idpxyz-breadcrumb">
           <p className="font-medium text-idpxyz-text">资料维护提示</p>
           <ul className="mt-1 list-disc pl-4">
             {notes.map((note) => (
@@ -167,11 +168,13 @@ function addressOf(address?: RegisteredAddressRecord): ReactNode {
   return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }
 
+// 节与节之间只用间距（票 company-subject-ux/08 第 4 条）：标题 13px 半粗、上 20px 下 8px，不再每节一条长横线——
+// 宽屏上横线横贯 52rem，比标题还显眼。
 function ProfileGroup({ title, extra, children }: { title: string; extra?: string; children: ReactNode }) {
   return (
-    <section className="border-t border-idpxyz-border pt-4">
-      <div className="mb-1 flex items-baseline gap-2">
-        <h4 className="text-[14px] font-semibold leading-6 text-idpxyz-textBright">{title}</h4>
+    <section className="mt-5 first:mt-3">
+      <div className="mb-2 flex items-baseline gap-2">
+        <h4 className="text-[13px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
         {extra ? <span className="text-[12px] text-idpxyz-breadcrumb">{extra}</span> : null}
       </div>
       {children}

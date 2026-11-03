@@ -12,12 +12,15 @@ export const absentValueMark = '—';
 
 export function ProfileReadoutField({
   label,
+  title,
   value,
   mono = false,
   emphasized = false,
   wide = false,
 }: {
   label: string;
+  /** 标签的悬停说明：标签列固定宽、不折行，放不下的限定语（「税务 / 海关」）进这里。 */
+  title?: string;
   /** 字串或已排好版的节点（如 ProfileReadoutAddress）；空串、undefined 与旧写法的「未配置」都算没有。 */
   value?: ReactNode;
   mono?: boolean;
@@ -27,8 +30,10 @@ export function ProfileReadoutField({
   const absent = value === undefined || value === null || value === '' || value === '未配置';
   return (
     <div className={`legal-entity-readout-field ${wide ? 'legal-entity-readout-field-wide' : ''}`}>
-      <dt className="text-[12px] leading-6 text-idpxyz-breadcrumb">{label}</dt>
-      <dd className={`min-w-0 text-[13px] leading-6 ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${mono ? 'font-mono' : ''} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
+      <dt className="text-[12px] leading-5 text-idpxyz-breadcrumb" title={title}>
+        {label}
+      </dt>
+      <dd className={`min-w-0 text-[13px] leading-5 ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${mono ? 'font-mono' : ''} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
         {absent ? absentValueMark : value}
       </dd>
     </div>

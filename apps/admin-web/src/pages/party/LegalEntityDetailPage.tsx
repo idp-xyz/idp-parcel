@@ -257,10 +257,14 @@ export function LegalEntityDetailPage({
           ? [
               {
                 id: 'summary',
+                // 正文最宽 52rem、靠左，与详情栏同一宽度纪律（票 company-subject-ux/08 第 4 条）；模板的内容列是 960px，
+                // 读出在里面不撑满。
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityProfileSummary query={profileQuery} />
-                    <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
+                    <div className="max-w-[52rem]">
+                      <LegalEntityProfileSummary query={profileQuery} />
+                      <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
+                    </div>
                   </section>
                 ),
               },
