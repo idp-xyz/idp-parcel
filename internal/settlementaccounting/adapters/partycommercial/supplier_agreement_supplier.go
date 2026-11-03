@@ -15,7 +15,8 @@ import (
 // 把协议正文上的供应商（往来单位标识）译成结算账单上同一种供应商引用（ADR-0358 决定一）。两侧说的是同一个往来单位，
 // 这里只换类型，不换值——换了值，匹配门比对的就不是同一个东西。
 //
-// 译不过去与指称歧义都包 saports.ErrSupplierAgreementSupplierUntranslatable：两种都是确定性的，编排凭它与读不动分开。
+// 译不过去、指称歧义与 PC 库里存的供应商立不成标识都包 saports.ErrSupplierAgreementSupplierUntranslatable：三种都是确定性的，
+// 编排凭它与读不动分开——形成上抛不重投，补记把那一版留空列出、不为它挡住其余各版（ADR-0358 决定三）。
 type SupplierAgreementSupplier struct {
 	agreements pcports.SupplierAgreementSupplierView
 }
@@ -45,7 +46,7 @@ func (adapter *SupplierAgreementSupplier) LoadSupplierAgreementSupplier(
 		return none, false, fmt.Errorf("%w: %w: supplier agreement: %v", saports.ErrSupplierAgreementSupplierUntranslatable, ErrUntranslatableAnswer, err)
 	}
 	party, found, err := adapter.agreements.LoadSupplierAgreementSupplier(ctx, commercialTenant, label)
-	if errors.Is(err, pcports.ErrSupplierAgreementLabelAmbiguous) {
+	if errors.Is(err, pcports.ErrSupplierAgreementLabelAmbiguous) || errors.Is(err, pcports.ErrSupplierAgreementSupplierMalformed) {
 		return none, false, fmt.Errorf("load supplier agreement supplier: %w: %w", saports.ErrSupplierAgreementSupplierUntranslatable, err)
 	}
 	if err != nil {

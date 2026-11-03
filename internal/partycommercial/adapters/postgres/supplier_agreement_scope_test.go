@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -130,5 +131,33 @@ func TestAnAmbiguousLabelNamesNoSupplier(t *testing.T) {
 	_, found, err := suppliers.LoadSupplierAgreementSupplier(ctx, pcTenant(t, "tenant-1"), slashedObject.QualifiedLabel())
 	if !errors.Is(err, ports.ErrSupplierAgreementLabelAmbiguous) || found {
 		t.Fatalf("歧义指称：found=%v err=%v, want ErrSupplierAgreementLabelAmbiguous", found, err)
+	}
+}
+
+// Covers: 库里那一版正文存的供应商立不成往来单位标识（库上 btrim 只削空格，制表符过得了检查）——报
+// ports.ErrSupplierAgreementSupplierMalformed，与读不动分开，消费方凭它把那一版当确定性的坏答案（ADR-0358 决定三）。
+func TestAMalformedStoredSupplierIsReportedAsSuch(t *testing.T) {
+	repository, transactor, db := newDeclarationFixture(t)
+	ctx := t.Context()
+	suppliers, err := adapter.NewSupplierAgreementSuppliers(db)
+	if err != nil {
+		t.Fatalf("构造协议供应商读口：%v", err)
+	}
+	version := effectiveVersionOfKind(t, domain.SupplierAgreementObject, "agreement-malformed", "v1", "digest-m1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	mustSaveSupplierAgreement(t, transactor, ctx, repository, supplierAgreementOn(t, version, "supplier-1", "plan-buy-1"))
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		executor, err := db.RequireExecutor(txCtx)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(txCtx, `UPDATE party_commercial.supplier_agreement SET supplier_party_id = E'\t' WHERE object_id = 'agreement-malformed'`)
+		return err
+	}); err != nil {
+		t.Fatalf("把供应商改成立不成标识的值：%v", err)
+	}
+	_, found, err := suppliers.LoadSupplierAgreementSupplier(ctx, pcTenant(t, "tenant-1"), version.QualifiedLabel())
+	if !errors.Is(err, ports.ErrSupplierAgreementSupplierMalformed) || found {
+		t.Fatalf("存的供应商立不成标识：found=%v err=%v, want ErrSupplierAgreementSupplierMalformed", found, err)
 	}
 }

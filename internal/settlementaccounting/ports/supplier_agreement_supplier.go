@@ -8,8 +8,8 @@ import (
 )
 
 // ErrSupplierAgreementSupplierUntranslatable 表示协议供应商这一问答出了确定性的坏答案：租户、协议指称或 PC 交回的供应商译不进
-// 结算的词汇表，或那一份指称在 PC 一侧比中不止一版协议。判据同 ErrSupplierAgreementScopeUntranslatable：重投同一份永远同一个
-// 结果，调用方上抛，不答未决。
+// 结算的词汇表，那一份指称在 PC 一侧比中不止一版协议，或 PC 库里那一版正文存的供应商立不成标识。判据同
+// ErrSupplierAgreementScopeUntranslatable：重投同一份永远同一个结果，形成上抛、不答未决，补记把那一版留空列出。
 var ErrSupplierAgreementSupplierUntranslatable = errors.New(
 	"settlement accounting: supplier agreement supplier answer cannot be translated")
 

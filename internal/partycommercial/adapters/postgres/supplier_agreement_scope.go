@@ -78,7 +78,7 @@ func (repository *SupplierAgreementSuppliers) LoadSupplierAgreementSupplier(
 	}
 	supplier, err := domain.NewPartyID(row.supplier)
 	if err != nil {
-		return none, false, fmt.Errorf("load supplier agreement supplier: %w", err)
+		return none, false, fmt.Errorf("load supplier agreement supplier: %w: %w", ports.ErrSupplierAgreementSupplierMalformed, err)
 	}
 	return supplier, true, nil
 }

@@ -79,3 +79,14 @@ func TestAnAmbiguousAgreementLabelNamesNoSupplier(t *testing.T) {
 		t.Fatalf("歧义指称：found=%v err=%v, want ErrSupplierAgreementSupplierUntranslatable", found, err)
 	}
 }
+
+// Covers: PC 库里存的供应商立不成标识——同指称歧义一样包 saports.ErrSupplierAgreementSupplierUntranslatable，不当读不动：形成凭它上抛、
+// 补记凭它留空列出，不为这一版挡住其余（ADR-0358 决定三）。
+func TestAMalformedStoredSupplierIsDeterministic(t *testing.T) {
+	malformed := fmt.Errorf("load supplier agreement supplier: %w: blank", pcports.ErrSupplierAgreementSupplierMalformed)
+	_, found, err := supplierAdapter(t, &agreementSupplierSourceDouble{err: malformed}).LoadSupplierAgreementSupplier(
+		t.Context(), saTenant(t, "SYN-TENANT-01"), saAgreement(t, "SYN-SUPPLIER-TRUNK-CN-SG-01/v1"))
+	if !errors.Is(err, saports.ErrSupplierAgreementSupplierUntranslatable) || found {
+		t.Fatalf("存的供应商立不成标识：found=%v err=%v, want ErrSupplierAgreementSupplierUntranslatable", found, err)
+	}
+}
