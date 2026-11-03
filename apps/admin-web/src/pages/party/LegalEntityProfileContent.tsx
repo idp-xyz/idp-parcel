@@ -128,7 +128,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
   if (!accounts.length) return <p className="text-[13px] leading-5 text-idpxyz-breadcrumb">未登记收款账户</p>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
+      <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
         <caption className="sr-only">收款账户清单</caption>
         <colgroup>
           <col className="w-[18%]" />

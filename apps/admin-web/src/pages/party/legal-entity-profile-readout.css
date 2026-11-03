@@ -30,6 +30,18 @@
   grid-column: 1 / -1;
 }
 
+/* 读出表（票 company-subject-ux/11 第 2 条）：行的悬停底色从表的最左缘起，首列不留内边距时字顶在底色的边上；首末两列
+   各留 0.75rem，与中间列同宽。写在这里而不是逐表写 Tailwind 类，是让收款账户表与以后再加的读出表取同一处。 */
+.legal-entity-readout-table th:first-child,
+.legal-entity-readout-table td:first-child {
+  padding-left: 0.75rem;
+}
+
+.legal-entity-readout-table th:last-child,
+.legal-entity-readout-table td:last-child {
+  padding-right: 0.75rem;
+}
+
 /* 联系人卡组（票 company-subject-ux/11 第 1 条）：卡组自己就是容器——「联系人」签里没有资料读出的外框可量，概要签里
    卡组又套在读出卡内、比外框窄两个内边距；量自己的宽，两处才按同一把尺排列。容器名与读出共用，两列的断点也共用。 */
 .legal-entity-contact-cards {
