@@ -16,6 +16,8 @@
 // 「评价参数已登记」，停着的评价请求由它续办（ADR-0229 决定五）。
 // `evaluation-resume` 是运营续办口（ADR-0229 决定六）：点名一件包裹或一版发生项、给一个续办引用，续办在它上面停着的
 // 每一件；同一个引用重跑是重放。它不登任何租户取值，缺的取值补登之前续办只会照实再停一次。
+// `expected-cost-supplier-backfill` 是补记口（ADR-0358 决定三）：点名租户，给本记录之前形成、还没记供应商的预期成本按各自的
+// 协议问 party-commercial 补上，只写仍为空的那一格；重跑只补仍空的。它也不登租户取值——供应商取自协议。
 //
 // 本口只开人工 / 受控批量的门，不自动采用：任何回调 / 文件到达都不在这里（UC-SA-005 输入表「不因接收回调
 // 自动采用」；真实财务系统来源仍 `No-Go / 待参数化`，PAR-INT-05）。输入全部来自 -input 指定的 JSON 文件，未知
@@ -92,6 +94,7 @@ type registrar struct {
 	sellMoments  *application.RegisterSellBillingMomentAdoptionHandler
 	feeMappings  *application.RegisterFeeItemMappingHandler
 	resumes      *application.OperatorResumeEvaluationHandler
+	backfills    *application.BackfillExpectedCostSupplierHandler
 	transactor   bentoapp.Transactor
 }
 
@@ -383,8 +386,13 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, err
 	}
+	backfills, err := buildExpectedCostSupplierBackfill(db)
+	if err != nil {
+		return none, err
+	}
 	return registrar{
 		resumes:      resumes,
+		backfills:    backfills,
 		funds:        funds,
 		accounts:     accountHandler,
 		catalogues:   catalogueHandler,
