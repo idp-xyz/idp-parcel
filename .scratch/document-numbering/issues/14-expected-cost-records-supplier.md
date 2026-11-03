@@ -1,7 +1,7 @@
 # 14 预期成本记下供应商：登记账单按供应商筛预期成本，匹配门核供应商
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）；越权风险点待 SA owner 复核
 父票：[spec](../spec.md)
 Blocked by: 无（从票 [13](./13-supplier-bill-number-and-ranged-audit-outcomes.md) 的分支 tip `4bcdc59f7` 起，已含票 11、票 13 与 main `3b4720283`；票 11、13 进 main 后并一次 main）
 出处：票 [11](./11-supplier-bill-and-audited-payable-admin-pages.md) 评审 Spec 非阻断 3——登记表单的预期成本不按供应商筛（只筛当前版与币种，供应商下拉列全部往来单位），匹配门 `MatchBillLine` 也不核供应商（ADR-0340 越权风险点四），误选一次就把账单对到别家的预期成本；票 11 修订查明预期成本的读口、表与领域类型都没有供应商，只有它依的那一版协议（`agreement_ref`），协议属哪家供应商归 party-commercial，于是在 UC-SA-004「给开发的交接」记了一行缺口（去处「待立票」）、登记表单加了一句提示。用户 2026-11-02 在三个选项（预期成本记下供应商 / 匹配时经往来单位与协议方核对 / 暂不补）里选「预期成本记下供应商」：形成预期成本时从协议取出供应商一并记下（之后不变），登记表单按所选供应商筛，匹配时在结算上下文内直接比对、不对就拒；先写 ADR 再做。
@@ -72,3 +72,16 @@ Blocked by: 无（从票 [13](./13-supplier-bill-number-and-ranged-audit-outcome
 3. PC 库里存的供应商立不成往来单位标识时，PC 读口改报具名错误 `ports.ErrSupplierAgreementSupplierMalformed`（与读不动分开），结算的消费侧适配器把它同指称歧义一样译成 `ErrSupplierAgreementSupplierUntranslatable`：形成照旧上抛落 publish_failed、不重投；补记口把那一版记为 `AGREEMENT_SUPPLIER_UNTRANSLATABLE`、留空列出、退 2，其余照写，不再整笔回滚（ADR-0358 决定三「不能为它们挡住其余的补记」）。新用例：PC 真库 `TestAMalformedStoredSupplierIsReportedAsSuch`（库上 `btrim` 只削空格，制表符过得了检查却立不成标识）、适配器 `TestAMalformedStoredSupplierIsDeterministic`，补记口真库用例加一版存制表符供应商的协议、断言它留空列出而同租户补得上的那份照写。AT 盘点 `AT-SA-237` 行补这两条用例名。ADR-0358 的「译不过来」已涵盖这一种，正文不改。
 
 验证（修订后的 tip）：`go build ./...`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/settlementaccounting/... ./internal/partycommercial/... ./internal/architecture/... ./cmd/... ./migrations/...` 40 个包 ok、0 FAIL（含 PG），新用例 `-v` 抽查 PASS；前端 `npx tsc -b` 无输出、`pnpm test` 1127 pass / 0 fail、`npx vite build` 退 0。
+
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 初评钉 `082162615`：两轴阻断为零；非阻断三条（头注跨文件计数、供应商不符答复没用名称、译不成往来单位标识时补记口整笔回滚）作者在 `45fcbb13d`、`f8cc1b3fb`、`edbb0bace` 修。
+- 复评钉 `1325fba2d`（含修订与并入票 13 的解冲突）：两轴阻断为零；唯一非阻断（合并引入的注释指错）作者在 `791ba6f1d` 修。之后并入票 13 第三轮修订（`32eb59c1f`，接收编排结果结构里票 14 那一格改名 `costSupplier` 以让出票 13 的 `supplier`），协调方进 main 前核过合并差异，全量测试过。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `969205ae9` 上依次 `git merge --no-ff origin/claude-docnum13`（tip `70531b003`，合并提交 `329bf3beb`）、`origin/claude-docnum14`（tip `32eb59c1f`，合并提交 `7943aa513`）、`origin/claude-docnum15`（tip `1e0019367`，合并提交 `5ce46a359`），均无冲突；三票同一次全量。
+- 协调方两笔：`546861ac4`（票 13 第四轮复评非阻断——审核口所需决定种类不在已认之列时缺省答未授予，关上放行路径）、`7bc032259`（票 15 复评非阻断——送站读口门的次序注释跟上装配处的请求目标检查）。
+- main tip 上重生成 ADR 索引（`b638bb595`）、AT 盘点总览计数（`ca173b8dc`）、机制清点（`f26f0ca60`）。
+- 全量真库测试 `scripts/test-full.sh`：退 0，174 个包 ok。一次性库 `seed_docnum131415` 灌种子：退 0。
+- 迁移 `settlement_accounting/0055`（预期成本可空 `supplier_party_ref`）。**有数据的库**：迁移后旧预期成本读作「未记」、匹配时拒，要对每个租户跑一次 `parcel-settlement-register expected-cost-supplier-backfill`。

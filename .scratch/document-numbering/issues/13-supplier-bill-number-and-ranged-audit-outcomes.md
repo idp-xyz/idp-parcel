@@ -1,7 +1,7 @@
 # 13 供应商账单补全：接收口加供应商账单号（按外部标识记），审核补争议、拒绝并按金额范围审
 
 Category: enhancement
-Status: in-review
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）；越权风险点待 SA owner 复核
 父票：[spec](../spec.md)
 Blocked by: 无（从票 [11](./11-supplier-bill-and-audited-payable-admin-pages.md) 的分支起，票 11 进 main 后并一次 main）
 出处：票 11 完成记录「留给协调方」第 1、2 条查出两处领域缺口——接收口载荷与接收表都没有放供应商账单号的格，票 11 只得把主张标识生成为「供应商/账单号」再从里面拆出来显示，与 GLOSSARY「外部标识」相悖；审核只能「通过」，而 SA `CONTEXT.md`「供应商主张与审核应付」与 UC-SA-004 要通过、争议、拒绝按金额范围并存，争议解除后只处理原争议金额。用户 2026-11-02 裁定「两处都做」：新立一份 ADR，再实现，管理台页面跟上，并替换票 11 的权宜做法。
@@ -109,3 +109,17 @@ Blocked by: 无（从票 [11](./11-supplier-bill-and-audited-payable-admin-pages
 
 验证：`go build`、`go vet ./...` 退 0，改过的 Go 文件 `gofmt -l` 无输出，`go test -count=1 -p 1 ./internal/architecture/... ./cmd/... ./migrations/... ./internal/settlementaccounting/... ./internal/accessidentity/... ./internal/platform/...` 全过（含 PG）。本轮没动前端与迁移。
 
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 初评钉 `4bcdc59f7`：Spec 阻断 1（ADR-0163 决定四被改未挂指针）；协调方裁争议决定另立授予（照 UC-SA-004「分别授权」）、账单号拒首尾空白与控制字符、大小写不折算；并入票 11 复评转来四条。
+- 复评钉 `437926b9a`：Spec 阻断 1（ADR-0340 决定二授予一句被扩未挂指针）；同一主张各版本供应商不得改变、拒 Cf、审核口先认授予再读体、0054 号列 CHECK。
+- 第三轮钉 `4435dee67`：Spec 阻断 1（本轮引入：审核口第一步吞掉第二种授予的拒因）。
+- 第四轮钉 `70531b003`：两轴阻断为零。非阻断只记不追：几处注释只说「新版本」而规则含同版本（`BillClaimSupplierConflict`、`FindClaimSupplier`、编排测试 Covers）；`telling` 注释宜写码名 `INTAKE_FAILED`；ADR-0357 决定五次序漏「认不出的错误」一档、四格用例未钉这一档（探针证行为正确）；管理台「同一份账单的新版本不能换供应商」未覆盖同版本重发。决定种类写在三处可能放行一条，协调方进 main 时修（见下）。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `969205ae9` 上依次 `git merge --no-ff origin/claude-docnum13`（tip `70531b003`，合并提交 `329bf3beb`）、`origin/claude-docnum14`（tip `32eb59c1f`，合并提交 `7943aa513`）、`origin/claude-docnum15`（tip `1e0019367`，合并提交 `5ce46a359`），均无冲突；三票同一次全量。
+- 协调方两笔：`546861ac4`（票 13 第四轮复评非阻断——审核口所需决定种类不在已认之列时缺省答未授予，关上放行路径）、`7bc032259`（票 15 复评非阻断——送站读口门的次序注释跟上装配处的请求目标检查）。
+- main tip 上重生成 ADR 索引（`b638bb595`）、AT 盘点总览计数（`ca173b8dc`）、机制清点（`f26f0ca60`）。
+- 全量真库测试 `scripts/test-full.sh`：退 0，174 个包 ok。一次性库 `seed_docnum131415` 灌种子：退 0。
+- 迁移 `settlement_accounting/0054`（账单号册与审核决定册、回填既有应付、撤 `audited_payable_one_per_line`）、`access_identity/0039`（争议决定授予种类）；种子 `data/access/34`、`35`、`data/governance/77`、`steps/510` 跟上。
