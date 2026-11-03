@@ -1,7 +1,7 @@
 # 公司主体 UX 评估落地
 
 Category: enhancement
-Status: in-progress——01–12 已进 main；13 进行中
+Status: resolved——2026-11-03 子票 01–13 全部进 main
 出处：用户 2026-11-02 要求以 UX 专家视角评估「公司主体」的 UX/UI 与内容表达，并裁定「按建议直接修改优化」。评估基于 main `97ca27b8b` 的预览（演示租户 5 家主体）；截图与页面文本在协调方会话的 scratchpad `ux-le/`。
 
 ## 评估结论（一句话）
@@ -62,7 +62,7 @@ Status: in-progress——01–12 已进 main；13 进行中
 | [10](./issues/10-workspace-tab-icons.md) | 对象工作区的签统一配小图标（全站；用户 2026-11-03 裁定） | `templates/workspace-tab-icons.tsx`（新）、`templates/DetailPageTemplate.tsx`、`pages/party/{LegalEntityDetailPanel,BusinessPartyDetailPanel,VersionDetailDrawer}.tsx` | — | resolved（2026-11-03 进 main） |
 | [11](./issues/11-contact-cards.md) | 联系人改成卡片；读出表首列内边距；两处漏改的字（用户 2026-11-03 反馈） | `LegalEntityContactsTable.tsx`→`LegalEntityContactCards.tsx`、`LegalEntityContactsSection.tsx`、`LegalEntityProfileContent.tsx`、`LegalEntityProfileReadout.tsx` + `.css` | — | resolved（2026-11-03 进 main） |
 | [12](./issues/12-readout-typography.md) | 读出可读性：地址按行、抬头成清单、字号统一、账户表列宽（用户 2026-11-03 反馈） | `LegalEntityProfileContent.tsx`、`LegalEntityProfileReadout.tsx` + `.css` | — | resolved（2026-11-03 进 main） |
-| [13](./issues/13-fiori-object-page.md) | 对象页照 Fiori Object Page：锚点栏单页滚动、头部随滚动收起、表单响应与字号（用户 2026-11-03 裁「三条都做」） | `templates/DetailPageTemplate.tsx`、`templates/workspace-tabs.ts`、`pages/party/{LegalEntityDetailPage,BusinessPartyDetailPage}.tsx`、`LegalEntityProfileReadout.tsx` + `.css` | — | in-progress |
+| [13](./issues/13-fiori-object-page.md) | 对象页照 Fiori Object Page：锚点栏单页滚动、头部随滚动收起、表单响应与字号（用户 2026-11-03 裁「三条都做」） | `templates/DetailPageTemplate.tsx`、`templates/workspace-tabs.ts`、`pages/party/{LegalEntityDetailPage,BusinessPartyDetailPage}.tsx`、`LegalEntityProfileReadout.tsx` + `.css` | — | resolved（2026-11-03 进 main） |
 
 01–05 并行，各自只动表里的落点；落点之外的文件要改一行也先告诉协调方。进 main 顺序 01 → 02 → 03 → 04，每票进 main 前 `git merge origin/main` 再过三道门。
 

@@ -1,7 +1,7 @@
 # 13 对象页照 Fiori Object Page：锚点栏单页滚动、头部随滚动收起、表单响应与字号
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 问能否参考 SAP Fiori；协调方列了三条（锚点栏 + 单页滚动、Dynamic Page 头部收起、表单响应规则 + 读出字号），用户裁「三条都做」。只搬版式与行为，不搬 Fiori 的皮（颜色、圆角、字体 token 照旧用本仓的）。
@@ -67,3 +67,11 @@ Blocked by: 无
 **残留 / 未验**：暗色主题未看；`prefers-reduced-motion` 那条路（直接跳不平滑）未实测；`aside` 右栏在分区版式下没有页面在用、未验；两张对象页同时挂在工作区里时 `section-<id>` 会重复（滚动与高亮只在各自滚动容器里查、不受影响，`aria-controls` 会指到先出现的那一个）；内容刚够滚一点时头收起后 scrollTop 被夹到几像素、要回到 0 才恢复（按设计）；CI `admin-web` job 在分支上未看。票面「深链 `?tab=` 照旧可达」：仓里这两张对象页今天没有 `?tab=` 深链（壳层 hash 只到 `<模块>/<对象>`，签靠 `activeTab` prop 与工作区记住的 `useTabViewState`），受控 `activeTab` 拨到哪一节就滚到哪一节已验（页头动作、记住的锚点），没有另造深链。
 
 **要协调方裁的**：分区标题 15 还是 13；窄卡阈值 28rem（则 559 详情栏标签在左）还是提到 36rem；页头「更新公司资料」改走页面级抽屉这一变（`LegalEntityProfileSection` 的 `formOpenRequest` 口留着给详情栏用）是否接受；往来单位概要卡改名「登记依据」是否接受；共享面（`templates/*`）评审 Spec 轴由协调方派。
+
+## 评审与进 main 记录（2026-11-03，协调方）
+
+- 共享面 Spec 轴隔离评审钉 `ceb9cf9d3`：阻断一条——往来单位概要卡 `basicTitle="登记依据"` 把 spec 用语表退役的词重上界面，协调方改「来源单据」。非阻断四条：内容不满一屏仍垫高（改为不垫）；折起即卸载未写进注释（已写）；联系人分区内层 h3 与分区标题同档（降为 h4 14px）；锚点栏用 `role=tab` 指向非 tabpanel 的分区——可过，更对的是 `nav` + 链接，另票。
+- 评审裁决：分区标题 15px 半粗（卡标题 14，一级不能小于二级）；窄卡阈值 28rem，票面第 4 节「559 标签在上」改为「559 标签在左、不溢出」。
+- 作者请裁 ③（页头主动作改走页面级抽屉、往来单位概要卡改名）——抽屉接受，改名按评审改回「来源单据」。
+- main `8c3b04391` 上 `git merge --no-ff origin/claude-csux-13`（tip `ceb9cf9d3`），无冲突，协调方再加一笔评审修订。三道门在 main 上退 0（tsc、run-tests 1178、vite build）；`'tabs'` 版式按作者的 innerHTML 三次对比字节级不变。
+- 其它对象页（运单、清关单等）切到分区版式归后续票，逐页看过再切。
