@@ -113,7 +113,11 @@ func (intake *OperatorDecisionIntake) IntakeSupplierBillAudit(
 	}
 	for _, decision := range supplierBillAuditDecisions(command) {
 		if !held[decision] {
-			return application.AuditBillLineCommand{}, refused[decision]
+			// 所需的决定种类若不在上面认过的那几种里，`refused` 没有它的拒因；交回 nil 就等于放行，所以缺省答未授予。
+			if reason := refused[decision]; reason != nil {
+				return application.AuditBillLineCommand{}, reason
+			}
+			return application.AuditBillLineCommand{}, ErrOperatorNotGranted
 		}
 	}
 	command.OperationEvidence = operatorEvidence(operator)
