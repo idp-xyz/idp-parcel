@@ -4,8 +4,10 @@ import type {
   LegalEntityProfileContent,
   LegalEntityProfileResolutionResponseBody,
   LegalEntityProfileRevisionRecord,
+  RegisteredAddressRecord,
 } from './api';
-import { addressText, contactPurposeLabels, representativeLabel } from './legal-entity-profile';
+import { countryLabel } from '../refdata-names';
+import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
 
 export type ProfileChangeKind = 'added' | 'modified' | 'removed' | 'unchanged';
 export interface ProfileFieldChange {
@@ -57,6 +59,16 @@ export function profileRevisionState(
   return { label: resolution.effectiveRevision ? '历史版本' : '已登记', tone: 'muted' };
 }
 
+/**
+ * 对比表里的地址文本：地址行在前用「 · 」连，国家 / 地区另起一行经基础数据译名（译名表没读回时显码）——与资料读出的
+ * ProfileReadoutAddress 同一版式，表格格子按 pre-wrap 排所以用换行。没有地址交空串，调用方按「没有」比。
+ */
+export function profileAddressText(address?: RegisteredAddressRecord): string {
+  if (!address) return '';
+  const lines = address.lines.filter((line) => line.trim() !== '').join(' · ');
+  return [lines, address.country ? countryLabel(address.country) : ''].filter(Boolean).join('\n');
+}
+
 const values = (items: readonly string[] = []) => [...items].sort();
 const purposeText = (items: readonly ContactPurpose[] = []) =>
   values(items).map((value) => contactPurposeLabels[value as ContactPurpose] ?? value).join('、');
@@ -104,7 +116,7 @@ export function compareLegalEntityProfiles(
     const kind: ProfileChangeKind = left === right ? 'unchanged' : !left ? 'added' : !right ? 'removed' : 'modified';
     fields.push({ id, group, field, before: left, after: right, kind, subject, detail, contactKey, social });
   };
-  const address = (value: Parameters<typeof addressText>[0]) => value ? addressText(value) : '';
+  const address = profileAddressText;
   const representative = (content: LegalEntityProfileContent) => content.representative
     ? `${representativeLabel(content.representative.kind)}：${content.representative.name}` : '';
   const tax = (content: LegalEntityProfileContent) => values(content.taxRegistrationNumbers

@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { formatInstant } from '../moment';
-import { addressText, contactPurposeLabels, representativeLabel } from './legal-entity-profile';
+import { useRefdataNames } from '../use-refdata-names';
+import { Instant } from './detail-primitives';
+import { ProfileReadoutAddress, absentValueMark } from './LegalEntityProfileReadout';
+import { contactPurposeLabels, representativeLabel } from './legal-entity-profile';
 import {
   compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
   profileRevisionState, selectedProfileRevision, type ProfileChangeKind, type ProfileFieldChange,
@@ -14,7 +17,7 @@ import {
   type LegalEntityProfileResolutionResponseBody, type LegalEntityProfileRevisionListResponseBody,
   type LegalEntityProfileRevisionRecord,
 } from './api';
-import { problemNote } from './presentation';
+import { problemNote, profileRevisionLabel } from './presentation';
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
 const kindLabels: Record<ProfileChangeKind, string> = {
@@ -37,6 +40,9 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
   const [currentResult, setCurrentResult] = useState<{ key: string; answer: ApiResult<LegalEntityProfileResolutionResponseBody> }>();
   const history = historyResult?.key === requestKey ? historyResult.answer : null;
   const current = currentResult?.key === requestKey ? currentResult.answer : null;
+  // 对比表的地址文本经基础数据译国家名（legal-entity-profile-history.ts 的 profileAddressText 读模块级名表）；这里订阅一下，
+  // 名表读回时重算对比，否则先渲出来的那张表停在码上。
+  useRefdataNames();
 
   useEffect(() => {
     let cancelled = false;
@@ -71,8 +77,8 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
   if (history.kind === 'callerProblem') return <div className={note}><p>读取方式问题：{problemNote(history.code)}</p><TechnicalDetails rows={httpRows(history.status, history.code)} /></div>;
   if (history.kind === 'noAnswer') return <SectionError title="资料版本读取失败" description={problemNote(history.code)} technical={httpRows(history.status, history.code)} onRetry={retry} />;
   if (history.kind === 'transport') return <SectionError title="无法连接主数据读取服务" description={history.message} onRetry={retry} />;
-  if (history.kind === 'outcome' && history.body.legalEntityId !== legalEntityId) return <SectionError title="返回的法人资料与当前对象不符" description="为避免展示其他对象的资料，已丢弃这次答案。" onRetry={retry} />;
-  if (revisions.length === 0) return <p className={note}>该法人尚无资料修订。</p>;
+  if (history.kind === 'outcome' && history.body.legalEntityId !== legalEntityId) return <SectionError title="返回的公司资料与当前对象不符" description="为避免展示其他公司的资料，已丢弃这次答案。" onRetry={retry} />;
+  if (revisions.length === 0) return <p className={note}>这家公司还没有登记过资料。</p>;
 
   const selectedIndex = selected ? revisions.findIndex((row) => row.revision === selected.revision) : -1;
   const defaultBaseline = selectedIndex >= 0 ? revisions[selectedIndex + 1] : undefined;
@@ -85,7 +91,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
   const resolutionIsUsable = currentBody !== undefined && ['RESOLVED', 'PROFILE_INCOMPLETE'].includes(currentBody.outcome);
   const currentReadProblem = current === null ? null
     : current === undefined ? '正在判读当前生效版本…'
-    : current.kind === 'outcome' && current.body.legalEntityId !== legalEntityId ? '返回的法人资料与当前对象不符，版本状态未判读。'
+    : current.kind === 'outcome' && current.body.legalEntityId !== legalEntityId ? '返回的公司资料与当前对象不符，版本状态未判读。'
     : current.kind === 'outcome' ? current.body.outcome === 'RESOLVED' || current.body.outcome === 'PROFILE_INCOMPLETE' ? null : '当前生效状态暂不可判读。'
     : current.kind === 'transport' ? '无法连接当前资料读取服务，版本状态暂不可判读。'
     : current.kind === 'noAnswer' ? `当前生效状态读取失败：${problemNote(current.code)}`
@@ -112,7 +118,7 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
             {revisions.map((row, index) => {
               const rowState = profileRevisionState(row, resolutionIsUsable ? currentBody : undefined);
               const summary = index === revisions.length - 1 ? '首次登记' : profileComparisonSummary(compareLegalEntityProfiles(revisions[index + 1], row));
-              return <option key={row.revision} value={row.revision}>资料 r{row.revision} · {rowState.label} · {summary}</option>;
+              return <option key={row.revision} value={row.revision}>{profileRevisionLabel(row.revision)} · {rowState.label} · {summary}</option>;
             })}
           </select>
           <ol aria-label="资料版本登记顺序" className="mt-3 space-y-1.5">
@@ -125,16 +131,16 @@ export function LegalEntityProfileHistory({ legalEntityId, revision }: { legalEn
                   <button
                     type="button"
                     aria-current={active ? 'true' : undefined}
-                    aria-label={`资料 r${row.revision}，${rowState.label}，${summary}`}
+                    aria-label={`${profileRevisionLabel(row.revision)}，${rowState.label}，${summary}`}
                     onClick={() => selectRevision(row.revision)}
                     className={`w-full rounded-md border px-3 py-2 text-left transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${active ? 'border-idpxyz-accent bg-idpxyz-activeItem' : 'border-transparent hover:bg-idpxyz-hoverItem'}`}
                   >
                     <span className="flex items-center justify-between gap-2">
-                      <span className="text-[13px] font-semibold text-idpxyz-text">资料 r{row.revision}</span>
+                      <span className="text-[13px] font-semibold text-idpxyz-text">{profileRevisionLabel(row.revision)}</span>
                       <span className={`rounded-full bg-idpxyz-bg px-2 py-0.5 text-[11px] ${rowState.tone === 'current' ? 'font-medium text-idpxyz-accent' : 'text-idpxyz-breadcrumb'}`}>{rowState.label}</span>
                     </span>
                     <span className="mt-1 block truncate text-[12px] text-idpxyz-breadcrumb">{summary}</span>
-                    <span className="mt-1 block text-[11px] text-idpxyz-breadcrumb">生效 {formatInstant(row.effectiveFrom)}</span>
+                    <span className="mt-1 block text-[11px] text-idpxyz-breadcrumb">生效 <Instant value={row.effectiveFrom} precision="day" /></span>
                   </button>
                 </li>
               );
@@ -173,19 +179,20 @@ function RevisionDetails({
   onBaselineChange: (value: string) => void;
   onChangedOnlyChange: (value: boolean) => void;
 }) {
+  // 生效是「哪一天」，只显日期；登记时刻保留到分钟（spec 公司主体 UX「统一用语」）；完整时刻都在悬停里。
   return (
-    <section aria-label={`资料 r${selected.revision} 详情`} className="min-w-0 border-t border-idpxyz-border pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0">
+    <section aria-label={`${profileRevisionLabel(selected.revision)} 详情`} className="min-w-0 border-t border-idpxyz-border pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h5 className="text-[14px] font-semibold text-idpxyz-text">资料 r{selected.revision}</h5>
+          <h5 className="text-[14px] font-semibold text-idpxyz-text">{profileRevisionLabel(selected.revision)}</h5>
           <p className="mt-1 break-words text-[12px] text-idpxyz-breadcrumb">{baseline ? profileComparisonSummary(comparison) : '首次登记，无前一版本可比较'}</p>
         </div>
-        <span className="shrink-0 rounded-md bg-idpxyz-bg px-2 py-1 text-[11px] text-idpxyz-breadcrumb">{formatInstant(selected.registeredAt)}</span>
+        <span className="shrink-0 rounded-md bg-idpxyz-bg px-2 py-1 text-[11px] text-idpxyz-breadcrumb"><Instant value={selected.registeredAt} precision="minute" /></span>
       </div>
       <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 text-[12px] sm:grid-cols-2">
-        <Metadata label="生效时间" value={formatInstant(selected.effectiveFrom)} />
-        <Metadata label="登记时间" value={formatInstant(selected.registeredAt)} />
-        <Metadata label="登记依据" value={selected.basis} wide />
+        <Metadata label="生效时间" value={<Instant value={selected.effectiveFrom} precision="day" />} />
+        <Metadata label="登记时间" value={<Instant value={selected.registeredAt} precision="minute" />} />
+        <Metadata label="来源单据" value={selected.basis} wide />
       </dl>
 
       {baseline ? (
@@ -198,7 +205,7 @@ function RevisionDetails({
               aria-label="选择比较基准版本"
               className="mt-1 block h-8 w-full rounded-md border border-idpxyz-border bg-idpxyz-bg px-2 text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent"
             >
-              {baselineOptions.map((row) => <option key={row.revision} value={row.revision}>资料 r{row.revision} · {formatInstant(row.effectiveFrom)}</option>)}
+              {baselineOptions.map((row) => <option key={row.revision} value={row.revision}>{profileRevisionLabel(row.revision)} · 生效 {formatInstant(row.effectiveFrom, { precision: 'day' })}</option>)}
               <option value="">不比较</option>
             </select>
           </label>
@@ -216,7 +223,7 @@ function RevisionDetails({
             <div className="max-h-[min(45vh,26rem)] overflow-auto rounded-md border border-idpxyz-border">
               <Table className="min-w-[34rem] text-left text-[12px]">
                 <TableHeader className="sticky top-0 z-10 bg-idpxyz-bg">
-                  <TableRow><TableHead>项目</TableHead><TableHead>上一版 · r{baseline.revision}</TableHead><TableHead>当前选择 · r{selected.revision}</TableHead></TableRow>
+                  <TableRow><TableHead>项目</TableHead><TableHead>上一版 · {profileRevisionLabel(baseline.revision)}</TableHead><TableHead>当前选择 · {profileRevisionLabel(selected.revision)}</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{fields.map((field) => <ChangeRow key={field.id} field={field} />)}</TableBody>
               </Table>
@@ -233,33 +240,38 @@ function RevisionDetails({
   );
 }
 
+/**
+ * 「项目」格：联系人的项分两行——上行「姓名 · 项」（社交账号的项就是平台名），下行部门 / 职务弱化；此前把姓名、部门 / 职务、
+ * 平台用括号与间隔点塞成一行，读的人要在一串里找哪段是哪段。非联系人的项只有一行。
+ */
 function ChangeRow({ field }: { field: ProfileFieldChange }) {
-  const label = field.contactKey ? `${field.subject}${field.detail ? `（${field.detail}）` : ''} · ${field.field}` : field.field;
   return (
     <TableRow>
       <TableCell className="min-w-28 align-top">
-        <span>{label}</span>
+        <span className="block">{field.contactKey ? `${field.subject} · ${field.field}` : field.field}</span>
+        {field.contactKey && field.detail ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{field.detail}</span> : null}
         {field.kind !== 'unchanged' ? <span className={`mt-0.5 block ${kindClasses[field.kind]}`}>{kindLabels[field.kind]}</span> : null}
       </TableCell>
-      <TableCell className={`max-w-64 whitespace-pre-wrap [overflow-wrap:anywhere] align-top ${field.kind === 'removed' || field.kind === 'modified' ? 'line-through decoration-idpxyz-border' : 'text-idpxyz-breadcrumb'}`}>{field.before || '—'}</TableCell>
-      <TableCell className={`max-w-64 whitespace-pre-wrap [overflow-wrap:anywhere] align-top ${field.kind === 'added' || field.kind === 'modified' ? 'font-medium text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>{field.after || '—'}</TableCell>
+      <TableCell className={`max-w-64 whitespace-pre-wrap [overflow-wrap:anywhere] align-top ${field.kind === 'removed' || field.kind === 'modified' ? 'line-through decoration-idpxyz-border' : 'text-idpxyz-breadcrumb'}`}>{field.before || absentValueMark}</TableCell>
+      <TableCell className={`max-w-64 whitespace-pre-wrap [overflow-wrap:anywhere] align-top ${field.kind === 'added' || field.kind === 'modified' ? 'font-medium text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>{field.after || absentValueMark}</TableCell>
     </TableRow>
   );
 }
 
-function Metadata({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+function Metadata({ label, value, wide = false }: { label: string; value: ReactNode; wide?: boolean }) {
   return <div className={`min-w-0 ${wide ? 'sm:col-span-2' : ''}`}><dt className="text-[11px] text-idpxyz-breadcrumb">{label}</dt><dd className="mt-0.5 break-words text-idpxyz-text">{value}</dd></div>;
 }
 
 function Snapshot({ revision }: { revision: LegalEntityProfileRevisionRecord }) {
-  const representative = revision.representative ? `${representativeLabel(revision.representative.kind)} · ${revision.representative.name}` : '未配置';
+  const representative = revision.representative ? `${representativeLabel(revision.representative.kind)} · ${revision.representative.name}` : absentValueMark;
   const contacts = [...revision.contacts].sort((a, b) => a.name.localeCompare(b.name));
+  const address = (value?: LegalEntityProfileRevisionRecord['officeAddress']) => value ? <ProfileReadoutAddress address={value} /> : absentValueMark;
   return (
     <div className="mt-3 max-h-[min(50vh,30rem)] space-y-4 overflow-auto pr-1 text-[12px]">
       <section><h6 className="font-medium text-idpxyz-text">代表人信息</h6><p className="mt-1 break-words text-idpxyz-breadcrumb">{representative}</p></section>
-      <section><h6 className="font-medium text-idpxyz-text">地址信息</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="注册地址" value={addressText(revision.registeredAddress)} /><Metadata label="办公地址" value={addressText(revision.officeAddress)} /><Metadata label="通信地址" value={addressText(revision.correspondenceAddress)} /></dl></section>
-      <section><h6 className="font-medium text-idpxyz-text">税务与开票</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="税务登记号" value={revision.taxRegistrationNumbers.map((row) => `${row.typeCode} ${row.number}`).join('；') || '未配置'} /><Metadata label="开票资料" value={revision.invoicingRegistered ? '已登记' : '未登记'} /><Metadata label="开票抬头" value={revision.invoiceTitle || '未配置'} /></dl></section>
-      <section><h6 className="font-medium text-idpxyz-text">联系人 · {contacts.length}</h6>{contacts.length ? <ul className="mt-2 space-y-2">{contacts.map((contact, index) => <li key={`${contact.name}-${contact.email ?? ''}-${contact.phone ?? ''}-${index}`} className="rounded-md border border-idpxyz-border p-2.5"><p className="font-medium text-idpxyz-text">{contact.name}</p><p className="mt-1 break-words text-idpxyz-breadcrumb">{[contact.department, contact.position, contact.email, contact.phone, (contact.purposes ?? []).map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、'), contact.primaryFor?.length ? `主要联系人：${contact.primaryFor.map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、')}` : ''].filter(Boolean).join(' · ') || '未配置其他联系资料'}</p>{contact.socialAccounts?.length ? <ul className="mt-2 space-y-1">{contact.socialAccounts.map((account, accountIndex) => <li key={`${account.platform}-${account.account}-${accountIndex}`} className="break-all"><span className="text-idpxyz-breadcrumb">{account.platform}　</span><span className="text-idpxyz-text">{account.account}</span></li>)}</ul> : null}</li>)}</ul> : <p className="mt-1 text-idpxyz-breadcrumb">未配置联系人</p>}</section>
+      <section><h6 className="font-medium text-idpxyz-text">地址信息</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="注册地址" value={address(revision.registeredAddress)} /><Metadata label="办公地址" value={address(revision.officeAddress)} /><Metadata label="通信地址" value={address(revision.correspondenceAddress)} /></dl></section>
+      <section><h6 className="font-medium text-idpxyz-text">税务与开票</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="税务登记号" value={revision.taxRegistrationNumbers.map((row) => `${row.typeCode} ${row.number}`).join('；') || absentValueMark} /><Metadata label="开票资料" value={revision.invoicingRegistered ? '已登记' : '未登记'} /><Metadata label="开票抬头" value={revision.invoiceTitle || absentValueMark} /></dl></section>
+      <section><h6 className="font-medium text-idpxyz-text">联系人 · {contacts.length}</h6>{contacts.length ? <ul className="mt-2 space-y-2">{contacts.map((contact, index) => <li key={`${contact.name}-${contact.email ?? ''}-${contact.phone ?? ''}-${index}`} className="rounded-md border border-idpxyz-border p-2.5"><p className="font-medium text-idpxyz-text">{contact.name}</p><p className="mt-1 break-words text-idpxyz-breadcrumb">{[contact.department, contact.position, contact.email, contact.phone, (contact.purposes ?? []).map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、'), contact.primaryFor?.length ? `主要联系人：${contact.primaryFor.map((purpose) => contactPurposeLabels[purpose] ?? purpose).join('、')}` : ''].filter(Boolean).join(' · ') || absentValueMark}</p>{contact.socialAccounts?.length ? <ul className="mt-2 space-y-1">{contact.socialAccounts.map((account, accountIndex) => <li key={`${account.platform}-${account.account}-${accountIndex}`} className="break-all"><span className="text-idpxyz-breadcrumb">{account.platform}　</span><span className="text-idpxyz-text">{account.account}</span></li>)}</ul> : null}</li>)}</ul> : <p className="mt-1 text-idpxyz-breadcrumb">没有联系人</p>}</section>
     </div>
   );
 }
