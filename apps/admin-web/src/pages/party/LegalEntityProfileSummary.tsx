@@ -1,6 +1,5 @@
 import { LegalEntityProfileContent } from './LegalEntityProfileContent';
 import { CurrentLegalEntityProfile, type CurrentLegalEntityProfileQuery } from './CurrentLegalEntityProfile';
-import { StatusPill } from '../../components/StatusPill';
 import { useMemo } from 'react';
 import { formatInstant } from '../moment';
 import { listRegistrationNumberTypes, type LegalEntityProfileResolutionResponseBody } from './api';
@@ -37,16 +36,21 @@ function ProfileSummary({
   const effective = body.effectiveRevision;
   return (
     <section className="legal-entity-profile-readout" aria-label="当前有效公司资料">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <StatusPill label={`资料状态：${status.label}`} tone={status.tone} />
+      {/* 读出的小标题只说「读的是哪一版」（票 company-subject-ux/08 第 3 条）：资料状态那枚药丸撤掉，它已在头区事实行里，
+          同一块面上出现两次是重复。没有生效版本时没有版可点名，才把结论句「资料状态：…」写在这里。 */}
+      <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
         {effective ? (
-          <span className="text-[12px] leading-6 tabular-nums text-idpxyz-breadcrumb">
-            {profileRevisionLabel(effective.revision)} · <Instant value={effective.effectiveFrom} precision="day" /> 起生效
-          </span>
-        ) : null}
-      </div>
+          <>
+            当前资料 <span className="tabular-nums text-idpxyz-text">{profileRevisionLabel(effective.revision)}</span> ·{' '}
+            <span className="text-idpxyz-text"><Instant value={effective.effectiveFrom} precision="day" /></span> 起生效 · 来源单据{' '}
+            <span className="font-mono text-idpxyz-text">{effective.basis}</span>
+          </>
+        ) : (
+          <>资料状态：{status.label}</>
+        )}
+      </p>
       {status.tone !== 'good' ? (
-        <p className="mt-1 text-[12px] leading-6 text-idpxyz-breadcrumb">{status.description}</p>
+        <p className="mt-1 text-[12px] leading-5 text-idpxyz-breadcrumb">{status.description}</p>
       ) : null}
       <LegalEntityProfileContent content={effective} includeContacts={false} typeNameOf={typeNameOf} />
       <TechnicalDetails
