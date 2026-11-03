@@ -53,6 +53,23 @@ export function identityDeactivationDraftOf(target: { kind: IdentityKind; id: st
   return { ...emptyIdentityDeactivationDraft(), kind: target?.kind ?? '', id: target?.id ?? '' };
 }
 
+/**
+ * 落册答 `DEACTIVATED` 之后谁来重取（票 13 第 7 条的分工，票 company-subject-ux/03 加锁定那一支）：参与方册由页面重取
+ * （notifyPage），法人册 / 客户账户册由表单自己重读（reloadOwnRegister）；JSON 镜像那条路分不出种类（sentKind 为 null），
+ * 两边都重取。锁定对象的对话框一律只通知页面——对话框随之关掉、表单卸载，自己重读没有意义。
+ * 抽成纯函数是为了让提交之后的回调链路在 node:test 里对着替身钉住，不必真发停用。
+ */
+export function deactivationLandedActions(
+  locked: boolean,
+  sentKind: string | null,
+): { notifyPage: boolean; reloadOwnRegister: boolean } {
+  if (locked) return { notifyPage: true, reloadOwnRegister: false };
+  return {
+    notifyPage: sentKind === null || sentKind === 'BUSINESS_PARTY',
+    reloadOwnRegister: sentKind === null || sentKind !== 'BUSINESS_PARTY',
+  };
+}
+
 /** 表单认领的 JSON 路径；一项一批，下标固定 0。 */
 export const identityDeactivationFieldPaths = [
   'deactivations[0].kind',

@@ -4,6 +4,7 @@ import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord
 import { identityKindLabels } from './presentation';
 import {
   deactivationConfirmation,
+  deactivationLandedActions,
   emptyIdentityDeactivationDraft,
   identityDeactivationDraftOf,
   identityDeactivationFieldPaths,
@@ -212,4 +213,15 @@ test('identityDeactivationDraftOf 只填种类与标识', () => {
     at: '',
   });
   deepEqual(identityDeactivationDraftOf(null), emptyIdentityDeactivationDraft());
+});
+
+// Covers: 落册之后的回调链路（提交路径的替身）——锁定的对话框只通知页面；未锁定时参与方册由页面重取、另两册表单自己重读、
+// JSON 镜像分不出种类两边都来。
+test('deactivationLandedActions 按锁定与送出的种类分派重取', () => {
+  deepEqual(deactivationLandedActions(true, 'LEGAL_ENTITY'), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(true, null), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(false, 'BUSINESS_PARTY'), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(false, 'LEGAL_ENTITY'), { notifyPage: false, reloadOwnRegister: true });
+  deepEqual(deactivationLandedActions(false, 'CUSTOMER_ACCOUNT'), { notifyPage: false, reloadOwnRegister: true });
+  deepEqual(deactivationLandedActions(false, null), { notifyPage: true, reloadOwnRegister: true });
 });

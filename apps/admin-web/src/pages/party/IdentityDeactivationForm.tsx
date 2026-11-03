@@ -35,6 +35,7 @@ import type { DeactivationPreset } from './business-parties-address';
 import { registrationDraftUnsaved } from './registration-form';
 import {
   deactivationConfirmation,
+  deactivationLandedActions,
   identityDeactivationDraftOf,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
@@ -240,8 +241,9 @@ export function IdentityDeactivationForm({
     // 草稿由深链预填，预填后人什么都没填；刷新深链会再预填一次，不弹离开确认。
     guardUnsaved: false,
     onLanded: (sent) => {
-      if (locked !== null || sent === null || sent.kind === 'BUSINESS_PARTY') onDeactivated();
-      if (locked === null && (sent === null || sent.kind !== 'BUSINESS_PARTY')) setReloadKey((value) => value + 1);
+      const actions = deactivationLandedActions(locked !== null, sent?.kind ?? null);
+      if (actions.notifyPage) onDeactivated();
+      if (actions.reloadOwnRegister) setReloadKey((value) => value + 1);
     },
   });
   const { draft, patch, problems, timeZone } = form;
