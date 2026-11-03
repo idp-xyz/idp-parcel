@@ -4,7 +4,9 @@ import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord
 import { identityKindLabels } from './presentation';
 import {
   deactivationConfirmation,
+  deactivationLandedActions,
   emptyIdentityDeactivationDraft,
+  identityDeactivationDraftOf,
   identityDeactivationFieldPaths,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
@@ -166,21 +168,22 @@ test('认领的路径表', () => {
 });
 
 // 票 party-commercial-uiux/06：停用是终态，按下前复述要停的是谁、从何时起、凭什么。
-test('停用确认框复述种类、名称与标识、本地与 UTC 两份时点、依据与修订号，并说清不能撤回', () => {
-  const confirmation = deactivationConfirmation(
-    { kind: 'LEGAL_ENTITY', id: 'SYN-LE-01', revision: '2', basis: 'SYN-DEREG-01', at: '2026-11-01T09:30' },
-    'Asia/Shanghai',
-    '合成运营方一号（演示） · SYN-LE-01 · 已生效',
-  );
+test('停用确认框复述种类、名称与标识、本地与 UTC 两份时点、来源单据与版本号，并说清不能撤回', () => {
+  const draft = { kind: 'LEGAL_ENTITY', id: 'SYN-LE-01', revision: '2', basis: 'SYN-DEREG-01', at: '2026-11-01T09:30' };
+  const confirmation = deactivationConfirmation(draft, 'Asia/Shanghai', '合成运营方一号（演示） · SYN-LE-01 · 已生效');
   equal(confirmation.title, '停用这个责任法人？');
   equal(confirmation.message.includes('不能撤回'), true);
   deepEqual(confirmation.facts, [
     { label: '身份种类', value: '责任法人' },
     { label: '身份', value: '合成运营方一号（演示） · SYN-LE-01 · 已生效' },
     { label: '停用时点', value: '2026-11-01 09:30:00 UTC+8（UTC 2026-11-01T01:30:00Z）' },
-    { label: '停用依据', value: 'SYN-DEREG-01' },
-    { label: '修订号', value: 'r2' },
+    { label: '停用来源单据', value: 'SYN-DEREG-01' },
+    { label: '版本号', value: '第 2 版' },
   ]);
+  // 公司主体页的对话框把主语换成「公司主体」，词表的「责任法人」不露出（票 company-subject-ux/03）。
+  const asCompany = deactivationConfirmation(draft, 'Asia/Shanghai', null, '公司主体');
+  equal(asCompany.title, '停用这个公司主体？');
+  equal(asCompany.facts[0].value, '公司主体');
 });
 
 test('停用确认框对未填的格照实说未填，不替表单判', () => {
@@ -199,4 +202,27 @@ test('停用确认框：手填的标识没有候选文字，只报标识', () =>
     null,
   );
   equal(confirmation.facts[1].value, 'SYN-ACCOUNT-09');
+});
+
+// Covers: 锁定 / 预填的草稿只带种类与标识，修订号、来源单据与停用时间留空；传 null 即空草稿（票 company-subject-ux/03）。
+test('identityDeactivationDraftOf 只填种类与标识', () => {
+  deepEqual(identityDeactivationDraftOf({ kind: 'LEGAL_ENTITY', id: 'SYN-LE-01' }), {
+    kind: 'LEGAL_ENTITY',
+    id: 'SYN-LE-01',
+    revision: '',
+    basis: '',
+    at: '',
+  });
+  deepEqual(identityDeactivationDraftOf(null), emptyIdentityDeactivationDraft());
+});
+
+// Covers: 落册之后的回调链路（提交路径的替身）——锁定的对话框只通知页面；未锁定时参与方册由页面重取、另两册表单自己重读、
+// JSON 镜像分不出种类两边都来。
+test('deactivationLandedActions 按锁定与送出的种类分派重取', () => {
+  deepEqual(deactivationLandedActions(true, 'LEGAL_ENTITY'), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(true, null), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(false, 'BUSINESS_PARTY'), { notifyPage: true, reloadOwnRegister: false });
+  deepEqual(deactivationLandedActions(false, 'LEGAL_ENTITY'), { notifyPage: false, reloadOwnRegister: true });
+  deepEqual(deactivationLandedActions(false, 'CUSTOMER_ACCOUNT'), { notifyPage: false, reloadOwnRegister: true });
+  deepEqual(deactivationLandedActions(false, null), { notifyPage: true, reloadOwnRegister: true });
 });

@@ -36,3 +36,45 @@ Blocked by: 无
 - 三道门退 0；新增纯函数有 node:test。
 - 浏览器在演示租户核（不提交停用）：对象页首屏三格 + 生命周期条；「关联」签列出 SYN-LE-01 名下的合同 / 协议 / 政策；「更多 › 停用」打开对话框、种类与对象锁定、标题带公司名；详情栏同样。
 - 往来单位页 `#/business-parties?register=identity-deactivation` 照旧可用。
+
+## 完成记录（2026-11-03，分支 `claude-csux-03`，worktree 从 main `ae9a9a763` 起）
+
+### 落点
+
+- 票面落点：`LegalEntityDetailPage.tsx`、`LegalEntityDetailPanel.tsx`、`LegalEntityHeaderParts.tsx`（摆上 `LegalEntityLifecycle`，新增 `DateCell` / `ProfileStatusValue`，「更多」菜单自己记对话框开关）、`IdentityDeactivationForm.tsx`（`locked` 属性）、新 `LegalEntityDeactivationDialog.tsx`、新 `LegalEntityReferencesSection.tsx`（含 `useLegalEntityReferences`，两册一页只读一次、首屏与「关联」签共用）+ `legal-entity-references.ts`（+ `.test.ts`）。
+- 落点之外：
+  - `GroupLegalEntitiesPage.tsx` 只加 `onChanged={retry}` 一个 prop（票面写明）。
+  - `identity-deactivation-form.ts`（+ `.test.ts`）：它是 `IdentityDeactivationForm.tsx` 的纯半边，别的票不碰。加了两个纯函数——`identityDeactivationDraftOf`（锁定 / 预填的草稿只带种类与标识）与 `deactivationLandedActions`（落册后谁来重取，提交路径在 node:test 里对替身钉住）；第 5 条要的「锁定预填的表单判读」只能落在 `.ts` 里，组件文件钉不了。
+- 共享面（`templates/*`、`components/*`）一行没动：模板不给指标值字号选项，就在值节点上自己定 16px（`statValue`）。
+
+### 判据
+
+- ✅ 三道门退 0：`tsc -b --noEmit`、`run-tests.mjs`（1137 测试全绿）、`vite build`。
+- ✅ 新增纯函数有 node:test：`legal-entity-references.test.ts`（关联、在用、段首措辞、被引用求和、去处、日期取日、资料状态格）、`identity-deactivation-form.test.ts` 加两例。
+- ✅ 对象页首屏三格 + 生命周期条：`01-object-first-screen.png`——生效日期 2026-01-02、资料状态胶囊、被引用 4、生命周期条；「变更」与「停用时点 未停用」已撤。
+- ✅ 「关联」签列出 SYN-LE-01 名下的协议 / 政策：`02-object-related.png`——「供应商协议 4 · 在用 2」四行、「结算政策 2」两行，行是去对应页带检索词的链接。
+- ✅ 「更多 › 停用」开对话框、种类与对象锁定、标题带公司名：`03-object-deactivation-dialog.png`——标题「停用公司主体 合成运营方一号（演示）」，只有版本号（建议值 2）、来源单据、停用时间三格；Esc 关掉。
+- ✅ 详情栏同样：`04-panel-first-screen.png`（头区生命周期条、三格）、`05-panel-related.png`、`06-panel-deactivation-dialog.png`。
+- ✅ 往来单位页 `#/business-parties?register=identity-deactivation` 照旧可用：`07-parties-deactivation-form.png`——种类与对象两格仍在。
+- ✅ 整个核验没有发任何写请求（脚本监听并断言：`NO WRITE REQUESTS`）。
+- 截图与脚本：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/70733dd4-0571-48b5-8660-e52d102ae60f/scratchpad/csux03/`（`shots.js`，vite 自起 :5203 对 :19080，核完已停）。
+
+### 与票面的出入（要协调方裁）
+
+- **客户合同、客户账户不在「关联」签里**：`CustomerContractRecord` 没有责任法人一格（后端 `customerContractBody` 不透出法人，领域客户合同正文也没有这一格），`CustomerAccountRecord` 只钉客户参与方——在已取回的行上关联不出来。签底一句话如实说明，合同经结算政策的「合同」一格间接可见。读口上带 `legalEntity` 的另有授信政策与接受规则包，票面没列，没加；要加是两个 GET，裁了再做。
+- **「被引用」= 供应商协议在用版本数 + 结算政策版本数**：结算政策读面没有状态（`version-groups.ts`「那几册只排不筛」），「在用」判不了，按版本数计；格的 `title` 写明口径。
+- 「资料状态」格的词仍是旧词（开票资料可用），由票 04 的 `legalEntityProfileStatusOf` 改，本票只调用。
+
+### 未验
+
+- 停用的提交路径没在浏览器上走（不发写请求）；落册后「关对话框 + 重取列表」的链路以 `deactivationLandedActions` 的 node:test 与代码为证。
+- 「停用日期」格与「停用来源单据」行只在已停用主体上出现，演示租户没有已停用主体，没截到图；是条件 JSX，判读在同一处。
+
+### 追加（2026-11-03，按协调方裁定与票 01 / 04 进 main 后）
+
+- **(b) 信用政策与接单规则包进「关联」签与「被引用」**（`7b759a8a3`）：同一只 `useLegalEntityReferences` 读四册（供应商协议、结算政策、信用政策、接单规则包），段与行同形；`referencedCount` 收四册状态，任一册没答到仍「—」；三本政策册按版本数计（裁定 c），口径句在 `referencedCountNote`。演示租户 SYN-LE-01 的「被引用」由 4 变 6（2 + 2 + 1 + 1）。测试：`legal-entity-references.test.ts` 加信用 / 规则包关联、四册求和、去处。
+- **接上票 01 的词源**：头部「注册号」经 `registrationNumberTypeNamesOf` 译成目录名（浏览器核到「统一社会信用代码 9100…」），列表页把 `typeNameOf` 传进对象页与详情栏（`GroupLegalEntitiesPage.tsx` 再加一个 prop，协调方裁定允许），登记记录时间线用同一份译名（`legalEntityRevisionHistoryOf(typeNameOf)`）；生效 / 停用日期改用 `Instant precision="day"`，自写的 `displayDateOf` 与 `DateCell` 删掉；详情栏「登记记录」签字面已改。
+- **停用对话框不露「责任法人」**：`deactivationConfirmation` 加可换主语参数，公司主体页传对象词典的「公司主体」（浏览器核到确认框「停用这个公司主体？」「身份种类 公司主体」，`03b-object-deactivation-confirm.png`）；确认框两格按 spec 改「停用来源单据」「版本号 · 第 N 版」（往来单位页的同一确认框随之同词，spec 是唯一权威）。
+- **合并**：`origin/main` 合了两次——票 01 之后（`5bc6ff32e`，无冲突）、票 04 之后（`72784f838`，无冲突；04 动的是资料表单那几份文件，本票没碰）。合并后三道门：tsc 0、node:test 1157/1157、vite build 通过；页头按钮两处都是「更新公司资料」。
+- **合并后浏览器复核**（不发写请求）：首屏「资料状态」已显票 04 的新词「可开票」；其余判据同上。
+- (a) 客户合同 / 客户账户：按裁定不改票面，签底一句保留，等后端票透出责任法人再接。(d) 资料状态的词等票 04——已进 main，本票只调用，已显新词。

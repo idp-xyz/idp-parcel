@@ -19,14 +19,12 @@ import {
   type GroupLegalEntityRecord,
   type LegalEntityRevisionListResponseBody,
 } from './api';
-import {
-  identityLayerAbsentNote,
-  partyNameUnknownNote,
-  updateOrdinalLabel,
-} from './presentation';
+import { identityLayerAbsentNote, partyNameUnknownNote } from './presentation';
 import {
   LegalEntityBanners,
+  LegalEntityLifecycle,
   LegalEntityMoreMenu,
+  ProfileStatusValue,
   legalEntityHasBanners,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
@@ -35,9 +33,11 @@ import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
 import { legalEntityContactCountOf } from './legal-entity-profile';
-import { identityLayerCellsOf } from './legal-entity-identity';
+import { identityLayerCellsOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
+import { LegalEntityReferencesSection, useLegalEntityReferences, type LegalEntityReferences } from './LegalEntityReferencesSection';
+import { profileStatusCellOf, referencedCount, referencedCountNote, referencedCountText, type ProfileStatusCell } from './legal-entity-references';
 import { Instant } from './detail-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
@@ -48,17 +48,21 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['group-legal-entities'];
 
 /**
- * 对象页与工作台详情栏共用身份修订历史的判读。
- * 模块级常量——load 进 effect 依赖。
+ * 对象页与工作台详情栏共用身份修订历史的判读。按注册号类型目录译名的那一份随页面传进来（票 01 备好的
+ * `legalEntityRevisionTimeline` 第三参）；`load` 仍是模块级函数——只有它进 effect 依赖，每帧新造的壳不会触发重取。
  */
-export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
-  subject: '法人',
-  endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
-  load: listLegalEntityRevisions,
-  echoedSubjectId: (body) => body.legalEntityId,
-  timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant),
-  noteOf: revisionHistoryNote,
-};
+export function legalEntityRevisionHistoryOf(
+  typeNameOf?: RegistrationNumberTypeNameOf,
+): RevisionHistoryRegister<LegalEntityRevisionListResponseBody> {
+  return {
+    subject: '法人',
+    endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
+    load: listLegalEntityRevisions,
+    echoedSubjectId: (body) => body.legalEntityId,
+    timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant, typeNameOf),
+    noteOf: revisionHistoryNote,
+  };
+}
 
 function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
@@ -66,8 +70,9 @@ function muted(text: string): ReactNode {
 
 // 身份事实留在头部，当前资料归概要，资料版本与身份修订各用自己的历史链。
 
-function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
-  const identity = identityLayerCellsOf(row);
+function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberTypeNameOf): DetailMeta[] {
+  // 注册号的类型码经目录译成名（统一社会信用代码），目录没读到就按码显——译名是锦上添花，号本身在答复里。
+  const identity = identityLayerCellsOf(row, typeNameOf);
   return [
     {
       label: '国家',
@@ -80,39 +85,60 @@ function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
   ];
 }
 
-function buildSummary(row: GroupLegalEntityRecord): DetailSummaryStat[] {
+// 指标卡的值比模板的 text-lg 再降一级：主数据不是仪表盘，16px 够认、不抢页头。模板不给这个选项，就在值上自己定。
+const statValue = 'text-[16px] font-medium';
+
+/**
+ * 首屏三格（票 company-subject-ux/03）：生效日期、资料状态、被引用；已停用时才多一格停用日期。身份版本只在「登记记录」签看，
+ * 「未停用」不占格。生命周期条与往来单位页同位（BusinessPartyDetailPage 的 buildSummary）。
+ */
+function buildSummary(row: GroupLegalEntityRecord, profileCell: ProfileStatusCell, references: LegalEntityReferences): DetailSummaryStat[] {
+  const referenced = referencedCount(references.states);
+  const day = (value: string) => (
+    <span className={`${statValue} font-mono`}>
+      <Instant value={value} precision="day" />
+    </span>
+  );
   return [
-    { label: '变更', value: updateOrdinalLabel(row.revision) },
-    { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
-    { label: '登记时间', value: <Instant value={row.registeredAt} /> },
-    { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
+    { label: '生效日期', value: day(row.effectiveFrom) },
+    { label: '资料状态', value: <ProfileStatusValue cell={profileCell} /> },
+    {
+      label: '被引用',
+      value: (
+        <span className={`${statValue} font-mono`} title={referencedCountNote}>
+          {referencedCountText(referenced)}
+        </span>
+      ),
+    },
+    ...(row.deactivatedAt ? [{ label: '停用日期', value: day(row.deactivatedAt) }] : []),
+    { label: '生命周期', value: <LegalEntityLifecycle row={row} /> },
   ];
 }
 
-/** 与详情栏概要签同一份格：头区与指标带已经显示的不再重复。 */
+/** 与详情栏概要签同一份格：头区与指标带已经显示的不再重复；往来单位档案与各标识收进技术详情。 */
 function buildBasicFields(row: GroupLegalEntityRecord): DetailField[] {
   return [
-    { label: '对应的往来单位', value: row.partyNameKnown ? row.partyName : muted(partyNameUnknownNote) },
-    {
-      label: '停用的来源单据',
-      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('未停用'),
-    },
+    ...(row.deactivationBasis
+      ? [{ label: '停用来源单据', value: <span className="font-mono">{row.deactivationBasis}</span> }]
+      : []),
     {
       label: '技术详情',
-      value: (
-        <TechnicalDetails
-          rows={[
-            { label: '法人标识', value: row.legalEntityId },
-            { label: '参与方标识', value: row.partyId },
-            { label: '身份修订号', value: String(row.revision) },
-            { label: '登记依据', value: row.basis },
-            { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
-            { label: '停用依据', value: row.deactivationBasis ?? '' },
-            { label: '租户', value: row.tenantId },
-          ]}
-        />
-      ),
+      value: <TechnicalDetails rows={legalEntityTechnicalRows(row)} />,
     },
+  ];
+}
+
+/** 技术详情的行：对象页与详情栏同一份。行名照旧用原词与原码，那是给技术人员对照的；往来单位档案是从首屏撤下来的那一格。 */
+export function legalEntityTechnicalRows(row: GroupLegalEntityRecord): { label: string; value: string }[] {
+  return [
+    { label: '法人标识', value: row.legalEntityId },
+    { label: '往来单位档案', value: row.partyNameKnown && row.partyName ? row.partyName : partyNameUnknownNote },
+    { label: '参与方标识', value: row.partyId },
+    { label: '身份修订号', value: String(row.revision) },
+    { label: '登记依据', value: row.basis },
+    { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
+    { label: '停用依据', value: row.deactivationBasis ?? '' },
+    { label: '租户', value: row.tenantId },
   ];
 }
 
@@ -153,6 +179,7 @@ export function LegalEntityDetailPage({
   listAnswer,
   retry,
   onBack,
+  typeNameOf,
 }: {
   legalEntityId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -160,6 +187,8 @@ export function LegalEntityDetailPage({
   listAnswer: ApiResult<GroupLegalEntityListResponseBody> | null;
   retry: () => void;
   onBack: () => void;
+  /** 注册号类型目录的译名（列表页读一次传进来）；不给就按码显。 */
+  typeNameOf?: RegistrationNumberTypeNameOf;
 }) {
   const [tab, setTab] = useTabViewState<WorkspaceTabId>('legal-entity.object-tab', 'summary');
   // 旧对象页把身份历史放在时间线签，保留工作区已记住的历史查看位置。
@@ -175,6 +204,9 @@ export function LegalEntityDetailPage({
       ? profileQuery.answer.body
       : undefined,
   );
+  // 两册一页只读一次：首屏「被引用」与「关联」签用同一份答案。
+  const references = useLegalEntityReferences(row?.legalEntityId ?? legalEntityId);
+  const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
   const openProfileForm = () => {
     setTab('profile-versions');
     setFormOpenRequest((count) => count + 1);
@@ -197,10 +229,10 @@ export function LegalEntityDetailPage({
                   onClick={openProfileForm}
                 >
                   <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                  更新法人资料
+                  更新公司资料
                 </Button>
               ) : null}
-              <LegalEntityMoreMenu row={row} />
+              <LegalEntityMoreMenu row={row} onChanged={retry} />
             </>
           ) : null}
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
@@ -208,8 +240,8 @@ export function LegalEntityDetailPage({
           </Button>
         </>
       }
-      meta={row ? buildMeta(row) : []}
-      summary={row ? buildSummary(row) : undefined}
+      meta={row ? buildMeta(row, typeNameOf) : []}
+      summary={row ? buildSummary(row, profileCell, references) : undefined}
       basicTitle="概要"
       basicFields={row ? buildBasicFields(row) : []}
       sections={
@@ -270,10 +302,18 @@ export function LegalEntityDetailPage({
                 id: 'identity-revisions',
                 content: (
                   <RevisionHistorySection
-                    register={legalEntityRevisionHistory}
+                    register={legalEntityRevisionHistoryOf(typeNameOf)}
                     subjectId={row.legalEntityId}
                     revision={row.revision}
                   />
+                ),
+              },
+              {
+                id: 'related',
+                content: (
+                  <section className="bg-idpxyz-bg p-5">
+                    <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />
+                  </section>
                 ),
               },
             ]

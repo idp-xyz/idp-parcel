@@ -12,7 +12,7 @@
 
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord } from './api';
 import { formatInstant, wallTimeToRfc3339 } from '../moment';
-import { identityKindLabels, type IdentityKind } from './presentation';
+import { identityKindLabels, updateOrdinalLabel, type IdentityKind } from './presentation';
 import { revisionOf, suggestedNextRevision } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
 
@@ -42,6 +42,32 @@ export interface IdentityDeactivationPayload {
 
 export function emptyIdentityDeactivationDraft(): IdentityDeactivationDraft {
   return { kind: '', id: '', revision: '', basis: '', at: '' };
+}
+
+/**
+ * 只填了种类与标识的草稿：深链预填（business-parties-address.ts 的 DeactivationPreset）与公司主体页对话框锁定对象
+ * （票 company-subject-ux/03）都从它起——前者当「没提交」的基线，后者当初始草稿。修订号、来源单据与停用时间一律留空：
+ * 那几格要停用的人自己核过再填，预填与锁定都不替人填。传 null 即空草稿。
+ */
+export function identityDeactivationDraftOf(target: { kind: IdentityKind; id: string } | null): IdentityDeactivationDraft {
+  return { ...emptyIdentityDeactivationDraft(), kind: target?.kind ?? '', id: target?.id ?? '' };
+}
+
+/**
+ * 落册答 `DEACTIVATED` 之后谁来重取（票 13 第 7 条的分工，票 company-subject-ux/03 加锁定那一支）：参与方册由页面重取
+ * （notifyPage），法人册 / 客户账户册由表单自己重读（reloadOwnRegister）；JSON 镜像那条路分不出种类（sentKind 为 null），
+ * 两边都重取。锁定对象的对话框一律只通知页面——对话框随之关掉、表单卸载，自己重读没有意义。
+ * 抽成纯函数是为了让提交之后的回调链路在 node:test 里对着替身钉住，不必真发停用。
+ */
+export function deactivationLandedActions(
+  locked: boolean,
+  sentKind: string | null,
+): { notifyPage: boolean; reloadOwnRegister: boolean } {
+  if (locked) return { notifyPage: true, reloadOwnRegister: false };
+  return {
+    notifyPage: sentKind === null || sentKind === 'BUSINESS_PARTY',
+    reloadOwnRegister: sentKind === null || sentKind !== 'BUSINESS_PARTY',
+  };
 }
 
 /** 表单认领的 JSON 路径；一项一批，下标固定 0。 */
@@ -140,7 +166,7 @@ export interface DeactivationConfirmation {
 
 /**
  * 停用确认框的文案（票 party-commercial-uiux/06）。停用在 PC CONTEXT 里是终态，按下之前把要停的是谁、从什么时候起、
- * 凭什么复述一遍：种类、名称与标识、停用时点（本地墙钟与 UTC 各一份，跨 CN/SG 两地对时不必换算）、依据、修订号。
+ * 凭什么复述一遍：种类、名称与标识、停用时点（本地墙钟与 UTC 各一份，跨 CN/SG 两地对时不必换算）、来源单据、版本号。
  * 未填的格照实说未填——确认框不替表单判，送上去由服务端点名。
  *
  * `draft` 取表单真正要送的那一份（修订号未改时带着建议值）。`pickedLabel` 是下拉里选中那一项的文字，三册都写成
@@ -150,8 +176,10 @@ export function deactivationConfirmation(
   draft: IdentityDeactivationDraft,
   timeZone: string,
   pickedLabel: string | null,
+  subject: string | null = null,
 ): DeactivationConfirmation {
-  const kindLabel = isIdentityKind(draft.kind) ? identityKindLabels[draft.kind] : '';
+  // 主语可由调用方换：公司主体页的对话框锁定了种类，对运营只说「公司主体」，不露词表里的「责任法人」（spec 统一用语）。
+  const kindLabel = subject ?? (isIdentityKind(draft.kind) ? identityKindLabels[draft.kind] : '');
   const instant = wallTimeToRfc3339(draft.at, timeZone);
   const id = draft.id.trim();
   const revision = draft.revision.trim();
@@ -162,8 +190,8 @@ export function deactivationConfirmation(
       { label: '身份种类', value: kindLabel || '（未选）' },
       { label: '身份', value: id === '' ? '（未填）' : (pickedLabel ?? id) },
       { label: '停用时点', value: instant ? `${formatInstant(instant, { timeZone })}（UTC ${instant}）` : '（未填或格式不对）' },
-      { label: '停用依据', value: draft.basis.trim() || '（未填）' },
-      { label: '修订号', value: revision === '' ? '（未填）' : `r${revision}` },
+      { label: '停用来源单据', value: draft.basis.trim() || '（未填）' },
+      { label: '版本号', value: revision === '' ? '（未填）' : updateOrdinalLabel(Number(revision)) },
     ],
   };
 }

@@ -35,7 +35,8 @@ import type { DeactivationPreset } from './business-parties-address';
 import { registrationDraftUnsaved } from './registration-form';
 import {
   deactivationConfirmation,
-  emptyIdentityDeactivationDraft,
+  deactivationLandedActions,
+  identityDeactivationDraftOf,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
   identityKindOptions,
@@ -75,6 +76,15 @@ export interface IdentityDeactivationFormProps {
    * 时不算没提交——与下面 guardUnsaved 关掉的理由同一条。卸载时报 false。
    */
   onUnsavedChange?: (unsaved: boolean) => void;
+  /**
+   * 种类与对象锁死（票 company-subject-ux/03）：公司主体页的停用对话框开在那家公司自己的页上，停的只能是它，
+   * 「停用什么 / 停用哪一个」两格不摆、不可改，只填版本号、来源单据与停用时间；壳（卡片标题、说明句、JSON 导入）
+   * 由对话框给，这里只摆格。落册答 `DEACTIVATED` 一律回调 onDeactivated——对话框据此关掉并重取列表。
+   * 与 preset 的差别：预填是起点、人可以改；锁定不可改。
+   */
+  locked?: DeactivationPreset | null;
+  /** 锁定对象在确认框里叫什么（公司主体页传「公司主体」）；不给就用种类词表。 */
+  subjectLabel?: string;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -197,6 +207,8 @@ export function IdentityDeactivationForm({
   onDeactivated,
   preset = null,
   onUnsavedChange,
+  locked = null,
+  subjectLabel,
 }: IdentityDeactivationFormProps) {
   const [confirming, setConfirming] = useState(false);
   // 本表单自读那一册的答案，连同是哪一册（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连
@@ -219,30 +231,29 @@ export function IdentityDeactivationForm({
 
   const form = useRegistrationForm<IdentityDeactivationDraft>({
     kind,
-    empty: emptyIdentityDeactivationDraft,
+    // 锁定对象时草稿从锁定的种类与标识起，两格之后不再改；没锁定就是空草稿，深链预填在下面的 effect 里补。
+    empty: () => identityDeactivationDraftOf(locked),
     suggestion: (draft) => suggestedDeactivationRevision(targetsFor(draft.kind), draft.id),
     localProblems: identityDeactivationLocalProblems,
     payloadOf: identityDeactivationPayloadOf,
     // 答 `DEACTIVATED`（PartyRegistryOutcome 里 PartyIdentityDeactivated 的线上名）才重取；`册上没有这一个身份`与
     // 修订错位都没写进去。按送出的种类重读对应册（第 7 条）：参与方册由页面重取，法人册 / 客户账户册本表单自己重读。
     // JSON 镜像那条路交回 null（快照是未译的 JSON，壳不解它，分不出种类）——两边都重取：各是一个 GET，为分种类去解一份
-    // unknown 不值。
+    // unknown 不值。锁定对象的对话框一律回调：对话框关掉后由页面重取列表，本表单自读的那一册随之卸掉，不必再读。
     landedOutcome: 'DEACTIVATED',
     // 草稿由深链预填，预填后人什么都没填；刷新深链会再预填一次，不弹离开确认。
     guardUnsaved: false,
     onLanded: (sent) => {
-      if (sent === null || sent.kind === 'BUSINESS_PARTY') onDeactivated();
-      if (sent === null || sent.kind !== 'BUSINESS_PARTY') setReloadKey((value) => value + 1);
+      const actions = deactivationLandedActions(locked !== null, sent?.kind ?? null);
+      if (actions.notifyPage) onDeactivated();
+      if (actions.reloadOwnRegister) setReloadKey((value) => value + 1);
     },
   });
-  const { draft, patch, problems, locked, timeZone } = form;
+  const { draft, patch, problems, timeZone } = form;
+  const submitting = form.locked;
   const selectedKind = isIdentityKind(draft.kind) ? draft.kind : null;
-  // 离开确认的基线带着预填两格：预填进来、人什么都没填，不算没提交。
-  const unsaved = registrationDraftUnsaved(
-    draft,
-    { ...emptyIdentityDeactivationDraft(), kind: preset?.kind ?? '', id: preset?.id ?? '' },
-    form.landedKey,
-  );
+  // 离开确认的基线带着预填（或锁定）两格：预填进来、人什么都没填，不算没提交。
+  const unsaved = registrationDraftUnsaved(draft, identityDeactivationDraftOf(locked ?? preset), form.landedKey);
   useEffect(() => {
     onUnsavedChange?.(unsaved);
   }, [onUnsavedChange, unsaved]);
@@ -272,16 +283,149 @@ export function IdentityDeactivationForm({
   const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
   // 确认框里复述名称：候选取自同一份册答案，没取到就只报标识，不另读。
   const selectedName = selected === null ? null : pairedLabelOf(selected, draft.id);
-  const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName);
+  const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName, subjectLabel ?? null);
   const pickerProps = {
     label: '停用哪一个 *',
     path: 'deactivations[0].id',
     problems,
     value: draft.id,
-    locked,
+    locked: submitting,
     onChange: (id: string) => patch({ id }),
     ...pickerNotes,
   };
+
+  const fields = (
+    <div className="grid grid-cols-2 gap-3">
+      {locked === null ? (
+        <Field label="停用什么 *" path="deactivations[0].kind" problems={problems}>
+          <select
+            className={selectClass}
+            value={draft.kind}
+            disabled={submitting}
+            // 换种类连标识一起清：上一册的标识留在格里，会被送到另一册去查。
+            onChange={(event) => patch({ kind: event.target.value, id: '' })}
+          >
+            <option value="">未选</option>
+            {kindOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+            法人与客户账户也在这里停用；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
+          </span>
+        </Field>
+      ) : null}
+
+      {locked !== null ? null : selected !== null ? (
+        // key 带种类：换种类即换 Picker，上一册的候选与「不在读面上」那一项不留在下拉里。
+        <RegisterPicker key={selected.register.kind} paired={selected} {...pickerProps} />
+      ) : (
+        <Field label="身份标识 *" path="deactivations[0].id" problems={problems}>
+          <Input
+            value={draft.id}
+            readOnly={submitting}
+            className="font-mono text-[13px]"
+            placeholder="先选身份种类，再从对应册上选"
+            onChange={(event) => patch({ id: event.target.value })}
+          />
+        </Field>
+      )}
+
+      <RevisionField
+        label="版本号"
+        path="deactivations[0].revision"
+        problems={problems}
+        {...form.revisionField}
+        note={
+          // 落点显的就是建议值本身（同一份 rows、同一个标识算出来的），不在这里再加一次——「最新修订加一」只在
+          // suggestedNextRevision 一处。
+          known
+            ? '系统按已登记的记录自动算好，一般不用改；提示版本号对不上时刷新后再试。'
+            : '列表里没有这个编码（或还没读到）；停用一个从未登记的对象会提示「没有找到」。'
+        }
+      />
+
+      <Field label="来源单据 *" path="deactivations[0].basis" problems={problems}>
+        <Input
+          value={draft.basis}
+          readOnly={submitting}
+          className="font-mono text-[13px]"
+          placeholder="停用通知、审批单号或邮件"
+          onChange={(event) => patch({ basis: event.target.value })}
+        />
+      </Field>
+
+      <WallTimeField
+        label="停用时间 *"
+        path="deactivations[0].at"
+        problems={problems}
+        value={draft.at}
+        locked={submitting}
+        timeZone={timeZone}
+        onChange={(at) => patch({ at })}
+      />
+    </div>
+  );
+
+  const actions = (
+    <div className="flex items-start gap-3">
+      {/* 停用是终态（PC CONTEXT「已停用」），按下之前再拦一道、复述要停的是谁；确认才发请求。 */}
+      <Button
+        variant="default"
+        className={dangerActionClass}
+        onClick={() => setConfirming(true)}
+        disabled={submitting || !form.canSend}
+      >
+        {submitting ? '停用中…' : '停用'}
+      </Button>
+      <RegistrationAnswerNote
+        state={form.state}
+        owner={info.owner}
+        outcomeLabels={partyIdentityOutcomeLabels}
+        problemNote={problemNote}
+      />
+    </div>
+  );
+
+  const confirm = (
+    <ConfirmDialog
+      renderFooter={confirmDialogFooter}
+      open={confirming}
+      tone="danger"
+      title={confirmation.title}
+      message={confirmation.message}
+      extraContent={
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+          {confirmation.facts.map((fact) => (
+            <div key={fact.label} className="contents">
+              <dt className="text-idpxyz-breadcrumb">{fact.label}</dt>
+              <dd className="font-mono break-all text-idpxyz-text">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      }
+      confirmLabel="停用"
+      cancelLabel="不停用"
+      onConfirm={() => {
+        setConfirming(false);
+        form.send();
+      }}
+      onCancel={() => setConfirming(false)}
+    />
+  );
+
+  // 锁定对象时壳由对话框给：卡片标题、说明句与 JSON 导入都不摆——导入的快照里可以写别的对象，锁定就白锁了。
+  if (locked !== null) {
+    return (
+      <div className="flex flex-col gap-4">
+        {fields}
+        {actions}
+        {confirm}
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -294,123 +438,14 @@ export function IdentityDeactivationForm({
           <p className="text-[12px] text-idpxyz-breadcrumb">
             {'从停用时间起，新的业务不再找它；已有记录保留，停用后不能撤回。合作关系不在这里停用——到合作关系里撤销或到期。'}
           </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="停用什么 *" path="deactivations[0].kind" problems={problems}>
-              <select
-                className={selectClass}
-                value={draft.kind}
-                disabled={locked}
-                // 换种类连标识一起清：上一册的标识留在格里，会被送到另一册去查。
-                onChange={(event) => patch({ kind: event.target.value, id: '' })}
-              >
-                <option value="">未选</option>
-                {kindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
-                法人与客户账户也在这里停用；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
-              </span>
-            </Field>
-
-            {selected !== null ? (
-              // key 带种类：换种类即换 Picker，上一册的候选与「不在读面上」那一项不留在下拉里。
-              <RegisterPicker key={selected.register.kind} paired={selected} {...pickerProps} />
-            ) : (
-              <Field label="身份标识 *" path="deactivations[0].id" problems={problems}>
-                <Input
-                  value={draft.id}
-                  readOnly={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="先选身份种类，再从对应册上选"
-                  onChange={(event) => patch({ id: event.target.value })}
-                />
-              </Field>
-            )}
-
-            <RevisionField
-              path="deactivations[0].revision"
-              problems={problems}
-              {...form.revisionField}
-              note={
-                // 落点显的就是建议值本身（同一份 rows、同一个标识算出来的），不在这里再加一次——「最新修订加一」只在
-                // suggestedNextRevision 一处。
-                known
-                  ? `系统按已登记的记录算好了序号（第 ${form.revisionField.suggestion} 次更新），一般不用改；提示序号对不上时刷新后再试。`
-                  : '列表里没有这个编码（或还没读到）；停用一个从未登记的对象会提示「没有找到」。'
-              }
-            />
-
-            <Field label="来源单据 *" path="deactivations[0].basis" problems={problems}>
-              <Input
-                value={draft.basis}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="停用通知、审批单号或邮件"
-                onChange={(event) => patch({ basis: event.target.value })}
-              />
-            </Field>
-
-            <WallTimeField
-              label="停用时间 *"
-              path="deactivations[0].at"
-              problems={problems}
-              value={draft.at}
-              locked={locked}
-              timeZone={timeZone}
-              onChange={(at) => patch({ at })}
-            />
-          </div>
-
-          <div className="flex items-start gap-3">
-            {/* 停用是终态（PC CONTEXT「已停用」），按下之前再拦一道、复述要停的是谁；确认才发请求。 */}
-            <Button
-              variant="default"
-              className={dangerActionClass}
-              onClick={() => setConfirming(true)}
-              disabled={locked || !form.canSend}
-            >
-              {locked ? '停用中…' : '停用'}
-            </Button>
-            <RegistrationAnswerNote
-              state={form.state}
-              owner={info.owner}
-              outcomeLabels={partyIdentityOutcomeLabels}
-              problemNote={problemNote}
-            />
-          </div>
+          {fields}
+          {actions}
         </CardContent>
       </Card>
 
       <SnapshotJsonDetails kind={kind} submit={form.submit} />
 
-      <ConfirmDialog
-        renderFooter={confirmDialogFooter}
-        open={confirming}
-        tone="danger"
-        title={confirmation.title}
-        message={confirmation.message}
-        extraContent={
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
-            {confirmation.facts.map((fact) => (
-              <div key={fact.label} className="contents">
-                <dt className="text-idpxyz-breadcrumb">{fact.label}</dt>
-                <dd className="font-mono break-all text-idpxyz-text">{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
-        }
-        confirmLabel="停用"
-        cancelLabel="不停用"
-        onConfirm={() => {
-          setConfirming(false);
-          form.send();
-        }}
-        onCancel={() => setConfirming(false)}
-      />
+      {confirm}
     </div>
   );
 }

@@ -334,6 +334,7 @@ export function GroupLegalEntitiesPage() {
         listAnswer={answer}
         retry={retry}
         onBack={() => tabReturn.returnTo('group-legal-entities')}
+        typeNameOf={typeNameOf}
       />
     );
   }
@@ -518,6 +519,8 @@ export function GroupLegalEntitiesPage() {
             onOpenObjectPage={() => {
               window.location.hash = detailHash(row.legalEntityId);
             }}
+            onChanged={retry}
+            typeNameOf={typeNameOf}
           />
         ) : null;
       }}
