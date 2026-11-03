@@ -1,7 +1,7 @@
 # 08 视觉收拾：详情栏与对象页一套版式、去重复、宽屏不散
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 看 2000px 宽屏下的列表 + 详情栏截图，认为「显示的专业性不够，有点乱」；协调方诊断见下。
@@ -61,3 +61,8 @@ Blocked by: 无
 - 已停用 / 待补行的详情栏与对象页（演示数据里没有停用的公司主体）；`legalEntityHeaderFacts` 的「停用」格只过了类型检查。
 - 往来单位详情栏与对象页借同一条 `LegalEntityLifecycle`，随之变紧凑：详情栏 1440 宽看过一眼（`bp-list-panel-1440.png`）无异常，对象页指标卡里那一格未截图。
 - 版本历史对比表的地址改成同一行只过了 node:test，未开「资料版本」签看。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `0531b1b78` 上 `git merge --no-ff origin/claude-csux-08`（tip `e08523e46`），无冲突。三道门在 main 上退 0（tsc、run-tests 1163、vite build）。协调方看过 2000 宽的详情栏与对象页截图（`scratchpad/csux08/after-*.png`）。
+- 作者请裁：① 对象页事实行放模板 meta 行，不动模板——接受；② 事实行用 spec 词「资料状态」「资料版本 第 N 版」、国家显「中国（CN）」——接受；③ 往来单位两页随 `LegalEntityLifecycle` 变紧凑——接受，两处同形；④ `demo_live` 上 SYN-LE-01 的第 6 版（来源单据写的是税号、海关编码改成 3101234567、生效当天）不是任何票的种子，是有人在预览上用配置员账号真保存了一次——演示库本就是给人试的，不回滚。
