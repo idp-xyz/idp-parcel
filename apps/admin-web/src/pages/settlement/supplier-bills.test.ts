@@ -10,6 +10,7 @@ import {
   differingClassificationWords,
   hasReceptionProblems,
   legacyBillNumberOf,
+  linesForSupplier,
   lineDisposition,
   matchSummary,
   NO_EXPECTED_COST,
@@ -21,6 +22,7 @@ import {
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
+  unrecordedSupplierCount,
   withExactHits,
   type ReceptionDraft,
 } from './supplier-bills';
@@ -126,21 +128,42 @@ const cost = (overrides: Partial<SupplierExpectedCostRecord>): SupplierExpectedC
   ...overrides,
 });
 
-test('能拿来对账的预期成本只列当前那一版、同币种的', () => {
+test('能拿来对账的预期成本只列所选供应商的、当前那一版、同币种的', () => {
   const costs = [
-    cost({ version: 'V1' }),
-    cost({ version: 'V2', priorVersion: 'V1', correctionReason: 'R' }),
-    cost({ version: 'W1', withdrawn: true }),
-    cost({ version: 'U1', settlementCurrency: 'USD' }),
+    cost({ version: 'V1', supplier: 'TRUNK' }),
+    cost({ version: 'V2', priorVersion: 'V1', correctionReason: 'R', supplier: 'TRUNK' }),
+    cost({ version: 'W1', withdrawn: true, supplier: 'TRUNK' }),
+    cost({ version: 'U1', settlementCurrency: 'USD', supplier: 'TRUNK' }),
+    cost({ version: 'L1', supplier: 'LM' }),
+    cost({ version: 'OLD' }),
   ];
   deepEqual(
-    currentExpectedCosts(costs, 'CNY').map((item) => item.version),
+    currentExpectedCosts(costs, 'CNY', 'TRUNK').map((item) => item.version),
     ['V2'],
   );
   deepEqual(
-    currentExpectedCosts(costs, '').map((item) => item.version),
+    currentExpectedCosts(costs, '', 'TRUNK').map((item) => item.version),
     ['V2', 'U1'],
   );
+  deepEqual(
+    currentExpectedCosts(costs, 'CNY', 'LM').map((item) => item.version),
+    ['L1'],
+  );
+  // 没选供应商一份都不列；没记供应商的旧行哪一家都不列，只计数。
+  deepEqual(currentExpectedCosts(costs, 'CNY', ''), []);
+  equal(unrecordedSupplierCount(costs, 'CNY'), 1);
+  equal(unrecordedSupplierCount(costs, 'USD'), 0);
+});
+
+test('换了供应商，各行选的别家预期成本连同对上方式清掉，找不到对应运输与本家的留着', () => {
+  const line = (expected: string, classification: string) => ({ expected, classification, claimed: '8500', feeItem: '', basis: '' });
+  const lines = [line('V2', 'MATCHED'), line('L1', 'MATCHED'), line(NO_EXPECTED_COST, 'NO_MATCHING_OCCURRENCE'), line('', '')];
+  deepEqual(linesForSupplier(lines, [cost({ version: 'V2', supplier: 'TRUNK' })]), [
+    line('V2', 'MATCHED'),
+    line('', ''),
+    line(NO_EXPECTED_COST, 'NO_MATCHING_OCCURRENCE'),
+    line('', ''),
+  ]);
 });
 
 test('对上方式照匹配门的形状给：金额相等才能选已对上，没有预期成本只能选找不到对应运输', () => {
@@ -220,6 +243,22 @@ test('接收答复说人话：受理、审核人未配置、重复、版本冲�
     '没有登记：第 2 行选的预期成本 V1 已经被更正过（现在是 V2），改选当前那一版再登记。',
   );
   match(receptionAnswerText({ outcome: 'SUPPLIER_BILL_NUMBER_CONFLICT', registeredClaim: 'BILL-OLD' }, 'INV-1'), /账单号 INV-1 已经登记过/);
+});
+
+test('接收答复说人话：选了别家供应商的预期成本、选了没记供应商的预期成本（ADR-0358）', () => {
+  equal(
+    receptionAnswerText(
+      { outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH', expectedCostSupplier: { line: '1', version: 'L1', supplier: 'SYN-PARTY-CARRIER-LM-01' } },
+      'INV-1',
+    ),
+    '没有登记：第 1 行选的预期成本 L1 是 SYN-PARTY-CARRIER-LM-01 的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。',
+  );
+  match(receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH' }, 'INV-1'), /别家供应商/);
+  match(
+    receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_UNRECORDED', expectedCostSupplier: { line: '2', version: 'OLD' } }, 'INV-1'),
+    /第 2 行选的预期成本 OLD 还没记是哪家供应商的.*补记/,
+  );
+  equal(/[A-Z_]{8,}/.test(receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_UNRECORDED' }, 'INV-1')), false);
 });
 
 test('对不上的分类从取值表取界面词：不含已对上，不出英文码', () => {
