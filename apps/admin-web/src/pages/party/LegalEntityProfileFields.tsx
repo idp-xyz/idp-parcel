@@ -1,24 +1,50 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Button, Input, Textarea } from '@idpxyz/ui-primitives';
-import type { ContactPurpose } from './api';
-import { contactPurposeLabels, type ContactDraft, type LegalEntityProfileDraft } from './legal-entity-profile';
-import { Field, Problems } from './PublicationFormFields';
+import type { ApiResult } from '../catalogue-api';
+import type { ContactPurpose, RegistrationNumberTypeListResponseBody } from './api';
+import { policiesHash } from './commercial-policies-address';
+import {
+  contactPurposeLabels,
+  profileTaxTypeOptions,
+  type ContactDraft,
+  type LegalEntityProfileDraft,
+} from './legal-entity-profile';
+import { Field, Problems, SearchableSelect } from './PublicationFormFields';
 import { FormGroup } from './party-registration-fields';
+
+/** 结算政策册在商业规则页里的位置：开票币种在那里按公司主体、相对方与合同解析，这里只指路。 */
+export const settlementPolicyHash = policiesHash('#/commercial-policies', { tab: 'registers', register: 'SETTLEMENT_POLICY' });
+
+/**
+ * 必填格外面的锚：点保存时把第一个缺项滚进视野靠它找格（LegalEntityProfileSection 的 scrollToField）。路径与格认领问题
+ * 的 JSON 路径同一个串，缺项清单（legalEntityProfileMissingFields）与锚不必各记一份名字。
+ */
+export function FieldAnchor({ path, children }: { path: string; children: ReactNode }) {
+  return <div data-field-path={path}>{children}</div>;
+}
 
 export function LegalEntityProfileFields({
   draft,
   patch,
   problems,
   locked,
+  typeCatalogue,
+  onLeave,
 }: {
   draft: LegalEntityProfileDraft;
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
   problems: Record<string, string[]>;
   locked: boolean;
+  /** 注册号类型目录的答案（税务登记号类型候选从里面取资料层）；还在读为 null。 */
+  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
+  /** 表单里的站内链接要离开本页时交给调用方：有没提交的输入时先确认再走，不让一个链接把表单静默关掉。 */
+  onLeave: (href: string) => void;
 }) {
   const platformListId = useId();
   const setContact = (index: number, change: Partial<ContactDraft>) =>
     patch({ contacts: draft.contacts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  const setTaxNumber = (index: number, change: Partial<LegalEntityProfileDraft['taxNumbers'][number]>) =>
+    patch({ taxNumbers: draft.taxNumbers.map((item, at) => (at === index ? { ...item, ...change } : item)) });
   return (
     <>
       <datalist id={platformListId}>
@@ -35,7 +61,7 @@ export function LegalEntityProfileFields({
             }
             className="h-9 w-full rounded-md border border-idpxyz-border bg-idpxyz-card px-3 text-[13px] text-idpxyz-text"
           >
-            <option value="">未配置</option>
+            <option value="">未选</option>
             <option value="LEGAL_REPRESENTATIVE">法定代表人</option>
             <option value="RESPONSIBLE_PERSON">登记负责人</option>
           </select>
@@ -58,32 +84,36 @@ export function LegalEntityProfileFields({
           ] as const
         ).map(([path, label, country, lines]) => (
           <div key={path} className="md:col-span-2 grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <Field
-              label={`${label}国家 / 地区${path === 'registeredAddress' ? ' *' : ''}`}
-              path={`profiles[0].${path}`}
-              problems={problems}
-            >
-              <Input
-                aria-label={`${label}国家 / 地区`}
-                placeholder="如 CN、SG"
-                value={draft[country]}
-                readOnly={locked}
-                onChange={(event) => patch({ [country]: event.target.value })}
-              />
-            </Field>
-            <Field
-              label={`${label}${path === 'registeredAddress' ? ' *' : '（选填）'}`}
-              path={`profiles[0].${path}.lines`}
-              problems={problems}
-            >
-              <Textarea
-                aria-label={label}
-                rows={2}
-                value={draft[lines]}
-                readOnly={locked}
-                onChange={(event) => patch({ [lines]: event.target.value })}
-              />
-            </Field>
+            <FieldAnchor path={`profiles[0].${path}`}>
+              <Field
+                label={`${label}国家 / 地区${path === 'registeredAddress' ? ' *' : ''}`}
+                path={`profiles[0].${path}`}
+                problems={problems}
+              >
+                <Input
+                  aria-label={`${label}国家 / 地区`}
+                  placeholder="如 CN、SG"
+                  value={draft[country]}
+                  readOnly={locked}
+                  onChange={(event) => patch({ [country]: event.target.value })}
+                />
+              </Field>
+            </FieldAnchor>
+            <FieldAnchor path={`profiles[0].${path}.lines`}>
+              <Field
+                label={`${label}${path === 'registeredAddress' ? ' *' : '（选填）'}`}
+                path={`profiles[0].${path}.lines`}
+                problems={problems}
+              >
+                <Textarea
+                  aria-label={label}
+                  rows={2}
+                  value={draft[lines]}
+                  readOnly={locked}
+                  onChange={(event) => patch({ [lines]: event.target.value })}
+                />
+              </Field>
+            </FieldAnchor>
           </div>
         ))}
       </FormGroup>
@@ -96,37 +126,47 @@ export function LegalEntityProfileFields({
             onChange={(event) => patch({ invoiceTitle: event.target.value })}
           />
         </Field>
+        {/* 币种不在本表单：结算政策按公司主体、相对方与合同解析，这里只指路（票 company-subject-ux/04 第 7 项）。 */}
+        <p className="md:col-span-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
+          开票币种不在这里定：由「
+          <a
+            href={settlementPolicyHash}
+            className="text-idpxyz-accent underline-offset-2 hover:underline"
+            onClick={(event) => {
+              event.preventDefault();
+              onLeave(settlementPolicyHash);
+            }}
+          >
+            商业规则 › 结算政策
+          </a>
+          」按公司主体、相对方与合同解析。
+        </p>
         <div className="md:col-span-2">
+          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">税务登记号</p>
           {draft.taxNumbers.map((row, index) => (
-            <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3">
-              <Input
-                aria-label={`税务登记号 ${index + 1} 类型`}
-                placeholder="税务登记号类型码"
+            <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3">
+              <TaxTypeField
+                index={index}
+                country={draft.addressCountry}
                 value={row.typeCode}
-                readOnly={locked}
-                onChange={(event) =>
-                  patch({
-                    taxNumbers: draft.taxNumbers.map((item, at) =>
-                      at === index ? { ...item, typeCode: event.target.value } : item,
-                    ),
-                  })
-                }
+                locked={locked}
+                problems={problems}
+                typeCatalogue={typeCatalogue}
+                onChange={(typeCode) => setTaxNumber(index, { typeCode })}
               />
-              <Input
-                aria-label={`税务登记号 ${index + 1} 号码`}
-                placeholder="税务登记号"
-                value={row.number}
-                readOnly={locked}
-                onChange={(event) =>
-                  patch({
-                    taxNumbers: draft.taxNumbers.map((item, at) =>
-                      at === index ? { ...item, number: event.target.value } : item,
-                    ),
-                  })
-                }
-              />
+              <Field label="号码" path={`profiles[0].taxRegistrationNumbers[${index}].number`} problems={problems}>
+                <Input
+                  aria-label={`税务登记号 ${index + 1} 号码`}
+                  placeholder="税务登记号原样填"
+                  className="font-mono text-[13px]"
+                  value={row.number}
+                  readOnly={locked}
+                  onChange={(event) => setTaxNumber(index, { number: event.target.value })}
+                />
+              </Field>
               <Button
                 variant="ghost"
+                className="mt-5"
                 disabled={locked}
                 onClick={() => patch({ taxNumbers: draft.taxNumbers.filter((_, at) => at !== index) })}
               >
@@ -142,6 +182,9 @@ export function LegalEntityProfileFields({
           >
             添加税务登记号
           </Button>
+          <p className="mt-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
+            跨境开票常用：中国税号、香港 BR、美国 EIN、欧盟 VAT / IOSS / EORI——按注册地配置后在这里选。
+          </p>
         </div>
       </FormGroup>
       <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。">
@@ -158,21 +201,26 @@ export function LegalEntityProfileFields({
                     ['email', '邮箱'],
                     ['phone', '电话'],
                   ] as const
-                ).map(([key, label]) => (
-                  <Field
-                    key={key}
-                    label={label}
-                    path={`profiles[0].contacts[${index}]${key === 'name' ? '' : '.' + key}`}
-                    problems={problems}
-                  >
-                    <Input
-                      aria-label={`联系人 ${index + 1} ${label}`}
-                      value={row[key] ?? ''}
-                      readOnly={locked}
-                      onChange={(event) => setContact(index, { [key]: event.target.value })}
-                    />
-                  </Field>
-                ))}
+                ).map(([key, label]) => {
+                  const path = `profiles[0].contacts[${index}]${key === 'name' ? '' : '.' + key}`;
+                  const field = (
+                    <Field label={label} path={path} problems={problems}>
+                      <Input
+                        aria-label={`联系人 ${index + 1} ${label}`}
+                        value={row[key] ?? ''}
+                        readOnly={locked}
+                        onChange={(event) => setContact(index, { [key]: event.target.value })}
+                      />
+                    </Field>
+                  );
+                  return key === 'name' ? (
+                    <FieldAnchor key={key} path={path}>
+                      {field}
+                    </FieldAnchor>
+                  ) : (
+                    <div key={key}>{field}</div>
+                  );
+                })}
               </div>
               <div className="mt-4 space-y-2">
                 <p className="text-[12px] font-medium text-idpxyz-text">社交账号 <span className="font-normal text-idpxyz-breadcrumb">（选填，可添加多个）</span></p>
@@ -271,5 +319,61 @@ export function LegalEntityProfileFields({
         </div>
       </FormGroup>
     </>
+  );
+}
+
+/**
+ * 税务登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
+ * 码进载荷。目录里这一国家没有资料层类型、或目录读不到时退回手填类型码并指路——要加类型得先到基础数据配置，
+ * 表单不替目录造码。选出来的只是类型码，合不合目录仍由服务端登记时判。
+ */
+function TaxTypeField({
+  index,
+  country,
+  value,
+  locked,
+  problems,
+  typeCatalogue,
+  onChange,
+}: {
+  index: number;
+  country: string;
+  value: string;
+  locked: boolean;
+  problems: Record<string, string[]>;
+  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
+  onChange: (typeCode: string) => void;
+}) {
+  const path = `profiles[0].taxRegistrationNumbers[${index}].typeCode`;
+  const options = typeCatalogue?.kind === 'outcome' ? profileTaxTypeOptions(typeCatalogue.body.registrationNumberTypes, country) : [];
+  if (options.length > 0) {
+    return (
+      <Field label="类型" path={path} problems={problems}>
+        <SearchableSelect options={options} value={value} disabled={locked} onChange={onChange} unknownNote="手填，不在目录上" />
+      </Field>
+    );
+  }
+  const reason =
+    typeCatalogue === null
+      ? '正在读注册号类型目录…'
+      : typeCatalogue.kind === 'outcome'
+        ? country.trim() === ''
+          ? '先填注册地址国家 / 地区，这里才有候选。'
+          : `目录里「${country.trim()}」还没有资料层的注册号类型，可先手填类型码。`
+        : '注册号类型目录暂时读不到，可先手填类型码。';
+  return (
+    <Field label="类型" path={path} problems={problems}>
+      <Input
+        aria-label={`税务登记号 ${index + 1} 类型`}
+        placeholder="类型码"
+        className="font-mono text-[13px]"
+        value={value}
+        readOnly={locked}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">
+        {reason}要加类型，先到「基础数据 › 注册号类型」配置。
+      </span>
+    </Field>
   );
 }
