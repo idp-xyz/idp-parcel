@@ -36,7 +36,7 @@ import { RevisionHistorySection, type RevisionHistoryRegister } from './Revision
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
-import { DetailRow, Instant, RefText, useCopyToClipboard } from './detail-primitives';
+import { DetailRow, Instant, RefText } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
@@ -70,7 +70,8 @@ function muted(text: string): ReactNode {
 // 身份事实留在头部，当前资料归概要，资料版本与身份修订各用自己的历史链。
 
 /**
- * 头区第二行的 meta，与详情栏头区同一形（票 company-subject-ux/08）：编码、注册地、注册号一行小字，号可点按复制；
+ * 头区第二行的 meta，与详情栏头区同一形（票 company-subject-ux/08）：编码、注册地、注册号一行小字，号是号码类、点击即复制
+ * （RefText，票 company-subject-ux/14）；
  * 关键事实（legalEntityHeaderFacts）接在后面，生命周期小步进贴在行末。注册号的类型码经目录译成名（统一社会信用代码），
  * 目录没读到就按码显——译名是锦上添花，号本身在答复里；一行小字放得下类型名，就跟在号前面显而不藏进 title。
  *
@@ -80,13 +81,12 @@ function muted(text: string): ReactNode {
 function buildMeta(
   row: GroupLegalEntityRecord,
   typeNameOf: RegistrationNumberTypeNameOf | undefined,
-  copy: (label: string, value: string) => void,
   profileCell: ProfileStatusCell,
   referenced: number | null,
 ): DetailMeta[] {
   const identity = identityLayerCellsOf(row, typeNameOf);
   return [
-    { label: '编码', value: <RefText value={row.legalEntityId} name="编码" onCopy={copy} /> },
+    { label: '编码', value: <RefText value={row.legalEntityId} name="编码" /> },
     {
       label: '注册地',
       value: identity ? <CountryLabel code={identity.country} /> : muted(identityLayerAbsentNote),
@@ -97,7 +97,7 @@ function buildMeta(
         ? identity.numberCells.map((cell, index) => (
             <Fragment key={`${cell.number}#${index}`}>
               {index > 0 ? '；' : null}
-              {muted(cell.typeName)} <RefText value={cell.number} name={cell.typeName} onCopy={copy} />
+              {muted(cell.typeName)} <RefText value={cell.number} name={cell.typeName} />
             </Fragment>
           ))
         : muted(identityLayerAbsentNote),
@@ -225,7 +225,6 @@ export function LegalEntityDetailPage({
   const references = useLegalEntityReferences(row?.legalEntityId ?? legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
   const referenced = referencedCount(references.states);
-  const copy = useCopyToClipboard();
   const openProfileForm = () => {
     setTab('profile-versions');
     setHeaderFormOpen(true);
@@ -270,7 +269,7 @@ export function LegalEntityDetailPage({
           </Button>
         </>
       }
-      meta={row ? buildMeta(row, typeNameOf, copy, profileCell, referenced) : []}
+      meta={row ? buildMeta(row, typeNameOf, profileCell, referenced) : []}
       // 头区 meta 行已把身份事实与关键事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
       // 停用来源单据跟在停用横幅下。传空数组——分签形态下模板按有没有字段判要不要画这张卡，空的不画。
       basicFields={[]}

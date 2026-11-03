@@ -2,6 +2,7 @@ import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
+import { CopyAside, RefText } from './detail-primitives';
 import {
   ProfileReadoutAddresses,
   ProfileReadoutCard,
@@ -59,7 +60,8 @@ export function LegalEntityProfileContent({
         <ProfileReadoutGrid>
           {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs），两张都占整行——抬头与几种号并排时半列放不下。
               主抬头排第一、语言格后带「主抬头」：它仍是「可开票」的判据，但与其他语言的抬头是同一类内容，不再分两格两种排法。
-              没标语言的主抬头语言格显「—」：空格一律「—」（spec「统一用语」）。 */}
+              没标语言的主抬头语言格显「—」：空格一律「—」（spec「统一用语」）。
+              抬头是文本类、号是号码类（票 company-subject-ux/14）：抬头末尾悬停出复制图标，号整个是按钮点击即复制。 */}
           <ProfileReadoutField
             label="开票抬头"
             wide
@@ -75,7 +77,11 @@ export function LegalEntityProfileContent({
                         {row.primary ? <PrimaryTitleMark /> : null}
                       </>
                     ),
-                    value: row.primary ? <span className="font-medium text-idpxyz-textBright"><ReadoutText text={row.title} /></span> : <ReadoutText text={row.title} />,
+                    value: (
+                      <CopyAside value={row.title} name="开票抬头">
+                        {row.primary ? <span className="font-medium text-idpxyz-textBright"><ReadoutText text={row.title} /></span> : <ReadoutText text={row.title} />}
+                      </CopyAside>
+                    ),
                   }))}
                 />
               ) : undefined
@@ -89,12 +95,15 @@ export function LegalEntityProfileContent({
               content?.taxRegistrationNumbers.length ? (
                 <ProfileReadoutPairs
                   mono
-                  rows={content.taxRegistrationNumbers.map((row, index) => ({
-                    key: `${row.typeCode}-${row.number}-${index}`,
-                    head: typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode,
-                    headTitle: row.typeCode,
-                    value: row.number,
-                  }))}
+                  rows={content.taxRegistrationNumbers.map((row, index) => {
+                    const typeName = typeNameOf?.(content.registeredAddress.country, row.typeCode, 'PROFILE') ?? row.typeCode;
+                    return {
+                      key: `${row.typeCode}-${row.number}-${index}`,
+                      head: typeName,
+                      headTitle: row.typeCode,
+                      value: <RefText value={row.number} name={typeName} />,
+                    };
+                  })}
                 />
               ) : undefined
             }
@@ -137,7 +146,8 @@ function PrimaryTitleMark() {
 
 /**
  * 收款账户表，一行一个账户、币种打头（ADR-0359 决定三「按币种登记」，开单方按单据币种挑账户）。没有账户是结论句
- * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名，账号与 SWIFT 等宽、可选中复制。
+ * 「未登记收款账户」（ADR 给旧修订的读法）；表内空格「—」。币种经基础数据译名；账号与 SWIFT 是号码类、点击即复制，
+ * 户名与开户行是文本类、末尾悬停出复制图标（票 company-subject-ux/14）。
  * 表与读出同一把尺（票 company-subject-ux/13 第 3 条）：正文 14、表头与次要行 13、等宽 13，行高一律 6。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
@@ -172,14 +182,20 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
                 {account.label ? <span className="block text-[13px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
               </th>
-              <td className="px-3 py-2.5 text-idpxyz-text"><ReadoutText text={account.holderName} /></td>
+              <td className="px-3 py-2.5 text-idpxyz-text">
+                <CopyAside value={account.holderName} name="户名"><ReadoutText text={account.holderName} /></CopyAside>
+              </td>
               <td className="px-3 py-2.5">
-                <span className="block text-idpxyz-text"><ReadoutText text={account.bankName} /></span>
+                <span className="block text-idpxyz-text">
+                  <CopyAside value={account.bankName} name="开户行"><ReadoutText text={account.bankName} /></CopyAside>
+                </span>
                 {account.bankAddress ? <span className="block text-[13px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
               </td>
               <td className="px-3 py-2.5 font-mono text-[13px]">
-                <span className="block select-text text-idpxyz-text [overflow-wrap:anywhere]">{account.accountNumber}</span>
-                {account.swiftCode ? <span className="block select-text text-idpxyz-breadcrumb">{account.swiftCode}</span> : null}
+                <span className="block text-idpxyz-text"><RefText value={account.accountNumber} name="账号" /></span>
+                {account.swiftCode ? (
+                  <span className="block text-idpxyz-breadcrumb"><RefText value={account.swiftCode} name="SWIFT / BIC" /></span>
+                ) : null}
               </td>
               <td className="py-2.5 pl-3">
                 {account.note ? <span className="text-idpxyz-text"><ReadoutText text={account.note} /></span> : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}

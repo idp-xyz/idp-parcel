@@ -6,7 +6,7 @@ import { listRegistrationNumberTypes, type LegalEntityProfileResolutionResponseB
 import { profileRevisionLabel } from './presentation';
 import { legalEntityProfileStatusOf } from './legal-entity-profile';
 import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
-import { Instant } from './detail-primitives';
+import { Instant, RefText } from './detail-primitives';
 import { useLoaded } from './PublicationFormFields';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 
@@ -43,7 +43,8 @@ function ProfileSummary({
           <>
             当前资料 <span className="tabular-nums text-idpxyz-text">{profileRevisionLabel(effective.revision)}</span> ·{' '}
             <span className="text-idpxyz-text"><Instant value={effective.effectiveFrom} precision="day" /></span> 起生效 · 来源单据{' '}
-            <span className="font-mono text-[13px] text-idpxyz-text">{effective.basis}</span>
+            {/* 来源单据是号码类（票 company-subject-ux/14）：点击即复制；色随外层，这句是弱显的小字，号要正文色，所以套一层。 */}
+            <span className="text-[13px] text-idpxyz-text"><RefText value={effective.basis} name="来源单据" /></span>
           </>
         ) : (
           <>资料状态：{status.label}</>

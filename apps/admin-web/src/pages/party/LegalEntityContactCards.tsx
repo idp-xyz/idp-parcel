@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { Mail, MessageCircle, Phone, type LucideIcon } from 'lucide-react';
 import type { LegalEntityContactRecord } from './api';
 import { contactCardOf, socialAccountsText, type ContactCard } from './legal-entity-contact-cards';
+import { CopyAside, RefText } from './detail-primitives';
 import './legal-entity-profile-readout.css';
 
 /**
@@ -9,6 +10,8 @@ import './legal-entity-profile-readout.css';
  * 用途，其余三列都是一格叠几行、一人占一百多像素高，四个人就占满一屏；卡把一个人的信息收在一块，一屏看得完整个名册。
  * 卡与资料读出卡（ProfileReadoutCard）同一种画法——细边框、无投影——但不带浅底标题条：人名就是标题。
  * 哪几行显、用途怎么折算由 legal-entity-contact-cards.ts 判，这里只摆。
+ * 姓名是文本类、电话 / 邮箱 / 社交账号是号码类（票 company-subject-ux/14）：姓名末尾悬停出复制图标，三行的值整个是按钮、
+ * 点击即复制、等宽 13。
  */
 export function LegalEntityContactCards({ contacts }: { contacts: readonly LegalEntityContactRecord[] }) {
   // 整张清单没有人是结论句，照旧用文字（spec 公司主体 UX「统一用语」）。
@@ -29,7 +32,9 @@ function ContactCardView({ card }: { card: ContactCard }) {
   // 字号与资料读出同一把尺（票 company-subject-ux/13 第 3 条）：人名与各行 14、所属与平台名 13、等宽账号 13。
   return (
     <li className="min-w-0 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-4 py-3">
-      <h5 className="break-words text-[14px] font-semibold leading-6 text-idpxyz-textBright">{card.name}</h5>
+      <h5 className="break-words text-[14px] font-semibold leading-6 text-idpxyz-textBright">
+        <CopyAside value={card.name} name="联系人姓名">{card.name}</CopyAside>
+      </h5>
       {card.affiliation ? <p className="mt-0.5 break-words text-[13px] leading-5 text-idpxyz-breadcrumb">{card.affiliation}</p> : null}
       {card.purposes.length ? (
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="联系用途">
@@ -56,13 +61,13 @@ function ContactCardView({ card }: { card: ContactCard }) {
         <ul className="mt-2.5 space-y-1 text-[14px] leading-6 text-idpxyz-text">
           {card.phone ? (
             <ContactLine icon={Phone} label="电话">
-              <span className="tabular-nums">{card.phone}</span>
+              <RefText value={card.phone} name="电话" className="text-[13px]" />
             </ContactLine>
           ) : null}
           {card.email ? (
             <ContactLine icon={Mail} label="邮箱">
               {/* 邮箱按字符折、不按连字符折：按词折会在域名的「idp-」后断开，读的人要把两段拼回去才认得出是哪个域。 */}
-              <span className="break-all">{card.email}</span>
+              <RefText value={card.email} name="邮箱" className="break-all text-[13px]" />
             </ContactLine>
           ) : null}
           {card.socialAccounts.length ? (
@@ -73,7 +78,11 @@ function ContactCardView({ card }: { card: ContactCard }) {
                 {card.socialAccounts.map((account, index) => (
                   <span key={`${account.platform}-${account.account}-${index}`} className="flex min-w-0 items-baseline gap-2">
                     <span className="w-[4.5em] shrink-0 text-[13px] text-idpxyz-breadcrumb">{account.platform}</span>
-                    <span className="min-w-0 select-text break-all font-mono text-[13px]">{account.account}</span>
+                    <RefText
+                      value={account.account}
+                      name={account.platform ? `${account.platform}账号` : '社交账号'}
+                      className="min-w-0 break-all text-[13px]"
+                    />
                   </span>
                 ))}
               </span>

@@ -503,6 +503,14 @@ export function addressLinesOf(address: RegisteredAddressRecord): string[] {
   return address.lines.map((line) => line.trim()).filter((line) => line !== '');
 }
 
+/**
+ * 地址整段复制出去的文字（票 company-subject-ux/14）：录入的行各占一行，国家译名作末行——与读出一行一行对得上，贴进
+ * 别处仍是一份能用的地址。国家译名由调用方按基础数据查好传进来，这里不碰名表；空译名就不带末行。
+ */
+export function addressCopyText(address: RegisteredAddressRecord, countryName: string): string {
+  return [...addressLinesOf(address), ...(countryName ? [countryName] : [])].join('\n');
+}
+
 export interface ReadoutTextSegment {
   text: string;
   /** 真即这一段不许在内部折行：前一个字 + 一组全角括号。 */
