@@ -577,7 +577,7 @@ export function GroupLegalEntitiesPage() {
             <section>
               <h3 className="font-semibold text-idpxyz-textBright">资料怎么维护</h3>
               <p className="mt-1">
-                注册地、注册号改了不覆盖旧的，每保存一次就多一版登记记录。开票抬头、税号、地址和联系人叫公司资料，在详情里点
+                注册地、注册号改了不覆盖旧的，每保存一次就多一版登记记录。开票抬头、监管登记号、收款账户、地址和联系人叫公司资料，在详情里点
                 「更新公司资料」登记，也是一版一版留着；开票时按日期取当天生效的那一版。
               </p>
             </section>
