@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiResult } from '../catalogue-api';
 import { listLegalEntityProfileRevisions, listLegalEntityRevisions } from './api';
+import { cachedLegalEntityRead, loadLegalEntityRead } from './legal-entity-read-cache';
 
 /** 回显标识 + 修订链：资料版本与登记记录两种答复的公共形状，计数只看这两格。 */
 export interface RevisionChainBody {
@@ -43,27 +44,43 @@ interface Answered {
  * 拼了一把同样的钥匙，这里照用——一把钥匙两处转，少一处忘了拧。答案钉在发问那一刻的 request 上：换了公司或钥匙，
  * 旧答案即使后到也不算数。
  */
-export function useLegalEntityTabCounts(legalEntityId: string | undefined, refreshKey: string): LegalEntityTabCounts {
+export function useLegalEntityTabCounts(
+  legalEntityId: string | undefined,
+  refreshKey: string,
+  version?: string,
+): LegalEntityTabCounts {
   const request = useMemo(() => ({ legalEntityId, refreshKey }), [legalEntityId, refreshKey]);
   const [answered, setAnswered] = useState<Answered | null>(null);
 
   useEffect(() => {
     if (!request.legalEntityId) return;
     let cancelled = false;
-    void listLegalEntityProfileRevisions(request.legalEntityId).then((profile) => {
+    // 给了身份版本就经页面内缓存问（与当前资料同一份缓存，见 legal-entity-read-cache.ts）：读过的先显、问到了再替换。
+    const profileLoad =
+      version === undefined
+        ? listLegalEntityProfileRevisions(request.legalEntityId)
+        : loadLegalEntityRead('profileRevisions', request.legalEntityId, version);
+    const identityLoad =
+      version === undefined
+        ? listLegalEntityRevisions(request.legalEntityId)
+        : loadLegalEntityRead('identityRevisions', request.legalEntityId, version);
+    void profileLoad.then((profile) => {
       if (!cancelled) setAnswered((previous) => ({ ...(previous?.request === request ? previous : {}), request, profile }));
     });
-    void listLegalEntityRevisions(request.legalEntityId).then((identity) => {
+    void identityLoad.then((identity) => {
       if (!cancelled) setAnswered((previous) => ({ ...(previous?.request === request ? previous : {}), request, identity }));
     });
     return () => {
       cancelled = true;
     };
-  }, [request]);
+  }, [request, version]);
 
-  if (!legalEntityId || answered?.request !== request) return {};
+  if (!legalEntityId) return {};
+  const fresh = answered?.request === request ? answered : undefined;
+  const profile = fresh?.profile ?? (version !== undefined ? cachedLegalEntityRead('profileRevisions', legalEntityId, version) : undefined);
+  const identity = fresh?.identity ?? (version !== undefined ? cachedLegalEntityRead('identityRevisions', legalEntityId, version) : undefined);
   return {
-    profileRevisions: revisionCountOf(answered.profile ?? null, legalEntityId),
-    identityRevisions: revisionCountOf(answered.identity ?? null, legalEntityId),
+    profileRevisions: revisionCountOf(profile ?? null, legalEntityId),
+    identityRevisions: revisionCountOf(identity ?? null, legalEntityId),
   };
 }

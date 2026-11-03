@@ -36,6 +36,7 @@ import { RevisionHistorySection, type RevisionHistoryRegister } from './Revision
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
+import { invalidateLegalEntityReads, legalEntityReadVersion } from './legal-entity-read-cache';
 import { DetailRow, Instant, RefText } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
@@ -213,9 +214,10 @@ export function LegalEntityDetailPage({
   const [profileRefresh, setProfileRefresh] = useState(0);
   // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
   const refreshKey = `${row?.revision}:${row?.status}:${profileRefresh}`;
-  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, refreshKey);
+  const readVersion = row ? legalEntityReadVersion(row) : undefined;
+  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, refreshKey, readVersion);
   // 签上的计数（票 company-subject-ux/09）：模板按 count 字段摆；读不到就不给，不拿 0 冒充。
-  const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, refreshKey);
+  const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, refreshKey, readVersion);
   const profileBody =
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row?.legalEntityId
       ? profileQuery.answer.body
@@ -257,6 +259,7 @@ export function LegalEntityDetailPage({
                   onOpenChange={setHeaderFormOpen}
                   legalEntityId={row.legalEntityId}
                   onLanded={() => {
+                    invalidateLegalEntityReads(row.legalEntityId);
                     setHeaderLanded((count) => count + 1);
                     setProfileRefresh((value) => value + 1);
                   }}
@@ -334,7 +337,10 @@ export function LegalEntityDetailPage({
                       key={`${row.legalEntityId}#${headerLanded}`}
                       legalEntityId={row.legalEntityId}
                       collapseCurrentProfile
-                      onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
+                      onProfileUpdated={() => {
+                        invalidateLegalEntityReads(row.legalEntityId);
+                        setProfileRefresh((value) => value + 1);
+                      }}
                     />
                   </section>
                 ),

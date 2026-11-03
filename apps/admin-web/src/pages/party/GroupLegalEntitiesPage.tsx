@@ -54,6 +54,10 @@ import {
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { CountryLabel } from '../refdata-labels';
 import { entryHint } from '../operator-grants';
+import { neighborsOf, prefetchLegalEntityReads } from './legal-entity-read-cache';
+
+// 列表取回后预读右栏的前几行：一行三个很小的读，二十行是六十个请求，再多就只读选中行的邻行。
+const prefetchedRowLimit = 20;
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
@@ -339,6 +343,22 @@ export function GroupLegalEntitiesPage() {
       [...new Set(entities.map((entity) => identityLayerCellsOf(entity)?.country).filter((country): country is string => Boolean(country)))].sort(),
     [entities],
   );
+
+  // 右栏的三种读预先读好（legal-entity-read-cache.ts）：列表取回后先把前若干行读进页面内缓存，选中一行后再把它在当前
+  // 排序下的上下邻行读好——点哪一行、方向键走到哪一行，右栏都直接显，不再先清空成「正在读取」再撑开。只在列表视图做；
+  // 前若干行之外的行点到时照常现读（有占位轮廓，不塌）。
+  useEffect(() => {
+    if (view.kind !== 'list' || knownEntities === null) return;
+    const timer = window.setTimeout(() => {
+      for (const entity of knownEntities.slice(0, prefetchedRowLimit)) prefetchLegalEntityReads(entity);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [view.kind, knownEntities]);
+  useEffect(() => {
+    if (view.kind !== 'list' || selectedKey === null) return;
+    const ordered = sortLegalEntities(filterLegalEntities(entities, { search, status, registrationCountry, attentionOnly }), sort);
+    for (const entity of neighborsOf(ordered, (row) => row.legalEntityId, selectedKey)) prefetchLegalEntityReads(entity);
+  }, [view.kind, selectedKey, entities, search, status, registrationCountry, attentionOnly, sort]);
 
   if (view.kind === 'object') {
     const row = entities.find((entity) => entity.legalEntityId === view.legalEntityId) ?? null;

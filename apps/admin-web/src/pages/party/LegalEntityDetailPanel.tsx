@@ -28,6 +28,7 @@ import { RevisionHistorySection } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
+import { invalidateLegalEntityReads, legalEntityReadVersion } from './legal-entity-read-cache';
 import {
   CopyAside,
   Fact,
@@ -97,8 +98,9 @@ export function LegalEntityDetailPanel({
   const [profileRefresh, setProfileRefresh] = useState(0);
   // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
   const refreshKey = `${row.revision}:${row.status}:${profileRefresh}`;
-  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, refreshKey);
-  const tabCounts = useLegalEntityTabCounts(row.legalEntityId, refreshKey);
+  const readVersion = legalEntityReadVersion(row);
+  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, refreshKey, readVersion);
+  const tabCounts = useLegalEntityTabCounts(row.legalEntityId, refreshKey, readVersion);
   const contactCount = legalEntityContactCountOf(
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row.legalEntityId
       ? profileQuery.answer.body
@@ -241,7 +243,10 @@ export function LegalEntityDetailPanel({
                 legalEntityId={row.legalEntityId}
                 formOpenRequest={formOpenRequest}
                 collapseCurrentProfile
-                onProfileUpdated={() => setProfileRefresh((value) => value + 1)}
+                onProfileUpdated={() => {
+                  invalidateLegalEntityReads(row.legalEntityId);
+                  setProfileRefresh((value) => value + 1);
+                }}
               />
             </TabsContent>
             <TabsContent
