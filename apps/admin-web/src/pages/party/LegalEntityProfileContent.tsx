@@ -1,10 +1,9 @@
-import type { ReactNode } from 'react';
 import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
-import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
+import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
 import {
-  ProfileReadoutAddress,
+  ProfileReadoutAddresses,
   ProfileReadoutCard,
   ProfileReadoutField,
   ProfileReadoutGrid,
@@ -40,11 +39,19 @@ export function LegalEntityProfileContent({
             label={content?.representative ? representativeLabel(content.representative.kind) : '代表人 / 负责人'}
             value={content?.representative?.name}
             emphasized
+            wide
           />
-          <ProfileReadoutField label="注册地址" value={addressOf(content?.registeredAddress)} />
-          <ProfileReadoutField label="办公地址" value={addressOf(content?.officeAddress)} />
-          <ProfileReadoutField label="通信地址" value={addressOf(content?.correspondenceAddress)} />
         </ProfileReadoutGrid>
+        {/* 注册地址是资料的必填格，没有也画一栏「—」；办公 / 通信两个可缺的地址没有就不画栏。 */}
+        <div className="mt-3">
+          <ProfileReadoutAddresses
+            items={[
+              { key: 'registered', label: '注册地址', address: content?.registeredAddress },
+              ...(content?.officeAddress ? [{ key: 'office', label: '办公地址', address: content.officeAddress }] : []),
+              ...(content?.correspondenceAddress ? [{ key: 'correspondence', label: '通信地址', address: content.correspondenceAddress }] : []),
+            ]}
+          />
+        </div>
       </ProfileReadoutCard>
       <ProfileReadoutCard icon={Receipt} title="税务与开票">
         <ProfileReadoutGrid>
@@ -171,9 +178,4 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
       </table>
     </div>
   );
-}
-
-// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家并进行末）排。
-function addressOf(address?: RegisteredAddressRecord): ReactNode {
-  return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }

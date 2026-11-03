@@ -30,6 +30,14 @@
   grid-column: 1 / -1;
 }
 
+/* 地址行（票 company-subject-ux/12 第 1 条）：窄时一地址一行纵向堆叠；够宽时每个地址一栏并排（见下面的容器查询）。
+   行与行的间距取网格的 row-gap，三栏之间取网格的 column-gap，与标签 / 值网格同一把尺。 */
+.legal-entity-readout-addresses {
+  display: grid;
+  column-gap: 2rem;
+  row-gap: 0.5rem;
+}
+
 /* 读出表（票 company-subject-ux/11 第 2 条）：行的悬停底色从表的最左缘起，首列不留内边距时字顶在底色的边上；首末两列
    各留 0.75rem，与中间列同宽。写在这里而不是逐表写 Tailwind 类，是让收款账户表与以后再加的读出表取同一处。 */
 .legal-entity-readout-table th:first-child,
@@ -63,6 +71,13 @@
 
   .legal-entity-contact-cards-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 有几个地址就几栏、等宽：按列流放进隐式列，不写死三栏——没有的地址不画栏（ProfileReadoutAddresses），
+     两个地址时各占一半，不留一栏空白。48rem 时三栏各剩 13rem 多，一行地址折一次，仍比两列网格里挤着的好读。 */
+  .legal-entity-readout-addresses {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
   }
 }
 

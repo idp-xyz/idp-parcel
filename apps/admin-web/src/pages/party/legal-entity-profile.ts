@@ -467,9 +467,18 @@ function addressPayload(country: string, lines: string): RegisteredAddressRecord
   return value.country || value.lines.length ? value : undefined;
 }
 
-/** 没有地址显「—」（spec「统一用语」的空值规则）：空值不是结论句，不配一句话。 */
+/** 没有地址显「—」（spec「统一用语」的空值规则）：空值不是结论句，不配一句话。只给 title 与对比用；读出按行走 addressLinesOf。 */
 export function addressText(address?: RegisteredAddressRecord): string {
   return address ? [address.country, ...address.lines].filter(Boolean).join(' · ') : '—';
+}
+
+/**
+ * 读出里逐行显示的地址行：地址按行录入（addressPayload 按换行拆），就按行显，不再用「 · 」串成一段——串起来的一段折到
+ * 两三行后，眼睛得在点和括号里找断句。空行与首尾空白剔掉（录入时裁过，旧数据与批量导入的未必）。国家不在这里：
+ * 它经基础数据译名（CountryLabel 是 React 件）、由读出件另作末行。
+ */
+export function addressLinesOf(address: RegisteredAddressRecord): string[] {
+  return address.lines.map((line) => line.trim()).filter((line) => line !== '');
 }
 
 export function legalEntityContactCountOf(resolution: LegalEntityProfileResolutionResponseBody | undefined): number | undefined {

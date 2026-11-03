@@ -3,6 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { LegalEntityProfileRevisionRecord, RegistrationNumberTypeRecord } from './api';
 import { compareLegalEntityProfiles } from './legal-entity-profile-history';
 import {
+  addressLinesOf,
   addressText,
   bankAccountCurrencyOptions,
   emptyLegalEntityProfileDraft,
@@ -224,6 +225,12 @@ test('修订号建议', () => {
 test('地址转写：没有即「—」', () => {
   equal(addressText(undefined), '—');
   equal(addressText({ country: 'CN', lines: ['SYN 一行', 'SYN 二行'] }), 'CN · SYN 一行 · SYN 二行');
+});
+
+// Covers（票 company-subject-ux/12 第 1 条）：读出按录入的行显，空行与首尾空白剔掉、次序不动；国家不混进行里。
+test('读出的地址行：照录入次序、剔空行与空白、不含国家', () => {
+  deepEqual(addressLinesOf({ country: 'CN', lines: [' SYN 一行 ', '', '  ', 'SYN 二行'] }), ['SYN 一行', 'SYN 二行']);
+  deepEqual(addressLinesOf({ country: 'CN', lines: [] }), []);
 });
 
 test('资料状态按当前查询结果区分未登记资料、资料不全与可开票，词照统一用语', () => {
