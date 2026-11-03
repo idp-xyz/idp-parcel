@@ -17,6 +17,9 @@ import (
 // 本文件在真渠道真库上证票 tf-face-algebra/01：零时刻之后不足一微秒的业务时间、含 NUL 的引用都答 200 `未受理`
 // 而不是写进去读不回或 500，库零行。装载分配走生产端点构造、生产准入桥与 buildSegmentOperations；移动事实、派送尝试走
 // WorkFactCommandIntake 与生产编排。NUL 在 JSON 里写作 \u0000，解码后进命令的是真 NUL。测试输入是隔离合成，只记 `S`。
+//
+// 这几条用例端点直挂、不经登记处，证的是构造门本身对 NUL 的那一格；生产路由上请求体检查（`request_body_guard.go`）
+// 先拦下含 NUL 的请求体答 400，到不了这里。
 
 var channelRegistryZero = map[string]string{
 	"零点后 1ns":            "0001-01-01T00:00:00.000000001Z",
@@ -41,7 +44,7 @@ func notAcceptedOnTheChannel(t *testing.T, name, want string, response *httptest
 	}
 }
 
-// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——装载分配零点格与版本、成员含 NUL 答 200 INPUT_NOT_ACCEPTED，
+// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——装载分配零点格与版本、成员含 NUL 答 200 INPUT_NOT_ACCEPTED（端点直挂），
 // 版本行与成员行零行；零点后一微秒照常形成，原样重放答已在册。
 func TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel(t *testing.T) {
 	fixture := newChainFaceFixture(t)
@@ -75,7 +78,7 @@ func TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel(t *t
 	}
 }
 
-// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——移动事实零点格与地点含 NUL 答 200 INPUT_NOT_ACCEPTED，事实行零行。
+// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——移动事实零点格与地点含 NUL 答 200 INPUT_NOT_ACCEPTED（端点直挂），事实行零行。
 func TestMovementFactUnstorableValuesAreNotAcceptedOnTheProductionChannel(t *testing.T) {
 	pool, _, endpoint := sameIdentityProductionEndpoint(t)
 	post := func(body string) *httptest.ResponseRecorder {
@@ -96,7 +99,7 @@ func TestMovementFactUnstorableValuesAreNotAcceptedOnTheProductionChannel(t *tes
 	}
 }
 
-// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——任务在册时派送尝试证据含 NUL 答 200 SOURCE_NOT_ACCEPTED，尝试行与结果行零行。
+// Covers: 票 tf-face-algebra/01 完成判据「HTTP 真渠道回归」——任务在册时派送尝试证据含 NUL 答 200 SOURCE_NOT_ACCEPTED（端点直挂），尝试行与结果行零行。
 func TestDeliveryAttemptEvidenceWithNULIsNotAcceptedOnTheProductionChannel(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
