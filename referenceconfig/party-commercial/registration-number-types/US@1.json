@@ -1,0 +1,20 @@
+{
+  "identifier": "party-commercial/registration-number-types/US",
+  "version": 1,
+  "title": "美国：雇主识别号 EIN（资料层）；公开编码格式",
+  "source": "EIN：美国国税局（IRS）发给的 9 位数字联邦税号，书写形态为 XX-XXXXXXX",
+  "note": "只随附资料层：州注册号由各州分别发放、无统一公开格式，不猜（ADR-0359 决定二），因此本份没有身份层类型，美国法人的终身注册号类型由租户按所在州登记。样例为合成值，IRS 不发放 00 前缀，不指向任何真实主体；首版随附哪些国家与地区、是否带校验位算法待定（ADR-0146 越权风险点 5）",
+  "types": [
+    {
+      "countryCode": "US",
+      "typeCode": "EIN",
+      "name": "雇主识别号（EIN）",
+      "layer": "PROFILE",
+      "format": "[0-9]{2}-[0-9]{7}",
+      "samples": [
+        "00-0000000",
+        "00-0000301"
+      ]
+    }
+  ]
+}

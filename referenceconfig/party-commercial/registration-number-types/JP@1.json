@@ -1,0 +1,29 @@
+{
+  "identifier": "party-commercial/registration-number-types/JP",
+  "version": 1,
+  "title": "日本：法人番号（身份层）与适格请求书发行事业者登记番号（资料层）；公开编码格式，不含校验数字算法",
+  "source": "法人番号：国税厅发给的 13 位数字；适格请求书发行事业者登记番号：国税厅发给的「T」加 13 位法人番号",
+  "note": "只校验编码格式，不含校验数字算法；样例为合成值，全零，不指向任何真实主体；首版随附哪些国家与地区、是否带校验位算法待定（ADR-0146 越权风险点 5）",
+  "types": [
+    {
+      "countryCode": "JP",
+      "typeCode": "CORPORATE_NO",
+      "name": "法人番号",
+      "layer": "IDENTITY",
+      "format": "[0-9]{13}",
+      "samples": [
+        "0000000000000"
+      ]
+    },
+    {
+      "countryCode": "JP",
+      "typeCode": "INVOICE_REG_NO",
+      "name": "适格请求书发行事业者登记番号",
+      "layer": "PROFILE",
+      "format": "T[0-9]{13}",
+      "samples": [
+        "T0000000000000"
+      ]
+    }
+  ]
+}

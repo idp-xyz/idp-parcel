@@ -1,0 +1,43 @@
+{
+  "identifier": "party-commercial/registration-number-types/GB",
+  "version": 1,
+  "title": "英国：公司编号（身份层）、VAT 登记号与 EORI 号（资料层）；公开编码格式",
+  "source": "公司编号：Companies House 发给的 8 位编号，纯数字或 2 位字母前缀（SC、NI、OC 等）加 6 位数字；VAT 登记号：HMRC 公布的 GB 加 9 位或 12 位数字，政府部门 GBGD 加 3 位、医疗机构 GBHA 加 3 位；EORI：HMRC 公布的 GB（北爱尔兰 XI）加 12 位数字",
+  "note": "只校验编码格式，不含校验位算法；样例为合成值，全零，不指向任何真实主体；首版随附哪些国家与地区、是否带校验位算法待定（ADR-0146 越权风险点 5）",
+  "types": [
+    {
+      "countryCode": "GB",
+      "typeCode": "COMPANY_NO",
+      "name": "公司编号（Companies House）",
+      "layer": "IDENTITY",
+      "format": "[0-9]{8}|[A-Z]{2}[0-9]{6}",
+      "samples": [
+        "00000000",
+        "SC000000"
+      ]
+    },
+    {
+      "countryCode": "GB",
+      "typeCode": "VAT",
+      "name": "VAT 登记号",
+      "layer": "PROFILE",
+      "format": "GB[0-9]{9}|GB[0-9]{12}|GBGD[0-9]{3}|GBHA[0-9]{3}",
+      "samples": [
+        "GB000000000",
+        "GB000000000000",
+        "GBGD000"
+      ]
+    },
+    {
+      "countryCode": "GB",
+      "typeCode": "EORI",
+      "name": "经济运营商注册识别号（EORI）",
+      "layer": "PROFILE",
+      "format": "(GB|XI)[0-9]{12}",
+      "samples": [
+        "GB000000000000",
+        "XI000000000000"
+      ]
+    }
+  ]
+}

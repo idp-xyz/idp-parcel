@@ -1,0 +1,32 @@
+{
+  "identifier": "party-commercial/registration-number-types/SG",
+  "version": 2,
+  "title": "新加坡：唯一实体编号 UEN（身份层）与 GST 登记号（资料层）；公开编码格式，不含校验字母算法",
+  "source": "UEN：新加坡 UEN 编码规则（uen.gov.sg 公布）三类形态；GST 登记号：IRAS 公布，ACRA 登记实体的 GST 登记号即其 UEN",
+  "note": "第 2 版在第 1 版之上增列资料层一类，第 1 版照旧可引。GST 登记号只随附 ACRA 登记实体的形态（即 UEN 形态）；非 ACRA 登记实体由 IRAS 另发的登记号形态本版未核实，不猜（ADR-0359 决定二）。只校验编码格式，不含校验字母算法；样例为合成值，序号全零，不指向任何真实主体；首版随附哪些国家与地区、是否带校验位算法待定（ADR-0146 越权风险点 5）",
+  "types": [
+    {
+      "countryCode": "SG",
+      "typeCode": "UEN",
+      "name": "唯一实体编号（UEN）",
+      "layer": "IDENTITY",
+      "format": "[0-9]{8}[A-Z]|[0-9]{9}[A-Z]|[RST][0-9]{2}[A-Z]{2}[0-9]{4}[A-Z]",
+      "samples": [
+        "00000000A",
+        "200000000A",
+        "T00LL0000A"
+      ]
+    },
+    {
+      "countryCode": "SG",
+      "typeCode": "GST_REG",
+      "name": "GST 登记号",
+      "layer": "PROFILE",
+      "format": "[0-9]{8}[A-Z]|[0-9]{9}[A-Z]|[RST][0-9]{2}[A-Z]{2}[0-9]{4}[A-Z]",
+      "samples": [
+        "00000000A",
+        "200000000A"
+      ]
+    }
+  ]
+}

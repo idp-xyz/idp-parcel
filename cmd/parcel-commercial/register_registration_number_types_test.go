@@ -231,7 +231,7 @@ func TestAnAdoptItemRefusesContentOfItsOwnAndReferencesThatDoNotResolve(t *testi
 		"另写层":        adopt(`"revision": 1,`, `"revision": 1, "layer": "IDENTITY",`),
 		"另写格式":       adopt(`"revision": 1,`, `"revision": 1, "format": "[0-9]{18}",`),
 		"另写依据":       adopt(`"revision": 1,`, `"revision": 1, "basis": "SYN-BASIS-01",`),
-		"未发布的版本":     adopt(`CN@1`, `CN@2`),
+		"未发布的版本":     adopt(`CN@1`, `CN@99`),
 		"参考配置里没有该类型": adopt(`"typeCode": "USCC"`, `"typeCode": "SYN-CN-LIFETIME"`),
 		"国家与键不符":     adopt(`"countryCode": "CN"`, `"countryCode": "SG"`),
 		"引用形状不对":     adopt(`party-commercial/registration-number-types/CN@1`, `CN@1`),
