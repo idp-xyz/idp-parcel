@@ -44,6 +44,15 @@ export function emptyIdentityDeactivationDraft(): IdentityDeactivationDraft {
   return { kind: '', id: '', revision: '', basis: '', at: '' };
 }
 
+/**
+ * 只填了种类与标识的草稿：深链预填（business-parties-address.ts 的 DeactivationPreset）与公司主体页对话框锁定对象
+ * （票 company-subject-ux/03）都从它起——前者当「没提交」的基线，后者当初始草稿。修订号、来源单据与停用时间一律留空：
+ * 那几格要停用的人自己核过再填，预填与锁定都不替人填。传 null 即空草稿。
+ */
+export function identityDeactivationDraftOf(target: { kind: IdentityKind; id: string } | null): IdentityDeactivationDraft {
+  return { ...emptyIdentityDeactivationDraft(), kind: target?.kind ?? '', id: target?.id ?? '' };
+}
+
 /** 表单认领的 JSON 路径；一项一批，下标固定 0。 */
 export const identityDeactivationFieldPaths = [
   'deactivations[0].kind',

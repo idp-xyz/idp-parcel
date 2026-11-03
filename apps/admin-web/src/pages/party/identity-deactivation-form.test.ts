@@ -5,6 +5,7 @@ import { identityKindLabels } from './presentation';
 import {
   deactivationConfirmation,
   emptyIdentityDeactivationDraft,
+  identityDeactivationDraftOf,
   identityDeactivationFieldPaths,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
@@ -199,4 +200,16 @@ test('停用确认框：手填的标识没有候选文字，只报标识', () =>
     null,
   );
   equal(confirmation.facts[1].value, 'SYN-ACCOUNT-09');
+});
+
+// Covers: 锁定 / 预填的草稿只带种类与标识，修订号、来源单据与停用时间留空；传 null 即空草稿（票 company-subject-ux/03）。
+test('identityDeactivationDraftOf 只填种类与标识', () => {
+  deepEqual(identityDeactivationDraftOf({ kind: 'LEGAL_ENTITY', id: 'SYN-LE-01' }), {
+    kind: 'LEGAL_ENTITY',
+    id: 'SYN-LE-01',
+    revision: '',
+    basis: '',
+    at: '',
+  });
+  deepEqual(identityDeactivationDraftOf(null), emptyIdentityDeactivationDraft());
 });
