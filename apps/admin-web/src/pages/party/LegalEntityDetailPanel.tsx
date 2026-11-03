@@ -28,6 +28,7 @@ import { legalEntityRevisionHistoryOf, legalEntityTechnicalRows } from './LegalE
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount } from './legal-entity-references';
+import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
 import {
   Fact,
   FactStrip,
@@ -79,7 +80,10 @@ export function LegalEntityDetailPanel({
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
-  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, `${row.revision}:${row.status}:${profileRefresh}`);
+  // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
+  const refreshKey = `${row.revision}:${row.status}:${profileRefresh}`;
+  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, refreshKey);
+  const tabCounts = useLegalEntityTabCounts(row.legalEntityId, refreshKey);
   const contactCount = legalEntityContactCountOf(
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row.legalEntityId
       ? profileQuery.answer.body
@@ -172,14 +176,19 @@ export function LegalEntityDetailPanel({
             联系人
             {contactCount !== undefined ? <TabCountBadge count={contactCount} /> : null}
           </TabsTrigger>
+          {/* 签上带数（票 company-subject-ux/09）：资料版本数、登记记录数各读一次修订链，关联数与首屏「被引用」同一份；
+              读不到就不带，不拿 0 冒充。 */}
           <TabsTrigger value="profile" className={tabTriggerClass}>
             资料版本
+            {tabCounts.profileRevisions !== undefined ? <TabCountBadge count={tabCounts.profileRevisions} /> : null}
           </TabsTrigger>
           <TabsTrigger value="history" className={tabTriggerClass}>
             登记记录
+            {tabCounts.identityRevisions !== undefined ? <TabCountBadge count={tabCounts.identityRevisions} /> : null}
           </TabsTrigger>
           <TabsTrigger value="related" className={tabTriggerClass}>
             关联
+            {referenced !== null ? <TabCountBadge count={referenced} /> : null}
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">

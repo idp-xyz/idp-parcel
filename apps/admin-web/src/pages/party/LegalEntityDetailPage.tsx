@@ -36,6 +36,7 @@ import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
+import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
 import { DetailRow, RefText, useCopyToClipboard } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
@@ -180,7 +181,11 @@ export function LegalEntityDetailPage({
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
-  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, `${row?.revision}:${row?.status}:${profileRefresh}`);
+  // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
+  const refreshKey = `${row?.revision}:${row?.status}:${profileRefresh}`;
+  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, refreshKey);
+  // 签上的计数（票 company-subject-ux/09）：模板按 count 字段摆；读不到就不给，不拿 0 冒充。
+  const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, refreshKey);
   const contactCount = legalEntityContactCountOf(
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row?.legalEntityId
       ? profileQuery.answer.body
@@ -189,6 +194,7 @@ export function LegalEntityDetailPage({
   // 两册一页只读一次：首屏「被引用」与「关联」签用同一份答案。
   const references = useLegalEntityReferences(row?.legalEntityId ?? legalEntityId);
   const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
+  const referenced = referencedCount(references.states);
   const copy = useCopyToClipboard();
   const openProfileForm = () => {
     setTab('profile-versions');
@@ -222,7 +228,7 @@ export function LegalEntityDetailPage({
           </Button>
         </>
       }
-      meta={row ? buildMeta(row, typeNameOf, copy, profileCell, referencedCount(references.states)) : []}
+      meta={row ? buildMeta(row, typeNameOf, copy, profileCell, referenced) : []}
       // 头区 meta 行已把身份事实与关键事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
       // 停用来源单据跟在停用横幅下。传空数组——分签形态下模板按有没有字段判要不要画这张卡，空的不画。
       basicFields={[]}
@@ -279,6 +285,7 @@ export function LegalEntityDetailPage({
               },
               {
                 id: 'profile-versions',
+                count: tabCounts.profileRevisions,
                 keepMounted: true,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
@@ -294,6 +301,7 @@ export function LegalEntityDetailPage({
               },
               {
                 id: 'identity-revisions',
+                count: tabCounts.identityRevisions,
                 content: (
                   <RevisionHistorySection
                     register={legalEntityRevisionHistoryOf(typeNameOf)}
@@ -304,6 +312,7 @@ export function LegalEntityDetailPage({
               },
               {
                 id: 'related',
+                count: referenced ?? undefined,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />
