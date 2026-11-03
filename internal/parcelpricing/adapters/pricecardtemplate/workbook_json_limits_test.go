@@ -323,7 +323,8 @@ func TestAProblemListUnderTheCapCarriesNoTruncationNote(t *testing.T) {
 
 // Covers: `AT-PP-046`——上限以内的最大合法形状（单表行数上限的行、总格数恰在上限）读取有界：读完整条路径（规范化、再读）耗时与
 // 堆峰值都留在一个明确的范围里。这是「再大的合法输入也不会把进程拖垮」的下界证据；峰值在本机实测约一百兆字节出头，这里放宽到
-// 三倍多，防的是量级退化，不是卡一个具体的数。
+// 三倍多，防的是量级退化，不是卡一个具体的数。耗时同一道理：本机十秒上下，CI 的共享执行器实测会到十六到十八秒，上限按同样的
+// 三倍放宽——卡在本机数值的一倍半上，CI 会把执行器的抖动报成回归。
 func TestTheLargestLegalWorkbookIsReadWithinBoundedTimeAndMemory(t *testing.T) {
 	row := `{"a001":1,"a002":1,"a003":1,"a004":1,"a005":1,"a006":1,"a007":1,"a008":1,"a009":1,"a010":1}`
 	body := []byte(workbookBody("zz", strings.Repeat(row+",", maxRowsPerSheet-1)+row))
@@ -340,7 +341,7 @@ func TestTheLargestLegalWorkbookIsReadWithinBoundedTimeAndMemory(t *testing.T) {
 		}
 		reading = templateReader.ReadPriceCardWorkbook(canonical)
 	})
-	if elapsed := time.Since(start); elapsed > 15*time.Second || peak > 400<<20 {
+	if elapsed := time.Since(start); elapsed > 45*time.Second || peak > 400<<20 {
 		t.Fatalf("最大合法形状：耗时 %v，堆峰值 %d MiB", elapsed, peak>>20)
 	}
 	if reading.Accepted && len(reading.Problems) == 1 && reading.Problems[0].Code == ports.TemplateFileTooLarge {
