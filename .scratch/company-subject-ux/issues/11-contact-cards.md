@@ -1,7 +1,7 @@
 # 11 联系人改成卡片；读出表首列内边距；两处漏改的字
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：用户 2026-11-03 看「联系人」签截图（`scratchpad/ux-le2/contacts-table-feedback.png`）问有没有更好的设计，并指出选中行文字贴着底色左边缘；协调方建议联系人用卡片，用户认可。
@@ -40,3 +40,9 @@ Blocked by: 无
 - 脚注「要改联系人，用右上方的「更新公司资料」。」✅；`更新法人资料` 全仓零命中。
 
 **未验**：暗色主题下胶囊底色与卡边；真有缺项的联系人只在 node:test 里走过，演示数据没有这种人；超长邮箱的 `break-all` 折法未实测；CI `admin-web` job 在分支上未看。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `4e4a6d977` 上 `git merge --no-ff origin/claude-csux-11`（tip `3f5ec9b08`），无冲突。三道门在 main 上退 0（tsc、run-tests 1168、vite build）。协调方看过 2000 宽对象页联系人签截图。
+- 作者请裁：对象页内容列被模板钉在 960px，卡最多两列；三列只在详情栏拖宽到 66rem 以上出现——接受，不改模板（两列对四到十位联系人已够扫，三列每列装不下一行邮箱）。
+- 没动共享面，不需评审。
