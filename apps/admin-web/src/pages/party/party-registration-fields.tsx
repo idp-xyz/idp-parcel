@@ -5,7 +5,9 @@ import {
   RegistrationPanel,
   type RegistrationPanelProps,
   type RegistrationPanelState,
+  type RegistrationResponseBody,
 } from '../../components/registration';
+import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import {
   commercialRegistrationEndpoints,
@@ -73,6 +75,7 @@ export interface RegistrationFormSpec<Draft extends RevisionedDraft> {
  * 建议值何时顶进草稿、答什么才算落地，规则在 registration-form.ts（node:test 钉着），这里只接线。
  *
  * `submit` 给 JSON 镜像区，与 `send` 打同一个端点、走同一条落地判据——两条路答落册时都要触发读签重取。
+ * `sendVia` 是 `send` 的底：要在本册之前先走别的一步（建档一体化）的表单把流程交进来，壳仍只管锁与本册的答复。
  */
 export function useRegistrationForm<Draft extends RevisionedDraft>(spec: RegistrationFormSpec<Draft>) {
   const [draft, setDraft] = useState<Draft>(spec.empty);
@@ -101,13 +104,20 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
       return answer;
     });
 
-  const send = () => {
+  /**
+   * 把一段表单自定的提交流程交给壳跑：壳只管上锁、把流程交回的本册答复示出来。流程里落本册用交进去的 `submit`
+   * （与 JSON 镜像同一个，落地判据与读签重取不分叉）；流程交回 null 即本册这一步没发——锁解开、答复区回到空，前一步
+   * 的答复不是本册的答复，由表单自己示。建档一体化（先登记往来单位再登记法人）用它编排两步，壳不知道前一步是什么。
+   */
+  const sendVia = (
+    flow: (sending: Draft, submitDraft: typeof submit) => Promise<ApiResult<RegistrationResponseBody> | null>,
+  ) => {
     if (!canSend) return;
     setState({ kind: 'submitting' });
-    void submit(spec.payloadOf(effectiveDraft, timeZone), effectiveDraft).then((answer) =>
-      setState({ kind: 'answered', answer }),
-    );
+    void flow(effectiveDraft, submit).then((answer) => setState(answer === null ? { kind: 'idle' } : { kind: 'answered', answer }));
   };
+
+  const send = () => sendVia((sending, submitDraft) => submitDraft(spec.payloadOf(sending, timeZone), sending));
 
   /** RevisionField 要的那几件，表单只需再给路径、问题表与格下那句。 */
   const revisionField = {
@@ -135,6 +145,7 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
     timeZone,
     submit,
     send,
+    sendVia,
     revisionField,
     unsaved,
     landedKey,

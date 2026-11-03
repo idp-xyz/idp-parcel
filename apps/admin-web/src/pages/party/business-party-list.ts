@@ -7,11 +7,14 @@
 //
 // 「类型」一列不是册上的字段：参与方是客户还是承运商，由它在关系册上持有的角色说（CONTEXT：角色由关系表达，身份本体不带
 // 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表与筛选按它称呼；一个角色都没有的叫「往来单位」。
+// 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
+// 按法人册算出参与方标识集合，类型列与筛选按它称呼，与角色并列显示。
 
 import type { WorkbenchSort } from '../../templates/workbench';
-import type { BusinessPartyRecord, PartyRelationshipRecord } from './api';
+import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   identityStatusLabels,
+  labelOf,
   partyRoleLabels,
   partyTypeFallbackLabel,
   partyTypeLabel,
@@ -23,8 +26,8 @@ import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
 
-/** 类型筛选：全部、某个角色，或 NONE——一个角色都没有的「往来单位」。 */
-export type BusinessPartyTypeFilter = CodeFilter<PartyRoleCode> | 'NONE';
+/** 类型筛选：全部、某个角色、OURS——法人册上钉着的「我方公司」，或 NONE——既不是我方公司、一个角色也没有的「往来单位」。 */
+export type BusinessPartyTypeFilter = CodeFilter<PartyRoleCode> | 'NONE' | 'OURS';
 
 export interface BusinessPartyFilter {
   search: string;
@@ -67,6 +70,36 @@ export function rolesOfParty(index: PartyRoleIndex, partyId: string): readonly P
   return index.get(partyId) ?? [];
 }
 
+/** 法人册上钉着责任法人的参与方标识集合；法人册没取到即空集，所有行都不按「我方公司」显。 */
+export type OurCompanyIndex = ReadonlySet<string>;
+
+export const emptyOurCompanyIndex: OurCompanyIndex = new Set();
+
+// 在用的两格才算「钉着」：已停用的法人不再是我们签约、开票用的公司，与角色只数在用关系同一条判据；待生效的算——它是登记好、
+// 等着用的公司，列表上该让人看见它是我方的。
+const ourCompanyBearingStatuses = new Set(['REGISTERED', 'EFFECTIVE']);
+
+/**
+ * 按法人册算哪些参与方是我方公司。法人钉的参与方就是行上的 partyId，不管名称转写到没到——转写不到是写入门失败的悬空，
+ * 那一行仍钉着这个标识。法人册没取到传 null，集合为空。
+ */
+export function ourCompanyPartyIds(entities: readonly GroupLegalEntityRecord[] | null): OurCompanyIndex {
+  if (entities === null) return emptyOurCompanyIndex;
+  return new Set(entities.filter((row) => ourCompanyBearingStatuses.has(row.status)).map((row) => row.partyId));
+}
+
+/** 「我方公司」在类型列与筛选里的词；只在这一处。 */
+export const ourCompanyLabel = '我方公司';
+
+/**
+ * 类型列的文字：我方公司排在它持有的角色前面（一家我方公司也可以在关系册上对别人担任客户），不是我方公司就照角色称呼，
+ * 一个角色都没有的叫「往来单位」（partyTypeLabel）。
+ */
+export function businessPartyTypeLabel(ours: boolean, roles: readonly string[]): string {
+  if (!ours) return partyTypeLabel(roles);
+  return [ourCompanyLabel, ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' / ');
+}
+
 /** 表头可排的四列。 */
 export type BusinessPartySortKey = 'party' | 'party-name' | 'effective-from' | 'registered-at';
 
@@ -75,25 +108,28 @@ export const defaultBusinessPartySort: WorkbenchSort = { key: 'registered-at', d
 
 /**
  * 搜索是包含匹配、不分大小写，命中参与方标识 / 名称 / 状态原名与中文 / 类型中文任一格；类型筛选精确到角色码，
- * NONE 只留一个角色都没有的。
+ * OURS 只留我方公司，NONE 只留既不是我方公司、一个角色也没有的。
  */
 export function filterBusinessParties(
   rows: readonly BusinessPartyRecord[],
   filter: BusinessPartyFilter,
   roles: PartyRoleIndex = emptyPartyRoleIndex,
+  ours: OurCompanyIndex = emptyOurCompanyIndex,
 ): BusinessPartyRecord[] {
   const type = filter.type ?? 'ALL';
   return rows.filter((row) => {
     if (filter.status !== 'ALL' && row.status !== filter.status) return false;
     const held = rolesOfParty(roles, row.partyId);
-    if (type === 'NONE' && held.length > 0) return false;
-    if (type !== 'ALL' && type !== 'NONE' && !held.includes(type)) return false;
+    const isOurs = ours.has(row.partyId);
+    if (type === 'OURS' && !isOurs) return false;
+    if (type === 'NONE' && (held.length > 0 || isOurs)) return false;
+    if (type !== 'ALL' && type !== 'NONE' && type !== 'OURS' && !held.includes(type)) return false;
     return matchesSearch(filter.search, [
       row.partyId,
       row.partyName,
       row.status,
       identityStatusLabels[row.status as IdentityStatusCode] ?? '',
-      partyTypeLabel(held),
+      businessPartyTypeLabel(isOurs, held),
     ]);
   });
 }
@@ -103,7 +139,9 @@ export interface BusinessPartyCounts {
   byStatus: Record<IdentityStatusCode, number>;
   /** 持有每个角色的参与方数；一个参与方持有两个角色时两格各记一次。 */
   byRole: Record<PartyRoleCode, number>;
-  /** 一个角色都没有的（「往来单位」）。 */
+  /** 法人册上钉着的「我方公司」数；同时持有角色的也各记一次。 */
+  ours: number;
+  /** 既不是我方公司、一个角色都没有的（「往来单位」）。 */
   withoutRole: number;
 }
 
@@ -114,24 +152,28 @@ export interface BusinessPartyCounts {
 export function countBusinessParties(
   rows: readonly BusinessPartyRecord[],
   roles: PartyRoleIndex = emptyPartyRoleIndex,
+  ours: OurCompanyIndex = emptyOurCompanyIndex,
 ): BusinessPartyCounts {
   const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
   const byRole = Object.fromEntries(Object.keys(partyRoleLabels).map((role) => [role, 0])) as Record<PartyRoleCode, number>;
+  let oursCount = 0;
   let withoutRole = 0;
   for (const row of rows) {
     if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
     const held = rolesOfParty(roles, row.partyId);
-    if (held.length === 0) withoutRole += 1;
+    const isOurs = ours.has(row.partyId);
+    if (isOurs) oursCount += 1;
+    if (held.length === 0 && !isOurs) withoutRole += 1;
     for (const role of held) byRole[role] += 1;
   }
-  return { total: rows.length, byStatus, byRole, withoutRole };
+  return { total: rows.length, byStatus, byRole, ours: oursCount, withoutRole };
 }
 
-/** 类型下拉的选项：全部、词表里每个角色、往来单位。 */
-export const businessPartyTypeFilterOptions: readonly { value: BusinessPartyTypeFilter; label: string }[] = [
-  ...codeFilterOptions(partyRoleLabels, '全部类型'),
-  { value: 'NONE', label: partyTypeFallbackLabel },
-];
+/** 类型下拉的选项：全部、我方公司、词表里每个角色、往来单位。我方公司排在角色前面，与类型列里的次序一样。 */
+export const businessPartyTypeFilterOptions: readonly { value: BusinessPartyTypeFilter; label: string }[] = (() => {
+  const [all, ...roles] = codeFilterOptions(partyRoleLabels, '全部类型');
+  return [all, { value: 'OURS', label: ourCompanyLabel }, ...roles, { value: 'NONE', label: partyTypeFallbackLabel }];
+})();
 
 /**
  * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。页面态里的空态说的是「登记册为空」，
