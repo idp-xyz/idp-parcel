@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
-import { deactivationLinkHash } from './business-parties-address';
+import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
 import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote } from './presentation';
 import {
   legalEntityLifecycle,
@@ -127,51 +128,63 @@ export function LegalEntityBanners({ row }: { row: GroupLegalEntityRecord }) {
 }
 
 /**
- * 「更多」菜单。动作只摆本产品真有的：停用照页头注释的分工留在业务参与方页，去那一页时把参与方标识放进地址的 `?q=`，
- * 身份册挂载时已经筛到这一行。「在新标签打开对象页」只在详情栏里有——对象页自己就是那张标签。
+ * 「更多」菜单。动作只摆本产品真有的：停用开本页的对话框（LegalEntityDeactivationDialog，票 company-subject-ux/03），
+ * 不再把人送去往来单位页——那一页的停用表单照旧是业务参与方与客户账户的停用入口。「在新标签打开对象页」只在详情栏里有
+ * ——对象页自己就是那张标签。
+ *
+ * 对话框的开关由菜单自己记：对象页与详情栏各摆一份菜单，两处都要同一个对话框，记在这里就不用两边各写一遍。
  */
 export function LegalEntityMoreMenu({
   row,
   onOpenObjectPage,
+  onChanged,
 }: {
   row: GroupLegalEntityRecord;
   onOpenObjectPage?: () => void;
+  /** 停用落册后回调；页面借它重取法人册让「已停用」立刻可见（对象页是 retry，详情栏经列表页传进来）。 */
+  onChanged?: () => void;
 }) {
   const copy = useCopyToClipboard();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
+  const [deactivating, setDeactivating] = useState(false);
   return (
-    <DropdownMenu
-      align="right"
-      trigger={
-        <Button variant="outline" size="sm" className="px-2 text-idpxyz-breadcrumb" aria-label="更多动作">
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      }
-    >
-      {onOpenObjectPage ? (
-        <MenuItem onSelect={onOpenObjectPage}>
-          <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          在新标签打开对象页
+    <>
+      <DropdownMenu
+        align="right"
+        trigger={
+          <Button variant="outline" size="sm" className="px-2 text-idpxyz-breadcrumb" aria-label="更多动作">
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        }
+      >
+        {onOpenObjectPage ? (
+          <MenuItem onSelect={onOpenObjectPage}>
+            <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            在新标签打开对象页
+          </MenuItem>
+        ) : null}
+        <MenuItem onSelect={() => copy('编码', row.legalEntityId)}>
+          <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+          复制编码
         </MenuItem>
-      ) : null}
-      <MenuItem onSelect={() => copy('法人标识', row.legalEntityId)}>
-        <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        复制编码
-      </MenuItem>
-      {mayWrite ? <MenuSeparator /> : null}
-      {/* 法人的停用表单在业务参与方页「登记 › 身份停用」（一个命令带种类）；深链预填种类与这个法人的标识，
-          菜单上点名的是法人本身，不是它所钉的业务参与方——后者是另一个身份，停错了收不回。 */}
+        {mayWrite ? <MenuSeparator /> : null}
+        {/* 菜单上点名的是这家公司本身，不是它所钉的业务参与方——后者是另一个身份，停错了收不回；对话框把种类与对象锁死。 */}
+        {mayWrite ? (
+          <MenuItem onSelect={() => setDeactivating(true)}>
+            <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            停用这个公司主体…
+          </MenuItem>
+        ) : null}
+      </DropdownMenu>
       {mayWrite ? (
-        <MenuItem
-          onSelect={() => {
-            window.location.hash = deactivationLinkHash({ kind: 'LEGAL_ENTITY', id: row.legalEntityId });
-          }}
-        >
-          <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          停用这个公司主体…
-        </MenuItem>
+        <LegalEntityDeactivationDialog
+          row={row}
+          open={deactivating}
+          onOpenChange={setDeactivating}
+          onDeactivated={() => onChanged?.()}
+        />
       ) : null}
-    </DropdownMenu>
+    </>
   );
 }
