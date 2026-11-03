@@ -1,7 +1,7 @@
 # 04 公司资料表单：默认基于当前版本、保存前差异预览、未保存保护、缺项提示、税务登记号类型从目录选、币种指引
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：评估「三、交互与任务流」前五条、「四、国际小包视角」税务与币种两条。
@@ -76,3 +76,9 @@ Blocked by: 无
 - 同一国同一码两层都登时 `registrationNumberTypeNamesOf` 取身份层的名（它的既定规则），税务登记号会跟着显身份层的名；演示库没有这种码。
 - 页头按钮仍叫「更新法人资料」（`LegalEntityDetailPage.tsx` / `LegalEntityDetailPanel.tsx`，票 03）。
 - `profileMaintenanceNotes` 的提示句（「法定代表人 / 登记负责人未配置」等）未改措辞：是结论句，不在空值规则内。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `53a0cc3e0` 上 `git merge --no-ff origin/claude-csux-04`（tip `7bfd31ad5`），无冲突；合并提交 `65b578bc2`。三道门在 main 上退 0（tsc、run-tests 1148、vite build）。
+- 作者请裁：① 版本历史对比表与快照的类型码译名——归票 06（`typeNameOf` 已备好）；② 页头按钮「更新法人资料」归票 03；③ 目录同国同码两层都登时查法取身份层名——票 06 把查法按层分键；④ 真发送路径按票面只到预览，接受。
+- 共享面：没动 `templates/*`、`shell/*`、`components/*`，不需评审。

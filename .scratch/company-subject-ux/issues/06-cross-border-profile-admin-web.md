@@ -11,7 +11,8 @@ Blocked by: [04](./04-profile-form.md)、[05](./05-cross-border-profile-extensio
 1. **监管登记号**：票 04 做好的「税务登记号类型从目录选」改名「监管登记号（税务 / 海关）」，候选仍取目录资料层；说明一句按票 05 决定 1。读出、差异预览、技术详情同改词。
 2. **收款账户**：公司资料表单加「收款账户」组（多条：用途标签、户名、开户行、账号 / IBAN、SWIFT / BIC、开户行地址、币种、备注；币种从基础数据币种目录选，没有目录就手填 ISO 4217 并提示）；读出页「税务与开票」下加「收款账户」表（按币种分行）；差异预览与版本对比（`legal-entity-profile-history.ts` 的 `compareLegalEntityProfiles`）识别账户的新增 / 修改 / 移除；资料维护提示：有生效开票抬头却没有收款账户时提示「对账单与发票上印不出收款账户」。
 3. **多语言抬头**：「开票抬头」格旁加「其他语言的抬头」多行（语言标签从一小组常用值选：zh-Hans、zh-Hant、en、ja；可手填 BCP 47）；读出页显示主抬头 + 其他语言；差异预览识别。
-4. 用语照 spec「统一用语」表；纯函数钉 node:test；三道门；浏览器核验（只读）。
+4. **译名收尾**（票 01 / 04 留下的）：版本历史对比表与快照（`LegalEntityProfileHistory.tsx`）把类型码经 `typeNameOf` 译名；`legal-entity-identity.ts` 的 `registrationNumberTypeNamesOf` 查法按层分键（同国同码两层都登时不再取身份层名顶资料层）。
+5. 用语照 spec「统一用语」表；纯函数钉 node:test；三道门；浏览器核验（只读）。
 
 ## 不做
 
