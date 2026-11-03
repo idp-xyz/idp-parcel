@@ -32,7 +32,7 @@ test('文本类：文字在按钮外照常可选，末尾的图标按钮只叫�
       children: ['SYN 一行', createElement('br', { key: 'br' }), 'SYN 二行'],
     }),
   );
-  match(html, /^<span class="group\/copy">SYN 一行<br\/>SYN 二行<button type="button" aria-label="复制注册地址" title="复制注册地址"/);
+  match(html, /^<span class="group\/copy inline-block max-w-full align-top">SYN 一行<br\/>SYN 二行<button type="button" aria-label="复制注册地址" title="复制注册地址"/);
   match(html, /group-hover\/copy:opacity-100[^>]*><svg[^>]*lucide-copy/);
   equal(html.includes('SYN 一行\nSYN 二行'), false);
   match(html, /<span role="status" class="sr-only"><\/span><\/span>$/);

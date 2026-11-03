@@ -91,6 +91,17 @@ function CopyNote({ note }: { note: string | null }) {
 const copyIconClass = 'h-3.5 w-3.5';
 
 /**
+ * 复制图标随悬停显出的样子：显出前等 150ms、淡入淡出 150ms，离开立刻开始淡出。一页几十个可复制的值，鼠标划过时
+ * 每经过一个就闪一下图标——用户 2026-11-03 指出「一直闪烁」；停留不到 150ms 的划过不显，停下来才显。
+ * Tailwind 要见到完整类名才生成，所以两个组名各写一份字面量，不拼接。
+ */
+function hoverRevealClass(group: 'ref' | 'copy'): string {
+  return group === 'ref'
+    ? 'opacity-0 transition-opacity duration-150 group-hover/ref:opacity-100 group-hover/ref:delay-150 group-focus-visible/ref:opacity-100 group-focus-visible/ref:delay-0'
+    : 'opacity-0 transition-opacity duration-150 group-hover/copy:opacity-100 group-hover/copy:delay-150 focus-visible:opacity-100 focus-visible:delay-0';
+}
+
+/**
  * 号码类的值（编码、注册号、监管登记号、账号、SWIFT、来源单据、电话、邮箱、社交账号）：等宽，整个值是按钮，点击即复制；
  * 悬停时值末尾出一枚 14px 复制图标、title 给「点击复制」；Tab 到、Enter / 空格复制是 button 自带的。
  * 读屏名「复制<名> <值>」：名说清复制的是什么，值跟在后面——按钮的内容就是值本身，aria-label 一盖，值就不再被读到。
@@ -109,13 +120,13 @@ export function RefText({ value, name, className }: { value: string; name: strin
         event.stopPropagation();
         copy(value);
       }}
-      className={`group/ref max-w-full rounded text-left font-mono text-inherit hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${className ?? ''}`.trim()}
+      className={`group/ref max-w-full rounded text-left font-mono text-inherit transition-colors duration-150 hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${className ?? ''}`.trim()}
     >
       <span className="[overflow-wrap:anywhere]">{value}</span>
       {note === null ? (
         <Copy
           aria-hidden="true"
-          className={`ml-1 inline-block ${copyIconClass} align-[-2px] text-idpxyz-breadcrumb opacity-0 group-hover/ref:opacity-100 group-focus-visible/ref:opacity-100`}
+          className={`ml-1 inline-block ${copyIconClass} align-[-2px] text-idpxyz-breadcrumb ${hoverRevealClass('ref')}`}
         />
       ) : null}
       <CopyNote note={note} />
@@ -141,8 +152,11 @@ export function CopyAside({
   className?: string;
 }) {
   const { note, copy } = useCopyNote();
+  // 悬停区是值的整块矩形（inline-block），不是逐个字形：多行地址的行间空隙、末字到图标之间的空隙都还在区里，鼠标从文字
+  // 挪向图标的路上图标不会消失（用户 2026-11-03 指出「点中这个图标很麻烦」）。按钮四周各垫 4px、负外边距抵回，可点
+  // 范围 22px 而版面不变。
   return (
-    <span className={`group/copy ${className ?? ''}`.trim()}>
+    <span className={`group/copy inline-block max-w-full align-top ${className ?? ''}`.trim()}>
       {children}
       <button
         type="button"
@@ -152,7 +166,7 @@ export function CopyAside({
           event.stopPropagation();
           copy(value);
         }}
-        className={`ml-1 inline-block ${copyIconClass} rounded align-[-2px] text-idpxyz-breadcrumb opacity-0 hover:text-idpxyz-accent focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent group-hover/copy:opacity-100`}
+        className={`-my-1 ml-0.5 inline-flex rounded p-1 align-[-6px] text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${hoverRevealClass('copy')}`}
       >
         <Copy aria-hidden="true" className={copyIconClass} />
       </button>
