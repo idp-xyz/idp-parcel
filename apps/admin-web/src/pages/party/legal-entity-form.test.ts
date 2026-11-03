@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
+import type { ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 import type { GroupLegalEntityRecord, RegistrationNumberTypeRecord } from './api';
 import {
+  companionPartyDraftOf,
+  companionPartyIdOf,
+  effectivePartyIdOf,
   emptyLegalEntityDraft,
   identityCountryOptions,
   identityTypeOptions,
@@ -9,7 +14,11 @@ import {
   legalEntityFieldPaths,
   legalEntityLocalProblems,
   legalEntityPayloadOf,
+  pairedSavePlan,
+  partyStepLanded,
+  runPairedSave,
   suggestedRevision,
+  withCompanionRegistered,
   type LegalEntityDraft,
 } from './legal-entity-form';
 
@@ -17,12 +26,15 @@ import {
 // RFC 3339、可缺键缺席；空串、引用在不在册、修订连不连续，一律原样送上去让服务端答。载荷镜像受控 CLI
 // register-parties 的 legalEntities 一项且**不带 tenantId**——在线 Intake 从认证结果取租户，载荷里带上
 // 就是自报（register_party_identity.go 包注释）。
+// 建档一体化那一族（票 company-subject-ux/02）钉的是两步串行的次序与停止条件，不钉任何一步答复的领域含义。
 
+// 基线选的是已有档案：法人钉的参与方就是 partyId 那一格，与建档一体化之前的载荷同形。一并登记的用例各自改 partyMode。
 function draft(over: Partial<LegalEntityDraft>): LegalEntityDraft {
   return {
     ...emptyLegalEntityDraft(),
     legalEntityId: 'SYN-LE-02',
     partyId: 'SYN-PARTY-SHIPPER-01',
+    partyMode: 'existing',
     revision: '1',
     basis: 'SYN-REG-BASIS-LE-02',
     effectiveFrom: '2026-01-02T08:00',
@@ -235,4 +247,129 @@ test('未提交草稿：空与空白不算，落册后未改不算', () => {
   const filled = { ...empty, legalEntityId: 'LE-01', basis: 'B-1' };
   equal(legalEntityDraftUnsaved(filled, { ...filled, revision: '1' }), false);
   equal(legalEntityDraftUnsaved({ ...filled, basis: 'B-2' }, { ...filled, revision: '1' }), true);
+});
+
+// ——建档一体化（票 company-subject-ux/02）——
+
+function outcome(name: string): ApiResult<RegistrationResponseBody> {
+  return { kind: 'outcome', status: 200, body: { outcome: name } };
+}
+
+const together = (over: Partial<LegalEntityDraft> = {}): LegalEntityDraft =>
+  draft({ partyMode: 'together', partyId: '', partyName: ' 合成新公司（演示） ', ...over });
+
+// Covers: 一并登记时往来单位编码缺省取公司主体编码、手填了就用手填的，两头都裁空白；法人载荷钉的就是这个编码，选已有档案时
+// 钉的是选中的那个。第一步落册后钉住登记成的编码，再改公司主体编码也不跟着变。
+test('一并登记：往来单位编码缺省取公司主体编码，落册后钉住', () => {
+  equal(companionPartyIdOf(together({ legalEntityId: ' SYN-LE-NEW ' })), 'SYN-LE-NEW');
+  equal(companionPartyIdOf(together({ companionPartyId: ' SYN-PARTY-NEW ' })), 'SYN-PARTY-NEW');
+  equal(companionPartyIdOf(together({ companionPartyId: '   ' })), 'SYN-LE-02');
+
+  equal(effectivePartyIdOf(together()), 'SYN-LE-02');
+  equal(legalEntityPayloadOf(together(), 'UTC').legalEntities[0].partyId, 'SYN-LE-02');
+  equal(effectivePartyIdOf(draft({})), 'SYN-PARTY-SHIPPER-01');
+
+  const pinned = withCompanionRegistered(together(), 'SYN-LE-02');
+  equal(effectivePartyIdOf({ ...pinned, legalEntityId: 'SYN-LE-03' }), 'SYN-LE-02');
+  equal(legalEntityPayloadOf({ ...pinned, legalEntityId: 'SYN-LE-03' }, 'UTC').legalEntities[0].legalEntityId, 'SYN-LE-03');
+});
+
+// Covers: 往来单位那一步的草稿——名称裁空白、来源单据与生效时间共用法人这一笔的、修订号固定 1（首笔，不替服务端算下一修订）。
+test('一并登记：往来单位草稿借法人的来源单据与生效时间，修订号为 1', () => {
+  deepEqual(companionPartyDraftOf(together()), {
+    partyId: 'SYN-LE-02',
+    name: '合成新公司（演示）',
+    revision: '1',
+    basis: 'SYN-REG-BASIS-LE-02',
+    effectiveFrom: '2026-01-02T08:00',
+  });
+});
+
+// Covers: 要不要先发第一步——一并登记且没落过才发；选已有档案不发；第一步落过不再发。
+test('保存计划：只有一并登记且未落册才发往来单位那一步', () => {
+  deepEqual(pairedSavePlan(together()), { party: true });
+  deepEqual(pairedSavePlan(draft({})), { party: false });
+  deepEqual(pairedSavePlan(withCompanionRegistered(together(), 'SYN-LE-02')), { party: false });
+});
+
+// Covers: 第一步算落了的只有 REGISTERED 与 ALREADY_REGISTERED 两格线上名；别的答案、403、没到达都不算。
+test('第一步落册判据：已登记与已在册算，其余不算', () => {
+  equal(partyStepLanded(outcome('REGISTERED')), true);
+  equal(partyStepLanded(outcome('ALREADY_REGISTERED')), true);
+  equal(partyStepLanded(outcome('CONTENT_CONFLICT')), false);
+  equal(partyStepLanded(outcome('NOT_ACCEPTED')), false);
+  equal(partyStepLanded({ kind: 'unconfigured', status: 403 } as ApiResult<RegistrationResponseBody>), false);
+  equal(partyStepLanded({ kind: 'transport', message: 'offline' }), false);
+});
+
+// 记下每次发送的次序与内容的假发送器：第一步答 partyAnswers 里依次取，第二步答 entityAnswer。
+function senders(partyAnswers: ApiResult<RegistrationResponseBody>[], entityAnswer: ApiResult<RegistrationResponseBody>) {
+  const log: string[] = [];
+  return {
+    log,
+    send: {
+      party: async (companion: { partyId: string; name: string }) => {
+        log.push(`party ${companion.partyId} ${companion.name}`);
+        return partyAnswers.shift() ?? outcome('REGISTERED');
+      },
+      entity: async (sending: LegalEntityDraft) => {
+        log.push(`entity ${sending.legalEntityId} -> ${effectivePartyIdOf(sending)}`);
+        return entityAnswer;
+      },
+    },
+  };
+}
+
+// Covers: 两步都成——先往来单位后法人，法人钉的是刚登记成的编码；两份答复各自原样交回，草稿钉上编码。
+test('两步串行：先往来单位、后法人，两步都成', async () => {
+  const { log, send } = senders([outcome('REGISTERED')], outcome('REGISTERED'));
+  const result = await runPairedSave(together(), send);
+  deepEqual(log, ['party SYN-LE-02 合成新公司（演示）', 'entity SYN-LE-02 -> SYN-LE-02']);
+  deepEqual(result.party, outcome('REGISTERED'));
+  deepEqual(result.entity, outcome('REGISTERED'));
+  equal(result.draft.companionRegisteredPartyId, 'SYN-LE-02');
+});
+
+// Covers: 第一步失败——答复原样交回，第二步不发，草稿不钉编码（下次保存仍从第一步起）。
+test('两步串行：第一步失败则第二步不发', async () => {
+  const { log, send } = senders([outcome('CONTENT_CONFLICT')], outcome('REGISTERED'));
+  const result = await runPairedSave(together(), send);
+  deepEqual(log, ['party SYN-LE-02 合成新公司（演示）']);
+  deepEqual(result.party, outcome('CONTENT_CONFLICT'));
+  equal(result.entity, null);
+  equal(result.draft.companionRegisteredPartyId, '');
+  deepEqual(pairedSavePlan(result.draft), { party: true });
+});
+
+// Covers: 第一步成、第二步失败——草稿钉上编码；拿这份草稿再保存一轮，只发第二步、不再发第一步，法人仍钉原编码。
+test('两步串行：第二步失败后再保存只重发第二步', async () => {
+  const first = senders([outcome('REGISTERED')], outcome('NOT_ACCEPTED'));
+  const failed = await runPairedSave(together(), first.send);
+  deepEqual(first.log, ['party SYN-LE-02 合成新公司（演示）', 'entity SYN-LE-02 -> SYN-LE-02']);
+  deepEqual(failed.entity, outcome('NOT_ACCEPTED'));
+  equal(failed.draft.companionRegisteredPartyId, 'SYN-LE-02');
+
+  // 操作者改了法人那边的格（这里改公司主体编码）再保存：只发第二步，钉的还是登记成的往来单位。
+  const retry = senders([outcome('CONTENT_CONFLICT')], outcome('REGISTERED'));
+  const landed = await runPairedSave({ ...failed.draft, legalEntityId: 'SYN-LE-02B' }, retry.send);
+  deepEqual(retry.log, ['entity SYN-LE-02B -> SYN-LE-02']);
+  equal(landed.party, null);
+  deepEqual(landed.entity, outcome('REGISTERED'));
+});
+
+// Covers: 往来单位「已在册」（ALREADY_REGISTERED）视为第一步成功——第二步照发。
+test('两步串行：往来单位已在册视为第一步成功', async () => {
+  const { log, send } = senders([outcome('ALREADY_REGISTERED')], outcome('REGISTERED'));
+  const result = await runPairedSave(together(), send);
+  deepEqual(log, ['party SYN-LE-02 合成新公司（演示）', 'entity SYN-LE-02 -> SYN-LE-02']);
+  equal(result.draft.companionRegisteredPartyId, 'SYN-LE-02');
+});
+
+// Covers: 选已有档案——不发第一步，法人钉选中的参与方；草稿原样交回。
+test('两步串行：选已有档案只发法人', async () => {
+  const { log, send } = senders([], outcome('REGISTERED'));
+  const result = await runPairedSave(draft({}), send);
+  deepEqual(log, ['entity SYN-LE-02 -> SYN-PARTY-SHIPPER-01']);
+  equal(result.party, null);
+  equal(result.draft.companionRegisteredPartyId, '');
 });
