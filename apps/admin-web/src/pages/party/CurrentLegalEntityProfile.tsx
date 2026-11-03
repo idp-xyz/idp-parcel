@@ -42,12 +42,12 @@ export function CurrentLegalEntityProfile({ query, children }: {
   children: (body: LegalEntityProfileResolutionResponseBody) => ReactNode;
 }) {
   const { legalEntityId, answer, retry } = query;
-  if (answer === null) return <p className="text-[12px] text-idpxyz-breadcrumb">正在读取当前法人资料…</p>;
+  if (answer === null) return <p className="text-[12px] text-idpxyz-breadcrumb">正在读取当前公司资料…</p>;
   if (answer.kind === 'unconfigured') {
-    return <p className="text-[13px] text-idpxyz-breadcrumb">法人资料读取渠道尚未配置，暂时无法读取。</p>;
+    return <p className="text-[13px] text-idpxyz-breadcrumb">公司资料读取渠道尚未配置，暂时无法读取。</p>;
   }
   if (isOperatorRefusal(answer)) {
-    return <OperatorRefusalNote kind={answer.kind} what="法人资料" className="text-[12px]" />;
+    return <OperatorRefusalNote kind={answer.kind} what="公司资料" className="text-[12px]" />;
   }
   if (answer.kind === 'callerProblem') {
     return (
@@ -60,7 +60,7 @@ export function CurrentLegalEntityProfile({ query, children }: {
   if (answer.kind === 'noAnswer') {
     return (
       <SectionError
-        title="法人资料读取失败"
+        title="公司资料读取失败"
         description={problemNote(answer.code)}
         technical={httpRows(answer.status, answer.code)}
         onRetry={retry}
@@ -77,7 +77,7 @@ export function CurrentLegalEntityProfile({ query, children }: {
     );
   }
   if (answer.body.legalEntityId !== legalEntityId) {
-    return <p className="text-[12px] text-idpxyz-breadcrumb">答案回显的法人与当前页面不符，已丢弃。</p>;
+    return <p className="text-[12px] text-idpxyz-breadcrumb">答案回显的公司主体与当前页面不符，已丢弃。</p>;
   }
   return <>{children(answer.body)}</>;
 }

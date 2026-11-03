@@ -46,7 +46,7 @@ export interface ContactDraft {
 }
 
 export interface LegalEntityProfileDraft {
-  /** 对象页上那个法人，不是输入格：资料挂在哪个法人上由页面定。 */
+  /** 对象页上那个公司主体，不是输入格：资料挂在哪个主体上由页面定。 */
   legalEntityId: string;
   /** 文本框原值；编成整数在组载荷时做。 */
   revision: string;
