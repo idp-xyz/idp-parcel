@@ -1,7 +1,7 @@
 # 15 查询值含 NUL 或非法 UTF-8 的读口一律答 400、不读库
 
 Category: bug
-Status: ready-for-agent
+Status: in-progress——2026-11-02 作者开工，分支 `claude-docnum15`
 父票：[spec](../spec.md)
 Blocked by: 无
 出处：票 [12](./12-customer-tracking-by-shipment-number.md) 复评（钉 `93dfe3f06`）——操作者族 `serveCurrentProjection`（visibility-exception `query_tracking_projections.go`）的 `parcel` 含 NUL 会进读，库拒收参数答 `500`。票 12 只修了首方客户追踪两口（`refuseUnstorableQueryValue`）。

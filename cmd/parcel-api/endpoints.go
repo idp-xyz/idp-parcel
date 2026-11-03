@@ -180,6 +180,8 @@ func registerEndpoints[D any](feature endpointFeature[D]) {
 			panic(fmt.Sprintf("parcel-api: two endpoint features share the wiring type %T", key))
 		}
 	}
+	// 读口的请求目标检查在这里套上（见 guardReadTargets）：生产装配与装配测试都从下面两个闭包出，挂的是同一道。
+	refusals := unstorableTargetRefusals(feature.lines)
 	endpointRegistry = append(endpointRegistry, registeredEndpoints{
 		lines:     feature.lines,
 		wiringKey: key,
@@ -188,10 +190,10 @@ func registerEndpoints[D any](feature endpointFeature[D]) {
 			if err != nil {
 				return nil, err
 			}
-			return feature.mount(channels, wiring), nil
+			return guardReadTargets(refusals, feature.mount(channels, wiring)), nil
 		},
 		mountWith: func(channels endpointChannels, wiring any) []httpapi.BusinessEndpoint {
-			return feature.mount(channels, wiring.(D))
+			return guardReadTargets(refusals, feature.mount(channels, wiring.(D)))
 		},
 	})
 }
