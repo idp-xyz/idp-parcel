@@ -209,7 +209,12 @@ export function WorkbenchPageTemplate<Row>({
       if (action === 'focus-search') searchRef.current?.focus();
       else if (action === 'close-detail') onSelect(null);
       else if (ready) {
-        const next = stepSelection(keysRef.current, selectedKey, action);
+        // 焦点在列表某一行上时从那一行起步：Tab 到一行未选中的行再按 ↓，该是它的下一行，不是原先选中那行的下一行。
+        const focusedRowKey =
+          event.target instanceof HTMLElement && event.target.matches('tr[data-row-key]') && listRef.current?.contains(event.target)
+            ? event.target.dataset.rowKey ?? null
+            : null;
+        const next = stepSelection(keysRef.current, focusedRowKey ?? selectedKey, action);
         if (next !== null) onSelect(next);
       }
     };
@@ -218,8 +223,8 @@ export function WorkbenchPageTemplate<Row>({
   }, [activeTab, selectedKey, detailOpen, onSelect, ready]);
 
   // 选中行换了就把它滚进可视区：方向键一路按下去不该把选中行按到屏幕外。焦点原在列表的某一行上时，焦点也跟到新选中
-  // 的行：点过一行再按方向键，焦点框不该留在原来那行、和新行的选中底色各在一处（用户 2026-11-03 指出）。焦点在检索框、
-  // 详情栏或别处时不抢——那时按方向键本就不走这里，选中是别的路径换的。
+  // 的行：点过一行再按方向键，焦点框不该留在原来那行、和新行的选中底色各在一处（用户 2026-11-03 指出）。只在焦点原本
+  // 就落在本列表的一行上时才移；焦点在检索框、详情栏、页头按钮或页面空白处时，方向键照样能换选中，但焦点不被拉回列表。
   useEffect(() => {
     if (selectedKey === null) return;
     const list = listRef.current;
