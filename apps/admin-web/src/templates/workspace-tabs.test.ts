@@ -113,6 +113,26 @@ test('同 id 多次传入依次接上，count 取第一个给了的', () => {
   equal(tabs[0].count, 2);
 });
 
+// Covers: 分区版式的折叠与摘要随归并带过去——collapsed 给了就是可折叠、有一个要折起就折起，summary 取第一个给了的；
+// 没给的签两格都空，分签版式与现有页面一字不变（票 company-subject-ux/13）。
+test('归并带上折叠与摘要：collapsed 有一个真即真，summary 取第一个', () => {
+  const tabs = resolveWorkspaceTabs<string>({ summary: ['basic'] }, [
+    { id: 'profile-versions', content: 'p1', collapsed: false, summary: 's1' },
+    { id: 'profile-versions', content: 'p2', collapsed: true, summary: 's2' },
+    { id: 'related', content: 'r', collapsed: false },
+    { id: 'contacts', content: 'c' },
+  ]);
+  deepEqual(
+    tabs.map((tab) => [tab.id, tab.collapsed, tab.summary]),
+    [
+      ['summary', undefined, undefined],
+      ['contacts', undefined, undefined],
+      ['profile-versions', true, 's1'],
+      ['related', false, undefined],
+    ],
+  );
+});
+
 // Covers: 每个出签的 id 都带固定表里的词，词不从调用方来。
 test('出签的词取自固定表', () => {
   const ids: WorkspaceTabId[] = ['timeline', 'exceptions'];

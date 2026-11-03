@@ -42,6 +42,13 @@ export interface WorkspaceTabInput<Content> {
   count?: number;
   /** 编辑签切走时保留草稿与查询状态；未声明的签沿用卸载行为。 */
   keepMounted?: boolean;
+  /**
+   * 只对「分区」版式有意义（票 company-subject-ux/13）：给了就是可折叠的分区，为真默认折起——折起时只显标题行与
+   * `summary`，内容等展开才挂载，重区块不白取数。分签版式不看这两格。
+   */
+  collapsed?: boolean;
+  /** 折起时标题行后的一句摘要（「第 3 版 · 2026-11-01 起生效 · 共 3 版」）。 */
+  summary?: Content;
 }
 
 /** 归并后要渲染的一签：内容按序摊平，模板内容在前。 */
@@ -51,6 +58,8 @@ export interface ResolvedWorkspaceTab<Content> {
   contents: Content[];
   count?: number;
   keepMounted?: boolean;
+  collapsed?: boolean;
+  summary?: Content;
 }
 
 /**
@@ -59,7 +68,8 @@ export interface ResolvedWorkspaceTab<Content> {
  * - 模板内容（基本信息 / 区块 → 概要，审计留痕 → 审计）在前，调用方同 id 内容接在其后。
  * - 没有任何内容的 id 不出签——签是导航，点不进的导航是死路（票面裁决 1）。
  * - 调用方同一 id 传多次就依次接上；count 取第一个给了的，不相加：计数是调用方对那一签的陈述，
- *   模板不替它做算术。
+ *   模板不替它做算术。summary 同 count 取第一个给了的；collapsed 同 keepMounted——给了就算可折叠，有一个要折起就折起：
+ *   折起只是少挂一段内容，展开才挂；两个调用方一个要折一个不要时，挂少的那一边不会错挂。
  */
 export function resolveWorkspaceTabs<Content>(
   templateContents: Partial<Record<WorkspaceTabId, readonly Content[]>>,
@@ -70,14 +80,18 @@ export function resolveWorkspaceTabs<Content>(
     const contents: Content[] = [...(templateContents[id] ?? [])];
     let count: number | undefined;
     let keepMounted: boolean | undefined;
+    let collapsed: boolean | undefined;
+    let summary: Content | undefined;
     for (const tab of callerTabs ?? []) {
       if (tab.id !== id) continue;
       contents.push(tab.content);
       if (count === undefined) count = tab.count;
       if (tab.keepMounted) keepMounted = true;
+      if (tab.collapsed !== undefined) collapsed = (collapsed ?? false) || tab.collapsed;
+      if (summary === undefined) summary = tab.summary;
     }
     if (contents.length === 0) continue;
-    resolved.push({ id, label: workspaceTabLabels[id], contents, count, keepMounted });
+    resolved.push({ id, label: workspaceTabLabels[id], contents, count, keepMounted, collapsed, summary });
   }
   return resolved;
 }
