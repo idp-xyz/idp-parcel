@@ -12,6 +12,12 @@ var (
 	// ErrCrossCurrencyMatch：账单币种与预期成本结算币不同且无换算依据时，域内直接立不成匹配；
 	// 编排答未配置（AT-SA-096），不用当前汇率猜测。
 	ErrCrossCurrencyMatch = errors.New("settlement accounting: cross-currency match needs a conversion basis")
+	// ErrBillSupplierMismatch：点名的预期成本记下的供应商不是这张账单的供应商（ADR-0358 决定二）。照它匹配就是把账单对到
+	// 别家的成本上；续办是改选这家的预期成本，或改判为没有对应发生项。
+	ErrBillSupplierMismatch = errors.New("settlement accounting: the expected cost belongs to another supplier")
+	// ErrExpectedCostSupplierUnrecorded：点名的预期成本是本记录之前形成、还没补记供应商的旧行（ADR-0358 决定三）。不照旧放过
+	// ——放过就是把要补的口子留给旧行；续办是按协议补记，不是改单，所以与 ErrBillSupplierMismatch 分开立（ADR-0029）。
+	ErrExpectedCostSupplierUnrecorded = errors.New("settlement accounting: the expected cost has no supplier recorded")
 	// ErrNotAuditable：一行通过审核的各段之和超出了它的已匹配金额（BillLineMatch.MatchedMinor）。超出预期的差异那一段、
 	// 没有对应发生项与重复计费的整行都没有成本撑着，只能争议或拒绝，不得自动接受（AT-SA-086）。
 	ErrNotAuditable          = errors.New("settlement accounting: a passed range exceeds the line's matched amount")
@@ -284,6 +290,9 @@ type BillLineMatch struct {
 }
 
 // MatchBillLine 逐格校验五值各自的完备性：
+//   - 点名了预期成本的四格先核供应商：那一版记下的供应商就是账单的供应商，不同 → ErrBillSupplierMismatch，没记 →
+//     ErrExpectedCostSupplierUnrecorded（ADR-0358 决定二）。排在币种之前：别家的成本谈不上换算，先答「换算未配置」会把一次
+//     录错说成租户没登参数；
 //   - `已匹配`要求预期成本在场、币种一致且金额相等，不携带差异依据；
 //   - `量差`/`价差`要求预期成本在场、币种一致、金额不等且带差异依据；
 //   - `无匹配发生项`要求预期成本**缺席**（没有可指的东西）且带检索依据；
@@ -307,6 +316,16 @@ func MatchBillLine(
 	}
 	expectedPresent := expected.Version().valid()
 	expectedMinor := int64(0)
+	if expectedPresent && classification != NoMatchingOccurrence {
+		// 没有对应发生项本就不该点名成本，点了是形状错（下面那一格拒），不在这里答成供应商不符。
+		supplier, recorded := expected.Supplier()
+		if !recorded {
+			return BillLineMatch{}, ErrExpectedCostSupplierUnrecorded
+		}
+		if supplier != claim.supplier {
+			return BillLineMatch{}, ErrBillSupplierMismatch
+		}
+	}
 	if expectedPresent {
 		settlementCurrency, settlementMinor := expected.SettlementAmount()
 		if settlementCurrency != claim.currency {

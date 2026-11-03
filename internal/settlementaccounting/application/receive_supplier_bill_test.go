@@ -287,6 +287,12 @@ func newBillFixture(t *testing.T) *billFixture {
 
 func fixtureExpectedCost(t *testing.T, version string, settlementMinor int64) domain.SupplierExpectedCost {
 	t.Helper()
+	return fixtureExpectedCostOf(t, version, settlementMinor, "partner-1")
+}
+
+// fixtureExpectedCostOf 照 fixtureExpectedCost 形成一份，供应商另给：证匹配门核供应商的用例要一份别家的成本（ADR-0358 决定二）。
+func fixtureExpectedCostOf(t *testing.T, version string, settlementMinor int64, supplier string) domain.SupplierExpectedCost {
+	t.Helper()
 	occurrence, err := domain.NewTransportChargeOccurrence(
 		billValue(t, domain.NewChargeOccurrenceID, "occurrence-1"),
 		billValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_FULFILLMENT"),
@@ -302,6 +308,7 @@ func fixtureExpectedCost(t *testing.T, version string, settlementMinor int64) do
 		FeeItem:            billValue(t, domain.NewFeeItemReference, "fee-linehaul"),
 		RuleVersion:        billValue(t, domain.NewPurchaseRuleVersionReference, "purchase-rule/v1"),
 		Agreement:          billValue(t, domain.NewSupplierAgreementReference, "agreement-1"),
+		Supplier:           billValue(t, domain.NewSupplierPartyReference, supplier),
 		Evaluation:         billValue(t, domain.NewBuyEvaluationReference, "buy-evaluation-1"),
 		OriginalCurrency:   billValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:      settlementMinor,

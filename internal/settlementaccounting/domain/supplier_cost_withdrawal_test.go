@@ -58,7 +58,7 @@ func TestARehydratedWithdrawalNeedsItsPriorVersion(t *testing.T) {
 	}
 	spec := domain.RehydrateSupplierExpectedCostSpec{
 		Version: original.Version(), Occurrence: original.Occurrence(), FeeItem: original.FeeItem(), RuleVersion: original.RuleVersion(),
-		Agreement: original.Agreement(), Evaluation: original.Evaluation(), Withdrawn: true,
+		Agreement: original.Agreement(), Supplier: mustValue(t, domain.NewSupplierPartyReference, "partner-1"), Evaluation: original.Evaluation(), Withdrawn: true,
 	}
 	spec.OriginalCurrency, spec.OriginalMinor = original.OriginalAmount()
 	spec.SettlementCurrency, spec.SettlementMinor = original.SettlementAmount()

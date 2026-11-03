@@ -133,15 +133,23 @@ func NewAuditSupplierBillEndpoint(intake SupplierBillAuditIntake, auditor Suppli
 }
 
 // receptionResponse 的 registeredClaim 与 registeredSupplierBillNumber 只在账单号冲突时出现、恰出其一：前者是这个号已标识的那份
-// 主张，后者是这份主张已登记的那个号（ADR-0357 决定一）。
+// 主张，后者是这份主张已登记的那个号（ADR-0357 决定一）。expectedCostSupplier 只在供应商不符与供应商未记两格出现（ADR-0358
+// 决定二）：哪一行、点名的哪一版，不符时另带那一版记下的供应商，好让人知道它是谁的。
 type receptionResponse struct {
-	Outcome                      string                  `json:"outcome"`
-	UndecidedReason              string                  `json:"undecidedReason,omitempty"`
-	ContinuationReference        string                  `json:"continuationReference,omitempty"`
-	AuditAuthority               string                  `json:"auditAuthority,omitempty"`
-	NotCurrent                   *expectedNotCurrentBody `json:"notCurrent,omitempty"`
-	RegisteredClaim              string                  `json:"registeredClaim,omitempty"`
-	RegisteredSupplierBillNumber string                  `json:"registeredSupplierBillNumber,omitempty"`
+	Outcome                      string                    `json:"outcome"`
+	UndecidedReason              string                    `json:"undecidedReason,omitempty"`
+	ContinuationReference        string                    `json:"continuationReference,omitempty"`
+	AuditAuthority               string                    `json:"auditAuthority,omitempty"`
+	NotCurrent                   *expectedNotCurrentBody   `json:"notCurrent,omitempty"`
+	RegisteredClaim              string                    `json:"registeredClaim,omitempty"`
+	RegisteredSupplierBillNumber string                    `json:"registeredSupplierBillNumber,omitempty"`
+	ExpectedCostSupplier         *expectedCostSupplierBody `json:"expectedCostSupplier,omitempty"`
+}
+
+type expectedCostSupplierBody struct {
+	Line     string `json:"line"`
+	Version  string `json:"version"`
+	Supplier string `json:"supplier,omitempty"`
 }
 
 type expectedNotCurrentBody struct {
@@ -175,6 +183,11 @@ func writeReceptionAnswer(response http.ResponseWriter, result application.Recei
 	}
 	if conflict, has := result.NumberConflict(); has {
 		body.RegisteredClaim, body.RegisteredSupplierBillNumber = conflict.RegisteredClaim.String(), conflict.RegisteredNumber.String()
+	}
+	if refusal, has := result.SupplierRefusal(); has {
+		body.ExpectedCostSupplier = &expectedCostSupplierBody{
+			Line: refusal.Line.String(), Version: refusal.Version.String(), Supplier: refusal.Supplier.String(),
+		}
 	}
 	if notCurrent, has := result.NotCurrent(); has {
 		body.NotCurrent = &expectedNotCurrentBody{

@@ -98,6 +98,8 @@ const (
 	BuyEvaluationRequestViewUnavailable
 	BuyEvaluationRequestRegisterUnavailable
 	OccurrenceInvalidationNotRecorded
+	// SupplierAgreementViewUnavailable：问不动成本所依那一版协议的供应商（ADR-0358 决定一），等 party-commercial 的读口恢复。
+	SupplierAgreementViewUnavailable
 )
 
 func (reason ExpectedCostUndecidedReason) String() string {
@@ -120,6 +122,8 @@ func (reason ExpectedCostUndecidedReason) String() string {
 		return "BUY_EVALUATION_REQUEST_REGISTER_UNAVAILABLE"
 	case OccurrenceInvalidationNotRecorded:
 		return "OCCURRENCE_INVALIDATION_NOT_RECORDED"
+	case SupplierAgreementViewUnavailable:
+		return "SUPPLIER_AGREEMENT_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -129,7 +133,7 @@ func (reason ExpectedCostUndecidedReason) String() string {
 // 发生项（TF 拥有的只读引用）、费用项目、供应商协议快照引用，加上要采用的评价引用与本版
 // 身份。金额、币种、换算步骤与价卡版本不在命令上——它们整组出自评价（CONTEXT「一份预期成本
 // 版本的全部计价结果，整组出自它引用的那一个 BUY PricingEvaluation」），命令带得了它们就有了
-// 第二套数字。
+// 第二套数字。供应商同理不在命令上：它是那一版协议的，由编排向协议的所有者问（ADR-0358 决定一）。
 type FormSupplierExpectedCostCommand struct {
 	TenantID   domain.TenantID
 	Version    domain.SupplierCostVersionID
@@ -182,10 +186,13 @@ func (result ExpectedCostResult) ContinuationReference() string {
 // 登记面（生产里同一个适配器），分两个接口是为了让只读的调用方拿不到写口。这里刻意没有
 // 发布意图：预期成本的消费方（UC-SA-004 逐行匹配、UC-SA-006 经营口径）按版本读它，今天没有
 // 任何消费者靠信封驱动；等有了再开，不预开空口。
+//
+// Suppliers 问成本所依那一版协议的供应商（ADR-0358 决定一），必备：缺了它，形成的成本就没有供应商，匹配门只能把它当旧行拒。
 type FormSupplierExpectedCostDeps struct {
 	Evaluations ports.BuyEvaluationView
 	Costs       ports.ExpectedCostView
 	Registry    ports.ExpectedCostRegistry
+	Suppliers   ports.SupplierAgreementSupplierView
 	Clock       ports.Clock
 }
 
@@ -262,8 +269,8 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	if err != nil {
 		return ExpectedCostResult{}, fmt.Errorf("settlement accounting: occurrence %s fee item %s: %w", command.Occurrence.ID(), command.FeeItem, err)
 	}
-	var cost domain.SupplierExpectedCost
-	if chained && head.Occurrence().Version() != command.Occurrence.Version() {
+	correcting := chained && head.Occurrence().Version() != command.Occurrence.Version()
+	if correcting {
 		if !head.Withdrawn() {
 			return expectedCostUndecided(OccurrenceInvalidationNotRecorded, head.Version().String(),
 				fmt.Errorf("chain head %s rests on occurrence version %s, which is not withdrawn yet", head.Version(), head.Occurrence().Version())), nil
@@ -272,11 +279,33 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 			return ExpectedCostResult{}, fmt.Errorf("%w: occurrence %s from %s to %s",
 				ErrCorrectionChangesSettlementCurrency, command.Occurrence.ID(), settlementCurrency, adoption.SettlementCurrency)
 		}
+	}
+	// 判过失效与等撤下之后、构造成本之前才问协议的供应商：已失效的那一版用不着它。纠错版本也重问——协议引用随新评价重述，
+	// 后继协议可以是另一家（ADR-0358 决定一）。
+	if handler.deps.Suppliers == nil {
+		return ExpectedCostResult{}, errors.New("settlement accounting: supplier expected cost formation is wired without the agreement supplier view")
+	}
+	supplier, found, err := handler.deps.Suppliers.LoadSupplierAgreementSupplier(ctx, command.TenantID, command.Agreement)
+	if errors.Is(err, ports.ErrSupplierAgreementSupplierUntranslatable) {
+		return ExpectedCostResult{}, fmt.Errorf("form supplier expected cost: occurrence %s agreement %s: %w",
+			command.Occurrence.ID(), command.Agreement, err)
+	}
+	if err != nil {
+		return expectedCostUndecided(SupplierAgreementViewUnavailable, command.Agreement.String(), err), nil
+	}
+	if !found {
+		// 成本所依的协议来自发生项，PC 不认它是两侧矛盾，同发起那一步（ADR-0208 决定四）：上抛等人看，不替它挑一家。
+		return ExpectedCostResult{}, fmt.Errorf("%w: occurrence %s agreement %s",
+			ErrOccurrenceAgreementNotRegistered, command.Occurrence.ID(), command.Agreement)
+	}
+	var cost domain.SupplierExpectedCost
+	if correcting {
 		cost, err = head.AppendCorrection(domain.CostCorrectionSpec{
 			Version:          command.Version,
 			Occurrence:       command.Occurrence,
 			RuleVersion:      adoption.RuleVersion,
 			Agreement:        command.Agreement,
+			Supplier:         supplier,
 			Evaluation:       command.Evaluation,
 			OriginalCurrency: adoption.OriginalCurrency,
 			OriginalMinor:    adoption.OriginalMinor,
@@ -291,6 +320,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 			FeeItem:            command.FeeItem,
 			RuleVersion:        adoption.RuleVersion,
 			Agreement:          command.Agreement,
+			Supplier:           supplier,
 			Evaluation:         command.Evaluation,
 			OriginalCurrency:   adoption.OriginalCurrency,
 			OriginalMinor:      adoption.OriginalMinor,
@@ -399,6 +429,7 @@ func costContinuation(parts ...string) string {
 
 // expectedCostDigest 是同一版本身份的内容比对锚：整组计价结果与三个来源引用任一不同即是另一
 // 份内容。经访问器取值而不比结构体——时间字段的单调读数与地点会让两份等价的成本比不相等。
+// 供应商不进：它由协议定，协议已在比对里；放进去，没记供应商的旧行与重投新形成的同一版就会被判成冲突（ADR-0358 决定一）。
 func expectedCostDigest(cost domain.SupplierExpectedCost) string {
 	originalCurrency, originalMinor := cost.OriginalAmount()
 	settlementCurrency, settlementMinor := cost.SettlementAmount()

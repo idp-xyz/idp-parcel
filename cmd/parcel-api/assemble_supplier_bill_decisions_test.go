@@ -97,6 +97,7 @@ func seedSupplierBillRegisters(t *testing.T, fixture *settlementDecisionsFixture
 		FeeItem:            mustSettlementValue(t, sadomain.NewFeeItemReference, "SYN-FEE-ITEM-TRUNK-COST-01"),
 		RuleVersion:        mustSettlementValue(t, sadomain.NewPurchaseRuleVersionReference, "SYN-PLAN-CN-SG-COST-01@v1"),
 		Agreement:          mustSettlementValue(t, sadomain.NewSupplierAgreementReference, "SYN-SUPPLIER-TRUNK-CN-SG-01/v3"),
+		Supplier:           mustSettlementValue(t, sadomain.NewSupplierPartyReference, "SYN-PARTY-CARRIER-TRUNK-01"),
 		Evaluation:         mustSettlementValue(t, sadomain.NewBuyEvaluationReference, "SYN-EVAL-BUY-PSB22-1"),
 		OriginalCurrency:   cny,
 		OriginalMinor:      8500,

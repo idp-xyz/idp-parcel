@@ -4,11 +4,13 @@ package domain
 // 同形，靠回指与原因是否在场分辨——纠错换版本、原版本保留，因此一份成本的历史是
 // 多行，不是一行被改写。
 type RehydrateSupplierExpectedCostSpec struct {
-	Version            SupplierCostVersionID
-	Occurrence         TransportChargeOccurrence
-	FeeItem            FeeItemReference
-	RuleVersion        PurchaseRuleVersionReference
-	Agreement          SupplierAgreementReference
+	Version     SupplierCostVersionID
+	Occurrence  TransportChargeOccurrence
+	FeeItem     FeeItemReference
+	RuleVersion PurchaseRuleVersionReference
+	Agreement   SupplierAgreementReference
+	// Supplier 可缺：本记录之前形成、还没补记的旧行没有它，读作「未记供应商」（ADR-0358 决定三）。
+	Supplier           SupplierPartyReference
 	Evaluation         BuyEvaluationReference
 	OriginalCurrency   CurrencyCode
 	OriginalMinor      int64
@@ -65,6 +67,7 @@ func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (Supp
 		feeItem:            spec.FeeItem,
 		priceCardVersion:   spec.RuleVersion,
 		agreement:          spec.Agreement,
+		supplier:           spec.Supplier,
 		evaluation:         spec.Evaluation,
 		originalCurrency:   spec.OriginalCurrency,
 		originalMinor:      spec.OriginalMinor,

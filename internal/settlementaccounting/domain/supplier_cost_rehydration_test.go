@@ -15,6 +15,7 @@ func rehydrationSpec(t *testing.T) domain.RehydrateSupplierExpectedCostSpec {
 		FeeItem:            mustValue(t, domain.NewFeeItemReference, "LINEHAUL_BASE"),
 		RuleVersion:        mustValue(t, domain.NewPurchaseRuleVersionReference, "purchase-rules/v2"),
 		Agreement:          mustValue(t, domain.NewSupplierAgreementReference, "agreement-1/v3"),
+		Supplier:           mustValue(t, domain.NewSupplierPartyReference, "partner-1"),
 		Evaluation:         mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:      3900,

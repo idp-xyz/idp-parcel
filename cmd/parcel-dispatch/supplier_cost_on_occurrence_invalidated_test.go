@@ -45,10 +45,11 @@ func seedFirstSupplierCost(t *testing.T, db *bentopg.DB, tenant string, record t
 	rule, _ := sadomain.NewPurchaseRuleVersionReference("SYN-BUY-CARD/v1")
 	agreement, _ := sadomain.NewSupplierAgreementReference(record.Occurrence.Agreement().String())
 	evaluation, _ := sadomain.NewBuyEvaluationReference("SYN-BUY-EVAL-DCG15")
+	supplier, _ := sadomain.NewSupplierPartyReference("SYN-PARTY-CARRIER-TRUNK-01")
 	currency, _ := sadomain.NewCurrencyCode("CNY")
 	cost, err := sadomain.FormSupplierExpectedCost(sadomain.SupplierExpectedCostSpec{
 		Version: value(sadomain.NewSupplierCostVersionID, "BUYSC-SYN-EVREQ-DCG15"), Occurrence: occurrence, FeeItem: feeItem,
-		RuleVersion: rule, Agreement: agreement, Evaluation: evaluation,
+		RuleVersion: rule, Agreement: agreement, Supplier: supplier, Evaluation: evaluation,
 		OriginalCurrency: currency, OriginalMinor: 30000, SettlementCurrency: currency, SettlementMinor: 30000,
 	})
 	if err != nil {

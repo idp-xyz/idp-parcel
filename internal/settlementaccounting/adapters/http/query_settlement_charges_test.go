@@ -234,7 +234,7 @@ func TestCustomerChargeQueryKeepsUnconfiguredConditionApartFromMissingBasis(t *t
 }
 
 // Covers: 版本链 — 首版的 priorVersion/correctionReason 成对缺席，纠错版本两者成对
-// 在场；原版本保留，一份成本的历史是多行而不是一行被改写。
+// 在场；原版本保留，一份成本的历史是多行而不是一行被改写。`AT-SA-236`（读口半边）：记了供应商的带 supplier，没记的整键不出现。
 func TestSupplierExpectedCostQueryKeepsTheVersionChain(t *testing.T) {
 	register := &stubChargeCatalogue{
 		costs: []ports.SupplierExpectedCostCatalogueRow{
@@ -263,6 +263,7 @@ func TestSupplierExpectedCostQueryKeepsTheVersionChain(t *testing.T) {
 				FeeItem:             "SYN-FEE-01",
 				PurchaseRuleVersion: "SYN-RULE-02",
 				Agreement:           "SYN-AGR-01",
+				Supplier:            "SYN-PARTY-01",
 				Evaluation:          "SYN-BUY-02",
 				OriginalCurrency:    "SYN-CUR-01",
 				OriginalMinor:       41000,
@@ -288,6 +289,14 @@ func TestSupplierExpectedCostQueryKeepsTheVersionChain(t *testing.T) {
 	}
 	if body.Outcome != "SUPPLIER_EXPECTED_COSTS_LISTED" || len(body.Costs) != 2 {
 		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+
+	// 供应商（ADR-0358 决定四）：记了的照写；首版这一行是没补记的旧行，整键不出现，不填空串或「未知」。
+	if string(body.Costs[1]["supplier"]) != `"SYN-PARTY-01"` {
+		t.Fatalf("纠错版本丢了供应商：%s", response.Body.String())
+	}
+	if _, present := body.Costs[0]["supplier"]; present {
+		t.Fatalf("没记供应商的旧行带了 supplier 键：%s", response.Body.String())
 	}
 
 	first := body.Costs[0]

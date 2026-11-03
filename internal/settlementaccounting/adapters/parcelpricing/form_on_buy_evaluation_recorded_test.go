@@ -189,7 +189,7 @@ func newBuyGateFixture(t *testing.T, evaluations ...ppdomain.PricingEvaluation) 
 func (fixture *buyGateFixture) formation(t *testing.T, view saports.BuyEvaluationView) *saapplication.FormRequestedSupplierExpectedCostHandler {
 	t.Helper()
 	inner := saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
-		Evaluations: view, Costs: fixture.costs, Registry: fixture.costs, Clock: buyGateClock{},
+		Evaluations: view, Costs: fixture.costs, Registry: fixture.costs, Suppliers: everyAgreementSupplier{}, Clock: buyGateClock{},
 	})
 	return must[*saapplication.FormRequestedSupplierExpectedCostHandler](t)(saapplication.NewFormRequestedSupplierExpectedCostHandler(
 		saapplication.FormRequestedSupplierExpectedCostDeps{
@@ -356,4 +356,15 @@ func TestTheBuyGateRefusesNilDependencies(t *testing.T) {
 	if _, err := adapter.NewFormOnBuyEvaluationRecordedAdapter(view, nil); err == nil {
 		t.Fatal("nil 形成编排被收下了")
 	}
+}
+
+// everyAgreementSupplier 替 party-commercial 答每一版协议的供应商都是同一家：本文件证的是形成那一路，供应商怎么问另有用例
+// （ADR-0358 决定一）。
+type everyAgreementSupplier struct{}
+
+func (everyAgreementSupplier) LoadSupplierAgreementSupplier(
+	context.Context, sadomain.TenantID, sadomain.SupplierAgreementReference,
+) (sadomain.SupplierPartyReference, bool, error) {
+	supplier, err := sadomain.NewSupplierPartyReference("SYN-PARTY-CARRIER-TRUNK-01")
+	return supplier, err == nil, err
 }

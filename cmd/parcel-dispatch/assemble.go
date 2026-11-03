@@ -588,8 +588,8 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // 票 demo-chain-gaps/08、ADR-0200）登记的未决哨兵，恢复动作都是等依赖、重投：
 //   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方读不回，或读口自己答不出。读不回里混着重投不自愈
 //     的格，见那枚哨兵的头注。
-//   - sapricing.ErrSupplierCostFormationUndecided——BUY 请求册、评价读口或预期成本库答不出：形成与否未知，整笔
-//     回滚等重投。停在哪一个依赖上、它原样答了什么都在错误正文里。
+//   - sapricing.ErrSupplierCostFormationUndecided——BUY 请求册、评价读口、预期成本库或协议供应商读口（ADR-0358）答不出：
+//     形成与否未知，整笔回滚等重投。停在哪一个依赖上、它原样答了什么都在错误正文里。
 //
 // 不在名单里的：
 //   - 入账定局的各格不是错误，处理方答 nil——不是 BUY·SUPPLIER_COST 的评价（SELL 那一半由扇出的另一路接）、没有
@@ -599,7 +599,7 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 //     ErrSupplierCostFormationUndecided 重投。
 //   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
 //   - 形成编排上抛的矛盾（回指的请求不在 BUY 请求册上、派生版本上已有另一份内容、刚读到`已完成`的评价形成时却
-//     未受理），落 publish_failed 等人看。
+//     未受理、PC 不认成本所依的那一版协议或答出译不过来的供应商），落 publish_failed 等人看。
 var buyEvaluationRecordedUndecidedSentinels = []error{
 	sapricing.ErrEvaluationNotVisible,
 	sapricing.ErrSupplierCostFormationUndecided,
@@ -2499,12 +2499,22 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request register: %w", err)
 	}
+	// 成本所依那一版协议的供应商问 party-commercial，记在成本上，匹配门凭它核账单的供应商（ADR-0358 决定一）。
+	agreementSuppliers, err := pcpostgres.NewSupplierAgreementSuppliers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: supplier agreement supplier view: %w", err)
+	}
+	suppliers, err := sapartycommercial.NewSupplierAgreementSupplier(agreementSuppliers)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: supplier agreement supplier: %w", err)
+	}
 	formation, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
 		Requests: requests,
 		Costs: saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
 			Evaluations: view,
 			Costs:       costs,
 			Registry:    costs,
+			Suppliers:   suppliers,
 			Clock:       clock,
 		}),
 		Stops:      requests,

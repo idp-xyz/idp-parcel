@@ -65,7 +65,14 @@ func TestASupplierBillNumberIdentifiesOneClaimPerSupplier(t *testing.T) {
 	})
 
 	t.Run("another supplier may use the same number", func(t *testing.T) {
-		if got := receiveOnce(t, fixture, numberedBill(t, "bill-c", "v1", "partner-2", "INV-001")).Outcome(); got != application.BillReceived {
+		// 夹具里的预期成本都是 partner-1 的；另一家的账单点名它们会被匹配门拒（ADR-0358 决定二），所以这一张各行都判没有对应发生项。
+		other := numberedBill(t, "bill-c", "v1", "partner-2", "INV-001")
+		for index := range other.Directives {
+			other.Directives[index].Classification = domain.NoMatchingOccurrence
+			other.Directives[index].ExpectedVersion = domain.SupplierCostVersionID{}
+			other.Directives[index].Basis = billValue(t, domain.NewMatchBasisReference, "search-scope-1")
+		}
+		if got := receiveOnce(t, fixture, other).Outcome(); got != application.BillReceived {
 			t.Fatalf("outcome = %q", got)
 		}
 	})
