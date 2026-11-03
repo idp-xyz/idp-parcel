@@ -78,5 +78,6 @@ Status: in-progress——2026-11-02 子票 01–09 全部进 main（ADR-0355）�
 | [11](./issues/11-supplier-bill-and-audited-payable-admin-pages.md) | 管理台补供应商账单与应付：读口、查阅页、接收与审核表单（用户 2026-11-02 裁定补全套） | 后端 + 前端 | — | ready-for-agent | resolved（2026-11-02 进 main） 
 | [12](./issues/12-customer-tracking-by-shipment-number.md) | 客户追踪按运单号（委托的单据号）查：PS 按（租户，客户账户，单据号）的读、VE 消费侧适配器与编排、首方新口 `/v1/customer-shipment-tracking`、契约与演示（用户 2026-11-02 裁定，先写 ADR；出处票 10「第 4 条停在哪（向协调方报）」一节） | 后端 + 文档 | —（ADR-0356 已接受） | in-progress（作者完工，待评审） | resolved（2026-11-02 进 main） 
 | [15](./issues/15-query-values-with-nul-or-invalid-utf8-across-http-reads.md) | 查询值含 NUL 或非法 UTF-8 的读口一律答 400、不读库（票 12 复评查出操作者族同一缺陷） | 后端 | — | ready-for-agent |
+| [16](./issues/16-request-body-strings-with-nul-or-invalid-utf8.md) | 写口请求体（JSON）里的字符串含 NUL 或非法 UTF-8 一律答 400、不落库、不悄悄改写（票 15 完成记录探到；协调方 2026-11-02 裁定两种都拒） | 后端 | —（建在 15 之上） | in-progress |
 
 04–09 互不阻塞，可并行；各票动到同一份 AT 盘点与同一张端点表时按并行会话的取号规矩办。
