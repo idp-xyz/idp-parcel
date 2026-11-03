@@ -23,6 +23,7 @@ import { WorkspaceStatusBar } from './shell/WorkspaceStatusBar';
 import { isOpenCommandPaletteShortcut } from './shell/command-actions';
 import { useSessionPrincipal } from './shell/session';
 import { useBoundTenant } from './pages/use-operator-binding';
+import { prefetchRefdataNames } from './pages/use-refdata-names';
 import { logout } from './auth/oidc';
 import {
   listRecentObjects,
@@ -280,7 +281,9 @@ export function Layout() {
   }, [workspace.tabs]);
 
   // 首屏渲完、浏览器空闲时预取各域页面块，此后切页不再等块（懒加载与预取的取舍见 page-registry）。
+  // 国家 / 币种译名不等空闲：目录小、整表一次读完，外壳一挂上就读，首开的表直接带译名（理由在 prefetchRefdataNames）。
   useEffect(() => {
+    prefetchRefdataNames();
     // 类型里总有 requestIdleCallback，旧版 Safari 实际没有，退回定时。
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => prefetchPages());
     else window.setTimeout(prefetchPages, 1500);

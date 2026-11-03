@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
 import { TrulyEmptyState } from '@idpxyz/ui-primitives';
 import { TechnicalDetails, type TechnicalRow } from '../TechnicalDetails';
+import { revealClass, useDelayedReveal } from '../use-delayed-reveal';
 
 export { SectionError, type SectionErrorProps } from './section-error';
 export { TechnicalDetails, httpRows, type TechnicalRow } from '../TechnicalDetails';
@@ -27,10 +28,11 @@ export {
 // 渠道或部署参数没就位，需要登录=凭据没被认下，没有授予=缺授予。把接入那一格与「错误」并档会诱导人反复重试一件
 // 人不来配、不来登、不来授就永远不会好的事，分档依据 ADR-0022、ADR-0055 的「未配置即拒」格与 ADR-0100 决定四。
 
-/** 加载态：脉冲骨架块。不承诺进度，只表示「还没答案」。 */
+/** 加载态：脉冲骨架块。不承诺进度，只表示「还没答案」；答得快时不露（use-delayed-reveal.ts）。 */
 export function LoadingState({ label }: { label?: string }) {
+  const revealed = useDelayedReveal();
   return (
-    <div className="w-full max-w-[560px] px-6" role="status" aria-label={label ?? '加载中'}>
+    <div className={`w-full max-w-[560px] px-6 ${revealClass(revealed)}`} role="status" aria-label={label ?? '加载中'}>
       <div className="animate-pulse space-y-3">
         <div className="h-4 w-1/3 rounded bg-idpxyz-hover" />
         <div className="h-4 w-full rounded bg-idpxyz-hover" />

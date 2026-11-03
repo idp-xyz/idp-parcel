@@ -44,6 +44,14 @@ function ensureLoaded(): void {
     });
 }
 
+/**
+ * 外壳挂上即先读。等第一个单元格订阅才读，表格就先按码渲一遍、名表到了再换成「中国（CN）」，列宽随之一挪——
+ * 公司主体首开实测这一跳落在表出来之后约四十毫秒（用户 2026-11-03「首次打开公司主体感觉加载也很慢」）。
+ */
+export function prefetchRefdataNames(): void {
+  ensureLoaded();
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   ensureLoaded();

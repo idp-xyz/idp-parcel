@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
+import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import type { ApiResult } from '../catalogue-api';
 import { resolveLegalEntityProfile, type LegalEntityProfileResolutionResponseBody } from './api';
 import { cachedLegalEntityRead, loadLegalEntityRead } from './legal-entity-read-cache';
@@ -52,11 +53,12 @@ export function useCurrentLegalEntityProfile(
 
 /**
  * 还没答到时的占位：与读出同样的三块卡轮廓，高度相近。只摆一行「正在读取…」时，右栏先塌成一行、答案到了再整块撑开，
- * 看着是一闪（用户 2026-11-03 指出）。读屏只念一句状态。
+ * 看着是一闪（用户 2026-11-03 指出）。读屏只念一句状态。答得快时不露（components/use-delayed-reveal.ts），位置照占。
  */
 function ProfileReadoutSkeleton() {
+  const revealed = useDelayedReveal();
   return (
-    <div role="status" aria-label="正在读取当前公司资料" className="mt-3 flex animate-pulse flex-col gap-3">
+    <div role="status" aria-label="正在读取当前公司资料" className={`mt-3 flex animate-pulse flex-col gap-3 ${revealClass(revealed)}`}>
       {[4, 3, 2].map((lines, index) => (
         <div key={index} className="overflow-hidden rounded-md border border-idpxyz-border">
           <div className="h-9 border-b border-idpxyz-border bg-idpxyz-editor" />

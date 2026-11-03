@@ -10,6 +10,7 @@ import {
   type UnconfiguredFacts,
 } from '../components/states';
 import { skeletonOf, type LoadingShape } from './loading-shape';
+import { revealClass, useDelayedReveal } from '../components/use-delayed-reveal';
 
 export type { LoadingShape } from './loading-shape';
 
@@ -39,12 +40,14 @@ export interface StateSlotProps {
  * 按形状出骨架（形状 → 件的映射在 loading-shape.ts，这里只摆）。`table` 的 SkeletonTable 自己是个 tbody，得套在 table
  * 里才立得住；行列数不传就用 ui-patterns 的默认（列数模板不知道，真实列数归知道列定义的那一方传）。`detail` 是头区
  * 一行加两块卡片，像对象页的头 + 概要。外层一律 role="status"，与 LoadingState 同一语义：还没答案，不承诺进度。
+ * 答得快时骨架不露（components/use-delayed-reveal.ts）；`pulse-block` 的 LoadingState 自己等。
  */
 export function LoadingSkeleton({ shape, cols, rows }: { shape?: LoadingShape; cols?: number; rows?: number }) {
+  const revealCls = revealClass(useDelayedReveal());
   switch (skeletonOf(shape)) {
     case 'table':
       return (
-        <div className="w-full overflow-hidden" role="status" aria-label="加载中">
+        <div className={`w-full overflow-hidden ${revealCls}`} role="status" aria-label="加载中">
           <table className="w-full">
             <SkeletonTable rows={rows} cols={cols} />
           </table>
@@ -52,13 +55,13 @@ export function LoadingSkeleton({ shape, cols, rows }: { shape?: LoadingShape; c
       );
     case 'event-list':
       return (
-        <div className="w-full max-w-[880px] px-6" role="status" aria-label="加载中">
+        <div className={`w-full max-w-[880px] px-6 ${revealCls}`} role="status" aria-label="加载中">
           <SkeletonEventList rows={rows} />
         </div>
       );
     case 'header-and-cards':
       return (
-        <div className="w-full max-w-[720px] px-6 space-y-4" role="status" aria-label="加载中">
+        <div className={`w-full max-w-[720px] px-6 space-y-4 ${revealCls}`} role="status" aria-label="加载中">
           <Skeleton className="h-5 w-1/3" />
           <div className="grid grid-cols-2 gap-3">
             <SkeletonCard />

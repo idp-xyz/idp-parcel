@@ -8,6 +8,7 @@
 // 缓存键带身份版本（登记记录号与状态）：身份更正或停用之后版本变了，旧缓存自然不再命中；资料更新落册由调用方显式作废。
 // 只活在本页内存里，刷新即清空——它不是数据源，只是避免换行时的空窗。
 
+import { useEffect, useState } from 'react';
 import type { ApiResult } from '../catalogue-api';
 import {
   listLegalEntityProfileRevisions,
@@ -117,4 +118,24 @@ export function loadRegistrationNumberTypesCached(): Promise<ApiResult<Registrat
     return answer;
   });
   return numberTypesInflight;
+}
+
+/**
+ * 注册号类型目录：读过的那份先用、照常再问。列表的「注册地与注册号」列与资料版本的对比表都用它——每次挂上现读的话，
+ * 再开公司主体时列先显类型码、目录到了再换译名，列宽跟着一挪。
+ */
+export function useCachedRegistrationNumberTypes(): ApiResult<RegistrationNumberTypeListResponseBody> | null {
+  const [answer, setAnswer] = useState<ApiResult<RegistrationNumberTypeListResponseBody> | null>(
+    () => cachedRegistrationNumberTypes() ?? null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void loadRegistrationNumberTypesCached().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return answer;
 }

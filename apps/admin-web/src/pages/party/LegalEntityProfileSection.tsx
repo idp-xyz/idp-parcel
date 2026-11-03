@@ -36,7 +36,7 @@ import {
 import { profileRevisionLabel } from './presentation';
 import { problemNote } from './presentation';
 import { Field, useLoaded } from './PublicationFormFields';
-import { cachedRegistrationNumberTypes, loadRegistrationNumberTypesCached } from './legal-entity-read-cache';
+import { useCachedRegistrationNumberTypes } from './legal-entity-read-cache';
 import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { Instant } from './detail-primitives';
 import {
@@ -169,23 +169,6 @@ export function LegalEntityProfileSection({
 }
 
 /** 目录答案折成查法；没答（还在读、读不到）就是查不到任何码的空表，调用方按码显。 */
-/** 注册号类型目录：读过的那份先用、照常再问（legal-entity-read-cache.ts 的目录缓存）——换行时对比表不先显类型码再换译名。 */
-function useCachedRegistrationNumberTypes(): ApiResult<RegistrationNumberTypeListResponseBody> | null {
-  const [answer, setAnswer] = useState<ApiResult<RegistrationNumberTypeListResponseBody> | null>(
-    () => cachedRegistrationNumberTypes() ?? null,
-  );
-  useEffect(() => {
-    let cancelled = false;
-    void loadRegistrationNumberTypesCached().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return answer;
-}
-
 function useTypeNameOf(typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null): RegistrationNumberTypeNameOf {
   return useMemo(
     () => registrationNumberTypeNamesOf(typeCatalogue?.kind === 'outcome' ? typeCatalogue.body.registrationNumberTypes : []),

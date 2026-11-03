@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Timeline } from '@idpxyz/ui-primitives';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
+import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
@@ -44,6 +45,27 @@ export interface RevisionHistoryRegister<Body> {
   loadCached?: (subjectId: string, version: string) => Promise<ApiResult<Body>>;
 }
 
+/**
+ * 与时间线同轮廓的占位：只摆一行「正在读取」时这一签先塌成一行、答案到了再撑开，看着是一闪。答得快时不露
+ * （components/use-delayed-reveal.ts），位置照占。
+ */
+function RevisionTimelineSkeleton() {
+  const revealed = useDelayedReveal();
+  return (
+    <div role="status" aria-label="正在读取修订历史" className={`mt-2 flex animate-pulse flex-col gap-3 ${revealClass(revealed)}`}>
+      {[0, 1].map((index) => (
+        <div key={index} className="flex gap-3">
+          <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-idpxyz-hover" />
+          <div className="flex-1 rounded-md border border-idpxyz-border px-4 py-3">
+            <div className="h-3.5 w-32 rounded bg-idpxyz-hover" />
+            <div className="mt-2 h-3 w-3/4 rounded bg-idpxyz-hover" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function RevisionHistorySection<Body>({
   register,
   subjectId,
@@ -80,22 +102,7 @@ export function RevisionHistorySection<Body>({
   const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
   const answer = result?.key === requestKey ? result.answer : (useCache ? peek(subjectId, cacheVersion) ?? null : null);
 
-  if (answer === null) {
-    // 与时间线同轮廓的占位：只摆一行「正在读取」时这一签先塌成一行、答案到了再撑开，看着是一闪。
-    return (
-      <div role="status" aria-label="正在读取修订历史" className="mt-2 flex animate-pulse flex-col gap-3">
-        {[0, 1].map((index) => (
-          <div key={index} className="flex gap-3">
-            <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-idpxyz-hover" />
-            <div className="flex-1 rounded-md border border-idpxyz-border px-4 py-3">
-              <div className="h-3.5 w-32 rounded bg-idpxyz-hover" />
-              <div className="mt-2 h-3 w-3/4 rounded bg-idpxyz-hover" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
+  if (answer === null) return <RevisionTimelineSkeleton />;
   if (answer.kind === 'unconfigured') {
     return (
       <p className={note}>

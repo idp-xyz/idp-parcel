@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
+import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import type { ApiResult } from '../catalogue-api';
 import { formatInstant } from '../moment';
 import { useRefdataNames } from '../use-refdata-names';
@@ -31,6 +32,27 @@ const kindClasses: Record<ProfileChangeKind, string> = {
   removed: 'text-idpxyz-breadcrumb',
   unchanged: 'text-idpxyz-breadcrumb',
 };
+
+/**
+ * 与版本选择区同轮廓的占位：左栏几张版本卡、右栏一块对比区，不塌成一行字。答得快时不露
+ * （components/use-delayed-reveal.ts），位置照占。
+ */
+function ProfileHistorySkeleton() {
+  const revealed = useDelayedReveal();
+  return (
+    <div role="status" aria-label="正在读取资料版本" className={`grid min-w-0 animate-pulse gap-4 rounded-lg border border-idpxyz-border p-4 md:grid-cols-[minmax(11rem,0.7fr)_minmax(0,1.3fr)] ${revealClass(revealed)}`}>
+      <div className="flex flex-col gap-2">
+        <div className="h-9 rounded-md bg-idpxyz-hover" />
+        {[0, 1, 2].map((index) => <div key={index} className="h-16 rounded-md border border-idpxyz-border" />)}
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="h-4 w-24 rounded bg-idpxyz-hover" />
+        <div className="h-3 w-48 rounded bg-idpxyz-hover" />
+        <div className="mt-2 h-40 rounded-md border border-idpxyz-border" />
+      </div>
+    </div>
+  );
+}
 
 export function LegalEntityProfileHistory({
   legalEntityId,
@@ -100,22 +122,7 @@ export function LegalEntityProfileHistory({
   const currentRevision = currentBody?.effectiveRevision?.revision;
   const selected = selectedProfileRevision(revisions, selectedNumber, currentRevision);
 
-  if (history === null) {
-    // 与版本选择区同轮廓的占位：左栏几张版本卡、右栏一块对比区，不塌成一行字。
-    return (
-      <div role="status" aria-label="正在读取资料版本" className="grid min-w-0 animate-pulse gap-4 rounded-lg border border-idpxyz-border p-4 md:grid-cols-[minmax(11rem,0.7fr)_minmax(0,1.3fr)]">
-        <div className="flex flex-col gap-2">
-          <div className="h-9 rounded-md bg-idpxyz-hover" />
-          {[0, 1, 2].map((index) => <div key={index} className="h-16 rounded-md border border-idpxyz-border" />)}
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="h-4 w-24 rounded bg-idpxyz-hover" />
-          <div className="h-3 w-48 rounded bg-idpxyz-hover" />
-          <div className="mt-2 h-40 rounded-md border border-idpxyz-border" />
-        </div>
-      </div>
-    );
-  }
+  if (history === null) return <ProfileHistorySkeleton />;
   if (isOperatorRefusal(history)) return <OperatorRefusalNote kind={history.kind} what="资料版本" className={note} />;
   if (history.kind === 'unconfigured') return <p className={note}>资料版本读取渠道尚未配置，暂时无法查看。</p>;
   if (history.kind === 'callerProblem') return <div className={note}><p>读取方式问题：{problemNote(history.code)}</p><TechnicalDetails rows={httpRows(history.status, history.code)} /></div>;
