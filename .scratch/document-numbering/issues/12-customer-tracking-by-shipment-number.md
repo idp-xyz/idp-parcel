@@ -1,7 +1,7 @@
 # 12 客户追踪按运单号（委托的单据号）查
 
 Category: enhancement
-Status: in-progress——2026-11-02 作者实现完工、自验、推分支 `claude-docnum12`（完成记录见文末）；文档半边的评审修订已在同一分支；实现评审（钉 `283dca1f7`）两轴阻断为零，非阻断已在同一分支修完（见文末「评审修订」）；待进 main。此前 ready-for-agent——同日用户过目 ADR-0356 草案并同意，ADR-0356 已接受
+Status: resolved——2026-11-02 进 main（记录见文末「进 main 记录」）；操作者族 `serveCurrentProjection` 的同一缺陷转票 15
 父票：[spec](../spec.md)
 Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md) 已接受）
 出处：票 [10](./10-wrap-up-references-labels-and-tracking-by-shipment-number.md)「第 4 条停在哪（向协调方报）」一节查清「机制做得到、挡住的是 ADR 级取舍」；用户 2026-11-02 裁定「客户追踪支持按运单号查，先写 ADR」。
@@ -36,7 +36,7 @@ Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by
 
 - 不按委托标识、客户单号或其他外部标识定位（后者归票 demo-chain-gaps/119）。
 - 不在 visibility-exception 存单据号或委托–包裹映射。
-- 不改 `/v1/customer-tracking-view`、提交答复与操作者族的委托查阅读口。例外：实现评审查出按包裹查对含 NUL 或非法 UTF-8 的 `parcel` 答 `500`，与新口同一缺陷，本票一并修成 `400`、不读库——缺陷修复，契约形状不变（ADR-0223、ADR-0246 本就要求坏输入答 `400`）。
+- 不改 `/v1/customer-tracking-view`、提交答复与操作者族的委托查阅读口。例外：实现评审查出按包裹查对含 NUL 或非法 UTF-8 的 `parcel` 答 `500`，与新口同一缺陷，本票一并修成 `400`、不读库——缺陷修复，契约形状不变（依据 ADR-0029 按恢复动作分格）。
 - 不建包裹身份谱系模型。`AT-VE-235` 等谱系落地那一票；本票只让端口与答复形状留得下 `replaces`。
 - 不另设限流（首方族限流在票 first-party-api/02，冻结中）。
 
@@ -138,7 +138,7 @@ Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by
 5. **Spec：NUL 与非法 UTF-8 答 400**（`2492c769a`，单独一笔）。
    - 缺陷：`documentNumber=%00` 或 `%FF` 一路带进读，库拒收参数，答成 `500 NO_ANSWER_FORMED`。按包裹查 `parcel=%FF` 是同一缺陷。先写用例复现：两口都答 500，按包裹那口读到了视图库。
    - 修法：两口 Intake 共用 `refuseUnstorableQueryValue`，含 NUL 或不是合法 UTF-8 即坏请求，答 400，不读委托、视图与归属。
-   - **顺手修了按包裹查同一缺陷**：这是缺陷修复，契约形状不变（ADR-0223、ADR-0246 本就要求坏输入答 400）。「不做」里「不改 `/v1/customer-tracking-view`」那句旁已注明这一例外。首方契约新口那条的坏请求列举补上这两种。
+   - **顺手修了按包裹查同一缺陷**：这是缺陷修复，契约形状不变（依据是 ADR-0029 按恢复动作分格：坏输入改了才会好，答 400 而不答可重试的 500；复评指出原先挂在 ADR-0223、ADR-0246 名下站不住）。「不做」里「不改 `/v1/customer-tracking-view`」那句旁已注明这一例外。首方契约新口那条的坏请求列举补上这两种。
    - 用例：`TestUnstorableQueryValuesAreBadRequestsOnBothLines`，两口各 NUL、非法 UTF-8 一例，断言 400、无 outcome、一次不读。
 
 ### 修订后的验证（证据只记 `S`）
@@ -148,3 +148,16 @@ Blocked by: 无（[ADR-0356](../../../docs/adr/0356-customer-tracking-locates-by
 - `go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/architecture/... ./internal/platform/... ./internal/accessidentity/... ./cmd/... ./migrations/...` 全过，含 PG（`127.0.0.1:55432`）。
 - 新用例 `TestUnstorableQueryValuesAreBadRequestsOnBothLines` 修前红：两口都答 500，按包裹那口读到了视图库。修后 `-v` PASS、无 SKIP。
 - 本轮只动了 Intake 上的坏输入判断与文档，两只演示脚本与它们走的路径没动，没重跑一次性库演示。
+
+## 评审记录（2026-11-02，非作者隔离评审）
+
+- 文档半边钉 `00bc4fe68`：Spec 阻断二（UC-VE-008「批量查询逐对象返回结果……冲突或失败……」与整页 500 相抵；授予复用与 first-party-api/00「代决」一口一词相抵），非阻断六。协调方裁：授予照一口一词另立 `CUSTOMER_SHIPMENT_TRACKING_QUERY`。作者在 `ea21863fc`、`3e2bc443d` 改。
+- 实现钉 `283dca1f7`：两轴阻断为零，上轮两条阻断核过。非阻断见上「评审修订」；查询值含 NUL / 非法 UTF-8 答 500 一条协调方裁本票修（两口）。
+- 复评钉 `93dfe3f06`：两轴阻断为零。非阻断：`refuseUnstorableQueryValue` 头注与 `TestUnstorableQueryValuesAreBadRequestsOnBothLines` 的 Covers 把依据挂在 ADR-0223 / 0246 名下站不住（应是 ADR-0029）、引文与 ADR-0356 原文不符、头注「两口」跨文件计数、测试头注写成变更说明——协调方在进 main 时一笔改正（见下）。操作者族 `serveCurrentProjection`（`query_tracking_projections.go`）的 `parcel` 同一缺陷，不在本票范围，立票 15。
+
+## 进 main 记录（2026-11-02，协调方）
+
+- 在 origin/main `c5a9d879b` 上 `git merge --no-ff origin/claude-docnum12`（tip `93dfe3f06`，已含作者合 main 的 `a2d056095`），无冲突；合并提交 `a07d3f3f3`。
+- 协调方改正复评的注释非阻断：`refuseUnstorableQueryValue` 头注点名两个 Intake、依据改引 ADR-0029、引文对齐 ADR-0356 决定一原文；测试 Covers 同改、变更说明改成反事实写法；票面两处依据同改。
+- main tip 上重生成 ADR 索引、AT 盘点总览计数与机制清点（见推送记录）。
+- 迁移 `access_identity/0038`（能力词 CHECK 加新词）；种子 `steps/488`、`data/access/38` 给 SYN 渠道授新词。
