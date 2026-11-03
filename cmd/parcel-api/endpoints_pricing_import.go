@@ -19,8 +19,8 @@ type pricingImportWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[pricingImportWiring]{
 		lines: map[string]endpointLine{
-			"/pricing-price-card-previews":           {method: http.MethodPost, face: registryWriteFace()},
-			"/pricing-price-card-drafts":             {method: http.MethodPost, face: registryWriteFace()},
+			"/pricing-price-card-previews":           {method: http.MethodPost, face: registryWriteFace(), multipartUpload: true},
+			"/pricing-price-card-drafts":             {method: http.MethodPost, face: registryWriteFace(), multipartUpload: true},
 			"/pricing-price-card-draft-views":        {method: http.MethodGet, face: registryWriteFace()},
 			"/pricing-price-card-draft-approvals":    {method: http.MethodPost, face: registryWriteFace()},
 			"/pricing-price-card-draft-publications": {method: http.MethodPost, face: registryWriteFace()},

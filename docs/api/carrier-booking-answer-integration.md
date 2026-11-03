@@ -34,7 +34,7 @@
 
 ## 载荷
 
-`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`（错误体同认证各格，是现状）。
+`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`（错误体同认证各格，是现状）。请求体里任一字符串的原始字节不是合法 UTF-8、或 `\u` 转义出孤代理，同答这一格；服务端不把坏字节换成 U+FFFD 再收。标识里带 NUL 不在此列，见下文 `INPUT_NOT_ACCEPTED`。
 
 | 字段 | 含义 |
 |---|---|

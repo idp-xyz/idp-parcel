@@ -37,6 +37,8 @@ type endpointLine struct {
 	ownIntake bool
 	// probe 只给装配测试用：带分派参数或路径参数的行要一条走得到 Intake 的请求目标；空则取路径本身。
 	probe string
+	// multipartUpload 为真：这一行除 JSON 外另收 multipart/form-data 上传，请求体检查放过上传（见 requestBodyGuard）。
+	multipartUpload bool
 }
 
 // faceFamily 是能打开一行的那一族接入渠道。
@@ -180,8 +182,10 @@ func registerEndpoints[D any](feature endpointFeature[D]) {
 			panic(fmt.Sprintf("parcel-api: two endpoint features share the wiring type %T", key))
 		}
 	}
-	// 读口的请求目标检查在这里套上（见 guardReadTargets）：生产装配与装配测试都从下面两个闭包出，挂的是同一道。
+	// 读口的请求目标检查（见 guardReadTargets）与写口的请求体检查（见 guardRequestBodies）在这里套上：生产装配与装配测试都从
+	// 下面两个闭包出，挂的是同一道。
 	refusals := unstorableTargetRefusals(feature.lines)
+	bodyGuards := requestBodyGuards(feature.lines)
 	endpointRegistry = append(endpointRegistry, registeredEndpoints{
 		lines:     feature.lines,
 		wiringKey: key,
@@ -190,10 +194,10 @@ func registerEndpoints[D any](feature endpointFeature[D]) {
 			if err != nil {
 				return nil, err
 			}
-			return guardReadTargets(refusals, feature.mount(channels, wiring)), nil
+			return guardRequestBodies(bodyGuards, guardReadTargets(refusals, feature.mount(channels, wiring))), nil
 		},
 		mountWith: func(channels endpointChannels, wiring any) []httpapi.BusinessEndpoint {
-			return guardReadTargets(refusals, feature.mount(channels, wiring.(D)))
+			return guardRequestBodies(bodyGuards, guardReadTargets(refusals, feature.mount(channels, wiring.(D))))
 		},
 	})
 }
