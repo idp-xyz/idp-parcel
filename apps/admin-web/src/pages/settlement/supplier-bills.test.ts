@@ -252,12 +252,24 @@ test('接收答复说人话：受理、审核人未配置、重复、版本冲�
 });
 
 test('接收答复说人话：选了别家供应商的预期成本、选了没记供应商的预期成本（ADR-0358）', () => {
+  const names: Record<string, string> = { 'SYN-PARTY-CARRIER-LM-01': '合成末端承运方' };
+  const supplierName = (id: string) => names[id] ?? id;
   equal(
     receptionAnswerText(
       { outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH', expectedCostSupplier: { line: '1', version: 'L1', supplier: 'SYN-PARTY-CARRIER-LM-01' } },
       'INV-1',
+      supplierName,
     ),
-    '没有登记：第 1 行选的预期成本 L1 是 SYN-PARTY-CARRIER-LM-01 的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。',
+    '没有登记：第 1 行选的预期成本 L1 是合成末端承运方的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。',
+  );
+  // 取不到名称时退回标识。
+  match(
+    receptionAnswerText(
+      { outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH', expectedCostSupplier: { line: '1', version: 'L1', supplier: 'SYN-PARTY-UNKNOWN' } },
+      'INV-1',
+      supplierName,
+    ),
+    /是SYN-PARTY-UNKNOWN的/,
   );
   match(receptionAnswerText({ outcome: 'EXPECTED_COST_SUPPLIER_MISMATCH' }, 'INV-1'), /别家供应商/);
   match(

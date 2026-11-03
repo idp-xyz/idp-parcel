@@ -417,7 +417,9 @@ export function receptionAnswerText(
     case 'EXPECTED_COST_SUPPLIER_MISMATCH': {
       const refused = body.expectedCostSupplier;
       if (!refused) return '没有登记：所选的预期成本是别家供应商的，改选这家供应商的预期成本再登记。';
-      return `没有登记：第 ${refused.line} 行选的预期成本 ${refused.version} 是 ${refused.supplier ?? '别家供应商'} 的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。`;
+      // 那一版的供应商说名称（supplierName 取不到名称时自己退回标识），与账单号冲突那一句同一种说法。
+      const owner = refused.supplier ? supplierName(refused.supplier) : '别家供应商';
+      return `没有登记：第 ${refused.line} 行选的预期成本 ${refused.version} 是${owner}的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。`;
     }
     case 'EXPECTED_COST_SUPPLIER_UNRECORDED': {
       const refused = body.expectedCostSupplier;
