@@ -80,5 +80,6 @@ Status: in-progress——2026-11-02 子票 01–09 全部进 main（ADR-0355）�
 | [13](./issues/13-supplier-bill-number-and-ranged-audit-outcomes.md) | 供应商账单号按外部标识记录；审核按行按金额范围给通过 / 争议 / 拒绝（ADR-0357） | 后端 + 前端 + 文档 | 11 | resolved（2026-11-02 进 main） |
 | [14](./issues/14-expected-cost-records-supplier.md) | 预期成本记下所依协议的供应商，登记账单按供应商筛预期成本，匹配门核供应商（用户 2026-11-02 裁定「预期成本记下供应商」） | 后端 + 前端 | — | resolved（2026-11-02 进 main） |
 | [15](./issues/15-query-values-with-nul-or-invalid-utf8-across-http-reads.md) | 查询值含 NUL 或非法 UTF-8 的读口一律答 400、不读库（票 12 复评查出操作者族同一缺陷） | 后端 | — | resolved（2026-11-02 进 main） |
+| [16](./issues/16-request-body-strings-with-nul-or-invalid-utf8.md) | 写口请求体（JSON）里的字符串含 NUL 或非法 UTF-8 一律答 400、不落库、不悄悄改写（票 15 完成记录探到；协调方 2026-11-02 裁定两种都拒） | 后端 | —（建在 15 之上） | in-progress |
 
 04–09 互不阻塞，可并行；各票动到同一份 AT 盘点与同一张端点表时按并行会话的取号规矩办。

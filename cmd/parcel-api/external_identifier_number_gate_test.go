@@ -56,7 +56,9 @@ type gateSubmissionAnswer struct {
 // 装配：首方客户渠道 Intake（发行方替身签首方受众的令牌，客户渠道册登一个合成客户端并授提交能力）、提交编排、真库；归属坐标
 // 取写开关那一格与登记册里一条匹配的合成区间，同 TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase。客户
 // 包裹参考 513 字节或带 NUL 时答 400 MALFORMED_REQUEST，detail 点名 parcels[0].customerParcelReference、不抄号码本身，来源
-// 保全与委托一行都不落。恰 512 字节的照收：建单成立，快照里逐字是那个号。
+// 保全与委托一行都不落。恰 512 字节的照收：建单成立，快照里逐字是那个号。端点直挂、不经登记处：生产路由上带 NUL 的那一份
+// 先由请求体检查答 400 MALFORMED_REQUEST，不带 detail（票 document-numbering/16，见 guardRequestBodies），点名那一格的是
+// 检查背后这道门。
 func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

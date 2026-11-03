@@ -25,6 +25,7 @@
 | `5xx` | 服务端没能形成答案 | 留在队里，退避后重发同一请求 |
 
 - 不收 `Idempotency-Key`（ADR-0022）：重放的识别靠接入请求标识与规范化内容摘要，见下文「重放」。
+- **请求体不是文本答 `400 MALFORMED_REQUEST`**：JSON 请求体里任一字符串带 NUL（含 `\u0000` 转义）、原始字节不是合法 UTF-8、或 `\u` 转义出孤代理，都答这一格，什么都不落。服务端不把坏字节换成 U+FFFD 再收：换了，落下的就不是你送来的值。
 - **指名的对象看不见答 `404`**：委托、预报、交接单不存在，或属于别的租户、别的客户账户，同答一格，不分「不存在」与「无权」（ADR-0022）。码按上下文：`SHIPMENT_REQUEST_NOT_VISIBLE`、`DELIVERY_PRE_ADVICE_NOT_VISIBLE`、`DELIVERY_HANDOVER_NOTE_NOT_VISIBLE`。
 - **客户追踪视图是例外**：读不到视图也是业务答案，答 `200`。`outcome` 三格（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一），按调用方的续办分：
   - `CURRENT_VIEW`：有当前视图，带 `view`。各维待确认或不展示也是这一格，逐维看。

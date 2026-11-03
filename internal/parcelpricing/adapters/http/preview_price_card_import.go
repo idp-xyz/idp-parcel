@@ -211,6 +211,11 @@ func DecodePriceCardUpload(request *http.Request) (PriceCardUpload, error) {
 		return PriceCardUpload{}, fmt.Errorf("%w: the form carries exactly one %q file and nothing else", ErrMalformedRequest, PriceCardUploadField)
 	}
 	header := form.File[PriceCardUploadField][0]
+	// 文件名是表单里唯一的文本，录入口把它落进源文件名列。装配处的请求体检查放过 multipart，这一格只能在这里判：
+	// Content-Disposition 的 filename* 按百分号解出来可以带 NUL 或不是合法 UTF-8，原样进 text 列，库存不下（票 document-numbering/16）。
+	if !httpapi.StorableText(header.Filename) {
+		return PriceCardUpload{}, fmt.Errorf("%w: the file name is not storable text", ErrMalformedRequest)
+	}
 	file, err := header.Open()
 	if err != nil {
 		return PriceCardUpload{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
