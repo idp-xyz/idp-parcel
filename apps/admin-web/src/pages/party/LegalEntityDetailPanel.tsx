@@ -57,6 +57,21 @@ const tabTriggerClass = 'px-0 text-[12px] font-medium text-idpxyz-breadcrumb dat
  * 内容只取行上已有的与几个既有区块（公司资料、登记记录、关联各自取数），不为详情栏另开读口。横幅与「更多」菜单
  * 在 LegalEntityHeaderParts.tsx，对象页摆的是同一份。参照页的收货、证据、协作三签在法人册上没有对应的事实，不摆。
  */
+/**
+ * 签上的计数。还没读到（换了一行、新公司的数在路上）时摆一枚看不见的占位徽章，签的宽度不变：不摆的话左边每换一行，
+ * 一排签先缩窄、数到了再撑开，看着是一闪（用户 2026-11-03 指出）。读不到同样只占位不显数，不拿 0 冒充。
+ */
+function TabCount({ count }: { count: number | null | undefined }) {
+  if (count === null || count === undefined) {
+    return (
+      <span aria-hidden="true" className="invisible">
+        <TabCountBadge count={0} />
+      </span>
+    );
+  }
+  return <TabCountBadge count={count} />;
+}
+
 export function LegalEntityDetailPanel({
   row,
   onClose,
@@ -177,21 +192,21 @@ export function LegalEntityDetailPanel({
           </TabsTrigger>
           <TabsTrigger value="contacts" className={tabTriggerClass}>
             <WorkspaceTabLabel id="contacts" />
-            {contactCount !== undefined ? <TabCountBadge count={contactCount} /> : null}
+            <TabCount count={contactCount} />
           </TabsTrigger>
           {/* 签上带数（票 company-subject-ux/09）：资料版本数、登记记录数各读一次修订链，关联数与首屏「被引用」同一份；
-              读不到就不带，不拿 0 冒充。 */}
+              读不到就不显数，不拿 0 冒充——但位子留着，见 TabCount。 */}
           <TabsTrigger value="profile" className={tabTriggerClass}>
             <WorkspaceTabLabel id="profile-versions" />
-            {tabCounts.profileRevisions !== undefined ? <TabCountBadge count={tabCounts.profileRevisions} /> : null}
+            <TabCount count={tabCounts.profileRevisions} />
           </TabsTrigger>
           <TabsTrigger value="history" className={tabTriggerClass}>
             <WorkspaceTabLabel id="identity-revisions" />
-            {tabCounts.identityRevisions !== undefined ? <TabCountBadge count={tabCounts.identityRevisions} /> : null}
+            <TabCount count={tabCounts.identityRevisions} />
           </TabsTrigger>
           <TabsTrigger value="related" className={tabTriggerClass}>
             <WorkspaceTabLabel id="related" />
-            {referenced !== null ? <TabCountBadge count={referenced} /> : null}
+            <TabCount count={referenced} />
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
