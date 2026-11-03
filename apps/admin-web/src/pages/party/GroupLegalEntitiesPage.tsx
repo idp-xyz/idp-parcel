@@ -492,6 +492,7 @@ export function GroupLegalEntitiesPage() {
             onOpenObjectPage={() => {
               window.location.hash = detailHash(row.legalEntityId);
             }}
+            onChanged={retry}
           />
         ) : null;
       }}
