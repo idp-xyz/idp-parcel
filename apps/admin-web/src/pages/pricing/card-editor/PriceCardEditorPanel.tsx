@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useMarkUnsavedInput } from '../../../templates/unsaved-input';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { AlertTriangle, Check } from 'lucide-react';
 import { confirmDialogFooter } from '../../../components/confirm-dialog-footer';
@@ -117,7 +118,8 @@ function Editor({
   const stateText = useMemo(() => JSON.stringify(state), [state]);
   const dirty = stateText !== cleanState;
 
-  // 刷新与关页时浏览器自己弹确认；只在有没存下的内容时挂。
+  // 刷新与关页时浏览器自己弹确认；只在有没存下的内容时挂。换标签回来也不按新开页重挂（useMarkUnsavedInput）。
+  useMarkUnsavedInput(dirty && savedSignature !== signature);
   useEffect(() => {
     if (!dirty || savedSignature === signature) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

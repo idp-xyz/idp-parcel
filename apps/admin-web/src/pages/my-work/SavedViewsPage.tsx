@@ -1,4 +1,5 @@
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
+import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { Button, ConfirmDialog, Tag } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -35,6 +36,11 @@ export function SavedViewsPage() {
   const [removing, setRemoving] = useState<SavedView | null>(null);
 
   const reload = () => setList(listSavedViews(window.localStorage));
+  // 别的页存下视图时人不在这页上；标签保活，回到本页不重挂，所以本标签每次变成活动时重读（本机存储，不发请求）。
+  const activeTab = useWorkspaceTabPanel()?.isActiveTab ?? true;
+  useEffect(() => {
+    if (activeTab) setList(listSavedViews(window.localStorage));
+  }, [activeTab]);
   const rows = filterSavedViews(list, { keyword, moduleId });
   const open = (row: SavedView) => {
     window.location.hash = savedViewHash(row);

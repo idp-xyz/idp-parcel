@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMarkUnsavedInput } from '../../templates/unsaved-input';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, MoreHorizontal, Plus, UserPlus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import {
@@ -435,29 +437,29 @@ export function BusinessPartiesPage() {
   const [relationshipSort, setRelationshipSort] = useState<WorkbenchSort>(defaultPartyRelationshipSort);
   const [selectedRelationship, setSelectedRelationship] = useState<string | null>(null);
 
-  useEffect(() => {
-    // 地址是位置的唯一权威。停用预填读到就收下并从地址去掉（理由见 withoutDeactivationPreset），之后视图按去掉后的地址判。
-    const read = () => {
-      const current = window.location.hash;
-      const next = deactivationPresetOf(current);
-      if (next === null) {
-        setHash(current);
-        return;
-      }
-      setPreset(next);
-      const cleaned = withoutDeactivationPreset(current);
-      window.history.replaceState(window.history.state, '', cleaned);
-      setHash(cleaned);
-    };
-    read();
-    window.addEventListener('hashchange', read);
-    return () => window.removeEventListener('hashchange', read);
-  }, []);
+  // 地址是位置的唯一权威。停用预填读到就收下并从地址去掉（理由见 withoutDeactivationPreset），之后视图按去掉后的地址判。
+  // 只读本标签名下的地址（useOwnAddressChange）：藏着的这一页若也读，会把别的标签地址上的预填剥掉。
+  const readAddress = () => {
+    const current = window.location.hash;
+    const next = deactivationPresetOf(current);
+    if (next === null) {
+      setHash(current);
+      return;
+    }
+    setPreset(next);
+    const cleaned = withoutDeactivationPreset(current);
+    window.history.replaceState(window.history.state, '', cleaned);
+    setHash(cleaned);
+  };
+  // 挂载时读一次：首个地址是打开本标签的那一个，必在本标签名下；此后经 useOwnAddressChange。
+  useEffect(readAddress, []);
+  useOwnAddressChange(readAddress);
 
   const anyUnsaved = Object.values(unsaved).some(Boolean);
   // 刷新与关页时浏览器自己弹确认；只在登记视图且有表单报了没提交的输入时挂。表单自己也挂了一份（useUnsavedGuard），
   // 停用表单关掉了它（预填不算输入），这里按表单对着带预填的基线报上来的那一格再兜一次。
   const guardUnload = view.kind === 'register' && anyUnsaved;
+  useMarkUnsavedInput(guardUnload);
   useEffect(() => {
     if (!guardUnload) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

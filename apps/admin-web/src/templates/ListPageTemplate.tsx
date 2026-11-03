@@ -46,6 +46,7 @@ import {
 import { skeletonOf } from './loading-shape';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 import { useInspector } from './inspector-context';
+import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import type { InspectorContent } from './inspector';
 import { cursorPageSummary, cursorPagerControls } from './cursor-pagination';
 
@@ -127,7 +128,7 @@ export interface ListSavedViewsProps {
 
 /**
  * 选择模型（蓝图 10.5「多选行 → 露出 Bulk Action Bar」）。选中集按 rowKey 记、由调用方持有——它是页面的 UI 瞬态，模板不替页面存；
- * 翻页保留、筛选变更**不**自动清（用户可能在跨筛选攒一批再一起导出）；离开这张标签（切走、进详情——组件卸载）即丢，不进 saved-views：保存视图存的是
+ * 翻页保留、筛选变更**不**自动清（用户可能在跨筛选攒一批再一起导出）；活到这张列表页被重挂为止（list-selection.ts 文件头），不进 saved-views：保存视图存的是
  * 「筛选态」，选中集是对某一批具体对象的临时圈定，两者保质期差几个量级。传了才出复选列（表头 + 每行）；不传时 DOM 里没有任何
  * 复选框，行为与今天同。
  */
@@ -363,11 +364,17 @@ export function ListPageTemplate<Row>({
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
 
   // 检查器里正显示的那一行（键）。只在接了 inspector 时有意义；它是模板自己的呈现状态，不回流给调用方——调用方要的
-  // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。离开这张标签（组件卸载）即丢。
+  // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。标签保活：切走时它留着，切回来再把那一行交回
+  // 检查器（壳层换标签时清空检查器）。
   const inspectorController = useInspector();
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const offersInspector = inspector !== undefined;
-  useEffect(() => (offersInspector ? inspectorController.offer() : undefined), [offersInspector, inspectorController]);
+  // 检查器是活动标签的：藏着的列表页不声明、不往里交内容，否则壳层会为一张看不见的页留着右栏，或拿它的行盖掉眼前这页的。
+  const activeTab = useWorkspaceTabPanel()?.isActiveTab ?? true;
+  useEffect(
+    () => (offersInspector && activeTab ? inspectorController.offer() : undefined),
+    [offersInspector, activeTab, inspectorController],
+  );
   // 最近交给检查器的那份内容的 JSON（函数不进 JSON）。rows 变了按键重推时拿它比：页面常在每次渲染里重建行对象（把读模型
   // 映成展示行），比对象身份会每次都交——交了壳层重渲本页、本页又重建行，转不出来；比内容只在字真变了时才交。
   const shownContentJson = useRef<string | null>(null);
@@ -382,10 +389,14 @@ export function ListPageTemplate<Row>({
     onRowClick?.(row);
     inspectRow(row, key);
   };
-  // 右栏不留单击那一刻的旧快照：rows 换了（重取、检索改了）就按键找回那一行重推，找不到就清空。
+  // 切回本标签时壳层已把检查器清空（Layout 在布局副作用里清，先于这里），忘掉上次交过什么，下面那一条就会把选中行重交一遍。
+  useEffect(() => {
+    if (activeTab) shownContentJson.current = null;
+  }, [activeTab]);
+  // 右栏不留单击那一刻的旧快照：rows 换了（重取、检索改了）就按键找回那一行重推，找不到就清空。只在本标签活动时交。
   // inspector 与 rowKey 不作依赖：它们常是每次渲染新建的函数，用本次渲染的那一份就对。
   useEffect(() => {
-    if (!inspector || inspectedKey === null) return;
+    if (!activeTab || !inspector || inspectedKey === null) return;
     const row = rows.find((candidate) => rowKey(candidate) === inspectedKey);
     if (row === undefined) {
       shownContentJson.current = null;
@@ -398,7 +409,7 @@ export function ListPageTemplate<Row>({
     if (json === shownContentJson.current) return;
     shownContentJson.current = json;
     inspectorController.show(content);
-  }, [rows, inspectedKey]);
+  }, [rows, inspectedKey, activeTab]);
 
   const crumb =
     breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);

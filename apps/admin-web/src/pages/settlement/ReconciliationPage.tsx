@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
@@ -240,12 +241,8 @@ function CustomerStatementsTable({
 function useDisputedOnlyPlace(): [boolean, (disputedOnly: boolean) => void] {
   const [disputedOnly, setDisputedOnly] = useState(() => disputedOnlyOf(window.location.hash));
 
-  useEffect(() => {
-    // 本页已开着时从首页点待对账格进来，地址变了而页不重挂载，要跟着地址走。
-    const onHashChange = () => setDisputedOnly(disputedOnlyOf(window.location.hash));
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  // 本页已开着时从首页点待对账格进来，地址变了而页不重挂载，要跟着地址走。
+  useOwnAddressChange(() => setDisputedOnly(disputedOnlyOf(window.location.hash)));
 
   const place = (next: boolean) => {
     setDisputedOnly(next);

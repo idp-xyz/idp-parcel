@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMarkUnsavedInput } from '../../templates/unsaved-input';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { AlertTriangle, ArrowLeft, Clock, Info, Plus, X } from 'lucide-react';
 import {
   Button,
@@ -301,14 +303,11 @@ export function GroupLegalEntitiesPage() {
   );
   const columns = useMemo(() => columnsOf(typeNameOf), [typeNameOf]);
 
-  useEffect(() => {
-    const onHashChange = () => setHash(window.location.hash);
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  useOwnAddressChange(() => setHash(window.location.hash));
 
   // 刷新与关页时浏览器自己弹确认；只在登记视图且草稿有没提交的输入时挂。
   const guardUnload = view.kind === 'register' && registerUnsaved;
+  useMarkUnsavedInput(guardUnload);
   useEffect(() => {
     if (!guardUnload) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

@@ -8,6 +8,7 @@
 // 「没提交」抹掉。登记簿是纯函数加一个模块级的表，node:test 直接跑；挂浏览器事件的那半在 useUnsavedGuard。
 
 import { useEffect, useId } from 'react';
+import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 
 const registry = new Map<string, string>();
 
@@ -33,11 +34,13 @@ export function registrationGroup(kind: string): string {
 }
 
 /**
- * 表单挂着且有没提交的输入时：登记进簿，并让浏览器在刷新、关页前弹确认。卸载时移出，不留死记录。
+ * 表单挂着且有没提交的输入时：登记进簿，并让浏览器在刷新、关页前弹确认；也给所在标签登记一笔，换标签离开满新鲜期回来
+ * 不按新开页重挂（templates/unsaved-input.ts）。卸载时移出，不留死记录。
  * 浏览器只给固定的确认文案，不能自定义；要的只是「别悄悄丢」。
  */
 export function useUnsavedGuard(group: string, unsaved: boolean): void {
   const instance = useId();
+  useMarkUnsavedInput(unsaved);
   useEffect(() => {
     setDraftUnsaved(instance, group, unsaved);
     return () => setDraftUnsaved(instance, group, false);

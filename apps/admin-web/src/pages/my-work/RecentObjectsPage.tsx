@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -22,7 +23,8 @@ const info = moduleInfoById['recent-objects'];
 // 母版上排序 / 保存视图 / 更多筛选三个位照旧禁用 + 说明——本页的数据是本机历史，那三样没有可接的动作。
 // 页头没有图标位（模板 title 收 string，改模板属票 03 地盘且票面明写不改），图标在左导航条目上，这里不重复。
 //
-// 数据一次读进 state：本页自己是这份存储唯一的写方（清空），别的地方写（外壳记一条）时人不在这页上，回来时重挂载重读。
+// 数据读进 state：本页自己是这份存储唯一的写方（清空），别的地方写（外壳记一条）时人不在这页上。标签保活，回到本页不重挂，
+// 所以每次本标签变成活动时重读一遍（ADR-0360 决定四）——本机存储，读一次不发请求。
 // 「清空历史」走 ConfirmDialog 二次确认——它是唯一的删除入口，删的是整份历史，没有逐条删（理由见 recent-objects.ts 头注）。
 
 const columns: ListColumn<RecentObject>[] = [
@@ -46,6 +48,10 @@ const columns: ListColumn<RecentObject>[] = [
 
 export function RecentObjectsPage() {
   const [list, setList] = useState<RecentObject[]>(() => listRecentObjects(window.localStorage));
+  const activeTab = useWorkspaceTabPanel()?.isActiveTab ?? true;
+  useEffect(() => {
+    if (activeTab) setList(listRecentObjects(window.localStorage));
+  }, [activeTab]);
   const [keyword, setKeyword] = useState('');
   const [moduleId, setModuleId] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate } from '../../templates';
@@ -440,14 +441,10 @@ function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesT
   const [tab, setTab] = useState<PoliciesTab>(() => policiesTabOf(window.location.hash));
   const [register, setRegister] = useState<CommercialPolicyKind>(() => policiesRegisterOf(window.location.hash));
 
-  useEffect(() => {
-    const onHashChange = () => {
-      setTab(policiesTabOf(window.location.hash));
-      setRegister(policiesRegisterOf(window.location.hash));
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  useOwnAddressChange(() => {
+    setTab(policiesTabOf(window.location.hash));
+    setRegister(policiesRegisterOf(window.location.hash));
+  });
 
   const place = (nextTab: PoliciesTab, nextRegister: CommercialPolicyKind) => {
     const registerChanged = nextRegister !== register;

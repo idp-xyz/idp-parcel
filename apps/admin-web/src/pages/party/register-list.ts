@@ -47,7 +47,7 @@ export function registerListReducer<Body>(
   }
 }
 
-// 跨挂载的记忆（`remember`）：换标签时页面卸载，回来是新挂载、答案从空开始。给了 remember 的册，新挂载先拿上一次
+// 跨挂载的记忆（`remember`）：页面重挂（离开满新鲜期回来、关了再开）时是新挂载、答案从空开始。给了 remember 的册，新挂载先拿上一次
 // 答到的业务答案、照常再问——与 registerListReducer「重取不清上一份业务答案」同一条语义，只是跨过了卸载。按 load 引用记，所以同样
 // 要求 load 是模块级函数。只记业务答案，读不到的那几态不记，理由同 registerListReducer。只在浏览器内存里：整页重载
 // 即清，登出走 logout 的整页跳转，换会话不会带过去。被作废的那一问（换了重取序号、或已卸载）答到了也不记，免得慢的

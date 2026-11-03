@@ -123,6 +123,29 @@ export function hashForTab(tabId: string | null): string {
   return `#/${tabId ?? WORKBENCH_MODULE_ID}`;
 }
 
+/**
+ * 这个 hash 是不是这张标签的地址（查询串与第三段都算它的）。标签保活之后几张页同时挂着，地址变化每张都听得到；只有
+ * 落在自己名下的才归它读——列表标签听到自己那张详情标签的地址（`#/<模块>/<对象>`）若也照读，藏着的列表会自己翻成详情。
+ * 词表认不认这个模块与此无关：认不出的地址造不出任何标签 id，自然不等于哪一张。
+ */
+export function hashBelongsToTab(hash: string, tabId: string): boolean {
+  return tabIdFromHash(hash, () => true) === tabId;
+}
+
+/**
+ * 回到一张标签时要不要按新开页重挂：离开满新鲜期才重挂（重挂即重读，与保活之前每次回来都重读同一结果），新鲜期里回来
+ * 原样。没记过离开时刻（从没离开过、刚打开）不重挂。标签上有没提交的输入时也不重挂：重挂会把草稿一声不响地丢掉
+ * （templates/unsaved-input.ts 文件头）。
+ */
+export function returnNeedsFreshMount(
+  hiddenSince: number | undefined,
+  now: number,
+  freshForMs: number,
+  hasUnsavedInput: boolean,
+): boolean {
+  return !hasUnsavedInput && hiddenSince !== undefined && now - hiddenSince >= freshForMs;
+}
+
 // —— 各标签上次停在哪 ——
 
 /**

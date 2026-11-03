@@ -1,5 +1,5 @@
 // hash 地址的读写小件（票 admin-web-workspace-form/06）：检索词这类只活在地址里的页内状态放进 hash 的查询串
-// （`#/<模块>[/<对象>]?q=…`，与保存视图的 `?view=` 同层），标签卸载再挂载时从地址读回；另有路径段的安全解码。
+// （`#/<模块>[/<对象>]?q=…`，与保存视图的 `?view=` 同层），页面重挂（离开满新鲜期回来、刷新、收藏打开）时从地址读回；另有路径段的安全解码。
 // 零依赖、不引 React：run-tests 的 CommonJS 发射能直接加载，shell/ 与 pages/ 下的纯逻辑也直接引本文件而不经 templates/index
 // （那里带着 ESM-only 的 @idpxyz 原语）。读写地址的钩子在 use-address-keyword.ts。
 

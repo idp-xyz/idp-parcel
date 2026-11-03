@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import {
   WorkbenchPageTemplate,
   decodeHashSegment,
@@ -189,7 +190,7 @@ function viewStateOf(answer: ApiResult<ViewsListResponseBody> | null, rowCount: 
 }
 
 export function ShipmentRequestListPage() {
-  // 检索词在地址里（`?q=`）：壳层把列表与每份详情开成各自的标签、非活动标签卸载，进详情再回来是新实例——检索词靠地址活下来。
+  // 检索词在地址里（`?q=`）：壳层把列表与每份详情开成各自的标签；离开满新鲜期回来、刷新、收藏打开都是新实例——检索词靠地址活下来。
   const [search, setSearch] = useAddressKeyword();
   const tabReturn = useTabReturn();
   // 渲列表还是详情由 hash 二段定：详情地址在壳层是自己的一张标签，本组件在那张标签里渲详情。选中态的唯一来源是 hash。
@@ -203,11 +204,8 @@ export function ShipmentRequestListPage() {
   const [refreshing, setRefreshing] = useState(false);
   const names = useCustomerNames();
 
-  useEffect(() => {
-    const onHashChange = () => setDetailRef(selectedRefFromHash());
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  // 只认本标签名下的地址：列表与详情是两张标签，藏着的列表若照读详情标签的地址会自己翻成详情。
+  useOwnAddressChange(() => setDetailRef(selectedRefFromHash()));
 
   useEffect(() => {
     let cancelled = false;

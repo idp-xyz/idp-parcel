@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ADDRESS_KEYWORD_PARAM, hashQueryValue, hashWithQueryValue } from './address-query';
+import { useOwnAddressChange } from './use-own-address-change';
 
 /**
  * 列表页的检索词放在地址里（`?q=`，票 admin-web-workspace-form/06）：读自 hash、写回 hash。写用 history.replaceState——每敲一个字
@@ -9,11 +10,7 @@ import { ADDRESS_KEYWORD_PARAM, hashQueryValue, hashWithQueryValue } from './add
 export function useAddressKeyword(): [string, (keyword: string) => void] {
   const [keyword, setKeywordState] = useState(() => hashQueryValue(window.location.hash, ADDRESS_KEYWORD_PARAM));
 
-  useEffect(() => {
-    const onHashChange = () => setKeywordState(hashQueryValue(window.location.hash, ADDRESS_KEYWORD_PARAM));
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  useOwnAddressChange(() => setKeywordState(hashQueryValue(window.location.hash, ADDRESS_KEYWORD_PARAM)));
 
   const setKeyword = useCallback((next: string) => {
     setKeywordState(next);

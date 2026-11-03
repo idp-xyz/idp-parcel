@@ -15,6 +15,7 @@ import {
   closeOthers,
   closeTab,
   closeToRight,
+  hashBelongsToTab,
   hashForTab,
   hashOfUrl,
   initialWorkspaceState,
@@ -25,6 +26,7 @@ import {
   rememberTabAddress,
   reopenClosed,
   reorderTabs,
+  returnNeedsFreshMount,
   saveWorkspaceState,
   setInspectorVisible,
   setInspectorWidth,
@@ -89,6 +91,28 @@ test('tabIdFromHash：空 hash、#/workbench 与词表外的模块都落工作�
   equal(tabIdFromHash('#/', known), null);
   equal(tabIdFromHash('#/workbench', known), null);
   equal(tabIdFromHash('#/no-such-module/x', known), null);
+});
+
+test('hashBelongsToTab：查询串与第三段都算本标签的；同模块的对象地址是另一张标签', () => {
+  equal(hashBelongsToTab('#/group-legal-entities', 'group-legal-entities'), true);
+  equal(hashBelongsToTab('#/group-legal-entities?q=IDP', 'group-legal-entities'), true);
+  equal(hashBelongsToTab('#/shipment-request-inquiry/SR-1/timeline', 'shipment-request-inquiry/SR-1'), true);
+  equal(hashBelongsToTab('#/shipment-request-inquiry/SR-1', 'shipment-request-inquiry'), false);
+  equal(hashBelongsToTab('#/business-parties', 'group-legal-entities'), false);
+  equal(hashBelongsToTab('#/workbench', 'group-legal-entities'), false);
+  equal(hashBelongsToTab('', 'group-legal-entities'), false);
+});
+
+test('returnNeedsFreshMount：离开满新鲜期才重挂，没记过离开时刻不重挂', () => {
+  equal(returnNeedsFreshMount(undefined, 100_000, 30_000, false), false);
+  equal(returnNeedsFreshMount(80_000, 100_000, 30_000, false), false);
+  equal(returnNeedsFreshMount(70_000, 100_000, 30_000, false), true);
+  equal(returnNeedsFreshMount(10_000, 100_000, 30_000, false), true);
+});
+
+test('returnNeedsFreshMount：有没提交的输入时不重挂，离开多久都一样', () => {
+  equal(returnNeedsFreshMount(10_000, 100_000, 30_000, true), false);
+  equal(returnNeedsFreshMount(70_000, 100_000, 30_000, true), false);
 });
 
 test('tabIdFromHash / tabForHash：解不开的段（畸形百分号）落工作台，不抛', () => {

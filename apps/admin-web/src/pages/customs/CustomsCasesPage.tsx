@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -812,15 +813,11 @@ function useCasesPlace(): [CasesTab, boolean, (tab: CasesTab, unadmittedOnly: bo
   const [tab, setTab] = useState<CasesTab>(() => casesTabOf(window.location.hash));
   const [unadmittedOnly, setUnadmittedOnly] = useState(() => unadmittedOnlyOf(window.location.hash));
 
-  useEffect(() => {
-    // 本签已开着时从首页点卡关格进来，地址变了而页不重挂载，要跟着地址走。
-    const onHashChange = () => {
-      setTab(casesTabOf(window.location.hash));
-      setUnadmittedOnly(unadmittedOnlyOf(window.location.hash));
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  // 本签已开着时从首页点卡关格进来，地址变了而页不重挂载，要跟着地址走。
+  useOwnAddressChange(() => {
+    setTab(casesTabOf(window.location.hash));
+    setUnadmittedOnly(unadmittedOnlyOf(window.location.hash));
+  });
 
   const place = (nextTab: CasesTab, nextUnadmittedOnly: boolean) => {
     setTab(nextTab);

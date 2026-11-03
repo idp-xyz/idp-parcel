@@ -1,4 +1,5 @@
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
@@ -24,6 +25,9 @@ import { isOpenCommandPaletteShortcut } from './shell/command-actions';
 import { useSessionPrincipal } from './shell/session';
 import { useBoundTenant } from './pages/use-operator-binding';
 import { prefetchRefdataNames } from './pages/use-refdata-names';
+import { answerFreshForMs } from './query/freshness';
+import { tabHasUnsavedInput } from './templates/unsaved-input';
+import { CurrentTabContext } from './templates/current-tab';
 import { logout } from './auth/oidc';
 import {
   listRecentObjects,
@@ -51,6 +55,7 @@ import {
   rememberTabAddress,
   reopenClosed,
   reorderTabs,
+  returnNeedsFreshMount,
   saveWorkspaceState,
   setInspectorVisible,
   setInspectorWidth,
@@ -93,7 +98,10 @@ import {
 // 哪个地址」。可转发的状态仍从地址读；筛选、选中与分栏等临时呈现状态由 WorkspaceViewStateProvider 按标签保留；
 // 关标签写 hash——关掉活动标签后「现在在哪」这一问仍由 hash 答，标签集只是算出该落到哪个邻居，再把答案写回地址。
 // 工作台不是标签而是 EditorGroup 的 emptyStateContent：activeTabId 为 null 即显示工作台，理由见 workspace-state.ts 文件头。
-// 非活动标签卸载（preserveInactiveTabContent 关）：每张页各自 fetch，留着会攒请求——myshop-web 的演示数据无此顾虑，我们有。
+// 非活动标签保活（preserveInactiveTabContent 开，取舍见 ADR-0360 决定四）：回到标签不重建、不重读。标签打开过才挂页面——
+// 刷新后从本机存储恢复的那一排标签若一齐挂上，会一齐取数，且挂载时读到的是活动标签的地址。保活之后由外壳与模板守住的：
+// 藏着的页只认自己标签名下的地址（templates/use-own-address-change.ts）；检查器只归活动标签（ListPageTemplate）；
+// 离开满新鲜期再回来按新开页重挂、即重读，有没提交的输入的除外（returnNeedsFreshMount，期长 answerFreshForMs）。
 //
 // 外壳代管的唯一一件「页内」事是记最近对象：落到带第二段的对象地址就记一条本机历史（pages/my-work/recent-objects.ts）——
 // 记的是地址不是状态，且只有外壳站在每次 hash 变化的必经之路上。
@@ -140,6 +148,33 @@ export function Layout() {
   workspaceRef.current = workspace;
   // 各标签上次停在的完整地址：hashchange 时按 oldURL 记下离开的那一格，回程时读。只在回程那一刻被读、不驱动渲染，放 ref。
   const tabAddresses = useRef<TabAddressBook>(new Map());
+  // 保活与新鲜期：哪些标签打开过（打开过才挂页面）、各标签被切走的时刻、每张标签第几次挂载（进 renderTab 的 key，加一即按
+  // 新开页重挂）。这几样与换活动标签在同一个事件里改、同一次渲染生效——放到渲染之后再判，回来那一帧会先露出旧内容再换成
+  // 重读中的空白，新打开的标签也会先空一帧。
+  const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<string>>(
+    () => new Set(workspace.activeTabId !== null ? [workspace.activeTabId] : []),
+  );
+  const hiddenSince = useRef(new Map<string, number>());
+  const [mountGenerations, setMountGenerations] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const noteActivation = (leaving: string | null, arriving: string | null) => {
+    if (leaving === arriving) return;
+    const now = Date.now();
+    if (leaving !== null) hiddenSince.current.set(leaving, now);
+    if (arriving === null) return;
+    setVisitedTabs((visited) => (visited.has(arriving) ? visited : new Set(visited).add(arriving)));
+    if (returnNeedsFreshMount(hiddenSince.current.get(arriving), now, answerFreshForMs, tabHasUnsavedInput(arriving))) {
+      setMountGenerations((generations) => new Map(generations).set(arriving, (generations.get(arriving) ?? 0) + 1));
+    }
+    hiddenSince.current.delete(arriving);
+  };
+  // 关掉的标签忘掉离开时刻：重新打开它是一张新标签，从打开那一刻起算。打开过的集合不在这里剪——关掉的标签再回来必经激活，
+  // 激活那一刻已记回；在副作用里按一份旧的标签集去剪，反倒可能剪掉同一事件里刚记下的那张。
+  useEffect(() => {
+    const open = new Set(workspace.tabs.map((tab) => tab.id));
+    for (const id of [...hiddenSince.current.keys()]) if (!open.has(id)) hiddenSince.current.delete(id);
+  }, [workspace.tabs]);
+  const noteActivationRef = useRef(noteActivation);
+  noteActivationRef.current = noteActivation;
 
   useEffect(() => {
     saveWorkspaceState(window.localStorage, workspace);
@@ -150,6 +185,7 @@ export function Layout() {
     recordRecentObjectFromHash();
     const onHashChange = (event: HashChangeEvent) => {
       tabAddresses.current = rememberTabAddress(tabAddresses.current, hashOfUrl(event.oldURL), pageTitleById);
+      noteActivationRef.current(workspaceRef.current.activeTabId, tabForHash(window.location.hash, pageTitleById)?.id ?? null);
       setWorkspace((state) => applyHash(state, window.location.hash));
       recordRecentObjectFromHash();
     };
@@ -167,7 +203,11 @@ export function Layout() {
     if (next === prev) return;
     workspaceRef.current = next;
     setWorkspace(next);
-    if (next.activeTabId !== prev.activeTabId) window.location.hash = addressForTab(tabAddresses.current, next.activeTabId);
+    if (next.activeTabId !== prev.activeTabId) {
+      // ref 已先改成新活动标签，随后的 hashchange 看到的是同一张、不再记；所以关标签落到邻居这条路在这里记。
+      noteActivation(prev.activeTabId, next.activeTabId);
+      window.location.hash = addressForTab(tabAddresses.current, next.activeTabId);
+    }
   };
 
   const navigate = (hash: string) => {
@@ -224,7 +264,8 @@ export function Layout() {
 
   // 检查器：内容由列表页经 useInspector 交进来；控制口 useMemo 住，Provider 值不随每次渲染换引用。
   const [inspectorContent, setInspectorContent] = useState<InspectorContent | null>(null);
-  // 主区里挂着几个供内容的列表——非活动标签卸载，实际只有活动页的零个或一个；为零时右边不出检查器栏。
+  // 主区里有几个供内容的列表在声明——标签保活后藏着的页也挂着，但只有活动标签声明（ListPageTemplate），实际是零个或一个；
+  // 为零时右边不出检查器栏。
   // 计数而不是布尔：换标签时旧页撤回与新页声明的先后不由这里定。
   const [inspectorOffers, setInspectorOffers] = useState(0);
   const inspectorController = useMemo<InspectorController>(
@@ -238,7 +279,9 @@ export function Layout() {
     }),
     [],
   );
-  useEffect(() => {
+  // 布局副作用：要先于页面的普通副作用清——标签保活后切回列表页，ListPageTemplate 会在自己的副作用里把选中行重交检查器，
+  // 这里若晚一步清就把它刚交的那份抹掉。
+  useLayoutEffect(() => {
     setInspectorContent(null);
   }, [workspace.activeTabId]);
   // 页面「回到某标签」的口：与点标签同一条回程，落回那张标签上次停的地址。
@@ -289,13 +332,28 @@ export function Layout() {
     else window.setTimeout(prefetchPages, 1500);
   }, []);
 
-  // 按标签 id 键住内容：两张标签同一模块（列表与它的一份详情）时不复用同一个页面实例，切标签就是换页，页内状态不串。
-  // 页面块按域懒加载：加载态与取不回来都只占这一张标签的页面区。
+  // 工作台在保活模式下要自己摆：@idpxyz/ui-workspace 的保活分支只要还有标签就把各标签面板全藏起来、不渲 emptyStateContent，
+  // 回到工作台（没有活动标签）时主区是一片空白。工作台按设计不是标签（理由见 workspace-state.ts 文件头），所以这时把它
+  // 渲进标签面板的容器里——容器按各面板上的 data-tab-panel 找。根治归上游 idp-ui：保活分支在没有活动标签时也该渲空态。
+  // 一张标签都没有时容器不在，工作台照旧走 emptyStateContent。
+  const editorHostRef = useRef<HTMLDivElement>(null);
+  const [workbenchHost, setWorkbenchHost] = useState<HTMLElement | null>(null);
+  const workbenchOverTabs = workspace.activeTabId === null && workspace.tabs.length > 0;
+  useLayoutEffect(() => {
+    const host = workbenchOverTabs
+      ? (editorHostRef.current?.querySelector('[data-tab-panel]')?.parentElement ?? null)
+      : null;
+    setWorkbenchHost((current) => (current === host ? current : host));
+  });
+
+  // 按标签 id 键住内容：两张标签同一模块（列表与它的一份详情）时不复用同一个页面实例，页内状态不串。键里再带第几次挂载：
+  // 离开满新鲜期回来时加一，按新开页重挂。页面块按域懒加载：加载态与取不回来都只占这一张标签的页面区。
   const renderTab = (tabId: string) => {
+    if (!visitedTabs.has(tabId)) return null;
     const moduleId = moduleIdOfTab(tabId);
     const Page = pageById[moduleId];
     return (
-      <Fragment key={tabId}>
+      <CurrentTabContext.Provider key={`${tabId}\u0000${mountGenerations.get(tabId) ?? 0}`} value={tabId}>
         {Page ? (
           <PageChunkBoundary>
             <Suspense fallback={<PageLoading />}>
@@ -305,7 +363,7 @@ export function Layout() {
         ) : (
           <UnwiredModule moduleId={moduleId} />
         )}
-      </Fragment>
+      </CurrentTabContext.Provider>
     );
   };
 
@@ -342,6 +400,7 @@ export function Layout() {
           <InspectorProvider value={inspectorController}>
           <WorkspaceViewStateProvider tabIds={workspace.tabs.map((tab) => tab.id)}>
           <TabReturnProvider value={tabReturn}>
+          <div ref={editorHostRef} className="contents">
           <EditorGroup
             group={{ id: MAIN_EDITOR_GROUP_ID, tabs: workspace.tabs, activeTab: workspace.activeTabId ?? '' }}
             isActive
@@ -366,8 +425,10 @@ export function Layout() {
             getTabRiskDot={() => null}
             renderContent={renderTab}
             emptyStateContent={<Workbench onNavigate={setActive} />}
-            preserveInactiveTabContent={false}
+            preserveInactiveTabContent
           />
+          </div>
+          {workbenchOverTabs && workbenchHost ? createPortal(<Workbench onNavigate={setActive} />, workbenchHost) : null}
           </TabReturnProvider>
           </WorkspaceViewStateProvider>
           </InspectorProvider>
