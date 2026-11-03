@@ -3,7 +3,7 @@
 Category: enhancement
 Status: in-progress（分支 `claude-csux-06`，票 04 已进 main；票 05 分支 `claude-csux-05` tip `a34565442` 评审中，本票对着它的契约做）
 父票：[spec](../spec.md)
-Blocked by: [04](./04-profile-form.md)、[05](./05-cross-border-profile-extensions.md)
+Blocked by: 无（04、05 已进 main）
 出处：票 05 决定；评估「四、国际小包视角」。
 
 ## 要做的
@@ -55,3 +55,8 @@ Blocked by: [04](./04-profile-form.md)、[05](./05-cross-border-profile-extensio
 - 币种目录读不回时的手填格（`BankAccountCurrencyField` 的退路）只过 tsc 与 build，演示库目录读得回。
 - 服务端对（币种，账号）重复、语言重复、主抬头空着带语言版本的拒绝答复在格下怎么显，未在浏览器触发（本地先提了，要绕过本地提示才会到服务端）。
 - 工作台详情栏（`LegalEntityDetailPanel`）的概要签走同一个 `LegalEntityProfileContent`，未另截图。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `456dd64d8` 上 `git merge --no-ff origin/claude-csux-06`（tip `4d88462d1`），无冲突；协调方顺手把 `GroupLegalEntitiesPage.tsx` 使用说明里作者请裁的「税号」改成「监管登记号、收款账户」。三道门在 main 上退 0（tsc、run-tests 1163、vite build）。没动共享面，不需评审。
+- 币种目录读不回时退回手填那条路只过 tsc / build，未在浏览器看（作者如实记）。

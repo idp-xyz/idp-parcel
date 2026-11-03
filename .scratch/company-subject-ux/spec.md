@@ -1,7 +1,7 @@
 # 公司主体 UX 评估落地
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 子票 01–07 全部进 main
 出处：用户 2026-11-02 要求以 UX 专家视角评估「公司主体」的 UX/UI 与内容表达，并裁定「按建议直接修改优化」。评估基于 main `97ca27b8b` 的预览（演示租户 5 家主体）；截图与页面文本在协调方会话的 scratchpad `ux-le/`。
 
 ## 评估结论（一句话）
@@ -55,7 +55,7 @@ Status: in-progress
 | [03](./issues/03-object-page-deactivation-and-references.md) | 对象页与详情栏首屏重构、停用对话框留在本页、「被谁引用」全景 | `LegalEntityDetailPage.tsx`、`LegalEntityDetailPanel.tsx`、`LegalEntityHeaderParts.tsx`、`IdentityDeactivationForm.tsx`、新 `LegalEntityDeactivationDialog.tsx`、新 `LegalEntityReferencesSection.tsx` + `legal-entity-references.ts` | — | resolved（2026-11-03 进 main） |
 | [04](./issues/04-profile-form.md) | 公司资料表单：默认基于当前版本、保存前差异预览、未保存保护、缺项提示、税务登记号类型从目录选、币种指引 | `LegalEntityProfileSection.tsx`、`LegalEntityProfileFields.tsx`、`legal-entity-profile.ts`、`CurrentLegalEntityProfile.tsx`、`LegalEntityProfileSummary.tsx` | — | resolved（2026-11-03 进 main） |
 | [05](./issues/05-cross-border-profile-extensions.md) | 跨境主体资料扩展：监管登记号语言放宽、收款账户、多语言开票抬头（ADR-0359，协调方代决）——领域文档 + 后端 + 种子 | `docs/adr`、`docs/domain/party-commercial`、`internal/partycommercial`、`migrations/party_commercial`、`scripts/demo-seeds` | — | resolved（2026-11-03 进 main） |
-| [06](./issues/06-cross-border-profile-admin-web.md) | 管理台跟上票 05：监管登记号、收款账户、多语言抬头 | `pages/party/LegalEntityProfile*`、`legal-entity-profile*.ts` | 04、05 | blocked |
+| [06](./issues/06-cross-border-profile-admin-web.md) | 管理台跟上票 05：监管登记号、收款账户、多语言抬头 | `pages/party/LegalEntityProfile*`、`legal-entity-profile*.ts` | 04、05 | resolved（2026-11-03 进 main） |
 | [07](./issues/07-polish-after-landing.md) | 收尾抛光：空的概要卡、「关联」签显名称、头部注册号胶囊截断 | `LegalEntityDetailPage.tsx`、`LegalEntityDetailPanel.tsx`、`LegalEntityReferencesSection.tsx`、`legal-entity-references.ts` | — | resolved（2026-11-03 进 main） |
 
 01–05 并行，各自只动表里的落点；落点之外的文件要改一行也先告诉协调方。进 main 顺序 01 → 02 → 03 → 04，每票进 main 前 `git merge origin/main` 再过三道门。
