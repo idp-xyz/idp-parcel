@@ -29,6 +29,7 @@ import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalE
 import { profileStatusCellOf, referencedCount } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
 import {
+  CopyAside,
   Fact,
   FactStrip,
   RefText,
@@ -108,8 +109,9 @@ export function LegalEntityDetailPanel({
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {/* 公司名是文本类（票 company-subject-ux/14）：文字照常可选，末尾悬停出复制图标；转写不到的那句话不是值，不挂。 */}
             <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
-              {row.partyNameKnown ? row.partyName : <UnknownPartyName />}
+              {row.partyNameKnown && row.partyName ? <CopyAside value={row.partyName} name="公司名">{row.partyName}</CopyAside> : <UnknownPartyName />}
             </h2>
             <StatusPill code={row.status} />
           </div>
@@ -199,8 +201,8 @@ export function LegalEntityDetailPanel({
             <TabsContent value="overview" className="mt-0">
               {row.deactivationBasis ? (
                 <dl className="mb-4">
-                  <DetailRow label="停用来源单据" mono>
-                    {row.deactivationBasis}
+                  <DetailRow label="停用来源单据">
+                    <RefText value={row.deactivationBasis} name="停用来源单据" />
                   </DetailRow>
                 </dl>
               ) : null}
