@@ -349,7 +349,7 @@ function ReceptionForm({
             : draft.currency === ''
               ? '先选币种，预期成本只列这家供应商同币种的。'
               : `只列这家供应商 ${draft.currency} 的当前预期成本；别家的对不上，不同币种没有换算依据也对不上。`}
-          {unrecorded > 0 ? ` 另有 ${unrecorded} 份预期成本还没记是哪家供应商的（较早形成的），这里不列，请运营补记之后再选。` : ''}
+          {unrecorded > 0 ? `另有 ${unrecorded} 份预期成本还没记是哪家供应商的（较早形成的），这里不列，请运营补记之后再选。` : ''}
         </p>
         {touched && problems.fields.lines ? <p className={`text-[11px] ${statusToneText.warning}`}>{problems.fields.lines}</p> : null}
         {draft.lines.map((line, index) => {
