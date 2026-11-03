@@ -202,11 +202,11 @@ export function partyTypeLabel(roles: readonly string[]): string {
 }
 
 /**
- * 修订号给人看时说「第 N 次更新」：首笔也算一次，所以 r1 就是第 1 次。列表主列不显它，只在变更记录与事实条上出现；
- * 技术详情里仍是裸数字。
+ * 版本号给人看时说「第 N 版」：首笔也是第 1 版，不说「第 1 次更新」——运营的人数的是版本，不是更新次数
+ * （spec 公司主体 UX「统一用语」）。列表主列不显它，只在变更记录与事实条上出现；技术详情里仍是裸数字。
  */
 export function updateOrdinalLabel(revision: number): string {
-  return `第 ${revision} 次更新`;
+  return `第 ${revision} 版`;
 }
 
 // 法人册对象类型今天只有一格(传输层 kindResponsibleLegalEntity):经营组织没有
@@ -215,15 +215,31 @@ export const legalEntityKindLabels: Record<string, string> = {
   RESPONSIBLE_LEGAL_ENTITY: '公司主体',
 };
 
-// 责任法人身上有两条修订轴——身份登记修订与法人资料修订（ADR-0145 决定三），各自从 1 编号，同一屏常常一起出现；
-// 写成裸 rN 时「r1」与「生效修订 r2」读不出哪个是当前。法人页上凡显修订号都经这两个函数带上轴名。业务参与方
-// 只有身份一条轴，那几页照旧写裸 rN，不用这两个。
+// 责任法人身上有两条版本轴——身份登记的「登记记录」与公司资料的「资料版本」（ADR-0145 决定三），各自从 1 编号，同一屏
+// 常常一起出现。轴名由对象页的签与区块标题承担（workspace-tabs.ts 的 profile-versions / identity-revisions 两签），版本号
+// 本身短写「第 N 版」；签名盖不住轴名的位置（事实条、概要句）用带轴名的长写，不写裸 rN——「r1」与「生效修订 r2」读不出
+// 哪个是哪条轴。业务参与方只有身份一条轴，那几页照旧写裸 rN，不用这几个。
+export const identityRecordNoun = '登记记录';
+export const profileVersionNoun = '资料版本';
+
+/** 登记记录的短写「第 N 版」：用在「登记记录」签内，轴名由签承担。 */
 export function identityRevisionLabel(revision: number): string {
-  return `身份 r${revision}`;
+  return updateOrdinalLabel(revision);
 }
 
+/** 资料版本的短写「第 N 版」：用在「资料版本」签内。 */
 export function profileRevisionLabel(revision: number): string {
-  return `资料 r${revision}`;
+  return updateOrdinalLabel(revision);
+}
+
+/** 长写「登记记录 · 第 N 版」，给签名盖不住轴名的位置。 */
+export function identityRecordLabel(revision: number): string {
+  return `${identityRecordNoun} · ${updateOrdinalLabel(revision)}`;
+}
+
+/** 长写「资料版本 · 第 N 版」，同上。 */
+export function profileVersionLabel(revision: number): string {
+  return `${profileVersionNoun} · ${updateOrdinalLabel(revision)}`;
 }
 
 // 可停用的身份种类封闭集（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
@@ -238,25 +254,32 @@ export const identityKindLabels = {
 export type IdentityKind = keyof typeof identityKindLabels;
 
 // 法人与客户账户的「名称」在参与方册上转写而来；转不到是写入门失败才会出现的悬空引用，如实标出让人去查写侧，
-// 不补占位文本冒充名称。两页的列、抽屉与三册候选转写说的是同一件事，同一句话只在这里一处。
-export const partyNameUnknownNote = '参与方册查无此身份';
+// 不补占位文本冒充名称。两页的列、抽屉与三册候选转写说的是同一件事，同一句话只在这里一处。界面上参与方册叫
+// 「往来单位」（navigation 的 business-parties 页名），这句照页名说，让人知道去哪一页查。
+export const partyNameUnknownNote = '往来单位里查不到这家单位';
 
-/** 修订登记于身份层落地之前（identityLayerRegistered 为假）时身份两格的话；不填假值，句子只在这一处。 */
-export const identityLayerAbsentNote = '本修订登记时尚无此格';
+/**
+ * 修订登记于身份层落地之前（identityLayerRegistered 为假）时身份两格的话；不填假值，句子只在这一处。
+ * 说「还没有这两格」不说「没填」：那时格子本身不存在，不是登记的人漏了。
+ */
+export const identityLayerAbsentNote = '这一版登记时还没有这两格';
 
-/** 法人资料按时点解析的五格（ADR-0145 决定五、六；后端 domain.LegalEntityProfileResolution 原名）。 */
+/**
+ * 法人资料按时点解析的五格（ADR-0145 决定五、六；后端 domain.LegalEntityProfileResolution 原名）。句子是给运营与
+ * 财务看的结论（spec 公司主体 UX「统一用语」）：说能不能开票，不说「解析」「修订」；原因码另有一句，接在后面。
+ */
 export const profileResolutionOutcomeLabels: Record<string, string> = {
-  RESOLVED: '已解析：这一刻有生效的资料修订，开票资料齐',
-  PROFILE_INCOMPLETE: '资料不全（明确非成功，开立方据此拒开，不以默认值补齐）',
-  LEGAL_ENTITY_NOT_REGISTERED: '法人不在册',
-  LEGAL_ENTITY_NOT_EFFECTIVE: '法人在这一刻尚未生效',
-  LEGAL_ENTITY_DEACTIVATED: '法人在这一刻已停用',
+  RESOLVED: '可开票：当前有生效资料且开票资料齐全',
+  PROFILE_INCOMPLETE: '资料不全：缺开票抬头，开票会被拒',
+  LEGAL_ENTITY_NOT_REGISTERED: '公司不在册',
+  LEGAL_ENTITY_NOT_EFFECTIVE: '主体未生效：这个日期公司还没有生效',
+  LEGAL_ENTITY_DEACTIVATED: '主体已停用：这个日期公司已经停用',
 };
 
 /** 资料不全的两种原因。 */
 export const profileIncompleteCauseLabels: Record<string, string> = {
-  NO_EFFECTIVE_REVISION: '这一刻没有生效的资料修订',
-  NO_INVOICING_DETAILS: '生效的那一笔没有开票资料',
+  NO_EFFECTIVE_REVISION: '这个日期没有生效的资料',
+  NO_INVOICING_DETAILS: '生效的那一版没有开票抬头',
 };
 
 export const problemCodeNotes: Record<string, string> = {

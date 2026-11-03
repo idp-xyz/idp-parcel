@@ -271,7 +271,7 @@ test('法人资料状态按当前解析结果区分未配置、资料不全与�
   equal(legalEntityProfileStatusOf({ outcome: 'RESOLVED' }).label, '状态未识别');
 });
 
-// Covers: 历史从新到旧；标题点名是资料修订（与身份修订分得开，票 group-legal-entities-uiux/01）并带生效时点，
+// Covers: 历史从新到旧；标题短写「第 N 版」（轴名由「资料版本」签承担，spec 公司主体 UX「统一用语」）并带生效时点，
 // 未来生效的那笔看标题就分得出。
 test('资料修订历史从新到旧、标题带生效时点', () => {
   const items = profileRevisionTimeline(
@@ -280,7 +280,7 @@ test('资料修订历史从新到旧、标题带生效时点', () => {
   );
   deepEqual(
     items.map((item) => item.title),
-    ['资料 r2 · 生效自 <2027-01-01T00:00:00Z>', '资料 r1 · 生效自 <2026-01-01T00:00:00Z>'],
+    ['第 2 版 · 生效自 <2027-01-01T00:00:00Z>', '第 1 版 · 生效自 <2026-01-01T00:00:00Z>'],
   );
   equal(items[1].timestamp, '<2026-01-01T00:00:00Z>');
 });
