@@ -1,7 +1,7 @@
 # 16 写口请求体（JSON）里的字符串含 NUL 或非法 UTF-8，一律答 400、不落库、不悄悄改写
 
 Category: bug
-Status: in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum16`（完成记录见文末）；待非作者评审与进 main。此前 in-progress——2026-11-02 作者认领，分支 `claude-docnum16`，从票 15 的 `b29cf8216` 起
+Status: in-progress——2026-11-02 评审修订完（钉 `9fd8c17e3` 的评审：Spec 阻断 1、非阻断 1，见文末「评审修订」），待进 main。此前 in-progress——2026-11-02 作者完工、自验、推分支 `claude-docnum16`（完成记录见文末）；待非作者评审与进 main。此前 in-progress——2026-11-02 作者认领，分支 `claude-docnum16`，从票 15 的 `b29cf8216` 起
 父票：[spec](../spec.md)
 Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-across-http-reads.md) 之上：共用判据 `httpapi.StorableText` 与登记处挂检查的做法都出自那一票）
 出处：
@@ -82,18 +82,19 @@ Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-acro
 | 登记册配置写 | `/commercial-business-party-registrations` | `name` | 500 `NO_ANSWER_FORMED`，零行 | 201，落库的名称里坏处换成了 U+FFFD | 400 `MALFORMED_REQUEST`（带 `detail`），零行 | 同左 |
 | 登记册配置写 | `/visibility-catalogue-milestone-mapping-registrations` | `version` | 500，零行 | 200 `REFUSED`：解码器已把版本换成带 U+FFFD 的值才去判；本探针与前一版区间重叠，没落行 | 400，零行 | 同左 |
 | 登记册配置写 | `/network-catalog-node-registrations` | `code` | 500，零行 | 201，落库的代码末尾是 U+FFFD | 400，零行 | 同左 |
-| 运营决定（运输履约） | `/transport-fulfillment-load-assignment-registrations` | `version` | 200 `INPUT_NOT_ACCEPTED`，零行 | 201，落库并回显的版本末尾是 U+FFFD | 不变：200 `INPUT_NOT_ACCEPTED`，零行 | 400，零行 |
-| 作业事实登记（运输履约） | `/transport-fulfillment/movement-facts` | `location` | 200 `INPUT_NOT_ACCEPTED`，零行 | 201，落库的地点末尾是 U+FFFD | 不变 | 400，零行 |
-| 集成客户端（关务） | `/customs-regulatory-credential-registrations` | `holderRef` | 400 `MALFORMED_REQUEST`，零行 | 201，受理的是解码器换过的值 | 不变：400，零行 | 400，零行 |
+| 运营决定（运输履约） | `/transport-fulfillment-load-assignment-registrations` | `version` | 200 `INPUT_NOT_ACCEPTED`，零行 | 201，落库并回显的版本末尾是 U+FFFD | 400，零行（评审修订后；见下） | 400，零行 |
+| 作业事实登记（运输履约） | `/transport-fulfillment/movement-facts` | `location` | 200 `INPUT_NOT_ACCEPTED`，零行 | 201，落库的地点末尾是 U+FFFD | 400，零行（同上） | 400，零行 |
+| 集成客户端（关务） | `/customs-regulatory-credential-registrations` | `holderRef` | 400 `MALFORMED_REQUEST`，零行 | 201，受理的是解码器换过的值 | 400，零行 | 400，零行 |
 | 首方客户 | `/v1/shipment-requests` | `parcels[0].customerParcelReference` | 400，`detail` 点名该格 | 200（探针夹具无归属区间，合规载荷同答 `OWNERSHIP_UNRESOLVED`），来源保全落一行 | 400 问题详情，不带 `detail`，来源保全不落 | 同左 |
 | 首方客户 | `/v1/shipment-requests` | `recipientAddress` | 200，来源保全落一行 | 同上 | 400，来源保全不落 | 同左 |
+| 登记册配置写（运输履约，评审探到） | `/transport-fulfillment-delivery-dispatch-reask-cadence-registrations` | `basis` | 500 `NO_ANSWER_FORMED` | 201，坏值落行 | 400，零行 | 同左 |
+| 登记册配置写（关务，评审探到） | `/customs-case-requirement-registrations` | `basis` | 500 `NO_ANSWER_FORMED` | 201，坏值落行 | 400，零行 | 同左 |
 
-**逐行核对（修后，取证于 `c6cd7a46c`）。** 登记处全部非 GET 行共 161 行：146 行经共享渠道，15 行自建 Intake。每行发两份请求体，各自先交出停在坏处之后、串还没收尾的一段，再被读就记下：
+后两行的「修前」是评审修订时把套壳摘掉、在新用例里重跑得到的。
 
-- 停在原始 `0xFF` 之后的那一份：161 行都答 400，读到坏处即停。
-- 停在 `\u0000` 之后的那一份：96 行答 400、即停。运输履约 46 行、关务 19 行读了过去，留给构造门。
+**逐行核对（修后，取证于 `c3c0018fa`）。** 登记处全部非 GET 行共 161 行：146 行经共享渠道，15 行自建 Intake。每行发两份请求体，各自先交出停在坏处之后、串还没收尾的一段，再被读就记下。停在 `\u0000` 之后的、停在原始 `0xFF` 之后的，161 行都答 400、读到坏处即停。把登记处的套壳摘掉重跑，失败 322 格，即 161 的两倍。
 
-把登记处的套壳摘掉重跑，失败 257 格，即 161 加 96。
+（`c6cd7a46c` 时 NUL 那一份只有 96 行即停，运输履约 46 行、关务 19 行按豁免读了过去；豁免已在评审修订里删掉。）
 
 ### 提交
 
@@ -102,16 +103,17 @@ Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-acro
 | `a687cd10c` | 立票，spec 子票表加一行 |
 | `a1faa4072` | 并入票 15 评审修订（`origin/claude-docnum15` `1e0019367`），无冲突 |
 | `c6cd7a46c` | 共用件、登记处挂检查与 NUL 豁免、上传两行声明、单测与真库用例、两份对外契约同步、一条既有用例补注；Status 不动 |
-| 本笔 | 完成记录，Status → 完工待评审 |
+| `9fd8c17e3` | 完成记录，Status → 完工待评审 |
+| 评审修订各笔 | 见文末「评审修订」 |
 
 ### 做法与取舍
 
-- **判据一处，放在 `internal/platform/httpapi`。** `StorableJSONBody` 包住请求体，边读边判，有三种坏处：
+- **判据一份，放在 `internal/platform/httpapi`。** `StorableJSONBody` 包住请求体，边读边判，有三种坏处：
   - 原始字节不是 `StorableText`（含 NUL）；
   - 串里的 `\u0000` 转义；
   - `\u` 转义出孤代理。
 
-  `UnrewrittenJSONBody` 与它共用同一个扫描，只放过 NUL。扫描只跟字符串与转义两种状态，所以 `\\u0000`（转义的反斜杠后面跟字面的 u0000）照收。读到坏处，这一次 Read 交回 0 字节与 `ErrUnstorableBody`，此后每次都是它。坏处所在的那一段一个字节也不交：判到时那个串还没收尾，解码器凑不成含它的值，不会带着 U+FFFD 的前半截往下走。若交出 n 字节再报错，解码器可能已在这 n 字节里凑齐一个值，先交出值、不看错。`TestADecoderNeverSeesTheChunkCarryingTheProblem` 钉着整段一次读完时的这一格。不判 JSON 语法，也不加长度上限、字符白名单。
+  扫描只跟字符串与转义两种状态，所以 `\\u0000`（转义的反斜杠后面跟字面的 u0000）照收。读到坏处，这一次 Read 交回 0 字节与 `ErrUnstorableBody`，此后每次都是它。坏处所在的那一段一个字节也不交：判到时那个串还没收尾，解码器凑不成含它的值，不会带着 U+FFFD 的前半截往下走。若交出 n 字节再报错，解码器可能已在这 n 字节里凑齐一个值，先交出值、不看错。`TestADecoderNeverSeesTheChunkCarryingTheProblem` 钉着整段一次读完时的这一格。不判 JSON 语法，也不加长度上限、字符白名单。
 - **挂在登记处，不逐口改。** 写法同票 15 的读口检查：
   - `registerEndpoints` 登记时按行算好检查（`requestBodyGuards`），`production` 与 `mountWith` 两个闭包都经 `guardRequestBodies` 套上，生产装配与装配测试挂的是同一道。
   - 只挂非 GET 行，GET 不读请求体。新加一行写口自动带上。
@@ -122,50 +124,72 @@ Blocked by: 无（建在票 [15](./15-query-values-with-nul-or-invalid-utf8-acro
   - 各族坏请求的形状不同：旧形状带不带 `detail`，首方族是问题详情。读错落进各口自己的那一格，登记处不用再写一份形状，首方族也不必像票 15 那样另挂。也就没有按族预认定形状这件事（票 15 评审修订那一条在这里不发生）。
 
   代价：这一格的形状靠各口的解码助手把读错一律包成坏请求。两条逐行用例钉着它，哪一口把读错答成别的格就红。
-- **NUL 的豁免（协调方 2026-11-02 第二条指示：修前本不答 500 的写口，挂上会改既有分格的，照票 15 的豁免思路办）。**
-  - 进表照 `targetCheckExemptions` 的两条判法：修前 NUL 不答 500，且挂上会改那一格。
-  - 运输履约、关务合规两个上下文的构造门按产品规则拒 NUL，答各自既有的一格（多是 200 的未受理一类）；挂上会改成 400 `MALFORMED_REQUEST`，于是进 `bodyNULExemptions`。表在 `cmd/parcel-api` 的请求体检查旁边，按路径前缀写。
-  - 只豁免 NUL：这两个上下文的写口照判非法 UTF-8 与孤代理。那两种修前是被悄悄改写成 U+FFFD 受理，没有哪一格是为它们设的；协调方第一条裁定要求拒收。
-  - 按上下文豁免、不逐行列，因为判 NUL 的是上下文的构造门，规则管整个上下文，新加的写口照样归那道门。`TestBodyNULExemptionsCoverDeclaredWriteLines` 核每个前缀都罩得住声明过的写口。
-  - 节点作业、编号规则册、首方提交外部标识号的门也判 NUL，但答的就是 400 `MALFORMED_REQUEST`，挂上不改格，不进表。首方提交那一格答复少了 `detail`，见「留给协调方」。
-- **上传两行放过 multipart。** 价卡预览与价卡草稿录入两行在登记处声明 `multipartUpload`。请求体是 multipart/form-data 时不判，上传的工作簿是二进制。其余行不看 `Content-Type`：那些处理器不看这个头、一律按 JSON 解，按头放过就是给坏请求体留门。`TestOnlyAMultipartUploadPassesTheBodyCheckUnjudged` 钉这三格。
+- **NUL 一律拦，不按上下文豁免（评审修订，协调方裁）。** `c6cd7a46c` 曾按路径前缀放过运输履约、关务合规的 NUL，交各自构造门。评审真库实探：前缀罩进了修前就答 500 的口（两口的 `basis` 只判空白），两个上下文还有多处自由文本没逐一探。前缀豁免罩不准，逐格核验又不封顶，统一在入站拦下才确定不出 500。代价是这两个上下文部分口 NUL 的答复由 200 `INPUT_NOT_ACCEPTED`（或关务的未受理一类）改为 400 `MALFORMED_REQUEST`；两格都是「改输入」，恢复动作不变。
+  - 节点作业、编号规则册、首方提交外部标识号的门也判 NUL，答的本就是 400 `MALFORMED_REQUEST`，挂上不改格。首方提交那一格答复少了 `detail`，见「留给协调方」。
+- **上传两行放过 multipart。** 价卡预览与价卡草稿录入两行在登记处声明 `multipartUpload`。请求体是 multipart/form-data 时不判，上传的工作簿是二进制；表单里唯一的文本、文件名，由上传解码 `DecodePriceCardUpload` 判（评审修订）。其余行不看 `Content-Type`：那些处理器不看这个头、一律按 JSON 解，按头放过就是给坏请求体留门。`TestOnlyAMultipartUploadPassesTheBodyCheckUnjudged` 钉这三格。
 - **判整份请求体。** 口不解的格、尾随的第二个值里的坏处，一样拒，与票 15 判整条请求目标同理。看不见的只有一种：不查尾随内容的口（例如试算、价卡登记的 `Decode*Payload`）解完头一个值就不再读，坏处若在其后、又不与那个值同在一次 Read 里，读不到也就不判。那一段不进命令，也不进库。
 - **对外契约同步。**
   - [首方客户 API 契约](../../../docs/api/first-party-api-contract.md)「状态码」加一条：请求体不是文本答 `400 MALFORMED_REQUEST`，服务端不替换。
-  - [承运订舱答复对接](../../../docs/api/carrier-booking-answer-integration.md)「载荷」一段：非法 UTF-8 与孤代理同答 400。标识带 NUL 仍是 `INPUT_NOT_ACCEPTED`，那一行不动。
+  - [承运订舱答复对接](../../../docs/api/carrier-booking-answer-integration.md)「载荷」一段：任一字符串带 NUL、非法 UTF-8、孤代理同答 400；`INPUT_NOT_ACCEPTED` 一行去掉「带 NUL」。
 
 ### 验证（证据只记 `S`）
 
 - 新用例：
   - `internal/platform/httpapi`：
     - `TestStorableJSONBodyRefusesOnlyWhatTheStoreCannotHoldOrTheDecoderWouldRewrite`：拒收与照收两张表。拒收表含 NUL 转义、原始 NUL、非法 UTF-8 各形、孤高位与孤低位各形、第二个值里的坏处；照收表含中文、全角、emoji、代理对转义、`\\u0000`、`\u0001`、显式 U+FFFD。每张表都在一次读完、逐字节读、每次读一半三种读法下跑。
-    - `TestUnrewrittenJSONBodyLetsOnlyNULThrough`：只有 NUL 的那几份照交，其余照拒。
     - `TestADecoderNeverSeesTheChunkCarryingTheProblem`。
     - `TestRequireStorableJSONBodyOnlySwapsTheBody`：处理器不读则一个字节不读，坏处到处理器手上是 `ErrUnstorableBody`，合法请求体原样到。
   - `cmd/parcel-api`：
     - `TestEveryWriteLineReadsItsBodyThroughTheCheck`：经共享渠道的写口，各族渠道打开、授予与准入齐备，读口与编排是未接线占位。
     - `TestEveryOwnIntakeWriteLineReadsItsBodyThroughTheCheck`：自建 Intake 的写口，真库、登记处生产构造、授予齐备的合成铸造器。
-    - `TestBodyNULExemptionsCoverDeclaredWriteLines`。
     - `TestOnlyAMultipartUploadPassesTheBodyCheckUnjudged`。
-    - `TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase`：票 15 探到的三个登记口经生产构造接真库，三种坏处都答 400、零行。参与方名称换成中文、emoji 原样、代理对转义、`\\u0000` 时答 201，读回逐字相同。
-    - `TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDatabase`：运营决定（装载分配）、作业事实（移动事实）、集成客户端（监管凭证）、首方（提交，问题详情）各一口。非法 UTF-8 与孤代理都答 400、零行；NUL 在前三口答各自构造门的那一格（两口 200 `INPUT_NOT_ACCEPTED`，凭证 400），首方答 400；合规载荷照常。
-- 先红后绿：把 `registerEndpoints` 两个闭包里的 `bodyGuards` 换成 nil，逐行两条用例失败 257 格（161 加 96），三登记口那条也红：NUL 答 500，坏值落行。套回去全绿。
+    - `TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase`：票 15 探到的三个登记口，加评审探到的运输履约重问节奏、关务建案要求两口，经生产构造接真库，三种坏处都答 400、零行。参与方名称换成中文、emoji 原样、代理对转义、`\\u0000` 时答 201，读回逐字相同。
+    - `TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDatabase`：运营决定（装载分配）、作业事实（移动事实）、集成客户端（监管凭证）、首方（提交，问题详情）各一口，三种坏处都答 400、零行，合规载荷照常。
+  - `internal/parcelpricing/adapters/http`：`TestUploadIntakesRefuseAFileNameTheStoreCannotHold`（评审修订，见下）。
+- 先红后绿：把 `registerEndpoints` 两个闭包里的 `bodyGuards` 换成 nil，逐行两条用例失败 322 格，登记口那条也红：五口 NUL 都答 500 或落行，坏值落行。套回去全绿。
 - `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
-- `go test -count=1 -p 1 ./internal/... ./cmd/... ./migrations/...` 退 0：168 个包 ok、0 FAIL（含 PG `127.0.0.1:55432`），`internal/architecture`、`internal/platform/httpapi`、`cmd/parcel-api` 都在内。跑的是 `c6cd7a46c` 的 Go 内容（已并入票 15 修订）。
+- `go test -count=1 -p 1 ./internal/... ./cmd/... ./migrations/...` 退 0：168 个包 ok、0 FAIL（含 PG `127.0.0.1:55432`），`internal/architecture`、`internal/platform/httpapi`、`cmd/parcel-api` 都在内。跑的是 `c6cd7a46c` 的 Go 内容（已并入票 15 修订）；评审修订后的全量见「评审修订」。
 - `bash scripts/ci/generated-artifacts-pr.sh` 退 0：ADR 索引、AT 计数与提交的一致；机制清点过期，留推送方重生成。
-- 既有用例不改断言。直挂处理器、钉首方外部标识号门的 `TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore` 照旧绿，注释补一句：生产路由上带 NUL 的那一份由请求体检查先答 400、不带 `detail`。运输履约与关务钉 NUL 的用例（`storable_values_channel_test.go` 三条、`TestIntegrationClientCredentialRegistrationJudgesStorableValuesOnRealDB`）在生产路由上依旧成立，没动。
+- 既有用例不改断言。直挂处理器、钉首方外部标识号门的 `TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore` 照旧绿，注释补一句：生产路由上带 NUL 的那一份由请求体检查先答 400、不带 `detail`。运输履约与关务钉 NUL 的用例（`storable_values_channel_test.go` 三条、`TestIntegrationClientCredentialRegistrationJudgesStorableValuesOnRealDB`）也直挂处理器，照旧绿；它们钉的是检查背后的构造门，生产路由上 NUL 先由检查答 400。
 
 ### 留给协调方
 
-- **NUL 豁免照第二条指示做了，请裁是否保留。**
-  - 运输履约、关务合规两个上下文的写口，NUL 交各自的构造门，只判非法 UTF-8 与孤代理。
-  - 证据：运输履约有裁定与对接文档，两口实测 200 `INPUT_NOT_ACCEPTED`。关务静态读到构造门拒 NUL（技术回执答 `TechnicalReceiptNotAccepted`），凭证口实测 400。
-  - 没有逐格探。这两个上下文若有哪一格的构造门漏判 NUL，那一格修后仍答 500，归该上下文另立票。
-  - 若要回到第一条裁定的「一律 400」：删 `bodyNULExemptions` 两行，`TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDatabase` 两口的 NUL 断言改回 400，订舱答复对接文档 `INPUT_NOT_ACCEPTED` 一行去掉「带 NUL」。
-- **挂上即改、没有豁免的答复。**
+- **挂上即改的答复。**
   - 所有写口的非法 UTF-8 与孤代理：从「换成 U+FFFD 照常受理」改为 400、不落库。这是第一条裁定要的。
-  - 首方提交客户包裹件号带 NUL：仍是 400 `MALFORMED_REQUEST`，但问题详情不再带 `detail` 点名 `parcels[0].customerParcelReference`。判在解码之前，读错到不了点名那一格的门。契约写明 `detail` 是散文、不据此分支，所以按「不改格」处理。若要保留点名，只能让首方族也豁免 NUL，那样地址等格的 NUL 又会照收（见下一条）。
+  - 运输履约、关务合规部分口的 NUL：从 200 `INPUT_NOT_ACCEPTED`（或关务的未受理一类）改为 400。这是评审修订的裁定，理由见「做法与取舍」。
+  - 首方提交客户包裹件号带 NUL：仍是 400 `MALFORMED_REQUEST`，但问题详情不再带 `detail` 点名 `parcels[0].customerParcelReference`。判在解码之前，读错到不了点名那一格的门。契约写明 `detail` 是散文、不据此分支，所以按「不改格」处理。
   - 首方提交其余各格（如 `recipientAddress`）带 NUL：修前答 200，来源保全落一行；修后 400、不落。修前那一格没有哪张票为它设过。
-  - 不查尾随内容的口：尾随的第二个值里带坏处，修前照收头一个值，修后与那个值同在一次 Read 里时答 400。这是判整份请求体的结果，同票 15。
-- **两份对外契约改了，属改现行规则的文档，请评审一并过目。** 首方客户 API 契约「状态码」加一条；承运订舱答复对接「载荷」加一句。
+  - 不查尾随内容的口：尾随的第二个值里带坏处，修前照收头一个值；修后与那个值同在一次 Read 里时答 400。这是判整份请求体的结果，同票 15。
+- **两份对外契约改了，属改现行规则的文档。** 首方客户 API 契约「状态码」加一条；承运订舱答复对接「载荷」加一句，`INPUT_NOT_ACCEPTED` 一行去掉「带 NUL」。
 - **生成物不重生成**（作者不占号），交推送方。
+
+## 评审修订（2026-11-02，作者，钉评审 `9fd8c17e3`：Standards 阻断 0、Spec 阻断 1、非阻断 1）
+
+先并 `origin/main` `0d3d23d21`（票 13、14、15 已进 main），合并笔 `926a86b57`。冲突只在 spec 子票表，以 main 为准，票 16 那一行接在其后。
+
+1. **阻断（Spec）：NUL 豁免罩进了修前就答 500 的口。协调方裁：删豁免，一律 400。**
+   - 评审真库实探：`/transport-fulfillment-delivery-dispatch-reask-cadence-registrations` 的 `basis` 与 `/customs-case-requirement-registrations` 的 `basis` 都只判空白，带 NUL 在豁免下仍答 `500 NO_ANSWER_FORMED`。
+   - 改法：
+     - 删 `cmd/parcel-api` 的 `bodyNULExemptions` 与挂法；`requestBodyGuard` 回到只看方法与 `multipartUpload`。
+     - 删 `httpapi.UnrewrittenJSONBody` 及其单测，那是只给豁免用的。
+     - 文件头写明不按上下文豁免的理由：前缀罩不准，逐格核验不封顶。
+   - 用例：
+     - 逐行两条改回两份坏处都即停；删 `TestBodyNULExemptionsCoverDeclaredWriteLines`。
+     - 四族代表口那条里，装载分配、移动事实的 NUL 断言改为 400。
+     - 登记口真库那条补上面两口：三种坏处答 400、库里无行，合规载荷答 201。套壳摘掉时这两口 NUL 答 500，非法 UTF-8 落行。
+   - 文档：承运订舱答复对接「载荷」一段改成 NUL 也同答 400；`INPUT_NOT_ACCEPTED` 一行去掉「带 NUL」。
+   - 完成记录「做法与取舍」「代表口实测」「逐行核对」已改准。运输履约、关务部分口 NUL 的答复由 200 `INPUT_NOT_ACCEPTED`（关务为未受理一类）改为 400。理由：前缀豁免罩不准、逐格核验不封顶，统一在入站拦下才确定不出 500。
+2. **非阻断：价卡上传的文件名没判。顺手修了。**
+   - `pricinghttp.DecodePriceCardUpload` 在拿到文件格之后用 `httpapi.StorableText` 判 `header.Filename`。不合格包 `ErrMalformedRequest`，答该口既有坏请求那一格 400，工作簿不读、不解。预览与录入两口共用这一个解码，一处改两口都管。
+   - 用例 `TestUploadIntakesRefuseAFileNameTheStoreCannotHold`：Intake 级，不用工作簿夹具。`filename*=UTF-8''SYN%00.xlsx`、`%FF`、`%ED%A0%80` 三种，预览与录入两口都答 `ErrMalformedRequest`；`价卡📦.xlsx` 照收、原样进命令。把这道判摘掉时六格全红：Go 的 multipart 确实原样解出 NUL 与坏字节。
+   - 登记处守卫的注释补了一句：文件名由上传解码自己判。
+
+**提交**：`926a86b57`（并 main）、`c3c0018fa`（修订代码与文档）、本笔（票面）。
+
+**验证**（证据只记 `S`）：
+- `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
+- `go test -count=1 -p 1 ./internal/... ./cmd/... ./migrations/...` 退 0：168 个包 ok、0 FAIL（含 PG `127.0.0.1:55432`），`internal/architecture`、`internal/parcelpricing/adapters/http`、`internal/platform/httpapi`、`cmd/parcel-api` 都在内。跑的是 `c3c0018fa` 的 Go 内容。
+- 先红后绿：
+  - 套壳摘掉，逐行两条失败 322 格；登记口那条五口都红。
+  - 文件名那道判摘掉，新用例六格红。
+  - 两处套回去全绿。
