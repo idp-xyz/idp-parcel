@@ -3,22 +3,40 @@ import { lazy, type ComponentType } from 'react';
 // 页面按域懒加载（票 admin-web-bundle-size/01）：每个域的 barrel 是一个懒加载块，入口块只剩外壳、工作台与模板。
 // 同一个域的几页共用一个 import()，模块只取一次。别处要从某个域取非页面的东西（如 main.tsx 的 configure*Api）时
 // 直接引那个模块、不经 barrel：入口一静态引 barrel，那个域就被钉回入口块。
-const loadMyWork = () => import('./pages/my-work');
-const loadShipmentRequest = () => import('./pages/shipment-request');
-const loadChannelSelection = () => import('./pages/channel-selection');
-const loadTemplatePreview = () => import('./pages/template-preview');
-const loadGovernance = () => import('./pages/governance');
-const loadPricing = () => import('./pages/pricing');
-const loadNetwork = () => import('./pages/network');
-const loadOperations = () => import('./pages/operations');
-const loadSettlement = () => import('./pages/settlement');
-const loadCollection = () => import('./pages/collection');
-const loadVisibility = () => import('./pages/visibility');
-const loadCustoms = () => import('./pages/customs');
-const loadParty = () => import('./pages/party');
-const loadWorkDevices = () => import('./pages/work-devices');
-const loadReferenceData = () => import('./pages/reference-data');
-const loadDocumentNumbering = () => import('./pages/document-numbering');
+
+interface DomainLoader<Module> {
+  (): Promise<Module>;
+  /** 块已取回时同步给出模块，没取回是 undefined。 */
+  loaded(): Module | undefined;
+}
+
+/** 记下取回的模块，页面据此判断能否不挂起、直接渲染（见 `page`）。 */
+function domain<Module>(importer: () => Promise<Module>): DomainLoader<Module> {
+  let module: Module | undefined;
+  const load = () =>
+    importer().then((value) => {
+      module = value;
+      return value;
+    });
+  return Object.assign(load, { loaded: () => module });
+}
+
+const loadMyWork = domain(() => import('./pages/my-work'));
+const loadShipmentRequest = domain(() => import('./pages/shipment-request'));
+const loadChannelSelection = domain(() => import('./pages/channel-selection'));
+const loadTemplatePreview = domain(() => import('./pages/template-preview'));
+const loadGovernance = domain(() => import('./pages/governance'));
+const loadPricing = domain(() => import('./pages/pricing'));
+const loadNetwork = domain(() => import('./pages/network'));
+const loadOperations = domain(() => import('./pages/operations'));
+const loadSettlement = domain(() => import('./pages/settlement'));
+const loadCollection = domain(() => import('./pages/collection'));
+const loadVisibility = domain(() => import('./pages/visibility'));
+const loadCustoms = domain(() => import('./pages/customs'));
+const loadParty = domain(() => import('./pages/party'));
+const loadWorkDevices = domain(() => import('./pages/work-devices'));
+const loadReferenceData = domain(() => import('./pages/reference-data'));
+const loadDocumentNumbering = domain(() => import('./pages/document-numbering'));
 
 const domainLoaders = [
   loadMyWork,
@@ -40,8 +58,20 @@ const domainLoaders = [
 ];
 
 // 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
-function page<Module>(load: () => Promise<Module>, pick: (module: Module) => ComponentType): ComponentType {
-  return lazy(() => load().then((module) => ({ default: pick(module) })));
+//
+// 块已经预取回来时不经 React.lazy：lazy 包装第一次渲染总要挂起一下（哪怕模块早已在手），而 React 19 让挂起后显出的
+// 后备至少停留 300ms 才换成内容——预取过的页第一次打开照样先「正在加载」三百毫秒，页面的读请求也要等它挂上才发出
+// （用户 2026-11-03 指出「首次打开公司主体感觉加载也很慢」，实测列表请求在点击后约 320ms 才发）。块还没取回时照旧走
+// lazy，加载态与取不回来仍由 Layout 的 Suspense 与 PageChunkBoundary 接住。
+// 同一页不会在两条路之间换类型而重挂：lazy 那条路的模块经 domain 的 then 取回，loaded 先于 lazy 落定，挂起后重渲时
+// Page 已改走直接那条，lazy 那一层从未挂上；loaded 一旦有值也不再回到 undefined。
+function page<Module>(load: DomainLoader<Module>, pick: (module: Module) => ComponentType): ComponentType {
+  const Lazy = lazy(() => load().then((module) => ({ default: pick(module) })));
+  return function Page() {
+    const module = load.loaded();
+    const Component = module === undefined ? Lazy : pick(module);
+    return <Component />;
+  };
 }
 
 /**
