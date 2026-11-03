@@ -22,3 +22,30 @@ Blocked by: 无
 ## 完成判据
 
 - 三道门退 0；对象页与两处详情栏的签都是「小图标 + 词 (+ 计数)」，选中态图标变色；运单对象页的签同样带图标。
+
+## 完成记录（2026-11-03，分支 `claude-csux-10`）
+
+### 落点
+
+- 第 1 条：新 `apps/admin-web/src/templates/workspace-tab-icons.tsx`——`workspaceTabIcons: Record<WorkspaceTabId, LucideIcon>`，九个图标照票面所列，一个没换（summary `FileText`、contacts `Contact`、profile-versions `Layers`、identity-revisions `ClipboardList`、timeline `History`、related `Link2`、exceptions `AlertTriangle`、documents `Paperclip`、audit `ScrollText`）；`WorkspaceTabLabel({ id, children? })` 渲 14px `text-idpxyz-breadcrumb` 图标（`aria-hidden`）后接词，词默认取 `workspaceTabLabels`，`children` 是词的覆盖口（给签词另有口径的详情栏用），计数徽章由调用方接在它后面。`templates/index.ts` 导出两者。`workspace-tabs.ts` 一字未动。另加 `workspace-tab-icons.test.ts` 钉「一签一图、互不重复」——`Record` 只替 tsc 守「每签有图」，不重复类型说不出。提交 `eaee993cd`。
+- 第 2 条：`templates/DetailPageTemplate.tsx` 渲签处 `{tab.label}` → `<WorkspaceTabLabel id={tab.id}>{tab.label}</WorkspaceTabLabel>`，词仍取归并结果；计数照旧。提交 `b1fca5795`。
+- 第 3 条：`pages/party/LegalEntityDetailPanel.tsx` 概要 / 联系人 / 资料版本 / 登记记录 / 关联 直接按表取词与图标（Radix value 仍是栏自己的 `PanelTab`，它存在视图状态里）；`BusinessPartyDetailPanel.tsx`「全景」借 `summary`、「变更记录」借 `timeline`（对象页 `BusinessPartyDetailPage` 把同一条修订链放在时间线签），词经 `children` 保留，原先各自挑的 `Network` / `IdCard` 退掉；`VersionDetailDrawer.tsx`「详情」借 `summary`、「版本历史」借 `profile-versions`（同是对象的版本链）。页级列表签未碰。提交 `51531f6e5`。
+- 第 4 条：选中态不另定强调色，图标 `group-data-[state=active]:text-current` 跟随词色——`TabsTrigger` 原语自带 `group`，`data-state` 挂在它身上；模板签选中是 textBright、公司主体栏是 accent，图标各随其词。
+
+### 判据逐条
+
+- ✅ 三道门退 0：每笔提交前各跑一遍，`tsc -b --noEmit` 0、`run-tests` 1164 通过 0 失败（含新测试）、`vite build` 成功。
+- ✅ 对象页与两处详情栏的签都是「小图标 + 词 (+ 计数)」：playwright 对每个 `role=tab` 取证，`svg` 皆在、`width=14`，词与计数未变。截图（1440×900）：`legal-entity-object.png`、`legal-entity-object-contacts.png`、`legal-entity-list-panel.png`、`business-party-object.png`、`business-party-list-panel.png`。
+- ✅ 选中态图标变色：选中签 `iconColor === textColor`（对象页 `rgb(15,45,64)`、公司主体栏 `rgb(10,110,209)`），非选中 `rgb(83,107,130)`；切到「联系人」后随之换签。
+- ✅ 运单对象页的签带图标：运单列表第一行 → 详情栏「打开详情」→ `#/shipment-request-inquiry/EBAIYXVMVZQJ76X4P5AY6AKQ3E`，概要签带图标（`shipment-object.png`）。
+- ✅ 版本抽屉：客户合同第一行开抽屉，详情 / 版本历史带图标（`version-drawer.png`）。
+- ◑ 暗色主题：`legal-entity-object-dark.png`、`legal-entity-object-contacts-dark.png`、`legal-entity-list-panel-dark.png`——选中态仍与词同色（对象页 `rgb(204,204,204)`、栏 `rgb(0,122,204)`），非选中图标 breadcrumb `rgb(169,169,169)` 比模板签词的 textMuted `rgb(133,133,133)` 亮一档（栏上两者同为 169）；肉眼看齐整、可辨，照票面的 breadcrumb 不改，要图标与词完全同色就把非选中也改成 `text-current`，留给评审裁。
+- ✅ 核验全程零写请求（脚本断言）。
+- ⏳ 第 6 条共享面评审：待协调方派。
+
+截图与脚本在会话 scratchpad `csux10/`（`shots.js`，登录与 OIDC 回调改写抄 rd-ops）。
+
+### 未验
+
+- 异常 / 文档 / 审计三签眼下没有带数据的业务页渲它们，只经图标表与测试覆盖；`template-preview` 的工作区演示页走同一模板，未截。
+- 核验跑动中浏览器控制台出现两条 `Failed to load resource: 404`（只读 GET，图标是内联 SVG 不走网络，与本票代码路径无关），未追。

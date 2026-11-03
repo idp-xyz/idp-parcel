@@ -27,6 +27,7 @@ import {
   type WorkspaceTabId,
   type WorkspaceTabInput,
 } from './workspace-tabs';
+import { WorkspaceTabLabel } from './workspace-tab-icons';
 import { TabCountBadge } from '../components/TabCountBadge';
 
 /** 业务区块：一个区块渲染成一个 Panel（Card），内容由调用方组装。 */
@@ -319,7 +320,8 @@ function WorkspaceTabs({
       <TabsList className="px-4 shrink-0">
         {tabs.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id}>
-            {tab.label}
+            {/* 词取归并结果的 label 而不让 WorkspaceTabLabel 自己再查一遍表：签上显什么由 resolveWorkspaceTabs 一处定。 */}
+            <WorkspaceTabLabel id={tab.id}>{tab.label}</WorkspaceTabLabel>
             {tab.count !== undefined && (
               tab.id === 'contacts'
                 ? <TabCountBadge count={tab.count} />

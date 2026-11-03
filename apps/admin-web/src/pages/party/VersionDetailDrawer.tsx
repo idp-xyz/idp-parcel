@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Drawer, DrawerBody, DrawerHeader, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
-import type { ListColumn } from '../../templates';
+import { WorkspaceTabLabel, type ListColumn } from '../../templates';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
 import { DetailRow } from './detail-primitives';
@@ -67,9 +67,15 @@ export function VersionDetailDrawer<Row>({
           </DrawerHeader>
           <DrawerBody>
             <Tabs key={`${title(row).objectId}@${title(row).version}`} defaultValue="detail" className="gap-0">
+              {/* 图标取对象工作区签的固定表（票 company-subject-ux/10），词照抽屉的口径：「详情」是这一行的概要，
+                  「版本历史」是这个对象的版本链，与公司主体的「资料版本」同一种内容。 */}
               <TabsList>
-                <TabsTrigger value="detail">详情</TabsTrigger>
-                <TabsTrigger value="history">版本历史</TabsTrigger>
+                <TabsTrigger value="detail">
+                  <WorkspaceTabLabel id="summary">详情</WorkspaceTabLabel>
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  <WorkspaceTabLabel id="profile-versions">版本历史</WorkspaceTabLabel>
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="detail">
                 <dl>

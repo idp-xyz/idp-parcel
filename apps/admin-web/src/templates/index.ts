@@ -47,6 +47,7 @@ export {
   type WorkspaceTabId,
   type WorkspaceTabInput,
 } from './workspace-tabs';
+export { WorkspaceTabLabel, workspaceTabIcons } from './workspace-tab-icons';
 
 export {
   ReviewFlowTemplate,
