@@ -47,7 +47,7 @@ func TestAWithdrawalVersionRoundTripsAndAVersionIsCorrectedOnlyOnce(t *testing.T
 	// 另一版也回指首版：「一版至多被纠正一次」挡下，答已登记。
 	fork, err := first.AppendCorrection(domain.CostCorrectionSpec{
 		Version: saValue(t, domain.NewSupplierCostVersionID, "cost-fork"), Occurrence: withdrawnOccurrence(t, "occurrence-1"),
-		RuleVersion: first.RuleVersion(), Agreement: first.Agreement(), Evaluation: first.Evaluation(),
+		RuleVersion: first.RuleVersion(), Agreement: first.Agreement(), Supplier: saValue(t, domain.NewSupplierPartyReference, "supplier-1"), Evaluation: first.Evaluation(),
 		OriginalCurrency: saValue(t, domain.NewCurrencyCode, "USD"), OriginalMinor: 4200, SettlementMinor: 4200,
 		Reason: domain.OccurrenceSupersededCorrection(),
 	})

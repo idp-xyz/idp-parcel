@@ -210,16 +210,41 @@ export interface ReceptionDraft {
   lines: ReceptionLineDraft[];
 }
 
-/**
- * 能拿来对账的预期成本：当前那一版——不是失效纠错版本、也没有后继；选了币种时只列同币种的（不同币种没有换算依据，对不上）。
- *
- * 不按供应商筛：预期成本的读口与表上都没有供应商或承运方，只有它依的供应商协议（agreement），那一版协议是哪家供应商的归
- * party-commercial。匹配门也不核供应商，误选就对到别家的预期成本——这一缺口记在 UC-SA-004「给开发的交接」，表单只能如实提醒。
- */
-export function currentExpectedCosts(costs: readonly SupplierExpectedCostRecord[], currency: string): SupplierExpectedCostRecord[] {
+/** 当前那一版——不是失效纠错版本、也没有后继；选了币种时只留同币种的（不同币种没有换算依据，对不上）。 */
+function currentOfCurrency(costs: readonly SupplierExpectedCostRecord[], currency: string): SupplierExpectedCostRecord[] {
   const superseded = new Set(costs.map((cost) => cost.priorVersion).filter((version): version is string => !!version));
   return costs.filter(
     (cost) => !cost.withdrawn && !superseded.has(cost.version) && (currency === '' || cost.settlementCurrency === currency),
+  );
+}
+
+/**
+ * 能拿来对账的预期成本：所选供应商的、当前那一版、同币种的。预期成本记下了它所依协议的供应商，匹配门核账单的供应商与之相同
+ * （ADR-0358），所以别家的不列；没选供应商时一份都不列。没记供应商的旧行也不列——匹配门对它们答未记，补记之后才能选。
+ * 这里的筛选只省人的事，挡人的是匹配门。
+ */
+export function currentExpectedCosts(
+  costs: readonly SupplierExpectedCostRecord[],
+  currency: string,
+  supplier: string,
+): SupplierExpectedCostRecord[] {
+  if (supplier === '') return [];
+  return currentOfCurrency(costs, currency).filter((cost) => cost.supplier === supplier);
+}
+
+/** 当前、同币种而还没记供应商的预期成本有几份：表单如实说一句，补记之后它们才列得出来。 */
+export function unrecordedSupplierCount(costs: readonly SupplierExpectedCostRecord[], currency: string): number {
+  return currentOfCurrency(costs, currency).filter((cost) => !cost.supplier).length;
+}
+
+/**
+ * 换了供应商之后，各行已选的预期成本不在这家的可选之列就清掉，连同对上方式——不留一个匹配门会拒的选择。「找不到对应运输」
+ * 不点名预期成本，留着。
+ */
+export function linesForSupplier(lines: readonly ReceptionLineDraft[], selectable: readonly SupplierExpectedCostRecord[]): ReceptionLineDraft[] {
+  const versions = new Set(selectable.map((cost) => cost.version));
+  return lines.map((line) =>
+    line.expected === '' || line.expected === NO_EXPECTED_COST || versions.has(line.expected) ? line : { ...line, expected: '', classification: '' },
   );
 }
 
@@ -391,6 +416,18 @@ export function receptionAnswerText(
       return billNumberConflictText(body, billNumber);
     case 'CLAIM_SUPPLIER_CONFLICT':
       return claimSupplierConflictText(body, supplierName);
+    case 'EXPECTED_COST_SUPPLIER_MISMATCH': {
+      const refused = body.expectedCostSupplier;
+      if (!refused) return '没有登记：所选的预期成本是别家供应商的，改选这家供应商的预期成本再登记。';
+      // 那一版的供应商说名称（supplierName 取不到名称时自己退回标识），与主张供应商冲突那一句同一种说法。
+      const owner = refused.supplier ? supplierName(refused.supplier) : '别家供应商';
+      return `没有登记：第 ${refused.line} 行选的预期成本 ${refused.version} 是${owner}的，不是这张账单的供应商的。改选这家的预期成本，或改成「找不到对应运输」。`;
+    }
+    case 'EXPECTED_COST_SUPPLIER_UNRECORDED': {
+      const refused = body.expectedCostSupplier;
+      const which = refused ? `第 ${refused.line} 行选的预期成本 ${refused.version} ` : '所选的预期成本';
+      return `没有登记：${which}还没记是哪家供应商的（较早形成的那一批），核不了是不是这家的。请运营先补记供应商再登记。`;
+    }
     case 'EXPECTED_COST_NOT_CURRENT': {
       const stale = body.notCurrent;
       if (!stale) return '没有登记：所选的预期成本已经不是当前那一版，改选当前那一版再登记。';

@@ -46,6 +46,7 @@ const (
 	commandSellBillingMomentAdoption   = "sell-billing-moment-adoption"
 	commandFeeItemMapping              = "fee-item-mapping"
 	commandEvaluationResume            = "evaluation-resume"
+	commandExpectedCostSupplier        = "expected-cost-supplier-backfill"
 )
 
 var allCommands = []string{
@@ -75,6 +76,7 @@ var allCommands = []string{
 	commandSellBillingMomentAdoption,
 	commandFeeItemMapping,
 	commandEvaluationResume,
+	commandExpectedCostSupplier,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -432,6 +434,23 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 			}
 			return message, code, nil
 		}, nil
+	case commandExpectedCostSupplier:
+		backfill, err := registrationjson.ExpectedCostSupplierBackfillFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			result, err := registrar.backfills.Handle(ctx, backfill)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := backfillAnswer(commandExpectedCostSupplier, result)
+			if code == exitUndecided {
+				// 交回错误让 execute 回滚这一笔：已补的那几份随之撤回，原样重跑时再补，不留半份。
+				return message, code, fmt.Errorf("%w: %s", errExpectedCostSupplierBackfillUndecided, message)
+			}
+			return message, code, nil
+		}, nil
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
@@ -439,3 +458,6 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 
 // errEvaluationResumeUndecided 让运营续办在某一件未决时整笔回滚；execute 把它译成未决的退出码。
 var errEvaluationResumeUndecided = errors.New("evaluation resume undecided")
+
+// errExpectedCostSupplierBackfillUndecided 让补记在读不动、写不进时整笔回滚，同上。
+var errExpectedCostSupplierBackfillUndecided = errors.New("expected cost supplier backfill undecided")

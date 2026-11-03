@@ -213,7 +213,7 @@ func foldUndecidedFormation(
 	version domain.SupplierCostVersionID,
 ) (RequestedSupplierExpectedCostResult, error) {
 	switch formed.UndecidedReason() {
-	case EvaluationViewUnavailable, ExpectedCostRegistryUnavailable, OccurrenceInvalidationNotRecorded:
+	case EvaluationViewUnavailable, ExpectedCostRegistryUnavailable, OccurrenceInvalidationNotRecorded, SupplierAgreementViewUnavailable:
 		return RequestedSupplierExpectedCostResult{
 			outcome:   RequestedSupplierExpectedCostUndecided,
 			formation: formed,

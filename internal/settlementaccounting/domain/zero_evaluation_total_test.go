@@ -86,6 +86,7 @@ func TestASupplierCostTotallingZeroIsAZeroTotalForTheFirstVersionAndACorrection(
 		Occurrence:       cost.Occurrence(),
 		RuleVersion:      cost.RuleVersion(),
 		Agreement:        cost.Agreement(),
+		Supplier:         mustValue(t, domain.NewSupplierPartyReference, "partner-1"),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-zero"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/syn/step-2"),

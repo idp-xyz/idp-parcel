@@ -86,6 +86,12 @@ func (double *buyRequestViewDouble) FindByID(_ context.Context, key ports.Evalua
 // register 在请求册上登一份请求：发生项 occurrence-7 的 version 版、费用项目 fee-linehaul、协议 agreement-9。
 func (double *buyRequestViewDouble) register(t *testing.T, id, version string) {
 	t.Helper()
+	double.registerUnder(t, id, version, "agreement-9")
+}
+
+// registerUnder 照 register 登一份请求，协议另给：证后继协议换了供应商时纠错版本记哪一家（ADR-0358 决定一）。
+func (double *buyRequestViewDouble) registerUnder(t *testing.T, id, version, agreement string) {
+	t.Helper()
 	charge, err := domain.NewTransportChargeOccurrence(
 		billValue(t, domain.NewChargeOccurrenceID, "occurrence-7"),
 		billValue(t, domain.NewOccurrenceReasonReference, "BOOKING"),
@@ -102,7 +108,7 @@ func (double *buyRequestViewDouble) register(t *testing.T, id, version string) {
 		Sources: domain.EligibleSourceReferences{
 			Occurrence: charge,
 			FeeItem:    billValue(t, domain.NewFeeItemReference, "fee-linehaul"),
-			Agreement:  billValue(t, domain.NewSupplierAgreementReference, "agreement-9"),
+			Agreement:  billValue(t, domain.NewSupplierAgreementReference, agreement),
 		},
 		RequestedAt: costOccurredAt.Add(time.Minute),
 		RequestedBy: billValue(t, domain.NewRequesterReference, "syn-settlement-job"),

@@ -66,6 +66,7 @@ func expectedCost(t *testing.T, version string, settlementMinor int64) domain.Su
 		FeeItem:            settlementValue(t, domain.NewFeeItemReference, "fee-linehaul"),
 		RuleVersion:        settlementValue(t, domain.NewPurchaseRuleVersionReference, "purchase-rule/v1"),
 		Agreement:          settlementValue(t, domain.NewSupplierAgreementReference, "agreement-1"),
+		Supplier:           settlementValue(t, domain.NewSupplierPartyReference, "partner-1"),
 		Evaluation:         settlementValue(t, domain.NewBuyEvaluationReference, "buy-evaluation-1"),
 		OriginalCurrency:   settlementValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:      settlementMinor,

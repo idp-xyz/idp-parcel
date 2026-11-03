@@ -176,6 +176,7 @@ func (clock costClock) Now() time.Time { return clock.at }
 type expectedCostFixture struct {
 	evaluations *buyEvaluationViewDouble
 	registry    *expectedCostRegistryDouble
+	suppliers   *agreementSupplierDouble
 	handler     *application.FormSupplierExpectedCostHandler
 }
 
@@ -184,11 +185,13 @@ func newExpectedCostFixture(t *testing.T) *expectedCostFixture {
 	fixture := &expectedCostFixture{
 		evaluations: newBuyEvaluationView(),
 		registry:    newExpectedCostRegistry(),
+		suppliers:   newAgreementSupplierDouble(),
 	}
 	fixture.handler = application.NewFormSupplierExpectedCostHandler(application.FormSupplierExpectedCostDeps{
 		Evaluations: fixture.evaluations,
 		Costs:       fixture.registry,
 		Registry:    fixture.registry,
+		Suppliers:   fixture.suppliers,
 		Clock:       costClock{at: costRecordedAt},
 	})
 	fixture.evaluations.adoptions["buy-eval-1"] = completedAdoption(t, "buy-eval-1")
@@ -423,6 +426,7 @@ func TestNonCompletedEvaluationsDoNotBecomeCosts(t *testing.T) {
 			application.ConversionStepMissing, application.ExpectedCostRegistryUnavailable,
 			application.EvaluationAmountPrecisionUndeclared, application.BuyEvaluationRequestViewUnavailable,
 			application.BuyEvaluationRequestRegisterUnavailable, application.OccurrenceInvalidationNotRecorded,
+			application.SupplierAgreementViewUnavailable,
 		}
 		for _, reason := range reasons {
 			label := reason.String()

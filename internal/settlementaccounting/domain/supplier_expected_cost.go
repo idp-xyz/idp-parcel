@@ -157,13 +157,15 @@ func NewSupplierCostVersionID(value string) (SupplierCostVersionID, error) {
 	return SupplierCostVersionID{required}, err
 }
 
-// SupplierExpectedCostSpec 是形成一份供应商预期成本所需的全部输入。
+// SupplierExpectedCostSpec 是形成一份供应商预期成本所需的全部输入。Supplier 是 Agreement 那一版协议的供应商，由形成编排向
+// party-commercial 问得（ADR-0358 决定一）；构造门只要它在场，不判它与协议是否一致——那一问的答案就是协议的所有者给的。
 type SupplierExpectedCostSpec struct {
 	Version            SupplierCostVersionID
 	Occurrence         TransportChargeOccurrence
 	FeeItem            FeeItemReference
 	RuleVersion        PurchaseRuleVersionReference
 	Agreement          SupplierAgreementReference
+	Supplier           SupplierPartyReference
 	Evaluation         BuyEvaluationReference
 	OriginalCurrency   CurrencyCode
 	OriginalMinor      int64
@@ -176,11 +178,13 @@ type SupplierExpectedCostSpec struct {
 // （UC-SA-002 结果契约）。类型上没有账单主张、审核应付或付款字段——「不冒充」是
 // 结构性的；供应商账单与贷项归 UC-SA-004。
 type SupplierExpectedCost struct {
-	version            SupplierCostVersionID
-	occurrence         TransportChargeOccurrence
-	feeItem            FeeItemReference
-	priceCardVersion   PurchaseRuleVersionReference
-	agreement          SupplierAgreementReference
+	version          SupplierCostVersionID
+	occurrence       TransportChargeOccurrence
+	feeItem          FeeItemReference
+	priceCardVersion PurchaseRuleVersionReference
+	agreement        SupplierAgreementReference
+	// supplier 是 agreement 那一版协议的供应商，记下后不改（ADR-0358 决定一）。只有本记录之前形成、还没补记的旧行缺它。
+	supplier           SupplierPartyReference
 	evaluation         BuyEvaluationReference
 	originalCurrency   CurrencyCode
 	originalMinor      int64
@@ -203,6 +207,7 @@ func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCo
 		!spec.FeeItem.valid() ||
 		!spec.RuleVersion.valid() ||
 		!spec.Agreement.valid() ||
+		!spec.Supplier.valid() ||
 		!spec.Evaluation.valid() ||
 		!spec.OriginalCurrency.valid() ||
 		spec.OriginalMinor < 0 ||
@@ -227,6 +232,7 @@ func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCo
 		feeItem:            spec.FeeItem,
 		priceCardVersion:   spec.RuleVersion,
 		agreement:          spec.Agreement,
+		supplier:           spec.Supplier,
 		evaluation:         spec.Evaluation,
 		originalCurrency:   spec.OriginalCurrency,
 		originalMinor:      spec.OriginalMinor,
@@ -256,6 +262,12 @@ func (cost SupplierExpectedCost) RuleVersion() PurchaseRuleVersionReference {
 
 func (cost SupplierExpectedCost) Agreement() SupplierAgreementReference {
 	return cost.agreement
+}
+
+// Supplier 交回这一版所依协议的供应商；本记录之前形成、还没补记的旧行第二个值为 false，读作「未记供应商」（ADR-0358 决定三）。
+// 匹配门凭它判账单是不是这家的，未记不当作任何一家。
+func (cost SupplierExpectedCost) Supplier() (SupplierPartyReference, bool) {
+	return cost.supplier, cost.supplier.valid()
 }
 
 func (cost SupplierExpectedCost) Evaluation() BuyEvaluationReference {
@@ -289,11 +301,15 @@ func (cost SupplierExpectedCost) CorrectionReason() (CostCorrectionReason, bool)
 // 协议引用、发生项版本与业务时点、金额币种与换算步骤整组取自新评价（ADR-0067
 // 决定二），不从被纠正版本继承。合同结算币不在此列——它是合同交给评价的输入而
 // 不是评价的产物，计价纠错不改合同。
+//
+// Supplier 跟着 Agreement 走：纠错版本按新评价重述协议引用，供应商就是那一版协议的，由编排重新问得（ADR-0358 决定一）。它不是
+// 计价结果，也不在纠错不动的身份里——后继协议换了供应商，纠错版本就记新的那一家。
 type CostCorrectionSpec struct {
 	Version          SupplierCostVersionID
 	Occurrence       TransportChargeOccurrence
 	RuleVersion      PurchaseRuleVersionReference
 	Agreement        SupplierAgreementReference
+	Supplier         SupplierPartyReference
 	Evaluation       BuyEvaluationReference
 	OriginalCurrency CurrencyCode
 	OriginalMinor    int64
@@ -316,6 +332,7 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 		!spec.Occurrence.id.valid() ||
 		!spec.RuleVersion.valid() ||
 		!spec.Agreement.valid() ||
+		!spec.Supplier.valid() ||
 		!spec.Evaluation.valid() ||
 		!spec.OriginalCurrency.valid() || spec.OriginalMinor < 0 ||
 		spec.SettlementMinor < 0 || !spec.Reason.valid() {
@@ -340,6 +357,7 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 	corrected.occurrence = spec.Occurrence
 	corrected.priceCardVersion = spec.RuleVersion
 	corrected.agreement = spec.Agreement
+	corrected.supplier = spec.Supplier
 	corrected.evaluation = spec.Evaluation
 	corrected.originalCurrency = spec.OriginalCurrency
 	corrected.originalMinor = spec.OriginalMinor

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -96,7 +97,7 @@ func syntheticPricingEvaluation(
 }
 
 // buyEvaluationRequestRecord 合成一份 tenant-a 的 BUY 评价请求：发生项 SYN-OCC-DCG08@v1、费用项目 SYN-FEE-LINEHAUL、
-// 供应商协议 SYN-AGREEMENT-01。
+// 供应商协议 SYN-AGREEMENT-01/v1（party-commercial 一侧由 seedSupplierAgreement 登它的供应商）。
 func buyEvaluationRequestRecord(t *testing.T, id string) saports.EvaluationRequestRecord {
 	t.Helper()
 	occurrence, err := sadomain.NewTransportChargeOccurrence(
@@ -115,7 +116,7 @@ func buyEvaluationRequestRecord(t *testing.T, id string) saports.EvaluationReque
 		Sources: sadomain.EligibleSourceReferences{
 			Occurrence: occurrence,
 			FeeItem:    saValue(t, sadomain.NewFeeItemReference, "SYN-FEE-LINEHAUL"),
-			Agreement:  saValue(t, sadomain.NewSupplierAgreementReference, "SYN-AGREEMENT-01"),
+			Agreement:  saValue(t, sadomain.NewSupplierAgreementReference, "SYN-AGREEMENT-01/v1"),
 		},
 		RequestedAt: time.Date(2026, 8, 7, 10, 5, 0, 0, time.UTC),
 		RequestedBy: saValue(t, sadomain.NewRequesterReference, "SYN-SETTLEMENT-JOB"),
@@ -147,6 +148,7 @@ func TestABuyEvaluationRecordedFormsASupplierExpectedCostThroughTheRouteTable(t 
 		_, err := requests.Save(txCtx, requested)
 		return err
 	})
+	seedSupplierAgreement(t, db, "tenant-a", "SYN-AGREEMENT-01", "v1", "SYN-PARTY-CARRIER-01")
 
 	evaluations, err := pppostgres.NewEvaluations(db)
 	if err != nil {
@@ -214,9 +216,13 @@ func TestABuyEvaluationRecordedFormsASupplierExpectedCostThroughTheRouteTable(t 
 		t.Fatalf("按派生版本读预期成本：found=%v err=%v", found, err)
 	}
 	if cost.Occurrence().ID().String() != "SYN-OCC-DCG08" || cost.Occurrence().Version().String() != "v1" ||
-		cost.FeeItem().String() != "SYN-FEE-LINEHAUL" || cost.Agreement().String() != "SYN-AGREEMENT-01" {
+		cost.FeeItem().String() != "SYN-FEE-LINEHAUL" || cost.Agreement().String() != "SYN-AGREEMENT-01/v1" {
 		t.Fatalf("来源引用没取自请求：发生项 %s@%s 项目 %s 协议 %s",
 			cost.Occurrence().ID(), cost.Occurrence().Version(), cost.FeeItem(), cost.Agreement())
+	}
+	// 供应商由形成编排经结算的消费侧适配器问 party-commercial 的真读口得来，记在成本上（ADR-0358 决定一）。
+	if supplier, recorded := cost.Supplier(); !recorded || supplier.String() != "SYN-PARTY-CARRIER-01" {
+		t.Fatalf("成本供应商 = %q recorded=%v，want 协议上的 SYN-PARTY-CARRIER-01", supplier, recorded)
 	}
 	total, ok := formed.Total()
 	if !ok || total.Currency().String() != "USD" || total.Amount().String() != "12.5" {
@@ -252,4 +258,30 @@ func TestABuyEvaluationRecordedFormsASupplierExpectedCostThroughTheRouteTable(t 
 	if inboxTotal != 3 {
 		t.Fatalf("BUY 那一路 inbox 共 %d 行, want 3（矛盾与未决都不记账）", inboxTotal)
 	}
+}
+
+// seedSupplierAgreement 直写 party-commercial 的一版供应商协议（版本壳与正文各一行）：本文件证的是结算的形成那一路，协议怎么
+// 发布另有用例，这里只要 PC 的读口答得出这一版协议的供应商。
+func seedSupplierAgreement(t *testing.T, db *bentopg.DB, tenant, object, version, supplier string) {
+	t.Helper()
+	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		executor, err := db.RequireExecutor(txCtx)
+		if err != nil {
+			return err
+		}
+		if _, err := executor.Exec(txCtx, `
+			INSERT INTO party_commercial.commercial_version
+				(tenant_id, object_kind, object_id, version_label, scope_ref, content_digest, effective_starts_at, status, snapshot, published_at)
+			VALUES ($1, 3, $2, $3, 'SYN-SCOPE-01', 'PCC-1:syn', '2026-01-01T00:00:00Z', 3, '{}', '2025-12-15T00:00:00Z')`,
+			tenant, object, version); err != nil {
+			return err
+		}
+		_, err = executor.Exec(txCtx, `
+			INSERT INTO party_commercial.supplier_agreement
+				(tenant_id, object_kind, object_id, version_label, supplier_party_id, legal_entity_ref, agreement_scope_ref,
+				 purchase_plan_ref, effective_starts_at)
+			VALUES ($1, 3, $2, $3, $4, 'SYN-LE-01', 'SYN-SCOPE-01', 'SYN-PLAN-01', '2026-01-01T00:00:00Z')`,
+			tenant, object, version, supplier)
+		return err
+	})
 }

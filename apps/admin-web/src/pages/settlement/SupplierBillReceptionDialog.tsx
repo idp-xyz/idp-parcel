@@ -34,11 +34,13 @@ import {
   classificationChoices,
   currentExpectedCosts,
   hasReceptionProblems,
+  linesForSupplier,
   NO_EXPECTED_COST,
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
   receptionSettled,
+  unrecordedSupplierCount,
   type ReceptionDraft,
   type ReceptionLineDraft,
 } from './supplier-bills';
@@ -133,7 +135,11 @@ function ReceptionForm({
   const [freshClaim, setFreshClaim] = useState(() => newClaimId(new Date(), Math.random().toString(36).slice(2)));
 
   const costsByVersion = useMemo(() => new Map(catalogues.costs.map((cost) => [cost.version, cost])), [catalogues.costs]);
-  const options = useMemo(() => currentExpectedCosts(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
+  const options = useMemo(
+    () => currentExpectedCosts(catalogues.costs, draft.currency, draft.supplier),
+    [catalogues.costs, draft.currency, draft.supplier],
+  );
+  const unrecorded = useMemo(() => unrecordedSupplierCount(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
   // 被追加的原账单：页上这家供应商的那几份，加上按账单号在全册里找到的页外那几份（同一份只留一个）。页只列最近收到的，更早的
   // 原账单不在上面，靠下面那一格去找（findSupplierBillReceptions）。
   const [found, setFound] = useState<SupplierBillReceptionRecord[]>([]);
@@ -247,7 +253,20 @@ function ReceptionForm({
       {catalogues.problem ? <p className={`text-[12px] ${statusToneText.warning}`}>{catalogues.problem}</p> : null}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <Field label="供应商" problem={touched ? problems.fields.supplier : null}>
-          <select className={fieldClass} value={draft.supplier} onChange={(event) => set('supplier', event.target.value)}>
+          <select
+            className={fieldClass}
+            value={draft.supplier}
+            onChange={(event) => {
+              const supplier = event.target.value;
+              // 换了供应商，各行选的别家预期成本随之清掉：留着就是一个匹配门会拒的选择。
+              setDraft((current) => ({
+                ...current,
+                supplier,
+                lines: linesForSupplier(current.lines, currentExpectedCosts(catalogues.costs, current.currency, supplier)),
+              }));
+              setAnswer(null);
+            }}
+          >
             <option value="">选一家</option>
             {catalogues.parties.map((party) => (
               <option key={party.partyId} value={party.partyId}>
@@ -325,8 +344,12 @@ function ReceptionForm({
         <legend className="mb-1 text-[12px] font-semibold text-idpxyz-textBright">账单各行</legend>
         <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">
           每一行说清对的是我们记的哪一笔预期成本、对上了没有。金额按最小币单位写整数（例如 12.34 元写 1234），与本页其他金额同一写法。
-          {draft.currency === '' ? '先选币种，预期成本只列同币种的。' : `只列 ${draft.currency} 的当前预期成本；不同币种没有换算依据，对不上。`}
-          预期成本上只记了它依的供应商协议、没有记供应商，这里不按所选供应商筛，登记时也不核供应商：选之前看清协议是不是这家供应商的。
+          {draft.supplier === ''
+            ? '先选供应商，预期成本只列这家的。'
+            : draft.currency === ''
+              ? '先选币种，预期成本只列这家供应商同币种的。'
+              : `只列这家供应商 ${draft.currency} 的当前预期成本；别家的对不上，不同币种没有换算依据也对不上。`}
+          {unrecorded > 0 ? `另有 ${unrecorded} 份预期成本还没记是哪家供应商的（较早形成的），这里不列，请运营补记之后再选。` : ''}
         </p>
         {touched && problems.fields.lines ? <p className={`text-[11px] ${statusToneText.warning}`}>{problems.fields.lines}</p> : null}
         {draft.lines.map((line, index) => {

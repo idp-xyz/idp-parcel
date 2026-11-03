@@ -39,6 +39,12 @@ const (
 	// BillClaimSupplierConflict：同一份主张的新版本换了供应商（ADR-0357 决定一）。供应商是主张的相对方，也是账单号的分配方；换了
 	// 供应商的来件是另一家的账单，续办是另立主张登，或照原先的供应商改录入。它先于账单号的两格判，带没带号都落这一格。
 	BillClaimSupplierConflict
+	// BillExpectedCostSupplierMismatch：一行点名的预期成本记下的供应商不是这张账单的供应商（ADR-0358 决定二）。续办是改选这家
+	// 的预期成本，或改判为没有对应发生项。
+	BillExpectedCostSupplierMismatch
+	// BillExpectedCostSupplierUnrecorded：一行点名的预期成本还没记供应商（ADR-0358 决定三的旧行）。续办是按协议补记，不是改单，
+	// 所以与不符分两格（ADR-0029）。
+	BillExpectedCostSupplierUnrecorded
 )
 
 func (outcome BillReceptionOutcome) String() string {
@@ -59,6 +65,10 @@ func (outcome BillReceptionOutcome) String() string {
 		return "SUPPLIER_BILL_NUMBER_CONFLICT"
 	case BillClaimSupplierConflict:
 		return "CLAIM_SUPPLIER_CONFLICT"
+	case BillExpectedCostSupplierMismatch:
+		return "EXPECTED_COST_SUPPLIER_MISMATCH"
+	case BillExpectedCostSupplierUnrecorded:
+		return "EXPECTED_COST_SUPPLIER_UNRECORDED"
 	default:
 		return ""
 	}
@@ -116,6 +126,19 @@ type ReceiveSupplierBillResult struct {
 	notCurrent   ExpectedCostNotCurrent
 	numbering    SupplierBillNumberConflict
 	supplier     domain.SupplierPartyReference
+	costSupplier ExpectedCostSupplierRefusal
+}
+
+// ExpectedCostSupplierRefusal 说哪一行点名的哪一版不是这家供应商的：Supplier 是那一版记下的供应商，没记时为零值。
+type ExpectedCostSupplierRefusal struct {
+	Line     domain.BillLineReference
+	Version  domain.SupplierCostVersionID
+	Supplier domain.SupplierPartyReference
+}
+
+// SupplierRefusal 只在`供应商不符`与`供应商未记`两格有值。
+func (result ReceiveSupplierBillResult) SupplierRefusal() (ExpectedCostSupplierRefusal, bool) {
+	return result.costSupplier, result.outcome == BillExpectedCostSupplierMismatch || result.outcome == BillExpectedCostSupplierUnrecorded
 }
 
 // SupplierBillNumberConflict 说账单号冲突撞的是哪一边：RegisteredClaim 非零是号已标识另一份主张；RegisteredNumber 非零是这份
@@ -206,8 +229,10 @@ func NewReceiveSupplierBillHandler(deps ReceiveSupplierBillDeps) *ReceiveSupplie
 }
 
 // Handle 把一份供应商账单推进到接收与逐行匹配：按主张与账单号排队 → 这份主张已接收的版本是不是同一家供应商 → 账单号查重
-// （ADR-0357 决定一）→ 幂等/冲突按内容指纹分界（AT-SA-092/093）→ 主张成形 → 逐行匹配（每行必须有裁决，跨币种停在待判断）→ 审核授权探查（未配置即审核未决，不铸
-// 应付）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。
+// （ADR-0357 决定一）→ 幂等/冲突按内容指纹分界（AT-SA-092/093）→ 主张成形 → 逐行匹配（每行必须有裁决；点名的成本先判当前版，
+// 再由匹配门判供应商、币种与金额，别家的或没记供应商的不落，跨币种停在待判断）→ 审核授权探查（未配置即审核未决，不铸应付）→
+// 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。重放在逐行匹配之前就答了原结果：本记录之前接收的账单不按供应商
+// 重判（ADR-0358 决定二）。
 func (handler *ReceiveSupplierBillHandler) Handle(
 	ctx context.Context,
 	command ReceiveSupplierBillCommand,
@@ -291,6 +316,10 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 			expected = loaded
 		}
 		match, err := domain.MatchBillLine(claim, directive.Line, directive.Classification, expected, directive.Basis, record.RecordedAt)
+		if errors.Is(err, domain.ErrBillSupplierMismatch) || errors.Is(err, domain.ErrExpectedCostSupplierUnrecorded) {
+			// 点名了别家的、或还没记供应商的预期成本：不落账单、不交意图（ADR-0358 决定二）。
+			return supplierRefusal(command, directive, expected, err), nil
+		}
 		if errors.Is(err, domain.ErrCrossCurrencyMatch) {
 			// 币种不同且无换算依据：答未配置（原因 CONVERSION_UNCONFIGURED），不用当前汇率猜测（AT-SA-096）。
 			return ReceiveSupplierBillResult{outcome: BillUndecided, reason: BillConversionUnconfigured,
@@ -379,6 +408,22 @@ func (handler *ReceiveSupplierBillHandler) notCurrent(
 	}
 	return ReceiveSupplierBillResult{outcome: BillExpectedCostNotCurrent, notCurrent: stale,
 		continuation: billContinuation("EXPECTED_COST_NOT_CURRENT", command.Claim.Claim.String(), directive.Line.String())}, true, nil
+}
+
+func supplierRefusal(
+	command ReceiveSupplierBillCommand,
+	directive LineMatchDirective,
+	expected domain.SupplierExpectedCost,
+	err error,
+) ReceiveSupplierBillResult {
+	refusal := ExpectedCostSupplierRefusal{Line: directive.Line, Version: expected.Version()}
+	outcome := BillExpectedCostSupplierUnrecorded
+	if errors.Is(err, domain.ErrBillSupplierMismatch) {
+		outcome = BillExpectedCostSupplierMismatch
+		refusal.Supplier, _ = expected.Supplier()
+	}
+	return ReceiveSupplierBillResult{outcome: outcome, costSupplier: refusal,
+		continuation: billContinuation(outcome.String(), command.Claim.Claim.String(), directive.Line.String())}
 }
 
 func commandIdentityPresent(command ReceiveSupplierBillCommand) bool {

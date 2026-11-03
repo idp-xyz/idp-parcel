@@ -103,14 +103,16 @@ type SupplierExpectedCostCatalogueRow struct {
 	FeeItem             string
 	PurchaseRuleVersion string
 	Agreement           string
-	Evaluation          string
-	OriginalCurrency    string
-	OriginalMinor       int64
-	SettlementCurrency  string
-	SettlementMinor     int64
-	ConversionStep      string
-	PriorVersion        string
-	CorrectionReason    string
+	// Supplier 是 Agreement 那一版协议的供应商（ADR-0358 决定一）；本记录之前形成、还没补记的旧行为空串，读作「未记供应商」。
+	Supplier           string
+	Evaluation         string
+	OriginalCurrency   string
+	OriginalMinor      int64
+	SettlementCurrency string
+	SettlementMinor    int64
+	ConversionStep     string
+	PriorVersion       string
+	CorrectionReason   string
 	// Withdrawn 为真：这一版是失效纠错版本，它依的发生项已失效、这份成本不再成立；金额是被撤下那一笔的原样（ADR-0232 决定七）。
 	Withdrawn  bool
 	RecordedAt time.Time

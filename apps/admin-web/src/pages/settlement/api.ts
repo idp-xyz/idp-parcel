@@ -86,6 +86,8 @@ export interface SupplierExpectedCostRecord {
   feeItem: string;
   purchaseRuleVersion: string;
   agreement: string;
+  /** 这一版所依协议的供应商（ADR-0358 决定一）；本次改动之前形成、还没补记的旧行不带，读作未记。 */
+  supplier?: string;
   evaluation: string;
   originalCurrency: string;
   originalAmount: string;
@@ -734,6 +736,8 @@ export interface SupplierBillReceptionResponseBody {
   continuationReference?: string;
   auditAuthority?: string;
   notCurrent?: { line: string; version: string; withdrawn: boolean; successor?: string };
+  /** 只在 EXPECTED_COST_SUPPLIER_MISMATCH 与 EXPECTED_COST_SUPPLIER_UNRECORDED 时出现；不符时带那一版记下的供应商（ADR-0358 决定二）。 */
+  expectedCostSupplier?: { line: string; version: string; supplier?: string };
   /** 只在 SUPPLIER_BILL_NUMBER_CONFLICT 时出现、恰出其一：号已标识的那份主张，或这份主张已登记的号。 */
   registeredClaim?: string;
   registeredSupplierBillNumber?: string;

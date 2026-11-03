@@ -48,7 +48,7 @@ func TestABillLineNamingANonCurrentExpectedCostIsNotMatched(t *testing.T) {
 	head := current.costs.costs["cost/v1"]
 	corrected, err := head.AppendCorrection(domain.CostCorrectionSpec{
 		Version: billValue(t, domain.NewSupplierCostVersionID, "cost/v1-corrected"), Occurrence: invalidated,
-		RuleVersion: head.RuleVersion(), Agreement: head.Agreement(), Evaluation: head.Evaluation(),
+		RuleVersion: head.RuleVersion(), Agreement: head.Agreement(), Supplier: billValue(t, domain.NewSupplierPartyReference, "partner-1"), Evaluation: head.Evaluation(),
 		OriginalCurrency: billValue(t, domain.NewCurrencyCode, "USD"), OriginalMinor: 12000, SettlementMinor: 12000,
 		Reason: domain.OccurrenceSupersededCorrection(),
 	})
