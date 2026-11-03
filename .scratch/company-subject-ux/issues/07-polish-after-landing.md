@@ -1,7 +1,7 @@
 # 07 收尾抛光：空的概要卡、「关联」签显名称、头部注册号胶囊截断
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-03 进 main（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 无（01–04 已进 main `c61937b3f`）
 出处：协调方在 main 上复核四票合并后的结果（截图 `scratchpad/ux-le2/`）。
@@ -43,3 +43,7 @@ Blocked by: 无（01–04 已进 main `c61937b3f`）
 - 已停用公司主体的「停用来源单据」一行放在横幅下（演示数据里 SYN-LE-01 与列表首行都未停用），只过 `tsc` 与 build，未在浏览器里看。
 - 多个注册号的公司主体（一号一枚胶囊并排）演示数据里没有，只有单号实例；多号拆分钉在 `legal-entity-identity.test.ts`。
 - 票 06 稍后改 `LegalEntityProfile*`，本票未碰；两边无共同文件。
+
+## 进 main 记录（2026-11-03，协调方）
+
+- main `c01b08a8c` 上 `git merge --no-ff origin/claude-csux-07`（tip `02c61e526`），无冲突；合并提交 `d946e2ea7`。三道门在 main 上退 0（tsc、run-tests 1159、vite build）。没动共享面，不需评审。
