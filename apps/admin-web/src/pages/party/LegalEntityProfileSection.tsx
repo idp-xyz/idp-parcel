@@ -36,6 +36,7 @@ import {
 import { profileRevisionLabel } from './presentation';
 import { problemNote } from './presentation';
 import { Field, useLoaded } from './PublicationFormFields';
+import { cachedRegistrationNumberTypes, loadRegistrationNumberTypesCached } from './legal-entity-read-cache';
 import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { Instant } from './detail-primitives';
 import {
@@ -90,8 +91,11 @@ export function LegalEntityProfileSection({
   formOpenRequest = 0,
   collapseCurrentProfile = false,
   onProfileUpdated,
+  version,
 }: {
   legalEntityId: string;
+  /** 身份版本（legalEntityReadVersion）；给了版本历史就经页面内缓存读，换行时不先清空再撑开。 */
+  version?: string;
   /** 调用方每要一次「直接打开更新表单」就加一（页头的主动作）；0 即没要过。 */
   formOpenRequest?: number;
   /** 对象页已有当前资料摘要时折叠按日期查询，仍保留历史与未来日期的查看入口。 */
@@ -109,7 +113,7 @@ export function LegalEntityProfileSection({
   }, [formOpenRequest]);
   // 注册号类型目录读一次，给按日期查询的读出与版本历史（对比表、快照）把监管登记号类型码译成目录译名；读不到按码显。
   // 抽屉自己另读一份——它是导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
-  const typeNameOf = useTypeNameOf(useLoaded(listRegistrationNumberTypes));
+  const typeNameOf = useTypeNameOf(useCachedRegistrationNumberTypes());
   return (
     <div className="flex flex-col gap-5">
       <section>
@@ -117,7 +121,7 @@ export function LegalEntityProfileSection({
           <h4 className="text-[13px] font-semibold text-idpxyz-text">资料版本历史</h4>
           <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都保留一版；当前生效的那一版显示在概要。</p>
         </div>
-        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} revision={landed} typeNameOf={typeNameOf} />
+        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} revision={landed} typeNameOf={typeNameOf} version={version} />
       </section>
       {collapseCurrentProfile ? (
         <details
@@ -165,6 +169,23 @@ export function LegalEntityProfileSection({
 }
 
 /** 目录答案折成查法；没答（还在读、读不到）就是查不到任何码的空表，调用方按码显。 */
+/** 注册号类型目录：读过的那份先用、照常再问（legal-entity-read-cache.ts 的目录缓存）——换行时对比表不先显类型码再换译名。 */
+function useCachedRegistrationNumberTypes(): ApiResult<RegistrationNumberTypeListResponseBody> | null {
+  const [answer, setAnswer] = useState<ApiResult<RegistrationNumberTypeListResponseBody> | null>(
+    () => cachedRegistrationNumberTypes() ?? null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void loadRegistrationNumberTypesCached().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return answer;
+}
+
 function useTypeNameOf(typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null): RegistrationNumberTypeNameOf {
   return useMemo(
     () => registrationNumberTypeNamesOf(typeCatalogue?.kind === 'outcome' ? typeCatalogue.body.registrationNumberTypes : []),

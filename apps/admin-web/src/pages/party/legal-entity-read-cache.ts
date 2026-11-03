@@ -12,10 +12,12 @@ import type { ApiResult } from '../catalogue-api';
 import {
   listLegalEntityProfileRevisions,
   listLegalEntityRevisions,
+  listRegistrationNumberTypes,
   resolveLegalEntityProfile,
   type LegalEntityProfileResolutionResponseBody,
   type LegalEntityProfileRevisionListResponseBody,
   type LegalEntityRevisionListResponseBody,
+  type RegistrationNumberTypeListResponseBody,
 } from './api';
 
 export interface LegalEntityReadBodies {
@@ -96,4 +98,23 @@ export function neighborsOf<Row>(rows: readonly Row[], keyOfRow: (row: Row) => s
   const at = rows.findIndex((row) => keyOfRow(row) === selectedKey);
   if (at < 0) return [];
   return [rows[at - 1], rows[at + 1]].filter((row): row is Row => row !== undefined);
+}
+
+// 注册号类型目录：全租户一份，资料版本区每挂一次就重读一次的话，左边换行时对比表先显类型码、目录到了再换成译名，
+// 又是一闪。读过就先用读过的那份，照常再问一遍。
+let numberTypes: ApiResult<RegistrationNumberTypeListResponseBody> | undefined;
+let numberTypesInflight: Promise<ApiResult<RegistrationNumberTypeListResponseBody>> | undefined;
+
+export function cachedRegistrationNumberTypes(): ApiResult<RegistrationNumberTypeListResponseBody> | undefined {
+  return numberTypes;
+}
+
+export function loadRegistrationNumberTypesCached(): Promise<ApiResult<RegistrationNumberTypeListResponseBody>> {
+  if (numberTypesInflight) return numberTypesInflight;
+  numberTypesInflight = listRegistrationNumberTypes().then((answer) => {
+    numberTypesInflight = undefined;
+    if (answer.kind === 'outcome') numberTypes = answer;
+    return answer;
+  });
+  return numberTypesInflight;
 }

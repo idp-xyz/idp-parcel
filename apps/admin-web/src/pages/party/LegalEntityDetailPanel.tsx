@@ -239,6 +239,7 @@ export function LegalEntityDetailPanel({
               className="mt-0 data-[state=inactive]:hidden"
             >
               <LegalEntityProfileSection
+                version={readVersion}
                 key={row.legalEntityId}
                 legalEntityId={row.legalEntityId}
                 formOpenRequest={formOpenRequest}
@@ -254,7 +255,7 @@ export function LegalEntityDetailPanel({
               forceMount={visited.has('history') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
             >
-              <RevisionHistorySection register={legalEntityRevisionHistoryOf(typeNameOf)} subjectId={row.legalEntityId} revision={row.revision} />
+              <RevisionHistorySection register={legalEntityRevisionHistoryOf(typeNameOf)} subjectId={row.legalEntityId} revision={row.revision} cacheVersion={readVersion} />
             </TabsContent>
             <TabsContent value="related" className="mt-0">
               <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />

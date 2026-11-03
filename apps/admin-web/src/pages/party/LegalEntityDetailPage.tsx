@@ -36,7 +36,12 @@ import { RevisionHistorySection, type RevisionHistoryRegister } from './Revision
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
-import { invalidateLegalEntityReads, legalEntityReadVersion } from './legal-entity-read-cache';
+import {
+  cachedLegalEntityRead,
+  invalidateLegalEntityReads,
+  legalEntityReadVersion,
+  loadLegalEntityRead,
+} from './legal-entity-read-cache';
 import { DetailRow, Instant, RefText } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
@@ -61,8 +66,16 @@ export function legalEntityRevisionHistoryOf(
     echoedSubjectId: (body) => body.legalEntityId,
     timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant, typeNameOf),
     noteOf: revisionHistoryNote,
+    peek: peekIdentityRevisions,
+    loadCached: loadIdentityRevisions,
   };
 }
+
+// 登记记录签经页面内缓存读（legal-entity-read-cache.ts）；模块级常量，册对象每次渲染新建时引用不变，effect 不会白重跑。
+const peekIdentityRevisions = (legalEntityId: string, version: string) =>
+  cachedLegalEntityRead('identityRevisions', legalEntityId, version);
+const loadIdentityRevisions = (legalEntityId: string, version: string) =>
+  loadLegalEntityRead('identityRevisions', legalEntityId, version);
 
 function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
@@ -334,6 +347,7 @@ export function LegalEntityDetailPage({
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityProfileSection
+                      version={readVersion}
                       key={`${row.legalEntityId}#${headerLanded}`}
                       legalEntityId={row.legalEntityId}
                       collapseCurrentProfile
@@ -356,6 +370,7 @@ export function LegalEntityDetailPage({
                       register={legalEntityRevisionHistoryOf(typeNameOf)}
                       subjectId={row.legalEntityId}
                       revision={row.revision}
+                      cacheVersion={readVersion}
                     />
                   </section>
                 ),

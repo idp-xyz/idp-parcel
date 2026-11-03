@@ -36,39 +36,65 @@ export interface RevisionHistoryRegister<Body> {
   timelineOf: (body: Body) => RevisionTimelineItem[];
   /** 条数注释句（在 *-revisions.ts）。 */
   noteOf: (count: number) => string;
+  /**
+   * 可选的页面内缓存（公司主体那一册给，见 legal-entity-read-cache.ts）：`peek` 取这个对象这一版读过的那份先显，`loadCached`
+   * 经缓存去问。调用方同时给 `cacheVersion` 才用；两者都要是稳定引用，理由同 load。
+   */
+  peek?: (subjectId: string, version: string) => ApiResult<Body> | undefined;
+  loadCached?: (subjectId: string, version: string) => Promise<ApiResult<Body>>;
 }
 
 export function RevisionHistorySection<Body>({
   register,
   subjectId,
   revision,
+  cacheVersion,
 }: {
   register: RevisionHistoryRegister<Body>;
   /** 所问对象的标识。 */
   subjectId: string;
   /** 列表行上的最新修订号；变了就重取，理由见文件头。 */
   revision: number;
+  /** 给了且册带缓存时，读过的那份先显、后台再问（左边换行时这一签不再先清空再撑开）。 */
+  cacheVersion?: string;
 }) {
-  const { load } = register;
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
+  const { load, peek, loadCached } = register;
   const [reloadKey, setReloadKey] = useState(0);
+  // 答案钉在发问那一刻的键上：换了对象或修订，旧答案即使后到也不算数；没答到之前先看缓存。
+  const requestKey = `${subjectId}\u0000${revision}\u0000${reloadKey}`;
+  const [result, setResult] = useState<{ key: string; answer: ApiResult<Body> } | null>(null);
+  const useCache = cacheVersion !== undefined && peek !== undefined && loadCached !== undefined;
 
   useEffect(() => {
     let cancelled = false;
-    setAnswer(null);
-    void load(subjectId).then((next) => {
-      if (!cancelled) setAnswer(next);
+    const request = useCache ? loadCached(subjectId, cacheVersion) : load(subjectId);
+    void request.then((next) => {
+      if (!cancelled) setResult({ key: requestKey, answer: next });
     });
     return () => {
       cancelled = true;
     };
-  }, [load, subjectId, revision, reloadKey]);
+  }, [load, loadCached, useCache, subjectId, cacheVersion, requestKey]);
 
   const retry = () => setReloadKey((value) => value + 1);
   const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
+  const answer = result?.key === requestKey ? result.answer : (useCache ? peek(subjectId, cacheVersion) ?? null : null);
 
   if (answer === null) {
-    return <p className={note}>正在读取修订历史…</p>;
+    // 与时间线同轮廓的占位：只摆一行「正在读取」时这一签先塌成一行、答案到了再撑开，看着是一闪。
+    return (
+      <div role="status" aria-label="正在读取修订历史" className="mt-2 flex animate-pulse flex-col gap-3">
+        {[0, 1].map((index) => (
+          <div key={index} className="flex gap-3">
+            <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-idpxyz-hover" />
+            <div className="flex-1 rounded-md border border-idpxyz-border px-4 py-3">
+              <div className="h-3.5 w-32 rounded bg-idpxyz-hover" />
+              <div className="mt-2 h-3 w-3/4 rounded bg-idpxyz-hover" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
   if (answer.kind === 'unconfigured') {
     return (

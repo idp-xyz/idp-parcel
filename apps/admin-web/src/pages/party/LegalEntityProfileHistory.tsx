@@ -18,6 +18,7 @@ import {
   type LegalEntityProfileRevisionRecord,
 } from './api';
 import { problemNote, profileRevisionLabel } from './presentation';
+import { cachedLegalEntityRead, loadLegalEntityRead } from './legal-entity-read-cache';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
@@ -35,11 +36,17 @@ export function LegalEntityProfileHistory({
   legalEntityId,
   revision,
   typeNameOf,
+  version,
 }: {
   legalEntityId: string;
   revision: number;
   /** 监管登记号的类型码 → 目录译名，由调用方带目录折好交进来（票 company-subject-ux/06 第 4 条）；不给或译不出按码显。 */
   typeNameOf?: RegistrationNumberTypeNameOf;
+  /**
+   * 身份版本（legalEntityReadVersion）。给了就经页面内缓存读（legal-entity-read-cache.ts）：读过的那份先显、后台再问——
+   * 左边换行时这一签不再先清空成「正在读取」再撑开（用户 2026-11-03 指出）。
+   */
+  version?: string;
 }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
@@ -48,27 +55,39 @@ export function LegalEntityProfileHistory({
   const requestKey = `${legalEntityId}\u0000${revision}\u0000${reloadKey}`;
   const [historyResult, setHistoryResult] = useState<{ key: string; answer: ApiResult<LegalEntityProfileRevisionListResponseBody> }>();
   const [currentResult, setCurrentResult] = useState<{ key: string; answer: ApiResult<LegalEntityProfileResolutionResponseBody> }>();
-  const history = historyResult?.key === requestKey ? historyResult.answer : null;
-  const current = currentResult?.key === requestKey ? currentResult.answer : null;
+  const history =
+    historyResult?.key === requestKey
+      ? historyResult.answer
+      : (version !== undefined ? cachedLegalEntityRead('profileRevisions', legalEntityId, version) : undefined) ?? null;
+  const current =
+    currentResult?.key === requestKey
+      ? currentResult.answer
+      : (version !== undefined ? cachedLegalEntityRead('profile', legalEntityId, version) : undefined) ?? null;
   // 对比表的地址文本经基础数据译国家名（legal-entity-profile-history.ts 的 profileAddressText 读模块级名表）；这里订阅一下，
   // 名表读回时重算对比，否则先渲出来的那张表停在码上。
   useRefdataNames();
 
   useEffect(() => {
     let cancelled = false;
-    void listLegalEntityProfileRevisions(legalEntityId).then((answer) => {
+    const load = version === undefined
+      ? listLegalEntityProfileRevisions(legalEntityId)
+      : loadLegalEntityRead('profileRevisions', legalEntityId, version);
+    void load.then((answer) => {
       if (!cancelled) setHistoryResult({ key: requestKey, answer });
     });
     return () => { cancelled = true; };
-  }, [legalEntityId, requestKey]);
+  }, [legalEntityId, requestKey, version]);
 
   useEffect(() => {
     let cancelled = false;
-    void resolveLegalEntityProfile(legalEntityId, new Date().toISOString()).then((answer) => {
+    const load = version === undefined
+      ? resolveLegalEntityProfile(legalEntityId, new Date().toISOString())
+      : loadLegalEntityRead('profile', legalEntityId, version);
+    void load.then((answer) => {
       if (!cancelled) setCurrentResult({ key: requestKey, answer });
     });
     return () => { cancelled = true; };
-  }, [legalEntityId, requestKey]);
+  }, [legalEntityId, requestKey, version]);
 
   const retry = () => setReloadKey((value) => value + 1);
   const historyBody = history?.kind === 'outcome' && history.body.legalEntityId === legalEntityId
@@ -81,7 +100,22 @@ export function LegalEntityProfileHistory({
   const currentRevision = currentBody?.effectiveRevision?.revision;
   const selected = selectedProfileRevision(revisions, selectedNumber, currentRevision);
 
-  if (history === null) return <p role="status" className={note}>正在读取资料版本…</p>;
+  if (history === null) {
+    // 与版本选择区同轮廓的占位：左栏几张版本卡、右栏一块对比区，不塌成一行字。
+    return (
+      <div role="status" aria-label="正在读取资料版本" className="grid min-w-0 animate-pulse gap-4 rounded-lg border border-idpxyz-border p-4 md:grid-cols-[minmax(11rem,0.7fr)_minmax(0,1.3fr)]">
+        <div className="flex flex-col gap-2">
+          <div className="h-9 rounded-md bg-idpxyz-hover" />
+          {[0, 1, 2].map((index) => <div key={index} className="h-16 rounded-md border border-idpxyz-border" />)}
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-4 w-24 rounded bg-idpxyz-hover" />
+          <div className="h-3 w-48 rounded bg-idpxyz-hover" />
+          <div className="mt-2 h-40 rounded-md border border-idpxyz-border" />
+        </div>
+      </div>
+    );
+  }
   if (isOperatorRefusal(history)) return <OperatorRefusalNote kind={history.kind} what="资料版本" className={note} />;
   if (history.kind === 'unconfigured') return <p className={note}>资料版本读取渠道尚未配置，暂时无法查看。</p>;
   if (history.kind === 'callerProblem') return <div className={note}><p>读取方式问题：{problemNote(history.code)}</p><TechnicalDetails rows={httpRows(history.status, history.code)} /></div>;
