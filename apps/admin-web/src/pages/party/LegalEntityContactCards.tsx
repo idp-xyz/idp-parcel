@@ -1,7 +1,7 @@
-import { Fragment, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Mail, MessageCircle, Phone, type LucideIcon } from 'lucide-react';
 import type { LegalEntityContactRecord } from './api';
-import { contactCardOf, socialAccountSeparator, socialAccountsText, type ContactCard } from './legal-entity-contact-cards';
+import { contactCardOf, socialAccountsText, type ContactCard } from './legal-entity-contact-cards';
 import './legal-entity-profile-readout.css';
 
 /**
@@ -66,17 +66,14 @@ function ContactCardView({ card }: { card: ContactCard }) {
           ) : null}
           {card.socialAccounts.length ? (
             <ContactLine icon={MessageCircle} label="社交账号" title={socialAccountsText(card.socialAccounts)}>
-              <span>
+              {/* 一个账号一行、平台名占固定一栏：几个账号串在一行时平台名与账号混在一起，折行处还会剩一个分隔点挂在行尾
+                  （用户 2026-11-03 指出）。平台名空的那一栏留空，账号仍对齐。 */}
+              <span className="grid gap-0.5">
                 {card.socialAccounts.map((account, index) => (
-                  <Fragment key={`${account.platform}-${account.account}-${index}`}>
-                    {index > 0 ? <span className="text-idpxyz-breadcrumb">{socialAccountSeparator}</span> : null}
-                    {/* 「平台 账号」一组是 inline-block：放得下就整组换行，不在账号的连字符处断成「SYN-LE-01-」与「02」两截；
-                        只有一组比卡还宽时才在组内按字符折。 */}
-                    <span className="inline-block max-w-full [overflow-wrap:anywhere]">
-                      {account.platform ? <span className="text-idpxyz-breadcrumb">{account.platform} </span> : null}
-                      <span className="select-text font-mono text-[12px]">{account.account}</span>
-                    </span>
-                  </Fragment>
+                  <span key={`${account.platform}-${account.account}-${index}`} className="flex min-w-0 items-baseline gap-2">
+                    <span className="w-[4.5em] shrink-0 text-idpxyz-breadcrumb">{account.platform}</span>
+                    <span className="min-w-0 select-text break-all font-mono text-[12px]">{account.account}</span>
+                  </span>
                 ))}
               </span>
             </ContactLine>
