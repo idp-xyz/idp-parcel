@@ -24,12 +24,17 @@ import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
-import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
+import { listGroupLegalEntities, listRegistrationNumberTypes, type GroupLegalEntityRecord } from './api';
 import { useBoundTenant } from '../use-operator-binding';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
 import { identityLayerAbsentNote } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
-import { identityLayerCellsOf } from './legal-entity-identity';
+import { useLoaded } from './PublicationFormFields';
+import {
+  identityLayerCellsOf,
+  registrationNumberTypeNamesOf,
+  type RegistrationNumberTypeNameOf,
+} from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
 import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
 import { filterSelectClass, Instant, UnknownPartyName } from './detail-primitives';
@@ -54,14 +59,19 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['group-legal-entities'];
 
 function emptyDescriptionOf(mayWrite: boolean): string {
-  return `签约、开票都要以公司主体的名义。${entryHint(mayWrite, '用页头的「新增公司主体」登记第一个。')}`;
+  return `签约、开票都要用我们自己公司的名义。${entryHint(mayWrite, '用页头的「新增公司主体」登记第一个。')}`;
 }
+
+/** 「待处理」胶囊的悬停说明：判据在 legal-entity-list.ts 的 legalEntityNeedsAttention，这里只把它说成运营的话。 */
+const attentionFilterTitle = '注册地或注册号缺失，或关联的往来单位查不到';
 
 interface LegalEntityFilterItem {
   label: string;
   count: number;
   active: boolean;
   disabled?: boolean;
+  /** 悬停说明；只有判据不自明的胶囊（待处理）给。 */
+  title?: string;
   onClick: () => void;
 }
 
@@ -71,6 +81,7 @@ function LegalEntityFilterButton({ item }: { item: LegalEntityFilterItem }) {
       type="button"
       onClick={item.onClick}
       aria-pressed={item.active}
+      title={item.title}
       disabled={item.disabled ?? (item.count === 0 && !item.active)}
       className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent text-[12px] leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
         item.active
@@ -105,10 +116,11 @@ const statusDotClass: Record<string, string> = {
   DEACTIVATED: 'bg-idpxyz-textMuted',
 };
 
-// 身份两格国家在上、号在下：号照答复原样，国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，ADR-0335 决定七）；
-// 最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
-function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
-  const cells = identityLayerCellsOf(row);
+// 身份两格国家在上、号在下：国家经基础数据目录译成「中国（CN）」（码仍在括号里，查不到原样显示，ADR-0335 决定七），
+// 类型码经注册号类型目录译成「统一社会信用代码」（查法由页面读一次目录折成，译不出原样显码，legal-entity-identity.ts）；
+// 号本身照答复原样。最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
+function IdentityLayerCell({ row, typeNameOf }: { row: GroupLegalEntityRecord; typeNameOf: RegistrationNumberTypeNameOf }) {
+  const cells = identityLayerCellsOf(row, typeNameOf);
   if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
   return (
     <div className="min-w-40">
@@ -123,7 +135,10 @@ function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
 // 骨架期这里列过「运营集团租户」——ADR-0003 里那一级是配置与隔离边界本身，读面本来就在单租户
 // 作用域内取数，整列同值没有信息，接线时按 live 页惯例撤下。「对象类型」列同一判据撤下（票 01 第 3 条）：
 // 本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格，种类进详情栏与对象页。
-const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
+//
+// 列表是函数不是常量：注册号那一列要带目录查法，目录是页面挂载后读回的；页面用 useMemo 只在查法变时重建。
+function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<GroupLegalEntityRecord>[] {
+  return [
   {
     key: 'party',
     header: '公司主体',
@@ -157,18 +172,19 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'identity-layer',
     header: '注册地与注册号',
     minListWidth: 680,
-    render: (row) => <IdentityLayerCell row={row} />,
+    render: (row) => <IdentityLayerCell row={row} typeNameOf={typeNameOf} />,
   },
   {
     key: 'status',
     header: '状态',
     // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
+    // 三个时刻都只显到日期（spec 公司主体 UX「统一用语」）：生效 / 登记 / 停用对运营是「哪一天」，完整时刻在悬停里。
     render: (row) => (
       <div className="flex flex-col items-start gap-1">
         <StatusPill code={row.status} />
         {row.deactivatedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
-            自 <Instant value={row.deactivatedAt} />
+            自 <Instant value={row.deactivatedAt} precision="day" />
           </span>
         ) : null}
       </div>
@@ -186,7 +202,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
         {row.status === 'REGISTERED' ? (
           <Clock className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="尚未生效" />
         ) : null}
-        <Instant value={row.effectiveFrom} />
+        <Instant value={row.effectiveFrom} precision="day" />
       </span>
     ),
   },
@@ -197,11 +213,12 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     minListWidth: 1240,
     render: (row) => (
       <span className="font-mono text-idpxyz-breadcrumb">
-        <Instant value={row.registeredAt} />
+        <Instant value={row.registeredAt} precision="day" />
       </span>
     ),
   },
-];
+  ];
+}
 
 /** 详情地址：hash 二段。壳层拿前两段作标签 id，对象页因此另开一张标签，列表留在原处。 */
 function detailHash(legalEntityId: string): string {
@@ -257,6 +274,14 @@ export function GroupLegalEntitiesPage() {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [sort, setSort] = useTabViewState<WorkbenchSort>('legal-entities.sort', defaultLegalEntitySort);
   const [selectedKey, setSelectedKey] = useTabViewState<string | null>('legal-entities.selected', null);
+  // 注册号类型目录读一次，给「注册地与注册号」列把类型码译成名。读不到（未配置、拒绝、故障）就按码显，不报错、不挡列表：
+  // 译名是锦上添花，号本身在答复里。
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
+  const typeNameOf = useMemo(
+    () => registrationNumberTypeNamesOf(typeCatalogue?.kind === 'outcome' ? typeCatalogue.body.registrationNumberTypes : []),
+    [typeCatalogue],
+  );
+  const columns = useMemo(() => columnsOf(typeNameOf), [typeNameOf]);
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash);
@@ -325,7 +350,7 @@ export function GroupLegalEntitiesPage() {
           <div className="min-w-0">
             <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">新增公司主体</h1>
             <p className="truncate text-[12px] text-idpxyz-breadcrumb">
-              我们自己对外签约、开票的公司；先登记注册地与注册号，开票资料之后在详情里补
+              我们自己签约、开票用的公司；填注册地与注册号，开票资料和联系人保存后在详情里补
             </p>
           </div>
         </div>
@@ -372,6 +397,7 @@ export function GroupLegalEntitiesPage() {
         label: '待处理',
         count: counts.attention,
         active: attentionOnly,
+        title: attentionFilterTitle,
         onClick: () => setAttentionOnly(!attentionOnly),
       }
     : undefined;
@@ -410,7 +436,7 @@ export function GroupLegalEntitiesPage() {
       <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
       viewStateKey="legal-entities"
-      subtitle="我方签约、开票与结算使用的法人；身份登记和开票资料分别留存修订"
+      subtitle="我们自己签约、开票、结算用的公司"
       onRefresh={retry}
       refreshing={pending}
       primaryAction={
@@ -515,7 +541,7 @@ export function GroupLegalEntitiesPage() {
             <div>
               <DialogTitle>使用说明</DialogTitle>
               <DialogDescription className="mt-1">
-                公司主体是我方签约、开票与结算所依据的责任法人。
+                公司主体是我们自己签约、开票、结算用的公司。
               </DialogDescription>
             </div>
             <Button
@@ -528,26 +554,28 @@ export function GroupLegalEntitiesPage() {
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </DialogHeader>
+          {/* 全文是运营的话（spec 公司主体 UX「统一用语」）：不出现「责任法人」「修订」「身份」这些领域词，它们留在 CONTEXT 与技术详情。 */}
           <DialogBody className="space-y-4 text-[12px] leading-5 text-idpxyz-text">
             <section>
-              <h3 className="font-semibold text-idpxyz-textBright">主体关系</h3>
+              <h3 className="font-semibold text-idpxyz-textBright">这里登记谁</h3>
               <p className="mt-1">
-                本页维护我方责任法人，并关联往来单位身份。客户、供应商是往来单位承担的业务角色，不是另一份法人身份。
+                这里登记的是我们自己开票、签约用的公司。客户、供应商在「往来单位」里登记。
               </p>
             </section>
             <section>
               <h3 className="font-semibold text-idpxyz-textBright">状态与待处理</h3>
               <ul className="mt-1 list-disc space-y-1 pl-4">
-                <li>待生效：已登记，生效时点尚未到。</li>
-                <li>已生效：当前可用于新的商业决定。</li>
-                <li>已停用：自停用时点起不再用于新的商业决定，历史引用保留。</li>
-                <li>待处理：身份资料缺失，或关联的往来单位名称未解析；打开明细查看对应处理提示。</li>
+                <li>待生效：已经登记，生效日期还没到。</li>
+                <li>已生效：现在可以用它签约、开票。</li>
+                <li>已停用：从停用日期起不再用它签新约、开新票，之前的单据不受影响。</li>
+                <li>待处理：{attentionFilterTitle}；打开详情看怎么补。</li>
               </ul>
             </section>
             <section>
-              <h3 className="font-semibold text-idpxyz-textBright">资料维护</h3>
+              <h3 className="font-semibold text-idpxyz-textBright">资料怎么维护</h3>
               <p className="mt-1">
-                身份更正以新修订留存，不覆盖历史。开票资料与法人身份分开维护，可在明细页的“开票资料”中查看和登记。
+                注册地、注册号改了不覆盖旧的，每保存一次就多一版登记记录。开票抬头、税号、地址和联系人叫公司资料，在详情里点
+                「更新公司资料」登记，也是一版一版留着；开票时按日期取当天生效的那一版。
               </p>
             </section>
           </DialogBody>
