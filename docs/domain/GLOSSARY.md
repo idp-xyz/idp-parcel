@@ -1810,6 +1810,7 @@ Status: Confirmed
 依据 BUY `PricingEvaluation`、当前有效运输收费发生项、履约事实和其他合格依据形成的内部预期金额。它不证明供应商已经提出账单，也不自动构成应付。
 
 - 所有者：`settlement-accounting`。
+- 每一版记下它所依那一版[供应商商业协议版本](#供应商商业协议版本)的供应商（向 `party-commercial` 问得，形成时记、此后不改）；[供应商账单主张](#供应商账单主张)只对得上同一供应商的预期成本（[ADR-0358](../adr/0358-a-supplier-expected-cost-records-the-supplier-of-its-agreement-and-matching-checks-the-bill-supplier-against-it.md)）。
 - 避免使用：供应商账单主张、审核应付、供应商报价。
 
 ### 停因
