@@ -11,6 +11,12 @@
   row-gap: 0.5rem;
 }
 
+/* 每张读出卡自己是一个容器（票 company-subject-ux/13 第 3 条）：标签摆左还是摆上按卡的宽度定，不按视口——同一份件在
+   对象页的宽列与详情栏的窄栏里都要对。容器名另起一个，不与外层 legal-entity-profile 混：那个名字管的是网格排几列。 */
+.legal-entity-readout-card {
+  container: legal-entity-readout-card / inline-size;
+}
+
 .legal-entity-readout-field {
   display: grid;
   grid-template-columns: 7.5rem minmax(0, 1fr);
@@ -20,6 +26,22 @@
 
 .legal-entity-readout-field dt {
   white-space: nowrap;
+}
+
+/* 卡窄于 28rem 时标签在上、值在下（票 company-subject-ux/13 第 3 条）：7.5rem 的标签列在窄卡里要占掉三成多的宽，
+   值被挤成一个字一行。标签在上时退一档到 12px、行高随之，与值拉开主次；可以折行——不再有固定列宽要它守。
+   字号写在这里而不留给件上的 Tailwind 类：后代选择器的特异性压过工具类，容器变窄时这里的值生效，变宽时让回去。 */
+@container legal-entity-readout-card (width < 28rem) {
+  .legal-entity-readout-field {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.125rem;
+  }
+
+  .legal-entity-readout-field dt {
+    white-space: normal;
+    font-size: 12px;
+    line-height: 1.25rem;
+  }
 }
 
 /* 值格与表格的折行（票 company-subject-ux/12 第 4 条）：keep-all 让中文只在空格、闭括号与标点后折（「有限公司（演示）」
