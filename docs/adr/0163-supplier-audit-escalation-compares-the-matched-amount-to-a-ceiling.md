@@ -1,6 +1,6 @@
 # ADR-0163：供应商审核越权升级只比已匹配金额与已登记上限
 
-Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」与决定二的分界检验：不看任何一个租户的组织，就能回答一笔已匹配金额相对权限上限该不该升级。）<!-- 索引注记 -->｜**升级**：小于或等于上限在权限内，大于上限必须升级。上限另册登记，空册不形成应付。
+Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」与决定二的分界检验：不看任何一个租户的组织，就能回答一笔已匹配金额相对权限上限该不该升级。）<!-- 索引注记 -->｜**升级**：小于或等于上限在权限内，大于上限必须升级。上限另册登记，空册不形成应付。｜**部分停用**（2026-11-02）：其决定四「只拦会形成应付的已匹配行。量差、价差、无匹配和重复计费仍走原来的不可审，不先问上限。」一句已由 [ADR-0357](./0357-a-supplier-bill-number-is-an-external-identifier-of-the-claim-and-an-audit-passes-disputes-or-rejects-amount-ranges-of-a-line.md) 停用——审核按金额范围给结果之后，量差、价差行里预期成本撑得住的那部分（已匹配金额，取主张与预期之小）也可以通过、形成审核应付，要通过时同样先问上限，比的仍是这一行的已匹配金额；没有对应发生项与重复计费的已匹配金额是零，通过不了，也就不问。**适用场景**：只限供应商账单按金额范围给出的通过（含争议再审通过）；争议与拒绝不形成应付，不问上限。其余各条不变
 Date: 2026-09-30
 
 ## Context
@@ -43,3 +43,4 @@ Date: 2026-09-30
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)
 - [UC-SA-004](../application/settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 5 项
+- [ADR-0357](./0357-a-supplier-bill-number-is-an-external-identifier-of-the-claim-and-an-audit-passes-disputes-or-rejects-amount-ranges-of-a-line.md)：部分停用决定四一句（量差、价差行里已匹配的部分可通过，通过时也问上限）
