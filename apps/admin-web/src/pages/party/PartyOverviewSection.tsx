@@ -287,9 +287,13 @@ export function PartyOverviewSection({
           renderRow={(row) => (
             <RowCard key={row.legalEntityId}>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono">
+                {/* 点了去公司主体的对象页（地址形状见 group-legal-entities-address.ts 文件头），不是带检索词的列表。 */}
+                <a
+                  href={`#/group-legal-entities/${encodeURIComponent(row.legalEntityId)}`}
+                  className="font-mono text-idpxyz-accent hover:underline focus-visible:underline"
+                >
                   {row.legalEntityId} r{row.revision}
-                </span>
+                </a>
                 {statusBadge(identityStatusLabels, row.status)}
               </div>
               <Line label="注册国家 / 地区" mono>

@@ -325,7 +325,7 @@ export function GroupLegalEntitiesPage() {
           <div className="min-w-0">
             <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">新增公司主体</h1>
             <p className="truncate text-[12px] text-idpxyz-breadcrumb">
-              我们自己对外签约、开票的公司；先登记注册地与注册号，开票资料之后在详情里补
+              我们自己签约、开票用的公司；填注册地与注册号，开票资料和联系人保存后在详情里补
             </p>
           </div>
         </div>
