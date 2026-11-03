@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { RegistrationNumberTypeRecord } from './api';
-import { identityLayerCellsOf, lifetimeNumbersText, registrationNumberTypeNamesOf } from './legal-entity-identity';
+import { identityLayerCellsOf, lifetimeNumberCells, lifetimeNumbersText, registrationNumberTypeNamesOf } from './legal-entity-identity';
 
 // 本文件钉身份两格的呈现（票 legal-entity-profile/04）：登了就照答复原样示出，没登（修订早于身份层落地）交回 null
 // 让页面如实说，不拿空串或占位顶格；类型码经目录译名是调用方交进来的查法，不交就显码（票 company-subject-ux/01 第 3 条）。
+// 逐号拆开的 numberCells 给头部胶囊一号一枚用（票 company-subject-ux/07 第 3 条），与拼成一段的 numbers 同一条译名规则。
 
-// Covers: 登了身份层 → 国家码原样、号按「类型码 号」逐个列出，多号用中文分号隔开，次序照答复。
+// Covers: 登了身份层 → 国家码原样、号按「类型码 号」逐个列出，多号用中文分号隔开，次序照答复；逐号拆开的格同一次序。
 test('登了身份层：国家与号照答复原样', () => {
   deepEqual(
     identityLayerCellsOf({
@@ -14,7 +15,7 @@ test('登了身份层：国家与号照答复原样', () => {
       registrationCountry: 'CN',
       lifetimeRegistrationNumbers: [{ typeCode: 'USCC', number: '91000000000000001X' }],
     }),
-    { country: 'CN', numbers: 'USCC 91000000000000001X' },
+    { country: 'CN', numbers: 'USCC 91000000000000001X', numberCells: [{ typeName: 'USCC', number: '91000000000000001X' }] },
   );
   equal(
     lifetimeNumbersText([
@@ -23,13 +24,23 @@ test('登了身份层：国家与号照答复原样', () => {
     ]),
     'SYN-B 2；SYN-A 1',
   );
+  deepEqual(
+    lifetimeNumberCells([
+      { typeCode: 'SYN-B', number: '2' },
+      { typeCode: 'SYN-A', number: '1' },
+    ]),
+    [
+      { typeName: 'SYN-B', number: '2' },
+      { typeName: 'SYN-A', number: '1' },
+    ],
+  );
 });
 
-// Covers: identityLayerRegistered 为假 → null（不看其余键）；为真而键缺席 → 空串照答复，不补假值。
+// Covers: identityLayerRegistered 为假 → null（不看其余键）；为真而键缺席 → 空串照答复，不补假值，逐号的格也是空的。
 test('没登身份层交回 null，缺键不补', () => {
   equal(identityLayerCellsOf({ identityLayerRegistered: false }), null);
   equal(identityLayerCellsOf({ identityLayerRegistered: false, registrationCountry: 'CN' }), null);
-  deepEqual(identityLayerCellsOf({ identityLayerRegistered: true }), { country: '', numbers: '' });
+  deepEqual(identityLayerCellsOf({ identityLayerRegistered: true }), { country: '', numbers: '', numberCells: [] });
 });
 
 function numberType(over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord {
@@ -71,7 +82,15 @@ test('类型码经目录译名，译不出原样显码', () => {
       },
       typeNameOf,
     ),
-    { country: 'CN', numbers: '统一社会信用代码 91000000000000001X；SYN-OLD 7；SYN-BLANK 8' },
+    {
+      country: 'CN',
+      numbers: '统一社会信用代码 91000000000000001X；SYN-OLD 7；SYN-BLANK 8',
+      numberCells: [
+        { typeName: '统一社会信用代码', number: '91000000000000001X' },
+        { typeName: 'SYN-OLD', number: '7' },
+        { typeName: 'SYN-BLANK', number: '8' },
+      ],
+    },
   );
   equal(typeNameOf('US', 'EIN'), '雇主识别号');
   equal(typeNameOf('US', 'USCC'), undefined);

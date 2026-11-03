@@ -9,10 +9,21 @@
 
 import type { IdentityLayerRecord, LifetimeRegistrationNumberRecord, RegistrationNumberTypeRecord } from './api';
 
+export interface LifetimeNumberCell {
+  /** 类型名；译不出（没交查法、目录没有这个码、名为空串）就是类型码。 */
+  typeName: string;
+  number: string;
+}
+
 export interface IdentityLayerCells {
   country: string;
-  /** 一号一段「类型名（或类型码） 号」，多号之间用中文分号。 */
+  /** 一号一段「类型名（或类型码） 号」，多号之间用中文分号——目录行的一格文本。 */
   numbers: string;
+  /**
+   * 同一批号逐个拆开，给头部用：胶囊一号一枚、只显号，类型名进 title（票 company-subject-ux/07）。拼成一段文本放进
+   * 会截断的胶囊时，类型名长（演示目录「模拟注册号（仅演示，非真实证照格式）」）挤掉的是号，而号才是要认、要复制的。
+   */
+  numberCells: LifetimeNumberCell[];
 }
 
 /** 按注册国家 / 地区与类型码查类型名；查不到交回 undefined，调用方原样显码。 */
@@ -41,19 +52,28 @@ export function identityLayerCellsOf(
 ): IdentityLayerCells | null {
   if (!record.identityLayerRegistered) return null;
   const country = record.registrationCountry ?? '';
-  return {
-    country,
-    numbers: lifetimeNumbersText(
-      record.lifetimeRegistrationNumbers ?? [],
-      typeNameOf === undefined ? undefined : (typeCode) => typeNameOf(country, typeCode),
-    ),
-  };
+  const numberCells = lifetimeNumberCells(
+    record.lifetimeRegistrationNumbers ?? [],
+    typeNameOf === undefined ? undefined : (typeCode) => typeNameOf(country, typeCode),
+  );
+  return { country, numbers: cellsText(numberCells), numberCells };
+}
+
+export function lifetimeNumberCells(
+  numbers: readonly LifetimeRegistrationNumberRecord[],
+  typeNameOf?: (typeCode: string) => string | undefined,
+): LifetimeNumberCell[] {
+  // 目录里名为空串的类型按码显：空名上屏等于把号裸露成「 91000…」，看不出是什么号。
+  return numbers.map((entry) => ({ typeName: typeNameOf?.(entry.typeCode) || entry.typeCode, number: entry.number }));
+}
+
+function cellsText(cells: readonly LifetimeNumberCell[]): string {
+  return cells.map((cell) => `${cell.typeName} ${cell.number}`).join('；');
 }
 
 export function lifetimeNumbersText(
   numbers: readonly LifetimeRegistrationNumberRecord[],
   typeNameOf?: (typeCode: string) => string | undefined,
 ): string {
-  // 目录里名为空串的类型按码显：空名上屏等于把号裸露成「 91000…」，看不出是什么号。
-  return numbers.map((entry) => `${typeNameOf?.(entry.typeCode) || entry.typeCode} ${entry.number}`).join('；');
+  return cellsText(lifetimeNumberCells(numbers, typeNameOf));
 }

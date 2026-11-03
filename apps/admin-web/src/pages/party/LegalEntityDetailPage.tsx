@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { FileText } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
@@ -71,6 +71,7 @@ function muted(text: string): ReactNode {
 
 function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberTypeNameOf): DetailMeta[] {
   // 注册号的类型码经目录译成名（统一社会信用代码），目录没读到就按码显——译名是锦上添花，号本身在答复里。
+  // 头部这一行只显号、类型名进 title，与详情栏头部的胶囊同一种（票 company-subject-ux/07）。
   const identity = identityLayerCellsOf(row, typeNameOf);
   return [
     {
@@ -79,7 +80,16 @@ function buildMeta(row: GroupLegalEntityRecord, typeNameOf?: RegistrationNumberT
     },
     {
       label: '注册号',
-      value: identity ? <span className="font-mono">{identity.numbers}</span> : muted(identityLayerAbsentNote),
+      value: identity
+        ? identity.numberCells.map((cell, index) => (
+            <Fragment key={`${cell.number}#${index}`}>
+              {index > 0 ? '；' : null}
+              <span className="font-mono" title={cell.typeName}>
+                {cell.number}
+              </span>
+            </Fragment>
+          ))
+        : muted(identityLayerAbsentNote),
     },
   ];
 }

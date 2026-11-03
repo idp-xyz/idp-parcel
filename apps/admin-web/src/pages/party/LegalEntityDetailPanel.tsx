@@ -112,10 +112,14 @@ export function LegalEntityDetailPanel({
               <StatusPill code={row.status} />
             </div>
             <p className="mt-0.5 font-mono text-[12px] text-idpxyz-breadcrumb">编码 {row.legalEntityId}</p>
-            {/* 注册地与注册号是业务事实，留在头部；登记依据与各标识收进概要签底部的「技术详情」。 */}
+            {/* 注册地与注册号是业务事实，留在头部；登记依据与各标识收进概要签底部的「技术详情」。
+                注册号一号一枚、胶囊只显号，类型名进 title（与对象页头部同一种，票 company-subject-ux/07）：胶囊会截断，
+                类型名长时挤掉的是号，而号才是要认、要复制的；复制到手的也只是号。 */}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <RefChip label="注册地" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
-              <RefChip label="注册号" value={identity?.numbers} title="注册号" onCopy={copy} />
+              {identity?.numberCells.map((cell, index) => (
+                <RefChip key={`${cell.number}#${index}`} label="注册号" value={cell.number} title={cell.typeName} onCopy={copy} />
+              ))}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
