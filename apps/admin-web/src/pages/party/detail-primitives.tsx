@@ -6,7 +6,7 @@ import { statusToneSurface } from '../../components/status-tone';
 import { CodeRef } from '../../components/CodeRef';
 import { StatusPill } from '../../components/StatusPill';
 import { toneFor, toneForLabel, type StatusTone } from '../../vocabulary/status';
-import { formatInstant } from '../catalogue-view';
+import { formatInstant, type InstantPrecision } from '../moment';
 import type { ListColumn } from '../../templates';
 import { labelOf, partyNameUnknownNote } from './presentation';
 
@@ -58,11 +58,16 @@ export function UnknownPartyName() {
 /**
  * 时刻格：显本地墙钟带显式偏移（moment.ts 按装配点配置的区算），原 ISO 串放进 dateTime 与 title——
  * 跨 CN/SG 两地对同一事件时悬停给的是线格式那一份，两边比对不必各自换算（票 01 裁决 3）。
+ *
+ * `precision` 收短到日期或分钟时（主数据页的生效 / 登记 / 停用、版本历史的登记时刻），title 换成完整时刻带偏移：
+ * 省掉的那几位要在悬停里找得回来，而运营的人读 `2026-01-02 08:00:00 UTC+8` 比读 ISO 串顺。缺省到秒时照旧。
  */
-export function Instant({ value }: { value: string }) {
+export function Instant({ value, precision = 'second' }: { value: string; precision?: InstantPrecision }) {
+  const full = formatInstant(value);
+  const shortened = precision !== 'second';
   return (
-    <time dateTime={value} title={value}>
-      {formatInstant(value)}
+    <time dateTime={value} title={shortened ? full : value}>
+      {shortened ? formatInstant(value, { precision }) : full}
     </time>
   );
 }

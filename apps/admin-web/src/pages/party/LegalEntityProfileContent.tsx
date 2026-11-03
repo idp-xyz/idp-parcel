@@ -1,12 +1,8 @@
 import type { ReactNode } from 'react';
-import type { LegalEntityProfileContent as ProfileContent } from './api';
+import type { LegalEntityProfileContent as ProfileContent, RegisteredAddressRecord } from './api';
 import { LegalEntityContactsTable } from './LegalEntityContactsTable';
-import { ProfileReadoutField, ProfileReadoutGrid } from './LegalEntityProfileReadout';
-import {
-  addressText,
-  profileMaintenanceNotes,
-  representativeLabel,
-} from './legal-entity-profile';
+import { ProfileReadoutAddress, ProfileReadoutField, ProfileReadoutGrid } from './LegalEntityProfileReadout';
+import { profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 
 export function LegalEntityProfileContent({ content, includeContacts = true }: { content?: ProfileContent; includeContacts?: boolean }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
@@ -23,9 +19,9 @@ export function LegalEntityProfileContent({ content, includeContacts = true }: {
       </ProfileGroup>
       <ProfileGroup title="地址信息">
         <ProfileReadoutGrid>
-          <ProfileReadoutField label="注册地址" value={addressText(content?.registeredAddress)} />
-          <ProfileReadoutField label="办公地址" value={addressText(content?.officeAddress)} />
-          <ProfileReadoutField label="通信地址" value={addressText(content?.correspondenceAddress)} />
+          <ProfileReadoutField label="注册地址" value={addressOf(content?.registeredAddress)} />
+          <ProfileReadoutField label="办公地址" value={addressOf(content?.officeAddress)} />
+          <ProfileReadoutField label="通信地址" value={addressOf(content?.correspondenceAddress)} />
         </ProfileReadoutGrid>
       </ProfileGroup>
       <ProfileGroup title="税务与开票">
@@ -59,6 +55,11 @@ export function LegalEntityProfileContent({ content, includeContacts = true }: {
       ) : null}
     </div>
   );
+}
+
+// 没有地址交 undefined 让格显「—」；有地址按 ProfileReadoutAddress 的版式（行在前、国家另起一行）排。
+function addressOf(address?: RegisteredAddressRecord): ReactNode {
+  return address ? <ProfileReadoutAddress address={address} /> : undefined;
 }
 
 function ProfileGroup({ title, extra, children }: { title: string; extra?: string; children: ReactNode }) {

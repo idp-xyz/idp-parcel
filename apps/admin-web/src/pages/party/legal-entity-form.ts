@@ -10,9 +10,16 @@
 // 但去掉整批的 `tenantId`：在线 Intake 要把认证结果填进租户格、只从载荷取行内容（register_party_identity.go
 // 包注释）；载荷里带上租户就是请求方自报租户。今天端点挂 UnconfiguredIntake{} 必答 403，这份形状没有服务端
 // 消费者，真 Intake 落地时以它为准重谈，不把这里当已发布 Schema（api.ts 那段注释的原话）。
+//
+// **建档一体化**（票 company-subject-ux/02）：这家公司还没有往来单位档案时，保存先打往来单位口再打法人口，两步串行、
+// 不加后端复合命令（spec「不变的决定」）。串行的状态机在 runPairedSave 一族，往来单位那一步的载荷借 business-party-form.ts
+// 的草稿形状组成，这里只决定送什么、发不发，不判任何一步答复的领域含义。
 
+import type { ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 import type { GroupLegalEntityRecord, LifetimeRegistrationNumberRecord, RegistrationNumberTypeRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import type { BusinessPartyDraft } from './business-party-form';
 import { revisionOf, suggestedNextRevision } from './registration-form';
 
 /** 终身注册号的一行草稿：类型码与号各是文本框原值。 */
@@ -21,9 +28,27 @@ export interface LifetimeNumberDraft {
   number: string;
 }
 
+/**
+ * 往来单位档案从哪来（票 company-subject-ux/02 建档一体化）：`together` 是这家公司还没有档案、保存时先登记一份再登记法人；
+ * `existing` 是从参与方册上选一份已有的。缺省 `together`——新增公司主体的人多半是在建一家新公司，先去另一页登记档案
+ * 再回来选，正是这张票要收掉的三步路。
+ */
+export type CompanionPartyMode = 'together' | 'existing';
+
 export interface LegalEntityDraft {
   legalEntityId: string;
+  /** 选已有档案时选中的参与方标识；一并登记时不看这一格，送出的参与方标识由 effectivePartyIdOf 算。 */
   partyId: string;
+  partyMode: CompanionPartyMode;
+  /** 一并登记时的公司名称原值，登在往来单位档案上。 */
+  partyName: string;
+  /** 一并登记时往来单位编码的手填值；留空即取公司主体编码（companionPartyIdOf）。 */
+  companionPartyId: string;
+  /**
+   * 第一步落册后登记成的往来单位编码；空串即还没落。它钉住两件事：之后的保存只发法人那一步，以及法人钉的参与方就是这个编码——
+   * 落册之后操作者再改公司主体编码，不能把法人钉到一个没登记过的参与方上。
+   */
+  companionRegisteredPartyId: string;
   /** 文本框原值；编成整数在组载荷时做。 */
   revision: string;
   basis: string;
@@ -56,6 +81,10 @@ export function emptyLegalEntityDraft(): LegalEntityDraft {
   return {
     legalEntityId: '',
     partyId: '',
+    partyMode: 'together',
+    partyName: '',
+    companionPartyId: '',
+    companionRegisteredPartyId: '',
     revision: '',
     basis: '',
     effectiveFrom: '',
@@ -76,9 +105,14 @@ export function legalEntityDraftUnsaved(draft: LegalEntityDraft, landed: LegalEn
 }
 
 function draftHasInput(draft: LegalEntityDraft): boolean {
+  // 档案来源的选择本身不算输入（缺省就是一并登记）；一并登记那组的两格与已落册的编码算——第一步落了、第二步没落的表单
+  // 正是最不该被静默离开的那种。
   const cells = [
     draft.legalEntityId,
     draft.partyId,
+    draft.partyName,
+    draft.companionPartyId,
+    draft.companionRegisteredPartyId,
     draft.revision,
     draft.basis,
     draft.effectiveFrom,
@@ -115,7 +149,7 @@ export type LegalEntityFieldPath = (typeof legalEntityFieldPaths)[number];
 export function legalEntityPayloadOf(draft: LegalEntityDraft, timeZone: string): LegalEntityRegistrationPayload {
   const item: LegalEntityRegistrationItem = {
     legalEntityId: draft.legalEntityId.trim(),
-    partyId: draft.partyId.trim(),
+    partyId: effectivePartyIdOf(draft),
     basis: draft.basis.trim(),
   };
   const revision = revisionOf(draft.revision);
@@ -133,6 +167,87 @@ export function legalEntityPayloadOf(draft: LegalEntityDraft, timeZone: string):
   const correction = draft.identityCorrectionBasis.trim();
   if (correction !== '') item.identityCorrectionBasis = correction;
   return { legalEntities: [item] };
+}
+
+/**
+ * 一并登记时往来单位的编码：手填了就用手填的，留空取公司主体编码。两头都裁首尾空白——这个串要同时送进两口（先登往来
+ * 单位、再作法人钉的参与方），本册的载荷裁空白（legalEntityPayloadOf），往来单位那一步得与它说同一个对象。
+ */
+export function companionPartyIdOf(draft: Pick<LegalEntityDraft, 'legalEntityId' | 'companionPartyId'>): string {
+  const typed = draft.companionPartyId.trim();
+  return typed !== '' ? typed : draft.legalEntityId.trim();
+}
+
+/**
+ * 法人载荷里钉的参与方标识：选已有档案 → 选中的那一个；一并登记 → 第一步已落册就是登记成的那个编码，还没落就是此刻算出的
+ * 编码。落册之后不再跟着公司主体编码变，理由在 companionRegisteredPartyId 的注释。
+ */
+export function effectivePartyIdOf(draft: LegalEntityDraft): string {
+  if (draft.partyMode === 'existing') return draft.partyId.trim();
+  return draft.companionRegisteredPartyId !== '' ? draft.companionRegisteredPartyId : companionPartyIdOf(draft);
+}
+
+/**
+ * 一并登记那一步送往往来单位口的草稿。来源单据与生效时间就用法人这一笔的：往来单位生效时间 = 法人生效时间，法人生效时参与方
+ * 已生效这条领域规则由此在数据上成立，管理台仍不判它——送上去让服务端答。修订号固定为 1：这一组的语义是「这家公司还没有
+ * 档案」，就是首笔；编码已在册时服务端按册面答（同内容「已登记过」、异内容「内容冲突」），不在本地替它算下一修订——那会把
+ * 「一并登记」悄悄变成「更新已有档案的名称」。
+ */
+export function companionPartyDraftOf(draft: LegalEntityDraft): BusinessPartyDraft {
+  return {
+    partyId: companionPartyIdOf(draft),
+    name: draft.partyName.trim(),
+    revision: '1',
+    basis: draft.basis.trim(),
+    effectiveFrom: draft.effectiveFrom,
+  };
+}
+
+/** 这一轮保存要不要先发往来单位那一步：一并登记且还没落册才发；选已有档案或第一步已落过都只发法人。 */
+export function pairedSavePlan(draft: LegalEntityDraft): { party: boolean } {
+  return { party: draft.partyMode === 'together' && draft.companionRegisteredPartyId === '' };
+}
+
+/**
+ * 往来单位那一步算不算落了：答 `REGISTERED` 当然算；答 `ALREADY_REGISTERED`（同内容已在册）也算——档案在册就是第二步要的
+ * 前提，典型是第二步失败后刷新了页面、再保存时第一步重放。判的只是答案代数里的两格线上名（partyIdentityOutcomeLabels 的键），
+ * 不看中文、不读散文原因。
+ */
+export function partyStepLanded(answer: ApiResult<RegistrationResponseBody>): boolean {
+  return answer.kind === 'outcome' && (answer.body.outcome === 'REGISTERED' || answer.body.outcome === 'ALREADY_REGISTERED');
+}
+
+/** 第一步落册后的草稿：钉上登记成的编码（之后只发第二步、法人钉它）。 */
+export function withCompanionRegistered(draft: LegalEntityDraft, partyId: string): LegalEntityDraft {
+  return { ...draft, companionRegisteredPartyId: partyId };
+}
+
+export interface PairedSaveSenders {
+  party: (companion: BusinessPartyDraft) => Promise<ApiResult<RegistrationResponseBody>>;
+  entity: (draft: LegalEntityDraft) => Promise<ApiResult<RegistrationResponseBody>>;
+}
+
+export interface PairedSaveResult {
+  /** 这一轮发了第一步时它的答复；没发（选的是已有档案，或第一步早已落册）为 null。 */
+  party: ApiResult<RegistrationResponseBody> | null;
+  /** 法人那一步的答复；第一步没过为 null——第二步没发。 */
+  entity: ApiResult<RegistrationResponseBody> | null;
+  /** 这一轮之后的草稿：第一步落册时钉上了编码，其余情形原样交回。 */
+  draft: LegalEntityDraft;
+}
+
+/**
+ * 建档一体化的两步串行：先登记往来单位，落了再登记法人；第一步没过就停在那里，第二步不发。两步各自原样送、原样交回答复，
+ * 这里不解答复里任何领域含义（伞票 admin-write-faces/07 硬句）。第一步落册后草稿钉上编码，所以第二步失败再保存时
+ * pairedSavePlan 只会放第二步——「只重发第二步」不是这里记的状态，是草稿带着的。发送函数由组件注入，这一层不碰网络。
+ */
+export async function runPairedSave(draft: LegalEntityDraft, send: PairedSaveSenders): Promise<PairedSaveResult> {
+  if (!pairedSavePlan(draft).party) return { party: null, entity: await send.entity(draft), draft };
+  const companion = companionPartyDraftOf(draft);
+  const party = await send.party(companion);
+  if (!partyStepLanded(party)) return { party, entity: null, draft };
+  const pinned = withCompanionRegistered(draft, companion.partyId);
+  return { party, entity: await send.entity(pinned), draft: pinned };
 }
 
 /** 去首尾空白后，类型与号至少一格有字的行；都空的行当作没填。半填的行照带，由 legalEntityLocalProblems 在送之前拦。 */

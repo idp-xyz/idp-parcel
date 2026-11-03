@@ -46,6 +46,19 @@ test('单次调用可指定时区覆盖全局配置', () => {
   equal(zoneLabel('UTC', new Date('2026-09-16T04:27:55Z')), 'UTC');
 });
 
+// Covers: precision 收短到日期或分钟时按呈现时区取墙钟再截——UTC 的 2026-01-01T20:00 在上海是 1 月 2 日，日期不能
+// 从 ISO 串上剪；两级都不带偏移；缺省仍到秒带偏移；解析不了的串照旧原样交回。
+test('按 precision 收短到日期或分钟，日期按呈现时区取', () => {
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'day' }), '2026-01-01');
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'minute' }), '2026-01-01 20:00');
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'second' }), '2026-01-01 20:00:30 UTC');
+  configureDisplayTimeZone('Asia/Shanghai');
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'day' }), '2026-01-02');
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'minute' }), '2026-01-02 04:00');
+  equal(formatInstant('2026-01-01T20:00:30Z', { precision: 'day', timeZone: 'UTC' }), '2026-01-01');
+  equal(formatInstant('not-a-moment', { precision: 'day' }), 'not-a-moment');
+});
+
 // Covers: 解析不了的串原样交回，不抛、不改写——那是服务端给的值，页面不替它圆。
 test('解析不了的时刻原样交回', () => {
   equal(formatInstant('not-a-moment'), 'not-a-moment');

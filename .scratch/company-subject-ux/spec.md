@@ -51,15 +51,16 @@ Status: in-progress
 | 票 | 内容 | 落点 | 阻塞 | 状态 |
 |---|---|---|---|---|
 | [01](./issues/01-wording-and-list-page.md) | 用语统一、列表页细节、签名、空值与时间精度 | `pages/party/{GroupLegalEntitiesPage,LegalEntityContactsTable,LegalEntityProfileContent,LegalEntityProfileReadout,LegalEntityProfileHistory,RevisionHistorySection}.tsx`、`presentation.ts`、`legal-entity-identity.ts`、`legal-entity-list.ts`、`legal-entity-revisions.ts`、`legal-entity-profile-history.ts`、`detail-primitives.tsx`、`navigation.ts`、`templates/workspace-tabs.ts` | — | in-progress |
-| [02](./issues/02-register-party-and-entity-together.md) | 建档一体化：新增公司主体时一并登记往来单位；往来单位列表标出「我方公司」 | `LegalEntityRegistrationForm.tsx`、`legal-entity-form.ts`、`BusinessPartiesPage.tsx`、`business-party-list.ts` | — | in-progress |
+| [02](./issues/02-register-party-and-entity-together.md) | 建档一体化：新增公司主体时一并登记往来单位；往来单位列表标出「我方公司」 | `LegalEntityRegistrationForm.tsx`、`legal-entity-form.ts`、`BusinessPartiesPage.tsx`、`business-party-list.ts` | — | resolved（2026-11-03 进 main） |
 | [03](./issues/03-object-page-deactivation-and-references.md) | 对象页与详情栏首屏重构、停用对话框留在本页、「被谁引用」全景 | `LegalEntityDetailPage.tsx`、`LegalEntityDetailPanel.tsx`、`LegalEntityHeaderParts.tsx`、`IdentityDeactivationForm.tsx`、新 `LegalEntityDeactivationDialog.tsx`、新 `LegalEntityReferencesSection.tsx` + `legal-entity-references.ts` | — | in-progress |
 | [04](./issues/04-profile-form.md) | 公司资料表单：默认基于当前版本、保存前差异预览、未保存保护、缺项提示、税务登记号类型从目录选、币种指引 | `LegalEntityProfileSection.tsx`、`LegalEntityProfileFields.tsx`、`legal-entity-profile.ts`、`CurrentLegalEntityProfile.tsx`、`LegalEntityProfileSummary.tsx` | — | in-progress |
-| [05](./issues/05-cross-border-profile-extensions.md) | 跨境主体资料扩展（海关备案、银行收款账户、多语言抬头）——要改领域，待用户决定 | 领域 + 后端 + 前端 | 用户决定 | needs-info |
+| [05](./issues/05-cross-border-profile-extensions.md) | 跨境主体资料扩展：监管登记号语言放宽、收款账户、多语言开票抬头（ADR-0359，协调方代决）——领域文档 + 后端 + 种子 | `docs/adr`、`docs/domain/party-commercial`、`internal/partycommercial`、`migrations/party_commercial`、`scripts/demo-seeds` | — | in-progress |
+| [06](./issues/06-cross-border-profile-admin-web.md) | 管理台跟上票 05：监管登记号、收款账户、多语言抬头 | `pages/party/LegalEntityProfile*`、`legal-entity-profile*.ts` | 04、05 | blocked |
 
-01–04 并行，各自只动表里的落点；落点之外的文件要改一行也先告诉协调方。进 main 顺序 01 → 02 → 03 → 04，每票进 main 前 `git merge origin/main` 再过三道门。
+01–05 并行，各自只动表里的落点；落点之外的文件要改一行也先告诉协调方。进 main 顺序 01 → 02 → 03 → 04，每票进 main 前 `git merge origin/main` 再过三道门。
 
 ## 完成判据（父票）
 
 - 01–04 resolved；三道门在 main 上退 0；CI `admin-web` job 绿。
 - 浏览器在演示租户上核过：列表、详情栏四签、对象页四签、新增（含一并登记往来单位）、更新公司资料（预填当前版 + 差异预览）、停用对话框（不提交）。
-- 05 由用户决定要不要开领域票。
+- 05 走并行会话那条路（隔离评审、全量真库测试）进 main；06 在 04、05 之后做。

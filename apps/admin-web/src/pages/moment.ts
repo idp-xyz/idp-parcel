@@ -96,13 +96,20 @@ export function zoneLabel(timeZone: string, instant: Date): string {
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
+/**
+ * 显示到哪一级。`day` 只有日期、`minute` 到分钟，两级都不带偏移——它们给主数据页的生效 / 登记 / 停用这类
+ * 「哪一天」的格用（spec 公司主体 UX「统一用语」），偏移与秒是悬停里的事；缺省 `second` 到秒带偏移，照旧。
+ */
+export type InstantPrecision = 'day' | 'minute' | 'second';
+
 export interface FormatInstantOptions {
   /** 单次覆盖全局配置——悬停里要并排显 UTC 与本地时用。 */
   timeZone?: string;
+  precision?: InstantPrecision;
 }
 
 /**
- * `YYYY-MM-DD HH:mm:ss <偏移>`。解析不了的串原样交回：那是服务端给的值，页面不替它圆，
+ * `YYYY-MM-DD HH:mm:ss <偏移>`（按 precision 收短）。解析不了的串原样交回：那是服务端给的值，页面不替它圆，
  * 原样显出来比显成「Invalid Date」或空更容易让人去查源头。
  */
 export function formatInstant(value: string, options: FormatInstantOptions = {}): string {
@@ -110,10 +117,15 @@ export function formatInstant(value: string, options: FormatInstantOptions = {})
   if (Number.isNaN(instant.getTime())) return value;
   const timeZone = options.timeZone ?? displayTimeZone;
   const clock = wallClockOf(instant, timeZone);
-  return (
-    `${clock.year}-${pad(clock.month)}-${pad(clock.day)} ` +
-    `${pad(clock.hour)}:${pad(clock.minute)}:${pad(clock.second)} ${zoneLabel(timeZone, instant)}`
-  );
+  const date = `${clock.year}-${pad(clock.month)}-${pad(clock.day)}`;
+  switch (options.precision ?? 'second') {
+    case 'day':
+      return date;
+    case 'minute':
+      return `${date} ${pad(clock.hour)}:${pad(clock.minute)}`;
+    default:
+      return `${date} ${pad(clock.hour)}:${pad(clock.minute)}:${pad(clock.second)} ${zoneLabel(timeZone, instant)}`;
+  }
 }
 
 export function formatRange(from: string, to?: string): string {

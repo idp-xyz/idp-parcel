@@ -1,8 +1,10 @@
 import type { LegalEntityContactRecord } from './api';
 import { contactPurposeLabels } from './legal-entity-profile';
+import { absentValueMark } from './LegalEntityProfileReadout';
 
 export function LegalEntityContactsTable({ contacts }: { contacts: readonly LegalEntityContactRecord[] }) {
-  if (!contacts.length) return <p className="text-[13px] text-idpxyz-breadcrumb">未配置联系人</p>;
+  // 整张表没有人是结论句，照旧用文字；表内的空格一律「—」（spec 公司主体 UX「统一用语」）。
+  if (!contacts.length) return <p className="text-[13px] text-idpxyz-breadcrumb">还没有登记联系人</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[40rem] table-fixed border-collapse text-left text-[13px] leading-5">
@@ -30,12 +32,10 @@ export function LegalEntityContactsTable({ contacts }: { contacts: readonly Lega
                 {contact.name}
               </th>
               <td className="px-3 py-2.5">
-                <ContactValue value={contact.department} empty="部门未配置" />
-                <ContactValue value={contact.position} empty="职务未配置" secondary />
+                <StackedValues primary={contact.department} secondary={contact.position} />
               </td>
               <td className="px-3 py-2.5">
-                <ContactValue value={contact.phone} empty="电话未配置" />
-                <ContactValue value={contact.email} empty="邮箱未配置" secondary />
+                <StackedValues primary={contact.phone} secondary={contact.email} primaryNumeric />
               </td>
               <td className="px-3 py-2.5 text-[12px]">
                 {contact.socialAccounts?.length ? (
@@ -47,7 +47,7 @@ export function LegalEntityContactsTable({ contacts }: { contacts: readonly Lega
                       </div>
                     ))}
                   </dl>
-                ) : <span className="text-idpxyz-breadcrumb">未配置社交账号</span>}
+                ) : <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>}
               </td>
               <td className="py-2.5 pl-3 text-[12px]">
                 {contact.purposes?.length ? (
@@ -60,7 +60,7 @@ export function LegalEntityContactsTable({ contacts }: { contacts: readonly Lega
                     </div>
                   ))
                 ) : (
-                  <span className="text-idpxyz-breadcrumb">用途未配置</span>
+                  <span className="text-idpxyz-breadcrumb">{absentValueMark}</span>
                 )}
               </td>
             </tr>
@@ -71,10 +71,16 @@ export function LegalEntityContactsTable({ contacts }: { contacts: readonly Lega
   );
 }
 
-function ContactValue({ value, empty, secondary = false }: { value?: string; empty: string; secondary?: boolean }) {
+/**
+ * 上下两行的格（部门 / 职务、电话 / 邮箱）：有哪行显哪行，一行都没有才显一个「—」——两行各显一个「—」会让人以为是两个
+ * 都要填的格，而这两格本来就可缺。
+ */
+function StackedValues({ primary, secondary, primaryNumeric = false }: { primary?: string; secondary?: string; primaryNumeric?: boolean }) {
+  if (!primary && !secondary) return <p className="text-idpxyz-breadcrumb">{absentValueMark}</p>;
   return (
-    <p className={`[overflow-wrap:anywhere] ${secondary ? 'text-[12px]' : 'tabular-nums'} ${value && !secondary ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
-      {value || empty}
-    </p>
+    <>
+      {primary ? <p className={`[overflow-wrap:anywhere] text-idpxyz-text ${primaryNumeric ? 'tabular-nums' : ''}`}>{primary}</p> : null}
+      {secondary ? <p className="[overflow-wrap:anywhere] text-[12px] text-idpxyz-breadcrumb">{secondary}</p> : null}
+    </>
   );
 }
