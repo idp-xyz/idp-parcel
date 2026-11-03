@@ -33,3 +33,31 @@ Blocked by: 无
 ## 完成判据
 
 - 三道门退 0；1440 与 2000 宽度下详情栏：头区两行、事实一行、无指标卡、无重复药丸、正文不超 52rem、监管登记号与抬头为两列小表、地址国家在行末；对象页同形；列表状态与日期列不再贴右边缘。
+
+## 完成记录（2026-11-03，分支 `claude-csux-08`，一条一笔共六笔）
+
+**落点**（都在 `apps/admin-web/src/pages/party/`）：
+
+- 第 1 条 `LegalEntityHeaderParts.tsx`（`LegalEntityLifecycle` 改成按内容定宽的一行小步进）、`LegalEntityDetailPanel.tsx`（头区两行）、`LegalEntityDetailPage.tsx`（`buildMeta`：编码进 meta、`description` 不再传、生命周期作 meta 末格）、`detail-primitives.tsx`（`RefText` 纯文本复制、`Fact` 加 `inline` 形）。
+- 第 2 条 `LegalEntityHeaderParts.tsx`（`legalEntityHeaderFacts` 一处定义事实行）、`detail-primitives.tsx`（`FactStrip` 加 `inline` 形）、两处页面接上；`legal-entity-references.ts`（`profileStatusCellOf` 带出 `effectiveRevision`、`referencedCountText` 带单位「份」）+ 其 test。
+- 第 3 条 `LegalEntityProfileSummary.tsx`。
+- 第 4 条 `legal-entity-profile-readout.css`、`LegalEntityProfileReadout.tsx`（`ProfileReadoutField` 加 `title`）、`LegalEntityProfileContent.tsx`（`ProfileGroup`、标签「监管登记号」）、两处页面正文 `max-w-[52rem]`。
+- 第 5 条 `LegalEntityProfileReadout.tsx`（`ProfileReadoutAddress` 国家并进行末、新件 `ProfileReadoutPairs`）、`LegalEntityProfileContent.tsx`；`legal-entity-profile-history.ts` 的 `profileAddressText` 同步改成同一行 + 其 test。
+- 第 6 条 `GroupLegalEntitiesPage.tsx`（`columnsOf` 前两列 `width`、主列内容 `max-w-[22rem]`、`IdentityLayerCell` 号在上）。
+
+**判据逐条**（浏览器核验：自起 vite `:5208` 对 `:19080`，playwright 1440×900 与 2000×1020，脚本断言零写请求；截图在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/70733dd4-0571-48b5-8660-e52d102ae60f/scratchpad/csux08/after-*.png`）：
+
+- ✅ 三道门：`tsc -b --noEmit` 退 0、`run-tests.mjs` 1163 通过 0 失败、`vite build` 退 0。
+- ✅ 头区两行：详情栏第一行名称 + 状态，第二行 `编码 · 注册地 · 注册号` 纯文本（号点按复制照旧）+ 行末小步进；对象页第一行照模板，第二行 meta 同一串。
+- ✅ 事实一行、无指标卡：`生效 · 资料状态 · 资料版本 · 被引用`（已停用时多一格停用）；详情栏是 `FactStrip inline` 一行，对象页 `summary` 不再传。
+- ✅ 无重复药丸：概要签顶部只剩「当前资料 第 N 版 · 某日起生效 · 来源单据 …」一行。
+- ✅ 正文不超 52rem：量到详情栏读出 832px（2000 宽，栏 879px）、对象页读出 832px；1440 宽详情栏 559px 单列，两列只在 ≥ 44rem 启用。
+- ✅ 监管登记号与抬头两列小表、地址国家在行末弱显。
+- ✅ 列表：2000 宽无栏时五列 352 / 339 / 326 / 349 / 393px，状态与日期靠左紧跟前一列；有栏时状态列 189px 不贴边。
+- ◑ 对象页「事实一行放头区下方」：模板在头区与签之间只有指标卡这一格，事实行接在模板 meta 行后面（1440 宽折成两行），不是头区下另起一行——放进概要签又会与「当前资料 第 N 版」挨着重复；要不要动模板给一格，留协调方裁。
+
+**未验**：
+
+- 已停用 / 待补行的详情栏与对象页（演示数据里没有停用的公司主体）；`legalEntityHeaderFacts` 的「停用」格只过了类型检查。
+- 往来单位详情栏与对象页借同一条 `LegalEntityLifecycle`，随之变紧凑：详情栏 1440 宽看过一眼（`bp-list-panel-1440.png`）无异常，对象页指标卡里那一格未截图。
+- 版本历史对比表的地址改成同一行只过了 node:test，未开「资料版本」签看。
