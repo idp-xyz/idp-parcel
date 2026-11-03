@@ -29,12 +29,12 @@ import (
 
 // 本文件证票 document-numbering/16：写口的 JSON 请求体里，字符串含 NUL、原始字节不是合法 UTF-8、或 \u 转义出孤代理，各口照
 // 自己「请求体读不出」那一格答 400，处理器之后的写一笔都不发生、库里无行；合法多字节、代理对、转义的反斜杠照收、原样落库。
-// bodyNULExemptions 罩住的上下文（运输履约、关务合规），NUL 照旧到自己的构造门、答它既有的一格，只拒后两种。测试输入是隔离
-// 合成，只记 `S`。
+// 测试输入是隔离合成，只记 `S`。
 //
-// 修之前（实测于 b29cf8216）：NUL 进了写的口答 500 NO_ANSWER_FORMED；非法 UTF-8 与孤代理被换成 U+FFFD 照常受理。首方提交的客户
-// 包裹件号带 NUL 答 400 并点名那一格，那道判断仍在构造门里，钉它的用例直挂处理器
-// （TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore），生产路由上请求体检查先答。
+// 修之前（实测于 b29cf8216）：NUL 进了写的口答 500 NO_ANSWER_FORMED；非法 UTF-8 与孤代理被换成 U+FFFD 照常受理。运输履约有的口
+// NUL 答 200 INPUT_NOT_ACCEPTED，首方提交的客户包裹件号带 NUL 答 400 并点名那一格——那些判断仍在各自的构造门里，钉它们的用例直挂
+// 处理器（TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel、
+// TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore），生产路由上请求体检查先答 400。
 
 // unstorableBodyValues 是放进 JSON 字符串里的三种坏处，照原样拼进载荷：NUL 转义、原始 FF 字节、孤高位转义。
 var unstorableBodyValues = map[string]string{
@@ -65,9 +65,8 @@ const (
 	haltAfterFF  = "{\"probe\":\"SYN\xff"
 )
 
-// assertBodyCheck 发一份停在坏处之后的请求体。cut 为真：断言这一行读了请求体、读到坏处即停、答 400；为假：断言它读过了坏处，
-// 这种坏处留给处理器自判。
-func assertBodyCheck(t *testing.T, router http.Handler, pattern string, line endpointLine, probe businessEndpointProbe, first string, cut bool) {
+// assertBodyCheck 发一份停在坏处之后的请求体，断言这一行读了请求体、读到坏处即停、答 400。
+func assertBodyCheck(t *testing.T, router http.Handler, pattern string, line endpointLine, probe businessEndpointProbe, first string) {
 	t.Helper()
 	body := &haltingBody{first: first}
 	request := httptest.NewRequest(probe.method, probe.target, body)
@@ -77,21 +76,17 @@ func assertBodyCheck(t *testing.T, router http.Handler, pattern string, line end
 	request.Header.Set("Authorization", "Bearer presented.token")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	switch {
-	case cut && (body.reads == 0 || body.readPast || response.Code != http.StatusBadRequest):
+	if body.reads == 0 || body.readPast || response.Code != http.StatusBadRequest {
 		t.Errorf("%s（%s，自建 Intake=%t）带 %q：读了 %d 次、读过坏处 %t，答 %d %s；want 读到坏处即停、答 400",
 			pattern, line.face, line.ownIntake, first, body.reads, body.readPast, response.Code, response.Body.String())
-	case !cut && !body.readPast:
-		t.Errorf("%s（%s，自建 Intake=%t）带 %q：读了 %d 次、没读过坏处，答 %d %s；want 留给处理器自判",
-			pattern, line.face, line.ownIntake, first, body.reads, response.Code, response.Body.String())
 	}
 }
 
-// assertEveryBadnessIsJudged 对一行发两份：非法 UTF-8 每一行都判；NUL 除 bodyNULExemptions 罩住的行外都判。
+// assertEveryBadnessIsJudged 对一行发两份：停在 NUL 转义之后的，停在原始 FF 之后的。
 func assertEveryBadnessIsJudged(t *testing.T, router http.Handler, pattern string, line endpointLine, probe businessEndpointProbe) {
 	t.Helper()
-	assertBodyCheck(t, router, pattern, line, probe, haltAfterFF, true)
-	assertBodyCheck(t, router, pattern, line, probe, haltAfterNUL, !bodyNULJudgedByHandler(pattern))
+	assertBodyCheck(t, router, pattern, line, probe, haltAfterNUL)
+	assertBodyCheck(t, router, pattern, line, probe, haltAfterFF)
 }
 
 // admitEverything 是放行一切的准入范围：本文件只看请求体检查，准入那一格另有用例钉。
@@ -212,8 +207,7 @@ func writeLinePatterns(ownIntake bool) []string {
 }
 
 // Covers: 票 document-numbering/16——检查挂在登记处、不靠逐口记得：经共享渠道的每一行写口（各族渠道打开、授予与准入齐备，读口与
-// 编排是未接线占位）读请求体时读到非法 UTF-8 即停、答 400，读到 NUL 同样即停——bodyNULExemptions 罩住的行除外，NUL 读过去、
-// 留给它们的构造门；不挂检查的口要读完那个串才解得出值。自建 Intake 的写口由
+// 编排是未接线占位）读请求体时读到 NUL 或非法 UTF-8 即停、答 400；不挂检查的口要读完那个串才解得出值。自建 Intake 的写口由
 // TestEveryOwnIntakeWriteLineReadsItsBodyThroughTheCheck 在生产构造上证。
 func TestEveryWriteLineReadsItsBodyThroughTheCheck(t *testing.T) {
 	operatorMinter, err := buildOperatorMinter(acceptingVerifier{}, everyOperatorGrant{kinds: declaredDecisionKinds()}, admitEverything{})
@@ -341,7 +335,7 @@ func TestOnlyAMultipartUploadPassesTheBodyCheckUnjudged(t *testing.T) {
 	var read []byte
 	var readErr error
 	serve := func(pattern, contentType string) {
-		guard := requestBodyGuard(pattern, lines[pattern])
+		guard := requestBodyGuard(lines[pattern])
 		if guard == nil {
 			t.Fatalf("%s 没挂请求体检查", pattern)
 		}
@@ -366,22 +360,6 @@ func TestOnlyAMultipartUploadPassesTheBodyCheckUnjudged(t *testing.T) {
 	serve("/pricing-price-card-registrations", "multipart/form-data; boundary=SYN")
 	if !errors.Is(readErr, httpapi.ErrUnstorableBody) {
 		t.Fatalf("不收上传的行带 multipart 头：err %v，want 照判", readErr)
-	}
-}
-
-// Covers: 票 document-numbering/16——bodyNULExemptions 的每个前缀都罩得住登记处声明过的写口：前缀写错或那一上下文的写口都撤了，
-// 豁免就成了空话，这里当场红。
-func TestBodyNULExemptionsCoverDeclaredWriteLines(t *testing.T) {
-	for prefix := range bodyNULExemptions {
-		covered := 0
-		for pattern, line := range declaredEndpointLines() {
-			if line.method != http.MethodGet && strings.HasPrefix(pattern, prefix) {
-				covered++
-			}
-		}
-		if covered == 0 {
-			t.Errorf("豁免前缀 %s 罩不住任何一行写口", prefix)
-		}
 	}
 }
 
@@ -429,9 +407,10 @@ func countOf(t *testing.T, pool *pgxpool.Pool, query string, args ...any) int {
 	return rows
 }
 
-// Covers: 票 document-numbering/16 完成判据「cmd 真库测试」——票 15 探到的三个登记口经登记处的生产构造接真库：三种坏处都答 400
-// MALFORMED_REQUEST，库里无行（修前 NUL 答 500，非法 UTF-8 与孤代理换成 U+FFFD 落库）。同一格换成合法值照常答 201：参与方名称
-// 用中文、emoji 原样、代理对转义与转义的反斜杠，读回的字节与调用方送来的逐字相同，没被改写。
+// Covers: 票 document-numbering/16 完成判据「cmd 真库测试」——票 15 探到的三个登记口，与评审探到的运输履约、关务各一口（两口的
+// basis 只判空白），经登记处的生产构造接真库：三种坏处都答 400 MALFORMED_REQUEST，库里无行（修前 NUL 答 500，非法 UTF-8 与孤代理
+// 换成 U+FFFD 落库）。同一格换成合法值照常答 201：参与方名称用中文、emoji 原样、代理对转义与转义的反斜杠，读回的字节与调用方
+// 送来的逐字相同，没被改写。
 func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -441,9 +420,11 @@ func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T
 	sources := endpointSources{db: db, documentNumbers: documentNumberingComponents(t, db, docnumber.SecretTable{})}
 	channels := endpointChannels{operatorRegistries: operatorRegistriesForRegistryWriter(t)}
 	wanted := map[string]bool{
-		"/commercial-business-party-registrations":              true,
-		"/visibility-catalogue-milestone-mapping-registrations": true,
-		"/network-catalog-node-registrations":                   true,
+		"/commercial-business-party-registrations":                             true,
+		"/visibility-catalogue-milestone-mapping-registrations":                true,
+		"/network-catalog-node-registrations":                                  true,
+		"/transport-fulfillment-delivery-dispatch-reask-cadence-registrations": true,
+		"/customs-case-requirement-registrations":                              true,
 	}
 	var endpoints []httpapi.BusinessEndpoint
 	for _, feature := range endpointRegistry {
@@ -476,6 +457,12 @@ func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T
 	node := func(code string) string {
 		return `{"code":"` + code + `","version":1,"business_timezone":"Asia/Shanghai","effective_from":"2026-09-01T00:00:00Z"}`
 	}
+	cadence := func(version, basis string) string {
+		return `{"version":"` + version + `","intervalMinutes":60,"basis":"` + basis + `"}`
+	}
+	requirement := func(procedure, basis string) string {
+		return `{"jurisdictionRef":"SYN-JURISDICTION-SG","direction":"IMPORT","procedureRef":"` + procedure + `","required":true,"basis":"` + basis + `"}`
+	}
 	names := make([]string, 0, len(unstorableBodyValues))
 	for name := range unstorableBodyValues {
 		names = append(names, name)
@@ -487,11 +474,17 @@ func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T
 		assertMalformedBody(t, "参与方名称 "+name, post("/commercial-business-party-registrations", party(partyID, "SYN"+value+"X")))
 		assertMalformedBody(t, "映射版本 "+name, post("/visibility-catalogue-milestone-mapping-registrations", mapping("SYN-MAP-DN16-BAD"+value)))
 		assertMalformedBody(t, "节点代码 "+name, post("/network-catalog-node-registrations", node("SYN-NODE-DN16-BAD"+value)))
+		assertMalformedBody(t, "重问节奏依据 "+name, post("/transport-fulfillment-delivery-dispatch-reask-cadence-registrations",
+			cadence(fmt.Sprintf("SYN-REASK-DN16-BAD-%d", index), "SYN-BASIS"+value)))
+		assertMalformedBody(t, "建案要求依据 "+name, post("/customs-case-requirement-registrations",
+			requirement(fmt.Sprintf("SYN-PROCEDURE-DN16-BAD-%d", index), "SYN-BASIS"+value)))
 	}
 	for table, query := range map[string]string{
 		"参与方":  `SELECT count(*) FROM party_commercial.business_party_registration WHERE party_id LIKE 'SYN-PARTY-DN16-BAD-%'`,
 		"映射版本": `SELECT count(*) FROM visibility_exception.milestone_mapping_version WHERE mapping_version LIKE 'SYN-MAP-DN16-BAD%'`,
 		"节点":   `SELECT count(*) FROM network_routing.logistics_node_version WHERE node_code LIKE 'SYN-NODE-DN16-BAD%'`,
+		"重问节奏": `SELECT count(*) FROM transport_fulfillment.delivery_dispatch_reask_cadence WHERE version LIKE 'SYN-REASK-DN16-BAD-%'`,
+		"建案要求": `SELECT count(*) FROM customs_compliance.case_requirement_rule WHERE procedure_ref LIKE 'SYN-PROCEDURE-DN16-BAD-%'`,
 	} {
 		if rows := countOf(t, pool, query); rows != 0 {
 			t.Errorf("%s册上 %d 行坏值，want 零", table, rows)
@@ -499,8 +492,10 @@ func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T
 	}
 
 	for target, body := range map[string]string{
-		"/visibility-catalogue-milestone-mapping-registrations": mapping("SYN-MAP-DN16-GOOD"),
-		"/network-catalog-node-registrations":                   node("SYN-NODE-DN16-GOOD"),
+		"/visibility-catalogue-milestone-mapping-registrations":                mapping("SYN-MAP-DN16-GOOD"),
+		"/network-catalog-node-registrations":                                  node("SYN-NODE-DN16-GOOD"),
+		"/transport-fulfillment-delivery-dispatch-reask-cadence-registrations": cadence("SYN-REASK-DN16-GOOD", "SYN-BASIS/reask"),
+		"/customs-case-requirement-registrations":                              requirement("SYN-PROCEDURE-DN16-GOOD", "SYN-BASIS/requirement"),
 	} {
 		if response := post(target, body); response.Code != http.StatusCreated {
 			t.Fatalf("%s 合规载荷：答 %d %s，want 201", target, response.Code, response.Body.String())
@@ -527,10 +522,9 @@ func TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase(t *testing.T
 }
 
 // Covers: 票 document-numbering/16 完成判据「每族至少一个代表写口」——运营决定（装载分配）、作业事实登记（移动事实）、集成客户端
-// （监管凭证登记）、首方客户（提交委托）各取一口，经生产构造的 Intake 与编排接真库，套上登记处为这一行算好的那道检查：非法
-// UTF-8 与孤代理答该族的 400 MALFORMED_REQUEST（首方族是问题详情），库里无行。NUL 在首方提交上同答 400；前三口在
-// bodyNULExemptions 罩住的上下文里，NUL 照旧答各自构造门的那一格（运输履约 200 INPUT_NOT_ACCEPTED，关务的监管凭证在译装时拒、
-// 答 400），也不落行。登记册配置写一族见
+// （监管凭证登记）、首方客户（提交委托）各取一口，经生产构造的 Intake 与编排接真库，套上登记处为这一行算好的那道检查：三种
+// 坏处都答该族的 400 MALFORMED_REQUEST（首方族是问题详情），库里无行。装载分配与移动事实的 NUL 修前答 200 INPUT_NOT_ACCEPTED，
+// 修后同答 400。登记册配置写一族见
 // TestUnstorableBodiesNeverReachTheRegistersAgainstARealDatabase；主数据与运营查阅读一族的两行写口（试算、编号预览）不落库，
 // 只由 TestEveryWriteLineReadsItsBodyThroughTheCheck 与 TestEveryOwnIntakeWriteLineReadsItsBodyThroughTheCheck 证。
 func TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDatabase(t *testing.T) {
@@ -545,10 +539,6 @@ func TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDataba
 			request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
 			response := httptest.NewRecorder()
 			endpoint.ServeHTTP(response, request)
-			if value == `\u0000` {
-				notAcceptedOnTheChannel(t, name, "INPUT_NOT_ACCEPTED", response)
-				continue
-			}
 			assertMalformedBody(t, name, response)
 		}
 		if rows := countOf(t, fixture.pool, `SELECT count(*) FROM transport_fulfillment.load_assignment WHERE assignment_ref = 'SYN-LA-DN16'`); rows != 0 {
@@ -571,10 +561,6 @@ func TestEachFamilyAnswersUnstorableBodiesWithItsOwnBadRequestAgainstARealDataba
 			return response
 		}
 		for name, value := range unstorableBodyValues {
-			if value == `\u0000` {
-				notAcceptedOnTheChannel(t, name, "INPUT_NOT_ACCEPTED", post("SYN-NODE-01"+value))
-				continue
-			}
 			assertMalformedBody(t, name, post("SYN-NODE-01"+value))
 		}
 		if rows := tableRows(t, pool, "transport_movement_fact"); rows != 0 {

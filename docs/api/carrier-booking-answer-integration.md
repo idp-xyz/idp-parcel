@@ -34,7 +34,7 @@
 
 ## 载荷
 
-`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`（错误体同认证各格，是现状）。请求体里任一字符串的原始字节不是合法 UTF-8、或 `\u` 转义出孤代理，同答这一格；服务端不把坏字节换成 U+FFFD 再收。标识里带 NUL 不在此列，见下文 `INPUT_NOT_ACCEPTED`。
+`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`（错误体同认证各格，是现状）。请求体里任一字符串带 NUL（含 `\u0000` 转义）、原始字节不是合法 UTF-8、或 `\u` 转义出孤代理，同答这一格；服务端不把坏字节换成 U+FFFD 再收。
 
 | 字段 | 含义 |
 |---|---|
@@ -63,7 +63,7 @@
 | `EXISTING_ANSWER` | 同一标识、同一内容已在册，是重放；`answer` 回显在册那一份 | 无 |
 | `ANSWER_CONFLICT` | 同一标识换了内容；或这次订舱已有定局；或候补之后又来候补；或定局早于候补 | 不自动重发，交人；在册的答复不会被覆盖，要改约找租户 |
 | `BOOKING_NOT_FOUND` | 订舱在本租户下不在册，或答复方不是这次订舱所属委托的服务提供方——同一格、同一副响应，不带续办引用（ADR-0239 决定一） | 找租户核对订舱标识 |
-| `INPUT_NOT_ACCEPTED` | 载荷各格不成立：标识为空、带 NUL 或超过字节界；`ACCEPTED` 没带接受量、量超过申请量或带了 `basis`；其余取值带了量或没带 `basis`；`decidedAt` 缺或早于订舱申请时刻 | 改载荷再交 |
+| `INPUT_NOT_ACCEPTED` | 载荷各格不成立：标识为空或超过字节界；`ACCEPTED` 没带接受量、量超过申请量或带了 `basis`；其余取值带了量或没带 `basis`；`decidedAt` 缺或早于订舱申请时刻 | 改载荷再交 |
 | `COMMISSION_UNDECIDED` | 订舱册或答复册此刻读写不动，带 `undecidedReason`（`BOOKING_STORE_UNAVAILABLE` 或 `ANSWER_STORE_UNAVAILABLE`）与 `continuationReference` | 稍后原样重交 |
 
 `5xx` 表示服务端没能形成答案：留在队里，退避后原样重发。

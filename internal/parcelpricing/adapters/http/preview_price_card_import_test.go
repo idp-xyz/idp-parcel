@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -229,5 +230,44 @@ func TestOperatorIntakeTakesTheTenantFromTheAuthenticatedOperator(t *testing.T) 
 	pricinghttp.NewPreviewPriceCardImportEndpoint(intake, priceCardPreviewerDouble{}).ServeHTTP(recorder, upload("", card))
 	if recorder.Code != http.StatusUnauthorized || !strings.Contains(recorder.Body.String(), "OPERATOR_CREDENTIAL_REJECTED") {
 		t.Fatalf("endpoint without token: status = %d body = %s", recorder.Code, recorder.Body)
+	}
+}
+
+// Covers: 票 document-numbering/16——上传的文件名由上传解码判：Content-Disposition 的 filename* 解出 NUL 或非法 UTF-8，预览与
+// 录入两口的 Intake 都答请求形状不对，工作簿一个字节都不解；中文与 emoji 的文件名照收、原样进命令。
+func TestUploadIntakesRefuseAFileNameTheStoreCannotHold(t *testing.T) {
+	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload := func(disposition string) *http.Request {
+		request := uploadRequest(t, func(writer *multipart.Writer) {
+			part, err := writer.CreatePart(textproto.MIMEHeader{
+				"Content-Disposition": {`form-data; name="file"; ` + disposition},
+				"Content-Type":        {"application/octet-stream"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = part.Write([]byte("not a workbook"))
+		})
+		request.Header.Set("Authorization", "Bearer token")
+		return request
+	}
+	for name, disposition := range map[string]string{
+		"NUL":   `filename*=UTF-8''SYN%00.xlsx`,
+		"孤立 FF": `filename*=UTF-8''SYN%FF.xlsx`,
+		"代理区码点": `filename*=UTF-8''SYN%ED%A0%80.xlsx`,
+	} {
+		if _, err := intake.IntakePriceCardPreview(context.Background(), upload(disposition)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+			t.Errorf("预览 %s：err = %v，want ErrMalformedRequest", name, err)
+		}
+		if _, err := intake.IntakePriceCardDraftSubmission(context.Background(), upload(disposition)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+			t.Errorf("录入 %s：err = %v，want ErrMalformedRequest", name, err)
+		}
+	}
+	command, err := intake.IntakePriceCardPreview(context.Background(), upload(`filename*=UTF-8''%E4%BB%B7%E5%8D%A1%F0%9F%93%A6.xlsx`))
+	if err != nil || command.FileName != "价卡📦.xlsx" {
+		t.Fatalf("合法多字节文件名：command.FileName = %q err = %v", command.FileName, err)
 	}
 }

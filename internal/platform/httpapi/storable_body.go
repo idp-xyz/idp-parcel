@@ -40,28 +40,12 @@ func StorableJSONBody(body io.ReadCloser) io.ReadCloser {
 	return &storableJSONBody{body: body}
 }
 
-// UnrewrittenJSONBody 与 StorableJSONBody 同判，只放过 NUL（原始字节与 \u0000 转义都放）：非法 UTF-8 与孤代理照拒。给自己的
-// 构造门已经判 NUL、答着既有一格的口用——NUL 到了那道门答的是它那一格，在这里先拒就改了那一格；后两种修前是悄悄改写，没有
-// 哪一格是为它们设的，照拒。
-func UnrewrittenJSONBody(body io.ReadCloser) io.ReadCloser {
-	return &storableJSONBody{body: body, scan: jsonTextScan{allowNUL: true}}
-}
-
 // RequireStorableJSONBody 包住一个写口：请求体换成 StorableJSONBody，再交处理器。它自己不答：请求体由处理器在认证之后读，
 // 读到坏处时拿到的是一个读错，答复落在该口「请求体读不出」那一格——形状归各族，认证先于请求体的次序也不动。
 func RequireStorableJSONBody(next http.Handler) http.Handler {
-	return swapBody(next, StorableJSONBody)
-}
-
-// RequireUnrewrittenJSONBody 同 RequireStorableJSONBody，请求体换成 UnrewrittenJSONBody。
-func RequireUnrewrittenJSONBody(next http.Handler) http.Handler {
-	return swapBody(next, UnrewrittenJSONBody)
-}
-
-func swapBody(next http.Handler, judge func(io.ReadCloser) io.ReadCloser) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Body != nil && request.Body != http.NoBody {
-			request.Body = judge(request.Body)
+			request.Body = StorableJSONBody(request.Body)
 		}
 		next.ServeHTTP(response, request)
 	})
@@ -109,9 +93,7 @@ const (
 )
 
 type jsonTextScan struct {
-	// allowNUL：NUL 不算坏处（UnrewrittenJSONBody）。
-	allowNUL bool
-	state    jsonScanState
+	state jsonScanState
 	// digits 与 unit：当前 \u 转义已收的十六进制位数与已拼出的码元。
 	digits int
 	unit   rune
@@ -173,7 +155,7 @@ func (scan *jsonTextScan) end() error {
 }
 
 func (scan *jsonTextScan) step(char rune) error {
-	if char == 0 && !scan.allowNUL {
+	if char == 0 {
 		return errBodyNUL
 	}
 	switch scan.state {
@@ -232,7 +214,7 @@ func (scan *jsonTextScan) escaped() error {
 	case scan.state == inLowSurrogateEscape && !isLow:
 		return errBodyLoneSurrogate
 	case scan.state == inLowSurrogateEscape:
-	case scan.unit == 0 && !scan.allowNUL:
+	case scan.unit == 0:
 		return errBodyNUL
 	case isHigh:
 		scan.state = afterHighSurrogate

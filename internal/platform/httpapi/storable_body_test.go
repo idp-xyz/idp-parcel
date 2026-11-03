@@ -88,47 +88,6 @@ func TestStorableJSONBodyRefusesOnlyWhatTheStoreCannotHoldOrTheDecoderWouldRewri
 	}
 }
 
-// nulOnly 是 unstorableBodies 里坏处只有 NUL 的那几份。
-var nulOnly = map[string]bool{
-	"NUL 转义": true, "整串只有 NUL 转义": true, "键里的 NUL 转义": true, "反斜杠后的 NUL 转义": true,
-	"原始 NUL 字节": true, "代理对之后的 NUL 转义": true, "第二个值里的 NUL 转义": true,
-}
-
-// Covers: 票 document-numbering/16——UnrewrittenJSONBody 只放过 NUL：坏处只有 NUL 的请求体原文照交，留给处理器自己的构造门；
-// 非法 UTF-8 与孤代理照拒。照收那一张表照收。逐字节读与一次读完结论一样。
-func TestUnrewrittenJSONBodyLetsOnlyNULThrough(t *testing.T) {
-	for name := range nulOnly {
-		if _, listed := unstorableBodies[name]; !listed {
-			t.Fatalf("nulOnly 点名的 %q 不在 unstorableBodies 里", name)
-		}
-	}
-	for readerName, reader := range map[string]func(string) io.Reader{
-		"一次读完": func(body string) io.Reader { return strings.NewReader(body) },
-		"逐字节读": func(body string) io.Reader { return iotest.OneByteReader(strings.NewReader(body)) },
-	} {
-		read := func(body string) ([]byte, error) {
-			return io.ReadAll(httpapi.UnrewrittenJSONBody(io.NopCloser(reader(body))))
-		}
-		for name, body := range storableBodies {
-			if got, err := read(body); err != nil || string(got) != body {
-				t.Errorf("%s %s：交出 %q、err %v，want 原文照交", readerName, name, got, err)
-			}
-		}
-		for name, body := range unstorableBodies {
-			got, err := read(body)
-			if nulOnly[name] {
-				if err != nil || string(got) != body {
-					t.Errorf("%s %s：交出 %q、err %v，want NUL 照交", readerName, name, got, err)
-				}
-				continue
-			}
-			if !errors.Is(err, httpapi.ErrUnstorableBody) {
-				t.Errorf("%s %s：err %v，want ErrUnstorableBody", readerName, name, err)
-			}
-		}
-	}
-}
-
 // Covers: 票 document-numbering/16——坏处所在的那一段一个字节也不交：整份请求体在一次 Read 里到齐、含坏处的值在这一段里已经
 // 收尾，解码器也拿不到它，Decode 报的是 ErrUnstorableBody，不会带着 U+FFFD 解出一个值。此后每次 Read 都是同一个错。
 func TestADecoderNeverSeesTheChunkCarryingTheProblem(t *testing.T) {
