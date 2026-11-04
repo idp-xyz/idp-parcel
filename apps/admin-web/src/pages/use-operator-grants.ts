@@ -26,6 +26,15 @@ function loadHeldGrants(): Promise<HeldGrants | undefined> {
  * 只有明确知道没有登记册配置写授予才收起。
  */
 export function useMayWriteRegistry(): boolean {
+  return useRegistryWriteGrant().mayWrite;
+}
+
+/**
+ * 登记册配置写授予的两格（票 company-subject-section-edit/05）：`settled` 是授予答出了没有，`mayWrite` 与 useMayWriteRegistry 同一
+ * 口径（答出之前、答不出时都是 true）。要在「明确没有授予」时做点什么（把人从编辑态地址上请出去）的页面看这两格——
+ * 只看 mayWrite 分不清「还没答」和「没有」，加载期就动手会把有授予的人也踢出去。
+ */
+export function useRegistryWriteGrant(): { settled: boolean; mayWrite: boolean } {
   const [held, setHeld] = useState<HeldGrants | undefined>(settled);
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +45,7 @@ export function useMayWriteRegistry(): boolean {
       cancelled = true;
     };
   }, []);
-  return mayWriteRegistry(held);
+  return { settled: held !== undefined, mayWrite: mayWriteRegistry(held) };
 }
 
 /** 某一种运营决定的写入口摆不摆。答出之前与答不出时是 true（ADR-0315）：只有明确知道没有那一种授予才收起。 */

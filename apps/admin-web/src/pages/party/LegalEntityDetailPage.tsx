@@ -44,7 +44,7 @@ import { DetailRow, Instant, RefText } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { useMayWriteRegistry } from '../use-operator-grants';
+import { useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -226,12 +226,18 @@ export function LegalEntityDetailPage({
   // 旧对象页把身份历史放在时间线签，保留工作区已记住的历史查看位置。
   const activeTab = tab === 'timeline' ? 'identity-revisions' : tab;
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
-  const mayWrite = useMayWriteRegistry();
+  const grant = useRegistryWriteGrant();
+  const mayWrite = grant.mayWrite;
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
   // 编辑态落册的次数：资料版本分区按它重挂，让版本历史重读。
   const [headerLanded, setHeaderLanded] = useState(0);
-  // 页脚动作条的槽位：模板挂上后表单把「保存 / 取消」portal 进去。
+  // 页脚动作条的槽位：模板挂上后表单把「保存 / 取消」portal 进去；联系人分区的槽位同理，装表单的联系人那一组（票 04）。
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const [contactsSlot, setContactsSlot] = useState<HTMLElement | null>(null);
+  // 查看者拿着编辑态地址进来（票 05）：授予已答出、明确没有写授予时把编辑键清掉（替换地址，不压历史）。加载期不动。
+  useEffect(() => {
+    if (profileEditing && grant.settled && !grant.mayWrite) onExitProfileEdit();
+  }, [profileEditing, grant.settled, grant.mayWrite, onExitProfileEdit]);
   const [unsaved, setUnsaved] = useState(false);
   // 要离开编辑态的去向：取消（留在对象页）、返回列表、表单里的站内链接；有没提交的输入先问一句再走。
   const [pendingLeave, setPendingLeave] = useState<ProfileLeave | null>(null);
@@ -360,6 +366,7 @@ export function LegalEntityDetailPage({
                       key={row.legalEntityId}
                       legalEntityId={row.legalEntityId}
                       footerSlot={footerSlot}
+                      contactsSlot={contactsSlot}
                       onLanded={(sent) => {
                         addToast({
                           type: 'success',
@@ -386,7 +393,8 @@ export function LegalEntityDetailPage({
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     {editing ? (
-                      <p className="text-[13px] leading-6 text-idpxyz-breadcrumb">联系人在上方「概要」分区的表单里编辑。</p>
+                      // 编辑态：表单的联系人那一组经 portal 落在这里（ProfileEditMode 的 contactsSlot），分区里改分区的事。
+                      <div ref={setContactsSlot} />
                     ) : (
                       <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
                     )}

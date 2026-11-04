@@ -19,7 +19,9 @@ export function useTypeNameOf(typeCatalogue: ApiResult<RegistrationNumberTypeLis
 
 /** 把第一个缺项滚进视野并聚焦它的控件：锚是 FieldAnchor 按路径挂的 data-field-path。 */
 export function scrollToField(root: HTMLElement | null, path: string): void {
-  const anchor = root?.querySelector<HTMLElement>(`[data-field-path="${path}"]`);
+  // 联系人那一组在编辑态下经 portal 落在联系人分区里、不在表单容器内（票 company-subject-section-edit/04）：容器里找不到就整页找。
+  const selector = `[data-field-path="${path}"]`;
+  const anchor = root?.querySelector<HTMLElement>(selector) ?? document.querySelector<HTMLElement>(selector);
   if (!anchor) return;
   anchor.scrollIntoView({ block: 'center' });
   anchor.querySelector<HTMLElement>('input, textarea, select')?.focus({ preventScroll: true });

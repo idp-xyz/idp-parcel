@@ -65,6 +65,9 @@ import { useLegalEntityRead } from './legal-entity-reads';
 
 const info = moduleInfoById['group-legal-entities'];
 const kind = 'legal-entity-profile';
+// 编辑态下联系人那一组落到联系人分区（票 company-subject-section-edit/04），其余四组留在概要分区。
+const groupsOutsideContacts = ['representative', 'addresses', 'invoicing', 'bankAccounts'] as const;
+const contactsOnly = ['contacts'] as const;
 const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
 // 资料表单收在高级组里的那一格；组里有问题时组一律展开。
 const profileAdvancedPaths = ['profiles[0].revision'];
@@ -145,6 +148,7 @@ export function LegalEntityProfileSection({
 export function ProfileEditMode({
   legalEntityId,
   footerSlot,
+  contactsSlot = null,
   onLanded,
   onUnsavedChange,
   onRequestLeave,
@@ -152,6 +156,8 @@ export function ProfileEditMode({
   legalEntityId: string;
   /** 页脚动作条的槽位元素；null 即还没挂上。 */
   footerSlot: HTMLElement | null;
+  /** 联系人分区的槽位元素（票 company-subject-section-edit/04）：表单的联系人那一组 portal 进去；null 即落回概要分区里。 */
+  contactsSlot?: HTMLElement | null;
   /** 登记册答已落册时调用，带送出的草稿（版本号在里面）。 */
   onLanded: (sent: LegalEntityProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
@@ -167,6 +173,7 @@ export function ProfileEditMode({
   const knownFailed = revisions.answer !== null && known === null;
   const [blankFallback, setBlankFallback] = useState(false);
   const renderFooter = (node: ReactNode) => (footerSlot ? createPortal(node, footerSlot) : node);
+  const renderContacts = contactsSlot ? (node: ReactNode) => createPortal(node, contactsSlot) : undefined;
 
   const answer = current.answer;
   const resolved = answer?.kind === 'outcome' && answer.body.legalEntityId === legalEntityId ? answer.body : null;
@@ -210,6 +217,7 @@ export function ProfileEditMode({
       onRetryKnown={revisions.retry}
       typeCatalogue={typeCatalogue}
       renderFooter={renderFooter}
+      renderContacts={renderContacts}
       onLanded={onLanded}
       onUnsavedChange={onUnsavedChange}
       onRequestLeave={onRequestLeave}
@@ -247,6 +255,7 @@ function ProfileRegistrationForm({
   onRetryKnown,
   typeCatalogue,
   renderFooter,
+  renderContacts,
   onLanded,
   onUnsavedChange,
   onRequestLeave,
@@ -262,6 +271,8 @@ function ProfileRegistrationForm({
   typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 动作条摆到哪里去（页脚槽位）；ProfileEditMode 给。 */
   renderFooter: (node: ReactNode) => ReactNode;
+  /** 联系人那一组摆到哪里去（联系人分区的槽位，票 company-subject-section-edit/04）；不给就留在本表单里。 */
+  renderContacts?: (node: ReactNode) => ReactNode;
   onLanded: (sent: LegalEntityProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
   onRequestLeave: (href: string | null) => void;
@@ -330,6 +341,8 @@ function ProfileRegistrationForm({
       {/* scroll-mt：对象页的锚点栏吸在滚动容器顶上，滚进视野时按它留出高度，预览的标题不被盖住。 */}
       <div ref={bodyRef} className="min-w-0 scroll-mt-14">
           {preview !== null && current !== null ? (
+            <>
+            {renderContacts ? renderContacts(<p className="text-[13px] leading-6 text-idpxyz-breadcrumb">联系人的改动在上方「概要」分区的预览里。</p>) : null}
             <ChangePreview
               comparison={preview}
               current={current}
@@ -337,6 +350,7 @@ function ProfileRegistrationForm({
               effectiveFrom={draft.effectiveFrom}
               timeZone={timeZone}
             />
+            </>
           ) : (
             <div className="flex flex-col gap-5">
               <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] leading-5 text-idpxyz-text">
@@ -391,7 +405,21 @@ function ProfileRegistrationForm({
                 locked={locked}
                 typeCatalogue={typeCatalogue}
                 onLeave={onRequestLeave}
+                groups={renderContacts ? groupsOutsideContacts : undefined}
               />
+              {renderContacts
+                ? renderContacts(
+                    <LegalEntityProfileFields
+                      draft={draft}
+                      patch={patch}
+                      problems={problems}
+                      locked={locked}
+                      typeCatalogue={typeCatalogue}
+                      onLeave={onRequestLeave}
+                      groups={contactsOnly}
+                    />,
+                  )
+                : null}
 
               <FormGroup title="这次更新" description="依据哪份单据、从什么时候起生效；生效时间可以在未来。">
                 <FieldAnchor path="profiles[0].basis">

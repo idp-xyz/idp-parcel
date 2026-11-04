@@ -1,7 +1,7 @@
 # 公司主体资料分区编辑：就地改一组、就地加一条，不每次进整张表单
 
 Category: enhancement
-Status: resolved——2026-11-04 子票 01 `e3ccd7356`、02 `ab5727f69`、03 `cd0463366` 进 main
+Status: in-progress——子票 01 `e3ccd7356`、02 `ab5727f69`、03 `cd0463366` 进 main；04、05 进行中
 出处：用户 2026-11-04「现在公司主体，我希望能够局部修改和添加，不要每次都到大的页面修改」；会话提出按读出卡分区编辑、依据由产品按改动自动写一句且人可改、四张卡一次做齐，用户答「根据你的建议」。
 
 切片：PN-02，主责 party-commercial，非关务专项。权威：CONTEXT「法人资料」（资料链不可覆盖、按时点解析）、UC-PC-001、ADR-0145、ADR-0359、ADR-0360（取数层，`fresh` 读）。只改 `apps/admin-web/**`，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。
@@ -27,3 +27,5 @@ Status: resolved——2026-11-04 子票 01 `e3ccd7356`、02 `ab5727f69`、03 `cd
 | [01](./issues/01-section-scoped-profile-edit.md) | 四张读出卡各带「编辑」（逐行的卡再带「添加」），打开只装这一组格的抽屉 | resolved（2026-11-04 进 main） |
 | [02](./issues/02-in-place-section-edit.md) | 分区编辑改为就地：卡体变表单、卡底保存；抽屉退回只装整张表单（参考 Fiori 对象页编辑态） | resolved（2026-11-04 进 main） |
 | [03](./issues/03-object-page-edit-mode.md) | 整张「更新公司资料」改为对象页编辑态：页内就地、页脚动作条，抽屉删除 | resolved（2026-11-04 进 main） |
+| [04](./issues/04-contacts-group-in-contacts-section.md) | 编辑态下联系人组落到联系人分区，与概要分区共用一份表单 | in-progress |
+| [05](./issues/05-viewer-clears-edit-key.md) | 查看者落到编辑地址时清掉编辑键 | in-progress |

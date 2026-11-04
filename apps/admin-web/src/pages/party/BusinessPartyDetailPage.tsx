@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { partyAnswersDomain } from './party-writes';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
@@ -32,7 +32,7 @@ import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } 
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant } from './detail-primitives';
-import { useMayWriteRegistry } from '../use-operator-grants';
+import { useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -161,8 +161,13 @@ export function BusinessPartyDetailPage({
 }) {
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
-  const mayWrite = useMayWriteRegistry();
+  const grant = useRegistryWriteGrant();
+  const mayWrite = grant.mayWrite;
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
+  // 查看者拿着编辑态地址进来（票 company-subject-section-edit/05）：授予已答出、明确没有写授予时清掉编辑键（替换地址）。加载期不动。
+  useEffect(() => {
+    if (identityEditing && grant.settled && !grant.mayWrite) onExitIdentityEdit();
+  }, [identityEditing, grant.settled, grant.mayWrite, onExitIdentityEdit]);
   // 编辑态（票 business-party-edit-mode/02，照公司主体对象页）：概要分区换成「更正名称」表单，「保存 / 取消」钉在模板页脚；
   // 页头的「更正名称」「更多」收起。不是模态，「返回列表」有没提交的输入先问一句。
   const editing = identityEditing && mayWrite && row !== null;
