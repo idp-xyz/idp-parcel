@@ -492,7 +492,7 @@ func minimumMaterialsFromJSON(raw []byte) ([]domain.MinimumMaterialsRule, error)
 	return rules, nil
 }
 
-// ListCustomerServiceRules 上列客户服务规则版本壳，正文（0023）左连接。
+// customerServiceRuleRows 上列客户服务规则版本壳，正文（0023）左连接。
 //
 // 装载方向与 ListAuthorizationRules 同派：版本侧驱动，正文左连接——壳可先入册、正文随发布登记，
 // 只列正文行会让未登正文的已发布规则版本从目录上消失，而那个状态正是 visibility-exception 点读答
@@ -500,19 +500,24 @@ func minimumMaterialsFromJSON(raw []byte) ([]domain.MinimumMaterialsRule, error)
 //
 // 目录不重建领域对象、不形成判断：有父行而两张子表都空是坏数据（领域要求至少一项），拦它归内容
 // 读口 LoadCustomerServiceRule；这里照 ListAcceptanceRulePackages 的先例如实交回空集合。
-func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
+//
+// ListCustomerServiceRules 与 FindCustomerServiceRule 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) customerServiceRuleRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.CustomerServiceRuleRow, error) {
-	if err := requirePositiveLimit("list customer service rules", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list customer service rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.CustomerServiceRuleObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -559,15 +564,13 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 		         AND content.version_label = version.version_label
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.CustomerServiceRuleObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list customer service rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -585,9 +588,9 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 		targets = append(targets, &product, &contract, &responsible, &ruleScope, &registeredAt,
 			&deadlinesJSON, &materialsJSON)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("list customer service rules: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list customer service rules", status, closure.retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
@@ -605,24 +608,41 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 			case product == nil && contract != nil:
 				row.CustomerContract = *contract
 			default:
-				return nil, fmt.Errorf("list customer service rules: %s/%s 的适用声明既不是产品也不是合同",
+				return nil, fmt.Errorf("%s: %s/%s 的适用声明既不是产品也不是合同", operation,
 					row.ObjectID, row.VersionLabel)
 			}
 			row.ResponsibleParty = *responsible
 			row.RuleScope = *ruleScope
 		}
 		if row.ClaimDeadlines, err = claimDeadlineRowsFromJSON(deadlinesJSON); err != nil {
-			return nil, fmt.Errorf("list customer service rules: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		if row.MinimumMaterials, err = minimumMaterialsRowsFromJSON(materialsJSON); err != nil {
-			return nil, fmt.Errorf("list customer service rules: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		ruleRows = append(ruleRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list customer service rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return ruleRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CustomerServiceRuleRow, error) {
+	return catalogue.customerServiceRuleRows(ctx, "list customer service rules", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindCustomerServiceRule(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.CustomerServiceRuleRow, bool, error) {
+	return firstRow(catalogue.customerServiceRuleRows(ctx, "find customer service rule", tenant, 1, keyOf(objectID, version)))
 }
 
 // claimDeadlineRowsFromJSON 只转写，不校验种类是否在封闭三值内——判据同 cancellationAuthorityRowsFromJSON：

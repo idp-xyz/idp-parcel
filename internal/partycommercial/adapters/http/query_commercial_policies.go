@@ -55,6 +55,48 @@ type CommercialPolicyCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.PreAcceptanceFinancialControlPolicyRow, error)
+	FindAcceptanceRulePackage(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.AcceptanceRulePackageRow, bool, error)
+	FindPricePolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.PricePolicyRow, bool, error)
+	FindSettlementPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.SettlementPolicyRow, bool, error)
+	FindAuthorizationRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.AuthorizationRuleRow, bool, error)
+	FindCreditPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.CreditPolicyRow, bool, error)
+	FindCustomerServiceRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.CustomerServiceRuleRow, bool, error)
+	FindPreAcceptanceFinancialControlPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.PreAcceptanceFinancialControlPolicyRow, bool, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -239,22 +281,7 @@ func serveSettlementPolicies(
 	}
 	bodies := make([]settlementPolicyBody, 0, len(rows))
 	for _, row := range rows {
-		body := settlementPolicyBody{
-			ObjectID:          row.ObjectID,
-			Version:           row.VersionLabel,
-			Method:            row.Method,
-			LegalEntity:       row.LegalEntity,
-			Counterparty:      row.Counterparty,
-			ContractLabel:     row.ContractLabel,
-			ChargeScope:       row.ChargeScope,
-			Currency:          row.Currency,
-			EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
-			RegisteredAt:      rfc3339(row.RegisteredAt),
-		}
-		if row.HasEffectiveEnd {
-			body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
-		}
-		bodies = append(bodies, body)
+		bodies = append(bodies, settlementPolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, settlementPolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
@@ -581,6 +608,25 @@ type settlementPolicyBody struct {
 	EffectiveStartsAt string `json:"effectiveStartsAt"`
 	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+}
+
+func settlementPolicyBodyOf(row ports.SettlementPolicyRow) settlementPolicyBody {
+	body := settlementPolicyBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		Method:            row.Method,
+		LegalEntity:       row.LegalEntity,
+		Counterparty:      row.Counterparty,
+		ContractLabel:     row.ContractLabel,
+		ChargeScope:       row.ChargeScope,
+		Currency:          row.Currency,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		RegisteredAt:      rfc3339(row.RegisteredAt),
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	return body
 }
 
 type asOfPolicyListResponse struct {

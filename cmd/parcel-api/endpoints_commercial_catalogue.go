@@ -55,6 +55,9 @@ func init() {
 			"/commercial-product-channel-mappings/{mappingId}/revisions": {
 				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-product-channel-mappings/SYN-MAP-01/revisions",
 			},
+			"/commercial-version-readbacks/{kind}/{objectId}/{version}": {
+				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-version-readbacks/SERVICE_PRODUCT/SYN-PROD-CN-SG-EXPRESS/v1",
+			},
 			"/commercial-registration-number-types": {method: http.MethodGet, face: operationsReadFace()},
 			"/reference-data/enablement":            {method: http.MethodGet, face: operationsReadFace(), probe: "/reference-data/enablement?kind=COUNTRY"},
 		},
@@ -145,6 +148,9 @@ func init() {
 				// 与批准、发布两个写口各走各的授予面。读的是载体册适配器（同一张表的写口在登记写面上另装配）。
 				{Pattern: "/commercial-open-publication-drafts", Handler: commercialhttp.NewQueryPublicationDraftsEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},
 				{Pattern: "/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}", Handler: commercialhttp.NewQueryPublicationDraftEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},
+				// 商业版本按身份读回（ADR-0361 决定一）：管理台对象页的供数面，三个目录读口按类别分派，答与该类别目录行同形的一份。
+				// 同 Intake 变量，挂操作者查阅读；交入的三只读口与各目录列表口是同一只商业目录适配器——按身份读回是列表的投影。
+				{Pattern: "/commercial-version-readbacks/{kind}/{objectId}/{version}", Handler: commercialhttp.NewQueryCommercialVersionEndpoint(commercialCatalogueIntake, wiring.serviceProducts, wiring.commercialRelations, wiring.commercialPolicies)},
 				// 映射修订历史（票 party-commercial-uiux-backend/02）：渠道产品目录页详情抽屉「历史」栏的供数面，按路径里的映射展开整条修订链。
 				// 同读口参数、同 Intake 变量，裁决与业务参与方修订历史那一行一字不改（在 ports.ProductChannelMappingRevisionHistoryRead）；
 				// {mappingId} 由路由填进 PathValue，端点按同名取。

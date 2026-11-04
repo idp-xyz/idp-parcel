@@ -15,6 +15,12 @@ type ServiceProductCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.ServiceProductCatalogueRow, error)
+	FindServiceProduct(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.ServiceProductCatalogueRow, bool, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致——本适配器不新造查询语义,只消费 ADR-0077

@@ -39,6 +39,18 @@ func (double *relationReaderDouble) ListSupplierAgreements(
 	return double.agreements, nil
 }
 
+func (*relationReaderDouble) FindCustomerContract(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CustomerContractCatalogueRow, bool, error) {
+	return ports.CustomerContractCatalogueRow{}, false, nil
+}
+
+func (*relationReaderDouble) FindSupplierAgreement(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.SupplierAgreementCatalogueRow, bool, error) {
+	return ports.SupplierAgreementCatalogueRow{}, false, nil
+}
+
 func TestSupplierAgreementsEndpointTranscribesContentOnlyWhenRegistered(t *testing.T) {
 	query := catalogueQuery(t)
 	reader := &relationReaderDouble{

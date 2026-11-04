@@ -329,7 +329,7 @@ func controlItemsFromJSON(raw []byte) ([]domain.PreAcceptanceControlItem, error)
 	return items, nil
 }
 
-// ListPreAcceptanceFinancialControlPolicies 上列接受前财务控制策略版本壳，正文（0024）左连接
+// preAcceptanceFinancialControlPolicyRows 上列接受前财务控制策略版本壳，正文（0024）左连接
 // （票 admin-write-faces/06）。
 //
 // 装载方向与 ListCustomerServiceRules 同派：版本侧驱动，正文左连接——壳可先入册、正文随发布登记，
@@ -338,19 +338,24 @@ func controlItemsFromJSON(raw []byte) ([]domain.PreAcceptanceControlItem, error)
 //
 // 目录不重建领域对象、不形成判断：有父行而零子行是坏数据（领域要求至少一项），拦它归内容读口
 // LoadPreAcceptanceFinancialControlPolicy；这里照 ListCustomerServiceRules 的先例如实交回空集合。
-func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
+//
+// ListPreAcceptanceFinancialControlPolicies 与 FindPreAcceptanceFinancialControlPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) preAcceptanceFinancialControlPolicyRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
-	if err := requirePositiveLimit("list pre-acceptance financial control policies", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.PreAcceptanceFinancialControlPolicyObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -382,15 +387,13 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 		         AND content.version_label = version.version_label
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.PreAcceptanceFinancialControlPolicyObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -407,9 +410,9 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 		targets = append(targets, &jointPass, &registeredAt, &itemsJSON)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list pre-acceptance financial control policies", status, closure.retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
@@ -424,14 +427,31 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 			row.JointPassCondition = *jointPass
 		}
 		if row.Controls, err = controlItemRowsFromJSON(itemsJSON); err != nil {
-			return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		policyRows = append(policyRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return policyRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
+	return catalogue.preAcceptanceFinancialControlPolicyRows(ctx, "list pre-acceptance financial control policies", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindPreAcceptanceFinancialControlPolicy(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.PreAcceptanceFinancialControlPolicyRow, bool, error) {
+	return firstRow(catalogue.preAcceptanceFinancialControlPolicyRows(ctx, "find pre-acceptance financial control policy", tenant, 1, keyOf(objectID, version)))
 }
 
 // controlItemRowsFromJSON 只转写，不校验种类与处置是否在封闭集内——判据同 claimDeadlineRowsFromJSON：

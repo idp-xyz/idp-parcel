@@ -34,6 +34,18 @@ func (double *contractReaderDouble) ListSupplierAgreements(
 	return nil, nil
 }
 
+func (*contractReaderDouble) FindCustomerContract(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CustomerContractCatalogueRow, bool, error) {
+	return ports.CustomerContractCatalogueRow{}, false, nil
+}
+
+func (*contractReaderDouble) FindSupplierAgreement(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.SupplierAgreementCatalogueRow, bool, error) {
+	return ports.SupplierAgreementCatalogueRow{}, false, nil
+}
+
 func declaredConditionsRow(tightensObject, tightensVersion string) *ports.DeliveryConditionCatalogueRow {
 	return &ports.DeliveryConditionCatalogueRow{
 		Methods:             []string{"METHOD/in-person", "METHOD/locker"},

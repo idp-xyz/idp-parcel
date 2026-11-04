@@ -1412,12 +1412,23 @@ type DeliveryConditionCatalogueRow struct {
 // 租户在方法签名上(ADR-0077 Decision 五):目录是租户内部对象,运营查阅的授权边界
 // 只有租户。Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
 // 空目录如实交回空列表(ADR-0077 Decision 四):空表本身就是内容,上列不形成判断。
+//
+// FindServiceProduct 按身份读回一行（ADR-0361）：身份是（租户、类别、对象、版本），范围不是键——
+// 库上 commercial_version 的主键正是这四格。它是列表的投影而不是第二套转写：同一条语句多两格键
+// 过滤，列表上那一行与按身份读回的那一行逐字段相同。不在册与别的租户同形，答 false 不答错——
+// 跨租户不泄露存在性。
 type ServiceProductCatalogueRead interface {
 	ListServiceProducts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 	) ([]ServiceProductCatalogueRow, error)
+	FindServiceProduct(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ServiceProductCatalogueRow, bool, error)
 }
 
 // AssembledRuleRow 是规则包正文里一条按分类归档的规则引用的上列转写。
@@ -1712,6 +1723,11 @@ type PreAcceptanceFinancialControlPolicyRow struct {
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
 // 每个方法只读自己那张册子。
+//
+// 有自己版本的册子各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，
+// 同一条语句多两格键过滤。接受前财务控制声明（0007）与时点锚声明（0005）没有自己的版本——它们
+// 挂在客户合同版本 / 接单规则包版本下，身份是拥有者的——所以不配 Find：给它们配一个就是替一份
+// 声明造一个它没有的版本身份。
 type CommercialPolicyCatalogueRead interface {
 	ListAcceptanceRulePackages(
 		ctx context.Context,
@@ -1758,6 +1774,49 @@ type CommercialPolicyCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]PreAcceptanceFinancialControlPolicyRow, error)
+
+	FindAcceptanceRulePackage(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (AcceptanceRulePackageRow, bool, error)
+	FindPricePolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (PricePolicyRow, bool, error)
+	FindSettlementPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (SettlementPolicyRow, bool, error)
+	FindAuthorizationRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (AuthorizationRuleRow, bool, error)
+	FindCreditPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (CreditPolicyRow, bool, error)
+	FindCustomerServiceRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (CustomerServiceRuleRow, bool, error)
+	FindPreAcceptanceFinancialControlPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (PreAcceptanceFinancialControlPolicyRow, bool, error)
 }
 
 // ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。
@@ -1856,6 +1915,9 @@ type SupplierAgreementCatalogueRow struct {
 // CommercialPolicyCatalogueRead 的「正文表落库时按封闭集扩方法」)。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
+//
+// 两类各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，同一条语句
+// 多两格键过滤，不在册与别的租户同形。
 type CommercialRelationCatalogueRead interface {
 	ListCustomerContracts(
 		ctx context.Context,
@@ -1867,6 +1929,18 @@ type CommercialRelationCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]SupplierAgreementCatalogueRow, error)
+	FindCustomerContract(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (CustomerContractCatalogueRow, bool, error)
+	FindSupplierAgreement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (SupplierAgreementCatalogueRow, bool, error)
 }
 
 // ChannelAccountUseSaveOutcome 是一笔账号使用授权登记修订在持久化面的落点（ADR-0031

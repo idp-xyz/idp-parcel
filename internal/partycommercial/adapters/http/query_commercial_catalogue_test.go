@@ -77,6 +77,13 @@ func (double *productReaderDouble) ListServiceProducts(
 	return double.rows, nil
 }
 
+// 目录端点的替身只答列表；按身份读回那一面在 query_commercial_version_test.go 的替身上证，这里答「不在册」只为满足读口形状。
+func (*productReaderDouble) FindServiceProduct(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.ServiceProductCatalogueRow, bool, error) {
+	return ports.ServiceProductCatalogueRow{}, false, nil
+}
+
 type policyReaderDouble struct {
 	tenant      domain.TenantID
 	packages    []ports.AcceptanceRulePackageRow
@@ -103,6 +110,48 @@ func (double *policyReaderDouble) ListPreAcceptanceFinancialControlPolicies(
 		return nil, nil
 	}
 	return double.controlPols, nil
+}
+
+func (*policyReaderDouble) FindAcceptanceRulePackage(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.AcceptanceRulePackageRow, bool, error) {
+	return ports.AcceptanceRulePackageRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindPricePolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.PricePolicyRow, bool, error) {
+	return ports.PricePolicyRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindSettlementPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.SettlementPolicyRow, bool, error) {
+	return ports.SettlementPolicyRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindAuthorizationRule(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.AuthorizationRuleRow, bool, error) {
+	return ports.AuthorizationRuleRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindCreditPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CreditPolicyRow, bool, error) {
+	return ports.CreditPolicyRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindCustomerServiceRule(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CustomerServiceRuleRow, bool, error) {
+	return ports.CustomerServiceRuleRow{}, false, nil
+}
+
+func (*policyReaderDouble) FindPreAcceptanceFinancialControlPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.PreAcceptanceFinancialControlPolicyRow, bool, error) {
+	return ports.PreAcceptanceFinancialControlPolicyRow{}, false, nil
 }
 
 func (double *policyReaderDouble) record(method string) {

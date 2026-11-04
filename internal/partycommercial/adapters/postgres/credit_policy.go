@@ -320,35 +320,39 @@ func creditPolicyFrom(version domain.CommercialVersion, row scannedCreditPolicy)
 	return domain.NewCreditPolicy(version, legalEntity, level, chargeType, limit, interval)
 }
 
-// ListCreditPolicies 上列信用政策册。额度两列照列转写，HasAmount 说明哪一列在场；两空/两满
+// creditPolicyRows 上列信用政策册。额度两列照列转写，HasAmount 说明哪一列在场；两空/两满
 // 是库与领域分叉的坏数据，上抛不吸收。比例行的基数照列转写（ADR-0129），存量 NULL 转写为空串
 // ——目录只上列不重算，「未声明」由读面如实示出。
-func (catalogue *OperationsCatalogue) ListCreditPolicies(
+//
+// ListCreditPolicies 与 FindCreditPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) creditPolicyRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.CreditPolicyRow, error) {
-	if err := requirePositiveLimit("list credit policies", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list credit policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("", []any{tenant.String(), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT object_id, version_label, legal_entity_ref, authority_level_ref, charge_type_ref,
 		        limit_minor, limit_ratio_bps, ratio_base,
 		        effective_starts_at, effective_ends_at, registered_at
 		   FROM party_commercial.credit_policy
-		  WHERE tenant_id = $1
+		  WHERE tenant_id = $1`+filter+`
 		  ORDER BY registered_at DESC, object_id, version_label
 		  LIMIT $2`,
-		tenant.String(),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list credit policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -363,7 +367,7 @@ func (catalogue *OperationsCatalogue) ListCreditPolicies(
 			&limitMinor, &limitBps, &ratioBase,
 			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
 		); err != nil {
-			return nil, fmt.Errorf("list credit policies: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		switch {
 		case limitMinor != nil && limitBps == nil && ratioBase == nil:
@@ -375,7 +379,7 @@ func (catalogue *OperationsCatalogue) ListCreditPolicies(
 				row.RatioBase = *ratioBase
 			}
 		default:
-			return nil, fmt.Errorf("list credit policies: %s/%s 的额度既不是金额也不是比例",
+			return nil, fmt.Errorf("%s: %s/%s 的额度既不是金额也不是比例", operation,
 				row.ObjectID, row.VersionLabel)
 		}
 		if endsAt != nil {
@@ -385,7 +389,24 @@ func (catalogue *OperationsCatalogue) ListCreditPolicies(
 		policyRows = append(policyRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list credit policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return policyRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListCreditPolicies(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CreditPolicyRow, error) {
+	return catalogue.creditPolicyRows(ctx, "list credit policies", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindCreditPolicy(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.CreditPolicyRow, bool, error) {
+	return firstRow(catalogue.creditPolicyRows(ctx, "find credit policy", tenant, 1, keyOf(objectID, version)))
 }

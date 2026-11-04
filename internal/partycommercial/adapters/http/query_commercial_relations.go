@@ -21,6 +21,18 @@ type CommercialRelationCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.SupplierAgreementCatalogueRow, error)
+	FindCustomerContract(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.CustomerContractCatalogueRow, bool, error)
+	FindSupplierAgreement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (ports.SupplierAgreementCatalogueRow, bool, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。

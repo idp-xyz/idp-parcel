@@ -42,6 +42,48 @@ func requirePositiveLimit(operation string, limit int) error {
 	return nil
 }
 
+// versionKey 是按身份读回（ADR-0361）比列表多出来的两格键过滤：对象与版本。租户与类别已在语句的 WHERE 上，
+// 四格合起来正是 commercial_version 的主键——范围不是键，所以这里没有范围。nil 即列表。
+//
+// 按身份读回不另写语句：同一条语句、同一段扫描，只差这两格。另写一条就会长出第二套行转写，列表上那一行与
+// 读回的那一行迟早在某个格上不同，而管理台的对象页正是拿读回的那份当「目录上这一版」来显示的。
+type versionKey struct {
+	objectID string
+	version  string
+}
+
+func keyOf(objectID domain.CommercialObjectID, version domain.CommercialVersionLabel) *versionKey {
+	return &versionKey{objectID: objectID.String(), version: version.String()}
+}
+
+// filter 交出接在 WHERE 末尾的两格键过滤与追加了键值的参数。占位符号接着既有参数续编，LIMIT 的占位符留在原位
+// 不必改——PostgreSQL 不要求占位符按出现顺序编号。alias 是语句里驱动行的别名（版本壳或正文父行），空串即无别名。
+func (key *versionKey) filter(alias string, args []any) (string, []any) {
+	if key == nil {
+		return "", args
+	}
+	prefix := ""
+	if alias != "" {
+		prefix = alias + "."
+	}
+	next := len(args) + 1
+	clause := fmt.Sprintf("\n\t\t    AND %sobject_id = $%d\n\t\t    AND %sversion_label = $%d", prefix, next, prefix, next+1)
+	return clause, append(args, key.objectID, key.version)
+}
+
+// firstRow 把按键取回的至多一行折成「在不在」：键是主键，取回多于一行是语句写错，取不回是不在册——
+// 跨租户与不在册同形，读口不区分。
+func firstRow[Row any](rows []Row, err error) (Row, bool, error) {
+	var none Row
+	if err != nil {
+		return none, false, err
+	}
+	if len(rows) == 0 {
+		return none, false, nil
+	}
+	return rows[0], true, nil
+}
+
 // deliveryConditionColumns 是两条目录查询共用的交付条件一节:0030 父行的两条规则引用、所收紧的产品版本与声明时刻,
 // 方式子表以相关子查询各聚各的(与 ListAcceptanceRulePackages 同一条理由:与别的子表并列 LEFT JOIN 会互相做笛卡尔积)。
 // 父表按主键左连接到版本上、至多一行,不产生扇出;recipient_scope_rule_ref 在父表上 NOT NULL,它的在场即这一层的在场。
@@ -108,24 +150,29 @@ func (scan deliveryConditionScan) row() (*ports.DeliveryConditionCatalogueRow, e
 	return row, nil
 }
 
-// ListServiceProducts 上列服务产品版本(壳)并左连接形态册与交付条件册(0030 产品层)。
+// serviceProductRows 上列服务产品版本(壳)并左连接形态册与交付条件册(0030 产品层)。
 //
 // 上列对象是版本壳而不是形态行,理由在 ports.ServiceProductCatalogueRow 上;装载
 // 方向与 LoadForScope 同派(0008 迁移自注:装载由 commercial_version 侧驱动)。
 // 版本册只收已发布之后的状态,读回集外取值即坏数据,上抛不折成空。
-func (catalogue *OperationsCatalogue) ListServiceProducts(
+//
+// ListServiceProducts 与 FindServiceProduct 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) serviceProductRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.ServiceProductCatalogueRow, error) {
-	if err := requirePositiveLimit("list service products", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list service products: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.ServiceProductObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -139,15 +186,13 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 		         AND product.version_label = version.version_label`+deliveryConditionJoin+`
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.ServiceProductObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list service products: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -165,9 +210,9 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 		targets = append(targets, &form)
 		targets = append(targets, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("list service products: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list service products", status, closure.retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
@@ -180,17 +225,34 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 			row.HasForm = true
 		}
 		if row.DeliveryConditions, err = delivery.row(); err != nil {
-			return nil, fmt.Errorf("list service products: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		catalogueRows = append(catalogueRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list service products: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return catalogueRows, nil
 }
 
-// ListAcceptanceRulePackages 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
+func (catalogue *OperationsCatalogue) ListServiceProducts(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ServiceProductCatalogueRow, error) {
+	return catalogue.serviceProductRows(ctx, "list service products", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindServiceProduct(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.ServiceProductCatalogueRow, bool, error) {
+	return firstRow(catalogue.serviceProductRows(ctx, "find service product", tenant, 1, keyOf(objectID, version)))
+}
+
+// acceptanceRulePackageRows 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
 // 内容声明(0013 的收寄资格与终局规则)。一条语句取回全部父子——ReadExecutor 不保证
 // 两条语句同一快照,分次取会拼出从未同时存在的父子状态(与 LoadAcceptanceRulePackage
 // 同一条理由)。有父零子在内容读口是坏数据,在目录上列如实交回空集合:上列不重建领域
@@ -201,19 +263,24 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 // 于是把每族都数重。本函数原先只有一族,那个形状看不出问题;第二族一挂就出。两个
 // 声明壳仍走 LEFT JOIN:它们与父同主键、至多一行,不产生扇出,而「壳在不在」正需要
 // 连接后的 NULL 来判。
-func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
+//
+// ListAcceptanceRulePackages 与 FindAcceptanceRulePackage 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) acceptanceRulePackageRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.AcceptanceRulePackageRow, error) {
-	if err := requirePositiveLimit("list acceptance rule packages", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("parent", []any{tenant.String(), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT parent.object_id, parent.version_label,
 		        parent.service_product_id, parent.contract_id, parent.legal_entity_ref,
@@ -274,14 +341,13 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 		         AND finals.object_kind   = parent.object_kind
 		         AND finals.object_id     = parent.object_id
 		         AND finals.version_label = parent.version_label
-		  WHERE parent.tenant_id = $1
+		  WHERE parent.tenant_id = $1`+filter+`
 		  ORDER BY parent.declared_at DESC, parent.object_id, parent.version_label
 		  LIMIT $2`,
-		tenant.String(),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -297,7 +363,7 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 			&row.HasIntakeQualification, &sourcesJSON, &refsJSON,
 			&row.HasFinalRules, &finalsJSON,
 		); err != nil {
-			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
@@ -305,24 +371,41 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 		}
 		rules, err := assembledRuleRowsFromJSON(rulesJSON)
 		if err != nil {
-			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		row.Rules = rules
 		if row.AllowedIntakeSources, err = stringsFromJSON(sourcesJSON); err != nil {
-			return nil, fmt.Errorf("list acceptance rule packages: allowed intake sources: %w", err)
+			return nil, fmt.Errorf("%s: allowed intake sources: %w", operation, err)
 		}
 		if row.IntakeQualificationRefs, err = stringsFromJSON(refsJSON); err != nil {
-			return nil, fmt.Errorf("list acceptance rule packages: intake qualification refs: %w", err)
+			return nil, fmt.Errorf("%s: intake qualification refs: %w", operation, err)
 		}
 		if row.FinalRules, err = finalRuleRowsFromJSON(finalsJSON); err != nil {
-			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		packageRows = append(packageRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return packageRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.AcceptanceRulePackageRow, error) {
+	return catalogue.acceptanceRulePackageRows(ctx, "list acceptance rule packages", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindAcceptanceRulePackage(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.AcceptanceRulePackageRow, bool, error) {
+	return firstRow(catalogue.acceptanceRulePackageRows(ctx, "find acceptance rule package", tenant, 1, keyOf(objectID, version)))
 }
 
 func stringsFromJSON(raw []byte) ([]string, error) {
@@ -429,22 +512,27 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceControls(
 	return controlRows, nil
 }
 
-// ListPricePolicies 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)；口径册
+// pricePolicyRows 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)；口径册
 // (0022)左连接挂在正文行上,HasCaliber 说明有没有——0010 早于 0022,只有正文没有口径的行是合法
 // 状态。汇率三列半缺是库与领域分叉的坏数据,上抛不吸收。
-func (catalogue *OperationsCatalogue) ListPricePolicies(
+//
+// ListPricePolicies 与 FindPricePolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) pricePolicyRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.PricePolicyRow, error) {
-	if err := requirePositiveLimit("list price policies", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list price policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("price", []any{tenant.String(), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT price.object_id, price.version_label, price.direction, price.plan_ref, price.plan_direction,
 		        price.binding_conversion, price.policy_scope_ref,
@@ -458,14 +546,13 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 		         AND caliber.object_kind   = price.object_kind
 		         AND caliber.object_id     = price.object_id
 		         AND caliber.version_label = price.version_label
-		  WHERE price.tenant_id = $1
+		  WHERE price.tenant_id = $1`+filter+`
 		  ORDER BY price.registered_at DESC, price.object_id, price.version_label
 		  LIMIT $2`,
-		tenant.String(),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list price policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -484,7 +571,7 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 			&fxQuoteType, &fxAsOfSemantics, &fxAsOfPolicyVersion,
 			&caliberRegisteredAt,
 		); err != nil {
-			return nil, fmt.Errorf("list price policies: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
@@ -506,45 +593,66 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 				row.FxAsOfPolicyVersion = *fxAsOfPolicyVersion
 			case fxQuoteType == nil && fxAsOfSemantics == nil && fxAsOfPolicyVersion == nil:
 			default:
-				return nil, fmt.Errorf("list price policies: %s/%s 的汇率口径半缺",
+				return nil, fmt.Errorf("%s: %s/%s 的汇率口径半缺", operation,
 					row.ObjectID, row.VersionLabel)
 			}
 		}
 		policyRows = append(policyRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list price policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return policyRows, nil
 }
 
-// ListSettlementPolicies 上列结算政策册:方式与六维适用范围平铺(ADR-0044)。
-func (catalogue *OperationsCatalogue) ListSettlementPolicies(
+func (catalogue *OperationsCatalogue) ListPricePolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
+) ([]ports.PricePolicyRow, error) {
+	return catalogue.pricePolicyRows(ctx, "list price policies", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindPricePolicy(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.PricePolicyRow, bool, error) {
+	return firstRow(catalogue.pricePolicyRows(ctx, "find price policy", tenant, 1, keyOf(objectID, version)))
+}
+
+// settlementPolicyRows 上列结算政策册:方式与六维适用范围平铺(ADR-0044)。
+//
+// ListSettlementPolicies 与 FindSettlementPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) settlementPolicyRows(
+	ctx context.Context,
+	operation string,
+	tenant domain.TenantID,
+	limit int,
+	key *versionKey,
 ) ([]ports.SettlementPolicyRow, error) {
-	if err := requirePositiveLimit("list settlement policies", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list settlement policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("", []any{tenant.String(), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT object_id, version_label, method, legal_entity_ref, counterparty_ref,
 		        contract_label, charge_scope_ref, currency_code,
 		        effective_starts_at, effective_ends_at, registered_at
 		   FROM party_commercial.commercial_settlement_policy
-		  WHERE tenant_id = $1
+		  WHERE tenant_id = $1`+filter+`
 		  ORDER BY registered_at DESC, object_id, version_label
 		  LIMIT $2`,
-		tenant.String(),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list settlement policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -557,7 +665,7 @@ func (catalogue *OperationsCatalogue) ListSettlementPolicies(
 			&row.ContractLabel, &row.ChargeScope, &row.Currency,
 			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
 		); err != nil {
-			return nil, fmt.Errorf("list settlement policies: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
@@ -566,9 +674,26 @@ func (catalogue *OperationsCatalogue) ListSettlementPolicies(
 		policyRows = append(policyRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list settlement policies: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return policyRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListSettlementPolicies(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.SettlementPolicyRow, error) {
+	return catalogue.settlementPolicyRows(ctx, "list settlement policies", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindSettlementPolicy(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.SettlementPolicyRow, bool, error) {
+	return firstRow(catalogue.settlementPolicyRows(ctx, "find settlement policy", tenant, 1, keyOf(objectID, version)))
 }
 
 // ListAsOfPolicyDeclarations 上列时点锚声明册:某规则包为某类下游判断声明的时点
@@ -617,7 +742,7 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 	return declarationRows, nil
 }
 
-// ListCustomerContracts 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
+// customerContractRows 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
 //
 // 四张表一条语句取回,不分两次:ReadExecutor 不保证两条语句同一快照,分次会拼出
 // 从未同时存在的壳/正文/绑定组合(与 ListAcceptanceRulePackages 同一条理由)。
@@ -626,19 +751,24 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 // 就是绑定→正文,挂壳上会在正文缺席时把绑定行也带进来,而那种行库上根本不存在,
 // 读出来只会是一份自相矛盾的证据。交付条件父表按主键挂在壳上(与正文各自可缺,是两层),
 // 方式子表走相关子查询——与约定行并列 LEFT JOIN 会互相做笛卡尔积。
-func (catalogue *OperationsCatalogue) ListCustomerContracts(
+//
+// ListCustomerContracts 与 FindCustomerContract 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) customerContractRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.CustomerContractCatalogueRow, error) {
-	if err := requirePositiveLimit("list customer contracts", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list customer contracts: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.CustomerContractObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -668,7 +798,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		         AND binding.version_label = content.version_label`+deliveryConditionJoin+`
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  GROUP BY version.tenant_id, version.object_kind,
 		           version.object_id, version.version_label, version.scope_ref, version.status,
 		           version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -679,12 +809,10 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		           delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.CustomerContractObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list customer contracts: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -705,9 +833,9 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
 		targets = append(targets, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("list customer contracts: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list customer contracts", status, closure.retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
@@ -730,18 +858,35 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		}
 		bindings, err := controlBindingRowsFromJSON(bindingsJSON)
 		if err != nil {
-			return nil, fmt.Errorf("list customer contracts: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		row.Bindings = bindings
 		if row.DeliveryConditions, err = delivery.row(); err != nil {
-			return nil, fmt.Errorf("list customer contracts: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		contractRows = append(contractRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list customer contracts: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return contractRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListCustomerContracts(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CustomerContractCatalogueRow, error) {
+	return catalogue.customerContractRows(ctx, "list customer contracts", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindCustomerContract(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.CustomerContractCatalogueRow, bool, error) {
+	return firstRow(catalogue.customerContractRows(ctx, "find customer contract", tenant, 1, keyOf(objectID, version)))
 }
 
 type controlBindingDocument struct {
@@ -791,25 +936,30 @@ func bothOrNeither(neither bool) string {
 	return "皆有"
 }
 
-// ListAuthorizationRules 上列授权规则版本(壳),连同挂在它上面的取消授权目录。
+// authorizationRuleRows 上列授权规则版本(壳),连同挂在它上面的取消授权目录。
 //
 // 目录壳与父同主键、至多一行,走 LEFT JOIN——「壳在不在」正需要连接后的 NULL 来判;
 // 请求方声明走相关子查询,理由见 ListAcceptanceRulePackages 上那段。这里今天只有一族
 // 子表,叠 LEFT JOIN + GROUP BY 也不会错,用子查询是为了第二族挂上来时不必重走一遍
 // 那个坑。
-func (catalogue *OperationsCatalogue) ListAuthorizationRules(
+//
+// ListAuthorizationRules 与 FindAuthorizationRule 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) authorizationRuleRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.AuthorizationRuleRow, error) {
-	if err := requirePositiveLimit("list authorization rules", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list authorization rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.AuthorizationRuleObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -838,15 +988,13 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 		         AND content.version_label = version.version_label
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.AuthorizationRuleObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list authorization rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -863,9 +1011,9 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 		targets = append(targets, &declaredAt, &authoritiesJSON)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("list authorization rules: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list authorization rules", status, closure.retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
@@ -879,14 +1027,31 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 			row.HasCancellationAuthority = true
 		}
 		if row.CancellationAuthorities, err = cancellationAuthorityRowsFromJSON(authoritiesJSON); err != nil {
-			return nil, fmt.Errorf("list authorization rules: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		ruleRows = append(ruleRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list authorization rules: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return ruleRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListAuthorizationRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.AuthorizationRuleRow, error) {
+	return catalogue.authorizationRuleRows(ctx, "list authorization rules", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindAuthorizationRule(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.AuthorizationRuleRow, bool, error) {
+	return firstRow(catalogue.authorizationRuleRows(ctx, "find authorization rule", tenant, 1, keyOf(objectID, version)))
 }
 
 type cancellationAuthorityDocument struct {
@@ -952,24 +1117,29 @@ func catalogueStatusWord(operation string, status int16, retired bool) (string, 
 	return word, nil
 }
 
-// ListSupplierAgreements 上列供应商协议版本壳,正文(0021)左连接。
+// supplierAgreementRows 上列供应商协议版本壳,正文(0021)左连接。
 //
 // 装载方向与 ListCustomerContracts 同派:版本侧驱动,正文左连接——壳可先入册、正文随发布
 // 登记,只列正文行会让未登正文的已发布协议从目录上消失。方向不在行上:领域恒为 BUY、库上
 // 不成列。
-func (catalogue *OperationsCatalogue) ListSupplierAgreements(
+//
+// ListSupplierAgreements 与 FindSupplierAgreement 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
+func (catalogue *OperationsCatalogue) supplierAgreementRows(
 	ctx context.Context,
+	operation string,
 	tenant domain.TenantID,
 	limit int,
+	key *versionKey,
 ) ([]ports.SupplierAgreementCatalogueRow, error) {
-	if err := requirePositiveLimit("list supplier agreements", limit); err != nil {
+	if err := requirePositiveLimit(operation, limit); err != nil {
 		return nil, err
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list supplier agreements: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 
+	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.SupplierAgreementObject), limit})
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
@@ -985,15 +1155,13 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		         AND content.version_label = version.version_label
 		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2
+		    AND version.object_kind = $2`+filter+`
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
-		tenant.String(),
-		uint8(domain.SupplierAgreementObject),
-		limit,
+		args...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list supplier agreements: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -1013,9 +1181,9 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 			&agreementStartsAt, &agreementEndsAt, &registeredAt,
 			&cutAt, &successor, &retiredAt,
 		); err != nil {
-			return nil, fmt.Errorf("list supplier agreements: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
-		if row.Status, err = catalogueStatusWord("list supplier agreements", status, retiredAt != nil); err != nil {
+		if row.Status, err = catalogueStatusWord(operation, status, retiredAt != nil); err != nil {
 			return nil, err
 		}
 		// 收尾照版本点读的口径折进来（ADR-0233 决定五）：退役改状态并回显后继与时刻，截止回显最新一条更正的终点；原区间
@@ -1037,7 +1205,7 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		if supplier != nil {
 			if legalEntity == nil || purchasePlan == nil || agreementScope == nil ||
 				agreementStartsAt == nil || registeredAt == nil {
-				return nil, fmt.Errorf("list supplier agreements: %s/%s 的正文行不完整",
+				return nil, fmt.Errorf("%s: %s/%s 的正文行不完整", operation,
 					row.ObjectID, row.VersionLabel)
 			}
 			row.HasContent = true
@@ -1055,7 +1223,24 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		agreementRows = append(agreementRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list supplier agreements: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return agreementRows, nil
+}
+
+func (catalogue *OperationsCatalogue) ListSupplierAgreements(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.SupplierAgreementCatalogueRow, error) {
+	return catalogue.supplierAgreementRows(ctx, "list supplier agreements", tenant, limit, nil)
+}
+
+func (catalogue *OperationsCatalogue) FindSupplierAgreement(
+	ctx context.Context,
+	tenant domain.TenantID,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (ports.SupplierAgreementCatalogueRow, bool, error) {
+	return firstRow(catalogue.supplierAgreementRows(ctx, "find supplier agreement", tenant, 1, keyOf(objectID, version)))
 }

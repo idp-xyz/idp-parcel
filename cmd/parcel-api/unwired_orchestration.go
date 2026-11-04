@@ -1735,6 +1735,96 @@ func (unwiredCommercialCatalogue) ListSupplierAgreements(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) FindServiceProduct(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.ServiceProductCatalogueRow, bool, error) {
+	return commercialports.ServiceProductCatalogueRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindCustomerContract(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.CustomerContractCatalogueRow, bool, error) {
+	return commercialports.CustomerContractCatalogueRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindSupplierAgreement(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.SupplierAgreementCatalogueRow, bool, error) {
+	return commercialports.SupplierAgreementCatalogueRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindAcceptanceRulePackage(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.AcceptanceRulePackageRow, bool, error) {
+	return commercialports.AcceptanceRulePackageRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindPricePolicy(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.PricePolicyRow, bool, error) {
+	return commercialports.PricePolicyRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindSettlementPolicy(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.SettlementPolicyRow, bool, error) {
+	return commercialports.SettlementPolicyRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindAuthorizationRule(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.AuthorizationRuleRow, bool, error) {
+	return commercialports.AuthorizationRuleRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindCreditPolicy(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.CreditPolicyRow, bool, error) {
+	return commercialports.CreditPolicyRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindCustomerServiceRule(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.CustomerServiceRuleRow, bool, error) {
+	return commercialports.CustomerServiceRuleRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) FindPreAcceptanceFinancialControlPolicy(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialports.PreAcceptanceFinancialControlPolicyRow, bool, error) {
+	return commercialports.PreAcceptanceFinancialControlPolicyRow{}, false, errOrchestrationNotWired
+}
+
 func (unwiredCommercialCatalogue) ListBusinessParties(
 	context.Context,
 	commercialdomain.TenantID,
