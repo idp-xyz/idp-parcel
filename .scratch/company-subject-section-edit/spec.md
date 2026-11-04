@@ -1,7 +1,7 @@
 # 公司主体资料分区编辑：就地改一组、就地加一条，不每次进整张表单
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-04 子票 01 进 main `e3ccd7356`
 出处：用户 2026-11-04「现在公司主体，我希望能够局部修改和添加，不要每次都到大的页面修改」；会话提出按读出卡分区编辑、依据由产品按改动自动写一句且人可改、四张卡一次做齐，用户答「根据你的建议」。
 
 切片：PN-02，主责 party-commercial，非关务专项。权威：CONTEXT「法人资料」（资料链不可覆盖、按时点解析）、UC-PC-001、ADR-0145、ADR-0359、ADR-0360（取数层，`fresh` 读）。只改 `apps/admin-web/**`，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。
@@ -22,4 +22,4 @@ Status: in-progress
 
 | 票 | 内容 | 状态 |
 |---|---|---|
-| [01](./issues/01-section-scoped-profile-edit.md) | 四张读出卡各带「编辑」（逐行的卡再带「添加」），打开只装这一组格的抽屉 | in-progress |
+| [01](./issues/01-section-scoped-profile-edit.md) | 四张读出卡各带「编辑」（逐行的卡再带「添加」），打开只装这一组格的抽屉 | resolved（2026-11-04 进 main） |
