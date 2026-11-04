@@ -119,9 +119,9 @@ type ApprovalDutyRuleView interface {
 	LoadApprovalDutyRule(ctx context.Context, tenant domain.TenantID) (domain.ApprovalDutyRule, bool, error)
 }
 
-// ApprovalDutyRuleRegistry 在读口之上加登记写口。规则是租户治理参数（实例半边）：今天没有治理写面调它，
-// 写口只给装配与测试用；登记面归治理写面那一族按 ADR-0085 决定四另裁（ADR-0126 Decision 五）。一租户一条、
-// 撞键不覆盖：同内容是重放，异内容是冲突——改规则今天没有入口，等那一族的裁决。
+// ApprovalDutyRuleRegistry 在读口之上加登记写口。规则是租户治理参数（实例半边）：登记入口是 parcel-commercial 的受控
+// 命令行 register-approval-duty-rule（ADR-0362），治理 HTTP 写面仍按 ADR-0085 决定四那一族另裁。一租户一条、
+// 撞键不覆盖：同内容是重放，异内容是冲突——改规则今天没有入口。
 type ApprovalDutyRuleRegistry interface {
 	ApprovalDutyRuleView
 	SaveApprovalDutyRule(ctx context.Context, rule domain.ApprovalDutyRule) (ApprovalDutyRuleSaveOutcome, error)

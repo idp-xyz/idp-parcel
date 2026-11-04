@@ -30,7 +30,9 @@ const info = moduleInfoById['pending-publications'];
 
 // 列只放批准者要看的：改的是什么（类别 + 编号 + 版本）、状态、谁在什么时候提交。适用范围引用、摘要、主体全串进详情的
 // 「技术详情」——适用范围是册上的范围引用，不是批准者核对的业务内容。右栏开时只留编号、版本与状态。
-const columns: WorkbenchColumn<PendingDraftRow>[] = [
+type ShownRow = PendingDraftRow & { left?: boolean };
+
+const columns: WorkbenchColumn<ShownRow>[] = [
   {
     key: 'kind',
     header: '类别',
@@ -51,12 +53,15 @@ const columns: WorkbenchColumn<PendingDraftRow>[] = [
     key: 'status',
     header: '状态',
     // 读不出内容的改动照样在列表里，状态之外另标一枚；点开说怎么办。
-    render: (row) => (
-      <span className="inline-flex items-center gap-1.5">
-        <StatusPill code={row.source.status} />
-        {row.source.readable ? null : <StatusPill label={unreadableWord} tone="bad" />}
-      </span>
-    ),
+    render: (row) =>
+      row.left ? (
+        <StatusPill label="已离开列表" tone="info" />
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          <StatusPill code={row.source.status} />
+          {row.source.readable ? null : <StatusPill label={unreadableWord} tone="bad" />}
+        </span>
+      ),
   },
   {
     key: 'submitter',
@@ -112,8 +117,9 @@ export function PendingPublicationsPage() {
       (needle === '' ||
         draftSearchText(row.source, publicationKindLabels[row.source.kind] ?? row.source.kind).includes(needle)),
   );
-  // 选中的那一行已不在（发布后离开列表、或被筛掉）时钉在表尾，栏才开得住；它显示的仍是最后一次列表里的样子，栏里的读回是新的。
-  const shown = selected !== null && !visible.some((row) => row.key === selected.key) ? [...visible, selected] : visible;
+  // 选中的那一行已不在（发布后离开列表、或被筛掉）时钉在表尾，栏才开得住。钉着的行标成「已离开列表」而不显旧状态：
+  // 列表里的状态是上一次取回的，栏里读回的才是现在的，两处并排显两个状态会让人以为没发出去。
+  const shown = selected !== null && !visible.some((row) => row.key === selected.key) ? [...visible, { ...selected, left: true }] : visible;
   // 录入入口在各册自己的页面，没有登记册配置写授予的操作者看不到它们（ADR-0315）；本页自己没有那个入口，说明文案不往那里指，
   // 也不解释一个本页没有的入口。
   const mayWrite = useMayWriteRegistry();
@@ -128,7 +134,7 @@ export function PendingPublicationsPage() {
   const answered = answer?.kind === 'outcome';
 
   return (
-    <WorkbenchPageTemplate<PendingDraftRow>
+    <WorkbenchPageTemplate<ShownRow>
       title={info.title}
       viewStateKey="pending-publications"
       subtitle={`客户合同、服务产品、价格政策等改动先存为待批准，在这里核对内容后批准，再发布生效。点一行查看内容。${entryHint(mayWrite, '新的改动在各自的页面里录入。', '')}`}

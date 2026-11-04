@@ -42,3 +42,7 @@ echo "== 商业权威发布（party-commercial：发布批正文）与消费方�
 # 渠道引用，ECON 显式登记「未配置」——批级判据点名实例格显式未配置要有真实例可显；
 # 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。
 "$BIN/parcel-commercial" register-products -input "$SEEDS/commercial/register-products.json"
+# 商业发布审批职责规则（PAR-COM-18，ADR-0362）：演示租户的合成取值——录入者与批准者可为同一主体、不要求等级。演示租户只有
+# 一个配置操作者账号，要求不同主体就没人能批；这一格是演示租户自己的治理取值（ADR-0150），证据记 S，不是产品默认。不登时
+# 管理台的批准一律答未配置。
+"$BIN/parcel-commercial" register-approval-duty-rule -input "$SEEDS/commercial/register-approval-duty-rule.json"
