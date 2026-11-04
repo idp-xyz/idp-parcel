@@ -9,16 +9,20 @@ import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from
 import { Instant, RefText } from './detail-primitives';
 import { useLoaded } from './PublicationFormFields';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
-import type { ProfileEditRequest } from './legal-entity-profile-sections';
+import type { ProfileEditRequest, ProfileSectionEditing } from './legal-entity-profile-sections';
 
 /** 公司主体首屏要能判断「现在能不能拿来开票」：这里只读当前时点，不把完整资料表单塞进概要。 */
 export function LegalEntityProfileSummary({
   query,
   onEdit,
+  editing,
+  onEditEnd,
 }: {
   query: CurrentLegalEntityProfileQuery;
-  /** 读出卡上的「编辑」「添加…」（LegalEntityProfileContent 的同名口）；页面有写授予才给。 */
+  /** 读出卡上的「编辑」「添加…」与页面持有的编辑态（LegalEntityProfileContent 的同名口）；页面有写授予才给。 */
   onEdit?: (request: ProfileEditRequest) => void;
+  editing?: ProfileSectionEditing | null;
+  onEditEnd?: () => void;
 }) {
   // 注册号类型目录读一次，把税务登记号的类型码译成目录译名；读不到就按码显，译名是锦上添花，号本身在答复里。
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
@@ -28,7 +32,7 @@ export function LegalEntityProfileSummary({
   );
   return (
     <CurrentLegalEntityProfile query={query}>
-      {(body) => <ProfileSummary body={body} typeNameOf={typeNameOf} onEdit={onEdit} />}
+      {(body) => <ProfileSummary body={body} typeNameOf={typeNameOf} onEdit={onEdit} editing={editing} onEditEnd={onEditEnd} />}
     </CurrentLegalEntityProfile>
   );
 }
@@ -37,10 +41,14 @@ function ProfileSummary({
   body,
   typeNameOf,
   onEdit,
+  editing,
+  onEditEnd,
 }: {
   body: LegalEntityProfileResolutionResponseBody;
   typeNameOf: RegistrationNumberTypeNameOf;
   onEdit?: (request: ProfileEditRequest) => void;
+  editing?: ProfileSectionEditing | null;
+  onEditEnd?: () => void;
 }) {
   const status = legalEntityProfileStatusOf(body);
   const effective = body.effectiveRevision;
@@ -63,7 +71,7 @@ function ProfileSummary({
       {status.tone !== 'good' ? (
         <p className="mt-1 text-[13px] leading-6 text-idpxyz-breadcrumb">{status.description}</p>
       ) : null}
-      <LegalEntityProfileContent content={effective} includeContacts={false} typeNameOf={typeNameOf} onEdit={onEdit} />
+      <LegalEntityProfileContent content={effective} includeContacts={false} typeNameOf={typeNameOf} onEdit={onEdit} editing={editing} onEditEnd={onEditEnd} />
       <TechnicalDetails
         title="资料来源"
         className="mt-4"

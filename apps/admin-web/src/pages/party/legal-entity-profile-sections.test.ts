@@ -4,7 +4,7 @@ import { emptyLegalEntityProfileDraft, legalEntityProfileMissingFields } from '.
 import type { ProfileComparison, ProfileFieldChange } from './legal-entity-profile-history';
 import {
   draftWithNewRow,
-  profileEditScopeOf,
+  profileSectionEditingOf,
   profileSectionBasisOf,
   profileSectionOwnsPath,
   profileSections,
@@ -91,7 +91,7 @@ test('来源单据按本区改动自动写一句', () => {
   equal(profileSectionBasisOf(profileSections.bankAccounts, account), '更新收款账户：新增 人民币（CNY） 6222');
 });
 
-test('读出卡的请求折成抽屉的范围', () => {
-  deepEqual(profileEditScopeOf({ section: 'contacts', addRow: true }), { kind: 'section', section: 'contacts', addRow: true });
-  deepEqual(profileEditScopeOf({ section: 'invoicing' }), { kind: 'section', section: 'invoicing', addRow: false });
+test('读出卡的请求折成页面持有的编辑态，钉住公司', () => {
+  deepEqual(profileSectionEditingOf('SYN-LE-01', { section: 'contacts', addRow: true }), { legalEntityId: 'SYN-LE-01', section: 'contacts', addRow: true });
+  deepEqual(profileSectionEditingOf('SYN-LE-01', { section: 'invoicing' }), { legalEntityId: 'SYN-LE-01', section: 'invoicing', addRow: false });
 });

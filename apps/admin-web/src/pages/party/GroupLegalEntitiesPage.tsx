@@ -22,6 +22,7 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { hasUnsavedDraft, registrationGroup } from './unsaved-guard';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
@@ -295,6 +296,13 @@ export function GroupLegalEntitiesPage() {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [sort, setSort] = useTabViewState<WorkbenchSort>('legal-entities.sort', defaultLegalEntitySort);
   const [selectedKey, setSelectedKey] = useTabViewState<string | null>('legal-entities.selected', null);
+  // 详情栏里的公司资料就地编辑不是模态（票 company-subject-section-edit/02）：换行、关栏会把编辑中的卡连草稿一起卸掉，有没提交的
+  // 输入时先问一句。登记簿按组查（unsaved-guard.ts）：资料表单挂着且没提交就在簿上。
+  const [pendingSelect, setPendingSelect] = useState<{ key: string | null } | null>(null);
+  const selectRow = (key: string | null) => {
+    if (key !== selectedKey && hasUnsavedDraft(registrationGroup('legal-entity-profile'))) setPendingSelect({ key });
+    else setSelectedKey(key);
+  };
   // 注册号类型目录读一次，给「注册地与注册号」列把类型码译成名。读不到（未配置、拒绝、故障）就按码显，不报错、不挡列表：
   // 译名是锦上添花，号本身在答复里。与资料版本的对比表同一份缓存（useLoaded 按读函数认），再开这一页时译名与表同一帧出来。
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
@@ -538,7 +546,7 @@ export function GroupLegalEntitiesPage() {
       rows={visible}
       rowKey={(row) => row.legalEntityId}
       selectedKey={selectedKey}
-      onSelect={setSelectedKey}
+      onSelect={selectRow}
       rowAttention={legalEntityNeedsAttention}
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
@@ -549,7 +557,7 @@ export function GroupLegalEntitiesPage() {
         return row ? (
           <LegalEntityDetailPanel
             row={row}
-            onClose={() => setSelectedKey(null)}
+            onClose={() => selectRow(null)}
             onOpenObjectPage={() => {
               window.location.hash = detailHash(row.legalEntityId);
             }}
@@ -622,6 +630,21 @@ export function GroupLegalEntitiesPage() {
             </Button>
           </DialogFooter>
       </DialogContent>
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={pendingSelect !== null}
+        tone="warning"
+        title="放弃修改？"
+        message="公司资料里有改动还没有保存，换行或关闭详情后这些改动不会保留。"
+        confirmLabel="放弃"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          const next = pendingSelect?.key ?? null;
+          setPendingSelect(null);
+          setSelectedKey(next);
+        }}
+        onCancel={() => setPendingSelect(null)}
+      />
     </Dialog>
   );
 }

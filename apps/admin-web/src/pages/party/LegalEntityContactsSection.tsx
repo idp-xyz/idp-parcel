@@ -1,19 +1,26 @@
 import { CurrentLegalEntityProfile, type CurrentLegalEntityProfileQuery } from './CurrentLegalEntityProfile';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
 import { SectionActions } from './LegalEntityProfileContent';
+import { ProfileSectionEditor } from './LegalEntityProfileSectionEditor';
 import { Instant } from './detail-primitives';
 import { legalEntityContactCountOf, legalEntityProfileStatusOf } from './legal-entity-profile';
-import type { ProfileEditRequest } from './legal-entity-profile-sections';
+import type { ProfileEditRequest, ProfileSectionEditing } from './legal-entity-profile-sections';
 import { profileRevisionLabel } from './presentation';
 
 export function LegalEntityContactsSection({
   query,
   onEdit,
+  editing,
+  onEditEnd,
 }: {
   query: CurrentLegalEntityProfileQuery;
-  /** 「添加联系人」「编辑」开分区抽屉（票 company-subject-section-edit/01）；页面有写授予才给，不给就只指路整张表单。 */
+  /** 「添加联系人」「编辑」把名册就地切成表单（票 company-subject-section-edit/01、02）；页面有写授予才给，不给就只指路整张表单。 */
   onEdit?: (request: ProfileEditRequest) => void;
+  /** 页面持有的编辑态：在编联系人时名册换成就地表单；在编别区时按钮收起。 */
+  editing?: ProfileSectionEditing | null;
+  onEditEnd?: () => void;
 }) {
+  const editingContacts = editing && editing.section === 'contacts' && onEditEnd ? editing : null;
   return (
     <CurrentLegalEntityProfile query={query}>
       {(body) => {
@@ -34,10 +41,16 @@ export function LegalEntityContactsSection({
                 <span>
                   {profileRevisionLabel(profile.revision)} · 生效自 <Instant value={profile.effectiveFrom} precision="day" />
                 </span>
-                {onEdit ? <span className="flex items-center gap-1"><SectionActions section="contacts" onEdit={onEdit} /></span> : null}
+                {onEdit && !editing ? <span className="flex items-center gap-1"><SectionActions section="contacts" onEdit={onEdit} /></span> : null}
               </span>
             </div>
-            <LegalEntityContactCards contacts={profile.contacts} />
+            {editingContacts ? (
+              <div className="rounded-lg border border-idpxyz-border bg-idpxyz-bg px-4 py-3">
+                <ProfileSectionEditor key={editingContacts.legalEntityId} editing={editingContacts} onClose={onEditEnd!} />
+              </div>
+            ) : (
+              <LegalEntityContactCards contacts={profile.contacts} />
+            )}
             {onEdit ? null : <p className="mt-4 text-[13px] leading-6 text-idpxyz-breadcrumb">要改联系人，用右上方的「更新公司资料」。</p>}
           </section>
         );

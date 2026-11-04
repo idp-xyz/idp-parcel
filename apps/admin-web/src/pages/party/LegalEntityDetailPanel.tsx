@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileText, X } from 'lucide-react';
 import {
   Button,
@@ -18,8 +18,8 @@ import {
   LegalEntityMoreMenu,
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
-import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
-import { profileEditScopeOf, type ProfileEditRequest, type ProfileEditScope } from './legal-entity-profile-sections';
+import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { profileSectionEditingOf, type ProfileEditRequest, type ProfileSectionEditing } from './legal-entity-profile-sections';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
@@ -96,10 +96,16 @@ export function LegalEntityDetailPanel({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
-  // 读出卡上的「编辑」「添加…」开的分区抽屉（票 company-subject-section-edit/01）。范围存成状态、引用稳定：表单按它算打开时的
-  // 基线。落册后写口整域作废，这里不用再拧什么。
-  const [sectionScope, setSectionScope] = useState<ProfileEditScope | null>(null);
-  const onEdit = mayWrite ? (request: ProfileEditRequest) => setSectionScope(profileEditScopeOf(request)) : undefined;
+  // 读出卡上的「编辑」「添加…」把那张卡切成就地表单（票 company-subject-section-edit/02）。编辑态钉住公司：栏不按行重挂，换了行
+  // 就不算这一份。引用稳定——表单按它算打开时的基线。落册后写口整域作废，这里不用再拧什么。
+  const [editing, setEditing] = useState<ProfileSectionEditing | null>(null);
+  const activeEditing = editing !== null && editing.legalEntityId === row.legalEntityId ? editing : null;
+  // 换了行就丢掉上一家的编辑态（换行前列表页已问过「放弃修改？」）：留着的话回到那一行时它会原样复活、按钮又收起。
+  useEffect(() => {
+    if (editing !== null && editing.legalEntityId !== row.legalEntityId) setEditing(null);
+  }, [editing, row.legalEntityId]);
+  const onEdit = mayWrite ? (request: ProfileEditRequest) => setEditing(profileSectionEditingOf(row.legalEntityId, request)) : undefined;
+  const onEditEnd = () => setEditing(null);
   // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
   // 都随之重读，不另拧钥匙。
   const readVersion = legalEntityReadVersion(row);
@@ -219,7 +225,8 @@ export function LegalEntityDetailPanel({
           {/* 正文撑满栏宽：卡随栏的宽度排一列或两列（legal-entity-profile-readout.css 的容器查询），不另设上限——
               设了上限，栏拖宽之后卡停在上限处、右边空出一条。标签列与值列的间距由卡内两列各自收住，不靠限宽。 */}
           <div className="w-full">
-            <TabsContent value="overview" className="mt-0">
+            {/* 概要签保活：就地编辑住在这张签里，切到别的签再回来，编辑中的内容还在（票 company-subject-section-edit/02）。 */}
+            <TabsContent value="overview" forceMount className="mt-0 data-[state=inactive]:hidden">
               {row.deactivationBasis ? (
                 <dl className="mb-4">
                   <DetailRow label="停用来源单据">
@@ -227,7 +234,7 @@ export function LegalEntityDetailPanel({
                   </DetailRow>
                 </dl>
               ) : null}
-              <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} />
+              <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
               <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
             </TabsContent>
             <TabsContent
@@ -235,7 +242,7 @@ export function LegalEntityDetailPanel({
               forceMount={visited.has('contacts') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
             >
-              <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} />
+              <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
             </TabsContent>
             <TabsContent
               value="profile"
@@ -263,17 +270,6 @@ export function LegalEntityDetailPanel({
           </div>
         </div>
       </Tabs>
-      {sectionScope !== null ? (
-        <LegalEntityProfileDrawer
-          open
-          onOpenChange={(open) => {
-            if (!open) setSectionScope(null);
-          }}
-          legalEntityId={row.legalEntityId}
-          scope={sectionScope}
-          onLanded={() => undefined}
-        />
-      ) : null}
     </div>
   );
 }

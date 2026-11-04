@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { FileText } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
@@ -25,7 +25,7 @@ import {
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
-import { profileEditScopeOf, type ProfileEditRequest, type ProfileEditScope } from './legal-entity-profile-sections';
+import { profileSectionEditingOf, type ProfileEditRequest, type ProfileSectionEditing } from './legal-entity-profile-sections';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
@@ -214,9 +214,14 @@ export function LegalEntityDetailPage({
   const [headerFormOpen, setHeaderFormOpen] = useState(false);
   // 页头抽屉落册的次数：资料版本分区按它重挂（理由见函数头）；分区自己的抽屉落册不转它，不然刚保存完的抽屉会随分区一起卸掉。
   const [headerLanded, setHeaderLanded] = useState(0);
-  // 读出卡上的「编辑」「添加…」开的分区抽屉（票 company-subject-section-edit/01），与页头抽屉同一个组件、同一条落册路径。
-  const [sectionScope, setSectionScope] = useState<ProfileEditScope | null>(null);
-  const onEdit = mayWrite ? (request: ProfileEditRequest) => setSectionScope(profileEditScopeOf(request)) : undefined;
+  // 读出卡上的「编辑」「添加…」把那张卡切成就地表单（票 company-subject-section-edit/02）；编辑态钉住公司。
+  const [editing, setEditing] = useState<ProfileSectionEditing | null>(null);
+  const activeEditing = editing !== null && editing.legalEntityId === row?.legalEntityId ? editing : null;
+  useEffect(() => {
+    if (editing !== null && row !== null && editing.legalEntityId !== row.legalEntityId) setEditing(null);
+  }, [editing, row]);
+  const onEdit = mayWrite && row ? (request: ProfileEditRequest) => setEditing(profileSectionEditingOf(row.legalEntityId, request)) : undefined;
+  const onEditEnd = () => setEditing(null);
   // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
   // 都随之重读，不另拧钥匙。
   const readVersion = row ? legalEntityReadVersion(row) : undefined;
@@ -266,17 +271,6 @@ export function LegalEntityDetailPage({
                   onLanded={() => setHeaderLanded((count) => count + 1)}
                 />
               ) : null}
-              {sectionScope !== null ? (
-                <LegalEntityProfileDrawer
-                  open
-                  onOpenChange={(open) => {
-                    if (!open) setSectionScope(null);
-                  }}
-                  legalEntityId={row.legalEntityId}
-                  scope={sectionScope}
-                  onLanded={() => setHeaderLanded((count) => count + 1)}
-                />
-              ) : null}
             </>
           ) : null}
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
@@ -323,7 +317,7 @@ export function LegalEntityDetailPage({
                 // 与详情栏同一规矩：不设上限，宽度归容器定。
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} />
+                    <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
                     <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
                   </section>
                 ),
@@ -333,7 +327,7 @@ export function LegalEntityDetailPage({
                 count: contactCount,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} />
+                    <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
                   </section>
                 ),
               },

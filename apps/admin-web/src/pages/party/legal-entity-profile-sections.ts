@@ -1,4 +1,4 @@
-// 公司资料的分区编辑（票 company-subject-section-edit/01）：读出的每张卡各有自己的「编辑」，打开只装这一组格的抽屉。
+// 公司资料的分区编辑（票 company-subject-section-edit/01、02）：读出的每张卡各有自己的「编辑」，卡体就地变成只装这一组格的表单。
 // 服务端只收整版资料（CONTEXT「法人资料」：资料链不可覆盖），分区只是界面上的分区：提交仍是「此刻的当前版 + 这一组
 // 的改动」拼成的整版新资料。本文件是纯判读——分区表、路径归属、新行、来源单据的自动写法——node:test 钉着；组件只摆。
 
@@ -60,17 +60,21 @@ export const profileSections: Record<ProfileSectionId, ProfileSection> = {
   },
 };
 
-/** 抽屉装什么：整张表单，或某一区（`addRow` 即从「添加」打开，先加一空行）。 */
-export type ProfileEditScope = { kind: 'full' } | { kind: 'section'; section: ProfileSectionId; addRow: boolean };
-
-/** 读出卡上「编辑」「添加」交给页面的请求；页面据它开抽屉。 */
+/** 读出卡上「编辑」「添加」交给页面的请求；页面据它把那张卡切成编辑态。 */
 export interface ProfileEditRequest {
   section: ProfileSectionId;
   addRow?: boolean;
 }
 
-export function profileEditScopeOf(request: ProfileEditRequest): ProfileEditScope {
-  return { kind: 'section', section: request.section, addRow: request.addRow === true };
+/** 页面持有的编辑态：哪家公司的哪一区在编（票 02）；钉住公司，换了行就不算这一份。一次只编一区。 */
+export interface ProfileSectionEditing {
+  legalEntityId: string;
+  section: ProfileSectionId;
+  addRow: boolean;
+}
+
+export function profileSectionEditingOf(legalEntityId: string, request: ProfileEditRequest): ProfileSectionEditing {
+  return { legalEntityId, section: request.section, addRow: request.addRow === true };
 }
 
 /** 这条 JSON 路径归不归这一区。 */
