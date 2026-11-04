@@ -35,6 +35,7 @@ const loadVisibility = domain(() => import('./pages/visibility'));
 const loadCustoms = domain(() => import('./pages/customs'));
 const loadParty = domain(() => import('./pages/party'));
 const loadWorkDevices = domain(() => import('./pages/work-devices'));
+const loadOperatorAccess = domain(() => import('./pages/operator-access'));
 const loadReferenceData = domain(() => import('./pages/reference-data'));
 const loadDocumentNumbering = domain(() => import('./pages/document-numbering'));
 
@@ -135,6 +136,7 @@ export const pageById: Record<string, ComponentType> = {
   'commercial-policies': page(loadParty, (m) => m.CommercialPoliciesPage),
   'pending-publications': page(loadParty, (m) => m.PendingPublicationsPage),
   'work-devices': page(loadWorkDevices, (m) => m.WorkDeviceCataloguePage),
+  'operator-access': page(loadOperatorAccess, (m) => m.OperatorAccessPage),
   'reference-data': page(loadReferenceData, (m) => m.ReferenceDataPage),
   'document-numbering': page(loadDocumentNumbering, (m) => m.DocumentNumberingPage),
 };
@@ -194,6 +196,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'label-transactions',
   'channel-selection-decisions',
   'work-devices',
+  'operator-access',
   'reference-data',
   'document-numbering',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。

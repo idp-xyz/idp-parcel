@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { exchangeMasterData } from './catalogue-api';
-import { heldGrantsOf, mayMakeDecision, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
+import { heldGrantsOf, mayAdministerAccess, mayMakeDecision, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
 
 // 一页加载只问一次：各页的写入口都要这同一个答案，而操作者换授予要整页重载才重新问（授予在铸造那一刻取，
 // 令牌之外没有会话态）。在途与答出的都记在模块级，各页同时挂载也只发一次请求；答出的值留着，后挂载的页第一帧就拿到，
@@ -61,4 +61,19 @@ export function useMayMakeDecision(decision: string): boolean {
     };
   }, []);
   return mayMakeDecision(held, decision);
+}
+
+/** 操作者接入管理授予的两格（ADR-0363）：口径同 useRegistryWriteGrant，只是看的是另一格能力面。 */
+export function useOperatorAccessGrant(): { settled: boolean; mayAdminister: boolean } {
+  const [held, setHeld] = useState<HeldGrants | undefined>(settled);
+  useEffect(() => {
+    let cancelled = false;
+    void loadHeldGrants().then((next) => {
+      if (!cancelled) setHeld(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { settled: held !== undefined, mayAdminister: mayAdministerAccess(held) };
 }

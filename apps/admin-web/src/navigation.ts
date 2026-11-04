@@ -46,6 +46,7 @@ import {
   Stamp,
   Star,
   TabletSmartphone,
+  KeyRound,
   Ticket,
   TrendingUp,
   Truck,
@@ -176,6 +177,8 @@ export const navigationSections: NavigationSection[] = [
       { id: 'document-numbering', label: '单据编号', icon: 'document-numbering' },
       // 作业设备册是登记式目录，不是现场作业，也不做设备管理（ADR-0149 越权风险点 2）。
       { id: 'work-devices', label: '扫描设备', icon: 'work-devices' },
+      // 操作者与授予是本租户自己的账号管理（ADR-0363），与扫描设备同属共享接入身份，排在它后面。
+      { id: 'operator-access', label: '操作者与授予', icon: 'operator-access' },
       { id: 'pending-publications', label: '审批与发布', icon: 'pending-publications' },
       // 基础数据是产品内置的只读目录（ADR-0335），不是公司自己登记的配置，所以放在审批之后、管理员专用的试点治理之前。
       { id: 'reference-data', label: '基础数据', icon: 'reference-data' },
@@ -225,6 +228,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'document-numbering': Hash,
   'claim-prerequisites': BadgeCheck,
   'work-devices': TabletSmartphone,
+  'operator-access': KeyRound,
   'reference-data': BookOpen,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
@@ -425,6 +429,14 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '共享接入身份（access identity）',
     source:
       'docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md 决定二与越权风险点 2',
+  },
+
+  // —— 设置 · 操作者与授予（共享接入身份；不是限界上下文）——
+  'operator-access': {
+    title: '操作者与授予',
+    summary: '本公司能登录管理台的操作者，以及每个人持有哪几格授予。',
+    owner: '共享接入身份（access identity）',
+    source: 'docs/adr/0363-operators-and-grants-are-administered-online-through-an-operator-access-administration-face.md 决定一、二、五',
   },
 
   // —— 运单 · 作业与履约（node-operations / transport-fulfillment，管理台只做治理查阅面）——

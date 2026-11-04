@@ -16,6 +16,9 @@ export interface OperatorGrantsResponseBody {
 /** 登记册配置写：ADR-0085 那一族登记与发布端点的能力面，原词取自 accessidentity.CapabilityRegistryConfigurationWrite。 */
 export const registryWriteFace = 'REGISTRY_CONFIGURATION_WRITE';
 
+/** 操作者接入管理：操作者册的写面与本租户操作者册查阅的能力面（ADR-0363），原词取自 accessidentity.CapabilityOperatorAccessAdministration。 */
+export const operatorAccessAdministrationFace = 'OPERATOR_ACCESS_ADMINISTRATION';
+
 export interface HeldGrants {
   faces: ReadonlySet<string>;
   decisions: ReadonlySet<string>;
@@ -71,6 +74,11 @@ export function mayMakeDecision(held: HeldGrants | undefined, decision: string):
 /** 登记与发布入口摆不摆：明确知道没有登记册配置写授予才收起，不知道就摆。 */
 export function mayWriteRegistry(held: HeldGrants | undefined): boolean {
   return held === undefined || held.faces.has(registryWriteFace);
+}
+
+/** 操作者页的写入口摆不摆：同 mayWriteRegistry 的口径，只有明确知道没有操作者接入管理授予才收起。 */
+export function mayAdministerAccess(held: HeldGrants | undefined): boolean {
+  return held === undefined || held.faces.has(operatorAccessAdministrationFace);
 }
 
 /** 入口按授予收起时，原本指向它的文案改说这一句：说谁能用，不让人去找本页没有摆出的签或按钮。 */
