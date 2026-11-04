@@ -10,6 +10,14 @@
       "basis": "SYN-GRANT-BASIS-DEX-01"
     },
     {
+      "grantId": "SYN-GRANT-DEX-ACCESS-ADMIN-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATOR_ACCESS_ADMINISTRATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-ACCESS-ADMIN-01"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-CONFIG-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",

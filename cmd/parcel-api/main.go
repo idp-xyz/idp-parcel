@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -158,6 +159,7 @@ func run(logger *slog.Logger) error {
 		isolatedWrite:                 isolatedWrite,
 		selfAuthority:                 selfAuthority,
 		operatorVerifier:              operatorVerifier,
+		operatorIssuer:                strings.TrimSpace(os.Getenv(operatorIssuerEnv)),
 		integrationClientVerifier:     integrationClientVerifier,
 		customerClientVerifier:        customerClientVerifier,
 		registerNewerCanonicalization: registerNewerCanonicalization,
@@ -203,10 +205,12 @@ func run(logger *slog.Logger) error {
 // startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方、价卡登记的版本开关与单据号加扰密钥表。它们在 run 里带启动日志解析，
 // 参数不合规时在开池之前就带原因退出。
 type startupChannels struct {
-	isolatedRead              *isolatedReadIntakes
-	isolatedWrite             *isolatedWriteAdmission
-	selfAuthority             string
-	operatorVerifier          accessidentity.OperatorCredentialVerifier
+	isolatedRead     *isolatedReadIntakes
+	isolatedWrite    *isolatedWriteAdmission
+	selfAuthority    string
+	operatorVerifier accessidentity.OperatorCredentialVerifier
+	// operatorIssuer 是 operatorVerifier 信任的发行方串，操作者册查阅口回给管理台；未配置时为空。
+	operatorIssuer            string
 	integrationClientVerifier accessidentity.IntegrationClientCredentialVerifier
 	customerClientVerifier    accessidentity.CustomerClientCredentialVerifier
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），在 run 里带启动日志读一次。
@@ -311,6 +315,7 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 		isolatedWrite:                 startup.isolatedWrite,
 		selfAuthority:                 startup.selfAuthority,
 		operatorVerifier:              startup.operatorVerifier,
+		operatorIssuer:                startup.operatorIssuer,
 		operatorRegistry:              operatorRegistry,
 		deviceRegistry:                deviceRegistry,
 		admission:                     admission,

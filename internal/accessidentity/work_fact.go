@@ -26,6 +26,11 @@ const (
 	WorkScopeOffsite WorkScopeKind = "OFFSITE"
 )
 
+// WorkScopeKinds 交出全部作业范围种类，顺序固定：管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。
+func WorkScopeKinds() []WorkScopeKind {
+	return []WorkScopeKind{WorkScopeNode, WorkScopeOffsite}
+}
+
 // ParseWorkScopeKind 按字面取值认作业范围种类，大小写不折叠：册里存的就是这些字面量。
 func ParseWorkScopeKind(value string) (WorkScopeKind, error) {
 	switch kind := WorkScopeKind(value); kind {

@@ -228,6 +228,12 @@ var decisionKinds = []DecisionKind{
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 }
 
+// DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。
+// 交出的是拷贝。
+func DecisionKinds() []DecisionKind {
+	return append([]DecisionKind(nil), decisionKinds...)
+}
+
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
 func ParseDecisionKind(value string) (DecisionKind, error) {
 	for _, kind := range decisionKinds {

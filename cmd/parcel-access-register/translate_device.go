@@ -9,13 +9,11 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/accessidentity/adapters/registrationjson"
 )
 
 // workScopeDocument 是批文里的作业范围：种类与该租户给它的引用（参数登记册 PAR-INT-08、PAR-INT-10）。
-type workScopeDocument struct {
-	Kind      string `json:"kind"`
-	Reference string `json:"reference"`
-}
+type workScopeDocument = registrationjson.WorkScope
 
 type deviceBatchDocument struct {
 	TenantID string               `json:"tenantId"`
@@ -42,18 +40,7 @@ type deviceDeactivationItemDocument struct {
 }
 
 func workScopeFrom(document *workScopeDocument) (accessidentity.WorkScope, error) {
-	if document == nil {
-		return accessidentity.WorkScope{}, fmt.Errorf("workScope 缺席：作业范围不代填")
-	}
-	kind, err := accessidentity.ParseWorkScopeKind(document.Kind)
-	if err != nil {
-		return accessidentity.WorkScope{}, fmt.Errorf("workScope.kind %q：%w", document.Kind, err)
-	}
-	scope, err := accessidentity.NewWorkScope(kind, document.Reference)
-	if err != nil {
-		return accessidentity.WorkScope{}, fmt.Errorf("workScope.reference：%w", err)
-	}
-	return scope, nil
+	return registrationjson.WorkScopeFrom(document)
 }
 
 func deviceBatchFromJSON(raw []byte) ([]batchItem, error) {

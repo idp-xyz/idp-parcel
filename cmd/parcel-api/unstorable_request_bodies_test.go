@@ -96,7 +96,7 @@ func (admitEverything) Admits(context.Context, string, accessidentity.AdmissionR
 	return true, nil
 }
 
-// everyOperatorGrant 是操作者册的替身：主体绑在 SYN-TENANT-01 上，持查阅读、登记写与 kinds 里每一种运营决定的授予。
+// everyOperatorGrant 是操作者册的替身：主体绑在 SYN-TENANT-01 上，持查阅读、登记写、操作者接入管理与 kinds 里每一种运营决定的授予。
 type everyOperatorGrant struct{ kinds []accessidentity.DecisionKind }
 
 func (register everyOperatorGrant) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
@@ -117,7 +117,8 @@ func (register everyOperatorGrant) FindOperator(_ context.Context, subject acces
 		grants = append(grants, recorded)
 		return err
 	}
-	for index, capability := range []accessidentity.CapabilityFace{accessidentity.CapabilityMasterDataAndOperationsRead, accessidentity.CapabilityRegistryConfigurationWrite} {
+	for index, capability := range []accessidentity.CapabilityFace{accessidentity.CapabilityMasterDataAndOperationsRead, accessidentity.CapabilityRegistryConfigurationWrite,
+		accessidentity.CapabilityOperatorAccessAdministration} {
 		if err := record(accessidentity.NewOperatorGrant("SYN-TENANT-01", fmt.Sprintf("SYN-GRANT-FACE-%d", index), subject, capability, interval, "SYN-BASIS-GRANT")); err != nil {
 			return accessidentity.OperatorStanding{}, false, err
 		}

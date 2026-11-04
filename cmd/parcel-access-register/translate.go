@@ -1,8 +1,8 @@
 package main
 
-// 本文件把操作者册的三种登记批译成领域类型（集成客户端册的在 translate_integration_client.go）：逐字段过
-// accessidentity 的构造门，未知字段、缺件与形状错在触库之前拒收，一格不代填——没有缺省的生效起点或撤销时刻，
-// 也没有缺省依据。
+// 本文件把操作者册的三种登记批译成领域类型（集成客户端册的在 translate_integration_client.go）：单项的形状与翻译取
+// registrationjson（在线写口与本命令行共用同一份），本文件只拆批、取批头的租户；未知字段、缺件与形状错在触库之前拒收，
+// 一格不代填——没有缺省的生效起点或撤销时刻，也没有缺省依据。
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/accessidentity/adapters/registrationjson"
 )
 
 type operatorBatchDocument struct {
@@ -20,39 +21,21 @@ type operatorBatchDocument struct {
 	Operators []operatorItemDocument `json:"operators"`
 }
 
-type operatorItemDocument struct {
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
-	Basis   string `json:"basis"`
-}
+type operatorItemDocument = registrationjson.OperatorItem
 
 type grantBatchDocument struct {
 	TenantID string              `json:"tenantId"`
 	Grants   []grantItemDocument `json:"grants"`
 }
 
-type grantItemDocument struct {
-	GrantID           string             `json:"grantId"`
-	Issuer            string             `json:"issuer"`
-	Subject           string             `json:"subject"`
-	CapabilityFace    string             `json:"capabilityFace"`
-	DecisionKind      string             `json:"decisionKind,omitempty"`
-	WorkScope         *workScopeDocument `json:"workScope,omitempty"`
-	EffectiveStartsAt time.Time          `json:"effectiveStartsAt"`
-	EffectiveEndsAt   *time.Time         `json:"effectiveEndsAt,omitempty"`
-	Basis             string             `json:"basis"`
-}
+type grantItemDocument = registrationjson.GrantItem
 
 type revocationBatchDocument struct {
 	TenantID    string                   `json:"tenantId"`
 	Revocations []revocationItemDocument `json:"revocations"`
 }
 
-type revocationItemDocument struct {
-	GrantID   string    `json:"grantId"`
-	RevokedAt time.Time `json:"revokedAt"`
-	Basis     string    `json:"basis"`
-}
+type revocationItemDocument = registrationjson.RevocationItem
 
 func operatorBatchFromJSON(raw []byte) ([]batchItem, error) {
 	var document operatorBatchDocument
@@ -64,16 +47,12 @@ func operatorBatchFromJSON(raw []byte) ([]batchItem, error) {
 	}
 	items := make([]batchItem, 0, len(document.Operators))
 	for _, entry := range document.Operators {
-		subject, err := accessidentity.NewOperatorSubject(entry.Issuer, entry.Subject)
-		if err != nil {
-			return nil, fmt.Errorf("operators/%s：%w", entry.Subject, err)
-		}
-		binding, err := accessidentity.NewOperatorBinding(subject, document.TenantID, entry.Basis)
+		binding, err := registrationjson.BindingFrom(document.TenantID, entry)
 		if err != nil {
 			return nil, fmt.Errorf("operators/%s：%w", entry.Subject, err)
 		}
 		items = append(items, batchItem{
-			label: fmt.Sprintf("操作者 %s %s", subject.Issuer(), subject.Subject()),
+			label: fmt.Sprintf("操作者 %s %s", binding.Subject().Issuer(), binding.Subject().Subject()),
 			apply: func(ctx context.Context, books registers) (outcome, error) {
 				answer, err := books.operators.RegisterOperator(ctx, binding)
 				return operatorOutcome(answer), err
@@ -93,7 +72,7 @@ func grantBatchFromJSON(raw []byte) ([]batchItem, error) {
 	}
 	items := make([]batchItem, 0, len(document.Grants))
 	for _, entry := range document.Grants {
-		grant, err := grantFrom(document.TenantID, entry)
+		grant, err := registrationjson.GrantFrom(document.TenantID, entry)
 		if err != nil {
 			return nil, fmt.Errorf("grants/%s：%w", entry.GrantID, err)
 		}
@@ -108,59 +87,9 @@ func grantBatchFromJSON(raw []byte) ([]batchItem, error) {
 	return items, nil
 }
 
-func grantFrom(tenantID string, entry grantItemDocument) (accessidentity.OperatorGrant, error) {
-	subject, err := accessidentity.NewOperatorSubject(entry.Issuer, entry.Subject)
-	if err != nil {
-		return accessidentity.OperatorGrant{}, err
-	}
-	face, err := accessidentity.ParseCapabilityFace(entry.CapabilityFace)
-	if err != nil {
-		return accessidentity.OperatorGrant{}, fmt.Errorf("capabilityFace %q：%w", entry.CapabilityFace, err)
-	}
-	interval, err := intervalFrom(entry.EffectiveStartsAt, entry.EffectiveEndsAt)
-	if err != nil {
-		return accessidentity.OperatorGrant{}, err
-	}
-	// 决定种类只属「运营决定」一格（ADR-0151 决定一），作业范围只属「作业事实登记」一格（ADR-0149 决定二）：该带的缺了
-	// 要拒，别的格带了也要拒——带着种类或范围的登记册配置写授予，读批文的人会以为它只授了某一种决定、某一个节点。
-	if face != accessidentity.CapabilityOperationDecision && entry.DecisionKind != "" {
-		return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind 只属 OPERATION_DECISION，%s 不带决定种类", face)
-	}
-	if face != accessidentity.CapabilityWorkFactRegistration && entry.WorkScope != nil {
-		return accessidentity.OperatorGrant{}, fmt.Errorf("workScope 只属 WORK_FACT_REGISTRATION，%s 不带作业范围", face)
-	}
-	switch face {
-	case accessidentity.CapabilityOperationDecision:
-		kind, err := accessidentity.ParseDecisionKind(entry.DecisionKind)
-		if err != nil {
-			return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind %q：%w", entry.DecisionKind, err)
-		}
-		return accessidentity.NewOperationDecisionGrant(tenantID, entry.GrantID, subject, kind, interval, entry.Basis)
-	case accessidentity.CapabilityWorkFactRegistration:
-		scope, err := workScopeFrom(entry.WorkScope)
-		if err != nil {
-			return accessidentity.OperatorGrant{}, err
-		}
-		return accessidentity.NewWorkFactRegistrationGrant(tenantID, entry.GrantID, subject, scope, interval, entry.Basis)
-	}
-	return accessidentity.NewOperatorGrant(tenantID, entry.GrantID, subject, face, interval, entry.Basis)
-}
-
-// intervalFrom 译授予的生效区间，两本册的授予批共用：起点不代填。
+// intervalFrom 译授予的生效区间，各本册的授予批共用：起点不代填。形状规则在 registrationjson。
 func intervalFrom(startsAt time.Time, endsAt *time.Time) (accessidentity.EffectiveInterval, error) {
-	if startsAt.IsZero() {
-		return accessidentity.EffectiveInterval{}, fmt.Errorf("effectiveStartsAt 缺席：生效起点不代填")
-	}
-	end := time.Time{}
-	if endsAt != nil {
-		// 显式给零值与缺席在领域里同义（不设终点），批文里却是两种写法；拒掉前者，免得一个写坏的
-		// 终点被静静读成无限期。
-		if endsAt.IsZero() {
-			return accessidentity.EffectiveInterval{}, fmt.Errorf("effectiveEndsAt 给了零值：不设终点请省略该字段")
-		}
-		end = *endsAt
-	}
-	return accessidentity.NewEffectiveInterval(startsAt, end)
+	return registrationjson.IntervalFrom(startsAt, endsAt)
 }
 
 func revocationBatchFromJSON(raw []byte) ([]batchItem, error) {
@@ -193,10 +122,7 @@ func revocationsFromJSON(raw []byte) ([]accessidentity.GrantRevocation, error) {
 	}
 	revocations := make([]accessidentity.GrantRevocation, 0, len(document.Revocations))
 	for _, entry := range document.Revocations {
-		if entry.RevokedAt.IsZero() {
-			return nil, fmt.Errorf("revocations/%s：revokedAt 缺席：撤销时刻不代填", entry.GrantID)
-		}
-		revocation, err := accessidentity.NewGrantRevocation(document.TenantID, entry.GrantID, entry.RevokedAt, entry.Basis)
+		revocation, err := registrationjson.RevocationFrom(document.TenantID, entry)
 		if err != nil {
 			return nil, fmt.Errorf("revocations/%s：%w", entry.GrantID, err)
 		}

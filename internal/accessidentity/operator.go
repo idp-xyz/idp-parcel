@@ -86,6 +86,10 @@ const (
 	// 来源事实（ADR-0149 决定二）。它的授予按作业范围登记，只能经 NewWorkFactRegistrationGrant 建；信封只由
 	// WorkFactMinter 铸，要带已登记且在用的设备。
 	CapabilityWorkFactRegistration CapabilityFace = "WORK_FACT_REGISTRATION"
+	// CapabilityOperatorAccessAdministration 是操作者接入管理（ADR-0363 决定一）：守操作者登记、授予登记、撤销登记三个
+	// 写面与本租户操作者册的查阅读。它不守任何业务登记册——持它的人不因此能登业务数据，登记册配置写的人也不因此能给
+	// 人授权，租户才分得开「账号管理员」与「配置员」。有租户维，与预留的治理登记那一格不是一回事。
+	CapabilityOperatorAccessAdministration CapabilityFace = "OPERATOR_ACCESS_ADMINISTRATION"
 )
 
 // reservedGovernanceRegistration 是治理登记那一格：ADR-0100 只预留它，授予模型按 ADR-0085
@@ -107,7 +111,7 @@ func ParseCapabilityFace(value string) (CapabilityFace, error) {
 func (face CapabilityFace) checkGrantable() error {
 	switch face {
 	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision,
-		CapabilityWorkFactRegistration:
+		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration:
 		return nil
 	case reservedGovernanceRegistration:
 		return ErrCapabilityFaceReserved
@@ -116,6 +120,15 @@ func (face CapabilityFace) checkGrantable() error {
 }
 
 func (face CapabilityFace) String() string { return string(face) }
+
+// GrantableCapabilityFaces 交出此刻可授的全部能力面，顺序固定：这是操作者册的「列」，管理台据它摆选项而不在前端抄
+// 第二份（ADR-0363 决定二）。预留的治理登记不在其中——交出去就等于给了一个现成的值去授。
+func GrantableCapabilityFaces() []CapabilityFace {
+	return []CapabilityFace{
+		CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision,
+		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration,
+	}
+}
 
 // ErrInvalidEffectiveInterval 表示生效区间缺起点，或终点不晚于起点。
 var ErrInvalidEffectiveInterval = errors.New("access identity: effective interval needs a start and an end after it")
@@ -264,6 +277,15 @@ func (recorded RecordedGrant) EffectiveAt(at time.Time) bool {
 	return effectiveAt(recorded.grant.interval, recorded.revocation, recorded.revoked, at)
 }
 
+// LocksOutCallerIfRevoked 答撤销这笔授予会不会把 caller 自己锁在操作者接入管理面之外（ADR-0363 决定三）：授予是 caller
+// 名下的、面是操作者接入管理、且在 at 那一刻生效。别人的管理授予可撤，自己的其它格可撤；已不生效的那笔撤了也锁不住谁。
+// 只挡调用者自己这一条，不数全租户还剩几个管理员——数出来的结论在并发下立不住。
+func (recorded RecordedGrant) LocksOutCallerIfRevoked(caller OperatorSubject, at time.Time) bool {
+	return recorded.grant.subject == caller &&
+		recorded.grant.face == CapabilityOperatorAccessAdministration &&
+		recorded.EffectiveAt(at)
+}
+
 // effectiveAt 是两族授予共用的生效判断：区间含起点、不含终点，自撤销时刻起（含该时刻）不再生效。
 func effectiveAt(interval EffectiveInterval, revocation GrantRevocation, revoked bool, at time.Time) bool {
 	if !interval.Contains(at) {
@@ -343,6 +365,9 @@ const (
 	OperatorNotRegistered OperatorRegistrationOutcome = "OPERATOR_NOT_REGISTERED"
 	// OperatorGrantNotRegistered 只由 RegisterRevocation 答：本租户册上没有这笔授予。
 	OperatorGrantNotRegistered OperatorRegistrationOutcome = "GRANT_NOT_REGISTERED"
+	// OperatorRevocationWouldLockOutCaller 由在线撤销口答（ADR-0363 决定三）：这笔撤销落在调用者自己此刻生效的操作者接入
+	// 管理授予上，不写。受控命令行没有调用者，不答这一格。
+	OperatorRevocationWouldLockOutCaller OperatorRegistrationOutcome = "REVOCATION_WOULD_LOCK_OUT_CALLER"
 )
 
 func (outcome OperatorRegistrationOutcome) String() string { return string(outcome) }

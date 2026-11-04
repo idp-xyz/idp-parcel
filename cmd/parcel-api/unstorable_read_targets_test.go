@@ -362,6 +362,14 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	operatorBooks, err := aipg.NewOperatorRegistry(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operators, err := buildOperatorCatalogue(minter, operatorBooks, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	bare := map[string]http.Handler{
 		"/reference-data/countries":  refdatahttp.HandlerOrUnconfigured(reference.countries),
 		"/reference-data/currencies": refdatahttp.HandlerOrUnconfigured(reference.currencies),
@@ -369,6 +377,7 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 		"/work-devices":              identityhttp.WorkDeviceCatalogueHandler(workDevices),
 		"/operator-binding":          identityhttp.OperatorBindingHandler(binding),
 		"/operator-grants":           identityhttp.OperatorGrantsHandler(grants),
+		"/operators":                 identityhttp.OperatorsHandler(operators),
 	}
 	if len(bare) != len(targetCheckExemptions) {
 		t.Fatalf("对照处理器 %d 只，豁免表 %d 行：豁免表变了，这条用例要跟上", len(bare), len(targetCheckExemptions))
@@ -393,7 +402,8 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 			"/reference-data/countries?region="+value, "/reference-data/countries?q="+value,
 			"/reference-data/currencies?q="+value,
 			"/reference-data/units?category="+value, "/reference-data/units?q="+value,
-			"/work-devices?probeValue="+value, "/operator-binding?probeValue="+value, "/operator-grants?probeValue="+value)
+			"/work-devices?probeValue="+value, "/operator-binding?probeValue="+value, "/operator-grants?probeValue="+value,
+			"/operators?probeValue="+value)
 	}
 	for _, target := range targets {
 		got, want := serve(assembled, target), serve(unguarded, target)

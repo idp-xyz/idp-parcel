@@ -57,6 +57,8 @@ const (
 	faceRegistryWrite     faceFamily = "登记册配置写"
 	faceOperationDecision faceFamily = "运营决定"
 	faceWorkFact          faceFamily = "作业事实登记"
+	// faceOperatorAccessAdministration：操作者接入管理（ADR-0363 决定一）——操作者册的三个写面与本租户操作者册的查阅读。
+	faceOperatorAccessAdministration faceFamily = "操作者接入管理"
 	// faceIntegrationClient：集成客户端族（ADR-0149）。
 	faceIntegrationClient faceFamily = "集成客户端"
 )
@@ -79,6 +81,10 @@ func unconfiguredFace() accessFace   { return accessFace{family: faceUnconfigure
 func isolatedReadFace() accessFace   { return accessFace{family: faceIsolatedRead} }
 func operationsReadFace() accessFace { return accessFace{family: faceOperationsRead} }
 func registryWriteFace() accessFace  { return accessFace{family: faceRegistryWrite} }
+
+func operatorAccessAdministrationFace() accessFace {
+	return accessFace{family: faceOperatorAccessAdministration}
+}
 
 func customerClientFace(capability accessidentity.CustomerCapability) accessFace {
 	return accessFace{family: faceCustomerClient, capability: capability}
@@ -133,8 +139,11 @@ type endpointSources struct {
 	// 与收寄口的作业事实渠道（buildWorkFactIntakes）同一组。设备册另喂作业设备册（buildWorkDeviceCatalogue）。
 	operatorVerifier accessidentity.OperatorCredentialVerifier
 	operatorRegistry accessidentity.OperatorRegistry
-	deviceRegistry   *aipg.DeviceRegistry
-	admission        accessidentity.AdmissionScope
+	// operatorIssuer 是本进程信任的操作者发行方（与 operatorVerifier 同一件部署参数），操作者册查阅口回给管理台预填；渠道
+	// 未配置时为空，而那时整族答未配置、没有人读得到它。
+	operatorIssuer string
+	deviceRegistry *aipg.DeviceRegistry
+	admission      accessidentity.AdmissionScope
 	// operatorMinter 与 customerClientMinter 是两族在本进程唯一的那一只铸造器。
 	operatorMinter       *accessidentity.OperatorMinter
 	customerClientMinter *accessidentity.CustomerClientMinter

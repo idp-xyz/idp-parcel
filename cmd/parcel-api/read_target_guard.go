@@ -35,12 +35,13 @@ var targetCheckExemptions = map[string]string{
 	"/work-devices":              operatorIdentityExemption,
 	"/operator-binding":          operatorIdentityExemption,
 	"/operator-grants":           operatorIdentityExemption,
+	"/operators":                 operatorIdentityExemption,
 }
 
 const (
 	referenceDataExemption = "不把查询值带进库，既有分格不动：q、region、category 只在内存目录上检索与比对；" +
 		"包头契约的失败格是 REGION_NOT_RECOGNIZED / CATEGORY_NOT_RECOGNIZED，没有 MALFORMED_REQUEST"
-	operatorIdentityExemption = "不把查询值带进库，既有分格不动：三口根本不读查询串，也没有路径参数；码集里没有 MALFORMED_REQUEST"
+	operatorIdentityExemption = "不把查询值带进库，既有分格不动：这几口根本不读查询串，也没有路径参数；读口的码集里没有 MALFORMED_REQUEST"
 )
 
 // unstorableTargetRefusal 交回一行在请求目标不是文本时答的坏请求；nil 即这一行不在装配处挂检查。

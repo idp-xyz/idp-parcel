@@ -11,10 +11,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// sameReleaseFamilies 是与本产品客户端同版本发布的各族：操作者渠道的各能力面（主数据与运营查阅读、登记册配置写、运营决定）
-// 与作业事实登记（ADR-0021）。
+// sameReleaseFamilies 是与本产品客户端同版本发布的各族：操作者渠道的各能力面（主数据与运营查阅读、登记册配置写、运营决定、
+// 操作者接入管理）与作业事实登记（ADR-0021）。
 var sameReleaseFamilies = map[faceFamily]bool{
 	faceOperationsRead: true, faceRegistryWrite: true, faceOperationDecision: true, faceWorkFact: true,
+	faceOperatorAccessAdministration: true,
 }
 
 // Covers: ADR-0140 决定二与 Consequences「装配测试对首方族端点断言前缀、对操作者族端点断言无前缀」——首方客户族的每一行带
