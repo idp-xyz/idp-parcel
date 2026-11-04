@@ -1,7 +1,7 @@
 # 06 没有改动就不登新版：保存钮禁用、按钮旁说一句
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-04 进 main `2294bbe6d`（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 04
 
@@ -20,3 +20,10 @@ Blocked by: 04
 
 - 三道门退 0；`profileSectionBasisOf` 的测试跟着改。
 - 浏览器核：三处打开即禁用并显提示，改一格即启用，改回去再禁用。
+
+## 完成记录（2026-11-04，提交 `2294bbe6d`，CI run 41783394552 全绿）
+
+- 落点：`LegalEntityProfileSection.tsx`（整张表单）、`LegalEntityProfileSectionEditor.tsx`（分区）、`BusinessPartyIdentityEditMode.tsx`（往来单位）三处按内容差异禁用「保存」并在按钮旁说一句；`legal-entity-profile-sections.ts` 自动依据的无改动句改为「尚无改动」，测试跟着改。
+- ✅ 三道门退 0；CI 全绿。
+- ✅ 浏览器核：三处打开即禁用并显提示；整张表单只填来源单据仍禁用，改姓名启用，改回禁用；分区同；「添加联系人」的空行禁用、填名后启用；往来单位改名启用、改回禁用。
+- 评审：自审。证据 S。

@@ -1,7 +1,7 @@
 # 04 编辑态下联系人组落到联系人分区，与概要分区共用一份表单
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-04 进 main `7e511744a`（记录见文末）
 父票：[spec](../spec.md)
 Blocked by: 03
 
@@ -19,3 +19,10 @@ Blocked by: 03
 
 - 三道门退 0。
 - 浏览器核：编辑态下联系人分区里出现联系人组表单，概要分区里没有联系人组；在联系人分区改一位联系人，点保存后预览列出那一处改动；联系人分区在预览时显指路句；取消后两处都回读出。
+
+## 完成记录（2026-11-04，直接在 `main` 上做，自 `6b3dc6433`，提交 `7e511744a`，CI run 41783394552 全绿）
+
+- 落点：`LegalEntityProfileSection.tsx` 的 `ProfileEditMode` 收 `contactsSlot`、`ProfileRegistrationForm` 收 `renderContacts`，联系人组经 portal 进联系人分区（槽位没挂上退回概要分区），预览时联系人分区显指路句；`legal-entity-profile-form-parts.tsx` 的 `scrollToField` 容器里找不到就整页找；`LegalEntityDetailPage.tsx` 联系人分区在编辑态挂槽位。
+- ✅ 三道门退 0；CI 全绿。
+- ✅ 浏览器在演示租户核（playwright 只读探针，零写请求、零页面错误）：编辑态深链下联系人分区有「联系人 1…4」表单组、概要分区零个联系人组且仍有代表人与收款账户组；在联系人分区改姓名、填来源单据与生效时间后保存，预览列出那一位联系人的改动（姓名是联系人匹配键，按移除 + 新增列，与比对函数的既有口径一致）；预览时联系人分区显「联系人的改动在上方「概要」分区的预览里」；返回修改后表单回来；取消 → 放弃后联系人分区回名册。
+- 评审：diff 全在 `pages/**`，自审。证据 S。
