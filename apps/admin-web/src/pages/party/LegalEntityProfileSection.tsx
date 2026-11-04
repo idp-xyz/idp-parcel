@@ -36,7 +36,6 @@ import {
 import { profileRevisionLabel } from './presentation';
 import { problemNote } from './presentation';
 import { Field, useLoaded } from './PublicationFormFields';
-import { useCachedRegistrationNumberTypes } from './legal-entity-read-cache';
 import { registrationNumberTypeNamesOf, type RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { Instant } from './detail-primitives';
 import {
@@ -90,19 +89,18 @@ export function LegalEntityProfileSection({
   legalEntityId,
   formOpenRequest = 0,
   collapseCurrentProfile = false,
-  onProfileUpdated,
   version,
 }: {
   legalEntityId: string;
-  /** 身份版本（legalEntityReadVersion）；给了版本历史就经页面内缓存读，换行时不先清空再撑开。 */
+  /** 身份版本（legalEntityReadVersion）；资料版本签按它与签上计数同键读（legal-entity-reads.ts）。 */
   version?: string;
   /** 调用方每要一次「直接打开更新表单」就加一（页头的主动作）；0 即没要过。 */
   formOpenRequest?: number;
   /** 对象页已有当前资料摘要时折叠按日期查询，仍保留历史与未来日期的查看入口。 */
   collapseCurrentProfile?: boolean;
-  onProfileUpdated?: () => void;
 }) {
-  // 登记落册一次加一：当前有效区与历史区都按它重取，新登的那笔立刻可见。
+  // 登记落册一次加一：按日期查询那一区（CurrentProfile，仍是页内现读）按它重取，新登的那笔立刻可见。版本历史经取数层读，
+  // 写口答到后整域作废（party-writes.ts），不靠它。
   const [landed, setLanded] = useState(0);
   const [lookupVisited, setLookupVisited] = useState(false);
   // 没有登记册配置写授予的操作者不摆更新表单与打开它的按钮（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
@@ -113,7 +111,7 @@ export function LegalEntityProfileSection({
   }, [formOpenRequest]);
   // 注册号类型目录读一次，给按日期查询的读出与版本历史（对比表、快照）把监管登记号类型码译成目录译名；读不到按码显。
   // 抽屉自己另读一份——它是导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
-  const typeNameOf = useTypeNameOf(useCachedRegistrationNumberTypes());
+  const typeNameOf = useTypeNameOf(useLoaded(listRegistrationNumberTypes));
   return (
     <div className="flex flex-col gap-5">
       <section>
@@ -121,7 +119,7 @@ export function LegalEntityProfileSection({
           <h4 className="text-[13px] font-semibold text-idpxyz-text">资料版本历史</h4>
           <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都保留一版；当前生效的那一版显示在概要。</p>
         </div>
-        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} revision={landed} typeNameOf={typeNameOf} version={version} />
+        <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} typeNameOf={typeNameOf} version={version} />
       </section>
       {collapseCurrentProfile ? (
         <details
@@ -157,10 +155,7 @@ export function LegalEntityProfileSection({
             open={formOpen}
             onOpenChange={setFormOpen}
             legalEntityId={legalEntityId}
-            onLanded={() => {
-              setLanded((count) => count + 1);
-              onProfileUpdated?.();
-            }}
+            onLanded={() => setLanded((count) => count + 1)}
           />
         </section>
       ) : null}
@@ -241,7 +236,8 @@ export function LegalEntityProfileDrawer({
 
 /**
  * 抽屉体：先把当前生效的那一版与已登记的版本清单读回来，再挂表单——表单打开即预填当前版（票面第 1 项），没有就等它。
- * 当前资料读不到时不把人堵死：留一个「改为从空白开始」。
+ * 当前版打开时必现问（`fresh`），不拿缓存那份预填：缓存那份可能早于别人刚落的一版，而版本清单是现读的、会建议 N+1，
+ * 拿旧内容保存就把那一版无声改回去。当前资料读不到时不把人堵死：留一个「改为从空白开始」。
  */
 function ProfileDrawerBody({
   legalEntityId,
@@ -254,7 +250,7 @@ function ProfileDrawerBody({
   onUnsavedChange: (unsaved: boolean) => void;
   onRequestLeave: (href: string | null) => void;
 }) {
-  const current = useCurrentLegalEntityProfile(legalEntityId);
+  const current = useCurrentLegalEntityProfile(legalEntityId, undefined, { fresh: true });
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   const [known, setKnown] = useState<LegalEntityProfileRevisionRecord[] | null>(null);
   const [knownFailed, setKnownFailed] = useState(false);

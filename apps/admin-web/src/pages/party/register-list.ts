@@ -1,83 +1,18 @@
 // 参与方模块册页持有列表状态的钩子（票 admin-web-group-legal-entities/10 第 5 条立于业务参与方页，票 13 第 6 条抬成
-// 各册页共用并改重取做法）。页面持有读签的列表答案再传下去：登记签从这份答案取修订号建议，登记册答 REGISTERED /
-// DEACTIVATED 时触发对应读签重取，两签共享同一份答案而不各取一次。
+// 各册页共用）。页面持有读签的列表答案再传下去：登记签从这份答案取修订号建议，登记册答 REGISTERED / DEACTIVATED 时触发
+// 对应读签重取，两签共享同一份答案而不各取一次。
 //
-// 状态转移是纯函数 registerListReducer，node:test 钉着；钩子只负责把 load 接上 effect。
+// 经取数层读（ADR-0360，query/answers.ts）：同一个读函数在哪页用都是同一份缓存，新鲜期内再挂载直接给、不再问；重取在途时
+// 照旧显上一份业务答案，不清——清了，登记签那一瞬看到的是「列表没取到」，未手改的修订建议闪回 1、开着的抽屉因行找不到而
+// 关掉再打开。判读在 query/freshness.ts 的 answerToShow，node:test 钉着。参与方的写口答到后整域作废（api.ts）。
 
-import { useEffect, useReducer } from 'react';
 import type { ApiResult } from '../catalogue-api';
-
-export interface RegisterListState<Body> {
-  /** 最近一份答案；首取回来之前是 null（加载中）。 */
-  answer: ApiResult<Body> | null;
-  /** 重取序号：问了几次。effect 以它为依赖，每变一次重取一次。 */
-  version: number;
-  /** 手上这份答案答的是第几问；首答之前是 null。与 version 不等即还有一问在途（工作台刷新钮据此转圈、收尾报 toast）。 */
-  answeredVersion: number | null;
-}
-
-/** 有没有一问在途。重取保留旧业务答案，所以不能拿 answer 是否为 null 判。 */
-export function registerListPending<Body>(state: RegisterListState<Body>): boolean {
-  return state.answeredVersion !== state.version;
-}
-
-export type RegisterListEvent<Body> = { kind: 'reload' } | { kind: 'answered'; answer: ApiResult<Body> };
+import { loaderKey, useAnswer } from '../../query/answers';
 
 /**
- * 重取**不清上一份业务答案**（票 10 评审 S1）：清了，登记签那一瞬看到的是「列表没取到」——未手改的修订建议闪回 1、
- * 标识格提示句闪成「列表里没有」，新答案到了再复原；开着的抽屉也会因行找不到而关掉再打开。旧册面在新答案到来前
- * 继续可用，是重取这一动作本来的语义：问的是「有没有更新」，不是「忘掉已知的」。
- *
- * 上一份**不是**业务答案（未配置 / 调用方问题 / 未形成答案 / 没到达）时照旧回到加载中：那几态下的「重试」按钮
- * 若不换成加载中，按的人看不到任何反应，分不出是没按到还是还没回。
+ * 一册的列表状态：`answer` 最近一份答案、`retry` 重取、`pending` 有一问在途。`load` 要是稳定引用（模块级函数）：
+ * 缓存按读函数本身认，写成内联箭头每次渲染都是一份新缓存。
  */
-export function registerListReducer<Body>(
-  state: RegisterListState<Body>,
-  event: RegisterListEvent<Body>,
-): RegisterListState<Body> {
-  switch (event.kind) {
-    case 'reload':
-      return {
-        answer: state.answer?.kind === 'outcome' ? state.answer : null,
-        version: state.version + 1,
-        answeredVersion: state.answeredVersion,
-      };
-    case 'answered':
-      return { answer: event.answer, version: state.version, answeredVersion: state.version };
-  }
-}
-
-// 跨挂载的记忆（`remember`）：页面重挂（离开满新鲜期回来、关了再开）时是新挂载、答案从空开始。给了 remember 的册，新挂载先拿上一次
-// 答到的业务答案、照常再问——与 registerListReducer「重取不清上一份业务答案」同一条语义，只是跨过了卸载。按 load 引用记，所以同样
-// 要求 load 是模块级函数。只记业务答案，读不到的那几态不记，理由同 registerListReducer。只在浏览器内存里：整页重载
-// 即清，登出走 logout 的整页跳转，换会话不会带过去。被作废的那一问（换了重取序号、或已卸载）答到了也不记，免得慢的
-// 旧答案盖掉新记下的那份。
-const remembered = new WeakMap<object, ApiResult<unknown>>();
-
-/**
- * 一册的列表状态：`answer` 最近一份答案、`retry` 重取、`version` 重取序号。`load` 要是稳定引用（模块级函数），
- * 写成内联箭头会每次渲染重取。未回的旧请求按 cancelled 丢，不让慢答案盖掉快答案。
- */
-export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>, options?: { remember?: boolean }) {
-  const remember = options?.remember === true;
-  const [state, dispatch] = useReducer(registerListReducer<Body>, null, () => ({
-    answer: remember ? ((remembered.get(load) as ApiResult<Body> | undefined) ?? null) : null,
-    version: 0,
-    answeredVersion: null,
-  }));
-
-  useEffect(() => {
-    let cancelled = false;
-    void load().then((next) => {
-      if (cancelled) return;
-      if (remember && next.kind === 'outcome') remembered.set(load, next);
-      dispatch({ kind: 'answered', answer: next });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load, remember, state.version]);
-
-  const retry = () => dispatch({ kind: 'reload' });
-  return { answer: state.answer, retry, version: state.version, pending: registerListPending(state) };
+export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
+  return useAnswer(loaderKey('party', load), load);
 }

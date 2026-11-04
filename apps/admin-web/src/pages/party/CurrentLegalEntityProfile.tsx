@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import type { ApiResult } from '../catalogue-api';
-import { resolveLegalEntityProfile, type LegalEntityProfileResolutionResponseBody } from './api';
-import { cachedLegalEntityRead, loadLegalEntityRead } from './legal-entity-read-cache';
+import type { LegalEntityProfileResolutionResponseBody } from './api';
+import { useLegalEntityRead } from './legal-entity-reads';
 import { problemNote } from './presentation';
 
 export interface CurrentLegalEntityProfileQuery {
@@ -14,40 +14,16 @@ export interface CurrentLegalEntityProfileQuery {
 }
 
 /**
- * 计数、概要与联系人共用当前答案；新一轮读取不能沿用旧主体或旧修订的计数。
- *
- * 给了 `version`（身份版本，`legalEntityReadVersion`）就走页面内缓存：这家公司这一版读过的那份先显出来，同时照常再问一遍、
- * 答到了再替换——左边换行时右栏不再先清空成「正在读取…」再撑开（legal-entity-read-cache.ts 文件头）。不给就每次现问，
- * 如资料表单要拿最新的那一版预填。
+ * 计数、概要与联系人共用当前答案；换了公司或身份版本就是另一把键，不沿用旧主体或旧修订的那份（legal-entity-reads.ts）。
+ * 资料更新落册后整域作废（party-writes.ts），这里不另拧钥匙。不给 `version` 的（资料表单要拿此刻的当前资料预填）单占一格，
+ * 并带 `fresh`：打开表单必现问，问到之前不拿缓存那份预填。
  */
 export function useCurrentLegalEntityProfile(
   legalEntityId: string | undefined,
-  refreshKey: string | number = 0,
   version?: string,
+  options?: { fresh?: boolean },
 ): CurrentLegalEntityProfileQuery {
-  const [reloadKey, setReloadKey] = useState(0);
-  const retry = useCallback(() => setReloadKey((value) => value + 1), []);
-  const request = useMemo(() => ({ legalEntityId, refreshKey, reloadKey }), [legalEntityId, refreshKey, reloadKey]);
-  const [result, setResult] = useState<{
-    request: typeof request;
-    answer: ApiResult<LegalEntityProfileResolutionResponseBody>;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!request.legalEntityId) return;
-    let cancelled = false;
-    const load =
-      version === undefined
-        ? resolveLegalEntityProfile(request.legalEntityId, new Date().toISOString())
-        : loadLegalEntityRead('profile', request.legalEntityId, version);
-    void load.then((next) => {
-      if (!cancelled) setResult({ request, answer: next });
-    });
-    return () => { cancelled = true; };
-  }, [request, version]);
-
-  const cached = legalEntityId !== undefined && version !== undefined ? cachedLegalEntityRead('profile', legalEntityId, version) : undefined;
-  const answer = result?.request === request ? result.answer : (cached ?? null);
+  const { answer, retry } = useLegalEntityRead('profile', legalEntityId, version, options);
   return { legalEntityId, answer, retry };
 }
 

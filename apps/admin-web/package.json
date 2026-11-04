@@ -16,6 +16,7 @@
     "@idpxyz/ui-tokens": "^0.1.23",
     "@idpxyz/ui-utils": "^0.1.23",
     "@idpxyz/ui-workspace": "^0.1.25",
+    "@tanstack/react-query": "5.104.5",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
 import App from './App';
 import { AuthGate } from './auth/AuthGate';
@@ -11,6 +12,7 @@ import { configureVisibilityApi } from './pages/visibility/api';
 import { configureMasterDataApi } from './pages/catalogue-api';
 import { configureDisplayTimeZone, resolveDisplayTimeZone } from './pages/moment';
 import { configureVocabularyWarnings } from './vocabulary/status';
+import { queryClient } from './query/client';
 
 // 前端一律带 /api 前缀发起，开发代理剥前缀转发（见 vite.config.ts 的裁决注释）。
 configureShipmentRequestApi({ basePrefix: '/api' });
@@ -31,7 +33,10 @@ if (import.meta.env.DEV) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthGate>
-      <App />
+      {/* 取数层挂在登录门里面：未登录时不渲任何会取数的页，缓存只活在一次登录后的这一页加载里（ADR-0360）。 */}
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
     </AuthGate>
   </StrictMode>,
 );

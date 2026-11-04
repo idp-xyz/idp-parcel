@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
-import { listBusinessParties, listCommercialPolicies, listSupplierAgreements } from './api';
+import { commercialPolicyLoaders, listBusinessParties, listSupplierAgreements } from './api';
 import { InstantRange, statusBadge } from './detail-primitives';
 import {
   creditPoliciesOfLegalEntity,
@@ -28,11 +28,10 @@ import { useRegisterList } from './register-list';
 // 往来单位册是第五本，只为把行上的供应商与客户标识译成名称（票 company-subject-ux/07）：它读不到不影响任何一段，
 // 也不进「被引用」的计数，所以不占段状态、不给重试。
 
-// useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头会每次渲染重取。
-const listSettlementPolicies = () => listCommercialPolicies('SETTLEMENT_POLICY');
-const listCreditPolicies = () => listCommercialPolicies('CREDIT_POLICY');
-const listRulePackages = () => listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
-const rememberAcrossMounts = { remember: true };
+// useRegisterList 按读函数认缓存：带参数的读口取 commercialPolicyLoaders 里那一个，与政策页同一份。
+const listSettlementPolicies = commercialPolicyLoaders.SETTLEMENT_POLICY;
+const listCreditPolicies = commercialPolicyLoaders.CREDIT_POLICY;
+const listRulePackages = commercialPolicyLoaders.ACCEPTANCE_RULE_PACKAGE;
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
 
@@ -43,16 +42,13 @@ export interface LegalEntityReferences {
   partyNameOf: PartyNameOf;
 }
 
-/**
- * 各册各读一次，按法人标识在已取回的行上关联；换一家公司不重读，只换关联。带着详情切走再切回时先用上次答到的那份
- * （useRegisterList 的 remember）：否则详情栏先显「被引用 —」、关联签先没有计数，答到了再补上，又是一跳。
- */
+/** 各册各读一次，按法人标识在已取回的行上关联；换一家公司不重读，只换关联。各册的答案经取数层与册页共用一份缓存。 */
 export function useLegalEntityReferences(legalEntityId: string): LegalEntityReferences {
-  const agreements = useRegisterList(listSupplierAgreements, rememberAcrossMounts);
-  const settlement = useRegisterList(listSettlementPolicies, rememberAcrossMounts);
-  const credit = useRegisterList(listCreditPolicies, rememberAcrossMounts);
-  const rulePackages = useRegisterList(listRulePackages, rememberAcrossMounts);
-  const parties = useRegisterList(listBusinessParties, rememberAcrossMounts);
+  const agreements = useRegisterList(listSupplierAgreements);
+  const settlement = useRegisterList(listSettlementPolicies);
+  const credit = useRegisterList(listCreditPolicies);
+  const rulePackages = useRegisterList(listRulePackages);
+  const parties = useRegisterList(listBusinessParties);
   return {
     partyNameOf: partyNameOfAnswer(parties.answer),
     states: {

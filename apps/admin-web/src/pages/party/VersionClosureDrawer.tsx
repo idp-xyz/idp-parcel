@@ -51,8 +51,8 @@ function mapOutcome<From, To>(convert: (body: From) => To) {
 }
 
 /**
- * 抽屉打开时重读该册，不用页面上那份：收尾要对着此刻的册面判，行上的状态与区间可能已陈旧。函数在模块层各立一份，
- * useLoaded 按函数身份决定要不要重读，写在组件里每次渲染都是新函数会读个不停。
+ * 抽屉打开时现问一遍该册（useLoaded 的 `fresh`），问到之前不用缓存那份、也不用页面上那份：收尾要对着此刻的册面判，行上的
+ * 状态与区间可能已陈旧。函数在模块层各立一份：useLoaded 按函数身份认键，写在组件里每次渲染都是新键、永远读不完。
  */
 const loadVersionsOf: Record<ClosureObjectKind, () => Promise<ApiResult<KnownVersion[]>>> = {
   SERVICE_PRODUCT: () => listServiceProducts().then(mapOutcome(productKnownVersions)),
@@ -109,7 +109,7 @@ function ClosureBody({
   onClose: () => void;
   onClosed: () => void;
 }) {
-  const answer = useLoaded(loadVersionsOf[target.kind]);
+  const answer = useLoaded(loadVersionsOf[target.kind], { fresh: true });
   const all = answer?.kind === 'outcome' ? answer.body : null;
   const old = all === null ? null : closureOldOf(all, target);
   const successors = all !== null && old !== null ? closureSuccessors(old, all) : [];

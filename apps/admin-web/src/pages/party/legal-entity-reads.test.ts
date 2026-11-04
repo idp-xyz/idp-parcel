@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { legalEntityReadVersion, neighborsOf } from './legal-entity-read-cache';
+import { legalEntityReadVersion, neighborsOf } from './legal-entity-reads';
 
-// 钉右栏预读的两件判读：缓存键里的身份版本、方向键下一步会落到的邻行。缓存的存取与作废走真读口，由浏览器核验覆盖。
+// 钉右栏预读的两件判读：键里的身份版本、方向键下一步会落到的邻行。经取数层的存取与作废走真读口，由浏览器核验覆盖。
 
 test('身份版本由登记记录号与状态拼成：更正或停用之后版本变，旧缓存不再命中', () => {
   equal(legalEntityReadVersion({ revision: 1, status: 'EFFECTIVE' }), '1:EFFECTIVE');

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useRetryWhenChanged } from '../../query/answers';
+import { useRegisterList } from './register-list';
 import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
@@ -192,10 +193,10 @@ function CustomerContractsTable({
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条。与客户账户签共用同一个检索词——它们在一页上。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
-  const [reloadKey, setReloadKey] = useState(0);
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
+  const { answer, retry } = useRegisterList(listCustomerContracts);
+  useRetryWhenChanged(publishedKey, retry);
   // 账户标识旁的客户名称：账户册的第一页，读不到就没有名称。
   const accountsAnswer = useLoaded(loadCustomerAccountSuggestions);
   const accountNames = new Map(
@@ -213,17 +214,6 @@ function CustomerContractsTable({
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listCustomerContracts().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey, publishedKey]);
-
   const contracts = answer?.kind === 'outcome' ? answer.body.contracts : [];
   const needle = search.trim().toLowerCase();
   // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
@@ -239,7 +229,6 @@ function CustomerContractsTable({
     searchedContracts.filter((row) => matchesVersionStatus(contractFacts(row), statusFilter)),
     contractFacts,
   );
-  const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? contractKnownVersions(answer.body) : []);
   const keyOf = (row: CustomerContractRecord) => `${row.objectId}@${row.version}`;
   const selected = contracts.find((row) => keyOf(row) === selectedKey) ?? null;

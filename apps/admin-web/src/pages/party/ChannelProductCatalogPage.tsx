@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { partyAnswersDomain } from './party-writes';
+import { useAnswer } from '../../query/answers';
+import { useRegisterList } from './register-list';
 import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
@@ -85,23 +87,9 @@ function ProductChannelMappingTable() {
   const mayWrite = useMayWriteRegistry();
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
-  const [reloadKey, setReloadKey] = useState(0);
   // 点行打开的映射详情：记映射标识（票 party-commercial-uiux/21）。
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<ApiResult<ProductChannelMappingListResponseBody> | null>(
-    null,
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listProductChannelMappings().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+  const { answer, retry } = useRegisterList(listProductChannelMappings);
 
   const mappings = answer?.kind === 'outcome' ? answer.body.mappings : [];
   const needle = search.trim().toLowerCase();
@@ -112,33 +100,22 @@ function ProductChannelMappingTable() {
           .some((value) => value.toLowerCase().includes(needle)),
       )
     : mappings;
-  const retry = () => setReloadKey((value) => value + 1);
 
   // 点开一行时读这个映射的整条修订链；答复带映射标识，切换行时上一问的答案后到也不会错位。
-  const [revisions, setRevisions] = useState<{
-    mappingId: string;
-    answer: ApiResult<ProductChannelMappingRevisionListResponseBody>;
-  } | null>(null);
   // 历史里点的是哪一笔修订；没点就看最新一笔（目录行本身）。
   const [revisionNo, setRevisionNo] = useState<number | null>(null);
-  useEffect(() => {
-    if (selectedId === null) return;
-    let cancelled = false;
-    void listProductChannelMappingRevisions(selectedId).then((next) => {
-      if (!cancelled) setRevisions({ mappingId: selectedId, answer: next });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
+  // 点开一行才读；键带映射标识，换行就是另一份，上一行的答案后到也落不到这一行上。
+  const revisions = useAnswer(
+    [partyAnswersDomain, 'product-channel-mapping', selectedId ?? '', 'revisions'],
+    () => listProductChannelMappingRevisions(selectedId ?? ''),
+    { enabled: selectedId !== null },
+  ).answer;
   const latest = mappings.find((row) => row.mappingId === selectedId) ?? null;
   const chain =
-    revisions?.mappingId === selectedId && revisions.answer.kind === 'outcome' && revisions.answer.body.mappingId === selectedId
-      ? revisions.answer.body.revisions
-      : null;
+    revisions?.kind === 'outcome' && revisions.body.mappingId === selectedId ? revisions.body.revisions : null;
   const selected = (revisionNo !== null ? chain?.find((row) => row.revision === revisionNo) : null) ?? latest;
   const historyNote =
-    revisions?.mappingId !== selectedId
+    revisions === null
       ? '正在读取变更记录…'
       : chain === null
         ? '没能读到变更记录，稍后重新打开这个产品的渠道设置再看。'

@@ -28,7 +28,7 @@ import { RevisionHistorySection } from './RevisionHistorySection';
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
-import { invalidateLegalEntityReads, legalEntityReadVersion } from './legal-entity-read-cache';
+import { legalEntityReadVersion } from './legal-entity-reads';
 import {
   CopyAside,
   Fact,
@@ -95,12 +95,11 @@ export function LegalEntityDetailPanel({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
-  const [profileRefresh, setProfileRefresh] = useState(0);
-  // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
-  const refreshKey = `${row.revision}:${row.status}:${profileRefresh}`;
+  // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
+  // 都随之重读，不另拧钥匙。
   const readVersion = legalEntityReadVersion(row);
-  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, refreshKey, readVersion);
-  const tabCounts = useLegalEntityTabCounts(row.legalEntityId, refreshKey, readVersion);
+  const profileQuery = useCurrentLegalEntityProfile(row.legalEntityId, readVersion);
+  const tabCounts = useLegalEntityTabCounts(row.legalEntityId, readVersion);
   const contactCount = legalEntityContactCountOf(
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row.legalEntityId
       ? profileQuery.answer.body
@@ -244,10 +243,6 @@ export function LegalEntityDetailPanel({
                 legalEntityId={row.legalEntityId}
                 formOpenRequest={formOpenRequest}
                 collapseCurrentProfile
-                onProfileUpdated={() => {
-                  invalidateLegalEntityReads(row.legalEntityId);
-                  setProfileRefresh((value) => value + 1);
-                }}
               />
             </TabsContent>
             <TabsContent
@@ -255,7 +250,7 @@ export function LegalEntityDetailPanel({
               forceMount={visited.has('history') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
             >
-              <RevisionHistorySection register={legalEntityRevisionHistoryOf(typeNameOf)} subjectId={row.legalEntityId} revision={row.revision} cacheVersion={readVersion} />
+              <RevisionHistorySection register={legalEntityRevisionHistoryOf(typeNameOf)} subjectId={row.legalEntityId} revision={row.revision} version={readVersion} />
             </TabsContent>
             <TabsContent value="related" className="mt-0">
               <LegalEntityReferencesSection legalEntityId={row.legalEntityId} references={references} />

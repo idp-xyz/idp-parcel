@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
+import { pricingAnswersDomain } from '../pricing/pricing-writes';
 import type { NewVersionStart } from './new-version';
-import { listCommercialPolicies } from './api';
+import { commercialPolicyLoaders } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
@@ -25,7 +26,7 @@ import {
   type PricePolicyDraft,
 } from './price-policy-form';
 
-const loadKnownVersions = () => listCommercialPolicies('PRICE_POLICY');
+const loadKnownVersions = commercialPolicyLoaders.PRICE_POLICY;
 
 /**
  * 价格规则版本的逐字段表单（票 admin-write-faces/14；ADR-0101 决定八本册选形：逐字段表单，口径作条件节）。
@@ -195,6 +196,7 @@ function PricePolicyFields({
             locked={locked}
             onChange={(pricingPlan) => patch({ pricingPlan })}
             load={listPriceCards}
+            domain={pricingAnswersDomain}
             optionsOf={(body: PriceCardListResponseBody) =>
               body.cards.map((card) => ({
                 value: planReferenceOf(card),

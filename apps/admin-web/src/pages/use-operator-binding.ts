@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { exchangeMasterData } from './catalogue-api';
 import { boundTenantOf, type OperatorBindingResponseBody } from './operator-binding';
 
@@ -7,12 +7,26 @@ import { boundTenantOf, type OperatorBindingResponseBody } from './operator-bind
 // 不记：那多半是一时的，记住就得整页重载才会再问。
 let pending: Promise<string | undefined> | null = null;
 
+// 取数缓存键的租户段（ADR-0360 决定三）：答出了是绑定的租户标识；问过但答不出是 unboundTenantKey——页面照样去问自己的
+// 读口，各自答出拒绝或未配置，不因为顶栏那一问没答上就一直转圈；还没问完是 null，取数等它。键里带租户，换了绑定就换了一整片
+// 键，上一个租户的答案不会显给下一个。
+const unboundTenantKey = '(unbound)';
+let tenantKey: string | null = null;
+const tenantKeyListeners = new Set<() => void>();
+
+function publishTenantKey(next: string): void {
+  if (tenantKey === next) return;
+  tenantKey = next;
+  for (const listener of tenantKeyListeners) listener();
+}
+
 function loadBoundTenant(): Promise<string | undefined> {
   if (pending === null) {
     pending = exchangeMasterData<OperatorBindingResponseBody>('/operator-binding')
       .then(boundTenantOf)
       .then((tenant) => {
         if (tenant === undefined) pending = null;
+        publishTenantKey(tenant ?? unboundTenantKey);
         return tenant;
       });
   }
@@ -32,4 +46,25 @@ export function useBoundTenant(): string | undefined {
     };
   }, []);
   return tenant;
+}
+
+function subscribeTenantKey(listener: () => void): () => void {
+  tenantKeyListeners.add(listener);
+  return () => {
+    tenantKeyListeners.delete(listener);
+  };
+}
+
+/** 取数缓存键的租户段；还没问完是 null。读过之后再挂载的页同步拿到，不为它多等一帧。 */
+export function useTenantKey(): string | null {
+  const key = useSyncExternalStore(subscribeTenantKey, () => tenantKey, () => null);
+  useEffect(() => {
+    void loadBoundTenant();
+  }, []);
+  return key;
+}
+
+/** 渲染之外（预读、写后作废）用的租户段；还没问完是 null。 */
+export function currentTenantKey(): string | null {
+  return tenantKey;
 }

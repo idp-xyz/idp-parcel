@@ -5,6 +5,7 @@
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { afterPartyWrite } from './party-writes';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -682,6 +683,24 @@ export function listCommercialPolicies(
   );
 }
 
+/**
+ * 每一类一个模块级读函数。取数层按读函数本身认缓存（query/answers.ts 的 loaderKey），各页、各表单都从这里取同一个函数，
+ * 同一类的册面才是同一份缓存；各自现写一个箭头，同一册就各读各的、各存一份。
+ */
+export const commercialPolicyLoaders: {
+  readonly [Kind in CommercialPolicyKind]: () => Promise<ApiResult<CommercialPolicyListResponseBody>>;
+} = {
+  ACCEPTANCE_RULE_PACKAGE: () => listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE'),
+  PRE_ACCEPTANCE_CONTROL: () => listCommercialPolicies('PRE_ACCEPTANCE_CONTROL'),
+  PRICE_POLICY: () => listCommercialPolicies('PRICE_POLICY'),
+  SETTLEMENT_POLICY: () => listCommercialPolicies('SETTLEMENT_POLICY'),
+  AS_OF_POLICY: () => listCommercialPolicies('AS_OF_POLICY'),
+  AUTHORIZATION_RULE: () => listCommercialPolicies('AUTHORIZATION_RULE'),
+  CREDIT_POLICY: () => listCommercialPolicies('CREDIT_POLICY'),
+  PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: () => listCommercialPolicies('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY'),
+  CUSTOMER_SERVICE_RULE: () => listCommercialPolicies('CUSTOMER_SERVICE_RULE'),
+};
+
 // 合同与协议各走自己的路径,不并进 /commercial-policies 的 kind 分派:那个参数分的是
 // 「商业规则与策略」一页里的五个页签,而这两样是管理台上两张独立的页(裁决与理由在
 // 后端 query_commercial_relations.go 的文件注释)。
@@ -840,7 +859,7 @@ export function registerCommercial(
   kind: CommercialRegistrationKind,
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>(commercialRegistrationEndpoints[kind], snapshot);
+  return afterPartyWrite(postMasterData<RegistrationResponseBody>(commercialRegistrationEndpoints[kind], snapshot));
 }
 
 /**
@@ -927,7 +946,7 @@ export function endPartyRelationship(
   action: PartyRelationshipEndingAction,
   payload: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>(partyRelationshipEndingEndpoints[action], payload);
+  return afterPartyWrite(postMasterData<RegistrationResponseBody>(partyRelationshipEndingEndpoints[action], payload));
 }
 
 /**
@@ -968,5 +987,5 @@ export function closeCommercialVersion(
   mode: VersionClosureMode,
   payload: unknown,
 ): Promise<ApiResult<VersionClosureResponseBody>> {
-  return postMasterData<VersionClosureResponseBody>(versionClosureEndpoints[mode], payload);
+  return afterPartyWrite(postMasterData<VersionClosureResponseBody>(versionClosureEndpoints[mode], payload));
 }

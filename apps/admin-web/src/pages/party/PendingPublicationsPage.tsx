@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useRegisterList } from './register-list';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { entryHint } from '../operator-grants';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -90,21 +90,9 @@ export function PendingPublicationsPage() {
   // 检索词在地址里（`?q=`），刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<PendingStatusFilter>('ALL');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<PublicationDraftListResponseBody> | null>(null);
-  // 抽屉开着的那一份的身份。不从行里反推：批准或发布之后列表重取，行会暂时清空（发布后还会离开列表），抽屉不能跟着关。
+  const { answer, retry } = useRegisterList(listOpenPublicationDrafts);
+  // 抽屉开着的那一份的身份。不从行里反推：发布之后那一行离开列表，抽屉不能跟着关。
   const [selected, setSelected] = useState<PendingDraftIdentity | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listOpenPublicationDrafts().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   const rows = answer?.kind === 'outcome' ? pendingRowsOf(answer.body) : [];
   const records = rows.map((row) => row.source);
@@ -116,7 +104,6 @@ export function PendingPublicationsPage() {
       (needle === '' ||
         draftSearchText(row.source, publicationKindLabels[row.source.kind] ?? row.source.kind).includes(needle)),
   );
-  const retry = () => setReloadKey((value) => value + 1);
   // 录入入口在各册自己的页面，没有登记册配置写授予的操作者看不到它们（ADR-0315）；本页自己没有那个入口，说明文案不往那里指，
   // 也不解释一个本页没有的入口。
   const mayWrite = useMayWriteRegistry();

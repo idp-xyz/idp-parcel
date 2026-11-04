@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { partyAnswersDomain } from './party-writes';
+import { useAnswer, useRetryWhenChanged } from '../../query/answers';
 import { Button, ConfirmDialog, Drawer, DrawerBody, DrawerHeader } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
@@ -73,7 +75,6 @@ export function PendingDraftDrawer({
 }) {
   const identity = target === null ? '' : `${target.kind}|${target.objectId}|${target.version}`;
   const [reloadKey, setReloadKey] = useState(0);
-  const [readback, setReadback] = useState<ApiResult<PublicationDraftReadbackResponseBody> | null>(null);
   const [approval, setApproval] = useState<ApiResult<PublicationDraftResponseBody> | null>(null);
   const [publication, setPublication] = useState<ApiResult<PublicationDraftPublicationResponseBody> | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
@@ -87,19 +88,15 @@ export function PendingDraftDrawer({
     setConfirmingPublish(false);
   }, [identity]);
 
-  useEffect(() => {
-    if (target === null) return undefined;
-    let cancelled = false;
-    setReadback(null);
-    void readPublicationDraft(target.kind, target.objectId, target.version).then((next) => {
-      if (!cancelled) setReadback(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // target 的三格由 identity 代表；对象引用每次渲染都新，不放进依赖。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity, reloadKey]);
+  // 键带载体的三格，换一份载体就是另一份；批准、发布答到后写口整域作废（party-writes.ts），读回随之重问。
+  const readbackQuery = useAnswer(
+    [partyAnswersDomain, 'publication-draft', target?.kind ?? '', target?.objectId ?? '', target?.version ?? ''],
+    // 没有载体时不发（enabled），这一支到不了。
+    () => (target === null ? Promise.reject(new Error('no draft')) : readPublicationDraft(target.kind, target.objectId, target.version)),
+    { enabled: target !== null },
+  );
+  const readback = readbackQuery.answer;
+  useRetryWhenChanged(reloadKey, readbackQuery.retry);
 
   const draft = readback?.kind === 'outcome' ? readback.body.draft : undefined;
   // 读不回的载体没有可批准或发布的内容，动作按钮不摆；按下去服务端本也只会答 DRAFT_NOT_READABLE。

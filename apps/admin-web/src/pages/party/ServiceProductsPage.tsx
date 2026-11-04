@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useRetryWhenChanged } from '../../query/answers';
+import { useRegisterList } from './register-list';
 import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
@@ -117,25 +118,14 @@ function ServiceProductVersionsTable({
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
-  const [reloadKey, setReloadKey] = useState(0);
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
+  const { answer, retry } = useRegisterList(listServiceProducts);
+  useRetryWhenChanged(refreshKey, retry);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listServiceProducts().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey, refreshKey]);
 
   const products = answer?.kind === 'outcome' ? answer.body.products : [];
   const needle = search.trim().toLowerCase();
@@ -151,7 +141,6 @@ function ServiceProductVersionsTable({
     searchedProducts.filter((row) => matchesVersionStatus(productFacts(row), statusFilter)),
     productFacts,
   );
-  const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []);
   const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
   const selected = products.find((row) => keyOf(row) === selectedKey) ?? null;

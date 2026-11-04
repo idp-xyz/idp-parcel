@@ -7,7 +7,7 @@ import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { listGroupLegalEntities, listCommercialPolicies } from './api';
+import { listGroupLegalEntities, listCommercialPolicies, commercialPolicyLoaders } from './api';
 import type { NewVersionStart } from './new-version';
 import { Field, Problems, ReferencePicker, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
@@ -20,7 +20,7 @@ import {
   type CreditPolicyDraft,
 } from './credit-policy-form';
 
-const loadKnownVersions = () => listCommercialPolicies('CREDIT_POLICY');
+const loadKnownVersions = commercialPolicyLoaders.CREDIT_POLICY;
 
 /**
  * 信用政策版本的逐字段表单（票 admin-write-faces/16；ADR-0101 决定八本册选形）。五步由 PublicationDraftFlow

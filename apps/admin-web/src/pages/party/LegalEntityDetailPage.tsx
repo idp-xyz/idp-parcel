@@ -36,12 +36,7 @@ import { RevisionHistorySection, type RevisionHistoryRegister } from './Revision
 import { LegalEntityReferencesSection, useLegalEntityReferences } from './LegalEntityReferencesSection';
 import { profileStatusCellOf, referencedCount, type ProfileStatusCell } from './legal-entity-references';
 import { useLegalEntityTabCounts } from './legal-entity-tab-counts';
-import {
-  cachedLegalEntityRead,
-  invalidateLegalEntityReads,
-  legalEntityReadVersion,
-  loadLegalEntityRead,
-} from './legal-entity-read-cache';
+import { legalEntityReadKey, legalEntityReadVersion } from './legal-entity-reads';
 import { DetailRow, Instant, RefText } from './detail-primitives';
 import { CountryLabel } from '../refdata-labels';
 import { StatusPill } from '../../components/StatusPill';
@@ -54,7 +49,7 @@ const info = moduleInfoById['group-legal-entities'];
 
 /**
  * 对象页与工作台详情栏共用身份修订历史的判读。按注册号类型目录译名的那一份随页面传进来（票 01 备好的
- * `legalEntityRevisionTimeline` 第三参）；`load` 仍是模块级函数——只有它进 effect 依赖，每帧新造的壳不会触发重取。
+ * `legalEntityRevisionTimeline` 第三参）；每帧新造的壳不会触发重取——认的是键，不是壳。
  */
 export function legalEntityRevisionHistoryOf(
   typeNameOf?: RegistrationNumberTypeNameOf,
@@ -66,16 +61,10 @@ export function legalEntityRevisionHistoryOf(
     echoedSubjectId: (body) => body.legalEntityId,
     timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant, typeNameOf),
     noteOf: revisionHistoryNote,
-    peek: peekIdentityRevisions,
-    loadCached: loadIdentityRevisions,
+    // 与签上的「登记记录」计数同键（legal-entity-reads.ts）：签上先有数，点进签里不再问。
+    answerKey: (legalEntityId, version) => legalEntityReadKey('identityRevisions', legalEntityId, version),
   };
 }
-
-// 登记记录签经页面内缓存读（legal-entity-read-cache.ts）；模块级常量，册对象每次渲染新建时引用不变，effect 不会白重跑。
-const peekIdentityRevisions = (legalEntityId: string, version: string) =>
-  cachedLegalEntityRead('identityRevisions', legalEntityId, version);
-const loadIdentityRevisions = (legalEntityId: string, version: string) =>
-  loadLegalEntityRead('identityRevisions', legalEntityId, version);
 
 function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
@@ -224,13 +213,12 @@ export function LegalEntityDetailPage({
   const [headerFormOpen, setHeaderFormOpen] = useState(false);
   // 页头抽屉落册的次数：资料版本分区按它重挂（理由见函数头）；分区自己的抽屉落册不转它，不然刚保存完的抽屉会随分区一起卸掉。
   const [headerLanded, setHeaderLanded] = useState(0);
-  const [profileRefresh, setProfileRefresh] = useState(0);
-  // 身份登了下一修订、停用、资料更新落册——三件事都要让当前资料与签上的计数重读，一把钥匙两处转。
-  const refreshKey = `${row?.revision}:${row?.status}:${profileRefresh}`;
+  // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
+  // 都随之重读，不另拧钥匙。
   const readVersion = row ? legalEntityReadVersion(row) : undefined;
-  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, refreshKey, readVersion);
+  const profileQuery = useCurrentLegalEntityProfile(row?.legalEntityId, readVersion);
   // 签上的计数（票 company-subject-ux/09）：模板按 count 字段摆；读不到就不给，不拿 0 冒充。
-  const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, refreshKey, readVersion);
+  const tabCounts = useLegalEntityTabCounts(row?.legalEntityId, readVersion);
   const profileBody =
     profileQuery.answer?.kind === 'outcome' && profileQuery.answer.body.legalEntityId === row?.legalEntityId
       ? profileQuery.answer.body
@@ -271,11 +259,7 @@ export function LegalEntityDetailPage({
                   open={headerFormOpen}
                   onOpenChange={setHeaderFormOpen}
                   legalEntityId={row.legalEntityId}
-                  onLanded={() => {
-                    invalidateLegalEntityReads(row.legalEntityId);
-                    setHeaderLanded((count) => count + 1);
-                    setProfileRefresh((value) => value + 1);
-                  }}
+                  onLanded={() => setHeaderLanded((count) => count + 1)}
                 />
               ) : null}
             </>
@@ -351,10 +335,6 @@ export function LegalEntityDetailPage({
                       key={`${row.legalEntityId}#${headerLanded}`}
                       legalEntityId={row.legalEntityId}
                       collapseCurrentProfile
-                      onProfileUpdated={() => {
-                        invalidateLegalEntityReads(row.legalEntityId);
-                        setProfileRefresh((value) => value + 1);
-                      }}
                     />
                   </section>
                 ),
@@ -370,7 +350,7 @@ export function LegalEntityDetailPage({
                       register={legalEntityRevisionHistoryOf(typeNameOf)}
                       subjectId={row.legalEntityId}
                       revision={row.revision}
-                      cacheVersion={readVersion}
+                      version={readVersion}
                     />
                   </section>
                 ),

@@ -15,6 +15,7 @@
 // 点亮，本文件一行不用改。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { afterPartyWrite } from './party-writes';
 
 /**
  * 发布轴的商业对象类别（domain.CommercialObjectKind 的 String() 原词，封闭集；Go 那边加一格这里跟着加）。
@@ -523,22 +524,22 @@ export function previewCommercialPublication(
 export function submitPublicationDraft(
   payload: CommercialPublicationPayload,
 ): Promise<ApiResult<PublicationDraftResponseBody>> {
-  return postMasterData<PublicationDraftResponseBody>(publicationDraftEndpoints.submit, payload);
+  return afterPartyWrite(postMasterData<PublicationDraftResponseBody>(publicationDraftEndpoints.submit, payload));
 }
 
 export function approvePublicationDraft(
   reference: PublicationDraftReferencePayload,
 ): Promise<ApiResult<PublicationDraftResponseBody>> {
-  return postMasterData<PublicationDraftResponseBody>(publicationDraftEndpoints.approve, reference);
+  return afterPartyWrite(postMasterData<PublicationDraftResponseBody>(publicationDraftEndpoints.approve, reference));
 }
 
 export function publishPublicationDraft(
   reference: PublicationDraftReferencePayload,
 ): Promise<ApiResult<PublicationDraftPublicationResponseBody>> {
-  return postMasterData<PublicationDraftPublicationResponseBody>(
+  return afterPartyWrite(postMasterData<PublicationDraftPublicationResponseBody>(
     publicationDraftEndpoints.publish,
     reference,
-  );
+  ));
 }
 
 // ——以下为答案代数的逐格中文。四口各一张表而不并成一张：`NOT_ACCEPTED` 在预览与录入两栏说的都是

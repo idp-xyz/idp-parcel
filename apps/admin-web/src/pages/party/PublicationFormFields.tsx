@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { loaderKey, useAnswer } from '../../query/answers';
+import { partyAnswersDomain } from './party-writes';
 import { Button, Combobox, Input } from '@idpxyz/ui-primitives';
 import {
   accessRefusalHeadline,
@@ -158,21 +160,20 @@ export function RowFrame({
 }
 
 /**
- * 读一次、只读一次：读面与词表都是目录，表单打开时取一份，不随每次击键重取。`load` 要是稳定引用（模块级函数），写成
- * 内联箭头会每次渲染重取。
+ * 读面与词表都是目录，表单打开时取一份，不随每次击键重取。经取数层读（ADR-0360）：同一个读函数在几张表单、几页之间
+ * 共用一份缓存，新鲜期内再打开不再问；参与方的写口答到后整域作废（api.ts），刚发布的版本下次打开表单就在。`load` 要是
+ * 稳定引用（模块级函数）：缓存按读函数本身认，写成内联箭头每次渲染都是一份新缓存、永远答不上来。
  */
-export function useLoaded<Body>(load: () => Promise<ApiResult<Body>>): ApiResult<Body> | null {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void load().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-  return answer;
+export function useLoaded<Body>(
+  load: () => Promise<ApiResult<Body>>,
+  options?: {
+    /** 读面属别的域时给那个域（价卡目录归定价），那个域的写口作废时这份才跟着过期；不给是参与方。 */
+    domain?: string;
+    /** 打开时必现问一遍，问到之前不给缓存那份（query/answers.ts 的同名选项）。 */
+    fresh?: boolean;
+  },
+): ApiResult<Body> | null {
+  return useAnswer(loaderKey(options?.domain ?? partyAnswersDomain, load), load, { fresh: options?.fresh }).answer;
 }
 
 export interface PickerOption {
@@ -264,9 +265,14 @@ export interface ReferencePickerFaceProps<Body> {
  */
 export function ReferencePicker<Body>({
   load,
+  domain,
   ...face
-}: ReferencePickerFaceProps<Body> & { load: () => Promise<ApiResult<Body>> }) {
-  const answer = useLoaded(load);
+}: ReferencePickerFaceProps<Body> & {
+  load: () => Promise<ApiResult<Body>>;
+  /** 读面属别的域时给那个域（useLoaded 的同名选项）。 */
+  domain?: string;
+}) {
+  const answer = useLoaded(load, { domain });
   return <ReferencePickerFor answer={answer} {...face} />;
 }
 

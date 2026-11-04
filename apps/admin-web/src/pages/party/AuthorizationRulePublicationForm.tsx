@@ -4,7 +4,7 @@ import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { cancellationPartyLabels } from './presentation';
-import { listCommercialPolicies } from './api';
+import { listCommercialPolicies, commercialPolicyLoaders } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
@@ -24,7 +24,7 @@ import {
   type PartyOptionsState,
 } from './authorization-rule-form';
 
-const loadKnownVersions = () => listCommercialPolicies('AUTHORIZATION_RULE');
+const loadKnownVersions = commercialPolicyLoaders.AUTHORIZATION_RULE;
 
 /**
  * 授权规则版本的逐字段发布表单（票 admin-write-faces/17；ADR-0101 决定八自裁为逐字段表单 + 取消授权按请求方可加行）。

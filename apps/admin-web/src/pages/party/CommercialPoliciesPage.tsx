@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useRetryWhenChanged } from '../../query/answers';
+import { useRegisterList } from './register-list';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
@@ -6,12 +8,11 @@ import { ListPageTemplate } from '../../templates';
 import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { RegistrationPanel, chipClass } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import {
+  commercialPolicyLoaders,
   commercialRegistrationEndpoints,
   declarationLandingLabels,
-  listCommercialPolicies,
   publicationOutcomeLabels,
   registerCommercial,
   type CommercialPolicyKind,
@@ -120,29 +121,15 @@ function PolicyRegisters({
   // 检索词在地址里（`?q=`）：合同上的规则包、控制策略链接带着它过来，筛到那一条。换册时由页面清掉（见 usePoliciesPlace）。
   const [search, setSearch] = useAddressKeyword();
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
-  const [reloadKey, setReloadKey] = useState(0);
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState<{
-    kind: CommercialPolicyKind;
-    answer: ApiResult<CommercialPolicyListResponseBody>;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listCommercialPolicies(kind).then((answer) => {
-      if (!cancelled) setLoaded({ kind, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [kind, reloadKey, externalReloadKey]);
-
-  const answer = loaded?.kind === kind ? loaded.answer : null;
+  // 每册一个读函数（commercialPolicyLoaders）：换册就是另一份缓存，上一册的答案不会显在这一册下。
+  const { answer, retry } = useRegisterList(commercialPolicyLoaders[kind]);
+  useRetryWhenChanged(externalReloadKey, retry);
   // 行里的币种经 currencyLabel 译名；订阅名表只为名表读回时重绘这些行。
   useRefdataNames();
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
@@ -158,7 +145,6 @@ function PolicyRegisters({
     searchedRows.filter((row) => !withStatus || matchesVersionStatus(policyFacts(row), statusFilter)),
     policyFacts,
   );
-  const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []);
   // 目录表与详情抽屉用同一份列（引用链接与状态徽章已套好）。
   const detailColumns = withRefLinks(withStatusBadge(kindColumns[kind]), directory);

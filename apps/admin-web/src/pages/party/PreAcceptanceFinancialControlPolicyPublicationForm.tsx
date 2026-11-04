@@ -3,7 +3,7 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { controlFailureDispositionLabels, controlKindLabels, jointPassConditionLabels } from './presentation';
-import { listCommercialPolicies } from './api';
+import { listCommercialPolicies, commercialPolicyLoaders } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
@@ -26,7 +26,7 @@ import {
   type ControlPolicyDraft,
 } from './pre-acceptance-financial-control-policy-form';
 
-const loadKnownVersions = () => listCommercialPolicies('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY');
+const loadKnownVersions = commercialPolicyLoaders.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY;
 
 /**
  * 接受前财务控制策略版本的逐字段表单（票 admin-write-faces/13；ADR-0101 决定八逐册裁形）。

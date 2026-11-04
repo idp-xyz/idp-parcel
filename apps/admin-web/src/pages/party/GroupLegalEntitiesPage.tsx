@@ -26,7 +26,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
-import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
+import { listGroupLegalEntities, listRegistrationNumberTypes, type GroupLegalEntityRecord } from './api';
 import { useBoundTenant } from '../use-operator-binding';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
 import { identityLayerAbsentNote } from './presentation';
@@ -55,7 +55,8 @@ import {
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { CountryLabel } from '../refdata-labels';
 import { entryHint } from '../operator-grants';
-import { neighborsOf, prefetchLegalEntityReads, useCachedRegistrationNumberTypes } from './legal-entity-read-cache';
+import { neighborsOf, prefetchLegalEntityReads } from './legal-entity-reads';
+import { useLoaded } from './PublicationFormFields';
 
 // 列表取回后预读右栏的前几行：一行三个很小的读，二十行是六十个请求，再多就只读选中行的邻行。
 const prefetchedRowLimit = 20;
@@ -295,8 +296,8 @@ export function GroupLegalEntitiesPage() {
   const [sort, setSort] = useTabViewState<WorkbenchSort>('legal-entities.sort', defaultLegalEntitySort);
   const [selectedKey, setSelectedKey] = useTabViewState<string | null>('legal-entities.selected', null);
   // 注册号类型目录读一次，给「注册地与注册号」列把类型码译成名。读不到（未配置、拒绝、故障）就按码显，不报错、不挡列表：
-  // 译名是锦上添花，号本身在答复里。经页面内缓存读，再开这一页时译名与表同一帧出来。
-  const typeCatalogue = useCachedRegistrationNumberTypes();
+  // 译名是锦上添花，号本身在答复里。与资料版本的对比表同一份缓存（useLoaded 按读函数认），再开这一页时译名与表同一帧出来。
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   const typeNameOf = useMemo(
     () => registrationNumberTypeNamesOf(typeCatalogue?.kind === 'outcome' ? typeCatalogue.body.registrationNumberTypes : []),
     [typeCatalogue],
@@ -342,7 +343,7 @@ export function GroupLegalEntitiesPage() {
     [entities],
   );
 
-  // 右栏的三种读预先读好（legal-entity-read-cache.ts）：列表取回后先把前若干行读进页面内缓存，选中一行后再把它在当前
+  // 右栏的三种读预先读好（legal-entity-reads.ts）：列表取回后先把前若干行读进取数层的缓存，选中一行后再把它在当前
   // 排序下的上下邻行读好——点哪一行、方向键走到哪一行，右栏都直接显，不再先清空成「正在读取」再撑开。只在列表视图做；
   // 前若干行之外的行点到时照常现读（有占位轮廓，不塌）。
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { partyAnswersDomain } from './party-writes';
 import { Button } from '@idpxyz/ui-primitives';
 import {
   DetailPageTemplate,
@@ -34,12 +35,13 @@ const info = moduleInfoById['business-parties'];
 
 /**
  * 对象页「时间线」签与工作台详情栏「身份与修订」签交给修订历史区的那几样（票 12 第 5 条立、票 13 第 9 条改用共用件）：
- * 判读在 business-party-revisions.ts（两册共用的本体在 revision-timeline.ts）。模块级常量——load 进 effect 依赖。
+ * 判读在 business-party-revisions.ts（两册共用的本体在 revision-timeline.ts）。
  */
 export const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessPartyRevisionListResponseBody> = {
   subject: '参与方',
   endpoint: 'GET /commercial-business-parties/{partyId}/revisions',
   load: listBusinessPartyRevisions,
+  answerKey: (partyId, version) => [partyAnswersDomain, 'business-party', partyId, version, 'revisions'],
   echoedSubjectId: (body) => body.partyId,
   timelineOf: (body) => businessPartyRevisionTimeline(body.revisions, formatInstant),
   noteOf: businessPartyRevisionHistoryNote,

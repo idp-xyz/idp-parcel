@@ -10,7 +10,7 @@ import type { NewVersionStart } from './new-version';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, ReferencePicker, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
-import { listCustomerContracts, listGroupLegalEntities, listServiceProducts, listCommercialPolicies } from './api';
+import { listCustomerContracts, listGroupLegalEntities, listServiceProducts, listCommercialPolicies, commercialPolicyLoaders } from './api';
 import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import {
   acceptanceRulePackageFieldPaths,
@@ -33,7 +33,7 @@ import {
   type VocabularyState,
 } from './acceptance-rule-package-form';
 
-const loadKnownVersions = () => listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
+const loadKnownVersions = commercialPolicyLoaders.ACCEPTANCE_RULE_PACKAGE;
 
 /**
  * 接单规则包版本的分节发布表单（票 admin-write-faces/12；ADR-0101 决定八自裁为分节的逐字段表单，不走模板导入）。

@@ -4,6 +4,7 @@ import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '.
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import {
+  commercialPolicyLoaders,
   listCommercialPolicies,
   listCustomerAccounts,
   listGroupLegalEntities,
@@ -38,8 +39,8 @@ import { useRegisterList } from './register-list';
 // 参与方详情抽屉的「全景」签（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
 // 关系册答案由页面持有、传进来（与关系签同一份，登一段关系后两处一起更新）；另四册在打开时各取一次，一段未配置或出错只影响那一段。
 
-// useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头会每次渲染重取。
-const listSettlementPolicies = () => listCommercialPolicies('SETTLEMENT_POLICY');
+// useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头每次渲染都是新键、永远读不完。
+const listSettlementPolicies = commercialPolicyLoaders.SETTLEMENT_POLICY;
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
 

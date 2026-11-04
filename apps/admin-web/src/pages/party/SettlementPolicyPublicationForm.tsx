@@ -3,7 +3,7 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
-import { listBusinessParties, listCustomerContracts, listGroupLegalEntities, listCommercialPolicies } from './api';
+import { listBusinessParties, listCustomerContracts, listGroupLegalEntities, listCommercialPolicies, commercialPolicyLoaders } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import type { NewVersionStart } from './new-version';
@@ -33,7 +33,7 @@ import {
   type SettlementPolicyDraft,
 } from './settlement-policy-form';
 
-const loadKnownVersions = () => listCommercialPolicies('SETTLEMENT_POLICY');
+const loadKnownVersions = commercialPolicyLoaders.SETTLEMENT_POLICY;
 
 /**
  * 结算政策版本的逐字段表单（票 admin-write-faces/15；ADR-0101 决定八逐册裁形）。

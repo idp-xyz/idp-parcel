@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
+import { pricingAnswersDomain } from '../pricing/pricing-writes';
 import { listBusinessParties, listGroupLegalEntities, listSupplierAgreements } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { agreementKnownVersions } from './known-versions';
@@ -184,6 +185,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 locked={locked}
                 onChange={(purchasePlan) => patch({ purchasePlan })}
                 load={listPriceCards}
+                domain={pricingAnswersDomain}
                 optionsOf={(body: PriceCardListResponseBody) =>
                   body.cards.map((card) => ({
                     value: planReferenceOf(card),

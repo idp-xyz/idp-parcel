@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { useRegisterList } from './register-list';
 import type { ListColumn } from '../../templates';
 import { listBusinessParties, listGroupLegalEntities } from './api';
 import { emptyNameDirectory, nameDirectoryOf, refHash, refName, type NameDirectory, type RefKind, type RowRefs } from './ref-links';
@@ -10,23 +11,19 @@ import { emptyNameDirectory, nameDirectoryOf, refHash, refName, type NameDirecto
  * 引用格照样只显标识——名称是帮人认的，读不到不该让表格报错。
  */
 export function useNameDirectory(): NameDirectory {
-  const [directory, setDirectory] = useState<NameDirectory>(emptyNameDirectory);
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([listBusinessParties(), listGroupLegalEntities()]).then(([parties, entities]) => {
-      if (cancelled) return;
-      setDirectory(
-        nameDirectoryOf(
-          parties.kind === 'outcome' ? parties.body : null,
-          entities.kind === 'outcome' ? entities.body : null,
-        ),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return directory;
+  // 两册经取数层读，与往来单位页、公司主体页的列表同一份缓存。
+  const parties = useRegisterList(listBusinessParties).answer;
+  const entities = useRegisterList(listGroupLegalEntities).answer;
+  return useMemo(
+    () =>
+      parties === null && entities === null
+        ? emptyNameDirectory
+        : nameDirectoryOf(
+            parties?.kind === 'outcome' ? parties.body : null,
+            entities?.kind === 'outcome' ? entities.body : null,
+          ),
+    [parties, entities],
+  );
 }
 
 /**

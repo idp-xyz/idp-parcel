@@ -9,7 +9,7 @@ import { priceDirectionLabels, priceCardPurposeLabels } from '../../vocabulary/p
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { catalogueViewState } from '../catalogue-view';
 import { InstantRange } from '../party/detail-primitives';
-import { useRegisterList } from '../party/register-list';
+import { loaderKey, useAnswer } from '../../query/answers';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { PriceCardEditorPanel } from './card-editor/PriceCardEditorPanel';
 import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
@@ -27,6 +27,7 @@ import {
   type PriceCardStatusFilter,
 } from './price-card-list';
 import { listPriceCards, registerPriceCard, registrationOutcomeLabels, type PriceCardRecord } from './api';
+import { pricingAnswersDomain } from './pricing-writes';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -88,7 +89,8 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
 function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCreate: () => void }) {
-  const { answer, retry, pending } = useRegisterList(listPriceCards);
+  // 经取数层读，键在定价域下（pricing-writes.ts）：发布、登记之后作废的是这个域，目录签回来就是新的。
+  const { answer, retry, pending } = useAnswer(loaderKey(pricingAnswersDomain, listPriceCards), listPriceCards);
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);

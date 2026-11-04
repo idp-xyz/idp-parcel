@@ -9,7 +9,7 @@ import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } fr
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import type { NewVersionStart } from './new-version';
 import { Field, ProblemText, ReferencePicker, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
-import { listCustomerContracts, listServiceProducts, listCommercialPolicies } from './api';
+import { listCustomerContracts, listServiceProducts, listCommercialPolicies, commercialPolicyLoaders } from './api';
 import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import { fieldProblemText, itemProblemText } from './field-problem-text';
 import { WallTimeField } from './party-registration-fields';
@@ -33,7 +33,7 @@ import {
   type ServiceRuleDraft,
 } from './customer-service-rule-form';
 
-const loadKnownVersions = () => listCommercialPolicies('CUSTOMER_SERVICE_RULE');
+const loadKnownVersions = commercialPolicyLoaders.CUSTOMER_SERVICE_RULE;
 
 /**
  * 客户服务规则版本的逐字段表单（票 admin-write-faces/18；ADR-0101 决定八逐册裁形）。

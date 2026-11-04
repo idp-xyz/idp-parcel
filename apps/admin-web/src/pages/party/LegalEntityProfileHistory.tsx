@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
@@ -13,13 +13,9 @@ import {
   bankAccountSubject, compareLegalEntityProfiles, orderedProfileRevisions, profileComparisonSummary,
   profileRevisionState, selectedProfileRevision, type ProfileChangeKind, type ProfileFieldChange,
 } from './legal-entity-profile-history';
-import {
-  listLegalEntityProfileRevisions, resolveLegalEntityProfile,
-  type LegalEntityProfileResolutionResponseBody, type LegalEntityProfileRevisionListResponseBody,
-  type LegalEntityProfileRevisionRecord,
-} from './api';
+import type { LegalEntityProfileRevisionRecord } from './api';
 import { problemNote, profileRevisionLabel } from './presentation';
-import { cachedLegalEntityRead, loadLegalEntityRead } from './legal-entity-read-cache';
+import { useLegalEntityRead } from './legal-entity-reads';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
 const note = 'text-[12px] text-idpxyz-breadcrumb';
@@ -56,62 +52,33 @@ function ProfileHistorySkeleton() {
 
 export function LegalEntityProfileHistory({
   legalEntityId,
-  revision,
   typeNameOf,
   version,
 }: {
   legalEntityId: string;
-  revision: number;
   /** 监管登记号的类型码 → 目录译名，由调用方带目录折好交进来（票 company-subject-ux/06 第 4 条）；不给或译不出按码显。 */
   typeNameOf?: RegistrationNumberTypeNameOf;
   /**
-   * 身份版本（legalEntityReadVersion）。给了就经页面内缓存读（legal-entity-read-cache.ts）：读过的那份先显、后台再问——
-   * 左边换行时这一签不再先清空成「正在读取」再撑开（用户 2026-11-03 指出）。
+   * 身份版本（legalEntityReadVersion）。与签上计数、详情栏同键（legal-entity-reads.ts）：读过的那份直接显、过了新鲜期后台再问，
+   * 左边换行时这一签不先清空成「正在读取」再撑开（用户 2026-11-03 指出）。资料更新落册后整域作废，不另传钥匙。
    */
   version?: string;
 }) {
-  const [reloadKey, setReloadKey] = useState(0);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
   const [baselineNumber, setBaselineNumber] = useState<number | null | undefined>(undefined);
   const [changedOnly, setChangedOnly] = useState(true);
-  const requestKey = `${legalEntityId}\u0000${revision}\u0000${reloadKey}`;
-  const [historyResult, setHistoryResult] = useState<{ key: string; answer: ApiResult<LegalEntityProfileRevisionListResponseBody> }>();
-  const [currentResult, setCurrentResult] = useState<{ key: string; answer: ApiResult<LegalEntityProfileResolutionResponseBody> }>();
-  const history =
-    historyResult?.key === requestKey
-      ? historyResult.answer
-      : (version !== undefined ? cachedLegalEntityRead('profileRevisions', legalEntityId, version) : undefined) ?? null;
-  const current =
-    currentResult?.key === requestKey
-      ? currentResult.answer
-      : (version !== undefined ? cachedLegalEntityRead('profile', legalEntityId, version) : undefined) ?? null;
+  const historyQuery = useLegalEntityRead('profileRevisions', legalEntityId, version);
+  const currentQuery = useLegalEntityRead('profile', legalEntityId, version);
+  const history = historyQuery.answer;
+  const current = currentQuery.answer;
   // 对比表的地址文本经基础数据译国家名（legal-entity-profile-history.ts 的 profileAddressText 读模块级名表）；这里订阅一下，
   // 名表读回时重算对比，否则先渲出来的那张表停在码上。
   useRefdataNames();
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = version === undefined
-      ? listLegalEntityProfileRevisions(legalEntityId)
-      : loadLegalEntityRead('profileRevisions', legalEntityId, version);
-    void load.then((answer) => {
-      if (!cancelled) setHistoryResult({ key: requestKey, answer });
-    });
-    return () => { cancelled = true; };
-  }, [legalEntityId, requestKey, version]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = version === undefined
-      ? resolveLegalEntityProfile(legalEntityId, new Date().toISOString())
-      : loadLegalEntityRead('profile', legalEntityId, version);
-    void load.then((answer) => {
-      if (!cancelled) setCurrentResult({ key: requestKey, answer });
-    });
-    return () => { cancelled = true; };
-  }, [legalEntityId, requestKey, version]);
-
-  const retry = () => setReloadKey((value) => value + 1);
+  const retry = () => {
+    historyQuery.retry();
+    currentQuery.retry();
+  };
   const historyBody = history?.kind === 'outcome' && history.body.legalEntityId === legalEntityId
     ? history.body
     : undefined;

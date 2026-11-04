@@ -8,6 +8,7 @@
 import { exchangeMasterData, postMasterData, postMasterDataForm } from '../catalogue-api';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { afterPricingWrite } from './pricing-writes';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -47,7 +48,7 @@ export const registrationOutcomeLabels: Record<string, string> = {
 export function registerPriceCard(
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>('/pricing-price-card-registrations', snapshot);
+  return afterPricingWrite(postMasterData<RegistrationResponseBody>('/pricing-price-card-registrations', snapshot));
 }
 
 // ---- 价卡导入（ADR-0101 决定三、四；票 price-card-import/02、03、05）----
@@ -152,9 +153,8 @@ export function submitPriceCardDraft(
   file: Blob,
   fileName: string,
 ): Promise<ApiResult<PriceCardDraftSubmissionBody>> {
-  return postMasterDataForm<PriceCardDraftSubmissionBody>(
-    priceCardDraftPath,
-    priceCardUploadForm(file, fileName),
+  return afterPricingWrite(
+    postMasterDataForm<PriceCardDraftSubmissionBody>(priceCardDraftPath, priceCardUploadForm(file, fileName)),
   );
 }
 
@@ -222,7 +222,7 @@ export function previewPriceCardWorkbook(workbook: PriceCardWorkbook): Promise<A
 export function submitPriceCardWorkbookDraft(
   workbook: PriceCardWorkbook,
 ): Promise<ApiResult<PriceCardDraftSubmissionBody>> {
-  return postMasterData<PriceCardDraftSubmissionBody>(priceCardDraftPath, workbook);
+  return afterPricingWrite(postMasterData<PriceCardDraftSubmissionBody>(priceCardDraftPath, workbook));
 }
 
 // ---- 价卡草稿签（ADR-0101 决定五；票 price-card-import/03、04、06）----
@@ -259,22 +259,19 @@ export function listPriceCardDrafts(): Promise<ApiResult<PriceCardDraftListRespo
 export function approvePriceCardDraft(
   payload: PriceCardDraftReferencePayload,
 ): Promise<ApiResult<PriceCardDraftProgressBody>> {
-  return postMasterData<PriceCardDraftProgressBody>(priceCardDraftApprovalPath, payload);
+  return afterPricingWrite(postMasterData<PriceCardDraftProgressBody>(priceCardDraftApprovalPath, payload));
 }
 
 export function publishPriceCardDraft(
   payload: PriceCardDraftReferencePayload,
 ): Promise<ApiResult<PriceCardDraftProgressBody>> {
-  return postMasterData<PriceCardDraftProgressBody>(priceCardDraftPublicationPath, payload);
+  return afterPricingWrite(postMasterData<PriceCardDraftProgressBody>(priceCardDraftPublicationPath, payload));
 }
 
 export function registerReferenceSeries(
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>(
-    '/pricing-reference-series-registrations',
-    snapshot,
-  );
+  return afterPricingWrite(postMasterData<RegistrationResponseBody>('/pricing-reference-series-registrations', snapshot));
 }
 
 // ---- 序列版本复核（ADR-0099 决定二；票 pricing-reference-series-operations/04 切片 04b）----
@@ -331,7 +328,7 @@ export const seriesReviewOutcomeLabels: Record<string, string> = {
 export function reviewReferenceSeries(
   request: SeriesReviewRequest,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>('/pricing-reference-series-reviews', request);
+  return afterPricingWrite(postMasterData<RegistrationResponseBody>('/pricing-reference-series-reviews', request));
 }
 
 export interface PriceCardRecord {
@@ -508,10 +505,7 @@ export function previewReferenceSeries(
 export function registerReferenceSeriesPayload(
   payload: SeriesRegistrationPayload,
 ): Promise<ApiResult<RegistrationResponseBody>> {
-  return postMasterData<RegistrationResponseBody>(
-    '/pricing-reference-series-registrations',
-    payload,
-  );
+  return afterPricingWrite(postMasterData<RegistrationResponseBody>('/pricing-reference-series-registrations', payload));
 }
 
 /**

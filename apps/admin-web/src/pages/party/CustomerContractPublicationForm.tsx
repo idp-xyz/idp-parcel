@@ -3,7 +3,7 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
-import { listCommercialPolicies, type CommercialPolicyListResponseBody, listCustomerContracts } from './api';
+import { commercialPolicyLoaders, listCommercialPolicies, type CommercialPolicyListResponseBody, listCustomerContracts } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { contractKnownVersions } from './known-versions';
 import { controlRequirementLabels, labelOf } from './presentation';
@@ -422,14 +422,10 @@ type ObjectCandidates =
   | OperatorRefusal
   | { kind: 'unavailable' };
 
-// 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。两册各一个，不由 kind 现拼。
-function loadRulePackages(): Promise<ApiResult<CommercialPolicyListResponseBody>> {
-  return listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
-}
+// 稳定的函数引用：useLoaded 按函数身份认键，写成内联箭头每次渲染都是新键、永远读不完。两册各一个，不由 kind 现拼。
+const loadRulePackages = commercialPolicyLoaders.ACCEPTANCE_RULE_PACKAGE;
 
-function loadControlPolicies(): Promise<ApiResult<CommercialPolicyListResponseBody>> {
-  return listCommercialPolicies('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY');
-}
+const loadControlPolicies = commercialPolicyLoaders.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY;
 
 function useObjectCandidates(load: () => Promise<ApiResult<CommercialPolicyListResponseBody>>): ObjectCandidates {
   const answer = useLoaded(load);

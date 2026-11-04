@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useRetryWhenChanged } from '../../query/answers';
+import { useRegisterList } from './register-list';
 import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody, type SupplierAgreementRecord } from './api';
@@ -60,25 +61,14 @@ function SupplierAgreementCatalogue({
   const [search, setSearch] = useAddressKeyword();
   const directory = useNameDirectory();
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
-  const [reloadKey, setReloadKey] = useState(0);
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
+  const { answer, retry } = useRegisterList(listSupplierAgreements);
+  useRetryWhenChanged(reloadToken, retry);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSupplierAgreements().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey, reloadToken]);
 
   const rows = answer?.kind === 'outcome' ? supplierAgreementRowsOf(answer.body) : [];
   const needle = search.trim().toLowerCase();
@@ -94,7 +84,6 @@ function SupplierAgreementCatalogue({
     searchedRows.filter((row) => matchesVersionStatus(row.version, statusFilter)),
     (row) => row.version,
   );
-  const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? agreementKnownVersions(answer.body) : []);
   // 目录表与详情抽屉用同一份列（引用链接与状态徽章已套好）。
   const detailColumns = withRefLinks(withStatusBadge(supplierAgreementColumns), directory);
