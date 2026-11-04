@@ -18,7 +18,8 @@ import {
   LegalEntityMoreMenu,
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
-import { LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { profileEditScopeOf, type ProfileEditRequest, type ProfileEditScope } from './legal-entity-profile-sections';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
@@ -95,6 +96,10 @@ export function LegalEntityDetailPanel({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
+  // 读出卡上的「编辑」「添加…」开的分区抽屉（票 company-subject-section-edit/01）。范围存成状态、引用稳定：表单按它算打开时的
+  // 基线。落册后写口整域作废，这里不用再拧什么。
+  const [sectionScope, setSectionScope] = useState<ProfileEditScope | null>(null);
+  const onEdit = mayWrite ? (request: ProfileEditRequest) => setSectionScope(profileEditScopeOf(request)) : undefined;
   // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
   // 都随之重读，不另拧钥匙。
   const readVersion = legalEntityReadVersion(row);
@@ -222,7 +227,7 @@ export function LegalEntityDetailPanel({
                   </DetailRow>
                 </dl>
               ) : null}
-              <LegalEntityProfileSummary query={profileQuery} />
+              <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} />
               <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
             </TabsContent>
             <TabsContent
@@ -230,7 +235,7 @@ export function LegalEntityDetailPanel({
               forceMount={visited.has('contacts') || undefined}
               className="mt-0 data-[state=inactive]:hidden"
             >
-              <LegalEntityContactsSection query={profileQuery} />
+              <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} />
             </TabsContent>
             <TabsContent
               value="profile"
@@ -258,6 +263,17 @@ export function LegalEntityDetailPanel({
           </div>
         </div>
       </Tabs>
+      {sectionScope !== null ? (
+        <LegalEntityProfileDrawer
+          open
+          onOpenChange={(open) => {
+            if (!open) setSectionScope(null);
+          }}
+          legalEntityId={row.legalEntityId}
+          scope={sectionScope}
+          onLanded={() => undefined}
+        />
+      ) : null}
     </div>
   );
 }

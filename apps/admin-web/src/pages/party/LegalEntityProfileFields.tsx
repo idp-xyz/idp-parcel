@@ -15,6 +15,7 @@ import {
   type LegalEntityProfileDraft,
 } from './legal-entity-profile';
 import { Field, Problems, SearchableSelect } from './PublicationFormFields';
+import type { ProfileFieldGroupId } from './legal-entity-profile-sections';
 import { FormGroup } from './party-registration-fields';
 
 /** 结算政策册在商业规则页里的位置：开票币种在那里按公司主体、相对方与合同解析，这里只指路。 */
@@ -35,6 +36,7 @@ export function LegalEntityProfileFields({
   locked,
   typeCatalogue,
   onLeave,
+  groups,
 }: {
   draft: LegalEntityProfileDraft;
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
@@ -44,7 +46,10 @@ export function LegalEntityProfileFields({
   typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 表单里的站内链接要离开本页时交给调用方：有没提交的输入时先确认再走，不让一个链接把表单静默关掉。 */
   onLeave: (href: string) => void;
+  /** 只渲染这几组（分区抽屉，票 company-subject-section-edit/01）；不给渲染全部。 */
+  groups?: readonly ProfileFieldGroupId[];
 }) {
+  const show = (group: ProfileFieldGroupId) => groups === undefined || groups.includes(group);
   const platformListId = useId();
   // 语言标签用 datalist 而不是选单：常用的四种一点即选，别的 BCP 47 标签照样能手填（ADR-0359 决定四只锁形状）。
   const languageListId = useId();
@@ -66,6 +71,7 @@ export function LegalEntityProfileFields({
       <datalist id={languageListId}>
         {invoiceTitleLanguageOptions.map((option) => <option key={option.value} value={option.value} label={option.label} />)}
       </datalist>
+      {show('representative') ? (
       <FormGroup title="代表人 / 负责人" description="按登记资料填写；与业务联系人分别管理。">
         <Field label="身份类型" path="profiles[0].representative" problems={problems}>
           <select
@@ -91,6 +97,8 @@ export function LegalEntityProfileFields({
           />
         </Field>
       </FormGroup>
+      ) : null}
+      {show('addresses') ? (
       <FormGroup title="地址" description="注册地址须与身份的注册国家 / 地区一致；办公和通信地址可分别登记。">
         {(
           [
@@ -133,6 +141,8 @@ export function LegalEntityProfileFields({
           </div>
         ))}
       </FormGroup>
+      ) : null}
+      {show('invoicing') ? (
       <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料；其他语言的抬头挂在它上面，哪种语言印到单据上由开单方按收件方定。">
         <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
           <Input
@@ -258,6 +268,8 @@ export function LegalEntityProfileFields({
           </p>
         </div>
       </FormGroup>
+      ) : null}
+      {show('bankAccounts') ? (
       <FormGroup
         title="收款账户"
         description="对账单与发票上印的我方银行账户，可按币种登记多个。币种只说这个账户收哪种钱，不决定结算币种。"
@@ -338,6 +350,8 @@ export function LegalEntityProfileFields({
           </Button>
         </div>
       </FormGroup>
+      ) : null}
+      {show('contacts') ? (
       <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。">
         <div className="md:col-span-2 space-y-4">
           {draft.contacts.map((row, index) => (
@@ -469,6 +483,7 @@ export function LegalEntityProfileFields({
           </Button>
         </div>
       </FormGroup>
+      ) : null}
     </>
   );
 }

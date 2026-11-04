@@ -1,4 +1,5 @@
-import { Contact, Landmark, Receipt, UserRound } from 'lucide-react';
+import { Contact, Landmark, Pencil, Plus, Receipt, UserRound } from 'lucide-react';
+import { Button } from '@idpxyz/ui-primitives';
 import type { LegalEntityBankAccountRecord, LegalEntityProfileContent as ProfileContent } from './api';
 import { CurrencyLabel } from '../refdata-labels';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
@@ -14,6 +15,7 @@ import {
 } from './LegalEntityProfileReadout';
 import { invoiceTitleRowsOf, languageTagLabel, profileMaintenanceNotes, representativeLabel } from './legal-entity-profile';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
+import { profileSections, type ProfileEditRequest, type ProfileSectionId } from './legal-entity-profile-sections';
 
 /**
  * 当前资料的读出，四张卡（票 company-subject-ux/09）：代表人与地址、税务与开票、收款账户、联系人。代表人与地址并成
@@ -24,19 +26,26 @@ export function LegalEntityProfileContent({
   content,
   includeContacts = true,
   typeNameOf,
+  onEdit,
 }: {
   content?: ProfileContent;
   includeContacts?: boolean;
   /** 监管登记号的类型码 → 目录译名（按注册地址国家查）；不给或查不到按码显。码留在 title 里给要对照的人。 */
   typeNameOf?: RegistrationNumberTypeNameOf;
+  /**
+   * 每张卡标题条上的「编辑」与逐行区的「添加…」交给页面开分区抽屉（票 company-subject-section-edit/01）。页面有写授予才给；
+   * 按日期查询那种历史视图不给。没读到当前版时即使给了也不摆——没有当前版无从「局部」改起，走「更新公司资料」整张表单。
+   */
+  onEdit?: (request: ProfileEditRequest) => void;
 }) {
   const notes = content ? profileMaintenanceNotes(content) : [];
+  const actionsOf = (section: ProfileSectionId) => (onEdit && content ? <SectionActions section={section} onEdit={onEdit} /> : undefined);
   const bankAccounts = content?.bankAccounts ?? [];
   const contacts = content?.contacts ?? [];
   const invoiceTitleRows = content ? invoiceTitleRowsOf(content) : [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
-      <ProfileReadoutCard icon={UserRound} title="代表人与地址">
+      <ProfileReadoutCard icon={UserRound} title="代表人与地址" actions={actionsOf('representativeAndAddresses')}>
         <ProfileReadoutGrid>
           <ProfileReadoutField
             label={content?.representative ? representativeLabel(content.representative.kind) : '代表人 / 负责人'}
@@ -56,7 +65,7 @@ export function LegalEntityProfileContent({
           />
         </div>
       </ProfileReadoutCard>
-      <ProfileReadoutCard icon={Receipt} title="税务与开票">
+      <ProfileReadoutCard icon={Receipt} title="税务与开票" actions={actionsOf('invoicing')}>
         <ProfileReadoutGrid>
           {/* 语言 → 抬头、类型名 → 号各是一张两列小表（ProfileReadoutPairs），两张都占整行——抬头与几种号并排时半列放不下。
               主抬头排第一、语言格后带「主抬头」：它仍是「可开票」的判据，但与其他语言的抬头是同一类内容，不再分两格两种排法。
@@ -110,11 +119,11 @@ export function LegalEntityProfileContent({
           />
         </ProfileReadoutGrid>
       </ProfileReadoutCard>
-      <ProfileReadoutCard icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined}>
+      <ProfileReadoutCard icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined} actions={actionsOf('bankAccounts')}>
         <LegalEntityBankAccountsTable accounts={bankAccounts} />
       </ProfileReadoutCard>
       {includeContacts ? (
-        <ProfileReadoutCard icon={Contact} title="联系人" extra={contacts.length ? `${contacts.length} 位` : undefined}>
+        <ProfileReadoutCard icon={Contact} title="联系人" extra={contacts.length ? `${contacts.length} 位` : undefined} actions={actionsOf('contacts')}>
           <LegalEntityContactCards contacts={contacts} />
         </ProfileReadoutCard>
       ) : null}
@@ -129,6 +138,29 @@ export function LegalEntityProfileContent({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 读出卡标题条上的动作：逐行的区（收款账户、联系人）先摆「添加…」再摆「编辑」，其余只有「编辑」。按钮弱显——它们是
+ * 标题条上的次要动作，主动作「更新公司资料」在页头。
+ */
+export function SectionActions({ section, onEdit }: { section: ProfileSectionId; onEdit: (request: ProfileEditRequest) => void }) {
+  const definition = profileSections[section];
+  const buttonClass = 'h-6 px-1.5 text-[12px] text-idpxyz-breadcrumb hover:text-idpxyz-text';
+  return (
+    <>
+      {definition.list ? (
+        <Button variant="ghost" size="sm" className={buttonClass} onClick={() => onEdit({ section, addRow: true })}>
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          {definition.list.addLabel}
+        </Button>
+      ) : null}
+      <Button variant="ghost" size="sm" className={buttonClass} aria-label={`编辑${definition.title}`} onClick={() => onEdit({ section })}>
+        <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+        编辑
+      </Button>
+    </>
   );
 }
 

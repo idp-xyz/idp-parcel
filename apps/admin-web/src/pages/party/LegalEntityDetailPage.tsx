@@ -25,6 +25,7 @@ import {
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { profileEditScopeOf, type ProfileEditRequest, type ProfileEditScope } from './legal-entity-profile-sections';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
@@ -213,6 +214,9 @@ export function LegalEntityDetailPage({
   const [headerFormOpen, setHeaderFormOpen] = useState(false);
   // 页头抽屉落册的次数：资料版本分区按它重挂（理由见函数头）；分区自己的抽屉落册不转它，不然刚保存完的抽屉会随分区一起卸掉。
   const [headerLanded, setHeaderLanded] = useState(0);
+  // 读出卡上的「编辑」「添加…」开的分区抽屉（票 company-subject-section-edit/01），与页头抽屉同一个组件、同一条落册路径。
+  const [sectionScope, setSectionScope] = useState<ProfileEditScope | null>(null);
+  const onEdit = mayWrite ? (request: ProfileEditRequest) => setSectionScope(profileEditScopeOf(request)) : undefined;
   // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
   // 都随之重读，不另拧钥匙。
   const readVersion = row ? legalEntityReadVersion(row) : undefined;
@@ -262,6 +266,17 @@ export function LegalEntityDetailPage({
                   onLanded={() => setHeaderLanded((count) => count + 1)}
                 />
               ) : null}
+              {sectionScope !== null ? (
+                <LegalEntityProfileDrawer
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setSectionScope(null);
+                  }}
+                  legalEntityId={row.legalEntityId}
+                  scope={sectionScope}
+                  onLanded={() => setHeaderLanded((count) => count + 1)}
+                />
+              ) : null}
             </>
           ) : null}
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
@@ -308,7 +323,7 @@ export function LegalEntityDetailPage({
                 // 与详情栏同一规矩：不设上限，宽度归容器定。
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityProfileSummary query={profileQuery} />
+                    <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} />
                     <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
                   </section>
                 ),
@@ -318,7 +333,7 @@ export function LegalEntityDetailPage({
                 count: contactCount,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityContactsSection query={profileQuery} />
+                    <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} />
                   </section>
                 ),
               },

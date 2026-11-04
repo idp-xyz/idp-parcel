@@ -18,12 +18,15 @@ export function ProfileReadoutCard({
   icon: Icon,
   title,
   extra,
+  actions,
   children,
 }: {
   icon: LucideIcon;
   title: string;
   /** 标题后的小字（「2 个」「4 位」），弱显。 */
   extra?: string;
+  /** 标题条右端的动作（「编辑」「添加…」，票 company-subject-section-edit/01）；只读的读出不给。 */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   // 读出的字号（票 company-subject-ux/13 第 3 条）：值 14 / 标签 13 / 等宽 13 / 卡标题 14，行高 6；联系人卡与收款账户表同一把尺。
@@ -34,6 +37,7 @@ export function ProfileReadoutCard({
         <Icon className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
         <h4 className="text-[14px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
         {extra ? <span className="text-[13px] leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
+        {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
       <div className="px-4 py-3">{children}</div>
     </section>

@@ -6,6 +6,7 @@ import {
   resolveDisplayTimeZone,
   formatInstant,
   formatRange,
+  wallTimeOf,
   wallTimeToRfc3339,
   zoneLabel,
 } from './moment';
@@ -94,4 +95,12 @@ test('呈现时区的解析：配置、未配置、非法值', () => {
   configureDisplayTimeZone('Asia/Shanghai');
   equal(formatInstant('2026-10-30T00:00:00Z'), '2026-10-30 08:00:00 UTC+8');
   configureDisplayTimeZone(before);
+});
+
+// Covers: 此刻折成墙钟原值按给定区算、带秒；与 wallTimeToRfc3339 往返回到同一秒。
+test('时刻折成该区的墙钟原值，与墙钟换 RFC 3339 互为反向', () => {
+  const instant = new Date('2026-11-03T16:05:07Z');
+  equal(wallTimeOf(instant, 'Asia/Shanghai'), '2026-11-04T00:05:07');
+  equal(wallTimeOf(instant, 'UTC'), '2026-11-03T16:05:07');
+  equal(wallTimeToRfc3339(wallTimeOf(instant, 'America/New_York'), 'America/New_York'), '2026-11-03T16:05:07Z');
 });

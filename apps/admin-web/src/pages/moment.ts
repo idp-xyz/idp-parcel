@@ -135,6 +135,15 @@ export function formatRange(from: string, to?: string): string {
 const wallTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 /**
+ * 一个时刻在给定 IANA 区的墙钟原值（`YYYY-MM-DDTHH:mm:ss`），给 `datetime-local` 预填「此刻」用；与 wallTimeToRfc3339
+ * 互为反向，往返回到同一秒。
+ */
+export function wallTimeOf(instant: Date, timeZone: string): string {
+  const clock = wallClockOf(instant, timeZone);
+  return `${clock.year}-${pad(clock.month)}-${pad(clock.day)}T${pad(clock.hour)}:${pad(clock.minute)}:${pad(clock.second)}`;
+}
+
+/**
  * `datetime-local` 收到的墙钟时刻（`YYYY-MM-DDTHH:mm[:ss]`，无时区）按给定 IANA 区换成 RFC 3339
  * UTC（到秒，`Z` 结尾）。换不出来交回 null，调用方按编码层问题报，不猜、不补默认。
  *
