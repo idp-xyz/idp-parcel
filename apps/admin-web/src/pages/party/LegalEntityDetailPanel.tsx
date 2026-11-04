@@ -20,6 +20,7 @@ import {
 } from './LegalEntityHeaderParts';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { profileSectionEditingOf, type ProfileEditRequest, type ProfileSectionEditing } from './legal-entity-profile-sections';
+import { objectHash, profileEditHash } from './group-legal-entities-address';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
 import { LegalEntityContactsSection } from './LegalEntityContactsSection';
 import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
@@ -95,7 +96,6 @@ export function LegalEntityDetailPanel({
   const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview', tab]));
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [formOpenRequest, setFormOpenRequest] = useState(0);
   // 读出卡上的「编辑」「添加…」把那张卡切成就地表单（票 company-subject-section-edit/02）。编辑态钉住公司：栏不按行重挂，换了行
   // 就不算这一份。引用稳定——表单按它算打开时的基线。落册后写口整域作废，这里不用再拧什么。
   const [editing, setEditing] = useState<ProfileSectionEditing | null>(null);
@@ -126,9 +126,9 @@ export function LegalEntityDetailPanel({
     setTab(next);
     setVisited((previous) => (previous.has(next) ? previous : new Set(previous).add(next)));
   };
+  // 整张「更新公司资料」是对象页的编辑态（票 company-subject-section-edit/03）：把人带到对象页带编辑键的地址，栏里不再开抽屉。
   const openProfileForm = () => {
-    selectTab('profile');
-    setFormOpenRequest((count) => count + 1);
+    window.location.hash = profileEditHash(objectHash(row.legalEntityId), true);
   };
 
   return (
@@ -253,8 +253,8 @@ export function LegalEntityDetailPanel({
                 version={readVersion}
                 key={row.legalEntityId}
                 legalEntityId={row.legalEntityId}
-                formOpenRequest={formOpenRequest}
                 collapseCurrentProfile
+                onOpenForm={openProfileForm}
               />
             </TabsContent>
             <TabsContent

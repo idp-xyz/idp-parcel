@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
+import { groupLegalEntitiesViewOf, objectHash, profileEditHash, profileEditRequested, registerViewHash } from './group-legal-entities-address';
 
 // 本文件钉集团与法人页「地址 → 视图」的判读（票 group-legal-entities-uiux/04）：登记视图住在查询串上，不占路径第二段——
 // 第二段是法人标识，法人标识是自由文本，拿保留词占它会让同名法人的对象页打不开。
@@ -36,4 +36,15 @@ test('进出登记视图只改登记键', () => {
   equal(registerViewHash('#/group-legal-entities?q=SYN', true), '#/group-legal-entities?q=SYN&register=1');
   equal(registerViewHash('#/group-legal-entities?q=SYN&register=1', false), '#/group-legal-entities?q=SYN');
   equal(registerViewHash('#/group-legal-entities?register=1', false), '#/group-legal-entities');
+});
+
+// Covers: 编辑态只认 `edit=profile`；进出只改这一个键，对象标识与别的键原样；对象地址上带了编辑键仍是对象页。
+test('对象页整版资料的编辑态住在查询串上', () => {
+  equal(objectHash('LE/01'), '#/group-legal-entities/LE%2F01');
+  equal(profileEditRequested('#/group-legal-entities/SYN-LE-01?edit=profile'), true);
+  equal(profileEditRequested('#/group-legal-entities/SYN-LE-01?edit=1'), false);
+  equal(profileEditRequested('#/group-legal-entities/SYN-LE-01'), false);
+  equal(profileEditHash('#/group-legal-entities/SYN-LE-01', true), '#/group-legal-entities/SYN-LE-01?edit=profile');
+  equal(profileEditHash('#/group-legal-entities/SYN-LE-01?edit=profile', false), '#/group-legal-entities/SYN-LE-01');
+  deepEqual(groupLegalEntitiesViewOf('#/group-legal-entities/SYN-LE-01?edit=profile'), { kind: 'object', legalEntityId: 'SYN-LE-01' });
 });

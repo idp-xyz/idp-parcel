@@ -126,6 +126,11 @@ export interface DetailPageTemplateProps {
    * 放进来的东西在窄屏上看不见，所以只放「看不见也不缺」的辅助内容，正文归签。
    */
   aside?: ReactNode;
+  /**
+   * 页脚动作条（Fiori 对象页的 footer toolbar，票 company-subject-section-edit/03）：对象进入编辑态时「保存 / 取消」钉在
+   * 这里，不随内容滚、不被分区挤走；内容归调用方。只在 ready 态渲染——非 ready 态没有东西可保存。不传不渲染，渲染逐字节同。
+   */
+  footer?: ReactNode;
   viewState: TemplateViewState;
   stateOverride?: StateSlotProps['override'];
 }
@@ -151,6 +156,7 @@ export function DetailPageTemplate({
   onActiveTabChange,
   layout = 'tabs',
   aside,
+  footer,
   viewState,
   stateOverride,
 }: DetailPageTemplateProps) {
@@ -230,6 +236,7 @@ export function DetailPageTemplate({
           aside={aside}
           activeTab={activeTab}
           onActiveTabChange={onActiveTabChange}
+          footer={footer}
           stateSlot={
             viewState.kind === 'ready' ? null : (
               <div className="flex-1 flex items-center justify-center overflow-auto">
@@ -323,8 +330,14 @@ export function DetailPageTemplate({
           <StateSlot state={viewState} override={stateOverride} />
         </div>
       )}
+      {viewState.kind === 'ready' && hasRenderableContent(footer) ? <FooterBar>{footer}</FooterBar> : null}
     </div>
   );
+}
+
+/** 页脚动作条的容器：一道上边线、页面底色，内容由调用方摆（左边说话、右边动作，主动作靠右是调用方的事）。 */
+function FooterBar({ children }: { children: ReactNode }) {
+  return <div className="shrink-0 border-t border-idpxyz-border bg-idpxyz-bg px-4 py-2.5">{children}</div>;
 }
 
 // React 会把 null / undefined / 布尔 / 空串渲染成空，调用方给了这样一签等于没给——
@@ -425,6 +438,7 @@ function SectionsWorkspace({
   aside,
   activeTab,
   onActiveTabChange,
+  footer,
   stateSlot,
 }: {
   title: string;
@@ -439,6 +453,7 @@ function SectionsWorkspace({
   aside: ReactNode;
   activeTab?: WorkspaceTabId;
   onActiveTabChange?: (tab: WorkspaceTabId) => void;
+  footer?: ReactNode;
   stateSlot: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -500,6 +515,7 @@ function SectionsWorkspace({
       ) : (
         stateSlot
       )}
+      {ready && hasRenderableContent(footer) ? <FooterBar>{footer}</FooterBar> : null}
     </>
   );
 }

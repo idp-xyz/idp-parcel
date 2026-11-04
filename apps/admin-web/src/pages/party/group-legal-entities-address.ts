@@ -34,3 +34,23 @@ export function groupLegalEntitiesViewOf(hash: string): GroupLegalEntitiesView {
 export function registerViewHash(hash: string, open: boolean): string {
   return hashWithQueryValue(hash, REGISTER_VIEW_PARAM, open ? '1' : '');
 }
+
+/** 对象页地址。 */
+export function objectHash(legalEntityId: string): string {
+  return `#/${MODULE_ID}/${encodeURIComponent(legalEntityId)}`;
+}
+
+/**
+ * 对象页整版资料的编辑态在查询串里的键（票 company-subject-section-edit/03）：值为 `profile` 即编辑态。与登记视图同一做法——
+ * 编辑态住在地址上，刷新、后退都按地址走；详情栏要「打开表单」只需把人带到这个地址。
+ */
+export const PROFILE_EDIT_PARAM = 'edit';
+
+export function profileEditRequested(hash: string): boolean {
+  return hashQueryValue(hash, PROFILE_EDIT_PARAM) === 'profile';
+}
+
+/** 进出编辑态的地址：只改编辑键，路径与别的键原样。 */
+export function profileEditHash(hash: string, open: boolean): string {
+  return hashWithQueryValue(hash, PROFILE_EDIT_PARAM, open ? 'profile' : '');
+}

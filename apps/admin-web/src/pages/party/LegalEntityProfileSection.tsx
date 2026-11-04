@@ -1,22 +1,10 @@
 import { LegalEntityProfileContent } from './LegalEntityProfileContent';
 import { FieldAnchor, LegalEntityProfileFields } from './LegalEntityProfileFields';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Button,
-  ConfirmDialog,
-  Dialog,
-  DialogBody,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-} from '@idpxyz/ui-primitives';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, Input } from '@idpxyz/ui-primitives';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { moduleInfoById } from '../../navigation';
-import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote } from '../../components/registration';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
@@ -69,9 +57,9 @@ import { useLegalEntityRead } from './legal-entity-reads';
 // 公司资料的版本历史与更新表单沿同一条不可覆盖的资料链维护。当前时点摘要由 LegalEntityProfileSummary 负责；判读、折算与载荷
 // 在 legal-entity-profile.ts（纯函数，node:test 钉着），这里只摆。
 //
-// 更新表单住在从右侧滑出的抽屉里（票 company-subject-ux/04 第 5 项），页头「更新公司资料」与本区底部的同名按钮打开的是同一个。
-// 抽屉是模态的：开着的时候换签、换行、关详情栏都点不到，所以「未保存保护」只守一处——关抽屉（叉、Esc、点遮罩）与表单里
-// 站内链接要离开时，有没提交的输入先确认。
+// 整张更新表单是对象页的编辑态（票 company-subject-section-edit/03，参考 Fiori 对象页的显示态 / 编辑态）：住在概要分区里，
+// 「保存 / 取消」钉在页脚；票 company-subject-ux/04 定的右侧抽屉已撤。页头与本区底部的「更新公司资料」都把人带进那个编辑态
+// （地址上的 `?edit=profile`）。编辑态不是模态，「未保存保护」由对象页守：返回列表与表单里的站内链接要离开时先确认。
 //
 // 调用方按公司主体给 key：换一个主体就整块重挂，表单草稿里钉的主体标识不会停在上一个身上。
 
@@ -83,30 +71,23 @@ const profileAdvancedPaths = ['profiles[0].revision'];
 
 export function LegalEntityProfileSection({
   legalEntityId,
-  formOpenRequest = 0,
   collapseCurrentProfile = false,
   version,
+  onOpenForm,
 }: {
   legalEntityId: string;
   /** 身份版本（legalEntityReadVersion）；资料版本签按它与签上计数同键读（legal-entity-reads.ts）。 */
   version?: string;
-  /** 调用方每要一次「直接打开更新表单」就加一（页头的主动作）；0 即没要过。 */
-  formOpenRequest?: number;
   /** 对象页已有当前资料摘要时折叠按日期查询，仍保留历史与未来日期的查看入口。 */
   collapseCurrentProfile?: boolean;
+  /** 本区底部「更新公司资料」：把人带进对象页的编辑态；没有写授予时按钮不摆。 */
+  onOpenForm?: () => void;
 }) {
-  // 登记落册一次加一：按日期查询那一区（CurrentProfile，仍是页内现读）按它重取，新登的那笔立刻可见。版本历史经取数层读，
-  // 写口答到后整域作废（party-writes.ts），不靠它。
-  const [landed, setLanded] = useState(0);
   const [lookupVisited, setLookupVisited] = useState(false);
   // 没有登记册配置写授予的操作者不摆更新表单与打开它的按钮（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
-  useEffect(() => {
-    if (formOpenRequest > 0) setFormOpen(true);
-  }, [formOpenRequest]);
   // 注册号类型目录读一次，给按日期查询的读出与版本历史（对比表、快照）把监管登记号类型码译成目录译名；读不到按码显。
-  // 抽屉自己另读一份——它是导出件，页头也能单独挂它，不能指望挂它的人都带目录来。
+  // 编辑态自己另读一份——它是导出件，不能指望挂它的人都带目录来。
   const typeNameOf = useTypeNameOf(useLoaded(listRegistrationNumberTypes));
   return (
     <div className="flex flex-col gap-5">
@@ -127,7 +108,7 @@ export function LegalEntityProfileSection({
           <summary className="cursor-pointer text-[13px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">
             查看某个日期的资料
           </summary>
-          {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} landed={landed} typeNameOf={typeNameOf} /> : null}
+          {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} typeNameOf={typeNameOf} /> : null}
         </details>
       ) : (
         <section className="border-t border-idpxyz-border pt-4">
@@ -139,20 +120,14 @@ export function LegalEntityProfileSection({
               </p>
             </div>
           </div>
-          <CurrentProfile legalEntityId={legalEntityId} landed={landed} typeNameOf={typeNameOf} />
+          <CurrentProfile legalEntityId={legalEntityId} typeNameOf={typeNameOf} />
         </section>
       )}
-      {mayWrite ? (
+      {mayWrite && onOpenForm ? (
         <section className="border-t border-idpxyz-border pt-5">
-          <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
+          <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={onOpenForm}>
             更新公司资料
           </Button>
-          <LegalEntityProfileDrawer
-            open={formOpen}
-            onOpenChange={setFormOpen}
-            legalEntityId={legalEntityId}
-            onLanded={() => setLanded((count) => count + 1)}
-          />
         </section>
       ) : null}
     </div>
@@ -160,82 +135,27 @@ export function LegalEntityProfileSection({
 }
 
 /**
- * 更新公司资料的抽屉：受控的 open / onOpenChange，调用方（本区或页头）只管开关。用 Dialog 的 DialogContent 改成贴右侧的整高
- * 面板而不用组件库的 Drawer：那个 Drawer 定宽 24rem 且不收 className，装不下两列的资料表单；DialogContent 收 className，
- * cn 走 tailwind-merge，定位与宽度的冲突类按后者算。宽度与工作台详情栏同级。
+ * 对象页的编辑态本体（票 company-subject-section-edit/03）：先把当前生效的那一版与已登记的版本清单读回来，再挂表单——表单打开
+ * 即预填当前版（票 company-subject-ux/04「默认基于当前版本」），没有就等它。两份都打开时必现问（`fresh`），不拿缓存那份预填：缓存那份可能
+ * 早于别人刚落的一版，拿旧内容保存就把那一版无声改回去。当前资料读不到时不把人堵死：留一个「改为从空白开始」。
  *
- * 关抽屉走 requestLeave：有没提交的输入先问一句，确认了才真关；表单里的站内链接要去别处同一道门。
+ * 「保存 / 取消」与答复不在正文里：经 `footerSlot` 钉进对象页的页脚动作条（DetailPageTemplate 的 footer），槽位还没挂上时
+ * 暂摆在正文末尾。分区的改动不走这里：读出卡上就地编（LegalEntityProfileSectionEditor.tsx）。
  */
-export function LegalEntityProfileDrawer({
-  open,
-  onOpenChange,
+export function ProfileEditMode({
   legalEntityId,
-  onLanded,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  legalEntityId: string;
-  /** 登记册答已落册时调用，调用方借它重取读签。 */
-  onLanded: () => void;
-}) {
-  const [unsaved, setUnsaved] = useState(false);
-  // 要离开时的去向：null 是关抽屉，字符串是表单里的站内链接要去的地址；有没提交的输入时先问一句再走。
-  const [pendingLeave, setPendingLeave] = useState<{ href: string | null } | null>(null);
-  const leave = (href: string | null) => {
-    setPendingLeave(null);
-    onOpenChange(false);
-    if (href !== null) window.location.hash = href;
-  };
-  const requestLeave = (href: string | null) => (unsaved ? setPendingLeave({ href }) : leave(href));
-  return (
-    <>
-      <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : requestLeave(null))}>
-        <DialogContent
-          size="xl"
-          className="left-auto right-0 top-0 flex h-full w-[min(60rem,94vw)] max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-y-0 border-r-0"
-          aria-label="更新公司资料"
-        >
-          {/* 关了就卸：下一次打开是一次全新的挂载，基线与目录重读，上一次的草稿不留。 */}
-          {open ? (
-            <ProfileDrawerBody
-              key={legalEntityId}
-              legalEntityId={legalEntityId}
-              onLanded={onLanded}
-              onUnsavedChange={setUnsaved}
-              onRequestLeave={requestLeave}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-      <ConfirmDialog
-        renderFooter={confirmDialogFooter}
-        open={pendingLeave !== null}
-        tone="warning"
-        title={pendingLeave?.href ? '离开这一页？' : '关闭表单？'}
-        message="有内容还没有保存，离开后填写的内容不会保留。"
-        confirmLabel={pendingLeave?.href ? '离开' : '放弃并关闭'}
-        cancelLabel="继续填写"
-        onConfirm={() => leave(pendingLeave?.href ?? null)}
-        onCancel={() => setPendingLeave(null)}
-      />
-    </>
-  );
-}
-
-/**
- * 抽屉体：先把当前生效的那一版与已登记的版本清单读回来，再挂表单——表单打开即预填当前版（票面第 1 项），没有就等它。
- * 两份都打开时必现问（`fresh`），不拿缓存那份预填：缓存那份可能早于别人刚落的一版，拿旧内容保存就把那一版无声改回去。
- * 当前资料读不到时不把人堵死：留一个「改为从空白开始」。分区的改动不走这里：读出卡上就地编（LegalEntityProfileSectionEditor.tsx）。
- */
-function ProfileDrawerBody({
-  legalEntityId,
+  footerSlot,
   onLanded,
   onUnsavedChange,
   onRequestLeave,
 }: {
   legalEntityId: string;
-  onLanded: () => void;
+  /** 页脚动作条的槽位元素；null 即还没挂上。 */
+  footerSlot: HTMLElement | null;
+  /** 登记册答已落册时调用，带送出的草稿（版本号在里面）。 */
+  onLanded: (sent: LegalEntityProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
+  /** 要离开编辑态：null 是取消，字符串是表单里的站内链接要去的地址；有没提交的输入由对象页先问一句。 */
   onRequestLeave: (href: string | null) => void;
 }) {
   const current = useCurrentLegalEntityProfile(legalEntityId, undefined, { fresh: true });
@@ -246,39 +166,30 @@ function ProfileDrawerBody({
     revisions.answer?.kind === 'outcome' && revisions.answer.body.legalEntityId === legalEntityId ? revisions.answer.body.revisions : null;
   const knownFailed = revisions.answer !== null && known === null;
   const [blankFallback, setBlankFallback] = useState(false);
+  const renderFooter = (node: ReactNode) => (footerSlot ? createPortal(node, footerSlot) : node);
 
   const answer = current.answer;
   const resolved = answer?.kind === 'outcome' && answer.body.legalEntityId === legalEntityId ? answer.body : null;
-  const header = (
-    <DialogHeader className="shrink-0">
-      <div className="min-w-0">
-        <DialogTitle>更新公司资料</DialogTitle>
-        <DialogDescription className="mt-0.5 font-mono">编码 {legalEntityId}</DialogDescription>
-      </div>
-      <DialogClose />
-    </DialogHeader>
-  );
   if (resolved === null && !blankFallback) {
     return (
       <>
-        {header}
-        <DialogBody className="min-h-0 flex-1 overflow-y-auto">
-          {answer === null ? (
-            <p className="text-[12px] text-idpxyz-breadcrumb">正在读取当前资料，表单会基于它预填…</p>
-          ) : (
-            <div className="flex flex-col items-start gap-3">
-              <CurrentLegalEntityProfile query={current}>{() => null}</CurrentLegalEntityProfile>
-              <Button variant="outline" onClick={() => setBlankFallback(true)}>
-                改为从空白开始
-              </Button>
-            </div>
-          )}
-        </DialogBody>
-        <DialogFooter className="shrink-0">
-          <Button variant="outline" onClick={() => onRequestLeave(null)}>
-            取消
-          </Button>
-        </DialogFooter>
+        {answer === null ? (
+          <p className="text-[12px] text-idpxyz-breadcrumb">正在读取当前资料，表单会基于它预填…</p>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            <CurrentLegalEntityProfile query={current}>{() => null}</CurrentLegalEntityProfile>
+            <Button variant="outline" onClick={() => setBlankFallback(true)}>
+              改为从空白开始
+            </Button>
+          </div>
+        )}
+        {renderFooter(
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => onRequestLeave(null)}>
+              取消
+            </Button>
+          </div>,
+        )}
       </>
     );
   }
@@ -290,21 +201,19 @@ function ProfileDrawerBody({
         ? `当前没有生效的资料（${legalEntityProfileStatusOf(resolved).label}）`
         : null;
   return (
-    <>
-      {header}
-      <ProfileRegistrationForm
-        legalEntityId={legalEntityId}
-        current={currentContent}
-        noCurrentNote={noCurrentNote}
-        known={known}
-        knownFailed={knownFailed}
-        onRetryKnown={revisions.retry}
-        typeCatalogue={typeCatalogue}
-        onLanded={onLanded}
-        onUnsavedChange={onUnsavedChange}
-        onRequestLeave={onRequestLeave}
-      />
-    </>
+    <ProfileRegistrationForm
+      legalEntityId={legalEntityId}
+      current={currentContent}
+      noCurrentNote={noCurrentNote}
+      known={known}
+      knownFailed={knownFailed}
+      onRetryKnown={revisions.retry}
+      typeCatalogue={typeCatalogue}
+      renderFooter={renderFooter}
+      onLanded={onLanded}
+      onUnsavedChange={onUnsavedChange}
+      onRequestLeave={onRequestLeave}
+    />
   );
 }
 
@@ -337,6 +246,7 @@ function ProfileRegistrationForm({
   knownFailed,
   onRetryKnown,
   typeCatalogue,
+  renderFooter,
   onLanded,
   onUnsavedChange,
   onRequestLeave,
@@ -350,7 +260,9 @@ function ProfileRegistrationForm({
   knownFailed: boolean;
   onRetryKnown: () => void;
   typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
-  onLanded: () => void;
+  /** 动作条摆到哪里去（页脚槽位）；ProfileEditMode 给。 */
+  renderFooter: (node: ReactNode) => ReactNode;
+  onLanded: (sent: LegalEntityProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
   onRequestLeave: (href: string | null) => void;
 }) {
@@ -359,7 +271,6 @@ function ProfileRegistrationForm({
     base.kind === 'current' ? current : base.kind === 'blank' ? null : (known?.find((row) => row.revision === base.revision) ?? null);
   // 未保存的基线就是打开（或改基）时预填进去的那份：只有预填、人什么都没动，不算没提交。
   const baseDraft = useMemo(() => legalEntityProfileDraftBasedOn(legalEntityId, baseContent), [legalEntityId, baseContent]);
-  const [landedCount, setLandedCount] = useState(0);
   const form = useRegistrationForm<LegalEntityProfileDraft>({
     kind,
     empty: () => baseDraft,
@@ -367,10 +278,7 @@ function ProfileRegistrationForm({
     localProblems: legalEntityProfileLocalProblems,
     payloadOf: legalEntityProfilePayloadOf,
     landedOutcome: 'REGISTERED',
-    onLanded: () => {
-      setLandedCount((value) => value + 1);
-      onLanded();
-    },
+    onLanded,
   });
   const { draft, patch, locked, timeZone } = form;
   useEffect(() => {
@@ -392,6 +300,10 @@ function ProfileRegistrationForm({
   const problems = attempted ? problemsWithMissing(form.problems, missing) : form.problems;
   const bodyRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ProfileComparison | null>(null);
+  // 预览比表单短得多：表单住在整页滚动的分区里，内容一换短，滚动位置会落到后面的分区上，人看不见预览——把它滚进视野。
+  useEffect(() => {
+    if (preview !== null) bodyRef.current?.scrollIntoView({ block: 'start' });
+  }, [preview]);
   const typeNameOf = useTypeNameOf(typeCatalogue);
   const save = () => {
     if (missing.length > 0) {
@@ -411,13 +323,12 @@ function ProfileRegistrationForm({
   const advancedSummary = `版本号 ${form.revisionField.value.trim() || '未填'}${
     form.revisionField.edited ? '（手填）' : '（建议值）'
   }`;
-  const landedNow = landedCount > 0 && !form.unsaved;
   const knownOptions = [...(known ?? [])].sort((a, b) => b.revision - a.revision);
 
   return (
     <>
-      <DialogBody className="min-h-0 flex-1 overflow-y-auto">
-        <div ref={bodyRef}>
+      {/* scroll-mt：对象页的锚点栏吸在滚动容器顶上，滚进视野时按它留出高度，预览的标题不被盖住。 */}
+      <div ref={bodyRef} className="min-w-0 scroll-mt-14">
           {preview !== null && current !== null ? (
             <ChangePreview
               comparison={preview}
@@ -518,9 +429,9 @@ function ProfileRegistrationForm({
               </AdvancedGroup>
             </div>
           )}
-        </div>
-      </DialogBody>
-      <DialogFooter className="shrink-0 justify-between gap-4">
+      </div>
+      {renderFooter(
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1 text-[12px]">
           {attempted && missing.length > 0 ? (
             <p role="alert" className="text-idpxyz-danger">
@@ -552,10 +463,6 @@ function ProfileRegistrationForm({
                 确认保存
               </Button>
             </>
-          ) : landedNow ? (
-            <Button variant="default" className={primaryActionClass} onClick={() => onRequestLeave(null)}>
-              关闭
-            </Button>
           ) : (
             <>
               <Button variant="outline" disabled={locked} onClick={() => onRequestLeave(null)}>
@@ -572,7 +479,8 @@ function ProfileRegistrationForm({
             </>
           )}
         </div>
-      </DialogFooter>
+      </div>,
+      )}
     </>
   );
 }
@@ -660,11 +568,9 @@ function BaseLine({
  */
 function CurrentProfile({
   legalEntityId,
-  landed,
   typeNameOf,
 }: {
   legalEntityId: string;
-  landed: number;
   typeNameOf: RegistrationNumberTypeNameOf;
 }) {
   const timeZone = currentDisplayTimeZone();
@@ -686,7 +592,7 @@ function CurrentProfile({
     return () => {
       cancelled = true;
     };
-  }, [legalEntityId, at, timeZone, landed, reloadKey]);
+  }, [legalEntityId, at, timeZone, reloadKey]);
 
   const retry = () => setReloadKey((value) => value + 1);
   return (

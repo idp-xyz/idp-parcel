@@ -29,7 +29,7 @@ import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listGroupLegalEntities, listRegistrationNumberTypes, type GroupLegalEntityRecord } from './api';
 import { useBoundTenant } from '../use-operator-binding';
-import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
+import { groupLegalEntitiesViewOf, objectHash, profileEditHash, profileEditRequested, registerViewHash } from './group-legal-entities-address';
 import { identityLayerAbsentNote } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import {
@@ -242,11 +242,6 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
   ];
 }
 
-/** 详情地址：hash 二段。壳层拿前两段作标签 id，对象页因此另开一张标签，列表留在原处。 */
-function detailHash(legalEntityId: string): string {
-  return `#/group-legal-entities/${encodeURIComponent(legalEntityId)}`;
-}
-
 /**
  * 集团与法人（party-commercial）。行对象是责任法人的最新登记修订：法人钉在稳定的业务参与方身份上
  * （ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按修订版本化不可覆盖，停用形成新修订而不是删除。
@@ -340,6 +335,28 @@ export function GroupLegalEntitiesPage() {
     }
     window.location.replace(registerViewHash(window.location.hash, false));
   };
+  // 对象页整版资料的编辑态（票 company-subject-section-edit/03）与登记视图同一套历史收口：本次挂载里自己压进去的用后退退出，
+  // 刷新或从别的标签直接落在编辑态的用替换——不然保存或取消之后浏览器后退会回到 `?edit=profile`、重新进入编辑态。
+  // 退出后还要去别处（返回列表、表单里的站内链接）时一律替换再走：后退是异步的，接着跳转会打架。
+  const pushedProfileEdit = useRef(false);
+  const enterProfileEdit = () => {
+    pushedProfileEdit.current = true;
+    window.location.hash = profileEditHash(window.location.hash, true);
+  };
+  const exitProfileEdit = (then?: () => void) => {
+    if (then === undefined && pushedProfileEdit.current) {
+      pushedProfileEdit.current = false;
+      window.history.back();
+      return;
+    }
+    pushedProfileEdit.current = false;
+    const next = profileEditHash(window.location.hash, false);
+    window.location.replace(next);
+    // 自己同步记下：紧接着的 `then` 多半把地址换到别的标签名下，hashchange 回调跑到时那次变化已不归本标签，useOwnAddressChange
+    // 会把它滤掉，本页的 hash 状态就停在编辑态上、表单一直挂着。
+    setHash(next);
+    then?.();
+  };
   const requestLeaveRegister = () => (registerUnsaved ? setConfirmingLeave(true) : leaveRegister());
 
   // 列表没取到（加载中 / 未配置 / 出错）传 null：登记表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
@@ -377,6 +394,9 @@ export function GroupLegalEntitiesPage() {
         retry={retry}
         onBack={() => tabReturn.returnTo('group-legal-entities')}
         typeNameOf={typeNameOf}
+        profileEditing={profileEditRequested(hash)}
+        onEnterProfileEdit={enterProfileEdit}
+        onExitProfileEdit={exitProfileEdit}
       />
     );
   }
@@ -559,7 +579,7 @@ export function GroupLegalEntitiesPage() {
             row={row}
             onClose={() => selectRow(null)}
             onOpenObjectPage={() => {
-              window.location.hash = detailHash(row.legalEntityId);
+              window.location.hash = objectHash(row.legalEntityId);
             }}
             onChanged={retry}
             typeNameOf={typeNameOf}

@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { FileText } from 'lucide-react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
+import { useToast } from '@idpxyz/ui-theme-runtime';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import {
   DetailPageTemplate,
@@ -24,7 +26,7 @@ import {
   legalEntityHasBanners,
   legalEntityHeaderFacts,
 } from './LegalEntityHeaderParts';
-import { LegalEntityProfileDrawer, LegalEntityProfileSection } from './LegalEntityProfileSection';
+import { LegalEntityProfileSection, ProfileEditMode } from './LegalEntityProfileSection';
 import { profileSectionEditingOf, type ProfileEditRequest, type ProfileSectionEditing } from './legal-entity-profile-sections';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { LegalEntityProfileSummary } from './LegalEntityProfileSummary';
@@ -47,6 +49,9 @@ import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
+
+/** 离开编辑态的去向：取消留在对象页；返回列表；表单里的站内链接。 */
+type ProfileLeave = { kind: 'cancel' } | { kind: 'back' } | { kind: 'link'; href: string };
 
 /**
  * 对象页与工作台详情栏共用身份修订历史的判读。按注册号类型目录译名的那一份随页面传进来（票 01 备好的
@@ -184,9 +189,12 @@ function profileVersionsSummary(
 
 /**
  * 对象页按分区版式摆（票 company-subject-ux/13）：概要、联系人、资料版本（默认折起）、登记记录（默认折起）、关联一页纵排，
- * 签成锚点栏。页头「更新公司资料」开的是本页自己挂的抽屉，不经资料版本分区——那个分区折着时内容没挂，
- * 经它转的「打开表单」要求到不了；抽屉落册后把分区按钥匙重挂，让它的版本历史重读。分区里底部的同名按钮照旧开分区自己的抽屉。
- * 受控锚点仍交给模板：更新动作同时把锚点拨到资料版本，模板滚过去并把折着的分区展开。
+ * 签成锚点栏。
+ *
+ * 编辑态（票 company-subject-section-edit/03，参考 Fiori 对象页的显示态 / 编辑态）：由地址上的 `?edit=profile` 决定（调用方
+ * 判好传进来，进出经 onEnterProfileEdit / onExitProfileEdit 改地址），概要分区换成整张表单，「保存 / 取消」钉在模板的页脚动作条；页头的
+ * 「更新公司资料」与「更多」收起，联系人分区只留一句指路，分区就地编辑的按钮也收起——一次只有一个编辑态。落册后报 toast、
+ * 回到显示态，并把资料版本分区按钥匙重挂让版本历史重读。不是模态，所以「返回列表」与表单里的站内链接要离开时先问一句。
  */
 export function LegalEntityDetailPage({
   legalEntityId,
@@ -195,8 +203,17 @@ export function LegalEntityDetailPage({
   retry,
   onBack,
   typeNameOf,
+  profileEditing,
+  onEnterProfileEdit,
+  onExitProfileEdit,
 }: {
   legalEntityId: string;
+  /** 整版资料的编辑态：由地址判出（group-legal-entities-address.ts 的 profileEditRequested）。 */
+  profileEditing: boolean;
+  /** 进编辑态：调用方改地址。 */
+  onEnterProfileEdit: () => void;
+  /** 出编辑态：调用方改地址（后退或替换，由它按历史判）；`then` 是退出后还要去的地方，给了就替换地址再走。 */
+  onExitProfileEdit: (then?: () => void) => void;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
   row: GroupLegalEntityRecord | null;
   listAnswer: ApiResult<GroupLegalEntityListResponseBody> | null;
@@ -211,17 +228,40 @@ export function LegalEntityDetailPage({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
-  const [headerFormOpen, setHeaderFormOpen] = useState(false);
-  // 页头抽屉落册的次数：资料版本分区按它重挂（理由见函数头）；分区自己的抽屉落册不转它，不然刚保存完的抽屉会随分区一起卸掉。
+  // 编辑态落册的次数：资料版本分区按它重挂，让版本历史重读。
   const [headerLanded, setHeaderLanded] = useState(0);
-  // 读出卡上的「编辑」「添加…」把那张卡切成就地表单（票 company-subject-section-edit/02）；编辑态钉住公司。
-  const [editing, setEditing] = useState<ProfileSectionEditing | null>(null);
-  const activeEditing = editing !== null && editing.legalEntityId === row?.legalEntityId ? editing : null;
+  // 页脚动作条的槽位：模板挂上后表单把「保存 / 取消」portal 进去。
+  const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const [unsaved, setUnsaved] = useState(false);
+  // 要离开编辑态的去向：取消（留在对象页）、返回列表、表单里的站内链接；有没提交的输入先问一句再走。
+  const [pendingLeave, setPendingLeave] = useState<ProfileLeave | null>(null);
+  const { addToast } = useToast();
+  const leave = (target: ProfileLeave) => {
+    setPendingLeave(null);
+    if (target.kind === 'cancel') onExitProfileEdit();
+    else if (target.kind === 'back') onExitProfileEdit(onBack);
+    else {
+      const { href } = target;
+      onExitProfileEdit(() => {
+        window.location.hash = href;
+      });
+    }
+  };
+  const requestLeave = (target: ProfileLeave) => (unsaved ? setPendingLeave(target) : leave(target));
+  const editing = profileEditing && mayWrite && row !== null;
+  // 进编辑态就丢掉分区的就地编辑态：一次只有一个编辑态，退出后也不让上次的分区表单原样回来。
   useEffect(() => {
-    if (editing !== null && row !== null && editing.legalEntityId !== row.legalEntityId) setEditing(null);
-  }, [editing, row]);
-  const onEdit = mayWrite && row ? (request: ProfileEditRequest) => setEditing(profileSectionEditingOf(row.legalEntityId, request)) : undefined;
-  const onEditEnd = () => setEditing(null);
+    if (editing) setSectionEditing(null);
+  }, [editing]);
+  // 读出卡上的「编辑」「添加…」把那张卡切成就地表单（票 company-subject-section-edit/02）；编辑态钉住公司。
+  const [sectionEditing, setSectionEditing] = useState<ProfileSectionEditing | null>(null);
+  const activeEditing = sectionEditing !== null && sectionEditing.legalEntityId === row?.legalEntityId && !editing ? sectionEditing : null;
+  useEffect(() => {
+    if (sectionEditing !== null && row !== null && sectionEditing.legalEntityId !== row.legalEntityId) setSectionEditing(null);
+  }, [sectionEditing, row]);
+  const onEdit =
+    mayWrite && row && !editing ? (request: ProfileEditRequest) => setSectionEditing(profileSectionEditingOf(row.legalEntityId, request)) : undefined;
+  const onEditEnd = () => setSectionEditing(null);
   // 身份登了下一修订、停用会换身份版本，即换了键；资料更新落册由写口整域作废（party-writes.ts）——当前资料与签上的计数
   // 都随之重读，不另拧钥匙。
   const readVersion = row ? legalEntityReadVersion(row) : undefined;
@@ -238,17 +278,19 @@ export function LegalEntityDetailPage({
   const profileCell = profileStatusCellOf(profileQuery.answer, row?.legalEntityId ?? legalEntityId);
   const referenced = referencedCount(references.states);
   const openProfileForm = () => {
-    setTab('profile-versions');
-    setHeaderFormOpen(true);
+    setSectionEditing(null);
+    setTab('summary');
+    onEnterProfileEdit();
   };
   return (
+    <>
     <DetailPageTemplate
       title={info.title}
       identifier={row ? (row.partyNameKnown ? row.partyName : partyNameUnknownNote) : legalEntityId}
       status={row ? <StatusPill code={row.status} /> : undefined}
       headerActions={
         <>
-          {row ? (
+          {row && !editing ? (
             <>
               {mayWrite ? (
                 <Button
@@ -262,22 +304,19 @@ export function LegalEntityDetailPage({
                 </Button>
               ) : null}
               <LegalEntityMoreMenu row={row} onChanged={retry} />
-              {/* 抽屉经 portal 开在页面之上，摆在动作区里只是让它跟着页头那颗按钮；关着时不占 DOM。 */}
-              {mayWrite ? (
-                <LegalEntityProfileDrawer
-                  open={headerFormOpen}
-                  onOpenChange={setHeaderFormOpen}
-                  legalEntityId={row.legalEntityId}
-                  onLanded={() => setHeaderLanded((count) => count + 1)}
-                />
-              ) : null}
             </>
           ) : null}
-          <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[12px] text-idpxyz-breadcrumb"
+            onClick={() => (editing ? requestLeave({ kind: 'back' }) : onBack())}
+          >
             返回列表
           </Button>
         </>
       }
+      footer={editing ? <div ref={setFooterSlot} /> : undefined}
       meta={row ? buildMeta(row, typeNameOf, profileCell, referenced) : []}
       // 头区 meta 行已把身份事实与关键事实显完，概要卡没有自己的格：技术详情跟在当前资料读出之后（与详情栏概要签同位），
       // 停用来源单据跟在停用横幅下。传空数组——分签形态下模板按有没有字段判要不要画这张卡，空的不画。
@@ -315,7 +354,26 @@ export function LegalEntityDetailPage({
                 id: 'summary',
                 // 读出撑满模板的内容列，卡按自己的宽度排一列或两列（legal-entity-profile-readout.css 的容器查询），
                 // 与详情栏同一规矩：不设上限，宽度归容器定。
-                content: (
+                content: editing ? (
+                  <section className="bg-idpxyz-bg p-5" aria-label="更新公司资料">
+                    <ProfileEditMode
+                      key={row.legalEntityId}
+                      legalEntityId={row.legalEntityId}
+                      footerSlot={footerSlot}
+                      onLanded={(sent) => {
+                        addToast({
+                          type: 'success',
+                          title: `公司资料已更新${sent ? `，登记为${profileRevisionLabel(Number(sent.revision))}` : ''}`,
+                        });
+                        setHeaderLanded((count) => count + 1);
+                        setUnsaved(false);
+                        onExitProfileEdit();
+                      }}
+                      onUnsavedChange={setUnsaved}
+                      onRequestLeave={(href) => requestLeave(href === null ? { kind: 'cancel' } : { kind: 'link', href })}
+                    />
+                  </section>
+                ) : (
                   <section className="bg-idpxyz-bg p-5">
                     <LegalEntityProfileSummary query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
                     <TechnicalDetails className="mt-4" rows={legalEntityTechnicalRows(row)} />
@@ -327,7 +385,11 @@ export function LegalEntityDetailPage({
                 count: contactCount,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
-                    <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
+                    {editing ? (
+                      <p className="text-[13px] leading-6 text-idpxyz-breadcrumb">联系人在上方「概要」分区的表单里编辑。</p>
+                    ) : (
+                      <LegalEntityContactsSection query={profileQuery} onEdit={onEdit} editing={activeEditing} onEditEnd={onEditEnd} />
+                    )}
                   </section>
                 ),
               },
@@ -344,6 +406,7 @@ export function LegalEntityDetailPage({
                       key={`${row.legalEntityId}#${headerLanded}`}
                       legalEntityId={row.legalEntityId}
                       collapseCurrentProfile
+                      onOpenForm={editing ? undefined : openProfileForm}
                     />
                   </section>
                 ),
@@ -383,5 +446,19 @@ export function LegalEntityDetailPage({
       layout="sections"
       viewState={viewState}
     />
+    <ConfirmDialog
+      renderFooter={confirmDialogFooter}
+      open={pendingLeave !== null}
+      tone="warning"
+      title={pendingLeave?.kind === 'cancel' ? '放弃修改？' : '离开这一页？'}
+      message="有内容还没有保存，离开后填写的内容不会保留。"
+      confirmLabel={pendingLeave?.kind === 'cancel' ? '放弃' : '离开'}
+      cancelLabel="继续编辑"
+      onConfirm={() => {
+        if (pendingLeave !== null) leave(pendingLeave);
+      }}
+      onCancel={() => setPendingLeave(null)}
+    />
+    </>
   );
 }
