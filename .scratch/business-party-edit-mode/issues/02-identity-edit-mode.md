@@ -1,7 +1,7 @@
 # 02 名称更正 = 对象页编辑态
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 

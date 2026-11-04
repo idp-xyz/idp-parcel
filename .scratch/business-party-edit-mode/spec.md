@@ -18,6 +18,6 @@ Status: in-progress
 
 | 票 | 内容 | 状态 |
 |---|---|---|
-| [01](./issues/01-deactivation-dialog-on-page.md) | 停用留在本页：对象页与详情栏「更多 › 停用」开本页对话框 | in-progress |
-| [02](./issues/02-identity-edit-mode.md) | 名称更正 = 对象页编辑态（`?edit=identity`），页脚保存 / 取消 | draft |
+| [01](./issues/01-deactivation-dialog-on-page.md) | 停用留在本页：对象页与详情栏「更多 › 停用」开本页对话框 | resolved（2026-11-04 进 main） |
+| [02](./issues/02-identity-edit-mode.md) | 名称更正 = 对象页编辑态（`?edit=identity`），页脚保存 / 取消 | in-progress |
 | [03](./issues/03-relationship-inline-register.md) | 全景「合作关系」块就地登记新关系，本方预填 | draft |
