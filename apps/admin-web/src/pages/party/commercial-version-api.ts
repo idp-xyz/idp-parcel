@@ -10,7 +10,8 @@ export type CommercialVersionReadBody<Record> =
   | { outcome: 'COMMERCIAL_VERSION_READ'; kind: CommercialObjectKindName; version: Record }
   | { outcome: 'COMMERCIAL_VERSION_NOT_FOUND' };
 
-export const commercialVersionReadbackEndpoint = '/commercial-version-readbacks';
+/** 页面状态区里给操作者看的端点说明；路径本身写在下面的模板串里，与 parcel-api 端点表那一行同形。 */
+export const commercialVersionReadbackEndpointNote = 'GET /commercial-version-readbacks/{kind}/{objectId}/{version}';
 
 export function readCommercialVersion<Record>(
   kind: CommercialObjectKindName,
@@ -18,7 +19,7 @@ export function readCommercialVersion<Record>(
   version: string,
 ): Promise<ApiResult<CommercialVersionReadBody<Record>>> {
   return exchangeMasterData<CommercialVersionReadBody<Record>>(
-    `${commercialVersionReadbackEndpoint}/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}/${encodeURIComponent(version)}`,
+    `/commercial-version-readbacks/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}/${encodeURIComponent(version)}`,
   );
 }
 

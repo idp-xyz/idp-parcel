@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { useAnswer, useRetryWhenChanged } from '../../query/answers';
 import { partyAnswersDomain } from './party-writes';
-import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { commercialVersionReadbackEndpointNote, readCommercialVersion, readVersionOf } from './commercial-version-api';
 import { VersionObjectPage } from './VersionObjectPage';
 import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
 import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
@@ -309,7 +309,7 @@ function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
         }
         viewState={catalogueViewState(readback.answer, row ? 1 : 0, readback.retry, {
           module: info,
-          endpoint: `GET ${commercialVersionReadbackEndpoint}/SERVICE_PRODUCT/{objectId}/{version}`,
+          endpoint: commercialVersionReadbackEndpointNote,
           emptyTitle: '没有这一版',
           emptyDescription: '这个产品标识与版本号在本租户的册上不存在；地址可能抄错，或这一版尚未发布。',
         })}

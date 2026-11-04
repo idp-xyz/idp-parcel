@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useAnswer, useRetryWhenChanged } from '../../query/answers';
 import { partyAnswersDomain } from './party-writes';
-import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { commercialVersionReadbackEndpointNote, readCommercialVersion, readVersionOf } from './commercial-version-api';
 import { VersionObjectPage } from './VersionObjectPage';
 import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
@@ -337,7 +337,7 @@ function PolicyObjectPage({ register, objectId, version, directory }: VersionObj
         }
         viewState={catalogueViewState(answer, row ? 1 : 0, readback.retry, {
           module: info,
-          endpoint: `GET ${commercialVersionReadbackEndpoint}/{kind}/{objectId}/{version}`,
+          endpoint: commercialVersionReadbackEndpointNote,
           emptyTitle: '没有这一版',
           emptyDescription:
             objectKind === null
