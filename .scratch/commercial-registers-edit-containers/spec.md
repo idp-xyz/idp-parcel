@@ -25,8 +25,8 @@ Status: in-progress
 | 票 | 页 | 状态 |
 |---|---|---|
 | [01](./issues/01-service-products.md) | 服务产品（含抽出共享件 `VersionDetailPanel`、`VersionClosureDialog`、登记视图壳） | resolved（2026-11-04 进 main） |
-| [02](./issues/02-party-contracts.md) | 客户与合同（两张表单：签订合同、新增客户账户） | in-progress |
-| [03](./issues/03-supplier-agreements.md) | 供应商协议 | draft |
+| [02](./issues/02-party-contracts.md) | 客户与合同（两张表单：签订合同、新增客户账户） | resolved（2026-11-04 进 main） |
+| [03](./issues/03-supplier-agreements.md) | 供应商协议 | in-progress |
 | [04](./issues/04-commercial-policies.md) | 商业规则（九本册、已有地址） | draft |
 | [05](./issues/05-channel-product-catalog.md) | 渠道产品目录（只换详情容器） | draft |
 | [06](./issues/06-pending-publications.md) | 审批与发布（待发布抽屉退役） | draft |

@@ -1,7 +1,7 @@
 # 03 供应商协议：行详情进右栏、签订协议走登记视图、收尾用对话框
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 
