@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
@@ -8,6 +8,10 @@ import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } 
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { BusinessPartyBanners, BusinessPartyMoreMenu } from './BusinessPartyHeaderParts';
+import { useMayWriteRegistry } from '../use-operator-grants';
+import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
+import { useToast } from '@idpxyz/ui-theme-runtime';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -44,20 +48,50 @@ export function BusinessPartyDetailPanel({
   retryRelationships: () => void;
   onClose: () => void;
   onOpenObjectPage: () => void;
-  /** 「停用此参与方…」：页面借它记下这次是从列表压进登记视图的，再改地址。 */
-  /** 页面持有的参与方列表答案，给「更多 › 停用」的对话框。 */
+  /** 页面持有的参与方列表答案，给「更多 › 停用」的对话框与「登记合作关系」的双方候选。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
   /** 停用落册后回调；列表页借它重取参与方册。 */
   onChanged: () => void;
 }) {
   const [tab, setTab] = useState<PanelTab>('overview');
   const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
+  // 没有登记册配置写授予的操作者不摆登记入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
+  const { addToast } = useToast();
+  // 全景签「合作关系」块就地登记（票 business-party-edit-mode/03）。栏不按行重挂：换了行就不算这一份。
+  const [registering, setRegistering] = useState<string | null>(null);
+  const [relationshipUnsaved, setRelationshipUnsaved] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
+  const relationshipRegistration = mayWrite
+    ? {
+        active: registering === row.partyId,
+        onOpen: () => setRegistering(row.partyId),
+        form: (
+          <PartyRelationshipRegistrationForm
+            key={row.partyId}
+            knownRelationships={knownRelationships}
+            parties={parties}
+            preset={{ holder: row.partyId }}
+            onRegistered={() => {
+              addToast({ type: 'success', title: '合作关系已登记' });
+              setRelationshipUnsaved(false);
+              setRegistering(null);
+              retryRelationships();
+            }}
+            onUnsavedChange={setRelationshipUnsaved}
+            inline={{ onCancel: () => (relationshipUnsaved ? setConfirmingCancel(true) : setRegistering(null)) }}
+          />
+        ),
+      }
+    : undefined;
   const selectTab = (next: PanelTab) => {
     setTab(next);
     setVisited((previous) => (previous.has(next) ? previous : new Set(previous).add(next)));
   };
 
   return (
+    <>
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`业务参与方 ${row.partyId}`}>
       <div className="space-y-3 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
@@ -128,7 +162,12 @@ export function BusinessPartyDetailPanel({
             forceMount={visited.has('overview') || undefined}
             className="mt-0 data-[state=inactive]:hidden"
           >
-            <PartyOverviewSection partyId={row.partyId} relationships={relationships} retryRelationships={retryRelationships} />
+            <PartyOverviewSection
+              partyId={row.partyId}
+              relationships={relationships}
+              retryRelationships={retryRelationships}
+              relationshipRegistration={relationshipRegistration}
+            />
           </TabsContent>
           <TabsContent
             value="identity"
@@ -160,5 +199,20 @@ export function BusinessPartyDetailPanel({
         </div>
       </Tabs>
     </div>
+    <ConfirmDialog
+      renderFooter={confirmDialogFooter}
+      open={confirmingCancel}
+      tone="warning"
+      title="放弃修改？"
+      message="有内容还没有保存，离开后填写的内容不会保留。"
+      confirmLabel="放弃"
+      cancelLabel="继续编辑"
+      onConfirm={() => {
+        setConfirmingCancel(false);
+        setRegistering(null);
+      }}
+      onCancel={() => setConfirmingCancel(false)}
+    />
+    </>
   );
 }

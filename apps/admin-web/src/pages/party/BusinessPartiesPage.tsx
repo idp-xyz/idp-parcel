@@ -14,6 +14,7 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { hasUnsavedDraft, registrationGroup } from './unsaved-guard';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneText } from '../../components/status-tone';
 import type { ApiResult } from '../catalogue-api';
@@ -450,6 +451,13 @@ export function BusinessPartiesPage() {
   const [type, setType] = useState<BusinessPartyTypeFilter>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultBusinessPartySort);
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  // 详情栏全景签里的关系登记不是模态（票 business-party-edit-mode/03）：换行、关栏会把表单连草稿一起卸掉，有没提交的输入时先问一句。
+  // 登记簿按组查（unsaved-guard.ts）：列表视图里挂着的关系表单只有详情栏这一份。
+  const [pendingSelect, setPendingSelect] = useState<{ key: string | null } | null>(null);
+  const selectParty = (key: string | null) => {
+    if (key !== selectedParty && hasUnsavedDraft(registrationGroup('party-relationship'))) setPendingSelect({ key });
+    else setSelectedParty(key);
+  };
   // 关系册的列表状态。检索留在页内：停用入口与引用链接定位的是身份这一册。
   const [relationshipSearch, setRelationshipSearch] = useState('');
   const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
@@ -762,7 +770,7 @@ export function BusinessPartiesPage() {
           rows={visible}
           rowKey={(row) => row.partyId}
           selectedKey={selectedParty}
-          onSelect={setSelectedParty}
+          onSelect={selectParty}
           sort={sort}
           onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
           noMatchText={businessPartyNoMatchNote}
@@ -779,7 +787,7 @@ export function BusinessPartiesPage() {
                 roles={rolesOfParty(roleIndex, row.partyId)}
                 relationships={relationships.answer}
                 retryRelationships={relationships.retry}
-                onClose={() => setSelectedParty(null)}
+                onClose={() => selectParty(null)}
                 onOpenObjectPage={() => {
                   window.location.hash = businessPartyObjectHash(row.partyId);
                 }}
@@ -910,6 +918,21 @@ export function BusinessPartiesPage() {
           emptyTitle: '还没有登记任何合作关系',
           emptyDescription: `谁是我们的客户、谁是承运商，都由合作关系说。${entryHint(mayWrite, '用页头的「建立合作关系」登记第一段。')}`,
         })}
+      />
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={pendingSelect !== null}
+        tone="warning"
+        title="放弃修改？"
+        message="合作关系登记还没有保存，换行或关闭详情后填写的内容不会保留。"
+        confirmLabel="放弃"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          const next = pendingSelect?.key ?? null;
+          setPendingSelect(null);
+          setSelectedParty(next);
+        }}
+        onCancel={() => setPendingSelect(null)}
       />
     </div>
   );

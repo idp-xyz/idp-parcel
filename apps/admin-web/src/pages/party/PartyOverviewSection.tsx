@@ -115,6 +115,7 @@ function Section<Row>({
   partyId,
   children,
   state,
+  action,
 }: {
   title: string;
   /** 这段事实所在的页；缺席即就在本页另一签。 */
@@ -123,6 +124,8 @@ function Section<Row>({
   partyId?: string;
   children: ReactNode;
   state: OverviewSectionState<Row>;
+  /** 标题条右端的动作（「登记合作关系」，票 business-party-edit-mode/03）；与「去某页」二选一摆。 */
+  action?: ReactNode;
 }) {
   const target = moduleId ? moduleInfoById[moduleId] : undefined;
   const href = moduleId ? overviewSectionHash(moduleId, partyId ?? '') : '';
@@ -143,7 +146,9 @@ function Section<Row>({
           >
             去「{target.title}」
           </Button>
-        ) : null}
+        ) : (
+          action ?? null
+        )}
       </header>
       {children}
     </section>
@@ -181,10 +186,16 @@ export function PartyOverviewSection({
   partyId,
   relationships,
   retryRelationships,
+  relationshipRegistration,
 }: {
   partyId: string;
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
+  /**
+   * 「合作关系」块就地登记（票 business-party-edit-mode/03）：有写授予的页面给；`active` 为真时块体换成 `form`，标题条的
+   * 「登记合作关系」收起。不给就只读。
+   */
+  relationshipRegistration?: { active: boolean; onOpen: () => void; form: ReactNode };
 }) {
   const accounts = useRegisterList(listCustomerAccounts);
   const entities = useRegisterList(listGroupLegalEntities);
@@ -224,7 +235,21 @@ export function PartyOverviewSection({
         </p>
       </section>
 
-      <Section title="合作关系" state={relationshipState}>
+      <Section
+        title="合作关系"
+        state={relationshipState}
+        action={
+          relationshipRegistration && !relationshipRegistration.active ? (
+            <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={relationshipRegistration.onOpen}>
+              登记合作关系
+            </Button>
+          ) : undefined
+        }
+      >
+        {relationshipRegistration?.active ? (
+          <div className="rounded-md border border-idpxyz-border bg-idpxyz-bg p-3">{relationshipRegistration.form}</div>
+        ) : (
+        <>
         <SectionBody
           state={relationshipState}
           what="合作关系"
@@ -255,6 +280,8 @@ export function PartyOverviewSection({
           )}
         />
         <p className={`mt-2 ${note}`}>全部关系在本页「合作关系」册可筛看。</p>
+        </>
+        )}
       </Section>
 
       <Section title="客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>

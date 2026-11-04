@@ -5,6 +5,7 @@ import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
+import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import {
   DetailPageTemplate,
   type DetailField,
@@ -167,9 +168,40 @@ export function BusinessPartyDetailPage({
   const editing = identityEditing && mayWrite && row !== null;
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
   const [unsaved, setUnsaved] = useState(false);
-  const [confirmingBack, setConfirmingBack] = useState(false);
+  // 要确认才做的那件事（放弃编辑态、放弃关系登记、离开）；null 即没在问。
+  const [confirming, setConfirming] = useState<(() => void) | null>(null);
   const { addToast } = useToast();
   const knownParties = listAnswer?.kind === 'outcome' ? listAnswer.body.parties : null;
+  // 全景区「合作关系」块就地登记（票 business-party-edit-mode/03）；与编辑态互斥，一页一个写口在开。
+  const [registeringRelationship, setRegisteringRelationship] = useState(false);
+  const [relationshipUnsaved, setRelationshipUnsaved] = useState(false);
+  const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
+  const relationshipRegistration =
+    mayWrite && row && !editing
+      ? {
+          active: registeringRelationship,
+          onOpen: () => setRegisteringRelationship(true),
+          form: (
+            <PartyRelationshipRegistrationForm
+              key={row.partyId}
+              knownRelationships={knownRelationships}
+              parties={listAnswer}
+              preset={{ holder: row.partyId }}
+              onRegistered={() => {
+                addToast({ type: 'success', title: '合作关系已登记' });
+                setRelationshipUnsaved(false);
+                setRegisteringRelationship(false);
+                retryRelationships();
+              }}
+              onUnsavedChange={setRelationshipUnsaved}
+              inline={{
+                onCancel: () =>
+                  relationshipUnsaved ? setConfirming(() => () => setRegisteringRelationship(false)) : setRegisteringRelationship(false),
+              }}
+            />
+          ),
+        }
+      : undefined;
   return (
     <>
     <DetailPageTemplate
@@ -181,7 +213,15 @@ export function BusinessPartyDetailPage({
           {row && !editing ? (
             <>
               {mayWrite ? (
-                <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={onEnterIdentityEdit}>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className={`${primaryActionClass} text-[12px]`}
+                  onClick={() => {
+                    setRegisteringRelationship(false);
+                    onEnterIdentityEdit();
+                  }}
+                >
                   更正名称
                 </Button>
               ) : null}
@@ -192,7 +232,13 @@ export function BusinessPartyDetailPage({
             variant="outline"
             size="sm"
             className="text-[12px] text-idpxyz-breadcrumb"
-            onClick={() => (editing ? (unsaved ? setConfirmingBack(true) : onExitIdentityEdit(onBack)) : onBack())}
+            onClick={() => {
+              if (editing) {
+                if (unsaved) setConfirming(() => () => onExitIdentityEdit(onBack));
+                else onExitIdentityEdit(onBack);
+              } else if (registeringRelationship && relationshipUnsaved) setConfirming(() => onBack);
+              else onBack();
+            }}
           >
             返回列表
           </Button>
@@ -226,7 +272,7 @@ export function BusinessPartyDetailPage({
                             onExitIdentityEdit();
                           }}
                           onUnsavedChange={setUnsaved}
-                          onCancel={() => (unsaved ? setConfirmingBack(true) : onExitIdentityEdit())}
+                          onCancel={() => (unsaved ? setConfirming(() => () => onExitIdentityEdit()) : onExitIdentityEdit())}
                         />
                       ),
                     },
@@ -254,6 +300,7 @@ export function BusinessPartyDetailPage({
                     partyId={row.partyId}
                     relationships={relationships}
                     retryRelationships={retryRelationships}
+                    relationshipRegistration={relationshipRegistration}
                   />
                 ),
               },
@@ -283,17 +330,18 @@ export function BusinessPartyDetailPage({
     />
     <ConfirmDialog
       renderFooter={confirmDialogFooter}
-      open={confirmingBack}
+      open={confirming !== null}
       tone="warning"
       title="放弃修改？"
       message="有内容还没有保存，离开后填写的内容不会保留。"
       confirmLabel="放弃"
       cancelLabel="继续编辑"
       onConfirm={() => {
-        setConfirmingBack(false);
-        onExitIdentityEdit();
+        const run = confirming;
+        setConfirming(null);
+        run?.();
       }}
-      onCancel={() => setConfirmingBack(false)}
+      onCancel={() => setConfirming(null)}
     />
     </>
   );

@@ -1,7 +1,7 @@
 # 03 全景「合作关系」块就地登记新关系
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 

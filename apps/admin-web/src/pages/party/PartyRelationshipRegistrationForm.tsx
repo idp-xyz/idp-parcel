@@ -60,6 +60,16 @@ export interface PartyRelationshipRegistrationFormProps {
   onRegistered: () => void;
   /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
   onUnsavedChange?: (unsaved: boolean) => void;
+  /**
+   * 预填的格（票 business-party-edit-mode/03）：从某家单位的页上登记时「哪一方」就是它，预填并锁死——开在谁的页上就登谁担任
+   * 角色的关系。只在挂载时读；换一家单位由调用方换 key 重挂。
+   */
+  preset?: Partial<PartyRelationshipDraft>;
+  /**
+   * 嵌在对象页全景区「合作关系」块里（票 business-party-edit-mode/03）：不带卡片外壳与 JSON 导入，动作行多一枚「取消」。
+   * 不给即列表页登记视图里的整页形态。
+   */
+  inline?: { onCancel: () => void };
 }
 
 const info = moduleInfoById['business-parties'];
@@ -72,10 +82,13 @@ export function PartyRelationshipRegistrationForm({
   parties,
   onRegistered,
   onUnsavedChange,
+  preset,
+  inline,
 }: PartyRelationshipRegistrationFormProps) {
+  const holderLocked = preset?.holder !== undefined;
   const form = useRegistrationForm<PartyRelationshipDraft>({
     kind,
-    empty: emptyPartyRelationshipDraft,
+    empty: () => ({ ...emptyPartyRelationshipDraft(), ...preset }),
     suggestion: (draft) => suggestedPartyRelationshipRevision(knownRelationships, draft.relationshipId),
     localProblems: partyRelationshipLocalProblems,
     payloadOf: partyRelationshipPayloadOf,
@@ -103,13 +116,8 @@ export function PartyRelationshipRegistrationForm({
       ? `这是关系 ${known.relationshipId} 的第 ${form.revisionField.suggestion} 次更新，序号已算好`
       : '首次登记，序号由系统填';
 
-  return (
-    <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{registrationTitles[kind]}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+  const body = (
+    <>
           <p className="text-[12px] text-idpxyz-breadcrumb">
             记录谁对谁担任什么角色、从什么时候开始。双方都要先登记为往来单位；没有批准信息的先作为待确认关系，批准后再保存一次。
           </p>
@@ -120,7 +128,7 @@ export function PartyRelationshipRegistrationForm({
               path="relationships[0].holder"
               problems={problems}
               value={draft.holder}
-              locked={locked}
+              locked={locked || holderLocked}
               onChange={(holder) => patch({ holder })}
               answer={parties}
               optionsOf={businessPartyPickerOptions}
@@ -303,6 +311,37 @@ export function PartyRelationshipRegistrationForm({
             />
           </AdvancedGroup>
 
+    </>
+  );
+  // 嵌入形态（全景区的块里）：动作行左边说话、右边「取消 / 保存」，主动作靠右，与对象页编辑态的页脚同一排法。
+  if (inline) {
+    return (
+      <div className="flex flex-col gap-4">
+        {body}
+        <div className="flex flex-wrap items-start justify-between gap-3 border-t border-idpxyz-border pt-3">
+          <div className="min-w-0 flex-1 text-[12px]">
+            <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={partyIdentityOutcomeLabels} problemNote={problemNote} />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={inline.onCancel}>
+              取消
+            </Button>
+            <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} onClick={form.send} disabled={locked || !form.canSend}>
+              {locked ? '保存中…' : '保存'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{registrationTitles[kind]}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {body}
           <div className="flex items-start gap-3">
             <Button
               variant="default"
