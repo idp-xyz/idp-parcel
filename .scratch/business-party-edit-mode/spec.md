@@ -1,7 +1,7 @@
 # 往来单位对象页：动作留在本页，照公司主体的显示态 / 编辑态落
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-04 子票 01 `e6402095b`、02 `c5bf8c4c5`、03 `b62cc67b3`+`b2ccc39de` 进 main
 出处：用户 2026-11-04 问「我们下一步的工作呢」；会话盘点管理台的编辑容器后建议先把往来单位对象页做成与公司主体一致（同一对模板，用户会并排比较），再统一各商业册的「表单签 + 抽屉」。用户此前裁定「以后都是 Yes」，按建议开工。
 
 现状：往来单位对象页只有「返回列表」与「更多 › 停用」，停用把人送回列表页的登记视图（`?register=identity-deactivation&deactivate=…`）；名称更正要去列表页「新增往来单位」填同一个编码再保存；登记合作关系也在列表页的登记视图里。对象页本身改不了任何东西。
@@ -20,4 +20,4 @@ Status: in-progress
 |---|---|---|
 | [01](./issues/01-deactivation-dialog-on-page.md) | 停用留在本页：对象页与详情栏「更多 › 停用」开本页对话框 | resolved（2026-11-04 进 main） |
 | [02](./issues/02-identity-edit-mode.md) | 名称更正 = 对象页编辑态（`?edit=identity`），页脚保存 / 取消 | resolved（2026-11-04 进 main） |
-| [03](./issues/03-relationship-inline-register.md) | 全景「合作关系」块就地登记新关系，本方预填 | in-progress |
+| [03](./issues/03-relationship-inline-register.md) | 全景「合作关系」块就地登记新关系，本方预填 | resolved（2026-11-04 进 main） |
