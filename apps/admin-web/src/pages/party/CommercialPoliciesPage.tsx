@@ -22,7 +22,7 @@ import {
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest, type NewVersionStart } from './new-version';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
-import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
+import { hasUnsavedDraft, publicationGroup, registrationGroup, useUnsavedGuard } from './unsaved-guard';
 import { policyKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDialog } from './VersionClosureDialog';
@@ -481,9 +481,16 @@ export function CommercialPoliciesPage() {
     }
     place('registers', register);
   };
-  // 发布视图里任一册的表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿；各册表单在视图里保活）。
-  const requestLeave = () =>
-    tab === 'publish' && commercialPolicyKinds.some((kind) => hasUnsavedDraft(publicationGroup(kind))) ? setConfirmingLeave(true) : leaveView();
+  // JSON 发布的快照框报上来的「有没提交的输入」：记进登记簿（刷新、关页也会被拦）。
+  const [jsonUnsaved, setJsonUnsaved] = useState(false);
+  useUnsavedGuard(registrationGroup('publication-json'), tab === 'json' && jsonUnsaved);
+  // 发布视图里任一册的表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿；各册表单在视图里保活）；JSON 视图照快照框报的问。
+  const requestLeave = () => {
+    const unsaved =
+      tab === 'publish' ? commercialPolicyKinds.some((kind) => hasUnsavedDraft(publicationGroup(kind))) : tab === 'json' && jsonUnsaved;
+    if (unsaved) setConfirmingLeave(true);
+    else leaveView();
+  };
   // 右栏「发新版本」：记下是哪一版，进发布视图、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
   const [request, setRequest] = useState<NewVersionRequest<PolicySource> | null>(null);
   const beginNewVersion = (source: PolicySource) => {
@@ -521,6 +528,7 @@ export function CommercialPoliciesPage() {
             outcomeLabels={publicationOutcomeLabels}
             declarationLandingLabels={declarationLandingLabels}
             problemNote={problemNote}
+            onUnsavedChange={setJsonUnsaved}
           />
         )}
         <ConfirmDialog

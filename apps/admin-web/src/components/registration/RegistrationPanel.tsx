@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
@@ -121,6 +121,11 @@ export interface RegistrationPanelProps {
   declarationLandingLabels?: Record<string, string>;
   /** problem+json 错误码的中文说明，取该上下文自己的 presentation，不在此处统一措辞。 */
   problemNote: (code: string) => string;
+  /**
+   * 快照框里有没提交的输入时报真、提交得到答复或清空后报假。面板住在由地址决定的登记视图里时（票
+   * commercial-registers-edit-containers/05），页面据此在「返回列表」前问一句；不报就没有守卫，面板自己不管地址。
+   */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 type PanelState =
@@ -140,10 +145,18 @@ export function RegistrationPanel({
   undecidedReasonLabels,
   declarationLandingLabels,
   problemNote,
+  onUnsavedChange,
 }: RegistrationPanelProps) {
   const info = moduleInfoById[moduleId];
   const [draft, setDraft] = useState('');
   const [state, setState] = useState<PanelState>({ kind: 'idle' });
+  // 送出去过的那一份：与框里此刻的一样就算提交过（答复原样留在面板里，人看完再走不该被拦）；被拒后改过一字，又是没提交的。
+  const [submittedDraft, setSubmittedDraft] = useState<string | null>(null);
+  const unsaved = draft.trim() !== '' && draft !== submittedDraft;
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+    return () => onUnsavedChange?.(false);
+  }, [unsaved]);
 
   const send = () => {
     let snapshot: unknown;
@@ -159,6 +172,7 @@ export function RegistrationPanel({
       return;
     }
     setState({ kind: 'submitting' });
+    setSubmittedDraft(draft);
     void submit(snapshot).then((answer) => setState({ kind: 'answered', answer }));
   };
 

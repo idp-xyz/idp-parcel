@@ -1,7 +1,7 @@
 # 05 渠道产品目录：行详情进右栏
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 

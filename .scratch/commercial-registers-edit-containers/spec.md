@@ -27,8 +27,8 @@ Status: in-progress
 | [01](./issues/01-service-products.md) | 服务产品（含抽出共享件 `VersionDetailPanel`、`VersionClosureDialog`、登记视图壳） | resolved（2026-11-04 进 main） |
 | [02](./issues/02-party-contracts.md) | 客户与合同（两张表单：签订合同、新增客户账户） | resolved（2026-11-04 进 main） |
 | [03](./issues/03-supplier-agreements.md) | 供应商协议 | resolved（2026-11-04 进 main） |
-| [04](./issues/04-commercial-policies.md) | 商业规则（九本册、已有地址） | in-progress |
-| [05](./issues/05-channel-product-catalog.md) | 渠道产品目录（只换详情容器） | draft |
+| [04](./issues/04-commercial-policies.md) | 商业规则（九本册、已有地址） | resolved（2026-11-04 进 main） |
+| [05](./issues/05-channel-product-catalog.md) | 渠道产品目录（只换详情容器） | in-progress |
 | [06](./issues/06-pending-publications.md) | 审批与发布（待发布抽屉退役） | draft |
 
 每票一笔进 main、一次只读探针；共享件在票 01 抽出，后面的票只接线。碰 `templates/*` 才要非作者评审；本规格预计只碰 `pages/**`。
