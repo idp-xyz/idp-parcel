@@ -6,6 +6,8 @@ import {
   businessPartyRegisters,
   deactivationLinkHash,
   deactivationPresetOf,
+  identityEditHash,
+  identityEditRequested,
   registerViewHash,
   withoutDeactivationPreset,
 } from './business-parties-address';
@@ -81,4 +83,13 @@ test('登记视图地址只改登记键；对象地址往返不走样', () => {
   equal(registerViewHash('#/business-parties?q=SYN&register=business-party', null), '#/business-parties?q=SYN');
   const id = 'P/上海 01&x';
   deepEqual(businessPartiesViewOf(businessPartyObjectHash(id)), { kind: 'object', partyId: id });
+});
+
+// Covers: 编辑态只认 `edit=identity`；进出只改这一个键；对象地址上带了编辑键仍是对象页。
+test('对象页「更正名称」的编辑态住在查询串上', () => {
+  equal(identityEditRequested('#/business-parties/SYN-P-01?edit=identity'), true);
+  equal(identityEditRequested('#/business-parties/SYN-P-01?edit=profile'), false);
+  equal(identityEditHash('#/business-parties/SYN-P-01', true), '#/business-parties/SYN-P-01?edit=identity');
+  equal(identityEditHash('#/business-parties/SYN-P-01?edit=identity', false), '#/business-parties/SYN-P-01');
+  deepEqual(businessPartiesViewOf('#/business-parties/SYN-P-01?edit=identity'), { kind: 'object', partyId: 'SYN-P-01' });
 });

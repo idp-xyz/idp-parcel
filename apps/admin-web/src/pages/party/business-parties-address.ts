@@ -71,6 +71,21 @@ export function businessPartyObjectHash(partyId: string): string {
   return `#/${MODULE_ID}/${encodeURIComponent(partyId)}`;
 }
 
+/**
+ * 对象页「更正名称」的编辑态在查询串里的键（票 business-party-edit-mode/02）：值为 `identity` 即编辑态。与公司主体的
+ * `?edit=profile` 同一做法——编辑态住在地址上，刷新、后退都按地址走。
+ */
+export const IDENTITY_EDIT_PARAM = 'edit';
+
+export function identityEditRequested(hash: string): boolean {
+  return hashQueryValue(hash, IDENTITY_EDIT_PARAM) === 'identity';
+}
+
+/** 进出编辑态的地址：只改编辑键，路径与别的键原样。 */
+export function identityEditHash(hash: string, open: boolean): string {
+  return hashWithQueryValue(hash, IDENTITY_EDIT_PARAM, open ? 'identity' : '');
+}
+
 /** 指向停用表单、带好种类与标识的地址。 */
 export function deactivationLinkHash(preset: DeactivationPreset): string {
   return hashWithQueryValue(

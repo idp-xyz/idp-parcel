@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { partyAnswersDomain } from './party-writes';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
+import { useToast } from '@idpxyz/ui-theme-runtime';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { primaryActionClass } from '../../components/primary-action';
+import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
 import {
   DetailPageTemplate,
   type DetailField,
@@ -135,6 +139,9 @@ export function BusinessPartyDetailPage({
   relationships,
   retryRelationships,
   onBack,
+  identityEditing,
+  onEnterIdentityEdit,
+  onExitIdentityEdit,
 }: {
   partyId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -144,32 +151,87 @@ export function BusinessPartyDetailPage({
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
   onBack: () => void;
+  /** 「更正名称」的编辑态：由地址判出（business-parties-address.ts 的 identityEditRequested）。 */
+  identityEditing: boolean;
+  /** 进编辑态：调用方改地址。 */
+  onEnterIdentityEdit: () => void;
+  /** 出编辑态：调用方改地址（后退或替换，由它按历史判）；`then` 是退出后还要去的地方，给了就替换地址再走。 */
+  onExitIdentityEdit: (then?: () => void) => void;
 }) {
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const viewState = viewStateOf(listAnswer, row, retry, mayWrite);
+  // 编辑态（票 business-party-edit-mode/02，照公司主体对象页）：概要分区换成「更正名称」表单，「保存 / 取消」钉在模板页脚；
+  // 页头的「更正名称」「更多」收起。不是模态，「返回列表」有没提交的输入先问一句。
+  const editing = identityEditing && mayWrite && row !== null;
+  const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const [unsaved, setUnsaved] = useState(false);
+  const [confirmingBack, setConfirmingBack] = useState(false);
+  const { addToast } = useToast();
+  const knownParties = listAnswer?.kind === 'outcome' ? listAnswer.body.parties : null;
   return (
+    <>
     <DetailPageTemplate
       title={info.title}
       identifier={row?.partyName ?? partyId}
       status={row ? <StatusPill code={row.status} /> : undefined}
       headerActions={
         <>
-          {row ? <BusinessPartyMoreMenu row={row} parties={listAnswer} onChanged={retry} /> : null}
-          <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
+          {row && !editing ? (
+            <>
+              {mayWrite ? (
+                <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={onEnterIdentityEdit}>
+                  更正名称
+                </Button>
+              ) : null}
+              <BusinessPartyMoreMenu row={row} parties={listAnswer} onChanged={retry} />
+            </>
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[12px] text-idpxyz-breadcrumb"
+            onClick={() => (editing ? (unsaved ? setConfirmingBack(true) : onExitIdentityEdit(onBack)) : onBack())}
+          >
             返回列表
           </Button>
         </>
       }
+      footer={editing ? <div ref={setFooterSlot} /> : undefined}
       meta={row ? buildMeta(row) : []}
       summary={row ? buildSummary(row) : undefined}
       // 这张卡装的是停用的来源单据与技术详情；分区版式下「概要」已是分区标题，卡再叫概要就是上下两行同一个词。
       basicTitle="来源单据"
-      basicFields={row ? buildBasicFields(row) : []}
+      basicFields={row && !editing ? buildBasicFields(row) : []}
       sections={
         row
           ? [
+              ...(editing
+                ? [
+                    {
+                      id: 'identity-edit',
+                      title: '更正名称',
+                      description: '改的是这家单位登记在册的名称；合作关系、合同与账户照旧指向它。',
+                      content: (
+                        <BusinessPartyIdentityEditMode
+                          key={row.partyId}
+                          row={row}
+                          knownParties={knownParties}
+                          footerSlot={footerSlot}
+                          onLanded={(sent) => {
+                            addToast({ type: 'success', title: `名称已更正${sent ? `，登记为${updateOrdinalLabel(Number(sent.revision))}` : ''}` });
+                            setUnsaved(false);
+                            retry();
+                            onExitIdentityEdit();
+                          }}
+                          onUnsavedChange={setUnsaved}
+                          onCancel={() => (unsaved ? setConfirmingBack(true) : onExitIdentityEdit())}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               ...(businessPartyHasBanners(row)
                 ? [
                     {
@@ -219,5 +281,20 @@ export function BusinessPartyDetailPage({
       layout="sections"
       viewState={viewState}
     />
+    <ConfirmDialog
+      renderFooter={confirmDialogFooter}
+      open={confirmingBack}
+      tone="warning"
+      title="放弃修改？"
+      message="有内容还没有保存，离开后填写的内容不会保留。"
+      confirmLabel="放弃"
+      cancelLabel="继续编辑"
+      onConfirm={() => {
+        setConfirmingBack(false);
+        onExitIdentityEdit();
+      }}
+      onCancel={() => setConfirmingBack(false)}
+    />
+    </>
   );
 }

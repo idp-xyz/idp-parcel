@@ -41,6 +41,8 @@ import {
   businessPartyObjectHash,
   businessPartyRegisters,
   deactivationPresetOf,
+  identityEditHash,
+  identityEditRequested,
   registerViewHash,
   withoutDeactivationPreset,
   type BusinessPartyRegister,
@@ -415,6 +417,26 @@ export function BusinessPartiesPage() {
   // 本次挂载里是不是从列表压进登记视图的：是就用后退回列表，不再压一条；刷新、深链或从别的标签回来直接落在登记视图时
   // 不是，那时后退一格不一定是列表，改用替换。
   const pushedRegister = useRef(false);
+  // 对象页「更正名称」的编辑态（票 business-party-edit-mode/02）与登记视图同一套历史收口：自己压进去的用后退退出，刷新或
+  // 直接落在编辑态的用替换；退出后还要去别处时替换再走，并同步 setHash——紧接着切标签时 hashchange 回调已不归本标签，
+  // useOwnAddressChange 会把它滤掉。
+  const pushedIdentityEdit = useRef(false);
+  const enterIdentityEdit = () => {
+    pushedIdentityEdit.current = true;
+    window.location.hash = identityEditHash(window.location.hash, true);
+  };
+  const exitIdentityEdit = (then?: () => void) => {
+    if (then === undefined && pushedIdentityEdit.current) {
+      pushedIdentityEdit.current = false;
+      window.history.back();
+      return;
+    }
+    pushedIdentityEdit.current = false;
+    const next = identityEditHash(window.location.hash, false);
+    window.location.replace(next);
+    setHash(next);
+    then?.();
+  };
   // 深链（法人页「停用此责任法人…」、本页详情栏「停用此参与方…」）带来的停用预填：读到就交给停用表单，然后从地址里去掉，
   // 免得换标签回来、页面重新挂载时再预填一次。这一页的标签已开着时地址变了也认：壳层不重挂已开的标签。
   const [preset, setPreset] = useState<DeactivationPreset | null>(null);
@@ -528,6 +550,9 @@ export function BusinessPartiesPage() {
         relationships={relationships.answer}
         retryRelationships={relationships.retry}
         onBack={() => tabReturn.returnTo('business-parties')}
+        identityEditing={identityEditRequested(hash)}
+        onEnterIdentityEdit={enterIdentityEdit}
+        onExitIdentityEdit={exitIdentityEdit}
       />
     );
   }
