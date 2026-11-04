@@ -316,6 +316,12 @@ function ProfileRegistrationForm({
     if (preview !== null) bodyRef.current?.scrollIntoView({ block: 'start' });
   }, [preview]);
   const typeNameOf = useTypeNameOf(typeCatalogue);
+  // 内容没变就不登新版（票 06）：有当前版时把将要送的内容与它比，一处都没变就禁用保存；只改来源单据或生效时间不算。第一版照旧。
+  const changed =
+    current === null ||
+    compareLegalEntityProfiles(current, profileComparisonContentOf(form.effectiveDraft, timeZone), typeNameOf).fields.some(
+      (field) => field.kind !== 'unchanged',
+    );
   const save = () => {
     if (missing.length > 0) {
       setAttempted(true);
@@ -472,6 +478,7 @@ function ProfileRegistrationForm({
             outcomeLabels={legalEntityProfileOutcomeLabels}
             problemNote={problemNote}
           />
+          {!changed && preview === null && form.state.kind === 'idle' ? <p className="text-idpxyz-breadcrumb">资料没有改动，不用保存。</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {preview !== null ? (
@@ -500,7 +507,7 @@ function ProfileRegistrationForm({
                 variant="default"
                 className={primaryActionClass}
                 onClick={save}
-                disabled={locked || known === null || !form.canSend}
+                disabled={locked || known === null || !form.canSend || !changed}
               >
                 {locked ? '保存中…' : '保存'}
               </Button>

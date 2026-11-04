@@ -152,10 +152,10 @@ function SectionForm({
   const typeNameOf = useTypeNameOf(typeCatalogue);
 
   const [basisEdited, setBasisEdited] = useState(false);
-  const autoBasis = profileSectionBasisOf(
-    section,
-    compareLegalEntityProfiles(current, profileComparisonContentOf(form.effectiveDraft, timeZone), typeNameOf),
-  );
+  const comparison = compareLegalEntityProfiles(current, profileComparisonContentOf(form.effectiveDraft, timeZone), typeNameOf);
+  const autoBasis = profileSectionBasisOf(section, comparison);
+  // 内容没变就不登新版（票 06）：只改来源单据或生效时间不算改动；从「添加」加的空行在填之前也不算。
+  const changed = comparison.fields.some((field) => field.kind !== 'unchanged');
   const useAutoBasis = !basisEdited;
   // 将要送的那份：缺项判读、预览、提交都看它；落册簿记（landedKey）仍按草稿本身记。
   const sendingDraft = useAutoBasis ? { ...form.effectiveDraft, basis: autoBasis } : form.effectiveDraft;
@@ -292,6 +292,7 @@ function SectionForm({
             </p>
           ) : null}
           <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={legalEntityProfileOutcomeLabels} problemNote={problemNote} />
+          {!changed && preview === null && form.state.kind === 'idle' ? <p className="text-idpxyz-breadcrumb">没有改动，不用保存。</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {preview !== null ? (
@@ -322,7 +323,7 @@ function SectionForm({
                 size="sm"
                 className={`${primaryActionClass} text-[12px]`}
                 onClick={save}
-                disabled={locked || known === null || !form.canSend || outsideMissing.length > 0}
+                disabled={locked || known === null || !form.canSend || outsideMissing.length > 0 || !changed}
               >
                 {locked ? '保存中…' : '保存'}
               </Button>

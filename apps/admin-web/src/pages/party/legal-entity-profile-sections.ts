@@ -133,8 +133,8 @@ const changeVerbs: Record<Exclude<ProfileChangeKind, 'unchanged'>, string> = { a
 /**
  * 分区保存时来源单据的自动写法（产品策略，spec「三类归法」）：「更新联系人：新增 张三、修改 李四」。按主体归并——
  * 一个联系人改了三格是一处「修改」，不是三处；主体名里带着本区名的（「收款账户 · 人民币（CNY） …」）去掉那个前缀。
- * 最多点三处，其余并成「等 N 处」：来源单据是一行字，不是变更日志，整份差异在版本历史里。什么都没改也要写一句——
- * 确认后仍登记为新的一版（整张表单的预览也这么说）。
+ * 最多点三处，其余并成「等 N 处」：来源单据是一行字，不是变更日志，整份差异在版本历史里。什么都没改时写「尚无改动」——
+ * 那时保存钮是禁用的（票 06），这一句只是让人看见格里为什么还空着。
  */
 export function profileSectionBasisOf(section: ProfileSection, comparison: ProfileComparison): string {
   const entries = new Map<string, { label: string; kinds: Set<ProfileChangeKind> }>();
@@ -151,7 +151,7 @@ export function profileSectionBasisOf(section: ProfileSection, comparison: Profi
     const verb = entry.kinds.size === 1 ? changeVerbs[[...entry.kinds][0] as Exclude<ProfileChangeKind, 'unchanged'>] : '修改';
     return `${verb} ${entry.label}`;
   });
-  if (parts.length === 0) return `更新${section.title}：内容未变，重新登记一版`;
+  if (parts.length === 0) return `更新${section.title}：尚无改动`;
   const shown = parts.slice(0, 3).join('、');
   return `更新${section.title}：${parts.length > 3 ? `${shown} 等 ${parts.length} 处` : shown}`;
 }

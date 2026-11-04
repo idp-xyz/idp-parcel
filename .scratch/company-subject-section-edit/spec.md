@@ -29,3 +29,4 @@ Status: in-progress——子票 01 `e3ccd7356`、02 `ab5727f69`、03 `cd0463366`
 | [03](./issues/03-object-page-edit-mode.md) | 整张「更新公司资料」改为对象页编辑态：页内就地、页脚动作条，抽屉删除 | resolved（2026-11-04 进 main） |
 | [04](./issues/04-contacts-group-in-contacts-section.md) | 编辑态下联系人组落到联系人分区，与概要分区共用一份表单 | in-progress |
 | [05](./issues/05-viewer-clears-edit-key.md) | 查看者落到编辑地址时清掉编辑键 | in-progress |
+| [06](./issues/06-no-change-no-new-version.md) | 没有改动就不登新版：保存钮禁用、按钮旁说一句 | in-progress |

@@ -78,7 +78,7 @@ test('来源单据按本区改动自动写一句', () => {
   ]);
   equal(profileSectionBasisOf(contacts, mixed), '更新联系人：新增 张三、修改 李四');
   equal(profileSectionBasisOf(profileSections.representativeAndAddresses, mixed), '更新代表人与地址：修改 注册地址');
-  equal(profileSectionBasisOf(profileSections.invoicing, mixed), '更新税务与开票：内容未变，重新登记一版');
+  equal(profileSectionBasisOf(profileSections.invoicing, mixed), '更新税务与开票：尚无改动');
   const many = comparison(
     ['甲', '乙', '丙', '丁', '戊'].map((name, index) =>
       change({ group: '联系人', field: '联系人资料', kind: 'removed', subject: name, contactKey: `contact-${index}` }),

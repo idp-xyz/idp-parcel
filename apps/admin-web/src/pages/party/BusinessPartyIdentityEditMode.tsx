@@ -72,6 +72,8 @@ export function BusinessPartyIdentityEditMode({
     form.revisionField.value.trim() || '未填'
   }${form.revisionField.edited ? '（手填）' : '（建议值）'}`;
   const renderFooter = (node: ReactNode) => (footerSlot ? createPortal(node, footerSlot) : node);
+  // 名称没变就不登新版（票 company-subject-section-edit/06）。
+  const changed = draft.name !== row.partyName;
 
   return (
     <div className="flex flex-col gap-4">
@@ -126,12 +128,13 @@ export function BusinessPartyIdentityEditMode({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 text-[12px]">
             <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={partyIdentityOutcomeLabels} problemNote={problemNote} />
+            {!changed && form.state.kind === 'idle' ? <p className="text-idpxyz-breadcrumb">名称没有改动，不用保存。</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button variant="outline" disabled={locked} onClick={onCancel}>
               取消
             </Button>
-            <Button variant="default" className={primaryActionClass} onClick={form.send} disabled={locked || !form.canSend}>
+            <Button variant="default" className={primaryActionClass} onClick={form.send} disabled={locked || !form.canSend || !changed}>
               {locked ? '保存中…' : '保存'}
             </Button>
           </div>
