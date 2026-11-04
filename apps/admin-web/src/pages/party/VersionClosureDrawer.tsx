@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ConfirmDialog, Drawer, DrawerBody, DrawerHeader, Input } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog, Drawer, Input } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
@@ -100,7 +100,8 @@ export function VersionClosureDrawer({
   );
 }
 
-function ClosureBody({
+/** 收尾的本体：抽屉与对话框共用，外壳由调用方给（票 commercial-registers-edit-containers/01）。 */
+export function ClosureBody({
   target,
   onClose,
   onClosed,
@@ -117,7 +118,7 @@ function ClosureBody({
 
   return (
     <>
-      <DrawerHeader>
+      <div className="border-b border-idpxyz-border px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-[13px] text-idpxyz-textMuted">收尾旧版</span>
           <span className="font-mono font-medium text-idpxyz-text">{target.objectId}</span>
@@ -128,8 +129,8 @@ function ClosureBody({
           {target.kindLabel}
           {old ? ` · 生效区间 ${describeRange(old)}` : ''}
         </p>
-      </DrawerHeader>
-      <DrawerBody>
+      </div>
+      <div className="px-5 py-4">
         <div className="flex flex-col gap-3">
           <p className="text-[12px] text-idpxyz-textMuted">
             {'同一对象发了新版本后，旧版不会自己结束：两版区间重叠的部分，解析会答「适用冲突」，直到旧版被收尾。' +
@@ -153,7 +154,7 @@ function ClosureBody({
             <ClosureForm target={target} old={old!} successors={successors} onClose={onClose} onClosed={onClosed} />
           )}
         </div>
-      </DrawerBody>
+      </div>
     </>
   );
 }

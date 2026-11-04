@@ -1,31 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
-import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
+import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import {
   commercialRegistrationEndpoints,
   listServiceProducts,
   productChannelOutcomeLabels,
   registerCommercial,
-  type ServiceProductListResponseBody,
   type ServiceProductRecord,
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
-import { withNewVersionAction } from './NewVersionAction';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
-import { publicationGroup } from './unsaved-guard';
+import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
 import { productKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
-import { VersionClosureDrawer } from './VersionClosureDrawer';
-import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { VersionClosureDialog } from './VersionClosureDialog';
+import { VersionDetailPanel } from './VersionDetailPanel';
 import { versionHistoryOf } from './version-history';
 import { serviceProductDraftFromRecord } from './service-product-form';
-import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
+import { serviceProductsViewHash, serviceProductsViewOf, type ServiceProductsView } from './service-products-address';
+import { RegisterView } from './RegisterView';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -45,7 +47,7 @@ import {
 } from './presentation';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
-import { useMayWriteRegistry } from '../use-operator-grants';
+import { useMayWriteRegistry, useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
 const info = moduleInfoById['service-products'];
@@ -60,10 +62,11 @@ const productFacts = (row: ServiceProductRecord): VersionFacts => ({
   effectiveStartsAt: row.effectiveStartsAt,
 });
 
-const columns: ListColumn<ServiceProductRecord>[] = [
-  // 主列只留运营要看的：产品与版本、形态、状态、交付条件、有效期；适用范围与各标识进详情抽屉的「技术详情」。
+// 主列只留运营要看的：产品与版本、形态、状态、交付条件、有效期；适用范围与各标识进右栏详情的「技术详情」。
+// 右栏打开时收起次要列（hideWhenDetailOpen），窄栏里仍读得清主身份与状态。
+const columns: WorkbenchColumn<ServiceProductRecord>[] = [
   {
-    id: 'product',
+    key: 'product',
     header: '服务产品',
     render: (row) => (
       <div className="min-w-40">
@@ -73,58 +76,63 @@ const columns: ListColumn<ServiceProductRecord>[] = [
     ),
   },
   {
-    id: 'form',
+    key: 'form',
     header: '服务形态',
     render: (row) => (row.form ? labelOf(serviceFormLabels, row.form) : <span className="text-idpxyz-textMuted">未登记</span>),
   },
   {
-    id: 'status',
+    key: 'status',
     header: '状态',
     render: (row) => <StatusPill code={row.status} />,
   },
   {
-    id: 'delivery-conditions',
+    key: 'delivery-conditions',
     header: '交付条件',
-    className: 'min-w-64',
+    hideWhenDetailOpen: true,
     render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
   },
   {
-    id: 'effective',
+    key: 'effective',
     header: '有效期',
-    className: 'min-w-64 font-mono text-xs',
-    render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
+    hideWhenDetailOpen: true,
+    render: (row) => <span className="font-mono text-xs">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
   },
   {
-    id: 'published-at',
+    key: 'published-at',
     header: '发布时间',
-    className: 'min-w-44 font-mono text-xs',
-    render: (row) => formatInstant(row.publishedAt),
+    hideWhenDetailOpen: true,
+    render: (row) => <span className="font-mono text-xs">{formatInstant(row.publishedAt)}</span>,
   },
 ];
+
+const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
 
 // 渠道账号授权不在本端点体内，页面不以空列伪装该类读取已经实现；产品—渠道映射自
 // 票 admin-remainder-mechanism-batch/02 起有自己的页（channel-product-catalog）与
 // 端点，不并进本页——那边上列登记册信封，这边上列版本壳，行形状与修订轴不同。
 //
-// `refreshKey` 由页面递增：「发布版本」签的载体到达发布那一步时刷本读面，让新版本在同页立刻可见。
-function ServiceProductVersionsTable({
+// `refreshKey` 由页面递增：登记视图里的载体到达发布那一步时刷本读面，让新版本回到目录时立刻可见。
+function ServiceProductVersionsWorkbench({
   refreshKey,
   onStartNewVersion,
+  onOpenView,
 }: {
   refreshKey: number;
-  /** 点行上的「发新版本」：把这一版带去发布签预填（票 party-commercial-uiux/14）。 */
+  /** 右栏头部的「发新版本」：把这一版带去登记视图预填（票 party-commercial-uiux/14）。 */
   onStartNewVersion: (record: ServiceProductRecord) => void;
+  /** 页头主动作：进「新增产品版本」「登记服务形态」登记视图。 */
+  onOpenView: (view: ServiceProductsView) => void;
 }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const { answer, retry } = useRegisterList(listServiceProducts);
+  const { answer, retry, pending } = useRegisterList(listServiceProducts);
   useRetryWhenChanged(refreshKey, retry);
-  // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
+  // 右栏里的「收尾…」：记下是哪一版，对话框据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
-  // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
+  // 右栏里的那一行（票 commercial-registers-edit-containers/01）：行键，与详情抽屉时代同一个键。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const products = answer?.kind === 'outcome' ? answer.body.products : [];
@@ -142,195 +150,228 @@ function ServiceProductVersionsTable({
     productFacts,
   );
   const closable = closableKeys(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []);
-  const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
-  const selected = products.find((row) => keyOf(row) === selectedKey) ?? null;
+  const answered = answer?.kind === 'outcome';
 
   return (
     <>
-      <ListPageTemplate<ServiceProductRecord>
+      <WorkbenchPageTemplate<ServiceProductRecord>
         title={info.title}
+        viewStateKey="service-products"
         // 渠道账号的业务使用授权还没有读口，本页不为它留列。
-        description="我们对外卖的服务产品及其版本、形态与交付条件；要改条款就发新版本。产品能走哪些渠道，看「渠道产品」页"
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: '搜索服务产品或版本',
-        }}
-        filterSummary={
-          // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
-          answer?.kind === 'outcome' ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined
-        }
-        filters={
-          answer?.kind === 'outcome' && products.length > 0 ? (
-            <VersionStatusChips
-              counts={versionStatusCounts(products, productFacts)}
-              value={statusFilter}
-              onChange={setStatusFilter}
-            />
+        subtitle="我们对外卖的服务产品及其版本、形态与交付条件；要改条款就发新版本。产品能走哪些渠道，看「渠道产品」页"
+        onRefresh={retry}
+        refreshing={pending}
+        primaryAction={
+          mayWrite ? (
+            <>
+              <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={() => onOpenView('register')}>
+                登记服务形态
+              </Button>
+              <Button variant="default" className={primaryActionClass} onClick={() => onOpenView('publish')}>
+                新增产品版本
+              </Button>
+            </>
           ) : undefined
         }
-        emptyRowsNote="这组条件下没有匹配的产品版本"
-        columns={withNewVersionAction(columns, {
-          enabled: mayWrite,
-          labelOf: (row) => `服务产品 ${row.objectId} ${row.version}`,
-          onStart: onStartNewVersion,
-          closure: {
-            canClose: (row) => closable.has(closureKeyOf(row)),
-            onClose: (row) => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row)),
-          },
-        })}
+        search={{ value: search, onChange: setSearch, placeholder: '搜索服务产品或版本' }}
+        extraFilters={
+          answered && products.length > 0 ? (
+            <VersionStatusChips counts={versionStatusCounts(products, productFacts)} value={statusFilter} onChange={setStatusFilter} />
+          ) : undefined
+        }
+        // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
+        toolbarRight={answered ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined}
+        columns={columns}
         rows={visibleProducts}
         rowKey={keyOf}
-        onRowClick={(row) => setSelectedKey(keyOf(row))}
+        selectedKey={selectedKey}
+        onSelect={setSelectedKey}
+        noMatchText="这组条件下没有匹配的产品版本"
+        onClearFilters={() => {
+          setSearch('');
+          setStatusFilter('all');
+        }}
+        renderDetail={(key) => {
+          const row = products.find((candidate) => keyOf(candidate) === key);
+          return row ? (
+            <VersionDetailPanel<ServiceProductRecord>
+              row={row}
+              columns={columns}
+              title={(record) => ({ objectId: record.objectId, version: record.version })}
+              subtitle={(record) => `服务产品 · ${record.form ? labelOf(serviceFormLabels, record.form) : '形态未登记'}`}
+              technical={(record) => [
+                { label: '产品标识', value: record.objectId },
+                { label: '版本号', value: record.version },
+                { label: '适用范围', value: record.scope },
+                { label: '服务形态码', value: record.form ?? '' },
+              ]}
+              status={(record) => record.status}
+              history={(record) => versionHistoryOf(products, record)}
+              currentVersion={(record) => record.version}
+              onSelectVersion={(version) => {
+                const next = products.find(
+                  (candidate) => candidate.objectId === row.objectId && candidate.scope === row.scope && candidate.version === version,
+                );
+                if (next) setSelectedKey(keyOf(next));
+              }}
+              readOnly={!mayWrite}
+              actions={(record) => (
+                <>
+                  <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record)}>
+                    发新版本
+                  </Button>
+                  {closable.has(closureKeyOf(record)) ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[12px]"
+                      onClick={() => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', record))}
+                    >
+                      收尾…
+                    </Button>
+                  ) : null}
+                </>
+              )}
+              onClose={() => setSelectedKey(null)}
+            />
+          ) : null;
+        }}
         viewState={catalogueViewState(answer, products.length, retry, {
           module: info,
           endpoint: 'GET /commercial-service-products',
           emptyTitle: '还没有发布任何服务产品',
           emptyDescription: `合同、价格与接单规则都要挂在服务产品上。${entryHint(
             mayWrite,
-            '在「新增产品版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态。',
+            '用页头的「新增产品版本」发布第一个版本；「登记服务形态」只给已有版本补形态。',
           )}`,
         })}
       />
-      <VersionDetailDrawer<ServiceProductRecord>
-        row={selected}
-        columns={columns}
-        title={(row) => ({ objectId: row.objectId, version: row.version })}
-        subtitle={(row) => `服务产品 · ${row.form ? labelOf(serviceFormLabels, row.form) : '形态未登记'}`}
-        technical={(row) => [
-          { label: '产品标识', value: row.objectId },
-          { label: '版本号', value: row.version },
-          { label: '适用范围', value: row.scope },
-          { label: '服务形态码', value: row.form ?? '' },
-        ]}
-        status={(row) => row.status}
-        history={(row) => versionHistoryOf(products, row)}
-        currentVersion={(row) => row.version}
-        onSelectVersion={(version) => {
-          const next = products.find((row) => row.objectId === selected?.objectId && row.scope === selected?.scope && row.version === version);
-          if (next) setSelectedKey(keyOf(next));
-        }}
-        readOnly={!mayWrite}
-        actions={(row) => (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSelectedKey(null);
-                onStartNewVersion(row);
-              }}
-            >
-              发新版本
-            </Button>
-            {closable.has(closureKeyOf(row)) ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSelectedKey(null);
-                  setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row));
-                }}
-              >
-                收尾…
-              </Button>
-            ) : null}
-          </>
-        )}
-        onClose={() => setSelectedKey(null)}
-      />
-      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>
   );
 }
 
+const viewTitles: Record<Exclude<ServiceProductsView, 'versions'>, { title: string; subtitle: string }> = {
+  publish: { title: '新增产品版本', subtitle: '版本壳、有效起止与引用；表单 → 预览 → 存为待批准 → 批准 → 发布' },
+  register: { title: registrationTitles['service-product-form'], subtitle: '给已有的产品版本补服务形态；改形态要发新版本' },
+};
+
 /**
- * 服务产品：查阅版本壳，外加发布签与登记签（ADR-0085，票 admin-write-faces/02 切片 02c、09）。
+ * 服务产品：目录工作台，外加两个登记视图（ADR-0085，票 admin-write-faces/02 切片 02c、09）。
  *
- * **「发布版本」签是本册的运营主路径**（票 09，ADR-0101 决定八逐字段表单）：版本壳四格 + 有效起止 +
- * 引用表，五步「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」由公共半边的流程组件走；发布落定后本页
- * 目录读面刷新，新版本立刻可见。JSON 镜像签留在商业规则与策略页作高级口，不因主路径落地而删。
+ * 容器照 commercial-registers-edit-containers 的决定：行详情在工作台右栏（VersionDetailPanel），「新增产品版本」「登记服务形态」是
+ * 由地址决定的整页登记视图（RegisterView，`?tab=publish` / `?tab=register`），不再是列表旁边的签；收尾在对话框。登记视图进出照
+ * 往来单位：自己压进去的用后退，刷新或直接落在视图上的用替换；有没提交的输入时「返回列表」先问一句。
  *
- * 登记签只装服务形态一册。**服务产品版本本身不在登记签**：版本由发布口产生（发布快照的对象
- * 类别取 SERVICE_PRODUCT），那是另一个用例、另一套答案代数（已发布已生效 / 已计划生效 /
- * 发布未决），而形态是挂在一个已在册且已生效的版本上的内容。签名写死「登记服务形态」而不是
- * 「登记服务产品」，为的是让两条路的分工在签上看得见——版本从「发布版本」签来，形态从这里补。
+ * **「新增产品版本」是本册的运营主路径**（票 09，ADR-0101 决定八逐字段表单）：版本壳四格 + 有效起止 + 引用表，五步
+ * 「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」由公共半边的流程组件走；发布落定后目录读面刷新，回到目录新版本立刻可见。
+ * JSON 镜像签留在商业规则与策略页作高级口，不因主路径落地而删。
  *
- * 形态钉在产品版本上：同一版本换个形态撞的是内容冲突，改形态要发新版本。所以本签只有登记
- * 一个动作，没有行级编辑或删除面。墙降之前它必然答 403「接入渠道未配置」，那是诚实答案；
- * 墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
+ * 登记视图「登记服务形态」只装服务形态一册。**服务产品版本本身不在登记视图**：版本由发布口产生（发布快照的对象类别取
+ * SERVICE_PRODUCT），那是另一个用例、另一套答案代数，而形态是挂在一个已在册且已生效的版本上的内容。形态钉在产品版本上：
+ * 同一版本换个形态撞的是内容冲突，改形态要发新版本。墙降之前它必然答 403「接入渠道未配置」，那是诚实答案。
  */
 export function ServiceProductsPage() {
-  const mayWrite = useMayWriteRegistry();
+  const grant = useRegistryWriteGrant();
+  const mayWrite = grant.mayWrite;
   const [refreshKey, setRefreshKey] = useState(0);
-  // 点产品行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
-  const [placedTab, setTab] = useState('versions');
-  // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在被收起的签上的话落回读签，不留一块空白。
-  const tab = !mayWrite && (placedTab === 'publish' || placedTab === 'register') ? 'versions' : placedTab;
+  // 地址是位置的唯一权威：视图从 hash 判（service-products-address.ts），只读本标签名下的地址变化。
+  const [hash, setHash] = useState(() => window.location.hash);
+  useOwnAddressChange(() => setHash(window.location.hash));
+  const requested = serviceProductsViewOf(hash);
+  // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在登记视图上的话落回目录，不留一块空白。
+  const view: ServiceProductsView = mayWrite ? requested : 'versions';
+  // 本次挂载里是不是从目录压进登记视图的：是就用后退回目录；刷新或从别的标签直接落在视图上的用替换。
+  const pushedView = useRef(false);
+  const openView = (next: ServiceProductsView) => {
+    pushedView.current = true;
+    window.location.hash = serviceProductsViewHash(window.location.hash, next);
+  };
+  const leaveView = () => {
+    setConfirmingLeave(false);
+    if (pushedView.current) {
+      pushedView.current = false;
+      window.history.back();
+      return;
+    }
+    const next = serviceProductsViewHash(window.location.hash, 'versions');
+    window.location.replace(next);
+    setHash(next);
+  };
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // 查看者拿着登记视图的地址进来：授予已答出、明确没有写授予时把键清掉（替换地址）。加载期不动（与公司主体页同一做法）。
+  useEffect(() => {
+    if (requested !== 'versions' && grant.settled && !grant.mayWrite) {
+      const next = serviceProductsViewHash(window.location.hash, 'versions');
+      window.location.replace(next);
+      setHash(next);
+    }
+  }, [requested, grant.settled, grant.mayWrite]);
+  // 登记视图里的发布表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿）。
+  const requestLeave = () => (hasUnsavedDraft(publicationGroup('SERVICE_PRODUCT')) ? setConfirmingLeave(true) : leaveView());
+
+  // 右栏「发新版本」：记下是哪一版，进登记视图；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [request, setRequest] = useState<NewVersionRequest<ServiceProductRecord> | null>(null);
   const beginNewVersion = (record: ServiceProductRecord) => {
     setRequest((previous) => nextRequest(previous, record));
-    setTab('publish');
+    if (view !== 'publish') openView('publish');
   };
-  // 发布签里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
+  // 登记视图里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
   const replaceGuard = useReplaceDraftGuard<ServiceProductRecord>(
     () => publicationGroup('SERVICE_PRODUCT'),
     beginNewVersion,
-    '发布版本',
+    '新增产品版本',
   );
+
+  if (view === 'publish' || view === 'register') {
+    const heading = viewTitles[view];
+    return (
+      <RegisterView title={heading.title} subtitle={heading.subtitle} onBack={requestLeave}>
+        {view === 'publish' ? (
+          <ServiceProductPublicationForm
+            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+            key={request?.token ?? 0}
+            onPublished={() => setRefreshKey((value) => value + 1)}
+            start={
+              request
+                ? {
+                    draft: serviceProductDraftFromRecord(request.source),
+                    from: newVersionFrom('服务产品', request.source.objectId, request.source.version),
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <RegistrationPanel
+            moduleId="service-products"
+            title={registrationTitles['service-product-form']}
+            endpoint={`POST ${commercialRegistrationEndpoints['service-product-form']}`}
+            snapshotHint={registrationSnapshotHints['service-product-form']}
+            submit={(snapshot) => registerCommercial('service-product-form', snapshot)}
+            // 形态与产品—渠道映射共用一份答案代数（服务端交回同一个 ProductChannelOutcome）。
+            outcomeLabels={productChannelOutcomeLabels}
+            problemNote={problemNote}
+          />
+        )}
+        <ConfirmDialog
+          renderFooter={confirmDialogFooter}
+          open={confirmingLeave}
+          tone="warning"
+          title="离开这一页？"
+          message="有内容还没有发布，离开后填写的内容不会保留。"
+          confirmLabel="离开"
+          cancelLabel="继续填写"
+          onConfirm={leaveView}
+          onCancel={() => setConfirmingLeave(false)}
+        />
+      </RegisterView>
+    );
+  }
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+    <>
       {replaceGuard.dialog}
-      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="versions">服务产品</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="publish">新增产品版本</TabsTrigger> : null}
-          {mayWrite ? <TabsTrigger value="register">登记服务形态</TabsTrigger> : null}
-        </TabsList>
-        <KeepAliveTabsContent
-          value="versions"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <ServiceProductVersionsTable refreshKey={refreshKey} onStartNewVersion={replaceGuard.start} />
-        </KeepAliveTabsContent>
-        {mayWrite ? (
-          <KeepAliveTabsContent
-            value="publish"
-            className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-          >
-            <ServiceProductPublicationForm
-              // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
-              key={request?.token ?? 0}
-              onPublished={() => setRefreshKey((value) => value + 1)}
-              start={
-                request
-                  ? {
-                      draft: serviceProductDraftFromRecord(request.source),
-                      from: newVersionFrom('服务产品', request.source.objectId, request.source.version),
-                    }
-                  : undefined
-              }
-            />
-          </KeepAliveTabsContent>
-        ) : null}
-        {mayWrite ? (
-          <KeepAliveTabsContent
-            value="register"
-            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-          >
-            <RegistrationPanel
-              moduleId="service-products"
-              title={registrationTitles['service-product-form']}
-              endpoint={`POST ${commercialRegistrationEndpoints['service-product-form']}`}
-              snapshotHint={registrationSnapshotHints['service-product-form']}
-              submit={(snapshot) => registerCommercial('service-product-form', snapshot)}
-              // 形态与产品—渠道映射共用一份答案代数（服务端交回同一个 ProductChannelOutcome）。
-              outcomeLabels={productChannelOutcomeLabels}
-              problemNote={problemNote}
-            />
-          </KeepAliveTabsContent>
-        ) : null}
-      </KeepAliveTabs>
-    </div>
+      <ServiceProductVersionsWorkbench refreshKey={refreshKey} onStartNewVersion={replaceGuard.start} onOpenView={openView} />
+    </>
   );
 }
