@@ -1,7 +1,7 @@
 # 商业各册的编辑容器统一：列表 + 右栏详情、新增走登记视图、收尾用对话框
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-04 子票 01–06 全部进 main（01 `b2c9c5159`、02 `e778a775c`、03 `5aae1ad23`、04 `fc956259f`、05 `3d44ed40b`、06 `56d07fbb2`）
 出处：公司主体与往来单位两张对象页改成 Fiori 式之后（`.scratch/company-subject-section-edit`、`.scratch/business-party-edit-mode`），用户 2026-11-04 问「一次做掉，还是按业务顺序一个一个来」；会话建议「规格一次定，页面按业务顺序逐页落」，用户此前裁定「以后都是 Yes」。
 
 ## 现状（取证于 main `103dd5ed2`，子代理只读调研）
@@ -29,6 +29,6 @@ Status: in-progress
 | [03](./issues/03-supplier-agreements.md) | 供应商协议 | resolved（2026-11-04 进 main） |
 | [04](./issues/04-commercial-policies.md) | 商业规则（九本册、已有地址） | resolved（2026-11-04 进 main） |
 | [05](./issues/05-channel-product-catalog.md) | 渠道产品目录（只换详情容器） | resolved（2026-11-04 进 main） |
-| [06](./issues/06-pending-publications.md) | 审批与发布（待发布抽屉退役） | in-progress |
+| [06](./issues/06-pending-publications.md) | 审批与发布（待发布抽屉退役） | resolved（2026-11-04 进 main） |
 
 每票一笔进 main、一次只读探针；共享件在票 01 抽出，后面的票只接线。碰 `templates/*` 才要非作者评审；本规格预计只碰 `pages/**`。
