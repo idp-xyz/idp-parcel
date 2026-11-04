@@ -804,6 +804,21 @@ export function BusinessPartiesPage() {
             emptyDescription: `客户、承运商、代理都从这里登记。${entryHint(mayWrite, '用页头的「新增往来单位」登记第一家。')}`,
           })}
         />
+        <ConfirmDialog
+          renderFooter={confirmDialogFooter}
+          open={pendingSelect !== null}
+          tone="warning"
+          title="放弃修改？"
+          message="合作关系登记还没有保存，换行或关闭详情后填写的内容不会保留。"
+          confirmLabel="放弃"
+          cancelLabel="继续编辑"
+          onConfirm={() => {
+            const next = pendingSelect?.key ?? null;
+            setPendingSelect(null);
+            setSelectedParty(next);
+          }}
+          onCancel={() => setPendingSelect(null)}
+        />
       </div>
     );
   }
@@ -918,21 +933,6 @@ export function BusinessPartiesPage() {
           emptyTitle: '还没有登记任何合作关系',
           emptyDescription: `谁是我们的客户、谁是承运商，都由合作关系说。${entryHint(mayWrite, '用页头的「建立合作关系」登记第一段。')}`,
         })}
-      />
-      <ConfirmDialog
-        renderFooter={confirmDialogFooter}
-        open={pendingSelect !== null}
-        tone="warning"
-        title="放弃修改？"
-        message="合作关系登记还没有保存，换行或关闭详情后填写的内容不会保留。"
-        confirmLabel="放弃"
-        cancelLabel="继续编辑"
-        onConfirm={() => {
-          const next = pendingSelect?.key ?? null;
-          setPendingSelect(null);
-          setSelectedParty(next);
-        }}
-        onCancel={() => setPendingSelect(null)}
       />
     </div>
   );
