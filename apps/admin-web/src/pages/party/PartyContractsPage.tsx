@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useRetryWhenChanged } from '../../query/answers';
+import { useAnswer, useRetryWhenChanged } from '../../query/answers';
+import { partyAnswersDomain } from './party-writes';
+import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { VersionObjectPage } from './VersionObjectPage';
+import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { useRegisterList } from './register-list';
 import { Button, ConfirmDialog, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, WorkbenchPageTemplate, useAddressKeyword, type ListColumn, type WorkbenchColumn } from '../../templates';
@@ -192,6 +197,84 @@ function customerAccountColumn(names: ReadonlyMap<string, string>): WorkbenchCol
  * 目录是工作台，行详情在右栏（票 commercial-registers-edit-containers/02）；发布走「签订合同」登记视图，那一视图的载体到达
  * 发布那一步时由页面把 `publishedKey` 拨一格，本表随之重读——回到目录（含绑定列）立刻可见。
  */
+/** 目录表与详情共用的列：合同列之后插客户列（账户标识旁的客户名称取账户册的第一页，读不到就没有名称）。 */
+function useContractColumns(): WorkbenchColumn<CustomerContractRecord>[] {
+  const accountsAnswer = useLoaded(loadCustomerAccountSuggestions);
+  const accountNames = new Map(
+    accountsAnswer?.kind === 'outcome'
+      ? accountsAnswer.body.accounts.flatMap((account) =>
+          account.customerPartyNameKnown && account.customerPartyName ? [[account.accountId, account.customerPartyName] as const] : [],
+        )
+      : [],
+  );
+  // 客户列紧跟合同列：运营先认合同、再认客户；按列标识找位置，不按下标数。
+  const afterContract = columns.findIndex((column) => column.key === 'contract') + 1;
+  return [...columns.slice(0, afterContract), customerAccountColumn(accountNames), ...columns.slice(afterContract)];
+}
+
+/** 一版客户合同的对象页（票 commercial-version-object-pages/02）：内容按身份读回，历史与可收尾判断从目录来。 */
+function CustomerContractObjectPage({ objectId, version }: VersionObjectAddress) {
+  const mayWrite = useMayWriteRegistry();
+  const contractColumns = useContractColumns();
+  const readback = useAnswer(
+    [partyAnswersDomain, 'commercial-version', 'CUSTOMER_CONTRACT', objectId, version],
+    () => readCommercialVersion<CustomerContractRecord>('CUSTOMER_CONTRACT', objectId, version),
+    { fresh: true },
+  );
+  const row = readVersionOf(readback.answer);
+  const list = useRegisterList(listCustomerContracts);
+  const contracts = list.answer?.kind === 'outcome' ? list.answer.body.contracts : [];
+  const closable = closableKeys(list.answer?.kind === 'outcome' ? contractKnownVersions(list.answer.body) : []);
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  const historyPool =
+    row && !contracts.some((candidate) => candidate.objectId === row.objectId && candidate.version === row.version) ? [...contracts, row] : contracts;
+  const refresh = () => {
+    readback.retry();
+    list.retry();
+  };
+  return (
+    <>
+      <VersionObjectPage<CustomerContractRecord>
+        kindLabel="客户合同"
+        objectId={objectId}
+        version={version}
+        row={row}
+        columns={contractColumns}
+        status={(record) => record.status}
+        technical={(record) => [
+          { label: '合同标识', value: record.objectId },
+          { label: '版本号', value: record.version },
+          { label: '适用范围', value: record.scope },
+          { label: '客户账户标识', value: record.customerAccountId ?? '' },
+          { label: '接单规则包标识', value: record.rulePackageId ?? '' },
+          { label: '正文登记时间', value: record.declaredAt ?? '' },
+        ]}
+        history={row ? versionHistoryOf(historyPool, row) : []}
+        onSelectVersion={(next) => {
+          window.location.hash = versionObjectHash('party-contracts', objectId, next);
+        }}
+        actions={
+          row && mayWrite && closable.has(closureKeyOf(row)) ? (
+            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', row))}>
+              收尾…
+            </Button>
+          ) : undefined
+        }
+        viewState={catalogueViewState(readback.answer, row ? 1 : 0, readback.retry, {
+          module: info,
+          endpoint: `GET ${commercialVersionReadbackEndpoint}/CUSTOMER_CONTRACT/{objectId}/{version}`,
+          emptyTitle: '没有这一版',
+          emptyDescription: '这个合同标识与版本号在本租户的册上不存在；地址可能抄错，或这一版尚未发布。',
+        })}
+        onBack={() => {
+          window.location.hash = hashWithQueryValue('#/party-contracts', ADDRESS_KEYWORD_PARAM, objectId);
+        }}
+      />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={refresh} />
+    </>
+  );
+}
+
 function CustomerContractsWorkbench({
   publishedKey,
   onStartNewVersion,
@@ -209,18 +292,7 @@ function CustomerContractsWorkbench({
   const mayWrite = useMayWriteRegistry();
   const { answer, retry, pending } = useRegisterList(listCustomerContracts);
   useRetryWhenChanged(publishedKey, retry);
-  // 账户标识旁的客户名称：账户册的第一页，读不到就没有名称。
-  const accountsAnswer = useLoaded(loadCustomerAccountSuggestions);
-  const accountNames = new Map(
-    accountsAnswer?.kind === 'outcome'
-      ? accountsAnswer.body.accounts.flatMap((account) =>
-          account.customerPartyNameKnown && account.customerPartyName ? [[account.accountId, account.customerPartyName] as const] : [],
-        )
-      : [],
-  );
-  // 客户列紧跟合同列：运营先认合同、再认客户；按列标识找位置，不按下标数。
-  const afterContract = columns.findIndex((column) => column.key === 'contract') + 1;
-  const contractColumns = [...columns.slice(0, afterContract), customerAccountColumn(accountNames), ...columns.slice(afterContract)];
+  const contractColumns = useContractColumns();
   // 右栏里的「收尾…」：记下是哪一版，对话框据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 右栏里的那一行：行键，与详情抽屉时代同一个键（票 party-commercial-uiux/21）。
@@ -304,6 +376,9 @@ function CustomerContractsWorkbench({
                 if (next) setSelectedKey(keyOf(next));
               }}
               readOnly={!mayWrite}
+              onOpenObjectPage={() => {
+                window.location.hash = versionObjectHash('party-contracts', row.objectId, row.version);
+              }}
               actions={(record) => (
                 <>
                   <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record)}>
@@ -478,6 +553,8 @@ export function PartyContractsPage() {
   // 地址是位置的唯一权威：视图从 hash 判（party-contracts-address.ts），只读本标签名下的地址变化。
   const [hash, setHash] = useState(() => window.location.hash);
   useOwnAddressChange(() => setHash(window.location.hash));
+  // 对象地址先认（票 commercial-version-object-pages/02）。
+  const object = versionObjectOf(hash, 'party-contracts');
   const requested = partyContractsViewOf(hash);
   // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在登记视图上的话落回对应的列表，不留一块空白。
   const view: PartyContractsView = !mayWrite && isPartyContractsRegisterView(requested) ? partyContractsListOf(requested) : requested;
@@ -519,6 +596,8 @@ export function PartyContractsPage() {
     beginNewVersion,
     '签订合同',
   );
+
+  if (object) return <CustomerContractObjectPage key={`${object.objectId}@${object.version}`} {...object} />;
 
   if (isPartyContractsRegisterView(view)) {
     const heading = viewTitles[view];

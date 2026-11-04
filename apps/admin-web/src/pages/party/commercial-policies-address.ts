@@ -2,6 +2,7 @@
 // 政策册签与发布签共用同一本册，读到哪本、发布的就是哪本。另有「这本册怎么发布」的对照。
 // 纯函数、只引零依赖的 address-query，node:test 直接跑。
 
+import type { CommercialObjectKindName } from './publication-draft-api';
 import { hashQueryValue, hashWithQueryValue } from '../../templates/address-query';
 import type { CommercialPolicyKind } from './api';
 import { commercialPolicyKinds } from './presentation';
@@ -47,5 +48,21 @@ export function publishTargetOf(register: CommercialPolicyKind): PublishTarget {
       return { kind: 'with-contract' };
     default:
       return { kind: 'form' };
+  }
+}
+
+/**
+ * 册 → 商业对象类别（对象页与按身份读回用，票 commercial-version-object-pages/02）。商业价格政策在册上叫 PRICE_POLICY、对象类别叫
+ * PRICE_RULE；接受判断时点策略与接受前财务控制声明没有自己的版本（随规则包 / 合同发布），没有对象页，答 null。
+ */
+export function policyObjectKindOf(register: CommercialPolicyKind): CommercialObjectKindName | null {
+  switch (register) {
+    case 'PRICE_POLICY':
+      return 'PRICE_RULE';
+    case 'AS_OF_POLICY':
+    case 'PRE_ACCEPTANCE_CONTROL':
+      return null;
+    default:
+      return register;
   }
 }

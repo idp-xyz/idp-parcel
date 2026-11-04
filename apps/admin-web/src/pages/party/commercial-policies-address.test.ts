@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { policiesHash, policiesRegisterOf, policiesTabOf, publishTargetOf } from './commercial-policies-address';
+import { policiesHash, policiesRegisterOf, policiesTabOf, policyObjectKindOf, publishTargetOf } from './commercial-policies-address';
 import { commercialPolicyKinds } from './presentation';
 
 test('地址里没写签与册时落在政策册签、接单规则包', () => {
@@ -41,4 +41,12 @@ test('七本册有自己的发布表单，随所属版本发布的两本各指�
     CREDIT_POLICY: 'form',
     CUSTOMER_SERVICE_RULE: 'form',
   });
+});
+
+// Covers: 价格政策换对象类别名；两本声明册没有对象页；其余同名。
+test('册到商业对象类别的映射', () => {
+  equal(policyObjectKindOf('PRICE_POLICY'), 'PRICE_RULE');
+  equal(policyObjectKindOf('AS_OF_POLICY'), null);
+  equal(policyObjectKindOf('PRE_ACCEPTANCE_CONTROL'), null);
+  equal(policyObjectKindOf('CREDIT_POLICY'), 'CREDIT_POLICY');
 });

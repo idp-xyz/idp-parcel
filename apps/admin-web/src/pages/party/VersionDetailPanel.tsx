@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { WorkspaceTabLabel } from '../../templates';
 import { StatusPill } from '../../components/StatusPill';
@@ -35,6 +35,7 @@ export function VersionDetailPanel<Row>({
   readOnly = false,
   emptyHistoryNote,
   technical,
+  onOpenObjectPage,
   onClose,
 }: {
   row: Row;
@@ -50,6 +51,8 @@ export function VersionDetailPanel<Row>({
   readOnly?: boolean;
   emptyHistoryNote?: string;
   technical?: (row: Row) => TechnicalRow[];
+  /** 给了就在头部摆「打开对象页」（票 commercial-version-object-pages/02）；没有自己版本的行（随所属版本发布的声明）不给。 */
+  onOpenObjectPage?: () => void;
   onClose: () => void;
 }) {
   const head = title(row);
@@ -64,6 +67,11 @@ export function VersionDetailPanel<Row>({
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {actions && !readOnly ? actions(row) : null}
+            {onOpenObjectPage ? (
+              <Button className="text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onOpenObjectPage} aria-label="打开对象页" title="打开对象页">
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
             <Button className="text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>

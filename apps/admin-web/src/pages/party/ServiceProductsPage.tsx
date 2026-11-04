@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
-import { useRetryWhenChanged } from '../../query/answers';
+import { useAnswer, useRetryWhenChanged } from '../../query/answers';
+import { partyAnswersDomain } from './party-writes';
+import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { VersionObjectPage } from './VersionObjectPage';
+import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { useRegisterList } from './register-list';
 import { moduleInfoById } from '../../navigation';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
@@ -216,6 +221,9 @@ function ServiceProductVersionsWorkbench({
                 if (next) setSelectedKey(keyOf(next));
               }}
               readOnly={!mayWrite}
+              onOpenObjectPage={() => {
+                window.location.hash = versionObjectHash('service-products', row.objectId, row.version);
+              }}
               actions={(record) => (
                 <>
                   <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record)}>
@@ -252,6 +260,68 @@ function ServiceProductVersionsWorkbench({
   );
 }
 
+/**
+ * 一版服务产品的对象页（票 commercial-version-object-pages/02）：内容按身份读回（新鲜），历史与可收尾判断从目录来。目录有页大小
+ * 上限，读回的这一版不在目录里时把它补进历史池，至少列出自己。
+ */
+function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
+  const mayWrite = useMayWriteRegistry();
+  const readback = useAnswer(
+    [partyAnswersDomain, 'commercial-version', 'SERVICE_PRODUCT', objectId, version],
+    () => readCommercialVersion<ServiceProductRecord>('SERVICE_PRODUCT', objectId, version),
+    { fresh: true },
+  );
+  const row = readVersionOf(readback.answer);
+  const list = useRegisterList(listServiceProducts);
+  const products = list.answer?.kind === 'outcome' ? list.answer.body.products : [];
+  const closable = closableKeys(list.answer?.kind === 'outcome' ? productKnownVersions(list.answer.body) : []);
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  const historyPool = row && !products.some((candidate) => keyOf(candidate) === keyOf(row)) ? [...products, row] : products;
+  const refresh = () => {
+    readback.retry();
+    list.retry();
+  };
+  return (
+    <>
+      <VersionObjectPage<ServiceProductRecord>
+        kindLabel="服务产品"
+        objectId={objectId}
+        version={version}
+        row={row}
+        columns={columns}
+        status={(record) => record.status}
+        technical={(record) => [
+          { label: '产品标识', value: record.objectId },
+          { label: '版本号', value: record.version },
+          { label: '适用范围', value: record.scope },
+          { label: '服务形态码', value: record.form ?? '' },
+        ]}
+        history={row ? versionHistoryOf(historyPool, row) : []}
+        onSelectVersion={(next) => {
+          window.location.hash = versionObjectHash('service-products', objectId, next);
+        }}
+        actions={
+          row && mayWrite && closable.has(closureKeyOf(row)) ? (
+            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row))}>
+              收尾…
+            </Button>
+          ) : undefined
+        }
+        viewState={catalogueViewState(readback.answer, row ? 1 : 0, readback.retry, {
+          module: info,
+          endpoint: `GET ${commercialVersionReadbackEndpoint}/SERVICE_PRODUCT/{objectId}/{version}`,
+          emptyTitle: '没有这一版',
+          emptyDescription: '这个产品标识与版本号在本租户的册上不存在；地址可能抄错，或这一版尚未发布。',
+        })}
+        onBack={() => {
+          window.location.hash = hashWithQueryValue('#/service-products', ADDRESS_KEYWORD_PARAM, objectId);
+        }}
+      />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={refresh} />
+    </>
+  );
+}
+
 const viewTitles: Record<Exclude<ServiceProductsView, 'versions'>, { title: string; subtitle: string }> = {
   publish: { title: '新增产品版本', subtitle: '版本壳、有效起止与引用；表单 → 预览 → 存为待批准 → 批准 → 发布' },
   register: { title: registrationTitles['service-product-form'], subtitle: '给已有的产品版本补服务形态；改形态要发新版本' },
@@ -279,6 +349,8 @@ export function ServiceProductsPage() {
   // 地址是位置的唯一权威：视图从 hash 判（service-products-address.ts），只读本标签名下的地址变化。
   const [hash, setHash] = useState(() => window.location.hash);
   useOwnAddressChange(() => setHash(window.location.hash));
+  // 对象地址先认（票 commercial-version-object-pages/02）：`#/service-products/<objectId>/<version>` 是一版的对象页。
+  const object = versionObjectOf(hash, 'service-products');
   const requested = serviceProductsViewOf(hash);
   // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在登记视图上的话落回目录，不留一块空白。
   const view: ServiceProductsView = mayWrite ? requested : 'versions';
@@ -316,6 +388,8 @@ export function ServiceProductsPage() {
     beginNewVersion,
     '新增产品版本',
   );
+
+  if (object) return <ServiceProductObjectPage key={`${object.objectId}@${object.version}`} {...object} />;
 
   if (view === 'publish' || view === 'register') {
     const heading = viewTitles[view];

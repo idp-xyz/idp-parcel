@@ -1,7 +1,7 @@
 # 登记视图与编辑态的「返回」：压过历史之后地址被别处动过时不再后退
 
 Category: bug
-Status: in-progress
+Status: resolved——2026-11-04 进 main `a9b193054`
 出处：commercial-registers-edit-containers 票 05 的非作者评审指出（2026-11-04）：进登记视图压了一条历史、出视图用后退，但若中途切到别的工作区标签再回来按「返回列表」，后退落到的是别的标签的地址。用户 2026-11-04 答「按你的建议全部做」。
 
 现状：七张页各自用一个 `useRef(false)` 记「本次挂载里是不是自己压进去的」，出视图时只看这个标志就 `history.back()`。标志不知道压完之后历史里又多了什么。
@@ -16,4 +16,4 @@ Status: in-progress
 
 | 票 | 内容 | 状态 |
 |---|---|---|
-| [01](./issues/01-pushed-address-hook.md) | 抽钩子、七处换用 | in-progress |
+| [01](./issues/01-pushed-address-hook.md) | 抽钩子、七处换用 | resolved（2026-11-04 进 main） |

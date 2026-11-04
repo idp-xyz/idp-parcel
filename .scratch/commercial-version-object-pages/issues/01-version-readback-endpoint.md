@@ -1,7 +1,7 @@
 # 01 后端：商业版本按身份读回单条
 
 Category: enhancement
-Status: done-uncommitted
+Status: resolved——2026-11-04 进 main `1dabc6f45`
 父票：[spec](../spec.md)
 
 ## 要做的
@@ -40,4 +40,4 @@ ADR 取号 0361：`docs/adr/0361-a-commercial-version-can-be-read-back-by-identi
 ### 会话补核（2026-11-04）
 
 - 用 land 树的构建另起一只 `parcel-api`（127.0.0.1:19081，环境与演示 API 同一份、同一演示库），管理台 vite 5175 指向它，Playwright 以配置操作者登录后经页面走真读口：`SERVICE_PRODUCT/SYN-PROD-CN-SG-ECON/v1`、`SUPPLIER_AGREEMENT/SYN-SUPPLIER-LASTMILE-SG-01/v1`、`CUSTOMER_CONTRACT/SYN-CONTRACT-01/v1`、`ACCEPTANCE_RULE_PACKAGE/SYN-RULEPKG-01/v1` 均答 200 `COMMERCIAL_VERSION_READ`，`SERVICE_PRODUCT/NOPE/v9` 答 200 `COMMERCIAL_VERSION_NOT_FOUND`；共享的演示 API（19080）未动。
-- 非作者评审：见票末「评审」。
+- 非作者评审：APPROVE，两处非阻塞建议已照改（ADR 候选段去掉跨文件计数；处理器 `default` 分支答「答案未形成」）。证据 S。

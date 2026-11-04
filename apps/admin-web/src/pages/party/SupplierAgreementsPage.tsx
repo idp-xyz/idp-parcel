@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useRetryWhenChanged } from '../../query/answers';
+import { useAnswer, useRetryWhenChanged } from '../../query/answers';
+import { partyAnswersDomain } from './party-writes';
+import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { VersionObjectPage } from './VersionObjectPage';
+import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { useRegisterList } from './register-list';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
@@ -157,6 +162,9 @@ function SupplierAgreementWorkbench({
                 if (next) setSelectedKey(next.key);
               }}
               readOnly={!mayWrite}
+              onOpenObjectPage={() => {
+                window.location.hash = versionObjectHash('supplier-agreements', row.source.objectId, row.source.version);
+              }}
               actions={(record) => (
                 <>
                   <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record.source)}>
@@ -198,6 +206,65 @@ function SupplierAgreementWorkbench({
  * （`?tab=publish`），收尾在对话框。写签跟着读签走：发布落定的版本就在目录里，页面借 reloadToken 让它回到目录时立刻可见。
  * 受控发布的 JSON 镜像口留在「商业规则与策略」页作高级口，本页不重复摆。
  */
+/** 一版供应商协议的对象页（票 commercial-version-object-pages/02）：内容按身份读回，历史与可收尾判断从目录来。 */
+function SupplierAgreementObjectPage({ objectId, version }: VersionObjectAddress) {
+  const mayWrite = useMayWriteRegistry();
+  const directory = useNameDirectory();
+  const readback = useAnswer(
+    [partyAnswersDomain, 'commercial-version', 'SUPPLIER_AGREEMENT', objectId, version],
+    () => readCommercialVersion<SupplierAgreementRecord>('SUPPLIER_AGREEMENT', objectId, version),
+    { fresh: true },
+  );
+  const record = readVersionOf(readback.answer);
+  const row = record ? supplierAgreementRowsOf({ outcome: 'SUPPLIER_AGREEMENTS_LISTED', agreements: [record] })[0] ?? null : null;
+  const list = useRegisterList(listSupplierAgreements);
+  const agreements = list.answer?.kind === 'outcome' ? list.answer.body.agreements : [];
+  const closable = closableKeys(list.answer?.kind === 'outcome' ? agreementKnownVersions(list.answer.body) : []);
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  const historyPool =
+    record && !agreements.some((candidate) => candidate.objectId === record.objectId && candidate.version === record.version)
+      ? [...agreements, record]
+      : agreements;
+  const refresh = () => {
+    readback.retry();
+    list.retry();
+  };
+  return (
+    <>
+      <VersionObjectPage<SupplierAgreementRow>
+        kindLabel="供应商协议"
+        objectId={objectId}
+        version={version}
+        row={row}
+        columns={withRefLinks(withStatusBadge(supplierAgreementColumns), directory)}
+        status={(candidate) => candidate.source.status}
+        technical={supplierAgreementTechnicalRows}
+        history={record ? versionHistoryOf(historyPool, record) : []}
+        onSelectVersion={(next) => {
+          window.location.hash = versionObjectHash('supplier-agreements', objectId, next);
+        }}
+        actions={
+          record && mayWrite && closable.has(closureKeyOf(record)) ? (
+            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', record))}>
+              收尾…
+            </Button>
+          ) : undefined
+        }
+        viewState={catalogueViewState(readback.answer, row ? 1 : 0, readback.retry, {
+          module: info,
+          endpoint: `GET ${commercialVersionReadbackEndpoint}/SUPPLIER_AGREEMENT/{objectId}/{version}`,
+          emptyTitle: '没有这一版',
+          emptyDescription: '这个协议标识与版本号在本租户的册上不存在；地址可能抄错，或这一版尚未发布。',
+        })}
+        onBack={() => {
+          window.location.hash = hashWithQueryValue('#/supplier-agreements', ADDRESS_KEYWORD_PARAM, objectId);
+        }}
+      />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={refresh} />
+    </>
+  );
+}
+
 export function SupplierAgreementsPage() {
   const grant = useRegistryWriteGrant();
   const mayWrite = grant.mayWrite;
@@ -205,6 +272,8 @@ export function SupplierAgreementsPage() {
   // 地址是位置的唯一权威：视图从 hash 判（supplier-agreements-address.ts），只读本标签名下的地址变化。
   const [hash, setHash] = useState(() => window.location.hash);
   useOwnAddressChange(() => setHash(window.location.hash));
+  // 对象地址先认（票 commercial-version-object-pages/02）。
+  const object = versionObjectOf(hash, 'supplier-agreements');
   const requested = supplierAgreementsViewOf(hash);
   // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在登记视图上的话落回目录，不留一块空白。
   const view: SupplierAgreementsView = mayWrite ? requested : 'catalogue';
@@ -242,6 +311,8 @@ export function SupplierAgreementsPage() {
     beginNewVersion,
     '签订协议',
   );
+
+  if (object) return <SupplierAgreementObjectPage key={`${object.objectId}@${object.version}`} {...object} />;
 
   if (view === 'publish') {
     return (

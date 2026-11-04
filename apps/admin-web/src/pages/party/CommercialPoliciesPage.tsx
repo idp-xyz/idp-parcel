@@ -1,7 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useRetryWhenChanged } from '../../query/answers';
-import { useRegisterList } from './register-list';
+import { useAnswer, useRetryWhenChanged } from '../../query/answers';
+import { partyAnswersDomain } from './party-writes';
+import { commercialVersionReadbackEndpoint, readCommercialVersion, readVersionOf } from './commercial-version-api';
+import { VersionObjectPage } from './VersionObjectPage';
+import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { useRegisterList } from './register-list';
 import { usePushedAddress } from '../../templates/use-pushed-address';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
@@ -56,6 +60,7 @@ import {
   policiesTabOf,
   publishTargetOf,
   type PoliciesTab,
+  policyObjectKindOf,
 } from './commercial-policies-address';
 import { withStatusBadge } from './detail-primitives';
 import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
@@ -220,6 +225,13 @@ function PolicyRegisters({
                 if (next) setSelectedKey(next.key);
               }}
               readOnly={!mayWrite}
+              onOpenObjectPage={
+                row.version && policyObjectKindOf(kind) !== null
+                  ? () => {
+                      window.location.hash = versionObjectHash('commercial-policies', row.version?.objectId ?? '', row.version?.version ?? '', { register: kind });
+                    }
+                  : undefined
+              }
               actions={(record) => (
                 <>
                   {record.source ? (
@@ -268,6 +280,77 @@ function policyClosureTarget(source: PolicySource | undefined): ClosureTarget | 
     default:
       return null;
   }
+}
+
+/**
+ * 一版政策的对象页（票 commercial-version-object-pages/02）：按册与身份读回（新鲜），用这本册的列转写成一行；历史与可收尾判断从
+ * 这本册的目录来。没有自己版本的两本册（随所属版本发布的声明）不进这里，地址上是那两本时按「没有这一版」答。
+ */
+function PolicyObjectPage({ register, objectId, version, directory }: VersionObjectAddress & { register: CommercialPolicyKind; directory: NameDirectory }) {
+  const mayWrite = useMayWriteRegistry();
+  const objectKind = policyObjectKindOf(register);
+  const readback = useAnswer(
+    [partyAnswersDomain, 'commercial-version', objectKind ?? '', objectId, version],
+    () => readCommercialVersion<CommercialPolicyListResponseBody['policies'][number]>(objectKind ?? 'CREDIT_POLICY', objectId, version),
+    { fresh: true, enabled: objectKind !== null },
+  );
+  const record = readVersionOf(readback.answer);
+  // 读回的那一份与这本册的目录行同形：套进目录的行转写，列与引用链接都照目录那一套。
+  const row = record ? (rowsOf({ outcome: 'COMMERCIAL_POLICIES_LISTED', kind: register, policies: [record] } as CommercialPolicyListResponseBody)[0] ?? null) : null;
+  const list = useRegisterList(commercialPolicyLoaders[register]);
+  const listRows = list.answer?.kind === 'outcome' ? rowsOf(list.answer.body) : [];
+  const closable = closableKeys(list.answer?.kind === 'outcome' ? policyKnownVersions(list.answer.body) : []);
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  const pool = listRows.flatMap((candidate) => (candidate.source ? [candidate.source.record] : []));
+  const historyPool = row?.source && !listRows.some((candidate) => candidate.key === row.key) ? [...pool, row.source.record] : pool;
+  const target = policyClosureTarget(row?.source);
+  const refresh = () => {
+    readback.retry();
+    list.retry();
+  };
+  // 没有对象页的两本册：不发读回，直接按「没有这一版」显。
+  const answer = objectKind === null ? ({ kind: 'outcome', status: 200, body: { outcome: 'COMMERCIAL_VERSION_NOT_FOUND' } } as const) : readback.answer;
+  return (
+    <>
+      <VersionObjectPage<PolicyRow>
+        kindLabel={policyKindLabels[register]}
+        objectId={objectId}
+        version={version}
+        row={row}
+        columns={withRefLinks(withStatusBadge(kindColumns[register]), directory)}
+        status={(candidate) => candidate.version?.status}
+        technical={(candidate) => [
+          { label: '对象标识', value: candidate.version?.objectId ?? '' },
+          { label: '版本号', value: candidate.version?.version ?? '' },
+          { label: '适用范围', value: candidate.source && 'scope' in candidate.source.record ? String(candidate.source.record.scope ?? '') : '' },
+        ]}
+        history={row?.source ? versionHistoryOf(historyPool, row.source.record) : []}
+        onSelectVersion={(next) => {
+          window.location.hash = versionObjectHash('commercial-policies', objectId, next, { register });
+        }}
+        actions={
+          target !== null && mayWrite && closable.has(closureKeyOf(target)) ? (
+            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(target)}>
+              收尾…
+            </Button>
+          ) : undefined
+        }
+        viewState={catalogueViewState(answer, row ? 1 : 0, readback.retry, {
+          module: info,
+          endpoint: `GET ${commercialVersionReadbackEndpoint}/{kind}/{objectId}/{version}`,
+          emptyTitle: '没有这一版',
+          emptyDescription:
+            objectKind === null
+              ? `${policyKindLabels[register]}没有自己的版本，随所属版本发布；请到那本册看。`
+              : '这个对象标识与版本号在本租户的这本册上不存在；地址可能抄错，或这一版尚未发布。',
+        })}
+        onBack={() => {
+          window.location.hash = hashWithQueryValue(policiesHash('#/commercial-policies', { tab: 'registers', register }), ADDRESS_KEYWORD_PARAM, objectId);
+        }}
+      />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={refresh} />
+    </>
+  );
 }
 
 // 声明类两册的行按所属版本给了版本信息；万一没有（行模型新加一册忘了给），按行键单独成组，不报错。
@@ -458,6 +541,10 @@ export function CommercialPoliciesPage() {
   const grant = useRegistryWriteGrant();
   const mayWrite = grant.mayWrite;
   const [placedTab, register, place] = usePoliciesPlace();
+  // 对象地址先认（票 commercial-version-object-pages/02）：`#/commercial-policies/<objectId>/<version>?register=<册>`。
+  const [hash, setHash] = useState(() => window.location.hash);
+  useOwnAddressChange(() => setHash(window.location.hash));
+  const object = versionObjectOf(hash, 'commercial-policies');
   // 地址里的签可能是别人发来的发布视图链接：没有登记写授予时两个视图不摆，落回政策册，不留一块空白。
   const tab = mayWrite || placedTab === 'registers' ? placedTab : 'registers';
   // 查看者拿着视图地址进来：授予已答出、明确没有写授予时把键清掉（替换地址）。加载期不动。
@@ -504,6 +591,8 @@ export function CommercialPoliciesPage() {
   const notePublished = (kind: CommercialPolicyKind) => {
     if (kind === register) setReloadKey((value) => value + 1);
   };
+
+  if (object) return <PolicyObjectPage key={`${register}:${object.objectId}@${object.version}`} register={register} directory={directory} {...object} />;
 
   if (tab === 'publish' || tab === 'json') {
     return (
