@@ -40,7 +40,6 @@ import {
   businessPartiesViewOf,
   businessPartyObjectHash,
   businessPartyRegisters,
-  deactivationLinkHash,
   deactivationPresetOf,
   registerViewHash,
   withoutDeactivationPreset,
@@ -495,10 +494,6 @@ export function BusinessPartiesPage() {
     pushedRegister.current = true;
     window.location.hash = registerViewHash(window.location.hash, register);
   };
-  const openDeactivation = (target: DeactivationPreset) => {
-    pushedRegister.current = view.kind !== 'register';
-    window.location.hash = deactivationLinkHash(target);
-  };
   const leaveRegister = () => {
     setConfirmingLeave(false);
     setPreset(null);
@@ -763,7 +758,8 @@ export function BusinessPartiesPage() {
                 onOpenObjectPage={() => {
                   window.location.hash = businessPartyObjectHash(row.partyId);
                 }}
-                onDeactivate={() => openDeactivation({ kind: 'BUSINESS_PARTY', id: row.partyId })}
+                parties={parties.answer}
+                onChanged={parties.retry}
               />
             ) : null;
           }}

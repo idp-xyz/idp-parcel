@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
 import { statusToneBanner, statusToneText, type StatusTone } from '../../components/status-tone';
-import type { BusinessPartyRecord, PartyRelationshipRecord } from './api';
-import { businessPartyObjectHash, deactivationLinkHash } from './business-parties-address';
+import type { BusinessPartyRecord, PartyRelationshipRecord, BusinessPartyListResponseBody } from './api';
+import { businessPartyObjectHash } from './business-parties-address';
 import { labelOf, partyNameUnknownNote, relationshipStatusLabels } from './presentation';
 import { partyRelationshipNeedsAttention } from './party-relationship-list';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import type { ApiResult } from '../catalogue-api';
+import { BusinessPartyDeactivationDialog } from './BusinessPartyDeactivationDialog';
 
 // 业务参与方页两册头区的件：横幅与「更多」菜单。身份册的详情栏与对象页各摆一份同样的头区（照 LegalEntityHeaderParts.tsx，
 // 票 group-legal-entities-uiux/09：同一对象两处结构一致），件只在这里写一遍，两处各自排版。不摆生命周期步进：状态药丸
@@ -39,21 +42,24 @@ export function BusinessPartyBanners({ row }: { row: BusinessPartyRecord }) {
  */
 export function BusinessPartyMoreMenu({
   row,
+  parties,
   onOpenObjectPage,
-  onDeactivate,
+  onChanged,
 }: {
   row: BusinessPartyRecord;
+  /** 页面持有的参与方列表答案，给停用对话框（候选与版本号建议）；首取回来之前为 null。 */
+  parties: ApiResult<BusinessPartyListResponseBody> | null;
   onOpenObjectPage?: () => void;
-  onDeactivate?: () => void;
+  /** 停用落册后回调；页面借它重取参与方册让「已停用」立刻可见。 */
+  onChanged?: () => void;
 }) {
   const copy = useCopyToClipboard();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const deactivate = () => {
-    if (onDeactivate) onDeactivate();
-    else window.location.hash = deactivationLinkHash({ kind: 'BUSINESS_PARTY', id: row.partyId });
-  };
+  // 停用开在本页的对话框里（票 business-party-edit-mode/01），不再送去列表页登记视图的停用表单。
+  const [deactivating, setDeactivating] = useState(false);
   return (
+    <>
     <DropdownMenu
       align="right"
       trigger={
@@ -74,12 +80,22 @@ export function BusinessPartyMoreMenu({
       </MenuItem>
       {mayWrite ? <MenuSeparator /> : null}
       {mayWrite ? (
-        <MenuItem onSelect={deactivate}>
+        <MenuItem onSelect={() => setDeactivating(true)}>
           <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
           停用这家单位…
         </MenuItem>
       ) : null}
     </DropdownMenu>
+    {mayWrite ? (
+      <BusinessPartyDeactivationDialog
+        row={row}
+        parties={parties}
+        open={deactivating}
+        onOpenChange={setDeactivating}
+        onDeactivated={() => onChanged?.()}
+      />
+    ) : null}
+    </>
   );
 }
 

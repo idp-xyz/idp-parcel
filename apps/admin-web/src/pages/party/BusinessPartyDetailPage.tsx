@@ -156,7 +156,7 @@ export function BusinessPartyDetailPage({
       status={row ? <StatusPill code={row.status} /> : undefined}
       headerActions={
         <>
-          {row ? <BusinessPartyMoreMenu row={row} /> : null}
+          {row ? <BusinessPartyMoreMenu row={row} parties={listAnswer} onChanged={retry} /> : null}
           <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
             返回列表
           </Button>

@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 import type { ApiResult } from '../catalogue-api';
-import type { BusinessPartyRecord, PartyRelationshipListResponseBody } from './api';
+import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
@@ -33,7 +33,8 @@ export function BusinessPartyDetailPanel({
   retryRelationships,
   onClose,
   onOpenObjectPage,
-  onDeactivate,
+  parties,
+  onChanged,
 }: {
   row: BusinessPartyRecord;
   /** 这个参与方在关系册上持有的角色（business-party-list.ts 的 indexPartyRoles），头部按它称呼；空即「往来单位」。 */
@@ -44,7 +45,10 @@ export function BusinessPartyDetailPanel({
   onClose: () => void;
   onOpenObjectPage: () => void;
   /** 「停用此参与方…」：页面借它记下这次是从列表压进登记视图的，再改地址。 */
-  onDeactivate: () => void;
+  /** 页面持有的参与方列表答案，给「更多 › 停用」的对话框。 */
+  parties: ApiResult<BusinessPartyListResponseBody> | null;
+  /** 停用落册后回调；列表页借它重取参与方册。 */
+  onChanged: () => void;
 }) {
   const [tab, setTab] = useState<PanelTab>('overview');
   const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
@@ -79,7 +83,7 @@ export function BusinessPartyDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <BusinessPartyMoreMenu row={row} onOpenObjectPage={onOpenObjectPage} onDeactivate={onDeactivate} />
+            <BusinessPartyMoreMenu row={row} parties={parties} onOpenObjectPage={onOpenObjectPage} onChanged={onChanged} />
             <Button
               className="text-idpxyz-breadcrumb"
               variant="ghost"
