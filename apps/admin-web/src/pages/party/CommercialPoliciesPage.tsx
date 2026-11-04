@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
-import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { ListPageTemplate } from '../../templates';
+import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { primaryActionClass } from '../../components/primary-action';
 import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { RegistrationPanel, chipClass } from '../../components/registration';
@@ -19,13 +21,13 @@ import {
   type CommercialPolicyListResponseBody,
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest, type NewVersionStart } from './new-version';
-import { withNewVersionAction } from './NewVersionAction';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
-import { publicationGroup } from './unsaved-guard';
+import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
 import { policyKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
-import { VersionClosureDrawer } from './VersionClosureDrawer';
-import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { VersionClosureDialog } from './VersionClosureDialog';
+import { VersionDetailPanel } from './VersionDetailPanel';
+import { RegisterView } from './RegisterView';
 import { versionHistoryOf } from './version-history';
 import { acceptanceRulePackageDraftFromRecord } from './acceptance-rule-package-form';
 import { authorizationRuleDraftFromRecord } from './authorization-rule-form';
@@ -34,7 +36,7 @@ import { customerServiceRuleDraftFromRecord } from './customer-service-rule-form
 import { preAcceptanceFinancialControlPolicyDraftFromRecord } from './pre-acceptance-financial-control-policy-form';
 import { pricePolicyDraftFromRecord } from './price-policy-form';
 import { settlementPolicyDraftFromRecord } from './settlement-policy-form';
-import { KeepAliveTabs, KeepAliveTabsContent, useVisited } from './keep-alive-tabs';
+import { useVisited } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -71,7 +73,7 @@ import {
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
-import { useMayWriteRegistry } from '../use-operator-grants';
+import { useMayWriteRegistry, useRegistryWriteGrant } from '../use-operator-grants';
 import { useRefdataNames } from '../use-refdata-names';
 
 const info = moduleInfoById['commercial-policies'];
@@ -111,12 +113,15 @@ function PolicyRegisters({
   reloadKey: externalReloadKey,
   directory,
   onStartNewVersion,
+  onOpenPublish,
 }: {
   kind: CommercialPolicyKind;
   reloadKey: number;
   directory: NameDirectory;
-  /** 点行上的「发新版本」：把这一行的记录带去发布签预填（票 party-commercial-uiux/14）。 */
+  /** 右栏头部的「发新版本」：把这一行的记录带去登记视图预填（票 party-commercial-uiux/14）。 */
   onStartNewVersion: (source: PolicySource) => void;
+  /** 页头主动作：进「发布新版本」登记视图，选中当前这本册。 */
+  onOpenPublish: () => void;
 }) {
   // 检索词在地址里（`?q=`）：合同上的规则包、控制策略链接带着它过来，筛到那一条。换册时由页面清掉（见 usePoliciesPlace）。
   const [search, setSearch] = useAddressKeyword();
@@ -128,7 +133,7 @@ function PolicyRegisters({
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // 每册一个读函数（commercialPolicyLoaders）：换册就是另一份缓存，上一册的答案不会显在这一册下。
-  const { answer, retry } = useRegisterList(commercialPolicyLoaders[kind]);
+  const { answer, retry, pending } = useRegisterList(commercialPolicyLoaders[kind]);
   useRetryWhenChanged(externalReloadKey, retry);
   // 行里的币种经 currencyLabel 译名；订阅名表只为名表读回时重绘这些行。
   useRefdataNames();
@@ -146,114 +151,107 @@ function PolicyRegisters({
     policyFacts,
   );
   const closable = closableKeys(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []);
-  // 目录表与详情抽屉用同一份列（引用链接与状态徽章已套好）。
+  // 目录表与右栏详情用同一份列（引用链接与状态徽章已套好）；工作台的列按 key 认，照列的 id 搬过来。九本册列形各异，
+  // 右栏打开时统一只留前三列（对象、版本与状态一类的主身份列），其余收起。
   const detailColumns = withRefLinks(withStatusBadge(kindColumns[kind]), directory);
-  const selected = rows.find((row) => row.key === selectedKey) ?? null;
+  const workbenchColumns: WorkbenchColumn<PolicyRow>[] = detailColumns.map((column, index) => ({
+    key: column.id,
+    header: column.header,
+    render: column.render,
+    hideWhenDetailOpen: index >= 3,
+  }));
   const historyPool = rows.flatMap((row) => (row.source ? [row.source.record] : []));
+  const answered = answer?.kind === 'outcome';
 
   return (
     <>
-      <ListPageTemplate<PolicyRow>
+      <WorkbenchPageTemplate<PolicyRow>
         title={policyKindLabels[kind]}
-        description={policyKindSources[kind]}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: '搜规则编号、服务产品、客户合同',
-        }}
-        filterSummary={
-          // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
-          answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined
-        }
-        filters={
-          answer?.kind === 'outcome' && withStatus ? (
-            <VersionStatusChips
-              counts={versionStatusCounts(rows, policyFacts)}
-              value={statusFilter}
-              onChange={setStatusFilter}
-            />
+        viewStateKey={`commercial-policies:${kind}`}
+        subtitle={policyKindSources[kind]}
+        onRefresh={retry}
+        refreshing={pending}
+        primaryAction={
+          mayWrite ? (
+            <Button variant="default" className={primaryActionClass} onClick={onOpenPublish}>
+              发布新版本
+            </Button>
           ) : undefined
         }
-        emptyRowsNote="没有匹配的规则"
-        columns={withNewVersionAction(detailColumns, {
-          enabled: mayWrite,
-          // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
-          canStart: (row) => row.source !== undefined,
-          labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
-          onStart: (row) => {
-            if (row.source) onStartNewVersion(row.source);
-          },
-          // 只有读面带状态的三本册有可收尾的版本；其余册与声明类两册没有这个动作。
-          closure: {
-            canClose: (row) => {
-              const target = policyClosureTarget(row.source);
-              return target !== null && closable.has(closureKeyOf(target));
-            },
-            onClose: (row) => setClosing(policyClosureTarget(row.source)),
-          },
-        })}
+        search={{ value: search, onChange: setSearch, placeholder: '搜规则编号、服务产品、客户合同' }}
+        extraFilters={
+          answered && withStatus ? (
+            <VersionStatusChips counts={versionStatusCounts(rows, policyFacts)} value={statusFilter} onChange={setStatusFilter} />
+          ) : undefined
+        }
+        // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
+        toolbarRight={answered ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined}
+        columns={workbenchColumns}
         rows={visibleRows}
         rowKey={(row) => row.key}
-        onRowClick={(row) => setSelectedKey(row.key)}
+        selectedKey={selectedKey}
+        onSelect={setSelectedKey}
+        noMatchText="没有匹配的规则"
+        onClearFilters={() => {
+          setSearch('');
+          setStatusFilter('all');
+        }}
+        renderDetail={(key) => {
+          const row = rows.find((candidate) => candidate.key === key);
+          if (!row) return null;
+          const target = policyClosureTarget(row.source);
+          return (
+            <VersionDetailPanel<PolicyRow>
+              row={row}
+              columns={detailColumns}
+              title={(record) => ({ objectId: record.version?.objectId ?? record.key, version: record.version?.version ?? '' })}
+              subtitle={() => policyKindLabels[kind]}
+              technical={(record) => [
+                { label: '对象标识', value: record.version?.objectId ?? '' },
+                { label: '版本号', value: record.version?.version ?? '' },
+                { label: '适用范围', value: record.source && 'scope' in record.source.record ? String(record.source.record.scope ?? '') : '' },
+              ]}
+              status={(record) => record.version?.status}
+              history={(record) => (record.source ? versionHistoryOf(historyPool, record.source.record) : [])}
+              currentVersion={(record) => record.version?.version ?? ''}
+              onSelectVersion={(version) => {
+                const next = rows.find((candidate) => candidate.version?.objectId === row.version?.objectId && candidate.version?.version === version);
+                if (next) setSelectedKey(next.key);
+              }}
+              readOnly={!mayWrite}
+              actions={(record) => (
+                <>
+                  {record.source ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[12px]"
+                      onClick={() => {
+                        if (record.source) onStartNewVersion(record.source);
+                      }}
+                    >
+                      发新版本
+                    </Button>
+                  ) : null}
+                  {target !== null && closable.has(closureKeyOf(target)) ? (
+                    <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(target)}>
+                      收尾…
+                    </Button>
+                  ) : null}
+                </>
+              )}
+              onClose={() => setSelectedKey(null)}
+            />
+          );
+        }}
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET /commercial-policies?kind=${kind}`,
           emptyTitle: `还没有任何${policyKindLabels[kind]}`,
-          emptyDescription: '这本册还是空的；在「发布新版本」签发布第一版。',
+          emptyDescription: '这本册还是空的；用页头的「发布新版本」发布第一版。',
         })}
       />
-      <VersionDetailDrawer<PolicyRow>
-        row={selected}
-        columns={detailColumns}
-        title={(row) => ({ objectId: row.version?.objectId ?? row.key, version: row.version?.version ?? '' })}
-        subtitle={(row) => policyKindLabels[kind]}
-        technical={(row) => [
-          { label: '对象标识', value: row.version?.objectId ?? '' },
-          { label: '版本号', value: row.version?.version ?? '' },
-          { label: '适用范围', value: row.source && 'scope' in row.source.record ? String(row.source.record.scope ?? '') : '' },
-        ]}
-        status={(row) => row.version?.status}
-        history={(row) => (row.source ? versionHistoryOf(historyPool, row.source.record) : [])}
-        currentVersion={(row) => row.version?.version ?? ''}
-        onSelectVersion={(version) => {
-          const next = rows.find((row) => row.version?.objectId === selected?.version?.objectId && row.version?.version === version);
-          if (next) setSelectedKey(next.key);
-        }}
-        readOnly={!mayWrite}
-        actions={(row) => {
-          const target = policyClosureTarget(row.source);
-          return (
-            <>
-              {row.source ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedKey(null);
-                    if (row.source) onStartNewVersion(row.source);
-                  }}
-                >
-                  发新版本
-                </Button>
-              ) : null}
-              {target !== null && closable.has(closureKeyOf(target)) ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedKey(null);
-                    setClosing(target);
-                  }}
-                >
-                  收尾…
-                </Button>
-              ) : null}
-            </>
-          );
-        }}
-        onClose={() => setSelectedKey(null)}
-      />
-      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+      <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>
   );
 }
@@ -301,7 +299,7 @@ function PublishPane({
   } else if (target.kind === 'with-contract') {
     body = (
       <WhereToPublish
-        text="接受前财务控制是客户合同上按费用范围的约定，随合同一起发布：在客户与合同页的「发布合同版本」签里填写。控制具体怎么做，在「接受前财务控制策略」这本册发布。"
+        text="接受前财务控制是客户合同上按费用范围的约定，随合同一起发布：在客户与合同页的「签订合同」里填写。控制具体怎么做，在「接受前财务控制策略」这本册发布。"
         action="去客户与合同"
         onAction={() => {
           window.location.hash = '#/party-contracts';
@@ -446,26 +444,52 @@ function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesT
 }
 
 /**
- * 商业规则与策略（party-commercial）：政策册、发布新版本、JSON 发布三签。
+ * 商业规则与策略（party-commercial）：政策册工作台，外加「发布新版本」「JSON 发布（高级）」两个登记视图。
  *
  * 发布摆在这里而不另开专页，是票 admin-write-faces/03 的裁决：发布对象里多数类的结果显示在本页的册里，写签跟着读签走。
- * 发布签与政策册签共用同一组册名与同一个选中的册（票 party-commercial-uiux/05）：此前七个「发布 X 版本」签各占一签、
- * 与读签册名对不上，十个签在常见宽度下挤成两行。
+ * 发布视图与政策册共用同一组册名与同一个选中的册（票 party-commercial-uiux/05），换册只替换地址（usePoliciesPlace）。
  *
- * JSON 发布签按 ADR-0101 决定一是受控批量口的在线镜像，不是配置员的主路径，标「高级」列在最后。
+ * 容器照 commercial-registers-edit-containers 的决定（票 04）：行详情在工作台右栏，两张写面是由地址决定的整页登记视图
+ * （`?tab=publish` / `?tab=json`，键沿用此前的签名），进视图压一条历史、出来后退或替换；视图里任一册的表单有没提交的输入时
+ * 「返回列表」先问一句；收尾在对话框。JSON 发布按 ADR-0101 决定一是受控批量口的在线镜像，不是配置员的主路径，标「高级」。
  */
 export function CommercialPoliciesPage() {
-  const mayWrite = useMayWriteRegistry();
+  const grant = useRegistryWriteGrant();
+  const mayWrite = grant.mayWrite;
   const [placedTab, register, place] = usePoliciesPlace();
-  // 地址里的签可能是别人发来的发布签链接：没有登记写授予时发布两签不摆，落回政策册，不留一块空白。
+  // 地址里的签可能是别人发来的发布视图链接：没有登记写授予时两个视图不摆，落回政策册，不留一块空白。
   const tab = mayWrite || placedTab === 'registers' ? placedTab : 'registers';
+  // 查看者拿着视图地址进来：授予已答出、明确没有写授予时把键清掉（替换地址）。加载期不动。
+  useEffect(() => {
+    if (placedTab !== 'registers' && grant.settled && !grant.mayWrite) place('registers', register);
+  }, [placedTab, grant.settled, grant.mayWrite]);
   const [reloadKey, setReloadKey] = useState(0);
   const directory = useNameDirectory();
-  // 点目录行上的「发新版本」：记下是哪一版，切到发布签、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
+  // 本次挂载里是不是从政策册压进视图的：是就用后退回册；刷新或从别的标签直接落在视图上的用替换。
+  const pushedView = useRef(false);
+  const openView = (next: PoliciesTab, nextRegister: CommercialPolicyKind) => {
+    pushedView.current = true;
+    window.location.hash = policiesHash(window.location.hash, { tab: next, register: nextRegister });
+  };
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const leaveView = () => {
+    setConfirmingLeave(false);
+    if (pushedView.current) {
+      pushedView.current = false;
+      window.history.back();
+      return;
+    }
+    place('registers', register);
+  };
+  // 发布视图里任一册的表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿；各册表单在视图里保活）。
+  const requestLeave = () =>
+    tab === 'publish' && commercialPolicyKinds.some((kind) => hasUnsavedDraft(publicationGroup(kind))) ? setConfirmingLeave(true) : leaveView();
+  // 右栏「发新版本」：记下是哪一版，进发布视图、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
   const [request, setRequest] = useState<NewVersionRequest<PolicySource> | null>(null);
   const beginNewVersion = (source: PolicySource) => {
     setRequest((previous) => nextRequest(previous, source));
-    place('publish', source.kind);
+    if (tab === 'publish') place('publish', source.kind);
+    else openView('publish', source.kind);
   };
   // 目标那一册的发布表单里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
   const replaceGuard = useReplaceDraftGuard<PolicySource>(
@@ -473,69 +497,67 @@ export function CommercialPoliciesPage() {
     beginNewVersion,
     '发布新版本',
   );
-  // 发布落定一版：读面那一册重读，切回政策册签时结果已在；仍停在发布签，让人看完答复。
+  // 发布落定一版：读面那一册重读，回到政策册时结果已在；仍停在视图里，让人看完答复。
   const notePublished = (kind: CommercialPolicyKind) => {
     if (kind === register) setReloadKey((value) => value + 1);
   };
 
+  if (tab === 'publish' || tab === 'json') {
+    return (
+      <RegisterView
+        title={tab === 'publish' ? '发布新版本' : 'JSON 发布（高级）'}
+        subtitle={tab === 'publish' ? `当前册：${policyKindLabels[register]}；表单 → 预览 → 存为待批准 → 批准 → 发布` : registrationSnapshotHints.publication}
+        onBack={requestLeave}
+      >
+        {tab === 'publish' ? (
+          <PublishPane register={register} onRegisterChange={(kind) => place('publish', kind)} onPublished={notePublished} request={request} />
+        ) : (
+          <RegistrationPanel
+            moduleId="commercial-policies"
+            title={registrationTitles.publication}
+            endpoint={`POST ${commercialRegistrationEndpoints.publication}`}
+            snapshotHint={registrationSnapshotHints.publication}
+            submit={(snapshot) => registerCommercial('publication', snapshot)}
+            outcomeLabels={publicationOutcomeLabels}
+            declarationLandingLabels={declarationLandingLabels}
+            problemNote={problemNote}
+          />
+        )}
+        <ConfirmDialog
+          renderFooter={confirmDialogFooter}
+          open={confirmingLeave}
+          tone="warning"
+          title="离开这一页？"
+          message="有内容还没有发布，离开后填写的内容不会保留。"
+          confirmLabel="离开"
+          cancelLabel="继续填写"
+          onConfirm={leaveView}
+          onCancel={() => setConfirmingLeave(false)}
+        />
+      </RegisterView>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       {replaceGuard.dialog}
-      <KeepAliveTabs
-        value={tab}
-        onValueChange={(next) => place(next as PoliciesTab, register)}
-        className="flex-1 flex flex-col overflow-hidden gap-0"
-      >
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="registers">规则</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="publish">发布新版本</TabsTrigger> : null}
-          {mayWrite ? <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger> : null}
-        </TabsList>
-        <KeepAliveTabsContent
-          value="registers"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
-          {/* 按册重挂：检索词从地址重读（换册时已清掉），不带上一本册的词。 */}
-          <PolicyRegisters
-            key={register}
-            kind={register}
-            reloadKey={reloadKey}
-            directory={directory}
-            onStartNewVersion={replaceGuard.start}
-          />
-        </KeepAliveTabsContent>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pr-4">
+        <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
         {mayWrite ? (
-          <KeepAliveTabsContent
-            value="publish"
-            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-          >
-            <PublishPane
-              register={register}
-              onRegisterChange={(kind) => place('publish', kind)}
-              onPublished={notePublished}
-              request={request}
-            />
-          </KeepAliveTabsContent>
+          <Button variant="ghost" size="sm" className="mt-3 text-[12px] text-idpxyz-breadcrumb" onClick={() => openView('json', register)}>
+            JSON 发布（高级）
+          </Button>
         ) : null}
-        {mayWrite ? (
-          <KeepAliveTabsContent
-            value="json"
-            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-          >
-            <RegistrationPanel
-              moduleId="commercial-policies"
-              title={registrationTitles.publication}
-              endpoint={`POST ${commercialRegistrationEndpoints.publication}`}
-              snapshotHint={registrationSnapshotHints.publication}
-              submit={(snapshot) => registerCommercial('publication', snapshot)}
-              outcomeLabels={publicationOutcomeLabels}
-              declarationLandingLabels={declarationLandingLabels}
-              problemNote={problemNote}
-            />
-          </KeepAliveTabsContent>
-        ) : null}
-      </KeepAliveTabs>
+      </div>
+      {/* 按册重挂：检索词从地址重读（换册时已清掉），不带上一本册的词。 */}
+      <PolicyRegisters
+        key={register}
+        kind={register}
+        reloadKey={reloadKey}
+        directory={directory}
+        onStartNewVersion={replaceGuard.start}
+        onOpenPublish={() => openView('publish', register)}
+      />
     </div>
   );
 }

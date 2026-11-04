@@ -1,7 +1,7 @@
 # 04 商业规则：行详情进右栏、发布签改登记视图（九本册换册保活照旧）、收尾用对话框
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 
