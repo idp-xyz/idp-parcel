@@ -1,7 +1,7 @@
 # 06 审批与发布：待发布那一份进右栏，批准与发布在右栏动作行
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 

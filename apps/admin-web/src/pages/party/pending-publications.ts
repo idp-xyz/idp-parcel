@@ -1,5 +1,5 @@
 // 「审批与发布」页的纯逻辑（ADR-0314 决定三）：把列表读口交回的载体折成行、给详情抽屉复述的几项、批准与发布各在哪个状态
-// 下可做、胶囊筛与计数。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftDrawer.tsx 只负责摆。
+// 下可做、胶囊筛与计数。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftPanel.tsx 只负责摆。
 //
 // **本文件不算摘要、不判谁能批准**：摘要原样取自服务端的读回，批准职责由服务端的审批职责规则判。这里只按状态词决定按钮
 // 亮不亮——状态词是服务端的，亮了按下去服务端仍会答它的结果。

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ConfirmDialog, Drawer, Input } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog, Input } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
@@ -69,38 +69,14 @@ function describeRange(row: KnownVersion): string {
 }
 
 /**
- * 目录行上「收尾…」打开的抽屉（票 party-commercial-uiux/16）。同一对象换版后旧版不会自己结束，重叠的部分解析会答「适用冲突」；
- * 这里让登记方指名旧版让位给哪个后继：后继晚于旧版起点的截止在后继生效时点，同起点的退役。
+ * 「收尾…」的本体（票 party-commercial-uiux/16；外壳是 VersionClosureDialog，抽屉形态已随票 commercial-registers-edit-containers/06 退役）。
+ * 同一对象换版后旧版不会自己结束，重叠的部分解析会答「适用冲突」；这里让登记方指名旧版让位给哪个后继：后继晚于旧版起点的
+ * 截止在后继生效时点，同起点的退役。
  *
  * 次序：重读册面 → 认出旧版与可让位的后继 → 选后继、填依据（截止另有更正时刻）→ 确认框复述并说明不可撤回 → 提交。
  * 本组件不裁任何门：两版在不在册、都生效没有、后继接不接得住旧版此后那一段，由服务端按整册判，答复原样摆在按钮下方。
  * 纯逻辑在 version-closure.ts。
  */
-export function VersionClosureDrawer({
-  target,
-  onClose,
-  onClosed,
-}: {
-  target: ClosureTarget | null;
-  onClose: () => void;
-  /** 答复说收尾已落（或认出已落过）时调用，页面借它重取目录。 */
-  onClosed: () => void;
-}) {
-  return (
-    <Drawer open={target !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="收尾旧版">
-      {target ? (
-        <ClosureBody
-          key={`${target.kind}|${target.scope}|${target.objectId}|${target.version}`}
-          target={target}
-          onClose={onClose}
-          onClosed={onClosed}
-        />
-      ) : null}
-    </Drawer>
-  );
-}
-
-/** 收尾的本体：抽屉与对话框共用，外壳由调用方给（票 commercial-registers-edit-containers/01）。 */
 export function ClosureBody({
   target,
   onClose,
