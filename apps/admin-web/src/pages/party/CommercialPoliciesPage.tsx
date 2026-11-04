@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
@@ -465,20 +466,15 @@ export function CommercialPoliciesPage() {
   }, [placedTab, grant.settled, grant.mayWrite]);
   const [reloadKey, setReloadKey] = useState(0);
   const directory = useNameDirectory();
-  // 本次挂载里是不是从政策册压进视图的：是就用后退回册；刷新或从别的标签直接落在视图上的用替换。
-  const pushedView = useRef(false);
-  const openView = (next: PoliciesTab, nextRegister: CommercialPolicyKind) => {
-    pushedView.current = true;
-    window.location.hash = policiesHash(window.location.hash, { tab: next, register: nextRegister });
-  };
+  // 从政策册压进视图的用后退回册；刷新、深链、或压完之后地址被别处动过的（切过标签）用替换——判法在 usePushedAddress。
+  // 视图里换册走 usePoliciesPlace 的 replaceState，不经 hashchange，后退照常可用。
+  const pushed = usePushedAddress();
+  const openView = (next: PoliciesTab, nextRegister: CommercialPolicyKind) =>
+    pushed.push(policiesHash(window.location.hash, { tab: next, register: nextRegister }));
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const leaveView = () => {
     setConfirmingLeave(false);
-    if (pushedView.current) {
-      pushedView.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushed.back()) return;
     place('registers', register);
   };
   // JSON 发布的快照框报上来的「有没提交的输入」：记进登记簿（刷新、关页也会被拦）。

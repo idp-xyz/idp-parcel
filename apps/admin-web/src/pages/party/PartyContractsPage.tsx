@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
 import { Button, ConfirmDialog, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
@@ -8,6 +8,7 @@ import { RegistrationPanel } from '../../components/registration';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
@@ -493,20 +494,13 @@ export function PartyContractsPage() {
     window.history.replaceState(window.history.state, '', target);
     setHash(target);
   };
-  // 本次挂载里是不是从列表压进登记视图的：是就用后退回列表；刷新或从别的标签直接落在视图上的用替换。
-  const pushedView = useRef(false);
-  const openView = (next: PartyContractsView) => {
-    pushedView.current = true;
-    window.location.hash = partyContractsViewHash(window.location.hash, next);
-  };
+  // 从列表压进登记视图的用后退回列表；刷新、深链、或压完之后地址被别处动过的（切过标签）用替换——判法在 usePushedAddress。
+  const pushed = usePushedAddress();
+  const openView = (next: PartyContractsView) => pushed.push(partyContractsViewHash(window.location.hash, next));
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const leaveView = () => {
     setConfirmingLeave(false);
-    if (pushedView.current) {
-      pushedView.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushed.back()) return;
     replaceView(partyContractsListOf(view));
   };
   // 登记视图里的发布表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿）。

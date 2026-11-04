@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
@@ -10,6 +10,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import {
   commercialRegistrationEndpoints,
   listServiceProducts,
@@ -281,19 +282,12 @@ export function ServiceProductsPage() {
   const requested = serviceProductsViewOf(hash);
   // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在登记视图上的话落回目录，不留一块空白。
   const view: ServiceProductsView = mayWrite ? requested : 'versions';
-  // 本次挂载里是不是从目录压进登记视图的：是就用后退回目录；刷新或从别的标签直接落在视图上的用替换。
-  const pushedView = useRef(false);
-  const openView = (next: ServiceProductsView) => {
-    pushedView.current = true;
-    window.location.hash = serviceProductsViewHash(window.location.hash, next);
-  };
+  // 从目录压进登记视图的用后退回目录；刷新、深链、或压完之后地址被别处动过的（切过标签）用替换——判法在 usePushedAddress。
+  const pushed = usePushedAddress();
+  const openView = (next: ServiceProductsView) => pushed.push(serviceProductsViewHash(window.location.hash, next));
   const leaveView = () => {
     setConfirmingLeave(false);
-    if (pushedView.current) {
-      pushedView.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushed.back()) return;
     const next = serviceProductsViewHash(window.location.hash, 'versions');
     window.location.replace(next);
     setHash(next);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import { AlertTriangle, ArrowLeft, Clock, Info, Plus, X } from 'lucide-react';
 import {
   Button,
@@ -277,9 +278,9 @@ export function GroupLegalEntitiesPage() {
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
   const view = groupLegalEntitiesViewOf(hash);
-  // 本次挂载里是不是从列表压进登记视图的：是就用后退回列表，不再压一条；刷新或从别的标签回来直接落在登记视图时不是，
-  // 那时后退一格不一定是列表，改用替换。
-  const pushedRegister = useRef(false);
+  // 从列表压进登记视图的用后退回列表，不再压一条；刷新、深链、或压完之后地址被别处动过的（切过标签）那时后退一格不一定是
+  // 列表，改用替换——判法在 usePushedAddress。
+  const pushedRegister = usePushedAddress();
   const [registerUnsaved, setRegisterUnsaved] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
@@ -322,34 +323,21 @@ export function GroupLegalEntitiesPage() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [guardUnload]);
 
-  const openRegister = () => {
-    pushedRegister.current = true;
-    window.location.hash = registerViewHash(window.location.hash, true);
-  };
+  const openRegister = () => pushedRegister.push(registerViewHash(window.location.hash, true));
   const leaveRegister = () => {
     setConfirmingLeave(false);
-    if (pushedRegister.current) {
-      pushedRegister.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushedRegister.back()) return;
     window.location.replace(registerViewHash(window.location.hash, false));
   };
   // 对象页整版资料的编辑态（票 company-subject-section-edit/03）与登记视图同一套历史收口：本次挂载里自己压进去的用后退退出，
   // 刷新或从别的标签直接落在编辑态的用替换——不然保存或取消之后浏览器后退会回到 `?edit=profile`、重新进入编辑态。
-  // 退出后还要去别处（返回列表、表单里的站内链接）时一律替换再走：后退是异步的，接着跳转会打架。
-  const pushedProfileEdit = useRef(false);
-  const enterProfileEdit = () => {
-    pushedProfileEdit.current = true;
-    window.location.hash = profileEditHash(window.location.hash, true);
-  };
+  // 退出后还要去别处（返回列表、表单里的站内链接）时一律替换再走：后退是异步的，接着跳转会打架。压完之后地址被别处动过的
+  // （切过标签）也替换，判法在 usePushedAddress。
+  const pushedProfileEdit = usePushedAddress();
+  const enterProfileEdit = () => pushedProfileEdit.push(profileEditHash(window.location.hash, true));
   const exitProfileEdit = (then?: () => void) => {
-    if (then === undefined && pushedProfileEdit.current) {
-      pushedProfileEdit.current = false;
-      window.history.back();
-      return;
-    }
-    pushedProfileEdit.current = false;
+    if (then === undefined && pushedProfileEdit.back()) return;
+    pushedProfileEdit.forget();
     const next = profileEditHash(window.location.hash, false);
     window.location.replace(next);
     // 自己同步记下：紧接着的 `then` 多半把地址换到别的标签名下，hashchange 回调跑到时那次变化已不归本标签，useOwnAddressChange

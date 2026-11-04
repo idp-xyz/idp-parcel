@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRetryWhenChanged } from '../../query/answers';
 import { useRegisterList } from './register-list';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
@@ -9,6 +9,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import { listSupplierAgreements, type SupplierAgreementRecord } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
@@ -215,20 +216,13 @@ export function SupplierAgreementsPage() {
       setHash(next);
     }
   }, [requested, grant.settled, grant.mayWrite]);
-  // 本次挂载里是不是从目录压进登记视图的：是就用后退回目录；刷新或从别的标签直接落在视图上的用替换。
-  const pushedView = useRef(false);
-  const openPublish = () => {
-    pushedView.current = true;
-    window.location.hash = supplierAgreementsViewHash(window.location.hash, 'publish');
-  };
+  // 从目录压进登记视图的用后退回目录；刷新、深链、或压完之后地址被别处动过的（切过标签）用替换——判法在 usePushedAddress。
+  const pushed = usePushedAddress();
+  const openPublish = () => pushed.push(supplierAgreementsViewHash(window.location.hash, 'publish'));
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const leaveView = () => {
     setConfirmingLeave(false);
-    if (pushedView.current) {
-      pushedView.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushed.back()) return;
     const next = supplierAgreementsViewHash(window.location.hash, 'catalogue');
     window.location.replace(next);
     setHash(next);

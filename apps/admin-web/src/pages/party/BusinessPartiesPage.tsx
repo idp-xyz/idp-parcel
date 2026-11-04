@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
+import { usePushedAddress } from '../../templates/use-pushed-address';
 import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, MoreHorizontal, Plus, UserPlus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import {
@@ -415,24 +416,17 @@ export function BusinessPartiesPage() {
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
   const view = businessPartiesViewOf(hash);
-  // 本次挂载里是不是从列表压进登记视图的：是就用后退回列表，不再压一条；刷新、深链或从别的标签回来直接落在登记视图时
-  // 不是，那时后退一格不一定是列表，改用替换。
-  const pushedRegister = useRef(false);
+  // 从列表压进登记视图的用后退回列表，不再压一条；刷新、深链、或压完之后地址被别处动过的（切过标签）那时后退一格不一定是
+  // 列表，改用替换——判法在 usePushedAddress。
+  const pushedRegister = usePushedAddress();
   // 对象页「更正名称」的编辑态（票 business-party-edit-mode/02）与登记视图同一套历史收口：自己压进去的用后退退出，刷新或
   // 直接落在编辑态的用替换；退出后还要去别处时替换再走，并同步 setHash——紧接着切标签时 hashchange 回调已不归本标签，
   // useOwnAddressChange 会把它滤掉。
-  const pushedIdentityEdit = useRef(false);
-  const enterIdentityEdit = () => {
-    pushedIdentityEdit.current = true;
-    window.location.hash = identityEditHash(window.location.hash, true);
-  };
+  const pushedIdentityEdit = usePushedAddress();
+  const enterIdentityEdit = () => pushedIdentityEdit.push(identityEditHash(window.location.hash, true));
   const exitIdentityEdit = (then?: () => void) => {
-    if (then === undefined && pushedIdentityEdit.current) {
-      pushedIdentityEdit.current = false;
-      window.history.back();
-      return;
-    }
-    pushedIdentityEdit.current = false;
+    if (then === undefined && pushedIdentityEdit.back()) return;
+    pushedIdentityEdit.forget();
     const next = identityEditHash(window.location.hash, false);
     window.location.replace(next);
     setHash(next);
@@ -521,17 +515,12 @@ export function BusinessPartiesPage() {
       replaceHash(registerViewHash(window.location.hash, register));
       return;
     }
-    pushedRegister.current = true;
-    window.location.hash = registerViewHash(window.location.hash, register);
+    pushedRegister.push(registerViewHash(window.location.hash, register));
   };
   const leaveRegister = () => {
     setConfirmingLeave(false);
     setPreset(null);
-    if (pushedRegister.current) {
-      pushedRegister.current = false;
-      window.history.back();
-      return;
-    }
+    if (pushedRegister.back()) return;
     window.location.replace(registerViewHash(window.location.hash, null));
   };
   const requestLeaveRegister = () => (anyUnsaved ? setConfirmingLeave(true) : leaveRegister());
