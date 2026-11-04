@@ -1,7 +1,7 @@
 # 02 客户与合同：行详情进右栏、签订合同与新增客户账户走登记视图、收尾用对话框
 
 Category: enhancement
-Status: draft
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 01
 
