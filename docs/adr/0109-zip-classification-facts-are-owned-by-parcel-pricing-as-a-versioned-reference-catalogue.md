@@ -1,6 +1,6 @@
 # ADR-0109: 邮编分类事实（分区表、偏远档位表）归 `parcel-pricing` 拥有，作为版本化的「计价参考目录」登记；价卡以目录绑定声明分区与档位的来源，评价由目录解析、查不到即待判断，不给默认
 
-Status: Accepted<!-- 索引注记 -->｜**归属判据**：谁读它谁拥有它，加 ADR-0013 把外部数值序列判给计价的同一条理由——分区表是承运商公布的外部分类事实，只被计价读，与燃油率序列只差取值是类别。**适用场景**：评价输入里任何由邮编派生的分区与档位；绑标识不绑版本、按时点选在用版照 ADR-0099；未绑定的卡保留调用方给值路径且两者在摘要里分得开；邮编前缀粒度随首份真实表来，仓内不填
+Status: Accepted<!-- 索引注记 -->｜**归属判据**：谁读它谁拥有它，加 ADR-0013 把外部数值序列判给计价的同一条理由——分区表是承运商公布的外部分类事实，只被计价读，与燃油率序列只差取值是类别。**适用场景**：评价输入里任何由邮编派生的分区与档位；绑标识不绑版本、按时点选在用版照 ADR-0099；未绑定的卡保留调用方给值路径且两者在摘要里分得开；邮编前缀粒度随首份真实表来，仓内不填｜**部分停用**（2026-11-05）：其决定二「目的邮编前缀 → 值的映射」一句已由 [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 扩成——外加每个始发维度至多一条「其余邮编」映射，接住本版里没被任何前缀映射覆盖的目的邮编，前缀映射一律优先。**适用场景**：只限登了这一行的目录版本；决定四「查不到即待判断，不给默认」与其余各条不变
 Date: 2026-09-04
 
 ## Context
@@ -47,3 +47,4 @@ Date: 2026-09-04
 - [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md)：计价拥有外部序列的理由——本记录把同一理由用到外部分类事实上
 - [ADR-0099](./0099-price-card-binds-series-identity-and-in-force-version-is-derived-from-review.md)：绑标识不绑版本、在用版本从复核派生——目录照抄这一套
 - [ADR-0108](./0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)：目录版本引用冻进评价清单时的身份形状
+- [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md)：扩成决定二一句（只限登了「其余邮编」行的目录版本）

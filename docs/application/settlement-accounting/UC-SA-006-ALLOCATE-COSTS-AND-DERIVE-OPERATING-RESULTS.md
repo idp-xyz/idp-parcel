@@ -149,3 +149,7 @@
 | `PAR-NFR-06` | 分摊批处理、指标刷新和恢复目标 | 不能形成生产运行基线 |
 
 完成本用例只证明经营分摊和指标可以从独立来源守恒派生；它不替代供应商审核、客户对账、法定会计或集团合并。
+
+## 给开发的交接
+
+- **预估口径经营毛利的低毛利提示**（[SA CONTEXT「经营指标、人工调整与系统边界」](../../domain/settlement-accounting/CONTEXT.md)、[ADR-0366](../../adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）：代码尚未做到。经营毛利读面只给数，没有提示格，也没有阈值登记册；阈值是租户取值，没登时提示格答未配置，不内置任何比例。提示不阻断任何业务动作，不形成费用或异常案件。承接见[冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md) 2026-11-05。

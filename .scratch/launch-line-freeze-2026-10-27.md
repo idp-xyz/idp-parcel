@@ -247,6 +247,12 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-29｜价卡导入模板 PPT-2 与结构化工作簿（ADR-0349，[price-card-import/08](./price-card-import/issues/08-template-ppt-2-structured-workbook-and-spec-face.md)）已补：总额上下限与偏远档位查表可导入，管理台编辑器直接提交结构化数据。上一条「价卡导入暂不支持总额上下限与偏远档位查表」已处理；同条「登记 PPC-6 价卡前要求显式部署开关」**升级**——导入从此能造出 PPC-6 的卡，任何持登记写授予的操作者都能经导入、批准、发布走到这一步，代码里仍没有门（滚动部署时旧进程遇 PPC-6 出错即停）｜price-card-import/08 作者与评审｜R2（编辑器给租户用之前、第一张 PPC-6 价卡登记前做）
 - 2026-11-01｜登记较新规范化版本价卡的部署开关（ADR-0352，[pricing-engine-gaps/03](./pricing-engine-gaps/issues/03-newer-canonicalization-registration-deployment-switch.md)）已补：登记非基础版（今天即 `PPC-6`）价卡要运维显式设 `IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION=true`，默认关，登记口、草稿发布、受控 CLI 共用一道门。上两条里「登记 PPC-6 价卡前要求显式部署开关」已处理；残余：开关关着时导入仍能存下 `PPC-6` 草稿，滚动窗口里旧构建列该租户草稿会整页失败（ADR-0352 越权风险点 6，靠「先升级再开开关」的发布顺序兜）｜pricing-engine-gaps/03 作者与评审｜R2（首个租户上线前确认各环境的开关与升级顺序）
 - 2026-10-29｜价卡导入 PPT-2 评审非阻断余项：①领域层条件树校验对长嵌套是平方代价（既有，非本票引入），JSON 十万节点读取约 168 秒，电子表格同样可达，要给条件树、计算树设深度上限；②空行不计格数，64 张表各 5.4 万个空行使 RSS 约 224 MB（有界）；③结构化工作簿规范化字节转义 `<`、`>`、`&`，与起点那版不一致，只影响含这三个字符内容的 `form:` 名与来源散列｜price-card-import/08 复评｜①R2（导入面向租户操作者之前）、②③R3｜处理中：用户 2026-11-01 裁定三项这轮做完，[price-card-import/09](./price-card-import/issues/09-import-hardening-tree-depth-row-total-and-unescaped-canonical-bytes.md) 作者已完工（①两棵树设 32 层上限、②各表行数合计设上限且空行也算、③规范化恢复不转义），待隔离评审与进 main；进 main 后改为已处理
+- 2026-11-05｜价表档位边界写死成含下界不含上界（`RateEntry.contains`），承运商「不超过 X」的阶梯只能把每档平移一个进位单位转抄；已代决改由价表声明两种读法之一｜[ADR-0364](../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 决定一；`internal/parcelpricing/domain/rate_table.go`｜R2（首个真实价卡登记前做完）
+- 2026-11-05｜总额上下限只能对整票，「最低运费计入燃油基数」的卡表达不了；已代决加「只对基础运费」基数｜ADR-0364 决定二；ADR-0348 越权风险点 0、2｜R2（首个租户的价卡用到即做）
+- 2026-11-05｜票级计价重量只有合计后派生，多件按件计重的卡算不对；已代决加「逐件派生后求和」与进位点｜ADR-0364 决定三｜R3
+- 2026-11-05｜分区与偏远档位目录没有「其余邮编」写法；已代决加显式一行，不做未命中兜底｜ADR-0364 决定四｜R3
+- 2026-11-05｜带始发维度的目录一律取寄件邮编作始发，按入口分区的尾程卡查出的区不对；已代决改由价卡声明始发来源（寄件邮编或这一段起始节点的计费起点），要 NR 取数侧按段交起始节点、TF 发生项读口答实际履约段的起始节点｜[ADR-0365](../docs/adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)｜R2（首个租户的线路有按入口分区的尾程时），否则 R3
+- 2026-11-05｜经营毛利只给数、没有低毛利提示；已代决只在预估口径上按租户阈值提示，接单与择优都不设毛利门槛｜[ADR-0366](../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三；`UC-SA-006`｜R3
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

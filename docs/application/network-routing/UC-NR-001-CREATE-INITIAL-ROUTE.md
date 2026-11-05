@@ -288,5 +288,6 @@
 | 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`） | 依赖类未决的那一件仍让消费门整封回滚重投，同一交接里已判成的计划一起回滚、重投时按判断键再判 | [docs-consistency/code/78](../../../.scratch/docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md) |
 | 路由未形成「保持可续办」（结果「路由未形成」、步骤 8C） | 登记补齐或部署接入之后没有续办（最低成本并列由授权角色经并列裁决口裁，见步骤 8D，不等续办）：重驱要随请求携带的地理投影，本上下文不落它，取法待裁 | [demo-chain-gaps/154](../../../.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md) |
 | 运营查阅以名称称呼节点，没登名称时以节点身份称呼（[CONTEXT「网络结构与适用范围」](../../domain/network-routing/CONTEXT.md#网络结构与适用范围)） | 读口已带 `displayName`（`AT-NR-111`）；管理台网点页行首仍显示编码，没用名称 | 管理台另票（协调方派） |
+| 候选成本取数按段交出这一段的起始节点，供按起始节点取计费起点的卡用（[ADR-0365](../../adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)） | 取数侧只交段计价区域与包裹邮编路线 | [冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md) 2026-11-05 |
 
 完成本用例不表示运输执行已经完成设计。班次、容量、订舱、装载和实际履约应继续在 `transport-fulfillment` 的后续应用用例中展开。

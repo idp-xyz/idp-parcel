@@ -1,6 +1,6 @@
 # ADR-0189：逐段计价区域按卡给——绑了分区目录的卡由包裹邮编路线经目录读出，未绑的卡取租户按线路段登记的段计价区域
 
-Status: Accepted（2026-10-18，Claude Code 会话代 PP、NR owner 决：用户原话「你作为业务和系统专家自决。解决所有的问题」；票 [routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 的产物。补 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条留给 PP 计价输入缝的那一格，越权风险点 5 由本记录接手。越权风险点见文末，待 PP、NR 与 SA owner 复核。） 决定四第二步（绑目录那一路）落地时的补充裁定见文末「补记：票 routing-first-cut/20 落绑目录那一路时的补充裁定」（2026-10-19）。<!-- 索引注记 -->｜**按卡给**：绑目录的卡走包裹邮编路线与 PP 读数补全（票 routing-first-cut/20），未绑的卡取段计价区域，都没有即待判断。**段计价区域**：NR 一本只增不改的册，键（租户，线路，版本，段号），只挂在有成本依据的段上，不随线路版本内容走。只适用于整段区域恒定的卡，按目的邮编分区的卡要绑目录。不采节点邮编。
+Status: Accepted（2026-10-18，Claude Code 会话代 PP、NR owner 决：用户原话「你作为业务和系统专家自决。解决所有的问题」；票 [routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 的产物。补 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条留给 PP 计价输入缝的那一格，越权风险点 5 由本记录接手。越权风险点见文末，待 PP、NR 与 SA owner 复核。） 决定四第二步（绑目录那一路）落地时的补充裁定见文末「补记：票 routing-first-cut/20 落绑目录那一路时的补充裁定」（2026-10-19）。<!-- 索引注记 -->｜**按卡给**：绑目录的卡走包裹邮编路线与 PP 读数补全（票 routing-first-cut/20），未绑的卡取段计价区域，都没有即待判断。**段计价区域**：NR 一本只增不改的册，键（租户，线路，版本，段号），只挂在有成本依据的段上，不随线路版本内容走。只适用于整段区域恒定的卡，按目的邮编分区的卡要绑目录。不采节点邮编。｜**部分停用**（2026-11-05）：其决定三「按节点地址分区是另一种目录形态，等首个真实租户的分区表需要时再定（ADR-0109 决定二「粒度随首份真实分区表定」）。」一句，与补记「邮编路线从哪来」一条里「路线是整件包裹的、不随段变，寄件邮编作始发、收件邮编作目的。」一句，已由 [ADR-0365](./0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md) 停用——带始发维度的目录，始发按价卡声明取寄件邮编或这一段起始节点在卡上登记的计费起点，节点的设施地址不当起点。**适用场景**：前一句对全部绑了带始发维度目录的卡；后一句只限声明了按起始节点取始发的卡。决定三前半「不采形态二：节点不加邮编。」与其余各条不变｜**越权风险点 7 已答**（2026-11-05）：由 [ADR-0365](./0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md) 回答——声明了按起始节点取始发的卡，始发随段取；其余卡照旧
 
 Date: 2026-10-18
 
@@ -54,6 +54,7 @@ Date: 2026-10-18
 - [ADR-0075：客户地址随判断请求在请求期携带过界](./0075-customer-address-is-carried-with-the-routing-request.md)：邮编路线的来处
 - [ADR-0147：参考配置随产品版本嵌入发布](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)：决定四，采用行与依据格的引用串
 - 票：[routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md)（本记录）、[routing-first-cut/20](../../.scratch/routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md)（绑目录那一路）
+- [ADR-0365](./0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)：停用决定三一句与补记「邮编路线从哪来」一句（适用场景见 `Status` 行注记），回答越权风险点 7
 
 ## 补记：票 routing-first-cut/20 落绑目录那一路时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 PP、NR owner 复核）
 
