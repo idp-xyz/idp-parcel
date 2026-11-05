@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { Button } from '@idpxyz/ui-primitives';
+import { X } from 'lucide-react';
+import { Button, ConfirmDialog, Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@idpxyz/ui-primitives';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
@@ -9,6 +11,8 @@ import {
   listCustomerAccounts,
   listGroupLegalEntities,
   listSupplierAgreements,
+  type BusinessPartyListResponseBody,
+  type CustomerAccountRecord,
   type PartyRelationshipListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
@@ -38,6 +42,8 @@ import {
 } from './presentation';
 import { useRegisterList } from './register-list';
 import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
+import { CustomerAccountRegistrationForm } from './CustomerAccountRegistrationForm';
+import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 import { businessPartyObjectHash } from './business-parties-address';
 
 // 参与方详情抽屉的「全景」签（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
@@ -128,7 +134,7 @@ function Section<Row>({
   partyId?: string;
   children: ReactNode;
   state: OverviewSectionState<Row>;
-  /** 标题条右端的动作（「登记合作关系」，票 business-party-edit-mode/03）；与「去某页」二选一摆。 */
+  /** 标题条右端的动作（「登记合作关系」「新增客户账户」）；与「去某页」并排时动作在前（票 business-parties-object-page/03）。 */
   action?: ReactNode;
 }) {
   const target = moduleId ? moduleInfoById[moduleId] : undefined;
@@ -140,19 +146,20 @@ function Section<Row>({
           {title}
           <span className="ml-1.5 font-mono text-idpxyz-breadcrumb">{countText(state)}</span>
         </h3>
-        {target ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              window.location.hash = href;
-            }}
-          >
-            去「{target.title}」
-          </Button>
-        ) : (
-          action ?? null
-        )}
+        <span className="flex items-center gap-1">
+          {action ?? null}
+          {target ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                window.location.hash = href;
+              }}
+            >
+              去「{target.title}」
+            </Button>
+          ) : null}
+        </span>
       </header>
       {children}
     </section>
@@ -265,6 +272,143 @@ function RelationshipRows({
   );
 }
 
+// 还能停用的账户：已生效与待生效（CONTEXT「参与方身份」：未到生效时点的登记也可以停用，那是撤下一笔还没生效的登记）。
+const deactivatableAccountStatuses: ReadonlySet<string> = new Set(['REGISTERED', 'EFFECTIVE']);
+
+/**
+ * 客户账户块（票 business-parties-object-page/03）：账户行显状态；有写授予时块头「新增客户账户」就地换成表单（所属客户锁成本单位），
+ * 每个还能停用的账户一行「停用…」，对话框里是停用表单锁成这个账户。有没提交的输入时「取消」先问一句。落册后重读账户册。
+ */
+function CustomerAccountsBlock({
+  partyId,
+  state,
+  accounts,
+  writes,
+}: {
+  partyId: string;
+  state: OverviewSectionState<CustomerAccountRecord>;
+  accounts: { answer: ApiResult<{ accounts: CustomerAccountRecord[] }> | null; retry: () => void };
+  writes?: { parties: ApiResult<BusinessPartyListResponseBody> | null };
+}) {
+  const [registering, setRegistering] = useState(false);
+  const [unsaved, setUnsaved] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [deactivating, setDeactivating] = useState<CustomerAccountRecord | null>(null);
+  const knownAccounts = accounts.answer?.kind === 'outcome' ? accounts.answer.body.accounts : null;
+  return (
+    <>
+      <Section
+        title="客户账户"
+        moduleId="party-contracts"
+        partyId={partyId}
+        state={state}
+        action={
+          writes && !registering ? (
+            <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={() => setRegistering(true)}>
+              新增客户账户
+            </Button>
+          ) : undefined
+        }
+      >
+        {registering && writes ? (
+          <div className="mb-2 rounded-md border border-idpxyz-border bg-idpxyz-bg p-3">
+            <CustomerAccountRegistrationForm
+              key={partyId}
+              knownAccounts={knownAccounts}
+              parties={writes.parties}
+              preset={{ customerPartyId: partyId }}
+              onRegistered={() => {
+                setUnsaved(false);
+                setRegistering(false);
+                accounts.retry();
+              }}
+              onUnsavedChange={setUnsaved}
+              inline={{ onCancel: () => (unsaved ? setConfirmingDiscard(true) : setRegistering(false)) }}
+            />
+          </div>
+        ) : null}
+        <SectionBody
+          state={state}
+          what="客户账户"
+          emptyNote="还没有关联到这家单位的客户账户。"
+          retry={accounts.retry}
+          renderRow={(row) => (
+            <RowCard key={row.accountId}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono">
+                  {row.accountId} r{row.revision}
+                </span>
+                <span className="flex items-center gap-2">
+                  {writes && deactivatableAccountStatuses.has(row.status) ? (
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 type-body text-idpxyz-breadcrumb" onClick={() => setDeactivating(row)}>
+                      停用…
+                    </Button>
+                  ) : null}
+                  {statusBadge(identityStatusLabels, row.status)}
+                </span>
+              </div>
+              <Line label="生效时间" mono>
+                <Instant value={row.effectiveFrom} />
+              </Line>
+              {row.deactivatedAt ? (
+                <Line label="停用时间" mono>
+                  <Instant value={row.deactivatedAt} />
+                </Line>
+              ) : null}
+            </RowCard>
+          )}
+        />
+      </Section>
+      {writes ? (
+        <Dialog open={deactivating !== null} onOpenChange={(open) => (open ? undefined : setDeactivating(null))}>
+          <DialogContent size="xl" className="max-h-[85vh] overflow-y-auto">
+            {deactivating ? (
+              <>
+                <DialogHeader className="items-start">
+                  <div>
+                    <DialogTitle>停用客户账户 {deactivating.accountId}</DialogTitle>
+                    <DialogDescription className="mt-1">从停用时间起，这个账户不再接新的委托与合同；已有记录保留，停用后不能撤回。</DialogDescription>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" aria-label="关闭" onClick={() => setDeactivating(null)}>
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </DialogHeader>
+                <DialogBody>
+                  <IdentityDeactivationForm
+                    key={deactivating.accountId}
+                    parties={writes.parties}
+                    locked={{ kind: 'CUSTOMER_ACCOUNT', id: deactivating.accountId }}
+                    subjectLabel="客户账户"
+                    onDeactivated={() => {
+                      setDeactivating(null);
+                      accounts.retry();
+                    }}
+                  />
+                </DialogBody>
+              </>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={confirmingDiscard}
+        tone="warning"
+        title="放弃修改？"
+        message="有内容还没有保存，取消后填写的内容不会保留。"
+        confirmLabel="放弃"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          setConfirmingDiscard(false);
+          setUnsaved(false);
+          setRegistering(false);
+        }}
+        onCancel={() => setConfirmingDiscard(false)}
+      />
+    </>
+  );
+}
+
 function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   if (roles.length === 0) return null;
   return (
@@ -313,6 +457,7 @@ export function PartyOverviewSection({
   retryRelationships,
   relationshipRegistration,
   onRelationshipEnded,
+  accountWrites,
 }: {
   partyId: string;
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
@@ -327,6 +472,11 @@ export function PartyOverviewSection({
    * 不给就只读。结束件与合作关系册右栏是同一个（PartyRelationshipEndActions），撤销 / 到期的判据一字不改。
    */
   onRelationshipEnded?: () => void;
+  /**
+   * 客户账户块的写入口（票 business-parties-object-page/03）：有写授予的页面给，带上页面持有的往来单位列表答案（新增表单的候选、
+   * 停用表单的版本建议都从它取）。给了才摆「新增客户账户」与各账户的「停用…」；不给就只读。
+   */
+  accountWrites?: { parties: ApiResult<BusinessPartyListResponseBody> | null };
 }) {
   const accounts = useRegisterList(listCustomerAccounts);
   const entities = useRegisterList(listGroupLegalEntities);
@@ -392,27 +542,7 @@ export function PartyOverviewSection({
         )}
       </Section>
 
-      <Section title="客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>
-        <SectionBody
-          state={accountState}
-          what="客户账户"
-          emptyNote="还没有关联到这家单位的客户账户。"
-          retry={accounts.retry}
-          renderRow={(row) => (
-            <RowCard key={row.accountId}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono">
-                  {row.accountId} r{row.revision}
-                </span>
-                {statusBadge(identityStatusLabels, row.status)}
-              </div>
-              <Line label="生效时间" mono>
-                <Instant value={row.effectiveFrom} />
-              </Line>
-            </RowCard>
-          )}
-        />
-      </Section>
+      <CustomerAccountsBlock partyId={partyId} state={accountState} accounts={accounts} writes={accountWrites} />
 
       <Section title="公司主体" moduleId="group-legal-entities" partyId={partyId} state={entityState}>
         <SectionBody

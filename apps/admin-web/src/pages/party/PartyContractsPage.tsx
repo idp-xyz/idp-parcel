@@ -9,7 +9,7 @@ import { useRegisterList } from './register-list';
 import { Button, ConfirmDialog, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, WorkbenchPageTemplate, useAddressKeyword, type ListColumn, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationPanel } from '../../components/registration';
+import { CustomerAccountRegistrationForm } from './CustomerAccountRegistrationForm';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
@@ -19,7 +19,7 @@ import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
-import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
+import { hasUnsavedDraft, publicationGroup, registrationGroup } from './unsaved-guard';
 import { contractKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDialog } from './VersionClosureDialog';
@@ -51,16 +51,14 @@ import { StatusPill } from '../../components/StatusPill';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
-  commercialRegistrationEndpoints,
+  listBusinessParties,
   listCustomerAccounts,
   listCustomerContracts,
-  partyIdentityOutcomeLabels,
-  registerCommercial,
   type CustomerAccountRecord,
   type CustomerContractListResponseBody,
   type CustomerContractRecord,
 } from './api';
-import { labelOf, partyNameUnknownNote, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { labelOf, partyNameUnknownNote, registrationTitles } from './presentation';
 
 // 抽屉副题里给状态补一句「所以呢」：运营看到「已退役」要知道的是它不再用于新单。
 const contractStatusNotes: Record<string, string> = {
@@ -580,9 +578,19 @@ export function PartyContractsPage() {
     if (pushed.back()) return;
     replaceView(partyContractsListOf(view));
   };
+  // 「新增客户账户」视图的表单要账户册（修订号建议）与往来单位册（所属客户的候选）：经取数层读，与各页同一份缓存。
+  const accountsList = useRegisterList(listCustomerAccounts);
+  const partiesList = useRegisterList(listBusinessParties);
+  const knownAccounts = accountsList.answer?.kind === 'outcome' ? accountsList.answer.body.accounts : null;
+  const partiesAnswer = partiesList.answer;
+  const retryAccounts = accountsList.retry;
   // 登记视图里的发布表单有没提交的输入时先问一句（票 party-commercial-uiux/17 的登记簿）。
+  // 「新增客户账户」视图如今是结构化表单，它也登记进簿（useRegistrationForm 自带），一并问。
   const requestLeave = () =>
-    view === 'publish-contract' && hasUnsavedDraft(publicationGroup('CUSTOMER_CONTRACT')) ? setConfirmingLeave(true) : leaveView();
+    (view === 'publish-contract' && hasUnsavedDraft(publicationGroup('CUSTOMER_CONTRACT'))) ||
+    (view === 'register' && hasUnsavedDraft(registrationGroup('customer-account')))
+      ? setConfirmingLeave(true)
+      : leaveView();
 
   // 右栏「签新版本」：记下是哪一版，进登记视图；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [request, setRequest] = useState<NewVersionRequest<CustomerContractRecord> | null>(null);
@@ -618,14 +626,10 @@ export function PartyContractsPage() {
             }
           />
         ) : (
-          <RegistrationPanel
-            moduleId="party-contracts"
-            title={registrationTitles['customer-account']}
-            endpoint={`POST ${commercialRegistrationEndpoints['customer-account']}`}
-            snapshotHint={registrationSnapshotHints['customer-account']}
-            submit={(snapshot) => registerCommercial('customer-account', snapshot)}
-            outcomeLabels={partyIdentityOutcomeLabels}
-            problemNote={problemNote}
+          <CustomerAccountRegistrationForm
+            knownAccounts={knownAccounts}
+            parties={partiesAnswer}
+            onRegistered={retryAccounts}
           />
         )}
         <ConfirmDialog

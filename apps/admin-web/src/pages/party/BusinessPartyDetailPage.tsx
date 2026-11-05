@@ -333,6 +333,7 @@ export function BusinessPartyDetailPage({
                       retryRelationships={retryRelationships}
                       relationshipRegistration={relationshipRegistration}
                       onRelationshipEnded={mayWrite && !editing ? retryRelationships : undefined}
+                      accountWrites={mayWrite && !editing ? { parties: listAnswer } : undefined}
                     />
                   </section>
                 ),
