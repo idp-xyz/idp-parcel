@@ -6,14 +6,7 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
-import {
-  DetailPageTemplate,
-  type DetailField,
-  type DetailMeta,
-  type DetailSummaryStat,
-  type TemplateViewState,
-  type WorkspaceTabId,
-} from '../../templates';
+import { DetailPageTemplate, type DetailMeta, type TemplateViewState, type WorkspaceTabId } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -29,9 +22,9 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
-import { PartyOverviewSection } from './PartyOverviewSection';
+import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
-import { Instant } from './detail-primitives';
+import { DetailRow, Instant } from './detail-primitives';
 import { useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -39,7 +32,7 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['business-parties'];
 
 /**
- * 对象页「时间线」签与工作台详情栏「身份与修订」签交给修订历史区的那几样（票 12 第 5 条立、票 13 第 9 条改用共用件）：
+ * 对象页「登记记录」签与工作台详情栏「登记记录」签交给修订历史区的那几样（票 12 第 5 条立、票 13 第 9 条改用共用件）：
  * 判读在 business-party-revisions.ts（两册共用的本体在 revision-timeline.ts）。
  */
 export const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessPartyRevisionListResponseBody> = {
@@ -56,46 +49,62 @@ function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
 }
 
-// 对象页与工作台详情栏摆同一套头区（票 group-legal-entities-uiux/09 的做法）：详情栏的引用签（依据）进头区第二行，
-// 事实条四格加生命周期条进指标带，概要签的格与详情栏「身份与修订」签同一份，停用横幅成「需要处理」区，全景成区，
-// 身份修订历史进「时间线」签——签名受共用模板的固定词表约束（workspace-tabs.ts），全景没有对应的词，留在概要签里成区。
+// 版式照公司主体对象页（票 business-parties-object-page/01）：头区一行元信息、不摆大指标卡；分区走共用模板的固定签——「概要」是
+// 身份读出，「关联」是全景（合作关系、客户账户、公司主体、供应商协议、结算政策），「登记记录」是身份修订链。业务参与方只有身份这
+// 一层（CONTEXT「参与方身份」），没有法人资料那几个分区。
 
-function buildMeta(row: BusinessPartyRecord): DetailMeta[] {
-  return [{ label: '编码', value: <span className="font-mono">{row.partyId}</span> }];
-}
-
-function buildSummary(row: BusinessPartyRecord): DetailSummaryStat[] {
+function buildMeta(row: BusinessPartyRecord, related: number | undefined): DetailMeta[] {
   return [
-    { label: '变更', value: updateOrdinalLabel(row.revision) },
-    { label: '生效时间', value: <Instant value={row.effectiveFrom} /> },
-    { label: '登记时间', value: <Instant value={row.registeredAt} /> },
-    { label: '停用时点', value: row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用' },
-    // 不摆生命周期步进：状态药丸已经说了在哪一格，停用另有时点，步进是第二遍（用户 2026-11-03 裁定，公司主体两页同）。
+    { label: '编码', value: <span className="font-mono">{row.partyId}</span> },
+    { label: '生效', value: <Instant value={row.effectiveFrom} precision="day" /> },
+    ...(row.deactivatedAt ? [{ label: '停用', value: <Instant value={row.deactivatedAt} precision="day" /> }] : []),
+    { label: '登记', value: updateOrdinalLabel(row.revision) },
+    { label: '关联', value: related === undefined ? muted('…') : `${related} 项` },
   ];
 }
 
-/** 与详情栏「变更记录」签同一份格：头区与指标带已经显示的不再重复；标识、修订号、依据、租户收进技术详情。 */
-function buildBasicFields(row: BusinessPartyRecord): DetailField[] {
-  return [
-    {
-      label: '停用的来源单据',
-      value: row.deactivationBasis ? <span className="font-mono">{row.deactivationBasis}</span> : muted('未停用'),
-    },
-    {
-      label: '技术详情',
-      value: (
-        <TechnicalDetails
-          rows={[
-            { label: '参与方标识', value: row.partyId },
-            { label: '当前修订号', value: String(row.revision) },
-            { label: '来源单据', value: row.basis },
-            { label: '停用依据', value: row.deactivationBasis ?? '' },
-            { label: '租户', value: row.tenantId },
-          ]}
-        />
-      ),
-    },
-  ];
+/** 「概要」分区：身份这一层的全部读出。登记依据就是当前这一版的来源单据，直接显；排查用的标识与租户收进技术详情。 */
+function IdentityReadout({ row }: { row: BusinessPartyRecord }) {
+  return (
+    <section className="bg-idpxyz-bg p-5">
+      <dl>
+        <DetailRow label="名称">{row.partyName}</DetailRow>
+        <DetailRow label="编码" mono>
+          {row.partyId}
+        </DetailRow>
+        <DetailRow label="状态">
+          <StatusPill code={row.status} />
+        </DetailRow>
+        <DetailRow label="生效时间">
+          <Instant value={row.effectiveFrom} />
+        </DetailRow>
+        <DetailRow label="当前登记">
+          {updateOrdinalLabel(row.revision)} · 登记于 <Instant value={row.registeredAt} />
+        </DetailRow>
+        <DetailRow label="来源单据" mono>
+          {row.basis}
+        </DetailRow>
+        {row.deactivatedAt ? (
+          <>
+            <DetailRow label="停用时点">
+              <Instant value={row.deactivatedAt} />
+            </DetailRow>
+            <DetailRow label="停用依据" mono>
+              {row.deactivationBasis ?? ''}
+            </DetailRow>
+          </>
+        ) : null}
+      </dl>
+      <TechnicalDetails
+        className="mt-4"
+        rows={[
+          { label: '参与方标识', value: row.partyId },
+          { label: '当前修订号', value: String(row.revision) },
+          { label: '租户', value: row.tenantId },
+        ]}
+      />
+    </section>
+  );
 }
 
 /**
@@ -129,8 +138,8 @@ function viewStateOf(
 /**
  * 参与方对象页（`#/business-parties/<参与方标识>`）。结构同工作台详情栏（BusinessPartyDetailPanel）。关系册答案由列表页
  * 持有、传进来（与关系册同一份），全景区不另取。签由本页记、经模板的受控签口交进去，与法人对象页同一做法。
- * 按分区版式摆（票 company-subject-ux/13）：概要与时间线一页纵排，时间线默认折起——修订链要取数，折着时标题后
- * 显当前第几版。指标带仍在头区，随滚动收起。
+ * 按分区版式摆（票 company-subject-ux/13；版式对齐公司主体，票 business-parties-object-page/01）：概要、登记记录、关联一页纵排，
+ * 登记记录默认折起——修订链要取数，折着时标题后显当前第几版。
  */
 export function BusinessPartyDetailPage({
   partyId,
@@ -160,6 +169,7 @@ export function BusinessPartyDetailPage({
   onExitIdentityEdit: (then?: () => void) => void;
 }) {
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
+  const related = usePartyOverviewCount(partyId, relationships);
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const grant = useRegistryWriteGrant();
   const mayWrite = grant.mayWrite;
@@ -250,11 +260,8 @@ export function BusinessPartyDetailPage({
         </>
       }
       footer={editing ? <div ref={setFooterSlot} /> : undefined}
-      meta={row ? buildMeta(row) : []}
-      summary={row ? buildSummary(row) : undefined}
-      // 这张卡装的是停用的来源单据与技术详情；分区版式下「概要」已是分区标题，卡再叫概要就是上下两行同一个词。
-      basicTitle="来源单据"
-      basicFields={row && !editing ? buildBasicFields(row) : []}
+      meta={row ? buildMeta(row, related) : []}
+      basicFields={[]}
       sections={
         row
           ? [
@@ -296,32 +303,36 @@ export function BusinessPartyDetailPage({
                     },
                   ]
                 : []),
-              {
-                id: 'overview',
-                title: '全景',
-                description: '这家单位对我们是什么：合作关系、客户账户、公司主体、供应商协议与结算政策。',
-                content: (
-                  <PartyOverviewSection
-                    partyId={row.partyId}
-                    relationships={relationships}
-                    retryRelationships={retryRelationships}
-                    relationshipRegistration={relationshipRegistration}
-                  />
-                ),
-              },
             ]
           : undefined
       }
       tabs={
         row
           ? [
+              ...(editing ? [] : [{ id: 'summary' as const, content: <IdentityReadout row={row} /> }]),
               {
-                id: 'timeline',
+                id: 'identity-revisions',
                 collapsed: true,
                 summary: `当前${updateOrdinalLabel(row.revision)}`,
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
+                  </section>
+                ),
+              },
+              {
+                id: 'related',
+                count: related,
+                // 默认展开：来往来单位对象页多半就是要看它和我们有哪些往来。
+                collapsed: false,
+                content: (
+                  <section className="bg-idpxyz-bg p-5">
+                    <PartyOverviewSection
+                      partyId={row.partyId}
+                      relationships={relationships}
+                      retryRelationships={retryRelationships}
+                      relationshipRegistration={relationshipRegistration}
+                    />
                   </section>
                 ),
               },

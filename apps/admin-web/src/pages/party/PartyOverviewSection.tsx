@@ -182,6 +182,34 @@ function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   );
 }
 
+/**
+ * 全景各段的合计（对象页「关联」签上的数，票 business-parties-object-page/01）：与块里那行「合作关系 N · 客户账户 N ……」同一份读法、
+ * 同一批缓存的读口，各段数法与那一行逐字相同。任一段还没答出或答不出就是 undefined——签上不显数，
+ * 不拿半截数冒充总数。
+ */
+export function usePartyOverviewCount(
+  partyId: string,
+  relationships: ApiResult<PartyRelationshipListResponseBody> | null,
+): number | undefined {
+  const accounts = useRegisterList(listCustomerAccounts);
+  const entities = useRegisterList(listGroupLegalEntities);
+  const agreements = useRegisterList(listSupplierAgreements);
+  const settlement = useRegisterList(listSettlementPolicies);
+  const states = [
+    sectionOf(relationships, (body) => relationshipsOfParty(partyId, body.relationships)),
+    sectionOf(accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts)),
+    sectionOf(entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities)),
+    sectionOf(agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements)),
+    sectionOf(settlement.answer, (body) => (body.kind === 'SETTLEMENT_POLICY' ? settlementPoliciesOfParty(partyId, body.policies) : null)),
+  ];
+  let total = 0;
+  for (const state of states) {
+    if (state.kind !== 'answered') return undefined;
+    total += state.rows.length;
+  }
+  return total;
+}
+
 export function PartyOverviewSection({
   partyId,
   relationships,

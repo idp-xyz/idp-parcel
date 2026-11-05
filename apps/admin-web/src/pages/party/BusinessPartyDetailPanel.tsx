@@ -24,9 +24,9 @@ type PanelTab = 'overview' | 'identity';
  * 名称一行 + 引用签）· 「更多」菜单 + 关闭 · 生命周期条 · 停用横幅 · 事实条 · 两签。
  *
  * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：更新次数、生效时点、登记时间与停用时点归事实条，名称是标题，
- * 编码是副题；标识、修订号、登记依据、租户这类排查用的字收进「变更记录」签底部的「技术详情」，不再占头部。
+ * 编码是副题；标识、修订号、登记依据、租户这类排查用的字收进「登记记录」签底部的「技术详情」，不再占头部。
  *
- * 两签沿票 operator-workspace-gaps/01：「全景」（默认）回答这个参与方对我们是什么，「身份与修订」装剩下的格与修订历史。
+ * 两签沿票 operator-workspace-gaps/01：「关联」（默认，原称全景）回答这个参与方对我们是什么，「登记记录」（原称身份与修订、变更记录）装剩下的格与修订历史。
  * 去过的签留着挂载（隐藏而不卸载）：全景一开就读四册、修订历史读一条链，每切回来一次就重取一次会闪一次加载态；只留
  * 「去过的」，方向键逐行翻时不为没看的签取数。签不按参与方重置：↑/↓ 逐行翻时停在哪一签就一直看哪一签，与法人栏同一做法。
  */
@@ -146,14 +146,14 @@ export function BusinessPartyDetailPanel({
       </FactStrip>
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
-        {/* 图标取对象工作区签的固定表（票 company-subject-ux/10），词照栏的口径：「全景」是这家单位的概要签，
-            「变更记录」与对象页 BusinessPartyDetailPage 放在「时间线」签的是同一条修订链——同一种内容同一个图标。 */}
+        {/* 签名与图标取对象工作区签的固定表（票 company-subject-ux/10），与对象页同名（票 business-parties-object-page/01）：
+            「关联」是这家单位和我们有哪些往来，「登记记录」是身份修订链——同一种内容同一个词、同一个图标。 */}
         <TabsList className="mx-5 mt-3 shrink-0">
           <TabsTrigger value="overview" className="text-idpxyz-breadcrumb">
-            <WorkspaceTabLabel id="summary">全景</WorkspaceTabLabel>
+            <WorkspaceTabLabel id="related" />
           </TabsTrigger>
           <TabsTrigger value="identity" className="text-idpxyz-breadcrumb">
-            <WorkspaceTabLabel id="timeline">变更记录</WorkspaceTabLabel>
+            <WorkspaceTabLabel id="identity-revisions" />
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
