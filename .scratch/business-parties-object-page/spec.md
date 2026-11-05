@@ -33,7 +33,7 @@ Status: in-progress
 | 票 | 内容 | 状态 |
 |---|---|---|
 | [01](./issues/01-object-page-sections.md) | 对象页分区版式与右栏签名对齐 | resolved（2026-11-05 进 main） |
-| [02](./issues/02-relationships-section-lifecycle.md) | 合作关系分区：点开详情、就地结束、已结束折叠 | in-progress |
-| [03](./issues/03-customer-accounts-section.md) | 客户账户分区：结构化新增表单（两处共用）、停用对话框 | draft |
+| [02](./issues/02-relationships-section-lifecycle.md) | 合作关系分区：就地结束、已结束折叠、对方可点 | resolved（2026-11-05 进 main） |
+| [03](./issues/03-customer-accounts-section.md) | 客户账户分区：结构化新增表单（两处共用）、停用对话框 | in-progress |
 | [04](./issues/04-list-code-and-type.md) | 列表：名称下带编码、无关系类型显「—」 | draft |
 | [05](./issues/05-acceptance.md) | 整页验收：浏览器全流程、非作者评审 | draft |

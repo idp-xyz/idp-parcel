@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
@@ -10,6 +10,7 @@ import {
   listGroupLegalEntities,
   listSupplierAgreements,
   type PartyRelationshipListResponseBody,
+  type PartyRelationshipRecord,
 } from './api';
 import { Instant, InstantRange, UnknownPartyName, statusBadge } from './detail-primitives';
 import {
@@ -22,6 +23,7 @@ import {
   settlementPoliciesOfParty,
   supplierAgreementsOfParty,
   type OverviewSectionState,
+  type PartyRelationshipView,
   overviewSectionHash,
 } from './party-overview';
 import {
@@ -35,6 +37,8 @@ import {
   settlementMethodLabels,
 } from './presentation';
 import { useRegisterList } from './register-list';
+import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
+import { businessPartyObjectHash } from './business-parties-address';
 
 // 参与方详情抽屉的「全景」签（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
 // 关系册答案由页面持有、传进来（与关系签同一份，登一段关系后两处一起更新）；另四册在打开时各取一次，一段未配置或出错只影响那一段。
@@ -168,6 +172,99 @@ function Line({ label, children, mono = false }: { label: string; children: Reac
   );
 }
 
+// 还在起作用的关系：候选与已生效；到期、撤销、替代都是终局（CONTEXT「参与方关系」生命周期），收进「已结束」。
+const liveRelationshipStatuses: ReadonlySet<string> = new Set(['CANDIDATE', 'EFFECTIVE']);
+
+/**
+ * 合作关系块的行（票 business-parties-object-page/02）：还在起作用的照列，生效中的可就地「结束…」；已结束的收在「已结束 N 条」下，
+ * 默认折起——来对象页的人多半只关心现在的关系，历史关系留着可查。对方单位名可点到它的对象页。
+ */
+function RelationshipRows({
+  state,
+  records,
+  retry,
+  onEnded,
+}: {
+  state: OverviewSectionState<PartyRelationshipView>;
+  records: readonly PartyRelationshipRecord[];
+  retry: () => void;
+  onEnded?: () => void;
+}) {
+  const [ending, setEnding] = useState<string | null>(null);
+  if (state.kind !== 'answered') {
+    return <SectionBody state={state} what="合作关系" emptyNote="还没有与这家单位的合作关系。" retry={retry} renderRow={() => null} />;
+  }
+  const live = state.rows.filter((view) => liveRelationshipStatuses.has(view.status));
+  const ended = state.rows.filter((view) => !liveRelationshipStatuses.has(view.status));
+  const row = (view: PartyRelationshipView, endable: boolean) => {
+    const record = records.find((candidate) => candidate.relationshipId === view.relationshipId);
+    return (
+      <RowCard key={view.relationshipId}>
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            {view.side === 'HOLDER' ? '担任' : '对方担任'}
+            {labelOf(partyRoleLabels, view.role)}
+          </span>
+          <span className="flex items-center gap-2">
+            {endable && onEnded && record && view.status === 'EFFECTIVE' && ending !== view.relationshipId ? (
+              <Button variant="ghost" size="sm" className="h-6 px-1.5 type-body text-idpxyz-breadcrumb" onClick={() => setEnding(view.relationshipId)}>
+                结束…
+              </Button>
+            ) : null}
+            {statusBadge(relationshipStatusLabels, view.status)}
+          </span>
+        </div>
+        <Line label="对方">
+          <a className="text-idpxyz-accent hover:underline" href={businessPartyObjectHash(view.otherPartyId)}>
+            {view.otherPartyNameKnown ? view.otherPartyName : view.otherPartyId}
+          </a>{' '}
+          <span className="font-mono text-idpxyz-breadcrumb">{view.otherPartyId}</span>
+          {view.otherPartyNameKnown ? null : <UnknownPartyName />}
+        </Line>
+        <Line label="适用范围" mono>
+          {view.scope}
+        </Line>
+        <Line label="有效区间" mono>
+          <InstantRange from={view.effectiveStartsAt} to={view.effectiveEndsAt} />
+        </Line>
+        <Line label="关系编号" mono>
+          {view.relationshipId} r{view.revision}
+        </Line>
+        {ending === view.relationshipId && record && onEnded ? (
+          <div className="mt-2 border-t border-idpxyz-border pt-2">
+            <PartyRelationshipEndActions
+              key={view.relationshipId}
+              row={record}
+              onEnded={() => {
+                setEnding(null);
+                onEnded();
+              }}
+            />
+            <Button variant="ghost" size="sm" className="mt-1 h-6 px-1.5 type-body text-idpxyz-breadcrumb" onClick={() => setEnding(null)}>
+              收起
+            </Button>
+          </div>
+        ) : null}
+      </RowCard>
+    );
+  };
+  return (
+    <>
+      {live.length === 0 ? (
+        <p className={note}>{ended.length === 0 ? '还没有与这家单位的合作关系。' : '没有还在起作用的合作关系。'}</p>
+      ) : (
+        <ul className="flex flex-col gap-2">{live.map((view) => row(view, true))}</ul>
+      )}
+      {ended.length > 0 ? (
+        <details className="mt-2">
+          <summary className={`cursor-pointer ${note}`}>已结束 {ended.length} 条</summary>
+          <ul className="mt-2 flex flex-col gap-2">{ended.map((view) => row(view, false))}</ul>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   if (roles.length === 0) return null;
   return (
@@ -215,6 +312,7 @@ export function PartyOverviewSection({
   relationships,
   retryRelationships,
   relationshipRegistration,
+  onRelationshipEnded,
 }: {
   partyId: string;
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
@@ -224,6 +322,11 @@ export function PartyOverviewSection({
    * 「登记合作关系」收起。不给就只读。
    */
   relationshipRegistration?: { active: boolean; onOpen: () => void; form: ReactNode };
+  /**
+   * 生效中的关系就地「结束…」（票 business-parties-object-page/02）：有写授予的页面给，答 `ENDED` 时回调（页面借它重取关系册）。
+   * 不给就只读。结束件与合作关系册右栏是同一个（PartyRelationshipEndActions），撤销 / 到期的判据一字不改。
+   */
+  onRelationshipEnded?: () => void;
 }) {
   const accounts = useRegisterList(listCustomerAccounts);
   const entities = useRegisterList(listGroupLegalEntities);
@@ -278,34 +381,11 @@ export function PartyOverviewSection({
           <div className="rounded-md border border-idpxyz-border bg-idpxyz-bg p-3">{relationshipRegistration.form}</div>
         ) : (
         <>
-        <SectionBody
+        <RelationshipRows
           state={relationshipState}
-          what="合作关系"
-          emptyNote="还没有与这家单位的合作关系。"
+          records={relationships?.kind === 'outcome' ? relationships.body.relationships : []}
           retry={retryRelationships}
-          renderRow={(view) => (
-            <RowCard key={view.relationshipId}>
-              <div className="flex items-center justify-between gap-2">
-                <span>
-                  {view.side === 'HOLDER' ? '担任' : '对方担任'}{labelOf(partyRoleLabels, view.role)}
-                </span>
-                {statusBadge(relationshipStatusLabels, view.status)}
-              </div>
-              <Line label="对方">
-                <span className="font-mono">{view.otherPartyId}</span>{' '}
-                {view.otherPartyNameKnown ? view.otherPartyName : <UnknownPartyName />}
-              </Line>
-              <Line label="适用范围" mono>
-                {view.scope}
-              </Line>
-              <Line label="有效区间" mono>
-                <InstantRange from={view.effectiveStartsAt} to={view.effectiveEndsAt} />
-              </Line>
-              <Line label="关系编号" mono>
-                {view.relationshipId} r{view.revision}
-              </Line>
-            </RowCard>
-          )}
+          onEnded={onRelationshipEnded}
         />
         <p className={`mt-2 ${note}`}>全部关系在本页「合作关系」册可筛看。</p>
         </>

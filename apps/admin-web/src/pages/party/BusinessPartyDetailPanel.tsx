@@ -167,6 +167,7 @@ export function BusinessPartyDetailPanel({
               relationships={relationships}
               retryRelationships={retryRelationships}
               relationshipRegistration={relationshipRegistration}
+              onRelationshipEnded={mayWrite ? retryRelationships : undefined}
             />
           </TabsContent>
           <TabsContent

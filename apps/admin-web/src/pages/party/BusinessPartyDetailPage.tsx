@@ -332,6 +332,7 @@ export function BusinessPartyDetailPage({
                       relationships={relationships}
                       retryRelationships={retryRelationships}
                       relationshipRegistration={relationshipRegistration}
+                      onRelationshipEnded={mayWrite && !editing ? retryRelationships : undefined}
                     />
                   </section>
                 ),
