@@ -1,6 +1,6 @@
 # ADR-0365：带始发维度的分区与偏远档位目录，始发按价卡声明的来源取——寄件邮编，或这一段起始节点在卡上登记的计费起点；物理节点地址不当起点，评价带不出起始节点或卡上没登即待判断
 
-Status: Accepted（2026-11-05，Cursor 会话代产品 owner、PP、NR 与 TF owner 决（代决）：用户原话与授权同 [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md)；起因是 `docs/wms/` 原型手册附录 D「同址多注入」。部分停用 [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定三一句与补记「邮编路线从哪来」一条的一句，并回答其越权风险点 7。越权风险点见文末，待 PP、NR 与 TF owner 复核。）<!-- 索引注记 -->｜**判据**：价卡绑了带始发维度的目录时声明始发来源，二选一——寄件邮编（今天的读法），或按这一段的起始节点取卡上「节点 → 计费起点邮编」映射；后一种只在评价带得出起始节点时可用（路由比价按段、正式 BUY 评价按发生项所在实际履约段），带不出或卡上没登该节点即待判断，不退回寄件邮编；物理节点地址不当计费起点，节点仍不加邮编；目的照旧取收件邮编
+Status: Accepted（2026-11-05，Cursor 会话代产品 owner、PP、NR 与 TF owner 决（代决）：用户原话与授权同 [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md)；起因是用户当日提供、未入本仓的原型《用户手册与计费计算说明》v1.1 附录 D「同址多注入」。部分停用 [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定三一句与补记「邮编路线从哪来」一条的一句。越权风险点见文末，待 PP、NR 与 TF owner 复核。）<!-- 索引注记 -->｜**判据**：价卡绑了带始发维度的目录时声明始发来源，二选一——寄件邮编（今天的读法），或按这一段的起始节点取卡上「节点 → 计费起点邮编」映射；后一种只在评价带得出起始节点时可用（路由比价按段、正式 BUY 评价按发生项所在实际履约段），面单渠道择优与运营试算带不出，带不出或卡上没登该节点即待判断，不退回寄件邮编；`SELL` 卡不能声明后一种；物理节点地址不当计费起点，节点仍不加邮编；目的照旧取收件邮编
 
 Date: 2026-11-05
 
@@ -9,7 +9,7 @@ Date: 2026-11-05
 取证于 main `dde9b0c65`，只记 `S`。
 
 - 原型手册附录 D：同一目的地 10001，从 LAX 注入落 Zone 8，从 EWR 注入落 Zone 2；完整成本再加前程与注入费，按最低完整成本选 LAX。美国尾程把包裹注入末端承运商时按入口邮编分区，是「小包专线与货代」这一层客户的日常形态（[开发主线「三层与各自的常规业务形态」](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#三层与各自的常规业务形态)）。手册还把「合同计费起点」与「物理节点」分开：起点是合同约定用来查区的邮编，可以不是设施所在地。
-- [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一与补记：绑了目录的卡用包裹邮编路线经目录读出区域，路线是整件包裹的、不随段变，寄件邮编作始发、收件邮编作目的。决定三不采「节点加邮编」，把「按节点地址分区」留到首个真实租户的分区表需要时再定；越权风险点 7 记下了代价：中间段并不从寄件人出发。对按入口分区的尾程卡，拿寄件邮编（在中国）当始发，查出的区是错的。
+- [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一与补记：绑了目录的卡用包裹邮编路线经目录读出区域，路线是整件包裹的、不随段变，寄件邮编作始发、收件邮编作目的。决定三不采「节点加邮编」，把「按节点地址分区」留到首个真实租户的分区表需要时再定。越权风险点 7 记的是目的一侧的代价：「几段同引一张按目的邮编分区的卡，几段同区；中间段并不送到收件人」。始发一侧有同形的问题而没有记：中间段并不从寄件人出发，却拿寄件邮编作始发。对按入口分区的尾程卡，拿寄件邮编（在中国）当始发，查出的区是错的。
 - [ADR-0109](./0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md) 决定二：一版目录声明始发维度（始发邮编前缀集或始发分区），形状已在，缺的是始发输入从哪来。
 - [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：评价按范围选卡，计价条款只从价卡读。计费起点是采购条款，该登在卡上，不登在参与方与商业的协议上。
 - 正式 BUY 评价按运输收费发生项计价（[ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)），发生项读口今天交成员载运对象与业务时点，不交段的起讫（CONTEXT-MAP「`transport-fulfillment → parcel-pricing`（发生项成员读口）」）。
@@ -26,13 +26,15 @@ Date: 2026-11-05
 
 **二、物理节点地址不当计费起点。**（产品策略）
 
-- 起点是卡上登的值，与节点的设施地址无关；节点照旧不加邮编，ADR-0189 决定三「不采形态二：节点不加邮编。」不变。改节点不改任何卡的起点。
+- 起点是卡上登的值，与节点的设施地址无关；节点照旧不加邮编，ADR-0189 决定三「**不采形态二**：节点不加邮编。」不变。改节点不改任何卡的起点。
 
-**三、评价从两路带出起始节点。**（机制）
+**三、评价从两路带出起始节点，其余各路带不出。**（机制）
 
 - 路由比价：`network-routing` 按段交出这一段的起始节点，与段计价区域、邮编路线一并交给计价（ADR-0189 补记「走哪一口」那一口）。
 - 正式 BUY 评价：计价经发生项读口读出发生项所在实际履约段的起始节点，这一格归 `transport-fulfillment` 答；计价不从包裹或路由计划推。
-- 其余评价对象（已受理包裹的 SELL 评价、受理前估价、运营试算）没有段，带不出起始节点；声明了按起始节点取的卡在这些评价上待判断。
+- 面单渠道择优：小包托运按候选向计价要 `BUY` 成本（CONTEXT-MAP「`parcel-pricing → parcel-shipment`（渠道择优成本）」），候选是渠道产品、没有段，带不出起始节点；声明了按起始节点取的卡在这一路待判断，候选按缺少成本依据出局。面单渠道的卡按寄件邮编取始发，承运商按发件地址分区的常规情形由此表达；按渠道自己的入口分区另立。
+- 运营试算等其余没有段的评价同样带不出起始节点，声明了按起始节点取的卡在这些评价上待判断。
+- 方向为 `SELL` 的卡不能声明按起始节点取，登记即拒：客户价的评价对象是包裹或委托，没有段。
 
 **四、缺与坏照旧分开。**（机制）
 
@@ -47,9 +49,9 @@ Date: 2026-11-05
 
 ## 对已接受记录的作用
 
-- 部分停用 ADR-0189 决定三「按节点地址分区是另一种目录形态，等首个真实租户的分区表需要时再定（ADR-0109 决定二「粒度随首份真实分区表定」）。」一句：始发不按节点地址取，按卡上声明的来源取，形态现在定。适用场景：全部绑了带始发维度目录的卡；决定三前半「不采形态二：节点不加邮编。」与其余各条不变。
+- 部分停用 ADR-0189 决定三「按节点地址分区是另一种目录形态，等首个真实租户的分区表需要时再定（ADR-0109 决定二「粒度随首份真实分区表定」）。」一句：始发不按节点地址取，按卡上声明的来源取，形态现在定。适用场景：全部绑了带始发维度目录的卡；决定三前半「**不采形态二**：节点不加邮编。」与其余各条不变。
 - 部分停用 ADR-0189 补记「邮编路线从哪来」一条里「路线是整件包裹的、不随段变，寄件邮编作始发、收件邮编作目的。」一句：始发随段取。适用场景：只限声明了按起始节点取始发的卡；其余卡照原句。
-- 回答 ADR-0189 越权风险点 7「路线按整件包裹，不按段」：声明了按起始节点取始发的卡，始发随段取，代价由此解除；其余卡照旧承担它。
+- 不回答 ADR-0189 越权风险点 7：那一条记的是目的一侧，本记录不动目的，按目的邮编分区的卡几段同区照旧。本记录补的是那条没记的始发一侧。
 
 ## Consequences
 
@@ -69,12 +71,13 @@ Date: 2026-11-05
 
 1. **卡上引用网络与路由的节点身份。**（决定一）卡只引用、不拥有；节点停用或改名不动卡。归 PP、NR owner。
 2. **发生项读口补「实际履约段的起始节点」。**（决定三）取进入这一段那次`已交接`声明的交出节点，还是段自己记的起点，由 TF owner 定。归 TF、PP owner。
-3. **SELL 卡不开按起始节点取。**（决定三）客户价若要按入口分区，另立。归 PP owner。
+3. **SELL 卡登记即拒按起始节点取。**（决定三）客户价若要按入口分区，另立。归 PP owner。
 4. **一个节点在一张卡上只登一个起点。**（决定一）同一节点按服务分起点的卡另立。归 PP owner。
+5. **面单渠道一路只认寄件邮编。**（决定三）按入口分区的面单渠道卡在渠道择优里出局；渠道产品要声明自己的入口时另立。归 PS、PP owner。
 
 ## Links
 
-- [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md)：逐段计价区域按卡给；本记录部分停用其决定三一句与补记一句，回答越权风险点 7
+- [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md)：逐段计价区域按卡给；本记录部分停用其决定三一句与补记一句，不回答越权风险点 7
 - [ADR-0109](./0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)：目录的始发维度
 - [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：计价条款只从价卡读，所以起点登在卡上
 - [ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)：正式 BUY 评价按发生项发起

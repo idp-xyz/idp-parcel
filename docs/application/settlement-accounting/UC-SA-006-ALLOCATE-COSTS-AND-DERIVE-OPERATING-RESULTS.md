@@ -152,4 +152,4 @@
 
 ## 给开发的交接
 
-- **预估口径经营毛利的低毛利提示**（[SA CONTEXT「经营指标、人工调整与系统边界」](../../domain/settlement-accounting/CONTEXT.md)、[ADR-0366](../../adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）：代码尚未做到。经营毛利读面只给数，没有提示格，也没有阈值登记册；阈值是租户取值，没登时提示格答未配置，不内置任何比例。提示不阻断任何业务动作，不形成费用或异常案件。承接见[冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md) 2026-11-05。
+- **预估口径经营毛利的低毛利提示**（[SA CONTEXT「经营指标、人工调整与系统边界」](../../domain/settlement-accounting/CONTEXT.md)、[ADR-0366](../../adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）：代码尚未做到。经营毛利读面只给数，没有提示格，也没有阈值登记册；阈值是租户取值，没登时提示格答未配置，不内置任何比例。提示不阻断任何业务动作，不形成费用或异常案件。承接见[冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md)里出处写 ADR-0366 的那一行。

@@ -262,5 +262,6 @@
 |---|---|---|
 | 封签相符的集运单元交接派生成员随单元受控（`AT-TF-054`） | 派生规则与节点作业的单元控制规则都没立，单元的交接只对单元本身形成交接与参与（ADR-0263 决定四）。`AT-TF-054` 的现状缺口随规则确立补齐，本行预期结果不变 | 票 [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md) |
 | 交出门禁读数对集运单元按单元本身问（TF CONTEXT「交出门禁读数」，ADR-0213 决定四） | 现行规则如此，但 ADR-0213 越权风险点 11 已复核为应修订：袋的境内交出可能读成一格假的不受门禁，跨区读成未决而说不出袋里哪一件被挡；成员展开与出发读数同形的修法待裁 | 票 [demo-chain-gaps/122](../../../.scratch/demo-chain-gaps/issues/122-handover-gate-reading-does-not-expand-consolidation-unit-members.md) |
+| 发生项读口答出发生项所在实际履约段的起始节点，供按起始节点取计费起点的价卡用（CONTEXT-MAP「`transport-fulfillment → parcel-pricing`（发生项成员读口）」，[ADR-0365](../../adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md) 决定三） | 读口只交成员载运对象与业务时点；起始节点取进入这一段那次`已交接`声明的交出节点还是段自己记的起点，待 TF owner 定（ADR-0365 越权风险点） | [冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md)里出处写 ADR-0365 的那一行 |
 
 完成本用例只证明运输控制和实际履约事实可追溯；派送交付、POD、退运和包裹终局由后续用例分别形成。
