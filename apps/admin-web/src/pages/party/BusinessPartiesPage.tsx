@@ -451,7 +451,9 @@ export function BusinessPartiesPage() {
   // 登记簿按组查（unsaved-guard.ts）：列表视图里挂着的关系表单只有详情栏这一份。
   const [pendingSelect, setPendingSelect] = useState<{ key: string | null } | null>(null);
   const selectParty = (key: string | null) => {
-    if (key !== selectedParty && hasUnsavedDraft(registrationGroup('party-relationship'))) setPendingSelect({ key });
+    // 右栏关联签里就地开着的两种表单（登记合作关系、新增客户账户）有没提交的输入时，换行先问一句。
+    if (key !== selectedParty && (hasUnsavedDraft(registrationGroup('party-relationship')) || hasUnsavedDraft(registrationGroup('customer-account'))))
+      setPendingSelect({ key });
     else setSelectedParty(key);
   };
   // 关系册的列表状态。检索留在页内：停用入口与引用链接定位的是身份这一册。
@@ -776,6 +778,7 @@ export function BusinessPartiesPage() {
               <BusinessPartyDetailPanel
                 row={row}
                 roles={rolesOfParty(roleIndex, row.partyId)}
+                ours={ourCompanies.has(row.partyId)}
                 relationships={relationships.answer}
                 retryRelationships={relationships.retry}
                 onClose={() => selectParty(null)}

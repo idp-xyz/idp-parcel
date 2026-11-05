@@ -4,6 +4,7 @@ import { Button, Tabs, TabsContent, TabsList, TabsTrigger, ConfirmDialog } from 
 import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
+import { ourCompanyLabel } from './business-party-list';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
@@ -33,6 +34,7 @@ type PanelTab = 'overview' | 'identity';
 export function BusinessPartyDetailPanel({
   row,
   roles,
+  ours,
   relationships,
   retryRelationships,
   onClose,
@@ -43,6 +45,8 @@ export function BusinessPartyDetailPanel({
   row: BusinessPartyRecord;
   /** 这个参与方在关系册上持有的角色（business-party-list.ts 的 indexPartyRoles），头部按它称呼；空即「往来单位」。 */
   roles: readonly string[];
+  /** 是不是法人册上钉着的我方公司；与列表类型格同一判据（business-party-list.ts 的 businessPartyTypeLabel）。 */
+  ours: boolean;
   /** 关系册答案随页面持有、交给全景签，与关系册工作台同一份，不另取。 */
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
@@ -100,9 +104,12 @@ export function BusinessPartyDetailPanel({
               <h2 className="truncate type-title font-semibold text-idpxyz-textBright">{row.partyName}</h2>
               <StatusPill code={row.status} />
             </div>
-            {/* 类型按持有的角色称呼；一个角色都没有就说「往来单位」，不留空。 */}
+            {/* 类型与列表类型格同一说法：我方公司排在角色前面；既不是我方公司、又没有角色时说「暂无合作关系」，不留空。 */}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {roles.length === 0 ? (
+              {ours ? (
+                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">{ourCompanyLabel}</span>
+              ) : null}
+              {roles.length === 0 && !ours ? (
                 <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
                   {partyTypeFallbackLabel}
                 </span>

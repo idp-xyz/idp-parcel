@@ -532,6 +532,7 @@ export function PartyOverviewSection({
         ) : (
         <>
         <RelationshipRows
+          key={partyId}
           state={relationshipState}
           records={relationships?.kind === 'outcome' ? relationships.body.relationships : []}
           retry={retryRelationships}
@@ -542,7 +543,8 @@ export function PartyOverviewSection({
         )}
       </Section>
 
-      <CustomerAccountsBlock partyId={partyId} state={accountState} accounts={accounts} writes={accountWrites} />
+      {/* 按单位重挂：工作台右栏换行时不重挂整栏，块里开着的表单、对话框与「结束」展开不能串到下一家单位。 */}
+      <CustomerAccountsBlock key={partyId} partyId={partyId} state={accountState} accounts={accounts} writes={accountWrites} />
 
       <Section title="公司主体" moduleId="group-legal-entities" partyId={partyId} state={entityState}>
         <SectionBody

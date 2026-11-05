@@ -32,7 +32,7 @@ import { entryHint } from '../operator-grants';
 const info = moduleInfoById['business-parties'];
 
 /**
- * 对象页「登记记录」签与工作台详情栏「登记记录」签交给修订历史区的那几样（票 12 第 5 条立、票 13 第 9 条改用共用件）：
+ * 对象页「登记记录」签与工作台详情栏「登记记录」签交给修订历史区的那几样（修订历史区是两册共用件 RevisionHistorySection）：
  * 判读在 business-party-revisions.ts（两册共用的本体在 revision-timeline.ts）。
  */
 export const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessPartyRevisionListResponseBody> = {

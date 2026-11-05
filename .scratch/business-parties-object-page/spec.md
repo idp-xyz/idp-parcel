@@ -1,7 +1,7 @@
 # 往来单位达到公司主体的完成度：对象页版式对齐、合作关系与客户账户就地闭环
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-05 子票 01–05 全部进 main
 出处：用户 2026-11-05 认定公司主体已全面完成验收，问「按业务流程下一步做哪个页面的完整实现」；会话按业务流程说明书「商业管理员」旅程第一步（集团与法人、业务参与方）建议往来单位，用户答「开始」。
 
 切片：PN-02，主责 party-commercial，非关务专项。权威：CONTEXT「业务参与方」「参与方关系」「货主客户账户」与生命周期「参与方身份」「参与方关系」。只改 `apps/admin-web/**`，走 workflow「前端切片」。
@@ -36,4 +36,4 @@ Status: in-progress
 | [02](./issues/02-relationships-section-lifecycle.md) | 合作关系分区：就地结束、已结束折叠、对方可点 | resolved（2026-11-05 进 main） |
 | [03](./issues/03-customer-accounts-section.md) | 客户账户分区：结构化新增表单（两处共用）、停用对话框 | resolved（2026-11-05 进 main） |
 | [04](./issues/04-list-code-and-type.md) | 列表：名称下带编码、无关系类型显「暂无合作关系」 | resolved（2026-11-05 进 main） |
-| [05](./issues/05-acceptance.md) | 整页验收：浏览器全流程、非作者评审 | in-progress |
+| [05](./issues/05-acceptance.md) | 整页验收：浏览器全流程、非作者评审 | resolved（2026-11-05 进 main） |
