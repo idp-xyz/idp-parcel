@@ -32,7 +32,7 @@ import {
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
 import { StatusPill } from '../../components/StatusPill';
-import { labelOf, partyRoleLabels } from './presentation';
+import { labelOf, partyRoleLabels, partyTypeFallbackLabel } from './presentation';
 import { Instant, UnknownPartyName, filterSelectClass } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
@@ -125,8 +125,10 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
             aria-hidden="true"
           />
           {/* 名称取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
-          <span className="truncate font-medium text-[color:var(--ds-text-link-hover)]" title={row.partyId}>
-            {row.partyName}
+          {/* 名称下带编码（票 business-parties-object-page/04，照公司主体列表）：编码是对外对账、填单时认的那一串。 */}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-medium text-[color:var(--ds-text-link-hover)]">{row.partyName}</span>
+            <span className="truncate font-mono type-caption text-idpxyz-breadcrumb">{row.partyId}</span>
           </span>
         </div>
       ),
@@ -681,7 +683,7 @@ export function BusinessPartiesPage() {
           ...(counts.withoutRole > 0
             ? [
                 {
-                  label: '往来单位',
+                  label: partyTypeFallbackLabel,
                   value: counts.withoutRole,
                   active: type === 'NONE',
                   onClick: () => toggleType('NONE'),

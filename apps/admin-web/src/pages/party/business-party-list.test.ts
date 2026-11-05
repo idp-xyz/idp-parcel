@@ -207,7 +207,7 @@ test('类型筛选与计数按持有的角色', () => {
     'SYN-PARTY-RETIRED-01',
   ]);
   deepEqual(ids(filterBusinessParties(rows, { search: '承运商代理', status: 'ALL' }, index)), ['SYN-PARTY-AGENT-04']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '往来单位', status: 'ALL' }, index)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
+  deepEqual(ids(filterBusinessParties(rows, { search: '暂无合作关系', status: 'ALL' }, index)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
   const counts = countBusinessParties(rows, index);
   equal(counts.byRole.CUSTOMER, 1);
   equal(counts.byRole.CARRIER_AGENT, 1);
@@ -247,12 +247,12 @@ test('ourCompanyPartyIds 按法人册钉着的参与方算，只数在用的法�
   equal(ourCompanyPartyIds(null).size, 0);
 });
 
-// Covers: 类型列的文字——我方公司排在角色前面；不是我方公司就照角色，没角色叫「往来单位」。
+// Covers: 类型列的文字——我方公司排在角色前面；不是我方公司就照角色，没角色叫「暂无合作关系」。
 test('businessPartyTypeLabel 把我方公司排在角色前面', () => {
   equal(businessPartyTypeLabel(true, []), '我方公司');
   equal(businessPartyTypeLabel(true, ['CUSTOMER']), '我方公司 / 客户');
   equal(businessPartyTypeLabel(false, ['CUSTOMER', 'SUPPLIER']), '客户 / 供应商');
-  equal(businessPartyTypeLabel(false, []), '往来单位');
+  equal(businessPartyTypeLabel(false, []), '暂无合作关系');
 });
 
 // Covers: 筛选 OURS 只留我方公司；NONE 不再把我方公司算成「往来单位」；搜索能按「我方公司」命中；计数分出 ours、

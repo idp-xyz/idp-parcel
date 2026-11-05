@@ -194,7 +194,9 @@ export type PartyRoleCode = keyof typeof partyRoleLabels;
  * 参与方按它持有的角色称呼（客户、供应商、承运商代理……）；一个角色都没有时叫「往来单位」——它在册、有名称，只是还没
  * 登记与谁的合作关系。角色词取关系册的封闭集，不另造一套「类型」。
  */
-export const partyTypeFallbackLabel = '往来单位';
+// 一个生效角色也没有、又不是我方公司的单位，类型格说的就是这件事（票 business-parties-object-page/04）：原来叫「往来单位」，与模块名
+// 同词，读不出意思；这个词同时是类型筛选的一个选项，所以用一句短话而不是「—」。
+export const partyTypeFallbackLabel = '暂无合作关系';
 
 export function partyTypeLabel(roles: readonly string[]): string {
   if (roles.length === 0) return partyTypeFallbackLabel;
