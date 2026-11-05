@@ -29,7 +29,7 @@ const columns: ListColumn<WorkDeviceRecord>[] = [
   {
     id: 'device',
     header: '设备号',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => row.deviceId,
   },
   {
@@ -40,7 +40,7 @@ const columns: ListColumn<WorkDeviceRecord>[] = [
   {
     id: 'scope-ref',
     header: '地点编号',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => row.workScopeRef,
   },
   {
@@ -51,7 +51,7 @@ const columns: ListColumn<WorkDeviceRecord>[] = [
   {
     id: 'deactivated-at',
     header: '停用时间',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => (row.deactivatedAt ? formatInstant(row.deactivatedAt) : ''),
   },
 ];

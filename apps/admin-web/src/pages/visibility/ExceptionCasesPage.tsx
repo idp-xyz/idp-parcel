@@ -67,7 +67,7 @@ const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
   {
     key: 'team',
     header: '处理团队',
-    render: (row) => <span className="truncate font-mono text-[12px] text-idpxyz-text">{row.responsibleTeam}</span>,
+    render: (row) => <span className="truncate font-mono type-body text-idpxyz-text">{row.responsibleTeam}</span>,
   },
   {
     key: 'established',

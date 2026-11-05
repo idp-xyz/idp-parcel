@@ -210,8 +210,8 @@ export function SubmitShipmentRequestPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[880px] mx-auto px-6 py-6 space-y-4">
         <header>
-          <h1 className="text-[18px] font-bold text-idpxyz-textBright">新建运单</h1>
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-1">
+          <h1 className="type-title font-bold text-idpxyz-textBright">新建运单</h1>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-1">
             替客户录一票运单。提交后由系统判断能不能受理;受理之前它在运单列表里是「待受理」。
           </p>
         </header>
@@ -261,7 +261,7 @@ export function SubmitShipmentRequestPage() {
               <input className={inputClass} value={head.destinationServiceScope} onChange={(event) => setHeadField('destinationServiceScope')(event.target.value)} />
             </Field>
           </div>
-          <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-3">一票运单里的包裹寄收件人和目的地相同;寄收件不同的货请分开建运单。</p>
+          <p className="type-caption leading-4 text-idpxyz-textMuted mt-3">一票运单里的包裹寄收件人和目的地相同;寄收件不同的货请分开建运单。</p>
         </Section>
 
         <Section title="包裹">
@@ -280,12 +280,12 @@ export function SubmitShipmentRequestPage() {
           </div>
           <button
             type="button"
-            className="mt-3 rounded border border-idpxyz-border px-3 py-1.5 text-[12px] text-idpxyz-text hover:bg-idpxyz-hover"
+            className="mt-3 rounded border border-idpxyz-border px-3 py-1.5 type-body text-idpxyz-text hover:bg-idpxyz-hover"
             onClick={() => setParcels((current) => [...current, { ...emptyParcel }])}
           >
             再加一件
           </button>
-          <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">一票运单至少一件包裹;整票一起受理或拒绝,不会只收一部分。</p>
+          <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">一票运单至少一件包裹;整票一起受理或拒绝,不会只收一部分。</p>
         </Section>
 
         <div className="flex items-center gap-3">
@@ -293,11 +293,11 @@ export function SubmitShipmentRequestPage() {
             type="button"
             disabled={pending}
             onClick={handleSubmit}
-            className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
+            className="rounded border border-idpxyz-accent px-4 py-2 type-value font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
             {pending ? pendingText('提交') : '提交运单'}
           </button>
-          {errorCount > 0 ? <span className="text-[12px] text-idpxyz-textBright">还有 {errorCount} 处没填好,已在字段旁标出。</span> : null}
+          {errorCount > 0 ? <span className="type-body text-idpxyz-textBright">还有 {errorCount} 处没填好,已在字段旁标出。</span> : null}
         </div>
 
         <ResultPanel result={result} pending={pending} renderOutcome={(body, status) => <SubmitOutcomeCard body={body} status={status} />} />
@@ -331,13 +331,13 @@ function ParcelCard({
   return (
     <div className="rounded border border-idpxyz-border p-3">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[13px] font-bold text-idpxyz-textBright">第 {index + 1} 件</span>
+        <span className="type-value font-bold text-idpxyz-textBright">第 {index + 1} 件</span>
         <button
           type="button"
           disabled={!removable}
           onClick={onRemove}
           title={removable ? undefined : '至少要有一件包裹'}
-          className="rounded border border-idpxyz-border px-2 py-1 text-[11px] text-idpxyz-textMuted hover:bg-idpxyz-hover disabled:opacity-40"
+          className="rounded border border-idpxyz-border px-2 py-1 type-caption text-idpxyz-textMuted hover:bg-idpxyz-hover disabled:opacity-40"
         >
           去掉这件
         </button>
@@ -349,7 +349,7 @@ function ParcelCard({
         </Field>
       </div>
 
-      <p className="text-[12px] text-idpxyz-textMuted mt-3 mb-2">重量与尺寸</p>
+      <p className="type-body text-idpxyz-textMuted mt-3 mb-2">重量与尺寸</p>
       <div className="grid grid-cols-4 gap-3">
         <Field label="毛重" required error={error('declaredWeightValue')} hint="照客户报的填,如 1.50。">
           <input {...bind('declaredWeightValue')} inputMode="decimal" />
@@ -372,9 +372,9 @@ function ParcelCard({
           <input {...bind('declaredDimensionsUnit')} placeholder="如 CM" />
         </Field>
       </div>
-      <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-1">尺寸可以不填;填就长、宽、高和单位一起填。</p>
+      <p className="type-caption leading-4 text-idpxyz-textMuted mt-1">尺寸可以不填;填就长、宽、高和单位一起填。</p>
 
-      <p className="text-[12px] text-idpxyz-textMuted mt-3 mb-2">申报资料</p>
+      <p className="type-body text-idpxyz-textMuted mt-3 mb-2">申报资料</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="品名" error={error('goodsDescription')}>
           <input {...bind('goodsDescription')} />
@@ -411,11 +411,11 @@ function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status:
   const ownership = body.productionOwnership;
   return (
     <NoticeCard title={view.label} titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
+      <p className="type-body leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
 
       <dl className="mt-3 space-y-1">
         {body.shipmentRequestId ? (
-          <div className="flex gap-2 text-[12px] leading-5">
+          <div className="flex gap-2 type-body leading-5">
             <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">{documentTypeWords.SHIPMENT.numberName}</dt>
             <dd>
               <ShipmentNo shipmentRequestId={body.shipmentRequestId} documentNumber={body.documentNumber} />
@@ -429,7 +429,7 @@ function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status:
       </dl>
 
       {body.gateBlockReasons && body.gateBlockReasons.length > 0 ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">之后再提交会被拦住,原因见技术详情。</p>
+        <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">之后再提交会被拦住,原因见技术详情。</p>
       ) : null}
 
       <TechnicalDetails

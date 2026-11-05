@@ -51,7 +51,7 @@ const info = moduleInfoById['post-intake-disposition'];
 function NoteLine({ note }: { note: OperatorNote | null }) {
   if (!note) return null;
   return (
-    <div className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+    <div className={`type-body ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
       {note.text}
       {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
       <TechnicalDetails rows={note.technical} />
@@ -139,7 +139,7 @@ export function PostIntakeDispositionPage() {
               id: line.id,
               title: line.title,
               subtitle: line.subtitle,
-              status: <span className="shrink-0 text-[11px] text-idpxyz-textMuted">{line.statusText}</span>,
+              status: <span className="shrink-0 type-caption text-idpxyz-textMuted">{line.statusText}</span>,
               meta: line.meta,
             };
           })}
@@ -162,12 +162,12 @@ export function PostIntakeDispositionPage() {
                       placeholder="改送到哪里"
                     />
                   </Field>
-                  <p className="text-[12px] text-idpxyz-textMuted">
+                  <p className="type-body text-idpxyz-textMuted">
                     在下方写明处置理由后选择去向。决定会留下记录,之后要改去向,再做一次新的决定。
                   </p>
                 </>
               ) : (
-                <p className="text-[12px] text-idpxyz-textMuted">只有获得「货物处置」权限的操作员能在这里做决定。</p>
+                <p className="type-body text-idpxyz-textMuted">只有获得「货物处置」权限的操作员能在这里做决定。</p>
               )}
               <NoteLine note={note} />
               {selected ? <TechnicalDetails rows={requestTechnicalRows(selected)} /> : null}
@@ -232,7 +232,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
   return (
     <div className="px-4 pb-6">
       <Section title="待办事项">
-        <p className="mb-3 text-[12px] text-idpxyz-textMuted">
+        <p className="mb-3 type-body text-idpxyz-textMuted">
           处置决定里要人去办的事(扣件、安排退运等),办完后在这里登记「已办」或「办不了」。办不了也要登记,这票货仍归当前网点看管。
           之后又做过新决定的事项不会消失,办之前先看最新一次决定怎么说。
         </p>
@@ -264,9 +264,9 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
             </Button>
           )}
         </div>
-        {!answer && <p className="text-[12px] text-idpxyz-textMuted">读取中…</p>}
+        {!answer && <p className="type-body text-idpxyz-textMuted">读取中…</p>}
         {answer && answer.kind !== 'outcome' && (
-          <div className="text-[12px] text-idpxyz-textMuted">
+          <div className="type-body text-idpxyz-textMuted">
             待办事项这次没有读到,不代表没有待办。请稍后刷新。
             <TechnicalDetails
               rows={
@@ -280,9 +280,9 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
             />
           </div>
         )}
-        {body && <p className="mb-2 text-[12px] text-idpxyz-text">{manualSummaryText(body, parcel)}</p>}
+        {body && <p className="mb-2 type-body text-idpxyz-text">{manualSummaryText(body, parcel)}</p>}
         {body && items.length === 0 && (
-          <p className="text-[12px] text-idpxyz-textMuted">{parcel ? manualItemsEmptyState.readback : manualItemsEmptyState.pending}</p>
+          <p className="type-body text-idpxyz-textMuted">{parcel ? manualItemsEmptyState.readback : manualItemsEmptyState.pending}</p>
         )}
         <ul className="flex flex-col gap-2">
           {items.map((item) => {
@@ -291,15 +291,15 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
             return (
               <li key={line.id} className={`rounded border p-3 ${active ? 'border-idpxyz-accent' : 'border-idpxyz-border'}`}>
                 <button type="button" className="block w-full text-left" onClick={() => setSelectedKey(line.id)}>
-                  <div className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                  <div className="flex flex-wrap items-baseline gap-x-2 type-body">
                     <ParcelNo parcelId={line.parcelId} className="text-idpxyz-textBright" />
                     <span className="text-idpxyz-text">{line.task}</span>
                   </div>
-                  <div className="text-[11px] text-idpxyz-textMuted">
+                  <div className="type-caption text-idpxyz-textMuted">
                     {line.decisionText} · {line.decidedAt}
                   </div>
-                  {line.superseded && <div className="text-[11px] text-idpxyz-accent">{line.supersededText}</div>}
-                  <div className="text-[11px] text-idpxyz-textMuted" title={line.resultTitle || undefined}>{line.resultText ? `结果:${line.resultText}` : '还没登记结果'}</div>
+                  {line.superseded && <div className="type-caption text-idpxyz-accent">{line.supersededText}</div>}
+                  <div className="type-caption text-idpxyz-textMuted" title={line.resultTitle || undefined}>{line.resultText ? `结果:${line.resultText}` : '还没登记结果'}</div>
                 </button>
                 {active && <TechnicalDetails rows={line.technical} />}
                 {active && !item.result && (
@@ -321,11 +321,11 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
                         <Button variant="default" disabled={sending} onClick={register}>
                           登记结果
                         </Button>
-                        {sending && <span className="ml-2 text-[11px] text-idpxyz-textMuted">提交中…</span>}
+                        {sending && <span className="ml-2 type-caption text-idpxyz-textMuted">提交中…</span>}
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[12px] text-idpxyz-textMuted">只有获得「待办登记」权限的操作员能登记结果。</p>
+                    <p className="mt-2 type-body text-idpxyz-textMuted">只有获得「待办登记」权限的操作员能登记结果。</p>
                   )
                 )}
               </li>

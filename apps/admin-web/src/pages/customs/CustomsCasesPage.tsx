@@ -75,7 +75,7 @@ function recordColumns(spec: ColumnSpec[], tech?: [label: string, key: string][]
     id: column.id,
     header: column.header,
     className:
-      [column.mono ? 'font-mono text-xs' : '', column.multi ? 'whitespace-pre-line' : '', column.nowrap ? 'whitespace-nowrap' : '']
+      [column.mono ? 'font-mono type-body leading-4' : '', column.multi ? 'whitespace-pre-line' : '', column.nowrap ? 'whitespace-nowrap' : '']
         .filter(Boolean)
         .join(' ') || undefined,
     render: (row) =>
@@ -442,12 +442,12 @@ function AdmissionJudgementsTable({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
-        <label className="flex items-center gap-1.5 text-sm">
+        <label className="flex items-center gap-1.5 type-body leading-5">
           <input type="checkbox" checked={unadmittedOnly} onChange={(event) => onUnadmittedOnlyChange(event.target.checked)} />
           只看卡关
         </label>
         {unadmittedOnly ? (
-          <span className="text-xs text-idpxyz-textMuted">每件运单只看最近那一刻的放行检查，有一项没过的（被拦、待定、缺配置）就列，卡得最久的在前</span>
+          <span className="type-body leading-4 text-idpxyz-textMuted">每件运单只看最近那一刻的放行检查，有一项没过的（被拦、待定、缺配置）就列，卡得最久的在前</span>
         ) : (
           <form
             className="flex items-center gap-2"
@@ -456,17 +456,17 @@ function AdmissionJudgementsTable({
               setObject(draft.trim());
             }}
           >
-            <label className="text-sm" htmlFor="admission-object">
+            <label className="type-body leading-5" htmlFor="admission-object">
               按{parcelNumberName}查
             </label>
             <input
               id="admission-object"
-              className="border rounded px-2 py-1 text-sm font-mono"
+              className="border rounded px-2 py-1 type-body leading-5 font-mono"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={`${parcelNumberName}；留空列出最近的记录`}
             />
-            <button type="submit" className="border rounded px-3 py-1 text-sm">
+            <button type="submit" className="border rounded px-3 py-1 type-body leading-5">
               查询
             </button>
           </form>
@@ -520,7 +520,7 @@ function col(id: string, header: string, mono = false, nowrap = false): ListColu
   return {
     id,
     header,
-    className: [mono ? 'font-mono text-xs' : '', nowrap ? 'whitespace-nowrap' : ''].filter(Boolean).join(' ') || undefined,
+    className: [mono ? 'font-mono type-body leading-4' : '', nowrap ? 'whitespace-nowrap' : ''].filter(Boolean).join(' ') || undefined,
     render: (row) => row.values[id] ?? '—',
   };
 }

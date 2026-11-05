@@ -60,15 +60,15 @@ export function CurrentLegalEntityProfile({ query, children }: {
   const { legalEntityId, answer, retry } = query;
   if (answer === null) return <ProfileReadoutSkeleton />;
   if (answer.kind === 'unconfigured') {
-    return <p className="text-[13px] text-idpxyz-breadcrumb">公司资料读取渠道尚未配置，暂时无法读取。</p>;
+    return <p className="type-value text-idpxyz-breadcrumb">公司资料读取渠道尚未配置，暂时无法读取。</p>;
   }
   if (isOperatorRefusal(answer)) {
-    return <OperatorRefusalNote kind={answer.kind} what="公司资料" className="text-[12px]" />;
+    return <OperatorRefusalNote kind={answer.kind} what="公司资料" className="type-body" />;
   }
   if (answer.kind === 'callerProblem') {
     return (
       <div>
-        <p className="text-[12px] text-idpxyz-breadcrumb">调用方式问题：{problemNote(answer.code)}</p>
+        <p className="type-body text-idpxyz-breadcrumb">调用方式问题：{problemNote(answer.code)}</p>
         <TechnicalDetails className="mt-2" rows={httpRows(answer.status, answer.code)} />
       </div>
     );
@@ -93,7 +93,7 @@ export function CurrentLegalEntityProfile({ query, children }: {
     );
   }
   if (answer.body.legalEntityId !== legalEntityId) {
-    return <p className="text-[12px] text-idpxyz-breadcrumb">答案回显的公司主体与当前页面不符，已丢弃。</p>;
+    return <p className="type-body text-idpxyz-breadcrumb">答案回显的公司主体与当前页面不符，已丢弃。</p>;
   }
   return <>{children(answer.body)}</>;
 }

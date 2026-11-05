@@ -114,7 +114,7 @@ function listColumnsOf(kind: RuleBookKind): ListColumn<RuleRow>[] {
   return columnsByKind[kind].map((column) => ({
     id: column.id,
     header: column.header,
-    className: column.mono ? 'font-mono text-xs' : undefined,
+    className: column.mono ? 'font-mono type-body leading-4' : undefined,
     render: (row: RuleRow) => {
       const code = cellCode(row, column.id);
       if (column.pill && code) return <StatusPill code={code} />;

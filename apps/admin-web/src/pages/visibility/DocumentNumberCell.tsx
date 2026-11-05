@@ -14,11 +14,11 @@ export function DocumentNumberCell({
 }) {
   const reference = primaryReference(documentNumber, internal, absence);
   return reference.numbered ? (
-    <span className="truncate whitespace-nowrap font-mono text-xs font-medium text-idpxyz-textBright" title={reference.text}>
+    <span className="truncate whitespace-nowrap font-mono type-body leading-4 font-medium text-idpxyz-textBright" title={reference.text}>
       {reference.text}
     </span>
   ) : (
-    <span className="truncate whitespace-nowrap font-mono text-[11px] text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
+    <span className="truncate whitespace-nowrap font-mono type-caption text-idpxyz-breadcrumb" title={`${reference.text}（${reference.hint}）`}>
       {reference.text}
     </span>
   );

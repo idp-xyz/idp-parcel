@@ -312,7 +312,7 @@ export function IdentityDeactivationForm({
               </option>
             ))}
           </select>
-          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+          <span className="block type-body text-idpxyz-breadcrumb mt-1">
             法人与客户账户也在这里停用；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
           </span>
         </Field>
@@ -326,7 +326,7 @@ export function IdentityDeactivationForm({
           <Input
             value={draft.id}
             readOnly={submitting}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="先选身份种类，再从对应册上选"
             onChange={(event) => patch({ id: event.target.value })}
           />
@@ -351,7 +351,7 @@ export function IdentityDeactivationForm({
         <Input
           value={draft.basis}
           readOnly={submitting}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="停用通知、审批单号或邮件"
           onChange={(event) => patch({ basis: event.target.value })}
         />
@@ -397,7 +397,7 @@ export function IdentityDeactivationForm({
       title={confirmation.title}
       message={confirmation.message}
       extraContent={
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 type-value">
           {confirmation.facts.map((fact) => (
             <div key={fact.label} className="contents">
               <dt className="text-idpxyz-breadcrumb">{fact.label}</dt>
@@ -435,7 +435,7 @@ export function IdentityDeactivationForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {/* 修订号是操作者声明自己看到的册面（册上最新 + 1），错位由服务端拒而不是替人猜；租户由操作者身份给出，不在表单上。 */}
-          <p className="text-[12px] text-idpxyz-breadcrumb">
+          <p className="type-body text-idpxyz-breadcrumb">
             {'从停用时间起，新的业务不再找它；已有记录保留，停用后不能撤回。合作关系不在这里停用——到合作关系里撤销或到期。'}
           </p>
           {fields}

@@ -79,7 +79,7 @@ export function BusinessPartyRegistrationForm({
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <p className="text-[12px] text-idpxyz-breadcrumb">
+          <p className="type-body text-idpxyz-breadcrumb">
             登记一家新的往来单位。要更正已登记单位的名称，填同一个编码再保存一次，历次记录都会保留。
           </p>
 
@@ -88,7 +88,7 @@ export function BusinessPartyRegistrationForm({
               <Input
                 value={draft.name}
                 readOnly={locked}
-                className="text-[13px]"
+                className="type-value"
                 placeholder="如 深圳某某跨境电商有限公司"
                 onChange={(event) => patch({ name: event.target.value })}
               />
@@ -98,11 +98,11 @@ export function BusinessPartyRegistrationForm({
               <Input
                 value={draft.partyId}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="如 SHIPPER-01"
                 onChange={(event) => patch({ partyId: event.target.value })}
               />
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">
                 {known
                   ? `这个编码已登记为「${known.partyName}」；这次保存会更新它的名称或来源单据。`
                   : '给内部用的短编码，建议用单位简称；登记后不能改，前后不要带空格。'}
@@ -113,11 +113,11 @@ export function BusinessPartyRegistrationForm({
               <Input
                 value={draft.basis}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="合同编号、邮件或审批单号"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">这次登记依据的是哪份单据，方便以后追溯。</span>
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">这次登记依据的是哪份单据，方便以后追溯。</span>
             </Field>
 
             <WallTimeField

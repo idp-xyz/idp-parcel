@@ -142,7 +142,7 @@ export function LegalEntityProfileContent({
         </ProfileReadoutCard>
       ) : null}
       {notes.length ? (
-        <div className="mt-2 border-t border-idpxyz-border pt-4 text-[13px] leading-6 text-idpxyz-breadcrumb">
+        <div className="mt-2 border-t border-idpxyz-border pt-4 type-body leading-6 text-idpxyz-breadcrumb">
           <p className="font-medium text-idpxyz-text">资料维护提示</p>
           <ul className="mt-1 list-disc pl-4">
             {notes.map((note) => (
@@ -161,7 +161,7 @@ export function LegalEntityProfileContent({
  */
 export function SectionActions({ section, onEdit }: { section: ProfileSectionId; onEdit: (request: ProfileEditRequest) => void }) {
   const definition = profileSections[section];
-  const buttonClass = 'h-6 px-1.5 text-[12px] text-idpxyz-breadcrumb hover:text-idpxyz-text';
+  const buttonClass = 'h-6 px-1.5 type-body text-idpxyz-breadcrumb hover:text-idpxyz-text';
   return (
     <>
       {definition.list ? (
@@ -184,7 +184,7 @@ export function SectionActions({ section, onEdit }: { section: ProfileSectionId;
  */
 function PrimaryTitleMark() {
   return (
-    <span className="ml-1.5 inline-flex items-center rounded-full border border-idpxyz-border bg-idpxyz-editor px-1.5 align-[1px] text-[11px] font-medium leading-4 text-idpxyz-text">
+    <span className="ml-1.5 inline-flex items-center rounded-full border border-idpxyz-border bg-idpxyz-editor px-1.5 align-[1px] type-caption font-medium leading-4 text-idpxyz-text">
       主抬头
     </span>
   );
@@ -197,10 +197,10 @@ function PrimaryTitleMark() {
  * 表与读出同一把尺（票 company-subject-ux/13 第 3 条）：正文 14、表头与次要行 13、等宽 13，行高一律 6。
  */
 export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly LegalEntityBankAccountRecord[] }) {
-  if (!accounts.length) return <p className="text-[14px] leading-6 text-idpxyz-breadcrumb">未登记收款账户</p>;
+  if (!accounts.length) return <p className="type-value leading-6 text-idpxyz-breadcrumb">未登记收款账户</p>;
   return (
     <div className="overflow-x-auto">
-      <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left text-[14px] leading-6">
+      <table className="legal-entity-readout-table w-full min-w-[40rem] table-fixed border-collapse text-left type-value leading-6">
         <caption className="sr-only">收款账户清单</caption>
         {/* 列宽按内容的常见长度分（票 company-subject-ux/12 第 4 条）：户名与开户行（带地址）最长，币种与备注最短；
             账号一列要装下 IBAN 的长度，等宽字再按字符折。币种列取 15 而不是票面的 14：详情栏拖到 2000 宽时表约 840px，
@@ -212,7 +212,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
           <col className="w-[22%]" />
           <col className="w-[14%]" />
         </colgroup>
-        <thead className="border-b border-idpxyz-border text-[13px] text-idpxyz-breadcrumb">
+        <thead className="border-b border-idpxyz-border type-body text-idpxyz-breadcrumb">
           <tr>
             <th scope="col" className="py-2 pr-3 font-medium">币种 / 用途</th>
             <th scope="col" className="px-3 py-2 font-medium">户名</th>
@@ -226,7 +226,7 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
             <tr key={`${account.currency}-${account.accountNumber}-${index}`} className="align-top">
               <th scope="row" className="py-2.5 pr-3 font-medium text-idpxyz-textBright">
                 <span className="block"><CurrencyLabel code={account.currency} /></span>
-                {account.label ? <span className="block text-[13px] font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
+                {account.label ? <span className="block type-body font-normal text-idpxyz-breadcrumb">{account.label}</span> : null}
               </th>
               <td className="px-3 py-2.5 text-idpxyz-text">
                 <CopyAside value={account.holderName} name="户名"><ReadoutText text={account.holderName} /></CopyAside>
@@ -235,9 +235,9 @@ export function LegalEntityBankAccountsTable({ accounts }: { accounts: readonly 
                 <span className="block text-idpxyz-text">
                   <CopyAside value={account.bankName} name="开户行"><ReadoutText text={account.bankName} /></CopyAside>
                 </span>
-                {account.bankAddress ? <span className="block text-[13px] text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
+                {account.bankAddress ? <span className="block type-body text-idpxyz-breadcrumb"><ReadoutText text={account.bankAddress} /></span> : null}
               </td>
-              <td className="px-3 py-2.5 font-mono text-[13px]">
+              <td className="px-3 py-2.5 font-mono type-body">
                 <span className="block text-idpxyz-text"><RefText value={account.accountNumber} name="账号" /></span>
                 {account.swiftCode ? (
                   <span className="block text-idpxyz-breadcrumb"><RefText value={account.swiftCode} name="SWIFT / BIC" /></span>

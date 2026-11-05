@@ -69,9 +69,9 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
   return (
     <div data-field={field.fee(fee.uid, 'conditions')} tabIndex={-1}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[12px] font-medium text-idpxyz-textBright">什么时候收（触发条件）</span>
+        <span className="type-body font-medium text-idpxyz-textBright">什么时候收（触发条件）</span>
         {fee.conditions.length > 1 ? (
-          <label className="flex items-center gap-1.5 text-[12px] text-idpxyz-breadcrumb">
+          <label className="flex items-center gap-1.5 type-body text-idpxyz-breadcrumb">
             下面几条
             <SelectControl
               id={field.fee(fee.uid, 'combine')}
@@ -97,7 +97,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
           return (
             <div key={row.uid} className="rounded border border-idpxyz-border p-2">
               <div className="flex flex-wrap items-start gap-2">
-                <span className="w-12 pt-1.5 text-[12px] text-idpxyz-breadcrumb">条件 {index + 1}</span>
+                <span className="w-12 pt-1.5 type-body text-idpxyz-breadcrumb">条件 {index + 1}</span>
                 <div className="w-44">
                   <ControlWithErrors id={field.condition(fee.uid, row.uid, 'source')}>
                     {(invalid) => (
@@ -115,7 +115,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
                 </div>
                 {row.source === '' ? null : category ? (
                   <>
-                    <span className="pt-1.5 text-[12px] text-idpxyz-text">{comparisonLabels.EQ}</span>
+                    <span className="pt-1.5 type-body text-idpxyz-text">{comparisonLabels.EQ}</span>
                     <div className="w-36">
                       {categoryChoices !== null ? (
                         <ControlWithErrors id={field.condition(fee.uid, row.uid, 'value')}>
@@ -178,7 +178,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
                     </div>
                   </>
                 )}
-                <span className="min-w-0 flex-1 basis-40 pt-1.5 text-[12px] text-idpxyz-breadcrumb">{text === null ? '' : `→ ${text}`}</span>
+                <span className="min-w-0 flex-1 basis-40 pt-1.5 type-body text-idpxyz-breadcrumb">{text === null ? '' : `→ ${text}`}</span>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -200,7 +200,7 @@ export function ConditionBuilder({ fee }: { fee: FeeItemState }) {
           <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
           添加条件
         </Button>
-        {sentence === null ? null : <span className="text-[12px] text-idpxyz-text">合起来：{sentence}时收取</span>}
+        {sentence === null ? null : <span className="type-body text-idpxyz-text">合起来：{sentence}时收取</span>}
       </div>
       <p className={`${hintClass} mt-1`}>想表示「每件都收」，保留「实重大于 0」这一条即可。</p>
     </div>

@@ -77,14 +77,14 @@ function DecisionRow({
 }) {
   const note = decision.payable ? payableNumberAbsenceNote(decision.payable) : undefined;
   return (
-    <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 type-body">
       {decision.resolvesDispute ? (
         <StatusPill label={`再审${verdictLabel(decision.verdict)}`} tone={toneFor(decision.verdict, auditVerdictScope)} />
       ) : (
         <StatusPill code={decision.verdict} scope={auditVerdictScope} />
       )}
       <span className="font-semibold text-idpxyz-textBright">{formatMoney(decision.amount, currency)}</span>
-      <span className="text-[11px] text-idpxyz-breadcrumb">
+      <span className="type-caption text-idpxyz-breadcrumb">
         区间 {decision.rangeFrom}–{decision.rangeTo} · {formatInstant(decision.auditedAt)} 由 {operatorWords(decision.operationEvidence)} 审
       </span>
       {decision.payable ? (
@@ -95,14 +95,14 @@ function DecisionRow({
             type="button"
             size="sm"
             variant="ghost"
-            className="ml-1 h-6 px-1.5 text-[12px] text-idpxyz-link"
+            className="ml-1 h-6 px-1.5 type-body text-idpxyz-link"
             onClick={() => onShowPayable(payableLabel(decision.payable!))}
           >
             在「审核应付」里看
           </Button>
         </span>
       ) : null}
-      {decision.basis ? <span className="basis-full text-[11px] leading-4 text-idpxyz-breadcrumb">依据：{decision.basis}</span> : null}
+      {decision.basis ? <span className="basis-full type-caption leading-4 text-idpxyz-breadcrumb">依据：{decision.basis}</span> : null}
     </li>
   );
 }
@@ -173,7 +173,7 @@ function LineCard({
           <StatusPill label={disposition.label} tone={disposition.tone} />
         </span>
       </div>
-      <p className="mt-1 text-[11px] leading-4 text-idpxyz-breadcrumb">
+      <p className="mt-1 type-caption leading-4 text-idpxyz-breadcrumb">
         费用项目 <span className="font-mono">{line.feeItem}</span>
         {line.expectedVersion
           ? ` · 对的预期成本 ${formatMoney(line.expectedAmount, currency)}${varianceWords(line.varianceAmount, currency)}`
@@ -182,7 +182,7 @@ function LineCard({
             : ''}
         {` · 最多能通过 ${formatMoney(line.matchedAmount, currency)}`}
       </p>
-      {line.basis ? <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">对账依据：{line.basis}</p> : null}
+      {line.basis ? <p className="type-caption leading-4 text-idpxyz-breadcrumb">对账依据：{line.basis}</p> : null}
       {line.decisions.length > 0 ? (
         <>
           <ul className="mt-1.5 space-y-1">
@@ -190,18 +190,18 @@ function LineCard({
               <DecisionRow key={decision.decision} decision={decision} currency={currency} onShowPayable={onShowPayable} />
             ))}
           </ul>
-          <p className="mt-1 text-[11px] text-idpxyz-breadcrumb">{tallyWords(line, currency)}</p>
+          <p className="mt-1 type-caption text-idpxyz-breadcrumb">{tallyWords(line, currency)}</p>
         </>
       ) : null}
       {answers.map((answer, index) => (
-        <p key={index} role="status" className="mt-1.5 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+        <p key={index} role="status" className="mt-1.5 rounded border border-idpxyz-border px-2 py-1.5 type-body leading-5 text-idpxyz-text">
           {answer}
         </p>
       ))}
       {(grants.audit || grants.dispute) && form === null ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {disposition.auditable ? (
-            <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => openForm({ kind: 'audit' })}>
+            <Button type="button" size="sm" variant="outline" className="h-7 type-body" onClick={() => openForm({ kind: 'audit' })}>
               审核这一行
             </Button>
           ) : null}
@@ -211,7 +211,7 @@ function LineCard({
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 text-[12px]"
+              className="h-7 type-body"
               onClick={() => openForm({ kind: 'reaudit', dispute: entry.dispute.decision })}
             >
               核实后再审争议中的 {formatMoney(String(totalOf(entry.open)), currency)}
@@ -326,7 +326,7 @@ export function SupplierBillPanel({
         </p>
       ) : null}
       <section className="space-y-1.5">
-        <h3 className="text-[12px] font-bold text-idpxyz-textBright">各行与去向</h3>
+        <h3 className="type-body font-bold text-idpxyz-textBright">各行与去向</h3>
         {lines === null ? (
           <p>正在读这张账单的各行…</p>
         ) : lines.kind !== 'outcome' ? (
@@ -350,7 +350,7 @@ export function SupplierBillPanel({
         )}
       </section>
       <section className="space-y-1.5">
-        <h3 className="text-[12px] font-bold text-idpxyz-textBright">审核这张账单</h3>
+        <h3 className="type-body font-bold text-idpxyz-textBright">审核这张账单</h3>
         {grants.audit || grants.dispute ? (
           <p>
             逐行审核，一行可以拆成几段分别给通过、争议或拒绝：通过的那一段形成审核应付、交回{payableNumberName}，一行通过的不超过它能通过的

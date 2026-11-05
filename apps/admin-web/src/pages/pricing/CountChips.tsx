@@ -35,7 +35,7 @@ export function CountChips({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(id === null || active ? null : id)}
-            className={`whitespace-nowrap rounded px-2 py-1 text-[12px] transition-colors ${
+            className={`whitespace-nowrap rounded px-2 py-1 type-body transition-colors ${
               active ? 'bg-idpxyz-accent text-white' : 'text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text'
             }`}
           >

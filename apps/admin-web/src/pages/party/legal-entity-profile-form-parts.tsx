@@ -60,25 +60,25 @@ export function ChangePreview({
   return (
     <div className="flex flex-col gap-3" aria-label="保存前差异预览">
       <div>
-        <h3 className="text-[14px] font-semibold text-idpxyz-textBright">这次改了什么</h3>
-        <p className="mt-1 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <h3 className="type-section font-semibold text-idpxyz-textBright">这次改了什么</h3>
+        <p className="mt-1 type-body leading-5 text-idpxyz-breadcrumb">
           与当前生效的{profileRevisionLabel(current.revision)}相比。确认后登记为第 {nextRevision.trim() || '?'} 版，{effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；
           版本连不连续、国家对不对得上由服务端判。
           {basis !== undefined ? <>来源单据：<span className="font-mono text-idpxyz-text">{basis}</span>。</> : null}
         </p>
         {comparison.contactMatchingLimited ? (
-          <p role="note" className="mt-1 text-[12px] leading-5 text-idpxyz-breadcrumb">
+          <p role="note" className="mt-1 type-body leading-5 text-idpxyz-breadcrumb">
             资料里没有联系人的稳定标识：无法唯一对应的联系人按移除和新增列出，不推测为同一人。
           </p>
         ) : null}
       </div>
       {changed.length === 0 ? (
-        <p role="status" className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] text-idpxyz-text">
+        <p role="status" className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body text-idpxyz-text">
           资料内容与{profileRevisionLabel(current.revision)}完全相同。确认后仍会登记为新的一版，只是来源单据与生效时间换成这一次的。
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-idpxyz-border">
-          <table className="w-full min-w-[32rem] text-left text-[12px]">
+          <table className="w-full min-w-[32rem] text-left type-body">
             <thead className="bg-idpxyz-sidebar text-idpxyz-breadcrumb">
               <tr>
                 <th className="px-3 py-2 font-medium">项目</th>

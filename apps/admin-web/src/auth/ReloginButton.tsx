@@ -4,10 +4,10 @@ import { beginLogin, currentLocation } from './oidc';
 const sizeClass = {
   // 页级状态卡里那一颗，与错误态的「重试」同形。
   block:
-    'inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover',
+    'inline-flex items-center gap-1.5 px-3 py-1.5 type-body rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover',
   // 接在一句说明末尾的那一颗。
   inline:
-    'ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover align-middle',
+    'ml-2 inline-flex items-center gap-1 px-2 py-0.5 type-caption rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover align-middle',
 };
 
 /**

@@ -168,8 +168,8 @@ export function CancelParcelPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[720px] mx-auto px-6 py-6 space-y-4">
         <header>
-          <h1 className="text-[18px] font-bold text-idpxyz-textBright">取消运单</h1>
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-1">
+          <h1 className="type-title font-bold text-idpxyz-textBright">取消运单</h1>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-1">
             客户要停一票已受理的运单时,在这里按包裹逐件申请取消。货已经收寄的包裹取消不了,会转到「货物处置」由运营决定去向;
             还没受理的运单要停请走「提交与撤回」。
           </p>
@@ -233,12 +233,12 @@ export function CancelParcelPage() {
             type="button"
             disabled={pending}
             onClick={() => void requestCancel()}
-            className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
+            className="rounded border border-idpxyz-accent px-4 py-2 type-value font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
             {pending ? pendingText('取消') : '取消列出的包裹'}
           </button>
           {Object.keys(errors).length > 0 ? (
-            <span className="text-[12px] text-idpxyz-textBright">还有没填好的地方,已在字段旁标出。</span>
+            <span className="type-body text-idpxyz-textBright">还有没填好的地方,已在字段旁标出。</span>
           ) : null}
         </div>
 
@@ -246,7 +246,7 @@ export function CancelParcelPage() {
           <div className="space-y-3">
             {entries.map(({ parcelId, result }) => (
               <div key={parcelId} className="space-y-1">
-                <div className="text-[12px] text-idpxyz-textMuted">
+                <div className="type-body text-idpxyz-textMuted">
                   包裹 <ParcelNo parcelId={parcelId} className="text-idpxyz-text" />
                 </div>
                 <ResultPanel
@@ -257,7 +257,7 @@ export function CancelParcelPage() {
               </div>
             ))}
             {pending ? (
-              <div className="rounded border border-idpxyz-border p-4 text-[13px] text-idpxyz-textMuted">正在逐件提交…</div>
+              <div className="rounded border border-idpxyz-border p-4 type-value text-idpxyz-textMuted">正在逐件提交…</div>
             ) : null}
           </div>
         ) : null}
@@ -289,7 +289,7 @@ function CancellationOutcomeCard({ body, status }: { body: CancellationResponseB
   const pendingView = body.pendingReason ? cancellationPendingReasonViews[body.pendingReason] : undefined;
   return (
     <NoticeCard title={view.label} titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
+      <p className="type-body leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
 
       <dl className="mt-3 space-y-1">
         {body.decidedAt ? <DetailRow label="决定时间" value={formatInstant(body.decidedAt)} /> : null}
@@ -299,13 +299,13 @@ function CancellationOutcomeCard({ body, status }: { body: CancellationResponseB
       {pendingView ? (
         // 未配置态用正文色而非沉底色:它是要人去登记参数的行动项,不是可忽略的细节;
         // 但仍不是错误色——未配置不是故障,也不是业务否定。
-        <p className={`text-[11px] leading-4 mt-2 ${pendingView.unconfigured ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+        <p className={`type-caption leading-4 mt-2 ${pendingView.unconfigured ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
           {pendingView.note}
         </p>
       ) : null}
 
       {body.handoffReference ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">取消已经成立,只是通知还没发出去;再提交一次只会重发通知,不会形成第二份取消。</p>
+        <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">取消已经成立,只是通知还没发出去;再提交一次只会重发通知,不会形成第二份取消。</p>
       ) : null}
 
       <TechnicalDetails

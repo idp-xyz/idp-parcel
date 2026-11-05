@@ -42,7 +42,7 @@ import { useRegisterList } from './register-list';
 // useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头每次渲染都是新键、永远读不完。
 const listSettlementPolicies = commercialPolicyLoaders.SETTLEMENT_POLICY;
 
-const note = 'text-[12px] text-idpxyz-breadcrumb';
+const note = 'type-body text-idpxyz-breadcrumb';
 
 function SectionBody<Row>({
   state,
@@ -132,7 +132,7 @@ function Section<Row>({
   return (
     <section className="py-3 border-b border-idpxyz-border last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[12px] font-medium text-idpxyz-text">
+        <h3 className="type-body font-medium text-idpxyz-text">
           {title}
           <span className="ml-1.5 font-mono text-idpxyz-breadcrumb">{countText(state)}</span>
         </h3>
@@ -156,7 +156,7 @@ function Section<Row>({
 }
 
 function RowCard({ children }: { children: ReactNode }) {
-  return <li className="rounded border border-idpxyz-border px-2.5 py-2 text-[12px] text-idpxyz-text">{children}</li>;
+  return <li className="rounded border border-idpxyz-border px-2.5 py-2 type-body text-idpxyz-text">{children}</li>;
 }
 
 function Line({ label, children, mono = false }: { label: string; children: ReactNode; mono?: boolean }) {
@@ -171,7 +171,7 @@ function Line({ label, children, mono = false }: { label: string; children: Reac
 function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   if (roles.length === 0) return null;
   return (
-    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
+    <p className="mt-1 flex flex-wrap items-center gap-1.5 type-body">
       <span className="text-idpxyz-breadcrumb">{label}</span>
       {roles.map((role) => (
         <span key={role} className="rounded border border-idpxyz-border px-1.5 py-0.5 text-idpxyz-text">
@@ -215,7 +215,7 @@ export function PartyOverviewSection({
   return (
     <div>
       <section className="py-3 border-b border-idpxyz-border">
-        <h3 className="text-[12px] font-medium text-idpxyz-text">它对我们是什么</h3>
+        <h3 className="type-body font-medium text-idpxyz-text">它对我们是什么</h3>
         {roles === null ? (
           <p className={`mt-1 ${note}`}>合作关系还没读到，角色见下方「合作关系」一段。</p>
         ) : roles.asHolder.length === 0 && roles.asCounterparty.length === 0 ? (
@@ -240,7 +240,7 @@ export function PartyOverviewSection({
         state={relationshipState}
         action={
           relationshipRegistration && !relationshipRegistration.active ? (
-            <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={relationshipRegistration.onOpen}>
+            <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={relationshipRegistration.onOpen}>
               登记合作关系
             </Button>
           ) : undefined

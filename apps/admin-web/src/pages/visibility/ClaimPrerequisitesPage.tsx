@@ -77,14 +77,14 @@ function technicalColumn<Row>(rowsOf: (row: Row) => { label: string; value: stri
 const approverColumn = <Row extends { approvedBy: string }>(): ListColumn<Row> => ({
   id: 'approved-by',
   header: '批准人',
-  className: 'whitespace-nowrap font-mono text-xs',
+  className: 'whitespace-nowrap font-mono type-body leading-4',
   render: (row) => <span title={row.approvedBy}>{shortPrincipalRef(row.approvedBy)}</span>,
 });
 
 // —— 可索赔范围签 ——
 
 const eligibilityColumns: ListColumn<ClaimEligibilityRecord>[] = [
-  { id: 'contract', header: objectNouns.contract, className: 'font-mono text-xs text-idpxyz-textBright', render: (row) => row.contract },
+  { id: 'contract', header: objectNouns.contract, className: 'font-mono type-body leading-4 text-idpxyz-textBright', render: (row) => row.contract },
   { id: 'kinds', header: '可索赔的类型', render: (row) => claimKindsText(row.coveredKinds) },
   approverColumn<ClaimEligibilityRecord>(),
   technicalColumn((row) => [
@@ -140,7 +140,7 @@ function authorizationColumns(names: PartyNames): ListColumn<ClaimAuthorizationR
         row.applicants.length === 0 ? (
           <span className="text-idpxyz-textBright">{applicantsText(row.applicants)}</span>
         ) : (
-          <span className="font-mono text-xs">{applicantsText(row.applicants)}</span>
+          <span className="font-mono type-body leading-4">{applicantsText(row.applicants)}</span>
         ),
     },
     approverColumn<ClaimAuthorizationRecord>(),

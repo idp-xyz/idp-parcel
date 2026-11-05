@@ -35,8 +35,8 @@ export function ProfileReadoutCard({
     <section className="legal-entity-readout-card overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-bg">
       <div className="flex items-center gap-2 border-b border-idpxyz-border bg-idpxyz-editor px-4 py-2">
         <Icon className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-        <h4 className="text-[14px] font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
-        {extra ? <span className="text-[13px] leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
+        <h4 className="type-section font-semibold leading-5 text-idpxyz-textBright">{title}</h4>
+        {extra ? <span className="type-body leading-5 text-idpxyz-breadcrumb">{extra}</span> : null}
         {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
       <div className="px-4 py-3">{children}</div>
@@ -71,10 +71,10 @@ export function ProfileReadoutField({
   const absent = value === undefined || value === null || value === '' || value === '未配置';
   return (
     <div className={`legal-entity-readout-field ${wide ? 'legal-entity-readout-field-wide' : ''}`}>
-      <dt className="text-[13px] leading-6 text-idpxyz-breadcrumb" title={title}>
+      <dt className="type-body leading-6 text-idpxyz-breadcrumb" title={title}>
         {label}
       </dt>
-      <dd className={`min-w-0 leading-6 ${mono ? 'font-mono text-[13px]' : 'text-[14px]'} ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
+      <dd className={`min-w-0 leading-6 ${mono ? 'font-mono type-body' : 'type-value'} ${absent ? 'text-idpxyz-breadcrumb' : 'text-idpxyz-text'} ${emphasized && !absent ? 'font-medium text-idpxyz-textBright' : ''}`}>
         {absent ? absentValueMark : value}
       </dd>
     </div>
@@ -128,8 +128,8 @@ export function ProfileReadoutAddresses({
     <dl className="legal-entity-readout-addresses">
       {items.map((item) => (
         <div key={item.key} className="min-w-0">
-          <dt className="text-[13px] leading-6 text-idpxyz-breadcrumb">{item.label}</dt>
-          <dd className={`min-w-0 text-[14px] leading-6 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
+          <dt className="type-body leading-6 text-idpxyz-breadcrumb">{item.label}</dt>
+          <dd className={`min-w-0 type-value leading-6 ${item.address ? 'text-idpxyz-text' : 'text-idpxyz-breadcrumb'}`}>
             {item.address ? <ProfileReadoutAddress address={item.address} name={item.label} /> : absentValueMark}
           </dd>
         </div>
@@ -173,10 +173,10 @@ export function ProfileReadoutPairs({
     <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1">
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <dt className={`text-[13px] leading-6 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
+          <dt className={`type-body leading-6 text-idpxyz-breadcrumb ${headNowrap ? 'whitespace-nowrap' : ''}`} title={row.headTitle}>
             {row.head}
           </dt>
-          <dd className={`min-w-0 leading-6 text-idpxyz-text ${mono ? 'select-text font-mono text-[13px]' : 'text-[14px]'}`}>{row.value}</dd>
+          <dd className={`min-w-0 leading-6 text-idpxyz-text ${mono ? 'select-text font-mono type-body' : 'type-value'}`}>{row.value}</dd>
         </Fragment>
       ))}
     </dl>

@@ -56,7 +56,7 @@ export function VersionObjectPage<Row>({
       headerActions={
         <>
           {actions}
-          <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
+          <Button variant="outline" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={onBack}>
             在目录中查看
           </Button>
         </>

@@ -43,9 +43,9 @@ function parcelResultCell(row: LabelTransactionRow) {
         <StatusPill label={row.parcelAccepted ? '已受理' : '未受理'} tone={row.parcelAccepted ? 'good' : 'bad'} />
         {row.parcelAccepted && row.parcelIdentifier ? <CodeRef value={row.parcelIdentifier} title="渠道面单号" /> : null}
       </span>
-      {!row.parcelAccepted && row.parcelResultReason ? <span className="text-[11px] text-idpxyz-textMuted">{row.parcelResultReason}</span> : null}
+      {!row.parcelAccepted && row.parcelResultReason ? <span className="type-caption text-idpxyz-textMuted">{row.parcelResultReason}</span> : null}
       {/* 后续动作与原结果并列而不改写它:渠道作废与「当初有没有被受理」是两件事。 */}
-      {followUps ? <span className="text-[11px] text-idpxyz-textMuted">之后:{followUps}</span> : null}
+      {followUps ? <span className="type-caption text-idpxyz-textMuted">之后:{followUps}</span> : null}
     </div>
   );
 }
@@ -62,7 +62,7 @@ function continuedAttemptCell(row: LabelTransactionRow) {
   return (
     <div className="flex flex-col items-center gap-0.5">
       <StatusPill label="可以再试" tone="info" />
-      <span className="text-[11px] text-idpxyz-textMuted">{row.continuedAttemptDecided ? '关过又重开' : '没有人关过'}</span>
+      <span className="type-caption text-idpxyz-textMuted">{row.continuedAttemptDecided ? '关过又重开' : '没有人关过'}</span>
     </div>
   );
 }
@@ -82,7 +82,7 @@ const columns: ListColumn<LabelTransactionRow>[] = [
       <div className="flex flex-col gap-0.5">
         <CodeRef value={row.transactionId} title="面单交易" />
         {row.priorTransactionId && (
-          <span className="text-[11px] text-idpxyz-textMuted">
+          <span className="type-caption text-idpxyz-textMuted">
             {labelFor(row.priorLinkKind ?? '')}自 <span className="font-mono">{row.priorTransactionId}</span>
           </span>
         )}
@@ -103,7 +103,7 @@ const columns: ListColumn<LabelTransactionRow>[] = [
     render: (row) => (row.finalized ? <StatusPill label="已定案" tone="muted" /> : <StatusPill label="待确认" tone="warn" />),
   },
   { id: 'continue-attempt', header: '还能再试', align: 'center', className: 'w-[120px]', render: (row) => continuedAttemptCell(row) },
-  { id: 'business-time', header: '时间', className: 'w-[170px]', render: (row) => <span className="text-[12px]">{formatInstant(row.establishedAt)}</span> },
+  { id: 'business-time', header: '时间', className: 'w-[170px]', render: (row) => <span className="type-body">{formatInstant(row.establishedAt)}</span> },
 ];
 
 export function LabelTransactionsPage() {

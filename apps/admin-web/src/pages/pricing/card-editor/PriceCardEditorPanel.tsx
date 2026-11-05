@@ -62,7 +62,7 @@ function signatureOf(generated: GeneratedWorkbook | null): string {
 export function PriceCardEditorPanel({ onOpenDrafts, onDraftSaved }: { onOpenDrafts: () => void; onDraftSaved: () => void }) {
   const { spec: specAnswer, env, reload } = useEditorEnv();
   if (specAnswer === null) {
-    return <div className="flex-1 p-6 text-[13px] text-idpxyz-breadcrumb">正在读取价卡填写规则…</div>;
+    return <div className="flex-1 p-6 type-value text-idpxyz-breadcrumb">正在读取价卡填写规则…</div>;
   }
   if (specAnswer.kind !== 'outcome') {
     return (
@@ -73,9 +73,9 @@ export function PriceCardEditorPanel({ onOpenDrafts, onDraftSaved }: { onOpenDra
   }
   if (!knownTemplateVersions.includes(specAnswer.body.templateVersion)) {
     return (
-      <div className="flex-1 overflow-auto p-6 text-[13px] text-idpxyz-text">
+      <div className="flex-1 overflow-auto p-6 type-value text-idpxyz-text">
         <p className="font-medium text-idpxyz-textBright">价卡填写规则已经升级到 {specAnswer.body.templateVersion}</p>
-        <p className="mt-1 text-[12px] text-idpxyz-breadcrumb">
+        <p className="mt-1 type-body text-idpxyz-breadcrumb">
           这个页面按旧版规则设计，继续提交可能漏掉新增的内容。请刷新页面；仍然看到这条提示，请先用「导入价卡」，并联系管理员升级页面。
         </p>
       </div>
@@ -287,8 +287,8 @@ function Editor({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-idpxyz-border px-4 py-2.5">
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-idpxyz-textBright">新建价卡</h2>
-            <p className="text-[12px] text-idpxyz-breadcrumb">
+            <h2 className="type-title font-semibold text-idpxyz-textBright">新建价卡</h2>
+            <p className="type-body text-idpxyz-breadcrumb">
               按步骤填写，预览通过后存为草稿。要改已有的价卡，请新建一个版本，或用「导入价卡」上传 Excel。
             </p>
           </div>
@@ -303,7 +303,7 @@ function Editor({
         </div>
 
         {sampleLoaded ? (
-          <p role="note" className="shrink-0 border-b border-idpxyz-border bg-idpxyz-sidebar px-4 py-1.5 text-[12px] text-idpxyz-text">
+          <p role="note" className="shrink-0 border-b border-idpxyz-border bg-idpxyz-sidebar px-4 py-1.5 type-body text-idpxyz-text">
             {sampleNote}逐步看一遍就知道每一格怎么填；要存成自己的价卡，请把标识和数值都改成真实的。
           </p>
         ) : null}
@@ -324,12 +324,12 @@ function Editor({
                       aria-current={current ? 'step' : undefined}
                       disabled={!reachable}
                       onClick={() => go(id)}
-                      className={`flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-idpxyz-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`flex w-full items-center gap-2 rounded px-2.5 py-2 text-left type-value focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-idpxyz-accent disabled:cursor-not-allowed disabled:opacity-50 ${
                         current ? 'bg-idpxyz-hover font-medium text-idpxyz-textBright' : 'text-idpxyz-text hover:bg-idpxyz-hover'
                       }`}
                     >
                       <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full type-caption ${
                           issues > 0
                             ? 'bg-[color:var(--ds-status-danger-fg)] text-white'
                             : current
@@ -354,12 +354,12 @@ function Editor({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
               <div className="mb-4">
-                <h3 className="text-[15px] font-semibold text-idpxyz-textBright">
+                <h3 className="type-section font-semibold text-idpxyz-textBright">
                   {index + 1}. {stepTitles[step]}
                 </h3>
-                <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">{stepIntro[step]}</p>
+                <p className="mt-0.5 type-body text-idpxyz-breadcrumb">{stepIntro[step]}</p>
                 {(backendCounts[step] ?? 0) > 0 ? (
-                  <p role="alert" className="mt-2 text-[12px] text-[color:var(--ds-status-danger-fg)]">
+                  <p role="alert" className="mt-2 type-body text-[color:var(--ds-status-danger-fg)]">
                     上次预览在这一步发现 {backendCounts[step]} 处要改（已标红）。改完回到最后一步重新预览。
                   </p>
                 ) : null}
@@ -371,7 +371,7 @@ function Editor({
                 上一步
               </Button>
               {step === 'preview' ? (
-                <span className="text-[12px] text-idpxyz-breadcrumb">
+                <span className="type-body text-idpxyz-breadcrumb">
                   {draftSaved ? '草稿已保存' : fresh && preview?.answer.kind === 'outcome' && preview.answer.body.outcome === 'VALIDATED' ? '预览通过，可以存为草稿' : ''}
                 </span>
               ) : (

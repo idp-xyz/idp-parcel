@@ -37,9 +37,9 @@ export function IdentityDispositionPanel({ units, onLanded }: { units: IdentityR
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {rows.length === 0 ? (
-          <p className="text-xs text-idpxyz-textMuted">当前页没有待识别过的实物。</p>
+          <p className="type-body leading-4 text-idpxyz-textMuted">当前页没有待识别过的实物。</p>
         ) : (
-          <table className="w-full text-xs">
+          <table className="w-full type-body leading-4">
             <thead>
               <tr className="text-left text-idpxyz-textMuted">
                 <th className="py-1 pr-2 font-normal">作业实物</th>
@@ -144,11 +144,11 @@ function DispositionForm({
 
   return (
     <div className="mt-2 flex flex-col gap-2 border-t border-idpxyz-border pt-2">
-      <p className="text-xs text-idpxyz-textMuted">
+      <p className="type-body leading-4 text-idpxyz-textMuted">
         处置 <span className="font-mono">{draft.unit}</span>：指定处置候选中的一件，或确认都不是。这件实物每条链各追加一版处置版，原判断与
         冲突版照留；操作者身份由接入渠道给，本表单不收也不送。
       </p>
-      <label className="block text-xs">
+      <label className="block type-body leading-4">
         <span className="text-idpxyz-textMuted">所处置的版本（复核页上看到的当前有效版本）</span>
         <select
           className="ml-2 font-mono"
@@ -162,7 +162,7 @@ function DispositionForm({
           ))}
         </select>
       </label>
-      <fieldset className="text-xs">
+      <fieldset className="type-body leading-4">
         <legend className="text-idpxyz-textMuted">结果</legend>
         {candidates.map((candidate) => (
           <label key={candidate} className="mr-4 inline-flex items-center gap-1 font-mono">
@@ -176,16 +176,16 @@ function DispositionForm({
         </label>
       </fieldset>
       <label className="block">
-        <span className="text-xs text-idpxyz-textMuted">处置依据引用 *</span>
+        <span className="type-body leading-4 text-idpxyz-textMuted">处置依据引用 *</span>
         <Input
           value={draft.basis}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="复核记录、工单或核实凭证的引用，逐字保存、不判真伪"
           onChange={(event) => onChange({ ...draft, basis: event.target.value })}
         />
       </label>
       {draft.coDisposedUnits.length > 0 ? (
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           一并确认不是 {draft.parcel}：
           {draft.coDisposedUnits.map((co) => (
             <span key={co.unit} className="ml-1 font-mono">
@@ -221,7 +221,7 @@ function DispositionAnswerNote({
   parcel: string;
   onCoDispose: (units: CoDisposedUnit[]) => void;
 }) {
-  const frame = 'text-xs';
+  const frame = 'type-body leading-4';
   switch (state.kind) {
     case 'idle':
     case 'submitting':

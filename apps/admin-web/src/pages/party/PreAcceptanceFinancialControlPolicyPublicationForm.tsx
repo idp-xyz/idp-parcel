@@ -100,8 +100,8 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
       {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <h3 className="type-value font-medium text-idpxyz-text">版本信息</h3>
+            <p className="type-caption text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
               本身。策略正文没有自己的范围与区间：它只说控制怎么做，用在哪个费用范围由客户合同按范围指定。
             </p>
@@ -110,7 +110,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
                 <Input
                   value={draft.objectId}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ objectId: event.target.value })}
                 />
               </Field>
@@ -118,7 +118,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
                 <Input
                   value={draft.version}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ version: event.target.value })}
                 />
               </Field>
@@ -126,7 +126,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
                 <Input
                   value={draft.scope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ scope: event.target.value })}
                 />
               </Field>
@@ -155,8 +155,8 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">策略正文（这一版的条款内容）</h3>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <h3 className="type-value font-medium text-idpxyz-text">策略正文（这一版的条款内容）</h3>
+            <p className="type-caption text-idpxyz-textMuted">
               先选共同通过条件，再填控制项表：每行说在哪个费用范围上做哪一种控制、判断顺序排第几、失败了怎么处置、失败或补偿的责任归谁。至少要有一项；判断顺序从 1 起，同一版里不能重复；同一范围上同一种控制只能有一行。
               <strong>「明确不做控制」不在这里设</strong>：那是客户合同按范围的声明（要写明不适用的依据），控制种类里没有这一项。
             </p>
@@ -177,13 +177,13 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
             </div>
 
             <div className="flex items-center justify-between">
-              <h4 className="text-[12px] font-medium text-idpxyz-text">控制项（{draft.controls.length} 行）</h4>
+              <h4 className="type-body font-medium text-idpxyz-text">控制项（{draft.controls.length} 行）</h4>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withControlRowAdded)}>
                 加一行
               </Button>
             </div>
             {draft.controls.length === 0 ? (
-              <p className="text-[11px] text-idpxyz-textMuted">
+              <p className="type-caption text-idpxyz-textMuted">
                 还没有控制项。一版策略至少要有一项控制；「明确不做控制」由客户合同声明，不在这里。
               </p>
             ) : null}
@@ -202,7 +202,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
               />
             ))}
             {hints.length > 0 ? (
-              <ul className="text-[11px] text-idpxyz-textMuted list-disc ml-4">
+              <ul className="type-caption text-idpxyz-textMuted list-disc ml-4">
                 {hints.map((hint) => (
                   <li key={hint}>提示：{hint}</li>
                 ))}
@@ -242,7 +242,7 @@ function ControlRow({
   return (
     <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-idpxyz-textMuted">第 {index + 1} 行</span>
+        <span className="type-body text-idpxyz-textMuted">第 {index + 1} 行</span>
         <Button variant="outline" disabled={locked} onClick={onRemove}>
           删这一行
         </Button>
@@ -265,7 +265,7 @@ function ControlRow({
           <Input
             value={row.chargeScope}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="费用范围（系统不核对是否已登记）"
             onChange={(event) => onChange({ chargeScope: event.target.value })}
           />
@@ -274,7 +274,7 @@ function ControlRow({
           <Input
             value={row.order}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="从 1 起的整数，同一版里不重复"
             onChange={(event) => onChange({ order: event.target.value })}
           />
@@ -296,14 +296,14 @@ function ControlRow({
           <Input
             value={row.responsibility}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="参与方、条款或角色"
             onChange={(event) => onChange({ responsibility: event.target.value })}
           />
         </Field>
       </div>
       {rowLines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger">
+        <span key={line} className="block type-caption text-idpxyz-danger">
           <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}

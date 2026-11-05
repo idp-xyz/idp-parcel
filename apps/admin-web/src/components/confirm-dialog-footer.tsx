@@ -12,13 +12,13 @@ export function confirmDialogFooter(ctx: ConfirmDialogRenderFooterContext): Reac
   const confirmClass = ctx.confirmVariant === 'danger' ? dangerActionClass : primaryActionClass;
   return (
     <>
-      <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={ctx.onCancel} disabled={ctx.pending}>
+      <Button variant="outline" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={ctx.onCancel} disabled={ctx.pending}>
         {ctx.cancelLabel}
       </Button>
       <Button
         variant="default"
         size="sm"
-        className={`${confirmClass} text-[12px]`}
+        className={`${confirmClass} type-body`}
         onClick={ctx.onConfirm}
         disabled={ctx.pending}
         aria-busy={ctx.pending}

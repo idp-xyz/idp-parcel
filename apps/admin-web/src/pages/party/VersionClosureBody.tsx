@@ -96,33 +96,33 @@ export function ClosureBody({
     <>
       <div className="border-b border-idpxyz-border px-5 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-idpxyz-textMuted">收尾旧版</span>
+          <span className="type-value text-idpxyz-textMuted">收尾旧版</span>
           <span className="font-mono font-medium text-idpxyz-text">{target.objectId}</span>
-          <span className="font-mono text-xs text-idpxyz-textMuted">{target.version}</span>
+          <span className="font-mono type-body leading-4 text-idpxyz-textMuted">{target.version}</span>
           {old?.status ? statusBadge(commercialStatusLabels, old.status) : null}
         </div>
-        <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">
+        <p className="mt-0.5 type-body text-idpxyz-textMuted">
           {target.kindLabel}
           {old ? ` · 生效区间 ${describeRange(old)}` : ''}
         </p>
       </div>
       <div className="px-5 py-4">
         <div className="flex flex-col gap-3">
-          <p className="text-[12px] text-idpxyz-textMuted">
+          <p className="type-body text-idpxyz-textMuted">
             {'同一对象发了新版本后，旧版不会自己结束：两版区间重叠的部分，解析会答「适用冲突」，直到旧版被收尾。' +
               '收尾让旧版把位置让给指名的后继，分两种：后继晚于旧版起点的，旧版截止在后继生效的那一刻；' +
               '两版同一起点的，旧版整版退役。'}
           </p>
           {answer === null ? (
-            <p className="text-[12px] text-idpxyz-textMuted">正在读取这个对象的各个版本…</p>
+            <p className="type-body text-idpxyz-textMuted">正在读取这个对象的各个版本…</p>
           ) : all === null ? (
-            <p className="text-[12px] text-idpxyz-danger">
+            <p className="type-body text-idpxyz-danger">
               没能读到册面，无法核对旧版与后继，请稍后重试。这不是收尾被拒绝，什么都没有写。
             </p>
           ) : oldProblem !== null ? (
-            <p className="text-[12px] text-idpxyz-danger">{oldProblem}</p>
+            <p className="type-body text-idpxyz-danger">{oldProblem}</p>
           ) : successors.length === 0 ? (
-            <p className="text-[12px] text-idpxyz-textMuted">
+            <p className="type-body text-idpxyz-textMuted">
               {'现在没有可以让这一版让位的后继。后继必须是同一对象、同一范围里「在用」、生效起点不早于这一版的另一个版本；' +
                 '需要的话先到发布页签发布新版本。'}
             </p>
@@ -192,7 +192,7 @@ function ClosureForm({
         </select>
       </Field>
       {successor !== null && mode !== null ? (
-        <p className="text-[12px] text-idpxyz-text">
+        <p className="type-body text-idpxyz-text">
           {mode === 'cut'
             ? `${successor.version} 晚于 ${old.version} 起点：${old.version} 将截止在 ${formatInstant(successor.effectiveStartsAt)}，此前照旧可选，此后不再参选。`
             : `${successor.version} 与 ${old.version} 同一起点：${old.version} 将整版退役，此后不再参与新的选择。`}
@@ -202,7 +202,7 @@ function ClosureForm({
         <Input
           value={draft.reference}
           readOnly={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="做出这个决定的依据，例如决议或工单编号"
           onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
         />
@@ -221,7 +221,7 @@ function ClosureForm({
       ) : null}
       <div className="flex items-center gap-2">
         {finished ? (
-          <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} onClick={onClose}>
+          <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} onClick={onClose}>
             完成
           </Button>
         ) : (
@@ -229,7 +229,7 @@ function ClosureForm({
             <Button
               variant="default"
               size="sm"
-              className={`${primaryActionClass} text-[12px]`}
+              className={`${primaryActionClass} type-body`}
               disabled={locked || mode === null || closureIncomplete(draft, mode) || Object.keys(problems).length > 0}
               onClick={() => setConfirming(true)}
             >
@@ -238,7 +238,7 @@ function ClosureForm({
             <Button
               variant="outline"
               size="sm"
-              className="text-[12px] text-idpxyz-breadcrumb"
+              className="type-body text-idpxyz-breadcrumb"
               disabled={locked}
               onClick={onClose}
             >
@@ -249,7 +249,7 @@ function ClosureForm({
       </div>
 
       {outcome !== null ? (
-        <div className={`text-[12px] ${outcome.done ? 'text-idpxyz-text' : 'text-idpxyz-danger'}`} role="status">
+        <div className={`type-body ${outcome.done ? 'text-idpxyz-text' : 'text-idpxyz-danger'}`} role="status">
           <p>{outcome.text}</p>
           {outcome.cause ? (
             <p className="mt-1">
@@ -269,7 +269,7 @@ function ClosureForm({
           title={closureConfirmTitle(mode, target)}
           message={closureConfirmMessage(mode)}
           extraContent={
-            <ul className="text-[12px] text-idpxyz-text flex flex-col gap-1">
+            <ul className="type-body text-idpxyz-text flex flex-col gap-1">
               {closureConfirmLines(target, old, successor, mode, draft, timeZone).map((line) => (
                 <li key={line}>{line}</li>
               ))}

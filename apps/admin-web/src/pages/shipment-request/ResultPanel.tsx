@@ -20,7 +20,7 @@ export function ResultPanel<Body>({
 }) {
   if (pending) {
     return (
-      <div className="rounded border border-idpxyz-border p-4 text-[13px] text-idpxyz-textMuted">
+      <div className="rounded border border-idpxyz-border p-4 type-value text-idpxyz-textMuted">
         正在提交…
       </div>
     );
@@ -46,7 +46,7 @@ export function ResultPanel<Body>({
       // 呈现为可改正的陈述,不是系统故障。
       return (
         <NoticeCard title="没有受理">
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{problemMessage(result.code)}</p>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-2">{problemMessage(result.code)}</p>
           <TechnicalDetails rows={answerTechnicalRows(result)} />
         </NoticeCard>
       );
@@ -54,7 +54,7 @@ export function ResultPanel<Body>({
     case 'noAnswer':
       return (
         <NoticeCard title="这次没有处理成功">
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-2">
             {problemMessage(result.code)} 这次没有形成任何业务决定,重试是安全的,不会重复建单。
           </p>
           <TechnicalDetails rows={answerTechnicalRows(result)} />
@@ -64,7 +64,7 @@ export function ResultPanel<Body>({
     case 'transport':
       return (
         <NoticeCard title="没有连上服务器">
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">请求没有送出去。请检查网络后再试;一直连不上请联系管理员。</p>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-2">请求没有送出去。请检查网络后再试;一直连不上请联系管理员。</p>
           <TechnicalDetails rows={answerTechnicalRows(result)} />
         </NoticeCard>
       );

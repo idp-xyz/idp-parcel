@@ -59,7 +59,7 @@ const columnsOf = (names: PlaceNameIndex): WorkbenchColumn<NetworkVersionRecord>
     render: (row) => (
       <div className="min-w-0">
         <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.code ?? '—'}</div>
-        <div className="text-[11px] text-idpxyz-breadcrumb">{versionWord(row.version)}</div>
+        <div className="type-caption text-idpxyz-breadcrumb">{versionWord(row.version)}</div>
       </div>
     ),
   },

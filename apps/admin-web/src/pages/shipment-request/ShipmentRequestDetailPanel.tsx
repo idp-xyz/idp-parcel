@@ -36,19 +36,19 @@ export function ShipmentRequestDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright" title={shipmentNo}>
+              <h2 className="truncate font-mono type-title font-semibold text-idpxyz-textBright" title={shipmentNo}>
                 {shipmentNo}
               </h2>
               <StatusPill code={row.state} />
             </div>
-            <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
+            <p className="mt-0.5 type-body text-idpxyz-breadcrumb">
               <span className={customer.isCode ? 'font-mono' : 'text-idpxyz-text'}>{customer.text}</span>
               {' · '}
               {objectNouns.customerReference} <span className="font-mono">{row.sourceRequestKey}</span>
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={onOpenDetail}>
+            <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={onOpenDetail}>
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
               打开详情
             </Button>
@@ -77,7 +77,7 @@ export function ShipmentRequestDetailPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <p className="type-body leading-5 text-idpxyz-breadcrumb">
           包裹明细、受理进度与决定在「打开详情」里；这里只放一眼要看的。
         </p>
         <TechnicalDetails
@@ -100,8 +100,8 @@ export function ShipmentRequestDetailPanel({
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
-      <p className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
+      <p className="type-body text-idpxyz-breadcrumb">{label}</p>
+      <p className="mt-0.5 break-words type-body font-semibold leading-snug text-idpxyz-textBright">{children}</p>
     </div>
   );
 }

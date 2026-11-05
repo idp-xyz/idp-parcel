@@ -46,7 +46,7 @@ type Busy = 'approve' | 'publish' | null;
  */
 function UnreadableNote({ draft }: { draft: PublicationDraftRecord }) {
   return (
-    <section className="flex flex-col gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 text-xs text-idpxyz-textMuted">
+    <section className="flex flex-col gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 type-body leading-4 text-idpxyz-textMuted">
       <p className="font-medium text-idpxyz-text">{unreadableWord}，不能批准或发布</p>
       <p>
         这份改动的格式是当前版本的系统不认得的，或含系统已不再接受的内容，所以看不到内容；刷新或重试不会改变结果。
@@ -128,24 +128,24 @@ export function PendingDraftPanel({
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{target.objectId}</h2>
-            <span className="font-mono text-xs text-idpxyz-textMuted">{target.version}</span>
+            <h2 className="truncate font-mono type-title font-semibold text-idpxyz-textBright">{target.objectId}</h2>
+            <span className="font-mono type-body leading-4 text-idpxyz-textMuted">{target.version}</span>
             {draft ? <StatusPill code={draft.status} /> : null}
           </div>
           <Button className="shrink-0 text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
             <X className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
-        <p className="text-[12px] text-idpxyz-textMuted">{publicationKindLabels[target.kind] ?? target.kind}</p>
+        <p className="type-body text-idpxyz-textMuted">{publicationKindLabels[target.kind] ?? target.kind}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
         {readback === null ? (
-          <p className="py-3 text-[12px] text-idpxyz-textMuted">正在读取这份改动…</p>
+          <p className="py-3 type-body text-idpxyz-textMuted">正在读取这份改动…</p>
         ) : (
           <FlowAnswerNote answer={readback} what="读取这份改动">
             {(body) =>
               body.draft === undefined ? (
-                <p className="py-3 text-[12px] text-idpxyz-textMuted">
+                <p className="py-3 type-body text-idpxyz-textMuted">
                   找不到这份改动：它可能已被替换或从未存过。请回到列表刷新后再看。
                 </p>
               ) : (
@@ -155,14 +155,14 @@ export function PendingDraftPanel({
                   {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}
                   {publication ? <PublicationNote answer={publication} /> : null}
                   {body.draft.readable && body.draft.status === 'PENDING_APPROVAL' ? (
-                    <p className="text-xs text-idpxyz-textMuted">
+                    <p className="type-body leading-4 text-idpxyz-textMuted">
                       批准的是下面这份内容。如果在你批准之前有人改过它，这次不会批准，页面会换成改过的内容让你重新核对。
                     </p>
                   ) : null}
                   {body.draft.readable ? (
                     <section className="flex flex-col gap-1">
-                      <h3 className="text-[12px] font-medium text-idpxyz-text">提交的内容</h3>
-                      <pre className="max-h-[50vh] overflow-auto rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 font-mono text-[12px] text-idpxyz-text whitespace-pre-wrap break-all">
+                      <h3 className="type-body font-medium text-idpxyz-text">提交的内容</h3>
+                      <pre className="max-h-[50vh] overflow-auto rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 font-mono type-body text-idpxyz-text whitespace-pre-wrap break-all">
                         {canonicalDocumentText(body.draft.content)}
                       </pre>
                     </section>
@@ -198,7 +198,7 @@ export function PendingDraftPanel({
               ) : null}
             </>
           ) : (
-            <p className="text-xs text-idpxyz-textMuted">你的账号没有批准与发布的权限；需要时请联系管理员开通。</p>
+            <p className="type-body leading-4 text-idpxyz-textMuted">你的账号没有批准与发布的权限；需要时请联系管理员开通。</p>
           )}
         </div>
       ) : null}

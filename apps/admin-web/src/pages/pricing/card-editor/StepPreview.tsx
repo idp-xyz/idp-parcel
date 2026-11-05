@@ -46,7 +46,7 @@ function localView(workbook: PriceCardWorkbook): PriceCardContentView | null {
 function UnlocatedLine({ problem }: { problem: PriceCardProblem }) {
   const words = unlocatedWords(problem);
   return (
-    <li className="rounded border border-idpxyz-border px-3 py-2 text-[12px] text-[color:var(--ds-status-danger-fg)]">
+    <li className="rounded border border-idpxyz-border px-3 py-2 type-body text-[color:var(--ds-status-danger-fg)]">
       {words.text}
       {words.original ? (
         <details className="ml-1 inline-block align-top text-idpxyz-breadcrumb">
@@ -62,7 +62,7 @@ function ProblemList({ located, onJump }: { located: readonly LocatedProblem[]; 
   return (
     <ul className="space-y-1.5">
       {located.map((entry, index) => (
-        <li key={`${index}-${entry.field}-${entry.problem.code}`} className="flex flex-wrap items-baseline gap-x-2 rounded border border-idpxyz-border px-3 py-2 text-[12px]">
+        <li key={`${index}-${entry.field}-${entry.problem.code}`} className="flex flex-wrap items-baseline gap-x-2 rounded border border-idpxyz-border px-3 py-2 type-body">
           <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-idpxyz-breadcrumb">{stepTitles[entry.step]}</span>
           <span className="font-medium text-idpxyz-textBright">{entry.where}</span>
           <span className="min-w-0 flex-1 text-[color:var(--ds-status-danger-fg)]">
@@ -117,7 +117,7 @@ export function StepPreview({
 
   return (
     <div className="space-y-5">
-      <p className="text-[12px] text-idpxyz-text">
+      <p className="type-body text-idpxyz-text">
         预览会把这张价卡完整检查一遍，但不会保存。通过之后再「存为草稿」，草稿要到「草稿与审批」签批准、发布后才生效。
       </p>
 
@@ -126,7 +126,7 @@ export function StepPreview({
           <SectionTitle>还有 {localIssues.length} 处没填好</SectionTitle>
           <ul className="space-y-1.5">
             {localIssues.map((issue, index) => (
-              <li key={`${index}-${issue.field}`} className="flex flex-wrap items-baseline gap-x-2 rounded border border-idpxyz-border px-3 py-2 text-[12px]">
+              <li key={`${index}-${issue.field}`} className="flex flex-wrap items-baseline gap-x-2 rounded border border-idpxyz-border px-3 py-2 type-body">
                 <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-idpxyz-breadcrumb">{stepTitles[stepOfField(issue.field)]}</span>
                 <span className="font-medium text-idpxyz-textBright">{issue.where}</span>
                 <span className="min-w-0 flex-1 text-[color:var(--ds-status-danger-fg)]">{issue.text}</span>
@@ -152,7 +152,7 @@ export function StepPreview({
         <Button variant={savable ? 'default' : 'outline'} className={savable ? primaryActionClass : undefined} onClick={onSave} disabled={phase !== 'idle' || !savable}>
           {phase === 'saving' ? '保存中…' : '存为草稿'}
         </Button>
-        {preview && !fresh ? <span className="text-[12px] text-[color:var(--ds-status-warning-fg)]">预览之后又改过内容，请重新预览；存草稿存的是预览过的那一份。</span> : null}
+        {preview && !fresh ? <span className="type-body text-[color:var(--ds-status-warning-fg)]">预览之后又改过内容，请重新预览；存草稿存的是预览过的那一份。</span> : null}
       </div>
 
       {draft ? (
@@ -160,7 +160,7 @@ export function StepPreview({
           {draft.kind !== 'outcome' ? (
             <ChannelProblem answer={draft} what="存草稿" onRetry={onSave} />
           ) : (
-            <div className="rounded border border-idpxyz-border p-3 text-[12px] text-idpxyz-text">
+            <div className="rounded border border-idpxyz-border p-3 type-body text-idpxyz-text">
               <p className="font-medium text-idpxyz-textBright">{draftOutcomeText[draft.body.outcome] ?? '草稿已处理。'}</p>
               {draft.body.draft ? (
                 <p className="mt-1">
@@ -188,7 +188,7 @@ export function StepPreview({
               : '这份价卡没有通过预览'}
           </SectionTitle>
           {preview?.mapped.truncated ? (
-            <p role="note" className="mb-2 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-warning-fg)] px-3 py-2 text-[12px] text-idpxyz-text">
+            <p role="note" className="mb-2 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-warning-fg)] px-3 py-2 type-body text-idpxyz-text">
               {preview.mapped.truncated}
             </p>
           ) : null}
@@ -201,17 +201,17 @@ export function StepPreview({
             </ul>
           ) : null}
           {reading.outcome === 'NOT_ACCEPTED' && (preview?.mapped.located.length ?? 0) + (preview?.mapped.unlocated.length ?? 0) === 0 ? (
-            <p className="text-[12px] text-[color:var(--ds-status-danger-fg)]">这份内容没有被接受，也没有给出具体原因；请检查方案标识和版本是否填好。</p>
+            <p className="type-body text-[color:var(--ds-status-danger-fg)]">这份内容没有被接受，也没有给出具体原因；请检查方案标识和版本是否填好。</p>
           ) : null}
         </section>
       ) : null}
 
       {passed && content ? (
         <section aria-label="预览通过">
-          <p className="mb-3 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-success-fg)] px-3 py-2 text-[12px] text-idpxyz-text">
+          <p className="mb-3 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-success-fg)] px-3 py-2 type-body text-idpxyz-text">
             预览通过：这张价卡没有发现问题。
           </p>
-          <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[12px] text-idpxyz-text">
+          <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 type-body text-idpxyz-text">
             <dt className="text-idpxyz-breadcrumb">方案</dt>
             <dd className="font-mono">
               {reading?.plan?.id}@{reading?.plan?.version}

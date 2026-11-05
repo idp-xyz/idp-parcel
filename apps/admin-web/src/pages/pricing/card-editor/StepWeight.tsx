@@ -27,7 +27,7 @@ function Segments({ policy, title, hint }: { policy: 'chargeable' | 'volumetric'
     <section>
       <SectionTitle hint={hint}>{title}</SectionTitle>
       <div className="overflow-x-auto rounded border border-idpxyz-border">
-        <table className="w-full min-w-[480px] text-[12px]">
+        <table className="w-full min-w-[480px] type-body">
           <thead className="bg-idpxyz-sidebar text-left text-idpxyz-breadcrumb">
             <tr>
               <th className="w-10 px-2 py-1.5 font-medium">段</th>

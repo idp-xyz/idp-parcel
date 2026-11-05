@@ -59,12 +59,12 @@ export function TopBar({ moduleTitle, principal, tenantName, onSignOut, onOpenCo
     <header className="h-12 flex items-center gap-2 px-4 border-b border-idpxyz-border bg-idpxyz-titleBar shrink-0">
       <Package className="h-5 w-5 shrink-0 text-idpxyz-accent" aria-hidden="true" />
       <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className="whitespace-nowrap text-[12px] text-idpxyz-textMuted">{PRODUCT_ATTRIBUTION}</span>
+        <span className="whitespace-nowrap type-body text-idpxyz-textMuted">{PRODUCT_ATTRIBUTION}</span>
         {/* 分隔符只是视觉断句，读屏念「Parcel / IDP 工作台」比念出一个间隔号清楚。 */}
-        <span className="text-[12px] text-idpxyz-textMuted" aria-hidden="true">
+        <span className="type-body text-idpxyz-textMuted" aria-hidden="true">
           {ATTRIBUTION_SEPARATOR}
         </span>
-        <span className="truncate text-[14px] font-bold text-idpxyz-textBright">{moduleTitle}</span>
+        <span className="truncate type-section font-bold text-idpxyz-textBright">{moduleTitle}</span>
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -116,7 +116,7 @@ function GlobalSearchSlot({ onOpen }: { onOpen?: () => void }) {
         {/* 键帽的形沿 vendor CommandPalette 面板右上角那枚 ESC 的样式，两处一个长相。 */}
         <kbd
           aria-hidden="true"
-          className="ml-auto shrink-0 rounded bg-idpxyz-hover px-1.5 py-0.5 font-sans text-[10px] text-idpxyz-textMuted"
+          className="ml-auto shrink-0 rounded bg-idpxyz-hover px-1.5 py-0.5 font-sans type-caption text-idpxyz-textMuted"
         >
           {COMMAND_PALETTE_SHORTCUT_KEYS.join(' ')}
         </kbd>
@@ -182,7 +182,7 @@ function UserMenu({ principal, onSignOut }: { principal?: string; onSignOut: () 
       trigger={
         <Button type="button" variant="ghost" aria-label={userMenuLabel(principal)} className="gap-1.5 px-2">
           <CircleUser className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {principal ? <span className="max-w-[160px] truncate text-[11px]">{principal}</span> : null}
+          {principal ? <span className="max-w-[160px] truncate type-caption">{principal}</span> : null}
           <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
         </Button>
       }

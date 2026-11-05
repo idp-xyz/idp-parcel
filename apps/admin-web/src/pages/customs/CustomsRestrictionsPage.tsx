@@ -53,7 +53,7 @@ function gateCol(id: string, header: string, mono = false, nowrap = false): List
   return {
     id,
     header,
-    className: [mono ? 'font-mono text-xs' : '', nowrap ? 'whitespace-nowrap' : ''].filter(Boolean).join(' ') || undefined,
+    className: [mono ? 'font-mono type-body leading-4' : '', nowrap ? 'whitespace-nowrap' : ''].filter(Boolean).join(' ') || undefined,
     render: (row) => row.values[id] ?? '—',
   };
 }

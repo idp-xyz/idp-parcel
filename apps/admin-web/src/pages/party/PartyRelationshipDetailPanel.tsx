@@ -37,16 +37,16 @@ export function PartyRelationshipDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
+              <h2 className="truncate type-title font-semibold text-idpxyz-textBright">
                 {row.holderNameKnown ? row.holderName : <UnknownPartyName />}
               </h2>
-              <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
+              <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
                 {labelOf(partyRoleLabels, row.role)}
               </span>
               <StatusPill code={row.status} />
             </div>
             {/* 方向由「持有方对相对方持有该角色」表达（CONTEXT）；给人读就是一句「甲是乙的客户」，不另起方向格。 */}
-            <p className="mt-0.5 text-[13px] text-idpxyz-text">
+            <p className="mt-0.5 type-value text-idpxyz-text">
               是 {row.counterpartyNameKnown ? row.counterpartyName : <UnknownPartyName />} 的{labelOf(partyRoleLabels, row.role)}
             </p>
           </div>

@@ -61,8 +61,8 @@ export function VersionDetailPanel<Row>({
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{head.objectId}</h2>
-            <span className="font-mono text-xs text-idpxyz-textMuted">{head.version}</span>
+            <h2 className="truncate font-mono type-title font-semibold text-idpxyz-textBright">{head.objectId}</h2>
+            <span className="font-mono type-body leading-4 text-idpxyz-textMuted">{head.version}</span>
             {status?.(row) ? <StatusPill code={status(row) as string} /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -77,7 +77,7 @@ export function VersionDetailPanel<Row>({
             </Button>
           </div>
         </div>
-        <p className="text-[12px] text-idpxyz-textMuted">{subtitle(row)}</p>
+        <p className="type-body text-idpxyz-textMuted">{subtitle(row)}</p>
       </div>
       <Tabs key={`${head.objectId}@${head.version}`} defaultValue="detail" className="flex min-h-0 flex-1 flex-col gap-0">
         <TabsList className="mx-5 mt-2 h-9 w-auto shrink-0 gap-5">
@@ -123,7 +123,7 @@ export function HistoryList({
   emptyNote?: string;
 }) {
   if (entries.length === 0) {
-    return <p className="py-3 text-[12px] text-idpxyz-textMuted">{emptyNote}</p>;
+    return <p className="py-3 type-body text-idpxyz-textMuted">{emptyNote}</p>;
   }
   return (
     <ol className="py-2 flex flex-col gap-2">
@@ -138,13 +138,13 @@ export function HistoryList({
             onClick={() => onSelect(entry.version)}
           >
             <span className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[13px] font-medium text-idpxyz-text">{entry.label ?? entry.version}</span>
+              <span className="font-mono type-value font-medium text-idpxyz-text">{entry.label ?? entry.version}</span>
               {entry.status ? <StatusPill code={entry.status} /> : null}
-              {entry.version === current ? <span className="text-[11px] text-idpxyz-accent">正在查看</span> : null}
+              {entry.version === current ? <span className="type-caption text-idpxyz-accent">正在查看</span> : null}
             </span>
-            <span className="mt-1 block font-mono text-[12px] text-idpxyz-textMuted">{entry.interval}</span>
-            {entry.closure ? <span className="mt-0.5 block text-[12px] text-idpxyz-text">{entry.closure}</span> : null}
-            {entry.note ? <span className="mt-0.5 block text-[12px] text-idpxyz-text">{entry.note}</span> : null}
+            <span className="mt-1 block font-mono type-body text-idpxyz-textMuted">{entry.interval}</span>
+            {entry.closure ? <span className="mt-0.5 block type-body text-idpxyz-text">{entry.closure}</span> : null}
+            {entry.note ? <span className="mt-0.5 block type-body text-idpxyz-text">{entry.note}</span> : null}
           </button>
         </li>
       ))}

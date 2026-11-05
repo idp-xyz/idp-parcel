@@ -25,7 +25,7 @@ export function PreviewNote({ answer }: { answer: ApiResult<PublicationPreviewRe
   return (
     <FlowAnswerNote answer={answer} what="预览">
       {(body) => (
-        <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
+        <div className="type-body leading-4 text-idpxyz-textMuted flex flex-col gap-1">
           <p>
             <OutcomeText labels={previewOutcomeLabels} outcome={body.outcome} />
           </p>
@@ -54,7 +54,7 @@ export function DraftNote({
   return (
     <FlowAnswerNote answer={answer} what={what}>
       {(body) => (
-        <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
+        <div className="type-body leading-4 text-idpxyz-textMuted flex flex-col gap-1">
           <p>
             <OutcomeText labels={labels} outcome={body.outcome} />
           </p>
@@ -77,7 +77,7 @@ export function PublicationNote({ answer }: { answer: ApiResult<PublicationDraft
   return (
     <FlowAnswerNote answer={answer} what="发布">
       {(body) => (
-        <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
+        <div className="type-body leading-4 text-idpxyz-textMuted flex flex-col gap-1">
           <p>
             <OutcomeText labels={publishOutcomeLabels} outcome={body.outcome} />
           </p>
@@ -138,7 +138,7 @@ function OutcomeText({ labels, outcome }: { labels: Record<string, string>; outc
 // 摘要整串显示不截断：它就是载体与册上那一格，操作者要拿它去对。
 export function FactList({ facts }: { facts: readonly PublicationFact[] }) {
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 type-value">
       {facts.map((fact) => (
         <div key={fact.label} className="contents">
           <dt className="text-idpxyz-textMuted">{fact.label}</dt>
@@ -174,7 +174,7 @@ export function FlowAnswerNote<Body>({
       return <>{children(answer.body)}</>;
     case 'unconfigured':
       return (
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           {what}：暂时不能进行，接入渠道还没有配置。{unconfiguredNote}
         </p>
       );
@@ -183,7 +183,7 @@ export function FlowAnswerNote<Body>({
       return <OperatorRefusalNote kind={answer.kind} what={what} />;
     case 'callerProblem':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>
             {what}没有被接受：{problemNote(answer.code)}
             {answer.detail ? ` ${answer.detail}` : ''}
@@ -193,14 +193,14 @@ export function FlowAnswerNote<Body>({
       );
     case 'noAnswer':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>系统这次没有处理完{what}：{problemNote(answer.code)}；请稍后重试。</p>
           <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
         </div>
       );
     case 'transport':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>连不上服务，{what}没有完成；请确认网络与服务在运行后重试。</p>
           <TechnicalDetails rows={[{ label: '传输层', value: answer.message }]} />
         </div>

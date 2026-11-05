@@ -42,9 +42,9 @@ import {
  * 中文词表只作装饰；ReferencePicker 的候选只由读面生成，读不到退回手填。不预选：「未选」是一个空值状态，不是默认值。
  */
 
-export const fieldLabel = 'block text-[12px] text-idpxyz-breadcrumb mb-1';
+export const fieldLabel = 'block type-body text-idpxyz-breadcrumb mb-1';
 export const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
+  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 type-value ' +
   'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
 
 /**
@@ -69,7 +69,7 @@ export function ProblemText({ problem }: { problem: FieldProblemText }) {
 export function Problems({ lines }: { lines?: readonly string[] }) {
   if (!lines || lines.length === 0) return null;
   return (
-    <ul className="text-[12px] text-idpxyz-danger list-disc ml-4 mt-1">
+    <ul className="type-body text-idpxyz-danger list-disc ml-4 mt-1">
       {lines.map((line) => (
         <li key={line}>
           <ProblemText problem={fieldProblemText(line)} />
@@ -227,7 +227,7 @@ export function SearchableSelect({
       searchPlaceholder="搜索名称或标识"
       emptyText="没有匹配的候选"
       disabled={disabled}
-      triggerClassName="text-[13px]"
+      triggerClassName="type-value"
     />
   );
 }
@@ -301,7 +301,7 @@ export function ReferencePickerFor<Body>({
     return (
       <Field label={label} path={path} problems={problems}>
         <SearchableSelect options={options} value={value} disabled={locked} onChange={onChange} unknownNote={unknownNote} />
-        {note !== undefined ? <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{note}</span> : null}
+        {note !== undefined ? <span className="block type-body text-idpxyz-breadcrumb mt-1">{note}</span> : null}
       </Field>
     );
   }
@@ -311,11 +311,11 @@ export function ReferencePickerFor<Body>({
       <Input
         value={value}
         disabled={locked}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         placeholder={manualPlaceholder}
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+      <span className="block type-body text-idpxyz-breadcrumb mt-1">
         {answer === null
           ? `正在读${readFace}…`
           : answer.kind === 'unconfigured'
@@ -378,7 +378,7 @@ export function VocabularySelect({
           ))}
         </select>
         {options.length === 0 ? (
-          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">服务端暂时没有提供这一格的可选项。</span>
+          <span className="block type-body text-idpxyz-breadcrumb mt-1">服务端暂时没有提供这一格的可选项。</span>
         ) : null}
       </Field>
     );
@@ -389,7 +389,7 @@ export function VocabularySelect({
       <select className={selectClass} value="" disabled>
         <option value="">{vocabularyPlaceholder(vocabulary, setName)}</option>
       </select>
-      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+      <span className="block type-body text-idpxyz-breadcrumb mt-1">
         {/* 可选项只从服务端词表读口取，表单不内置枚举、不自造码；读到之前这一格选不了，留空送预览由服务端点名。 */}
         {unavailableNote ?? '可选项由服务端提供，还没读到时这一格暂时选不了。'}
       </span>

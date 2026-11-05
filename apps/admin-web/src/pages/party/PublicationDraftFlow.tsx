@@ -201,13 +201,13 @@ export function PublicationDraftFlow({
       <CardContent className="flex flex-col gap-4">
         {/* 预览与录入送同一份载荷、服务端在同一处算内容摘要，所以批准与发布的必是预览过的那一份；表单不算摘要、
             不收批准人、不替服务端判格，录入者与批准者由操作者身份给出（ADR-0126）。这些是给开发者的，不上屏。 */}
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           {'发布分五步：填表 → 预览 → 存为待批准 → 批准 → 发布。预览会检查每一格并算出内容摘要；存为待批准之后表单锁定，要改内容请点「重新开始」。谁能批准由租户的审批职责规则决定。'}
           <strong>发布后这一版不能修改</strong>，要改须用新的版本号再发布。
         </p>
 
         {prefilledFrom ? (
-          <div className="flex flex-col gap-1 rounded border border-idpxyz-border px-3 py-2 text-xs text-idpxyz-text">
+          <div className="flex flex-col gap-1 rounded border border-idpxyz-border px-3 py-2 type-body leading-4 text-idpxyz-text">
             <p>
               {`已按「${prefilledFrom}」预填。版本号和生效区间要自己填；读面上看不到的格也是空的。发布前请逐格核对，改动的格才是这一版新的内容。`}
             </p>
@@ -220,7 +220,7 @@ export function PublicationDraftFlow({
         {children({ problems, locked, versionNote })}
 
         {unclaimed.length > 0 ? (
-          <ul className="text-xs text-idpxyz-danger list-disc ml-4">
+          <ul className="type-body leading-4 text-idpxyz-danger list-disc ml-4">
             {unclaimed.map((problem) => (
               <li key={`${problem.field}:${problem.problem}`}>
                 <span className="font-mono">{problem.field}</span>：<ProblemText problem={fieldProblemText(problem.problem)} />
@@ -255,14 +255,14 @@ export function PublicationDraftFlow({
         </div>
 
         {flow.preview !== null && preview === null && step === 'form' ? (
-          <p className="text-xs text-idpxyz-textMuted">表单已改动，上一次预览及其后各步作废；请重新预览。</p>
+          <p className="type-body leading-4 text-idpxyz-textMuted">表单已改动，上一次预览及其后各步作废；请重新预览。</p>
         ) : null}
         {preview ? <PreviewNote answer={preview} /> : null}
         {submission ? <DraftNote answer={submission} what="存为待批准" labels={submitOutcomeLabels} /> : null}
         {decision.visible ? (
           <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
-            <h3 className="text-[12px] font-medium text-idpxyz-text">批准与发布</h3>
-            <p className="text-xs text-idpxyz-textMuted">
+            <h3 className="type-body font-medium text-idpxyz-text">批准与发布</h3>
+            <p className="type-body leading-4 text-idpxyz-textMuted">
               {decision.status}
               {decision.approve === 'ready'
                 ? '批准由租户的审批职责规则决定谁能做，批准之后才能发布；发布后这一版不能修改。'
@@ -290,7 +290,7 @@ export function PublicationDraftFlow({
             </div>
             {changed !== null ? (
               <>
-                <p className="text-xs text-idpxyz-textMuted">
+                <p className="type-body leading-4 text-idpxyz-textMuted">
                   {changed === 'approve'
                     ? `要采用别人改后的内容，去「${pendingPageTitle}」页查看现在的内容后在那里批；要以表单上这份为准，重新存为待批准——` +
                       '存下的会改回眼前这份，别人的改动随之被覆盖，然后再批。'
@@ -363,7 +363,7 @@ function mergeProblems(
 function Stepper({ step }: { step: FlowStep }) {
   const reachedIndex = flowSteps.indexOf(step);
   return (
-    <ol className="flex items-center gap-2 text-[12px]">
+    <ol className="flex items-center gap-2 type-body">
       {flowSteps.map((candidate, index) => {
         const reached = index <= reachedIndex;
         const current = index === reachedIndex;
@@ -398,11 +398,11 @@ function PublicationSummaryCard({
 }) {
   return (
     <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
-      <h3 className="text-[12px] font-medium text-idpxyz-text">将要发布</h3>
+      <h3 className="type-body font-medium text-idpxyz-text">将要发布</h3>
       <FactList facts={facts} />
       {bodyFacts.length > 0 ? (
         <>
-          <h4 className="mt-1 text-[12px] font-medium text-idpxyz-text">正文要点</h4>
+          <h4 className="mt-1 type-body font-medium text-idpxyz-text">正文要点</h4>
           <FactList facts={bodyFacts} />
         </>
       ) : null}

@@ -70,7 +70,7 @@ function col(
     className: options?.className,
     render: (row) =>
       options?.mono ? (
-        <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span>
+        <span className="font-mono type-body">{row.values[id] ?? '—'}</span>
       ) : (
         (row.values[id] ?? '—')
       ),
@@ -368,8 +368,8 @@ export function NodeOperationsReviewPage() {
   const recheckActions = (row: ReviewRow) => {
     const availability = row.recheck;
     if (!availability) return undefined;
-    if (availability.kind === 'unavailable') return <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>;
-    if (!mayRecheck) return <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('再核对', labelFor(pendingIdentityRecheckDecision))}</p>;
+    if (availability.kind === 'unavailable') return <p className="type-body text-idpxyz-breadcrumb">{availability.reason}</p>;
+    if (!mayRecheck) return <p className="type-body text-idpxyz-breadcrumb">{hiddenDecisionHint('再核对', labelFor(pendingIdentityRecheckDecision))}</p>;
     const mine = recheck?.judgmentVersion === availability.judgmentVersion;
     return (
       <div className="space-y-2">
@@ -428,7 +428,7 @@ function RecheckAnswerNote({
   judgmentVersion: string;
   answer: ApiResult<IdentityRecheckResponseBody>;
 }) {
-  const frame = 'text-xs';
+  const frame = 'type-body leading-4';
   switch (answer.kind) {
     case 'outcome': {
       const note = describeRecheckAnswer(answer.body);

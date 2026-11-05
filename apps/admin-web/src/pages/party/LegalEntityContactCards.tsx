@@ -15,7 +15,7 @@ import './legal-entity-profile-readout.css';
  */
 export function LegalEntityContactCards({ contacts }: { contacts: readonly LegalEntityContactRecord[] }) {
   // 整张清单没有人是结论句，照旧用文字（spec 公司主体 UX「统一用语」）。
-  if (!contacts.length) return <p className="text-[14px] leading-6 text-idpxyz-breadcrumb">还没有登记联系人</p>;
+  if (!contacts.length) return <p className="type-value leading-6 text-idpxyz-breadcrumb">还没有登记联系人</p>;
   return (
     <div className="legal-entity-contact-cards">
       <ul className="legal-entity-contact-cards-grid" aria-label="联系人清单">
@@ -32,10 +32,10 @@ function ContactCardView({ card }: { card: ContactCard }) {
   // 字号与资料读出同一把尺（票 company-subject-ux/13 第 3 条）：人名与各行 14、所属与平台名 13、等宽账号 13。
   return (
     <li className="min-w-0 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-4 py-3">
-      <h5 className="break-words text-[14px] font-semibold leading-6 text-idpxyz-textBright">
+      <h5 className="break-words type-section font-semibold leading-6 text-idpxyz-textBright">
         <CopyAside value={card.name} name="联系人姓名">{card.name}</CopyAside>
       </h5>
-      {card.affiliation ? <p className="mt-0.5 break-words text-[13px] leading-5 text-idpxyz-breadcrumb">{card.affiliation}</p> : null}
+      {card.affiliation ? <p className="mt-0.5 break-words type-body leading-5 text-idpxyz-breadcrumb">{card.affiliation}</p> : null}
       {card.purposes.length ? (
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="联系用途">
           {card.purposes.map((purpose) => (
@@ -44,13 +44,13 @@ function ContactCardView({ card }: { card: ContactCard }) {
             <li
               key={purpose.code}
               title={purpose.primary ? `${purpose.label}的主要联系人` : undefined}
-              className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-idpxyz-border bg-idpxyz-editor px-2 py-0.5 text-[12px] leading-4 text-idpxyz-text"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-idpxyz-border bg-idpxyz-editor px-2 py-0.5 type-body leading-4 text-idpxyz-text"
             >
               {purpose.label}
               {purpose.primary ? (
                 <>
                   <span aria-hidden="true" className="text-idpxyz-breadcrumb">·</span>
-                  <span className="text-[11px] font-medium">主要</span>
+                  <span className="type-caption font-medium">主要</span>
                 </>
               ) : null}
             </li>
@@ -58,16 +58,16 @@ function ContactCardView({ card }: { card: ContactCard }) {
         </ul>
       ) : null}
       {hasLines ? (
-        <ul className="mt-2.5 space-y-1 text-[14px] leading-6 text-idpxyz-text">
+        <ul className="mt-2.5 space-y-1 type-value leading-6 text-idpxyz-text">
           {card.phone ? (
             <ContactLine icon={Phone} label="电话">
-              <RefText value={card.phone} name="电话" className="text-[13px]" />
+              <RefText value={card.phone} name="电话" className="type-body" />
             </ContactLine>
           ) : null}
           {card.email ? (
             <ContactLine icon={Mail} label="邮箱">
               {/* 邮箱按字符折、不按连字符折：按词折会在域名的「idp-」后断开，读的人要把两段拼回去才认得出是哪个域。 */}
-              <RefText value={card.email} name="邮箱" className="break-all text-[13px]" />
+              <RefText value={card.email} name="邮箱" className="break-all type-body" />
             </ContactLine>
           ) : null}
           {card.socialAccounts.length ? (
@@ -77,11 +77,11 @@ function ContactCardView({ card }: { card: ContactCard }) {
               <span className="grid gap-0.5">
                 {card.socialAccounts.map((account, index) => (
                   <span key={`${account.platform}-${account.account}-${index}`} className="flex min-w-0 items-baseline gap-2">
-                    <span className="w-[4.5em] shrink-0 text-[13px] text-idpxyz-breadcrumb">{account.platform}</span>
+                    <span className="w-[4.5em] shrink-0 type-body text-idpxyz-breadcrumb">{account.platform}</span>
                     <RefText
                       value={account.account}
                       name={account.platform ? `${account.platform}账号` : '社交账号'}
-                      className="min-w-0 break-all text-[13px]"
+                      className="min-w-0 break-all type-body"
                     />
                   </span>
                 ))}

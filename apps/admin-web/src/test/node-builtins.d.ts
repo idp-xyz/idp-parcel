@@ -41,4 +41,15 @@ declare module 'node:assert/strict' {
 // 字符串这一种签名——测试只需要 JSON 文本，不需要 Buffer 那一族重载。
 declare module 'node:fs' {
   export function readFileSync(path: string, encoding: 'utf8'): string;
+  // 字号守卫要递归列出 src 下的源文件（typography-roles.test.ts）：只声明带 withFileTypes 的那一种重载。
+  export interface Dirent {
+    name: string;
+    isDirectory(): boolean;
+  }
+  export function readdirSync(path: string, options: { withFileTypes: true }): Dirent[];
+}
+
+// 字号守卫拼路径用（typography-roles.test.ts）。
+declare module 'node:path' {
+  export function join(...segments: string[]): string;
 }

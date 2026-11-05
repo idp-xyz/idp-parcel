@@ -23,7 +23,7 @@ export function WorkspaceStatusBar({ location }: WorkspaceStatusBarProps) {
   const { theme } = useTheme();
   const { density, toggleDensity } = useDensity();
   return (
-    <div className="flex h-[22px] shrink-0 select-none items-center justify-between bg-idpxyz-statusBar px-2 text-[12px] text-white">
+    <div className="flex h-[22px] shrink-0 select-none items-center justify-between bg-idpxyz-statusBar px-2 type-body text-white">
       <div className="flex items-center gap-3">
         <span className="max-w-[480px] truncate" title={location} data-workspace-location>
           {location}

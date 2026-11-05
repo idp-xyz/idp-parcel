@@ -37,15 +37,15 @@ import { formatMoney, technicalRows } from './ops-ui';
 // 对账单页右栏：客服照客户来电或来信代登记一项争议，财务核实后处理（ADR-0354）。两张表单各按自己那一种授予收起（ADR-0315）：
 // 只在明确知道没有授予时收起，不知道就摆，服务端照旧每次判。表单只对左边选中的那一张单；单的全貌与已有争议在左边的行与技术详情里。
 
-const fieldClass = 'w-full rounded border border-idpxyz-border bg-idpxyz-editor px-2 py-1 text-[12px] text-idpxyz-text';
-const labelClass = 'block text-[11px] text-idpxyz-textMuted mb-0.5';
+const fieldClass = 'w-full rounded border border-idpxyz-border bg-idpxyz-editor px-2 py-1 type-body text-idpxyz-text';
+const labelClass = 'block type-caption text-idpxyz-textMuted mb-0.5';
 
 function Field({ label, problem, children }: { label: string; problem?: string | null; children: ReactNode }) {
   return (
     <label className="block">
       <span className={labelClass}>{label}</span>
       {children}
-      {problem ? <span className="mt-0.5 block text-[11px] text-[color:var(--ds-status-warning-text,#b45309)]">{problem}</span> : null}
+      {problem ? <span className="mt-0.5 block type-caption text-[color:var(--ds-status-warning-text,#b45309)]">{problem}</span> : null}
     </label>
   );
 }
@@ -55,7 +55,7 @@ function AnswerNote({ answer, verb, words }: { answer: ApiResult<DisputeDecision
   if (answer === null) return null;
   const text = answer.kind === 'outcome' ? words(answer.body) : feedbackFor(answer, verb).text;
   return (
-    <p role="status" className="mt-2 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+    <p role="status" className="mt-2 rounded border border-idpxyz-border px-2 py-1.5 type-body leading-5 text-idpxyz-text">
       {text}
     </p>
   );
@@ -140,10 +140,10 @@ function RegisterDisputeForm({
     }
   };
 
-  if (lines === null) return <p className="text-[12px] text-idpxyz-textMuted">正在读这张单上的费用…</p>;
+  if (lines === null) return <p className="type-body text-idpxyz-textMuted">正在读这张单上的费用…</p>;
   if (lines.kind !== 'outcome' || options.length === 0) {
     return (
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted">
+      <p className="type-body leading-5 text-idpxyz-textMuted">
         {lines.kind === 'outcome' ? '这张单上没有能选的费用行。' : `${feedbackFor(lines, '读取').text}；读不到这张单上的费用，没法选是哪一笔。`}
       </p>
     );
@@ -173,7 +173,7 @@ function RegisterDisputeForm({
         <textarea className={fieldClass} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例：客户来电说这票实重 1.2 kg，单上按 1.5 kg 计" />
       </Field>
       {statement.voidedAt ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted">
+        <p className="type-caption leading-4 text-idpxyz-textMuted">
           这张单在 {formatInstant(statement.voidedAt)} 作废；作废之前客户提出的异议照常登记，作废之后提出的不再登记在这张单上。
         </p>
       ) : null}
@@ -236,7 +236,7 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
   if (open.length === 0) {
     return (
       <>
-        <p className="text-[12px] leading-5 text-idpxyz-textMuted">这张单上没有还在等处理的争议。</p>
+        <p className="type-body leading-5 text-idpxyz-textMuted">这张单上没有还在等处理的争议。</p>
         <AnswerNote answer={answer} verb="处理" words={resolutionAnswerText} />
       </>
     );
@@ -261,22 +261,22 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
         </select>
       </Field>
       {dispute ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted">客户说：{open.find((item) => item.dispute === dispute)?.reason}</p>
+        <p className="type-caption leading-4 text-idpxyz-textMuted">客户说：{open.find((item) => item.dispute === dispute)?.reason}</p>
       ) : null}
       <fieldset>
         <legend className={labelClass}>怎么处理</legend>
         <div className="space-y-1">
           {resolutionOptions.map((option) => (
-            <label key={option.value} className="flex items-start gap-1.5 text-[12px] text-idpxyz-text">
+            <label key={option.value} className="flex items-start gap-1.5 type-body text-idpxyz-text">
               <input type="radio" name="dispute-resolution" checked={resolution === option.value} onChange={() => setResolution(option.value)} />
               <span>
                 {option.label}
-                <span className="block text-[11px] text-idpxyz-textMuted">{option.hint}</span>
+                <span className="block type-caption text-idpxyz-textMuted">{option.hint}</span>
               </span>
             </label>
           ))}
         </div>
-        {touched && problems.resolution ? <span className="text-[11px] text-[color:var(--ds-status-warning-text,#b45309)]">{problems.resolution}</span> : null}
+        {touched && problems.resolution ? <span className="type-caption text-[color:var(--ds-status-warning-text,#b45309)]">{problems.resolution}</span> : null}
       </fieldset>
       <Field label="核实了什么" problem={touched ? problems.basis : null}>
         <textarea className={fieldClass} rows={3} value={basis} onChange={(event) => setBasis(event.target.value)} placeholder="例：调了磅单，实重 1.5 kg，原费用无误" />
@@ -295,14 +295,14 @@ function ResolveDisputeForm({ statement, onAnswered }: { statement: CustomerStat
  */
 function DisputeList({ statement }: { statement: CustomerStatementRecord }) {
   if (statement.disputes.length === 0) {
-    return <p className="text-[12px] text-idpxyz-textMuted">这张单上还没有登记过争议。</p>;
+    return <p className="type-body text-idpxyz-textMuted">这张单上还没有登记过争议。</p>;
   }
   return (
     <ul className="space-y-2">
       {statement.disputes.map((item) => (
         <li key={item.dispute} className="rounded border border-idpxyz-border px-2 py-1.5">
-          <p className="font-mono text-[12px] text-idpxyz-textBright">{disputeLabel(item)}</p>
-          <p className="text-[11px] leading-4 text-idpxyz-textMuted">
+          <p className="font-mono type-body text-idpxyz-textBright">{disputeLabel(item)}</p>
+          <p className="type-caption leading-4 text-idpxyz-textMuted">
             {item.charge} · 不认 {item.disputedAmount} · {item.resolution ? labelFor(item.resolution, 'dispute') : '还没有处理结果'}
           </p>
           <TechnicalDetails
@@ -340,43 +340,43 @@ export function StatementDisputePanel({
   };
   return (
     <aside className="w-full shrink-0 overflow-y-auto border-t border-idpxyz-border p-4 lg:w-[360px] lg:border-l lg:border-t-0">
-      <h2 className="text-[13px] font-bold text-idpxyz-textBright">客户对账单争议</h2>
+      <h2 className="type-value font-bold text-idpxyz-textBright">客户对账单争议</h2>
       {statement ? (
-        <p className="mt-0.5 font-mono text-[11px] text-idpxyz-textMuted">{statement.statementNumber}</p>
+        <p className="mt-0.5 font-mono type-caption text-idpxyz-textMuted">{statement.statementNumber}</p>
       ) : (
-        <p className="mt-1 text-[12px] leading-5 text-idpxyz-textMuted">先在左边点一张对账单，再登记客户提出的争议或处理已有的争议。</p>
+        <p className="mt-1 type-body leading-5 text-idpxyz-textMuted">先在左边点一张对账单，再登记客户提出的争议或处理已有的争议。</p>
       )}
       {statement && gone ? (
         <>
           {lastAnswer?.statement === statement.statementNumber ? (
-            <p role="status" className="mt-3 rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+            <p role="status" className="mt-3 rounded border border-idpxyz-border px-2 py-1.5 type-body leading-5 text-idpxyz-text">
               {lastAnswer.text}
             </p>
           ) : null}
-          <p className="mt-3 text-[12px] leading-5 text-idpxyz-textMuted">这张单已不在当前列表里；要再登记或处理，换个筛选后重新点它。</p>
+          <p className="mt-3 type-body leading-5 text-idpxyz-textMuted">这张单已不在当前列表里；要再登记或处理，换个筛选后重新点它。</p>
         </>
       ) : statement ? (
         <>
           <section className="mt-4">
-            <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">这张单上的争议</h3>
+            <h3 className="mb-1.5 type-body font-bold text-idpxyz-textBright">这张单上的争议</h3>
             <DisputeList statement={statement} />
           </section>
           <section className="mt-5">
-            <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">登记争议</h3>
-            <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">客户来电或来信说某笔费用不对，照他的话登记下来，等财务核实。</p>
+            <h3 className="mb-1.5 type-body font-bold text-idpxyz-textBright">登记争议</h3>
+            <p className="mb-2 type-caption leading-4 text-idpxyz-textMuted">客户来电或来信说某笔费用不对，照他的话登记下来，等财务核实。</p>
             {mayRegister ? (
               <RegisterDisputeForm statement={statement} onAnswered={answered} />
             ) : (
-              <p className="text-[12px] text-idpxyz-textMuted">{hiddenDecisionHint('登记争议', labelFor(statementDisputeRegistrationDecision))}</p>
+              <p className="type-body text-idpxyz-textMuted">{hiddenDecisionHint('登记争议', labelFor(statementDisputeRegistrationDecision))}</p>
             )}
           </section>
           <section className="mt-5">
-            <h3 className="mb-1.5 text-[12px] font-bold text-idpxyz-textBright">处理争议</h3>
-            <p className="mb-2 text-[11px] leading-4 text-idpxyz-textMuted">核实之后给出结论。接受与部分接受不在这里改金额，费用调整另做。</p>
+            <h3 className="mb-1.5 type-body font-bold text-idpxyz-textBright">处理争议</h3>
+            <p className="mb-2 type-caption leading-4 text-idpxyz-textMuted">核实之后给出结论。接受与部分接受不在这里改金额，费用调整另做。</p>
             {mayResolve ? (
               <ResolveDisputeForm statement={statement} onAnswered={answered} />
             ) : (
-              <p className="text-[12px] text-idpxyz-textMuted">{hiddenDecisionHint('处理争议', labelFor(statementDisputeResolutionDecision))}</p>
+              <p className="type-body text-idpxyz-textMuted">{hiddenDecisionHint('处理争议', labelFor(statementDisputeResolutionDecision))}</p>
             )}
           </section>
         </>

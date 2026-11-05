@@ -16,7 +16,7 @@ export function StepRefs() {
         {fuel.length === 0 ? (
           <p className={hintClass}>这张价卡没有按燃油费率序列计算的费用项。</p>
         ) : (
-          <ul className="list-disc pl-5 text-[13px] text-idpxyz-text">
+          <ul className="list-disc pl-5 type-value text-idpxyz-text">
             {fuel.map((id) => (
               <li key={id} className="font-mono">
                 {id}

@@ -36,7 +36,7 @@ const info = moduleInfoById['charges-billing'];
 /** 包裹号从来源事实或确认依据里认（两者都长成 <族>/<包裹号>/…）；都认不出就显费用来源的中文说法。 */
 function parcelCell(row: CustomerChargeRecord) {
   const parcel = parcelFromRef(row.sourceFact) ?? parcelFromRef(row.confirmationBasis);
-  if (parcel) return <span className="font-mono text-xs text-idpxyz-textBright">{parcel}</span>;
+  if (parcel) return <span className="font-mono type-body leading-4 text-idpxyz-textBright">{parcel}</span>;
   const family = sourceFactLabel(row.sourceFact);
   if (family) return <span className="text-idpxyz-text">{family}</span>;
   // 未确认行上来源事实整键不出现：包裹在确认时才随来源事实固定到这一行，不是漏登。
@@ -113,7 +113,7 @@ function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeReco
     {
       id: 'confirmed-at',
       header: '确认时间',
-      className: 'whitespace-nowrap font-mono text-xs',
+      className: 'whitespace-nowrap font-mono type-body leading-4',
       // 与确认依据成对：未确认时整键不出现，不为它编造零时刻。
       render: (row) => (row.confirmedAt ? formatInstant(row.confirmedAt) : <span className="text-idpxyz-textMuted">未确认</span>),
     },
@@ -214,7 +214,7 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
     id: 'agreement',
     header: '供应商协议',
     // 本册不带供应商参与方编码，只带协议引用；协议号就是运营认供应商的字，原样作主字。
-    render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.agreement}</span>,
+    render: (row) => <span className="font-mono type-body leading-4 text-idpxyz-textBright">{row.agreement}</span>,
   },
   { id: 'fee-item', header: '费用项目', className: 'whitespace-nowrap', render: (row) => feeItemLabel(row.feeItem) },
   {
@@ -245,7 +245,7 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
   {
     id: 'occurred-at',
     header: '发生时间',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => formatInstant(row.occurredAt),
   },
   {

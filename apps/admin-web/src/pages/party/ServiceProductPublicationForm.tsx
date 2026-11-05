@@ -129,7 +129,7 @@ function ServiceProductFields({
       <Input
         value={draft[path]}
         readOnly={form.locked}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         placeholder={placeholder}
         onChange={(event) => onPatch({ [path]: event.target.value })}
       />
@@ -151,7 +151,7 @@ function ServiceProductFields({
   return (
     <div className="flex flex-col gap-4">
       {/* 本册载荷是版本壳加一节可缺的正文；哪几格立不住由预览逐格答，表单不自判。 */}
-      <p className="text-xs text-idpxyz-textMuted">
+      <p className="type-body leading-4 text-idpxyz-textMuted">
         这里发布服务产品的一个版本，供合同、接单规则与价格政策引用。服务形态在「登记服务形态」里登记，能走哪些渠道在「渠道产品」页登记。交付条件可以不填。
       </p>
 
@@ -204,11 +204,11 @@ function ReferencesEditor({
         </Button>
       </div>
       {/* 类别是不是集合内的词由预览逐格点名；被引对象发布了没有由发布那一步答（发布未决）。 */}
-      <p className="text-[11px] text-idpxyz-textMuted mb-2">
+      <p className="type-caption text-idpxyz-textMuted mb-2">
         左格填对象的类别，右格填它的编号；两格都空的行不会提交。类别填错时预览会指出；关联的对象还没发布时，这一版暂时发布不了，先发布它再来。
       </p>
       {rows.length === 0 ? (
-        <p className="text-[11px] text-idpxyz-textMuted">没有关联对象。服务产品可以不关联任何对象。</p>
+        <p className="type-caption text-idpxyz-textMuted">没有关联对象。服务产品可以不关联任何对象。</p>
       ) : (
         <div className="flex flex-col gap-2">
           {rows.map((row, index) => (
@@ -217,14 +217,14 @@ function ReferencesEditor({
                 <Input
                   value={row.kind}
                   readOnly={locked}
-                  className="font-mono text-[12px]"
+                  className="font-mono type-body"
                   placeholder="对象类别"
                   onChange={(event) => onChange(index, { kind: event.target.value })}
                 />
                 <Input
                   value={row.objectId}
                   readOnly={locked}
-                  className="font-mono text-[12px]"
+                  className="font-mono type-body"
                   placeholder="对象编号"
                   onChange={(event) => onChange(index, { objectId: event.target.value })}
                 />

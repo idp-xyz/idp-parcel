@@ -73,7 +73,7 @@ function parcelCol(id: string, header: string): ReviewColumn<ReviewRow> {
     id,
     header,
     render: (row) => (
-      <span className="font-mono text-[12px]" title={row.values[id]}>
+      <span className="font-mono type-body" title={row.values[id]}>
         {parcelNoOf(row.values[id] ?? '')}
       </span>
     ),
@@ -104,7 +104,7 @@ function col(
     render: (row) => {
       const value = row.values[id] ?? '—';
       if (options?.pill) return pillCell(row, id, options.pill.codeKey, options.pill.scope);
-      if (options?.mono) return <span className="font-mono text-[12px]">{value}</span>;
+      if (options?.mono) return <span className="font-mono type-body">{value}</span>;
       return value;
     },
   };
@@ -549,7 +549,7 @@ export function TransportFulfillmentReviewPage() {
     <span className="inline-flex items-center gap-2">
       <input
         aria-label="交接批次号"
-        className="h-8 w-[220px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 font-mono text-[12px]"
+        className="h-8 w-[220px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 font-mono type-body"
         placeholder="交接批次号"
         value={scopeDraft}
         onChange={(event) => setScopeDraft(event.target.value)}
@@ -563,14 +563,14 @@ export function TransportFulfillmentReviewPage() {
     <span className="inline-flex items-center gap-2">
       <input
         aria-label="按订舱标识筛"
-        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[12px]"
+        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body"
         placeholder="按订舱标识筛"
         value={bounceDraft.booking ?? ''}
         onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
       />
       <input
         aria-label="按答复的承运商筛"
-        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[12px]"
+        className="h-8 w-[160px] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body"
         placeholder="按答复的承运商筛"
         value={bounceDraft.source ?? ''}
         onChange={(event) => setBounceDraft({ ...bounceDraft, source: event.target.value })}

@@ -77,7 +77,7 @@ const columns: WorkbenchColumn<ServiceProductRecord>[] = [
     render: (row) => (
       <div className="min-w-40">
         <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
-        <p className="mt-0.5 text-xs text-idpxyz-textMuted">版本 {row.version}</p>
+        <p className="mt-0.5 type-body leading-4 text-idpxyz-textMuted">版本 {row.version}</p>
       </div>
     ),
   },
@@ -101,13 +101,13 @@ const columns: WorkbenchColumn<ServiceProductRecord>[] = [
     key: 'effective',
     header: '有效期',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-xs">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
   },
   {
     key: 'published-at',
     header: '发布时间',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-xs">{formatInstant(row.publishedAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatInstant(row.publishedAt)}</span>,
   },
 ];
 
@@ -170,7 +170,7 @@ function ServiceProductVersionsWorkbench({
         primaryAction={
           mayWrite ? (
             <>
-              <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={() => onOpenView('register')}>
+              <Button variant="outline" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={() => onOpenView('register')}>
                 登记服务形态
               </Button>
               <Button variant="default" className={primaryActionClass} onClick={() => onOpenView('publish')}>
@@ -226,14 +226,14 @@ function ServiceProductVersionsWorkbench({
               }}
               actions={(record) => (
                 <>
-                  <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record)}>
+                  <Button variant="outline" size="sm" className="type-body" onClick={() => onStartNewVersion(record)}>
                     发新版本
                   </Button>
                   {closable.has(closureKeyOf(record)) ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-[12px]"
+                      className="type-body"
                       onClick={() => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', record))}
                     >
                       收尾…
@@ -302,7 +302,7 @@ function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
         }}
         actions={
           row && mayWrite && closable.has(closureKeyOf(row)) ? (
-            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row))}>
+            <Button variant="outline" size="sm" className="type-body" onClick={() => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row))}>
               收尾…
             </Button>
           ) : undefined

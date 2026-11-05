@@ -12,7 +12,7 @@ export function DeliveryConditionsCell({ conditions }: { conditions?: DeliveryCo
     return <span className="text-idpxyz-textMuted">未声明</span>;
   }
   return (
-    <div className="text-xs space-y-0.5">
+    <div className="type-body leading-4 space-y-0.5">
       {conditions.tightens ? (
         <p className="text-idpxyz-textMuted">
           收紧自产品 <RefLink kind="service-product" id={conditions.tightens.objectId} />

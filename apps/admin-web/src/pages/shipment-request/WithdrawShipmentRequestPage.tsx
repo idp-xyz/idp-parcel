@@ -133,8 +133,8 @@ export function WithdrawShipmentRequestPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[720px] mx-auto px-6 py-6 space-y-4">
         <header>
-          <h1 className="text-[18px] font-bold text-idpxyz-textBright">撤回运单</h1>
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-1">
+          <h1 className="type-title font-bold text-idpxyz-textBright">撤回运单</h1>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-1">
             客户在运单受理之前要停掉它,在这里整票撤回;录过的内容不会删。已经受理的运单要停,请走「取消运单」。
           </p>
         </header>
@@ -174,11 +174,11 @@ export function WithdrawShipmentRequestPage() {
             type="button"
             disabled={pending}
             onClick={() => void requestWithdraw()}
-            className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
+            className="rounded border border-idpxyz-accent px-4 py-2 type-value font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
             {pending ? pendingText('撤回') : '撤回这票运单'}
           </button>
-          {Object.keys(errors).length > 0 ? <span className="text-[12px] text-idpxyz-textBright">还有没填好的地方,已在字段旁标出。</span> : null}
+          {Object.keys(errors).length > 0 ? <span className="type-body text-idpxyz-textBright">还有没填好的地方,已在字段旁标出。</span> : null}
         </div>
 
         <ResultPanel result={result} pending={pending} renderOutcome={(body, status) => <WithdrawalOutcomeCard body={body} status={status} />} />
@@ -209,11 +209,11 @@ function WithdrawalOutcomeCard({ body, status }: { body: WithdrawalResponseBody;
   const view = withdrawalOutcomeViews[body.outcome] ?? unknownOutcome;
   return (
     <NoticeCard title={view.label} titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
+      <p className="type-body leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
 
       <dl className="mt-3 space-y-1">
         {body.requestState ? (
-          <div className="flex gap-2 text-[12px] leading-5">
+          <div className="flex gap-2 type-body leading-5">
             <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">运单现在</dt>
             <dd>
               <StatusPill code={body.requestState} />
@@ -221,7 +221,7 @@ function WithdrawalOutcomeCard({ body, status }: { body: WithdrawalResponseBody;
           </div>
         ) : null}
         {body.decisionKind ? (
-          <div className="flex gap-2 text-[12px] leading-5">
+          <div className="flex gap-2 type-body leading-5">
             <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">已有决定</dt>
             <dd>
               <StatusPill code={body.decisionKind} />
@@ -231,10 +231,10 @@ function WithdrawalOutcomeCard({ body, status }: { body: WithdrawalResponseBody;
       </dl>
 
       {body.compensationReference ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">占用的资金还没释放完,系统会继续处理,不用重新撤回。</p>
+        <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">占用的资金还没释放完,系统会继续处理,不用重新撤回。</p>
       ) : null}
       {body.controlReleaseNotAccepted ? (
-        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">撤回已成立;占用的资金结算侧没有受理释放,已转到「资金释放待处理」等人处理,再撤一次不会改变它。</p>
+        <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">撤回已成立;占用的资金结算侧没有受理释放,已转到「资金释放待处理」等人处理,再撤一次不会改变它。</p>
       ) : null}
 
       <TechnicalDetails

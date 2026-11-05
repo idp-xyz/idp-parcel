@@ -180,12 +180,12 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
           {/* 队列区：固定宽度，独立滚动，选中项高亮。 */}
           <div className="flex w-[300px] shrink-0 flex-col border-r border-idpxyz-border">
             <div className="flex h-8 shrink-0 items-center justify-between border-b border-idpxyz-border px-3">
-              <span className="text-[11px] font-medium text-idpxyz-textMuted">{queueTitle}</span>
-              <span className="text-[11px] text-idpxyz-textMuted">{queue.length}</span>
+              <span className="type-caption font-medium text-idpxyz-textMuted">{queueTitle}</span>
+              <span className="type-caption text-idpxyz-textMuted">{queue.length}</span>
             </div>
             <div className="flex-1 overflow-auto">
               {queue.length === 0 ? (
-                <p className="px-3 py-4 text-[12px] text-idpxyz-textMuted">队列为空。</p>
+                <p className="px-3 py-4 type-body text-idpxyz-textMuted">队列为空。</p>
               ) : (
                 queue.map((item) => (
                   <button
@@ -201,18 +201,18 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-mono text-[12px] text-idpxyz-textBright">
+                      <span className="truncate font-mono type-body text-idpxyz-textBright">
                         {item.title}
                       </span>
                       {item.status}
                     </div>
                     {item.subtitle && (
-                      <div className="mt-0.5 truncate text-[11px] text-idpxyz-text">
+                      <div className="mt-0.5 truncate type-caption text-idpxyz-text">
                         {item.subtitle}
                       </div>
                     )}
                     {item.meta && (
-                      <div className="mt-0.5 text-[11px] text-idpxyz-textMuted">{item.meta}</div>
+                      <div className="mt-0.5 type-caption text-idpxyz-textMuted">{item.meta}</div>
                     )}
                   </button>
                 ))
@@ -232,7 +232,7 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
                     {detailFields && detailFields.length > 0 && (
                       <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
                         {detailFields.map((field) => (
-                          <div key={field.label} className="flex gap-3 text-[12px] leading-5">
+                          <div key={field.label} className="flex gap-3 type-body leading-5">
                             <dt className="w-[96px] shrink-0 text-idpxyz-textMuted">
                               {field.label}
                             </dt>
@@ -281,13 +281,13 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
                         </Button>
                       ))}
                       {decisionPending && (
-                        <span className="text-[11px] text-idpxyz-textMuted">决定提交中…</span>
+                        <span className="type-caption text-idpxyz-textMuted">决定提交中…</span>
                       )}
                     </div>
                     {unavailableNotes.length > 0 && (
                       <div className="mt-2 flex flex-col gap-0.5">
                         {unavailableNotes.map((option) => (
-                          <p key={option.id} className="text-[11px] text-idpxyz-textMuted">
+                          <p key={option.id} className="type-caption text-idpxyz-textMuted">
                             「{option.label}」暂不可用：{option.disabledReason}
                           </p>
                         ))}
@@ -303,7 +303,7 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
                     </CardHeader>
                     <CardContent>
                       {auditTrail.length === 0 ? (
-                        <p className="text-[12px] text-idpxyz-textMuted">暂无审计记录。</p>
+                        <p className="type-body text-idpxyz-textMuted">暂无审计记录。</p>
                       ) : (
                         <Timeline items={auditTrail} />
                       )}
@@ -313,7 +313,7 @@ export function ReviewFlowTemplate<K extends string = ReviewDecisionKind>({
               </div>
             ) : (
               <div className="flex h-full items-center justify-center">
-                <p className="text-[12px] text-idpxyz-textMuted">从左侧队列选择一项开始复核。</p>
+                <p className="type-body text-idpxyz-textMuted">从左侧队列选择一项开始复核。</p>
               </div>
             )}
           </div>

@@ -38,12 +38,12 @@ export function ExceptionDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright" title={title}>
+              <h2 className="truncate font-mono type-title font-semibold text-idpxyz-textBright" title={title}>
                 {title}
               </h2>
               <RowStatusPill status={status} />
             </div>
-            {subtitle ? <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-0.5 type-body text-idpxyz-breadcrumb">{subtitle}</p> : null}
           </div>
           <Button
             className="shrink-0 text-idpxyz-breadcrumb"
@@ -62,12 +62,12 @@ export function ExceptionDetailPanel({
         <dl className="grid grid-cols-2 gap-2.5">
           {facts.map((fact) => (
             <div key={fact.label} className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-              <dt className="text-[12px] text-idpxyz-breadcrumb">{fact.label}</dt>
-              <dd className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
+              <dt className="type-body text-idpxyz-breadcrumb">{fact.label}</dt>
+              <dd className="mt-0.5 break-words type-body font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
             </div>
           ))}
         </dl>
-        {children ? <div className="mt-4 space-y-2 text-[12px] leading-5 text-idpxyz-breadcrumb">{children}</div> : null}
+        {children ? <div className="mt-4 space-y-2 type-body leading-5 text-idpxyz-breadcrumb">{children}</div> : null}
         <TechnicalDetails className="mt-4" rows={technical} />
       </div>
     </div>

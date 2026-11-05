@@ -31,7 +31,7 @@ const columns: ListColumn<RecentObject>[] = [
   {
     id: 'object',
     header: '编号',
-    render: (row) => <span className="font-mono text-[12px]">{row.objectId}</span>,
+    render: (row) => <span className="font-mono type-body">{row.objectId}</span>,
   },
   {
     id: 'module',

@@ -4,7 +4,7 @@
 
 /** 选中态描边与文字换成强调色；未选中态用边框色与弱文字，悬停显底色。 */
 export const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
+  `px-2.5 py-1 type-body rounded border ${
     active
       ? 'border-idpxyz-accent text-idpxyz-accent'
       : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'

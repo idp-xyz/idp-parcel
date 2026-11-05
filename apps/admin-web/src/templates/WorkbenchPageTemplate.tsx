@@ -270,15 +270,15 @@ export function WorkbenchPageTemplate<Row>({
     rows.length === 0 ? (
       <div className="flex flex-col items-center justify-center py-16 text-idpxyz-breadcrumb">
         <Inbox className="mb-3 h-8 w-8 opacity-50" aria-hidden="true" />
-        <p className="text-[13px]">{noMatchText}</p>
+        <p className="type-value">{noMatchText}</p>
         {onClearFilters && (
-          <Button variant="ghost" size="sm" className="mt-2 text-[12px] text-idpxyz-breadcrumb" onClick={onClearFilters}>
+          <Button variant="ghost" size="sm" className="mt-2 type-body text-idpxyz-breadcrumb" onClick={onClearFilters}>
             清除筛选
           </Button>
         )}
       </div>
     ) : (
-      <table className="w-full text-[12px]">
+      <table className="w-full type-body">
         <thead className="sticky top-0 z-10 bg-idpxyz-panelBg">
           <tr className="border-b border-idpxyz-border text-left text-idpxyz-breadcrumb">
             {visibleColumns.map((column, index) => (
@@ -363,8 +363,8 @@ export function WorkbenchPageTemplate<Row>({
           此前是一行 overflow-x-auto，窄一点就把后面几格裁掉、不给任何提示，md 以下更是整组藏起。 */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b border-idpxyz-border px-6 py-3">
         <div className="min-w-0 shrink-0">
-          <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
-          {subtitle && <p className="truncate text-[12px] text-idpxyz-breadcrumb">{subtitle}</p>}
+          <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
+          {subtitle && <p className="truncate type-body text-idpxyz-breadcrumb">{subtitle}</p>}
         </div>
         {kpis && kpis.length > 0 && (
           <>
@@ -373,7 +373,7 @@ export function WorkbenchPageTemplate<Row>({
               {kpis.map((kpi) =>
                 kpi.custom != null ? (
                   <div key={kpi.label} className="flex flex-col gap-0.5 px-1">
-                    <span className="whitespace-nowrap text-[12px] uppercase tracking-wide text-idpxyz-breadcrumb">
+                    <span className="whitespace-nowrap type-body uppercase tracking-wide text-idpxyz-breadcrumb">
                       {kpi.label}
                     </span>
                     {kpi.custom}
@@ -390,14 +390,14 @@ export function WorkbenchPageTemplate<Row>({
                       kpi.active ? 'bg-idpxyz-activeItem ring-1 ring-idpxyz-accent' : 'hover:bg-idpxyz-hover'
                     }`}
                   >
-                    <span className="flex items-center gap-1 whitespace-nowrap text-[12px] uppercase leading-none tracking-wide text-idpxyz-breadcrumb">
+                    <span className="flex items-center gap-1 whitespace-nowrap type-body uppercase leading-none tracking-wide text-idpxyz-breadcrumb">
                       {kpi.icon}
                       {kpi.label}
                     </span>
                     <span
                       // 激活态的底色上语气字色不足 4.5:1（票 group-legal-entities-uiux/08 评审），激活时数值改用正文亮色，
                       // 语气由图标与激活描边承载。
-                      className={`text-[16px] font-semibold leading-none ${
+                      className={`type-title font-semibold leading-none ${
                         kpi.active ? 'text-idpxyz-textBright' : (kpi.tone ?? 'text-idpxyz-textBright')
                       } ${
                         kpi.pulse ? 'animate-pulse' : ''
@@ -430,7 +430,7 @@ export function WorkbenchPageTemplate<Row>({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-idpxyz-border px-6 py-2.5">
-        <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 text-[12px] focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
+        <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 type-body focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
           <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
           <input
             ref={searchRef}
@@ -442,7 +442,7 @@ export function WorkbenchPageTemplate<Row>({
             className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
             onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
           />
-          <kbd className="rounded border border-idpxyz-border px-1 text-[12px] text-idpxyz-breadcrumb">/</kbd>
+          <kbd className="rounded border border-idpxyz-border px-1 type-body text-idpxyz-breadcrumb">/</kbd>
         </div>
         {statusChips && statusChips.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
@@ -452,7 +452,7 @@ export function WorkbenchPageTemplate<Row>({
                 type="button"
                 onClick={chip.onClick}
                 aria-pressed={chip.active}
-                className={`rounded px-2 py-1 text-[12px] transition-colors ${
+                className={`rounded px-2 py-1 type-body transition-colors ${
                   chip.active
                     ? 'bg-idpxyz-accent text-white'
                     : 'text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text'
@@ -465,7 +465,7 @@ export function WorkbenchPageTemplate<Row>({
           </div>
         )}
         {extraFilters}
-        {toolbarRight && <span className="ml-auto text-[12px] text-idpxyz-breadcrumb">{toolbarRight}</span>}
+        {toolbarRight && <span className="ml-auto type-body text-idpxyz-breadcrumb">{toolbarRight}</span>}
       </div>
 
       <div ref={split.containerRef} className="flex min-h-0 flex-1 overflow-hidden">

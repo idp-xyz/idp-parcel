@@ -56,20 +56,20 @@ function ProfileSummary({
     <section className="legal-entity-profile-readout" aria-label="当前有效公司资料">
       {/* 读出的小标题只说「读的是哪一版」（票 company-subject-ux/08 第 3 条）：资料状态那枚药丸撤掉，它已在头区事实行里，
           同一块面上出现两次是重复。没有生效版本时没有版可点名，才把结论句「资料状态：…」写在这里。 */}
-      <p className="text-[13px] leading-6 text-idpxyz-breadcrumb">
+      <p className="type-value leading-6 text-idpxyz-breadcrumb">
         {effective ? (
           <>
             当前资料 <span className="tabular-nums text-idpxyz-text">{profileRevisionLabel(effective.revision)}</span> ·{' '}
             <span className="text-idpxyz-text"><Instant value={effective.effectiveFrom} precision="day" /></span> 起生效 · 来源单据{' '}
             {/* 来源单据是号码类（票 company-subject-ux/14）：点击即复制；色随外层，这句是弱显的小字，号要正文色，所以套一层。 */}
-            <span className="text-[13px] text-idpxyz-text"><RefText value={effective.basis} name="来源单据" /></span>
+            <span className="type-value text-idpxyz-text"><RefText value={effective.basis} name="来源单据" /></span>
           </>
         ) : (
           <>资料状态：{status.label}</>
         )}
       </p>
       {status.tone !== 'good' ? (
-        <p className="mt-1 text-[13px] leading-6 text-idpxyz-breadcrumb">{status.description}</p>
+        <p className="mt-1 type-value leading-6 text-idpxyz-breadcrumb">{status.description}</p>
       ) : null}
       <LegalEntityProfileContent content={effective} includeContacts={false} typeNameOf={typeNameOf} onEdit={onEdit} editing={editing} onEditEnd={onEditEnd} />
       <TechnicalDetails

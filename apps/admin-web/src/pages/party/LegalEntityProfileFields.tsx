@@ -81,7 +81,7 @@ export function LegalEntityProfileFields({
             onChange={(event) =>
               patch({ representativeKind: event.target.value as LegalEntityProfileDraft['representativeKind'] })
             }
-            className="h-9 w-full rounded-md border border-idpxyz-border bg-idpxyz-card px-3 text-[13px] text-idpxyz-text"
+            className="h-9 w-full rounded-md border border-idpxyz-border bg-idpxyz-card px-3 type-value text-idpxyz-text"
           >
             <option value="">未选</option>
             <option value="LEGAL_REPRESENTATIVE">法定代表人</option>
@@ -157,14 +157,14 @@ export function LegalEntityProfileFields({
             list={languageListId}
             aria-label="主抬头语言"
             placeholder="如 zh-Hans、en（选填）"
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             value={draft.invoiceTitleLanguage}
             readOnly={locked}
             onChange={(event) => patch({ invoiceTitleLanguage: event.target.value })}
           />
         </Field>
         <div className="md:col-span-2 space-y-2">
-          <p className="text-[12px] font-medium text-idpxyz-text">其他语言的抬头 <span className="font-normal text-idpxyz-breadcrumb">（选填，一种语言一行）</span></p>
+          <p className="type-body font-medium text-idpxyz-text">其他语言的抬头 <span className="font-normal text-idpxyz-breadcrumb">（选填，一种语言一行）</span></p>
           {draft.invoiceTitles.map((row, index) => (
             <div key={index} className="space-y-1">
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] items-start gap-2">
@@ -172,7 +172,7 @@ export function LegalEntityProfileFields({
                   list={languageListId}
                   aria-label={`其他语言的抬头 ${index + 1} 语言`}
                   placeholder="语言，如 en"
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   value={row.language}
                   readOnly={locked}
                   onChange={(event) => setInvoiceTitle(index, { language: event.target.value })}
@@ -206,7 +206,7 @@ export function LegalEntityProfileFields({
           </Button>
         </div>
         {/* 币种不在本表单：结算政策按公司主体、相对方与合同解析，这里只指路（票 company-subject-ux/04 第 7 项）。 */}
-        <p className="md:col-span-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <p className="md:col-span-2 type-body leading-5 text-idpxyz-breadcrumb">
           开票币种不在这里定：由「
           <a
             href={settlementPolicyHash}
@@ -221,7 +221,7 @@ export function LegalEntityProfileFields({
           」按公司主体、相对方与合同解析。
         </p>
         <div className="md:col-span-2">
-          <p className="mb-2 text-[12px] font-medium text-idpxyz-text">监管登记号（税务 / 海关）</p>
+          <p className="mb-2 type-body font-medium text-idpxyz-text">监管登记号（税务 / 海关）</p>
           {draft.taxNumbers.map((row, index) => (
             <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3">
               <TaxTypeField
@@ -237,7 +237,7 @@ export function LegalEntityProfileFields({
                 <Input
                   aria-label={`监管登记号 ${index + 1} 号码`}
                   placeholder="登记号原样填"
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   value={row.number}
                   readOnly={locked}
                   onChange={(event) => setTaxNumber(index, { number: event.target.value })}
@@ -262,7 +262,7 @@ export function LegalEntityProfileFields({
             添加监管登记号
           </Button>
           {/* 税务与海关的号不分两组（ADR-0359 决定一）：判法一样——类型与格式由目录按注册地说，号属税务还是海关也由类型说。 */}
-          <p className="mt-2 text-[12px] leading-5 text-idpxyz-breadcrumb">
+          <p className="mt-2 type-body leading-5 text-idpxyz-breadcrumb">
             税务、海关等监管机关发给公司、可后办可变的登记号都登在这里：税号、海关注册编码、AEO 认证编号、VAT / IOSS / EORI；
             类型按注册地在「基础数据 › 注册号类型」配置后在这里选。
           </p>
@@ -277,7 +277,7 @@ export function LegalEntityProfileFields({
         <div className="md:col-span-2 space-y-4">
           {draft.bankAccounts.map((row, index) => (
             <fieldset key={index} disabled={locked} className="min-w-0 border-t border-idpxyz-border pt-3">
-              <legend className="px-1 text-[13px] font-medium text-idpxyz-text">收款账户 {index + 1}</legend>
+              <legend className="px-1 type-value font-medium text-idpxyz-text">收款账户 {index + 1}</legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 {(
                   [
@@ -297,7 +297,7 @@ export function LegalEntityProfileFields({
                         <Input
                           aria-label={`收款账户 ${index + 1} ${label.replace(' *', '')}`}
                           placeholder={placeholder || undefined}
-                          className={mono ? 'font-mono text-[13px]' : undefined}
+                          className={mono ? 'font-mono type-value' : undefined}
                           value={row[key]}
                           readOnly={locked}
                           onChange={(event) => setBankAccount(index, { [key]: event.target.value })}
@@ -356,7 +356,7 @@ export function LegalEntityProfileFields({
         <div className="md:col-span-2 space-y-4">
           {draft.contacts.map((row, index) => (
             <fieldset key={index} disabled={locked} className="min-w-0 border-t border-idpxyz-border pt-3">
-              <legend className="px-1 text-[13px] font-medium text-idpxyz-text">联系人 {index + 1}</legend>
+              <legend className="px-1 type-value font-medium text-idpxyz-text">联系人 {index + 1}</legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 {(
                   [
@@ -388,7 +388,7 @@ export function LegalEntityProfileFields({
                 })}
               </div>
               <div className="mt-4 space-y-2">
-                <p className="text-[12px] font-medium text-idpxyz-text">社交账号 <span className="font-normal text-idpxyz-breadcrumb">（选填，可添加多个）</span></p>
+                <p className="type-body font-medium text-idpxyz-text">社交账号 <span className="font-normal text-idpxyz-breadcrumb">（选填，可添加多个）</span></p>
                 {(row.socialAccounts ?? []).map((social, accountIndex) => (
                   <div key={accountIndex} className="space-y-1">
                     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] items-start gap-2">
@@ -416,7 +416,7 @@ export function LegalEntityProfileFields({
                 {(Object.entries(contactPurposeLabels) as [ContactPurpose, string][]).map(([purpose, label]) => {
                   const selected = row.purposes?.includes(purpose) ?? false;
                   return (
-                    <div key={purpose} className="flex flex-wrap items-center gap-2 text-[12px] text-idpxyz-text">
+                    <div key={purpose} className="flex flex-wrap items-center gap-2 type-body text-idpxyz-text">
                       <label className="flex items-center gap-1.5">
                         <input
                           type="checkbox"
@@ -519,12 +519,12 @@ function BankAccountCurrencyField({
             <Input
               aria-label={`收款账户 ${index + 1} 币种`}
               placeholder="如 CNY、USD"
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               value={value}
               readOnly={locked}
               onChange={(event) => onChange(event.target.value)}
             />
-            <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">币种目录暂时读不到：先手填 ISO 4217 三位字母码。</span>
+            <span className="mt-1 block type-body text-idpxyz-breadcrumb">币种目录暂时读不到：先手填 ISO 4217 三位字母码。</span>
           </>
         )}
       </Field>
@@ -576,12 +576,12 @@ function TaxTypeField({
       <Input
         aria-label={`监管登记号 ${index + 1} 类型`}
         placeholder="类型码"
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         value={value}
         readOnly={locked}
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">
+      <span className="mt-1 block type-body text-idpxyz-breadcrumb">
         {reason}要加类型，先到「基础数据 › 注册号类型」配置。
       </span>
     </Field>

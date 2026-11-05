@@ -70,19 +70,19 @@ export function PriceCardImportPanel() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {/* 预览与存草稿打的是同一份字节（预览过的就是存下的那份）；录入人由接入渠道给，表单不收。 */}
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="type-body leading-4 text-idpxyz-textMuted">
             适合已经在 Excel 里做好的价卡：下载模板，按模板填好后上传，先「检查并预览」，没有问题再「存为草稿」。
             存下的草稿到「草稿与审批」签里批准、发布。
           </p>
-          <p className="text-xs">
+          <p className="type-body leading-4">
             <a className="text-idpxyz-accent underline" href={priceCardTemplateHref} download={priceCardTemplateFileName}>
               下载模板（{priceCardTemplateFileName}）
             </a>
           </p>
-          <label className="text-xs text-idpxyz-textMuted">
+          <label className="type-body leading-4 text-idpxyz-textMuted">
             选择填好的 Excel 文件
             <input
-              className="mt-1 block text-xs text-idpxyz-text"
+              className="mt-1 block type-body leading-4 text-idpxyz-text"
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={(event) => choose(event.target.files?.[0] ?? null)}
@@ -101,7 +101,7 @@ export function PriceCardImportPanel() {
               {phase === 'saving' ? '保存中…' : '存为草稿'}
             </Button>
           </div>
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="type-body leading-4 text-idpxyz-textMuted">
             先预览这份文件才能存为草稿；换了文件要重新预览。
           </p>
           {preview ? (
@@ -132,7 +132,7 @@ function ReadingAnswer({
   }
   const reading = answer.body;
   return (
-    <section className="flex flex-col gap-2 text-xs">
+    <section className="flex flex-col gap-2 type-body leading-4">
       <p>
         {title}：{labelOf(labels, reading.outcome)}
       </p>
@@ -167,7 +167,7 @@ function DraftAnswer({ answer }: { answer: ApiResult<PriceCardDraftSubmissionBod
   }
   const body = answer.body;
   return (
-    <section className="flex flex-col gap-2 text-xs">
+    <section className="flex flex-col gap-2 type-body leading-4">
       <p>存草稿：{labelOf(priceCardDraftOutcomeLabels, body.outcome)}</p>
       {body.draft ? (
         <p>
@@ -214,7 +214,7 @@ export function ProblemTable({ problems }: { problems: PriceCardProblem[] }) {
     return <p className="text-idpxyz-textMuted">没有发现问题。</p>;
   }
   return (
-    <table className="w-full text-left text-xs">
+    <table className="w-full text-left type-body leading-4">
       <thead className="text-idpxyz-textMuted">
         <tr>
           <th className="py-1 pr-3 font-normal">工作表</th>
@@ -247,7 +247,7 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
     case 'unconfigured':
       return (
         // 渠道未配置是诚实答案（ADR-0055）：改文件或重试都不会变，页面也不拿演示数据顶替。
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           {title}：访问通道尚未配置（403），这次没有处理；改文件或重试都不会变，请管理员先配置访问通道。
         </p>
       );
@@ -256,7 +256,7 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
       return <OperatorRefusalNote kind={answer.kind} what={title} />;
     case 'callerProblem':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>
             {title}没成功：{problemNote(answer.code)}
             {answer.detail ? ` 原因：${answer.detail}` : ''}
@@ -266,7 +266,7 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
       );
     case 'noAnswer':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>
             {title}这次没处理完：{problemNote(answer.code)}
           </p>
@@ -275,7 +275,7 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
       );
     case 'transport':
       return (
-        <p className="text-xs text-idpxyz-danger">
+        <p className="type-body leading-4 text-idpxyz-danger">
           {title}：连不上系统（{answer.message}）；检查网络后重试。
         </p>
       );

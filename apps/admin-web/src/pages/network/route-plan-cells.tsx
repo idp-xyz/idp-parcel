@@ -35,7 +35,7 @@ export function parcelCell(numberOf: ShipmentNumberOf) {
         >
           {shipment.text}
         </span>
-        <span className="text-[11px] text-idpxyz-breadcrumb">
+        <span className="type-caption text-idpxyz-breadcrumb">
           包裹 <span className="font-mono">{parcelNoOf(row.declaredParcelId)}</span>
         </span>
       </div>

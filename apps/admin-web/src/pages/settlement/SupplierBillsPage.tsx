@@ -90,10 +90,10 @@ function billColumns(names: PartyNames): WorkbenchColumn<SupplierBillReceptionRe
       sortKey: 'bill',
       render: (row) => (
         <span className="flex flex-col">
-          <span className="truncate font-mono text-xs font-medium text-idpxyz-textBright" title={row.claim}>
+          <span className="truncate font-mono type-body leading-4 font-medium text-idpxyz-textBright" title={row.claim}>
             {billLabel(row)}
           </span>
-          {row.claimVersion !== '1' ? <span className="text-[11px] text-idpxyz-breadcrumb">版本 {row.claimVersion}</span> : null}
+          {row.claimVersion !== '1' ? <span className="type-caption text-idpxyz-breadcrumb">版本 {row.claimVersion}</span> : null}
         </span>
       ),
     },
@@ -216,12 +216,12 @@ function SupplierBillsWorkbench({
         refreshing={refreshing}
         primaryAction={
           mayReceive ? (
-            <Button size="sm" className={`${primaryActionClass} h-7 gap-1.5 text-[12px]`} onClick={() => setDialogOpen(true)}>
+            <Button size="sm" className={`${primaryActionClass} h-7 gap-1.5 type-body`} onClick={() => setDialogOpen(true)}>
               <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
               登记供应商账单
             </Button>
           ) : (
-            <span className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('登记供应商账单', labelFor(supplierBillReceptionDecision))}</span>
+            <span className="type-body text-idpxyz-breadcrumb">{hiddenDecisionHint('登记供应商账单', labelFor(supplierBillReceptionDecision))}</span>
           )
         }
         search={{ value: search, onChange: setSearch, placeholder: '搜账单号、供应商、账期…' }}
@@ -311,7 +311,7 @@ function payableColumns(names: PartyNames): WorkbenchColumn<AuditedPayableRecord
       key: 'bill',
       header: '账单号 · 行',
       render: (row) => (
-        <span className="truncate font-mono text-xs text-idpxyz-breadcrumb" title={row.claim}>
+        <span className="truncate font-mono type-body leading-4 text-idpxyz-breadcrumb" title={row.claim}>
           {billNumberOf(row) ?? row.claim} · 第 {row.line} 行
         </span>
       ),

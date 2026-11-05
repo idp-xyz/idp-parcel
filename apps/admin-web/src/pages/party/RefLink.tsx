@@ -51,8 +51,8 @@ export function RefLink({
     >
       {name ? (
         <>
-          <span className="block font-sans text-[13px]">{name}</span>
-          <span className="block font-mono text-[11px] text-idpxyz-breadcrumb">{id}</span>
+          <span className="block font-sans type-value">{name}</span>
+          <span className="block font-mono type-caption text-idpxyz-breadcrumb">{id}</span>
         </>
       ) : (
         <span className="font-mono">{text ?? id}</span>

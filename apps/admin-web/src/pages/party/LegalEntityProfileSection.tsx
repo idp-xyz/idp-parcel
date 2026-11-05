@@ -68,7 +68,7 @@ const kind = 'legal-entity-profile';
 // 编辑态下联系人那一组落到联系人分区（票 company-subject-section-edit/04），其余四组留在概要分区。
 const groupsOutsideContacts = ['representative', 'addresses', 'invoicing', 'bankAccounts'] as const;
 const contactsOnly = ['contacts'] as const;
-const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
+const note = 'mt-1 type-body text-idpxyz-breadcrumb';
 // 资料表单收在高级组里的那一格；组里有问题时组一律展开。
 const profileAdvancedPaths = ['profiles[0].revision'];
 
@@ -96,8 +96,8 @@ export function LegalEntityProfileSection({
     <div className="flex flex-col gap-5">
       <section>
         <div>
-          <h4 className="text-[13px] font-semibold text-idpxyz-text">资料版本历史</h4>
-          <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次更新都保留一版；当前生效的那一版显示在概要。</p>
+          <h4 className="type-value font-semibold text-idpxyz-text">资料版本历史</h4>
+          <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">每次更新都保留一版；当前生效的那一版显示在概要。</p>
         </div>
         <LegalEntityProfileHistory key={legalEntityId} legalEntityId={legalEntityId} typeNameOf={typeNameOf} version={version} />
       </section>
@@ -108,7 +108,7 @@ export function LegalEntityProfileSection({
             if (event.currentTarget.open) setLookupVisited(true);
           }}
         >
-          <summary className="cursor-pointer text-[13px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">
+          <summary className="cursor-pointer type-value font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">
             查看某个日期的资料
           </summary>
           {lookupVisited ? <CurrentProfile legalEntityId={legalEntityId} typeNameOf={typeNameOf} /> : null}
@@ -117,8 +117,8 @@ export function LegalEntityProfileSection({
         <section className="border-t border-idpxyz-border pt-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
-              <p className="mt-1 text-xs text-idpxyz-breadcrumb">
+              <h4 className="type-value font-semibold text-idpxyz-text">当前有效资料</h4>
+              <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">
                 开票时按当时生效的那一版资料；可以提前登记未来生效的资料。
               </p>
             </div>
@@ -181,7 +181,7 @@ export function ProfileEditMode({
     return (
       <>
         {answer === null ? (
-          <p className="text-[12px] text-idpxyz-breadcrumb">正在读取当前资料，表单会基于它预填…</p>
+          <p className="type-body text-idpxyz-breadcrumb">正在读取当前资料，表单会基于它预填…</p>
         ) : (
           <div className="flex flex-col items-start gap-3">
             <CurrentLegalEntityProfile query={current}>{() => null}</CurrentLegalEntityProfile>
@@ -348,7 +348,7 @@ function ProfileRegistrationForm({
       <div ref={bodyRef} className="min-w-0 scroll-mt-14">
           {preview !== null && current !== null ? (
             <>
-            {renderContacts ? renderContacts(<p className="text-[13px] leading-6 text-idpxyz-breadcrumb">联系人的改动在上方「概要」分区的预览里。</p>) : null}
+            {renderContacts ? renderContacts(<p className="type-value leading-6 text-idpxyz-breadcrumb">联系人的改动在上方「概要」分区的预览里。</p>) : null}
             <ChangePreview
               comparison={preview}
               current={current}
@@ -359,7 +359,7 @@ function ProfileRegistrationForm({
             </>
           ) : (
             <div className="flex flex-col gap-5">
-              <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] leading-5 text-idpxyz-text">
+              <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body leading-5 text-idpxyz-text">
                 <BaseLine base={base} current={current} baseContent={baseContent} known={known} noCurrentNote={noCurrentNote} locked={locked} onSwitch={switchBase} />
                 {knownOptions.length > 0 || knownFailed ? (
                   <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-idpxyz-border pt-1.5 text-idpxyz-breadcrumb">
@@ -369,7 +369,7 @@ function ProfileRegistrationForm({
                       disabled={locked || known === null}
                       value={sourceRevision}
                       onChange={(event) => setSourceRevision(event.target.value)}
-                      className="h-7 min-w-0 max-w-full rounded-md border border-idpxyz-border bg-idpxyz-card px-2 text-[12px] text-idpxyz-text"
+                      className="h-7 min-w-0 max-w-full rounded-md border border-idpxyz-border bg-idpxyz-card px-2 type-body text-idpxyz-text"
                     >
                       <option value="">{knownFailed ? '版本读取失败' : '选择资料版本'}</option>
                       {knownOptions.map((row) => (
@@ -381,7 +381,7 @@ function ProfileRegistrationForm({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-[12px]"
+                      className="type-body"
                       disabled={locked || source === null}
                       onClick={() => {
                         if (source) switchBase({ kind: 'revision', revision: source.revision }, source);
@@ -390,7 +390,7 @@ function ProfileRegistrationForm({
                       带入此版本
                     </Button>
                     {knownFailed ? (
-                      <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={onRetryKnown}>
+                      <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={onRetryKnown}>
                         重试读取版本
                       </Button>
                     ) : null}
@@ -398,7 +398,7 @@ function ProfileRegistrationForm({
                 ) : null}
               </div>
 
-              <ul className="list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
+              <ul className="list-disc pl-4 type-body leading-5 text-idpxyz-breadcrumb">
                 <li>每次更新都留一版，新的一版从它的生效时间起取代上一版；可以提前登记未来生效的资料。</li>
                 <li>注册地址的国家 / 地区须与身份上的注册国家 / 地区一致。</li>
                 <li>没填开票抬头的那一版生效后，开票会因「资料不全」被拒。</li>
@@ -433,7 +433,7 @@ function ProfileRegistrationForm({
                     <Input
                       value={draft.basis}
                       readOnly={locked}
-                      className="font-mono text-[13px]"
+                      className="font-mono type-value"
                       placeholder="营业执照、税务登记或审批单号"
                       onChange={(event) => patch({ basis: event.target.value })}
                     />
@@ -466,7 +466,7 @@ function ProfileRegistrationForm({
       </div>
       {renderFooter(
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 text-[12px]">
+        <div className="min-w-0 flex-1 type-body">
           {attempted && missing.length > 0 ? (
             <p role="alert" className="text-idpxyz-danger">
               还有 {missing.length} 项必填未填：{missing.map((field) => field.label).join('、')}
@@ -700,7 +700,7 @@ function ResolutionAnswer({
   const status = legalEntityProfileStatusOf(body);
   const effective = body.effectiveRevision;
   return (
-    <div className="text-[12px]">
+    <div className="type-body">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusPill label={`资料状态：${status.label}`} tone={status.tone} />
         <span className="text-idpxyz-breadcrumb">
@@ -713,7 +713,7 @@ function ResolutionAnswer({
           <dt className="text-idpxyz-breadcrumb">生效版本</dt>
           <dd>
             {profileRevisionLabel(effective.revision)} · <Instant value={effective.effectiveFrom} precision="day" /> 起生效 · 来源单据{' '}
-            <span className="font-mono text-[13px]">{effective.basis}</span>
+            <span className="font-mono type-value">{effective.basis}</span>
           </dd>
         </dl>
       ) : null}

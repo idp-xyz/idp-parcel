@@ -69,7 +69,7 @@ const columns: WorkbenchColumn<ShownRow>[] = [
     hideWhenDetailOpen: true,
     // 操作者主体引用是「发行方#主体」的长串，列里显短名，全串悬停与详情里都有。
     render: (row) => (
-      <span className="font-mono text-[12px]">
+      <span className="font-mono type-body">
         <PrincipalRef value={row.source.submitter} />
       </span>
     ),
@@ -79,7 +79,7 @@ const columns: WorkbenchColumn<ShownRow>[] = [
     header: '提交时间',
     hideWhenDetailOpen: true,
     render: (row) => (
-      <span className="font-mono text-[12px]">
+      <span className="font-mono type-body">
         <Instant value={row.source.submittedAt} />
       </span>
     ),

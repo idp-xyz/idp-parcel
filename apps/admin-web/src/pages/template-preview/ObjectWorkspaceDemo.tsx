@@ -56,7 +56,7 @@ export function ObjectWorkspaceDemo({
             <CardDescription>调用方接在模板审计留痕之后的同 id 内容</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-[12px] leading-6 text-idpxyz-text">
+            <p className="type-body leading-6 text-idpxyz-text">
               上方留痕是模板从 auditTrail 渲染的；真实页面由审计读口供数，本卡只演示调用方可以在其后补充说明。
             </p>
           </CardContent>
@@ -85,7 +85,7 @@ export function ObjectWorkspaceDemo({
                   <TableRow key={item.id}>
                     <TableCell>{item.kind}</TableCell>
                     <TableCell>
-                      <span className="font-mono text-[12px]">{item.id}</span>
+                      <span className="font-mono type-body">{item.id}</span>
                     </TableCell>
                     <TableCell className="text-idpxyz-textMuted">{item.note}</TableCell>
                   </TableRow>
@@ -106,7 +106,7 @@ export function ObjectWorkspaceDemo({
             <CardDescription>调用方接在模板概要内容之后的同 id 内容</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-[12px] leading-6 text-idpxyz-text">
+            <p className="type-body leading-6 text-idpxyz-text">
               本签前面的基本信息与两个区块是模板按 basicFields / sections 放进「概要」的；这张卡是调用方另给的同 id 内容，
               模板把它接在自己的内容之后。
             </p>
@@ -150,7 +150,7 @@ export function ObjectWorkspaceDemo({
         id: section.id,
         title: section.title,
         description: section.description,
-        content: <p className="text-[12px] leading-6 text-idpxyz-text">{section.body}</p>,
+        content: <p className="type-body leading-6 text-idpxyz-text">{section.body}</p>,
       }))}
       auditTrail={demoDetailAuditTrail}
       tabs={tabs}
@@ -161,7 +161,7 @@ export function ObjectWorkspaceDemo({
             <CardDescription>窄屏上整栏隐藏，只放看不见也不缺的辅助信息</CardDescription>
           </CardHeader>
           <CardContent>
-            <dl className="flex flex-col gap-1.5 text-[12px] leading-5">
+            <dl className="flex flex-col gap-1.5 type-body leading-5">
               {demoWorkspaceAsideFacts.map((fact) => (
                 <div key={fact.label} className="flex flex-col">
                   <dt className="text-idpxyz-textMuted">{fact.label}</dt>

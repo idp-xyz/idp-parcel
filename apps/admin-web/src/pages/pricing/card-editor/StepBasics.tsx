@@ -115,7 +115,7 @@ export function StepBasics() {
       </section>
 
       <details className="rounded border border-idpxyz-border px-3 py-2">
-        <summary className="cursor-pointer select-none text-[12px] text-idpxyz-breadcrumb">更多设置</summary>
+        <summary className="cursor-pointer select-none type-body text-idpxyz-breadcrumb">更多设置</summary>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <TextField
             id={field.basics('baseChargeCode')}

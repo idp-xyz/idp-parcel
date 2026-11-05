@@ -73,13 +73,13 @@ export function SeriesReviewPanel({
     <Card className="m-4">
       <CardHeader>
         <CardTitle>
-          复核 <span className="font-mono text-[13px]">{target.seriesId}</span>
-          <span className="text-[13px] text-idpxyz-textMuted"> 版本 {target.seriesVersion}</span>
+          复核 <span className="font-mono type-value">{target.seriesId}</span>
+          <span className="type-value text-idpxyz-textMuted"> 版本 {target.seriesVersion}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* 复核责任方与授予由接入渠道给，表单不收也不送——从浏览器收一个上去就是自报身份（ADR-0262 决定一）。 */}
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           核对这一版的每期数值与外部来源公布的是否一致。通过后，这一版从现在起参与计价；退回后，登记人要更正再登一版。
           复核只是另记一条结论，原来登记的数值不会被改。
           <br />
@@ -88,7 +88,7 @@ export function SeriesReviewPanel({
         </p>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-idpxyz-textMuted">结论</span>
+          <span className="type-body leading-4 text-idpxyz-textMuted">结论</span>
           <Button
             variant={decision === 'APPROVED' ? 'default' : 'outline'}
             onClick={() => setDecision('APPROVED')}
@@ -108,7 +108,7 @@ export function SeriesReviewPanel({
           onChange={(event) => setBasis(event.target.value)}
           placeholder="理由（必填）：例如「已与来源公布的数值逐期核对一致」"
           rows={4}
-          className="text-xs"
+          className="type-body leading-4"
         />
 
         <div className="flex items-center gap-3">
@@ -138,12 +138,12 @@ function ReviewAnswerNote({ state }: { state: PanelState }) {
     case 'outcome': {
       const outcome = answer.body.outcome;
       // 未收录的 outcome 原样示出原名：新增一格时宁可显示原名，也不把它归进某个既有中文说法——那会让一种新答案冒充另一种。
-      return <p className="text-xs text-idpxyz-textMuted">{seriesReviewOutcomeLabels[outcome] ?? outcome}</p>;
+      return <p className="type-body leading-4 text-idpxyz-textMuted">{seriesReviewOutcomeLabels[outcome] ?? outcome}</p>;
     }
     case 'unconfigured':
       // 渠道未配置是诚实答案不是尚未实现（ADR-0055）：改请求或重试都不会变，续办在配置接入渠道。
       return (
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           访问通道尚未配置，这次复核没有记下；重试也不会变。请管理员先配置访问通道。
         </p>
       );
@@ -152,15 +152,15 @@ function ReviewAnswerNote({ state }: { state: PanelState }) {
       return <OperatorRefusalNote kind={answer.kind} what="复核" />;
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">复核没有记下：{problemNote(answer.code)}</p>
+        <p className="type-body leading-4 text-idpxyz-danger">复核没有记下：{problemNote(answer.code)}</p>
       );
     case 'noAnswer':
       return (
-        <p className="text-xs text-idpxyz-danger">
+        <p className="type-body leading-4 text-idpxyz-danger">
           这次没处理完，复核记没记上还不确定；稍后刷新列表确认，再决定要不要重提。（问题码 {answer.code}）
         </p>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">连不上系统，复核没有提交（{answer.message}）；检查网络后重试。</p>;
+      return <p className="type-body leading-4 text-idpxyz-danger">连不上系统，复核没有提交（{answer.message}）；检查网络后重试。</p>;
   }
 }

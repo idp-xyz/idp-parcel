@@ -13,13 +13,13 @@ export function UnwiredModule({ moduleId }: { moduleId: string }) {
       <div className="max-w-[560px] px-6">
         <div className="flex items-center gap-2 mb-3">
           <CircleDashed className="h-5 w-5 text-idpxyz-textMuted" />
-          <span className="text-[18px] text-idpxyz-textBright">{info.title}</span>
-          <span className="text-[11px] px-2 py-0.5 rounded border border-idpxyz-border text-idpxyz-textMuted">
+          <span className="type-title text-idpxyz-textBright">{info.title}</span>
+          <span className="type-caption px-2 py-0.5 rounded border border-idpxyz-border text-idpxyz-textMuted">
             尚未开放
           </span>
         </div>
-        <p className="text-[13px] leading-6 text-idpxyz-text">{info.summary}</p>
-        <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-3">
+        <p className="type-value leading-6 text-idpxyz-text">{info.summary}</p>
+        <p className="type-body leading-5 text-idpxyz-textMuted mt-3">
           这页的数据入口还没有开放：不发请求、不显示任何未经确认的默认值。开放后由对应模块供数。
         </p>
         <TechnicalDetails

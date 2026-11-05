@@ -44,7 +44,7 @@ function factStatus(row: FactRow): RowStatus {
   return { label: row.values.effectiveBasis, tone: row.values.effectiveBasis === '待确认' ? 'warn' : 'good' };
 }
 
-const mono = (value: string | undefined) => <span className="font-mono text-[12px]">{value ?? '—'}</span>;
+const mono = (value: string | undefined) => <span className="font-mono type-body">{value ?? '—'}</span>;
 
 const columns: WorkbenchColumn<FactRow>[] = [
   {
@@ -121,7 +121,7 @@ export function EffectiveTimeJudgmentPage() {
           <span className="inline-flex items-center gap-2">
             <Input
               value={sourceDraft}
-              className="h-8 w-[260px] font-mono text-[12px]"
+              className="h-8 w-[260px] font-mono type-body"
               placeholder="轨迹来源（如承运商的接口编码）"
               aria-label="轨迹来源"
               onChange={(event) => setSourceDraft(event.target.value)}
@@ -200,7 +200,7 @@ function FactDetail({ row, mayJudge, onClose, onJudged }: { row: FactRow; mayJud
             </Button>
           )
         ) : (
-          <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('确认时间', labelFor(effectiveTimeJudgmentDecision))}</p>
+          <p className="type-body text-idpxyz-breadcrumb">{hiddenDecisionHint('确认时间', labelFor(effectiveTimeJudgmentDecision))}</p>
         )
       }
       onClose={onClose}
@@ -259,7 +259,7 @@ function JudgmentPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           确认后会新记一条，原来的记录照留；确认过的时间会同步到物流动态，客户看到的轨迹随之更新。确认人记为当前登录的你。
           {target.version ? (
             // 再判之前先把「这一条判过没有、按哪个依据」摆出来（票 21 红线）；待确认行如实说待确认。
@@ -273,19 +273,19 @@ function JudgmentPanel({
         </p>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-xs text-idpxyz-textMuted">轨迹编号 *</span>
+            <span className="type-body leading-4 text-idpxyz-textMuted">轨迹编号 *</span>
             <Input
               value={fact}
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               placeholder="从列表那一行的「技术详情」里复制"
               onChange={(event) => setFact(event.target.value)}
             />
           </label>
           <label className="block">
-            <span className="text-xs text-idpxyz-textMuted">从何时起算 *</span>
+            <span className="type-body leading-4 text-idpxyz-textMuted">从何时起算 *</span>
             <Input
               value={effectiveAt}
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               placeholder="如 2026-09-04T06:05:00Z 或 2026-09-04T14:05:00+08:00"
               onChange={(event) => setEffectiveAt(event.target.value)}
             />
@@ -313,7 +313,7 @@ function JudgmentPanel({
 function JudgmentAnswerNote({ state }: { state: PanelState }) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
   if (state.kind === 'malformed') {
-    return <p className="text-xs text-idpxyz-danger">没有提交：{state.message}</p>;
+    return <p className="type-body leading-4 text-idpxyz-danger">没有提交：{state.message}</p>;
   }
 
   const answer = state.answer;
@@ -322,7 +322,7 @@ function JudgmentAnswerNote({ state }: { state: PanelState }) {
       const note = describeJudgmentAnswer(answer.body);
       const tone = note.tone === 'answered' ? 'text-idpxyz-textMuted' : 'text-idpxyz-danger';
       return (
-        <div className={`text-xs ${tone}`}>
+        <div className={`type-body leading-4 ${tone}`}>
           <p>{note.headline}</p>
           {note.details.length > 0 ? (
             <ul className="mt-0.5 ml-4 list-disc">
@@ -336,7 +336,7 @@ function JudgmentAnswerNote({ state }: { state: PanelState }) {
     }
     case 'unconfigured':
       return (
-        <p className="text-xs text-idpxyz-textMuted">
+        <p className="type-body leading-4 text-idpxyz-textMuted">
           操作入口还没有配置好，这次什么都没有保存；重试也不会改变结果，请联系系统管理员完成配置。在那之前这条轨迹仍是待确认，
           不会进物流动态。
         </p>
@@ -346,17 +346,17 @@ function JudgmentAnswerNote({ state }: { state: PanelState }) {
       return <OperatorRefusalNote kind={answer.kind} what="确认起算时间" />;
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">
+        <p className="type-body leading-4 text-idpxyz-danger">
           没有确认：{judgmentProblemNote(answer.code)}
         </p>
       );
     case 'noAnswer':
       return (
-        <p className="text-xs text-idpxyz-danger">
+        <p className="type-body leading-4 text-idpxyz-danger">
           结果还不确定：{judgmentProblemNote(answer.code)}；稍后刷新看这一条确认上没有，重新提交同一时间不会重复记录。
         </p>
       );
     case 'transport':
-      return <p className="text-xs text-idpxyz-danger">连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
+      return <p className="type-body leading-4 text-idpxyz-danger">连不上服务，这次没有提交；请检查网络后重试（{answer.message}）</p>;
   }
 }

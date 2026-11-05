@@ -72,8 +72,8 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
     header: '名称',
     render: (row) => (
       <div className="min-w-40">
-        <div className="break-all font-mono text-[12px] text-idpxyz-textBright">{row.seriesId}</div>
-        <div className="text-[11px] text-idpxyz-textMuted">
+        <div className="break-all font-mono type-body text-idpxyz-textBright">{row.seriesId}</div>
+        <div className="type-caption text-idpxyz-textMuted">
           版本 {row.seriesVersion}
           {row.priorVersion ? ` · 更正 ${row.priorVersion}` : ''}
         </div>
@@ -89,14 +89,14 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
   {
     id: 'source',
     header: '数据来源',
-    render: (row) => <span className="break-all font-mono text-[12px]">{row.sourceIdentifier}</span>,
+    render: (row) => <span className="break-all font-mono type-body">{row.sourceIdentifier}</span>,
   },
   {
     id: 'range',
     header: '管哪段时间',
     className: 'whitespace-nowrap',
     render: (row) => (
-      <span className="font-mono text-[12px]">
+      <span className="font-mono type-body">
         {formatInstant(row.effectiveFrom)}
         {row.effectiveTo ? ` → ${formatInstant(row.effectiveTo)}` : ' → 长期'}
       </span>
@@ -111,7 +111,7 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
         <div className="whitespace-nowrap">
           <StatusPill label={state.label} tone={state.tone} />
           {row.reviewCount > 0 ? (
-            <div className="mt-0.5 text-[11px] text-idpxyz-textMuted">
+            <div className="mt-0.5 type-caption text-idpxyz-textMuted">
               {row.approvedReviewCount}/{row.reviewCount} 次通过
               {row.lastReviewedAt ? ` · ${formatInstant(row.lastReviewedAt)}` : ''}
             </div>
@@ -124,7 +124,7 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
     id: 'registered',
     header: '登记时间',
     className: 'whitespace-nowrap',
-    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.registeredAt)}</span>,
+    render: (row) => <span className="font-mono type-body">{formatInstant(row.registeredAt)}</span>,
   },
   {
     id: 'technical',

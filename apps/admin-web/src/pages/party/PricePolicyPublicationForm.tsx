@@ -54,8 +54,8 @@ export interface PricePolicyPublicationFormProps {
   start?: NewVersionStart<PricePolicyDraft>;
 }
 
-const groupTitle = 'text-[13px] font-medium text-idpxyz-text';
-const noteClass = 'text-[11px] text-idpxyz-textMuted';
+const groupTitle = 'type-value font-medium text-idpxyz-text';
+const noteClass = 'type-caption text-idpxyz-textMuted';
 
 export function PricePolicyPublicationForm({ onPublished, start }: PricePolicyPublicationFormProps) {
   const [draft, setDraft] = useState<PricePolicyDraft>(start?.draft ?? emptyPricePolicyDraft());
@@ -109,7 +109,7 @@ function PricePolicyFields({
       <Input
         value={draft[key]}
         disabled={locked}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         placeholder={placeholder}
         onChange={(event) => patch({ [key]: event.target.value } as Partial<PricePolicyDraft>)}
       />
@@ -288,7 +288,7 @@ function ConditionalField({
         <Input
           value={value}
           disabled={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
         />

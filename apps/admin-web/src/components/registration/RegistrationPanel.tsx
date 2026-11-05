@@ -183,7 +183,7 @@ export function RegistrationPanel({
           <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="text-xs text-idpxyz-textMuted">
+          <div className="type-body leading-4 text-idpxyz-textMuted">
             <p>{snapshotHint}</p>
             <TechnicalDetails
               rows={[
@@ -197,7 +197,7 @@ export function RegistrationPanel({
             onChange={(event) => setDraft(event.target.value)}
             placeholder="粘贴登记快照 JSON"
             rows={12}
-            className="font-mono text-xs"
+            className="font-mono type-body leading-4"
           />
           <div className="flex items-center gap-3">
             <Button onClick={send} disabled={state.kind === 'submitting' || draft.trim() === ''}>
@@ -248,7 +248,7 @@ export function RegistrationAnswerNote({
 }: RegistrationAnswerNoteProps) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
   if (state.kind === 'malformed') {
-    return <p className="text-xs text-idpxyz-danger">不是合法 JSON，未提交：{state.message}</p>;
+    return <p className="type-body leading-4 text-idpxyz-danger">不是合法 JSON，未提交：{state.message}</p>;
   }
 
   const answer = state.answer;
@@ -268,7 +268,7 @@ export function RegistrationAnswerNote({
       const overApplied = overAppliedNote(answer.body.overAppliedMinor);
       const unreconciled = unreconciledScopesNote(answer.body.unreconciledScopes);
       return (
-        <div className="text-xs text-idpxyz-textMuted">
+        <div className="type-body leading-4 text-idpxyz-textMuted">
           <p>
             登记册答复：{label}
             {reason ? <>；拒绝理由：{refusalReasonLabels?.[reason] ?? reason}</> : null}
@@ -299,7 +299,7 @@ export function RegistrationAnswerNote({
     }
     case 'unconfigured':
       return (
-        <div className="text-xs text-idpxyz-textMuted">
+        <div className="type-body leading-4 text-idpxyz-textMuted">
           <p>
             接入渠道还没有配置，这不是故障：改请求或重试都不会改变结果，要先由配部署的人完成接入配置。配置完成之前，登记仍走受控登记命令行。
           </p>
@@ -323,7 +323,7 @@ export function RegistrationAnswerNote({
       return <OperatorRefusalNote kind={answer.kind} />;
     case 'callerProblem':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>调用方式问题：{problemNote(answer.code)}</p>
           {/* 服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11）：原样示出、不查表、不截断——
               「tenantId must not be carried…」那半句正是操作者要去掉的那一格。缺席不显：没给就是没给，不
@@ -334,14 +334,14 @@ export function RegistrationAnswerNote({
       );
     case 'noAnswer':
       return (
-        <div className="text-xs text-idpxyz-danger">
+        <div className="type-body leading-4 text-idpxyz-danger">
           <p>服务端没有形成答案：{problemNote(answer.code)}；登记与否未知，可稍后重试。</p>
           <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
         </div>
       );
     case 'transport':
       return (
-        <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>
+        <p className="type-body leading-4 text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>
       );
   }
 }

@@ -63,7 +63,7 @@ function col(id: string, header: string, options?: { mono?: boolean; className?:
     className: options?.className,
     render: (row) => {
       const value = row.values[id] ?? '—';
-      return options?.mono ? <span className="font-mono text-[12px]">{value}</span> : value;
+      return options?.mono ? <span className="font-mono type-body">{value}</span> : value;
     },
   };
 }
@@ -124,7 +124,7 @@ export function ChannelSelectionDecisionsPage() {
           <div className="flex items-center gap-2">
             <Input
               value={inspectDraft}
-              className="font-mono text-[12px] w-[220px]"
+              className="font-mono type-body w-[220px]"
               placeholder="按决定号查看"
               onChange={(event) => setInspectDraft(event.target.value)}
             />
@@ -137,13 +137,13 @@ export function ChannelSelectionDecisionsPage() {
           <>
             <Input
               value={scopeDraft}
-              className="font-mono text-[12px] w-[200px]"
+              className="font-mono type-body w-[200px]"
               placeholder="商业范围"
               onChange={(event) => setScopeDraft(event.target.value)}
             />
             <Input
               value={mappingDraft}
-              className="font-mono text-[12px] w-[200px]"
+              className="font-mono type-body w-[200px]"
               placeholder="产品—渠道映射"
               onChange={(event) => setMappingDraft(event.target.value)}
             />
@@ -223,10 +223,10 @@ function DecisionPanel({ decisionId, onClose }: { decisionId: string; onClose: (
 function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry: () => void }) {
   switch (state.kind) {
     case 'loading':
-      return <p className="text-xs text-idpxyz-textMuted">读取中…</p>;
+      return <p className="type-body leading-4 text-idpxyz-textMuted">读取中…</p>;
     case 'notVisible':
       return (
-        <div className="text-xs text-idpxyz-textMuted">
+        <div className="type-body leading-4 text-idpxyz-textMuted">
           没有这条决定,可能是号填错了;请核对后再查。
           <TechnicalDetails
             rows={[
@@ -239,7 +239,7 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
       );
     case 'unconfigured':
       return (
-        <div className="text-xs text-idpxyz-textMuted">
+        <div className="type-body leading-4 text-idpxyz-textMuted">
           管理台还没接上操作者登录渠道,读不到这条决定;请部署的人配置后再试。
           <TechnicalDetails
             rows={[
@@ -254,7 +254,7 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
       return <OperatorRefusalNote kind={state.kind} />;
     case 'error':
       return (
-        <div className="flex flex-col gap-1 text-xs text-idpxyz-textMuted">
+        <div className="flex flex-col gap-1 type-body leading-4 text-idpxyz-textMuted">
           <div className="flex items-center gap-3">
             <span>{state.message}</span>
             {state.canRetry ? (
@@ -271,7 +271,7 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
       const candidates = candidateRowsOf(decision);
       return (
         <>
-          <p className="text-xs text-idpxyz-text">
+          <p className="type-body leading-4 text-idpxyz-text">
             结论:<strong>{wordOf(conclusionLabels, decision.conclusion)}</strong>
             {decision.selectedCandidate ? (
               <>
@@ -291,7 +291,7 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
             <TableBody>
               {candidates.map((row, index) => (
                 <TableRow key={row.key}>
-                  <TableCell className="font-mono text-[12px]">{row.values.candidate}</TableCell>
+                  <TableCell className="font-mono type-body">{row.values.candidate}</TableCell>
                   <TableCell>
                     <StatusPill code={decision.candidates[index]?.outcome ?? ''} label={row.values.outcome} />
                   </TableCell>
@@ -300,7 +300,7 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
               ))}
             </TableBody>
           </Table>
-          <p className="text-[11px] text-idpxyz-textMuted">报价金额不在本页:到「价格评价」页按技术详情里的评价引用查。</p>
+          <p className="type-caption text-idpxyz-textMuted">报价金额不在本页:到「价格评价」页按技术详情里的评价引用查。</p>
           <TechnicalDetails rows={decisionTechnicalRows(decision)} />
         </>
       );

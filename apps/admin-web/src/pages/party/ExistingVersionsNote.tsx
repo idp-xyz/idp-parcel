@@ -36,7 +36,7 @@ export function ExistingVersionsNote({
       {lines.map((line) => (
         <p
           key={line.text}
-          className={`text-[12px] ${line.tone === 'warn' ? 'font-medium text-idpxyz-danger' : 'text-idpxyz-breadcrumb'}`}
+          className={`type-body ${line.tone === 'warn' ? 'font-medium text-idpxyz-danger' : 'text-idpxyz-breadcrumb'}`}
         >
           {line.text}
         </p>

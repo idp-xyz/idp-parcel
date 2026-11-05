@@ -32,7 +32,7 @@ import {
 // 不预选任何一项，「用这台电脑的时区」只是替人把那一项挑出来，仍要人自己点登记。登记表单按登记册配置写授予收起（ADR-0315）。
 
 const fieldClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[12px] text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
+  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
 
 /** 运行环境认得的 IANA 时区名；老环境没有这项能力时只剩裸 UTC 与这台电脑所在的区，仍选得出来。 */
 function supportedZones(browserZone: string): string[] {
@@ -49,7 +49,7 @@ function supportedZones(browserZone: string): string[] {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="text-[13px] font-semibold text-idpxyz-textBright">{title}</h3>
+      <h3 className="type-value font-semibold text-idpxyz-textBright">{title}</h3>
       <div className="mt-1.5">{children}</div>
     </section>
   );
@@ -102,7 +102,7 @@ function RegistrationForm({ onRegistered }: { onRegistered: () => void }) {
       }}
     >
       <label className="block">
-        <span className="mb-0.5 block text-[11px] text-idpxyz-textMuted">时区</span>
+        <span className="mb-0.5 block type-caption text-idpxyz-textMuted">时区</span>
         <select
           className={fieldClass}
           value={zone}
@@ -119,15 +119,15 @@ function RegistrationForm({ onRegistered }: { onRegistered: () => void }) {
             </option>
           ))}
         </select>
-        <span className="mt-1 flex flex-wrap items-center gap-1 text-[12px] text-idpxyz-breadcrumb">
-          <Button type="button" size="sm" variant="ghost" className="h-6 px-1.5 text-[12px] text-idpxyz-link" onClick={() => setZone(browserZone)}>
+        <span className="mt-1 flex flex-wrap items-center gap-1 type-body text-idpxyz-breadcrumb">
+          <Button type="button" size="sm" variant="ghost" className="h-6 px-1.5 type-body text-idpxyz-link" onClick={() => setZone(browserZone)}>
             用这台电脑的时区（{zoneWords(browserZone)}）
           </Button>
         </span>
-        {touched && problems.zone ? <span className={`mt-0.5 block text-[11px] ${statusToneText.warning}`}>{problems.zone}</span> : null}
+        {touched && problems.zone ? <span className={`mt-0.5 block type-caption ${statusToneText.warning}`}>{problems.zone}</span> : null}
       </label>
       <div>
-        <span className="mb-0.5 block text-[11px] text-idpxyz-textMuted">从什么时候起用（按 {zoneLabel(displayZone, new Date())} 填写）</span>
+        <span className="mb-0.5 block type-caption text-idpxyz-textMuted">从什么时候起用（按 {zoneLabel(displayZone, new Date())} 填写）</span>
         <div className="flex flex-wrap items-center gap-1.5">
           <input
             className={`${fieldClass} w-52`}
@@ -140,22 +140,22 @@ function RegistrationForm({ onRegistered }: { onRegistered: () => void }) {
             aria-label="从什么时候起用"
             aria-invalid={touched && problems.effectiveFrom !== null}
           />
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px] text-idpxyz-link" onClick={() => setWallTime(wallTimeIn(new Date(), displayZone))}>
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 type-body text-idpxyz-link" onClick={() => setWallTime(wallTimeIn(new Date(), displayZone))}>
             现在
           </Button>
         </div>
         {touched && problems.effectiveFrom ? (
-          <span className={`mt-0.5 block text-[11px] ${statusToneText.warning}`}>{problems.effectiveFrom}</span>
+          <span className={`mt-0.5 block type-caption ${statusToneText.warning}`}>{problems.effectiveFrom}</span>
         ) : null}
       </div>
-      <p className="text-[12px] leading-5 text-idpxyz-breadcrumb">
+      <p className="type-body leading-5 text-idpxyz-breadcrumb">
         登记之后开立的单据才按它出日期；此前开立、没带单据号的单据不补号。时区只增不改，要换就再登一版。
       </p>
       <Button type="submit" size="sm" className={primaryActionClass} disabled={pending}>
         {pending ? '登记中…' : '登记单据编号时区'}
       </Button>
       {answer ? (
-        <div role="status" className={`rounded border px-3 py-2 text-[12px] leading-5 ${statusToneBanner[answer.tone]}`}>
+        <div role="status" className={`rounded border px-3 py-2 type-body leading-5 ${statusToneBanner[answer.tone]}`}>
           <p>{answer.words}</p>
           <TechnicalDetails className="mt-1" rows={answer.technical} />
         </div>
@@ -194,7 +194,7 @@ export function TimeZoneDialog({
             <X className="h-4 w-4" aria-hidden="true" />
           </Button>
         </DialogHeader>
-        <DialogBody className="space-y-4 text-[12px] leading-5 text-idpxyz-text">
+        <DialogBody className="space-y-4 type-body leading-5 text-idpxyz-text">
           <Section title="此刻">
             {state.configured ? (
               <p>

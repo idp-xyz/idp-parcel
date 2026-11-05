@@ -65,7 +65,7 @@ function rejectionConfirmText({ entry, reason }: PendingRejection): string {
  */
 function restrictedItemsBlock(entry: AuthorizedDispositionQueueEntry) {
   return (
-    <div className="flex flex-col gap-1 text-[12px]">
+    <div className="flex flex-col gap-1 type-body">
       <span className="text-idpxyz-textMuted">没通过的检查</span>
       {entry.restrictedItems.length === 0 ? (
         <p className="text-idpxyz-textMuted">这票运单停在等待处置,却没有任何没通过的检查——数据异常,请联系管理员核对。</p>
@@ -83,7 +83,7 @@ function restrictedItemsBlock(entry: AuthorizedDispositionQueueEntry) {
 function NoteLine({ note }: { note: DispositionCommandNote | null }) {
   if (!note) return null;
   return (
-    <div className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+    <div className={`type-body ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
       {note.text}
       {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
       <TechnicalDetails rows={note.technical} />
@@ -194,7 +194,7 @@ export function AuthorizedDispositionPage() {
             id: row.id,
             title: row.title,
             subtitle: row.subtitle,
-            status: <span className={`shrink-0 text-[11px] ${row.badData ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>{row.statusText}</span>,
+            status: <span className={`shrink-0 type-caption ${row.badData ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>{row.statusText}</span>,
             meta: row.meta,
           };
         })}
@@ -207,7 +207,7 @@ export function AuthorizedDispositionPage() {
             {selectedEntry && restrictedItemsBlock(selectedEntry)}
             {/* 单份读不回时不留空白:已记录的判断是处置的依据,缺了要说清缺在哪一步。 */}
             {selectedId && !caseBody && (
-              <p className="text-[12px] text-idpxyz-textMuted">{caseAnswer ? caseFailureText(caseAnswer) : '正在读取详情…'}</p>
+              <p className="type-body text-idpxyz-textMuted">{caseAnswer ? caseFailureText(caseAnswer) : '正在读取详情…'}</p>
             )}
             {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
             <NoteLine note={commandNote} />

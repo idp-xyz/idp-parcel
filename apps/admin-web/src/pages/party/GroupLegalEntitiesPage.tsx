@@ -91,7 +91,7 @@ function LegalEntityFilterButton({ item }: { item: LegalEntityFilterItem }) {
       aria-pressed={item.active}
       title={item.title}
       disabled={item.disabled ?? (item.count === 0 && !item.active)}
-      className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent text-[12px] leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent type-body leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
         item.active
           ? 'border-b-idpxyz-accent font-semibold text-idpxyz-textBright'
           : 'text-idpxyz-breadcrumb hover:text-idpxyz-textBright'
@@ -136,12 +136,12 @@ function IdentityLayerCell({ row, typeNameOf }: { row: GroupLegalEntityRecord; t
   if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
   const country = cells.country === '' ? null : <CountryLabel code={cells.country} />;
   if (cells.numberCells.length === 0) {
-    return <p className="min-w-40 text-[13px] leading-5 text-idpxyz-text">{country}</p>;
+    return <p className="min-w-40 type-value leading-5 text-idpxyz-text">{country}</p>;
   }
   return (
     <div className="min-w-40">
-      <p className="font-mono text-[13px] leading-5 text-idpxyz-text">{cells.numberCells.map((cell) => cell.number).join('；')}</p>
-      <p className="mt-0.5 truncate text-[12px] leading-4 text-idpxyz-breadcrumb" title={cells.numbers}>
+      <p className="font-mono type-value leading-5 text-idpxyz-text">{cells.numberCells.map((cell) => cell.number).join('；')}</p>
+      <p className="mt-0.5 truncate type-body leading-4 text-idpxyz-breadcrumb" title={cells.numbers}>
         {cells.numberCells.map((cell) => cell.typeName).join('；')}
         {country ? <> · {country}</> : null}
       </p>
@@ -176,11 +176,11 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
           aria-hidden="true"
         />
         <span
-          className="min-w-0 truncate text-[14px] font-semibold leading-5 text-idpxyz-textBright"
+          className="min-w-0 truncate type-section font-semibold leading-5 text-idpxyz-textBright"
           title={row.partyNameKnown ? row.partyName : row.legalEntityId}
         >
           <span className="block truncate">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</span>
-          <span className="mt-0.5 block truncate font-mono text-[12px] font-normal leading-4 text-idpxyz-breadcrumb">
+          <span className="mt-0.5 block truncate font-mono type-body font-normal leading-4 text-idpxyz-breadcrumb">
             {row.legalEntityId}
           </span>
         </span>
@@ -206,7 +206,7 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
       <div className="flex flex-col items-start gap-1">
         <StatusPill code={row.status} />
         {row.deactivatedAt ? (
-          <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
+          <span className="font-mono type-body text-idpxyz-breadcrumb">
             自 <Instant value={row.deactivatedAt} precision="day" />
           </span>
         ) : null}
@@ -394,13 +394,13 @@ export function GroupLegalEntitiesPage() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-          <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
+          <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             返回列表
           </Button>
           <div className="min-w-0">
-            <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">新增公司主体</h1>
-            <p className="truncate text-[12px] text-idpxyz-breadcrumb">
+            <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">新增公司主体</h1>
+            <p className="truncate type-body text-idpxyz-breadcrumb">
               我们自己签约、开票用的公司；填注册地与注册号，开票资料和联系人保存后在详情里补
             </p>
           </div>
@@ -497,7 +497,7 @@ export function GroupLegalEntitiesPage() {
             type="button"
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-[12px] text-idpxyz-accent"
+            className="gap-1.5 type-body text-idpxyz-accent"
             aria-haspopup="dialog"
             aria-expanded={helpOpen}
             onClick={() => setHelpOpen(true)}
@@ -540,7 +540,7 @@ export function GroupLegalEntitiesPage() {
             {hasActiveFilters ? (
               <button
                 type="button"
-                className="inline-flex h-[34px] items-center whitespace-nowrap text-[12px] leading-normal text-idpxyz-breadcrumb hover:text-idpxyz-textBright focus-visible:outline-none focus-visible:underline"
+                className="inline-flex h-[34px] items-center whitespace-nowrap type-body leading-normal text-idpxyz-breadcrumb hover:text-idpxyz-textBright focus-visible:outline-none focus-visible:underline"
                 onClick={clearFilters}
               >
                 清除
@@ -608,7 +608,7 @@ export function GroupLegalEntitiesPage() {
             </Button>
           </DialogHeader>
           {/* 全文是运营的话（spec 公司主体 UX「统一用语」）：不出现「责任法人」「修订」「身份」这些领域词，它们留在 CONTEXT 与技术详情。 */}
-          <DialogBody className="space-y-4 text-[12px] leading-5 text-idpxyz-text">
+          <DialogBody className="space-y-4 type-body leading-5 text-idpxyz-text">
             <section>
               <h3 className="font-semibold text-idpxyz-textBright">这里登记谁</h3>
               <p className="mt-1">

@@ -18,7 +18,7 @@ import { problemNote, profileRevisionLabel } from './presentation';
 import { useLegalEntityRead } from './legal-entity-reads';
 import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 
-const note = 'text-[12px] text-idpxyz-breadcrumb';
+const note = 'type-body text-idpxyz-breadcrumb';
 const kindLabels: Record<ProfileChangeKind, string> = {
   added: '新增', modified: '已修改', removed: '移除', unchanged: '未变化',
 };
@@ -126,12 +126,12 @@ export function LegalEntityProfileHistory({
       {currentReadProblem ? <p role="status" className={note}>{currentReadProblem}</p> : null}
       <div className="grid min-w-0 gap-4 rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4 md:grid-cols-[minmax(11rem,0.7fr)_minmax(0,1.3fr)]">
         <div className="min-w-0">
-          <label htmlFor="legal-entity-profile-revision" className="text-[12px] font-medium text-idpxyz-text">选择资料版本</label>
+          <label htmlFor="legal-entity-profile-revision" className="type-body font-medium text-idpxyz-text">选择资料版本</label>
           <select
             id="legal-entity-profile-revision"
             value={selected?.revision ?? ''}
             onChange={(event) => selectRevision(Number(event.target.value))}
-            className="mt-1.5 h-9 w-full min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-bg px-2 text-[13px] text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent"
+            className="mt-1.5 h-9 w-full min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-bg px-2 type-value text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent"
           >
             {revisions.map((row, index) => {
               const rowState = profileRevisionState(row, resolutionIsUsable ? currentBody : undefined);
@@ -154,11 +154,11 @@ export function LegalEntityProfileHistory({
                     className={`w-full rounded-md border px-3 py-2 text-left transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${active ? 'border-idpxyz-accent bg-idpxyz-activeItem' : 'border-transparent hover:bg-idpxyz-hoverItem'}`}
                   >
                     <span className="flex items-center justify-between gap-2">
-                      <span className="text-[13px] font-semibold text-idpxyz-text">{profileRevisionLabel(row.revision)}</span>
-                      <span className={`rounded-full bg-idpxyz-bg px-2 py-0.5 text-[11px] ${rowState.tone === 'current' ? 'font-medium text-idpxyz-accent' : 'text-idpxyz-breadcrumb'}`}>{rowState.label}</span>
+                      <span className="type-value font-semibold text-idpxyz-text">{profileRevisionLabel(row.revision)}</span>
+                      <span className={`rounded-full bg-idpxyz-bg px-2 py-0.5 type-caption ${rowState.tone === 'current' ? 'font-medium text-idpxyz-accent' : 'text-idpxyz-breadcrumb'}`}>{rowState.label}</span>
                     </span>
-                    <span className="mt-1 block truncate text-[12px] text-idpxyz-breadcrumb">{summary}</span>
-                    <span className="mt-1 block text-[11px] text-idpxyz-breadcrumb">生效 <Instant value={row.effectiveFrom} precision="day" /></span>
+                    <span className="mt-1 block truncate type-body text-idpxyz-breadcrumb">{summary}</span>
+                    <span className="mt-1 block type-caption text-idpxyz-breadcrumb">生效 <Instant value={row.effectiveFrom} precision="day" /></span>
                   </button>
                 </li>
               );
@@ -204,12 +204,12 @@ function RevisionDetails({
     <section aria-label={`${profileRevisionLabel(selected.revision)} 详情`} className="min-w-0 border-t border-idpxyz-border pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h5 className="text-[14px] font-semibold text-idpxyz-text">{profileRevisionLabel(selected.revision)}</h5>
-          <p className="mt-1 break-words text-[12px] text-idpxyz-breadcrumb">{baseline ? profileComparisonSummary(comparison) : '首次登记，无前一版本可比较'}</p>
+          <h5 className="type-section font-semibold text-idpxyz-text">{profileRevisionLabel(selected.revision)}</h5>
+          <p className="mt-1 break-words type-body text-idpxyz-breadcrumb">{baseline ? profileComparisonSummary(comparison) : '首次登记，无前一版本可比较'}</p>
         </div>
-        <span className="shrink-0 rounded-md bg-idpxyz-bg px-2 py-1 text-[11px] text-idpxyz-breadcrumb"><Instant value={selected.registeredAt} precision="minute" /></span>
+        <span className="shrink-0 rounded-md bg-idpxyz-bg px-2 py-1 type-caption text-idpxyz-breadcrumb"><Instant value={selected.registeredAt} precision="minute" /></span>
       </div>
-      <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 text-[12px] sm:grid-cols-2">
+      <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 type-body sm:grid-cols-2">
         <Metadata label="生效时间" value={<Instant value={selected.effectiveFrom} precision="day" />} />
         <Metadata label="登记时间" value={<Instant value={selected.registeredAt} precision="minute" />} />
         <Metadata label="来源单据" value={selected.basis} wide />
@@ -217,7 +217,7 @@ function RevisionDetails({
 
       {baseline ? (
         <div className="mt-4 flex min-w-0 flex-wrap items-end gap-3 border-t border-idpxyz-border pt-3">
-          <label className="min-w-0 flex-1 text-[12px] text-idpxyz-breadcrumb">
+          <label className="min-w-0 flex-1 type-body text-idpxyz-breadcrumb">
             比较基准
             <select
               value={baselineNumber === undefined ? baseline.revision : baselineNumber ?? ''}
@@ -229,7 +229,7 @@ function RevisionDetails({
               <option value="">不比较</option>
             </select>
           </label>
-          <label className="inline-flex min-h-8 items-center gap-2 pb-1 text-[12px] text-idpxyz-text">
+          <label className="inline-flex min-h-8 items-center gap-2 pb-1 type-body text-idpxyz-text">
             <input type="checkbox" checked={changedOnly} onChange={(event) => onChangedOnlyChange(event.target.checked)} className="size-4 accent-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-idpxyz-accent" />
             只看变化
           </label>
@@ -238,22 +238,22 @@ function RevisionDetails({
 
       {baseline ? (
         <div className="mt-2 min-w-0">
-          {comparison?.contactMatchingLimited ? <p role="note" className="mb-2 rounded-md bg-idpxyz-bg px-2.5 py-2 text-[11px] text-idpxyz-breadcrumb">资料中没有联系人的稳定标识；无法唯一对应的联系人按移除和新增列出，不推测为同一人。</p> : null}
+          {comparison?.contactMatchingLimited ? <p role="note" className="mb-2 rounded-md bg-idpxyz-bg px-2.5 py-2 type-caption text-idpxyz-breadcrumb">资料中没有联系人的稳定标识；无法唯一对应的联系人按移除和新增列出，不推测为同一人。</p> : null}
           {fields.length ? (
             <div className="max-h-[min(45vh,26rem)] overflow-auto rounded-md border border-idpxyz-border">
-              <Table className="min-w-[34rem] text-left text-[12px]">
+              <Table className="min-w-[34rem] text-left type-body">
                 <TableHeader className="sticky top-0 z-10 bg-idpxyz-bg">
                   <TableRow className="hover:bg-transparent"><TableHead>项目</TableHead><TableHead>上一版 · {profileRevisionLabel(baseline.revision)}</TableHead><TableHead>当前选择 · {profileRevisionLabel(selected.revision)}</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{fields.map((field) => <ChangeRow key={field.id} field={field} />)}</TableBody>
               </Table>
             </div>
-          ) : <p role="status" className="py-3 text-[12px] text-idpxyz-breadcrumb">{changedOnly ? '这两个版本之间没有资料变化。关闭「只看变化」可查看全部项目。' : '没有可显示的资料项目。'}</p>}
+          ) : <p role="status" className="py-3 type-body text-idpxyz-breadcrumb">{changedOnly ? '这两个版本之间没有资料变化。关闭「只看变化」可查看全部项目。' : '没有可显示的资料项目。'}</p>}
         </div>
       ) : null}
 
       <details className="mt-3 border-t border-idpxyz-border pt-3">
-        <summary className="cursor-pointer text-[12px] font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">查看完整资料快照</summary>
+        <summary className="cursor-pointer type-body font-medium text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent">查看完整资料快照</summary>
         <Snapshot revision={selected} typeNameOf={typeNameOf} />
       </details>
     </section>
@@ -269,7 +269,7 @@ function ChangeRow({ field }: { field: ProfileFieldChange }) {
     <TableRow className="hover:bg-transparent">
       <TableCell className="min-w-28 align-top">
         <span className="block">{field.contactKey ? `${field.subject} · ${field.field}` : field.field}</span>
-        {field.contactKey && field.detail ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{field.detail}</span> : null}
+        {field.contactKey && field.detail ? <span className="mt-0.5 block type-caption text-idpxyz-breadcrumb">{field.detail}</span> : null}
         {field.kind !== 'unchanged' ? <span className={`mt-0.5 block ${kindClasses[field.kind]}`}>{kindLabels[field.kind]}</span> : null}
       </TableCell>
       <TableCell className={`max-w-64 whitespace-pre-wrap [overflow-wrap:anywhere] align-top ${field.kind === 'removed' || field.kind === 'modified' ? 'line-through decoration-idpxyz-border' : 'text-idpxyz-breadcrumb'}`}>{field.before || absentValueMark}</TableCell>
@@ -279,7 +279,7 @@ function ChangeRow({ field }: { field: ProfileFieldChange }) {
 }
 
 function Metadata({ label, value, wide = false }: { label: string; value: ReactNode; wide?: boolean }) {
-  return <div className={`min-w-0 ${wide ? 'sm:col-span-2' : ''}`}><dt className="text-[11px] text-idpxyz-breadcrumb">{label}</dt><dd className="mt-0.5 break-words text-idpxyz-text">{value}</dd></div>;
+  return <div className={`min-w-0 ${wide ? 'sm:col-span-2' : ''}`}><dt className="type-caption text-idpxyz-breadcrumb">{label}</dt><dd className="mt-0.5 break-words text-idpxyz-text">{value}</dd></div>;
 }
 
 function Snapshot({ revision, typeNameOf }: { revision: LegalEntityProfileRevisionRecord; typeNameOf?: RegistrationNumberTypeNameOf }) {
@@ -289,7 +289,7 @@ function Snapshot({ revision, typeNameOf }: { revision: LegalEntityProfileRevisi
   const contacts = [...revision.contacts].sort((a, b) => a.name.localeCompare(b.name));
   const address = (value?: LegalEntityProfileRevisionRecord['officeAddress']) => value ? <ProfileReadoutAddress address={value} /> : absentValueMark;
   return (
-    <div className="mt-3 max-h-[min(50vh,30rem)] space-y-4 overflow-auto pr-1 text-[12px]">
+    <div className="mt-3 max-h-[min(50vh,30rem)] space-y-4 overflow-auto pr-1 type-body">
       <section><h6 className="font-medium text-idpxyz-text">代表人信息</h6><p className="mt-1 break-words text-idpxyz-breadcrumb">{representative}</p></section>
       <section><h6 className="font-medium text-idpxyz-text">地址信息</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="注册地址" value={address(revision.registeredAddress)} /><Metadata label="办公地址" value={address(revision.officeAddress)} /><Metadata label="通信地址" value={address(revision.correspondenceAddress)} /></dl></section>
       <section><h6 className="font-medium text-idpxyz-text">税务与开票</h6><dl className="mt-1 grid gap-2 sm:grid-cols-2"><Metadata label="监管登记号（税务 / 海关）" value={revision.taxRegistrationNumbers.map((row) => `${typeName(row.typeCode)} ${row.number}`).join('；') || absentValueMark} /><Metadata label="开票资料" value={revision.invoicingRegistered ? '已登记' : '未登记'} /><Metadata label="开票抬头" value={revision.invoiceTitle || absentValueMark} /><Metadata label="主抬头语言" value={revision.invoiceTitleLanguage ? languageTagLabel(revision.invoiceTitleLanguage) : absentValueMark} /><Metadata label="其他语言的抬头" value={revision.invoiceTitles?.length ? revision.invoiceTitles.map((row) => `${languageTagLabel(row.language)} ${row.title}`).join('；') : absentValueMark} /></dl></section>

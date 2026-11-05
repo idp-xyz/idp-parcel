@@ -53,7 +53,7 @@ const columns: DetailColumn<ProductChannelMappingRecord>[] = [
         <p>
           <RefLink kind="service-product" id={row.productObjectId} />
         </p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.productVersionLabel}</p>
+        <p className="mt-0.5 font-mono type-body leading-4 text-idpxyz-textMuted">{row.productVersionLabel}</p>
       </div>
     ),
   },
@@ -64,7 +64,7 @@ const columns: DetailColumn<ProductChannelMappingRecord>[] = [
     // 而不是留白——留白读起来像数据缺件，而这格恰恰是登记者说出的内容。
     render: (row) =>
       row.channels.length > 0 ? (
-        <div className="min-w-44 font-mono text-xs">
+        <div className="min-w-44 font-mono type-body leading-4">
           {row.channels.map((channel) => (
             <p key={channel}>{channel}</p>
           ))}
@@ -76,12 +76,12 @@ const columns: DetailColumn<ProductChannelMappingRecord>[] = [
   {
     id: 'effective',
     header: '有效期',
-    render: (row) => <span className="font-mono text-xs">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
   },
   {
     id: 'registered-at',
     header: '登记时间',
-    render: (row) => <span className="font-mono text-xs">{formatInstant(row.registeredAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatInstant(row.registeredAt)}</span>,
   },
 ];
 // 工作台的列按 key 认，照上面的 id 搬；右栏开时只留服务产品与渠道两列。

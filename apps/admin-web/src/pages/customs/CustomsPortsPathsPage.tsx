@@ -87,7 +87,7 @@ const periodColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
   key: 'period',
   header,
   hideWhenDetailOpen: true,
-  render: (row) => <span className="font-mono text-[12px]">{formatRange(row.appliesFrom, row.appliesUntil)}</span>,
+  render: (row) => <span className="font-mono type-body">{formatRange(row.appliesFrom, row.appliesUntil)}</span>,
 });
 
 const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
@@ -97,7 +97,7 @@ const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
     statusColumn,
     { key: 'port', header: '经哪个口岸', render: (row) => row.portLabel ?? row.port },
     { key: 'direction', header: '方向', render: (row) => (row.direction ? labelFor(row.direction) : '—') },
-    { key: 'mode', header: '申报模式', hideWhenDetailOpen: true, render: (row) => <span className="font-mono text-[12px]">{row.mode ?? '—'}</span> },
+    { key: 'mode', header: '申报模式', hideWhenDetailOpen: true, render: (row) => <span className="font-mono type-body">{row.mode ?? '—'}</span> },
   ],
   regions: [nameColumn('区域'), statusColumn],
 };

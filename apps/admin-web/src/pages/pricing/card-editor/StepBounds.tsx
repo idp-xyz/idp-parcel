@@ -40,7 +40,7 @@ export function StepBounds() {
 
       <section>
         <SectionTitle hint="金额算出来后按多大的单位进位或四舍五入，比如精确到 0.01。不取整就不勾。">金额取整</SectionTitle>
-        <label className="mb-3 flex items-center gap-2 text-[13px] text-idpxyz-text">
+        <label className="mb-3 flex items-center gap-2 type-value text-idpxyz-text">
           <input type="checkbox" checked={amountRounding.enabled} onChange={(event) => setRounding({ enabled: event.target.checked })} />
           对算出的金额取整
         </label>
@@ -67,7 +67,7 @@ export function StepBounds() {
             <FieldBox id={field.rounding('points')} label="在哪些环节取整" required labelsControl={false} className="md:col-span-2" hint="每一项费用算出来就取整，还是只对合计取整，可以多选。">
               <div className="flex flex-wrap gap-4" data-field={field.rounding('points')} tabIndex={-1}>
                 {points.map((code) => (
-                  <label key={code} className="flex items-center gap-1.5 text-[13px] text-idpxyz-text">
+                  <label key={code} className="flex items-center gap-1.5 type-value text-idpxyz-text">
                     <input
                       type="checkbox"
                       checked={amountRounding.points.includes(code)}

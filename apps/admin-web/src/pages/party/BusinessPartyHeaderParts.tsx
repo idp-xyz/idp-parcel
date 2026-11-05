@@ -24,7 +24,7 @@ export function businessPartyHasBanners(row: BusinessPartyRecord): boolean {
 export function BusinessPartyBanners({ row }: { row: BusinessPartyRecord }) {
   if (!row.deactivatedAt) return null;
   return (
-    <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.danger}`}>
+    <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.danger}`}>
       <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText.danger}`} aria-hidden="true" />
       <span>
         自 <Instant value={row.deactivatedAt} /> 起停用，新的业务不再找它
@@ -116,7 +116,7 @@ export function PartyRelationshipBanners({ row }: { row: PartyRelationshipRecord
   return (
     <>
       {row.endedAt && (
-        <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner[tone]}`}>
+        <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner[tone]}`}>
           <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText[tone]}`} aria-hidden="true" />
           <span>
             自 <Instant value={row.endedAt} /> 起{labelOf(relationshipStatusLabels, row.status)}，之后的新业务不再按这段关系办
@@ -131,7 +131,7 @@ export function PartyRelationshipBanners({ row }: { row: PartyRelationshipRecord
 
 function UnknownPartyBanner({ side, partyId }: { side: string; partyId: string }) {
   return (
-    <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
+    <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.warning}`}>
       <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
       <span>
         待查：{side}

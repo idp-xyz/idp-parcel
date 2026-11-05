@@ -27,7 +27,7 @@ export function SectionError({ title, description, onRetry, technical }: Section
   return (
     <div
       role="alert"
-      className="mt-1 rounded border border-idpxyz-border border-l-2 border-l-idpxyz-danger bg-idpxyz-panelBg px-3 py-2 text-[12px] text-idpxyz-text"
+      className="mt-1 rounded border border-idpxyz-border border-l-2 border-l-idpxyz-danger bg-idpxyz-panelBg px-3 py-2 type-body text-idpxyz-text"
     >
       <div className="flex items-center gap-2 text-idpxyz-danger">
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -39,7 +39,7 @@ export function SectionError({ title, description, onRetry, technical }: Section
         <button
           type="button"
           onClick={onRetry}
-          className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover"
+          className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 type-body rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover"
         >
           <RotateCw className="h-3.5 w-3.5" aria-hidden />
           重试

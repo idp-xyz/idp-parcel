@@ -72,15 +72,15 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
       id: 'statement-number',
       header: '对账单号',
       className: 'whitespace-nowrap',
-      render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.statementNumber}</span>,
+      render: (row) => <span className="font-mono type-body leading-4 text-idpxyz-textBright">{row.statementNumber}</span>,
     },
     { id: 'customer', header: '客户', className: 'whitespace-nowrap', render: (row) => statementCustomer(row, accountOwners, names) },
-    { id: 'period', header: '账期', className: 'font-mono text-xs', render: (row) => row.period },
+    { id: 'period', header: '账期', className: 'font-mono type-body leading-4', render: (row) => row.period },
     {
       id: 'total',
       header: '金额',
       align: 'right',
-      className: 'font-mono text-xs tabular-nums',
+      className: 'font-mono type-body leading-4 tabular-nums',
       // 总额照实转写不由行数派生：总额严格等于所含明细之和是写口的不变量，读侧重算一遍只会在两处各说一套。
       render: (row) => formatMoney(row.totalAmount, row.currency),
     },
@@ -102,7 +102,7 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
     {
       id: 'published-at',
       header: '发布时间',
-      className: 'whitespace-nowrap font-mono text-xs',
+      className: 'whitespace-nowrap font-mono type-body leading-4',
       render: (row) => formatInstant(row.publishedAt),
     },
     {
@@ -182,11 +182,11 @@ function CustomerStatementsTable({
     <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shrink-0">
-          <label className="flex items-center gap-1.5 text-sm">
+          <label className="flex items-center gap-1.5 type-body leading-5">
             <input type="checkbox" checked={disputedOnly} onChange={(event) => onDisputedOnlyChange(event.target.checked)} />
             只看待对账
           </label>
-          <span className="text-xs text-idpxyz-textMuted">
+          <span className="type-body leading-4 text-idpxyz-textMuted">
             {disputedOnly
               ? '只列有异议还没处理完（未处理或待复核）的单；客户确认没确认本系统不记，不在这里筛'
               : '勾上只看有异议还没处理完的单'}

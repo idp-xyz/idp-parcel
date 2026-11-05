@@ -26,23 +26,23 @@ export function DeliveryScopeFilters({
       {chips}
       <Input
         value={filter.documentNumber ?? ''}
-        className="h-8 w-[200px] font-mono text-[12px]"
+        className="h-8 w-[200px] font-mono type-body"
         placeholder={`${numberLabel}（逐字，空即不限）`}
         aria-label={numberLabel}
         onChange={(event) => onChange({ ...filter, documentNumber: event.target.value })}
       />
       <Input
         value={filter.node}
-        className="h-8 w-[200px] font-mono text-[12px]"
+        className="h-8 w-[200px] font-mono type-body"
         placeholder="网点编码（空即全部网点）"
         aria-label="网点"
         onChange={(event) => onChange({ ...filter, node: event.target.value })}
       />
-      <label className="inline-flex items-center gap-1 text-xs text-idpxyz-textMuted">
+      <label className="inline-flex items-center gap-1 type-body leading-4 text-idpxyz-textMuted">
         {dayLabel}
         <input
           type="date"
-          className="h-8 rounded border border-idpxyz-border bg-transparent px-1 font-mono text-[12px]"
+          className="h-8 rounded border border-idpxyz-border bg-transparent px-1 font-mono type-body"
           value={filter.day}
           onChange={(event) => onChange({ ...filter, day: event.target.value })}
         />
@@ -53,7 +53,7 @@ export function DeliveryScopeFilters({
 
 /** 详情读（按标识读一份）没拿到业务答案时的那一句：未配置、未授予、看不见、没形成答案、没到达各写各的。 */
 export function DeliveryScopeReadNote({ answer, what }: { answer: Exclude<ApiResult<unknown>, { kind: 'outcome' }>; what: string }) {
-  const frame = 'text-xs';
+  const frame = 'type-body leading-4';
   switch (answer.kind) {
     case 'unconfigured':
       return <p className={`${frame} text-idpxyz-textMuted`}>查看入口还没有配置好，重试也不会改变结果；请联系系统管理员完成配置。</p>;

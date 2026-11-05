@@ -30,7 +30,7 @@ import { TemplateParts } from './TemplateParts';
 // 那一刻提交必拒，不如让人先看到为什么。预览答不出时照样放提交——登记口自己会判，页面不替它拦。
 
 const fieldClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[12px] text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
+  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
 
 // 等人停手再预览：每敲一个字就问一次，会把半截格式的拒因闪个不停。
 const PREVIEW_DELAY_MS = 350;
@@ -38,7 +38,7 @@ const PREVIEW_DELAY_MS = 350;
 /** 一段答复或预览说明：淡底横幅，正文色字，语气只落在描边与图标上。 */
 function Note({ tone, children }: { tone: 'success' | 'info' | 'warning'; children: ReactNode }) {
   return (
-    <div role="status" className={`rounded border px-3 py-2 text-[12px] leading-5 ${statusToneBanner[tone]}`}>
+    <div role="status" className={`rounded border px-3 py-2 type-body leading-5 ${statusToneBanner[tone]}`}>
       {children}
     </div>
   );
@@ -58,7 +58,7 @@ function PreviewPanel({
   onConfirmOverlap: (value: boolean) => void;
 }) {
   if (view === null) {
-    return <p className="text-[12px] text-idpxyz-breadcrumb">{loading ? '正在预览…' : '填了格式就能看到样例号。'}</p>;
+    return <p className="type-body text-idpxyz-breadcrumb">{loading ? '正在预览…' : '填了格式就能看到样例号。'}</p>;
   }
   if (view.kind === 'rejected') {
     return (
@@ -89,9 +89,9 @@ function PreviewPanel({
   return (
     <div className={`space-y-2 ${loading ? 'opacity-60' : ''}`}>
       <div className="rounded border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-        <p className="text-[11px] text-idpxyz-breadcrumb">样例号</p>
-        <p className="mt-0.5 break-all font-mono text-[18px] font-semibold text-idpxyz-textBright">{view.sample}</p>
-        <p className="mt-1 text-[12px] leading-5 text-idpxyz-text">
+        <p className="type-caption text-idpxyz-breadcrumb">样例号</p>
+        <p className="mt-0.5 break-all font-mono type-title font-semibold text-idpxyz-textBright">{view.sample}</p>
+        <p className="mt-1 type-body leading-5 text-idpxyz-text">
           {formatInstant(view.at)} 开立的第一张{row.type.name}会拿到这个号；日期按{view.zone}算
           {issuerType ? '（实际按开立方的业务时区，这里只示形状）' : ''}。{view.reset.sentence ? `${view.reset.sentence}。` : ''}
         </p>
@@ -119,7 +119,7 @@ function PreviewPanel({
           </label>
         </Note>
       ) : (
-        <p className="text-[12px] text-idpxyz-breadcrumb">没看出与这一类用过的格式重叠。</p>
+        <p className="type-body text-idpxyz-breadcrumb">没看出与这一类用过的格式重叠。</p>
       )}
     </div>
   );
@@ -223,14 +223,14 @@ export function NewFormatForm({
       }}
     >
       <div>
-        <h3 className="text-[13px] font-semibold text-idpxyz-textBright">改用新的编号格式</h3>
-        <p className="mt-0.5 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <h3 className="type-value font-semibold text-idpxyz-textBright">改用新的编号格式</h3>
+        <p className="mt-0.5 type-body leading-5 text-idpxyz-breadcrumb">
           新格式只管生效之后开立的{row.type.name}；已开立的{row.type.numberName}不变。规则只增不改，想换回来就再登一版。
         </p>
       </div>
 
       <label className="block">
-        <span className="mb-0.5 block text-[11px] text-idpxyz-textMuted">格式</span>
+        <span className="mb-0.5 block type-caption text-idpxyz-textMuted">格式</span>
         <input
           ref={inputRef}
           className={`${fieldClass} font-mono`}
@@ -243,9 +243,9 @@ export function NewFormatForm({
           }}
           aria-invalid={touched && problems.template !== null}
         />
-        {touched && problems.template ? <span className={`mt-0.5 block text-[11px] ${statusToneText.warning}`}>{problems.template}</span> : null}
+        {touched && problems.template ? <span className={`mt-0.5 block type-caption ${statusToneText.warning}`}>{problems.template}</span> : null}
       </label>
-      <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+      <div className="flex flex-wrap items-center gap-1.5 type-body">
         <span className="text-idpxyz-breadcrumb">插入：</span>
         {templateTokenGuide.map((entry) => (
           <Button
@@ -253,7 +253,7 @@ export function NewFormatForm({
             type="button"
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[12px]"
+            className="h-6 px-2 type-body"
             onClick={() => insert(tokenWithDigits(entry.token, digits))}
             title={`${entry.label}：${tokenWithDigits(entry.token, digits)}`}
           >
@@ -272,7 +272,7 @@ export function NewFormatForm({
           />
         </label>
       </div>
-      <details className="text-[12px]">
+      <details className="type-body">
         <summary className="cursor-pointer select-none text-idpxyz-link">格式怎么写</summary>
         <div className="mt-1.5 space-y-1.5 leading-5 text-idpxyz-text">
           <p>花括号以外的字原样出现在号里，例如前缀「P」、连字符「-」。花括号里写下面这些部件：</p>
@@ -306,7 +306,7 @@ export function NewFormatForm({
       </details>
 
       <div className="block">
-        <span className="mb-0.5 block text-[11px] text-idpxyz-textMuted">
+        <span className="mb-0.5 block type-caption text-idpxyz-textMuted">
           从什么时候起用（按 {zoneLabel(displayZone, new Date())} 填写）
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -321,26 +321,26 @@ export function NewFormatForm({
             aria-label="从什么时候起用"
             aria-invalid={touched && problems.effectiveFrom !== null}
           />
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px] text-idpxyz-link" onClick={() => setWallTime(wallTimeIn(new Date(), displayZone))}>
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 type-body text-idpxyz-link" onClick={() => setWallTime(wallTimeIn(new Date(), displayZone))}>
             现在
           </Button>
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-[12px] text-idpxyz-link"
+            className="h-7 px-2 type-body text-idpxyz-link"
             onClick={() => setWallTime(nextMonthStartWallTime(new Date(), displayZone))}
           >
             下月 1 日零点
           </Button>
         </div>
         {touched && problems.effectiveFrom ? (
-          <span className={`mt-0.5 block text-[11px] ${statusToneText.warning}`}>{problems.effectiveFrom}</span>
+          <span className={`mt-0.5 block type-caption ${statusToneText.warning}`}>{problems.effectiveFrom}</span>
         ) : null}
       </div>
 
       <div>
-        <p className="mb-1 text-[11px] text-idpxyz-textMuted">预览（不占号）</p>
+        <p className="mb-1 type-caption text-idpxyz-textMuted">预览（不占号）</p>
         <PreviewPanel
           view={view}
           loading={previewLoading || !fresh}
@@ -351,7 +351,7 @@ export function NewFormatForm({
       </div>
 
       {touched && overlapUnconfirmed ? (
-        <p className={`text-[12px] ${statusToneText.warning}`}>先看过重叠提示并勾选确认，再登记。</p>
+        <p className={`type-body ${statusToneText.warning}`}>先看过重叠提示并勾选确认，再登记。</p>
       ) : null}
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" className={primaryActionClass} disabled={pending || rejectedNow}>

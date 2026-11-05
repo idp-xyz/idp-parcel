@@ -10,13 +10,13 @@ export function TemplateParts({ template, className }: { template: string; class
     <span className={`inline-flex flex-wrap items-center gap-0.5 ${className ?? ''}`.trim()} title={templateReading(template)}>
       {segments.map((segment, index) =>
         segment.kind === 'literal' ? (
-          <span key={index} className="whitespace-pre font-mono text-[12px] text-idpxyz-textBright">
+          <span key={index} className="whitespace-pre font-mono type-body text-idpxyz-textBright">
             {segment.text}
           </span>
         ) : (
           <span
             key={index}
-            className={`rounded border px-1 text-[11px] leading-4 ${
+            className={`rounded border px-1 type-caption leading-4 ${
               segment.known
                 ? 'border-idpxyz-border bg-idpxyz-hover text-idpxyz-text'
                 : 'border-[color:var(--ds-status-warning-border)] font-mono text-idpxyz-text'

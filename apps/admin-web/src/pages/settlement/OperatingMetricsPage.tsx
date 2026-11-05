@@ -37,8 +37,8 @@ function resultTechnicalRows(row: OperatingResultRecord) {
 }
 
 const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
-  { id: 'scope', header: '分析范围', className: 'font-mono text-xs text-idpxyz-textBright', render: (row) => row.scope },
-  { id: 'period', header: '账期', className: 'font-mono text-xs', render: (row) => row.period },
+  { id: 'scope', header: '分析范围', className: 'font-mono type-body leading-4 text-idpxyz-textBright', render: (row) => row.scope },
+  { id: 'period', header: '账期', className: 'font-mono type-body leading-4', render: (row) => row.period },
   {
     id: 'basis',
     header: '口径',
@@ -50,7 +50,7 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
     id: 'margin',
     header: '毛利',
     align: 'right',
-    className: 'font-mono text-xs tabular-nums',
+    className: 'font-mono type-body leading-4 tabular-nums',
     // 带符号照实呈现，负值即经营损失。不重算：派生它的门在写口，读侧再算一遍就成了第二处定义。
     render: (row) => (
       <span className={row.margin.startsWith('-') ? 'text-[color:var(--ds-status-danger-fg)]' : 'text-idpxyz-textBright'}>
@@ -64,12 +64,12 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
     // 角色照册转写，不是页面判出来的。空数组是「这份快照没有组成项」的如实一格，不留白。
     render: (row) =>
       row.components.length > 0 ? (
-        <div className="min-w-64 text-xs">
+        <div className="min-w-64 type-body leading-4">
           {row.components.map((component) => (
             <p key={`${component.role}:${component.source}:${component.effect}:${component.amount}`} className="whitespace-nowrap">
               {labelFor(component.role)}
               <span className="text-idpxyz-textMuted">（{labelFor(component.effect)}）</span> {formatMoney(component.amount, '')}
-              <span className="ml-1 font-mono text-[11px] text-idpxyz-textMuted">{component.source}</span>
+              <span className="ml-1 font-mono type-caption text-idpxyz-textMuted">{component.source}</span>
             </p>
           ))}
         </div>
@@ -80,7 +80,7 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
   {
     id: 'as-of',
     header: '截至',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => formatInstant(row.asOf),
   },
   {
@@ -149,12 +149,12 @@ function allocationTechnicalRows(row: CostAllocationRecord) {
 }
 
 const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
-  { id: 'source', header: '来源成本', className: 'font-mono text-xs text-idpxyz-textBright', render: (row) => row.source },
+  { id: 'source', header: '来源成本', className: 'font-mono type-body leading-4 text-idpxyz-textBright', render: (row) => row.source },
   {
     id: 'source-amount',
     header: '金额',
     align: 'right',
-    className: 'font-mono text-xs tabular-nums',
+    className: 'font-mono type-body leading-4 tabular-nums',
     render: (row) => formatMoney(row.sourceAmount, row.currency),
   },
   {
@@ -163,7 +163,7 @@ const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
     // 空数组即「全额未分摊」——与未分摊余额栏互相印证，不折进份额里凑平。
     render: (row) =>
       row.portions.length > 0 ? (
-        <div className="min-w-48 text-xs">
+        <div className="min-w-48 type-body leading-4">
           {row.portions.map((portion) => (
             <p key={`${portion.target}:${portion.amount}`} className="whitespace-nowrap">
               <span className="font-mono">{portion.target}</span> {formatMoney(portion.amount, '')}
@@ -178,14 +178,14 @@ const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
     id: 'unallocated',
     header: '未分摊',
     align: 'right',
-    className: 'font-mono text-xs tabular-nums',
+    className: 'font-mono type-body leading-4 tabular-nums',
     // 单独成栏：未分摊余额是第一类结果不是尾差——没有合格对象或分母为零时来源金额整笔留在这里等新依据。
     render: (row) => formatMoney(row.unallocatedAmount, ''),
   },
   {
     id: 'allocated-at',
     header: '分摊时间',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => formatInstant(row.allocatedAt),
   },
   {

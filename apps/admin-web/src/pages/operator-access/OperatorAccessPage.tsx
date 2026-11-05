@@ -66,7 +66,7 @@ const columns: WorkbenchColumn<OperatorRecord>[] = [
       </span>
     ),
   },
-  { key: 'basis', header: '登记依据', render: (row) => <span className="font-mono text-[12px]">{row.basis}</span> },
+  { key: 'basis', header: '登记依据', render: (row) => <span className="font-mono type-body">{row.basis}</span> },
   {
     key: 'grants',
     header: '生效中的授予',
@@ -75,7 +75,7 @@ const columns: WorkbenchColumn<OperatorRecord>[] = [
       return effective.length === 0 ? (
         <span className="text-idpxyz-textMuted">无</span>
       ) : (
-        <span className="text-[12px]">{Array.from(new Set(effective.map((grant) => faceLabel(grant.capabilityFace)))).join('、')}</span>
+        <span className="type-body">{Array.from(new Set(effective.map((grant) => faceLabel(grant.capabilityFace)))).join('、')}</span>
       );
     },
   },
@@ -83,7 +83,7 @@ const columns: WorkbenchColumn<OperatorRecord>[] = [
     key: 'recorded-at',
     header: '登记时间',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.recordedAt)}</span>,
+    render: (row) => <span className="font-mono type-body">{formatInstant(row.recordedAt)}</span>,
   },
 ];
 
@@ -93,39 +93,39 @@ function WriteAnswerLine({ answer }: { answer: ApiResult<OperatorWriteResponseBo
   switch (answer.kind) {
     case 'outcome':
       return (
-        <p className={`text-[12px] ${answer.body.outcome === 'RECORDED' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+        <p className={`type-body ${answer.body.outcome === 'RECORDED' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
           {operatorWriteOutcomeLabel(answer.body.outcome)}
         </p>
       );
     case 'callerProblem':
-      return <p className="text-[12px] text-idpxyz-danger">请求的格式不对（{answer.code}）{answer.detail ? `：${answer.detail}` : ''}</p>;
+      return <p className="type-body text-idpxyz-danger">请求的格式不对（{answer.code}）{answer.detail ? `：${answer.detail}` : ''}</p>;
     case 'notGranted':
-      return <p className="text-[12px] text-idpxyz-danger">你的账号没有操作者接入管理授予。</p>;
+      return <p className="type-body text-idpxyz-danger">你的账号没有操作者接入管理授予。</p>;
     case 'loginRequired':
-      return <p className="text-[12px] text-idpxyz-danger">登录已失效，请重新登录。</p>;
+      return <p className="type-body text-idpxyz-danger">登录已失效，请重新登录。</p>;
     case 'unconfigured':
-      return <p className="text-[12px] text-idpxyz-danger">操作者渠道尚未配置。</p>;
+      return <p className="type-body text-idpxyz-danger">操作者渠道尚未配置。</p>;
     default:
-      return <p className="text-[12px] text-idpxyz-danger">答案未形成，请稍后重试。</p>;
+      return <p className="type-body text-idpxyz-danger">答案未形成，请稍后重试。</p>;
   }
 }
 
 /** 本地时刻输入：datetime-local 的值按显示时区折成 RFC3339；折不动（空或畸形）交回 null。 */
 function WallTimeInput({ label, value, onChange, note }: { label: string; value: string; onChange: (value: string) => void; note?: string }) {
   return (
-    <label className="flex flex-col gap-1 text-[12px]">
+    <label className="flex flex-col gap-1 type-body">
       <span className="text-idpxyz-textMuted">{label}</span>
-      <Input type="datetime-local" value={value} onChange={(event) => onChange(event.target.value)} className="font-mono text-[12px]" />
-      {note ? <span className="text-[11px] text-idpxyz-breadcrumb">{note}</span> : null}
+      <Input type="datetime-local" value={value} onChange={(event) => onChange(event.target.value)} className="font-mono type-body" />
+      {note ? <span className="type-caption text-idpxyz-breadcrumb">{note}</span> : null}
     </label>
   );
 }
 
 function TextInput({ label, value, onChange, placeholder, mono = true }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; mono?: boolean }) {
   return (
-    <label className="flex flex-col gap-1 text-[12px]">
+    <label className="flex flex-col gap-1 type-body">
       <span className="text-idpxyz-textMuted">{label}</span>
-      <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={mono ? 'font-mono text-[12px]' : 'text-[12px]'} />
+      <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={mono ? 'font-mono type-body' : 'type-body'} />
     </label>
   );
 }
@@ -186,8 +186,8 @@ function GrantForm({
   };
   return (
     <section className="flex flex-col gap-3 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3">
-      <h3 className="text-[13px] font-medium text-idpxyz-text">授予能力面</h3>
-      <label className="flex flex-col gap-1 text-[12px]">
+      <h3 className="type-value font-medium text-idpxyz-text">授予能力面</h3>
+      <label className="flex flex-col gap-1 type-body">
         <span className="text-idpxyz-textMuted">能力面</span>
         <select className={selectClass} value={face} onChange={(event) => setFace(event.target.value)}>
           {vocabulary.faces.map((candidate) => (
@@ -198,7 +198,7 @@ function GrantForm({
         </select>
       </label>
       {face === 'OPERATION_DECISION' ? (
-        <label className="flex flex-col gap-1 text-[12px]">
+        <label className="flex flex-col gap-1 type-body">
           <span className="text-idpxyz-textMuted">决定种类</span>
           <select className={selectClass} value={decisionKind} onChange={(event) => setDecisionKind(event.target.value)}>
             {vocabulary.decisionKinds.map((candidate) => (
@@ -211,7 +211,7 @@ function GrantForm({
       ) : null}
       {face === 'WORK_FACT_REGISTRATION' ? (
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-[12px]">
+          <label className="flex flex-col gap-1 type-body">
             <span className="text-idpxyz-textMuted">作业范围种类</span>
             <select className={selectClass} value={scopeKind} onChange={(event) => setScopeKind(event.target.value)}>
               {vocabulary.workScopeKinds.map((candidate) => (
@@ -232,10 +232,10 @@ function GrantForm({
       </div>
       <WriteAnswerLine answer={answer} />
       <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" className="text-[12px]" onClick={onClose}>
+        <Button variant="outline" size="sm" className="type-body" onClick={onClose}>
           取消
         </Button>
-        <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} disabled={!complete || busy} onClick={submit}>
+        <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} disabled={!complete || busy} onClick={submit}>
           {busy ? '登记中…' : '登记授予'}
         </Button>
       </div>
@@ -273,8 +273,8 @@ function RevokeDialog({ grant, onClose, onRevoked }: { grant: OperatorGrantRecor
       <DialogContent size="md" className="p-0" aria-label="撤销授予">
         {grant ? (
           <div className="flex flex-col gap-3 p-5">
-            <h2 className="text-[15px] font-semibold text-idpxyz-textBright">撤销授予 {grant.grantId}？</h2>
-            <p className="text-[12px] text-idpxyz-textMuted">
+            <h2 className="type-title font-semibold text-idpxyz-textBright">撤销授予 {grant.grantId}？</h2>
+            <p className="type-body text-idpxyz-textMuted">
               {faceLabel(grant.capabilityFace)}
               {grantQualifier(grant) ? ` · ${grantQualifier(grant)}` : ''}。撤销自撤销时刻起生效，写入后没有撤回的入口。
             </p>
@@ -282,10 +282,10 @@ function RevokeDialog({ grant, onClose, onRevoked }: { grant: OperatorGrantRecor
             <TextInput label="依据" value={basis} onChange={setBasis} placeholder="撤销的单据或依据引用" />
             <WriteAnswerLine answer={answer} />
             <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" size="sm" className="text-[12px]" onClick={onClose}>
+              <Button variant="outline" size="sm" className="type-body" onClick={onClose}>
                 再想想
               </Button>
-              <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} disabled={!complete || busy} onClick={submit}>
+              <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} disabled={!complete || busy} onClick={submit}>
                 {busy ? '撤销中…' : '确认撤销'}
               </Button>
             </div>
@@ -316,12 +316,12 @@ function OperatorDetailPanel({
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="break-all font-mono text-[14px] font-semibold text-idpxyz-textBright">{operator.subject}</h2>
-            <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">操作者 · 生效中的授予 {effectiveGrantCount(operator, now)} 条</p>
+            <h2 className="break-all font-mono type-title font-semibold text-idpxyz-textBright">{operator.subject}</h2>
+            <p className="mt-0.5 type-body text-idpxyz-textMuted">操作者 · 生效中的授予 {effectiveGrantCount(operator, now)} 条</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {!readOnly && !granting ? (
-              <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setGranting(true)}>
+              <Button variant="outline" size="sm" className="type-body" onClick={() => setGranting(true)}>
                 授予…
               </Button>
             ) : null}
@@ -352,15 +352,15 @@ function OperatorDetailPanel({
           />
         ) : null}
         <section className="flex flex-col gap-2">
-          <h3 className="text-[12px] font-medium text-idpxyz-text">授予</h3>
+          <h3 className="type-body font-medium text-idpxyz-text">授予</h3>
           {operator.grants.length === 0 ? (
-            <p className="text-[12px] text-idpxyz-textMuted">还没有任何授予：这个操作者登录后什么也做不了。</p>
+            <p className="type-body text-idpxyz-textMuted">还没有任何授予：这个操作者登录后什么也做不了。</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {operator.grants.map((grant) => {
                 const standing = grantStandingAt(grant, now);
                 return (
-                  <li key={grant.grantId} className="flex flex-col gap-1 rounded border border-idpxyz-border p-3 text-[12px]">
+                  <li key={grant.grantId} className="flex flex-col gap-1 rounded border border-idpxyz-border p-3 type-body">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-idpxyz-text">{faceLabel(grant.capabilityFace)}</span>
@@ -368,7 +368,7 @@ function OperatorDetailPanel({
                         <StatusPill label={grantStandingLabels[standing]} tone={standingTone[standing]} />
                       </div>
                       {!readOnly && (standing === 'effective' || standing === 'pending') ? (
-                        <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setRevoking(grant)}>
+                        <Button variant="outline" size="sm" className="type-body" onClick={() => setRevoking(grant)}>
                           撤销…
                         </Button>
                       ) : null}
@@ -422,19 +422,19 @@ function OperatorRegistrationForm({ issuer }: { issuer: string }) {
   return (
     <div className="flex-1 overflow-auto p-4">
       <section className="mx-auto flex max-w-3xl flex-col gap-3 rounded border border-idpxyz-border bg-idpxyz-bg p-4">
-        <p className="text-[12px] text-idpxyz-textMuted">
+        <p className="type-body text-idpxyz-textMuted">
           主体标识是发行方给这个账号的 <span className="font-mono">sub</span>，不是邮箱：让对方先登录一次，在本页的拒绝提示里抄给你。登记后还要给授予，
           否则登录了也什么都做不了。
         </p>
-        <label className="flex flex-col gap-1 text-[12px]">
+        <label className="flex flex-col gap-1 type-body">
           <span className="text-idpxyz-textMuted">发行方</span>
-          <Input value={issuer} readOnly className="font-mono text-[12px]" />
+          <Input value={issuer} readOnly className="font-mono type-body" />
         </label>
         <TextInput label="主体标识" value={subject} onChange={setSubject} placeholder="发行方签发的 sub" />
         <TextInput label="登记依据" value={basis} onChange={setBasis} placeholder="入职单、授权函等依据引用" />
         <WriteAnswerLine answer={answer} />
         <div className="flex items-center justify-end">
-          <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} disabled={!complete || busy} onClick={submit}>
+          <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} disabled={!complete || busy} onClick={submit}>
             {busy ? '登记中…' : '登记操作者'}
           </Button>
         </div>

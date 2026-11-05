@@ -89,7 +89,7 @@ export function PartyRelationshipEndActions({
               key={action}
               variant="outline"
               size="sm"
-              className={`text-[12px] ${action === 'revocation' ? 'text-idpxyz-danger' : 'text-idpxyz-breadcrumb'}`}
+              className={`type-body ${action === 'revocation' ? 'text-idpxyz-danger' : 'text-idpxyz-breadcrumb'}`}
               disabled={!availability.available || locked}
               title={availability.available ? undefined : availability.reason}
               onClick={() => start(action)}
@@ -100,7 +100,7 @@ export function PartyRelationshipEndActions({
         })}
       </div>
       {unavailable.length > 0 ? (
-        <ul className="text-[12px] text-idpxyz-breadcrumb">
+        <ul className="type-body text-idpxyz-breadcrumb">
           {unavailable.map(({ action, reason }) => (
             <li key={action}>
               {partyRelationshipEndingActionLabels[action]}不可用：{reason}
@@ -111,7 +111,7 @@ export function PartyRelationshipEndActions({
 
       {open !== null ? (
         <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-3">
-          <div className="text-[12px] text-idpxyz-breadcrumb">
+          <div className="type-body text-idpxyz-breadcrumb">
             <p>
               {open === 'revocation'
                 ? '撤销即时结束这段关系：终止修订一落册，它就不再支持新的商业决定。时刻不得晚于此刻。'
@@ -128,7 +128,7 @@ export function PartyRelationshipEndActions({
             <Input
               value={draft.basis}
               readOnly={locked}
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               placeholder={`${partyRelationshipEndingActionLabels[open]}依据引用`}
               onChange={(event) => setDraft((current) => ({ ...current, basis: event.target.value }))}
             />
@@ -146,7 +146,7 @@ export function PartyRelationshipEndActions({
             <Button
               variant="default"
               size="sm"
-              className={`${primaryActionClass} text-[12px]`}
+              className={`${primaryActionClass} type-body`}
               disabled={locked || Object.keys(problems).length > 0}
               onClick={() => setConfirming(true)}
             >
@@ -155,7 +155,7 @@ export function PartyRelationshipEndActions({
             <Button
               variant="outline"
               size="sm"
-              className="text-[12px] text-idpxyz-breadcrumb"
+              className="type-body text-idpxyz-breadcrumb"
               disabled={locked}
               onClick={() => setOpen(null)}
             >
@@ -180,7 +180,7 @@ export function PartyRelationshipEndActions({
           title={`${partyRelationshipEndingActionLabels[open]}这段参与方关系？`}
           message={endingConfirmMessage(open)}
           extraContent={
-            <ul className="text-[12px] text-idpxyz-text flex flex-col gap-1">
+            <ul className="type-body text-idpxyz-text flex flex-col gap-1">
               {endingConfirmLines(row, open, draft, timeZone).map((line) => (
                 <li key={line}>{line}</li>
               ))}

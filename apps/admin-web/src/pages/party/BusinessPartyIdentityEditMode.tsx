@@ -77,18 +77,18 @@ export function BusinessPartyIdentityEditMode({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] leading-5 text-idpxyz-text">
+      <p className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body leading-5 text-idpxyz-text">
         更正后登记为新的一版（当前 {updateOrdinalLabel(row.revision)}），历次记录都保留；编码不能改——编码变了就是另一家单位。
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="编码" path="businessParties[0].partyId" problems={problems}>
-          <Input value={draft.partyId} readOnly className="font-mono text-[13px] text-idpxyz-breadcrumb" aria-label="编码" />
+          <Input value={draft.partyId} readOnly className="font-mono type-value text-idpxyz-breadcrumb" aria-label="编码" />
         </Field>
         <Field label="名称 *" path="businessParties[0].name" problems={problems}>
           <Input
             value={draft.name}
             readOnly={locked}
-            className="text-[13px]"
+            className="type-value"
             aria-label="名称"
             onChange={(event) => patch({ name: event.target.value })}
           />
@@ -97,12 +97,12 @@ export function BusinessPartyIdentityEditMode({
           <Input
             value={draft.basis}
             readOnly={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="合同编号、邮件或审批单号"
             aria-label="来源单据"
             onChange={(event) => patch({ basis: event.target.value })}
           />
-          <span className="mt-1 block text-[12px] text-idpxyz-breadcrumb">这次更正依据的是哪份单据，方便以后追溯。</span>
+          <span className="mt-1 block type-body text-idpxyz-breadcrumb">这次更正依据的是哪份单据，方便以后追溯。</span>
         </Field>
       </div>
       <AdvancedGroup open={advancedOpen} onToggle={() => undefined} summary={advancedSummary}>
@@ -126,7 +126,7 @@ export function BusinessPartyIdentityEditMode({
       </AdvancedGroup>
       {renderFooter(
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1 text-[12px]">
+          <div className="min-w-0 flex-1 type-body">
             <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={partyIdentityOutcomeLabels} problemNote={problemNote} />
             {!changed && form.state.kind === 'idle' ? <p className="text-idpxyz-breadcrumb">名称没有改动，不用保存。</p> : null}
           </div>

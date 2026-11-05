@@ -73,7 +73,7 @@ export function CoverageSummaryBar({
     // 摘要条取不到不挡目录：下面那张表有自己的三态呈现，这里再铺一遍同样的话是噪声。
     // 但**接入那一格（未配置、需要登录、没有授予）要说一句**——静默消失会让人以为这一册没有覆盖问题，而实际上是没问过。
     return (
-      <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
+      <div className="shrink-0 px-4 pt-3 type-body leading-4 text-idpxyz-textMuted">
         {answer.kind === 'unconfigured'
           ? '各项数值还能用多久：没查到，访问通道尚未配置（403）。这是今天没问到，不等于都够用。'
           : isOperatorRefusal(answer)
@@ -88,7 +88,7 @@ export function CoverageSummaryBar({
   const rows = answer.body.series.map((record) => coverageRowOf(record, asOf));
   if (rows.length === 0) {
     return (
-      <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
+      <div className="shrink-0 px-4 pt-3 type-body leading-4 text-idpxyz-textMuted">
         还没有登记任何汇率或燃油费率；在「登记数值」签里登记第一条。
         <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
@@ -98,7 +98,7 @@ export function CoverageSummaryBar({
   return (
     <div className="shrink-0 px-4 pt-3">
       <div className="flex items-baseline justify-between">
-        <span className="text-xs text-idpxyz-textMuted">
+        <span className="type-body leading-4 text-idpxyz-textMuted">
           各项数值还能用多久 —— 一项一格
           {onSelectSeries ? (focusedSeries ? '；下方列表只看所选' : '；点一格只看它的各版本') : null}
           {onSelectSeries && focusedSeries ? (
@@ -111,7 +111,7 @@ export function CoverageSummaryBar({
             </button>
           ) : null}
         </span>
-        <span className="text-[11px] text-idpxyz-textMuted">
+        <span className="type-caption text-idpxyz-textMuted">
           截至 <span className="font-mono">{formatInstant(asOf)}</span>
         </span>
       </div>
@@ -134,7 +134,7 @@ export function CoverageSummaryBar({
         })}
       </div>
       <PendingEvaluationsCell answer={pendingAnswer} />
-      <p className="mt-2 text-[11px] text-idpxyz-textMuted">
+      <p className="mt-2 type-caption text-idpxyz-textMuted">
         提醒天数未配置：还剩几天该提醒补登下一期，贵公司还没设置，所以这里只列天数、不标颜色。
       </p>
     </div>
@@ -157,7 +157,7 @@ function PendingEvaluationsCell({
 }) {
   const cell = pendingEvaluationsCellOf(answer);
   return (
-    <div className="mt-2 text-[11px] text-idpxyz-textMuted">
+    <div className="mt-2 type-caption text-idpxyz-textMuted">
       <span>{pendingEvaluationsNote(cell)}</span>
       {cell.state === 'counted' && cell.byKind.length > 0 ? (
         <span className="ml-1">
@@ -186,25 +186,25 @@ function CoverageChip({
 }) {
   const body = (
     <>
-      <div className="font-mono text-[12px] text-idpxyz-accent">{row.seriesId}</div>
-      <div className="text-[11px] text-idpxyz-textMuted">
+      <div className="font-mono type-body text-idpxyz-accent">{row.seriesId}</div>
+      <div className="type-caption text-idpxyz-textMuted">
         {labelOf(seriesKindLabels, row.kind)} · 共 {row.registeredVersionCount} 个版本
       </div>
       <div className="mt-1">
         {coverageNote(row.coverage)}
         {row.coverage.inForceVersion ? (
-          <span className="ml-1 font-mono text-[11px] text-idpxyz-textMuted">
+          <span className="ml-1 font-mono type-caption text-idpxyz-textMuted">
             （在用 {row.coverage.inForceVersion}）
           </span>
         ) : null}
       </div>
       {row.pending.attention ? (
-        <div className="mt-1 text-[11px] text-idpxyz-textMuted">
+        <div className="mt-1 type-caption text-idpxyz-textMuted">
           {/* 两格分列而不是相加：一格等复核人、一格等登记方更正。 */}
           待复核 {row.pending.unreviewed} 个版本 · 已退回待更正 {row.pending.returned} 个版本
         </div>
       ) : null}
-      <div className="mt-1 text-[11px] text-idpxyz-textMuted">
+      <div className="mt-1 type-caption text-idpxyz-textMuted">
         {row.lastReview
           ? `最近复核 ${formatInstant(row.lastReview.at)}（${labelOf(reviewDecisionLabels, row.lastReview.decision)}）`
           : '还没有人复核过'}
@@ -213,7 +213,7 @@ function CoverageChip({
   );
 
   // 高亮只标「选中」，不标颜色等级——这一格仍然不判紧急（阈值未配置，见上）。
-  const frame = `rounded border px-3 py-2 text-xs text-left ${
+  const frame = `rounded border px-3 py-2 type-body leading-4 text-left ${
     focused ? 'border-idpxyz-accent' : 'border-idpxyz-border'
   }`;
   if (!onSelect) return <div className={frame}>{body}</div>;

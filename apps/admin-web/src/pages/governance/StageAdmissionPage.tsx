@@ -56,7 +56,7 @@ function registryTable<Row>(
   emptyNote: string,
 ) {
   if (rows.length === 0) {
-    return <p className="text-[12px] text-idpxyz-textMuted">{emptyNote}</p>;
+    return <p className="type-body text-idpxyz-textMuted">{emptyNote}</p>;
   }
   return (
     <Table>
@@ -72,7 +72,7 @@ function registryTable<Row>(
   );
 }
 
-const cellClass = 'font-mono text-xs';
+const cellClass = 'font-mono type-body leading-4';
 
 /** 能力与事实种类是封闭码时经词典译成一线的词；带「/」的是租户自定义引用，不是码，原样显示。 */
 function kindLabel(code: string): string {
@@ -84,7 +84,7 @@ const emptyRegisterNote = '还没有登记。登记由管理员用命令行工�
 
 /** 查阅仍未开的那一格：说的是查阅分批，不是数据缺件。 */
 function secondBatchNote(text: string) {
-  return <p className="text-[12px] text-idpxyz-textMuted">{text}</p>;
+  return <p className="type-body text-idpxyz-textMuted">{text}</p>;
 }
 
 /**
@@ -201,8 +201,8 @@ export function StageAdmissionPage() {
         (row) => (
           <TableRow key={`${row.objectScope}:${row.capability}:${row.factKind}:${row.fromAt}`}>
             <TableCell className={cellClass}>{row.objectScope}</TableCell>
-            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.capability)}</TableCell>
-            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.factKind)}</TableCell>
+            <TableCell className="whitespace-nowrap type-body leading-4">{kindLabel(row.capability)}</TableCell>
+            <TableCell className="whitespace-nowrap type-body leading-4">{kindLabel(row.factKind)}</TableCell>
             <TableCell className={cellClass}>{row.authority}</TableCell>
             <TableCell className={cellClass}>{formatRange(row.fromAt, row.toAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.insertedAt)}</TableCell>
@@ -228,7 +228,7 @@ export function StageAdmissionPage() {
             <TableCell className={cellClass}><PrincipalRef value={row.executedBy} /></TableCell>
             <TableCell className={cellClass}>{formatInstant(row.occurredAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.effectiveAt)}</TableCell>
-            <TableCell className="text-xs">{row.inTransitNote}</TableCell>
+            <TableCell className="type-body leading-4">{row.inTransitNote}</TableCell>
           </TableRow>
         ),
         emptyRegisterNote,
@@ -286,16 +286,16 @@ export function StageAdmissionPage() {
             key={`${row.objectScope}:${row.capability}:${row.factKind}:${row.authority}:${row.fromAt}`}
           >
             <TableCell className={cellClass}>{row.objectScope}</TableCell>
-            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.capability)}</TableCell>
-            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.factKind)}</TableCell>
+            <TableCell className="whitespace-nowrap type-body leading-4">{kindLabel(row.capability)}</TableCell>
+            <TableCell className="whitespace-nowrap type-body leading-4">{kindLabel(row.factKind)}</TableCell>
             <TableCell className={cellClass}>{row.authority}</TableCell>
             <TableCell className={cellClass}>{formatRange(row.fromAt, row.toAt)}</TableCell>
             <TableCell className={cellClass}>{row.stopEvidence}</TableCell>
-            <TableCell className="text-xs">{row.acceptedFacts}</TableCell>
-            <TableCell className="text-xs">{row.pendingExternals}</TableCell>
-            <TableCell className="text-xs">{row.actualControl}</TableCell>
-            <TableCell className="text-xs">{row.responsibilities}</TableCell>
-            <TableCell className="text-xs">{row.nextAction}</TableCell>
+            <TableCell className="type-body leading-4">{row.acceptedFacts}</TableCell>
+            <TableCell className="type-body leading-4">{row.pendingExternals}</TableCell>
+            <TableCell className="type-body leading-4">{row.actualControl}</TableCell>
+            <TableCell className="type-body leading-4">{row.responsibilities}</TableCell>
+            <TableCell className="type-body leading-4">{row.nextAction}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.inventoryTakenAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.effectiveAt)}</TableCell>
           </TableRow>

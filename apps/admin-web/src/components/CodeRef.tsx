@@ -57,7 +57,7 @@ export function CodeRef({ value, label, title, wrap = false, className, onCopy }
       type="button"
       title={codeRefTitle(name, value)}
       onClick={handleClick}
-      className={`inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-left text-[12px] hover:border-idpxyz-accent ${className ?? ''}`.trim()}
+      className={`inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-left type-body hover:border-idpxyz-accent ${className ?? ''}`.trim()}
     >
       {label ? <span className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</span> : null}
       <span className={`min-w-0 font-mono text-idpxyz-text ${wrap ? 'break-all' : 'truncate'}`}>{value}</span>

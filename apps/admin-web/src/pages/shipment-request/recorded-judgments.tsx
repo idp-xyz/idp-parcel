@@ -46,7 +46,7 @@ function technicalRowsOf(recorded: RecordedJudgmentsRecord): TechnicalRow[] {
 export function recordedJudgmentsBlock(recorded: RecordedJudgmentsRecord) {
   const control = recorded.financialControl;
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 type-body">
       <div>
         <span className="text-idpxyz-textMuted">能否送达</span>
         {recorded.reachability.length === 0 ? (

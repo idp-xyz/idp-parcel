@@ -46,7 +46,7 @@ export interface AuthorizationRulePublicationFormProps {
   start?: NewVersionStart<AuthorizationRuleDraft>;
 }
 
-const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
+const sectionTitle = 'type-value font-medium text-idpxyz-text';
 
 export function AuthorizationRulePublicationForm({ onPublished, start }: AuthorizationRulePublicationFormProps) {
   const [draft, setDraft] = useState<AuthorizationRuleDraft>(start?.draft ?? emptyAuthorizationRuleDraft());
@@ -113,7 +113,7 @@ function ShellFields({
           <Input
             value={draft.objectId}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
@@ -121,7 +121,7 @@ function ShellFields({
           <Input
             value={draft.version}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
@@ -129,7 +129,7 @@ function ShellFields({
           <Input
             value={draft.scope}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="商业范围引用"
             onChange={(event) => patch({ scope: event.target.value })}
           />
@@ -156,7 +156,7 @@ function ShellFields({
         />
       </div>
       {form.versionNote}
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。
       </p>
     </section>
@@ -187,7 +187,7 @@ function CancellationAuthorityFields({
           加一行
         </Button>
       </div>
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         每行写一种可以取消的请求方，以及依据哪条规则；没写的请求方不能取消。至少要有一行，同一请求方只能有一行。
       </p>
       {/* 正文根 authorizationRule 认领了就要有处显（票 22 判据 3；票 17 评审点名）：服务端点到正文整体而不是目录时落在这里。 */}
@@ -211,7 +211,7 @@ function CancellationAuthorityFields({
                 <Input
                   value={row.rule}
                   readOnly={form.locked}
-                  className="font-mono text-[12px]"
+                  className="font-mono type-body"
                   placeholder="取消规则引用，如 CANCEL/customer-before-intake"
                   onChange={(event) => patchRow(index, { rule: event.target.value })}
                 />
@@ -275,7 +275,7 @@ function PartyPicker({
               : `暂时读不到可选项（${accessRefusalTitle(parties.kind)}）`}
         </option>
       </select>
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+      <span className="block type-caption text-idpxyz-textMuted mt-1">
         {parties.kind === 'loading'
           ? '正在读取可选的请求方。'
           : parties.kind === 'unconfigured'

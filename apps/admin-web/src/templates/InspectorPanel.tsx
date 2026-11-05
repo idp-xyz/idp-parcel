@@ -47,7 +47,7 @@ function StatusWord({ word }: { word: string }) {
   return word in domainStatusTones ? (
     <StatusBadgeFor status={word as DomainStatus} />
   ) : (
-    <span className="font-mono text-[11px] text-idpxyz-textMuted">{word}</span>
+    <span className="font-mono type-caption text-idpxyz-textMuted">{word}</span>
   );
 }
 
@@ -113,7 +113,7 @@ function SectionBody({ section }: { section: InspectorSectionContent }) {
         <ul className="space-y-1">
           {section.links.map((link) => (
             <li key={link.hash}>
-              <a href={link.hash} className="text-[11px] text-idpxyz-accent hover:underline">
+              <a href={link.hash} className="type-caption text-idpxyz-accent hover:underline">
                 {link.label}
               </a>
             </li>
@@ -147,7 +147,7 @@ export function InspectorPanel({ content, headerActions }: InspectorPanelProps) 
       <InspectorHeader title={PANEL_TITLE}>{headerActions}</InspectorHeader>
       {content === null ? (
         <InspectorBody>
-          <p className="text-[11px] text-idpxyz-textMuted" data-inspector-empty>
+          <p className="type-caption text-idpxyz-textMuted" data-inspector-empty>
             {INSPECTOR_EMPTY_NOTE}
           </p>
         </InspectorBody>

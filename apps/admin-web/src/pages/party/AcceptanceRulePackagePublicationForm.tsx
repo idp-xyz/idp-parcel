@@ -57,8 +57,8 @@ export interface AcceptanceRulePackagePublicationFormProps {
   start?: NewVersionStart<AcceptanceRulePackageDraft>;
 }
 
-const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
-const hint = 'text-[11px] text-idpxyz-textMuted';
+const sectionTitle = 'type-value font-medium text-idpxyz-text';
+const hint = 'type-caption text-idpxyz-textMuted';
 const root = 'acceptanceRulePackage';
 
 type Update = (mutate: (current: AcceptanceRulePackageDraft) => AcceptanceRulePackageDraft) => void;
@@ -223,7 +223,7 @@ function CodeChecklist({
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1">
       {options.options.map((option) => (
-        <label key={option.value} className="inline-flex items-center gap-1 text-[13px] text-idpxyz-text">
+        <label key={option.value} className="inline-flex items-center gap-1 type-value text-idpxyz-text">
           <input
             type="checkbox"
             checked={selected.includes(option.value)}
@@ -249,7 +249,7 @@ function ShellFields({ draft, update, form, timeZone }: Omit<SectionProps, 'voca
           <Input
             value={draft.objectId}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
@@ -257,7 +257,7 @@ function ShellFields({ draft, update, form, timeZone }: Omit<SectionProps, 'voca
           <Input
             value={draft.version}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
@@ -265,7 +265,7 @@ function ShellFields({ draft, update, form, timeZone }: Omit<SectionProps, 'voca
           <Input
             value={draft.scope}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="商业范围引用"
             onChange={(event) => patch({ scope: event.target.value })}
           />
@@ -349,7 +349,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary, timeZone }: Se
           <Input
             value={draft.body.scope}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="商业范围引用"
             onChange={(event) => patchBody({ scope: event.target.value })}
           />
@@ -400,7 +400,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary, timeZone }: Se
                 <Input
                   value={rule.reference}
                   readOnly={form.locked}
-                  className="font-mono text-[12px]"
+                  className="font-mono type-body"
                   placeholder="如 RULE/ingress-identity"
                   onChange={(event) => patchBody({ rules: replaceAt(draft.body.rules, index, { reference: event.target.value }) })}
                 />
@@ -448,7 +448,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
               <Input
                 value={row.semantics}
                 readOnly={form.locked}
-                className="font-mono text-[12px]"
+                className="font-mono type-body"
                 placeholder="如 AT_SUBMISSION"
                 onChange={(event) => setRows(replaceAt(rows, index, { semantics: event.target.value }))}
               />
@@ -457,7 +457,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
               <Input
                 value={row.policyVersion}
                 readOnly={form.locked}
-                className="font-mono text-[12px]"
+                className="font-mono type-body"
                 placeholder="如 asof-policy/v1"
                 onChange={(event) => setRows(replaceAt(rows, index, { policyVersion: event.target.value }))}
               />
@@ -566,7 +566,7 @@ function IntakeQualificationFields({ draft, update, form, vocabulary }: SectionP
               <Input
                 value={qualification}
                 readOnly={form.locked}
-                className="font-mono text-[12px]"
+                className="font-mono type-body"
                 placeholder="如 INTAKE-QUAL/realname"
                 onChange={(event) =>
                   patchIntake({ qualifications: intake.qualifications.map((item, at) => (at === index ? event.target.value : item)) })
@@ -620,7 +620,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
               <Input
                 value={row.finalKind}
                 readOnly={form.locked}
-                className="font-mono text-[12px]"
+                className="font-mono type-body"
                 placeholder="如 FINAL/delivery"
                 onChange={(event) => setRows(replaceAt(rows, index, { finalKind: event.target.value }))}
               />
@@ -649,7 +649,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
             <Input
               value={validity.duration}
               readOnly={form.locked}
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               placeholder="如 P7D（7 天）或 P3DT12H（3 天 12 小时）；不收年、月、周"
               onChange={(event) => patchValidity({ duration: event.target.value })}
             />
@@ -717,7 +717,7 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
               <Input
                 value={rule.dataGroup}
                 readOnly={form.locked}
-                className="font-mono text-[12px]"
+                className="font-mono type-body"
                 placeholder="如 consignee.address"
                 onChange={(event) => patchAmendment({ rules: replaceAt(amendment.rules, index, { dataGroup: event.target.value }) })}
               />

@@ -52,7 +52,7 @@ export function StatusPill({ code, scope, label, tone, className }: StatusPillPr
   return (
     <span
       data-tone={resolvedTone}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[12px] leading-4 text-idpxyz-text ${classes.pill} ${className ?? ''}`.trim()}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 type-body leading-4 text-idpxyz-text ${classes.pill} ${className ?? ''}`.trim()}
     >
       <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${classes.dot}`} />
       {word}

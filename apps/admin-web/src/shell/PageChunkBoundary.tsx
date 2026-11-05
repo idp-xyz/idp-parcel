@@ -34,5 +34,5 @@ export class PageChunkBoundary extends Component<{ children: ReactNode }, { erro
  */
 export function PageLoading() {
   const revealed = useDelayedReveal(400);
-  return <p className={`p-4 text-[12px] text-idpxyz-textMuted ${revealClass(revealed)}`}>正在加载页面…</p>;
+  return <p className={`p-4 type-body text-idpxyz-textMuted ${revealClass(revealed)}`}>正在加载页面…</p>;
 }

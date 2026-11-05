@@ -81,7 +81,7 @@ function CopyNote({ note }: { note: string | null }) {
   return (
     <span
       role="status"
-      className={note === null ? 'sr-only' : 'ml-1 whitespace-nowrap font-sans text-[12px] font-normal text-idpxyz-breadcrumb'}
+      className={note === null ? 'sr-only' : 'ml-1 whitespace-nowrap font-sans type-body font-normal text-idpxyz-breadcrumb'}
     >
       {note ?? ''}
     </span>

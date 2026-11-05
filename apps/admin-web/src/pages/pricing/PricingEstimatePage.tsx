@@ -41,11 +41,11 @@ const WEIGHT_UNITS = ['G', 'KG', 'OZ', 'LB'] as const;
 const LENGTH_UNITS = ['CM', 'IN'] as const;
 
 const selectClass =
-  'rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] text-idpxyz-text focus:outline-none focus:border-idpxyz-accent';
+  'rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 type-value text-idpxyz-text focus:outline-none focus:border-idpxyz-accent';
 
 function Field({ label, hint, problem, children }: { label: string; hint?: string; problem?: string; children: ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-[12px] text-idpxyz-textMuted">
+    <label className="flex flex-col gap-1 type-body text-idpxyz-textMuted">
       <span>{label}</span>
       {children}
       {problem ? <span className="text-idpxyz-danger">{problem}</span> : hint ? <span>{hint}</span> : null}
@@ -89,8 +89,8 @@ export function PricingEstimatePage() {
   return (
     <div className="flex-1 overflow-auto bg-idpxyz-editor p-4">
       <div className="mb-3">
-        <h2 className="text-[15px] font-medium text-idpxyz-text">{info.title}</h2>
-        <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">
+        <h2 className="type-title font-medium text-idpxyz-text">{info.title}</h2>
+        <p className="mt-0.5 type-body text-idpxyz-textMuted">
           客户问价、核对价卡时用：填一件假设的包裹，看适用的每张价卡各收多少钱。试算只是看看，不报价、不记账、不留记录；几张价卡并排列出，不分先后。
         </p>
       </div>
@@ -200,7 +200,7 @@ export function PricingEstimatePage() {
             >
               {submitting ? '试算中…' : '试算'}
             </Button>
-            <span className="text-[12px] text-idpxyz-textMuted">必填项空着也能试算：结果里会逐项说明缺什么。</span>
+            <span className="type-body text-idpxyz-textMuted">必填项空着也能试算：结果里会逐项说明缺什么。</span>
           </div>
         </CardContent>
       </Card>
@@ -221,16 +221,16 @@ function EstimateAnswer({ answer }: { answer: ApiResult<EstimateResponseBody> })
     case 'unconfigured':
       return (
         // 渠道未配置是诚实答案（ADR-0055）：不是「没有价格」，改声明或重试都不会变。
-        <p className="text-[12px] text-idpxyz-textMuted">
+        <p className="type-body text-idpxyz-textMuted">
           访问通道尚未配置（403），这次没有试算；这不代表没有价格。改包裹信息或重试都不会变，请管理员先配置访问通道。
         </p>
       );
     case 'loginRequired':
     case 'notGranted':
-      return <OperatorRefusalNote kind={answer.kind} what="试算" className="text-[12px] text-idpxyz-textMuted" />;
+      return <OperatorRefusalNote kind={answer.kind} what="试算" className="type-body text-idpxyz-textMuted" />;
     case 'callerProblem':
       return (
-        <div className="text-[12px] text-idpxyz-danger">
+        <div className="type-body text-idpxyz-danger">
           <p>
             没能试算：{problemNote(answer.code)}
             {answer.detail ? ` ${answer.detail}` : ''}
@@ -240,25 +240,25 @@ function EstimateAnswer({ answer }: { answer: ApiResult<EstimateResponseBody> })
       );
     case 'noAnswer':
       return (
-        <div className="text-[12px] text-idpxyz-danger">
+        <div className="type-body text-idpxyz-danger">
           <p>这次试算没算完：{problemNote(answer.code)}</p>
           <TechnicalDetails rows={httpRows(answer.status, answer.code)} className="mt-1 text-idpxyz-text" />
         </div>
       );
     case 'transport':
-      return <p className="text-[12px] text-idpxyz-danger">连不上系统，没能试算（{answer.message}）；检查网络后重试。</p>;
+      return <p className="type-body text-idpxyz-danger">连不上系统，没能试算（{answer.message}）；检查网络后重试。</p>;
   }
 }
 
 function EstimateBody({ body }: { body: EstimateResponseBody }) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13px] text-idpxyz-text">
+      <p className="type-value text-idpxyz-text">
         {labelOf(estimateOutcomeLabels, body.outcome)}
         {body.reason ? <span className="ml-2 text-idpxyz-textMuted">（{labelOf(estimateReasonLabels, body.reason)}）</span> : null}
       </p>
       {body.conflict.length > 0 ? (
-        <ul className="text-[12px] text-idpxyz-textMuted">
+        <ul className="type-body text-idpxyz-textMuted">
           {body.conflict.map((reference) => (
             <li key={`${reference.id}@${reference.version}`}>
               同时有效的版本：<span className="font-mono">{reference.id}</span> 版本{' '}
@@ -282,15 +282,15 @@ function CandidateCard({ candidate }: { candidate: EstimateCandidateRecord }) {
       <CardHeader>
         <CardTitle>
           <span className="font-mono">{candidate.plan.id}</span>
-          <span className="ml-1 text-[12px] font-normal text-idpxyz-textMuted">版本 {candidate.plan.version}</span>
-          <span className="ml-2 text-[12px] font-normal text-idpxyz-textMuted">{labelOf(estimateAnswerLabels, candidate.answer)}</span>
+          <span className="ml-1 type-body font-normal text-idpxyz-textMuted">版本 {candidate.plan.version}</span>
+          <span className="ml-2 type-body font-normal text-idpxyz-textMuted">{labelOf(estimateAnswerLabels, candidate.answer)}</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
         {candidate.evaluation ? (
           <EvaluationDetail evaluation={candidate.evaluation} />
         ) : (
-          <ul className="text-[12px] text-idpxyz-textMuted">
+          <ul className="type-body text-idpxyz-textMuted">
             {(candidate.missing ?? []).map((code) => (
               <li key={code}>缺 {labelOf(estimateMissingLabels, code)}</li>
             ))}
@@ -303,20 +303,20 @@ function CandidateCard({ candidate }: { candidate: EstimateCandidateRecord }) {
 
 function EvaluationDetail({ evaluation }: { evaluation: EstimateEvaluationRecord }) {
   return (
-    <div className="flex flex-col gap-2 text-[12px] text-idpxyz-text">
+    <div className="flex flex-col gap-2 type-body text-idpxyz-text">
       <p className="flex items-center gap-2">
         <StatusPill code={evaluation.status} scope="pricing-evaluation" />
         <span className="text-idpxyz-textMuted">
           {labelOf(directionLabels, evaluation.direction)} · {labelOf(purposeLabels, evaluation.purpose)}
         </span>
       </p>
-      <p className="text-[15px] font-medium">
+      <p className="type-section font-medium">
         {evaluation.total ? (
           <span className="font-mono">
             {evaluation.total.amount} {evaluation.total.currency}
           </span>
         ) : (
-          <span className="text-[12px] font-normal text-idpxyz-textMuted">没有合计：这一份没算完，不显示金额，也不会用 0 代替</span>
+          <span className="type-body font-normal text-idpxyz-textMuted">没有合计：这一份没算完，不显示金额，也不会用 0 代替</span>
         )}
       </p>
       {evaluation.chargeLines.length > 0 ? (

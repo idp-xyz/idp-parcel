@@ -54,7 +54,7 @@ export interface CustomerContractPublicationFormProps {
   start?: NewVersionStart<CustomerContractDraft>;
 }
 
-const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
+const sectionTitle = 'type-value font-medium text-idpxyz-text';
 
 export function CustomerContractPublicationForm({ onPublished, start }: CustomerContractPublicationFormProps) {
   const [draft, setDraft] = useState<CustomerContractDraft>(start?.draft ?? emptyCustomerContractDraft());
@@ -139,7 +139,7 @@ function ShellFields({
           <Input
             value={draft.objectId}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
@@ -147,7 +147,7 @@ function ShellFields({
           <Input
             value={draft.version}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="如 v1；改条款就用下一个版本号"
             onChange={(event) => patch({ version: event.target.value })}
           />
@@ -156,7 +156,7 @@ function ShellFields({
           <Input
             value={draft.scope}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="这份合同管哪些业务，按公司约定的写法填"
             onChange={(event) => patch({ scope: event.target.value })}
           />
@@ -183,7 +183,7 @@ function ShellFields({
         />
       </div>
       {form.versionNote}
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         开始时间晚于现在也可以先保存和批准；到了开始时间再发布即可。
       </p>
     </section>
@@ -251,7 +251,7 @@ function ContractContentFields({
         </Button>
       </div>
       {/* 两格都空、同一范围写两行、策略填了册上没有的标识，都照样送上去由服务端答，表单不代判。 */}
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         每行只填其中一项：指名一份接受前财务控制策略，或写明不适用的依据；同一费用范围只写一行。一行都不加也可以，表示没有对任何费用范围作约定——这时查这些费用范围得到的是「不存在」，不是「不适用」。
       </p>
       <div className="flex flex-col gap-2">
@@ -270,7 +270,7 @@ function ContractContentFields({
                 <Input
                   value={binding.chargeScope}
                   readOnly={form.locked}
-                  className="font-mono text-[12px]"
+                  className="font-mono type-body"
                   placeholder="费用范围引用"
                   onChange={(event) => patchBinding(index, { chargeScope: event.target.value })}
                 />
@@ -294,7 +294,7 @@ function ContractContentFields({
                   <Input
                     value={binding.inapplicabilityBasis}
                     readOnly={form.locked}
-                    className="font-mono text-[12px]"
+                    className="font-mono type-body"
                     placeholder="为什么这个费用范围不需要接受前财务控制"
                     onChange={(event) => patchBinding(index, { inapplicabilityBasis: event.target.value })}
                   />
@@ -371,7 +371,7 @@ function PreAcceptanceControlFields({
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>这份合同接单前要不要做财务控制</h3>
       {/* 「不适用」必带依据：缺依据的不适用与一次默认放行分不开；「要求」不得带依据。两条都由服务端裁。 */}
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         这里回答整份合同接单前要不要做财务控制（预付冻结、信用校验）；上面的约定表按费用范围回答用哪份策略。选「不适用」要写明商业依据。
       </p>
       <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
@@ -401,7 +401,7 @@ function PreAcceptanceControlFields({
             <Input
               value={draft.controlNotApplicableBasis}
               readOnly={form.locked}
-              className="font-mono text-[13px]"
+              className="font-mono type-value"
               placeholder="合同条款或商业依据，如 CONTRACT-CLAUSE/NO-PRE-ACCEPTANCE-CONTROL"
               onChange={(event) => patch({ controlNotApplicableBasis: event.target.value })}
             />
@@ -466,7 +466,7 @@ function ObjectPicker({
           onChange={onChange}
         />
         {candidates.objectIds.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+          <span className="block type-caption text-idpxyz-textMuted mt-1">
             当前租户的{registerName}为空；先发布那一册的版本，再回来指名。
           </span>
         ) : null}
@@ -478,11 +478,11 @@ function ObjectPicker({
       <Input
         value={value}
         readOnly={locked}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         placeholder="对象标识"
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+      <span className="block type-caption text-idpxyz-textMuted mt-1">
         {candidates.kind === 'loading'
           ? `正在读${registerName}…`
           : candidates.kind === 'unconfigured'

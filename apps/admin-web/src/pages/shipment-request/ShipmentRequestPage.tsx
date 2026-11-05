@@ -9,7 +9,7 @@ export function ShipmentRequestPage() {
   const [view, setView] = useState<'submit' | 'withdraw'>('submit');
 
   const tabClass = (active: boolean) =>
-    `px-3 py-1.5 text-[13px] rounded border ${
+    `px-3 py-1.5 type-value rounded border ${
       active
         ? 'border-idpxyz-accent text-idpxyz-accent'
         : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'

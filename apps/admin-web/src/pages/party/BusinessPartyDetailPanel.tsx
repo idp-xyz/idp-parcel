@@ -97,23 +97,23 @@ export function BusinessPartyDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">{row.partyName}</h2>
+              <h2 className="truncate type-title font-semibold text-idpxyz-textBright">{row.partyName}</h2>
               <StatusPill code={row.status} />
             </div>
             {/* 类型按持有的角色称呼；一个角色都没有就说「往来单位」，不留空。 */}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {roles.length === 0 ? (
-                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
+                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
                   {partyTypeFallbackLabel}
                 </span>
               ) : (
                 roles.map((role) => (
-                  <span key={role} className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
+                  <span key={role} className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
                     {labelOf(partyRoleLabels, role)}
                   </span>
                 ))
               )}
-              <span className="font-mono text-[12px] text-idpxyz-breadcrumb">编码 {row.partyId}</span>
+              <span className="font-mono type-body text-idpxyz-breadcrumb">编码 {row.partyId}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -182,7 +182,7 @@ export function BusinessPartyDetailPanel({
               </dl>
             ) : null}
             <section className={row.deactivationBasis ? 'mt-4' : ''}>
-              <h3 className="text-[12px] font-medium text-idpxyz-text">历次更新</h3>
+              <h3 className="type-body font-medium text-idpxyz-text">历次更新</h3>
               <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
             </section>
             <TechnicalDetails

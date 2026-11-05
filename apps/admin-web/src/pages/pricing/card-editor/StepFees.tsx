@@ -56,9 +56,9 @@ function FeeCard({ fee, index }: { fee: FeeItemState; index: number }) {
     <section className="rounded border border-idpxyz-border p-3" aria-label={`费用项 ${index + 1}`} data-field={field.fee(fee.uid, 'card')} tabIndex={-1}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">费用项 {index + 1}</span>
-          <span className="truncate text-[13px] font-medium text-idpxyz-textBright">{fee.name.trim() || '（还没起名）'}</span>
-          <span className="text-[12px] text-idpxyz-breadcrumb">{feeKindLabels[fee.kind]}</span>
+          <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">费用项 {index + 1}</span>
+          <span className="truncate type-value font-medium text-idpxyz-textBright">{fee.name.trim() || '（还没起名）'}</span>
+          <span className="type-body text-idpxyz-breadcrumb">{feeKindLabels[fee.kind]}</span>
         </div>
         <Button variant="ghost" size="sm" className="text-idpxyz-breadcrumb" onClick={() => update((draft) => ({ ...draft, fees: draft.fees.filter((item) => item.uid !== fee.uid) }))}>
           <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -178,7 +178,7 @@ function FeeCard({ fee, index }: { fee: FeeItemState; index: number }) {
 
         {keyed ? (
           <div data-field={field.fee(fee.uid, 'rows')} tabIndex={-1}>
-            <span className="mb-1 block text-[12px] font-medium text-idpxyz-textBright">
+            <span className="mb-1 block type-body font-medium text-idpxyz-textBright">
               {fee.kind === 'TABLE_REMOTE' ? '偏远档位与金额' : '分区、重量段与金额'}
             </span>
             <p className={`${hintClass} mb-2`}>
@@ -204,8 +204,8 @@ function FeeCard({ fee, index }: { fee: FeeItemState; index: number }) {
         {feeHasConditionBuilder(fee.kind) ? <ConditionBuilder fee={fee} /> : null}
         {fee.kind === 'TABLE_REMOTE' ? (
           <div>
-            <span className="text-[12px] font-medium text-idpxyz-textBright">什么时候收</span>
-            <p className="mt-0.5 text-[12px] text-idpxyz-text">
+            <span className="type-body font-medium text-idpxyz-textBright">什么时候收</span>
+            <p className="mt-0.5 type-body text-idpxyz-text">
               {remoteSentence !== null && remoteTiers(fee).length > 0 ? `${remoteSentence}时收取（由上面价表里的档位自动得出）` : '收件地址落在价表里任一档位时收取（填了档位后这里会显示）'}
             </p>
             <GroupErrors ids={[field.fee(fee.uid, 'conditions')]} />
@@ -275,13 +275,13 @@ export function StepFees() {
 
   return (
     <div className="space-y-4">
-      {state.fees.length === 0 ? <p className="text-[12px] text-idpxyz-text">没有其他费用就直接下一步。</p> : null}
+      {state.fees.length === 0 ? <p className="type-body text-idpxyz-text">没有其他费用就直接下一步。</p> : null}
       {state.fees.map((fee, index) => (
         <FeeCard key={fee.uid} fee={fee} index={index} />
       ))}
       {choosing ? (
         <div className="rounded border border-dashed border-idpxyz-border p-3" role="group" aria-label="选择费用项类型">
-          <p className="mb-2 text-[12px] font-medium text-idpxyz-textBright">加哪一种费用？</p>
+          <p className="mb-2 type-body font-medium text-idpxyz-textBright">加哪一种费用？</p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {feeKindOrder.map((kind) => (
               <button
@@ -293,8 +293,8 @@ export function StepFees() {
                   setChoosing(false);
                 }}
               >
-                <span className="block text-[13px] font-medium text-idpxyz-textBright">{feeKindLabels[kind]}</span>
-                <span className="block text-[12px] text-idpxyz-breadcrumb">{feeKindHints[kind]}</span>
+                <span className="block type-value font-medium text-idpxyz-textBright">{feeKindLabels[kind]}</span>
+                <span className="block type-body text-idpxyz-breadcrumb">{feeKindHints[kind]}</span>
               </button>
             ))}
           </div>

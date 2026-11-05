@@ -60,7 +60,7 @@ function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
   return {
     id,
     header,
-    className: mono ? 'font-mono text-xs' : undefined,
+    className: mono ? 'font-mono type-body leading-4' : undefined,
     render: (row) => row.values[id] ?? '—',
   };
 }

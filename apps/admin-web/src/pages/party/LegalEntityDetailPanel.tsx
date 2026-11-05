@@ -47,7 +47,7 @@ import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 
 type PanelTab = 'overview' | 'contacts' | 'profile' | 'history' | 'related';
 
-const tabTriggerClass = 'px-0 text-[12px] font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent';
+const tabTriggerClass = 'px-0 type-body font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent';
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
@@ -137,14 +137,14 @@ export function LegalEntityDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {/* 公司名是文本类（票 company-subject-ux/14）：文字照常可选，末尾悬停出复制图标；转写不到的那句话不是值，不挂。 */}
-            <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">
+            <h2 className="truncate type-title font-semibold text-idpxyz-textBright">
               {row.partyNameKnown && row.partyName ? <CopyAside value={row.partyName} name="公司名">{row.partyName}</CopyAside> : <UnknownPartyName />}
             </h2>
             <StatusPill code={row.status} />
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {mayWrite ? (
-              <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
+              <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openProfileForm}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 更新公司资料
               </Button>

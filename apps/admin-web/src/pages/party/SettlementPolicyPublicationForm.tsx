@@ -100,8 +100,8 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
       {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <h3 className="type-value font-medium text-idpxyz-text">版本信息</h3>
+            <p className="type-caption text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
               本身，和下方政策正文里的生效区间分开填。这一版引用的客户合同取自下方正文里选的合同，不用另填。
             </p>
@@ -110,7 +110,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 <Input
                   value={draft.objectId}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ objectId: event.target.value })}
                 />
               </Field>
@@ -118,7 +118,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 <Input
                   value={draft.version}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ version: event.target.value })}
                 />
               </Field>
@@ -126,7 +126,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 <Input
                   value={draft.scope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ scope: event.target.value })}
                 />
               </Field>
@@ -156,12 +156,12 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
 
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-medium text-idpxyz-text">政策正文（这一版的条款内容）</h3>
+              <h3 className="type-value font-medium text-idpxyz-text">政策正文（这一版的条款内容）</h3>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withShellIntervalCopiedIntoPolicy)}>
                 区间从版本信息带入
               </Button>
             </div>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <p className="type-caption text-idpxyz-textMuted">
               结算政策说的是<strong>怎么结</strong>
               （预付或账期），以及在哪个范围适用：责任法人、客户相对方、合同版本、费用范围、币种、生效区间，六项都要填。同一范围上有两种结法同时命中，就是适用冲突。接受前要不要做财务控制不在这里设，看客户合同与「接受前财务控制策略」。
             </p>
@@ -216,7 +216,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 <Input
                   value={draft.chargeScope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="服务或费用范围"
                   onChange={(event) => patch({ chargeScope: event.target.value })}
                 />
@@ -225,7 +225,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 <Input
                   value={draft.currency}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="如 CNY"
                   onChange={(event) => patch({ currency: event.target.value })}
                 />
@@ -313,7 +313,7 @@ function ContractPicker({
           }}
         />
         {contracts.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+          <span className="block type-caption text-idpxyz-textMuted mt-1">
             当前租户尚无客户合同版本；先发布客户合同，再发布挂在它上面的结算政策。
           </span>
         ) : null}
@@ -328,7 +328,7 @@ function ContractPicker({
         <Input
           value={objectId}
           disabled={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="合同对象标识（读不到合同列表时手填）"
           onChange={(event) => onChange({ objectId: event.target.value, version })}
         />
@@ -337,12 +337,12 @@ function ContractPicker({
         <Input
           value={version}
           disabled={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="只填版本号"
           onChange={(event) => onChange({ objectId, version: event.target.value })}
         />
       </Field>
-      <span className="block text-[11px] text-idpxyz-textMuted">
+      <span className="block type-caption text-idpxyz-textMuted">
         {answer === null
           ? '正在读取客户合同列表…'
           : answer.kind === 'unconfigured'

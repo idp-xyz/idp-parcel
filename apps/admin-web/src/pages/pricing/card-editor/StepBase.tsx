@@ -45,7 +45,7 @@ export function RateGrid({
   return (
     <div>
       <div className="overflow-x-auto rounded border border-idpxyz-border">
-        <table className="w-full min-w-[520px] text-[12px]">
+        <table className="w-full min-w-[520px] type-body">
           <thead className="bg-idpxyz-sidebar text-left text-idpxyz-breadcrumb">
             <tr>
               <th className="w-10 px-2 py-1.5 font-medium">#</th>

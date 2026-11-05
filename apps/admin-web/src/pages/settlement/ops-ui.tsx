@@ -19,8 +19,8 @@ export function technicalRows(rows: readonly OptionalTechnicalRow[]): TechnicalR
 export function TwoLine({ primary, secondary, mono }: { primary: ReactNode; secondary?: ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className={`truncate text-idpxyz-textBright ${mono ? 'font-mono text-xs' : ''}`.trim()}>{primary}</div>
-      {secondary ? <div className="truncate font-mono text-[11px] text-idpxyz-textMuted">{secondary}</div> : null}
+      <div className={`truncate text-idpxyz-textBright ${mono ? 'font-mono type-body leading-4' : ''}`.trim()}>{primary}</div>
+      {secondary ? <div className="truncate font-mono type-caption text-idpxyz-textMuted">{secondary}</div> : null}
     </div>
   );
 }
@@ -41,7 +41,7 @@ export function AmountCell({
     settlementAmount === undefined ||
     (settlementAmount === originalAmount && settlementCurrency === originalCurrency);
   return (
-    <div className="text-right font-mono text-xs tabular-nums">
+    <div className="text-right font-mono type-body leading-4 tabular-nums">
       <div className="text-idpxyz-textBright">{formatMoney(originalAmount, originalCurrency)}</div>
       {same ? null : (
         <div className="text-idpxyz-textMuted">结算 {formatMoney(settlementAmount, settlementCurrency ?? '')}</div>

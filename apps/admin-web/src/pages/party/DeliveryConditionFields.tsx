@@ -38,12 +38,12 @@ export function DeliveryConditionFields({
 
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-medium text-idpxyz-text">
+      <h3 className="type-value font-medium text-idpxyz-text">
         交付条件（选填）{layer === 'contract' ? ' · 合同层' : ' · 产品层'}
       </h3>
       {/* 交付方式的词表属租户实例登记，表单不给候选；方式是否真在所收紧的那一版产品层之内由服务端在发布那一步核，
           预览与批准看不出放宽。合同版本信息上的产品引用不带版本号，所以收紧的产品版本要在这里另填。 */}
-      <p className="text-[11px] text-idpxyz-textMuted">
+      <p className="type-caption text-idpxyz-textMuted">
         {'一格都不填，表示这一版不约定交付条件；填了任何一格，整节都会提交。交付方式每行填一种；收件范围规则与交付证明规则各填一条引用。'}
         {layer === 'contract'
           ? '合同层要写明所收紧的服务产品版本（产品标识 + 版本号），交付方式只能在那一版产品的范围内收紧，发布时由服务端检查。'
@@ -79,7 +79,7 @@ export function DeliveryConditionFields({
           onChange={(event) => onPatch({ methodsText: event.target.value })}
         />
         {methodLines.map((item) => (
-          <span key={item.key} className="block text-[11px] text-idpxyz-danger mt-1">
+          <span key={item.key} className="block type-caption text-idpxyz-danger mt-1">
             <ProblemText problem={item.problem} />
           </span>
         ))}
@@ -89,7 +89,7 @@ export function DeliveryConditionFields({
           <Input
             value={draft.recipientScopeRule}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="谁可以收件的规则引用"
             onChange={(event) => onPatch({ recipientScopeRule: event.target.value })}
           />
@@ -98,7 +98,7 @@ export function DeliveryConditionFields({
           <Input
             value={draft.proofOfDeliveryRule}
             readOnly={form.locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="凭什么算有效交付的规则引用"
             onChange={(event) => onPatch({ proofOfDeliveryRule: event.target.value })}
           />

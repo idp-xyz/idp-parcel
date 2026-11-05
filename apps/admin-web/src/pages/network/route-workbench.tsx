@@ -156,14 +156,14 @@ function CursorPager({ pagination }: { pagination: ListCursorPaginationProps }) 
   if (pagination.page <= 1 && pagination.next === null) return null;
   return (
     <span className="inline-flex items-center gap-1">
-      <Button variant="ghost" size="sm" className="h-6 px-2 text-[12px]" disabled={pagination.page <= 1} onClick={pagination.onPrevious}>
+      <Button variant="ghost" size="sm" className="h-6 px-2 type-body" disabled={pagination.page <= 1} onClick={pagination.onPrevious}>
         上一页
       </Button>
       <span>第 {pagination.page} 页</span>
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 px-2 text-[12px]"
+        className="h-6 px-2 type-body"
         disabled={pagination.next === null}
         onClick={() => pagination.next !== null && pagination.onNext(pagination.next)}
       >
@@ -191,7 +191,7 @@ export function SectionTabs<Id extends string>({
           type="button"
           aria-pressed={section.id === active}
           onClick={() => onChange(section.id)}
-          className={`rounded px-2 py-1 text-[12px] transition-colors ${
+          className={`rounded px-2 py-1 type-body transition-colors ${
             section.id === active
               ? 'bg-idpxyz-activeItem font-medium text-idpxyz-textBright ring-1 ring-idpxyz-accent'
               : 'text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text'
@@ -241,14 +241,14 @@ export function RecordDetailPanel({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2
-                className={`truncate text-[16px] font-semibold text-idpxyz-textBright ${mono ? 'font-mono' : ''}`.trim()}
+                className={`truncate type-title font-semibold text-idpxyz-textBright ${mono ? 'font-mono' : ''}`.trim()}
                 title={title}
               >
                 {title}
               </h2>
               {status ? <RowStatusPill status={status} /> : null}
             </div>
-            {subtitle ? <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-0.5 type-body text-idpxyz-breadcrumb">{subtitle}</p> : null}
           </div>
           <Button
             className="shrink-0 text-idpxyz-breadcrumb"
@@ -267,13 +267,13 @@ export function RecordDetailPanel({
           <dl className="grid grid-cols-2 gap-2.5">
             {facts.map((fact) => (
               <div key={fact.label} className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-                <dt className="text-[12px] text-idpxyz-breadcrumb">{fact.label}</dt>
-                <dd className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
+                <dt className="type-body text-idpxyz-breadcrumb">{fact.label}</dt>
+                <dd className="mt-0.5 break-words type-body font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
               </div>
             ))}
           </dl>
         ) : null}
-        {children ? <div className="mt-4 space-y-2 text-[12px] leading-5 text-idpxyz-breadcrumb">{children}</div> : null}
+        {children ? <div className="mt-4 space-y-2 type-body leading-5 text-idpxyz-breadcrumb">{children}</div> : null}
         {actions ? <div className="mt-4">{actions}</div> : null}
         <TechnicalDetails className="mt-4" rows={technical} />
       </div>

@@ -223,7 +223,7 @@ export interface ListPageTemplateProps<Row> {
 
 // 过滤条上原生 select 的样子，与 FilterSearch 同高同字号；不从 pages/ 借类名——模板层不反向依赖页面层。
 const filterControlClass =
-  'h-6 shrink-0 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text ' +
+  'h-6 shrink-0 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-caption text-idpxyz-text ' +
   'outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35';
 
 // 可聚焦行的焦点态：outline 而不是 ring——ring 是 box-shadow，浏览器对 <tr> 不一定画；outline 内缩一格免得被容器
@@ -259,7 +259,7 @@ function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationP
   return (
     <nav
       aria-label="翻页"
-      className="flex items-center justify-between gap-4 text-[11px] text-idpxyz-textMuted"
+      className="flex items-center justify-between gap-4 type-caption text-idpxyz-textMuted"
       data-cursor-pagination
     >
       <span className="tabular-nums">{cursorPageSummary(page, size, total)}</span>
@@ -555,7 +555,7 @@ export function ListPageTemplate<Row>({
         {filters && <FilterGroup>{filters}</FilterGroup>}
         <FilterGroup>{slots.map(renderSlot)}</FilterGroup>
         {filterSummary && (
-          <span className="ml-auto shrink-0 text-[11px] text-idpxyz-textMuted">{filterSummary}</span>
+          <span className="ml-auto shrink-0 type-caption text-idpxyz-textMuted">{filterSummary}</span>
         )}
       </FilterBar>
       {moreFilters !== undefined && moreFiltersOpen && (
@@ -572,7 +572,7 @@ export function ListPageTemplate<Row>({
           aria-label="批量动作"
           className={`flex shrink-0 items-center gap-2 border-b border-idpxyz-border bg-idpxyz-activeItem px-4 ${cellPadding}`}
         >
-          <span className="text-[11px] font-medium text-idpxyz-accent">已选 {selectedCount} 项</span>
+          <span className="type-caption font-medium text-idpxyz-accent">已选 {selectedCount} 项</span>
           <span aria-hidden="true" className="mx-1 h-3 w-px bg-idpxyz-border" />
           {bulkActions?.csv && (
             <Button variant="ghost" size="sm" className="shrink-0" onClick={exportSelectedCsv}>

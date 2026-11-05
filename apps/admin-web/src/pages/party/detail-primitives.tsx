@@ -86,7 +86,7 @@ export function InstantRange({ from, to }: { from: string; to?: string }) {
 
 // 过滤条里的下拉比表单里的格矮一号（py-1 / 12px），与同栏的搜索框齐高；表单那份 selectClass 不借来用。
 export const filterSelectClass =
-  'rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1 text-[12px] ' +
+  'rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1 type-body ' +
   'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent';
 
 /** 复制到剪贴板，成败都以 toast 反馈；不支持 clipboard 的上下文（非 https）如实说，不静默。 */
@@ -147,7 +147,7 @@ export function Fact({
 }) {
   if (inline) {
     return (
-      <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-5" title={title}>
+      <div className="flex min-w-0 items-center gap-1.5 type-body leading-5" title={title}>
         <dt className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</dt>
         <dd className="min-w-0 truncate text-idpxyz-text [&_time]:font-mono">{children}</dd>
       </div>
@@ -155,8 +155,8 @@ export function Fact({
   }
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
-      <p className="mt-0.5 break-words font-mono text-[13px] font-medium leading-5 text-idpxyz-text [&_time]:text-[12px] [&_time]:font-normal">{children}</p>
+      <p className="type-body text-idpxyz-breadcrumb">{label}</p>
+      <p className="mt-0.5 break-words font-mono type-value font-medium leading-5 text-idpxyz-text [&_time]:type-body [&_time]:font-normal">{children}</p>
     </div>
   );
 }
@@ -221,11 +221,11 @@ export function DetailRow({
 }) {
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 border-b border-idpxyz-border py-2.5 last:border-b-0">
-      <dt className="pt-0.5 text-[12px] leading-5 text-idpxyz-breadcrumb">{label}</dt>
-      <dd className={`flex min-w-0 items-start justify-between gap-2 text-[13px] leading-5 text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
+      <dt className="pt-0.5 type-body leading-5 text-idpxyz-breadcrumb">{label}</dt>
+      <dd className={`flex min-w-0 items-start justify-between gap-2 type-value leading-5 text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
         <span className="min-w-0 break-words">{children}</span>
         {onCopy ? (
-          <Button variant="ghost" size="sm" className="shrink-0 px-1.5 text-[12px] text-idpxyz-breadcrumb" onClick={onCopy}>
+          <Button variant="ghost" size="sm" className="shrink-0 px-1.5 type-body text-idpxyz-breadcrumb" onClick={onCopy}>
             复制
           </Button>
         ) : null}

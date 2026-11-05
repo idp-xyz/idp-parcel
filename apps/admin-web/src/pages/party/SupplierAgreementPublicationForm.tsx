@@ -78,9 +78,9 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
       {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
+            <h3 className="type-value font-medium text-idpxyz-text">版本信息</h3>
             {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样；版本上不带指名引用，引用全在正文里。 */}
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <p className="type-caption text-idpxyz-textMuted">
               这里填的是这一版本自己的适用范围与有效期，和下面协议条款里的范围与有效期分开。供应商、公司主体与采购价格表在条款里填。
             </p>
             <div className="grid grid-cols-2 gap-3">
@@ -88,7 +88,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 <Input
                   value={draft.objectId}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ objectId: event.target.value })}
                 />
               </Field>
@@ -96,7 +96,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 <Input
                   value={draft.version}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ version: event.target.value })}
                 />
               </Field>
@@ -104,7 +104,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 <Input
                   value={draft.scope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ scope: event.target.value })}
                 />
               </Field>
@@ -134,13 +134,13 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
 
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-medium text-idpxyz-text">协议正文（这一版的条款内容）</h3>
+              <h3 className="type-value font-medium text-idpxyz-text">协议正文（这一版的条款内容）</h3>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withShellCopiedIntoAgreement)}>
                 范围与区间从版本信息带入
               </Button>
             </div>
             {/* 方向由领域钉死为 BUY，正文没有方向格；采购方案只传方案版本引用串，表单不读方案内容，方向与绑定换算归价格政策那册。 */}
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <p className="type-caption text-idpxyz-textMuted">
               供应商协议约定的是我们向供应商采购，方向固定为买价，不用另填。采购价格表从价格表里选；换算方式在商业价格政策里约定。
             </p>
             <div className="grid grid-cols-2 gap-3">
@@ -173,7 +173,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 <Input
                   value={draft.agreementScope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ agreementScope: event.target.value })}
                 />
               </Field>

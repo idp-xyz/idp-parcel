@@ -75,7 +75,7 @@ const columns: WorkbenchColumn<RuleRow>[] = [
     header: '样例号',
     render: (row) =>
       row.sample ? (
-        <span className="font-mono text-[13px] text-idpxyz-textBright">{row.sample}</span>
+        <span className="font-mono type-value text-idpxyz-textBright">{row.sample}</span>
       ) : (
         <span className="text-idpxyz-breadcrumb" title="登记单据编号时区后才有样例">
           —
@@ -91,7 +91,7 @@ const columns: WorkbenchColumn<RuleRow>[] = [
       <span className="inline-flex flex-wrap items-center gap-1.5">
         <StatusPill code={row.source} scope={SOURCE_SCOPE} />
         {row.source === 'TENANT_RULE' && row.effectiveFrom ? (
-          <span className="text-[11px] text-idpxyz-breadcrumb">{formatInstant(row.effectiveFrom).slice(0, 10)} 起</span>
+          <span className="type-caption text-idpxyz-breadcrumb">{formatInstant(row.effectiveFrom).slice(0, 10)} 起</span>
         ) : null}
       </span>
     ),
@@ -119,7 +119,7 @@ const columns: WorkbenchColumn<RuleRow>[] = [
 function MissingZoneBanner({ body, mayWrite, onOpen }: { body: DocumentNumberingReadBody; mayWrite: boolean; onOpen: () => void }) {
   const state = numberingZoneStateOf(body);
   return (
-    <div role="alert" className={`flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-6 py-2.5 text-[13px] ${statusToneBanner.warning}`}>
+    <div role="alert" className={`flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-6 py-2.5 type-value ${statusToneBanner.warning}`}>
       <AlertTriangle className={`h-4 w-4 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="font-semibold text-idpxyz-textBright">{numberingZoneMissingSentence}</span>
@@ -132,11 +132,11 @@ function MissingZoneBanner({ body, mayWrite, onOpen }: { body: DocumentNumbering
         )}
       </span>
       {mayWrite ? (
-        <Button size="sm" variant="default" className={`${primaryActionClass} h-7 text-[12px]`} onClick={onOpen}>
+        <Button size="sm" variant="default" className={`${primaryActionClass} h-7 type-body`} onClick={onOpen}>
           登记单据编号时区
         </Button>
       ) : (
-        <span className="text-[12px] text-idpxyz-breadcrumb">登记需要登记册配置写授予，请联系管理员。</span>
+        <span className="type-body text-idpxyz-breadcrumb">登记需要登记册配置写授予，请联系管理员。</span>
       )}
     </div>
   );
@@ -172,11 +172,11 @@ export function DocumentNumberingPage() {
             label: '单据编号时区',
             value: zone.configured ? zone.current : '未配置',
             custom: zone.configured ? (
-              <span className="text-[14px] font-semibold text-idpxyz-textBright" title={zone.currentZone}>
+              <span className="type-section font-semibold text-idpxyz-textBright" title={zone.currentZone}>
                 {zone.current}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[14px] font-semibold text-idpxyz-textBright">
+              <span className="inline-flex items-center gap-1 type-section font-semibold text-idpxyz-textBright">
                 <AlertTriangle className={`h-3.5 w-3.5 ${statusToneText.warning}`} aria-hidden="true" />
                 未配置
               </span>
@@ -206,7 +206,7 @@ export function DocumentNumberingPage() {
         refreshing={refreshing}
         primaryAction={
           body ? (
-            <Button variant="ghost" size="sm" className="gap-1.5 text-[12px] text-idpxyz-accent" onClick={() => setZoneDialogOpen(true)}>
+            <Button variant="ghost" size="sm" className="gap-1.5 type-body text-idpxyz-accent" onClick={() => setZoneDialogOpen(true)}>
               <Clock className="h-3.5 w-3.5" aria-hidden="true" />
               {mayWrite ? '登记单据编号时区' : '单据编号时区的历次登记'}
             </Button>

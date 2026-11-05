@@ -11,7 +11,7 @@ import { versionChoiceKey, type VersionChoice } from './picker-options';
 //     输入的格，带上已取回那一页的候选作输入提示。
 // 读不到读口时一律退回手填并说明原因；选出来的只是引用，在不在册、能不能引仍由服务端判。
 
-const note = 'block text-[12px] text-idpxyz-breadcrumb mt-1';
+const note = 'block type-body text-idpxyz-breadcrumb mt-1';
 
 /** 货主客户账户册的第一页，给输入提示用；useLoaded 要一个不随渲染变的函数，所以单独立一个。 */
 export function loadCustomerAccountSuggestions() {
@@ -80,7 +80,7 @@ export function ObjectVersionPicker<Body>({
         <Input
           value={objectId}
           readOnly={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="对象标识"
           aria-label={`${label}：对象标识`}
           onChange={(event) => onChange({ objectId: event.target.value, version })}
@@ -88,7 +88,7 @@ export function ObjectVersionPicker<Body>({
         <Input
           value={version}
           readOnly={locked}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="版本号"
           aria-label={`${label}：版本号`}
           onChange={(event) => onChange({ objectId, version: event.target.value })}
@@ -142,7 +142,7 @@ export function SuggestInput<Body>({
         value={value}
         readOnly={locked}
         list={options.length > 0 ? listId : undefined}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />

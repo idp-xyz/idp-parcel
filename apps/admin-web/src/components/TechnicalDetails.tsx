@@ -33,7 +33,7 @@ export function TechnicalDetails({ rows, className, title }: TechnicalDetailsPro
   const shown = rows.filter((row) => row.value.trim() !== '');
   if (shown.length === 0) return null;
   return (
-    <details className={`text-[12px] ${className ?? ''}`.trim()}>
+    <details className={`type-body ${className ?? ''}`.trim()}>
       <summary className="cursor-pointer select-none text-idpxyz-breadcrumb hover:text-idpxyz-text">
         {title ?? TECHNICAL_DETAILS_TITLE}
       </summary>

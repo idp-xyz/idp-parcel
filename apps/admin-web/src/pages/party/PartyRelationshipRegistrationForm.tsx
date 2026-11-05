@@ -118,7 +118,7 @@ export function PartyRelationshipRegistrationForm({
 
   const body = (
     <>
-          <p className="text-[12px] text-idpxyz-breadcrumb">
+          <p className="type-body text-idpxyz-breadcrumb">
             记录谁对谁担任什么角色、从什么时候开始。双方都要先登记为往来单位；没有批准信息的先作为待确认关系，批准后再保存一次。
           </p>
 
@@ -151,7 +151,7 @@ export function PartyRelationshipRegistrationForm({
                   </option>
                 ))}
               </select>
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">它对对方是什么：客户、供应商、承运商代理……</span>
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">它对对方是什么：客户、供应商、承运商代理……</span>
             </Field>
 
             <ReferencePickerFor<BusinessPartyListResponseBody>
@@ -178,7 +178,7 @@ export function PartyRelationshipRegistrationForm({
                       value={draft.scopeCustomerAccount}
                       readOnly={locked}
                       list={accountOptions.length > 0 ? accountListId : undefined}
-                      className="font-mono text-[13px]"
+                      className="font-mono type-value"
                       placeholder="可从提示里选，也可直接输入账户编码"
                       onChange={(event) => patch({ scopeCustomerAccount: event.target.value })}
                     />
@@ -195,13 +195,13 @@ export function PartyRelationshipRegistrationForm({
                     <Input
                       value={draft.scopeNode}
                       readOnly={locked}
-                      className="font-mono text-[13px]"
+                      className="font-mono type-value"
                       placeholder="留空即不限网点"
                       onChange={(event) => patch({ scopeNode: event.target.value })}
                     />
                   </label>
                 </div>
-                <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+                <span className="block type-body text-idpxyz-breadcrumb mt-1">
                   这家单位替哪个客户账户交付，可以再限定到一个网点。
                 </span>
               </Field>
@@ -210,11 +210,11 @@ export function PartyRelationshipRegistrationForm({
                 <Input
                   value={draft.scope}
                   readOnly={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="如 全部业务，或某条线路、某个客户账户"
                   onChange={(event) => patch({ scope: event.target.value })}
                 />
-                <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">这段关系管哪些业务；按公司约定的写法填。</span>
+                <span className="block type-body text-idpxyz-breadcrumb mt-1">这段关系管哪些业务；按公司约定的写法填。</span>
               </Field>
             )}
 
@@ -243,7 +243,7 @@ export function PartyRelationshipRegistrationForm({
               <Input
                 value={draft.basis}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="合同编号、邮件或审批单号"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
@@ -253,11 +253,11 @@ export function PartyRelationshipRegistrationForm({
               <Input
                 value={draft.relationshipId}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="如 REL-SHIPPER-01-CUSTOMER"
                 onChange={(event) => patch({ relationshipId: event.target.value })}
               />
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">
                 {known
                   ? `这个编号已登记；这次保存会更新那段关系。`
                   : '给这段关系起一个内部编号，登记后不能改。'}
@@ -267,7 +267,7 @@ export function PartyRelationshipRegistrationForm({
 
           {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
           <div className="flex flex-col gap-3 rounded border border-idpxyz-border p-3">
-            <label className="flex items-center gap-2 text-[13px] text-idpxyz-text">
+            <label className="flex items-center gap-2 type-value text-idpxyz-text">
               <input
                 type="checkbox"
                 checked={draft.approved}
@@ -275,7 +275,7 @@ export function PartyRelationshipRegistrationForm({
                 onChange={(event) => patch({ approved: event.target.checked })}
               />
               已批准
-              <span className="text-[12px] text-idpxyz-breadcrumb">不勾则先作为待确认关系，批准后再保存一次</span>
+              <span className="type-body text-idpxyz-breadcrumb">不勾则先作为待确认关系，批准后再保存一次</span>
             </label>
             {draft.approved ? (
               <div className="grid grid-cols-2 gap-3">
@@ -283,7 +283,7 @@ export function PartyRelationshipRegistrationForm({
                   <Input
                     value={draft.approvalReference}
                     readOnly={locked}
-                    className="font-mono text-[13px]"
+                    className="font-mono type-value"
                     placeholder="审批单号或批准邮件"
                     onChange={(event) => patch({ approvalReference: event.target.value })}
                   />
@@ -319,14 +319,14 @@ export function PartyRelationshipRegistrationForm({
       <div className="flex flex-col gap-4">
         {body}
         <div className="flex flex-wrap items-start justify-between gap-3 border-t border-idpxyz-border pt-3">
-          <div className="min-w-0 flex-1 text-[12px]">
+          <div className="min-w-0 flex-1 type-body">
             <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={partyIdentityOutcomeLabels} problemNote={problemNote} />
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={inline.onCancel}>
+            <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={inline.onCancel}>
               取消
             </Button>
-            <Button variant="default" size="sm" className={`${primaryActionClass} text-[12px]`} onClick={form.send} disabled={locked || !form.canSend}>
+            <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '保存中…' : '保存'}
             </Button>
           </div>

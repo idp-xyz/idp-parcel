@@ -57,7 +57,7 @@ export function ModuleChips({
  */
 export function InstantCell({ value }: { value: string }) {
   return (
-    <time dateTime={value} title={value} className="font-mono text-[12px]">
+    <time dateTime={value} title={value} className="font-mono type-body">
       {formatInstant(value)}
     </time>
   );

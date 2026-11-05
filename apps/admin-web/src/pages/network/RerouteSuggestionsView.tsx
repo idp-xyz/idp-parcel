@@ -181,9 +181,9 @@ function SuggestionDetail({
             </Button>
           )
         ) : availability.kind === 'unavailable' ? (
-          <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>
+          <p className="type-body text-idpxyz-breadcrumb">{availability.reason}</p>
         ) : (
-          <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('决定改路', labelFor(authorizedRerouteDecision))}</p>
+          <p className="type-body text-idpxyz-breadcrumb">{hiddenDecisionHint('决定改路', labelFor(authorizedRerouteDecision))}</p>
         )
       }
       onClose={onClose}
@@ -239,7 +239,7 @@ function RerouteDecisionCard({
       <CardHeader>
         <CardTitle>决定改路</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-xs">
+      <CardContent className="flex flex-col gap-2 type-body leading-4">
         <p className="text-idpxyz-textMuted">
           包裹 <span className="font-mono">{suggestion.declaredParcelId}</span> 的原计划{' '}
           <span className="font-mono">{suggestion.reviewedPlan ?? '—'}</span> 已失效。从建议里合格的备选路线中选一条：系统按此刻的
@@ -263,7 +263,7 @@ function RerouteDecisionCard({
           <span className="text-idpxyz-textMuted">决定依据引用 *</span>
           <Input
             value={draft.basis}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="审批单、工单或来电记录的引用，逐字保存、不判真伪"
             onChange={(event) => setDraft({ ...draft, basis: event.target.value })}
           />

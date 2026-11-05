@@ -45,7 +45,7 @@ import { advancedGroupOpen } from './registration-form';
 
 const info = moduleInfoById['group-legal-entities'];
 const kind = 'legal-entity-profile';
-const note = 'text-[12px] leading-5 text-idpxyz-breadcrumb';
+const note = 'type-body leading-5 text-idpxyz-breadcrumb';
 
 /**
  * 读出卡里的就地编辑（票 company-subject-section-edit/02，参考 SAP Fiori 对象页的显示态 / 编辑态）：点卡上「编辑」「添加…」，
@@ -77,7 +77,7 @@ export function ProfileSectionEditor({ editing, onClose }: { editing: ProfileSec
             当前没有生效的资料（{legalEntityProfileStatusOf(resolved).label}），无从只改「{section.title}」；请用「更新公司资料」登记整版。
           </p>
         )}
-        <Button variant="outline" size="sm" className="text-[12px]" onClick={onClose}>
+        <Button variant="outline" size="sm" className="type-body" onClick={onClose}>
           关闭
         </Button>
       </div>
@@ -206,7 +206,7 @@ function SectionForm({
         />
       ) : (
         <>
-          <p className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 text-[12px] leading-5 text-idpxyz-text">
+          <p className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body leading-5 text-idpxyz-text">
             基于当前生效的 <span className="font-medium">{profileRevisionLabel(current.revision)}</span> 只改「{section.title}」，其余内容原样带着；
             保存后登记为新的一版。
           </p>
@@ -226,7 +226,7 @@ function SectionForm({
                   <Input
                     value={useAutoBasis ? autoBasis : draft.basis}
                     readOnly={locked}
-                    className="font-mono text-[13px]"
+                    className="font-mono type-value"
                     onChange={(event) => {
                       setBasisEdited(true);
                       patch({ basis: event.target.value });
@@ -236,7 +236,7 @@ function SectionForm({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="shrink-0 text-[12px] text-idpxyz-breadcrumb"
+                      className="shrink-0 type-body text-idpxyz-breadcrumb"
                       disabled={locked}
                       onClick={() => {
                         setBasisEdited(false);
@@ -271,7 +271,7 @@ function SectionForm({
               note="系统按已登记的记录自动算好，一般不用改。"
             />
             {knownFailed ? (
-              <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={onRetryKnown}>
+              <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={onRetryKnown}>
                 重试读取版本清单
               </Button>
             ) : null}
@@ -280,7 +280,7 @@ function SectionForm({
       )}
       {/* 卡底动作条（Fiori 的页脚动作条收进卡里）：左边说话，右边动作、主动作靠右。 */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-t border-idpxyz-border pt-3">
-        <div className="min-w-0 flex-1 text-[12px]">
+        <div className="min-w-0 flex-1 type-body">
           {attempted && missing.length > 0 ? (
             <p role="alert" className="text-idpxyz-danger">
               还有 {missing.length} 项必填未填：{missing.map((field) => field.label).join('、')}
@@ -297,13 +297,13 @@ function SectionForm({
         <div className="flex shrink-0 items-center gap-2">
           {preview !== null ? (
             <>
-              <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={() => setPreview(null)}>
+              <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={() => setPreview(null)}>
                 返回修改
               </Button>
               <Button
                 variant="default"
                 size="sm"
-                className={`${primaryActionClass} text-[12px]`}
+                className={`${primaryActionClass} type-body`}
                 disabled={locked}
                 onClick={() => {
                   setPreview(null);
@@ -315,13 +315,13 @@ function SectionForm({
             </>
           ) : (
             <>
-              <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={() => requestLeave(null)}>
+              <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={() => requestLeave(null)}>
                 取消
               </Button>
               <Button
                 variant="default"
                 size="sm"
-                className={`${primaryActionClass} text-[12px]`}
+                className={`${primaryActionClass} type-body`}
                 onClick={save}
                 disabled={locked || known === null || !form.canSend || outsideMissing.length > 0 || !changed}
               >

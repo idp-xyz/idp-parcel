@@ -5,13 +5,13 @@ import type { ReactNode } from 'react';
 
 export const inputClass =
   'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 ' +
-  'text-[13px] text-idpxyz-text placeholder:text-idpxyz-textMuted ' +
+  'type-value text-idpxyz-text placeholder:text-idpxyz-textMuted ' +
   'focus:outline-none focus:border-idpxyz-accent';
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded border border-idpxyz-border p-4">
-      <h2 className="text-[14px] font-bold text-idpxyz-textBright mb-3">{title}</h2>
+      <h2 className="type-section font-bold text-idpxyz-textBright mb-3">{title}</h2>
       {children}
     </section>
   );
@@ -32,17 +32,17 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="block text-[12px] text-idpxyz-textMuted mb-1">
+      <span className="block type-body text-idpxyz-textMuted mb-1">
         {label}
         {required ? <span className="text-idpxyz-accent ml-0.5">*</span> : null}
       </span>
       {children}
       {hint ? (
-        <span className="block text-[11px] leading-4 text-idpxyz-textMuted mt-1">{hint}</span>
+        <span className="block type-caption leading-4 text-idpxyz-textMuted mt-1">{hint}</span>
       ) : null}
       {error ? (
         // 校验失败用亮色文字陈述,不用红:形状级问题是「话没说全」,不是故障。
-        <span className="block text-[11px] leading-4 text-idpxyz-textBright mt-1">
+        <span className="block type-caption leading-4 text-idpxyz-textBright mt-1">
           {error}
         </span>
       ) : null}
@@ -65,9 +65,9 @@ export function NoticeCard({
   return (
     <div className="rounded border border-idpxyz-border p-4">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className={`text-[15px] font-bold ${titleClass}`}>{title}</span>
+        <span className={`type-section font-bold ${titleClass}`}>{title}</span>
         {meta ? (
-          <span className="text-[11px] font-mono text-idpxyz-textMuted">{meta}</span>
+          <span className="type-caption font-mono text-idpxyz-textMuted">{meta}</span>
         ) : null}
       </div>
       {children}
@@ -86,7 +86,7 @@ export function DetailRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex gap-2 text-[12px] leading-5">
+    <div className="flex gap-2 type-body leading-5">
       <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">{label}</dt>
       <dd className={`text-idpxyz-text break-all ${mono ? 'font-mono' : ''}`}>{value}</dd>
     </div>

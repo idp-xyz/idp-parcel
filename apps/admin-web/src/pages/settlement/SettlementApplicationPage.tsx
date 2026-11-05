@@ -57,8 +57,8 @@ function factTechnicalRows(row: ExternalFundsFactRecord) {
 }
 
 const columns: ListColumn<ExternalFundsFactRecord>[] = [
-  { id: 'fact', header: '流水号', className: 'whitespace-nowrap', render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.fact}</span> },
-  { id: 'source', header: '来源系统', className: 'whitespace-nowrap font-mono text-xs', render: (row) => row.source },
+  { id: 'fact', header: '流水号', className: 'whitespace-nowrap', render: (row) => <span className="font-mono type-body leading-4 text-idpxyz-textBright">{row.fact}</span> },
+  { id: 'source', header: '来源系统', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => row.source },
   {
     id: 'kind',
     header: '种类',
@@ -70,14 +70,14 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
     id: 'amount',
     header: '金额',
     align: 'right',
-    className: 'font-mono text-xs tabular-nums',
+    className: 'font-mono type-body leading-4 tabular-nums',
     render: (row) => formatMoney(row.amount, row.currency),
   },
   {
     id: 'applied',
     header: '已核销 / 未核销',
     align: 'right',
-    className: 'whitespace-nowrap font-mono text-xs tabular-nums',
+    className: 'whitespace-nowrap font-mono type-body leading-4 tabular-nums',
     // 未核销是第一类结果不是尾差，不得被默认费用吞并；未核销不为零时亮出来。
     render: (row) => (
       <span>
@@ -88,11 +88,11 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
       </span>
     ),
   },
-  { id: 'mapped', header: '核到哪里', className: 'text-xs', render: (row) => mappedTo(row.mappings) },
+  { id: 'mapped', header: '核到哪里', className: 'type-body leading-4', render: (row) => mappedTo(row.mappings) },
   {
     id: 'occurred-at',
     header: '发生时间',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     // 外部事实的业务发生时刻，不是系统接收或写入时间。
     render: (row) => formatInstant(row.occurredAt),
   },

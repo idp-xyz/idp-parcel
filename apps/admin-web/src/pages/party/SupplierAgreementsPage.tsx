@@ -167,14 +167,14 @@ function SupplierAgreementWorkbench({
               }}
               actions={(record) => (
                 <>
-                  <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record.source)}>
+                  <Button variant="outline" size="sm" className="type-body" onClick={() => onStartNewVersion(record.source)}>
                     签新版本
                   </Button>
                   {closable.has(closureKeyOf(record.source)) ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-[12px]"
+                      className="type-body"
                       onClick={() => setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', record.source))}
                     >
                       收尾…
@@ -245,7 +245,7 @@ function SupplierAgreementObjectPage({ objectId, version }: VersionObjectAddress
         }}
         actions={
           record && mayWrite && closable.has(closureKeyOf(record)) ? (
-            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', record))}>
+            <Button variant="outline" size="sm" className="type-body" onClick={() => setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', record))}>
               收尾…
             </Button>
           ) : undefined

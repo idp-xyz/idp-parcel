@@ -112,15 +112,15 @@ function LoginScreen({ error }: { error?: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-950">
       <div className="w-full max-w-sm rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center shadow-xl">
-        <h1 className="text-lg font-semibold text-neutral-100">包裹网络管理台</h1>
-        <p className="mt-2 text-sm text-neutral-400">请先到操作者渠道的发行方登录</p>
-        <p className="mt-1 break-all font-mono text-xs text-neutral-500">{ISSUER}</p>
+        <h1 className="type-title leading-7 font-semibold text-neutral-100">包裹网络管理台</h1>
+        <p className="mt-2 type-body leading-5 text-neutral-400">请先到操作者渠道的发行方登录</p>
+        <p className="mt-1 break-all font-mono type-body leading-4 text-neutral-500">{ISSUER}</p>
         {error ? (
-          <p className="mt-4 rounded-md border border-red-900 bg-red-950 p-2 text-xs text-red-300">{error}</p>
+          <p className="mt-4 rounded-md border border-red-900 bg-red-950 p-2 type-body leading-4 text-red-300">{error}</p>
         ) : null}
         <button
           type="button"
-          className="mt-6 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          className="mt-6 w-full rounded-lg bg-indigo-600 px-4 py-2 type-value leading-5 font-medium text-white hover:bg-indigo-500"
           onClick={() => void beginLogin(currentLocation())}
         >
           前往发行方登录

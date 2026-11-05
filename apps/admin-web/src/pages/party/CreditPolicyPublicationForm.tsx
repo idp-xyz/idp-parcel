@@ -85,7 +85,7 @@ export function CreditPolicyPublicationForm({
   );
 }
 
-const groupTitle = 'text-[12px] font-medium text-idpxyz-text';
+const groupTitle = 'type-body font-medium text-idpxyz-text';
 
 function loadCreditVocabulary(): Promise<ApiResult<PublicationVocabularyResponseBody>> {
   return fetchPublicationVocabulary('CREDIT_POLICY');
@@ -121,7 +121,7 @@ function CreditPolicyFields({
         value={draft[key]}
         readOnly={locked}
         inputMode={inputMode}
-        className={`font-mono text-[13px] ${(problems[path] ?? []).length > 0 ? 'border-idpxyz-danger' : ''}`}
+        className={`font-mono type-value ${(problems[path] ?? []).length > 0 ? 'border-idpxyz-danger' : ''}`}
         placeholder={placeholder}
         onChange={(event) => patch({ [key]: event.target.value } as Partial<CreditPolicyDraft>)}
       />
@@ -197,7 +197,7 @@ function CreditPolicyFields({
           </div>
           <Problems lines={problems['creditPolicy.limit']} />
           {/* 只填一项、比例带基数、金额不带基数都由服务端构造门判，表单不替它挑；基数怎么折成额度归结算侧，这里不算。 */}
-          <p className="text-[11px] text-idpxyz-textMuted mt-1">
+          <p className="type-caption text-idpxyz-textMuted mt-1">
             金额与比例只填一项。填比例时要选基数（按什么算比例），填金额时不选基数。是否填对由服务端在预览时检查。
           </p>
         </div>
@@ -215,7 +215,7 @@ function CreditPolicyFields({
             有效区间从版本信息带入
           </Button>
           {/* 正文区间是 0020 正文自己的列，与版本区间各自送；带入只是抄一次文本，不是默认值。 */}
-          <span className="text-[11px] text-idpxyz-textMuted">
+          <span className="type-caption text-idpxyz-textMuted">
             正文的有效区间属于这条信用政策本身，和版本的有效区间分开填；带入只是省一次手填。
           </span>
         </div>

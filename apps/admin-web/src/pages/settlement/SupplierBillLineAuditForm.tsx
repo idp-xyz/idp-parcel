@@ -29,16 +29,16 @@ import {
 // 已经记下的那几段（AT-SA-099）。审核决定标识在每段第一次提交前定下，重发落回同一份。
 
 const fieldClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[12px] text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
+  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none';
 
 const newId = () => newAuditDecisionId(new Date(), Math.random().toString(36).slice(2));
 
 function Field({ label, problem, children, className }: { label: string; problem?: string | null; children: ReactNode; className?: string }) {
   return (
     <label className={`block ${className ?? ''}`}>
-      <span className="mb-0.5 block text-[11px] text-idpxyz-textMuted">{label}</span>
+      <span className="mb-0.5 block type-caption text-idpxyz-textMuted">{label}</span>
       {children}
-      {problem ? <span className={`mt-0.5 block text-[11px] ${statusToneText.warning}`}>{problem}</span> : null}
+      {problem ? <span className={`mt-0.5 block type-caption ${statusToneText.warning}`}>{problem}</span> : null}
     </label>
   );
 }
@@ -145,7 +145,7 @@ export function SupplierBillLineAuditForm({
         void onSubmit();
       }}
     >
-      <p className="text-[11px] leading-4 text-idpxyz-breadcrumb">
+      <p className="type-caption leading-4 text-idpxyz-breadcrumb">
         {context.resolving
           ? `这段争议还没解的有 ${formatMoney(String(available), currency)}。核实之后逐段给通过或拒绝，都要写依据；没覆盖到的部分仍在争议中。`
           : `这一行还没审的有 ${formatMoney(String(available), currency)}，其中最多还能通过 ${formatMoney(String(context.headroom), currency)}。可以拆成几段分别给结果；超出能通过的部分只能争议或拒绝。`}
@@ -167,7 +167,7 @@ export function SupplierBillLineAuditForm({
             </Field>
             <Field label="金额" problem={touched ? rowProblems.amount : null}>
               <input className={`${fieldClass} font-mono`} inputMode="numeric" value={row.amount} onChange={(event) => setRow(index, { amount: event.target.value })} />
-              {range ? <span className="mt-0.5 block text-[11px] text-idpxyz-breadcrumb">{formatMoney(row.amount.trim(), currency)}</span> : null}
+              {range ? <span className="mt-0.5 block type-caption text-idpxyz-breadcrumb">{formatMoney(row.amount.trim(), currency)}</span> : null}
             </Field>
             <Field label={row.verdict === 'PASSED' && !context.resolving ? '依据（可不写）' : '依据'} problem={touched ? rowProblems.basis : null}>
               <input
@@ -191,21 +191,21 @@ export function SupplierBillLineAuditForm({
           </div>
         );
       })}
-      {touched && problems.overall ? <p className={`text-[11px] ${statusToneText.warning}`}>{problems.overall}</p> : null}
+      {touched && problems.overall ? <p className={`type-caption ${statusToneText.warning}`}>{problems.overall}</p> : null}
       {answers.map((answer, index) => (
-        <p key={index} role="status" className="rounded border border-idpxyz-border px-2 py-1.5 text-[12px] leading-5 text-idpxyz-text">
+        <p key={index} role="status" className="rounded border border-idpxyz-border px-2 py-1.5 type-body leading-5 text-idpxyz-text">
           {answer}
         </p>
       ))}
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" onClick={addRow} disabled={pending}>
+        <Button type="button" size="sm" variant="ghost" className="h-7 type-body" onClick={addRow} disabled={pending}>
           <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
           再拆一段
         </Button>
-        <Button type="submit" size="sm" className={`${primaryActionClass} h-7 text-[12px]`} disabled={pending}>
+        <Button type="submit" size="sm" className={`${primaryActionClass} h-7 type-body`} disabled={pending}>
           {pending ? '提交中…' : context.resolving ? '提交再审' : '提交审核'}
         </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" onClick={onCancel} disabled={pending}>
+        <Button type="button" size="sm" variant="ghost" className="h-7 type-body" onClick={onCancel} disabled={pending}>
           取消
         </Button>
       </div>

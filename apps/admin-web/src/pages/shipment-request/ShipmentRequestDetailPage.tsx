@@ -105,7 +105,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
             {view.declaredParcels.map((parcel) => (
               <TableRow key={parcel.parcelId}>
                 <TableCell>
-                  <span className="font-mono text-[12px]">{parcel.parcelId}</span>
+                  <span className="font-mono type-body">{parcel.parcelId}</span>
                 </TableCell>
                 <TableCell>
                   {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
@@ -166,7 +166,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
 /** 区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
 function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="flex gap-3 text-[12px] leading-5">
+    <div className="flex gap-3 type-body leading-5">
       <dt className="w-[128px] shrink-0 text-idpxyz-textMuted">{label}</dt>
       <dd className={`min-w-0 flex-1 break-words text-idpxyz-text ${mono ? 'font-mono' : ''}`}>{value}</dd>
     </div>
@@ -291,7 +291,7 @@ export function ShipmentRequestDetailPage({
           <button
             type="button"
             onClick={onBack}
-            className="rounded border border-idpxyz-border px-3 py-1.5 text-[12px] text-idpxyz-textMuted hover:bg-idpxyz-hover"
+            className="rounded border border-idpxyz-border px-3 py-1.5 type-body text-idpxyz-textMuted hover:bg-idpxyz-hover"
           >
             返回列表
           </button>

@@ -86,7 +86,7 @@ function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSum
           <div className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={shipmentDisplayNoOf(row)}>
             {shipmentDisplayNoOf(row)}
           </div>
-          <div className="truncate text-[12px] text-idpxyz-breadcrumb" title={row.sourceRequestKey}>
+          <div className="truncate type-body text-idpxyz-breadcrumb" title={row.sourceRequestKey}>
             {objectNouns.customerReference} <span className="font-mono">{row.sourceRequestKey}</span>
           </div>
         </div>

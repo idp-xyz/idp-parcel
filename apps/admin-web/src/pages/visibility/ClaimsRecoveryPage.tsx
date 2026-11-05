@@ -96,13 +96,13 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
     {
       id: 'target',
       header: objectNouns.parcelNumber,
-      render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.target}</span>,
+      render: (row) => <span className="font-mono type-body leading-4 text-idpxyz-textBright">{row.target}</span>,
     },
     { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
     { id: 'kind', header: '索赔类型', className: 'whitespace-nowrap', render: (row) => labelFor(row.kind, 'claim-kind') },
     { id: 'status', header: objectNouns.status, render: (row) => <RowStatusPill status={claimStatus(row)} /> },
-    { id: 'submitted', header: '提交时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.submittedAt) },
-    { id: 'deadline', header: '期限', className: 'whitespace-nowrap text-xs', render: claimDeadline },
+    { id: 'submitted', header: '提交时间', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.submittedAt) },
+    { id: 'deadline', header: '期限', className: 'whitespace-nowrap type-body leading-4', render: claimDeadline },
     technicalColumn((row) => [
       { label: claimNumberName, value: row.documentNumber ?? absenceText(row.documentNumberAbsence) },
       { label: '客户的索赔项编号', value: row.itemId },
@@ -171,9 +171,9 @@ function notificationColumns(names: PartyNames): ListColumn<CustomerNotification
   return [
     { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
     { id: 'status', header: '通知进度', render: (row) => <RowStatusPill status={notificationStatus(row)} /> },
-    { id: 'channel', header: '通知渠道', className: 'font-mono text-xs', render: (row) => row.channel },
-    { id: 'deadline', header: '要求在此前通知', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.deadline) },
-    { id: 'decided', header: '决定通知时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.decidedAt) },
+    { id: 'channel', header: '通知渠道', className: 'font-mono type-body leading-4', render: (row) => row.channel },
+    { id: 'deadline', header: '要求在此前通知', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.deadline) },
+    { id: 'decided', header: '决定通知时间', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.decidedAt) },
     technicalColumn((row) => [
       { label: '通知编号', value: row.notificationId },
       { label: '客户编码', value: row.customer },
@@ -224,11 +224,11 @@ function CustomerNoticesTable({ names }: { names: PartyNames }) {
 
 /** 一类追偿动作走到哪一步：节点胶囊，重试过的另注第几次；还没有动作如实说「还没有」。 */
 function actionCell(action: RecoveryActionRecord | undefined) {
-  if (!action) return <span className="text-xs text-idpxyz-breadcrumb">还没有</span>;
+  if (!action) return <span className="type-body leading-4 text-idpxyz-breadcrumb">还没有</span>;
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
       <StatusPill code={action.milestone} scope={recoveryMilestoneScope(action.milestone)} />
-      <span className="font-mono text-[11px] text-idpxyz-textMuted">
+      <span className="font-mono type-caption text-idpxyz-textMuted">
         {formatInstant(action.occurredAt)}
         {action.attempt > 1 ? ` · 第 ${action.attempt} 次` : ''}
       </span>
@@ -256,8 +256,8 @@ function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] 
     // 预先通知与正式主张是两类动作，各示各的最近一步，不合并成一个「已追偿」。
     { id: 'notice', header: '预先通知', render: (row) => actionCell(row.preliminaryNotice) },
     { id: 'assertion', header: '正式主张', render: (row) => actionCell(row.formalAssertion) },
-    { id: 'deadline', header: '追偿期限', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.deadline) },
-    { id: 'opened', header: '发起时间', className: 'whitespace-nowrap font-mono text-xs', render: (row) => formatInstant(row.openedAt) },
+    { id: 'deadline', header: '追偿期限', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.deadline) },
+    { id: 'opened', header: '发起时间', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.openedAt) },
     technicalColumn((row) => [
       { label: '追偿编号', value: row.matterId },
       { label: '案件内部标识', value: row.caseId },

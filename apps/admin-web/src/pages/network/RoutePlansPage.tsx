@@ -61,7 +61,7 @@ function initialRouteColumns(
     { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
     { key: 'customer', header: '客户', render: (row) => customerText(row.customerAccountId, names) },
     { key: 'conclusion', header: '结论', render: (row) => <RowStatusPill status={codeStatus(row.conclusion)} /> },
-    { key: 'route', header: '路线', hideWhenDetailOpen: true, render: (row) => <span className="text-[12px]">{routeText(row, places)}</span> },
+    { key: 'route', header: '路线', hideWhenDetailOpen: true, render: (row) => <span className="type-body">{routeText(row, places)}</span> },
     {
       key: 'recorded-at',
       header: '定路线时间',

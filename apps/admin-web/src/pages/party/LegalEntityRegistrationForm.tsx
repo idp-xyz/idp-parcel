@@ -182,8 +182,8 @@ export function LegalEntityRegistrationForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
-            <p className="text-[13px] font-medium text-idpxyz-text">说明</p>
-            <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
+            <p className="type-value font-medium text-idpxyz-text">说明</p>
+            <ul className="mt-1 list-disc pl-4 type-body leading-5 text-idpxyz-breadcrumb">
               <li>这里登记的是我们自己开票、签约用的公司。客户、供应商在「往来单位」里登记。</li>
               <li>还没有往来单位档案的公司会在保存时一并登记一份；已有档案的从下拉里选。</li>
               <li>录错了就填同一个编码再保存一次；改正注册地或注册号时在「高级」里写明更正的来源单据。</li>
@@ -196,11 +196,11 @@ export function LegalEntityRegistrationForm({
               <Input
                 value={draft.legalEntityId}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="如 LE-SHA-01"
                 onChange={(event) => patch({ legalEntityId: event.target.value })}
               />
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{identifierNote}</span>
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">{identifierNote}</span>
             </Field>
 
             <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
@@ -221,7 +221,7 @@ export function LegalEntityRegistrationForm({
             {/* 往来单位档案二选一：缺省一并登记，选已有时那组收起、下拉照旧。单选是原生控件，与结算页的做法一样。 */}
             <fieldset className="md:col-span-2 flex flex-col gap-2">
               <legend className={fieldLabel}>往来单位档案 *</legend>
-              <label className="flex items-center gap-1.5 text-[13px] text-idpxyz-text">
+              <label className="flex items-center gap-1.5 type-value text-idpxyz-text">
                 <input
                   type="radio"
                   name="legal-entity-party-mode"
@@ -238,7 +238,7 @@ export function LegalEntityRegistrationForm({
                   aria-label="一并登记的往来单位"
                 >
                   {companionRegistered ? (
-                    <p className="md:col-span-2 text-[13px] text-idpxyz-text">
+                    <p className="md:col-span-2 type-value text-idpxyz-text">
                       已登记 ✓ 往来单位 <span className="font-mono">{draft.companionRegisteredPartyId}</span> 已在册，这次保存只登记公司主体。
                     </p>
                   ) : null}
@@ -246,7 +246,7 @@ export function LegalEntityRegistrationForm({
                     <Input
                       value={draft.partyName}
                       readOnly={companionLocked}
-                      className="text-[13px]"
+                      className="type-value"
                       placeholder="如 深圳某某跨境电商有限公司"
                       onChange={(event) => patch({ partyName: event.target.value })}
                     />
@@ -255,18 +255,18 @@ export function LegalEntityRegistrationForm({
                     <Input
                       value={companionRegistered ? draft.companionRegisteredPartyId : draft.companionPartyId}
                       readOnly={companionLocked}
-                      className="font-mono text-[13px]"
+                      className="font-mono type-value"
                       placeholder={identifier === '' ? '缺省与公司主体编码相同' : identifier}
                       onChange={(event) => patch({ companionPartyId: event.target.value })}
                     />
-                    <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{companionIdNote}</span>
+                    <span className="block type-body text-idpxyz-breadcrumb mt-1">{companionIdNote}</span>
                   </Field>
-                  <p className="md:col-span-2 text-[12px] text-idpxyz-breadcrumb">
+                  <p className="md:col-span-2 type-body text-idpxyz-breadcrumb">
                     来源单据与生效时间用下面「登记」里填的那一份：往来单位与公司主体同一时刻生效。
                   </p>
                   {partyState.kind === 'answered' ? (
                     <div className="md:col-span-2 flex items-start gap-2">
-                      <span className="shrink-0 text-xs text-idpxyz-textMuted">往来单位这一步：</span>
+                      <span className="shrink-0 type-body leading-4 text-idpxyz-textMuted">往来单位这一步：</span>
                       <RegistrationAnswerNote
                         state={partyState}
                         owner={partyInfo.owner}
@@ -277,7 +277,7 @@ export function LegalEntityRegistrationForm({
                   ) : null}
                 </div>
               ) : null}
-              <label className="flex items-center gap-1.5 text-[13px] text-idpxyz-text">
+              <label className="flex items-center gap-1.5 type-value text-idpxyz-text">
                 <input
                   type="radio"
                   name="legal-entity-party-mode"
@@ -333,7 +333,7 @@ export function LegalEntityRegistrationForm({
                       <Input
                         value={row.number}
                         readOnly={locked}
-                        className="font-mono text-[13px]"
+                        className="font-mono type-value"
                         placeholder="注册号原样填"
                         onChange={(event) => setNumberRow(index, { number: event.target.value })}
                       />
@@ -349,7 +349,7 @@ export function LegalEntityRegistrationForm({
                 <Button className="text-idpxyz-breadcrumb" variant="outline" disabled={locked} onClick={addNumberRow}>
                   添加一个注册号
                 </Button>
-                <span className="text-[12px] text-idpxyz-breadcrumb">
+                <span className="type-body text-idpxyz-breadcrumb">
                   如统一社会信用代码、公司注册编号（CR No.）、EIN；一个公司可按类型登记多个。
                 </span>
               </div>
@@ -361,7 +361,7 @@ export function LegalEntityRegistrationForm({
               <Input
                 value={draft.basis}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="董事会决议、营业执照或审批单号"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
@@ -391,11 +391,11 @@ export function LegalEntityRegistrationForm({
               <Input
                 value={draft.identityCorrectionBasis}
                 readOnly={locked}
-                className="font-mono text-[13px]"
+                className="font-mono type-value"
                 placeholder="只在改正注册地或注册号时填"
                 onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
               />
-              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+              <span className="block type-body text-idpxyz-breadcrumb mt-1">
                 改正录错的注册地或注册号时，写明依据哪份单据；首次登记不填。
               </span>
             </Field>
@@ -422,7 +422,7 @@ export function LegalEntityRegistrationForm({
 
       {/* 受控批量口的在线镜像，折起来放底部：主路径是上面那几格（ADR-0101 决定一原句）。只镜像法人那一步，理由在组件头注。 */}
       <details className="rounded border border-idpxyz-border">
-        <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-breadcrumb">
+        <summary className="cursor-pointer select-none px-4 py-2 type-value text-idpxyz-breadcrumb">
           高级：导入 JSON（批量迁移用）
         </summary>
         <RegistrationPanel

@@ -42,7 +42,7 @@ const info = moduleInfoById['network-catalog'];
 // 检索词沿地址上的 ?q= 停稳后下推到读口（ADR-0144），翻页走游标；不在答回来的那一页上再筛——截断之后再筛，答出的「没有」可能是假的。
 type Row = NetworkVersionRecord & { key: string };
 
-const mono = (value: string) => <span className="truncate font-mono text-[12px]">{value}</span>;
+const mono = (value: string) => <span className="truncate font-mono type-body">{value}</span>;
 
 function statusOf(family: NetworkCatalogFamily, row: Row): RowStatus | undefined {
   const code =
@@ -81,7 +81,7 @@ function identityCell(row: Row, family: NetworkCatalogFamily, names: PlaceNameIn
       <div className={`truncate font-medium text-[color:var(--ds-text-link-hover)] ${code === (row.code ?? row.targetCode) ? 'font-mono' : ''}`.trim()}>
         {code}
       </div>
-      <div className="text-[11px] text-idpxyz-breadcrumb">{second}</div>
+      <div className="type-caption text-idpxyz-breadcrumb">{second}</div>
     </div>
   );
 }

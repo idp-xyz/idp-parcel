@@ -56,7 +56,7 @@ const STATE_OPTIONS: { kind: PreviewStateKind; label: string }[] = [
 
 // 演示页自己的下拉样子：与模板过滤条上的控件同高同字号。不从别的页面借类名，也不让模板为演示页导出内部常量。
 const demoSelectClass =
-  'h-6 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text ' +
+  'h-6 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-caption text-idpxyz-text ' +
   'outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35';
 
 // 主筛选 / 更多筛选的选项直接从演示行里取，不另造词——演示页展示的是位，不是词表。
@@ -308,10 +308,10 @@ export function TemplatePreviewPage() {
       {/* 醒目横幅：本页所有数据的证据层级是隔离合成 S，先声明再展示。 */}
       <div className="flex items-center gap-2 border-b border-idpxyz-border bg-idpxyz-hover px-4 py-2 shrink-0">
         <FlaskConical className="h-4 w-4 text-idpxyz-accent shrink-0" aria-hidden />
-        <span className="text-[12px] font-semibold text-idpxyz-textBright">
+        <span className="type-body font-semibold text-idpxyz-textBright">
           隔离合成 S 演示，非生产数据
         </span>
-        <span className="text-[11px] text-idpxyz-textMuted">
+        <span className="type-caption text-idpxyz-textMuted">
           本页仅用于三个页面模板的视觉与交互验收；全部数据来自 demo.ts 合成假数据（SYN-
           前缀），不发请求、不落台账，不得作任何生产默认。
         </span>
@@ -319,7 +319,7 @@ export function TemplatePreviewPage() {
 
       {/* 状态切换器：切换所有模板实例共用的 viewState，演示 StateSlot 各态。 */}
       <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
-        <span className="text-[11px] text-idpxyz-textMuted shrink-0">视图状态</span>
+        <span className="type-caption text-idpxyz-textMuted shrink-0">视图状态</span>
         {STATE_OPTIONS.map((option) => (
           <FilterChip
             key={option.kind}
@@ -343,14 +343,14 @@ export function TemplatePreviewPage() {
         <TabsContent value="list" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           {/* 结构位档位：分别验证「接了的位有真动作」与「没接的位退成禁用按钮 + 悬停说明」两条渲染路径。 */}
           <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
-            <span className="text-[11px] text-idpxyz-textMuted shrink-0">结构位</span>
+            <span className="type-caption text-idpxyz-textMuted shrink-0">结构位</span>
             <FilterChip active={slotsWired} onClick={() => setSlotsWired(true)}>
               已接入
             </FilterChip>
             <FilterChip active={!slotsWired} onClick={() => setSlotsWired(false)}>
               未接入（禁用态）
             </FilterChip>
-            <span className="ml-auto text-[11px] text-idpxyz-textMuted">
+            <span className="ml-auto type-caption text-idpxyz-textMuted">
               单击行 = 预览（toast）；双击或行聚焦后 Enter = 开对象（toast）。真实页面在此写 hash 二段路由。
             </span>
           </div>
@@ -412,7 +412,7 @@ export function TemplatePreviewPage() {
             }
             moreFilters={
               slotsWired ? (
-                <label className="flex items-center gap-1.5 text-[11px] text-idpxyz-textMuted">
+                <label className="flex items-center gap-1.5 type-caption text-idpxyz-textMuted">
                   目的国/地区
                   <select
                     className={demoSelectClass}
@@ -482,7 +482,7 @@ export function TemplatePreviewPage() {
               id: section.id,
               title: section.title,
               description: section.description,
-              content: <p className="text-[12px] leading-6 text-idpxyz-text">{section.body}</p>,
+              content: <p className="type-body leading-6 text-idpxyz-text">{section.body}</p>,
             }))}
             auditTrail={demoDetailAuditTrail}
             viewState={viewState}
@@ -492,7 +492,7 @@ export function TemplatePreviewPage() {
         <TabsContent value="workspace" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           {/* 同一模板的对象工作区形态（传 meta / summary / tabs / aside）；上一签「详情模板」是它不传新 prop 时的叠 Card 形态。 */}
           <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
-            <span className="text-[11px] text-idpxyz-textMuted">
+            <span className="type-caption text-idpxyz-textMuted">
               签按固定序出：调用方按 审计 → 关联 → 概要 传，渲染仍是 概要 · 关联 · 审计；时间线 / 异常 / 文档无内容不出签。
               头区不设负责人 / 风险——本仓没有它们的领域来源。右侧上下文只在宽屏显示。
             </span>
@@ -506,7 +506,7 @@ export function TemplatePreviewPage() {
         <TabsContent value="review" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           {/* 决定集档位：分别验证「不传 decisions 的二元回退」与「可配置决定集」两条渲染路径。 */}
           <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
-            <span className="text-[11px] text-idpxyz-textMuted shrink-0">决定集</span>
+            <span className="type-caption text-idpxyz-textMuted shrink-0">决定集</span>
             <FilterChip
               active={reviewDecisionMode === 'binary'}
               onClick={() => setReviewDecisionMode('binary')}

@@ -221,7 +221,7 @@ export function BusinessPartyDetailPage({
                 <Button
                   size="sm"
                   variant="default"
-                  className={`${primaryActionClass} text-[12px]`}
+                  className={`${primaryActionClass} type-body`}
                   onClick={() => {
                     setRegisteringRelationship(false);
                     onEnterIdentityEdit();
@@ -236,7 +236,7 @@ export function BusinessPartyDetailPage({
           <Button
             variant="outline"
             size="sm"
-            className="text-[12px] text-idpxyz-breadcrumb"
+            className="type-body text-idpxyz-breadcrumb"
             onClick={() => {
               if (editing) {
                 if (unsaved) setConfirming(() => () => onExitIdentityEdit(onBack));

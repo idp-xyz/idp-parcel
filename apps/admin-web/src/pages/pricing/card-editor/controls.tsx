@@ -6,7 +6,7 @@ import { Input } from '@idpxyz/ui-primitives';
 import { fieldLabel, selectClass } from '../../party/PublicationFormFields';
 import { useEditor, type FieldError } from './EditorContext';
 
-export const hintClass = 'text-[11px] leading-4 text-idpxyz-textMuted';
+export const hintClass = 'type-caption leading-4 text-idpxyz-textMuted';
 const invalidClass = 'border-[color:var(--ds-status-danger-fg)] focus:border-[color:var(--ds-status-danger-fg)]';
 
 export interface Option {
@@ -21,7 +21,7 @@ export function useFieldErrors(id: string): FieldError[] {
 export function ErrorLines({ errors, withWhere = false }: { errors: readonly FieldError[]; withWhere?: boolean }) {
   if (errors.length === 0) return null;
   return (
-    <ul className="mt-1 list-disc pl-4 text-[12px] text-[color:var(--ds-status-danger-fg)]" role="alert">
+    <ul className="mt-1 list-disc pl-4 type-body text-[color:var(--ds-status-danger-fg)]" role="alert">
       {errors.map((error, index) => (
         <li key={`${index}-${error.text}`}>
           {withWhere ? `${error.where}：` : ''}
@@ -116,7 +116,7 @@ export function TextField({
         placeholder={placeholder}
         inputMode={inputMode}
         aria-invalid={errors.length > 0}
-        className={`text-[13px] ${mono ? 'font-mono' : ''} ${errors.length > 0 ? invalidClass : ''}`}
+        className={`type-value ${mono ? 'font-mono' : ''} ${errors.length > 0 ? invalidClass : ''}`}
         onChange={(event) => onChange(event.target.value)}
       />
     </FieldBox>
@@ -222,7 +222,7 @@ export function CellInput({
       value={value}
       placeholder={placeholder}
       inputMode={mono ? 'decimal' : 'text'}
-      className={`text-[12px] ${mono ? 'font-mono' : ''} ${errors.length > 0 ? invalidClass : ''}`}
+      className={`type-body ${mono ? 'font-mono' : ''} ${errors.length > 0 ? invalidClass : ''}`}
       onChange={(event) => onChange(event.target.value)}
     />
   );
@@ -245,7 +245,7 @@ export function GroupErrors({ ids }: { ids: readonly string[] }) {
 export function SectionTitle({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
   return (
     <div className="mb-2">
-      <h3 className="text-[13px] font-semibold text-idpxyz-textBright">{children}</h3>
+      <h3 className="type-value font-semibold text-idpxyz-textBright">{children}</h3>
       {hint ? <p className={`${hintClass} mt-0.5`}>{hint}</p> : null}
     </div>
   );

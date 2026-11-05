@@ -77,10 +77,10 @@ function DetailPanel({
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`${name} ${code}`}>
       <div className="flex items-start justify-between gap-3 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="min-w-0">
-          <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright" title={name}>
+          <h2 className="truncate type-title font-semibold text-idpxyz-textBright" title={name}>
             {name}
           </h2>
-          <p className="mt-0.5 font-mono text-[12px] text-idpxyz-breadcrumb">{code}</p>
+          <p className="mt-0.5 font-mono type-body text-idpxyz-breadcrumb">{code}</p>
         </div>
         <Button className="shrink-0 text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
           <X className="h-4 w-4" aria-hidden="true" />
@@ -90,12 +90,12 @@ function DetailPanel({
         <dl className="grid grid-cols-2 gap-2.5">
           {facts.map((fact) => (
             <div key={fact.label} className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-              <dt className="text-[12px] text-idpxyz-breadcrumb">{fact.label}</dt>
-              <dd className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
+              <dt className="type-body text-idpxyz-breadcrumb">{fact.label}</dt>
+              <dd className="mt-0.5 break-words type-body font-semibold leading-snug text-idpxyz-textBright">{fact.value}</dd>
             </div>
           ))}
         </dl>
-        {note ? <p className="mt-3 text-[12px] leading-5 text-idpxyz-breadcrumb">{note}</p> : null}
+        {note ? <p className="mt-3 type-body leading-5 text-idpxyz-breadcrumb">{note}</p> : null}
         <TechnicalDetails className="mt-4" rows={technical} />
       </div>
     </div>

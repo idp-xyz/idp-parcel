@@ -43,7 +43,7 @@ const columns: ListColumn<PricingEvaluationRecord>[] = [
   {
     id: 'evaluation',
     header: '计费编号',
-    className: 'font-mono text-xs text-idpxyz-textBright',
+    className: 'font-mono type-body leading-4 text-idpxyz-textBright',
     render: (row) => row.evaluationId,
   },
   {
@@ -54,7 +54,7 @@ const columns: ListColumn<PricingEvaluationRecord>[] = [
   {
     id: 'recorded-at',
     header: '计费时间',
-    className: 'whitespace-nowrap font-mono text-xs',
+    className: 'whitespace-nowrap font-mono type-body leading-4',
     render: (row) => formatInstant(row.recordedAt),
   },
   {

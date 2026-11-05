@@ -36,7 +36,7 @@ function col(id: string, header: string, mono = false): ListColumn<PreAdviceRevi
   return {
     id,
     header,
-    render: (row) => (mono ? <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span> : (row.values[id] ?? '—')),
+    render: (row) => (mono ? <span className="font-mono type-body">{row.values[id] ?? '—'}</span> : (row.values[id] ?? '—')),
   };
 }
 
@@ -44,7 +44,7 @@ function col(id: string, header: string, mono = false): ListColumn<PreAdviceRevi
 function columnsWith(names: CustomerNameIndex): ListColumn<PreAdviceReviewRow>[] {
   return columns.map((column) =>
     column.id === 'customerAccount'
-      ? { ...column, render: (row) => names.get(row.values.customerAccount) ?? <span className="font-mono text-[12px]">{row.values.customerAccount}</span> }
+      ? { ...column, render: (row) => names.get(row.values.customerAccount) ?? <span className="font-mono type-body">{row.values.customerAccount}</span> }
       : column,
   );
 }

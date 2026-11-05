@@ -78,7 +78,7 @@ export function enablementColumns<Row extends { code: string }>(
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-[12px] text-idpxyz-link"
+          className="h-6 px-2 type-body text-idpxyz-link"
           onClick={(event) => {
             event.stopPropagation();
             ask({ code: row.code, name: nameOf(row), action });
@@ -131,7 +131,7 @@ export function EnablementDialog({
       title={`${verb}${pending.name}`}
       message={confirmMessage(pending.action, pending.name)}
       extraContent={
-        <div className="space-y-2 text-[13px]">
+        <div className="space-y-2 type-value">
           <label className="block">
             <span className="text-idpxyz-breadcrumb">来源单据（可不填）</span>
             <Input

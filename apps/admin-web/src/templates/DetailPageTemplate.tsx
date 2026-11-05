@@ -174,7 +174,7 @@ export function DetailPageTemplate({
       <CardContent>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
           {basicFields.map((field) => (
-            <div key={field.label} className="flex gap-3 text-[12px] leading-5">
+            <div key={field.label} className="flex gap-3 type-body leading-5">
               <dt className="w-[96px] shrink-0 text-idpxyz-textMuted">{field.label}</dt>
               <dd className="min-w-0 flex-1 break-words text-idpxyz-text">
                 {field.value}
@@ -203,7 +203,7 @@ export function DetailPageTemplate({
       </CardHeader>
       <CardContent>
         {auditTrail.length === 0 ? (
-          <p className="text-[12px] text-idpxyz-textMuted">暂无审计记录。</p>
+          <p className="type-body text-idpxyz-textMuted">暂无审计记录。</p>
         ) : (
           <Timeline items={auditTrail} />
         )}
@@ -258,7 +258,7 @@ export function DetailPageTemplate({
               <PageHeaderTitle>{title}</PageHeaderTitle>
               {identifier && (
                 <span className="inline-flex items-center gap-1">
-                  <span className="select-all font-mono text-[12px] text-idpxyz-accent">
+                  <span className="select-all font-mono type-body text-idpxyz-accent">
                     {identifier}
                   </span>
                   <CopyIdentifierButton text={identifier} />
@@ -268,7 +268,7 @@ export function DetailPageTemplate({
               {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
             </div>
             {meta !== undefined && meta.length > 0 && (
-              <dl className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
+              <dl className="flex flex-wrap gap-x-4 gap-y-0.5 type-caption leading-4">
                 {meta.map((item) => (
                   <div key={item.label} className="flex gap-1">
                     <dt className="text-idpxyz-textMuted">{item.label}</dt>
@@ -285,7 +285,7 @@ export function DetailPageTemplate({
           <PageHeaderContent>
             <PageHeaderTitle>{title}</PageHeaderTitle>
             {identifier && (
-              <span className="font-mono text-[12px] text-idpxyz-accent">{identifier}</span>
+              <span className="font-mono type-body text-idpxyz-accent">{identifier}</span>
             )}
             {status}
             {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
@@ -394,7 +394,7 @@ function WorkspaceTabs({
             {tab.count !== undefined && (
               tab.id === 'contacts'
                 ? <TabCountBadge count={tab.count} />
-                : <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
+                : <span className="type-caption font-normal text-idpxyz-textMuted">{tab.count}</span>
             )}
           </TabsTrigger>
         ))}
@@ -470,7 +470,7 @@ function SectionsWorkspace({
             <PageHeaderTitle>{title}</PageHeaderTitle>
             {identifier && (
               <span className="inline-flex items-center gap-1">
-                <span className="select-all font-mono text-[12px] text-idpxyz-accent">
+                <span className="select-all font-mono type-body text-idpxyz-accent">
                   {identifier}
                 </span>
                 <CopyIdentifierButton text={identifier} />
@@ -482,7 +482,7 @@ function SectionsWorkspace({
           {meta !== undefined && meta.length > 0 && (
             <CollapsibleRows collapsed={headerCollapsed} innerRef={metaRef}>
               {/* 标题行与 meta 行的间距放在可收起块里面而不是 flex gap 上：块收成 0 高时 gap 还会留一道空。 */}
-              <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
+              <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 type-caption leading-4">
                 {meta.map((item) => (
                   <div key={item.label} className="flex gap-1">
                     <dt className="text-idpxyz-textMuted">{item.label}</dt>
@@ -696,7 +696,7 @@ function WorkspaceSections({
                 {tab.count !== undefined && (
                   tab.id === 'contacts'
                     ? <TabCountBadge count={tab.count} />
-                    : <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
+                    : <span className="type-caption font-normal text-idpxyz-textMuted">{tab.count}</span>
                 )}
               </TabsTrigger>
             ))}
@@ -756,11 +756,11 @@ function SectionHeading({
 }) {
   const count =
     tab.count !== undefined ? (
-      <span className="ml-1.5 text-[12px] font-normal tabular-nums text-idpxyz-breadcrumb">{tab.count}</span>
+      <span className="ml-1.5 type-body font-normal tabular-nums text-idpxyz-breadcrumb">{tab.count}</span>
     ) : null;
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-idpxyz-border pb-1.5">
-      <h3 id={`${sectionElementId(tab.id)}-title`} className="text-[15px] font-semibold leading-6 text-idpxyz-textBright">
+      <h3 id={`${sectionElementId(tab.id)}-title`} className="type-section font-semibold leading-6 text-idpxyz-textBright">
         {onToggle ? (
           <button
             type="button"
@@ -784,7 +784,7 @@ function SectionHeading({
         )}
       </h3>
       {!expanded && tab.summary !== undefined ? (
-        <span className="text-[12px] leading-5 text-idpxyz-breadcrumb">{tab.summary}</span>
+        <span className="type-body leading-5 text-idpxyz-breadcrumb">{tab.summary}</span>
       ) : null}
     </div>
   );
@@ -798,10 +798,10 @@ function SummaryStrip({ stats }: { stats: DetailSummaryStat[] }) {
     <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3 border-b border-idpxyz-border px-4 py-3">
       {stats.map((stat) => (
         <Card key={stat.label} className="px-4 py-3 shadow-none hover:shadow-none">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-idpxyz-textMuted">
+          <div className="type-caption font-medium uppercase tracking-wider text-idpxyz-textMuted">
             {stat.label}
           </div>
-          <div className="mt-1 text-lg font-semibold text-idpxyz-textBright">{stat.value}</div>
+          <div className="mt-1 type-title leading-7 font-semibold text-idpxyz-textBright">{stat.value}</div>
         </Card>
       ))}
     </div>

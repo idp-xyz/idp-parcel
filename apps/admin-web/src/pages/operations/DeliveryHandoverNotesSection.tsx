@@ -52,7 +52,7 @@ function col(id: string, header: string, mono = false): ListColumn<HandoverNoteR
   return {
     id,
     header,
-    render: (row) => (mono ? <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span> : (row.values[id] ?? '—')),
+    render: (row) => (mono ? <span className="font-mono type-body">{row.values[id] ?? '—'}</span> : (row.values[id] ?? '—')),
   };
 }
 
@@ -201,7 +201,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
                 <span>{claim.values.conclusion}</span>
                 {claim.values.route ? <span>· {claim.values.route}</span> : null}
                 {claim.confirm.kind === 'available' && !mayConfirm ? (
-                  <span className="basis-full text-[11px]">{hiddenDecisionHint('确认', labelFor(deliveryHandoverConfirmationDecision))}</span>
+                  <span className="basis-full type-caption">{hiddenDecisionHint('确认', labelFor(deliveryHandoverConfirmationDecision))}</span>
                 ) : claim.confirm.kind === 'available' ? (
                   <Button
                     variant="outline"
@@ -220,7 +220,7 @@ function HandoverNoteDetail({ noteId, onClose, onLanded }: { noteId: string; onC
                     确认
                   </Button>
                 ) : (
-                  <span className="basis-full text-[11px]">{claim.confirm.reason}</span>
+                  <span className="basis-full type-caption">{claim.confirm.reason}</span>
                 )}
               </li>
             ))}
@@ -329,7 +329,7 @@ function ConfirmationForm({
                 <span className="text-idpxyz-textMuted">目录读不到时可逐字填参与方标识，判断照旧由参与方与商业作答：</span>
                 <Input
                   value={draft.deliveringParticipant}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="参与方标识"
                   onChange={(event) => onChange({ ...draft, deliveringParticipant: event.target.value })}
                 />
@@ -342,7 +342,7 @@ function ConfirmationForm({
         <span className="text-idpxyz-textMuted">依据引用 *</span>
         <Input
           value={draft.basis}
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           placeholder="柜台核验记录、委托书或工单的引用，逐字保存、不判真伪"
           onChange={(event) => onChange({ ...draft, basis: event.target.value })}
         />

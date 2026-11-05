@@ -114,7 +114,7 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {/* 批准者是谁、须不须另一人由审批职责规则在写口判，页面不预判（ADR-0101 决定五）。 */}
-          <p className="text-xs text-idpxyz-textMuted">
+          <p className="type-body leading-4 text-idpxyz-textMuted">
             新建或导入的价卡先存成草稿。检查通过的可以批准，批准后再发布；发布后就出现在「全部价卡」里，开始参与计价。
             谁可以批准、录入人能不能自己批准，按贵公司的审批规则。
           </p>
@@ -122,10 +122,10 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
             <Button variant="outline" onClick={reload} disabled={answer === null || pending !== null}>
               刷新
             </Button>
-            {answer?.kind === 'outcome' ? <span className="text-xs text-idpxyz-textMuted">共 {rows.length} 个版本</span> : null}
+            {answer?.kind === 'outcome' ? <span className="type-body leading-4 text-idpxyz-textMuted">共 {rows.length} 个版本</span> : null}
           </div>
           {viewState.kind === 'ready' ? (
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left type-body leading-4">
               <thead className="text-idpxyz-textMuted">
                 <tr>
                   <th className="py-1 pr-3 font-normal">价卡</th>
@@ -212,13 +212,13 @@ function DraftRow({
     <tr className="border-t border-idpxyz-border align-top">
       <td className="py-1.5 pr-3">
         <div className="font-mono text-idpxyz-textBright">{row.plan.id}</div>
-        <div className="text-[11px] text-idpxyz-textMuted">版本 {row.plan.version}</div>
+        <div className="type-caption text-idpxyz-textMuted">版本 {row.plan.version}</div>
       </td>
       <td className="py-1.5 pr-3">
         {/* 草稿四态的词取 priceCardDraftStatusLabels 那一份（编辑器预览也用它），色调按词反查词典。 */}
         <StatusPill label={priceCardDraftStatusLabels[row.status] ?? row.status} code={row.status} />
         {row.publishedAt ? (
-          <div className="text-[11px] text-idpxyz-textMuted">发布于 {formatInstant(row.publishedAt)}</div>
+          <div className="type-caption text-idpxyz-textMuted">发布于 {formatInstant(row.publishedAt)}</div>
         ) : null}
       </td>
       <td className="py-1.5 pr-3">
@@ -237,14 +237,14 @@ function DraftRow({
       </td>
       <td className="py-1.5 pr-3">
         <div><PrincipalRef value={row.submitter} /></div>
-        <div className="text-[11px] text-idpxyz-textMuted">{formatInstant(row.submittedAt)}</div>
+        <div className="type-caption text-idpxyz-textMuted">{formatInstant(row.submittedAt)}</div>
       </td>
       <td className="py-1.5 pr-3">
         {row.approver ? (
           <>
             <div><PrincipalRef value={row.approver} /></div>
             {row.approvedAt ? (
-              <div className="text-[11px] text-idpxyz-textMuted">{formatInstant(row.approvedAt)}</div>
+              <div className="type-caption text-idpxyz-textMuted">{formatInstant(row.approvedAt)}</div>
             ) : null}
           </>
         ) : (

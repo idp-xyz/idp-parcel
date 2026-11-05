@@ -302,7 +302,7 @@ export function LegalEntityDetailPage({
                 <Button
                   size="sm"
                   variant="default"
-                  className={`${primaryActionClass} text-[12px]`}
+                  className={`${primaryActionClass} type-body`}
                   onClick={openProfileForm}
                 >
                   <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -315,7 +315,7 @@ export function LegalEntityDetailPage({
           <Button
             variant="outline"
             size="sm"
-            className="text-[12px] text-idpxyz-breadcrumb"
+            className="type-body text-idpxyz-breadcrumb"
             onClick={() => (editing ? requestLeave({ kind: 'back' }) : onBack())}
           >
             返回列表

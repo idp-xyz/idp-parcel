@@ -27,8 +27,8 @@ import { usePriceCardContent } from './use-price-card-content';
 // 读不到如实显示，不画成空：未配置、没有授予、查无、本构建读不了的格式各说各的话。读到的文档里有看不懂的结构，
 // 在费用项表里标「这一项暂不支持展示」并带原文折叠，页头另提示一句——不是这张卡没有这些收费。
 
-const sectionTitle = 'mb-2 text-[13px] font-semibold text-idpxyz-textBright';
-const note = 'text-[12px] text-idpxyz-breadcrumb';
+const sectionTitle = 'mb-2 type-value font-semibold text-idpxyz-textBright';
+const note = 'type-body text-idpxyz-breadcrumb';
 
 function Lines({ lines }: { lines: readonly string[] }) {
   return (
@@ -54,7 +54,7 @@ function FeeItemRow({ item }: { item: FeeItem }) {
         {unsupported && item.raw !== undefined ? (
           <details className="mt-1">
             <summary className="cursor-pointer select-none text-idpxyz-breadcrumb hover:text-idpxyz-text">查看原文</summary>
-            <pre className="mt-1 max-h-48 overflow-auto rounded border border-idpxyz-border bg-idpxyz-sidebar p-2 font-mono text-[11px] leading-snug">
+            <pre className="mt-1 max-h-48 overflow-auto rounded border border-idpxyz-border bg-idpxyz-sidebar p-2 font-mono type-caption leading-snug">
               {JSON.stringify(item.raw, null, 2)}
             </pre>
           </details>
@@ -73,7 +73,7 @@ function FeeItemRow({ item }: { item: FeeItem }) {
 function FeeItemsTable({ items }: { items: readonly FeeItem[] }) {
   return (
     <div className="overflow-x-auto rounded border border-idpxyz-border">
-      <table className="w-full min-w-[560px] text-[12px]">
+      <table className="w-full min-w-[560px] type-body">
         <thead className="bg-idpxyz-sidebar text-left text-idpxyz-breadcrumb">
           <tr className="border-b border-idpxyz-border">
             <th scope="col" className="w-[19%] px-2 py-1.5 font-medium">费用</th>
@@ -96,7 +96,7 @@ function ReferenceList({ rows }: { rows: readonly ReferenceRow[] }) {
   return (
     <ul className="space-y-2">
       {rows.map((row) => (
-        <li key={`${row.kindLabel}:${row.name}`} className="rounded border border-idpxyz-border px-3 py-2 text-[12px]">
+        <li key={`${row.kindLabel}:${row.name}`} className="rounded border border-idpxyz-border px-3 py-2 type-body">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-idpxyz-breadcrumb">{row.kindLabel}</span>
             <span className="font-mono text-idpxyz-textBright">{row.name}</span>
@@ -126,7 +126,7 @@ export function PriceCardViewSections({ view }: { view: PriceCardContentView }) 
   return (
     <div className="space-y-5">
       {view.unsupportedCount > 0 ? (
-        <p role="note" className="rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-warning-fg)] px-3 py-2 text-[12px] text-idpxyz-text">
+        <p role="note" className="rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-warning-fg)] px-3 py-2 type-body text-idpxyz-text">
           有 {view.unsupportedCount} 项这版管理台暂不支持展示，已在下表里标出并附上原文；它们是这张卡的收费规则，不是没有。
         </p>
       ) : null}
@@ -139,15 +139,15 @@ export function PriceCardViewSections({ view }: { view: PriceCardContentView }) 
       {view.weightRule !== null || view.amountRounding !== null ? (
         <section aria-label="重量规则">
           <h3 className={sectionTitle}>重量规则</h3>
-          {view.weightRule !== null ? <p className="text-[12px] leading-5 text-idpxyz-text">{view.weightRule}</p> : null}
-          {view.amountRounding !== null ? <p className="mt-1 text-[12px] leading-5 text-idpxyz-text">{view.amountRounding}。</p> : null}
+          {view.weightRule !== null ? <p className="type-body leading-5 text-idpxyz-text">{view.weightRule}</p> : null}
+          {view.amountRounding !== null ? <p className="mt-1 type-body leading-5 text-idpxyz-text">{view.amountRounding}。</p> : null}
         </section>
       ) : null}
 
       {view.refusals.length > 0 ? (
         <section aria-label="不接收的情形">
           <h3 className={sectionTitle}>不接收的情形</h3>
-          <ul className="space-y-1 text-[12px] text-idpxyz-text">
+          <ul className="space-y-1 type-body text-idpxyz-text">
             {view.refusals.map((refusal) => (
               <li key={`${refusal.clause}:${refusal.when}`}>
                 {refusal.when}时不接收<span className="text-idpxyz-breadcrumb">（条款：{refusal.clause}）</span>
@@ -272,11 +272,11 @@ export function PriceCardDetailPanel({ row, onClose }: { row: PriceCardRecord; o
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="break-all text-[16px] font-semibold text-idpxyz-textBright">{row.planId}</h2>
-              <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">版本 {row.planVersion}</span>
+              <h2 className="break-all type-title font-semibold text-idpxyz-textBright">{row.planId}</h2>
+              <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">版本 {row.planVersion}</span>
               <StatusPill label={status.label} tone={status.tone} />
             </div>
-            <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
+            <p className="mt-0.5 type-body text-idpxyz-breadcrumb">
               {direction} · {purpose} · 适用范围 {row.scope}
             </p>
           </div>

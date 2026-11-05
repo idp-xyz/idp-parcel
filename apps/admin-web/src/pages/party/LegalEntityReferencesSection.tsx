@@ -33,7 +33,7 @@ const listSettlementPolicies = commercialPolicyLoaders.SETTLEMENT_POLICY;
 const listCreditPolicies = commercialPolicyLoaders.CREDIT_POLICY;
 const listRulePackages = commercialPolicyLoaders.ACCEPTANCE_RULE_PACKAGE;
 
-const note = 'text-[12px] text-idpxyz-breadcrumb';
+const note = 'type-body text-idpxyz-breadcrumb';
 
 export interface LegalEntityReferences {
   states: LegalEntityReferenceStates;
@@ -152,7 +152,7 @@ function Register<Row>({
   const target = moduleInfoById[moduleId];
   return (
     <details open className="border-b border-idpxyz-border py-3 last:border-b-0">
-      <summary className="flex cursor-pointer select-none items-center justify-between gap-2 text-[12px] font-medium text-idpxyz-text">
+      <summary className="flex cursor-pointer select-none items-center justify-between gap-2 type-body font-medium text-idpxyz-text">
         <span>{referenceLineText(title, state, withInUse)}</span>
         {target ? (
           <a
@@ -175,7 +175,7 @@ function RowLink({ href, children }: { href: string; children: ReactNode }) {
     <li>
       <a
         href={href}
-        className="block rounded border border-idpxyz-border px-2.5 py-2 text-[12px] text-idpxyz-text hover:border-idpxyz-accent hover:bg-idpxyz-hover"
+        className="block rounded border border-idpxyz-border px-2.5 py-2 type-body text-idpxyz-text hover:border-idpxyz-accent hover:bg-idpxyz-hover"
       >
         {children}
       </a>

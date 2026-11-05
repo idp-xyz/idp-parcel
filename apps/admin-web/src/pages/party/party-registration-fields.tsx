@@ -187,16 +187,16 @@ export function RevisionField({
           value={value}
           readOnly={locked}
           inputMode="numeric"
-          className="font-mono text-[13px]"
+          className="font-mono type-value"
           onChange={(event) => onChange(event.target.value)}
         />
         {edited ? (
-          <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" disabled={locked} onClick={onUseSuggestion}>
+          <Button variant="outline" size="sm" className="type-body text-idpxyz-breadcrumb" disabled={locked} onClick={onUseSuggestion}>
             用系统算的 {suggestion}
           </Button>
         ) : null}
       </div>
-      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{note}</span>
+      <span className="block type-body text-idpxyz-breadcrumb mt-1">{note}</span>
     </Field>
   );
 }
@@ -232,10 +232,10 @@ export function WallTimeField({
         step={1}
         value={value}
         readOnly={locked}
-        className="font-mono text-[13px]"
+        className="font-mono type-value"
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
+      <span className="block type-body text-idpxyz-breadcrumb mt-1">
         {note ? `${note} ` : ''}按本地时刻（{timeZone}）填。
       </span>
     </Field>
@@ -285,7 +285,7 @@ export function SnapshotJsonDetails({
 }) {
   return (
     <details className="rounded border border-idpxyz-border">
-      <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-breadcrumb">
+      <summary className="cursor-pointer select-none px-4 py-2 type-value text-idpxyz-breadcrumb">
         高级：粘贴登记快照 JSON
       </summary>
       <RegistrationPanel
@@ -306,8 +306,8 @@ export function FormGroup({ title, description, children }: { title: string; des
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h3 className="text-[13px] font-semibold text-idpxyz-text">{title}</h3>
-        {description ? <p className="mt-1 text-xs text-idpxyz-breadcrumb">{description}</p> : null}
+        <h3 className="type-value font-semibold text-idpxyz-text">{title}</h3>
+        {description ? <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">{description}</p> : null}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
@@ -341,8 +341,8 @@ export function AdvancedGroup({
         className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-idpxyz-hover"
       >
         <Chevron className="h-4 w-4 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-        <span className="shrink-0 text-[13px] font-semibold text-idpxyz-text">高级</span>
-        <span className="min-w-0 truncate text-xs text-idpxyz-breadcrumb">{summary}</span>
+        <span className="shrink-0 type-value font-semibold text-idpxyz-text">高级</span>
+        <span className="min-w-0 truncate type-body leading-4 text-idpxyz-breadcrumb">{summary}</span>
       </button>
       {open ? (
         <div id={bodyId} className="grid grid-cols-1 gap-3 border-t border-idpxyz-border p-3 md:grid-cols-2">

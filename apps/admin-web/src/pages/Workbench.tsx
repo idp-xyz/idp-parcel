@@ -152,7 +152,7 @@ function TodoGrid({ onNavigate }: { onNavigate?: (id: string) => void }) {
   return (
     <section className="mb-6">
       <div className="mb-2.5 flex items-center gap-2">
-        <h2 className="text-[13px] font-bold text-idpxyz-textBright">今日待办</h2>
+        <h2 className="type-value font-bold text-idpxyz-textBright">今日待办</h2>
         <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => setReloadKey((key) => key + 1)}>
           <RefreshCw className="h-3.5 w-3.5" aria-hidden />
           刷新
@@ -181,18 +181,18 @@ function TodoGrid({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 attention ? 'border-[color:var(--ds-status-warning-border)]' : 'border-idpxyz-border'
               }`}
             >
-              <span className="block text-[12px] text-idpxyz-textMuted">
+              <span className="block type-body text-idpxyz-textMuted">
                 {pageTitleById[tile.id] ?? tile.id}
                 {tile.filterLabel ? ` · ${tile.filterLabel}` : null}
               </span>
               <span
-                className={`mt-1 block font-bold ${counted ? 'text-[22px]' : 'text-[14px]'} ${
+                className={`mt-1 block font-bold ${counted ? 'type-display' : 'type-section'} ${
                   attention ? statusToneText.warning : counted ? 'text-idpxyz-textBright' : 'text-idpxyz-textMuted'
                 }`}
               >
                 {todoValueText(state)}
               </span>
-              <span className="mt-1 block text-[11px] leading-4 text-idpxyz-textMuted">{todoNoteText(state, tile.waiting)}</span>
+              <span className="mt-1 block type-caption leading-4 text-idpxyz-textMuted">{todoNoteText(state, tile.waiting)}</span>
             </button>
           );
         })}
@@ -220,16 +220,16 @@ function MyWorkCard({
 }) {
   return (
     <section className="rounded border border-idpxyz-border p-4">
-      <h2 className="flex items-center gap-2 text-[13px] font-bold text-idpxyz-textBright mb-2.5">
+      <h2 className="flex items-center gap-2 type-value font-bold text-idpxyz-textBright mb-2.5">
         <Icon className="h-4 w-4 text-idpxyz-textMuted" aria-hidden />
         <span>{title}</span>
-        <span className="text-[11px] font-normal text-idpxyz-textMuted">{total} 条</span>
+        <span className="type-caption font-normal text-idpxyz-textMuted">{total} 条</span>
         <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={onViewAll} disabled={!onViewAll}>
           查看全部
         </Button>
       </h2>
       {total === 0 ? (
-        <p className="text-[12px] leading-5 text-idpxyz-textMuted">{emptyNote}</p>
+        <p className="type-body leading-5 text-idpxyz-textMuted">{emptyNote}</p>
       ) : (
         <ul className="space-y-1">{children}</ul>
       )}
@@ -251,8 +251,8 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1080px] mx-auto px-6 py-6">
         <header className="mb-5">
-          <h1 className="text-[20px] font-bold text-idpxyz-textBright">{pageTitleById.workbench}</h1>
-          <p className="text-[12px] leading-5 text-idpxyz-textMuted mt-1">
+          <h1 className="type-title font-bold text-idpxyz-textBright">{pageTitleById.workbench}</h1>
+          <p className="type-body leading-5 text-idpxyz-textMuted mt-1">
             今天要处理的事都在这里，点一格进到对应的列表；下面是你最近打开过的对象和全部功能入口。
           </p>
         </header>
@@ -277,8 +277,8 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
                     window.location.hash = recentObjectHash(row);
                   }}
                 >
-                  <span className="text-[12px] text-idpxyz-text truncate">{row.title}</span>
-                  <span className="hidden sm:inline text-[11px] text-idpxyz-textMuted truncate">
+                  <span className="type-body text-idpxyz-text truncate">{row.title}</span>
+                  <span className="hidden sm:inline type-caption text-idpxyz-textMuted truncate">
                     {moduleTitleOf(row.moduleId)}
                   </span>
                   <span className="ml-auto shrink-0 text-idpxyz-textMuted">
@@ -304,8 +304,8 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
                     window.location.hash = savedViewHash(row);
                   }}
                 >
-                  <span className="text-[12px] text-idpxyz-text truncate">{row.name}</span>
-                  <span className="hidden sm:inline text-[11px] text-idpxyz-textMuted truncate">
+                  <span className="type-body text-idpxyz-text truncate">{row.name}</span>
+                  <span className="hidden sm:inline type-caption text-idpxyz-textMuted truncate">
                     {moduleTitleOf(row.moduleId)}
                   </span>
                   {row.isDefault ? (
@@ -319,18 +319,18 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
           </MyWorkCard>
         </div>
 
-        <h2 className="mb-2.5 text-[13px] font-bold text-idpxyz-textBright">全部功能</h2>
+        <h2 className="mb-2.5 type-value font-bold text-idpxyz-textBright">全部功能</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {entrySections.map((section) => (
             <section key={section.title} className="rounded border border-idpxyz-border p-4">
-              <h3 className="mb-2 text-[12px] font-bold text-idpxyz-textBright">{section.title}</h3>
+              <h3 className="mb-2 type-body font-bold text-idpxyz-textBright">{section.title}</h3>
               <ul className="space-y-0.5">
                 {section.items.map((item) => (
                   <li key={item.id}>
                     <button
                       type="button"
                       onClick={onNavigate ? () => onNavigate(item.id) : undefined}
-                      className="w-full rounded px-2 py-1 text-left text-[12px] text-idpxyz-text hover:bg-idpxyz-hover"
+                      className="w-full rounded px-2 py-1 text-left type-body text-idpxyz-text hover:bg-idpxyz-hover"
                     >
                       {item.label}
                     </button>

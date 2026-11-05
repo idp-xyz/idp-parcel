@@ -45,7 +45,7 @@ function amountCol(id: string, header: string, pick: (row: CodSubledgerRecord) =
     id,
     header,
     align: 'right',
-    className: 'whitespace-nowrap font-mono text-xs tabular-nums',
+    className: 'whitespace-nowrap font-mono type-body leading-4 tabular-nums',
     render: (row) => formatMoney(pick(row), ''),
   };
 }
@@ -61,13 +61,13 @@ function columns(names: PartyNames): ListColumn<CodSubledgerRecord>[] {
         return <TwoLine primary={ref.primary} secondary={ref.secondary} />;
       },
     },
-    { id: 'channel', header: '代收渠道', className: 'whitespace-nowrap font-mono text-xs', render: (row) => row.channel },
-    { id: 'currency', header: '币种', align: 'center', className: 'whitespace-nowrap text-xs', render: (row) => <CurrencyLabel code={row.currency} /> },
+    { id: 'channel', header: '代收渠道', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => row.channel },
+    { id: 'currency', header: '币种', align: 'center', className: 'whitespace-nowrap type-body leading-4', render: (row) => <CurrencyLabel code={row.currency} /> },
     amountCol('payable', '应付客户', (row) => row.balances.payableToCustomer),
     amountCol('in-transit', '渠道在途', (row) => row.balances.inTransitAtChannel),
     amountCol('awaiting', '待清分', (row) => row.balances.awaitingAllocation),
     amountCol('remitted', '已汇付', (row) => row.balances.remitted),
-    { id: 'difference', header: '差异', className: 'whitespace-nowrap text-xs', render: differenceText },
+    { id: 'difference', header: '差异', className: 'whitespace-nowrap type-body leading-4', render: differenceText },
     {
       id: 'batches',
       header: '回汇批次',

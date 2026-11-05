@@ -39,7 +39,7 @@ export function LoadingState({ label }: { label?: string }) {
         <div className="h-4 w-5/6 rounded bg-idpxyz-hover" />
         <div className="h-4 w-2/3 rounded bg-idpxyz-hover" />
       </div>
-      {label ? <p className="mt-4 text-[12px] text-idpxyz-textMuted">{label}</p> : null}
+      {label ? <p className="mt-4 type-body text-idpxyz-textMuted">{label}</p> : null}
     </div>
   );
 }
@@ -89,8 +89,8 @@ export function ErrorState({ title, code, technical, description, onRetry }: Err
   return (
     <div className="text-center max-w-[420px] px-6">
       <AlertTriangle className="h-8 w-8 mx-auto mb-3 text-idpxyz-textMuted" aria-hidden />
-      <p className="text-[15px] text-idpxyz-textBright mb-1">{title ?? '本次未取得结果'}</p>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted">
+      <p className="type-section text-idpxyz-textBright mb-1">{title ?? '本次未取得结果'}</p>
+      <p className="type-body leading-5 text-idpxyz-textMuted">
         {description ?? '服务端没有形成答案，稍后可重试；若持续失败，请展开「技术详情」，携其中的错误码求助。'}
       </p>
       <TechnicalDetails
@@ -101,7 +101,7 @@ export function ErrorState({ title, code, technical, description, onRetry }: Err
         <button
           type="button"
           onClick={onRetry}
-          className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover"
+          className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 type-body rounded border border-idpxyz-border text-idpxyz-text hover:bg-idpxyz-hover"
         >
           <RotateCw className="h-3.5 w-3.5" aria-hidden />
           重试

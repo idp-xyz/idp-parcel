@@ -72,13 +72,13 @@ function AccessStateCard({
   return (
     <div className="text-center max-w-[460px] px-6">
       {icon}
-      <p className="text-[15px] text-idpxyz-textBright mb-1">{title}</p>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted">{description}</p>
+      <p className="type-section text-idpxyz-textBright mb-1">{title}</p>
+      <p className="type-body leading-5 text-idpxyz-textMuted">{description}</p>
       {unlock ? (
         <dl className="mt-3 border-t border-idpxyz-border pt-2.5 text-left">
           <div className="flex gap-2">
-            <dt className="shrink-0 w-[64px] text-[11px] leading-4 text-idpxyz-textMuted">放行条件</dt>
-            <dd className="text-[11px] leading-4 text-idpxyz-text">{unlock}</dd>
+            <dt className="shrink-0 w-[64px] type-caption leading-4 text-idpxyz-textMuted">放行条件</dt>
+            <dd className="type-caption leading-4 text-idpxyz-text">{unlock}</dd>
           </div>
         </dl>
       ) : null}
@@ -152,7 +152,7 @@ export function OperatorRefusalNote({
   className?: string;
 }) {
   return (
-    <div className={className ?? 'text-xs text-idpxyz-textMuted'}>
+    <div className={className ?? 'type-body leading-4 text-idpxyz-textMuted'}>
       <p>
         {operatorRefusalMessage(kind, what)}
         {kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}

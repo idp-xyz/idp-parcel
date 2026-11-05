@@ -31,12 +31,12 @@ export function TrackingDetailPanel({ row, onClose }: { row: TrackingRow; onClos
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright" title={row.parcelId}>
+              <h2 className="truncate font-mono type-title font-semibold text-idpxyz-textBright" title={row.parcelId}>
                 {row.parcelId}
               </h2>
               {row.latestMilestone ? <StatusPill code={row.latestMilestone} /> : <StatusPill label={currentStatusLabelOf(row)} tone="muted" />}
             </div>
-            <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
+            <p className="mt-0.5 type-body text-idpxyz-breadcrumb">
               {objectNouns.updatedAt}{' '}
               <time className="font-mono" dateTime={row.derivedAt} title={row.derivedAt}>
                 {formatInstant(row.derivedAt)}
@@ -63,23 +63,23 @@ export function TrackingDetailPanel({ row, onClose }: { row: TrackingRow; onClos
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <h3 className="text-[12px] font-medium text-idpxyz-breadcrumb">各段最后一步</h3>
+        <h3 className="type-body font-medium text-idpxyz-breadcrumb">各段最后一步</h3>
         {row.latestBySource.length === 0 ? (
-          <p className="mt-2 text-[12px] text-idpxyz-breadcrumb">还没有任何动态。</p>
+          <p className="mt-2 type-body text-idpxyz-breadcrumb">还没有任何动态。</p>
         ) : (
           <ol className="mt-2 space-y-2">
             {row.latestBySource.map((entry) => (
-              <li key={`${entry.source}-${entry.fact}`} className="flex items-baseline gap-2 text-[13px]">
+              <li key={`${entry.source}-${entry.fact}`} className="flex items-baseline gap-2 type-value">
                 <span className="w-[3em] shrink-0 text-idpxyz-breadcrumb">{sourceContextLabels[entry.source] ?? entry.source}</span>
                 <StatusPill code={entry.kind} />
-                <time className="ml-auto shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb" dateTime={entry.occurredAt} title={entry.occurredAt}>
+                <time className="ml-auto shrink-0 font-mono type-body text-idpxyz-breadcrumb" dateTime={entry.occurredAt} title={entry.occurredAt}>
                   {formatInstant(entry.occurredAt)}
                 </time>
               </li>
             ))}
           </ol>
         )}
-        <p className="mt-3 text-[12px] leading-5 text-idpxyz-breadcrumb">
+        <p className="mt-3 type-body leading-5 text-idpxyz-breadcrumb">
           动态按业务发生时间排列；同一件事有更正时只显最新一版，被更正的版本数在上方「已被更正」。
         </p>
         <TechnicalDetails className="mt-4" rows={technical} />
@@ -91,8 +91,8 @@ export function TrackingDetailPanel({ row, onClose }: { row: TrackingRow; onClos
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
-      <p className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
+      <p className="type-body text-idpxyz-breadcrumb">{label}</p>
+      <p className="mt-0.5 break-words type-body font-semibold leading-snug text-idpxyz-textBright">{children}</p>
     </div>
   );
 }

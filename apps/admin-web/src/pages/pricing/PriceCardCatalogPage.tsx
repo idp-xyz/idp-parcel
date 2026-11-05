@@ -40,7 +40,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
     render: (row) => (
       <div className="min-w-36">
         <div className="break-all font-medium text-[color:var(--ds-text-link-hover)]">{row.planId}</div>
-        <div className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">版本 {row.planVersion}</div>
+        <div className="mt-0.5 type-body text-idpxyz-breadcrumb">版本 {row.planVersion}</div>
       </div>
     ),
   },
@@ -50,7 +50,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
     render: (row) => (
       <div className="whitespace-nowrap">
         <div>{priceDirectionLabels[row.direction] ?? row.direction}</div>
-        <div className="text-[12px] text-idpxyz-breadcrumb">{priceCardPurposeLabels[row.purpose] ?? row.purpose}</div>
+        <div className="type-body text-idpxyz-breadcrumb">{priceCardPurposeLabels[row.purpose] ?? row.purpose}</div>
       </div>
     ),
   },
@@ -66,7 +66,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
     header: '适用期',
     hideWhenDetailOpen: true,
     render: (row) => (
-      <span className="font-mono text-[12px]">
+      <span className="font-mono type-body">
         <InstantRange from={row.effectiveFrom} to={row.effectiveTo} />
       </span>
     ),

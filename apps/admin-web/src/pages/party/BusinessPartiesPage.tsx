@@ -147,7 +147,7 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
         <div className="flex flex-col items-start gap-1 whitespace-nowrap">
           <StatusPill code={row.status} />
           {row.deactivatedAt ? (
-            <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
+            <span className="font-mono type-body text-idpxyz-breadcrumb">
               自 <Instant value={row.deactivatedAt} />
             </span>
           ) : null}
@@ -237,7 +237,7 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
       <div className="flex flex-col items-start gap-1">
         <StatusPill code={row.status} />
         {row.endedAt ? (
-          <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
+          <span className="font-mono type-body text-idpxyz-breadcrumb">
             自 <Instant value={row.endedAt} />
           </span>
         ) : null}
@@ -560,13 +560,13 @@ export function BusinessPartiesPage() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-          <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
+          <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             返回列表
           </Button>
           <div className="min-w-0">
-            <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">{heading.title}</h1>
-            <p className="truncate text-[12px] text-idpxyz-breadcrumb">{heading.subtitle}</p>
+            <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{heading.title}</h1>
+            <p className="truncate type-body text-idpxyz-breadcrumb">{heading.subtitle}</p>
           </div>
           {/* 三本册的切换：换册只换地址键值（openRegister），切走的表单留着挂载。 */}
           <Tabs
@@ -576,7 +576,7 @@ export function BusinessPartiesPage() {
           >
             <TabsList aria-label="选择登记册">
               {businessPartyRegisters.map((id) => (
-                <TabsTrigger key={id} value={id} className="text-[12px] text-idpxyz-breadcrumb">
+                <TabsTrigger key={id} value={id} className="type-body text-idpxyz-breadcrumb">
                   {registerBookLabels[id]}
                 </TabsTrigger>
               ))}
@@ -645,12 +645,12 @@ export function BusinessPartiesPage() {
       <TabsList className="shrink-0 px-4" aria-label="选择读册">
         <TabsTrigger value="identities">
           往来单位
-          {partiesAnswered ? <span className="ml-1.5 font-mono text-[12px] text-idpxyz-breadcrumb">{partyRows.length}</span> : null}
+          {partiesAnswered ? <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{partyRows.length}</span> : null}
         </TabsTrigger>
         <TabsTrigger value="relationships">
           合作关系
           {relationshipsAnswered ? (
-            <span className="ml-1.5 font-mono text-[12px] text-idpxyz-breadcrumb">{relationshipRows.length}</span>
+            <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{relationshipRows.length}</span>
           ) : null}
         </TabsTrigger>
       </TabsList>

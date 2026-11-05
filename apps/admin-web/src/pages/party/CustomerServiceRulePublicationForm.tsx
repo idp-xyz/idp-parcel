@@ -119,8 +119,8 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
       {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <h3 className="type-value font-medium text-idpxyz-text">版本信息</h3>
+            <p className="type-caption text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
               本身。这一版引用的服务产品或客户合同取自下方「适用对象」，不用在这里另填。
             </p>
@@ -129,7 +129,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 <Input
                   value={draft.objectId}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ objectId: event.target.value })}
                 />
               </Field>
@@ -137,7 +137,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 <Input
                   value={draft.version}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ version: event.target.value })}
                 />
               </Field>
@@ -145,7 +145,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 <Input
                   value={draft.scope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   onChange={(event) => patch({ scope: event.target.value })}
                 />
               </Field>
@@ -174,8 +174,8 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">规则正文（这一版的条款内容）</h3>
-            <p className="text-[11px] text-idpxyz-textMuted">
+            <h3 className="type-value font-medium text-idpxyz-text">规则正文（这一版的条款内容）</h3>
+            <p className="type-caption text-idpxyz-textMuted">
               先选这条规则随哪个服务产品或客户合同适用，再填责任方与规则适用范围，然后填两张表：索赔期限每种期限一行，最低材料每种索赔类型一行，两张表合起来至少要有一行。索赔类型、材料与起算事件的解释在可见性与异常那边，这里照原词填。
             </p>
             <div className="grid grid-cols-2 gap-3">
@@ -196,7 +196,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
               </Field>
               {chosen === null ? (
                 <Field label="适用对象标识 *" path={`${bodyPath}.<serviceProduct | customerContract>`} problems={problems}>
-                  <Input value="" disabled className="font-mono text-[13px]" placeholder="先在左侧选定适用对象是产品还是合同" />
+                  <Input value="" disabled className="font-mono type-value" placeholder="先在左侧选定适用对象是产品还是合同" />
                 </Field>
               ) : (
                 <div>
@@ -230,7 +230,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                   )}
                   {/* 同一个标识也作版本上的指名引用送出；服务端核出两处不一致时点名的是那条引用，问题显在这一格下。 */}
                   {(problems[`references.${chosen.shellKey}`] ?? []).map((line) => (
-                    <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
+                    <span key={line} className="block type-caption text-idpxyz-danger mt-1">
                       版本信息里的{chosen.noun}引用：<ProblemText problem={fieldProblemText(line)} />
                     </span>
                   ))}
@@ -240,7 +240,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 <Input
                   value={draft.responsible}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="参与方标识（系统不核对是否已登记）"
                   onChange={(event) => patch({ responsible: event.target.value })}
                 />
@@ -249,24 +249,24 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 <Input
                   value={draft.ruleScope}
                   disabled={locked}
-                  className="font-mono text-[13px]"
+                  className="font-mono type-value"
                   placeholder="这条规则的适用范围，与上方版本适用范围分开填"
                   onChange={(event) => patch({ ruleScope: event.target.value })}
                 />
               </Field>
             </div>
             {tightenOnly === null ? null : (
-              <p className="text-[11px] text-idpxyz-text rounded border border-idpxyz-border px-3 py-2">{tightenOnly}</p>
+              <p className="type-caption text-idpxyz-text rounded border border-idpxyz-border px-3 py-2">{tightenOnly}</p>
             )}
 
             <div className="flex items-center justify-between">
-              <h4 className="text-[12px] font-medium text-idpxyz-text">索赔期限（{draft.claimDeadlines.length} 行）</h4>
+              <h4 className="type-body font-medium text-idpxyz-text">索赔期限（{draft.claimDeadlines.length} 行）</h4>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withClaimDeadlineRowAdded)}>
                 加一行
               </Button>
             </div>
             {draft.claimDeadlines.length === 0 ? (
-              <p className="text-[11px] text-idpxyz-textMuted">
+              <p className="type-caption text-idpxyz-textMuted">
                 {serviceRuleEmptyTableNote(draft.appliesTo, 'claimDeadlines')}每一种期限只能有一行。
               </p>
             ) : null}
@@ -285,13 +285,13 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
             ))}
 
             <div className="flex items-center justify-between">
-              <h4 className="text-[12px] font-medium text-idpxyz-text">最低材料（{draft.minimumMaterials.length} 行）</h4>
+              <h4 className="type-body font-medium text-idpxyz-text">最低材料（{draft.minimumMaterials.length} 行）</h4>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withMinimumMaterialsRowAdded)}>
                 加一行
               </Button>
             </div>
             {draft.minimumMaterials.length === 0 ? (
-              <p className="text-[11px] text-idpxyz-textMuted">
+              <p className="type-caption text-idpxyz-textMuted">
                 {serviceRuleEmptyTableNote(draft.appliesTo, 'minimumMaterials')}每一种索赔类型只能有一行；每行至少一项材料，且不能重复。
               </p>
             ) : null}
@@ -338,7 +338,7 @@ function ClaimDeadlineRow({
   return (
     <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-idpxyz-textMuted">
+        <span className="type-body text-idpxyz-textMuted">
           期限第 {index + 1} 行
         </span>
         <Button variant="outline" disabled={locked} onClick={onRemove}>
@@ -363,7 +363,7 @@ function ClaimDeadlineRow({
           <Input
             value={row.startEvent}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="起算事件（照可见性与异常那边的原词填）"
             onChange={(event) => onChange({ startEvent: event.target.value })}
           />
@@ -372,7 +372,7 @@ function ClaimDeadlineRow({
           <Input
             value={row.days}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="正整数天数，按右侧的业务日历计"
             onChange={(event) => onChange({ days: event.target.value })}
           />
@@ -381,14 +381,14 @@ function ClaimDeadlineRow({
           <Input
             value={row.calendar}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="业务日历或时区的标识"
             onChange={(event) => onChange({ calendar: event.target.value })}
           />
         </Field>
       </div>
       {rowLines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger">
+        <span key={line} className="block type-caption text-idpxyz-danger">
           <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}
@@ -421,7 +421,7 @@ function MinimumMaterialsRow({
   return (
     <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-idpxyz-textMuted">
+        <span className="type-body text-idpxyz-textMuted">
           材料第 {index + 1} 行
         </span>
         <Button variant="outline" disabled={locked} onClick={onRemove}>
@@ -433,7 +433,7 @@ function MinimumMaterialsRow({
           <Input
             value={row.claimKind}
             disabled={locked}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="索赔类型（照可见性与异常那边的原词填）"
             onChange={(event) => onChange({ claimKind: event.target.value })}
           />
@@ -447,14 +447,14 @@ function MinimumMaterialsRow({
             onChange={(event) => onChange({ materials: event.target.value })}
           />
           {itemLines.map((item) => (
-            <span key={item.key} className="block text-[11px] text-idpxyz-danger mt-1">
+            <span key={item.key} className="block type-caption text-idpxyz-danger mt-1">
               <ProblemText problem={item.problem} />
             </span>
           ))}
         </Field>
       </div>
       {rowLines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger">
+        <span key={line} className="block type-caption text-idpxyz-danger">
           <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}

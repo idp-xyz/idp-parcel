@@ -170,9 +170,9 @@ function TieDetail({
             </Button>
           )
         ) : availability.kind === 'unavailable' ? (
-          <p className="text-[12px] text-idpxyz-breadcrumb">{availability.reason}</p>
+          <p className="type-body text-idpxyz-breadcrumb">{availability.reason}</p>
         ) : (
-          <p className="text-[12px] text-idpxyz-breadcrumb">{hiddenDecisionHint('选定路线', labelFor(authorizedRerouteDecision))}</p>
+          <p className="type-body text-idpxyz-breadcrumb">{hiddenDecisionHint('选定路线', labelFor(authorizedRerouteDecision))}</p>
         )
       }
       onClose={onClose}
@@ -228,7 +228,7 @@ function InitialRouteTieCard({
       <CardHeader>
         <CardTitle>选定路线</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-xs">
+      <CardContent className="flex flex-col gap-2 type-body leading-4">
         <p className="text-idpxyz-textMuted">
           包裹 <span className="font-mono">{tie.declaredParcelId}</span> 有几条备选路线成本一样。从并列的那几条里选一条：系统按此刻的情况再核一遍，
           通过就定下这件包裹的路线，从决定的时刻起生效；这条路线此刻被限制、已不合格或依据不明时不会生效。决定人记为当前登录的你。
@@ -251,7 +251,7 @@ function InitialRouteTieCard({
           <span className="text-idpxyz-textMuted">决定依据引用 *</span>
           <Input
             value={draft.basis}
-            className="font-mono text-[13px]"
+            className="font-mono type-value"
             placeholder="审批单、工单或来电记录的引用，逐字保存、不判真伪"
             onChange={(event) => setDraft({ ...draft, basis: event.target.value })}
           />

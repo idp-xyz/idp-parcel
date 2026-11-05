@@ -147,7 +147,7 @@ export function ControlReleaseRefusalsPage() {
             id: line.id,
             title: line.title,
             subtitle: line.subtitle,
-            status: <span className="shrink-0 text-[11px] text-idpxyz-textMuted">{line.statusText}</span>,
+            status: <span className="shrink-0 type-caption text-idpxyz-textMuted">{line.statusText}</span>,
             meta: line.meta,
           };
         })}
@@ -158,13 +158,13 @@ export function ControlReleaseRefusalsPage() {
         detailExtra={
           <div className="flex flex-col gap-3">
             {selected && (
-              <p className="text-[12px] text-idpxyz-textMuted">
+              <p className="type-body text-idpxyz-textMuted">
                 在下方写明核对了什么。「{refusalActionLabel('RELEASE_AT_SETTLEMENT')}」会再向结算侧申请放掉这笔钱,结算侧确认放掉才算处理完;
                 「{refusalActionLabel('MARK_HANDLED')}」只记一笔(谁、凭什么、什么时候),不动账,用于已经在结算侧手工放掉的情况。处理完后系统会接着处理这票运单。
               </p>
             )}
             {note && (
-              <div className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+              <div className={`type-body ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
                 {note.text}
                 {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
                 <TechnicalDetails rows={note.technical} />

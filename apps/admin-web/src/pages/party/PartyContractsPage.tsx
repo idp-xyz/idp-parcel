@@ -88,7 +88,7 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
     render: (row) => (
       <div className="min-w-40">
         <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
-        <p className="mt-0.5 text-xs text-idpxyz-textMuted">版本 {row.version}</p>
+        <p className="mt-0.5 type-body leading-4 text-idpxyz-textMuted">版本 {row.version}</p>
       </div>
     ),
   },
@@ -126,13 +126,13 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
     key: 'effective',
     header: '有效期',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-xs">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatRange(row.effectiveStartsAt, row.effectiveEndsAt)}</span>,
   },
   {
     key: 'published-at',
     header: '发布时间',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-xs">{formatInstant(row.publishedAt)}</span>,
+    render: (row) => <span className="font-mono type-body leading-4">{formatInstant(row.publishedAt)}</span>,
   },
 ];
 
@@ -156,7 +156,7 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
   return (
     <ul className="space-y-0.5">
       {row.bindings.map((binding) => (
-        <li key={binding.chargeScope} className="text-xs">
+        <li key={binding.chargeScope} className="type-body leading-4">
           <span className="font-mono text-idpxyz-text">{binding.chargeScope}</span>
           <span className="text-idpxyz-textMuted"> · </span>
           {binding.policyId ? (
@@ -255,7 +255,7 @@ function CustomerContractObjectPage({ objectId, version }: VersionObjectAddress)
         }}
         actions={
           row && mayWrite && closable.has(closureKeyOf(row)) ? (
-            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', row))}>
+            <Button variant="outline" size="sm" className="type-body" onClick={() => setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', row))}>
               收尾…
             </Button>
           ) : undefined
@@ -381,14 +381,14 @@ function CustomerContractsWorkbench({
               }}
               actions={(record) => (
                 <>
-                  <Button variant="outline" size="sm" className="text-[12px]" onClick={() => onStartNewVersion(record)}>
+                  <Button variant="outline" size="sm" className="type-body" onClick={() => onStartNewVersion(record)}>
                     签新版本
                   </Button>
                   {closable.has(closureKeyOf(record)) ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-[12px]"
+                      className="type-body"
                       onClick={() => setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', record))}
                     >
                       收尾…
@@ -426,16 +426,16 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
         {row.customerPartyNameKnown ? (
           <p className="font-medium text-idpxyz-text">{row.customerPartyName}</p>
         ) : (
-          <p className="text-xs text-idpxyz-textMuted">{partyNameUnknownNote}</p>
+          <p className="type-body leading-4 text-idpxyz-textMuted">{partyNameUnknownNote}</p>
         )}
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.customerPartyId}</p>
+        <p className="mt-0.5 font-mono type-body leading-4 text-idpxyz-textMuted">{row.customerPartyId}</p>
       </div>
     ),
   },
   {
     id: 'account',
     header: '账户编码',
-    className: 'font-mono text-xs',
+    className: 'font-mono type-body leading-4',
     render: (row) => row.accountId,
   },
   {
@@ -448,12 +448,12 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
           <StatusPill code={row.status} />
         </p>
         {row.deactivatedAt ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
+          <p className="mt-0.5 font-mono type-body leading-4 text-idpxyz-textMuted">
             自 {formatInstant(row.deactivatedAt)}
           </p>
         ) : null}
         {row.deactivationBasis ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.deactivationBasis}</p>
+          <p className="mt-0.5 font-mono type-body leading-4 text-idpxyz-textMuted">{row.deactivationBasis}</p>
         ) : null}
       </div>
     ),
@@ -461,13 +461,13 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
   {
     id: 'effective-from',
     header: '生效时间',
-    className: 'min-w-44 font-mono text-xs',
+    className: 'min-w-44 font-mono type-body leading-4',
     render: (row) => formatInstant(row.effectiveFrom),
   },
   {
     id: 'registered-at',
     header: '登记时间',
-    className: 'min-w-44 font-mono text-xs',
+    className: 'min-w-44 font-mono type-body leading-4',
     render: (row) => formatInstant(row.registeredAt),
   },
 ];

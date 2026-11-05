@@ -238,7 +238,7 @@ function PolicyRegisters({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-[12px]"
+                      className="type-body"
                       onClick={() => {
                         if (record.source) onStartNewVersion(record.source);
                       }}
@@ -247,7 +247,7 @@ function PolicyRegisters({
                     </Button>
                   ) : null}
                   {target !== null && closable.has(closureKeyOf(target)) ? (
-                    <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(target)}>
+                    <Button variant="outline" size="sm" className="type-body" onClick={() => setClosing(target)}>
                       收尾…
                     </Button>
                   ) : null}
@@ -330,7 +330,7 @@ function PolicyObjectPage({ register, objectId, version, directory }: VersionObj
         }}
         actions={
           target !== null && mayWrite && closable.has(closureKeyOf(target)) ? (
-            <Button variant="outline" size="sm" className="text-[12px]" onClick={() => setClosing(target)}>
+            <Button variant="outline" size="sm" className="type-body" onClick={() => setClosing(target)}>
               收尾…
             </Button>
           ) : undefined
@@ -410,7 +410,7 @@ function PublishPane({
 
 function WhereToPublish({ text, action, onAction }: { text: string; action: string; onAction: () => void }) {
   return (
-    <div className="m-4 rounded border border-idpxyz-border p-4 flex flex-col items-start gap-3 text-[13px] text-idpxyz-text">
+    <div className="m-4 rounded border border-idpxyz-border p-4 flex flex-col items-start gap-3 type-value text-idpxyz-text">
       <p>{text}</p>
       <Button variant="outline" onClick={onAction}>
         {action}
@@ -637,7 +637,7 @@ export function CommercialPoliciesPage() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pr-4">
         <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
         {mayWrite ? (
-          <Button variant="ghost" size="sm" className="mt-3 text-[12px] text-idpxyz-breadcrumb" onClick={() => openView('json', register)}>
+          <Button variant="ghost" size="sm" className="mt-3 type-body text-idpxyz-breadcrumb" onClick={() => openView('json', register)}>
             JSON 发布（高级）
           </Button>
         ) : null}

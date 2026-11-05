@@ -25,13 +25,13 @@ export function RegisterView({
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
       <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-        <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={onBack}>
+        <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={onBack}>
           <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
           {backLabel}
         </Button>
         <div className="min-w-0">
-          <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
-          {subtitle ? <p className="truncate text-[12px] text-idpxyz-breadcrumb">{subtitle}</p> : null}
+          <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
+          {subtitle ? <p className="truncate type-body text-idpxyz-breadcrumb">{subtitle}</p> : null}
         </div>
         {aside ? <div className="ml-auto shrink-0">{aside}</div> : null}
       </div>

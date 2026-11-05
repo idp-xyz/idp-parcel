@@ -85,14 +85,14 @@ function auditTrailOf(review: ReviewStatusRecord): AuditEntry[] {
 
 function queueStatusOf(entry: AcceptanceReviewQueueEntry) {
   return (
-    <span className="shrink-0 text-[11px] text-idpxyz-textMuted">{entry.reviewCompleted ? '已复核,等系统继续' : '等待复核'}</span>
+    <span className="shrink-0 type-caption text-idpxyz-textMuted">{entry.reviewCompleted ? '已复核,等系统继续' : '等待复核'}</span>
   );
 }
 
 function NoteLine({ note }: { note: OperatorNote | null }) {
   if (!note) return null;
   return (
-    <div className={`text-[12px] ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
+    <div className={`type-body ${note.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}>
       {note.text}
       {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
       <TechnicalDetails rows={note.technical} />
@@ -213,7 +213,7 @@ export function AcceptanceReviewPage() {
           <div className="flex flex-col gap-3">
             {/* 单份读不回时不留空白:详情是复核的依据,缺了要说清缺在哪一步。 */}
             {selectedId && !caseBody && (
-              <p className="text-[12px] text-idpxyz-textMuted">{caseAnswer ? caseFailureText(caseAnswer) : '正在读取详情…'}</p>
+              <p className="type-body text-idpxyz-textMuted">{caseAnswer ? caseFailureText(caseAnswer) : '正在读取详情…'}</p>
             )}
             {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
             <NoteLine note={commandNote} />
