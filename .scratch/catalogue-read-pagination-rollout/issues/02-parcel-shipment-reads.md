@@ -58,7 +58,7 @@ Blocked by: 01
 **完成判据**
 
 - ✅ 真库用例（`SYN-` / 既有夹具数据，带 DSN，钉 `31fcbf4f2`）：面单交易「翻页期间新建立一笔不重出不漏行、total 5 → 6」与「transactionResult 维内为或、q 命中覆盖包裹与渠道账户、`%` 按字面、空册」两条；其余七册在 `catalogue_pages_test.go` 各按小页走完全部页（拼起来恰是全集、次序即缺省序）、筛选或 q 改变 total、队列积压数不变、空册；渠道择优另证选择器进游标摘要（不收窄时的游标换上收窄选择器解不开）；人工项在 `cmd/parcel-dispatch` 的真库用例里补翻页与按所有者收窄。「翻页期间插入新行」只在面单交易一册上做：键集机制是共用件的，各册证的是落列，按小页走完全集已能抓出落错的列。
-- ✅ 端点用例：面单交易的集外键、集外排序维、词表外筛选值、坏游标各答 400 带 detail，读口不被调用；渠道未配置时参数写对写错都答 403；答复带 `page`（size 取 Intake 页大小）。其余各端点的既有用例照改签名后通过，`unconfigured_intake_test` 的查询串变体照旧答 403。
+- ✅ 端点用例：面单交易的集外键、集外排序维、词表外筛选值、坏游标各答 400 带 detail，读口不被调用；九个端点各自在 `catalogue_pages_endpoints_test.go` 的表驱动用例里过一遍「合规的一问带 page、size 取 Intake 页大小；集外参数答 400 带理由散文；渠道未配置时同一个坏请求答 403」，另证按运单号、按包裹两条有界查找不解码、不带 page。`unconfigured_intake_test` 的查询串变体照旧答 403。
 - ✅ 迁移无 CR、无 BOM（`migrations` 行尾守卫过）。
 - 门（作者自验，钉 `31fcbf4f2`，WSL go1.26.8）：`gofmt -l` 空；全仓 `go build`、`go vet` 退 0；带 DSN `-p 1 -count=1`：`internal/parcelshipment/adapters/postgres` 382 PASS / 0 SKIP，`cmd/parcel-api` 654 PASS，`cmd/parcel-dispatch` 506 PASS，`internal/architecture/...` 174 PASS，`migrations`、`internal/platform/migrate` 过；`internal/parcelshipment/...` 其余包与 `internal/platform/cataloguepage` 无 DSN 全过。计数取证：`grep -c -- '--- PASS'` 与 `grep -c -- '--- SKIP'` 打在各包 `-v` 输出上。
 
