@@ -41,7 +41,7 @@ const outcomeGateConditionsListed = "GATE_CONDITIONS_LISTED"
 // 如实一格（领域折为不适用）；「目录未登记 → 未决」表现为整份目录不在 gates 里
 // ——两格含义与关闭义务那对相反（0008 自注），页面文案必须各说各话。
 //
-// 查询参数按 ports.GateConditionPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
+// 查询参数按 ports.GateConditionPages 解码，在 Intake 之后（ADR-0144 决定六；未配置的渠道对一切请求同答 403，ADR-0055 决定三）；答复带 page。
 func NewQueryGateConditionsEndpoint(
 	intake CatalogueQueryIntake,
 	reader GateConditionCatalogueReader,
@@ -53,14 +53,14 @@ func NewQueryGateConditionsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.GateConditionPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.GateConditionPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

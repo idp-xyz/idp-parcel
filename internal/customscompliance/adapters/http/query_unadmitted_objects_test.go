@@ -36,7 +36,7 @@ func serveUnadmitted(t *testing.T, intake customshttp.CatalogueQueryIntake, stub
 	return response
 }
 
-// Covers: AT-CC-456 — 件数是读口答的全部件数，不是这一页的行数；还有下一页即标截断（该票 spec 取舍 5）；行形与判断册同一份；
+// Covers: AT-CC-456 — 件数是读口答的全部件数，不是这一页的行数；还有下一页即标截断（该票 spec「已带计数与 truncated 的待办队列保留这两格」）；行形与判断册同一份；
 // 租户与页大小只取自接入面。
 func TestUnadmittedObjectQueryCarriesTheWholeCountAndMarksTruncation(t *testing.T) {
 	stub := &stubUnadmittedObjects{listed: ports.UnadmittedObjects{

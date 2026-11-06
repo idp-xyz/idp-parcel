@@ -135,11 +135,11 @@ func TestComplianceRuleQueryRefusesNonGetMethods(t *testing.T) {
 	}
 }
 
-// Covers: registry 封闭集 — 缺席与未知值都是坏请求（替调用方默认一本册子就是替它猜），
-// 拒在 Intake 之前，属传输形状。
+// Covers: registry 封闭集 — 缺席与未知值都是坏请求（替调用方默认一本册子就是替它猜），在 Intake 之后拒：
+// 未配置的渠道对它们同答 403，见 TestUnconfiguredCatalogueIntakeRefusesBothRegistriesIdentically。
 func TestComplianceRuleQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryComplianceRulesEndpoint(
-		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 50},
 		unreachableRuleCatalogue{t: t},
 	)
 	for name, query := range map[string]string{
@@ -158,14 +158,16 @@ func TestComplianceRuleQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 对全部分派分支同答 403，
-// 分支选择不泄露任何东西；读口不被触到。
+// Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 对全部分派分支同答 403，缺席与集外的 registry 也一样，
+// 分支选择与封闭集都不泄露；读口不被触到。
 func TestUnconfiguredCatalogueIntakeRefusesBothRegistriesIdentically(t *testing.T) {
 	endpoint := customshttp.NewQueryComplianceRulesEndpoint(
 		customshttp.UnconfiguredIntake{}, unreachableRuleCatalogue{t: t},
 	)
 	var bodies []string
-	for _, query := range []string{"?registry=case-requirement", "?registry=interpretation"} {
+	for _, query := range []string{
+		"?registry=case-requirement", "?registry=interpretation", "", "?registry=", "?registry=readiness",
+	} {
 		response := httptest.NewRecorder()
 		endpoint.ServeHTTP(response, catalogueRequest(t, query))
 		if response.Code != http.StatusForbidden {
@@ -177,8 +179,10 @@ func TestUnconfiguredCatalogueIntakeRefusesBothRegistriesIdentically(t *testing.
 		assertNoOutcome(t, response)
 		bodies = append(bodies, response.Body.String())
 	}
-	if bodies[0] != bodies[1] {
-		t.Fatalf("两个分支的未配置答复不一致：%s vs %s", bodies[0], bodies[1])
+	for _, body := range bodies[1:] {
+		if body != bodies[0] {
+			t.Fatalf("未配置答复随请求变了：%s vs %s", bodies[0], body)
+		}
 	}
 }
 

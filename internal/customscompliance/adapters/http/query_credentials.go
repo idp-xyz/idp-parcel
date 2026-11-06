@@ -41,7 +41,7 @@ const outcomeCredentialsListed = "CREDENTIALS_LISTED"
 // 所以没有「当前版 / 历史版」的折叠可做。次数额度「来源未提供」以 uses 缺席表达——写成 0
 // 会被读成额度已用尽，而那一格在本册根本没有表达方式（余额不是登记内容）。
 //
-// 查询参数按 ports.CredentialPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
+// 查询参数按 ports.CredentialPages 解码，在 Intake 之后（ADR-0144 决定六；未配置的渠道对一切请求同答 403，ADR-0055 决定三）；答复带 page。
 func NewQueryCredentialsEndpoint(
 	intake CatalogueQueryIntake,
 	reader CredentialCatalogueReader,
@@ -53,14 +53,14 @@ func NewQueryCredentialsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.CredentialPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.CredentialPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

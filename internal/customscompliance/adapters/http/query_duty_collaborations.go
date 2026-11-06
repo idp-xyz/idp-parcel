@@ -40,7 +40,7 @@ const outcomeDutyCollaborationsListed = "DUTY_COLLABORATIONS_LISTED"
 // 在类型上没有格，传输层也不给它留。它不等于支付指令、付款交易、客户回收或监管放行
 // ——响应形里没有那些键。
 //
-// 查询参数按 ports.DutyCollaborationPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
+// 查询参数按 ports.DutyCollaborationPages 解码，在 Intake 之后（ADR-0144 决定六；未配置的渠道对一切请求同答 403，ADR-0055 决定三）；答复带 page。
 func NewQueryDutyCollaborationsEndpoint(
 	intake CatalogueQueryIntake,
 	reader DutyCollaborationCatalogueReader,
@@ -52,14 +52,14 @@ func NewQueryDutyCollaborationsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.DutyCollaborationPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.DutyCollaborationPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

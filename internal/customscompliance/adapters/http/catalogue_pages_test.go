@@ -17,7 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// pageRecorder 是十六册读口的同一个替身：记下端点交来的租户、页大小与查询对象（外部结果另记版本选择器），交回预置的
+// pageRecorder 是本上下文各册读口的同一个替身：记下端点交来的租户、页大小与查询对象（外部结果另记版本选择器），交回预置的
 // next、total 与积压件数，不交行——各册行的转写另有用例。
 type pageRecorder struct {
 	next  string
@@ -363,7 +363,7 @@ func pagedCatalogueNamed(t *testing.T, name string) pagedCatalogue {
 
 var grantedPageIntake = grantedCatalogueIntake{tenant: "SYN-TENANT-01", limit: 25}
 
-// Covers: ADR-0144 决定一、四、五、六——十六册各自：查询参数按本册声明解成查询对象原样交给读口（排序、维内去重升序的筛选、
+// Covers: ADR-0144 决定一、四、五、六——各册各自：查询参数按本册声明解成查询对象原样交给读口（排序、维内去重升序的筛选、
 // q、游标位置），租户与页大小只取自接入面；答复带 page（size 取接入面给的页大小，next 与 total 原样带出），列表那一格是数组。
 // 窄口参数（案件的 case、提交版本的 version、判断册的 object）是筛选维，带值照答。
 func TestCustomsCataloguesHandTheDecodedQueryToTheReader(t *testing.T) {
@@ -411,8 +411,8 @@ func TestCustomsCataloguesHandTheDecodedQueryToTheReader(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0144 决定一、三、四——十六册各自：请求自报的 tenant、limit 是集外键（租户与页大小只从接入面来），集外排序维、
-// 词表外筛选值、窄口参数给空值、解不开的游标、换了排序的旧游标，一律答 400 带理由散文，读口不被调用。
+// Covers: ADR-0144 决定一、三、四——各册各自：请求自报的 tenant、limit 是集外键（租户与页大小只从接入面来），集外排序维、
+// 词表外筛选值、解不开的游标、换了排序或 q 的旧游标，一律答 400 带理由散文，读口不被调用。
 func TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration(t *testing.T) {
 	for _, paged := range pagedCatalogues() {
 		t.Run(paged.name, func(t *testing.T) {
@@ -423,12 +423,13 @@ func TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration(t *testing.T) {
 				"集外排序维":    paged.values(t, url.Values{"sort": {"SYN-NOT-A-FIELD"}}),
 				"解不开的游标":   paged.values(t, url.Values{"after": {"SYN-not-a-cursor"}}),
 				"换了排序的旧游标": paged.values(t, url.Values{"after": {paged.cursor(t, sorted, paged.at)}}),
+				"换了 q 的旧游标": paged.values(t, url.Values{
+					"sort": {paged.sort}, "q": {"SYN-B"},
+					"after": {paged.cursor(t, paged.values(t, url.Values{"sort": {paged.sort}, "q": {"SYN-A"}}), paged.at)},
+				}),
 			}
 			if paged.outOfVocabulary != nil {
 				refusals["词表外筛选值"] = paged.values(t, paged.outOfVocabulary)
-			}
-			if paged.narrow != "" {
-				refusals["窄口参数给空值"] = paged.values(t, url.Values{paged.narrow: {""}})
 			}
 			for name, values := range refusals {
 				t.Run(name, func(t *testing.T) {
@@ -443,21 +444,66 @@ func TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0144 决定六——查询参数属传输形状、先于 Intake：渠道未配置时写错参数也先答 400、理由点到那一格；写对了才答 403，
-// 读口不被调用。
-func TestCustomsCatalogueQueriesAreDecodedBeforeIntake(t *testing.T) {
+// Covers: ADR-0055 决定三——端点先 Intake、后解码：渠道未配置时各册对一切请求同答 403，参数写对写错（集外排序维、集外键、
+// 解不开的游标、词表外筛选值，按 registry 分派的路由上缺 registry 或给集外取值）答复逐字相同，没有凭据的调用方探不出
+// 有哪几册、各册开放了哪些查询维度；读口不被调用。
+func TestUnconfiguredChannelsAnswerEveryCatalogueQueryIdentically(t *testing.T) {
 	for _, paged := range pagedCatalogues() {
 		t.Run(paged.name, func(t *testing.T) {
-			refused := paged.serve(t, customshttp.UnconfiguredIntake{}, &pageRecorder{},
-				paged.values(t, url.Values{"sort": {"SYN-NOT-A-FIELD"}}))
-			if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "SYN-NOT-A-FIELD") {
-				t.Fatalf("理由散文应点到那一格：%q", detail)
+			queries := map[string]url.Values{
+				"写对":     paged.values(t, merged(url.Values{"sort": {paged.sort}}, paged.filters)),
+				"集外排序维":  paged.values(t, url.Values{"sort": {"SYN-NOT-A-FIELD"}}),
+				"集外键":    paged.values(t, url.Values{"SYN-NOT-A-KEY": {"SYN-VALUE"}}),
+				"解不开的游标": paged.values(t, url.Values{"after": {"SYN-not-a-cursor"}}),
 			}
-			recorder := &pageRecorder{}
-			unconfigured := paged.serve(t, customshttp.UnconfiguredIntake{}, recorder,
-				paged.values(t, merged(url.Values{"sort": {paged.sort}}, paged.filters)))
-			if unconfigured.Code != http.StatusForbidden || recorder.called {
-				t.Fatalf("参数写对、渠道未配置：status = %d（want 403），读口被调用 = %v", unconfigured.Code, recorder.called)
+			if paged.outOfVocabulary != nil {
+				queries["词表外筛选值"] = paged.values(t, paged.outOfVocabulary)
+			}
+			if paged.values(t, nil).Has("registry") {
+				queries["缺 registry"] = url.Values{}
+				queries["集外 registry"] = url.Values{"registry": {"SYN-NOT-A-REGISTRY"}}
+			}
+			answers := map[string]string{}
+			for name, values := range queries {
+				recorder := &pageRecorder{}
+				response := paged.serve(t, customshttp.UnconfiguredIntake{}, recorder, values)
+				if response.Code != http.StatusForbidden || recorder.called {
+					t.Fatalf("%s：status = %d（want 403），读口被调用 = %v", name, response.Code, recorder.called)
+				}
+				answers[response.Body.String()] = name
+			}
+			if len(answers) != 1 {
+				t.Fatalf("未配置的答复随请求内容变了：%v", answers)
+			}
+		})
+	}
+}
+
+// Covers: 迁移前就在用的窄口参数（案件的 case、提交版本的 version、判断册的 object）空值即不收窄、落到整册，迁移后照旧——
+// 空值在解码前去掉，不答「筛选维的取值为空」；与有值的同给时只按有值的那几个收窄。
+func TestBlankNarrowingStillListsTheWholeCatalogue(t *testing.T) {
+	for _, paged := range pagedCatalogues() {
+		if paged.narrow == "" {
+			continue
+		}
+		t.Run(paged.name, func(t *testing.T) {
+			for name, test := range map[string]struct {
+				given []string
+				want  []string
+			}{
+				"只给空值":    {given: []string{""}, want: nil},
+				"空值与有值同给": {given: []string{"", "SYN-KEY-01"}, want: []string{"SYN-KEY-01"}},
+			} {
+				t.Run(name, func(t *testing.T) {
+					recorder := &pageRecorder{}
+					response := paged.serve(t, grantedPageIntake, recorder, paged.values(t, url.Values{paged.narrow: test.given}))
+					if response.Code != http.StatusOK || !recorder.called {
+						t.Fatalf("status = %d；body = %s", response.Code, response.Body)
+					}
+					if got := recorder.query.Filters[paged.narrow]; !reflect.DeepEqual(got, test.want) {
+						t.Fatalf("%s 收窄得 %v，应为 %v", paged.narrow, got, test.want)
+					}
+				})
 			}
 		})
 	}
@@ -506,7 +552,7 @@ func TestTheExternalResultVersionStaysASelector(t *testing.T) {
 	}
 }
 
-// Covers: 该票 spec 取舍 5——卡关对象的 unadmittedCount 是整个队列的积压数，不随筛选与 q 变；page.total 是这一组条件下的
+// Covers: 带计数与 truncated 的待办队列保留这两格——卡关对象的 unadmittedCount 是整个队列的积压数，不随筛选与 q 变；page.total 是这一组条件下的
 // 件数；truncated 即 page.next 不为 null。
 func TestTheUnadmittedCountIsTheWholeBacklogWhilePageTotalFollowsTheConditions(t *testing.T) {
 	blocked, _ := admissionAnswerWords()

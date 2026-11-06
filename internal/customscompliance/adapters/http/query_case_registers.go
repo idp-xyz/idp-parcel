@@ -72,7 +72,8 @@ var caseRegisterPages = map[string]*cataloguepage.Catalogue{
 // 判断输入，那是点读 LoadObligationItems 伺候的另一个调用面——查阅面收下截点参数，
 // 就等于让目录读口长出第二种「盘点」语义，而它不该有判断语义。
 //
-// 其余查询参数按选中那一册的声明解码，先于 Intake（ADR-0144 决定六）；cutoff 不在任何一册的声明里，照集外键答 400。
+// 分派与其余查询参数的解码都在 Intake 之后，判据同 NewQueryComplianceRulesEndpoint；其余参数按选中那一册的声明解码，
+// cutoff 不在任何一册的声明里，照集外键答 400。
 func NewQueryCaseRegistersEndpoint(
 	intake CatalogueQueryIntake,
 	reader CaseRegisterCatalogueReader,
@@ -84,6 +85,11 @@ func NewQueryCaseRegistersEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
 		registry := request.URL.Query().Get("registry")
 		catalogue, known := caseRegisterPages[registry]
 		if !known {
@@ -93,12 +99,6 @@ func NewQueryCaseRegistersEndpoint(
 		pageQuery, err := catalogue.Decode(request.URL.Query())
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()

@@ -64,7 +64,8 @@ var portsPathsPages = map[string]*cataloguepage.Catalogue{
 // 截点那条）：按时点解析版本是候选读取的判断输入，那是点读 PortsPathsView 伺候的
 // 另一个调用面——查阅面收下时点参数，就等于让目录读口长出第二种「解析」语义。
 //
-// 其余查询参数按选中那一册的声明解码，先于 Intake（ADR-0144 决定六）；时点参数不在任何一册的声明里，照集外键答 400。
+// 分派与其余查询参数的解码都在 Intake 之后，判据同 NewQueryComplianceRulesEndpoint；其余参数按选中那一册的声明解码，
+// 时点参数不在任何一册的声明里，照集外键答 400。
 func NewQueryPortsPathsEndpoint(
 	intake CatalogueQueryIntake,
 	reader PortsPathsCatalogueReader,
@@ -76,6 +77,11 @@ func NewQueryPortsPathsEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
 		registry := request.URL.Query().Get("registry")
 		catalogue, known := portsPathsPages[registry]
 		if !known {
@@ -85,12 +91,6 @@ func NewQueryPortsPathsEndpoint(
 		pageQuery, err := catalogue.Decode(request.URL.Query())
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()

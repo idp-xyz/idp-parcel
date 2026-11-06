@@ -3,6 +3,7 @@ package customshttp
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -18,7 +19,8 @@ import (
 // 分层保存的外部结果不能被一个端点的参数集串成「一个状态」。技术回执、监管接收、业务受理、放行
 // 逐层原样上列，响应形里没有任何跨层折出的「清关成功」之类的字段。
 //
-// 查询参数按各册声明（ports.CustomsCasePages 等）解码，先于 Intake（ADR-0144 决定六）；答复带 page。
+// 查询参数按各册声明（ports.CustomsCasePages 等）解码，在 Intake 之后（ADR-0144 决定六；未配置的渠道对一切请求同答 403，
+// ADR-0055 决定三）；答复带 page。
 const (
 	outcomeCustomsCasesListed        = "CUSTOMS_CASES_LISTED"
 	outcomeSubmissionVersionsListed  = "SUBMISSION_VERSIONS_LISTED"
@@ -59,7 +61,7 @@ var (
 	_ ActionAdmissionJudgementReader = ports.ActionAdmissionJudgementRead(nil)
 )
 
-// serveRecordList 收拢四口共有的外壳：方法、按本册声明解码查询参数、Intake、读、成形。read 拿到请求本身，
+// serveRecordList 收拢四口共有的外壳：方法、Intake、按本册声明解码查询参数、读、成形。read 拿到请求本身，
 // 选择器（外部结果的 version）由它自己读。
 func serveRecordList[Record any, Body any](
 	intake CatalogueQueryIntake,
@@ -77,14 +79,14 @@ func serveRecordList[Record any, Body any](
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		pageQuery, err := catalogue.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodeRecordQuery(catalogue, request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		page, err := read(request, query.Scope.Tenant(), query.Limit, pageQuery)
@@ -100,6 +102,32 @@ func serveRecordList[Record any, Body any](
 			"outcome": outcome, key: bodies, "page": page.Page(query.Limit),
 		})
 	})
+}
+
+// blankNarrowing 是迁移前就在用的窄口参数：那时空值即不收窄、落到整册，这一点迁移后照旧——解码前去掉它的空值，
+// 而不是答「筛选维的取值为空」。只对这几个键做；别的筛选维给空值仍是坏请求（ADR-0144 决定四）。
+var blankNarrowing = map[*cataloguepage.Catalogue]string{
+	ports.CustomsCasePages:        "case",
+	ports.SubmissionVersionPages:  "version",
+	ports.AdmissionJudgementPages: "object",
+}
+
+// decodeRecordQuery 去掉本册窄口参数上的空值，再按本册声明解码。
+func decodeRecordQuery(catalogue *cataloguepage.Catalogue, values url.Values) (cataloguepage.Query, error) {
+	if key, narrowing := blankNarrowing[catalogue]; narrowing && values.Has(key) {
+		kept := make([]string, 0, len(values[key]))
+		for _, value := range values[key] {
+			if value != "" {
+				kept = append(kept, value)
+			}
+		}
+		if len(kept) == 0 {
+			values.Del(key)
+		} else {
+			values[key] = kept
+		}
+	}
+	return catalogue.Decode(values)
 }
 
 func instant(at time.Time) string { return at.UTC().Format(time.RFC3339Nano) }
@@ -462,7 +490,7 @@ type unadmittedObjectsResponse struct {
 // 那一刻上有一份动作准入判断不让动作过门的，连同全部件数与是否截断。哪一格算「不过门」与「最近」怎么取，见
 // ports.UnadmittedObjects。行形与判断册同一份，列表页按同一套列读它。
 //
-// 查询参数按 ports.UnadmittedObjectPages 解码，先于 Intake；按对象精确查归判断册那一口。
+// 查询参数按 ports.UnadmittedObjectPages 解码，在 Intake 之后；按对象精确查归判断册那一口。
 func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader UnadmittedObjectReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -470,14 +498,14 @@ func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader Unadm
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		pageQuery, err := ports.UnadmittedObjectPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.UnadmittedObjectPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		listed, err := reader.ListUnadmittedObjects(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
