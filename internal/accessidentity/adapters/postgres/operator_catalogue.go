@@ -30,10 +30,11 @@ type scannedOperator struct {
 	row             accessidentity.OperatorCatalogueRow
 }
 
-// ListOperators 用一条查询取本页操作者连同各自的授予与撤销（ADR-0363 决定二）：分两次查会让绑定与授予取自两个时点。本页先
-// 在操作者表上按 accessidentity.OperatorCataloguePages 取出（带 LIMIT 的子查询），授予与撤销只随本页的操作者连接，不为翻
-// 不到的操作者扫授予。授予在操作者名下按登记时刻排、同刻按授予标识排：管理台显的是「谁先登的」，不是生效先后。总数另起
-// 一句：与本页同一组条件，不保证同一快照——要同快照的是一个操作者的绑定与授予，不是页与总数。
+// ListOperators 用一条查询取本页操作者连同各自的授予与撤销：一句之内只看一个快照，几句之间看的可以不是同一刻，拆开读就
+// 保不住 accessidentity.OperatorCatalogue 头注要的「册上同一刻的样子」（FindOperator 同理）。本页先在操作者表上按
+// accessidentity.OperatorCataloguePages 取出（带 LIMIT 的子查询），授予与撤销只随本页的操作者连接，不为翻不到的操作者扫
+// 授予。授予在操作者名下按登记时刻排、同刻按授予标识排：管理台显的是「谁先登的」，不是生效先后。总数另起一句：与本页同一组
+// 条件，不保证同一快照——要同一刻的是一页里的绑定、授予与撤销，不是页与总数。
 // 此刻生不生效不在这里判，理由同 FindOperator。limit 非正是调用方编程错误。
 func (registry *OperatorRegistry) ListOperators(
 	ctx context.Context,

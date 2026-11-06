@@ -66,10 +66,11 @@ func (row OperatorCatalogueRow) Grants() []RecordedGrantRow {
 
 // OperatorCatalogue 是操作者册按租户的查阅口与按授予标识的装载口（ADR-0363 决定二、三）。
 //
-// ListOperators 只列本租户，按 OperatorCataloguePages 解出的查询取一页（ADR-0144 决定六）：本页的操作者连同名下的授予与
-// 撤销出自同一条查询，绑定与授予不取自两个时点（ADR-0363 决定二）；授予在各自操作者名下按登记时刻排。limit 是页大小，非正
-// 即拒；空册答空页而不是 error。FindGrant 按（租户、授予标识）取一笔授予连同撤销，给撤销口在写入前判防锁死；不在册答
-// found=false 而不返回 error，理由同 OperatorRegistry。
+// ListOperators 只列本租户，按 OperatorCataloguePages 解出的查询取一页（ADR-0144 决定六），交回本页的操作者连同名下的
+// 授予与撤销（ADR-0363 决定二）。一页里的绑定、授予与撤销须是册上同一刻的样子：分几次读，两次之间落下的登记或撤销只被
+// 其中一次看见，页上就会出现册上哪一刻都没有过的组合——比如一笔授予显作未撤销，同页却有在撤销它之后才登的授予。授予在
+// 各自操作者名下按登记时刻排。limit 是页大小，非正即拒；空册答空页而不是 error。FindGrant 按（租户、授予标识）取一笔授予
+// 连同撤销，给撤销口在写入前判防锁死；不在册答 found=false 而不返回 error，理由同 OperatorRegistry。
 type OperatorCatalogue interface {
 	ListOperators(
 		ctx context.Context,

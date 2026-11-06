@@ -7,9 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// operatorCatalogueReadLimit 是本包查阅口（作业设备册、操作者册）的页大小。页大小按渠道契约定，不采信请求（ADR-0144
-// 决定二）；别的上下文由操作者查阅 Intake 带出，本包的认证件只交回租户与主体，所以定在这里，与那些 Intake 同值（如
-// collectionremittance 的 operatorCatalogueReadLimit）。不随租户变。
+// operatorCatalogueReadLimit 是本包查阅口（作业设备册、操作者册）的页大小。页大小归渠道契约，不采信请求（ADR-0144
+// 决定二）；本包的认证件只交回租户与主体、不带页大小，所以定在这里。不随租户变。
 const operatorCatalogueReadLimit = 200
 
 // writePageQueryProblem 把目录查询参数的拒绝答成 400 MALFORMED_REQUEST，理由散文原样进 detail（ADR-0144 决定一、四）。
