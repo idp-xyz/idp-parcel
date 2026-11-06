@@ -25,3 +25,87 @@ settlement、customs、collection、party（客户账户之外）、governance�
 
 - 每笔：三道门（tsc / run-tests / vite build）退 0；改到的 api 层有 node:test 钉住查询串的拼法与 `page` 的接收。
 - 每个上下文至少一页在演示种子上「检索 → 翻页 → 换检索回第一页」走通（dom-probe 或浏览器，做不到如实写）。
+
+## 完成记录 · parcel-shipment 一笔（含 channel-selection；2026-11-06，分支 `cursor/crpr-14a-admin-shipment`，基 `d6b3f64a5`）
+
+基是 02 的分支 tip（`cursor/catalogue-pagination-rollout`）。02 还没进 main，本笔就在分支上做，等 02 落地后由推送方摘到 main。diff 只在
+`apps/admin-web/src/pages/shipment-request/**`、`apps/admin-web/src/pages/channel-selection/**` 与本票面；没动 `templates/*`、`shell/*`、
+`components/*`，也没动未迁读口的页面。
+
+**落点**（笔 `c96b5cbda`）
+
+| 页 | api 函数 | 下推什么 | 翻页条 |
+|---|---|---|---|
+| 运单列表 | `listShipmentRequestViews` | `q`（地址上的 `?q=`，停稳后）；状态胶囊 → `state`；表头「提交时间」旧→新 → `sort=submittedAt`（新→旧是缺省序，不带） | 工具条右端 |
+| 接受前复核 | `listAcceptanceReviewQueue` | 只翻页 | 页底 |
+| 授权处置 | `listAuthorizedDispositionQueue` | 只翻页 | 页底 |
+| 释放拒收处理 | `listControlReleaseRefusals` | 只翻页；页头「待处理 N 笔」是整册积压 | 页底 |
+| 受理后处置请求（货物处置上半） | `listPostIntakeDispositionRequests` | 只翻页；「待处置 N 票」是整册积压 | 队列下沿 |
+| 待人工处理项（货物处置下半） | `listPostIntakeManualItems`；按包裹读回另立有界查找 `findPostIntakeManualItemsOfParcel` | 只翻页；「待办 N 项」是整册积压 | 待办清单之后 |
+| 面单交易 | `listLabelTransactions` | `q` | 模板 `pagination` |
+| 渠道择优并列冲突 | `listTiedChannelSelectionDecisions`，条件由 `tiedChannelSelectionConditions` 拼 | 选择器 `view=tied`，收窄时加 `scope`、`mapping`，不算检索条件 | 模板 `pagination` |
+| 取消先后冲突 | — | 管理台没有这一页，本笔不新建 | — |
+
+共用的改动：`shipment-request/api.ts` 的 `ApiResult` 改用 `catalogue-api` 那一份，4xx 带上 `detail`；新文件 `shipment-request/cursor-pager.tsx`
+（`CursorPager`、`CursorPagerBar`、`pastFirstPage`）——`ReviewFlowTemplate` 与 `WorkbenchPageTemplate` 没有翻页槽，页面照 `ListPageTemplate`
+那条翻页条的标记自摆一条，字句与按钮可否取模板导出的 `cursorPageSummary`、`cursorPagerControls`；运单列表的查询条件由 `shipmentListConditions`
+一处拼；`refusalQueueViewState`、`dispositionQueueViewState`、`requestQueueViewState` 多收 `narrowed`。按运单号、按一组标识、按标识取单份
+这些有界查找一字不变。
+
+**判断项**
+
+1. **运单列表撤掉的**：运单号、客户、件数三列的页内排序——读口能排的只有 `submittedAt` 与 `shipmentRequestId`，运单号列显的是单据号，
+   按委托标识排对不上屏上的次序，所以不给排；状态胶囊上的计数与命令头指标——一页里数出来的不是各状态的总数，按状态的总数读口不给；
+   按客户名称检索——名称从参与方册转写，读口 `q` 只覆盖委托号、单据号、来源请求键。读口另有 `customerAccountId` 一维，本页没有对应的
+   筛选条，不另加。头注已改写成现状。
+2. **面单交易撤掉的**：页内按渠道面单号匹配（读口 `q` 覆盖交易号、渠道账户、覆盖包裹），检索框提示随之改成「搜包裹号 / 面单交易 /
+   渠道账号」；`transactionResult` 一维本页没有筛选条，不另加。`page` 与 `total` 数的是交易，摘要因此分开报「本页 N 笔交易,摊开 M 行」。
+3. **没有检索框与筛选条的页**（复核、授权处置、释放拒收、货物处置两份清单）只接翻页，读口收的 `q` 与筛选维不接，也不为此新加控件；
+   票面「撤客户端筛选」在这几页无可撤。头注各写一句。
+4. **翻过第一页答零行**：队列里的行处理掉之后重取当前页（游标不动）常会碰到，这不是册为空。上面那几页把 `pastFirstPage` 当 `narrowed`
+   交给呈现态，留在就绪态，翻页条跟着留下好往回翻；待办清单那一行另说「这一页往后没有待办了,往前翻看看。」
+5. **渠道择优的商业范围与映射**照 ADR-0144 当选择器带，不进 `catalogueConditionsNarrow`；它们在条件签名里，换收窄对象回第一页。
+6. **`truncated`** 留在答复类型里（答复照旧带），页面一律读 `page`。
+7. **400 的理由散文**：复核、授权处置、释放拒收、货物处置上半、面单交易、渠道择优经 `catalogueViewState` 接在问题码说明之后；运单列表
+   自有呈现态，照同一做法接在 `problemNote` 之后；待办清单的错误行同样接上。
+
+**完成判据**（作者自验，钉 `c96b5cbda`，WSL node v22.23.3）
+
+- ✅ 三道门：`tsc -b --noEmit` 退 0；`scripts/run-tests.mjs` 1227 pass / 0 fail，退 0；`vite build` 退 0（只有既有的 vendor 块超 500 kB 提示）。
+- ✅ api 层 node:test：新 `shipment-request/catalogue-reads.test.ts` 钉运单列表与其余列表读口「不带参数即裸路径，带检索、状态、排序、游标
+  一并下推」、筛选维按参数名逐值下推、有界查找的请求一字不变、`page` 原样交出、400 的理由散文进 `detail`（没给就没有这一格）；新
+  `channel-selection/tied-decisions-read.test.ts` 钉选择器与检索词、游标同进一个查询串，按决定号取单份不变，`page` 原样交出。队列与运单
+  列表的纯逻辑用例跟着改（整册积压数、`narrowed`、`shipmentListConditions`）。
+- ✅ 运单列表在演示种子上走通「检索 → 翻页 → 换检索回第一页」（dom-probe 接真栈，32 ok / 0 fail，证据 `S`）。种子里没有运单，第二页又要
+  多于一页大小（200）的行，所以在灌好的 `SYN-TENANT-01` 上经 `POST /v1/shipment-requests` 补交 205 票 `SYN-ACCESS-REQUEST-PAGE-001…205`
+  （全部 201、已提交）：
+  - 栈：`d6b3f64a5` 构建的 `parcel-api` 加一次性 `postgres:16.14`，`scripts/demo-seeds/seed.sh` 灌入退 0。页面挂在 `scripts/dom-probe.mjs`
+    那一套 happy-dom 里，fetch 转给真 `parcel-api`；探针源在仓外。
+  - 首屏发裸路径，「第 1 / 2 页 · 共 205 条」，200 行。逐字敲 `PAGE` 只发停稳后的一问 `?q=PAGE`，地址带上 `q=PAGE`。下一页带检索词与
+    游标：第二页 5 行，与第一页不相交，合起来 205 个不同运单，末页「下一页」不能按。上一页回第一页，不带游标，行同第一次。
+  - 在第二页换检索词 `PAGE-007`，不带旧游标，回第一页「第 1 / 1 页 · 共 1 条」，恰是那一笔；改回 `PAGE` 落第一页。零命中示「当前筛选
+    条件下没有匹配的运单」，不报「还没有运单」。
+  - 101 个字的检索词答 400，页面示「这次查询没有被接受」并原样接上「检索词 q 超过 100 个字符」。状态胶囊「待受理」下推 `state=SUBMITTED`，
+    换胶囊不带旧游标，零命中留在就绪态。表头旧→新下推 `sort=submittedAt`，首行是最早那一笔。
+  - 同栈 curl：`state=FOO`、集外的键、坏游标各答 400 带 detail。走完拆栈。
+- ✅ 释放拒收处理页的翻页（dom-probe，替身传输，12 ok / 0 fail）：第一页「第 1 / 2 页 · 共 3 条」，页头只报「待处理 3 笔」、不再写「先列出」；
+  下一页带答复的游标；第二页答零行仍留着翻页条，不报「没有积压」，页头随答复报「待处理 2 笔」，上一页能按；上一页回第一页、不带游标。
+
+**未验与风险**
+
+- 浏览器没走：`AuthGate` 要真登录，本笔只用 dom-probe。
+- 要操作员凭据的那几页（复核、授权处置、释放拒收、货物处置、面单交易、渠道择优）没在真栈上走：种子里这几册没有行，本笔也没起操作员
+  凭据。它们靠 api 用例与上面那条替身走查；「每个上下文至少一页」由运单列表满足。
+- 模板缺口：`ReviewFlowTemplate` 与 `WorkbenchPageTemplate` 没有翻页槽，`cursor-pager.tsx` 照抄了 `ListPageTemplate` 那条翻页条的标记，
+  模板补槽之后该删。归模板地盘，本笔不改模板。
+- 积压在两次读之间变少时，翻页条会显「第 2 / 1 页」（`cursorPageSummary` 的字句，替身走查里见到）。归模板。
+- `ListPageTemplate` 的两页（面单交易、渠道择优）照首批接法：不带检索时翻过第一页答零行落空态，翻页条随之不显。面单交易只增不减，碰不到；
+  并列清单在翻页之间被人裁掉一批时可能碰到，重进页面即回第一页。
+- 决定、登记之后重取当前页，清单先回加载态再出行（`useCatalogueCursor` 的 `retry` 如此）；旧版重取期间旧行留在屏上。
+- 运单列表不再能按客户名称检索，面单交易不再能按渠道面单号检索：读口 `q` 不覆盖这两列，要补归后端声明。
+- 运单列表 400 时接在前面的问题码说明取 `presentation.ts` 的 `problemCodeNotes`，那一句面向命令（「请求构造不出命令,……请检查填写内容后再提交。」），
+  理由散文跟在后面；`catalogue-view` 的那一句面向查询。本笔没改。
+- 工作台（`Workbench.tsx`）的待办计数不带参数调这几个读口，复核与授权处置两项数的是第一页的条目，不是整册积压。迁移前后一样，不在本笔地盘。
+- `go test ./internal/architecture/...` 本机没跑（本笔只动前端）；全量 `scripts/test-full.sh` 归推送方在重放后的 tip 上跑。
+
+**评审**：只碰 `pages/**` 与本票面，不碰 `templates/*`、`shell/*`、`components/*`，按 workflow「前端切片」评审那一步不要 Spec 轴评审，判据自查如上。
