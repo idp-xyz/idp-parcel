@@ -125,7 +125,7 @@ func TestCaseRegisterQueryRefusesNonGetMethods(t *testing.T) {
 // （两端点各自的封闭集不互相收留）。
 func TestCaseRegisterQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryCaseRegistersEndpoint(
-		grantedCatalogueIntake{tenant: "TENANT-1", limit: 50},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 50},
 		unreachableCaseRegisters{t: t},
 	)
 	for name, query := range map[string]string{

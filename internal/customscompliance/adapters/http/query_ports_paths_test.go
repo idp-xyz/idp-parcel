@@ -95,7 +95,7 @@ func TestPortsPathsQueryRefusesNonGetMethods(t *testing.T) {
 // 各自的封闭集不互相收留），未建模的区域维没有分派格。
 func TestPortsPathsQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryPortsPathsEndpoint(
-		grantedCatalogueIntake{tenant: "TENANT-1", limit: 50},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 50},
 		unreachablePortsPaths{t: t},
 	)
 	for name, query := range map[string]string{

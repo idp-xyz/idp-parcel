@@ -139,7 +139,7 @@ func TestComplianceRuleQueryRefusesNonGetMethods(t *testing.T) {
 // 未配置的渠道对它们同答 403，见 TestUnconfiguredCatalogueIntakeRefusesBothRegistriesIdentically。
 func TestComplianceRuleQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryComplianceRulesEndpoint(
-		grantedCatalogueIntake{tenant: "TENANT-1", limit: 50},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 50},
 		unreachableRuleCatalogue{t: t},
 	)
 	for name, query := range map[string]string{
