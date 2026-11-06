@@ -1,7 +1,7 @@
 # 08 右栏首屏：随状态的提示、关联计数一行、主动作随状态
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始
 

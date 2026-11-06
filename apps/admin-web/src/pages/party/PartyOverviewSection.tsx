@@ -428,23 +428,54 @@ function RoleTags({ label, roles }: { label: string; roles: string[] }) {
  * 同一批缓存的读口，各段数法与那一行逐字相同。任一段还没答出或答不出就是 undefined——签上不显数，
  * 不拿半截数冒充总数。
  */
-export function usePartyOverviewCount(
+/** 全景五段各自的段状态，键即段序。右栏头区的计数行（票 business-party-ux/08）与对象页「关联」签的合计都从它算。 */
+export interface PartyOverviewStates {
+  relationships: OverviewSectionState<PartyRelationshipView>;
+  accounts: OverviewSectionState<CustomerAccountRecord>;
+  entities: OverviewSectionState<unknown>;
+  agreements: OverviewSectionState<unknown>;
+  settlement: OverviewSectionState<unknown>;
+}
+
+/** 五段各自的标题，与块里的段名同词。 */
+export const partyOverviewSectionTitles: Record<keyof PartyOverviewStates, string> = {
+  relationships: '合作关系',
+  accounts: '客户账户',
+  entities: '公司主体',
+  agreements: '供应商协议',
+  settlement: '结算政策',
+};
+
+/**
+ * 读四册并按参与方切出五段状态。读口经取数层缓存（register-list.ts 文件头）：头区与「关联」签两处挂着也只取一次，
+ * 哪一册没答出那一段就不是 answered。
+ */
+export function usePartyOverviewStates(
   partyId: string,
   relationships: ApiResult<PartyRelationshipListResponseBody> | null,
-): number | undefined {
+): PartyOverviewStates {
   const accounts = useRegisterList(listCustomerAccounts);
   const entities = useRegisterList(listGroupLegalEntities);
   const agreements = useRegisterList(listSupplierAgreements);
   const settlement = useRegisterList(listSettlementPolicies);
-  const states = [
-    sectionOf(relationships, (body) => relationshipsOfParty(partyId, body.relationships)),
-    sectionOf(accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts)),
-    sectionOf(entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities)),
-    sectionOf(agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements)),
-    sectionOf(settlement.answer, (body) => (body.kind === 'SETTLEMENT_POLICY' ? settlementPoliciesOfParty(partyId, body.policies) : null)),
-  ];
+  return {
+    relationships: sectionOf(relationships, (body) => relationshipsOfParty(partyId, body.relationships)),
+    accounts: sectionOf(accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts)),
+    entities: sectionOf(entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities)),
+    agreements: sectionOf(agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements)),
+    settlement: sectionOf(settlement.answer, (body) =>
+      body.kind === 'SETTLEMENT_POLICY' ? settlementPoliciesOfParty(partyId, body.policies) : null,
+    ),
+  };
+}
+
+export function usePartyOverviewCount(
+  partyId: string,
+  relationships: ApiResult<PartyRelationshipListResponseBody> | null,
+): number | undefined {
+  const states = usePartyOverviewStates(partyId, relationships);
   let total = 0;
-  for (const state of states) {
+  for (const state of Object.values(states)) {
     if (state.kind !== 'answered') return undefined;
     total += state.rows.length;
   }
@@ -458,6 +489,7 @@ export function PartyOverviewSection({
   relationshipRegistration,
   onRelationshipEnded,
   accountWrites,
+  summaryCounts,
 }: {
   partyId: string;
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
@@ -477,6 +509,11 @@ export function PartyOverviewSection({
    * 停用表单的版本建议都从它取）。给了才摆「新增客户账户」与各账户的「停用…」；不给就只读。
    */
   accountWrites?: { parties: ApiResult<BusinessPartyListResponseBody> | null };
+  /**
+   * 顶部「它对我们是什么」里要不要带那行五册计数。右栏把计数摆在头区（票 business-party-ux/08），签里就不再重复——一个事实
+   * 首屏只出现一处；对象页没有那一行，照旧带。缺省带。
+   */
+  summaryCounts?: boolean;
 }) {
   const accounts = useRegisterList(listCustomerAccounts);
   const entities = useRegisterList(listGroupLegalEntities);
@@ -507,10 +544,12 @@ export function PartyOverviewSection({
             <RoleTags label="对方担任：" roles={roles.asCounterparty} />
           </>
         )}
-        <p className={`mt-2 ${note}`}>
-          合作关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 公司主体 {countText(entityState)} · 供应商协议{' '}
-          {countText(agreementState)} · 结算政策 {countText(settlementState)}
-        </p>
+        {summaryCounts !== false ? (
+          <p className={`mt-2 ${note}`}>
+            合作关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 公司主体 {countText(entityState)} · 供应商协议{' '}
+            {countText(agreementState)} · 结算政策 {countText(settlementState)}
+          </p>
+        ) : null}
         <p className={`mt-1 ${note}`}>
           授信、余额与运单不在这里显示；角色只数已生效的关系。
         </p>

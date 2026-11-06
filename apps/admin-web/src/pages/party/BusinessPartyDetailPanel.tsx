@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Maximize2, X } from 'lucide-react';
+import { FileText, Handshake, Info, Maximize2, X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
@@ -27,7 +27,10 @@ import { useMayWriteRegistry } from '../use-operator-grants';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
-import { PartyOverviewSection } from './PartyOverviewSection';
+import { PartyOverviewSection, partyOverviewSectionTitles, usePartyOverviewStates, type PartyOverviewStates } from './PartyOverviewSection';
+import { countText } from './party-overview';
+import { liveRelationshipCountOf, panelHintOf, panelPrimaryActionOf } from './business-party-panel-first-screen';
+import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
@@ -68,7 +71,9 @@ function PanelProfilePart({
 
 /**
  * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（名称 + 状态徽章 +
- * 其他语言名称一行 + 角色标签）· 主动作「更新资料」+「更多」菜单 + 打开对象页 + 关闭 · meta 行 · 停用横幅 · 一行事实 · 签。
+ * 其他语言名称一行 + 角色标签）· 主动作 +「更多」菜单 + 打开对象页 + 关闭 · meta 行 · 停用横幅 · 随状态的提示 · 一行事实 ·
+ * 关联计数一行 · 签。主动作随状态（票 business-party-ux/08）：没有在用关系的单位是「登记合作关系」，其余是「更新资料」；
+ * 判读在 business-party-panel-first-screen.ts。
  *
  * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：生效、停用、登记版次与资料版本归那一行事实，只显到日，照公司
  * 主体栏（票 business-party-ux/01）；登记时刻在「登记记录」签；名称是标题，编码与识别信息在 meta 行；标识、修订号、登记依据、
@@ -158,6 +163,19 @@ export function BusinessPartyDetailPanel({
   const openProfileForm = () => {
     window.location.hash = profileEditHash(businessPartyObjectHash(row.partyId), true);
   };
+  // 首屏那一句提示与主动作（票 business-party-ux/08）：判读在 business-party-panel-first-screen.ts。五段计数与「关联」签读同一份缓存。
+  const overview = usePartyOverviewStates(row.partyId, relationships);
+  const liveRelationships = overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
+  const hint = panelHintOf(row, ours, liveRelationships);
+  const primary = panelPrimaryActionOf(mayWrite, pinned, hint);
+  // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开，不另造一处写口。
+  const openRelationshipForm = () => {
+    selectTab('overview');
+    setRegistering(row.partyId);
+  };
+  const countsLineLabel = (Object.keys(partyOverviewSectionTitles) as (keyof PartyOverviewStates)[])
+    .map((key) => `${partyOverviewSectionTitles[key]} ${countText(overview[key])}`)
+    .join('，');
 
   return (
     <>
@@ -183,7 +201,19 @@ export function BusinessPartyDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {mayWrite && pinned !== true ? (
+            {/* 主动作随状态：没有在用关系的单位下一步是登关系，「更新资料」退成描边；其余照旧（panelPrimaryActionOf）。 */}
+            {primary === 'register-relationship' ? (
+              <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openRelationshipForm}>
+                <Handshake className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                登记合作关系
+              </Button>
+            ) : null}
+            {primary === 'register-relationship' && pinned !== true ? (
+              <Button size="sm" variant="outline" className="type-body text-idpxyz-breadcrumb" onClick={openProfileForm}>
+                更新资料
+              </Button>
+            ) : null}
+            {primary === 'update-profile' ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openProfileForm}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 更新资料
@@ -223,6 +253,27 @@ export function BusinessPartyDetailPanel({
         </dl>
 
         <BusinessPartyBanners row={row} />
+
+        {/* 随状态的提示，`info` 语气、照票 02 空状态那种「给下一步」的写法；已停用由上面的横幅说，这里不再说一遍。 */}
+        {hint ? (
+          <div className={`flex items-start gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.info}`}>
+            <Info className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
+            {hint.kind === 'pending' ? (
+              <span>
+                计划于 <Instant value={hint.effectiveFrom} precision="day" /> 生效；在那之前不按它办新业务，合作关系等生效后再登。
+              </span>
+            ) : (
+              <span className="flex flex-wrap items-center gap-x-2">
+                <span>还没有合作关系。它是客户还是承运商，由合作关系说。</span>
+                {mayWrite ? (
+                  <button type="button" className="text-idpxyz-accent hover:underline" onClick={openRelationshipForm}>
+                    登记合作关系
+                  </button>
+                ) : null}
+              </span>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <FactStrip inline>
@@ -243,6 +294,24 @@ export function BusinessPartyDetailPanel({
           </Fact>
         )}
       </FactStrip>
+
+      {/* 关联计数一行（票 business-party-ux/08）：让人在首屏知道「关联」签里有什么，点了切过去；哪一册没答出那一格显「—」
+          （countText），不拿 0 冒充「没有」。签里原来那行计数去掉（summaryCounts），一个事实首屏只出现一处。 */}
+      <button
+        type="button"
+        onClick={() => selectTab('overview')}
+        aria-label={`查看关联：${countsLineLabel}`}
+        className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-b border-idpxyz-border px-5 py-1.5 text-left type-body text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent"
+      >
+        {(Object.keys(partyOverviewSectionTitles) as (keyof PartyOverviewStates)[]).map((key, index) => (
+          <span key={key} className="flex items-center gap-x-1.5">
+            {index > 0 ? <span aria-hidden="true">·</span> : null}
+            <span>
+              {partyOverviewSectionTitles[key]} <span className="font-mono tabular-nums text-idpxyz-text">{countText(overview[key])}</span>
+            </span>
+          </span>
+        ))}
+      </button>
 
       <Tabs value={shown} onValueChange={(value) => selectTab(value as BusinessPartyPanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* 签名与图标取对象工作区签的固定表（票 company-subject-ux/10），与对象页同名（票 business-parties-object-page/01）：
@@ -294,6 +363,7 @@ export function BusinessPartyDetailPanel({
               relationshipRegistration={relationshipRegistration}
               onRelationshipEnded={mayWrite ? retryRelationships : undefined}
               accountWrites={mayWrite ? { parties } : undefined}
+              summaryCounts={false}
             />
           </TabsContent>
           <TabsContent
