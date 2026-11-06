@@ -172,14 +172,14 @@ var serviceProductListed = `WITH listed AS (
            AND version.object_kind = $2
      )`
 
-// serviceProductRead：q 另覆盖形态，管理台今天检索的就是标识、版本、范围与形态。
+// serviceProductRead：q 另覆盖形态，管理台检索的就是标识、版本、范围与形态。
 var serviceProductRead = catalogueRead[ports.ServiceProductCatalogueRow]{
 	binding:   ports.ServiceProductPages.MustBind(versionShellColumns("form")),
 	listed:    serviceProductListed,
 	selection: versionShellSelection + `, form, ` + deliveryConditionSelection,
 	scan:      scanServiceProduct,
 	position: func(row ports.ServiceProductCatalogueRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 
@@ -324,7 +324,7 @@ var acceptanceRulePackageRead = catalogueRead[ports.AcceptanceRulePackageRow]{
 		        intake_declared, intake_sources, intake_refs, finals_declared, final_rules`,
 	scan: scanAcceptanceRulePackage,
 	position: func(row ports.AcceptanceRulePackageRow, sortField string) cataloguepage.Position {
-		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.DeclaredAt, row.EffectiveStartsAt)
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.DeclaredAt)
 	},
 }
 
@@ -380,15 +380,12 @@ func (catalogue *OperationsCatalogue) FindAcceptanceRulePackage(
 		tenant.String())
 }
 
-// policyContentPosition 给策略目录各正文册编本页末行的位置：at 是本册缺省序那一维（声明或登记时刻），另两维生效起点与对象号
-// 在各册行上同名同义（ports.policyContentPages）。
-func policyContentPosition(sortField, objectID, version string, at, effectiveStartsAt time.Time) cataloguepage.Position {
-	value := objectID
-	switch sortField {
-	case "declaredAt", "registeredAt":
-		value = cataloguepage.FormatInstant(at)
-	case "effectiveStartsAt":
-		value = cataloguepage.FormatInstant(effectiveStartsAt)
+// policyContentPosition 给策略目录各正文册编本页末行的位置：at 是本册缺省序那一维（声明或登记时刻），对象号那一维在各册
+// 行上同名同义（ports.policyContentPages）。
+func policyContentPosition(sortField, objectID, version string, at time.Time) cataloguepage.Position {
+	value := cataloguepage.FormatInstant(at)
+	if sortField == "objectId" {
+		value = objectID
 	}
 	return cataloguepage.Position{Value: value, Identity: []string{objectID, version}}
 }
@@ -396,7 +393,7 @@ func policyContentPosition(sortField, objectID, version string, at, effectiveSta
 // policyContentColumns 是策略目录里自带版本与生效区间的正文册共用的落列：at 是本册缺省序那一维落的列，keyword 是 q 覆盖的列。
 func policyContentColumns(at, atColumn string, filters map[string]string, keyword ...string) cataloguepage.Columns {
 	return cataloguepage.Columns{
-		Sorts:    map[string]string{at: atColumn, "effectiveStartsAt": "effective_starts_at", "objectId": "object_id"},
+		Sorts:    map[string]string{at: atColumn, "objectId": "object_id"},
 		Identity: []string{"object_id", "version_label"},
 		Filters:  filters,
 		Keyword:  keyword,
@@ -536,7 +533,7 @@ var pricePolicyRead = catalogueRead[ports.PricePolicyRow]{
 		        fx_quote_type_ref, fx_as_of_semantics_ref, fx_as_of_policy_version, caliber_registered_at`,
 	scan: scanPricePolicy,
 	position: func(row ports.PricePolicyRow, sortField string) cataloguepage.Position {
-		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt)
 	},
 }
 
@@ -636,7 +633,7 @@ var settlementPolicyRead = catalogueRead[ports.SettlementPolicyRow]{
 		return row, nil
 	},
 	position: func(row ports.SettlementPolicyRow, sortField string) cataloguepage.Position {
-		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt)
 	},
 }
 
@@ -757,7 +754,7 @@ var customerContractListed = `WITH listed AS (
                   delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
      )`
 
-// customerContractRead：q 另覆盖规则包与客户账户，管理台今天检索的就是这几格。
+// customerContractRead：q 另覆盖规则包与客户账户，管理台检索的就是这几格。
 var customerContractRead = catalogueRead[ports.CustomerContractCatalogueRow]{
 	binding: ports.CustomerContractPages.MustBind(versionShellColumns("rule_package_id", "customer_account_id")),
 	listed:  customerContractListed,
@@ -765,7 +762,7 @@ var customerContractRead = catalogueRead[ports.CustomerContractCatalogueRow]{
 		deliveryConditionSelection,
 	scan: scanCustomerContract,
 	position: func(row ports.CustomerContractCatalogueRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 
@@ -963,7 +960,7 @@ var authorizationRuleRead = catalogueRead[ports.AuthorizationRuleRow]{
 		return row, nil
 	},
 	position: func(row ports.AuthorizationRuleRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 
@@ -1056,7 +1053,7 @@ func versionStatusWord(status int16, retired bool) (string, error) {
 var versionStatusCode = fmt.Sprintf(
 	"CASE WHEN retirement.retired_at IS NOT NULL THEN %d ELSE version.status END", domain.CommercialVersionRetired)
 
-// versionShellSelection 是版本壳各册在 listed 里导出、取页与读回打头的那几列：版本行七列加 catalogueClosureColumns。
+// versionShellSelection 是版本壳各册在 listed 里导出、取页与读回打头的那几列：版本行的各列加 catalogueClosureColumns。
 const versionShellSelection = `object_id, version_label, scope_ref, status,
 		        effective_starts_at, effective_ends_at, published_at,
 		        corrected_ends_at, successor_label, retired_at`
@@ -1065,9 +1062,7 @@ const versionShellSelection = `object_id, version_label, scope_ref, status,
 // versionStatusCode 导出的 status_code 上；q 覆盖对象、版本与范围，extra 是各册另覆盖的正文列。
 func versionShellColumns(extra ...string) cataloguepage.Columns {
 	return cataloguepage.Columns{
-		Sorts: map[string]string{
-			"publishedAt": "published_at", "effectiveStartsAt": "effective_starts_at", "objectId": "object_id",
-		},
+		Sorts:    map[string]string{"publishedAt": "published_at", "objectId": "object_id"},
 		Identity: []string{"object_id", "version_label"},
 		Filters:  map[string]string{"status": "status_code"},
 		Codes:    map[string]func(string) (int64, error){"status": cataloguepage.Code[domain.CommercialVersionStatus]},
@@ -1075,14 +1070,11 @@ func versionShellColumns(extra ...string) cataloguepage.Columns {
 	}
 }
 
-// versionShellPosition 给版本壳各册编本页末行的位置，三个可排维在各册行上同名同义。
-func versionShellPosition(sortField, objectID, version string, publishedAt, effectiveStartsAt time.Time) cataloguepage.Position {
-	value := objectID
-	switch sortField {
-	case "publishedAt":
-		value = cataloguepage.FormatInstant(publishedAt)
-	case "effectiveStartsAt":
-		value = cataloguepage.FormatInstant(effectiveStartsAt)
+// versionShellPosition 给版本壳各册编本页末行的位置，各可排维在各册行上同名同义。
+func versionShellPosition(sortField, objectID, version string, publishedAt time.Time) cataloguepage.Position {
+	value := cataloguepage.FormatInstant(publishedAt)
+	if sortField == "objectId" {
+		value = objectID
 	}
 	return cataloguepage.Position{Value: value, Identity: []string{objectID, version}}
 }
@@ -1114,7 +1106,7 @@ var supplierAgreementListed = `WITH listed AS (
            AND version.object_kind = $2
      )`
 
-// supplierAgreementRead：q 另覆盖正文里的供应商、法人、价格表与协议范围，管理台今天检索的是转写后的各格。
+// supplierAgreementRead：q 另覆盖正文里的供应商、法人、价格表与协议范围，管理台检索的是转写后的各格。
 var supplierAgreementRead = catalogueRead[ports.SupplierAgreementCatalogueRow]{
 	binding: ports.SupplierAgreementPages.MustBind(versionShellColumns(
 		"supplier_party_id", "legal_entity_ref", "purchase_plan_ref", "agreement_scope_ref")),
@@ -1123,7 +1115,7 @@ var supplierAgreementRead = catalogueRead[ports.SupplierAgreementCatalogueRow]{
 		        agreement_scope_ref, agreement_effective_starts_at, agreement_effective_ends_at, agreement_registered_at`,
 	scan: scanSupplierAgreement,
 	position: func(row ports.SupplierAgreementCatalogueRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 

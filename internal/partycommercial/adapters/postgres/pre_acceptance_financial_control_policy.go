@@ -417,7 +417,7 @@ var preAcceptanceFinancialControlPolicyRead = catalogueRead[ports.PreAcceptanceF
 		return row, nil
 	},
 	position: func(row ports.PreAcceptanceFinancialControlPolicyRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 

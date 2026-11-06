@@ -202,7 +202,7 @@ func (repository *PublicationDrafts) ListOpenDrafts(
 	return cataloguepage.Result[ports.OpenPublicationDraft]{Rows: drafts, Next: page.Next, Total: page.Total}, nil
 }
 
-// openDraftListed 上列租户名下还没发布的载体。两格状态写成字面量而不绑参数：0047 那条部分索引的谓词是同一组字面量，
+// openDraftListed 上列租户名下还没发布的载体。状态条件写成字面量而不绑参数：0047 那条部分索引的谓词是同一组字面量，
 // 规划器要从语句本身推得出谓词才肯用它，绑参数的泛型计划推不出。码取自领域枚举而不手写数字，与 0028 的 CHECK 是同一组。
 var openDraftListed = fmt.Sprintf(`WITH listed AS (
 	SELECT object_kind, object_id, version_label,
@@ -218,17 +218,14 @@ const openDraftSelection = `object_kind, object_id, version_label,
 	content_canonicalization, content_digest, content_document,
 	submitter_ref, submitted_at, status, approver_ref, approved_at, published_at`
 
-// openDraftBinding 落列见 ports.OpenPublicationDraftPages。status 与类别在库上都存领域码，按词换码比；q 覆盖对象、版本、
-// 范围与录入者、批准者两格主体引用。
+// openDraftBinding 落列见 ports.OpenPublicationDraftPages。status 在库上存领域码，按词换码比；q 覆盖对象、版本、范围与
+// 录入者、批准者的主体引用。
 var openDraftBinding = ports.OpenPublicationDraftPages.MustBind(cataloguepage.Columns{
-	Sorts:    map[string]string{"submittedAt": "submitted_at", "objectId": "object_id"},
+	Sorts:    map[string]string{"submittedAt": "submitted_at"},
 	Identity: []string{"object_kind", "object_id", "version_label"},
-	Filters:  map[string]string{"status": "status", "kind": "object_kind"},
-	Codes: map[string]func(string) (int64, error){
-		"status": cataloguepage.Code[domain.PublicationDraftStatus],
-		"kind":   cataloguepage.Code[domain.CommercialObjectKind],
-	},
-	Keyword: []string{"object_id", "version_label", "scope_ref", "submitter_ref", "approver_ref"},
+	Filters:  map[string]string{"status": "status"},
+	Codes:    map[string]func(string) (int64, error){"status": cataloguepage.Code[domain.PublicationDraftStatus]},
+	Keyword:  []string{"object_id", "version_label", "scope_ref", "submitter_ref", "approver_ref"},
 })
 
 // openDraftRow 是载体列表的扫描行：一份载体（读得回或读不回）连同 ORDER BY 那几列在列上的原值，游标位置取它们而不取
@@ -250,13 +247,9 @@ func openDraftRead(tenant domain.TenantID) catalogueRead[openDraftRow] {
 		scan: func(rows pgx.Rows) (openDraftRow, error) {
 			return scanOpenDraft(rows, tenant)
 		},
-		position: func(row openDraftRow, sortField string) cataloguepage.Position {
-			value := cataloguepage.FormatInstant(row.submittedAt)
-			if sortField == "objectId" {
-				value = row.objectID
-			}
+		position: func(row openDraftRow, _ string) cataloguepage.Position {
 			return cataloguepage.Position{
-				Value:    value,
+				Value:    cataloguepage.FormatInstant(row.submittedAt),
 				Identity: []string{cataloguepage.FormatInteger(int64(row.kind)), row.objectID, row.version},
 			}
 		},

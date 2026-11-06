@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
@@ -14,11 +15,23 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证开放中的发布载体按 ADR-0144 分页（票 catalogue-read-pagination-rollout/11）：翻页中途录入新载体
-// 不重不漏、空册答空页；状态与类别按领域原词筛，q 覆盖对象号、版本、范围、录入者与批准者，% 按字面；本构建读不回的载体
-// 照样受筛、占页里的位置、计入总数，游标从它接得下去。夹具租户与范围沿用本包的 tenant-1 / scope-1（makeUnreadable 只改
-// tenant-1 的行），其余取值一律 SYN-，不借 draftShellIn 那份带非合成取值的壳与正文。
+// 不重不漏、空册答空页；状态按领域原词筛，q 覆盖对象号、版本、范围、录入者与批准者，% 按字面；本构建读不回的载体照样受筛、
+// 占页里的位置、计入总数，游标从它接得下去。夹具取值一律 SYN-，不借 draftShellIn 那份带非合成取值的壳与正文。
 
-// synDraft 录入 tenant-1 的一份 kind 类载体，录入时刻是 draftSubmittedAt 之后 minute 分钟：缺省序按录入时刻倒序，次序由
+const draftPageTenant = "SYN-TENANT-01"
+
+// makeDraftUnreadable 把合成租户名下一行的规范化版本改成本构建不认得的 PCC-9（摘要串的前缀随之，库上 CHECK 要求两者一致）。
+func makeDraftUnreadable(t *testing.T, pool *pgxpool.Pool, objectID string) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE party_commercial.publication_draft
+		    SET content_canonicalization = 'PCC-9', content_digest = 'PCC-9:SYN-FUTURE-BUILD'
+		  WHERE tenant_id = $1 AND object_id = $2`, draftPageTenant, objectID); err != nil {
+		t.Fatalf("改写 %s：%v", objectID, err)
+	}
+}
+
+// synDraft 录入合成租户的一份 kind 类载体，录入时刻是 draftSubmittedAt 之后 minute 分钟：缺省序按录入时刻倒序，次序由
 // 夹具给定，不靠库里的 now()。信用政策带正文与一条服务产品引用，同 draftShellIn 的形状；服务产品是无正文的册。
 func synDraft(
 	t *testing.T,
@@ -34,11 +47,11 @@ func synDraft(
 		t.Fatalf("有效区间：%v", err)
 	}
 	shell := domain.PublicationDraftShell{
-		TenantID:  pcTenant(t, "tenant-1"),
+		TenantID:  pcTenant(t, draftPageTenant),
 		Kind:      kind,
 		ObjectID:  pcValue(t, domain.NewCommercialObjectID, objectID),
 		Version:   pcValue(t, domain.NewCommercialVersionLabel, "v1"),
-		Scope:     pcValue(t, domain.NewCommercialScopeReference, "scope-1"),
+		Scope:     pcValue(t, domain.NewCommercialScopeReference, "SYN-SCOPE-1"),
 		Effective: interval,
 	}
 	content := domain.PublicationContent{Kind: kind}
@@ -106,7 +119,7 @@ func seedOpenDrafts(t *testing.T) (*adapter.PublicationDrafts, domain.TenantID) 
 	approved := synDraft(t, transactor, drafts, domain.ServiceProductObject, "SYN-DRAFT-B", "SYN-SUBMITTER-2", 2)
 	mustAdvanceDraft(t, transactor, ctx, drafts, approveDraft(t, approved, "SYN-APPROVER-1"))
 	synDraft(t, transactor, drafts, domain.CreditPolicyObject, "SYN-DRAFT-C", "SYN-SUBMITTER-2", 3)
-	makeUnreadable(t, pool, "SYN-DRAFT-C")
+	makeDraftUnreadable(t, pool, "SYN-DRAFT-C")
 	published := approveDraft(t, synDraft(t, transactor, drafts, domain.CreditPolicyObject, "SYN-DRAFT-D", "SYN-SUBMITTER-1", 4),
 		"SYN-APPROVER-1")
 	mustAdvanceDraft(t, transactor, ctx, drafts, published)
@@ -115,7 +128,7 @@ func seedOpenDrafts(t *testing.T) (*adapter.PublicationDrafts, domain.TenantID) 
 		t.Fatalf("发布：%v", err)
 	}
 	mustAdvanceDraft(t, transactor, ctx, drafts, done)
-	return drafts, pcTenant(t, "tenant-1")
+	return drafts, pcTenant(t, draftPageTenant)
 }
 
 // Covers: 票 11 完成判据——开放中的发布载体翻页中途录入新载体不重不漏；空册答空页、共 0。
@@ -124,7 +137,7 @@ func TestOpenDraftCataloguePagesWithoutRepeatsOrGapsWhileDraftsArrive(t *testing
 	ctx := t.Context()
 	minute := 0
 	assertPagesWithoutRepeatsOrGaps(t, ports.OpenPublicationDraftPages,
-		openDraftLister(ctx, drafts, pcTenant(t, "tenant-1"), openDraftObjectID),
+		openDraftLister(ctx, drafts, pcTenant(t, draftPageTenant), openDraftObjectID),
 		func(id string) {
 			minute++
 			synDraft(t, transactor, drafts, domain.CreditPolicyObject, id, "SYN-SUBMITTER-1", minute)
@@ -134,7 +147,7 @@ func TestOpenDraftCataloguePagesWithoutRepeatsOrGapsWhileDraftsArrive(t *testing
 		openDraftLister(ctx, drafts, pcTenant(t, "SYN-TENANT-EMPTY"), openDraftObjectID))
 }
 
-// Covers: 票 11 完成判据——状态与类别按领域原词筛（维内或、维间与），q 覆盖声明的那几格且不分大小写、% 按字面，总数与本页
+// Covers: 票 11 完成判据——状态按领域原词筛（维内取并，与 q 取交），q 覆盖声明的那几格且不分大小写、% 按字面，总数与本页
 // 同一组条件；读不回的一行按库上的列受筛，与读得回的一样。
 func TestOpenDraftCatalogueFiltersAndSearchesUnreadableRowsAlike(t *testing.T) {
 	drafts, tenant := seedOpenDrafts(t)
@@ -150,17 +163,14 @@ func TestOpenDraftCatalogueFiltersAndSearchesUnreadableRowsAlike(t *testing.T) {
 			{"status=PENDING_APPROVAL", c + "," + a},
 			{"status=APPROVED", b},
 			{"status=PENDING_APPROVAL&status=APPROVED", c + "," + b + "," + a},
-			{"kind=SERVICE_PRODUCT", b},
-			{"kind=CREDIT_POLICY&status=PENDING_APPROVAL", c + "," + a},
-			{"kind=SETTLEMENT_POLICY", ""},
 			{"q=syn-submitter-2", c + "," + b},
+			{"q=syn-submitter-2&status=PENDING_APPROVAL", c},
 			{"q=SYN-APPROVER", b},
 			{"q=SYN-DRAFT-A", a},
-			{"q=V1&kind=CREDIT_POLICY", c + "," + a},
+			{"q=V1&status=PENDING_APPROVAL", c + "," + a},
 			{"q=SCOPE-1&status=APPROVED", b},
-			{"sort=objectId", a + "," + b + "," + c},
-			{"sort=-objectId&status=PENDING_APPROVAL", c + "," + a},
 			{"sort=submittedAt", a + "," + b + "," + c},
+			{"sort=submittedAt&status=PENDING_APPROVAL", a + "," + c},
 			{"q=%25", ""},
 		})
 }

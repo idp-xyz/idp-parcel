@@ -17,7 +17,7 @@ import (
 var _ ports.RegistrationNumberTypeCatalogueRead = (*OperationsCatalogue)(nil)
 
 // registrationNumberTypeListed 是总数与取页共用的前半句。status 的导出与参与方身份册逐字相同（停用判断在先，其次生效
-// 时点）：两册的生命周期是同样三格。
+// 时点）：两边的生命周期是同一组状态。
 var registrationNumberTypeListed = `WITH entry AS (
         SELECT DISTINCT ON (country_code, type_code) *
           FROM party_commercial.registration_number_type_registration
@@ -36,12 +36,10 @@ var registrationNumberTypeListed = `WITH entry AS (
           FROM entry
      )`
 
-// registrationNumberTypeRead：q 覆盖国家 / 地区、类型代码与类型名称——登记表单挑候选时认的就是这三格。
+// registrationNumberTypeRead：q 覆盖国家 / 地区、类型代码与类型名称——登记表单挑候选时认的就是这几格。
 var registrationNumberTypeRead = catalogueRead[ports.RegistrationNumberTypeRow]{
 	binding: ports.RegistrationNumberTypePages.MustBind(cataloguepage.Columns{
-		Sorts: map[string]string{
-			"registeredAt": "recorded_at", "effectiveFrom": "effective_from", "countryCode": "country_code",
-		},
+		Sorts:    map[string]string{"registeredAt": "recorded_at"},
 		Identity: []string{"country_code", "type_code"},
 		Filters:  map[string]string{"status": "status", "layer": "layer", "countryCode": "country_code"},
 		Keyword:  []string{"country_code", "type_code", "type_name"},
@@ -86,13 +84,9 @@ func scanRegistrationNumberType(rows pgx.Rows) (ports.RegistrationNumberTypeRow,
 	return row, nil
 }
 
-func registrationNumberTypePosition(row ports.RegistrationNumberTypeRow, sortField string) cataloguepage.Position {
-	value := row.CountryCode
-	switch sortField {
-	case "registeredAt":
-		value = cataloguepage.FormatInstant(row.RegisteredAt)
-	case "effectiveFrom":
-		value = cataloguepage.FormatInstant(row.EffectiveFrom)
+func registrationNumberTypePosition(row ports.RegistrationNumberTypeRow, _ string) cataloguepage.Position {
+	return cataloguepage.Position{
+		Value:    cataloguepage.FormatInstant(row.RegisteredAt),
+		Identity: []string{row.CountryCode, row.TypeCode},
 	}
-	return cataloguepage.Position{Value: value, Identity: []string{row.CountryCode, row.TypeCode}}
 }

@@ -564,7 +564,7 @@ var customerServiceRuleRead = catalogueRead[ports.CustomerServiceRuleRow]{
 		        responsible_party_id, rule_scope_ref, rule_registered_at, claim_deadlines, minimum_materials`,
 	scan: scanCustomerServiceRule,
 	position: func(row ports.CustomerServiceRuleRow, sortField string) cataloguepage.Position {
-		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
 	},
 }
 

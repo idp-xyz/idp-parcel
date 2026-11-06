@@ -1140,7 +1140,7 @@ type PartyRelationshipRow struct {
 //
 // 上列对象是**最新修订**而不是全部修订：目录回答「这个租户今天有哪些身份、各处哪格」，
 // 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒，判据同 ServiceProductCatalogueRead；
-// 三个目录方法收端点按 BusinessPartyPages、GroupLegalEntityPages、PartyRelationshipPages 解出的查询对象，
+// 各目录方法收端点按 BusinessPartyPages、GroupLegalEntityPages、PartyRelationshipPages 解出的查询对象，
 // 答一页（ADR-0144），空册答空页。
 //
 // 证据面另有出口：嵌入的 LegalEntityRevisionHistoryRead 与 BusinessPartyRevisionHistoryRead 各按单个
@@ -1936,7 +1936,7 @@ type SupplierAgreementCatalogueRow struct {
 // 目录查阅」从代码里读不出来,而那正是封闭集要表达的东西(判据同
 // CommercialPolicyCatalogueRead 的「正文表落库时按封闭集扩方法」)。
 //
-// 租户在签名上、Limit 非正拒,判据同 ServiceProductCatalogueRead;两个列表方法各收端点按
+// 租户在签名上、Limit 非正拒,判据同 ServiceProductCatalogueRead;合同与协议的列表方法各收端点按
 // CustomerContractPages、SupplierAgreementPages 解出的查询对象,答一页(ADR-0144),空册答空页。
 //
 // 两类各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，同一段取数

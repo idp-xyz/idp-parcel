@@ -20,16 +20,17 @@ import (
 // 的列，条件只能落在那之后。各册的声明在 ports.BusinessPartyPages 等处。
 var _ ports.PartyIdentityCatalogueRead = (*OperationsCatalogue)(nil)
 
-// identityNumbersText 把 jsonb 号数组里的号抽成以空格分隔的一段文本，供 q 覆盖：整列转文本会让检索词命中键名（typeCode、
-// number），所以只抽值。alias 是带 lifetime_registration_numbers 列的那一行。
+// identityNumbersText 把 jsonb 号数组里的号抽成一段文本供 q 覆盖：整列转文本会让检索词命中键名（typeCode、number）与引号，
+// 所以只抽值。各号之间用 chr(31) 隔开——检索词里打不出这个字符，带空格的检索词就不会把相邻两个号拼成一次命中。alias 是带
+// lifetime_registration_numbers 列的那一行。
 func identityNumbersText(alias string) string {
-	return `(SELECT string_agg(entry.value ->> 'number', ' ')
+	return `(SELECT string_agg(entry.value ->> 'number', chr(31))
 		          FROM jsonb_array_elements(` + alias + `.lifetime_registration_numbers) AS entry(value))`
 }
 
 // businessPartyListed 是业务参与方总数与取页共用的前半句。它不左连接任何东西：名称就在本册行上。status 的导出与法人册、
-// 客户账户册逐字相同（停用判断在先，其次生效时点），因为三册用的是同一个 domain.IdentityLifecycle。外部编码照管理台的
-// 检索口径抽成「系统 编码」一段，q 写系统名加编码也命中。
+// 客户账户册逐字相同（停用判断在先，其次生效时点），因为它们用的是同一个 domain.IdentityLifecycle。外部编码照管理台的
+// 检索口径每项抽成「系统 编码」一段，q 写系统名加编码也命中；项与项之间用 chr(31) 隔开（理由同 identityNumbersText）。
 var businessPartyListed = `WITH party AS (
         SELECT DISTINCT ON (party_id) *
           FROM party_commercial.business_party_registration
@@ -48,12 +49,12 @@ var businessPartyListed = `WITH party AS (
                    ELSE 'REGISTERED'
                END AS status,
                ` + identityNumbersText("party") + ` AS registration_numbers,
-               (SELECT string_agg(concat_ws(' ', entry.value ->> 'system', entry.value ->> 'code'), ' ')
+               (SELECT string_agg(concat_ws(' ', entry.value ->> 'system', entry.value ->> 'code'), chr(31))
                   FROM jsonb_array_elements(party.external_references) AS entry(value)) AS external_codes
           FROM party
      )`
 
-// businessPartyRead：q 覆盖参与方号、名称与行上的识别信息（终身注册号、外部编码），即管理台今天检索的那几格。
+// businessPartyRead：q 覆盖参与方号、名称与行上的识别信息（终身注册号、外部编码），即管理台检索的那几格。
 var businessPartyRead = catalogueRead[ports.BusinessPartyRow]{
 	binding: ports.BusinessPartyPages.MustBind(cataloguepage.Columns{
 		Sorts:    map[string]string{"registeredAt": "recorded_at", "effectiveFrom": "effective_from", "partyId": "party_id"},
@@ -153,7 +154,7 @@ var groupLegalEntityListed = `WITH entity AS (
           LEFT JOIN party ON party.party_id = entity.party_id
      )`
 
-// groupLegalEntityRead：q 覆盖法人号、所钉参与方的标识与名称、注册国家与终身注册号，即管理台今天检索的那几格。
+// groupLegalEntityRead：q 覆盖法人号、所钉参与方的标识与名称、注册国家与终身注册号，即管理台检索的那几格。
 var groupLegalEntityRead = catalogueRead[ports.GroupLegalEntityRow]{
 	binding: ports.GroupLegalEntityPages.MustBind(cataloguepage.Columns{
 		Sorts: map[string]string{
@@ -262,7 +263,7 @@ var partyRelationshipListed = `WITH relation AS (
           LEFT JOIN party AS counterparty ON counterparty.party_id = relation.counterparty_party_id
      )`
 
-// partyRelationshipRead：q 覆盖关系号与双方的标识、名称，即管理台今天检索的那几格（角色与状态是筛选维）。
+// partyRelationshipRead：q 覆盖关系号与双方的标识、名称，即管理台检索的那几格（角色与状态是筛选维）。
 var partyRelationshipRead = catalogueRead[ports.PartyRelationshipRow]{
 	binding: ports.PartyRelationshipPages.MustBind(cataloguepage.Columns{
 		Sorts: map[string]string{

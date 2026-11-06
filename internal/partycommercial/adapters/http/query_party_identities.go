@@ -50,7 +50,7 @@ const (
 // 导出、关系状态是登记事实），折进一个带 kind 的入口会让两种状态在同一响应形状里
 // 相互冒充。
 //
-// 三个目录端点的查询参数（after、sort、筛选维与 q）各按本册声明解码（ports.BusinessPartyPages、
+// 各目录端点的查询参数（after、sort、筛选维与 q）各按本册声明解码（ports.BusinessPartyPages、
 // GroupLegalEntityPages、PartyRelationshipPages；ADR-0144 决定六），在 Intake 之后：渠道未配置时对一切请求同答 403
 // （ADR-0055 决定三）。
 

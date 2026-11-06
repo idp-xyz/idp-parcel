@@ -19,8 +19,8 @@ import (
 // ports.ProductChannelMappingPages。
 var _ ports.ProductChannelMappingCatalogueRead = (*OperationsCatalogue)(nil)
 
-// productChannelMappingListed 是目录总数与取页共用的前半句。渠道绑定照 q 的口径抽成以空格分隔的引用（只抽值，同
-// identityNumbersText 的理由）；显式“未配置”的空数组抽出来是 NULL，不命中任何检索词。
+// productChannelMappingListed 是目录总数与取页共用的前半句。渠道绑定照 q 的口径抽成以 chr(31) 分隔的引用（只抽值、
+// 分隔符的取法同 identityNumbersText）；显式“未配置”的空数组抽出来是 NULL，不命中任何检索词。
 var productChannelMappingListed = `WITH mapping AS (
         SELECT DISTINCT ON (mapping_id) *
           FROM party_commercial.product_channel_mapping_registration
@@ -32,17 +32,15 @@ var productChannelMappingListed = `WITH mapping AS (
                mapping.channel_refs, mapping.basis_ref,
                mapping.effective_starts_at, mapping.effective_ends_at,
                mapping.recorded_at,
-               (SELECT string_agg(channel.value, ' ')
+               (SELECT string_agg(channel.value, chr(31))
                   FROM jsonb_array_elements_text(mapping.channel_refs) AS channel(value)) AS channel_text
           FROM mapping
      )`
 
-// productChannelMappingRead：q 覆盖映射标识、服务产品与版本、依据与渠道引用，即管理台今天检索的那几格。
+// productChannelMappingRead：q 覆盖映射标识、服务产品与版本、依据与渠道引用，即管理台检索的那几格。
 var productChannelMappingRead = catalogueRead[ports.ProductChannelMappingRow]{
 	binding: ports.ProductChannelMappingPages.MustBind(cataloguepage.Columns{
-		Sorts: map[string]string{
-			"registeredAt": "recorded_at", "effectiveStartsAt": "effective_starts_at", "mappingId": "mapping_id",
-		},
+		Sorts:    map[string]string{"registeredAt": "recorded_at"},
 		Identity: []string{"mapping_id"},
 		Keyword:  []string{"mapping_id", "product_object_id", "product_version_label", "basis_ref", "channel_text"},
 	}),
@@ -95,15 +93,8 @@ func scanProductChannelMapping(rows pgx.Rows) (ports.ProductChannelMappingRow, e
 	return row, nil
 }
 
-func productChannelMappingPosition(row ports.ProductChannelMappingRow, sortField string) cataloguepage.Position {
-	value := row.MappingID
-	switch sortField {
-	case "registeredAt":
-		value = cataloguepage.FormatInstant(row.RegisteredAt)
-	case "effectiveStartsAt":
-		value = cataloguepage.FormatInstant(row.EffectiveStartsAt)
-	}
-	return cataloguepage.Position{Value: value, Identity: []string{row.MappingID}}
+func productChannelMappingPosition(row ports.ProductChannelMappingRow, _ string) cataloguepage.Position {
+	return cataloguepage.Position{Value: cataloguepage.FormatInstant(row.RegisteredAt), Identity: []string{row.MappingID}}
 }
 
 // ListProductChannelMappingRevisions 交回一个映射在登记册上的全部修订，按修订号升序。
