@@ -93,6 +93,9 @@ var AdmissionJudgementPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 //
 // 一个对象一行（UnadmittedObjects 头注），行标识是对象。缺省序是动作时点升序，卡得最久的在前。answer 的词表只收不过门的
 // 那几格：过门的答复进不了这一册，收进词表只会让一个恒为空的筛选看起来合法。
+//
+// 排序值是对象最晚那一刻的动作时点，只增不减：翻页途中一个对象被重新判断、仍卡着，它就挪到队尾，可能在后面的页再出现一次；
+// 仍卡着的对象不会漏，取的照旧是严格排在游标之后的行（ADR-0144 决定一）。为这一点改答复体不值得——重出的那一行是它的新位置。
 var UnadmittedObjectPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-unadmitted-objects",
 	Sorts: []cataloguepage.SortDimension{

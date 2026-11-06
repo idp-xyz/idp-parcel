@@ -1,7 +1,7 @@
 # 09 customs-compliance 十六册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-09-customs`，基 `d48c5b130`；完成记录见文末）。迁移编号 customs-compliance `0033`（进 main 时按 tip 重核）
+Status: in-progress——非作者评审（钉 `2f952629a`）无阻断，三条非阻断已由派单方处理，待进 main（分支 `cursor/crpr-09-customs`，基 `d48c5b130`；完成记录与评审记录见文末）。迁移编号 customs-compliance `0033`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/customscompliance/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/customs_compliance` 的一条新迁移（索引）。
@@ -100,11 +100,13 @@ Blocked by: 01
 2. **决胜键改同向**。解释规则、口岸目录、申报路径目录迁移前是首列升序、`applies_from DESC`，迁移后 `applies_from` 随首列升序：同一键下有多版时旧版排在前，迁移前是新版在前。管理台规则页与口岸路径页按答复次序上列、不在前端重排，这几行的上下次序在页面上看得见。动作准入判断册迁移前是 `judged_at DESC, judgement_id`（标识升序），迁移后标识随首列倒序，只在判断时刻完全相同时次序不同。
 3. **行标识不是「主键去掉租户」的**。关务案件取唯一约束 `customs_case_id_unique` 里的案件标识，不取主键（辖区、方向、程序、义务）：主键是「同一法律行为一案」的幂等键，案件标识在租户内同样唯一，又是迁移前 `ORDER BY` 的唯一列和答复里引用案件的那一格。提交版本与税费付款核对在主键各段之外插一段固定时刻、核对时刻：版本号随机签发、版本指纹是内容摘要，都不带先后，插上时刻才保住迁移前的次序；这两册因此各新建一条索引，主键不动。
 4. **按包裹、事件计量的大册**。动作准入判断册（每次判断一行）、外部监管结果（每条回执一行）、提交版本（每个申报单元逐版一行）照给精确 total，超出租户级规模时回 ADR-0144 改成 `null`。卡关对象每次取页都从全部判断派生一遍，积压大时取页与计数的代价随判断条数涨（见未验）。
-5. **卡关对象**。答复体嵌统一结果类型：`ports.UnadmittedObjects` 是 `cataloguepage.Result` 外加 `Count`，Next 与 Total 都来自 `Result`。`unadmittedCount` 是整个队列的积压数，不随筛选与 q 变，与本页同一条语句求，本页为空时另问一句只数件数的；`page.total` 是这一组条件下的件数；`truncated` 即 `page.next` 不为 `null`（`TestTheUnadmittedCountIsTheWholeBacklogWhilePageTotalFollowsTheConditions`）。对象的排序值是它最近一次判断的动作时点：翻页期间同一对象再被判断会挪到后面，可能在后面的页重出一次。
+5. **卡关对象**。答复体嵌统一结果类型：`ports.UnadmittedObjects` 是 `cataloguepage.Result` 外加 `Count`，Next 与 Total 都来自 `Result`。`unadmittedCount` 是整个队列的积压数，不随筛选与 q 变，与本页同一条语句求，本页为空时另问一句只数件数的；`page.total` 是这一组条件下的件数；`truncated` 即 `page.next` 不为 `null`（`TestTheUnadmittedCountIsTheWholeBacklogWhilePageTotalFollowsTheConditions`）。对象的排序值是它最近一次判断的动作时点：翻页期间同一对象再被判断会挪到后面，可能在后面的页重出一次；这一点也写进了 `UnadmittedObjectPages` 的声明头注。
 6. **从「被忽略」变「答 400」的参数**。迁移前各口只读 `registry` 与窄口参数，其余查询参数一概静默忽略；迁移后集外键答 400（ADR-0144 决定四）。受影响的有请求自报的 `tenant`、`limit`——旧用例原在查询串里带它们并断言被忽略，改为不带、断言租户与页大小取自接入面，拒绝由 `TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration` 逐册证；还有案件登记口的 `cutoff` 与口岸路径口的时点参数，两口头注早裁定不收，迁移前同样被静默忽略。
 7. **registry 校验挪到 Intake 之后**。未配置的渠道上，缺 registry 或集外 registry 迁移前答 400，迁移后与合规一问同答 403；配置了的渠道上照旧答 400。
 8. **total 与本页是两条语句**（卡关对象除外）。没开只读快照，两次读之间有写入时 total 与本页可能差一；卡关对象的两个件数与本页同一条语句求。
 9. **`93bd03a1c` 的提交说明**写的是先解码后 Intake，与现行口径相反；`9f7371418` 改正并在提交说明里写明。
+10. **就绪判断与提交授权没放状态维（偏离 ADR-0144 决定四）**：两册有「失效与否」这一状态，答复体却没有状态一格，筛选维无名可取。今天没有调用方按状态筛这两册，不是回归；
+   连同 04、05 同类的两处收进 16 号票统一处理（能在 SQL 里由本册的行导出就补上，导不出就回 ADR-0144 改决定四的适用范围），不在本票豁免。
 
 **未验**
 
@@ -112,3 +114,15 @@ Blocked by: 01
 - 管理台没在浏览器里点过；管理台改造归 14。
 - 并发写入下 total 与本页的一致性没有用例。
 - 全量 `scripts/test-full.sh` 由推送方在重放后的 tip 上跑。
+
+## 评审记录
+
+**评审 ← 子代理 · 钉 `2f952629a`**：两轴无阻断。
+
+| 评审意见 | 处理 |
+|---|---|
+| 非阻断：就绪判断、提交授权有「失效与否」状态却没放状态维，等于在代码里豁免 ADR-0144 决定四，应交 ADR 定 | 判断项 10；收进 16 号票，与 04、05 同类两处一并处理 |
+| 非阻断：三处新写的 `grantedCatalogueIntake{tenant: "TENANT-1"}` 不带 `SYN-` | 三条 registry 拒绝用例里改为 `SYN-TENANT-1`；旧用例里的旧夹具不回改 |
+| 非阻断：卡关对象翻页时被重判的对象可能在后面的页重出一次，应写进声明头注 | 补进 `UnadmittedObjectPages` 头注 |
+
+修订由派单方在本分支上做（作者会话已收工），只动上面三处与本票面；评审取证用的探针照旧有效，未另起复核。
