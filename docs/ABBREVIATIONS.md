@@ -19,10 +19,8 @@
 | `CC` | `customs-compliance` | 关务与贸易合规 | [CONTEXT.md](./domain/customs-compliance/CONTEXT.md) |
 | `VE` | `visibility-exception` | 全程追踪与异常 | [CONTEXT.md](./domain/visibility-exception/CONTEXT.md) |
 | `SA` | `settlement-accounting` | 结算与经营核算 | [CONTEXT.md](./domain/settlement-accounting/CONTEXT.md) |
-| `CR` | `collection-remittance` | 代收与清分 | 仅由[上下文地图](./domain/CONTEXT-MAP.md)定义 |
+| `CR` | `collection-remittance` | 代收与清分 | [CONTEXT.md](./domain/collection-remittance/CONTEXT.md) |
 | `WF` | `warehouse-fulfillment` | 仓配履约 | [CONTEXT.md](./domain/warehouse-fulfillment/CONTEXT.md) |
-
-`CR` 没有自己的 `CONTEXT.md`：首发已确认不包含代收货款，按「不建立只有标题的空文档」这条不创建。
 
 ## Go 包前缀命名法
 
@@ -62,7 +60,7 @@
 
 `PAR-` 与 `UC-`/`AT-` 的第二段都是上下文缩写，但取值范围不同：`PAR-` 用的是参数分类（`COM`、`NET`、`INT`、`CUS`、`NFR`、`VIS`、`GOV`、`SET`），不是限界上下文。
 
-`UC-` 目前覆盖八个上下文（`PC`、`PS`、`NR`、`NO`、`TF`、`CC`、`VE`、`SA`）。`parcel-pricing` 与 `collection-remittance` 没有 `UC-*`。
+`UC-` 覆盖哪些上下文见[应用用例索引](./application/README.md)。
 
 ### 两个容易混的登记册
 

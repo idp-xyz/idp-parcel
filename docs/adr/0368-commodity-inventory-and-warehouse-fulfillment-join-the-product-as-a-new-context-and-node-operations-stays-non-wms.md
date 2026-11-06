@@ -130,4 +130,4 @@ Status: Accepted（2026-11-06，用户以产品 owner 身份在会话问题卡�
 - [外部 WMS 协作缝设计备忘](../design/external-wms-collaboration-seams-design-note.md)：维持现边界时与外部 WMS 的协作缝
 - [IDP Parcel 仓储与履约 DDD 设计评审 V0.4（参考）](../reference/IDP_Parcel_DDD_Design_Review_V0.4.html)：起因之一，非权威
 - [上线线与冻结清单](../../.scratch/launch-line-freeze-2026-10-27.md)
-- [ADR-0370：仓配出库按发运方式分本产品网络、自备面单与自提](./0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md)：部分停用决定四首条的适用范围（只对发运方式为本产品网络的出库请求成立），回答决定四末条与越权风险点 6
+- [ADR-0370：仓配履约的出库请求按发运方式分本产品网络、自备面单与自提](./0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md)：部分停用决定四首条的适用范围（只对发运方式为本产品网络的出库请求成立），回答决定四末条与越权风险点 6
