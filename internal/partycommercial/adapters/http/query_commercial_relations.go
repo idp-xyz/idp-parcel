@@ -58,7 +58,7 @@ const (
 // 独立的页,照 /commercial-service-products 的先例各配一个入口。把两张页折进一个带
 // kind 的入口,会让「页面加一个页签」和「产品多一类目录」在契约上长成同一个动作。
 
-// 两个列表端点的查询参数各按本册声明解码(ports.CustomerContractPages、SupplierAgreementPages;ADR-0144 决定六),
+// 合同与协议列表端点的查询参数各按本册声明解码(ports.CustomerContractPages、SupplierAgreementPages;ADR-0144 决定六),
 // 在 Intake 之后:渠道未配置时对一切请求同答 403(ADR-0055 决定三)。
 
 // NewQueryCustomerContractsEndpoint 交回客户与合同目录查阅的 HTTP 入口

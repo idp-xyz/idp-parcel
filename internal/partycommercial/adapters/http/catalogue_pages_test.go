@@ -142,7 +142,7 @@ func (reader *pagingProductChannelMappingReader) ListProductChannelMappingRevisi
 	return nil, nil
 }
 
-// pagingVersionShellReader 同时是服务产品与商业关系两个读口：三册都是版本壳，行标识都是对象与版本两段。
+// pagingVersionShellReader 同时是服务产品与商业关系的读口：这几册都是版本壳，行标识都是对象与版本。
 type pagingVersionShellReader struct {
 	pageRecorder
 }
@@ -192,8 +192,8 @@ func (*pagingVersionShellReader) FindSupplierAgreement(
 	return ports.SupplierAgreementCatalogueRow{}, false, nil
 }
 
-// pagingPolicyReader 是策略目录九种册子的读口。各册行标识的段数照本册声明：接受前财务控制声明指名合同两段，时点锚声明多
-// 判断类型一段。
+// pagingPolicyReader 是策略目录各种册子的读口。各册行标识照本册声明：接受前财务控制声明是合同对象与合同版本，时点锚声明
+// 另带判断类型。
 type pagingPolicyReader struct {
 	pageRecorder
 }
@@ -400,7 +400,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 				return commercialhttp.NewQueryRegistrationNumberTypesEndpoint(intake, numberTypes)
 			},
 			recorder: &numberTypes.pageRecorder, collection: "registrationNumberTypes",
-			defaultSort: "-registeredAt", badSort: "typeName", badFilter: "layer=CORPORATE",
+			defaultSort: "-registeredAt", badSort: "countryCode", badFilter: "layer=CORPORATE",
 			goodQuery: "layer=IDENTITY&countryCode=XA", changedQuery: "layer=PROFILE&countryCode=XA",
 		},
 		{
@@ -409,7 +409,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 				return commercialhttp.NewQueryProductChannelMappingsEndpoint(intake, mappings)
 			},
 			recorder: &mappings.pageRecorder, collection: "mappings",
-			defaultSort: "-registeredAt", badSort: "productObjectId",
+			defaultSort: "-registeredAt", badSort: "mappingId",
 			goodQuery: "q=SYN-PRODUCT", changedQuery: "q=SYN-CH",
 		},
 		{
@@ -418,7 +418,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 				return commercialhttp.NewQueryServiceProductsEndpoint(intake, shells)
 			},
 			recorder: &shells.pageRecorder, collection: "products",
-			defaultSort: "-publishedAt", badSort: "registeredAt", badFilter: "status=DRAFT",
+			defaultSort: "-publishedAt", badSort: "effectiveStartsAt", badFilter: "status=DRAFT",
 			goodQuery: "status=EFFECTIVE", changedQuery: "status=RETIRED",
 		},
 		{
@@ -451,7 +451,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 		},
 		{
 			name: "价格政策", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
-			selector: "kind=PRICE_POLICY", defaultSort: "-registeredAt", badSort: "declaredAt",
+			selector: "kind=PRICE_POLICY", defaultSort: "-registeredAt", badSort: "effectiveStartsAt",
 			badFilter: "direction=OUTBOUND", goodQuery: "direction=SELL", changedQuery: "direction=BUY&direction=SELL",
 		},
 		{
@@ -491,8 +491,8 @@ func pagedEndpointCases() []pagedEndpointCase {
 				return commercialhttp.NewQueryPublicationDraftsEndpoint(intake, drafts)
 			},
 			recorder: &drafts.pageRecorder, collection: "drafts",
-			defaultSort: "-submittedAt", badSort: "approvedAt", badFilter: "status=PUBLISHED",
-			goodQuery: "status=PENDING_APPROVAL&kind=CREDIT_POLICY", changedQuery: "status=APPROVED&kind=CREDIT_POLICY",
+			defaultSort: "-submittedAt", badSort: "objectId", badFilter: "status=PUBLISHED",
+			goodQuery: "status=PENDING_APPROVAL&q=SYN-DRAFT", changedQuery: "status=APPROVED&q=SYN-DRAFT",
 		},
 	}
 }
@@ -540,7 +540,7 @@ func getPaged(t *testing.T, endpoint http.Handler, selector, rawQuery string) (*
 	return recorder, problem
 }
 
-// Covers: 完成判据「答复带 page，size 等于 Intake 的页大小」与「换条件拿旧游标答 400」——page 三格齐在（ADR-0144 决定五），
+// Covers: 完成判据「答复带 page，size 等于 Intake 的页大小」与「换条件拿旧游标答 400」——page 块各格齐在（ADR-0144 决定五），
 // 读口收到的第一页查询是本册缺省序、没有游标；游标带着上一次的条件摘要，换了条件还拿它答 400，条件没变则把位置交给读口。
 func TestMigratedCatalogueEndpointsCarryThePage(t *testing.T) {
 	limit := synCatalogueQuery(t).Limit

@@ -15,8 +15,12 @@ import (
 
 // 本文件对真实 PostgreSQL 证以版本壳为行的各册按 ADR-0144 分页（票 catalogue-read-pagination-rollout/11）：服务产品、客户
 // 合同、供应商协议，与商业策略目录里授权规则、客户服务规则、接受前财务控制策略那几种 kind。翻页中途发布新版本不重不漏、空册
-// 答空页；status 按折进退役之后的位置筛，q 覆盖对象、版本、范围与各册另覆盖的正文格，% 按字面。夹具租户与范围沿用本包的
-// tenant-1 / scope-1，其余取值一律 SYN-。
+// 答空页；status 按折进退役之后的位置筛，q 覆盖对象、版本、范围与各册另覆盖的正文格，% 按字面。夹具取值一律 SYN-。
+
+const (
+	shellPageTenant = "SYN-TENANT-01"
+	shellPageScope  = "SYN-SCOPE-1"
+)
 
 // shellCatalogueCase 是版本壳一册在本文件里的样子。行抹成「对象/版本」一格，各册同一张表断言；content 给 LIVE 那一版登本册的
 // 正文，让 q 有一格只在正文里出现的串可命中。q 不覆盖正文的册 content 留空，只证壳上那几格。
@@ -70,7 +74,7 @@ func shellCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue, t
 				agreement, err := domain.NewSupplierAgreement(version,
 					pcValue(t, domain.NewPartyID, "SYN-SUPPLIER-LIVE"),
 					pcValue(t, domain.NewLegalEntityReference, "SYN-LEGAL-1"),
-					pcScope(t),
+					version.Scope(),
 					pcValue(t, domain.NewPricingPlanReference, "SYN-PLAN-BUY-1"),
 					version.Effective())
 				if err != nil {
@@ -98,7 +102,7 @@ func shellCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue, t
 				rule, err := domain.NewCustomerServiceRuleVersion(version,
 					domain.CustomerServiceRuleAppliesToCustomerContract(pcValue(t, domain.NewCommercialObjectID, "SYN-CONTRACT-LIVE")),
 					pcValue(t, domain.NewPartyID, "SYN-RESPONSIBLE-1"),
-					pcScope(t),
+					version.Scope(),
 					[]domain.ClaimDeadlineRule{deadlineRule(t, domain.FirstClaimDeadline, "SYN-EVENT-DELIVERED", 30, "SYN-CALENDAR-1")},
 					nil)
 				if err != nil {
@@ -135,7 +139,7 @@ func shellLister[Row any](
 	}
 }
 
-// shellVersionFixture 经领域重建门造一份 tenant-1 的 kind 类版本：在 publishedAt 发布，从 cutRowPredecessorStart 起至
+// shellVersionFixture 经领域重建门造一份合成租户的 kind 类版本：在 publishedAt 发布，从 cutRowPredecessorStart 起至
 // cutRowEnd。已发布未生效的版本不带生效时刻（重建门会拒）；客户合同指名 SYN-RULES-1，合同正文挂的规则包要与之一致。
 func shellVersionFixture(
 	t *testing.T,
@@ -158,11 +162,11 @@ func shellVersionFixture(
 		t.Fatalf("批准依据：%v", err)
 	}
 	spec := domain.RehydrateCommercialVersionSpec{
-		TenantID:      pcTenant(t, "tenant-1"),
+		TenantID:      pcTenant(t, shellPageTenant),
 		Kind:          kind,
 		ObjectID:      pcValue(t, domain.NewCommercialObjectID, objectID),
 		Version:       pcValue(t, domain.NewCommercialVersionLabel, label),
-		Scope:         pcScope(t),
+		Scope:         pcValue(t, domain.NewCommercialScopeReference, shellPageScope),
 		ContentDigest: pcValue(t, domain.NewCommercialContentDigest, "SYN-DIGEST-"+objectID+"-"+label),
 		Effective:     interval,
 		Status:        status,
@@ -203,7 +207,7 @@ func TestVersionShellCataloguesPageWithoutRepeatsOrGapsWhileVersionsArrive(t *te
 		objectID, _, _ := strings.Cut(label, "/")
 		return objectID
 	}
-	for _, shell := range shellCatalogueCases(t, catalogue, pcTenant(t, "tenant-1")) {
+	for _, shell := range shellCatalogueCases(t, catalogue, pcTenant(t, shellPageTenant)) {
 		assertPagesWithoutRepeatsOrGaps(t, shell.pages, shell.list, func(id string) {
 			published = published.Add(time.Minute)
 			fixture.save(t, shellVersionFixture(t, shell.kind, id, "v1", published, domain.CommercialVersionEffective))
@@ -220,7 +224,7 @@ func TestVersionShellCataloguesPageWithoutRepeatsOrGapsWhileVersionsArrive(t *te
 func TestVersionShellCataloguesFilterTheFoldedStatusAndSearch(t *testing.T) {
 	fixture := newCutFixture(t)
 	catalogue := shellCatalogueOf(t, fixture)
-	for _, shell := range shellCatalogueCases(t, catalogue, pcTenant(t, "tenant-1")) {
+	for _, shell := range shellCatalogueCases(t, catalogue, pcTenant(t, shellPageTenant)) {
 		at := func(minutes int) time.Time { return publishedAtRow.Add(time.Duration(minutes) * time.Minute) }
 		pending := shellVersionFixture(t, shell.kind, shell.prefix+"PENDING", "v1", at(1), domain.CommercialVersionPublished)
 		live := shellVersionFixture(t, shell.kind, shell.prefix+"LIVE", "v1", at(2), domain.CommercialVersionEffective)

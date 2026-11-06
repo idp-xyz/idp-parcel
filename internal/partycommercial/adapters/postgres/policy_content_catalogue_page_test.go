@@ -13,8 +13,8 @@ import (
 
 // 本文件对真实 PostgreSQL 证商业策略目录里以正文为行的各册按 ADR-0144 分页（票 catalogue-read-pagination-rollout/11）：
 // 接单规则包、接受前财务控制声明、价格政策、结算政策、信用政策与时点锚声明。翻页中途登记新正文不重不漏、空册答空页；筛选按
-// 领域原词比，q 覆盖各册声明的那几格，% 按字面。以版本壳为行的那几种 kind 在 version_shell_catalogue_page_test.go。夹具租户与
-// 范围沿用本包的 tenant-1 / scope-1，其余取值一律 SYN-。
+// 领域原词比，q 覆盖各册声明的那几格，% 按字面。以版本壳为行的那几种 kind 在 version_shell_catalogue_page_test.go。夹具取值
+// 一律 SYN-，正文的范围取拥有版本自己的范围。
 
 // contentCatalogueCase 是正文一册在本文件里的样子。行抹成「拥有对象/版本」一格（时点锚声明再接判断类型），各册同一张表断言。
 // row 登一行最简的正文，连同它挂靠的已生效版本；seed 登筛选与 q 用例的那几行，cases 按读面次序列出期望。夹具的对象号随登记
@@ -52,9 +52,7 @@ func contentCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue,
 				{"q=SYN-CONTRACT-3", "SYN-RULES-C/v1"},
 				{"q=SYN-LE-2", "SYN-RULES-B/v1"},
 				{"sort=objectId", "SYN-RULES-A/v1,SYN-RULES-B/v1,SYN-RULES-C/v1"},
-				// 三版生效起点相同，按起点排即全由行标识收尾。
-				{"sort=effectiveStartsAt", "SYN-RULES-A/v1,SYN-RULES-B/v1,SYN-RULES-C/v1"},
-				{"sort=-effectiveStartsAt&q=SYN-LE-1", "SYN-RULES-C/v1,SYN-RULES-A/v1"},
+				{"sort=-objectId&q=SYN-LE-1", "SYN-RULES-C/v1,SYN-RULES-A/v1"},
 				{"q=scope-1&sort=objectId", "SYN-RULES-A/v1,SYN-RULES-B/v1,SYN-RULES-C/v1"},
 				{"q=%25", ""},
 			},
@@ -127,7 +125,7 @@ func contentCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue,
 				{"q=syn-customer-1", "SYN-SETTLEMENT-C/v1,SYN-SETTLEMENT-A/v1"},
 				{"q=SYN-CHARGE-FREIGHT&method=TERMS", "SYN-SETTLEMENT-B/v1"},
 				{"q=SYN-CONTRACT-1/v1&sort=objectId", "SYN-SETTLEMENT-A/v1,SYN-SETTLEMENT-B/v1,SYN-SETTLEMENT-C/v1"},
-				{"sort=-effectiveStartsAt&method=TERMS", "SYN-SETTLEMENT-C/v1,SYN-SETTLEMENT-B/v1"},
+				{"sort=-objectId&method=TERMS", "SYN-SETTLEMENT-C/v1,SYN-SETTLEMENT-B/v1"},
 				{"q=%25", ""},
 			},
 		},
@@ -149,7 +147,7 @@ func contentCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue,
 				{"q=syn-level-finance", "SYN-CREDIT-C/v1,SYN-CREDIT-B/v1"},
 				{"q=SYN-LE-2", "SYN-CREDIT-B/v1"},
 				{"sort=objectId&q=SYN-CHARGE-EXPRESS", "SYN-CREDIT-A/v1,SYN-CREDIT-C/v1"},
-				{"sort=-effectiveStartsAt", "SYN-CREDIT-C/v1,SYN-CREDIT-B/v1,SYN-CREDIT-A/v1"},
+				{"sort=-objectId", "SYN-CREDIT-C/v1,SYN-CREDIT-B/v1,SYN-CREDIT-A/v1"},
 				{"q=%25", ""},
 			},
 		},
@@ -186,7 +184,7 @@ func contentCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue,
 	}
 }
 
-// policyContentOwner 登一份 tenant-1 的 kind 类已生效版本 v1，充当正文的拥有对象。
+// policyContentOwner 登一份合成租户的 kind 类已生效版本 v1，充当正文的拥有对象。
 func policyContentOwner(t *testing.T, fixture cutFixture, kind domain.CommercialObjectKind, objectID string) domain.CommercialVersion {
 	t.Helper()
 	version := shellVersionFixture(t, kind, objectID, "v1", publishedAtRow, domain.CommercialVersionEffective)
@@ -201,7 +199,7 @@ func saveRulePackageBody(t *testing.T, fixture cutFixture, objectID, product, co
 		pcValue(t, domain.NewCommercialObjectID, product),
 		pcValue(t, domain.NewCommercialObjectID, contract),
 		pcValue(t, domain.NewLegalEntityReference, legalEntity),
-		pcScope(t),
+		owner.Scope(),
 		owner.Effective(),
 	)
 	if err != nil {
@@ -239,9 +237,12 @@ func saveControlDeclaration(t *testing.T, fixture cutFixture, objectID, basis st
 func savePricePolicyBody(t *testing.T, fixture cutFixture, objectID string, direction domain.PriceDirection, plan string) {
 	t.Helper()
 	version := policyContentOwner(t, fixture, domain.PriceRuleObject, objectID)
-	mustSavePricePolicy(t, fixture.transactor, t.Context(), fixture.publications,
-		pricePolicyOn(t, version, direction, direction, domain.PlanBindingConversionNone, plan),
-		direction, domain.PlanBindingConversionNone)
+	policy, err := domain.NewCommercialPricePolicy(version, direction, pcValue(t, domain.NewPricingPlanReference, plan),
+		direction, domain.PlanBindingConversionNone, version.Scope(), version.Effective())
+	if err != nil {
+		t.Fatalf("价格政策：%v", err)
+	}
+	mustSavePricePolicy(t, fixture.transactor, t.Context(), fixture.publications, policy, direction, domain.PlanBindingConversionNone)
 }
 
 func saveSettlementPolicyBody(
@@ -314,7 +315,7 @@ func TestPolicyContentCataloguesPageWithoutRepeatsOrGapsWhileContentArrives(t *t
 		objectID, _, _ := strings.Cut(label, "/")
 		return objectID
 	}
-	for _, content := range contentCatalogueCases(t, catalogue, pcTenant(t, "tenant-1")) {
+	for _, content := range contentCatalogueCases(t, catalogue, pcTenant(t, shellPageTenant)) {
 		assertPagesWithoutRepeatsOrGaps(t, content.pages, content.list, func(id string) {
 			content.row(t, fixture, id)
 		}, ownerOf, content.prefix)
@@ -329,7 +330,7 @@ func TestPolicyContentCataloguesPageWithoutRepeatsOrGapsWhileContentArrives(t *t
 func TestPolicyContentCataloguesFilterAndSearch(t *testing.T) {
 	fixture := newCutFixture(t)
 	catalogue := shellCatalogueOf(t, fixture)
-	for _, content := range contentCatalogueCases(t, catalogue, pcTenant(t, "tenant-1")) {
+	for _, content := range contentCatalogueCases(t, catalogue, pcTenant(t, shellPageTenant)) {
 		content.seed(t, fixture)
 		assertFilteredPages(t, content.name, content.pages, content.list, func(row string) string { return row }, content.cases)
 	}

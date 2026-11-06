@@ -342,7 +342,7 @@ var creditPolicyRead = catalogueRead[ports.CreditPolicyRow]{
 		        effective_starts_at, effective_ends_at, registered_at`,
 	scan: scanCreditPolicy,
 	position: func(row ports.CreditPolicyRow, sortField string) cataloguepage.Position {
-		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt)
 	},
 }
 

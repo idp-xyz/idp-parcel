@@ -10,7 +10,7 @@ import (
 )
 
 // 本文件是票 catalogue-read-pagination-rollout/11 各册真库用例共用的取页助手：查询对象一律按本册声明解出，与端点解的是
-// 同一份声明；迁移前只按 limit 上列的旧用例，改成缺省序的第一页、只看行。
+// 同一份声明。只看行、不翻页的用例取缺省序的第一页（firstPage）。
 
 func firstPage(t *testing.T, catalogue *cataloguepage.Catalogue) cataloguepage.Query {
 	t.Helper()
