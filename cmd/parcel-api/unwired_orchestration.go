@@ -2046,8 +2046,9 @@ func (unwiredCodSubledgers) ListCodSubledgers(
 	context.Context,
 	collectiondomain.TenantID,
 	int,
-) ([]collectionports.CodSubledgerCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[collectionports.CodSubledgerCatalogueRow], error) {
+	return cataloguepage.Result[collectionports.CodSubledgerCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // 结算与核算四页的读口占位（票 admin-skeleton-closure-batch/04）。四个类型而不是一个：

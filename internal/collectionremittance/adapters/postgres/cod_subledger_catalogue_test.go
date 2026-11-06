@@ -98,8 +98,8 @@ func (fixture *catalogueFixture) seedPosting(
 // Covers: ADR-0077 Decision 四 — 空册如实答空列表,不是错误也不折成未配置。
 func TestEmptyCodSubledgerRegisterAnswersAnEmptyList(t *testing.T) {
 	catalogue, _ := newCodSubledgerCatalogue(t)
-	entries, err := catalogue.ListCodSubledgers(t.Context(),
-		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListCodSubledgers(t.Context(),
+		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.CodSubledgerPages)))
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("空册上列走样:err=%v entries=%+v", err, entries)
 	}
@@ -148,8 +148,8 @@ func TestCodSubledgerCatalogueDerivesBalancesAndAttachesBatches(t *testing.T) {
 			 $1, 'COLLECTED', $2)`,
 		successionAt, catalogueBaseAt)
 
-	entries, err := catalogue.ListCodSubledgers(t.Context(),
-		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListCodSubledgers(t.Context(),
+		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.CodSubledgerPages)))
 	if err != nil {
 		t.Fatalf("上列分户账:%v", err)
 	}
@@ -192,8 +192,8 @@ func TestCodSubledgerCatalogueKeepsOpenedButUnpostedLedgersInPlace(t *testing.T)
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
 		"EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", 88000, "COLLECTION_FACT", "SYN-FACT-01")
 
-	entries, err := catalogue.ListCodSubledgers(t.Context(),
-		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListCodSubledgers(t.Context(),
+		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.CodSubledgerPages)))
 	if err != nil {
 		t.Fatalf("上列分户账:%v", err)
 	}
@@ -219,8 +219,8 @@ func TestCodSubledgerCatalogueTranscribesNegativeBalancesFaithfully(t *testing.T
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
 		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 500, "ALLOCATION", "SYN-INSTR-01")
 
-	entries, err := catalogue.ListCodSubledgers(t.Context(),
-		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListCodSubledgers(t.Context(),
+		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.CodSubledgerPages)))
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("上列分户账走样:err=%v entries=%+v", err, entries)
 	}
@@ -234,17 +234,17 @@ func TestCodSubledgerCatalogueTranscribesNegativeBalancesFaithfully(t *testing.T
 func TestCodSubledgerCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newCodSubledgerCatalogue(t)
 	tenant := catalogueValue(t, domain.NewTenantID, "tenant-a")
-	if _, err := catalogue.ListCodSubledgers(t.Context(), tenant, 0); err == nil {
+	if _, err := catalogue.ListCodSubledgers(t.Context(), tenant, 0, firstPage(t, ports.CodSubledgerPages)); err == nil {
 		t.Fatal("limit=0 的上列被接受了")
 	}
-	if _, err := catalogue.ListCodSubledgers(t.Context(), tenant, -1); err == nil {
+	if _, err := catalogue.ListCodSubledgers(t.Context(), tenant, -1, firstPage(t, ports.CodSubledgerPages)); err == nil {
 		t.Fatal("limit=-1 的上列被接受了")
 	}
 
 	fixture.seedSubledger(t, "tenant-a", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
 	fixture.seedSubledger(t, "tenant-a", "SYN-CUST-02", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
 	fixture.seedSubledger(t, "tenant-a", "SYN-CUST-03", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
-	entries, err := catalogue.ListCodSubledgers(t.Context(), tenant, 2)
+	entries, err := rowsOf(catalogue.ListCodSubledgers(t.Context(), tenant, 2, firstPage(t, ports.CodSubledgerPages)))
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("limit=2 却上列了 %d 行:err=%v", len(entries), err)
 	}

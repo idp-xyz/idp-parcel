@@ -1,7 +1,7 @@
 # 10 collection-remittance 一册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 collection-remittance `0005`（进 main 时按 tip 重核）
+Status: in-progress——2026-11-06 作者开工，分支 `cursor/crpr-10-collection`，基 `3a20b2bcc`。迁移编号预留 collection-remittance `0005`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/collectionremittance/{ports,adapters/http,adapters/postgres}` 里代收分户账的读端口、端点与读面及其测试；`cmd/parcel-api` 里这个读口的占位；
 `migrations/collection_remittance` 的一条新迁移（索引）。

@@ -13,6 +13,7 @@ import (
 	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var catalogueBaseAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
@@ -50,20 +51,27 @@ func (intake failingCatalogueIntake) IntakeCatalogueQuery(
 	return collectionhttp.CatalogueQuery{}, intake.err
 }
 
-// stubCodSubledgers 是读口替身:记录收到的键,交回预置的册子或故障。
+// stubCodSubledgers 是读口替身:记录收到的键与查询,交回预置的一页或故障。
 type stubCodSubledgers struct {
 	entries []ports.CodSubledgerCatalogueRow
+	next    string
+	total   int64
 	err     error
 
+	called    bool
 	gotTenant string
 	gotLimit  int
+	gotQuery  cataloguepage.Query
 }
 
 func (stub *stubCodSubledgers) ListCodSubledgers(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CodSubledgerCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.entries, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CodSubledgerCatalogueRow], error) {
+	stub.called = true
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.CodSubledgerCatalogueRow]{
+		Rows: stub.entries, Next: stub.next, Total: stub.total,
+	}, stub.err
 }
 
 // unreachableCodSubledgers 断言读口未被触到:传输形状的拒绝与未配置格都发生在读库
@@ -71,10 +79,10 @@ func (stub *stubCodSubledgers) ListCodSubledgers(
 type unreachableCodSubledgers struct{ t *testing.T }
 
 func (stub unreachableCodSubledgers) ListCodSubledgers(
-	context.Context, domain.TenantID, int,
-) ([]ports.CodSubledgerCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CodSubledgerCatalogueRow], error) {
 	stub.t.Fatal("a refused request reached the subledger register")
-	return nil, nil
+	return cataloguepage.Result[ports.CodSubledgerCatalogueRow]{}, nil
 }
 
 func subledgerRequest(t *testing.T, query string) *http.Request {
@@ -142,7 +150,8 @@ func TestUnconfiguredCodSubledgerIntakeRefusesEveryRequest(t *testing.T) {
 }
 
 // Covers: 逐格转写 — 四维键、保管依据、开立时间、余额最小单位计数串、记账笔数与
-// 批次数组原样透出;租户与页大小从作用域来,不采信请求自报;空批次以空数组在场。
+// 批次数组原样透出;租户与页大小从作用域来,查询串自报的租户与页大小是集外键,答 400
+// 且不带任何行(ADR-0144 决定四);空批次以空数组在场。
 func TestCodSubledgerListTranscribesLedgersVerbatim(t *testing.T) {
 	register := &stubCodSubledgers{
 		entries: []ports.CodSubledgerCatalogueRow{
@@ -182,14 +191,28 @@ func TestCodSubledgerListTranscribesLedgersVerbatim(t *testing.T) {
 	endpoint := collectionhttp.NewQueryCodSubledgersEndpoint(
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
 	)
+	refused := httptest.NewRecorder()
+	endpoint.ServeHTTP(refused, subledgerRequest(t, "?tenant=TENANT-9&limit=9999"))
+	if refused.Code != http.StatusBadRequest || problemCode(t, refused) != "MALFORMED_REQUEST" {
+		t.Fatalf("自报租户与页大小:status = %d body = %s,want 400 MALFORMED_REQUEST",
+			refused.Code, refused.Body.String())
+	}
+	var refusedFields map[string]json.RawMessage
+	if err := json.Unmarshal(refused.Body.Bytes(), &refusedFields); err != nil {
+		t.Fatalf("decode %s: %v", refused.Body.Bytes(), err)
+	}
+	if _, present := refusedFields["subledgers"]; present || register.called {
+		t.Fatalf("集外键的拒绝带出了行或问到了读口:%s", refused.Body.String())
+	}
+
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, subledgerRequest(t, "?tenant=TENANT-9&limit=9999"))
+	endpoint.ServeHTTP(response, subledgerRequest(t, ""))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样:tenant=%q limit=%d(自报查询参数被采信了)",
+		t.Fatalf("读口收到的键走样:tenant=%q limit=%d(应取自作用域与 Intake)",
 			register.gotTenant, register.gotLimit)
 	}
 	var body struct {

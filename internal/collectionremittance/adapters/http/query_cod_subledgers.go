@@ -10,6 +10,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CatalogueQuery 是一次已授权的主数据目录查阅(ADR-0077):作用域来自认证与授权结果,
@@ -49,7 +50,8 @@ type CodSubledgerCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CodSubledgerCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CodSubledgerCatalogueRow], error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致——本端点不新造查询语义。
@@ -67,9 +69,11 @@ const outcomeCodSubledgersListed = "COD_SUBLEDGERS_LISTED"
 // /customs-gate-conditions 文件头那句)。指令册、事实册与差异事项册不在本端点:
 // 它们是各自独立的登记册,长出查阅语义时各立入口,不在这里预留分派格。
 //
-// 全部已开立分户账连同派生余额原样上列,**不下推清分或汇付的判断参数**:哪笔该清分、
+// 已开立分户账连同派生余额按页原样上列,**不下推清分或汇付的判断参数**:哪笔该清分、
 // 哪批该汇付是记账写入方伺候的判断输入,查阅面收下判断参数就等于让目录读口长出第二
-// 种「处置」语义(裁决同 /customs-ports-paths 不收评估时点那条)。
+// 种「处置」语义(裁决同 /customs-ports-paths 不收评估时点那条)。查询参数(after、
+// sort 与 q)按 ports.CodSubledgerPages 解码(ADR-0144 决定六),在 Intake 之后
+// (writePageQueryProblem 头注)。
 func NewQueryCodSubledgersEndpoint(
 	intake CatalogueQueryIntake,
 	reader CodSubledgerCatalogueReader,
@@ -87,7 +91,13 @@ func NewQueryCodSubledgersEndpoint(
 			return
 		}
 
-		entries, err := reader.ListCodSubledgers(request.Context(), query.Scope.Tenant(), query.Limit)
+		pageQuery, err := ports.CodSubledgerPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
+		page, err := reader.ListCodSubledgers(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成,不是「空册」——伪装成后者会让一次该重试的故障变成终局。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -95,13 +105,14 @@ func NewQueryCodSubledgersEndpoint(
 		}
 
 		// 空列表交回空数组而不是 null:调用方判「没有行」不该先判「有没有字段」。
-		bodies := make([]codSubledgerBody, 0, len(entries))
-		for _, entry := range entries {
+		bodies := make([]codSubledgerBody, 0, len(page.Rows))
+		for _, entry := range page.Rows {
 			bodies = append(bodies, subledgerBodyOf(entry))
 		}
 		writeJSON(response, http.StatusOK, codSubledgerListResponse{
 			Outcome:    outcomeCodSubledgersListed,
 			Subledgers: bodies,
+			Page:       page.Page(query.Limit),
 		})
 	})
 }
@@ -173,6 +184,7 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 type codSubledgerListResponse struct {
 	Outcome    string             `json:"outcome"`
 	Subledgers []codSubledgerBody `json:"subledgers"`
+	Page       cataloguepage.Page `json:"page"`
 }
 
 // codSubledgerBody 逐字段透出一本分户账:四维键、保管依据引用、开立时间、各位置
@@ -219,12 +231,22 @@ type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
+// problemDetail 的 detail 只随「改请求才会好」的 4xx 在场,是给操作者看的理由散文,
+// 调用方不据此分支;为空时那一格缺席,不写空串。
 type problemDetail struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+// writeProblemWithDetail 是 writeProblem 带理由散文的兄弟。单立一个函数而不是给
+// writeProblem 加变参:交不交 detail 在调用点要一眼读得出来——5xx 照旧只交 code,那是
+// 依赖故障的内部原文,不外泄。
+func writeProblemWithDetail(response http.ResponseWriter, status int, code string, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {
