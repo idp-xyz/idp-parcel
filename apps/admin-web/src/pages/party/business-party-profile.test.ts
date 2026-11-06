@@ -8,6 +8,7 @@ import {
   businessPartyProfileMissingFields,
   businessPartyProfilePayloadOf,
   businessPartyProfileVersionFact,
+  customerLacksContacts,
   effectiveBusinessPartyProfile,
   emptyBusinessPartyProfileDraft,
   otherLanguageNameOf,
@@ -86,6 +87,15 @@ test('otherLanguageNameOf 先取英文', () => {
   equal(otherLanguageNameOf({ names: [{ language: 'en', name: '  ' }] }), null);
   equal(otherLanguageNameOf({}), null);
   equal(otherLanguageNameOf(null), null);
+});
+
+// Covers: 只对此刻是客户的单位提示；没有资料与资料里没有联系人都算缺，有一位就不提示；别的角色不提示。
+test('customerLacksContacts 只提示缺联系人的客户', () => {
+  equal(customerLacksContacts(['CUSTOMER'], null), true);
+  equal(customerLacksContacts(['CUSTOMER'], { ...record, contacts: [] }), true);
+  equal(customerLacksContacts(['CUSTOMER', 'SUPPLIER'], record), false);
+  equal(customerLacksContacts(['CARRIER_AGENT'], null), false);
+  equal(customerLacksContacts([], { ...record, contacts: [] }), false);
 });
 
 // Covers: 头部「资料」格分清在读、读不到、未登记、尚无生效版本与第几版；读不到不冒充未登记，别家的答复不认。

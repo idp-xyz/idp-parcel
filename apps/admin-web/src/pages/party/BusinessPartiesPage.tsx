@@ -582,6 +582,7 @@ export function BusinessPartiesPage() {
         onEnterProfileEdit={enterProfileEdit}
         onExitProfileEdit={exitProfileEdit}
         ours={entities.answer == null ? null : pinnedParties.has(view.partyId)}
+        roles={rolesOfParty(roleIndex, view.partyId)}
       />
     );
   }

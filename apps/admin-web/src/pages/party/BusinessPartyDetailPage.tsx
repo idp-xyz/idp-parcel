@@ -177,6 +177,7 @@ export function BusinessPartyDetailPage({
   onEnterProfileEdit,
   onExitProfileEdit,
   ours: pinned,
+  roles,
 }: {
   partyId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -201,6 +202,8 @@ export function BusinessPartyDetailPage({
    * null 是法人册还没答出；没取到（未配置、出错）由调用方答 false，写口照旧在服务端判。
    */
   ours: boolean | null;
+  /** 这家单位此刻持有的角色（列表页的 rolesOfParty）；概要按它判要不要提示客户补联系人。 */
+  roles: readonly string[];
 }) {
   const ours = pinned === true;
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
@@ -235,6 +238,12 @@ export function BusinessPartyDetailPage({
   const [registeringRelationship, setRegisteringRelationship] = useState(false);
   const [relationshipUnsaved, setRelationshipUnsaved] = useState(false);
   const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
+  const startProfileEdit = () => {
+    setRegisteringRelationship(false);
+    onEnterProfileEdit();
+  };
+  // 资料空状态与客户提示里的「更新资料」与页头那一枚同一个去处；查看者、我方公司与编辑态中不摆。
+  const profileUpdate = mayWrite && !ours && !anyEditing ? startProfileEdit : undefined;
   const relationshipRegistration =
     mayWrite && row && !anyEditing
       ? {
@@ -272,15 +281,7 @@ export function BusinessPartyDetailPage({
           {row && !anyEditing ? (
             <>
               {mayWrite && !ours ? (
-                <Button
-                  size="sm"
-                  variant="default"
-                  className={`${primaryActionClass} type-body`}
-                  onClick={() => {
-                    setRegisteringRelationship(false);
-                    onEnterProfileEdit();
-                  }}
-                >
+                <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={startProfileEdit}>
                   更新资料
                 </Button>
               ) : null}
@@ -410,6 +411,8 @@ export function BusinessPartyDetailPage({
                                 partyId={row.partyId}
                                 query={profiles}
                                 registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+                                roles={roles}
+                                onUpdate={profileUpdate}
                               />
                             )}
                           </section>
@@ -424,7 +427,7 @@ export function BusinessPartyDetailPage({
                       id: 'contacts' as const,
                       content: (
                         <section className="bg-idpxyz-bg p-5">
-                          <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} />
+                          <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} onUpdate={profileUpdate} />
                         </section>
                       ),
                     },
@@ -438,7 +441,7 @@ export function BusinessPartyDetailPage({
                       summary: profileVersionsSummary(profiles, row.partyId),
                       content: (
                         <section className="bg-idpxyz-bg p-5">
-                          <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} />
+                          <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} onUpdate={profileUpdate} />
                         </section>
                       ),
                     },

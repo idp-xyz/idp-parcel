@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Landmark, MapPin, Receipt } from 'lucide-react';
+import { FileText, Landmark, MapPin, Receipt, UserPlus } from 'lucide-react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import { RegistrationAnswerNote } from '../../components/registration';
 import { moduleInfoById } from '../../navigation';
 import { useAnswer, type AnswerQuery } from '../../query/answers';
@@ -22,6 +23,7 @@ import {
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
   businessPartyProfilePayloadOf,
+  customerLacksContacts,
   effectiveBusinessPartyProfile,
   suggestedBusinessPartyProfileRevision,
   type BusinessPartyProfileDraft,
@@ -82,15 +84,51 @@ export function effectiveProfileOf(
 /** 我方公司的往来单位在资料位置上的那句话：它的资料登在公司主体上（ADR-0369 决定二）。对象页与详情栏共用。 */
 export const ourCompanyProfileNote = '这是我方公司的往来单位：联系人、地址、税号与收款账户登在公司主体的资料上。';
 
-/** 资料没读到或没有生效那一版时的一句话；读到了有生效版就 null。 */
-function profileAbsenceNote(query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>, partyId: string): string | null {
+/**
+ * 读出几处共用的资料状态：还在读或读不到只给一句灰字；读到了却没有生效的一版是空状态（登过、都在未来生效的另说一句）；
+ * 有生效版就交出那一版。别家的答复（换行时上一家的还没换掉）当作还在读。
+ */
+type ProfileState =
+  | { kind: 'note'; text: string }
+  | { kind: 'empty'; scheduled: boolean; body: BusinessPartyProfileRevisionListResponseBody }
+  | { kind: 'present'; record: BusinessPartyProfileRevisionRecord; body: BusinessPartyProfileRevisionListResponseBody };
+
+function profileStateOf(query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>, partyId: string): ProfileState {
   const answer = query.answer;
-  if (answer === null) return '正在读取资料…';
-  if (answer.kind !== 'outcome') return '资料暂时读不到，稍后刷新再看。';
+  if (answer === null) return { kind: 'note', text: '正在读取资料…' };
+  if (answer.kind !== 'outcome') return { kind: 'note', text: '资料暂时读不到，稍后刷新再看。' };
   const { record, body } = effectiveProfileOf(query, partyId);
-  if (record) return null;
-  if (body && body.revisions.length > 0) return '还没有生效的资料：已登记的版本都在未来生效。';
-  return '还没有登记资料。联系人、地址、税号与收款账户都在「更新资料」里登记。';
+  if (body === null) return { kind: 'note', text: '正在读取资料…' };
+  if (record) return { kind: 'present', record, body };
+  return { kind: 'empty', scheduled: body.revisions.length > 0, body };
+}
+
+const customerEmptyLine = '这家单位是客户，建议登记一位联系人，下单和对账时找得到人。';
+const customerHintLine = '这家单位是客户，资料里还没有联系人；建议登记一位，下单和对账时找得到人。';
+
+/**
+ * 资料空着时的那一块：说清空在哪、下一步去哪。有写授予的给「更新资料」——描边按钮：页头已有一枚实心的主动作，两枚实心会抢；
+ * 查看者只看到话。
+ */
+function ProfileEmptyState({ title, lines, onUpdate }: { title: string; lines: readonly string[]; onUpdate?: () => void }) {
+  return (
+    <div className="mt-3 flex items-start gap-3 rounded-md border border-dashed border-idpxyz-border px-4 py-4">
+      <FileText className="mt-0.5 h-5 w-5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="type-value font-medium text-idpxyz-text">{title}</p>
+        {lines.map((line) => (
+          <p key={line} className="mt-1 type-body leading-5 text-idpxyz-breadcrumb">
+            {line}
+          </p>
+        ))}
+        {onUpdate ? (
+          <Button size="sm" variant="outline" className="mt-3 type-body" onClick={onUpdate}>
+            更新资料
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 /** 「概要」里的资料读出：名称与地址、税务与开票、收款账户三张卡。联系人有自己的分区。 */
@@ -98,17 +136,35 @@ export function BusinessPartyProfileReadout({
   partyId,
   query,
   registrationCountry,
+  roles = [],
+  onUpdate,
 }: {
   partyId: string;
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
   /** 往来单位登记的注册国家：监管登记号的类型名按它查，没有按注册地址国家。 */
   registrationCountry?: string;
+  /** 这家单位此刻持有的角色；是客户而缺联系人时提示一句（customerLacksContacts）。 */
+  roles?: readonly string[];
+  /** 空状态与提示里的「更新资料」；不给就不摆按钮（查看者）。 */
+  onUpdate?: () => void;
 }) {
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   const typeNameOf = useTypeNameOf(typeCatalogue);
-  const note = profileAbsenceNote(query, partyId);
-  const { record } = effectiveProfileOf(query, partyId);
-  if (note !== null || record === null) return <p className="type-value leading-6 text-idpxyz-breadcrumb">{note}</p>;
+  const state = profileStateOf(query, partyId);
+  if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
+  if (state.kind === 'empty') {
+    return (
+      <ProfileEmptyState
+        title={state.scheduled ? '还没有生效的资料' : '还没有登记资料'}
+        lines={[
+          state.scheduled ? '已登记的版本都在未来生效。' : '联系人、地址、税号与收款账户都在「更新资料」里登记。',
+          ...(customerLacksContacts(roles, null) ? [customerEmptyLine] : []),
+        ]}
+        onUpdate={onUpdate}
+      />
+    );
+  }
+  const record = state.record;
   const names = record.names ?? [];
   const addresses = [
     ...(record.registeredAddress ? [{ key: 'registered', label: '注册地址', address: record.registeredAddress }] : []),
@@ -120,6 +176,17 @@ export function BusinessPartyProfileReadout({
   const bankAccounts = record.bankAccounts ?? [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
+      {customerLacksContacts(roles, record) ? (
+        <div className={`flex items-center gap-2 rounded border px-3 py-2 type-body ${statusToneBanner.info}`}>
+          <UserPlus className={`h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
+          <span className="min-w-0 flex-1 leading-5">{customerHintLine}</span>
+          {onUpdate ? (
+            <Button size="sm" variant="outline" className="h-7 shrink-0 type-body" onClick={onUpdate}>
+              更新资料
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <ProfileReadoutCard icon={MapPin} title="名称与地址">
         <ProfileReadoutGrid>
           <ProfileReadoutField
@@ -205,31 +272,47 @@ export function BusinessPartyProfileReadout({
   );
 }
 
-/** 「联系人」分区：此刻有效那一版的联系人卡。 */
+/** 「联系人」分区：此刻有效那一版的联系人卡；没有资料或资料里没有联系人时是空状态。 */
 export function BusinessPartyContactsReadout({
   partyId,
   query,
+  onUpdate,
 }: {
   partyId: string;
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
+  onUpdate?: () => void;
 }) {
-  const note = profileAbsenceNote(query, partyId);
-  const { record } = effectiveProfileOf(query, partyId);
-  if (note !== null || record === null) return <p className="type-value leading-6 text-idpxyz-breadcrumb">{note}</p>;
-  return <LegalEntityContactCards contacts={record.contacts} />;
+  const state = profileStateOf(query, partyId);
+  if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
+  const contacts = state.kind === 'present' ? state.record.contacts : [];
+  if (contacts.length === 0) {
+    return (
+      <ProfileEmptyState
+        title={state.kind === 'present' ? '还没有登记联系人' : state.scheduled ? '还没有生效的资料' : '还没有登记资料'}
+        lines={['联系人与地址、税号一起在「更新资料」里登记。']}
+        onUpdate={onUpdate}
+      />
+    );
+  }
+  return <LegalEntityContactCards contacts={contacts} />;
 }
 
 /** 「资料版本」分区：全部已登记的版本，从新到旧；此刻有效的那一版标「当前」，未到生效时间的标「未生效」。 */
 export function BusinessPartyProfileVersions({
   partyId,
   query,
+  onUpdate,
 }: {
   partyId: string;
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
+  onUpdate?: () => void;
 }) {
-  const { body } = effectiveProfileOf(query, partyId);
-  if (body === null) return <p className="type-value leading-6 text-idpxyz-breadcrumb">{profileAbsenceNote(query, partyId)}</p>;
-  if (body.revisions.length === 0) return <p className="type-value leading-6 text-idpxyz-breadcrumb">还没有登记资料。</p>;
+  const state = profileStateOf(query, partyId);
+  if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
+  const body = state.body;
+  if (body.revisions.length === 0) {
+    return <ProfileEmptyState title="还没有登记资料" lines={['登记后每一版都列在这里，旧版本不会被覆盖。']} onUpdate={onUpdate} />;
+  }
   const now = Date.now();
   const rows = [...body.revisions].sort((left, right) => right.revision - left.revision);
   return (

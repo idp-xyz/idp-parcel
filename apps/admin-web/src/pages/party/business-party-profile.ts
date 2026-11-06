@@ -106,6 +106,17 @@ export function otherLanguageNameOf(record: Pick<BusinessPartyProfileRevisionRec
 }
 
 /**
+ * 客户缺联系人提示的判据：此刻持有客户角色，此刻有效的资料里却一位联系人都没有（没有资料也算）。只是提示——下单与对账要找得到
+ * 人；不拦任何操作，也不替租户定几位才够。
+ */
+export function customerLacksContacts(
+  roles: readonly string[],
+  record: Pick<BusinessPartyProfileRevisionRecord, 'contacts'> | null,
+): boolean {
+  return roles.includes('CUSTOMER') && (record?.contacts ?? []).length === 0;
+}
+
+/**
  * 头部事实「资料」那一格。读到了却没有生效版时分开说「尚无生效版本」（登过、都在未来生效）与「未登记」；还在读是「…」，读不到
  * 是「读不到」——不拿「未登记」冒充，那会让人以为对方真没登资料。
  */

@@ -1,7 +1,7 @@
 # 03 对象页：meta 行补识别信息，概要去重，时刻只到日
 
 Category: enhancement
-Status: open
+Status: in-progress
 父票：[spec](../spec.md)
 
 ## 要做的

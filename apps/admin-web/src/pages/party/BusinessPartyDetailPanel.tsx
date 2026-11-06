@@ -47,20 +47,26 @@ function PanelProfilePart({
   pinned,
   part,
   profiles,
+  roles,
+  onUpdate,
 }: {
   row: BusinessPartyRecord;
   pinned: boolean | null;
   part: 'summary' | 'contacts' | 'versions';
   profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
+  roles: readonly string[];
+  onUpdate?: () => void;
 }) {
   if (pinned === true) return <p className="type-value leading-6 text-idpxyz-breadcrumb">{ourCompanyProfileNote}</p>;
-  if (part === 'contacts') return <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} />;
-  if (part === 'versions') return <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} />;
+  if (part === 'contacts') return <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} onUpdate={onUpdate} />;
+  if (part === 'versions') return <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} onUpdate={onUpdate} />;
   return (
     <BusinessPartyProfileReadout
       partyId={row.partyId}
       query={profiles}
       registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+      roles={roles}
+      onUpdate={onUpdate}
     />
   );
 }
@@ -282,16 +288,16 @@ export function BusinessPartyDetailPanel({
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <TabsContent value="summary" forceMount={visited.has('summary') || undefined} className="mt-0 data-[state=inactive]:hidden">
-            <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="summary" />
+            <PanelProfilePart row={row} pinned={pinned} profiles={profiles} roles={roles} onUpdate={mayWrite ? openProfileForm : undefined} part="summary" />
           </TabsContent>
           {tabs.includes('contacts') ? (
             <TabsContent value="contacts" forceMount={visited.has('contacts') || undefined} className="mt-0 data-[state=inactive]:hidden">
-              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="contacts" />
+              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} roles={roles} onUpdate={mayWrite ? openProfileForm : undefined} part="contacts" />
             </TabsContent>
           ) : null}
           {tabs.includes('profile') ? (
             <TabsContent value="profile" forceMount={visited.has('profile') || undefined} className="mt-0 data-[state=inactive]:hidden">
-              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="versions" />
+              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} roles={roles} onUpdate={mayWrite ? openProfileForm : undefined} part="versions" />
             </TabsContent>
           ) : null}
           <TabsContent
