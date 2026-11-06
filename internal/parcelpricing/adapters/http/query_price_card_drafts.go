@@ -44,8 +44,8 @@ const outcomePriceCardDraftsListed = "PRICE_CARD_DRAFTS_LISTED"
 
 // NewQueryPriceCardDraftsEndpoint 交回草稿查阅读口（GET /pricing-price-card-draft-views）。
 //
-// 查询参数（after、sort、status 与 q）按 ports.PriceCardDraftPages 解码（ADR-0144 决定六），先于 Intake，因而也先于
-// 认证：没带令牌而查询串写错的一问答 400，不答 401——查询串的形状与谁在问无关。
+// 查询参数（after、sort、status 与 q）按 ports.PriceCardDraftPages 解码（ADR-0144 决定六），在 Intake 之后
+// （decodePageQuery 头注），因而也在认证之后：没带令牌的一问不论查询串写得对不对都答 401。
 func NewQueryPriceCardDraftsEndpoint(intake PriceCardDraftQueryIntake, reader PriceCardDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -53,16 +53,16 @@ func NewQueryPriceCardDraftsEndpoint(intake PriceCardDraftQueryIntake, reader Pr
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.PriceCardDraftPages, request)
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		// 与录入口同一族 Intake、同一组答复格（未配置、凭据被拒、未授予、身份依赖不可用、请求形状不对），所以用命令面
 		// 那份分流，不用目录查阅那份——后者没有操作者渠道的三格。
 		query, err := intake.IntakePriceCardDraftQuery(request.Context(), request)
 		if err != nil {
 			writeRegistrationIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodePageQuery(ports.PriceCardDraftPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		page, err := reader.ListPriceCardDrafts(request.Context(), query.Tenant, query.Limit, pageQuery)
@@ -97,7 +97,7 @@ var _ PriceCardDraftQueryIntake = (*OperatorRegistryIntake)(nil)
 
 // IntakePriceCardDraftQuery 是操作者渠道对草稿查阅的译法：只认证，租户取认证出的身份，页大小取渠道契约。授予照登记册
 // 配置写那一格认，与录入口同一个——ADR-0101 Consequences 把草稿查阅读口与各命令口一并挂在操作者 Intake 上，
-// 看草稿的就是导入与批准草稿的人；只持查阅授予的答未授予。查询串不在这里解（ADR-0144 决定六），端点已按声明解过。
+// 看草稿的就是导入与批准草稿的人；只持查阅授予的答未授予。查询串不在这里解（ADR-0144 决定六），端点在这之后按声明解。
 func (intake *OperatorRegistryIntake) IntakePriceCardDraftQuery(ctx context.Context, request *http.Request) (PriceCardDraftQuery, error) {
 	operator, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
 	if err != nil {

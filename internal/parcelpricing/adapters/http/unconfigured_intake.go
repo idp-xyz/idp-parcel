@@ -62,7 +62,7 @@ func (UnconfiguredIntake) IntakePriceCardDraftSubmission(context.Context, *http.
 }
 
 // IntakePriceCardDraftQuery 不读请求：草稿查阅的租户同样只从信封来（ADR-0101 Consequences 把这一口也挂在操作者
-// Intake 上）。查询串本来就不归 Intake，端点在它之前按声明解（ADR-0144 决定六）。
+// Intake 上）。查询串本来就不归 Intake，端点在它之后按声明解（ADR-0144 决定六）。
 func (UnconfiguredIntake) IntakePriceCardDraftQuery(context.Context, *http.Request) (PriceCardDraftQuery, error) {
 	return PriceCardDraftQuery{}, ErrAccessChannelNotConfigured
 }

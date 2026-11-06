@@ -33,7 +33,7 @@ const outcomeEvaluationsListed = "EVALUATIONS_LISTED"
 // 复用本包目录查阅的 Intake：评价查阅同属运营查阅，授权边界同是租户
 // （ADR-0077 Decision 五），不为业务事实册另立第二种准入形。
 //
-// 查询参数（after、sort、status 与 q）按 ports.EvaluationPages 解码（ADR-0144 决定六），先于 Intake。
+// 查询参数（after、sort、status 与 q）按 ports.EvaluationPages 解码（ADR-0144 决定六），在 Intake 之后（decodePageQuery 头注）。
 func NewQueryEvaluationsEndpoint(
 	intake PricingCatalogueIntake,
 	reader EvaluationCatalogueReader,
@@ -45,14 +45,14 @@ func NewQueryEvaluationsEndpoint(
 			return
 		}
 
-		pageQuery, err := decodePageQuery(ports.EvaluationPages, request)
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodePageQuery(ports.EvaluationPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

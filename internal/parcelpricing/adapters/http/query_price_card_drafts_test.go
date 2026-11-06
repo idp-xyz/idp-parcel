@@ -187,9 +187,10 @@ func TestPriceCardDraftViewsPassTheDecodedQueryAndCarryThePage(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定一、四——原先 Intake 里那道封闭解码挪进册声明后照样封闭：小写或空的状态词、自报租户、自定页大小、
-// 集外排序维、解不开的游标与坏转义都答 400 带理由散文，读口与 Intake 都不被走到；查询参数先于 Intake，渠道未配置时写错
-// 参数也先答 400，写对了才答 403。
+// 集外排序维、解不开的游标与坏转义都答 400 带理由散文，读口不被走到。解码在 Intake 之后：渠道未配置时参数写对写错都答
+// 403，答复不随请求内容变（ADR-0055 决定三）。
 func TestPriceCardDraftViewsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
+	granted := priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{Limit: 50}}
 	for name, query := range map[string]string{
 		"小写状态词":  "?status=draft",
 		"空状态词":   "?status=",
@@ -201,28 +202,32 @@ func TestPriceCardDraftViewsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &priceCardDraftReaderDouble{}
-			assertPageQueryRefused(t, requestPriceCardDrafts(
-				priceCardDraftQueryIntakeDouble{err: errors.New("Intake 不该被走到")}, reader, priceCardDraftViewsTarget+query))
+			assertPageQueryRefused(t, requestPriceCardDrafts(granted, reader, priceCardDraftViewsTarget+query))
 			if reader.called {
 				t.Fatal("坏请求不该走到读口")
 			}
 		})
 	}
 
-	refused := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{},
-		priceCardDraftViewsTarget+"?status=ARCHIVED")
+	refused := requestPriceCardDrafts(granted, &priceCardDraftReaderDouble{}, priceCardDraftViewsTarget+"?status=ARCHIVED")
 	if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "status") {
 		t.Fatalf("理由散文应点到那一格：%q", detail)
 	}
-	unconfigured := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{},
-		priceCardDraftViewsTarget+"?status=PUBLISHED")
-	if unconfigured.Code != http.StatusForbidden {
-		t.Fatalf("参数写对、渠道未配置 status = %d, want 403", unconfigured.Code)
+	var answers []string
+	for _, query := range []string{"?status=ARCHIVED", "?status=PUBLISHED"} {
+		unconfigured := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{}, priceCardDraftViewsTarget+query)
+		if unconfigured.Code != http.StatusForbidden || errorCode(t, unconfigured) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+			t.Fatalf("%s：status = %d；body = %s", query, unconfigured.Code, unconfigured.Body)
+		}
+		answers = append(answers, unconfigured.Body.String())
+	}
+	if answers[0] != answers[1] {
+		t.Fatalf("未配置的渠道答复随查询串变了：%q / %q", answers[0], answers[1])
 	}
 }
 
-// 操作者渠道：租户取认证出的身份，页大小由接入面定；没令牌答凭据被拒。查询串不归 Intake：带不带、带了什么它都不看，
-// 自报租户在端点按声明解码时就被拒了。
+// 操作者渠道：租户取认证出的身份，页大小由接入面定；没令牌答凭据被拒，查询串写错也一样——认证在解码之前。查询串不归
+// Intake：带不带、带了什么它都不看，自报租户在端点按声明解码时才被拒。
 func TestOperatorIntakeTranslatesTheDraftQuery(t *testing.T) {
 	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{})
 	if err != nil {
@@ -248,9 +253,11 @@ func TestOperatorIntakeTranslatesTheDraftQuery(t *testing.T) {
 	if detail := assertPageQueryRefused(t, recorder); !strings.Contains(detail, "tenant") {
 		t.Fatalf("self-reported tenant: detail = %q", detail)
 	}
-	recorder = httptest.NewRecorder()
-	pricinghttp.NewQueryPriceCardDraftsEndpoint(intake, &priceCardDraftReaderDouble{}).ServeHTTP(recorder, request("", priceCardDraftViewsTarget))
-	if recorder.Code != http.StatusUnauthorized || errorCode(t, recorder) != "OPERATOR_CREDENTIAL_REJECTED" {
-		t.Fatalf("endpoint without token: status = %d body = %s", recorder.Code, recorder.Body)
+	for _, target := range []string{priceCardDraftViewsTarget, priceCardDraftViewsTarget + "?tenant=SYN-TENANT-02"} {
+		recorder = httptest.NewRecorder()
+		pricinghttp.NewQueryPriceCardDraftsEndpoint(intake, &priceCardDraftReaderDouble{}).ServeHTTP(recorder, request("", target))
+		if recorder.Code != http.StatusUnauthorized || errorCode(t, recorder) != "OPERATOR_CREDENTIAL_REJECTED" {
+			t.Fatalf("endpoint without token, %s: status = %d body = %s", target, recorder.Code, recorder.Body)
+		}
 	}
 }

@@ -42,8 +42,8 @@ const outcomeReferenceSeriesCoverageListed = "REFERENCE_SERIES_COVERAGE_LISTED"
 //
 // 一条序列一行,不是一版一行——一版一行的问法归 /pricing-reference-series。
 //
-// 查询参数（after、sort、kind 与 q）按 ports.ReferenceSeriesCoveragePages 解码（ADR-0144 决定六），先于 Intake。每一页
-// 各按自己那一问的时钟解「在用」、各自回显 asOf：游标只记排序位置，不记时刻——翻页顺序按序列标识，与那一刻无关，所以
+// 查询参数（after、sort、kind 与 q）按 ports.ReferenceSeriesCoveragePages 解码（ADR-0144 决定六），在 Intake 之后
+// （decodePageQuery 头注）。每一页各按自己那一问的时钟解「在用」、各自回显 asOf：游标只记排序位置，不记时刻——翻页顺序按序列标识，与那一刻无关，所以
 // 翻页不重不漏；同一次翻阅的前后两页若跨过一次复核，后一页就按复核之后说话，asOf 如实告诉页面这一点。
 func NewQueryReferenceSeriesCoverageEndpoint(
 	intake PricingCatalogueIntake,
@@ -57,14 +57,14 @@ func NewQueryReferenceSeriesCoverageEndpoint(
 			return
 		}
 
-		pageQuery, err := decodePageQuery(ports.ReferenceSeriesCoveragePages, request)
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodePageQuery(ports.ReferenceSeriesCoveragePages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

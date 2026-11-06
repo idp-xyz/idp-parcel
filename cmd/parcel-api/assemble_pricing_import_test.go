@@ -217,7 +217,7 @@ func TestThePriceCardDraftViewsAnswerFromTheOperatorChannel(t *testing.T) {
 		"no bearer token":  {registryWriterRegister{}, "", views, http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED"},
 		"read grant only":  {readerRegister{}, "presented.operator.token", views, http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		"register is down": {failingRegister{}, "presented.operator.token", views, http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE"},
-		// 查询串按草稿册的声明先于 Intake 解，自报的租户是声明外的键、在那里被拒——租户只从信封来。
+		// 认证过了才解查询串，自报的租户在那里被拒——租户只从信封来。
 		"granted, tenant self-reported": {registryWriterRegister{}, "presented.operator.token", views + "?tenantId=SYN-TENANT-02", http.StatusBadRequest, "MALFORMED_REQUEST"},
 		"granted":                       {registryWriterRegister{}, "presented.operator.token", views, http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 	}
