@@ -43,7 +43,7 @@ var caseRequirementRulePages = ports.CaseRequirementRulePages.MustBind(catalogue
 	Keyword:  []string{"jurisdiction_ref", "procedure_ref", "basis"},
 })
 
-// scannedCaseRequirementRule 留着键三列的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
+// scannedCaseRequirementRule 留着键（辖区、方向、程序）的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
 type scannedCaseRequirementRule struct {
 	entry                                  ports.CaseRequirementRuleEntry
 	jurisdiction, direction, procedureCode string
@@ -123,7 +123,7 @@ var interpretationRulePages = ports.InterpretationRulePages.MustBind(cataloguepa
 	Keyword:  []string{"jurisdiction_ref", "rule_ref"},
 })
 
-// scannedInterpretationRule 留着键三列的原值，理由同 scannedCaseRequirementRule。
+// scannedInterpretationRule 留着键（结果层、辖区、生效起点）的原值，理由同 scannedCaseRequirementRule。
 type scannedInterpretationRule struct {
 	entry               ports.InterpretationRuleEntry
 	layer, jurisdiction string

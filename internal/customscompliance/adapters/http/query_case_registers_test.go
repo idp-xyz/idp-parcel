@@ -121,7 +121,7 @@ func TestCaseRegisterQueryRefusesNonGetMethods(t *testing.T) {
 }
 
 // Covers: registry 封闭集 — 缺席与集外值都是坏请求，在 Intake 之后拒（未配置的渠道对它们同答 403，见
-// TestUnconfiguredCaseRegisterIntakeRefusesAllRegistriesIdentically）；规则库那两个 registry 值在本端点也是集外
+// TestUnconfiguredCaseRegisterIntakeRefusesAllRegistriesIdentically）；规则库的 registry 取值在本端点也是集外
 // （两端点各自的封闭集不互相收留）。
 func TestCaseRegisterQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryCaseRegistersEndpoint(

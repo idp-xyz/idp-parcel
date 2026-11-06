@@ -430,7 +430,7 @@ func (views *OperationsRecordViews) ListExternalResults(
 	return result, nil
 }
 
-// externalResultPosition 取的是扫描出来的 recorded_at 与 source_id 两列；本册只有记下时刻一个可排维。
+// externalResultPosition 取的是扫描出来的 recorded_at 与 source_id 两列。
 func externalResultPosition(record ports.ExternalResultViewRecord, _ string) cataloguepage.Position {
 	return cataloguepage.Position{
 		Value:    cataloguepage.FormatInstant(record.RecordedAt),
@@ -498,7 +498,7 @@ func (views *OperationsRecordViews) ListActionAdmissionJudgements(
 	return result, nil
 }
 
-// admissionJudgementPosition 取的是扫描出来的 judged_at 与 judgement_id 两列；本册只有判断时刻一个可排维。
+// admissionJudgementPosition 取的是扫描出来的 judged_at 与 judgement_id 两列。
 func admissionJudgementPosition(record ports.ActionAdmissionJudgementRecord, _ string) cataloguepage.Position {
 	return cataloguepage.Position{
 		Value:    cataloguepage.FormatInstant(record.JudgedAt),
@@ -670,7 +670,7 @@ func (views *OperationsRecordViews) ListUnadmittedObjects(
 	return ports.UnadmittedObjects{Result: result, Count: int(backlog)}, nil
 }
 
-// unadmittedObjectPosition 取的是 stuck 导出的 action_at 与 object_ref 两列；本册只有动作时点一个可排维。
+// unadmittedObjectPosition 取的是 stuck 导出的 action_at 与 object_ref 两列。
 func unadmittedObjectPosition(record ports.ActionAdmissionJudgementRecord, _ string) cataloguepage.Position {
 	return cataloguepage.Position{
 		Value:    cataloguepage.FormatInstant(record.ActionAt),

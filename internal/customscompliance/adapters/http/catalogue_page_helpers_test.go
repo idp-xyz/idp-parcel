@@ -28,7 +28,7 @@ func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) s
 	return body.Error.Detail
 }
 
-// pageOf 读出答复里的 page 一格；三格都必须在场。
+// pageOf 读出答复里的 page 一格；size、next、total 都必须在场。
 func pageOf(t *testing.T, response *httptest.ResponseRecorder) map[string]json.RawMessage {
 	t.Helper()
 	var body struct {

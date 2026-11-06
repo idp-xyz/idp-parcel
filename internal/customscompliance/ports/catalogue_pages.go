@@ -16,7 +16,7 @@ import (
 
 // CustomsCasePages 是关务案件查阅（GET /customs-case-records）的声明。
 //
-// 缺省序是案件标识升序。行标识取案件标识而不是主键：主键那四维（辖区、方向、程序、义务）是「同一法律行为一案」的幂等键，
+// 缺省序是案件标识升序。行标识取案件标识而不是主键：主键（辖区、方向、程序、义务）是「同一法律行为一案」的幂等键，
 // 案件标识在租户内同样唯一（customs_case_id_unique），又是答复与各册引用案件时用的那一格。case 是按案件收窄的筛选维——
 // 单份读回用的就是它，名字即答复体的字段名；direction 是封闭词表一维。
 var CustomsCasePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
@@ -75,7 +75,7 @@ var ExternalResultPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // AdmissionJudgementPages 是动作准入判断册查阅（GET /customs-action-admission-judgements）的声明。
 //
 // 缺省序是判断时刻倒序，最近的在前；同一刻按判断标识倒序，与排序同向（决定三）。object 是按对象收窄的筛选维——按包裹号
-// 精确查用的就是它；answer 是判断的结论，封闭五格。
+// 精确查用的就是它；answer 是判断的结论，封闭词表一维。
 var AdmissionJudgementPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-action-admission-judgements",
 	Sorts: []cataloguepage.SortDimension{
@@ -257,7 +257,7 @@ var CredentialPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // DutyCollaborationPages 是税费付款协作事项册（GET /customs-duty-collaborations）的声明。
 //
 // 缺省序是决定范围升序，行标识是登记册键（范围、税费引用）；明确无需付款的那一格税费引用是空串，照样是键的一段。kind 是
-// 义务依据的封闭二格。
+// 义务依据的封闭词表。
 var DutyCollaborationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-duty-collaborations",
 	Sorts: []cataloguepage.SortDimension{
