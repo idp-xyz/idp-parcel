@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// 十六册在真库上的翻页用例（ADR-0144；该票 spec「完成判据」的真库那一条）：翻页期间插入新行不重出、不漏行，total 随筛选与
+// 本上下文各册在真库上的翻页用例（ADR-0144；该票 spec「完成判据」的真库那一条）：翻页期间插入新行不重出、不漏行，total 随筛选与
 // q 变，空册答空页且 total 为 0。各册怎么播一行、怎么取一页写在 pagedRegisters 里，每条用例对每册各过一遍。
 
 const (
@@ -389,7 +389,7 @@ func joined(groups ...url.Values) url.Values {
 	return values
 }
 
-// Covers: ADR-0144 决定一——十六册各自：按「排序维值 + 标识」的游标翻页。翻完第一页后插入两行，一行落在已翻过的那头、一行落在
+// Covers: ADR-0144 决定一——各册各自：按「排序维值 + 标识」的游标翻页。翻完第一页后插入两行，一行落在已翻过的那头、一行落在
 // 未翻的那头：第二页不重出第一页的行（偏移分页会在第二页开头重出第一页的末行），新落在未翻那头的那一行照样翻到；total 随之由
 // 4 变 6，末页 next 为空。他租户同形的行不进来。
 func TestCustomsCataloguesPageByCursorWithoutRepeatsOrGapsWhileRowsArrive(t *testing.T) {
@@ -415,7 +415,7 @@ func TestCustomsCataloguesPageByCursorWithoutRepeatsOrGapsWhileRowsArrive(t *tes
 	}
 }
 
-// Covers: ADR-0144 决定四、五——十六册各自：筛选维内为或、维与 q 为与；q 在本册声明的列上做不分大小写的字面包含（% 按字面、
+// Covers: ADR-0144 决定四、五——各册各自：筛选维内为或、维与 q 为与；q 在本册声明的列上做不分大小写的字面包含（% 按字面、
 // 零命中）；total 与本页出自同一组条件。空册答空页且 total 为 0（ADR-0077 Decision 四）。
 func TestCustomsCatalogueTotalsFollowTheFiltersAndTheKeyword(t *testing.T) {
 	for _, register := range pagedRegisters() {
@@ -451,7 +451,7 @@ func TestCustomsCatalogueTotalsFollowTheFiltersAndTheKeyword(t *testing.T) {
 	}
 }
 
-// Covers: 该票 spec 取舍 5——卡关对象的积压件数是整个队列的，不随筛选与 q 变；total 是这一组条件下的件数，本页一件也没有时
+// Covers: 带计数与 truncated 的待办队列保留这两格——卡关对象的积压件数是整个队列的，不随筛选与 q 变；total 是这一组条件下的件数，本页一件也没有时
 // 两个数照样答出。
 func TestTheUnadmittedBacklogStaysWholeUnderFiltersAndTheKeyword(t *testing.T) {
 	fixture := newViewFixture(t)
@@ -482,6 +482,48 @@ func TestTheUnadmittedBacklogStaysWholeUnderFiltersAndTheKeyword(t *testing.T) {
 			}
 			if listed.Count != 4 || listed.Total != test.total || (listed.Next != "") != (test.total > 1) {
 				t.Fatalf("积压 %d / total %d / next %q，应为积压 4 / total %d", listed.Count, listed.Total, listed.Next, test.total)
+			}
+		})
+	}
+}
+
+// Covers: q 落在包裹号数组上只比元素——数组 JSON 文本里的引号、逗号与括号不被命中，两个包裹号首尾相接拼出的串也不命中；
+// 命中第二个包裹号的照样找到。案件的 parcels 与提交版本的 members 各过一遍。
+func TestTheKeywordOnParcelArraysMatchesElementsOnly(t *testing.T) {
+	fixture := newViewFixture(t)
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.customs_case
+			(tenant_id, jurisdiction_ref, direction, procedure_ref, obligation_ref, case_id, parcels, roles, established_at)
+		 VALUES ($1, 'SYN-JURISDICTION-01', 'EXPORT', 'SYN-PROCEDURE-01', 'SYN-OBLIGATION-01', 'SYN-CASE-01',
+		         jsonb_build_array(
+		             jsonb_build_object('parcel', 'SYN-PARCEL-01', 'customer', 'SYN-CUSTOMER-01', 'sourceRef', 'SYN-SOURCE-01'),
+		             jsonb_build_object('parcel', 'SYN-PARCEL-02', 'customer', 'SYN-CUSTOMER-01', 'sourceRef', 'SYN-SOURCE-02')),
+		         '[]', $2)`,
+		pageTenant, viewBaseAt)
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.declaration_submission
+			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members, dossier_ref, roles_ref,
+			 readiness_basis, authority_ref, fixed_at, recorded_at, is_current)
+		 VALUES ($1, 'SYN-UNIT-01', 'SYN-PROCEDURE-01', 'SYN-VERSION-01', 'SYN-DIGEST-01',
+		         jsonb_build_array('SYN-PARCEL-01', 'SYN-PARCEL-02'), 'SYN-DOSSIER-01', 'SYN-ROLES-01',
+		         'SYN-BASIS-01', 'SYN-AUTHORITY-01', $2, $2, true)`,
+		pageTenant, viewBaseAt)
+	views := built(adapter.NewOperationsRecordViews(fixture.db))(t)
+	tenant := viewValue(t, domain.NewTenantID, pageTenant)
+	for keyword, want := range map[string]int64{`"`: 0, ",": 0, "[": 0, "01SYN": 0, "parcel-02": 1} {
+		t.Run(keyword, func(t *testing.T) {
+			values := url.Values{"q": {keyword}}
+			cases, err := views.ListCustomsCases(t.Context(), tenant, 10, pageQuery(t, ports.CustomsCasePages, values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			submissions, err := views.ListSubmissionVersions(t.Context(), tenant, 10,
+				pageQuery(t, ports.SubmissionVersionPages, values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cases.Total != want || submissions.Total != want {
+				t.Fatalf("q=%q：案件 total %d、提交版本 total %d，应各为 %d", keyword, cases.Total, submissions.Total, want)
 			}
 		})
 	}

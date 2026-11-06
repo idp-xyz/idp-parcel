@@ -90,12 +90,12 @@ func TestPortsPathsQueryRefusesNonGetMethods(t *testing.T) {
 	}
 }
 
-// Covers: registry 封闭集 — 缺席与集外值都是坏请求，拒在 Intake 之前；案件册的
-// registry 值在本端点也是集外（两端点各自的封闭集不互相收留），未建模的区域维没有
-// 分派格。
+// Covers: registry 封闭集 — 缺席与集外值都是坏请求，在 Intake 之后拒（未配置的渠道对它们同答 403，见
+// TestUnconfiguredPortsPathsIntakeRefusesBothRegistriesIdentically）；案件册的 registry 值在本端点也是集外（两端点
+// 各自的封闭集不互相收留），未建模的区域维没有分派格。
 func TestPortsPathsQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	endpoint := customshttp.NewQueryPortsPathsEndpoint(
-		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 50},
 		unreachablePortsPaths{t: t},
 	)
 	for name, query := range map[string]string{
@@ -115,14 +115,16 @@ func TestPortsPathsQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 对两个分派分支同答 403，
-// 分支选择不泄露任何东西；读口不被触到。
+// Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 对两个分派分支同答 403，缺席与集外的 registry 也一样，
+// 分支选择与封闭集都不泄露；读口不被触到。
 func TestUnconfiguredPortsPathsIntakeRefusesBothRegistriesIdentically(t *testing.T) {
 	endpoint := customshttp.NewQueryPortsPathsEndpoint(
 		customshttp.UnconfiguredIntake{}, unreachablePortsPaths{t: t},
 	)
 	var bodies []string
-	for _, query := range []string{"?registry=candidate-port", "?registry=declaration-path"} {
+	for _, query := range []string{
+		"?registry=candidate-port", "?registry=declaration-path", "", "?registry=", "?registry=candidate-region",
+	} {
 		response := httptest.NewRecorder()
 		endpoint.ServeHTTP(response, portsPathsRequest(t, query))
 		if response.Code != http.StatusForbidden {
@@ -134,8 +136,10 @@ func TestUnconfiguredPortsPathsIntakeRefusesBothRegistriesIdentically(t *testing
 		assertNoOutcome(t, response)
 		bodies = append(bodies, response.Body.String())
 	}
-	if bodies[0] != bodies[1] {
-		t.Fatalf("两个分支的未配置答复不一致：%v", bodies)
+	for _, body := range bodies[1:] {
+		if body != bodies[0] {
+			t.Fatalf("未配置答复随请求变了：%v", bodies)
+		}
 	}
 }
 

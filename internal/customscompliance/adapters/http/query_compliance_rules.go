@@ -75,10 +75,9 @@ var ruleCataloguePages = map[string]*cataloguepage.Catalogue{
 // NewQueryComplianceRulesEndpoint 交回合规规则库查阅的 HTTP 入口
 // （GET /customs-compliance-rules，ADR-0077）。
 //
-// 两本规则登记册共用一个端点，按 `registry` 查询参数分派：参数在场与否、取值在不在
-// 封闭集内属传输形状（与方法检查同级，先于 Intake），读它不构成读业务内容——未配置
-// Intake 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认
-// 一本册子就是替它猜。其余查询参数按选中那一册的声明解码，同样先于 Intake（ADR-0144 决定六）。
+// 两本规则登记册共用一个端点，按 `registry` 查询参数分派。缺席或不在封闭集内按坏请求拒：替调用方默认一本册子
+// 就是替它猜。分派与其余查询参数的解码都在 Intake 之后：未配置的渠道对一切请求同答 403，坏的 registry 也不例外
+// （ADR-0055 决定三），没有凭据的调用方探不出有哪几本册子、各册开放了哪些查询维度。其余参数按选中那一册的声明解码。
 func NewQueryComplianceRulesEndpoint(
 	intake CatalogueQueryIntake,
 	reader RuleCatalogueReader,
@@ -90,6 +89,11 @@ func NewQueryComplianceRulesEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
 		registry := request.URL.Query().Get("registry")
 		catalogue, known := ruleCataloguePages[registry]
 		if !known {
@@ -99,12 +103,6 @@ func NewQueryComplianceRulesEndpoint(
 		pageQuery, err := catalogue.Decode(request.URL.Query())
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()

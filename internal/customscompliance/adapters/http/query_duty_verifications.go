@@ -38,7 +38,7 @@ const outcomeDutyVerificationsListed = "DUTY_VERIFICATIONS_LISTED"
 // 版本追加、不按到达顺序覆盖（UC-CC-009），哪版是当前由读者按 verifiedAt 判读。「待关联」
 // 是资金事实册上的派生（没有核对引用它的事实就是待关联），不是核对册的列，本端点不代算。
 //
-// 查询参数按 ports.DutyVerificationPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
+// 查询参数按 ports.DutyVerificationPages 解码，在 Intake 之后（ADR-0144 决定六；未配置的渠道对一切请求同答 403，ADR-0055 决定三）；答复带 page。
 func NewQueryDutyVerificationsEndpoint(
 	intake CatalogueQueryIntake,
 	reader DutyVerificationCatalogueReader,
@@ -50,14 +50,14 @@ func NewQueryDutyVerificationsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.DutyVerificationPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.DutyVerificationPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

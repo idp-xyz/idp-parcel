@@ -60,14 +60,15 @@ type caseClosureDocument struct {
 }
 
 // customsCasePages 把 ports.CustomsCasePages 落到列上。q 在案件标识、单据号、监管范围与义务、关联包裹的包裹号上做字面
-// 包含；包裹号只取 parcels 数组里 parcel 那一格，键名、客户与来源引用不进检索。
+// 包含；包裹号只取 parcels 数组里 parcel 那一格，键名、客户与来源引用不进检索。各包裹号以单元分隔符拼起来再比：数组的
+// JSON 文本里有引号、逗号与括号，q 会命中它们或跨两个包裹号命中，那不是字面包含。
 var customsCasePages = ports.CustomsCasePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"case": "c.case_id", "establishedAt": "c.established_at"},
 	Identity: []string{"c.case_id"},
 	Filters:  map[string]string{"case": "c.case_id", "direction": "c.direction"},
 	Keyword: []string{
 		"c.case_id", "c.document_number", "c.jurisdiction_ref", "c.procedure_ref", "c.obligation_ref",
-		"jsonb_path_query_array(c.parcels, '$[*].parcel')::text",
+		"(SELECT string_agg(p ->> 'parcel', chr(31)) FROM jsonb_array_elements(c.parcels) AS p)",
 	},
 })
 
@@ -223,12 +224,15 @@ func orEmpty(value *string) string {
 }
 
 // submissionVersionPages 把 ports.SubmissionVersionPages 落到列上。isCurrent 落在布尔列的文本形上（'true' / 'false'，与
-// 词表同词）；q 在版本号、单元、程序与成员包裹（数组的文本形，包裹号照原样出现在里面）上做字面包含。
+// 词表同词）；q 在版本号、单元、程序与成员包裹号上做字面包含，成员包裹号只拼数组元素，判据同 customsCasePages。
 var submissionVersionPages = ports.SubmissionVersionPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"unit": "s.unit_id", "fixedAt": "s.fixed_at"},
 	Identity: []string{"s.unit_id", "s.procedure_ref", "s.fixed_at", "s.version_id"},
 	Filters:  map[string]string{"version": "s.version_id", "isCurrent": "s.is_current::text"},
-	Keyword:  []string{"s.version_id", "s.unit_id", "s.procedure_ref", "s.members::text"},
+	Keyword: []string{
+		"s.version_id", "s.unit_id", "s.procedure_ref",
+		"(SELECT string_agg(m, chr(31)) FROM jsonb_array_elements_text(s.members) AS m)",
+	},
 })
 
 func (views *OperationsRecordViews) ListSubmissionVersions(
