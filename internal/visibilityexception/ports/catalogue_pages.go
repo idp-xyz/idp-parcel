@@ -17,7 +17,8 @@ import (
 // 按版本取单件的两支不经它。
 //
 // 本册一个包裹一行（它的当前版），按包裹计量。缺省序是推导时刻倒序、同刻按包裹倒序，与迁移前同一口径。推导时刻随重推导前移：
-// 翻页途中被重推导的包裹挪到已翻过的那头，本轮翻页可能不再见到它，但不会重出。投影没有状态一格，不放筛选维；q 覆盖包裹与版本。
+// 倒序翻页时，途中被重推导的包裹挪到已翻过的那头，本轮可能不再见到它；正序翻页时它挪到游标之后，可能在后面的页再出现一次。
+// 投影没有状态一格，不放筛选维；q 覆盖包裹与版本。
 var TrackingProjectionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "tracking-projections",
 	Sorts: []cataloguepage.SortDimension{
@@ -49,7 +50,8 @@ var ExceptionCasePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // SignalEpisodePages 是分诊查阅信号发作期一册（GET /exception-triage-records?registry=signal-episode）的声明。
 //
 // 缺省序是开始时刻倒序，与迁移前同一口径；同刻收尾从库内序号换成发作期标识，标识取登记表主键（只有发作期标识这一段，不含租户）。lastHitAt 随每次命中
-// 前移，按它翻页时途中再被命中的发作期挪到已翻过的那头，本轮可能不再见到它，但不会重出。outcome 是行上已记下的分诊结论
+// 前移：按它倒序翻页时，途中再被命中的发作期挪到已翻过的那头，本轮可能不再见到它；正序翻页时它挪到游标之后，可能在后面的页
+// 再出现一次。outcome 是行上已记下的分诊结论
 // （triage.outcome），词表取自领域 TriageOutcome，尚未分诊的发作期不落在任何一个词上；它只按已有结论收窄，不是分诊决定参数。
 // q 覆盖发作期标识、包裹与信号种类。
 var SignalEpisodePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
