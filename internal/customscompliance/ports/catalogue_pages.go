@@ -152,7 +152,7 @@ var InterpretationRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // ReadinessJudgmentPages 是就绪判断（GET /customs-case-registers?registry=readiness）的声明。
 //
-// 缺省序是申报单元升序，行标识是单元（主键）。不放筛选维：失效与否由撤销两格的在场表达，答复体刻意不设状态字段
+// 缺省序是申报单元升序，行标识是单元（主键）。不放筛选维：失效与否由 revokedBy、revokedAt 的在场表达，答复体刻意不设状态字段
 // （customshttp 的 readinessJudgmentBody 头注），筛选维名又只取答复体的字段名（决定四），不为筛选另造一格。
 var ReadinessJudgmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-case-registers/readiness",
