@@ -377,6 +377,9 @@ flowchart LR
 - `settlement-accounting ↔ 财务、税务、银行和支付系统`：结算拥有物流运营分户账，外部系统拥有真实收付款、银行清算、法定税额与发票、会计应收应付、坏账、总账和法定报表。双方通过可追溯事实及映射协作，不共同维护一个可覆盖余额。
 - `parcel-shipment / transport-fulfillment → collection-remittance`：小包托运拥有并提供包裹与客户代收服务要求快照；运输履约拥有并提供履约侧代收证据、渠道代收报告和渠道回款通知，但这些来源都不等于运营企业真实到账。代收与清分据此登记代收指令与代收事实，形成代收分户账结果（资金位置见 [GLOSSARY「代收分户账」](./GLOSSARY.md#代收分户账)），不取得客户要求、履约证据或银行事实所有权。
 - `settlement-accounting ↔ collection-remittance`：结算拥有 COD 服务费和有效协议允许的运费抵扣金额，代收与清分拥有代收本金及汇付。运营企业真实到账同样只经结算的唯一采用口进入本产品：代收与清分登记这一层代收事实时，证据引用指向一条结算已采用、且已整条认作代收本金的外部资金事实（认作之后它在结算一侧不核销、不进运营余额，与别的映射互斥），按引用向结算的只读口读回此刻的链头核对，引用同一条事实的各条真实到账金额之和不超过它、一条事实对一条指令至多一条，移位记账前再核一次（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)、[ADR-0330](../adr/0330-a-collected-principal-bank-arrival-is-registered-against-an-adopted-funds-fact-that-settlement-has-set-aside-as-collected-principal.md)）。未实际收到的代收款不得进入可付客户余额，代收本金也不得计入经营口径物流收入或普通运营结算余额。
+- `party-commercial → warehouse-fulfillment`：参与方与商业拥有货主客户账户与合同；仓配履约引用它们——出库请求属于某个货主客户账户，打包完成后以它的名义提交委托——不取得客户账户或合同的所有权（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定二、四）。
+- `warehouse-fulfillment → parcel-shipment`：仓配履约打包完成时，以出库请求所属货主客户账户的名义向小包托运提交委托，来源「仓配出库」，来源请求键取自（出库请求，包裹序号）；打包称得的重量与尺寸作声明测量，货物内容取自出库请求的商品明细，作客户原始资料。小包托运对它与客户渠道交来的委托作同一套接受判断，不因来源绕过任何接受规则；委托、包裹身份与接受决定仍归小包托运（ADR-0368 决定四）。
+- `warehouse-fulfillment → parcel-pricing / settlement-accounting`：仓配履约登记仓储作业收费发生项（作业种类、货主、数量与单位、业务时间、来源事实引用），它只证明作业已发生及其数量与单位，不带金额。对货主收多少由计价按 `SELL` 价卡评价，结算采用为客户运营应收，双方不回写发生项。计价要为它立新的评价对象（仓租还要按持有期计），另立 ADR；在那之前小包计价 CONTEXT 的评价对象不含它（ADR-0368 决定七）。
 
 ## 文档关系
 

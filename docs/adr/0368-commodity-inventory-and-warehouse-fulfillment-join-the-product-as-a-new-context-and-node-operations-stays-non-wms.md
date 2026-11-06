@@ -1,6 +1,6 @@
 # ADR-0368：商品库存与仓配作为新的限界上下文「仓配履约」（`warehouse-fulfillment`）纳入产品——节点作业仍不是 WMS，包裹在打包完成后经委托进入小包链路，首发范围不变
 
-Status: Accepted（2026-11-06，用户以产品 owner 身份在会话问题卡上选「接受：按清单一次改完相关文件，再用 /grill-with-docs 写仓配履约的 CONTEXT」，接受整份记录。同日早些时候由 Cursor 会话按用户要求起草为 Proposed 草案（用户当时选「准备改边界：起草把商品库存与仓配纳入产品的 ADR 草案（Proposed，交你定）」）；起草时会话建议维持 ADR-0006，正文如实保留这一建议。决定一（产品边界与判据读法）是用户本人的决定；决定二至七落到各上下文的细节由会话拟定、代各上下文 owner 决（代决），用户接受整份记录但未逐条过目，越权风险点 2 至 6 待 PS、PP、仓配履约与一线作业端 owner 复核。部分停用 [ADR-0006](./0006-parcel-node-operations-not-full-wms.md) Consequences 一句与 [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md) Decision 两句，见「对已接受记录的作用」。实现另立票、另立切片，本记录不动 `internal/**`。起草能力边界：读过 ADR-0006、ADR-0021 全文，CONTEXT-MAP 的产品边界、核心区分与小包托运、节点作业两节，节点作业 CONTEXT 的节点收寄词条与非 WMS 诸句，小包托运 CONTEXT 的客户原始资料、声明测量、委托撤回与收寄后服务处置词条，结算与经营核算 CONTEXT 的费用来源一句，开发主线的目标客户群与能力范围判据，产品基线与首发试点范围的非 WMS 句，ADR-0310 的直客与 1:N 两节；没读：各上下文其余全文、一线作业端设计简报、计价规则模型对新计价对象的适配。）<!-- 索引注记 -->｜**判据**：新立「仓配履约」（`warehouse-fulfillment`）上下文，拥有货主商品身份、库存账与流水、预占、入库与上架、库内移动与盘点、出库请求与拣货打包任务、退货入库和代理仓库存声明；按对象分边界、不按场地分——节点作业仍只管节点内的包裹作业与集运单元，包裹身份仍归小包托运；打包完成后由仓配履约以货主客户账户的名义提交委托（来源「仓配出库」），库存在仓配自己的出库确认时扣减；一线作业端扩到仓内作业；仓储作业费经不带金额的收费发生项交计价与结算；能力范围判据只为仓配一项读宽；首发范围与冻结清单不变
+Status: Accepted（2026-11-06，用户以产品 owner 身份在会话问题卡上选「接受：按清单一次改完相关文件，再用 /grill-with-docs 写仓配履约的 CONTEXT」，接受整份记录。同日早些时候由 Cursor 会话按用户要求起草为 Proposed 草案（用户当时选「准备改边界：起草把商品库存与仓配纳入产品的 ADR 草案（Proposed，交你定）」）；起草时会话建议维持 ADR-0006，正文如实保留这一建议。决定一（产品边界与判据读法）与决定八（首发范围与冻结清单不变）属产品 owner，由用户这次接受定下；决定二至七落到各上下文的细节由会话拟定、代各上下文 owner 决（代决），用户接受的是整份记录，没有逐条确认这些细节，越权风险点 2 至 6 待 PS、PP、仓配履约与一线作业端 owner 复核。部分停用 [ADR-0006](./0006-parcel-node-operations-not-full-wms.md) Consequences 一句与 [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md) Decision 两句，见「对已接受记录的作用」。实现另立票、另立切片，本记录不动 `internal/**`。起草能力边界：读过 ADR-0006、ADR-0021 全文，CONTEXT-MAP 的产品边界、核心区分与小包托运、节点作业两节，节点作业 CONTEXT 的节点收寄词条与非 WMS 诸句，小包托运 CONTEXT 的客户原始资料、声明测量、委托撤回与收寄后服务处置词条，结算与经营核算 CONTEXT 的费用来源一句，开发主线的目标客户群与能力范围判据，产品基线与首发试点范围的非 WMS 句，ADR-0310 的直客与 1:N 两节；没读：各上下文其余全文、一线作业端设计简报、计价规则模型对新计价对象的适配。）<!-- 索引注记 -->｜**判据**：新立「仓配履约」（`warehouse-fulfillment`）上下文，拥有货主商品身份、库存账与流水、预占、入库与上架、库内移动与盘点、出库请求与拣货打包任务、退货入库和代理仓库存声明；按对象分边界、不按场地分——节点作业仍只管节点内的包裹作业与集运单元，包裹身份仍归小包托运；打包完成后由仓配履约以货主客户账户的名义提交委托（来源「仓配出库」），库存在仓配自己的出库确认时扣减；一线作业端扩到仓内作业；仓储作业费经不带金额的收费发生项交计价与结算；能力范围判据只为仓配一项读宽；首发范围与冻结清单不变
 
 ## Context
 
@@ -75,18 +75,19 @@ Status: Accepted（2026-11-06，用户以产品 owner 身份在会话问题卡�
 - ADR-0006、ADR-0021 的 `Status` 行索引注记与 Links 各加一条前向指针，正文不动。
 - 开发主线「产品需求假设」：登记 `PA-WF-01`（见 Consequences）。
 - CONTEXT-MAP「核心区分」：补一条商品库存与包裹是不同身份（决定三）。
-- [docs/agents/domain.md](../agents/domain.md)：「每个已映射的上下文都有 `CONTEXT.md`」一句与上下文表，写明仓配履约暂无 `CONTEXT.md`。
+- [docs/agents/domain.md](../agents/domain.md)：「Every mapped context has a `CONTEXT.md` today」一句与上下文表，写明仓配履约暂无 `CONTEXT.md`。
 - [docs/README](../README.md)：领域文档列表补仓配履约一条；外部 WMS 协作缝设计备忘与几份 WMS 参考件的条目里，写「草案 ADR-0368」或「现行排除完整 WMS」的说法改为已接受。
-- [外部 WMS 协作缝设计备忘](../design/external-wms-collaboration-seams-design-note.md)：写「草案」的几处、「不做清单」里不记库存那一条、「仓储作业要收费」与「货主、SKU 与库存」两行，改成区分外部 WMS 与本产品自营的仓配履约。
+- [外部 WMS 协作缝设计备忘](../design/external-wms-collaboration-seams-design-note.md)：写「草案」的几处、「不做清单」里不记库存那一条、「仓储作业要收费」与「货主、SKU 与库存」两行，改成区分外部 WMS 与本产品自营的仓配履约；「不做清单」里不在节点作业加字段那一条，引文只留 ADR-0006 Consequences 照旧成立的「不能通过不断增加场站字段隐式吸收」。
 - [产品基线](../product/PRODUCT-BASELINE.md)「网络运营与场站边界」：「本产品不建设完整商品库存 WMS；场站可以管理包裹暂存位置、作业批次和实物控制，但不拥有商品库存可用量、库存价值、采购入库、补货或销售订单拣选等完整仓储职责。」改为场站不拥有、仓配履约拥有，货主的库存价值与采购、销售订单仍不在产品内。
 - 开发主线「能力范围判据」：补上决定一的读法，判据仍只在那一处定义。
-- [CONTEXT-MAP](../domain/CONTEXT-MAP.md)：新增 `warehouse-fulfillment` 一节（拥有 / 不拥有），写明它与小包托运、节点作业、小包计价、结算与经营核算、参与方与商业的关系；节点作业「不拥有」里「商品库存账、库存可用量、库存价值、补货、仓储拣选或库存调整等完整 WMS 能力。」一条补注归属。
-- [产品业务全景与端到端流程说明书](../product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)「产品卖给谁」一节：「本产品不是」清单里「完整商品库存 WMS、车队资产系统、银行支付系统、税务系统或总账系统。」去掉 WMS 一项。
-- [ABBREVIATIONS](../ABBREVIATIONS.md)：以「十个限界上下文的所有权边界见」起头的那一句改个数，并补新上下文的代码、目录名与中文名。
+- [CONTEXT-MAP](../domain/CONTEXT-MAP.md)：新增 `warehouse-fulfillment` 一节（拥有 / 不拥有）；关系图加它与参与方与商业、小包托运、小包计价、结算与经营核算之间的边，「关系约束」逐条写明这些关系；它与节点作业之间没有边，分界写在该节「不拥有」与「核心区分」；节点作业「不拥有」里「商品库存账、库存可用量、库存价值、补货、仓储拣选或库存调整等完整 WMS 能力。」一条补注归属。
+- [产品业务全景与端到端流程说明书](../product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)「产品卖给谁」一节：「本产品不是」清单里「完整商品库存 WMS、车队资产系统、银行支付系统、税务系统或总账系统。」一条，完整商品库存 WMS 换成货主的进销存或 ERP，并补一句 3PL 仓配由仓配履约承担、首发不包含。
+- [ABBREVIATIONS](../ABBREVIATIONS.md)：以「十个限界上下文的所有权边界见」起头的那一句去掉个数（它数的是 CONTEXT-MAP 的节，照 AGENTS.md「改文档」不写别处的计数），并补新上下文的代码、目录名与中文名。
 - [结算与经营核算 CONTEXT](../domain/settlement-accounting/CONTEXT.md)：「费用引用原始测量、面单交易、节点作业、运输收费发生项、其他运输履约、关务、异常责任和外部财务事实，但不得修改这些来源。」的来源列举补上仓配履约的仓储作业收费发生项（决定七）。
 - [小包托运 CONTEXT](../domain/parcel-shipment/CONTEXT.md)：来源请求身份那一条（「由租户、客户账户、来源和来源请求键组成的完整复合身份」）记下「仓配出库」这一来源与它的来源请求键（决定四）；实现差距写进 [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)「给开发的交接」。
 - 一线作业端的范围说明：[一线扫描离线与冲突决策简报](../design/frontline-scan-offline-and-conflict-decision-brief.md)里「范围上界见」ADR-0006 那句与 Links 里「作业端范围的上界」一条，以及产品业务全景说明书里「一线作业客户端属于产品范围，用于节点收寄、扫描、实测、分拣、集运、封签、点验和现场协作。」一句，补上决定六的仓内作业。
 - **不**同笔建 `docs/domain/warehouse-fulfillment/CONTEXT.md` 空壳：[docs/README](../README.md)「维护原则」要求「各上下文的 `CONTEXT.md` 按确认顺序创建，不建立只有标题的空文档。」它随新切片的第一张票写成，GLOSSARY 词条同去。
+- **不**改[小包计价 CONTEXT](../domain/parcel-pricing/CONTEXT.md)：它的「评价对象」词条是封闭的，仓储作业收费发生项不在其中。为它立新的评价对象、让仓租按持有期计价，是决定七说的那份另立 ADR，小包计价 CONTEXT 随那份 ADR 改；CONTEXT-MAP「关系约束」里仓配履约到计价与结算的那一条写明了这一点。
 - ADR 索引由推送方重生成，不手改。
 
 ## Consequences
