@@ -79,8 +79,8 @@ func declaredPatterns(keep func(endpointLine) bool) []string {
 
 // businessEndpointProbe 是一行端点的有效探测请求。
 //
-// 方法与必填分派参数必须逐项写对：拿错方法测出来的 405、漏掉 family/registry/kind
-// 测出来的 400 都会盖过未配置 Intake 的 403，断言就什么也没守住。它们取自登记处的行声明。
+// 方法与必填分派参数必须逐项写对：拿错方法测出来的 405、漏掉先于 Intake 判的分派参数测出来的 400，
+// 都会盖过未配置 Intake 的 403，断言就什么也没守住。它们取自登记处的行声明。
 type businessEndpointProbe struct {
 	method string
 	target string
