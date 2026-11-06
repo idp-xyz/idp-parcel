@@ -30,8 +30,9 @@ const info = moduleInfoById['label-transactions'];
  * (continuedAttemptBasis 说明派生依据),不是存下来的状态;派生依据的码不上屏。
  *
  * 读口已迁到 ADR-0144:检索词(地址上的 `?q=`,停稳后)下推,接模板的游标翻页,不在答回来的那一页上再筛。翻页按交易翻,
- * 翻页条上的总数数的是交易,一页交易摊开的行比它多,所以摘要把两样分开报。渠道面单号不在读口检索的列里,检索框的提示
- * 因此不写它;读口另有交易结果一维,本页没有对应的筛选条,不另加。
+ * 翻页条上的总数数的是交易,一页交易摊开的行比它多,所以摘要把两样分开报。检索框提示里写的号码都要在读口检索的列里
+ * (parcel-shipment postgres 读面的 labelTransactionPages),那边少一列,这里的提示跟着改;读口另有交易结果一维,本页没有
+ * 对应的筛选条,不另加。
  */
 
 /**
@@ -123,7 +124,7 @@ export function LabelTransactionsPage() {
     <ListPageTemplate<LabelTransactionRow>
       title={info.title}
       description="每笔面单交易覆盖了哪些包裹、渠道答了什么、还能不能再试。定案只说明结果不再变,定下的也可能是失败。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: '搜包裹号 / 面单交易 / 渠道账号' }}
+      search={{ value: keyword, onChange: setKeyword, placeholder: '搜包裹号 / 面单交易 / 渠道面单号' }}
       filterSummary={body ? `本页 ${transactionCount} 笔交易,摊开 ${rows.length} 行` : undefined}
       columns={columns}
       rows={rows}
