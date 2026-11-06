@@ -12,6 +12,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // stubCredentials 是读口替身：记录收到的键，交回预置的册子或故障。
@@ -24,20 +25,20 @@ type stubCredentials struct {
 }
 
 func (stub *stubCredentials) ListCredentials(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CredentialCatalogueEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CredentialCatalogueEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.entries, stub.err
+	return cataloguepage.Result[ports.CredentialCatalogueEntry]{Rows: stub.entries, Total: int64(len(stub.entries))}, stub.err
 }
 
 // unreachableCredentials 断言读口未被触到：传输形状的拒绝与未配置格都发生在读库之前。
 type unreachableCredentials struct{ t *testing.T }
 
 func (stub unreachableCredentials) ListCredentials(
-	context.Context, domain.TenantID, int,
-) ([]ports.CredentialCatalogueEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CredentialCatalogueEntry], error) {
 	stub.t.Fatal("a refused request reached the credential register")
-	return nil, nil
+	return cataloguepage.Result[ports.CredentialCatalogueEntry]{}, nil
 }
 
 func credentialRequest(method string) *http.Request {
@@ -94,20 +95,21 @@ func TestUnconfiguredCredentialIntakeRefusesTheQuery(t *testing.T) {
 }
 
 // Covers: ADR-0077 Decision 四 / 票 sa-cc/10 完成判据 1 — 空册以空数组在场（不是 null 也不是
-// 未配置）；租户与页大小从作用域来，不采信请求自报。
+// 未配置）；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestAnEmptyCredentialRegisterAnswersAnEmptyArray(t *testing.T) {
 	register := &stubCredentials{}
 	endpoint := customshttp.NewQueryCredentialsEndpoint(
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-credentials?tenant=TENANT-9&limit=9999", nil))
+	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-credentials", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（租户或页大小不是接入面给的）",
 			register.gotTenant, register.gotLimit)
 	}
 	var body struct {

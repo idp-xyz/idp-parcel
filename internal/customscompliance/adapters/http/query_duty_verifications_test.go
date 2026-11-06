@@ -12,6 +12,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // stubDutyVerifications 是读口替身：记录收到的键，交回预置的册子或故障。
@@ -24,20 +25,20 @@ type stubDutyVerifications struct {
 }
 
 func (stub *stubDutyVerifications) ListDutyVerifications(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DutyVerificationRecord, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.DutyVerificationRecord], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.records, stub.err
+	return cataloguepage.Result[ports.DutyVerificationRecord]{Rows: stub.records, Total: int64(len(stub.records))}, stub.err
 }
 
 // unreachableDutyVerifications 断言读口未被触到。
 type unreachableDutyVerifications struct{ t *testing.T }
 
 func (stub unreachableDutyVerifications) ListDutyVerifications(
-	context.Context, domain.TenantID, int,
-) ([]ports.DutyVerificationRecord, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DutyVerificationRecord], error) {
 	stub.t.Fatal("a refused request reached the duty verification register")
-	return nil, nil
+	return cataloguepage.Result[ports.DutyVerificationRecord]{}, nil
 }
 
 func verificationRequest(method string) *http.Request {
@@ -106,15 +107,15 @@ func TestUnconfiguredDutyVerificationIntakeRefusesTheQuery(t *testing.T) {
 	assertNoOutcome(t, response)
 }
 
-// Covers: ADR-0077 Decision 四 / 票 sa-cc/10 完成判据 1 — 空册以空数组在场；租户与页大小
-// 从作用域来，不采信请求自报。
+// Covers: ADR-0077 Decision 四 / 票 sa-cc/10 完成判据 1 — 空册以空数组在场；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestAnEmptyDutyVerificationRegisterAnswersAnEmptyArray(t *testing.T) {
 	register := &stubDutyVerifications{}
 	endpoint := customshttp.NewQueryDutyVerificationsEndpoint(
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-duty-verifications?tenant=TENANT-9&limit=9999", nil))
+	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-duty-verifications", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())

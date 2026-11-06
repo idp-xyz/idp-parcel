@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // DutyVerificationCatalogueReader 是本端点消费的读口：税费付款核对登记册的列表读面。
@@ -16,7 +17,8 @@ type DutyVerificationCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.DutyVerificationRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DutyVerificationRecord], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -35,6 +37,8 @@ const outcomeDutyVerificationsListed = "DUTY_VERIFICATIONS_LISTED"
 // 是按监管程序登记进来的规则，不是查阅面的常量。全部版本连指纹原样上列：迟到事实按新
 // 版本追加、不按到达顺序覆盖（UC-CC-009），哪版是当前由读者按 verifiedAt 判读。「待关联」
 // 是资金事实册上的派生（没有核对引用它的事实就是待关联），不是核对册的列，本端点不代算。
+//
+// 查询参数按 ports.DutyVerificationPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
 func NewQueryDutyVerificationsEndpoint(
 	intake CatalogueQueryIntake,
 	reader DutyVerificationCatalogueReader,
@@ -46,20 +50,25 @@ func NewQueryDutyVerificationsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.DutyVerificationPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		records, err := reader.ListDutyVerifications(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListDutyVerifications(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]dutyVerificationBody, 0, len(records))
-		for _, record := range records {
+		bodies := make([]dutyVerificationBody, 0, len(page.Rows))
+		for _, record := range page.Rows {
 			verification := record.Verification
 			bodies = append(bodies, dutyVerificationBody{
 				Duty:         record.Key.Duty.String(),
@@ -78,6 +87,7 @@ func NewQueryDutyVerificationsEndpoint(
 		writeJSON(response, http.StatusOK, dutyVerificationListResponse{
 			Outcome:       outcomeDutyVerificationsListed,
 			Verifications: bodies,
+			Page:          page.Page(query.Limit),
 		})
 	})
 }
@@ -85,6 +95,7 @@ func NewQueryDutyVerificationsEndpoint(
 type dutyVerificationListResponse struct {
 	Outcome       string                 `json:"outcome"`
 	Verifications []dutyVerificationBody `json:"verifications"`
+	Page          cataloguepage.Page     `json:"page"`
 }
 
 // dutyVerificationBody 逐字段透出一版核对。version 是幂等键上的内容指纹（同三维同内容

@@ -5,6 +5,7 @@ import (
 
 	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	customsports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 func init() {
@@ -20,39 +21,39 @@ func init() {
 type unwiredCustomsCaseRecords struct{}
 
 func (unwiredCustomsCaseRecords) ListCustomsCases(
-	context.Context, customsdomain.TenantID, string, int,
-) ([]customsports.CustomsCaseRecord, error) {
-	return nil, errOrchestrationNotWired
+	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[customsports.CustomsCaseRecord], error) {
+	return cataloguepage.Result[customsports.CustomsCaseRecord]{}, errOrchestrationNotWired
 }
 
 type unwiredSubmissionRecords struct{}
 
 func (unwiredSubmissionRecords) ListSubmissionVersions(
-	context.Context, customsdomain.TenantID, string, int,
-) ([]customsports.SubmissionVersionRecord, error) {
-	return nil, errOrchestrationNotWired
+	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[customsports.SubmissionVersionRecord], error) {
+	return cataloguepage.Result[customsports.SubmissionVersionRecord]{}, errOrchestrationNotWired
 }
 
 type unwiredExternalResultViews struct{}
 
 func (unwiredExternalResultViews) ListExternalResults(
-	context.Context, customsdomain.TenantID, string, int,
-) ([]customsports.ExternalResultViewRecord, error) {
-	return nil, errOrchestrationNotWired
+	context.Context, customsdomain.TenantID, string, int, cataloguepage.Query,
+) (cataloguepage.Result[customsports.ExternalResultViewRecord], error) {
+	return cataloguepage.Result[customsports.ExternalResultViewRecord]{}, errOrchestrationNotWired
 }
 
 type unwiredAdmissionJudgementViews struct{}
 
 func (unwiredAdmissionJudgementViews) ListActionAdmissionJudgements(
-	context.Context, customsdomain.TenantID, string, int,
-) ([]customsports.ActionAdmissionJudgementRecord, error) {
-	return nil, errOrchestrationNotWired
+	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[customsports.ActionAdmissionJudgementRecord], error) {
+	return cataloguepage.Result[customsports.ActionAdmissionJudgementRecord]{}, errOrchestrationNotWired
 }
 
 type unwiredUnadmittedObjects struct{}
 
 func (unwiredUnadmittedObjects) ListUnadmittedObjects(
-	context.Context, customsdomain.TenantID, int,
+	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
 ) (customsports.UnadmittedObjects, error) {
 	return customsports.UnadmittedObjects{}, errOrchestrationNotWired
 }

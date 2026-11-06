@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CredentialCatalogueReader 是本端点消费的读口：监管凭证登记册的列表读面。查阅不触发
@@ -17,7 +18,8 @@ type CredentialCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CredentialCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CredentialCatalogueEntry], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -38,6 +40,8 @@ const outcomeCredentialsListed = "CREDENTIALS_LISTED"
 // 逐版原样上列：凭证是不可变版本，一身份一版，换期限或额度是另一张凭证（0014 自注），
 // 所以没有「当前版 / 历史版」的折叠可做。次数额度「来源未提供」以 uses 缺席表达——写成 0
 // 会被读成额度已用尽，而那一格在本册根本没有表达方式（余额不是登记内容）。
+//
+// 查询参数按 ports.CredentialPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
 func NewQueryCredentialsEndpoint(
 	intake CatalogueQueryIntake,
 	reader CredentialCatalogueReader,
@@ -49,20 +53,25 @@ func NewQueryCredentialsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.CredentialPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		entries, err := reader.ListCredentials(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListCredentials(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]credentialBody, 0, len(entries))
-		for _, entry := range entries {
+		bodies := make([]credentialBody, 0, len(page.Rows))
+		for _, entry := range page.Rows {
 			credential := entry.Credential
 			body := credentialBody{
 				Credential:        credential.ID().String(),
@@ -82,13 +91,15 @@ func NewQueryCredentialsEndpoint(
 		writeJSON(response, http.StatusOK, credentialListResponse{
 			Outcome:     outcomeCredentialsListed,
 			Credentials: bodies,
+			Page:        page.Page(query.Limit),
 		})
 	})
 }
 
 type credentialListResponse struct {
-	Outcome     string           `json:"outcome"`
-	Credentials []credentialBody `json:"credentials"`
+	Outcome     string             `json:"outcome"`
+	Credentials []credentialBody   `json:"credentials"`
+	Page        cataloguepage.Page `json:"page"`
 }
 
 // credentialBody 逐字段透出一版监管凭证。uses 只在来源提供了次数额度时在场：领域把零约定

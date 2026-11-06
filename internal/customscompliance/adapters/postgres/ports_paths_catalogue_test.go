@@ -6,6 +6,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
 // 口岸目录与申报路径目录列表读面的用例（ADR-0077 Decision 四/五那三句在本册的样子）。
@@ -24,16 +25,16 @@ func newPortsPathsCatalogue(t *testing.T) (*adapter.PortsPathsCatalogue, *viewFi
 func TestEmptyPortsPathsRegistersAnswerEmptyLists(t *testing.T) {
 	catalogue, _ := newPortsPathsCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
-	if entries, err := catalogue.ListCandidatePorts(t.Context(), tenant, 10); err != nil || len(entries) != 0 {
+	if entries, err := rowsOf(catalogue.ListCandidatePorts(t.Context(), tenant, 10, firstPage(t, ports.CandidatePortPages))); err != nil || len(entries) != 0 {
 		t.Fatalf("空口岸册上列走样：err=%v entries=%+v", err, entries)
 	}
-	if entries, err := catalogue.ListDeclarationPaths(t.Context(), tenant, 10); err != nil || len(entries) != 0 {
+	if entries, err := rowsOf(catalogue.ListDeclarationPaths(t.Context(), tenant, 10, firstPage(t, ports.DeclarationPathPages))); err != nil || len(entries) != 0 {
 		t.Fatalf("空路径册上列走样：err=%v entries=%+v", err, entries)
 	}
 }
 
-// Covers: 全部版本连同区间原样上列（开放版终点零值透出），键升序、同键内起点倒序；
-// 跨租户不可见。区间判读留给读者——历史版本不被过滤掉。
+// Covers: 全部版本连同区间原样上列（开放版终点零值透出），键升序、同键内起点升序（与键序同向，
+// ADR-0144 决定三）；跨租户不可见。区间判读留给读者——历史版本不被过滤掉。
 func TestCandidatePortCatalogueListsAllVersionsInKeyOrder(t *testing.T) {
 	catalogue, fixture := newPortsPathsCatalogue(t)
 	successionAt := viewBaseAt.Add(48 * time.Hour)
@@ -46,22 +47,22 @@ func TestCandidatePortCatalogueListsAllVersionsInKeyOrder(t *testing.T) {
 			('tenant-b', 'SYN-PORT-09', $1, NULL)`,
 		viewBaseAt, successionAt)
 
-	entries, err := catalogue.ListCandidatePorts(t.Context(),
-		viewValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListCandidatePorts(t.Context(),
+		viewValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.CandidatePortPages)))
 	if err != nil {
 		t.Fatalf("上列口岸目录：%v", err)
 	}
 	if len(entries) != 3 {
 		t.Fatalf("上列了 %d 行，要 3 行：%+v", len(entries), entries)
 	}
-	// SYN-PORT-01 的两版在前（键升序），版本内起点倒序：当前开放版先于历史版。
-	if entries[0].Port.String() != "SYN-PORT-01" || !entries[0].AppliesFrom.Equal(successionAt) ||
-		!entries[0].AppliesUntil.IsZero() {
-		t.Fatalf("首行不是 SYN-PORT-01 当前版：%+v", entries[0])
+	// SYN-PORT-01 的两版在前（键升序），版本内起点升序：历史版先于当前开放版。
+	if entries[0].Port.String() != "SYN-PORT-01" || !entries[0].AppliesFrom.Equal(viewBaseAt) ||
+		!entries[0].AppliesUntil.Equal(successionAt) {
+		t.Fatalf("首行不是 SYN-PORT-01 历史版（区间原样）：%+v", entries[0])
 	}
-	if entries[1].Port.String() != "SYN-PORT-01" || !entries[1].AppliesFrom.Equal(viewBaseAt) ||
-		!entries[1].AppliesUntil.Equal(successionAt) {
-		t.Fatalf("次行不是 SYN-PORT-01 历史版（区间原样）：%+v", entries[1])
+	if entries[1].Port.String() != "SYN-PORT-01" || !entries[1].AppliesFrom.Equal(successionAt) ||
+		!entries[1].AppliesUntil.IsZero() {
+		t.Fatalf("次行不是 SYN-PORT-01 当前版：%+v", entries[1])
 	}
 	if entries[2].Port.String() != "SYN-PORT-02" {
 		t.Fatalf("末行不是 SYN-PORT-02：%+v", entries[2])
@@ -73,7 +74,7 @@ func TestCandidatePortCatalogueListsAllVersionsInKeyOrder(t *testing.T) {
 	}
 }
 
-// Covers: 路径册上列同款——三维逐格如实、键升序、版本倒序、跨租户不可见。
+// Covers: 路径册上列同款——三维逐格如实、键升序、版本按起点升序、跨租户不可见。
 func TestDeclarationPathCatalogueListsRoutesFaithfully(t *testing.T) {
 	catalogue, fixture := newPortsPathsCatalogue(t)
 	successionAt := viewBaseAt.Add(48 * time.Hour)
@@ -87,25 +88,25 @@ func TestDeclarationPathCatalogueListsRoutesFaithfully(t *testing.T) {
 			('tenant-b', 'SYN-PATH-09', $1, NULL, 'SYN-PORT-09', 'IMPORT', 'SYN-MODE-GENERAL')`,
 		viewBaseAt, successionAt)
 
-	entries, err := catalogue.ListDeclarationPaths(t.Context(),
-		viewValue(t, domain.NewTenantID, "tenant-a"), 10)
+	entries, err := rowsOf(catalogue.ListDeclarationPaths(t.Context(),
+		viewValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.DeclarationPathPages)))
 	if err != nil {
 		t.Fatalf("上列路径目录：%v", err)
 	}
 	if len(entries) != 3 {
 		t.Fatalf("上列了 %d 行，要 3 行：%+v", len(entries), entries)
 	}
-	current := entries[0]
+	historical := entries[0]
+	current := entries[1]
 	if current.Path.String() != "SYN-PATH-01" || !current.AppliesFrom.Equal(successionAt) ||
 		current.Route.Port().String() != "SYN-PORT-02" {
-		t.Fatalf("首行不是 SYN-PATH-01 当前版：%+v", current)
+		t.Fatalf("次行不是 SYN-PATH-01 当前版：%+v", current)
 	}
-	historical := entries[1]
 	if historical.Path.String() != "SYN-PATH-01" || !historical.AppliesUntil.Equal(successionAt) ||
 		historical.Route.Port().String() != "SYN-PORT-01" ||
 		historical.Route.Direction() != domain.ImportManifest ||
 		historical.Route.Mode().String() != "SYN-MODE-GENERAL" {
-		t.Fatalf("次行三维或区间走样：%+v", historical)
+		t.Fatalf("首行三维或区间走样：%+v", historical)
 	}
 	other := entries[2]
 	if other.Path.String() != "SYN-PATH-02" || other.Route.Direction() != domain.ExportManifest ||
@@ -123,10 +124,10 @@ func TestDeclarationPathCatalogueListsRoutesFaithfully(t *testing.T) {
 func TestPortsPathsCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newPortsPathsCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
-	if _, err := catalogue.ListCandidatePorts(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListCandidatePorts(t.Context(), tenant, 0, firstPage(t, ports.CandidatePortPages))); err == nil {
 		t.Fatal("limit=0 的口岸上列被接受了")
 	}
-	if _, err := catalogue.ListDeclarationPaths(t.Context(), tenant, -1); err == nil {
+	if _, err := rowsOf(catalogue.ListDeclarationPaths(t.Context(), tenant, -1, firstPage(t, ports.DeclarationPathPages))); err == nil {
 		t.Fatal("limit=-1 的路径上列被接受了")
 	}
 
@@ -137,7 +138,7 @@ func TestPortsPathsCatalogueGuardsItsLimit(t *testing.T) {
 			('tenant-a', 'SYN-PORT-02', $1),
 			('tenant-a', 'SYN-PORT-03', $1)`,
 		viewBaseAt)
-	entries, err := catalogue.ListCandidatePorts(t.Context(), tenant, 2)
+	entries, err := rowsOf(catalogue.ListCandidatePorts(t.Context(), tenant, 2, firstPage(t, ports.CandidatePortPages)))
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("limit=2 却上列了 %d 行：err=%v", len(entries), err)
 	}

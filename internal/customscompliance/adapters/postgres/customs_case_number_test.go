@@ -11,6 +11,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
@@ -87,7 +88,7 @@ func TestACaseNumberAndItsAbsenceAreReadBackByBothReads(t *testing.T) {
 		"tenant-b": {"", "NUMBERING_TIME_ZONE_NOT_CONFIGURED"},
 		"tenant-c": {"", "ISSUED_BEFORE_NUMBERING"},
 	} {
-		records, err := views.ListCustomsCases(ctx, crgValue(t, domain.NewTenantID, tenant), "", 10)
+		records, err := rowsOf(views.ListCustomsCases(ctx, crgValue(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.CustomsCasePages)))
 		if err != nil || len(records) != 1 {
 			t.Fatalf("%s 查阅面：%v %+v", tenant, err, records)
 		}

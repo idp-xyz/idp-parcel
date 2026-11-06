@@ -506,7 +506,7 @@ func TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder(t *testing.T) {
 		current.Verification.Procedure() != underExport.Verification.Procedure() {
 		t.Fatalf("当前一版该是核对时刻更晚的出口那版并带程序：err=%v found=%v %+v", err, found, current)
 	}
-	listed, err := catalogue.ListDutyVerifications(t.Context(), tenantA(t), 10)
+	listed, err := rowsOf(catalogue.ListDutyVerifications(t.Context(), tenantA(t), 10, firstPage(t, ports.DutyVerificationPages)))
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("上列该两版：err=%v n=%d", err, len(listed))
 	}

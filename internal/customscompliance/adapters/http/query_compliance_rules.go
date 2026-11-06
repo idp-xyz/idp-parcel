@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CatalogueQuery 是一次已授权的主数据目录查阅（ADR-0077）：合规规则库
@@ -35,12 +36,14 @@ type RuleCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CaseRequirementRuleEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CaseRequirementRuleEntry], error)
 	ListInterpretationRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.InterpretationRuleEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.InterpretationRuleEntry], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义，只消费 ADR-0077
@@ -56,11 +59,18 @@ const (
 )
 
 // registry 查询参数的封闭集（未知值坏请求）。值指名登记册，不是内容过滤器——按内容
-// 维过滤的查询语义今天不存在，长出来时在本上下文票内扩，不动本分派（ADR-0077）。
+// 维的筛选是各册自己的筛选维（ports.CaseRequirementRulePages / InterpretationRulePages），
+// 不动本分派（ADR-0077）。
 const (
 	registryCaseRequirement = "case-requirement"
 	registryInterpretation  = "interpretation"
 )
+
+// ruleCataloguePages 把 registry 的每个取值对到那一册的声明：每种取值各是一册，排序、筛选与游标各按各的。
+var ruleCataloguePages = map[string]*cataloguepage.Catalogue{
+	registryCaseRequirement: ports.CaseRequirementRulePages,
+	registryInterpretation:  ports.InterpretationRulePages,
+}
 
 // NewQueryComplianceRulesEndpoint 交回合规规则库查阅的 HTTP 入口
 // （GET /customs-compliance-rules，ADR-0077）。
@@ -68,7 +78,7 @@ const (
 // 两本规则登记册共用一个端点，按 `registry` 查询参数分派：参数在场与否、取值在不在
 // 封闭集内属传输形状（与方法检查同级，先于 Intake），读它不构成读业务内容——未配置
 // Intake 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认
-// 一本册子就是替它猜。
+// 一本册子就是替它猜。其余查询参数按选中那一册的声明解码，同样先于 Intake（ADR-0144 决定六）。
 func NewQueryComplianceRulesEndpoint(
 	intake CatalogueQueryIntake,
 	reader RuleCatalogueReader,
@@ -81,8 +91,14 @@ func NewQueryComplianceRulesEndpoint(
 		}
 
 		registry := request.URL.Query().Get("registry")
-		if registry != registryCaseRequirement && registry != registryInterpretation {
+		catalogue, known := ruleCataloguePages[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -95,9 +111,9 @@ func NewQueryComplianceRulesEndpoint(
 
 		switch registry {
 		case registryCaseRequirement:
-			serveCaseRequirementRules(response, request, reader, tenant, query.Limit)
+			serveCaseRequirementRules(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryInterpretation:
-			serveInterpretationRules(response, request, reader, tenant, query.Limit)
+			serveInterpretationRules(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -108,16 +124,17 @@ func serveCaseRequirementRules(
 	reader RuleCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rules, err := reader.ListCaseRequirementRules(request.Context(), tenant, limit)
+	page, err := reader.ListCaseRequirementRules(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成终局。
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]caseRequirementRuleBody, 0, len(rules))
-	for _, rule := range rules {
+	bodies := make([]caseRequirementRuleBody, 0, len(page.Rows))
+	for _, rule := range page.Rows {
 		bodies = append(bodies, caseRequirementRuleBody{
 			Jurisdiction: rule.Jurisdiction.String(),
 			Direction:    rule.Direction.String(),
@@ -129,6 +146,7 @@ func serveCaseRequirementRules(
 	writeJSON(response, http.StatusOK, caseRequirementRuleListResponse{
 		Outcome: outcomeCaseRequirementRulesListed,
 		Rules:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -138,14 +156,15 @@ func serveInterpretationRules(
 	reader RuleCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rules, err := reader.ListInterpretationRules(request.Context(), tenant, limit)
+	page, err := reader.ListInterpretationRules(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]interpretationRuleBody, 0, len(rules))
-	for _, rule := range rules {
+	bodies := make([]interpretationRuleBody, 0, len(page.Rows))
+	for _, rule := range page.Rows {
 		body := interpretationRuleBody{
 			Layer:        rule.Layer.String(),
 			Jurisdiction: rule.Jurisdiction.String(),
@@ -162,6 +181,7 @@ func serveInterpretationRules(
 	writeJSON(response, http.StatusOK, interpretationRuleListResponse{
 		Outcome: outcomeInterpretationRulesListed,
 		Rules:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -192,11 +212,13 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 type caseRequirementRuleListResponse struct {
 	Outcome string                    `json:"outcome"`
 	Rules   []caseRequirementRuleBody `json:"rules"`
+	Page    cataloguepage.Page        `json:"page"`
 }
 
 type interpretationRuleListResponse struct {
 	Outcome string                   `json:"outcome"`
 	Rules   []interpretationRuleBody `json:"rules"`
+	Page    cataloguepage.Page       `json:"page"`
 }
 
 // caseRequirementRuleBody 逐字段透出建案要求规则：监管范围三维、判断与依据。依据对

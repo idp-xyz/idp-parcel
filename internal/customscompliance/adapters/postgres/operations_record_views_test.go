@@ -1,11 +1,13 @@
 package postgres_test
 
 import (
+	"net/url"
 	"testing"
 	"time"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
 func newOperationsRecordViews(t *testing.T) (*adapter.OperationsRecordViews, *viewFixture) {
@@ -88,7 +90,7 @@ func TestOperationsViewsListCasesWithUnitsAndClosureIsolatedByTenant(t *testing.
 	views, fixture := newOperationsRecordViews(t)
 	seedDemoShapedChain(t, fixture)
 
-	cases, err := views.ListCustomsCases(t.Context(), recordTenant(t, "SYN-TENANT-01"), "", 10)
+	cases, err := rowsOf(views.ListCustomsCases(t.Context(), recordTenant(t, "SYN-TENANT-01"), 10, firstPage(t, ports.CustomsCasePages)))
 	if err != nil {
 		t.Fatalf("上列案件：%v", err)
 	}
@@ -104,7 +106,8 @@ func TestOperationsViewsListCasesWithUnitsAndClosureIsolatedByTenant(t *testing.
 		t.Fatalf("关案记录走样：%+v", got.Closure)
 	}
 
-	one, err := views.ListCustomsCases(t.Context(), recordTenant(t, "SYN-TENANT-01"), "CASE-OTHER", 10)
+	one, err := rowsOf(views.ListCustomsCases(t.Context(), recordTenant(t, "SYN-TENANT-01"), 10,
+		pageQuery(t, ports.CustomsCasePages, url.Values{"case": {"CASE-OTHER"}})))
 	if err != nil || len(one) != 0 {
 		t.Fatalf("按他租户案件号单份读回必须答空：%v %+v", err, one)
 	}
@@ -115,7 +118,8 @@ func TestOperationsViewsListSubmissionVersionsWithSendFactAndReceipts(t *testing
 	views, fixture := newOperationsRecordViews(t)
 	seedDemoShapedChain(t, fixture)
 
-	versions, err := views.ListSubmissionVersions(t.Context(), recordTenant(t, "SYN-TENANT-01"), "", 10)
+	versions, err := rowsOf(views.ListSubmissionVersions(t.Context(), recordTenant(t, "SYN-TENANT-01"), 10,
+		firstPage(t, ports.SubmissionVersionPages)))
 	if err != nil {
 		t.Fatalf("上列提交版本：%v", err)
 	}
@@ -127,7 +131,8 @@ func TestOperationsViewsListSubmissionVersionsWithSendFactAndReceipts(t *testing
 		len(attempt.Receipts) != 1 || attempt.Receipts[0].Source != "rcpt-1" {
 		t.Fatalf("尝试、发送事实或回执走样：%+v", attempt)
 	}
-	if other, err := views.ListSubmissionVersions(t.Context(), recordTenant(t, "SYN-TENANT-02"), "", 10); err != nil || len(other) != 0 {
+	if other, err := rowsOf(views.ListSubmissionVersions(t.Context(), recordTenant(t, "SYN-TENANT-02"), 10,
+		firstPage(t, ports.SubmissionVersionPages))); err != nil || len(other) != 0 {
 		t.Fatalf("他租户不得看见提交版本：%v %+v", err, other)
 	}
 }
@@ -137,7 +142,8 @@ func TestOperationsViewsListExternalResultsWithReleaseAndUnattributable(t *testi
 	views, fixture := newOperationsRecordViews(t)
 	seedDemoShapedChain(t, fixture)
 
-	results, err := views.ListExternalResults(t.Context(), recordTenant(t, "SYN-TENANT-01"), "", 10)
+	results, err := rowsOf(views.ListExternalResults(t.Context(), recordTenant(t, "SYN-TENANT-01"), "", 10,
+		firstPage(t, ports.ExternalResultPages)))
 	if err != nil {
 		t.Fatalf("上列外部结果：%v", err)
 	}
@@ -157,7 +163,8 @@ func TestOperationsViewsListExternalResultsWithReleaseAndUnattributable(t *testi
 	if !lost.Unattributable || lost.SubmissionVersion != "" || lost.Release != nil {
 		t.Fatalf("归属不上的响应不得被猜出版本或放行：%+v", lost)
 	}
-	scoped, err := views.ListExternalResults(t.Context(), recordTenant(t, "SYN-TENANT-01"), "SUBV-1", 10)
+	scoped, err := rowsOf(views.ListExternalResults(t.Context(), recordTenant(t, "SYN-TENANT-01"), "SUBV-1", 10,
+		pageQuery(t, ports.ExternalResultPages, url.Values{"version": {"SUBV-1"}})))
 	if err != nil || len(scoped) != 1 {
 		t.Fatalf("按版本过滤走样：%v %+v", err, scoped)
 	}
@@ -168,7 +175,8 @@ func TestOperationsViewsListActionAdmissionJudgements(t *testing.T) {
 	views, fixture := newOperationsRecordViews(t)
 	seedDemoShapedChain(t, fixture)
 
-	judgements, err := views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-01"), "PCL-1", 10)
+	judgements, err := rowsOf(views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-01"), 10,
+		pageQuery(t, ports.AdmissionJudgementPages, url.Values{"object": {"PCL-1"}})))
 	if err != nil || len(judgements) != 1 {
 		t.Fatalf("判断册上列走样：%v %+v", err, judgements)
 	}
@@ -177,10 +185,12 @@ func TestOperationsViewsListActionAdmissionJudgements(t *testing.T) {
 		judgement.Findings[0].Bases[0].Sources[0] != "RES-REL" || !judgement.Zones[0].Registered {
 		t.Fatalf("判断记录走样：%+v", judgement)
 	}
-	if none, err := views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-01"), "PCL-NONE", 10); err != nil || len(none) != 0 {
+	if none, err := rowsOf(views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-01"), 10,
+		pageQuery(t, ports.AdmissionJudgementPages, url.Values{"object": {"PCL-NONE"}}))); err != nil || len(none) != 0 {
 		t.Fatalf("无判断的对象必须答有答案的空：%v %+v", err, none)
 	}
-	if other, err := views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-02"), "", 10); err != nil || len(other) != 0 {
+	if other, err := rowsOf(views.ListActionAdmissionJudgements(t.Context(), recordTenant(t, "SYN-TENANT-02"), 10,
+		firstPage(t, ports.AdmissionJudgementPages))); err != nil || len(other) != 0 {
 		t.Fatalf("他租户不得看见判断册：%v %+v", err, other)
 	}
 }
@@ -189,10 +199,10 @@ func TestOperationsViewsListActionAdmissionJudgements(t *testing.T) {
 func TestOperationsViewsEmptyRegistersAnswerEmptyAndRejectNonPositiveLimit(t *testing.T) {
 	views, _ := newOperationsRecordViews(t)
 	tenant := recordTenant(t, "SYN-TENANT-01")
-	if cases, err := views.ListCustomsCases(t.Context(), tenant, "", 10); err != nil || len(cases) != 0 {
+	if cases, err := rowsOf(views.ListCustomsCases(t.Context(), tenant, 10, firstPage(t, ports.CustomsCasePages))); err != nil || len(cases) != 0 {
 		t.Fatalf("空库案件：%v %+v", err, cases)
 	}
-	if _, err := views.ListSubmissionVersions(t.Context(), tenant, "", 0); err == nil {
+	if _, err := views.ListSubmissionVersions(t.Context(), tenant, 0, firstPage(t, ports.SubmissionVersionPages)); err == nil {
 		t.Fatal("limit 为 0 必须拒")
 	}
 }
@@ -260,12 +270,12 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 	rejudge(t, fixture, tenant, "J-T2", at(10))
 	seedJudgement(t, fixture, "SYN-TENANT-02", "J-X1", "PCL-X", at(1), "BLOCKED")
 
-	listed, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 10)
+	listed, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 10, firstPage(t, ports.UnadmittedObjectPages))
 	if err != nil {
 		t.Fatalf("上列卡关对象：%v", err)
 	}
 	var objects []string
-	for _, judgement := range listed.Judgements {
+	for _, judgement := range listed.Rows {
 		objects = append(objects, judgement.Object+"/"+judgement.Judgement)
 	}
 	want := []string{"PCL-C/J-C1", "PCL-D/J-D1", "PCL-B/J-B2", "PCL-G/J-G1", "PCL-H/J-H2"}
@@ -277,19 +287,19 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 			t.Fatalf("清单走样（卡得最久的在前）：%v，要 %v", objects, want)
 		}
 	}
-	if len(listed.Judgements[0].Findings) != 1 || listed.Judgements[0].OnwardNode != "NODE-B" {
-		t.Fatalf("判断行形与判断册不同：%+v", listed.Judgements[0])
+	if len(listed.Rows[0].Findings) != 1 || listed.Rows[0].OnwardNode != "NODE-B" {
+		t.Fatalf("判断行形与判断册不同：%+v", listed.Rows[0])
 	}
 
-	page, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 1)
-	if err != nil || page.Count != len(want) || len(page.Judgements) != 1 || page.Judgements[0].Object != "PCL-C" {
+	page, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 1, firstPage(t, ports.UnadmittedObjectPages))
+	if err != nil || page.Count != len(want) || len(page.Rows) != 1 || page.Rows[0].Object != "PCL-C" {
 		t.Fatalf("件数必须是全部而不是这一页：err=%v %+v", err, page)
 	}
-	none, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, "SYN-TENANT-03"), 10)
-	if err != nil || none.Count != 0 || len(none.Judgements) != 0 {
+	none, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, "SYN-TENANT-03"), 10, firstPage(t, ports.UnadmittedObjectPages))
+	if err != nil || none.Count != 0 || len(none.Rows) != 0 {
 		t.Fatalf("没有判断的租户答 0 件：err=%v %+v", err, none)
 	}
-	if _, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 0); err == nil {
+	if _, err := views.ListUnadmittedObjects(t.Context(), recordTenant(t, tenant), 0, firstPage(t, ports.UnadmittedObjectPages)); err == nil {
 		t.Fatal("limit 为 0 必须拒")
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	ccregistrationjson "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/registrationjson"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	customsports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -79,10 +81,15 @@ func TestTheWiredCredentialAndDutyRegistrationsRecordAgainstARealDatabase(t *tes
 		if err != nil {
 			t.Fatalf("构造凭证册读面：%v", err)
 		}
-		rows, err := catalogue.ListCredentials(ctx, tenant, 50)
+		firstPage, err := customsports.CredentialPages.Decode(url.Values{})
+		if err != nil {
+			t.Fatalf("解码凭证册首页：%v", err)
+		}
+		listed, err := catalogue.ListCredentials(ctx, tenant, 50, firstPage)
 		if err != nil {
 			t.Fatalf("读回凭证册：%v", err)
 		}
+		rows := listed.Rows
 		if len(rows) != 1 {
 			t.Fatalf("凭证册上 %d 行，想要 1——首登要在、冲突那版不得落册", len(rows))
 		}
@@ -140,10 +147,15 @@ func TestTheWiredCredentialAndDutyRegistrationsRecordAgainstARealDatabase(t *tes
 		if err != nil {
 			t.Fatalf("构造协作与核对读面：%v", err)
 		}
-		rows, err := catalogue.ListDutyVerifications(ctx, tenant, 50)
+		firstPage, err := customsports.DutyVerificationPages.Decode(url.Values{})
+		if err != nil {
+			t.Fatalf("解码核对册首页：%v", err)
+		}
+		listed, err := catalogue.ListDutyVerifications(ctx, tenant, 50, firstPage)
 		if err != nil {
 			t.Fatalf("读回核对册：%v", err)
 		}
+		rows := listed.Rows
 		if len(rows) != 0 {
 			t.Fatalf("核对册上 %d 行，想要 0——前置未齐不得落核对", len(rows))
 		}

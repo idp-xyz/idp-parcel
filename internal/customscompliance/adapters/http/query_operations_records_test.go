@@ -11,20 +11,21 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 type stubCaseRecords struct {
 	records   []ports.CustomsCaseRecord
 	err       error
 	gotTenant string
-	gotFilter string
+	gotFilter []string
 }
 
 func (stub *stubCaseRecords) ListCustomsCases(
-	_ context.Context, tenant domain.TenantID, caseID string, _ int,
-) ([]ports.CustomsCaseRecord, error) {
-	stub.gotTenant, stub.gotFilter = tenant.String(), caseID
-	return stub.records, stub.err
+	_ context.Context, tenant domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomsCaseRecord], error) {
+	stub.gotTenant, stub.gotFilter = tenant.String(), query.Filters["case"]
+	return cataloguepage.Result[ports.CustomsCaseRecord]{Rows: stub.records, Total: int64(len(stub.records))}, stub.err
 }
 
 // Covers: ADR-0055/ADR-0077 Decision 三 — 未授予（未配置 Intake）答 403，读口不被触到。
@@ -50,13 +51,14 @@ func TestCustomsRecordQueriesRefuseNonGet(t *testing.T) {
 	}
 }
 
-// Covers: 租户只取自信封（请求自报的租户不采信）；空册以空数组在场；过滤参数原样下传。
+// Covers: 租户只取自信封（请求自报的 tenant 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）；空册以空数组在场；按案件的窄口参数作 case 筛选维下传。
 func TestCustomsCaseQueryTakesTenantFromEnvelopeAndAnswersEmptyArray(t *testing.T) {
 	stub := &stubCaseRecords{}
 	handler := customshttp.NewQueryCustomsCasesEndpoint(grantedCatalogueIntake{tenant: "T1", limit: 5}, stub)
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-case-records?tenant=T9&case=CASE-1", nil))
-	if response.Code != http.StatusOK || stub.gotTenant != "T1" || stub.gotFilter != "CASE-1" {
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-case-records?case=CASE-1", nil))
+	if response.Code != http.StatusOK || stub.gotTenant != "T1" || len(stub.gotFilter) != 1 || stub.gotFilter[0] != "CASE-1" {
 		t.Fatalf("status = %d tenant = %q filter = %q", response.Code, stub.gotTenant, stub.gotFilter)
 	}
 	var body struct {

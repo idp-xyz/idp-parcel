@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 关务运营查阅的四本记录读面（演示票 demo-2026-10-30/01）：案件、提交版本、外部监管结果、动作准入判断册。
@@ -16,6 +17,8 @@ import (
 // 四口各立入口、不合成一个 `?registry=` 分派：它们是 UC-CC-001/005/006/013 四个不同层次的对象，
 // 分层保存的外部结果不能被一个端点的参数集串成「一个状态」。技术回执、监管接收、业务受理、放行
 // 逐层原样上列，响应形里没有任何跨层折出的「清关成功」之类的字段。
+//
+// 查询参数按各册声明（ports.CustomsCasePages 等）解码，先于 Intake（ADR-0144 决定六）；答复带 page。
 const (
 	outcomeCustomsCasesListed        = "CUSTOMS_CASES_LISTED"
 	outcomeSubmissionVersionsListed  = "SUBMISSION_VERSIONS_LISTED"
@@ -26,19 +29,27 @@ const (
 // CustomsCaseRecordReader、SubmissionRecordReader、ExternalResultViewReader、
 // ActionAdmissionJudgementReader 是各端点消费的读口，编译期锁缝与端口保持一致。
 type CustomsCaseRecordReader interface {
-	ListCustomsCases(ctx context.Context, tenant domain.TenantID, caseID string, limit int) ([]ports.CustomsCaseRecord, error)
+	ListCustomsCases(
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomsCaseRecord], error)
 }
 
 type SubmissionRecordReader interface {
-	ListSubmissionVersions(ctx context.Context, tenant domain.TenantID, version string, limit int) ([]ports.SubmissionVersionRecord, error)
+	ListSubmissionVersions(
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SubmissionVersionRecord], error)
 }
 
 type ExternalResultViewReader interface {
-	ListExternalResults(ctx context.Context, tenant domain.TenantID, version string, limit int) ([]ports.ExternalResultViewRecord, error)
+	ListExternalResults(
+		ctx context.Context, tenant domain.TenantID, version string, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExternalResultViewRecord], error)
 }
 
 type ActionAdmissionJudgementReader interface {
-	ListActionAdmissionJudgements(ctx context.Context, tenant domain.TenantID, object string, limit int) ([]ports.ActionAdmissionJudgementRecord, error)
+	ListActionAdmissionJudgements(
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ActionAdmissionJudgementRecord], error)
 }
 
 var (
@@ -48,13 +59,16 @@ var (
 	_ ActionAdmissionJudgementReader = ports.ActionAdmissionJudgementRead(nil)
 )
 
-// serveRecordList 收拢四口共有的外壳：方法、Intake、可选过滤参数、读、成形。
+// serveRecordList 收拢四口共有的外壳：方法、按本册声明解码查询参数、Intake、读、成形。read 拿到请求本身，
+// 选择器（外部结果的 version）由它自己读。
 func serveRecordList[Record any, Body any](
 	intake CatalogueQueryIntake,
-	filterParam string,
+	catalogue *cataloguepage.Catalogue,
 	outcome string,
 	key string,
-	read func(ctx context.Context, tenant domain.TenantID, filter string, limit int) ([]Record, error),
+	read func(
+		request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[Record], error),
 	transcribe func(Record) Body,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -63,21 +77,28 @@ func serveRecordList[Record any, Body any](
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		records, err := read(request.Context(), query.Scope.Tenant(), request.URL.Query().Get(filterParam), query.Limit)
+		page, err := read(request, query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]Body, 0, len(records))
-		for _, record := range records {
+		bodies := make([]Body, 0, len(page.Rows))
+		for _, record := range page.Rows {
 			bodies = append(bodies, transcribe(record))
 		}
-		writeJSON(response, http.StatusOK, map[string]any{"outcome": outcome, key: bodies})
+		writeJSON(response, http.StatusOK, map[string]any{
+			"outcome": outcome, key: bodies, "page": page.Page(query.Limit),
+		})
 	})
 }
 
@@ -141,10 +162,14 @@ type caseClosureBody struct {
 }
 
 // NewQueryCustomsCasesEndpoint 交回关务案件及其申报单元查阅的 HTTP 入口
-// （GET /customs-case-records，可选 ?case= 单份读回）。
+// （GET /customs-case-records；?case= 单份读回是 case 筛选维，见 ports.CustomsCasePages）。
 func NewQueryCustomsCasesEndpoint(intake CatalogueQueryIntake, reader CustomsCaseRecordReader) http.Handler {
-	return serveRecordList(intake, "case", outcomeCustomsCasesListed, "cases",
-		reader.ListCustomsCases,
+	return serveRecordList(intake, ports.CustomsCasePages, outcomeCustomsCasesListed, "cases",
+		func(
+			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		) (cataloguepage.Result[ports.CustomsCaseRecord], error) {
+			return reader.ListCustomsCases(request.Context(), tenant, limit, query)
+		},
 		func(record ports.CustomsCaseRecord) customsCaseBody {
 			body := customsCaseBody{
 				Case: record.Case, DocumentNumber: record.DocumentNumber, DocumentNumberAbsence: record.DocumentNumberAbsence,
@@ -225,10 +250,14 @@ type receiptBody struct {
 }
 
 // NewQuerySubmissionVersionsEndpoint 交回提交版本、提交尝试、发送事实与技术回执查阅的 HTTP 入口
-// （GET /customs-submission-records，可选 ?version= 单份读回，ADR-0342）。
+// （GET /customs-submission-records；?version= 单份读回（ADR-0342）是 version 筛选维，见 ports.SubmissionVersionPages）。
 func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader SubmissionRecordReader) http.Handler {
-	return serveRecordList(intake, "version", outcomeSubmissionVersionsListed, "submissions",
-		reader.ListSubmissionVersions,
+	return serveRecordList(intake, ports.SubmissionVersionPages, outcomeSubmissionVersionsListed, "submissions",
+		func(
+			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		) (cataloguepage.Result[ports.SubmissionVersionRecord], error) {
+			return reader.ListSubmissionVersions(request.Context(), tenant, limit, query)
+		},
 		func(record ports.SubmissionVersionRecord) submissionVersionBody {
 			members := record.Members
 			if members == nil {
@@ -295,13 +324,17 @@ type releaseBody struct {
 }
 
 // NewQueryExternalResultsEndpoint 交回外部监管结果（含放行结果）查阅的 HTTP 入口
-// （GET /customs-external-result-records，可选 ?version= 只列归属于该提交版本的）。
+// （GET /customs-external-result-records，可选 ?version= 只列归属于该提交版本的；version 是选择器，见 ports.ExternalResultPages）。
 //
 // 归属不上任何提交版本的响应（unattributable）照样上列、只带原始语义——留存不猜，
 // 不补造版本或层次；同层冲突以 layerConflict 标出，双方事实都在，不选边。
 func NewQueryExternalResultsEndpoint(intake CatalogueQueryIntake, reader ExternalResultViewReader) http.Handler {
-	return serveRecordList(intake, "version", outcomeExternalResultsListed, "results",
-		reader.ListExternalResults,
+	return serveRecordList(intake, ports.ExternalResultPages, outcomeExternalResultsListed, "results",
+		func(
+			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		) (cataloguepage.Result[ports.ExternalResultViewRecord], error) {
+			return reader.ListExternalResults(request.Context(), tenant, request.URL.Query().Get("version"), limit, query)
+		},
 		func(record ports.ExternalResultViewRecord) externalResultBody {
 			body := externalResultBody{
 				Source: record.Source, Layer: record.Layer, Role: record.Role, RawSemantics: record.RawSemantics,
@@ -356,13 +389,19 @@ type admissionBasisBody struct {
 }
 
 // NewQueryActionAdmissionJudgementsEndpoint 交回动作准入判断册查阅的 HTTP 入口
-// （GET /customs-action-admission-judgements，可选 ?object= 按包裹号精确查——判断册的对象是声明包裹，传申报单元号只会得到空册）。
+// （GET /customs-action-admission-judgements，可选 ?object= 按包裹号精确查——判断册的对象是声明包裹，传申报单元号只会得到空册；
+// object 是筛选维，见 ports.AdmissionJudgementPages）。
 //
 // 判断册是判断当时的记录：每行带当时的区域读数与逐动作答复及依据，旧行不改。查阅面不重判、
 // 不拿「此刻」的登记册覆盖当时的答案——换了登记册之后同一请求的新判断是另一行。
 func NewQueryActionAdmissionJudgementsEndpoint(intake CatalogueQueryIntake, reader ActionAdmissionJudgementReader) http.Handler {
-	return serveRecordList(intake, "object", outcomeAdmissionJudgementsListed, "judgements",
-		reader.ListActionAdmissionJudgements, admissionJudgementBodyOf)
+	return serveRecordList(intake, ports.AdmissionJudgementPages, outcomeAdmissionJudgementsListed, "judgements",
+		func(
+			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		) (cataloguepage.Result[ports.ActionAdmissionJudgementRecord], error) {
+			return reader.ListActionAdmissionJudgements(request.Context(), tenant, limit, query)
+		},
+		admissionJudgementBodyOf)
 }
 
 func admissionJudgementBodyOf(record ports.ActionAdmissionJudgementRecord) admissionJudgementBody {
@@ -399,7 +438,9 @@ func admissionJudgementBodyOf(record ports.ActionAdmissionJudgementRecord) admis
 
 // UnadmittedObjectReader 是卡关对象查阅消费的读口。
 type UnadmittedObjectReader interface {
-	ListUnadmittedObjects(ctx context.Context, tenant domain.TenantID, limit int) (ports.UnadmittedObjects, error)
+	ListUnadmittedObjects(
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (ports.UnadmittedObjects, error)
 }
 
 var _ UnadmittedObjectReader = ports.UnadmittedObjectRead(nil)
@@ -407,18 +448,21 @@ var _ UnadmittedObjectReader = ports.UnadmittedObjectRead(nil)
 // 空清单仍是 LISTED：「此刻没有卡关的对象」是如实答案，件数 0 只在读口真答了 0 时出现。
 const outcomeUnadmittedObjectsListed = "UNADMITTED_OBJECTS_LISTED"
 
+// unadmittedObjectsResponse 的 unadmittedCount 是整个队列的积压，不随筛选与 q 变；page.total 才是这一组条件下的件数。
+// truncated 即还有下一页（page.next 不为 null），与件数无关：带了筛选时件数本就大于这一组条件能列出的。
 type unadmittedObjectsResponse struct {
 	Outcome         string                   `json:"outcome"`
 	UnadmittedCount int                      `json:"unadmittedCount"`
 	Truncated       bool                     `json:"truncated"`
 	Judgements      []admissionJudgementBody `json:"judgements"`
+	Page            cataloguepage.Page       `json:"page"`
 }
 
 // NewQueryUnadmittedObjectsEndpoint 交回卡关对象查阅的 HTTP 入口（GET /customs-unadmitted-objects）：每个对象最晚
 // 那一刻上有一份动作准入判断不让动作过门的，连同全部件数与是否截断。哪一格算「不过门」与「最近」怎么取，见
 // ports.UnadmittedObjects。行形与判断册同一份，列表页按同一套列读它。
 //
-// 不收过滤参数：这口回答的就是一问，按对象查归判断册那一口。
+// 查询参数按 ports.UnadmittedObjectPages 解码，先于 Intake；按对象精确查归判断册那一口。
 func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader UnadmittedObjectReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -426,26 +470,32 @@ func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader Unadm
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		pageQuery, err := ports.UnadmittedObjectPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		listed, err := reader.ListUnadmittedObjects(request.Context(), query.Scope.Tenant(), query.Limit)
+		listed, err := reader.ListUnadmittedObjects(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回不伪装成 0 件：首页把 0 读成「没有卡关的」，卡住的包裹就更没人看见了。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]admissionJudgementBody, 0, len(listed.Judgements))
-		for _, record := range listed.Judgements {
+		bodies := make([]admissionJudgementBody, 0, len(listed.Rows))
+		for _, record := range listed.Rows {
 			bodies = append(bodies, admissionJudgementBodyOf(record))
 		}
 		writeJSON(response, http.StatusOK, unadmittedObjectsResponse{
 			Outcome:         outcomeUnadmittedObjectsListed,
 			UnadmittedCount: listed.Count,
-			Truncated:       listed.Count > len(listed.Judgements),
+			Truncated:       listed.Next != "",
 			Judgements:      bodies,
+			Page:            listed.Page(query.Limit),
 		})
 	})
 }

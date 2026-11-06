@@ -118,6 +118,8 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 只在目录查询参数被拒时在场（writePageQueryProblem），是给操作者看的理由散文，调用方不据此分支。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {

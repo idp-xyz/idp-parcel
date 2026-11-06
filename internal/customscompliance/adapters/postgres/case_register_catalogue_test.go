@@ -26,8 +26,8 @@ func listReadiness(
 	limit int,
 ) []domain.ReadinessJudgment {
 	t.Helper()
-	judgments, err := catalogue.ListReadinessJudgments(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	judgments, err := rowsOf(catalogue.ListReadinessJudgments(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.ReadinessJudgmentPages)))
 	if err != nil {
 		t.Fatalf("上列就绪判断：%v", err)
 	}
@@ -41,8 +41,8 @@ func listAuthorities(
 	limit int,
 ) []domain.SubmissionAuthorization {
 	t.Helper()
-	authorizations, err := catalogue.ListSubmissionAuthorities(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	authorizations, err := rowsOf(catalogue.ListSubmissionAuthorities(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.SubmissionAuthorityPages)))
 	if err != nil {
 		t.Fatalf("上列提交授权：%v", err)
 	}
@@ -56,8 +56,8 @@ func listObligations(
 	limit int,
 ) []ports.ClosureObligationCatalogueEntry {
 	t.Helper()
-	entries, err := catalogue.ListClosureObligations(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListClosureObligations(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.ClosureObligationPages)))
 	if err != nil {
 		t.Fatalf("上列关闭义务目录：%v", err)
 	}
@@ -206,13 +206,13 @@ func TestClosureObligationCataloguesSeparateUnregisteredFromEmpty(t *testing.T) 
 func TestCaseRegisterCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newCaseRegisterCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
-	if _, err := catalogue.ListReadinessJudgments(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListReadinessJudgments(t.Context(), tenant, 0, firstPage(t, ports.ReadinessJudgmentPages))); err == nil {
 		t.Fatal("limit=0 的就绪上列被接受了")
 	}
-	if _, err := catalogue.ListSubmissionAuthorities(t.Context(), tenant, -1); err == nil {
+	if _, err := rowsOf(catalogue.ListSubmissionAuthorities(t.Context(), tenant, -1, firstPage(t, ports.SubmissionAuthorityPages))); err == nil {
 		t.Fatal("limit=-1 的授权上列被接受了")
 	}
-	if _, err := catalogue.ListClosureObligations(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListClosureObligations(t.Context(), tenant, 0, firstPage(t, ports.ClosureObligationPages))); err == nil {
 		t.Fatal("limit=0 的义务目录上列被接受了")
 	}
 

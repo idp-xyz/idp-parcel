@@ -8,6 +8,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
 // 票 tf-face-algebra/11 的真库回归：凭证登记编排接真登记册（timestamptz 只存到微秒）。按纳秒判时，微秒以下有非零位的
@@ -95,7 +96,7 @@ func TestACredentialStartingWithinAMicrosecondOfTheZeroInstantIsNotAcceptedAndTh
 	if outcome := channel.register(t, "SYN-CRED-TFA11-ZERO", poisoned, from); outcome != customsapp.ConfigurationNotAccepted {
 		t.Errorf("零时刻后一百纳秒的起点 = %s，want NOT_ACCEPTED——入册后读回成零时刻，重建不出来", outcome)
 	}
-	entries, err := channel.catalogue.ListCredentials(t.Context(), channel.tenant, 50)
+	entries, err := rowsOf(channel.catalogue.ListCredentials(t.Context(), channel.tenant, 50, firstPage(t, ports.CredentialPages)))
 	if err != nil {
 		t.Fatalf("租户凭证列面：%v", err)
 	}
