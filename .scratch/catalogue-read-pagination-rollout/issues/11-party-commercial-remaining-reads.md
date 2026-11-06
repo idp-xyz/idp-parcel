@@ -1,7 +1,7 @@
 # 11 party-commercial 其余十八册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 party-commercial `0047`（进 main 时按 tip 重核）
+Status: in-progress——分支 `cursor/crpr-11-party`，基 `d48c5b130`；迁移编号预留 party-commercial `0047`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/partycommercial/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试（客户账户已迁，不在内）；`cmd/parcel-api` 里这些读口的占位；
 `migrations/party_commercial` 的一条新迁移（索引）。

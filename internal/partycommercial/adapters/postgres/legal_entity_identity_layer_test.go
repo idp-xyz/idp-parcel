@@ -140,7 +140,7 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 	firstWithCorrection := identityCommand(t, 1, "CN", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	firstWithCorrection.IdentityCorrectionBasis = &basis
 	expectRefused(t, fixture.register(t, firstWithCorrection), "首笔登记")
-	if rows, err := fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.GroupLegalEntityPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("refused registrations wrote rows: %d rows, err %v", len(rows), err)
 	}
 
@@ -155,7 +155,7 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 		t.Fatalf("correction outcome = %s (%v)", result.Outcome(), result.Cause())
 	}
 
-	rows, err := fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.GroupLegalEntityPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("catalogue = %d rows, err %v", len(rows), err)
 	}
@@ -223,7 +223,7 @@ func TestHistoricalLegalEntityRevisionReadsBackWithoutIdentityLayer(t *testing.T
 	if _, has := latest.IdentityLayer(); has {
 		t.Fatal("historical revision must read back without an identity layer")
 	}
-	rows, err := fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.GroupLegalEntityPages)))
 	if err != nil || len(rows) != 1 || rows[0].HasIdentityLayer || rows[0].HasIdentityCorrection {
 		t.Fatalf("catalogue = %+v, err %v", rows, err)
 	}

@@ -221,7 +221,7 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 	}
 
 	// 目录：法人行带参与方名称、状态 EFFECTIVE；关系行双方名称齐、状态 EFFECTIVE。
-	entities, err := catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10)
+	entities, err := rowsOf(catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.GroupLegalEntityPages)))
 	if err != nil {
 		t.Fatalf("list entities: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 		t.Fatalf("entity row = %+v", entities[0])
 	}
 
-	relations, err := catalogue.ListPartyRelationships(ctx, pcTenant(t, "tenant-1"), 10)
+	relations, err := rowsOf(catalogue.ListPartyRelationships(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.PartyRelationshipPages)))
 	if err != nil {
 		t.Fatalf("list relationships: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 	if latestEntity.Revision() != 2 {
 		t.Fatalf("latest entity revision = %d, want 2", latestEntity.Revision())
 	}
-	entitiesAfter, err := catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10)
+	entitiesAfter, err := rowsOf(catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.GroupLegalEntityPages)))
 	if err != nil {
 		t.Fatalf("list entities after deactivation: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 	}
 
 	// 跨租户读不到：目录与点读都与从未登记同形。
-	foreignEntities, err := catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-b"), 10)
+	foreignEntities, err := rowsOf(catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-b"), 10, firstPage(t, ports.GroupLegalEntityPages)))
 	if err != nil || len(foreignEntities) != 0 {
 		t.Fatalf("foreign tenant entities = (%d, %v)", len(foreignEntities), err)
 	}
@@ -347,7 +347,7 @@ func TestBusinessPartyCatalogueShowsAllThreeLifecycleCells(t *testing.T) {
 		return registrations.SaveBusinessParty(txCtx, deactivated)
 	})
 
-	rows, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.BusinessPartyPages)))
 	if err != nil {
 		t.Fatalf("list business parties: %v", err)
 	}
@@ -375,11 +375,11 @@ func TestBusinessPartyCatalogueShowsAllThreeLifecycleCells(t *testing.T) {
 		t.Fatalf("已停用那一行 = %+v", retired)
 	}
 
-	foreign, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-b"), 10)
+	foreign, err := rowsOf(catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-b"), 10, firstPage(t, ports.BusinessPartyPages)))
 	if err != nil || len(foreign) != 0 {
 		t.Fatalf("跨租户 = (%d, %v)；隔离边界按 ADR-0003 在 SQL 条件上", len(foreign), err)
 	}
-	if _, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 0); err == nil {
+	if _, err := rowsOf(catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 0, firstPage(t, ports.BusinessPartyPages))); err == nil {
 		t.Fatal("limit 为 0 时读面静默答了一页")
 	}
 }
@@ -432,7 +432,7 @@ func TestACandidateRelationshipRoundTripsWithoutApproval(t *testing.T) {
 		t.Fatalf("candidate status = %v", loaded.Relationship().Status())
 	}
 
-	rows, err := catalogue.ListPartyRelationships(t.Context(), pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListPartyRelationships(t.Context(), pcTenant(t, "tenant-1"), 10, firstPage(t, ports.PartyRelationshipPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("list = (%d, %v)", len(rows), err)
 	}

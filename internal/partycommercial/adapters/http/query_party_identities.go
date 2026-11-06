@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PartyIdentityCatalogueReader 是参与方身份目录各端点消费的读口。它嵌入两册的修订历史读口
@@ -18,17 +19,20 @@ type PartyIdentityCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.BusinessPartyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.BusinessPartyRow], error)
 	ListGroupLegalEntities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.GroupLegalEntityRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.GroupLegalEntityRow], error)
 	ListPartyRelationships(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.PartyRelationshipRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PartyRelationshipRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -45,6 +49,10 @@ const (
 // 管理台上两张独立的页，一页一入口；且两册的行形状与状态代数都不同（身份状态按时点
 // 导出、关系状态是登记事实），折进一个带 kind 的入口会让两种状态在同一响应形状里
 // 相互冒充。
+//
+// 三个目录端点的查询参数（after、sort、筛选维与 q）各按本册声明解码（ports.BusinessPartyPages、
+// GroupLegalEntityPages、PartyRelationshipPages；ADR-0144 决定六），属传输形状、先于 Intake，
+// 答法与次序同 /commercial-customer-accounts。
 
 // NewQueryBusinessPartiesEndpoint 交回业务参与方身份本体查阅的 HTTP 入口
 // （GET /commercial-business-parties，ADR-0077）。
@@ -64,25 +72,32 @@ func NewQueryBusinessPartiesEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.BusinessPartyPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListBusinessParties(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListBusinessParties(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]businessPartyBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]businessPartyBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, businessPartyBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, businessPartyListResponse{
 			Outcome: outcomeBusinessPartiesListed,
 			Parties: bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -90,6 +105,7 @@ func NewQueryBusinessPartiesEndpoint(
 type businessPartyListResponse struct {
 	Outcome string              `json:"outcome"`
 	Parties []businessPartyBody `json:"parties"`
+	Page    cataloguepage.Page  `json:"page"`
 }
 
 // businessPartyBody 逐字段透出参与方身份本体的最新修订。这里没有 partyNameKnown：
@@ -169,13 +185,19 @@ func NewQueryGroupLegalEntitiesEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.GroupLegalEntityPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListGroupLegalEntities(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListGroupLegalEntities(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空目录」——伪装成后者会让一次该重试的故障
 			// 变成一份看起来如实的空册。
@@ -183,13 +205,14 @@ func NewQueryGroupLegalEntitiesEndpoint(
 			return
 		}
 
-		bodies := make([]groupLegalEntityBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]groupLegalEntityBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, groupLegalEntityBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, groupLegalEntityListResponse{
 			Outcome:  outcomeGroupLegalEntitiesListed,
 			Entities: bodies,
+			Page:     page.Page(query.Limit),
 		})
 	})
 }
@@ -207,25 +230,32 @@ func NewQueryPartyRelationshipsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.PartyRelationshipPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListPartyRelationships(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListPartyRelationships(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]partyRelationshipBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]partyRelationshipBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, partyRelationshipBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, partyRelationshipListResponse{
 			Outcome:       outcomePartyRelationshipsListed,
 			Relationships: bodies,
+			Page:          page.Page(query.Limit),
 		})
 	})
 }
@@ -233,6 +263,7 @@ func NewQueryPartyRelationshipsEndpoint(
 type groupLegalEntityListResponse struct {
 	Outcome  string                 `json:"outcome"`
 	Entities []groupLegalEntityBody `json:"entities"`
+	Page     cataloguepage.Page     `json:"page"`
 }
 
 // groupLegalEntityBody 逐字段透出法人最新修订与其参与方名称。
@@ -329,6 +360,7 @@ func groupLegalEntityBodyOf(row ports.GroupLegalEntityRow) groupLegalEntityBody 
 type partyRelationshipListResponse struct {
 	Outcome       string                  `json:"outcome"`
 	Relationships []partyRelationshipBody `json:"relationships"`
+	Page          cataloguepage.Page      `json:"page"`
 }
 
 // partyRelationshipBody 逐字段透出关系最新修订。方向由持有方→相对方的字段次序表达

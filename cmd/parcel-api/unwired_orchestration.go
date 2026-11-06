@@ -1887,16 +1887,18 @@ func (unwiredCommercialCatalogue) ListBusinessParties(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.BusinessPartyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.BusinessPartyRow], error) {
+	return cataloguepage.Result[commercialports.BusinessPartyRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListGroupLegalEntities(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.GroupLegalEntityRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.GroupLegalEntityRow], error) {
+	return cataloguepage.Result[commercialports.GroupLegalEntityRow]{}, errOrchestrationNotWired
 }
 
 // 两册的修订历史（法人册票 admin-web-group-legal-entities/03，参与方册票 12）随 PartyIdentityCatalogueReader
@@ -1921,8 +1923,9 @@ func (unwiredCommercialCatalogue) ListPartyRelationships(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.PartyRelationshipRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.PartyRelationshipRow], error) {
+	return cataloguepage.Result[commercialports.PartyRelationshipRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListProductChannelMappingRevisions(

@@ -12,6 +12,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对参与方身份两个目录端点（票 admin-remainder-mechanism-batch/01）证传输面：
@@ -27,39 +28,21 @@ type partyIdentityReaderDouble struct {
 }
 
 func (double *partyIdentityReaderDouble) ListBusinessParties(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.BusinessPartyRow, error) {
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.parties, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.BusinessPartyRow], error) {
+	return tenantPage(double.err, tenant == double.tenant, double.parties)
 }
 
 func (double *partyIdentityReaderDouble) ListGroupLegalEntities(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.GroupLegalEntityRow, error) {
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.entities, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.GroupLegalEntityRow], error) {
+	return tenantPage(double.err, tenant == double.tenant, double.entities)
 }
 
 func (double *partyIdentityReaderDouble) ListPartyRelationships(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.PartyRelationshipRow, error) {
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.relationships, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.PartyRelationshipRow], error) {
+	return tenantPage(double.err, tenant == double.tenant, double.relationships)
 }
 
 // 两册的修订历史读口随 PartyIdentityCatalogueReader 嵌入进来；本文件的用例不经它们，替身只补形状。
