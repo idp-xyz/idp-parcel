@@ -190,6 +190,13 @@ export const partyRoleLabels = {
 
 export type PartyRoleCode = keyof typeof partyRoleLabels;
 
+// 外部系统编码的用途封闭集（domain ExternalReferencePurpose，ADR-0367 决定三）：说这个码是对方系统里哪一本主档的码。
+export const externalReferencePurposeLabels = {
+  CUSTOMER: '客户编码',
+  SUPPLIER: '供应商编码',
+  PARTY: '往来单位编码',
+} as const satisfies Record<string, string>;
+
 /**
  * 参与方按它持有的角色称呼（客户、供应商、承运商代理……），角色词取关系册的封闭集，不另造一套「类型」。一个角色都没有（候选与
  * 已生效的关系都算角色）、又不是我方公司时，说「暂无合作关系」——它在册、有名称，只是还没登记与谁的合作关系（票
@@ -366,7 +373,9 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
       '它们没有自己的版本，随所属版本一起发布。声明只能随发布一起登记，发布后要改须发新版本。',
   ),
   'business-party': snapshotHint(
-    'businessParties 数组里一项的键：partyId、name、revision、basis、effectiveFrom。' +
+    'businessParties 数组里一项的键：partyId、name、revision、basis、effectiveFrom；' +
+      '识别信息可带 registrationCountry、lifetimeRegistrationNumbers[{typeCode, number}]、identityCorrectionBasis、' +
+      'externalReferences[{system, purpose, code}]（一笔修订是整份内容，不带已登的号即是去掉；改号或去号要带更正依据）。' +
       '首笔修订号必须是 1，之后必须连续；跳号说明你看到的列表已过时，会被拒，不会替你猜。',
     { tenantGridFilledByChannel: true },
   ),

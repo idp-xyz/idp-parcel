@@ -3,18 +3,21 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
-import { partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
+import { listRegistrationNumberTypes, partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
 import { problemNote, registrationTitles } from './presentation';
-import { Field } from './PublicationFormFields';
-import { AdvancedGroup, RevisionField, SnapshotJsonDetails, WallTimeField, useRegistrationForm } from './party-registration-fields';
+import { Field, useLoaded } from './PublicationFormFields';
+import { AdvancedGroup, FormGroup, RevisionField, SnapshotJsonDetails, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import { advancedGroupOpen } from './registration-form';
 import {
   businessPartyLocalProblems,
   businessPartyPayloadOf,
   emptyBusinessPartyDraft,
+  identificationChanged,
+  registeredNumbersChanged,
   suggestedBusinessPartyRevision,
   type BusinessPartyDraft,
 } from './business-party-form';
+import { BusinessPartyIdentificationFields } from './BusinessPartyIdentificationFields';
 
 /**
  * 「新增往来单位」表单（票 admin-web-group-legal-entities/10 第 1 条；ADR-0101 决定八自裁：格少、低频、无矩阵，直接逐字段表单）。
@@ -63,6 +66,7 @@ export function BusinessPartyRegistrationForm({
 
   // 按原串找而不裁空白：载荷也不裁，" X" 送上去就是另一个身份，这里若裁了就会把它说成「已在册」。
   const known = knownParties?.find((row) => row.partyId === draft.partyId);
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   // 高级组：null 即操作者还没点过，按 advancedGroupOpen 的缺省走（编码已在册时展开——这一笔是更新，让人看见序号）。
   const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
   const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, known !== undefined);
@@ -80,7 +84,7 @@ export function BusinessPartyRegistrationForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="type-body text-idpxyz-breadcrumb">
-            登记一家新的往来单位。要更正已登记单位的名称，填同一个编码再保存一次，历次记录都会保留。
+            登记一家新的往来单位。要更正已登记单位的名称或识别信息，到它的对象页用「更正登记信息」，那里会带上它已登的内容。
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -131,6 +135,29 @@ export function BusinessPartyRegistrationForm({
               note="从这一刻起可以与它建立合作关系；填未来的时间就先显示为待生效。"
             />
           </div>
+
+          <FormGroup
+            title="识别信息（选填）"
+            description="注册号用来认出同一家公司有没有被登过两次；外部系统编码用来与财务等系统对上。"
+          >
+            <BusinessPartyIdentificationFields
+              draft={draft}
+              patch={patch}
+              problems={problems}
+              locked={locked}
+              typeCatalogue={typeCatalogue}
+              notice={
+                known && identificationChanged(known, draft)
+                  ? '这个编码已登记过，它已登的注册号或外部编码与本表单不同：保存后以本表单为准，没填的就去掉了。'
+                  : undefined
+              }
+              correction={
+                known && registeredNumbersChanged(known, draft)
+                  ? { note: '这个编码已登过注册号，这次没有原样带上：要保留就在对象页用「更正登记信息」；是当初录错了，才在这里填更正依据。' }
+                  : undefined
+              }
+            />
+          </FormGroup>
 
           <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
             <RevisionField

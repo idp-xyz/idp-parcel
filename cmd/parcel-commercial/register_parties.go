@@ -31,12 +31,24 @@ type partyBatchDocument struct {
 	Relationships    []partyRelationshipDocument `json:"relationships,omitempty"`
 }
 
+// businessPartyDocument 的识别信息四格与在线口 businessParties 项逐字同形（ADR-0367）：键可缺，缺不缺、能不能接上前一笔
+// 由用例判。
 type businessPartyDocument struct {
-	PartyID       string    `json:"partyId"`
-	Name          string    `json:"name"`
-	Revision      int       `json:"revision"`
-	Basis         string    `json:"basis"`
-	EffectiveFrom time.Time `json:"effectiveFrom"`
+	PartyID                     string                      `json:"partyId"`
+	Name                        string                      `json:"name"`
+	Revision                    int                         `json:"revision"`
+	Basis                       string                      `json:"basis"`
+	EffectiveFrom               time.Time                   `json:"effectiveFrom"`
+	RegistrationCountry         *string                     `json:"registrationCountry,omitempty"`
+	LifetimeRegistrationNumbers []lifetimeNumberDocument    `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis     *string                     `json:"identityCorrectionBasis,omitempty"`
+	ExternalReferences          []externalReferenceDocument `json:"externalReferences,omitempty"`
+}
+
+type externalReferenceDocument struct {
+	System  string `json:"system"`
+	Purpose string `json:"purpose"`
+	Code    string `json:"code"`
 }
 
 // legalEntityDocument 的身份层三格与在线口 legalEntities 项逐字同形（ADR-0145 决定一、二）：键可缺，缺不缺由用例判。
@@ -174,6 +186,18 @@ func businessPartyCommandFrom(tenant pcdomain.TenantID, item businessPartyDocume
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
 	}
+	country, numbers, correction, err := identityFieldsFrom(item.RegistrationCountry, item.LifetimeRegistrationNumbers, item.IdentityCorrectionBasis)
+	if err != nil {
+		return none, err
+	}
+	command.RegistrationCountry, command.LifetimeNumbers, command.IdentityCorrectionBasis = country, numbers, correction
+	for _, reference := range item.ExternalReferences {
+		parsed, err := pcdomain.ParseExternalReference(reference.System, reference.Purpose, reference.Code)
+		if err != nil {
+			return none, err
+		}
+		command.ExternalReferences = append(command.ExternalReferences, parsed)
+	}
 	return partyBatchCommand{
 		label: fmt.Sprintf("参与方 %s r%d", item.PartyID, item.Revision),
 		execute: func(ctx context.Context, handler *pcapplication.RegisterPartyIdentityHandler) (pcapplication.PartyRegistryResult, error) {
@@ -204,41 +228,58 @@ func legalEntityCommandFrom(tenant pcdomain.TenantID, item legalEntityDocument) 
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
 	}
-	if item.RegistrationCountry != nil {
-		country, err := pcdomain.NewRegistrationCountryCode(*item.RegistrationCountry)
-		if err != nil {
-			return none, err
-		}
-		command.RegistrationCountry = &country
+	country, numbers, correction, err := identityFieldsFrom(item.RegistrationCountry, item.LifetimeRegistrationNumbers, item.IdentityCorrectionBasis)
+	if err != nil {
+		return none, err
 	}
-	for _, number := range item.LifetimeRegistrationNumbers {
-		typeCode, err := pcdomain.NewRegistrationNumberTypeCode(number.TypeCode)
-		if err != nil {
-			return none, err
-		}
-		value, err := pcdomain.NewRegistrationNumber(number.Number)
-		if err != nil {
-			return none, err
-		}
-		lifetime, err := pcdomain.NewLifetimeRegistrationNumber(typeCode, value)
-		if err != nil {
-			return none, err
-		}
-		command.LifetimeNumbers = append(command.LifetimeNumbers, lifetime)
-	}
-	if item.IdentityCorrectionBasis != nil {
-		correction, err := pcdomain.NewIdentityBasisReference(*item.IdentityCorrectionBasis)
-		if err != nil {
-			return none, err
-		}
-		command.IdentityCorrectionBasis = &correction
-	}
+	command.RegistrationCountry, command.LifetimeNumbers, command.IdentityCorrectionBasis = country, numbers, correction
 	return partyBatchCommand{
 		label: fmt.Sprintf("责任法人 %s r%d", item.LegalEntityID, item.Revision),
 		execute: func(ctx context.Context, handler *pcapplication.RegisterPartyIdentityHandler) (pcapplication.PartyRegistryResult, error) {
 			return handler.RegisterLegalEntity(ctx, command)
 		},
 	}, nil
+}
+
+// identityFieldsFrom 把注册国家、终身注册号与身份更正依据三格译成命令上的值，法人项与参与方项共用；键缺即没给。
+func identityFieldsFrom(
+	rawCountry *string,
+	rawNumbers []lifetimeNumberDocument,
+	rawCorrection *string,
+) (*pcdomain.RegistrationCountryCode, []pcdomain.LifetimeRegistrationNumber, *pcdomain.IdentityBasisReference, error) {
+	var country *pcdomain.RegistrationCountryCode
+	if rawCountry != nil {
+		value, err := pcdomain.NewRegistrationCountryCode(*rawCountry)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		country = &value
+	}
+	var numbers []pcdomain.LifetimeRegistrationNumber
+	for _, number := range rawNumbers {
+		typeCode, err := pcdomain.NewRegistrationNumberTypeCode(number.TypeCode)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		value, err := pcdomain.NewRegistrationNumber(number.Number)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		lifetime, err := pcdomain.NewLifetimeRegistrationNumber(typeCode, value)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		numbers = append(numbers, lifetime)
+	}
+	var correction *pcdomain.IdentityBasisReference
+	if rawCorrection != nil {
+		value, err := pcdomain.NewIdentityBasisReference(*rawCorrection)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		correction = &value
+	}
+	return country, numbers, correction, nil
 }
 
 func customerAccountCommandFrom(tenant pcdomain.TenantID, item customerAccountDocument) (partyBatchCommand, error) {

@@ -13,9 +13,22 @@
 // **载荷不带租户格。** 镜像受控 CLI `parcel-commercial register-parties` 输入里 `businessParties` 数组的一项，
 // 去掉整批的 `tenantId`：隔离 Intake 对键在场即拒、含 null（refuseSelfReportedTenant）。
 
-import type { BusinessPartyRecord } from './api';
+import type { BusinessPartyIdentificationRecord, BusinessPartyRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
 import { revisionOf, suggestedNextRevision } from './registration-form';
+
+/** 一行注册号：类型码取自注册号类型目录的身份层，号原样。 */
+export interface PartyNumberRow {
+  typeCode: string;
+  number: string;
+}
+
+/** 一行外部系统编码；purpose 未选是空串。 */
+export interface PartyExternalReferenceRow {
+  system: string;
+  purpose: string;
+  code: string;
+}
 
 export interface BusinessPartyDraft {
   partyId: string;
@@ -25,6 +38,12 @@ export interface BusinessPartyDraft {
   basis: string;
   /** `datetime-local` 原值（操作者本地墙钟），留空即缺席。 */
   effectiveFrom: string;
+  /** 识别信息（ADR-0367）各格可缺：注册国家空串即没给；三格都空的行是没填的空行，组载荷时不带。 */
+  registrationCountry: string;
+  lifetimeNumbers: PartyNumberRow[];
+  /** 身份更正依据；只在改了或去掉已登的号时要填，空串即缺席。 */
+  identityCorrectionBasis: string;
+  externalReferences: PartyExternalReferenceRow[];
 }
 
 /** 键名逐字取 businessPartyDocument 的 json 标签。 */
@@ -34,6 +53,10 @@ export interface BusinessPartyRegistrationItem {
   revision?: number;
   basis: string;
   effectiveFrom?: string;
+  registrationCountry?: string;
+  lifetimeRegistrationNumbers?: PartyNumberRow[];
+  identityCorrectionBasis?: string;
+  externalReferences?: PartyExternalReferenceRow[];
 }
 
 export interface BusinessPartyRegistrationPayload {
@@ -41,7 +64,65 @@ export interface BusinessPartyRegistrationPayload {
 }
 
 export function emptyBusinessPartyDraft(): BusinessPartyDraft {
-  return { partyId: '', name: '', revision: '', basis: '', effectiveFrom: '' };
+  return {
+    partyId: '',
+    name: '',
+    revision: '',
+    basis: '',
+    effectiveFrom: '',
+    registrationCountry: '',
+    lifetimeNumbers: [],
+    identityCorrectionBasis: '',
+    externalReferences: [],
+  };
+}
+
+/**
+ * 册上这一行的识别信息摆回草稿：更正名称时照带原有的号与编码——一笔修订是整份内容，不带即是去掉（ADR-0367 决定一）。
+ * 更正依据不带：它说的是「这一笔改了号」，不是那一行的属性。
+ */
+export function identificationDraftOf(
+  row: BusinessPartyIdentificationRecord,
+): Pick<BusinessPartyDraft, 'registrationCountry' | 'lifetimeNumbers' | 'identityCorrectionBasis' | 'externalReferences'> {
+  const registered = row.identityLayerRegistered === true;
+  return {
+    registrationCountry: registered ? (row.registrationCountry ?? '') : '',
+    lifetimeNumbers: registered ? (row.lifetimeRegistrationNumbers ?? []).map((entry) => ({ ...entry })) : [],
+    identityCorrectionBasis: '',
+    externalReferences: (row.externalReferences ?? []).map((entry) => ({ ...entry })),
+  };
+}
+
+const filledNumbers = (rows: readonly PartyNumberRow[]) => rows.filter((row) => row.typeCode !== '' || row.number !== '');
+const filledReferences = (rows: readonly PartyExternalReferenceRow[]) =>
+  rows.filter((row) => row.system !== '' || row.purpose !== '' || row.code !== '');
+
+function numbersKey(country: string, rows: readonly PartyNumberRow[]): string {
+  return JSON.stringify([country, [...rows].map((row) => [row.typeCode, row.number]).sort()]);
+}
+
+/**
+ * 草稿上的号与册上这一行的号是不是不一样了（国家、或整组号，与录入次序无关）。册上没登号时答 false——第一次补登不是更正。
+ * 这只是给表单决定「要不要摆出身份更正依据那一格」的呈现判断；要不要更正依据，由服务端答。
+ */
+export function registeredNumbersChanged(row: BusinessPartyIdentificationRecord, draft: BusinessPartyDraft): boolean {
+  if (row.identityLayerRegistered !== true) return false;
+  return (
+    numbersKey(row.registrationCountry ?? '', row.lifetimeRegistrationNumbers ?? []) !==
+    numbersKey(draft.registrationCountry, filledNumbers(draft.lifetimeNumbers))
+  );
+}
+
+/** 草稿上的识别信息与册上这一行比有没有改动（号、或外部编码，与录入次序无关）。 */
+export function identificationChanged(row: BusinessPartyIdentificationRecord, draft: BusinessPartyDraft): boolean {
+  const before = identificationDraftOf(row);
+  const referencesKey = (rows: readonly PartyExternalReferenceRow[]) =>
+    JSON.stringify([...rows].map((entry) => [entry.system, entry.purpose, entry.code]).sort());
+  return (
+    numbersKey(before.registrationCountry, before.lifetimeNumbers) !==
+      numbersKey(draft.registrationCountry, filledNumbers(draft.lifetimeNumbers)) ||
+    referencesKey(before.externalReferences) !== referencesKey(filledReferences(draft.externalReferences))
+  );
 }
 
 /** 表单认领的 JSON 路径；一项一批，下标固定 0。 */
@@ -51,6 +132,10 @@ export const businessPartyFieldPaths = [
   'businessParties[0].revision',
   'businessParties[0].basis',
   'businessParties[0].effectiveFrom',
+  'businessParties[0].registrationCountry',
+  'businessParties[0].lifetimeRegistrationNumbers',
+  'businessParties[0].identityCorrectionBasis',
+  'businessParties[0].externalReferences',
 ] as const;
 
 export type BusinessPartyFieldPath = (typeof businessPartyFieldPaths)[number];
@@ -71,6 +156,13 @@ export function businessPartyPayloadOf(draft: BusinessPartyDraft, timeZone: stri
     const moment = wallTimeToRfc3339(draft.effectiveFrom, timeZone);
     if (moment !== null) item.effectiveFrom = moment;
   }
+  // 识别信息：没填的格缺席，空行不带；填了的原样带——国家缺了号还在、号行只填一半，都送上去让服务端点名。
+  if (draft.registrationCountry !== '') item.registrationCountry = draft.registrationCountry;
+  const numbers = filledNumbers(draft.lifetimeNumbers);
+  if (numbers.length > 0) item.lifetimeRegistrationNumbers = numbers.map((row) => ({ ...row }));
+  if (draft.identityCorrectionBasis !== '') item.identityCorrectionBasis = draft.identityCorrectionBasis;
+  const references = filledReferences(draft.externalReferences);
+  if (references.length > 0) item.externalReferences = references.map((row) => ({ ...row }));
   return { businessParties: [item] };
 }
 

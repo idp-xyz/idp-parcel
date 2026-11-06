@@ -74,11 +74,18 @@ func notAccepted(cause error) PartyRegistryResult {
 }
 
 // RegisterBusinessPartyCommand 登记业务参与方身份的一笔修订。
+//
+// 识别信息（ADR-0367）各格可缺：国家与号同缺同有，缺一格是漏填；更正依据只随改了或去掉已登的号的修订出现；外部编码
+// 零到多项。一笔修订是整份内容——更正名称时照带原有的号与编码，不带即是去掉。
 type RegisterBusinessPartyCommand struct {
-	Party         domain.BusinessParty
-	Revision      int
-	Basis         domain.IdentityBasisReference
-	EffectiveFrom time.Time
+	Party                   domain.BusinessParty
+	Revision                int
+	Basis                   domain.IdentityBasisReference
+	EffectiveFrom           time.Time
+	RegistrationCountry     *domain.RegistrationCountryCode
+	LifetimeNumbers         []domain.LifetimeRegistrationNumber
+	IdentityCorrectionBasis *domain.IdentityBasisReference
+	ExternalReferences      []domain.ExternalReference
 }
 
 // RegisterLegalEntityCommand 登记责任法人身份的一笔修订。Party 是引用：法人必须钉在
@@ -168,8 +175,9 @@ type RegisterPartyIdentityHandler struct {
 	numberTypes ports.RegistrationNumberTypeLookup
 }
 
-// NewRegisterPartyIdentityHandler 的 numberTypes 只有责任法人的新登记与新修订用得上（按注册号类型
-// 目录判号）；不登法人的调用方可以给 nil，给了 nil 又去登法人，用例答技术失败而不是替它放行。
+// NewRegisterPartyIdentityHandler 的 numberTypes 只有带注册号的新登记与新修订用得上（按注册号类型目录判号）：责任法人
+// 每一笔都带，往来单位带了号才用。既不登法人、也不登带号往来单位的调用方可以给 nil；给了 nil 又去登这两样，用例答技术
+// 失败而不是替它放行。
 func NewRegisterPartyIdentityHandler(
 	registry ports.PartyIdentityRegistry,
 	numberTypes ports.RegistrationNumberTypeLookup,
@@ -192,6 +200,18 @@ func (handler *RegisterPartyIdentityHandler) RegisterBusinessParty(
 	if err != nil {
 		return notAccepted(err), nil
 	}
+	identity, hasIdentity, err := identityLayerFrom(command.RegistrationCountry, command.LifetimeNumbers)
+	if err != nil {
+		return notAccepted(err), nil
+	}
+	var identityPointer *domain.LegalEntityIdentityLayer
+	if hasIdentity {
+		identityPointer = &identity
+	}
+	registration, err = registration.WithIdentification(identityPointer, command.IdentityCorrectionBasis, command.ExternalReferences)
+	if err != nil {
+		return notAccepted(businessPartyIdentificationRefusal(err)), nil
+	}
 
 	latest, found, err := handler.registry.LoadLatestBusinessParty(
 		ctx, command.Party.Tenant(), command.Party.ID(),
@@ -207,6 +227,18 @@ func (handler *RegisterPartyIdentityHandler) RegisterBusinessParty(
 	}
 	if result, rejected := checkRevisionSlot(command.Revision, found, latestRevision, deactivated); rejected {
 		return result, nil
+	}
+
+	// 识别信息的门只拦将要落册的新登记与新修订，判据同法人身份层：修订号落在已有修订上的是重放或冲突，照册面原样
+	// 比对——目录与别家的登记都可能已经变了，拿今天的门去拦一次重放只会把「已登记」答错。
+	if !found || command.Revision > latestRevision {
+		refusal, err := handler.checkBusinessPartyIdentification(ctx, registration, latest, found)
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register business party: %w", err)
+		}
+		if refusal != "" {
+			return notAccepted(errors.New(refusal)), nil
+		}
 	}
 
 	outcome, err := handler.registry.SaveBusinessParty(ctx, registration)
@@ -282,11 +314,35 @@ func (handler *RegisterPartyIdentityHandler) RegisterLegalEntity(
 				"新登记与新修订必须带注册国家 / 地区与至少一个终身注册号（ADR-0145 决定一）",
 			)), nil
 		}
-		refusal, err := handler.checkLifetimeNumbers(ctx, command.Tenant, identity, lifecycle.EffectiveFrom())
+		refusal, err := handler.checkLifetimeNumbers(ctx, command.Tenant, identity, lifecycle.EffectiveFrom(), "法人生效时点")
 		if err != nil {
 			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
 		}
 		if refusal != "" {
+			return notAccepted(errors.New(refusal)), nil
+		}
+		// 我方公司的号只登在公司主体上（ADR-0367 决定一）：钉一个自己带着号的往来单位，同一个号就有了两处。先取钉住
+		// 这个参与方的锁、再重读它的最新修订——与「给参与方登号」那条路径互斥，并发时不会两边都看不见对方。
+		if _, err := handler.registry.FindLegalEntitiesPinning(ctx, command.Tenant, command.Party); err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
+		}
+		lockedParty, _, err := handler.registry.LoadLatestBusinessParty(ctx, command.Tenant, command.Party)
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
+		}
+		if _, partyHasNumbers := lockedParty.IdentityLayer(); partyHasNumbers {
+			return notAccepted(fmt.Errorf(
+				"往来单位 %s 自己登着注册号：我方公司的号只登在公司主体上；先带身份更正依据更正这家往来单位、去掉它的号，再登公司主体",
+				command.Party,
+			)), nil
+		}
+		holders, err := handler.registry.FindRegistrationNumberHolders(ctx, command.Tenant, identity)
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
+		}
+		if refusal := registrationNumberHolderRefusal(holders, func(holder ports.RegistrationNumberHolder) bool {
+			return holder.Kind == ports.IdentificationHeldByLegalEntity && holder.ID == command.Entity.String()
+		}); refusal != "" {
 			return notAccepted(errors.New(refusal)), nil
 		}
 	}
@@ -311,37 +367,47 @@ func (handler *RegisterPartyIdentityHandler) RegisterLegalEntity(
 	return registrationResult(outcome), nil
 }
 
-// legalEntityIdentityLayerFrom 把命令上的身份层两格合成一个身份层。两格都缺即没有身份层（重放历史
-// 修订的形状）；缺一格是登记方漏填，按`未受理`交回并说清缺的是哪一格。
+// legalEntityIdentityLayerFrom 把法人命令上的身份层两格合成一个身份层，判据在 identityLayerFrom。
 func legalEntityIdentityLayerFrom(command RegisterLegalEntityCommand) (domain.LegalEntityIdentityLayer, bool, error) {
-	if command.RegistrationCountry == nil && len(command.LifetimeNumbers) == 0 {
+	return identityLayerFrom(command.RegistrationCountry, command.LifetimeNumbers)
+}
+
+// identityLayerFrom 把命令上的注册国家与终身注册号合成一个身份层，法人与往来单位共用。两格都缺即没有身份层（法人
+// 重放历史修订、往来单位没登号的形状）；缺一格是登记方漏填，按`未受理`交回并说清缺的是哪一格。
+func identityLayerFrom(
+	country *domain.RegistrationCountryCode,
+	numbers []domain.LifetimeRegistrationNumber,
+) (domain.LegalEntityIdentityLayer, bool, error) {
+	if country == nil && len(numbers) == 0 {
 		return domain.LegalEntityIdentityLayer{}, false, nil
 	}
-	if command.RegistrationCountry == nil {
+	if country == nil {
 		return domain.LegalEntityIdentityLayer{}, false, errors.New(
 			"缺注册国家 / 地区：终身注册号要按注册国家 / 地区的注册号类型目录判",
 		)
 	}
-	if len(command.LifetimeNumbers) == 0 {
+	if len(numbers) == 0 {
 		return domain.LegalEntityIdentityLayer{}, false, fmt.Errorf(
-			"缺终身注册号：注册国家 / 地区 %s 下至少要登一个终身注册号", command.RegistrationCountry,
+			"缺终身注册号：注册国家 / 地区 %s 下至少要登一个终身注册号", country,
 		)
 	}
-	layer, err := domain.NewLegalEntityIdentityLayer(*command.RegistrationCountry, command.LifetimeNumbers)
+	layer, err := domain.NewLegalEntityIdentityLayer(*country, numbers)
 	if err != nil {
 		return domain.LegalEntityIdentityLayer{}, false, fmt.Errorf("身份层不成立（一类终身注册号只收一个）：%w", err)
 	}
 	return layer, true, nil
 }
 
-// checkLifetimeNumbers 按注册号类型目录逐个判身份层上的号（ADR-0145 决定一），判的时点是法人生效时点：
-// 身份在那一刻生效，号的类型那一刻就得在用；目录条目的生效时点由实施方按该类号实际启用的时间登记。
+// checkLifetimeNumbers 按注册号类型目录逐个判身份层上的号（ADR-0145 决定一，往来单位同一道门见 ADR-0367 决定一），判的
+// 时点是这个身份的生效时点（when 是拒绝理由里对它的称呼）：身份在那一刻生效，号的类型那一刻就得在用；目录条目的生效时点
+// 由实施方按该类号实际启用的时间登记。
 // 非空的第一个返回值是给登记方看的拒绝理由；error 只留给读目录的技术失败——一次该重试的故障不能答成「未登记」。
 func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 	ctx context.Context,
 	tenant domain.TenantID,
 	identity domain.LegalEntityIdentityLayer,
 	at time.Time,
+	when string,
 ) (string, error) {
 	if handler.numberTypes == nil {
 		return "", errors.New("注册号类型目录未装配，判不了终身注册号")
@@ -352,7 +418,7 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 	if err := refdata.CheckCountry(country.String()); err != nil {
 		return fmt.Sprintf(
 			"注册国家 / 地区 %s 不在产品内置的国家 / 地区目录里（ISO 3166-1）：换成目录里的码；"+
-				"已在册的法人要先带身份更正依据，把注册国家 / 地区更正成目录内的码", country), nil
+				"已在册的要先带身份更正依据，把注册国家 / 地区更正成目录内的码", country), nil
 	}
 	catalogue, err := handler.numberTypes.LoadRegistrationNumberTypeCatalogue(ctx, tenant, country)
 	if err != nil {
@@ -364,7 +430,7 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 			return "", err
 		}
 		refusal, err := registrationNumberRefusal(
-			check, country, number.TypeCode(), number.Number(), domain.RegistrationNumberIdentityLayer, "法人生效时点", at,
+			check, country, number.TypeCode(), number.Number(), domain.RegistrationNumberIdentityLayer, when, at,
 		)
 		if err != nil || refusal != "" {
 			return refusal, err

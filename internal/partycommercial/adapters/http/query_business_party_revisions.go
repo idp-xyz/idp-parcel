@@ -109,6 +109,7 @@ type businessPartyRevisionBody struct {
 	DeactivatedAt     string `json:"deactivatedAt,omitempty"`
 	DeactivationBasis string `json:"deactivationBasis,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+	businessPartyIdentificationBody
 }
 
 func businessPartyRevisionBodyOf(row ports.BusinessPartyRevisionRow) businessPartyRevisionBody {
@@ -125,5 +126,6 @@ func businessPartyRevisionBodyOf(row ports.BusinessPartyRevisionRow) businessPar
 		body.DeactivatedAt = rfc3339(row.DeactivatedAt)
 		body.DeactivationBasis = row.DeactivationBasis
 	}
+	body.businessPartyIdentificationBody = businessPartyIdentificationBodyOf(row.BusinessPartyIdentificationRow)
 	return body
 }

@@ -23,6 +23,7 @@ import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   listBusinessParties,
+  listCustomerAccounts,
   listGroupLegalEntities,
   listPartyRelationships,
   type BusinessPartyListResponseBody,
@@ -410,6 +411,8 @@ export function BusinessPartiesPage() {
   const relationships = useRegisterList(listPartyRelationships);
   // 法人册只为类型列的「我方公司」读（business-party-list.ts 文件头）；读不到就没有一行按我方公司显，列表照常。
   const entities = useRegisterList(listGroupLegalEntities);
+  // 客户账户册只为类型列的「客户」读（ADR-0367 决定四）：账户的所属客户持有客户角色，不要求先登客户关系；读不到就只按关系算。
+  const accounts = useRegisterList(listCustomerAccounts);
   // 页名下的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户；答不出就不显，不拿列表行上的 tenantId 顶。
   const boundTenant = useBoundTenant();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
@@ -534,9 +537,10 @@ export function BusinessPartiesPage() {
   const knownRelationships = relationships.answer?.kind === 'outcome' ? relationships.answer.body.relationships : null;
   const partyRows = knownParties ?? [];
   const relationshipRows = knownRelationships ?? [];
-  // 类型列按关系册与法人册算（business-party-list.ts 文件头）；哪一册没取到时所有行先按「往来单位」显，取到后自动补上。
+  // 类型列按关系册、客户账户册与法人册算（business-party-list.ts 文件头）；哪一册没取到，那一册先不贡献，取到后自动补上。
   const knownEntities = entities.answer?.kind === 'outcome' ? entities.answer.body.entities : null;
-  const roleIndex = useMemo(() => indexPartyRoles(knownRelationships), [knownRelationships]);
+  const knownAccounts = accounts.answer?.kind === 'outcome' ? accounts.answer.body.accounts : null;
+  const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
   const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
   const identityColumns = useMemo(() => identityColumnsOf(roleIndex, ourCompanies), [roleIndex, ourCompanies]);
 
@@ -554,6 +558,7 @@ export function BusinessPartiesPage() {
         identityEditing={identityEditRequested(hash)}
         onEnterIdentityEdit={enterIdentityEdit}
         onExitIdentityEdit={exitIdentityEdit}
+        ours={ourCompanies.has(view.partyId)}
       />
     );
   }

@@ -3,6 +3,7 @@
 // 那一格（名称）与注释句的主语。
 
 import type { BusinessPartyRevisionRecord } from './api';
+import { identificationChangeLines } from './business-party-identification';
 import {
   identityRevisionHistoryNote,
   identityRevisionTimeline,
@@ -13,13 +14,20 @@ export type { RevisionTimelineItem } from './revision-timeline';
 
 /**
  * 每笔在共用格之外显「名称 <partyName>」：名称登在参与方册自己的行上、随修订走，是这一笔的内容——
- * 「从哪份换到哪份」在并排的描述里自己比（理由在 api.ts 的 BusinessPartyRevisionRecord）。
+ * 「从哪份换到哪份」在并排的描述里自己比（理由在 api.ts 的 BusinessPartyRevisionRecord）。识别信息（ADR-0367）不并排全量显，
+ * 只说这一笔比前一笔增删了哪些号与外部编码：号与编码往往一长串，每笔都全量列出，读的人反而看不出哪一笔动了它们。
  */
 export function businessPartyRevisionTimeline(
   revisions: readonly BusinessPartyRevisionRecord[],
   format: (iso: string) => string,
 ): RevisionTimelineItem[] {
-  return identityRevisionTimeline(revisions, format, (row) => `名称 ${row.partyName}`);
+  // 读口按修订号升序交回（ports.BusinessPartyRevisionHistoryRead），前一笔就是数组里的前一个。
+  const previous = new Map<number, BusinessPartyRevisionRecord | null>(
+    revisions.map((row, index) => [row.revision, index === 0 ? null : revisions[index - 1]]),
+  );
+  return identityRevisionTimeline(revisions, format, (row) =>
+    [`名称 ${row.partyName}`, ...identificationChangeLines(previous.get(row.revision) ?? null, row)].join(' · '),
+  );
 }
 
 export function businessPartyRevisionHistoryNote(count: number): string {

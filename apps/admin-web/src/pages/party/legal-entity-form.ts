@@ -19,7 +19,7 @@ import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
 import type { GroupLegalEntityRecord, LifetimeRegistrationNumberRecord, RegistrationNumberTypeRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
-import type { BusinessPartyDraft } from './business-party-form';
+import { emptyBusinessPartyDraft, type BusinessPartyDraft } from './business-party-form';
 import { revisionOf, suggestedNextRevision } from './registration-form';
 
 /** 终身注册号的一行草稿：类型码与号各是文本框原值。 */
@@ -194,7 +194,9 @@ export function effectivePartyIdOf(draft: LegalEntityDraft): string {
  * 「一并登记」悄悄变成「更新已有档案的名称」。
  */
 export function companionPartyDraftOf(draft: LegalEntityDraft): BusinessPartyDraft {
+  // 识别信息一格不带：我方公司的号只登在公司主体上（ADR-0367 决定一），往来单位那一笔只是它的参与方身份。
   return {
+    ...emptyBusinessPartyDraft(),
     partyId: companionPartyIdOf(draft),
     name: draft.partyName.trim(),
     revision: '1',

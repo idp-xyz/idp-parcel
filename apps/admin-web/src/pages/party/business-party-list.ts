@@ -6,12 +6,13 @@
 // 不是对册；分页下推之前这条限制如实存在，页面不假装成全量。
 //
 // 「类型」一列不是册上的字段：参与方是客户还是承运商，由它在关系册上持有的角色说（CONTEXT：角色由关系表达，身份本体不带
-// 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表与筛选按它称呼；一个角色都没有的叫「往来单位」。
+// 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表与筛选按它称呼；一个角色都没有的显「暂无合作关系」。客户角色
+// 另认一处事实：未停用客户账户的所属客户也持有它（CONTEXT 参与方身份诸句，ADR-0367 决定四）——账户不要求先登客户关系。
 // 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
 // 按法人册算出参与方标识集合，类型列与筛选按它称呼，与角色并列显示。
 
 import type { WorkbenchSort } from '../../templates/workbench';
-import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
+import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   identityStatusLabels,
   labelOf,
@@ -22,6 +23,7 @@ import {
   type PartyRoleCode,
 } from './presentation';
 import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter } from './list-order';
+import { partyIdentificationSearchTerms } from './business-party-identification';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
@@ -47,20 +49,32 @@ export const emptyPartyRoleIndex: PartyRoleIndex = new Map();
 // 在用的两格才算「持有」：到期、撤销、替代都是边界之后不再依据这段关系（CONTEXT），一家只剩过期合同的单位今天就不是客户。
 const roleBearingStatuses = new Set(['CANDIDATE', 'EFFECTIVE']);
 
+// 未停用的客户账户才让所属客户持有客户角色：已登记待生效的算，与关系的「候选」同一条判据——登好了、等着用。
+const customerBearingAccountStatuses = new Set(['REGISTERED', 'EFFECTIVE']);
+
 /**
  * 按关系册给每个参与方算它持有的角色。只数持有方那一侧：角色由「哪一方对哪一方持有」表达，相对方是被持有的一方
  * （我们的公司主体、或授权交付时的客户），它不因此得到这个角色。词表之外的角色码不进索引——它没有中文可显，
- * 也不该冒充某个已知类型。关系册没取到传 null，索引为空，所有行按「往来单位」显。
+ * 也不该冒充某个已知类型。客户账户册另给所属客户记一次客户角色（文件头）。哪一册没取到传 null，那一册不贡献角色。
  */
-export function indexPartyRoles(relationships: readonly PartyRelationshipRecord[] | null): PartyRoleIndex {
-  if (relationships === null) return emptyPartyRoleIndex;
+export function indexPartyRoles(
+  relationships: readonly PartyRelationshipRecord[] | null,
+  accounts: readonly CustomerAccountRecord[] | null = null,
+): PartyRoleIndex {
+  if (relationships === null && accounts === null) return emptyPartyRoleIndex;
   const index = new Map<string, Set<PartyRoleCode>>();
-  for (const row of relationships) {
+  const hold = (partyId: string, role: PartyRoleCode) => {
+    const roles = index.get(partyId) ?? new Set<PartyRoleCode>();
+    roles.add(role);
+    index.set(partyId, roles);
+  };
+  for (const row of relationships ?? []) {
     if (!roleBearingStatuses.has(row.status)) continue;
     if (!(row.role in partyRoleLabels)) continue;
-    const roles = index.get(row.holderId) ?? new Set<PartyRoleCode>();
-    roles.add(row.role as PartyRoleCode);
-    index.set(row.holderId, roles);
+    hold(row.holderId, row.role as PartyRoleCode);
+  }
+  for (const account of accounts ?? []) {
+    if (customerBearingAccountStatuses.has(account.status)) hold(account.customerPartyId, 'CUSTOMER');
   }
   const order = Object.keys(partyRoleLabels) as PartyRoleCode[];
   return new Map([...index].map(([partyId, roles]) => [partyId, order.filter((role) => roles.has(role))]));
@@ -107,7 +121,7 @@ export type BusinessPartySortKey = 'party' | 'party-name' | 'effective-from' | '
 export const defaultBusinessPartySort: WorkbenchSort = { key: 'registered-at', dir: -1 };
 
 /**
- * 搜索是包含匹配、不分大小写，命中参与方标识 / 名称 / 状态原名与中文 / 类型中文任一格；类型筛选精确到角色码，
+ * 搜索是包含匹配、不分大小写，命中参与方标识 / 名称 / 状态原名与中文 / 类型中文 / 注册号 / 外部编码任一格；类型筛选精确到角色码，
  * OURS 只留我方公司，NONE 只留既不是我方公司、一个角色也没有的。
  */
 export function filterBusinessParties(
@@ -130,6 +144,7 @@ export function filterBusinessParties(
       row.status,
       identityStatusLabels[row.status as IdentityStatusCode] ?? '',
       businessPartyTypeLabel(isOurs, held),
+      ...partyIdentificationSearchTerms(row),
     ]);
   });
 }

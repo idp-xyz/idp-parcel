@@ -162,11 +162,20 @@ func (entity ResponsibleLegalEntity) Party() PartyID {
 // BusinessPartyRegistration 是业务参与方身份在登记册上的一笔修订：身份内容 + 登记
 // 依据 + 生命周期事实。修订从 1 起连续递增，内容更正与停用都形成新修订，不原地改写
 // （CONTEXT「身份登记版本化不可覆盖」）。
+//
+// 识别信息（注册国家与终身注册号、身份更正依据、外部系统编码，ADR-0367）都可缺：号与法人身份层同一形状，
+// 所以借用 LegalEntityIdentityLayer 而不另造一个两格相同的类型。带不带、能不能接上前一笔，归写入用例与
+// CheckBusinessPartyIdentitySuccession；这里要同时装得下没有这几格的历史修订。
 type BusinessPartyRegistration struct {
-	party     BusinessParty
-	revision  int
-	basis     IdentityBasisReference
-	lifecycle IdentityLifecycle
+	party         BusinessParty
+	revision      int
+	basis         IdentityBasisReference
+	lifecycle     IdentityLifecycle
+	identity      LegalEntityIdentityLayer
+	hasIdentity   bool
+	correction    IdentityBasisReference
+	hasCorrection bool
+	references    []ExternalReference
 }
 
 func NewBusinessPartyRegistration(
@@ -187,7 +196,8 @@ func NewBusinessPartyRegistration(
 	}, nil
 }
 
-// Deactivate 交回下一笔修订：同一身份、修订号加一、生命周期进入已停用。
+// Deactivate 交回下一笔修订：同一身份、修订号加一、生命周期进入已停用。识别号与外部编码原样沿用；身份更正
+// 依据不沿用——停用修订不更正任何号。
 func (registration BusinessPartyRegistration) Deactivate(
 	basis IdentityBasisReference,
 	at time.Time,
@@ -198,6 +208,9 @@ func (registration BusinessPartyRegistration) Deactivate(
 	}
 	registration.revision++
 	registration.lifecycle = deactivated
+	registration.correction = IdentityBasisReference{}
+	registration.hasCorrection = false
+	registration.references = registration.ExternalReferences()
 	return registration, nil
 }
 

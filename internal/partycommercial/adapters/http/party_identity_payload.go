@@ -55,12 +55,18 @@ func exactlyOneItem(line string, own, total int) error {
 // 各口的一项与受控 CLI 的一项逐字同形（票 02 表单载荷即镜像它）：两口对同一项译出同一条命令。
 // 字段不做首尾空白裁切，与 CLI 一致——裁切是表单那一层已经做过的编码层动作，服务端再做一遍会让 " X" 与 "X" 在
 // 这一口成为同一身份、在受控 CLI 却是两个。
+// businessPartyDocument 的识别信息四格（ADR-0367）键可缺，判据同法人项的身份层三格：Intake 只管形状，缺不缺、能不能
+// 接上前一笔、有没有别人持有，由用例答`未受理`。
 type businessPartyDocument struct {
-	PartyID       string    `json:"partyId"`
-	Name          string    `json:"name"`
-	Revision      int       `json:"revision"`
-	Basis         string    `json:"basis"`
-	EffectiveFrom time.Time `json:"effectiveFrom"`
+	PartyID                     string                           `json:"partyId"`
+	Name                        string                           `json:"name"`
+	Revision                    int                              `json:"revision"`
+	Basis                       string                           `json:"basis"`
+	EffectiveFrom               time.Time                        `json:"effectiveFrom"`
+	RegistrationCountry         *string                          `json:"registrationCountry,omitempty"`
+	LifetimeRegistrationNumbers []lifetimeRegistrationNumberBody `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis     *string                          `json:"identityCorrectionBasis,omitempty"`
+	ExternalReferences          []externalReferenceBody          `json:"externalReferences,omitempty"`
 }
 
 // legalEntityDocument 的身份层三格（ADR-0145 决定一、二）键可缺：缺即没给，是缺是漏由用例判（新登记缺国家或缺号答
@@ -227,12 +233,27 @@ func (item businessPartyDocument) command(tenant domain.TenantID) (application.R
 	if err != nil {
 		return none, fmt.Errorf("%w: businessParties[0].basis: %v", ErrMalformedRequest, err)
 	}
-	return application.RegisterBusinessPartyCommand{
+	command := application.RegisterBusinessPartyCommand{
 		Party:         party,
 		Revision:      item.Revision,
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
-	}, nil
+	}
+	country, numbers, correction, err := identityFieldsFrom(
+		"businessParties[0]", item.RegistrationCountry, item.LifetimeRegistrationNumbers, item.IdentityCorrectionBasis,
+	)
+	if err != nil {
+		return none, err
+	}
+	command.RegistrationCountry, command.LifetimeNumbers, command.IdentityCorrectionBasis = country, numbers, correction
+	for index, reference := range item.ExternalReferences {
+		parsed, err := domain.ParseExternalReference(reference.System, reference.Purpose, reference.Code)
+		if err != nil {
+			return none, fmt.Errorf("%w: businessParties[0].externalReferences[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		command.ExternalReferences = append(command.ExternalReferences, parsed)
+	}
+	return command, nil
 }
 
 // command 把一次管理台登记的法人项译成责任法人身份修订登记命令。
@@ -262,44 +283,57 @@ func (item legalEntityDocument) command(tenant domain.TenantID) (application.Reg
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
 	}
-	if err := applyLegalEntityIdentityFields(&command, item); err != nil {
+	country, numbers, correction, err := identityFieldsFrom(
+		"legalEntities[0]", item.RegistrationCountry, item.LifetimeRegistrationNumbers, item.IdentityCorrectionBasis,
+	)
+	if err != nil {
 		return none, err
 	}
+	command.RegistrationCountry, command.LifetimeNumbers, command.IdentityCorrectionBasis = country, numbers, correction
 	return command, nil
 }
 
-// applyLegalEntityIdentityFields 把载荷上的身份层三格译进命令；形状不对包 ErrMalformedRequest，字段名随报。
-func applyLegalEntityIdentityFields(command *application.RegisterLegalEntityCommand, item legalEntityDocument) error {
-	if item.RegistrationCountry != nil {
-		country, err := domain.NewRegistrationCountryCode(*item.RegistrationCountry)
+// identityFieldsFrom 把载荷上的注册国家、终身注册号与身份更正依据三格译成命令上的值，法人项与参与方项共用；形状不对包
+// ErrMalformedRequest，字段名随报（line 是项的路径前缀）。
+func identityFieldsFrom(
+	line string,
+	rawCountry *string,
+	rawNumbers []lifetimeRegistrationNumberBody,
+	rawCorrection *string,
+) (*domain.RegistrationCountryCode, []domain.LifetimeRegistrationNumber, *domain.IdentityBasisReference, error) {
+	var country *domain.RegistrationCountryCode
+	if rawCountry != nil {
+		value, err := domain.NewRegistrationCountryCode(*rawCountry)
 		if err != nil {
-			return fmt.Errorf("%w: legalEntities[0].registrationCountry: %v", ErrMalformedRequest, err)
+			return nil, nil, nil, fmt.Errorf("%w: %s.registrationCountry: %v", ErrMalformedRequest, line, err)
 		}
-		command.RegistrationCountry = &country
+		country = &value
 	}
-	for index, number := range item.LifetimeRegistrationNumbers {
+	var numbers []domain.LifetimeRegistrationNumber
+	for index, number := range rawNumbers {
 		typeCode, err := domain.NewRegistrationNumberTypeCode(number.TypeCode)
 		if err != nil {
-			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, index, err)
+			return nil, nil, nil, fmt.Errorf("%w: %s.lifetimeRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, line, index, err)
 		}
 		value, err := domain.NewRegistrationNumber(number.Number)
 		if err != nil {
-			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d].number: %v", ErrMalformedRequest, index, err)
+			return nil, nil, nil, fmt.Errorf("%w: %s.lifetimeRegistrationNumbers[%d].number: %v", ErrMalformedRequest, line, index, err)
 		}
 		lifetime, err := domain.NewLifetimeRegistrationNumber(typeCode, value)
 		if err != nil {
-			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d]: %v", ErrMalformedRequest, index, err)
+			return nil, nil, nil, fmt.Errorf("%w: %s.lifetimeRegistrationNumbers[%d]: %v", ErrMalformedRequest, line, index, err)
 		}
-		command.LifetimeNumbers = append(command.LifetimeNumbers, lifetime)
+		numbers = append(numbers, lifetime)
 	}
-	if item.IdentityCorrectionBasis != nil {
-		correction, err := domain.NewIdentityBasisReference(*item.IdentityCorrectionBasis)
+	var correction *domain.IdentityBasisReference
+	if rawCorrection != nil {
+		value, err := domain.NewIdentityBasisReference(*rawCorrection)
 		if err != nil {
-			return fmt.Errorf("%w: legalEntities[0].identityCorrectionBasis: %v", ErrMalformedRequest, err)
+			return nil, nil, nil, fmt.Errorf("%w: %s.identityCorrectionBasis: %v", ErrMalformedRequest, line, err)
 		}
-		command.IdentityCorrectionBasis = &correction
+		correction = &value
 	}
-	return nil
+	return country, numbers, correction, nil
 }
 
 // decodeClosedDocument 以封闭形状解载荷，判据与同包发布口共用 decodeStrict：未知键拒——这一口的形状是封闭的，

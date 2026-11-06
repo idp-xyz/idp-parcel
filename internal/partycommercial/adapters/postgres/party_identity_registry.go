@@ -184,12 +184,18 @@ func (document identityLifecycleDocument) rebuild() (domain.IdentityBasisReferen
 	return basis, lifecycle, nil
 }
 
+// businessPartyDocument 的识别信息四格（ADR-0367）一律 omitempty 且排在末尾：本格落地之前写下的快照、以及没登识别
+// 信息的修订，照旧编出同一串字节、同一个内容摘要——重放判定不因加格而变成冲突。
 type businessPartyDocument struct {
 	Tenant    string `json:"tenant"`
 	PartyID   string `json:"partyId"`
 	PartyName string `json:"partyName"`
 	Revision  int    `json:"revision"`
 	identityLifecycleDocument
+	RegistrationCountry     string                      `json:"registrationCountry,omitempty"`
+	LifetimeNumbers         []lifetimeNumberDocument    `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis string                      `json:"identityCorrectionBasis,omitempty"`
+	ExternalReferences      []externalReferenceDocument `json:"externalReferences,omitempty"`
 }
 
 func (repository *PartyIdentityRegistrations) SaveBusinessParty(
@@ -204,13 +210,44 @@ func (repository *PartyIdentityRegistrations) SaveBusinessParty(
 		Revision:                  registration.Revision(),
 		identityLifecycleDocument: lifecycleDocumentOf(registration.Basis(), registration.Lifecycle()),
 	}
+	// 识别信息四列与快照同源；没带的格落 NULL（0045 的同空同有与非空数组约束）。
+	extra := map[string]any{
+		"party_name":                    party.Name().String(),
+		"registration_country":          nil,
+		"lifetime_registration_numbers": nil,
+		"identity_correction_basis":     nil,
+		"external_references":           nil,
+	}
+	if layer, has := registration.IdentityLayer(); has {
+		numbers := lifetimeNumberDocumentsOf(layer)
+		raw, err := json.Marshal(numbers)
+		if err != nil {
+			return ports.PartyRegistrySaveOutcomeInvalid, fmt.Errorf("save business_party_registration: %w", err)
+		}
+		document.RegistrationCountry = layer.Country().String()
+		document.LifetimeNumbers = numbers
+		extra["registration_country"] = layer.Country().String()
+		extra["lifetime_registration_numbers"] = string(raw)
+	}
+	if basis, has := registration.IdentityCorrectionBasis(); has {
+		document.IdentityCorrectionBasis = basis.String()
+		extra["identity_correction_basis"] = basis.String()
+	}
+	if references := externalReferenceDocumentsOf(registration.ExternalReferences()); len(references) > 0 {
+		raw, err := json.Marshal(references)
+		if err != nil {
+			return ports.PartyRegistrySaveOutcomeInvalid, fmt.Errorf("save business_party_registration: %w", err)
+		}
+		document.ExternalReferences = references
+		extra["external_references"] = string(raw)
+	}
 	return repository.saveIdentityRow(ctx, identityRegistrationRow{
 		table:     "business_party_registration",
 		idColumn:  "party_id",
 		tenant:    party.Tenant().String(),
 		id:        party.ID().String(),
 		revision:  registration.Revision(),
-		extra:     map[string]any{"party_name": party.Name().String()},
+		extra:     extra,
 		basis:     registration.Basis().String(),
 		lifecycle: registration.Lifecycle(),
 		document:  document,
@@ -554,7 +591,31 @@ func businessPartyFromSnapshot(raw []byte) (domain.BusinessPartyRegistration, er
 	if err != nil {
 		return domain.BusinessPartyRegistration{}, err
 	}
-	return domain.NewBusinessPartyRegistration(party, document.Revision, basis, lifecycle)
+	registration, err := domain.NewBusinessPartyRegistration(party, document.Revision, basis, lifecycle)
+	if err != nil {
+		return domain.BusinessPartyRegistration{}, err
+	}
+	layer, hasIdentity, err := identityLayerFromDocuments(document.RegistrationCountry, document.LifetimeNumbers)
+	if err != nil {
+		return domain.BusinessPartyRegistration{}, err
+	}
+	references, err := externalReferencesFromDocuments(document.ExternalReferences)
+	if err != nil {
+		return domain.BusinessPartyRegistration{}, err
+	}
+	var identity *domain.LegalEntityIdentityLayer
+	if hasIdentity {
+		identity = &layer
+	}
+	var correction *domain.IdentityBasisReference
+	if document.IdentityCorrectionBasis != "" {
+		value, err := domain.NewIdentityBasisReference(document.IdentityCorrectionBasis)
+		if err != nil {
+			return domain.BusinessPartyRegistration{}, err
+		}
+		correction = &value
+	}
+	return registration.WithIdentification(identity, correction, references)
 }
 
 func legalEntityFromSnapshot(raw []byte) (domain.LegalEntityRegistration, error) {

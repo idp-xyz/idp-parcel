@@ -1033,6 +1033,8 @@ type PartyIdentityRegistry interface {
 		tenant domain.TenantID,
 		relationship domain.RelationshipID,
 	) (domain.PartyRelationshipRegistration, bool, error)
+
+	IdentificationHolderLookup
 }
 
 // BusinessPartyRow 是业务参与方身份本体目录上列的一行：一个角色中立的参与方身份的最新
@@ -1058,6 +1060,7 @@ type BusinessPartyRow struct {
 	DeactivationBasis string
 	HasDeactivation   bool
 	RegisteredAt      time.Time
+	BusinessPartyIdentificationRow
 }
 
 // GroupLegalEntityRow 是集团与法人目录上列的一行：一个责任法人的最新登记修订，连同

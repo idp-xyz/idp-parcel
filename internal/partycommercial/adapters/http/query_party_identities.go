@@ -106,6 +106,7 @@ type businessPartyBody struct {
 	DeactivatedAt     string `json:"deactivatedAt,omitempty"`
 	DeactivationBasis string `json:"deactivationBasis,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+	businessPartyIdentificationBody
 }
 
 func businessPartyBodyOf(row ports.BusinessPartyRow) businessPartyBody {
@@ -122,6 +123,35 @@ func businessPartyBodyOf(row ports.BusinessPartyRow) businessPartyBody {
 	if row.HasDeactivation {
 		body.DeactivatedAt = rfc3339(row.DeactivatedAt)
 		body.DeactivationBasis = row.DeactivationBasis
+	}
+	body.businessPartyIdentificationBody = businessPartyIdentificationBodyOf(row.BusinessPartyIdentificationRow)
+	return body
+}
+
+// businessPartyIdentificationBody 是往来单位一笔修订的识别信息（ADR-0367），目录行与修订历史行共用。identityLayerRegistered
+// 是显式布尔，判据同法人的身份层：为假即这笔修订没带号，页面不拿空数组去推；外部编码零项时整格缺席。
+type businessPartyIdentificationBody struct {
+	identityLayerBody
+	ExternalReferences []externalReferenceBody `json:"externalReferences,omitempty"`
+}
+
+type externalReferenceBody struct {
+	System  string `json:"system"`
+	Purpose string `json:"purpose"`
+	Code    string `json:"code"`
+}
+
+func businessPartyIdentificationBodyOf(row ports.BusinessPartyIdentificationRow) businessPartyIdentificationBody {
+	body := businessPartyIdentificationBody{
+		identityLayerBody: identityLayerBodyOf(
+			row.HasIdentityLayer, row.RegistrationCountry, row.LifetimeNumbers,
+			row.HasIdentityCorrection, row.IdentityCorrectionBasis,
+		),
+	}
+	for _, reference := range row.ExternalReferences {
+		body.ExternalReferences = append(body.ExternalReferences, externalReferenceBody{
+			System: reference.System, Purpose: reference.Purpose, Code: reference.Code,
+		})
 	}
 	return body
 }

@@ -31,6 +31,7 @@ type BusinessPartyRevisionRow struct {
 	DeactivationBasis string
 	HasDeactivation   bool
 	RegisteredAt      time.Time
+	BusinessPartyIdentificationRow
 }
 
 // BusinessPartyRevisionHistoryRead 是业务参与方修订历史的读端口（票 admin-web-group-legal-entities/12）：

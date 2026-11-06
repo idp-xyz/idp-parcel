@@ -556,6 +556,25 @@ func (stub stubPartyIdentityRegistry) LoadLatestRelationship(
 	return domain.PartyRelationshipRegistration{}, false, nil
 }
 
+// 查重读口在这个替身上一律答「没人持有」：本文件证的是在线口的翻译与答复，查重门由用例测试与 PostgreSQL 适配器测试证。
+func (stub stubPartyIdentityRegistry) FindRegistrationNumberHolders(
+	context.Context, domain.TenantID, domain.LegalEntityIdentityLayer,
+) ([]ports.RegistrationNumberHolder, error) {
+	return nil, nil
+}
+
+func (stub stubPartyIdentityRegistry) FindExternalReferenceHolders(
+	context.Context, domain.TenantID, []domain.ExternalReference,
+) ([]ports.ExternalReferenceHolder, error) {
+	return nil, nil
+}
+
+func (stub stubPartyIdentityRegistry) FindLegalEntitiesPinning(
+	context.Context, domain.TenantID, domain.PartyID,
+) ([]string, error) {
+	return nil, nil
+}
+
 func pcBusinessPartyCommand(t *testing.T, revision int) application.RegisterBusinessPartyCommand {
 	t.Helper()
 	party, err := domain.NewBusinessParty(

@@ -35,6 +35,8 @@ func (catalogue *OperationsCatalogue) ListBusinessParties(
 		`SELECT party.tenant_id, party.party_id, party.party_name,
 		        party.revision, party.basis_ref, party.effective_from,
 		        party.deactivated_at, party.deactivation_basis, party.recorded_at,
+		        party.registration_country, party.lifetime_registration_numbers,
+		        party.identity_correction_basis, party.external_references,
 		        CASE
 		            WHEN party.deactivated_at IS NOT NULL AND party.deactivated_at <= now()
 		                THEN 'DEACTIVATED'
@@ -62,12 +64,18 @@ func (catalogue *OperationsCatalogue) ListBusinessParties(
 		var row ports.BusinessPartyRow
 		var deactivatedAt *time.Time
 		var deactivationBasis *string
+		var identification businessPartyIdentificationColumns
 		if err := rows.Scan(
 			&row.TenantID, &row.PartyID, &row.PartyName,
 			&row.Revision, &row.Basis, &row.EffectiveFrom,
 			&deactivatedAt, &deactivationBasis, &row.RegisteredAt,
+			&identification.country, &identification.numbers,
+			&identification.correction, &identification.references,
 			&row.Status,
 		); err != nil {
+			return nil, fmt.Errorf("list business parties: %w", err)
+		}
+		if err := identification.apply(&row.BusinessPartyIdentificationRow); err != nil {
 			return nil, fmt.Errorf("list business parties: %w", err)
 		}
 		if deactivatedAt != nil {

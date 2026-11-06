@@ -6,6 +6,9 @@ import {
   businessPartyLocalProblems,
   businessPartyPayloadOf,
   emptyBusinessPartyDraft,
+  identificationChanged,
+  identificationDraftOf,
+  registeredNumbersChanged,
   suggestedBusinessPartyRevision,
   type BusinessPartyDraft,
 } from './business-party-form';
@@ -118,5 +121,54 @@ test('认领的路径表', () => {
     'businessParties[0].revision',
     'businessParties[0].basis',
     'businessParties[0].effectiveFrom',
+    'businessParties[0].registrationCountry',
+    'businessParties[0].lifetimeRegistrationNumbers',
+    'businessParties[0].identityCorrectionBasis',
+    'businessParties[0].externalReferences',
   ]);
+});
+
+// Covers: ADR-0367 识别信息的编码——没填的格缺席、空行不带、填了一半的行原样送（由服务端点名）；不裁空白。
+test('识别信息进载荷：空格缺席、空行不带', () => {
+  const bare = businessPartyPayloadOf(draft({}), 'UTC').businessParties[0];
+  equal('registrationCountry' in bare, false);
+  equal('lifetimeRegistrationNumbers' in bare, false);
+  equal('identityCorrectionBasis' in bare, false);
+  equal('externalReferences' in bare, false);
+  const item = businessPartyPayloadOf(
+    draft({
+      registrationCountry: 'CN',
+      lifetimeNumbers: [{ typeCode: 'USCC', number: '91000000000000009X' }, { typeCode: '', number: '' }],
+      identityCorrectionBasis: 'SYN-FIX',
+      externalReferences: [{ system: 'ERP', purpose: '', code: 'C-1' }, { system: '', purpose: '', code: '' }],
+    }),
+    'UTC',
+  ).businessParties[0];
+  equal(item.registrationCountry, 'CN');
+  deepEqual(item.lifetimeRegistrationNumbers, [{ typeCode: 'USCC', number: '91000000000000009X' }]);
+  equal(item.identityCorrectionBasis, 'SYN-FIX');
+  deepEqual(item.externalReferences, [{ system: 'ERP', purpose: '', code: 'C-1' }]);
+});
+
+// Covers: 更正时把册上的识别信息摆回草稿；改没改、改没改号按内容比，与次序无关；册上没号时补登不算改号。
+test('识别信息的预填与改动判读', () => {
+  const row = {
+    identityLayerRegistered: true,
+    registrationCountry: 'CN',
+    lifetimeRegistrationNumbers: [{ typeCode: 'A', number: '1' }, { typeCode: 'B', number: '2' }],
+    externalReferences: [{ system: 'ERP', purpose: 'CUSTOMER', code: 'C-1' }],
+  };
+  const prefilled = draft(identificationDraftOf(row));
+  deepEqual(prefilled.lifetimeNumbers, row.lifetimeRegistrationNumbers);
+  equal(prefilled.identityCorrectionBasis, '');
+  equal(identificationChanged(row, prefilled), false);
+  equal(registeredNumbersChanged(row, prefilled), false);
+  const reordered = draft({ ...prefilled, lifetimeNumbers: [...prefilled.lifetimeNumbers].reverse() });
+  equal(identificationChanged(row, reordered), false);
+  const recoded = draft({ ...prefilled, externalReferences: [{ system: 'ERP', purpose: 'CUSTOMER', code: 'C-2' }] });
+  equal(identificationChanged(row, recoded), true);
+  equal(registeredNumbersChanged(row, recoded), false);
+  const removed = draft({ ...prefilled, registrationCountry: '', lifetimeNumbers: [] });
+  equal(registeredNumbersChanged(row, removed), true);
+  equal(registeredNumbersChanged({}, draft({ registrationCountry: 'CN', lifetimeNumbers: [{ typeCode: 'A', number: '1' }] })), false);
 });

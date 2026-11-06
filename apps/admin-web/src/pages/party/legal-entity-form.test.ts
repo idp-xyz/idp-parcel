@@ -282,6 +282,11 @@ test('一并登记：往来单位草稿借法人的来源单据与生效时间�
     revision: '1',
     basis: 'SYN-REG-BASIS-LE-02',
     effectiveFrom: '2026-01-02T08:00',
+    // 我方公司的号只登在公司主体上（ADR-0367 决定一），往来单位那一步一格识别信息都不带。
+    registrationCountry: '',
+    lifetimeNumbers: [],
+    identityCorrectionBasis: '',
+    externalReferences: [],
   });
 });
 

@@ -17,6 +17,7 @@ import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
+import { BusinessPartyIdentificationRows } from './BusinessPartyIdentificationRows';
 
 type PanelTab = 'overview' | 'identity';
 
@@ -43,7 +44,7 @@ export function BusinessPartyDetailPanel({
   onChanged,
 }: {
   row: BusinessPartyRecord;
-  /** 这个参与方在关系册上持有的角色（business-party-list.ts 的 indexPartyRoles），头部按它称呼；空即「往来单位」。 */
+  /** 这个参与方持有的角色（business-party-list.ts 的 indexPartyRoles：在用关系，加上未停用客户账户的所属客户），头部按它称呼；空即「暂无合作关系」。 */
   roles: readonly string[];
   /** 是不是法人册上钉着的我方公司；与列表类型格同一判据（business-party-list.ts 的 businessPartyTypeLabel）。 */
   ours: boolean;
@@ -183,14 +184,15 @@ export function BusinessPartyDetailPanel({
             forceMount={visited.has('identity') || undefined}
             className="mt-0 data-[state=inactive]:hidden"
           >
-            {row.deactivationBasis ? (
-              <dl>
+            <dl>
+              <BusinessPartyIdentificationRows record={row} />
+              {row.deactivationBasis ? (
                 <DetailRow label="停用的来源单据" mono>
                   {row.deactivationBasis}
                 </DetailRow>
-              </dl>
-            ) : null}
-            <section className={row.deactivationBasis ? 'mt-4' : ''}>
+              ) : null}
+            </dl>
+            <section className="mt-4">
               <h3 className="type-body font-medium text-idpxyz-text">历次更新</h3>
               <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
             </section>

@@ -195,6 +195,27 @@ test('indexPartyRoles 按持有方汇总在用关系的角色', () => {
   equal(indexPartyRoles(null).size, 0);
 });
 
+// Covers: ADR-0367 决定四——未停用客户账户的所属客户持有客户角色，不要求先登客户关系；已停用的账户不算；与关系上的客户
+// 角色合并不重复；关系册没取到时账户册照样贡献。
+test('indexPartyRoles 把未停用客户账户的所属客户算作客户', () => {
+  const account = (accountId: string, customerPartyId: string, status: string) => ({
+    tenantId: 'SYN-TENANT-01', accountId, customerPartyId, customerPartyNameKnown: true, status,
+    revision: 1, basis: 'SYN-BASIS', effectiveFrom: '2026-01-01T00:00:00Z', registeredAt: '2026-01-01T00:00:00Z',
+  });
+  const index = indexPartyRoles(
+    [relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-SHIPPER-01', role: 'CUSTOMER' })],
+    [
+      account('A1', 'SYN-PARTY-SHIPPER-01', 'EFFECTIVE'),
+      account('A2', 'SYN-PARTY-SHIPPER-02', 'REGISTERED'),
+      account('A3', 'SYN-PARTY-SHIPPER-03', 'DEACTIVATED'),
+    ],
+  );
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-SHIPPER-01'), ['CUSTOMER']);
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-SHIPPER-02'), ['CUSTOMER']);
+  deepEqual(rolesOfParty(index, 'SYN-PARTY-SHIPPER-03'), []);
+  deepEqual(rolesOfParty(indexPartyRoles(null, [account('A4', 'SYN-PARTY-SHIPPER-04', 'EFFECTIVE')]), 'SYN-PARTY-SHIPPER-04'), ['CUSTOMER']);
+});
+
 // Covers: 类型筛选精确到角色；NONE 只留没有角色的；类型中文也能被搜索命中；计数按角色与「无角色」分格。
 test('类型筛选与计数按持有的角色', () => {
   const index = indexPartyRoles([

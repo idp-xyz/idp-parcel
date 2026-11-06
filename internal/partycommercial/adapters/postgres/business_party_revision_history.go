@@ -33,7 +33,8 @@ func (catalogue *OperationsCatalogue) ListBusinessPartyRevisions(
 
 	rows, err := querier.Query(ctx,
 		`SELECT tenant_id, party_id, party_name, revision, basis_ref, effective_from,
-		        deactivated_at, deactivation_basis, recorded_at
+		        deactivated_at, deactivation_basis, recorded_at,
+		        registration_country, lifetime_registration_numbers, identity_correction_basis, external_references
 		   FROM party_commercial.business_party_registration
 		  WHERE tenant_id = $1 AND party_id = $2
 		  ORDER BY revision ASC`,
@@ -51,10 +52,15 @@ func (catalogue *OperationsCatalogue) ListBusinessPartyRevisions(
 		var row ports.BusinessPartyRevisionRow
 		var deactivatedAt *time.Time
 		var deactivationBasis *string
+		var identification businessPartyIdentificationColumns
 		if err := rows.Scan(
 			&row.TenantID, &row.PartyID, &row.PartyName, &row.Revision, &row.Basis, &row.EffectiveFrom,
 			&deactivatedAt, &deactivationBasis, &row.RegisteredAt,
+			&identification.country, &identification.numbers, &identification.correction, &identification.references,
 		); err != nil {
+			return nil, fmt.Errorf("list business party revisions: %w", err)
+		}
+		if err := identification.apply(&row.BusinessPartyIdentificationRow); err != nil {
 			return nil, fmt.Errorf("list business party revisions: %w", err)
 		}
 		if deactivatedAt != nil {

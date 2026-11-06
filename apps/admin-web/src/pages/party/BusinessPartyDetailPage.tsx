@@ -25,6 +25,7 @@ import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } 
 import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { DetailRow, Instant } from './detail-primitives';
+import { BusinessPartyIdentificationRows } from './BusinessPartyIdentificationRows';
 import { useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -63,7 +64,7 @@ function buildMeta(row: BusinessPartyRecord, related: number | undefined): Detai
   ];
 }
 
-/** 「概要」分区：身份这一层的全部读出。登记依据就是当前这一版的来源单据，直接显；排查用的标识与租户收进技术详情。 */
+/** 「概要」分区：身份这一层的全部读出，含识别信息。登记依据就是当前这一版的来源单据，直接显；排查用的标识与租户收进技术详情。 */
 function IdentityReadout({ row }: { row: BusinessPartyRecord }) {
   return (
     <section className="bg-idpxyz-bg p-5">
@@ -72,6 +73,7 @@ function IdentityReadout({ row }: { row: BusinessPartyRecord }) {
         <DetailRow label="编码" mono>
           {row.partyId}
         </DetailRow>
+        <BusinessPartyIdentificationRows record={row} />
         <DetailRow label="状态">
           <StatusPill code={row.status} />
         </DetailRow>
@@ -152,6 +154,7 @@ export function BusinessPartyDetailPage({
   identityEditing,
   onEnterIdentityEdit,
   onExitIdentityEdit,
+  ours,
 }: {
   partyId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -167,6 +170,8 @@ export function BusinessPartyDetailPage({
   onEnterIdentityEdit: () => void;
   /** 出编辑态：调用方改地址（后退或替换，由它按历史判）；`then` 是退出后还要去的地方，给了就替换地址再走。 */
   onExitIdentityEdit: (then?: () => void) => void;
+  /** 是不是法人册上钉着的我方公司（business-party-list.ts 的 ourCompanyPartyIds）；编辑态据此不摆注册号。 */
+  ours: boolean;
 }) {
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   const related = usePartyOverviewCount(partyId, relationships);
@@ -237,7 +242,7 @@ export function BusinessPartyDetailPage({
                     onEnterIdentityEdit();
                   }}
                 >
-                  更正名称
+                  更正登记信息
                 </Button>
               ) : null}
               <BusinessPartyMoreMenu row={row} parties={listAnswer} onChanged={retry} />
@@ -269,16 +274,17 @@ export function BusinessPartyDetailPage({
                 ? [
                     {
                       id: 'identity-edit',
-                      title: '更正名称',
-                      description: '改的是这家单位登记在册的名称；合作关系、合同与账户照旧指向它。',
+                      title: '更正登记信息',
+                      description: '改的是这家单位登记在册的名称与识别信息；合作关系、合同与账户照旧指向它。',
                       content: (
                         <BusinessPartyIdentityEditMode
                           key={row.partyId}
                           row={row}
+                          ours={ours}
                           knownParties={knownParties}
                           footerSlot={footerSlot}
                           onLanded={(sent) => {
-                            addToast({ type: 'success', title: `名称已更正${sent ? `，登记为${updateOrdinalLabel(Number(sent.revision))}` : ''}` });
+                            addToast({ type: 'success', title: `登记信息已更正${sent ? `，登记为${updateOrdinalLabel(Number(sent.revision))}` : ''}` });
                             setUnsaved(false);
                             retry();
                             onExitIdentityEdit();

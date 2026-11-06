@@ -564,7 +564,26 @@ export interface PartyRelationshipListResponseBody {
 //
 // status 按装载时点导出（REGISTERED / EFFECTIVE / DEACTIVATED）；停用两件只在已停用时
 // 在场。这里没有 partyNameKnown：名称就在本册行上，不像法人与关系那样要左连接过来。
-export interface BusinessPartyRecord {
+/** 往来单位在一个外部系统里的一个编码（ADR-0367 决定三）：purpose 是封闭三词 CUSTOMER / SUPPLIER / PARTY。 */
+export interface ExternalReferenceRecord {
+  system: string;
+  purpose: string;
+  code: string;
+}
+
+/**
+ * 往来单位一笔修订的识别信息（ADR-0367；后端 businessPartyIdentificationBody），目录行与修订历史行共用。四格都可缺：
+ * identityLayerRegistered 为假或缺席（这几格落地之前的构建不交它）即这笔修订没带号；外部编码零项时整格缺席。
+ */
+export interface BusinessPartyIdentificationRecord {
+  identityLayerRegistered?: boolean;
+  registrationCountry?: string;
+  lifetimeRegistrationNumbers?: LifetimeRegistrationNumberRecord[];
+  identityCorrectionBasis?: string;
+  externalReferences?: ExternalReferenceRecord[];
+}
+
+export interface BusinessPartyRecord extends BusinessPartyIdentificationRecord {
   tenantId: string;
   partyId: string;
   partyName: string;
@@ -587,7 +606,7 @@ export interface BusinessPartyListResponseBody {
 // 法人修订行多出的一格：名称登在参与方册自己的行上、随修订走，「名称从哪份换到哪份」正是两笔之间改了什么的
 // 一部分；法人修订行不带名称是因为名称不在法人册上，两者是表形的差别不是口径分歧。停用两件只在已停用那一笔
 // 在场——页面看键在不在，不拿空串推。读口不做 diff，两笔之间改了什么由页面并排显。
-export interface BusinessPartyRevisionRecord {
+export interface BusinessPartyRevisionRecord extends BusinessPartyIdentificationRecord {
   tenantId: string;
   partyId: string;
   partyName: string;
@@ -908,7 +927,7 @@ export const partyIdentityOutcomeLabels: Record<string, string> = {
   DEACTIVATED: '已停用：停用记为新的一笔修订，之前的修订不变。',
   ALREADY_REGISTERED: '已登记过同样的内容，原修订不变。',
   CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的内容。要更正，请用下一个修订号登记。',
-  NOT_ACCEPTED: '未受理：修订号对不上，或引用的对象不存在。没有写入任何内容。',
+  NOT_ACCEPTED: '未受理：登记册没有接受这一笔，原因见下。没有写入任何内容。',
   NOT_FOUND: '没有找到这个身份：要停用的对象从未登记。',
 };
 
