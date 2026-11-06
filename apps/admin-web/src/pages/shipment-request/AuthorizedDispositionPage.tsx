@@ -5,6 +5,7 @@ import { ReviewFlowTemplate, type ReviewDecisionOption } from '../../templates';
 import { ReloginButton } from '../../auth/ReloginButton';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { moduleInfoById } from '../../navigation';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import {
   disposeShipmentRequest,
   findAcceptanceReviewCase,
@@ -13,8 +14,8 @@ import {
   type ApiResult,
   type AuthorizedDispositionChoice,
   type AuthorizedDispositionQueueEntry,
-  type AuthorizedDispositionQueueListResponseBody,
 } from './api';
+import { CursorPagerBar, pastFirstPage } from './cursor-pager';
 import {
   dispositionChoiceOptions,
   dispositionCommandNoteOf,
@@ -101,25 +102,17 @@ function NoteLine({ note }: { note: DispositionCommandNote | null }) {
  * /shipment-requests/authorized-dispositions。决定集只有`拒绝`与`交客户补充`——「放行」不在集内,
  * 硬句「人工处理不得绕过硬规则或把缺少的权威结果改成通过」在这里是结构性的:去向类型只有两值。
  * 谁有权处置由编排去问 party-commercial,前端不自判。
+ *
+ * 列表已迁到 ADR-0144,按游标翻页,翻页条在页底。本页没有检索框与筛选条,读口收的检索词与筛选维不接,只翻页。
  */
 export function AuthorizedDispositionPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [queueAnswer, setQueueAnswer] = useState<ApiResult<AuthorizedDispositionQueueListResponseBody> | null>(null);
+  const { answer: queueAnswer, pagination, retry: retryQueue } = useCatalogueCursor({}, listAuthorizedDispositionQueue);
   const [caseLoaded, setCaseLoaded] = useState<{ id: string; answer: ApiResult<AcceptanceReviewCaseResponseBody> } | null>(null);
   const [commandPending, setCommandPending] = useState(false);
   const [commandNote, setCommandNote] = useState<DispositionCommandNote | null>(null);
   const [pendingRejection, setPendingRejection] = useState<PendingRejection | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listAuthorizedDispositionQueue().then((answer) => {
-      if (!cancelled) setQueueAnswer(answer);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -140,7 +133,12 @@ export function AuthorizedDispositionPage() {
   const selectedEntry = entries.find((entry) => entry.shipmentRequestId === selectedId) ?? null;
   const caseAnswer = caseLoaded?.id === selectedId ? caseLoaded.answer : null;
   const caseBody = caseAnswer?.kind === 'outcome' ? caseAnswer.body : null;
-  const retry = () => setReloadKey((value) => value + 1);
+  // 队列重取停在当前这一页(游标不动),选中的那份详情一并重读。
+  const retry = () => {
+    retryQueue();
+    setReloadKey((value) => value + 1);
+  };
+  const viewState = dispositionQueueViewState(queueAnswer, retry, info, pastFirstPage(pagination));
 
   // 命令成立才重读:403 之后队列没有任何变化,重读只会白跑一趟。
   const decide = (choice: AuthorizedDispositionChoice, entry: AuthorizedDispositionQueueEntry, reason: string) => {
@@ -183,7 +181,7 @@ export function AuthorizedDispositionPage() {
   };
 
   return (
-    <>
+    <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
       <ReviewFlowTemplate<AuthorizedDispositionChoice>
         title={info.title}
         description="受理前的付款检查没通过、要由有权的人决定去向的运单停在这里。只能选拒绝或交客户补充,这里不能代替检查放行。"
@@ -224,8 +222,9 @@ export function AuthorizedDispositionPage() {
         decisions={dispositionDecisions}
         decisionPending={commandPending}
         onDecide={onDecide}
-        viewState={dispositionQueueViewState(queueAnswer, retry, info)}
+        viewState={viewState}
       />
+      {pagination && viewState.kind === 'ready' && <CursorPagerBar pagination={pagination} />}
       {/* 「拒绝」是不可逆去向,按下之后再拦一道;确认即发命令,进行中由模板禁用按钮、结果由上面的 commandNote 呈现。 */}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
@@ -238,6 +237,6 @@ export function AuthorizedDispositionPage() {
         onConfirm={confirmRejection}
         onCancel={cancelRejection}
       />
-    </>
+    </div>
   );
 }

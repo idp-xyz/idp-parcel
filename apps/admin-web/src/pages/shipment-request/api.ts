@@ -11,7 +11,8 @@
 //   loginRequired / notGranted —— 401 + OPERATOR_CREDENTIAL_REJECTED 要重新登录、403 +
 //                     OPERATOR_NOT_GRANTED 要登记授予(ADR-0100 决定四;与上一格同在
 //                     auth/access-refusal.ts 判);
-//   callerProblem  —— 其余 4xx,调用方的错,重发同样内容不会改变结果;
+//   callerProblem  —— 其余 4xx,调用方的错,重发同样内容不会改变结果;服务端随答一句理由散文时
+//                     带上 detail;
 //   noAnswer       —— 5xx,服务端没形成答案,可退避重试;
 //   transport      —— fetch 未通或响应不是 JSON:parcel-api 一律写 JSON,非 JSON
 //                     说明请求根本没到它(前缀/代理未通),与 5xx 分开,恢复动作不同。
@@ -19,10 +20,16 @@
 // 单份查阅多一枚要认的 4xx code:SHIPMENT_REQUEST_NOT_VISIBLE(404)。它是终局业务
 // 答案而不是故障——「统一不可见结果」不区分「不存在」与「越权/他租户对象」,页面按
 // callerProblem 里的这枚 code 专门呈现,不得当错误重试,也不得替它补出第二种说法。
+//
+// 各 list* 列表读口按 ADR-0144 翻页:游标、排序、筛选维与 `q` 经 catalogueRequestPath 拼进查询串,答复多一格
+// page;不带参数即裸路径。每册收哪些键以 internal/parcelshipment/ports 的 catalogue_pages.go 为准——集外的键
+// 答 400,这里不自造。按运单号、按一组标识、按标识取单份、按包裹读回是有界查找,不翻页,照旧。
 
-import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
+import { accessRefusalOf } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
-import { problemCodeOf } from '../problem-body';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
+import { problemCodeOf, problemDetailOf } from '../problem-body';
 
 // 路径前缀已裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧在 bootstrap
 // 调 configureShipmentRequestApi({ basePrefix: '/api' }) 注入。默认空串只是未装配
@@ -202,6 +209,11 @@ export interface ViewsListResponseBody {
   requests: ShipmentRequestSummary[];
 }
 
+/** 列表那一支翻页,多一格 page;按运单号、按一组标识的有界查找答的是上面那一形,不带它。 */
+export interface ViewsPageResponseBody extends ViewsListResponseBody {
+  page: CataloguePage;
+}
+
 export interface ViewDetailResponseBody {
   outcome: 'REQUEST_VIEW';
   request: ShipmentRequestDetail;
@@ -230,6 +242,7 @@ export interface AcceptanceReviewQueueEntry extends ShipmentRequestSummary {
 export interface AcceptanceReviewQueueListResponseBody {
   outcome: 'REVIEW_QUEUE_LISTED';
   entries: AcceptanceReviewQueueEntry[];
+  page: CataloguePage;
 }
 
 /**
@@ -327,6 +340,7 @@ export interface AuthorizedDispositionQueueEntry extends ShipmentRequestSummary 
 export interface AuthorizedDispositionQueueListResponseBody {
   outcome: 'DISPOSITION_QUEUE_LISTED';
   entries: AuthorizedDispositionQueueEntry[];
+  page: CataloguePage;
 }
 
 /**
@@ -387,12 +401,16 @@ export interface ControlReleaseRefusalRow {
   recordedAt: string;
 }
 
-/** unhandledCount 是未处理的全部行数,truncated 说明清单被页大小截断(计数不截断)。 */
+/**
+ * unhandledCount 是未处理的全部行数,不随筛选、检索与翻页变;truncated 与 page.next 不为 null 同义(后面还有),
+ * 页面看 page。
+ */
 export interface ControlReleaseRefusalListResponseBody {
   outcome: 'CONTROL_RELEASE_REFUSALS_LISTED';
   unhandledCount: number;
   truncated: boolean;
   refusals: ControlReleaseRefusalRow[];
+  page: CataloguePage;
 }
 
 export type ControlReleaseRefusalAction = 'RELEASE_AT_SETTLEMENT' | 'MARK_HANDLED';
@@ -470,11 +488,14 @@ export interface LabelTransactionRow {
  * continuedAttemptBasis 是「继续尝试判断」那一列的派生依据代码,页头要如实转述它——
  * 这一列是按 CONTEXT 规则由决定登记册与当前有效终局现算出来的,不是存下来的状态,
  * 不写明就会被读成「有人逐件核对过」。
+ *
+ * 翻页按交易翻:page 的页大小与总数数的是交易,一页交易摊开后的行数比它多。
  */
 export interface LabelTransactionsListResponseBody {
   outcome: 'LABEL_TRANSACTIONS_LISTED';
   continuedAttemptBasis: string;
   rows: LabelTransactionRow[];
+  page: CataloguePage;
 }
 
 /** 继续尝试判断由决定登记册与当前有效终局现算时服务端交回的依据代码。 */
@@ -673,11 +694,13 @@ export interface PostIntakeDispositionRequestRow {
   currentVersion: number;
 }
 
+/** pendingCount 是等回应的全部票数,不随翻页变;truncated 与 page.next 不为 null 同义,页面看 page。 */
 export interface PostIntakeDispositionRequestsResponseBody {
   outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED';
   pendingCount: number;
   truncated: boolean;
   requests: PostIntakeDispositionRequestRow[];
+  page: CataloguePage;
 }
 
 export interface PostIntakeDispositionDecisionDraft {
@@ -729,6 +752,14 @@ export interface PostIntakeManualItemsResponseBody {
   items: PostIntakeManualItemRow[];
 }
 
+/**
+ * 待登记清单那一支翻页,多一格 page;pendingCount 是全部未登记的项数,不随翻页变,truncated 与 page.next 不为
+ * null 同义。按包裹读回是有界查找,答的是上面那一形,不带 page。
+ */
+export interface PostIntakeManualItemsPageResponseBody extends PostIntakeManualItemsResponseBody {
+  page: CataloguePage;
+}
+
 export interface PostIntakeManualItemResultDraft {
   parcel: string;
   decisionVersion: number;
@@ -744,13 +775,9 @@ export interface PostIntakeManualItemResultResponseBody {
 }
 
 // ---- 调用结果 ----
-
-export type ApiResult<Body> =
-  | { kind: 'outcome'; status: number; body: Body }
-  | AccessRefusal
-  | { kind: 'callerProblem'; status: number; code: string }
-  | { kind: 'noAnswer'; status: number; code: string }
-  | { kind: 'transport'; message: string };
+//
+// 与主数据各页同一套结果代数,不另抄一份:列表读口经 use-catalogue-cursor 翻页,那边收的就是这一形。
+export type { ApiResult } from '../catalogue-api';
 
 export function submitShipmentRequest(
   draft: ShipmentRequestDraft,
@@ -770,8 +797,12 @@ export function cancelParcel(
   return post<CancellationResponseBody>('/v1/shipment-requests/parcel-cancellations', draft);
 }
 
-export function listShipmentRequestViews(): Promise<ApiResult<ViewsListResponseBody>> {
-  return exchange<ViewsListResponseBody>('/shipment-request-views', { method: 'GET' });
+/** 运单列表,收哪些键见 ports.ShipmentRequestViewPages。 */
+export function listShipmentRequestViews(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ViewsPageResponseBody>> {
+  return exchange<ViewsPageResponseBody>(catalogueRequestPath('/shipment-request-views', conditions, after), { method: 'GET' });
 }
 
 /** 按运单号(单据号)在可见范围里找运单:逐字比,没有是空列表(ADR-0355 决定十一「可按单据号检索」)。 */
@@ -810,12 +841,15 @@ export function findShipmentRequestView(
   );
 }
 
-export function listAcceptanceReviewQueue(): Promise<
-  ApiResult<AcceptanceReviewQueueListResponseBody>
-> {
-  return exchange<AcceptanceReviewQueueListResponseBody>('/acceptance-review-queue', {
-    method: 'GET',
-  });
+/** 复核队列,收哪些键见 ports.AcceptanceReviewQueuePages。 */
+export function listAcceptanceReviewQueue(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<AcceptanceReviewQueueListResponseBody>> {
+  return exchange<AcceptanceReviewQueueListResponseBody>(
+    catalogueRequestPath('/acceptance-review-queue', conditions, after),
+    { method: 'GET' },
+  );
 }
 
 export function findAcceptanceReviewCase(
@@ -827,12 +861,15 @@ export function findAcceptanceReviewCase(
   );
 }
 
-export function listAuthorizedDispositionQueue(): Promise<
-  ApiResult<AuthorizedDispositionQueueListResponseBody>
-> {
-  return exchange<AuthorizedDispositionQueueListResponseBody>('/authorized-disposition-queue', {
-    method: 'GET',
-  });
+/** 授权处置队列,收哪些键见 ports.AuthorizedDispositionQueuePages。 */
+export function listAuthorizedDispositionQueue(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<AuthorizedDispositionQueueListResponseBody>> {
+  return exchange<AuthorizedDispositionQueueListResponseBody>(
+    catalogueRequestPath('/authorized-disposition-queue', conditions, after),
+    { method: 'GET' },
+  );
 }
 
 export function disposeShipmentRequest(
@@ -841,8 +878,15 @@ export function disposeShipmentRequest(
   return post<AuthorizedDispositionResponseBody>('/shipment-requests/authorized-dispositions', draft);
 }
 
-export function listControlReleaseRefusals(): Promise<ApiResult<ControlReleaseRefusalListResponseBody>> {
-  return exchange<ControlReleaseRefusalListResponseBody>('/control-release-refusals', { method: 'GET' });
+/** 释放未受理册,收哪些键见 ports.ControlReleaseRefusalPages。 */
+export function listControlReleaseRefusals(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ControlReleaseRefusalListResponseBody>> {
+  return exchange<ControlReleaseRefusalListResponseBody>(
+    catalogueRequestPath('/control-release-refusals', conditions, after),
+    { method: 'GET' },
+  );
 }
 
 export function handleControlReleaseRefusal(
@@ -851,8 +895,15 @@ export function handleControlReleaseRefusal(
   return post<ControlReleaseRefusalHandlingResponseBody>('/control-release-refusal-handlings', draft);
 }
 
-export function listPostIntakeDispositionRequests(): Promise<ApiResult<PostIntakeDispositionRequestsResponseBody>> {
-  return exchange<PostIntakeDispositionRequestsResponseBody>('/post-intake-disposition-requests', { method: 'GET' });
+/** 等回应的停止请求,收哪些键见 ports.PostIntakeDispositionRequestPages。 */
+export function listPostIntakeDispositionRequests(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<PostIntakeDispositionRequestsResponseBody>> {
+  return exchange<PostIntakeDispositionRequestsResponseBody>(
+    catalogueRequestPath('/post-intake-disposition-requests', conditions, after),
+    { method: 'GET' },
+  );
 }
 
 export function decidePostIntakeDisposition(
@@ -861,10 +912,23 @@ export function decidePostIntakeDisposition(
   return post<PostIntakeDispositionDecisionResponseBody>('/post-intake-disposition-decisions', draft);
 }
 
-/** 不带包裹上列本租户尚未登记结果的项;带包裹读回这件包裹名下全部项连同结果。 */
-export function listPostIntakeManualItems(parcel?: string): Promise<ApiResult<PostIntakeManualItemsResponseBody>> {
-  const query = parcel ? `?parcel=${encodeURIComponent(parcel)}` : '';
-  return exchange<PostIntakeManualItemsResponseBody>(`/post-intake-disposition-manual-items${query}`, { method: 'GET' });
+/** 本租户尚未登记结果的项,收哪些键见 ports.PostIntakeManualItemPages。 */
+export function listPostIntakeManualItems(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<PostIntakeManualItemsPageResponseBody>> {
+  return exchange<PostIntakeManualItemsPageResponseBody>(
+    catalogueRequestPath('/post-intake-disposition-manual-items', conditions, after),
+    { method: 'GET' },
+  );
+}
+
+/** 读回这件包裹名下全部项连同结果:有界查找,不翻页,不与翻页参数同带。 */
+export function findPostIntakeManualItemsOfParcel(parcel: string): Promise<ApiResult<PostIntakeManualItemsResponseBody>> {
+  return exchange<PostIntakeManualItemsResponseBody>(
+    `/post-intake-disposition-manual-items?parcel=${encodeURIComponent(parcel)}`,
+    { method: 'GET' },
+  );
 }
 
 export function registerPostIntakeManualItemResult(
@@ -873,8 +937,15 @@ export function registerPostIntakeManualItemResult(
   return post<PostIntakeManualItemResultResponseBody>('/post-intake-disposition-manual-item-results', draft);
 }
 
-export function listLabelTransactions(): Promise<ApiResult<LabelTransactionsListResponseBody>> {
-  return exchange<LabelTransactionsListResponseBody>('/label-transactions', { method: 'GET' });
+/** 面单交易,收哪些键见 ports.LabelTransactionPages。 */
+export function listLabelTransactions(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<LabelTransactionsListResponseBody>> {
+  return exchange<LabelTransactionsListResponseBody>(
+    catalogueRequestPath('/label-transactions', conditions, after),
+    { method: 'GET' },
+  );
 }
 
 export function completeManualReview(
@@ -934,5 +1005,9 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }
-  return { kind: 'callerProblem', status: response.status, code };
+  // 只在服务端真给了一句字符串时才带上这一格,缺席不多出一个值为 undefined 的键(与主数据那边同一判法)。
+  const detail = problemDetailOf(parsed);
+  return detail === undefined
+    ? { kind: 'callerProblem', status: response.status, code }
+    : { kind: 'callerProblem', status: response.status, code, detail };
 }

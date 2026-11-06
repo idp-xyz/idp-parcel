@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { StatusPill } from '../../components/StatusPill';
 import { CodeRef } from '../../components/CodeRef';
 import { labelFor } from '../../vocabulary/status';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { listLabelTransactions, type ApiResult, type LabelTransactionRow, type LabelTransactionsListResponseBody } from './api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { listLabelTransactions, type LabelTransactionRow } from './api';
 import { ParcelNo } from './refs';
-import { parcelNoOf } from './ref-no';
 
 // 页面标题取导航登记的那一份;主责上下文(parcel-shipment)只在代码里出现,屏上不说系统的话。
 const info = moduleInfoById['label-transactions'];
@@ -28,6 +28,10 @@ const info = moduleInfoById['label-transactions'];
  *
  * 「还能再试」一列由每件包裹的继续尝试决定登记册(受控关闭 / 重开决定)与当前有效终局按规则现算
  * (continuedAttemptBasis 说明派生依据),不是存下来的状态;派生依据的码不上屏。
+ *
+ * 读口已迁到 ADR-0144:检索词(地址上的 `?q=`,停稳后)下推,接模板的游标翻页,不在答回来的那一页上再筛。翻页按交易翻,
+ * 翻页条上的总数数的是交易,一页交易摊开的行比它多,所以摘要把两样分开报。渠道面单号不在读口检索的列里,检索框的提示
+ * 因此不写它;读口另有交易结果一维,本页没有对应的筛选条,不另加。
  */
 
 /**
@@ -107,44 +111,31 @@ const columns: ListColumn<LabelTransactionRow>[] = [
 ];
 
 export function LabelTransactionsPage() {
-  const [keyword, setKeyword] = useState('');
-  const [reloadToken, setReloadToken] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<LabelTransactionsListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listLabelTransactions().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
+  const [keyword, setKeyword] = useAddressKeyword();
+  const conditions = { q: useSettledKeyword(keyword) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listLabelTransactions);
 
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const rows = body?.rows ?? [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        [row.transactionId, row.parcelId, parcelNoOf(row.parcelId), row.parcelIdentifier ?? ''].some((field) => field.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadToken((token) => token + 1);
+  const transactionCount = new Set(rows.map((row) => row.transactionId)).size;
 
   return (
     <ListPageTemplate<LabelTransactionRow>
       title={info.title}
       description="每笔面单交易覆盖了哪些包裹、渠道答了什么、还能不能再试。定案只说明结果不再变,定下的也可能是失败。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: '搜包裹号 / 面单交易 / 渠道面单号' }}
-      filterSummary={answer?.kind === 'outcome' ? `共 ${visibleRows.length} 行` : undefined}
+      search={{ value: keyword, onChange: setKeyword, placeholder: '搜包裹号 / 面单交易 / 渠道账号' }}
+      filterSummary={body ? `本页 ${transactionCount} 笔交易,摊开 ${rows.length} 行` : undefined}
       columns={columns}
-      rows={visibleRows}
+      rows={rows}
       rowKey={(row) => `${row.transactionId}#${row.parcelId}`}
+      emptyRowsNote="当前检索条件下没有匹配的面单交易"
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /label-transactions',
         emptyTitle: '还没有面单交易',
         emptyDescription: '面单交易由渠道对接写入;渠道接上之前这里是空的。',
+        narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );

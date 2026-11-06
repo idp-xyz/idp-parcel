@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import {
   WorkbenchPageTemplate,
@@ -9,27 +9,26 @@ import {
   type TemplateViewState,
   type WorkbenchChip,
   type WorkbenchColumn,
-  type WorkbenchKpi,
   type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
-import { statusToneText } from '../../components/status-tone';
-import { toneFor, type StatusTone } from '../../vocabulary/status';
+import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { problemNote } from './presentation';
 import { listShipmentRequestViews, type ApiResult, type ShipmentRequestSummary, type ViewsListResponseBody } from './api';
+import { CursorPager } from './cursor-pager';
 import { ShipmentRequestDetailPage } from './ShipmentRequestDetailPage';
 import { ShipmentRequestDetailPanel } from './ShipmentRequestDetailPanel';
 import { useCustomerNames } from './use-customer-names';
 import {
-  countShipmentsByState,
   customerDisplayOf,
   defaultShipmentSort,
-  filterShipments,
-  shipmentCountSummary,
+  shipmentListConditions,
   shipmentNoMatchNote,
-  sortShipments,
+  shipmentStates,
   type CustomerNameIndex,
   type ShipmentStateFilter,
 } from './shipment-request-list';
@@ -48,7 +47,11 @@ const info = moduleInfoById['shipment-request-inquiry'];
 // 不泄露任何存在性），单份的不可见由详情页按同一语义呈现。
 //
 // 栏目跟真实读模型走：读模型没有的字段（目的地、重量、收件人、预计送达）不虚构，设计源第八节记着要补的读口。
-// 检索、筛选、排序只在已取回的这一页行上做，不属于查询协议。
+//
+// 读口已迁到 ADR-0144，按游标翻页（工具条右端）。检索词（地址上的 `?q=`，停稳后）、状态胶囊与提交时间的先后下推成查询条件
+// （shipment-request-list 的 shipmentListConditions），不在答回来的那一页上再筛再排。客户名称不在读口检索的列里，检索框的
+// 提示因此不写客户；读口另有客户账户一维，本页没有对应的筛选条，不另加。状态胶囊不带计数、命令头不摆指标：一页之内数出来的
+// 不是各状态的总数，按状态的总数读口不给；当前条件下共几张由翻页条说。
 
 // 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<运单号>），与外壳的模块级 hash 路由同一约定：刷新回到同一份
 // 详情、后退自然收回列表、详情可收藏转发。多标签壳层拿前两段作标签 id，详情因此开成自己的一张标签、列表留在另一张。
@@ -66,20 +69,12 @@ function detailHash(row: Pick<ShipmentRequestSummary, 'shipmentRequestId' | 'doc
   return `#/shipment-request-inquiry/${encodeURIComponent(shipmentDisplayNoOf(row))}`;
 }
 
-// 词典五档色调 → 指标数值的字色类（components/status-tone 只有四档语气，中性不着色）。
-const kpiToneClass: Partial<Record<StatusTone, string>> = {
-  good: statusToneText.success,
-  info: statusToneText.info,
-  warn: statusToneText.warning,
-  bad: statusToneText.danger,
-};
-
+// 表头只有提交时间一列可排：别的列在读口上没有对应的排序维，在答回来的一页里排只排得动这一页。
 function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSummary>[] {
   return [
     {
       key: 'shipment-id',
       header: objectNouns.shipmentNumber,
-      sortKey: 'shipment-id',
       render: (row) => (
         <div className="min-w-0">
           {/* 标识取主题的链接色 text.link.hover：强调色落在画布与选中行上对比度不够（集团与法人页同一判据）。 */}
@@ -95,7 +90,6 @@ function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSum
     {
       key: 'customer',
       header: objectNouns.customer,
-      sortKey: 'customer',
       render: (row) => {
         const customer = customerDisplayOf(row, names);
         return customer.isCode ? (
@@ -110,7 +104,6 @@ function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSum
     {
       key: 'parcel-count',
       header: objectNouns.parcelCount,
-      sortKey: 'parcel-count',
       right: true,
       width: '72px',
       render: (row) => <span className="font-mono">{row.declaredParcelCount}</span>,
@@ -135,12 +128,17 @@ function columnsOf(names: CustomerNameIndex): WorkbenchColumn<ShipmentRequestSum
 }
 
 // 取数答案 → 模板页面态。空列表走空态而不是就绪态的空表格：模板明言不从 rows.length 推断，「还没有运单」这一业务事实要由本页
-// 说出来；筛出为空不是空态——viewState 按总数判，表格区另显 noMatchText。
-function viewStateOf(answer: ApiResult<ViewsListResponseBody> | null, rowCount: number, retry: () => void): TemplateViewState {
+// 说出来；带检索词或状态答出零行不是空态（narrowed，同 catalogue-view 的那一格）——留在就绪态，表格区另显 noMatchText。
+function viewStateOf(
+  answer: ApiResult<ViewsListResponseBody> | null,
+  rowCount: number,
+  retry: () => void,
+  narrowed: boolean,
+): TemplateViewState {
   if (answer === null) return { kind: 'loading', shape: 'table' };
   switch (answer.kind) {
     case 'outcome':
-      return rowCount === 0
+      return rowCount === 0 && !narrowed
         ? {
             kind: 'empty',
             title: '还没有运单',
@@ -161,7 +159,8 @@ function viewStateOf(answer: ApiResult<ViewsListResponseBody> | null, rowCount: 
       return {
         kind: 'error',
         title: '这次查询没有被接受',
-        description: problemNote(answer.code),
+        // 读口按 ADR-0144 拒掉的查询（集外的键、坏游标）随答一句理由散文，原样接在后面。
+        description: answer.detail === undefined ? problemNote(answer.code) : `${problemNote(answer.code)} ${answer.detail}`,
         technical: [
           { label: 'HTTP 状态', value: String(answer.status) },
           { label: '问题码', value: answer.code },
@@ -198,79 +197,36 @@ export function ShipmentRequestListPage() {
   const [state, setState] = useState<ShipmentStateFilter>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultShipmentSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
-  const [answer, setAnswer] = useState<ApiResult<ViewsListResponseBody> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const conditions = shipmentListConditions(useSettledKeyword(search), state, sort);
+  // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。换条件回第一页、翻页与重取都在 useCatalogueCursor 里。
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listShipmentRequestViews);
   const names = useCustomerNames();
 
   // 只认本标签名下的地址：列表与详情是两张标签，藏着的列表若照读详情标签的地址会自己翻成详情。
   useOwnAddressChange(() => setDetailRef(selectedRefFromHash()));
 
-  useEffect(() => {
-    let cancelled = false;
-    // 刷新不清上一份业务答案：旧表在新答案到来前继续可用；首取与非业务答案的重试仍回到加载中。
-    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
-    void listShipmentRequestViews().then((result) => {
-      if (cancelled) return;
-      setAnswer(result);
-      setRefreshing(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
   if (detailRef !== null) {
     return <ShipmentRequestDetailPage shipmentRef={detailRef} onBack={() => tabReturn.returnTo('shipment-request-inquiry')} />;
   }
 
-  const retry = () => {
-    setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  };
   const rows = answer?.kind === 'outcome' ? answer.body.requests : [];
-  const answered = answer?.kind === 'outcome';
-  const visible = sortShipments(filterShipments(rows, { search, state }, names), sort, names);
-  const counts = countShipmentsByState(rows);
-  const toggleState = (code: string) => setState(state === code ? 'ALL' : code);
-
-  // 指标即筛：只列这一页上真出现过的状态，按生命周期顺序；词与色调经用语词典。
-  const kpis: WorkbenchKpi[] | undefined = answered
-    ? counts.map((item) => ({
-        label: item.label,
-        value: item.count,
-        tone: kpiToneClass[toneFor(item.code)],
-        active: state === item.code,
-        onClick: () => toggleState(item.code),
-      }))
-    : undefined;
-
-  const statusChips: WorkbenchChip[] | undefined = answered
-    ? [
-        { id: 'ALL', label: '全部', count: rows.length, active: state === 'ALL', onClick: () => setState('ALL') },
-        ...counts.map((item) => ({
-          id: item.code,
-          label: item.label,
-          count: item.count,
-          active: state === item.code,
-          onClick: () => toggleState(item.code),
-        })),
-      ]
-    : undefined;
+  const toggleState = (code: ShipmentStateFilter) => setState(state === code ? 'ALL' : code);
+  const statusChips: WorkbenchChip[] = [
+    { id: 'ALL', label: '全部', active: state === 'ALL', onClick: () => setState('ALL') },
+    ...shipmentStates.map((code) => ({ id: code, label: labelFor(code), active: state === code, onClick: () => toggleState(code) })),
+  ];
 
   return (
     <WorkbenchPageTemplate<ShipmentRequestSummary>
       title={info.title}
       subtitle={info.summary}
-      kpis={kpis}
       onRefresh={retry}
-      refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、客户单号、客户…' }}
+      refreshing={answer === null}
+      search={{ value: search, onChange: setSearch, placeholder: '搜运单号、客户单号…' }}
       statusChips={statusChips}
-      toolbarRight={answered ? shipmentCountSummary(rows.length, visible.length) : undefined}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={columnsOf(names)}
-      rows={visible}
+      rows={rows}
       rowKey={(row) => row.shipmentRequestId}
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
@@ -282,7 +238,7 @@ export function ShipmentRequestListPage() {
         setState('ALL');
       }}
       renderDetail={(key) => {
-        const row = visible.find((item) => item.shipmentRequestId === key);
+        const row = rows.find((item) => item.shipmentRequestId === key);
         return row ? (
           <ShipmentRequestDetailPanel
             row={row}
@@ -294,7 +250,7 @@ export function ShipmentRequestListPage() {
           />
         ) : null;
       }}
-      viewState={viewStateOf(answer, rows.length, retry)}
+      viewState={viewStateOf(answer, rows.length, retry, catalogueConditionsNarrow(conditions))}
     />
   );
 }

@@ -110,10 +110,12 @@ export const dispositionQueueEmptyState = {
   description: '受理前的付款控制没通过、而策略要求由有权的人决定去向时,运单才会停在这里;现在没有积压。',
 } as const;
 
+/** narrowed 同 catalogueViewState:为真时零行留在就绪态,不说「没有积压」。 */
 export function dispositionQueueViewState(
   answer: ApiResult<AuthorizedDispositionQueueListResponseBody> | null,
   retry: () => void,
   module: ModuleInfo,
+  narrowed = false,
 ): TemplateViewState {
   const count = answer?.kind === 'outcome' ? answer.body.entries.length : 0;
   return catalogueViewState(answer, count, retry, {
@@ -121,5 +123,6 @@ export function dispositionQueueViewState(
     endpoint: 'GET /authorized-disposition-queue',
     emptyTitle: dispositionQueueEmptyState.title,
     emptyDescription: dispositionQueueEmptyState.description,
+    narrowed,
   });
 }

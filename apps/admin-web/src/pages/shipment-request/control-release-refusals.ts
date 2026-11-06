@@ -109,10 +109,9 @@ export function handlingDraftOf(
   };
 }
 
-/** 页头的计数说明。计数是未处理的全部行数;清单被页大小截断时说清只列了最早登记的几笔。 */
+/** 页头的计数说明:未处理的全部行数,不随翻页变;一页之外还有多少由翻页条说。 */
 export function refusalSummaryText(body: ControlReleaseRefusalListResponseBody): string {
-  const count = `待处理 ${body.unhandledCount} 笔`;
-  return body.truncated ? `${count}(先列出最早登记的 ${body.refusals.length} 笔,处理之后其余的会补进来)` : count;
+  return `待处理 ${body.unhandledCount} 笔`;
 }
 
 /** 空清单的措辞:空是答案。 */
@@ -121,10 +120,12 @@ export const refusalQueueEmptyState = {
   description: '运单撤回、拒绝或处置之后,结算侧没放掉占用的钱时才会记到这里;现在没有积压。',
 } as const;
 
+/** narrowed 同 catalogueViewState:为真时零行留在就绪态,不说「没有积压」。 */
 export function refusalQueueViewState(
   answer: ApiResult<ControlReleaseRefusalListResponseBody> | null,
   retry: () => void,
   module: ModuleInfo,
+  narrowed = false,
 ): TemplateViewState {
   const count = answer?.kind === 'outcome' ? answer.body.refusals.length : 0;
   return catalogueViewState(answer, count, retry, {
@@ -132,6 +133,7 @@ export function refusalQueueViewState(
     endpoint: 'GET /control-release-refusals',
     emptyTitle: refusalQueueEmptyState.title,
     emptyDescription: refusalQueueEmptyState.description,
+    narrowed,
   });
 }
 
