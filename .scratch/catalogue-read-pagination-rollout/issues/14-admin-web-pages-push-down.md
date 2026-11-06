@@ -26,7 +26,8 @@ settlement、customs、collection、party（客户账户之外）、governance�
   筛选维的册，页面可以先按名称查客户账户目录（`/commercial-customer-accounts?q=`）取账户号，再以 `customerAccountId` 收窄；这是一个「选客户」控件，不是
   `q` 的一部分，要不要做、做在哪几页另行定。
 - **network（07 交回）**：`route-plans.contract.test.ts` 读的两份后端契约夹具多了 `page`，管理台类型不认这个键，那条用例会红。**07 进 main 时须同批补上
-  管理台的类型**，不能让 main 上的前端用例红着等这一步。另：复核页与建议页今天在页内按 `reassessedAt`、`suggestedAt` 排，读口缺省序是 `recordedAt`
+  管理台的类型与那条用例的比对助手**（07 的非作者评审指出：`assertShape` 只认字符串叶子，而 `page.size`、`page.total` 是数字、`page.next` 可为
+  `null`），不能让 main 上的前端用例红着等这一步。另：复核页与建议页今天在页内按 `reassessedAt`、`suggestedAt` 排，读口缺省序是 `recordedAt`
   （建议答复体为此新添了这一格），接这两页时以读口的次序为准。
 - **pricing（04 交回）**：价卡状态是页面现算的，不是登记册上的列，服务端不能按它筛；要筛得先在读面导出这一列。`seriesId` 精确筛选维为「只看这一条序列」开，
   `q` 的包含匹配会带进同前缀的兄弟序列。
