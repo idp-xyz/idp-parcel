@@ -1,7 +1,7 @@
 # 10 collection-remittance 一册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——修订轮：非作者评审（钉 `42622b45c`）拦下的阻断已修，待复核（分支 `cursor/crpr-10-collection`，基 `3a20b2bcc`；预留的 collection-remittance `0005` 未用，见完成记录；评审记录见文末）
+Status: resolved——2026-11-06 进 main（`098767b1e`），记录见文末「进 main 记录」
 Blocked by: 01
 地盘：`internal/collectionremittance/{ports,adapters/http,adapters/postgres}` 里代收分户账的读端口、端点与读面及其测试；`cmd/parcel-api` 里这个读口的占位；
 `migrations/collection_remittance` 的一条新迁移（索引）。
@@ -81,3 +81,19 @@ Blocked by: 01
 | 阻断（Standards）：`ports/catalogue_pages.go` 的文件头注与 `CodSubledgerPages` 头注、票面完成记录的声明一节与判断项，都按序号引 spec 的取舍；这是跨文件序数，spec 的取舍还在增删，编号会漂 | 代码注释与票面一律改引规则原名：spec「缺省序保今天的次序」「可排维、筛选维从小放」「可排维与行标识的列必须非空」「每迁一册补一条与缺省序同形的索引」。顺带查过本票改过的注释与票面，没有数别处东西的句子；`rg -n '取舍 ?[0-9]' internal/collectionremittance .scratch/catalogue-read-pagination-rollout/issues/10-*.md` 零命中 |
 | 非阻断（Spec）：另放的 `openedAt` 可排维依据只是 `CodLedgerPage.tsx` 技术详情里显示开立时间；列表里没有这一列也没有排序，这一维也没有索引；放出去再收回，调用方会开始吃 400 | 删去：声明里的那一维、落列里的 `s.opened_at`、`codSubledgerPosition` 按开立时刻取值的分支，「开立时刻倒序」「开立时刻正序」子用例与只为它们写的 `seedSubledgerOpenedAt`；端点用例里带 `sort` 的合规一问改用 `-customer`。删前查过 `apps/admin-web`、`scripts`、`cmd`，没有带 `sort=openedAt` 的调用方。判断项「可排维只放 `customer` 一维」 |
 | 非阻断（Spec，交 14）：管理台 COD 台账页今天的客户端搜索会命中客户显示名，`codSubledgerPages.Keyword` 只覆盖标识列 | 不归本票，已由派单方登到 14 号票 |
+
+## 进 main 记录（2026-11-06，通道 1 推送）
+
+**出处**：分支 `cursor/crpr-10-collection`，tip `52d7f476a`。**评审**：首轮钉 `42622b45c` 拦一条阻断（引 spec 取舍序号），修订轮复核钉 `52d7f476a` 两轴无阻断，上一轮三条意见都已解。
+
+**main 上的 SHA**：`098767b1e`（重放到当时的 `origin/main` `0874218c9` 之上：各分支逐笔 cherry-pick（带 `-x`，出处在提交说明里），推送方补的几笔见下）。
+
+| 步骤 | 结果 |
+|---|---|
+| 重放 | 01/02 分支与 03–13、15、14a 各分支共 106 笔，无冲突 |
+| 推送方补的几笔 | `de1fb75d8` AT-TF-333 改指新用例名；`66a689cbc` `cmd/parcel-api` 三处注释改成现状；`29af46c24` 删掉 15 留的两个别名；`6aff3149a` 管理台路线计划契约用例认 `page`；`446252dc4` 重生成机制清点；`098767b1e` 01 与 05 叠合处的用例 |
+| 生成物 | `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 在 tip 上退 0；机制清点在 `446252dc4` 重生成，tip 上再生成无差异 |
+| 全量真库测试 | `scripts/test-full.sh` 对 `098767b1e` 退 0（175 个包 ok、17 个包无测试文件）。前一跑对 `446252dc4` 红一条：01 的 NUL 补件与 05 的挡回册判据用例叠合，`098767b1e` 修后重跑全绿 |
+| 种子灌一次性库 | 升级路径：`0874218c9` 的代码灌库 A，本批代码对库 A 迁移退 0（施加 11 条新迁移）；本批代码灌空库 B 退 0；两库用后删 |
+| 管理台三道门 | tsc 退 0、run-tests 1236 条全过、vite build 退 0 |
+| 推确切 SHA | `git push origin 098767b1e:main`，`origin/main` 等于 `098767b1e` |

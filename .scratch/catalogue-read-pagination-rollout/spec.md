@@ -76,21 +76,21 @@ Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮
 
 | 票 | 标题 | 地盘 | 状态 |
 |---|---|---|---|
-| [01](./issues/01-platform-sql-binding-and-result.md) | 共用件补件：落列声明、取页 SQL 片段、`Finish` 与统一结果类型 | `internal/platform/cataloguepage` | ready-for-agent |
-| [02](./issues/02-parcel-shipment-reads.md) | parcel-shipment 九册 | `internal/parcelshipment`、`migrations/parcel_shipment` | ready-for-agent |
-| [03](./issues/03-visibility-exception-reads.md) | visibility-exception 十四册 | `internal/visibilityexception`、`migrations/visibility_exception` | ready-for-agent |
-| [04](./issues/04-parcel-pricing-reads.md) | parcel-pricing 各册 | `internal/parcelpricing`、`migrations/parcel_pricing` | ready-for-agent |
-| [05](./issues/05-transport-fulfillment-reads.md) | transport-fulfillment 各册 | `internal/transportfulfillment`、`migrations/transport_fulfillment` | ready-for-agent |
-| [06](./issues/06-node-operations-reads.md) | node-operations 八册 | `internal/nodeoperations`、`migrations/node_operations` | ready-for-agent |
-| [07](./issues/07-network-routing-remaining-reads.md) | network-routing 其余四册 | `internal/networkrouting`（目录七族之外）、`migrations/network_routing` | ready-for-agent |
-| [08](./issues/08-settlement-accounting-reads.md) | settlement-accounting 各册 | `internal/settlementaccounting`、`migrations/settlement_accounting` | ready-for-agent |
-| [09](./issues/09-customs-compliance-reads.md) | customs-compliance 十六册 | `internal/customscompliance`、`migrations/customs_compliance` | ready-for-agent |
-| [10](./issues/10-collection-remittance-reads.md) | collection-remittance 一册 | `internal/collectionremittance`、`migrations/collection_remittance` | ready-for-agent |
-| [11](./issues/11-party-commercial-remaining-reads.md) | party-commercial 其余十八册 | `internal/partycommercial`（客户账户之外）、`migrations/party_commercial` | ready-for-agent |
-| [12](./issues/12-pilot-governance-reads.md) | pilot-governance 四册 | `internal/pilotgovernance`、`migrations/pilot_governance` | ready-for-agent |
-| [13](./issues/13-access-identity-reads.md) | access-identity 操作者与工作设备两册（今天不设上限） | `internal/accessidentity`、`migrations/access_identity` | ready-for-agent |
-| [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | ready-for-agent |
-| [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | ready-for-agent |
+| [01](./issues/01-platform-sql-binding-and-result.md) | 共用件补件：落列声明、取页 SQL 片段、`Finish` 与统一结果类型 | `internal/platform/cataloguepage` | resolved（`098767b1e`） |
+| [02](./issues/02-parcel-shipment-reads.md) | parcel-shipment 九册 | `internal/parcelshipment`、`migrations/parcel_shipment` | resolved（`098767b1e`） |
+| [03](./issues/03-visibility-exception-reads.md) | visibility-exception 十四册 | `internal/visibilityexception`、`migrations/visibility_exception` | resolved（`098767b1e`） |
+| [04](./issues/04-parcel-pricing-reads.md) | parcel-pricing 各册 | `internal/parcelpricing`、`migrations/parcel_pricing` | resolved（`098767b1e`） |
+| [05](./issues/05-transport-fulfillment-reads.md) | transport-fulfillment 各册 | `internal/transportfulfillment`、`migrations/transport_fulfillment` | resolved（`098767b1e`） |
+| [06](./issues/06-node-operations-reads.md) | node-operations 八册 | `internal/nodeoperations`、`migrations/node_operations` | resolved（`098767b1e`） |
+| [07](./issues/07-network-routing-remaining-reads.md) | network-routing 其余四册 | `internal/networkrouting`（目录七族之外）、`migrations/network_routing` | resolved（`098767b1e`） |
+| [08](./issues/08-settlement-accounting-reads.md) | settlement-accounting 各册 | `internal/settlementaccounting`、`migrations/settlement_accounting` | resolved（`098767b1e`） |
+| [09](./issues/09-customs-compliance-reads.md) | customs-compliance 十六册 | `internal/customscompliance`、`migrations/customs_compliance` | resolved（`098767b1e`） |
+| [10](./issues/10-collection-remittance-reads.md) | collection-remittance 一册 | `internal/collectionremittance`、`migrations/collection_remittance` | resolved（`098767b1e`） |
+| [11](./issues/11-party-commercial-remaining-reads.md) | party-commercial 其余十八册 | `internal/partycommercial`（客户账户之外）、`migrations/party_commercial` | resolved（`098767b1e`） |
+| [12](./issues/12-pilot-governance-reads.md) | pilot-governance 四册 | `internal/pilotgovernance`、`migrations/pilot_governance` | resolved（`098767b1e`） |
+| [13](./issues/13-access-identity-reads.md) | access-identity 操作者与工作设备两册（今天不设上限） | `internal/accessidentity`、`migrations/access_identity` | resolved（`098767b1e`） |
+| [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | in-progress（parcel-shipment 一笔随 `098767b1e` 进 main，其余待接） |
+| [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | resolved（`098767b1e`） |
 | [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、08、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | ready-for-agent（Blocked by 04、05、06、08、09、12） |
 | [17](./issues/17-vocabulary-read-checks-kind-after-intake.md) | 商业发布词表口先 Intake、后校验 kind（11 的评审提出） | `internal/partycommercial/adapters/http` 的词表口 | ready-for-agent（Blocked by 11） |
 | [18](./issues/18-raw-query-parsing-in-cataloguepage.md) | 目录读口的原始查询串解析收进共用件（04 的评审提出） | `internal/platform/cataloguepage` 与各目录端点取查询串那一行 | ready-for-agent（Blocked by 02–13、15） |

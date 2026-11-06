@@ -1,7 +1,7 @@
 # 02 parcel-shipment 九册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——非作者评审首轮（钉 `3a20b2bcc`）拦下的两条阻断已修，修订轮复核（钉 `9c5e302b9`）两轴无阻断，非阻断已处理，待进 main（2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，基 main `a1274a6b8`；完成记录与评审记录见文末）。迁移编号 parcel-shipment `0036`（进 main 时按 tip 重核）
+Status: resolved——2026-11-06 进 main（`098767b1e`），记录见文末「进 main 记录」
 Blocked by: 01
 地盘：`internal/parcelshipment/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/parcel_shipment` 的一条新迁移（索引）。
@@ -115,3 +115,19 @@ Blocked by: 01
 | 非阻断：`TestAuthorizedDispositionQueuePagesOldestFirst` 仍把 `version-1` 写进库 | 保留：它要与旧的共享委托夹具里的提交版本对上，受限项才读得到；旧夹具不回改，用例头注写明 |
 | 非阻断：落点表没登 `9c5e302b9` | 补登 |
 | 非阻断：升序几册的中途插入都落在末尾，偏移分页也能过 | 两个委托队列中途再插一份提交早于游标的委托：它不出现、已翻过的行不重出，偏移分页会挤出重出。其余升序册与人工项不补——键集由共用件按构造生成、`binding_test.go` 逐字钉住取页 SQL，倒序三册真库已证 |
+
+## 进 main 记录（2026-11-06，通道 1 推送）
+
+**出处**：分支 `cursor/catalogue-pagination-rollout`，tip `e87ce15a9`。**评审**：首轮钉 `3a20b2bcc` 拦两条阻断，修订轮复核钉 `9c5e302b9` 两轴无阻断。
+
+**main 上的 SHA**：`098767b1e`（重放到当时的 `origin/main` `0874218c9` 之上：各分支逐笔 cherry-pick（带 `-x`，出处在提交说明里），推送方补的几笔见下）。
+
+| 步骤 | 结果 |
+|---|---|
+| 重放 | 01/02 分支与 03–13、15、14a 各分支共 106 笔，无冲突 |
+| 推送方补的几笔 | `de1fb75d8` AT-TF-333 改指新用例名；`66a689cbc` `cmd/parcel-api` 三处注释改成现状；`29af46c24` 删掉 15 留的两个别名；`6aff3149a` 管理台路线计划契约用例认 `page`；`446252dc4` 重生成机制清点；`098767b1e` 01 与 05 叠合处的用例 |
+| 生成物 | `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 在 tip 上退 0；机制清点在 `446252dc4` 重生成，tip 上再生成无差异 |
+| 全量真库测试 | `scripts/test-full.sh` 对 `098767b1e` 退 0（175 个包 ok、17 个包无测试文件）。前一跑对 `446252dc4` 红一条：01 的 NUL 补件与 05 的挡回册判据用例叠合，`098767b1e` 修后重跑全绿 |
+| 种子灌一次性库 | 升级路径：`0874218c9` 的代码灌库 A，本批代码对库 A 迁移退 0（施加 11 条新迁移）；本批代码灌空库 B 退 0；两库用后删 |
+| 管理台三道门 | tsc 退 0、run-tests 1236 条全过、vite build 退 0 |
+| 推确切 SHA | `git push origin 098767b1e:main`，`origin/main` 等于 `098767b1e` |

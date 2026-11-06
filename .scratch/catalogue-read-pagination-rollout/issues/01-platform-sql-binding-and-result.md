@@ -1,7 +1,7 @@
 # 01 共用件补件：落列声明、取页 SQL 片段、`Finish` 与统一结果类型
 
 Category: enhancement
-Status: in-progress——与 02 一并评审：首轮钉 `3a20b2bcc`，修订轮复核钉 `9c5e302b9`（含之后补的 NUL 缺口）两轴无阻断，非阻断已处理，待进 main。2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，worktree `idp-parcel-pagination`，基 main `a1274a6b8`
+Status: resolved——2026-11-06 进 main（`098767b1e`），记录见文末「进 main 记录」
 地盘：`internal/platform/cataloguepage`（新文件与其测试；包头注一句）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定一、三、四、五、七；spec「共用件的补件」。
 
@@ -52,3 +52,21 @@ Status: in-progress——与 02 一并评审：首轮钉 `3a20b2bcc`，修订轮
 
 - **首轮 ← 子代理 · 钉 `3a20b2bcc`**：本票判据都有用例覆盖，无阻断。
 - **修订轮复核 ← 子代理 · 钉 `9c5e302b9`**（首个复核会话在交出结论前停住，由另一个非作者会话接替）：两轴无阻断。判据只在 `storable.Text` 一处、与 `read_target_guard.go` 互补无冲突、挪包成立，复核都核过。两条非阻断：判断项 1「变的只是原本答 500 的那几类请求」不确（客户追踪那一册伪造游标原答 200）——已改写；`Decode` 不判选择器的取值——归 18 号票。
+
+## 进 main 记录（2026-11-06，通道 1 推送）
+
+**出处**：分支 `cursor/catalogue-pagination-rollout`，tip `e87ce15a9`。**评审**：首轮钉 `3a20b2bcc`（与 02 一并），修订轮复核钉 `9c5e302b9`，两轴无阻断。
+
+**main 上的 SHA**：`098767b1e`（重放到当时的 `origin/main` `0874218c9` 之上：各分支逐笔 cherry-pick（带 `-x`，出处在提交说明里），推送方补的几笔见下）。
+
+| 步骤 | 结果 |
+|---|---|
+| 重放 | 01/02 分支与 03–13、15、14a 各分支共 106 笔，无冲突 |
+| 推送方补的几笔 | `de1fb75d8` AT-TF-333 改指新用例名；`66a689cbc` `cmd/parcel-api` 三处注释改成现状；`29af46c24` 删掉 15 留的两个别名；`6aff3149a` 管理台路线计划契约用例认 `page`；`446252dc4` 重生成机制清点；`098767b1e` 01 与 05 叠合处的用例 |
+| 生成物 | `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 在 tip 上退 0；机制清点在 `446252dc4` 重生成，tip 上再生成无差异 |
+| 全量真库测试 | `scripts/test-full.sh` 对 `098767b1e` 退 0（175 个包 ok、17 个包无测试文件）。前一跑对 `446252dc4` 红一条：01 的 NUL 补件与 05 的挡回册判据用例叠合，`098767b1e` 修后重跑全绿 |
+| 种子灌一次性库 | 升级路径：`0874218c9` 的代码灌库 A，本批代码对库 A 迁移退 0（施加 11 条新迁移）；本批代码灌空库 B 退 0；两库用后删 |
+| 管理台三道门 | tsc 退 0、run-tests 1236 条全过、vite build 退 0 |
+| 推确切 SHA | `git push origin 098767b1e:main`，`origin/main` 等于 `098767b1e` |
+
+**本票进 main 时另办**：01 的 NUL 补件与 05 的挡回册判据用例在叠合时撞上：带 NUL 的两格改由共用件拒，进 main 时补一笔 `098767b1e`。

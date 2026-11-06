@@ -1,7 +1,7 @@
 # 12 pilot-governance 四册迁到 ADR-0144
 
 Category: enhancement
-Status: 非作者评审（钉 `9700d7ffc`）无阻断，非阻断已处理，待进 main（分支 `cursor/crpr-12-governance`，基 `3a20b2bcc`；迁移用了预留的 pilot-governance `0009`，进 main 时按 tip 重核）
+Status: resolved——2026-11-06 进 main（`098767b1e`），记录见文末「进 main 记录」
 Blocked by: 01
 地盘：`internal/pilotgovernance/{ports,adapters/http,adapters/postgres}` 里治理登记册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这个读口的占位；
 `migrations/pilot_governance` 的一条新迁移（索引）。
@@ -100,3 +100,21 @@ Blocked by: 01
 | 配置了的渠道上坏 `register` 答 400 不带 `detail` | 保留迁移前的答法，与 02 的渠道择优选择器同形 |
 | 区间开闭、暂停是否已恢复是派生状态，没放筛选维 | 已收进 16 号票 |
 | `cmd/parcel-api/endpoints_governance_registers.go` 头注的「三册一口」已失真 | 不在本票地盘，由推送方进 main 时改 |
+
+## 进 main 记录（2026-11-06，通道 1 推送）
+
+**出处**：分支 `cursor/crpr-12-governance`，tip `d1122e5c6`。**评审**：钉 `9700d7ffc` 两轴无阻断。
+
+**main 上的 SHA**：`098767b1e`（重放到当时的 `origin/main` `0874218c9` 之上：各分支逐笔 cherry-pick（带 `-x`，出处在提交说明里），推送方补的几笔见下）。
+
+| 步骤 | 结果 |
+|---|---|
+| 重放 | 01/02 分支与 03–13、15、14a 各分支共 106 笔，无冲突 |
+| 推送方补的几笔 | `de1fb75d8` AT-TF-333 改指新用例名；`66a689cbc` `cmd/parcel-api` 三处注释改成现状；`29af46c24` 删掉 15 留的两个别名；`6aff3149a` 管理台路线计划契约用例认 `page`；`446252dc4` 重生成机制清点；`098767b1e` 01 与 05 叠合处的用例 |
+| 生成物 | `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 在 tip 上退 0；机制清点在 `446252dc4` 重生成，tip 上再生成无差异 |
+| 全量真库测试 | `scripts/test-full.sh` 对 `098767b1e` 退 0（175 个包 ok、17 个包无测试文件）。前一跑对 `446252dc4` 红一条：01 的 NUL 补件与 05 的挡回册判据用例叠合，`098767b1e` 修后重跑全绿 |
+| 种子灌一次性库 | 升级路径：`0874218c9` 的代码灌库 A，本批代码对库 A 迁移退 0（施加 11 条新迁移）；本批代码灌空库 B 退 0；两库用后删 |
+| 管理台三道门 | tsc 退 0、run-tests 1236 条全过、vite build 退 0 |
+| 推确切 SHA | `git push origin 098767b1e:main`，`origin/main` 等于 `098767b1e` |
+
+**本票进 main 时另办**：`cmd/parcel-api/endpoints_governance_registers.go` 头注「三册一口」已失真，进 main 时改为不数册（`66a689cbc`）。

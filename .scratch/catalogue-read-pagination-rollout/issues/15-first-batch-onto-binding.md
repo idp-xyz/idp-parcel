@@ -1,7 +1,7 @@
 # 15 首批两册改用 01 的补件、两份页类型并入统一结果类型
 
 Category: enhancement
-Status: in-progress——非作者评审（钉 `07463c4d9`）无阻断，非阻断已由派单方处理，待进 main（2026-11-06，分支 `cursor/crpr-15-first-batch`，worktree `idp-parcel-crpr-15`，基 `d6b3f64a5`；同日派单方裁定 `family` 校验挪到 Intake 之后，已按裁定改，`e4a8afb18`；完成记录与评审记录见文末）
+Status: resolved——2026-11-06 进 main（`098767b1e`），记录见文末「进 main 记录」
 Blocked by: 01
 地盘：`internal/partycommercial/adapters/postgres/customer_account_catalogue.go`、`internal/networkrouting/adapters/postgres/network_catalog_list.go`，
 `internal/partycommercial/ports/catalogue_page.go`、`internal/networkrouting/ports` 里的 `CatalogPage`，以及它们的调用点与测试替身。
@@ -85,3 +85,21 @@ Blocked by: 01
 | 非阻断：`businessEndpointProbe` 头注的 family 一项已过时、没有归属 | 判断项 5 写明由推送方在本批都进 main 之后一并改 |
 
 修订由派单方在本分支上做（作者会话的交回未送达），只动注释与本票面。
+
+## 进 main 记录（2026-11-06，通道 1 推送）
+
+**出处**：分支 `cursor/crpr-15-first-batch`，tip `6bb50f4d6`。**评审**：钉 `07463c4d9` 两轴无阻断。
+
+**main 上的 SHA**：`098767b1e`（重放到当时的 `origin/main` `0874218c9` 之上：各分支逐笔 cherry-pick（带 `-x`，出处在提交说明里），推送方补的几笔见下）。
+
+| 步骤 | 结果 |
+|---|---|
+| 重放 | 01/02 分支与 03–13、15、14a 各分支共 106 笔，无冲突 |
+| 推送方补的几笔 | `de1fb75d8` AT-TF-333 改指新用例名；`66a689cbc` `cmd/parcel-api` 三处注释改成现状；`29af46c24` 删掉 15 留的两个别名；`6aff3149a` 管理台路线计划契约用例认 `page`；`446252dc4` 重生成机制清点；`098767b1e` 01 与 05 叠合处的用例 |
+| 生成物 | `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 在 tip 上退 0；机制清点在 `446252dc4` 重生成，tip 上再生成无差异 |
+| 全量真库测试 | `scripts/test-full.sh` 对 `098767b1e` 退 0（175 个包 ok、17 个包无测试文件）。前一跑对 `446252dc4` 红一条：01 的 NUL 补件与 05 的挡回册判据用例叠合，`098767b1e` 修后重跑全绿 |
+| 种子灌一次性库 | 升级路径：`0874218c9` 的代码灌库 A，本批代码对库 A 迁移退 0（施加 11 条新迁移）；本批代码灌空库 B 退 0；两库用后删 |
+| 管理台三道门 | tsc 退 0、run-tests 1236 条全过、vite build 退 0 |
+| 推确切 SHA | `git push origin 098767b1e:main`，`origin/main` 等于 `098767b1e` |
+
+**本票进 main 时另办**：本批都进 main，别名的删除条件已满足：`CataloguePage` / `CatalogPage` 删掉、调用点改写成 `cataloguepage.Result`（`29af46c24`）；`businessEndpointProbe` 头注一并改成现状（`66a689cbc`）。

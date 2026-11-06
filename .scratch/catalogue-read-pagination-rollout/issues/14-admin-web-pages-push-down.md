@@ -1,7 +1,7 @@
 # 14 管理台各列表页改游标翻页、筛选与检索下推
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——parcel-shipment 一笔（委托与渠道择优各页，分支 `cursor/crpr-14a-admin-shipment` tip `2ab4958c9`）已随 `098767b1e` 进 main；其余上下文的后端都已进 main，页面待接
 Blocked by: 逐上下文跟随 02–13——某上下文的后端子票进 main 之后，才接该上下文的页面
 地盘：`apps/admin-web/src/pages/**` 里消费 02–13 各册的 api 层与列表页；`apps/admin-web/README.md`「列表页上列通则」只在需要时改一句。
 出处：ADR-0144 决定四、八；首批 [05](../../catalogue-read-pagination/issues/05-first-two-pages-push-down.md) 的接法（`pages/catalogue-query.ts`、
