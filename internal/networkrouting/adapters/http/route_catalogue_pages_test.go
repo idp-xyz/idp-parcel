@@ -14,11 +14,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// 本文件钉路由判断两册、改路建议与初始路由并列四册的翻页传输面（ADR-0144 决定一、三至六）：先 Intake、后解码，未配置的渠道
-// 对一切查询串同答 403；配置了的渠道上坏参数答 400 带理由散文、读口不被触到；解出的查询对象原样交给读口，答复带 page 三格，
+// 本文件钉初始路由、路由复核、改路建议与初始路由并列各册的翻页传输面（ADR-0144 决定一、三至六）：先 Intake、后解码，未配置
+// 的渠道对一切查询串同答 403；配置了的渠道上坏参数答 400 带理由散文、读口不被触到；解出的查询对象原样交给读口，答复带 page，
 // size 取 Intake 页大小。
 
-// pagedRouteFace 把一册的请求目标、查询声明与端点装法包成同一形状，四册才能各过一遍同一组用例。
+// pagedRouteFace 把一册的请求目标、查询声明与端点装法包成同一形状，各册才能过同一组用例。
 type pagedRouteFace struct {
 	path      string
 	selectors url.Values
@@ -123,7 +123,7 @@ func serveRoute(endpoint http.Handler, target string) *httptest.ResponseRecorder
 	return response
 }
 
-// routePageOf 读出 200 答复里的 page 一格，三个键都须在场：到了末页 next 是 null，不是缺席。
+// routePageOf 读出 200 答复里的 page 一格，size、next、total 都须在场：到了末页 next 是 null，不是缺席。
 func routePageOf(t *testing.T, response *httptest.ResponseRecorder) cataloguepage.Page {
 	t.Helper()
 	if response.Code != http.StatusOK {
@@ -150,7 +150,7 @@ func routePageOf(t *testing.T, response *httptest.ResponseRecorder) cataloguepag
 }
 
 // Covers: ADR-0144 决定五——答复的 page 由读口的下一游标与总数拼成，size 回显 Intake 给的页大小；末页 next 为 null，
-// 空册 total 为 0。四册各过一遍。
+// 空册 total 为 0。每册各过一遍。
 func TestEachRouteCatalogueAnswersThePageWithTheIntakeSize(t *testing.T) {
 	for name, face := range pagedRouteFaces() {
 		t.Run(name, func(t *testing.T) {
@@ -171,7 +171,7 @@ func TestEachRouteCatalogueAnswersThePageWithTheIntakeSize(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定六、一——端点按本册声明解出查询对象原样交给读口：换了方向的排序、维内多值的筛选、去掉首尾空白的 q；
-// 把游标带回 after，读口收到的就是上一页末行的位置。四册各过一遍。
+// 把游标带回 after，读口收到的就是上一页末行的位置。每册各过一遍。
 func TestEachRouteCatalogueHandsTheDecodedQueryToTheReader(t *testing.T) {
 	for name, face := range pagedRouteFaces() {
 		t.Run(name, func(t *testing.T) {
@@ -210,7 +210,7 @@ func TestEachRouteCatalogueHandsTheDecodedQueryToTheReader(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定三、四、一——配置了的渠道上，集外键（含从前被忽略的自报租户与页大小）、集外排序维、词表外筛选值、换了条件
-// 或来自别册的游标、超长的 q，各答 400 MALFORMED_REQUEST，detail 带理由散文、不带 outcome；读口不被触到。四册各过一遍。
+// 或来自别册的游标、超长的 q，各答 400 MALFORMED_REQUEST，detail 带理由散文、不带 outcome；读口不被触到。每册各过一遍。
 func TestEachRouteCatalogueRefusesMalformedParametersWithAReason(t *testing.T) {
 	faces := pagedRouteFaces()
 	for name, face := range faces {
@@ -242,8 +242,8 @@ func TestEachRouteCatalogueRefusesMalformedParametersWithAReason(t *testing.T) {
 	}
 }
 
-// Covers: spec 取舍「端点先 Intake、后解码」（ADR-0055 决定三）——渠道未配置时，参数写对写错都答同一个 403
-// ACCESS_CHANNEL_NOT_CONFIGURED，答复不随查询串变；/route-plans 缺 register 或取值不在集内也一样。四册各过一遍。
+// Covers: spec「端点先 Intake、后解码查询参数」（ADR-0055 决定三）——渠道未配置时，参数写对写错都答同一个 403
+// ACCESS_CHANNEL_NOT_CONFIGURED，答复不随查询串变；/route-plans 缺 register 或取值不在集内也一样。每册各过一遍。
 func TestEachRouteCatalogueAnswersForbiddenWhateverTheQueryWhenUnconfigured(t *testing.T) {
 	for name, face := range pagedRouteFaces() {
 		t.Run(name, func(t *testing.T) {

@@ -58,7 +58,7 @@ func insertInitialRouteRow(
 		formedPlanVersion, recordedAt)
 }
 
-// insertJudgmentRow 同 insertInitialRouteRow，只是判断键由调用方给全六段：租户、客户账户、委托、受理基线、包裹、服务目的。
+// insertJudgmentRow 同 insertInitialRouteRow，只是判断键由调用方给全：租户、客户账户、委托、受理基线、包裹、服务目的。
 func insertJudgmentRow(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -216,6 +216,22 @@ func insertReassessmentRow(
 	recordedAt time.Time,
 ) {
 	t.Helper()
+	insertReassessmentRowOn(t, pool, ctx,
+		[6]string{tenantID, "SYN-ACC-1", "SYN-REQ-1", "SYN-BASELINE-1", "SYN-PARCEL-1", "DELIVERY"},
+		correlationID, conclusion, reviewedPlan, lapseBasis, candidateState, recordedAt)
+}
+
+// insertReassessmentRowOn 同 insertReassessmentRow，只是被复核的判断键由调用方给全：租户、客户账户、委托、受理基线、包裹、服务目的。
+func insertReassessmentRowOn(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	ctx context.Context,
+	key [6]string,
+	correlationID, conclusion string,
+	reviewedPlan, lapseBasis, candidateState string,
+	recordedAt time.Time,
+) {
+	t.Helper()
 	var reviewedValue, lapseValue, candidateValue *string
 	if reviewedPlan != "" {
 		reviewedValue = &reviewedPlan
@@ -232,8 +248,7 @@ func insertReassessmentRow(
 			 acceptance_baseline, declared_parcel_id, service_purpose, conclusion,
 			 reviewed_plan, lapse_basis, candidate_state, trigger_occurred_at, reassessed_at, recorded_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		tenantID, correlationID, "SYN-ACC-1", "SYN-REQ-1", "SYN-BASELINE-1",
-		"SYN-PARCEL-1", "DELIVERY", conclusion,
+		key[0], correlationID, key[1], key[2], key[3], key[4], key[5], conclusion,
 		reviewedValue, lapseValue, candidateValue, recordedAt.Add(-time.Hour), recordedAt.Add(-time.Minute), recordedAt,
 	); err != nil {
 		t.Fatalf("插复核行 %s：%v", correlationID, err)

@@ -20,7 +20,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证路由判断两册、改路建议与初始路由并列四册的翻页（ADR-0144 决定一、三至五）：翻页期间落新行，
+// 本文件对真实 PostgreSQL 16 证初始路由、路由复核、改路建议与初始路由并列各册的翻页（ADR-0144 决定一、三至五）：翻页期间落新行，
 // 已翻过的页不重出、未翻的页不漏行；首维同值的几行按判断键各段同向决胜；total 随筛选与 q 变，q 的通配符按字面算；空册答空页、
 // total 为 0。夹具一律 SYN- 合成值。
 
@@ -77,7 +77,7 @@ func keyRowOf(key domain.InitialRouteJudgmentKey) [6]string {
 	}
 }
 
-// keyText 把一行的判断键五段按客户账户、委托、受理基线、包裹、服务目的的次序拼起来，两册的行都照这一种写法比。
+// keyText 把一行判断键里租户以外的各段按客户账户、委托、受理基线、包裹、服务目的的次序拼起来，初始路由册与并列册的行都照这一种写法比。
 func keyText(account, request, baseline, parcel, purpose string) string {
 	return strings.Join([]string{account, request, baseline, parcel, purpose}, "/")
 }
@@ -162,7 +162,7 @@ func recordSynTie(t *testing.T, routes *adapter.InitialRoutes, transactor bentoa
 type pagedRouteRegister struct {
 	catalogue *cataloguepage.Catalogue
 	// open 建一只空库，交回落行与上列两个口：落行给一个合成名与这一行在缺省序那一维上的时刻；上列交回各行的合成名、下一游标与
-	// 总数。合成名在初始路由与并列两册是包裹，在复核与建议两册是触发关联。
+	// 总数。合成名在初始路由册与并列册是包裹，在复核册与建议册是触发关联。
 	open func(t *testing.T) (seed func(name string, at time.Time), list func(limit int, query cataloguepage.Query) ([]string, string, int64))
 }
 
@@ -190,7 +190,8 @@ func pagedRouteRegisters() map[string]pagedRouteRegister {
 			open: func(t *testing.T) (func(string, time.Time), func(int, cataloguepage.Query) ([]string, string, int64)) {
 				catalogue, pool := newRoutePlanCatalogue(t)
 				seed := func(correlation string, at time.Time) {
-					insertReassessmentRow(t, pool, t.Context(), pagingTenant, correlation, "STILL_APPLICABLE", "SYN-PLAN-1#v1", "", "", at)
+					insertReassessmentRowOn(t, pool, t.Context(), keyRowOf(parcelKey(t, "SYN-PARCEL-1")),
+						correlation, "STILL_APPLICABLE", "SYN-PLAN-1#v1", "", "", at)
 				}
 				list := func(limit int, query cataloguepage.Query) ([]string, string, int64) {
 					page, err := catalogue.ListRouteReassessments(t.Context(), pagingTenantID(t), limit, query)
@@ -241,7 +242,7 @@ func pagedRouteRegisters() map[string]pagedRouteRegister {
 
 // Covers: spec 完成判据「每册翻页期间插入新行，已翻过的页不重出、未翻的页不漏行；空册答空页且 total 为 0」（ADR-0144 决定一、五）
 // ——空册先答空页；落五行后缺省序下两行一页地翻，翻完第一页再落两行：一行排在已翻过的区间，一行排在未翻的区间。已翻过的页不重出，
-// 未翻的页不漏行、新落的那行在后面的页里出现；total 随落行变化，末页 next 为空。四册各跑一遍。
+// 未翻的页不漏行、新落的那行在后面的页里出现；total 随落行变化，末页 next 为空。每册各跑一遍。
 func TestEachRouteRegisterPagesWithoutRepeatsOrGapsWhileRowsArrive(t *testing.T) {
 	for name, register := range pagedRouteRegisters() {
 		t.Run(name, func(t *testing.T) {
@@ -280,7 +281,7 @@ func TestEachRouteRegisterPagesWithoutRepeatsOrGapsWhileRowsArrive(t *testing.T)
 	}
 }
 
-// tiedOnTheSortValue 是同一时刻落下的六条判断键：头一条之外，每条只在一段上与它不同，五段各占一条。
+// tiedOnTheSortValue 是同一时刻落下的一组判断键：头一条之外，每条只在一段上与它不同，租户以外的每一段都各有一条。
 var tiedOnTheSortValue = [][5]string{
 	{"SYN-ACC-1", "SYN-REQ-1", "SYN-BASELINE-1", "SYN-PARCEL-1", "SYN-PURPOSE-A"},
 	{"SYN-ACC-2", "SYN-REQ-1", "SYN-BASELINE-1", "SYN-PARCEL-1", "SYN-PURPOSE-A"},
@@ -311,8 +312,8 @@ func collectOneByOne(t *testing.T, catalogue *cataloguepage.Catalogue, total int
 	}
 }
 
-// Covers: 本票「组合键各段都进行标识」（ADR-0144 决定三）——落册时刻相同的六行，两两只差判断键的某一段，五段各有一对；一行一页地
-// 翻，每行恰好出一次，次序是各段同向倒序：少了哪一段，只差那一段的两行就会在游标处重出或漏掉。初始路由按客户账户打头的段序。
+// Covers: 本票「组合键各段都进行标识」（ADR-0144 决定三）——落册时刻相同的一组行，两两只差判断键的某一段，每一段各有一对；一行一页
+// 地翻，每行恰好出一次，次序是各段同向倒序：少了哪一段，只差那一段的两行就会在游标处重出或漏掉。初始路由按客户账户打头的段序。
 func TestInitialRoutesTiedOnTheRecordedTimeAreSeparatedByEveryKeySegment(t *testing.T) {
 	catalogue, pool := newRoutePlanCatalogue(t)
 	for _, segments := range tiedOnTheSortValue {
@@ -342,7 +343,7 @@ func TestInitialRoutesTiedOnTheRecordedTimeAreSeparatedByEveryKeySegment(t *test
 	}
 }
 
-// Covers: 同上，并列册——停住时刻相同的六行逐行翻完不重不漏；段序照迁移前的决胜次序以包裹打头，所以包裹那一对排在最前。
+// Covers: 同上，并列册——停住时刻相同的这组行逐行翻完不重不漏；段序照迁移前的决胜次序以包裹打头，所以包裹那一对排在最前。
 func TestInitialRouteTiesSettledAtTheSameTimeAreSeparatedByEveryKeySegment(t *testing.T) {
 	routes, ties, transactor, _ := newTiePagingFixture(t)
 	for _, segments := range tiedOnTheSortValue {
@@ -400,9 +401,17 @@ func assertNarrowing(
 func TestInitialRouteFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T) {
 	catalogue, pool := newRoutePlanCatalogue(t)
 	ctx := t.Context()
-	insertInitialRouteRow(t, pool, ctx, pagingTenant, "SYN-PARCEL-1", "SYN-PLAN-1#v1", pagingBaseAt)
-	insertInitialRouteRow(t, pool, ctx, pagingTenant, "SYN-PARCEL-2", "", pagingBaseAt.Add(time.Hour))
-	insertInitialRouteRow(t, pool, ctx, pagingTenant, "SYN-PARCEL-3", "SYN-PLAN-3#v1", pagingBaseAt.Add(2*time.Hour))
+	for _, row := range []struct {
+		request, parcel, plan string
+		at                    time.Time
+	}{
+		{"SYN-REQ-1", "SYN-PARCEL-1", "SYN-PLAN-1#v1", pagingBaseAt},
+		{"SYN-REQ-2", "SYN-PARCEL-2", "", pagingBaseAt.Add(time.Hour)},
+		{"SYN-REQ-3", "SYN-PARCEL-3", "SYN-PLAN-3#v1", pagingBaseAt.Add(2 * time.Hour)},
+	} {
+		key := synJudgmentKey(t, [5]string{"SYN-ACC-1", row.request, "SYN-BASELINE-1", row.parcel, "SYN-PURPOSE-1"})
+		insertJudgmentRow(t, pool, ctx, keyRowOf(key), row.plan, row.at)
+	}
 
 	all := []string{"SYN-PARCEL-3", "SYN-PARCEL-2", "SYN-PARCEL-1"}
 	assertNarrowing(t, ports.InitialRoutePages, map[string]narrowingCase{
@@ -410,9 +419,9 @@ func TestInitialRouteFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T) {
 		"一维一值":        {url.Values{"conclusion": {"ROUTE_FORMED"}}, []string{"SYN-PARCEL-3", "SYN-PARCEL-1"}},
 		"维内为或":        {url.Values{"conclusion": {"ROUTE_FORMED", "NO_CURRENT_ROUTE"}}, all},
 		"q 不分大小写命中计划": {url.Values{"q": {"syn-plan-3"}}, []string{"SYN-PARCEL-3"}},
-		"q 命中委托":      {url.Values{"q": {"SYN-REQ-SYN-PARCEL-2"}}, []string{"SYN-PARCEL-2"}},
+		"q 命中委托":      {url.Values{"q": {"SYN-REQ-2"}}, []string{"SYN-PARCEL-2"}},
 		"q 与筛选同时":     {url.Values{"q": {"SYN-PARCEL"}, "conclusion": {"NO_CURRENT_ROUTE"}}, []string{"SYN-PARCEL-2"}},
-		"服务目的不进 q":    {url.Values{"q": {"DELIVERY"}}, []string{}},
+		"服务目的不进 q":    {url.Values{"q": {"SYN-PURPOSE"}}, []string{}},
 		"q 的百分号按字面算":  {url.Values{"q": {"%"}}, []string{}},
 	}, func(query cataloguepage.Query) ([]string, string, int64) {
 		page, err := catalogue.ListInitialRoutes(ctx, pagingTenantID(t), 10, query)
@@ -423,15 +432,17 @@ func TestInitialRouteFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T) {
 	})
 }
 
-// Covers: ADR-0144 决定四、五——复核册：结论维内为或，q 覆盖触发关联与被复核计划；触发关联里真带着 % 的那一行只被字面的 % 命中。
+// Covers: ADR-0144 决定四、五——复核册：结论维内为或，q 覆盖触发关联与被复核计划、服务目的不进 q；触发关联里真带着 % 的那一行只被
+// 字面的 % 命中。
 func TestRouteReassessmentFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T) {
 	catalogue, pool := newRoutePlanCatalogue(t)
 	ctx := t.Context()
-	insertReassessmentRow(t, pool, ctx, pagingTenant, "SYN-CORR-1", "STILL_APPLICABLE", "SYN-PLAN-1#v1", "", "", pagingBaseAt)
-	insertReassessmentRow(t, pool, ctx, pagingTenant, "SYN-CORR-2", "PLAN_LAPSED",
+	key := keyRowOf(parcelKey(t, "SYN-PARCEL-1"))
+	insertReassessmentRowOn(t, pool, ctx, key, "SYN-CORR-1", "STILL_APPLICABLE", "SYN-PLAN-1#v1", "", "", pagingBaseAt)
+	insertReassessmentRowOn(t, pool, ctx, key, "SYN-CORR-2", "PLAN_LAPSED",
 		"SYN-PLAN-2#v1", "SYN-LAPSE/line-withdrawn", "NO_QUALIFIED_CANDIDATES", pagingBaseAt.Add(time.Hour))
-	insertReassessmentRow(t, pool, ctx, pagingTenant, "SYN-CORR-3", "STILL_APPLICABLE", "SYN-PLAN-3#v1", "", "", pagingBaseAt.Add(2*time.Hour))
-	insertReassessmentRow(t, pool, ctx, pagingTenant, "SYN-CORR-4%", "STILL_APPLICABLE", "SYN-PLAN-4#v1", "", "", pagingBaseAt.Add(3*time.Hour))
+	insertReassessmentRowOn(t, pool, ctx, key, "SYN-CORR-3", "STILL_APPLICABLE", "SYN-PLAN-3#v1", "", "", pagingBaseAt.Add(2*time.Hour))
+	insertReassessmentRowOn(t, pool, ctx, key, "SYN-CORR-4%", "STILL_APPLICABLE", "SYN-PLAN-4#v1", "", "", pagingBaseAt.Add(3*time.Hour))
 
 	all := []string{"SYN-CORR-4%", "SYN-CORR-3", "SYN-CORR-2", "SYN-CORR-1"}
 	assertNarrowing(t, ports.RouteReassessmentPages, map[string]narrowingCase{
@@ -442,6 +453,7 @@ func TestRouteReassessmentFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T
 		"q 不分大小写命中计划": {url.Values{"q": {"syn-plan-3"}}, []string{"SYN-CORR-3"}},
 		"q 命中触发关联":    {url.Values{"q": {"CORR-1"}}, []string{"SYN-CORR-1"}},
 		"q 与筛选同时":     {url.Values{"q": {"SYN-PLAN"}, "conclusion": {"PLAN_LAPSED"}}, []string{"SYN-CORR-2"}},
+		"服务目的不进 q":    {url.Values{"q": {"SYN-PURPOSE"}}, []string{}},
 		"q 的百分号按字面算":  {url.Values{"q": {"%"}}, []string{"SYN-CORR-4%"}},
 	}, func(query cataloguepage.Query) ([]string, string, int64) {
 		page, err := catalogue.ListRouteReassessments(ctx, pagingTenantID(t), 10, query)
@@ -471,6 +483,7 @@ func TestRerouteSuggestionFiltersAndKeywordNarrowTheRowsAndTheTotal(t *testing.T
 		"q 命中包裹":     {url.Values{"q": {"syn-parcel-2"}}, []string{"SYN-CORR-2"}},
 		"q 命中触发关联":   {url.Values{"q": {"CORR-3"}}, []string{"SYN-CORR-3"}},
 		"q 与筛选同时":    {url.Values{"q": {"SYN-PARCEL-1"}, "state": {"SUPERSEDED"}}, []string{}},
+		"服务目的不进 q":   {url.Values{"q": {"SYN-PURPOSE"}}, []string{}},
 		"q 的百分号按字面算": {url.Values{"q": {"%"}}, []string{}},
 	}, func(query cataloguepage.Query) ([]string, string, int64) {
 		page, err := stores.catalogue.ListRerouteSuggestions(t.Context(), pagingTenantID(t), 10, query)

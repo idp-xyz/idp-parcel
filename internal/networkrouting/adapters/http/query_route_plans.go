@@ -54,7 +54,7 @@ var registerCatalogues = map[string]*cataloguepage.Catalogue{
 // NewQueryRoutePlansEndpoint 交回路由判断两册查阅的 HTTP 入口
 // （GET /route-plans，ADR-0077；最终路径归装配票，本批为 closure-batch/07）。
 //
-// 两册共用一个端点，按 `register` 查询参数分派（先例：本包网络目录端点一口七分派）。
+// 两册共用一个端点，按 `register` 查询参数分派（先例：本包网络目录端点按 `family` 分派各族）。
 // 缺席或取值不在封闭集内按坏请求拒：替调用方默认一册就是替它猜。
 // 复用本包目录查阅的 Intake：判断册查阅同属运营查阅，授权边界同是租户，不为业务
 // 事实册另立第二种准入形（先例：parcelpricing 评价端点同一分法）。
