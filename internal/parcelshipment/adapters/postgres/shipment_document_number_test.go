@@ -10,6 +10,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 func numberedShipmentDocument(t *testing.T, raw string) domain.ShipmentDocumentNumbering {
@@ -66,7 +67,7 @@ func TestTheDocumentNumberIsReadBackWithTheRequestAndTheViews(t *testing.T) {
 		t.Fatalf("旧委托被补号：%v", err)
 	}
 
-	listed, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 10)
+	listed, err := rowsOf(views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 10, firstPage(t, ports.ShipmentRequestViewPages)))
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("列表：%d 行，%v", len(listed), err)
 	}
@@ -192,7 +193,7 @@ func TestATimeZoneNotConfiguredAbsenceIsReadBackAsItself(t *testing.T) {
 	if reason, _ := found.DocumentNumbering().Absence(); reason != domain.DocumentNumberingTimeZoneNotConfigured {
 		t.Fatalf("读回的无号情形 = %v", reason)
 	}
-	listed, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 10)
+	listed, err := rowsOf(views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 10, firstPage(t, ports.ShipmentRequestViewPages)))
 	if err != nil || len(listed) != 1 {
 		t.Fatalf("列表：%v %v", listed, err)
 	}
@@ -305,7 +306,7 @@ func TestTheRefusalCatalogueCarriesTheDocumentNumberOfTheRequestEachRowNames(t *
 	rig.record(t, refusalFor(t, "tenant-1", "request-1", "version-1", refusalRecordedAt, syntheticScope(t)))
 	rig.record(t, refusalFor(t, "tenant-1", "request-unknown", "version-1", refusalRecordedAt.Add(time.Minute), syntheticScope(t)))
 
-	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-1"), 10)
+	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-1"), 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || len(listed.Refusals) != 2 {
 		t.Fatalf("查阅：%d 行 %v", len(listed.Refusals), err)
 	}

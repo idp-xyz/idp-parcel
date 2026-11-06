@@ -166,8 +166,9 @@ func (fixture *refusalsFixture) get(t *testing.T, target, token string) (int, ma
 	return response.Code, answer
 }
 
-// Covers: AT-PS-161；ADR-0293 决定一——查阅按租户隔离：租户 A 的操作者只看到 A 的未处理行与计数，B 的行看不见；请求里自报的租户参数不采信；
-// 没有查阅读授予（只持运营决定授予）答 403 OPERATOR_NOT_GRANTED；没有令牌答 401。
+// Covers: AT-PS-161；ADR-0293 决定一——查阅按租户隔离：租户 A 的操作者只看到 A 的未处理行与计数，B 的行看不见；请求里自报的租户与页大小
+// 参数不采信——迁到 ADR-0144 之后它们是集外键，答 400 而不是被静默忽略（决定四），无论哪种都答不出 A 的行；没有查阅读授予（只持运营决定授予）
+// 答 403 OPERATOR_NOT_GRANTED；没有令牌答 401。
 func TestTheWiredRefusalQueryIsScopedToTheOperatorsTenant(t *testing.T) {
 	fixture := newRefusalsFixture(t)
 	fixture.record(t, refusalsTenantA, "SYN-REQ-A1", "SYN-VER-01", false)
@@ -186,9 +187,13 @@ func TestTheWiredRefusalQueryIsScopedToTheOperatorsTenant(t *testing.T) {
 	}
 
 	status, answer = fixture.get(t, "/control-release-refusals?tenant="+refusalsTenantA+"&limit=1", refusalsReaderB)
+	if status != http.StatusBadRequest || problemCodeOf(answer) != "MALFORMED_REQUEST" || answer["refusals"] != nil {
+		t.Fatalf("租户 B 自报了租户 A = %d %v, want 400 MALFORMED_REQUEST 且不带任何行", status, answer)
+	}
+	status, answer = fixture.get(t, "/control-release-refusals", refusalsReaderB)
 	rows, _ = answer["refusals"].([]any)
 	if status != http.StatusOK || len(rows) != 1 || rows[0].(map[string]any)["shipmentRequestId"] != "SYN-REQ-B1" {
-		t.Fatalf("租户 B 自报了租户 A = %d %v, want 只有 B 自己那一行", status, answer)
+		t.Fatalf("租户 B = %d %v, want 只有 B 自己那一行", status, answer)
 	}
 
 	if status, answer = fixture.get(t, "/control-release-refusals", refusalsNoRead); status != http.StatusForbidden || problemCodeOf(answer) != "OPERATOR_NOT_GRANTED" {

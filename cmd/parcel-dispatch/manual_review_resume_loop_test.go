@@ -366,7 +366,7 @@ func (fixture *manualReviewLoopFixture) listReviewQueue(
 	if err != nil {
 		t.Fatalf("作用域：%v", err)
 	}
-	records, err := fixture.views.ListAwaitingManualReview(ctx, scope, 10)
+	records, err := rowsOf(fixture.views.ListAwaitingManualReview(ctx, scope, 10, firstPage(t, psports.AcceptanceReviewQueuePages)))
 	if err != nil {
 		t.Fatalf("列复核队列：%v", err)
 	}

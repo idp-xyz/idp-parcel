@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -189,7 +190,7 @@ func TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPS
 	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = 'parcel-shipment.post-intake-disposition.decided' AND failure_code IS NOT NULL`); n != 0 {
 		t.Fatalf("带失败码的处置信封 %d 封, want 0", n)
 	}
-	pending, err := fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50)
+	pending, err := fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50, firstPage(t, psports.PostIntakeManualItemPages))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,8 +208,30 @@ func TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPS
 	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey WHERE journey_id = 'JRN/`+intercepted+`/PID-1'`); n != 0 {
 		t.Fatalf("拦截开出了旅程 %d 条, want 0", n)
 	}
-	if pending, err = fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50); err != nil || pending.Count != 4 {
+	if pending, err = fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50, firstPage(t, psports.PostIntakeManualItemPages)); err != nil || pending.Count != 4 {
 		t.Fatalf("拦截之后待人工处理项 %d（%v）, want 4——退运两项加拦截两项", pending.Count, err)
+	}
+	// 翻页（ADR-0144）：四项按决定时刻翻成两页，拼起来恰是四个不同的项；按所有者收窄时 total 跟着变，积压数仍是四。
+	firstOfTwo, err := fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 3, firstPage(t, psports.PostIntakeManualItemPages))
+	if err != nil || len(firstOfTwo.Items) != 3 || firstOfTwo.Next == "" || firstOfTwo.Total != 4 {
+		t.Fatalf("第一页 %d 项、total %d、next %q（%v）", len(firstOfTwo.Items), firstOfTwo.Total, firstOfTwo.Next, err)
+	}
+	secondOfTwo, err := fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 3,
+		nextPage(t, psports.PostIntakeManualItemPages, url.Values{}, firstOfTwo.Next))
+	if err != nil || len(secondOfTwo.Items) != 1 || secondOfTwo.Next != "" {
+		t.Fatalf("第二页 %d 项、next %q（%v）", len(secondOfTwo.Items), secondOfTwo.Next, err)
+	}
+	seen := map[psdomain.ManualItemKey]bool{}
+	for _, item := range append(firstOfTwo.Items, secondOfTwo.Items...) {
+		seen[item.Key] = true
+	}
+	if len(seen) != 4 {
+		t.Fatalf("两页合起来 %d 个不同的项, want 4", len(seen))
+	}
+	nodeOnly, err := fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50,
+		pageQuery(t, psports.PostIntakeManualItemPages, url.Values{"owner": {"NODE_OPERATIONS"}}))
+	if err != nil || len(nodeOnly.Items) != 2 || nodeOnly.Total != 2 || nodeOnly.Count != 4 {
+		t.Fatalf("按所有者收窄 %d 项、total %d、count %d（%v）, want 2/2/4", len(nodeOnly.Items), nodeOnly.Total, nodeOnly.Count, err)
 	}
 
 	const nr, no, tf = psdomain.DispositionOwnerNetworkRouting, psdomain.DispositionOwnerNodeOperations, psdomain.DispositionOwnerTransportFulfillment
@@ -226,7 +249,7 @@ func TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPS
 	fixture.registerResult(t, intercepted, no, psdomain.DispositionActionHoldAtControl, handled, "已在控制处扣住")
 	fixture.registerResult(t, intercepted, tf, psdomain.DispositionActionHoldOnwardMovement, unable, "承运商已提货，无法截停")
 
-	if pending, err = fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50); err != nil || pending.Count != 0 {
+	if pending, err = fixture.items.ListPendingPostIntakeManualItems(t.Context(), fixture.identity.TenantID(), 50, firstPage(t, psports.PostIntakeManualItemPages)); err != nil || pending.Count != 0 {
 		t.Fatalf("全部登记后待人工处理项 %d（%v）, want 0", pending.Count, err)
 	}
 	read, err := fixture.items.ListPostIntakeManualItemsOfParcel(t.Context(), fixture.identity.TenantID(), mustPS(t, psdomain.NewDeclaredParcelID, intercepted))

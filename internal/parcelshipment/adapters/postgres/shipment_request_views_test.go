@@ -9,6 +9,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -176,7 +177,7 @@ func TestListVisibleFiltersByScopeNewestFirst(t *testing.T) {
 	mustInsert(t, transactor, ctx, repository,
 		scopedSubmittedRequest(t, "tenant-2", "customer-1", "view-d", "REQ-D", submittedAtFixture.Add(3*time.Hour)))
 
-	rows, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1", "customer-2"), 10)
+	rows, err := rowsOf(views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1", "customer-2"), 10, firstPage(t, ports.ShipmentRequestViewPages)))
 	if err != nil {
 		t.Fatalf("查阅列表：%v", err)
 	}
@@ -217,7 +218,7 @@ func TestListVisibleHonorsTheLimit(t *testing.T) {
 	mustInsert(t, transactor, ctx, repository,
 		scopedSubmittedRequest(t, "tenant-1", "customer-1", "view-b", "REQ-B", submittedAtFixture.Add(time.Hour)))
 
-	rows, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 1)
+	rows, err := rowsOf(views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 1, firstPage(t, ports.ShipmentRequestViewPages)))
 	if err != nil {
 		t.Fatalf("查阅列表：%v", err)
 	}
@@ -225,7 +226,7 @@ func TestListVisibleHonorsTheLimit(t *testing.T) {
 		t.Fatalf("rows = %+v, want 只有最新的 REQ-B", rows)
 	}
 
-	if _, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 0); err == nil {
+	if _, err := views.ListVisible(ctx, viewScope(t, "tenant-1", "customer-1"), 0, firstPage(t, ports.ShipmentRequestViewPages)); err == nil {
 		t.Fatal("非正 limit 是调用方编程错误，不该静默答一页")
 	}
 }

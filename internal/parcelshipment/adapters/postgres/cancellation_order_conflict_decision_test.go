@@ -293,7 +293,7 @@ func TestTheCatalogueListsTheTenantsUnresolvedConflictsOldestFirst(t *testing.T)
 	rig.recordConflict(t, "tenant-2",
 		conflictOf(t, "parcel-x", "PCXL-x", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, cancelRequestedAt, cancelRequestedAt.Add(-time.Hour)), conflictDetectedAt)
 
-	listed, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10)
+	listed, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || listed.Count != 3 || len(listed.Conflicts) != 3 {
 		t.Fatalf("清单 = %+v err=%v, want 三行", listed, err)
 	}
@@ -302,7 +302,7 @@ func TestTheCatalogueListsTheTenantsUnresolvedConflictsOldestFirst(t *testing.T)
 	}
 
 	rig.decide(t, decisionOf(t, keys[2], domain.BoundaryFactReferred, "https://id.syn.example#alice"))
-	listed, err = rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10)
+	listed, err = rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || listed.Count != 2 || len(listed.Conflicts) != 2 || listed.Conflicts[0].Parcel.String() != "parcel-2" {
 		t.Fatalf("决定后清单 = %+v err=%v, want 被决定的行消失", listed, err)
 	}
@@ -310,15 +310,15 @@ func TestTheCatalogueListsTheTenantsUnresolvedConflictsOldestFirst(t *testing.T)
 		t.Fatalf("冲突行数 = %d, want 3——决定不改册", n)
 	}
 
-	truncated, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 1)
+	truncated, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 1, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || truncated.Count != 2 || len(truncated.Conflicts) != 1 {
 		t.Fatalf("截断清单 = %+v err=%v, want 计数 2、清单 1 行", truncated, err)
 	}
-	empty, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-3"), 10)
+	empty, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-3"), 10, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || empty.Count != 0 || empty.Conflicts == nil || len(empty.Conflicts) != 0 {
 		t.Fatalf("空租户清单 = %+v err=%v", empty, err)
 	}
-	if _, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 0); err == nil {
+	if _, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 0, firstPage(t, ports.CancellationOrderConflictPages)); err == nil {
 		t.Fatal("页大小 0 没有被拒")
 	}
 }
@@ -345,7 +345,7 @@ func TestTheCatalogueKeepsAConflictThatDiffersFromADecidedOneInASingleDimension(
 		conflictOf(t, "parcel-1", "PCXL-X", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, at, before), conflictDetectedAt)
 	rig.decide(t, decisionOf(t, decidedKey, domain.CancellationNotUpheld, "https://id.syn.example#alice"))
 
-	listed, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10)
+	listed, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || listed.Count != len(variants) || len(listed.Conflicts) != len(variants) {
 		t.Fatalf("tenant-1 清单 = %+v err=%v, want 只差一维的 %d 行都在", listed, err, len(variants))
 	}
@@ -359,7 +359,7 @@ func TestTheCatalogueKeepsAConflictThatDiffersFromADecidedOneInASingleDimension(
 			t.Errorf("%s：这一行与已决定的只差一维，却被藏出了清单", name)
 		}
 	}
-	other, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-3"), 10)
+	other, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-3"), 10, firstPage(t, ports.CancellationOrderConflictPages))
 	if err != nil || other.Count != 1 || len(other.Conflicts) != 1 {
 		t.Fatalf("tenant-3 清单 = %+v err=%v, want 别的租户的决定不藏本租户的冲突行", other, err)
 	}

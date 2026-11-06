@@ -34,8 +34,8 @@ func TestLabelTransactionsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0144 决定一、三、四——集外的键、排序维与筛选值，解不开的游标，都答 400 带理由散文，读口不被调用；查询参数属传输
-// 形状、先于 Intake：渠道未配置时写错参数也先答 400，写对了才答 403。
+// Covers: ADR-0144 决定一、三、四——集外的键、排序维与筛选值，解不开的游标，都答 400 带理由散文，读口不被调用。解码在 Intake
+// 之后：渠道未配置时参数写对写错都答 403，答复不随请求内容变（ADR-0055 决定三）。
 func TestLabelTransactionsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	for name, target := range map[string]string{
 		"未知键":    "/label-transactions?tenant=SYN-TENANT-02",
@@ -52,14 +52,16 @@ func TestLabelTransactionsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		})
 	}
 
-	refused := requestLabelTransactions(t, shipmenthttp.UnconfiguredIntake{}, &labelTransactionsReaderDouble{},
+	refused := requestLabelTransactions(t, labelTransactionIntake(t), &labelTransactionsReaderDouble{},
 		http.MethodGet, "/label-transactions?sort=parcelId")
 	if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "parcelId") {
 		t.Fatalf("理由散文应点到那一格：%q", detail)
 	}
-	unconfigured := requestLabelTransactions(t, shipmenthttp.UnconfiguredIntake{}, &labelTransactionsReaderDouble{},
-		http.MethodGet, "/label-transactions?sort=-establishedAt")
-	if unconfigured.Code != http.StatusForbidden {
-		t.Fatalf("参数写对、渠道未配置 status = %d, want 403", unconfigured.Code)
+	for _, target := range []string{"/label-transactions?sort=parcelId", "/label-transactions?sort=-establishedAt"} {
+		unconfigured := requestLabelTransactions(t, shipmenthttp.UnconfiguredIntake{}, &labelTransactionsReaderDouble{},
+			http.MethodGet, target)
+		if unconfigured.Code != http.StatusForbidden {
+			t.Fatalf("%s 渠道未配置 status = %d, want 403", target, unconfigured.Code)
+		}
 	}
 }

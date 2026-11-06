@@ -340,7 +340,7 @@ func (fixture *dispositionLoopFixture) listDispositionQueue(
 	ctx context.Context,
 ) []psports.AuthorizedDispositionQueueRecord {
 	t.Helper()
-	rows, err := fixture.views.ListAwaitingAuthorizedDisposition(ctx, fixture.queueScope(t), 10)
+	rows, err := rowsOf(fixture.views.ListAwaitingAuthorizedDisposition(ctx, fixture.queueScope(t), 10, firstPage(t, psports.AuthorizedDispositionQueuePages)))
 	if err != nil {
 		t.Fatalf("查授权处置队列：%v", err)
 	}

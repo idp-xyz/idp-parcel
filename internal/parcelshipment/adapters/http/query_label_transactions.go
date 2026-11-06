@@ -71,8 +71,8 @@ const continuedAttemptBasisRegisterAndCurrentFinal = "DERIVED_FROM_DECISION_REGI
 // NewQueryLabelTransactionsEndpoint 交回面单交易查阅的 HTTP 入口（GET /label-transactions）。
 // 行粒度是交易 × 包裹：一笔交易覆盖几件包裹就摊几行，摊开在读侧完成（决定七）。
 //
-// 查询参数（after、sort、transactionResult 与 q）按 ports.LabelTransactionPages 解码（ADR-0144 决定六），先于 Intake；
-// 翻页按交易翻，page 数的是交易（声明头注）。
+// 查询参数（after、sort、transactionResult 与 q）按 ports.LabelTransactionPages 解码（ADR-0144 决定六），在 Intake 之后
+// （writePageQueryProblem 头注）；翻页按交易翻，page 数的是交易（声明头注）。
 func NewQueryLabelTransactionsEndpoint(
 	intake LabelTransactionQueryIntake,
 	reader LabelTransactionsReader,
@@ -84,14 +84,14 @@ func NewQueryLabelTransactionsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.LabelTransactionPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeLabelTransactionQuery(request.Context(), request)
 		if err != nil {
 			writeIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.LabelTransactionPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

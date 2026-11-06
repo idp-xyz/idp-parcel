@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是「渠道择优决定」登记册的伴生运营查阅读端口（票 `label-channel/23`，读面形状照 ADR-0077
@@ -40,14 +41,16 @@ func (filter TiedChannelSelectionFilter) Subject() (domain.ChannelSelectionSubje
 // ChannelSelectionDecisionRead 是「渠道择优决定」登记册的伴生运营查阅读端口。
 type ChannelSelectionDecisionRead interface {
 	// ListTiedChannelSelectionDecisions 按租户列结论为并列冲突（TIED）的决定——`PAR-NET-16`「并列且无法
-	// 选出唯一一条时为冲突，交人工裁决」那一格的待办面。按决定时刻倒序、同刻按标识倒序：最近一次冲突在
-	// 最上面。limit 必须为正；从未择优过或没有冲突如实答空切片，不是错误。
+	// 选出唯一一条时为冲突，交人工裁决」那一格的待办面。缺省按决定时刻倒序、同刻按标识倒序：最近一次冲突在
+	// 最上面；照 ADR-0144 翻页，查询对象由端点按 TiedChannelSelectionPages 解出。limit 必须为正；从未择优过或
+	// 没有冲突如实答空页，不是错误。
 	ListTiedChannelSelectionDecisions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		filter TiedChannelSelectionFilter,
 		limit int,
-	) ([]domain.ChannelSelectionDecision, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.ChannelSelectionDecision], error)
 	// FindChannelSelectionDecision 按（租户 + 决定标识）取一条决定连逐候选结果。第二个返回值为 false 即
 	// 该租户下没有这条记录——不区分「不存在」与「属别的租户」（ADR-0029 探针纪律）。
 	FindChannelSelectionDecision(

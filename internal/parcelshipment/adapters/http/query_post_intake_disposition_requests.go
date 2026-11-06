@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 等收寄后服务处置决定回应的停止请求的运营查阅端点（ADR-0332）。只有读：形成决定是「运营决定」能力面上另一个端点，查阅面里没有动作。
@@ -28,6 +29,7 @@ type PostIntakeDispositionRequestReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (ports.UnansweredPostIntakeDispositionRequests, error)
 }
 
@@ -44,7 +46,8 @@ func (UnconfiguredIntake) IntakePostIntakeDispositionRequestQuery(context.Contex
 // 空清单仍是 LISTED：「此刻没有等回应的请求」是如实答案，与「接入渠道未配置」（403）分得开。
 const outcomePostIntakeDispositionRequestsListed = "POST_INTAKE_DISPOSITION_REQUESTS_LISTED"
 
-// NewQueryPostIntakeDispositionRequestsEndpoint 交回等回应请求查阅的 HTTP 入口（GET /post-intake-disposition-requests）。
+// NewQueryPostIntakeDispositionRequestsEndpoint 交回等回应请求查阅的 HTTP 入口（GET /post-intake-disposition-requests）。查询参数按
+// ports.PostIntakeDispositionRequestPages 解码（ADR-0144），在 Intake 之后；pendingCount 仍是全部积压，truncated 即本页之后还有。
 func NewQueryPostIntakeDispositionRequestsEndpoint(
 	intake PostIntakeDispositionRequestQueryIntake,
 	reader PostIntakeDispositionRequestReader,
@@ -60,7 +63,12 @@ func NewQueryPostIntakeDispositionRequestsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		listed, err := reader.ListUnansweredPostIntakeDispositionRequests(request.Context(), query.Tenant, query.Limit)
+		pageQuery, err := ports.PostIntakeDispositionRequestPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		listed, err := reader.ListUnansweredPostIntakeDispositionRequests(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空清单：把一次该重试的故障读成「没有等回应的请求」，卡住的包裹就更没人看见了。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -73,8 +81,9 @@ func NewQueryPostIntakeDispositionRequestsEndpoint(
 		writeJSON(response, http.StatusOK, postIntakeDispositionRequestsResponse{
 			Outcome:      outcomePostIntakeDispositionRequestsListed,
 			PendingCount: listed.Count,
-			Truncated:    listed.Count > len(listed.Requests),
+			Truncated:    listed.Next != "",
 			Requests:     bodies,
+			Page:         cataloguepage.NewPage(query.Limit, listed.Next, listed.Total),
 		})
 	})
 }
@@ -84,6 +93,7 @@ type postIntakeDispositionRequestsResponse struct {
 	PendingCount int                                `json:"pendingCount"`
 	Truncated    bool                               `json:"truncated"`
 	Requests     []postIntakeDispositionRequestBody `json:"requests"`
+	Page         cataloguepage.Page                 `json:"page"`
 }
 
 // postIntakeDispositionRequestBody 逐字段透出一份等回应的请求：决定命令要的几段（请求键、包裹、当前决定版本）原样给出；请求方、授权、原因与请求的业务时间

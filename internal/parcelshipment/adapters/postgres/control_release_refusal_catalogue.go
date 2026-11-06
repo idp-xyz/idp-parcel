@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ControlReleaseRefusalCatalogue 实现 ports.ControlReleaseRefusalCatalogue：运营查阅按租户列释放未受理册上还没被处理的行（ADR-0293
@@ -26,9 +27,10 @@ func NewControlReleaseRefusalCatalogue(db *bentopg.DB) (*ControlReleaseRefusalCa
 
 var _ ports.ControlReleaseRefusalCatalogue = (*ControlReleaseRefusalCatalogue)(nil)
 
-const unhandledControlReleaseRefusalFilter = `
-		  FROM parcel_shipment.control_release_refusal r
-		 WHERE r.tenant_id = $1
+const (
+	controlReleaseRefusalSource = "parcel_shipment.control_release_refusal r"
+	// unhandledControlReleaseRefusal 是「未处理」：册行没有对应的处理留痕。
+	unhandledControlReleaseRefusal = `r.tenant_id = $1
 		   AND NOT EXISTS (
 		       SELECT 1
 		         FROM parcel_shipment.control_release_refusal_handling h
@@ -36,67 +38,115 @@ const unhandledControlReleaseRefusalFilter = `
 		          AND h.shipment_request_id = r.shipment_request_id
 		          AND h.submission_version = r.submission_version
 		          AND h.control_result_id = r.control_result_id)`
+)
 
-// ListUnhandledControlReleaseRefusals 上列本租户册上未处理的行，最早登记的在前、同刻按委托与版本收尾，至多 limit 行；Count 是未处理的
-// 全部行数，不受 limit 截断。两句不在同一快照里：计数与清单是此刻的大概，处理动作的成败由处理口自己的主键判。
+// controlReleaseRefusalPages 把 ports.ControlReleaseRefusalPages 落到列上。q 在委托号、客户账户、控制结果与委托的单据号（运单号）
+// 上做字面包含：单据号不在册行上，按委托点读一列，与清单上示出的那一格是同一个号。
+var controlReleaseRefusalPages = ports.ControlReleaseRefusalPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"recordedAt": "r.recorded_at"},
+	Identity: []string{"r.shipment_request_id", "r.submission_version", "r.control_result_id"},
+	Filters:  map[string]string{"customerAccountId": "r.customer_account_id"},
+	Keyword: []string{
+		"r.shipment_request_id", "r.customer_account_id", "r.control_result_id",
+		`(SELECT s.document_number FROM parcel_shipment.shipment_request s
+		   WHERE s.tenant_id = r.tenant_id AND s.shipment_request_id = r.shipment_request_id)`,
+	},
+})
+
+// scannedControlReleaseRefusal 带着取页读回的键列原值：游标位置从它取，与 ORDER BY 用的是同一份。
+type scannedControlReleaseRefusal struct {
+	refusal                    ports.ControlReleaseRefusal
+	request, version, resultID string
+	recordedAt                 time.Time
+}
+
+// ListUnhandledControlReleaseRefusals 上列本租户册上未处理的行的一页：缺省最早登记的在前、同刻按（委托、版本、控制结果）收尾。
+// Count 是未处理的全部行数，不受页与条件截断。几句不在同一快照里：计数与清单是此刻的大概，处理动作的成败由处理口自己的主键判。
 func (catalogue *ControlReleaseRefusalCatalogue) ListUnhandledControlReleaseRefusals(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) (ports.UnhandledControlReleaseRefusals, error) {
+	fail := func(err error) (ports.UnhandledControlReleaseRefusals, error) {
+		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+	}
 	if limit <= 0 {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: limit %d is not a positive page size", limit)
+		return fail(fmt.Errorf("limit %d is not a positive page size", limit))
+	}
+	plan, err := controlReleaseRefusalPages.Plan(query, unhandledControlReleaseRefusal, []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		return fail(err)
 	}
-	var count int
-	if err := querier.QueryRow(ctx, `SELECT count(*)`+unhandledControlReleaseRefusalFilter, tenant.String()).Scan(&count); err != nil {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: count: %w", err)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(controlReleaseRefusalSource), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT r.shipment_request_id, r.submission_version, r.control_result_id, r.customer_account_id,
-		        r.occupation_legal_entity, r.occupation_settlement_account, r.occupation_currency,
-		        r.reason_ref, r.recorded_at`+unhandledControlReleaseRefusalFilter+`
-		 ORDER BY r.recorded_at, r.shipment_request_id, r.submission_version, r.control_result_id
-		 LIMIT $2`,
-		tenant.String(), limit)
+	backlog, err := queueBacklog(ctx, querier, query, total,
+		"SELECT count(*) FROM "+controlReleaseRefusalSource+" WHERE "+unhandledControlReleaseRefusal, tenant)
 	if err != nil {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(
+		`r.shipment_request_id, r.submission_version, r.control_result_id, r.customer_account_id,
+		 r.occupation_legal_entity, r.occupation_settlement_account, r.occupation_currency,
+		 r.reason_ref, r.recorded_at`, controlReleaseRefusalSource), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := ports.UnhandledControlReleaseRefusals{
-		Refusals:        []ports.ControlReleaseRefusal{},
-		Count:           count,
-		DocumentNumbers: map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering{},
-	}
+	var fetched []scannedControlReleaseRefusal
 	for rows.Next() {
 		var (
-			requestRaw, version, resultID, account, reason string
-			scope                                          occupationScopeRow
-			recordedAt                                     time.Time
+			row             scannedControlReleaseRefusal
+			account, reason string
+			scope           occupationScopeRow
 		)
-		if err := rows.Scan(&requestRaw, &version, &resultID, &account,
-			&scope.legalEntity, &scope.account, &scope.currency, &reason, &recordedAt); err != nil {
-			return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		if err := rows.Scan(&row.request, &row.version, &row.resultID, &account,
+			&scope.legalEntity, &scope.account, &scope.currency, &reason, &row.recordedAt); err != nil {
+			return fail(err)
 		}
-		requestID, err := domain.NewShipmentRequestID(requestRaw)
+		requestID, err := domain.NewShipmentRequestID(row.request)
 		if err != nil {
-			return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+			return fail(err)
 		}
-		refusal, err := controlReleaseRefusal(tenant, requestID, version, resultID, account, scope, reason, recordedAt)
-		if err != nil {
-			return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		if row.refusal, err = controlReleaseRefusal(tenant, requestID, row.version, row.resultID, account, scope, reason, row.recordedAt); err != nil {
+			return fail(err)
 		}
-		listed.Refusals = append(listed.Refusals, refusal)
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		return fail(err)
+	}
+	rows.Close()
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(row scannedControlReleaseRefusal, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(row.recordedAt),
+				Identity: []string{row.request, row.version, row.resultID},
+			}
+		})
+	if err != nil {
+		return fail(err)
+	}
+
+	listed := ports.UnhandledControlReleaseRefusals{
+		Refusals:        make([]ports.ControlReleaseRefusal, 0, len(page.Rows)),
+		Next:            page.Next,
+		Total:           page.Total,
+		Count:           backlog,
+		DocumentNumbers: map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering{},
+	}
+	for _, row := range page.Rows {
+		listed.Refusals = append(listed.Refusals, row.refusal)
 	}
 	if err := catalogue.readDocumentNumbers(ctx, querier, tenant, &listed); err != nil {
-		return ports.UnhandledControlReleaseRefusals{}, fmt.Errorf("list unhandled control release refusals: %w", err)
+		return fail(err)
 	}
 	return listed, nil
 }

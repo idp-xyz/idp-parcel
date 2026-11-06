@@ -15,6 +15,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var viewSubmittedAt = time.Date(2026, 9, 6, 11, 0, 0, 0, time.UTC)
@@ -166,11 +167,12 @@ func (double *viewsReaderDouble) ListVisible(
 	_ context.Context,
 	_ domain.AuthorizedQueryScope,
 	_ int,
-) ([]ports.ShipmentRequestSummaryRecord, error) {
+	_ cataloguepage.Query,
+) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
 	if double.listErr != nil {
-		return nil, double.listErr
+		return cataloguepage.Result[ports.ShipmentRequestSummaryRecord]{}, double.listErr
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.ShipmentRequestSummaryRecord]{Rows: double.rows}, nil
 }
 
 func (double *viewsReaderDouble) FindVisibleByID(

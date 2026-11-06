@@ -8,6 +8,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证复核队列读面（票 acceptance-review-read-face/01）：
@@ -134,8 +135,8 @@ func TestListAwaitingManualReviewFiltersOrdersAndTranscribes(t *testing.T) {
 			return awaitReview(t, request, "review-e")
 		})
 
-	rows, err := views.ListAwaitingManualReview(ctx,
-		viewScope(t, "tenant-1", "customer-1", "customer-2"), 10)
+	rows, err := rowsOf(views.ListAwaitingManualReview(ctx,
+		viewScope(t, "tenant-1", "customer-1", "customer-2"), 10, firstPage(t, ports.AcceptanceReviewQueuePages)))
 	if err != nil {
 		t.Fatalf("查复核队列：%v", err)
 	}
@@ -193,7 +194,7 @@ func TestListAwaitingManualReviewHonorsTheLimit(t *testing.T) {
 			return awaitReview(t, request, "review-g")
 		})
 
-	rows, err := views.ListAwaitingManualReview(ctx, viewScope(t, "tenant-1", "customer-1"), 1)
+	rows, err := rowsOf(views.ListAwaitingManualReview(ctx, viewScope(t, "tenant-1", "customer-1"), 1, firstPage(t, ports.AcceptanceReviewQueuePages)))
 	if err != nil {
 		t.Fatalf("查复核队列：%v", err)
 	}
@@ -201,7 +202,7 @@ func TestListAwaitingManualReviewHonorsTheLimit(t *testing.T) {
 		t.Fatalf("rows = %+v, want 只有最老的 REQ-RVW-F", rows)
 	}
 
-	if _, err := views.ListAwaitingManualReview(ctx, viewScope(t, "tenant-1", "customer-1"), 0); err == nil {
+	if _, err := views.ListAwaitingManualReview(ctx, viewScope(t, "tenant-1", "customer-1"), 0, firstPage(t, ports.AcceptanceReviewQueuePages)); err == nil {
 		t.Fatal("非正 limit 是调用方编程错误，不该静默答一页")
 	}
 }

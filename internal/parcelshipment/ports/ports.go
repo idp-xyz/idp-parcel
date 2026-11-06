@@ -1752,13 +1752,15 @@ type ShipmentRequestDetailRecord struct {
 // 的行。FindVisibleByID 的否定结果不区分「不存在」「属其他租户或客户账户」——那正是
 // CONTEXT`统一不可见结果`在读口上的形状，拆开就是造跨作用域存在性预言机（ADR-0029）。
 //
-// Limit 必须为正；每页多大由接入面按渠道契约裁决，读口只拒绝无意义的取值。
+// Limit 必须为正；每页多大由接入面按渠道契约裁决，读口只拒绝无意义的取值。ListVisible 照 ADR-0144 翻页（票
+// catalogue-read-pagination-rollout/02）：查询对象由端点按 ShipmentRequestViewPages 解出，键集与筛选落在作用域之内。
 type ShipmentRequestViews interface {
 	ListVisible(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]ShipmentRequestSummaryRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ShipmentRequestSummaryRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
@@ -1806,13 +1808,15 @@ type AcceptanceReviewQueueRecord struct {
 // FindVisibleByID 与 ShipmentRequestViews 同签名不是巧合：复核详情复用委托查阅详情
 // （审的就是这份委托登记过什么），不另造第二种详情。同一真库适配器同时满足两口。
 //
-// 排序与列表读口相反：老的在前（先来先审），同刻按委托标识正序保证分页可重复。
+// 排序与列表读口相反：老的在前（先来先审），同刻按委托标识正序；照 ADR-0144 翻页，查询对象由端点按
+// AcceptanceReviewQueuePages 解出。
 type AcceptanceReviewQueue interface {
 	ListAwaitingManualReview(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]AcceptanceReviewQueueRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AcceptanceReviewQueueRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
@@ -1884,13 +1888,15 @@ type AuthorizedDispositionQueueRecord struct {
 // 受限项取自本版当前采用的那一次控制结果的逐项（与形成决定那一步读的是同一批行），不重读策略正文：
 // 处置与责任引用是当时采用的那一版正文说的，正文换版不改队列上已停等的委托看到的东西。
 //
-// 排序同其余队列：老的在前（先停的先处置），同刻按委托标识正序保证分页可重复。Limit 必须为正。
+// 排序同其余队列：老的在前（先停的先处置），同刻按委托标识正序；照 ADR-0144 翻页，查询对象由端点按
+// AuthorizedDispositionQueuePages 解出。Limit 必须为正。
 type AuthorizedDispositionQueue interface {
 	ListAwaitingAuthorizedDisposition(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]AuthorizedDispositionQueueRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AuthorizedDispositionQueueRecord], error)
 }
 
 // OperatorRegistrationQueueRecord 是「等待运营登记」队列上的一行：一份在决定形成之前停在

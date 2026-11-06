@@ -181,7 +181,7 @@ func TestAnotherTenantCannotHandleARefusalAndWritesNothing(t *testing.T) {
 	if n := rig.queryCount(t, `SELECT count(*) FROM parcel_shipment.control_release_refusal_handling`); n != 0 {
 		t.Fatalf("处理留痕行数 = %d, want 0——别的租户的处理写进了库", n)
 	}
-	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-1"), 10)
+	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-1"), 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || listed.Count != 1 || len(listed.Refusals) != 1 {
 		t.Fatalf("本租户仍应有一笔未处理：%+v err=%v", listed, err)
 	}
@@ -249,7 +249,7 @@ func TestTheCatalogueListsOnlyThisTenantsUnhandledRefusalsWithTheirCount(t *test
 	}
 
 	tenant := psTenant(t, "tenant-1")
-	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 10)
+	listed, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil {
 		t.Fatalf("查阅：%v", err)
 	}
@@ -263,7 +263,7 @@ func TestTheCatalogueListsOnlyThisTenantsUnhandledRefusalsWithTheirCount(t *test
 		t.Fatalf("存量行的作用域应缺席：%+v", listed.Refusals[0].Scope)
 	}
 
-	truncated, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 2)
+	truncated, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 2, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || len(truncated.Refusals) != 2 || truncated.Count != 3 {
 		t.Fatalf("页大小 2 = %d 行（计数 %d）err=%v, want 2 行、计数仍为 3", len(truncated.Refusals), truncated.Count, err)
 	}
@@ -275,19 +275,19 @@ func TestTheCatalogueListsOnlyThisTenantsUnhandledRefusalsWithTheirCount(t *test
 		ports.ControlReleaseRefusalHandlingRecorded {
 		t.Fatalf("处理 = %d, want 已记下", outcome)
 	}
-	after, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 10)
+	after, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || after.Count != 2 || len(after.Refusals) != 2 || after.Refusals[0] != oldest || after.Refusals[1] != newest {
 		t.Fatalf("处理之后 = %+v err=%v, want 只剩 oldest 与 newest", after, err)
 	}
-	other, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-2"), 10)
+	other, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-2"), 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || other.Count != 1 || len(other.Refusals) != 1 || other.Refusals[0] != foreign {
 		t.Fatalf("租户 2 = %+v err=%v, want 只有它自己那一笔", other, err)
 	}
-	empty, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-3"), 10)
+	empty, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), psTenant(t, "tenant-3"), 10, firstPage(t, ports.ControlReleaseRefusalPages))
 	if err != nil || empty.Count != 0 || empty.Refusals == nil || len(empty.Refusals) != 0 {
 		t.Fatalf("没有行的租户 = %+v err=%v, want 空清单（非 nil）与零计数", empty, err)
 	}
-	if _, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 0); err == nil {
+	if _, err := rig.catalogue.ListUnhandledControlReleaseRefusals(t.Context(), tenant, 0, firstPage(t, ports.ControlReleaseRefusalPages)); err == nil {
 		t.Fatal("页大小 0 没有被拒——不设上限的清单会把整本册读出来")
 	}
 }

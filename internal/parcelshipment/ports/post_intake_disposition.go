@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是收寄后服务处置决定要读、要记与要交出的口（ADR-0332）：越过取消边界的包裹，客户的停止请求停在待处置（CancellationRecord 的
@@ -50,9 +51,12 @@ type PostIntakeDispositionRequest struct {
 	CurrentVersion int
 }
 
-// UnansweredPostIntakeDispositionRequests 是一个租户还没有被回应的请求：最早的在前，至多 limit 行；Count 是全部行数，大于 len(Requests) 即清单被页大小截断。
+// UnansweredPostIntakeDispositionRequests 是一个租户还没有被回应的请求的一页（ADR-0144）：Requests 是本页，Next 为空串即末页，Total 是
+// 本次 q 之下的总数；Count 是全部等回应的行数——队列的积压，不随 q 变（票 catalogue-read-pagination-rollout spec 取舍 5）。
 type UnansweredPostIntakeDispositionRequests struct {
 	Requests []PostIntakeDispositionRequest
+	Next     string
+	Total    int64
 	Count    int
 }
 
@@ -65,10 +69,12 @@ type PostIntakeDispositionRequests interface {
 		ctx context.Context,
 		key CancellationRequestKey,
 	) (PostIntakeDispositionRequest, bool, error)
+	// ListUnansweredPostIntakeDispositionRequests 取等回应请求的一页，查询对象由端点按 PostIntakeDispositionRequestPages 解出。
 	ListUnansweredPostIntakeDispositionRequests(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (UnansweredPostIntakeDispositionRequests, error)
 }
 

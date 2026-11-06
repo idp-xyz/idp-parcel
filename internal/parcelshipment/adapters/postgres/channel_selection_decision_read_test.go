@@ -60,7 +60,7 @@ type decisionReadRegistry interface {
 func TestTiedDecisionsAreListedNewestFirstWithinTheTenant(t *testing.T) {
 	registry, tenant, _ := tiedDecisionsFixture(t)
 
-	listed, err := registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.EveryTiedChannelSelection(), 10)
+	listed, err := rowsOf(registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.EveryTiedChannelSelection(), 10, firstPage(t, ports.TiedChannelSelectionPages)))
 	if err != nil {
 		t.Fatalf("列并列冲突：%v", err)
 	}
@@ -100,7 +100,7 @@ func TestTiedDecisionsAreListedNewestFirstWithinTheTenant(t *testing.T) {
 func TestTiedDecisionsCanBeNarrowedToASubjectAndPaged(t *testing.T) {
 	registry, tenant, subject := tiedDecisionsFixture(t)
 
-	narrowed, err := registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.TiedChannelSelectionsOf(subject), 10)
+	narrowed, err := rowsOf(registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.TiedChannelSelectionsOf(subject), 10, firstPage(t, ports.TiedChannelSelectionPages)))
 	if err != nil {
 		t.Fatalf("按对象收窄：%v", err)
 	}
@@ -108,7 +108,7 @@ func TestTiedDecisionsCanBeNarrowedToASubjectAndPaged(t *testing.T) {
 		t.Fatalf("收窄后应只剩该对象的两条并按倒序，实得 %+v", ids(narrowed))
 	}
 
-	paged, err := registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.EveryTiedChannelSelection(), 1)
+	paged, err := rowsOf(registry.ListTiedChannelSelectionDecisions(t.Context(), tenant, ports.EveryTiedChannelSelection(), 1, firstPage(t, ports.TiedChannelSelectionPages)))
 	if err != nil {
 		t.Fatalf("截页：%v", err)
 	}
@@ -122,7 +122,7 @@ func TestTiedDecisionsCanBeNarrowedToASubjectAndPaged(t *testing.T) {
 func TestTiedDecisionsAnswerEmptyForATenantThatNeverSelected(t *testing.T) {
 	registry, _, _ := tiedDecisionsFixture(t)
 
-	empty, err := registry.ListTiedChannelSelectionDecisions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-never"), ports.EveryTiedChannelSelection(), 10)
+	empty, err := rowsOf(registry.ListTiedChannelSelectionDecisions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-never"), ports.EveryTiedChannelSelection(), 10, firstPage(t, ports.TiedChannelSelectionPages)))
 	if err != nil {
 		t.Fatalf("从未择优过的租户：%v", err)
 	}
@@ -130,7 +130,7 @@ func TestTiedDecisionsAnswerEmptyForATenantThatNeverSelected(t *testing.T) {
 		t.Fatalf("应得空切片（非 nil），实得 %#v", empty)
 	}
 
-	if _, err := registry.ListTiedChannelSelectionDecisions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-1"), ports.EveryTiedChannelSelection(), 0); err == nil {
+	if _, err := registry.ListTiedChannelSelectionDecisions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-1"), ports.EveryTiedChannelSelection(), 0, firstPage(t, ports.TiedChannelSelectionPages)); err == nil {
 		t.Fatal("limit=0 应被拒")
 	}
 }

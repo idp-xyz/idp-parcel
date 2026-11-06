@@ -12,6 +12,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 复核队列端点的传输层测试（票 acceptance-review-read-face/01）。分派、方法门与错误
@@ -150,11 +151,12 @@ func (double *reviewQueueReaderDouble) ListAwaitingManualReview(
 	_ context.Context,
 	_ domain.AuthorizedQueryScope,
 	_ int,
-) ([]ports.AcceptanceReviewQueueRecord, error) {
+	_ cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error) {
 	if double.listErr != nil {
-		return nil, double.listErr
+		return cataloguepage.Result[ports.AcceptanceReviewQueueRecord]{}, double.listErr
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.AcceptanceReviewQueueRecord]{Rows: double.rows}, nil
 }
 
 func (double *reviewQueueReaderDouble) FindVisibleByID(

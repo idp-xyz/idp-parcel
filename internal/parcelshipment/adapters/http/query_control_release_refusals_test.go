@@ -13,6 +13,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件证释放未受理册的运营查阅端点（ADR-0293 决定一）：租户与页大小只来自 Intake（不采信请求）；清单逐字段透出，没存作用域的存量行
@@ -46,6 +47,7 @@ func (double *refusalCatalogueDouble) ListUnhandledControlReleaseRefusals(
 	_ context.Context,
 	tenant domain.TenantID,
 	limit int,
+	_ cataloguepage.Query,
 ) (ports.UnhandledControlReleaseRefusals, error) {
 	double.tenant, double.limit = tenant, limit
 	return double.listed, double.err
@@ -112,10 +114,13 @@ func getRefusals(t *testing.T, intake shipmenthttp.ControlReleaseRefusalQueryInt
 }
 
 // Covers: AT-PS-161；ADR-0293 决定一——清单逐字段透出；租户与页大小取 Intake 交出的、原样递给读口；存下作用域的行带三段，没存的存量行
-// scopeRecorded=false 且没有 occupationScope；清单被页大小截断时 truncated=true 而计数是未处理的全部行数。
+// scopeRecorded=false 且没有 occupationScope；本页之后还有时 truncated=true 而计数是未处理的全部行数（ADR-0144 后 truncated 即
+// page.next 不为空，票 catalogue-read-pagination-rollout spec 取舍 5）。
 func TestTheRefusalQueryListsUnhandledRowsWithTheirCountAndTruncationFlag(t *testing.T) {
 	reader := &refusalCatalogueDouble{listed: ports.UnhandledControlReleaseRefusals{
 		Refusals: []ports.ControlReleaseRefusal{refusalRow(t, "REQUEST-1", "VERSION-1", false), refusalRow(t, "REQUEST-2", "VERSION-2", true)},
+		Next:     "SYN-cursor",
+		Total:    5,
 		Count:    5,
 	}}
 	intake := refusalIntakeDouble{tenant: mustValue(t, domain.NewTenantID, "TENANT-1"), limit: 2}

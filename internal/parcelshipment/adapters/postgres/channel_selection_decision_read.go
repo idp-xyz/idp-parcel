@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件让 ChannelSelectionDecisions 同时实现 ports.ChannelSelectionDecisionRead（票 label-channel/23）：
@@ -20,51 +21,78 @@ import (
 
 var _ ports.ChannelSelectionDecisionRead = (*ChannelSelectionDecisions)(nil)
 
-// ListTiedChannelSelectionDecisions 按租户列并列冲突，按决定时刻倒序、同刻按标识倒序，limit 截页。
-// 收窄对象时多两个等值条件，走与 ListBySubject 同一个索引（tenant_id, scope_ref, mapping_ref, decided_at）。
-// 不按时间隐式截断：留痕要求属实例半边，窄口由调用方显式给。
+// tiedChannelSelectionPages 把 ports.TiedChannelSelectionPages 落到列上；q 在决定号、商业范围与产品—渠道映射上做字面包含。
+var tiedChannelSelectionPages = ports.TiedChannelSelectionPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"decidedAt": "decided_at", "decisionId": "decision_id"},
+	Identity: []string{"decision_id"},
+	Keyword:  []string{"decision_id", "scope_ref", "mapping_ref"},
+})
+
+// ListTiedChannelSelectionDecisions 按租户取并列冲突的一页：缺省按决定时刻倒序、同刻按标识倒序。收窄对象时固定条件多两个
+// 等值，走与 ListBySubject 同一个索引（tenant_id, scope_ref, mapping_ref, decided_at）。不按时间隐式截断：留痕要求属实例
+// 半边，窄口由调用方显式给。逐候选结果只对本页的决定取。
 func (registry *ChannelSelectionDecisions) ListTiedChannelSelectionDecisions(
 	ctx context.Context,
 	tenant domain.TenantID,
 	filter ports.TiedChannelSelectionFilter,
 	limit int,
-) ([]domain.ChannelSelectionDecision, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.ChannelSelectionDecision], error) {
+	fail := func(err error) (cataloguepage.Result[domain.ChannelSelectionDecision], error) {
+		return cataloguepage.Result[domain.ChannelSelectionDecision]{}, fmt.Errorf("list tied channel selection decisions: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list tied channel selection decisions: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	base := "tenant_id = $1 AND conclusion = $2"
+	args := []any{tenant.String(), domain.ChannelSelectionConcludedTied.String()}
+	if subject, narrowed := filter.Subject(); narrowed {
+		base += " AND scope_ref = $3 AND mapping_ref = $4"
+		args = append(args, subject.Scope().String(), subject.Mapping().String())
+	}
+	plan, err := tiedChannelSelectionPages.Plan(query, base, args, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := registry.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list tied channel selection decisions: %w", err)
+		return fail(err)
 	}
 
-	query := `SELECT decision_id, scope_ref, mapping_ref, assembled_as_of, rule, decided_at, conclusion
-		   FROM parcel_shipment.channel_selection_decision
-		  WHERE tenant_id = $1
-		    AND conclusion = $2`
-	args := []any{tenant.String(), domain.ChannelSelectionConcludedTied.String()}
-	if subject, narrowed := filter.Subject(); narrowed {
-		query += `
-		    AND scope_ref = $3
-		    AND mapping_ref = $4`
-		args = append(args, subject.Scope().String(), subject.Mapping().String())
+	const source = "parcel_shipment.channel_selection_decision"
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
 	}
-	query += fmt.Sprintf(`
-		  ORDER BY decided_at DESC, decision_id DESC
-		  LIMIT $%d`, len(args)+1)
-	args = append(args, limit)
+	heads, err := scanChannelSelectionDecisionHeads(ctx, querier,
+		plan.PageSQL("decision_id, scope_ref, mapping_ref, assembled_as_of, rule, decided_at, conclusion", source),
+		plan.PageArgs...)
+	if err != nil {
+		return fail(err)
+	}
+	page, err := cataloguepage.Finish(query, heads, limit, total, channelSelectionDecisionPosition)
+	if err != nil {
+		return fail(err)
+	}
+	result := cataloguepage.Result[domain.ChannelSelectionDecision]{
+		Rows: []domain.ChannelSelectionDecision{}, Next: page.Next, Total: page.Total,
+	}
+	if len(page.Rows) == 0 {
+		return result, nil
+	}
+	if result.Rows, err = rehydrateChannelSelectionDecisions(ctx, querier, tenant, page.Rows); err != nil {
+		return fail(err)
+	}
+	return result, nil
+}
 
-	heads, err := scanChannelSelectionDecisionHeads(ctx, querier, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list tied channel selection decisions: %w", err)
+// channelSelectionDecisionPosition 取头行扫描出的决定时刻与决定号：与 ORDER BY 用的是同一份列值。
+func channelSelectionDecisionPosition(head channelSelectionDecisionRow, sortField string) cataloguepage.Position {
+	value := head.id
+	if sortField == "decidedAt" {
+		value = cataloguepage.FormatInstant(head.decidedAt)
 	}
-	if len(heads) == 0 {
-		return []domain.ChannelSelectionDecision{}, nil
-	}
-	decisions, err := rehydrateChannelSelectionDecisions(ctx, querier, tenant, heads)
-	if err != nil {
-		return nil, fmt.Errorf("list tied channel selection decisions: %w", err)
-	}
-	return decisions, nil
+	return cataloguepage.Position{Value: value, Identity: []string{head.id}}
 }
 
 // FindChannelSelectionDecision 按（租户 + 决定标识）取一条。租户维在 SQL 条件上：别的租户拿同一个标识

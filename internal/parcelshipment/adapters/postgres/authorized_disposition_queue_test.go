@@ -10,6 +10,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -141,7 +142,7 @@ func TestListAwaitingAuthorizedDispositionFiltersAndTranscribesRestrictedItems(t
 			return awaitDisposition(t, request, "dispose-d")
 		})
 
-	rows, err := fixture.views.ListAwaitingAuthorizedDisposition(ctx, viewScope(t, "tenant-1", "customer-1", "customer-2"), 10)
+	rows, err := rowsOf(fixture.views.ListAwaitingAuthorizedDisposition(ctx, viewScope(t, "tenant-1", "customer-1", "customer-2"), 10, firstPage(t, ports.AuthorizedDispositionQueuePages)))
 	if err != nil {
 		t.Fatalf("查授权处置队列：%v", err)
 	}
@@ -189,7 +190,7 @@ func TestADispositionLeavesTheAuthorizedDispositionQueue(t *testing.T) {
 	recordAdoptedRestrictedControl(t, fixture, "tenant-1", "REQ-DISP-R", "version-1", "REQ-DISP-R/version-1")
 
 	scope := viewScope(t, "tenant-1", "customer-1")
-	before, err := fixture.views.ListAwaitingAuthorizedDisposition(ctx, scope, 10)
+	before, err := rowsOf(fixture.views.ListAwaitingAuthorizedDisposition(ctx, scope, 10, firstPage(t, ports.AuthorizedDispositionQueuePages)))
 	if err != nil || len(before) != 2 {
 		t.Fatalf("处置前 rows = %d err = %v, want 2", len(before), err)
 	}
@@ -221,7 +222,7 @@ func TestADispositionLeavesTheAuthorizedDispositionQueue(t *testing.T) {
 	}
 	mustSave(t, fixture.transactor, ctx, fixture.repository, rejectedIdentity, rejected)
 
-	after, err := fixture.views.ListAwaitingAuthorizedDisposition(ctx, scope, 10)
+	after, err := rowsOf(fixture.views.ListAwaitingAuthorizedDisposition(ctx, scope, 10, firstPage(t, ports.AuthorizedDispositionQueuePages)))
 	if err != nil {
 		t.Fatalf("处置后查队列：%v", err)
 	}
