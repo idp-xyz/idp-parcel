@@ -20,11 +20,11 @@ Blocked by: 01
 | `/settlement-audited-payables` | `AuditedPayableCatalogueRead.ListAuditedPayables` | `p.audited_at DESC, p.payable_id` |
 
 开工先核 `/settlement-statement-lines` 与 `/settlement-supplier-bill-lines`：按一张对账单、一张账单取行的属单条读取的从属面，按租户上列的则一并迁。
-供应商账单接收的排序维今天取自 JSON 文档里的时刻，迁移时导出成非空列再作可排维（取舍 6）。
+供应商账单接收的排序维今天取自 JSON 文档里的时刻，迁移时导出成非空列再作可排维（spec「可排维与行标识的列必须非空」）。
 
 ## 做法与判据
 
-见 spec「每张迁移子票（02–13）的做法与判据」。本票特有：带计数的两册照取舍 5。
+见 spec「每张迁移子票（02–13）的做法与判据」。本票特有：已带计数或 `truncated` 的队列照 spec「已带计数与 `truncated` 的待办队列保留这两格」。
 
 ## 完成记录（2026-11-06，作者会话）
 
