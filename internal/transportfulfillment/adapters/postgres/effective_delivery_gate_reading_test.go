@@ -119,7 +119,7 @@ func TestDeliveryGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("登一份停在本上下文这一侧的交付：%v", err)
 	}
-	rows, err := stores.catalogue.ListEffectiveDeliveries(ctx, record.Key.TenantID, 10)
+	rows, err := rowsOf(stores.catalogue.ListEffectiveDeliveries(ctx, record.Key.TenantID, 10, firstPage(t, ports.EffectiveDeliveryPages)))
 	if err != nil || len(rows) != 1 || rows[0].GateReading != "UNDECIDED" {
 		t.Fatalf("查阅册 = %+v %v，want 列出整格 UNDECIDED", rows, err)
 	}

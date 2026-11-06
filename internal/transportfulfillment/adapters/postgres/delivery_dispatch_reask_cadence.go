@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -89,43 +90,52 @@ func (register *DeliveryDispatchReaskCadences) Save(ctx context.Context, record 
 	return tag.RowsAffected() == 1, nil
 }
 
-// ListDeliveryDispatchReaskCadences 上列一个租户登过的各版（ADR-0230 决定五）：最近登记的在前，第一行就是生效的那一版。
+// deliveryDispatchReaskCadencePages 把 ports.DeliveryDispatchReaskCadencePages 落到列上。q 在版本与依据上做字面包含。
+var deliveryDispatchReaskCadencePages = ports.DeliveryDispatchReaskCadencePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"recordedAt": "recorded_at"},
+	Identity: []string{"version"},
+	Keyword:  []string{"version", "basis"},
+})
+
+// ListDeliveryDispatchReaskCadences 上列一个租户登过的各版（ADR-0230 决定五）：缺省最近登记的在前、同刻按版本倒序，与
+// CurrentCadence 同一个次序，不筛不搜时第一页第一行就是生效的那一版。
 func (catalogue *ReviewCatalogue) ListDeliveryDispatchReaskCadences(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.DeliveryDispatchReaskCadenceRecord, error) {
-	if limit <= 0 {
-		return nil, fmt.Errorf("list delivery dispatch reask cadences: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord], error) {
+		return cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord]{}, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := deliveryDispatchReaskCadencePages.Plan(query, "tenant_id = $1", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
+		return fail(err)
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT tenant_id, version, interval_minutes, basis, recorded_at
-		   FROM transport_fulfillment.delivery_dispatch_reask_cadence
-		  WHERE tenant_id = $1
-		  ORDER BY recorded_at DESC, version DESC
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+
+	const source = "transport_fulfillment.delivery_dispatch_reask_cadence"
+	page, err := readCataloguePage(ctx, querier, query, plan, limit, plan.CountSQL(source),
+		plan.PageSQL("tenant_id, version, interval_minutes, basis, recorded_at", source),
+		scanReaskCadence, deliveryDispatchReaskCadencePosition)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
+		return fail(err)
 	}
-	defer rows.Close()
-	list := make([]ports.DeliveryDispatchReaskCadenceRecord, 0, limit)
-	for rows.Next() {
-		record, err := scanReaskCadence(rows)
-		if err != nil {
-			return nil, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
-		}
-		list = append(list, record)
+	return page, nil
+}
+
+// deliveryDispatchReaskCadencePosition 取装回的记录：登记时刻只换了时区，版本的构造门原样存值，与列逐位相同。
+func deliveryDispatchReaskCadencePosition(record ports.DeliveryDispatchReaskCadenceRecord, _ string) cataloguepage.Position {
+	return cataloguepage.Position{
+		Value:    cataloguepage.FormatInstant(record.RecordedAt),
+		Identity: []string{record.Cadence.Version().String()},
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
-	}
-	return list, nil
 }
 
 func scanReaskCadence(row pgx.Row) (ports.DeliveryDispatchReaskCadenceRecord, error) {

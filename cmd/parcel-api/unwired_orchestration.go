@@ -391,8 +391,9 @@ func (unwiredExternalTrackingFactReview) ListCurrentExternalTrackingFacts(
 	tfdomain.TrackingSourceReference,
 	tfports.EffectiveTimeReviewFilter,
 	int,
-) ([]tfports.ExternalTrackingFactReviewRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.ExternalTrackingFactReviewRow], error) {
+	return cataloguepage.Result[tfports.ExternalTrackingFactReviewRow]{}, errOrchestrationNotWired
 }
 
 // unwiredEffectiveTimeJudgment 是有效时间显式判断口的编排占位（票 label-channel/21 写半边）。
@@ -435,105 +436,117 @@ func (unwiredTransportFulfillmentRecords) ListTransportSchedules(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.TransportScheduleCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.TransportScheduleCatalogueRow], error) {
+	return cataloguepage.Result[tfports.TransportScheduleCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListScheduleTemplates(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.ScheduleTemplateCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.ScheduleTemplateCatalogueRow], error) {
+	return cataloguepage.Result[tfports.ScheduleTemplateCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListCapacityPools(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.CapacityPoolCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.CapacityPoolCatalogueRow], error) {
+	return cataloguepage.Result[tfports.CapacityPoolCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListTransportHandovers(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.TransportHandoverCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.TransportHandoverCatalogueRow], error) {
+	return cataloguepage.Result[tfports.TransportHandoverCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListEffectiveDeliveries(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.EffectiveDeliveryCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.EffectiveDeliveryCatalogueRow], error) {
+	return cataloguepage.Result[tfports.EffectiveDeliveryCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListCarrierMasterDocuments(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.CarrierMasterDocumentCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.CarrierMasterDocumentCatalogueRow], error) {
+	return cataloguepage.Result[tfports.CarrierMasterDocumentCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListDeliveryDispatchPendings(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.DeliveryDispatchPendingRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.DeliveryDispatchPendingRecord], error) {
+	return cataloguepage.Result[tfports.DeliveryDispatchPendingRecord]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListDeliveryDispatchReaskCadences(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.DeliveryDispatchReaskCadenceRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.DeliveryDispatchReaskCadenceRecord], error) {
+	return cataloguepage.Result[tfports.DeliveryDispatchReaskCadenceRecord]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListActualFulfillmentUnformed(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.ActualFulfillmentUnformedRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.ActualFulfillmentUnformedRecord], error) {
+	return cataloguepage.Result[tfports.ActualFulfillmentUnformedRecord]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListTransportPreparations(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.TransportPreparationCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.TransportPreparationCatalogueRow], error) {
+	return cataloguepage.Result[tfports.TransportPreparationCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListBookingRequests(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.BookingRequestCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.BookingRequestCatalogueRow], error) {
+	return cataloguepage.Result[tfports.BookingRequestCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListBookingAnswerBounces(
 	context.Context,
 	tfdomain.TenantID,
-	tfports.BookingAnswerBounceFilter,
 	int,
-) ([]tfports.BookingAnswerBounceCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.BookingAnswerBounceCatalogueRow], error) {
+	return cataloguepage.Result[tfports.BookingAnswerBounceCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredTransportFulfillmentRecords) ListPendingAttemptResults(
 	context.Context,
 	tfdomain.TenantID,
 	int,
-) ([]tfports.PendingAttemptResultRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[tfports.PendingAttemptResultRow], error) {
+	return cataloguepage.Result[tfports.PendingAttemptResultRow]{}, errOrchestrationNotWired
 }
 
 // unwiredHandoverScopeSummary 是交接范围汇总读用例的占位，方法表与

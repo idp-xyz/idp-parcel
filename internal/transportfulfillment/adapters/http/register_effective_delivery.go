@@ -223,6 +223,9 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 只随目录查询参数的拒绝在场（ADR-0144 决定四，writePageQueryProblem）：说的是调用方自己这几个查询参数错在哪，
+	// 是散文，客户端不据此分支。其余问题照旧只交 code——依赖故障的内部原文不外泄，没有可说的时候整键不出现。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeOutcome(response http.ResponseWriter, result application.RegisterEffectiveDeliveryResult) {

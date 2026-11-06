@@ -206,7 +206,7 @@ func TestReviewCatalogueListsTransportSchedulesLatestDepartureFirst(t *testing.T
 	saveScheduleRecord(t, stores, ctx, catalogueScheduleRecord(t, "tenant-1", "sched-2", scheduleDeparts.Add(2*time.Hour)))
 	saveScheduleRecord(t, stores, ctx, catalogueScheduleRecord(t, "tenant-2", "sched-9", scheduleDeparts))
 
-	rows, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListTransportSchedules(ctx, tenant, 10, firstPage(t, ports.TransportSchedulePages)))
 	if err != nil {
 		t.Fatalf("上列班次册：%v", err)
 	}
@@ -222,7 +222,7 @@ func TestReviewCatalogueListsTransportSchedulesLatestDepartureFirst(t *testing.T
 		t.Errorf("班次行转写变形：%+v", rows)
 	}
 
-	limited, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 1)
+	limited, err := rowsOf(stores.catalogue.ListTransportSchedules(ctx, tenant, 1, firstPage(t, ports.TransportSchedulePages)))
 	if err != nil || len(limited) != 1 || limited[0].ScheduleID != "sched-2" {
 		t.Errorf("页大小未生效：rows=%+v err=%v", limited, err)
 	}
@@ -265,7 +265,7 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 
 	savePoolRecord(t, stores, ctx, establishedPoolRecord(t, "tenant-2", "schedule-9", 30))
 
-	rows, err := stores.catalogue.ListCapacityPools(ctx, tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListCapacityPools(ctx, tenant, 10, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil {
 		t.Fatalf("上列容量池册：%v", err)
 	}
@@ -288,7 +288,8 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 
 // TestReviewCatalogueListsHandoverVersionChain 证权威交接册一行一版本、版本链完整
 // 可见：已交接行不带依据，拒收行带依据；两方参与方引用照行转写，不折成一个「边界」
-// 串；另一个租户的判断不可见。
+// 串；另一个租户的判断不可见。两版裁决时刻相同，按行标识与排序同向决胜（ADR-0144
+// 决定一）：缺省序是裁决时刻倒序，标识也倒序，后一版在前。
 func TestReviewCatalogueListsHandoverVersionChain(t *testing.T) {
 	stores := newReviewCatalogueStores(t)
 	ctx := t.Context()
@@ -298,15 +299,15 @@ func TestReviewCatalogueListsHandoverVersionChain(t *testing.T) {
 	mustSaveHandover(t, stores.transactor, ctx, stores.handovers, refusedRecord(t, "handover-v2"))
 	mustSaveHandover(t, stores.transactor, ctx, stores.handovers, catalogueHandoverRecord(t, "tenant-2", "parcel-9", "handover-v9"))
 
-	rows, err := stores.catalogue.ListTransportHandovers(ctx, tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListTransportHandovers(ctx, tenant, 10, firstPage(t, ports.TransportHandoverPages)))
 	if err != nil {
 		t.Fatalf("上列交接册：%v", err)
 	}
-	if len(rows) != 2 || rows[0].Version != "handover-v1" || rows[1].Version != "handover-v2" {
+	if len(rows) != 2 || rows[0].Version != "handover-v2" || rows[1].Version != "handover-v1" {
 		t.Fatalf("册面行序变形：%+v", rows)
 	}
 
-	handed := rows[0]
+	handed := rows[1]
 	if handed.Object != "parcel-1" ||
 		handed.Scope != "scope-1" ||
 		handed.ReleasedBy != "node-1" ||
@@ -318,7 +319,7 @@ func TestReviewCatalogueListsHandoverVersionChain(t *testing.T) {
 		!handed.JudgedAt.Equal(handoverJudgedAtFixture) {
 		t.Errorf("已交接行转写变形：%+v", handed)
 	}
-	refused := rows[1]
+	refused := rows[0]
 	if refused.Verdict != "REFUSED" || refused.Basis != "seal-broken" {
 		t.Errorf("拒收行转写变形：%+v", refused)
 	}
@@ -351,7 +352,7 @@ func TestReviewCatalogueListsOnlyCurrentEffectiveDeliveries(t *testing.T) {
 	mustSaveDelivery(t, stores.transactor, ctx, stores.deliveries,
 		catalogueDeliveryRecord(t, "tenant-2", "parcel-9", "attempt-9", "pod-9", "delivery-v9", deliveredAtFixture, "", time.Time{}))
 
-	rows, err := stores.catalogue.ListEffectiveDeliveries(ctx, tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListEffectiveDeliveries(ctx, tenant, 10, firstPage(t, ports.EffectiveDeliveryPages)))
 	if err != nil {
 		t.Fatalf("上列交付册：%v", err)
 	}
@@ -419,7 +420,7 @@ func TestReviewCatalogueListsEveryCarrierMasterDocumentVersionWithItsAssociation
 	}
 	mustSaveMasterDocument(t, stores.transactor, ctx, documents, masterDocumentRecordOf(otherDocument, masterDocumentRecordedAt))
 
-	rows, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 10, firstPage(t, ports.CarrierMasterDocumentPages)))
 	if err != nil {
 		t.Fatalf("上列总单册：%v", err)
 	}
@@ -453,47 +454,47 @@ func TestFulfillmentReviewCatalogueRejectsNonPositiveLimitAndAnswersEmptyHonestl
 	ctx := t.Context()
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
 
-	if _, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 0, firstPage(t, ports.CarrierMasterDocumentPages))); err == nil {
 		t.Error("零页大小的总单上列没有被拒")
 	}
-	masterDocuments, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 5)
+	masterDocuments, err := rowsOf(stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 5, firstPage(t, ports.CarrierMasterDocumentPages)))
 	if err != nil || len(masterDocuments) != 0 {
 		t.Errorf("空总单册：rows=%+v err=%v", masterDocuments, err)
 	}
 
-	if _, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListTransportSchedules(ctx, tenant, 0, firstPage(t, ports.TransportSchedulePages))); err == nil {
 		t.Error("零页大小的班次上列没有被拒")
 	}
-	if _, err := stores.catalogue.ListCapacityPools(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListCapacityPools(ctx, tenant, -1, firstPage(t, ports.CapacityPoolPages))); err == nil {
 		t.Error("负页大小的容量池上列没有被拒")
 	}
-	if _, err := stores.catalogue.ListTransportHandovers(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListTransportHandovers(ctx, tenant, 0, firstPage(t, ports.TransportHandoverPages))); err == nil {
 		t.Error("零页大小的交接上列没有被拒")
 	}
-	if _, err := stores.catalogue.ListEffectiveDeliveries(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListEffectiveDeliveries(ctx, tenant, -1, firstPage(t, ports.EffectiveDeliveryPages))); err == nil {
 		t.Error("负页大小的交付上列没有被拒")
 	}
 
-	schedules, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 5)
+	schedules, err := rowsOf(stores.catalogue.ListTransportSchedules(ctx, tenant, 5, firstPage(t, ports.TransportSchedulePages)))
 	if err != nil || len(schedules) != 0 {
 		t.Errorf("空班次册：rows=%+v err=%v", schedules, err)
 	}
-	if _, err := stores.catalogue.ListScheduleTemplates(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListScheduleTemplates(ctx, tenant, 0, firstPage(t, ports.ScheduleTemplatePages))); err == nil {
 		t.Error("零页大小的周期安排上列没有被拒")
 	}
-	templates, err := stores.catalogue.ListScheduleTemplates(ctx, tenant, 5)
+	templates, err := rowsOf(stores.catalogue.ListScheduleTemplates(ctx, tenant, 5, firstPage(t, ports.ScheduleTemplatePages)))
 	if err != nil || len(templates) != 0 {
 		t.Errorf("空周期安排册：rows=%+v err=%v", templates, err)
 	}
-	pools, err := stores.catalogue.ListCapacityPools(ctx, tenant, 5)
+	pools, err := rowsOf(stores.catalogue.ListCapacityPools(ctx, tenant, 5, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil || len(pools) != 0 {
 		t.Errorf("空容量池册：rows=%+v err=%v", pools, err)
 	}
-	handovers, err := stores.catalogue.ListTransportHandovers(ctx, tenant, 5)
+	handovers, err := rowsOf(stores.catalogue.ListTransportHandovers(ctx, tenant, 5, firstPage(t, ports.TransportHandoverPages)))
 	if err != nil || len(handovers) != 0 {
 		t.Errorf("空交接册：rows=%+v err=%v", handovers, err)
 	}
-	deliveries, err := stores.catalogue.ListEffectiveDeliveries(ctx, tenant, 5)
+	deliveries, err := rowsOf(stores.catalogue.ListEffectiveDeliveries(ctx, tenant, 5, firstPage(t, ports.EffectiveDeliveryPages)))
 	if err != nil || len(deliveries) != 0 {
 		t.Errorf("空交付册：rows=%+v err=%v", deliveries, err)
 	}

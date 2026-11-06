@@ -232,11 +232,15 @@ func listedUnformed(t *testing.T, db *bentopg.DB, tenant string) []tfports.Actua
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed, err := catalogue.ListActualFulfillmentUnformed(t.Context(), mustTF(t, tfdomain.NewTenantID, tenant), 50)
+	query, err := tfports.ActualFulfillmentUnformedPages.Decode(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := catalogue.ListActualFulfillmentUnformed(t.Context(), mustTF(t, tfdomain.NewTenantID, tenant), 50, query)
 	if err != nil {
 		t.Fatalf("查阅未形成：%v", err)
 	}
-	return listed
+	return listed.Rows
 }
 
 func buyRequests(t *testing.T, db *bentopg.DB) int {

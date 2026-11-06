@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 var (
@@ -71,9 +72,13 @@ func TestDemoTransportSeedsRegisterOnARealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := catalogue.ListScheduleTemplates(ctx, tenant, 50)
-	if err != nil || len(rows) != len(files) {
-		t.Fatalf("周期安排册 = %d 行，要 %d；%v", len(rows), len(files), err)
+	templatesQuery, err := ports.ScheduleTemplatePages.Decode(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	templates, err := catalogue.ListScheduleTemplates(ctx, tenant, 50, templatesQuery)
+	if err != nil || len(templates.Rows) != len(files) {
+		t.Fatalf("周期安排册 = %d 行，要 %d；%v", len(templates.Rows), len(files), err)
 	}
 
 	materialize := []byte(`{"tenantId": "SYN-TENANT-01", "template": "SYN-SCHED-SHA-SZX-DAILY", "runningDate": "2026-10-22"}`)
@@ -92,12 +97,16 @@ func TestDemoTransportSeedsRegisterOnARealDatabase(t *testing.T) {
 		mustExecute(commandSchedule, raw, exitRegistered, "SCHEDULE_REGISTERED")
 		mustExecute(commandSchedule, raw, exitRegistered, "/WEIGHT EXISTING_POOL")
 	}
-	pools, err := catalogue.ListCapacityPools(ctx, tenant, 50)
+	poolsQuery, err := ports.CapacityPoolPages.Decode(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pools, err := catalogue.ListCapacityPools(ctx, tenant, 50, poolsQuery)
 	if err != nil {
 		t.Fatal(err)
 	}
 	listed := map[string]string{}
-	for _, pool := range pools {
+	for _, pool := range pools.Rows {
 		listed[pool.PoolID] = pool.Dimension
 	}
 	for _, want := range []string{

@@ -159,7 +159,7 @@ func TestScheduleTemplateVersionsAccumulateAndTheLatestIsCurrent(t *testing.T) {
 		t.Fatalf("同一版本号再落 = %s，%v", outcome, err)
 	}
 
-	rows, err := stores.catalogue.ListScheduleTemplates(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListScheduleTemplates(t.Context(), tenant, 10, firstPage(t, ports.ScheduleTemplatePages)))
 	if err != nil || len(rows) != 1 || rows[0].Version != 2 || rows[0].DepartureLocalMinute != 23*60 ||
 		len(rows[0].Weekdays) != 7 || rows[0].Weekdays[0] != "MON" || rows[0].EffectiveUntil != "" {
 		t.Fatalf("周期安排册只列当前版：rows=%+v err=%v", rows, err)
@@ -214,7 +214,7 @@ func TestMaterializingATemplateDateOnTheRegistryIsDeterministicAndIdempotent(t *
 	if err != nil || !found || current.Schedule.Version() != 2 {
 		t.Fatalf("当前版 = v%d，found=%v err=%v", current.Schedule.Version(), found, err)
 	}
-	rows, err := stores.catalogue.ListTransportSchedules(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListTransportSchedules(t.Context(), tenant, 10, firstPage(t, ports.TransportSchedulePages)))
 	if err != nil || len(rows) != 1 || rows[0].Version != 2 || rows[0].Origin != "TEMPLATE" ||
 		rows[0].Template != "SYN-TPL-1" || rows[0].TemplateVersion != 2 || rows[0].RunningDate != "2026-10-21" {
 		t.Fatalf("班次册只列当前版：rows=%+v err=%v", rows, err)
@@ -287,7 +287,7 @@ func TestScheduleCandidatesAnswerNotConfiguredOnAnEmptyRegistry(t *testing.T) {
 		strings.Join(identities, ",") != "SYN-TPL-1/2026-10-20,SYN-TPL-1/2026-10-21,SYN-TPL-1/2026-10-22" {
 		t.Fatalf("候选 = %s %v", listed.Outcome(), identities)
 	}
-	if rows, err := stores.catalogue.ListTransportSchedules(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(stores.catalogue.ListTransportSchedules(t.Context(), tenant, 10, firstPage(t, ports.TransportSchedulePages))); err != nil || len(rows) != 0 {
 		t.Fatalf("评估候选不应落册：rows=%+v err=%v", rows, err)
 	}
 

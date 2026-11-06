@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"strings"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // ExternalTrackingFactReviewReader 是本端点消费的读口：外部承运轨迹事实的当前版列表（管理台「有效时间
-// 判断」页，label-channel/21）。
+// 判断」页，label-channel/21）。查询对象按 ports.ExternalTrackingFactPages 解（ADR-0144）。
 type ExternalTrackingFactReviewReader interface {
 	ListCurrentExternalTrackingFacts(
 		ctx context.Context,
@@ -18,7 +19,8 @@ type ExternalTrackingFactReviewReader interface {
 		source domain.TrackingSourceReference,
 		filter ports.EffectiveTimeReviewFilter,
 		limit int,
-	) ([]ports.ExternalTrackingFactReviewRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExternalTrackingFactReviewRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -46,6 +48,9 @@ const (
 // 源是必备维而不是过滤器：规则按源登记、回填按源重判，判断人也按源看；缺席不猜「全部源」。视图同理
 // 必备——「没传就当待判断」是隐含默认，与读口拒绝集外过滤词是同一条纪律。状态词原样透出不解释
 // （ADR-0102 决定五）；**不给任何「推荐的有效时间」**——那是替所有者判断（票 21 红线）。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：source 与 view 是选择器，照旧先判；其余查询参数按
+// ports.ExternalTrackingFactPages 解，集外的键、可排维与词表之外的取值、别源别视图或过期的游标都在准入之前答 400 带理由。
 func NewQueryExternalTrackingFactsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ExternalTrackingFactReviewReader,
@@ -54,14 +59,15 @@ func NewQueryExternalTrackingFactsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		source, err := domain.NewTrackingSourceReference(request.URL.Query().Get("source"))
+		values := request.URL.Query()
+		source, err := domain.NewTrackingSourceReference(values.Get("source"))
 		if err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
 		var filter ports.EffectiveTimeReviewFilter
 		var outcome string
-		switch strings.TrimSpace(request.URL.Query().Get("view")) {
+		switch strings.TrimSpace(values.Get("view")) {
 		case viewPending:
 			filter, outcome = ports.PendingEffectiveTimeOnly, outcomePendingEffectiveTimeFactsListed
 		case viewCurrent:
@@ -70,18 +76,23 @@ func NewQueryExternalTrackingFactsEndpoint(
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
+		pageQuery, err := ports.ExternalTrackingFactPages.Decode(values)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
 			return
 		}
 
-		rows, err := reader.ListCurrentExternalTrackingFacts(request.Context(), query.Scope.Tenant(), source, filter, query.Limit)
+		page, err := reader.ListCurrentExternalTrackingFacts(request.Context(), query.Scope.Tenant(), source, filter, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]externalTrackingFactBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]externalTrackingFactBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, externalTrackingFactBody{
 				Fact:                 row.Fact,
 				Version:              row.Version,
@@ -102,13 +113,14 @@ func NewQueryExternalTrackingFactsEndpoint(
 				EffectiveJudgedBy:    row.EffectiveJudgedBy,
 			})
 		}
-		writeJSON(response, http.StatusOK, externalTrackingFactListResponse{Outcome: outcome, Facts: bodies})
+		writeJSON(response, http.StatusOK, externalTrackingFactListResponse{Outcome: outcome, Facts: bodies, Page: page.Page(query.Limit)})
 	})
 }
 
 type externalTrackingFactListResponse struct {
 	Outcome string                     `json:"outcome"`
 	Facts   []externalTrackingFactBody `json:"facts"`
+	Page    cataloguepage.Page         `json:"page"`
 }
 
 // externalTrackingFactBody 逐字段透出一条当前版。

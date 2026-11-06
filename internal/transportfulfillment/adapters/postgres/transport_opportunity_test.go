@@ -257,7 +257,7 @@ func TestPreparationAnswersEveryOutcomeOnTheRegisters(t *testing.T) {
 		t.Fatalf("冲突覆盖了原结果：锚 %q", anchor)
 	}
 
-	rows, err := stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10, firstPage(t, ports.TransportPreparationPages)))
 	if err != nil {
 		t.Fatalf("上列准备结果册：%v", err)
 	}
@@ -274,8 +274,8 @@ func TestPreparationAnswersEveryOutcomeOnTheRegisters(t *testing.T) {
 			t.Fatalf("未配置一行转写走样：%+v", row)
 		}
 	}
-	if other, err := stores.catalogue.ListTransportPreparations(t.Context(),
-		deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), 10); err != nil || len(other) != 0 {
+	if other, err := rowsOf(stores.catalogue.ListTransportPreparations(t.Context(),
+		deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), 10, firstPage(t, ports.TransportPreparationPages))); err != nil || len(other) != 0 {
 		t.Fatalf("他租户看见了：%d %v", len(other), err)
 	}
 }
@@ -299,7 +299,7 @@ func TestPreparationWritesNothingWhenUndecidedOrWithoutARoute(t *testing.T) {
 	if noRoute.Outcome() != application.PreparationRunNoRoute {
 		t.Fatalf("无路线 = %s", noRoute.Outcome())
 	}
-	if rows, err := stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10, firstPage(t, ports.TransportPreparationPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("未决或无路线写了结果：%d %v", len(rows), err)
 	}
 }

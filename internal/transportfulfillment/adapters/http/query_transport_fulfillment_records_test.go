@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -65,97 +66,97 @@ func (stub unreachableReviewCatalogue) refuse(register string) {
 }
 
 func (stub unreachableReviewCatalogue) ListTransportSchedules(
-	context.Context, domain.TenantID, int,
-) ([]ports.TransportScheduleCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportScheduleCatalogueRow], error) {
 	stub.refuse("transport schedule")
-	return nil, nil
+	return cataloguepage.Result[ports.TransportScheduleCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListScheduleTemplates(
-	context.Context, domain.TenantID, int,
-) ([]ports.ScheduleTemplateCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ScheduleTemplateCatalogueRow], error) {
 	stub.refuse("schedule template")
-	return nil, nil
+	return cataloguepage.Result[ports.ScheduleTemplateCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListCapacityPools(
-	context.Context, domain.TenantID, int,
-) ([]ports.CapacityPoolCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CapacityPoolCatalogueRow], error) {
 	stub.refuse("capacity pool")
-	return nil, nil
+	return cataloguepage.Result[ports.CapacityPoolCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListTransportHandovers(
-	context.Context, domain.TenantID, int,
-) ([]ports.TransportHandoverCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportHandoverCatalogueRow], error) {
 	stub.refuse("transport handover")
-	return nil, nil
+	return cataloguepage.Result[ports.TransportHandoverCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListEffectiveDeliveries(
-	context.Context, domain.TenantID, int,
-) ([]ports.EffectiveDeliveryCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.EffectiveDeliveryCatalogueRow], error) {
 	stub.refuse("effective delivery")
-	return nil, nil
+	return cataloguepage.Result[ports.EffectiveDeliveryCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListCarrierMasterDocuments(
-	context.Context, domain.TenantID, int,
-) ([]ports.CarrierMasterDocumentCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CarrierMasterDocumentCatalogueRow], error) {
 	stub.refuse("carrier master document")
-	return nil, nil
+	return cataloguepage.Result[ports.CarrierMasterDocumentCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListTransportPreparations(
-	context.Context, domain.TenantID, int,
-) ([]ports.TransportPreparationCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportPreparationCatalogueRow], error) {
 	stub.refuse("transport preparation")
-	return nil, nil
+	return cataloguepage.Result[ports.TransportPreparationCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListDeliveryDispatchPendings(
-	context.Context, domain.TenantID, int,
-) ([]ports.DeliveryDispatchPendingRecord, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryDispatchPendingRecord], error) {
 	stub.refuse("delivery dispatch pending")
-	return nil, nil
+	return cataloguepage.Result[ports.DeliveryDispatchPendingRecord]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListDeliveryDispatchReaskCadences(
-	context.Context, domain.TenantID, int,
-) ([]ports.DeliveryDispatchReaskCadenceRecord, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord], error) {
 	stub.refuse("delivery dispatch reask cadence")
-	return nil, nil
+	return cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListActualFulfillmentUnformed(
-	context.Context, domain.TenantID, int,
-) ([]ports.ActualFulfillmentUnformedRecord, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error) {
 	stub.refuse("actual fulfillment unformed")
-	return nil, nil
+	return cataloguepage.Result[ports.ActualFulfillmentUnformedRecord]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListBookingRequests(
-	context.Context, domain.TenantID, int,
-) ([]ports.BookingRequestCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.BookingRequestCatalogueRow], error) {
 	stub.refuse("booking request")
-	return nil, nil
+	return cataloguepage.Result[ports.BookingRequestCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListBookingAnswerBounces(
-	context.Context, domain.TenantID, ports.BookingAnswerBounceFilter, int,
-) ([]ports.BookingAnswerBounceCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.BookingAnswerBounceCatalogueRow], error) {
 	stub.refuse("booking answer bounce")
-	return nil, nil
+	return cataloguepage.Result[ports.BookingAnswerBounceCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListPendingAttemptResults(
-	context.Context, domain.TenantID, int,
-) ([]ports.PendingAttemptResultRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.PendingAttemptResultRow], error) {
 	stub.refuse("pending attempt result")
-	return nil, nil
+	return cataloguepage.Result[ports.PendingAttemptResultRow]{}, nil
 }
 
-// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
+// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键与查询对象。答复的总数即给定的行数，next 是给定的下一游标。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
 	templates       []ports.ScheduleTemplateCatalogueRow
@@ -170,102 +171,101 @@ type stubReviewCatalogue struct {
 	bookings        []ports.BookingRequestCatalogueRow
 	bounces         []ports.BookingAnswerBounceCatalogueRow
 	pendingResults  []ports.PendingAttemptResultRow
+	next            string
 	err             error
 
 	gotTenant string
 	gotLimit  int
-	gotFilter ports.BookingAnswerBounceFilter
+	gotQuery  cataloguepage.Query
+}
+
+// stubPage 记下读口收到的键，交回给定的行。
+func stubPage[Row any](
+	stub *stubReviewCatalogue, tenant domain.TenantID, limit int, query cataloguepage.Query, rows []Row,
+) (cataloguepage.Result[Row], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	if stub.err != nil {
+		return cataloguepage.Result[Row]{}, stub.err
+	}
+	return cataloguepage.Result[Row]{Rows: rows, Next: stub.next, Total: int64(len(rows))}, nil
 }
 
 func (stub *stubReviewCatalogue) ListTransportSchedules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.TransportScheduleCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.schedules, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportScheduleCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.schedules)
 }
 
 func (stub *stubReviewCatalogue) ListScheduleTemplates(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ScheduleTemplateCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.templates, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ScheduleTemplateCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.templates)
 }
 
 func (stub *stubReviewCatalogue) ListCapacityPools(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CapacityPoolCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.pools, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CapacityPoolCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.pools)
 }
 
 func (stub *stubReviewCatalogue) ListTransportHandovers(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.TransportHandoverCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.handovers, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportHandoverCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.handovers)
 }
 
 func (stub *stubReviewCatalogue) ListEffectiveDeliveries(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.EffectiveDeliveryCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.deliveries, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.EffectiveDeliveryCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.deliveries)
 }
 
 func (stub *stubReviewCatalogue) ListCarrierMasterDocuments(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CarrierMasterDocumentCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.masterDocuments, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CarrierMasterDocumentCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.masterDocuments)
 }
 
 func (stub *stubReviewCatalogue) ListTransportPreparations(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.TransportPreparationCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.preparations, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.TransportPreparationCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.preparations)
 }
 
 func (stub *stubReviewCatalogue) ListDeliveryDispatchPendings(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DeliveryDispatchPendingRecord, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.pendings, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryDispatchPendingRecord], error) {
+	return stubPage(stub, tenant, limit, query, stub.pendings)
 }
 
 func (stub *stubReviewCatalogue) ListDeliveryDispatchReaskCadences(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DeliveryDispatchReaskCadenceRecord, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.cadences, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord], error) {
+	return stubPage(stub, tenant, limit, query, stub.cadences)
 }
 
 func (stub *stubReviewCatalogue) ListActualFulfillmentUnformed(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ActualFulfillmentUnformedRecord, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.unformed, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error) {
+	return stubPage(stub, tenant, limit, query, stub.unformed)
 }
 
 func (stub *stubReviewCatalogue) ListBookingRequests(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.BookingRequestCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.bookings, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.BookingRequestCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.bookings)
 }
 
 func (stub *stubReviewCatalogue) ListBookingAnswerBounces(
-	_ context.Context, tenant domain.TenantID, filter ports.BookingAnswerBounceFilter, limit int,
-) ([]ports.BookingAnswerBounceCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit, stub.gotFilter = tenant.String(), limit, filter
-	return stub.bounces, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.BookingAnswerBounceCatalogueRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.bounces)
 }
 
 func (stub *stubReviewCatalogue) ListPendingAttemptResults(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.PendingAttemptResultRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.pendingResults, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PendingAttemptResultRow], error) {
+	return stubPage(stub, tenant, limit, query, stub.pendingResults)
 }
 
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
@@ -297,7 +297,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 var fulfillmentRegistries = []string{
 	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
 	"carrier-master-document", "transport-preparation", "delivery-dispatch-pending", "delivery-dispatch-reask-cadence",
-	"booking-request", "booking-answer-bounce", "pending-attempt-result",
+	"actual-fulfillment-unformed", "booking-request", "booking-answer-bounce", "pending-attempt-result",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -412,7 +412,8 @@ func TestTransportFulfillmentRecordsQueryAnswers500WhenTheRegisterFails(t *testi
 }
 
 // Covers: 逐格转写 — 班次册：身份、版本、方向三格、出发与到达、服务范围与来历照转写；临时班次不带出处三键；没有
-// 执行准备与实际执行键（无处可登不代填）；读口收到的是接入面裁决的键。
+// 执行准备与实际执行键（无处可登不代填）；读口收到的是接入面裁决的键。查询串上自报的 tenant 是集外键、准入之前就答 400，
+// 见 TestRecordsCatalogueRefusesSelfReportedTenantAndLimit。
 func TestTransportScheduleRegistryTranscribesRows(t *testing.T) {
 	register := &stubReviewCatalogue{
 		schedules: []ports.TransportScheduleCatalogueRow{
@@ -430,7 +431,7 @@ func TestTransportScheduleRegistryTranscribesRows(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=transport-schedule&tenant=TENANT-9")
+	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=transport-schedule")
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())

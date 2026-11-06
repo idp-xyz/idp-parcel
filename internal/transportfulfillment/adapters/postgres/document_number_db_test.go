@@ -254,7 +254,7 @@ func TestCommissionAndBookingNumbersAreIssuedInTheIssuingTransaction(t *testing.
 		t.Fatalf("没登时区读回 %s %v", absence, ok)
 	}
 
-	rows, err := chain.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(chain.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.BookingRequestPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("订舱册：%v %d", err, len(rows))
 	}
@@ -432,7 +432,7 @@ func TestRegistersThatReferToACommissionOrBookingReadItsNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("读当前版（订舱不在册）", current.CommissionDocumentNumber, current.BookingDocumentNumber, false)
-	rows, err := catalogue.ListCarrierMasterDocuments(ctx, withNumbers.Key.TenantID, 10)
+	rows, err := rowsOf(catalogue.ListCarrierMasterDocuments(ctx, withNumbers.Key.TenantID, 10, firstPage(t, ports.CarrierMasterDocumentPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("总单册：%v %d", err, len(rows))
 	}
@@ -445,7 +445,7 @@ func TestRegistersThatReferToACommissionOrBookingReadItsNumber(t *testing.T) {
 		return unformeds.RecordUnformed(txCtx, unformedEntry(t, key, time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC), ports.UnformedNotConfigured),
 			time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC))
 	})
-	listed, err := catalogue.ListActualFulfillmentUnformed(ctx, key.TenantID, 10)
+	listed, err := rowsOf(catalogue.ListActualFulfillmentUnformed(ctx, key.TenantID, 10, firstPage(t, ports.ActualFulfillmentUnformedPages)))
 	if err != nil || len(listed) != 1 || listed[0].CommissionDocumentNumber == nil {
 		t.Fatalf("未形成册：%v %d", err, len(listed))
 	}

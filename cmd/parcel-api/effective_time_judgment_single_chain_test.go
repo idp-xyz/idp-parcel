@@ -83,7 +83,8 @@ func (fixture judgmentChainFixture) command(fact string, at time.Time) tfapp.Jud
 // currentVersions 取当前版读面上这条事实的全部当前版——分叉的链在这里就是不止一条。
 func (fixture judgmentChainFixture) currentVersions(t *testing.T, fact string) []string {
 	t.Helper()
-	views, err := fixture.facts.ListCurrentExternalTrackingFacts(t.Context(), fixture.tenant, fixture.source, tfports.EveryCurrentVersion, 100)
+	views, err := tfRowsOf(fixture.facts.ListCurrentExternalTrackingFacts(t.Context(), fixture.tenant, fixture.source,
+		tfports.EveryCurrentVersion, 100, tfFirstPage(t, tfports.ExternalTrackingFactPages)))
 	if err != nil {
 		t.Fatalf("读当前版：%v", err)
 	}

@@ -213,7 +213,7 @@ func (register *DeliveryDispatchPendings) ListPending(
 	rows, err := querier.Query(ctx,
 		`SELECT `+deliveryDispatchPendingColumns+`
 		   FROM transport_fulfillment.delivery_dispatch_pending
-		  WHERE tenant_id = $1 AND state = 'PENDING'
+		  WHERE `+deliveryDispatchPendingOpen+`
 		    AND ($2::timestamptz IS NULL OR last_asked_at <= $2::timestamptz)
 		  ORDER BY last_asked_at, segment_ref, object_ref
 		  LIMIT $3`,
@@ -251,7 +251,7 @@ func (register *DeliveryDispatchPendings) CountPending(
 	if err := querier.QueryRow(ctx,
 		`SELECT count(*)
 		   FROM transport_fulfillment.delivery_dispatch_pending
-		  WHERE tenant_id = $1 AND state = 'PENDING'
+		  WHERE `+deliveryDispatchPendingOpen+`
 		    AND ($2::timestamptz IS NULL OR last_asked_at <= $2::timestamptz)`,
 		tenant.String(), askedByParameter(askedBy),
 	).Scan(&count); err != nil {
@@ -268,6 +268,10 @@ func askedByParameter(askedBy time.Time) *time.Time {
 	at := askedBy.UTC()
 	return &at
 }
+
+// deliveryDispatchPendingOpen 是「这个租户待形成的那几件」的筛法（租户在 $1）。按册重问的队列、它的件数与查阅页那一册
+// （ReviewCatalogue.ListDeliveryDispatchPendings）都用这一处，三处列的才是同一批。
+const deliveryDispatchPendingOpen = `tenant_id = $1 AND state = 'PENDING'`
 
 const deliveryDispatchPendingColumns = `tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at,
 		        last_asked_at, state, task_ref, lapsed_by, settled_at`

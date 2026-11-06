@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -20,12 +21,14 @@ import (
 
 type stubFactReview struct {
 	rows []ports.ExternalTrackingFactReviewRow
+	next string
 	err  error
 
 	gotTenant string
 	gotSource string
 	gotFilter ports.EffectiveTimeReviewFilter
 	gotLimit  int
+	gotQuery  cataloguepage.Query
 	calls     int
 }
 
@@ -35,10 +38,17 @@ func (stub *stubFactReview) ListCurrentExternalTrackingFacts(
 	source domain.TrackingSourceReference,
 	filter ports.EffectiveTimeReviewFilter,
 	limit int,
-) ([]ports.ExternalTrackingFactReviewRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalTrackingFactReviewRow], error) {
 	stub.calls++
 	stub.gotTenant, stub.gotSource, stub.gotFilter, stub.gotLimit = tenant.String(), source.String(), filter, limit
-	return stub.rows, stub.err
+	stub.gotQuery = query
+	if stub.err != nil {
+		return cataloguepage.Result[ports.ExternalTrackingFactReviewRow]{}, stub.err
+	}
+	return cataloguepage.Result[ports.ExternalTrackingFactReviewRow]{
+		Rows: stub.rows, Next: stub.next, Total: int64(len(stub.rows)),
+	}, nil
 }
 
 var factReviewOccurredAt = time.Date(2026, 9, 4, 6, 0, 0, 0, time.UTC)

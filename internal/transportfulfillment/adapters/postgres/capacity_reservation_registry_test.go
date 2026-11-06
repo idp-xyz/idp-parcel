@@ -118,7 +118,7 @@ func TestReservationsAndReleasesRoundTripOnTheRegistry(t *testing.T) {
 		t.Fatalf("释放读回 = %+v", release)
 	}
 
-	rows, err := stores.catalogue.ListCapacityPools(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListCapacityPools(t.Context(), tenant, 10, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil || len(rows) != 1 || rows[0].Reserved != 1200 || rows[0].Released != 200 || rows[0].Consumed != 0 {
 		t.Fatalf("查阅册 = %+v %v", rows, err)
 	}

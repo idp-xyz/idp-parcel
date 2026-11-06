@@ -56,7 +56,8 @@ func TestTheWiredEffectiveTimeJudgeAnswersHonestlyAgainstARealDatabase(t *testin
 		t.Fatalf("夹具落库 outcome = %s", saved)
 	}
 
-	before, err := facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.PendingEffectiveTimeOnly, 10)
+	before, err := tfRowsOf(facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.PendingEffectiveTimeOnly, 10,
+		tfFirstPage(t, tfports.ExternalTrackingFactPages)))
 	if err != nil || len(before) != 1 || before[0].Fact != "SYN-EXTF-LC21-1" {
 		t.Fatalf("判断前待判断视图应恰有这一条：%v %+v", err, before)
 	}
@@ -92,11 +93,13 @@ func TestTheWiredEffectiveTimeJudgeAnswersHonestlyAgainstARealDatabase(t *testin
 		t.Fatalf("outcome = %v, want ALREADY_JUDGED_AS_GIVEN——重放没读到判断版本，首笔事务没有提交", got)
 	}
 
-	after, err := facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.PendingEffectiveTimeOnly, 10)
+	after, err := tfRowsOf(facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.PendingEffectiveTimeOnly, 10,
+		tfFirstPage(t, tfports.ExternalTrackingFactPages)))
 	if err != nil || len(after) != 0 {
 		t.Fatalf("判断后待判断视图应为空：%v %+v", err, after)
 	}
-	current, err := facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.EveryCurrentVersion, 10)
+	current, err := tfRowsOf(facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.EveryCurrentVersion, 10,
+		tfFirstPage(t, tfports.ExternalTrackingFactPages)))
 	if err != nil || len(current) != 1 || current[0].Version != record.Key.Version.String() ||
 		current[0].EffectiveBasis != "JUDGED_EXPLICITLY" || current[0].Supersedes != "SYN-EXTV-LC21-1" {
 		t.Fatalf("全部当前版视图应只剩判断版本并带依据与前版：%v %+v", err, current)
