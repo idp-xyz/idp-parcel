@@ -184,9 +184,19 @@
 
 资料层的登记号是监管登记号（税务、海关等），收款账户与多语言开票抬头是随同一份完整修订保存的可选明细；规则、所有权边界与缺席语义以 CONTEXT「法人资料」和 [ADR-0359](../../adr/0359-regulatory-registration-numbers-bank-accounts-and-multilingual-invoice-titles-on-the-legal-entity-profile.md) 为准。登记成功、重放与同修订异内容的答法同上；同修订内（币种，账号）重复、语言重复、没主抬头却带语言版本、收款账户币种在内置目录外（[ADR-0345](../../adr/0345-tenant-enablement-of-countries-and-currencies-is-a-tenant-value-registered-in-party-commercial-and-new-write-entries-accept-only-catalogue-codes.md) 决定五）由接入答形状错，用例对（币种，账号）重复兜底答 `NOT_ACCEPTED`。按时点解析与历史读口均交出两组明细，旧修订缺席即未登记、不回填；`资料不全`仍只看主抬头。验收见 `AT-PC-078`。
 
+## 往来单位识别信息补充
+
+业务参与方身份修订可带注册国家 / 地区与终身注册号、身份更正依据和外部系统编码，跟随身份修订登记。规则、互斥与查重以 CONTEXT 参与方身份诸句和 [ADR-0367](../../adr/0367-a-business-party-may-carry-identification-and-the-customer-role-is-read-from-a-live-relationship-or-a-live-customer-account.md) 为准。
+
+登记成功与重放分别答 `REGISTERED`、`ALREADY_REGISTERED`，同修订不同内容答 `CONTENT_CONFLICT`。以下由用例答 `NOT_ACCEPTED`、不落册：号类型不在租户目录或格式不合、国家不在内置目录、改了已登的号却没带身份更正依据、没改却带了、被责任法人钉着的参与方带号、同一系统同一用途给了两个外部编码、号或外部编码已被另一个在用身份持有。持有方随原因点名。责任法人的新登记与新修订同过号的查重，钉一个带号的参与方也答 `NOT_ACCEPTED`。单项形状不成立由接入答形状错。
+
+验收：识别信息按修订原样读回，旧修订缺席即没有；同号第二家答 `NOT_ACCEPTED` 并点名第一家；停用第一家后第二家可登；并发两笔同号只落一笔；外部编码换码形成新修订；管理台列表按注册号与外部编码检索得到。
+
 ## 给开发的交接
 
 联系人社交账号跟随法人资料完整新修订登记，规则与兼容性引用 CONTEXT「法人资料」和 [ADR-0351](../../adr/0351-contact-social-accounts-are-optional-versioned-profile-details.md)。验收沿既有登记、解析、历史与重放边界：多账号无损读回，旧修订不变，同修订改账号答内容冲突，不成对或重复组合拒收，缺席不增加开票门禁。
+
+往来单位识别信息（ADR-0367）落在身份登记用例与业务参与方册：查重读口在事务内按号与按外部编码取事务级咨询锁再找持有方，责任法人登记共用同一读口；在线口、受控 CLI `register-parties` 与列表、修订历史读口同形加格。「客户」角色的判读今天只在管理台的往来单位列表与右栏，后端没有消费者。
 
 实现按业务对象提供语义化命令与 Repository，不建立一个可以修改任意商业表的通用配置接口；不预置真实商业默认值。PC 的发布、收尾与登记各册已有 PostgreSQL 持久化并接进 `cmd/parcel-api` 与 `parcel-commercial`，演示租户 `SYN-TENANT-01` 由种子登 `SYN-` 取值、证据只记 `S`；真实租户的主数据与证据（`PN02-W01/W03`）属租户上线时的实施。
 
