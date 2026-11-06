@@ -27,7 +27,7 @@ func TestCodSubledgersCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 		grantedCatalogueIntake{tenant: "SYN-TENANT-01", limit: 50}, register,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, subledgerRequest(t, "?q=%20SYN-CHAN%20&sort=-openedAt"))
+	endpoint.ServeHTTP(response, subledgerRequest(t, "?q=%20SYN-CHAN%20&sort=-customer"))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d；body = %s", response.Code, response.Body)
 	}
@@ -35,7 +35,7 @@ func TestCodSubledgersCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	if string(page["size"]) != "50" || string(page["next"]) != `"SYN-cursor"` || string(page["total"]) != "7" {
 		t.Fatalf("page 不对：%s", response.Body.Bytes())
 	}
-	if register.gotQuery.Sort != (cataloguepage.Sort{Field: "openedAt", Descending: true}) ||
+	if register.gotQuery.Sort != (cataloguepage.Sort{Field: "customer", Descending: true}) ||
 		register.gotQuery.Keyword != "SYN-CHAN" || register.gotQuery.After != nil {
 		t.Fatalf("读口收到的查询不对：%+v", register.gotQuery)
 	}
@@ -100,7 +100,7 @@ func TestCodSubledgersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	baseline := httptest.NewRecorder()
 	unconfigured := collectionhttp.NewQueryCodSubledgersEndpoint(collectionhttp.UnconfiguredIntake{}, unreachableCodSubledgers{t: t})
 	unconfigured.ServeHTTP(baseline, subledgerRequest(t, ""))
-	for _, query := range []string{"?sort=payableToCustomer", "?sort=-openedAt&q=SYN", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02"} {
+	for _, query := range []string{"?sort=payableToCustomer", "?sort=-customer&q=SYN", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02"} {
 		response := httptest.NewRecorder()
 		unconfigured.ServeHTTP(response, subledgerRequest(t, query))
 		if response.Code != http.StatusForbidden || response.Body.String() != baseline.Body.String() {
