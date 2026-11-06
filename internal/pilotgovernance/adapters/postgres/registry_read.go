@@ -52,15 +52,19 @@ var (
 		Identity: []string{"suspension_id"},
 		Keyword:  []string{"suspension_id", "decided_by"},
 	})
-	// 终点那一段必须与索引 takeover_record_by_effective 里的表达式逐字相同，规划器才认得那条索引。
 	takeoverPages = ports.TakeoverRegistryPages.MustBind(cataloguepage.Columns{
 		Sorts: map[string]string{"effectiveAt": "effective_at"},
 		Identity: []string{
-			"object_scope", "capability", "fact_kind", "authority", "from_at", "COALESCE(to_at, from_at)",
+			"object_scope", "capability", "fact_kind", "authority", "from_at", takeoverIntervalEnd,
 		},
 		Keyword: []string{"object_scope", "capability", "fact_kind", "authority"},
 	})
 )
+
+// takeoverIntervalEnd 是接管册行标识里「区间终点，开放区间取起点」那一段的落列。ORDER BY 与选列用的都是这一份，游标
+// 位置取它随行扫回来的值，不在 Go 里照着重算。它必须与索引 takeover_record_by_effective 里的表达式逐字相同，规划器才
+// 认得那条索引。
+const takeoverIntervalEnd = "COALESCE(to_at, from_at)"
 
 // registryListLimit 判据与各上下文目录读口同款：limit 非正是调用方编程错误，静默
 // 答一页会把「忘了传」变成一个没人决定过的页大小。
@@ -235,6 +239,12 @@ func (registers *GovernanceRegisters) ListResumptions(
 	return page, nil
 }
 
+// scannedTakeover 带着行标识末段扫回来的值：那一列是读面导出的，只进游标、不作答复字段，不进上列行。
+type scannedTakeover struct {
+	intervalEnd time.Time
+	row         ports.TakeoverRegistryRow
+}
+
 // ListTakeovers 上列对象级接管册。缺省按生效时刻倒序，同刻按行标识同向（倒序）收尾（ports.TakeoverRegistryPages
 // 头注）。盘点 jsonb 不选列。
 func (registers *GovernanceRegisters) ListTakeovers(
@@ -248,43 +258,45 @@ func (registers *GovernanceRegisters) ListTakeovers(
 	page, err := registryPage(ctx, registers.db, takeoverPages, query, limit,
 		`object_scope, capability, fact_kind, authority, from_at, to_at,
 		 stop_evidence, accepted_facts, pending_externals, actual_control,
-		 responsibilities, next_action, inventory_taken_at, effective_at`,
+		 responsibilities, next_action, inventory_taken_at, effective_at, `+takeoverIntervalEnd,
 		"pilot_governance.takeover_record",
-		func(scan func(dest ...any) error) (ports.TakeoverRegistryRow, error) {
-			var row ports.TakeoverRegistryRow
+		func(scan func(dest ...any) error) (scannedTakeover, error) {
+			var scanned scannedTakeover
 			var toAt *time.Time
+			row := &scanned.row
 			if err := scan(
 				&row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
 				&row.FromAt, &toAt, &row.StopEvidence, &row.AcceptedFacts,
 				&row.PendingExternals, &row.ActualControl, &row.Responsibilities,
-				&row.NextAction, &row.InventoryTakenAt, &row.EffectiveAt,
+				&row.NextAction, &row.InventoryTakenAt, &row.EffectiveAt, &scanned.intervalEnd,
 			); err != nil {
-				return ports.TakeoverRegistryRow{}, err
+				return scannedTakeover{}, err
 			}
 			if toAt != nil {
 				row.ToAt, row.HasToAt = *toAt, true
 			}
-			return row, nil
+			return scanned, nil
 		},
 		takeoverPosition,
 	)
 	if err != nil {
 		return cataloguepage.Result[ports.TakeoverRegistryRow]{}, fmt.Errorf("list takeovers: %w", err)
 	}
-	return page, nil
+	takeovers := make([]ports.TakeoverRegistryRow, 0, len(page.Rows))
+	for _, scanned := range page.Rows {
+		takeovers = append(takeovers, scanned.row)
+	}
+	return cataloguepage.Result[ports.TakeoverRegistryRow]{Rows: takeovers, Next: page.Next, Total: page.Total}, nil
 }
 
-// takeoverPosition 的末段是 COALESCE(to_at, from_at) 在 Go 侧的同一算法，两个值都取自扫回来的列。
-func takeoverPosition(row ports.TakeoverRegistryRow, _ string) cataloguepage.Position {
-	end := row.FromAt
-	if row.HasToAt {
-		end = row.ToAt
-	}
+// takeoverPosition 的各段都取扫回来的列值，末段就是 takeoverIntervalEnd 那一列。
+func takeoverPosition(scanned scannedTakeover, _ string) cataloguepage.Position {
+	row := scanned.row
 	return cataloguepage.Position{
 		Value: cataloguepage.FormatInstant(row.EffectiveAt),
 		Identity: []string{
 			row.ObjectScope, row.Capability, row.FactKind, row.Authority,
-			cataloguepage.FormatInstant(row.FromAt), cataloguepage.FormatInstant(end),
+			cataloguepage.FormatInstant(row.FromAt), cataloguepage.FormatInstant(scanned.intervalEnd),
 		},
 	}
 }
