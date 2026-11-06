@@ -104,21 +104,25 @@ const (
 // 恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
 //
 // **不下推交接改判或交付更正参数**：权威交接结果与有效交付的更正各有命令用例，
-// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。挡回册那一格收两个筛选维
-// （booking、source），只筛不改；别的册子不认它们。
+// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。各册的筛选维只筛不改，
+// 且只认那一册自己声明的（recordsCatalogues）。
 //
 // 承运答复挡回一格只挂这一口的操作者查阅读：挡回册说得出一个订舱在不在、归不归某个
 // 承运商，开给集成客户端族就把 ADR-0239 决定一合并掉的那一位又交了回去。
 //
 // 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：registry 每个取值各是一册（recordsCatalogues），
-// 按那一册的声明解查询参数，集外的键、可排维与词表之外的取值、别册或过期的游标都答 400 带理由。门次序是方法 → 册名 →
-// 查询参数 → 准入：查询参数属传输形状，渠道未配置时写错参数也先答 400。
+// 按那一册的声明解查询参数，集外的键、可排维与词表之外的取值、别册或过期的游标都答 400 带理由。门次序是方法 → 准入 →
+// 册名 → 查询参数：渠道未配置时对一切请求同答 403（ADR-0055 决定三），写错册名或参数的也一样。
 func NewQueryTransportFulfillmentRecordsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ReviewCatalogueReader,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
+			return
+		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
 			return
 		}
 		values := request.URL.Query()
@@ -134,10 +138,6 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		}
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 		tenant := query.Scope.Tenant()
@@ -497,7 +497,7 @@ func serveTransportPreparations(
 	})
 }
 
-// bookingAnswerBounceFilterProblem 判挡回册两个筛选维的取值。这两维没有词表，空值已由 Decode 拒过；给了却立不起来（空白、
+// bookingAnswerBounceFilterProblem 判挡回册筛选维 booking、source 的取值。它们没有词表，空值已由 Decode 拒过；给了却立不起来（空白、
 // 带 NUL、订舱标识超过字节界）照样是坏请求，不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为那个订舱没有挡回。
 // 订舱标识照领域构造门判，答复方是集成客户端绑定的来源身份、领域里没有它的类型，只判非空白与 NUL。
 func bookingAnswerBounceFilterProblem(query cataloguepage.Query) error {
