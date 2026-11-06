@@ -889,9 +889,13 @@ func bookingStanding(
 var bookingAnswerBouncePages = ports.BookingAnswerBouncePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"lastBouncedAt": "last_bounced_at", "count": "bounce_count"},
 	Identity: []string{"source_ref", "booking_id", "acceptance_id", "basis"},
-	Filters:  map[string]string{"booking": "booking_id", "source": "source_ref", "basis": "basis"},
-	Codes:    map[string]func(string) (int64, error){"basis": bounceBasisCodeOf},
-	Keyword:  []string{"source_ref", "booking_id", "acceptance_id"},
+	Filters: map[string]string{
+		ports.BookingAnswerBounceBookingFilter: "booking_id",
+		ports.BookingAnswerBounceSourceFilter:  "source_ref",
+		"basis":                                "basis",
+	},
+	Codes:   map[string]func(string) (int64, error){"basis": bounceBasisCodeOf},
+	Keyword: []string{"source_ref", "booking_id", "acceptance_id"},
 })
 
 // scannedBookingAnswerBounce 是挡回册取页读回的一行。依据另留库里的定宽码：游标位置要与 ORDER BY 用的是同一个值，行上只有
