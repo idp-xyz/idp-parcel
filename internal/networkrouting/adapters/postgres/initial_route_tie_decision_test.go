@@ -128,7 +128,7 @@ func TestTieDecisionEvidenceAndTheTieReadFaceStates(t *testing.T) {
 		t.Fatal("同一判断键第二次记裁决证据没被拒")
 	}
 
-	rows, err := ties.ListInitialRouteTies(ctx, decided.TenantID, 10)
+	rows, err := rowsOf(ties.ListInitialRouteTies(ctx, decided.TenantID, 10, firstPage(t, ports.InitialRouteTiePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,10 +150,11 @@ func TestTieDecisionEvidenceAndTheTieReadFaceStates(t *testing.T) {
 	if states["parcel-pending"].HasDecision {
 		t.Fatal("待决定的带了决定")
 	}
-	if other, err := ties.ListInitialRouteTies(ctx, scalar(t, domain.NewTenantID, "tenant-2"), 10); err != nil || len(other) != 0 {
+	if other, err := rowsOf(ties.ListInitialRouteTies(ctx, scalar(t, domain.NewTenantID, "tenant-2"), 10,
+		firstPage(t, ports.InitialRouteTiePages))); err != nil || len(other) != 0 {
 		t.Fatalf("他租户 rows = %v err = %v", other, err)
 	}
-	if _, err := ties.ListInitialRouteTies(ctx, decided.TenantID, 0); err == nil {
+	if _, err := ties.ListInitialRouteTies(ctx, decided.TenantID, 0, firstPage(t, ports.InitialRouteTiePages)); err == nil {
 		t.Fatal("limit 0 没被拒")
 	}
 }

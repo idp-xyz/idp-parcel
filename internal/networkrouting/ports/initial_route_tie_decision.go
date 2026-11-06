@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // InitialRouteNotFormedRecord 是未形成登记读回的一行，只带决定面要用的件：判断键、最近一次停住的原因、那次交接的关联，以及
@@ -95,9 +96,15 @@ type InitialRouteTieDecisionRow struct {
 	DecidedAt   time.Time
 }
 
-// InitialRouteTieCatalogueRead 是并列的列表读端口。租户在签名上；limit 非正拒；空册如实答空列表。
+// InitialRouteTieCatalogueRead 是并列的列表读端口。租户在签名上；limit 非正拒；空册如实答空页。查询对象由
+// InitialRouteTiePages 解出。
 type InitialRouteTieCatalogueRead interface {
-	ListInitialRouteTies(ctx context.Context, tenant domain.TenantID, limit int) ([]InitialRouteTieCatalogueRow, error)
+	ListInitialRouteTies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[InitialRouteTieCatalogueRow], error)
 }
 
 // ParseInitialRouteNotFormedReason 按字面认未形成原因，库里存的就是 String() 给的这些词。认不出的交 false，读回方当坏数据。

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是路由判断两册的伴生列表读端口（票 admin-skeleton-closure-batch/03，读面
@@ -95,16 +96,19 @@ type RouteReassessmentCatalogueRow struct {
 	RecordedAt         time.Time
 }
 
-// RoutePlanCatalogueRead 是路由判断两册的伴生列表读端口。
+// RoutePlanCatalogueRead 是路由判断两册的伴生列表读端口。查询对象分别由 InitialRoutePages 与 RouteReassessmentPages 解出，
+// 答回本页、下一页游标与同一组条件下的总数（ADR-0144 决定六）。
 type RoutePlanCatalogueRead interface {
 	ListInitialRoutes(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]InitialRouteCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[InitialRouteCatalogueRow], error)
 	ListRouteReassessments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]RouteReassessmentCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[RouteReassessmentCatalogueRow], error)
 }

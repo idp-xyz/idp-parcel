@@ -12,6 +12,7 @@ import (
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对路由判断两册端点（票 admin-skeleton-closure-batch/03）证传输面，判据与
@@ -19,27 +20,34 @@ import (
 // Intake 403、行体逐字段转写且可缺席组如实缺席、空册答空数组、读失败答 5xx。
 // Intake 替身复用 query_network_catalog_test.go 的既有件。
 
+// stubRoutePlanReader 是读口替身：记录收到的租户、页大小与查询对象，交回预置的行、下一游标与总数或故障。
 type stubRoutePlanReader struct {
 	judgments     []ports.InitialRouteCatalogueRow
 	reassessments []ports.RouteReassessmentCatalogueRow
+	next          string
+	total         int64
 	err           error
 
+	called    bool
 	gotTenant string
 	gotLimit  int
+	gotQuery  cataloguepage.Query
 }
 
 func (stub *stubRoutePlanReader) ListInitialRoutes(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.InitialRouteCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.judgments, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.InitialRouteCatalogueRow], error) {
+	stub.called, stub.gotTenant, stub.gotLimit, stub.gotQuery = true, tenant.String(), limit, query
+	return cataloguepage.Result[ports.InitialRouteCatalogueRow]{Rows: stub.judgments, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubRoutePlanReader) ListRouteReassessments(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.RouteReassessmentCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.reassessments, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.RouteReassessmentCatalogueRow], error) {
+	stub.called, stub.gotTenant, stub.gotLimit, stub.gotQuery = true, tenant.String(), limit, query
+	return cataloguepage.Result[ports.RouteReassessmentCatalogueRow]{
+		Rows: stub.reassessments, Next: stub.next, Total: stub.total,
+	}, stub.err
 }
 
 // unreachableRoutePlanReader 断言读口未被触到：传输形状的拒绝与未配置格都发生在
@@ -47,17 +55,17 @@ func (stub *stubRoutePlanReader) ListRouteReassessments(
 type unreachableRoutePlanReader struct{ t *testing.T }
 
 func (reader unreachableRoutePlanReader) ListInitialRoutes(
-	_ context.Context, _ domain.TenantID, _ int,
-) ([]ports.InitialRouteCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.InitialRouteCatalogueRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.InitialRouteCatalogueRow]{}, nil
 }
 
 func (reader unreachableRoutePlanReader) ListRouteReassessments(
-	_ context.Context, _ domain.TenantID, _ int,
-) ([]ports.RouteReassessmentCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.RouteReassessmentCatalogueRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.RouteReassessmentCatalogueRow]{}, nil
 }
 
 func routePlanBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
@@ -107,7 +115,7 @@ func TestRoutePlansEndpointAnswersForbiddenWhenIntakeUnconfigured(t *testing.T) 
 }
 
 func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.T) {
-	reader := &stubRoutePlanReader{judgments: []ports.InitialRouteCatalogueRow{
+	reader := &stubRoutePlanReader{total: 2, judgments: []ports.InitialRouteCatalogueRow{
 		{
 			CustomerAccountID:      "SYN-ACC-1",
 			ShipmentRequestID:      "SYN-REQ-1",
@@ -270,7 +278,7 @@ func legInstant(at time.Time) string {
 }
 
 func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *testing.T) {
-	reader := &stubRoutePlanReader{reassessments: []ports.RouteReassessmentCatalogueRow{
+	reader := &stubRoutePlanReader{total: 2, reassessments: []ports.RouteReassessmentCatalogueRow{
 		{
 			CorrelationID:      "SYN-CORR-1",
 			CustomerAccountID:  "SYN-ACC-1",

@@ -10,6 +10,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // RerouteSuggestionCatalogue 实现改路建议的列表读端口（ADR-0284 决定六）：管理台据它看哪几份建议待决定、各有哪几条候选。
@@ -28,72 +29,104 @@ func NewRerouteSuggestionCatalogue(db *bentopg.DB) (*RerouteSuggestionCatalogue,
 
 var _ ports.RerouteSuggestionCatalogueRead = (*RerouteSuggestionCatalogue)(nil)
 
-// ListRerouteSuggestions 上列本租户带建议的复核，按落册时间倒序、同刻按关联正序收尾。没有业务时间的旧行比不出先后，与决定口
-// 同一处置，读成已过时。
+// rerouteSuggestionSource 是总数与取页共用的前半句。state 在 CTE 里导出：筛选维与本页行读的是同一列，各格的判据只写这一处。
+// 没有业务时间的旧行比不出先后，与决定口同一处置，读成已过时。租户条件在 CTE 里，占 $1。
+var rerouteSuggestionSource = fmt.Sprintf(`WITH suggestions AS (
+	SELECT r.correlation_id, r.customer_account_id, r.shipment_request_id, r.acceptance_baseline,
+	       r.declared_parcel_id, r.service_purpose, r.reviewed_plan, r.lapse_basis, r.suggestion,
+	       r.trigger_occurred_at, r.recorded_at,
+	       d.chosen_candidate, d.new_plan_version, d.decided_by, d.decision_basis, d.decided_at,
+	       CASE WHEN d.chosen_candidate IS NOT NULL THEN '%s'
+	            WHEN r.trigger_occurred_at IS NULL OR EXISTS (
+	                SELECT 1
+	                  FROM network_routing.route_reassessment o
+	                 WHERE o.tenant_id = r.tenant_id
+	                   AND o.customer_account_id = r.customer_account_id
+	                   AND o.shipment_request_id = r.shipment_request_id
+	                   AND o.acceptance_baseline = r.acceptance_baseline
+	                   AND o.declared_parcel_id = r.declared_parcel_id
+	                   AND o.service_purpose = r.service_purpose
+	                   AND o.correlation_id <> r.correlation_id
+	                   AND o.trigger_occurred_at >= r.trigger_occurred_at) THEN '%s'
+	            ELSE '%s'
+	       END AS state
+	  FROM network_routing.route_reassessment r
+	  LEFT JOIN network_routing.authorized_reroute_decision d
+	         ON d.tenant_id = r.tenant_id
+	        AND d.suggestion_correlation_id = r.correlation_id
+	 WHERE r.tenant_id = $1
+	   AND r.suggestion IS NOT NULL
+) `, ports.RerouteSuggestionDecided, ports.RerouteSuggestionSuperseded, ports.RerouteSuggestionPending)
+
+var rerouteSuggestionPages = ports.RerouteSuggestionPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"recordedAt": "recorded_at"},
+	Identity: []string{"correlation_id"},
+	Filters:  map[string]string{"state": "state"},
+	Keyword: []string{
+		"correlation_id", "customer_account_id", "shipment_request_id", "acceptance_baseline", "declared_parcel_id",
+		"reviewed_plan",
+	},
+})
+
+// scannedRerouteSuggestion 是取页读回的一行。建议 jsonb 先留着，只解本页的行：多取来判下一页的那一行解不开，不该让本页答不出。
+type scannedRerouteSuggestion struct {
+	row        ports.RerouteSuggestionCatalogueRow
+	suggestion []byte
+}
+
+// ListRerouteSuggestions 上列本租户带建议的复核，按查询的筛选、q 与排序取游标之后的一页；缺省是落册时刻倒序、同刻按关联倒序。
 func (catalogue *RerouteSuggestionCatalogue) ListRerouteSuggestions(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.RerouteSuggestionCatalogueRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.RerouteSuggestionCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.RerouteSuggestionCatalogueRow], error) {
+		return cataloguepage.Result[ports.RerouteSuggestionCatalogueRow]{}, fmt.Errorf("list reroute suggestions: %w", err)
+	}
 	if err := routePlanListLimit("list reroute suggestions", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.RerouteSuggestionCatalogueRow]{}, err
+	}
+	plan, err := rerouteSuggestionPages.Plan(query, "", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list reroute suggestions: %w", err)
+		return fail(err)
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT r.correlation_id, r.customer_account_id, r.shipment_request_id, r.acceptance_baseline,
-		        r.declared_parcel_id, r.service_purpose, r.reviewed_plan, r.lapse_basis, r.suggestion,
-		        r.trigger_occurred_at,
-		        d.chosen_candidate, d.new_plan_version, d.decided_by, d.decision_basis, d.decided_at,
-		        CASE WHEN r.trigger_occurred_at IS NULL THEN true
-		             ELSE EXISTS (
-		                 SELECT 1
-		                   FROM network_routing.route_reassessment o
-		                  WHERE o.tenant_id = r.tenant_id
-		                    AND o.customer_account_id = r.customer_account_id
-		                    AND o.shipment_request_id = r.shipment_request_id
-		                    AND o.acceptance_baseline = r.acceptance_baseline
-		                    AND o.declared_parcel_id = r.declared_parcel_id
-		                    AND o.service_purpose = r.service_purpose
-		                    AND o.correlation_id <> r.correlation_id
-		                    AND o.trigger_occurred_at >= r.trigger_occurred_at)
-		        END AS overtaken
-		   FROM network_routing.route_reassessment r
-		   LEFT JOIN network_routing.authorized_reroute_decision d
-		          ON d.tenant_id = r.tenant_id
-		         AND d.suggestion_correlation_id = r.correlation_id
-		  WHERE r.tenant_id = $1
-		    AND r.suggestion IS NOT NULL
-		  ORDER BY r.recorded_at DESC, r.correlation_id
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+
+	var total int64
+	if err := querier.QueryRow(ctx, rerouteSuggestionSource+plan.CountSQL("suggestions"), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, rerouteSuggestionSource+plan.PageSQL(
+		`correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+		 declared_parcel_id, service_purpose, reviewed_plan, lapse_basis, suggestion,
+		 trigger_occurred_at, recorded_at,
+		 chosen_candidate, new_plan_version, decided_by, decision_basis, decided_at, state`,
+		"suggestions",
+	), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list reroute suggestions: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := make([]ports.RerouteSuggestionCatalogueRow, 0)
+	var fetched []scannedRerouteSuggestion
 	for rows.Next() {
 		var (
-			row                               ports.RerouteSuggestionCatalogueRow
+			scanned                           scannedRerouteSuggestion
 			reviewedPlan, lapseBasis          *string
-			suggestionJSON                    []byte
 			triggerAt                         *time.Time
 			chosen, newPlan, decidedBy, basis *string
 			decidedAt                         *time.Time
-			overtaken                         bool
+			state                             string
 		)
+		row := &scanned.row
 		if err := rows.Scan(&row.CorrelationID, &row.CustomerAccountID, &row.ShipmentRequestID, &row.AcceptanceBaseline,
-			&row.DeclaredParcelID, &row.ServicePurpose, &reviewedPlan, &lapseBasis, &suggestionJSON, &triggerAt,
-			&chosen, &newPlan, &decidedBy, &basis, &decidedAt, &overtaken); err != nil {
-			return nil, fmt.Errorf("list reroute suggestions: %w", err)
-		}
-		var suggestion suggestionRow
-		if err := json.Unmarshal(suggestionJSON, &suggestion); err != nil {
-			return nil, fmt.Errorf("list reroute suggestions: suggestion of %s: %w", row.CorrelationID, err)
+			&row.DeclaredParcelID, &row.ServicePurpose, &reviewedPlan, &lapseBasis, &scanned.suggestion, &triggerAt,
+			&row.RecordedAt, &chosen, &newPlan, &decidedBy, &basis, &decidedAt, &state); err != nil {
+			return fail(err)
 		}
 		if reviewedPlan != nil {
 			row.ReviewedPlan = *reviewedPlan
@@ -104,16 +137,8 @@ func (catalogue *RerouteSuggestionCatalogue) ListRerouteSuggestions(
 		if triggerAt != nil {
 			row.TriggerOccurredAt = triggerAt.UTC()
 		}
-		row.Blockers = append([]string{}, suggestion.Blockers...)
-		row.SuggestedAt = suggestion.SuggestedAt.UTC()
-		for _, candidate := range suggestion.Candidates {
-			row.Candidates = append(row.Candidates, ports.RerouteSuggestionCandidateRow{
-				ID: candidate.ID, Outcome: candidate.Outcome, Reason: candidate.Reason,
-			})
-		}
-		switch {
-		case chosen != nil:
-			row.State = ports.RerouteSuggestionDecided
+		row.State = ports.RerouteSuggestionState(state)
+		if chosen != nil {
 			row.HasDecision = true
 			row.Decision = ports.RerouteSuggestionDecisionRow{
 				Candidate:      *chosen,
@@ -122,15 +147,41 @@ func (catalogue *RerouteSuggestionCatalogue) ListRerouteSuggestions(
 				Basis:          *basis,
 				DecidedAt:      decidedAt.UTC(),
 			}
-		case overtaken:
-			row.State = ports.RerouteSuggestionSuperseded
-		default:
-			row.State = ports.RerouteSuggestionPending
+		}
+		fetched = append(fetched, scanned)
+	}
+	if err := rows.Err(); err != nil {
+		return fail(err)
+	}
+	rows.Close()
+
+	page, err := cataloguepage.Finish(query, fetched, limit, total, rerouteSuggestionPosition)
+	if err != nil {
+		return fail(err)
+	}
+	listed := make([]ports.RerouteSuggestionCatalogueRow, 0, len(page.Rows))
+	for _, scanned := range page.Rows {
+		row := scanned.row
+		var suggestion suggestionRow
+		if err := json.Unmarshal(scanned.suggestion, &suggestion); err != nil {
+			return fail(fmt.Errorf("suggestion of %s: %w", row.CorrelationID, err))
+		}
+		row.Blockers = append([]string{}, suggestion.Blockers...)
+		row.SuggestedAt = suggestion.SuggestedAt.UTC()
+		for _, candidate := range suggestion.Candidates {
+			row.Candidates = append(row.Candidates, ports.RerouteSuggestionCandidateRow{
+				ID: candidate.ID, Outcome: candidate.Outcome, Reason: candidate.Reason,
+			})
 		}
 		listed = append(listed, row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list reroute suggestions: %w", err)
+	return cataloguepage.Result[ports.RerouteSuggestionCatalogueRow]{Rows: listed, Next: page.Next, Total: page.Total}, nil
+}
+
+// rerouteSuggestionPosition 取一行在缺省序上的位置。本册只放出 recordedAt 一维；另放可排维时要按 sortField 取那一维的列值。
+func rerouteSuggestionPosition(scanned scannedRerouteSuggestion, _ string) cataloguepage.Position {
+	return cataloguepage.Position{
+		Value:    cataloguepage.FormatInstant(scanned.row.RecordedAt),
+		Identity: []string{scanned.row.CorrelationID},
 	}
-	return listed, nil
 }

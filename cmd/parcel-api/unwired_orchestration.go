@@ -1493,16 +1493,18 @@ func (unwiredRoutePlans) ListInitialRoutes(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.InitialRouteCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[networkports.InitialRouteCatalogueRow], error) {
+	return cataloguepage.Result[networkports.InitialRouteCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredRoutePlans) ListRouteReassessments(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.RouteReassessmentCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[networkports.RouteReassessmentCatalogueRow], error) {
+	return cataloguepage.Result[networkports.RouteReassessmentCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredGovernanceRegisters 是治理登记册读口的占位，方法表与

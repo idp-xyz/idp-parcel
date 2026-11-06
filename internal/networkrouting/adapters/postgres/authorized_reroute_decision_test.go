@@ -266,7 +266,8 @@ func TestTheSuggestionCatalogueListsPendingDecidedAndSupersededSuggestions(t *te
 	saveOtherReassessment(t, stores, superseded, "trigger-superseded-later", decisionSuggestionAt.Add(time.Minute))
 	saveSuggestion(t, stores, routeKey(t, "tenant-2", "parcel-elsewhere"), "trigger-elsewhere", decisionSuggestionAt)
 
-	rows, err := stores.catalogue.ListRerouteSuggestions(ctx, scalar(t, domain.NewTenantID, "tenant-1"), 50)
+	rows, err := rowsOf(stores.catalogue.ListRerouteSuggestions(ctx, scalar(t, domain.NewTenantID, "tenant-1"), 50,
+		firstPage(t, ports.RerouteSuggestionPages)))
 	if err != nil {
 		t.Fatalf("list：%v", err)
 	}
@@ -290,7 +291,8 @@ func TestTheSuggestionCatalogueListsPendingDecidedAndSupersededSuggestions(t *te
 	if row := states["trigger-superseded"]; row.State != ports.RerouteSuggestionSuperseded {
 		t.Fatalf("已过时那一行 = %+v", row)
 	}
-	if _, err := stores.catalogue.ListRerouteSuggestions(ctx, scalar(t, domain.NewTenantID, "tenant-1"), 0); err == nil {
+	if _, err := stores.catalogue.ListRerouteSuggestions(ctx, scalar(t, domain.NewTenantID, "tenant-1"), 0,
+		firstPage(t, ports.RerouteSuggestionPages)); err == nil {
 		t.Fatal("limit 0 没被拒")
 	}
 }

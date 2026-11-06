@@ -1,7 +1,7 @@
 # 07 network-routing 其余四册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 network-routing `0034`（进 main 时按 tip 重核）
+Status: in-progress——`cursor/crpr-07-network`，基 `d48c5b130`；迁移编号预留 network-routing `0034`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/networkrouting/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试（网络目录七族已迁，不在内）；`cmd/parcel-api` 里这些读口的占位；
 `migrations/network_routing` 的一条新迁移（索引）。
