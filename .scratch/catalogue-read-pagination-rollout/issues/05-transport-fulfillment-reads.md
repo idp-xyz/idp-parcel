@@ -1,7 +1,7 @@
 # 05 transport-fulfillment 各册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-05-transport`，基 `d48c5b130`；迁移编号 transport-fulfillment `0058`，进 main 时按 tip 重核）
+Status: in-progress——非作者评审（钉 `1d76b5990`）无阻断，三条非阻断已处理，待进 main（分支 `cursor/crpr-05-transport`，基 `d48c5b130`；迁移编号 transport-fulfillment `0058`，进 main 时按 tip 重核；评审记录见文末）
 Blocked by: 01
 地盘：`internal/transportfulfillment/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/transport_fulfillment` 的一条新迁移（索引）。
@@ -52,10 +52,14 @@ Blocked by: 01
 | | `adapters/http/catalogue_page_test.go`（重写）、`query_transport_fulfillment_records_test.go`、`query_booking_records_test.go`、`query_external_tracking_facts_test.go`、`operator_read_intake_test.go` | 端点表驱动用例；未配置用例补坏册名、坏筛选与各册坏参数的变体；钉「先于准入答 400」的旧用例改为配置了答 400、未配置答 403，其中两条改名（见判断项）；新加用例的替身值改 `SYN-` |
 | | `adapters/postgres/catalogue_page_test.go` | 翻页途中插入一行后断言逐页的精确序列；交接、有效交付、外部轨迹事实、待确认复核改用本文件的 `SYN-` 构造器 |
 | | `ports/catalogue_pages.go`、`adapters/postgres/delivery_dispatch_pending.go`、`0058` | 只改注释：spec 取舍序号换成规则原名，去掉数别处东西的计数；`0058` 的 SQL 不变 |
+| `1d76b5990` | 本票 | 修订轮完成记录 |
+| `0f9a88d93` | `ports/catalogue_pages.go`、`adapters/http/query_transport_fulfillment_records.go`、`adapters/postgres/review_catalogue.go` | 评审收尾：挡回册订舱、答复方两维的维名由 `ports` 导出常量，声明、端点判据与落列都引它；`BookingRequestPages` 头注补订舱册不是大册的理由 |
+| | `adapters/http/query_booking_records_test.go`、`catalogue_page_test.go` | 挡回册筛选用例断言 `detail` 是判据自己的理由；`assertPageQueryRefused` 交回 `detail` |
+| | `0058` | 头注如实写待确认复核清单的两条部分索引各自同形到哪一段；SQL 不变 |
 
 ### 逐册声明
 
-缺省序都取迁移前 `ORDER BY` 的首列与方向；行标识与排序同向作决胜键，取登记表主键去掉租户那几段，待确认复核清单例外（见判断项「待确认复核清单的行标识」）。
+缺省序都取迁移前 `ORDER BY` 的首列与方向；行标识与排序同向作决胜键，取登记表主键去掉租户那几段，待确认复核清单例外（见判断项「待确认复核清单的行标识与索引」）。
 各册为什么是这个缺省序写在 `catalogue_pages.go` 各声明头注。
 
 | 册（`registry`）· 读端口方法 | 缺省序 | 可排维 | 筛选维 | `q` 列 | 索引 |
@@ -72,7 +76,7 @@ Blocked by: 01
 | `actual-fulfillment-unformed` · `ListActualFulfillmentUnformed` | `endedAt` | `endedAt`、`commission` | `reason` | 段、对象、委托、协议对象 | 复用 `actual_fulfillment_unformed_open_by_tenant` |
 | `booking-request` · `ListBookingRequests` | `-requestedAt` | `requestedAt`、`booking` | — | 订舱、委托、班次、单据号 | 新 `booking_request_by_tenant_requested` |
 | `booking-answer-bounce` · `ListBookingAnswerBounces` | `-lastBouncedAt` | `lastBouncedAt`、`count` | `booking`、`source`（无词表）、`basis` | 答复方、订舱、答复 | 新 `booking_answer_bounce_by_tenant_last_bounced` |
-| `pending-attempt-result` · `ListPendingAttemptResults` | `occurredAt` | `occurredAt` | `side` | 尝试、对象、任务、来源身份 | 复用 `pickup_attempt_result_pending` 与 `delivery_attempt_result_pending` |
+| `pending-attempt-result` · `ListPendingAttemptResults` | `occurredAt` | `occurredAt` | `side` | 尝试、对象、任务、来源身份 | 不新建；两侧部分索引 `pickup_attempt_result_pending`、`delivery_attempt_result_pending` 只部分同形（见判断项） |
 | 外部轨迹事实 · `ListCurrentExternalTrackingFacts`（选择器 `source`、`view`） | `occurredAt` | `occurredAt`、`receivedAt` | `effectiveBasis` | 事实、对象、来源事件、状态 | 新 `external_carrier_tracking_fact_by_source_occurred`（源进键） |
 
 ### 判据（实测于 `343aa9fbb`）
@@ -108,7 +112,8 @@ Blocked by: 01
 - ✅ **迁移按字节无 CR、无 BOM**：`0058` 与本票逐个查过，无 `\r`，首三字节不是 `efbbbf`。
 - ✅ spec「`limit` 非正仍拒」：各读面先拒 `limit < 1`，未改。
 - ✅ spec「可排维与行标识的列必须非空」：各可排维所在列在建表语句里都是 `NOT NULL`；标识列是主键段；待确认复核清单派送一侧的来源身份是字面空串。
-- ✅ spec「每迁一册补一条与缺省序同形的索引」：见上表索引一列，复用的已有索引同在 `0058` 头注点名。
+- ◑ spec「每迁一册补一条与缺省序同形的索引」：除待确认复核清单外，各册都有同形索引，新建或复用见上表索引一列，复用的在 `0058` 头注点名；
+  待确认复核清单没有同形索引，本票也不补，理由见判断项「待确认复核清单的行标识与索引」。
 
 自验（作者口径，实测于 `343aa9fbb`，真库包带 DSN、`-p 1`）：`go build ./...`、`go vet ./...` 全仓通过；改动包与反向依赖（`go list` 连测试导入算出）共 22 包全数通过，
 `--- PASS` 4273、`--- SKIP` 0、`--- FAIL` 0——`transportfulfillment/adapters/postgres` 586、`adapters/http` 666、`application` 1326、`cmd/parcel-api` 654、
@@ -121,22 +126,26 @@ Blocked by: 01
 2. **决胜键方向变了的册**：spec「行标识取登记表主键去掉租户那几段」要求标识与排序同向。缺省序倒序、而迁移前标识升序的——班次、交接、有效交付、总单、运输准备、
    订舱、挡回——迁移后标识随排序倒序，只在首列完全相同时次序与迁移前不同。`TestReviewCatalogueListsHandoverVersionChain` 里两版裁决时刻相同，期望改为后一版在前。
    重问间隔迁移前已是双倒序；升序各册不变。
-3. **待确认复核清单的行标识**不是登记表主键去掉租户：揽收与派送两侧合成一册，揽收一侧的登记键是（来源身份，对象），派送一侧是（尝试，对象）、来源身份恒为空串，
-   单取哪一侧的键另一侧都会撞，故取（一侧，尝试，对象，来源身份）。揽收一侧同一尝试同一对象可由不同来源报来，迁移前那几行之间没有定序，现在由来源身份定。
-   其余各册的行标识都是登记表主键去掉租户那几段。
+3. **待确认复核清单的行标识与索引**：行标识不是登记表主键去掉租户——揽收与派送两侧合成一册，揽收一侧的登记键是（来源身份，对象），派送一侧是（尝试，对象）、
+   来源身份恒为空串，单取哪一侧的键另一侧都会撞，故取（一侧，尝试，对象，来源身份）。揽收一侧同一尝试同一对象可由不同来源报来，迁移前那几行之间没有定序，
+   现在由来源身份定。其余各册的行标识都是登记表主键去掉租户那几段。索引也只部分同形：派送一侧的部分索引与本册在那一支的次序相同，揽收一侧的只有（租户，
+   发生时刻）这段前缀同形（尝试取自联上的揽收尝试表）；两支并起来之后整册还要再排一遍，哪一条单表索引都给不出整册的序，本票不补。细节在 `0058` 头注。
 4. **大册**（spec「`total` 一律给精确值」）：交接、有效交付、运输准备按包裹计量，外部轨迹事实按事件计量；`total` 照缺省给精确值，超出租户级规模时回 ADR-0144 改 `null`。
+   订舱册不在其列：一次订舱一行，申请量记在 `quantity` 一格，订多少都只占一行，不按包裹计量；立票时「本票特有」把订舱算进大册，按这个计量不成立
+   （`BookingRequestPages` 头注同写）。
 5. **订舱册不放状态筛选维**：状态词由读口从当前那一份答复派生，库里没有列；按它筛只能先读后筛，`total` 就不是真数。这与 spec「可排维、筛选维从小放」里
-   「有状态（或同类封闭词表）的册放出那一维作筛选维」有张力；要补得先把状态落成列或在 SQL 里导出，属另票。
+   「有状态（或同类封闭词表）的册放出那一维作筛选维」有张力；要补得先把状态落成列或在 SQL 里导出，归 16 号票（`16-derived-state-filter-dimensions.md`）。
 6. **管理台、脚本与 cmd 发的参数**：管理台发 `registry`、挡回册的 `booking` 与 `source`、事实页的 `source` 与 `view`；`scripts/demo-seeds` 只发 `registry`；
    `cmd/parcel-api` 的探针发 `registry` 与 `source`+`view`（`object` 只发给不迁的首次有效收寄）。`registry`、`source`、`view` 登为选择器；挡回册的 `booking`、
-   `source` 登为无词表的筛选维，取值立不立得起来仍由端点照迁移前的判据判（空白、NUL、超长答 400）。这些判定现在都在准入之后。
+   `source` 登为无词表的筛选维，取值立不立得起来仍由端点照迁移前的判据判（空白、NUL、超长答 400），判据与声明引 `ports` 导出的同一对维名常量。
+   这些判定现在都在准入之后。
 7. **自报的 `tenant`、`limit` 现在答 400**：迁移前端点收下不用，现在是未知键（`TestRecordsCatalogueRefusesSelfReportedTenantAndLimit`）。管理台、脚本与 cmd 都不发。
    未配置的渠道上同答 403。
 8. **门次序对调改了未配置渠道上的旧答法**：迁移前两个端点先判选择器再准入——缺或未知的 `registry`、挡回册立不起来的 `booking` 与 `source`、事实页缺 `source`
    或坏 `view`，在未配置的渠道上答 400；现在一律答 403（ADR-0055 决定三：未配置的答复不随请求变）。配置了的渠道上照旧答 400 `MALFORMED_REQUEST`。
    钉旧次序的两条用例改名：`TestAnUnknownRegistryIsRefusedBeforeTheChannelCheck` 改为 `TestTheChannelIsCheckedBeforeTheRegistry`，
    `TestABookingAnswerBounceFilterThatCannotStandIsRefusedBeforeTheChannel` 改为 `TestABookingAnswerBounceFilterThatCannotStandIsRefused`。
-   `.scratch/at-coverage-inventory.md` 的 `AT-TF-333` 一行仍写后者的旧名，不在本票地盘，进 main 时要跟着改；`demo-chain-gaps/167` 里的旧名是已收口票的历史，不改。
+   `.scratch/at-coverage-inventory.md` 的 `AT-TF-333` 一行仍写后者的旧名，不在本票地盘，由推送方进 main 时改；`demo-chain-gaps/167` 里的旧名是已收口票的历史，不改。
    node-operations 与 settlement-accounting 各有一条同名的 `TestAnUnknownRegistryIsRefusedBeforeTheChannelCheck`，06、08 照 spec 对调门次序时会碰到同一处。
 9. **空值的旧答法保住**：`?registry=`、挡回册的 `?booking=` 与 `?source=`、事实页的 `?source=` 与 `?view=` 迁移前都答 400，配置了的渠道上照旧答 400；
    没有哪个参数的空值从前落到列表支、迁移后变成集外键。
@@ -148,9 +157,9 @@ Blocked by: 01
 14. **端点用例补册名**：端点用例的 registry 封闭集补上了迁移前漏列的 `actual-fulfillment-unformed`。
 15. **夹具**：修订轮新写的真库夹具（交接、有效交付、外部轨迹事实、待确认复核）用本文件自带的 `SYN-` 构造器，标识与 `q` 所查各列全为 `SYN-`；借用的既有构造器
     只在内容摘要、计量单位这类不进标识也不进 `q` 的格上留着自己的写法。端点用例新加的替身值同为 `SYN-`；旧用例的夹具不回改。
-16. **`0058` 修订轮只改头注**：SQL 不变。迁移校验和按文件内容在运行时算、只存在应用过它的库里；`0058` 还没进 main，只在本分支的测试库里应用过。
+16. **`0058` 修订轮与评审收尾都只改头注**：SQL 不变。迁移校验和按文件内容在运行时算、只存在应用过它的库里；`0058` 还没进 main，只在本分支的测试库里应用过。
 17. **提交没有逐册切**：`registry` 分派的各册共用一个读端口接口 `ReviewCatalogueRead` 与一个分派端点，逐册切会让中间提交里端点半迁（有的册拒未知键、有的不拒），
-    故按「代码与端点用例 → 真库用例 → 索引迁移」分笔提交；修订轮的改动另成一笔。
+    故按「代码与端点用例 → 真库用例 → 索引迁移」分笔提交；修订轮与评审收尾的改动各成一笔。
 
 ### 没验证的
 
@@ -158,3 +167,19 @@ Blocked by: 01
 - 索引只按形状对齐缺省序，没在有量的数据上看 `EXPLAIN`。
 - `scripts/demo-seeds/demo-run/chain.sh` 没跑：它取运输准备册第一页找本件的几段，缺省序新近在前，按理落在第一页。
 - 迁移编号 `0058` 进 main 时按 tip 重核。
+
+## 评审记录
+
+**非作者评审 · 钉 `1d76b5990`**（两轴无阻断）
+
+| 评审意见 | 处理 |
+|---|---|
+| 非阻断：`bookingAnswerBounceFilterProblem` 用字面量 `booking`、`source` 取筛选值，没有对上声明 `BookingAnswerBouncePages`；声明里这一维改了名，判据就静默落空，用例只断言 400，测不出来 | `0f9a88d93`：`ports` 导出 `BookingAnswerBounceBookingFilter`、`BookingAnswerBounceSourceFilter`，声明的 `Filters`、端点判据与 postgres 落列都引这两个常量；`TestABookingAnswerBounceFilterThatCannotStandIsRefused` 改为断言 `detail` 含判据自己的理由（空串归声明解码拒，不钉共用件的措辞），为此 `assertPageQueryRefused` 交回 `detail`。变异核对：只把声明里订舱一维改成别的字面量、判据照引常量，「空白订舱」「订舱带 NUL」「订舱超界」变红，「空订舱」与答复方各格照过 |
+| 非阻断：`0058` 头注把 `pickup_attempt_result_pending` 列在「已有索引恰与缺省序同形」之下，实际只有（租户，发生时刻）前缀同形 | `0f9a88d93`：待确认复核清单移出那一列，如实写两侧部分索引各自同形到哪一段、整册为何没有同形索引，SQL 不动；本票逐册表的索引一格与判据同步改，判据记 ◑，理由归判断项「待确认复核清单的行标识与索引」 |
+| 非阻断：订舱册不算大册缺一句理由——「本票特有」点了订舱，判断项「大册」与 `BookingRequestPages` 头注都没点名 | `0f9a88d93` 的 `BookingRequestPages` 头注与本票判断项「大册」补：一次订舱一行、申请量记在 `quantity`，不按包裹计量 |
+| 已知项：订舱册的状态筛选维 | 归 16 号票，见判断项「订舱册不放状态筛选维」 |
+| 已知项：`.scratch/at-coverage-inventory.md` 的 `AT-TF-333` 仍写旧用例名 | 不在本票地盘，由推送方进 main 时改，见判断项「门次序对调改了未配置渠道上的旧答法」 |
+
+处理后自验（实测于 `0f9a88d93`）：改过的 `.go` 已 `gofmt -w`；`go build ./...`、`go vet ./internal/transportfulfillment/... ./cmd/...` 通过；带 DSN、`-p 1`：
+`transportfulfillment/adapters/http` `--- PASS` 666、`adapters/postgres` 586、`cmd/parcel-api` 654，`--- SKIP` 与 `--- FAIL` 均为 0；`transportfulfillment/ports` 无测试文件。
+`0058` 与本票无 CR、无 BOM。
