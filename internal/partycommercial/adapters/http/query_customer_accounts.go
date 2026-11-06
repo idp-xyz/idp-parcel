@@ -38,7 +38,7 @@ const outcomeCustomerAccountsListed = "CUSTOMER_ACCOUNTS_LISTED"
 // 会相互冒充——判据与身份/关系两口分立那条同一句。
 //
 // 查询参数（after、sort、筛选维与 q）在 Intake 之后按 ports.CustomerAccountCatalogue 解码（ADR-0144 决定六）：渠道
-// 未配置时对一切请求同答 403、不随参数写对写错而变（ADR-0055 决定三），没有凭据的调用方也就探不出本册开放了哪些
+// 未配置时答复不随查询参数写对写错而变、一律 403（ADR-0055 决定三），没有凭据的调用方也就探不出本册开放了哪些
 // 查询维度；配置了的渠道上不成立即 400，理由散文放进 detail。与 /network-catalog 同一次序。
 func NewQueryCustomerAccountsEndpoint(
 	intake CommercialCatalogueIntake,
