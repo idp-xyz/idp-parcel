@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"go.idp.xyz/idp-parcel/internal/platform/storable"
 )
 
 // Query 是解码后的一次目录查询，由端点处理器与作用域、页大小一起交给读端口（ADR-0144 决定六）。
@@ -36,8 +38,8 @@ func malformed(format string, arguments ...any) *MalformedQuery {
 	return &MalformedQuery{Reason: fmt.Sprintf(format, arguments...)}
 }
 
-// Decode 从查询串解出本册的一次查询。集外键、集外排序维、词表外或为空的筛选值、超长的 q、只能给一次
-// 却给了多次的键、解不开或与本次条件不符的游标，一律答 *MalformedQuery。
+// Decode 从查询串解出本册的一次查询。集外键、集外排序维、词表外或为空的筛选值、超长的 q、库存不下的 q 与筛选值、
+// 只能给一次却给了多次的键、解不开或与本次条件不符的游标，一律答 *MalformedQuery。
 func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 	query := Query{Sort: catalogue.defaultSort, Filters: map[string][]string{}, catalogue: catalogue}
 	selectors := map[string][]string{}
@@ -69,6 +71,9 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 				return Query{}, err
 			}
 			keyword := strings.TrimSpace(value)
+			if !storable.Text(keyword) {
+				return Query{}, malformed("检索词 q 含库存不下的字符（NUL 或不合法的 UTF-8）")
+			}
 			if utf8.RuneCountInString(keyword) > MaxKeywordRunes {
 				return Query{}, malformed("检索词 q 超过 %d 个字符", MaxKeywordRunes)
 			}
@@ -90,6 +95,9 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 			for _, value := range given {
 				if value == "" {
 					return Query{}, malformed("筛选维 %s 的取值为空", key)
+				}
+				if !storable.Text(value) {
+					return Query{}, malformed("筛选维 %s 的取值含库存不下的字符（NUL 或不合法的 UTF-8）", key)
 				}
 				if vocabulary != nil && !vocabulary[value] {
 					return Query{}, malformed("筛选维 %s 的取值 %q 不在词表内", key, value)

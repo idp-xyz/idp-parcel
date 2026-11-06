@@ -179,19 +179,20 @@ func trailing(t *testing.T, cursor, suffix string) string {
 func TestAnUndecodableOrForgedCursorIsRefused(t *testing.T) {
 	good := cursorAfter(t, url.Values{}, lastRow())
 	cursors := map[string]string{
-		"空串":        "",
-		"不是 base64": "!!!",
-		"不是 JSON":   base64.RawURLEncoding.EncodeToString([]byte("SYN-not-json")),
-		"多一格":       tamper(t, good, func(body map[string]any) { body["x"] = "SYN" }),
-		"排序维被改":     tamper(t, good, func(body map[string]any) { body["s"] = "accountId" }),
-		"时刻带时区偏移":   tamper(t, good, func(body map[string]any) { body["v"] = "2026-09-24T14:18:31+08:00" }),
-		"时刻不成形":     tamper(t, good, func(body map[string]any) { body["v"] = "SYN-yesterday" }),
-		"标识少一段":     tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07"} }),
-		"标识多一段":     tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "3", "SYN"} }),
-		"标识整数段带前导零": tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "03"} }),
-		"标识整数段不是整数": tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "three"} }),
-		"摘要被改":      tamper(t, good, func(body map[string]any) { body["d"] = "SYN" }),
-		"末尾拖着多余的字节": trailing(t, good, ` {"s":"SYN"}`),
+		"空串":         "",
+		"不是 base64":  "!!!",
+		"不是 JSON":    base64.RawURLEncoding.EncodeToString([]byte("SYN-not-json")),
+		"多一格":        tamper(t, good, func(body map[string]any) { body["x"] = "SYN" }),
+		"排序维被改":      tamper(t, good, func(body map[string]any) { body["s"] = "accountId" }),
+		"时刻带时区偏移":    tamper(t, good, func(body map[string]any) { body["v"] = "2026-09-24T14:18:31+08:00" }),
+		"时刻不成形":      tamper(t, good, func(body map[string]any) { body["v"] = "SYN-yesterday" }),
+		"标识少一段":      tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07"} }),
+		"标识多一段":      tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "3", "SYN"} }),
+		"标识整数段带前导零":  tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "03"} }),
+		"标识整数段不是整数":  tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC-07", "three"} }),
+		"标识文本段带 NUL": tamper(t, good, func(body map[string]any) { body["i"] = []string{"SYN-ACC\x00-07", "3"} }),
+		"摘要被改":       tamper(t, good, func(body map[string]any) { body["d"] = "SYN" }),
+		"末尾拖着多余的字节":  trailing(t, good, ` {"s":"SYN"}`),
 	}
 	for name, cursor := range cursors {
 		t.Run(name, func(t *testing.T) {
@@ -214,6 +215,7 @@ func TestCursorAfterRefusesAPositionThatDoesNotFitTheDeclaration(t *testing.T) {
 		"标识段数不符":     {Value: cataloguepage.FormatInstant(registeredAt), Identity: []string{"SYN-ACC-07"}},
 		"排序维值不是规整时刻": {Value: "2026-09-24 06:18:31", Identity: []string{"SYN-ACC-07", "3"}},
 		"标识整数段不规整":   {Value: cataloguepage.FormatInstant(registeredAt), Identity: []string{"SYN-ACC-07", "+3"}},
+		"标识文本段带 NUL": {Value: cataloguepage.FormatInstant(registeredAt), Identity: []string{"SYN-ACC\x00-07", "3"}},
 	}
 	for name, position := range positions {
 		t.Run(name, func(t *testing.T) {

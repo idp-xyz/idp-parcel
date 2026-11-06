@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/storable"
 )
 
 // staleCursorReason 是 ADR-0144 决定一点名的理由散文：游标解不开，或摘要与本次的排序 / 筛选不符，
@@ -93,6 +95,11 @@ func checkValue(kind ValueKind, value string) error {
 	var err error
 	switch kind {
 	case Text:
+		// 游标不防篡改：文本段是读面从列里扫回来的值，只有库存得下的才可能出现；伪造的带着 NUL 原样进 SQL 参数，库拒收、读口答
+		// 500。请求目标检查判的是 base64 编过的整条游标，看不到解开后的这一格，所以在这里按同一份判据再判。
+		if !storable.Text(value) {
+			err = fmt.Errorf("%q 不是库存得下的文本", value)
+		}
 	case Integer:
 		_, err = ParseInteger(value)
 	case Instant:
