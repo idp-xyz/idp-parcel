@@ -28,6 +28,17 @@ func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) s
 	return body.Error.Detail
 }
 
+// containsKey 答复体顶层有没有这个键。
+func containsKey(t *testing.T, response *httptest.ResponseRecorder, key string) bool {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	_, present := fields[key]
+	return present
+}
+
 // pageOf 读出答复里的 page 一格；三格都必须在场。
 func pageOf(t *testing.T, response *httptest.ResponseRecorder) map[string]json.RawMessage {
 	t.Helper()
