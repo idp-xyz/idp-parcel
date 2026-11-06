@@ -996,7 +996,7 @@ Status: Confirmed
 作业位置是物流节点内部用于表达作业区、暂存区、工位、容器或其他实际放置关系的层级位置；当前位置是依据当前有效位置和集运包含关系派生的结果。
 
 - 所有者：`node-operations`。
-- 作业位置不是 `network-routing` 拥有的物流节点，也不是 WMS 库位；当前位置不能与当前直接物理父级形成相互冲突的两套记录。
+- 作业位置不是 `network-routing` 拥有的物流节点，也不是 `warehouse-fulfillment` 的[库位](#库位)；当前位置不能与当前直接物理父级形成相互冲突的两套记录。
 - 避免与 `network-routing` 的「当前控制位置」混用：那是路由历史里业务时间最晚的已判控制触发，[ADR-0235](../adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定四称它「当前位置」，见 [network-routing/CONTEXT.md](./network-routing/CONTEXT.md) 同名词条。
 - 避免使用：物流节点、库存库位、最后扫描地点。
 
@@ -1040,6 +1040,34 @@ Status: Confirmed
 - 所有者：`node-operations`。
 - 正式包裹标签、承运商面单、路由标签或监管标签必须依据所属上下文的有效指令处理；节点只拥有打印、粘贴、遮盖或移除的物理执行事实及新旧标签观察。
 - 避免使用：正式包裹标识、面单交易、永久路由依据。
+
+## 仓配履约
+
+### 出库请求
+
+货主经客户渠道交来、要求从某个仓发出货物的请求，带商品明细、收件人与地址和要求的服务产品。
+
+- 所有者：`warehouse-fulfillment`。
+- 打包完成后，它的每个包裹以（出库请求，包裹序号）为来源请求键、以来源「仓配出库」各提交一份委托，由 `parcel-shipment` 作与客户渠道交来的委托同一套接受判断；出库请求本身不是委托，也不取得包裹身份（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四）。
+- 仓配履约说的出库请求、出库确认，指货离开仓里的库存；`customs-compliance` 受门禁的「出库」动作是节点上的交出，两者无关。
+- 避免使用：出库单、订单、委托。
+
+### 库位
+
+仓配履约在仓内记库存位置的最小放置单元，属于一个库区。
+
+- 所有者：`warehouse-fulfillment`。
+- 库位不是节点作业的作业位置，也不是物流节点；作业位置不当库位用，库位也不进节点作业的位置关系。
+- 避免使用：仓位、货位、作业位置。
+
+### 仓储作业收费发生项
+
+证明一项仓储作业已经发生的事实：作业种类、货主、仓、业务时间、来源事实引用，以及一组计量与作业属性；它不带金额。
+
+- 所有者：`warehouse-fulfillment`。
+- 对货主收多少由 `parcel-pricing` 按 `SELL` 价卡评价，`settlement-accounting` 采用为客户运营应收，两者都不回写发生项；计价为它立评价对象另立 ADR（ADR-0368 决定七）。
+- 它与运输收费发生项是两种事实，所有者不同。
+- 避免使用：仓储费、仓租账单、运输收费发生项。
 
 ## 网络与履约
 

@@ -33,7 +33,7 @@
 - [全程追踪与异常上下文](./domain/visibility-exception/CONTEXT.md)：定义内部追踪投影、客户普通全程追踪视图、标准里程碑、ETA、异常信号与案件、处置协调、客户可见异常、客户披露决定、责任证据、客户索赔三类期限及追偿外部动作/响应，是该上下文语言、规则和生命周期的权威来源。
 - [结算与经营核算上下文](./domain/settlement-accounting/CONTEXT.md)：定义价格评价的财务采用、费用与调整类型唯一所有权、实际代垫判断、客户代垫回收、客户赔付义务、应追偿/认可金额、结算账户、供应商预期成本与审核应付、对账、真实收付映射、核销、成本分摊和经营指标，是物流运营结算语言、规则和生命周期的权威来源。
 - [代收与清分上下文](./domain/collection-remittance/CONTEXT.md)：定义代收指令、代收事实、代收分户账与分配守恒、回汇批次和差异事项，是受托代收本金的保管、归集与汇付的语言、规则和生命周期权威来源；代收本金与运营结算余额分属两个口径。
-- 仓配履约上下文（`warehouse-fulfillment`）：[ADR-0368](./adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 立，拥有货主商品身份、库存账与预占、入库上架、库内移动与盘点、出库拣货打包与仓储作业收费发生项；`CONTEXT.md` 尚未写成，在此之前以[领域上下文地图](./domain/CONTEXT-MAP.md)「仓配履约」一节为准，首发不包含。
+- [仓配履约上下文](./domain/warehouse-fulfillment/CONTEXT.md)：定义货主商品、库存账与库存流水、占用与分配、入库预报与收货上架、库内移动与盘点、出库请求与拣货、出库复核、打包、出库确认与截单、退货入库与回库处置、代理仓库存声明和仓储作业收费发生项，是 3PL 仓配语言、规则和生命周期的权威来源；由 [ADR-0368](./adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 立，首发不包含。
 - [统一领域语言](./domain/GLOSSARY.md)：定义跨上下文必须保持一致的核心术语及需要避免的混用。
 - [核心领域场景](./domain/SCENARIOS.md)：用端到端场景验证对象身份、业务规则和跨上下文边界。
 - [法人资料代表人、分类地址与联系人用途](./adr/0350-legal-entity-profile-representative-addresses-and-contact-purposes.md)：公司主体资料扩展的产品形状、主要联系人约束与旧修订兼容性。

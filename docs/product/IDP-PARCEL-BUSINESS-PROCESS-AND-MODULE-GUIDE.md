@@ -469,7 +469,7 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 
 ### 8.2 一线作业客户端
 
-一线作业客户端属于产品范围，用于节点收寄、扫描、实测、分拣、集运、封签、点验和现场协作，以及仓配履约的收货、上架、移库、补货、盘点、拣货与复核打包（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)，首发不包含）。其核心要求是弱网与离线条件下仍能铸造稳定作业事实身份和设备业务时间，恢复联网后按幂等与冲突语义提交。
+一线作业客户端属于产品范围，用于节点收寄、扫描、实测、分拣、集运、封签、点验和现场协作，以及仓配履约的收货、上架、移库、补货、盘点、拣货、出库复核与打包（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)，首发不包含）。其核心要求是弱网与离线条件下仍能铸造稳定作业事实身份和设备业务时间，恢复联网后按幂等与冲突语义提交。
 
 当前仓库尚未落地独立的一线作业应用。管理台骨架不能替代高频扫描、设备身份和离线队列需求；未来客户端仍应复用同一业务端点和领域语义，不建立第二套节点事实模型。
 
