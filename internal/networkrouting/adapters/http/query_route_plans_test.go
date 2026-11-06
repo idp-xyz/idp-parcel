@@ -89,7 +89,7 @@ func TestRoutePlansEndpointRejectsNonGetAndUnknownRegister(t *testing.T) {
 		t.Fatalf("POST 答 %d, want 405", recorder.Code)
 	}
 
-	for _, target := range []string{"/route-plans", "/route-plans?register=plans"} {
+	for _, target := range []string{"/route-plans", "/route-plans?register=", "/route-plans?register=plans"} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
 		if recorder.Code != http.StatusBadRequest {
@@ -99,17 +99,26 @@ func TestRoutePlansEndpointRejectsNonGetAndUnknownRegister(t *testing.T) {
 	}
 }
 
+// 未配置 Intake 对两册同答 403；register 缺席、为空、取值不在集内，或带着集外键与集外排序维，也都答 403——register 与其余
+// 查询参数都在 Intake 之后才看（ADR-0055 决定三）。
 func TestRoutePlansEndpointAnswersForbiddenWhenIntakeUnconfigured(t *testing.T) {
 	endpoint := networkhttp.NewQueryRoutePlansEndpoint(
 		networkhttp.UnconfiguredIntake{},
 		unreachableRoutePlanReader{t: t},
 	)
-	for _, register := range []string{"initial-route", "reassessment"} {
+	for _, target := range []string{
+		"/route-plans?register=initial-route",
+		"/route-plans?register=reassessment",
+		"/route-plans",
+		"/route-plans?register=",
+		"/route-plans?register=SYN-NOT-A-REGISTER",
+		"/route-plans?register=initial-route&tenant=SYN-TENANT-09",
+		"/route-plans?register=reassessment&sort=-declaredParcelId",
+	} {
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder,
-			httptest.NewRequest(http.MethodGet, "/route-plans?register="+register, nil))
+		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
 		if recorder.Code != http.StatusForbidden {
-			t.Fatalf("未配置 Intake 对 %s 答 %d, want 403", register, recorder.Code)
+			t.Fatalf("未配置 Intake 对 %s 答 %d, want 403", target, recorder.Code)
 		}
 	}
 }

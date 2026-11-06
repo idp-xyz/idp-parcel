@@ -199,8 +199,8 @@ func (repository *InitialRouteTieDecisions) ListInitialRouteTies(
 	return cataloguepage.Result[ports.InitialRouteTieCatalogueRow]{Rows: listed, Next: page.Next, Total: page.Total}, nil
 }
 
-// initialRouteTiePosition 取一行在缺省序上的位置，标识段序与 initialRouteTiePages 的落列一致。本册只放出 settledAt 一维；另放
-// 可排维时要按 sortField 取那一维的列值。
+// initialRouteTiePosition 取一行在缺省序上的位置，标识段序与 initialRouteTiePages 的落列一致。本册的可排维只放出 settledAt；声明
+// 另放可排维时，这里要按 sortField 取那一维的列值。
 func initialRouteTiePosition(scanned scannedInitialRouteTie, _ string) cataloguepage.Position {
 	row := scanned.row
 	return cataloguepage.Position{

@@ -1,7 +1,7 @@
--- 票 catalogue-read-pagination-rollout/07：network-routing 其余四册迁到 ADR-0144 之后，各册按「租户 + 排序维 + 行标识」取页，
--- 每册补一条与缺省序同形的索引（ADR-0144 决定七）。三张表上都没有以「租户 + 排序维」打头的旧索引，没有要换掉的。
+-- 票 catalogue-read-pagination-rollout/07：network-routing 其余各册迁到 ADR-0144 之后，各册按「租户 + 排序维 + 行标识」取页，
+-- 每册补一条与缺省序同形的索引（ADR-0144 决定七）。下列各表上都没有以「租户 + 排序维」打头的旧索引，没有要换掉的。
 
--- 初始路由判断册：缺省序落册时刻倒序，标识是判断键去掉租户的五段。
+-- 初始路由判断册：缺省序落册时刻倒序，标识是判断键去掉租户后余下的各段。
 CREATE INDEX initial_route_by_tenant_recorded
     ON network_routing.initial_route
         (tenant_id, recorded_at DESC, customer_account_id DESC, shipment_request_id DESC,
@@ -16,7 +16,7 @@ CREATE INDEX route_reassessment_suggestion_by_tenant_recorded
     ON network_routing.route_reassessment (tenant_id, recorded_at DESC, correlation_id DESC)
     WHERE suggestion IS NOT NULL;
 
--- 初始路由并列册：缺省序最近一次停住的时刻倒序，标识是以包裹打头的判断键五段；只取停在并列的行。
+-- 初始路由并列册：缺省序最近一次停住的时刻倒序，标识是判断键去掉租户后余下的各段、以包裹打头；只取停在并列的行。
 CREATE INDEX initial_route_not_formed_tied_by_tenant_settled
     ON network_routing.initial_route_not_formed
         (tenant_id, settled_at DESC, declared_parcel_id DESC, customer_account_id DESC,

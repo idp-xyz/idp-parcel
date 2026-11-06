@@ -160,7 +160,7 @@ func (catalogue *RoutePlanCatalogue) ListInitialRoutes(
 	return cataloguepage.Result[ports.InitialRouteCatalogueRow]{Rows: judgments, Next: page.Next, Total: page.Total}, nil
 }
 
-// initialRoutePosition 取一行在缺省序上的位置。本册只放出 recordedAt 一维；另放可排维时要按 sortField 取那一维的列值。
+// initialRoutePosition 取一行在缺省序上的位置。本册的可排维只放出 recordedAt；声明另放可排维时，这里要按 sortField 取那一维的列值。
 func initialRoutePosition(scanned scannedInitialRoute, _ string) cataloguepage.Position {
 	row := scanned.row
 	return cataloguepage.Position{
@@ -304,8 +304,8 @@ func (catalogue *RoutePlanCatalogue) ListRouteReassessments(
 	return page, nil
 }
 
-// routeReassessmentPosition 取一行在缺省序上的位置。RecordedAt 是扫描回来的列值，不是副本。本册只放出 recordedAt 一维；另放
-// 可排维时要按 sortField 取那一维的列值。
+// routeReassessmentPosition 取一行在缺省序上的位置。RecordedAt 是扫描回来的列值，不是副本。本册的可排维只放出 recordedAt；声明
+// 另放可排维时，这里要按 sortField 取那一维的列值。
 func routeReassessmentPosition(row ports.RouteReassessmentCatalogueRow, _ string) cataloguepage.Position {
 	return cataloguepage.Position{Value: cataloguepage.FormatInstant(row.RecordedAt), Identity: []string{row.CorrelationID}}
 }
