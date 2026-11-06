@@ -223,8 +223,8 @@ func getCustomerAccounts(t *testing.T, endpoint http.Handler, rawQuery string) (
 }
 
 // Covers: 票 catalogue-read-pagination/02 完成判据「未知键、集外排序维、词表外筛选值各答 400 带理由散文」——查询参数一律
-// 封闭集（ADR-0144 决定三、四）：多给的键若被静默忽略，页面以为筛了、服务端其实没筛。解码先于 Intake：渠道未配置时
-// 写错参数也先答 400，与 /network-catalog 同一次序；参数对了才轮到 Intake 答 403。
+// 封闭集（ADR-0144 决定三、四）：多给的键若被静默忽略，页面以为筛了、服务端其实没筛。解码在 Intake 之后：渠道未配置时
+// 参数写对写错都答 403 且逐字节相同（ADR-0055 决定三），与 /network-catalog 同一次序。
 func TestCustomerAccountsEndpointRefusesQueriesOutsideTheDeclaration(t *testing.T) {
 	endpoint := commercialhttp.NewQueryCustomerAccountsEndpoint(intakeDouble{query: catalogueQuery(t)}, &pagingAccountReaderDouble{})
 	for _, tc := range []struct {
@@ -246,11 +246,13 @@ func TestCustomerAccountsEndpointRefusesQueriesOutsideTheDeclaration(t *testing.
 
 	unconfigured := commercialhttp.NewQueryCustomerAccountsEndpoint(
 		intakeDouble{err: commercialhttp.ErrAccessChannelNotConfigured}, &pagingAccountReaderDouble{})
-	if recorder, _ := getCustomerAccounts(t, unconfigured, "sort=status"); recorder.Code != http.StatusBadRequest {
-		t.Fatalf("未配置渠道 + 坏参数 status = %d，want 400（解码先于 Intake）", recorder.Code)
+	bad, _ := getCustomerAccounts(t, unconfigured, "sort=status")
+	if bad.Code != http.StatusForbidden {
+		t.Fatalf("未配置渠道 + 坏参数 status = %d，want 403（Intake 先于解码）", bad.Code)
 	}
-	if recorder, _ := getCustomerAccounts(t, unconfigured, "sort=accountId"); recorder.Code != http.StatusForbidden {
-		t.Fatalf("未配置渠道 + 好参数 status = %d，want 403", recorder.Code)
+	good, _ := getCustomerAccounts(t, unconfigured, "sort=accountId")
+	if good.Code != http.StatusForbidden || good.Body.String() != bad.Body.String() {
+		t.Fatalf("未配置渠道 + 好参数 status = %d body = %s，want 403 且与坏参数那一问逐字节相同", good.Code, good.Body)
 	}
 }
 

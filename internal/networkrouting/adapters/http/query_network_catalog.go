@@ -107,8 +107,9 @@ var familyCatalogues = map[string]*cataloguepage.Catalogue{
 // 读业务内容——未配置 Intake 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏
 // 请求拒：替调用方默认一族就是替它猜。
 //
-// 其余查询参数（after、sort、筛选维与 q）按所选族的声明解码（ADR-0144 决定六），同属
-// 传输形状、同样先于 Intake：不成立即 400，理由散文放进 detail。
+// 其余查询参数（after、sort、筛选维与 q）在 Intake 之后按所选族的声明解码（ADR-0144 决定六）：
+// 渠道未配置时七族同答 403、不随这些参数写对写错而变（ADR-0055 决定三），没有凭据的调用方也就
+// 探不出各族开放了哪些查询维度；配置了的渠道上不成立即 400，理由散文放进 detail。
 func NewQueryNetworkCatalogEndpoint(
 	intake CatalogueQueryIntake,
 	reader OperationsCatalogReader,
@@ -127,6 +128,11 @@ func NewQueryNetworkCatalogEndpoint(
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
 		pageQuery, err := catalogue.Decode(values)
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
@@ -135,12 +141,6 @@ func NewQueryNetworkCatalogEndpoint(
 				return
 			}
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		ctx := request.Context()

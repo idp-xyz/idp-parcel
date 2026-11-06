@@ -278,7 +278,7 @@ func TestCatalogueIntakeFailuresKeepTheirGrades(t *testing.T) {
 
 // Covers: ADR-0077 Decision 一/五 — 节点族逐字段转写：未闭版 effectiveTo 缺席、已闭版
 // 在场；租户与页大小从作用域来（自报的 tenant / limit 在 ADR-0144 之下已是集外键，见
-// TestSelfReportedScopeParametersAreRefusedBeforeTheIntake）。
+// TestSelfReportedScopeParametersAreRefused）。
 func TestNodeVersionsAreListedVerbatim(t *testing.T) {
 	reader := &stubCatalogReader{
 		nodes: []ports.NodeDefinitionVersion{
@@ -586,11 +586,28 @@ func problemDetailText(t *testing.T, response *httptest.ResponseRecorder) string
 	return body.Error.Detail
 }
 
+// assertUnconfiguredCatalogueRefusal 断言渠道未配置时这一问答 403，且与写对的一问逐字节相同：查询参数在 Intake
+// 之后才解码（ADR-0055 决定三），没有凭据的调用方探不出各族开放了哪些查询维度。
+func assertUnconfiguredCatalogueRefusal(t *testing.T, query string) {
+	t.Helper()
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(networkhttp.UnconfiguredIntake{}, unreachableCatalogReader{t: t})
+	answer := func(query string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, catalogRequest(t, query))
+		return response
+	}
+	got, wellFormed := answer(query), answer("?family=node")
+	if got.Code != http.StatusForbidden || got.Body.String() != wellFormed.Body.String() {
+		t.Fatalf("%s：未配置渠道答 %d %s，want 与写对的一问同答 403 %s", query, got.Code, got.Body.String(), wellFormed.Body.String())
+	}
+}
+
 // Covers: ADR-0144 决定四「未知参数键 → MALFORMED_REQUEST」——自报的 tenant / limit 从前被忽略，
-// 如今是集外键，在 Intake 之前就拒（越权风险点 2 预告过的收紧）；读口不被触到。
-func TestSelfReportedScopeParametersAreRefusedBeforeTheIntake(t *testing.T) {
+// 如今是集外键（越权风险点 2 预告过的收紧）：配置了的渠道上答 400 带理由散文，读口不被触到；渠道未配置时
+// 与写对的一问同答 403。
+func TestSelfReportedScopeParametersAreRefused(t *testing.T) {
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
-		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
 		unreachableCatalogReader{t: t},
 	)
 	for _, query := range []string{"?family=node&tenant=TENANT-9", "?family=node&limit=9999"} {
@@ -602,14 +619,15 @@ func TestSelfReportedScopeParametersAreRefusedBeforeTheIntake(t *testing.T) {
 		if problemDetailText(t, response) == "" {
 			t.Fatalf("%s: 400 没带理由散文", query)
 		}
+		assertUnconfiguredCatalogueRefusal(t, query)
 	}
 }
 
-// Covers: ADR-0144 决定三、四、一——集外排序维、词表外筛选值、别族或换条件后的游标、超长的 q，都在
-// Intake 之前答 400，detail 带理由散文；读口不被触到。
+// Covers: ADR-0144 决定三、四、一——集外排序维、词表外筛选值、别族或换条件后的游标、超长的 q，在配置了的
+// 渠道上答 400，detail 带理由散文，读口不被触到；渠道未配置时与写对的一问同答 403。
 func TestMalformedQueryParametersAreRefusedWithAReason(t *testing.T) {
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
-		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
 		unreachableCatalogReader{t: t},
 	)
 	nodeQuery, err := ports.NodeVersionCatalogue.Decode(nil)
@@ -640,6 +658,7 @@ func TestMalformedQueryParametersAreRefusedWithAReason(t *testing.T) {
 			if problemDetailText(t, response) == "" {
 				t.Fatalf("400 没带理由散文：%s", response.Body.String())
 			}
+			assertUnconfiguredCatalogueRefusal(t, query)
 		})
 	}
 }
