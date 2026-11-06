@@ -16,9 +16,9 @@ import (
 )
 
 // 本文件对治理登记册端点（票 admin-skeleton-closure-batch/02，接管册 ADR-0155）证
-// 传输面：方法门、register 封闭四册缺席按坏请求拒且不触读口、未配置 Intake 对全部分支
-// 403、行体逐字段转写且开放区间上界如实缺席、接管盘点 jsonb 不上列、空册答空数组、
-// 读失败答 5xx。阶段评审查阅仍不在封闭集内。
+// 传输面：方法门、配置了的渠道上 register 缺席或不在封闭四册内按坏请求拒且不触读口、
+// 未配置 Intake 对一切请求 403（register 写错也一样）、行体逐字段转写且开放区间上界如实
+// 缺席、接管盘点 jsonb 不上列、空册答空数组、读失败答 5xx。阶段评审查阅仍不在封闭集内。
 
 var registryEndpointAt = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
@@ -140,9 +140,10 @@ func TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister(t *testing.T
 		t.Fatalf("Allow = %q, want GET", allow)
 	}
 
-	// 阶段评审查阅仍未开，不在封闭集内——今天问就是坏请求。缺席参数同拒。
+	// 阶段评审查阅仍未开，不在封闭集内——今天问就是坏请求。缺席参数与空值同拒。
 	for _, target := range []string{
 		"/governance-registers",
+		"/governance-registers?register=",
 		"/governance-registers?register=stage-review",
 	} {
 		recorder := httptest.NewRecorder()
@@ -157,6 +158,7 @@ func TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister(t *testing.T
 func TestGovernanceRegistersEndpointAnswersForbiddenWhenIntakeUnconfigured(t *testing.T) {
 	endpoint := governancehttp.NewQueryGovernanceRegistersEndpoint(
 		governancehttp.UnconfiguredIntake{}, unreachableRegistryReader{t: t})
+	var answered string
 	for _, register := range []string{"authority-interval", "suspension", "resumption", "takeover"} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder,
@@ -171,6 +173,20 @@ func TestGovernanceRegistersEndpointAnswersForbiddenWhenIntakeUnconfigured(t *te
 		detail, _ := body["error"].(map[string]any)
 		if detail["code"] != "ACCESS_CHANNEL_NOT_CONFIGURED" {
 			t.Fatalf("错误码 = %v", detail["code"])
+		}
+		answered = recorder.Body.String()
+	}
+
+	// register 也在 Intake 之后判：缺席、空值或写错时，未配置的渠道与写对的一问同答，答复不随请求内容变（ADR-0055 决定三）。
+	for _, target := range []string{
+		"/governance-registers",
+		"/governance-registers?register=",
+		"/governance-registers?register=stage-review",
+	} {
+		recorder := httptest.NewRecorder()
+		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+		if recorder.Code != http.StatusForbidden || recorder.Body.String() != answered {
+			t.Fatalf("未配置 Intake 对 %s 答 %d %s，want 与写对的一问同答 403 %s", target, recorder.Code, recorder.Body, answered)
 		}
 	}
 }

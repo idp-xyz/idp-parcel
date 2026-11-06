@@ -60,8 +60,8 @@ func TestGovernanceRegistersCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定一、三、四——集外的键、排序维与筛选键，解不开的游标、换了条件或换了一册还拿来的旧游标，都答 400
-// 带理由散文，读口不被调用。register 是选择器、取值进游标摘要：暂停册的游标拿去翻恢复册即拒。解码在 Intake 之后：渠道未配置
-// 时参数写对写错都答 403，答复不随请求内容变（ADR-0055 决定三）。
+// 带理由散文，读口不被调用。register 是选择器、取值进游标摘要：暂停册的游标拿去翻恢复册即拒。register 与解码都在 Intake
+// 之后：渠道未配置时参数写对写错、register 缺席或写错都答 403，答复不随请求内容变（ADR-0055 决定三）。
 func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	selected := url.Values{"register": {"suspension"}, "q": {"SYN-A"}}
 	keyed, err := ports.SuspensionRegistryPages.Decode(selected)
@@ -122,11 +122,14 @@ func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"?register=suspension&after=SYN-not-a-cursor",
 		"?register=suspension&tenant=SYN-TENANT-02",
 		"?register=takeover&authority=SYN-AUTH/successor",
+		"",
+		"?register=",
+		"?register=stage-review&q=SYN",
 	} {
 		response := httptest.NewRecorder()
 		unconfigured.ServeHTTP(response, registryRequest(query))
 		if response.Code != http.StatusForbidden || response.Body.String() != baseline.Body.String() {
-			t.Fatalf("%s 渠道未配置：%d %s，want 与不带参数同答 403 %s", query, response.Code, response.Body, baseline.Body)
+			t.Fatalf("%q 渠道未配置：%d %s，want 与写对的一问同答 403 %s", query, response.Code, response.Body, baseline.Body)
 		}
 	}
 }
