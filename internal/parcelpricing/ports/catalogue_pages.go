@@ -7,8 +7,8 @@ import (
 
 // 本文件是本上下文各列表读口的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/04）：可排维与筛选维按
 // 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列、q 覆盖哪几列在 postgres 读面里。缺省序保迁移前的次序
-// （该票 spec 取舍 1）；决胜键是行标识、与排序同向（决定三）——迁移前首列倒序、决胜键正序的几册，只在首列完全相同的行之间
-// 次序变了。
+// （该票 spec「缺省序保今天的次序」）；决胜键是行标识、与排序同向（决定三）——迁移前首列倒序、决胜键正序的几册，只在首列
+// 完全相同的行之间次序变了。
 //
 // /pricing-pending-series-evaluations 不在这里：它答的是按序列种类分组的计数，不是一册行，组数以种类的封闭集为界。
 
@@ -84,8 +84,9 @@ var ReferenceSeriesPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // ReferenceSeriesCoveragePages 是参考序列覆盖（GET /pricing-reference-series-coverage）的声明，一条序列（标识 + 种类）一行。
 //
 // 这一行是一条序列各版的聚合，没有登记时间一格；缺省序取 seriesId 升序，与迁移前同一口径——覆盖页是按序列找行，不按登记
-// 先后。行标识是（序列标识、种类）：版本表没有约束把一条标识钉在一个种类上（ReferenceSeriesCoverageRow 头注），同一标识两个
-// 种类各是一行。kind 放出作筛选维（决定四）；q 覆盖 seriesId。page 与 total 数的是序列，不是版本。
+// 先后。这一行不是登记表的行，行标识因此不取版本表主键去掉租户那几段（spec「行标识取登记表主键去掉租户那几段」），取聚合的
+// 分组键（序列标识、种类）：版本表没有约束把一条标识钉在一个种类上（ReferenceSeriesCoverageRow 头注），同一标识两个种类各是
+// 一行。kind 放出作筛选维（决定四）；q 覆盖 seriesId。page 与 total 数的是序列，不是版本。
 var ReferenceSeriesCoveragePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "pricing-reference-series-coverage",
 	Sorts:       []cataloguepage.SortDimension{{Name: "seriesId", Kind: cataloguepage.Text}},

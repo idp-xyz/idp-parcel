@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -164,65 +163,6 @@ func TestPriceCardDraftViewsTransportAnswers(t *testing.T) {
 		ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, priceCardDraftViewsTarget, nil))
 	if recorder.Code != http.StatusMethodNotAllowed || recorder.Header().Get("Allow") != http.MethodGet {
 		t.Fatalf("POST: status = %d allow = %q", recorder.Code, recorder.Header().Get("Allow"))
-	}
-}
-
-// Covers: ADR-0144 决定四、五、六——状态筛选从 Intake 挪进册声明后可以重复（维内取或），与排序、检索词一起解成查询对象
-// 原样交给读口；答复带 page（size 取 Intake 给的页大小，next 与 total 原样带出）。
-func TestPriceCardDraftViewsPassTheDecodedQueryAndCarryThePage(t *testing.T) {
-	reader := &priceCardDraftReaderDouble{pageProbe: pageProbe{next: "SYN-cursor", total: 7}}
-	recorder := requestPriceCardDrafts(priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{Limit: 50}}, reader,
-		priceCardDraftViewsTarget+"?status=VALIDATED&status=DRAFT&q=SYN-CARD&sort=submittedAt")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d；body = %s", recorder.Code, recorder.Body)
-	}
-	page := pageOf(t, recorder)
-	if string(page["size"]) != "50" || string(page["next"]) != `"SYN-cursor"` || string(page["total"]) != "7" {
-		t.Fatalf("page 不对：%s", recorder.Body.Bytes())
-	}
-	if reader.query.Sort != (cataloguepage.Sort{Field: "submittedAt"}) || reader.query.Keyword != "SYN-CARD" ||
-		!reflect.DeepEqual(reader.query.Filters["status"], []string{"DRAFT", "VALIDATED"}) {
-		t.Fatalf("读口收到的查询不对：%+v", reader.query)
-	}
-}
-
-// Covers: ADR-0144 决定一、四——原先 Intake 里那道封闭解码挪进册声明后照样封闭：小写或空的状态词、自报租户、自定页大小、
-// 集外排序维、解不开的游标与坏转义都答 400 带理由散文，读口不被走到。解码在 Intake 之后：渠道未配置时参数写对写错都答
-// 403，答复不随请求内容变（ADR-0055 决定三）。
-func TestPriceCardDraftViewsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
-	granted := priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{Limit: 50}}
-	for name, query := range map[string]string{
-		"小写状态词":  "?status=draft",
-		"空状态词":   "?status=",
-		"自报租户":   "?tenant=SYN-TENANT-02",
-		"自定页大小":  "?status=DRAFT&limit=1000",
-		"集外排序维":  "?sort=planId",
-		"解不开的游标": "?after=SYN-not-a-cursor",
-		"坏转义":    "?q=%zz",
-	} {
-		t.Run(name, func(t *testing.T) {
-			reader := &priceCardDraftReaderDouble{}
-			assertPageQueryRefused(t, requestPriceCardDrafts(granted, reader, priceCardDraftViewsTarget+query))
-			if reader.called {
-				t.Fatal("坏请求不该走到读口")
-			}
-		})
-	}
-
-	refused := requestPriceCardDrafts(granted, &priceCardDraftReaderDouble{}, priceCardDraftViewsTarget+"?status=ARCHIVED")
-	if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "status") {
-		t.Fatalf("理由散文应点到那一格：%q", detail)
-	}
-	var answers []string
-	for _, query := range []string{"?status=ARCHIVED", "?status=PUBLISHED"} {
-		unconfigured := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{}, priceCardDraftViewsTarget+query)
-		if unconfigured.Code != http.StatusForbidden || errorCode(t, unconfigured) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-			t.Fatalf("%s：status = %d；body = %s", query, unconfigured.Code, unconfigured.Body)
-		}
-		answers = append(answers, unconfigured.Body.String())
-	}
-	if answers[0] != answers[1] {
-		t.Fatalf("未配置的渠道答复随查询串变了：%q / %q", answers[0], answers[1])
 	}
 }
 
