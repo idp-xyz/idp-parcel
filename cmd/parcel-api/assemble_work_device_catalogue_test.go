@@ -10,10 +10,12 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // Covers: 票 operator-channel/21——查阅端点接在操作者查阅读上。发行方未配置答未配置；没有查阅读授予答未授予；
-// 授予齐备而册读失败答答案未形成，不答未配置；空册答空列表。
+// 授予齐备而册读失败答答案未形成，不答未配置；空册答空列表。请求自报的 tenant 在认证之前不改变任何一格，认证过了是集外
+// 查询键、答 400（ADR-0144 决定四）——租户只取自信封。
 func TestWorkDeviceCatalogueAnswersFromTheOperatorChannel(t *testing.T) {
 	if identityhttp.WorkDeviceCataloguePath != "/work-devices" {
 		t.Fatalf("路径常量 = %s，端点表字面量对不上", identityhttp.WorkDeviceCataloguePath)
@@ -32,20 +34,23 @@ func TestWorkDeviceCatalogueAnswersFromTheOperatorChannel(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	const selfReportedTenant = "/work-devices?tenant=SYN-TENANT-02"
 	cases := []struct {
 		name      string
 		minter    *accessidentity.OperatorMinter
 		catalogue accessidentity.DeviceCatalogue
 		token     string
+		target    string
 		status    int
 		code      string
 		outcome   string
 	}{
-		{"issuer unconfigured", unconfigured, emptyDeviceCatalogue{}, "presented.operator.token", http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED", ""},
-		{"no bearer token", granted, emptyDeviceCatalogue{}, "", http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED", ""},
-		{"write grant is not a read grant", ungranted, emptyDeviceCatalogue{}, "presented.operator.token", http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
-		{"reader down", granted, failingDeviceCatalogue{}, "presented.operator.token", http.StatusInternalServerError, "NO_ANSWER_FORMED", ""},
-		{"empty catalogue", granted, emptyDeviceCatalogue{}, "presented.operator.token", http.StatusOK, "", "WORK_DEVICES_LISTED"},
+		{"issuer unconfigured", unconfigured, emptyDeviceCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED", ""},
+		{"no bearer token", granted, emptyDeviceCatalogue{}, "", selfReportedTenant, http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED", ""},
+		{"write grant is not a read grant", ungranted, emptyDeviceCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
+		{"self-reported tenant is outside the query set", granted, failingDeviceCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusBadRequest, "MALFORMED_REQUEST", ""},
+		{"reader down", granted, failingDeviceCatalogue{}, "presented.operator.token", "/work-devices", http.StatusInternalServerError, "NO_ANSWER_FORMED", ""},
+		{"empty catalogue", granted, emptyDeviceCatalogue{}, "presented.operator.token", "/work-devices", http.StatusOK, "", "WORK_DEVICES_LISTED"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -53,7 +58,7 @@ func TestWorkDeviceCatalogueAnswersFromTheOperatorChannel(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := httptest.NewRequest(http.MethodGet, "/work-devices?tenant=SYN-TENANT-02", nil)
+			request := httptest.NewRequest(http.MethodGet, testCase.target, nil)
 			if testCase.token != "" {
 				request.Header.Set("Authorization", "Bearer "+testCase.token)
 			}
@@ -84,12 +89,16 @@ func TestWorkDeviceCatalogueAnswersFromTheOperatorChannel(t *testing.T) {
 
 type emptyDeviceCatalogue struct{}
 
-func (emptyDeviceCatalogue) ListDevices(context.Context, string) ([]accessidentity.DeviceCatalogueRow, error) {
-	return []accessidentity.DeviceCatalogueRow{}, nil
+func (emptyDeviceCatalogue) ListDevices(
+	context.Context, string, int, cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.DeviceCatalogueRow], error) {
+	return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{Rows: []accessidentity.DeviceCatalogueRow{}}, nil
 }
 
 type failingDeviceCatalogue struct{}
 
-func (failingDeviceCatalogue) ListDevices(context.Context, string) ([]accessidentity.DeviceCatalogueRow, error) {
-	return nil, errors.New("device catalogue down")
+func (failingDeviceCatalogue) ListDevices(
+	context.Context, string, int, cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.DeviceCatalogueRow], error) {
+	return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{}, errors.New("device catalogue down")
 }

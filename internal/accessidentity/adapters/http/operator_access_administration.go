@@ -13,6 +13,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/accessidentity/adapters/registrationjson"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -123,10 +124,12 @@ func allowMethod(response http.ResponseWriter, request *http.Request, method str
 	return false
 }
 
-// NewQueryOperatorsEndpoint 交回操作者册查阅的 HTTP 入口（ADR-0363 决定二）。只接受 GET，租户只来自认证结果。
+// NewQueryOperatorsEndpoint 交回操作者册查阅的 HTTP 入口（ADR-0363 决定二）。只接受 GET，租户只来自认证结果；查询参数在
+// 认证之后按 accessidentity.OperatorCataloguePages 解码，页大小是 operatorCatalogueReadLimit。
 //
 // 答复里的词表（可授能力面、决定种类、作业范围种类）与 issuer 是产品与部署的事实，不是租户取值：管理台据此摆选项、预填
-// 发行方，不在前端抄第二份。issuer 是本进程信任的那一个，渠道未配置时整族答 403，这一格不会被读到。
+// 发行方，不在前端抄第二份。issuer 是本进程信任的那一个，渠道未配置时整族答 403，这一格不会被读到。词表与 issuer 不随页
+// 变，每一页都带。
 func NewQueryOperatorsEndpoint(
 	authenticator OperatorAccessAdministrationAuthenticator,
 	catalogue accessidentity.OperatorCatalogue,
@@ -144,13 +147,20 @@ func NewQueryOperatorsEndpoint(
 			writeCatalogueProblem(response, err)
 			return
 		}
-		rows, err := catalogue.ListOperators(request.Context(), administrator.TenantID)
+		query, err := accessidentity.OperatorCataloguePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		result, err := catalogue.ListOperators(request.Context(), administrator.TenantID, operatorCatalogueReadLimit, query)
 		if err != nil {
 			// 读不回是答案未形成，不是空册。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		writeJSON(response, http.StatusOK, operatorsResponseOf(issuer, rows))
+		body := operatorsResponseOf(issuer, result.Rows)
+		body.Page = result.Page(operatorCatalogueReadLimit)
+		writeJSON(response, http.StatusOK, body)
 	}), nil
 }
 
@@ -307,12 +317,13 @@ type registrationResponse struct {
 }
 
 type operatorsResponse struct {
-	Outcome        string         `json:"outcome"`
-	Issuer         string         `json:"issuer"`
-	Faces          []string       `json:"faces"`
-	DecisionKinds  []string       `json:"decisionKinds"`
-	WorkScopeKinds []string       `json:"workScopeKinds"`
-	Operators      []operatorBody `json:"operators"`
+	Outcome        string             `json:"outcome"`
+	Issuer         string             `json:"issuer"`
+	Faces          []string           `json:"faces"`
+	DecisionKinds  []string           `json:"decisionKinds"`
+	WorkScopeKinds []string           `json:"workScopeKinds"`
+	Operators      []operatorBody     `json:"operators"`
+	Page           cataloguepage.Page `json:"page"`
 }
 
 type operatorBody struct {

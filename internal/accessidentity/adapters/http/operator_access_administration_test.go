@@ -14,6 +14,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件证操作者接入管理面的四口（ADR-0363 决定二、三）：查阅答复的形状与词表、三个写口的准入三格、坏载荷、答复代数到状态码的
@@ -32,7 +33,11 @@ func (fake adminAuthenticatorFake) AuthenticateAccessAdministration(context.Cont
 
 type operatorCatalogueFake struct {
 	tenant   string
+	limit    int
+	query    cataloguepage.Query
 	rows     []accessidentity.OperatorCatalogueRow
+	next     string
+	total    int64
 	grant    accessidentity.RecordedGrant
 	found    bool
 	err      error
@@ -40,13 +45,18 @@ type operatorCatalogueFake struct {
 	grantIDs []string
 }
 
-func (fake *operatorCatalogueFake) ListOperators(_ context.Context, tenantID string) ([]accessidentity.OperatorCatalogueRow, error) {
+func (fake *operatorCatalogueFake) ListOperators(
+	_ context.Context,
+	tenantID string,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.OperatorCatalogueRow], error) {
 	fake.listed++
-	fake.tenant = tenantID
+	fake.tenant, fake.limit, fake.query = tenantID, limit, query
 	if fake.err != nil {
-		return nil, fake.err
+		return cataloguepage.Result[accessidentity.OperatorCatalogueRow]{}, fake.err
 	}
-	return fake.rows, nil
+	return cataloguepage.Result[accessidentity.OperatorCatalogueRow]{Rows: fake.rows, Next: fake.next, Total: fake.total}, nil
 }
 
 func (fake *operatorCatalogueFake) FindGrant(_ context.Context, tenantID, grantID string) (accessidentity.RecordedGrant, bool, error) {
@@ -164,7 +174,7 @@ func operatorsHandler(t *testing.T, authenticator identityhttp.OperatorAccessAdm
 }
 
 // Covers: ADR-0363 决定二——查阅答复带本租户的操作者、授予与撤销记录，外加产品词表与本进程信任的发行方；可选格按能力面在场而不是 null；
-// 请求里自报的租户不进答复，册只按信封上的租户列。
+// 册只按信封上的租户列，查询串上自报的租户是集外键、答 400（ADR-0144 决定四）。
 func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	subject := catalogueSubject(t)
 	binding, err := accessidentity.NewOperatorBinding(subject, catalogueTenant, "SYN-BASIS-BINDING")
@@ -214,9 +224,13 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	catalogue := &operatorCatalogueFake{rows: []accessidentity.OperatorCatalogueRow{row, empty}}
 	handler := operatorsHandler(t, adminAuthenticatorFake{administrator: administrator(t)}, catalogue, "https://id.syn.example/dex")
 
-	response := serveJSON(handler, http.MethodGet, identityhttp.OperatorsPath+"?tenant=SYN-TENANT-02", "")
+	response := serveJSON(handler, http.MethodGet, identityhttp.OperatorsPath, "")
 	if response.Code != http.StatusOK || catalogue.tenant != catalogueTenant {
 		t.Fatalf("status %d tenant %s body %s", response.Code, catalogue.tenant, response.Body.String())
+	}
+	if refused := serveJSON(handler, http.MethodGet, identityhttp.OperatorsPath+"?tenant=SYN-TENANT-02", ""); refused.Code != http.StatusBadRequest ||
+		problemCode(t, refused) != "MALFORMED_REQUEST" || catalogue.listed != 1 {
+		t.Fatalf("自报租户 = %d %s，册读了 %d 次", refused.Code, refused.Body.String(), catalogue.listed)
 	}
 	var listed struct {
 		Outcome        string           `json:"outcome"`

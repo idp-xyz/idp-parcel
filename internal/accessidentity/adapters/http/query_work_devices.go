@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -93,7 +94,8 @@ func unconfiguredOperatorRead() http.Handler {
 	})
 }
 
-// NewQueryWorkDevicesEndpoint 交回作业设备册查阅的 HTTP 入口。只接受 GET。租户只来自认证结果。
+// NewQueryWorkDevicesEndpoint 交回作业设备册查阅的 HTTP 入口。只接受 GET。租户只来自认证结果；查询参数在认证之后按
+// accessidentity.DeviceCataloguePages 解码，页大小是 operatorCatalogueReadLimit。
 func NewQueryWorkDevicesEndpoint(
 	authenticator OperatorCatalogueAuthenticator,
 	catalogue accessidentity.DeviceCatalogue,
@@ -112,19 +114,25 @@ func NewQueryWorkDevicesEndpoint(
 			writeCatalogueProblem(response, err)
 			return
 		}
-		rows, err := catalogue.ListDevices(request.Context(), tenant)
+		query, err := accessidentity.DeviceCataloguePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		result, err := catalogue.ListDevices(request.Context(), tenant, operatorCatalogueReadLimit, query)
 		if err != nil {
 			// 读不回是答案未形成，不是空册。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]workDeviceBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]workDeviceBody, 0, len(result.Rows))
+		for _, row := range result.Rows {
 			bodies = append(bodies, workDeviceBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, workDeviceListResponse{
 			Outcome: outcomeWorkDevicesListed,
 			Devices: bodies,
+			Page:    result.Page(operatorCatalogueReadLimit),
 		})
 	}), nil
 }
@@ -146,8 +154,9 @@ func writeCatalogueProblem(response http.ResponseWriter, err error) {
 }
 
 type workDeviceListResponse struct {
-	Outcome string           `json:"outcome"`
-	Devices []workDeviceBody `json:"devices"`
+	Outcome string             `json:"outcome"`
+	Devices []workDeviceBody   `json:"devices"`
+	Page    cataloguepage.Page `json:"page"`
 }
 
 // workDeviceBody 只有查阅行上的那几格。deactivatedAt 缺席即这一行尚未停用。
@@ -176,12 +185,19 @@ type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
+// problemDetail 的 detail 只随「改请求才会好」的 4xx 在场，是给操作者看的理由散文，
+// 调用方不据此分支；为空时那一格缺席，不写空串。
 type problemDetail struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+func writeProblemWithDetail(response http.ResponseWriter, status int, code string, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

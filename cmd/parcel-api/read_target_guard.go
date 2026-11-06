@@ -32,10 +32,8 @@ var targetCheckExemptions = map[string]string{
 	"/reference-data/countries":  referenceDataExemption,
 	"/reference-data/currencies": referenceDataExemption,
 	"/reference-data/units":      referenceDataExemption,
-	"/work-devices":              operatorIdentityExemption,
 	"/operator-binding":          operatorIdentityExemption,
 	"/operator-grants":           operatorIdentityExemption,
-	"/operators":                 operatorIdentityExemption,
 }
 
 const (
@@ -50,9 +48,9 @@ const (
 // 首方客户族不挂：本族先认证、后读查询串，令牌不过的调用方看不到查询串校验的结果，所以它的读口在 Intake 里、认证之后判
 // （visibilityhttp 的 refuseUnstorableQueryValue，判据同一份）。
 //
-// 挂旧形状的只列今天有 GET 行、处理器写的坏请求确是 {"error":{"code"}} 的族：主数据与运营查阅读、登记册配置写、隔离读。别的族
-// 哪天挂上 GET 行，先在这里定它的坏请求形状——不预先认定，族没列到就在登记处的 init 里停。哪一族迁到问题详情（ADR-0140
-// 决定三的后续票），就把它从旧形状那一格挪出去。
+// 挂旧形状的只列今天有 GET 行、处理器写的坏请求确是 {"error":{"code"}} 的族：主数据与运营查阅读、登记册配置写、隔离读、操作者
+// 接入管理。别的族哪天挂上 GET 行，先在这里定它的坏请求形状——不预先认定，族没列到就在登记处的 init 里停。哪一族迁到问题详情
+// （ADR-0140 决定三的后续票），就把它从旧形状那一格挪出去。
 func unstorableTargetRefusal(pattern string, line endpointLine) http.HandlerFunc {
 	if line.method != http.MethodGet {
 		return nil
@@ -63,7 +61,7 @@ func unstorableTargetRefusal(pattern string, line endpointLine) http.HandlerFunc
 	switch line.face.family {
 	case faceCustomerClient:
 		return nil
-	case faceOperationsRead, faceRegistryWrite, faceIsolatedRead:
+	case faceOperationsRead, faceRegistryWrite, faceIsolatedRead, faceOperatorAccessAdministration:
 		return writeLegacyMalformedRequest
 	}
 	panic(fmt.Sprintf("parcel-api: GET endpoint %s declares face family %q, whose bad-request shape is not settled here", pattern, line.face.family))

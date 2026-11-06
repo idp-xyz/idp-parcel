@@ -249,9 +249,9 @@ func productionReadRouter(t *testing.T, cases []unstorableReadCase) http.Handler
 	return httpapi.NewWithEndpoints(buildinfo.Info{}, endpoints)
 }
 
-// Covers: 票 document-numbering/15 完成判据「cmd 真库测试」——清点里修前答 500 NO_ANSWER_FORMED 的格，每个上下文取一口，经生产
-// 装配接真库：NUL 与三种非法 UTF-8 都答 400 旧形状；同一格换成合法多字节，答复与 ASCII 同状态、不是 400 也不是 500。外加一条
-// 同形核对：/tracking-projections 处理器自己答的坏请求（两个定位参数同在）与检查答的逐字节相同。
+// Covers: 票 document-numbering/15 完成判据「cmd 真库测试」——清点里修前答 500 NO_ANSWER_FORMED 的格，以及把查询值带进库的
+// 查阅口，每个上下文取一口，经生产装配接真库：NUL 与三种非法 UTF-8 都答 400 旧形状；同一格换成合法多字节，答复与 ASCII 同状态、
+// 不是 400 也不是 500。外加一条同形核对：/tracking-projections 处理器自己答的坏请求（两个定位参数同在）与检查答的逐字节相同。
 func TestUnstorableReadValuesAreBadRequestsAgainstARealDatabase(t *testing.T) {
 	query, path := url.QueryEscape, url.PathEscape
 	cases := []unstorableReadCase{
@@ -265,6 +265,7 @@ func TestUnstorableReadValuesAreBadRequestsAgainstARealDatabase(t *testing.T) {
 		{"/pricing-price-cards/content", "/pricing-price-cards/content?id={v}&version=v1", query},
 		{"/settlement-statement-lines", "/settlement-statement-lines?statement={v}", query},
 		{"/transport-fulfillment-external-tracking-facts", "/transport-fulfillment-external-tracking-facts?source={v}&view=pending", query},
+		{"/work-devices", "/work-devices?q={v}", query},
 	}
 	router := productionReadRouter(t, cases)
 	get := func(target string) *httptest.ResponseRecorder {
@@ -310,9 +311,9 @@ func TestTargetCheckExemptionsNameDeclaredReadLines(t *testing.T) {
 	}
 }
 
-// Covers: 票 document-numbering/15 评审修订（Spec 阻断）——豁免的六口经登记处真装配、真铸造器认证之后，对坏目标的答复与不挂检查的
-// 同一处理器逐字节相同：基础数据三口 region / category 带 NUL 仍答各自的 400 REGION_NOT_RECOGNIZED / CATEGORY_NOT_RECOGNIZED，
-// q 带 NUL 或非法 UTF-8 仍答 200；操作者身份三口带一格不读的坏查询值仍答 200。对照的处理器照各特性的 mount 用 build 件直接
+// Covers: 票 document-numbering/15 评审修订（Spec 阻断）——豁免表里的各口经登记处真装配、真铸造器认证之后，对坏目标的答复与不挂
+// 检查的同一处理器逐字节相同：基础数据各口 region / category 带 NUL 仍答各自的 400 REGION_NOT_RECOGNIZED / CATEGORY_NOT_RECOGNIZED，
+// q 带 NUL 或非法 UTF-8 仍答 200；操作者身份各口带一格不读的坏查询值仍答 200。对照的处理器照各特性的 mount 用 build 件直接
 // 立起来——处理器自 base 以来没动，它的答复就是 base 的答复。
 func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -350,10 +351,6 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workDevices, err := buildWorkDeviceCatalogue(minter, devices)
-	if err != nil {
-		t.Fatal(err)
-	}
 	binding, err := buildOperatorBinding(minter)
 	if err != nil {
 		t.Fatal(err)
@@ -362,22 +359,12 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	operatorBooks, err := aipg.NewOperatorRegistry(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	operators, err := buildOperatorCatalogue(minter, operatorBooks, "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	bare := map[string]http.Handler{
 		"/reference-data/countries":  refdatahttp.HandlerOrUnconfigured(reference.countries),
 		"/reference-data/currencies": refdatahttp.HandlerOrUnconfigured(reference.currencies),
 		"/reference-data/units":      refdatahttp.HandlerOrUnconfigured(reference.units),
-		"/work-devices":              identityhttp.WorkDeviceCatalogueHandler(workDevices),
 		"/operator-binding":          identityhttp.OperatorBindingHandler(binding),
 		"/operator-grants":           identityhttp.OperatorGrantsHandler(grants),
-		"/operators":                 identityhttp.OperatorsHandler(operators),
 	}
 	if len(bare) != len(targetCheckExemptions) {
 		t.Fatalf("对照处理器 %d 只，豁免表 %d 行：豁免表变了，这条用例要跟上", len(bare), len(targetCheckExemptions))
@@ -402,8 +389,7 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 			"/reference-data/countries?region="+value, "/reference-data/countries?q="+value,
 			"/reference-data/currencies?q="+value,
 			"/reference-data/units?category="+value, "/reference-data/units?q="+value,
-			"/work-devices?probeValue="+value, "/operator-binding?probeValue="+value, "/operator-grants?probeValue="+value,
-			"/operators?probeValue="+value)
+			"/operator-binding?probeValue="+value, "/operator-grants?probeValue="+value)
 	}
 	for _, target := range targets {
 		got, want := serve(assembled, target), serve(unguarded, target)
@@ -421,7 +407,6 @@ func TestExemptReadLinesAnswerExactlyAsTheirHandlersDo(t *testing.T) {
 		"/reference-data/units?category=SYN%FFX":     {http.StatusBadRequest, "CATEGORY_NOT_RECOGNIZED"},
 		"/reference-data/countries?q=SYN%00X":        {http.StatusOK, ""},
 		"/reference-data/currencies?q=SYN%C0%AFX":    {http.StatusOK, ""},
-		"/work-devices?probeValue=SYN%00X":           {http.StatusOK, ""},
 		"/operator-binding?probeValue=SYN%ED%A0%80X": {http.StatusOK, ""},
 		"/operator-grants?probeValue=SYN%FFX":        {http.StatusOK, ""},
 	}

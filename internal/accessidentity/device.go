@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ErrIncompleteDeviceRegistration 表示设备册的一行缺件，建不成。
@@ -164,12 +166,18 @@ func (device RecordedDevice) CatalogueRow() (DeviceCatalogueRow, error) {
 	return NewDeviceCatalogueRow(registration.DeviceID(), registration.WorkScope(), nil)
 }
 
-// DeviceCatalogue 按租户列出已登记设备。空册答空切片，不答未配置；读不动才答 error。
+// DeviceCatalogue 按租户列出已登记设备，按 DeviceCataloguePages 解出的查询取一页（ADR-0144 决定六）。limit 是页大小，
+// 非正即拒；空册答空页，不答未配置；读不动才答 error。
 //
 // 与 DeviceRegistry 分列：FindDevice 的替身只为一台设备的铸造服务，列册是查阅。塞进同一个接口会让那些替身空实现
 // 一个它们碰不到的方法。postgres 的 DeviceRegistry 两者都实现，册仍是一本。
 type DeviceCatalogue interface {
-	ListDevices(ctx context.Context, tenantID string) ([]DeviceCatalogueRow, error)
+	ListDevices(
+		ctx context.Context,
+		tenantID string,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DeviceCatalogueRow], error)
 }
 
 // DeviceRegistry 是设备册的装载口：按（租户、设备标识）取一台设备，连同它的停用。

@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // DeviceRegistry 实现作业设备册的登记口与装载口（access_identity 0004、ADR-0149 决定二）。撞键从不覆盖：同内容重放
@@ -170,38 +171,73 @@ func (registry *DeviceRegistry) FindDevice(
 	return device, true, nil
 }
 
-// ListDevices 按租户列出已登记设备，含已停用的。空册答空切片。别的租户的行不在结果里。
+// deviceCatalogueStatus 由停用导出查阅行上的状态词，词取 accessidentity.DeviceCatalogueStatus：登记与停用不另存一列状态。
+var deviceCatalogueStatus = fmt.Sprintf("CASE WHEN x.device_id IS NULL THEN '%s' ELSE '%s' END",
+	accessidentity.DeviceCatalogueRegistered, accessidentity.DeviceCatalogueDeactivated)
+
+// deviceCataloguePages 把 accessidentity.DeviceCataloguePages 落到设备表 d 与停用表 x 的列上。停用表以（租户、设备标识）
+// 为主键，左连接不放大行数，总数数的仍是设备。
+var deviceCataloguePages = accessidentity.DeviceCataloguePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"deviceId": "d.device_id"},
+	Identity: []string{"d.device_id"},
+	Filters:  map[string]string{"status": deviceCatalogueStatus},
+	Keyword:  []string{"d.device_id", "d.work_scope_ref"},
+})
+
+// scannedDevice 是一台设备扫描回来的设备标识列与建好的查阅行：查阅行上的标识经构造门修剪过，游标位置取列上原样的值。
+type scannedDevice struct {
+	deviceID string
+	row      accessidentity.DeviceCatalogueRow
+}
+
+// ListDevices 按租户列出已登记设备，含已停用的，取页按 accessidentity.DeviceCataloguePages。空册答空页。别的租户的行不在
+// 结果里。一台设备连同它的停用出自同一条查询；总数另起一句，与本页同一组条件。limit 非正是调用方编程错误。
 //
-// 查询仍取出依据，只为经领域构造门重建登记行；查阅行再把依据留在登记行上，不带出去。次序按设备标识，
+// 查询仍取出依据，只为经领域构造门重建登记行；查阅行再把依据留在登记行上，不带出去。缺省次序按设备标识，
 // 两次读回才对得上，不表示业务优先级。
 func (registry *DeviceRegistry) ListDevices(
 	ctx context.Context,
 	tenantID string,
-) ([]accessidentity.DeviceCatalogueRow, error) {
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.DeviceCatalogueRow], error) {
 	const operation = "list devices"
+	fail := func(err error) (cataloguepage.Result[accessidentity.DeviceCatalogueRow], error) {
+		return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{}, fmt.Errorf("%s: %w", operation, err)
+	}
 	tenant := strings.TrimSpace(tenantID)
 	if tenant == "" {
-		return nil, fmt.Errorf("%s: %w", operation, accessidentity.ErrDeviceCatalogueTenantRequired)
+		return fail(accessidentity.ErrDeviceCatalogueTenantRequired)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := deviceCataloguePages.Plan(query, "d.tenant_id = $1", []any{tenant}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := registry.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+		return fail(err)
+	}
+
+	const source = `access_identity.device d
+		   LEFT JOIN access_identity.device_deactivation x
+		     ON x.tenant_id = d.tenant_id AND x.device_id = d.device_id`
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT d.device_id, d.work_scope_kind, d.work_scope_ref, d.basis_ref, x.deactivated_at, x.basis_ref
-		   FROM access_identity.device d
-		   LEFT JOIN access_identity.device_deactivation x
-		     ON x.tenant_id = d.tenant_id AND x.device_id = d.device_id
-		  WHERE d.tenant_id = $1
-		  ORDER BY d.device_id`,
-		tenant,
+		plan.PageSQL("d.device_id, d.work_scope_kind, d.work_scope_ref, d.basis_ref, x.deactivated_at, x.basis_ref", source),
+		plan.PageArgs...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := make([]accessidentity.DeviceCatalogueRow, 0)
+	var fetched []scannedDevice
 	for rows.Next() {
 		var (
 			deviceID, kind, reference, basis string
@@ -209,22 +245,36 @@ func (registry *DeviceRegistry) ListDevices(
 			deactivationBasis                *string
 		)
 		if err := rows.Scan(&deviceID, &kind, &reference, &basis, &deactivatedAt, &deactivationBasis); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return fail(err)
 		}
 		device, err := recordedDeviceFromRow(tenant, deviceID, kind, reference, basis, deactivatedAt, deactivationBasis)
 		if err != nil {
-			return nil, fmt.Errorf("%s: 设备 %s：%w", operation, deviceID, err)
+			return fail(fmt.Errorf("设备 %s：%w", deviceID, err))
 		}
 		row, err := device.CatalogueRow()
 		if err != nil {
-			return nil, fmt.Errorf("%s: 设备 %s：%w", operation, deviceID, err)
+			return fail(fmt.Errorf("设备 %s：%w", deviceID, err))
 		}
-		listed = append(listed, row)
+		fetched = append(fetched, scannedDevice{deviceID: deviceID, row: row})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+		return fail(err)
 	}
-	return listed, nil
+
+	page, err := cataloguepage.Finish(query, fetched, limit, total, devicePosition)
+	if err != nil {
+		return fail(err)
+	}
+	listed := make([]accessidentity.DeviceCatalogueRow, 0, len(page.Rows))
+	for _, scanned := range page.Rows {
+		listed = append(listed, scanned.row)
+	}
+	return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{Rows: listed, Next: page.Next, Total: page.Total}, nil
+}
+
+// devicePosition 取本页末台设备扫描回来的设备标识：排序维与行标识是同一列。
+func devicePosition(row scannedDevice, _ string) cataloguepage.Position {
+	return cataloguepage.Position{Value: row.deviceID, Identity: []string{row.deviceID}}
 }
 
 // recordedDeviceFromRow 经领域构造门重建一台设备，理由同 recordedGrantFromRow。
