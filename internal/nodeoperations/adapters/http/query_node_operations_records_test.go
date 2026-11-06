@@ -203,7 +203,7 @@ func TestUnconfiguredIntakeRefusesEveryNodeOperationsRecordsRequest(t *testing.T
 	}
 }
 
-// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400），读口不被触到。实际
+// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400，理由散文进 detail），读口不被触到。实际
 // 测量与交接证据两区在存储上没有登记册，它们的名字也在封闭集之外：没有表就没有读法，
 // 答一份恒空册子会把「无处可登」演成「登记册为空」。
 func TestNodeOperationsRecordsQueryRejectsUnknownRegistries(t *testing.T) {
@@ -212,28 +212,28 @@ func TestNodeOperationsRecordsQueryRejectsUnknownRegistries(t *testing.T) {
 	)
 	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=receptions", "?registry=measurement", "?registry=handover-evidence"} {
 		t.Run(registry, func(t *testing.T) {
-			response := serveGet(endpoint, "/node-operations-records"+registry)
-			if response.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d（%s）", response.Code, http.StatusBadRequest, response.Body.String())
-			}
-			if got := problemCode(t, response); got != "MALFORMED_REQUEST" {
-				t.Fatalf("code = %q, want MALFORMED_REQUEST", got)
-			}
-			assertNoOutcome(t, response)
+			assertPageQueryRefused(t, serveGet(endpoint, "/node-operations-records"+registry))
 		})
 	}
 }
 
-// Covers: 门的次序 — 请求形状立不起来先于渠道未配置作答。册名认不出是请求自身的事，
-// 判它不需要先知道调用方是谁。
-func TestAnUnknownRegistryIsRefusedBeforeTheChannelCheck(t *testing.T) {
+// Covers: 门的次序 — 渠道未配置先于一切查询参数作答（该票 spec「端点先 Intake、后解码查询参数」，ADR-0055 决定三）：册名也是
+// 查询参数，缺席或认不出的册名在未配置的渠道上与合规的一问同答 403，答复不随请求内容变。
+func TestAnUnknownRegistryOnAnUnconfiguredChannelAnswers403(t *testing.T) {
 	endpoint := nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(
 		nodeopshttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t},
 	)
-	response := serveGet(endpoint, "/node-operations-records?registry=unknown")
-
-	if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	want := serveGet(endpoint, "/node-operations-records?registry=reception")
+	if want.Code != http.StatusForbidden || problemCode(t, want) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("合规的一问：status = %d body = %s", want.Code, want.Body.String())
+	}
+	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=measurement"} {
+		t.Run(registry, func(t *testing.T) {
+			response := serveGet(endpoint, "/node-operations-records"+registry)
+			if response.Code != want.Code || response.Body.String() != want.Body.String() {
+				t.Fatalf("status = %d body = %s，应与合规的一问逐字相同", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 

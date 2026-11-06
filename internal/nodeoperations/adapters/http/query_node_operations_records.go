@@ -2,8 +2,11 @@ package nodeopshttp
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
@@ -79,6 +82,9 @@ var registryCatalogues = map[string]*cataloguepage.Catalogue{
 	registryPhysicalControl:     ports.PhysicalControlTransitionPages,
 }
 
+// unknownRegistryReason 只说本端点认哪几个册名，不谈库里有什么；它只在 Intake 放行之后出现。
+var unknownRegistryReason = "registry 只认 " + strings.Join(slices.Sorted(maps.Keys(registryCatalogues)), "、") + " 之一"
+
 // NewQueryNodeOperationsRecordsEndpoint 交回节点作业查阅页各本册子的 HTTP 入口
 // （GET /node-operations-records，票 admin-skeleton-closure-batch/05）。
 //
@@ -90,8 +96,8 @@ var registryCatalogues = map[string]*cataloguepage.Catalogue{
 // **不下推身份裁决或处置参数**：待识别实物的身份确认由 parcel-shipment 以版本化
 // 关联形成，查阅面收下「确认身份」参数就等于让目录读口长出第二种「处置」语义。
 //
-// 门的次序是方法 → 册名 → Intake → 翻页与筛选参数：册名认不出是请求自身的事，判它不需要先知道调用方是谁；其余查询参数在 Intake
-// 之后照那一册的声明解（理由在 writePageQueryProblem 的头注）。
+// 门的次序是方法 → Intake → 册名 → 翻页与筛选参数：册名也是查询参数，渠道未配置时带什么册名都同答 403（理由在
+// writePageQueryProblem 的头注）；配置了的渠道上认不出的册名答 400，理由散文进 detail。
 func NewQueryNodeOperationsRecordsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ReviewCatalogueReader,
@@ -100,14 +106,14 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
 		registry := request.URL.Query().Get(registrySelector)
 		catalogue, known := registryCatalogues[registry]
 		if !known {
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
+			writePageQueryProblem(response, &cataloguepage.MalformedQuery{Reason: unknownRegistryReason})
 			return
 		}
 		pageQuery, err := catalogue.Decode(request.URL.Query())
