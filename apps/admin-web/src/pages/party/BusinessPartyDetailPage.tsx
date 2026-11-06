@@ -32,6 +32,7 @@ import {
   BusinessPartyProfileReadout,
   BusinessPartyProfileVersions,
   effectiveProfileOf,
+  ourCompanyProfileNote,
   useBusinessPartyProfiles,
 } from './BusinessPartyProfileSection';
 import type { AnswerQuery } from '../../query/answers';
@@ -69,8 +70,8 @@ function muted(text: string): ReactNode {
 }
 
 // 版式照公司主体对象页（票 business-parties-object-page/01）：头区一行元信息、不摆大指标卡；分区走共用模板的固定签——「概要」是
-// 身份读出，「关联」是全景（合作关系、客户账户、公司主体、供应商协议、结算政策），「登记记录」是身份修订链。业务参与方只有身份这
-// 一层（CONTEXT「参与方身份」），没有法人资料那几个分区。
+// 身份读出，「关联」是全景（合作关系、客户账户、公司主体、供应商协议、结算政策），「登记记录」是身份修订链。往来单位资料
+// （ADR-0369）并进概要，另有「联系人」「资料版本」两个分区；我方公司不摆，资料登在公司主体上。
 
 function buildMeta(row: BusinessPartyRecord, related: number | undefined): DetailMeta[] {
   return [
@@ -403,9 +404,7 @@ export function BusinessPartyDetailPage({
                           <IdentityReadout row={row} />
                           <section className="bg-idpxyz-bg px-5 pb-5">
                             {ours ? (
-                              <p className="type-value leading-6 text-idpxyz-breadcrumb">
-                                这是我方公司的往来单位：联系人、地址、税号与收款账户登在公司主体的资料上。
-                              </p>
+                              <p className="type-value leading-6 text-idpxyz-breadcrumb">{ourCompanyProfileNote}</p>
                             ) : (
                               <BusinessPartyProfileReadout
                                 partyId={row.partyId}

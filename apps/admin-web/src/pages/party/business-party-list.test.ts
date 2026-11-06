@@ -3,6 +3,8 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   partiesPinnedByLegalEntities,
+  businessPartyPanelTabsOf,
+  shownBusinessPartyPanelTab,
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
@@ -317,4 +319,19 @@ test('partiesPinnedByLegalEntities 认已停用的公司主体', () => {
   equal(pinned.has('P1'), true);
   equal(pinned.has('P2'), true);
   equal(partiesPinnedByLegalEntities(null).size, 0);
+});
+
+// Covers: 详情栏与对象页同一道门——我方公司不摆资料两签；法人册未答出时签条照常，不先多后少。
+test('businessPartyPanelTabsOf 我方公司不摆联系人与资料版本', () => {
+  const all = ['summary', 'contacts', 'profile', 'identity', 'overview'];
+  deepEqual(businessPartyPanelTabsOf(false), all);
+  deepEqual(businessPartyPanelTabsOf(null), all);
+  deepEqual(businessPartyPanelTabsOf(true), ['summary', 'identity', 'overview']);
+});
+
+// Covers: 逐行翻到我方公司时签退回概要，但记下的那一签不被改掉。
+test('shownBusinessPartyPanelTab 记下的签这一行没有就显概要', () => {
+  equal(shownBusinessPartyPanelTab('contacts', businessPartyPanelTabsOf(true)), 'summary');
+  equal(shownBusinessPartyPanelTab('overview', businessPartyPanelTabsOf(true)), 'overview');
+  equal(shownBusinessPartyPanelTab('contacts', businessPartyPanelTabsOf(false)), 'contacts');
 });

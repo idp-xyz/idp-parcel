@@ -111,6 +111,25 @@ export function partiesPinnedByLegalEntities(entities: readonly GroupLegalEntity
   return new Set(entities.map((row) => row.partyId));
 }
 
+/** 往来单位详情栏的签，顺序即签条上的顺序。值存在视图状态里，换名会让旧状态失配。 */
+export type BusinessPartyPanelTab = 'summary' | 'contacts' | 'profile' | 'identity' | 'overview';
+
+/**
+ * 详情栏摆哪几张签，判据同对象页：公司主体钉着的往来单位不收往来单位资料（ADR-0369 决定二），「联系人」「资料版本」两签不摆，
+ * 概要里只剩一句指向公司主体的话。法人册还没答出（null）时照常摆——签条不因法人册晚到而先多后少，资料等它答出再读。
+ */
+export function businessPartyPanelTabsOf(pinned: boolean | null): readonly BusinessPartyPanelTab[] {
+  return pinned === true ? ['summary', 'identity', 'overview'] : ['summary', 'contacts', 'profile', 'identity', 'overview'];
+}
+
+/** 记下的签这一行没有（翻到了我方公司那一行）就显概要；记下的值不动，翻回别的行仍停在那一签。 */
+export function shownBusinessPartyPanelTab(
+  stored: BusinessPartyPanelTab,
+  tabs: readonly BusinessPartyPanelTab[],
+): BusinessPartyPanelTab {
+  return tabs.includes(stored) ? stored : 'summary';
+}
+
 /** 「我方公司」在类型列与筛选里的词；只在这一处。 */
 export const ourCompanyLabel = '我方公司';
 

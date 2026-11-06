@@ -19,6 +19,7 @@ Status: resolved——2026-11-06 子票全部进 main
 | [01](./issues/01-adr-and-context.md) | ADR-0369、ADR-0367 指针、CONTEXT、UC-PC-001 | resolved（2026-11-06 进 main） |
 | [02](./issues/02-backend-profile-register.md) | 后端：共用校验、领域、迁移、登记册、用例、写口与读口、装配 | resolved（2026-11-06 进 main） |
 | [03](./issues/03-admin-web-profile-section.md) | 管理台：对象页资料分区、编辑态与版本清单 | resolved（2026-11-06 进 main） |
+| [04](./issues/04-detail-panel-profile.md) | 管理台：列表右栏摆资料与「更新资料」，照公司主体右栏 | resolved（2026-11-06 进 main） |
 
 ## 评审记录
 

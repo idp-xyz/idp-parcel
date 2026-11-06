@@ -79,6 +79,9 @@ export function effectiveProfileOf(
   return { record: effectiveBusinessPartyProfile(answer.body), body: answer.body };
 }
 
+/** 我方公司的往来单位在资料位置上的那句话：它的资料登在公司主体上（ADR-0369 决定二）。对象页与详情栏共用。 */
+export const ourCompanyProfileNote = '这是我方公司的往来单位：联系人、地址、税号与收款账户登在公司主体的资料上。';
+
 /** 资料没读到或没有生效那一版时的一句话；读到了有生效版就 null。 */
 function profileAbsenceNote(query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>, partyId: string): string | null {
   const answer = query.answer;

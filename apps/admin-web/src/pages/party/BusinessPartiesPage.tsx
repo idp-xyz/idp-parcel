@@ -807,6 +807,7 @@ export function BusinessPartiesPage() {
                 row={row}
                 roles={rolesOfParty(roleIndex, row.partyId)}
                 ours={ourCompanies.has(row.partyId)}
+                pinned={entities.answer == null ? null : pinnedParties.has(row.partyId)}
                 relationships={relationships.answer}
                 retryRelationships={relationships.retry}
                 onClose={() => selectParty(null)}
