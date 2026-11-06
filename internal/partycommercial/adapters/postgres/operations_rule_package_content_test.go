@@ -40,7 +40,7 @@ func TestRulePackageCatalogueDoesNotFanOutAcrossStageContentFamilies(t *testing.
 		return repository.SaveFinalRule(txCtx, finalRuleOf(t, owner, "FINAL/effective-delivery"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListAcceptanceRulePackages(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListAcceptanceRulePackages(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.AcceptanceRulePackagePages)))
 	if err != nil {
 		t.Fatalf("上列规则包:%v", err)
 	}
@@ -111,7 +111,7 @@ func TestRulePackageCatalogueSeparatesUndeclaredStageContentFromEmptyDeclaration
 		return repository.SaveIntakeQualification(txCtx, explicit)
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListAcceptanceRulePackages(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListAcceptanceRulePackages(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.AcceptanceRulePackagePages)))
 	if err != nil {
 		t.Fatalf("上列规则包:%v", err)
 	}

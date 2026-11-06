@@ -47,7 +47,7 @@ func TestFiveCommercialCataloguesEchoTheVersionClosure(t *testing.T) {
 			return echoes, err
 		},
 		domain.AuthorizationRuleObject: func(ctx context.Context, c *adapter.OperationsCatalogue, tenant domain.TenantID) ([]closureCatalogueEcho, error) {
-			rows, err := c.ListAuthorizationRules(ctx, tenant, 20)
+			rows, err := rowsOf(c.ListAuthorizationRules(ctx, tenant, 20, firstPage(t, ports.AuthorizationRulePages)))
 			echoes := make([]closureCatalogueEcho, 0, len(rows))
 			for _, r := range rows {
 				echoes = append(echoes, closureCatalogueEcho{r.ObjectID + "/" + r.VersionLabel, r.Status, r.EffectiveEndsAt, r.HasEffectiveEnd,
@@ -56,7 +56,7 @@ func TestFiveCommercialCataloguesEchoTheVersionClosure(t *testing.T) {
 			return echoes, err
 		},
 		domain.PreAcceptanceFinancialControlPolicyObject: func(ctx context.Context, c *adapter.OperationsCatalogue, tenant domain.TenantID) ([]closureCatalogueEcho, error) {
-			rows, err := c.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 20)
+			rows, err := rowsOf(c.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 20, firstPage(t, ports.PreAcceptanceFinancialControlPolicyPages)))
 			echoes := make([]closureCatalogueEcho, 0, len(rows))
 			for _, r := range rows {
 				echoes = append(echoes, closureCatalogueEcho{r.ObjectID + "/" + r.VersionLabel, r.Status, r.EffectiveEndsAt, r.HasEffectiveEnd,
@@ -65,7 +65,7 @@ func TestFiveCommercialCataloguesEchoTheVersionClosure(t *testing.T) {
 			return echoes, err
 		},
 		domain.CustomerServiceRuleObject: func(ctx context.Context, c *adapter.OperationsCatalogue, tenant domain.TenantID) ([]closureCatalogueEcho, error) {
-			rows, err := c.ListCustomerServiceRules(ctx, tenant, 20)
+			rows, err := rowsOf(c.ListCustomerServiceRules(ctx, tenant, 20, firstPage(t, ports.CustomerServiceRulePages)))
 			echoes := make([]closureCatalogueEcho, 0, len(rows))
 			for _, r := range rows {
 				echoes = append(echoes, closureCatalogueEcho{r.ObjectID + "/" + r.VersionLabel, r.Status, r.EffectiveEndsAt, r.HasEffectiveEnd,

@@ -520,7 +520,7 @@ func TestCustomerServiceRuleCatalogueListsShellsWithAndWithoutContent(t *testing
 		nil,
 	))
 
-	rows, err := catalogue.ListCustomerServiceRules(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListCustomerServiceRules(ctx, tenant, 10, firstPage(t, ports.CustomerServiceRulePages)))
 	if err != nil {
 		t.Fatalf("上列客户服务规则：%v", err)
 	}
@@ -561,7 +561,7 @@ func TestCustomerServiceRuleCatalogueListsShellsWithAndWithoutContent(t *testing
 		t.Fatalf("壳自身的列变形：%#v", empty)
 	}
 
-	if _, err := catalogue.ListCustomerServiceRules(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListCustomerServiceRules(ctx, tenant, 0, firstPage(t, ports.CustomerServiceRulePages))); err == nil {
 		t.Fatal("limit 非正应被拒")
 	}
 }

@@ -96,16 +96,10 @@ type policyReaderDouble struct {
 }
 
 func (double *policyReaderDouble) ListPreAcceptanceFinancialControlPolicies(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error) {
 	double.record("controlPolicies")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.controlPols, nil
+	return tenantPage(double.err, tenant == double.tenant, double.controlPols)
 }
 
 func (*policyReaderDouble) FindAcceptanceRulePackage(
@@ -158,107 +152,59 @@ func (double *policyReaderDouble) record(method string) {
 }
 
 func (double *policyReaderDouble) ListAcceptanceRulePackages(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.AcceptanceRulePackageRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceRulePackageRow], error) {
 	double.record("packages")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.packages, nil
+	return tenantPage(double.err, tenant == double.tenant, double.packages)
 }
 
 func (double *policyReaderDouble) ListPreAcceptanceControls(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.PreAcceptanceControlRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceControlRow], error) {
 	double.record("controls")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.controls, nil
+	return tenantPage(double.err, tenant == double.tenant, double.controls)
 }
 
 func (double *policyReaderDouble) ListPricePolicies(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.PricePolicyRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.PricePolicyRow], error) {
 	double.record("prices")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.prices, nil
+	return tenantPage(double.err, tenant == double.tenant, double.prices)
 }
 
 func (double *policyReaderDouble) ListSettlementPolicies(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.SettlementPolicyRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.SettlementPolicyRow], error) {
 	double.record("settlements")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.settlements, nil
+	return tenantPage(double.err, tenant == double.tenant, double.settlements)
 }
 
 func (double *policyReaderDouble) ListAsOfPolicyDeclarations(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.AsOfPolicyRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.AsOfPolicyRow], error) {
 	double.record("asOf")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.asOf, nil
+	return tenantPage(double.err, tenant == double.tenant, double.asOf)
 }
 
 func (double *policyReaderDouble) ListAuthorizationRules(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.AuthorizationRuleRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorizationRuleRow], error) {
 	double.record("authz")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.authz, nil
+	return tenantPage(double.err, tenant == double.tenant, double.authz)
 }
 
 func (double *policyReaderDouble) ListCreditPolicies(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.CreditPolicyRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CreditPolicyRow], error) {
 	double.record("credits")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.credits, nil
+	return tenantPage(double.err, tenant == double.tenant, double.credits)
 }
 
 func (double *policyReaderDouble) ListCustomerServiceRules(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.CustomerServiceRuleRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerServiceRuleRow], error) {
 	double.record("serviceRules")
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.serviceRule, nil
+	return tenantPage(double.err, tenant == double.tenant, double.serviceRule)
 }
 
 func decodeBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {

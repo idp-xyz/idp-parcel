@@ -77,7 +77,7 @@ func (read catalogueRead[Row]) find(
 	if err != nil {
 		return none, false, fmt.Errorf("%s: %w", operation, err)
 	}
-	filter, args := key.filter("", args)
+	filter, args := key.filter(args)
 	fetched, err := read.rows(ctx, querier, read.listed+" SELECT "+read.selection+" FROM listed WHERE TRUE"+filter, args, 1)
 	if err != nil {
 		return none, false, fmt.Errorf("%s: %w", operation, err)

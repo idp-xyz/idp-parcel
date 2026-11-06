@@ -13,6 +13,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 接受前财务控制策略册的持久化面（票 party-commercial-context-gaps/07，ADR-0115，0024 迁移）。写口挂在
@@ -339,66 +340,49 @@ func controlItemsFromJSON(raw []byte) ([]domain.PreAcceptanceControlItem, error)
 // 目录不重建领域对象、不形成判断：有父行而零子行是坏数据（领域要求至少一项），拦它归内容读口
 // LoadPreAcceptanceFinancialControlPolicy；这里照 ListCustomerServiceRules 的先例如实交回空集合。
 //
-// ListPreAcceptanceFinancialControlPolicies 与 FindPreAcceptanceFinancialControlPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) preAcceptanceFinancialControlPolicyRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// 正文没有对象或名称一类的检索格，q 只覆盖版本壳上的对象、版本与范围。
+// ListPreAcceptanceFinancialControlPolicies 与 FindPreAcceptanceFinancialControlPolicy 都经它（ADR-0361）：列表在上面取页，
+// 读回在上面多两格键过滤。
+var preAcceptanceFinancialControlPolicyListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               content.joint_pass_condition, content.registered_at AS policy_registered_at,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'control',        item.control_kind,
+                                   'chargeScope',    item.charge_scope_ref,
+                                   'order',          item.evaluation_order,
+                                   'onFailure',      item.failure_disposition,
+                                   'responsibility', item.responsibility_ref
+                               )
+                               ORDER BY item.evaluation_order
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.pre_acceptance_financial_control_item AS item
+                 WHERE item.tenant_id     = version.tenant_id
+                   AND item.object_kind   = version.object_kind
+                   AND item.object_id     = version.object_id
+                   AND item.version_label = version.version_label) AS controls,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.pre_acceptance_financial_control_policy AS content
+                 ON content.tenant_id     = version.tenant_id
+                AND content.object_kind   = version.object_kind
+                AND content.object_id     = version.object_id
+                AND content.version_label = version.version_label
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.PreAcceptanceFinancialControlPolicyObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+catalogueClosureColumns+`,
-		        content.joint_pass_condition, content.registered_at,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'control',        item.control_kind,
-		                            'chargeScope',    item.charge_scope_ref,
-		                            'order',          item.evaluation_order,
-		                            'onFailure',      item.failure_disposition,
-		                            'responsibility', item.responsibility_ref
-		                        )
-		                        ORDER BY item.evaluation_order
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.pre_acceptance_financial_control_item AS item
-		          WHERE item.tenant_id     = version.tenant_id
-		            AND item.object_kind   = version.object_kind
-		            AND item.object_id     = version.object_id
-		            AND item.version_label = version.version_label)
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.pre_acceptance_financial_control_policy AS content
-		          ON content.tenant_id     = version.tenant_id
-		         AND content.object_kind   = version.object_kind
-		         AND content.object_id     = version.object_id
-		         AND content.version_label = version.version_label
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
-
-	policyRows := make([]ports.PreAcceptanceFinancialControlPolicyRow, 0, limit)
-	for rows.Next() {
+var preAcceptanceFinancialControlPolicyRead = catalogueRead[ports.PreAcceptanceFinancialControlPolicyRow]{
+	binding:   ports.PreAcceptanceFinancialControlPolicyPages.MustBind(versionShellColumns()),
+	listed:    preAcceptanceFinancialControlPolicyListed,
+	selection: versionShellSelection + `, joint_pass_condition, policy_registered_at, controls`,
+	scan: func(rows pgx.Rows) (ports.PreAcceptanceFinancialControlPolicyRow, error) {
 		var row ports.PreAcceptanceFinancialControlPolicyRow
 		var status int16
 		var endsAt, registeredAt *time.Time
@@ -410,10 +394,11 @@ func (catalogue *OperationsCatalogue) preAcceptanceFinancialControlPolicyRows(
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 		targets = append(targets, &jointPass, &registeredAt, &itemsJSON)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return row, err
 		}
-		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
-			return nil, err
+		var err error
+		if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+			return row, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
@@ -427,22 +412,24 @@ func (catalogue *OperationsCatalogue) preAcceptanceFinancialControlPolicyRows(
 			row.JointPassCondition = *jointPass
 		}
 		if row.Controls, err = controlItemRowsFromJSON(itemsJSON); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return row, err
 		}
-		policyRows = append(policyRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	return policyRows, nil
+		return row, nil
+	},
+	position: func(row ports.PreAcceptanceFinancialControlPolicyRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
 }
 
 func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
-	return catalogue.preAcceptanceFinancialControlPolicyRows(ctx, "list pre-acceptance financial control policies", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error) {
+	return preAcceptanceFinancialControlPolicyRead.page(ctx, catalogue.db,
+		"list pre-acceptance financial control policies", limit, query,
+		tenant.String(), uint8(domain.PreAcceptanceFinancialControlPolicyObject))
 }
 
 func (catalogue *OperationsCatalogue) FindPreAcceptanceFinancialControlPolicy(
@@ -451,7 +438,9 @@ func (catalogue *OperationsCatalogue) FindPreAcceptanceFinancialControlPolicy(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.PreAcceptanceFinancialControlPolicyRow, bool, error) {
-	return firstRow(catalogue.preAcceptanceFinancialControlPolicyRows(ctx, "find pre-acceptance financial control policy", tenant, 1, keyOf(objectID, version)))
+	return preAcceptanceFinancialControlPolicyRead.find(ctx, catalogue.db,
+		"find pre-acceptance financial control policy", keyOf(objectID, version),
+		tenant.String(), uint8(domain.PreAcceptanceFinancialControlPolicyObject))
 }
 
 // controlItemRowsFromJSON 只转写，不校验种类与处置是否在封闭集内——判据同 claimDeadlineRowsFromJSON：

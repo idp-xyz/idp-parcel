@@ -391,7 +391,7 @@ func TestCreditPolicyCatalogueListsBothLimitForms(t *testing.T) {
 	mustSaveCreditPolicy(t, transactor, ctx, repository,
 		creditPolicyOn(t, theirs, "charge-freight", creditAmountLimit(t, 1)))
 
-	rows, err := catalogue.ListCreditPolicies(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListCreditPolicies(ctx, tenant, 10, firstPage(t, ports.CreditPolicyPages)))
 	if err != nil {
 		t.Fatalf("上列信用政策：%v", err)
 	}
@@ -408,7 +408,7 @@ func TestCreditPolicyCatalogueListsBothLimitForms(t *testing.T) {
 	if row := byObject["credit-ratio"]; row.HasAmount || row.LimitRatioBasisPoints != 1500 || row.ChargeType != "charge-surcharge" {
 		t.Fatalf("比例行 = %#v", row)
 	}
-	if _, err := catalogue.ListCreditPolicies(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListCreditPolicies(ctx, tenant, 0, firstPage(t, ports.CreditPolicyPages))); err == nil {
 		t.Fatal("limit 非正应被拒")
 	}
 }

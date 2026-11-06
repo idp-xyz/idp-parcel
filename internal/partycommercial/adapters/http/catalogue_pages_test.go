@@ -179,6 +179,136 @@ func (*pagingVersionShellReader) FindSupplierAgreement(
 	return ports.SupplierAgreementCatalogueRow{}, false, nil
 }
 
+// pagingPolicyReader 是策略目录九种册子的读口。各册行标识的段数照本册声明：接受前财务控制声明指名合同两段，时点锚声明多
+// 判断类型一段。
+type pagingPolicyReader struct {
+	pageRecorder
+}
+
+func (reader *pagingPolicyReader) ListAcceptanceRulePackages(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceRulePackageRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.AcceptanceRulePackageRow{
+		ObjectID: "SYN-RULES-1", VersionLabel: "v1", ServiceProduct: "SYN-PRODUCT-1", Contract: "SYN-CONTRACT-1",
+		LegalEntity: "SYN-LE-1", Scope: "SYN-SCOPE-1", EffectiveStartsAt: pageListedAt, DeclaredAt: pageListedAt,
+	}, "SYN-RULES-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListPreAcceptanceControls(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceControlRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.PreAcceptanceControlRow{
+		ContractObjectID: "SYN-CONTRACT-1", ContractVersion: "v1", Requirement: "REQUIRED", DeclaredAt: pageListedAt,
+	}, "SYN-CONTRACT-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListPricePolicies(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PricePolicyRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.PricePolicyRow{
+		ObjectID: "SYN-PRICE-1", VersionLabel: "v1", Direction: "SELL", PlanRef: "SYN-PLAN-1", PlanDirection: "SELL",
+		PolicyScope: "SYN-SCOPE-1", EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
+	}, "SYN-PRICE-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListSettlementPolicies(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.SettlementPolicyRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.SettlementPolicyRow{
+		ObjectID: "SYN-SETTLEMENT-1", VersionLabel: "v1", Method: "TERMS", LegalEntity: "SYN-LE-1",
+		Counterparty: "SYN-PARTY-1", ContractLabel: "v1", ChargeScope: "SYN-CHARGE-1", Currency: "XTS",
+		EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
+	}, "SYN-SETTLEMENT-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListAsOfPolicyDeclarations(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.AsOfPolicyRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.AsOfPolicyRow{
+		RulePackageObjectID: "SYN-RULES-1", RulePackageVersion: "v1", JudgmentType: "NETWORK_REACHABILITY",
+		SemanticsRef: "SYN-SEMANTICS-1", PolicyVersion: "SYN-POLICY-V1", DeclaredAt: pageListedAt,
+	}, "SYN-RULES-1", "v1", "NETWORK_REACHABILITY")
+}
+
+func (reader *pagingPolicyReader) ListAuthorizationRules(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorizationRuleRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.AuthorizationRuleRow{
+		ObjectID: "SYN-AUTHZ-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-AUTHZ-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListCreditPolicies(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CreditPolicyRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.CreditPolicyRow{
+		ObjectID: "SYN-CREDIT-1", VersionLabel: "v1", LegalEntity: "SYN-LE-1", AuthorityLevel: "SYN-AUTHORITY-1",
+		ChargeType: "SYN-CHARGE-1", HasAmount: true, LimitMinor: 100000,
+		EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
+	}, "SYN-CREDIT-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListCustomerServiceRules(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerServiceRuleRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.CustomerServiceRuleRow{
+		ObjectID: "SYN-SERVICE-RULE-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-SERVICE-RULE-1", "v1")
+}
+
+func (reader *pagingPolicyReader) ListPreAcceptanceFinancialControlPolicies(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.PreAcceptanceFinancialControlPolicyRow{
+		ObjectID: "SYN-CONTROL-POLICY-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-CONTROL-POLICY-1", "v1")
+}
+
+func (*pagingPolicyReader) FindAcceptanceRulePackage(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.AcceptanceRulePackageRow, bool, error) {
+	return ports.AcceptanceRulePackageRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindPricePolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.PricePolicyRow, bool, error) {
+	return ports.PricePolicyRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindSettlementPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.SettlementPolicyRow, bool, error) {
+	return ports.SettlementPolicyRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindAuthorizationRule(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.AuthorizationRuleRow, bool, error) {
+	return ports.AuthorizationRuleRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindCreditPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CreditPolicyRow, bool, error) {
+	return ports.CreditPolicyRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindCustomerServiceRule(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CustomerServiceRuleRow, bool, error) {
+	return ports.CustomerServiceRuleRow{}, false, nil
+}
+
+func (*pagingPolicyReader) FindPreAcceptanceFinancialControlPolicy(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.PreAcceptanceFinancialControlPolicyRow, bool, error) {
+	return ports.PreAcceptanceFinancialControlPolicyRow{}, false, nil
+}
+
 // pagedEndpointCase 是一册在表里的一行。selector 是册子选择器（如 kind=PRICE_POLICY），每次请求都带上；badFilter 只在本册
 // 有带词表的筛选维时给。goodQuery 是一组合本册声明的条件，翻页那一步换条件拿旧游标就是拿它与 changedQuery 对照。
 type pagedEndpointCase struct {
@@ -199,6 +329,10 @@ func pagedEndpointCases() []pagedEndpointCase {
 	numberTypes := &pagingRegistrationNumberTypeReader{}
 	mappings := &pagingProductChannelMappingReader{}
 	shells := &pagingVersionShellReader{}
+	policies := &pagingPolicyReader{}
+	policyEndpoint := func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+		return commercialhttp.NewQueryCommercialPoliciesEndpoint(intake, policies)
+	}
 	return []pagedEndpointCase{
 		{
 			name: "业务参与方",
@@ -272,6 +406,76 @@ func pagedEndpointCases() []pagedEndpointCase {
 			defaultSort: "-publishedAt", badSort: "supplier", badFilter: "status=DRAFT",
 			goodQuery: "q=SYN-SUPPLIER", changedQuery: "q=SYN-SUPPLIER&status=EFFECTIVE",
 		},
+		{
+			name: "接单规则包", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=ACCEPTANCE_RULE_PACKAGE", defaultSort: "-declaredAt", badSort: "registeredAt",
+			goodQuery: "q=SYN-RULES", changedQuery: "q=SYN-PRODUCT",
+		},
+		{
+			name: "接受前财务控制声明", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=PRE_ACCEPTANCE_CONTROL", defaultSort: "-declaredAt", badSort: "objectId",
+			badFilter: "requirement=OPTIONAL", goodQuery: "requirement=REQUIRED", changedQuery: "requirement=NOT_APPLICABLE",
+		},
+		{
+			name: "价格政策", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=PRICE_POLICY", defaultSort: "-registeredAt", badSort: "declaredAt",
+			badFilter: "direction=OUTBOUND", goodQuery: "direction=SELL", changedQuery: "direction=BUY&direction=SELL",
+		},
+		{
+			name: "结算政策", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=SETTLEMENT_POLICY", defaultSort: "-registeredAt", badSort: "currency",
+			badFilter: "method=CASH", goodQuery: "method=TERMS&q=SYN-LE", changedQuery: "method=TERMS",
+		},
+		{
+			name: "时点锚声明", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=AS_OF_POLICY", defaultSort: "-declaredAt", badSort: "effectiveStartsAt",
+			badFilter: "judgmentType=PRICING", goodQuery: "judgmentType=NETWORK_REACHABILITY",
+			changedQuery: "judgmentType=PRE_ACCEPTANCE_FINANCIAL_CONTROL",
+		},
+		{
+			name: "授权规则", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=AUTHORIZATION_RULE", defaultSort: "-publishedAt", badSort: "registeredAt",
+			badFilter: "status=DRAFT", goodQuery: "status=EFFECTIVE", changedQuery: "status=RETIRED",
+		},
+		{
+			name: "信用政策", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=CREDIT_POLICY", defaultSort: "-registeredAt", badSort: "chargeType",
+			goodQuery: "q=SYN-LE", changedQuery: "q=SYN-CHARGE",
+		},
+		{
+			name: "客户服务规则", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=CUSTOMER_SERVICE_RULE", defaultSort: "-publishedAt", badSort: "responsibleParty",
+			badFilter: "status=ACTIVE", goodQuery: "status=EFFECTIVE&q=SYN-PARTY", changedQuery: "status=EFFECTIVE",
+		},
+		{
+			name: "接受前财务控制策略", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
+			selector: "kind=PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", defaultSort: "-publishedAt", badSort: "jointPassCondition",
+			badFilter: "status=DRAFT", goodQuery: "status=SUPERSEDED&status=EXPIRED", changedQuery: "status=EXPIRED",
+		},
+	}
+}
+
+// Covers: 票面「kind 保持册子选择器原义、登为 Selectors」——kind 的取值进游标摘要（ADR-0144 决定四）：价格政策与结算政策
+// 缺省序与行标识同形，拿前者的游标翻后者仍答游标不符，一册的位置不交给另一册的读口。
+func TestCommercialPolicyCursorDoesNotCrossKinds(t *testing.T) {
+	reader := &pagingPolicyReader{}
+	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: catalogueQuery(t)}, reader)
+	first, _ := getPaged(t, endpoint, "kind=PRICE_POLICY", "")
+	var body struct {
+		Page struct {
+			Next string `json:"next"`
+		} `json:"page"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &body); err != nil || first.Code != http.StatusOK || body.Page.Next == "" {
+		t.Fatalf("价格政策第一页 status = %d, body = %s（%v），want 200 且带 next", first.Code, first.Body, err)
+	}
+	reader.seen = nil
+	stale, problem := getPaged(t, endpoint, "kind=SETTLEMENT_POLICY", "after="+url.QueryEscape(body.Page.Next))
+	if stale.Code != http.StatusBadRequest || problem.Error.Detail != "游标与本次的排序或筛选不符，请从第一页重取" {
+		t.Fatalf("拿价格政策的游标翻结算政策 status = %d, problem = %+v，want 400 游标不符", stale.Code, problem)
+	}
+	if reader.seen != nil {
+		t.Fatalf("跨种的游标进了读口：%+v", reader.seen)
 	}
 }
 

@@ -138,7 +138,7 @@ func TestServiceProductCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.
 	if _, err := rowsOf(catalogue.ListServiceProducts(ctx, tenant, 0, firstPage(t, ports.ServiceProductPages))); err == nil {
 		t.Fatal("limit 0 未被拒")
 	}
-	if _, err := catalogue.ListPricePolicies(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(catalogue.ListPricePolicies(ctx, tenant, -1, firstPage(t, ports.PricePolicyPages))); err == nil {
 		t.Fatal("策略册 limit -1 未被拒")
 	}
 }
@@ -202,7 +202,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 	mustSaveSettlementPolicy(t, transactor, ctx, repository,
 		settlementPolicyOn(t, settleVersion, domain.TermsMethod, "charge-express"))
 
-	packages, err := catalogue.ListAcceptanceRulePackages(ctx, tenant, 10)
+	packages, err := rowsOf(catalogue.ListAcceptanceRulePackages(ctx, tenant, 10, firstPage(t, ports.AcceptanceRulePackagePages)))
 	if err != nil {
 		t.Fatalf("上列规则包:%v", err)
 	}
@@ -223,7 +223,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 		t.Fatalf("规则引用变形:%+v", ruled.Rules)
 	}
 
-	controls, err := catalogue.ListPreAcceptanceControls(ctx, tenant, 10)
+	controls, err := rowsOf(catalogue.ListPreAcceptanceControls(ctx, tenant, 10, firstPage(t, ports.PreAcceptanceControlPages)))
 	if err != nil {
 		t.Fatalf("上列控制声明:%v", err)
 	}
@@ -242,7 +242,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 		t.Fatalf("不适用声明变形:%+v", row)
 	}
 
-	prices, err := catalogue.ListPricePolicies(ctx, tenant, 10)
+	prices, err := rowsOf(catalogue.ListPricePolicies(ctx, tenant, 10, firstPage(t, ports.PricePolicyPages)))
 	if err != nil {
 		t.Fatalf("上列价格政策:%v", err)
 	}
@@ -255,7 +255,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 		t.Fatalf("价格政策变形:%+v", price)
 	}
 
-	theirPrices, err := catalogue.ListPricePolicies(ctx, pcTenant(t, "tenant-2"), 10)
+	theirPrices, err := rowsOf(catalogue.ListPricePolicies(ctx, pcTenant(t, "tenant-2"), 10, firstPage(t, ports.PricePolicyPages)))
 	if err != nil {
 		t.Fatalf("上列他租价格政策:%v", err)
 	}
@@ -263,7 +263,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 		t.Fatalf("他租自己的列表不完整:%+v", theirPrices)
 	}
 
-	settlements, err := catalogue.ListSettlementPolicies(ctx, tenant, 10)
+	settlements, err := rowsOf(catalogue.ListSettlementPolicies(ctx, tenant, 10, firstPage(t, ports.SettlementPolicyPages)))
 	if err != nil {
 		t.Fatalf("上列结算政策:%v", err)
 	}
@@ -278,7 +278,7 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 		t.Fatalf("结算政策变形:%+v", settlement)
 	}
 
-	asOf, err := catalogue.ListAsOfPolicyDeclarations(ctx, tenant, 10)
+	asOf, err := rowsOf(catalogue.ListAsOfPolicyDeclarations(ctx, tenant, 10, firstPage(t, ports.AsOfPolicyPages)))
 	if err != nil {
 		t.Fatalf("上列时点锚声明:%v", err)
 	}
@@ -303,19 +303,19 @@ func TestCommercialPolicyCatalogueKindsAnswerSeparately(t *testing.T) {
 
 	// 从未登记过的租户:五册全部如实答空。
 	emptyTenant := pcTenant(t, "tenant-9")
-	if rows, err := catalogue.ListAcceptanceRulePackages(ctx, emptyTenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListAcceptanceRulePackages(ctx, emptyTenant, 10, firstPage(t, ports.AcceptanceRulePackagePages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空租户规则包:len=%d err=%v", len(rows), err)
 	}
-	if rows, err := catalogue.ListPreAcceptanceControls(ctx, emptyTenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListPreAcceptanceControls(ctx, emptyTenant, 10, firstPage(t, ports.PreAcceptanceControlPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空租户控制声明:len=%d err=%v", len(rows), err)
 	}
-	if rows, err := catalogue.ListPricePolicies(ctx, emptyTenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListPricePolicies(ctx, emptyTenant, 10, firstPage(t, ports.PricePolicyPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空租户价格政策:len=%d err=%v", len(rows), err)
 	}
-	if rows, err := catalogue.ListSettlementPolicies(ctx, emptyTenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListSettlementPolicies(ctx, emptyTenant, 10, firstPage(t, ports.SettlementPolicyPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空租户结算政策:len=%d err=%v", len(rows), err)
 	}
-	if rows, err := catalogue.ListAsOfPolicyDeclarations(ctx, emptyTenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListAsOfPolicyDeclarations(ctx, emptyTenant, 10, firstPage(t, ports.AsOfPolicyPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空租户时点锚:len=%d err=%v", len(rows), err)
 	}
 }

@@ -40,7 +40,7 @@ func TestPreAcceptanceFinancialControlPolicyCatalogueListsShellsWithAndWithoutCo
 		controlItemRow(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure, "customer-1"),
 	))
 
-	rows, err := catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 10, firstPage(t, ports.PreAcceptanceFinancialControlPolicyPages)))
 	if err != nil {
 		t.Fatalf("上列接受前财务控制策略：%v", err)
 	}
@@ -78,10 +78,10 @@ func TestPreAcceptanceFinancialControlPolicyCatalogueListsShellsWithAndWithoutCo
 		t.Fatalf("壳自身的列变形：%#v", empty)
 	}
 
-	if _, err := catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, 0, firstPage(t, ports.PreAcceptanceFinancialControlPolicyPages))); err == nil {
 		t.Fatal("limit 非正应被拒")
 	}
-	if rows, err := catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, pcTenant(t, "tenant-3"), 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, pcTenant(t, "tenant-3"), 10, firstPage(t, ports.PreAcceptanceFinancialControlPolicyPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("空册 = (%d 行, %v)，want 空列表且无 error", len(rows), err)
 	}
 }

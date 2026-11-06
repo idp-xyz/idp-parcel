@@ -13,12 +13,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// 本文件对真实 PostgreSQL 证版本壳三册（服务产品、客户合同、供应商协议）按 ADR-0144 分页（票
-// catalogue-read-pagination-rollout/11）：翻页中途发布新版本不重不漏、空册答空页；status 按折进退役之后的位置筛，q 覆盖
-// 对象、版本、范围与各册另覆盖的正文格，% 按字面。夹具全部合成。
+// 本文件对真实 PostgreSQL 证以版本壳为行的各册按 ADR-0144 分页（票 catalogue-read-pagination-rollout/11）：服务产品、客户
+// 合同、供应商协议，与商业策略目录里授权规则、客户服务规则、接受前财务控制策略那几种 kind。翻页中途发布新版本不重不漏、空册
+// 答空页；status 按折进退役之后的位置筛，q 覆盖对象、版本、范围与各册另覆盖的正文格，% 按字面。夹具租户与范围沿用本包的
+// tenant-1 / scope-1，其余取值一律 SYN-。
 
-// shellCatalogueCase 是版本壳一册在本文件里的样子。行抹成「对象/版本」一格，三册同一张表断言；content 给 LIVE 那一版登本册的
-// 正文，让 q 有一格只在正文里出现的串可命中。
+// shellCatalogueCase 是版本壳一册在本文件里的样子。行抹成「对象/版本」一格，各册同一张表断言；content 给 LIVE 那一版登本册的
+// 正文，让 q 有一格只在正文里出现的串可命中。q 不覆盖正文的册 content 留空，只证壳上那几格。
 type shellCatalogueCase struct {
 	name       string
 	kind       domain.CommercialObjectKind
@@ -50,7 +51,7 @@ func shellCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue, t
 			}, func(row ports.CustomerContractCatalogueRow) string { return row.ObjectID + "/" + row.VersionLabel }),
 			content: func(t *testing.T, fixture cutFixture, version domain.CommercialVersion) {
 				contract, err := domain.NewCustomerContract(version, pcValue(t, domain.NewCustomerAccountID, "SYN-CUSTOMER-LIVE"),
-					pcValue(t, domain.NewCommercialObjectID, "rules-1"), nil)
+					pcValue(t, domain.NewCommercialObjectID, "SYN-RULES-1"), nil)
 				if err != nil {
 					t.Fatalf("合同正文：%v", err)
 				}
@@ -82,6 +83,40 @@ func shellCatalogueCases(t *testing.T, catalogue *adapter.OperationsCatalogue, t
 			},
 			contentHit: "syn-supplier-live",
 		},
+		{
+			name: "授权规则", kind: domain.AuthorizationRuleObject, prefix: "SYN-AUTHZ-", pages: ports.AuthorizationRulePages,
+			list: shellLister(func(query cataloguepage.Query, limit int) (cataloguepage.Result[ports.AuthorizationRuleRow], error) {
+				return catalogue.ListAuthorizationRules(ctx, tenant, limit, query)
+			}, func(row ports.AuthorizationRuleRow) string { return row.ObjectID + "/" + row.VersionLabel }),
+		},
+		{
+			name: "客户服务规则", kind: domain.CustomerServiceRuleObject, prefix: "SYN-SERVICE-RULE-", pages: ports.CustomerServiceRulePages,
+			list: shellLister(func(query cataloguepage.Query, limit int) (cataloguepage.Result[ports.CustomerServiceRuleRow], error) {
+				return catalogue.ListCustomerServiceRules(ctx, tenant, limit, query)
+			}, func(row ports.CustomerServiceRuleRow) string { return row.ObjectID + "/" + row.VersionLabel }),
+			content: func(t *testing.T, fixture cutFixture, version domain.CommercialVersion) {
+				rule, err := domain.NewCustomerServiceRuleVersion(version,
+					domain.CustomerServiceRuleAppliesToCustomerContract(pcValue(t, domain.NewCommercialObjectID, "SYN-CONTRACT-LIVE")),
+					pcValue(t, domain.NewPartyID, "SYN-RESPONSIBLE-1"),
+					pcScope(t),
+					[]domain.ClaimDeadlineRule{deadlineRule(t, domain.FirstClaimDeadline, "SYN-EVENT-DELIVERED", 30, "SYN-CALENDAR-1")},
+					nil)
+				if err != nil {
+					t.Fatalf("客户服务规则正文：%v", err)
+				}
+				mustSaveCustomerServiceRule(t, fixture.transactor, t.Context(), fixture.publications, rule)
+			},
+			contentHit: "syn-contract-live",
+		},
+		{
+			name: "接受前财务控制策略", kind: domain.PreAcceptanceFinancialControlPolicyObject, prefix: "SYN-CONTROL-POLICY-",
+			pages: ports.PreAcceptanceFinancialControlPolicyPages,
+			list: shellLister(func(query cataloguepage.Query, limit int) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error) {
+				return catalogue.ListPreAcceptanceFinancialControlPolicies(ctx, tenant, limit, query)
+			}, func(row ports.PreAcceptanceFinancialControlPolicyRow) string {
+				return row.ObjectID + "/" + row.VersionLabel
+			}),
+		},
 	}
 }
 
@@ -101,7 +136,7 @@ func shellLister[Row any](
 }
 
 // shellVersionFixture 经领域重建门造一份 tenant-1 的 kind 类版本：在 publishedAt 发布，从 cutRowPredecessorStart 起至
-// cutRowEnd。已发布未生效的版本不带生效时刻（重建门会拒）；客户合同照 cutVersion 指名 rules-1。
+// cutRowEnd。已发布未生效的版本不带生效时刻（重建门会拒）；客户合同指名 SYN-RULES-1，合同正文挂的规则包要与之一致。
 func shellVersionFixture(
 	t *testing.T,
 	kind domain.CommercialObjectKind,
@@ -139,7 +174,7 @@ func shellVersionFixture(
 	}
 	if kind == domain.CustomerContractObject {
 		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
-			domain.AcceptanceRulePackageObject: pcValue(t, domain.NewCommercialObjectID, "rules-1"),
+			domain.AcceptanceRulePackageObject: pcValue(t, domain.NewCommercialObjectID, "SYN-RULES-1"),
 		}
 	}
 	version, err := domain.RehydrateCommercialVersion(spec)
@@ -158,7 +193,7 @@ func shellCatalogueOf(t *testing.T, fixture cutFixture) *adapter.OperationsCatal
 	return catalogue
 }
 
-// Covers: 完成判据「翻页期间插入新行不重不漏」与「空册答空页」，三册各一遍。缺省序是发布时刻降序，夹具逐个晚一分钟发布；三册
+// Covers: 完成判据「翻页期间插入新行不重不漏」与「空册答空页」，各册各一遍。缺省序是发布时刻降序，夹具逐个晚一分钟发布；各册
 // 共一个租户，各读各的 object_kind。
 func TestVersionShellCataloguesPageWithoutRepeatsOrGapsWhileVersionsArrive(t *testing.T) {
 	fixture := newCutFixture(t)
@@ -180,7 +215,7 @@ func TestVersionShellCataloguesPageWithoutRepeatsOrGapsWhileVersionsArrive(t *te
 }
 
 // Covers: 完成判据「筛选与 q 收窄、total 随之变；q 里的 % 按字面」。status 按折进退役之后的位置筛：同起点退役另册保存、版本行上
-// 仍是已生效，筛 RETIRED 要筛得出它，筛 EFFECTIVE 不得混进它。每册四版：已发布未生效的 PENDING、已生效的 LIVE（登了正文）、
+// 仍是已生效，筛 RETIRED 要筛得出它，筛 EFFECTIVE 不得混进它。每册四版：已发布未生效的 PENDING、已生效的 LIVE（q 覆盖正文的册给它登正文）、
 // REISSUED 的 v1 让位给同起点的 v2 退役；发布时刻依次晚一分钟。
 func TestVersionShellCataloguesFilterTheFoldedStatusAndSearch(t *testing.T) {
 	fixture := newCutFixture(t)
@@ -194,13 +229,15 @@ func TestVersionShellCataloguesFilterTheFoldedStatusAndSearch(t *testing.T) {
 		for _, version := range []domain.CommercialVersion{pending, live, old, reissue} {
 			fixture.save(t, version)
 		}
-		shell.content(t, fixture, live)
+		if shell.content != nil {
+			shell.content(t, fixture, live)
+		}
 		if result := fixture.retire(t, retireCommand(t, old, "v2", "SYN-RETIRE-"+shell.prefix+"PAGE")); result.Outcome() != application.VersionClosureRegistered {
 			t.Fatalf("%s retire outcome = %q (cause %v)", shell.name, result.Outcome(), result.Cause())
 		}
 
 		label := func(name string) string { return shell.prefix + name }
-		assertFilteredPages(t, shell.name, shell.pages, shell.list, func(row string) string { return row }, []pageCase{
+		cases := []pageCase{
 			{"", label("REISSUED/v2") + "," + label("REISSUED/v1") + "," + label("LIVE/v1") + "," + label("PENDING/v1")},
 			{"status=RETIRED", label("REISSUED/v1")},
 			{"status=EFFECTIVE", label("REISSUED/v2") + "," + label("LIVE/v1")},
@@ -209,8 +246,11 @@ func TestVersionShellCataloguesFilterTheFoldedStatusAndSearch(t *testing.T) {
 			{"sort=-objectId&q=reissued", label("REISSUED/v2") + "," + label("REISSUED/v1")},
 			{"q=v2", label("REISSUED/v2")},
 			{"q=SCOPE-1&status=EFFECTIVE", label("REISSUED/v2") + "," + label("LIVE/v1")},
-			{"q=" + shell.contentHit, label("LIVE/v1")},
 			{"q=%25", ""},
-		})
+		}
+		if shell.contentHit != "" {
+			cases = append(cases, pageCase{"q=" + shell.contentHit, label("LIVE/v1")})
+		}
+		assertFilteredPages(t, shell.name, shell.pages, shell.list, func(row string) string { return row }, cases)
 	}
 }
