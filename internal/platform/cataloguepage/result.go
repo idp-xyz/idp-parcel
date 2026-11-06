@@ -18,6 +18,9 @@ func (result Result[Row]) Page(size int) Page {
 
 // Finish 把读面照 Plan 取回的至多 limit+1 行切成本页；还有下一页时，用本页末行的位置编出游标。position 给出一行的
 // 位置：Value 取 sortField 那一维的值（按声明的 ValueKind 规整，见 FormatInstant / FormatInteger），Identity 按声明的段序。
+//
+// 位置的值必须取自读面 ORDER BY 用的那几列，不取领域对象或快照文档里的副本：副本的精度或写法与列不一致时（快照里的
+// 时刻带纳秒、列只到微秒），键集比较会把本页末行再取回来，或漏掉与它同值的行。所以 Row 常是读面自己的扫描行。
 func Finish[Row any](
 	query Query,
 	fetched []Row,
