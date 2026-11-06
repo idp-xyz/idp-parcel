@@ -163,7 +163,7 @@ func TestProductChannelMappingRoundTripAndCatalogue(t *testing.T) {
 	revised := mappingRegistrationFixture(t, "tenant-1", "map-open", 2, "CH-NEW")
 	mustSaveMapping(t, transactor, mappings, revised)
 
-	rows, err := catalogue.ListProductChannelMappings(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListProductChannelMappings(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.ProductChannelMappingPages)))
 	if err != nil {
 		t.Fatalf("list mappings: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestProductChannelMappingRoundTripAndCatalogue(t *testing.T) {
 	}
 
 	// 跨租户读不到：目录与点读都与从未登记同形。
-	foreign, err := catalogue.ListProductChannelMappings(ctx, pcTenant(t, "tenant-b"), 10)
+	foreign, err := rowsOf(catalogue.ListProductChannelMappings(ctx, pcTenant(t, "tenant-b"), 10, firstPage(t, ports.ProductChannelMappingPages)))
 	if err != nil || len(foreign) != 0 {
 		t.Fatalf("foreign rows = (%d, %v)", len(foreign), err)
 	}

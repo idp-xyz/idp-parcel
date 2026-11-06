@@ -95,6 +95,40 @@ func (reader *pagingPartyIdentityReader) ListBusinessPartyRevisions(
 	return nil, nil
 }
 
+type pagingRegistrationNumberTypeReader struct {
+	pageRecorder
+}
+
+func (reader *pagingRegistrationNumberTypeReader) ListRegistrationNumberTypes(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.RegistrationNumberTypeRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.RegistrationNumberTypeRow{
+		TenantID: "tenant-1", CountryCode: "XA", TypeCode: "SYN-LIFETIME", Revision: 1, TypeName: "合成终身注册号",
+		Layer: "IDENTITY", FormatPattern: `SYN-[0-9]{6}`, Basis: "SYN-BASIS-1", Status: "EFFECTIVE",
+		EffectiveFrom: pageListedAt, RegisteredAt: pageListedAt,
+	}, "XA", "SYN-LIFETIME")
+}
+
+type pagingProductChannelMappingReader struct {
+	pageRecorder
+}
+
+func (reader *pagingProductChannelMappingReader) ListProductChannelMappings(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ProductChannelMappingRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.ProductChannelMappingRow{
+		TenantID: "tenant-1", MappingID: "SYN-MAP-1", Revision: 1, ProductObjectID: "SYN-PRODUCT-1",
+		ProductVersionLabel: "v1", Channels: []string{"SYN-CH-1"}, Basis: "SYN-BASIS-1",
+		EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
+	}, "SYN-MAP-1")
+}
+
+func (reader *pagingProductChannelMappingReader) ListProductChannelMappingRevisions(
+	context.Context, domain.TenantID, domain.ProductChannelMappingID,
+) ([]ports.ProductChannelMappingRow, error) {
+	return nil, nil
+}
+
 // pagedEndpointCase 是一册在表里的一行。selector 是册子选择器（如 kind=PRICE_POLICY），每次请求都带上；badFilter 只在本册
 // 有带词表的筛选维时给。goodQuery 是一组合本册声明的条件，翻页那一步换条件拿旧游标就是拿它与 changedQuery 对照。
 type pagedEndpointCase struct {
@@ -112,6 +146,8 @@ type pagedEndpointCase struct {
 
 func pagedEndpointCases() []pagedEndpointCase {
 	identities := &pagingPartyIdentityReader{}
+	numberTypes := &pagingRegistrationNumberTypeReader{}
+	mappings := &pagingProductChannelMappingReader{}
 	return []pagedEndpointCase{
 		{
 			name: "业务参与方",
@@ -139,6 +175,24 @@ func pagedEndpointCases() []pagedEndpointCase {
 			recorder: &identities.pageRecorder, collection: "relationships",
 			defaultSort: "-registeredAt", badSort: "holderName", badFilter: "role=OWNER",
 			goodQuery: "role=CUSTOMER&status=CANDIDATE&status=EFFECTIVE", changedQuery: "role=SUPPLIER&status=EFFECTIVE",
+		},
+		{
+			name: "注册号类型",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQueryRegistrationNumberTypesEndpoint(intake, numberTypes)
+			},
+			recorder: &numberTypes.pageRecorder, collection: "registrationNumberTypes",
+			defaultSort: "-registeredAt", badSort: "typeName", badFilter: "layer=CORPORATE",
+			goodQuery: "layer=IDENTITY&countryCode=XA", changedQuery: "layer=PROFILE&countryCode=XA",
+		},
+		{
+			name: "渠道产品映射",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQueryProductChannelMappingsEndpoint(intake, mappings)
+			},
+			recorder: &mappings.pageRecorder, collection: "mappings",
+			defaultSort: "-registeredAt", badSort: "productObjectId",
+			goodQuery: "q=SYN-PRODUCT", changedQuery: "q=SYN-CH",
 		},
 	}
 }

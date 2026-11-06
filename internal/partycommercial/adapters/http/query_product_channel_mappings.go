@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ProductChannelCatalogueReader 是渠道产品目录端点消费的读口，嵌入详情抽屉的修订历史读口：两个端点在装配点共用同一个读口
@@ -16,7 +17,8 @@ type ProductChannelCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ProductChannelMappingRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ProductChannelMappingRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -31,6 +33,9 @@ const outcomeProductChannelMappingsListed = "PRODUCT_CHANNEL_MAPPINGS_LISTED"
 //
 // 它不并进 /commercial-service-products：那边上列版本壳，这边上列映射登记信封——
 // 行形状与修订轴不同，分立判据在 ports.ProductChannelMappingCatalogueRead 注释。
+//
+// 查询参数按 ports.ProductChannelMappingPages 解码，属传输形状、先于 Intake（ADR-0144 决定六），答法与次序同
+// /commercial-customer-accounts。
 func NewQueryProductChannelMappingsEndpoint(
 	intake CommercialCatalogueIntake,
 	reader ProductChannelCatalogueReader,
@@ -42,13 +47,19 @@ func NewQueryProductChannelMappingsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.ProductChannelMappingPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListProductChannelMappings(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListProductChannelMappings(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空目录」——伪装成后者会让一次该重试的故障
 			// 变成一份看起来如实的空册。
@@ -56,13 +67,14 @@ func NewQueryProductChannelMappingsEndpoint(
 			return
 		}
 
-		bodies := make([]productChannelMappingBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]productChannelMappingBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, productChannelMappingBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, productChannelMappingListResponse{
 			Outcome:  outcomeProductChannelMappingsListed,
 			Mappings: bodies,
+			Page:     page.Page(query.Limit),
 		})
 	})
 }
@@ -70,6 +82,7 @@ func NewQueryProductChannelMappingsEndpoint(
 type productChannelMappingListResponse struct {
 	Outcome  string                      `json:"outcome"`
 	Mappings []productChannelMappingBody `json:"mappings"`
+	Page     cataloguepage.Page          `json:"page"`
 }
 
 // productChannelMappingBody 逐字段透出映射最新修订。channels 是渠道绑定格的引用

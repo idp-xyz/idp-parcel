@@ -1901,16 +1901,18 @@ func (unwiredCommercialCatalogue) ListProductChannelMappings(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.ProductChannelMappingRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.ProductChannelMappingRow], error) {
+	return cataloguepage.Result[commercialports.ProductChannelMappingRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListRegistrationNumberTypes(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.RegistrationNumberTypeRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.RegistrationNumberTypeRow], error) {
+	return cataloguepage.Result[commercialports.RegistrationNumberTypeRow]{}, errOrchestrationNotWired
 }
 
 // unwiredVisibilityCatalogue 是 VE 六类目录列表读口的占位，方法表与

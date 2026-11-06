@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对注册号类型目录的三个端点证传输面：两个登记写口未配置即拒且不读载荷、答案逐名转写
@@ -217,15 +218,9 @@ type registrationNumberTypeReaderDouble struct {
 }
 
 func (double *registrationNumberTypeReaderDouble) ListRegistrationNumberTypes(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.RegistrationNumberTypeRow, error) {
-	if double.loadErr != nil {
-		return nil, double.loadErr
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.rows, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.RegistrationNumberTypeRow], error) {
+	return tenantPage(double.loadErr, tenant == double.tenant, double.rows)
 }
 
 // Covers: 行体逐字段转写；停用两件只在已停用的行上出现，在用的行上缺席而不是空串。

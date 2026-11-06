@@ -12,6 +12,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对渠道产品目录端点（票 admin-remainder-mechanism-batch/02）证传输面：方法门、
@@ -38,15 +39,9 @@ func (double *productChannelMappingReaderDouble) ListProductChannelMappingRevisi
 }
 
 func (double *productChannelMappingReaderDouble) ListProductChannelMappings(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.ProductChannelMappingRow, error) {
-	if double.loadErr != nil {
-		return nil, double.loadErr
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.rows, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.ProductChannelMappingRow], error) {
+	return tenantPage(double.loadErr, tenant == double.tenant, double.rows)
 }
 
 var mappingListedAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)

@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // RegistrationNumberTypeCatalogueReader 是注册号类型目录端点消费的读口。
@@ -14,7 +15,8 @@ type RegistrationNumberTypeCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.RegistrationNumberTypeRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.RegistrationNumberTypeRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -25,7 +27,8 @@ const outcomeRegistrationNumberTypesListed = "REGISTRATION_NUMBER_TYPES_LISTED"
 
 // NewQueryRegistrationNumberTypesEndpoint 交回注册号类型目录查阅的 HTTP 入口
 // （GET /commercial-registration-number-types，ADR-0077）。查阅不触发判断——判号走
-// ports.RegistrationNumberTypeLookup，不走本口。
+// ports.RegistrationNumberTypeLookup，不走本口。查询参数按 ports.RegistrationNumberTypePages 解码，属传输形状、
+// 先于 Intake（ADR-0144 决定六），答法与次序同 /commercial-customer-accounts。
 func NewQueryRegistrationNumberTypesEndpoint(
 	intake CommercialCatalogueIntake,
 	reader RegistrationNumberTypeCatalogueReader,
@@ -37,26 +40,33 @@ func NewQueryRegistrationNumberTypesEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.RegistrationNumberTypePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListRegistrationNumberTypes(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListRegistrationNumberTypes(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空目录」。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]registrationNumberTypeBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]registrationNumberTypeBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, registrationNumberTypeBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, registrationNumberTypeListResponse{
 			Outcome:                 outcomeRegistrationNumberTypesListed,
 			RegistrationNumberTypes: bodies,
+			Page:                    page.Page(query.Limit),
 		})
 	})
 }
@@ -64,6 +74,7 @@ func NewQueryRegistrationNumberTypesEndpoint(
 type registrationNumberTypeListResponse struct {
 	Outcome                 string                       `json:"outcome"`
 	RegistrationNumberTypes []registrationNumberTypeBody `json:"registrationNumberTypes"`
+	Page                    cataloguepage.Page           `json:"page"`
 }
 
 // registrationNumberTypeBody 逐字段透出类型的最新修订。停用两件只在已停用时出现：缺席即没有停用，
