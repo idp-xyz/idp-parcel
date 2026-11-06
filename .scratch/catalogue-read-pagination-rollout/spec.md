@@ -91,7 +91,7 @@ Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮
 | [13](./issues/13-access-identity-reads.md) | access-identity 操作者与工作设备两册（今天不设上限） | `internal/accessidentity`、`migrations/access_identity` | ready-for-agent |
 | [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | ready-for-agent |
 | [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | ready-for-agent |
-| [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | ready-for-agent（Blocked by 04、05、09、12） |
+| [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | ready-for-agent（Blocked by 04、05、06、09、12） |
 
 走法：01–13、15 碰 Go / SQL，走[进 main 的步骤](../../docs/agents/workflow.md#进-main-的步骤)；14 的 diff 只在 `apps/admin-web/**` 与票面，走
 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)，按上下文分笔、随各后端子票进 main 逐页接。

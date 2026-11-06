@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent
-Blocked by: 04、05、09、12（这几张票进 main 之后，在它们落成的读面上加）
+Blocked by: 04、05、06、09、12（这几张票进 main 之后，在它们落成的读面上加）
 地盘：下表各册所在上下文的 `ports` 声明、postgres 读面、端点答复体与用例；需要时各上下文一条索引迁移。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四；spec「可排维、筛选维从小放」。
 
@@ -15,6 +15,7 @@ Blocked by: 04、05、09、12（这几张票进 main 之后，在它们落成的
 |---|---|---|---|
 | 就绪判断、提交授权（`/customs-case-registers` 按 `registry` 分派的两册） | 09 | 「失效与否」，读面里判 | 09 的非作者评审（钉 `2f952629a`） |
 | 订舱请求（`/transport-fulfillment-records` 按 `registry` 分派的那一册） | 05 | 读口在 Go 里派生 | 05 的作者交回 |
+| 派送预报、交接单、身份复核单元（`/node-operations-records` 按册名分派的几册） | 06 | 预报撤回、交接单关闭与范围、复核单元冲突与处置，读面里判 | 06 的非作者评审（钉 `bb8e4f322`） |
 | 价卡（`/pricing-price-cards`） | 04 | 管理台页面现算 | 04 的作者交回 |
 | 授权区间、暂停（`/governance-registers` 按 `register` 分派的两册） | 12 | 区间开闭、暂停是否已恢复，读面里判 | 12 的非作者评审（钉 `9700d7ffc`） |
 
