@@ -6,12 +6,7 @@ import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
-import {
-  businessPartyPanelTabsOf,
-  ourCompanyLabel,
-  shownBusinessPartyPanelTab,
-  type BusinessPartyPanelTab,
-} from './business-party-list';
+import { businessPartyPanelTabsOf, shownBusinessPartyPanelTab, type BusinessPartyPanelTab } from './business-party-list';
 import { businessPartyObjectHash, profileEditHash } from './business-parties-address';
 import {
   BusinessPartyContactsReadout,
@@ -24,10 +19,10 @@ import {
 import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
 import type { AnswerQuery } from '../../query/answers';
 import type { BusinessPartyProfileRevisionListResponseBody } from './api';
-import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
+import { updateOrdinalLabel } from './presentation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
-import { BusinessPartyBanners, BusinessPartyMoreMenu } from './BusinessPartyHeaderParts';
+import { BusinessPartyBanners, BusinessPartyMoreMenu, BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { useToast } from '@idpxyz/ui-theme-runtime';
@@ -182,22 +177,9 @@ export function BusinessPartyDetailPanel({
                 </CopyAside>
               </p>
             ) : null}
-            {/* 类型与列表类型格同一说法：我方公司排在角色前面；既不是我方公司、又没有角色时说「暂无合作关系」，不留空。 */}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {ours ? (
-                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">{ourCompanyLabel}</span>
-              ) : null}
-              {roles.length === 0 && !ours ? (
-                <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
-                  {partyTypeFallbackLabel}
-                </span>
-              ) : (
-                roles.map((role) => (
-                  <span key={role} className="rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-breadcrumb">
-                    {labelOf(partyRoleLabels, role)}
-                  </span>
-                ))
-              )}
+            {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，不留空。 */}
+            <div className="mt-1">
+              <BusinessPartyTypeTags ours={ours} roles={roles} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

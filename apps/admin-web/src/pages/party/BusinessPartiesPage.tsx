@@ -55,19 +55,22 @@ import {
 } from './business-parties-address';
 import { BusinessPartyDetailPage } from './BusinessPartyDetailPage';
 import { BusinessPartyDetailPanel } from './BusinessPartyDetailPanel';
+import { BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
+import { CountryLabel } from '../refdata-labels';
 import { PartyRelationshipDetailPanel } from './PartyRelationshipDetailPanel';
 import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
+  businessPartyRegistrationCountry,
   businessPartyTypeFilterOptions,
-  businessPartyTypeLabel,
   countBusinessParties,
   defaultBusinessPartySort,
   filterBusinessParties,
   indexPartyRoles,
   ourCompanyPartyIds,
   partiesPinnedByLegalEntities,
+  partyRegistrationCountriesOf,
   rolesOfParty,
   sortBusinessParties,
   type BusinessPartyStatusFilter,
@@ -113,13 +116,18 @@ const relationshipStatusDotClass: Record<string, string> = {
   SUPERSEDED: 'bg-gray-400',
 };
 
-// 身份本体册的列。主列只留运营要看的：名称、类型（我方公司 / 按持有的角色称呼）、状态、生效时点；标识、修订号、登记依据进详情栏
-// 底部的「技术详情」。停用时点与状态同格呈现：看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——
-// 排的键看不见，操作者判不出「为什么这一条在最上面」。类型列要关系册与法人册才算得出，所以列表随两份索引生成。
-// 列随列表可用宽度增减，照公司主体列表（GroupLegalEntitiesPage 的 columnsOf）：名称、类型、状态三列总在，生效时间与登记时间
-// 各有一个宽度门槛，随分栏拖动与窗口缩放收放，不再只看详情栏开没开。前两列给定宽，多出来的宽度落到状态与日期列上；名称格
-// 另上限 22rem，列表比各列之和还宽时名称不跟着长。时刻只显到日（「哪一天」），完整时刻在悬停里。
-function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): WorkbenchColumn<BusinessPartyRecord>[] {
+// 身份本体册的列。主列只留运营要看的：名称、类型（我方公司与持有的角色，成标签）、注册地、状态、生效时点；标识、修订号、登记依据
+// 进详情栏底部的「技术详情」。停用时点与状态同格呈现：看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09
+// 裁决 1）——排的键看不见，操作者判不出「为什么这一条在最上面」。类型列要关系册与法人册才算得出，所以列表随两份索引生成。
+// 列随列表可用宽度增减，照公司主体列表（GroupLegalEntitiesPage 的 columnsOf）：名称、类型、状态三列总在，注册地、生效时间与
+// 登记时间各有一个宽度门槛，随分栏拖动与窗口缩放收放，不再只看详情栏开没开；注册地的门槛最低——跨境往来先要认国家，比日期
+// 常用（票 business-party-ux/04）。前两列给定宽，多出来的宽度落到状态与日期列上；名称格另上限 22rem，列表比各列之和还宽时
+// 名称不跟着长。时刻只显到日（「哪一天」），完整时刻在悬停里。
+function identityColumnsOf(
+  roles: PartyRoleIndex,
+  ours: OurCompanyIndex,
+  countries: ReadonlyMap<string, string>,
+): WorkbenchColumn<BusinessPartyRecord>[] {
   return [
     {
       key: 'party-name',
@@ -145,11 +153,22 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
       key: 'type',
       header: '类型',
       width: '12rem',
-      render: (row) => (
-        <span className="whitespace-nowrap text-idpxyz-text">
-          {businessPartyTypeLabel(ours.has(row.partyId), rolesOfParty(roles, row.partyId))}
-        </span>
-      ),
+      render: (row) => <BusinessPartyTypeTags ours={ours.has(row.partyId)} roles={rolesOfParty(roles, row.partyId)} />,
+    },
+    {
+      key: 'country',
+      header: '注册地',
+      minListWidth: 880,
+      render: (row) => {
+        const country = businessPartyRegistrationCountry(row, countries);
+        return country ? (
+          <span className="whitespace-nowrap text-idpxyz-text">
+            <CountryLabel code={country} />
+          </span>
+        ) : (
+          <span className="text-idpxyz-breadcrumb">—</span>
+        );
+      },
     },
     {
       key: 'status',
@@ -562,7 +581,11 @@ export function BusinessPartiesPage() {
   const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
   const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
   const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
-  const identityColumns = useMemo(() => identityColumnsOf(roleIndex, ourCompanies), [roleIndex, ourCompanies]);
+  const entityCountries = useMemo(() => partyRegistrationCountriesOf(knownEntities), [knownEntities]);
+  const identityColumns = useMemo(
+    () => identityColumnsOf(roleIndex, ourCompanies, entityCountries),
+    [roleIndex, ourCompanies, entityCountries],
+  );
 
   if (view.kind === 'object') {
     const row = partyRows.find((party) => party.partyId === view.partyId) ?? null;

@@ -4,17 +4,41 @@ import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primit
 import { statusToneBanner, statusToneText, type StatusTone } from '../../components/status-tone';
 import type { BusinessPartyRecord, PartyRelationshipRecord, BusinessPartyListResponseBody } from './api';
 import { businessPartyObjectHash } from './business-parties-address';
-import { labelOf, partyNameUnknownNote, relationshipStatusLabels } from './presentation';
+import { labelOf, partyNameUnknownNote, partyRoleLabels, partyTypeFallbackLabel, relationshipStatusLabels } from './presentation';
+import { ourCompanyLabel } from './business-party-list';
 import { partyRelationshipNeedsAttention } from './party-relationship-list';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import type { ApiResult } from '../catalogue-api';
 import { BusinessPartyDeactivationDialog } from './BusinessPartyDeactivationDialog';
 
-// 业务参与方页两册头区的件：横幅与「更多」菜单。身份册的详情栏与对象页各摆一份同样的头区（照 LegalEntityHeaderParts.tsx，
+// 业务参与方页两册头区的件：类型标签、横幅与「更多」菜单。身份册的详情栏与对象页各摆一份同样的头区（照 LegalEntityHeaderParts.tsx，
 // 票 group-legal-entities-uiux/09：同一对象两处结构一致），件只在这里写一遍，两处各自排版。不摆生命周期步进：状态药丸
 // 已经说了在哪一格，停用另有时点，步进是第二遍（用户 2026-11-03 裁定，与公司主体两页同）。
 // 横幅正文用正文色、语气只给描边与图标（理由在 components/status-tone.ts）。
+
+/**
+ * 类型标签，列表类型格与右栏头部同一份（票 business-party-ux/04），说法同 business-party-list.ts 的 businessPartyTypeLabel：
+ * 我方公司一枚、排在前面，用提示语气的淡底与描边好与角色分开——强调色作字在画布上不足 4.5:1，所以字仍是正文色；各角色各一枚，
+ * 中性灰底；两样都没有时是弱色字「暂无合作关系」，不做成标签——它说的是「没有」，不该和有的东西一样醒目。
+ */
+export function BusinessPartyTypeTags({ ours, roles }: { ours: boolean; roles: readonly string[] }) {
+  if (!ours && roles.length === 0) {
+    return <span className="whitespace-nowrap type-body text-idpxyz-breadcrumb">{partyTypeFallbackLabel}</span>;
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {ours ? (
+        <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 type-body font-medium ${statusToneBanner.info}`}>{ourCompanyLabel}</span>
+      ) : null}
+      {roles.map((role) => (
+        <span key={role} className="whitespace-nowrap rounded bg-idpxyz-hover px-1.5 py-0.5 type-body font-medium text-idpxyz-text">
+          {labelOf(partyRoleLabels, role)}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 /** 这一行要不要摆横幅：停用了。参与方册是名称的来源，没有「待补」可报。 */
 export function businessPartyHasBanners(row: BusinessPartyRecord): boolean {

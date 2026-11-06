@@ -1,7 +1,7 @@
 # 往来单位 UX：参照 Fiori 原型取长，追平公司主体那一轮的版式与用语
 
 Category: enhancement
-Status: in-progress——2026-11-06 起
+Status: resolved——2026-11-06 子票 01–04 全部进 main
 出处：2026-11-06 用户在 5173 看往来单位问「为什么还是老的界面」；补上右栏资料（[business-party-profile/04](../business-party-profile/issues/04-detail-panel-profile.md)）之后，用户打开外来原型 `ux/IDP_Parcel_Partner_Fiori_Prototype_V1.0.html`（主树下未入库），答「需要，但不是完全照抄，你是 ux 专家，目标是专业，美观，ux 友好」。
 
 切片：PN-02，主责 party-commercial，非关务专项。只改 `apps/admin-web/**`，走 workflow「前端切片」。机制：无新增，读口与写口都已有。产品策略：页面形态与提示语。租户取值：无。
@@ -40,4 +40,4 @@ Status: in-progress——2026-11-06 起
 | [01](./issues/01-panel-header.md) | 右栏抬头：英文名、一行事实只显到日、对象页图标按钮 | resolved（2026-11-06 进 main） |
 | [02](./issues/02-empty-state-and-contact-hint.md) | 资料空状态给下一步，客户缺联系人时提醒 | resolved（2026-11-06 进 main） |
 | [03](./issues/03-object-page-summary.md) | 对象页：meta 行补识别信息，概要去重，时刻只到日 | resolved（2026-11-06 进 main） |
-| [04](./issues/04-list-type-tags-and-country.md) | 列表：类型改标签，加注册地一列 | in-progress |
+| [04](./issues/04-list-type-tags-and-country.md) | 列表：类型改标签，加注册地一列 | resolved（2026-11-06 进 main） |

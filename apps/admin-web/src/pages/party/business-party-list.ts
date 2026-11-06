@@ -111,6 +111,27 @@ export function partiesPinnedByLegalEntities(entities: readonly GroupLegalEntity
   return new Set(entities.map((row) => row.partyId));
 }
 
+/**
+ * 列表「注册地」格要的公司主体那一半：参与方 → 钉着它的公司主体登的注册国家。我方公司不在往来单位上登识别信息（ADR-0367
+ * 决定一），它的注册地登在公司主体上；已停用的公司主体也算——注册在哪儿不因停用而变。法人册没取到为空表。
+ */
+export function partyRegistrationCountriesOf(entities: readonly GroupLegalEntityRecord[] | null): ReadonlyMap<string, string> {
+  const countries = new Map<string, string>();
+  for (const row of entities ?? []) {
+    if (row.identityLayerRegistered && row.registrationCountry) countries.set(row.partyId, row.registrationCountry);
+  }
+  return countries;
+}
+
+/** 「注册地」格：往来单位自己登了就用它，否则取公司主体那一份（partyRegistrationCountriesOf）；都没有为 null。 */
+export function businessPartyRegistrationCountry(
+  row: Pick<BusinessPartyRecord, 'partyId' | 'identityLayerRegistered' | 'registrationCountry'>,
+  entityCountries: ReadonlyMap<string, string>,
+): string | null {
+  if (row.identityLayerRegistered && row.registrationCountry) return row.registrationCountry;
+  return entityCountries.get(row.partyId) ?? null;
+}
+
 /** 往来单位详情栏的签，顺序即签条上的顺序。值存在视图状态里，换名会让旧状态失配。 */
 export type BusinessPartyPanelTab = 'summary' | 'contacts' | 'profile' | 'identity' | 'overview';
 

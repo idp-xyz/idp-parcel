@@ -1,7 +1,7 @@
 # 04 列表：类型改标签，加注册地一列
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-06 进 main
 父票：[spec](../spec.md)
 
 ## 要做的
@@ -13,3 +13,10 @@ Status: in-progress
 
 - 三道门退 0。
 - 浏览器：列表全宽时类型为标签、注册地列可见；开右栏时注册地列收起；我方公司标签与角色标签可区分。
+
+## 完成记录（2026-11-06，直接推 `main`）
+
+- 落点：`BusinessPartyHeaderParts.tsx` 加 `BusinessPartyTypeTags`：我方公司一枚、`info` 语气淡底描边（强调色作字在画布上不足 4.5:1，字仍是正文色），各角色中性灰底，两样都没有是弱色字「暂无合作关系」；列表类型格与右栏头部都用它。`BusinessPartiesPage.tsx` 加「注册地」列（门槛 880，低于生效时间的 960）。做的时候发现我方公司的注册地全是「—」：我方公司不在往来单位上登识别信息（ADR-0367 决定一），注册地在公司主体上——`business-party-list.ts` 加 `partyRegistrationCountriesOf` 与 `businessPartyRegistrationCountry`，往来单位自己没登时取钉着它的公司主体那一份（已停用的也算），带测试。
+- ✅ 三道门退 0，测试全过，含新增的一个用例。
+- ✅ 浏览器（本树另起 vite 5178，接演示 API 19080）：全宽表头「名称 | 类型 | 注册地 | 状态 | 生效时间 | 登记时间」；货主一号「客户 · 中国（CN）」，四家我方公司为「我方公司」标签与各自公司主体的注册地（中国、美国、中国香港、中国）；没有合作关系的为弱色字；开右栏后列表只剩名称、类型、状态；右栏头部标签同一份。只读。证据 S。
+- 评审：diff 全在 `pages/**`，按 workflow「前端切片」自审。

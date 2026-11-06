@@ -4,6 +4,8 @@ import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipReco
 import {
   partiesPinnedByLegalEntities,
   businessPartyPanelTabsOf,
+  businessPartyRegistrationCountry,
+  partyRegistrationCountriesOf,
   shownBusinessPartyPanelTab,
   businessPartyCountSummary,
   businessPartyNoMatchNote,
@@ -319,6 +321,19 @@ test('partiesPinnedByLegalEntities 认已停用的公司主体', () => {
   equal(pinned.has('P1'), true);
   equal(pinned.has('P2'), true);
   equal(partiesPinnedByLegalEntities(null).size, 0);
+});
+
+// Covers: 注册地先取往来单位自己登的；我方公司取钉着它的公司主体的（已停用的也算）；公司主体没登身份层、法人册没取到都不补。
+test('businessPartyRegistrationCountry 我方公司取公司主体的注册地', () => {
+  const entity = (partyId: string, status: string, registrationCountry?: string) =>
+    ({ tenantId: 'T', legalEntityId: `LE-${partyId}`, kind: 'RESPONSIBLE_LEGAL_ENTITY', partyId, partyNameKnown: true, status, revision: 1, basis: 'B', effectiveFrom: '2026-01-01T00:00:00Z', registeredAt: '2026-01-01T00:00:00Z', identityLayerRegistered: registrationCountry !== undefined, registrationCountry }) as never;
+  const countries = partyRegistrationCountriesOf([entity('OURS', 'EFFECTIVE', 'CN'), entity('OLD', 'DEACTIVATED', 'HK'), entity('BARE', 'EFFECTIVE')]);
+  const party = (partyId: string, registrationCountry?: string) => ({ partyId, identityLayerRegistered: registrationCountry !== undefined, registrationCountry });
+  equal(businessPartyRegistrationCountry(party('SHIPPER', 'SG'), countries), 'SG');
+  equal(businessPartyRegistrationCountry(party('OURS'), countries), 'CN');
+  equal(businessPartyRegistrationCountry(party('OLD'), countries), 'HK');
+  equal(businessPartyRegistrationCountry(party('BARE'), countries), null);
+  equal(businessPartyRegistrationCountry(party('OURS'), partyRegistrationCountriesOf(null)), null);
 });
 
 // Covers: 详情栏与对象页同一道门——我方公司不摆资料两签；法人册未答出时签条照常，不先多后少。
