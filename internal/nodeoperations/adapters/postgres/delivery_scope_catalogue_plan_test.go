@@ -20,7 +20,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证送站预报与送站交接单两条查阅列表的各种读法经迁移 0021 各自那条索引读册表（票 ps-external-mark-relations/15）。
+// 本文件对真实 PostgreSQL 证送站预报与送站交接单两条查阅列表的各种读法经各自那条索引读册表（票 ps-external-mark-relations/15）。
+// 下面四条索引由迁移 0021 建，ADR-0144 迁移那一笔按与排序同向的决胜键同名重建过（catalogue-read-pagination-rollout/06）。
 //
 // EXPLAIN 的是读口自己发出的那条语句与那组参数：经连接池的查询追踪原样记下，不在测试里另抄一份 SQL——抄的那份会在查询改动时
 // 留在这里变旧，而计划照旧好看。参数随语句绑定，规划器拿得到实参，「参数为空即不设这一界」那几支在规划时就折掉，计划与读口执行
@@ -160,17 +161,18 @@ func (fixture *cataloguePlanFixture) seed(t *testing.T) {
 	}
 }
 
-// listQuery 交回读口这一次调用发出的第一条语句——列表本身；其后按这一页标识取撤回、关闭与结论的那几条不在本票里。
+// listQuery 交回读口这一次调用取页的那一条语句——列表本身，带 LIMIT 的那一条；在它之前数总数的那一条、其后按这一页标识取撤回、
+// 关闭与结论的那几条不在本票里。
 func (fixture *cataloguePlanFixture) listQuery(t *testing.T, relation string) recordedQuery {
 	t.Helper()
 	queries := fixture.recorder.take()
-	if len(queries) == 0 {
-		t.Fatal("读口没有发出任何语句")
+	for _, query := range queries {
+		if strings.Contains(query.sql, "FROM node_operations."+relation) && strings.Contains(query.sql, " LIMIT ") {
+			return query
+		}
 	}
-	if !strings.Contains(queries[0].sql, "FROM node_operations."+relation) {
-		t.Fatalf("读口发出的第一条语句不是 %s 上的列表：%s", relation, queries[0].sql)
-	}
-	return queries[0]
+	t.Fatalf("读口没有发出 %s 上取页的语句：%d 条语句里都没有", relation, len(queries))
+	return recordedQuery{}
 }
 
 // explainedNode 是 EXPLAIN (FORMAT JSON) 计划树上的一个节点；只取断言要看的几格。
@@ -235,7 +237,7 @@ type listedRow struct {
 	at   time.Time
 }
 
-// checkListed 证灌量之后列表答的仍是筛选与次序本身：节点逐字、区间左闭右开、业务时刻倒序同刻按标识。
+// checkListed 证灌量之后列表答的仍是筛选与次序本身：节点逐字、区间左闭右开、业务时刻倒序同刻按标识倒序。
 func checkListed(t *testing.T, rows []listedRow, filter ports.DeliveryScopeCatalogueFilter) {
 	t.Helper()
 	if len(rows) == 0 {
@@ -250,7 +252,7 @@ func checkListed(t *testing.T, rows []listedRow, filter ports.DeliveryScopeCatal
 		}
 		if index > 0 {
 			previous := rows[index-1]
-			if row.at.After(previous.at) || (row.at.Equal(previous.at) && row.id < previous.id) {
+			if row.at.After(previous.at) || (row.at.Equal(previous.at) && row.id > previous.id) {
 				t.Errorf("次序走样：%s(%v) 排在 %s(%v) 之后", row.id, row.at, previous.id, previous.at)
 			}
 		}
@@ -292,7 +294,7 @@ func TestPreAdviceAndHandoverNoteListsReadThroughTheirIndexes(t *testing.T) {
 		{
 			name: "预报", relation: "delivery_pre_advice", nodeIndex: preAdviceNodeIndex, tenantIndex: preAdviceTenantIndex,
 			list: func(t *testing.T, filter ports.DeliveryScopeCatalogueFilter) ([]listedRow, error) {
-				states, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, filter, planPageSize)
+				states, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, filter, planPageSize, firstPage(t, ports.DeliveryPreAdvicePages)))
 				rows := make([]listedRow, 0, len(states))
 				for _, state := range states {
 					rows = append(rows, listedRow{
@@ -305,7 +307,7 @@ func TestPreAdviceAndHandoverNoteListsReadThroughTheirIndexes(t *testing.T) {
 		{
 			name: "交接单", relation: "delivery_handover_note", nodeIndex: handoverNoteNodeIndex, tenantIndex: handoverNoteTenantIndex,
 			list: func(t *testing.T, filter ports.DeliveryScopeCatalogueFilter) ([]listedRow, error) {
-				notes, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, filter, planPageSize)
+				notes, err := rowsOf(fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, filter, planPageSize, firstPage(t, ports.DeliveryHandoverNotePages)))
 				rows := make([]listedRow, 0, len(notes))
 				for _, row := range notes {
 					if row.MemberCount != 2 {

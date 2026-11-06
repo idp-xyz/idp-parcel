@@ -10,6 +10,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // DeliveryScopeCatalogue 实现 ports.DeliveryScopeCatalogueRead：送站预报册与送站交接单册的运营查阅读（迁移 0013；票
@@ -57,55 +58,95 @@ func catalogueFilterArgs(filter ports.DeliveryScopeCatalogueFilter) (node *strin
 	return node, from, until, documentNumber
 }
 
-// ListDeliveryPreAdvices 按预计送达倒序列预报，同刻按标识；再按这一页的标识取各自的撤回。
+const preAdviceRegister = "node_operations.delivery_pre_advice"
+
+// preAdvicePages 把 ports.DeliveryPreAdvicePages 落到预报册的列上；q 在预报标识、单号、客户账户与节点上做字面包含（没有单号的行只靠
+// 另几列命中）。
+var preAdvicePages = ports.DeliveryPreAdvicePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"expectedArrivalAt": "expected_arrival_at"},
+	Identity: []string{"pre_advice_id"},
+	Keyword:  []string{"pre_advice_id", "document_number", "customer_account_id", "node_ref"},
+})
+
+// listedPreAdvices 是预报册在选择器筛选下的定义：四个参数由 catalogueFilterArgs 给出，为空即不设那一界。
+const listedPreAdvices = `tenant_id = $1
+	AND ($2::text IS NULL OR node_ref = $2)
+	AND ($3::timestamptz IS NULL OR expected_arrival_at >= $3)
+	AND ($4::timestamptz IS NULL OR expected_arrival_at < $4)
+	AND ($5::text IS NULL OR document_number = $5)`
+
+// listedPreAdvice 是取页时的一行：预计送达与标识另从排序列上扫回，游标位置用它们而不用还原后领域对象里的副本。
+type listedPreAdvice struct {
+	state domain.DeliveryPreAdviceState
+	at    time.Time
+	id    string
+}
+
+// ListDeliveryPreAdvices 列预报的一页，缺省按预计送达倒序、同刻按标识倒序；再按这一页的标识取各自的撤回。
 func (catalogue *DeliveryScopeCatalogue) ListDeliveryPreAdvices(
 	ctx context.Context,
 	tenant domain.TenantID,
 	filter ports.DeliveryScopeCatalogueFilter,
 	limit int,
-) ([]domain.DeliveryPreAdviceState, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.DeliveryPreAdviceState], error) {
+	fail := func(err error) (cataloguepage.Result[domain.DeliveryPreAdviceState], error) {
+		return cataloguepage.Result[domain.DeliveryPreAdviceState]{}, fmt.Errorf("list delivery pre-advices: %w", err)
+	}
 	if limit <= 0 {
-		return nil, fmt.Errorf("list delivery pre-advices: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	node, from, until, documentNumber := catalogueFilterArgs(filter)
+	plan, err := preAdvicePages.Plan(query, listedPreAdvices,
+		[]any{tenant.String(), node, from, until, documentNumber}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery pre-advices: %w", err)
+		return fail(err)
 	}
-	node, from, until, documentNumber := catalogueFilterArgs(filter)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(preAdviceRegister), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
 	rows, err := querier.Query(ctx,
-		`SELECT `+preAdviceColumns+`
-		   FROM node_operations.delivery_pre_advice
-		  WHERE tenant_id = $1
-		    AND ($2::text IS NULL OR node_ref = $2)
-		    AND ($3::timestamptz IS NULL OR expected_arrival_at >= $3)
-		    AND ($4::timestamptz IS NULL OR expected_arrival_at < $4)
-		    AND ($6::text IS NULL OR document_number = $6)
-		  ORDER BY expected_arrival_at DESC, pre_advice_id
-		  LIMIT $5`,
-		tenant.String(), node, from, until, limit, documentNumber,
-	)
+		plan.PageSQL(preAdviceColumns+`, expected_arrival_at, pre_advice_id`, preAdviceRegister), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery pre-advices: %w", err)
+		return fail(err)
 	}
-	var (
-		states []domain.DeliveryPreAdviceState
-		ids    []string
-	)
+	fetched := make([]listedPreAdvice, 0, limit+1)
 	for rows.Next() {
-		preAdvice, _, err := scanPreAdvice(rows, tenant)
+		var row listedPreAdvice
+		preAdvice, _, err := scanPreAdvice(trailingRow{row: rows, tail: []any{&row.at, &row.id}}, tenant)
 		if err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("list delivery pre-advices: %w", err)
+			return fail(err)
 		}
-		states = append(states, domain.DeliveryPreAdviceState{PreAdvice: preAdvice})
-		ids = append(ids, preAdvice.ID().String())
+		row.state = domain.DeliveryPreAdviceState{PreAdvice: preAdvice}
+		fetched = append(fetched, row)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list delivery pre-advices: %w", err)
+		return fail(err)
 	}
-	if len(ids) == 0 {
-		return states, nil
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(row listedPreAdvice, _ string) cataloguepage.Position {
+			return cataloguepage.Position{Value: cataloguepage.FormatInstant(row.at), Identity: []string{row.id}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	listed := cataloguepage.Result[domain.DeliveryPreAdviceState]{
+		Rows: make([]domain.DeliveryPreAdviceState, len(page.Rows)), Next: page.Next, Total: page.Total,
+	}
+	if len(page.Rows) == 0 {
+		return listed, nil
+	}
+	ids := make([]string, len(page.Rows))
+	for index, row := range page.Rows {
+		listed.Rows[index] = row.state
+		ids[index] = row.state.PreAdvice.ID().String()
 	}
 
 	withdrawals, err := querier.Query(ctx,
@@ -115,24 +156,24 @@ func (catalogue *DeliveryScopeCatalogue) ListDeliveryPreAdvices(
 		tenant.String(), ids,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery pre-advices: withdrawals: %w", err)
+		return fail(fmt.Errorf("withdrawals: %w", err))
 	}
 	defer withdrawals.Close()
 	byPreAdvice := make(map[string]domain.DeliveryPreAdviceWithdrawal, len(ids))
 	for withdrawals.Next() {
 		withdrawal, _, err := scanWithdrawal(withdrawals, tenant)
 		if err != nil {
-			return nil, fmt.Errorf("list delivery pre-advices: withdrawals: %w", err)
+			return fail(fmt.Errorf("withdrawals: %w", err))
 		}
 		byPreAdvice[withdrawal.PreAdvice().String()] = withdrawal
 	}
 	if err := withdrawals.Err(); err != nil {
-		return nil, fmt.Errorf("list delivery pre-advices: withdrawals: %w", err)
+		return fail(fmt.Errorf("withdrawals: %w", err))
 	}
-	for index := range states {
-		states[index].Withdrawal = byPreAdvice[states[index].PreAdvice.ID().String()]
+	for index := range listed.Rows {
+		listed.Rows[index].Withdrawal = byPreAdvice[ids[index]]
 	}
-	return states, nil
+	return listed, nil
 }
 
 // FindDeliveryPreAdvice 就是预报册自己的按标识读。
@@ -144,71 +185,114 @@ func (catalogue *DeliveryScopeCatalogue) FindDeliveryPreAdvice(
 	return catalogue.preAdvices.FindDeliveryPreAdvice(ctx, tenant, id)
 }
 
-// ListDeliveryHandoverNotes 按开立倒序列交接单，同刻按标识，每行另带名下成员数；再按这一页的标识取各自的关闭与结论。
+const handoverNoteRegister = "node_operations.delivery_handover_note AS note"
+
+// handoverNotePages 把 ports.DeliveryHandoverNotePages 落到交接单册（别名 note）的列上；q 在单据标识、单号、节点与交付方上做字面
+// 包含（没有单号、未登交付方的行只靠另几列命中）。
+var handoverNotePages = ports.DeliveryHandoverNotePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"openedAt": "note.opened_at"},
+	Identity: []string{"note.note_id"},
+	Keyword:  []string{"note.note_id", "note.document_number", "note.node_ref", "note.delivering_party"},
+})
+
+// listedHandoverNotes 是交接单册在选择器筛选下的定义，参数同 listedPreAdvices。
+const listedHandoverNotes = `note.tenant_id = $1
+	AND ($2::text IS NULL OR note.node_ref = $2)
+	AND ($3::timestamptz IS NULL OR note.opened_at >= $3)
+	AND ($4::timestamptz IS NULL OR note.opened_at < $4)
+	AND ($5::text IS NULL OR note.document_number = $5)`
+
+// listedHandoverNote 是取页时的一行：开立时刻与标识另从排序列上扫回，理由同 listedPreAdvice。
+type listedHandoverNote struct {
+	row ports.DeliveryHandoverNoteCatalogueRow
+	at  time.Time
+	id  string
+}
+
+// ListDeliveryHandoverNotes 列交接单的一页，缺省按开立倒序、同刻按标识倒序，每行另带名下成员数；再按这一页的标识取各自的关闭与结论。
 func (catalogue *DeliveryScopeCatalogue) ListDeliveryHandoverNotes(
 	ctx context.Context,
 	tenant domain.TenantID,
 	filter ports.DeliveryScopeCatalogueFilter,
 	limit int,
-) ([]ports.DeliveryHandoverNoteCatalogueRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow], error) {
+		return cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow]{}, fmt.Errorf("list delivery handover notes: %w", err)
+	}
 	if limit <= 0 {
-		return nil, fmt.Errorf("list delivery handover notes: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	node, from, until, documentNumber := catalogueFilterArgs(filter)
+	plan, err := handoverNotePages.Plan(query, listedHandoverNotes,
+		[]any{tenant.String(), node, from, until, documentNumber}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery handover notes: %w", err)
+		return fail(err)
 	}
-	node, from, until, documentNumber := catalogueFilterArgs(filter)
-	rows, err := querier.Query(ctx,
-		`SELECT note.note_id, note.node_ref, note.delivering_party, note.claimed_account_ids, note.opened_at,
-		        note.document_number, note.document_number_absence,
-		        (SELECT count(*) FROM node_operations.delivery_handover_member AS member
-		          WHERE member.tenant_id = note.tenant_id AND member.note_id = note.note_id)
-		   FROM node_operations.delivery_handover_note AS note
-		  WHERE note.tenant_id = $1
-		    AND ($2::text IS NULL OR note.node_ref = $2)
-		    AND ($3::timestamptz IS NULL OR note.opened_at >= $3)
-		    AND ($4::timestamptz IS NULL OR note.opened_at < $4)
-		    AND ($6::text IS NULL OR note.document_number = $6)
-		  ORDER BY note.opened_at DESC, note.note_id
-		  LIMIT $5`,
-		tenant.String(), node, from, until, limit, documentNumber,
-	)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(handoverNoteRegister), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(
+		`note.note_id, note.node_ref, note.delivering_party, note.claimed_account_ids, note.opened_at,
+		 note.document_number, note.document_number_absence,
+		 (SELECT count(*) FROM node_operations.delivery_handover_member AS member
+		   WHERE member.tenant_id = note.tenant_id AND member.note_id = note.note_id),
+		 note.opened_at, note.note_id`,
+		handoverNoteRegister), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery handover notes: %w", err)
+		return fail(err)
 	}
-	var (
-		list []ports.DeliveryHandoverNoteCatalogueRow
-		ids  []string
-	)
+	fetched := make([]listedHandoverNote, 0, limit+1)
 	for rows.Next() {
-		var count int64
-		note, _, err := scanHandoverNote(trailingRow{row: rows, tail: []any{&count}}, tenant)
+		var (
+			listed listedHandoverNote
+			count  int64
+		)
+		note, _, err := scanHandoverNote(trailingRow{row: rows, tail: []any{&count, &listed.at, &listed.id}}, tenant)
 		if err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("list delivery handover notes: %w", err)
+			return fail(err)
 		}
-		list = append(list, ports.DeliveryHandoverNoteCatalogueRow{State: domain.DeliveryHandoverNoteState{Note: note}, MemberCount: count})
-		ids = append(ids, note.ID().String())
+		listed.row = ports.DeliveryHandoverNoteCatalogueRow{State: domain.DeliveryHandoverNoteState{Note: note}, MemberCount: count}
+		fetched = append(fetched, listed)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list delivery handover notes: %w", err)
+		return fail(err)
 	}
-	if len(ids) == 0 {
-		return list, nil
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(listed listedHandoverNote, _ string) cataloguepage.Position {
+			return cataloguepage.Position{Value: cataloguepage.FormatInstant(listed.at), Identity: []string{listed.id}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	result := cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow]{
+		Rows: make([]ports.DeliveryHandoverNoteCatalogueRow, len(page.Rows)), Next: page.Next, Total: page.Total,
+	}
+	if len(page.Rows) == 0 {
+		return result, nil
+	}
+	ids := make([]string, len(page.Rows))
+	for index, listed := range page.Rows {
+		result.Rows[index] = listed.row
+		ids[index] = listed.row.State.Note.ID().String()
 	}
 
 	closures, bindings, err := catalogue.noteEvidence(ctx, querier, tenant, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list delivery handover notes: %w", err)
+		return fail(err)
 	}
-	for index := range list {
-		id := list[index].State.Note.ID().String()
-		list[index].State.Closure = closures[id]
-		list[index].State.Bindings = bindings[id]
+	for index := range result.Rows {
+		result.Rows[index].State.Closure = closures[ids[index]]
+		result.Rows[index].State.Bindings = bindings[ids[index]]
 	}
-	return list, nil
+	return result, nil
 }
 
 // noteEvidence 按一组交接单标识取各自的关闭与结论，经两本册写侧同一组还原门读回。

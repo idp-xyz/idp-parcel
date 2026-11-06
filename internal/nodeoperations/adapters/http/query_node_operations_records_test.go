@@ -13,6 +13,7 @@ import (
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var catalogueBaseAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
@@ -65,71 +66,76 @@ func (stub unreachableReviewCatalogue) refuse(register string) {
 }
 
 func (stub unreachableReviewCatalogue) ListReceptions(
-	context.Context, domain.TenantID, int,
-) ([]ports.ReceptionCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ReceptionCatalogueRow], error) {
 	stub.refuse("reception")
-	return nil, nil
+	return cataloguepage.Result[ports.ReceptionCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListUnidentifiedItems(
-	context.Context, domain.TenantID, int,
-) ([]ports.UnidentifiedItemCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.UnidentifiedItemCatalogueRow], error) {
 	stub.refuse("unidentified item")
-	return nil, nil
+	return cataloguepage.Result[ports.UnidentifiedItemCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListConsolidationUnits(
-	context.Context, domain.TenantID, int,
-) ([]ports.ConsolidationUnitCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ConsolidationUnitCatalogueRow], error) {
 	stub.refuse("consolidation unit")
-	return nil, nil
+	return cataloguepage.Result[ports.ConsolidationUnitCatalogueRow]{}, nil
 }
 
 func (stub unreachableReviewCatalogue) ListConsolidationMembers(
-	context.Context, domain.TenantID, int,
-) ([]ports.ConsolidationMemberCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ConsolidationMemberCatalogueRow], error) {
 	stub.refuse("consolidation member")
-	return nil, nil
+	return cataloguepage.Result[ports.ConsolidationMemberCatalogueRow]{}, nil
 }
 
-// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
+// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键与查询；next 与 total 原样放进每一册的结果。待识别册的答复另问
+// 按实物那一册，那一问收到的查询另记在 gotUnitsQuery，不盖掉 gotQuery。
 type stubReviewCatalogue struct {
 	receptions []ports.ReceptionCatalogueRow
 	items      []ports.UnidentifiedItemCatalogueRow
 	units      []ports.ConsolidationUnitCatalogueRow
 	members    []ports.ConsolidationMemberCatalogueRow
+	next       string
+	total      int64
 	err        error
 
-	gotTenant string
-	gotLimit  int
+	gotTenant     string
+	gotLimit      int
+	gotQuery      cataloguepage.Query
+	gotUnitsQuery cataloguepage.Query
 }
 
 func (stub *stubReviewCatalogue) ListReceptions(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ReceptionCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.receptions, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ReceptionCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.ReceptionCatalogueRow]{Rows: stub.receptions, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubReviewCatalogue) ListUnidentifiedItems(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.UnidentifiedItemCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.items, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.UnidentifiedItemCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.UnidentifiedItemCatalogueRow]{Rows: stub.items, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubReviewCatalogue) ListConsolidationUnits(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ConsolidationUnitCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.units, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ConsolidationUnitCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.ConsolidationUnitCatalogueRow]{Rows: stub.units, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubReviewCatalogue) ListConsolidationMembers(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ConsolidationMemberCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.members, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ConsolidationMemberCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.ConsolidationMemberCatalogueRow]{Rows: stub.members, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
@@ -309,7 +315,7 @@ func TestReceptionRegistryTranscribesRows(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(recordsEndpoint(register), "/node-operations-records?registry=reception&tenant=TENANT-9")
+	response := serveGet(recordsEndpoint(register), "/node-operations-records?registry=reception")
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())

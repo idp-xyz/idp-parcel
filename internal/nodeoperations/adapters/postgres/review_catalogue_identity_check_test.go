@@ -24,7 +24,7 @@ func TestCataloguesCarryTheIdentityCheckOfPendingUnits(t *testing.T) {
 		"SYN-SCAN-NRS05-FORMED":    ports.IdentityCheckAbsent,
 	}
 
-	items, err := catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10)
+	items, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}
@@ -37,7 +37,7 @@ func TestCataloguesCarryTheIdentityCheckOfPendingUnits(t *testing.T) {
 		}
 	}
 
-	rows, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, tenant), 10)
+	rows, err := rowsOf(catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil {
 		t.Fatalf("上列收寄册：%v", err)
 	}

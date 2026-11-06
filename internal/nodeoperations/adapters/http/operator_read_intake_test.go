@@ -96,19 +96,30 @@ func TestOperatorReadRefusalsKeepTheirGradesAtTheEndpoint(t *testing.T) {
 	}
 }
 
-// Covers: 同上——装进端点后，每本册子的读口收到的都是信封的租户与产品常量页大小，请求里的自报不起作用。
+// Covers: 同上——装进端点后，每本册子的读口收到的都是信封的租户与产品常量页大小，请求里的自报不起作用：头部的自报不读；查询串里的
+// tenant 与 limit 不在任何一册的声明里，整个请求答 400，读口不被触到（ADR-0144 决定四）。
 func TestOperatorReadIntakeFeedsEveryRegistryTheEnvelopeTenant(t *testing.T) {
 	intake := operatorReadIntake(t, operationsReader{tenant: "SYN-TENANT-01"})
-	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit"} {
+	for _, registry := range []string{
+		"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member", "physical-control",
+	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}
-			response := serveGet(nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(intake, register),
-				"/node-operations-records?registry="+registry+"&tenant=TENANT-9&limit=9999")
+			request := httptest.NewRequest(http.MethodGet, "/node-operations-records?registry="+registry, nil)
+			request.Header.Set("X-Reported-Tenant", "TENANT-9")
+			response := httptest.NewRecorder()
+			nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(intake, register).ServeHTTP(response, request)
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 			}
 			if register.gotTenant != "SYN-TENANT-01" || register.gotLimit != 200 {
 				t.Fatalf("读口收到 tenant=%q limit=%d", register.gotTenant, register.gotLimit)
+			}
+
+			for _, reported := range []string{"&tenant=TENANT-9", "&limit=9999"} {
+				refused := serveGet(nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(intake, unreachableReviewCatalogue{t: t}),
+					"/node-operations-records?registry="+registry+reported)
+				assertPageQueryRefused(t, refused)
 			}
 		})
 	}

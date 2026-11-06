@@ -14,6 +14,7 @@ import (
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodeopsdomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	nodeopsports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // transactionalIdentityDisposition 把身份冲突处置包进一笔事务，事务边界归装配点，理由同 transactionalIdentityRecheck：包裹锁、追加的
@@ -103,6 +104,7 @@ func (unwiredNodeOperationsRecords) ListIdentityReviewUnits(
 	context.Context,
 	nodeopsdomain.TenantID,
 	int,
-) ([]nodeopsports.IdentityReviewUnitRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.IdentityReviewUnitRow], error) {
+	return cataloguepage.Result[nodeopsports.IdentityReviewUnitRow]{}, errOrchestrationNotWired
 }

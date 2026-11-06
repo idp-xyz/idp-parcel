@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是节点作业查阅页的伴生列表读端口（ADR-0077，票 admin-skeleton-closure-batch/05）：
@@ -22,7 +23,8 @@ import (
 //
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
 // 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
-// 就是内容，续办是收寄命令端点的真渠道去产生事实，不折成未配置）。
+// 就是内容，续办是收寄命令端点的真渠道去产生事实，不折成未配置）。各册的查询对象由端点按
+// ReceptionPages 一族声明解出，答一页、下一页的游标与同一组条件下的总数（ADR-0144 决定六）。
 
 // ReceptionCatalogueRow 是收寄登记册上列的一行。
 //
@@ -109,9 +111,13 @@ type UnidentifiedItemCatalogueRow struct {
 // IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：
 // 一件有过待识别那一格的作业实物，连同它各条判断链此刻的当前有效版本。身份冲突处置逐链追加、可能写到操作者没看过的链上，复核页
 // 因此要把一件实物的各链列在一起；处置命令要指名的「所处置的版本」与处置候选也都从这几版来。
+//
+// LatestRecordedAt 是这件实物待识别各版里最近一次的登记时刻，即本册的排序维：取自读面导出的那一列，不是 Heads 里某一版的时刻——
+// 处置版与形成格也在 Heads 里，它们的登记时刻不进这一格。
 type IdentityReviewUnitRow struct {
-	Unit  string
-	Heads []IdentityReviewHead
+	Unit             string
+	LatestRecordedAt time.Time
+	Heads            []IdentityReviewHead
 }
 
 // IdentityReviewHead 是一条判断链的当前有效版本：Kind 是收寄判断的封闭词（INTAKE_FORMED / PENDING_IDENTIFICATION），候选、冲突
@@ -179,33 +185,44 @@ type ConsolidationMemberCatalogueRow struct {
 	DirectionalBasis domain.DirectionalBasisRecord
 }
 
-// ReviewCatalogueRead 是节点作业查阅页的伴生列表读端口。
+// ReviewCatalogueRead 是节点作业查阅页的伴生列表读端口。各方法的查询对象由同名册的声明解出（ListReceptions 对 ReceptionPages，
+// 余类推）。
 type ReviewCatalogueRead interface {
 	ListReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ReceptionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ReceptionCatalogueRow], error)
 	ListUnidentifiedItems(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]UnidentifiedItemCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[UnidentifiedItemCatalogueRow], error)
 	ListConsolidationUnits(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ConsolidationUnitCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ConsolidationUnitCatalogueRow], error)
 	ListConsolidationMembers(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ConsolidationMemberCatalogueRow, error)
-	// ListIdentityReviewUnits 按实物上列待识别实物页（IdentityReviewUnitRow）：limit 数的是实物，不是版本。
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ConsolidationMemberCatalogueRow], error)
+	// ListIdentityReviewUnits 按实物上列待识别实物页（IdentityReviewUnitRow）：limit 与 total 数的都是实物，不是版本。
 	ListIdentityReviewUnits(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]IdentityReviewUnitRow, error)
-	ListPhysicalControlTransitions(ctx context.Context, tenant domain.TenantID, limit int) ([]PhysicalControlTransitionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[IdentityReviewUnitRow], error)
+	ListPhysicalControlTransitions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PhysicalControlTransitionCatalogueRow], error)
 }

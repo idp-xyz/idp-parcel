@@ -162,7 +162,7 @@ func deliveryScopeCheckFieldsOf(check domain.DeliveryScopeCheck) deliveryScopeCh
 	}
 }
 
-// problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、节点或实物的存在
+// problemResponse 刻意不带底层失败的措辞。那种措辞会捎带租户、节点或实物的存在
 // 性；调用方要分流靠稳定的 `code`，要细节去查带关联标识的服务端记录（ADR-0029 同源
 // 纪律：错误不泄露他租户的存在）。
 type problemResponse struct {
@@ -171,6 +171,9 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 只随目录查询参数的拒绝在场（writePageQueryProblem），只说调用方自己这份查询串错在哪一格（ADR-0144 决定一、四），
+	// 不谈库里有什么。它是散文，客户端不据此分支；其余各格整键不出现。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeOutcome(response http.ResponseWriter, result application.ReceiveDeliveredUnitResult) {

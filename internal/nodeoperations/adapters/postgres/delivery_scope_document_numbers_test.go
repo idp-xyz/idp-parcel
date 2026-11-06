@@ -156,14 +156,14 @@ func TestDeliveryScopeRegistersKeepTheDocumentNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	byNumber, err := catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "PA-20261102-00001")}, 10)
+	byNumber, err := rowsOf(catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "PA-20261102-00001")}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil || len(byNumber) != 1 || byNumber[0].PreAdvice.ID() != first.ID() {
 		t.Fatalf("按单据号列预报 = %d 份, %v", len(byNumber), err)
 	}
-	if none, err := catalogue.ListDeliveryPreAdvices(ctx, otherTenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "PA-20261102-00001")}, 10); err != nil || len(none) != 0 {
+	if none, err := rowsOf(catalogue.ListDeliveryPreAdvices(ctx, otherTenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "PA-20261102-00001")}, 10, firstPage(t, ports.DeliveryPreAdvicePages))); err != nil || len(none) != 0 {
 		t.Fatalf("别的租户按同一单据号列出 %d 份, %v", len(none), err)
 	}
-	noteRows, err := catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "HO-20261102-00001")}, 10)
+	noteRows, err := rowsOf(catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{DocumentNumber: must(t, domain.NewDocumentNumber, "HO-20261102-00001")}, 10, firstPage(t, ports.DeliveryHandoverNotePages)))
 	if err != nil || len(noteRows) != 1 || noteRows[0].State.Note.ID() != note.ID() {
 		t.Fatalf("按单据号列交接单 = %d 张, %v", len(noteRows), err)
 	}

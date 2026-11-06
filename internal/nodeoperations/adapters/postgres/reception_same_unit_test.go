@@ -371,14 +371,14 @@ func TestAMergeRecordIsNotReadAsAnIntakeOrAnAssociation(t *testing.T) {
 	intoPending := mergedRow(t, sameUnitTenant, "SYN-SCAN-NRS04-04", "SYN-UNIT-NRS04-P", "SYN-NODE-NRS04", pending.JudgmentVersion.String())
 	saveReceptions(t, transactor, ctx, receptions, formed, pending, intoFormed, intoPending)
 
-	listed, err := catalogue.ListReceptions(ctx, tenant, 10)
+	listed, err := rowsOf(catalogue.ListReceptions(ctx, tenant, 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil {
 		t.Fatalf("上列收寄册：%v", err)
 	}
 	if got := receptionSourcesOf(listed); !slices.Equal(got, []string{"SYN-SCAN-NRS04-01", "SYN-SCAN-NRS04-02"}) {
 		t.Errorf("收寄册列出 %v, want 只有两条判断", got)
 	}
-	unidentified, err := catalogue.ListUnidentifiedItems(ctx, tenant, 10)
+	unidentified, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, tenant, 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}
