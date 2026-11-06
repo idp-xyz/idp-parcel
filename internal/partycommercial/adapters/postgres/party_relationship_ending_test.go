@@ -13,6 +13,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -215,7 +216,7 @@ func TestEndedRelationshipsLandAndReadBackFromTheRegister(t *testing.T) {
 			next.Relationship().Holder(), next.Relationship().Effective().StartsAt())
 	}
 
-	rows, err := fixture.catalogue.ListPartyRelationships(t.Context(), pcTenant(t, tenant), 50)
+	rows, err := rowsOf(fixture.catalogue.ListPartyRelationships(t.Context(), pcTenant(t, tenant), 50, firstPage(t, ports.PartyRelationshipPages)))
 	if err != nil {
 		t.Fatalf("list relationships: %v", err)
 	}

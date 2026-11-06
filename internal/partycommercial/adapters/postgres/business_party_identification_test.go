@@ -118,7 +118,7 @@ func TestBusinessPartyIdentificationRoundTrip(t *testing.T) {
 		}
 	}
 
-	rows, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 50)
+	rows, err := rowsOf(catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 50, firstPage(t, ports.BusinessPartyPages)))
 	if err != nil {
 		t.Fatal(err)
 	}

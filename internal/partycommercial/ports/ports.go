@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CommercialAuthorityView 取一个范围下的当前权威商业视图。
@@ -1138,8 +1139,9 @@ type PartyRelationshipRow struct {
 // 生命周期）。两类册子的行形状、状态代数与修订轴都不同，并进去 kind 参数就开始说谎。
 //
 // 上列对象是**最新修订**而不是全部修订：目录回答「这个租户今天有哪些身份、各处哪格」，
-// 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒、空册答空列表，
-// 判据同 ServiceProductCatalogueRead。
+// 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒，判据同 ServiceProductCatalogueRead；
+// 三个目录方法收端点按 BusinessPartyPages、GroupLegalEntityPages、PartyRelationshipPages 解出的查询对象，
+// 答一页（ADR-0144），空册答空页。
 //
 // 证据面另有出口：嵌入的 LegalEntityRevisionHistoryRead 与 BusinessPartyRevisionHistoryRead 各按单个
 // 法人 / 参与方展开全部修订，供同一页的详情抽屉。它们嵌在这里而不另立读口参数，因为读的是同一张表、
@@ -1152,17 +1154,20 @@ type PartyIdentityCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]BusinessPartyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[BusinessPartyRow], error)
 	ListGroupLegalEntities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]GroupLegalEntityRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[GroupLegalEntityRow], error)
 	ListPartyRelationships(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PartyRelationshipRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PartyRelationshipRow], error)
 }
 
 // ServiceProductFormRegistry 是形态登记用例的持久化面：整册装载 + 形态写入。
