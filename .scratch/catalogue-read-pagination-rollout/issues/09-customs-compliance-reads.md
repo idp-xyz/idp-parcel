@@ -47,7 +47,7 @@ Blocked by: 01
 
 `cmd/parcel-api` 里：`unwired_orchestration.go` 只改关务各读口占位方法的签名（规则库、案件登记、门禁、口岸路径、凭证、税费协作与核对），邻行未动；`endpoints_customs_records_test.go` 里记录各口与卡关对象的占位、`assemble_customs_registration_test.go` 的真库装配用例（读回前先解首页查询）同样只跟签名。共用件 `internal/platform/cataloguepage` 未改。
 
-**各册声明**（声明在 `ports/catalogue_pages.go`，落列在各读面头部；缺省序都取迁移前 `ORDER BY` 的首列与方向，声明头注写明为什么不是 `-registeredAt`）
+**各册声明**（声明在 `ports/catalogue_pages.go`，落列在各读面头部；缺省序都取迁移前 `ORDER BY` 的首列与方向，声明文件的头注写明为什么都不是 `-registeredAt`）
 
 | 册（路由 · 选择器） | 缺省序 | 可排维 | 筛选维 | q 覆盖的列 | 索引 |
 |---|---|---|---|---|---|
@@ -92,7 +92,7 @@ Blocked by: 01
 
 **判断项**
 
-1. **窄口参数**（管理台与脚本带的参数怎么声明的）。管理台 `apps/admin-web/src/pages/customs/api.ts` 实际只带两样：按 registry 分派的路由带 `registry`，动作准入判断册在选了对象时带 `object`（没选不带）；其余各册不带参数。`scripts/` 不调这些读口；`cmd/parcel-api` 的用例带非空 `case`，路由探针带 `registry`。
+1. **窄口参数**（管理台与脚本带的参数怎么声明的）。管理台 `apps/admin-web/src/pages/customs/api.ts` 实际带的只有：按 registry 分派的路由带 `registry`，动作准入判断册在选了对象时带 `object`（没选不带）；其余各册不带参数。`scripts/` 不调这些读口；`cmd/parcel-api` 的用例带非空 `case`，路由探针带 `registry`。
    - `registry` 登为选择器：每个取值各是一册、各有册名，取值进游标摘要，一册的游标换个 registry 去翻答 400。
    - 案件的 `case`、提交版本的 `version`、判断册的 `object` 登为自由取值的筛选维。迁移前是单值精确收窄，迁移后可给多值、维内为或。迁移前空值即不收窄，端点在解码前去掉这几个键上的空值，`?case=` 照旧落整册，不答「筛选维的取值为空」；与有值的同给时只按有值的收窄（`TestBlankNarrowingStillListsTheWholeCatalogue`）。
    - 外部监管结果的 `version` 登为选择器：原样交给读口、空即不收窄，取值进摘要（`TestTheExternalResultVersionStaysASelector`）。答复体里那一格叫 `submissionVersion`，筛选维名只取答复体的字段名（决定四），所以不当筛选维。
