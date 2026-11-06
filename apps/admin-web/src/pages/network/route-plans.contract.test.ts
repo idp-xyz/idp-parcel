@@ -9,6 +9,7 @@ import type {
   RouteReassessmentListResponseBody,
   RouteReassessmentRecord,
 } from './api';
+import type { CataloguePage } from '../catalogue-query';
 
 // 前后端之间唯一的共享物是后端包 testdata/ 里的契约夹具（票 admin-web-audit-followups/04）：
 // Go 测试把 GET /route-plans 端点真答出的响应体写在那里并逐字节守着，这里读**同一个文件**校
@@ -37,13 +38,21 @@ interface KeyShape {
   readonly nested?: Readonly<Record<string, KeyShape>>;
   /** 值是对象数组（册的行）的键，各带行形状。 */
   readonly rows?: Readonly<Record<string, KeyShape>>;
+  /** 叶子不是字符串的键，各带它允许的 JSON 类型（null 也算一种）。 */
+  readonly leaves?: Readonly<Record<string, readonly LeafType[]>>;
 }
+
+type LeafType = 'string' | 'number' | 'null';
 
 type Row = Record<string, unknown>;
 
+function leafTypeOf(value: unknown): string {
+  return value === null ? 'null' : typeof value;
+}
+
 /**
  * 一个对象的键集合必须落在类型认识的键里，必备键一个不缺；值按形状逐键核：对象与行数组
- * 递归，其余一律字符串——两册的列面今天没有别的值类型，有了再开格。
+ * 递归，叶子按 leaves 声明的类型核，没声明的一律字符串。
  */
 function assertShape(value: unknown, shape: KeyShape, where: string): Row {
   ok(typeof value === 'object' && value !== null && !Array.isArray(value), `${where} 不是对象`);
@@ -63,7 +72,9 @@ function assertShape(value: unknown, shape: KeyShape, where: string): Row {
     } else if (rows) {
       assertRows(record[key], rows, `${where}.${key}`);
     } else {
-      equal(typeof record[key], 'string', `${where}.${key} 不是字符串`);
+      const allowed: readonly string[] = shape.leaves?.[key] ?? ['string'];
+      const actual = leafTypeOf(record[key]);
+      ok(allowed.includes(actual), `${where}.${key} 是 ${actual}，应为 ${allowed.join(' 或 ')}`);
     }
   }
   return record;
@@ -93,9 +104,19 @@ function assertOptionalKeysCovered(records: readonly Row[], shape: KeyShape, whe
   }
 }
 
+// —— 两册共用的翻页格 ——
+
+const pageRequired = ['size', 'next', 'total'] as const satisfies readonly RequiredKeys<CataloguePage>[];
+const pageComplete: Exhaustive<CataloguePage, (typeof pageRequired)[number]> = true;
+const pageShape: KeyShape = {
+  required: pageRequired,
+  optional: [],
+  leaves: { size: ['number'], next: ['string', 'null'], total: ['number', 'null'] },
+};
+
 // —— 初始路由册 ——
 
-const initialRouteBodyRequired = ['outcome', 'judgments'] as const satisfies readonly RequiredKeys<InitialRouteListResponseBody>[];
+const initialRouteBodyRequired = ['outcome', 'judgments', 'page'] as const satisfies readonly RequiredKeys<InitialRouteListResponseBody>[];
 const initialRouteBodyComplete: Exhaustive<InitialRouteListResponseBody, (typeof initialRouteBodyRequired)[number]> = true;
 
 const applicabilityRequired = ['state', 'transitionedAt'] as const satisfies readonly RequiredKeys<RoutePlanApplicability>[];
@@ -132,7 +153,7 @@ const judgmentShape: KeyShape = {
 
 // —— 路由复核册 ——
 
-const reassessmentBodyRequired = ['outcome', 'reassessments'] as const satisfies readonly RequiredKeys<RouteReassessmentListResponseBody>[];
+const reassessmentBodyRequired = ['outcome', 'reassessments', 'page'] as const satisfies readonly RequiredKeys<RouteReassessmentListResponseBody>[];
 const reassessmentBodyComplete: Exhaustive<RouteReassessmentListResponseBody, (typeof reassessmentBodyRequired)[number]> = true;
 
 const reassessmentRequired = [
@@ -160,6 +181,7 @@ const reassessmentComplete: Exhaustive<
 const reassessmentShape: KeyShape = { required: reassessmentRequired, optional: reassessmentOptional };
 
 // 这几个常量只为让编译器替清单作证，运行时没有读者。
+void pageComplete;
 void initialRouteBodyComplete;
 void applicabilityComplete;
 void judgmentComplete;
@@ -170,7 +192,7 @@ void reassessmentComplete;
 test('GET /route-plans?register=initial-route 的契约夹具与 InitialRouteListResponseBody 逐键对得上', () => {
   const body = assertShape(
     readFixture('route_plans_initial_route.json'),
-    { required: initialRouteBodyRequired, optional: [], rows: { judgments: judgmentShape } },
+    { required: initialRouteBodyRequired, optional: [], nested: { page: pageShape }, rows: { judgments: judgmentShape } },
     '响应体',
   );
   equal(body.outcome, 'INITIAL_ROUTES_LISTED' satisfies InitialRouteListResponseBody['outcome']);
@@ -179,7 +201,7 @@ test('GET /route-plans?register=initial-route 的契约夹具与 InitialRouteLis
 test('GET /route-plans?register=reassessment 的契约夹具与 RouteReassessmentListResponseBody 逐键对得上', () => {
   const body = assertShape(
     readFixture('route_plans_reassessment.json'),
-    { required: reassessmentBodyRequired, optional: [], rows: { reassessments: reassessmentShape } },
+    { required: reassessmentBodyRequired, optional: [], nested: { page: pageShape }, rows: { reassessments: reassessmentShape } },
     '响应体',
   );
   equal(body.outcome, 'ROUTE_REASSESSMENTS_LISTED' satisfies RouteReassessmentListResponseBody['outcome']);

@@ -228,6 +228,7 @@ export interface InitialRouteRecord {
 export interface InitialRouteListResponseBody {
   outcome: 'INITIAL_ROUTES_LISTED';
   judgments: InitialRouteRecord[];
+  page: CataloguePage;
 }
 
 export interface RouteReassessmentRecord {
@@ -252,6 +253,7 @@ export interface RouteReassessmentRecord {
 export interface RouteReassessmentListResponseBody {
   outcome: 'ROUTE_REASSESSMENTS_LISTED';
   reassessments: RouteReassessmentRecord[];
+  page: CataloguePage;
 }
 
 export function listInitialRoutes(): Promise<ApiResult<InitialRouteListResponseBody>> {
