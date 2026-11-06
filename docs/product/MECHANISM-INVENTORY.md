@@ -14,15 +14,15 @@
 | nodeoperations | 122 | 126 | 16 | 31 | 4 | 18 |
 | parcelpricing | 157 | 166 | 20 | 20 | 1 | 27 |
 | parcelshipment | 280 | 274 | 29 | 56 | 13 | 32 |
-| partycommercial | 187 | 217 | 16 | 44 | 1 | 45 |
+| partycommercial | 191 | 222 | 17 | 45 | 1 | 45 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 41 | 36 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 270 | 220 | 45 | 76 | 13 | 14 |
 | transportfulfillment | 313 | 321 | 56 | 63 | 16 | 57 |
 | visibilityexception | 146 | 142 | 16 | 35 | 8 | 15 |
-| **合计** | 1858 | 1890 | 247 | 413 | 69 | 252 |
+| **合计** | 1862 | 1895 | 248 | 414 | 69 | 252 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 284、测试 465。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 284、测试 466。
 
 ## 跨上下文消费缝：51 组，176 个生产文件
 
@@ -80,7 +80,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：13 个模块共 374 份 SQL
+## 迁移：13 个模块共 375 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -92,7 +92,7 @@
 | node_operations | 24 |
 | parcel_pricing | 14 |
 | parcel_shipment | 35 |
-| party_commercial | 44 |
+| party_commercial | 45 |
 | pilot_governance | 8 |
 | settlement_accounting | 54 |
 | transport_fulfillment | 52 |
@@ -148,7 +148,7 @@
 | （未归类） | 1 |
 | **合计** | 45 |
 
-## 端口：声明 686 个；基线口径缺 44，精确口径缺 2
+## 端口：声明 687 个；基线口径缺 45，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -164,6 +164,7 @@
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
+- `partycommercial.IdentificationHolderLookup` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.PartyIdentityRegistrations）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
 - `settlementaccounting.AmountGrammarRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AmountGrammars）
 - `settlementaccounting.AmountGrammarView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AmountGrammars）
