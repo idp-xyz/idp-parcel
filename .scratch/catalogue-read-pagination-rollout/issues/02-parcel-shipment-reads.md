@@ -1,7 +1,7 @@
 # 02 parcel-shipment 九册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——修订轮：非作者评审（钉 `3a20b2bcc`）拦下的两条阻断已修，待复核（2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，基 main `a1274a6b8`；完成记录与评审记录见文末）。迁移编号 parcel-shipment `0036`（进 main 时按 tip 重核）
+Status: in-progress——非作者评审首轮（钉 `3a20b2bcc`）拦下的两条阻断已修，修订轮复核（钉 `9c5e302b9`）两轴无阻断，非阻断已处理，待进 main（2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，基 main `a1274a6b8`；完成记录与评审记录见文末）。迁移编号 parcel-shipment `0036`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/parcelshipment/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/parcel_shipment` 的一条新迁移（索引）。
@@ -41,7 +41,9 @@ Blocked by: 01
 | `31fcbf4f2` | 其余八册；九个端点改为先 Intake 后解码；`cmd/parcel-api`、`cmd/parcel-dispatch` 的占位、替身与调用点；新用例 |
 | `d6b3f64a5` | 九个端点的表驱动端点用例 |
 | `c3c226b00` | 评审修订：七册真库用例重写、人工项翻页用例独立成文；渠道择优两条分支改为先 Intake；面单交易的 `q` 改落在逐个包裹号上；空 `?parcel=` 照旧落到清单；注释里引 spec 的序数改成原句；夹具一律 `SYN-` |
-| 补 `q`（本笔） | 面单交易的 `q` 补上渠道签发的包裹级标识（管理台叫渠道面单号）：14a 接面单交易页时发现页上按它检索，而本册 `q` 漏了这一列，前端只能撤掉这项检索 |
+| `2ffc962a0` | 补 `q`：面单交易的 `q` 补上渠道签发的包裹级标识（管理台叫渠道面单号）：14a 接面单交易页时发现页上按它检索，而本册 `q` 漏了这一列，前端只能撤掉这项检索 |
+| `9c5e302b9` | 委托三册共用一份 q 落列 `shipmentRequestKeyword`；人工项端点那句注释改成现行约束 |
+| 复核之后（本笔） | 修订轮复核的非阻断：两个委托队列中途再插一份提交早于游标的委托（区分键集与偏移）；`shipmentRequestKeyword` 头注不再数别处的使用者；`walk` 头注删去已不存在的形参 |
 
 依赖 01 的两笔：`7b1166838`（落列、取页片段、`Finish`、统一结果类型）、`9726b2f35`（`Words` / `Code`）。
 
@@ -96,10 +98,20 @@ Blocked by: 01
 | 阻断：真库判据未满足——除面单交易外八册没在翻页中途插入新行；空册 total 为 0 只三册断言；委托查阅的筛选子项丢了 total；授权处置队列没有筛选或 q 用例；完成记录的 ✅ 与实际不符 | 七册在 `catalogue_pages_test.go` 重写，每册都插入新行、断言空租户 total 与筛选 total；人工项另写 `post_intake_manual_items_page_test.go`；完成判据按实际改写 |
 | 阻断：`serveTiedChannelSelectionDecisions` 先解析选择器再 Intake，未配置时 `?view=all` 答 400 | 对调；单条分支一并对调（判断项 2）；未配置用例补上坏选择器、集外参数与空标识 |
 | 非阻断：注释引「spec 取舍 1/5」，序数会漂 | 改成引原句 |
-| 非阻断：`shipmentRequestQueueColumns` 注里数另一个文件的列数 | 改成说落在同样的列上，不数 |
+| 非阻断：`shipmentRequestQueueColumns` 注里数另一个文件的列数 | 先改成说落在同样的列上；`9c5e302b9` 再改为三册共用一份 `shipmentRequestKeyword`，由代码保证 |
 | 非阻断：新夹具值不带 `SYN-` | 改为 `SYN-` |
 | 非阻断：面单交易 q 落在 `coveredParcels::text` 上，会命中 JSON 标点 | 改落在逐个包裹号以 `chr(31)` 连成的串上；真库用例证查 `"`、`,` 零命中，按第二件包裹号查到那笔交易且只算一笔 |
 | 非阻断：端点用例只覆盖面单交易，没测换条件拿旧游标 | `d6b3f64a5` 已补九个端点；本笔补旧游标用例 |
 | 非阻断：委托三册用 `shipment_request_id` 作行标识，未记判断 | 判断项 7 |
 | 非阻断：四个计数端口自己带 `Next` / `Total`，没用 `Result` | 判断项 8 |
 | 非阻断：`?parcel=` 传空值由列清单变成答 400 | 端点先删空键再解码；端点用例钉住 |
+
+**修订轮复核 ← 子代理 · 钉 `9c5e302b9`**（复核范围 `3a20b2bcc..9c5e302b9`，含之后补的面单号 `q` 与 01 的 NUL 缺口。首个复核会话在交出结论前停住，由另一个非作者会话接替，探针在 tip 上重跑）：两轴无阻断，首轮两条阻断已解——八册都在翻页途中插行、断言空租户与筛选或 q 的 total；渠道择优两条分支先 Intake，未配置的七种变体都答 403。单条分支对调合理（ADR-0055 决定三高于票面）。`parcelResults` 一向 `omitempty`，缺席得 NULL 不报错，探针证实。
+
+| 复核意见 | 处理 |
+|---|---|
+| 非阻断：`shipmentRequestKeyword` 头注「两个委托队列……三册共用这一份」数的是别处的使用者 | 改为「各委托队列」，不数 |
+| 非阻断：`walk` 头注仍说「按页大小 size」，形参已删 | 改写 |
+| 非阻断：`TestAuthorizedDispositionQueuePagesOldestFirst` 仍把 `version-1` 写进库 | 保留：它要与旧的共享委托夹具里的提交版本对上，受限项才读得到；旧夹具不回改，用例头注写明 |
+| 非阻断：落点表没登 `9c5e302b9` | 补登 |
+| 非阻断：升序几册的中途插入都落在末尾，偏移分页也能过 | 两个委托队列中途再插一份提交早于游标的委托：它不出现、已翻过的行不重出，偏移分页会挤出重出。其余升序册与人工项不补——键集由共用件按构造生成、`binding_test.go` 逐字钉住取页 SQL，倒序三册真库已证 |
