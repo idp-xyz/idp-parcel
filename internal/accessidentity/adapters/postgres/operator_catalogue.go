@@ -168,7 +168,7 @@ func (registry *OperatorRegistry) ListOperators(
 }
 
 // operatorPosition 取本页末个操作者扫描回来的列值：登记时刻与（发行方、主体）都从 o 的列上原样读回，与 ORDER BY 用的是
-// 同一份。本册只有登记时刻一个可排维。
+// 同一份。排序维参数不读：位置值一律取登记时刻，OperatorCataloguePages 加了可排维，这里就得按维取值。
 func operatorPosition(row scannedOperator, _ string) cataloguepage.Position {
 	return cataloguepage.Position{
 		Value:    cataloguepage.FormatInstant(row.recordedAt),

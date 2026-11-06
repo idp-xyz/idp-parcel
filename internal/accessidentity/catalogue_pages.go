@@ -4,7 +4,7 @@ import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 
 // 本文件是本上下文两册查阅的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/13）。本上下文没有
 // ports 子包，查阅口 OperatorCatalogue 与 DeviceCatalogue 就在包根，声明随它们放。可排维按答复体的 JSON 字段名点名，查询
-// 对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec 取舍 1）。
+// 对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec「缺省序保今天的次序」）。
 
 // OperatorCataloguePages 是操作者册查阅（GET /operators）的声明。
 //
