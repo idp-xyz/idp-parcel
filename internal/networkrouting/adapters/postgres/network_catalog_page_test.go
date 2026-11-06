@@ -26,7 +26,7 @@ func keyOf(code string, version int32) string {
 	return code + "/" + cataloguepage.FormatInteger(int64(version))
 }
 
-func keysOf[Row any](page ports.CatalogPage[Row], err error, key func(Row) string) ([]string, string, int64, error) {
+func keysOf[Row any](page cataloguepage.Result[Row], err error, key func(Row) string) ([]string, string, int64, error) {
 	keys := make([]string, 0, len(page.Rows))
 	for _, row := range page.Rows {
 		keys = append(keys, key(row))

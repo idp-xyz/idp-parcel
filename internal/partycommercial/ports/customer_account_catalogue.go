@@ -59,7 +59,7 @@ type CustomerAccountCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CataloguePage[CustomerAccountRow], error)
+	) (cataloguepage.Result[CustomerAccountRow], error)
 }
 
 // CustomerAccountCatalogue 是本册的查询声明（ADR-0144 决定三、四、七）：可排维与筛选维按答复体的 JSON 字段名点名。

@@ -21,7 +21,7 @@ type CustomerAccountCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (ports.CataloguePage[ports.CustomerAccountRow], error)
+	) (cataloguepage.Result[ports.CustomerAccountRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。

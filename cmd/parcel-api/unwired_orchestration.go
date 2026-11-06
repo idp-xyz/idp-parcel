@@ -1426,8 +1426,8 @@ func (unwiredNetworkCatalogue) ListNodeVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.NodeDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.NodeDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.NodeDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.NodeDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListConnectionVersions(
@@ -1435,8 +1435,8 @@ func (unwiredNetworkCatalogue) ListConnectionVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.ConnectionDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.ConnectionDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.ConnectionDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.ConnectionDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListLineVersions(
@@ -1444,8 +1444,8 @@ func (unwiredNetworkCatalogue) ListLineVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.LineDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.LineDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.LineDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.LineDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListServiceAreaVersions(
@@ -1453,8 +1453,8 @@ func (unwiredNetworkCatalogue) ListServiceAreaVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.ServiceAreaDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.ServiceAreaDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.ServiceAreaDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.ServiceAreaDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListServiceCalendarVersions(
@@ -1462,8 +1462,8 @@ func (unwiredNetworkCatalogue) ListServiceCalendarVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.ServiceCalendarDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.ServiceCalendarDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.ServiceCalendarDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.ServiceCalendarDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListAvailabilityAdjustments(
@@ -1471,8 +1471,8 @@ func (unwiredNetworkCatalogue) ListAvailabilityAdjustments(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.AvailabilityAdjustmentStatement], error) {
-	return networkports.CatalogPage[networkports.AvailabilityAdjustmentStatement]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.AvailabilityAdjustmentStatement], error) {
+	return cataloguepage.Result[networkports.AvailabilityAdjustmentStatement]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListRouteStrategyVersions(
@@ -1480,8 +1480,8 @@ func (unwiredNetworkCatalogue) ListRouteStrategyVersions(
 	networkdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (networkports.CatalogPage[networkports.RouteStrategyDefinitionVersion], error) {
-	return networkports.CatalogPage[networkports.RouteStrategyDefinitionVersion]{}, errOrchestrationNotWired
+) (cataloguepage.Result[networkports.RouteStrategyDefinitionVersion], error) {
+	return cataloguepage.Result[networkports.RouteStrategyDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 // unwiredRoutePlans 是路由判断两册列表读口的占位，方法表与
@@ -1788,8 +1788,8 @@ func (unwiredCommercialCatalogue) ListCustomerAccounts(
 	commercialdomain.TenantID,
 	int,
 	cataloguepage.Query,
-) (commercialports.CataloguePage[commercialports.CustomerAccountRow], error) {
-	return commercialports.CataloguePage[commercialports.CustomerAccountRow]{}, errOrchestrationNotWired
+) (cataloguepage.Result[commercialports.CustomerAccountRow], error) {
+	return cataloguepage.Result[commercialports.CustomerAccountRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListCustomerContracts(

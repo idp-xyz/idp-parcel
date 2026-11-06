@@ -37,7 +37,7 @@ func (catalog *NetworkCatalog) ListNodeVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+) (cataloguepage.Result[ports.NodeDefinitionVersion], error) {
 	return listPage(ctx, catalog, nodeFamily, tenant, limit, query)
 }
 
@@ -46,7 +46,7 @@ func (catalog *NetworkCatalog) ListConnectionVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+) (cataloguepage.Result[ports.ConnectionDefinitionVersion], error) {
 	return listPage(ctx, catalog, connectionFamily, tenant, limit, query)
 }
 
@@ -55,7 +55,7 @@ func (catalog *NetworkCatalog) ListLineVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+) (cataloguepage.Result[ports.LineDefinitionVersion], error) {
 	return listPage(ctx, catalog, lineFamily, tenant, limit, query)
 }
 
@@ -64,7 +64,7 @@ func (catalog *NetworkCatalog) ListServiceAreaVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+) (cataloguepage.Result[ports.ServiceAreaDefinitionVersion], error) {
 	return listPage(ctx, catalog, serviceAreaFamily, tenant, limit, query)
 }
 
@@ -73,7 +73,7 @@ func (catalog *NetworkCatalog) ListServiceCalendarVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+) (cataloguepage.Result[ports.ServiceCalendarDefinitionVersion], error) {
 	return listPage(ctx, catalog, serviceCalendarFamily, tenant, limit, query)
 }
 
@@ -82,7 +82,7 @@ func (catalog *NetworkCatalog) ListAvailabilityAdjustments(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+) (cataloguepage.Result[ports.AvailabilityAdjustmentStatement], error) {
 	return listPage(ctx, catalog, adjustmentFamily, tenant, limit, query)
 }
 
@@ -91,7 +91,7 @@ func (catalog *NetworkCatalog) ListRouteStrategyVersions(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+) (cataloguepage.Result[ports.RouteStrategyDefinitionVersion], error) {
 	return listPage(ctx, catalog, routeStrategyFamily, tenant, limit, query)
 }
 
@@ -383,13 +383,13 @@ func listPage[Row any](
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CatalogPage[Row], error) {
-	fail := func(err error) (ports.CatalogPage[Row], error) {
-		return ports.CatalogPage[Row]{}, fmt.Errorf("%s: %w", family.operation, err)
+) (cataloguepage.Result[Row], error) {
+	fail := func(err error) (cataloguepage.Result[Row], error) {
+		return cataloguepage.Result[Row]{}, fmt.Errorf("%s: %w", family.operation, err)
 	}
 	querier, err := catalog.listQuerier(ctx, family.operation, limit)
 	if err != nil {
-		return ports.CatalogPage[Row]{}, err
+		return cataloguepage.Result[Row]{}, err
 	}
 	plan, err := family.pages.Plan(query, "tenant_id = $1", []any{tenant.String()}, limit)
 	if err != nil {

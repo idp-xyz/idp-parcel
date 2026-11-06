@@ -70,41 +70,41 @@ type OperationsCatalogRead interface {
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[NodeDefinitionVersion], error)
+	) (cataloguepage.Result[NodeDefinitionVersion], error)
 	ListConnectionVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[ConnectionDefinitionVersion], error)
+	) (cataloguepage.Result[ConnectionDefinitionVersion], error)
 	ListLineVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[LineDefinitionVersion], error)
+	) (cataloguepage.Result[LineDefinitionVersion], error)
 	ListServiceAreaVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[ServiceAreaDefinitionVersion], error)
+	) (cataloguepage.Result[ServiceAreaDefinitionVersion], error)
 	ListServiceCalendarVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[ServiceCalendarDefinitionVersion], error)
+	) (cataloguepage.Result[ServiceCalendarDefinitionVersion], error)
 	ListAvailabilityAdjustments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[AvailabilityAdjustmentStatement], error)
+	) (cataloguepage.Result[AvailabilityAdjustmentStatement], error)
 	ListRouteStrategyVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
-	) (CatalogPage[RouteStrategyDefinitionVersion], error)
+	) (cataloguepage.Result[RouteStrategyDefinitionVersion], error)
 }

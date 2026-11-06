@@ -29,14 +29,14 @@ type customerAccountReaderDouble struct {
 
 func (double *customerAccountReaderDouble) ListCustomerAccounts(
 	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
-) (ports.CataloguePage[ports.CustomerAccountRow], error) {
+) (cataloguepage.Result[ports.CustomerAccountRow], error) {
 	if double.err != nil {
-		return ports.CataloguePage[ports.CustomerAccountRow]{}, double.err
+		return cataloguepage.Result[ports.CustomerAccountRow]{}, double.err
 	}
 	if tenant != double.tenant {
-		return ports.CataloguePage[ports.CustomerAccountRow]{}, nil
+		return cataloguepage.Result[ports.CustomerAccountRow]{}, nil
 	}
-	return ports.CataloguePage[ports.CustomerAccountRow]{
+	return cataloguepage.Result[ports.CustomerAccountRow]{
 		Rows: double.accounts, Total: int64(len(double.accounts)),
 	}, nil
 }
@@ -186,16 +186,16 @@ type pagingAccountReaderDouble struct {
 
 func (double *pagingAccountReaderDouble) ListCustomerAccounts(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
-) (ports.CataloguePage[ports.CustomerAccountRow], error) {
+) (cataloguepage.Result[ports.CustomerAccountRow], error) {
 	double.seen = &query
 	next, err := query.CursorAfter(cataloguepage.Position{
 		Value:    cataloguepage.FormatInstant(accountListedAt),
 		Identity: []string{"SYN-ACC-1"},
 	})
 	if err != nil {
-		return ports.CataloguePage[ports.CustomerAccountRow]{}, err
+		return cataloguepage.Result[ports.CustomerAccountRow]{}, err
 	}
-	return ports.CataloguePage[ports.CustomerAccountRow]{
+	return cataloguepage.Result[ports.CustomerAccountRow]{
 		Rows:  []ports.CustomerAccountRow{{TenantID: "tenant-1", AccountID: "SYN-ACC-1", Status: "EFFECTIVE", RegisteredAt: accountListedAt}},
 		Next:  next,
 		Total: 3,

@@ -70,12 +70,12 @@ func (catalogue *OperationsCatalogue) ListCustomerAccounts(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
-) (ports.CataloguePage[ports.CustomerAccountRow], error) {
-	fail := func(err error) (ports.CataloguePage[ports.CustomerAccountRow], error) {
-		return ports.CataloguePage[ports.CustomerAccountRow]{}, fmt.Errorf("list customer accounts: %w", err)
+) (cataloguepage.Result[ports.CustomerAccountRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.CustomerAccountRow], error) {
+		return cataloguepage.Result[ports.CustomerAccountRow]{}, fmt.Errorf("list customer accounts: %w", err)
 	}
 	if err := requirePositiveLimit("list customer accounts", limit); err != nil {
-		return ports.CataloguePage[ports.CustomerAccountRow]{}, err
+		return cataloguepage.Result[ports.CustomerAccountRow]{}, err
 	}
 	// 租户 $1 已落在 listed 的前半句里，listed 上不另带固定条件。
 	plan, err := customerAccountPages.Plan(query, "", []any{tenant.String()}, limit)

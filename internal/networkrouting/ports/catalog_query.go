@@ -2,11 +2,6 @@ package ports
 
 import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 
-// CatalogPage 是统一结果类型 cataloguepage.Result 的别名（ADR-0144 决定七「一处定义」：类型只在共用件里定义一次）。调用点
-// 暂不改写：旧名有几处在 cmd/parcel-api/unwired_orchestration.go 里，紧挨着同批别的迁移票改过的占位方法，现在改写会让分批进 main
-// 撞出合并冲突。删除条件：catalogue-read-pagination-rollout 各票都进 main 之后，一笔改写调用点、删掉别名。
-type CatalogPage[Row any] = cataloguepage.Result[Row]
-
 // 各族的查询声明（ADR-0144 决定三、四、七）。可排维、筛选维按答复体的 JSON 字段名点名；family 是册子选择器，
 // 保持原义、不兼作筛选维，各族各自声明。
 //

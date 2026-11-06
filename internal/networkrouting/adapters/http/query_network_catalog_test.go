@@ -73,40 +73,40 @@ type stubCatalogReader struct {
 	gotQuery  cataloguepage.Query
 }
 
-func pageOf[Row any](stub *stubCatalogReader, tenant domain.TenantID, limit int, query cataloguepage.Query, rows []Row) (ports.CatalogPage[Row], error) {
+func pageOf[Row any](stub *stubCatalogReader, tenant domain.TenantID, limit int, query cataloguepage.Query, rows []Row) (cataloguepage.Result[Row], error) {
 	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
-	page := ports.CatalogPage[Row]{Rows: rows, Total: stub.total}
+	page := cataloguepage.Result[Row]{Rows: rows, Total: stub.total}
 	if stub.next != nil {
 		page.Next = stub.next(query)
 	}
 	return page, stub.err
 }
 
-func (stub *stubCatalogReader) ListNodeVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListNodeVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.NodeDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.nodes)
 }
 
-func (stub *stubCatalogReader) ListConnectionVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListConnectionVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ConnectionDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.connections)
 }
 
-func (stub *stubCatalogReader) ListLineVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListLineVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.LineDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.lines)
 }
 
-func (stub *stubCatalogReader) ListServiceAreaVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListServiceAreaVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ServiceAreaDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.areas)
 }
 
-func (stub *stubCatalogReader) ListServiceCalendarVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListServiceCalendarVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ServiceCalendarDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.calendars)
 }
 
-func (stub *stubCatalogReader) ListAvailabilityAdjustments(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+func (stub *stubCatalogReader) ListAvailabilityAdjustments(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.AvailabilityAdjustmentStatement], error) {
 	return pageOf(stub, tenant, limit, query, stub.adjustments)
 }
 
-func (stub *stubCatalogReader) ListRouteStrategyVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+func (stub *stubCatalogReader) ListRouteStrategyVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.RouteStrategyDefinitionVersion], error) {
 	return pageOf(stub, tenant, limit, query, stub.strategies)
 }
 
@@ -118,39 +118,39 @@ func (stub unreachableCatalogReader) fail() {
 	stub.t.Fatal("a refused request reached the catalogue reader")
 }
 
-func (stub unreachableCatalogReader) ListNodeVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListNodeVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.NodeDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.NodeDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.NodeDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListConnectionVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListConnectionVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.ConnectionDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.ConnectionDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.ConnectionDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListLineVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListLineVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.LineDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.LineDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.LineDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListServiceAreaVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListServiceAreaVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.ServiceAreaDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.ServiceAreaDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.ServiceAreaDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListServiceCalendarVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListServiceCalendarVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.ServiceCalendarDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.ServiceCalendarDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.ServiceCalendarDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListAvailabilityAdjustments(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+func (stub unreachableCatalogReader) ListAvailabilityAdjustments(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.AvailabilityAdjustmentStatement], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.AvailabilityAdjustmentStatement]{}, nil
+	return cataloguepage.Result[ports.AvailabilityAdjustmentStatement]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListRouteStrategyVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+func (stub unreachableCatalogReader) ListRouteStrategyVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[ports.RouteStrategyDefinitionVersion], error) {
 	stub.fail()
-	return ports.CatalogPage[ports.RouteStrategyDefinitionVersion]{}, nil
+	return cataloguepage.Result[ports.RouteStrategyDefinitionVersion]{}, nil
 }
 
 func catalogRequest(t *testing.T, query string) *http.Request {

@@ -50,13 +50,13 @@ type CatalogueQueryIntake interface {
 // （ADR-0068 Decision 六）不因本端点松动——上列按族透版本行原文，不选版不折叠，
 // 形不成判断依据。
 type OperationsCatalogReader interface {
-	ListNodeVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error)
-	ListConnectionVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error)
-	ListLineVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error)
-	ListServiceAreaVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error)
-	ListServiceCalendarVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error)
-	ListAvailabilityAdjustments(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error)
-	ListRouteStrategyVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error)
+	ListNodeVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.NodeDefinitionVersion], error)
+	ListConnectionVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ConnectionDefinitionVersion], error)
+	ListLineVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.LineDefinitionVersion], error)
+	ListServiceAreaVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ServiceAreaDefinitionVersion], error)
+	ListServiceCalendarVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ServiceCalendarDefinitionVersion], error)
+	ListAvailabilityAdjustments(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.AvailabilityAdjustmentStatement], error)
+	ListRouteStrategyVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.RouteStrategyDefinitionVersion], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义，只消费 ADR-0077
@@ -150,37 +150,37 @@ func NewQueryNetworkCatalogEndpoint(
 		switch family {
 		case familyNode:
 			serveVersionPage(response, outcomeNodeVersionsListed, limit, nodeVersionBodyOf,
-				func() (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.NodeDefinitionVersion], error) {
 					return reader.ListNodeVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyConnection:
 			serveVersionPage(response, outcomeConnectionVersionsListed, limit, connectionVersionBodyOf,
-				func() (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.ConnectionDefinitionVersion], error) {
 					return reader.ListConnectionVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyLine:
 			serveVersionPage(response, outcomeLineVersionsListed, limit, lineVersionBodyOf,
-				func() (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.LineDefinitionVersion], error) {
 					return reader.ListLineVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyServiceArea:
 			serveVersionPage(response, outcomeServiceAreaVersionsListed, limit, serviceAreaVersionBodyOf,
-				func() (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.ServiceAreaDefinitionVersion], error) {
 					return reader.ListServiceAreaVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyServiceCalendar:
 			serveVersionPage(response, outcomeServiceCalendarVersionsListed, limit, serviceCalendarVersionBodyOf,
-				func() (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.ServiceCalendarDefinitionVersion], error) {
 					return reader.ListServiceCalendarVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyAvailabilityAdjustment:
 			serveVersionPage(response, outcomeAvailabilityAdjustmentsListed, limit, adjustmentBodyOf,
-				func() (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+				func() (cataloguepage.Result[ports.AvailabilityAdjustmentStatement], error) {
 					return reader.ListAvailabilityAdjustments(ctx, tenant, limit, pageQuery)
 				})
 		case familyRouteStrategy:
 			serveVersionPage(response, outcomeRouteStrategyVersionsListed, limit, routeStrategyVersionBodyOf,
-				func() (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+				func() (cataloguepage.Result[ports.RouteStrategyDefinitionVersion], error) {
 					return reader.ListRouteStrategyVersions(ctx, tenant, limit, pageQuery)
 				})
 		}
@@ -194,7 +194,7 @@ func serveVersionPage[Entry any, Body any](
 	outcome string,
 	limit int,
 	bodyOf func(Entry) Body,
-	list func() (ports.CatalogPage[Entry], error),
+	list func() (cataloguepage.Result[Entry], error),
 ) {
 	page, err := list()
 	if err != nil {
