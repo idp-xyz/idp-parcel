@@ -53,7 +53,7 @@ settlement、customs、collection、party（客户账户之外）、governance�
 `apps/admin-web/src/pages/shipment-request/**`、`apps/admin-web/src/pages/channel-selection/**` 与本票面；没动 `templates/*`、`shell/*`、
 `components/*`，也没动未迁读口的页面。
 
-**落点**（笔 `c96b5cbda`）
+**落点**（笔 `c96b5cbda`；面单交易的检索提示回改在 `32704949c`）
 
 | 页 | api 函数 | 下推什么 | 翻页条 |
 |---|---|---|---|
@@ -79,8 +79,8 @@ settlement、customs、collection、party（客户账户之外）、governance�
    按委托标识排对不上屏上的次序，所以不给排；状态胶囊上的计数与命令头指标——一页里数出来的不是各状态的总数，按状态的总数读口不给；
    按客户名称检索——名称从参与方册转写，读口 `q` 只覆盖委托号、单据号、来源请求键。读口另有 `customerAccountId` 一维，本页没有对应的
    筛选条，不另加。头注已改写成现状。
-2. **面单交易撤掉的**：页内按渠道面单号匹配（读口 `q` 覆盖交易号、渠道账户、覆盖包裹），检索框提示随之改成「搜包裹号 / 面单交易 /
-   渠道账号」；`transactionResult` 一维本页没有筛选条，不另加。`page` 与 `total` 数的是交易，摘要因此分开报「本页 N 笔交易,摊开 M 行」。
+2. **面单交易**：渠道面单号检索由后端 `q` 覆盖（后端 `2ffc962a0`），检索框提示保持「搜包裹号 / 面单交易 / 渠道面单号」，检索词照旧
+   下推、页内不再筛；`transactionResult` 一维本页没有筛选条，不另加。`page` 与 `total` 数的是交易，摘要因此分开报「本页 N 笔交易,摊开 M 行」。
 3. **没有检索框与筛选条的页**（复核、授权处置、释放拒收、货物处置两份清单）只接翻页，读口收的 `q` 与筛选维不接，也不为此新加控件；
    票面「撤客户端筛选」在这几页无可撤。头注各写一句。
 4. **翻过第一页答零行**：队列里的行处理掉之后重取当前页（游标不动）常会碰到，这不是册为空。上面那几页把 `pastFirstPage` 当 `narrowed`
@@ -93,6 +93,7 @@ settlement、customs、collection、party（客户账户之外）、governance�
 **完成判据**（作者自验，钉 `c96b5cbda`，WSL node v22.23.3）
 
 - ✅ 三道门：`tsc -b --noEmit` 退 0；`scripts/run-tests.mjs` 1227 pass / 0 fail，退 0；`vite build` 退 0（只有既有的 vendor 块超 500 kB 提示）。
+  面单交易回改之后在 `32704949c` 上重跑，结果相同。
 - ✅ api 层 node:test：新 `shipment-request/catalogue-reads.test.ts` 钉运单列表与其余列表读口「不带参数即裸路径，带检索、状态、排序、游标
   一并下推」、筛选维按参数名逐值下推、有界查找的请求一字不变、`page` 原样交出、400 的理由散文进 `detail`（没给就没有这一格）；新
   `channel-selection/tied-decisions-read.test.ts` 钉选择器与检索词、游标同进一个查询串，按决定号取单份不变，`page` 原样交出。队列与运单
@@ -123,7 +124,8 @@ settlement、customs、collection、party（客户账户之外）、governance�
 - `ListPageTemplate` 的两页（面单交易、渠道择优）照首批接法：不带检索时翻过第一页答零行落空态，翻页条随之不显。面单交易只增不减，碰不到；
   并列清单在翻页之间被人裁掉一批时可能碰到，重进页面即回第一页。
 - 决定、登记之后重取当前页，清单先回加载态再出行（`useCatalogueCursor` 的 `retry` 如此）；旧版重取期间旧行留在屏上。
-- 运单列表不再能按客户名称检索，面单交易不再能按渠道面单号检索：读口 `q` 不覆盖这两列，要补归后端声明。
+- 运单列表不再能按客户名称检索：读口 `q` 不覆盖这一列，要补归后端声明。
+- 面单交易按渠道面单号检索没在真栈上走：页面只是照旧把检索词下推到 `q`，命中由后端 `2ffc962a0` 的 `TestLabelTransactionsKeywordReachesTheChannelParcelIdentifier` 证明。
 - 运单列表 400 时接在前面的问题码说明取 `presentation.ts` 的 `problemCodeNotes`，那一句面向命令（「请求构造不出命令,……请检查填写内容后再提交。」），
   理由散文跟在后面；`catalogue-view` 的那一句面向查询。本笔没改。
 - 工作台（`Workbench.tsx`）的待办计数不带参数调这几个读口，复核与授权处置两项数的是第一页的条目，不是整册积压。迁移前后一样，不在本笔地盘。
