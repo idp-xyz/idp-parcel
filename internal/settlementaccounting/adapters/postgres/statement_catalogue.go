@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -24,6 +25,9 @@ import (
 // 费用行与调整行只取长度不取内容：明细属详情面，目录行要的是「有几行」与「一行都
 // 没有」分得开。长度在库内用 jsonb_array_length 求，不把整列 jsonb 搬到进程里再数
 // ——搬回来的那一份除了被数一次没有别的用处。
+//
+// 各册按 ports 上各自的声明取页：总数另数一句，与取页不在同一快照里，是此刻的大概；一行的
+// 各格仍在一条语句里。
 type StatementCatalogue struct {
 	db *bentopg.DB
 }
@@ -113,29 +117,63 @@ const customerStatementColumns = `s.statement_number, s.account_id, s.period_ref
 		          WHERE i.tenant_id = s.tenant_id
 		            AND i.statement_number = s.statement_number)`
 
+// statementDisputeNumbers 是单上各项争议的争议号连成的一格，只供 q 检索：客户报来的常是争议号，争议挂在单上、不另成一册。
+// 以换行相隔，检索词里没有换行就不会跨两个号命中；单上没有争议、或争议都没有号时为 NULL，这一格不命中。
+const statementDisputeNumbers = `(SELECT string_agg(d.document_number, E'\n')
+		   FROM settlement_accounting.statement_dispute AS d
+		  WHERE d.tenant_id = s.tenant_id
+		    AND d.statement_number = s.statement_number)`
+
+// customerStatementPageColumns 是对账单册与挂着未了结争议的单两册共用的落列：两册同列同解码，次序与 q 也同一份。
+var customerStatementPageColumns = cataloguepage.Columns{
+	Sorts:    map[string]string{"statementNumber": "s.statement_number", "publishedAt": "s.published_at"},
+	Identity: []string{"s.statement_number"},
+	Keyword:  []string{"s.statement_number", "s.account_id", "s.period_ref", statementDisputeNumbers},
+}
+
+var (
+	customerStatementPages         = ports.CustomerStatementPages.MustBind(customerStatementPageColumns)
+	disputedCustomerStatementPages = ports.DisputedCustomerStatementPages.MustBind(customerStatementPageColumns)
+)
+
+const customerStatementTable = `settlement_accounting.customer_statement AS s`
+
+// customerStatementPosition 给出对账单一行的位置，两册共用。
+func customerStatementPosition(row ports.CustomerStatementCatalogueRow, sortField string) cataloguepage.Position {
+	position := cataloguepage.Position{Value: row.StatementNumber, Identity: []string{row.StatementNumber}}
+	if sortField == "publishedAt" {
+		position.Value = cataloguepage.FormatInstant(row.PublishedAt)
+	}
+	return position
+}
+
 func (catalogue *StatementCatalogue) ListCustomerStatements(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.CustomerStatementCatalogueRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerStatementCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.CustomerStatementCatalogueRow], error) {
+		return cataloguepage.Result[ports.CustomerStatementCatalogueRow]{}, fmt.Errorf("list customer statements: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list customer statements: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := customerStatementPages.Plan(query, "s.tenant_id = $1", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list customer statements: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT `+customerStatementColumns+`
-		   FROM settlement_accounting.customer_statement AS s
-		  WHERE s.tenant_id = $1
-		  ORDER BY s.statement_number
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(customerStatementTable), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(customerStatementColumns, customerStatementTable), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list customer statements: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
@@ -143,68 +181,97 @@ func (catalogue *StatementCatalogue) ListCustomerStatements(
 	for rows.Next() {
 		row, err := scanCustomerStatement(rows.Scan)
 		if err != nil {
-			return nil, fmt.Errorf("list customer statements: %w", err)
+			return fail(err)
 		}
 		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list customer statements: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	page, err := cataloguepage.Finish(query, entries, limit, total, customerStatementPosition)
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
 }
 
-// ListDisputedCustomerStatements 上列至少挂着一项没有终局结果的争议的对账单（见 ports.DisputedCustomerStatements）。张数用窗口计数在同一条语句里求：窗口在 LIMIT 之前算，张数是全部而不是这一页，
-// 也不会与这一页分属两个快照；一张都没有时一行都不回，张数如实是 0。
-func (catalogue *StatementCatalogue) ListDisputedCustomerStatements(
-	ctx context.Context,
-	tenant domain.TenantID,
-	limit int,
-) (ports.DisputedCustomerStatements, error) {
-	if limit < 1 {
-		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: limit must be positive, got %d", limit)
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT `+customerStatementColumns+`, count(*) OVER ()
-		   FROM settlement_accounting.customer_statement AS s
-		  WHERE s.tenant_id = $1
+// disputedCustomerStatementCondition 是「挂着未了结争议」的那条固定条件：至少一项争议没有终局结果（$2 是终局结果的词）。
+const disputedCustomerStatementCondition = `s.tenant_id = $1
 		    AND EXISTS (
 		        SELECT 1
 		          FROM settlement_accounting.statement_dispute AS o
 		         WHERE o.tenant_id = s.tenant_id
 		           AND o.statement_number = s.statement_number
-		           AND (o.resolved_at IS NULL OR o.resolution <> ALL($2)))
-		  ORDER BY s.statement_number
-		  LIMIT $3`,
-		tenant.String(), finalDisputeResolutions, limit,
-	)
-	if err != nil {
+		           AND (o.resolved_at IS NULL OR o.resolution <> ALL($2)))`
+
+// ListDisputedCustomerStatements 上列至少挂着一项没有终局结果的争议的对账单的一页（见 ports.DisputedCustomerStatements）。
+// 张数是整个待对账队列的积压数，不随 q 变（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）：
+// 本次没有任何条件时它就是
+// total，不多数一次；带了 q 时另数一次只带固定条件的。几句不在同一快照里，张数与清单是此刻的大概；一张都没有时张数如实是 0。
+func (catalogue *StatementCatalogue) ListDisputedCustomerStatements(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (ports.DisputedCustomerStatements, error) {
+	fail := func(err error) (ports.DisputedCustomerStatements, error) {
 		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	conditionArgs := []any{tenant.String(), finalDisputeResolutions}
+	plan, err := disputedCustomerStatementPages.Plan(query, disputedCustomerStatementCondition, conditionArgs, limit)
+	if err != nil {
+		return fail(err)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(customerStatementTable), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
+	backlog := total
+	if query.Keyword != "" || len(query.Filters) > 0 {
+		if err := querier.QueryRow(ctx,
+			"SELECT count(*) FROM "+customerStatementTable+" WHERE "+disputedCustomerStatementCondition,
+			conditionArgs...).Scan(&backlog); err != nil {
+			return fail(fmt.Errorf("count backlog: %w", err))
+		}
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(customerStatementColumns, customerStatementTable), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := ports.DisputedCustomerStatements{Statements: make([]ports.CustomerStatementCatalogueRow, 0, limit)}
+	entries := make([]ports.CustomerStatementCatalogueRow, 0, limit)
 	for rows.Next() {
-		var count int64
-		row, err := scanCustomerStatement(rows.Scan, &count)
+		row, err := scanCustomerStatement(rows.Scan)
 		if err != nil {
-			return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+			return fail(err)
 		}
-		listed.Count = int(count)
-		listed.Statements = append(listed.Statements, row)
+		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
-		return ports.DisputedCustomerStatements{}, fmt.Errorf("list disputed customer statements: %w", err)
+		return fail(err)
 	}
-	return listed, nil
+	page, err := cataloguepage.Finish(query, entries, limit, total, customerStatementPosition)
+	if err != nil {
+		return fail(err)
+	}
+	return ports.DisputedCustomerStatements{
+		Count:      int(backlog),
+		Next:       page.Next,
+		Total:      page.Total,
+		Statements: page.Rows,
+	}, nil
 }
 
-// scanCustomerStatement 按 customerStatementColumns 的列序解一行；extra 接在这些列之后（如窗口计数）。
-func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.CustomerStatementCatalogueRow, error) {
+// scanCustomerStatement 按 customerStatementColumns 的列序解一行。
+func scanCustomerStatement(scan func(dest ...any) error) (ports.CustomerStatementCatalogueRow, error) {
 	var (
 		row            ports.CustomerStatementCatalogueRow
 		publishedAt    time.Time
@@ -213,13 +280,12 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 		disputesJSON   []byte
 		inclusionsJSON []byte
 	)
-	dest := append([]any{
+	if err := scan(
 		&row.StatementNumber, &row.Account, &row.Period, &row.Currency, &row.TotalMinor,
 		&row.LineCount, &row.AdjustmentCount,
 		&publishedAt, &voidBasis, &voidedAt,
 		&disputesJSON, &inclusionsJSON,
-	}, extra...)
-	if err := scan(dest...); err != nil {
+	); err != nil {
 		return ports.CustomerStatementCatalogueRow{}, err
 	}
 	row.PublishedAt = publishedAt.UTC()
@@ -272,37 +338,38 @@ func scanCustomerStatement(scan func(dest ...any) error, extra ...any) (ports.Cu
 	return row, nil
 }
 
-func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
-	ctx context.Context,
-	tenant domain.TenantID,
-	filter ports.SupplierBillReceptionFilter,
-	limit int,
-) ([]ports.SupplierBillReceptionCatalogueRow, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list supplier bill receptions: limit must be positive, got %d", limit)
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
-	}
+// supplierBillReceptionPages 把账单接收册的声明落到列上，列名都是 supplierBillReceptionWith 导出的。
+var supplierBillReceptionPages = ports.SupplierBillReceptionPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"receivedAt": "r.received_at", "period": "r.period_ref"},
+	Identity: []string{"r.claim_id", "r.claim_version"},
+	Keyword:  []string{"r.claim_id", "r.bill_number", "r.supplier_ref", "r.period_ref", "r.legal_entity"},
+})
 
-	// 按到达的业务时刻倒序截页（同刻按主张身份与版本，排序才确定）：页大小截掉的必须是最早收到的那些。按主张身份排再截，
-	// 超过一页之后截掉的是主张身份排在后面的账单，最新收到的那一份可能根本不在页上，页面再怎么按收到时间排也补不回来。
-	//
-	// 审核授权有两格：audit_authority_configured 是接收时写下的快照，另一格读这一刻审核授权册上有没有这一组——审核步骤在
-	// 审核那一刻读的正是这本册（理由见 ports.SupplierBillReceptionCatalogueRow）。
-	//
-	// 汇总都在库内一条语句里求（同一快照）：行金额之和与分类计数各展开一次 jsonb；应付只数落在这一版各行上的那几笔——
-	// 应付不带主张版本，同一主张的另一版若多出一行，那一行的应付不算进这一版。「已匹配却没有应付」按行逐条看应付在不在，
-	// 已匹配那个分类的字面取自领域（$3），不在 SQL 里另写一份。一行可以有几份应付（一段一份，ADR-0357 决定三），应付行数数的是
-	// 有应付的行，不是应付的份数。
-	//
-	// 审核决定的三个和（已拒绝、仍在争议中、还没有任何结果）也只数这一版各行上的决定，求法与 domain.TallyLineDecisions 一致：
-	// 仍在争议中 = 直接给的争议之和减去全部再审之和，还没有结果 = 逐行主张金额减去直接给的各段之和、不小于零。结果的字面取自
-	// 领域（$4、$5）。账单号取账单号册，不论哪一版带来。按账单号检索时，供应商比的是号册上的分配方（$7 对 n.supplier_ref）：
-	// 号是那家供应商分配的；存量里各版本供应商不一的主张，按接收行的供应商比就会让另一家的检索命中这个号。
-	rows, err := querier.Query(ctx,
-		`SELECT r.claim_id, r.claim_version, r.supplier_ref, r.legal_entity, r.period_ref, r.currency,
+// supplierBillReceptionWith 是账单接收册的取数来源：接收行连同账单号册上的号与分配方，收到时刻经迁移 0056 的取值函数导出成
+// 一列。读面调的必须就是那个函数而不是展开写的同义表达式：函数标了 IMMUTABLE、体内的文本转时刻却不是，规划器因此不内联它，
+// 只有调同一个函数，那条表达式索引才认得出来。
+const supplierBillReceptionWith = `WITH r AS (
+		SELECT b.tenant_id, b.claim_id, b.claim_version, b.supplier_ref, b.legal_entity, b.period_ref, b.currency,
+		       b.claim, b.matches, b.audit_authority_configured, b.operation_evidence, b.recorded_at,
+		       settlement_accounting.supplier_bill_received_at(b.claim) AS received_at,
+		       n.bill_number, n.supplier_ref AS bill_supplier_ref
+		  FROM settlement_accounting.supplier_bill_reception AS b
+		  LEFT JOIN settlement_accounting.supplier_bill_number AS n
+		    ON n.tenant_id = b.tenant_id AND n.claim_id = b.claim_id
+	) `
+
+// supplierBillReceptionCondition 是读面的固定条件：租户与 ports.SupplierBillReceptionFilter 的三维（$2 主张身份、$3 供应商、
+// $4 账单号，空串即不筛）。按账单号检索时，供应商比的是号册上的分配方（$3 对 bill_supplier_ref）：号是那家供应商分配的；
+// 存量里各版本供应商不一的主张，按接收行的供应商比就会让另一家的检索命中这个号。
+const supplierBillReceptionCondition = `r.tenant_id = $1
+		    AND ($2::text = '' OR r.claim_id = $2)
+		    AND ($3::text = '' OR ($4::text = '' AND r.supplier_ref = $3) OR ($4::text <> '' AND r.bill_supplier_ref = $3))
+		    AND ($4::text = '' OR r.bill_number = $4)`
+
+// supplierBillReceptionSelection 与 supplierBillReceptionLaterals 是取页那一句的列与来源。三个占位由 fmt 填：已匹配那个分类与
+// 两种审核结果的字面只出现在取页那一句里，总数那一句不带，编号因此接在取页参数之后（见 ListSupplierBillReceptions）。
+const (
+	supplierBillReceptionSelection = `r.claim_id, r.claim_version, r.supplier_ref, r.legal_entity, r.period_ref, r.currency,
 		        jsonb_array_length(r.claim -> 'lines')::bigint,
 		        jsonb_array_length(r.matches)::bigint,
 		        (SELECT COALESCE(sum((l ->> 'claimed_minor')::bigint), 0)::bigint
@@ -321,10 +388,10 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		                       AND d.line_ref = l ->> 'line'
 		                       AND d.resolves_decision IS NULL), 0), 0)), 0)::bigint
 		           FROM jsonb_array_elements(r.claim -> 'lines') AS l),
-		        n.bill_number,
+		        r.bill_number,
 		        (SELECT count(*)::bigint
 		           FROM jsonb_array_elements(r.matches) AS m
-		          WHERE m ->> 'classification' = $3
+		          WHERE m ->> 'classification' = $%[1]d
 		            AND NOT EXISTS (
 		                SELECT 1
 		                  FROM settlement_accounting.audited_payable AS p
@@ -338,13 +405,11 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		             WHERE a.tenant_id = r.tenant_id
 		               AND a.supplier_id = r.supplier_ref
 		               AND a.legal_entity_id = r.legal_entity),
-		        (r.claim ->> 'received_at')::timestamptz,
+		        r.received_at,
 		        r.claim ->> 'supplements',
 		        r.operation_evidence,
-		        r.recorded_at
-		   FROM settlement_accounting.supplier_bill_reception AS r
-		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
-		     ON n.tenant_id = r.tenant_id AND n.claim_id = r.claim_id
+		        r.recorded_at`
+	supplierBillReceptionLaterals = `r
 		  CROSS JOIN LATERAL (
 		        SELECT count(DISTINCT p.line_ref)::bigint AS lines, COALESCE(sum(p.amount_minor), 0)::bigint AS minor
 		          FROM settlement_accounting.audited_payable AS p
@@ -353,10 +418,10 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		           AND p.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
 		       ) AS payables
 		  CROSS JOIN LATERAL (
-		        SELECT COALESCE(sum(d.range_to_minor - d.range_from_minor) FILTER (WHERE d.verdict = $5), 0)::bigint AS rejected,
+		        SELECT COALESCE(sum(d.range_to_minor - d.range_from_minor) FILTER (WHERE d.verdict = $%[2]d), 0)::bigint AS rejected,
 		               GREATEST(
 		                   COALESCE(sum(d.range_to_minor - d.range_from_minor)
-		                            FILTER (WHERE d.verdict = $4 AND d.resolves_decision IS NULL), 0)
+		                            FILTER (WHERE d.verdict = $%[1]d AND d.resolves_decision IS NULL), 0)
 		                 - COALESCE(sum(d.range_to_minor - d.range_from_minor)
 		                            FILTER (WHERE d.resolves_decision IS NOT NULL), 0),
 		                 0)::bigint AS open_dispute
@@ -364,18 +429,59 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		         WHERE d.tenant_id = r.tenant_id
 		           AND d.claim_id = r.claim_id
 		           AND d.line_ref IN (SELECT l ->> 'line' FROM jsonb_array_elements(r.claim -> 'lines') AS l)
-		       ) AS audits
-		  WHERE r.tenant_id = $1
-		    AND ($6::text = '' OR r.claim_id = $6)
-		    AND ($7::text = '' OR ($8::text = '' AND r.supplier_ref = $7) OR ($8::text <> '' AND n.supplier_ref = $7))
-		    AND ($8::text = '' OR n.bill_number = $8)
-		  ORDER BY (r.claim ->> 'received_at')::timestamptz DESC, r.claim_id, r.claim_version
-		  LIMIT $2`,
-		tenant.String(), limit, domain.LineMatched.String(), domain.AuditDisputed.String(), domain.AuditRejected.String(),
-		filter.Claim, filter.Supplier, filter.SupplierBillNumber,
-	)
+		       ) AS audits`
+)
+
+func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
+	ctx context.Context,
+	tenant domain.TenantID,
+	filter ports.SupplierBillReceptionFilter,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error) {
+		return cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow]{}, fmt.Errorf("list supplier bill receptions: %w", err)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := supplierBillReceptionPages.Plan(query, supplierBillReceptionCondition,
+		[]any{tenant.String(), filter.Claim, filter.Supplier, filter.SupplierBillNumber}, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
+		return fail(err)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, supplierBillReceptionWith+plan.CountSQL("r"), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
+
+	// 缺省按到达的业务时刻倒序（同刻按主张身份与版本，同向）：最新收到的账单总在第一页上。按主张身份排，超过一页之后排在
+	// 后面的是主张身份靠后的账单，最新收到的那一份可能根本不在第一页上。
+	//
+	// 审核授权有两格：audit_authority_configured 是接收时写下的快照，另一格读这一刻审核授权册上有没有这一组——审核步骤在
+	// 审核那一刻读的正是这本册（理由见 ports.SupplierBillReceptionCatalogueRow）。
+	//
+	// 汇总都在库内一条语句里求（同一快照）：行金额之和与分类计数各展开一次 jsonb；应付只数落在这一版各行上的那几笔——
+	// 应付不带主张版本，同一主张的另一版若多出一行，那一行的应付不算进这一版。「已匹配却没有应付」按行逐条看应付在不在，
+	// 已匹配那个分类的字面取自领域，不在 SQL 里另写一份。一行可以有几份应付（一段一份，ADR-0357 决定三），应付行数数的是
+	// 有应付的行，不是应付的份数。
+	//
+	// 审核决定的三个和（已拒绝、仍在争议中、还没有任何结果）也只数这一版各行上的决定，求法与 domain.TallyLineDecisions 一致：
+	// 仍在争议中 = 直接给的争议之和减去全部再审之和，还没有结果 = 逐行主张金额减去直接给的各段之和、不小于零。结果的字面取自
+	// 领域。账单号取账单号册，不论哪一版带来。
+	next := len(plan.PageArgs)
+	args := append(append([]any(nil), plan.PageArgs...),
+		domain.LineMatched.String(), domain.AuditDisputed.String(), domain.AuditRejected.String())
+	rows, err := querier.Query(ctx, supplierBillReceptionWith+plan.PageSQL(
+		fmt.Sprintf(supplierBillReceptionSelection, next+1),
+		fmt.Sprintf(supplierBillReceptionLaterals, next+2, next+3),
+	), args...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
@@ -400,10 +506,10 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 			&row.MatchedWithoutPayableCount,
 			&row.AuditAuthorityConfigured, &row.AuditAuthorityConfiguredNow, &receivedAt, &supplements, &evidence, &recordedAt,
 		); err != nil {
-			return nil, fmt.Errorf("list supplier bill receptions: %w", err)
+			return fail(err)
 		}
 		if err := json.Unmarshal(classificationsJS, &row.ClassificationCounts); err != nil {
-			return nil, fmt.Errorf("list supplier bill receptions: 分类计数解码：%w", err)
+			return fail(fmt.Errorf("分类计数解码：%w", err))
 		}
 		row.ReceivedAt = receivedAt.UTC()
 		row.SupplierBillNumber = catalogueText(billNumber)
@@ -413,9 +519,23 @@ func (catalogue *StatementCatalogue) ListSupplierBillReceptions(
 		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list supplier bill receptions: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	page, err := cataloguepage.Finish(query, entries, limit, total,
+		func(row ports.SupplierBillReceptionCatalogueRow, sortField string) cataloguepage.Position {
+			position := cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(row.ReceivedAt),
+				Identity: []string{row.Claim, row.ClaimVersion},
+			}
+			if sortField == "period" {
+				position.Value = row.Period
+			}
+			return position
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
 }
 
 // FindStatementLines 读一张已发布对账单自己的费用行（单上的不可覆盖快照），连同币种、发布与作废时刻；单不在册答 false。

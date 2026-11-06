@@ -61,7 +61,7 @@ func TestACorrectionBelowTheAppliedTotalIsAdoptedAndSaysSoAndRepostsTheScope(t *
 	if err != nil {
 		t.Fatalf("构造资金事实册：%v", err)
 	}
-	rows, err := catalogue.ListExternalFundsFacts(t.Context(), rig.tenant, 50)
+	rows, err := rowsOf(catalogue.ListExternalFundsFacts(t.Context(), rig.tenant, 50, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil {
 		t.Fatalf("列资金事实册：%v", err)
 	}

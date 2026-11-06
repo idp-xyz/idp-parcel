@@ -3,6 +3,8 @@ package postgres_test
 import (
 	"testing"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // seedStatement 播一张已发布对账单；voided 为真时带作废留痕。
@@ -54,9 +56,13 @@ func TestDisputedStatementsAreThoseWithADisputeAwaitingAFinalResolution(t *testi
 	fixture.seedStatement(t, "tenant-b", "SYN-STMT-A", false)
 	fixture.seedDispute(t, "tenant-b", "SYN-STMT-A", "SYN-DSP-X", "")
 
-	listed, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	disputedPage := firstPage(t, ports.DisputedCustomerStatementPages)
+	listed, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 10, disputedPage)
 	if err != nil {
 		t.Fatalf("上列挂着未了结争议的单：%v", err)
+	}
+	if listed.Next != "" || listed.Total != 4 {
+		t.Fatalf("一页装得下时没有下一页、总数是全部：next=%q total=%d", listed.Next, listed.Total)
 	}
 	var numbers []string
 	for _, row := range listed.Statements {
@@ -75,16 +81,19 @@ func TestDisputedStatementsAreThoseWithADisputeAwaitingAFinalResolution(t *testi
 		t.Fatalf("单上的争议要整份带出（已终局的也在），与对账单册同形：%+v", listed.Statements)
 	}
 
-	page, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 1)
+	page, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 1, disputedPage)
 	if err != nil || page.Count != len(want) || len(page.Statements) != 1 || page.Statements[0].StatementNumber != "SYN-STMT-A" {
 		t.Fatalf("张数必须是全部而不是这一页：err=%v %+v", err, page)
 	}
+	if page.Next == "" || page.Total != int64(len(want)) {
+		t.Fatalf("截了页要给下一页的游标、总数仍是全部：next=%q total=%d", page.Next, page.Total)
+	}
 
-	none, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, "tenant-c"), 10)
+	none, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, "tenant-c"), 10, disputedPage)
 	if err != nil || none.Count != 0 || len(none.Statements) != 0 {
 		t.Fatalf("没有单的租户答 0 张：err=%v %+v", err, none)
 	}
-	if _, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 0); err == nil {
+	if _, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), catalogueTenantID(t, catalogueTenant), 0, disputedPage); err == nil {
 		t.Fatal("limit 为 0 必须拒")
 	}
 }

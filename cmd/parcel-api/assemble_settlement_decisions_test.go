@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件对真实 PostgreSQL 证运营确认口与截单发布口的生产装配（ADR-0339 决定一、二；票 product-strategy-boundary/22 第 2 笔）：
@@ -388,8 +390,12 @@ func TestTheStatementPublicationFacePublishesAListedPeriod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := catalogue.ListCustomerCharges(t.Context(), fixture.tenant, 10)
-	if err != nil || len(rows) != 1 || rows[0].AttributionDate != last || rows[0].BilledOn != number {
+	firstPage, err := saports.CustomerChargePages.Decode(url.Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := catalogue.ListCustomerCharges(t.Context(), fixture.tenant, 10, firstPage)
+	if rows := listed.Rows; err != nil || len(rows) != 1 || rows[0].AttributionDate != last || rows[0].BilledOn != number {
 		t.Fatalf("读口 = %+v err = %v，want 归属日 %s、所在单 %s", rows, err, last, number)
 	}
 	// 同一发布意图（账户、账期、截止版本）同内容重放答原单原号，不取第二个号；换了内容答发布意图冲突。

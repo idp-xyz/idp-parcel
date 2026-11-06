@@ -71,13 +71,15 @@ func TestSupplierBillReceptionCatalogueSummarisesLinesAndPayables(t *testing.T) 
 	// 另一个租户同一主张同一行的应付不算进本租户这一份。
 	seedAuditedPayable(t, fixture, "tenant-b", "SYN-PAYABLE-1", "SYN-SUP-01/INV-2", "L1", 1000, "AP-202608-00001", nil, catalogueBaseAt)
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
+	rows, err := rowsOf(fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10,
+		firstPage(t, ports.SupplierBillReceptionPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列账单走样：err=%v rows=%+v", err, rows)
 	}
-	audited, pending := rows[0], rows[1]
-	if audited.Claim != "SYN-SUP-01/INV-1" || pending.Claim != "SYN-SUP-01/INV-2" {
-		t.Fatalf("同一收到时刻要按主张身份排：%+v", rows)
+	// 同一收到时刻按主张身份排，与收到时刻同向倒序（票 catalogue-read-pagination-rollout spec「行标识取登记表主键去掉租户那几段」）。
+	pending, audited := rows[0], rows[1]
+	if pending.Claim != "SYN-SUP-01/INV-2" || audited.Claim != "SYN-SUP-01/INV-1" {
+		t.Fatalf("同一收到时刻要按主张身份倒序：%+v", rows)
 	}
 	if audited.TotalClaimedMinor != 3300 || audited.LineCount != 3 || audited.MatchCount != 3 {
 		t.Fatalf("主张金额之和或行数走样（要 3300、3、3）：%+v", audited)
@@ -157,7 +159,7 @@ func TestAuditedPayableCatalogueListsNumbersAndFilters(t *testing.T) {
 	seedAuditedPayable(t, fixture, "tenant-b", "SYN-PAYABLE-B", "SYN-SUP-01/INV-1", "L1", 1000, "AP-202608-00002", nil, catalogueBaseAt.Add(3*time.Hour))
 
 	tenant := catalogueTenantID(t, catalogueTenant)
-	rows, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 10)
+	rows, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 10, firstPage(t, ports.AuditedPayablePages)))
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("上列应付走样（只列本租户三笔）：err=%v rows=%+v", err, rows)
 	}
@@ -189,7 +191,7 @@ func TestAuditedPayableCatalogueListsNumbersAndFilters(t *testing.T) {
 		{"几维同给取交集", ports.AuditedPayableFilter{Supplier: "SYN-SUP-01", DocumentNumber: "AP-202608-00002"}, nil},
 	} {
 		t.Run(probe.name, func(t *testing.T) {
-			got, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, probe.filter, 10)
+			got, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, probe.filter, 10, firstPage(t, ports.AuditedPayablePages)))
 			if err != nil || len(got) != len(probe.want) {
 				t.Fatalf("err=%v got=%+v want=%v", err, got, probe.want)
 			}
@@ -201,11 +203,11 @@ func TestAuditedPayableCatalogueListsNumbersAndFilters(t *testing.T) {
 		})
 	}
 
-	limited, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 1)
+	limited, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 1, firstPage(t, ports.AuditedPayablePages)))
 	if err != nil || len(limited) != 1 || limited[0].Payable != "SYN-PAYABLE-NEW" {
 		t.Fatalf("页大小要截在最新那一笔：err=%v rows=%+v", err, limited)
 	}
-	if _, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 0); err == nil {
+	if _, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{}, 0, firstPage(t, ports.AuditedPayablePages)); err == nil {
 		t.Fatal("页大小为 0 要拒")
 	}
 }
@@ -224,13 +226,14 @@ func TestAnAuditedPayableWithoutItsReceptionIsAnError(t *testing.T) {
 		"按另一家供应商检索": {Supplier: "SYN-SUP-02"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if rows, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, filter, 10); err == nil {
+			if rows, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, filter, 10, firstPage(t, ports.AuditedPayablePages))); err == nil {
 				t.Fatalf("没有接收记录的应付要答错误，却交回了 %+v", rows)
 			}
 		})
 	}
 	// 按应付单号或主张检索点名的是有接收记录的那一笔，孤儿不在检索范围里，照常答。
-	rows, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{DocumentNumber: "AP-202608-00001"}, 10)
+	rows, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{DocumentNumber: "AP-202608-00001"}, 10,
+		firstPage(t, ports.AuditedPayablePages)))
 	if err != nil || len(rows) != 1 || rows[0].Payable != "SYN-PAYABLE-1" {
 		t.Fatalf("按应付单号检索有接收记录的那一笔要照常答：err=%v rows=%+v", err, rows)
 	}
@@ -261,7 +264,8 @@ func TestSupplierBillReceptionCatalogueKeepsTheLatestReceivedOnThePage(t *testin
 	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/Z-LATEST", "SYN-SUP-01", catalogueBaseAt, true)
 	seedReceptionReceivedAt(t, fixture, "SYN-SUP-01/M-MIDDLE", "SYN-SUP-01", catalogueBaseAt.Add(-24*time.Hour), true)
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 2)
+	rows, err := rowsOf(fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 2,
+		firstPage(t, ports.SupplierBillReceptionPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
 	}
@@ -283,7 +287,8 @@ func TestSupplierBillReceptionCatalogueReadsTheAuditAuthorityAsItIsNow(t *testin
 		        ($1, 'SYN-SUP-02', 'SYN-LE-OTHER', 'SYN-AUDITOR-ROLE', $2)`,
 		catalogueTenant, catalogueBaseAt.Add(time.Hour))
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
+	rows, err := rowsOf(fixture.statement.ListSupplierBillReceptions(t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10,
+		firstPage(t, ports.SupplierBillReceptionPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列走样：err=%v rows=%+v", err, rows)
 	}
@@ -346,7 +351,8 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 		t.Fatalf("L3 = %+v", l3)
 	}
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, ports.SupplierBillReceptionFilter{}, 10)
+	rows, err := rowsOf(fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, ports.SupplierBillReceptionFilter{}, 10,
+		firstPage(t, ports.SupplierBillReceptionPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("账单册：err=%v rows=%+v", err, rows)
 	}
@@ -366,7 +372,10 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 	seedSupplierBill(t, fixture, catalogueTenant, "SYN-BILL-RANDOM-2", "1", "SYN-SUP-01", "", catalogueBaseAt.Add(time.Hour))
 	fixture.seed(t, `UPDATE settlement_accounting.supplier_bill_reception
 		SET claim = jsonb_set(claim, '{received_at}', '"2026-08-31T00:00:00Z"') WHERE claim_id = 'SYN-BILL-RANDOM-2'`)
-	if page, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, ports.SupplierBillReceptionFilter{}, 1); err != nil ||
+	receptions := func(filter ports.SupplierBillReceptionFilter, limit int) ([]ports.SupplierBillReceptionCatalogueRow, error) {
+		return rowsOf(fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, filter, limit, firstPage(t, ports.SupplierBillReceptionPages)))
+	}
+	if page, err := receptions(ports.SupplierBillReceptionFilter{}, 1); err != nil ||
 		len(page) != 1 || page[0].Claim != "SYN-BILL-RANDOM-2" {
 		t.Fatalf("页大小 1 只该列最晚收到的那份：err=%v %+v", err, page)
 	}
@@ -375,7 +384,7 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 		"by claim":    {Claim: claim},
 		"number only": {SupplierBillNumber: "INV-2608-007"},
 	} {
-		found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, filter, 1)
+		found, err := receptions(filter, 1)
 		if err != nil || len(found) != 1 || found[0].Claim != claim {
 			t.Fatalf("%s：页外的原账单要找得到：err=%v %+v", name, err, found)
 		}
@@ -384,7 +393,7 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 		"other case":     {SupplierBillNumber: "inv-2608-007"},
 		"other supplier": {Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"},
 	} {
-		if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant, filter, 10); err != nil || len(found) != 0 {
+		if found, err := receptions(filter, 10); err != nil || len(found) != 0 {
 			t.Fatalf("%s 不该找到：err=%v %+v", name, err, found)
 		}
 	}
@@ -392,20 +401,17 @@ func TestSupplierBillBooksCarryRangedDecisionsAndTheBillNumber(t *testing.T) {
 	// 存量里各版本供应商不一的主张（编排今天会挡，这里直写一版另一家供应商的）：按（另一家，号）检索不命中——供应商比的是号册上的
 	// 分配方；只按另一家供应商检索，照接收行的供应商找得到那一版。
 	seedSupplierBill(t, fixture, catalogueTenant, claim, "2", "SYN-SUP-02", "", catalogueBaseAt)
-	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
-		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 0 {
+	if found, err := receptions(ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 0 {
 		t.Fatalf("另一家供应商加这个号不该命中：err=%v %+v", err, found)
 	}
-	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
-		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 2 {
+	if found, err := receptions(ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-01", SupplierBillNumber: "INV-2608-007"}, 10); err != nil || len(found) != 2 {
 		t.Fatalf("分配方加号要命中这份主张的两版：err=%v %+v", err, found)
 	}
-	if found, err := fixture.statement.ListSupplierBillReceptions(t.Context(), tenant,
-		ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", Claim: claim}, 10); err != nil || len(found) != 1 || found[0].ClaimVersion != "2" {
+	if found, err := receptions(ports.SupplierBillReceptionFilter{Supplier: "SYN-SUP-02", Claim: claim}, 10); err != nil || len(found) != 1 || found[0].ClaimVersion != "2" {
 		t.Fatalf("不给号时按接收行的供应商比：err=%v %+v", err, found)
 	}
 
-	payables, err := fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{Claim: claim}, 10)
+	payables, err := rowsOf(fixture.statement.ListAuditedPayables(t.Context(), tenant, ports.AuditedPayableFilter{Claim: claim}, 10, firstPage(t, ports.AuditedPayablePages)))
 	if err != nil || len(payables) != 3 {
 		t.Fatalf("应付册：err=%v rows=%+v", err, payables)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -24,17 +25,17 @@ type stubChargeCatalogue struct {
 }
 
 func (stub *stubChargeCatalogue) ListCustomerCharges(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CustomerChargeCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerChargeCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.charges, stub.err
+	return cataloguepage.Result[ports.CustomerChargeCatalogueRow]{Rows: stub.charges, Total: int64(len(stub.charges))}, stub.err
 }
 
 func (stub *stubChargeCatalogue) ListSupplierExpectedCosts(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.SupplierExpectedCostCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierExpectedCostCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.costs, stub.err
+	return cataloguepage.Result[ports.SupplierExpectedCostCatalogueRow]{Rows: stub.costs, Total: int64(len(stub.costs))}, stub.err
 }
 
 func chargesEndpoint(register *stubChargeCatalogue) http.Handler {
@@ -42,7 +43,8 @@ func chargesEndpoint(register *stubChargeCatalogue) http.Handler {
 }
 
 // Covers: 逐格转写 — 费用身份、阶段、币种三件组、确认留痕与依据数组原样透出；金额以
-// 最小单位计数串在场；租户与页大小从作用域来，不采信请求自报。
+// 最小单位计数串在场；租户与页大小从作用域来：查询串里自报的租户与页大小是集外键，答 400 不带任何行（ADR-0144 决定四），
+// 不带它们照答本租户的行。
 func TestCustomerChargeQueryTranscribesChargesVerbatim(t *testing.T) {
 	confirmedAt := catalogueBaseAt.Add(48 * time.Hour)
 	register := &stubChargeCatalogue{
@@ -75,13 +77,19 @@ func TestCustomerChargeQueryTranscribesChargesVerbatim(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(chargesEndpoint(register), "/settlement-charges?registry=customer-charge&tenant=TENANT-9&limit=9999")
+	selfReported := serveGet(chargesEndpoint(register), "/settlement-charges?registry=customer-charge&tenant=TENANT-9&limit=9999")
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if register.gotTenant != "" {
+		t.Fatalf("自报租户与页大小的请求触到了读口：tenant=%q limit=%d", register.gotTenant, register.gotLimit)
+	}
 
+	response := serveGet(chargesEndpoint(register), "/settlement-charges?registry=customer-charge")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（不取自作用域）",
 			register.gotTenant, register.gotLimit)
 	}
 	var body struct {

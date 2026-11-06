@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -26,21 +27,22 @@ type stubStatementCatalogue struct {
 }
 
 func (stub *stubStatementCatalogue) ListCustomerStatements(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CustomerStatementCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerStatementCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.statements, stub.err
+	return cataloguepage.Result[ports.CustomerStatementCatalogueRow]{Rows: stub.statements, Total: int64(len(stub.statements))}, stub.err
 }
 
-// ListSupplierBillReceptions 像真读口一样截在 limit：端点多取一行判页外有没有，替身不截就证不了那一判。
+// ListSupplierBillReceptions 像真读口一样截在 limit、页外还有时给出游标：端点的 truncated 只看游标在不在，替身不截就证不了那一判。
 func (stub *stubStatementCatalogue) ListSupplierBillReceptions(
-	_ context.Context, tenant domain.TenantID, filter ports.SupplierBillReceptionFilter, limit int,
-) ([]ports.SupplierBillReceptionCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, filter ports.SupplierBillReceptionFilter, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit, stub.gotReceptionFilter = tenant.String(), limit, filter
+	page := cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow]{Rows: stub.receptions, Total: int64(len(stub.receptions))}
 	if len(stub.receptions) > limit {
-		return stub.receptions[:limit], stub.err
+		page.Rows, page.Next = stub.receptions[:limit], "SYN-CURSOR-NEXT"
 	}
-	return stub.receptions, stub.err
+	return page, stub.err
 }
 
 func statementsEndpoint(register *stubStatementCatalogue) http.Handler {
@@ -49,7 +51,7 @@ func statementsEndpoint(register *stubStatementCatalogue) http.Handler {
 
 // Covers: 逐格转写 — 单号、账户、周期、总额与两个计数原样透出；异议与后续纳入以各自
 // 数组挂在单上；未裁定的异议不带裁定三键（不代填「待处理」）；纳入行没有金额键。`AT-SA-230`（读口半边）：
-// 每项争议带争议号，或带它为什么没有。
+// 每项争议带争议号，或带它为什么没有。查询串里自报的租户是集外键，答 400 不带任何行（ADR-0144 决定四）。
 func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 	resolvedAt := catalogueBaseAt.Add(72 * time.Hour)
 	register := &stubStatementCatalogue{
@@ -106,8 +108,14 @@ func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(statementsEndpoint(register), "/settlement-statements?registry=customer-statement&tenant=TENANT-9")
+	selfReported := serveGet(statementsEndpoint(register), "/settlement-statements?registry=customer-statement&tenant=TENANT-9")
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if register.gotTenant != "" {
+		t.Fatalf("自报租户的请求触到了读口：tenant=%q", register.gotTenant)
+	}
 
+	response := serveGet(statementsEndpoint(register), "/settlement-statements?registry=customer-statement")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
@@ -387,7 +395,9 @@ func TestSupplierBillReceptionQueryCarriesTheBillSummary(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-232 — 账单册超过一页时答 truncated，只列一页；不到一页答 false。端点向读口多要一行判页外有没有，那一行不上列。
+// Covers: AT-SA-232 — 账单册超过一页时答 truncated，只列一页；不到一页答 false。truncated 与 page.next 同义（照票
+// catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」对 truncated 的改法），读口收到的就是
+// Intake 的页大小，不再多要一行。
 func TestSupplierBillReceptionQueryFlagsAPageCut(t *testing.T) {
 	rows := func(count int) []ports.SupplierBillReceptionCatalogueRow {
 		receptions := make([]ports.SupplierBillReceptionCatalogueRow, 0, count)
@@ -417,8 +427,11 @@ func TestSupplierBillReceptionQueryFlagsAPageCut(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
 			}
-			if register.gotLimit != 26 || body.Truncated == nil || *body.Truncated != probe.truncated || len(body.Receptions) != probe.listed {
+			if register.gotLimit != 25 || body.Truncated == nil || *body.Truncated != probe.truncated || len(body.Receptions) != probe.listed {
 				t.Fatalf("limit=%d truncated=%v listed=%d：%s", register.gotLimit, body.Truncated, len(body.Receptions), response.Body.String())
+			}
+			if next := string(pageOf(t, response)["next"]); (next != "null") != probe.truncated {
+				t.Fatalf("truncated=%v 而 page.next=%s：两格该同义", probe.truncated, next)
 			}
 		})
 	}

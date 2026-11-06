@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -15,7 +16,8 @@ type FundsApplicationCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ExternalFundsFactCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExternalFundsFactCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -35,7 +37,9 @@ const outcomeExternalFundsFactsListed = "EXTERNAL_FUNDS_FACTS_LISTED"
 //
 // 外部财务或支付系统拥有真实收付款事实，本上下文只有 `UC-SA-005` 能形成映射与核销；
 // 本端点是查阅面，**不收任何分配或撤销参数**——收下就等于开出一条绕开 UC-SA-005 的
-// 第二写路。
+// 第二写路。翻页、排序、事实类型筛选与 q 由端点按 ports.ExternalFundsFactPages 解码（ADR-0144
+// 决定六），排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先 Intake、后解码查询参数」）；它们只是查找，
+// 不是分配参数。
 func NewQuerySettlementFundsApplicationsEndpoint(
 	intake CatalogueQueryIntake,
 	reader FundsApplicationCatalogueReader,
@@ -48,8 +52,13 @@ func NewQuerySettlementFundsApplicationsEndpoint(
 		if !ok {
 			return
 		}
+		pageQuery, err := ports.ExternalFundsFactPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 
-		rows, err := reader.ListExternalFundsFacts(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListExternalFundsFacts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成终局。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -57,13 +66,14 @@ func NewQuerySettlementFundsApplicationsEndpoint(
 		}
 
 		// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-		bodies := make([]externalFundsFactBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]externalFundsFactBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, externalFundsFactBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, externalFundsFactListResponse{
 			Outcome: outcomeExternalFundsFactsListed,
 			Facts:   bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -116,6 +126,7 @@ func externalFundsFactBodyOf(row ports.ExternalFundsFactCatalogueRow) externalFu
 type externalFundsFactListResponse struct {
 	Outcome string                  `json:"outcome"`
 	Facts   []externalFundsFactBody `json:"facts"`
+	Page    cataloguepage.Page      `json:"page"`
 }
 
 // externalFundsFactBody 逐字段透出一笔已采用的外部资金事实。

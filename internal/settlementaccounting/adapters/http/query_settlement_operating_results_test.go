@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -24,17 +25,17 @@ type stubOperatingCatalogue struct {
 }
 
 func (stub *stubOperatingCatalogue) ListOperatingResults(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.OperatingResultCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.OperatingResultCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.results, stub.err
+	return cataloguepage.Result[ports.OperatingResultCatalogueRow]{Rows: stub.results, Total: int64(len(stub.results))}, stub.err
 }
 
 func (stub *stubOperatingCatalogue) ListCostAllocations(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CostAllocationCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CostAllocationCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.allocations, stub.err
+	return cataloguepage.Result[ports.CostAllocationCatalogueRow]{Rows: stub.allocations, Total: int64(len(stub.allocations))}, stub.err
 }
 
 func operatingEndpoint(register *stubOperatingCatalogue) http.Handler {
@@ -42,7 +43,7 @@ func operatingEndpoint(register *stubOperatingCatalogue) http.Handler {
 }
 
 // Covers: 组成逐项在场不净额 — 增减两向的组成各占一行；毛利照册转写，读口不重算；
-// 负毛利（经营损失）仍走同一个键。
+// 负毛利（经营损失）仍走同一个键。查询串里自报的租户是集外键，答 400 不带任何行（ADR-0144 决定四）。
 func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 	register := &stubOperatingCatalogue{
 		results: []ports.OperatingResultCatalogueRow{
@@ -77,8 +78,14 @@ func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(operatingEndpoint(register), "/settlement-operating-results?registry=operating-result&tenant=TENANT-9")
+	selfReported := serveGet(operatingEndpoint(register), "/settlement-operating-results?registry=operating-result&tenant=TENANT-9")
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if register.gotTenant != "" {
+		t.Fatalf("自报租户的请求触到了读口：tenant=%q", register.gotTenant)
+	}
 
+	response := serveGet(operatingEndpoint(register), "/settlement-operating-results?registry=operating-result")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -179,7 +180,8 @@ type AuditedPayableCatalogueReader interface {
 		tenant domain.TenantID,
 		filter ports.AuditedPayableFilter,
 		limit int,
-	) ([]ports.AuditedPayableCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AuditedPayableCatalogueRow], error)
 }
 
 var _ AuditedPayableCatalogueReader = ports.AuditedPayableCatalogueRead(nil)
@@ -187,12 +189,14 @@ var _ AuditedPayableCatalogueReader = ports.AuditedPayableCatalogueRead(nil)
 // 空册仍是 LISTED：「还没有形成过审核应付」是如实答案。
 const outcomeAuditedPayablesListed = "AUDITED_PAYABLES_LISTED"
 
-// auditedPayableListResponse 的 truncated 为真：同样的检索维之下，页外还有更早形成的应付。检索维在库里对全册筛，不是在这一页
-// 里筛，所以按应付单号检索，页外的那一笔照样找得到。
+// auditedPayableListResponse 的 truncated 为真：本页之后还有，即 page.next 不为空。本册不带计数，truncated 照票
+// catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」对 truncated 的改法。检索维在库里对全册筛，
+// 不是在这一页里筛，所以按应付单号检索，页外的那一笔照样找得到。
 type auditedPayableListResponse struct {
 	Outcome   string               `json:"outcome"`
 	Truncated bool                 `json:"truncated"`
 	Payables  []auditedPayableBody `json:"payables"`
+	Page      cataloguepage.Page   `json:"page"`
 }
 
 // auditedPayableBody 逐字段透出一笔审核应付。documentNumber 与 documentNumberAbsence 恰出其一，理由同 supplierBillPayableBody；
@@ -223,7 +227,8 @@ type auditedPayableBody struct {
 }
 
 // NewQueryAuditedPayablesEndpoint 交回审核应付册的 HTTP 入口（GET /settlement-audited-payables）。可选检索维 documentNumber、
-// claim、supplier 各自精确相等、同给取交集（ports.AuditedPayableFilter）；不收别的参数，理由同 NewQuerySettlementStatementsEndpoint。
+// claim、supplier 各自精确相等、同给取交集（ports.AuditedPayableFilter），在声明 ports.AuditedPayablePages 里登为选择器；翻页与
+// q 按同一份声明在 Intake 之后解码。不收别的参数，理由同 NewQuerySettlementStatementsEndpoint。
 func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader AuditedPayableCatalogueReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
@@ -237,18 +242,18 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 		if !ok {
 			return
 		}
-		// 多取一行只为判页外还有没有，理由同账单册。
-		rows, err := reader.ListAuditedPayables(request.Context(), query.Scope.Tenant(), filter, query.Limit+1)
+		pageQuery, err := ports.AuditedPayablePages.Decode(values)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := reader.ListAuditedPayables(request.Context(), query.Scope.Tenant(), filter, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		truncated := len(rows) > query.Limit
-		if truncated {
-			rows = rows[:query.Limit]
-		}
-		bodies := make([]auditedPayableBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]auditedPayableBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, auditedPayableBody{
 				Payable: row.Payable, DocumentNumber: row.DocumentNumber, DocumentNumberAbsence: row.DocumentNumberAbsence,
 				Claim: row.Claim, Line: row.Line, ExpectedVersion: row.ExpectedVersion, Supplier: row.Supplier, Period: row.Period,
@@ -260,7 +265,7 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 			})
 		}
 		writeJSON(response, http.StatusOK, auditedPayableListResponse{
-			Outcome: outcomeAuditedPayablesListed, Truncated: truncated, Payables: bodies,
+			Outcome: outcomeAuditedPayablesListed, Truncated: page.Next != "", Payables: bodies, Page: page.Page(query.Limit),
 		})
 	})
 }

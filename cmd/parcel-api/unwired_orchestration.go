@@ -2061,16 +2061,18 @@ func (unwiredSettlementCharges) ListCustomerCharges(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.CustomerChargeCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.CustomerChargeCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.CustomerChargeCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredSettlementCharges) ListSupplierExpectedCosts(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.SupplierExpectedCostCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.SupplierExpectedCostCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.SupplierExpectedCostCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredSettlementStatements 的方法表与 settlementports.StatementCatalogueRead、DisputedStatementRead、StatementLineRead、
@@ -2081,8 +2083,9 @@ func (unwiredSettlementStatements) ListCustomerStatements(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.CustomerStatementCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.CustomerStatementCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.CustomerStatementCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredSettlementStatements) ListSupplierBillReceptions(
@@ -2090,8 +2093,9 @@ func (unwiredSettlementStatements) ListSupplierBillReceptions(
 	settlementdomain.TenantID,
 	settlementports.SupplierBillReceptionFilter,
 	int,
-) ([]settlementports.SupplierBillReceptionCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.SupplierBillReceptionCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.SupplierBillReceptionCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredSettlementStatements) FindStatementLines(
@@ -2106,6 +2110,7 @@ func (unwiredSettlementStatements) ListDisputedCustomerStatements(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
+	cataloguepage.Query,
 ) (settlementports.DisputedCustomerStatements, error) {
 	return settlementports.DisputedCustomerStatements{}, errOrchestrationNotWired
 }
@@ -2124,8 +2129,9 @@ func (unwiredSettlementStatements) ListAuditedPayables(
 	settlementdomain.TenantID,
 	settlementports.AuditedPayableFilter,
 	int,
-) ([]settlementports.AuditedPayableCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.AuditedPayableCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.AuditedPayableCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredSettlementFundsApplications 的方法表与 settlementports.FundsApplicationCatalogueRead
@@ -2136,8 +2142,9 @@ func (unwiredSettlementFundsApplications) ListExternalFundsFacts(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.ExternalFundsFactCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.ExternalFundsFactCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.ExternalFundsFactCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredSettlementOperatingResults 的方法表与 settlementports.OperatingCatalogueRead
@@ -2148,16 +2155,18 @@ func (unwiredSettlementOperatingResults) ListOperatingResults(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.OperatingResultCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.OperatingResultCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.OperatingResultCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredSettlementOperatingResults) ListCostAllocations(
 	context.Context,
 	settlementdomain.TenantID,
 	int,
-) ([]settlementports.CostAllocationCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[settlementports.CostAllocationCatalogueRow], error) {
+	return cataloguepage.Result[settlementports.CostAllocationCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // 外部资金事实采用 / 更正两口的命令占位（票 sa-cc/31）。两个类型而不是一个：生产上两口是同一只编排的两个方法，

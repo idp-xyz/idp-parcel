@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -41,15 +42,16 @@ type stubAuditedPayables struct {
 	gotLimit  int
 }
 
-// ListAuditedPayables 像真读口一样截在 limit，理由同 stubStatementCatalogue。
+// ListAuditedPayables 像真读口一样截在 limit、页外还有时给出游标，理由同 stubStatementCatalogue。
 func (stub *stubAuditedPayables) ListAuditedPayables(
-	_ context.Context, tenant domain.TenantID, filter ports.AuditedPayableFilter, limit int,
-) ([]ports.AuditedPayableCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, filter ports.AuditedPayableFilter, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.AuditedPayableCatalogueRow], error) {
 	stub.gotTenant, stub.gotFilter, stub.gotLimit = tenant.String(), filter, limit
+	page := cataloguepage.Result[ports.AuditedPayableCatalogueRow]{Rows: stub.rows, Total: int64(len(stub.rows))}
 	if len(stub.rows) > limit {
-		return stub.rows[:limit], stub.err
+		page.Rows, page.Next = stub.rows[:limit], "SYN-CURSOR-NEXT"
 	}
-	return stub.rows, stub.err
+	return page, stub.err
 }
 
 // Covers: AT-SA-232、AT-SA-234 — 一份账单的各行逐格透出：匹配分类原名、所引预期成本与差额、依据、已匹配金额与四个和、这一行上
@@ -176,7 +178,8 @@ func TestSupplierBillLinesQuerySeparatesMissingFromUnanswered(t *testing.T) {
 }
 
 // Covers: AT-SA-232、AT-SA-231 — 审核应付册逐笔透出应付单号或无号原因（恰出其一）、所属主张与行、供应商与账期、审核授权方与
-// 点审核的人；检索维原样交给读口，不认的参数不采信；多于一页答 truncated、只列一页；空册答空数组；读不回答 NO_ANSWER_FORMED。
+// 点审核的人；检索维原样交给读口；查询串里自报的租户是集外键，答 400 不带任何行（ADR-0144 决定四）；多于一页答 truncated、
+// 只列一页，truncated 与 page.next 同义；空册答空数组；读不回答 NO_ANSWER_FORMED。
 func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 	stub := &stubAuditedPayables{rows: []ports.AuditedPayableCatalogueRow{
 		{Payable: "PAYABLE-1", DocumentNumber: "AP-202608-00001", Claim: "SYN-SUP-01/INV-1", Line: "1", ExpectedVersion: "SYN-EXP-1",
@@ -187,10 +190,16 @@ func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 			ExpectedVersion: "SYN-EXP-0", Supplier: "SYN-SUP-01", Period: "2026-07", LegalEntity: "SYN-LE-01", Account: "SYN-ACC-PAYABLE",
 			Currency: "CNY", AmountMinor: 500, AuditorRef: "SYN-AUDITOR-ROLE", AuditedAt: catalogueBaseAt, RecordedAt: catalogueBaseAt},
 	}}
-	response := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), stub),
+	selfReported := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), stub),
 		"/settlement-audited-payables?documentNumber=AP-202608-00001&claim=SYN-SUP-01%2FINV-1&supplier=SYN-SUP-01&tenant=TENANT-9")
-	// 向读口多要一行，只为判页外还有没有。
-	if response.Code != http.StatusOK || stub.gotTenant != "TENANT-1" || stub.gotLimit != 26 {
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if stub.gotTenant != "" {
+		t.Fatalf("自报租户的请求触到了读口：tenant=%q", stub.gotTenant)
+	}
+	response := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), stub),
+		"/settlement-audited-payables?documentNumber=AP-202608-00001&claim=SYN-SUP-01%2FINV-1&supplier=SYN-SUP-01")
+	if response.Code != http.StatusOK || stub.gotTenant != "TENANT-1" || stub.gotLimit != 25 {
 		t.Fatalf("status = %d tenant = %q limit = %d", response.Code, stub.gotTenant, stub.gotLimit)
 	}
 	if stub.gotFilter != (ports.AuditedPayableFilter{DocumentNumber: "AP-202608-00001", Claim: "SYN-SUP-01/INV-1", Supplier: "SYN-SUP-01"}) {
@@ -235,6 +244,9 @@ func TestAuditedPayablesQueryTranscribesNumbersAndPassesFilters(t *testing.T) {
 	}
 	if err := json.Unmarshal(cut.Body.Bytes(), &cutBody); err != nil || !cutBody.Truncated || len(cutBody.Payables) != 25 {
 		t.Fatalf("多于一页要答 truncated、只列一页：%s", cut.Body.String())
+	}
+	if next := string(pageOf(t, cut)["next"]); next == "null" {
+		t.Fatalf("truncated 为真而 page.next 为 null：%s", cut.Body.String())
 	}
 
 	empty := serveGet(settlementhttp.NewQueryAuditedPayablesEndpoint(grantedIntake(), &stubAuditedPayables{}), "/settlement-audited-payables")

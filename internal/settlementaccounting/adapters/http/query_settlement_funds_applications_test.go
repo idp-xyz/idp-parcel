@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -23,10 +24,10 @@ type stubFundsApplicationCatalogue struct {
 }
 
 func (stub *stubFundsApplicationCatalogue) ListExternalFundsFacts(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ExternalFundsFactCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalFundsFactCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.facts, stub.err
+	return cataloguepage.Result[ports.ExternalFundsFactCatalogueRow]{Rows: stub.facts, Total: int64(len(stub.facts))}, stub.err
 }
 
 func fundsEndpoint(register *stubFundsApplicationCatalogue) http.Handler {
@@ -62,7 +63,7 @@ func TestExternalFundsFactQueryShowsTheScopeSpreadAndTheUnscopedUnapplied(t *tes
 }
 
 // Covers: 三个金额各算各的 — 已核销、已撤销与未核销分别在场，不合成净额；映射与核销
-// 分两个数组；未撤销的核销不带撤销两键。
+// 分两个数组；未撤销的核销不带撤销两键。查询串里自报的租户与页大小是集外键，答 400 不带任何行（ADR-0144 决定四）。
 func TestExternalFundsFactQuerySplitsAppliedFromReversed(t *testing.T) {
 	reversedAt := catalogueBaseAt.Add(48 * time.Hour)
 	register := &stubFundsApplicationCatalogue{
@@ -109,13 +110,19 @@ func TestExternalFundsFactQuerySplitsAppliedFromReversed(t *testing.T) {
 			},
 		},
 	}
-	response := serveGet(fundsEndpoint(register), "/settlement-funds-applications?tenant=TENANT-9&limit=9999")
+	selfReported := serveGet(fundsEndpoint(register), "/settlement-funds-applications?tenant=TENANT-9&limit=9999")
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if register.gotTenant != "" {
+		t.Fatalf("自报租户与页大小的请求触到了读口：tenant=%q limit=%d", register.gotTenant, register.gotLimit)
+	}
 
+	response := serveGet(fundsEndpoint(register), "/settlement-funds-applications")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（不取自作用域）",
 			register.gotTenant, register.gotLimit)
 	}
 	var body struct {
