@@ -3,8 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -57,22 +55,13 @@ const customerAccountListed = `WITH account AS (
           LEFT JOIN party ON party.party_id = account.customer_party_id
      )`
 
-type accountKeyColumn struct {
-	column string
-	kind   cataloguepage.ValueKind
-}
-
-// 声明里的可排维、筛选维落到 listed 的列上；行标识是 account_id。
-var (
-	customerAccountSortColumns = map[string]accountKeyColumn{
-		"registeredAt":  {"recorded_at", cataloguepage.Instant},
-		"effectiveFrom": {"effective_from", cataloguepage.Instant},
-		"accountId":     {"account_id", cataloguepage.Text},
-	}
-	customerAccountIdentity       = accountKeyColumn{"account_id", cataloguepage.Text}
-	customerAccountFilterColumns  = map[string]string{"status": "status", "customerPartyId": "customer_party_id"}
-	customerAccountKeywordColumns = []string{"account_id", "customer_party_id", "party_name"}
-)
+// customerAccountPages 把 ports.CustomerAccountCatalogue 落到 listed 导出的列上；行标识是 account_id。
+var customerAccountPages = ports.CustomerAccountCatalogue.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"registeredAt": "recorded_at", "effectiveFrom": "effective_from", "accountId": "account_id"},
+	Identity: []string{"account_id"},
+	Filters:  map[string]string{"status": "status", "customerPartyId": "customer_party_id"},
+	Keyword:  []string{"account_id", "customer_party_id", "party_name"},
+})
 
 // ListCustomerAccounts 上列货主客户账户的最新修订：先按筛选与 q 数总数，再取游标之后的 limit+1 行，多出的一行
 // 只用来判有没有下一页。
@@ -88,57 +77,24 @@ func (catalogue *OperationsCatalogue) ListCustomerAccounts(
 	if err := requirePositiveLimit("list customer accounts", limit); err != nil {
 		return ports.CataloguePage[ports.CustomerAccountRow]{}, err
 	}
-	primary, mapped := customerAccountSortColumns[query.Sort.Field]
-	if !mapped {
-		return fail(fmt.Errorf("排序维 %q 没有落到列上（查询对象须由 ports.CustomerAccountCatalogue 解出）", query.Sort.Field))
+	// 租户 $1 已落在 listed 的前半句里，listed 上不另带固定条件。
+	plan, err := customerAccountPages.Plan(query, "", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
 		return fail(err)
 	}
-	where, args, err := customerAccountConditions(tenant, query)
-	if err != nil {
-		return fail(err)
-	}
 
 	var total int64
-	if err := querier.QueryRow(ctx, customerAccountListed+" SELECT count(*) FROM listed WHERE "+where, args...).Scan(&total); err != nil {
+	if err := querier.QueryRow(ctx, customerAccountListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
-
-	keys := []accountKeyColumn{primary, customerAccountIdentity}
-	direction, comparison := "ASC", ">"
-	if query.Sort.Descending {
-		direction, comparison = "DESC", "<"
-	}
-	if query.After != nil {
-		values := append([]string{query.After.Value}, query.After.Identity...)
-		if len(values) != len(keys) {
-			return fail(fmt.Errorf("游标位置有 %d 格，排序键有 %d 列", len(values), len(keys)))
-		}
-		columns := make([]string, len(keys))
-		placeholders := make([]string, len(keys))
-		for index, key := range keys {
-			value, err := accountTypedValue(key.kind, values[index])
-			if err != nil {
-				return fail(err)
-			}
-			args = append(args, value)
-			columns[index], placeholders[index] = key.column, fmt.Sprintf("$%d", len(args))
-		}
-		where += fmt.Sprintf(" AND (%s) %s (%s)", strings.Join(columns, ", "), comparison, strings.Join(placeholders, ", "))
-	}
-	args = append(args, limit+1)
-	rows, err := querier.Query(ctx, fmt.Sprintf(
-		`%s SELECT tenant_id, account_id, customer_party_id, party_name,
-		           revision, basis_ref, effective_from,
-		           deactivated_at, deactivation_basis, recorded_at, status
-		      FROM listed
-		     WHERE %s
-		     ORDER BY %s %s, %s %s
-		     LIMIT $%d`,
-		customerAccountListed, where, primary.column, direction, customerAccountIdentity.column, direction, len(args),
-	), args...)
+	rows, err := querier.Query(ctx, customerAccountListed+" "+plan.PageSQL(
+		`tenant_id, account_id, customer_party_id, party_name,
+		 revision, basis_ref, effective_from,
+		 deactivated_at, deactivation_basis, recorded_at, status`, "listed"), plan.PageArgs...)
 	if err != nil {
 		return fail(err)
 	}
@@ -176,73 +132,22 @@ func (catalogue *OperationsCatalogue) ListCustomerAccounts(
 		return fail(err)
 	}
 
-	page, more := cataloguepage.Trim(fetched, limit)
-	result := ports.CataloguePage[ports.CustomerAccountRow]{Rows: page, Total: total}
-	if more {
-		last := page[len(page)-1]
-		next, err := query.CursorAfter(cataloguepage.Position{
-			Value:    customerAccountSortValue(last, query.Sort.Field),
-			Identity: []string{last.AccountID},
-		})
-		if err != nil {
-			return fail(err)
-		}
-		result.Next = next
+	page, err := cataloguepage.Finish(query, fetched, limit, total, customerAccountPosition)
+	if err != nil {
+		return fail(err)
 	}
-	return result, nil
+	return page, nil
 }
 
-// customerAccountConditions 是筛选维与 q 的条件，总数与取页共用同一组；$1 是租户，已落在 listed 的前半句里。
-// 筛选维内为或（= ANY）、维间为与。
-func customerAccountConditions(tenant domain.TenantID, query cataloguepage.Query) (string, []any, error) {
-	clauses := []string{"TRUE"}
-	args := []any{tenant.String()}
-	dimensions := make([]string, 0, len(query.Filters))
-	for dimension := range query.Filters {
-		dimensions = append(dimensions, dimension)
-	}
-	sort.Strings(dimensions)
-	for _, dimension := range dimensions {
-		column, mapped := customerAccountFilterColumns[dimension]
-		if !mapped {
-			return "", nil, fmt.Errorf("筛选维 %q 没有落到列上", dimension)
-		}
-		args = append(args, query.Filters[dimension])
-		clauses = append(clauses, fmt.Sprintf("%s = ANY($%d)", column, len(args)))
-	}
-	if query.Keyword != "" {
-		args = append(args, "%"+accountLikeLiteral.Replace(query.Keyword)+"%")
-		matches := make([]string, len(customerAccountKeywordColumns))
-		for index, column := range customerAccountKeywordColumns {
-			matches[index] = fmt.Sprintf("%s ILIKE $%d", column, len(args))
-		}
-		clauses = append(clauses, "("+strings.Join(matches, " OR ")+")")
-	}
-	return strings.Join(clauses, " AND "), args, nil
-}
-
-// accountLikeLiteral 让 q 在 ILIKE 里只做字面包含：% 与 _ 是通配符，反斜杠是 LIKE 的缺省转义符。
-var accountLikeLiteral = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-func accountTypedValue(kind cataloguepage.ValueKind, value string) (any, error) {
-	switch kind {
-	case cataloguepage.Instant:
-		return cataloguepage.ParseInstant(value)
-	case cataloguepage.Integer:
-		return cataloguepage.ParseInteger(value)
-	default:
-		return value, nil
-	}
-}
-
-// customerAccountSortValue 给出一行在某个可排维上的值，按声明的 ValueKind 规整；本页末行的游标从这里取。
-func customerAccountSortValue(row ports.CustomerAccountRow, field string) string {
-	switch field {
+// customerAccountPosition 给出一行在排序维上的位置，按声明的 ValueKind 规整。登记时刻、生效时刻与账户号都是从 listed
+// 的列上原样扫进行里的值，与 ORDER BY 用的是同一份（cataloguepage.Finish 头注）。
+func customerAccountPosition(row ports.CustomerAccountRow, sortField string) cataloguepage.Position {
+	value := row.AccountID
+	switch sortField {
 	case "registeredAt":
-		return cataloguepage.FormatInstant(row.RegisteredAt)
+		value = cataloguepage.FormatInstant(row.RegisteredAt)
 	case "effectiveFrom":
-		return cataloguepage.FormatInstant(row.EffectiveFrom)
-	default:
-		return row.AccountID
+		value = cataloguepage.FormatInstant(row.EffectiveFrom)
 	}
+	return cataloguepage.Position{Value: value, Identity: []string{row.AccountID}}
 }
