@@ -27,8 +27,8 @@ const outcomeRegistrationNumberTypesListed = "REGISTRATION_NUMBER_TYPES_LISTED"
 
 // NewQueryRegistrationNumberTypesEndpoint 交回注册号类型目录查阅的 HTTP 入口
 // （GET /commercial-registration-number-types，ADR-0077）。查阅不触发判断——判号走
-// ports.RegistrationNumberTypeLookup，不走本口。查询参数按 ports.RegistrationNumberTypePages 解码，属传输形状、
-// 先于 Intake（ADR-0144 决定六），答法与次序同 /commercial-customer-accounts。
+// ports.RegistrationNumberTypeLookup，不走本口。查询参数按 ports.RegistrationNumberTypePages 解码（ADR-0144 决定六），
+// 在 Intake 之后：渠道未配置时对一切请求同答 403（ADR-0055 决定三）。
 func NewQueryRegistrationNumberTypesEndpoint(
 	intake CommercialCatalogueIntake,
 	reader RegistrationNumberTypeCatalogueReader,
@@ -40,15 +40,15 @@ func NewQueryRegistrationNumberTypesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.RegistrationNumberTypePages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.RegistrationNumberTypePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

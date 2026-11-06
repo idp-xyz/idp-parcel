@@ -158,12 +158,11 @@ var commercialPolicyPages = map[string]*cataloguepage.Catalogue{
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
 // (GET /commercial-policies?kind=,ADR-0077、票 master-data-wiring/05)。
 //
-// kind 缺席或集外按坏请求拒:各册子的行形状互不相同,替调用方选一种就是猜。kind
-// 的在场与取值属传输形状(与方法检查同级,先于 Intake),读它不构成读业务内容——
-// 未配置 Intake 对全部种类同答 403,分支选择不泄露任何东西。
+// kind 缺席、为空或集外按坏请求拒:各册子的行形状互不相同,替调用方选一种就是猜。这道校验与其余查询参数一样排在
+// Intake 之后:渠道未配置时对一切请求同答 403(ADR-0055 决定三),坏 kind 也不例外,没有凭据的调用方探不出有哪几种册子。
 //
-// 其余查询参数按 kind 选定的那一册声明解码(commercialPolicyPages),同属传输形状、先于 Intake(ADR-0144 决定六),
-// 答法与次序同 /commercial-customer-accounts。kind 在各册声明里是选择器,取值进游标摘要:拿一种的游标去翻另一种答游标不符。
+// 其余查询参数按 kind 选定的那一册声明解码(commercialPolicyPages;ADR-0144 决定六)。kind 在各册声明里是选择器,
+// 取值进游标摘要:拿一种的游标去翻另一种答游标不符。
 func NewQueryCommercialPoliciesEndpoint(
 	intake CommercialCatalogueIntake,
 	reader CommercialPolicyCatalogueReader,
@@ -172,6 +171,12 @@ func NewQueryCommercialPoliciesEndpoint(
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
@@ -184,12 +189,6 @@ func NewQueryCommercialPoliciesEndpoint(
 		pageQuery, err := pages.Decode(request.URL.Query())
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()

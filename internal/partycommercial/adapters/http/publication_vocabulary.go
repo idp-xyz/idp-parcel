@@ -34,8 +34,7 @@ const outcomePublicationVocabularyListed = "PUBLICATION_VOCABULARY_LISTED"
 // 词表跟着同一条分派走是同一形；一册一口要在装配表加好几行、几张表单票改同一文件，正是第 1 波刻意避开的撞点。
 // 只答码不答中文：中文留在 admin-web 各页词表。
 //
-// kind 属传输形状（与方法检查同级、先于 Intake，判据同 /commercial-policies：未配置 Intake 对全部类别同答 403，
-// 分支选择不泄露任何东西）。集合外或缺席答 400 + MALFORMED_REQUEST 并把 kind 那一格的问题带在响应体里——与命令口
+// kind 属传输形状（与方法检查同级、先于 Intake：未配置 Intake 对全部类别同答 403，分支选择不泄露任何东西）。集合外或缺席答 400 + MALFORMED_REQUEST 并把 kind 那一格的问题带在响应体里——与命令口
 // 的逐格问题同一形状——不静默答空：「没这一册」与「这一册没词」要人做的事不同。kind 合法而没词答 200 + 空 sets。
 // 例外是编码：kind（或查询串里任何一格）解码后含 NUL 或不是合法 UTF-8，装配处挂的 httpapi.RefuseUnstorableReadTarget 在本
 // 处理器之前答 400 + MALFORMED_REQUEST，那一份不带 problems——检查对一切 GET 读口同答一份，不懂各口的逐格问题形状。

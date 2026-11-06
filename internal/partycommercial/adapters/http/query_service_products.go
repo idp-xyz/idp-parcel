@@ -35,8 +35,7 @@ const outcomeServiceProductsListed = "SERVICE_PRODUCTS_LISTED"
 
 // NewQueryServiceProductsEndpoint 交回服务产品目录查阅的 HTTP 入口
 // (GET /commercial-service-products,ADR-0077、票 master-data-wiring/05)。查询参数按
-// ports.ServiceProductPages 解码,属传输形状、先于 Intake(ADR-0144 决定六),答法与次序同
-// /commercial-customer-accounts。
+// ports.ServiceProductPages 解码(ADR-0144 决定六),在 Intake 之后:渠道未配置时对一切请求同答 403(ADR-0055 决定三)。
 func NewQueryServiceProductsEndpoint(
 	intake CommercialCatalogueIntake,
 	reader ServiceProductCatalogueReader,
@@ -48,15 +47,15 @@ func NewQueryServiceProductsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.ServiceProductPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.ServiceProductPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
