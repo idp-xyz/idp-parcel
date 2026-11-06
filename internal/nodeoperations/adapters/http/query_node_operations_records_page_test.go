@@ -91,7 +91,7 @@ func TestNodeOperationsRecordsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 			if got.Sort != registry.wantSort || got.Keyword != "SYN" || got.After != nil || !reflect.DeepEqual(got.Filters, registry.wantFilters) {
 				t.Fatalf("读口收到的查询走样：%+v", got)
 			}
-			if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
+			if granted := grantedIntake(); register.gotTenant != granted.tenant || register.gotLimit != granted.limit {
 				t.Fatalf("读口收到 tenant=%q limit=%d", register.gotTenant, register.gotLimit)
 			}
 		})
@@ -191,8 +191,8 @@ func TestNodeOperationsRecordsCursorsBelongToTheirCatalogueAndConditions(t *test
 	}
 }
 
-// Covers: spec 取舍「端点先 Intake、后解码查询参数」（ADR-0055 决定三）——渠道未配置时，册名认得出，翻页、排序、筛选参数写对写错都
-// 答 403，答复不随这些参数变，读口不被触到。
+// Covers: spec 取舍「端点先 Intake、后解码查询参数」（ADR-0055 决定三）——渠道未配置时，翻页、排序、筛选参数写对写错都答 403，
+// 答复不随这些参数变，读口不被触到（册名写错同此，见 TestAnUnknownRegistryOnAnUnconfiguredChannelAnswers403）。
 func TestUnconfiguredRecordsAnswer403WhateverThePageParameters(t *testing.T) {
 	endpoint := nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeopshttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t})
 	for _, registry := range recordsRegistries {
@@ -246,7 +246,7 @@ func TestIdentityReviewUnitRegistryListsUnitsWithTheirLatestRecording(t *testing
 	if page := pageOf(t, response); string(page["next"]) != `"SYN-cursor"` || string(page["total"]) != "3" {
 		t.Fatalf("page 走样：%s", response.Body.String())
 	}
-	if catalogue.gotTenant != "TENANT-1" || catalogue.gotLimit != 25 {
+	if granted := grantedIntake(); catalogue.gotTenant != granted.tenant || catalogue.gotLimit != granted.limit {
 		t.Fatalf("读口收到 tenant=%q limit=%d", catalogue.gotTenant, catalogue.gotLimit)
 	}
 }
