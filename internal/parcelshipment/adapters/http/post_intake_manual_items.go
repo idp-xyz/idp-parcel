@@ -203,7 +203,7 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 		ofParcel := values.Get("parcel")
 		var pageQuery cataloguepage.Query
 		if ofParcel == "" {
-			// 迁移前 `?parcel=` 带空值落到待登记清单；去掉这个空键再解码，旧调用照旧拿到清单而不是集外键 400。
+			// `?parcel=` 带空值属清单分支：去掉这个空键再解码，不然它被当成集外键答 400，带着空键来取清单的调用方就取不到了。
 			values.Del("parcel")
 			if pageQuery, err = ports.PostIntakeManualItemPages.Decode(values); err != nil {
 				writePageQueryProblem(response, err)
