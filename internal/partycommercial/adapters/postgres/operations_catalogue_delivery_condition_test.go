@@ -30,15 +30,16 @@ func TestServiceProductCatalogueCarriesTheProductLayerDeliveryConditions(t *test
 		return repository.SaveDeliveryConditions(txCtx, productDeliveryConditionsOf(t, foreign, "method-z"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列服务产品：%v", err)
 	}
-	if len(rows) != 2 || rows[0].ObjectID != "product-1" || rows[1].ObjectID != "product-2" {
-		t.Fatalf("上列 = %d 行 %q/%q，want product-1 / product-2", len(rows), rows[0].ObjectID, rows[1].ObjectID)
+	// 两版同刻发布，按对象标识降序收尾（ADR-0144）。
+	if len(rows) != 2 || rows[0].ObjectID != "product-2" || rows[1].ObjectID != "product-1" {
+		t.Fatalf("上列 = %d 行 %q/%q，want product-2 / product-1", len(rows), rows[0].ObjectID, rows[1].ObjectID)
 	}
 
-	conditions := rows[0].DeliveryConditions
+	conditions := rows[1].DeliveryConditions
 	if conditions == nil {
 		t.Fatal("声明过产品层的版本那一格为 nil")
 	}
@@ -54,8 +55,8 @@ func TestServiceProductCatalogueCarriesTheProductLayerDeliveryConditions(t *test
 	if conditions.DeclaredAt.IsZero() {
 		t.Fatal("已登声明却没有声明时刻")
 	}
-	if rows[1].DeliveryConditions != nil {
-		t.Fatalf("没声明的版本长出了交付条件：%#v", rows[1].DeliveryConditions)
+	if rows[0].DeliveryConditions != nil {
+		t.Fatalf("没声明的版本长出了交付条件：%#v", rows[0].DeliveryConditions)
 	}
 }
 
@@ -74,7 +75,7 @@ func TestServiceProductCatalogueOrdersMethodsByBytesRegardlessOfCollation(t *tes
 		return repository.SaveDeliveryConditions(txCtx, content)
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列服务产品：%v", err)
 	}
@@ -128,15 +129,16 @@ func TestCustomerContractCatalogueCarriesTheContractLayerDeliveryConditions(t *t
 		return repository.SaveDeliveryConditions(txCtx, contractDeliveryConditionsOf(t, conditionsOnly, "product-1", "v1", "method-a"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列客户合同：%v", err)
 	}
-	if len(rows) != 3 || rows[0].ObjectID != "contract-1" || rows[1].ObjectID != "contract-2" || rows[2].ObjectID != "contract-3" {
+	// 三版同刻发布，按对象标识降序收尾（ADR-0144）。
+	if len(rows) != 3 || rows[0].ObjectID != "contract-3" || rows[1].ObjectID != "contract-2" || rows[2].ObjectID != "contract-1" {
 		t.Fatalf("上列 = %d 行，次序或数量不对", len(rows))
 	}
 
-	both := rows[0]
+	both := rows[2]
 	if !both.HasContent || len(both.Bindings) != 2 {
 		t.Fatalf("正文那一层丢了：hasContent=%v bindings=%d", both.HasContent, len(both.Bindings))
 	}
@@ -153,8 +155,8 @@ func TestCustomerContractCatalogueCarriesTheContractLayerDeliveryConditions(t *t
 	if !rows[1].HasContent || rows[1].DeliveryConditions != nil {
 		t.Fatalf("只登正文的版本：hasContent=%v deliveryConditions=%#v", rows[1].HasContent, rows[1].DeliveryConditions)
 	}
-	if rows[2].HasContent || rows[2].DeliveryConditions == nil || rows[2].DeliveryConditions.Methods[0] != "method-a" {
-		t.Fatalf("只登交付条件的版本：hasContent=%v deliveryConditions=%#v", rows[2].HasContent, rows[2].DeliveryConditions)
+	if rows[0].HasContent || rows[0].DeliveryConditions == nil || rows[0].DeliveryConditions.Methods[0] != "method-a" {
+		t.Fatalf("只登交付条件的版本：hasContent=%v deliveryConditions=%#v", rows[0].HasContent, rows[0].DeliveryConditions)
 	}
 
 	// 正文那一层的约定行与交付条件的方式行并存时，各自不被对方数重（相关子查询各聚各的）。
@@ -162,7 +164,7 @@ func TestCustomerContractCatalogueCarriesTheContractLayerDeliveryConditions(t *t
 		t.Fatalf("两族子表互相扇出：bindings=%d methods=%d", len(both.Bindings), len(both.DeliveryConditions.Methods))
 	}
 
-	foreign, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-2"), 10)
+	foreign, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-2"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("他租户上列：%v", err)
 	}

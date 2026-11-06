@@ -1651,8 +1651,9 @@ func (unwiredCommercialCatalogue) ListServiceProducts(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.ServiceProductCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.ServiceProductCatalogueRow], error) {
+	return cataloguepage.Result[commercialports.ServiceProductCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListAcceptanceRulePackages(
@@ -1742,16 +1743,18 @@ func (unwiredCommercialCatalogue) ListCustomerContracts(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.CustomerContractCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.CustomerContractCatalogueRow], error) {
+	return cataloguepage.Result[commercialports.CustomerContractCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListSupplierAgreements(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.SupplierAgreementCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.SupplierAgreementCatalogueRow], error) {
+	return cataloguepage.Result[commercialports.SupplierAgreementCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) FindServiceProduct(

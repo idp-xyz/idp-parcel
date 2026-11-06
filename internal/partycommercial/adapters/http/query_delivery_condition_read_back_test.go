@@ -9,6 +9,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件证两张目录端点上交付条件那一节的转写（票 admin-write-faces/25 裁读回折进既有目录行）：声明过的行带
@@ -20,18 +21,15 @@ type contractReaderDouble struct {
 }
 
 func (double *contractReaderDouble) ListCustomerContracts(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.CustomerContractCatalogueRow, error) {
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.contracts, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error) {
+	return tenantPage(nil, tenant == double.tenant, double.contracts)
 }
 
 func (double *contractReaderDouble) ListSupplierAgreements(
-	context.Context, domain.TenantID, int,
-) ([]ports.SupplierAgreementCatalogueRow, error) {
-	return nil, nil
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
+	return cataloguepage.Result[ports.SupplierAgreementCatalogueRow]{}, nil
 }
 
 func (*contractReaderDouble) FindCustomerContract(

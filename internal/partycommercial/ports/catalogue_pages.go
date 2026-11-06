@@ -85,6 +85,45 @@ var RegistrationNumberTypePages = cataloguepage.MustCatalogue(cataloguepage.Spec
 	},
 })
 
+// 版本壳各册（服务产品、客户合同、供应商协议，与策略目录里的授权规则、客户服务规则、接受前财务控制策略）由
+// commercial_version 驱动，迁移前按发布时刻倒序。缺省序因此是 -publishedAt 而不是 -registeredAt：版本壳上没有登记时刻这一格，
+// 发布时刻就是它进入发布登记册的那一刻。行标识是对象与版本两段（commercial_version 的主键去掉租户与类别）。
+
+// versionStatuses 是版本壳各册 status 的词表，即目录行上那一格的取值：发布登记册只收发布之后的位置（发布重建拒草稿），
+// DRAFT 因此不在词表里，筛它答 400 而不是永远答空页。
+var versionStatuses = []string{
+	domain.CommercialVersionPublished.String(),
+	domain.CommercialVersionEffective.String(),
+	domain.CommercialVersionExpired.String(),
+	domain.CommercialVersionRetired.String(),
+	domain.CommercialVersionSuperseded.String(),
+}
+
+// versionShellPages 是版本壳各册共用的声明形状，selectors 只有策略目录那三种用（kind）。
+func versionShellPages(name string, selectors ...string) *cataloguepage.Catalogue {
+	return cataloguepage.MustCatalogue(cataloguepage.Spec{
+		Name: name,
+		Sorts: []cataloguepage.SortDimension{
+			{Name: "publishedAt", Kind: cataloguepage.Instant},
+			{Name: "effectiveStartsAt", Kind: cataloguepage.Instant},
+			{Name: "objectId", Kind: cataloguepage.Text},
+		},
+		DefaultSort: cataloguepage.Sort{Field: "publishedAt", Descending: true},
+		Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+		Filters:     []cataloguepage.FilterDimension{{Name: "status", Vocabulary: versionStatuses}},
+		Selectors:   selectors,
+	})
+}
+
+// ServiceProductPages 是 /commercial-service-products 的查询声明。
+var ServiceProductPages = versionShellPages("commercial-service-products")
+
+// CustomerContractPages 是 /commercial-customer-contracts 的查询声明。
+var CustomerContractPages = versionShellPages("commercial-customer-contracts")
+
+// SupplierAgreementPages 是 /commercial-supplier-agreements 的查询声明。
+var SupplierAgreementPages = versionShellPages("commercial-supplier-agreements")
+
 // ProductChannelMappingPages 是 /commercial-product-channel-mappings 的查询声明。映射没有独立状态代数（行上不导出状态，裁决在
 // ProductChannelMappingRow），本册因此不设筛选维，收窄只靠 q。
 var ProductChannelMappingPages = cataloguepage.MustCatalogue(cataloguepage.Spec{

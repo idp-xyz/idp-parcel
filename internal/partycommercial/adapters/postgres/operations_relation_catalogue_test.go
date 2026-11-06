@@ -35,7 +35,7 @@ func TestCustomerContractCatalogueSeparatesMissingContentFromEmptyBindings(t *te
 		return repository.SaveCustomerContractContent(txCtx, contractContentOf(t, bound, "control-policy-1"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列客户合同:%v", err)
 	}
@@ -43,18 +43,18 @@ func TestCustomerContractCatalogueSeparatesMissingContentFromEmptyBindings(t *te
 		t.Fatalf("上列 %d 行,want 3(正文缺席的版本也在列)", len(rows))
 	}
 
-	// 夹具的 published_at 同刻,次序由对象标识收尾。
-	if rows[0].ObjectID != "contract-1" || rows[1].ObjectID != "contract-2" || rows[2].ObjectID != "contract-3" {
+	// 夹具的 published_at 同刻,次序由对象标识随默认排序同向(降序)收尾(ADR-0144)。
+	if rows[0].ObjectID != "contract-3" || rows[1].ObjectID != "contract-2" || rows[2].ObjectID != "contract-1" {
 		t.Fatalf("次序 = %q/%q/%q", rows[0].ObjectID, rows[1].ObjectID, rows[2].ObjectID)
 	}
 
 	// 无正文:HasContent 假、无规则包、零绑定。
-	if rows[0].HasContent || rows[0].RulePackageID != "" || len(rows[0].Bindings) != 0 {
+	if rows[2].HasContent || rows[2].RulePackageID != "" || len(rows[2].Bindings) != 0 {
 		t.Fatalf("正文未登记的版本长出了正文:hasContent=%v rulePackage=%q bindings=%d",
-			rows[0].HasContent, rows[0].RulePackageID, len(rows[0].Bindings))
+			rows[2].HasContent, rows[2].RulePackageID, len(rows[2].Bindings))
 	}
 
-	// 有正文零约定:HasContent 真、有规则包、零绑定。这一行与上一行都是「零绑定」,
+	// 有正文零约定:HasContent 真、有规则包、零绑定。这一行与无正文那一行都是「零绑定」,
 	// 分得开它们的只有 HasContent——本用例的要害就在这一对断言上。
 	if !rows[1].HasContent || rows[1].RulePackageID != "rules-1" {
 		t.Fatalf("已登正文的空约定合同读成了未登记:hasContent=%v rulePackage=%q",
@@ -68,7 +68,7 @@ func TestCustomerContractCatalogueSeparatesMissingContentFromEmptyBindings(t *te
 	}
 
 	// 有正文有约定:指名策略与显式不适用各一条,按费用范围排序。
-	bindings := rows[2].Bindings
+	bindings := rows[0].Bindings
 	if len(bindings) != 2 {
 		t.Fatalf("约定 %d 条,want 2", len(bindings))
 	}
@@ -82,7 +82,7 @@ func TestCustomerContractCatalogueSeparatesMissingContentFromEmptyBindings(t *te
 	}
 
 	// 版本壳字段照实转写。
-	shell := rows[2]
+	shell := rows[0]
 	if shell.Status != "EFFECTIVE" || shell.Scope != "scope-1" || shell.VersionLabel != "v1" {
 		t.Fatalf("版本壳变形:status=%q scope=%q version=%q", shell.Status, shell.Scope, shell.VersionLabel)
 	}
@@ -119,7 +119,7 @@ func TestCustomerContractCatalogueEchoesTheCustomerAccount(t *testing.T) {
 		return repository.SaveCustomerContractContent(txCtx, otherAccount)
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列客户合同:%v", err)
 	}
@@ -152,7 +152,7 @@ func TestRelationCataloguesDoNotBleedAcrossObjectKinds(t *testing.T) {
 	mustSaveVersion(t, transactor, ctx, repository, agreement)
 	mustSaveVersion(t, transactor, ctx, repository, product)
 
-	contracts, err := catalogue.ListCustomerContracts(ctx, tenant, 10)
+	contracts, err := rowsOf(catalogue.ListCustomerContracts(ctx, tenant, 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列客户合同:%v", err)
 	}
@@ -160,7 +160,7 @@ func TestRelationCataloguesDoNotBleedAcrossObjectKinds(t *testing.T) {
 		t.Fatalf("合同目录串了别的类别:%+v", contracts)
 	}
 
-	agreements, err := catalogue.ListSupplierAgreements(ctx, tenant, 10)
+	agreements, err := rowsOf(catalogue.ListSupplierAgreements(ctx, tenant, 10, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("上列供应商协议:%v", err)
 	}
@@ -193,7 +193,7 @@ func TestRelationCataloguesAreTenantIsolated(t *testing.T) {
 
 	// 他租户的正文不得漏进本租户那一行——两租户共用同一个对象标识与版本号,若正文
 	// 的连接条件漏了租户,这一行会带上别人的规则包而其余字段毫无异样。
-	contracts, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10)
+	contracts, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列本租户合同:%v", err)
 	}
@@ -205,7 +205,7 @@ func TestRelationCataloguesAreTenantIsolated(t *testing.T) {
 			contracts[0].HasContent, len(contracts[0].Bindings))
 	}
 
-	theirContracts, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-2"), 10)
+	theirContracts, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-2"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("上列他租户合同:%v", err)
 	}
@@ -213,7 +213,7 @@ func TestRelationCataloguesAreTenantIsolated(t *testing.T) {
 		t.Fatalf("他租户自己的行不完整:%+v", theirContracts)
 	}
 
-	agreements, err := catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-1"), 10)
+	agreements, err := rowsOf(catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("上列本租户协议:%v", err)
 	}
@@ -221,11 +221,11 @@ func TestRelationCataloguesAreTenantIsolated(t *testing.T) {
 		t.Fatalf("本租户协议上列 %d 行,want 1", len(agreements))
 	}
 
-	emptyContracts, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-9"), 10)
+	emptyContracts, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-9"), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("空租户上列合同:%v", err)
 	}
-	emptyAgreements, err := catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-9"), 10)
+	emptyAgreements, err := rowsOf(catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-9"), 10, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("空租户上列协议:%v", err)
 	}
@@ -242,15 +242,16 @@ func TestRelationCataloguesApplyTheLimitAndRejectNonPositive(t *testing.T) {
 	ctx := t.Context()
 	tenant := pcTenant(t, "tenant-1")
 
+	// 两版同刻发布,按对象标识降序收尾,第一页那一行是 contract-2——多绑定的正文登在它上面。
 	first := effectiveContract(t, "contract-1", "v1", "digest-1")
 	second := effectiveContract(t, "contract-2", "v1", "digest-2")
 	mustSaveVersion(t, transactor, ctx, repository, first)
 	mustSaveVersion(t, transactor, ctx, repository, second)
 	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
-		return repository.SaveCustomerContractContent(txCtx, contractContentOf(t, first, "control-policy-1"))
+		return repository.SaveCustomerContractContent(txCtx, contractContentOf(t, second, "control-policy-1"))
 	}, ports.DeclarationSaved)
 
-	limited, err := catalogue.ListCustomerContracts(ctx, tenant, 1)
+	limited, err := rowsOf(catalogue.ListCustomerContracts(ctx, tenant, 1, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("limit=1 上列合同:%v", err)
 	}
@@ -262,7 +263,7 @@ func TestRelationCataloguesApplyTheLimitAndRejectNonPositive(t *testing.T) {
 		effectiveSupplierAgreement(t, "tenant-1", "agreement-1", "v1", "digest-a1"))
 	mustSaveVersion(t, transactor, ctx, repository,
 		effectiveSupplierAgreement(t, "tenant-1", "agreement-2", "v1", "digest-a2"))
-	limitedAgreements, err := catalogue.ListSupplierAgreements(ctx, tenant, 1)
+	limitedAgreements, err := rowsOf(catalogue.ListSupplierAgreements(ctx, tenant, 1, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("limit=1 上列协议:%v", err)
 	}
@@ -271,10 +272,10 @@ func TestRelationCataloguesApplyTheLimitAndRejectNonPositive(t *testing.T) {
 	}
 
 	for _, limit := range []int{0, -1} {
-		if _, err := catalogue.ListCustomerContracts(ctx, tenant, limit); err == nil {
+		if _, err := rowsOf(catalogue.ListCustomerContracts(ctx, tenant, limit, firstPage(t, ports.CustomerContractPages))); err == nil {
 			t.Fatalf("合同 limit=%d 未拒", limit)
 		}
-		if _, err := catalogue.ListSupplierAgreements(ctx, tenant, limit); err == nil {
+		if _, err := rowsOf(catalogue.ListSupplierAgreements(ctx, tenant, limit, firstPage(t, ports.SupplierAgreementPages))); err == nil {
 			t.Fatalf("协议 limit=%d 未拒", limit)
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对供应商协议目录端点证正文透出（票 party-commercial-context-gaps/03）：壳在正文缺时
@@ -22,21 +23,15 @@ type relationReaderDouble struct {
 }
 
 func (double *relationReaderDouble) ListCustomerContracts(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.CustomerContractCatalogueRow, error) {
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.contracts, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error) {
+	return tenantPage(nil, tenant == double.tenant, double.contracts)
 }
 
 func (double *relationReaderDouble) ListSupplierAgreements(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.SupplierAgreementCatalogueRow, error) {
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.agreements, nil
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
+	return tenantPage(nil, tenant == double.tenant, double.agreements)
 }
 
 func (*relationReaderDouble) FindCustomerContract(

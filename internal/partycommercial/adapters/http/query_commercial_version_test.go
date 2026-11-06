@@ -12,6 +12,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对商业版本按身份读回端点（ADR-0361 决定一）证传输面：在册答 READ 并带与该类别目录行同形的一份；不在册与跨租户
@@ -120,14 +121,20 @@ func (double *versionReaderDouble) FindPreAcceptanceFinancialControlPolicy(
 }
 
 // 列表那一面本端点不碰；替身答空只为满足读口形状。
-func (double *versionReaderDouble) ListServiceProducts(context.Context, domain.TenantID, int) ([]ports.ServiceProductCatalogueRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListServiceProducts(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ServiceProductCatalogueRow], error) {
+	return cataloguepage.Result[ports.ServiceProductCatalogueRow]{}, nil
 }
-func (double *versionReaderDouble) ListCustomerContracts(context.Context, domain.TenantID, int) ([]ports.CustomerContractCatalogueRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListCustomerContracts(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error) {
+	return cataloguepage.Result[ports.CustomerContractCatalogueRow]{}, nil
 }
-func (double *versionReaderDouble) ListSupplierAgreements(context.Context, domain.TenantID, int) ([]ports.SupplierAgreementCatalogueRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListSupplierAgreements(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
+	return cataloguepage.Result[ports.SupplierAgreementCatalogueRow]{}, nil
 }
 func (double *versionReaderDouble) ListAcceptanceRulePackages(context.Context, domain.TenantID, int) ([]ports.AcceptanceRulePackageRow, error) {
 	return nil, nil

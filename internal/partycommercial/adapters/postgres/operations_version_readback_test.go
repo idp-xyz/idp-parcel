@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证商业版本按身份读回（ADR-0361 决定二）：Find… 是 List… 的投影——同一条语句多两格键过滤，
@@ -22,7 +23,7 @@ func TestFindServiceProductIsTheRowTheCatalogueLists(t *testing.T) {
 	mustSaveVersion(t, transactor, ctx, repository, bare)
 	mustSaveServiceProduct(t, transactor, ctx, repository, serviceProductOf(t, withForm))
 
-	listed, err := catalogue.ListServiceProducts(ctx, tenant, 10)
+	listed, err := rowsOf(catalogue.ListServiceProducts(ctx, tenant, 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("上列服务产品：%d 行，err = %v", len(listed), err)
 	}
@@ -55,7 +56,7 @@ func TestFindSupplierAgreementIsTenantIsolatedAndKindBound(t *testing.T) {
 	mustSaveVersion(t, transactor, ctx, repository, product)
 
 	for _, tenant := range []string{"tenant-1", "tenant-2"} {
-		listed, err := catalogue.ListSupplierAgreements(ctx, pcTenant(t, tenant), 10)
+		listed, err := rowsOf(catalogue.ListSupplierAgreements(ctx, pcTenant(t, tenant), 10, firstPage(t, ports.SupplierAgreementPages)))
 		if err != nil || len(listed) != 1 {
 			t.Fatalf("%s 上列协议：%d 行，err = %v", tenant, len(listed), err)
 		}

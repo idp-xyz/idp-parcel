@@ -1421,10 +1421,11 @@ type DeliveryConditionCatalogueRow struct {
 //
 // 租户在方法签名上(ADR-0077 Decision 五):目录是租户内部对象,运营查阅的授权边界
 // 只有租户。Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
-// 空目录如实交回空列表(ADR-0077 Decision 四):空表本身就是内容,上列不形成判断。
+// ListServiceProducts 收端点按 ServiceProductPages 解出的查询对象,答一页(ADR-0144);空目录如实答空页
+// (ADR-0077 Decision 四):空表本身就是内容,上列不形成判断。
 //
 // FindServiceProduct 按身份读回一行（ADR-0361）：身份是（租户、类别、对象、版本），范围不是键——
-// 库上 commercial_version 的主键正是这四格。它是列表的投影而不是第二套转写：同一条语句多两格键
+// 库上 commercial_version 的主键正是这四格。它是列表的投影而不是第二套转写：同一段取数多两格键
 // 过滤，列表上那一行与按身份读回的那一行逐字段相同。不在册与别的租户同形，答 false 不答错——
 // 跨租户不泄露存在性。
 type ServiceProductCatalogueRead interface {
@@ -1432,7 +1433,8 @@ type ServiceProductCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ServiceProductCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ServiceProductCatalogueRow], error)
 	FindServiceProduct(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -1924,21 +1926,24 @@ type SupplierAgreementCatalogueRow struct {
 // 目录查阅」从代码里读不出来,而那正是封闭集要表达的东西(判据同
 // CommercialPolicyCatalogueRead 的「正文表落库时按封闭集扩方法」)。
 //
-// 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
+// 租户在签名上、Limit 非正拒,判据同 ServiceProductCatalogueRead;两个列表方法各收端点按
+// CustomerContractPages、SupplierAgreementPages 解出的查询对象,答一页(ADR-0144),空册答空页。
 //
-// 两类各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，同一条语句
+// 两类各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，同一段取数
 // 多两格键过滤，不在册与别的租户同形。
 type CommercialRelationCatalogueRead interface {
 	ListCustomerContracts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CustomerContractCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomerContractCatalogueRow], error)
 	ListSupplierAgreements(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]SupplierAgreementCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SupplierAgreementCatalogueRow], error)
 	FindCustomerContract(
 		ctx context.Context,
 		tenant domain.TenantID,

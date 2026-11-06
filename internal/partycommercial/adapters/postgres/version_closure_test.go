@@ -13,6 +13,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -472,7 +473,7 @@ func TestASameStartRetirementLeavesOnlyTheSuccessorInTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contracts, err := catalogue.ListCustomerContracts(t.Context(), old.Tenant(), 10)
+	contracts, err := rowsOf(catalogue.ListCustomerContracts(t.Context(), old.Tenant(), 10, firstPage(t, ports.CustomerContractPages)))
 	if err != nil {
 		t.Fatalf("合同目录：%v", err)
 	}
@@ -542,7 +543,7 @@ func TestSupplierAgreementPointReadsFoldTheVersionClosure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed, err := catalogue.ListSupplierAgreements(ctx, v1.Tenant(), 10)
+	listed, err := rowsOf(catalogue.ListSupplierAgreements(ctx, v1.Tenant(), 10, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("目录上列：%v", err)
 	}

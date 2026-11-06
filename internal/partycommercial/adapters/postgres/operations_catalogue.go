@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // OperationsCatalogue 实现两个主数据目录查阅读端口(ADR-0077):服务产品目录与商业
@@ -93,13 +95,17 @@ func firstRow[Row any](rows []Row, err error) (Row, bool, error) {
 // 不同,不钉 collation 就成了「部署库的 locale 决定目录序」(票 admin-write-faces/26 ①)。
 const deliveryConditionColumns = `
 		        delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
-		        delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at,
+		        delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at AS delivery_declared_at,
 		        (SELECT COALESCE(json_agg(method.method_ref ORDER BY method.method_ref COLLATE "C"), '[]'::json)
 		           FROM party_commercial.delivery_condition_method AS method
 		          WHERE method.tenant_id     = delivery.tenant_id
 		            AND method.object_kind   = delivery.object_kind
 		            AND method.object_id     = delivery.object_id
-		            AND method.version_label = delivery.version_label)`
+		            AND method.version_label = delivery.version_label) AS delivery_methods`
+
+// deliveryConditionSelection 是 deliveryConditionColumns 在 listed 里导出的列名，次序同 deliveryConditionScan.targets。
+const deliveryConditionSelection = `recipient_scope_rule_ref, proof_of_delivery_rule_ref,
+		        tightens_object_id, tightens_version_label, delivery_declared_at, delivery_methods`
 
 const deliveryConditionJoin = `
 		   LEFT JOIN party_commercial.delivery_condition AS delivery
@@ -150,97 +156,83 @@ func (scan deliveryConditionScan) row() (*ports.DeliveryConditionCatalogueRow, e
 	return row, nil
 }
 
-// serviceProductRows 上列服务产品版本(壳)并左连接形态册与交付条件册(0030 产品层)。
+// serviceProductListed 上列服务产品版本(壳)并左连接形态册与交付条件册(0030 产品层)。
 //
 // 上列对象是版本壳而不是形态行,理由在 ports.ServiceProductCatalogueRow 上;装载
 // 方向与 LoadForScope 同派(0008 迁移自注:装载由 commercial_version 侧驱动)。
 // 版本册只收已发布之后的状态,读回集外取值即坏数据,上抛不折成空。
 //
-// ListServiceProducts 与 FindServiceProduct 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) serviceProductRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.ServiceProductCatalogueRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// ListServiceProducts 与 FindServiceProduct 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var serviceProductListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               product.form,` + deliveryConditionColumns + `,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.service_product_form AS product
+                 ON product.tenant_id     = version.tenant_id
+                AND product.object_kind   = version.object_kind
+                AND product.object_id     = version.object_id
+                AND product.version_label = version.version_label` + deliveryConditionJoin + `
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.ServiceProductObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+catalogueClosureColumns+`,
-		        product.form,`+deliveryConditionColumns+`
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.service_product_form AS product
-		          ON product.tenant_id     = version.tenant_id
-		         AND product.object_kind   = version.object_kind
-		         AND product.object_id     = version.object_id
-		         AND product.version_label = version.version_label`+deliveryConditionJoin+`
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+// serviceProductRead：q 另覆盖形态，管理台今天检索的就是标识、版本、范围与形态。
+var serviceProductRead = catalogueRead[ports.ServiceProductCatalogueRow]{
+	binding:   ports.ServiceProductPages.MustBind(versionShellColumns("form")),
+	listed:    serviceProductListed,
+	selection: versionShellSelection + `, form, ` + deliveryConditionSelection,
+	scan:      scanServiceProduct,
+	position: func(row ports.ServiceProductCatalogueRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
+}
 
-	catalogueRows := make([]ports.ServiceProductCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.ServiceProductCatalogueRow
-		var status int16
-		var closure catalogueClosureScan
-		var endsAt *time.Time
-		var form *string
-		var delivery deliveryConditionScan
-		targets := append([]any{
-			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
-		targets = append(targets, &form)
-		targets = append(targets, delivery.targets()...)
-		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
-			return nil, err
-		}
-		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		if form != nil {
-			row.Form = *form
-			row.HasForm = true
-		}
-		if row.DeliveryConditions, err = delivery.row(); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		catalogueRows = append(catalogueRows, row)
+func scanServiceProduct(rows pgx.Rows) (ports.ServiceProductCatalogueRow, error) {
+	var row ports.ServiceProductCatalogueRow
+	var status int16
+	var closure catalogueClosureScan
+	var endsAt *time.Time
+	var form *string
+	var delivery deliveryConditionScan
+	targets := append([]any{
+		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+	targets = append(targets, &form)
+	targets = append(targets, delivery.targets()...)
+	if err := rows.Scan(targets...); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	var err error
+	if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+		return row, err
 	}
-	return catalogueRows, nil
+	row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
+	}
+	if form != nil {
+		row.Form = *form
+		row.HasForm = true
+	}
+	if row.DeliveryConditions, err = delivery.row(); err != nil {
+		return row, err
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListServiceProducts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ServiceProductCatalogueRow, error) {
-	return catalogue.serviceProductRows(ctx, "list service products", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ServiceProductCatalogueRow], error) {
+	return serviceProductRead.page(ctx, catalogue.db, "list service products", limit, query,
+		tenant.String(), uint8(domain.ServiceProductObject))
 }
 
 func (catalogue *OperationsCatalogue) FindServiceProduct(
@@ -249,7 +241,8 @@ func (catalogue *OperationsCatalogue) FindServiceProduct(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.ServiceProductCatalogueRow, bool, error) {
-	return firstRow(catalogue.serviceProductRows(ctx, "find service product", tenant, 1, keyOf(objectID, version)))
+	return serviceProductRead.find(ctx, catalogue.db, "find service product", keyOf(objectID, version),
+		tenant.String(), uint8(domain.ServiceProductObject))
 }
 
 // acceptanceRulePackageRows 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
@@ -742,7 +735,7 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 	return declarationRows, nil
 }
 
-// customerContractRows 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
+// customerContractListed 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
 //
 // 四张表一条语句取回,不分两次:ReadExecutor 不保证两条语句同一快照,分次会拼出
 // 从未同时存在的壳/正文/绑定组合(与 ListAcceptanceRulePackages 同一条理由)。
@@ -752,132 +745,117 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 // 读出来只会是一份自相矛盾的证据。交付条件父表按主键挂在壳上(与正文各自可缺,是两层),
 // 方式子表走相关子查询——与约定行并列 LEFT JOIN 会互相做笛卡尔积。
 //
-// ListCustomerContracts 与 FindCustomerContract 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) customerContractRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.CustomerContractCatalogueRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// ListCustomerContracts 与 FindCustomerContract 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var customerContractListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               content.rule_package_id, content.customer_account_id, content.declared_at AS content_declared_at,
+               COALESCE(
+                   json_agg(
+                       json_build_object(
+                           'chargeScope', binding.charge_scope_ref,
+                           'policyId',    binding.policy_id,
+                           'basis',       binding.inapplicability_basis
+                       )
+                       ORDER BY binding.charge_scope_ref
+                   ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
+                   '[]'::json
+               ) AS bindings,` + deliveryConditionColumns + `,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.customer_contract_content AS content
+                 ON content.tenant_id     = version.tenant_id
+                AND content.object_kind   = version.object_kind
+                AND content.object_id     = version.object_id
+                AND content.version_label = version.version_label
+          LEFT JOIN party_commercial.customer_contract_control_binding AS binding
+                 ON binding.tenant_id     = content.tenant_id
+                AND binding.object_kind   = content.object_kind
+                AND binding.object_id     = content.object_id
+                AND binding.version_label = content.version_label` + deliveryConditionJoin + `
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+         GROUP BY version.tenant_id, version.object_kind,
+                  version.object_id, version.version_label, version.scope_ref, version.status,
+                  version.effective_starts_at, version.effective_ends_at, version.published_at,
+                  content.rule_package_id, content.customer_account_id, content.declared_at,
+                  latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at,
+                  delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
+                  delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
+                  delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.CustomerContractObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+catalogueClosureColumns+`,
-		        content.rule_package_id, content.customer_account_id, content.declared_at,
-		        COALESCE(
-		            json_agg(
-		                json_build_object(
-		                    'chargeScope', binding.charge_scope_ref,
-		                    'policyId',    binding.policy_id,
-		                    'basis',       binding.inapplicability_basis
-		                )
-		                ORDER BY binding.charge_scope_ref
-		            ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
-		            '[]'::json
-		        ),`+deliveryConditionColumns+`
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.customer_contract_content AS content
-		          ON content.tenant_id     = version.tenant_id
-		         AND content.object_kind   = version.object_kind
-		         AND content.object_id     = version.object_id
-		         AND content.version_label = version.version_label
-		   LEFT JOIN party_commercial.customer_contract_control_binding AS binding
-		          ON binding.tenant_id     = content.tenant_id
-		         AND binding.object_kind   = content.object_kind
-		         AND binding.object_id     = content.object_id
-		         AND binding.version_label = content.version_label`+deliveryConditionJoin+`
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  GROUP BY version.tenant_id, version.object_kind,
-		           version.object_id, version.version_label, version.scope_ref, version.status,
-		           version.effective_starts_at, version.effective_ends_at, version.published_at,
-		           content.rule_package_id, content.customer_account_id, content.declared_at,
-		           latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at,
-		           delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
-		           delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
-		           delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+// customerContractRead：q 另覆盖规则包与客户账户，管理台今天检索的就是这几格。
+var customerContractRead = catalogueRead[ports.CustomerContractCatalogueRow]{
+	binding: ports.CustomerContractPages.MustBind(versionShellColumns("rule_package_id", "customer_account_id")),
+	listed:  customerContractListed,
+	selection: versionShellSelection + `, rule_package_id, customer_account_id, content_declared_at, bindings, ` +
+		deliveryConditionSelection,
+	scan: scanCustomerContract,
+	position: func(row ports.CustomerContractCatalogueRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
+}
 
-	contractRows := make([]ports.CustomerContractCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.CustomerContractCatalogueRow
-		var status int16
-		var closure catalogueClosureScan
-		var endsAt *time.Time
-		var rulePackage *string
-		var customerAccount *string
-		var declaredAt *time.Time
-		var bindingsJSON []byte
-		var delivery deliveryConditionScan
-		targets := append([]any{
-			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
-		targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
-		targets = append(targets, delivery.targets()...)
-		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
-			return nil, err
-		}
-		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		// rule_package_id 在正文表上 NOT NULL,它的在场即正文行的在场——不必再多取
-		// 一列去问「有没有正文」。
-		if rulePackage != nil {
-			row.RulePackageID = *rulePackage
-			row.HasContent = true
-		}
-		// customer_account_id 在 0037 之前写下的旧行上是 NULL(没有这一格可补),如实交回空串。
-		if customerAccount != nil {
-			row.CustomerAccountID = *customerAccount
-		}
-		if declaredAt != nil {
-			row.DeclaredAt = *declaredAt
-		}
-		bindings, err := controlBindingRowsFromJSON(bindingsJSON)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		row.Bindings = bindings
-		if row.DeliveryConditions, err = delivery.row(); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		contractRows = append(contractRows, row)
+func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, error) {
+	var row ports.CustomerContractCatalogueRow
+	var status int16
+	var closure catalogueClosureScan
+	var endsAt *time.Time
+	var rulePackage *string
+	var customerAccount *string
+	var declaredAt *time.Time
+	var bindingsJSON []byte
+	var delivery deliveryConditionScan
+	targets := append([]any{
+		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+	targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
+	targets = append(targets, delivery.targets()...)
+	if err := rows.Scan(targets...); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	var err error
+	if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+		return row, err
 	}
-	return contractRows, nil
+	row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
+	}
+	// rule_package_id 在正文表上 NOT NULL,它的在场即正文行的在场——不必再多取
+	// 一列去问「有没有正文」。
+	if rulePackage != nil {
+		row.RulePackageID = *rulePackage
+		row.HasContent = true
+	}
+	// customer_account_id 在 0037 之前写下的旧行上是 NULL(没有这一格可补),如实交回空串。
+	if customerAccount != nil {
+		row.CustomerAccountID = *customerAccount
+	}
+	if declaredAt != nil {
+		row.DeclaredAt = *declaredAt
+	}
+	if row.Bindings, err = controlBindingRowsFromJSON(bindingsJSON); err != nil {
+		return row, err
+	}
+	if row.DeliveryConditions, err = delivery.row(); err != nil {
+		return row, err
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.CustomerContractCatalogueRow, error) {
-	return catalogue.customerContractRows(ctx, "list customer contracts", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error) {
+	return customerContractRead.page(ctx, catalogue.db, "list customer contracts", limit, query,
+		tenant.String(), uint8(domain.CustomerContractObject))
 }
 
 func (catalogue *OperationsCatalogue) FindCustomerContract(
@@ -886,7 +864,8 @@ func (catalogue *OperationsCatalogue) FindCustomerContract(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.CustomerContractCatalogueRow, bool, error) {
-	return firstRow(catalogue.customerContractRows(ctx, "find customer contract", tenant, 1, keyOf(objectID, version)))
+	return customerContractRead.find(ctx, catalogue.db, "find customer contract", keyOf(objectID, version),
+		tenant.String(), uint8(domain.CustomerContractObject))
 }
 
 type controlBindingDocument struct {
@@ -1105,11 +1084,20 @@ func (closure *catalogueClosureScan) echo() (cutAt time.Time, hasCut bool, retir
 	return cutAt, hasCut, retiredAt, successor
 }
 
-// catalogueStatusWord 把版本行的状态列折成目录上的那一格：退役了就是`已退役`，与整册装载施加退役之后的位置相同。
+// catalogueStatusWord 是 versionStatusWord 带错误前缀的写法，给还按 operation 自己包错误的读面用。
 func catalogueStatusWord(operation string, status int16, retired bool) (string, error) {
+	word, err := versionStatusWord(status, retired)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", operation, err)
+	}
+	return word, nil
+}
+
+// versionStatusWord 把版本行的状态列折成目录上的那一格：退役了就是`已退役`，与整册装载施加退役之后的位置相同。
+func versionStatusWord(status int16, retired bool) (string, error) {
 	word := domain.CommercialVersionStatus(status).String()
 	if word == "" {
-		return "", fmt.Errorf("%s: 版本状态 %d 不在封闭集内", operation, status)
+		return "", fmt.Errorf("版本状态 %d 不在封闭集内", status)
 	}
 	if retired {
 		return domain.CommercialVersionRetired.String(), nil
@@ -1117,123 +1105,140 @@ func catalogueStatusWord(operation string, status int16, retired bool) (string, 
 	return word, nil
 }
 
-// supplierAgreementRows 上列供应商协议版本壳,正文(0021)左连接。
+// versionStatusCode 是版本壳各册 status 维落的那一列，与 versionStatusWord 同一个折法：版本行的状态列随发布固定、退役另册
+// 保存，目录行上那一格是折进退役之后的位置。筛选按同一个位置比，否则筛 RETIRED 筛不出已退役的版本、筛别的状态反倒混进
+// 它们。要在 versionClosureJoins("version") 之后用。
+var versionStatusCode = fmt.Sprintf(
+	"CASE WHEN retirement.retired_at IS NOT NULL THEN %d ELSE version.status END", domain.CommercialVersionRetired)
+
+// versionShellSelection 是版本壳各册在 listed 里导出、取页与读回打头的那几列：版本行七列加 catalogueClosureColumns。
+const versionShellSelection = `object_id, version_label, scope_ref, status,
+		        effective_starts_at, effective_ends_at, published_at,
+		        corrected_ends_at, successor_label, retired_at`
+
+// versionShellColumns 是版本壳各册共用的落列（声明在 ports 的 versionShellPages）：排序与标识落在版本行上，status 落在
+// versionStatusCode 导出的 status_code 上；q 覆盖对象、版本与范围，extra 是各册另覆盖的正文列。
+func versionShellColumns(extra ...string) cataloguepage.Columns {
+	return cataloguepage.Columns{
+		Sorts: map[string]string{
+			"publishedAt": "published_at", "effectiveStartsAt": "effective_starts_at", "objectId": "object_id",
+		},
+		Identity: []string{"object_id", "version_label"},
+		Filters:  map[string]string{"status": "status_code"},
+		Codes:    map[string]func(string) (int64, error){"status": cataloguepage.Code[domain.CommercialVersionStatus]},
+		Keyword:  append([]string{"object_id", "version_label", "scope_ref"}, extra...),
+	}
+}
+
+// versionShellPosition 给版本壳各册编本页末行的位置，三个可排维在各册行上同名同义。
+func versionShellPosition(sortField, objectID, version string, publishedAt, effectiveStartsAt time.Time) cataloguepage.Position {
+	value := objectID
+	switch sortField {
+	case "publishedAt":
+		value = cataloguepage.FormatInstant(publishedAt)
+	case "effectiveStartsAt":
+		value = cataloguepage.FormatInstant(effectiveStartsAt)
+	}
+	return cataloguepage.Position{Value: value, Identity: []string{objectID, version}}
+}
+
+// supplierAgreementListed 上列供应商协议版本壳,正文(0021)左连接。
 //
 // 装载方向与 ListCustomerContracts 同派:版本侧驱动,正文左连接——壳可先入册、正文随发布
 // 登记,只列正文行会让未登正文的已发布协议从目录上消失。方向不在行上:领域恒为 BUY、库上
 // 不成列。
 //
-// ListSupplierAgreements 与 FindSupplierAgreement 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) supplierAgreementRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.SupplierAgreementCatalogueRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// ListSupplierAgreements 与 FindSupplierAgreement 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var supplierAgreementListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               content.supplier_party_id, content.legal_entity_ref, content.purchase_plan_ref,
+               content.agreement_scope_ref, content.effective_starts_at AS agreement_effective_starts_at,
+               content.effective_ends_at AS agreement_effective_ends_at,
+               content.registered_at AS agreement_registered_at,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.supplier_agreement AS content
+                 ON content.tenant_id     = version.tenant_id
+                AND content.object_kind   = version.object_kind
+                AND content.object_id     = version.object_id
+                AND content.version_label = version.version_label
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.SupplierAgreementObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        content.supplier_party_id, content.legal_entity_ref, content.purchase_plan_ref,
-		        content.agreement_scope_ref, content.effective_starts_at, content.effective_ends_at,
-		        content.registered_at,
-		        latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.supplier_agreement AS content
-		          ON content.tenant_id     = version.tenant_id
-		         AND content.object_kind   = version.object_kind
-		         AND content.object_id     = version.object_id
-		         AND content.version_label = version.version_label
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+// supplierAgreementRead：q 另覆盖正文四格（供应商、法人、价格表、协议范围），管理台今天检索的是转写后的各格。
+var supplierAgreementRead = catalogueRead[ports.SupplierAgreementCatalogueRow]{
+	binding: ports.SupplierAgreementPages.MustBind(versionShellColumns(
+		"supplier_party_id", "legal_entity_ref", "purchase_plan_ref", "agreement_scope_ref")),
+	listed: supplierAgreementListed,
+	selection: versionShellSelection + `, supplier_party_id, legal_entity_ref, purchase_plan_ref,
+		        agreement_scope_ref, agreement_effective_starts_at, agreement_effective_ends_at, agreement_registered_at`,
+	scan: scanSupplierAgreement,
+	position: func(row ports.SupplierAgreementCatalogueRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
+}
 
-	agreementRows := make([]ports.SupplierAgreementCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.SupplierAgreementCatalogueRow
-		var status int16
-		var endsAt *time.Time
-		var supplier, legalEntity, purchasePlan, agreementScope *string
-		var agreementStartsAt, agreementEndsAt, registeredAt *time.Time
-		var cutAt, retiredAt *time.Time
-		var successor *string
-		if err := rows.Scan(
-			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
-			&supplier, &legalEntity, &purchasePlan, &agreementScope,
-			&agreementStartsAt, &agreementEndsAt, &registeredAt,
-			&cutAt, &successor, &retiredAt,
-		); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if row.Status, err = catalogueStatusWord(operation, status, retiredAt != nil); err != nil {
-			return nil, err
-		}
-		// 收尾照版本点读的口径折进来（ADR-0233 决定五）：退役改状态并回显后继与时刻，截止回显最新一条更正的终点；原区间
-		// 照旧是那一格，不拿收尾覆盖它。
-		if cutAt != nil {
-			row.SelectionEndsAt = *cutAt
-			row.HasSelectionCut = true
-		}
-		if retiredAt != nil && successor != nil {
-			row.RetiredAt = *retiredAt
-			row.Successor = *successor
-		}
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		// supplier_party_id 在正文表上 NOT NULL,它的在场即正文行的在场;其余正文列同为
-		// NOT NULL(除区间终点),到这里非空是表形保证的,缺一列即坏数据。
-		if supplier != nil {
-			if legalEntity == nil || purchasePlan == nil || agreementScope == nil ||
-				agreementStartsAt == nil || registeredAt == nil {
-				return nil, fmt.Errorf("%s: %s/%s 的正文行不完整", operation,
-					row.ObjectID, row.VersionLabel)
-			}
-			row.HasContent = true
-			row.Supplier = *supplier
-			row.LegalEntity = *legalEntity
-			row.PurchasePlan = *purchasePlan
-			row.AgreementScope = *agreementScope
-			row.AgreementEffectiveStartsAt = *agreementStartsAt
-			row.RegisteredAt = *registeredAt
-			if agreementEndsAt != nil {
-				row.AgreementEffectiveEndsAt = *agreementEndsAt
-				row.HasAgreementEffectiveEnd = true
-			}
-		}
-		agreementRows = append(agreementRows, row)
+func scanSupplierAgreement(rows pgx.Rows) (ports.SupplierAgreementCatalogueRow, error) {
+	var row ports.SupplierAgreementCatalogueRow
+	var status int16
+	var closure catalogueClosureScan
+	var endsAt *time.Time
+	var supplier, legalEntity, purchasePlan, agreementScope *string
+	var agreementStartsAt, agreementEndsAt, registeredAt *time.Time
+	targets := append([]any{
+		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+	targets = append(targets,
+		&supplier, &legalEntity, &purchasePlan, &agreementScope,
+		&agreementStartsAt, &agreementEndsAt, &registeredAt)
+	if err := rows.Scan(targets...); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	var err error
+	if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+		return row, err
 	}
-	return agreementRows, nil
+	// 收尾照版本点读的口径折进来（ADR-0233 决定五）：退役改状态并回显后继与时刻，截止回显最新一条更正的终点；原区间
+	// 照旧是那一格，不拿收尾覆盖它。
+	row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
+	}
+	// supplier_party_id 在正文表上 NOT NULL,它的在场即正文行的在场;其余正文列同为
+	// NOT NULL(除区间终点),到这里非空是表形保证的,缺一列即坏数据。
+	if supplier != nil {
+		if legalEntity == nil || purchasePlan == nil || agreementScope == nil ||
+			agreementStartsAt == nil || registeredAt == nil {
+			return row, fmt.Errorf("%s/%s 的正文行不完整", row.ObjectID, row.VersionLabel)
+		}
+		row.HasContent = true
+		row.Supplier = *supplier
+		row.LegalEntity = *legalEntity
+		row.PurchasePlan = *purchasePlan
+		row.AgreementScope = *agreementScope
+		row.AgreementEffectiveStartsAt = *agreementStartsAt
+		row.RegisteredAt = *registeredAt
+		if agreementEndsAt != nil {
+			row.AgreementEffectiveEndsAt = *agreementEndsAt
+			row.HasAgreementEffectiveEnd = true
+		}
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.SupplierAgreementCatalogueRow, error) {
-	return catalogue.supplierAgreementRows(ctx, "list supplier agreements", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
+	return supplierAgreementRead.page(ctx, catalogue.db, "list supplier agreements", limit, query,
+		tenant.String(), uint8(domain.SupplierAgreementObject))
 }
 
 func (catalogue *OperationsCatalogue) FindSupplierAgreement(
@@ -1242,5 +1247,6 @@ func (catalogue *OperationsCatalogue) FindSupplierAgreement(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.SupplierAgreementCatalogueRow, bool, error) {
-	return firstRow(catalogue.supplierAgreementRows(ctx, "find supplier agreement", tenant, 1, keyOf(objectID, version)))
+	return supplierAgreementRead.find(ctx, catalogue.db, "find supplier agreement", keyOf(objectID, version),
+		tenant.String(), uint8(domain.SupplierAgreementObject))
 }
