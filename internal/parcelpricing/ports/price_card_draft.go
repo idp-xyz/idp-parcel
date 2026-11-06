@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 价卡草稿册的端口（ADR-0101 决定三；票 price-card-import/03）。单立一个文件而不进 price_card_catalog.go：草稿不是
@@ -46,10 +47,16 @@ type PriceCardDraftRegister interface {
 	SubmitDraft(ctx context.Context, draft domain.PriceCardDraft) (PriceCardDraftSubmitOutcome, error)
 }
 
-// PriceCardDraftRead 是草稿册的查阅读口：按租户列出，status 为零值即四格都列，否则只列那一格。读回经领域重建门整图
-// 重验；limit 必须为正，每页多大由接入面定（判据同目录读口）。
+// PriceCardDraftRead 是草稿册的查阅读口：按租户列出，只列哪几格状态由查询对象的 status 筛选维说，不给即四格都列。读回经
+// 领域重建门整图重验；limit 必须为正，每页多大由接入面定（判据同目录读口）。翻页、排序与筛选照 ADR-0144（票
+// catalogue-read-pagination-rollout/04）：查询对象由端点按 PriceCardDraftPages 解出，读口答「本页草稿 + 下一游标 + 总数」。
 type PriceCardDraftRead interface {
-	ListPriceCardDrafts(ctx context.Context, tenant domain.TenantID, status domain.PriceCardDraftStatus, limit int) ([]domain.PriceCardDraft, error)
+	ListPriceCardDrafts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.PriceCardDraft], error)
 }
 
 // PriceCardDraftAdvanceOutcome 是推进落点的封闭代数（票 price-card-import/04）。

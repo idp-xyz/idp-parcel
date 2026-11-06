@@ -1,7 +1,7 @@
 # 04 parcel-pricing 各册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 parcel-pricing `0015`（进 main 时按 tip 重核）
+Status: in-progress——分支 `cursor/crpr-04-pricing`，基 `d48c5b130`；迁移编号预留 parcel-pricing `0015`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/parcelpricing/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/parcel_pricing` 的一条新迁移（索引）。

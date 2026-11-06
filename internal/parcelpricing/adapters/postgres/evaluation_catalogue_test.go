@@ -10,6 +10,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -74,7 +75,7 @@ func TestEvaluationCatalogueTranscribesTheColumnFace(t *testing.T) {
 	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-002", "tenant-a", "UNRATABLE", base.Add(time.Hour))
 	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-THEIRS", "tenant-b", "COMPLETED", base.Add(2*time.Hour))
 
-	rows, err := catalogue.ListEvaluations(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListEvaluations(ctx, tenant, 10, firstPage(t, ports.EvaluationPages)))
 	if err != nil {
 		t.Fatalf("上列评价：%v", err)
 	}
@@ -100,7 +101,8 @@ func TestEvaluationCatalogueTranscribesTheColumnFace(t *testing.T) {
 		t.Fatalf("失败态没照登透出：%+v", unratable)
 	}
 
-	empty, err := catalogue.ListEvaluations(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10)
+	empty, err := rowsOf(catalogue.ListEvaluations(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+		firstPage(t, ports.EvaluationPages)))
 	if err != nil {
 		t.Fatalf("空租户上列：%v", err)
 	}
@@ -120,7 +122,8 @@ func TestEvaluationCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.T) {
 		insertEvaluationRow(t, pool, ctx, id, "tenant-a", "PENDING", base.Add(time.Duration(i)*time.Minute))
 	}
 
-	rows, err := catalogue.ListEvaluations(ctx, tenant, 2)
+	everything := firstPage(t, ports.EvaluationPages)
+	rows, err := rowsOf(catalogue.ListEvaluations(ctx, tenant, 2, everything))
 	if err != nil {
 		t.Fatalf("带 limit 上列：%v", err)
 	}
@@ -128,10 +131,10 @@ func TestEvaluationCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.T) {
 		t.Fatalf("limit 2 交回 %d 行", len(rows))
 	}
 
-	if _, err := catalogue.ListEvaluations(ctx, tenant, 0); err == nil {
+	if _, err := catalogue.ListEvaluations(ctx, tenant, 0, everything); err == nil {
 		t.Fatal("评价册 limit 0 未被拒")
 	}
-	if _, err := catalogue.ListEvaluations(ctx, tenant, -1); err == nil {
+	if _, err := catalogue.ListEvaluations(ctx, tenant, -1, everything); err == nil {
 		t.Fatal("评价册 limit -1 未被拒")
 	}
 }

@@ -6,11 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 const priceCardDraftViewsTarget = "/pricing-price-card-draft-views"
@@ -25,22 +28,31 @@ func (double priceCardDraftQueryIntakeDouble) IntakePriceCardDraftQuery(context.
 }
 
 type priceCardDraftReaderDouble struct {
+	pageProbe
 	drafts []domain.PriceCardDraft
 	err    error
 	tenant domain.TenantID
-	status domain.PriceCardDraftStatus
-	limit  int
 }
 
-func (double *priceCardDraftReaderDouble) ListPriceCardDrafts(_ context.Context, tenant domain.TenantID, status domain.PriceCardDraftStatus, limit int) ([]domain.PriceCardDraft, error) {
-	double.tenant, double.status, double.limit = tenant, status, limit
-	return double.drafts, double.err
+func (double *priceCardDraftReaderDouble) ListPriceCardDrafts(
+	_ context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.PriceCardDraft], error) {
+	double.record(limit, query)
+	double.tenant = tenant
+	return cataloguepage.Result[domain.PriceCardDraft]{Rows: double.drafts, Next: double.next, Total: double.total}, double.err
 }
 
 func getPriceCardDrafts(intake pricinghttp.PriceCardDraftQueryIntake, reader pricinghttp.PriceCardDraftReader) *httptest.ResponseRecorder {
+	return requestPriceCardDrafts(intake, reader, priceCardDraftViewsTarget)
+}
+
+func requestPriceCardDrafts(intake pricinghttp.PriceCardDraftQueryIntake, reader pricinghttp.PriceCardDraftReader, target string) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	pricinghttp.NewQueryPriceCardDraftsEndpoint(intake, reader).
-		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, priceCardDraftViewsTarget, nil))
+		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
 	return recorder
 }
 
@@ -63,7 +75,7 @@ func approvedDraft(t *testing.T, validated domain.PriceCardDraft) domain.PriceCa
 }
 
 // 一格一行照实透出：状态、源文件身份、录入者与批准者并排；已校验起带内容概要，`草稿`带逐格问题；读口拿到的是
-// Intake 译出的租户、状态与页大小。
+// Intake 译出的租户与页大小，查询串空着就是不带筛选的第一页。
 func TestPriceCardDraftViewsListEachDraftAsItStands(t *testing.T) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")
 	if err != nil {
@@ -73,10 +85,10 @@ func TestPriceCardDraftViewsListEachDraftAsItStands(t *testing.T) {
 	_, withProblems := problemDraft(t)
 	reader := &priceCardDraftReaderDouble{drafts: []domain.PriceCardDraft{approvedDraft(t, validated), withProblems}}
 	recorder := getPriceCardDrafts(priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{
-		Tenant: tenant, Status: domain.PriceCardDraftStatusInvalid, Limit: 25,
+		Tenant: tenant, Limit: 25,
 	}}, reader)
 
-	if recorder.Code != http.StatusOK || reader.tenant != tenant || reader.status != domain.PriceCardDraftStatusInvalid || reader.limit != 25 {
+	if recorder.Code != http.StatusOK || reader.tenant != tenant || reader.limit != 25 || len(reader.query.Filters) != 0 {
 		t.Fatalf("status = %d reader = %+v", recorder.Code, reader)
 	}
 	var body struct {
@@ -119,15 +131,18 @@ func TestPriceCardDraftViewsListEachDraftAsItStands(t *testing.T) {
 	}
 }
 
-// 空册是内容不是未配置：答空数组。
+// 空册是内容不是未配置：答空数组，page 答总数 0、没有下一页。
 func TestPriceCardDraftViewsAnswerAnEmptyRegisterAsAnEmptyList(t *testing.T) {
-	recorder := getPriceCardDrafts(priceCardDraftQueryIntakeDouble{}, &priceCardDraftReaderDouble{})
+	recorder := getPriceCardDrafts(priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{Limit: 25}}, &priceCardDraftReaderDouble{})
 	var body map[string]json.RawMessage
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
 	if recorder.Code != http.StatusOK || string(body["drafts"]) != "[]" {
 		t.Fatalf("status = %d body = %s", recorder.Code, recorder.Body)
+	}
+	if page := pageOf(t, recorder); string(page["total"]) != "0" || string(page["next"]) != "null" {
+		t.Fatalf("空册的 page = %s", recorder.Body)
 	}
 }
 
@@ -152,32 +167,62 @@ func TestPriceCardDraftViewsTransportAnswers(t *testing.T) {
 	}
 }
 
-// 查询串只认 status 一格、至多一个值、取四格之一；缺即四格都列。别的键一律不收：租户不从请求里来，页大小由接入面定。
-func TestDecodePriceCardDraftQueryIsStrict(t *testing.T) {
-	for target, want := range map[string]domain.PriceCardDraftStatus{
-		priceCardDraftViewsTarget:                      domain.PriceCardDraftStatusInvalid,
-		priceCardDraftViewsTarget + "?status=DRAFT":    domain.PriceCardDraftStatusDraft,
-		priceCardDraftViewsTarget + "?status=APPROVED": domain.PriceCardDraftStatusApproved,
-	} {
-		status, err := pricinghttp.DecodePriceCardDraftQuery(httptest.NewRequest(http.MethodGet, target, nil))
-		if err != nil || status != want {
-			t.Errorf("%s: status = %v err = %v", target, status, err)
-		}
+// Covers: ADR-0144 决定四、五、六——状态筛选从 Intake 挪进册声明后可以重复（维内取或），与排序、检索词一起解成查询对象
+// 原样交给读口；答复带 page（size 取 Intake 给的页大小，next 与 total 原样带出）。
+func TestPriceCardDraftViewsPassTheDecodedQueryAndCarryThePage(t *testing.T) {
+	reader := &priceCardDraftReaderDouble{pageProbe: pageProbe{next: "SYN-cursor", total: 7}}
+	recorder := requestPriceCardDrafts(priceCardDraftQueryIntakeDouble{query: pricinghttp.PriceCardDraftQuery{Limit: 50}}, reader,
+		priceCardDraftViewsTarget+"?status=VALIDATED&status=DRAFT&q=SYN-CARD&sort=submittedAt")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d；body = %s", recorder.Code, recorder.Body)
 	}
-	for _, target := range []string{
-		priceCardDraftViewsTarget + "?status=draft",
-		priceCardDraftViewsTarget + "?status=",
-		priceCardDraftViewsTarget + "?status=DRAFT&status=VALIDATED",
-		priceCardDraftViewsTarget + "?tenant=SYN-TENANT-02",
-		priceCardDraftViewsTarget + "?status=DRAFT&limit=1000",
-	} {
-		if _, err := pricinghttp.DecodePriceCardDraftQuery(httptest.NewRequest(http.MethodGet, target, nil)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
-			t.Errorf("%s: err = %v, want ErrMalformedRequest", target, err)
-		}
+	page := pageOf(t, recorder)
+	if string(page["size"]) != "50" || string(page["next"]) != `"SYN-cursor"` || string(page["total"]) != "7" {
+		t.Fatalf("page 不对：%s", recorder.Body.Bytes())
+	}
+	if reader.query.Sort != (cataloguepage.Sort{Field: "submittedAt"}) || reader.query.Keyword != "SYN-CARD" ||
+		!reflect.DeepEqual(reader.query.Filters["status"], []string{"DRAFT", "VALIDATED"}) {
+		t.Fatalf("读口收到的查询不对：%+v", reader.query)
 	}
 }
 
-// 操作者渠道：租户取认证出的身份，状态取查询串，页大小由接入面定；没令牌答凭据被拒，坏查询串答请求形状不对。
+// Covers: ADR-0144 决定一、四——原先 Intake 里那道封闭解码挪进册声明后照样封闭：小写或空的状态词、自报租户、自定页大小、
+// 集外排序维、解不开的游标与坏转义都答 400 带理由散文，读口与 Intake 都不被走到；查询参数先于 Intake，渠道未配置时写错
+// 参数也先答 400，写对了才答 403。
+func TestPriceCardDraftViewsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
+	for name, query := range map[string]string{
+		"小写状态词":  "?status=draft",
+		"空状态词":   "?status=",
+		"自报租户":   "?tenant=SYN-TENANT-02",
+		"自定页大小":  "?status=DRAFT&limit=1000",
+		"集外排序维":  "?sort=planId",
+		"解不开的游标": "?after=SYN-not-a-cursor",
+		"坏转义":    "?q=%zz",
+	} {
+		t.Run(name, func(t *testing.T) {
+			reader := &priceCardDraftReaderDouble{}
+			assertPageQueryRefused(t, requestPriceCardDrafts(
+				priceCardDraftQueryIntakeDouble{err: errors.New("Intake 不该被走到")}, reader, priceCardDraftViewsTarget+query))
+			if reader.called {
+				t.Fatal("坏请求不该走到读口")
+			}
+		})
+	}
+
+	refused := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{},
+		priceCardDraftViewsTarget+"?status=ARCHIVED")
+	if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "status") {
+		t.Fatalf("理由散文应点到那一格：%q", detail)
+	}
+	unconfigured := requestPriceCardDrafts(pricinghttp.UnconfiguredIntake{}, &priceCardDraftReaderDouble{},
+		priceCardDraftViewsTarget+"?status=PUBLISHED")
+	if unconfigured.Code != http.StatusForbidden {
+		t.Fatalf("参数写对、渠道未配置 status = %d, want 403", unconfigured.Code)
+	}
+}
+
+// 操作者渠道：租户取认证出的身份，页大小由接入面定；没令牌答凭据被拒。查询串不归 Intake：带不带、带了什么它都不看，
+// 自报租户在端点按声明解码时就被拒了。
 func TestOperatorIntakeTranslatesTheDraftQuery(t *testing.T) {
 	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{})
 	if err != nil {
@@ -191,16 +236,19 @@ func TestOperatorIntakeTranslatesTheDraftQuery(t *testing.T) {
 		return built
 	}
 	query, err := intake.IntakePriceCardDraftQuery(context.Background(), request("token", priceCardDraftViewsTarget+"?status=VALIDATED"))
-	if err != nil || query.Tenant.String() != "SYN-TENANT-01" || query.Status != domain.PriceCardDraftStatusValidated || query.Limit < 1 {
+	if err != nil || query.Tenant.String() != "SYN-TENANT-01" || query.Limit < 1 {
 		t.Fatalf("query = %+v err = %v", query, err)
 	}
 	if _, err := intake.IntakePriceCardDraftQuery(context.Background(), request("", priceCardDraftViewsTarget)); !errors.Is(err, pricinghttp.ErrOperatorCredentialRejected) {
 		t.Fatalf("no token: err = %v", err)
 	}
-	if _, err := intake.IntakePriceCardDraftQuery(context.Background(), request("token", priceCardDraftViewsTarget+"?tenant=SYN-TENANT-02")); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
-		t.Fatalf("self-reported tenant: err = %v", err)
-	}
 	recorder := httptest.NewRecorder()
+	pricinghttp.NewQueryPriceCardDraftsEndpoint(intake, &priceCardDraftReaderDouble{}).
+		ServeHTTP(recorder, request("token", priceCardDraftViewsTarget+"?tenant=SYN-TENANT-02"))
+	if detail := assertPageQueryRefused(t, recorder); !strings.Contains(detail, "tenant") {
+		t.Fatalf("self-reported tenant: detail = %q", detail)
+	}
+	recorder = httptest.NewRecorder()
 	pricinghttp.NewQueryPriceCardDraftsEndpoint(intake, &priceCardDraftReaderDouble{}).ServeHTTP(recorder, request("", priceCardDraftViewsTarget))
 	if recorder.Code != http.StatusUnauthorized || errorCode(t, recorder) != "OPERATOR_CREDENTIAL_REJECTED" {
 		t.Fatalf("endpoint without token: status = %d body = %s", recorder.Code, recorder.Body)

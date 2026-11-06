@@ -779,16 +779,18 @@ func (unwiredPricingCatalogue) ListPriceCards(
 	context.Context,
 	pricingdomain.TenantID,
 	int,
-) ([]pricingports.PriceCardCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingports.PriceCardCatalogueRow], error) {
+	return cataloguepage.Result[pricingports.PriceCardCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredPricingCatalogue) ListReferenceSeries(
 	context.Context,
 	pricingdomain.TenantID,
 	int,
-) ([]pricingports.ReferenceSeriesCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingports.ReferenceSeriesCatalogueRow], error) {
+	return cataloguepage.Result[pricingports.ReferenceSeriesCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredPriceCardContent 是价卡内容读口的占位。不并进 unwiredPricingCatalogue：生产装配点上它是另一只适配器
@@ -822,8 +824,9 @@ func (unwiredReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 	pricingdomain.TenantID,
 	time.Time,
 	int,
-) ([]pricingports.ReferenceSeriesCoverageRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingports.ReferenceSeriesCoverageRow], error) {
+	return cataloguepage.Result[pricingports.ReferenceSeriesCoverageRow]{}, errOrchestrationNotWired
 }
 
 // unwiredPendingSeriesEvaluations 是被挂起评价联动读口的占位（ADR-0105 Decision 五）。独立成型的理由同上：
@@ -847,8 +850,9 @@ func (unwiredPricingEvaluations) ListEvaluations(
 	context.Context,
 	pricingdomain.TenantID,
 	int,
-) ([]pricingports.EvaluationCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingports.EvaluationCatalogueRow], error) {
+	return cataloguepage.Result[pricingports.EvaluationCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // 价卡与序列登记两格的命令占位（ADR-0085，票 admin-write-faces/01）：与其余命令占位
@@ -964,10 +968,10 @@ type unwiredPriceCardDrafts struct{}
 func (unwiredPriceCardDrafts) ListPriceCardDrafts(
 	context.Context,
 	pricingdomain.TenantID,
-	pricingdomain.PriceCardDraftStatus,
 	int,
-) ([]pricingdomain.PriceCardDraft, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingdomain.PriceCardDraft], error) {
+	return cataloguepage.Result[pricingdomain.PriceCardDraft]{}, errOrchestrationNotWired
 }
 
 // unwiredPricingEstimate 是运营试算的命令占位（ADR-0152，票 operator-workspace-gaps/05）。判据同回放占位：不交回零值答复，

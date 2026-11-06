@@ -70,8 +70,11 @@ type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
+// problemDetail 的 Detail 是给人读的理由散文，客户端按 Code 分支、不解析它；只有目录查询参数被拒那一格带它（ADR-0144
+// 决定一、四），其余各格没有就缺席。
 type problemDetail struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {

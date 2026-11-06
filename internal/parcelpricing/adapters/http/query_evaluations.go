@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // EvaluationCatalogueReader 是评价登记册端点消费的读口（票 admin-skeleton-closure-batch/03）。
@@ -16,7 +17,8 @@ type EvaluationCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.EvaluationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.EvaluationCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
@@ -30,6 +32,8 @@ const outcomeEvaluationsListed = "EVALUATIONS_LISTED"
 // （GET /pricing-evaluations；最终路径归装配票，本批为 closure-batch/07）。
 // 复用本包目录查阅的 Intake：评价查阅同属运营查阅，授权边界同是租户
 // （ADR-0077 Decision 五），不为业务事实册另立第二种准入形。
+//
+// 查询参数（after、sort、status 与 q）按 ports.EvaluationPages 解码（ADR-0144 决定六），先于 Intake。
 func NewQueryEvaluationsEndpoint(
 	intake PricingCatalogueIntake,
 	reader EvaluationCatalogueReader,
@@ -41,13 +45,18 @@ func NewQueryEvaluationsEndpoint(
 			return
 		}
 
+		pageQuery, err := decodePageQuery(ports.EvaluationPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListEvaluations(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListEvaluations(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障
 			// 变成一份看起来如实的空册。
@@ -56,20 +65,22 @@ func NewQueryEvaluationsEndpoint(
 		}
 
 		// 空册交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-		bodies := make([]evaluationBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]evaluationBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, evaluationBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, evaluationListResponse{
 			Outcome:     outcomeEvaluationsListed,
 			Evaluations: bodies,
+			Page:        page.Page(query.Limit),
 		})
 	})
 }
 
 type evaluationListResponse struct {
-	Outcome     string           `json:"outcome"`
-	Evaluations []evaluationBody `json:"evaluations"`
+	Outcome     string             `json:"outcome"`
+	Evaluations []evaluationBody   `json:"evaluations"`
+	Page        cataloguepage.Page `json:"page"`
 }
 
 // evaluationBody 逐字段透出检索列面。状态是迁移钉住的封闭五格原词

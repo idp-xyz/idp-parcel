@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是主数据登记目录查阅的伴生列表读端口(ADR-0077,票 master-data-wiring/02):
@@ -19,6 +20,9 @@ import (
 // 租户在方法签名上(ADR-0077 Decision 五);Limit 必须为正,每页多大由接入面按渠道
 // 契约裁决,读口只拒绝无意义的取值;空登记册如实交回空列表(Decision 四:空册本身
 // 就是内容,续办是登记责任方去登记口登记,不折成未配置)。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/04）：查询对象由端点按 PriceCardPages、
+// ReferenceSeriesPages 与 ReferenceSeriesCoveragePages 解出，读口答「本页行 + 下一游标 + 总数」。
 
 // PriceCardCatalogueRow 是价卡目录上列的一行:一份已登记价卡版本的检索列面。
 // 方向与计算目的成对照列(CONTEXT:首发一一对应);源文件名与 SHA-256 是证据索引
@@ -62,7 +66,8 @@ type PriceCardCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PriceCardCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PriceCardCatalogueRow], error)
 }
 
 // ReferenceSeriesCatalogueRow 是计价参考序列登记册上列的一行:一版序列的检索列面。
@@ -136,7 +141,8 @@ type ReferenceSeriesCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ReferenceSeriesCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ReferenceSeriesCatalogueRow], error)
 }
 
 // ReferenceSeriesCoverageRow 是一条序列的覆盖地平线摘要:它答的是「这条序列还盖得住
@@ -188,5 +194,6 @@ type ReferenceSeriesCoverageRead interface {
 		tenant domain.TenantID,
 		at time.Time,
 		limit int,
-	) ([]ReferenceSeriesCoverageRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ReferenceSeriesCoverageRow], error)
 }

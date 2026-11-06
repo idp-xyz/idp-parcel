@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ReferenceSeriesCoverage 实现 ports.ReferenceSeriesCoverageRead(票
@@ -52,7 +53,6 @@ type coverageWindow struct {
 type coverageGroup struct {
 	seriesID   string
 	kind       string
-	order      int
 	windows    map[string]coverageWindow
 	reviewed   map[string]bool
 	approved   map[string]bool
@@ -61,64 +61,119 @@ type coverageGroup struct {
 	lastCall   string
 }
 
-// ListReferenceSeriesCoverage 交出每条序列此刻的覆盖摘要。at 是「在用」所参照的时刻,
-// 由调用方给:在用版本是该时刻之前复核通过的最新版本,读口自己取 now 会让同参数的两次
-// 查询答不同的话。
+// coverageKey 是覆盖册的一行标识:序列标识与种类。
+type coverageKey struct {
+	seriesID string
+	kind     string
+}
+
+// coveragePages 把 ports.ReferenceSeriesCoveragePages 落到 coverageSeries 导出的两列上。
+var coveragePages = ports.ReferenceSeriesCoveragePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"seriesId": "series_id"},
+	Identity: []string{"series_id", "kind"},
+	Filters:  map[string]string{"kind": "kind"},
+	Keyword:  []string{"series_id"},
+})
+
+// coverageSeries 是覆盖册取页的来源:本租户登过的每条序列(标识 + 种类)各一行。租户条件写在里面、占 $1,翻页与
+// 筛选的条件接在外面。
+const coverageSeries = `(SELECT DISTINCT series_id, kind
+		   FROM parcel_pricing.reference_series_version
+		  WHERE tenant_id = $1) series`
+
+// ListReferenceSeriesCoverage 交出每条序列此刻的覆盖摘要,按查询的筛选、q 与排序取游标之后的一页;缺省按序列标识
+// 升序、同标识按种类升序。at 是「在用」所参照的时刻,由调用方给:在用版本是该时刻之前复核通过的最新版本,读口自己
+// 取 now 会让同参数的两次查询答不同的话。
 //
-// limit 数的是**序列条数**不是行数:一条序列有几版是登记方的事,拿版本数分页会让一条
-// 多版序列把整页占满,而调用方要的是「我有几条序列、各自还剩多少」。
+// limit、page 与 total 数的都是**序列条数**不是行数:一条序列有几版是登记方的事,拿版本数分页会让一条多版序列把整页
+// 占满,而调用方要的是「我有几条序列、各自还剩多少」。所以分两句:先按查询取一页序列,再只为这几条取全部版本与复核。
 func (coverage *ReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 	ctx context.Context,
 	tenant domain.TenantID,
 	at time.Time,
 	limit int,
-) ([]ports.ReferenceSeriesCoverageRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ReferenceSeriesCoverageRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ReferenceSeriesCoverageRow], error) {
+		return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{}, fmt.Errorf("list reference series coverage: %w", err)
+	}
 	if err := catalogueLimit("list reference series coverage", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{}, err
 	}
 	if tenant.String() == "" {
-		return nil, fmt.Errorf("list reference series coverage: tenant is required")
+		return fail(fmt.Errorf("tenant is required"))
 	}
 	// 零时刻在领域里恒答「没有在用版本」(SelectInForceSeriesVersion 首行就拒)。放它进来
 	// 会让每一行都显示未在用,而那是调用方忘了传时刻,不是登记册的事实。
 	if at.IsZero() {
-		return nil, fmt.Errorf("list reference series coverage: moment is required")
+		return fail(fmt.Errorf("moment is required"))
+	}
+	plan, err := coveragePages.Plan(query, "", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := coverage.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list reference series coverage: %w", err)
+		return fail(err)
+	}
+
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(coverageSeries), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	keyRows, err := querier.Query(ctx, plan.PageSQL("series_id, kind", coverageSeries), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
+	}
+	defer keyRows.Close()
+	fetched := make([]coverageKey, 0, limit+1)
+	for keyRows.Next() {
+		var key coverageKey
+		if err := keyRows.Scan(&key.seriesID, &key.kind); err != nil {
+			return fail(err)
+		}
+		fetched = append(fetched, key)
+	}
+	if err := keyRows.Err(); err != nil {
+		return fail(err)
+	}
+	keyRows.Close()
+
+	page, err := cataloguepage.Finish(query, fetched, limit, total, coveragePosition)
+	if err != nil {
+		return fail(err)
+	}
+	summaries := make([]ports.ReferenceSeriesCoverageRow, 0, len(page.Rows))
+	if len(page.Rows) == 0 {
+		return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{Rows: summaries, Next: page.Next, Total: page.Total}, nil
+	}
+	seriesIDs := make([]string, 0, len(page.Rows))
+	kinds := make([]string, 0, len(page.Rows))
+	for _, key := range page.Rows {
+		seriesIDs = append(seriesIDs, key.seriesID)
+		kinds = append(kinds, key.kind)
 	}
 
 	rows, err := querier.Query(ctx,
-		`WITH picked AS (
-		     SELECT series_id, kind
-		       FROM parcel_pricing.reference_series_version
-		      WHERE tenant_id = $1
-		      GROUP BY series_id, kind
-		      ORDER BY series_id, kind
-		      LIMIT $2
-		 )
-		 SELECT v.series_id, v.kind, v.series_version, v.content_digest,
+		`SELECT v.series_id, v.kind, v.series_version, v.content_digest,
 		        v.registered_at, v.effective_from, v.effective_to,
 		        r.reviewed_at, r.decision
 		   FROM parcel_pricing.reference_series_version v
-		   JOIN picked p ON p.series_id = v.series_id AND p.kind = v.kind
 		   LEFT JOIN parcel_pricing.reference_series_review r
 		     ON r.tenant_id = v.tenant_id
 		    AND r.series_id = v.series_id
 		    AND r.series_version = v.series_version
 		  WHERE v.tenant_id = $1
+		    AND (v.series_id, v.kind) IN (SELECT * FROM unnest($2::text[], $3::text[]))
 		  ORDER BY v.series_id, v.kind, v.series_version, r.reviewed_at, r.reviewer`,
-		tenant.String(),
-		limit,
+		tenant.String(), seriesIDs, kinds,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list reference series coverage: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	groups := make(map[string]*coverageGroup)
-	order := 0
+	groups := make(map[coverageKey]*coverageGroup, len(page.Rows))
 	for rows.Next() {
 		var seriesID, kind, version, digest string
 		var registeredAt, effectiveFrom time.Time
@@ -130,22 +185,20 @@ func (coverage *ReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 			&registeredAt, &effectiveFrom, &effectiveTo,
 			&reviewedAt, &decision,
 		); err != nil {
-			return nil, fmt.Errorf("list reference series coverage: %w", err)
+			return fail(err)
 		}
 
-		key := seriesID + "\x00" + kind
+		key := coverageKey{seriesID: seriesID, kind: kind}
 		group, seen := groups[key]
 		if !seen {
 			group = &coverageGroup{
 				seriesID: seriesID,
 				kind:     kind,
-				order:    order,
 				windows:  make(map[string]coverageWindow),
 				reviewed: make(map[string]bool),
 				approved: make(map[string]bool),
 			}
 			groups[key] = group
-			order++
 		}
 		if _, known := group.windows[version]; !known {
 			window := coverageWindow{from: effectiveFrom}
@@ -176,28 +229,32 @@ func (coverage *ReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 		// 这条引用带的指纹是那一版登记的内容摘要（ADR-0108：有真摘要就带），不是身份的一部分。
 		reference, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactReferenceSeries, seriesID, version, digest)
 		if err != nil {
-			return nil, fmt.Errorf("list reference series coverage: %s/%s：%w", seriesID, version, err)
+			return fail(fmt.Errorf("%s/%s：%w", seriesID, version, err))
 		}
 		candidate, err := domain.NewReviewedSeriesVersion(
 			reference, registeredAt, *reviewedAt, domain.SeriesReviewDecision(*decision))
 		if err != nil {
-			return nil, fmt.Errorf("list reference series coverage: review row for %s/%s：%w", seriesID, version, err)
+			return fail(fmt.Errorf("review row for %s/%s：%w", seriesID, version, err))
 		}
 		group.candidates = append(group.candidates, candidate)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list reference series coverage: %w", err)
+		return fail(err)
 	}
 
-	ordered := make([]*coverageGroup, len(groups))
-	for _, group := range groups {
-		ordered[group.order] = group
-	}
-	summaries := make([]ports.ReferenceSeriesCoverageRow, 0, len(ordered))
-	for _, group := range ordered {
+	for _, key := range page.Rows {
+		group, found := groups[key]
+		if !found {
+			// 版本表只增不改,取页时登过的序列取明细时不会不在;不在就是这两句之间库被动过,不拿半页充数。
+			return fail(fmt.Errorf("本页的序列 %s/%s 取明细时不在了", key.seriesID, key.kind))
+		}
 		summaries = append(summaries, group.summarise(at))
 	}
-	return summaries, nil
+	return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{Rows: summaries, Next: page.Next, Total: page.Total}, nil
+}
+
+func coveragePosition(key coverageKey, _ string) cataloguepage.Position {
+	return cataloguepage.Position{Value: key.seriesID, Identity: []string{key.seriesID, key.kind}}
 }
 
 // summarise 把一条序列的中间态折成一行。挑在用那一步交领域,本函数只负责把领域挑出来的

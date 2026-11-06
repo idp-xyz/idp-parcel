@@ -61,8 +61,8 @@ func TestCoverageAnswersAnEmptyListForATenantWithNothingRegistered(t *testing.T)
 	_, _, coverage, _ := newSeriesCoverage(t)
 	ctx := t.Context()
 
-	rows, err := coverage.ListReferenceSeriesCoverage(
-		ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), reviewAtTwo, 10)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(
+		ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), reviewAtTwo, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("空册报错：%v", err)
 	}
@@ -86,7 +86,7 @@ func TestCoverageReportsTheInForceVersionAndItsHorizon(t *testing.T) {
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, first, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewApproved))
 
-	rows, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 10)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面：%v", err)
 	}
@@ -126,7 +126,7 @@ func TestCoverageTellsAnOpenEndedVersionFromABoundedOne(t *testing.T) {
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, openEnded, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewApproved))
 
-	rows, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 10)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面：%v", err)
 	}
@@ -161,7 +161,7 @@ func TestCoverageSeparatesWaitingForAReviewerFromWaitingForTheRegistrant(t *test
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, returned, "SYN-PRC-SERIES-REVIEWER", reviewAtTwo, domain.SeriesReviewReturned))
 
-	rows, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtThree, 10)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtThree, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面：%v", err)
 	}
@@ -193,7 +193,7 @@ func TestCoverageResolvesInForceAtTheGivenMoment(t *testing.T) {
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, registration, "SYN-PRC-SERIES-REVIEWER", reviewAtTwo, domain.SeriesReviewApproved))
 
-	before, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtOne, 10)
+	before, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtOne, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面（复核前）：%v", err)
 	}
@@ -205,7 +205,7 @@ func TestCoverageResolvesInForceAtTheGivenMoment(t *testing.T) {
 		t.Fatalf("复核前的计数变形：登记 %d，未复核 %d", earlier.RegisteredVersionCount, earlier.UnreviewedVersionCount)
 	}
 
-	after, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtThree, 10)
+	after, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtThree, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面（复核后）：%v", err)
 	}
@@ -232,8 +232,8 @@ func TestCoverageIsScopedToTheTenant(t *testing.T) {
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, theirs, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewApproved))
 
-	rows, err := coverage.ListReferenceSeriesCoverage(
-		ctx, evaluationValue(t, domain.NewTenantID, "tenant-a"), reviewAtTwo, 10)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(
+		ctx, evaluationValue(t, domain.NewTenantID, "tenant-a"), reviewAtTwo, 10, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面：%v", err)
 	}
@@ -260,7 +260,7 @@ func TestCoverageLimitCountsSeriesNotVersions(t *testing.T) {
 	registerSeries(t, versions, transactor, ctx,
 		fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-PAGE-B", "v1"))
 
-	rows, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 1)
+	rows, err := rowsOf(coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 1, firstPage(t, ports.ReferenceSeriesCoveragePages)))
 	if err != nil {
 		t.Fatalf("取覆盖列面：%v", err)
 	}
@@ -280,10 +280,11 @@ func TestCoverageRefusesAMissingMomentOrPageSize(t *testing.T) {
 	ctx := t.Context()
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 
-	if _, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, time.Time{}, 10); err == nil {
+	everything := firstPage(t, ports.ReferenceSeriesCoveragePages)
+	if _, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, time.Time{}, 10, everything); err == nil {
 		t.Fatal("零时刻被接受")
 	}
-	if _, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 0); err == nil {
+	if _, err := coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 0, everything); err == nil {
 		t.Fatal("零页大小被接受")
 	}
 }

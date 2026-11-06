@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ReferenceSeriesCatalogueReader 是参考序列登记册端点消费的读口。
@@ -14,7 +15,8 @@ type ReferenceSeriesCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ReferenceSeriesCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ReferenceSeriesCatalogueRow], error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -27,6 +29,8 @@ const outcomeReferenceSeriesListed = "REFERENCE_SERIES_LISTED"
 // (GET /pricing-reference-series,ADR-0077、票 master-data-wiring/02;最终路径归
 // 装配票)。逐期取值不在响应里:期次的消费口是按计价基准时点的解析,目录只答
 // 「登了哪些版本、什么来源、什么证据等级」。
+//
+// 查询参数（after、sort、kind、seriesId 与 q）按 ports.ReferenceSeriesPages 解码（ADR-0144 决定六），先于 Intake。
 func NewQueryReferenceSeriesEndpoint(
 	intake PricingCatalogueIntake,
 	reader ReferenceSeriesCatalogueReader,
@@ -38,25 +42,31 @@ func NewQueryReferenceSeriesEndpoint(
 			return
 		}
 
+		pageQuery, err := decodePageQuery(ports.ReferenceSeriesPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListReferenceSeries(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListReferenceSeries(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]referenceSeriesBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]referenceSeriesBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, referenceSeriesBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, referenceSeriesListResponse{
 			Outcome: outcomeReferenceSeriesListed,
 			Series:  bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -64,6 +74,7 @@ func NewQueryReferenceSeriesEndpoint(
 type referenceSeriesListResponse struct {
 	Outcome string                `json:"outcome"`
 	Series  []referenceSeriesBody `json:"series"`
+	Page    cataloguepage.Page    `json:"page"`
 }
 
 // referenceSeriesBody 逐字段透出检索列面。口径两键与更正两键各自成对在场或成对

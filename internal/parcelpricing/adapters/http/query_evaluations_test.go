@@ -11,6 +11,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对评价登记册端点（票 admin-skeleton-closure-batch/03）证传输面，判据与
@@ -18,6 +19,7 @@ import (
 // 读失败答 5xx。替身与断言助手复用 query_pricing_catalogue_test.go 的既有件。
 
 type evaluationReaderDouble struct {
+	pageProbe
 	tenant domain.TenantID
 	rows   []ports.EvaluationCatalogueRow
 	err    error
@@ -26,15 +28,17 @@ type evaluationReaderDouble struct {
 func (double *evaluationReaderDouble) ListEvaluations(
 	_ context.Context,
 	tenant domain.TenantID,
-	_ int,
-) ([]ports.EvaluationCatalogueRow, error) {
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.EvaluationCatalogueRow], error) {
+	double.record(limit, query)
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.EvaluationCatalogueRow]{}, double.err
 	}
 	if tenant != double.tenant {
-		return nil, nil
+		return cataloguepage.Result[ports.EvaluationCatalogueRow]{}, nil
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.EvaluationCatalogueRow]{Rows: double.rows, Next: double.next, Total: double.total}, nil
 }
 
 func TestEvaluationsEndpointOnlyAcceptsGet(t *testing.T) {

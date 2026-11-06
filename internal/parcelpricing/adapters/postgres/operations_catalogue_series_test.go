@@ -78,7 +78,7 @@ func TestReferenceSeriesCatalogueCarriesReviewFactsAndPeriods(t *testing.T) {
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, first, "SYN-PRC-SERIES-REVIEWER-2", reviewAtTwo, domain.SeriesReviewApproved))
 
-	rows, err := catalogue.ListReferenceSeries(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListReferenceSeries(ctx, tenant, 10, firstPage(t, ports.ReferenceSeriesPages)))
 	if err != nil {
 		t.Fatalf("上列序列：%v", err)
 	}
@@ -142,7 +142,7 @@ func TestReferenceSeriesCatalogueLimitCountsVersionsNotJoinedRows(t *testing.T) 
 	recordReview(t, reviews, transactor, ctx,
 		seriesReview(t, latest, "SYN-PRC-SERIES-REVIEWER-2", reviewAtTwo, domain.SeriesReviewApproved))
 
-	rows, err := catalogue.ListReferenceSeries(ctx, tenant, 1)
+	rows, err := rowsOf(catalogue.ListReferenceSeries(ctx, tenant, 1, firstPage(t, ports.ReferenceSeriesPages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列：%v", err)
 	}
