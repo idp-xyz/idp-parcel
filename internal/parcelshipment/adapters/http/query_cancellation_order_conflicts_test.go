@@ -75,7 +75,7 @@ func getConflicts(t *testing.T, intake shipmenthttp.CancellationOrderConflictQue
 
 // Covers: AT-PS-167；ADR-0295 决定一——清单逐字段透出（决定命令要的包裹、边界种类、边界那一代、取消原样给出，两边的业务时间与发现时间一并给出）；租户与页大小取 Intake
 // 交出的、原样递给读口；本页之后还有时 truncated=true 而计数是未解开的全部行数（ADR-0144 后 truncated 即 page.next 不为空，
-// 票 catalogue-read-pagination-rollout spec 取舍 5）。
+// 票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）。
 func TestTheConflictQueryListsUnresolvedRowsWithTheirCountAndTruncationFlag(t *testing.T) {
 	reader := &conflictCatalogueDouble{listed: ports.UnresolvedCancellationOrderConflicts{
 		Conflicts: []ports.CancellationOrderConflictEntry{

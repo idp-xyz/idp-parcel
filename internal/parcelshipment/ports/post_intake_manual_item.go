@@ -24,7 +24,7 @@ type PostIntakeManualItem struct {
 }
 
 // PendingPostIntakeManualItems 是一个租户还没有登记结果的项的一页（ADR-0144）：Items 是本页，Next 为空串即末页，Total 是本次筛选与 q
-// 之下的总数；Count 是全部待登记的项数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout spec 取舍 5）。
+// 之下的总数；Count 是全部待登记的项数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）。
 type PendingPostIntakeManualItems struct {
 	Items []PostIntakeManualItem
 	Next  string

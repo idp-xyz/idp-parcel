@@ -6,7 +6,7 @@ import (
 )
 
 // 本文件是本上下文各列表读口的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/02）：可排维与筛选维按
-// 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec 取舍 1）。
+// 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec「缺省序保今天的次序」）。
 
 // ShipmentRequestViewPages 是委托查阅列表（GET /shipment-request-views 的列表分支）的声明。
 //

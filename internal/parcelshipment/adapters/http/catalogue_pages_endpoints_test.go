@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// 本文件按端点逐个证 ADR-0144 迁移后的传输形状（票 catalogue-read-pagination-rollout/02，spec 取舍 8）：答复带 page 且 size 取
+// 本文件按端点逐个证 ADR-0144 迁移后的传输形状（票 catalogue-read-pagination-rollout/02，spec「端点先 Intake、后解码查询参数」）：答复带 page 且 size 取
 // Intake 给的页大小；配置了的渠道上集外参数答 400 带理由散文；渠道未配置时同一个坏请求答 403——解码在 Intake 之后，答复不随请求
 // 内容变（ADR-0055 决定三）。各册怎么取页由 postgres 读面的用例证，这里的读口一律是答一页空行的替身。
 
@@ -53,7 +53,7 @@ type pagedEndpoint struct {
 
 func pagedEndpoints(t *testing.T) map[string]pagedEndpoint {
 	t.Helper()
-	tenant := mustValue(t, domain.NewTenantID, "TENANT-1")
+	tenant := mustValue(t, domain.NewTenantID, "SYN-TENANT-1")
 	return map[string]pagedEndpoint{
 		"面单交易": {
 			configured:   shipmenthttp.NewQueryLabelTransactionsEndpoint(labelTransactionIntake(t), &labelTransactionsReaderDouble{}),
@@ -83,7 +83,7 @@ func pagedEndpoints(t *testing.T) map[string]pagedEndpoint {
 		"释放未受理册": {
 			configured:   shipmenthttp.NewQueryControlReleaseRefusalsEndpoint(refusalIntakeDouble{tenant: tenant, limit: 2}, &refusalCatalogueDouble{}),
 			unconfigured: shipmenthttp.NewQueryControlReleaseRefusalsEndpoint(shipmenthttp.UnconfiguredIntake{}, &refusalCatalogueDouble{}),
-			good:         "/control-release-refusals", bad: "/control-release-refusals?tenant=TENANT-9", size: "2",
+			good:         "/control-release-refusals", bad: "/control-release-refusals?tenant=SYN-TENANT-9", size: "2",
 		},
 		"取消先后冲突册": {
 			configured:   shipmenthttp.NewQueryCancellationOrderConflictsEndpoint(conflictIntakeDouble{tenant: tenant, limit: 2}, &conflictCatalogueDouble{}),
@@ -109,8 +109,8 @@ func serve(handler http.Handler, target string) *httptest.ResponseRecorder {
 	return response
 }
 
-// Covers: ADR-0144 决定四、五与 spec 取舍 8——九个端点各自：合规的一问带 page、size 取 Intake 的页大小；集外参数答 400 带理由散文；
-// 渠道未配置时同一个坏请求答 403。
+// Covers: ADR-0144 决定四、五与 spec「端点先 Intake、后解码查询参数」——九个端点各自：合规的一问带 page、size 取 Intake 的页大小；集外参数答 400 带理由散文；
+// 渠道未配置时合规与不合规的一问都答 403。
 func TestEveryMigratedEndpointCarriesThePageAndDecodesAfterTheIntake(t *testing.T) {
 	for name, endpoint := range pagedEndpoints(t) {
 		t.Run(name, func(t *testing.T) {
@@ -122,15 +122,17 @@ func TestEveryMigratedEndpointCarriesThePageAndDecodesAfterTheIntake(t *testing.
 				t.Fatalf("page.size = %s, want %s（取 Intake 的页大小）", size, endpoint.size)
 			}
 			assertPageQueryRefused(t, serve(endpoint.configured, endpoint.bad))
-			if unconfigured := serve(endpoint.unconfigured, endpoint.bad); unconfigured.Code != http.StatusForbidden {
-				t.Fatalf("渠道未配置时的坏请求 status = %d, want 403；body = %s", unconfigured.Code, unconfigured.Body)
+			for _, target := range []string{endpoint.good, endpoint.bad} {
+				if unconfigured := serve(endpoint.unconfigured, target); unconfigured.Code != http.StatusForbidden {
+					t.Fatalf("渠道未配置时 %s status = %d, want 403；body = %s", target, unconfigured.Code, unconfigured.Body)
+				}
 			}
 		})
 	}
 }
 
-// Covers: 有界查找与单条分支在解码之前分派走（02 票「做法与判据」）：按运单号查委托、按包裹读回人工项都不带 page，也不因为带了
-// 别的参数被当成目录查询拒掉。
+// Covers: 有界查找与单条分支在解码之前分派走（02 票「做法与判据」）：按运单号查委托、按包裹读回人工项都不带 page——`documentNumber`、
+// `parcel` 不在两册声明的键集里，先解码的话这两问会被当成集外键答 400。
 func TestBoundedLookupsBypassTheCatalogueDecoding(t *testing.T) {
 	views := serve(shipmenthttp.NewQueryShipmentRequestViewsEndpoint(&viewsIntakeDouble{}, &viewsReaderDouble{}),
 		"/shipment-request-views?documentNumber=SYN-WB-1")
@@ -141,5 +143,14 @@ func TestBoundedLookupsBypassTheCatalogueDecoding(t *testing.T) {
 		"/post-intake-disposition-manual-items?parcel=SYN-PARCEL-1")
 	if items.Code != http.StatusOK || containsKey(t, items, "page") {
 		t.Fatalf("按包裹读回 = %d %s，want 200 且不带 page", items.Code, items.Body)
+	}
+}
+
+// Covers: 迁移前 `?parcel=` 带空值落到待登记清单；迁移后照旧答清单、带 page，不因那个空键被当成集外键答 400。
+func TestAnEmptyParcelStillListsThePendingItems(t *testing.T) {
+	items := serve(shipmenthttp.NewQueryPostIntakeManualItemsEndpoint(manualItemIntakeDouble{limit: 25}, manualItemReaderDouble{}),
+		"/post-intake-disposition-manual-items?parcel=")
+	if items.Code != http.StatusOK || !containsKey(t, items, "page") {
+		t.Fatalf("空 parcel = %d %s，want 200 且带 page（落到清单）", items.Code, items.Body)
 	}
 }

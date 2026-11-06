@@ -2,6 +2,7 @@ package shipmenthttp_test
 
 import (
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,6 +32,30 @@ func TestLabelTransactionsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	if reader.query.Sort != (cataloguepage.Sort{Field: "transactionId"}) || reader.query.Keyword != "SYN" ||
 		!reflect.DeepEqual(reader.query.Filters["transactionResult"], []string{"FAILED", "SUCCEEDED"}) {
 		t.Fatalf("读口收到的查询不对：%+v", reader.query)
+	}
+}
+
+// Covers: ADR-0144 决定一——换了筛选条件还拿旧游标，答 400 带那句「游标与本次的排序或筛选不符，请从第一页重取」，读口不被调用：
+// 静默照翻，翻出来的是另一份列表的中段。
+func TestLabelTransactionsRefuseACursorFromOtherConditions(t *testing.T) {
+	failed, err := ports.LabelTransactionPages.Decode(url.Values{"transactionResult": {"FAILED"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := failed.CursorAfter(cataloguepage.Position{
+		Value: cataloguepage.FormatInstant(labelEstablishedAtFixture), Identity: []string{"SYN-LT-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &labelTransactionsReaderDouble{}
+	response := requestLabelTransactions(t, labelTransactionIntake(t), reader, http.MethodGet,
+		"/label-transactions?transactionResult=SUCCEEDED&after="+url.QueryEscape(cursor))
+	if detail := assertPageQueryRefused(t, response); detail != "游标与本次的排序或筛选不符，请从第一页重取" {
+		t.Fatalf("理由散文：得 %q", detail)
+	}
+	if reader.called {
+		t.Fatal("拿旧游标的一问不该走到读口")
 	}
 }
 

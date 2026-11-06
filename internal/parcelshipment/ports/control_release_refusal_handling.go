@@ -96,7 +96,7 @@ type ControlReleaseRefusalHandlings interface {
 
 // UnhandledControlReleaseRefusals 是一个租户册上还没有被处理的行的一页（ADR-0144）：Refusals 是本页，Next 为空串即末页，Total 是
 // 本次筛选与 q 之下的总数；Count 是未处理的全部行数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout spec
-// 取舍 5）。DocumentNumbers 是本页各行所指委托的单据号这一格（ADR-0355 决定十一），按委托标识查；册行指的委托读不到时不在
+// 「已带计数与 truncated 的待办队列保留这两格」）。DocumentNumbers 是本页各行所指委托的单据号这一格（ADR-0355 决定十一），按委托标识查；册行指的委托读不到时不在
 // 其中——那一行只能显委托标识，不拿「上线前开立」替它说。
 type UnhandledControlReleaseRefusals struct {
 	Refusals        []ControlReleaseRefusal

@@ -113,17 +113,18 @@ func serveTiedChannelSelectionDecisions(
 	intake ChannelSelectionDecisionQueryIntake,
 	reader ChannelSelectionDecisionsReader,
 ) {
-	filter, err := tiedChannelSelectionFilterOf(request)
-	if err != nil {
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-		return
-	}
+	// 选择器与查询参数都在 Intake 之后读：未配置的渠道对一切请求同答（ADR-0055 决定三），坏选择器也一样。
 	query, err := intake.IntakeChannelSelectionDecisionQuery(request.Context(), request)
 	if err != nil {
 		writeIntakeProblem(response, err)
 		return
 	}
-	// view、scope、mapping 在声明里登为选择器（端点自己读、保持原义），其余键按 ADR-0144 解码，在 Intake 之后。
+	filter, err := tiedChannelSelectionFilterOf(request)
+	if err != nil {
+		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		return
+	}
+	// view、scope、mapping 在声明里登为选择器（端点自己读、保持原义），其余键按 ADR-0144 解码。
 	pageQuery, err := ports.TiedChannelSelectionPages.Decode(request.URL.Query())
 	if err != nil {
 		writePageQueryProblem(response, err)
@@ -181,16 +182,16 @@ func serveChannelSelectionDecision(
 	intake ChannelSelectionDecisionQueryIntake,
 	reader ChannelSelectionDecisionsReader,
 ) {
-	// 标识只定位候选对象，不单独证明查询权限——权限在 Intake 交出的租户上；读定位参数属传输形状，不是被禁的
-	// 授权输入（ADR-0078 Decision 二）。
-	id, err := domain.NewChannelSelectionDecisionID(strings.TrimSpace(request.URL.Query().Get("decisionId")))
-	if err != nil {
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-		return
-	}
+	// 标识在 Intake 之后读：未配置的渠道对一切请求同答（ADR-0055 决定三），空标识也一样。标识只定位候选对象，不单独
+	// 证明查询权限——权限在 Intake 交出的租户上；读定位参数属传输形状，不是被禁的授权输入（ADR-0078 Decision 二）。
 	query, err := intake.IntakeChannelSelectionDecisionQuery(request.Context(), request)
 	if err != nil {
 		writeIntakeProblem(response, err)
+		return
+	}
+	id, err := domain.NewChannelSelectionDecisionID(strings.TrimSpace(request.URL.Query().Get("decisionId")))
+	if err != nil {
+		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return
 	}
 

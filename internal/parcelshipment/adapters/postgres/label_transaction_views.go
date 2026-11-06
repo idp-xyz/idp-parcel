@@ -35,13 +35,18 @@ func NewLabelTransactionViews(db *bentopg.DB) (*LabelTransactionViews, error) {
 var _ ports.LabelTransactionViews = (*LabelTransactionViews)(nil)
 
 // labelTransactionPages 把 ports.LabelTransactionPages 落到列上。transactionResult 落在存代码的 state 列；q 在交易标识、
-// 快照里的渠道账户与覆盖包裹（数组的文本形，包裹标识照原样出现在里面）上做字面包含。
+// 快照里的渠道账户与覆盖包裹上做字面包含。覆盖包裹只拼数组元素、以单元分隔符（chr(31)）隔开：数组的 JSON 文本形里还有引号与
+// 逗号，检索它们会命中每一笔交易，那不是对包裹号的字面包含。
 var labelTransactionPages = ports.LabelTransactionPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"establishedAt": "established_at", "transactionId": "label_transaction_id"},
 	Identity: []string{"label_transaction_id"},
 	Filters:  map[string]string{"transactionResult": "state"},
 	Codes:    map[string]func(string) (int64, error){"transactionResult": cataloguepage.Code[domain.LabelTransactionState]},
-	Keyword:  []string{"label_transaction_id", "snapshot->>'channelAccount'", "(snapshot->'coveredParcels')::text"},
+	Keyword: []string{
+		"label_transaction_id",
+		"snapshot->>'channelAccount'",
+		"(SELECT string_agg(parcel, chr(31)) FROM jsonb_array_elements_text(snapshot->'coveredParcels') AS parcel)",
+	},
 })
 
 // scannedLabelTransaction 是取页读回的一行。establishedAt 取自列而不是快照：游标位置要与 ORDER BY 用的是同一个值，
