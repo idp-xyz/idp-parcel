@@ -99,7 +99,8 @@ func TestOperatorReadRefusalsKeepTheirGradesAtTheEndpoint(t *testing.T) {
 	}
 }
 
-// Covers: 同上——装进端点后，读口按信封的租户作答：同一份投影，信封租户对得上才列出来。
+// Covers: 同上——装进端点后，读口按信封的租户作答：同一份投影，信封租户对得上才列出来。查询串里自报的租户是
+// ADR-0144 的集外键（决定四），答 400 且不带任何行，读口不被调用。
 func TestOperatorReadIntakeFeedsTheEndpointTheEnvelopeTenant(t *testing.T) {
 	projection := operationsProjection(t)
 	for _, testCase := range []struct {
@@ -107,8 +108,14 @@ func TestOperatorReadIntakeFeedsTheEndpointTheEnvelopeTenant(t *testing.T) {
 		listed int
 	}{{"tenant-1", 1}, {"tenant-2", 0}} {
 		t.Run(testCase.tenant, func(t *testing.T) {
-			response := opsServe(t, operatorReadIntake(t, operationsReader{tenant: testCase.tenant}), opsReader(t, projection),
-				http.MethodGet, "/tracking-projections?tenant=tenant-1")
+			intake := operatorReadIntake(t, operationsReader{tenant: testCase.tenant})
+			reader := opsReader(t, projection)
+			assertPageQueryRefused(t, opsServe(t, intake, reader, http.MethodGet, "/tracking-projections?tenant=tenant-1"))
+			if reader.listCalled {
+				t.Fatal("自报租户的请求走到了读口")
+			}
+
+			response := opsServe(t, intake, opsReader(t, projection), http.MethodGet, "/tracking-projections")
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 			}

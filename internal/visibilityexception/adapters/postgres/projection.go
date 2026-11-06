@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -140,63 +141,77 @@ func (repository *Projections) LockCurrent(
 	return projection, true, nil
 }
 
-// ListCurrent 按租户列出各包裹的当前投影版本（运营追踪查阅的列表读面,ADR-0076）。
-// 新派生的在前,同刻并列按包裹引用倒序,保证分页可重复;limit 非正是调用方编程错误
-// ——静默答一页会把「忘了传」变成一个没人决定过的页大小（判据与委托查阅读口同款）。
-// 只走当前标记,不扫描历史版本;留存的历史版仍由 FindByVersion 按版本读回。
+// trackingProjectionPages 把 ports.TrackingProjectionPages 落到列上。可排维与标识都取版本行上的列：包裹引用在两表上相等（联接
+// 条件），取版本行那份，键集比较才落在同一张表的索引列上。q 在包裹与版本标识上做字面包含。
+var trackingProjectionPages = ports.TrackingProjectionPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"derivedAt": "v.derived_at", "parcel": "v.parcel_ref"},
+	Identity: []string{"v.parcel_ref"},
+	Keyword:  []string{"v.parcel_ref", "v.version_id"},
+})
+
+// scannedProjection 是取页读回的一行。parcel 与 derivedAt 取自 ORDER BY 用的列，游标位置与排序是同一个值
+// （cataloguepage.Finish 头注）。
+type scannedProjection struct {
+	parcel     string
+	derivedAt  time.Time
+	projection domain.TrackingProjection
+}
+
+// ListCurrent 按租户列出各包裹的当前投影版本（运营追踪查阅的列表读面,ADR-0076），按查询的 q 与排序取游标之后的一页；缺省是
+// 新派生的在前、同刻按包裹引用倒序。limit 非正是调用方编程错误——静默答一页会把「忘了传」变成一个没人决定过的页大小（判据与
+// 委托查阅读口同款）。答复只含当前标记指名的那一版;留存的历史版仍由 FindByVersion 按版本读回。
 func (repository *Projections) ListCurrent(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]domain.TrackingProjection, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list current projections: limit must be positive, got %d", limit)
-	}
-	querier, err := repository.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.TrackingProjection], error) {
+	const source = `visibility_exception.tracking_projection_current AS c
+		JOIN visibility_exception.tracking_projection_version AS v
+		  ON v.tenant_id = c.tenant_id
+		 AND v.parcel_ref = c.parcel_ref
+		 AND v.version_id = c.version_id`
+	page, err := readPage(ctx, repository.db, trackingProjectionPages, query, tenant, "c.tenant_id = $1", limit,
+		pageSources{
+			count:     source,
+			page:      source,
+			selection: "v.version_id, v.parcel_ref, v.derived_at, v.prior_version, v.entries",
+		},
+		scanProjection, trackingProjectionPosition)
 	if err != nil {
-		return nil, fmt.Errorf("list current projections: %w", err)
+		return cataloguepage.Result[domain.TrackingProjection]{}, fmt.Errorf("list current projections: %w", err)
 	}
+	projections := make([]domain.TrackingProjection, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		projections = append(projections, row.projection)
+	}
+	return cataloguepage.Result[domain.TrackingProjection]{Rows: projections, Next: page.Next, Total: page.Total}, nil
+}
 
-	rows, err := querier.Query(ctx,
-		`SELECT v.version_id, v.parcel_ref, v.derived_at, v.prior_version, v.entries
-		   FROM visibility_exception.tracking_projection_current AS c
-		   JOIN visibility_exception.tracking_projection_version AS v
-		     ON v.tenant_id = c.tenant_id
-		    AND v.parcel_ref = c.parcel_ref
-		    AND v.version_id = c.version_id
-		  WHERE c.tenant_id = $1
-		  ORDER BY v.derived_at DESC, v.parcel_ref DESC
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+func scanProjection(rows pgx.Rows) (scannedProjection, error) {
+	var row scannedProjection
+	var versionID string
+	var priorVersion *string
+	var entriesRaw []byte
+	if err := rows.Scan(&versionID, &row.parcel, &row.derivedAt, &priorVersion, &entriesRaw); err != nil {
+		return scannedProjection{}, err
+	}
+	parcel, err := domain.NewTrackedParcelReference(row.parcel)
 	if err != nil {
-		return nil, fmt.Errorf("list current projections: %w", err)
+		return scannedProjection{}, fmt.Errorf("rebuild projection: %w", err)
 	}
-	defer rows.Close()
+	if row.projection, err = rebuildProjection(versionID, parcel, row.derivedAt, priorVersion, entriesRaw); err != nil {
+		return scannedProjection{}, fmt.Errorf("rebuild projection: %w", err)
+	}
+	return row, nil
+}
 
-	projections := make([]domain.TrackingProjection, 0, limit)
-	for rows.Next() {
-		var versionID, parcelRef string
-		var derivedAt time.Time
-		var priorVersion *string
-		var entriesRaw []byte
-		if err := rows.Scan(&versionID, &parcelRef, &derivedAt, &priorVersion, &entriesRaw); err != nil {
-			return nil, fmt.Errorf("list current projections: %w", err)
-		}
-		parcel, err := domain.NewTrackedParcelReference(parcelRef)
-		if err != nil {
-			return nil, fmt.Errorf("rebuild projection: %w", err)
-		}
-		projection, err := rebuildProjection(versionID, parcel, derivedAt, priorVersion, entriesRaw)
-		if err != nil {
-			return nil, fmt.Errorf("rebuild projection: %w", err)
-		}
-		projections = append(projections, projection)
+func trackingProjectionPosition(row scannedProjection, sortField string) cataloguepage.Position {
+	value := row.parcel
+	if sortField == "derivedAt" {
+		value = cataloguepage.FormatInstant(row.derivedAt)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list current projections: %w", err)
-	}
-	return projections, nil
+	return cataloguepage.Position{Value: value, Identity: []string{row.parcel}}
 }
 
 // FindByVersion 按版本读回留存的任一版——当前版或已被更新的历史版皆可（ADR-0065）。

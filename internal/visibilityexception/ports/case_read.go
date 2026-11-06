@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
@@ -21,8 +22,11 @@ import (
 //
 // 三组接口按页分立：一页一读口，某页读不回不该把另两页也拖进故障面。租户在方法签名
 // 上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道契约裁决；空登
-// 记册如实交回空列表（Decision 四：空册本身就是内容——案件侧的写入方是信号→分诊→
+// 记册如实交回空页、总数为零（Decision 四：空册本身就是内容——案件侧的写入方是信号→分诊→
 // 建案的编排，事实在接入渠道墙后面，三页接完仍是空册是预期不是缺陷）。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/03）：各读口收端点按该册声明（SignalEpisodePages 等）
+// 解出的查询对象，答「本页行 + 下一游标 + 总数」。
 
 // SignalEpisodeCatalogueRow 是信号发作期册上列的一行：发作期连同它的分诊结论。
 //
@@ -232,12 +236,14 @@ type TriageReviewRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]SignalEpisodeCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SignalEpisodeCatalogueRow], error)
 	ListDispositionRequests(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DispositionRequestCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DispositionRequestCatalogueRow], error)
 }
 
 // CaseReviewRead 是异常案件页（exception-cases）的伴生列表读端口。
@@ -250,7 +256,8 @@ type CaseReviewRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ExceptionCaseCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExceptionCaseCatalogueRow], error)
 }
 
 // ClaimsRecoveryReviewRead 是索赔与追偿页（claims-recovery）三个页签的伴生列表读
@@ -263,15 +270,18 @@ type ClaimsRecoveryReviewRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CustomerNotificationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomerNotificationCatalogueRow], error)
 	ListClaimItems(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ClaimItemCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ClaimItemCatalogueRow], error)
 	ListRecoveryMatters(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]RecoveryMatterCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[RecoveryMatterCatalogueRow], error)
 }

@@ -129,35 +129,35 @@ func TestCatalogueListRejectsNonPositiveLimit(t *testing.T) {
 
 	attempts := map[string]func(context.Context, int) error{
 		"里程碑映射": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListMilestoneMappings(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListMilestoneMappings(ctx, tenant, limit, firstPage(t, ports.MilestoneMappingCataloguePages)))
 			return err
 		},
 		"分诊规则": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListTriageRules(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListTriageRules(ctx, tenant, limit, firstPage(t, ports.TriageRuleCataloguePages)))
 			return err
 		},
 		"通知策略": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListNotificationPolicies(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListNotificationPolicies(ctx, tenant, limit, firstPage(t, ports.NotificationPolicyCataloguePages)))
 			return err
 		},
 		"索赔资格": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListClaimEligibilities(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListClaimEligibilities(ctx, tenant, limit, firstPage(t, ports.ClaimEligibilityCataloguePages)))
 			return err
 		},
 		"索赔授权": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListClaimAuthorizations(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListClaimAuthorizations(ctx, tenant, limit, firstPage(t, ports.ClaimAuthorizationCataloguePages)))
 			return err
 		},
 		"披露策略": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListDisclosurePolicies(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListDisclosurePolicies(ctx, tenant, limit, firstPage(t, ports.DisclosurePolicyCataloguePages)))
 			return err
 		},
 		"异常披露规则": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListExceptionDisclosureRules(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListExceptionDisclosureRules(ctx, tenant, limit, firstPage(t, ports.ExceptionDisclosureRuleCataloguePages)))
 			return err
 		},
 		"冲突信号规则": func(ctx context.Context, limit int) error {
-			_, err := catalogue.ListConflictSignalRules(ctx, tenant, limit)
+			_, err := rowsOf(catalogue.ListConflictSignalRules(ctx, tenant, limit, firstPage(t, ports.ConflictSignalRuleCataloguePages)))
 			return err
 		},
 	}
@@ -180,27 +180,27 @@ func TestEmptyCataloguesListAsEmptyNotAsError(t *testing.T) {
 	catalogue := listCatalogue(t, fixture)
 	tenant := listTenant(t, "tenant-a")
 
-	mappings, err := catalogue.ListMilestoneMappings(t.Context(), tenant, 10)
+	mappings, err := rowsOf(catalogue.ListMilestoneMappings(t.Context(), tenant, 10, firstPage(t, ports.MilestoneMappingCataloguePages)))
 	if err != nil || len(mappings) != 0 {
 		t.Fatalf("空映射册：rows=%v err=%v", mappings, err)
 	}
-	triage, err := catalogue.ListTriageRules(t.Context(), tenant, 10)
+	triage, err := rowsOf(catalogue.ListTriageRules(t.Context(), tenant, 10, firstPage(t, ports.TriageRuleCataloguePages)))
 	if err != nil || len(triage) != 0 {
 		t.Fatalf("空分诊册：rows=%v err=%v", triage, err)
 	}
-	notifications, err := catalogue.ListNotificationPolicies(t.Context(), tenant, 10)
+	notifications, err := rowsOf(catalogue.ListNotificationPolicies(t.Context(), tenant, 10, firstPage(t, ports.NotificationPolicyCataloguePages)))
 	if err != nil || len(notifications) != 0 {
 		t.Fatalf("空通知册：rows=%v err=%v", notifications, err)
 	}
-	eligibilities, err := catalogue.ListClaimEligibilities(t.Context(), tenant, 10)
+	eligibilities, err := rowsOf(catalogue.ListClaimEligibilities(t.Context(), tenant, 10, firstPage(t, ports.ClaimEligibilityCataloguePages)))
 	if err != nil || len(eligibilities) != 0 {
 		t.Fatalf("空资格册：rows=%v err=%v", eligibilities, err)
 	}
-	authorizations, err := catalogue.ListClaimAuthorizations(t.Context(), tenant, 10)
+	authorizations, err := rowsOf(catalogue.ListClaimAuthorizations(t.Context(), tenant, 10, firstPage(t, ports.ClaimAuthorizationCataloguePages)))
 	if err != nil || len(authorizations) != 0 {
 		t.Fatalf("空授权册：rows=%v err=%v", authorizations, err)
 	}
-	disclosures, err := catalogue.ListDisclosurePolicies(t.Context(), tenant, 10)
+	disclosures, err := rowsOf(catalogue.ListDisclosurePolicies(t.Context(), tenant, 10, firstPage(t, ports.DisclosurePolicyCataloguePages)))
 	if err != nil || len(disclosures) != 0 {
 		t.Fatalf("空披露册：rows=%v err=%v", disclosures, err)
 	}
@@ -232,7 +232,7 @@ func TestListMilestoneMappingsReturnsVersionsWithEntriesNewestFirst(t *testing.T
 		return fixture.registrar.RegisterMilestoneMapping(txCtx, tenant, second)
 	})
 
-	rows, err := catalogue.ListMilestoneMappings(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListMilestoneMappings(t.Context(), tenant, 10, firstPage(t, ports.MilestoneMappingCataloguePages)))
 	if err != nil {
 		t.Fatalf("上列映射册：%v", err)
 	}
@@ -274,7 +274,7 @@ func TestListTriageRulesTranscribesClosedSetWords(t *testing.T) {
 		return fixture.registrar.RegisterTriageRules(txCtx, tenant, registration)
 	})
 
-	rows, err := catalogue.ListTriageRules(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListTriageRules(t.Context(), tenant, 10, firstPage(t, ports.TriageRuleCataloguePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列分诊册：rows=%d err=%v", len(rows), err)
 	}
@@ -304,7 +304,7 @@ func TestListNotificationPoliciesTranscribesIntervalAsText(t *testing.T) {
 		return fixture.registrar.RegisterNotificationPolicy(txCtx, tenant, registration)
 	})
 
-	rows, err := catalogue.ListNotificationPolicies(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListNotificationPolicies(t.Context(), tenant, 10, firstPage(t, ports.NotificationPolicyCataloguePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列通知册：rows=%d err=%v", len(rows), err)
 	}
@@ -329,7 +329,7 @@ func TestListClaimEligibilitiesCarriesCoveredKinds(t *testing.T) {
 		return fixture.registrar.RegisterClaimEligibility(txCtx, tenant, registration)
 	})
 
-	rows, err := catalogue.ListClaimEligibilities(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListClaimEligibilities(t.Context(), tenant, 10, firstPage(t, ports.ClaimEligibilityCataloguePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列资格册：rows=%d err=%v", len(rows), err)
 	}
@@ -358,7 +358,7 @@ func TestListClaimAuthorizationsKeepsEmptyRosterExplicit(t *testing.T) {
 		return fixture.registrar.RegisterClaimAuthorization(txCtx, tenant, emptyRoster)
 	})
 
-	rows, err := catalogue.ListClaimAuthorizations(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListClaimAuthorizations(t.Context(), tenant, 10, firstPage(t, ports.ClaimAuthorizationCataloguePages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列授权册：rows=%d err=%v", len(rows), err)
 	}
@@ -383,7 +383,7 @@ func TestListDisclosurePoliciesCarriesFourDimensionCells(t *testing.T) {
 		return fixture.registrar.RegisterDisclosurePolicy(txCtx, tenant, registration)
 	})
 
-	rows, err := catalogue.ListDisclosurePolicies(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListDisclosurePolicies(t.Context(), tenant, 10, firstPage(t, ports.DisclosurePolicyCataloguePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列披露册：rows=%d err=%v", len(rows), err)
 	}
@@ -467,7 +467,7 @@ func TestListExceptionDisclosureRulesReturnsVersionsWithEntriesNewestFirst(t *te
 		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenant, second)
 	})
 
-	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListExceptionDisclosureRules(t.Context(), tenant, 10, firstPage(t, ports.ExceptionDisclosureRuleCataloguePages)))
 	if err != nil {
 		t.Fatalf("上列异常披露规则册：%v", err)
 	}
@@ -504,7 +504,7 @@ func TestEmptyExceptionDisclosureRuleCatalogueListsAsEmpty(t *testing.T) {
 	fixture := newRegistrarFixture(t)
 	catalogue := listCatalogue(t, fixture)
 
-	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), listTenant(t, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListExceptionDisclosureRules(t.Context(), listTenant(t, "tenant-a"), 10, firstPage(t, ports.ExceptionDisclosureRuleCataloguePages)))
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("空异常披露规则册：rows=%v err=%v", rows, err)
 	}
@@ -526,7 +526,7 @@ func TestExceptionDisclosureRuleListIsTenantScoped(t *testing.T) {
 		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenantB, forB)
 	})
 
-	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), tenantA, 10)
+	rows, err := rowsOf(catalogue.ListExceptionDisclosureRules(t.Context(), tenantA, 10, firstPage(t, ports.ExceptionDisclosureRuleCataloguePages)))
 	if err != nil || len(rows) != 1 || rows[0].Version != "disclose-rule/a" {
 		t.Fatalf("租户 A 的异常披露规则册应只有 disclose-rule/a：rows=%+v err=%v", rows, err)
 	}
@@ -545,7 +545,7 @@ func TestListConflictSignalRulesTranscribesTheSingleRow(t *testing.T) {
 		return fixture.registrar.RegisterConflictSignalRule(txCtx, tenant, registration)
 	})
 
-	rows, err := catalogue.ListConflictSignalRules(t.Context(), tenant, 10)
+	rows, err := rowsOf(catalogue.ListConflictSignalRules(t.Context(), tenant, 10, firstPage(t, ports.ConflictSignalRuleCataloguePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列冲突信号规则册：rows=%d err=%v", len(rows), err)
 	}
@@ -564,7 +564,7 @@ func TestEmptyConflictSignalRuleCatalogueListsAsEmpty(t *testing.T) {
 	fixture := newRegistrarFixture(t)
 	catalogue := listCatalogue(t, fixture)
 
-	rows, err := catalogue.ListConflictSignalRules(t.Context(), listTenant(t, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListConflictSignalRules(t.Context(), listTenant(t, "tenant-a"), 10, firstPage(t, ports.ConflictSignalRuleCataloguePages)))
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("空冲突信号规则册：rows=%v err=%v", rows, err)
 	}
@@ -586,7 +586,7 @@ func TestConflictSignalRuleListIsTenantScoped(t *testing.T) {
 		return fixture.registrar.RegisterConflictSignalRule(txCtx, tenantB, forB)
 	})
 
-	rows, err := catalogue.ListConflictSignalRules(t.Context(), tenantA, 10)
+	rows, err := rowsOf(catalogue.ListConflictSignalRules(t.Context(), tenantA, 10, firstPage(t, ports.ConflictSignalRuleCataloguePages)))
 	if err != nil || len(rows) != 1 || rows[0].Version != "conflict/a" {
 		t.Fatalf("租户 A 的冲突信号规则册应只有 conflict/a：rows=%+v err=%v", rows, err)
 	}
@@ -627,11 +627,11 @@ func TestCatalogueListsAreTenantScoped(t *testing.T) {
 		return fixture.registrar.RegisterNotificationPolicy(txCtx, tenantB, notificationB)
 	})
 
-	mappings, err := catalogue.ListMilestoneMappings(t.Context(), tenantA, 10)
+	mappings, err := rowsOf(catalogue.ListMilestoneMappings(t.Context(), tenantA, 10, firstPage(t, ports.MilestoneMappingCataloguePages)))
 	if err != nil || len(mappings) != 1 || mappings[0].Version != "map/a" {
 		t.Fatalf("租户 A 的映射册应只有 map/a：rows=%+v err=%v", mappings, err)
 	}
-	notifications, err := catalogue.ListNotificationPolicies(t.Context(), tenantA, 10)
+	notifications, err := rowsOf(catalogue.ListNotificationPolicies(t.Context(), tenantA, 10, firstPage(t, ports.NotificationPolicyCataloguePages)))
 	if err != nil || len(notifications) != 1 || notifications[0].Policy != "disclose/a" {
 		t.Fatalf("租户 A 的通知册应只有 disclose/a：rows=%+v err=%v", notifications, err)
 	}

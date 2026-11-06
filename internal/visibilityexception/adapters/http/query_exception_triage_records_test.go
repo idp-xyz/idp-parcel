@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -18,34 +19,40 @@ import (
 type triageReaderDouble struct {
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
+	called bool
+	next   string
+	total  int64
 
 	episodes []ports.SignalEpisodeCatalogueRow
 	requests []ports.DispositionRequestCatalogueRow
 	err      error
 }
 
-func (double *triageReaderDouble) record(tenant domain.TenantID, limit int) error {
+func (double *triageReaderDouble) record(tenant domain.TenantID, limit int, query cataloguepage.Query) error {
 	double.tenant = tenant
 	double.limit = limit
+	double.query = query
+	double.called = true
 	return double.err
 }
 
 func (double *triageReaderDouble) ListSignalEpisodes(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.SignalEpisodeCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.SignalEpisodeCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.SignalEpisodeCatalogueRow]{}, err
 	}
-	return double.episodes, nil
+	return cataloguepage.Result[ports.SignalEpisodeCatalogueRow]{Rows: double.episodes, Next: double.next, Total: double.total}, nil
 }
 
 func (double *triageReaderDouble) ListDispositionRequests(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DispositionRequestCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.DispositionRequestCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.DispositionRequestCatalogueRow]{}, err
 	}
-	return double.requests, nil
+	return cataloguepage.Result[ports.DispositionRequestCatalogueRow]{Rows: double.requests, Next: double.next, Total: double.total}, nil
 }
 
 // unreachableTriageReader 是「被调即失败」的替身：未配置 Intake 的合同就是不构造
@@ -53,17 +60,17 @@ func (double *triageReaderDouble) ListDispositionRequests(
 type unreachableTriageReader struct{ t *testing.T }
 
 func (reader unreachableTriageReader) ListSignalEpisodes(
-	context.Context, domain.TenantID, int,
-) ([]ports.SignalEpisodeCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SignalEpisodeCatalogueRow], error) {
 	reader.t.Error("a request passed the unconfigured intake and reached the triage reader")
-	return nil, nil
+	return cataloguepage.Result[ports.SignalEpisodeCatalogueRow]{}, nil
 }
 
 func (reader unreachableTriageReader) ListDispositionRequests(
-	context.Context, domain.TenantID, int,
-) ([]ports.DispositionRequestCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DispositionRequestCatalogueRow], error) {
 	reader.t.Error("a request passed the unconfigured intake and reached the triage reader")
-	return nil, nil
+	return cataloguepage.Result[ports.DispositionRequestCatalogueRow]{}, nil
 }
 
 var triageRegistries = []string{"signal-episode", "disposition-request"}

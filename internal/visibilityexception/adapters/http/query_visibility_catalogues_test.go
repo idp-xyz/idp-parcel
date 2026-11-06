@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -18,6 +19,10 @@ import (
 type catalogueReaderDouble struct {
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
+	called bool
+	next   string
+	total  int64
 
 	mappings       []ports.MilestoneMappingCatalogueRow
 	triage         []ports.TriageRuleCatalogueRow
@@ -30,82 +35,84 @@ type catalogueReaderDouble struct {
 	err            error
 }
 
-func (double *catalogueReaderDouble) record(tenant domain.TenantID, limit int) error {
+func (double *catalogueReaderDouble) record(tenant domain.TenantID, limit int, query cataloguepage.Query) error {
 	double.tenant = tenant
 	double.limit = limit
+	double.query = query
+	double.called = true
 	return double.err
 }
 
 func (double *catalogueReaderDouble) ListMilestoneMappings(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.MilestoneMappingCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.MilestoneMappingCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.MilestoneMappingCatalogueRow]{}, err
 	}
-	return double.mappings, nil
+	return cataloguepage.Result[ports.MilestoneMappingCatalogueRow]{Rows: double.mappings, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListTriageRules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.TriageRuleCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.TriageRuleCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.TriageRuleCatalogueRow]{}, err
 	}
-	return double.triage, nil
+	return cataloguepage.Result[ports.TriageRuleCatalogueRow]{Rows: double.triage, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListNotificationPolicies(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.NotificationPolicyCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.NotificationPolicyCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.NotificationPolicyCatalogueRow]{}, err
 	}
-	return double.notifications, nil
+	return cataloguepage.Result[ports.NotificationPolicyCatalogueRow]{Rows: double.notifications, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListClaimEligibilities(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ClaimEligibilityCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimEligibilityCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.ClaimEligibilityCatalogueRow]{}, err
 	}
-	return double.eligibilities, nil
+	return cataloguepage.Result[ports.ClaimEligibilityCatalogueRow]{Rows: double.eligibilities, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListClaimAuthorizations(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ClaimAuthorizationCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow]{}, err
 	}
-	return double.authorizations, nil
+	return cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow]{Rows: double.authorizations, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListDisclosurePolicies(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DisclosurePolicyCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.DisclosurePolicyCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.DisclosurePolicyCatalogueRow]{}, err
 	}
-	return double.disclosures, nil
+	return cataloguepage.Result[ports.DisclosurePolicyCatalogueRow]{Rows: double.disclosures, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListExceptionDisclosureRules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow]{}, err
 	}
-	return double.disclosureRule, nil
+	return cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow]{Rows: double.disclosureRule, Next: double.next, Total: double.total}, nil
 }
 
 func (double *catalogueReaderDouble) ListConflictSignalRules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ConflictSignalRuleCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow]{}, err
 	}
-	return double.conflictRules, nil
+	return cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow]{Rows: double.conflictRules, Next: double.next, Total: double.total}, nil
 }
 
 // unreachableCatalogueReader 是「被调即失败」的替身：未配置 Intake 的合同就是不构造
@@ -117,59 +124,59 @@ func (reader unreachableCatalogueReader) fail() {
 }
 
 func (reader unreachableCatalogueReader) ListMilestoneMappings(
-	context.Context, domain.TenantID, int,
-) ([]ports.MilestoneMappingCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.MilestoneMappingCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.MilestoneMappingCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListTriageRules(
-	context.Context, domain.TenantID, int,
-) ([]ports.TriageRuleCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.TriageRuleCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.TriageRuleCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListNotificationPolicies(
-	context.Context, domain.TenantID, int,
-) ([]ports.NotificationPolicyCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.NotificationPolicyCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.NotificationPolicyCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListClaimEligibilities(
-	context.Context, domain.TenantID, int,
-) ([]ports.ClaimEligibilityCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimEligibilityCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.ClaimEligibilityCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListClaimAuthorizations(
-	context.Context, domain.TenantID, int,
-) ([]ports.ClaimAuthorizationCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListDisclosurePolicies(
-	context.Context, domain.TenantID, int,
-) ([]ports.DisclosurePolicyCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DisclosurePolicyCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.DisclosurePolicyCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListExceptionDisclosureRules(
-	context.Context, domain.TenantID, int,
-) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow]{}, nil
 }
 
 func (reader unreachableCatalogueReader) ListConflictSignalRules(
-	context.Context, domain.TenantID, int,
-) ([]ports.ConflictSignalRuleCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow]{}, nil
 }
 
 var visibilityCatalogueKinds = []string{

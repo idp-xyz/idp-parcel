@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // projection_test.go 的构造器钉死单一包裹;列表读面要跨包裹取证,这里另备带包裹
@@ -81,7 +82,7 @@ func TestListCurrentReturnsPerParcelCurrentVersions(t *testing.T) {
 			listProjection(t, "parcel-9", "list-projection-9", projectionBaseAt.Add(5*time.Hour)))
 	})
 
-	listed, err := fixture.projections.ListCurrent(ctx, tenantA, 10)
+	listed, err := rowsOf(fixture.projections.ListCurrent(ctx, tenantA, 10, firstPage(t, ports.TrackingProjectionPages)))
 	if err != nil {
 		t.Fatalf("ListCurrent：%v", err)
 	}
@@ -106,13 +107,13 @@ func TestListCurrentReturnsPerParcelCurrentVersions(t *testing.T) {
 	}
 
 	// limit 截断:只回最新的一行。
-	limited, err := fixture.projections.ListCurrent(ctx, tenantA, 1)
+	limited, err := rowsOf(fixture.projections.ListCurrent(ctx, tenantA, 1, firstPage(t, ports.TrackingProjectionPages)))
 	if err != nil || len(limited) != 1 || limited[0].Version().String() != "list-projection-2" {
 		t.Fatalf("limit=1：err=%v got=%v", err, limited)
 	}
 
 	// 无投影的租户答空列表:对租户内已授权的运营查阅这是如实业务答案,不是错误。
-	empty, err := fixture.projections.ListCurrent(ctx, projectionTenant(t, "tenant-list-none"), 10)
+	empty, err := rowsOf(fixture.projections.ListCurrent(ctx, projectionTenant(t, "tenant-list-none"), 10, firstPage(t, ports.TrackingProjectionPages)))
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("空租户：err=%v rows=%d", err, len(empty))
 	}
@@ -121,8 +122,8 @@ func TestListCurrentReturnsPerParcelCurrentVersions(t *testing.T) {
 // Covers: OperationsProjectionRead 的 limit 约定 — 非正 limit 是调用方编程错误。
 func TestListCurrentRejectsNonPositiveLimit(t *testing.T) {
 	fixture := newProjectionFixture(t)
-	if _, err := fixture.projections.ListCurrent(t.Context(),
-		projectionTenant(t, "tenant-list-a"), 0); err == nil {
+	if _, err := rowsOf(fixture.projections.ListCurrent(t.Context(),
+		projectionTenant(t, "tenant-list-a"), 0, firstPage(t, ports.TrackingProjectionPages))); err == nil {
 		t.Fatal("limit=0 被接受了")
 	}
 }

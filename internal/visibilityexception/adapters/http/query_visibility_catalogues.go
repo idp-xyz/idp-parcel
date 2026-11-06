@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -16,42 +17,50 @@ type VisibilityCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.MilestoneMappingCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.MilestoneMappingCatalogueRow], error)
 	ListTriageRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.TriageRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.TriageRuleCatalogueRow], error)
 	ListNotificationPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.NotificationPolicyCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.NotificationPolicyCatalogueRow], error)
 	ListClaimEligibilities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ClaimEligibilityCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ClaimEligibilityCatalogueRow], error)
 	ListClaimAuthorizations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ClaimAuthorizationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow], error)
 	ListDisclosurePolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.DisclosurePolicyCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DisclosurePolicyCatalogueRow], error)
 	ListExceptionDisclosureRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ExceptionDisclosureRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow], error)
 	ListConflictSignalRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ConflictSignalRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义，只消费票
@@ -78,6 +87,18 @@ const (
 	kindConflictSignalRule      = "CONFLICT_SIGNAL_RULE"
 )
 
+// visibilityCataloguePages 按 kind 取那一册的查询声明：选择器的每个取值各是一册（ADR-0144 决定四），不在表里的取值即集外。
+var visibilityCataloguePages = map[string]*cataloguepage.Catalogue{
+	kindMilestoneMapping:        ports.MilestoneMappingCataloguePages,
+	kindTriageRule:              ports.TriageRuleCataloguePages,
+	kindNotificationPolicy:      ports.NotificationPolicyCataloguePages,
+	kindClaimEligibility:        ports.ClaimEligibilityCataloguePages,
+	kindClaimAuthorization:      ports.ClaimAuthorizationCataloguePages,
+	kindDisclosurePolicy:        ports.DisclosurePolicyCataloguePages,
+	kindExceptionDisclosureRule: ports.ExceptionDisclosureRuleCataloguePages,
+	kindConflictSignalRule:      ports.ConflictSignalRuleCataloguePages,
+}
+
 // NewQueryVisibilityCataloguesEndpoint 交回 VE 规则与策略目录查阅的 HTTP 入口
 // （GET /visibility-catalogues?kind=，票 admin-web-page-wiring-frontier/02；两册规则目录
 // 随票 ve-disclosure-policy-view/03 加入同一端点，多两个 kind，不另立路径）。
@@ -87,6 +108,9 @@ const (
 // kind 缺席或集外按坏请求拒：六种册子的行形状互不相同，替调用方选一种就是猜。kind
 // 的在场与取值属传输形状（与方法检查同级，先于 Intake），读它不构成读业务内容——
 // 未配置 Intake 对全部种类同答 403，分支选择不泄露任何东西。
+//
+// 翻页、排序与筛选照 ADR-0144：kind 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
+// 坏参数答 400 带理由散文，答复加 page；kind 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
 func NewQueryVisibilityCataloguesEndpoint(
 	intake OperationsTrackingIntake,
 	reader VisibilityCatalogueReader,
@@ -99,39 +123,40 @@ func NewQueryVisibilityCataloguesEndpoint(
 		}
 
 		kind := request.URL.Query().Get("kind")
-		switch kind {
-		case kindMilestoneMapping, kindTriageRule, kindNotificationPolicy,
-			kindClaimEligibility, kindClaimAuthorization, kindDisclosurePolicy,
-			kindExceptionDisclosureRule, kindConflictSignalRule:
-		default:
+		catalogue, known := visibilityCataloguePages[kind]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-
 		query, err := intake.IntakeOperationsQuery(request.Context(), request)
 		if err != nil {
 			writeOperationsIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()
 
 		switch kind {
 		case kindMilestoneMapping:
-			serveMilestoneMappingCatalogues(response, request, reader, tenant, query.Limit)
+			serveMilestoneMappingCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindTriageRule:
-			serveTriageRuleCatalogues(response, request, reader, tenant, query.Limit)
+			serveTriageRuleCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindNotificationPolicy:
-			serveNotificationPolicyCatalogues(response, request, reader, tenant, query.Limit)
+			serveNotificationPolicyCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindClaimEligibility:
-			serveClaimEligibilityCatalogues(response, request, reader, tenant, query.Limit)
+			serveClaimEligibilityCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindClaimAuthorization:
-			serveClaimAuthorizationCatalogues(response, request, reader, tenant, query.Limit)
+			serveClaimAuthorizationCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindDisclosurePolicy:
-			serveDisclosurePolicyCatalogues(response, request, reader, tenant, query.Limit)
+			serveDisclosurePolicyCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindExceptionDisclosureRule:
-			serveExceptionDisclosureRuleCatalogues(response, request, reader, tenant, query.Limit)
+			serveExceptionDisclosureRuleCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindConflictSignalRule:
-			serveConflictSignalRuleCatalogues(response, request, reader, tenant, query.Limit)
+			serveConflictSignalRuleCatalogues(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -142,16 +167,17 @@ func serveMilestoneMappingCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListMilestoneMappings(request.Context(), tenant, limit)
+	page, err := reader.ListMilestoneMappings(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成一份
 		// 看起来如实的空册。各 kind 分支同一条理由，下同。
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]milestoneMappingCatalogueBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]milestoneMappingCatalogueBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := milestoneMappingCatalogueBody{
 			Version:       row.Version,
 			EffectiveFrom: catalogueInstant(row.EffectiveFrom),
@@ -174,6 +200,7 @@ func serveMilestoneMappingCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindMilestoneMapping,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -183,14 +210,15 @@ func serveTriageRuleCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListTriageRules(request.Context(), tenant, limit)
+	page, err := reader.ListTriageRules(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]triageRuleCatalogueBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]triageRuleCatalogueBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := triageRuleCatalogueBody{
 			Version:       row.Version,
 			EffectiveFrom: catalogueInstant(row.EffectiveFrom),
@@ -213,6 +241,7 @@ func serveTriageRuleCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindTriageRule,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -222,14 +251,15 @@ func serveNotificationPolicyCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListNotificationPolicies(request.Context(), tenant, limit)
+	page, err := reader.ListNotificationPolicies(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]notificationPolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]notificationPolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, notificationPolicyBody{
 			Policy:        row.Policy,
 			Channel:       row.Channel,
@@ -242,6 +272,7 @@ func serveNotificationPolicyCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindNotificationPolicy,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -251,14 +282,15 @@ func serveClaimEligibilityCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListClaimEligibilities(request.Context(), tenant, limit)
+	page, err := reader.ListClaimEligibilities(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]claimEligibilityBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]claimEligibilityBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, claimEligibilityBody{
 			Contract:     row.Contract,
 			Version:      row.Version,
@@ -270,6 +302,7 @@ func serveClaimEligibilityCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindClaimEligibility,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -279,14 +312,15 @@ func serveClaimAuthorizationCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListClaimAuthorizations(request.Context(), tenant, limit)
+	page, err := reader.ListClaimAuthorizations(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]claimAuthorizationBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]claimAuthorizationBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, claimAuthorizationBody{
 			Customer:   row.Customer,
 			Version:    row.Version,
@@ -298,6 +332,7 @@ func serveClaimAuthorizationCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindClaimAuthorization,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -307,14 +342,15 @@ func serveDisclosurePolicyCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListDisclosurePolicies(request.Context(), tenant, limit)
+	page, err := reader.ListDisclosurePolicies(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]disclosurePolicyCatalogueBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]disclosurePolicyCatalogueBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := disclosurePolicyCatalogueBody{
 			Version:       row.Version,
 			EffectiveFrom: catalogueInstant(row.EffectiveFrom),
@@ -339,6 +375,7 @@ func serveDisclosurePolicyCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindDisclosurePolicy,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -348,14 +385,15 @@ func serveExceptionDisclosureRuleCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListExceptionDisclosureRules(request.Context(), tenant, limit)
+	page, err := reader.ListExceptionDisclosureRules(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]exceptionDisclosureRuleCatalogueBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]exceptionDisclosureRuleCatalogueBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := exceptionDisclosureRuleCatalogueBody{
 			Version:       row.Version,
 			EffectiveFrom: catalogueInstant(row.EffectiveFrom),
@@ -381,6 +419,7 @@ func serveExceptionDisclosureRuleCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindExceptionDisclosureRule,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -390,14 +429,15 @@ func serveConflictSignalRuleCatalogues(
 	reader VisibilityCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListConflictSignalRules(request.Context(), tenant, limit)
+	page, err := reader.ListConflictSignalRules(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]conflictSignalRuleBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]conflictSignalRuleBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, conflictSignalRuleBody{
 			SignalKind:   row.SignalKind,
 			Version:      row.Version,
@@ -410,6 +450,7 @@ func serveConflictSignalRuleCatalogues(
 		Outcome:    outcomeVisibilityCataloguesListed,
 		Kind:       kindConflictSignalRule,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -427,6 +468,7 @@ type milestoneMappingListResponse struct {
 	Outcome    string                          `json:"outcome"`
 	Kind       string                          `json:"kind"`
 	Catalogues []milestoneMappingCatalogueBody `json:"catalogues"`
+	Page       cataloguepage.Page              `json:"page"`
 }
 
 // milestoneMappingCatalogueBody 是一版映射连同整版条目。effectiveTo 缺席即当前版
@@ -449,6 +491,7 @@ type triageRuleListResponse struct {
 	Outcome    string                    `json:"outcome"`
 	Kind       string                    `json:"kind"`
 	Catalogues []triageRuleCatalogueBody `json:"catalogues"`
+	Page       cataloguepage.Page        `json:"page"`
 }
 
 type triageRuleCatalogueBody struct {
@@ -469,6 +512,7 @@ type notificationPolicyListResponse struct {
 	Outcome    string                   `json:"outcome"`
 	Kind       string                   `json:"kind"`
 	Catalogues []notificationPolicyBody `json:"catalogues"`
+	Page       cataloguepage.Page       `json:"page"`
 }
 
 // notificationPolicyBody 无版本与区间字段：这份目录的版本化由披露策略引用本身承担
@@ -485,6 +529,7 @@ type claimEligibilityListResponse struct {
 	Outcome    string                 `json:"outcome"`
 	Kind       string                 `json:"kind"`
 	Catalogues []claimEligibilityBody `json:"catalogues"`
+	Page       cataloguepage.Page     `json:"page"`
 }
 
 type claimEligibilityBody struct {
@@ -498,6 +543,7 @@ type claimAuthorizationListResponse struct {
 	Outcome    string                   `json:"outcome"`
 	Kind       string                   `json:"kind"`
 	Catalogues []claimAuthorizationBody `json:"catalogues"`
+	Page       cataloguepage.Page       `json:"page"`
 }
 
 // claimAuthorizationBody 的 applicants 允许为空数组：目录行在场而名单为空是「此账户
@@ -514,6 +560,7 @@ type disclosurePolicyListResponse struct {
 	Outcome    string                          `json:"outcome"`
 	Kind       string                          `json:"kind"`
 	Catalogues []disclosurePolicyCatalogueBody `json:"catalogues"`
+	Page       cataloguepage.Page              `json:"page"`
 }
 
 type disclosurePolicyCatalogueBody struct {
@@ -547,6 +594,7 @@ type exceptionDisclosureRuleListResponse struct {
 	Outcome    string                                 `json:"outcome"`
 	Kind       string                                 `json:"kind"`
 	Catalogues []exceptionDisclosureRuleCatalogueBody `json:"catalogues"`
+	Page       cataloguepage.Page                     `json:"page"`
 }
 
 // exceptionDisclosureRuleCatalogueBody 是一版异常披露规则连同整版条目（0023）。它与
@@ -575,6 +623,7 @@ type conflictSignalRuleListResponse struct {
 	Outcome    string                   `json:"outcome"`
 	Kind       string                   `json:"kind"`
 	Catalogues []conflictSignalRuleBody `json:"catalogues"`
+	Page       cataloguepage.Page       `json:"page"`
 }
 
 // conflictSignalRuleBody 无生效区间字段：这份目录一租户一条、换版是治理动作（0025 头注），

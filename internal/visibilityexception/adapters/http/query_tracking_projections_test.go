@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -34,20 +35,28 @@ type projectionReaderDouble struct {
 	byVersion map[domain.ProjectionVersionID]domain.TrackingProjection
 	tenant    domain.TenantID
 	err       error
+
+	listQuery  cataloguepage.Query
+	listCalled bool
+	next       string
+	total      int64
 }
 
 func (double *projectionReaderDouble) ListCurrent(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ int,
-) ([]domain.TrackingProjection, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.TrackingProjection], error) {
+	double.listQuery = query
+	double.listCalled = true
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[domain.TrackingProjection]{}, double.err
 	}
 	if tenant != double.tenant {
-		return nil, nil
+		return cataloguepage.Result[domain.TrackingProjection]{}, nil
 	}
-	return double.listed, nil
+	return cataloguepage.Result[domain.TrackingProjection]{Rows: double.listed, Next: double.next, Total: double.total}, nil
 }
 
 func (double *projectionReaderDouble) FindCurrent(

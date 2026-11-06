@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -35,7 +36,8 @@ type OperationsProjectionReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.TrackingProjection, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.TrackingProjection], error)
 	FindCurrent(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -72,6 +74,9 @@ const (
 // 参数是否在场属传输形状(与方法检查同级,先于 Intake),读它不构成读业务内容——
 // 未配置 Intake 对全部分支同答 403,分支选择不泄露任何东西。两个定位参数同时在场
 // 按坏请求拒:选哪个都是替调用方猜。
+//
+// 列表那一支照 ADR-0144 在 Intake 之后按 ports.TrackingProjectionPages 解码(writePageQueryProblem 头注),坏参数答
+// 400 带理由散文,答复加 page;按包裹或按版本取单件的两支先分派、不经解码,它们收的参数与列表的翻页集无关。
 func NewQueryTrackingProjectionsEndpoint(
 	intake OperationsTrackingIntake,
 	reader OperationsProjectionReader,
@@ -89,7 +94,6 @@ func NewQueryTrackingProjectionsEndpoint(
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-
 		query, err := intake.IntakeOperationsQuery(request.Context(), request)
 		if err != nil {
 			writeOperationsIntakeProblem(response, err)
@@ -115,19 +119,25 @@ func serveProjectionList(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	projections, err := reader.ListCurrent(request.Context(), tenant, limit)
+	pageQuery, err := ports.TrackingProjectionPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListCurrent(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null:调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]projectionBody, 0, len(projections))
-	for _, projection := range projections {
+	bodies := make([]projectionBody, 0, len(page.Rows))
+	for _, projection := range page.Rows {
 		bodies = append(bodies, projectionBodyOf(projection))
 	}
 	writeJSON(response, http.StatusOK, projectionListResponse{
 		Outcome:     outcomeProjectionsListed,
 		Projections: bodies,
+		Page:        page.Page(limit),
 	})
 }
 
@@ -213,8 +223,9 @@ func writeOperationsIntakeProblem(response http.ResponseWriter, err error) {
 }
 
 type projectionListResponse struct {
-	Outcome     string           `json:"outcome"`
-	Projections []projectionBody `json:"projections"`
+	Outcome     string             `json:"outcome"`
+	Projections []projectionBody   `json:"projections"`
+	Page        cataloguepage.Page `json:"page"`
 }
 
 type projectionDetailResponse struct {

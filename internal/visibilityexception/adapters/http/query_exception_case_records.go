@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -15,7 +16,8 @@ type CaseReviewReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ExceptionCaseCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExceptionCaseCatalogueRow], error)
 }
 
 var _ CaseReviewReader = ports.CaseReviewRead(nil)
@@ -29,6 +31,9 @@ const outcomeExceptionCasesListed = "EXCEPTION_CASES_LISTED"
 // 占坑。查阅不推进案件阶段、不合并、不关闭——那些是案件命令面的判断（CONTEXT
 // 「异常案件」），本端点只消费存储读面（ADR-0077 Decision 一）。准入复用运营追踪
 // 查阅的 OperationsTrackingIntake，判据同 /exception-triage-records。
+//
+// 翻页、排序与筛选照 ADR-0144：查询参数在 Intake 之后按 ports.ExceptionCasePages 解码（writePageQueryProblem 头注），
+// 坏参数答 400 带理由散文，答复加 page。
 func NewQueryExceptionCaseRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader CaseReviewReader,
@@ -44,13 +49,18 @@ func NewQueryExceptionCaseRecordsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
-		rows, err := reader.ListExceptionCases(request.Context(), query.Scope.Tenant(), query.Limit)
+		pageQuery, err := ports.ExceptionCasePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := reader.ListExceptionCases(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]exceptionCaseBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]exceptionCaseBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			body := exceptionCaseBody{
 				CaseID:                row.CaseID,
 				DocumentNumber:        row.DocumentNumber,
@@ -74,6 +84,7 @@ func NewQueryExceptionCaseRecordsEndpoint(
 		writeJSON(response, http.StatusOK, exceptionCaseListResponse{
 			Outcome: outcomeExceptionCasesListed,
 			Cases:   bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -81,6 +92,7 @@ func NewQueryExceptionCaseRecordsEndpoint(
 type exceptionCaseListResponse struct {
 	Outcome string              `json:"outcome"`
 	Cases   []exceptionCaseBody `json:"cases"`
+	Page    cataloguepage.Page  `json:"page"`
 }
 
 // exceptionCaseBody 逐字段透出一件异常案件。

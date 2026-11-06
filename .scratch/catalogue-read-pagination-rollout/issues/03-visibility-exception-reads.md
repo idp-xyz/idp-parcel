@@ -1,7 +1,7 @@
 # 03 visibility-exception 十四册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 visibility-exception `0034`（进 main 时按 tip 重核）
+Status: in-progress——2026-11-06 作者会话在分支 `cursor/crpr-03-visibility` 上做（worktree `idp-parcel-crpr-03`，基 `d48c5b130`）；迁移编号预留 visibility-exception `0034`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/visibilityexception/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/visibility_exception` 的一条新迁移（索引）。

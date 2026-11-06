@@ -751,8 +751,9 @@ func (unwiredProjectionViews) ListCurrent(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilitydomain.TrackingProjection, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilitydomain.TrackingProjection], error) {
+	return cataloguepage.Result[visibilitydomain.TrackingProjection]{}, errOrchestrationNotWired
 }
 
 func (unwiredProjectionViews) FindCurrent(
@@ -1918,48 +1919,54 @@ func (unwiredVisibilityCatalogue) ListMilestoneMappings(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.MilestoneMappingCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.MilestoneMappingCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.MilestoneMappingCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListTriageRules(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.TriageRuleCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.TriageRuleCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.TriageRuleCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListNotificationPolicies(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.NotificationPolicyCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.NotificationPolicyCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.NotificationPolicyCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListClaimEligibilities(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ClaimEligibilityCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ClaimEligibilityCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ClaimEligibilityCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListClaimAuthorizations(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ClaimAuthorizationCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ClaimAuthorizationCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ClaimAuthorizationCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListDisclosurePolicies(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.DisclosurePolicyCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.DisclosurePolicyCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.DisclosurePolicyCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // 异常披露规则与冲突信号规则两册随票 ve-disclosure-policy-view/03 进同一读口：占位随端口
@@ -1968,16 +1975,18 @@ func (unwiredVisibilityCatalogue) ListExceptionDisclosureRules(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ExceptionDisclosureRuleCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ExceptionDisclosureRuleCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ExceptionDisclosureRuleCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredVisibilityCatalogue) ListConflictSignalRules(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ConflictSignalRuleCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ConflictSignalRuleCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ConflictSignalRuleCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredCaseReview 是 VE 案件侧三读口（分诊两册、案件单册、理赔追偿三册）的占位，
@@ -1990,48 +1999,54 @@ func (unwiredCaseReview) ListSignalEpisodes(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.SignalEpisodeCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.SignalEpisodeCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.SignalEpisodeCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseReview) ListDispositionRequests(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.DispositionRequestCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.DispositionRequestCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.DispositionRequestCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseReview) ListExceptionCases(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ExceptionCaseCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ExceptionCaseCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ExceptionCaseCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseReview) ListCustomerNotifications(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.CustomerNotificationCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.CustomerNotificationCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.CustomerNotificationCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseReview) ListClaimItems(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.ClaimItemCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.ClaimItemCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.ClaimItemCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseReview) ListRecoveryMatters(
 	context.Context,
 	visibilitydomain.TenantID,
 	int,
-) ([]visibilityports.RecoveryMatterCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[visibilityports.RecoveryMatterCatalogueRow], error) {
+	return cataloguepage.Result[visibilityports.RecoveryMatterCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredCodSubledgers 是代收分户账册列表读口的占位，方法表与
