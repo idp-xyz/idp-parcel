@@ -12,6 +12,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 待批准发布载体与审批职责规则的持久化面（0028；ADR-0126 Decision 三）。
@@ -174,76 +175,123 @@ func (repository *PublicationDrafts) LoadDraft(
 	return draft, true, nil
 }
 
-// ListOpenDrafts 交出租户名下还没发布的载体（`待批准`与`已批准`），录入时刻由新到旧，同刻按版本身份定序。
+// ListOpenDrafts 照查询对象取一页租户名下还没发布的载体（`待批准`与`已批准`）；排序、筛选与 q 声明在
+// ports.OpenPublicationDraftPages（ADR-0144），缺省录入时刻由新到旧，同刻按版本身份与排序同向收尾。
 //
 // 租户条件落在 SQL 上（ADR-0003 隔离边界）；每一行都经重建门读回。本构建折不回正文的行作为读不回一格带着库上的事实
-// 留在列表里：跳过它会让批准者以为列表就是全部，让整页答不出又会叫一行读不回的载体挡住租户全部在途工作。行本身坏了
-// （重建门因行数据而拒）才让整次答案未形成。不分页：未发布的载体是在途工作，量级是人手能批完的那一档，读口答的是 limit 以内。
+// 留在页里：跳过它会让批准者以为列表就是全部，让整页答不出又会叫一行读不回的载体挡住租户全部在途工作。它照样计入总数、
+// 照样占页里的位置，游标按列上的值编，翻页不因它重建失败而跳行。行本身坏了（重建门因行数据而拒）才让整次答案未形成。
 func (repository *PublicationDrafts) ListOpenDrafts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.OpenPublicationDraft, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.OpenPublicationDraft], error) {
+	const operation = "list open publication drafts"
 	if tenant.String() == "" {
-		return nil, fmt.Errorf("list open publication drafts: tenant is required")
+		return cataloguepage.Result[ports.OpenPublicationDraft]{}, fmt.Errorf("%s: tenant is required", operation)
 	}
-	if limit <= 0 {
-		return nil, fmt.Errorf("list open publication drafts: limit must be positive, got %d", limit)
-	}
-	querier, err := repository.db.ReadExecutor(ctx)
+	page, err := openDraftRead(tenant).page(ctx, repository.db, operation, limit, query, tenant.String())
 	if err != nil {
-		return nil, fmt.Errorf("list open publication drafts: %w", err)
+		return cataloguepage.Result[ports.OpenPublicationDraft]{}, err
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT object_kind, object_id, version_label,
-		        scope_ref, effective_starts_at, effective_ends_at, declared_references,
-		        content_canonicalization, content_digest, content_document,
-		        submitter_ref, submitted_at, status, approver_ref, approved_at, published_at
-		   FROM party_commercial.publication_draft
-		  WHERE tenant_id = $1 AND status IN ($2, $3)
-		  ORDER BY submitted_at DESC, object_kind, object_id, version_label
-		  LIMIT $4`,
-		tenant.String(), uint8(domain.PublicationDraftPendingApproval), uint8(domain.PublicationDraftApproved), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list open publication drafts: %w", err)
+	drafts := make([]ports.OpenPublicationDraft, len(page.Rows))
+	for index, row := range page.Rows {
+		drafts[index] = row.open
 	}
-	defer rows.Close()
+	return cataloguepage.Result[ports.OpenPublicationDraft]{Rows: drafts, Next: page.Next, Total: page.Total}, nil
+}
 
-	drafts := make([]ports.OpenPublicationDraft, 0)
-	for rows.Next() {
-		var kind uint8
-		var objectID, version string
-		var row scannedDraft
-		if err := rows.Scan(&kind, &objectID, &version,
-			&row.scope, &row.startsAt, &row.endsAt, &row.references,
-			&row.canonicalization, &row.digest, &row.document,
-			&row.submitter, &row.submittedAt, &row.status, &row.approver, &row.approvedAt, &row.publishedAt); err != nil {
-			return nil, fmt.Errorf("list open publication drafts: %w", err)
-		}
-		object, err := domain.NewCommercialObjectID(objectID)
-		if err != nil {
-			return nil, fmt.Errorf("list open publication drafts: %w", err)
-		}
-		label, err := domain.NewCommercialVersionLabel(version)
-		if err != nil {
-			return nil, fmt.Errorf("list open publication drafts: %w", err)
-		}
-		draft, err := row.draft(tenant, domain.CommercialObjectKind(kind), object, label)
-		var unreadable *domain.UnreadablePublicationDraft
-		switch {
-		case errors.As(err, &unreadable):
-			drafts = append(drafts, ports.UnreadableOpenDraft(unreadable))
-		case err != nil:
-			return nil, fmt.Errorf("list open publication drafts: %w", err)
-		default:
-			drafts = append(drafts, ports.ReadableOpenDraft(draft))
-		}
+// openDraftListed 上列租户名下还没发布的载体。两格状态写成字面量而不绑参数：0047 那条部分索引的谓词是同一组字面量，
+// 规划器要从语句本身推得出谓词才肯用它，绑参数的泛型计划推不出。码取自领域枚举而不手写数字，与 0028 的 CHECK 是同一组。
+var openDraftListed = fmt.Sprintf(`WITH listed AS (
+	SELECT object_kind, object_id, version_label,
+	       scope_ref, effective_starts_at, effective_ends_at, declared_references,
+	       content_canonicalization, content_digest, content_document,
+	       submitter_ref, submitted_at, status, approver_ref, approved_at, published_at
+	  FROM party_commercial.publication_draft
+	 WHERE tenant_id = $1 AND status IN (%d, %d)
+)`, uint8(domain.PublicationDraftPendingApproval), uint8(domain.PublicationDraftApproved))
+
+const openDraftSelection = `object_kind, object_id, version_label,
+	scope_ref, effective_starts_at, effective_ends_at, declared_references,
+	content_canonicalization, content_digest, content_document,
+	submitter_ref, submitted_at, status, approver_ref, approved_at, published_at`
+
+// openDraftBinding 落列见 ports.OpenPublicationDraftPages。status 与类别在库上都存领域码，按词换码比；q 覆盖对象、版本、
+// 范围与录入者、批准者两格主体引用。
+var openDraftBinding = ports.OpenPublicationDraftPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"submittedAt": "submitted_at", "objectId": "object_id"},
+	Identity: []string{"object_kind", "object_id", "version_label"},
+	Filters:  map[string]string{"status": "status", "kind": "object_kind"},
+	Codes: map[string]func(string) (int64, error){
+		"status": cataloguepage.Code[domain.PublicationDraftStatus],
+		"kind":   cataloguepage.Code[domain.CommercialObjectKind],
+	},
+	Keyword: []string{"object_id", "version_label", "scope_ref", "submitter_ref", "approver_ref"},
+})
+
+// openDraftRow 是载体列表的扫描行：一份载体（读得回或读不回）连同 ORDER BY 那几列在列上的原值，游标位置取它们而不取
+// 载体里的副本（理由在 cataloguepage.Finish 头注）。
+type openDraftRow struct {
+	open        ports.OpenPublicationDraft
+	kind        uint8
+	objectID    string
+	version     string
+	submittedAt time.Time
+}
+
+// openDraftRead 每次按租户现组：扫描要把租户交给重建门；绑定、语句与选列是包级的同一份。
+func openDraftRead(tenant domain.TenantID) catalogueRead[openDraftRow] {
+	return catalogueRead[openDraftRow]{
+		binding:   openDraftBinding,
+		listed:    openDraftListed,
+		selection: openDraftSelection,
+		scan: func(rows pgx.Rows) (openDraftRow, error) {
+			return scanOpenDraft(rows, tenant)
+		},
+		position: func(row openDraftRow, sortField string) cataloguepage.Position {
+			value := cataloguepage.FormatInstant(row.submittedAt)
+			if sortField == "objectId" {
+				value = row.objectID
+			}
+			return cataloguepage.Position{
+				Value:    value,
+				Identity: []string{cataloguepage.FormatInteger(int64(row.kind)), row.objectID, row.version},
+			}
+		},
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list open publication drafts: %w", err)
+}
+
+func scanOpenDraft(rows pgx.Rows, tenant domain.TenantID) (openDraftRow, error) {
+	var scanned openDraftRow
+	var row scannedDraft
+	if err := rows.Scan(&scanned.kind, &scanned.objectID, &scanned.version,
+		&row.scope, &row.startsAt, &row.endsAt, &row.references,
+		&row.canonicalization, &row.digest, &row.document,
+		&row.submitter, &scanned.submittedAt, &row.status, &row.approver, &row.approvedAt, &row.publishedAt); err != nil {
+		return openDraftRow{}, err
 	}
-	return drafts, nil
+	row.submittedAt = scanned.submittedAt
+	object, err := domain.NewCommercialObjectID(scanned.objectID)
+	if err != nil {
+		return openDraftRow{}, err
+	}
+	label, err := domain.NewCommercialVersionLabel(scanned.version)
+	if err != nil {
+		return openDraftRow{}, err
+	}
+	draft, err := row.draft(tenant, domain.CommercialObjectKind(scanned.kind), object, label)
+	var unreadable *domain.UnreadablePublicationDraft
+	switch {
+	case errors.As(err, &unreadable):
+		scanned.open = ports.UnreadableOpenDraft(unreadable)
+	case err != nil:
+		return openDraftRow{}, err
+	default:
+		scanned.open = ports.ReadableOpenDraft(draft)
+	}
+	return scanned, nil
 }
 
 // AdvanceDraft 写回一份已在领域推进过状态的载体。UPDATE 带前态条件——`已批准`要求库上是`待批准`，`已发布`要求库上

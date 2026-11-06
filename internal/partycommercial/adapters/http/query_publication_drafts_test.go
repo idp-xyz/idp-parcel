@@ -14,6 +14,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对待批准发布载体的两个读回端点（ADR-0314 决定一）证传输面：列表不带正文、带摘要与状态与痕迹；单份读回带规范化文档
@@ -46,8 +47,10 @@ func (double draftReaderDouble) LoadDraft(
 	return double.store.LoadDraft(ctx, double.storedUnder, kind, objectID, version)
 }
 
-func (double draftReaderDouble) ListOpenDrafts(_ context.Context, _ domain.TenantID, _ int) ([]ports.OpenPublicationDraft, error) {
-	return double.open, double.err
+func (double draftReaderDouble) ListOpenDrafts(
+	_ context.Context, _ domain.TenantID, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.OpenPublicationDraft], error) {
+	return tenantPage(double.err, true, double.open)
 }
 
 // submittedAndApprovedDrafts 经真端点录入两份载体（一份指名引用、一份不指名），再批准后一份：读回要证的就是这条链上落下的内容。

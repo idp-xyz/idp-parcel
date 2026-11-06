@@ -309,6 +309,25 @@ func (*pagingPolicyReader) FindPreAcceptanceFinancialControlPolicy(
 	return ports.PreAcceptanceFinancialControlPolicyRow{}, false, nil
 }
 
+// pagingDraftReader 是待批准载体列表的翻页替身。载体要经录入链才造得出，这张表只数行、不看行里的字段，交一行零值载体；
+// 行标识按本册声明的段序与值类给（类别是整数码）。
+type pagingDraftReader struct {
+	pageRecorder
+}
+
+func (reader *pagingDraftReader) ListOpenDrafts(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.OpenPublicationDraft], error) {
+	return recordPage(&reader.pageRecorder, query, ports.OpenPublicationDraft{},
+		cataloguepage.FormatInteger(int64(domain.CreditPolicyObject)), "SYN-DRAFT-1", "v1")
+}
+
+func (*pagingDraftReader) LoadDraft(
+	context.Context, domain.TenantID, domain.CommercialObjectKind, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (domain.PublicationDraft, bool, error) {
+	return domain.PublicationDraft{}, false, nil
+}
+
 // pagedEndpointCase 是一册在表里的一行。selector 是册子选择器（如 kind=PRICE_POLICY），每次请求都带上；badFilter 只在本册
 // 有带词表的筛选维时给。goodQuery 是一组合本册声明的条件，翻页那一步换条件拿旧游标就是拿它与 changedQuery 对照。
 type pagedEndpointCase struct {
@@ -333,6 +352,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 	policyEndpoint := func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
 		return commercialhttp.NewQueryCommercialPoliciesEndpoint(intake, policies)
 	}
+	drafts := &pagingDraftReader{}
 	return []pagedEndpointCase{
 		{
 			name: "业务参与方",
@@ -451,6 +471,15 @@ func pagedEndpointCases() []pagedEndpointCase {
 			name: "接受前财务控制策略", endpoint: policyEndpoint, recorder: &policies.pageRecorder, collection: "policies",
 			selector: "kind=PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", defaultSort: "-publishedAt", badSort: "jointPassCondition",
 			badFilter: "status=DRAFT", goodQuery: "status=SUPERSEDED&status=EXPIRED", changedQuery: "status=EXPIRED",
+		},
+		{
+			name: "待批准发布载体",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQueryPublicationDraftsEndpoint(intake, drafts)
+			},
+			recorder: &drafts.pageRecorder, collection: "drafts",
+			defaultSort: "-submittedAt", badSort: "approvedAt", badFilter: "status=PUBLISHED",
+			goodQuery: "status=PENDING_APPROVAL&kind=CREDIT_POLICY", changedQuery: "status=APPROVED&kind=CREDIT_POLICY",
 		},
 	}
 }

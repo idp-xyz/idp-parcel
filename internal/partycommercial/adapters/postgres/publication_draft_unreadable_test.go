@@ -112,7 +112,7 @@ func TestAnUnreadableDraftIsListedAndReadBackAsNotReadableInsteadOfFailingThePag
 		t.Fatalf("读不回一格的事实 = %#v", unreadable)
 	}
 
-	listed, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10)
+	listed, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.OpenPublicationDraftPages)))
 	if err != nil {
 		t.Fatalf("列出未发布载体：%v", err)
 	}
@@ -242,7 +242,7 @@ func TestABrokenDraftRowStillFailsAndAPendingOneIsHealedByResubmittingTheSameCon
 		if found || !errors.Is(err, domain.ErrInvalidRehydratedPublicationDraft) || errors.Is(err, domain.ErrPublicationDraftNotReadable) {
 			t.Fatalf("%s：点读 found %v, err %v, want 行坏了而不是读不回", name, found, err)
 		}
-		if _, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10); !errors.Is(err, domain.ErrInvalidRehydratedPublicationDraft) {
+		if _, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.OpenPublicationDraftPages))); !errors.Is(err, domain.ErrInvalidRehydratedPublicationDraft) {
 			t.Fatalf("%s：列表遇到坏行 err = %v, want 整次未形成", name, err)
 		}
 		// 同内容按同版本重录：快照文档与库上不同，修订落下，行回到读得回的样子。

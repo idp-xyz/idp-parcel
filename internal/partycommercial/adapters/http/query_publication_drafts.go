@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PublicationDraftReader 是待批准发布载体读回端点消费的读口（ADR-0314 决定一）。它单独成接口，端点只声明自己用到的那两个方法；
@@ -21,7 +22,12 @@ type PublicationDraftReader interface {
 		objectID domain.CommercialObjectID,
 		version domain.CommercialVersionLabel,
 	) (domain.PublicationDraft, bool, error)
-	ListOpenDrafts(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.OpenPublicationDraft, error)
+	ListOpenDrafts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.OpenPublicationDraft], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -46,6 +52,9 @@ const (
 // 状态与批准痕迹，批准者据此选一份去翻看。挂操作者查阅读——读的是租户自己的在途工作，不是写面；批准与发布仍各走各的登记写口。
 // 空列表答 200 加空数组（空是内容，不是缺席）。本构建折不回正文的载体照样在列表里，`readable` 为假并带成因 `unreadableCause`，
 // 其余字段取自库上的列（含列上的规范化版本与摘要）：批准者看得见这一份在、动不了它，不会因为一行读不回而整页答不出。
+//
+// 查询参数按 ports.OpenPublicationDraftPages 解码，属传输形状、先于 Intake（ADR-0144 决定六），答法同
+// /commercial-customer-accounts；答复带 page。单份读回是按身份取一行，不收这些参数。
 func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader PublicationDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -53,26 +62,35 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		pageQuery, err := ports.OpenPublicationDraftPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		drafts, err := reader.ListOpenDrafts(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListOpenDrafts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「没有待批准的」：伪装成空列表会让批准者以为没有活要干。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]publicationDraftBody, 0, len(drafts))
-		for _, open := range drafts {
+		bodies := make([]publicationDraftBody, 0, len(page.Rows))
+		for _, open := range page.Rows {
 			if draft, readable := open.Draft(); readable {
 				bodies = append(bodies, publicationDraftBodyOf(draft, false))
 			} else if unreadable, ok := open.Unreadable(); ok {
 				bodies = append(bodies, unreadablePublicationDraftBodyOf(unreadable))
 			}
 		}
-		writeJSON(response, http.StatusOK, publicationDraftListResponse{Outcome: outcomePublicationDraftsListed, Drafts: bodies})
+		writeJSON(response, http.StatusOK, publicationDraftListResponse{
+			Outcome: outcomePublicationDraftsListed,
+			Drafts:  bodies,
+			Page:    page.Page(query.Limit),
+		})
 	})
 }
 
@@ -127,6 +145,7 @@ func NewQueryPublicationDraftEndpoint(intake CommercialCatalogueIntake, reader P
 type publicationDraftListResponse struct {
 	Outcome string                 `json:"outcome"`
 	Drafts  []publicationDraftBody `json:"drafts"`
+	Page    cataloguepage.Page     `json:"page"`
 }
 
 type publicationDraftReadResponse struct {
