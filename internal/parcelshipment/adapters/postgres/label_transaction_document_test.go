@@ -112,7 +112,7 @@ func TestABatchDocumentSurvivesTheSnapshotRoundTripWithoutABody(t *testing.T) {
 		t.Error("本体无存放处时不该报告已存放")
 	}
 
-	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-doc-a"), 10)
+	records, err := rowsOf(views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-doc-a"), 10, firstPage(t, ports.LabelTransactionPages)))
 	if err != nil {
 		t.Fatalf("读面查阅：%v", err)
 	}
@@ -200,7 +200,7 @@ func TestASecondDocumentIsAppendedInsteadOfReplacingTheFirst(t *testing.T) {
 		t.Error("第二条带定位符，本体应报告已存放")
 	}
 
-	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-doc-b"), 10)
+	records, err := rowsOf(views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-doc-b"), 10, firstPage(t, ports.LabelTransactionPages)))
 	if err != nil {
 		t.Fatalf("读面查阅：%v", err)
 	}

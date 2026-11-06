@@ -692,8 +692,9 @@ func (unwiredLabelTransactions) ListLabelTransactions(
 	context.Context,
 	shipmentdomain.TenantID,
 	int,
-) ([]shipmentports.LabelTransactionRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[shipmentports.LabelTransactionRecord], error) {
+	return cataloguepage.Result[shipmentports.LabelTransactionRecord]{}, errOrchestrationNotWired
 }
 
 // unwiredChannelSelectionDecisions 是渠道择优决定查阅读口的占位（票 label-channel/23）；读不回交回稳定错误

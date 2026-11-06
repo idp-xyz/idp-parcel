@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // SourceSubmissionRepository 在明确的来源作用域下保全不可变来源事实。查询以完整的
@@ -2106,12 +2107,16 @@ type LabelTransactionDocumentRow struct {
 // 的隔离边界照常在。
 //
 // 命令面不在这里：本上下文的面单交易写入等渠道墙，本切片根本不开写行。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/02）：查询对象由端点按 LabelTransactionPages 解出，
+// 读口答「本页交易 + 下一游标 + 总数」。
 type LabelTransactionViews interface {
 	ListLabelTransactions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]LabelTransactionRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[LabelTransactionRecord], error)
 }
 
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。

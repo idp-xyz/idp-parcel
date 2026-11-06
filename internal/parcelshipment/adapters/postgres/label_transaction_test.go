@@ -49,6 +49,17 @@ func establishedLabelTransactionFixture(
 	parcels ...string,
 ) domain.LabelTransaction {
 	t.Helper()
+	return establishedLabelTransactionFixtureAt(t, tenant, transactionID, labelEstablishedAt, parcels...)
+}
+
+// establishedLabelTransactionFixtureAt 同上，只是建立时刻按参数给——翻页用例要几笔先后建立的交易。
+func establishedLabelTransactionFixtureAt(
+	t *testing.T,
+	tenant, transactionID string,
+	establishedAt time.Time,
+	parcels ...string,
+) domain.LabelTransaction {
+	t.Helper()
 
 	covered := make([]domain.DeclaredParcelID, len(parcels))
 	for index, parcel := range parcels {
@@ -65,7 +76,7 @@ func establishedLabelTransactionFixture(
 		Contract:               mustBuild(t, domain.NewChannelContractReference, "contract-1"),
 		Rate:                   mustBuild(t, domain.NewChannelRateReference, "rate-1"),
 		ResponsibilityBasis:    mustBuild(t, domain.NewResponsibilityBasisSnapshotReference, "basis-snapshot-1"),
-		EstablishedAt:          labelEstablishedAt,
+		EstablishedAt:          establishedAt,
 	})
 	if err != nil {
 		t.Fatalf("建立面单交易：%v", err)
@@ -354,7 +365,7 @@ func TestALabelTransactionIsInvisibleToAnotherTenant(t *testing.T) {
 		t.Fatal("另一个租户读到了不属于它的面单交易")
 	}
 
-	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-b"), 10)
+	records, err := rowsOf(views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-b"), 10, firstPage(t, ports.LabelTransactionPages)))
 	if err != nil {
 		t.Fatalf("按另一租户列册：%v", err)
 	}
@@ -395,7 +406,7 @@ func TestTheLabelTransactionViewExpandsOneRowPerCoveredParcel(t *testing.T) {
 	}
 	mustInsertLabelTransaction(t, transactor, ctx, repository, pending)
 
-	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-a"), 10)
+	records, err := rowsOf(views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.LabelTransactionPages)))
 	if err != nil {
 		t.Fatalf("列册：%v", err)
 	}
@@ -500,7 +511,7 @@ func TestTheLabelTransactionViewDerivesContinuedAttemptFromTheRegisterAndTheCurr
 	}
 	mustInsertRegister(t, transactor, ctx, registers, foreign)
 
-	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-a"), 10)
+	records, err := rowsOf(views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.LabelTransactionPages)))
 	if err != nil {
 		t.Fatalf("列册：%v", err)
 	}
@@ -534,7 +545,7 @@ func TestTheLabelTransactionViewDerivesContinuedAttemptFromTheRegisterAndTheCurr
 func TestTheLabelTransactionViewRejectsANonPositiveLimit(t *testing.T) {
 	_, views, _ := newLabelTransactions(t)
 
-	if _, err := views.ListLabelTransactions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-a"), 0); err == nil {
+	if _, err := views.ListLabelTransactions(t.Context(), mustBuild(t, domain.NewTenantID, "tenant-a"), 0, firstPage(t, ports.LabelTransactionPages)); err == nil {
 		t.Fatal("limit 为 0 时读面静默答了一页")
 	}
 }

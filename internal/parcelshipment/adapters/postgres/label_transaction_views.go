@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // LabelTransactionViews 实现 ports.LabelTransactionViews：面单交易查阅的只读面。
@@ -32,77 +34,109 @@ func NewLabelTransactionViews(db *bentopg.DB) (*LabelTransactionViews, error) {
 
 var _ ports.LabelTransactionViews = (*LabelTransactionViews)(nil)
 
-// ListLabelTransactions 按租户取回最近建立的面单交易，新的在前；同刻并列时按交易标识倒序，
-// 保证分页可重复。limit 非正是调用方编程错误，判据同 ListVisible。
+// labelTransactionPages 把 ports.LabelTransactionPages 落到列上。transactionResult 落在存代码的 state 列；q 在交易标识、
+// 快照里的渠道账户与覆盖包裹（数组的文本形，包裹标识照原样出现在里面）上做字面包含。
+var labelTransactionPages = ports.LabelTransactionPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"establishedAt": "established_at", "transactionId": "label_transaction_id"},
+	Identity: []string{"label_transaction_id"},
+	Filters:  map[string]string{"transactionResult": "state"},
+	Codes:    map[string]func(string) (int64, error){"transactionResult": cataloguepage.Code[domain.LabelTransactionState]},
+	Keyword:  []string{"label_transaction_id", "snapshot->>'channelAccount'", "(snapshot->'coveredParcels')::text"},
+})
+
+// scannedLabelTransaction 是取页读回的一行。establishedAt 取自列而不是快照：游标位置要与 ORDER BY 用的是同一个值，
+// 快照里那份带纳秒、列只到微秒（cataloguepage.Finish 头注）。
+type scannedLabelTransaction struct {
+	id            string
+	state         domain.LabelTransactionState
+	establishedAt time.Time
+	document      labelTransactionDocument
+}
+
+// ListLabelTransactions 按租户上列面单交易，按查询的筛选、q 与排序取游标之后的一页；缺省是建立时刻倒序、同刻按交易标识倒序。
+// 继续尝试判断只对本页的交易现算。limit 非正是调用方编程错误，判据同 ListVisible。
 func (views *LabelTransactionViews) ListLabelTransactions(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.LabelTransactionRecord, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.LabelTransactionRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.LabelTransactionRecord], error) {
+		return cataloguepage.Result[ports.LabelTransactionRecord]{}, fmt.Errorf("list label transactions: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list label transactions: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := labelTransactionPages.Plan(query, "tenant_id = $1", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := views.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list label transactions: %w", err)
+		return fail(err)
 	}
 
-	rows, err := querier.Query(ctx,
-		`SELECT label_transaction_id, state, snapshot
-		   FROM parcel_shipment.label_transaction
-		  WHERE tenant_id = $1
-		  ORDER BY established_at DESC, label_transaction_id DESC
-		  LIMIT $2`,
-		tenant.String(),
-		limit,
-	)
+	const source = "parcel_shipment.label_transaction"
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL("label_transaction_id, state, established_at, snapshot", source), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list label transactions: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	type scannedTransaction struct {
-		id       string
-		state    domain.LabelTransactionState
-		document labelTransactionDocument
-	}
-	var scanned []scannedTransaction
+	var fetched []scannedLabelTransaction
 	for rows.Next() {
-		var transactionID string
+		var row scannedLabelTransaction
 		var state uint8
 		var raw []byte
-		if err := rows.Scan(&transactionID, &state, &raw); err != nil {
-			return nil, fmt.Errorf("list label transactions: %w", err)
+		if err := rows.Scan(&row.id, &state, &row.establishedAt, &raw); err != nil {
+			return fail(err)
 		}
-		var document labelTransactionDocument
-		if err := json.Unmarshal(raw, &document); err != nil {
-			return nil, fmt.Errorf("list label transactions: 快照不是本适配器写下的形状：%w", err)
+		if err := json.Unmarshal(raw, &row.document); err != nil {
+			return fail(fmt.Errorf("快照不是本适配器写下的形状：%w", err))
 		}
-		scanned = append(scanned, scannedTransaction{id: transactionID, state: domain.LabelTransactionState(state), document: document})
+		row.state = domain.LabelTransactionState(state)
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list label transactions: %w", err)
+		return fail(err)
 	}
 	rows.Close()
 
+	page, err := cataloguepage.Finish(query, fetched, limit, total, labelTransactionPosition)
+	if err != nil {
+		return fail(err)
+	}
+
 	covered := make([]string, 0)
-	for _, transaction := range scanned {
+	for _, transaction := range page.Rows {
 		covered = append(covered, transaction.document.CoveredParcels...)
 	}
 	judgments, err := views.continuedAttemptJudgments(ctx, tenant, covered)
 	if err != nil {
-		return nil, fmt.Errorf("list label transactions: %w", err)
+		return fail(err)
 	}
 
-	records := make([]ports.LabelTransactionRecord, 0, len(scanned))
-	for _, transaction := range scanned {
+	records := make([]ports.LabelTransactionRecord, 0, len(page.Rows))
+	for _, transaction := range page.Rows {
 		record, err := transaction.document.viewRecord(transaction.id, transaction.state, judgments)
 		if err != nil {
-			return nil, fmt.Errorf("list label transactions: %w", err)
+			return fail(err)
 		}
 		records = append(records, record)
 	}
-	return records, nil
+	return cataloguepage.Result[ports.LabelTransactionRecord]{Rows: records, Next: page.Next, Total: page.Total}, nil
+}
+
+func labelTransactionPosition(row scannedLabelTransaction, sortField string) cataloguepage.Position {
+	value := row.id
+	if sortField == "establishedAt" {
+		value = cataloguepage.FormatInstant(row.establishedAt)
+	}
+	return cataloguepage.Position{Value: value, Identity: []string{row.id}}
 }
 
 // viewRecord 把快照摊成查阅记录，逐件覆盖包裹一行。

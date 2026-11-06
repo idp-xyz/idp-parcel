@@ -12,6 +12,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var labelEstablishedAtFixture = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -45,22 +46,26 @@ func labelTransactionIntake(t *testing.T) *labelTransactionIntakeDouble {
 
 type labelTransactionsReaderDouble struct {
 	records []ports.LabelTransactionRecord
+	next    string
+	total   int64
 	err     error
 	tenant  domain.TenantID
 	limit   int
+	query   cataloguepage.Query
+	called  bool
 }
 
 func (double *labelTransactionsReaderDouble) ListLabelTransactions(
 	_ context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.LabelTransactionRecord, error) {
-	double.tenant = tenant
-	double.limit = limit
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.LabelTransactionRecord], error) {
+	double.tenant, double.limit, double.query, double.called = tenant, limit, query, true
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.LabelTransactionRecord]{}, double.err
 	}
-	return double.records, nil
+	return cataloguepage.Result[ports.LabelTransactionRecord]{Rows: double.records, Next: double.next, Total: double.total}, nil
 }
 
 // labelTransactionRecordFixture 是一笔「部分成功」的交易：一件受理带渠道号并被作废，
@@ -111,9 +116,19 @@ func getLabelTransactions(
 	method string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
+	return requestLabelTransactions(t, intake, reader, method, "/label-transactions")
+}
+
+func requestLabelTransactions(
+	t *testing.T,
+	intake shipmenthttp.LabelTransactionQueryIntake,
+	reader shipmenthttp.LabelTransactionsReader,
+	method, target string,
+) *httptest.ResponseRecorder {
+	t.Helper()
 	endpoint := shipmenthttp.NewQueryLabelTransactionsEndpoint(intake, reader)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, httptest.NewRequest(method, "/label-transactions", nil))
+	endpoint.ServeHTTP(response, httptest.NewRequest(method, target, nil))
 	return response
 }
 

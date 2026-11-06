@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 面单交易查阅端点（票 admin-skeleton-closure-batch/08，ADR-0084 决定七）。
@@ -46,7 +47,8 @@ type LabelTransactionsReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.LabelTransactionRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.LabelTransactionRecord], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
@@ -68,6 +70,9 @@ const continuedAttemptBasisRegisterAndCurrentFinal = "DERIVED_FROM_DECISION_REGI
 
 // NewQueryLabelTransactionsEndpoint 交回面单交易查阅的 HTTP 入口（GET /label-transactions）。
 // 行粒度是交易 × 包裹：一笔交易覆盖几件包裹就摊几行，摊开在读侧完成（决定七）。
+//
+// 查询参数（after、sort、transactionResult 与 q）按 ports.LabelTransactionPages 解码（ADR-0144 决定六），先于 Intake；
+// 翻页按交易翻，page 数的是交易（声明头注）。
 func NewQueryLabelTransactionsEndpoint(
 	intake LabelTransactionQueryIntake,
 	reader LabelTransactionsReader,
@@ -79,26 +84,32 @@ func NewQueryLabelTransactionsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.LabelTransactionPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeLabelTransactionQuery(request.Context(), request)
 		if err != nil {
 			writeIntakeProblem(response, err)
 			return
 		}
 
-		records, err := reader.ListLabelTransactions(request.Context(), query.Tenant, query.Limit)
+		page, err := reader.ListLabelTransactions(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		rows := make([]labelTransactionRowBody, 0, len(records))
-		for _, record := range records {
+		rows := make([]labelTransactionRowBody, 0, len(page.Rows))
+		for _, record := range page.Rows {
 			rows = append(rows, labelTransactionRowsOf(record)...)
 		}
 		writeJSON(response, http.StatusOK, labelTransactionsListResponse{
 			Outcome:               outcomeLabelTransactionsListed,
 			ContinuedAttemptBasis: continuedAttemptBasisRegisterAndCurrentFinal,
 			Rows:                  rows,
+			Page:                  page.Page(query.Limit),
 		})
 	})
 }
@@ -107,6 +118,7 @@ type labelTransactionsListResponse struct {
 	Outcome               string                    `json:"outcome"`
 	ContinuedAttemptBasis string                    `json:"continuedAttemptBasis"`
 	Rows                  []labelTransactionRowBody `json:"rows"`
+	Page                  cataloguepage.Page        `json:"page"`
 }
 
 // labelTransactionRowBody 是「交易 × 包裹」一行的传输形。
