@@ -113,3 +113,51 @@ func TestLabelTransactionsTotalFollowsTheResultFilterAndTheKeyword(t *testing.T)
 		t.Fatalf("空册：得 %+v", empty)
 	}
 }
+
+// Covers: q 也落在渠道签发的包裹级标识上（管理台面单交易页按「渠道面单号」检索）：渠道答复过的交易按它的标识命中；还没有渠道答复、
+// parcelResults 整键缺席的交易照常参与检索而不报错，只是这一格不命中。
+func TestLabelTransactionsKeywordReachesTheChannelParcelIdentifier(t *testing.T) {
+	ctx := t.Context()
+	repository, views, transactor := newLabelTransactions(t)
+	tenant := mustBuild(t, domain.NewTenantID, "SYN-TENANT-01")
+	mustInsertLabelTransaction(t, transactor, ctx, repository, establishedLabelTransactionFixtureAt(t,
+		"SYN-TENANT-01", "SYN-LT-WAITING", labelEstablishedAt.Add(time.Minute), "SYN-PARCEL-W1"))
+	submitted, err := establishedLabelTransactionFixtureAt(t, "SYN-TENANT-01", "SYN-LT-ANSWERED",
+		labelEstablishedAt.Add(2*time.Minute), "SYN-PARCEL-A1", "SYN-PARCEL-A2").SubmitToChannel(labelEstablishedAt.Add(3 * time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	answered, err := submitted.RecordChannelResult(domain.RecordChannelResultSpec{
+		Outcome: domain.LabelTransactionPartiallySucceeded,
+		ParcelResults: []domain.LabelTransactionParcelResultSpec{
+			{
+				Parcel:     mustBuild(t, domain.NewDeclaredParcelID, "SYN-PARCEL-A1"),
+				Accepted:   true,
+				Identifier: mustBuild(t, domain.NewChannelParcelIdentifier, "SYN-CHANNEL-NO-77"),
+			},
+			{
+				Parcel: mustBuild(t, domain.NewDeclaredParcelID, "SYN-PARCEL-A2"),
+				Reason: mustBuild(t, domain.NewChannelResultReasonReference, "SYN-REASON-1"),
+			},
+		},
+		ObservedAt: labelEstablishedAt.Add(4 * time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustInsertLabelTransaction(t, transactor, ctx, repository, answered)
+
+	for keyword, want := range map[string][]string{
+		"syn-channel-no-77": {"SYN-LT-ANSWERED"},
+		"SYN-CHANNEL-NO":    {"SYN-LT-ANSWERED"},
+		"SYN-PARCEL":        {"SYN-LT-ANSWERED", "SYN-LT-WAITING"},
+	} {
+		page, err := views.ListLabelTransactions(ctx, tenant, 10, pageQuery(t, ports.LabelTransactionPages, url.Values{"q": {keyword}}))
+		if err != nil {
+			t.Fatalf("q=%s：%v", keyword, err)
+		}
+		if got := labelTransactionIDs(page.Rows); !reflect.DeepEqual(got, want) || page.Total != int64(len(want)) {
+			t.Fatalf("q=%s：得 %v / total %d，应为 %v", keyword, got, page.Total, want)
+		}
+	}
+}

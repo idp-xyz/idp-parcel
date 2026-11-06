@@ -35,8 +35,9 @@ func NewLabelTransactionViews(db *bentopg.DB) (*LabelTransactionViews, error) {
 var _ ports.LabelTransactionViews = (*LabelTransactionViews)(nil)
 
 // labelTransactionPages 把 ports.LabelTransactionPages 落到列上。transactionResult 落在存代码的 state 列；q 在交易标识、
-// 快照里的渠道账户与覆盖包裹上做字面包含。覆盖包裹只拼数组元素、以单元分隔符（chr(31)）隔开：数组的 JSON 文本形里还有引号与
-// 逗号，检索它们会命中每一笔交易，那不是对包裹号的字面包含。
+// 快照里的渠道账户、覆盖包裹与渠道签发的包裹级标识（管理台叫渠道面单号，列在面单交易页上）上做字面包含。两个数组都只拼元素、
+// 以单元分隔符（chr(31)）隔开：数组的 JSON 文本形里还有引号与逗号，检索它们会命中每一笔交易，那不是对号码的字面包含。
+// parcelResults 在渠道答复之前整键缺席，jsonb_array_elements 对缺席的键得零行，那一格不命中。
 var labelTransactionPages = ports.LabelTransactionPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"establishedAt": "established_at", "transactionId": "label_transaction_id"},
 	Identity: []string{"label_transaction_id"},
@@ -46,6 +47,7 @@ var labelTransactionPages = ports.LabelTransactionPages.MustBind(cataloguepage.C
 		"label_transaction_id",
 		"snapshot->>'channelAccount'",
 		"(SELECT string_agg(parcel, chr(31)) FROM jsonb_array_elements_text(snapshot->'coveredParcels') AS parcel)",
+		"(SELECT string_agg(result->>'identifier', chr(31)) FROM jsonb_array_elements(snapshot->'parcelResults') AS result)",
 	},
 })
 
