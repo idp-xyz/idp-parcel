@@ -166,12 +166,12 @@ func exchangeRegistration(t *testing.T, tenant, seriesID, version string) domain
 func seedEvaluations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := t.Context()
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-001", "tenant-a", "COMPLETED", pageBase)
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-002", "tenant-a", "FAILED", pageBase.Add(time.Hour))
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-003", "tenant-a", "CONFLICT", pageBase.Add(3*time.Hour))
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-004", "tenant-a", "COMPLETED", pageBase.Add(3*time.Hour))
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-005", "tenant-a", "UNRATABLE", pageBase.Add(4*time.Hour))
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-THEIRS", "tenant-b", "COMPLETED", pageBase.Add(4*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-001", "SYN-TENANT-01", "COMPLETED", pageBase)
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-002", "SYN-TENANT-01", "FAILED", pageBase.Add(time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-003", "SYN-TENANT-01", "CONFLICT", pageBase.Add(3*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-004", "SYN-TENANT-01", "COMPLETED", pageBase.Add(3*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-005", "SYN-TENANT-01", "UNRATABLE", pageBase.Add(4*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-THEIRS", "SYN-TENANT-02", "COMPLETED", pageBase.Add(4*time.Hour))
 }
 
 // Covers: ADR-0144 决定一、三、五——评价册按落册时刻倒序、同刻按评价号倒序翻页。翻页途中新落两行：比游标新的那行不再出现，
@@ -179,7 +179,7 @@ func seedEvaluations(t *testing.T, pool *pgxpool.Pool) {
 func TestEvaluationPagesWalkWithoutRepeatOrGap(t *testing.T) {
 	catalogue, pool := newEvaluationCatalogue(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	seedEvaluations(t, pool)
 
 	first, err := catalogue.ListEvaluations(ctx, tenant, 2, firstPage(t, ports.EvaluationPages))
@@ -189,8 +189,8 @@ func TestEvaluationPagesWalkWithoutRepeatOrGap(t *testing.T) {
 	assertPage(t, "第一页", evaluationIDsOf(first.Rows), first.Total, first.Next,
 		[]string{"SYN-EVAL-005", "SYN-EVAL-004"}, 5, true)
 
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-006", "tenant-a", "PENDING", pageBase.Add(5*time.Hour))
-	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-000", "tenant-a", "COMPLETED", pageBase.Add(3*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-006", "SYN-TENANT-01", "PENDING", pageBase.Add(5*time.Hour))
+	insertEvaluationRow(t, pool, ctx, "SYN-EVAL-000", "SYN-TENANT-01", "COMPLETED", pageBase.Add(3*time.Hour))
 
 	second, err := catalogue.ListEvaluations(ctx, tenant, 2, nextPage(t, ports.EvaluationPages, url.Values{}, first.Next))
 	if err != nil {
@@ -212,7 +212,7 @@ func TestEvaluationPagesWalkWithoutRepeatOrGap(t *testing.T) {
 func TestEvaluationPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	catalogue, pool := newEvaluationCatalogue(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	seedEvaluations(t, pool)
 
 	list := func(label string, values url.Values, want ...string) {
@@ -234,7 +234,7 @@ func TestEvaluationPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	list("正序", url.Values{"sort": {"recordedAt"}},
 		"SYN-EVAL-001", "SYN-EVAL-002", "SYN-EVAL-003", "SYN-EVAL-004", "SYN-EVAL-005")
 
-	empty, err := catalogue.ListEvaluations(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+	empty, err := catalogue.ListEvaluations(ctx, evaluationValue(t, domain.NewTenantID, "SYN-TENANT-03"), 10,
 		firstPage(t, ports.EvaluationPages))
 	if err != nil {
 		t.Fatalf("空租户：%v", err)
@@ -244,12 +244,12 @@ func TestEvaluationPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 
 func seedPriceCards(t *testing.T, fixture pagedPricing) {
 	t.Helper()
-	fixture.card(t, "tenant-a", "plan-a", "v1", domain.PricingDirectionSell, 0)
-	fixture.card(t, "tenant-a", "plan-b", "v1", domain.PricingDirectionBuy, time.Hour)
-	fixture.card(t, "tenant-a", "plan-c", "v1", domain.PricingDirectionSell, 2*time.Hour)
-	fixture.card(t, "tenant-a", "plan-d", "v1", domain.PricingDirectionSell, 2*time.Hour)
-	fixture.card(t, "tenant-a", "plan-a", "v2", domain.PricingDirectionSell, 3*time.Hour)
-	fixture.card(t, "tenant-b", "plan-theirs", "v1", domain.PricingDirectionSell, 3*time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-A", "v1", domain.PricingDirectionSell, 0)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-B", "v1", domain.PricingDirectionBuy, time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-C", "v1", domain.PricingDirectionSell, 2*time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-D", "v1", domain.PricingDirectionSell, 2*time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-A", "v2", domain.PricingDirectionSell, 3*time.Hour)
+	fixture.card(t, "SYN-TENANT-02", "SYN-PLAN-THEIRS", "v1", domain.PricingDirectionSell, 3*time.Hour)
 }
 
 // Covers: ADR-0144 决定一、三、五——价卡目录按登记时刻倒序、同刻按（方案、版本）倒序翻页；翻页途中新登的版本照游标前后各归其位，
@@ -257,29 +257,29 @@ func seedPriceCards(t *testing.T, fixture pagedPricing) {
 func TestPriceCardPagesWalkWithoutRepeatOrGap(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	seedPriceCards(t, fixture)
 
 	first, err := fixture.catalogue.ListPriceCards(ctx, tenant, 2, firstPage(t, ports.PriceCardPages))
 	if err != nil {
 		t.Fatalf("第一页：%v", err)
 	}
-	assertPage(t, "第一页", planKeysOf(first.Rows), first.Total, first.Next, []string{"plan-a@v2", "plan-d@v1"}, 5, true)
+	assertPage(t, "第一页", planKeysOf(first.Rows), first.Total, first.Next, []string{"SYN-PLAN-A@v2", "SYN-PLAN-D@v1"}, 5, true)
 
-	fixture.card(t, "tenant-a", "plan-e", "v1", domain.PricingDirectionSell, 4*time.Hour)
-	fixture.card(t, "tenant-a", "plan-c", "v2", domain.PricingDirectionSell, 2*time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-E", "v1", domain.PricingDirectionSell, 4*time.Hour)
+	fixture.card(t, "SYN-TENANT-01", "SYN-PLAN-C", "v2", domain.PricingDirectionSell, 2*time.Hour)
 
 	second, err := fixture.catalogue.ListPriceCards(ctx, tenant, 2, nextPage(t, ports.PriceCardPages, url.Values{}, first.Next))
 	if err != nil {
 		t.Fatalf("第二页：%v", err)
 	}
-	assertPage(t, "第二页", planKeysOf(second.Rows), second.Total, second.Next, []string{"plan-c@v2", "plan-c@v1"}, 7, true)
+	assertPage(t, "第二页", planKeysOf(second.Rows), second.Total, second.Next, []string{"SYN-PLAN-C@v2", "SYN-PLAN-C@v1"}, 7, true)
 
 	third, err := fixture.catalogue.ListPriceCards(ctx, tenant, 2, nextPage(t, ports.PriceCardPages, url.Values{}, second.Next))
 	if err != nil {
 		t.Fatalf("第三页：%v", err)
 	}
-	assertPage(t, "第三页", planKeysOf(third.Rows), third.Total, third.Next, []string{"plan-b@v1", "plan-a@v1"}, 7, false)
+	assertPage(t, "第三页", planKeysOf(third.Rows), third.Total, third.Next, []string{"SYN-PLAN-B@v1", "SYN-PLAN-A@v1"}, 7, false)
 }
 
 // Covers: ADR-0144 决定三、四与越权风险点 1——价卡目录按 planId 排时同一方案的各版挨在一起；direction 维、q（方案标识、版本与
@@ -287,7 +287,7 @@ func TestPriceCardPagesWalkWithoutRepeatOrGap(t *testing.T) {
 func TestPriceCardPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	seedPriceCards(t, fixture)
 
 	list := func(label string, values url.Values, want ...string) {
@@ -298,17 +298,19 @@ func TestPriceCardPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 		}
 		assertPage(t, label, planKeysOf(page.Rows), page.Total, page.Next, append([]string{}, want...), int64(len(want)), false)
 	}
-	list("按方案正序", url.Values{"sort": {"planId"}}, "plan-a@v1", "plan-a@v2", "plan-b@v1", "plan-c@v1", "plan-d@v1")
-	list("按方案倒序", url.Values{"sort": {"-planId"}}, "plan-d@v1", "plan-c@v1", "plan-b@v1", "plan-a@v2", "plan-a@v1")
-	list("只看采购", url.Values{"direction": {"BUY"}}, "plan-b@v1")
-	list("采购或销售", url.Values{"direction": {"SELL", "BUY"}}, "plan-a@v2", "plan-d@v1", "plan-c@v1", "plan-b@v1", "plan-a@v1")
-	list("按方案检索", url.Values{"q": {"PLAN-A"}}, "plan-a@v2", "plan-a@v1")
-	list("按版本检索", url.Values{"q": {"V2"}}, "plan-a@v2")
-	list("按适用范围检索", url.Values{"q": {"scope-1"}}, "plan-a@v2", "plan-d@v1", "plan-c@v1", "plan-b@v1", "plan-a@v1")
-	list("条件叠加", url.Values{"direction": {"SELL"}, "q": {"plan-c"}}, "plan-c@v1")
+	list("按方案正序", url.Values{"sort": {"planId"}}, "SYN-PLAN-A@v1", "SYN-PLAN-A@v2", "SYN-PLAN-B@v1", "SYN-PLAN-C@v1", "SYN-PLAN-D@v1")
+	list("按方案倒序", url.Values{"sort": {"-planId"}}, "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1", "SYN-PLAN-A@v2", "SYN-PLAN-A@v1")
+	list("只看采购", url.Values{"direction": {"BUY"}}, "SYN-PLAN-B@v1")
+	list("采购或销售", url.Values{"direction": {"SELL", "BUY"}},
+		"SYN-PLAN-A@v2", "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1", "SYN-PLAN-A@v1")
+	list("按方案检索", url.Values{"q": {"plan-a"}}, "SYN-PLAN-A@v2", "SYN-PLAN-A@v1")
+	list("按版本检索", url.Values{"q": {"V2"}}, "SYN-PLAN-A@v2")
+	list("按适用范围检索", url.Values{"q": {"scope-1"}},
+		"SYN-PLAN-A@v2", "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1", "SYN-PLAN-A@v1")
+	list("条件叠加", url.Values{"direction": {"SELL"}, "q": {"plan-c"}}, "SYN-PLAN-C@v1")
 	list("百分号按字面", url.Values{"q": {"%"}})
 
-	empty, err := fixture.catalogue.ListPriceCards(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+	empty, err := fixture.catalogue.ListPriceCards(ctx, evaluationValue(t, domain.NewTenantID, "SYN-TENANT-03"), 10,
 		firstPage(t, ports.PriceCardPages))
 	if err != nil {
 		t.Fatalf("空租户：%v", err)
@@ -316,17 +318,18 @@ func TestPriceCardPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	assertPage(t, "空租户", planKeysOf(empty.Rows), empty.Total, empty.Next, []string{}, 0, false)
 }
 
-// Covers: ADR-0144 决定一、三、五——序列册按登记时刻倒序、同刻按（序列、版本）倒序翻页；复核事实只为本页各版去复核册里取，
-// 落在后一页的版本复核计数与最近一次复核照样完整，期次与引用 digest 照样转写。
+// Covers: ADR-0144 决定一、三、五——序列册按登记时刻倒序、同刻按（序列、版本）倒序翻页。翻页途中新登两版：比游标新的那版不再
+// 出现，与游标同刻而标识排在其后的那版在下一页出现。复核事实只为本页各版去复核册里取，落在后面几页的版本复核计数与最近一次
+// 复核照样完整，期次与引用 digest 照样转写。
 func TestReferenceSeriesPagesFoldReviewsOnEveryPage(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
-	older := fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-A", "v1"), 0)
-	newer := fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-A", "v2"), time.Hour)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-AB", "v1"), 2*time.Hour)
-	fixture.seriesVersion(t, exchangeRegistration(t, "tenant-a", "SYN-PRC-USD-CNY", "v1"), 2*time.Hour)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-b", "SYN-PRC-FUEL-A", "v1"), 3*time.Hour)
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	older := fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-A", "v1"), 0)
+	newer := fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-A", "v2"), time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-AB", "v1"), 2*time.Hour)
+	fixture.seriesVersion(t, exchangeRegistration(t, "SYN-TENANT-01", "SYN-PRC-USD-CNY", "v1"), 2*time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-02", "SYN-PRC-FUEL-A", "v1"), 3*time.Hour)
 	recordReview(t, fixture.reviews, fixture.transactor, ctx,
 		seriesReview(t, older, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewReturned))
 	recordReview(t, fixture.reviews, fixture.transactor, ctx,
@@ -346,14 +349,28 @@ func TestReferenceSeriesPagesFoldReviewsOnEveryPage(t *testing.T) {
 		}
 	}
 
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-Z", "v1"), 4*time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-AA", "v1"), 2*time.Hour)
+
 	second, err := fixture.catalogue.ListReferenceSeries(ctx, tenant, 2,
 		nextPage(t, ports.ReferenceSeriesPages, url.Values{}, first.Next))
 	if err != nil {
 		t.Fatalf("第二页：%v", err)
 	}
 	assertPage(t, "第二页", seriesKeysOf(second.Rows), second.Total, second.Next,
-		[]string{"SYN-PRC-FUEL-A@v2", "SYN-PRC-FUEL-A@v1"}, 4, false)
-	latest, earliest := second.Rows[0], second.Rows[1]
+		[]string{"SYN-PRC-FUEL-AA@v1", "SYN-PRC-FUEL-A@v2"}, 6, true)
+
+	third, err := fixture.catalogue.ListReferenceSeries(ctx, tenant, 2,
+		nextPage(t, ports.ReferenceSeriesPages, url.Values{}, second.Next))
+	if err != nil {
+		t.Fatalf("第三页：%v", err)
+	}
+	assertPage(t, "第三页", seriesKeysOf(third.Rows), third.Total, third.Next, []string{"SYN-PRC-FUEL-A@v1"}, 6, false)
+
+	inserted, latest, earliest := second.Rows[0], second.Rows[1], third.Rows[0]
+	if inserted.ReviewCount != 0 || inserted.HasReview {
+		t.Fatalf("没人复核过的 %s 报了复核：%+v", inserted.SeriesID, inserted)
+	}
 	if latest.ReviewCount != 1 || latest.ApprovedReviewCount != 1 || !latest.LastReviewedAt.Equal(reviewAtThree) {
 		t.Fatalf("v2 的复核事实 = %d/%d/%v", latest.ReviewCount, latest.ApprovedReviewCount, latest.LastReviewedAt)
 	}
@@ -372,12 +389,12 @@ func TestReferenceSeriesPagesFoldReviewsOnEveryPage(t *testing.T) {
 func TestReferenceSeriesPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-A", "v1"), 0)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-A", "v2"), time.Hour)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-AB", "v1"), 2*time.Hour)
-	fixture.seriesVersion(t, exchangeRegistration(t, "tenant-a", "SYN-PRC-USD-CNY", "v1"), 2*time.Hour)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-b", "SYN-PRC-FUEL-A", "v1"), 3*time.Hour)
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-A", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-A", "v2"), time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-AB", "v1"), 2*time.Hour)
+	fixture.seriesVersion(t, exchangeRegistration(t, "SYN-TENANT-01", "SYN-PRC-USD-CNY", "v1"), 2*time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-02", "SYN-PRC-FUEL-A", "v1"), 3*time.Hour)
 
 	list := func(label string, values url.Values, want ...string) {
 		t.Helper()
@@ -398,7 +415,7 @@ func TestReferenceSeriesPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	list("条件叠加", url.Values{"kind": {"FUEL_RATE"}, "seriesId": {"SYN-PRC-FUEL-AB", "SYN-PRC-USD-CNY"}}, "SYN-PRC-FUEL-AB@v1")
 	list("百分号按字面", url.Values{"q": {"%"}})
 
-	empty, err := fixture.catalogue.ListReferenceSeries(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+	empty, err := fixture.catalogue.ListReferenceSeries(ctx, evaluationValue(t, domain.NewTenantID, "SYN-TENANT-03"), 10,
 		firstPage(t, ports.ReferenceSeriesPages))
 	if err != nil {
 		t.Fatalf("空租户：%v", err)
@@ -411,13 +428,13 @@ func TestReferenceSeriesPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 func TestCoveragePagesWalkSeriesInIdentifierOrder(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-B", "v1"), 0)
-	approved := fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-C", "v1"), 0)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-C", "v2"), time.Hour)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-D", "v1"), 0)
-	fixture.seriesVersion(t, exchangeRegistration(t, "tenant-a", "SYN-PRC-USD-CNY", "v1"), 0)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-b", "SYN-PRC-FUEL-THEIRS", "v1"), 0)
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-B", "v1"), 0)
+	approved := fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-C", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-C", "v2"), time.Hour)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-D", "v1"), 0)
+	fixture.seriesVersion(t, exchangeRegistration(t, "SYN-TENANT-01", "SYN-PRC-USD-CNY", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-02", "SYN-PRC-FUEL-THEIRS", "v1"), 0)
 	recordReview(t, fixture.reviews, fixture.transactor, ctx,
 		seriesReview(t, approved, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewApproved))
 
@@ -433,8 +450,8 @@ func TestCoveragePagesWalkSeriesInIdentifierOrder(t *testing.T) {
 		t.Fatalf("FUEL-C 的明细不完整：%+v", row)
 	}
 
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-A", "v1"), 0)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-E", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-A", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-E", "v1"), 0)
 
 	second, err := fixture.coverage.ListReferenceSeriesCoverage(ctx, tenant, reviewAtTwo, 2,
 		nextPage(t, ports.ReferenceSeriesCoveragePages, url.Values{}, first.Next))
@@ -458,11 +475,11 @@ func TestCoveragePagesWalkSeriesInIdentifierOrder(t *testing.T) {
 func TestCoveragePagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	fixture := newPagedPricing(t)
 	ctx := t.Context()
-	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-B", "v1"), 0)
-	fixture.seriesVersion(t, fuelRegistration(t, "tenant-a", "SYN-PRC-FUEL-C", "v1"), 0)
-	fixture.seriesVersion(t, exchangeRegistration(t, "tenant-a", "SYN-PRC-FUEL-C", "v2"), 0)
-	fixture.seriesVersion(t, exchangeRegistration(t, "tenant-a", "SYN-PRC-USD-CNY", "v1"), 0)
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-B", "v1"), 0)
+	fixture.seriesVersion(t, fuelRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-C", "v1"), 0)
+	fixture.seriesVersion(t, exchangeRegistration(t, "SYN-TENANT-01", "SYN-PRC-FUEL-C", "v2"), 0)
+	fixture.seriesVersion(t, exchangeRegistration(t, "SYN-TENANT-01", "SYN-PRC-USD-CNY", "v1"), 0)
 
 	walked := []string{}
 	values := url.Values{}
@@ -502,7 +519,7 @@ func TestCoveragePagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 		"SYN-PRC-USD-CNY/EXCHANGE_RATE", "SYN-PRC-FUEL-C/FUEL_RATE", "SYN-PRC-FUEL-C/EXCHANGE_RATE", "SYN-PRC-FUEL-B/FUEL_RATE")
 	list("百分号按字面", url.Values{"q": {"%"}})
 
-	empty, err := fixture.coverage.ListReferenceSeriesCoverage(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"),
+	empty, err := fixture.coverage.ListReferenceSeriesCoverage(ctx, evaluationValue(t, domain.NewTenantID, "SYN-TENANT-03"),
 		reviewAtTwo, 10, firstPage(t, ports.ReferenceSeriesCoveragePages))
 	if err != nil {
 		t.Fatalf("空租户：%v", err)
