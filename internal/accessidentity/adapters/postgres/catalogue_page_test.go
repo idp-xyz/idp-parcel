@@ -127,18 +127,19 @@ func TestOperatorCataloguePagesByCursorWithoutRepeatsOrGapsWhileOperatorsRegiste
 func TestOperatorCatalogueBreaksTiesOnIssuerAndSubjectInTheSortDirection(t *testing.T) {
 	register := newOperatorRegister(t)
 	pages := accessidentity.OperatorCataloguePages
-	const otherIssuer = "https://syn-issuer-02.example.invalid"
-	seedOperator(t, register, otherIssuer, "SYN-OPERATOR-TIE-A", "SYN-BINDING-BASIS", pageAt(1))
-	seedOperator(t, register, syntheticIssuer, "SYN-OPERATOR-TIE-B", "SYN-BINDING-BASIS", pageAt(1))
-	seedOperator(t, register, syntheticIssuer, "SYN-OPERATOR-LATER", "SYN-BINDING-BASIS", pageAt(2))
-	seedOperator(t, register, syntheticIssuer, "SYN-OPERATOR-TIE-A", "SYN-BINDING-BASIS", pageAt(1))
-	seedOperator(t, register, otherIssuer, "SYN-OPERATOR-TIE-B", "SYN-BINDING-BASIS", pageAt(1))
+	// 两个发行方同形、只差末一字，次序不随库的排序规则变。
+	const issuerA, issuerB = "SYN-ISSUER-A", "SYN-ISSUER-B"
+	seedOperator(t, register, issuerB, "SYN-OPERATOR-TIE-A", "SYN-BINDING-BASIS", pageAt(1))
+	seedOperator(t, register, issuerA, "SYN-OPERATOR-TIE-B", "SYN-BINDING-BASIS", pageAt(1))
+	seedOperator(t, register, issuerA, "SYN-OPERATOR-LATER", "SYN-BINDING-BASIS", pageAt(2))
+	seedOperator(t, register, issuerA, "SYN-OPERATOR-TIE-A", "SYN-BINDING-BASIS", pageAt(1))
+	seedOperator(t, register, issuerB, "SYN-OPERATOR-TIE-B", "SYN-BINDING-BASIS", pageAt(1))
 	ascending := []string{
-		syntheticIssuer + " SYN-OPERATOR-TIE-A",
-		syntheticIssuer + " SYN-OPERATOR-TIE-B",
-		otherIssuer + " SYN-OPERATOR-TIE-A",
-		otherIssuer + " SYN-OPERATOR-TIE-B",
-		syntheticIssuer + " SYN-OPERATOR-LATER",
+		issuerA + " SYN-OPERATOR-TIE-A",
+		issuerA + " SYN-OPERATOR-TIE-B",
+		issuerB + " SYN-OPERATOR-TIE-A",
+		issuerB + " SYN-OPERATOR-TIE-B",
+		issuerA + " SYN-OPERATOR-LATER",
 	}
 	descending := slices.Clone(ascending)
 	slices.Reverse(descending)

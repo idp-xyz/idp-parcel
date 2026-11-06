@@ -101,13 +101,13 @@ func TestCataloguesCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 
 // Covers: ADR-0144 决定一、三、四——集外的键、排序维与筛选键，词表外的筛选值，解不开的游标、换了条件或换了一册还拿来的旧游标，
 // 都答 400 带理由散文，读口不被调用。解码在认证之后：渠道未配置时参数写对写错都答 403，答复不随请求内容变（ADR-0055 决定三；
-// 该票 spec 取舍 8）。
+// 该票 spec「端点先 Intake、后解码查询参数」）。
 func TestCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	deviceCursor := cursorFor(t, accessidentity.DeviceCataloguePages, cataloguepage.Position{
 		Value: "SYN-DEVICE-A", Identity: []string{"SYN-DEVICE-A"},
 	})
 	operatorCursor := cursorFor(t, accessidentity.OperatorCataloguePages, cataloguepage.Position{
-		Value: cataloguepage.FormatInstant(catalogueAt), Identity: []string{"https://id.syn.example/dex", "SYN-OPERATOR-01"},
+		Value: cataloguepage.FormatInstant(catalogueAt), Identity: []string{"SYN-ISSUER-A", "SYN-OPERATOR-01"},
 	})
 	refusals := map[string]map[string]struct{ query, points string }{
 		"work-devices": {
@@ -209,7 +209,7 @@ func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) s
 	return body.Error.Detail
 }
 
-// pageOf 读出答复里的 page 一格；三格都必须在场。
+// pageOf 读出答复里的 page 一格；size、next、total 都必须在场。
 func pageOf(t *testing.T, response *httptest.ResponseRecorder) map[string]json.RawMessage {
 	t.Helper()
 	var body struct {
