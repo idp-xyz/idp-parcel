@@ -53,7 +53,8 @@ func pageCellOf(t *testing.T, response *httptest.ResponseRecorder) string {
 }
 
 // assertPageQueryRefused 断言一次查询参数的拒绝：400 MALFORMED_REQUEST，带说明错在哪的 detail，除 error 之外不带任何格。
-func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) {
+// 交回 detail，供要分清是哪一道门拒的用例再断言。
+func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body struct {
 		Error struct {
@@ -71,6 +72,7 @@ func assertPageQueryRefused(t *testing.T, response *httptest.ResponseRecorder) {
 	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil || len(fields) != 1 {
 		t.Fatalf("坏请求的答复除 error 之外还带了别的格：%s", response.Body.String())
 	}
+	return body.Error.Detail
 }
 
 // assertChannelNotConfigured 断言未配置渠道的答复：403 ACCESS_CHANNEL_NOT_CONFIGURED，不带业务结果格。

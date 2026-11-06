@@ -187,8 +187,9 @@ var ActualFulfillmentUnformedPages = cataloguepage.MustCatalogue(cataloguepage.S
 
 // BookingRequestPages 是订舱册（registry=booking-request）的声明。
 //
-// 一次订舱一行，行标识是订舱标识。缺省序是申请时刻倒序，与迁移前同一口径。不放筛选维：状态词是读口从当前那一份答复派生的，
-// 库里没有它的列，按它筛只能先读后筛，total 就不再是真数。
+// 一次订舱一行，行标识是订舱标识。申请量记在 quantity 一格，订多少都只占一行，不按包裹计量，不是该票 spec「total 一律给精确值」
+// 点名的那类大册。缺省序是申请时刻倒序，与迁移前同一口径。不放筛选维：状态词是读口从当前那一份答复派生的，库里没有它的列，
+// 按它筛只能先读后筛，total 就不再是真数。
 var BookingRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/booking-request",
 	Sorts: []cataloguepage.SortDimension{
@@ -199,6 +200,14 @@ var BookingRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Selectors:   []string{RecordsRegistrySelector},
 })
+
+// BookingAnswerBounceBookingFilter 与 BookingAnswerBounceSourceFilter 是挡回册无词表的订舱、答复方两维的名字，也是它们的
+// 查询键；声明、端点判据与 postgres 落列都引这两个常量。落列写错了名 MustBind 当场 panic，端点判据却只是按名从查询对象里取值：
+// 名字对不上就什么也取不到，写坏的筛选不再被拒，静默放宽成全册。
+const (
+	BookingAnswerBounceBookingFilter = "booking"
+	BookingAnswerBounceSourceFilter  = "source"
+)
 
 // BookingAnswerBouncePages 是承运答复挡回册（registry=booking-answer-bounce）的声明。
 //
@@ -215,8 +224,8 @@ var BookingAnswerBouncePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "lastBouncedAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text, cataloguepage.Text, cataloguepage.Integer},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "booking"},
-		{Name: "source"},
+		{Name: BookingAnswerBounceBookingFilter},
+		{Name: BookingAnswerBounceSourceFilter},
 		{Name: "basis", Vocabulary: cataloguepage.Words[BookingAnswerBounceBasis]()},
 	},
 	Selectors: []string{RecordsRegistrySelector},

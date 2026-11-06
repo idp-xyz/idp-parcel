@@ -9,8 +9,13 @@
 --   派送待形成册    delivery_dispatch_pending_open_by_tenant（0045，谓词 state = 'PENDING'）
 --   重问间隔册      delivery_dispatch_reask_cadence_current（0046）
 --   实际履约未形成册 actual_fulfillment_unformed_open_by_tenant（0048，谓词 state = 'UNFORMED'）
---   待确认复核清单  pickup_attempt_result_pending 与 delivery_attempt_result_pending（0055）：两侧各按自己的部分索引取出待确认
---                   的行，合并后的次序在两支并起来之后排；待确认是要人逐件清空的复核清单，只含还没认定的那几件。
+--
+-- 待确认复核清单不在上列，本迁移也不为它新建：它是揽收、派送两侧待确认的行并起来的一册，两侧各有一条部分索引（0055，谓词
+-- outcome = 'PENDING_CONFIRMATION'），都只部分同形。delivery_attempt_result_pending 是（租户，发生时刻，尝试，对象），派送一支的
+-- 「一侧」恒为 DELIVERY、「来源身份」恒为空串，按它取出的次序就是本册在这一支的次序；pickup_attempt_result_pending 是（租户，
+-- 发生时刻，来源身份，对象），只有（租户，发生时刻）这段前缀与缺省序同形——本册在揽收一支接着按尝试排，尝试取自联上的
+-- pickup_attempt，不在 pickup_attempt_result 上。两支并起来之后整册还要再排一遍，哪一条单表索引都给不出整册的序；待确认是要人
+-- 逐件清空的复核清单，只含还没认定的那几件，再排的只是这几件。
 
 -- 班次册：只列每个班次的当前版；缺省序出发时刻倒序，标识（班次，版本）。
 CREATE INDEX transport_schedule_by_tenant_departure

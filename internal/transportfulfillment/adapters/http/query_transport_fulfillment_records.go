@@ -497,18 +497,22 @@ func serveTransportPreparations(
 	})
 }
 
-// bookingAnswerBounceFilterProblem 判挡回册筛选维 booking、source 的取值。它们没有词表，空值已由 Decode 拒过；给了却立不起来（空白、
-// 带 NUL、订舱标识超过字节界）照样是坏请求，不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为那个订舱没有挡回。
-// 订舱标识照领域构造门判，答复方是集成客户端绑定的来源身份、领域里没有它的类型，只判非空白与 NUL。
+// bookingAnswerBounceFilterProblem 判挡回册订舱、答复方两维的取值，维名取 ports 导出的常量。它们没有词表，空值已由 Decode 拒过；
+// 给了却立不起来（空白、带 NUL、订舱标识超过字节界）照样是坏请求，不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为
+// 那个订舱没有挡回。订舱标识照领域构造门判，答复方是集成客户端绑定的来源身份、领域里没有它的类型，只判非空白与 NUL。
 func bookingAnswerBounceFilterProblem(query cataloguepage.Query) error {
-	for _, booking := range query.Filters["booking"] {
+	for _, booking := range query.Filters[ports.BookingAnswerBounceBookingFilter] {
 		if _, err := domain.NewBookingReference(booking); err != nil {
-			return &cataloguepage.MalformedQuery{Reason: fmt.Sprintf("筛选维 booking 的取值 %q 不是订舱标识", booking)}
+			return &cataloguepage.MalformedQuery{
+				Reason: fmt.Sprintf("筛选维 %s 的取值 %q 不是订舱标识", ports.BookingAnswerBounceBookingFilter, booking),
+			}
 		}
 	}
-	for _, source := range query.Filters["source"] {
+	for _, source := range query.Filters[ports.BookingAnswerBounceSourceFilter] {
 		if strings.TrimSpace(source) == "" || strings.ContainsRune(source, 0) {
-			return &cataloguepage.MalformedQuery{Reason: fmt.Sprintf("筛选维 source 的取值 %q 不是答复方的来源身份", source)}
+			return &cataloguepage.MalformedQuery{
+				Reason: fmt.Sprintf("筛选维 %s 的取值 %q 不是答复方的来源身份", ports.BookingAnswerBounceSourceFilter, source),
+			}
 		}
 	}
 	return nil

@@ -102,7 +102,8 @@ func TestTheBookingRequestRegistryTranscribesRowsWithTheirStanding(t *testing.T)
 }
 
 // Covers: AT-TF-333 的线格式那一半（票 demo-chain-gaps/167，ADR-0239 决定二）——挡回册逐格转写：答复方、订舱、答复标识、依据词、首末
-// 挡回时刻、次数（十进制计数串）；订舱与答复方的筛选参数照 ADR-0144 作筛选维交给读口，缺席即不筛。
+// 挡回时刻、次数（十进制计数串）；订舱与答复方的筛选参数照 ADR-0144 作筛选维交给读口，缺席即不筛。查询键与读口收到的维名都写
+// 字面量、不引 ports 的常量：管理台发的就是这两个键，常量改了名这里先红。
 func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *testing.T) {
 	register := &stubReviewCatalogue{bounces: []ports.BookingAnswerBounceCatalogueRow{
 		{Source: "SYN-PARTY-CARRIER-LM-01", Booking: "SYN-BOOKING-1", Answer: "SYN-ANSWER-1", Basis: "SOURCE_NOT_SERVICE_PROVIDER",
@@ -142,25 +143,29 @@ func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *test
 }
 
 // Covers: AT-TF-333 筛选那一支——给了却立不起来的筛选（空串、全空白、带 NUL、订舱标识超过字节界）是坏请求（400），不静默放宽成
-// 全册，读口不被触到。判它在渠道准入之后（spec「端点先 Intake、后解码查询参数」）：渠道未配置时同一问答 403。
+// 全册，读口不被触到。空串由声明解码拒，理由归共用件，这里不钉；其余由端点照迁移前的判据拒，detail 必须是那道判据自己的理由：
+// 只断言 400 的话，声明里这一维改了名、旧键成了集外键也照样 400，判据静默落空却测不出来。查询键取 ports 导出的维名，与声明、
+// 判据同一处定义；线格式上的键名由逐格转写那条用例按字面量钉。判它在渠道准入之后（spec「端点先 Intake、后解码查询参数」）：
+// 渠道未配置时同一问答 403。
 func TestABookingAnswerBounceFilterThatCannotStandIsRefused(t *testing.T) {
-	for name, query := range map[string]string{
-		"空订舱":      "&booking=",
-		"空白订舱":     "&booking=%20%20",
-		"订舱带 NUL":  "&booking=SYN%00BOOKING",
-		"订舱超界":     "&booking=" + strings.Repeat("B", 513),
-		"空答复方":     "&source=",
-		"空白答复方":    "&source=%20",
-		"答复方带 NUL": "&source=SYN%00CARRIER",
+	booking, source := ports.BookingAnswerBounceBookingFilter, ports.BookingAnswerBounceSourceFilter
+	for name, testCase := range map[string]struct{ query, reason string }{
+		"空订舱":      {query: "&" + booking + "="},
+		"空白订舱":     {query: "&" + booking + "=%20%20", reason: "不是订舱标识"},
+		"订舱带 NUL":  {query: "&" + booking + "=SYN%00BOOKING", reason: "不是订舱标识"},
+		"订舱超界":     {query: "&" + booking + "=" + strings.Repeat("B", 513), reason: "不是订舱标识"},
+		"空答复方":     {query: "&" + source + "="},
+		"空白答复方":    {query: "&" + source + "=%20", reason: "不是答复方的来源身份"},
+		"答复方带 NUL": {query: "&" + source + "=SYN%00CARRIER", reason: "不是答复方的来源身份"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			target := "/transport-fulfillment-records?registry=booking-answer-bounce" + query
+			target := "/transport-fulfillment-records?registry=booking-answer-bounce" + testCase.query
 			configured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), unreachableReviewCatalogue{t: t})
 			response := serveGet(configured, target)
-			if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-				t.Fatalf("配置了的渠道：status = %d body = %s", response.Code, response.Body.String())
+			detail := assertPageQueryRefused(t, response)
+			if !strings.Contains(detail, testCase.reason) {
+				t.Fatalf("配置了的渠道：detail 不是挡回册筛选判据的理由（应含 %q）：%s", testCase.reason, response.Body.String())
 			}
-			assertNoOutcome(t, response)
 
 			unconfigured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(tfhttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t})
 			response = serveGet(unconfigured, target)
