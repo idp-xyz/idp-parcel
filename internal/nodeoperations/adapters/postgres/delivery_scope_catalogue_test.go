@@ -133,7 +133,7 @@ func TestPreAdvicesAreListedByNodeAndExpectedArrivalWithinTheTenant(t *testing.T
 	}
 	tenant := must(t, domain.NewTenantID, catalogueTenant)
 
-	all, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 10)
+	all, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatalf("上列预报：%v", err)
 	}
@@ -155,45 +155,45 @@ func TestPreAdvicesAreListedByNodeAndExpectedArrivalWithinTheTenant(t *testing.T
 		t.Errorf("列出的预报走样：%+v", listedFirst)
 	}
 
-	hub, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{Node: must(t, domain.NewNodeReference, catalogueHub)}, 10)
+	hub, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{Node: must(t, domain.NewNodeReference, catalogueHub)}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := preAdviceIDsOf(hub), []string{"SYN-PREADV-PSXM13-2", "SYN-PREADV-PSXM13-4", "SYN-PREADV-PSXM13-1"}; !slices.Equal(got, want) {
 		t.Fatalf("按节点 = %v, want %v", got, want)
 	}
-	day, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{
+	day, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{
 		Node: must(t, domain.NewNodeReference, catalogueHub), From: catalogueInstant(20, 0), Until: catalogueInstant(21, 0),
-	}, 10)
+	}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := preAdviceIDsOf(day), []string{"SYN-PREADV-PSXM13-1"}; !slices.Equal(got, want) {
 		t.Fatalf("按节点与预计送达日 = %v, want %v（右端开：零点那一份归下一日）", got, want)
 	}
-	from, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{From: catalogueInstant(21, 0)}, 10)
+	from, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{From: catalogueInstant(21, 0)}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := preAdviceIDsOf(from), []string{"SYN-PREADV-PSXM13-2", "SYN-PREADV-PSXM13-4"}; !slices.Equal(got, want) {
 		t.Fatalf("只给起点 = %v, want %v（左端闭）", got, want)
 	}
-	page, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 2)
+	page, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 2, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page) != 2 {
 		t.Fatalf("页大小 2 读回 %d 行", len(page))
 	}
-	if _, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 0); err == nil {
+	if _, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 0, firstPage(t, ports.DeliveryPreAdvicePages)); err == nil {
 		t.Fatal("页大小 0 未被拒")
 	}
-	other, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, must(t, domain.NewTenantID, catalogueOtherTenant), ports.DeliveryScopeCatalogueFilter{}, 10)
+	other, err := rowsOf(fixture.catalogue.ListDeliveryPreAdvices(ctx, must(t, domain.NewTenantID, catalogueOtherTenant), ports.DeliveryScopeCatalogueFilter{}, 10, firstPage(t, ports.DeliveryPreAdvicePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := preAdviceIDsOf(other), []string{"SYN-PREADV-PSXM13-1", "SYN-PREADV-PSXM13-OTHER"}; !slices.Equal(got, want) {
-		t.Fatalf("别的租户 = %v, want %v", got, want)
+	if got, want := preAdviceIDsOf(other), []string{"SYN-PREADV-PSXM13-OTHER", "SYN-PREADV-PSXM13-1"}; !slices.Equal(got, want) {
+		t.Fatalf("别的租户 = %v, want %v（同刻按标识倒序）", got, want)
 	}
 
 	own, found, err := fixture.catalogue.FindDeliveryPreAdvice(ctx, tenant, first.ID())
@@ -339,7 +339,7 @@ func TestHandoverNotesAreListedByNodeAndOpeningWithClaimsAndMembers(t *testing.T
 	}
 	tenant := must(t, domain.NewTenantID, catalogueTenant)
 
-	all, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 10)
+	all, err := rowsOf(fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 10, firstPage(t, ports.DeliveryHandoverNotePages)))
 	if err != nil {
 		t.Fatalf("上列交接单：%v", err)
 	}
@@ -370,23 +370,23 @@ func TestHandoverNotesAreListedByNodeAndOpeningWithClaimsAndMembers(t *testing.T
 		t.Errorf("运营决定那一格 = %+v", operated)
 	}
 
-	day, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{
+	day, err := rowsOf(fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{
 		Node: must(t, domain.NewNodeReference, catalogueHub), From: catalogueInstant(20, 0), Until: catalogueInstant(21, 0),
-	}, 10)
+	}, 10, firstPage(t, ports.DeliveryHandoverNotePages)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := noteIDsOf(day), []string{denied, established}; !slices.Equal(got, want) {
 		t.Fatalf("按节点与开立日 = %v, want %v", got, want)
 	}
-	page, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 1)
+	page, err := rowsOf(fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 1, firstPage(t, ports.DeliveryHandoverNotePages)))
 	if err != nil || len(page) != 1 {
 		t.Fatalf("页大小 1 读回 %d 行 err=%v", len(page), err)
 	}
-	if _, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 0); err == nil {
+	if _, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, ports.DeliveryScopeCatalogueFilter{}, 0, firstPage(t, ports.DeliveryHandoverNotePages)); err == nil {
 		t.Fatal("页大小 0 未被拒")
 	}
-	other, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, must(t, domain.NewTenantID, catalogueOtherTenant), ports.DeliveryScopeCatalogueFilter{}, 10)
+	other, err := rowsOf(fixture.catalogue.ListDeliveryHandoverNotes(ctx, must(t, domain.NewTenantID, catalogueOtherTenant), ports.DeliveryScopeCatalogueFilter{}, 10, firstPage(t, ports.DeliveryHandoverNotePages)))
 	if err != nil {
 		t.Fatal(err)
 	}

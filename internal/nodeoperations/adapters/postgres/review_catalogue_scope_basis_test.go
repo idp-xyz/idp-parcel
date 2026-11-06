@@ -83,7 +83,7 @@ func TestUnidentifiedItemsCarryTheScopeBasisAndTheLastAssignedNote(t *testing.T)
 		t.Fatalf("落交接单与成员：%v", err)
 	}
 
-	rows, err := catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10)
+	rows, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}

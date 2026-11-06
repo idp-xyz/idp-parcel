@@ -17,7 +17,7 @@ func TestUnidentifiedItemsCarryTheirConflictCause(t *testing.T) {
 	pending := recheckablePending(t, tenant, "SYN-SCAN-NRI07-ZERO", "SYN-INTAKEV-NRI07-ZERO", mark)
 	saveReceptions(t, transactor, ctx, receptions, ambiguous, legacy, pending)
 
-	rows, err := catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10)
+	rows, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}

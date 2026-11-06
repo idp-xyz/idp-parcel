@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件证身份冲突处置命令口（UC-NO-004；ADR-0210 决定六）：按 ADR-0022 把处置结果映射成响应——首次形成答 201，其余业务结果
@@ -472,20 +473,26 @@ type reviewUnitsCatalogue struct {
 	reviewUnits []ports.IdentityReviewUnitRow
 }
 
-func (catalogue reviewUnitsCatalogue) ListIdentityReviewUnits(_ context.Context, tenant domain.TenantID, limit int) ([]ports.IdentityReviewUnitRow, error) {
-	catalogue.gotTenant, catalogue.gotLimit = tenant.String(), limit
-	return catalogue.reviewUnits, nil
+func (catalogue reviewUnitsCatalogue) ListIdentityReviewUnits(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.IdentityReviewUnitRow], error) {
+	catalogue.gotTenant, catalogue.gotLimit, catalogue.gotUnitsQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.IdentityReviewUnitRow]{Rows: catalogue.reviewUnits, Next: catalogue.next, Total: catalogue.total}, nil
 }
 
 // ListIdentityReviewUnits 让既有的查阅目录替身也满足读口：它们只测别的册子，这一问交回空。
-func (stub *stubReviewCatalogue) ListIdentityReviewUnits(_ context.Context, tenant domain.TenantID, limit int) ([]ports.IdentityReviewUnitRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return nil, stub.err
+func (stub *stubReviewCatalogue) ListIdentityReviewUnits(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.IdentityReviewUnitRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotUnitsQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.IdentityReviewUnitRow]{Next: stub.next, Total: stub.total}, stub.err
 }
 
-func (stub unreachableReviewCatalogue) ListIdentityReviewUnits(context.Context, domain.TenantID, int) ([]ports.IdentityReviewUnitRow, error) {
+func (stub unreachableReviewCatalogue) ListIdentityReviewUnits(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.IdentityReviewUnitRow], error) {
 	stub.refuse("identity review unit")
-	return nil, nil
+	return cataloguepage.Result[ports.IdentityReviewUnitRow]{}, nil
 }
 
 // Covers: 票 06「做什么」里「复核目录与管理台」那一项的传输面：待识别实物册的答复另带 `units`——按实物把各链当前有效版本列在一起；处置版带处置文档

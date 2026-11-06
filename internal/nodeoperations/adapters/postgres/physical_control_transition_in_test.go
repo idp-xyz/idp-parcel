@@ -123,7 +123,7 @@ func TestATransferInIsStoredFoldedAndTransferredOutAgain(t *testing.T) {
 		t.Fatalf("转入立起的那一份被转出之后仍有 %d 份在身", len(active))
 	}
 
-	rows, err := fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 10)
+	rows, err := rowsOf(fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 10, firstPage(t, ports.PhysicalControlTransitionPages)))
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("上列 %d 行 err=%v", len(rows), err)
 	}

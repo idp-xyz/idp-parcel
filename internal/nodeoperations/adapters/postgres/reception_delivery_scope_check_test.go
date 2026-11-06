@@ -198,11 +198,11 @@ func TestCatalogueRowsCarryTheDeliveryScopeCheck(t *testing.T) {
 	saveReceptions(t, transactor, ctx, receptions, formed, unverified, legacy)
 
 	tenantID := ref(t, domain.NewTenantID, tenant)
-	listed, err := catalogue.ListReceptions(ctx, tenantID, 10)
+	listed, err := rowsOf(catalogue.ListReceptions(ctx, tenantID, 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil {
 		t.Fatalf("上列收寄册：%v", err)
 	}
-	unidentified, err := catalogue.ListUnidentifiedItems(ctx, tenantID, 10)
+	unidentified, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, tenantID, 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}

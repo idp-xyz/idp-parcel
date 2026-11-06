@@ -346,7 +346,7 @@ func TestConsolidationMemberCatalogueListsAddAndRemoveFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造查阅目录：%v", err)
 	}
-	rows, err := catalogue.ListConsolidationMembers(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListConsolidationMembers(ctx, tenant, 10, firstPage(t, ports.ConsolidationMemberPages)))
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestConsolidationMemberCatalogueListsAddAndRemoveFacts(t *testing.T) {
 	if !rows[2].DirectionalBasis.Recorded() || rows[2].DirectionalBasis.ServiceResult().Cancellation() != "CANCEL-1" {
 		t.Fatalf("judged add row basis = %v", rows[2].DirectionalBasis.Cells())
 	}
-	other, err := catalogue.ListConsolidationMembers(ctx, ref(t, domain.NewTenantID, "tenant-b"), 10)
+	other, err := rowsOf(catalogue.ListConsolidationMembers(ctx, ref(t, domain.NewTenantID, "tenant-b"), 10, firstPage(t, ports.ConsolidationMemberPages)))
 	if err != nil || len(other) != 0 {
 		t.Fatalf("tenant-b = %+v err=%v", other, err)
 	}

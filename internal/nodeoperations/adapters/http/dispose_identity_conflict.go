@@ -311,10 +311,12 @@ func judgmentVersionBodyOf(record ports.ReceptionRecord) judgmentVersionBody {
 	return body
 }
 
-// identityReviewUnitBody 是待识别实物页按实物列的一件：各条判断链此刻的当前有效版本。
+// identityReviewUnitBody 是待识别实物页按实物列的一件：各条判断链此刻的当前有效版本。latestRecordedAt 是这件实物待识别各版里最近
+// 一次的登记时刻，按实物那一册按它排（可排维取答复体里的字段名，ADR-0144 决定三），不是哪一条链头的时刻。
 type identityReviewUnitBody struct {
-	Unit  string                   `json:"unit"`
-	Heads []identityReviewHeadBody `json:"heads"`
+	Unit             string                   `json:"unit"`
+	LatestRecordedAt string                   `json:"latestRecordedAt"`
+	Heads            []identityReviewHeadBody `json:"heads"`
 }
 
 // identityReviewHeadBody 逐格透出一条链的当前有效版本。identityConflict 恒在场（不省成 omitempty）：复核页据它与各版关联判这件实物
@@ -332,14 +334,14 @@ type identityReviewHeadBody struct {
 	Disposition      *identityDispositionBody `json:"disposition,omitempty"`
 }
 
-func identityReviewUnitBodies(request *http.Request, reader ReviewCatalogueReader, tenant domain.TenantID, limit int) ([]identityReviewUnitBody, error) {
-	rows, err := reader.ListIdentityReviewUnits(request.Context(), tenant, limit)
-	if err != nil {
-		return nil, err
-	}
+func identityReviewUnitBodies(rows []ports.IdentityReviewUnitRow) []identityReviewUnitBody {
 	units := make([]identityReviewUnitBody, 0, len(rows))
 	for _, row := range rows {
-		unit := identityReviewUnitBody{Unit: row.Unit, Heads: make([]identityReviewHeadBody, 0, len(row.Heads))}
+		unit := identityReviewUnitBody{
+			Unit:             row.Unit,
+			LatestRecordedAt: rfc3339(row.LatestRecordedAt),
+			Heads:            make([]identityReviewHeadBody, 0, len(row.Heads)),
+		}
 		for _, head := range row.Heads {
 			body := identityReviewHeadBody{
 				SourceID:         head.SourceID,
@@ -359,5 +361,5 @@ func identityReviewUnitBodies(request *http.Request, reader ReviewCatalogueReade
 		}
 		units = append(units, unit)
 	}
-	return units, nil
+	return units
 }

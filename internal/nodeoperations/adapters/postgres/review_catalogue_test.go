@@ -76,7 +76,7 @@ func TestReviewCatalogueListsReceptionsNewestFirstWithinTenant(t *testing.T) {
 	foreign := formedRecord(t, "tenant-b", "scan-9")
 	saveReceptions(t, transactor, ctx, receptions, formed, pending, refused, foreign)
 
-	rows, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil {
 		t.Fatalf("上列收寄册：%v", err)
 	}
@@ -104,7 +104,7 @@ func TestReviewCatalogueListsReceptionsNewestFirstWithinTenant(t *testing.T) {
 		t.Errorf("待识别格转写变形：%+v", rows[1])
 	}
 
-	limited, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 1)
+	limited, err := rowsOf(catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 1, firstPage(t, ports.ReceptionPages)))
 	if err != nil || len(limited) != 1 || limited[0].SourceID != "scan-1" {
 		t.Errorf("页大小未生效：rows=%+v err=%v", limited, err)
 	}
@@ -130,7 +130,7 @@ func TestReviewCatalogueTranscribesTheServiceResultCheck(t *testing.T) {
 	pending.RecordedAt = receivedAt.Add(time.Minute)
 	saveReceptions(t, transactor, ctx, receptions, marked, unmarked, unreadable, pending)
 
-	rows, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil {
 		t.Fatalf("上列收寄册：%v", err)
 	}
@@ -179,7 +179,7 @@ func TestReviewCatalogueListsUnidentifiedItemsOnly(t *testing.T) {
 		notFormedRecord(t, "tenant-a", "scan-3"),
 	)
 
-	rows, err := catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}
@@ -245,7 +245,7 @@ func TestReviewCatalogueListsConsolidationUnitsByIdentity(t *testing.T) {
 	foreign := openConsolidation(t, "bag-9", "asset-9")
 	saveConsolidation(t, transactor, ctx, consolidations, foreignTenant, foreign)
 
-	rows, err := catalogue.ListConsolidationUnits(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListConsolidationUnits(ctx, tenant, 10, firstPage(t, ports.ConsolidationUnitPages)))
 	if err != nil {
 		t.Fatalf("上列集运单元册：%v", err)
 	}
@@ -301,25 +301,25 @@ func TestReviewCatalogueRejectsNonPositiveLimitAndAnswersEmptyHonestly(t *testin
 	ctx := t.Context()
 	tenant := ref(t, domain.NewTenantID, "tenant-a")
 
-	if _, err := catalogue.ListReceptions(ctx, tenant, 0); err == nil {
+	if _, err := catalogue.ListReceptions(ctx, tenant, 0, firstPage(t, ports.ReceptionPages)); err == nil {
 		t.Error("零页大小的收寄上列没有被拒")
 	}
-	if _, err := catalogue.ListUnidentifiedItems(ctx, tenant, -1); err == nil {
+	if _, err := catalogue.ListUnidentifiedItems(ctx, tenant, -1, firstPage(t, ports.UnidentifiedItemPages)); err == nil {
 		t.Error("负页大小的待识别上列没有被拒")
 	}
-	if _, err := catalogue.ListConsolidationUnits(ctx, tenant, 0); err == nil {
+	if _, err := catalogue.ListConsolidationUnits(ctx, tenant, 0, firstPage(t, ports.ConsolidationUnitPages)); err == nil {
 		t.Error("零页大小的集运上列没有被拒")
 	}
 
-	receptions, err := catalogue.ListReceptions(ctx, tenant, 5)
+	receptions, err := rowsOf(catalogue.ListReceptions(ctx, tenant, 5, firstPage(t, ports.ReceptionPages)))
 	if err != nil || len(receptions) != 0 {
 		t.Errorf("空收寄册：rows=%+v err=%v", receptions, err)
 	}
-	items, err := catalogue.ListUnidentifiedItems(ctx, tenant, 5)
+	items, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, tenant, 5, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil || len(items) != 0 {
 		t.Errorf("空待识别册：rows=%+v err=%v", items, err)
 	}
-	units, err := catalogue.ListConsolidationUnits(ctx, tenant, 5)
+	units, err := rowsOf(catalogue.ListConsolidationUnits(ctx, tenant, 5, firstPage(t, ports.ConsolidationUnitPages)))
 	if err != nil || len(units) != 0 {
 		t.Errorf("空集运册：rows=%+v err=%v", units, err)
 	}

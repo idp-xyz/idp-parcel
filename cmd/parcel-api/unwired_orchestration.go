@@ -96,32 +96,36 @@ func (unwiredNodeOperationsRecords) ListReceptions(
 	context.Context,
 	nodeopsdomain.TenantID,
 	int,
-) ([]nodeopsports.ReceptionCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.ReceptionCatalogueRow], error) {
+	return cataloguepage.Result[nodeopsports.ReceptionCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredNodeOperationsRecords) ListUnidentifiedItems(
 	context.Context,
 	nodeopsdomain.TenantID,
 	int,
-) ([]nodeopsports.UnidentifiedItemCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.UnidentifiedItemCatalogueRow], error) {
+	return cataloguepage.Result[nodeopsports.UnidentifiedItemCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredNodeOperationsRecords) ListConsolidationUnits(
 	context.Context,
 	nodeopsdomain.TenantID,
 	int,
-) ([]nodeopsports.ConsolidationUnitCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.ConsolidationUnitCatalogueRow], error) {
+	return cataloguepage.Result[nodeopsports.ConsolidationUnitCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredNodeOperationsRecords) ListConsolidationMembers(
 	context.Context,
 	nodeopsdomain.TenantID,
 	int,
-) ([]nodeopsports.ConsolidationMemberCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.ConsolidationMemberCatalogueRow], error) {
+	return cataloguepage.Result[nodeopsports.ConsolidationMemberCatalogueRow]{}, errOrchestrationNotWired
 }
 
 // unwiredDelivery 一个类型顶两个端点：首登与更正共用 DeliveryHandler 这一个接口。

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是送站预报册与送站交接单册的运营查阅读端口（票 ps-external-mark-relations/13；UC-NO-006「权限、隔离与审计」）：管理台按节点与
@@ -42,14 +43,16 @@ type DeliveryHandoverNoteDetail struct {
 	Members []domain.DeliveryHandoverMember
 }
 
-// DeliveryScopeCatalogueRead 是两本册的运营查阅读端口。列表新近在前（业务时刻倒序，同刻按标识）。
+// DeliveryScopeCatalogueRead 是两本册的运营查阅读端口。两条列表的查询对象由端点按 DeliveryPreAdvicePages、DeliveryHandoverNotePages
+// 解出，缺省新近在前（业务时刻倒序，同刻按标识倒序）；filter 是端点按两册的选择器读出的筛选，与查询对象同时生效。
 type DeliveryScopeCatalogueRead interface {
 	ListDeliveryPreAdvices(
 		ctx context.Context,
 		tenant domain.TenantID,
 		filter DeliveryScopeCatalogueFilter,
 		limit int,
-	) ([]domain.DeliveryPreAdviceState, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.DeliveryPreAdviceState], error)
 	FindDeliveryPreAdvice(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -60,7 +63,8 @@ type DeliveryScopeCatalogueRead interface {
 		tenant domain.TenantID,
 		filter DeliveryScopeCatalogueFilter,
 		limit int,
-	) ([]DeliveryHandoverNoteCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DeliveryHandoverNoteCatalogueRow], error)
 	FindDeliveryHandoverNoteDetail(
 		ctx context.Context,
 		tenant domain.TenantID,

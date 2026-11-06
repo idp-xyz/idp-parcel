@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
 // Covers: 票 no-reception-source/03「复核目录：待识别行带来源文档里的外部标识观察（旧行如实写来源未保全）」的存储面——每一行
@@ -23,7 +24,7 @@ func TestUnidentifiedItemsCarryTheMarkAndTheirPlaceInTheChain(t *testing.T) {
 	successor.IdentityConflict = true
 	saveReceptions(t, transactor, ctx, receptions, current, sourceless, superseded, successor)
 
-	rows, err := catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10)
+	rows, err := rowsOf(catalogue.ListUnidentifiedItems(ctx, ref(t, domain.NewTenantID, tenant), 10, firstPage(t, ports.UnidentifiedItemPages)))
 	if err != nil {
 		t.Fatalf("上列待识别册：%v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是节点作业查阅页的节点控制转移册（registry=physical-control，ADR-0214 决定三）：权威运输交接推进节点控制时留下的各行，转出、
@@ -20,14 +21,15 @@ func servePhysicalControlTransitions(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListPhysicalControlTransitions(request.Context(), tenant, limit)
+	page, err := reader.ListPhysicalControlTransitions(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]physicalControlTransitionBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]physicalControlTransitionBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, physicalControlTransitionBody{
 			HandoverObject:          row.HandoverObject,
 			HandoverScope:           row.HandoverScope,
@@ -50,12 +52,14 @@ func servePhysicalControlTransitions(
 	writeJSON(response, http.StatusOK, physicalControlTransitionListResponse{
 		Outcome:     outcomePhysicalControlTransitionsListed,
 		Transitions: bodies,
+		Page:        page.Page(limit),
 	})
 }
 
 type physicalControlTransitionListResponse struct {
 	Outcome     string                          `json:"outcome"`
 	Transitions []physicalControlTransitionBody `json:"transitions"`
+	Page        cataloguepage.Page              `json:"page"`
 }
 
 // physicalControlTransitionBody 逐字段透出一行控制转移。

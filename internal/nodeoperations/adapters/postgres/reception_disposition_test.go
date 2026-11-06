@@ -223,7 +223,7 @@ func TestIdentityReviewUnitsListEveryChainHeadWithItsDisposition(t *testing.T) {
 	designated, notIt := dispositionOfOneMark(t)
 	saveReceptions(t, transactor, ctx, receptions, early, conflict, late, other, solo, designated, notIt)
 
-	units, err := catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 10)
+	units, err := rowsOf(catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 10, firstPage(t, ports.IdentityReviewUnitPages)))
 	if err != nil {
 		t.Fatalf("按实物上列：%v", err)
 	}
@@ -255,7 +255,7 @@ func TestIdentityReviewUnitsListEveryChainHeadWithItsDisposition(t *testing.T) {
 	if len(b.Heads) != 1 || b.Heads[0].Kind != "INTAKE_FORMED" || b.Heads[0].Association != "SYN-PARCEL-NRI06-X" || !b.Heads[0].Disposition.Recorded() {
 		t.Fatalf("B 的链头 = %+v, want 指定一件的处置版", b.Heads)
 	}
-	if _, err := catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 0); err == nil {
+	if _, err := catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 0, firstPage(t, ports.IdentityReviewUnitPages)); err == nil {
 		t.Fatal("页大小 0 没拒")
 	}
 }
@@ -294,7 +294,7 @@ func TestTheDispositionReadsLeaveMergeRecordsOut(t *testing.T) {
 	if got := sourceIDsOf(rows); !slices.Equal(got, []string{conflict.Key.SourceID, notIt.Key.SourceID, early.Key.SourceID}) {
 		t.Fatalf("按实物读 = %v, want 不含并入行", got)
 	}
-	units, err := catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 10)
+	units, err := rowsOf(catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 10, firstPage(t, ports.IdentityReviewUnitPages)))
 	if err != nil {
 		t.Fatalf("按实物上列：%v", err)
 	}

@@ -15,6 +15,7 @@ import (
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -23,16 +24,16 @@ import (
 // unwiredDeliveryScopeRecords 是送站预报与送站交接单查阅读口的占位：装配测试用它证四行都接到了读口、且未配置 Intake 拒在读口之前。
 type unwiredDeliveryScopeRecords struct{}
 
-func (unwiredDeliveryScopeRecords) ListDeliveryPreAdvices(context.Context, nodomain.TenantID, noports.DeliveryScopeCatalogueFilter, int) ([]nodomain.DeliveryPreAdviceState, error) {
-	return nil, errOrchestrationNotWired
+func (unwiredDeliveryScopeRecords) ListDeliveryPreAdvices(context.Context, nodomain.TenantID, noports.DeliveryScopeCatalogueFilter, int, cataloguepage.Query) (cataloguepage.Result[nodomain.DeliveryPreAdviceState], error) {
+	return cataloguepage.Result[nodomain.DeliveryPreAdviceState]{}, errOrchestrationNotWired
 }
 
 func (unwiredDeliveryScopeRecords) FindDeliveryPreAdvice(context.Context, nodomain.TenantID, nodomain.DeliveryPreAdviceID) (nodomain.DeliveryPreAdviceState, bool, error) {
 	return nodomain.DeliveryPreAdviceState{}, false, errOrchestrationNotWired
 }
 
-func (unwiredDeliveryScopeRecords) ListDeliveryHandoverNotes(context.Context, nodomain.TenantID, noports.DeliveryScopeCatalogueFilter, int) ([]noports.DeliveryHandoverNoteCatalogueRow, error) {
-	return nil, errOrchestrationNotWired
+func (unwiredDeliveryScopeRecords) ListDeliveryHandoverNotes(context.Context, nodomain.TenantID, noports.DeliveryScopeCatalogueFilter, int, cataloguepage.Query) (cataloguepage.Result[noports.DeliveryHandoverNoteCatalogueRow], error) {
+	return cataloguepage.Result[noports.DeliveryHandoverNoteCatalogueRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredDeliveryScopeRecords) FindDeliveryHandoverNoteDetail(context.Context, nodomain.TenantID, nodomain.DeliveryHandoverNoteID) (noports.DeliveryHandoverNoteDetail, bool, error) {

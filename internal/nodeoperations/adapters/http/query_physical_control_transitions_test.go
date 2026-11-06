@@ -11,6 +11,7 @@ import (
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件证节点作业查阅页的节点控制转移册（registry=physical-control，ADR-0214 决定三）的传输面，并给既有的几只查阅目录替身补上
@@ -23,31 +24,33 @@ type controlTransitionsCatalogue struct {
 }
 
 func (catalogue controlTransitionsCatalogue) ListPhysicalControlTransitions(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.PhysicalControlTransitionCatalogueRow, error) {
-	catalogue.gotTenant, catalogue.gotLimit = tenant.String(), limit
-	return catalogue.transitions, catalogue.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error) {
+	catalogue.gotTenant, catalogue.gotLimit, catalogue.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow]{
+		Rows: catalogue.transitions, Next: catalogue.next, Total: catalogue.total,
+	}, catalogue.err
 }
 
 // ListPhysicalControlTransitions 让既有的查阅目录替身也满足读口：它们只测别的册子，这一问交回空。
 func (stub *stubReviewCatalogue) ListPhysicalControlTransitions(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.PhysicalControlTransitionCatalogueRow, error) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return nil, stub.err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow]{Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub unreachableReviewCatalogue) ListPhysicalControlTransitions(
-	context.Context, domain.TenantID, int,
-) ([]ports.PhysicalControlTransitionCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error) {
 	stub.refuse("physical control transition")
-	return nil, nil
+	return cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow]{}, nil
 }
 
 func (catalogue reviewUnitsCatalogue) ListPhysicalControlTransitions(
-	ctx context.Context, tenant domain.TenantID, limit int,
-) ([]ports.PhysicalControlTransitionCatalogueRow, error) {
-	return catalogue.stubReviewCatalogue.ListPhysicalControlTransitions(ctx, tenant, limit)
+	ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error) {
+	return catalogue.stubReviewCatalogue.ListPhysicalControlTransitions(ctx, tenant, limit, query)
 }
 
 // Covers: `AT-NO-112` 的传输面（ADR-0214 决定三、五）——registry=physical-control 照行转写：转出那一行带控制四件与转出两件，没推进

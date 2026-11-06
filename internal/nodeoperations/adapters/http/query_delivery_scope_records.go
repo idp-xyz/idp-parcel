@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是送站预报与送站交接单的运营查阅读（票 ps-external-mark-relations/13；UC-NO-006「权限、隔离与审计」）：管理台按节点与业务时刻列
@@ -28,7 +29,8 @@ type DeliveryScopeCatalogueReader interface {
 		tenant domain.TenantID,
 		filter ports.DeliveryScopeCatalogueFilter,
 		limit int,
-	) ([]domain.DeliveryPreAdviceState, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.DeliveryPreAdviceState], error)
 	FindDeliveryPreAdvice(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -39,7 +41,8 @@ type DeliveryScopeCatalogueReader interface {
 		tenant domain.TenantID,
 		filter ports.DeliveryScopeCatalogueFilter,
 		limit int,
-	) ([]ports.DeliveryHandoverNoteCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow], error)
 	FindDeliveryHandoverNoteDetail(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -64,7 +67,8 @@ const (
 	handoverNoteIDPathValue = "noteId"
 )
 
-// 两本册列表各自认的查询键：节点与业务时刻区间的两端。键名带上是哪一种业务时刻，免得一个 from 在两本册上说两件事。
+// 两本册列表各自认的查询键：节点与业务时刻区间的两端。键名带上是哪一种业务时刻，免得一个 from 在两本册上说两件事。四个键在两册的
+// 目录声明（ports.DeliveryPreAdvicePages、ports.DeliveryHandoverNotePages）里登为选择器，两处必须同字，否则解码先把它当集外键拒掉。
 var (
 	preAdviceFilterKeys    = catalogueFilterKeys{from: "expectedArrivalFrom", until: "expectedArrivalUntil"}
 	handoverNoteFilterKeys = catalogueFilterKeys{from: "openedFrom", until: "openedUntil"}
@@ -75,11 +79,16 @@ type catalogueFilterKeys struct {
 	until string
 }
 
-// catalogueFilterOf 读列表的筛选。键封闭：认不出的键、重复的键、空白节点或单据号、读不成 RFC 3339 的时刻、起点不早于终点都答坏请求
-// ——静默丢掉一个拼错的键，人会把全租户的列表当成按条件筛过的。documentNumber 按单据号逐字找（ADR-0355 决定十一），预报与交接单的列表同一个键。
+// catalogueFilterOf 读列表的筛选，只读这几个选择器键。认不出的键在此之前已由目录声明的解码拒掉——静默丢掉一个拼错的键，人会把全租户
+// 的列表当成按条件筛过的；这里拒重复的键、空白节点或单据号、读不成 RFC 3339 的时刻、起点不早于终点。documentNumber 按单据号逐字找
+// （ADR-0355 决定十一），预报与交接单的列表同一个键。
 func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.DeliveryScopeCatalogueFilter, bool) {
 	var filter ports.DeliveryScopeCatalogueFilter
-	for key, values := range query {
+	for _, key := range []string{"node", "documentNumber", keys.from, keys.until} {
+		values, given := query[key]
+		if !given {
+			continue
+		}
 		if len(values) != 1 {
 			return ports.DeliveryScopeCatalogueFilter{}, false
 		}
@@ -96,7 +105,7 @@ func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.Delive
 				return ports.DeliveryScopeCatalogueFilter{}, false
 			}
 			filter.DocumentNumber = number
-		case keys.from, keys.until:
+		default:
 			at, err := time.Parse(time.RFC3339Nano, values[0])
 			if err != nil {
 				return ports.DeliveryScopeCatalogueFilter{}, false
@@ -106,8 +115,6 @@ func catalogueFilterOf(query url.Values, keys catalogueFilterKeys) (ports.Delive
 			} else {
 				filter.Until = at
 			}
-		default:
-			return ports.DeliveryScopeCatalogueFilter{}, false
 		}
 	}
 	if !filter.From.IsZero() && !filter.Until.IsZero() && !filter.From.Before(filter.Until) {
@@ -131,24 +138,32 @@ func scopeReadEndpoint(intake CatalogueQueryIntake, serve func(http.ResponseWrit
 }
 
 // NewQueryDeliveryPreAdvicesEndpoint 交回预报列表（GET /node-operations-delivery-pre-advices）：按节点（node）、预计送达区间
-// （expectedArrivalFrom 闭、expectedArrivalUntil 开）与单据号（documentNumber）筛，新近在前。空册答 200 + []。
+// （expectedArrivalFrom 闭、expectedArrivalUntil 开）与单据号（documentNumber）筛，翻页、排序与 q 照 ports.DeliveryPreAdvicePages，
+// 缺省新近在前。空册答 200 + []，page.total 为 0。
 func NewQueryDeliveryPreAdvicesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
+		pageQuery, err := ports.DeliveryPreAdvicePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		filter, ok := catalogueFilterOf(request.URL.Query(), preAdviceFilterKeys)
 		if !ok {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		states, err := reader.ListDeliveryPreAdvices(request.Context(), query.Scope.Tenant(), filter, query.Limit)
+		page, err := reader.ListDeliveryPreAdvices(request.Context(), query.Scope.Tenant(), filter, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]preAdviceCatalogueBody, 0, len(states))
-		for _, state := range states {
+		bodies := make([]preAdviceCatalogueBody, 0, len(page.Rows))
+		for _, state := range page.Rows {
 			bodies = append(bodies, preAdviceCatalogueBodyOf(state))
 		}
-		writeJSON(response, http.StatusOK, preAdviceListResponse{Outcome: outcomeDeliveryPreAdvicesListed, PreAdvices: bodies})
+		writeJSON(response, http.StatusOK, preAdviceListResponse{
+			Outcome: outcomeDeliveryPreAdvicesListed, PreAdvices: bodies, Page: page.Page(query.Limit),
+		})
 	})
 }
 
@@ -174,24 +189,32 @@ func NewQueryDeliveryPreAdviceEndpoint(intake CatalogueQueryIntake, reader Deliv
 }
 
 // NewQueryDeliveryHandoverNotesEndpoint 交回交接单列表（GET /node-operations-delivery-handover-notes）：按节点（node）、开立区间
-// （openedFrom 闭、openedUntil 开）与单据号（documentNumber）筛，新近在前。空册答 200 + []。
+// （openedFrom 闭、openedUntil 开）与单据号（documentNumber）筛，翻页、排序与 q 照 ports.DeliveryHandoverNotePages，缺省新近在前。
+// 空册答 200 + []，page.total 为 0。
 func NewQueryDeliveryHandoverNotesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
+		pageQuery, err := ports.DeliveryHandoverNotePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		filter, ok := catalogueFilterOf(request.URL.Query(), handoverNoteFilterKeys)
 		if !ok {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		rows, err := reader.ListDeliveryHandoverNotes(request.Context(), query.Scope.Tenant(), filter, query.Limit)
+		page, err := reader.ListDeliveryHandoverNotes(request.Context(), query.Scope.Tenant(), filter, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]handoverNoteCatalogueBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]handoverNoteCatalogueBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, handoverNoteCatalogueBodyOf(row.State, row.MemberCount))
 		}
-		writeJSON(response, http.StatusOK, handoverNoteListResponse{Outcome: outcomeDeliveryHandoverNotesListed, HandoverNotes: bodies})
+		writeJSON(response, http.StatusOK, handoverNoteListResponse{
+			Outcome: outcomeDeliveryHandoverNotesListed, HandoverNotes: bodies, Page: page.Page(query.Limit),
+		})
 	})
 }
 
@@ -229,6 +252,7 @@ func NewQueryDeliveryHandoverNoteEndpoint(intake CatalogueQueryIntake, reader De
 type preAdviceListResponse struct {
 	Outcome    string                   `json:"outcome"`
 	PreAdvices []preAdviceCatalogueBody `json:"preAdvices"`
+	Page       cataloguepage.Page       `json:"page"`
 }
 
 type preAdviceFoundResponse struct {
@@ -255,6 +279,7 @@ func preAdviceCatalogueBodyOf(state domain.DeliveryPreAdviceState) preAdviceCata
 type handoverNoteListResponse struct {
 	Outcome       string                      `json:"outcome"`
 	HandoverNotes []handoverNoteCatalogueBody `json:"handoverNotes"`
+	Page          cataloguepage.Page          `json:"page"`
 }
 
 // handoverNoteFoundResponse 是详情：交接单与列表同一个形，另带名下成员（形成方式、事实身份、业务时间），按落册先后。

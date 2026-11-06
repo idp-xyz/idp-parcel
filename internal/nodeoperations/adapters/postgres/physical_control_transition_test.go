@@ -198,7 +198,7 @@ func TestATransferOutIsFoldedIntoEveryReadOfTheIntakeControl(t *testing.T) {
 	if len(heads) != 1 || heads[0].Control.Active() {
 		t.Fatalf("认当前收寄读到 %d 条、控制在身=%v, want 一条且已转出（再送站不再并入它）", len(heads), len(heads) == 1 && heads[0].Control.Active())
 	}
-	rows, err := fixture.catalogue.ListReceptions(t.Context(), tenant, 10)
+	rows, err := rowsOf(fixture.catalogue.ListReceptions(t.Context(), tenant, 10, firstPage(t, ports.ReceptionPages)))
 	if err != nil || len(rows) != 1 || rows[0].ControlReleasedBy != "TRANSPORT-HANDOVER/v1" ||
 		rows[0].ControlReleasedAt == nil || !rows[0].ControlReleasedAt.Equal(controlHandedOverAt) {
 		t.Fatalf("收寄册 = %+v err = %v", rows, err)
@@ -514,7 +514,7 @@ func TestTheControlTransitionRegisterIsListed(t *testing.T) {
 		return nil
 	})
 
-	rows, err := fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 10)
+	rows, err := rowsOf(fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 10, firstPage(t, ports.PhysicalControlTransitionPages)))
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("上列 %d 行 err=%v", len(rows), err)
 	}
@@ -529,7 +529,7 @@ func TestTheControlTransitionRegisterIsListed(t *testing.T) {
 		rows[2].TransferredAt == nil || !rows[2].TransferredAt.Equal(controlHandedOverAt) {
 		t.Fatalf("转出那一行 = %+v", rows[2])
 	}
-	if _, err := fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 0); err == nil {
+	if _, err := fixture.catalogue.ListPhysicalControlTransitions(t.Context(), tenant, 0, firstPage(t, ports.PhysicalControlTransitionPages)); err == nil {
 		t.Fatal("页大小为零该拒")
 	}
 }

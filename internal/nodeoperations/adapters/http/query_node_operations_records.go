@@ -3,9 +3,11 @@ package nodeopshttp
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ReviewCatalogueReader 是本端点消费的读口：节点作业查阅各本册子的列表读面，一册一个方法，
@@ -15,28 +17,38 @@ type ReviewCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ReceptionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ReceptionCatalogueRow], error)
 	ListUnidentifiedItems(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.UnidentifiedItemCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.UnidentifiedItemCatalogueRow], error)
 	ListConsolidationUnits(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ConsolidationUnitCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ConsolidationUnitCatalogueRow], error)
 	ListConsolidationMembers(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ConsolidationMemberCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ConsolidationMemberCatalogueRow], error)
 	ListIdentityReviewUnits(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.IdentityReviewUnitRow, error)
-	ListPhysicalControlTransitions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.PhysicalControlTransitionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.IdentityReviewUnitRow], error)
+	ListPhysicalControlTransitions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -56,6 +68,17 @@ const (
 	registryConsolidationMember = "consolidation-member"
 )
 
+// registryCatalogues 是册名的封闭集，也是每个册名各对一册的目录声明（ADR-0144 决定四：选择器保持原义，一个取值一册）。
+// 认不出的册名在这里就答坏请求；认得出的，翻页、排序、筛选与 q 照那一册的声明解。
+var registryCatalogues = map[string]*cataloguepage.Catalogue{
+	registryReception:           ports.ReceptionPages,
+	registryUnidentifiedItem:    ports.UnidentifiedItemPages,
+	registryIdentityReviewUnit:  ports.IdentityReviewUnitPages,
+	registryConsolidationUnit:   ports.ConsolidationUnitPages,
+	registryConsolidationMember: ports.ConsolidationMemberPages,
+	registryPhysicalControl:     ports.PhysicalControlTransitionPages,
+}
+
 // NewQueryNodeOperationsRecordsEndpoint 交回节点作业查阅页各本册子的 HTTP 入口
 // （GET /node-operations-records，票 admin-skeleton-closure-batch/05）。
 //
@@ -66,6 +89,9 @@ const (
 //
 // **不下推身份裁决或处置参数**：待识别实物的身份确认由 parcel-shipment 以版本化
 // 关联形成，查阅面收下「确认身份」参数就等于让目录读口长出第二种「处置」语义。
+//
+// 门的次序是方法 → 册名 → Intake → 翻页与筛选参数：册名认不出是请求自身的事，判它不需要先知道调用方是谁；其余查询参数在 Intake
+// 之后照那一册的声明解（理由在 writePageQueryProblem 的头注）。
 func NewQueryNodeOperationsRecordsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ReviewCatalogueReader,
@@ -74,12 +100,9 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		registry := request.URL.Query().Get("registry")
-		if registry != registryReception &&
-			registry != registryUnidentifiedItem &&
-			registry != registryConsolidationUnit &&
-			registry != registryConsolidationMember &&
-			registry != registryPhysicalControl {
+		registry := request.URL.Query().Get(registrySelector)
+		catalogue, known := registryCatalogues[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -87,22 +110,32 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		if !ok {
 			return
 		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		tenant := query.Scope.Tenant()
 
 		switch registry {
 		case registryReception:
-			serveReceptions(response, request, reader, tenant, query.Limit)
+			serveReceptions(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryUnidentifiedItem:
-			serveUnidentifiedItems(response, request, reader, tenant, query.Limit)
+			serveUnidentifiedItems(response, request, reader, tenant, query.Limit, pageQuery)
+		case registryIdentityReviewUnit:
+			serveIdentityReviewUnits(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryConsolidationUnit:
-			serveConsolidationUnits(response, request, reader, tenant, query.Limit)
+			serveConsolidationUnits(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryConsolidationMember:
-			serveConsolidationMembers(response, request, reader, tenant, query.Limit)
+			serveConsolidationMembers(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryPhysicalControl:
-			servePhysicalControlTransitions(response, request, reader, tenant, query.Limit)
+			servePhysicalControlTransitions(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
+
+// registrySelector 是挑册的查询键；它在各册声明里登为选择器，取值进游标摘要。
+const registrySelector = "registry"
 
 func serveReceptions(
 	response http.ResponseWriter,
@@ -110,14 +143,15 @@ func serveReceptions(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListReceptions(request.Context(), tenant, limit)
+	page, err := reader.ListReceptions(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]receptionCatalogueBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]receptionCatalogueBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := receptionCatalogueBody{
 			SourceID:             row.SourceID,
 			Kind:                 row.Kind,
@@ -140,6 +174,7 @@ func serveReceptions(
 	writeJSON(response, http.StatusOK, receptionCatalogueListResponse{
 		Outcome:    outcomeReceptionsListed,
 		Receptions: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -149,14 +184,15 @@ func serveUnidentifiedItems(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListUnidentifiedItems(request.Context(), tenant, limit)
+	page, err := reader.ListUnidentifiedItems(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]unidentifiedItemBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]unidentifiedItemBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := unidentifiedItemBody{
 			SourceID:         row.SourceID,
 			Unit:             row.Unit,
@@ -180,7 +216,14 @@ func serveUnidentifiedItems(
 		}
 		bodies = append(bodies, body)
 	}
-	units, err := identityReviewUnitBodies(request, reader, tenant, limit)
+	// units 是按实物那一册不带条件的第一页：本次的翻页、排序、筛选与 q 属于 items 那一册，不套到它头上；它的位置与总数在
+	// registry=identity-review-unit 那一口。
+	unitsQuery, err := ports.IdentityReviewUnitPages.Decode(url.Values{registrySelector: {registryIdentityReviewUnit}})
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	units, err := reader.ListIdentityReviewUnits(request.Context(), tenant, limit, unitsQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
@@ -188,7 +231,8 @@ func serveUnidentifiedItems(
 	writeJSON(response, http.StatusOK, unidentifiedItemListResponse{
 		Outcome: outcomeUnidentifiedItemsListed,
 		Items:   bodies,
-		Units:   units,
+		Units:   identityReviewUnitBodies(units.Rows),
+		Page:    page.Page(limit),
 	})
 }
 
@@ -198,14 +242,15 @@ func serveConsolidationUnits(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListConsolidationUnits(request.Context(), tenant, limit)
+	page, err := reader.ListConsolidationUnits(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]consolidationUnitBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]consolidationUnitBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, consolidationUnitBody{
 			UnitID:                row.UnitID,
 			Asset:                 row.Asset,
@@ -224,12 +269,14 @@ func serveConsolidationUnits(
 	writeJSON(response, http.StatusOK, consolidationUnitListResponse{
 		Outcome: outcomeConsolidationUnitsListed,
 		Units:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type receptionCatalogueListResponse struct {
 	Outcome    string                   `json:"outcome"`
 	Receptions []receptionCatalogueBody `json:"receptions"`
+	Page       cataloguepage.Page       `json:"page"`
 }
 
 // receptionCatalogueBody 逐字段透出一行收寄登记。
@@ -271,11 +318,13 @@ type receptionCatalogueBody struct {
 }
 
 // units 是同一页按实物列的那一半（票 no-reception-identity/06）：items 逐行列待识别，分不出哪一版仍是当前有效版本、冲突处置过没有；
-// units 把一件实物各条链的当前有效版本列在一起，处置版带处置文档。两者同一次查询答出，页面不必为处置动作另发一次请求。
+// units 把一件实物各条链的当前有效版本列在一起，处置版带处置文档。两者同一次查询答出，页面不必为处置动作另发一次请求。page 说的是
+// items 那一册；units 恒是按实物那一册的第一页，要往后翻走 registry=identity-review-unit。
 type unidentifiedItemListResponse struct {
 	Outcome string                   `json:"outcome"`
 	Items   []unidentifiedItemBody   `json:"items"`
 	Units   []identityReviewUnitBody `json:"units"`
+	Page    cataloguepage.Page       `json:"page"`
 }
 
 // unidentifiedItemBody 逐字段透出一行待识别实物登记。
@@ -316,6 +365,7 @@ type unidentifiedItemBody struct {
 type consolidationUnitListResponse struct {
 	Outcome string                  `json:"outcome"`
 	Units   []consolidationUnitBody `json:"units"`
+	Page    cataloguepage.Page      `json:"page"`
 }
 
 // consolidationUnitBody 逐字段透出一个集运单元实例。
@@ -356,14 +406,15 @@ func serveConsolidationMembers(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListConsolidationMembers(request.Context(), tenant, limit)
+	page, err := reader.ListConsolidationMembers(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]consolidationMemberBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]consolidationMemberBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, consolidationMemberBody{
 			SourceID:         row.SourceID,
 			Action:           row.Action,
@@ -379,12 +430,14 @@ func serveConsolidationMembers(
 	writeJSON(response, http.StatusOK, consolidationMemberListResponse{
 		Outcome: outcomeConsolidationMembersListed,
 		Members: bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type consolidationMemberListResponse struct {
 	Outcome string                    `json:"outcome"`
 	Members []consolidationMemberBody `json:"members"`
+	Page    cataloguepage.Page        `json:"page"`
 }
 
 // consolidationMemberBody 逐字段透出一次移入或移出的来源事实。sourceId 原样带 FTI/ 标记：导入事实与设备事实靠它

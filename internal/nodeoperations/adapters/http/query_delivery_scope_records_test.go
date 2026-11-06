@@ -13,6 +13,7 @@ import (
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件钉送站预报与送站交接单运营查阅读的传输面（票 ps-external-mark-relations/13「做什么」的「查阅读口」；UC-NO-006「权限、隔离与审计」）：
@@ -20,27 +21,31 @@ import (
 
 var scopeReadAt = time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
 
-// stubDeliveryScopeCatalogue 是两本册查阅读口的替身：记下读口收到的租户、筛选、页大小与标识；calls 计读口被触到的次数。
+// stubDeliveryScopeCatalogue 是两本册查阅读口的替身：记下读口收到的租户、筛选、页大小、查询与标识；next 与 total 原样放进两条列表
+// 的结果；calls 计读口被触到的次数。
 type stubDeliveryScopeCatalogue struct {
 	preAdvices []domain.DeliveryPreAdviceState
 	notes      []ports.DeliveryHandoverNoteCatalogueRow
 	preAdvice  map[string]domain.DeliveryPreAdviceState
 	note       map[string]ports.DeliveryHandoverNoteDetail
+	next       string
+	total      int64
 	err        error
 
 	calls     int
 	gotTenant string
 	gotFilter ports.DeliveryScopeCatalogueFilter
 	gotLimit  int
+	gotQuery  cataloguepage.Query
 	gotID     string
 }
 
 func (stub *stubDeliveryScopeCatalogue) ListDeliveryPreAdvices(
-	_ context.Context, tenant domain.TenantID, filter ports.DeliveryScopeCatalogueFilter, limit int,
-) ([]domain.DeliveryPreAdviceState, error) {
+	_ context.Context, tenant domain.TenantID, filter ports.DeliveryScopeCatalogueFilter, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[domain.DeliveryPreAdviceState], error) {
 	stub.calls++
-	stub.gotTenant, stub.gotFilter, stub.gotLimit = tenant.String(), filter, limit
-	return stub.preAdvices, stub.err
+	stub.gotTenant, stub.gotFilter, stub.gotLimit, stub.gotQuery = tenant.String(), filter, limit, query
+	return cataloguepage.Result[domain.DeliveryPreAdviceState]{Rows: stub.preAdvices, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubDeliveryScopeCatalogue) FindDeliveryPreAdvice(
@@ -53,11 +58,11 @@ func (stub *stubDeliveryScopeCatalogue) FindDeliveryPreAdvice(
 }
 
 func (stub *stubDeliveryScopeCatalogue) ListDeliveryHandoverNotes(
-	_ context.Context, tenant domain.TenantID, filter ports.DeliveryScopeCatalogueFilter, limit int,
-) ([]ports.DeliveryHandoverNoteCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, filter ports.DeliveryScopeCatalogueFilter, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow], error) {
 	stub.calls++
-	stub.gotTenant, stub.gotFilter, stub.gotLimit = tenant.String(), filter, limit
-	return stub.notes, stub.err
+	stub.gotTenant, stub.gotFilter, stub.gotLimit, stub.gotQuery = tenant.String(), filter, limit, query
+	return cataloguepage.Result[ports.DeliveryHandoverNoteCatalogueRow]{Rows: stub.notes, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubDeliveryScopeCatalogue) FindDeliveryHandoverNoteDetail(

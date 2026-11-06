@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -143,11 +144,15 @@ func controlTransitions(t *testing.T, db *bentopg.DB) []noports.PhysicalControlT
 	if err != nil {
 		t.Fatalf("查阅目录：%v", err)
 	}
-	rows, err := catalogue.ListPhysicalControlTransitions(t.Context(), mustNO(t, nodomain.NewTenantID, nodeControlTenant), 50)
+	query, err := noports.PhysicalControlTransitionPages.Decode(url.Values{})
+	if err != nil {
+		t.Fatalf("解出转移册的缺省查询：%v", err)
+	}
+	page, err := catalogue.ListPhysicalControlTransitions(t.Context(), mustNO(t, nodomain.NewTenantID, nodeControlTenant), 50, query)
 	if err != nil {
 		t.Fatalf("上列转移册：%v", err)
 	}
-	return rows
+	return page.Rows
 }
 
 // Covers: `AT-NO-101`、`AT-NO-112`（ADR-0214 决定一、三、六）——生产路由表上交接信封扇出到 NO 这一路：上海枢纽收寄在身的那件包裹交接
