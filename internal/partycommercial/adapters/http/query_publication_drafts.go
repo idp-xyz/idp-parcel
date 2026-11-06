@@ -53,8 +53,8 @@ const (
 // 空列表答 200 加空数组（空是内容，不是缺席）。本构建折不回正文的载体照样在列表里，`readable` 为假并带成因 `unreadableCause`，
 // 其余字段取自库上的列（含列上的规范化版本与摘要）：批准者看得见这一份在、动不了它，不会因为一行读不回而整页答不出。
 //
-// 查询参数按 ports.OpenPublicationDraftPages 解码，属传输形状、先于 Intake（ADR-0144 决定六），答法同
-// /commercial-customer-accounts；答复带 page。单份读回是按身份取一行，不收这些参数。
+// 查询参数按 ports.OpenPublicationDraftPages 解码（ADR-0144 决定六），在 Intake 之后：渠道未配置时对一切请求同答 403
+// （ADR-0055 决定三）；答复带 page。单份读回是按身份取一行，不收这些参数。
 func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader PublicationDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -62,14 +62,14 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		pageQuery, err := ports.OpenPublicationDraftPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.OpenPublicationDraftPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		page, err := reader.ListOpenDrafts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)

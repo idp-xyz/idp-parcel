@@ -51,8 +51,8 @@ const (
 // 相互冒充。
 //
 // 三个目录端点的查询参数（after、sort、筛选维与 q）各按本册声明解码（ports.BusinessPartyPages、
-// GroupLegalEntityPages、PartyRelationshipPages；ADR-0144 决定六），属传输形状、先于 Intake，
-// 答法与次序同 /commercial-customer-accounts。
+// GroupLegalEntityPages、PartyRelationshipPages；ADR-0144 决定六），在 Intake 之后：渠道未配置时对一切请求同答 403
+// （ADR-0055 决定三）。
 
 // NewQueryBusinessPartiesEndpoint 交回业务参与方身份本体查阅的 HTTP 入口
 // （GET /commercial-business-parties，ADR-0077）。
@@ -72,15 +72,15 @@ func NewQueryBusinessPartiesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.BusinessPartyPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.BusinessPartyPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -185,15 +185,15 @@ func NewQueryGroupLegalEntitiesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.GroupLegalEntityPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.GroupLegalEntityPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -230,15 +230,15 @@ func NewQueryPartyRelationshipsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.PartyRelationshipPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.PartyRelationshipPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

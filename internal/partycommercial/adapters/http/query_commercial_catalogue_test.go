@@ -17,7 +17,7 @@ import (
 )
 
 // 本文件对两个目录端点(ADR-0077,票 master-data-wiring/05)证传输面:方法门、
-// 未配置 Intake 一律 403、kind 封闭集先于 Intake、五种册子各自分派、行体逐字段
+// 未配置 Intake 一律 403、kind 封闭集在 Intake 之后校验、五种册子各自分派、行体逐字段
 // 转写且可缺席字段如实缺席、空目录答空数组、读失败答 5xx。
 
 var catBaseAt = time.Date(2026, 8, 25, 8, 0, 0, 0, time.UTC)
@@ -361,26 +361,40 @@ func TestServiceProductsEndpointAnswersReadFailureWith500(t *testing.T) {
 	}
 }
 
-// Covers: kind 封闭集是传输形状,先于 Intake——缺席或集外即 400,即便渠道未配置也
-// 不折成 403;服务产品与客户合同是商业对象类别却不是**策略**册子(它们各有自己的目录端点),
-// 如实不在本集合内。客户服务规则版本曾是这里的集外例子,随 0023 正文册落库进了集合。
-func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
-	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(
+// Covers: kind 封闭集——缺席、为空或集外即 400;服务产品与客户合同是商业对象类别却不是**策略**册子(它们各有自己的
+// 目录端点),如实不在本集合内。客户服务规则版本曾是这里的集外例子,随 0023 正文册落库进了集合。kind 在 Intake 之后
+// 校验:渠道未配置时这几问与合法 kind 答同一份 403(ADR-0055 决定三),调用方从答复里探不出有哪几种册子。
+func TestPoliciesEndpointRejectsMissingOrUnknownKindAfterIntake(t *testing.T) {
+	configured := commercialhttp.NewQueryCommercialPoliciesEndpoint(
+		intakeDouble{query: synCatalogueQuery(t)},
+		&policyReaderDouble{},
+	)
+	unconfigured := commercialhttp.NewQueryCommercialPoliciesEndpoint(
 		commercialhttp.UnconfiguredIntake{},
 		&policyReaderDouble{},
 	)
+	baseline := httptest.NewRecorder()
+	unconfigured.ServeHTTP(baseline, httptest.NewRequest(http.MethodGet, "/commercial-policies?kind=PRICE_POLICY", nil))
 	for _, target := range []string{
 		"/commercial-policies",
+		"/commercial-policies?kind=",
 		"/commercial-policies?kind=SERVICE_PRODUCT",
 		"/commercial-policies?kind=CUSTOMER_CONTRACT",
 	} {
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+		configured.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("%s status = %d", target, recorder.Code)
 		}
 		if code := errorCode(t, recorder); code != "MALFORMED_REQUEST" {
 			t.Fatalf("%s code = %q", target, code)
+		}
+
+		refused := httptest.NewRecorder()
+		unconfigured.ServeHTTP(refused, httptest.NewRequest(http.MethodGet, target, nil))
+		if refused.Code != http.StatusForbidden || refused.Body.String() != baseline.Body.String() {
+			t.Fatalf("%s 未配置渠道 status = %d, body = %s;want 与合法 kind 同一份 403:%s",
+				target, refused.Code, refused.Body, baseline.Body)
 		}
 	}
 }

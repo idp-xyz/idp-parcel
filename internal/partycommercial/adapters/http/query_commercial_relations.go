@@ -59,7 +59,7 @@ const (
 // kind 的入口,会让「页面加一个页签」和「产品多一类目录」在契约上长成同一个动作。
 
 // 两个列表端点的查询参数各按本册声明解码(ports.CustomerContractPages、SupplierAgreementPages;ADR-0144 决定六),
-// 属传输形状、先于 Intake,答法与次序同 /commercial-customer-accounts。
+// 在 Intake 之后:渠道未配置时对一切请求同答 403(ADR-0055 决定三)。
 
 // NewQueryCustomerContractsEndpoint 交回客户与合同目录查阅的 HTTP 入口
 // (GET /commercial-customer-contracts,ADR-0077)。
@@ -74,15 +74,15 @@ func NewQueryCustomerContractsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.CustomerContractPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.CustomerContractPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -119,15 +119,15 @@ func NewQuerySupplierAgreementsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.SupplierAgreementPages.Decode(request.URL.Query())
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		pageQuery, err := ports.SupplierAgreementPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

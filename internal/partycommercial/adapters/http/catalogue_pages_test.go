@@ -16,10 +16,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
-// 本文件对票 catalogue-read-pagination-rollout/11 迁到 ADR-0144 的各列表端点证查询参数的传输面：答复带 page（size 是
-// Intake 定的页大小，next 与 total 照读口）、读口收到的是按本册声明解出的查询；未知键、集外排序维、词表外筛选值、解不开
-// 的游标各答 400 带理由散文，且不进读口；解码先于 Intake——渠道未配置时坏参数答 400、好参数答 403。各册同形，表驱动，
-// 每册各跑一遍。
+// 本文件对票 catalogue-read-pagination-rollout/11 迁到 ADR-0144 的各列表端点证查询参数的传输面（spec「端点先 Intake、
+// 后解码查询参数」）：答复带 page（size 是 Intake 定的页大小，next 与 total 照读口）、读口收到的是按本册声明解出的查询；
+// 配置了的渠道上未知键、集外排序维、词表外筛选值、解不开的游标各答 400 带理由散文，且不进读口；渠道未配置时合规与不合规的
+// 一问同答一份 403——解码在 Intake 之后，答复不随请求内容变（ADR-0055 决定三）。各册同形，表驱动，每册各跑一遍。
 
 // tenantPage 是各册旧替身答页的共用一段：读失败照答错，他租答空页，本租答全部行、总数即行数。
 func tenantPage[Row any](err error, mine bool, rows []Row) (cataloguepage.Result[Row], error) {
@@ -33,6 +33,19 @@ func tenantPage[Row any](err error, mine bool, rows []Row) (cataloguepage.Result
 }
 
 var pageListedAt = time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+
+// synCatalogueQuery 是本文件各用例的 Intake 结果。页大小故意不取常见的整数：端点若写死了一个页大小，size 的断言才拦得住。
+func synCatalogueQuery(t *testing.T) commercialhttp.CatalogueQuery {
+	t.Helper()
+	scope, err := domain.NewOperationsQueryScope(
+		catValue(t, domain.NewOperationsScopeReference, "SYN-OPS-SCOPE-01"),
+		catValue(t, domain.NewTenantID, "SYN-TENANT-01"),
+	)
+	if err != nil {
+		t.Fatalf("构造作用域：%v", err)
+	}
+	return commercialhttp.CatalogueQuery{Scope: scope, Limit: 37}
+}
 
 // pageRecorder 记下读口收到的查询。recordPage 按那份查询给本页末行编下一页游标——游标只能由解出它的那份查询编，端点对它的
 // 校验（摘要与本次条件是否相符）才证得到；identity 是那一行标识各段的取值，段数与各段的值类须合本册声明。
@@ -60,7 +73,7 @@ func (reader *pagingPartyIdentityReader) ListBusinessParties(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.BusinessPartyRow], error) {
 	return recordPage(&reader.pageRecorder, query, ports.BusinessPartyRow{
-		TenantID: "tenant-1", PartyID: "SYN-PARTY-1", Status: "EFFECTIVE",
+		TenantID: "SYN-TENANT-01", PartyID: "SYN-PARTY-1", Status: "EFFECTIVE",
 		EffectiveFrom: pageListedAt, RegisteredAt: pageListedAt,
 	}, "SYN-PARTY-1")
 }
@@ -69,7 +82,7 @@ func (reader *pagingPartyIdentityReader) ListGroupLegalEntities(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.GroupLegalEntityRow], error) {
 	return recordPage(&reader.pageRecorder, query, ports.GroupLegalEntityRow{
-		TenantID: "tenant-1", LegalEntityID: "SYN-LE-1", PartyID: "SYN-PARTY-1", Status: "EFFECTIVE",
+		TenantID: "SYN-TENANT-01", LegalEntityID: "SYN-LE-1", PartyID: "SYN-PARTY-1", Status: "EFFECTIVE",
 		EffectiveFrom: pageListedAt, RegisteredAt: pageListedAt,
 	}, "SYN-LE-1")
 }
@@ -78,7 +91,7 @@ func (reader *pagingPartyIdentityReader) ListPartyRelationships(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.PartyRelationshipRow], error) {
 	return recordPage(&reader.pageRecorder, query, ports.PartyRelationshipRow{
-		TenantID: "tenant-1", RelationshipID: "SYN-REL-1", HolderID: "SYN-PARTY-1", CounterpartyID: "SYN-PARTY-2",
+		TenantID: "SYN-TENANT-01", RelationshipID: "SYN-REL-1", HolderID: "SYN-PARTY-1", CounterpartyID: "SYN-PARTY-2",
 		Role: "CUSTOMER", Status: "EFFECTIVE", EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
 	}, "SYN-REL-1")
 }
@@ -103,7 +116,7 @@ func (reader *pagingRegistrationNumberTypeReader) ListRegistrationNumberTypes(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.RegistrationNumberTypeRow], error) {
 	return recordPage(&reader.pageRecorder, query, ports.RegistrationNumberTypeRow{
-		TenantID: "tenant-1", CountryCode: "XA", TypeCode: "SYN-LIFETIME", Revision: 1, TypeName: "合成终身注册号",
+		TenantID: "SYN-TENANT-01", CountryCode: "XA", TypeCode: "SYN-LIFETIME", Revision: 1, TypeName: "合成终身注册号",
 		Layer: "IDENTITY", FormatPattern: `SYN-[0-9]{6}`, Basis: "SYN-BASIS-1", Status: "EFFECTIVE",
 		EffectiveFrom: pageListedAt, RegisteredAt: pageListedAt,
 	}, "XA", "SYN-LIFETIME")
@@ -117,7 +130,7 @@ func (reader *pagingProductChannelMappingReader) ListProductChannelMappings(
 	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.ProductChannelMappingRow], error) {
 	return recordPage(&reader.pageRecorder, query, ports.ProductChannelMappingRow{
-		TenantID: "tenant-1", MappingID: "SYN-MAP-1", Revision: 1, ProductObjectID: "SYN-PRODUCT-1",
+		TenantID: "SYN-TENANT-01", MappingID: "SYN-MAP-1", Revision: 1, ProductObjectID: "SYN-PRODUCT-1",
 		ProductVersionLabel: "v1", Channels: []string{"SYN-CH-1"}, Basis: "SYN-BASIS-1",
 		EffectiveStartsAt: pageListedAt, RegisteredAt: pageListedAt,
 	}, "SYN-MAP-1")
@@ -370,7 +383,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 			},
 			recorder: &identities.pageRecorder, collection: "entities",
 			defaultSort: "-registeredAt", badSort: "partyName", badFilter: "status=ACTIVE",
-			goodQuery: "registrationCountry=CN&status=EFFECTIVE", changedQuery: "registrationCountry=SG&status=EFFECTIVE",
+			goodQuery: "registrationCountry=XA&status=EFFECTIVE", changedQuery: "registrationCountry=XB&status=EFFECTIVE",
 		},
 		{
 			name: "参与方关系",
@@ -488,7 +501,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 // 缺省序与行标识同形，拿前者的游标翻后者仍答游标不符，一册的位置不交给另一册的读口。
 func TestCommercialPolicyCursorDoesNotCrossKinds(t *testing.T) {
 	reader := &pagingPolicyReader{}
-	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: catalogueQuery(t)}, reader)
+	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: synCatalogueQuery(t)}, reader)
 	first, _ := getPaged(t, endpoint, "kind=PRICE_POLICY", "")
 	var body struct {
 		Page struct {
@@ -530,9 +543,9 @@ func getPaged(t *testing.T, endpoint http.Handler, selector, rawQuery string) (*
 // Covers: 完成判据「答复带 page，size 等于 Intake 的页大小」与「换条件拿旧游标答 400」——page 三格齐在（ADR-0144 决定五），
 // 读口收到的第一页查询是本册缺省序、没有游标；游标带着上一次的条件摘要，换了条件还拿它答 400，条件没变则把位置交给读口。
 func TestMigratedCatalogueEndpointsCarryThePage(t *testing.T) {
-	limit := catalogueQuery(t).Limit
+	limit := synCatalogueQuery(t).Limit
 	for _, tc := range pagedEndpointCases() {
-		endpoint := tc.endpoint(intakeDouble{query: catalogueQuery(t)})
+		endpoint := tc.endpoint(intakeDouble{query: synCatalogueQuery(t)})
 		tc.recorder.seen = nil
 		recorder, _ := getPaged(t, endpoint, tc.selector, tc.goodQuery)
 		if recorder.Code != http.StatusOK {
@@ -573,11 +586,12 @@ func TestMigratedCatalogueEndpointsCarryThePage(t *testing.T) {
 	}
 }
 
-// Covers: 完成判据「未知键、集外排序维、词表外筛选值、解不开的游标各答 400 带理由」与「未配置渠道时坏参数 400、好参数 403」——
-// 查询参数一律封闭集（ADR-0144 决定三、四）：多给的键若被静默忽略，页面以为筛了、服务端其实没筛。坏参数不进读口。
+// Covers: 完成判据「未知键、集外排序维、词表外筛选值、解不开的游标各答 400 带理由」与「渠道未配置时一律 403」——查询参数
+// 一律封闭集（ADR-0144 决定三、四）：多给的键若被静默忽略，页面以为筛了、服务端其实没筛。坏参数不进读口；渠道未配置时
+// 合规与不合规的一问答的是同一份 403，调用方从答复里看不出本册开放了哪些维度。
 func TestMigratedCatalogueEndpointsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	for _, tc := range pagedEndpointCases() {
-		endpoint := tc.endpoint(intakeDouble{query: catalogueQuery(t)})
+		endpoint := tc.endpoint(intakeDouble{query: synCatalogueQuery(t)})
 		refusals := []struct {
 			query  string
 			reason string
@@ -608,13 +622,21 @@ func TestMigratedCatalogueEndpointsRefuseQueriesOutsideTheDeclaration(t *testing
 		}
 
 		unconfigured := tc.endpoint(intakeDouble{err: commercialhttp.ErrAccessChannelNotConfigured})
-		if recorder, problem := getPaged(t, unconfigured, tc.selector, "sort="+tc.badSort); recorder.Code != http.StatusBadRequest ||
-			!strings.Contains(problem.Error.Detail, tc.badSort) {
-			t.Fatalf("%s 未配置渠道 + 坏参数 status = %d, problem = %+v，want 400 且理由点名参数（解码先于 Intake）",
-				tc.name, recorder.Code, problem)
+		baseline, _ := getPaged(t, unconfigured, tc.selector, tc.goodQuery)
+		if baseline.Code != http.StatusForbidden {
+			t.Fatalf("%s 未配置渠道 + 合规的一问 status = %d，want 403", tc.name, baseline.Code)
 		}
-		if recorder, _ := getPaged(t, unconfigured, tc.selector, tc.goodQuery); recorder.Code != http.StatusForbidden {
-			t.Fatalf("%s 未配置渠道 + 好参数 status = %d，want 403", tc.name, recorder.Code)
+		for _, refusal := range refusals {
+			tc.recorder.seen = nil
+			recorder, problem := getPaged(t, unconfigured, tc.selector, refusal.query)
+			if recorder.Code != http.StatusForbidden || problem.Error.Code != "ACCESS_CHANNEL_NOT_CONFIGURED" ||
+				recorder.Body.String() != baseline.Body.String() {
+				t.Fatalf("%s 未配置渠道 + %s: status = %d, body = %s；want 与合规一问同一份 403：%s",
+					tc.name, refusal.query, recorder.Code, recorder.Body, baseline.Body)
+			}
+			if tc.recorder.seen != nil {
+				t.Fatalf("%s 未配置渠道 + %s: 请求进了读口", tc.name, refusal.query)
+			}
 		}
 	}
 }
