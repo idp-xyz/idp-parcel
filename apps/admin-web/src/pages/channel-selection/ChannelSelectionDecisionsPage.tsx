@@ -21,13 +21,14 @@ import { StatusPill } from '../../components/StatusPill';
 import { CodeRef } from '../../components/CodeRef';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { formatInstant } from '../catalogue-view';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import {
   findChannelSelectionDecision,
   listTiedChannelSelectionDecisions,
+  tiedChannelSelectionConditions,
   type ApiResult,
   type ChannelSelectionDecisionResponseBody,
   type ChannelSelectionSubjectFilter,
-  type TiedChannelSelectionDecisionsResponseBody,
 } from './api';
 import {
   candidateRowsOf,
@@ -55,6 +56,9 @@ const info = moduleInfoById['channel-selection-decisions'];
  * 本页**只列不裁**:人工裁决的形状(裁决人、裁决规则属实例半边;机制侧怎么落要先过 /domain-modeling)不在
  * 本票,页面上没有任何「裁决」动作。也**没有金额**:金额留在 parcel-pricing 的评价上,这里只透评价引用;
  * 不按时间隐式截断,窄口只有对象一维,由输入框显式给。
+ *
+ * 列表读口已迁到 ADR-0144,接模板的游标翻页;换收窄对象回第一页。商业范围与映射是选择器,随查询一起带、不算检索条件。
+ * 本页没有检索框,读口收的检索词不接。
  */
 function col(id: string, header: string, options?: { mono?: boolean; className?: string }): ListColumn<DecisionRow> {
   return {
@@ -80,28 +84,12 @@ export function ChannelSelectionDecisionsPage() {
   const [scopeDraft, setScopeDraft] = useState('');
   const [mappingDraft, setMappingDraft] = useState('');
   const [subject, setSubject] = useState<ChannelSelectionSubjectFilter | undefined>(undefined);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{
-    subject: ChannelSelectionSubjectFilter | undefined;
-    answer: ApiResult<TiedChannelSelectionDecisionsResponseBody>;
-  } | null>(null);
+  const { answer, pagination, retry } = useCatalogueCursor(tiedChannelSelectionConditions(subject), listTiedChannelSelectionDecisions);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [inspectDraft, setInspectDraft] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    void listTiedChannelSelectionDecisions(subject).then((answer) => {
-      if (!cancelled) setLoaded({ subject, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [subject, reloadKey]);
-
-  const answer = loaded && loaded.subject === subject ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const rows = body ? decisionRowsOf(body) : [];
-  const retry = () => setReloadKey((value) => value + 1);
 
   // 两个都填才收窄:服务端只给一半答 400,那条 400 说的是「你问错了」,页面不替它兜成「没收窄」。
   const draftComplete = scopeDraft.trim() !== '' && mappingDraft.trim() !== '';
@@ -157,11 +145,12 @@ export function ChannelSelectionDecisionsPage() {
             ) : null}
           </>
         }
-        // 计数只在拿到业务答案后显示,未配置态不报「0 行」。
-        filterSummary={body ? `并列 ${rows.length} 条${subject ? '(已收窄)' : ''}` : undefined}
+        // 计数只在拿到业务答案后显示,未配置态不报「0 行」;整册多少条在翻页条上,这里只数本页。
+        filterSummary={body ? `本页 ${rows.length} 条${subject ? '(已收窄)' : ''}` : undefined}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.key}
+        pagination={pagination}
         onRowClick={(row) => setInspecting(row.decisionId)}
         viewState={tiedListViewState(answer, subject, rows.length, retry, {
           module: info,

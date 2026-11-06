@@ -62,16 +62,19 @@ test('决定集恰是拒绝与交客户补充两去向,没有通过 / 放行 / �
   equal(dispositionChoiceOptions.find((option) => option.id === 'CUSTOMER_SUPPLEMENT')?.label, '交客户补充');
 });
 
-// Covers: 三态之一「空」——服务端作答且 entries 为空数组才是空队列,措辞说没有积压,不说缺陷。
-test('空队列是答案不是缺陷', () => {
-  const state = dispositionQueueViewState(
-    { kind: 'outcome', status: 200, body: { outcome: 'DISPOSITION_QUEUE_LISTED', entries: [] } },
-    () => {},
-    moduleInfo,
-  );
+// Covers: 三态之一「空」——服务端作答且 entries 为空数组才是空队列,措辞说没有积压,不说缺陷;翻过第一页答出零行照收窄办,
+// 留在就绪态。
+test('空队列是答案不是缺陷;翻过第一页的零行不算空队列', () => {
+  const empty = {
+    kind: 'outcome' as const,
+    status: 200,
+    body: { outcome: 'DISPOSITION_QUEUE_LISTED' as const, entries: [], page: { size: 200, next: null, total: 0 } },
+  };
+  const state = dispositionQueueViewState(empty, () => {}, moduleInfo);
   ok(state.kind === 'empty');
   match(state.title ?? '', /等待授权处置/);
   match(state.description ?? '', /没有积压/);
+  equal(dispositionQueueViewState(empty, () => {}, moduleInfo, true).kind, 'ready');
 });
 
 // Covers: 三态之二「有项」——有行即 ready;队列行显去前缀的运单号、客户、件数与未通过项数;
@@ -79,7 +82,7 @@ test('空队列是答案不是缺陷', () => {
 test('有项时队列行与受限项文案说运营的话,原码进技术详情', () => {
   const entry = entryOf();
   const state = dispositionQueueViewState(
-    { kind: 'outcome', status: 200, body: { outcome: 'DISPOSITION_QUEUE_LISTED', entries: [entry] } },
+    { kind: 'outcome', status: 200, body: { outcome: 'DISPOSITION_QUEUE_LISTED', entries: [entry], page: { size: 200, next: null, total: 1 } } },
     () => {},
     moduleInfo,
   );

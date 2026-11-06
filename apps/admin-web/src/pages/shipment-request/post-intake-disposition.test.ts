@@ -36,7 +36,7 @@ function itemOf(overrides: Partial<PostIntakeManualItemRow> = {}): PostIntakeMan
   };
 }
 
-test('列表:去向集恰是五种;队列行带去前缀的包裹号、为什么等处置与处置次数;摘要说明截断', () => {
+test('列表:去向集恰是五种;队列行带去前缀的包裹号、为什么等处置与处置次数;摘要只报积压数,截断交给翻页条', () => {
   deepEqual(directionOptions.map((o) => o.id), ['CONTINUE', 'INTERCEPT', 'REDIRECT', 'RETURN', 'TERMINATE_SERVICE']);
   const line = requestQueueRowOf(requestOf({ currentVersion: 2, reason: '客户改主意' }));
   equal(line.title, 'PARCEL1');
@@ -44,7 +44,7 @@ test('列表:去向集恰是五种;队列行带去前缀的包裹号、为什么
   equal(line.subtitle, '申请取消时货已收寄 · 客户改主意');
   equal(line.statusText, '已处置 2 次');
   equal(requestQueueRowOf(requestOf()).statusText, '尚未处置');
-  equal(requestSummaryText({ outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED', pendingCount: 5, truncated: true, requests: [requestOf()] }), '待处置 5 票(先列出 1 票,处置之后其余的会补进来)');
+  equal(requestSummaryText({ outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED', pendingCount: 5, truncated: true, requests: [requestOf()], page: { size: 1, next: 'c1', total: 5 } }), '待处置 5 票');
 });
 
 test('列表:业务行不带英文码与请求键,那些进技术详情;没记下的字段如实说没记下', () => {
@@ -56,9 +56,20 @@ test('列表:业务行不带英文码与请求键,那些进技术详情;没记�
   equal(technical.find((r) => r.label === '请求键')!.value, 'RK-1');
 });
 
-test('列表:空清单是答案,读不到不画成空', () => {
-  const empty = requestQueueViewState({ kind: 'outcome', status: 200, body: { outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED', pendingCount: 0, truncated: false, requests: [] } }, () => undefined, moduleInfo);
-  equal(empty.kind, 'empty');
+test('列表:空清单是答案,读不到不画成空;翻过第一页的零行不算空清单', () => {
+  const emptyAnswer = {
+    kind: 'outcome' as const,
+    status: 200,
+    body: {
+      outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED' as const,
+      pendingCount: 0,
+      truncated: false,
+      requests: [],
+      page: { size: 200, next: null, total: 0 },
+    },
+  };
+  equal(requestQueueViewState(emptyAnswer, () => undefined, moduleInfo).kind, 'empty');
+  equal(requestQueueViewState(emptyAnswer, () => undefined, moduleInfo, true).kind, 'ready');
   equal(requestQueueViewState({ kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }, () => undefined, moduleInfo).kind, 'error');
   equal(requestQueueViewState({ kind: 'unconfigured' } as never, () => undefined, moduleInfo).kind, 'unconfigured');
 });
@@ -120,8 +131,9 @@ test('登记:说明必填;草案带四段键、结果与说明;重放与冲突�
   match(manualResultNoteOf('登记', { kind: 'callerProblem', status: 404, code: 'POST_INTAKE_MANUAL_ITEM_NOT_VISIBLE' }).text, /刷新清单/);
 });
 
-test('读回:按包裹摘要说名下项数与未登记数', () => {
+test('读回:按包裹摘要说名下项数与未登记数;待登记清单只报积压数,截断交给翻页条', () => {
   equal(manualSummaryText({ outcome: 'POST_INTAKE_MANUAL_ITEMS_LISTED', pendingCount: 1, truncated: false, items: [itemOf(), itemOf({ owner: 'NETWORK_ROUTING' })] }, 'DPCL-PARCEL1'), '包裹 PARCEL1 共 2 项,其中 1 项还没登记结果');
+  equal(manualSummaryText({ outcome: 'POST_INTAKE_MANUAL_ITEMS_LISTED', pendingCount: 250, truncated: true, items: [itemOf()] }), '待办 250 项');
 });
 
 test('写入口按授予收起:明确没有才收起,不知道就摆;两种运营决定分开授予', () => {

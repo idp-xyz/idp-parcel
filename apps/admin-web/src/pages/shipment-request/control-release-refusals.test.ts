@@ -90,26 +90,48 @@ test('草案不带处理人,依据去两端空白', () => {
   ok(!('handler' in draft));
 });
 
-// Covers: 三态之「空」——服务端作答且清单为空才是空队列,措辞说「没有积压」是答案,不说缺陷。
-test('空清单是答案不是缺陷', () => {
-  const state = refusalQueueViewState(
-    { kind: 'outcome', status: 200, body: { outcome: 'CONTROL_RELEASE_REFUSALS_LISTED', unhandledCount: 0, truncated: false, refusals: [] } },
-    () => {},
-    moduleInfo,
-  );
+// Covers: 三态之「空」——服务端作答且清单为空才是空队列,措辞说「没有积压」是答案,不说缺陷;翻过第一页答出零行照收窄办,
+// 留在就绪态不说没有积压。
+test('空清单是答案不是缺陷;翻过第一页的零行不算空队列', () => {
+  const empty = {
+    kind: 'outcome' as const,
+    status: 200,
+    body: {
+      outcome: 'CONTROL_RELEASE_REFUSALS_LISTED' as const,
+      unhandledCount: 0,
+      truncated: false,
+      refusals: [],
+      page: { size: 200, next: null, total: 0 },
+    },
+  };
+  const state = refusalQueueViewState(empty, () => {}, moduleInfo);
   ok(state.kind === 'empty');
   match(state.description ?? '', /没有积压/);
+  equal(refusalQueueViewState(empty, () => {}, moduleInfo, true).kind, 'ready');
 });
 
-// Covers: 页头的计数与截断说明:计数是未处理的全部行数;清单被页大小截断时说清只列了最早的几笔。
-test('计数与截断如实说明', () => {
+// Covers: 页头只报未处理的全部行数,不随翻页变;一页之外还有多少交给翻页条,页头不再写「先列出几笔」。
+test('页头只报积压数,截断交给翻页条', () => {
   equal(
-    refusalSummaryText({ outcome: 'CONTROL_RELEASE_REFUSALS_LISTED', unhandledCount: 2, truncated: false, refusals: [rowOf(), rowOf()] }),
+    refusalSummaryText({
+      outcome: 'CONTROL_RELEASE_REFUSALS_LISTED',
+      unhandledCount: 2,
+      truncated: false,
+      refusals: [rowOf(), rowOf()],
+      page: { size: 200, next: null, total: 2 },
+    }),
     '待处理 2 笔',
   );
-  const truncated = refusalSummaryText({ outcome: 'CONTROL_RELEASE_REFUSALS_LISTED', unhandledCount: 250, truncated: true, refusals: [rowOf()] });
-  match(truncated, /待处理 250 笔/);
-  match(truncated, /先列出最早登记的 1 笔/);
+  equal(
+    refusalSummaryText({
+      outcome: 'CONTROL_RELEASE_REFUSALS_LISTED',
+      unhandledCount: 250,
+      truncated: true,
+      refusals: [rowOf()],
+      page: { size: 1, next: 'c1', total: 250 },
+    }),
+    '待处理 250 笔',
+  );
 });
 
 // Covers: ADR-0022——每一格 outcome 都是形成了的业务答案,各说各的话且不带码:已处理说系统接着处理、已被处理说先到那一份、

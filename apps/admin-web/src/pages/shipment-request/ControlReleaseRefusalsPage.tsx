@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CheckCheck, Landmark } from 'lucide-react';
 import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
@@ -6,15 +6,15 @@ import { ReloginButton } from '../../auth/ReloginButton';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { moduleInfoById } from '../../navigation';
 import { formatInstant } from '../catalogue-view';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import {
   handleControlReleaseRefusal,
   listControlReleaseRefusals,
-  type ApiResult,
   type ControlReleaseRefusalAction,
-  type ControlReleaseRefusalListResponseBody,
   type ControlReleaseRefusalRow,
 } from './api';
+import { CursorPagerBar, pastFirstPage } from './cursor-pager';
 import {
   handlingDraftOf,
   refusalActionLabel,
@@ -76,29 +76,22 @@ function markConfirmText({ row, basis }: PendingMark): string {
  * 「核对后释放」由服务端按原关联再请求一次释放,提供方答已收口才算处理;「标记已处理」只留痕。两者都同笔让接受链
  * 重驱那份委托的当前版本。没有告警阈值——本产品没有告警引擎,页头只给计数。谁有权处理由「运营决定」里「释放拒收处理」
  * 这一种授予把守(与授权处置的授予分开),前端不自判。
+ *
+ * 清单已迁到 ADR-0144,按游标翻页,翻页条在页底;页头的计数是整册积压,不随翻页变。本页没有检索框与筛选条,读口收的检索词与
+ * 筛选维不接,只翻页。
  */
 export function ControlReleaseRefusalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<ControlReleaseRefusalListResponseBody> | null>(null);
+  // 处理之后重取停在当前这一页(游标不动)。
+  const { answer, pagination, retry } = useCatalogueCursor({}, listControlReleaseRefusals);
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<RefusalHandlingNote | null>(null);
   const [pendingMark, setPendingMark] = useState<PendingMark | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void listControlReleaseRefusals().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const refusals = body?.refusals ?? [];
   const selected = refusals.find((row) => refusalKeyOf(row) === selectedId) ?? null;
-  const retry = () => setReloadKey((value) => value + 1);
+  const viewState = refusalQueueViewState(answer, retry, info, pastFirstPage(pagination));
 
   // 处理有了答复就重读:成立的那一笔要从清单消失,已被处理的也一样;释放没收口 / 再被拒收时清单不变,重读只是确认没变。
   const act = (action: ControlReleaseRefusalAction, row: ControlReleaseRefusalRow, basis: string) => {
@@ -136,7 +129,7 @@ export function ControlReleaseRefusalsPage() {
   };
 
   return (
-    <>
+    <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
       <ReviewFlowTemplate<ControlReleaseRefusalAction>
         title={info.title}
         description={`运单的业务结果已经定了,但占用客户余额或额度的那笔钱结算侧没放掉。在这里核对后释放,或在结算侧手工放掉后标记已处理。${body ? refusalSummaryText(body) : ''}`}
@@ -176,8 +169,9 @@ export function ControlReleaseRefusalsPage() {
         decisions={actionDecisions}
         decisionPending={pending}
         onDecide={onDecide}
-        viewState={refusalQueueViewState(answer, retry, info)}
+        viewState={viewState}
       />
+      {pagination && viewState.kind === 'ready' && <CursorPagerBar pagination={pagination} />}
       {/* 标记已处理只留痕却会让接受链此后不再为这一笔停下,按下之后再拦一道;确认即发命令,进行中由模板禁用按钮、结果由 `note` 状态呈现。 */}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
@@ -190,6 +184,6 @@ export function ControlReleaseRefusalsPage() {
         onConfirm={confirmMark}
         onCancel={cancelMark}
       />
-    </>
+    </div>
   );
 }

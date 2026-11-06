@@ -155,9 +155,9 @@ export function requestTechnicalRows(row: PostIntakeDispositionRequestRow): Tech
   ];
 }
 
+/** 等回应的全部票数,不随翻页变;一页之外还有多少由翻页条说。 */
 export function requestSummaryText(body: PostIntakeDispositionRequestsResponseBody): string {
-  const count = `待处置 ${body.pendingCount} 票`;
-  return body.truncated ? `${count}(先列出 ${body.requests.length} 票,处置之后其余的会补进来)` : count;
+  return `待处置 ${body.pendingCount} 票`;
 }
 
 export const requestQueueEmptyState = {
@@ -165,10 +165,12 @@ export const requestQueueEmptyState = {
   description: '客户在货物收寄之后申请停止运送,这里才会出现待处置的运单;现在没有积压。',
 } as const;
 
+/** narrowed 同 catalogueViewState:为真时零行留在就绪态,不说「没有积压」。 */
 export function requestQueueViewState(
   answer: ApiResult<PostIntakeDispositionRequestsResponseBody> | null,
   retry: () => void,
   module: ModuleInfo,
+  narrowed = false,
 ): TemplateViewState {
   const count = answer?.kind === 'outcome' ? answer.body.requests.length : 0;
   return catalogueViewState(answer, count, retry, {
@@ -176,6 +178,7 @@ export function requestQueueViewState(
     endpoint: 'GET /post-intake-disposition-requests',
     emptyTitle: requestQueueEmptyState.title,
     emptyDescription: requestQueueEmptyState.description,
+    narrowed,
   });
 }
 
@@ -343,13 +346,15 @@ export function manualResultNoteOf(label: string, answer: ApiResult<PostIntakeMa
   );
 }
 
+/** 待登记清单报全部未登记的项数,不随翻页变,一页之外还有多少由翻页条说;按包裹读回是那件包裹名下的全部项。 */
 export function manualSummaryText(body: PostIntakeManualItemsResponseBody, parcel?: string): string {
   if (parcel) return `包裹 ${parcelNoOf(parcel)} 共 ${body.items.length} 项,其中 ${body.pendingCount} 项还没登记结果`;
-  const count = `待办 ${body.pendingCount} 项`;
-  return body.truncated ? `${count}(先列出 ${body.items.length} 项,登记之后其余的会补进来)` : count;
+  return `待办 ${body.pendingCount} 项`;
 }
 
 export const manualItemsEmptyState = {
   pending: '现在没有待办事项。处置决定里系统办不了、要人去办的事(如在网点扣件、规划退运路线)才会列在这里。',
+  // 翻过第一页答出零行:这一页上的都登记掉了,前面几页可能还有,不能说「现在没有待办」。
+  pastFirstPage: '这一页往后没有待办了,往前翻看看。',
   readback: '这票货没有待办事项。',
 } as const;

@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
 import { ReloginButton } from '../../auth/ReloginButton';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { moduleInfoById } from '../../navigation';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import { Field, inputClass, Section } from './controls';
 import { ParcelNo } from './refs';
 import { postIntakeDispositionDecision, postIntakeManualItemDecision } from '../operator-grants';
 import { useMayMakeDecision } from '../use-operator-grants';
 import {
   decidePostIntakeDisposition,
+  findPostIntakeManualItemsOfParcel,
   listPostIntakeDispositionRequests,
   listPostIntakeManualItems,
   registerPostIntakeManualItemResult,
@@ -17,10 +19,10 @@ import {
   type ManualItemOutcome,
   type PostIntakeDirection,
   type PostIntakeDispositionRequestRow,
-  type PostIntakeDispositionRequestsResponseBody,
   type PostIntakeManualItemRow,
   type PostIntakeManualItemsResponseBody,
 } from './api';
+import { CursorPager, CursorPagerBar, pastFirstPage } from './cursor-pager';
 import {
   decisionClearsRequest,
   decisionDraftOf,
@@ -65,32 +67,25 @@ function NoteLine({ note }: { note: OperatorNote | null }) {
  *
  * 写入口按授予收起(ADR-0315):处置决定与待办登记是两种分开授予的运营决定(ADR-0341 决定三)。
  * 摆不摆只是呈现,每个写口照旧由服务端判授予。取消先于收寄的入口在「取消运单」页,不在这里。
+ *
+ * 上下两份清单都已迁到 ADR-0144,各按游标翻页:上半的翻页条在队列下沿,下半的在待办清单之后;两处的计数都是整册积压,
+ * 不随翻页变。两处都没有检索框与筛选条,读口收的检索词与筛选维不接,只翻页。「按包裹号查」是有界查找,不翻页。
  */
 export function PostIntakeDispositionPage() {
   const mayDecide = useMayMakeDecision(postIntakeDispositionDecision);
   const mayRegister = useMayMakeDecision(postIntakeManualItemDecision);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<PostIntakeDispositionRequestsResponseBody> | null>(null);
+  // 决定之后重取停在当前这一页(游标不动)。
+  const { answer, pagination, retry } = useCatalogueCursor({}, listPostIntakeDispositionRequests);
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<OperatorNote | null>(null);
   const [destination, setDestination] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    void listPostIntakeDispositionRequests().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const requests = body?.requests ?? [];
   const selected: PostIntakeDispositionRequestRow | null = requests.find((row) => requestKeyOf(row) === selectedId) ?? null;
-  const retry = () => setReloadKey((value) => value + 1);
+  const viewState = requestQueueViewState(answer, retry, info, pastFirstPage(pagination));
   // 形成决定会让待办事项多出几项,下半部随之重读。
   const [itemsReloadKey, setItemsReloadKey] = useState(0);
 
@@ -176,8 +171,9 @@ export function PostIntakeDispositionPage() {
           decisions={decisions}
           decisionPending={pending}
           onDecide={onDecide}
-          viewState={requestQueueViewState(answer, retry, info)}
+          viewState={viewState}
         />
+        {pagination && viewState.kind === 'ready' && <CursorPagerBar pagination={pagination} />}
       </div>
       <ManualItemsSection mayRegister={mayRegister} reloadKey={itemsReloadKey} />
     </div>
@@ -188,7 +184,8 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
   const [localReload, setLocalReload] = useState(0);
   const [parcelInput, setParcelInput] = useState('');
   const [parcel, setParcel] = useState<string | undefined>(undefined);
-  const [answer, setAnswer] = useState<ApiResult<PostIntakeManualItemsResponseBody> | null>(null);
+  const pendingItems = useCatalogueCursor({}, listPostIntakeManualItems);
+  const [readback, setReadback] = useState<ApiResult<PostIntakeManualItemsResponseBody> | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<ManualItemOutcome>('HANDLED');
   const [noteText, setNoteText] = useState('');
@@ -197,16 +194,27 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
   const [note, setNote] = useState<OperatorNote | null>(null);
 
   useEffect(() => {
+    if (parcel === undefined) return;
     let cancelled = false;
-    setAnswer(null);
-    void listPostIntakeManualItems(parcel).then((result) => {
-      if (!cancelled) setAnswer(result);
+    setReadback(null);
+    void findPostIntakeManualItemsOfParcel(parcel).then((result) => {
+      if (!cancelled) setReadback(result);
     });
     return () => {
       cancelled = true;
     };
   }, [parcel, reloadKey, localReload]);
 
+  // 上半形成决定、本节登记了结果,待登记清单都重取当前这一页(游标不动);首次挂载由 useCatalogueCursor 自己取,这里只认变化。
+  const seenReloads = useRef({ reloadKey, localReload });
+  useEffect(() => {
+    if (seenReloads.current.reloadKey === reloadKey && seenReloads.current.localReload === localReload) return;
+    seenReloads.current = { reloadKey, localReload };
+    pendingItems.retry();
+  }, [reloadKey, localReload]);
+
+  const answer = parcel === undefined ? pendingItems.answer : readback;
+  const pagination = parcel === undefined ? pendingItems.pagination : undefined;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const items: PostIntakeManualItemRow[] = body?.items ?? [];
   const selected = items.find((item) => manualItemKeyOf(item) === selectedKey) ?? null;
@@ -268,6 +276,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
         {answer && answer.kind !== 'outcome' && (
           <div className="type-body text-idpxyz-textMuted">
             待办事项这次没有读到,不代表没有待办。请稍后刷新。
+            {answer.kind === 'callerProblem' && answer.detail !== undefined ? ` ${answer.detail}` : null}
             <TechnicalDetails
               rows={
                 answer.kind === 'callerProblem' || answer.kind === 'noAnswer'
@@ -282,7 +291,9 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
         )}
         {body && <p className="mb-2 type-body text-idpxyz-text">{manualSummaryText(body, parcel)}</p>}
         {body && items.length === 0 && (
-          <p className="type-body text-idpxyz-textMuted">{parcel ? manualItemsEmptyState.readback : manualItemsEmptyState.pending}</p>
+          <p className="type-body text-idpxyz-textMuted">
+            {parcel ? manualItemsEmptyState.readback : pastFirstPage(pagination) ? manualItemsEmptyState.pastFirstPage : manualItemsEmptyState.pending}
+          </p>
         )}
         <ul className="flex flex-col gap-2">
           {items.map((item) => {
@@ -332,6 +343,11 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
             );
           })}
         </ul>
+        {pagination && (
+          <div className="mt-2">
+            <CursorPager pagination={pagination} />
+          </div>
+        )}
         <div className="mt-2">
           <NoteLine note={note} />
         </div>

@@ -7,6 +7,7 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { moduleInfoById } from '../../navigation';
 import { labelFor } from '../../vocabulary/status';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import {
   completeManualReview,
   findAcceptanceReviewCase,
@@ -14,10 +15,10 @@ import {
   rejectShipmentRequest,
   type AcceptanceReviewCaseResponseBody,
   type AcceptanceReviewQueueEntry,
-  type AcceptanceReviewQueueListResponseBody,
   type ApiResult,
   type ReviewStatusRecord,
 } from './api';
+import { CursorPagerBar, pastFirstPage } from './cursor-pager';
 import { recordedJudgmentsBlock } from './recorded-judgments';
 import { manualReviewCompletionDraftOf } from './manual-review-completion';
 import { caseBusinessFields, caseFailureText, caseTechnicalRows } from './review-case';
@@ -107,25 +108,17 @@ function NoteLine({ note }: { note: OperatorNote | null }) {
  * 本页接 GET /acceptance-review-queue 的列表与单份两支,决定按钮打两个命令端点
  * (票 admin-skeleton-closure-batch/09)。命令面今天必答 403——那是 ADR-0055 的设计,
  * 页面如实呈现,不用开发用采信身份把它绕过去。
+ *
+ * 列表那一支已迁到 ADR-0144,按游标翻页,翻页条在页底。本页没有检索框与筛选条,读口收的检索词与筛选维不接,只翻页。
  */
 export function AcceptanceReviewPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [queueAnswer, setQueueAnswer] = useState<ApiResult<AcceptanceReviewQueueListResponseBody> | null>(null);
+  const { answer: queueAnswer, pagination, retry: retryQueue } = useCatalogueCursor({}, listAcceptanceReviewQueue);
   const [caseLoaded, setCaseLoaded] = useState<{ id: string; answer: ApiResult<AcceptanceReviewCaseResponseBody> } | null>(null);
   const [commandPending, setCommandPending] = useState(false);
   const [commandNote, setCommandNote] = useState<OperatorNote | null>(null);
   const [pendingRejection, setPendingRejection] = useState<PendingRejection | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listAcceptanceReviewQueue().then((answer) => {
-      if (!cancelled) setQueueAnswer(answer);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -145,7 +138,18 @@ export function AcceptanceReviewPage() {
   const entries = queueBody?.entries ?? [];
   const caseAnswer = caseLoaded?.id === selectedId ? caseLoaded.answer : null;
   const caseBody = caseAnswer?.kind === 'outcome' ? caseAnswer.body : null;
-  const retry = () => setReloadKey((value) => value + 1);
+  // 队列重取停在当前这一页(游标不动),选中的那份详情一并重读。
+  const retry = () => {
+    retryQueue();
+    setReloadKey((value) => value + 1);
+  };
+  const viewState = catalogueViewState(queueAnswer, entries.length, retry, {
+    module: info,
+    endpoint: 'GET /acceptance-review-queue',
+    emptyTitle: '没有等待复核的运单',
+    emptyDescription: '只有规则要求人工判断的运单才会进这个队列;现在没有积压。',
+    narrowed: pastFirstPage(pagination),
+  });
 
   // 命令成立才重读:403 之后队列没有任何变化,重读只会白跑一趟。
   const settle = (note: OperatorNote, reload: boolean) => {
@@ -193,7 +197,7 @@ export function AcceptanceReviewPage() {
   };
 
   return (
-    <>
+    <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
       <ReviewFlowTemplate<ReviewCommandId>
         title={info.title}
         description="规则要求人工看一眼才能受理的运单停在这里。记录复核完成后由系统接着判断能不能受理;确定不能受理的可以直接拒绝。"
@@ -232,13 +236,9 @@ export function AcceptanceReviewPage() {
         decisionPending={commandPending}
         onDecide={onDecide}
         auditTrail={caseBody ? auditTrailOf(caseBody.review) : undefined}
-        viewState={catalogueViewState(queueAnswer, entries.length, retry, {
-          module: info,
-          endpoint: 'GET /acceptance-review-queue',
-          emptyTitle: '没有等待复核的运单',
-          emptyDescription: '只有规则要求人工判断的运单才会进这个队列;现在没有积压。',
-        })}
+        viewState={viewState}
       />
+      {pagination && viewState.kind === 'ready' && <CursorPagerBar pagination={pagination} />}
       {/* 「拒绝这票运单」当场形成决定、不可逆,按下之后再拦一道;确认即发命令,进行中由模板禁用按钮、结果由上面的 commandNote 呈现。 */}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
@@ -251,6 +251,6 @@ export function AcceptanceReviewPage() {
         onConfirm={confirmRejection}
         onCancel={cancelRejection}
       />
-    </>
+    </div>
   );
 }

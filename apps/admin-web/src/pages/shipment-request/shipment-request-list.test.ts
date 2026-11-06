@@ -1,18 +1,18 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import {
-  countShipmentsByState,
   customerDisplayOf,
   customerNameIndexOf,
   defaultShipmentSort,
-  filterShipments,
-  shipmentCountSummary,
-  sortShipments,
+  shipmentListConditions,
+  shipmentStates,
 } from './shipment-request-list';
+import { catalogueConditionsNarrow, catalogueRequestPath } from '../catalogue-query';
+import { toggleWorkbenchSort } from '../../templates/workbench';
 import type { ShipmentRequestSummary } from './api';
 
-// 本文件钉运单工作台的纯逻辑：客户名称从客户账户册转写、转写不到显编码；搜索命中运单号（单据号）/ 客户单号 / 客户名；
-// 默认提交时间新→旧；状态计数只列出现过的码且词经词典。
+// 本文件钉运单工作台的纯逻辑：客户名称从客户账户册转写、转写不到显编码；检索词、状态胶囊与提交时间先后下推成读口的查询条件
+// （票 catalogue-read-pagination-rollout/14，契约 ADR-0144 决定三、四）。
 
 const row = (overrides: Partial<ShipmentRequestSummary>): ShipmentRequestSummary => ({
   shipmentRequestId: 'SHR-1',
@@ -72,46 +72,33 @@ test('客户格有名称显名称，没有显编码并标明是编码', () => {
   deepEqual(customerDisplayOf(row({ customerAccountId: 'SYN-ACCOUNT-09' }), names), { text: 'SYN-ACCOUNT-09', isCode: true });
 });
 
-test('搜索命中运单号、客户单号、客户编码或客户名称；状态筛选只留那一格', () => {
-  const rows = [row({}), row({ shipmentRequestId: 'SHR-2', customerAccountId: 'SYN-ACCOUNT-02', sourceRequestKey: 'K-2', state: 'ACCEPTED' })];
-  equal(filterShipments(rows, { search: '货主一号', state: 'ALL' }, names).length, 1);
-  equal(filterShipments(rows, { search: 'k-2', state: 'ALL' }, names).length, 1);
-  equal(filterShipments(rows, { search: 'account-02', state: 'ALL' }, names).length, 1);
-  equal(filterShipments(rows, { search: '', state: 'ACCEPTED' }, names)[0].shipmentRequestId, 'SHR-2');
-  equal(filterShipments(rows, { search: '', state: 'ALL' }, names).length, 2);
+const path = '/shipment-request-views';
+
+// Covers: 不带检索、状态「全部」、默认新→旧时不收窄，查询串为空——第一页即裸路径（缺省序不写进去）。
+test('默认条件即裸路径，不收窄', () => {
+  const conditions = shipmentListConditions('', 'ALL', defaultShipmentSort);
+  equal(catalogueRequestPath(path, conditions, null), path);
+  equal(catalogueConditionsNarrow(conditions), false);
 });
 
-test('运单号即单据号：按单据号能搜到，委托标识照旧可搜；按运单号排序排的是屏上那一格', () => {
-  const rows = [
-    row({ shipmentRequestId: 'SHR-1', documentNumber: 'P20261102000002' }),
-    row({ shipmentRequestId: 'SHR-2', documentNumber: 'P20261102000001' }),
-    row({ shipmentRequestId: 'SHR-0OLD', documentNumberAbsence: 'ISSUED_BEFORE_NUMBERING' }),
-  ];
-  deepEqual(filterShipments(rows, { search: 'p20261102000001', state: 'ALL' }, names).map((r) => r.shipmentRequestId), ['SHR-2']);
-  deepEqual(filterShipments(rows, { search: 'SHR-0OLD', state: 'ALL' }, names).map((r) => r.shipmentRequestId), ['SHR-0OLD']);
-  // 没有单据号的那一行屏上显的是去前缀的委托标识（0OLD），按它排进去。
-  deepEqual(sortShipments(rows, { key: 'shipment-id', dir: 1 }, names).map((r) => r.shipmentRequestId), ['SHR-0OLD', 'SHR-2', 'SHR-1']);
+// Covers: 状态胶囊下推成 state 一维、检索词去首尾空白成 q；两样都算收窄（零行说「这组条件下没有」）。
+test('状态胶囊下推成 state，检索词下推成 q', () => {
+  const conditions = shipmentListConditions(' P2026 ', 'ACCEPTED', defaultShipmentSort);
+  equal(catalogueRequestPath(path, conditions, null), `${path}?state=ACCEPTED&q=P2026`);
+  equal(catalogueConditionsNarrow(conditions), true);
+  equal(catalogueConditionsNarrow(shipmentListConditions('', 'WITHDRAWN', defaultShipmentSort)), true);
 });
 
-test('默认按提交时间新→旧；件数与客户名可排', () => {
-  deepEqual(defaultShipmentSort, { key: 'submitted-at', dir: -1 });
-  const rows = [
-    row({ shipmentRequestId: 'A', submittedAt: '2026-10-28T10:00:00Z', declaredParcelCount: 3 }),
-    row({ shipmentRequestId: 'B', submittedAt: '2026-10-28T11:00:00Z', declaredParcelCount: 1, customerAccountId: 'SYN-ACCOUNT-02' }),
-  ];
-  deepEqual(sortShipments(rows, defaultShipmentSort, names).map((r) => r.shipmentRequestId), ['B', 'A']);
-  deepEqual(sortShipments(rows, { key: 'parcel-count', dir: 1 }, names).map((r) => r.shipmentRequestId), ['B', 'A']);
-  deepEqual(sortShipments(rows, { key: 'customer', dir: 1 }, names).map((r) => r.shipmentRequestId), ['B', 'A']);
-  equal(sortShipments(rows, { key: 'nowhere', dir: 1 }, names).length, 2);
+// Covers: 表头点提交时间翻成旧→新时下推 sort=submittedAt；再点回到新→旧即缺省序，不写 sort。排序不收窄。
+test('提交时间翻成旧→新时下推 sort，翻回来不写', () => {
+  const ascending = toggleWorkbenchSort(defaultShipmentSort, 'submitted-at');
+  const conditions = shipmentListConditions('', 'ALL', ascending);
+  equal(catalogueRequestPath(path, conditions, null), `${path}?sort=submittedAt`);
+  equal(catalogueConditionsNarrow(conditions), false);
+  equal(catalogueRequestPath(path, shipmentListConditions('', 'ALL', toggleWorkbenchSort(ascending, 'submitted-at')), null), path);
 });
 
-test('状态计数只列出现过的码、按生命周期顺序、词经词典', () => {
-  const rows = [row({}), row({ state: 'WITHDRAWN' }), row({ state: 'ACCEPTED' }), row({})];
-  deepEqual(countShipmentsByState(rows), [
-    { code: 'SUBMITTED', label: '待受理', count: 2 },
-    { code: 'ACCEPTED', label: '已受理', count: 1 },
-    { code: 'WITHDRAWN', label: '已撤回', count: 1 },
-  ]);
-  deepEqual(countShipmentsByState([]), []);
-  equal(shipmentCountSummary(4, 2), '共 4 张运单，当前显示 2 张');
+// Covers: 状态胶囊只摆状态维词表里的码，按生命周期顺序。
+test('状态胶囊按状态维词表、生命周期顺序', () => {
+  deepEqual([...shipmentStates], ['SUBMITTED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN']);
 });

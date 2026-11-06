@@ -61,6 +61,7 @@ test('并列冲突行：结论译回原词，并列的那几家单独列出，�
   const body: TiedChannelSelectionDecisionsResponseBody = {
     outcome: 'TIED_CHANNEL_SELECTION_DECISIONS_LISTED',
     decisions: [tied],
+    page: { size: 200, next: null, total: 1 },
   };
   const rows = decisionRowsOf(body);
   equal(rows.length, 1);
@@ -115,6 +116,7 @@ test('空册是答案：不收窄与收窄各一句，与未配置分开', () =>
   const empty = outcome<TiedChannelSelectionDecisionsResponseBody>({
     outcome: 'TIED_CHANNEL_SELECTION_DECISIONS_LISTED',
     decisions: [],
+    page: { size: 200, next: null, total: 0 },
   });
   const whole = tiedListViewState(empty, undefined, 0, noRetry, options);
   equal(whole.kind, 'empty');
@@ -131,6 +133,7 @@ test('空册是答案：不收窄与收窄各一句，与未配置分开', () =>
     outcome<TiedChannelSelectionDecisionsResponseBody>({
       outcome: 'TIED_CHANNEL_SELECTION_DECISIONS_LISTED',
       decisions: [tied],
+      page: { size: 200, next: null, total: 1 },
     }),
     undefined,
     1,
