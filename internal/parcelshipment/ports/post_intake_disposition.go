@@ -52,7 +52,7 @@ type PostIntakeDispositionRequest struct {
 }
 
 // UnansweredPostIntakeDispositionRequests 是一个租户还没有被回应的请求的一页（ADR-0144）：Requests 是本页，Next 为空串即末页，Total 是
-// 本次 q 之下的总数；Count 是全部等回应的行数——队列的积压，不随 q 变（票 catalogue-read-pagination-rollout spec 取舍 5）。
+// 本次 q 之下的总数；Count 是全部等回应的行数——队列的积压，不随 q 变（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）。
 type UnansweredPostIntakeDispositionRequests struct {
 	Requests []PostIntakeDispositionRequest
 	Next     string

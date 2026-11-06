@@ -355,12 +355,17 @@ func TestASingleDecisionIsServedByIdentity(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055 未配置即拒与 ADR-0029 的分格——两条分支在渠道未配置时同答 403；读口答不出答 5xx；非 GET
-// 拒在方法门上。
+// Covers: ADR-0055 未配置即拒与 ADR-0029 的分格——两条分支在渠道未配置时同答 403，坏选择器、空标识与集外参数也一样
+// （ADR-0055 决定三：答复不随请求内容变）；读口答不出答 5xx；非 GET 拒在方法门上。
 func TestChannelSelectionDecisionsAnswersSplitByRecoveryAction(t *testing.T) {
 	for _, target := range []string{
 		"/channel-selection-decisions?view=tied",
 		"/channel-selection-decisions?decisionId=CSDN-1",
+		"/channel-selection-decisions",
+		"/channel-selection-decisions?view=all",
+		"/channel-selection-decisions?view=tied&scope=scope-a",
+		"/channel-selection-decisions?view=tied&sort=scope",
+		"/channel-selection-decisions?decisionId=%20",
 	} {
 		unconfigured := getChannelSelectionDecisions(t, shipmenthttp.UnconfiguredIntake{},
 			&channelSelectionReaderDouble{}, http.MethodGet, target)

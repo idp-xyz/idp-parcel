@@ -199,10 +199,13 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 			writeIntakeProblem(response, err)
 			return
 		}
-		ofParcel := request.URL.Query().Get("parcel")
+		values := request.URL.Query()
+		ofParcel := values.Get("parcel")
 		var pageQuery cataloguepage.Query
 		if ofParcel == "" {
-			if pageQuery, err = ports.PostIntakeManualItemPages.Decode(request.URL.Query()); err != nil {
+			// 迁移前 `?parcel=` 带空值落到待登记清单；去掉这个空键再解码，旧调用照旧拿到清单而不是集外键 400。
+			values.Del("parcel")
+			if pageQuery, err = ports.PostIntakeManualItemPages.Decode(values); err != nil {
 				writePageQueryProblem(response, err)
 				return
 			}

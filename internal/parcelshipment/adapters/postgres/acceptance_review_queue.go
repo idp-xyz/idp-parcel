@@ -26,7 +26,7 @@ var _ ports.AcceptanceReviewQueue = (*ShipmentRequestViews)(nil)
 // waitingRequests 是委托队列的固定条件：作用域那一段再加等待态与`已提交`。
 const waitingRequests = visibleRequests + " AND task_waiting_on = $3 AND state = $4"
 
-// shipmentRequestQueueColumns 把两个委托队列的声明落到列上：q 与委托查阅同三列。
+// shipmentRequestQueueColumns 把两个委托队列的声明落到列上：q 与委托查阅落在同样的列上。
 var shipmentRequestQueueColumns = cataloguepage.Columns{
 	Sorts:    map[string]string{"submittedAt": "submitted_at", "shipmentRequestId": "shipment_request_id"},
 	Identity: []string{"shipment_request_id"},

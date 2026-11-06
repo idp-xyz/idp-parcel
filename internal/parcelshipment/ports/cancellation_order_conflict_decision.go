@@ -89,7 +89,7 @@ type CancellationOrderConflictDecisions interface {
 
 // UnresolvedCancellationOrderConflicts 是一个租户册上还没有被决定的冲突的一页（ADR-0144）：Conflicts 是本页，Next 为空串即末页，
 // Total 是本次筛选与 q 之下的总数；Count 是未解开的全部行数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout
-// spec 取舍 5）。
+// spec「已带计数与 truncated 的待办队列保留这两格」）。
 type UnresolvedCancellationOrderConflicts struct {
 	Conflicts []CancellationOrderConflictEntry
 	Next      string

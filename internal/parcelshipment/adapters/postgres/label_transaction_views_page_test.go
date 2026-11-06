@@ -60,17 +60,17 @@ func TestLabelTransactionsPageByCursorWithoutRepeatsOrGapsWhileTransactionsArriv
 	}
 }
 
-// Covers: ADR-0144 决定四、五——transactionResult 落在存代码的 state 列上，维内为或；q 在交易标识、渠道账户与覆盖包裹上做
-// 不分大小写的字面包含（% 按字面、零命中）；total 与本页出自同一组条件。空册答空页且 total 为 0（ADR-0077 Decision 四）。
+// Covers: ADR-0144 决定四、五——transactionResult 落在存代码的 state 列上，维内为或；q 在交易标识、渠道账户与逐个覆盖包裹号上做
+// 不分大小写的字面包含（% 按字面、零命中；覆盖包裹存成 JSON 数组，它的引号与逗号不是包裹号的一部分，查它们零命中）；覆盖两件的
+// 交易按一笔计；total 与本页出自同一组条件。空册答空页且 total 为 0（ADR-0077 Decision 四）。
 func TestLabelTransactionsTotalFollowsTheResultFilterAndTheKeyword(t *testing.T) {
 	ctx := t.Context()
 	repository, views, transactor := newLabelTransactions(t)
 	tenant := mustBuild(t, domain.NewTenantID, "SYN-TENANT-01")
-	for index := 1; index <= 2; index++ {
-		mustInsertLabelTransaction(t, transactor, ctx, repository, establishedLabelTransactionFixtureAt(t,
-			"SYN-TENANT-01", fmt.Sprintf("SYN-LT-%d", index),
-			labelEstablishedAt.Add(time.Duration(index)*time.Minute), fmt.Sprintf("SYN-PARCEL-%d", index)))
-	}
+	mustInsertLabelTransaction(t, transactor, ctx, repository, establishedLabelTransactionFixtureAt(t,
+		"SYN-TENANT-01", "SYN-LT-1", labelEstablishedAt.Add(time.Minute), "SYN-PARCEL-1", "SYN-PARCEL-1B"))
+	mustInsertLabelTransaction(t, transactor, ctx, repository, establishedLabelTransactionFixtureAt(t,
+		"SYN-TENANT-01", "SYN-LT-2", labelEstablishedAt.Add(2*time.Minute), "SYN-PARCEL-2"))
 	submitted, err := establishedLabelTransactionFixtureAt(t, "SYN-TENANT-01", "SYN-LT-3",
 		labelEstablishedAt.Add(3*time.Minute), "SYN-PARCEL-3").SubmitToChannel(labelEstablishedAt.Add(4 * time.Minute))
 	if err != nil {
@@ -88,6 +88,9 @@ func TestLabelTransactionsTotalFollowsTheResultFilterAndTheKeyword(t *testing.T)
 		"q 命中渠道账户":  {values: url.Values{"q": {"CHANNEL-ACCOUNT"}}, want: []string{"SYN-LT-3", "SYN-LT-2", "SYN-LT-1"}},
 		"维与 q 为与":   {values: url.Values{"transactionResult": {"ESTABLISHED"}, "q": {"SYN-LT-3"}}, want: []string{}},
 		"q 的 % 按字面": {values: url.Values{"q": {"%"}}, want: []string{}},
+		"q 不命中引号":   {values: url.Values{"q": {`"`}}, want: []string{}},
+		"q 不命中逗号":   {values: url.Values{"q": {","}}, want: []string{}},
+		"两件按一笔计":    {values: url.Values{"q": {"SYN-PARCEL-1B"}}, want: []string{"SYN-LT-1"}},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

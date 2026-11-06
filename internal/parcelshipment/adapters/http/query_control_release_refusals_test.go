@@ -115,7 +115,7 @@ func getRefusals(t *testing.T, intake shipmenthttp.ControlReleaseRefusalQueryInt
 
 // Covers: AT-PS-161；ADR-0293 决定一——清单逐字段透出；租户与页大小取 Intake 交出的、原样递给读口；存下作用域的行带三段，没存的存量行
 // scopeRecorded=false 且没有 occupationScope；本页之后还有时 truncated=true 而计数是未处理的全部行数（ADR-0144 后 truncated 即
-// page.next 不为空，票 catalogue-read-pagination-rollout spec 取舍 5）。
+// page.next 不为空，票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）。
 func TestTheRefusalQueryListsUnhandledRowsWithTheirCountAndTruncationFlag(t *testing.T) {
 	reader := &refusalCatalogueDouble{listed: ports.UnhandledControlReleaseRefusals{
 		Refusals: []ports.ControlReleaseRefusal{refusalRow(t, "REQUEST-1", "VERSION-1", false), refusalRow(t, "REQUEST-2", "VERSION-2", true)},
