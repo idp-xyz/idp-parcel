@@ -16,10 +16,13 @@ How the engineering skills should consume this repo's Bounded Context records, U
   directory; there is no per-context `docs/adr/` beside each `CONTEXT.md` yet.
   Number new ADRs by scanning `docs/adr/` only.
 
-Every mapped context has a `CONTEXT.md` today, including
-`collection-remittance` (its mechanism is built; the first-release pilot does not
-enable COD — that is a pilot-scope fact in `docs/product/PILOT-SCOPE.md`, not a
-reason to skip the context). If other domain files are missing for an area under
+Every mapped context has a `CONTEXT.md` today except `warehouse-fulfillment`,
+including `collection-remittance` (its mechanism is built; the first-release pilot
+does not enable COD — that is a pilot-scope fact in `docs/product/PILOT-SCOPE.md`,
+not a reason to skip the context). `warehouse-fulfillment` was added by
+`docs/adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md`;
+until its `CONTEXT.md` is written with the first ticket of its slice, its section
+in `CONTEXT-MAP.md` and that ADR are its authority. If other domain files are missing for an area under
 work, **proceed silently** and note the gap; lazy creation belongs to
 `/domain-modeling` after language is resolved.
 
@@ -62,6 +65,7 @@ Mapped context records (relative to `docs/domain/`):
 | `visibility-exception` | `visibility-exception/CONTEXT.md` |
 | `settlement-accounting` | `settlement-accounting/CONTEXT.md` |
 | `collection-remittance` | `collection-remittance/CONTEXT.md` |
+| `warehouse-fulfillment` | not written yet (see its section in `CONTEXT-MAP.md`) |
 
 For a future context-local ADR directory, write under `docs/adr/` relative to that
 context's mapped `CONTEXT.md` directory and number by scanning only that target.

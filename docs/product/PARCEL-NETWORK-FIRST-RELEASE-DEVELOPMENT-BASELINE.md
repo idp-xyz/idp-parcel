@@ -352,6 +352,8 @@ TF 0；其余上下文的增减各归各票，本条不追）。**一句要如�
 
 判据结构没变，仍是「指得出来才进」，变的只是所指对象——从一张卡换成市场上可命名的模式；它同样要挡住无边界扩张。
 
+**仓配一项的读法**（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定一）：仓配是目标客户群里「3PL 与集运干线运营商」一层的主业，属常规形态；判据里的「承运或渠道商业模式」对这一项读宽到 3PL 仓配这一类物流服务商业模式。只为仓配这一项读宽，判据对其余能力的读法不变。
+
 **一条硬边界不随判据变化：任何取值仍必须由价卡或商业政策版本携带，不得内置为常量。** 能力可以按市场形态建，数值不行。这是「行业估算不能直接转为已确认」在产品语境下的准确形式——形态决定支持什么结构，实例值永远等真实价卡。
 
 ### 产品需求假设
@@ -364,6 +366,7 @@ TF 0；其余上下文的增减各归各票，本条不追）。**一句要如�
 | `PA-PP-02` | 抛重系数是渠道属性而非行业常数，须逐份价卡给出 | 同上 | 已由[小包计价上下文](../domain/parcel-pricing/CONTEXT.md)「不得内置系数常量」承接，无需另行实现 |
 | `PA-PP-03` | 进位可能在同一渠道内按重量分段 | 同上 | 决定重量取整策略的规范化形状 |
 | `PA-CR-01` | 跨境出口小包在中东/东南亚等目的市场以 COD 为常规收款形态，承运/渠道商代收货款并周期回汇 | 行业形态，专家判断，无一手协议 | 决定 `collection-remittance` 上下文按能力范围判据准入及其分户账/回汇批次的机制形状（2026-08-28 受托裁定，批次记录见 `.scratch/admin-remainder-mechanism-batch/spec.md`）；汇率、回汇周期、手续费等取值一律等真实协议 |
+| `PA-WF-01` | 以仓配为主业的租户（「3PL 与集运干线运营商」一层）里，有一部分会用本产品的仓配履约承担自己的仓库作业，而不是只把自有 WMS 接进来——至少没有 WMS、或 WMS 接不上跨境干线的那部分 | 行业判断，专家判断，无一手数据 | 决定 `warehouse-fulfillment` 按能力范围判据准入（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)）；自带 WMS 的租户照[外部 WMS 协作缝设计备忘](../design/external-wms-collaboration-seams-design-note.md)接入；某个租户用哪一种是租户取值 |
 
 「依据强度」一栏写明这些不是已确认参数。据其决定**能力范围**允许，据其决定**任何取值**不允许。
 

@@ -4,7 +4,7 @@
 
 **这一屏在业务里的位置**：[端到端主链](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#端到端主链)第 3 阶段，货主客户把实物送到场站之后、运输履约之前。工位上完成的认货、测量、分拣、集运封签与交出，是电子委托与实物绑定的那一刻——在它之前系统里只有客户声明，在它之后才有本产品自己的事实，而下游五个上下文分别消费这些事实。
 
-语言、规则与所有权以[节点作业上下文](../domain/node-operations/CONTEXT.md)为准，范围上界见 [ADR-0006](../adr/0006-parcel-node-operations-not-full-wms.md)，产品为何自带该端见 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md)。**本文不复述这三处**，只在推导需要时引用其规则。
+语言、规则与所有权以[节点作业上下文](../domain/node-operations/CONTEXT.md)为准，节点作业这部分的范围上界见 [ADR-0006](../adr/0006-parcel-node-operations-not-full-wms.md)（仓配履约的仓内作业经 [ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 也进作业端，不在本文范围），产品为何自带该端见 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md)。**本文不复述这三处**，只在推导需要时引用其规则。
 
 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md) 把一线作业客户端定为产品的一部分，并写明「离线容忍进入产品要求，会反过来约束业务端点的形状——幂等、冲突合并语义、本地队列与重放……它不解除 ADR-0017 的闸门，但闸门开启后设计业务端点时必须一并考虑；离线是设计不出来就补不上的那类要求，事后加代价极高」。
 
@@ -115,5 +115,6 @@ ADR-0021 用来论证「必须自带作业端」的正是这一处：
 - [ADR-0023：作业事实的身份与发生时间由设备签发](../adr/0023-work-fact-identity-and-time-are-minted-by-the-device.md)：第 5 至 7 条的权威，由本文第三、四节推出
 - [ADR-0024：方向性作业的依据随对象下发并携带有效区间](../adr/0024-directional-work-basis-carries-a-validity-interval.md)：第 8 条的权威，由本文第五节推出
 - [节点作业上下文](../domain/node-operations/CONTEXT.md)：安全作业与方向性作业的分界、身份冲突规则、来源事实不可覆盖，全部推导的权威依据
-- [ADR-0006：场站节点管理小包网络作业而非完整 WMS](../adr/0006-parcel-node-operations-not-full-wms.md)：作业端范围的上界
+- [ADR-0006：场站节点管理小包网络作业而非完整 WMS](../adr/0006-parcel-node-operations-not-full-wms.md)：作业端里节点作业这部分的范围上界
+- [ADR-0368：商品库存与仓配作为新的限界上下文「仓配履约」纳入产品](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)：仓内作业也进作业端，不在本文范围
 - [ADR-0018：产品内客户端应用落在顶层 `apps/`](../adr/0018-product-clients-share-release-boundary-under-apps.md)：端的落位，本文不预建

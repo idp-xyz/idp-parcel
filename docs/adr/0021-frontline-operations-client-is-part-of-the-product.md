@@ -1,6 +1,6 @@
 # ADR-0021: 一线作业客户端属于产品，范围限于本产品拥有的节点作业
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-11-06）：其 Decision「**范围限于本产品拥有的节点作业**：扫描、点验、身份冲突处置、测量录入、集运单元与封签、作业位置移动。」一句的「限于」一层，与「**明确不做**：库存账、上架、拣货、波次等完整 WMS 能力，依 ADR-0006 已排除；以及租户既有的面单打印、财务与人事。」一句里「库存账、上架、拣货、波次等完整 WMS 能力，依 ADR-0006 已排除」那一半，已由 [ADR-0368](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 停用——一线作业端扩到仓配履约的仓内作业（收货、上架、移库、补货、盘点、拣货、复核打包）；**适用场景**：只限仓配履约的仓内作业，节点作业那部分的范围与列举照旧，租户既有的面单打印、财务与人事照旧不做；H1 里「范围限于本产品拥有的节点作业」按此读。其 Alternatives 否决「按完整 WMS 的作业面建设」的理由里「超出目标客户群的常规形态，违反能力范围判据」半句由 ADR-0368 决定一回答。其余各条不变  
 Date: 2026-08-10
 
 ## Context
@@ -54,3 +54,4 @@ Date: 2026-08-10
 - [节点作业上下文](../domain/node-operations/CONTEXT.md)：工位、现场人员与身份冲突规则，工作流归属论证的出处
 - [开发主线：能力范围判据与产品就绪](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：本记录采用的判据
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：「代码与模块边界」引用本记录的落位结论
+- [ADR-0368：商品库存与仓配作为新的限界上下文「仓配履约」纳入产品](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)：部分停用本记录 Decision「范围限于本产品拥有的节点作业」一句的「限于」一层与「明确不做」一句里完整 WMS 能力那一半，一线作业端扩到仓配履约的仓内作业

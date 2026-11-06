@@ -7,10 +7,10 @@
 
 依据是 [ADR-0006](../adr/0006-parcel-node-operations-not-full-wms.md) Decision 里的
 「真实业务同时需要完整仓储管理时，应通过明确边界协作或另行作出领域扩展决策。」本文是「明
-确边界协作」那一支；「另行作出领域扩展决策」那一支是草案
-[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)，
-它未被接受之前不是依据。即使它被接受，下表小包一侧的落点也不变，变的只是对端与接入方式，
-见文末「触发与消费方式」。
+确边界协作」那一支；「另行作出领域扩展决策」那一支是
+[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)
+（2026-11-06 接受）：本产品自己立了仓配履约上下文。两支并存——租户自带 WMS 时照本文接；
+用本产品的仓配履约时，下表小包一侧的落点不变，变的只是对端与接入方式，见文末「触发与消费方式」。
 
 进入条件沿用开发主线的[能力范围判据](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#能力范围判据)：
 指得出一类真实存在、在目标客户群里属常规形态的承运或渠道商业模式需要它，才进。指得出来时
@@ -38,9 +38,9 @@ WMS 可以是货主自己的、海外仓服务商的，也可以是租户自己�
 | 网络到仓库上门提货 | `transport-fulfillment` | 场外揽收（[UC-TF-002](../application/transport-fulfillment/UC-TF-002-PERFORM-OFFSITE-PICKUP.md)） | 揽收形成运输控制；WMS 记下的交货是对端的声明，不替代揽收事实 |
 | 货主或 WMS 要截单 | `parcel-shipment` | 撤回尚未决定的委托（[UC-PS-005](../application/parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md)）；逐包裹取消与收寄后服务处置（[UC-PS-006](../application/parcel-shipment/UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md)） | 委托尚无接受或拒绝决定时整份撤回；已接受、未越过取消边界时逐包裹取消；越过之后取消不成立，转由运营方形成收寄后服务处置决定（[ADR-0332](../adr/0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md)）。停拣、出库拦截是 WMS 自己的决定，两边各判各的，不互相代判。WMS 知道结果靠「写口回执、同请求重放与客户追踪视图」（ADR-0310 决定四），没有委托状态读口 |
 | 退件回到仓库 | `transport-fulfillment`（退运旅程与交付）、`node-operations`（回到网络节点时的收寄） | 退运旅程（[UC-TF-007](../application/transport-fulfillment/UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md)）；派送与交付证明（[UC-TF-006](../application/transport-fulfillment/UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md)）；节点收寄与待识别实物 | 退运是关联而独立的新旅程，不倒退原旅程（[运输履约 CONTEXT](../domain/transport-fulfillment/CONTEXT.md)）；送回 WMS 仓库是这段旅程的交付，签收方是仓库。回到租户节点的退件照节点收寄办，认不出的建待识别实物，「不得冒充正式包裹、集运单元或库存项目」。拆包、质检与上架回库是 WMS 的库存记账，本产品不记 |
-| 仓储作业要收费（入库、仓租、拣货打包、增值服务） | 无 | 无 | [结算与经营核算 CONTEXT](../domain/settlement-accounting/CONTEXT.md) 为费用列的引用来源是「原始测量、面单交易、节点作业、运输收费发生项、其他运输履约、关务、异常责任和外部财务事实」，其中没有 WMS 作业。今天由 WMS 自己出账；要并进本产品的对账单是一项新的决定，不在本文 |
+| 仓储作业要收费（入库、仓租、拣货打包、增值服务） | 无 | 无 | [结算与经营核算 CONTEXT](../domain/settlement-accounting/CONTEXT.md) 为费用列的引用来源里，仓储作业收费发生项只来自本产品的仓配履约（ADR-0368），外部 WMS 的作业不在其中。外部 WMS 的仓储费今天由它自己出账；要并进本产品的对账单是一项新的决定，不在本文 |
 | WMS 的拣货、打包、出库事件要给客户看 | `visibility-exception` | 无 | 追踪只投影事实所有者已接受的事实；WMS 事件今天没有所有者收编，不进追踪。要进，先指定所有者并在它的 `CONTEXT.md` 定词，不直插投影——与[渠道适配缝设计备忘](./channel-adapter-seams-design-note.md)「轨迹采集 / 状态同步」一行同一条规则 |
-| 货主、SKU 与库存 | `party-commercial`（货主客户账户）；SKU 与库存不在本产品 | 客户系统登记（ADR-0310 决定二） | WMS 的货主编码对到本产品的货主客户账户，对应关系随客户系统登记绑定。节点的位置与控制「不等同于可用库存或仓储账面数量」（ADR-0006），本产品也不收 WMS 的库存快照 |
+| 货主、SKU 与库存 | `party-commercial`（货主客户账户）；外部 WMS 的 SKU 与库存不进本产品（本产品自营仓配的那份归 `warehouse-fulfillment`） | 客户系统登记（ADR-0310 决定二） | WMS 的货主编码对到本产品的货主客户账户，对应关系随客户系统登记绑定。节点的位置与控制「不等同于可用库存或仓储账面数量」（ADR-0006），本产品也不收 WMS 的库存快照 |
 
 ## 不做清单
 
@@ -49,7 +49,8 @@ WMS 可以是货主自己的、海外仓服务商的，也可以是租户自己�
 - **不立「仓储中心」或通用 WMS 适配上下文。** 上表各类交接分属既有上下文；合成一个读写面
   会穿 [CONTEXT-MAP](../domain/CONTEXT-MAP.md) 的所有权边界，与渠道适配缝设计备忘不立「渠道
   中心」上下文是同一条理由。
-- **不替 WMS 记库存，不做 SKU 主数据、FNSKU 换标或 FBA 入库计划。** 这些是仓内商品作业。
+- **不替外部 WMS 记库存，不收它的库存快照，不替它做 SKU 主数据、FNSKU 换标或 FBA 入库计划。**
+  这些是外部 WMS 自己的仓内商品作业；本产品自己的仓配履约记的是它自己经营的库存。
 - **不实现任何适配器、不排期。** 本文是缝位登记，不是工作包。
 
 ## 触发与消费方式
@@ -60,7 +61,7 @@ WMS 可以是货主自己的、海外仓服务商的，也可以是租户自己�
 今天开着的口」](../api/first-party-api-contract.md#首方族今天开着的口)），通常只缺租户侧的
 渠道登记与对接，不缺机制。
 
-若 ADR-0368 被接受，对端从外部 WMS 变成本产品的仓配履约上下文。小包一侧的落点不变；「打
-包完成」「截单」「仓储作业要收费」「WMS 的拣货、打包、出库事件」几行的接入方式要按 ADR-0368
-重看，其余行不受影响；「不做清单」里不记库存、不做 SKU 主数据那一条，届时读作只对外部 WMS
-成立。租户自带 WMS 的场景不因此消失，本文各行照旧适用。
+用本产品的仓配履约时，对端从外部 WMS 变成仓配履约上下文。小包一侧的落点不变；「打包完成」
+「截单」「仓储作业要收费」「WMS 的拣货、打包、出库事件」几行的接入方式按 ADR-0368 走：委托由
+仓配履约以货主名义提交（来源「仓配出库」），仓储作业费经它的收费发生项交计价与结算，其余行
+不受影响。

@@ -6,7 +6,7 @@
 
 ## 限界上下文缩写
 
-十个限界上下文的所有权边界见[领域上下文地图](./domain/CONTEXT-MAP.md)。这里只给代码、目录名与中文名的对照——在此之前，这份对照只存在于上下文地图那张 mermaid 图的节点标签里，搜不到也不成表。
+十一个限界上下文的所有权边界见[领域上下文地图](./domain/CONTEXT-MAP.md)。这里只给代码、目录名与中文名的对照——在此之前，这份对照只存在于上下文地图那张 mermaid 图的节点标签里，搜不到也不成表。
 
 | 缩写 | 目录名 | 中文名 | 权威文档 |
 |---|---|---|---|
@@ -20,6 +20,7 @@
 | `VE` | `visibility-exception` | 全程追踪与异常 | [CONTEXT.md](./domain/visibility-exception/CONTEXT.md) |
 | `SA` | `settlement-accounting` | 结算与经营核算 | [CONTEXT.md](./domain/settlement-accounting/CONTEXT.md) |
 | `CR` | `collection-remittance` | 代收与清分 | 仅由[上下文地图](./domain/CONTEXT-MAP.md)定义 |
+| `WF` | `warehouse-fulfillment` | 仓配履约 | 暂由[上下文地图](./domain/CONTEXT-MAP.md)「仓配履约」一节与 [ADR-0368](./adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 定义，`CONTEXT.md` 随仓配切片的第一张票写成 |
 
 `CR` 没有自己的 `CONTEXT.md`：首发已确认不包含代收货款，按「不建立只有标题的空文档」这条不创建。
 

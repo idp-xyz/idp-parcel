@@ -25,6 +25,7 @@ Status: Confirmed
 - 代收货款本金属于代收与清分，不是经营口径物流收入、客户预付余额或普通结算账户资金。
 - 计划、承诺、已经发生的事实及其派生状态分别管理，任何一层不得静默覆盖另一层。
 - 网络连接、线路、包裹路由计划、具体班次、装载分配和物理装载具有不同身份与所有者，稳定网络定义、未来执行意图和实际事实不得相互覆盖。
+- 商品库存与包裹是不同身份，按对象分边界、不按场地分：打包完成、委托提交之前只有库存与任务，之后只有包裹。库存的库位与状态不是包裹的节点控制，包裹的节点控制与暂存位置也不是库存；仓配的出库确认与节点收寄是两件事实，谁也不替谁（ADR-0368）。
 
 ## 上下文
 
@@ -119,7 +120,7 @@ Status: Confirmed
 - 场外揽收、节点与运输方的权威交接结果、班次、装载分配、实际移动、外部承运合同、总单或舱单。
 - 线路、路由计划、集运兼容判断、监管查验授权、关务限制、放行或处置决定。
 - 客户可见全程状态、异常案件、损坏责任、计费重量或运营结算结果。
-- 商品库存账、库存可用量、库存价值、补货、仓储拣选或库存调整等完整 WMS 能力。
+- 商品库存账、库存可用量、库存价值、补货、仓储拣选或库存调整等完整 WMS 能力。商品库存与仓配归 `warehouse-fulfillment`（ADR-0368），库存价值不在本产品内。
 
 ### [`transport-fulfillment`](./transport-fulfillment/CONTEXT.md)：运输履约
 
@@ -219,6 +220,25 @@ Status: Confirmed
 - 银行流水、支付清算、总账和法定会计余额。
 - 将未实际收到的代收款提前确认为可付客户余额的权力。
 
+### `warehouse-fulfillment`：仓配履约
+
+由 [ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 立。本上下文的 `CONTEXT.md` 尚未写成，随仓配切片的第一张票写；在此之前，语言与边界以本节与 ADR-0368 为准。首发不包含本上下文的能力。
+
+**拥有**：
+
+- 货主商品身份：货主名下的商品（SKU）、别名与包装层级；不同货主的同名 SKU 互不相干。
+- 库存账与库存流水：按（租户，货主，仓，库位，商品，库存状态，批次或效期）记数量，余额只由流水派生；出库请求对可用量的预占、释放与消耗。
+- 入库预报、收货与收货差异、上架、库内移动、拣选位补货与盘点。
+- 出库请求、波次与拣货任务、复核与打包，以及打包完成后以货主客户账户的名义向 `parcel-shipment` 提交的委托（来源「仓配出库」）。
+- 退货入库与回库处置、代理仓报来的库存声明（带来源、时点与有效期）。
+- 仓储作业的收费发生项：只证明作业已发生及其数量与单位，不带金额。
+
+**不拥有**：
+
+- 客户委托、包裹身份与客户承诺；节点收寄、集运单元、节点内实物控制与交接证据；揽收、运输交接与交付。
+- 货主客户账户与合同、价格、费用与对账。
+- 货主的库存价值与成本、采购与销售订单、补货计划；这些留在货主自己的 ERP 与财务里。
+
 ## 上下文关系
 
 ```mermaid
@@ -233,6 +253,7 @@ flowchart LR
     VE["visibility-exception<br/>全程追踪与异常"]
     SA["settlement-accounting<br/>结算与经营核算"]
     CR["collection-remittance<br/>代收与清分"]
+    WF["warehouse-fulfillment<br/>仓配履约"]
 
     PC -->|客户、合同、产品、接单规则与财务控制策略| PS
     PC -->|参与方、法人、产品与合同资格依据| NR
@@ -291,6 +312,10 @@ flowchart LR
     TF -->|履约侧代收证据和渠道回款依据| CR
     SA -->|COD 服务费和合法抵扣金额| CR
     CR -->|代收、清分与汇付结果| SA
+    PC -->|货主客户账户与合同| WF
+    WF -->|以货主名义提交的委托（来源「仓配出库」）| PS
+    WF -->|仓储作业收费发生项| PP
+    WF -->|仓储作业收费发生项| SA
 ```
 
 ### 关系约束
@@ -365,5 +390,6 @@ flowchart LR
 - `visibility-exception` 的语言、规则和生命周期见 [visibility-exception/CONTEXT.md](./visibility-exception/CONTEXT.md)。
 - `settlement-accounting` 的语言、规则和生命周期见 [settlement-accounting/CONTEXT.md](./settlement-accounting/CONTEXT.md)。
 - `collection-remittance` 的语言、规则和生命周期见 [collection-remittance/CONTEXT.md](./collection-remittance/CONTEXT.md)。
+- `warehouse-fulfillment` 尚无 `CONTEXT.md`，语言与边界暂以本地图「仓配履约」一节与 [ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 为准。
 - 统一术语见 [GLOSSARY.md](./GLOSSARY.md)。
 - 跨上下文业务验证见 [SCENARIOS.md](./SCENARIOS.md)。

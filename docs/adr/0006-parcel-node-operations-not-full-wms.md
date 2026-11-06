@@ -1,6 +1,6 @@
 # ADR-0006: 场站节点管理小包网络作业而非完整 WMS
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-11-06）：其 Consequences「涉及完整仓储职责的客户场景需要与外部能力协作，不能通过不断增加场站字段隐式吸收。」一句里「涉及完整仓储职责的客户场景需要与外部能力协作」那一半已由 [ADR-0368](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 停用——这类客户场景改为与外部能力或本产品的仓配履约上下文协作；「不能通过不断增加场站字段隐式吸收」照旧。Decision「真实业务同时需要完整仓储管理时，应通过明确边界协作或另行作出领域扩展决策。」由 ADR-0368 回答（无条款停用）：「另行作出领域扩展决策」那一支即 ADR-0368 立的仓配履约上下文，场站节点不建设、不拥有以库存为中心的完整仓储业务照旧。其余各条不变
 Date: 2026-07-29
 
 ## Context
@@ -30,3 +30,4 @@ Date: 2026-07-29
 
 - [ADR-0001：国际小包采用自治产品与领域边界](./0001-autonomous-product-domain-boundary.md)
 - [ADR-0005：由来源事实形成有效事件并派生状态](./0005-source-facts-effective-events-derived-state.md)
+- [ADR-0368：商品库存与仓配作为新的限界上下文「仓配履约」纳入产品](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)：部分停用本记录 Consequences 里「涉及完整仓储职责的客户场景需要与外部能力协作」那一半；它就是 Decision 所说「另行作出领域扩展决策」的那一支，Decision 不停用
