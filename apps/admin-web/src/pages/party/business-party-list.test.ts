@@ -10,7 +10,7 @@ import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
-  businessPartyTypeFilterOptions,
+  businessPartyTypeKpis,
   businessPartyTypeLabel,
   countBusinessParties,
   defaultBusinessPartySort,
@@ -238,8 +238,15 @@ test('类型筛选与计数按持有的角色', () => {
   equal(counts.byRole.CUSTOMER, 1);
   equal(counts.byRole.CARRIER_AGENT, 1);
   equal(counts.withoutRole, 2);
-  equal(businessPartyTypeFilterOptions[0].value, 'ALL');
-  equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
+  // 指标格只出有数的类型，角色按词表序，「暂无合作关系」在最后。
+  deepEqual(
+    businessPartyTypeKpis(counts).map((cell) => [cell.type, cell.count]),
+    [
+      ['CUSTOMER', 1],
+      ['CARRIER_AGENT', 1],
+      ['NONE', 2],
+    ],
+  );
 });
 
 function legalEntity(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
@@ -282,7 +289,7 @@ test('businessPartyTypeLabel 把我方公司排在角色前面', () => {
 });
 
 // Covers: 筛选 OURS 只留我方公司；NONE 不再把我方公司算成「往来单位」；搜索能按「我方公司」命中；计数分出 ours、
-// withoutRole 不含我方公司；下拉里「我方公司」在「全部类型」之后、角色之前。
+// withoutRole 不含我方公司；指标格里「我方公司」在角色之前、「暂无合作关系」在最后，计数为零的类型不出格。
 test('我方公司进筛选、搜索与计数', () => {
   const index = indexPartyRoles([relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' })]);
   const ours = ourCompanyPartyIds([legalEntity({}), legalEntity({ legalEntityId: 'SYN-LE-02', partyId: 'SYN-PARTY-AGENT-04' })]);
@@ -308,9 +315,15 @@ test('我方公司进筛选、搜索与计数', () => {
   equal(counts.withoutRole, 2);
   equal(countBusinessParties(rows, index).withoutRole, 3);
 
-  deepEqual(businessPartyTypeFilterOptions.slice(0, 2).map((option) => option.value), ['ALL', 'OURS']);
-  equal(businessPartyTypeFilterOptions[1].label, '我方公司');
-  equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
+  deepEqual(
+    businessPartyTypeKpis(counts).map((cell) => [cell.type, cell.label, cell.count]),
+    [
+      ['OURS', '我方公司', 2],
+      ['CUSTOMER', '客户', 1],
+      ['NONE', '暂无合作关系', 2],
+    ],
+  );
+  deepEqual(businessPartyTypeKpis(countBusinessParties([], index, ours)), []);
 });
 
 // Covers: 对象页收起写入口用的口径——已停用的公司主体钉着的参与方也算；法人册没取到为空集。

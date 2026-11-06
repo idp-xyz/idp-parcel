@@ -33,7 +33,7 @@ import {
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
 import { StatusPill } from '../../components/StatusPill';
-import { labelOf, partyRoleLabels, partyTypeFallbackLabel } from './presentation';
+import { labelOf, partyRoleLabels } from './presentation';
 import { Instant, UnknownPartyName, filterSelectClass } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
@@ -63,7 +63,7 @@ import {
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
   businessPartyRegistrationCountry,
-  businessPartyTypeFilterOptions,
+  businessPartyTypeKpis,
   countBusinessParties,
   defaultBusinessPartySort,
   filterBusinessParties,
@@ -720,46 +720,16 @@ export function BusinessPartiesPage() {
     const toggleStatus = (code: BusinessPartyStatusFilter) => setStatus(status === code ? 'ALL' : code);
     const toggleType = (code: BusinessPartyTypeFilter) => setType(type === code ? 'ALL' : code);
 
-    // 指标按角色分格、可点即筛：运营问的是「有几家客户、几家承运商」，不是「有几条已登记修订」。只摆有数的角色，
-    // 再加待生效与已停用两格状态——它们是要去办事的（催生效、查停用）。
-    const roleKpis: WorkbenchKpi[] = (Object.keys(partyRoleLabels) as (keyof typeof partyRoleLabels)[])
-      .filter((role) => counts.byRole[role] > 0)
-      .map((role) => ({
-        label: partyRoleLabels[role],
-        value: counts.byRole[role],
-        tone: statusToneText.info,
-        active: type === role,
-        onClick: () => toggleType(role),
-      }));
+    // 指标只按类型分格、可点即筛（票 business-party-ux/05）：运营问的是「有几家客户、几家承运商」，不是「有几条已登记修订」。
+    // 哪几格、什么序在 businessPartyTypeKpis；状态（待生效、已停用）不在这里，归下面的状态芯片——一个筛选器不开两个入口。
     const kpis: WorkbenchKpi[] | undefined = partiesAnswered
-      ? [
-          ...roleKpis,
-          ...(counts.withoutRole > 0
-            ? [
-                {
-                  label: partyTypeFallbackLabel,
-                  value: counts.withoutRole,
-                  active: type === 'NONE',
-                  onClick: () => toggleType('NONE'),
-                } satisfies WorkbenchKpi,
-              ]
-            : []),
-          {
-            label: '待生效',
-            value: counts.byStatus.REGISTERED,
-            tone: counts.byStatus.REGISTERED > 0 ? statusToneText.warning : undefined,
-            icon:
-              counts.byStatus.REGISTERED > 0 ? <Clock className={`h-3 w-3 ${statusToneText.warning}`} aria-hidden="true" /> : undefined,
-            active: status === 'REGISTERED',
-            onClick: () => toggleStatus('REGISTERED'),
-          },
-          {
-            label: '已停用',
-            value: counts.byStatus.DEACTIVATED,
-            active: status === 'DEACTIVATED',
-            onClick: () => toggleStatus('DEACTIVATED'),
-          },
-        ]
+      ? businessPartyTypeKpis(counts).map((cell) => ({
+          label: cell.label,
+          value: cell.count,
+          tone: statusToneText.info,
+          active: type === cell.type,
+          onClick: () => toggleType(cell.type),
+        }))
       : undefined;
 
     const statusChips: WorkbenchChip[] | undefined = partiesAnswered
@@ -792,24 +762,8 @@ export function BusinessPartiesPage() {
           refreshing={parties.pending}
           primaryAction={primaryAction}
           search={{ value: search, onChange: setSearch, placeholder: '名称、编码、注册号或外部编码' }}
+          // 类型筛选只在命令头的指标格上，工具条不再放同义的类型下拉；状态芯片与它叠加。
           statusChips={statusChips}
-          // 类型按角色筛，角色多格并排成胶囊太长，留作下拉；与状态胶囊叠加。
-          extraFilters={
-            partiesAnswered ? (
-              <select
-                className={filterSelectClass}
-                value={type}
-                aria-label="类型"
-                onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
-              >
-                {businessPartyTypeFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : undefined
-          }
           toolbarRight={partiesAnswered ? businessPartyCountSummary(partyRows.length, visible.length) : undefined}
           columns={identityColumns}
           rows={visible}

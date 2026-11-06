@@ -1,7 +1,7 @@
 # 05 列表命令头：指标行只按类型分格，类型下拉去掉
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始
 

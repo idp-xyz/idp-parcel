@@ -233,11 +233,27 @@ export function countBusinessParties(
   return { total: rows.length, byStatus, byRole, ours: oursCount, withoutRole };
 }
 
-/** 类型下拉的选项：全部、我方公司、词表里每个角色、往来单位。我方公司排在角色前面，与类型列里的次序一样。 */
-export const businessPartyTypeFilterOptions: readonly { value: BusinessPartyTypeFilter; label: string }[] = (() => {
-  const [all, ...roles] = codeFilterOptions(partyRoleLabels, '全部类型');
-  return [all, { value: 'OURS', label: ourCompanyLabel }, ...roles, { value: 'NONE', label: partyTypeFallbackLabel }];
-})();
+/** 命令头上按类型分的一格指标：筛选值、词与计数。 */
+export interface BusinessPartyTypeKpi {
+  type: Exclude<BusinessPartyTypeFilter, 'ALL'>;
+  label: string;
+  count: number;
+}
+
+/**
+ * 命令头按类型分格的指标（票 business-party-ux/05）：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。
+ * 计数为零的类型不出格——它筛出来必然为空。类型筛选只有这一个入口：此前工具条上还有一个同义的类型下拉，去掉了；
+ * 待生效与已停用两格也不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
+ */
+export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPartyTypeKpi[] {
+  const cells: BusinessPartyTypeKpi[] = [];
+  if (counts.ours > 0) cells.push({ type: 'OURS', label: ourCompanyLabel, count: counts.ours });
+  for (const role of Object.keys(partyRoleLabels) as PartyRoleCode[]) {
+    if (counts.byRole[role] > 0) cells.push({ type: role, label: partyRoleLabels[role], count: counts.byRole[role] });
+  }
+  if (counts.withoutRole > 0) cells.push({ type: 'NONE', label: partyTypeFallbackLabel, count: counts.withoutRole });
+  return cells;
+}
 
 /**
  * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。页面态里的空态说的是「登记册为空」，
