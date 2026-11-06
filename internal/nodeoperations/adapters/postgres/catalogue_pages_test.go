@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -109,8 +110,10 @@ func expectEmpty[Row any](t *testing.T, page cataloguepage.Result[Row], err erro
 	}
 }
 
-// pagesFixture 把收寄册、集运两册与查阅目录建在同一个测试库上：pgtest.Pool 每调一次是一个新库，分开建会读到两个世界。
+// pagesFixture 把收寄册、集运两册与查阅目录建在同一个测试库上：pgtest.Pool 每调一次是一个新库，分开建会读到两个世界。pool 留给
+// 绕过写口直接改库的那几问。
 type pagesFixture struct {
+	pool       *pgxpool.Pool
 	transactor bentoapp.Transactor
 	catalogue  *adapter.ReviewCatalogue
 	receptions *adapter.Receptions
@@ -120,11 +123,12 @@ type pagesFixture struct {
 
 func newPagesFixture(t *testing.T) *pagesFixture {
 	t.Helper()
-	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	fixture := &pagesFixture{transactor: db.Transactor()}
+	fixture := &pagesFixture{pool: pool, transactor: db.Transactor()}
 	if fixture.catalogue, err = adapter.NewReviewCatalogue(db); err != nil {
 		t.Fatal(err)
 	}
@@ -354,6 +358,48 @@ func TestIdentityReviewUnitsPageOnTheirLatestRecording(t *testing.T) {
 	})
 	page, err := fixture.catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, "SYN-TENANT-CRPR06-NONE"), 2, firstPage(t, ports.IdentityReviewUnitPages))
 	expectEmpty(t, page, err)
+}
+
+// Covers: 身份复核单元的行标识是 intake 里的 jsonb 键，库里不保证它在（cataloguepage.Columns 头注：可排维与行标识的列必须非空）。
+// 绕过写口造一行缺键的待识别，与另两件实物同刻：两个方向翻页都在取到它的那一页响亮报错，不会悄悄走完。留着 NULL 的话，正序时游标
+// 停在同刻的第一件上，键集比较对缺键那一组得 NULL，它就从后面各页消失，total 却还数着它。
+func TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit(t *testing.T) {
+	fixture := newPagesFixture(t)
+	ctx := t.Context()
+	const tenant = "SYN-TENANT-CRPR06-K"
+	at := func(minutes int) time.Time { return receivedAt.Add(time.Duration(minutes) * time.Minute) }
+	fixture.save(t,
+		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K1", "SYN-HU-CRPR06-K1", at(3), ""),
+		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K2", "SYN-HU-CRPR06-K2", at(2), ""),
+		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K3", "SYN-HU-CRPR06-K3", at(2), ""),
+		pagedIntake(t, tenant, "SYN-SRC-CRPR06-KX", "SYN-HU-CRPR06-KX", at(2), ""),
+		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K4", "SYN-HU-CRPR06-K4", at(1), ""),
+	)
+	if _, err := fixture.pool.Exec(ctx,
+		`UPDATE node_operations.reception SET intake = intake - 'unit' WHERE tenant_id = $1 AND source_id = $2`,
+		tenant, "SYN-SRC-CRPR06-KX"); err != nil {
+		t.Fatalf("去掉作业实物键：%v", err)
+	}
+	tenantID := ref(t, domain.NewTenantID, tenant)
+
+	for _, values := range []url.Values{{}, {"sort": {"latestRecordedAt"}}} {
+		query := pageQuery(t, ports.IdentityReviewUnitPages, values)
+		seen := 0
+		for pages := 1; ; pages++ {
+			page, err := fixture.catalogue.ListIdentityReviewUnits(ctx, tenantID, 2, query)
+			if err != nil {
+				break
+			}
+			seen += len(page.Rows)
+			if page.Next == "" {
+				t.Fatalf("%q 走完了 %d 页、见到 %d 件、total %d：缺作业实物的那一组没有让任何一页报错", values.Encode(), pages, seen, page.Total)
+			}
+			if pages > 20 {
+				t.Fatal("翻了二十页还没到末页：游标没有前进")
+			}
+			query = nextPage(t, ports.IdentityReviewUnitPages, values, page.Next)
+		}
+	}
 }
 
 // pagedConsolidation 开一个集运单元，执行方与证据都取合成值。

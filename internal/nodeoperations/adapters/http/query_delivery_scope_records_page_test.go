@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
@@ -111,6 +112,36 @@ func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 			}
 			if reader.calls != 0 {
 				t.Fatal("游标对不上时读口被触到")
+			}
+		})
+	}
+}
+
+// Covers: 该票 spec「端点先 Intake、后解码查询参数」（ADR-0055 决定三）——渠道未配置时，两条列表对合规的一问（不带参数、带选择器
+// 排序与 q）与坏排序、解不开的游标、集外的键同答一个 403：答复与不带参数的那一问逐字相同，读口不被触到。
+func TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery(t *testing.T) {
+	for _, testCase := range []struct {
+		read      scopeRead
+		compliant string
+	}{
+		{scopeReads[0], "?node=SYN-NODE-1&sort=expectedArrivalAt&q=SYN"},
+		{scopeReads[2], "?node=SYN-NODE-1&sort=openedAt&q=SYN"},
+	} {
+		t.Run(testCase.read.name, func(t *testing.T) {
+			reader := &stubDeliveryScopeCatalogue{}
+			want := testCase.read.serve(nodeopshttp.UnconfiguredIntake{}, reader, http.MethodGet, testCase.read.target)
+			if want.Code != http.StatusForbidden || problemCode(t, want) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+				t.Fatalf("不带参数的一问：status = %d body = %s", want.Code, want.Body.String())
+			}
+			assertNoOutcome(t, want)
+			for _, query := range []string{testCase.compliant, "?sort=nowhere", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02"} {
+				response := testCase.read.serve(nodeopshttp.UnconfiguredIntake{}, reader, http.MethodGet, testCase.read.target+query)
+				if response.Code != want.Code || response.Body.String() != want.Body.String() {
+					t.Fatalf("%s：status = %d body = %s，应与不带参数的一问逐字相同", query, response.Code, response.Body.String())
+				}
+			}
+			if reader.calls != 0 {
+				t.Fatal("渠道未配置时读口被触到")
 			}
 		})
 	}

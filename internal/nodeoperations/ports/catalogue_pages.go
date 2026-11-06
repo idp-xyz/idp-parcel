@@ -56,6 +56,10 @@ var UnidentifiedItemPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // 本册的行是聚合：一件有过待识别那一格的作业实物一行。缺省序是它待识别各版里最近一次登记时刻（latestRecordedAt）倒序，与迁移前
 // 同一口径；这一维是读面在公用表表达式里导出的列，键集落在导出列上。行标识是作业实物——聚合的分组键，册上没有别的主键。一件实物
 // 此刻冲突与否、处置过没有都由它各链的当前有效版本派生，派生的不作筛选维。q 只覆盖作业实物。
+//
+// 导出列会前移：一件实物又登一版待识别，它的 latestRecordedAt 就换成那一版的登记时刻，在册上的位置跟着挪。倒序翻页时，还没翻到的
+// 那件因此挤到已翻过的那头，这一趟可能漏掉它；已翻过的那件仍在已翻过的那头，不重出。正序翻页时反过来：已翻过的那件跳到游标之后，
+// 这一趟可能再出现一次；还没翻到的那件只往后挪，不漏。
 var IdentityReviewUnitPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "node-operations-identity-review-units",
 	Sorts:       []cataloguepage.SortDimension{{Name: "latestRecordedAt", Kind: cataloguepage.Instant}},

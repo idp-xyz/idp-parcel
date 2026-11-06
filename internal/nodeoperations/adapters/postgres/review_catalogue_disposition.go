@@ -19,14 +19,19 @@ var identityReviewUnitPages = ports.IdentityReviewUnitPages.MustBind(cataloguepa
 	Keyword:  []string{"u.unit"},
 })
 
-// identityReviewUnits 把「有过待识别那一格的作业实物」做成导出表 u，计数与取页都从它上面走。分组键与
-// reception_intake_unit_idx 的表达式同形，后面按实物取链头那一读才走得上它。
+// identityReviewUnits 把「有过待识别那一格的作业实物」做成导出表 u，计数与取页都从它上面走。
+//
+// 作业实物是 intake 里的 jsonb 键：库里 reception_intake_presence 只保证 intake 本身非空，键在不在靠收寄写口（intakeRow 的 unit
+// 不省略）。分组键因此先导出成非空列（cataloguepage.Columns 头注：可排维与行标识的列必须非空）——留着 NULL 的话，正序翻页时与游标
+// 同刻、排在它后面的那一组会被键集比较悄悄跳过。缺键的行归到空串那一组，取到它的那一页由 ListIdentityReviewUnits 响亮报错，不把
+// 坏行演成一件看起来正常的实物。后面按实物取链头那一读仍按 intake ->> 'unit' 取，与 reception_intake_unit_idx 的表达式同形才
+// 走得上它。
 const identityReviewUnits = `WITH u AS (
-		SELECT intake ->> 'unit' AS unit, max(recorded_at) AS latest
+		SELECT COALESCE(intake ->> 'unit', '') AS unit, max(recorded_at) AS latest
 		  FROM node_operations.reception
 		 WHERE tenant_id = $1
 		   AND kind = 'PENDING_IDENTIFICATION'
-		 GROUP BY intake ->> 'unit'
+		 GROUP BY COALESCE(intake ->> 'unit', '')
 	) `
 
 // ListIdentityReviewUnits 按实物上列待识别实物页（ports.IdentityReviewUnitRow）的一页：有过待识别那一格的作业实物，缺省按待识别各版
@@ -74,6 +79,11 @@ func (catalogue *ReviewCatalogue) ListIdentityReviewUnits(
 		if err := rows.Scan(&unit, &latest); err != nil {
 			rows.Close()
 			return fail(err)
+		}
+		if unit == "" {
+			rows.Close()
+			return fail(fmt.Errorf("pending identification rows without an intake unit, latest recorded at %s",
+				latest.UTC().Format(time.RFC3339Nano)))
 		}
 		fetched = append(fetched, ports.IdentityReviewUnitRow{Unit: unit, LatestRecordedAt: latest.UTC()})
 	}
