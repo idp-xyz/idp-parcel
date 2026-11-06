@@ -41,7 +41,7 @@ var candidatePortPages = ports.CandidatePortPages.MustBind(cataloguepage.Columns
 	Keyword:  []string{"port_ref", "display_name"},
 })
 
-// scannedCandidatePort 留着键两列的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
+// scannedCandidatePort 留着键（口岸、生效起点）的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
 type scannedCandidatePort struct {
 	entry       ports.CandidatePortEntry
 	port        string
@@ -118,7 +118,7 @@ var declarationPathPages = ports.DeclarationPathPages.MustBind(cataloguepage.Col
 	Keyword:  []string{"path_ref", "port_ref", "declaration_mode"},
 })
 
-// scannedDeclarationPath 留着键两列的原值，理由同 scannedCandidatePort。
+// scannedDeclarationPath 留着键（路径、生效起点）的原值，理由同 scannedCandidatePort。
 type scannedDeclarationPath struct {
 	entry       ports.DeclarationPathEntry
 	path        string

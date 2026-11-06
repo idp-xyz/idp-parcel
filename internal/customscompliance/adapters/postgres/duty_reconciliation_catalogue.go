@@ -53,7 +53,7 @@ var dutyCollaborationPages = ports.DutyCollaborationPages.MustBind(cataloguepage
 	Keyword:  []string{"scope_ref", "duty_ref", "obligor_ref"},
 })
 
-// scannedDutyCollaboration 留着键两列与形成时刻的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象——
+// scannedDutyCollaboration 留着键（范围、税费引用）与形成时刻的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象——
 // 无需付款格的税费引用在领域上是零值，在键上是空串，两者不是同一个写法。
 type scannedDutyCollaboration struct {
 	collaboration domain.DutyPaymentCollaboration
@@ -130,7 +130,7 @@ func (catalogue *DutyReconciliationCatalogue) ListDutyCollaborations(
 }
 
 // dutyVerificationPages 把 ports.DutyVerificationPages 落到列上。三轴各落在同名列上；q 在税费、资金事实与决定范围
-// 三格引用上做字面包含。
+// 的引用上做字面包含。
 var dutyVerificationPages = ports.DutyVerificationPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"duty": "duty_ref", "verifiedAt": "verified_at"},
 	Identity: []string{"duty_ref", "funds_ref", "scope_ref", "verified_at", "version_digest"},
@@ -138,7 +138,7 @@ var dutyVerificationPages = ports.DutyVerificationPages.MustBind(cataloguepage.C
 	Keyword:  []string{"duty_ref", "funds_ref", "scope_ref"},
 })
 
-// scannedDutyVerification 留着标识五列的原值，理由同 scannedDutyCollaboration。
+// scannedDutyVerification 留着标识各列的原值，理由同 scannedDutyCollaboration。
 type scannedDutyVerification struct {
 	record                     ports.DutyVerificationRecord
 	duty, funds, scope, digest string
