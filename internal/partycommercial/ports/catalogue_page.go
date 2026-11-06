@@ -1,9 +1,7 @@
 package ports
 
-// CataloguePage 是目录上列读回的一页（ADR-0144 决定六）：本页行、下一页游标（空串即已到末页），以及与本页
-// 同一组条件下的总数。迁到 ADR-0144 的各册读端口都答这一形。
-type CataloguePage[Row any] struct {
-	Rows  []Row
-	Next  string
-	Total int64
-}
+import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
+
+// CataloguePage 已并入统一结果类型 cataloguepage.Result（ADR-0144 决定七「一处定义」）。别名只为不拆正在并行迁移的
+// 分支：那些分支上的读端口、占位与替身还写着 ports.CataloguePage，删掉类型它们合进来就编不过。
+type CataloguePage[Row any] = cataloguepage.Result[Row]

@@ -1,7 +1,7 @@
 # 15 首批两册改用 01 的补件、两份页类型并入统一结果类型
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-06 作者会话在分支 `cursor/crpr-15-first-batch` 上做（worktree `idp-parcel-crpr-15`，基 `d6b3f64a5`）
 Blocked by: 01
 地盘：`internal/partycommercial/adapters/postgres/customer_account_catalogue.go`、`internal/networkrouting/adapters/postgres/network_catalog_list.go`，
 `internal/partycommercial/ports/catalogue_page.go`、`internal/networkrouting/ports` 里的 `CatalogPage`，以及它们的调用点与测试替身。

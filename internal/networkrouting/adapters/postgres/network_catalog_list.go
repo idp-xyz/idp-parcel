@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -97,49 +95,34 @@ func (catalog *NetworkCatalog) ListRouteStrategyVersions(
 	return listPage(ctx, catalog, routeStrategyFamily, tenant, limit, query)
 }
 
-// catalogFamily 把一族在 ports 里的查询声明落到它那张版本表上：答复体字段名对到列，行标识对到主键里
+// catalogFamily 把一族在 ports 里的查询声明落到它那张版本表上（pages）：答复体字段名对到列，行标识对到主键里
 // 租户之后的列（与声明的 Identity 同序同形）。
 type catalogFamily[Row any] struct {
 	operation string
 	table     string
 	selection string
-	sorts     map[string]keyColumn
-	identity  []keyColumn
-	filters   map[string]string
-	keyword   []string
+	pages     *cataloguepage.Binding
 	scan      func(pgx.Rows) (Row, error)
-	// sortValues 与 identityOf 给出一行在各可排维上的值与它的标识，都按声明的 ValueKind 规整；
-	// 本页末行的游标从这里取。
+	// sortValues 与 identityOf 给出一行在各可排维上的值与它的标识，都按声明的 ValueKind 规整；本页末行的游标
+	// 从这里取。取的是 scan 从 ORDER BY 那几列原样读进行里的值：换成精度或写法不同的副本，键集比较会重出或漏行。
 	sortValues func(Row) map[string]string
 	identityOf func(Row) []string
-}
-
-type keyColumn struct {
-	column string
-	kind   cataloguepage.ValueKind
-}
-
-func codeAndVersion(codeColumn string) []keyColumn {
-	return []keyColumn{{codeColumn, cataloguepage.Text}, {"version", cataloguepage.Integer}}
 }
 
 func codeVersion(code string, version int32) []string {
 	return []string{code, cataloguepage.FormatInteger(int64(version))}
 }
 
-var byEffectiveFrom = keyColumn{"effective_from", cataloguepage.Instant}
-
 var nodeFamily = catalogFamily[ports.NodeDefinitionVersion]{
 	operation: "list node versions",
 	table:     "network_routing.logistics_node_version",
 	selection: "node_code, version, business_timezone, effective_from, effective_to, basis_ref, display_name",
-	sorts: map[string]keyColumn{
-		"code":          {"node_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: codeAndVersion("node_code"),
-	filters:  map[string]string{"code": "node_code"},
-	keyword:  []string{"node_code", "display_name"},
+	pages: ports.NodeVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"code": "node_code", "effectiveFrom": "effective_from"},
+		Identity: []string{"node_code", "version"},
+		Filters:  map[string]string{"code": "node_code"},
+		Keyword:  []string{"node_code", "display_name"},
+	}),
 	scan: func(rows pgx.Rows) (ports.NodeDefinitionVersion, error) {
 		var row ports.NodeDefinitionVersion
 		var effectiveTo *time.Time
@@ -166,15 +149,15 @@ var connectionFamily = catalogFamily[ports.ConnectionDefinitionVersion]{
 	operation: "list connection versions",
 	table:     "network_routing.network_connection_version",
 	selection: "connection_code, version, from_node_code, to_node_code, business_timezone, effective_from, effective_to, basis_ref",
-	sorts: map[string]keyColumn{
-		"code":          {"connection_code", cataloguepage.Text},
-		"fromNode":      {"from_node_code", cataloguepage.Text},
-		"toNode":        {"to_node_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: codeAndVersion("connection_code"),
-	filters:  map[string]string{"code": "connection_code", "fromNode": "from_node_code", "toNode": "to_node_code"},
-	keyword:  []string{"connection_code", "from_node_code", "to_node_code"},
+	pages: ports.ConnectionVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts: map[string]string{
+			"code": "connection_code", "fromNode": "from_node_code", "toNode": "to_node_code",
+			"effectiveFrom": "effective_from",
+		},
+		Identity: []string{"connection_code", "version"},
+		Filters:  map[string]string{"code": "connection_code", "fromNode": "from_node_code", "toNode": "to_node_code"},
+		Keyword:  []string{"connection_code", "from_node_code", "to_node_code"},
+	}),
 	scan: func(rows pgx.Rows) (ports.ConnectionDefinitionVersion, error) {
 		var row ports.ConnectionDefinitionVersion
 		var effectiveTo *time.Time
@@ -201,13 +184,12 @@ var lineFamily = catalogFamily[ports.LineDefinitionVersion]{
 	operation: "list line versions",
 	table:     "network_routing.line_version",
 	selection: "line_code, version, segments, business_timezone, applicable_scope, effective_from, effective_to, basis_ref",
-	sorts: map[string]keyColumn{
-		"code":          {"line_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: codeAndVersion("line_code"),
-	filters:  map[string]string{"code": "line_code"},
-	keyword:  []string{"line_code"},
+	pages: ports.LineVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"code": "line_code", "effectiveFrom": "effective_from"},
+		Identity: []string{"line_code", "version"},
+		Filters:  map[string]string{"code": "line_code"},
+		Keyword:  []string{"line_code"},
+	}),
 	scan: func(rows pgx.Rows) (ports.LineDefinitionVersion, error) {
 		var row ports.LineDefinitionVersion
 		var segmentsRaw []byte
@@ -236,13 +218,12 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 	table:     "network_routing.service_area_version",
 	selection: "area_code, version, effective_from, effective_to, " +
 		"coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes, basis_ref",
-	sorts: map[string]keyColumn{
-		"code":          {"area_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: codeAndVersion("area_code"),
-	filters:  map[string]string{"code": "area_code"},
-	keyword:  []string{"area_code"},
+	pages: ports.ServiceAreaVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"code": "area_code", "effectiveFrom": "effective_from"},
+		Identity: []string{"area_code", "version"},
+		Filters:  map[string]string{"code": "area_code"},
+		Keyword:  []string{"area_code"},
+	}),
 	scan: func(rows pgx.Rows) (ports.ServiceAreaDefinitionVersion, error) {
 		var row areaVersionRow
 		var prefixes, origin, destination []byte
@@ -277,16 +258,12 @@ var serviceCalendarFamily = catalogFamily[ports.ServiceCalendarDefinitionVersion
 	operation: "list service calendar versions",
 	table:     "network_routing.service_calendar_version",
 	selection: "target_kind, target_code, version, effective_from, effective_to, basis_ref",
-	sorts: map[string]keyColumn{
-		"targetKind":    {"target_kind", cataloguepage.Text},
-		"targetCode":    {"target_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: []keyColumn{
-		{"target_kind", cataloguepage.Text}, {"target_code", cataloguepage.Text}, {"version", cataloguepage.Integer},
-	},
-	filters: map[string]string{"targetKind": "target_kind", "targetCode": "target_code"},
-	keyword: []string{"target_code"},
+	pages: ports.ServiceCalendarVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"targetKind": "target_kind", "targetCode": "target_code", "effectiveFrom": "effective_from"},
+		Identity: []string{"target_kind", "target_code", "version"},
+		Filters:  map[string]string{"targetKind": "target_kind", "targetCode": "target_code"},
+		Keyword:  []string{"target_code"},
+	}),
 	scan: func(rows pgx.Rows) (ports.ServiceCalendarDefinitionVersion, error) {
 		var row ports.ServiceCalendarDefinitionVersion
 		var kindRaw string
@@ -320,16 +297,14 @@ var adjustmentFamily = catalogFamily[ports.AvailabilityAdjustmentStatement]{
 	operation: "list availability adjustments",
 	table:     "network_routing.availability_adjustment",
 	selection: "adjustment_code, version, target_kind, target_code, adjustment_kind, source, effective_at, lifted_at",
-	sorts: map[string]keyColumn{
-		"code":        {"adjustment_code", cataloguepage.Text},
-		"targetCode":  {"target_code", cataloguepage.Text},
-		"effectiveAt": {"effective_at", cataloguepage.Instant},
-	},
-	identity: codeAndVersion("adjustment_code"),
-	filters: map[string]string{
-		"code": "adjustment_code", "targetKind": "target_kind", "targetCode": "target_code", "kind": "adjustment_kind",
-	},
-	keyword: []string{"adjustment_code", "target_code", "source"},
+	pages: ports.AvailabilityAdjustmentCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"code": "adjustment_code", "targetCode": "target_code", "effectiveAt": "effective_at"},
+		Identity: []string{"adjustment_code", "version"},
+		Filters: map[string]string{
+			"code": "adjustment_code", "targetKind": "target_kind", "targetCode": "target_code", "kind": "adjustment_kind",
+		},
+		Keyword: []string{"adjustment_code", "target_code", "source"},
+	}),
 	scan: func(rows pgx.Rows) (ports.AvailabilityAdjustmentStatement, error) {
 		var row ports.AvailabilityAdjustmentStatement
 		var targetKindRaw, adjustmentKindRaw string
@@ -363,13 +338,12 @@ var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 	operation: "list route strategy versions",
 	table:     "network_routing.route_strategy_version",
 	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form, auto_reroute_form, auto_reroute_improvement_threshold_minor, basis_ref",
-	sorts: map[string]keyColumn{
-		"code":          {"strategy_code", cataloguepage.Text},
-		"effectiveFrom": byEffectiveFrom,
-	},
-	identity: codeAndVersion("strategy_code"),
-	filters:  map[string]string{"code": "strategy_code"},
-	keyword:  []string{"strategy_code"},
+	pages: ports.RouteStrategyVersionCatalogue.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"code": "strategy_code", "effectiveFrom": "effective_from"},
+		Identity: []string{"strategy_code", "version"},
+		Filters:  map[string]string{"code": "strategy_code"},
+		Keyword:  []string{"strategy_code"},
+	}),
 	scan: func(rows pgx.Rows) (ports.RouteStrategyDefinitionVersion, error) {
 		var row ports.RouteStrategyDefinitionVersion
 		var effectiveTo *time.Time
@@ -417,49 +391,16 @@ func listPage[Row any](
 	if err != nil {
 		return ports.CatalogPage[Row]{}, err
 	}
-	primary, mapped := family.sorts[query.Sort.Field]
-	if !mapped {
-		return fail(fmt.Errorf("排序维 %q 没有落到列上（查询对象须由本族声明解出）", query.Sort.Field))
-	}
-	where, args, err := family.conditions(tenant, query)
+	plan, err := family.pages.Plan(query, "tenant_id = $1", []any{tenant.String()}, limit)
 	if err != nil {
 		return fail(err)
 	}
 
 	var total int64
-	if err := querier.QueryRow(ctx, "SELECT count(*) FROM "+family.table+" WHERE "+where, args...).Scan(&total); err != nil {
+	if err := querier.QueryRow(ctx, plan.CountSQL(family.table), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
-
-	keys := append([]keyColumn{primary}, family.identity...)
-	direction, comparison := "ASC", ">"
-	if query.Sort.Descending {
-		direction, comparison = "DESC", "<"
-	}
-	if query.After != nil {
-		values := append([]string{query.After.Value}, query.After.Identity...)
-		if len(values) != len(keys) {
-			return fail(fmt.Errorf("游标位置有 %d 格，排序键有 %d 列", len(values), len(keys)))
-		}
-		columns := make([]string, len(keys))
-		placeholders := make([]string, len(keys))
-		for index, key := range keys {
-			value, err := typedValue(key.kind, values[index])
-			if err != nil {
-				return fail(err)
-			}
-			args = append(args, value)
-			columns[index], placeholders[index] = key.column, fmt.Sprintf("$%d", len(args))
-		}
-		where += fmt.Sprintf(" AND (%s) %s (%s)", strings.Join(columns, ", "), comparison, strings.Join(placeholders, ", "))
-	}
-	order := make([]string, len(keys))
-	for index, key := range keys {
-		order[index] = key.column + " " + direction
-	}
-	args = append(args, limit+1)
-	rows, err := querier.Query(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE %s ORDER BY %s LIMIT $%d",
-		family.selection, family.table, where, strings.Join(order, ", "), len(args)), args...)
+	rows, err := querier.Query(ctx, plan.PageSQL(family.selection, family.table), plan.PageArgs...)
 	if err != nil {
 		return fail(err)
 	}
@@ -477,62 +418,13 @@ func listPage[Row any](
 		return fail(err)
 	}
 
-	page, more := cataloguepage.Trim(fetched, limit)
-	result := ports.CatalogPage[Row]{Rows: page, Total: total}
-	if more {
-		last := page[len(page)-1]
-		next, err := query.CursorAfter(cataloguepage.Position{
-			Value:    family.sortValues(last)[query.Sort.Field],
-			Identity: family.identityOf(last),
-		})
-		if err != nil {
-			return fail(err)
-		}
-		result.Next = next
+	page, err := cataloguepage.Finish(query, fetched, limit, total, func(row Row, sortField string) cataloguepage.Position {
+		return cataloguepage.Position{Value: family.sortValues(row)[sortField], Identity: family.identityOf(row)}
+	})
+	if err != nil {
+		return fail(err)
 	}
-	return result, nil
-}
-
-// conditions 是租户、筛选维与 q 的条件，总数与取页共用同一组。筛选维内为或（= ANY）、维间为与。
-func (family catalogFamily[Row]) conditions(tenant domain.TenantID, query cataloguepage.Query) (string, []any, error) {
-	clauses := []string{"tenant_id = $1"}
-	args := []any{tenant.String()}
-	dimensions := make([]string, 0, len(query.Filters))
-	for dimension := range query.Filters {
-		dimensions = append(dimensions, dimension)
-	}
-	sort.Strings(dimensions)
-	for _, dimension := range dimensions {
-		column, mapped := family.filters[dimension]
-		if !mapped {
-			return "", nil, fmt.Errorf("筛选维 %q 没有落到列上", dimension)
-		}
-		args = append(args, query.Filters[dimension])
-		clauses = append(clauses, fmt.Sprintf("%s = ANY($%d)", column, len(args)))
-	}
-	if query.Keyword != "" {
-		args = append(args, "%"+likeLiteral.Replace(query.Keyword)+"%")
-		matches := make([]string, len(family.keyword))
-		for index, column := range family.keyword {
-			matches[index] = fmt.Sprintf("%s ILIKE $%d", column, len(args))
-		}
-		clauses = append(clauses, "("+strings.Join(matches, " OR ")+")")
-	}
-	return strings.Join(clauses, " AND "), args, nil
-}
-
-// likeLiteral 让 q 在 ILIKE 里只做字面包含：% 与 _ 是通配符，反斜杠是 LIKE 的缺省转义符。
-var likeLiteral = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-func typedValue(kind cataloguepage.ValueKind, value string) (any, error) {
-	switch kind {
-	case cataloguepage.Instant:
-		return cataloguepage.ParseInstant(value)
-	case cataloguepage.Integer:
-		return cataloguepage.ParseInteger(value)
-	default:
-		return value, nil
-	}
+	return page, nil
 }
 
 // listQuerier 是七个上列方法共用的入口检查：limit 门禁加读执行器。

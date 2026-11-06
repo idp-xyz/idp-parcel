@@ -2,13 +2,9 @@ package ports
 
 import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 
-// CatalogPage 是目录上列读回的一页（ADR-0144 决定六）：本页行、下一页游标（空串即已到末页），以及与本页
-// 同一组条件下的总数。
-type CatalogPage[Row any] struct {
-	Rows  []Row
-	Next  string
-	Total int64
-}
+// CatalogPage 已并入统一结果类型 cataloguepage.Result（ADR-0144 决定七「一处定义」）。别名只为不拆正在并行迁移的
+// 分支：那些分支上的读端口、占位与替身还写着 ports.CatalogPage，删掉类型它们合进来就编不过。
+type CatalogPage[Row any] = cataloguepage.Result[Row]
 
 // 各族的查询声明（ADR-0144 决定三、四、七）。可排维、筛选维按答复体的 JSON 字段名点名；family 是册子选择器，
 // 保持原义、不兼作筛选维，各族各自声明。
