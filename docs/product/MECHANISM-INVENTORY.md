@@ -6,23 +6,23 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 45 | 60 | 0 | 7 | 0 | 4 |
+| accessidentity | 47 | 63 | 0 | 7 | 0 | 5 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
-| collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
-| customscompliance | 149 | 153 | 28 | 50 | 10 | 23 |
-| networkrouting | 97 | 117 | 11 | 19 | 2 | 10 |
-| nodeoperations | 122 | 126 | 16 | 31 | 4 | 18 |
-| parcelpricing | 157 | 166 | 20 | 20 | 1 | 27 |
-| parcelshipment | 280 | 274 | 29 | 56 | 13 | 32 |
-| partycommercial | 197 | 226 | 18 | 46 | 1 | 47 |
-| pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
-| platform（非业务） | 41 | 36 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 270 | 220 | 45 | 76 | 13 | 14 |
-| transportfulfillment | 313 | 321 | 56 | 63 | 16 | 57 |
-| visibilityexception | 146 | 142 | 16 | 35 | 8 | 15 |
-| **合计** | 1868 | 1899 | 249 | 415 | 69 | 254 |
+| collectionremittance | 30 | 26 | 5 | 6 | 0 | 4 |
+| customscompliance | 152 | 157 | 28 | 51 | 10 | 24 |
+| networkrouting | 99 | 119 | 11 | 19 | 2 | 11 |
+| nodeoperations | 125 | 131 | 16 | 31 | 4 | 20 |
+| parcelpricing | 159 | 170 | 20 | 20 | 1 | 28 |
+| parcelshipment | 283 | 280 | 29 | 57 | 13 | 33 |
+| partycommercial | 199 | 234 | 18 | 47 | 1 | 48 |
+| pilotgovernance | 25 | 23 | 5 | 6 | 1 | 5 |
+| platform（非业务） | 45 | 40 | 0 | 0 | 0 | 0 |
+| settlementaccounting | 272 | 223 | 45 | 76 | 13 | 15 |
+| transportfulfillment | 316 | 324 | 56 | 64 | 16 | 58 |
+| visibilityexception | 149 | 146 | 16 | 36 | 8 | 16 |
+| **合计** | 1901 | 1953 | 249 | 420 | 69 | 267 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 284、测试 466。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 284、测试 469。
 
 ## 跨上下文消费缝：51 组，176 个生产文件
 
@@ -80,23 +80,23 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：13 个模块共 376 份 SQL
+## 迁移：13 个模块共 387 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 40 |
+| access_identity | 41 |
 | collection_remittance | 4 |
-| customs_compliance | 32 |
+| customs_compliance | 33 |
 | document_numbering | 1 |
-| network_routing | 33 |
-| node_operations | 24 |
-| parcel_pricing | 14 |
-| parcel_shipment | 35 |
-| party_commercial | 46 |
-| pilot_governance | 8 |
-| settlement_accounting | 54 |
-| transport_fulfillment | 52 |
-| visibility_exception | 33 |
+| network_routing | 34 |
+| node_operations | 25 |
+| parcel_pricing | 15 |
+| parcel_shipment | 36 |
+| party_commercial | 47 |
+| pilot_governance | 9 |
+| settlement_accounting | 55 |
+| transport_fulfillment | 53 |
+| visibility_exception | 34 |
 
 ## 接线面：接入面端点 253 个，消费适配器 64 个生产文件，直投路由表 45 条
 
