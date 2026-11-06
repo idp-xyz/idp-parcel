@@ -1,0 +1,142 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDP Parcel 仓储与履约 DDD 设计评审</title>
+<style>
+:root{--bg:#f1f5f9;--ink:#15314b;--sub:#526a7f;--line:#dce7ef;--blue:#1662a8;--teal:#008b8b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 system-ui,-apple-system,"Microsoft YaHei",sans-serif}header{background:linear-gradient(120deg,#081f36,#104c63);color:white;padding:60px max(24px,calc((100vw - 1180px)/2))}header h1{font-size:clamp(30px,4vw,48px);line-height:1.2;margin:12px 0}header p{max-width:900px;color:#bcd7e4}.eyebrow{font-size:12px;letter-spacing:.15em;color:#8de1d6;font-weight:750}.badges{display:flex;gap:8px;flex-wrap:wrap}.badges span,.badge{font-size:11px;border-radius:20px;padding:4px 10px;background:#e3f4f3;color:#087574;font-weight:700}.badges span{background:#ffffff14;color:#d5edf0;border:1px solid #ffffff30}nav{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid var(--line);overflow:auto;white-space:nowrap;padding:12px max(24px,calc((100vw - 1180px)/2));display:flex;gap:19px}a{color:var(--blue);text-decoration:none}nav a{font-size:12px;font-weight:700;color:#526a7f}main{max-width:1180px;margin:auto;padding:25px 24px 70px}section{scroll-margin-top:65px;margin:45px 0}h2{font-size:25px;margin:0 0 8px}h3{font-size:17px;margin:0 0 8px}p{margin:8px 0;color:var(--sub)}.lead{font-size:14px;margin-bottom:18px}.card{background:white;border:1px solid var(--line);border-radius:15px;padding:20px;box-shadow:0 10px 24px #173c5810}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card small{color:var(--teal);font-weight:750;letter-spacing:.06em}.note{padding:15px 18px;border-left:3px solid #d99a31;background:#fff7e9;border-radius:0 10px 10px 0;color:#705328;margin:15px 0}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;min-width:750px;background:#fff}th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid #e7eef4;font-size:13px}th{background:#edf4f8;color:#42627a}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.step{background:#e9f4f5;border-radius:10px;padding:14px;min-height:100px}.step strong{display:block}.step small{font-size:11px;color:#547985}.line{border-top:1px solid var(--line);padding-top:15px;margin-top:15px}details{background:#fff;border:1px solid var(--line);border-radius:12px;margin:10px 0;padding:15px 18px}summary{cursor:pointer;font-weight:700}code{background:#e9f1f5;border-radius:4px;padding:2px 4px}footer{color:#8798a7;border-top:1px solid var(--line);padding-top:20px;font-size:12px}@media(max-width:750px){.grid,.grid.two{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,1fr)}header{padding:42px 20px}main{padding:18px}}@media print{nav,button{display:none}section{break-inside:auto}.card,details,tr{break-inside:avoid}details:not([open])>*:not(summary){display:block}.scroll{overflow:visible}table{min-width:0;font-size:9px}th,td{font-size:9px;padding:6px}}
+</style></head><body>
+<header><div class="eyebrow">STRATEGIC + TACTICAL DOMAIN DESIGN</div><h1>IDP Parcel 仓储与履约 DDD 设计评审</h1><p>在既有 IDP Parcel 内新增国际小包仓内作业、商品库存、海外仓仓配、合作仓及财务协同能力。先完成新增领域设计与评审；不重做已完成的 Parcel 原设计。</p><div class="badges"><span>评审草案 V0.4</span><span>2026-11-06</span><span>Parcel 原有设计为基线</span><span>新增能力为设计候选</span></div></header>
+<nav><a href="#status">设计状态</a><a href="#language">统一语言</a><a href="#contexts">战略领域</a><a href="#map">上下文关系</a><a href="#model">战术模型</a><a href="#flows">核心流程</a><a href="#rules">一致性</a><a href="#contracts">契约与权限</a><a href="#gates">验收门</a><a href="#ownership">权威矩阵</a><a href="#inventory">库存与仓配</a><a href="#parcelops">小包与交接</a><a href="#reverse">退件与计费</a><a href="#traceability">规则与验收追踪</a><a href="#deepmodel">聚合详情</a><a href="#deepstates">状态契约</a><a href="#crosscases">跨域场景</a><a href="#deepmodel">领域模型目录</a><a href="#deepstates">详细状态契约</a><a href="#crosscases">跨域场景矩阵</a></nav>
+<main>
+<section id="status"><h2>01 / 设计状态与决策边界</h2><p class="lead">本稿是新增仓储与履约能力的迭代设计评审材料，支持系统化讨论；并不表示 DDD 已经完整定版，也不授权或宣称已进入开发。</p><div class="grid">
+<div class="card"><small>已确定的目标</small><h3>全量业务范围</h3><p>国际小包、商品库存、一件代发、FBA、代理仓、逆向、财务及生态均纳入总体范围。分阶段交付不等于缩减最终目标。</p></div>
+<div class="card"><small>产品边界</small><h3>Parcel 内新增仓储能力</h3><p>在既有 Parcel 产品内设计小包、商品库存与仓配能力，复用现有业务主数据和职责；库存事实保持唯一写入权威。</p></div>
+<div class="card"><small>工程与实施</small><h3>保留证据等级</h3><p>依据用户确认，Parcel 已按原设计完成，作为既有基线。当前无法独立核验真实工程；新增仓储能力的接口映射、现场流程与性能仍需验证。</p></div></div><div class="note">本稿不将一个限界上下文自动等同一个微服务或数据库。先确定业务语义、数据权威与一致性边界，再结合实际工程选择部署。</div></section>
+
+<section id="language"><h2>02 / 统一语言</h2><p class="lead">同名词在不同上下文可能有不同含义。以下定义为候选，须与仓库、运营、财务和工程负责人逐项确认。</p><div class="scroll"><table><thead><tr><th>术语</th><th>领域含义</th><th>不得混同</th></tr></thead><tbody>
+<tr><td>履约请求</td><td>客户委托服务的逻辑角色；可复用既有对象，是否新建待核查</td><td>订单、运单、任务不预设一一对应</td></tr>
+<tr><td>运单 Shipment / 包裹 Parcel</td><td>运输业务身份 / 可独立处理物理件</td><td>运单号、承运商号、包裹编号不可互相覆盖</td></tr>
+<tr><td>站点访问 Station Visit</td><td>实物在某设施的一次作业过程；无预报可暂未关联正式包裹</td><td>扫描观察不等于正式接收</td></tr>
+<tr><td>商品 SKU / FNSKU</td><td>货主商品识别 / 适用平台场景的商品标识</td><td>普通小包不强制 FNSKU；不同货主 SKU 可重复</td></tr>
+<tr><td>库存 / 预占</td><td>按货主、仓、货位、商品、状态等维度记录的数量 / 特定需求对可用量的占用</td><td>代理仓声明或过期投影不是自营实时库存</td></tr>
+<tr><td>物流单元 / Manifest</td><td>箱、袋、托盘等物理单元 / 运输数据清单</td><td>物理装载、运输清单和海关申报批次不能假设一对一</td></tr>
+<tr><td>交出 / 接收</td><td>交出方记录与接收方声明</td><td>汇总确认不自动产生逐件确认</td></tr>
+<tr><td>计费依据 / 费用 / 账单</td><td>实际作业凭据 / 按合同计算结果 / 财务结算记录</td><td>称重或预报本身不自动等于已收费</td></tr>
+</tbody></table></div></section>
+
+<section id="contexts"><h2>03 / 战略领域与候选上下文</h2><p class="lead">分类是产品价值判断，不代表部署结构；各上下文名称和拆分须经过业务事件梳理及工程映射。</p><div class="grid">
+<div class="card"><small>核心域 · 候选</small><h3>跨境履约编排</h3><p>客户承诺、跨节点任务、部分履约与服务约束。避免与既有订单 / 运单权威重复。</p></div>
+<div class="card"><small>核心域 · 候选</small><h3>包裹仓内执行</h3><p>到仓、认领、测量、分拣、换标与现场异常；站点任务与物理事实。</p></div>
+<div class="card"><small>核心域 · 候选</small><h3>商品库存与仓配履约</h3><p>在 Parcel 内设计入库、货权、状态、预占、拣货与出库；聚合边界、事务和与既有模块的映射待评审。</p></div>
+<div class="card"><small>核心 / 支撑 · 待评审</small><h3>物流单元与交接</h3><p>物理成员、封签、交出、接收与对账；与仓内现场事件及运输计划分权。</p></div>
+<div class="card"><small>支撑域 · 候选</small><h3>产品定价与结算</h3><p>合同、渠道、分区、价卡、费用依据、费用计算、账单及资金状态。</p></div>
+<div class="card"><small>支撑域 · 候选</small><h3>运输、关务与追踪</h3><p>多段运输、承运商、清关约束、原始事件、轨迹映射；不是单个万能状态。</p></div>
+<div class="card"><small>支撑域 · 候选</small><h3>退件与异常处置</h3><p>客户指令、退件认领、质检、重派或销毁；商品库存与原运单按权威协同。</p></div>
+<div class="card"><small>通用 / 支撑 · 候选</small><h3>主体、权限与仓网</h3><p>租户、客户、合作方、设施、岗位与授权；不默认现有主数据实现满足需要。</p></div>
+<div class="card"><small>通用 / 支撑 · 候选</small><h3>集成与治理</h3><p>合作仓、平台、承运商、设备；BIP 能否复用须逐接口核验，审计与可观测贯穿全域。</p></div>
+</div></section>
+
+<section id="map"><h2>04 / 上下文协作关系</h2><p class="lead">箭头表达业务信息和证据流，不表示必须同步调用或把上下文实现为微服务。</p><div class="card"><div class="flow">
+<div class="step"><small>客户与商业</small><strong>授权与委托</strong><small>合同、客户、产品</small></div><div class="step"><small>订单与履约</small><strong>运单与请求</strong><small>身份、任务、约束</small></div><div class="step"><small>仓内执行</small><strong>包裹 / 商品</strong><small>观察、库存、作业</small></div><div class="step"><small>运输与交接</small><strong>计划与事实</strong><small>交出、接收、清关</small></div><div class="step"><small>协同领域</small><strong>追踪与结算</strong><small>事件、依据、账单</small></div>
+</div><p class="note">多个节点可由不同主体执行；外部合作仓的库存和交接回执是有来源、有时间和确认粒度的声明。域间写入必须经拥有者规则，不以共享数据库直接越权修改。</p></div>
+<div class="scroll line"><table><thead><tr><th>上游 → 下游</th><th>共享内容</th><th>集成语义 / 未决点</th></tr></thead><tbody>
+<tr><td>主体授权 → 各域</td><td>客户、货主、站点、角色与权限</td><td>引用权威 ID；身份与字段范围需真实 IAM 核验</td></tr>
+<tr><td>订单履约 → 仓内</td><td>预报、包裹 / 商品、站点任务、渠道约束</td><td>新建履约请求还是复用既有对象待 G0；无预报可先现场登记</td></tr>
+<tr><td>商品库存 ↔ 仓配作业</td><td>预占请求、拣货结果、扣减或释放</td><td>唯一库存权威；并发预占与扣减在该权威内原子校验</td></tr>
+<tr><td>仓内 → 物流单元 / 运输</td><td>装入、封签、实际交出及证据</td><td>D07 / D08 谁拥有物理成员须 G0 定案；计划、实交、接收分离</td></tr>
+<tr><td>仓内 / 运输 → 追踪</td><td>带来源与时间的作业和运输事件</td><td>归一映射保留原始事实；不把出库改译成签收</td></tr>
+<tr><td>仓内 / 运输 → 计费</td><td>重量、服务数量、交接及版本化计费依据</td><td>费用权威计算，账务追加调整；重送防重复收费</td></tr>
+<tr><td>外部系统 ↔ 集成边界</td><td>指令、回执、事件与库存声明</td><td>身份验证、协议、粒度、时点、幂等、重放和对账；BIP 适配待验证</td></tr>
+</tbody></table></div></section>
+
+<section id="model"><h2>05 / 战术模型：聚合候选与不变量</h2><p class="lead">以下是候选聚合边界，不等于表设计；聚合应围绕业务不变量和事务一致性决定。</p>
+<div class="scroll"><table><thead><tr><th>候选聚合</th><th>标识与状态</th><th>关键命令 / 不变量</th></tr></thead><tbody>
+<tr><td>站点作业件</td><td>站点访问 ID；可未关联 Parcel；认领与到仓状态分开</td><td>观察、认领、撤销、收货；保留来源与历史，不凭模糊条码绑定</td></tr>
+<tr><td>库存余额 / 库存流水</td><td>货主、仓、库位、SKU、批次、质量等维度；粒度待验证</td><td>入账、预占、释放、扣减、调整；并发下不得重复占用同一可用量</td></tr>
+<tr><td>物流单元</td><td>物理实例、状态、封签、成员版本</td><td>装入、移出、封闭、解封；有效直接父级唯一、禁止循环，锁定或约束方案待设计</td></tr>
+<tr><td>交接</td><td>计划、交出批次、接收声明和核对结果独立</td><td>部分交出可接收回执；汇总不生成单件确认；拒绝伪造对方身份</td></tr>
+<tr><td>面单与打印尝试</td><td>申请、文件、打印及贴标独立状态</td><td>外部超时为 UNKNOWN；重打与重新购单分离</td></tr>
+<tr><td>费用依据 / 账单</td><td>作业依据、候选费用、已批准账单和资金状态独立</td><td>按合同版本计算；原单保留；重复事件不得重复计费</td></tr>
+<tr><td>截单 / 退件处置</td><td>请求、外部执行、接收、客户指令、处置及财务状态</td><td>指令不代表完成；部分成功和未知分别保存；销毁需授权</td></tr>
+</tbody></table></div><p class="note">库存可用量的精确公式取决于状态互斥和既有账本口径。示例：若锁定、冻结与预占互不重叠，可用量 = 已确认在库 − 已预占 − 已锁定 − 已冻结；不能对重叠分类重复扣减。</p></section>
+
+<section id="flows"><h2>06 / 核心场景与异常</h2><p class="lead">按业务事实而非页面步骤建模。选中场景展开。</p>
+<details open><summary>场景 A：国内至海外的小包换单</summary><p>客户委托与预报 → 国内观察、匹配与收货 → 测量、分拣 → 可选装袋与部分交出 → 头程与适用清关 → 海外袋级或逐件接收 → 旧码匹配 → 面单就绪、打印与贴标确认 → 尾程实际交出及对方回执。</p><p><strong>异常：</strong>无预报隔离认领；袋到件未核不视为逐件接收；面单未就绪等待；购单和打印超时分别保留未知。</p></details>
+<details><summary>场景 B：商品库存到一件代发</summary><p>ASN / 无预报接收 → 核验货主、SKU、数量与质量 → 指定库存权威上架记账 → 订单请求预占 → 波次或单单拣货 → 复核包装 → 实际出库扣减 → 交接与费用依据。</p><p><strong>异常：</strong>短收、过期、破损、并发抢占、取消释放、部分拣出均需具体处理及账本追溯。代理仓库存有来源和过期时间。</p></details>
+<details><summary>场景 C：部分交接、截单与费用</summary><p>计划 100、观察 98，其中 1 暂扣、97 符合条件交出；对方仅汇总声明 96。保留 97 逐件交出事实及 96 汇总声明，差异 1 未定位；2 件未观察不等于丢失。按合同决定候选费用，不构造逐件接收。</p><p>已发起截单、外部拦截和退款各自独立；部分成功、超时未知和资金冲正均保留原证据。</p></details>
+<details><summary>场景 D：无预报退件及客户处置</summary><p>到仓观察 → 身份候选与授权认领 → 待指令 → 检查及客户授权 → 重派、退回或其他合法处置 → 费用依据与反馈。若拆包并恢复商品库存，商品库存权威核验后再记账。</p></details>
+</section>
+
+<section id="rules"><h2>07 / 一致性与事件设计</h2><div class="grid two"><div class="card"><h3>本地一致性</h3><p>围绕聚合内不变量进行原子校验。预占、库存变化和对应流水必须采用经过验证的事务与并发策略；幂等键作用域和保存期依据业务重试窗口确定。</p></div><div class="card"><h3>跨系统协作</h3><p>可采用事务性 Outbox 或等价可靠发布，消费侧去重、处理乱序与对账；外部副作用依合作方幂等或查询能力处理，不承诺端到端恰好一次。</p></div><div class="card"><h3>事件证据</h3><p>保留事件 ID、对象和版本、租户、来源、发生与接收时间、粒度、关联和因果 ID。纠错追加引用原记录，不删除已发生事实。</p></div><div class="card"><h3>异常与补偿</h3><p>UNKNOWN、PARTIAL 和 DISPUTED 一等建模。补偿是新增业务动作；无法撤回的实物交接、打印、清关或扣费需经责任方处理。</p></div></div></section>
+
+<section id="contracts"><h2>08 / 命令、事件与权限边界</h2><div class="scroll"><table><thead><tr><th>领域</th><th>示例命令 → 事实事件</th><th>权限、幂等与错误</th></tr></thead><tbody>
+<tr><td>仓内</td><td>ObserveArrival → ArrivalObserved；ClaimPiece → PieceClaimed</td><td>站点、客户、设备授权；候选冲突不自动匹配</td></tr>
+<tr><td>库存</td><td>ReserveStock → StockReserved；ReleaseReservation → ReservationReleased</td><td>库存权威内串行 / 乐观并发控制；重复键不同请求冲突</td></tr>
+<tr><td>单元</td><td>AddMember → MembershipRecorded；SealUnit → UnitSealed</td><td>父子关系、类型、封闭与并发检查；授权解封留痕</td></tr>
+<tr><td>交接</td><td>RecordDispatch → DispatchRecorded；SubmitAcknowledgement → AcknowledgementRecorded</td><td>接收方身份由认证主体推导或核验；精度不可升级</td></tr>
+<tr><td>费用</td><td>SubmitEvidence → EvidenceRecorded；CalculateCandidate → CandidateCalculated</td><td>结算权威决定账务，按合同与规则版本；外部付款未知待对账</td></tr>
+</tbody></table></div><p class="note">命令 / 事件名称为概念示例，不代表真实 API 或既有代码。个人信息、收件地址与采购价格按岗位、客户、设施与字段授权。</p></section>
+
+<section id="gates"><h2>09 / 设计验收与推进门</h2><div class="grid two"><div class="card"><h3>战略设计完成条件</h3><p>完整场景目录与领域术语获得业务评审；候选上下文地图、上游下游、事实权威、集成模式及开放决策均可追溯。</p></div><div class="card"><h3>战术设计完成条件</h3><p>核心聚合、不变量、状态转换、并发及补偿、命令 / 事件契约、权限、验收案例覆盖正常与异常路径并由责任人评审。</p></div><div class="card"><h3>工程映射门</h3><p>以已完成的原 Parcel 设计为基线，核实新增仓储领域与既有模型和接口的映射，形成复用 / 新增 / 适配矩阵；源码不可访问时保留待验证项。</p></div><div class="card"><h3>实现准备门</h3><p>设计问题分级关闭、样例验证、选定试点与依赖、测试数据、部署及恢复要求确认后，再决定开发范围。分阶段不删减最终目标。</p></div></div>
+<div class="scroll line"><table><thead><tr><th>候选验收</th><th>通过条件</th><th>当前状态</th></tr></thead><tbody>
+<tr><td>并发预占</td><td>同一可用量不能被并发重复预占；释放与扣减有流水</td><td>待设计并执行</td></tr>
+<tr><td>部分交接</td><td>97 交出、96 汇总声明；差 1 未定位，不造逐件确认</td><td>待设计并执行</td></tr>
+<tr><td>外部超时</td><td>购单、打印、退款各自 UNKNOWN；无盲目重复副作用</td><td>待设计并执行</td></tr>
+<tr><td>货权与租户</td><td>同名 SKU / 外部单号按作用域区分，跨租户越权失败</td><td>待设计并执行</td></tr>
+<tr><td>多站点退件</td><td>来源、客户授权、原运单、处置与费用依据可追溯</td><td>待设计并执行</td></tr>
+</tbody></table></div><div class="note">关键待决：履约请求是否复用已有对象；商品库存唯一权威；物流单元 D07 / D08 的写入方；试点场景及合作方回执粒度。这些均应在设计中持续推进，不应伪装为已决策。</div></section>
+
+<section id="ownership"><h2>10 / 业务权威与上下文边界</h2><p class="lead">复用既有 Parcel 原设计，新增领域只拥有其负责的事实。以下为候选逻辑边界；不表示新建服务、数据库或重复主数据。</p><div class="scroll"><table><thead><tr><th>对象 / 事实</th><th>候选权威</th><th>其他领域与约束</th></tr></thead><tbody>
+<tr><td>客户、货主、合作方、租户及权限</td><td>Parcel 已有商业主体及身份权限</td><td>仓内引用稳定 ID；客户、货权人、承运商及仓库经营者是角色，不等同租户。</td></tr>
+<tr><td>运单、包裹与运输标识</td><td>Parcel 原有订单、运单与标识域</td><td>仓内登记站点作业与未认领实物；无预报不得伪造 Parcel 身份。</td></tr>
+<tr><td>SKU、客户 SKU、FNSKU 别名</td><td>Parcel 内商品主数据候选上下文</td><td>同一货主、发码方、类型与时间范围内解析；是否复用已有商品对象待映射。</td></tr>
+<tr><td>商品库存、预占和流水</td><td>Parcel 内商品库存上下文</td><td>每一库存事实唯一权威；订单请求预占，仓配提供拣货证据，库存权威记账。</td></tr>
+<tr><td>站点观察、称重、换标</td><td>仓内作业上下文或授权外仓</td><td>每站点标识执行方；第三方回执是其声明，不转写为内部扫描。</td></tr>
+<tr><td>物流单元及物理成员</td><td>物流单元上下文（候选）</td><td>仓内提出装入命令，经拥有者执行业务规则；现有总包对象若已覆盖则复用并映射。</td></tr>
+<tr><td>交接计划、交出、接收</td><td>计划方、交出方、接收方分别对各自事实负责</td><td>对账投影可以汇总，不能越权代另一方确认或提升证据精度。</td></tr>
+<tr><td>报价、账单、收付</td><td>Parcel 既有对应报价 / 财务领域</td><td>仓储输出可计费证据；结算按照合同和版本执行，不覆盖历史。</td></tr>
+</tbody></table></div><p class="note">用户已确认原 Parcel 设计完成，本稿沿用其业务方向。真实代码当前不可访问，因此原系统实际实体、接口和已实现程度尚未独立核验；权威映射需要工程核对。</p></section>
+
+<section id="inventory"><h2>11 / 商品库存与仓配：战术设计</h2><div class="grid two">
+<div class="card"><h3>候选聚合与身份</h3><p>商品目录、库存账户、库存预占、入库单、作业任务、出库请求分别为候选聚合。库存账户粒度至少评估租户、货主、仓、库位、SKU、质量、批次、序列号与有效期。最终边界以不变量和既有 Parcel 模型确定。</p></div>
+<div class="card"><h3>库存守恒</h3><p>在同一计量粒度下，期末实物在库 = 期初 + 已确认入库 + 调入 + 已批准盘盈 − 已确认出库 − 调出 − 已批准盘亏。状态转换和预占只改变分类或可用量，不得凭空改变实物总量。</p></div>
+<div class="card"><h3>可用量与预占</h3><p>若预占、冻结和锁定分类互不重叠，可用 = 已确认在库 − 预占 − 冻结 − 锁定；否则须建立明确的交集处理，禁止重复扣减。同一可用量并发预占必须原子检查并防止超卖。</p></div>
+<div class="card"><h3>箱库存与商品库存</h3><p>开箱转换前明确箱中 SKU 数量、货权、质量、计量单位与可验证明细；转换采用原子或受控中间状态，一次只能由唯一库存权威执行，转换前后按 SKU 及单位守恒。</p></div></div>
+<div class="scroll line"><table><thead><tr><th>命令 → 成功事实</th><th>前置条件与事务边界</th><th>拒绝 / 异常</th></tr></thead><tbody>
+<tr><td>确认收货 → 收货事实</td><td>站点、货主、数量、单位及质量可核验；观察不自动入库存</td><td>无预报、错货、短收记录差异并等待认领或复核</td></tr>
+<tr><td>确认上架 → 库存入账</td><td>指定库存权威，在同一事务内登记有效数量与流水</td><td>库位禁用、货权冲突、重复命令拒绝或返回原结果</td></tr>
+<tr><td>申请预占 → 预占成功</td><td>库存权威按可用量和规则原子判定，记录订单及版本</td><td>不足可拒绝或按明确策略部分分配，不得静默超卖</td></tr>
+<tr><td>取消 → 预占释放</td><td>只释放尚未消耗且属于该订单的有效预占</td><td>已拣货或已交接启动回库 / 截单，不直接回滚现实</td></tr>
+<tr><td>出库复核 → 库存扣减</td><td>基于已确认出库的 SKU、货权、数量和预占，同事务写流水</td><td>缺货、错拣、损坏进入差异；补偿与审批有审计</td></tr>
+</tbody></table></div></section>
+
+<section id="parcelops"><h2>12 / 小包、箱袋与交接：战术设计</h2><p class="lead">各状态是独立维度，派生总览不取代事件；同一包裹可有多个站点访问。</p>
+<div class="scroll"><table><thead><tr><th>维度</th><th>候选状态 / 命令</th><th>核心约束</th></tr></thead><tbody>
+<tr><td>站点到仓</td><td>OBSERVED → RECEIPT_PENDING → ACCEPTED / REJECTED</td><td>观察与接收独立；仅扫描袋码不证明内部逐件接收。</td></tr>
+<tr><td>认领关联</td><td>UNMATCHED / AMBIGUOUS → MATCHED → CLAIM_REVOKED</td><td>授权与证据必需；撤销是新事实，已执行操作需要影响分析。</td></tr>
+<tr><td>箱袋</td><td>OPEN → SEALED → REOPENED；可再次封签形成新版本</td><td>同一实物同一时刻至多一个直接父级；禁止循环；并发装载必须原子控制。</td></tr>
+<tr><td>交出进度</td><td>PLANNED → PARTIAL_DISPATCHED → DISPATCHED</td><td>按已交出批次记录，可在其他件未交出时收到部分回执。</td></tr>
+<tr><td>接收对账</td><td>ACK_PENDING / PARTIAL_ACK / DISPUTED / CONFIRMED</td><td>与交出进度并存；汇总回执只能确认汇总数量，不产生单件事实。</td></tr>
+<tr><td>购单与打印</td><td>申请 REQUESTED / READY / FAILED / UNKNOWN；打印单次独立</td><td>接口超时和打印回执缺失为 UNKNOWN；贴标需独立复核；重打不再次购单。</td></tr>
+</tbody></table></div><div class="note">边界示例：计划 100、仓库观察 98、1 暂扣、97 实交，对方汇总声明 96；未交 3 与差异 1 同时存在，不指定丢失件。</div></section>
+
+<section id="reverse"><h2>13 / 跨域流程、费用与逆向</h2><div class="grid two">
+<div class="card"><h3>事件链：国内至海外</h3><p>ArrivalObserved → ReceiptAccepted → MeasurementRecorded → MembershipRecorded / UnitSealed → DispatchRecorded → 承运方声明 → 海外 ArrivalObserved → LabelReady → PrintAttempt / AppliedConfirmed → 尾程交出。</p><p>每条事件保留原始来源、发生与接收时间、主体、租户、关联 ID、对象版本、粒度；命名均为候选。</p></div>
+<div class="card"><h3>分阶段费用</h3><p>仓库输出计费证据，计费域按合同、币种、规则生效时间和费用粒度产生候选；审批、账单、冻结、扣款和退款分别记录。重复事件不得重复收费，已出账调整或冲正不得改写原单。</p></div>
+<div class="card"><h3>截单与部分成功</h3><p>REQUESTED → ASSESSING → EXECUTING → SUCCEEDED / FAILED / UNKNOWN；仓内、承运商和资金动作分别记录。外部超时须查询 / 对账，不能将请求成功解释为物理拦截完成。</p></div>
+<div class="card"><h3>退件与库存</h3><p>到仓观察 → 原单匹配或待认领 → 客户指令 → 授权质检和处置 → 重派、退回或其他 → 费用依据。拆包并入 SKU 库存前由库存权威确认货主、数量与质量。</p></div></div>
+<p class="note">事件顺序可能迟到或重复：保留原始回执、时间、版本和来源；跨域使用可靠发布、幂等消费和对账，外部动作不承诺端到端恰好一次。</p></section>
+
+<section id="traceability"><h2>14 / 规则、场景与验收追踪</h2><p class="lead">每项规则必须能够追溯到业务场景、命令、聚合和测试证据；以下是待评审 / 待执行的设计检查。</p>
+<div class="scroll"><table><thead><tr><th>编号</th><th>领域规则 / 场景</th><th>验收标准</th><th>状态</th></tr></thead><tbody>
+<tr><td>R01</td><td>不同客户相同参考号</td><td>授权范围内区分；多候选进入消歧，不能跨租户泄露。</td><td>候选</td></tr>
+<tr><td>R02</td><td>并发争抢同一库存</td><td>成功预占总量不超过可用；失败可解释，流水与账面一致。</td><td>候选</td></tr>
+<tr><td>R03</td><td>箱转 SKU 商品库存</td><td>按货主、SKU、单位和质量守恒；失败不产生双份库存。</td><td>候选</td></tr>
+<tr><td>R04</td><td>两站点 / 合作仓作业</td><td>站点访问独立；外部声明保留来源、事件时间与粒度。</td><td>候选</td></tr>
+<tr><td>R05</td><td>并发装入两个袋</td><td>最多一条有效直接父级；历史可追溯且禁止循环。</td><td>候选</td></tr>
+<tr><td>R06</td><td>部分交出和汇总确认</td><td>交出与接收进度并存；只定位数量差，不虚构单件回执。</td><td>候选</td></tr>
+<tr><td>R07</td><td>购单、打印、退款超时</td><td>分别保持 UNKNOWN；按外部契约查询或对账，不盲目重试。</td><td>候选</td></tr>
+<tr><td>R08</td><td>截单部分成功 / 无预报退件</td><td>原单、新单、权限、执行方、费用与处置证据关联。</td><td>候选</td></tr>
+<tr><td>R09</td><td>重复或乱序外部事件</td><td>保存原文与版本，安全重放；不重复出库、收费或覆盖更可信事实。</td><td>候选</td></tr>
+<tr><td>R10</td><td>客户需要 FBA 商品履约</td><td>货主 SKU / FNSKU 按实际平台适用规则映射；普通小包不强制 FNSKU。</td><td>候选</td></tr>
+</tbody></table></div>
+<div class="grid two line"><div class="card"><h3>需业务负责人确认</h3><p>业务模式与客户合同、货权、批次与效期、不同仓库作业、代理仓权限、费用触发与退件授权。</p></div><div class="card"><h3>需工程映射确认</h3><p>既有 Parcel 实体和接口、商品主数据和库存事实归属、物流单元权威、事务、现有 BIP 接入契约及迁移边界。</p></div></div><p class="note">本轮深化并非 DDD 完成证明。仍需事件风暴、逐上下文详细聚合与状态转换、工程映射和业务评审；暂不进入开发。</p></section>
+<section id="deepmodel"><h2>15 / 候选上下文与聚合详细目录</h2><p>字段、命令、事件和聚合均为待评审设计；并非已实现 API、物理表或最终拆分。每行验收是设计要求，尚未执行。</p><div class="scroll"><table><thead><tr><th>上下文</th><th>候选聚合</th><th>标识 / 数据维度</th><th>命令</th><th>事实事件</th><th>不变量</th><th>对照案例</th></tr></thead><tbody><tr><td>商品与标识</td><td>ProductIdentity</td><td>租户、货主、内部商品 ID、别名来源及有效期</td><td>登记商品 / 关联标识 / 撤销关联</td><td>ProductRegistered / IdentifierLinked</td><td>同一授权作用域内有效别名的冲突须显式处理；SKU、FNSKU 和包装条码含义不同。</td><td>多货主同 SKU；同一条码多候选不得自动选取。</td></tr><tr><td>收货与质检</td><td>InboundReceipt</td><td>预报引用、站点、货主、收货行、观察与质量记录</td><td>观察 / 核验 / 确认实收 / 记录差异</td><td>ArrivalObserved / ReceiptAccepted</td><td>预报不等于实收；收货与上架入账独立；未知货主先隔离认领。</td><td>100 预报、98 观察、破损 1；不得声明 2 已丢失。</td></tr><tr><td>商品库存</td><td>StockPosition / StockLedger</td><td>租户、货主、仓、位置、SKU、单位、质量、批次及版本</td><td>入账 / 冻结 / 调整 / 移库 / 出库</td><td>StockPosted / StockAdjusted</td><td>唯一库存权威；对应流水与余额原子提交；移库前后按货主及计量单位守恒。</td><td>重复请求不重复入账；并发调整冲突重试。</td></tr><tr><td>预占</td><td>StockReservation</td><td>订单引用、库存分配、数量、有效期、版本</td><td>预占 / 部分释放 / 消耗 / 取消</td><td>StockReserved / ReservationReleased</td><td>并发预占不可超卖；已消耗部分不得当作未消耗释放；超期策略可配置。</td><td>可用 10 并发申请 8 与 8；成功合计不得超 10。</td></tr><tr><td>波次与拣货</td><td>PickingTask</td><td>波次、任务、订单、SKU、库位、计划和实拣</td><td>生成任务 / 分配 / 拣取 / 异常 / 复核</td><td>PickingStarted / PickingConfirmed</td><td>分配是计划，实拣有扫描与数量证据；短拣不伪造完成；不得越权换库位。</td><td>缺货部分拣出，剩余明确等待或取消。</td></tr><tr><td>小包站点作业</td><td>StationVisit / StationPiece</td><td>设施、访问 ID、观察、包裹关联、测量、操作与设备</td><td>观察 / 匹配 / 认领 / 接收 / 测量</td><td>ArrivalObserved / PieceClaimed / MeasurementRecorded</td><td>认领、观察、接收及位置不同状态；原始数据与纠错追加保留。</td><td>无预报登记后认领，再撤销；历史和影响可追溯。</td></tr><tr><td>物流单元</td><td>HandlingUnit</td><td>实例、类型、成员关系、封签、版本</td><td>装入 / 移除 / 封签 / 解封</td><td>MembershipRecorded / UnitSealed</td><td>一个实物最多一个有效直接父级；禁止循环；封签快照不可覆盖。</td><td>两个员工同时装两袋，最多一个成功。</td></tr><tr><td>交接</td><td>Handover</td><td>计划版本、交出批次、接收声明、粒度及对账</td><td>创建计划 / 交出 / 提交声明 / 对账</td><td>DispatchRecorded / AcknowledgementRecorded</td><td>交出与接收独立；仅认证主体可确认自身事实；汇总不可推断件级。</td><td>计划100、实交97、对方汇总96；差1未定位。</td></tr><tr><td>面单</td><td>LabelOrder / PrintAttempt</td><td>包裹、渠道、申请、标签版本、打印与贴标尝试</td><td>申请 / 查询 / 打印 / 重打 / 贴标复核</td><td>LabelReady / PrintUnknown / LabelApplied</td><td>超时为 UNKNOWN；同一次请求遵循外部幂等；打印完成不等于贴标。</td><td>买单超时查询后恢复；打印未知重打不再次购单。</td></tr><tr><td>计费与账务协同</td><td>ChargeEvidence / ChargeCandidate</td><td>作业来源、合同版本、计价粒度、币种与精度</td><td>提交依据 / 计算候选 / 审批 / 冲正</td><td>EvidenceRecorded / ChargeCalculated</td><td>WMS 不直接修改账本；重复业务依据不重复计费；已出账调整追加。</td><td>90 件完成10 件待处理，按合同计价并留版本。</td></tr><tr><td>截单与退件</td><td>InterceptCase / ReturnCase</td><td>原单、来源、授权、处置、外部回执、费用</td><td>申请 / 评估 / 执行 / 核实 / 处置</td><td>InterceptRequested / ReturnObserved / DispositionConfirmed</td><td>请求不等于拦截成功；部分成功及未知可并存；销毁需授权。</td><td>退件无预报认领并重派，原号新号都可追溯。</td></tr><tr><td>代理仓协作</td><td>PartnerWarehouseStatement</td><td>伙伴、站点、SKU 映射、库存快照、时点、来源</td><td>接收声明 / 匹配 / 对账 / 标记过期</td><td>PartnerStatementReceived / DifferenceDetected</td><td>外部库存是声明并可能过期；授权分域；本地缓存不能冒充实时权威。</td><td>失联后库存过期标未知，禁止按新鲜库存承诺。</td></tr></tbody></table></div></section><section id="deepstates"><h2>16 / 状态转换与失败语义</h2><p>状态维度可并存；该表为待评审契约，并不约束已有 Parcel 域的内部实现。</p><div class="scroll"><table><thead><tr><th>对象</th><th>前状态</th><th>命令 / 触发</th><th>结果状态</th><th>前置条件</th><th>失败 / 恢复</th></tr></thead><tbody><tr><td>库存预占</td><td>不存在 / REQUESTED</td><td>预占</td><td>ACTIVE / PARTIAL</td><td>同一库存权威原子校验可用量；部分策略需明确</td><td>不足或版本冲突；幂等相同返回原结果</td></tr><tr><td>库存预占</td><td>ACTIVE / PARTIAL</td><td>消耗或释放</td><td>CONSUMED / RELEASED / PARTIAL</td><td>只操作有效未消耗余额；同事务写流水</td><td>重复事件去重，已交接不能伪装撤销</td></tr><tr><td>入仓</td><td>OBSERVED</td><td>确认接收</td><td>ACCEPTED / REJECTED</td><td>身份和权限或可受理例外，保存物理证据</td><td>未匹配可保持待认领；拒绝不删除观察</td></tr><tr><td>标签申请</td><td>REQUESTED</td><td>供应商响应 / 超时</td><td>READY / FAILED / UNKNOWN</td><td>保存来源和请求 ID；真实回执决定结果</td><td>UNKNOWN 查询或对账，不盲目重买</td></tr><tr><td>箱袋</td><td>OPEN</td><td>封签</td><td>SEALED</td><td>保存成员版本、封签与操作者</td><td>缺少授权或发生并发成员变更则拒绝</td></tr><tr><td>箱袋</td><td>SEALED</td><td>授权解封</td><td>REOPENED</td><td>原因、授权和旧版本；已交接先确定责任</td><td>未取得必需授权则拒绝</td></tr><tr><td>交出</td><td>PLANNED / PARTIAL</td><td>按件交出</td><td>PARTIAL / DISPATCHED</td><td>逐批事实和证据，与对方确认分离</td><td>允许其他件未完成；不重复交出同一有效事实</td></tr><tr><td>接收</td><td>PENDING / PARTIAL</td><td>逐件或汇总声明</td><td>PARTIAL / DISPUTED / CONFIRMED</td><td>认证接收方与证据粒度；与交出进度并存</td><td>汇总不生成逐件确认；差异待核对</td></tr><tr><td>退件</td><td>OBSERVED / UNMATCHED</td><td>认领并接受指令</td><td>IDENTIFIED / AWAITING_INSTRUCTION</td><td>客户授权、原单关联、站点及货权清楚</td><td>多候选消歧；销毁或拆包需额外授权</td></tr><tr><td>资金</td><td>REQUESTED</td><td>外部回执 / 超时</td><td>SUCCEEDED / FAILED / UNKNOWN</td><td>资金权威执行，原币种和动作 ID 保留</td><td>结果未知先对账；已记账调整需冲正</td></tr></tbody></table></div></section><section id="crosscases"><h2>17 / 端到端场景与领域证据</h2><div class="scroll"><table><thead><tr><th>场景</th><th>输入</th><th>领域事件或动作</th><th>不变量</th></tr></thead><tbody><tr><td>S01 预报入仓</td><td>客户预报100，现场98，1损坏</td><td>观察98 → 按协议接收 → 质量异常 → 可上架量复核</td><td>不造100条收货；差异不直接判丢失</td></tr><tr><td>S02 并发预占</td><td>可用10，两订单分别申请8</td><td>库存权威检查版本 → 原子预占 → 记录流水</td><td>成功总量≤10；失败可重试不重复占用</td></tr><tr><td>S03 商品到包裹</td><td>SKU已上架，订单一单多件</td><td>预占 → 波次拣货 → 扫描复核 → 包装成包裹 → 出库</td><td>库存商品与物流包裹不同身份，不重复扣减</td></tr><tr><td>S04 小包跨节点</td><td>国内仓交出97，海外袋级到达</td><td>国内实交 → 承运方声明 → 海外袋级观察 → 可选逐件复核</td><td>未拆袋不得标记全部逐件接收</td></tr><tr><td>S05 换单失败</td><td>供应商超时，打印回执未知</td><td>查询申请 → 对账 → 已获标签才执行打印复核</td><td>未知不得自动成功或重复购单</td></tr><tr><td>S06 截单与退件</td><td>部分交出后客户取消，部分拦截</td><td>截单评估 → 外部请求 → 各件结果 → 退件与费用调整</td><td>保留已发生事实，退款 / 解冻独立</td></tr><tr><td>S07 代理仓过期</td><td>合作仓声明时间已超有效期</td><td>标记过期 → 查询 / 对账 → 新声明进入投影</td><td>不得按过期可用库存做确定性承诺</td></tr><tr><td>S08 FBA换标</td><td>客户商品需平台专用标识</td><td>校验货主与平台 SKU 映射 → 换标服务 → 复核 → 出库</td><td>平台规则及接口需按实际站点和日期验证</td></tr></tbody></table></div></section><footer>依据：已完成的 IDP Parcel 原设计及仓储能力目标；本稿范围是 Parcel 内新增仓储与履约能力，旧全域设计沿用用户确认的既有基线。业务设计 V2.0 中涉及其他仓储产品的备选内容不适用于本稿。<br><a href="https://chatgpt.com/library?file_id=libfile_d1f59d0523b88191b78aecb321de50e0&amp;account_id=personal">查看现有业务设计</a> · <a href="https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis">领域分析参考</a> · <a href="https://learn.microsoft.com/en-us/power-platform/architecture/reference-architectures/transactional-outbox-pattern">事务性 Outbox 参考</a></footer>
+</main></body></html>
