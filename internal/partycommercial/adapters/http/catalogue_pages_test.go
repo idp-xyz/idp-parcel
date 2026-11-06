@@ -129,6 +129,56 @@ func (reader *pagingProductChannelMappingReader) ListProductChannelMappingRevisi
 	return nil, nil
 }
 
+// pagingVersionShellReader 同时是服务产品与商业关系两个读口：三册都是版本壳，行标识都是对象与版本两段。
+type pagingVersionShellReader struct {
+	pageRecorder
+}
+
+func (reader *pagingVersionShellReader) ListServiceProducts(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ServiceProductCatalogueRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.ServiceProductCatalogueRow{
+		ObjectID: "SYN-PRODUCT-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-PRODUCT-1", "v1")
+}
+
+func (reader *pagingVersionShellReader) ListCustomerContracts(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.CustomerContractCatalogueRow{
+		ObjectID: "SYN-CONTRACT-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-CONTRACT-1", "v1")
+}
+
+func (reader *pagingVersionShellReader) ListSupplierAgreements(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
+	return recordPage(&reader.pageRecorder, query, ports.SupplierAgreementCatalogueRow{
+		ObjectID: "SYN-AGREEMENT-1", VersionLabel: "v1", Scope: "SYN-SCOPE-1", Status: "EFFECTIVE",
+		EffectiveStartsAt: pageListedAt, PublishedAt: pageListedAt,
+	}, "SYN-AGREEMENT-1", "v1")
+}
+
+func (*pagingVersionShellReader) FindServiceProduct(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.ServiceProductCatalogueRow, bool, error) {
+	return ports.ServiceProductCatalogueRow{}, false, nil
+}
+
+func (*pagingVersionShellReader) FindCustomerContract(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.CustomerContractCatalogueRow, bool, error) {
+	return ports.CustomerContractCatalogueRow{}, false, nil
+}
+
+func (*pagingVersionShellReader) FindSupplierAgreement(
+	context.Context, domain.TenantID, domain.CommercialObjectID, domain.CommercialVersionLabel,
+) (ports.SupplierAgreementCatalogueRow, bool, error) {
+	return ports.SupplierAgreementCatalogueRow{}, false, nil
+}
+
 // pagedEndpointCase 是一册在表里的一行。selector 是册子选择器（如 kind=PRICE_POLICY），每次请求都带上；badFilter 只在本册
 // 有带词表的筛选维时给。goodQuery 是一组合本册声明的条件，翻页那一步换条件拿旧游标就是拿它与 changedQuery 对照。
 type pagedEndpointCase struct {
@@ -148,6 +198,7 @@ func pagedEndpointCases() []pagedEndpointCase {
 	identities := &pagingPartyIdentityReader{}
 	numberTypes := &pagingRegistrationNumberTypeReader{}
 	mappings := &pagingProductChannelMappingReader{}
+	shells := &pagingVersionShellReader{}
 	return []pagedEndpointCase{
 		{
 			name: "业务参与方",
@@ -193,6 +244,33 @@ func pagedEndpointCases() []pagedEndpointCase {
 			recorder: &mappings.pageRecorder, collection: "mappings",
 			defaultSort: "-registeredAt", badSort: "productObjectId",
 			goodQuery: "q=SYN-PRODUCT", changedQuery: "q=SYN-CH",
+		},
+		{
+			name: "服务产品",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQueryServiceProductsEndpoint(intake, shells)
+			},
+			recorder: &shells.pageRecorder, collection: "products",
+			defaultSort: "-publishedAt", badSort: "registeredAt", badFilter: "status=DRAFT",
+			goodQuery: "status=EFFECTIVE", changedQuery: "status=RETIRED",
+		},
+		{
+			name: "客户合同",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQueryCustomerContractsEndpoint(intake, shells)
+			},
+			recorder: &shells.pageRecorder, collection: "contracts",
+			defaultSort: "-publishedAt", badSort: "status", badFilter: "status=ACTIVE",
+			goodQuery: "status=EFFECTIVE&status=PUBLISHED", changedQuery: "status=EFFECTIVE",
+		},
+		{
+			name: "供应商协议",
+			endpoint: func(intake commercialhttp.CommercialCatalogueIntake) http.Handler {
+				return commercialhttp.NewQuerySupplierAgreementsEndpoint(intake, shells)
+			},
+			recorder: &shells.pageRecorder, collection: "agreements",
+			defaultSort: "-publishedAt", badSort: "supplier", badFilter: "status=DRAFT",
+			goodQuery: "q=SYN-SUPPLIER", changedQuery: "q=SYN-SUPPLIER&status=EFFECTIVE",
 		},
 	}
 }

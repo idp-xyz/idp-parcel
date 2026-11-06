@@ -13,6 +13,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对两个目录端点(ADR-0077,票 master-data-wiring/05)证传输面:方法门、
@@ -67,14 +68,9 @@ func (double *productReaderDouble) ListServiceProducts(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ int,
-) ([]ports.ServiceProductCatalogueRow, error) {
-	if double.err != nil {
-		return nil, double.err
-	}
-	if tenant != double.tenant {
-		return nil, nil
-	}
-	return double.rows, nil
+	_ cataloguepage.Query,
+) (cataloguepage.Result[ports.ServiceProductCatalogueRow], error) {
+	return tenantPage(double.err, tenant == double.tenant, double.rows)
 }
 
 // 目录端点的替身只答列表；按身份读回那一面在 query_commercial_version_test.go 的替身上证，这里答「不在册」只为满足读口形状。

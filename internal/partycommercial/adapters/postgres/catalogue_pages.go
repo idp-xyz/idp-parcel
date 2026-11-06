@@ -63,6 +63,28 @@ func (read catalogueRead[Row]) page(
 	return page, nil
 }
 
+// find 按身份读回一行（ADR-0361）：与取页同一段 listed、同一份列与扫描，只多 key 那两格键过滤——另写一条语句就会长出
+// 第二套行转写，理由在 versionKey 头注。args 同 page。
+func (read catalogueRead[Row]) find(
+	ctx context.Context,
+	db *bentopg.DB,
+	operation string,
+	key *versionKey,
+	args ...any,
+) (Row, bool, error) {
+	var none Row
+	querier, err := db.ReadExecutor(ctx)
+	if err != nil {
+		return none, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	filter, args := key.filter("", args)
+	fetched, err := read.rows(ctx, querier, read.listed+" SELECT "+read.selection+" FROM listed WHERE TRUE"+filter, args, 1)
+	if err != nil {
+		return none, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return firstRow(fetched, nil)
+}
+
 func (read catalogueRead[Row]) rows(
 	ctx context.Context,
 	querier bentopg.Querier,

@@ -100,7 +100,7 @@ func TestAuthorizationRuleCatalogueDoesNotBleedAcrossObjectKinds(t *testing.T) {
 	}
 
 	// 反向也要证一次:授权规则不该出现在服务产品目录里。
-	products, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10)
+	products, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列服务产品:%v", err)
 	}

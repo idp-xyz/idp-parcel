@@ -8,6 +8,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 // closureCatalogueEcho 是五本目录行上与收尾有关的那几格，抹平五种行类型之后逐本同口径断言。
@@ -28,7 +29,7 @@ type closureCatalogueEcho struct {
 func TestFiveCommercialCataloguesEchoTheVersionClosure(t *testing.T) {
 	list := map[domain.CommercialObjectKind]func(context.Context, *adapter.OperationsCatalogue, domain.TenantID) ([]closureCatalogueEcho, error){
 		domain.ServiceProductObject: func(ctx context.Context, c *adapter.OperationsCatalogue, tenant domain.TenantID) ([]closureCatalogueEcho, error) {
-			rows, err := c.ListServiceProducts(ctx, tenant, 20)
+			rows, err := rowsOf(c.ListServiceProducts(ctx, tenant, 20, firstPage(t, ports.ServiceProductPages)))
 			echoes := make([]closureCatalogueEcho, 0, len(rows))
 			for _, r := range rows {
 				echoes = append(echoes, closureCatalogueEcho{r.ObjectID + "/" + r.VersionLabel, r.Status, r.EffectiveEndsAt, r.HasEffectiveEnd,
@@ -37,7 +38,7 @@ func TestFiveCommercialCataloguesEchoTheVersionClosure(t *testing.T) {
 			return echoes, err
 		},
 		domain.CustomerContractObject: func(ctx context.Context, c *adapter.OperationsCatalogue, tenant domain.TenantID) ([]closureCatalogueEcho, error) {
-			rows, err := c.ListCustomerContracts(ctx, tenant, 20)
+			rows, err := rowsOf(c.ListCustomerContracts(ctx, tenant, 20, firstPage(t, ports.CustomerContractPages)))
 			echoes := make([]closureCatalogueEcho, 0, len(rows))
 			for _, r := range rows {
 				echoes = append(echoes, closureCatalogueEcho{r.ObjectID + "/" + r.VersionLabel, r.Status, r.EffectiveEndsAt, r.HasEffectiveEnd,

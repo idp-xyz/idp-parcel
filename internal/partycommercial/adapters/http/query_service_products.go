@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ServiceProductCatalogueReader 是服务产品目录端点消费的读口。
@@ -14,7 +15,8 @@ type ServiceProductCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ServiceProductCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ServiceProductCatalogueRow], error)
 	FindServiceProduct(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -32,7 +34,9 @@ var _ ServiceProductCatalogueReader = ports.ServiceProductCatalogueRead(nil)
 const outcomeServiceProductsListed = "SERVICE_PRODUCTS_LISTED"
 
 // NewQueryServiceProductsEndpoint 交回服务产品目录查阅的 HTTP 入口
-// (GET /commercial-service-products,ADR-0077、票 master-data-wiring/05)。
+// (GET /commercial-service-products,ADR-0077、票 master-data-wiring/05)。查询参数按
+// ports.ServiceProductPages 解码,属传输形状、先于 Intake(ADR-0144 决定六),答法与次序同
+// /commercial-customer-accounts。
 func NewQueryServiceProductsEndpoint(
 	intake CommercialCatalogueIntake,
 	reader ServiceProductCatalogueReader,
@@ -44,13 +48,19 @@ func NewQueryServiceProductsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.ServiceProductPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListServiceProducts(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListServiceProducts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成,不是「空目录」——伪装成后者会让一次该重试的故障变成
 			// 一份看起来如实的空册。
@@ -59,13 +69,14 @@ func NewQueryServiceProductsEndpoint(
 		}
 
 		// 空目录交回空数组而不是 null:调用方判「没有行」不该先判「有没有字段」。
-		bodies := make([]serviceProductBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]serviceProductBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, serviceProductBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, serviceProductListResponse{
 			Outcome:  outcomeServiceProductsListed,
 			Products: bodies,
+			Page:     page.Page(query.Limit),
 		})
 	})
 }
@@ -73,6 +84,7 @@ func NewQueryServiceProductsEndpoint(
 type serviceProductListResponse struct {
 	Outcome  string               `json:"outcome"`
 	Products []serviceProductBody `json:"products"`
+	Page     cataloguepage.Page   `json:"page"`
 }
 
 // serviceProductBody 逐字段透出版本壳与形态。form 缺席即形态未登记——那是合法

@@ -189,7 +189,7 @@ func TestSupplierAgreementCatalogueListsShellsAndTheirContent(t *testing.T) {
 	mustSaveSupplierAgreement(t, transactor, ctx, repository,
 		supplierAgreementOn(t, withContent, "supplier-1", "plan-buy-1"))
 
-	rows, err := catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListSupplierAgreements(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.SupplierAgreementPages)))
 	if err != nil {
 		t.Fatalf("上列供应商协议：%v", err)
 	}

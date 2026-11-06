@@ -43,20 +43,20 @@ func TestServiceProductCatalogueListsVersionShellsWithOptionalForms(t *testing.T
 	mustSaveVersion(t, transactor, ctx, repository, contract)
 	mustSaveServiceProduct(t, transactor, ctx, repository, serviceProductOf(t, withForm))
 
-	rows, err := catalogue.ListServiceProducts(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListServiceProducts(ctx, tenant, 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列服务产品:%v", err)
 	}
 	if len(rows) != 3 {
 		t.Fatalf("上列 %d 行,want 3(合同版本不得进服务产品目录)", len(rows))
 	}
-	// 夹具的 published_at 同刻,次序由对象标识收尾。
-	if rows[0].ObjectID != "product-0" || rows[1].ObjectID != "product-1" || rows[2].ObjectID != "product-2" {
+	// 夹具的 published_at 同刻,次序由对象标识随默认排序同向(降序)收尾(ADR-0144)。
+	if rows[0].ObjectID != "product-2" || rows[1].ObjectID != "product-1" || rows[2].ObjectID != "product-0" {
 		t.Fatalf("次序 = %q/%q/%q", rows[0].ObjectID, rows[1].ObjectID, rows[2].ObjectID)
 	}
 
-	if rows[0].Status != "PUBLISHED" {
-		t.Fatalf("已发布未生效的版本 status = %q, want PUBLISHED", rows[0].Status)
+	if rows[2].Status != "PUBLISHED" {
+		t.Fatalf("已发布未生效的版本 status = %q, want PUBLISHED", rows[2].Status)
 	}
 
 	formed := rows[1]
@@ -73,8 +73,8 @@ func TestServiceProductCatalogueListsVersionShellsWithOptionalForms(t *testing.T
 		t.Fatal("有界区间读回成了开放结束")
 	}
 
-	if rows[2].HasForm || rows[2].Form != "" {
-		t.Fatalf("未登形态的版本长出了形态:hasForm=%v form=%q", rows[2].HasForm, rows[2].Form)
+	if rows[0].HasForm || rows[0].Form != "" {
+		t.Fatalf("未登形态的版本长出了形态:hasForm=%v form=%q", rows[0].HasForm, rows[0].Form)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestServiceProductCatalogueIsTenantIsolated(t *testing.T) {
 	mustSaveVersion(t, transactor, ctx, repository, theirs)
 	mustSaveServiceProduct(t, transactor, ctx, repository, serviceProductOf(t, theirs))
 
-	rows, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列本租户:%v", err)
 	}
@@ -98,7 +98,7 @@ func TestServiceProductCatalogueIsTenantIsolated(t *testing.T) {
 		t.Fatalf("本租户看见了他租的行或形态:len=%d", len(rows))
 	}
 
-	other, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-2"), 10)
+	other, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-2"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("上列他租户:%v", err)
 	}
@@ -106,7 +106,7 @@ func TestServiceProductCatalogueIsTenantIsolated(t *testing.T) {
 		t.Fatalf("他租户自己的行不完整:len=%d", len(other))
 	}
 
-	empty, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-9"), 10)
+	empty, err := rowsOf(catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-9"), 10, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("空租户上列:%v", err)
 	}
@@ -127,7 +127,7 @@ func TestServiceProductCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.
 		mustSaveVersion(t, transactor, ctx, repository, version)
 	}
 
-	rows, err := catalogue.ListServiceProducts(ctx, tenant, 2)
+	rows, err := rowsOf(catalogue.ListServiceProducts(ctx, tenant, 2, firstPage(t, ports.ServiceProductPages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列:%v", err)
 	}
@@ -135,7 +135,7 @@ func TestServiceProductCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.
 		t.Fatalf("limit 2 交回 %d 行", len(rows))
 	}
 
-	if _, err := catalogue.ListServiceProducts(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListServiceProducts(ctx, tenant, 0, firstPage(t, ports.ServiceProductPages))); err == nil {
 		t.Fatal("limit 0 未被拒")
 	}
 	if _, err := catalogue.ListPricePolicies(ctx, tenant, -1); err == nil {

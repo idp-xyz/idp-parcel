@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CommercialRelationCatalogueReader 是商业关系载体目录两个端点消费的读口。
@@ -15,12 +16,14 @@ type CommercialRelationCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerContractCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomerContractCatalogueRow], error)
 	ListSupplierAgreements(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.SupplierAgreementCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error)
 	FindCustomerContract(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -55,6 +58,9 @@ const (
 // 独立的页,照 /commercial-service-products 的先例各配一个入口。把两张页折进一个带
 // kind 的入口,会让「页面加一个页签」和「产品多一类目录」在契约上长成同一个动作。
 
+// 两个列表端点的查询参数各按本册声明解码(ports.CustomerContractPages、SupplierAgreementPages;ADR-0144 决定六),
+// 属传输形状、先于 Intake,答法与次序同 /commercial-customer-accounts。
+
 // NewQueryCustomerContractsEndpoint 交回客户与合同目录查阅的 HTTP 入口
 // (GET /commercial-customer-contracts,ADR-0077)。
 func NewQueryCustomerContractsEndpoint(
@@ -68,13 +74,19 @@ func NewQueryCustomerContractsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.CustomerContractPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListCustomerContracts(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListCustomerContracts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成,不是「空目录」——伪装成后者会让一次该重试的故障变成
 			// 一份看起来如实的空册。
@@ -82,13 +94,14 @@ func NewQueryCustomerContractsEndpoint(
 			return
 		}
 
-		bodies := make([]customerContractBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]customerContractBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, customerContractBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, customerContractListResponse{
 			Outcome:   outcomeCustomerContractsListed,
 			Contracts: bodies,
+			Page:      page.Page(query.Limit),
 		})
 	})
 }
@@ -106,25 +119,32 @@ func NewQuerySupplierAgreementsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.SupplierAgreementPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListSupplierAgreements(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListSupplierAgreements(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]supplierAgreementBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]supplierAgreementBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, supplierAgreementBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, supplierAgreementListResponse{
 			Outcome:    outcomeSupplierAgreementsListed,
 			Agreements: bodies,
+			Page:       page.Page(query.Limit),
 		})
 	})
 }
@@ -132,6 +152,7 @@ func NewQuerySupplierAgreementsEndpoint(
 type customerContractListResponse struct {
 	Outcome   string                 `json:"outcome"`
 	Contracts []customerContractBody `json:"contracts"`
+	Page      cataloguepage.Page     `json:"page"`
 }
 
 // customerContractBody 逐字段透出版本壳与正文。
@@ -203,6 +224,7 @@ func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerCont
 type supplierAgreementListResponse struct {
 	Outcome    string                  `json:"outcome"`
 	Agreements []supplierAgreementBody `json:"agreements"`
+	Page       cataloguepage.Page      `json:"page"`
 }
 
 // supplierAgreementBody 逐字段透出版本壳与正文(0021)。
