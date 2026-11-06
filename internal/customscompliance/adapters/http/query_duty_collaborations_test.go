@@ -11,6 +11,7 @@ import (
 
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // stubDutyCollaborations 是读口替身：记录收到的键，交回预置的册子或故障。
@@ -23,20 +24,20 @@ type stubDutyCollaborations struct {
 }
 
 func (stub *stubDutyCollaborations) ListDutyCollaborations(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]domain.DutyPaymentCollaboration, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[domain.DutyPaymentCollaboration], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.entries, stub.err
+	return cataloguepage.Result[domain.DutyPaymentCollaboration]{Rows: stub.entries, Total: int64(len(stub.entries))}, stub.err
 }
 
 // unreachableDutyCollaborations 断言读口未被触到。
 type unreachableDutyCollaborations struct{ t *testing.T }
 
 func (stub unreachableDutyCollaborations) ListDutyCollaborations(
-	context.Context, domain.TenantID, int,
-) ([]domain.DutyPaymentCollaboration, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[domain.DutyPaymentCollaboration], error) {
 	stub.t.Fatal("a refused request reached the duty collaboration register")
-	return nil, nil
+	return cataloguepage.Result[domain.DutyPaymentCollaboration]{}, nil
 }
 
 func collaborationRequest(method string) *http.Request {
@@ -100,15 +101,15 @@ func TestUnconfiguredDutyCollaborationIntakeRefusesTheQuery(t *testing.T) {
 	assertNoOutcome(t, response)
 }
 
-// Covers: ADR-0077 Decision 四 / 票 sa-cc/10 完成判据 1 — 空册以空数组在场；租户与页大小
-// 从作用域来，不采信请求自报。
+// Covers: ADR-0077 Decision 四 / 票 sa-cc/10 完成判据 1 — 空册以空数组在场；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestAnEmptyDutyCollaborationRegisterAnswersAnEmptyArray(t *testing.T) {
 	register := &stubDutyCollaborations{}
 	endpoint := customshttp.NewQueryDutyCollaborationsEndpoint(
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-duty-collaborations?tenant=TENANT-9&limit=9999", nil))
+	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/customs-duty-collaborations", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())

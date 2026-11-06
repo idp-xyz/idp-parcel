@@ -12,6 +12,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // stubPortsPaths 是读口替身：记录收到的键，交回预置的册子或故障。
@@ -25,34 +26,34 @@ type stubPortsPaths struct {
 }
 
 func (stub *stubPortsPaths) ListCandidatePorts(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CandidatePortEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CandidatePortEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.portEntries, stub.err
+	return cataloguepage.Result[ports.CandidatePortEntry]{Rows: stub.portEntries, Total: int64(len(stub.portEntries))}, stub.err
 }
 
 func (stub *stubPortsPaths) ListDeclarationPaths(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.DeclarationPathEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.DeclarationPathEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.pathEntries, stub.err
+	return cataloguepage.Result[ports.DeclarationPathEntry]{Rows: stub.pathEntries, Total: int64(len(stub.pathEntries))}, stub.err
 }
 
 // unreachablePortsPaths 断言读口未被触到：传输形状的拒绝与未配置格都发生在读库之前。
 type unreachablePortsPaths struct{ t *testing.T }
 
 func (stub unreachablePortsPaths) ListCandidatePorts(
-	context.Context, domain.TenantID, int,
-) ([]ports.CandidatePortEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CandidatePortEntry], error) {
 	stub.t.Fatal("a refused request reached the ports register")
-	return nil, nil
+	return cataloguepage.Result[ports.CandidatePortEntry]{}, nil
 }
 
 func (stub unreachablePortsPaths) ListDeclarationPaths(
-	context.Context, domain.TenantID, int,
-) ([]ports.DeclarationPathEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.DeclarationPathEntry], error) {
 	stub.t.Fatal("a refused request reached the paths register")
-	return nil, nil
+	return cataloguepage.Result[ports.DeclarationPathEntry]{}, nil
 }
 
 func portsPathsRequest(t *testing.T, query string) *http.Request {
@@ -138,8 +139,9 @@ func TestUnconfiguredPortsPathsIntakeRefusesBothRegistriesIdentically(t *testing
 	}
 }
 
-// Covers: 版本区间逐格转写 — 开放版终点缺席、已换版行两端在场；租户与页大小从作用
-// 域来，不采信请求自报；空册以空数组在场。
+// Covers: 版本区间逐格转写 — 开放版终点缺席、已换版行两端在场；空册以空数组在场；
+// 租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestCandidatePortListTranscribesVersionIntervalsVerbatim(t *testing.T) {
 	successionAt := catalogueBaseAt.Add(48 * time.Hour)
 	register := &stubPortsPaths{
@@ -159,13 +161,13 @@ func TestCandidatePortListTranscribesVersionIntervalsVerbatim(t *testing.T) {
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, register,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, portsPathsRequest(t, "?registry=candidate-port&tenant=TENANT-9&limit=9999"))
+	endpoint.ServeHTTP(response, portsPathsRequest(t, "?registry=candidate-port"))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（租户或页大小不是接入面给的）",
 			register.gotTenant, register.gotLimit)
 	}
 	var body struct {

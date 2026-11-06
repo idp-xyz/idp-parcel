@@ -13,6 +13,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var catalogueBaseAt = time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
@@ -62,17 +63,17 @@ type stubRuleCatalogue struct {
 }
 
 func (stub *stubRuleCatalogue) ListCaseRequirementRules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CaseRequirementRuleEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.CaseRequirementRuleEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.requirementEntries, stub.err
+	return cataloguepage.Result[ports.CaseRequirementRuleEntry]{Rows: stub.requirementEntries, Total: int64(len(stub.requirementEntries))}, stub.err
 }
 
 func (stub *stubRuleCatalogue) ListInterpretationRules(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.InterpretationRuleEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.InterpretationRuleEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.interpretationEntries, stub.err
+	return cataloguepage.Result[ports.InterpretationRuleEntry]{Rows: stub.interpretationEntries, Total: int64(len(stub.interpretationEntries))}, stub.err
 }
 
 // unreachableRuleCatalogue 断言读口未被触到：传输形状的拒绝与未配置格都发生在读库
@@ -80,17 +81,17 @@ func (stub *stubRuleCatalogue) ListInterpretationRules(
 type unreachableRuleCatalogue struct{ t *testing.T }
 
 func (stub unreachableRuleCatalogue) ListCaseRequirementRules(
-	context.Context, domain.TenantID, int,
-) ([]ports.CaseRequirementRuleEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CaseRequirementRuleEntry], error) {
 	stub.t.Fatal("a refused request reached the rule catalogue")
-	return nil, nil
+	return cataloguepage.Result[ports.CaseRequirementRuleEntry]{}, nil
 }
 
 func (stub unreachableRuleCatalogue) ListInterpretationRules(
-	context.Context, domain.TenantID, int,
-) ([]ports.InterpretationRuleEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.InterpretationRuleEntry], error) {
 	stub.t.Fatal("a refused request reached the rule catalogue")
-	return nil, nil
+	return cataloguepage.Result[ports.InterpretationRuleEntry]{}, nil
 }
 
 func catalogueRequest(t *testing.T, query string) *http.Request {
@@ -205,8 +206,8 @@ func TestCatalogueIntakeFailuresKeepTheirGrades(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0077 Decision 一/五 — 建案要求规则逐字段转写；租户与页大小从作用域来，
-// 不采信请求自报。
+// Covers: ADR-0077 Decision 一/五 — 建案要求规则逐字段转写；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestCaseRequirementRulesAreListedVerbatim(t *testing.T) {
 	catalogue := &stubRuleCatalogue{
 		requirementEntries: []ports.CaseRequirementRuleEntry{
@@ -218,13 +219,13 @@ func TestCaseRequirementRulesAreListedVerbatim(t *testing.T) {
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, catalogue,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, catalogueRequest(t, "?registry=case-requirement&tenant=TENANT-9&limit=9999"))
+	endpoint.ServeHTTP(response, catalogueRequest(t, "?registry=case-requirement"))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if catalogue.gotTenant != "TENANT-1" || catalogue.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（租户或页大小不是接入面给的）",
 			catalogue.gotTenant, catalogue.gotLimit)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 关务运营查阅的四本记录读面（演示票 demo-2026-10-30/01）：案件与申报单元、提交版本与发送事实、外部监管结果
@@ -13,6 +14,9 @@ import (
 //
 // 行类型用纯字符串与时间，不重建领域对象：这些册由各自的写口经领域构造入库，读面只做转述；
 // 重建一遍只会让「绕过写口改过的坏数据」在查阅面上抛错而不是被看见，而查阅面本来就不该替写口把关。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/09）：查询对象由端点按各册声明（CustomsCasePages 等）
+// 解出，读口答「本页 + 下一游标 + 总数」。
 
 // CaseParcelRecord 是案件关联的一个包裹。
 type CaseParcelRecord struct {
@@ -65,14 +69,14 @@ type CustomsCaseRecord struct {
 	Closure               *CaseClosureRecord
 }
 
-// CustomsCaseRecordRead 按租户上列案件。case 非空时只答该案件（单份读回）。
+// CustomsCaseRecordRead 按租户上列案件。单份读回是按 case 筛选维收窄（CustomsCasePages）。
 type CustomsCaseRecordRead interface {
 	ListCustomsCases(
 		ctx context.Context,
 		tenant domain.TenantID,
-		caseID string,
 		limit int,
-	) ([]CustomsCaseRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomsCaseRecord], error)
 }
 
 // TechnicalReceiptRecord 是一份技术回执。
@@ -119,14 +123,14 @@ type SubmissionVersionRecord struct {
 	Attempts       []SubmissionAttemptRecord
 }
 
-// SubmissionRecordRead 按租户上列提交版本；version 非空时只答该版本。
+// SubmissionRecordRead 按租户上列提交版本。单份读回是按 version 筛选维收窄（SubmissionVersionPages）。
 type SubmissionRecordRead interface {
 	ListSubmissionVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
-		version string,
 		limit int,
-	) ([]SubmissionVersionRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SubmissionVersionRecord], error)
 }
 
 // ExternalResultReleaseRecord 是放行层结果带出的放行事实。
@@ -158,14 +162,16 @@ type ExternalResultViewRecord struct {
 	Release           *ExternalResultReleaseRecord
 }
 
-// ExternalResultViewRead 按租户上列外部监管结果；version 非空时只答归属于该提交版本的。
+// ExternalResultViewRead 按租户上列外部监管结果；version 非空时只答归属于该提交版本的。version 是册子选择器的取值
+// （ExternalResultPages），由端点读出交来，查询对象里不再有它。
 type ExternalResultViewRead interface {
 	ListExternalResults(
 		ctx context.Context,
 		tenant domain.TenantID,
 		version string,
 		limit int,
-	) ([]ExternalResultViewRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExternalResultViewRecord], error)
 }
 
 // AdmissionBasisRecord 是一项答复的依据。
@@ -205,32 +211,35 @@ type ActionAdmissionJudgementRecord struct {
 	JudgedAt   time.Time
 }
 
-// ActionAdmissionJudgementRead 按租户上列判断册；object 非空时只答该对象（包裹或申报单元）的判断，最近的在前。
+// ActionAdmissionJudgementRead 按租户上列判断册，缺省最近的在前；按对象（包裹或申报单元）收窄是 object 筛选维
+// （AdmissionJudgementPages）。
 type ActionAdmissionJudgementRead interface {
 	ListActionAdmissionJudgements(
 		ctx context.Context,
 		tenant domain.TenantID,
-		object string,
 		limit int,
-	) ([]ActionAdmissionJudgementRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ActionAdmissionJudgementRecord], error)
 }
 
 // UnadmittedObjects 是「卡关」那一问的答案：每个对象只看动作时点最晚的那一刻，那一刻上每一次请求取它当前的答复（同一请求重判过的
 // 取最晚那份），其中只要有一份不让动作过门（domain.AdmissionAnswer.Admits 为假），这个对象就卡在关务门禁上、等人处理，只计一次。来源变化不后台重算，放行到了而没人
 // 再过门的对象仍在这里——过门要人再问一次，这正是它还在等的那件事。
 //
-// Count 是这样的对象的全部件数，不受页大小截断；Judgements 是其中一页，每个对象一份（最晚那一刻上不过门的当前答复里最重的那份）。
-// 首页只拿件数，列表页拿这一页；件数若由调用方数这一页，过了页大小就会少报。
+// Count 是这样的对象的全部件数——整个队列的积压，不受页大小截断，也不随筛选与 q 变（该票 spec 取舍 5）；Result 是按查询取的
+// 一页，每个对象一份（最晚那一刻上不过门的当前答复里最重的那份），它的 Total 才是同一组条件下的件数。首页只拿件数，列表页
+// 拿这一页；件数若由调用方数这一页，过了页大小就会少报。
 type UnadmittedObjects struct {
-	Count      int
-	Judgements []ActionAdmissionJudgementRecord
+	cataloguepage.Result[ActionAdmissionJudgementRecord]
+	Count int
 }
 
-// UnadmittedObjectRead 按租户上列卡在关务门禁上的对象，卡得最久的在前。
+// UnadmittedObjectRead 按租户上列卡在关务门禁上的对象，缺省卡得最久的在前（UnadmittedObjectPages）。
 type UnadmittedObjectRead interface {
 	ListUnadmittedObjects(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (UnadmittedObjects, error)
 }

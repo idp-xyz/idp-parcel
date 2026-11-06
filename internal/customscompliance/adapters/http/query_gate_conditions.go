@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // GateConditionCatalogueReader 是本端点消费的读口：门禁条件目录与认定两表的列表读面。
@@ -16,7 +17,8 @@ type GateConditionCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.GateConditionCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.GateConditionCatalogueEntry], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -38,6 +40,8 @@ const outcomeGateConditionsListed = "GATE_CONDITIONS_LISTED"
 // 语义，查阅面转述登记册本身。空 findings 数组是「此动作在此边界本就不受门禁」的
 // 如实一格（领域折为不适用）；「目录未登记 → 未决」表现为整份目录不在 gates 里
 // ——两格含义与关闭义务那对相反（0008 自注），页面文案必须各说各话。
+//
+// 查询参数按 ports.GateConditionPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
 func NewQueryGateConditionsEndpoint(
 	intake CatalogueQueryIntake,
 	reader GateConditionCatalogueReader,
@@ -49,21 +53,26 @@ func NewQueryGateConditionsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.GateConditionPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		entries, err := reader.ListGateConditions(
-			request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListGateConditions(
+			request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]gateConditionCatalogueBody, 0, len(entries))
-		for _, entry := range entries {
+		bodies := make([]gateConditionCatalogueBody, 0, len(page.Rows))
+		for _, entry := range page.Rows {
 			findings := make([]gateFindingBody, 0, len(entry.Findings))
 			for _, finding := range entry.Findings {
 				findings = append(findings, gateFindingBody{
@@ -82,6 +91,7 @@ func NewQueryGateConditionsEndpoint(
 		writeJSON(response, http.StatusOK, gateConditionListResponse{
 			Outcome: outcomeGateConditionsListed,
 			Gates:   bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -89,6 +99,7 @@ func NewQueryGateConditionsEndpoint(
 type gateConditionListResponse struct {
 	Outcome string                       `json:"outcome"`
 	Gates   []gateConditionCatalogueBody `json:"gates"`
+	Page    cataloguepage.Page           `json:"page"`
 }
 
 // gateConditionCatalogueBody 是一份门禁目录连同全部已登记认定。findings 空数组是

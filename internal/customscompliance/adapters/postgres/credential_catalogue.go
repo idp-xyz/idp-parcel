@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CredentialCatalogue 实现 ports.CredentialCatalogueRead：监管凭证登记册的列表读面
@@ -20,8 +21,8 @@ import (
 // RegulatoryCredential，说明有人绕过写口改了它，作错误抛出而不是交回一个半成品对象。
 // uses 为零由领域译成「来源未提供」——本读口不在 SQL 里替它折成任何别的东西。
 //
-// 排序按凭证身份升序，保证分页可重复。limit 非正是调用方编程错误：静默答一页会把
-// 「忘了传」变成一个没人决定过的页大小。
+// 按 ports.CredentialPages 取页，缺省序是凭证身份升序。limit 非正是调用方编程错误：
+// 静默答一页会把「忘了传」变成一个没人决定过的页大小。
 type CredentialCatalogue struct {
 	db *bentopg.DB
 }
@@ -35,64 +36,86 @@ func NewCredentialCatalogue(db *bentopg.DB) (*CredentialCatalogue, error) {
 
 var _ ports.CredentialCatalogueRead = (*CredentialCatalogue)(nil)
 
+// credentialPages 把 ports.CredentialPages 落到列上。q 在凭证身份、签发方、持有方与所涉程序上做字面包含。
+var credentialPages = ports.CredentialPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"credential": "credential_id", "registeredAt": "registered_at"},
+	Identity: []string{"credential_id"},
+	Keyword:  []string{"credential_id", "issuer_ref", "holder_ref", "procedure_ref"},
+})
+
+// scannedCredential 留着凭证身份与登记时刻两列的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
+type scannedCredential struct {
+	entry        ports.CredentialCatalogueEntry
+	id           string
+	registeredAt time.Time
+}
+
 func (catalogue *CredentialCatalogue) ListCredentials(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.CredentialCatalogueEntry, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list credentials: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.CredentialCatalogueEntry], error) {
+	fail := func(err error) (cataloguepage.Result[ports.CredentialCatalogueEntry], error) {
+		return cataloguepage.Result[ports.CredentialCatalogueEntry]{}, fmt.Errorf("list credentials: %w", err)
 	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	const source = "customs_compliance.regulatory_credential"
+	page, err := openPage(ctx, catalogue.db, credentialPages, query, limit, source, "tenant_id = $1", tenant.String())
 	if err != nil {
-		return nil, fmt.Errorf("list credentials: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT credential_id, issuer_ref, holder_ref, procedure_ref,
-		        valid_from, valid_to, uses, registered_at, operation_evidence
-		   FROM customs_compliance.regulatory_credential
-		  WHERE tenant_id = $1
-		  ORDER BY credential_id
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+	rows, err := page.rows(ctx,
+		`credential_id, issuer_ref, holder_ref, procedure_ref,
+		        valid_from, valid_to, uses, registered_at, operation_evidence`,
+		source)
 	if err != nil {
-		return nil, fmt.Errorf("list credentials: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	entries := make([]ports.CredentialCatalogueEntry, 0, limit)
+	fetched := make([]scannedCredential, 0, limit+1)
 	for rows.Next() {
 		var (
-			idRaw, issuer, holder, procedure string
-			validFrom, validTo, registeredAt time.Time
-			uses                             int
-			evidence                         *string
+			row                       scannedCredential
+			issuer, holder, procedure string
+			validFrom, validTo        time.Time
+			uses                      int
+			evidence                  *string
 		)
-		if err := rows.Scan(&idRaw, &issuer, &holder, &procedure,
-			&validFrom, &validTo, &uses, &registeredAt, &evidence); err != nil {
-			return nil, fmt.Errorf("list credentials: %w", err)
+		if err := rows.Scan(&row.id, &issuer, &holder, &procedure,
+			&validFrom, &validTo, &uses, &row.registeredAt, &evidence); err != nil {
+			return fail(err)
 		}
-		id, err := domain.NewCredentialID(idRaw)
+		id, err := domain.NewCredentialID(row.id)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild credential catalogue: %w", err)
+			return fail(fmt.Errorf("rebuild credential catalogue: %w", err))
 		}
 		credential, err := rebuildCredential(id, issuer, holder, procedure, validFrom, validTo, uses)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild credential catalogue: %w", err)
+			return fail(fmt.Errorf("rebuild credential catalogue: %w", err))
 		}
-		entry := ports.CredentialCatalogueEntry{
+		row.entry = ports.CredentialCatalogueEntry{
 			Credential:   credential,
-			RegisteredAt: registeredAt.UTC(),
+			RegisteredAt: row.registeredAt.UTC(),
 		}
 		if evidence != nil {
-			entry.OperationEvidence = *evidence
+			row.entry.OperationEvidence = *evidence
 		}
-		entries = append(entries, entry)
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list credentials: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	result, err := cataloguepage.Finish(query, fetched, limit, page.total,
+		func(row scannedCredential, sortField string) cataloguepage.Position {
+			value := row.id
+			if sortField == "registeredAt" {
+				value = cataloguepage.FormatInstant(row.registeredAt)
+			}
+			return cataloguepage.Position{Value: value, Identity: []string{row.id}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return pageEntries(result, func(row scannedCredential) ports.CredentialCatalogueEntry { return row.entry }), nil
 }

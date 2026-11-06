@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CaseRegisterCatalogueReader 是本端点消费的读口：案件配置各册（就绪判断、提交
@@ -17,17 +18,20 @@ type CaseRegisterCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.ReadinessJudgment, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.ReadinessJudgment], error)
 	ListSubmissionAuthorities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.SubmissionAuthorization, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.SubmissionAuthorization], error)
 	ListClosureObligations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ClosureObligationCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ClosureObligationCatalogueEntry], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -48,6 +52,13 @@ const (
 	registryClosureObligation   = "closure-obligation"
 )
 
+// caseRegisterPages 把 registry 的每个取值对到那一册的声明，判据同 ruleCataloguePages。
+var caseRegisterPages = map[string]*cataloguepage.Catalogue{
+	registryReadiness:           ports.ReadinessJudgmentPages,
+	registrySubmissionAuthority: ports.SubmissionAuthorityPages,
+	registryClosureObligation:   ports.ClosureObligationPages,
+}
+
 // NewQueryCaseRegistersEndpoint 交回案件配置册查阅的 HTTP 入口
 // （GET /customs-case-registers，票 admin-web-page-wiring-frontier/05）。
 //
@@ -60,6 +71,8 @@ const (
 // 全部已登记义务项连同适用区间原样上列，区间判读留给读者。按截点盘点是关闭核对的
 // 判断输入，那是点读 LoadObligationItems 伺候的另一个调用面——查阅面收下截点参数，
 // 就等于让目录读口长出第二种「盘点」语义，而它不该有判断语义。
+//
+// 其余查询参数按选中那一册的声明解码，先于 Intake（ADR-0144 决定六）；cutoff 不在任何一册的声明里，照集外键答 400。
 func NewQueryCaseRegistersEndpoint(
 	intake CatalogueQueryIntake,
 	reader CaseRegisterCatalogueReader,
@@ -72,10 +85,14 @@ func NewQueryCaseRegistersEndpoint(
 		}
 
 		registry := request.URL.Query().Get("registry")
-		if registry != registryReadiness &&
-			registry != registrySubmissionAuthority &&
-			registry != registryClosureObligation {
+		catalogue, known := caseRegisterPages[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -88,11 +105,11 @@ func NewQueryCaseRegistersEndpoint(
 
 		switch registry {
 		case registryReadiness:
-			serveReadinessJudgments(response, request, reader, tenant, query.Limit)
+			serveReadinessJudgments(response, request, reader, tenant, query.Limit, pageQuery)
 		case registrySubmissionAuthority:
-			serveSubmissionAuthorities(response, request, reader, tenant, query.Limit)
+			serveSubmissionAuthorities(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryClosureObligation:
-			serveClosureObligations(response, request, reader, tenant, query.Limit)
+			serveClosureObligations(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -103,14 +120,15 @@ func serveReadinessJudgments(
 	reader CaseRegisterCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	judgments, err := reader.ListReadinessJudgments(request.Context(), tenant, limit)
+	page, err := reader.ListReadinessJudgments(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]readinessJudgmentBody, 0, len(judgments))
-	for _, judgment := range judgments {
+	bodies := make([]readinessJudgmentBody, 0, len(page.Rows))
+	for _, judgment := range page.Rows {
 		body := readinessJudgmentBody{
 			Unit:     judgment.Unit().String(),
 			Basis:    judgment.Basis().String(),
@@ -125,6 +143,7 @@ func serveReadinessJudgments(
 	writeJSON(response, http.StatusOK, readinessJudgmentListResponse{
 		Outcome:   outcomeReadinessJudgmentsListed,
 		Judgments: bodies,
+		Page:      page.Page(limit),
 	})
 }
 
@@ -134,14 +153,15 @@ func serveSubmissionAuthorities(
 	reader CaseRegisterCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	authorizations, err := reader.ListSubmissionAuthorities(request.Context(), tenant, limit)
+	page, err := reader.ListSubmissionAuthorities(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]submissionAuthorityBody, 0, len(authorizations))
-	for _, authorization := range authorizations {
+	bodies := make([]submissionAuthorityBody, 0, len(page.Rows))
+	for _, authorization := range page.Rows {
 		body := submissionAuthorityBody{
 			Unit:      authorization.Unit().String(),
 			Authority: authorization.Authority().String(),
@@ -156,6 +176,7 @@ func serveSubmissionAuthorities(
 	writeJSON(response, http.StatusOK, submissionAuthorityListResponse{
 		Outcome:     outcomeSubmissionAuthoritiesListed,
 		Authorities: bodies,
+		Page:        page.Page(limit),
 	})
 }
 
@@ -165,14 +186,15 @@ func serveClosureObligations(
 	reader CaseRegisterCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	entries, err := reader.ListClosureObligations(request.Context(), tenant, limit)
+	page, err := reader.ListClosureObligations(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]closureObligationCatalogueBody, 0, len(entries))
-	for _, entry := range entries {
+	bodies := make([]closureObligationCatalogueBody, 0, len(page.Rows))
+	for _, entry := range page.Rows {
 		items := make([]closureObligationItemBody, 0, len(entry.Items))
 		for _, registration := range entry.Items {
 			item := closureObligationItemBody{
@@ -199,22 +221,26 @@ func serveClosureObligations(
 	writeJSON(response, http.StatusOK, closureObligationListResponse{
 		Outcome:    outcomeClosureObligationsListed,
 		Catalogues: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
 type readinessJudgmentListResponse struct {
 	Outcome   string                  `json:"outcome"`
 	Judgments []readinessJudgmentBody `json:"judgments"`
+	Page      cataloguepage.Page      `json:"page"`
 }
 
 type submissionAuthorityListResponse struct {
 	Outcome     string                    `json:"outcome"`
 	Authorities []submissionAuthorityBody `json:"authorities"`
+	Page        cataloguepage.Page        `json:"page"`
 }
 
 type closureObligationListResponse struct {
 	Outcome    string                           `json:"outcome"`
 	Catalogues []closureObligationCatalogueBody `json:"catalogues"`
+	Page       cataloguepage.Page               `json:"page"`
 }
 
 // readinessJudgmentBody 逐字段透出一条就绪判断。撤销两列同现同缺（领域 Revoke 两者

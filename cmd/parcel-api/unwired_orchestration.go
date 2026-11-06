@@ -1518,16 +1518,18 @@ func (unwiredComplianceRules) ListCaseRequirementRules(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.CaseRequirementRuleEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.CaseRequirementRuleEntry], error) {
+	return cataloguepage.Result[customsports.CaseRequirementRuleEntry]{}, errOrchestrationNotWired
 }
 
 func (unwiredComplianceRules) ListInterpretationRules(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.InterpretationRuleEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.InterpretationRuleEntry], error) {
+	return cataloguepage.Result[customsports.InterpretationRuleEntry]{}, errOrchestrationNotWired
 }
 
 // unwiredCaseRegisters 是案件配置三册列表读口的占位，方法表与
@@ -1538,24 +1540,27 @@ func (unwiredCaseRegisters) ListReadinessJudgments(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsdomain.ReadinessJudgment, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsdomain.ReadinessJudgment], error) {
+	return cataloguepage.Result[customsdomain.ReadinessJudgment]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseRegisters) ListSubmissionAuthorities(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsdomain.SubmissionAuthorization, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsdomain.SubmissionAuthorization], error) {
+	return cataloguepage.Result[customsdomain.SubmissionAuthorization]{}, errOrchestrationNotWired
 }
 
 func (unwiredCaseRegisters) ListClosureObligations(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.ClosureObligationCatalogueEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.ClosureObligationCatalogueEntry], error) {
+	return cataloguepage.Result[customsports.ClosureObligationCatalogueEntry]{}, errOrchestrationNotWired
 }
 
 // unwiredGateConditions 是门禁条件目录列表读口的占位，方法表与
@@ -1566,8 +1571,9 @@ func (unwiredGateConditions) ListGateConditions(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.GateConditionCatalogueEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.GateConditionCatalogueEntry], error) {
+	return cataloguepage.Result[customsports.GateConditionCatalogueEntry]{}, errOrchestrationNotWired
 }
 
 // unwiredPortsPaths 是口岸与申报路径两册列表读口的占位，方法表与
@@ -1578,16 +1584,18 @@ func (unwiredPortsPaths) ListCandidatePorts(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.CandidatePortEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.CandidatePortEntry], error) {
+	return cataloguepage.Result[customsports.CandidatePortEntry]{}, errOrchestrationNotWired
 }
 
 func (unwiredPortsPaths) ListDeclarationPaths(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.DeclarationPathEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.DeclarationPathEntry], error) {
+	return cataloguepage.Result[customsports.DeclarationPathEntry]{}, errOrchestrationNotWired
 }
 
 // unwiredCredentialCatalogue 是监管凭证册列表读口的占位，方法表与
@@ -1598,8 +1606,9 @@ func (unwiredCredentialCatalogue) ListCredentials(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.CredentialCatalogueEntry, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.CredentialCatalogueEntry], error) {
+	return cataloguepage.Result[customsports.CredentialCatalogueEntry]{}, errOrchestrationNotWired
 }
 
 // unwiredDutyReconciliationCatalogue 是税费付款协作事项与税费付款核对两册列表读口的
@@ -1612,16 +1621,18 @@ func (unwiredDutyReconciliationCatalogue) ListDutyCollaborations(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsdomain.DutyPaymentCollaboration, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsdomain.DutyPaymentCollaboration], error) {
+	return cataloguepage.Result[customsdomain.DutyPaymentCollaboration]{}, errOrchestrationNotWired
 }
 
 func (unwiredDutyReconciliationCatalogue) ListDutyVerifications(
 	context.Context,
 	customsdomain.TenantID,
 	int,
-) ([]customsports.DutyVerificationRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[customsports.DutyVerificationRecord], error) {
+	return cataloguepage.Result[customsports.DutyVerificationRecord]{}, errOrchestrationNotWired
 }
 
 // unwiredPublicationDraftRead 是待批准发布载体读回口的占位：读到的一律是「没接线」，不装成空列表。

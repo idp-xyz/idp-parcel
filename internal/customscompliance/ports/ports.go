@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 type Clock interface {
@@ -843,18 +844,21 @@ type InterpretationRuleEntry struct {
 // 查阅不触发判断、决定或披露——它接存储读面，不接应用编排（分界句沿
 // /shipment-request-views 先例）。不拓宽既有写口与判断读口：扩既有接口会拆全部测试
 // 替身，伴生读口另立（ADR-0077 Decision 五）。租户维在方法签名上；limit 必须为正，
-// 页大小由接入面按渠道契约裁决，读口只拒绝无意义的取值。
+// 页大小由接入面按渠道契约裁决，读口只拒绝无意义的取值。翻页、排序与筛选照 ADR-0144：查询对象由端点按
+// CaseRequirementRulePages / InterpretationRulePages 解出，读口答「本页 + 下一游标 + 总数」。
 type RuleCatalogueRead interface {
 	ListCaseRequirementRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CaseRequirementRuleEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CaseRequirementRuleEntry], error)
 	ListInterpretationRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]InterpretationRuleEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[InterpretationRuleEntry], error)
 }
 
 // ClosureObligationCatalogueEntry 是关闭义务目录上列的一行：目录行（案件与登记时间）
@@ -880,23 +884,27 @@ type ClosureObligationCatalogueEntry struct {
 // 扁平行形状就等于把那道门拆了重考一遍。不拓宽 LoadReadiness / LoadSubmissionAuthority
 // / LoadObligationItems 三个点读口：点读按键伺候编排判断（义务盘点还带业务截点），
 // 上列按租户伺候查阅，两个调用面各答各的问题，扩点读签名会拆全部编排侧测试替身
-// （ADR-0077 Decision 五）。租户在签名上、limit 非正拒、空册答空列表。
+// （ADR-0077 Decision 五）。租户在签名上、limit 非正拒、空册答空列表。各册的查询声明是 ReadinessJudgmentPages、
+// SubmissionAuthorityPages、ClosureObligationPages（ADR-0144）。
 type CaseRegisterCatalogueRead interface {
 	ListReadinessJudgments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.ReadinessJudgment, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.ReadinessJudgment], error)
 	ListSubmissionAuthorities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.SubmissionAuthorization, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.SubmissionAuthorization], error)
 	ListClosureObligations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ClosureObligationCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ClosureObligationCatalogueEntry], error)
 }
 
 // GateConditionCatalogueEntry 是门禁条件目录上列的一行：目录行（范围+动作+边界三维
@@ -924,13 +932,14 @@ type GateConditionCatalogueEntry struct {
 // customs-cases 页（CaseRegisterCatalogueRead 注释里那条对照）。不拓宽
 // LoadPreconditionFindings 点读口：点读按（范围+动作+边界）三维键伺候门禁编排，上列
 // 按租户伺候查阅，两个调用面各答各的问题（ADR-0077 Decision 五）。租户在签名上、
-// limit 非正拒、空册答空列表。
+// limit 非正拒、空册答空列表；查询声明是 GateConditionPages（ADR-0144）。
 type GateConditionCatalogueRead interface {
 	ListGateConditions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]GateConditionCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[GateConditionCatalogueEntry], error)
 }
 
 // CandidatePortEntry 是口岸目录登记册的一行：口岸标识与生效区间。目录事实只有这
@@ -1340,18 +1349,21 @@ type DutyPaymentVerificationHandoff interface {
 // admin-remainder-mechanism-batch/03）。查阅不触发判断、决定或披露——它接存储读面，
 // 不接应用编排；全部版本连同区间原样上列，区间判读留给读者（判据同关闭义务上列不
 // 下推截点那条）。不拓宽 PortsPathsView 点读口：点读按键与时点伺候判断，上列按租户
-// 伺候查阅。租户在签名上、limit 非正拒、空册答空列表。
+// 伺候查阅。租户在签名上、limit 非正拒、空册答空列表；查询声明是 CandidatePortPages / DeclarationPathPages
+// （ADR-0144）。
 type PortsPathsCatalogueRead interface {
 	ListCandidatePorts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CandidatePortEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CandidatePortEntry], error)
 	ListDeclarationPaths(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DeclarationPathEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DeclarationPathEntry], error)
 }
 
 // CredentialCatalogueEntry 是监管凭证登记册上列的一行：在册的不可变凭证版本连同登记
@@ -1373,13 +1385,14 @@ type CredentialCatalogueEntry struct {
 // 适用性判断，上列按租户伺候查阅，两个调用面各答各的问题。按租户上列、不按客户过滤
 // ——本口是运营侧查阅面，客户面的隔离句（UC-CC-003：任一客户查询不得获知其他客户的
 // 存在）由客户面自己守，这里不代它过滤也不冒充它。租户在签名上、limit 非正拒、空册答
-// 空列表。
+// 空列表；查询声明是 CredentialPages（ADR-0144）。
 type CredentialCatalogueRead interface {
 	ListCredentials(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CredentialCatalogueEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CredentialCatalogueEntry], error)
 }
 
 // DutyCollaborationCatalogueRead 是税费付款协作事项登记册的伴生列表读口（ADR-0077
@@ -1388,13 +1401,15 @@ type CredentialCatalogueRead interface {
 // 明确无需付款）在对象上以 Duty / NoPayBasis 两个带布尔的出口分得开，第三种「没有结果
 // 所以不用付」在类型上没有格——换个扁平行形状就等于给它留出一格。不拓宽
 // DutyCollaborationStore 的 FindCollaboration 点读口：点读按（范围，税费引用）伺候核对
-// 编排，上列按租户伺候查阅。租户在签名上、limit 非正拒、空册答空列表。
+// 编排，上列按租户伺候查阅。租户在签名上、limit 非正拒、空册答空列表；查询声明是
+// DutyCollaborationPages（ADR-0144）。
 type DutyCollaborationCatalogueRead interface {
 	ListDutyCollaborations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.DutyPaymentCollaboration, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.DutyPaymentCollaboration], error)
 }
 
 // DutyVerificationCatalogueRead 是税费付款核对登记册的伴生列表读口（ADR-0077 Decision
@@ -1404,11 +1419,12 @@ type DutyCollaborationCatalogueRead interface {
 // 三轴逐格原值透出、不折总状态（ADR-0137 决定三；CONTEXT「分别表达，不能实现为一组互斥总状态」）；「待关联」是资金事实册上的派生（ExternalFundsFactRegister 注释），不是核对
 // 册的列，本口不代算它，也不推任何别的派生。全部版本连同指纹原样上列——迟到事实按新版本
 // 追加、不按到达顺序覆盖，哪一版是当前是读者按 VerifiedAt 判读的事。不拓宽
-// FindVerification 点读口。租户在签名上、limit 非正拒、空册答空列表。
+// FindVerification 点读口。租户在签名上、limit 非正拒、空册答空列表；查询声明是 DutyVerificationPages（ADR-0144）。
 type DutyVerificationCatalogueRead interface {
 	ListDutyVerifications(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DutyVerificationRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DutyVerificationRecord], error)
 }

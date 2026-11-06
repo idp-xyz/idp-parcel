@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // DutyCollaborationCatalogueReader 是本端点消费的读口：税费付款协作事项登记册的列表
@@ -16,7 +17,8 @@ type DutyCollaborationCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.DutyPaymentCollaboration, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.DutyPaymentCollaboration], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -37,6 +39,8 @@ const outcomeDutyCollaborationsListed = "DUTY_COLLABORATIONS_LISTED"
 // 反之——领域构造只放这两种形状（FormDutyCollaboration），第三种「没有结果所以不用付」
 // 在类型上没有格，传输层也不给它留。它不等于支付指令、付款交易、客户回收或监管放行
 // ——响应形里没有那些键。
+//
+// 查询参数按 ports.DutyCollaborationPages 解码，先于 Intake（ADR-0144 决定六）；答复带 page。
 func NewQueryDutyCollaborationsEndpoint(
 	intake CatalogueQueryIntake,
 	reader DutyCollaborationCatalogueReader,
@@ -48,20 +52,25 @@ func NewQueryDutyCollaborationsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.DutyCollaborationPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		collaborations, err := reader.ListDutyCollaborations(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListDutyCollaborations(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]dutyCollaborationBody, 0, len(collaborations))
-		for _, collaboration := range collaborations {
+		bodies := make([]dutyCollaborationBody, 0, len(page.Rows))
+		for _, collaboration := range page.Rows {
 			body := dutyCollaborationBody{
 				Scope:       collaboration.Scope().String(),
 				Kind:        collaboration.Kind().String(),
@@ -81,6 +90,7 @@ func NewQueryDutyCollaborationsEndpoint(
 		writeJSON(response, http.StatusOK, dutyCollaborationListResponse{
 			Outcome:        outcomeDutyCollaborationsListed,
 			Collaborations: bodies,
+			Page:           page.Page(query.Limit),
 		})
 	})
 }
@@ -88,6 +98,7 @@ func NewQueryDutyCollaborationsEndpoint(
 type dutyCollaborationListResponse struct {
 	Outcome        string                  `json:"outcome"`
 	Collaborations []dutyCollaborationBody `json:"collaborations"`
+	Page           cataloguepage.Page      `json:"page"`
 }
 
 // dutyCollaborationBody 逐字段透出一份协作事项。kind 封闭二值（ASSESSED_DUTY /

@@ -25,8 +25,8 @@ func listGates(
 	limit int,
 ) []ports.GateConditionCatalogueEntry {
 	t.Helper()
-	entries, err := catalogue.ListGateConditions(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListGateConditions(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.GateConditionPages)))
 	if err != nil {
 		t.Fatalf("上列门禁条件目录：%v", err)
 	}
@@ -116,10 +116,10 @@ func TestGateConditionCataloguesSeparateUnregisteredFromNotGuarded(t *testing.T)
 func TestGateConditionCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newGateConditionCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
-	if _, err := catalogue.ListGateConditions(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListGateConditions(t.Context(), tenant, 0, firstPage(t, ports.GateConditionPages))); err == nil {
 		t.Fatal("limit=0 的门禁上列被接受了")
 	}
-	if _, err := catalogue.ListGateConditions(t.Context(), tenant, -1); err == nil {
+	if _, err := rowsOf(catalogue.ListGateConditions(t.Context(), tenant, -1, firstPage(t, ports.GateConditionPages))); err == nil {
 		t.Fatal("limit=-1 的门禁上列被接受了")
 	}
 

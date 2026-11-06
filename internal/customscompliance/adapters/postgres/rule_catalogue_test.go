@@ -26,8 +26,8 @@ func listRequirementRules(
 	limit int,
 ) []ports.CaseRequirementRuleEntry {
 	t.Helper()
-	entries, err := catalogue.ListCaseRequirementRules(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListCaseRequirementRules(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.CaseRequirementRulePages)))
 	if err != nil {
 		t.Fatalf("上列建案要求规则：%v", err)
 	}
@@ -41,8 +41,8 @@ func listInterpretationRules(
 	limit int,
 ) []ports.InterpretationRuleEntry {
 	t.Helper()
-	entries, err := catalogue.ListInterpretationRules(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListInterpretationRules(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.InterpretationRulePages)))
 	if err != nil {
 		t.Fatalf("上列解释规则：%v", err)
 	}
@@ -102,7 +102,7 @@ func TestCaseRequirementRulesAreListedInKeyOrderWithinTheTenant(t *testing.T) {
 }
 
 // Covers: ADR-0070 问一甲 — 版本区间逐行读回：开放版终点零值、已闭合版终点在场；
-// 同一选择键内当前版在前；跨租户不可见。
+// 同一选择键内按生效起点升序，与键序同向（ADR-0144 决定三）；跨租户不可见。
 func TestInterpretationRuleVersionsCarryTheirValidityIntervals(t *testing.T) {
 	catalogue, fixture := newRuleCatalogue(t)
 	fixture.seed(t,
@@ -119,22 +119,22 @@ func TestInterpretationRuleVersionsCarryTheirValidityIntervals(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("上列了 %d 条，要 3 条：%+v", len(entries), entries)
 	}
-	// 层名升序：REGULATORY_RECEIPT 在 RELEASE_RESULT 之前；同键内生效起点倒序，
-	// 开放的 v2 在已闭合的 v1 之前。
+	// 层名升序：REGULATORY_RECEIPT 在 RELEASE_RESULT 之前；同键内生效起点升序，
+	// 已闭合的 v1 在开放的 v2 之前。
 	if entries[0].Layer != domain.RegulatoryReceiptLayer || entries[0].Rule.String() != "interpret/receipt/v1" {
 		t.Fatalf("首条不是回执层：%+v", entries[0])
 	}
-	if entries[1].Rule.String() != "interpret/release/v2" || !entries[1].AppliesUntil.IsZero() {
-		t.Fatalf("放行层当前版走样（开放版终点应为零值）：%+v", entries[1])
+	if entries[1].Rule.String() != "interpret/release/v1" {
+		t.Fatalf("放行层历史版走样：%+v", entries[1])
 	}
-	if entries[2].Rule.String() != "interpret/release/v1" {
-		t.Fatalf("放行层历史版走样：%+v", entries[2])
+	if !entries[1].AppliesUntil.Equal(viewBaseAt.Add(48 * time.Hour)) {
+		t.Fatalf("已闭合版终点走样：%v", entries[1].AppliesUntil)
 	}
-	if !entries[2].AppliesUntil.Equal(viewBaseAt.Add(48 * time.Hour)) {
-		t.Fatalf("已闭合版终点走样：%v", entries[2].AppliesUntil)
+	if !entries[1].AppliesFrom.Equal(viewBaseAt) {
+		t.Fatalf("生效起点走样：%v", entries[1].AppliesFrom)
 	}
-	if !entries[2].AppliesFrom.Equal(viewBaseAt) {
-		t.Fatalf("生效起点走样：%v", entries[2].AppliesFrom)
+	if entries[2].Rule.String() != "interpret/release/v2" || !entries[2].AppliesUntil.IsZero() {
+		t.Fatalf("放行层当前版走样（开放版终点应为零值）：%+v", entries[2])
 	}
 	for _, entry := range entries {
 		if entry.Rule.String() == "interpret/other-tenant/v1" {
@@ -146,12 +146,12 @@ func TestInterpretationRuleVersionsCarryTheirValidityIntervals(t *testing.T) {
 // Covers: ADR-0077 Decision 五 — limit 非正拒；limit 截断行数而不是静默全量。
 func TestRuleCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newRuleCatalogue(t)
-	if _, err := catalogue.ListCaseRequirementRules(t.Context(),
-		viewValue(t, domain.NewTenantID, "tenant-a"), 0); err == nil {
+	if _, err := rowsOf(catalogue.ListCaseRequirementRules(t.Context(),
+		viewValue(t, domain.NewTenantID, "tenant-a"), 0, firstPage(t, ports.CaseRequirementRulePages))); err == nil {
 		t.Fatal("limit=0 的建案要求规则上列被接受了")
 	}
-	if _, err := catalogue.ListInterpretationRules(t.Context(),
-		viewValue(t, domain.NewTenantID, "tenant-a"), -1); err == nil {
+	if _, err := rowsOf(catalogue.ListInterpretationRules(t.Context(),
+		viewValue(t, domain.NewTenantID, "tenant-a"), -1, firstPage(t, ports.InterpretationRulePages))); err == nil {
 		t.Fatal("limit=-1 的解释规则上列被接受了")
 	}
 

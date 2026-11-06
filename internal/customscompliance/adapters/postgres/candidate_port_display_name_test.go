@@ -76,7 +76,7 @@ func TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison(t *testing
 	if err != nil || !found || entry.DisplayName.String() != "深圳湾口岸" || !entry.AppliesUntil.Equal(renamedAt) {
 		t.Fatalf("前版点读：found=%v err=%v entry=%+v", found, err, entry)
 	}
-	entries, err := catalogue.ListCandidatePorts(t.Context(), tenant, 10)
+	entries, err := rowsOf(catalogue.ListCandidatePorts(t.Context(), tenant, 10, firstPage(t, ports.CandidatePortPages)))
 	if err != nil {
 		t.Fatalf("上列口岸：%v", err)
 	}
@@ -84,7 +84,7 @@ func TestCandidatePortDisplayNamesRoundTripAndJoinTheReplayComparison(t *testing
 	for _, listed := range entries {
 		names = append(names, listed.Port.String()+"="+listed.DisplayName.String())
 	}
-	want := []string{"SYN-PORT-SIN-01=", "SYN-PORT-SZX-01=皇岗口岸", "SYN-PORT-SZX-01=深圳湾口岸"}
+	want := []string{"SYN-PORT-SIN-01=", "SYN-PORT-SZX-01=深圳湾口岸", "SYN-PORT-SZX-01=皇岗口岸"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("上列名称 = %v，想要 %v", names, want)
 	}

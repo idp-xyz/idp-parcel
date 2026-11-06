@@ -11,6 +11,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 type stubUnadmittedObjects struct {
@@ -21,7 +22,7 @@ type stubUnadmittedObjects struct {
 }
 
 func (stub *stubUnadmittedObjects) ListUnadmittedObjects(
-	_ context.Context, tenant domain.TenantID, limit int,
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
 ) (ports.UnadmittedObjects, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return stub.listed, stub.err
@@ -31,21 +32,21 @@ func serveUnadmitted(t *testing.T, intake customshttp.CatalogueQueryIntake, stub
 	t.Helper()
 	response := httptest.NewRecorder()
 	customshttp.NewQueryUnadmittedObjectsEndpoint(intake, stub).
-		ServeHTTP(response, httptest.NewRequest(method, "/customs-unadmitted-objects?tenant=T9", nil))
+		ServeHTTP(response, httptest.NewRequest(method, "/customs-unadmitted-objects", nil))
 	return response
 }
 
-// Covers: AT-CC-456 — 件数是读口答的全部件数，不是这一页的行数；页比件数短即标截断；行形与判断册同一份；
-// 租户与页大小只取自接入面，请求自报的租户不采信。
+// Covers: AT-CC-456 — 件数是读口答的全部件数，不是这一页的行数；还有下一页即标截断（该票 spec 取舍 5）；行形与判断册同一份；
+// 租户与页大小只取自接入面。
 func TestUnadmittedObjectQueryCarriesTheWholeCountAndMarksTruncation(t *testing.T) {
 	stub := &stubUnadmittedObjects{listed: ports.UnadmittedObjects{
 		Count: 4,
-		Judgements: []ports.ActionAdmissionJudgementRecord{{
+		Result: cataloguepage.Result[ports.ActionAdmissionJudgementRecord]{Next: "SYN-NEXT-PAGE", Total: 4, Rows: []ports.ActionAdmissionJudgementRecord{{
 			Judgement: "J-1", Object: "PCL-1", Intent: "DEPARTURE", Node: "NODE-A", OnwardNode: "NODE-B",
 			ActionAt: catalogueBaseAt, CrossZone: "CROSSING", Answer: "BLOCKED", JudgedAt: catalogueBaseAt,
 			Findings: []ports.AdmissionFindingRecord{{Action: "CROSS_CUSTOMS_MOVEMENT", Answer: "BLOCKED",
 				Bases: []ports.AdmissionBasisRecord{{Cause: "RELEASE_NOT_RECEIVED", Scope: "UNIT-1"}}}},
-		}},
+		}}},
 	}}
 	response := serveUnadmitted(t, grantedCatalogueIntake{tenant: "T1", limit: 5}, stub, http.MethodGet)
 	if response.Code != http.StatusOK || stub.gotTenant != "T1" || stub.gotLimit != 5 {

@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PortsPathsCatalogueReader 是本端点消费的读口：口岸目录与申报路径目录两本册子的
@@ -18,12 +19,14 @@ type PortsPathsCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CandidatePortEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CandidatePortEntry], error)
 	ListDeclarationPaths(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.DeclarationPathEntry, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DeclarationPathEntry], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -43,6 +46,12 @@ const (
 	registryDeclarationPath = "declaration-path"
 )
 
+// portsPathsPages 把 registry 的每个取值对到那一册的声明，判据同 ruleCataloguePages。
+var portsPathsPages = map[string]*cataloguepage.Catalogue{
+	registryCandidatePort:   ports.CandidatePortPages,
+	registryDeclarationPath: ports.DeclarationPathPages,
+}
+
 // NewQueryPortsPathsEndpoint 交回口岸目录与申报路径目录查阅的 HTTP 入口
 // （GET /customs-ports-paths，票 admin-remainder-mechanism-batch/03）。
 //
@@ -54,6 +63,8 @@ const (
 // 全部版本连同生效区间原样上列，**不下推评估时点参数**（裁决同关闭义务上列不下推
 // 截点那条）：按时点解析版本是候选读取的判断输入，那是点读 PortsPathsView 伺候的
 // 另一个调用面——查阅面收下时点参数，就等于让目录读口长出第二种「解析」语义。
+//
+// 其余查询参数按选中那一册的声明解码，先于 Intake（ADR-0144 决定六）；时点参数不在任何一册的声明里，照集外键答 400。
 func NewQueryPortsPathsEndpoint(
 	intake CatalogueQueryIntake,
 	reader PortsPathsCatalogueReader,
@@ -66,8 +77,14 @@ func NewQueryPortsPathsEndpoint(
 		}
 
 		registry := request.URL.Query().Get("registry")
-		if registry != registryCandidatePort && registry != registryDeclarationPath {
+		catalogue, known := portsPathsPages[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -80,9 +97,9 @@ func NewQueryPortsPathsEndpoint(
 
 		switch registry {
 		case registryCandidatePort:
-			serveCandidatePorts(response, request, reader, tenant, query.Limit)
+			serveCandidatePorts(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryDeclarationPath:
-			serveDeclarationPaths(response, request, reader, tenant, query.Limit)
+			serveDeclarationPaths(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -93,16 +110,17 @@ func serveCandidatePorts(
 	reader PortsPathsCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	entries, err := reader.ListCandidatePorts(request.Context(), tenant, limit)
+	page, err := reader.ListCandidatePorts(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成终局。
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]candidatePortBody, 0, len(entries))
-	for _, entry := range entries {
+	bodies := make([]candidatePortBody, 0, len(page.Rows))
+	for _, entry := range page.Rows {
 		body := candidatePortBody{
 			Port:        entry.Port.String(),
 			DisplayName: entry.DisplayName.String(),
@@ -118,6 +136,7 @@ func serveCandidatePorts(
 	writeJSON(response, http.StatusOK, candidatePortListResponse{
 		Outcome: outcomeCandidatePortsListed,
 		Ports:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -127,14 +146,15 @@ func serveDeclarationPaths(
 	reader PortsPathsCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	entries, err := reader.ListDeclarationPaths(request.Context(), tenant, limit)
+	page, err := reader.ListDeclarationPaths(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]declarationPathBody, 0, len(entries))
-	for _, entry := range entries {
+	bodies := make([]declarationPathBody, 0, len(page.Rows))
+	for _, entry := range page.Rows {
 		body := declarationPathBody{
 			Path:            entry.Path.String(),
 			Port:            entry.Route.Port().String(),
@@ -150,17 +170,20 @@ func serveDeclarationPaths(
 	writeJSON(response, http.StatusOK, declarationPathListResponse{
 		Outcome: outcomeDeclarationPathsListed,
 		Paths:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type candidatePortListResponse struct {
 	Outcome string              `json:"outcome"`
 	Ports   []candidatePortBody `json:"ports"`
+	Page    cataloguepage.Page  `json:"page"`
 }
 
 type declarationPathListResponse struct {
 	Outcome string                `json:"outcome"`
 	Paths   []declarationPathBody `json:"paths"`
+	Page    cataloguepage.Page    `json:"page"`
 }
 
 // candidatePortBody 逐字段透出一版口岸合规候选：口岸标识、可选的显示名称与生效区间。

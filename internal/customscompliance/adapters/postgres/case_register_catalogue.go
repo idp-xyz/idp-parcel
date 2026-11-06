@@ -10,6 +10,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CaseRegisterCatalogue 实现 ports.CaseRegisterCatalogueRead：案件配置各册
@@ -26,8 +27,10 @@ import (
 // 查询 json_agg 各聚各的，形状循 visibilityexception OperationsCatalogue 的同款教训
 // 注释——多族 LEFT JOIN 会互相做笛卡尔积。
 //
-// 排序按登记册键升序（就绪/授权按单元，义务按案件、项内按义务名），保证分页可重复。
-// limit 非正是调用方编程错误：静默答一页会把「忘了传」变成一个没人决定过的页大小。
+// 三册按 ports 里的声明（ReadinessJudgmentPages / SubmissionAuthorityPages /
+// ClosureObligationPages）取页，缺省序是登记册键升序（就绪/授权按单元，义务按案件），
+// 义务项在一行之内按义务名排。limit 非正是调用方编程错误：静默答一页会把「忘了传」
+// 变成一个没人决定过的页大小。
 type CaseRegisterCatalogue struct {
 	db *bentopg.DB
 }
@@ -41,130 +44,171 @@ func NewCaseRegisterCatalogue(db *bentopg.DB) (*CaseRegisterCatalogue, error) {
 
 var _ ports.CaseRegisterCatalogueRead = (*CaseRegisterCatalogue)(nil)
 
+// readinessJudgmentPages 把 ports.ReadinessJudgmentPages 落到列上。q 在单元、就绪依据与撤销方上做字面包含。
+var readinessJudgmentPages = ports.ReadinessJudgmentPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"unit": "unit_id", "judgedAt": "judged_at"},
+	Identity: []string{"unit_id"},
+	Keyword:  []string{"unit_id", "basis_ref", "revoked_by"},
+})
+
+// scannedReadinessJudgment 留着单元与判断时刻两列的原值：游标位置取自 ORDER BY 用的列，不取重建后的领域对象。
+type scannedReadinessJudgment struct {
+	judgment domain.ReadinessJudgment
+	unit     string
+	judgedAt time.Time
+}
+
 func (catalogue *CaseRegisterCatalogue) ListReadinessJudgments(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]domain.ReadinessJudgment, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list readiness judgments: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.ReadinessJudgment], error) {
+	fail := func(err error) (cataloguepage.Result[domain.ReadinessJudgment], error) {
+		return cataloguepage.Result[domain.ReadinessJudgment]{}, fmt.Errorf("list readiness judgments: %w", err)
 	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	const source = "customs_compliance.readiness_judgment"
+	page, err := openPage(ctx, catalogue.db, readinessJudgmentPages, query, limit, source, "tenant_id = $1", tenant.String())
 	if err != nil {
-		return nil, fmt.Errorf("list readiness judgments: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT unit_id, basis_ref, judged_at, revoked_by, revoked_at
-		   FROM customs_compliance.readiness_judgment
-		  WHERE tenant_id = $1
-		  ORDER BY unit_id
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+	rows, err := page.rows(ctx, "unit_id, basis_ref, judged_at, revoked_by, revoked_at", source)
 	if err != nil {
-		return nil, fmt.Errorf("list readiness judgments: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	judgments := make([]domain.ReadinessJudgment, 0, limit)
+	fetched := make([]scannedReadinessJudgment, 0, limit+1)
 	for rows.Next() {
 		var (
-			unitRaw, basisRaw string
-			judgedAt          time.Time
-			revokedBy         *string
-			revokedAt         *time.Time
+			row       scannedReadinessJudgment
+			basisRaw  string
+			revokedBy *string
+			revokedAt *time.Time
 		)
-		if err := rows.Scan(&unitRaw, &basisRaw, &judgedAt, &revokedBy, &revokedAt); err != nil {
-			return nil, fmt.Errorf("list readiness judgments: %w", err)
+		if err := rows.Scan(&row.unit, &basisRaw, &row.judgedAt, &revokedBy, &revokedAt); err != nil {
+			return fail(err)
 		}
-		unit, err := domain.NewDeclarationUnitID(unitRaw)
+		unit, err := domain.NewDeclarationUnitID(row.unit)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild readiness judgment: %w", err)
+			return fail(fmt.Errorf("rebuild readiness judgment: %w", err))
 		}
 		basis, err := domain.NewReadinessBasisReference(basisRaw)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild readiness judgment: %w", err)
+			return fail(fmt.Errorf("rebuild readiness judgment: %w", err))
 		}
-		judgment, err := domain.JudgeReady(unit, basis, judgedAt)
+		judgment, err := domain.JudgeReady(unit, basis, row.judgedAt)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild readiness judgment: %w", err)
+			return fail(fmt.Errorf("rebuild readiness judgment: %w", err))
 		}
 		if revokedBy != nil {
 			judgment, err = judgment.Revoke(*revokedBy, *revokedAt)
 			if err != nil {
-				return nil, fmt.Errorf("rebuild readiness judgment: %w", err)
+				return fail(fmt.Errorf("rebuild readiness judgment: %w", err))
 			}
 		}
-		judgments = append(judgments, judgment)
+		row.judgment = judgment
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list readiness judgments: %w", err)
+		return fail(err)
 	}
-	return judgments, nil
+	result, err := cataloguepage.Finish(query, fetched, limit, page.total,
+		func(row scannedReadinessJudgment, sortField string) cataloguepage.Position {
+			value := row.unit
+			if sortField == "judgedAt" {
+				value = cataloguepage.FormatInstant(row.judgedAt)
+			}
+			return cataloguepage.Position{Value: value, Identity: []string{row.unit}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return pageEntries(result, func(row scannedReadinessJudgment) domain.ReadinessJudgment { return row.judgment }), nil
+}
+
+// submissionAuthorityPages 把 ports.SubmissionAuthorityPages 落到列上。q 在单元、授权引用与撤销方上做字面包含。
+var submissionAuthorityPages = ports.SubmissionAuthorityPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"unit": "unit_id", "grantedAt": "granted_at"},
+	Identity: []string{"unit_id"},
+	Keyword:  []string{"unit_id", "authority_ref", "revoked_by"},
+})
+
+// scannedSubmissionAuthority 留着单元与授予时刻两列的原值，理由同 scannedReadinessJudgment。
+type scannedSubmissionAuthority struct {
+	authorization domain.SubmissionAuthorization
+	unit          string
+	grantedAt     time.Time
 }
 
 func (catalogue *CaseRegisterCatalogue) ListSubmissionAuthorities(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]domain.SubmissionAuthorization, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list submission authorities: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.SubmissionAuthorization], error) {
+	fail := func(err error) (cataloguepage.Result[domain.SubmissionAuthorization], error) {
+		return cataloguepage.Result[domain.SubmissionAuthorization]{}, fmt.Errorf("list submission authorities: %w", err)
 	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	const source = "customs_compliance.submission_authority"
+	page, err := openPage(ctx, catalogue.db, submissionAuthorityPages, query, limit, source, "tenant_id = $1", tenant.String())
 	if err != nil {
-		return nil, fmt.Errorf("list submission authorities: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT unit_id, authority_ref, granted_at, revoked_by, revoked_at
-		   FROM customs_compliance.submission_authority
-		  WHERE tenant_id = $1
-		  ORDER BY unit_id
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+	rows, err := page.rows(ctx, "unit_id, authority_ref, granted_at, revoked_by, revoked_at", source)
 	if err != nil {
-		return nil, fmt.Errorf("list submission authorities: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	authorizations := make([]domain.SubmissionAuthorization, 0, limit)
+	fetched := make([]scannedSubmissionAuthority, 0, limit+1)
 	for rows.Next() {
 		var (
-			unitRaw, authorityRaw string
-			grantedAt             time.Time
-			revokedBy             *string
-			revokedAt             *time.Time
+			row          scannedSubmissionAuthority
+			authorityRaw string
+			revokedBy    *string
+			revokedAt    *time.Time
 		)
-		if err := rows.Scan(&unitRaw, &authorityRaw, &grantedAt, &revokedBy, &revokedAt); err != nil {
-			return nil, fmt.Errorf("list submission authorities: %w", err)
+		if err := rows.Scan(&row.unit, &authorityRaw, &row.grantedAt, &revokedBy, &revokedAt); err != nil {
+			return fail(err)
 		}
-		unit, err := domain.NewDeclarationUnitID(unitRaw)
+		unit, err := domain.NewDeclarationUnitID(row.unit)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild submission authority: %w", err)
+			return fail(fmt.Errorf("rebuild submission authority: %w", err))
 		}
 		authority, err := domain.NewSubmissionAuthorityReference(authorityRaw)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild submission authority: %w", err)
+			return fail(fmt.Errorf("rebuild submission authority: %w", err))
 		}
-		authorization, err := domain.GrantSubmissionAuthority(unit, authority, grantedAt)
+		authorization, err := domain.GrantSubmissionAuthority(unit, authority, row.grantedAt)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild submission authority: %w", err)
+			return fail(fmt.Errorf("rebuild submission authority: %w", err))
 		}
 		if revokedBy != nil {
 			authorization, err = authorization.Revoke(*revokedBy, *revokedAt)
 			if err != nil {
-				return nil, fmt.Errorf("rebuild submission authority: %w", err)
+				return fail(fmt.Errorf("rebuild submission authority: %w", err))
 			}
 		}
-		authorizations = append(authorizations, authorization)
+		row.authorization = authorization
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list submission authorities: %w", err)
+		return fail(err)
 	}
-	return authorizations, nil
+	result, err := cataloguepage.Finish(query, fetched, limit, page.total,
+		func(row scannedSubmissionAuthority, sortField string) cataloguepage.Position {
+			value := row.unit
+			if sortField == "grantedAt" {
+				value = cataloguepage.FormatInstant(row.grantedAt)
+			}
+			return cataloguepage.Position{Value: value, Identity: []string{row.unit}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return pageEntries(result,
+		func(row scannedSubmissionAuthority) domain.SubmissionAuthorization { return row.authorization }), nil
 }
 
 // closureObligationItemDocument 是义务项在 json_agg 里的临时词形。handedTo 与
@@ -209,21 +253,39 @@ func (document closureObligationItemDocument) registration() (ports.ObligationRe
 	return registration, nil
 }
 
+// closureObligationPages 把 ports.ClosureObligationPages 落到目录表的列上。q 只在案件引用上做字面包含：义务项是另一张表里
+// 的子集，进检索就得为每行另做一次子查询，本册的行是「一个案件的义务目录」，按案件找就够。
+var closureObligationPages = ports.ClosureObligationPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"case": "catalog.case_ref", "registeredAt": "catalog.registered_at"},
+	Identity: []string{"catalog.case_ref"},
+	Keyword:  []string{"catalog.case_ref"},
+})
+
+// scannedClosureObligation 留着案件与登记时刻两列的原值，理由同 scannedReadinessJudgment。
+type scannedClosureObligation struct {
+	entry        ports.ClosureObligationCatalogueEntry
+	caseRef      string
+	registeredAt time.Time
+}
+
 func (catalogue *CaseRegisterCatalogue) ListClosureObligations(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ClosureObligationCatalogueEntry, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list closure obligations: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClosureObligationCatalogueEntry], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ClosureObligationCatalogueEntry], error) {
+		return cataloguepage.Result[ports.ClosureObligationCatalogueEntry]{},
+			fmt.Errorf("list closure obligations: %w", err)
 	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	const source = "customs_compliance.closure_obligation_catalog AS catalog"
+	page, err := openPage(ctx, catalogue.db, closureObligationPages, query, limit, source,
+		"catalog.tenant_id = $1", tenant.String())
 	if err != nil {
-		return nil, fmt.Errorf("list closure obligations: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT catalog.case_ref, catalog.registered_at,
+	rows, err := page.rows(ctx,
+		`catalog.case_ref, catalog.registered_at,
 		        (SELECT COALESCE(
 		                    json_agg(
 		                        json_build_object(
@@ -242,52 +304,59 @@ func (catalogue *CaseRegisterCatalogue) ListClosureObligations(
 		                )
 		           FROM customs_compliance.closure_obligation_item AS item
 		          WHERE item.tenant_id = catalog.tenant_id
-		            AND item.case_ref  = catalog.case_ref)
-		   FROM customs_compliance.closure_obligation_catalog AS catalog
-		  WHERE catalog.tenant_id = $1
-		  ORDER BY catalog.case_ref
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+		            AND item.case_ref  = catalog.case_ref)`,
+		source)
 	if err != nil {
-		return nil, fmt.Errorf("list closure obligations: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	entries := make([]ports.ClosureObligationCatalogueEntry, 0, limit)
+	fetched := make([]scannedClosureObligation, 0, limit+1)
 	for rows.Next() {
 		var (
-			caseRaw      string
-			registeredAt time.Time
-			itemsJSON    []byte
+			row       scannedClosureObligation
+			itemsJSON []byte
 		)
-		if err := rows.Scan(&caseRaw, &registeredAt, &itemsJSON); err != nil {
-			return nil, fmt.Errorf("list closure obligations: %w", err)
+		if err := rows.Scan(&row.caseRef, &row.registeredAt, &itemsJSON); err != nil {
+			return fail(err)
 		}
-		caseRef, err := domain.NewCustomsCaseID(caseRaw)
+		caseRef, err := domain.NewCustomsCaseID(row.caseRef)
 		if err != nil {
-			return nil, fmt.Errorf("rebuild closure obligation catalogue: %w", err)
+			return fail(fmt.Errorf("rebuild closure obligation catalogue: %w", err))
 		}
 		var documents []closureObligationItemDocument
 		if err := json.Unmarshal(itemsJSON, &documents); err != nil {
-			return nil, fmt.Errorf("list closure obligations: 义务项集解码：%w", err)
+			return fail(fmt.Errorf("义务项集解码：%w", err))
 		}
 		items := make([]ports.ObligationRegistration, 0, len(documents))
 		for _, document := range documents {
 			registration, err := document.registration()
 			if err != nil {
-				return nil, fmt.Errorf("rebuild closure obligation catalogue: %w", err)
+				return fail(fmt.Errorf("rebuild closure obligation catalogue: %w", err))
 			}
 			items = append(items, registration)
 		}
-		entries = append(entries, ports.ClosureObligationCatalogueEntry{
+		row.entry = ports.ClosureObligationCatalogueEntry{
 			Case:         caseRef,
-			RegisteredAt: registeredAt.UTC(),
+			RegisteredAt: row.registeredAt.UTC(),
 			Items:        items,
-		})
+		}
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list closure obligations: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	result, err := cataloguepage.Finish(query, fetched, limit, page.total,
+		func(row scannedClosureObligation, sortField string) cataloguepage.Position {
+			value := row.caseRef
+			if sortField == "registeredAt" {
+				value = cataloguepage.FormatInstant(row.registeredAt)
+			}
+			return cataloguepage.Position{Value: value, Identity: []string{row.caseRef}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return pageEntries(result,
+		func(row scannedClosureObligation) ports.ClosureObligationCatalogueEntry { return row.entry }), nil
 }

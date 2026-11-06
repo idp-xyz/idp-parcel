@@ -12,6 +12,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // stubCaseRegisters 是读口替身：记录收到的键，交回预置的册子或故障。
@@ -26,24 +27,24 @@ type stubCaseRegisters struct {
 }
 
 func (stub *stubCaseRegisters) ListReadinessJudgments(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]domain.ReadinessJudgment, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[domain.ReadinessJudgment], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.judgments, stub.err
+	return cataloguepage.Result[domain.ReadinessJudgment]{Rows: stub.judgments, Total: int64(len(stub.judgments))}, stub.err
 }
 
 func (stub *stubCaseRegisters) ListSubmissionAuthorities(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]domain.SubmissionAuthorization, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[domain.SubmissionAuthorization], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.authorizations, stub.err
+	return cataloguepage.Result[domain.SubmissionAuthorization]{Rows: stub.authorizations, Total: int64(len(stub.authorizations))}, stub.err
 }
 
 func (stub *stubCaseRegisters) ListClosureObligations(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ClosureObligationCatalogueEntry, error) {
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.ClosureObligationCatalogueEntry], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
-	return stub.obligations, stub.err
+	return cataloguepage.Result[ports.ClosureObligationCatalogueEntry]{Rows: stub.obligations, Total: int64(len(stub.obligations))}, stub.err
 }
 
 // unreachableCaseRegisters 断言读口未被触到：传输形状的拒绝与未配置格都发生在读库
@@ -51,24 +52,24 @@ func (stub *stubCaseRegisters) ListClosureObligations(
 type unreachableCaseRegisters struct{ t *testing.T }
 
 func (stub unreachableCaseRegisters) ListReadinessJudgments(
-	context.Context, domain.TenantID, int,
-) ([]domain.ReadinessJudgment, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[domain.ReadinessJudgment], error) {
 	stub.t.Fatal("a refused request reached the case registers")
-	return nil, nil
+	return cataloguepage.Result[domain.ReadinessJudgment]{}, nil
 }
 
 func (stub unreachableCaseRegisters) ListSubmissionAuthorities(
-	context.Context, domain.TenantID, int,
-) ([]domain.SubmissionAuthorization, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[domain.SubmissionAuthorization], error) {
 	stub.t.Fatal("a refused request reached the case registers")
-	return nil, nil
+	return cataloguepage.Result[domain.SubmissionAuthorization]{}, nil
 }
 
 func (stub unreachableCaseRegisters) ListClosureObligations(
-	context.Context, domain.TenantID, int,
-) ([]ports.ClosureObligationCatalogueEntry, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ClosureObligationCatalogueEntry], error) {
 	stub.t.Fatal("a refused request reached the case registers")
-	return nil, nil
+	return cataloguepage.Result[ports.ClosureObligationCatalogueEntry]{}, nil
 }
 
 func registerRequest(t *testing.T, query string) *http.Request {
@@ -169,7 +170,8 @@ func TestUnconfiguredCaseRegisterIntakeRefusesAllRegistriesIdentically(t *testin
 }
 
 // Covers: CONTEXT「提交授权与就绪判断分别形成和失效」 / 票 05 形状约束一二 — 就绪与授权分册分格转写：有效行撤销两列
-// 缺席，失效行原判断与失效两列同场；租户与页大小从作用域来，不采信请求自报。
+// 缺席，失效行原判断与失效两列同场；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 	revoked, err := readinessOf(t, "unit-2", "basis-2", catalogueBaseAt).
 		Revoke("RULES-CHANGED", catalogueBaseAt.Add(24*time.Hour))
@@ -186,13 +188,13 @@ func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, registers,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, registerRequest(t, "?registry=readiness&tenant=TENANT-9&limit=9999"))
+	endpoint.ServeHTTP(response, registerRequest(t, "?registry=readiness"))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if registers.gotTenant != "TENANT-1" || registers.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（租户或页大小不是接入面给的）",
 			registers.gotTenant, registers.gotLimit)
 	}
 	var body struct {

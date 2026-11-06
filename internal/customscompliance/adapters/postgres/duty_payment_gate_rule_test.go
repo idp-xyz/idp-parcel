@@ -330,7 +330,7 @@ func TestTheGateCatalogueListsTheDutyPaymentRuleBesideFindings(t *testing.T) {
 		t.Fatalf("构造目录读口：%v", err)
 	}
 
-	entries, err := catalogue.ListGateConditions(t.Context(), tenant, 10)
+	entries, err := rowsOf(catalogue.ListGateConditions(t.Context(), tenant, 10, firstPage(t, ports.GateConditionPages)))
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("上列：err=%v entries=%d", err, len(entries))
 	}

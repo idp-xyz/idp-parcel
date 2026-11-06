@@ -26,8 +26,8 @@ func listCredentials(
 	limit int,
 ) []ports.CredentialCatalogueEntry {
 	t.Helper()
-	entries, err := catalogue.ListCredentials(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListCredentials(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.CredentialPages)))
 	if err != nil {
 		t.Fatalf("上列凭证册：%v", err)
 	}
@@ -103,10 +103,10 @@ func TestCredentialCatalogueListsRegisteredVersionsPerTenant(t *testing.T) {
 func TestCredentialCatalogueGuardsItsLimit(t *testing.T) {
 	catalogue, fixture := newCredentialCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
-	if _, err := catalogue.ListCredentials(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListCredentials(t.Context(), tenant, 0, firstPage(t, ports.CredentialPages))); err == nil {
 		t.Fatal("limit=0 的凭证上列被接受了")
 	}
-	if _, err := catalogue.ListCredentials(t.Context(), tenant, -1); err == nil {
+	if _, err := rowsOf(catalogue.ListCredentials(t.Context(), tenant, -1, firstPage(t, ports.CredentialPages))); err == nil {
 		t.Fatal("limit=-1 的凭证上列被接受了")
 	}
 

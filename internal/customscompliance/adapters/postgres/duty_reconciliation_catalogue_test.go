@@ -26,8 +26,8 @@ func listCollaborations(
 	limit int,
 ) []domain.DutyPaymentCollaboration {
 	t.Helper()
-	entries, err := catalogue.ListDutyCollaborations(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	entries, err := rowsOf(catalogue.ListDutyCollaborations(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.DutyCollaborationPages)))
 	if err != nil {
 		t.Fatalf("上列协作事项册：%v", err)
 	}
@@ -41,8 +41,8 @@ func listVerifications(
 	limit int,
 ) []ports.DutyVerificationRecord {
 	t.Helper()
-	records, err := catalogue.ListDutyVerifications(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), limit)
+	records, err := rowsOf(catalogue.ListDutyVerifications(t.Context(),
+		viewValue(t, domain.NewTenantID, tenant), limit, firstPage(t, ports.DutyVerificationPages)))
 	if err != nil {
 		t.Fatalf("上列付款核对册：%v", err)
 	}
@@ -175,10 +175,10 @@ func TestDutyRegisterCataloguesGuardTheirLimits(t *testing.T) {
 	catalogue, fixture := newDutyReconciliationCatalogue(t)
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
 	for _, limit := range []int{0, -1} {
-		if _, err := catalogue.ListDutyCollaborations(t.Context(), tenant, limit); err == nil {
+		if _, err := rowsOf(catalogue.ListDutyCollaborations(t.Context(), tenant, limit, firstPage(t, ports.DutyCollaborationPages))); err == nil {
 			t.Fatalf("limit=%d 的协作事项上列被接受了", limit)
 		}
-		if _, err := catalogue.ListDutyVerifications(t.Context(), tenant, limit); err == nil {
+		if _, err := rowsOf(catalogue.ListDutyVerifications(t.Context(), tenant, limit, firstPage(t, ports.DutyVerificationPages))); err == nil {
 			t.Fatalf("limit=%d 的付款核对上列被接受了", limit)
 		}
 	}

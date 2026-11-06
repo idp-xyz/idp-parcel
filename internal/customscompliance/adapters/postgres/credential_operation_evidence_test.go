@@ -42,7 +42,7 @@ func TestACredentialVersionKeepsItsOperationEvidence(t *testing.T) {
 		t.Fatalf("不记登记人的一路：%v %v", outcome, err)
 	}
 
-	entries, err := catalogue.ListCredentials(t.Context(), tenant, 10)
+	entries, err := rowsOf(catalogue.ListCredentials(t.Context(), tenant, 10, firstPage(t, ports.CredentialPages)))
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("上列：%d %v", len(entries), err)
 	}
