@@ -577,8 +577,9 @@ func (unwiredRequestViews) ListVisible(
 	context.Context,
 	shipmentdomain.AuthorizedQueryScope,
 	int,
-) ([]shipmentports.ShipmentRequestSummaryRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[shipmentports.ShipmentRequestSummaryRecord], error) {
+	return cataloguepage.Result[shipmentports.ShipmentRequestSummaryRecord]{}, errOrchestrationNotWired
 }
 
 func (unwiredRequestViews) FindVisibleByID(
@@ -669,8 +670,9 @@ func (unwiredReviewQueue) ListAwaitingManualReview(
 	context.Context,
 	shipmentdomain.AuthorizedQueryScope,
 	int,
-) ([]shipmentports.AcceptanceReviewQueueRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[shipmentports.AcceptanceReviewQueueRecord], error) {
+	return cataloguepage.Result[shipmentports.AcceptanceReviewQueueRecord]{}, errOrchestrationNotWired
 }
 
 func (unwiredReviewQueue) FindVisibleByID(
@@ -706,8 +708,9 @@ func (unwiredChannelSelectionDecisions) ListTiedChannelSelectionDecisions(
 	shipmentdomain.TenantID,
 	shipmentports.TiedChannelSelectionFilter,
 	int,
-) ([]shipmentdomain.ChannelSelectionDecision, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[shipmentdomain.ChannelSelectionDecision], error) {
+	return cataloguepage.Result[shipmentdomain.ChannelSelectionDecision]{}, errOrchestrationNotWired
 }
 
 func (unwiredChannelSelectionDecisions) FindChannelSelectionDecision(
@@ -727,8 +730,9 @@ func (unwiredDispositionQueue) ListAwaitingAuthorizedDisposition(
 	context.Context,
 	shipmentdomain.AuthorizedQueryScope,
 	int,
-) ([]shipmentports.AuthorizedDispositionQueueRecord, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[shipmentports.AuthorizedDispositionQueueRecord], error) {
+	return cataloguepage.Result[shipmentports.AuthorizedDispositionQueueRecord]{}, errOrchestrationNotWired
 }
 
 type unwiredReviewJudgments struct{}

@@ -11,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PostIntakeManualItems 实现 ports.PostIntakeManualItems：待人工处理项及其处理结果（ADR-0341）。项只追加，结果每项至多一份、不改不删；租户条件进每条语句。
@@ -53,19 +54,51 @@ func (items *PostIntakeManualItems) RecordPostIntakeManualItems(ctx context.Cont
 	return nil
 }
 
-// postIntakeManualItemSelect 取项连同所属决定的去向与目的地、包裹决定链此刻的版本、以及结果（没有结果时结果列为空）。
-const postIntakeManualItemSelect = `
-	SELECT i.tenant_id, i.parcel_id, i.decision_version, i.owner, i.action,
+// postIntakeManualItemSelect 取项连同所属决定的去向与目的地、包裹决定链此刻的版本、以及结果（没有结果时结果列为空）。选择列与来源
+// 分开写，是因为待登记清单按 ADR-0144 取页，片段要分别接在两处。
+const (
+	postIntakeManualItemColumns = `i.tenant_id, i.parcel_id, i.decision_version, i.owner, i.action,
 	       d.direction, d.destination_ref, d.decided_at,
 	       (SELECT max(c.version) FROM parcel_shipment.post_intake_disposition_decision c
 	         WHERE c.tenant_id = i.tenant_id AND c.parcel_id = i.parcel_id),
-	       r.outcome, r.note, r.handled_by, r.handled_at
-	  FROM parcel_shipment.post_intake_disposition_manual_item i
+	       r.outcome, r.note, r.handled_by, r.handled_at`
+	postIntakeManualItemSource = `parcel_shipment.post_intake_disposition_manual_item i
 	  JOIN parcel_shipment.post_intake_disposition_decision d
 	    ON d.tenant_id = i.tenant_id AND d.parcel_id = i.parcel_id AND d.version = i.decision_version
 	  LEFT JOIN parcel_shipment.post_intake_disposition_manual_result r
 	    ON r.tenant_id = i.tenant_id AND r.parcel_id = i.parcel_id AND r.decision_version = i.decision_version
 	   AND r.owner = i.owner AND r.action = i.action`
+	postIntakeManualItemSelect = `
+	SELECT ` + postIntakeManualItemColumns + `
+	  FROM ` + postIntakeManualItemSource
+	// pendingPostIntakeManualItem 是「待登记」：项还没有结果。
+	pendingPostIntakeManualItem = "i.tenant_id = $1 AND r.outcome IS NULL"
+)
+
+// postIntakeManualItemPages 把 ports.PostIntakeManualItemPages 落到列上。决定时刻落在项上的 created_at：写入时取自所属决定，与
+// 答复里的 decidedAt 同值，而索引在项上；q 在包裹上做字面包含。
+var postIntakeManualItemPages = ports.PostIntakeManualItemPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"decidedAt": "i.created_at"},
+	Identity: []string{"i.parcel_id", "i.decision_version", "i.owner", "i.action"},
+	Filters:  map[string]string{"owner": "i.owner", "action": "i.action"},
+	Keyword:  []string{"i.parcel_id"},
+})
+
+// withTrailing 在一行既有的扫描目标之后多接几格：取页那一句在共用的选择列后面多取了游标要的列，扫描函数照旧只认共用那几格。
+type withTrailing struct {
+	row   dispositionScanner
+	extra []any
+}
+
+func (scanner withTrailing) Scan(targets ...any) error {
+	return scanner.row.Scan(append(targets, scanner.extra...)...)
+}
+
+// scannedPostIntakeManualItem 带着取页读回的 created_at：游标位置从它取，与 ORDER BY 用的是同一份。
+type scannedPostIntakeManualItem struct {
+	item      ports.PostIntakeManualItem
+	createdAt time.Time
+}
 
 func (items *PostIntakeManualItems) FindPostIntakeManualItem(ctx context.Context, key domain.ManualItemKey) (ports.PostIntakeManualItem, bool, error) {
 	querier, err := items.db.ReadExecutor(ctx)
@@ -118,50 +151,73 @@ func (items *PostIntakeManualItems) RegisterPostIntakeManualItemResult(
 	return ports.PostIntakeManualRegistered, item, true, nil
 }
 
-// ListPendingPostIntakeManualItems 上列本租户还没有登记结果的项，最早的在前，至多 limit 行；Count 是全部行数，不受 limit 截断。两句不在同一快照里：计数与清单
-// 是此刻的大概，登记的成败由登记口自己判。
+// ListPendingPostIntakeManualItems 上列本租户还没有登记结果的项的一页：缺省最早的在前、同刻按（包裹、决定版本、所有者、动作）收尾。
+// Count 是全部待登记的项数，不受页与条件截断。几句不在同一快照里：计数与清单是此刻的大概，登记的成败由登记口自己判。
 func (items *PostIntakeManualItems) ListPendingPostIntakeManualItems(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) (ports.PendingPostIntakeManualItems, error) {
+	fail := func(err error) (ports.PendingPostIntakeManualItems, error) {
+		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: %w", err)
+	}
 	if limit <= 0 {
-		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: limit %d is not a positive page size", limit)
+		return fail(fmt.Errorf("limit %d is not a positive page size", limit))
+	}
+	plan, err := postIntakeManualItemPages.Plan(query, pendingPostIntakeManualItem, []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := items.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: %w", err)
+		return fail(err)
 	}
-	var count int
-	if err := querier.QueryRow(ctx,
-		`SELECT count(*)
-		   FROM parcel_shipment.post_intake_disposition_manual_item i
-		  WHERE i.tenant_id = $1
-		    AND NOT EXISTS (SELECT 1 FROM parcel_shipment.post_intake_disposition_manual_result r
-		                     WHERE r.tenant_id = i.tenant_id AND r.parcel_id = i.parcel_id
-		                       AND r.decision_version = i.decision_version AND r.owner = i.owner AND r.action = i.action)`,
-		tenant.String()).Scan(&count); err != nil {
-		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: count: %w", err)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(postIntakeManualItemSource), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
 	}
-	rows, err := querier.Query(ctx,
-		postIntakeManualItemSelect+`
-		 WHERE i.tenant_id = $1 AND r.outcome IS NULL
-		 ORDER BY i.created_at, i.parcel_id, i.decision_version, i.owner, i.action
-		 LIMIT $2`, tenant.String(), limit)
+	backlog, err := queueBacklog(ctx, querier, query, total,
+		"SELECT count(*) FROM "+postIntakeManualItemSource+" WHERE "+pendingPostIntakeManualItem, tenant)
 	if err != nil {
-		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: %w", err)
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(postIntakeManualItemColumns+", i.created_at", postIntakeManualItemSource), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
-	listed := ports.PendingPostIntakeManualItems{Items: []ports.PostIntakeManualItem{}, Count: count}
+	var fetched []scannedPostIntakeManualItem
 	for rows.Next() {
-		item, err := scanPostIntakeManualItem(rows)
-		if err != nil {
-			return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: %w", err)
+		var row scannedPostIntakeManualItem
+		if row.item, err = scanPostIntakeManualItem(withTrailing{row: rows, extra: []any{&row.createdAt}}); err != nil {
+			return fail(err)
 		}
-		listed.Items = append(listed.Items, item)
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return ports.PendingPostIntakeManualItems{}, fmt.Errorf("list pending post-intake manual items: %w", err)
+		return fail(err)
+	}
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(row scannedPostIntakeManualItem, _ string) cataloguepage.Position {
+			key := row.item.Key
+			return cataloguepage.Position{
+				Value: cataloguepage.FormatInstant(row.createdAt),
+				Identity: []string{
+					key.Parcel.String(), cataloguepage.FormatInteger(int64(key.DecisionVersion)),
+					key.Owner.String(), key.Action.String(),
+				},
+			}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	listed := ports.PendingPostIntakeManualItems{
+		Items: make([]ports.PostIntakeManualItem, 0, len(page.Rows)),
+		Next:  page.Next, Total: page.Total, Count: backlog,
+	}
+	for _, row := range page.Rows {
+		listed.Items = append(listed.Items, row.item)
 	}
 	return listed, nil
 }

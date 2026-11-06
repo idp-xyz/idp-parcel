@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ShipmentRequestViewsQuery 是一次已授权的委托查阅列表查询。作用域来自认证与授权结果
@@ -42,7 +43,8 @@ type ShipmentRequestViewsReader interface {
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]ports.ShipmentRequestSummaryRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
@@ -89,6 +91,9 @@ const codeRequestNotVisible = "SHIPMENT_REQUEST_NOT_VISIBLE"
 // 列表分支还收 `shipmentRequestIds`（逗号分隔的一组委托标识，至多 maxShipmentRequestIDsPerLookup 个）：别的上下文的页面
 // 上出现委托标识时，管理台按页上那几份一次取回运单号（ADR-0355 决定十一），引用方的读模型不复制单据号。作用域仍是列表
 // 查询那一份，与 `shipmentRequestId` 单份查阅同一套；作用域外的与查无的都不出现，仍答 LISTED。两种筛选不并用。
+//
+// 不带这两个参数的列表按 ADR-0144 翻页：查询参数按 ports.ShipmentRequestViewPages 解码，在 Intake 之后（未配置的渠道对一切
+// 请求同答，ADR-0055 决定三），答复带 page。按运单号与按一组标识的两支是有界查找，不解码、不带 page。
 func NewQueryShipmentRequestViewsEndpoint(
 	intake ShipmentRequestViewsIntake,
 	reader ShipmentRequestViewsReader,
@@ -119,9 +124,17 @@ func serveList(
 		writeIntakeProblem(response, err)
 		return
 	}
-
 	values := request.URL.Query()
+	var pageQuery cataloguepage.Query
+	if !values.Has("documentNumber") && !values.Has("shipmentRequestIds") {
+		if pageQuery, err = ports.ShipmentRequestViewPages.Decode(values); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+	}
+
 	var records []ports.ShipmentRequestSummaryRecord
+	var page *cataloguepage.Page
 	switch {
 	case values.Has("documentNumber") && values.Has("shipmentRequestIds"):
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
@@ -141,7 +154,12 @@ func serveList(
 		}
 		records, err = reader.ListVisibleByIDs(request.Context(), query.Scope, requestIDs)
 	default:
-		records, err = reader.ListVisible(request.Context(), query.Scope, query.Limit)
+		var listed cataloguepage.Result[ports.ShipmentRequestSummaryRecord]
+		if listed, err = reader.ListVisible(request.Context(), query.Scope, query.Limit, pageQuery); err == nil {
+			records = listed.Rows
+			spelled := listed.Page(query.Limit)
+			page = &spelled
+		}
 	}
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -156,6 +174,7 @@ func serveList(
 	writeJSON(response, http.StatusOK, viewsListResponse{
 		Outcome:  outcomeListed,
 		Requests: summaries,
+		Page:     page,
 	})
 }
 
@@ -253,9 +272,11 @@ func answerIntakeFailure(problem problemWriter, err error) {
 	}
 }
 
+// viewsListResponse 的 page 只在翻页的那一支在场：按运单号与按一组标识的查找不是一页目录。
 type viewsListResponse struct {
 	Outcome  string               `json:"outcome"`
 	Requests []requestSummaryBody `json:"requests"`
+	Page     *cataloguepage.Page  `json:"page,omitempty"`
 }
 
 type viewDetailResponse struct {

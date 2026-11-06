@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是待人工处理项要记、要读与要登记的口：收寄后服务处置决定形成时，请求表里系统不执行的几项与决定同笔落成待人工处理项；运营人员逐项登记处理结果，
@@ -22,9 +23,12 @@ type PostIntakeManualItem struct {
 	HasResult      bool
 }
 
-// PendingPostIntakeManualItems 是一个租户还没有登记结果的项：最早的在前，至多 limit 行；Count 是全部行数，大于 len(Items) 即清单被页大小截断。
+// PendingPostIntakeManualItems 是一个租户还没有登记结果的项的一页（ADR-0144）：Items 是本页，Next 为空串即末页，Total 是本次筛选与 q
+// 之下的总数；Count 是全部待登记的项数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout spec 取舍 5）。
 type PendingPostIntakeManualItems struct {
 	Items []PostIntakeManualItem
+	Next  string
+	Total int64
 	Count int
 }
 
@@ -48,7 +52,8 @@ type PostIntakeManualItems interface {
 		key domain.ManualItemKey,
 		result domain.ManualItemResult,
 	) (PostIntakeManualRegistrationOutcome, PostIntakeManualItem, bool, error)
-	ListPendingPostIntakeManualItems(ctx context.Context, tenant domain.TenantID, limit int) (PendingPostIntakeManualItems, error)
+	// ListPendingPostIntakeManualItems 取待登记项的一页，查询对象由端点按 PostIntakeManualItemPages 解出。
+	ListPendingPostIntakeManualItems(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (PendingPostIntakeManualItems, error)
 	// ListPostIntakeManualItemsOfParcel 读一件包裹名下的全部项（含已登记的），决定版本小的在前：PS 读回各项承接结果走这里。
 	ListPostIntakeManualItemsOfParcel(ctx context.Context, tenant domain.TenantID, parcel domain.DeclaredParcelID) ([]PostIntakeManualItem, error)
 }

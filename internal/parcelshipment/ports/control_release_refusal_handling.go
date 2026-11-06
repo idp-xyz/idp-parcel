@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ControlReleaseRefusalKey 是释放未受理册上一笔占用的身份：与册的主键同形（租户，委托，提交版本，控制结果）。处理留痕的主键就是它，
@@ -93,22 +94,26 @@ type ControlReleaseRefusalHandlings interface {
 	) (ControlReleaseRefusalHandlingSaveOutcome, ControlReleaseRefusalHandling, error)
 }
 
-// UnhandledControlReleaseRefusals 是一个租户册上还没有被处理的行：最早登记的在前，至多 limit 行；Count 是未处理的全部行数，
-// 大于 len(Refusals) 即清单被页大小截断。DocumentNumbers 是清单上各行所指委托的单据号这一格（ADR-0355 决定十一），按委托标识
-// 查；册行指的委托读不到时不在其中——那一行只能显委托标识，不拿「上线前开立」替它说。
+// UnhandledControlReleaseRefusals 是一个租户册上还没有被处理的行的一页（ADR-0144）：Refusals 是本页，Next 为空串即末页，Total 是
+// 本次筛选与 q 之下的总数；Count 是未处理的全部行数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout spec
+// 取舍 5）。DocumentNumbers 是本页各行所指委托的单据号这一格（ADR-0355 决定十一），按委托标识查；册行指的委托读不到时不在
+// 其中——那一行只能显委托标识，不拿「上线前开立」替它说。
 type UnhandledControlReleaseRefusals struct {
 	Refusals        []ControlReleaseRefusal
+	Next            string
+	Total           int64
 	Count           int
 	DocumentNumbers map[domain.ShipmentRequestID]domain.ShipmentDocumentNumbering
 }
 
-// ControlReleaseRefusalCatalogue 是释放未受理册的运营查阅读口：按租户列未处理的行加计数。租户条件进每条语句，否定结果不区分
-// 「没有」与「属于另一个租户」。
+// ControlReleaseRefusalCatalogue 是释放未受理册的运营查阅读口：按租户列未处理的行加计数，查询对象由端点按 ControlReleaseRefusalPages
+// 解出。租户条件进每条语句，否定结果不区分「没有」与「属于另一个租户」。
 type ControlReleaseRefusalCatalogue interface {
 	ListUnhandledControlReleaseRefusals(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (UnhandledControlReleaseRefusals, error)
 }
 

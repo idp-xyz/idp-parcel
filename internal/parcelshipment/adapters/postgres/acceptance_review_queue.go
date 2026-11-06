@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件在 ShipmentRequestViews 上补齐 ports.AcceptanceReviewQueue（票
@@ -22,40 +23,51 @@ import (
 // waitingOn 快照也不该上列。
 var _ ports.AcceptanceReviewQueue = (*ShipmentRequestViews)(nil)
 
-// ListAwaitingManualReview 按作用域取回当前停在「等待人工复核」的委托，老的在前
-// （先来先审），同刻按委托标识正序保证分页可重复。limit 非正是调用方编程错误，
-// 判据同 ListVisible。
+// waitingRequests 是委托队列的固定条件：作用域那一段再加等待态与`已提交`。
+const waitingRequests = visibleRequests + " AND task_waiting_on = $3 AND state = $4"
+
+// shipmentRequestQueueColumns 把两个委托队列的声明落到列上：q 与委托查阅同三列。
+var shipmentRequestQueueColumns = cataloguepage.Columns{
+	Sorts:    map[string]string{"submittedAt": "submitted_at", "shipmentRequestId": "shipment_request_id"},
+	Identity: []string{"shipment_request_id"},
+	Filters:  map[string]string{"customerAccountId": "customer_account_id"},
+	Keyword:  []string{"shipment_request_id", "document_number", "source_request_key"},
+}
+
+var acceptanceReviewQueuePages = ports.AcceptanceReviewQueuePages.MustBind(shipmentRequestQueueColumns)
+
+// ListAwaitingManualReview 按作用域取当前停在「等待人工复核」的委托的一页：缺省老的在前（先来先审），同刻按委托标识正序。
+// limit 非正是调用方编程错误，判据同 ListVisible。
 func (views *ShipmentRequestViews) ListAwaitingManualReview(
 	ctx context.Context,
 	scope domain.AuthorizedQueryScope,
 	limit int,
-) ([]ports.AcceptanceReviewQueueRecord, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error) {
+		return cataloguepage.Result[ports.AcceptanceReviewQueueRecord]{}, fmt.Errorf("list acceptance review queue: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list acceptance review queue: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := acceptanceReviewQueuePages.Plan(query, waitingRequests, []any{
+		scope.TenantID().String(), visibleAccounts(scope),
+		uint8(domain.ResumeByManualReview), uint8(domain.ShipmentRequestSubmitted),
+	}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := views.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list acceptance review queue: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT `+summaryColumns+`,
-		        snapshot->'acceptanceTask'
-		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		    AND task_waiting_on = $3
-		    AND state = $4
-		  ORDER BY submitted_at ASC, shipment_request_id ASC
-		  LIMIT $5`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		uint8(domain.ResumeByManualReview),
-		uint8(domain.ShipmentRequestSubmitted),
-		limit,
-	)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(shipmentRequestTable), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(summaryColumns+", snapshot->'acceptanceTask'", shipmentRequestTable), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list acceptance review queue: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
@@ -64,19 +76,19 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 		var row summaryRow
 		var rawTask []byte
 		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
-			return nil, fmt.Errorf("list acceptance review queue: %w", err)
+			return fail(err)
 		}
 		summary, err := row.record()
 		if err != nil {
-			return nil, fmt.Errorf("list acceptance review queue: %w", err)
+			return fail(err)
 		}
 		var task taskDocument
 		if err := json.Unmarshal(rawTask, &task); err != nil {
-			return nil, fmt.Errorf("list acceptance review queue: 快照不是本适配器写下的形状：%w", err)
+			return fail(fmt.Errorf("快照不是本适配器写下的形状：%w", err))
 		}
 		taskView, err := taskViewRecord(task)
 		if err != nil {
-			return nil, fmt.Errorf("list acceptance review queue: %w", err)
+			return fail(err)
 		}
 		records = append(records, ports.AcceptanceReviewQueueRecord{
 			ShipmentRequestSummaryRecord: summary,
@@ -92,7 +104,14 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list acceptance review queue: %w", err)
+		return fail(err)
 	}
-	return records, nil
+	page, err := cataloguepage.Finish(query, records, limit, total,
+		func(record ports.AcceptanceReviewQueueRecord, sortField string) cataloguepage.Position {
+			return summaryPosition(record.ShipmentRequestSummaryRecord, sortField)
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
 }

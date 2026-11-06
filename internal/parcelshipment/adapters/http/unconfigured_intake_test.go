@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // unconfiguredEndpoint 带上各自的合法方法：未配置格答在方法检查之后，拿错方法测出来
@@ -213,9 +214,10 @@ func (reader unreachableViewsReader) ListVisible(
 	context.Context,
 	domain.AuthorizedQueryScope,
 	int,
-) ([]ports.ShipmentRequestSummaryRecord, error) {
+	cataloguepage.Query,
+) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
 	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
-	return nil, nil
+	return cataloguepage.Result[ports.ShipmentRequestSummaryRecord]{}, nil
 }
 
 func (reader unreachableViewsReader) ListVisibleByDocumentNumber(

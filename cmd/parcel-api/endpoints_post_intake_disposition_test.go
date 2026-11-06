@@ -7,6 +7,7 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 func init() {
@@ -21,6 +22,6 @@ func (unwiredPostIntakeDisposition) Handle(context.Context, shipmentapp.DecidePo
 
 type unwiredPostIntakeDispositionRequests struct{}
 
-func (unwiredPostIntakeDispositionRequests) ListUnansweredPostIntakeDispositionRequests(context.Context, domain.TenantID, int) (ports.UnansweredPostIntakeDispositionRequests, error) {
+func (unwiredPostIntakeDispositionRequests) ListUnansweredPostIntakeDispositionRequests(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.UnansweredPostIntakeDispositionRequests, error) {
 	return ports.UnansweredPostIntakeDispositionRequests{}, errors.New("parcel-api: post-intake disposition requests not wired")
 }

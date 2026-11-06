@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 func init() {
@@ -14,6 +15,6 @@ func init() {
 
 type unwiredControlReleaseRefusals struct{}
 
-func (unwiredControlReleaseRefusals) ListUnhandledControlReleaseRefusals(context.Context, domain.TenantID, int) (ports.UnhandledControlReleaseRefusals, error) {
+func (unwiredControlReleaseRefusals) ListUnhandledControlReleaseRefusals(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.UnhandledControlReleaseRefusals, error) {
 	return ports.UnhandledControlReleaseRefusals{}, errors.New("parcel-api: control release refusal catalogue not wired")
 }

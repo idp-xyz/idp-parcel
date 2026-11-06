@@ -8,6 +8,7 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 func init() {
@@ -24,7 +25,7 @@ type unwiredPostIntakeManualItems struct{}
 
 var _ shipmenthttp.PostIntakeManualItemReader = unwiredPostIntakeManualItems{}
 
-func (unwiredPostIntakeManualItems) ListPendingPostIntakeManualItems(context.Context, domain.TenantID, int) (ports.PendingPostIntakeManualItems, error) {
+func (unwiredPostIntakeManualItems) ListPendingPostIntakeManualItems(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.PendingPostIntakeManualItems, error) {
 	return ports.PendingPostIntakeManualItems{}, errors.New("parcel-api: post-intake manual items not wired")
 }
 

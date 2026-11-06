@@ -12,6 +12,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 type dispositionQueueReaderDouble struct {
@@ -25,12 +26,13 @@ func (double *dispositionQueueReaderDouble) ListAwaitingAuthorizedDisposition(
 	_ context.Context,
 	scope domain.AuthorizedQueryScope,
 	limit int,
-) ([]ports.AuthorizedDispositionQueueRecord, error) {
+	_ cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorizedDispositionQueueRecord], error) {
 	double.scope, double.limit = scope, limit
 	if double.listErr != nil {
-		return nil, double.listErr
+		return cataloguepage.Result[ports.AuthorizedDispositionQueueRecord]{}, double.listErr
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.AuthorizedDispositionQueueRecord]{Rows: double.rows}, nil
 }
 
 func getDispositionQueue(

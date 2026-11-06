@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 渠道择优决定查阅端点（票 label-channel/23；票 14 裁决「谁读它：运营查阅面，沿 ADR-0077 读面通例另立读口
@@ -45,7 +46,8 @@ type ChannelSelectionDecisionsReader interface {
 		tenant domain.TenantID,
 		filter ports.TiedChannelSelectionFilter,
 		limit int,
-	) ([]domain.ChannelSelectionDecision, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.ChannelSelectionDecision], error)
 	FindChannelSelectionDecision(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -121,20 +123,27 @@ func serveTiedChannelSelectionDecisions(
 		writeIntakeProblem(response, err)
 		return
 	}
+	// view、scope、mapping 在声明里登为选择器（端点自己读、保持原义），其余键按 ADR-0144 解码，在 Intake 之后。
+	pageQuery, err := ports.TiedChannelSelectionPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
 
-	decisions, err := reader.ListTiedChannelSelectionDecisions(request.Context(), query.Tenant, filter, query.Limit)
+	page, err := reader.ListTiedChannelSelectionDecisions(request.Context(), query.Tenant, filter, query.Limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有冲突」不该先判「有没有字段」。
-	bodies := make([]channelSelectionDecisionBody, 0, len(decisions))
-	for _, decision := range decisions {
+	bodies := make([]channelSelectionDecisionBody, 0, len(page.Rows))
+	for _, decision := range page.Rows {
 		bodies = append(bodies, channelSelectionDecisionBodyOf(decision))
 	}
 	writeJSON(response, http.StatusOK, channelSelectionDecisionsListResponse{
 		Outcome:   outcomeTiedChannelSelectionDecisionsListed,
 		Decisions: bodies,
+		Page:      page.Page(query.Limit),
 	})
 }
 
@@ -205,6 +214,7 @@ func serveChannelSelectionDecision(
 type channelSelectionDecisionsListResponse struct {
 	Outcome   string                         `json:"outcome"`
 	Decisions []channelSelectionDecisionBody `json:"decisions"`
+	Page      cataloguepage.Page             `json:"page"`
 }
 
 type channelSelectionDecisionResponse struct {

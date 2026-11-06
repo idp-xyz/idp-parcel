@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是取消先后冲突的解开决定面要读、要记与要交出的口（ADR-0295）：冲突册（CancellationOrderConflictRegister）只记下冲突，解开它的是人形成的
@@ -86,20 +87,24 @@ type CancellationOrderConflictDecisions interface {
 	) (CancellationOrderConflictDecisionSaveOutcome, CancellationOrderConflictDecision, error)
 }
 
-// UnresolvedCancellationOrderConflicts 是一个租户册上还没有被决定的冲突：最早发现的在前，至多 limit 行；Count 是未解开的全部行数，
-// 大于 len(Conflicts) 即清单被页大小截断。
+// UnresolvedCancellationOrderConflicts 是一个租户册上还没有被决定的冲突的一页（ADR-0144）：Conflicts 是本页，Next 为空串即末页，
+// Total 是本次筛选与 q 之下的总数；Count 是未解开的全部行数——队列的积压，不随筛选与 q 变（票 catalogue-read-pagination-rollout
+// spec 取舍 5）。
 type UnresolvedCancellationOrderConflicts struct {
 	Conflicts []CancellationOrderConflictEntry
+	Next      string
+	Total     int64
 	Count     int
 }
 
-// CancellationOrderConflictCatalogue 是冲突册的运营查阅读口：按租户列未解开的行加计数。租户条件进每条语句，否定结果不区分「没有」与
-// 「属于另一个租户」。
+// CancellationOrderConflictCatalogue 是冲突册的运营查阅读口：按租户列未解开的行加计数，查询对象由端点按 CancellationOrderConflictPages
+// 解出。租户条件进每条语句，否定结果不区分「没有」与「属于另一个租户」。
 type CancellationOrderConflictCatalogue interface {
 	ListUnresolvedCancellationOrderConflicts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (UnresolvedCancellationOrderConflicts, error)
 }
 

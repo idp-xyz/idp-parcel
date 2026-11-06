@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 复核队列查阅端点（票 acceptance-review-read-face/01）。列的是「当前停在等待人工
@@ -25,7 +26,8 @@ type AcceptanceReviewQueueReader interface {
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]ports.AcceptanceReviewQueueRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
@@ -59,7 +61,8 @@ const (
 
 // NewQueryAcceptanceReviewQueueEndpoint 交回复核队列的 HTTP 入口
 // （GET /acceptance-review-queue）。列表与单份共用一个端点，按 `shipmentRequestId`
-// 查询参数分派——分派规则、方法门与错误分流全部照 /shipment-request-views 的形。
+// 查询参数分派——分派规则、方法门与错误分流全部照 /shipment-request-views 的形。列表分支按
+// ports.AcceptanceReviewQueuePages 解码（ADR-0144），在 Intake 之后，答复带 page。
 func NewQueryAcceptanceReviewQueueEndpoint(
 	intake ShipmentRequestViewsIntake,
 	reader AcceptanceReviewQueueReader,
@@ -91,20 +94,26 @@ func serveReviewQueue(
 		writeIntakeProblem(response, err)
 		return
 	}
+	pageQuery, err := ports.AcceptanceReviewQueuePages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
 
-	records, err := reader.ListAwaitingManualReview(request.Context(), query.Scope, query.Limit)
+	page, err := reader.ListAwaitingManualReview(request.Context(), query.Scope, query.Limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 
-	entries := make([]reviewQueueEntryBody, 0, len(records))
-	for _, record := range records {
+	entries := make([]reviewQueueEntryBody, 0, len(page.Rows))
+	for _, record := range page.Rows {
 		entries = append(entries, reviewQueueEntryBodyOf(record))
 	}
 	writeJSON(response, http.StatusOK, reviewQueueListResponse{
 		Outcome: outcomeReviewQueueListed,
 		Entries: entries,
+		Page:    page.Page(query.Limit),
 	})
 }
 
@@ -151,6 +160,7 @@ func serveReviewCase(
 type reviewQueueListResponse struct {
 	Outcome string                 `json:"outcome"`
 	Entries []reviewQueueEntryBody `json:"entries"`
+	Page    cataloguepage.Page     `json:"page"`
 }
 
 type reviewCaseResponse struct {

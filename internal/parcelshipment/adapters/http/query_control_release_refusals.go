@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 释放未受理册的运营查阅端点（ADR-0293 决定一）。
@@ -33,6 +34,7 @@ type ControlReleaseRefusalCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (ports.UnhandledControlReleaseRefusals, error)
 }
 
@@ -50,7 +52,8 @@ func (UnconfiguredIntake) IntakeControlReleaseRefusalQuery(context.Context, *htt
 // 业务结果的封闭集合。空册仍是 LISTED：空清单是「此刻没有积压」这个如实答案，与「接入渠道未配置」（403）分得开。
 const outcomeControlReleaseRefusalsListed = "CONTROL_RELEASE_REFUSALS_LISTED"
 
-// NewQueryControlReleaseRefusalsEndpoint 交回释放未受理册查阅的 HTTP 入口（GET /control-release-refusals）。
+// NewQueryControlReleaseRefusalsEndpoint 交回释放未受理册查阅的 HTTP 入口（GET /control-release-refusals）。查询参数按
+// ports.ControlReleaseRefusalPages 解码（ADR-0144），在 Intake 之后；unhandledCount 仍是整册积压，truncated 即本页之后还有。
 func NewQueryControlReleaseRefusalsEndpoint(
 	intake ControlReleaseRefusalQueryIntake,
 	reader ControlReleaseRefusalCatalogueReader,
@@ -66,7 +69,12 @@ func NewQueryControlReleaseRefusalsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		listed, err := reader.ListUnhandledControlReleaseRefusals(request.Context(), query.Tenant, query.Limit)
+		pageQuery, err := ports.ControlReleaseRefusalPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		listed, err := reader.ListUnhandledControlReleaseRefusals(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空册：把一次该重试的故障读成「没有积压」，积压就更没人看见了。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -89,8 +97,9 @@ func NewQueryControlReleaseRefusalsEndpoint(
 		writeJSON(response, http.StatusOK, controlReleaseRefusalsResponse{
 			Outcome:        outcomeControlReleaseRefusalsListed,
 			UnhandledCount: listed.Count,
-			Truncated:      listed.Count > len(listed.Refusals),
+			Truncated:      listed.Next != "",
 			Refusals:       bodies,
+			Page:           cataloguepage.NewPage(query.Limit, listed.Next, listed.Total),
 		})
 	})
 }
@@ -100,6 +109,7 @@ type controlReleaseRefusalsResponse struct {
 	UnhandledCount int                         `json:"unhandledCount"`
 	Truncated      bool                        `json:"truncated"`
 	Refusals       []controlReleaseRefusalBody `json:"refusals"`
+	Page           cataloguepage.Page          `json:"page"`
 }
 
 // controlReleaseRefusalBody 逐字段透出册上一行。occupationScope 只在存下了作用域时在场：缺席即施加时还不存作用域的存量行，scopeRecorded

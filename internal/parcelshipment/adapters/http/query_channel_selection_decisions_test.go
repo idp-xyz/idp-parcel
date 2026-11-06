@@ -13,6 +13,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var selectionDecidedAtFixture = time.Date(2026, 9, 4, 18, 30, 0, 0, time.UTC)
@@ -61,12 +62,13 @@ func (double *channelSelectionReaderDouble) ListTiedChannelSelectionDecisions(
 	tenant domain.TenantID,
 	filter ports.TiedChannelSelectionFilter,
 	limit int,
-) ([]domain.ChannelSelectionDecision, error) {
+	_ cataloguepage.Query,
+) (cataloguepage.Result[domain.ChannelSelectionDecision], error) {
 	double.tenant, double.filter, double.limit = tenant, filter, limit
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[domain.ChannelSelectionDecision]{}, double.err
 	}
-	return double.listed, nil
+	return cataloguepage.Result[domain.ChannelSelectionDecision]{Rows: double.listed}, nil
 }
 
 func (double *channelSelectionReaderDouble) FindChannelSelectionDecision(

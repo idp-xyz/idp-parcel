@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 取消先后冲突册的运营查阅端点（ADR-0295 决定一）。
@@ -32,6 +33,7 @@ type CancellationOrderConflictCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (ports.UnresolvedCancellationOrderConflicts, error)
 }
 
@@ -49,7 +51,8 @@ func (UnconfiguredIntake) IntakeCancellationOrderConflictQuery(context.Context, 
 // 业务结果的封闭集合。空册仍是 LISTED：空清单是「此刻没有未解开的冲突」这个如实答案，与「接入渠道未配置」（403）分得开。
 const outcomeCancellationOrderConflictsListed = "CANCELLATION_ORDER_CONFLICTS_LISTED"
 
-// NewQueryCancellationOrderConflictsEndpoint 交回取消先后冲突册查阅的 HTTP 入口（GET /cancellation-order-conflicts）。
+// NewQueryCancellationOrderConflictsEndpoint 交回取消先后冲突册查阅的 HTTP 入口（GET /cancellation-order-conflicts）。查询参数按
+// ports.CancellationOrderConflictPages 解码（ADR-0144），在 Intake 之后；unresolvedCount 仍是整册积压，truncated 即本页之后还有。
 func NewQueryCancellationOrderConflictsEndpoint(
 	intake CancellationOrderConflictQueryIntake,
 	reader CancellationOrderConflictCatalogueReader,
@@ -65,7 +68,12 @@ func NewQueryCancellationOrderConflictsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		listed, err := reader.ListUnresolvedCancellationOrderConflicts(request.Context(), query.Tenant, query.Limit)
+		pageQuery, err := ports.CancellationOrderConflictPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		listed, err := reader.ListUnresolvedCancellationOrderConflicts(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空册：把一次该重试的故障读成「没有未解开的冲突」，卡住的包裹就更没人看见了。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -79,8 +87,9 @@ func NewQueryCancellationOrderConflictsEndpoint(
 		writeJSON(response, http.StatusOK, cancellationOrderConflictsResponse{
 			Outcome:         outcomeCancellationOrderConflictsListed,
 			UnresolvedCount: listed.Count,
-			Truncated:       listed.Count > len(listed.Conflicts),
+			Truncated:       listed.Next != "",
 			Conflicts:       bodies,
+			Page:            cataloguepage.NewPage(query.Limit, listed.Next, listed.Total),
 		})
 	})
 }
@@ -90,6 +99,7 @@ type cancellationOrderConflictsResponse struct {
 	UnresolvedCount int                             `json:"unresolvedCount"`
 	Truncated       bool                            `json:"truncated"`
 	Conflicts       []cancellationOrderConflictBody `json:"conflicts"`
+	Page            cataloguepage.Page              `json:"page"`
 }
 
 // cancellationOrderConflictBody 逐字段透出册上一行：决定命令要的几段（包裹、边界种类、边界那一代、取消）原样给出，两边的业务时间与发现时间一并给出，让决定人

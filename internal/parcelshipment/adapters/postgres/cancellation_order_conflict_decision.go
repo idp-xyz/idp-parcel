@@ -11,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CancellationOrderConflictDecisions 实现 ports.CancellationOrderConflictDecisions：取消先后冲突的决定留痕（ADR-0295）。只追加，主键是冲突行的
@@ -151,9 +152,10 @@ func NewCancellationOrderConflictCatalogue(db *bentopg.DB) (*CancellationOrderCo
 
 var _ ports.CancellationOrderConflictCatalogue = (*CancellationOrderConflictCatalogue)(nil)
 
-const unresolvedCancellationOrderConflictFilter = `
-		  FROM parcel_shipment.cancellation_order_conflict c
-		 WHERE c.tenant_id = $1
+const (
+	cancellationOrderConflictSource = "parcel_shipment.cancellation_order_conflict c"
+	// unresolvedCancellationOrderConflict 是「未解开」：冲突行没有对应的决定留痕。
+	unresolvedCancellationOrderConflict = `c.tenant_id = $1
 		   AND NOT EXISTS (
 		       SELECT 1
 		         FROM parcel_shipment.cancellation_order_conflict_decision d
@@ -162,58 +164,100 @@ const unresolvedCancellationOrderConflictFilter = `
 		          AND d.boundary_kind = c.boundary_kind
 		          AND d.boundary_ref = c.boundary_ref
 		          AND d.cancellation_id = c.cancellation_id)`
+)
 
-// ListUnresolvedCancellationOrderConflicts 上列本租户册上未解开的行，最早发现的在前、同刻按包裹与边界那一代收尾，至多 limit 行；Count 是未解开的
-// 全部行数，不受 limit 截断。两句不在同一快照里：计数与清单是此刻的大概，决定的成败由决定口自己的主键判。
+// cancellationOrderConflictPages 把 ports.CancellationOrderConflictPages 落到列上；q 在包裹、边界那一代与取消上做字面包含。
+var cancellationOrderConflictPages = ports.CancellationOrderConflictPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"detectedAt": "c.detected_at"},
+	Identity: []string{"c.parcel_id", "c.boundary_kind", "c.boundary_ref", "c.cancellation_id"},
+	Filters:  map[string]string{"boundaryKind": "c.boundary_kind"},
+	Keyword:  []string{"c.parcel_id", "c.boundary_ref", "c.cancellation_id"},
+})
+
+// scannedCancellationOrderConflict 带着取页读回的键列原值：游标位置从它取，与 ORDER BY 用的是同一份。
+type scannedCancellationOrderConflict struct {
+	entry                                 ports.CancellationOrderConflictEntry
+	parcel, kind, reference, cancellation string
+	detectedAt                            time.Time
+}
+
+// ListUnresolvedCancellationOrderConflicts 上列本租户册上未解开的行的一页：缺省最早发现的在前、同刻按（包裹、边界种类、边界那一代、
+// 取消）收尾。Count 是未解开的全部行数，不受页与条件截断。几句不在同一快照里：计数与清单是此刻的大概，决定的成败由决定口自己
+// 的主键判。
 func (catalogue *CancellationOrderConflictCatalogue) ListUnresolvedCancellationOrderConflicts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) (ports.UnresolvedCancellationOrderConflicts, error) {
+	fail := func(err error) (ports.UnresolvedCancellationOrderConflicts, error) {
+		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+	}
 	if limit <= 0 {
-		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf(
-			"list unresolved cancellation order conflicts: limit %d is not a positive page size", limit)
+		return fail(fmt.Errorf("limit %d is not a positive page size", limit))
+	}
+	plan, err := cancellationOrderConflictPages.Plan(query, unresolvedCancellationOrderConflict, []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+		return fail(err)
 	}
-	var count int
-	if err := querier.QueryRow(ctx, `SELECT count(*)`+unresolvedCancellationOrderConflictFilter, tenant.String()).Scan(&count); err != nil {
-		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: count: %w", err)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(cancellationOrderConflictSource), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT c.parcel_id, c.boundary_kind, c.boundary_ref, c.cancellation_id, c.cancelled_at, c.boundary_at, c.detected_at`+
-			unresolvedCancellationOrderConflictFilter+`
-		 ORDER BY c.detected_at, c.parcel_id, c.boundary_ref, c.cancellation_id
-		 LIMIT $2`,
-		tenant.String(), limit)
+	backlog, err := queueBacklog(ctx, querier, query, total,
+		"SELECT count(*) FROM "+cancellationOrderConflictSource+" WHERE "+unresolvedCancellationOrderConflict, tenant)
 	if err != nil {
-		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(
+		"c.parcel_id, c.boundary_kind, c.boundary_ref, c.cancellation_id, c.cancelled_at, c.boundary_at, c.detected_at",
+		cancellationOrderConflictSource), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := ports.UnresolvedCancellationOrderConflicts{Conflicts: []ports.CancellationOrderConflictEntry{}, Count: count}
+	var fetched []scannedCancellationOrderConflict
 	for rows.Next() {
-		var (
-			parcelRaw, kind, reference, cancellationID string
-			cancelledAt, boundaryAt, detectedAt        time.Time
-		)
-		if err := rows.Scan(&parcelRaw, &kind, &reference, &cancellationID, &cancelledAt, &boundaryAt, &detectedAt); err != nil {
-			return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+		var row scannedCancellationOrderConflict
+		var cancelledAt, boundaryAt time.Time
+		if err := rows.Scan(&row.parcel, &row.kind, &row.reference, &row.cancellation, &cancelledAt, &boundaryAt, &row.detectedAt); err != nil {
+			return fail(err)
 		}
-		parcel, err := domain.NewDeclaredParcelID(parcelRaw)
+		parcel, err := domain.NewDeclaredParcelID(row.parcel)
 		if err != nil {
-			return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+			return fail(err)
 		}
-		entry, err := conflictEntry(tenant, parcel, kind, reference, cancellationID, cancelledAt, boundaryAt, detectedAt)
-		if err != nil {
-			return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+		if row.entry, err = conflictEntry(tenant, parcel, row.kind, row.reference, row.cancellation, cancelledAt, boundaryAt, row.detectedAt); err != nil {
+			return fail(err)
 		}
-		listed.Conflicts = append(listed.Conflicts, entry)
+		fetched = append(fetched, row)
 	}
 	if err := rows.Err(); err != nil {
-		return ports.UnresolvedCancellationOrderConflicts{}, fmt.Errorf("list unresolved cancellation order conflicts: %w", err)
+		return fail(err)
+	}
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(row scannedCancellationOrderConflict, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(row.detectedAt),
+				Identity: []string{row.parcel, row.kind, row.reference, row.cancellation},
+			}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	listed := ports.UnresolvedCancellationOrderConflicts{
+		Conflicts: make([]ports.CancellationOrderConflictEntry, 0, len(page.Rows)),
+		Next:      page.Next,
+		Total:     page.Total,
+		Count:     backlog,
+	}
+	for _, row := range page.Rows {
+		listed.Conflicts = append(listed.Conflicts, row.entry)
 	}
 	return listed, nil
 }

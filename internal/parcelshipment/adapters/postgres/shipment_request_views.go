@@ -12,6 +12,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ShipmentRequestViews 实现 ports.ShipmentRequestViews：委托查阅的只读面。
@@ -36,41 +37,71 @@ func NewShipmentRequestViews(db *bentopg.DB) (*ShipmentRequestViews, error) {
 
 var _ ports.ShipmentRequestViews = (*ShipmentRequestViews)(nil)
 
-// ListVisible 按作用域取回最近的委托概要，新的在前；同刻并列时按委托标识倒序，保证
-// 分页可重复。limit 非正是调用方编程错误——静默答一页会把「忘了传」变成一个没人决定
-// 过的页大小。
+// shipmentRequestViewPages 把 ports.ShipmentRequestViewPages 落到列上。state 落在存代码的 state 列；q 在委托号、单据号（运单号）
+// 与来源请求键上做字面包含——单据号可空，没有号的委托在 q 上只靠另两列命中。
+var shipmentRequestViewPages = ports.ShipmentRequestViewPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"submittedAt": "submitted_at", "shipmentRequestId": "shipment_request_id"},
+	Identity: []string{"shipment_request_id"},
+	Filters:  map[string]string{"state": "state", "customerAccountId": "customer_account_id"},
+	Codes:    map[string]func(string) (int64, error){"state": cataloguepage.Code[domain.ShipmentRequestState]},
+	Keyword:  []string{"shipment_request_id", "document_number", "source_request_key"},
+})
+
+// visibleRequests 是作用域那一段固定条件：租户与可见客户账户集合进 WHERE，读面答不出作用域外的行（`统一不可见结果`）。
+const visibleRequests = "tenant_id = $1 AND customer_account_id = ANY($2)"
+
+// ListVisible 按作用域取委托概要的一页：缺省提交时刻倒序、同刻按委托标识倒序。limit 非正是调用方编程错误——静默答一页
+// 会把「忘了传」变成一个没人决定过的页大小。
 func (views *ShipmentRequestViews) ListVisible(
 	ctx context.Context,
 	scope domain.AuthorizedQueryScope,
 	limit int,
-) ([]ports.ShipmentRequestSummaryRecord, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
+		return cataloguepage.Result[ports.ShipmentRequestSummaryRecord]{}, fmt.Errorf("list shipment request views: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list shipment request views: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := shipmentRequestViewPages.Plan(query, visibleRequests,
+		[]any{scope.TenantID().String(), visibleAccounts(scope)}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := views.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list shipment request views: %w", err)
+		return fail(err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT `+summaryColumns+`
-		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		  ORDER BY submitted_at DESC, shipment_request_id DESC
-		  LIMIT $3`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		limit,
-	)
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(shipmentRequestTable), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(summaryColumns, shipmentRequestTable), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list shipment request views: %w", err)
+		return fail(err)
 	}
 	records, err := collectSummaries(rows)
 	if err != nil {
-		return nil, fmt.Errorf("list shipment request views: %w", err)
+		return fail(err)
 	}
-	return records, nil
+	page, err := cataloguepage.Finish(query, records, limit, total, summaryPosition)
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
+}
+
+const shipmentRequestTable = "parcel_shipment.shipment_request"
+
+// summaryPosition 给出一份概要在排序维上的位置。提交时刻与委托号都是概要直接从列上读回的值（collectSummaries），与 ORDER BY
+// 用的是同一份。
+func summaryPosition(summary ports.ShipmentRequestSummaryRecord, sortField string) cataloguepage.Position {
+	value := summary.ShipmentRequestID.String()
+	if sortField == "submittedAt" {
+		value = cataloguepage.FormatInstant(summary.SubmittedAt)
+	}
+	return cataloguepage.Position{Value: value, Identity: []string{summary.ShipmentRequestID.String()}}
 }
 
 // ListVisibleByDocumentNumber 按（作用域 + 单据号）取回概要，逐字比对、不折算大小写或空白（号由编号规则渲染，折算就是另一个号）。

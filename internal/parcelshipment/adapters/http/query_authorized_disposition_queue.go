@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 授权处置队列查阅端点（票 sa-preacceptance-policy-view/04；ADR-0132 决定二）。列的是「当前停在等待授权
@@ -26,7 +27,8 @@ type AuthorizedDispositionQueueReader interface {
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,
 		limit int,
-	) ([]ports.AuthorizedDispositionQueueRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AuthorizedDispositionQueueRecord], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
@@ -36,7 +38,8 @@ var _ AuthorizedDispositionQueueReader = ports.AuthorizedDispositionQueue(nil)
 const outcomeDispositionQueueListed = "DISPOSITION_QUEUE_LISTED"
 
 // NewQueryAuthorizedDispositionQueueEndpoint 交回授权处置队列的 HTTP 入口
-// （GET /authorized-disposition-queue）。方法门与错误分流照 /acceptance-review-queue 的形。
+// （GET /authorized-disposition-queue）。方法门与错误分流照 /acceptance-review-queue 的形；查询参数按
+// ports.AuthorizedDispositionQueuePages 解码（ADR-0144），在 Intake 之后，答复带 page。
 func NewQueryAuthorizedDispositionQueueEndpoint(
 	intake ShipmentRequestViewsIntake,
 	reader AuthorizedDispositionQueueReader,
@@ -53,20 +56,26 @@ func NewQueryAuthorizedDispositionQueueEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
+		pageQuery, err := ports.AuthorizedDispositionQueuePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 
-		records, err := reader.ListAwaitingAuthorizedDisposition(request.Context(), query.Scope, query.Limit)
+		page, err := reader.ListAwaitingAuthorizedDisposition(request.Context(), query.Scope, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		entries := make([]dispositionQueueEntryBody, 0, len(records))
-		for _, record := range records {
+		entries := make([]dispositionQueueEntryBody, 0, len(page.Rows))
+		for _, record := range page.Rows {
 			entries = append(entries, dispositionQueueEntryBodyOf(record))
 		}
 		writeJSON(response, http.StatusOK, dispositionQueueListResponse{
 			Outcome: outcomeDispositionQueueListed,
 			Entries: entries,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -74,6 +83,7 @@ func NewQueryAuthorizedDispositionQueueEndpoint(
 type dispositionQueueListResponse struct {
 	Outcome string                      `json:"outcome"`
 	Entries []dispositionQueueEntryBody `json:"entries"`
+	Page    cataloguepage.Page          `json:"page"`
 }
 
 type dispositionQueueEntryBody struct {

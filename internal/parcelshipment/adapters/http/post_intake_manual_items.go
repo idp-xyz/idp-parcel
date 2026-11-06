@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -166,7 +167,7 @@ type PostIntakeManualItemQueryIntake interface {
 
 // PostIntakeManualItemReader 是查阅端点消费的读口：查阅不触发任何登记，所以接存储读面。
 type PostIntakeManualItemReader interface {
-	ListPendingPostIntakeManualItems(ctx context.Context, tenant domain.TenantID, limit int) (ports.PendingPostIntakeManualItems, error)
+	ListPendingPostIntakeManualItems(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.PendingPostIntakeManualItems, error)
 	ListPostIntakeManualItemsOfParcel(ctx context.Context, tenant domain.TenantID, parcel domain.DeclaredParcelID) ([]ports.PostIntakeManualItem, error)
 }
 
@@ -183,8 +184,9 @@ func (intake *OperatorOperationsReadIntake) IntakePostIntakeManualItemQuery(ctx 
 	return PostIntakeManualItemQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
 }
 
-// NewQueryPostIntakeManualItemsEndpoint 交回待人工处理项查阅的 HTTP 入口（GET /post-intake-disposition-manual-items）。不带参数上列本租户尚未登记结果的项；
-// 带 `parcel` 读回这件包裹名下的全部项连同各自的结果（PS 读回承接结果走这条）。查阅面里没有动作。
+// NewQueryPostIntakeManualItemsEndpoint 交回待人工处理项查阅的 HTTP 入口（GET /post-intake-disposition-manual-items）。不带 `parcel` 上列本租户尚未
+// 登记结果的项，按 ports.PostIntakeManualItemPages 解码（ADR-0144）、在 Intake 之后，答复带 page；带 `parcel` 读回这件包裹名下的全部项连同各自的
+// 结果（PS 读回承接结果走这条），是有界查找，不解码、不带 page。查阅面里没有动作。
 func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntake, reader PostIntakeManualItemReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -197,9 +199,18 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 			writeIntakeProblem(response, err)
 			return
 		}
+		ofParcel := request.URL.Query().Get("parcel")
+		var pageQuery cataloguepage.Query
+		if ofParcel == "" {
+			if pageQuery, err = ports.PostIntakeManualItemPages.Decode(request.URL.Query()); err != nil {
+				writePageQueryProblem(response, err)
+				return
+			}
+		}
 		var listed []ports.PostIntakeManualItem
+		var page *cataloguepage.Page
 		pendingCount, truncated := 0, false
-		if raw := request.URL.Query().Get("parcel"); raw != "" {
+		if raw := ofParcel; raw != "" {
 			parcel, err := domain.NewDeclaredParcelID(raw)
 			if err != nil {
 				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
@@ -215,29 +226,33 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 				}
 			}
 		} else {
-			pending, err := reader.ListPendingPostIntakeManualItems(request.Context(), query.Tenant, query.Limit)
+			pending, err := reader.ListPendingPostIntakeManualItems(request.Context(), query.Tenant, query.Limit, pageQuery)
 			if err != nil {
 				// 读不回是答案未形成，不伪装成空清单：把一次该重试的故障读成「没有待人工处理项」，卡住的包裹就更没人看见了。
 				writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 				return
 			}
-			listed, pendingCount, truncated = pending.Items, pending.Count, pending.Count > len(pending.Items)
+			listed, pendingCount, truncated = pending.Items, pending.Count, pending.Next != ""
+			spelled := cataloguepage.NewPage(query.Limit, pending.Next, pending.Total)
+			page = &spelled
 		}
 		bodies := make([]postIntakeManualItemBody, 0, len(listed))
 		for _, item := range listed {
 			bodies = append(bodies, postIntakeManualItemBodyOf(item))
 		}
 		writeJSON(response, http.StatusOK, postIntakeManualItemsResponse{
-			Outcome: outcomePostIntakeManualItemsListed, PendingCount: pendingCount, Truncated: truncated, Items: bodies,
+			Outcome: outcomePostIntakeManualItemsListed, PendingCount: pendingCount, Truncated: truncated, Items: bodies, Page: page,
 		})
 	})
 }
 
+// postIntakeManualItemsResponse 的 page 只在待登记清单那一支在场：按包裹读回的全部项不是一页目录。
 type postIntakeManualItemsResponse struct {
 	Outcome      string                     `json:"outcome"`
 	PendingCount int                        `json:"pendingCount"`
 	Truncated    bool                       `json:"truncated"`
 	Items        []postIntakeManualItemBody `json:"items"`
+	Page         *cataloguepage.Page        `json:"page,omitempty"`
 }
 
 // postIntakeManualItemBody 逐字段透出一项：登记命令要的几段（包裹、决定版本、所有者、动作）原样给出，另带所属决定的去向、目的地与包裹决定链此刻的版本；

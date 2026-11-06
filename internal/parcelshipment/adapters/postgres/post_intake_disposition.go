@@ -11,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PostIntakeDispositions 实现 ports.PostIntakeDispositions：收寄后服务处置决定的留痕（ADR-0332）。每个包裹一条线性的决定链，只追加，当前决定是链尾；
@@ -260,13 +261,21 @@ const postIntakeRequestSource = `
 	    ON c.tenant_id = n.tenant_id AND c.parcel_id = n.parcel_id
 	   AND c.cancellation_id = n.cancellation_id AND c.kind = 'PARCEL_CANCELLED'`
 
-const unansweredPostIntakeRequestFilter = `
-	 WHERE NOT EXISTS (
+// unansweredPostIntakeRequest 是「等回应」：没有被某份决定回应，包裹也还没有当前终局。
+const unansweredPostIntakeRequest = `NOT EXISTS (
 	           SELECT 1 FROM parcel_shipment.post_intake_disposition_decision a
 	            WHERE a.tenant_id = r.tenant_id AND a.request_key = r.request_key AND a.parcel_id = r.parcel_id)
 	   AND NOT EXISTS (
 	           SELECT 1 FROM parcel_shipment.final_outcome f
 	            WHERE f.tenant_id = r.tenant_id AND f.parcel_id = r.parcel_id AND f.is_current)`
+
+// postIntakeDispositionRequestPages 把 ports.PostIntakeDispositionRequestPages 落到来源 r 导出的列上；q 在请求键、包裹与取消上做
+// 字面包含（取消可空，待处置那一路的行只靠另两列命中）。
+var postIntakeDispositionRequestPages = ports.PostIntakeDispositionRequestPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"recordedAt": "r.decided_at"},
+	Identity: []string{"r.request_key", "r.parcel_id"},
+	Keyword:  []string{"r.request_key", "r.parcel_id", "r.cancellation_id"},
+})
 
 const postIntakeCurrentVersion = `COALESCE((SELECT max(d.version)
 	                          FROM parcel_shipment.post_intake_disposition_decision d
@@ -298,51 +307,74 @@ func (requests *PostIntakeDispositionRequests) FindPostIntakeDispositionRequest(
 	return request, true, nil
 }
 
-// ListUnansweredPostIntakeDispositionRequests 上列本租户还没有被回应的请求，最早记下的在前、同刻按请求键与包裹收尾，至多 limit 行；Count 是全部行数，不受
-// limit 截断。两句不在同一快照里：计数与清单是此刻的大概，决定的成败由决定口自己在锁里判。
+// ListUnansweredPostIntakeDispositionRequests 上列本租户还没有被回应的请求的一页：缺省最早记下的在前、同刻按请求键与包裹收尾。
+// Count 是全部等回应的行数，不受页与条件截断。几句不在同一快照里：计数与清单是此刻的大概，决定的成败由决定口自己在锁里判。
 func (requests *PostIntakeDispositionRequests) ListUnansweredPostIntakeDispositionRequests(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) (ports.UnansweredPostIntakeDispositionRequests, error) {
+	fail := func(err error) (ports.UnansweredPostIntakeDispositionRequests, error) {
+		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: %w", err)
+	}
 	if limit <= 0 {
-		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf(
-			"list unanswered post-intake disposition requests: limit %d is not a positive page size", limit)
+		return fail(fmt.Errorf("limit %d is not a positive page size", limit))
+	}
+	plan, err := postIntakeDispositionRequestPages.Plan(query, unansweredPostIntakeRequest, []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := requests.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: %w", err)
+		return fail(err)
 	}
-	var count int
-	if err := querier.QueryRow(ctx,
-		`WITH r AS (`+postIntakeRequestSource+`) SELECT count(*) FROM r`+unansweredPostIntakeRequestFilter,
-		tenant.String()).Scan(&count); err != nil {
-		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: count: %w", err)
+	with := `WITH r AS (` + postIntakeRequestSource + `) `
+	var total int64
+	if err := querier.QueryRow(ctx, with+plan.CountSQL("r"), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
 	}
-	rows, err := querier.Query(ctx,
-		`WITH r AS (`+postIntakeRequestSource+`)
-		 SELECT r.request_key, r.parcel_id, r.kind, r.crossed_intake_version, r.cancellation_id,
-		        r.requester_ref, r.authority_ref, r.reason_ref, r.requested_at, r.decided_at,
-		        `+postIntakeCurrentVersion+`
-		   FROM r`+unansweredPostIntakeRequestFilter+`
-		  ORDER BY r.decided_at, r.request_key, r.parcel_id
-		  LIMIT $2`,
-		tenant.String(), limit)
+	backlog, err := queueBacklog(ctx, querier, query, total,
+		with+"SELECT count(*) FROM r WHERE "+unansweredPostIntakeRequest, tenant)
 	if err != nil {
-		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: %w", err)
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, with+plan.PageSQL(
+		`r.request_key, r.parcel_id, r.kind, r.crossed_intake_version, r.cancellation_id,
+		 r.requester_ref, r.authority_ref, r.reason_ref, r.requested_at, r.decided_at,
+		 `+postIntakeCurrentVersion, "r"), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := ports.UnansweredPostIntakeDispositionRequests{Requests: []ports.PostIntakeDispositionRequest{}, Count: count}
+	var fetched []ports.PostIntakeDispositionRequest
 	for rows.Next() {
 		request, err := scanPostIntakeRequest(tenant, rows)
 		if err != nil {
-			return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: %w", err)
+			return fail(err)
 		}
-		listed.Requests = append(listed.Requests, request)
+		fetched = append(fetched, request)
 	}
 	if err := rows.Err(); err != nil {
-		return ports.UnansweredPostIntakeDispositionRequests{}, fmt.Errorf("list unanswered post-intake disposition requests: %w", err)
+		return fail(err)
+	}
+	// 记下时刻、请求键与包裹都是从 r 的列上原样读回的值（scanPostIntakeRequest），与 ORDER BY 用的是同一份。
+	page, err := cataloguepage.Finish(query, fetched, limit, total,
+		func(request ports.PostIntakeDispositionRequest, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(request.RecordedAt),
+				Identity: []string{request.Key.RequestKey.String(), request.Key.Parcel.String()},
+			}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	listed := ports.UnansweredPostIntakeDispositionRequests{
+		Requests: page.Rows, Next: page.Next, Total: page.Total, Count: backlog,
+	}
+	if listed.Requests == nil {
+		listed.Requests = []ports.PostIntakeDispositionRequest{}
 	}
 	return listed, nil
 }
