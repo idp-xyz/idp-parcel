@@ -287,7 +287,7 @@ func TestTheReviewCatalogueListsOnlyThisTenantsPendingDeliveries(t *testing.T) {
 		}
 		return register.SettleFormed(ctx, settled, task, pendingAnsweredAt.Add(time.Hour))
 	})
-	rows, err := catalogue.ListDeliveryDispatchPendings(t.Context(), mine.TenantID, 25)
+	rows, err := rowsOf(catalogue.ListDeliveryDispatchPendings(t.Context(), mine.TenantID, 25, firstPage(t, ports.DeliveryDispatchPendingPages)))
 	if err != nil {
 		t.Fatal(err)
 	}

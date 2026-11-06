@@ -100,7 +100,7 @@ func TestTheBookingRegistryKeepsTheSubmittingAndCancellingOperators(t *testing.T
 	if err != nil {
 		t.Fatalf("构造查阅册：%v", err)
 	}
-	rows, err := catalogue.ListBookingRequests(ctx, deliveryValue(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListBookingRequests(ctx, deliveryValue(t, domain.NewTenantID, "tenant-a"), 10, firstPage(t, ports.BookingRequestPages)))
 	if err != nil {
 		t.Fatalf("订舱册：%v", err)
 	}

@@ -102,7 +102,7 @@ func TestTheBookingRequestRegistryTranscribesRowsWithTheirStanding(t *testing.T)
 }
 
 // Covers: AT-TF-333 的线格式那一半（票 demo-chain-gaps/167，ADR-0239 决定二）——挡回册逐格转写：答复方、订舱、答复标识、依据词、首末
-// 挡回时刻、次数（十进制计数串）；两个筛选参数原样交给读口，缺席即不筛。
+// 挡回时刻、次数（十进制计数串）；两个筛选参数照 ADR-0144 作筛选维交给读口，缺席即不筛。
 func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *testing.T) {
 	register := &stubReviewCatalogue{bounces: []ports.BookingAnswerBounceCatalogueRow{
 		{Source: "SYN-PARTY-CARRIER-LM-01", Booking: "SYN-BOOKING-1", Answer: "SYN-ANSWER-1", Basis: "SOURCE_NOT_SERVICE_PROVIDER",
@@ -113,9 +113,9 @@ func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *test
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
-	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 ||
-		register.gotFilter != (ports.BookingAnswerBounceFilter{Booking: "SYN-BOOKING-1", Source: "SYN-PARTY-CARRIER-LM-01"}) {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d filter=%+v", register.gotTenant, register.gotLimit, register.gotFilter)
+	wantFilters := map[string][]string{"booking": {"SYN-BOOKING-1"}, "source": {"SYN-PARTY-CARRIER-LM-01"}}
+	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 || !reflect.DeepEqual(register.gotQuery.Filters, wantFilters) {
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d filters=%+v", register.gotTenant, register.gotLimit, register.gotQuery.Filters)
 	}
 	var body struct {
 		Outcome string              `json:"outcome"`
@@ -136,8 +136,8 @@ func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *test
 
 	unfiltered := &stubReviewCatalogue{}
 	if response := serveGet(recordsEndpoint(unfiltered), "/transport-fulfillment-records?registry=booking-answer-bounce"); response.Code != http.StatusOK ||
-		unfiltered.gotFilter != (ports.BookingAnswerBounceFilter{}) {
-		t.Fatalf("不带筛选 = %d，读口收到 %+v", response.Code, unfiltered.gotFilter)
+		len(unfiltered.gotQuery.Filters) != 0 {
+		t.Fatalf("不带筛选 = %d，读口收到 %+v", response.Code, unfiltered.gotQuery.Filters)
 	}
 }
 

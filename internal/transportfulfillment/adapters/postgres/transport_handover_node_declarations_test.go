@@ -94,7 +94,7 @@ func TestHandoverNodeDeclarationsRoundTripThroughEveryReadPath(t *testing.T) {
 		}
 	}
 
-	rows, err := stores.catalogue.ListTransportHandovers(ctx, first.Key.TenantID, 10)
+	rows, err := rowsOf(stores.catalogue.ListTransportHandovers(ctx, first.Key.TenantID, 10, firstPage(t, ports.TransportHandoverPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列交接册：%v rows=%d", err, len(rows))
 	}

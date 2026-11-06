@@ -14,6 +14,7 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件对真实 PostgreSQL 证 ADR-0303 复核记录（票 demo-chain-gaps/180）的生产装配半边：订舱提交与取消、取消运输委托、履约段采用
@@ -126,7 +127,8 @@ func TestTheBookingCancellationAndAdoptionDecisionsRecordTheirOperatorsAgainstAR
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := catalogue.ListBookingRequests(t.Context(), mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-01"), 10)
+	rows, err := tfRowsOf(catalogue.ListBookingRequests(t.Context(), mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-01"), 10,
+		tfFirstPage(t, tfports.BookingRequestPages)))
 	if err != nil || len(rows) != 1 || rows[0].SubmittedBy != firstOperatorRecorded || rows[0].CancelledBy != firstOperatorRecorded {
 		t.Fatalf("订舱册读回 = %+v err=%v，want 一行带提交人与取消人", rows, err)
 	}

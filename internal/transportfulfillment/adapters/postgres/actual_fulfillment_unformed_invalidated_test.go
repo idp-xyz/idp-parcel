@@ -52,7 +52,7 @@ func TestTheUnformedRegisterSettlesAnInvalidatedOccurrenceAsInvalidatedByDecisio
 	if _, found, _ := register.FindByKey(ctx, absent); found {
 		t.Fatal("册上没有的那一件被了结出了一行")
 	}
-	if listed, err := register.ListActualFulfillmentUnformed(ctx, key.TenantID, 50); err != nil || len(listed) != 0 {
+	if listed, err := rowsOf(register.ListActualFulfillmentUnformed(ctx, key.TenantID, 50, firstPage(t, ports.ActualFulfillmentUnformedPages))); err != nil || len(listed) != 0 {
 		t.Fatalf("查阅页列了 %+v %v", listed, err)
 	}
 

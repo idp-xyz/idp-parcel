@@ -47,7 +47,7 @@ func wantPoolOutcome(t *testing.T, result application.OpportunityResult, want ap
 
 func countPools(t *testing.T, stores scheduleRegistryStores, tenant domain.TenantID) int {
 	t.Helper()
-	rows, err := stores.catalogue.ListCapacityPools(t.Context(), tenant, 50)
+	rows, err := rowsOf(stores.catalogue.ListCapacityPools(t.Context(), tenant, 50, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil {
 		t.Fatalf("上列容量池册：%v", err)
 	}
@@ -116,7 +116,7 @@ func TestEstablishingAPoolOnTheRegistryChecksTheSchedule(t *testing.T) {
 			t.Fatalf("%s 池读回 = exists=%v %s %d %v", dimension, exists, found.Pool.Dimension(), found.Pool.Capacity(), err)
 		}
 	}
-	rows, err := stores.catalogue.ListCapacityPools(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListCapacityPools(t.Context(), tenant, 10, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil || len(rows) != 2 ||
 		rows[0].PoolID != "SYN-TPL-1/2026-10-21/BAG_POSITIONS" || rows[0].Dimension != "BAG_POSITIONS" || rows[0].Capacity != 40 ||
 		rows[1].PoolID != "SYN-TPL-1/2026-10-21/WEIGHT" || rows[1].Dimension != "WEIGHT" || rows[1].Capacity != 5000 {
@@ -150,7 +150,7 @@ func TestTemplateCapacitiesMaterializePoolsOnTheRegistry(t *testing.T) {
 	if err != nil || len(onConnection) != 1 || len(onConnection[0].Template.Content().Capacities) != 2 {
 		t.Fatalf("候选来源读回的周期安排缺容量声明：%+v %v", onConnection, err)
 	}
-	catalogued, err := stores.catalogue.ListScheduleTemplates(t.Context(), tenant, 10)
+	catalogued, err := rowsOf(stores.catalogue.ListScheduleTemplates(t.Context(), tenant, 10, firstPage(t, ports.ScheduleTemplatePages)))
 	if err != nil || len(catalogued) != 1 || len(catalogued[0].Capacities) != 2 ||
 		catalogued[0].Capacities[0].Dimension != "WEIGHT" || catalogued[0].Capacities[0].Capacity != 5000 ||
 		catalogued[0].Capacities[1].Dimension != "PIECES" || catalogued[0].Capacities[1].Unit != "PCS" {
@@ -194,7 +194,7 @@ func TestTemplateCapacitiesMaterializePoolsOnTheRegistry(t *testing.T) {
 		outcomes["SYN-TPL-1/2026-10-21/BAG_POSITIONS"] != application.PoolEstablished || !followed.Persisted() {
 		t.Fatalf("换版后再登 = %v persisted=%v", outcomes, followed.Persisted())
 	}
-	rows, err := stores.catalogue.ListCapacityPools(t.Context(), tenant, 10)
+	rows, err := rowsOf(stores.catalogue.ListCapacityPools(t.Context(), tenant, 10, firstPage(t, ports.CapacityPoolPages)))
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("池册 = %+v %v", rows, err)
 	}

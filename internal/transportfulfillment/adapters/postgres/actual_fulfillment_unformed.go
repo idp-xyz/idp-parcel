@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -188,57 +189,68 @@ func (register *ActualFulfillmentUnformeds) FindByKey(
 	return record, true, nil
 }
 
-// ListActualFulfillmentUnformed 列一个租户未形成的那几件：参与终点最早的在前，同刻按（段，对象）稳定排序。了结的不上列：这一页是要人去
-// 补的清单，不是发生项的历史。
+// actualFulfillmentUnformedPages 把 ports.ActualFulfillmentUnformedPages 落到列上。q 在段、对象、委托与协议对象上做字面包含。
+var actualFulfillmentUnformedPages = ports.ActualFulfillmentUnformedPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"endedAt": "ended_at", "commission": "commission_id"},
+	Identity: []string{"segment_ref", "object_ref"},
+	Filters:  map[string]string{"reason": "reason"},
+	Keyword:  []string{"segment_ref", "object_ref", "commission_id", "agreement_object"},
+})
+
+// ListActualFulfillmentUnformed 列一个租户未形成的那几件，按查询的筛选、q 与排序取游标之后的一页：缺省参与终点最早的在前，同刻按
+// （段，对象）升序。了结的不上列：这一页是要人去补的清单，不是发生项的历史。
 func (register *ActualFulfillmentUnformeds) ListActualFulfillmentUnformed(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ActualFulfillmentUnformedRecord, error) {
-	if limit <= 0 {
-		return nil, fmt.Errorf("list actual fulfillment unformed: limit must be positive, got %d", limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error) {
+		return cataloguepage.Result[ports.ActualFulfillmentUnformedRecord]{}, fmt.Errorf("list actual fulfillment unformed: %w", err)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := actualFulfillmentUnformedPages.Plan(query, "tenant_id = $1 AND state = 'UNFORMED'", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := register.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
+		return fail(err)
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT `+actualFulfillmentUnformedColumns+`
-		   FROM transport_fulfillment.actual_fulfillment_unformed
-		  WHERE tenant_id = $1 AND state = 'UNFORMED'
-		  ORDER BY ended_at, segment_ref, object_ref
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+
+	const source = "transport_fulfillment.actual_fulfillment_unformed"
+	page, err := readCataloguePage(ctx, querier, query, plan, limit, plan.CountSQL(source),
+		plan.PageSQL(actualFulfillmentUnformedColumns, source), scanActualFulfillmentUnformed, actualFulfillmentUnformedPosition)
 	if err != nil {
-		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
+		return fail(err)
 	}
-	defer rows.Close()
-	list := make([]ports.ActualFulfillmentUnformedRecord, 0)
-	for rows.Next() {
-		record, err := scanActualFulfillmentUnformed(rows)
-		if err != nil {
-			return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
-		}
-		list = append(list, record)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
-	}
-	rows.Close()
-	// 各件所在委托的单据号格另读一次（ADR-0355 决定十一），给查阅页那一格的委托引用带号。
-	commissions := make([]string, 0, len(list))
-	for _, record := range list {
+	// 各件所在委托的单据号格另读一次（ADR-0355 决定十一），给查阅页那一格的委托引用带号；只读本页这几件引到的。
+	commissions := make([]string, 0, len(page.Rows))
+	for _, record := range page.Rows {
 		commissions = append(commissions, record.Entry.Commission.String())
 	}
 	numberings, err := commissionDocumentNumberings(ctx, querier, tenant, commissions)
 	if err != nil {
-		return nil, fmt.Errorf("list actual fulfillment unformed: %w", err)
+		return fail(err)
 	}
-	for index := range list {
-		list[index].CommissionDocumentNumber = referencedNumbering(numberings, list[index].Entry.Commission.String())
+	for index := range page.Rows {
+		page.Rows[index].CommissionDocumentNumber = referencedNumbering(numberings, page.Rows[index].Entry.Commission.String())
 	}
-	return list, nil
+	return page, nil
+}
+
+// actualFulfillmentUnformedPosition 取装回的记录：参与终点只换了时区，段、对象与委托的构造门原样存值，与列逐位相同。
+func actualFulfillmentUnformedPosition(record ports.ActualFulfillmentUnformedRecord, sortField string) cataloguepage.Position {
+	value := cataloguepage.FormatInstant(record.Entry.EndedAt)
+	if sortField == "commission" {
+		value = record.Entry.Commission.String()
+	}
+	return cataloguepage.Position{
+		Value:    value,
+		Identity: []string{record.Entry.Key.Segment.String(), record.Entry.Key.Object.String()},
+	}
 }
 
 func scanActualFulfillmentUnformed(row pgx.Row) (ports.ActualFulfillmentUnformedRecord, error) {
@@ -333,11 +345,13 @@ func unformedReasonOf(raw string) ports.ActualFulfillmentUnformedReason {
 	return ports.ActualFulfillmentUnformedReasonInvalid
 }
 
-// ListActualFulfillmentUnformed 是查阅页那一格（ports.ReviewCatalogueRead）。不另写一条查询：筛法与排序只在册适配器的同名方法一处。
+// ListActualFulfillmentUnformed 是查阅页那一格（ports.ReviewCatalogueRead）。不另写一条查询：筛法、排序与翻页只在册适配器的同名
+// 方法一处。
 func (catalogue *ReviewCatalogue) ListActualFulfillmentUnformed(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ActualFulfillmentUnformedRecord, error) {
-	return (&ActualFulfillmentUnformeds{db: catalogue.db}).ListActualFulfillmentUnformed(ctx, tenant, limit)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error) {
+	return (&ActualFulfillmentUnformeds{db: catalogue.db}).ListActualFulfillmentUnformed(ctx, tenant, limit, query)
 }

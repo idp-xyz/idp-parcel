@@ -127,7 +127,7 @@ func TestAPreparationThatReadsAPoolHalfwayThroughAReleaseAnswersUndecided(t *tes
 	if result.Outcome() != application.PreparationRunUndecided || result.UndecidedReason() != application.CapacityPoolsUnavailable {
 		t.Fatalf("半截的池 = %s（%s），want 未决、池册读不动", result.Outcome(), result.UndecidedReason())
 	}
-	if rows, err := stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10, firstPage(t, ports.TransportPreparationPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("按半截的池落了结果：%d %v", len(rows), err)
 	}
 }

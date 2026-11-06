@@ -291,8 +291,8 @@ func TestTheJudgmentRecordsKeepTheirJudgeAndTheReviewFacesShowIt(t *testing.T) {
 		if err != nil || material.EffectiveJudgedBy.Present() {
 			t.Fatalf("素材版本读回判断人 = %q err=%v，want 没记下", material.EffectiveJudgedBy.String(), err)
 		}
-		rows, err := repository.ListCurrentExternalTrackingFacts(ctx, pending.Key.TenantID,
-			segmentRef(t, domain.NewTrackingSourceReference, "aggregator-a"), ports.EveryCurrentVersion, 10)
+		rows, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, pending.Key.TenantID,
+			segmentRef(t, domain.NewTrackingSourceReference, "aggregator-a"), ports.EveryCurrentVersion, 10, firstPage(t, ports.ExternalTrackingFactPages)))
 		if err != nil || len(rows) != 1 || rows[0].EffectiveJudgedBy != operatorADB {
 			t.Fatalf("查阅读面：%v %+v，want 一行、判断人 %q", err, rows, operatorADB)
 		}

@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -170,7 +171,7 @@ func TestTheBookingRegistryReadsEachBookingsStandingFromItsAnswers(t *testing.T)
 
 	before := stores.fingerprint(t)
 	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
-	rows, err := stores.catalogue.ListBookingRequests(t.Context(), tenant, 50)
+	rows, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), tenant, 50, firstPage(t, ports.BookingRequestPages)))
 	if err != nil {
 		t.Fatalf("上列订舱册：%v", err)
 	}
@@ -218,17 +219,17 @@ func TestTheBookingRegistryReadsEachBookingsStandingFromItsAnswers(t *testing.T)
 		t.Fatalf("取消时刻 = %v, want %v", rows[5].CancelledAt, cancelledAt)
 	}
 
-	if first, err := stores.catalogue.ListBookingRequests(t.Context(), tenant, 1); err != nil || len(first) != 1 || first[0].Booking != "SYN-BOOKING-PENDING" {
+	if first, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), tenant, 1, firstPage(t, ports.BookingRequestPages))); err != nil || len(first) != 1 || first[0].Booking != "SYN-BOOKING-PENDING" {
 		t.Fatalf("页大小 1：%+v %v", first, err)
 	}
-	others, err := stores.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), 50)
+	others, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), 50, firstPage(t, ports.BookingRequestPages)))
 	if err != nil || len(others) != 1 || others[0].Booking != "SYN-BOOKING-OTHER" || len(others[0].Answers) != 1 {
 		t.Fatalf("他租户只看见自己那一行：%+v %v", others, err)
 	}
-	if empty, err := stores.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-03"), 50); err != nil || empty == nil || len(empty) != 0 {
+	if empty, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-03"), 50, firstPage(t, ports.BookingRequestPages))); err != nil || empty == nil || len(empty) != 0 {
 		t.Fatalf("空册 = %#v %v, want 空列表", empty, err)
 	}
-	if _, err := stores.catalogue.ListBookingRequests(t.Context(), tenant, 0); err == nil {
+	if _, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), tenant, 0, firstPage(t, ports.BookingRequestPages))); err == nil {
 		t.Fatal("页大小 0 没被拒")
 	}
 	if after := stores.fingerprint(t); after != before {
@@ -258,9 +259,10 @@ func TestTheBounceRegistryTellsTheTwoBasesApartAndCountsResubmissions(t *testing
 	bounce(tenant, "SYN-PARTY-CARRIER-TRUNK-01", "SYN-BOOKING-NOWHERE", "SYN-ANSWER-2", ports.BouncedBookingNotRegistered, catalogueBookingAt.Add(time.Hour))
 	bounce(deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), "SYN-PARTY-CARRIER-LM-01", "SYN-BOOKING-TRUNK", "SYN-ANSWER-1",
 		ports.BouncedBookingNotRegistered, catalogueBookingAt.Add(3*time.Hour))
-	list := func(filter ports.BookingAnswerBounceFilter) []string {
+	list := func(filter url.Values) []string {
 		t.Helper()
-		rows, err := stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, filter, 50)
+		rows, err := rowsOf(stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, 50,
+			pageQuery(t, ports.BookingAnswerBouncePages, filter)))
 		if err != nil {
 			t.Fatalf("上列挡回册：%v", err)
 		}
@@ -276,36 +278,42 @@ func TestTheBounceRegistryTellsTheTwoBasesApartAndCountsResubmissions(t *testing
 		return "SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-TRUNK|SYN-ANSWER-1|SOURCE_NOT_SERVICE_PROVIDER|" + at(0) + "|" + at(last) + "|" + count
 	}
 	notRegistered := "SYN-PARTY-CARRIER-TRUNK-01|SYN-BOOKING-NOWHERE|SYN-ANSWER-2|BOOKING_NOT_REGISTERED|" + at(time.Hour) + "|" + at(time.Hour) + "|1"
-	if got, want := list(ports.BookingAnswerBounceFilter{}), []string{notRegistered, notProvider(0, "1")}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+	if got, want := list(url.Values{}), []string{notRegistered, notProvider(0, "1")}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("挡回册 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
 	bounce(tenant, "SYN-PARTY-CARRIER-LM-01", "SYN-BOOKING-TRUNK", "SYN-ANSWER-1", ports.BouncedSourceNotServiceProvider, catalogueBookingAt.Add(2*time.Hour))
 	before := stores.fingerprint(t)
-	if got, want := list(ports.BookingAnswerBounceFilter{}), []string{notProvider(2*time.Hour, "2"), notRegistered}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+	if got, want := list(url.Values{}), []string{notProvider(2*time.Hour, "2"), notRegistered}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("重交之后 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	for name, test := range map[string]struct {
-		filter ports.BookingAnswerBounceFilter
+		filter url.Values
 		want   []string
 	}{
-		"按订舱":          {ports.BookingAnswerBounceFilter{Booking: "SYN-BOOKING-NOWHERE"}, []string{notRegistered}},
-		"按答复方":         {ports.BookingAnswerBounceFilter{Source: "SYN-PARTY-CARRIER-LM-01"}, []string{notProvider(2*time.Hour, "2")}},
-		"两维都给":         {ports.BookingAnswerBounceFilter{Booking: "SYN-BOOKING-TRUNK", Source: "SYN-PARTY-CARRIER-TRUNK-01"}, nil},
-		"他租户同键那一行不混进来": {ports.BookingAnswerBounceFilter{Booking: "SYN-BOOKING-TRUNK", Source: "SYN-PARTY-CARRIER-LM-01"}, []string{notProvider(2*time.Hour, "2")}},
+		"按订舱":  {url.Values{"booking": {"SYN-BOOKING-NOWHERE"}}, []string{notRegistered}},
+		"按答复方": {url.Values{"source": {"SYN-PARTY-CARRIER-LM-01"}}, []string{notProvider(2*time.Hour, "2")}},
+		"两维都给": {url.Values{"booking": {"SYN-BOOKING-TRUNK"}, "source": {"SYN-PARTY-CARRIER-TRUNK-01"}}, nil},
+		"他租户同键那一行不混进来": {
+			url.Values{"booking": {"SYN-BOOKING-TRUNK"}, "source": {"SYN-PARTY-CARRIER-LM-01"}}, []string{notProvider(2*time.Hour, "2")},
+		},
+		"按依据（词经码表换成库里的码）": {url.Values{"basis": {"BOOKING_NOT_REGISTERED"}}, []string{notRegistered}},
+		"同一维给两个取值是或":      {url.Values{"booking": {"SYN-BOOKING-NOWHERE", "SYN-BOOKING-TRUNK"}}, []string{notProvider(2*time.Hour, "2"), notRegistered}},
 	} {
 		if got := list(test.filter); strings.Join(got, "\n") != strings.Join(test.want, "\n") {
 			t.Fatalf("%s =\n%s\nwant\n%s", name, strings.Join(got, "\n"), strings.Join(test.want, "\n"))
 		}
 	}
-	others, err := stores.catalogue.ListBookingAnswerBounces(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), ports.BookingAnswerBounceFilter{}, 50)
+	others, err := rowsOf(stores.catalogue.ListBookingAnswerBounces(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-02"), 50,
+		firstPage(t, ports.BookingAnswerBouncePages)))
 	if err != nil || len(others) != 1 || others[0].Basis != "BOOKING_NOT_REGISTERED" {
 		t.Fatalf("他租户只看见自己那一行：%+v %v", others, err)
 	}
-	if page, err := stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, ports.BookingAnswerBounceFilter{}, 1); err != nil || len(page) != 1 || page[0].Count != 2 {
+	if page, err := rowsOf(stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, 1,
+		firstPage(t, ports.BookingAnswerBouncePages))); err != nil || len(page) != 1 || page[0].Count != 2 {
 		t.Fatalf("页大小 1：%+v %v", page, err)
 	}
-	if _, err := stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, ports.BookingAnswerBounceFilter{}, 0); err == nil {
+	if _, err := stores.catalogue.ListBookingAnswerBounces(t.Context(), tenant, 0, firstPage(t, ports.BookingAnswerBouncePages)); err == nil {
 		t.Fatal("页大小 0 没被拒")
 	}
 	if after := stores.fingerprint(t); after != before {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
@@ -64,7 +65,8 @@ func (filter EffectiveTimeReviewFilter) String() string {
 
 // ExternalTrackingFactReviewRead 按（租户，轨迹源）上列当前版。租户与源都在签名上（ADR-0077 决定五）：
 // 源是这本册子的分组维——规则按源登记、回填按源重判，判断人也是一家源一家源地看。Limit 必须为正；
-// 没有事实的源如实交回空列表。
+// 没有事实的源如实交回空列表。翻页、排序与筛选照 ADR-0144：查询对象由端点按 ExternalTrackingFactPages 解出，
+// 读口答「本页行 + 下一游标 + 总数」。
 type ExternalTrackingFactReviewRead interface {
 	ListCurrentExternalTrackingFacts(
 		ctx context.Context,
@@ -72,5 +74,6 @@ type ExternalTrackingFactReviewRead interface {
 		source domain.TrackingSourceReference,
 		filter EffectiveTimeReviewFilter,
 		limit int,
-	) ([]ExternalTrackingFactReviewRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExternalTrackingFactReviewRow], error)
 }

@@ -223,7 +223,8 @@ func TestEachOperationDecisionRecordsTheOperatorWhoMadeItAgainstARealDatabase(t 
 			 WHERE tenant_id = 'SYN-TENANT-01' AND fact_ref = 'SYN-EXTF-OE' AND version_origin = 'JUDGMENT'`); got != firstOperatorRecorded {
 			t.Fatalf("判断人 = %q，want %q", got, firstOperatorRecorded)
 		}
-		rows, err := facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.EveryCurrentVersion, 10)
+		rows, err := tfRowsOf(facts.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, tfports.EveryCurrentVersion, 10,
+			tfFirstPage(t, tfports.ExternalTrackingFactPages)))
 		if err != nil || len(rows) != 1 || rows[0].EffectiveJudgedBy != firstOperatorRecorded {
 			t.Fatalf("查阅读面：%v %+v", err, rows)
 		}

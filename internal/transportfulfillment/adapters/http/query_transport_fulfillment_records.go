@@ -2,83 +2,59 @@ package tfhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // ReviewCatalogueReader 是本端点消费的读口：班次册、周期安排册、容量池册、权威交接判断册、有效交付结果册、
 // 总单册、运输准备结果册、订舱册与承运答复挡回册等的列表读面（管理台 transport-fulfillment-review 页）。
+// 每一册各收那一册的查询对象（ADR-0144），答本页行、下一游标与总数。
 type ReviewCatalogueReader interface {
 	ListTransportSchedules(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.TransportScheduleCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.TransportScheduleCatalogueRow], error)
 	ListScheduleTemplates(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.ScheduleTemplateCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ScheduleTemplateCatalogueRow], error)
 	ListCapacityPools(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.CapacityPoolCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CapacityPoolCatalogueRow], error)
 	ListTransportHandovers(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.TransportHandoverCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.TransportHandoverCatalogueRow], error)
 	ListEffectiveDeliveries(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.EffectiveDeliveryCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.EffectiveDeliveryCatalogueRow], error)
 	ListCarrierMasterDocuments(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.CarrierMasterDocumentCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CarrierMasterDocumentCatalogueRow], error)
 	ListTransportPreparations(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.TransportPreparationCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.TransportPreparationCatalogueRow], error)
 	ListDeliveryDispatchPendings(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.DeliveryDispatchPendingRecord, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DeliveryDispatchPendingRecord], error)
 	ListDeliveryDispatchReaskCadences(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.DeliveryDispatchReaskCadenceRecord, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DeliveryDispatchReaskCadenceRecord], error)
 	ListActualFulfillmentUnformed(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.ActualFulfillmentUnformedRecord, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ActualFulfillmentUnformedRecord], error)
 	ListBookingRequests(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.BookingRequestCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.BookingRequestCatalogueRow], error)
 	ListBookingAnswerBounces(
-		ctx context.Context,
-		tenant domain.TenantID,
-		filter ports.BookingAnswerBounceFilter,
-		limit int,
-	) ([]ports.BookingAnswerBounceCatalogueRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.BookingAnswerBounceCatalogueRow], error)
 	ListPendingAttemptResults(
-		ctx context.Context,
-		tenant domain.TenantID,
-		limit int,
-	) ([]ports.PendingAttemptResultRow, error)
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PendingAttemptResultRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -128,11 +104,15 @@ const (
 // 恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
 //
 // **不下推交接改判或交付更正参数**：权威交接结果与有效交付的更正各有命令用例，
-// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。挡回册那一格收两个筛选参数
+// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。挡回册那一格收两个筛选维
 // （booking、source），只筛不改；别的册子不认它们。
 //
 // 承运答复挡回一格只挂这一口的操作者查阅读：挡回册说得出一个订舱在不在、归不归某个
 // 承运商，开给集成客户端族就把 ADR-0239 决定一合并掉的那一位又交了回去。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：registry 每个取值各是一册（recordsCatalogues），
+// 按那一册的声明解查询参数，集外的键、可排维与词表之外的取值、别册或过期的游标都答 400 带理由。门次序是方法 → 册名 →
+// 查询参数 → 准入：查询参数属传输形状，渠道未配置时写错参数也先答 400。
 func NewQueryTransportFulfillmentRecordsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ReviewCatalogueReader,
@@ -141,31 +121,20 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		registry := request.URL.Query().Get("registry")
-		if registry != registryTransportSchedule &&
-			registry != registryScheduleTemplate &&
-			registry != registryCapacityPool &&
-			registry != registryTransportHandover &&
-			registry != registryEffectiveDelivery &&
-			registry != registryCarrierMasterDocument &&
-			registry != registryTransportPreparation &&
-			registry != registryDeliveryDispatchPending &&
-			registry != registryReaskCadence &&
-			registry != registryActualFulfillmentUnformed &&
-			registry != registryBookingRequest &&
-			registry != registryBookingAnswerBounce &&
-			registry != registryPendingAttemptResult {
+		values := request.URL.Query()
+		registry := values.Get(ports.RecordsRegistrySelector)
+		catalogue, known := recordsCatalogues[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		var bounceFilter ports.BookingAnswerBounceFilter
-		if registry == registryBookingAnswerBounce {
-			filter, ok := bookingAnswerBounceFilter(request)
-			if !ok {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			bounceFilter = filter
+		pageQuery, err := catalogue.Decode(values)
+		if err == nil && registry == registryBookingAnswerBounce {
+			err = bookingAnswerBounceFilterProblem(pageQuery)
+		}
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
 		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
@@ -175,33 +144,51 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 
 		switch registry {
 		case registryTransportSchedule:
-			serveTransportSchedules(response, request, reader, tenant, query.Limit)
+			serveTransportSchedules(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryScheduleTemplate:
-			serveScheduleTemplates(response, request, reader, tenant, query.Limit)
+			serveScheduleTemplates(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryCapacityPool:
-			serveCapacityPools(response, request, reader, tenant, query.Limit)
+			serveCapacityPools(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryTransportHandover:
-			serveTransportHandovers(response, request, reader, tenant, query.Limit)
+			serveTransportHandovers(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryEffectiveDelivery:
-			serveEffectiveDeliveries(response, request, reader, tenant, query.Limit)
+			serveEffectiveDeliveries(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryCarrierMasterDocument:
-			serveCarrierMasterDocuments(response, request, reader, tenant, query.Limit)
+			serveCarrierMasterDocuments(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryTransportPreparation:
-			serveTransportPreparations(response, request, reader, tenant, query.Limit)
+			serveTransportPreparations(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryDeliveryDispatchPending:
-			serveDeliveryDispatchPendings(response, request, reader, tenant, query.Limit)
+			serveDeliveryDispatchPendings(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryReaskCadence:
-			serveReaskCadences(response, request, reader, tenant, query.Limit)
+			serveReaskCadences(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryActualFulfillmentUnformed:
-			serveActualFulfillmentUnformed(response, request, reader, tenant, query.Limit)
+			serveActualFulfillmentUnformed(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryBookingRequest:
-			serveBookingRequests(response, request, reader, tenant, query.Limit)
+			serveBookingRequests(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryBookingAnswerBounce:
-			serveBookingAnswerBounces(response, request, reader, tenant, bounceFilter, query.Limit)
+			serveBookingAnswerBounces(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryPendingAttemptResult:
-			servePendingAttemptResults(response, request, reader, tenant, query.Limit)
+			servePendingAttemptResults(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
+}
+
+// recordsCatalogues 是选择器 registry 每个取值对应的那一册。册名封闭集就是这张表的键：不在表里的照旧答 400、不带理由，
+// 表外没有第二份册名清单。
+var recordsCatalogues = map[string]*cataloguepage.Catalogue{
+	registryTransportSchedule:         ports.TransportSchedulePages,
+	registryScheduleTemplate:          ports.ScheduleTemplatePages,
+	registryCapacityPool:              ports.CapacityPoolPages,
+	registryTransportHandover:         ports.TransportHandoverPages,
+	registryEffectiveDelivery:         ports.EffectiveDeliveryPages,
+	registryCarrierMasterDocument:     ports.CarrierMasterDocumentPages,
+	registryTransportPreparation:      ports.TransportPreparationPages,
+	registryDeliveryDispatchPending:   ports.DeliveryDispatchPendingPages,
+	registryReaskCadence:              ports.DeliveryDispatchReaskCadencePages,
+	registryActualFulfillmentUnformed: ports.ActualFulfillmentUnformedPages,
+	registryBookingRequest:            ports.BookingRequestPages,
+	registryBookingAnswerBounce:       ports.BookingAnswerBouncePages,
+	registryPendingAttemptResult:      ports.PendingAttemptResultPages,
 }
 
 func serveTransportSchedules(
@@ -210,14 +197,15 @@ func serveTransportSchedules(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListTransportSchedules(request.Context(), tenant, limit)
+	page, err := reader.ListTransportSchedules(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]transportScheduleBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]transportScheduleBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, transportScheduleBody{
 			ScheduleID:      row.ScheduleID,
 			Version:         row.Version,
@@ -237,6 +225,7 @@ func serveTransportSchedules(
 	writeJSON(response, http.StatusOK, transportScheduleListResponse{
 		Outcome:   outcomeTransportSchedulesListed,
 		Schedules: bodies,
+		Page:      page.Page(limit),
 	})
 }
 
@@ -246,14 +235,15 @@ func serveScheduleTemplates(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListScheduleTemplates(request.Context(), tenant, limit)
+	page, err := reader.ListScheduleTemplates(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]scheduleTemplateBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]scheduleTemplateBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, scheduleTemplateBody{
 			Template:           row.Template,
 			Version:            row.Version,
@@ -274,6 +264,7 @@ func serveScheduleTemplates(
 	writeJSON(response, http.StatusOK, scheduleTemplateListResponse{
 		Outcome:   outcomeScheduleTemplatesListed,
 		Templates: bodies,
+		Page:      page.Page(limit),
 	})
 }
 
@@ -295,14 +286,15 @@ func serveCapacityPools(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListCapacityPools(request.Context(), tenant, limit)
+	page, err := reader.ListCapacityPools(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]capacityPoolBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]capacityPoolBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, capacityPoolBody{
 			PoolID:     row.PoolID,
 			Schedule:   row.Schedule,
@@ -318,6 +310,7 @@ func serveCapacityPools(
 	writeJSON(response, http.StatusOK, capacityPoolListResponse{
 		Outcome: outcomeCapacityPoolsListed,
 		Pools:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -327,14 +320,15 @@ func serveTransportHandovers(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListTransportHandovers(request.Context(), tenant, limit)
+	page, err := reader.ListTransportHandovers(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]transportHandoverBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]transportHandoverBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, transportHandoverBody{
 			Object:          row.Object,
 			Scope:           row.Scope,
@@ -356,6 +350,7 @@ func serveTransportHandovers(
 	writeJSON(response, http.StatusOK, transportHandoverListResponse{
 		Outcome:   outcomeTransportHandoversListed,
 		Handovers: bodies,
+		Page:      page.Page(limit),
 	})
 }
 
@@ -365,14 +360,15 @@ func serveEffectiveDeliveries(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListEffectiveDeliveries(request.Context(), tenant, limit)
+	page, err := reader.ListEffectiveDeliveries(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]effectiveDeliveryBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]effectiveDeliveryBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, effectiveDeliveryBody{
 			Object:          row.Object,
 			Attempt:         row.Attempt,
@@ -391,6 +387,7 @@ func serveEffectiveDeliveries(
 	writeJSON(response, http.StatusOK, effectiveDeliveryListResponse{
 		Outcome:    outcomeEffectiveDeliveriesListed,
 		Deliveries: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -400,14 +397,15 @@ func serveCarrierMasterDocuments(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListCarrierMasterDocuments(request.Context(), tenant, limit)
+	page, err := reader.ListCarrierMasterDocuments(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]carrierMasterDocumentBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]carrierMasterDocumentBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, carrierMasterDocumentBody{
 			Document:             row.Document,
 			Version:              row.Version,
@@ -428,6 +426,7 @@ func serveCarrierMasterDocuments(
 	writeJSON(response, http.StatusOK, carrierMasterDocumentListResponse{
 		Outcome:         outcomeCarrierMasterDocumentsListed,
 		MasterDocuments: bodies,
+		Page:            page.Page(limit),
 	})
 }
 
@@ -437,14 +436,15 @@ func serveTransportPreparations(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListTransportPreparations(request.Context(), tenant, limit)
+	page, err := reader.ListTransportPreparations(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]transportPreparationBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]transportPreparationBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		demand := make([]preparationDemandBody, 0, len(row.Demand))
 		for _, each := range row.Demand {
 			demand = append(demand, preparationDemandBody(each))
@@ -493,30 +493,25 @@ func serveTransportPreparations(
 	writeJSON(response, http.StatusOK, transportPreparationListResponse{
 		Outcome:      outcomeTransportPreparationsListed,
 		Preparations: bodies,
+		Page:         page.Page(limit),
 	})
 }
 
-// bookingAnswerBounceFilter 读挡回册的两个筛选参数。缺席即不筛；给了却立不起来（空白、带 NUL、订舱标识超过字节界）是坏请求，
-// 不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为那个订舱没有挡回。订舱标识照领域构造门判，答复方是集成客户端绑定
-// 的来源身份、领域里没有它的类型，只判非空白与 NUL。
-func bookingAnswerBounceFilter(request *http.Request) (ports.BookingAnswerBounceFilter, bool) {
-	values := request.URL.Query()
-	var filter ports.BookingAnswerBounceFilter
-	if values.Has("booking") {
-		booking, err := domain.NewBookingReference(values.Get("booking"))
-		if err != nil {
-			return ports.BookingAnswerBounceFilter{}, false
+// bookingAnswerBounceFilterProblem 判挡回册两个筛选维的取值。这两维没有词表，空值已由 Decode 拒过；给了却立不起来（空白、
+// 带 NUL、订舱标识超过字节界）照样是坏请求，不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为那个订舱没有挡回。
+// 订舱标识照领域构造门判，答复方是集成客户端绑定的来源身份、领域里没有它的类型，只判非空白与 NUL。
+func bookingAnswerBounceFilterProblem(query cataloguepage.Query) error {
+	for _, booking := range query.Filters["booking"] {
+		if _, err := domain.NewBookingReference(booking); err != nil {
+			return &cataloguepage.MalformedQuery{Reason: fmt.Sprintf("筛选维 booking 的取值 %q 不是订舱标识", booking)}
 		}
-		filter.Booking = booking.String()
 	}
-	if values.Has("source") {
-		source := values.Get("source")
+	for _, source := range query.Filters["source"] {
 		if strings.TrimSpace(source) == "" || strings.ContainsRune(source, 0) {
-			return ports.BookingAnswerBounceFilter{}, false
+			return &cataloguepage.MalformedQuery{Reason: fmt.Sprintf("筛选维 source 的取值 %q 不是答复方的来源身份", source)}
 		}
-		filter.Source = source
 	}
-	return filter, true
+	return nil
 }
 
 // serveBookingRequests 上列订舱册（票 demo-chain-gaps/48）：一次订舱一行，带读出的状态词、当前那一份答复与名下全部答复。
@@ -526,14 +521,15 @@ func serveBookingRequests(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListBookingRequests(request.Context(), tenant, limit)
+	page, err := reader.ListBookingRequests(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]bookingRequestRowBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]bookingRequestRowBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		answers := make([]bookingAnswerBody, 0, len(row.Answers))
 		for _, answer := range row.Answers {
 			answers = append(answers, bookingAnswerRowBody(row.Booking, answer))
@@ -565,6 +561,7 @@ func serveBookingRequests(
 	writeJSON(response, http.StatusOK, bookingRequestListResponse{
 		Outcome:  outcomeBookingRequestsListed,
 		Bookings: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -587,16 +584,16 @@ func serveBookingAnswerBounces(
 	request *http.Request,
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
-	filter ports.BookingAnswerBounceFilter,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListBookingAnswerBounces(request.Context(), tenant, filter, limit)
+	page, err := reader.ListBookingAnswerBounces(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]bookingAnswerBounceBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]bookingAnswerBounceBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, bookingAnswerBounceBody{
 			Source:         row.Source,
 			Booking:        row.Booking,
@@ -610,12 +607,14 @@ func serveBookingAnswerBounces(
 	writeJSON(response, http.StatusOK, bookingAnswerBounceListResponse{
 		Outcome: outcomeBookingAnswerBouncesListed,
 		Bounces: bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type bookingRequestListResponse struct {
 	Outcome  string                  `json:"outcome"`
 	Bookings []bookingRequestRowBody `json:"bookings"`
+	Page     cataloguepage.Page      `json:"page"`
 }
 
 // bookingRequestRowBody 是订舱册上一行（票 demo-chain-gaps/48）。订舱各格与订舱提交口回显的那一份同一形状（bookingRequestBody，
@@ -640,6 +639,7 @@ type bookingRequestRowBody struct {
 type bookingAnswerBounceListResponse struct {
 	Outcome string                    `json:"outcome"`
 	Bounces []bookingAnswerBounceBody `json:"bounces"`
+	Page    cataloguepage.Page        `json:"page"`
 }
 
 // bookingAnswerBounceBody 是挡回册上一行。basis 是 ports.BookingAnswerBounceBasis 的词；两个时刻是本上下文记下挡回的时刻，不是
@@ -664,6 +664,7 @@ func quantity(value int64) string {
 type transportScheduleListResponse struct {
 	Outcome   string                  `json:"outcome"`
 	Schedules []transportScheduleBody `json:"schedules"`
+	Page      cataloguepage.Page      `json:"page"`
 }
 
 // transportScheduleBody 逐字段透出一个具体班次的一版（查阅列面与登记答复同一形状）。
@@ -690,6 +691,7 @@ type transportScheduleBody struct {
 type scheduleTemplateListResponse struct {
 	Outcome   string                 `json:"outcome"`
 	Templates []scheduleTemplateBody `json:"templates"`
+	Page      cataloguepage.Page     `json:"page"`
 }
 
 // scheduleTemplateBody 逐字段透出一份周期安排的一版（查阅列面与登记答复同一形状）。出发时刻是当地 HH:MM，时区
@@ -722,6 +724,7 @@ type capacityDeclarationBody struct {
 type capacityPoolListResponse struct {
 	Outcome string             `json:"outcome"`
 	Pools   []capacityPoolBody `json:"pools"`
+	Page    cataloguepage.Page `json:"page"`
 }
 
 // capacityPoolBody 逐字段透出一个容量池。
@@ -744,6 +747,7 @@ type capacityPoolBody struct {
 type transportHandoverListResponse struct {
 	Outcome   string                  `json:"outcome"`
 	Handovers []transportHandoverBody `json:"handovers"`
+	Page      cataloguepage.Page      `json:"page"`
 }
 
 // transportHandoverBody 逐字段透出一个权威交接判断版本。
@@ -776,6 +780,7 @@ type transportHandoverBody struct {
 type effectiveDeliveryListResponse struct {
 	Outcome    string                  `json:"outcome"`
 	Deliveries []effectiveDeliveryBody `json:"deliveries"`
+	Page       cataloguepage.Page      `json:"page"`
 }
 
 // effectiveDeliveryBody 逐字段透出一行当前版有效交付结果。
@@ -802,6 +807,7 @@ type effectiveDeliveryBody struct {
 type carrierMasterDocumentListResponse struct {
 	Outcome         string                      `json:"outcome"`
 	MasterDocuments []carrierMasterDocumentBody `json:"masterDocuments"`
+	Page            cataloguepage.Page          `json:"page"`
 }
 
 // carrierMasterDocumentBody 逐字段透出一行总单版本（ADR-0113）。
@@ -837,14 +843,15 @@ func serveDeliveryDispatchPendings(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListDeliveryDispatchPendings(request.Context(), tenant, limit)
+	page, err := reader.ListDeliveryDispatchPendings(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]deliveryDispatchPendingBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]deliveryDispatchPendingBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, deliveryDispatchPendingBody{
 			Segment:         row.Key.Segment.String(),
 			Object:          row.Key.Object.String(),
@@ -858,6 +865,7 @@ func serveDeliveryDispatchPendings(
 	writeJSON(response, http.StatusOK, deliveryDispatchPendingListResponse{
 		Outcome:  outcomeDeliveryDispatchPendingsListed,
 		Pendings: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -869,14 +877,15 @@ func serveReaskCadences(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListDeliveryDispatchReaskCadences(request.Context(), tenant, limit)
+	page, err := reader.ListDeliveryDispatchReaskCadences(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]reaskCadenceBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]reaskCadenceBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, reaskCadenceBody{
 			Version:         row.Cadence.Version().String(),
 			IntervalMinutes: int64(row.Cadence.Interval().Minutes()),
@@ -884,7 +893,11 @@ func serveReaskCadences(
 			RecordedAt:      rfc3339(row.RecordedAt),
 		})
 	}
-	writeJSON(response, http.StatusOK, reaskCadenceListResponse{Outcome: outcomeReaskCadencesListed, Cadences: bodies})
+	writeJSON(response, http.StatusOK, reaskCadenceListResponse{
+		Outcome:  outcomeReaskCadencesListed,
+		Cadences: bodies,
+		Page:     page.Page(limit),
+	})
 }
 
 // serveActualFulfillmentUnformed 上列实际履约未形成册里还未形成的那几件（ADR-0231 决定六）：哪一段的哪个对象、在哪份委托下按第几版答的、
@@ -896,14 +909,15 @@ func serveActualFulfillmentUnformed(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListActualFulfillmentUnformed(request.Context(), tenant, limit)
+	page, err := reader.ListActualFulfillmentUnformed(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]actualFulfillmentUnformedBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]actualFulfillmentUnformedBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		entry := row.Entry
 		bodies = append(bodies, actualFulfillmentUnformedBody{
 			Segment:              entry.Key.Segment.String(),
@@ -923,12 +937,14 @@ func serveActualFulfillmentUnformed(
 	writeJSON(response, http.StatusOK, actualFulfillmentUnformedListResponse{
 		Outcome:  outcomeActualFulfillmentUnformedListed,
 		Unformed: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
 type actualFulfillmentUnformedListResponse struct {
 	Outcome  string                          `json:"outcome"`
 	Unformed []actualFulfillmentUnformedBody `json:"unformed"`
+	Page     cataloguepage.Page              `json:"page"`
 }
 
 // actualFulfillmentUnformedBody 是册上一件。endedAt 是参与终点的业务时间，两个答复时刻是登记时刻；agreementObject 与 agreementVersion 是
@@ -953,6 +969,7 @@ type actualFulfillmentUnformedBody struct {
 type reaskCadenceListResponse struct {
 	Outcome  string             `json:"outcome"`
 	Cadences []reaskCadenceBody `json:"cadences"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 type reaskCadenceBody struct {
@@ -965,6 +982,7 @@ type reaskCadenceBody struct {
 type deliveryDispatchPendingListResponse struct {
 	Outcome  string                        `json:"outcome"`
 	Pendings []deliveryDispatchPendingBody `json:"pendings"`
+	Page     cataloguepage.Page            `json:"page"`
 }
 
 type deliveryDispatchPendingBody struct {
@@ -980,6 +998,7 @@ type deliveryDispatchPendingBody struct {
 type transportPreparationListResponse struct {
 	Outcome      string                     `json:"outcome"`
 	Preparations []transportPreparationBody `json:"preparations"`
+	Page         cataloguepage.Page         `json:"page"`
 }
 
 // transportPreparationBody 逐字段透出一份运输准备结果（ADR-0201 决定七）。
@@ -1050,6 +1069,7 @@ type pendingAttemptResultBody struct {
 type pendingAttemptResultListResponse struct {
 	Outcome string                     `json:"outcome"`
 	Results []pendingAttemptResultBody `json:"results"`
+	Page    cataloguepage.Page         `json:"page"`
 }
 
 // servePendingAttemptResults 上列还在待确认的逐对象尝试结果（票 docs-consistency/code/90）：复核清单，已更正的不在内。
@@ -1059,14 +1079,15 @@ func servePendingAttemptResults(
 	reader ReviewCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListPendingAttemptResults(request.Context(), tenant, limit)
+	page, err := reader.ListPendingAttemptResults(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]pendingAttemptResultBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]pendingAttemptResultBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, pendingAttemptResultBody{
 			Side: row.Side, SourceID: row.SourceID, Attempt: row.Attempt, Object: row.Object, Task: row.Task,
 			ExecutedBy: row.ExecutedBy, Place: row.Place, Source: row.Source, Gap: row.Gap, OccurredAt: rfc3339(row.OccurredAt),
@@ -1075,5 +1096,6 @@ func servePendingAttemptResults(
 	writeJSON(response, http.StatusOK, pendingAttemptResultListResponse{
 		Outcome: outcomePendingAttemptResultsListed,
 		Results: bodies,
+		Page:    page.Page(limit),
 	})
 }

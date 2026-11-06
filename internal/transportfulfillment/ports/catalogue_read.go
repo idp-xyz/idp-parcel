@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
@@ -23,6 +24,9 @@ import (
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
 // 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
 // 就是内容，续办是交付两个命令端点的真渠道去产生事实，不折成未配置）。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：每一册的查询对象由端点按那一册的声明
+// （TransportSchedulePages 一类）解出，读口答「本页行 + 下一游标 + 总数」。
 
 // TransportScheduleCatalogueRow 是班次登记册上列的一行：只列每个班次的当前版，方向三格、出发与到达、服务范围与
 // 来历照行转写。物化来的班次带周期安排代码、物化时那一版与运行日期；临时班次这三格缺席（空串与零）。
@@ -284,86 +288,92 @@ type BookingAnswerBounceCatalogueRow struct {
 	Count          int64
 }
 
-// BookingAnswerBounceFilter 是挡回册上列的两维筛选，空串即不按那一维筛；两维都给时同时满足。订舱一维让订舱册的一行链得到它名下
-// 的挡回，答复方一维让运营看一个承运商反复在答什么。
-type BookingAnswerBounceFilter struct {
-	Booking string
-	Source  string
-}
-
 // ReviewCatalogueRead 是运输履约查阅页的伴生列表读端口。
 type ReviewCatalogueRead interface {
 	ListTransportSchedules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]TransportScheduleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[TransportScheduleCatalogueRow], error)
 	ListScheduleTemplates(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ScheduleTemplateCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ScheduleTemplateCatalogueRow], error)
 	ListCapacityPools(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CapacityPoolCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CapacityPoolCatalogueRow], error)
 	ListTransportHandovers(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]TransportHandoverCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[TransportHandoverCatalogueRow], error)
 	ListEffectiveDeliveries(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]EffectiveDeliveryCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[EffectiveDeliveryCatalogueRow], error)
 	ListCarrierMasterDocuments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CarrierMasterDocumentCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CarrierMasterDocumentCatalogueRow], error)
 	ListTransportPreparations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]TransportPreparationCatalogueRow, error)
-	// ListDeliveryDispatchPendings 上列派送待形成册里待形成的那几件（ADR-0230 决定三），与按册重问读的是同一个队列、同一个排序：
-	// 运营人员看到的清单就是重问会去问的那几件。
+		query cataloguepage.Query,
+	) (cataloguepage.Result[TransportPreparationCatalogueRow], error)
+	// ListDeliveryDispatchPendings 上列派送待形成册里待形成的那几件（ADR-0230 决定三）。缺省序与按册重问读的是同一个次序：
+	// 运营人员看到的清单头上就是重问会先去问的那几件。
 	ListDeliveryDispatchPendings(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DeliveryDispatchPendingRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DeliveryDispatchPendingRecord], error)
 	// ListDeliveryDispatchReaskCadences 上列一个租户登过的各版重问间隔（ADR-0230 决定五），最近登记的在前：第一行就是生效的那一版。
 	ListDeliveryDispatchReaskCadences(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DeliveryDispatchReaskCadenceRecord, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DeliveryDispatchReaskCadenceRecord], error)
 	// ListActualFulfillmentUnformed 上列实际履约未形成册里还未形成的那几件（ADR-0231 决定六），参与终点最早的在前；了结的不上列。
 	ListActualFulfillmentUnformed(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ActualFulfillmentUnformedRecord, error)
-	// ListBookingRequests 上列订舱册，每次订舱一行连同它名下的承运答复与读出的状态词；新申请的在前，同刻按订舱标识稳定排序。
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ActualFulfillmentUnformedRecord], error)
+	// ListBookingRequests 上列订舱册，每次订舱一行连同它名下的承运答复与读出的状态词；缺省新申请的在前。
 	ListBookingRequests(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]BookingRequestCatalogueRow, error)
-	// ListBookingAnswerBounces 上列承运答复挡回册，最近一次挡回的在前，同刻按（答复方、订舱、答复标识、依据）稳定排序。
+		query cataloguepage.Query,
+	) (cataloguepage.Result[BookingRequestCatalogueRow], error)
+	// ListBookingAnswerBounces 上列承运答复挡回册，缺省最近一次挡回的在前。按订舱、答复方筛是查询对象上的两个筛选维
+	// （BookingAnswerBouncePages）。
 	ListBookingAnswerBounces(
 		ctx context.Context,
 		tenant domain.TenantID,
-		filter BookingAnswerBounceFilter,
 		limit int,
-	) ([]BookingAnswerBounceCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[BookingAnswerBounceCatalogueRow], error)
 	// ListPendingAttemptResults 上列还在待确认的逐对象尝试结果（揽收与派送两侧合并，最早的先看），已更正的不在内。
 	ListPendingAttemptResults(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PendingAttemptResultRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PendingAttemptResultRow], error)
 }

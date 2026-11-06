@@ -75,7 +75,7 @@ func TestListingCurrentFactsSeparatesPendingFromJudgedAndFollowsTheChain(t *test
 	tenantID := segmentRef(t, domain.NewTenantID, tenant)
 	sourceA := segmentRef(t, domain.NewTrackingSourceReference, "syn-source-a")
 
-	pending, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.PendingEffectiveTimeOnly, 50)
+	pending, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.PendingEffectiveTimeOnly, 50, firstPage(t, ports.ExternalTrackingFactPages)))
 	if err != nil {
 		t.Fatalf("待判断上列：%v", err)
 	}
@@ -94,7 +94,7 @@ func TestListingCurrentFactsSeparatesPendingFromJudgedAndFollowsTheChain(t *test
 		t.Fatalf("发生/接收时间没有原样透出：%s / %s", row.OccurredAt, row.ReceivedAt)
 	}
 
-	current, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.EveryCurrentVersion, 50)
+	current, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.EveryCurrentVersion, 50, firstPage(t, ports.ExternalTrackingFactPages)))
 	if err != nil {
 		t.Fatalf("全部当前版上列：%v", err)
 	}
@@ -112,12 +112,12 @@ func TestListingCurrentFactsSeparatesPendingFromJudgedAndFollowsTheChain(t *test
 	}
 
 	sourceB := segmentRef(t, domain.NewTrackingSourceReference, "syn-source-b")
-	pendingOfB, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceB, ports.PendingEffectiveTimeOnly, 50)
+	pendingOfB, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceB, ports.PendingEffectiveTimeOnly, 50, firstPage(t, ports.ExternalTrackingFactPages)))
 	if err != nil || len(pendingOfB) != 1 || pendingOfB[0].Fact != "RVF-B1" {
 		t.Fatalf("源 B 的待判断当前版应只有 RVF-B1：%v %+v", err, pendingOfB)
 	}
 
-	limited, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.EveryCurrentVersion, 1)
+	limited, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, sourceA, ports.EveryCurrentVersion, 1, firstPage(t, ports.ExternalTrackingFactPages)))
 	if err != nil || len(limited) != 1 {
 		t.Fatalf("页大小应被尊重：%v %+v", err, limited)
 	}
@@ -129,14 +129,14 @@ func TestListingCurrentFactsRefusesMeaninglessInput(t *testing.T) {
 	tenantID := segmentRef(t, domain.NewTenantID, "tenant-lc21-review")
 	source := segmentRef(t, domain.NewTrackingSourceReference, "syn-source-a")
 
-	if _, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, source, ports.EveryCurrentVersion, 0); err == nil {
+	if _, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, source, ports.EveryCurrentVersion, 0, firstPage(t, ports.ExternalTrackingFactPages))); err == nil {
 		t.Fatal("非正页大小应被拒")
 	}
-	if _, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID, source, ports.EffectiveTimeReviewFilterInvalid, 10); err == nil {
+	if _, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID, source, ports.EffectiveTimeReviewFilterInvalid, 10, firstPage(t, ports.ExternalTrackingFactPages))); err == nil {
 		t.Fatal("封闭集外的过滤词应被拒，不得静默当成某一格")
 	}
-	empty, err := repository.ListCurrentExternalTrackingFacts(ctx, tenantID,
-		segmentRef(t, domain.NewTrackingSourceReference, "syn-source-nobody"), ports.PendingEffectiveTimeOnly, 10)
+	empty, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, tenantID,
+		segmentRef(t, domain.NewTrackingSourceReference, "syn-source-nobody"), ports.PendingEffectiveTimeOnly, 10, firstPage(t, ports.ExternalTrackingFactPages)))
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("没有事实的源如实交回空列表：%v %+v", err, empty)
 	}

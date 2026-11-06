@@ -241,7 +241,7 @@ func TestTheUnformedRegisterTracksAndListsOnlyWhatIsStillUnformed(t *testing.T) 
 		t.Fatal("册上没有的那一件被了结出了一行")
 	}
 
-	listed, err := register.ListActualFulfillmentUnformed(ctx, early.TenantID, 50)
+	listed, err := rowsOf(register.ListActualFulfillmentUnformed(ctx, early.TenantID, 50, firstPage(t, ports.ActualFulfillmentUnformedPages)))
 	if err != nil || len(listed) != 2 || listed[0].Entry.Key != early || listed[1].Entry.Key != late {
 		t.Fatalf("列表 = %+v %v", listed, err)
 	}
@@ -418,7 +418,7 @@ func TestTheUnformedRegisterKeepsAFormationDefect(t *testing.T) {
 		got.Entry.Revision != 0 || got.Entry.Agreement != (domain.SupplierAgreementVersion{}) {
 		t.Fatalf("缺陷那一条读回 = %+v %v %v", got, found, err)
 	}
-	if listed, err := register.ListActualFulfillmentUnformed(t.Context(), key.TenantID, 10); err != nil || len(listed) != 1 {
+	if listed, err := rowsOf(register.ListActualFulfillmentUnformed(t.Context(), key.TenantID, 10, firstPage(t, ports.ActualFulfillmentUnformedPages))); err != nil || len(listed) != 1 {
 		t.Fatalf("缺陷那一条不上列：%+v %v", listed, err)
 	}
 

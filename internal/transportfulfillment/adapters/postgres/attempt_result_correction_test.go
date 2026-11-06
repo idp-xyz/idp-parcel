@@ -547,7 +547,7 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 		return err
 	})
 
-	rows, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10)
+	rows, err := rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10, firstPage(t, ports.PendingAttemptResultPages)))
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -563,10 +563,10 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 		rows[1].Object != "parcel-2" || rows[1].Gap != "conflict/signature-vs-address" {
 		t.Fatalf("派送行 = %+v", rows[1])
 	}
-	if limited, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 1); err != nil || len(limited) != 1 || limited[0].Side != ports.PendingAttemptSidePickup {
+	if limited, err := rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 1, firstPage(t, ports.PendingAttemptResultPages))); err != nil || len(limited) != 1 || limited[0].Side != ports.PendingAttemptSidePickup {
 		t.Fatalf("limit 1 = %+v err=%v；最早的先看", limited, err)
 	}
-	if _, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 0); err == nil {
+	if _, err := rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 0, firstPage(t, ports.PendingAttemptResultPages))); err == nil {
 		t.Fatal("上限为 0 被收下")
 	}
 
@@ -580,7 +580,7 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 		_, err = rig.pickupCorrections.Save(txCtx, correction)
 		return err
 	})
-	rows, err = rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10)
+	rows, err = rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10, firstPage(t, ports.PendingAttemptResultPages)))
 	if err != nil || len(rows) != 1 || rows[0].Side != ports.PendingAttemptSideDelivery {
 		t.Fatalf("揽收一格更正之后的清单 = %+v err=%v；更正过的不该列，没更正的派送一格应当仍在", rows, err)
 	}
@@ -592,10 +592,10 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 		_, err = rig.deliveryCorrections.Save(txCtx, deliveryCorrectionOf(t, target, domain.ObjectDelivered, ""))
 		return err
 	})
-	if rows, err = rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10); err != nil || len(rows) != 0 {
+	if rows, err = rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10, firstPage(t, ports.PendingAttemptResultPages))); err != nil || len(rows) != 0 {
 		t.Fatalf("两侧都更正之后的清单 = %+v err=%v, want 空", rows, err)
 	}
-	other, err := rig.catalogue.ListPendingAttemptResults(ctx, deliveryValue(t, domain.NewTenantID, "tenant-b"), 10)
+	other, err := rowsOf(rig.catalogue.ListPendingAttemptResults(ctx, deliveryValue(t, domain.NewTenantID, "tenant-b"), 10, firstPage(t, ports.PendingAttemptResultPages)))
 	if err != nil || len(other) != 1 || other[0].SourceID != "source-other-tenant" {
 		t.Fatalf("他租户的清单 = %+v err=%v；租户 a 的更正动不了它", other, err)
 	}

@@ -98,12 +98,13 @@ func TestOperatorReadRefusalsKeepTheirGradesAtTheEndpoint(t *testing.T) {
 	}
 }
 
-// Covers: 同上——装进端点后整链放行：信封的租户与产品常量页大小直达读口，答案照册转写。
+// Covers: 同上——装进端点后整链放行：信封的租户与产品常量页大小直达读口，答案照册转写。查询串上自报的 tenant、limit 在端点上
+// 是集外键，准入之前就答 400，见 TestRecordsCatalogueRefusesSelfReportedTenantAndLimit。
 func TestOperatorReadIntakeServesTheRecordsEndpoint(t *testing.T) {
 	register := &stubReviewCatalogue{}
 	endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(operatorReadIntake(t, operationsReader{tenant: "SYN-TENANT-01"}), register)
 
-	response := serveGet(endpoint, "/transport-fulfillment-records?registry=effective-delivery&tenant=TENANT-EVIL&limit=999")
+	response := serveGet(endpoint, "/transport-fulfillment-records?registry=effective-delivery")
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())

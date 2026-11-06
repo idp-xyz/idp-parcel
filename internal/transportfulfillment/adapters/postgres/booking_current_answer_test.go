@@ -53,7 +53,7 @@ func TestTheWriteAndReadFacesChooseTheSameCurrentAnswer(t *testing.T) {
 			}
 
 			written, found, writeErr := stores.answers.FindByKey(ctx, ports.BookingKey{TenantID: booking.TenantID(), Booking: booking.Booking()})
-			rows, readErr := stores.catalogue.ListBookingRequests(ctx, booking.TenantID(), 10)
+			rows, readErr := rowsOf(stores.catalogue.ListBookingRequests(ctx, booking.TenantID(), 10, firstPage(t, ports.BookingRequestPages)))
 			if shape.want == inconsistent {
 				if !errors.Is(writeErr, domain.ErrBookingAnswersInconsistent) {
 					t.Errorf("写面 FindByKey = %+v found=%v err=%v，want ErrBookingAnswersInconsistent", written.Acceptance, found, writeErr)
