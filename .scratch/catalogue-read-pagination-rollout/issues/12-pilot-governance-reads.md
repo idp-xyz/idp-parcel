@@ -1,7 +1,7 @@
 # 12 pilot-governance 四册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 pilot-governance `0009`（进 main 时按 tip 重核）
+Status: in-progress——2026-11-06 作者开工，分支 `cursor/crpr-12-governance`，基 `3a20b2bcc`。迁移编号预留 pilot-governance `0009`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/pilotgovernance/{ports,adapters/http,adapters/postgres}` 里治理登记册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这个读口的占位；
 `migrations/pilot_governance` 的一条新迁移（索引）。

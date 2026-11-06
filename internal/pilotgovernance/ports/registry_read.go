@@ -3,6 +3,8 @@ package ports
 import (
 	"context"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是治理登记册四册的伴生列表读端口（票 admin-skeleton-closure-batch/02 的三册，
@@ -20,8 +22,9 @@ import (
 // 字段冒充列。行内容全部是脱敏引用——建表纪律（真实客户、线路与阈值在参数登记册）
 // 与登记 CLI 纪律（票 12）共同保证，读口不承担第二道脱敏。
 //
-// limit 非正拒；空册如实答空列表走 2xx 成格（ADR-0077 Decision 四原文适用，
-// ADR-0083 Decision 二收尾句）。
+// limit 非正拒；空册如实答空页走 2xx 成格（ADR-0077 Decision 四原文适用，
+// ADR-0083 Decision 二收尾句）。查询对象由端点按 AuthorityIntervalRegistryPages 等
+// 四册的声明解出（ADR-0144 决定六），读口按它取页。
 
 // AuthorityIntervalRegistryRow 是生产权威区间册上列的一行。身份是（对象范围×能力×
 // 事实类型×权威方）四维加生效区间；to 缺席即开放区间——缺席是真话，不为区间齐整
@@ -85,8 +88,12 @@ type TakeoverRegistryRow struct {
 
 // GovernanceRegistryRead 是治理登记册四册的伴生列表读端口。阶段评审不在其中。
 type GovernanceRegistryRead interface {
-	ListAuthorityIntervals(ctx context.Context, limit int) ([]AuthorityIntervalRegistryRow, error)
-	ListSuspensions(ctx context.Context, limit int) ([]SuspensionRegistryRow, error)
-	ListResumptions(ctx context.Context, limit int) ([]ResumptionRegistryRow, error)
-	ListTakeovers(ctx context.Context, limit int) ([]TakeoverRegistryRow, error)
+	ListAuthorityIntervals(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[AuthorityIntervalRegistryRow], error)
+	ListSuspensions(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[SuspensionRegistryRow], error)
+	ListResumptions(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ResumptionRegistryRow], error)
+	ListTakeovers(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[TakeoverRegistryRow], error)
 }

@@ -1515,29 +1515,33 @@ type unwiredGovernanceRegisters struct{}
 func (unwiredGovernanceRegisters) ListAuthorityIntervals(
 	context.Context,
 	int,
-) ([]govports.AuthorityIntervalRegistryRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[govports.AuthorityIntervalRegistryRow], error) {
+	return cataloguepage.Result[govports.AuthorityIntervalRegistryRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredGovernanceRegisters) ListSuspensions(
 	context.Context,
 	int,
-) ([]govports.SuspensionRegistryRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[govports.SuspensionRegistryRow], error) {
+	return cataloguepage.Result[govports.SuspensionRegistryRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredGovernanceRegisters) ListResumptions(
 	context.Context,
 	int,
-) ([]govports.ResumptionRegistryRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[govports.ResumptionRegistryRow], error) {
+	return cataloguepage.Result[govports.ResumptionRegistryRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredGovernanceRegisters) ListTakeovers(
 	context.Context,
 	int,
-) ([]govports.TakeoverRegistryRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[govports.TakeoverRegistryRow], error) {
+	return cataloguepage.Result[govports.TakeoverRegistryRow]{}, errOrchestrationNotWired
 }
 
 type unwiredComplianceRules struct{}
