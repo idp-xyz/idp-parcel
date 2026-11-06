@@ -66,11 +66,11 @@ var registerCatalogues = map[string]*cataloguepage.Catalogue{
 // NewQueryGovernanceRegistersEndpoint 交回治理登记册查阅的 HTTP 入口
 // （GET /governance-registers；最终路径归装配票，本批为 closure-batch/07）。
 //
-// 四册共用一个端点，按 `register` 查询参数分派（先例：networkrouting 目录端点一口
-// 七分派）：参数在场与否、取值在不在封闭集内属传输形状，先于 Intake；未配置 Intake
-// 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认一册就是
-// 替它猜。本入口只查阅，不登记接管。其余参数（after、sort 与 q）按选中那一册的声明
-// 解码，在 Intake 之后（writePageQueryProblem 头注）。
+// 四册共用一个端点，按 `register` 查询参数分派（先例：networkrouting 目录端点也是
+// 一口分派多册）。register 与其余参数都在 Intake 之后读：未配置的渠道对一切请求同答 403，
+// register 缺席或写错也一样，答复不随请求内容变（ADR-0055 决定三）。配置了的渠道上
+// 缺席按坏请求拒：替调用方默认一册就是替它猜。本入口只查阅，不登记接管。其余参数
+// （after、sort 与 q）按选中那一册的声明解码（writePageQueryProblem 头注）。
 func NewQueryGovernanceRegistersEndpoint(
 	intake RegistryQueryIntake,
 	reader GovernanceRegistryReader,
@@ -82,16 +82,15 @@ func NewQueryGovernanceRegistersEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeRegistryQuery(request.Context(), request)
+		if err != nil {
+			writeRegistryIntakeProblem(response, err)
+			return
+		}
 		register := request.URL.Query().Get("register")
 		catalogue, known := registerCatalogues[register]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-
-		query, err := intake.IntakeRegistryQuery(request.Context(), request)
-		if err != nil {
-			writeRegistryIntakeProblem(response, err)
 			return
 		}
 		pageQuery, err := catalogue.Decode(request.URL.Query())

@@ -21,7 +21,7 @@ import (
 // 那一句，是这些表没有租户列（产品级机制，ADR-0083 Decision 一），往语句里写租户
 // 条件才是错的。恢复决定的盘点 jsonb 不透出，装载归 Resumptions.FindBySuspension。
 //
-// 取页按 ports 上四册的声明（ADR-0144）：总数一句、本页一句，同一组条件，不保证同一快照。
+// 取页按 ports 上各册的声明（ADR-0144）：总数一句、本页一句，同一组条件，不保证同一快照。
 type GovernanceRegisters struct {
 	db *bentopg.DB
 }
@@ -35,7 +35,7 @@ func NewGovernanceRegisters(db *bentopg.DB) (*GovernanceRegisters, error) {
 
 var _ ports.GovernanceRegistryRead = (*GovernanceRegisters)(nil)
 
-// 四册的落列。q 覆盖的列与各册声明头注同句；表没有租户列，取页的固定条件为空。
+// 各册的落列。q 覆盖的列与各册声明头注同句；表没有租户列，取页的固定条件为空。
 var (
 	authorityIntervalPages = ports.AuthorityIntervalRegistryPages.MustBind(cataloguepage.Columns{
 		Sorts:    map[string]string{"insertedAt": "inserted_at"},
@@ -71,7 +71,7 @@ func registryListLimit(operation string, limit int) error {
 	return nil
 }
 
-// registryPage 是四册共用的取页：按 binding 拼出总数与本页两句，逐行交 scan 扫描，再切页编游标。position 只能取
+// registryPage 是各册共用的取页：按 binding 拼出总数与本页两句，逐行交 scan 扫描，再切页编游标。position 只能取
 // scan 扫回来的列值（cataloguepage.Finish 头注）。
 func registryPage[Scanned any](
 	ctx context.Context,
@@ -121,7 +121,7 @@ type scannedAuthorityInterval struct {
 	row        ports.AuthorityIntervalRegistryRow
 }
 
-// ListAuthorityIntervals 上列生产权威区间册。缺省按登记时间倒序、同刻按追加序 interval_id 同向收尾，与迁移前同。
+// ListAuthorityIntervals 上列生产权威区间册。缺省按登记时间倒序、同刻按追加序 interval_id 同向收尾。
 func (registers *GovernanceRegisters) ListAuthorityIntervals(
 	ctx context.Context,
 	limit int,
@@ -165,7 +165,7 @@ func (registers *GovernanceRegisters) ListAuthorityIntervals(
 	return cataloguepage.Result[ports.AuthorityIntervalRegistryRow]{Rows: intervals, Next: page.Next, Total: page.Total}, nil
 }
 
-// ListSuspensions 上列暂停决定册。缺省按发生时刻倒序、同刻按暂停标识同向（倒序）收尾；迁移前同刻按标识正序。
+// ListSuspensions 上列暂停决定册。缺省按发生时刻倒序、同刻按暂停标识同向（倒序）收尾。
 func (registers *GovernanceRegisters) ListSuspensions(
 	ctx context.Context,
 	limit int,
@@ -200,7 +200,7 @@ func (registers *GovernanceRegisters) ListSuspensions(
 	return page, nil
 }
 
-// ListResumptions 上列恢复决定册。缺省按决定时刻倒序、同刻按被恢复的暂停标识同向（倒序）收尾；迁移前同刻按标识正序。
+// ListResumptions 上列恢复决定册。缺省按决定时刻倒序、同刻按被恢复的暂停标识同向（倒序）收尾。
 // 盘点 jsonb 不选列。
 func (registers *GovernanceRegisters) ListResumptions(
 	ctx context.Context,
@@ -235,8 +235,8 @@ func (registers *GovernanceRegisters) ListResumptions(
 	return page, nil
 }
 
-// ListTakeovers 上列对象级接管册。缺省按生效时刻倒序，同刻按六段行标识同向（倒序）收尾（ports.TakeoverRegistryPages
-// 头注）；迁移前同刻按区间四维与起点正序。盘点 jsonb 不选列。
+// ListTakeovers 上列对象级接管册。缺省按生效时刻倒序，同刻按行标识同向（倒序）收尾（ports.TakeoverRegistryPages
+// 头注）。盘点 jsonb 不选列。
 func (registers *GovernanceRegisters) ListTakeovers(
 	ctx context.Context,
 	limit int,

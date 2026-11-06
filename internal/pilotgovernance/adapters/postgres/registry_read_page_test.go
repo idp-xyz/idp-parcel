@@ -14,7 +14,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证治理登记册四册按 ADR-0144 取页（票 catalogue-read-pagination-rollout/12）。四册同形，共用
-// 一组表驱动用例、每册各过一遍。权威区间的登记时间是库给的 now()，这里直写 SQL 才排得出时刻；其余三册的时刻是领域
+// 一组表驱动用例、每册各过一遍。权威区间的登记时间是库给的 now()，这里直写 SQL 才排得出时刻；其余各册的时刻是领域
 // 输入，经写侧仓储登记。夹具全是 SYN- 合成值。
 
 // registerUnderTest 是一册在表驱动用例里的样子：seed 按序号与排序时刻登一行，序号进行标识（pageKey），list 取一页并把
@@ -234,7 +234,7 @@ func TestGovernanceRegistersPageByCursorWithoutRepeatsOrGapsWhileRowsAreRegister
 }
 
 // Covers: ADR-0144 决定三——同一时刻的几行按行标识与排序同向收尾，跨页续得上：倒序（缺省）时同刻的按标识倒序，正序时按
-// 标识正序。暂停、恢复与接管三册迁移前同刻按标识正序，迁移后缺省序下同刻的次序与迁移前相反（票面判断项）。
+// 标识正序。
 func TestGovernanceRegistersBreakTiesInTheSortDirection(t *testing.T) {
 	for name, register := range governanceRegistersUnderTest() {
 		t.Run(name, func(t *testing.T) {
@@ -309,8 +309,8 @@ func TestGovernanceRegistersTotalFollowsTheKeyword(t *testing.T) {
 	}
 }
 
-// Covers: ports.TakeoverRegistryPages 头注——接管册的行标识第六段是「区间终点，开放区间取起点」：前五段相同、一开一闭的两行
-// 都在册，按一行一页翻，倒序时闭区间在前、正序时开放区间在前，各只出现一次。
+// Covers: ports.TakeoverRegistryPages 头注——接管册行标识里「区间终点，开放区间取起点」那一段把一开一闭的两行分开：区间
+// 四维与起点都相同的这样两行都在册，按一行一页翻，倒序时闭区间在前、正序时开放区间在前，各只出现一次。
 func TestTakeoverRegistryKeepsOpenAndClosedTwinsApart(t *testing.T) {
 	ctx := t.Context()
 	fixture := newRegistryReadFixture(t)
