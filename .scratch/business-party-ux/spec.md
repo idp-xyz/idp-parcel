@@ -39,5 +39,5 @@ Status: in-progress——2026-11-06 起
 |---|---|---|
 | [01](./issues/01-panel-header.md) | 右栏抬头：英文名、一行事实只显到日、对象页图标按钮 | resolved（2026-11-06 进 main） |
 | [02](./issues/02-empty-state-and-contact-hint.md) | 资料空状态给下一步，客户缺联系人时提醒 | resolved（2026-11-06 进 main） |
-| [03](./issues/03-object-page-summary.md) | 对象页：meta 行补识别信息，概要去重，时刻只到日 | in-progress |
-| [04](./issues/04-list-type-tags-and-country.md) | 列表：类型改标签，加注册地一列 | open |
+| [03](./issues/03-object-page-summary.md) | 对象页：meta 行补识别信息，概要去重，时刻只到日 | resolved（2026-11-06 进 main） |
+| [04](./issues/04-list-type-tags-and-country.md) | 列表：类型改标签，加注册地一列 | in-progress |

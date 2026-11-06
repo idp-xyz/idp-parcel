@@ -24,8 +24,9 @@ import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from 
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
 import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
-import { DetailRow, Instant } from './detail-primitives';
-import { BusinessPartyIdentificationRows } from './BusinessPartyIdentificationRows';
+import { Instant } from './detail-primitives';
+import { RefText } from './copy-affordance';
+import { useBusinessPartyIdentificationMeta } from './BusinessPartyIdentificationRows';
 import {
   BusinessPartyContactsReadout,
   BusinessPartyProfileEditMode,
@@ -70,12 +71,15 @@ function muted(text: string): ReactNode {
 }
 
 // 版式照公司主体对象页（票 business-parties-object-page/01）：头区一行元信息、不摆大指标卡；分区走共用模板的固定签——「概要」是
-// 身份读出，「关联」是全景（合作关系、客户账户、公司主体、供应商协议、结算政策），「登记记录」是身份修订链。往来单位资料
-// （ADR-0369）并进概要，另有「联系人」「资料版本」两个分区；我方公司不摆，资料登在公司主体上。
+// 往来单位资料（ADR-0369）的读出与技术详情，「联系人」「资料版本」读同一份资料修订链（我方公司不摆，资料登在公司主体上），
+// 「登记记录」是身份修订链，「关联」是全景（合作关系、客户账户、公司主体、供应商协议、结算政策）。
+// 身份这一层（名称、编码、识别信息、状态、生效与登记版次）只在头区出现一次，与右栏头区同一份（票 business-party-ux/03）；
+// 当前来源单据在「登记记录」折起时的摘要里，排查用的标识与依据收进技术详情。
 
-function buildMeta(row: BusinessPartyRecord, related: number | undefined): DetailMeta[] {
+function buildMeta(row: BusinessPartyRecord, related: number | undefined, identification: DetailMeta[]): DetailMeta[] {
   return [
-    { label: '编码', value: <span className="font-mono">{row.partyId}</span> },
+    { label: '编码', value: <RefText value={row.partyId} name="编码" /> },
+    ...identification,
     { label: '生效', value: <Instant value={row.effectiveFrom} precision="day" /> },
     ...(row.deactivatedAt ? [{ label: '停用', value: <Instant value={row.deactivatedAt} precision="day" /> }] : []),
     { label: '登记', value: updateOrdinalLabel(row.revision) },
@@ -83,49 +87,15 @@ function buildMeta(row: BusinessPartyRecord, related: number | undefined): Detai
   ];
 }
 
-/** 「概要」分区：身份这一层的全部读出，含识别信息。登记依据就是当前这一版的来源单据，直接显；排查用的标识与租户收进技术详情。 */
-function IdentityReadout({ row }: { row: BusinessPartyRecord }) {
-  return (
-    <section className="bg-idpxyz-bg p-5">
-      <dl>
-        <DetailRow label="名称">{row.partyName}</DetailRow>
-        <DetailRow label="编码" mono>
-          {row.partyId}
-        </DetailRow>
-        <BusinessPartyIdentificationRows record={row} />
-        <DetailRow label="状态">
-          <StatusPill code={row.status} />
-        </DetailRow>
-        <DetailRow label="生效时间">
-          <Instant value={row.effectiveFrom} />
-        </DetailRow>
-        <DetailRow label="当前登记">
-          {updateOrdinalLabel(row.revision)} · 登记于 <Instant value={row.registeredAt} />
-        </DetailRow>
-        <DetailRow label="来源单据" mono>
-          {row.basis}
-        </DetailRow>
-        {row.deactivatedAt ? (
-          <>
-            <DetailRow label="停用时点">
-              <Instant value={row.deactivatedAt} />
-            </DetailRow>
-            <DetailRow label="停用依据" mono>
-              {row.deactivationBasis ?? ''}
-            </DetailRow>
-          </>
-        ) : null}
-      </dl>
-      <TechnicalDetails
-        className="mt-4"
-        rows={[
-          { label: '参与方标识', value: row.partyId },
-          { label: '当前修订号', value: String(row.revision) },
-          { label: '租户', value: row.tenantId },
-        ]}
-      />
-    </section>
-  );
+/** 概要底部的技术详情：行名照原词，给对照排查的人（company-subject-ux「统一用语」表末那条）。 */
+function technicalRowsOf(row: BusinessPartyRecord) {
+  return [
+    { label: '参与方标识', value: row.partyId },
+    { label: '当前修订号', value: String(row.revision) },
+    { label: '登记依据', value: row.basis },
+    ...(row.deactivationBasis ? [{ label: '停用依据', value: row.deactivationBasis }] : []),
+    { label: '租户', value: row.tenantId },
+  ];
 }
 
 /**
@@ -160,7 +130,7 @@ function viewStateOf(
  * 参与方对象页（`#/business-parties/<参与方标识>`）。结构同工作台详情栏（BusinessPartyDetailPanel）。关系册答案由列表页
  * 持有、传进来（与关系册同一份），全景区不另取。签由本页记、经模板的受控签口交进去，与法人对象页同一做法。
  * 按分区版式摆（票 company-subject-ux/13；版式对齐公司主体，票 business-parties-object-page/01）：概要、登记记录、关联一页纵排，
- * 登记记录默认折起——修订链要取数，折着时标题后显当前第几版。
+ * 登记记录默认折起——修订链要取数，折着时标题后显当前第几版与来源单据。
  */
 export function BusinessPartyDetailPage({
   partyId,
@@ -208,6 +178,7 @@ export function BusinessPartyDetailPage({
   const ours = pinned === true;
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   const related = usePartyOverviewCount(partyId, relationships);
+  const identificationMeta = useBusinessPartyIdentificationMeta(row);
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const grant = useRegistryWriteGrant();
   const mayWrite = grant.mayWrite;
@@ -318,7 +289,7 @@ export function BusinessPartyDetailPage({
         </>
       }
       footer={anyEditing ? <div ref={setFooterSlot} /> : undefined}
-      meta={row ? buildMeta(row, related) : []}
+      meta={row ? buildMeta(row, related, identificationMeta) : []}
       basicFields={[]}
       sections={
         row
@@ -401,22 +372,20 @@ export function BusinessPartyDetailPage({
                     {
                       id: 'summary' as const,
                       content: (
-                        <>
-                          <IdentityReadout row={row} />
-                          <section className="bg-idpxyz-bg px-5 pb-5">
-                            {ours ? (
-                              <p className="type-value leading-6 text-idpxyz-breadcrumb">{ourCompanyProfileNote}</p>
-                            ) : (
-                              <BusinessPartyProfileReadout
-                                partyId={row.partyId}
-                                query={profiles}
-                                registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
-                                roles={roles}
-                                onUpdate={profileUpdate}
-                              />
-                            )}
-                          </section>
-                        </>
+                        <section className="bg-idpxyz-bg p-5">
+                          {ours ? (
+                            <p className="type-value leading-6 text-idpxyz-breadcrumb">{ourCompanyProfileNote}</p>
+                          ) : (
+                            <BusinessPartyProfileReadout
+                              partyId={row.partyId}
+                              query={profiles}
+                              registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+                              roles={roles}
+                              onUpdate={profileUpdate}
+                            />
+                          )}
+                          <TechnicalDetails className="mt-4" rows={technicalRowsOf(row)} />
+                        </section>
                       ),
                     },
                   ]),
@@ -449,7 +418,11 @@ export function BusinessPartyDetailPage({
               {
                 id: 'identity-revisions',
                 collapsed: true,
-                summary: `当前${updateOrdinalLabel(row.revision)}`,
+                summary: (
+                  <>
+                    当前{updateOrdinalLabel(row.revision)} · 来源单据 <span className="font-mono">{row.basis}</span>
+                  </>
+                ),
                 content: (
                   <section className="bg-idpxyz-bg p-5">
                     <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />

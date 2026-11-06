@@ -1,7 +1,7 @@
 # 04 列表：类型改标签，加注册地一列
 
 Category: enhancement
-Status: open
+Status: in-progress
 父票：[spec](../spec.md)
 
 ## 要做的

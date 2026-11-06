@@ -348,11 +348,11 @@ function CustomerAccountsBlock({
                 </span>
               </div>
               <Line label="生效时间" mono>
-                <Instant value={row.effectiveFrom} />
+                <Instant value={row.effectiveFrom} precision="day" />
               </Line>
               {row.deactivatedAt ? (
                 <Line label="停用时间" mono>
-                  <Instant value={row.deactivatedAt} />
+                  <Instant value={row.deactivatedAt} precision="day" />
                 </Line>
               ) : null}
             </RowCard>

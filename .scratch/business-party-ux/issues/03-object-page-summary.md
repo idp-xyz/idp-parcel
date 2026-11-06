@@ -1,7 +1,7 @@
 # 03 对象页：meta 行补识别信息，概要去重，时刻只到日
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-06 进 main
 父票：[spec](../spec.md)
 
 ## 要做的
@@ -14,3 +14,11 @@ Status: in-progress
 
 - 三道门退 0。
 - 浏览器：货主一号对象页 meta 行有注册地、注册号与客户编码；概要首块就是资料卡；登记记录摘要带来源单据；关联里不再有到秒的时刻。零写请求。
+
+## 完成记录（2026-11-06，直接推 `main`）
+
+- 落点：`BusinessPartyIdentificationRows.tsx` 加 `useBusinessPartyIdentificationMeta`（与右栏头区同一份判读；模板以标签作 key，同名的格并成一项），删掉只给旧概要用的三行读出。`BusinessPartyDetailPage.tsx`：meta 行在编码后接识别信息，编码改为点击复制；概要不再列名称、编码、状态与到秒的时刻，只留资料读出（我方公司那一句）与技术详情（标识、修订号、登记依据、停用依据、租户）；「登记记录」折起时的摘要为「当前第 N 版 · 来源单据 …」。`PartyOverviewSection.tsx` 里客户账户的生效、停用时刻到日。
+- ✅ 三道门退 0。
+- ✅ 浏览器（本树另起 vite 5178，接演示 API 19080）：货主一号 meta 行「编码 · 注册地 中国（CN）· 注册号 … SYN-CN-REG-0901 · 客户编码 SYN-ERP SYN-C-0001 · 生效 2026-11-05 · 登记 第 2 版 · 关联 4 项」，概要首块是「名称与地址」卡，登记记录摘要「当前第 2 版 · 来源单据 SYN-IDENT-BASIS-SHIPPER-01」；货主二号概要为空状态（客户提示与按钮）+ 技术详情；我方公司概要为那一句 + 技术详情、无「更新资料」；零写请求。证据 S。
+- ◑ 关联里仍有到秒的时刻，都是已发布版本的「有效区间」（结算政策、适用范围等，出自全站共用的 `version-closure.ts`）：发布版本在哪一刻生效本身是要紧的事实，且那个件各页共用、测试钉着到秒，本票不动。
+- 评审：diff 全在 `pages/**`，按 workflow「前端切片」自审。
