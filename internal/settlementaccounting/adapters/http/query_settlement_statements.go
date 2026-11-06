@@ -425,19 +425,20 @@ type statementLineBody struct {
 
 // NewQueryStatementLinesEndpoint 交回一张对账单费用行查阅的 HTTP 入口（GET /settlement-statement-lines?statement=）。对账单册的目录
 // 行只带行数（明细归详情面）；登记争议要从这张单自己的行里选费用、核金额与提出时刻，从按页上列的费用册里反查会漏掉页外的费用，
-// 也认不出作废单上的行（ADR-0354 决定一、三）。statement 缺即坏请求。
+// 也认不出作废单上的行（ADR-0354 决定一、三）。statement 缺即坏请求，在准入之后才判：渠道未配置时答复对一切请求内容一致
+// （ADR-0055 决定三）。按一张单取行，不按 ADR-0144 翻页。
 func NewQueryStatementLinesEndpoint(intake CatalogueQueryIntake, reader StatementLineReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
 			return
 		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
 		number := request.URL.Query().Get("statement")
 		if number == "" {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 		found, has, err := reader.FindStatementLines(request.Context(), query.Scope.Tenant(), number)

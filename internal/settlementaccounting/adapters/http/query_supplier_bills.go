@@ -100,19 +100,20 @@ type supplierBillPayableBody struct {
 }
 
 // NewQuerySupplierBillLinesEndpoint 交回一份账单各行查阅的 HTTP 入口（GET /settlement-supplier-bill-lines?claim=&version=）。账单册
-// 目录行只带计数（明细归详情面）；审核要从这份账单自己的行里挑已匹配、还没有应付的那一行。claim 或 version 缺即坏请求。
+// 目录行只带计数（明细归详情面）；审核要从这份账单自己的行里挑已匹配、还没有应付的那一行。claim 或 version 缺即坏请求，在准入
+// 之后才判：渠道未配置时答复对一切请求内容一致（ADR-0055 决定三）。按一份账单取行，不按 ADR-0144 翻页。
 func NewQuerySupplierBillLinesEndpoint(intake CatalogueQueryIntake, reader SupplierBillLineReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
 			return
 		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
 		claim, version := request.URL.Query().Get("claim"), request.URL.Query().Get("version")
 		if claim == "" || version == "" {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 		found, has, err := reader.FindSupplierBillLines(request.Context(), query.Scope.Tenant(), claim, version)
