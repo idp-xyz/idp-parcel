@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是代收分户账查阅的伴生列表读端口(ADR-0077,票 admin-remainder-mechanism-batch/04):
@@ -17,8 +18,9 @@ import (
 // 汇付记账,批次不另持第二份成员清单)。目录上列不重建领域对象、不形成判断。
 //
 // 租户在方法签名上(ADR-0077 Decision 五);Limit 必须为正,每页多大由接入面按渠道
-// 契约裁决,读口只拒绝无意义的取值;空登记册如实交回空列表(Decision 四:空册本身
-// 就是内容,续办是登记责任方去登记口开立,不折成未配置)。
+// 契约裁决,读口只拒绝无意义的取值;翻页、排序与检索是调用方的查询意图,由端点按
+// CodSubledgerPages 解成查询对象交进来(ADR-0144 决定六)。空登记册如实交回空页
+// (Decision 四:空册本身就是内容,续办是登记责任方去登记口开立,不折成未配置)。
 
 // CodSubledgerPositionBalances 是一本分户账各账内资金位置的派生余额,币种最小单位。
 // 余额=去向侧入账之和−来源侧出账之和;写口守余额非负,读口照实转写——旁路写入
@@ -63,11 +65,13 @@ type CodSubledgerCatalogueRow struct {
 	Batches      []CodSubledgerRemittanceBatch
 }
 
-// CodSubledgerCatalogueRead 是代收分户账的伴生列表读端口。
+// CodSubledgerCatalogueRead 是代收分户账的伴生列表读端口:按查询取一页,答本页行、
+// 下一页的游标与同一组条件下的总数。
 type CodSubledgerCatalogueRead interface {
 	ListCodSubledgers(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CodSubledgerCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CodSubledgerCatalogueRow], error)
 }
