@@ -99,7 +99,7 @@ var versionStatuses = []string{
 	domain.CommercialVersionSuperseded.String(),
 }
 
-// versionShellPages 是版本壳各册共用的声明形状，selectors 只有策略目录那三种用（kind）。
+// versionShellPages 是版本壳各册共用的声明形状，selectors 只有策略目录里以版本壳为行的那几种用（kind）。
 func versionShellPages(name string, selectors ...string) *cataloguepage.Catalogue {
 	return cataloguepage.MustCatalogue(cataloguepage.Spec{
 		Name: name,
@@ -123,6 +123,84 @@ var CustomerContractPages = versionShellPages("commercial-customer-contracts")
 
 // SupplierAgreementPages 是 /commercial-supplier-agreements 的查询声明。
 var SupplierAgreementPages = versionShellPages("commercial-supplier-agreements")
+
+// 策略目录 /commercial-policies 按 kind 分派册子，每种各是一册（ADR-0144 决定四）：kind 保持册子选择器原义、登为
+// Selectors，取值进游标摘要，拿一种的游标去翻另一种答游标不符。各册缺省序保迁移前的首列与方向：正文册按登记或声明时刻
+// 倒序，以版本壳为行的那几种按发布时刻倒序（版本壳上没有登记时刻这一格）。筛选维只放有封闭词表的那一格；信用政策的权限
+// 等级与费用类型是开放引用，不设筛选维。
+
+// policyContentPages 是策略目录里自带版本与生效区间的正文册共用的声明形状：缺省按 at 倒序，另可按生效起点与对象号排；
+// 行标识是对象与版本两段（各表的 object_kind 由 CHECK 钉成一格，主键去掉租户与类别即这两段）。
+func policyContentPages(kind, at string, filters ...cataloguepage.FilterDimension) *cataloguepage.Catalogue {
+	return cataloguepage.MustCatalogue(cataloguepage.Spec{
+		Name: "commercial-policies/" + kind,
+		Sorts: []cataloguepage.SortDimension{
+			{Name: at, Kind: cataloguepage.Instant},
+			{Name: "effectiveStartsAt", Kind: cataloguepage.Instant},
+			{Name: "objectId", Kind: cataloguepage.Text},
+		},
+		DefaultSort: cataloguepage.Sort{Field: at, Descending: true},
+		Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+		Filters:     filters,
+		Selectors:   []string{"kind"},
+	})
+}
+
+// AcceptanceRulePackagePages 是 kind=ACCEPTANCE_RULE_PACKAGE 的查询声明。
+var AcceptanceRulePackagePages = policyContentPages("ACCEPTANCE_RULE_PACKAGE", "declaredAt")
+
+// PricePolicyPages 是 kind=PRICE_POLICY 的查询声明；direction 取自 domain.PriceDirection。
+var PricePolicyPages = policyContentPages("PRICE_POLICY", "registeredAt",
+	cataloguepage.FilterDimension{Name: "direction", Vocabulary: cataloguepage.Words[domain.PriceDirection]()})
+
+// SettlementPolicyPages 是 kind=SETTLEMENT_POLICY 的查询声明；method 取自 domain.SettlementMethod。
+var SettlementPolicyPages = policyContentPages("SETTLEMENT_POLICY", "registeredAt",
+	cataloguepage.FilterDimension{Name: "method", Vocabulary: cataloguepage.Words[domain.SettlementMethod]()})
+
+// CreditPolicyPages 是 kind=CREDIT_POLICY 的查询声明。
+var CreditPolicyPages = policyContentPages("CREDIT_POLICY", "registeredAt")
+
+// PreAcceptanceControlPages 是 kind=PRE_ACCEPTANCE_CONTROL 的查询声明。声明挂在客户合同版本下，没有自己的版本与生效区间：
+// 行标识是合同对象与合同版本两段，另可按合同对象排；requirement 取自 domain.PreAcceptanceControlRequirement。
+var PreAcceptanceControlPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-policies/PRE_ACCEPTANCE_CONTROL",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "declaredAt", Kind: cataloguepage.Instant},
+		{Name: "contractObjectId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "declaredAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "requirement", Vocabulary: cataloguepage.Words[domain.PreAcceptanceControlRequirement]()},
+	},
+	Selectors: []string{"kind"},
+})
+
+// AsOfPolicyPages 是 kind=AS_OF_POLICY 的查询声明。声明挂在接单规则包版本下、一版规则包每类判断一行：行标识是规则包对象、
+// 规则包版本与判断类型三段，另可按规则包对象排；judgmentType 取自 domain.JudgmentType。
+var AsOfPolicyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-policies/AS_OF_POLICY",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "declaredAt", Kind: cataloguepage.Instant},
+		{Name: "rulePackageObjectId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "declaredAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "judgmentType", Vocabulary: cataloguepage.Words[domain.JudgmentType]()},
+	},
+	Selectors: []string{"kind"},
+})
+
+// AuthorizationRulePages 是 kind=AUTHORIZATION_RULE 的查询声明。
+var AuthorizationRulePages = versionShellPages("commercial-policies/AUTHORIZATION_RULE", "kind")
+
+// CustomerServiceRulePages 是 kind=CUSTOMER_SERVICE_RULE 的查询声明。
+var CustomerServiceRulePages = versionShellPages("commercial-policies/CUSTOMER_SERVICE_RULE", "kind")
+
+// PreAcceptanceFinancialControlPolicyPages 是 kind=PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 的查询声明。
+var PreAcceptanceFinancialControlPolicyPages = versionShellPages(
+	"commercial-policies/PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", "kind")
 
 // ProductChannelMappingPages 是 /commercial-product-channel-mappings 的查询声明。映射没有独立状态代数（行上不导出状态，裁决在
 // ProductChannelMappingRow），本册因此不设筛选维，收窄只靠 q。

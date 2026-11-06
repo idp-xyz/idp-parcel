@@ -136,32 +136,50 @@ func (double *versionReaderDouble) ListSupplierAgreements(
 ) (cataloguepage.Result[ports.SupplierAgreementCatalogueRow], error) {
 	return cataloguepage.Result[ports.SupplierAgreementCatalogueRow]{}, nil
 }
-func (double *versionReaderDouble) ListAcceptanceRulePackages(context.Context, domain.TenantID, int) ([]ports.AcceptanceRulePackageRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListAcceptanceRulePackages(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceRulePackageRow], error) {
+	return cataloguepage.Result[ports.AcceptanceRulePackageRow]{}, nil
 }
-func (double *versionReaderDouble) ListPreAcceptanceControls(context.Context, domain.TenantID, int) ([]ports.PreAcceptanceControlRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListPreAcceptanceControls(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceControlRow], error) {
+	return cataloguepage.Result[ports.PreAcceptanceControlRow]{}, nil
 }
-func (double *versionReaderDouble) ListPricePolicies(context.Context, domain.TenantID, int) ([]ports.PricePolicyRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListPricePolicies(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.PricePolicyRow], error) {
+	return cataloguepage.Result[ports.PricePolicyRow]{}, nil
 }
-func (double *versionReaderDouble) ListSettlementPolicies(context.Context, domain.TenantID, int) ([]ports.SettlementPolicyRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListSettlementPolicies(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SettlementPolicyRow], error) {
+	return cataloguepage.Result[ports.SettlementPolicyRow]{}, nil
 }
-func (double *versionReaderDouble) ListAsOfPolicyDeclarations(context.Context, domain.TenantID, int) ([]ports.AsOfPolicyRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListAsOfPolicyDeclarations(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.AsOfPolicyRow], error) {
+	return cataloguepage.Result[ports.AsOfPolicyRow]{}, nil
 }
-func (double *versionReaderDouble) ListAuthorizationRules(context.Context, domain.TenantID, int) ([]ports.AuthorizationRuleRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListAuthorizationRules(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorizationRuleRow], error) {
+	return cataloguepage.Result[ports.AuthorizationRuleRow]{}, nil
 }
-func (double *versionReaderDouble) ListCreditPolicies(context.Context, domain.TenantID, int) ([]ports.CreditPolicyRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListCreditPolicies(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CreditPolicyRow], error) {
+	return cataloguepage.Result[ports.CreditPolicyRow]{}, nil
 }
-func (double *versionReaderDouble) ListCustomerServiceRules(context.Context, domain.TenantID, int) ([]ports.CustomerServiceRuleRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListCustomerServiceRules(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerServiceRuleRow], error) {
+	return cataloguepage.Result[ports.CustomerServiceRuleRow]{}, nil
 }
-func (double *versionReaderDouble) ListPreAcceptanceFinancialControlPolicies(context.Context, domain.TenantID, int) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
-	return nil, nil
+func (double *versionReaderDouble) ListPreAcceptanceFinancialControlPolicies(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error) {
+	return cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow]{}, nil
 }
 
 func versionReadbackEndpoint(intake commercialhttp.CommercialCatalogueIntake, reader *versionReaderDouble) http.Handler {

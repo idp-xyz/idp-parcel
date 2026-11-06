@@ -1699,72 +1699,81 @@ func (unwiredCommercialCatalogue) ListAcceptanceRulePackages(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.AcceptanceRulePackageRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.AcceptanceRulePackageRow], error) {
+	return cataloguepage.Result[commercialports.AcceptanceRulePackageRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListPreAcceptanceControls(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.PreAcceptanceControlRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.PreAcceptanceControlRow], error) {
+	return cataloguepage.Result[commercialports.PreAcceptanceControlRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListPricePolicies(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.PricePolicyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.PricePolicyRow], error) {
+	return cataloguepage.Result[commercialports.PricePolicyRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListSettlementPolicies(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.SettlementPolicyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.SettlementPolicyRow], error) {
+	return cataloguepage.Result[commercialports.SettlementPolicyRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListAsOfPolicyDeclarations(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.AsOfPolicyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.AsOfPolicyRow], error) {
+	return cataloguepage.Result[commercialports.AsOfPolicyRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListAuthorizationRules(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.AuthorizationRuleRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.AuthorizationRuleRow], error) {
+	return cataloguepage.Result[commercialports.AuthorizationRuleRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListCreditPolicies(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.CreditPolicyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.CreditPolicyRow], error) {
+	return cataloguepage.Result[commercialports.CreditPolicyRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListCustomerServiceRules(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.CustomerServiceRuleRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.CustomerServiceRuleRow], error) {
+	return cataloguepage.Result[commercialports.CustomerServiceRuleRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListPreAcceptanceFinancialControlPolicies(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.PreAcceptanceFinancialControlPolicyRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.PreAcceptanceFinancialControlPolicyRow], error) {
+	return cataloguepage.Result[commercialports.PreAcceptanceFinancialControlPolicyRow]{}, errOrchestrationNotWired
 }
 
 // 货主客户账户册（票 admin-write-faces/04）：方法表与 commercialhttp.CustomerAccountCatalogueReader

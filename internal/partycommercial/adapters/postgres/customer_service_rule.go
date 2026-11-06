@@ -13,6 +13,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 客户服务规则册的持久化面（票 party-commercial-context-gaps/05，ADR-0104，0023 迁移）。写口挂在
@@ -501,139 +502,128 @@ func minimumMaterialsFromJSON(raw []byte) ([]domain.MinimumMaterialsRule, error)
 // 目录不重建领域对象、不形成判断：有父行而两张子表都空是坏数据（领域要求至少一项），拦它归内容
 // 读口 LoadCustomerServiceRule；这里照 ListAcceptanceRulePackages 的先例如实交回空集合。
 //
-// ListCustomerServiceRules 与 FindCustomerServiceRule 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) customerServiceRuleRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.CustomerServiceRuleRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// 正文的范围与登记时刻改名导出，版本壳上已有同名的 scope_ref。
+// ListCustomerServiceRules 与 FindCustomerServiceRule 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var customerServiceRuleListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               content.service_product_id, content.customer_contract_id,
+               content.responsible_party_id, content.scope_ref AS rule_scope_ref,
+               content.registered_at AS rule_registered_at,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'kind',       deadline.deadline_kind,
+                                   'startEvent', deadline.start_event_ref,
+                                   'days',       deadline.duration_days,
+                                   'calendar',   deadline.calendar_ref
+                               )
+                               ORDER BY deadline.deadline_kind
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.customer_service_rule_claim_deadline AS deadline
+                 WHERE deadline.tenant_id     = version.tenant_id
+                   AND deadline.object_kind   = version.object_kind
+                   AND deadline.object_id     = version.object_id
+                   AND deadline.version_label = version.version_label) AS claim_deadlines,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'claimKind', material.claim_kind_ref,
+                                   'material',  material.material_ref
+                               )
+                               ORDER BY material.claim_kind_ref, material.material_ref
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.customer_service_rule_minimum_material AS material
+                 WHERE material.tenant_id     = version.tenant_id
+                   AND material.object_kind   = version.object_kind
+                   AND material.object_id     = version.object_id
+                   AND material.version_label = version.version_label) AS minimum_materials,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.customer_service_rule AS content
+                 ON content.tenant_id     = version.tenant_id
+                AND content.object_kind   = version.object_kind
+                AND content.object_id     = version.object_id
+                AND content.version_label = version.version_label
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.CustomerServiceRuleObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+catalogueClosureColumns+`,
-		        content.service_product_id, content.customer_contract_id,
-		        content.responsible_party_id, content.scope_ref, content.registered_at,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'kind',       deadline.deadline_kind,
-		                            'startEvent', deadline.start_event_ref,
-		                            'days',       deadline.duration_days,
-		                            'calendar',   deadline.calendar_ref
-		                        )
-		                        ORDER BY deadline.deadline_kind
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.customer_service_rule_claim_deadline AS deadline
-		          WHERE deadline.tenant_id     = version.tenant_id
-		            AND deadline.object_kind   = version.object_kind
-		            AND deadline.object_id     = version.object_id
-		            AND deadline.version_label = version.version_label),
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'claimKind', material.claim_kind_ref,
-		                            'material',  material.material_ref
-		                        )
-		                        ORDER BY material.claim_kind_ref, material.material_ref
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.customer_service_rule_minimum_material AS material
-		          WHERE material.tenant_id     = version.tenant_id
-		            AND material.object_kind   = version.object_kind
-		            AND material.object_id     = version.object_id
-		            AND material.version_label = version.version_label)
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.customer_service_rule AS content
-		          ON content.tenant_id     = version.tenant_id
-		         AND content.object_kind   = version.object_kind
-		         AND content.object_id     = version.object_id
-		         AND content.version_label = version.version_label
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+// customerServiceRuleRead：q 另覆盖正文里适用的产品或合同、责任方与规则范围。
+var customerServiceRuleRead = catalogueRead[ports.CustomerServiceRuleRow]{
+	binding: ports.CustomerServiceRulePages.MustBind(versionShellColumns(
+		"service_product_id", "customer_contract_id", "responsible_party_id", "rule_scope_ref")),
+	listed: customerServiceRuleListed,
+	selection: versionShellSelection + `, service_product_id, customer_contract_id,
+		        responsible_party_id, rule_scope_ref, rule_registered_at, claim_deadlines, minimum_materials`,
+	scan: scanCustomerServiceRule,
+	position: func(row ports.CustomerServiceRuleRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
+}
 
-	ruleRows := make([]ports.CustomerServiceRuleRow, 0, limit)
-	for rows.Next() {
-		var row ports.CustomerServiceRuleRow
-		var status int16
-		var endsAt, registeredAt *time.Time
-		var product, contract, responsible, ruleScope *string
-		var deadlinesJSON, materialsJSON []byte
-		var closure catalogueClosureScan
-		targets := append([]any{
-			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
-		targets = append(targets, &product, &contract, &responsible, &ruleScope, &registeredAt,
-			&deadlinesJSON, &materialsJSON)
-		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
-			return nil, err
-		}
-		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		// registered_at 在正文父行上 NOT NULL，它的在场即正文的在场。
-		if registeredAt != nil {
-			row.HasContent = true
-			row.RegisteredAt = *registeredAt
-			switch {
-			case product != nil && contract == nil:
-				row.ServiceProduct = *product
-			case product == nil && contract != nil:
-				row.CustomerContract = *contract
-			default:
-				return nil, fmt.Errorf("%s: %s/%s 的适用声明既不是产品也不是合同", operation,
-					row.ObjectID, row.VersionLabel)
-			}
-			row.ResponsibleParty = *responsible
-			row.RuleScope = *ruleScope
-		}
-		if row.ClaimDeadlines, err = claimDeadlineRowsFromJSON(deadlinesJSON); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if row.MinimumMaterials, err = minimumMaterialsRowsFromJSON(materialsJSON); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		ruleRows = append(ruleRows, row)
+func scanCustomerServiceRule(rows pgx.Rows) (ports.CustomerServiceRuleRow, error) {
+	var row ports.CustomerServiceRuleRow
+	var status int16
+	var endsAt, registeredAt *time.Time
+	var product, contract, responsible, ruleScope *string
+	var deadlinesJSON, materialsJSON []byte
+	var closure catalogueClosureScan
+	targets := append([]any{
+		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+	targets = append(targets, &product, &contract, &responsible, &ruleScope, &registeredAt,
+		&deadlinesJSON, &materialsJSON)
+	if err := rows.Scan(targets...); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	var err error
+	if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+		return row, err
 	}
-	return ruleRows, nil
+	row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
+	}
+	// registered_at 在正文父行上 NOT NULL，它的在场即正文的在场。
+	if registeredAt != nil {
+		row.HasContent = true
+		row.RegisteredAt = *registeredAt
+		switch {
+		case product != nil && contract == nil:
+			row.ServiceProduct = *product
+		case product == nil && contract != nil:
+			row.CustomerContract = *contract
+		default:
+			return row, fmt.Errorf("%s/%s 的适用声明既不是产品也不是合同", row.ObjectID, row.VersionLabel)
+		}
+		row.ResponsibleParty = *responsible
+		row.RuleScope = *ruleScope
+	}
+	if row.ClaimDeadlines, err = claimDeadlineRowsFromJSON(deadlinesJSON); err != nil {
+		return row, err
+	}
+	if row.MinimumMaterials, err = minimumMaterialsRowsFromJSON(materialsJSON); err != nil {
+		return row, err
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.CustomerServiceRuleRow, error) {
-	return catalogue.customerServiceRuleRows(ctx, "list customer service rules", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerServiceRuleRow], error) {
+	return customerServiceRuleRead.page(ctx, catalogue.db, "list customer service rules", limit, query,
+		tenant.String(), uint8(domain.CustomerServiceRuleObject))
 }
 
 func (catalogue *OperationsCatalogue) FindCustomerServiceRule(
@@ -642,7 +632,8 @@ func (catalogue *OperationsCatalogue) FindCustomerServiceRule(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.CustomerServiceRuleRow, bool, error) {
-	return firstRow(catalogue.customerServiceRuleRows(ctx, "find customer service rule", tenant, 1, keyOf(objectID, version)))
+	return customerServiceRuleRead.find(ctx, catalogue.db, "find customer service rule", keyOf(objectID, version),
+		tenant.String(), uint8(domain.CustomerServiceRuleObject))
 }
 
 // claimDeadlineRowsFromJSON 只转写，不校验种类是否在封闭三值内——判据同 cancellationAuthorityRowsFromJSON：

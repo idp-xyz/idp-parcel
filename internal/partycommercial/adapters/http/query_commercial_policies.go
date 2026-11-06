@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CommercialPolicyCatalogueReader 是商业策略目录端点消费的读口。
@@ -14,47 +15,56 @@ type CommercialPolicyCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.AcceptanceRulePackageRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AcceptanceRulePackageRow], error)
 	ListPreAcceptanceControls(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.PreAcceptanceControlRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PreAcceptanceControlRow], error)
 	ListPricePolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.PricePolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PricePolicyRow], error)
 	ListSettlementPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.SettlementPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SettlementPolicyRow], error)
 	ListAsOfPolicyDeclarations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.AsOfPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AsOfPolicyRow], error)
 	ListAuthorizationRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.AuthorizationRuleRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AuthorizationRuleRow], error)
 	ListCreditPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CreditPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CreditPolicyRow], error)
 	ListCustomerServiceRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerServiceRuleRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomerServiceRuleRow], error)
 	ListPreAcceptanceFinancialControlPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.PreAcceptanceFinancialControlPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PreAcceptanceFinancialControlPolicyRow], error)
 	FindAcceptanceRulePackage(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -132,12 +142,28 @@ const (
 	kindPreAcceptanceFinancialControlPolicy = "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY"
 )
 
+// commercialPolicyPages 把每种 kind 对到它那一册的查询声明；不在表里的 kind 即集外。
+var commercialPolicyPages = map[string]*cataloguepage.Catalogue{
+	kindAcceptanceRulePackage:               ports.AcceptanceRulePackagePages,
+	kindPreAcceptanceControl:                ports.PreAcceptanceControlPages,
+	kindPricePolicy:                         ports.PricePolicyPages,
+	kindSettlementPolicy:                    ports.SettlementPolicyPages,
+	kindAsOfPolicy:                          ports.AsOfPolicyPages,
+	kindAuthorizationRule:                   ports.AuthorizationRulePages,
+	kindCreditPolicy:                        ports.CreditPolicyPages,
+	kindCustomerServiceRule:                 ports.CustomerServiceRulePages,
+	kindPreAcceptanceFinancialControlPolicy: ports.PreAcceptanceFinancialControlPolicyPages,
+}
+
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
 // (GET /commercial-policies?kind=,ADR-0077、票 master-data-wiring/05)。
 //
 // kind 缺席或集外按坏请求拒:各册子的行形状互不相同,替调用方选一种就是猜。kind
 // 的在场与取值属传输形状(与方法检查同级,先于 Intake),读它不构成读业务内容——
 // 未配置 Intake 对全部种类同答 403,分支选择不泄露任何东西。
+//
+// 其余查询参数按 kind 选定的那一册声明解码(commercialPolicyPages),同属传输形状、先于 Intake(ADR-0144 决定六),
+// 答法与次序同 /commercial-customer-accounts。kind 在各册声明里是选择器,取值进游标摘要:拿一种的游标去翻另一种答游标不符。
 func NewQueryCommercialPoliciesEndpoint(
 	intake CommercialCatalogueIntake,
 	reader CommercialPolicyCatalogueReader,
@@ -150,13 +176,14 @@ func NewQueryCommercialPoliciesEndpoint(
 		}
 
 		kind := request.URL.Query().Get("kind")
-		switch kind {
-		case kindAcceptanceRulePackage, kindPreAcceptanceControl,
-			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy,
-			kindAuthorizationRule, kindCreditPolicy, kindCustomerServiceRule,
-			kindPreAcceptanceFinancialControlPolicy:
-		default:
+		pages, known := commercialPolicyPages[kind]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := pages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
@@ -169,23 +196,23 @@ func NewQueryCommercialPoliciesEndpoint(
 
 		switch kind {
 		case kindAcceptanceRulePackage:
-			serveRulePackages(response, request, reader, tenant, query.Limit)
+			serveRulePackages(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindPreAcceptanceControl:
-			servePreAcceptanceControls(response, request, reader, tenant, query.Limit)
+			servePreAcceptanceControls(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindPricePolicy:
-			servePricePolicies(response, request, reader, tenant, query.Limit)
+			servePricePolicies(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindSettlementPolicy:
-			serveSettlementPolicies(response, request, reader, tenant, query.Limit)
+			serveSettlementPolicies(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindAsOfPolicy:
-			serveAsOfPolicies(response, request, reader, tenant, query.Limit)
+			serveAsOfPolicies(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindAuthorizationRule:
-			serveAuthorizationRules(response, request, reader, tenant, query.Limit)
+			serveAuthorizationRules(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindCreditPolicy:
-			serveCreditPolicies(response, request, reader, tenant, query.Limit)
+			serveCreditPolicies(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindCustomerServiceRule:
-			serveCustomerServiceRules(response, request, reader, tenant, query.Limit)
+			serveCustomerServiceRules(response, request, reader, tenant, query.Limit, pageQuery)
 		case kindPreAcceptanceFinancialControlPolicy:
-			servePreAcceptanceFinancialControlPolicies(response, request, reader, tenant, query.Limit)
+			servePreAcceptanceFinancialControlPolicies(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -196,20 +223,22 @@ func serveRulePackages(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListAcceptanceRulePackages(request.Context(), tenant, limit)
+	page, err := reader.ListAcceptanceRulePackages(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]rulePackageBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]rulePackageBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, rulePackageBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, rulePackageListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindAcceptanceRulePackage,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -219,14 +248,15 @@ func servePreAcceptanceControls(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListPreAcceptanceControls(request.Context(), tenant, limit)
+	page, err := reader.ListPreAcceptanceControls(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]preAcceptanceControlBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]preAcceptanceControlBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := preAcceptanceControlBody{
 			ContractObjectID: row.ContractObjectID,
 			ContractVersion:  row.ContractVersion,
@@ -241,6 +271,7 @@ func servePreAcceptanceControls(
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindPreAcceptanceControl,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -250,20 +281,22 @@ func servePricePolicies(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListPricePolicies(request.Context(), tenant, limit)
+	page, err := reader.ListPricePolicies(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]pricePolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]pricePolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, pricePolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, pricePolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindPricePolicy,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -273,20 +306,22 @@ func serveSettlementPolicies(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListSettlementPolicies(request.Context(), tenant, limit)
+	page, err := reader.ListSettlementPolicies(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]settlementPolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]settlementPolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, settlementPolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, settlementPolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindSettlementPolicy,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -296,14 +331,15 @@ func serveAsOfPolicies(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListAsOfPolicyDeclarations(request.Context(), tenant, limit)
+	page, err := reader.ListAsOfPolicyDeclarations(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]asOfPolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]asOfPolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, asOfPolicyBody{
 			RulePackageObjectID: row.RulePackageObjectID,
 			RulePackageVersion:  row.RulePackageVersion,
@@ -317,6 +353,7 @@ func serveAsOfPolicies(
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindAsOfPolicy,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -326,20 +363,22 @@ func serveAuthorizationRules(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListAuthorizationRules(request.Context(), tenant, limit)
+	page, err := reader.ListAuthorizationRules(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]authorizationRuleBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]authorizationRuleBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, authorizationRuleBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, authorizationRuleListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindAuthorizationRule,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -349,20 +388,22 @@ func serveCreditPolicies(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListCreditPolicies(request.Context(), tenant, limit)
+	page, err := reader.ListCreditPolicies(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]creditPolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]creditPolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, creditPolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, creditPolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindCreditPolicy,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -372,20 +413,22 @@ func serveCustomerServiceRules(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListCustomerServiceRules(request.Context(), tenant, limit)
+	page, err := reader.ListCustomerServiceRules(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]customerServiceRuleBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]customerServiceRuleBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, customerServiceRuleBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, customerServiceRuleListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindCustomerServiceRule,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -395,31 +438,34 @@ func servePreAcceptanceFinancialControlPolicies(
 	reader CommercialPolicyCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
+	query cataloguepage.Query,
 ) {
-	rows, err := reader.ListPreAcceptanceFinancialControlPolicies(request.Context(), tenant, limit)
+	page, err := reader.ListPreAcceptanceFinancialControlPolicies(request.Context(), tenant, limit, query)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]preAcceptanceFinancialControlPolicyBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]preAcceptanceFinancialControlPolicyBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, preAcceptanceFinancialControlPolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, preAcceptanceFinancialControlPolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindPreAcceptanceFinancialControlPolicy,
 		Policies: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
 // 各册子各自的响应与行体。字段名不共享一套泛化壳:各册行形状互不相同,共享壳要么
 // 空出大半字段,要么把强类型折成 any——kind 回显加各自成形的 policies 数组,调用方
-// 按 kind 择形状。
+// 按 kind 择形状。page 是各册同形的翻页块(ADR-0144)。
 
 type rulePackageListResponse struct {
-	Outcome  string            `json:"outcome"`
-	Kind     string            `json:"kind"`
-	Policies []rulePackageBody `json:"policies"`
+	Outcome  string             `json:"outcome"`
+	Kind     string             `json:"kind"`
+	Policies []rulePackageBody  `json:"policies"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 type assembledRuleBody struct {
@@ -499,6 +545,7 @@ type preAcceptanceControlListResponse struct {
 	Outcome  string                     `json:"outcome"`
 	Kind     string                     `json:"kind"`
 	Policies []preAcceptanceControlBody `json:"policies"`
+	Page     cataloguepage.Page         `json:"page"`
 }
 
 type preAcceptanceControlBody struct {
@@ -510,9 +557,10 @@ type preAcceptanceControlBody struct {
 }
 
 type pricePolicyListResponse struct {
-	Outcome  string            `json:"outcome"`
-	Kind     string            `json:"kind"`
-	Policies []pricePolicyBody `json:"policies"`
+	Outcome  string             `json:"outcome"`
+	Kind     string             `json:"kind"`
+	Policies []pricePolicyBody  `json:"policies"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 // pricePolicyBody 是价格政策正文加它声明的计价口径（0022,票 party-commercial-context-gaps/06）。
@@ -594,6 +642,7 @@ type settlementPolicyListResponse struct {
 	Outcome  string                 `json:"outcome"`
 	Kind     string                 `json:"kind"`
 	Policies []settlementPolicyBody `json:"policies"`
+	Page     cataloguepage.Page     `json:"page"`
 }
 
 type settlementPolicyBody struct {
@@ -630,9 +679,10 @@ func settlementPolicyBodyOf(row ports.SettlementPolicyRow) settlementPolicyBody 
 }
 
 type asOfPolicyListResponse struct {
-	Outcome  string           `json:"outcome"`
-	Kind     string           `json:"kind"`
-	Policies []asOfPolicyBody `json:"policies"`
+	Outcome  string             `json:"outcome"`
+	Kind     string             `json:"kind"`
+	Policies []asOfPolicyBody   `json:"policies"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 type asOfPolicyBody struct {
@@ -648,6 +698,7 @@ type creditPolicyListResponse struct {
 	Outcome  string             `json:"outcome"`
 	Kind     string             `json:"kind"`
 	Policies []creditPolicyBody `json:"policies"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 // creditPolicyBody 的额度是两个指针键恰一在场:金额行只长 limitMinor、比例行只长
@@ -696,6 +747,7 @@ type authorizationRuleListResponse struct {
 	Outcome  string                  `json:"outcome"`
 	Kind     string                  `json:"kind"`
 	Policies []authorizationRuleBody `json:"policies"`
+	Page     cataloguepage.Page      `json:"page"`
 }
 
 type cancellationAuthorityBody struct {
@@ -756,6 +808,7 @@ type customerServiceRuleListResponse struct {
 	Outcome  string                    `json:"outcome"`
 	Kind     string                    `json:"kind"`
 	Policies []customerServiceRuleBody `json:"policies"`
+	Page     cataloguepage.Page        `json:"page"`
 }
 
 // customerServiceRuleBody 是客户服务规则版本壳加它登记过的正文（0023，ADR-0104）。
@@ -850,6 +903,7 @@ type preAcceptanceFinancialControlPolicyListResponse struct {
 	Outcome  string                                    `json:"outcome"`
 	Kind     string                                    `json:"kind"`
 	Policies []preAcceptanceFinancialControlPolicyBody `json:"policies"`
+	Page     cataloguepage.Page                        `json:"page"`
 }
 
 // preAcceptanceFinancialControlPolicyBody 是策略版本壳加它登记过的正文（0024，ADR-0115）。

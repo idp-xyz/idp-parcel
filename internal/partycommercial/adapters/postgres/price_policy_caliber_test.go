@@ -430,7 +430,7 @@ func TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes(t *testing.T
 		t.Fatalf("历史行折回变形：%#v", caliber)
 	}
 
-	rows, err := catalogue.ListPricePolicies(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListPricePolicies(ctx, tenant, 10, firstPage(t, ports.PricePolicyPages)))
 	if err != nil {
 		t.Fatalf("上列价格政策：%v", err)
 	}
@@ -484,7 +484,7 @@ func TestPricePolicyCatalogueListsCaliberBesideTheBody(t *testing.T) {
 		domain.SellDirection, domain.PlanBindingConversionNone)
 	mustSavePricePolicyCaliber(t, transactor, ctx, repository, sellCaliberWithFx(t, theirs, "their-quote"))
 
-	rows, err := catalogue.ListPricePolicies(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListPricePolicies(ctx, tenant, 10, firstPage(t, ports.PricePolicyPages)))
 	if err != nil {
 		t.Fatalf("上列价格政策：%v", err)
 	}

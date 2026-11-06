@@ -88,7 +88,7 @@ func TestAuthorizationRuleCatalogueDoesNotBleedAcrossObjectKinds(t *testing.T) {
 			cancellationAuthorityOf(t, authorization, "CANCEL/customer-before-intake"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListAuthorizationRules(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListAuthorizationRules(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.AuthorizationRulePages)))
 	if err != nil {
 		t.Fatalf("上列授权规则:%v", err)
 	}
@@ -124,7 +124,7 @@ func TestAuthorizationRuleCatalogueIsTenantIsolated(t *testing.T) {
 			cancellationAuthorityOf(t, theirs, "CANCEL/theirs-only"))
 	}, ports.DeclarationSaved)
 
-	rows, err := catalogue.ListAuthorizationRules(ctx, pcTenant(t, "tenant-1"), 10)
+	rows, err := rowsOf(catalogue.ListAuthorizationRules(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.AuthorizationRulePages)))
 	if err != nil {
 		t.Fatalf("上列授权规则:%v", err)
 	}
@@ -155,7 +155,7 @@ func TestAuthorizationRuleCatalogueAppliesTheLimitAndRejectsNonPositive(t *testi
 			effectiveDeclarationOwner(t, domain.AuthorizationRuleObject, objectID, "v1"))
 	}
 
-	limited, err := catalogue.ListAuthorizationRules(ctx, tenant, 1)
+	limited, err := rowsOf(catalogue.ListAuthorizationRules(ctx, tenant, 1, firstPage(t, ports.AuthorizationRulePages)))
 	if err != nil {
 		t.Fatalf("上列授权规则:%v", err)
 	}
@@ -163,7 +163,7 @@ func TestAuthorizationRuleCatalogueAppliesTheLimitAndRejectsNonPositive(t *testi
 		t.Fatalf("limit 未生效:len=%d", len(limited))
 	}
 	for _, limit := range []int{0, -1} {
-		if _, err := catalogue.ListAuthorizationRules(ctx, tenant, limit); err == nil {
+		if _, err := rowsOf(catalogue.ListAuthorizationRules(ctx, tenant, limit, firstPage(t, ports.AuthorizationRulePages))); err == nil {
 			t.Fatalf("limit=%d 未拒", limit)
 		}
 	}
@@ -177,7 +177,7 @@ func authorizationRulesByID(
 	limit int,
 ) map[string]ports.AuthorizationRuleRow {
 	t.Helper()
-	rows, err := catalogue.ListAuthorizationRules(ctx, tenant, limit)
+	rows, err := rowsOf(catalogue.ListAuthorizationRules(ctx, tenant, limit, firstPage(t, ports.AuthorizationRulePages)))
 	if err != nil {
 		t.Fatalf("上列授权规则:%v", err)
 	}

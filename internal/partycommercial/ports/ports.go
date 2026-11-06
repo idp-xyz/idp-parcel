@@ -1732,12 +1732,13 @@ type PreAcceptanceFinancialControlPolicyRow struct {
 // 没有正文册的对象类别不预留方法——预留一个空方法就是替租户拟一种它还没有的册子;正文表
 // 落库时按封闭集扩方法,不开通用口。
 //
-// 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
+// 租户在签名上、Limit 非正拒、空册答空页,判据同 ServiceProductCatalogueRead;每个 List… 收端点按
+// 本种声明(AcceptanceRulePackagePages 等，每种 kind 一份)解出的查询对象,答一页(ADR-0144)。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
 // 每个方法只读自己那张册子。
 //
 // 有自己版本的册子各配一个按身份读回的 Find…（ADR-0361），判据同 FindServiceProduct：列表的投影，
-// 同一条语句多两格键过滤。接受前财务控制声明（0007）与时点锚声明（0005）没有自己的版本——它们
+// 同一段取数多两格键过滤。接受前财务控制声明（0007）与时点锚声明（0005）没有自己的版本——它们
 // 挂在客户合同版本 / 接单规则包版本下，身份是拥有者的——所以不配 Find：给它们配一个就是替一份
 // 声明造一个它没有的版本身份。
 type CommercialPolicyCatalogueRead interface {
@@ -1745,47 +1746,56 @@ type CommercialPolicyCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]AcceptanceRulePackageRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AcceptanceRulePackageRow], error)
 	ListPreAcceptanceControls(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PreAcceptanceControlRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PreAcceptanceControlRow], error)
 	ListPricePolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PricePolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PricePolicyRow], error)
 	ListSettlementPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]SettlementPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SettlementPolicyRow], error)
 	ListAsOfPolicyDeclarations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]AsOfPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AsOfPolicyRow], error)
 	ListAuthorizationRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]AuthorizationRuleRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AuthorizationRuleRow], error)
 	ListCreditPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CreditPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CreditPolicyRow], error)
 	ListCustomerServiceRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CustomerServiceRuleRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomerServiceRuleRow], error)
 	ListPreAcceptanceFinancialControlPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]PreAcceptanceFinancialControlPolicyRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[PreAcceptanceFinancialControlPolicyRow], error)
 
 	FindAcceptanceRulePackage(
 		ctx context.Context,

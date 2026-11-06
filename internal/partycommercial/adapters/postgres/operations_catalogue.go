@@ -19,7 +19,7 @@ import (
 // Save;登记仍走 CommercialPublications 与 cmd/parcel-commercial 的受控通道。
 //
 // 每条语句显式携带租户条件(ADR-0003/0040:作用域是身份的一部分,不是过滤器)。
-// 排序都以登记/声明/发布时间倒序、同刻按对象与版本号正序收尾,保证分页可重复。
+// 各册的排序、筛选与 q 声明在 ports 的 …Pages 上(ADR-0144),同值按行标识与排序同向收尾,游标翻页不重不漏。
 type OperationsCatalogue struct {
 	db *bentopg.DB
 }
@@ -44,10 +44,10 @@ func requirePositiveLimit(operation string, limit int) error {
 	return nil
 }
 
-// versionKey 是按身份读回（ADR-0361）比列表多出来的两格键过滤：对象与版本。租户与类别已在语句的 WHERE 上，
-// 四格合起来正是 commercial_version 的主键——范围不是键，所以这里没有范围。nil 即列表。
+// versionKey 是按身份读回（ADR-0361）比列表多出来的两格键过滤：对象与版本。租户与类别已在 listed 的 WHERE 上，
+// 合起来正是 commercial_version 的主键——范围不是键，所以这里没有范围。
 //
-// 按身份读回不另写语句：同一条语句、同一段扫描，只差这两格。另写一条就会长出第二套行转写，列表上那一行与
+// 按身份读回不另写语句：与取页同一段 listed、同一段扫描，只差这两格。另写一条就会长出第二套行转写，列表上那一行与
 // 读回的那一行迟早在某个格上不同，而管理台的对象页正是拿读回的那份当「目录上这一版」来显示的。
 type versionKey struct {
 	objectID string
@@ -58,18 +58,10 @@ func keyOf(objectID domain.CommercialObjectID, version domain.CommercialVersionL
 	return &versionKey{objectID: objectID.String(), version: version.String()}
 }
 
-// filter 交出接在 WHERE 末尾的两格键过滤与追加了键值的参数。占位符号接着既有参数续编，LIMIT 的占位符留在原位
-// 不必改——PostgreSQL 不要求占位符按出现顺序编号。alias 是语句里驱动行的别名（版本壳或正文父行），空串即无别名。
-func (key *versionKey) filter(alias string, args []any) (string, []any) {
-	if key == nil {
-		return "", args
-	}
-	prefix := ""
-	if alias != "" {
-		prefix = alias + "."
-	}
+// filter 交出接在 listed 外层 WHERE 末尾的两格键过滤与追加了键值的参数，占位符号接着 listed 已占用的参数续编。
+func (key *versionKey) filter(args []any) (string, []any) {
 	next := len(args) + 1
-	clause := fmt.Sprintf("\n\t\t    AND %sobject_id = $%d\n\t\t    AND %sversion_label = $%d", prefix, next, prefix, next+1)
+	clause := fmt.Sprintf(" AND object_id = $%d AND version_label = $%d", next, next+1)
 	return clause, append(args, key.objectID, key.version)
 }
 
@@ -245,7 +237,7 @@ func (catalogue *OperationsCatalogue) FindServiceProduct(
 		tenant.String(), uint8(domain.ServiceProductObject))
 }
 
-// acceptanceRulePackageRows 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
+// acceptanceRulePackageListed 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
 // 内容声明(0013 的收寄资格与终局规则)。一条语句取回全部父子——ReadExecutor 不保证
 // 两条语句同一快照,分次取会拼出从未同时存在的父子状态(与 LoadAcceptanceRulePackage
 // 同一条理由)。有父零子在内容读口是坏数据,在目录上列如实交回空集合:上列不重建领域
@@ -253,143 +245,129 @@ func (catalogue *OperationsCatalogue) FindServiceProduct(
 //
 // **三族子表用相关子查询各聚各的,不再叠 LEFT JOIN + GROUP BY。** 多族子表同时以
 // LEFT JOIN 挂上来会互相做笛卡尔积——规则 3 条 × 允许来源 2 条会摊成 6 行,`json_agg`
-// 于是把每族都数重。本函数原先只有一族,那个形状看不出问题;第二族一挂就出。两个
+// 于是把每族都数重。这条语句原先只有一族,那个形状看不出问题;第二族一挂就出。两个
 // 声明壳仍走 LEFT JOIN:它们与父同主键、至多一行,不产生扇出,而「壳在不在」正需要
 // 连接后的 NULL 来判。
 //
-// ListAcceptanceRulePackages 与 FindAcceptanceRulePackage 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) acceptanceRulePackageRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.AcceptanceRulePackageRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// ListAcceptanceRulePackages 与 FindAcceptanceRulePackage 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+const acceptanceRulePackageListed = `WITH listed AS (
+        SELECT parent.object_id, parent.version_label,
+               parent.service_product_id, parent.contract_id, parent.legal_entity_ref,
+               parent.scope_ref, parent.effective_starts_at, parent.effective_ends_at,
+               parent.declared_at,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'category',  rule.rule_category,
+                                   'reference', rule.rule_reference
+                               )
+                               ORDER BY rule.rule_category, rule.rule_reference
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.acceptance_rule_package_rule AS rule
+                 WHERE rule.tenant_id     = parent.tenant_id
+                   AND rule.object_kind   = parent.object_kind
+                   AND rule.object_id     = parent.object_id
+                   AND rule.version_label = parent.version_label) AS rules,
+               intake.object_id IS NOT NULL AS intake_declared,
+               (SELECT COALESCE(json_agg(source.source_kind ORDER BY source.source_kind), '[]'::json)
+                  FROM party_commercial.intake_allowed_source AS source
+                 WHERE source.tenant_id     = parent.tenant_id
+                   AND source.object_kind   = parent.object_kind
+                   AND source.object_id     = parent.object_id
+                   AND source.version_label = parent.version_label) AS intake_sources,
+               (SELECT COALESCE(json_agg(ref.rule_reference ORDER BY ref.rule_reference), '[]'::json)
+                  FROM party_commercial.intake_qualification_ref AS ref
+                 WHERE ref.tenant_id     = parent.tenant_id
+                   AND ref.object_kind   = parent.object_kind
+                   AND ref.object_id     = parent.object_id
+                   AND ref.version_label = parent.version_label) AS intake_refs,
+               finals.object_id IS NOT NULL AS finals_declared,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'outcome',   final.outcome,
+                                   'finalKind', final.final_kind
+                               )
+                               ORDER BY final.outcome
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.final_rule_declaration AS final
+                 WHERE final.tenant_id     = parent.tenant_id
+                   AND final.object_kind   = parent.object_kind
+                   AND final.object_id     = parent.object_id
+                   AND final.version_label = parent.version_label) AS final_rules
+          FROM party_commercial.acceptance_rule_package AS parent
+          LEFT JOIN party_commercial.intake_qualification_content AS intake
+                 ON intake.tenant_id     = parent.tenant_id
+                AND intake.object_kind   = parent.object_kind
+                AND intake.object_id     = parent.object_id
+                AND intake.version_label = parent.version_label
+          LEFT JOIN party_commercial.final_rule_content AS finals
+                 ON finals.tenant_id     = parent.tenant_id
+                AND finals.object_kind   = parent.object_kind
+                AND finals.object_id     = parent.object_id
+                AND finals.version_label = parent.version_label
+         WHERE parent.tenant_id = $1
+     )`
 
-	filter, args := key.filter("parent", []any{tenant.String(), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT parent.object_id, parent.version_label,
-		        parent.service_product_id, parent.contract_id, parent.legal_entity_ref,
-		        parent.scope_ref, parent.effective_starts_at, parent.effective_ends_at,
-		        parent.declared_at,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'category',  rule.rule_category,
-		                            'reference', rule.rule_reference
-		                        )
-		                        ORDER BY rule.rule_category, rule.rule_reference
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.acceptance_rule_package_rule AS rule
-		          WHERE rule.tenant_id     = parent.tenant_id
-		            AND rule.object_kind   = parent.object_kind
-		            AND rule.object_id     = parent.object_id
-		            AND rule.version_label = parent.version_label),
-		        intake.object_id IS NOT NULL,
-		        (SELECT COALESCE(json_agg(source.source_kind ORDER BY source.source_kind), '[]'::json)
-		           FROM party_commercial.intake_allowed_source AS source
-		          WHERE source.tenant_id     = parent.tenant_id
-		            AND source.object_kind   = parent.object_kind
-		            AND source.object_id     = parent.object_id
-		            AND source.version_label = parent.version_label),
-		        (SELECT COALESCE(json_agg(ref.rule_reference ORDER BY ref.rule_reference), '[]'::json)
-		           FROM party_commercial.intake_qualification_ref AS ref
-		          WHERE ref.tenant_id     = parent.tenant_id
-		            AND ref.object_kind   = parent.object_kind
-		            AND ref.object_id     = parent.object_id
-		            AND ref.version_label = parent.version_label),
-		        finals.object_id IS NOT NULL,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'outcome',   final.outcome,
-		                            'finalKind', final.final_kind
-		                        )
-		                        ORDER BY final.outcome
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.final_rule_declaration AS final
-		          WHERE final.tenant_id     = parent.tenant_id
-		            AND final.object_kind   = parent.object_kind
-		            AND final.object_id     = parent.object_id
-		            AND final.version_label = parent.version_label)
-		   FROM party_commercial.acceptance_rule_package AS parent
-		   LEFT JOIN party_commercial.intake_qualification_content AS intake
-		          ON intake.tenant_id     = parent.tenant_id
-		         AND intake.object_kind   = parent.object_kind
-		         AND intake.object_id     = parent.object_id
-		         AND intake.version_label = parent.version_label
-		   LEFT JOIN party_commercial.final_rule_content AS finals
-		          ON finals.tenant_id     = parent.tenant_id
-		         AND finals.object_kind   = parent.object_kind
-		         AND finals.object_id     = parent.object_id
-		         AND finals.version_label = parent.version_label
-		  WHERE parent.tenant_id = $1`+filter+`
-		  ORDER BY parent.declared_at DESC, parent.object_id, parent.version_label
-		  LIMIT $2`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+// acceptanceRulePackageRead 落列见 ports.AcceptanceRulePackagePages；q 覆盖对象、版本与规则包上列的产品、合同、法人与
+// 范围引用。
+var acceptanceRulePackageRead = catalogueRead[ports.AcceptanceRulePackageRow]{
+	binding: ports.AcceptanceRulePackagePages.MustBind(policyContentColumns("declaredAt", "declared_at", nil,
+		"object_id", "version_label", "service_product_id", "contract_id", "legal_entity_ref", "scope_ref")),
+	listed: acceptanceRulePackageListed,
+	selection: `object_id, version_label, service_product_id, contract_id, legal_entity_ref,
+		        scope_ref, effective_starts_at, effective_ends_at, declared_at, rules,
+		        intake_declared, intake_sources, intake_refs, finals_declared, final_rules`,
+	scan: scanAcceptanceRulePackage,
+	position: func(row ports.AcceptanceRulePackageRow, sortField string) cataloguepage.Position {
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.DeclaredAt, row.EffectiveStartsAt)
+	},
+}
 
-	packageRows := make([]ports.AcceptanceRulePackageRow, 0, limit)
-	for rows.Next() {
-		var row ports.AcceptanceRulePackageRow
-		var endsAt *time.Time
-		var rulesJSON, sourcesJSON, refsJSON, finalsJSON []byte
-		if err := rows.Scan(
-			&row.ObjectID, &row.VersionLabel,
-			&row.ServiceProduct, &row.Contract, &row.LegalEntity,
-			&row.Scope, &row.EffectiveStartsAt, &endsAt, &row.DeclaredAt, &rulesJSON,
-			&row.HasIntakeQualification, &sourcesJSON, &refsJSON,
-			&row.HasFinalRules, &finalsJSON,
-		); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		rules, err := assembledRuleRowsFromJSON(rulesJSON)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		row.Rules = rules
-		if row.AllowedIntakeSources, err = stringsFromJSON(sourcesJSON); err != nil {
-			return nil, fmt.Errorf("%s: allowed intake sources: %w", operation, err)
-		}
-		if row.IntakeQualificationRefs, err = stringsFromJSON(refsJSON); err != nil {
-			return nil, fmt.Errorf("%s: intake qualification refs: %w", operation, err)
-		}
-		if row.FinalRules, err = finalRuleRowsFromJSON(finalsJSON); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		packageRows = append(packageRows, row)
+func scanAcceptanceRulePackage(rows pgx.Rows) (ports.AcceptanceRulePackageRow, error) {
+	var row ports.AcceptanceRulePackageRow
+	var endsAt *time.Time
+	var rulesJSON, sourcesJSON, refsJSON, finalsJSON []byte
+	if err := rows.Scan(
+		&row.ObjectID, &row.VersionLabel,
+		&row.ServiceProduct, &row.Contract, &row.LegalEntity,
+		&row.Scope, &row.EffectiveStartsAt, &endsAt, &row.DeclaredAt, &rulesJSON,
+		&row.HasIntakeQualification, &sourcesJSON, &refsJSON,
+		&row.HasFinalRules, &finalsJSON,
+	); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
 	}
-	return packageRows, nil
+	var err error
+	if row.Rules, err = assembledRuleRowsFromJSON(rulesJSON); err != nil {
+		return row, err
+	}
+	if row.AllowedIntakeSources, err = stringsFromJSON(sourcesJSON); err != nil {
+		return row, fmt.Errorf("allowed intake sources: %w", err)
+	}
+	if row.IntakeQualificationRefs, err = stringsFromJSON(refsJSON); err != nil {
+		return row, fmt.Errorf("intake qualification refs: %w", err)
+	}
+	if row.FinalRules, err = finalRuleRowsFromJSON(finalsJSON); err != nil {
+		return row, err
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.AcceptanceRulePackageRow, error) {
-	return catalogue.acceptanceRulePackageRows(ctx, "list acceptance rule packages", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AcceptanceRulePackageRow], error) {
+	return acceptanceRulePackageRead.page(ctx, catalogue.db, "list acceptance rule packages", limit, query, tenant.String())
 }
 
 func (catalogue *OperationsCatalogue) FindAcceptanceRulePackage(
@@ -398,7 +376,31 @@ func (catalogue *OperationsCatalogue) FindAcceptanceRulePackage(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.AcceptanceRulePackageRow, bool, error) {
-	return firstRow(catalogue.acceptanceRulePackageRows(ctx, "find acceptance rule package", tenant, 1, keyOf(objectID, version)))
+	return acceptanceRulePackageRead.find(ctx, catalogue.db, "find acceptance rule package", keyOf(objectID, version),
+		tenant.String())
+}
+
+// policyContentPosition 给策略目录各正文册编本页末行的位置：at 是本册缺省序那一维（声明或登记时刻），另两维生效起点与对象号
+// 在各册行上同名同义（ports.policyContentPages）。
+func policyContentPosition(sortField, objectID, version string, at, effectiveStartsAt time.Time) cataloguepage.Position {
+	value := objectID
+	switch sortField {
+	case "declaredAt", "registeredAt":
+		value = cataloguepage.FormatInstant(at)
+	case "effectiveStartsAt":
+		value = cataloguepage.FormatInstant(effectiveStartsAt)
+	}
+	return cataloguepage.Position{Value: value, Identity: []string{objectID, version}}
+}
+
+// policyContentColumns 是策略目录里自带版本与生效区间的正文册共用的落列：at 是本册缺省序那一维落的列，keyword 是 q 覆盖的列。
+func policyContentColumns(at, atColumn string, filters map[string]string, keyword ...string) cataloguepage.Columns {
+	return cataloguepage.Columns{
+		Sorts:    map[string]string{at: atColumn, "effectiveStartsAt": "effective_starts_at", "objectId": "object_id"},
+		Identity: []string{"object_id", "version_label"},
+		Filters:  filters,
+		Keyword:  keyword,
+	}
 }
 
 func stringsFromJSON(raw []byte) ([]string, error) {
@@ -456,154 +458,137 @@ func assembledRuleRowsFromJSON(raw []byte) ([]ports.AssembledRuleRow, error) {
 	return rules, nil
 }
 
-// ListPreAcceptanceControls 上列接受前财务控制声明册。拥有对象是客户合同版本
-// (object_kind CHECK 钉在 2),行内标识因此指名合同。
-func (catalogue *OperationsCatalogue) ListPreAcceptanceControls(
-	ctx context.Context,
-	tenant domain.TenantID,
-	limit int,
-) ([]ports.PreAcceptanceControlRow, error) {
-	if err := requirePositiveLimit("list pre-acceptance controls", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list pre-acceptance controls: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, requirement, not_applicable_basis, declared_at
-		   FROM party_commercial.pre_acceptance_control_declaration
-		  WHERE tenant_id = $1
-		  ORDER BY declared_at DESC, object_id, version_label
-		  LIMIT $2`,
-		tenant.String(),
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list pre-acceptance controls: %w", err)
-	}
-	defer rows.Close()
-
-	controlRows := make([]ports.PreAcceptanceControlRow, 0, limit)
-	for rows.Next() {
+// preAcceptanceControlRead 上列接受前财务控制声明册。拥有对象是客户合同版本
+// (object_kind CHECK 钉在 2),行内标识因此指名合同。requirement 在库上存的就是领域的词(0007 的 CHECK 与
+// domain.PreAcceptanceControlRequirement 同一组),筛选按原词比;q 覆盖合同对象、合同版本与不适用依据。
+var preAcceptanceControlRead = catalogueRead[ports.PreAcceptanceControlRow]{
+	binding: ports.PreAcceptanceControlPages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"declaredAt": "declared_at", "contractObjectId": "object_id"},
+		Identity: []string{"object_id", "version_label"},
+		Filters:  map[string]string{"requirement": "requirement"},
+		Keyword:  []string{"object_id", "version_label", "not_applicable_basis"},
+	}),
+	listed: `WITH listed AS (
+        SELECT object_id, version_label, requirement, not_applicable_basis, declared_at
+          FROM party_commercial.pre_acceptance_control_declaration
+         WHERE tenant_id = $1
+     )`,
+	selection: `object_id, version_label, requirement, not_applicable_basis, declared_at`,
+	scan: func(rows pgx.Rows) (ports.PreAcceptanceControlRow, error) {
 		var row ports.PreAcceptanceControlRow
 		var basis *string
 		if err := rows.Scan(
 			&row.ContractObjectID, &row.ContractVersion, &row.Requirement, &basis, &row.DeclaredAt,
 		); err != nil {
-			return nil, fmt.Errorf("list pre-acceptance controls: %w", err)
+			return row, err
 		}
 		if basis != nil {
 			row.NotApplicableBasis = *basis
 		}
-		controlRows = append(controlRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list pre-acceptance controls: %w", err)
-	}
-	return controlRows, nil
+		return row, nil
+	},
+	position: func(row ports.PreAcceptanceControlRow, sortField string) cataloguepage.Position {
+		value := row.ContractObjectID
+		if sortField == "declaredAt" {
+			value = cataloguepage.FormatInstant(row.DeclaredAt)
+		}
+		return cataloguepage.Position{Value: value, Identity: []string{row.ContractObjectID, row.ContractVersion}}
+	},
 }
 
-// pricePolicyRows 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)；口径册
+func (catalogue *OperationsCatalogue) ListPreAcceptanceControls(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.PreAcceptanceControlRow], error) {
+	return preAcceptanceControlRead.page(ctx, catalogue.db, "list pre-acceptance controls", limit, query, tenant.String())
+}
+
+// pricePolicyRead 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)；口径册
 // (0022)左连接挂在正文行上,HasCaliber 说明有没有——0010 早于 0022,只有正文没有口径的行是合法
 // 状态。汇率三列半缺是库与领域分叉的坏数据,上抛不吸收。
 //
-// ListPricePolicies 与 FindPricePolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) pricePolicyRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.PricePolicyRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// direction 在库上存的就是领域的词(0010 的 CHECK 与 domain.PriceDirection 同一组),筛选按原词比;q 覆盖对象、版本、
+// 方案引用与政策范围。ListPricePolicies 与 FindPricePolicy 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var pricePolicyRead = catalogueRead[ports.PricePolicyRow]{
+	binding: ports.PricePolicyPages.MustBind(policyContentColumns("registeredAt", "registered_at",
+		map[string]string{"direction": "direction"},
+		"object_id", "version_label", "plan_ref", "policy_scope_ref")),
+	listed: `WITH listed AS (
+        SELECT price.object_id, price.version_label, price.direction, price.plan_ref, price.plan_direction,
+               price.binding_conversion, price.policy_scope_ref,
+               price.effective_starts_at, price.effective_ends_at, price.registered_at,
+               caliber.tax_disposition, caliber.tax_classification_ref, caliber.volumetric_factor_ref,
+               caliber.fx_quote_type_ref, caliber.fx_as_of_semantics_ref, caliber.fx_as_of_policy_version,
+               caliber.registered_at AS caliber_registered_at
+          FROM party_commercial.commercial_price_policy AS price
+          LEFT JOIN party_commercial.price_policy_caliber AS caliber
+                 ON caliber.tenant_id     = price.tenant_id
+                AND caliber.object_kind   = price.object_kind
+                AND caliber.object_id     = price.object_id
+                AND caliber.version_label = price.version_label
+         WHERE price.tenant_id = $1
+     )`,
+	selection: `object_id, version_label, direction, plan_ref, plan_direction,
+		        binding_conversion, policy_scope_ref, effective_starts_at, effective_ends_at, registered_at,
+		        tax_disposition, tax_classification_ref, volumetric_factor_ref,
+		        fx_quote_type_ref, fx_as_of_semantics_ref, fx_as_of_policy_version, caliber_registered_at`,
+	scan: scanPricePolicy,
+	position: func(row ports.PricePolicyRow, sortField string) cataloguepage.Position {
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+	},
+}
 
-	filter, args := key.filter("price", []any{tenant.String(), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT price.object_id, price.version_label, price.direction, price.plan_ref, price.plan_direction,
-		        price.binding_conversion, price.policy_scope_ref,
-		        price.effective_starts_at, price.effective_ends_at, price.registered_at,
-		        caliber.tax_disposition, caliber.tax_classification_ref, caliber.volumetric_factor_ref,
-		        caliber.fx_quote_type_ref, caliber.fx_as_of_semantics_ref, caliber.fx_as_of_policy_version,
-		        caliber.registered_at
-		   FROM party_commercial.commercial_price_policy AS price
-		   LEFT JOIN party_commercial.price_policy_caliber AS caliber
-		          ON caliber.tenant_id     = price.tenant_id
-		         AND caliber.object_kind   = price.object_kind
-		         AND caliber.object_id     = price.object_id
-		         AND caliber.version_label = price.version_label
-		  WHERE price.tenant_id = $1`+filter+`
-		  ORDER BY price.registered_at DESC, price.object_id, price.version_label
-		  LIMIT $2`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+func scanPricePolicy(rows pgx.Rows) (ports.PricePolicyRow, error) {
+	var row ports.PricePolicyRow
+	var endsAt *time.Time
+	var taxDisposition, taxClassification, volumetricFactor *string
+	var fxQuoteType, fxAsOfSemantics, fxAsOfPolicyVersion *string
+	var caliberRegisteredAt *time.Time
+	if err := rows.Scan(
+		&row.ObjectID, &row.VersionLabel, &row.Direction, &row.PlanRef, &row.PlanDirection,
+		&row.BindingConversion, &row.PolicyScope,
+		&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
+		&taxDisposition, &taxClassification, &volumetricFactor,
+		&fxQuoteType, &fxAsOfSemantics, &fxAsOfPolicyVersion,
+		&caliberRegisteredAt,
+	); err != nil {
+		return row, err
 	}
-	defer rows.Close()
-
-	policyRows := make([]ports.PricePolicyRow, 0, limit)
-	for rows.Next() {
-		var row ports.PricePolicyRow
-		var endsAt *time.Time
-		var taxDisposition, taxClassification, volumetricFactor *string
-		var fxQuoteType, fxAsOfSemantics, fxAsOfPolicyVersion *string
-		var caliberRegisteredAt *time.Time
-		if err := rows.Scan(
-			&row.ObjectID, &row.VersionLabel, &row.Direction, &row.PlanRef, &row.PlanDirection,
-			&row.BindingConversion, &row.PolicyScope,
-			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
-			&taxDisposition, &taxClassification, &volumetricFactor,
-			&fxQuoteType, &fxAsOfSemantics, &fxAsOfPolicyVersion,
-			&caliberRegisteredAt,
-		); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		if taxDisposition != nil {
-			row.HasCaliber = true
-			row.TaxDisposition = *taxDisposition
-			row.TaxClassification = stringOrEmpty(taxClassification)
-			row.HistoricalVolumetricFactor = stringOrEmpty(volumetricFactor)
-			if caliberRegisteredAt != nil {
-				row.CaliberRegisteredAt = *caliberRegisteredAt
-			}
-			switch {
-			case fxQuoteType != nil && fxAsOfSemantics != nil && fxAsOfPolicyVersion != nil:
-				row.HasFx = true
-				row.FxQuoteType = *fxQuoteType
-				row.FxAsOfSemantics = *fxAsOfSemantics
-				row.FxAsOfPolicyVersion = *fxAsOfPolicyVersion
-			case fxQuoteType == nil && fxAsOfSemantics == nil && fxAsOfPolicyVersion == nil:
-			default:
-				return nil, fmt.Errorf("%s: %s/%s 的汇率口径半缺", operation,
-					row.ObjectID, row.VersionLabel)
-			}
-		}
-		policyRows = append(policyRows, row)
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	if taxDisposition != nil {
+		row.HasCaliber = true
+		row.TaxDisposition = *taxDisposition
+		row.TaxClassification = stringOrEmpty(taxClassification)
+		row.HistoricalVolumetricFactor = stringOrEmpty(volumetricFactor)
+		if caliberRegisteredAt != nil {
+			row.CaliberRegisteredAt = *caliberRegisteredAt
+		}
+		switch {
+		case fxQuoteType != nil && fxAsOfSemantics != nil && fxAsOfPolicyVersion != nil:
+			row.HasFx = true
+			row.FxQuoteType = *fxQuoteType
+			row.FxAsOfSemantics = *fxAsOfSemantics
+			row.FxAsOfPolicyVersion = *fxAsOfPolicyVersion
+		case fxQuoteType == nil && fxAsOfSemantics == nil && fxAsOfPolicyVersion == nil:
+		default:
+			return row, fmt.Errorf("%s/%s 的汇率口径半缺", row.ObjectID, row.VersionLabel)
+		}
 	}
-	return policyRows, nil
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListPricePolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.PricePolicyRow, error) {
-	return catalogue.pricePolicyRows(ctx, "list price policies", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.PricePolicyRow], error) {
+	return pricePolicyRead.page(ctx, catalogue.db, "list price policies", limit, query, tenant.String())
 }
 
 func (catalogue *OperationsCatalogue) FindPricePolicy(
@@ -612,45 +597,29 @@ func (catalogue *OperationsCatalogue) FindPricePolicy(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.PricePolicyRow, bool, error) {
-	return firstRow(catalogue.pricePolicyRows(ctx, "find price policy", tenant, 1, keyOf(objectID, version)))
+	return pricePolicyRead.find(ctx, catalogue.db, "find price policy", keyOf(objectID, version), tenant.String())
 }
 
-// settlementPolicyRows 上列结算政策册:方式与六维适用范围平铺(ADR-0044)。
+// settlementPolicyRead 上列结算政策册:方式与六维适用范围平铺(ADR-0044)。
 //
-// ListSettlementPolicies 与 FindSettlementPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) settlementPolicyRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.SettlementPolicyRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-
-	filter, args := key.filter("", []any{tenant.String(), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, method, legal_entity_ref, counterparty_ref,
+// method 在库上存的就是领域的词(0011 的 CHECK 与 domain.SettlementMethod 同一组),筛选按原词比;q 覆盖对象、版本与
+// 适用范围里的法人、对手方、合同与费用范围引用。ListSettlementPolicies 与 FindSettlementPolicy 都经它（ADR-0361）：
+// 列表在上面取页，读回在上面多两格键过滤。
+var settlementPolicyRead = catalogueRead[ports.SettlementPolicyRow]{
+	binding: ports.SettlementPolicyPages.MustBind(policyContentColumns("registeredAt", "registered_at",
+		map[string]string{"method": "method"},
+		"object_id", "version_label", "legal_entity_ref", "counterparty_ref", "contract_label", "charge_scope_ref")),
+	listed: `WITH listed AS (
+        SELECT object_id, version_label, method, legal_entity_ref, counterparty_ref,
+               contract_label, charge_scope_ref, currency_code,
+               effective_starts_at, effective_ends_at, registered_at
+          FROM party_commercial.commercial_settlement_policy
+         WHERE tenant_id = $1
+     )`,
+	selection: `object_id, version_label, method, legal_entity_ref, counterparty_ref,
 		        contract_label, charge_scope_ref, currency_code,
-		        effective_starts_at, effective_ends_at, registered_at
-		   FROM party_commercial.commercial_settlement_policy
-		  WHERE tenant_id = $1`+filter+`
-		  ORDER BY registered_at DESC, object_id, version_label
-		  LIMIT $2`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
-
-	policyRows := make([]ports.SettlementPolicyRow, 0, limit)
-	for rows.Next() {
+		        effective_starts_at, effective_ends_at, registered_at`,
+	scan: func(rows pgx.Rows) (ports.SettlementPolicyRow, error) {
 		var row ports.SettlementPolicyRow
 		var endsAt *time.Time
 		if err := rows.Scan(
@@ -658,26 +627,26 @@ func (catalogue *OperationsCatalogue) settlementPolicyRows(
 			&row.ContractLabel, &row.ChargeScope, &row.Currency,
 			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
 		); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return row, err
 		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
 		}
-		policyRows = append(policyRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	return policyRows, nil
+		return row, nil
+	},
+	position: func(row ports.SettlementPolicyRow, sortField string) cataloguepage.Position {
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+	},
 }
 
 func (catalogue *OperationsCatalogue) ListSettlementPolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.SettlementPolicyRow, error) {
-	return catalogue.settlementPolicyRows(ctx, "list settlement policies", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.SettlementPolicyRow], error) {
+	return settlementPolicyRead.page(ctx, catalogue.db, "list settlement policies", limit, query, tenant.String())
 }
 
 func (catalogue *OperationsCatalogue) FindSettlementPolicy(
@@ -686,53 +655,54 @@ func (catalogue *OperationsCatalogue) FindSettlementPolicy(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.SettlementPolicyRow, bool, error) {
-	return firstRow(catalogue.settlementPolicyRows(ctx, "find settlement policy", tenant, 1, keyOf(objectID, version)))
+	return settlementPolicyRead.find(ctx, catalogue.db, "find settlement policy", keyOf(objectID, version), tenant.String())
 }
 
-// ListAsOfPolicyDeclarations 上列时点锚声明册:某规则包为某类下游判断声明的时点
+// asOfPolicyRead 上列时点锚声明册:某规则包为某类下游判断声明的时点
 // 语义与政策版本。表不存时点值,这里也就没有时点值可列。
+//
+// judgment_type 在库上存的就是领域的词(0005 的 CHECK 与 domain.JudgmentType 同一组),筛选按原词比;q 覆盖规则包对象与
+// 版本、时点语义引用与政策版本。
+var asOfPolicyRead = catalogueRead[ports.AsOfPolicyRow]{
+	binding: ports.AsOfPolicyPages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"declaredAt": "declared_at", "rulePackageObjectId": "object_id"},
+		Identity: []string{"object_id", "version_label", "judgment_type"},
+		Filters:  map[string]string{"judgmentType": "judgment_type"},
+		Keyword:  []string{"object_id", "version_label", "semantics_ref", "policy_version"},
+	}),
+	listed: `WITH listed AS (
+        SELECT object_id, version_label, judgment_type, semantics_ref, policy_version, declared_at
+          FROM party_commercial.as_of_policy_declaration
+         WHERE tenant_id = $1
+     )`,
+	selection: `object_id, version_label, judgment_type, semantics_ref, policy_version, declared_at`,
+	scan: func(rows pgx.Rows) (ports.AsOfPolicyRow, error) {
+		var row ports.AsOfPolicyRow
+		err := rows.Scan(
+			&row.RulePackageObjectID, &row.RulePackageVersion,
+			&row.JudgmentType, &row.SemanticsRef, &row.PolicyVersion, &row.DeclaredAt,
+		)
+		return row, err
+	},
+	position: func(row ports.AsOfPolicyRow, sortField string) cataloguepage.Position {
+		value := row.RulePackageObjectID
+		if sortField == "declaredAt" {
+			value = cataloguepage.FormatInstant(row.DeclaredAt)
+		}
+		return cataloguepage.Position{
+			Value:    value,
+			Identity: []string{row.RulePackageObjectID, row.RulePackageVersion, row.JudgmentType},
+		}
+	},
+}
+
 func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.AsOfPolicyRow, error) {
-	if err := requirePositiveLimit("list as-of policy declarations", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list as-of policy declarations: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, judgment_type, semantics_ref, policy_version, declared_at
-		   FROM party_commercial.as_of_policy_declaration
-		  WHERE tenant_id = $1
-		  ORDER BY declared_at DESC, object_id, version_label, judgment_type
-		  LIMIT $2`,
-		tenant.String(),
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list as-of policy declarations: %w", err)
-	}
-	defer rows.Close()
-
-	declarationRows := make([]ports.AsOfPolicyRow, 0, limit)
-	for rows.Next() {
-		var row ports.AsOfPolicyRow
-		if err := rows.Scan(
-			&row.RulePackageObjectID, &row.RulePackageVersion,
-			&row.JudgmentType, &row.SemanticsRef, &row.PolicyVersion, &row.DeclaredAt,
-		); err != nil {
-			return nil, fmt.Errorf("list as-of policy declarations: %w", err)
-		}
-		declarationRows = append(declarationRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list as-of policy declarations: %w", err)
-	}
-	return declarationRows, nil
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AsOfPolicyRow], error) {
+	return asOfPolicyRead.page(ctx, catalogue.db, "list as-of policy declarations", limit, query, tenant.String())
 }
 
 // customerContractListed 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
@@ -915,70 +885,51 @@ func bothOrNeither(neither bool) string {
 	return "皆有"
 }
 
-// authorizationRuleRows 上列授权规则版本(壳),连同挂在它上面的取消授权目录。
+// authorizationRuleListed 上列授权规则版本(壳),连同挂在它上面的取消授权目录。
 //
 // 目录壳与父同主键、至多一行,走 LEFT JOIN——「壳在不在」正需要连接后的 NULL 来判;
-// 请求方声明走相关子查询,理由见 ListAcceptanceRulePackages 上那段。这里今天只有一族
+// 请求方声明走相关子查询,理由见 acceptanceRulePackageListed 的头注。这里今天只有一族
 // 子表,叠 LEFT JOIN + GROUP BY 也不会错,用子查询是为了第二族挂上来时不必重走一遍
 // 那个坑。
 //
-// ListAuthorizationRules 与 FindAuthorizationRule 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) authorizationRuleRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.AuthorizationRuleRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
+// ListAuthorizationRules 与 FindAuthorizationRule 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var authorizationRuleListed = `WITH listed AS (
+        SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+               version.effective_starts_at, version.effective_ends_at, version.published_at,
+               ` + catalogueClosureColumns + `,
+               content.declared_at AS authority_declared_at,
+               (SELECT COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'party',     declaration.party,
+                                   'reference', declaration.rule_reference
+                               )
+                               ORDER BY declaration.party
+                           ),
+                           '[]'::json
+                       )
+                  FROM party_commercial.cancellation_authority_declaration AS declaration
+                 WHERE declaration.tenant_id     = version.tenant_id
+                   AND declaration.object_kind   = version.object_kind
+                   AND declaration.object_id     = version.object_id
+                   AND declaration.version_label = version.version_label) AS authorities,
+               ` + versionStatusCode + ` AS status_code
+          FROM party_commercial.commercial_version AS version
+          LEFT JOIN party_commercial.cancellation_authority_content AS content
+                 ON content.tenant_id     = version.tenant_id
+                AND content.object_kind   = version.object_kind
+                AND content.object_id     = version.object_id
+                AND content.version_label = version.version_label
+          ` + versionClosureJoins("version") + `
+         WHERE version.tenant_id   = $1
+           AND version.object_kind = $2
+     )`
 
-	filter, args := key.filter("version", []any{tenant.String(), uint8(domain.AuthorizationRuleObject), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
-		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+catalogueClosureColumns+`,
-		        content.declared_at,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'party',     declaration.party,
-		                            'reference', declaration.rule_reference
-		                        )
-		                        ORDER BY declaration.party
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM party_commercial.cancellation_authority_declaration AS declaration
-		          WHERE declaration.tenant_id     = version.tenant_id
-		            AND declaration.object_kind   = version.object_kind
-		            AND declaration.object_id     = version.object_id
-		            AND declaration.version_label = version.version_label)
-		   FROM party_commercial.commercial_version AS version
-		   LEFT JOIN party_commercial.cancellation_authority_content AS content
-		          ON content.tenant_id     = version.tenant_id
-		         AND content.object_kind   = version.object_kind
-		         AND content.object_id     = version.object_id
-		         AND content.version_label = version.version_label
-		   `+versionClosureJoins("version")+`
-		  WHERE version.tenant_id   = $1
-		    AND version.object_kind = $2`+filter+`
-		  ORDER BY version.published_at DESC, version.object_id, version.version_label
-		  LIMIT $3`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
-
-	ruleRows := make([]ports.AuthorizationRuleRow, 0, limit)
-	for rows.Next() {
+var authorizationRuleRead = catalogueRead[ports.AuthorizationRuleRow]{
+	binding:   ports.AuthorizationRulePages.MustBind(versionShellColumns()),
+	listed:    authorizationRuleListed,
+	selection: versionShellSelection + `, authority_declared_at, authorities`,
+	scan: func(rows pgx.Rows) (ports.AuthorizationRuleRow, error) {
 		var row ports.AuthorizationRuleRow
 		var status int16
 		var closure catalogueClosureScan
@@ -990,10 +941,11 @@ func (catalogue *OperationsCatalogue) authorizationRuleRows(
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 		targets = append(targets, &declaredAt, &authoritiesJSON)
 		if err := rows.Scan(targets...); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return row, err
 		}
-		if row.Status, err = catalogueStatusWord(operation, status, closure.retiredAt != nil); err != nil {
-			return nil, err
+		var err error
+		if row.Status, err = versionStatusWord(status, closure.retiredAt != nil); err != nil {
+			return row, err
 		}
 		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
@@ -1006,22 +958,23 @@ func (catalogue *OperationsCatalogue) authorizationRuleRows(
 			row.HasCancellationAuthority = true
 		}
 		if row.CancellationAuthorities, err = cancellationAuthorityRowsFromJSON(authoritiesJSON); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
+			return row, err
 		}
-		ruleRows = append(ruleRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	return ruleRows, nil
+		return row, nil
+	},
+	position: func(row ports.AuthorizationRuleRow, sortField string) cataloguepage.Position {
+		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt, row.EffectiveStartsAt)
+	},
 }
 
 func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.AuthorizationRuleRow, error) {
-	return catalogue.authorizationRuleRows(ctx, "list authorization rules", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorizationRuleRow], error) {
+	return authorizationRuleRead.page(ctx, catalogue.db, "list authorization rules", limit, query,
+		tenant.String(), uint8(domain.AuthorizationRuleObject))
 }
 
 func (catalogue *OperationsCatalogue) FindAuthorizationRule(
@@ -1030,7 +983,8 @@ func (catalogue *OperationsCatalogue) FindAuthorizationRule(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.AuthorizationRuleRow, bool, error) {
-	return firstRow(catalogue.authorizationRuleRows(ctx, "find authorization rule", tenant, 1, keyOf(objectID, version)))
+	return authorizationRuleRead.find(ctx, catalogue.db, "find authorization rule", keyOf(objectID, version),
+		tenant.String(), uint8(domain.AuthorizationRuleObject))
 }
 
 type cancellationAuthorityDocument struct {
@@ -1082,15 +1036,6 @@ func (closure *catalogueClosureScan) echo() (cutAt time.Time, hasCut bool, retir
 		retiredAt, successor = *closure.retiredAt, *closure.successor
 	}
 	return cutAt, hasCut, retiredAt, successor
-}
-
-// catalogueStatusWord 是 versionStatusWord 带错误前缀的写法，给还按 operation 自己包错误的读面用。
-func catalogueStatusWord(operation string, status int16, retired bool) (string, error) {
-	word, err := versionStatusWord(status, retired)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", operation, err)
-	}
-	return word, nil
 }
 
 // versionStatusWord 把版本行的状态列折成目录上的那一格：退役了就是`已退役`，与整册装载施加退役之后的位置相同。
@@ -1169,7 +1114,7 @@ var supplierAgreementListed = `WITH listed AS (
            AND version.object_kind = $2
      )`
 
-// supplierAgreementRead：q 另覆盖正文四格（供应商、法人、价格表、协议范围），管理台今天检索的是转写后的各格。
+// supplierAgreementRead：q 另覆盖正文里的供应商、法人、价格表与协议范围，管理台今天检索的是转写后的各格。
 var supplierAgreementRead = catalogueRead[ports.SupplierAgreementCatalogueRow]{
 	binding: ports.SupplierAgreementPages.MustBind(versionShellColumns(
 		"supplier_party_id", "legal_entity_ref", "purchase_plan_ref", "agreement_scope_ref")),

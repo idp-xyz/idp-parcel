@@ -11,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 信用政策册的持久化面（票 party-commercial-context-gaps/03，0020 迁移）。写口挂在
@@ -320,86 +321,69 @@ func creditPolicyFrom(version domain.CommercialVersion, row scannedCreditPolicy)
 	return domain.NewCreditPolicy(version, legalEntity, level, chargeType, limit, interval)
 }
 
-// creditPolicyRows 上列信用政策册。额度两列照列转写，HasAmount 说明哪一列在场；两空/两满
+// creditPolicyRead 上列信用政策册。额度两列照列转写，HasAmount 说明哪一列在场；两空/两满
 // 是库与领域分叉的坏数据，上抛不吸收。比例行的基数照列转写（ADR-0129），存量 NULL 转写为空串
 // ——目录只上列不重算，「未声明」由读面如实示出。
 //
-// ListCreditPolicies 与 FindCreditPolicy 都经它（ADR-0361）：key 为 nil 即列表，否则多两格键过滤；operation 只进错误前缀。
-func (catalogue *OperationsCatalogue) creditPolicyRows(
-	ctx context.Context,
-	operation string,
-	tenant domain.TenantID,
-	limit int,
-	key *versionKey,
-) ([]ports.CreditPolicyRow, error) {
-	if err := requirePositiveLimit(operation, limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-
-	filter, args := key.filter("", []any{tenant.String(), limit})
-	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, legal_entity_ref, authority_level_ref, charge_type_ref,
+// 权限等级与费用类型是开放引用、不设筛选维（ports.CreditPolicyPages），q 覆盖对象、版本、责任法人与这两格引用。
+// ListCreditPolicies 与 FindCreditPolicy 都经它（ADR-0361）：列表在上面取页，读回在上面多两格键过滤。
+var creditPolicyRead = catalogueRead[ports.CreditPolicyRow]{
+	binding: ports.CreditPolicyPages.MustBind(policyContentColumns("registeredAt", "registered_at", nil,
+		"object_id", "version_label", "legal_entity_ref", "authority_level_ref", "charge_type_ref")),
+	listed: `WITH listed AS (
+        SELECT object_id, version_label, legal_entity_ref, authority_level_ref, charge_type_ref,
+               limit_minor, limit_ratio_bps, ratio_base,
+               effective_starts_at, effective_ends_at, registered_at
+          FROM party_commercial.credit_policy
+         WHERE tenant_id = $1
+     )`,
+	selection: `object_id, version_label, legal_entity_ref, authority_level_ref, charge_type_ref,
 		        limit_minor, limit_ratio_bps, ratio_base,
-		        effective_starts_at, effective_ends_at, registered_at
-		   FROM party_commercial.credit_policy
-		  WHERE tenant_id = $1`+filter+`
-		  ORDER BY registered_at DESC, object_id, version_label
-		  LIMIT $2`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
-	}
-	defer rows.Close()
+		        effective_starts_at, effective_ends_at, registered_at`,
+	scan: scanCreditPolicy,
+	position: func(row ports.CreditPolicyRow, sortField string) cataloguepage.Position {
+		return policyContentPosition(sortField, row.ObjectID, row.VersionLabel, row.RegisteredAt, row.EffectiveStartsAt)
+	},
+}
 
-	policyRows := make([]ports.CreditPolicyRow, 0, limit)
-	for rows.Next() {
-		var row ports.CreditPolicyRow
-		var limitMinor, limitBps *int64
-		var ratioBase *string
-		var endsAt *time.Time
-		if err := rows.Scan(
-			&row.ObjectID, &row.VersionLabel, &row.LegalEntity, &row.AuthorityLevel, &row.ChargeType,
-			&limitMinor, &limitBps, &ratioBase,
-			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
-		); err != nil {
-			return nil, fmt.Errorf("%s: %w", operation, err)
-		}
-		switch {
-		case limitMinor != nil && limitBps == nil && ratioBase == nil:
-			row.HasAmount = true
-			row.LimitMinor = *limitMinor
-		case limitMinor == nil && limitBps != nil:
-			row.LimitRatioBasisPoints = *limitBps
-			if ratioBase != nil {
-				row.RatioBase = *ratioBase
-			}
-		default:
-			return nil, fmt.Errorf("%s: %s/%s 的额度既不是金额也不是比例", operation,
-				row.ObjectID, row.VersionLabel)
-		}
-		if endsAt != nil {
-			row.EffectiveEndsAt = *endsAt
-			row.HasEffectiveEnd = true
-		}
-		policyRows = append(policyRows, row)
+func scanCreditPolicy(rows pgx.Rows) (ports.CreditPolicyRow, error) {
+	var row ports.CreditPolicyRow
+	var limitMinor, limitBps *int64
+	var ratioBase *string
+	var endsAt *time.Time
+	if err := rows.Scan(
+		&row.ObjectID, &row.VersionLabel, &row.LegalEntity, &row.AuthorityLevel, &row.ChargeType,
+		&limitMinor, &limitBps, &ratioBase,
+		&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
+	); err != nil {
+		return row, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", operation, err)
+	switch {
+	case limitMinor != nil && limitBps == nil && ratioBase == nil:
+		row.HasAmount = true
+		row.LimitMinor = *limitMinor
+	case limitMinor == nil && limitBps != nil:
+		row.LimitRatioBasisPoints = *limitBps
+		if ratioBase != nil {
+			row.RatioBase = *ratioBase
+		}
+	default:
+		return row, fmt.Errorf("%s/%s 的额度既不是金额也不是比例", row.ObjectID, row.VersionLabel)
 	}
-	return policyRows, nil
+	if endsAt != nil {
+		row.EffectiveEndsAt = *endsAt
+		row.HasEffectiveEnd = true
+	}
+	return row, nil
 }
 
 func (catalogue *OperationsCatalogue) ListCreditPolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.CreditPolicyRow, error) {
-	return catalogue.creditPolicyRows(ctx, "list credit policies", tenant, limit, nil)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.CreditPolicyRow], error) {
+	return creditPolicyRead.page(ctx, catalogue.db, "list credit policies", limit, query, tenant.String())
 }
 
 func (catalogue *OperationsCatalogue) FindCreditPolicy(
@@ -408,5 +392,5 @@ func (catalogue *OperationsCatalogue) FindCreditPolicy(
 	objectID domain.CommercialObjectID,
 	version domain.CommercialVersionLabel,
 ) (ports.CreditPolicyRow, bool, error) {
-	return firstRow(catalogue.creditPolicyRows(ctx, "find credit policy", tenant, 1, keyOf(objectID, version)))
+	return creditPolicyRead.find(ctx, catalogue.db, "find credit policy", keyOf(objectID, version), tenant.String())
 }
