@@ -1,7 +1,7 @@
 # 02 资料空状态给下一步，客户缺联系人时提醒
 
 Category: enhancement
-Status: open
+Status: in-progress
 父票：[spec](../spec.md)
 
 ## 要做的

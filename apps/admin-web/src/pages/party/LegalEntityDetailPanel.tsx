@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, X } from 'lucide-react';
+import { FileText, Maximize2, X } from 'lucide-react';
 import {
   Button,
   Tabs,
@@ -150,6 +150,17 @@ export function LegalEntityDetailPanel({
               </Button>
             ) : null}
             <LegalEntityMoreMenu row={row} onOpenObjectPage={onOpenObjectPage} onChanged={onChanged} />
+            {/* 对象页入口提到头部，与往来单位栏同一枚（票 business-party-ux/01）；「更多」里那一项照留。 */}
+            <Button
+              className="text-idpxyz-breadcrumb"
+              variant="ghost"
+              size="icon"
+              onClick={onOpenObjectPage}
+              aria-label="在新标签打开对象页"
+              title="在新标签打开对象页"
+            >
+              <Maximize2 className="h-4 w-4" aria-hidden="true" />
+            </Button>
             <Button
               className="text-idpxyz-breadcrumb"
               variant="ghost"

@@ -1,7 +1,7 @@
 # 01 右栏抬头：英文名、一行事实只显到日、对象页图标按钮
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-06 进 main
 父票：[spec](../spec.md)
 
 ## 要做的
@@ -14,3 +14,10 @@ Status: in-progress
 
 - 三道门退 0；资料那一格的判读钉 node:test。
 - 浏览器：货主一号抬头有英文名、事实一行且到日；无资料的单位资料格答「未登记」；我方公司不显英文名与资料格；图标按钮打开对象页（两种栏各点一次）。零写请求。
+
+## 完成记录（2026-11-06，直接推 `main`）
+
+- 落点：`business-party-profile.ts` 加 `otherLanguageNameOf`（先取英文，含 `en-GB` 这类写法，否则取第一个）与 `businessPartyProfileVersionFact`（第几版 / 尚无生效版本 / 未登记 / 在读 / 读不到），带测试。`BusinessPartyDetailPanel.tsx`：资料修订链提到栏顶读一次，抬头与三签共用；名称下一行英文名，悬停复制；四个大框换成一行小字，事实为生效、停用、登记、资料，到日；原来那一格登记时刻不再上首屏（在「登记记录」签）；关闭前加「在新标签打开对象页」图标按钮。`LegalEntityDetailPanel.tsx` 同加那枚按钮。
+- ✅ 三道门退 0，测试全过，含新增的两个用例。
+- ✅ 浏览器（本树另起 vite 5178，接演示 API 19080）：货主一号抬头带「Stellar Cross-border Commerce Co., Ltd. (SYN)」，事实一行「生效 2026-11-05 · 登记 第 2 版 · 资料 第 1 版」；货主二号无英文名、资料「未登记」；我方公司无英文名、无资料格；往来单位栏的图标按钮去 `#/business-parties/SYN-PARTY-SHIPPER-01`，公司主体栏的去 `#/group-legal-entities/SYN-LE-CN-SZ-01`；只点行与按钮，没有提交。证据 S。
+- 评审：diff 全在 `pages/**`，按 workflow「前端切片」自审。

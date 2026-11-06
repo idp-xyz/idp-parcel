@@ -7,8 +7,10 @@ import {
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
   businessPartyProfilePayloadOf,
+  businessPartyProfileVersionFact,
   effectiveBusinessPartyProfile,
   emptyBusinessPartyProfileDraft,
+  otherLanguageNameOf,
   suggestedBusinessPartyProfileRevision,
 } from './business-party-profile';
 
@@ -74,4 +76,27 @@ test('往来单位资料的预填与改动判读', () => {
   deepEqual(base.names, [{ language: 'en', name: 'SYN Shipper One' }]);
   equal(businessPartyProfileChanged(base, { ...base, basis: 'new', effectiveFrom: '2026-05-01T08:00' }, 'UTC'), false);
   equal(businessPartyProfileChanged(base, { ...base, names: [{ language: 'en', name: 'Renamed' }] }, 'UTC'), true);
+});
+
+// Covers: 抬头名称下那一行先取英文（含 en-GB 这类地区写法），没有英文取第一个；没有资料、没有名称或名称全空都不显。
+test('otherLanguageNameOf 先取英文', () => {
+  equal(otherLanguageNameOf(record), 'SYN Shipper One');
+  equal(otherLanguageNameOf({ names: [{ language: 'ja', name: 'SYN 日本' }, { language: 'en-GB', name: 'SYN UK' }] }), 'SYN UK');
+  equal(otherLanguageNameOf({ names: [{ language: 'ja', name: 'SYN 日本' }, { language: 'eng', name: 'SYN ENG' }] }), 'SYN 日本');
+  equal(otherLanguageNameOf({ names: [{ language: 'en', name: '  ' }] }), null);
+  equal(otherLanguageNameOf({}), null);
+  equal(otherLanguageNameOf(null), null);
+});
+
+// Covers: 头部「资料」格分清在读、读不到、未登记、尚无生效版本与第几版；读不到不冒充未登记，别家的答复不认。
+test('businessPartyProfileVersionFact 分清没登与读不到', () => {
+  const party = 'SYN-PARTY-SHIPPER-01';
+  const answer = (effectiveRevision: number | undefined, revisions: BusinessPartyProfileRevisionRecord[], partyId = party) =>
+    ({ kind: 'outcome', status: 200, body: { outcome: 'X', partyId, effectiveRevision, revisions } }) as const;
+  equal(businessPartyProfileVersionFact(null, party), '…');
+  equal(businessPartyProfileVersionFact({ kind: 'transport', message: 'down' }, party), '读不到');
+  equal(businessPartyProfileVersionFact(answer(undefined, []), party), '未登记');
+  equal(businessPartyProfileVersionFact(answer(undefined, [{ ...record, effectiveFrom: '2099-01-01T00:00:00Z' }]), party), '尚无生效版本');
+  equal(businessPartyProfileVersionFact(answer(1, [record]), party), '第 1 版');
+  equal(businessPartyProfileVersionFact(answer(1, [record], 'SYN-PARTY-OTHER'), party), '…');
 });

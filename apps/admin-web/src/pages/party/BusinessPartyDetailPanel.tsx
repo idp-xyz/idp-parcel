@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, X } from 'lucide-react';
+import { FileText, Maximize2, X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { WorkspaceTabLabel } from '../../templates/workspace-tab-icons';
@@ -17,9 +17,13 @@ import {
   BusinessPartyContactsReadout,
   BusinessPartyProfileReadout,
   BusinessPartyProfileVersions,
+  effectiveProfileOf,
   ourCompanyProfileNote,
   useBusinessPartyProfiles,
 } from './BusinessPartyProfileSection';
+import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
+import type { AnswerQuery } from '../../query/answers';
+import type { BusinessPartyProfileRevisionListResponseBody } from './api';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
@@ -33,24 +37,22 @@ import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
 import { BusinessPartyIdentificationFacts } from './BusinessPartyIdentificationRows';
-import { RefText } from './copy-affordance';
+import { CopyAside, RefText } from './copy-affordance';
 
 const tabTriggerClass = 'px-0 type-body font-medium text-idpxyz-breadcrumb data-[state=active]:text-idpxyz-accent';
 
-/**
- * 资料三签各挂一份修订链查询：键相同，一栏只发一笔；签没去过就不挂、不读。我方公司不读，法人册答出之前也先不读——同对象页，
- * 免得先发一笔再认出是我方公司。
- */
+/** 资料三签的正文；修订链由栏顶读一次，抬头的英文名与「资料」格用的是同一份。 */
 function PanelProfilePart({
   row,
   pinned,
   part,
+  profiles,
 }: {
   row: BusinessPartyRecord;
   pinned: boolean | null;
   part: 'summary' | 'contacts' | 'versions';
+  profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
 }) {
-  const profiles = useBusinessPartyProfiles(row.partyId, false, pinned === false);
   if (pinned === true) return <p className="type-value leading-6 text-idpxyz-breadcrumb">{ourCompanyProfileNote}</p>;
   if (part === 'contacts') return <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} />;
   if (part === 'versions') return <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} />;
@@ -64,15 +66,17 @@ function PanelProfilePart({
 }
 
 /**
- * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（标识 + 状态徽章 +
- * 名称一行 + 引用签）· 主动作「更新资料」+「更多」菜单 + 关闭 · 停用横幅 · 事实条 · 签。
+ * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（名称 + 状态徽章 +
+ * 其他语言名称一行 + 角色标签）· 主动作「更新资料」+「更多」菜单 + 打开对象页 + 关闭 · meta 行 · 停用横幅 · 一行事实 · 签。
  *
- * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：更新次数、生效时点、登记时间与停用时点归事实条，名称是标题，
- * 编码是副题；标识、修订号、登记依据、租户这类排查用的字收进「登记记录」签底部的「技术详情」，不再占头部。
+ * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：生效、停用、登记版次与资料版本归那一行事实，只显到日，照公司
+ * 主体栏（票 business-party-ux/01）；登记时刻在「登记记录」签；名称是标题，编码与识别信息在 meta 行；标识、修订号、登记依据、
+ * 租户这类排查用的字收进「登记记录」签底部的「技术详情」。
  *
  * 签照公司主体栏（票 business-party-profile/04）：「概要」（默认）读出往来单位资料，「联系人」「资料版本」读同一份资料修订链，
  * 「登记记录」（原称身份与修订、变更记录）装剩下的格与身份修订历史，「关联」（原称全景）回答这个参与方对我们是什么。我方公司
- * 不摆资料两签，判据在 business-party-list.ts 的 businessPartyPanelTabsOf。
+ * 不读也不摆资料，判据在 business-party-list.ts 的 businessPartyPanelTabsOf。资料修订链在栏顶读：抬头的英文名与「资料」格要它，
+ * 与公司主体栏读当前资料同一做法。
  * 去过的签留着挂载（隐藏而不卸载）：全景一开就读四册、修订历史读一条链，每切回来一次就重取一次会闪一次加载态；只留
  * 「去过的」，方向键逐行翻时不为没看的签取数。签不按参与方重置：↑/↓ 逐行翻时停在哪一签就一直看哪一签，与法人栏同一做法。
  */
@@ -112,6 +116,9 @@ export function BusinessPartyDetailPanel({
   const [visited, setVisited] = useState<ReadonlySet<BusinessPartyPanelTab>>(() => new Set<BusinessPartyPanelTab>([tab]));
   const tabs = businessPartyPanelTabsOf(pinned);
   const shown = shownBusinessPartyPanelTab(tab, tabs);
+  // 我方公司不读，法人册答出之前也先不读——同对象页，免得先发一笔再认出是我方公司。
+  const profiles = useBusinessPartyProfiles(row.partyId, false, pinned === false);
+  const otherName = otherLanguageNameOf(effectiveProfileOf(profiles, row.partyId).record);
   // 没有登记册配置写授予的操作者不摆登记入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const { addToast } = useToast();
@@ -161,6 +168,14 @@ export function BusinessPartyDetailPanel({
               <h2 className="truncate type-title font-semibold text-idpxyz-textBright">{row.partyName}</h2>
               <StatusPill code={row.status} />
             </div>
+            {/* 对外单据与海外往来认的写法（多半是英文名）紧跟在名称下面；文本类，悬停复制（票 company-subject-ux/14）。 */}
+            {otherName ? (
+              <p className="mt-0.5 truncate type-body text-idpxyz-breadcrumb">
+                <CopyAside value={otherName} name="其他语言名称">
+                  {otherName}
+                </CopyAside>
+              </p>
+            ) : null}
             {/* 类型与列表类型格同一说法：我方公司排在角色前面；既不是我方公司、又没有角色时说「暂无合作关系」，不留空。 */}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {ours ? (
@@ -191,6 +206,16 @@ export function BusinessPartyDetailPanel({
               className="text-idpxyz-breadcrumb"
               variant="ghost"
               size="icon"
+              onClick={onOpenObjectPage}
+              aria-label="在新标签打开对象页"
+              title="在新标签打开对象页"
+            >
+              <Maximize2 className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button
+              className="text-idpxyz-breadcrumb"
+              variant="ghost"
+              size="icon"
               onClick={onClose}
               aria-label="关闭详情"
               title="关闭（Esc）"
@@ -212,15 +237,23 @@ export function BusinessPartyDetailPanel({
         <BusinessPartyBanners row={row} />
       </div>
 
-      <FactStrip>
-        <Fact label="变更">{updateOrdinalLabel(row.revision)}</Fact>
-        <Fact label="生效时间">
-          <Instant value={row.effectiveFrom} />
+      <FactStrip inline>
+        <Fact inline label="生效">
+          <Instant value={row.effectiveFrom} precision="day" />
         </Fact>
-        <Fact label="登记时间">
-          <Instant value={row.registeredAt} />
+        {row.deactivatedAt ? (
+          <Fact inline label="停用">
+            <Instant value={row.deactivatedAt} precision="day" />
+          </Fact>
+        ) : null}
+        <Fact inline label="登记">
+          {updateOrdinalLabel(row.revision)}
         </Fact>
-        <Fact label="停用时点">{row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用'}</Fact>
+        {pinned === true ? null : (
+          <Fact inline label="资料">
+            {businessPartyProfileVersionFact(profiles.answer, row.partyId)}
+          </Fact>
+        )}
       </FactStrip>
 
       <Tabs value={shown} onValueChange={(value) => selectTab(value as BusinessPartyPanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">
@@ -249,16 +282,16 @@ export function BusinessPartyDetailPanel({
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <TabsContent value="summary" forceMount={visited.has('summary') || undefined} className="mt-0 data-[state=inactive]:hidden">
-            <PanelProfilePart row={row} pinned={pinned} part="summary" />
+            <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="summary" />
           </TabsContent>
           {tabs.includes('contacts') ? (
             <TabsContent value="contacts" forceMount={visited.has('contacts') || undefined} className="mt-0 data-[state=inactive]:hidden">
-              <PanelProfilePart row={row} pinned={pinned} part="contacts" />
+              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="contacts" />
             </TabsContent>
           ) : null}
           {tabs.includes('profile') ? (
             <TabsContent value="profile" forceMount={visited.has('profile') || undefined} className="mt-0 data-[state=inactive]:hidden">
-              <PanelProfilePart row={row} pinned={pinned} part="versions" />
+              <PanelProfilePart row={row} pinned={pinned} profiles={profiles} part="versions" />
             </TabsContent>
           ) : null}
           <TabsContent

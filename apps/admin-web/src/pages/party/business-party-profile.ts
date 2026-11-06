@@ -4,6 +4,7 @@
 //
 // 不裁领域门：往来单位在不在册、是不是我方公司、注册地址国家对不对得上、号合不合目录，一律送上去由服务端答。
 
+import type { ApiResult } from '../catalogue-api';
 import type {
   BusinessPartyProfileRevisionListResponseBody,
   BusinessPartyProfileRevisionRecord,
@@ -92,6 +93,32 @@ export function effectiveBusinessPartyProfile(
 ): BusinessPartyProfileRevisionRecord | null {
   if (body.effectiveRevision === undefined) return null;
   return body.revisions.find((row) => row.revision === body.effectiveRevision) ?? null;
+}
+
+/**
+ * 抬头名称下那一行：此刻有效资料里的其他语言名称。有英文取英文——对外单据与海外往来最常用；没有就取登记的第一个；没有为 null。
+ */
+export function otherLanguageNameOf(record: Pick<BusinessPartyProfileRevisionRecord, 'names'> | null): string | null {
+  const names = (record?.names ?? []).filter((row) => row.name.trim() !== '');
+  if (names.length === 0) return null;
+  const english = names.find((row) => /^en(-|$)/i.test(row.language.trim()));
+  return (english ?? names[0]).name;
+}
+
+/**
+ * 头部事实「资料」那一格。读到了却没有生效版时分开说「尚无生效版本」（登过、都在未来生效）与「未登记」；还在读是「…」，读不到
+ * 是「读不到」——不拿「未登记」冒充，那会让人以为对方真没登资料。
+ */
+export function businessPartyProfileVersionFact(
+  answer: ApiResult<BusinessPartyProfileRevisionListResponseBody> | null,
+  partyId: string,
+): string {
+  if (answer === null) return '…';
+  if (answer.kind !== 'outcome') return '读不到';
+  if (answer.body.partyId !== partyId) return '…';
+  const effective = effectiveBusinessPartyProfile(answer.body);
+  if (effective) return `第 ${effective.revision} 版`;
+  return answer.body.revisions.length > 0 ? '尚无生效版本' : '未登记';
 }
 
 /** 往来单位的修订折成法人资料内容的形状，好借法人资料的预填折算：注册地址缺席折成空的。 */
