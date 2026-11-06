@@ -184,21 +184,27 @@ func TestCurrentViewCarriesTheJudgmentBasisAndThePriorVersion(t *testing.T) {
 	}
 }
 
-// Covers: 源与视图是请求形状的事，缺席或集外 400 且不触读口；判它不需要先知道调用方是谁。
+// Covers: 源与视图是请求形状的事，缺席或集外 400 且不触读口。判它在渠道准入之后（spec「端点先 Intake、后解码查询参数」）：
+// 渠道未配置时同一问答 403，答复不随请求内容变（ADR-0055 决定三）。
 func TestFactQueryRefusesMissingSourceOrUnknownViewBeforeReadingAnything(t *testing.T) {
 	for name, target := range map[string]string{
 		"source missing":  "/x?view=pending",
 		"source blank":    "/x?source=%20&view=pending",
-		"view missing":    "/x?source=aggregator-a",
-		"view outside":    "/x?source=aggregator-a&view=all",
-		"view mixed case": "/x?source=aggregator-a&view=Pending",
+		"view missing":    "/x?source=SYN-SOURCE-A",
+		"view outside":    "/x?source=SYN-SOURCE-A&view=all",
+		"view mixed case": "/x?source=SYN-SOURCE-A&view=Pending",
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &stubFactReview{}
-			endpoint := tfhttp.NewQueryExternalTrackingFactsEndpoint(failingCatalogueIntake{err: errors.New("must not be asked")}, reader)
-			response := getFacts(t, endpoint, target)
+			configured := tfhttp.NewQueryExternalTrackingFactsEndpoint(grantedIntake(), reader)
+			response := getFacts(t, configured, target)
 			if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-				t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+				t.Fatalf("配置了的渠道：status = %d body = %s", response.Code, response.Body.String())
+			}
+			unconfigured := tfhttp.NewQueryExternalTrackingFactsEndpoint(tfhttp.UnconfiguredIntake{}, reader)
+			response = getFacts(t, unconfigured, target)
+			if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+				t.Fatalf("未配置的渠道：status = %d body = %s", response.Code, response.Body.String())
 			}
 			if reader.calls != 0 {
 				t.Fatal("坏请求触到了读口")

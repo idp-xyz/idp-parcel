@@ -319,14 +319,25 @@ func TestTransportFulfillmentRecordsQueryRefusesNonGetMethods(t *testing.T) {
 }
 
 // Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 一律 403 +
-// ACCESS_CHANNEL_NOT_CONFIGURED，各本册子一致，读口不被触到，不带业务结果格。
+// ACCESS_CHANNEL_NOT_CONFIGURED，各本册子一致，读口不被触到，不带业务结果格。答复不随请求内容变
+// （spec「端点先 Intake、后解码查询参数」）：册名缺席、为空或不在封闭集里，查询参数写错、挡回册的筛选立不起来，
+// 都同答 403——没有凭据的调用方探不出册名封闭集，也探不出各册开放了哪些查询维度。
 func TestUnconfiguredIntakeRefusesEveryTransportFulfillmentRecordsRequest(t *testing.T) {
 	endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
 		tfhttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t},
 	)
+	queries := []string{
+		"", "?registry=", "?registry=unknown", "?registry=transport-manifest",
+		"?registry=booking-answer-bounce&booking=%20", "?registry=booking-answer-bounce&source=",
+	}
 	for _, registry := range fulfillmentRegistries {
-		t.Run(registry, func(t *testing.T) {
-			response := serveGet(endpoint, "/transport-fulfillment-records?registry="+registry)
+		query := "?registry=" + registry
+		queries = append(queries, query, query+"&unknown=1", query+"&sort=nope", query+"&after=not-a-cursor",
+			query+"&tenant=SYN-TENANT-09", query+"&limit=999")
+	}
+	for _, query := range queries {
+		t.Run(query, func(t *testing.T) {
+			response := serveGet(endpoint, "/transport-fulfillment-records"+query)
 
 			if response.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusForbidden)
@@ -360,15 +371,24 @@ func TestTransportFulfillmentRecordsQueryRejectsUnknownRegistries(t *testing.T) 
 	}
 }
 
-// Covers: 门的次序 — 请求形状立不起来先于渠道未配置作答。
-func TestAnUnknownRegistryIsRefusedBeforeTheChannelCheck(t *testing.T) {
-	endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
+// Covers: 门的次序（spec「端点先 Intake、后解码查询参数」）— 渠道先于册名作答：同一问未知册名，未配置的渠道答 403，
+// 配置了的渠道才答 400（ADR-0055 决定三）。
+func TestTheChannelIsCheckedBeforeTheRegistry(t *testing.T) {
+	const target = "/transport-fulfillment-records?registry=unknown"
+	unconfigured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
 		tfhttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t},
 	)
-	response := serveGet(endpoint, "/transport-fulfillment-records?registry=unknown")
+	response := serveGet(unconfigured, target)
+	if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("未配置的渠道：status = %d body = %s", response.Code, response.Body.String())
+	}
 
+	configured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
+		grantedIntake(), unreachableReviewCatalogue{t: t},
+	)
+	response = serveGet(configured, target)
 	if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		t.Fatalf("配置了的渠道：status = %d body = %s", response.Code, response.Body.String())
 	}
 }
 
@@ -412,7 +432,7 @@ func TestTransportFulfillmentRecordsQueryAnswers500WhenTheRegisterFails(t *testi
 }
 
 // Covers: 逐格转写 — 班次册：身份、版本、方向三格、出发与到达、服务范围与来历照转写；临时班次不带出处三键；没有
-// 执行准备与实际执行键（无处可登不代填）；读口收到的是接入面裁决的键。查询串上自报的 tenant 是集外键、准入之前就答 400，
+// 执行准备与实际执行键（无处可登不代填）；读口收到的是接入面裁决的键。查询串上自报的 tenant 是集外键、准入之后答 400，
 // 见 TestRecordsCatalogueRefusesSelfReportedTenantAndLimit。
 func TestTransportScheduleRegistryTranscribesRows(t *testing.T) {
 	register := &stubReviewCatalogue{

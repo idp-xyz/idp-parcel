@@ -49,14 +49,19 @@ const (
 // 必备——「没传就当待判断」是隐含默认，与读口拒绝集外过滤词是同一条纪律。状态词原样透出不解释
 // （ADR-0102 决定五）；**不给任何「推荐的有效时间」**——那是替所有者判断（票 21 红线）。
 //
-// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：source 与 view 是选择器，照旧先判；其余查询参数按
-// ports.ExternalTrackingFactPages 解，集外的键、可排维与词表之外的取值、别源别视图或过期的游标都在准入之前答 400 带理由。
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/05）：source 与 view 是选择器，其余查询参数按
+// ports.ExternalTrackingFactPages 解，集外的键、可排维与词表之外的取值、别源别视图或过期的游标都答 400 带理由。选择器与
+// 查询参数都在准入之后判：渠道未配置时对一切请求同答 403（ADR-0055 决定三），缺源、坏视图的也一样。
 func NewQueryExternalTrackingFactsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ExternalTrackingFactReviewReader,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
+			return
+		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
 			return
 		}
 		values := request.URL.Query()
@@ -79,10 +84,6 @@ func NewQueryExternalTrackingFactsEndpoint(
 		pageQuery, err := ports.ExternalTrackingFactPages.Decode(values)
 		if err != nil {
 			writePageQueryProblem(response, err)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 

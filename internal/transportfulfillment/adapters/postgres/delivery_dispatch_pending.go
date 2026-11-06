@@ -270,7 +270,7 @@ func askedByParameter(askedBy time.Time) *time.Time {
 }
 
 // deliveryDispatchPendingOpen 是「这个租户待形成的那几件」的筛法（租户在 $1）。按册重问的队列、它的件数与查阅页那一册
-// （ReviewCatalogue.ListDeliveryDispatchPendings）都用这一处，三处列的才是同一批。
+// （ReviewCatalogue.ListDeliveryDispatchPendings）都用这一处，各处列的才是同一批。
 const deliveryDispatchPendingOpen = `tenant_id = $1 AND state = 'PENDING'`
 
 const deliveryDispatchPendingColumns = `tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at,

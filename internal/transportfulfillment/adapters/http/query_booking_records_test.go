@@ -102,7 +102,7 @@ func TestTheBookingRequestRegistryTranscribesRowsWithTheirStanding(t *testing.T)
 }
 
 // Covers: AT-TF-333 的线格式那一半（票 demo-chain-gaps/167，ADR-0239 决定二）——挡回册逐格转写：答复方、订舱、答复标识、依据词、首末
-// 挡回时刻、次数（十进制计数串）；两个筛选参数照 ADR-0144 作筛选维交给读口，缺席即不筛。
+// 挡回时刻、次数（十进制计数串）；订舱与答复方的筛选参数照 ADR-0144 作筛选维交给读口，缺席即不筛。
 func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *testing.T) {
 	register := &stubReviewCatalogue{bounces: []ports.BookingAnswerBounceCatalogueRow{
 		{Source: "SYN-PARTY-CARRIER-LM-01", Booking: "SYN-BOOKING-1", Answer: "SYN-ANSWER-1", Basis: "SOURCE_NOT_SERVICE_PROVIDER",
@@ -142,8 +142,8 @@ func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *test
 }
 
 // Covers: AT-TF-333 筛选那一支——给了却立不起来的筛选（空串、全空白、带 NUL、订舱标识超过字节界）是坏请求（400），不静默放宽成
-// 全册；判它是请求形状的事，先于渠道作答，读口不被触到。
-func TestABookingAnswerBounceFilterThatCannotStandIsRefusedBeforeTheChannel(t *testing.T) {
+// 全册，读口不被触到。判它在渠道准入之后（spec「端点先 Intake、后解码查询参数」）：渠道未配置时同一问答 403。
+func TestABookingAnswerBounceFilterThatCannotStandIsRefused(t *testing.T) {
 	for name, query := range map[string]string{
 		"空订舱":      "&booking=",
 		"空白订舱":     "&booking=%20%20",
@@ -154,14 +154,20 @@ func TestABookingAnswerBounceFilterThatCannotStandIsRefusedBeforeTheChannel(t *t
 		"答复方带 NUL": "&source=SYN%00CARRIER",
 	} {
 		t.Run(name, func(t *testing.T) {
-			for _, intake := range []tfhttp.CatalogueQueryIntake{grantedIntake(), tfhttp.UnconfiguredIntake{}} {
-				endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(intake, unreachableReviewCatalogue{t: t})
-				response := serveGet(endpoint, "/transport-fulfillment-records?registry=booking-answer-bounce"+query)
-				if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-					t.Fatalf("%T: status = %d body = %s", intake, response.Code, response.Body.String())
-				}
-				assertNoOutcome(t, response)
+			target := "/transport-fulfillment-records?registry=booking-answer-bounce" + query
+			configured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), unreachableReviewCatalogue{t: t})
+			response := serveGet(configured, target)
+			if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
+				t.Fatalf("配置了的渠道：status = %d body = %s", response.Code, response.Body.String())
 			}
+			assertNoOutcome(t, response)
+
+			unconfigured := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(tfhttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t})
+			response = serveGet(unconfigured, target)
+			if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+				t.Fatalf("未配置的渠道：status = %d body = %s", response.Code, response.Body.String())
+			}
+			assertNoOutcome(t, response)
 		})
 	}
 }

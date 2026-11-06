@@ -6,8 +6,9 @@ import (
 )
 
 // 本文件是本上下文各列表读口的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/05）：可排维与筛选维按
-// 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec 取舍 1），
-// 行标识取登记表主键去掉租户那几段，与排序同向作决胜键（取舍 2）。
+// 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序
+// （该票 spec「缺省序保今天的次序」）；行标识与排序同向作决胜键，取登记表主键去掉租户那几段
+// （spec「行标识取登记表主键去掉租户那几段」），待确认复核清单是例外，理由在 PendingAttemptResultPages。
 //
 // GET /transport-fulfillment-records 按 registry 分派，每一种各是一册、各有名字。registry 登为选择器：它照旧由端点读、
 // 用来选册，不并入筛选维；取值进游标摘要，拿这一册的游标去翻另一册答 400。
@@ -18,7 +19,7 @@ const RecordsRegistrySelector = "registry"
 // TransportSchedulePages 是班次册（registry=transport-schedule）的声明。
 //
 // 只列每个班次的当前版，行标识是（班次，版本）。缺省序是出发时刻倒序，与迁移前同一口径：班次的登记时刻是提交簿记，操作者
-// 按出发找班次。origin 放出作筛选维（物化来的与临时班次两格），词表取自领域 ScheduleOriginKind。
+// 按出发找班次。origin 放出作筛选维（物化来的还是临时班次），词表取自领域 ScheduleOriginKind。
 var TransportSchedulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/transport-schedule",
 	Sorts: []cataloguepage.SortDimension{
@@ -68,7 +69,7 @@ var CapacityPoolPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // TransportHandoverPages 是权威交接判断册（registry=transport-handover）的声明。
 //
 // 一行一版本，行标识是（对象，范围，版本）。缺省序是裁决时刻倒序，与迁移前同一口径。交接判断按载运对象逐个成立，是按包裹
-// 计量的大册（该票 spec 取舍 4）。verdict 放出作筛选维，词表取自领域 HandoverVerdict。
+// 计量的大册，total 照给精确值（该票 spec「total 一律给精确值」）。verdict 放出作筛选维，词表取自领域 HandoverVerdict。
 var TransportHandoverPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/transport-handover",
 	Sorts: []cataloguepage.SortDimension{
@@ -140,7 +141,7 @@ var TransportPreparationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // DeliveryDispatchPendingPages 是派送待形成册（registry=delivery-dispatch-pending）的声明。
 //
 // 只列待形成的，行标识是（段，对象）。缺省序是最近一次问的时刻升序，与迁移前同一口径：这是要人去催所有者的队列，最久没问的
-// 先看（取舍 1 的队列一格）。册上只有待形成一种状态，不放筛选维。
+// 先看（spec「缺省序保今天的次序」：待办队列照旧最早的在前）。册上只有待形成一种状态，不放筛选维。
 var DeliveryDispatchPendingPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/delivery-dispatch-pending",
 	Sorts: []cataloguepage.SortDimension{
@@ -202,8 +203,8 @@ var BookingRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // BookingAnswerBouncePages 是承运答复挡回册（registry=booking-answer-bounce）的声明。
 //
 // 行标识是（答复方，订舱，答复标识，依据）。缺省序是最近一次挡回时刻倒序，与迁移前同一口径；次数另作一维可排，看谁在反复答。
-// booking 与 source 是迁移前就有的两个筛选参数，照旧收下作筛选维：订舱一维让订舱册的一行链得到它名下的挡回，答复方一维让运营
-// 看一个承运商反复在答什么。这两维没有词表，取值立不立得起来由端点照迁移前的判据判。basis 放出作筛选维，词表取自
+// booking 与 source 是迁移前就有的筛选参数，照旧收下作筛选维：订舱一维让订舱册的一行链得到它名下的挡回，答复方一维让运营
+// 看一个承运商反复在答什么。它们没有词表，取值立不立得起来由端点照迁移前的判据判。basis 放出作筛选维，词表取自
 // BookingAnswerBounceBasis。
 var BookingAnswerBouncePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/booking-answer-bounce",
@@ -223,9 +224,9 @@ var BookingAnswerBouncePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // PendingAttemptResultPages 是待确认复核清单（registry=pending-attempt-result）的声明。
 //
-// 揽收与派送两侧合并成一册，行标识是（一侧，尝试，对象，来源身份）：揽收一侧的登记键是（来源身份，对象），派送一侧的是
-// （尝试，对象）、来源身份恒为空串，四段合起来两侧都唯一。缺省序是发生时刻升序，与迁移前同一口径：复核清单最早的先看。
-// side 放出作筛选维。
+// 揽收与派送两侧合并成一册，行标识是（一侧，尝试，对象，来源身份）。它不是哪一张登记表的主键去掉租户：揽收一侧的登记键是
+// （来源身份，对象），派送一侧的是（尝试，对象）、来源身份恒为空串；单取哪一侧的键，另一侧都会撞。加上一侧一段之后两侧的键
+// 合起来唯一。缺省序是发生时刻升序，与迁移前同一口径：复核清单最早的先看。side 放出作筛选维。
 var PendingAttemptResultPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/pending-attempt-result",
 	Sorts: []cataloguepage.SortDimension{
@@ -241,7 +242,7 @@ var PendingAttemptResultPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // ExternalTrackingFactPages 是外部承运轨迹事实当前版（GET /transport-fulfillment-external-tracking-facts）的声明。
 //
-// source 与 view 是迁移前就有的两个必给参数，登为选择器，照旧由端点读、判：源是这本册子的分组维，视图选待判断的当前版还是
+// source 与 view 是迁移前就有的必给参数，登为选择器，照旧由端点在准入之后读、判：源是这本册子的分组维，视图选待判断的当前版还是
 // 全部当前版。行标识是（事实，版本）。缺省序是发生时刻升序，与迁移前同一口径：判断人按事实发生的先后一条条判；接收时刻另作
 // 一维可排。effectiveBasis 放出作筛选维，词表取自领域 EffectiveTimeBasis。一条外部轨迹事件一行，是按事件计量的大册。
 var ExternalTrackingFactPages = cataloguepage.MustCatalogue(cataloguepage.Spec{

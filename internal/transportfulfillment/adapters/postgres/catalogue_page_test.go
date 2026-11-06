@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
@@ -15,21 +16,24 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证本上下文各册照 ADR-0144 取页（票 catalogue-read-pagination-rollout/05 完成判据）：每一册走同一套
-// 表驱动用例——空册答空页且 total 为 0；翻完第一页再添一行，后面的页不重出已翻过的行、原有的行一行不漏，total 随之变；换一个
-// 可排维（只有一维可排的册取反向）照样翻得完；total 随筛选维与 q 变，q 不分大小写、% 按字面。行经各册的写侧适配器或编排真实
-// 落库，夹具全为合成值（S 级）。
+// 表驱动用例——空册答空页且 total 为 0；翻完第一页再添一行，逐页见到的行恰是预期的序列：倒序的册里新行落在已翻过的一侧、
+// 后面的页见不到它，正序的队列里它排在末尾，原有的行各恰好见一次，total 随之变；换一个可排维（只有一维可排的册取反向）照样
+// 翻得完；total 随筛选维与 q 变，q 不分大小写、% 按字面。行经各册的写侧适配器或编排真实落库，标识与 q 所查各列的夹具值全为
+// SYN- 合成值（S 级）；借用的既有构造器只在内容摘要、计量单位这类不进标识也不进 q 的格上留着自己的写法。
 
 const pagedTenant = "SYN-TENANT-01"
 
 var pagedAt = time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)
 
-// pagedRegister 是一册真库翻页用例要的几样。add 往册里添第 index 行（1 起）并交回它的标识串；list 读一页；key 从行认出标识串；
-// alternateSort 是缺省序之外再翻一遍用的排序；totals 是六行都在之后、按条件数出的总数。
+// pagedRegister 是一册真库翻页用例要的几样。add 往册里添第 index 行（1 起）并交回它的标识串，缺省序的排序维随 index 递增；
+// list 读一页；key 从行认出标识串；newestFirst 说缺省序是倒序（后添的行排在前头）；alternateSort 是缺省序之外再翻一遍用的
+// 排序；totals 是六行都在之后、按条件数出的总数。
 type pagedRegister[Row any] struct {
 	catalogue     *cataloguepage.Catalogue
 	add           func(index int) string
 	list          func(tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[Row], error)
 	key           func(row Row) string
+	newestFirst   bool
 	alternateSort string
 	totals        map[string]pagedTotal
 }
@@ -48,17 +52,16 @@ func checkPagedRegister[Row any](t *testing.T, register pagedRegister[Row]) {
 		t.Fatalf("空册应答空页、total 为 0、没有下一页：%+v err=%v", empty, err)
 	}
 
-	existing := make([]string, 0, 5)
+	keys := make([]string, 0, 6)
 	for index := 1; index <= 5; index++ {
-		existing = append(existing, register.add(index))
+		keys = append(keys, register.add(index))
 	}
-	seen := map[string]bool{}
 	page, err := register.list(tenant, 2, firstPage(t, register.catalogue))
-	if err != nil || len(page.Rows) != 2 || page.Total != 5 || page.Next == "" {
-		t.Fatalf("第一页应两行、total 5、有下一页：%d 行 total %d next %q err=%v", len(page.Rows), page.Total, page.Next, err)
+	if err != nil || page.Total != 5 || page.Next == "" {
+		t.Fatalf("第一页应 total 5、有下一页：total %d next %q err=%v", page.Total, page.Next, err)
 	}
-	collectPagedKeys(t, register.key, page.Rows, seen)
-	register.add(6)
+	pages := [][]string{pagedKeys(register.key, page.Rows)}
+	keys = append(keys, register.add(6))
 	for turns := 0; page.Next != ""; turns++ {
 		if turns > 6 {
 			t.Fatal("六行的册翻了七页还没到头")
@@ -67,12 +70,16 @@ func checkPagedRegister[Row any](t *testing.T, register pagedRegister[Row]) {
 		if err != nil || page.Total != 6 {
 			t.Fatalf("接着翻：total %d err=%v，添了一行之后应为 6", page.Total, err)
 		}
-		collectPagedKeys(t, register.key, page.Rows, seen)
+		pages = append(pages, pagedKeys(register.key, page.Rows))
 	}
-	for _, key := range existing {
-		if !seen[key] {
-			t.Fatalf("翻页期间漏了原有的 %s（翻到的：%v）", key, seen)
-		}
+	// 翻完第一页才添的那一行排在缺省序的哪一头由方向定：倒序的册里它排在最前，落在已翻过的一侧，后面的页见不到它；正序的
+	// 队列里它排在末尾，最后一页见到它。两种都要原有的五行各恰好见一次。
+	want := [][]string{{keys[0], keys[1]}, {keys[2], keys[3]}, {keys[4], keys[5]}}
+	if register.newestFirst {
+		want = [][]string{{keys[4], keys[3]}, {keys[2], keys[1]}, {keys[0]}}
+	}
+	if !reflect.DeepEqual(pages, want) {
+		t.Fatalf("翻完第一页再添一行：逐页见到 %v，应为 %v", pages, want)
 	}
 
 	sorted := url.Values{"sort": {register.alternateSort}}
@@ -100,6 +107,14 @@ func checkPagedRegister[Row any](t *testing.T, register pagedRegister[Row]) {
 	}
 }
 
+func pagedKeys[Row any](key func(Row) string, rows []Row) []string {
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		keys = append(keys, key(row))
+	}
+	return keys
+}
+
 func collectPagedKeys[Row any](t *testing.T, key func(Row) string, rows []Row, seen map[string]bool) {
 	t.Helper()
 	for _, row := range rows {
@@ -111,7 +126,118 @@ func collectPagedKeys[Row any](t *testing.T, key func(Row) string, rows []Row, s
 	}
 }
 
-// Covers: ADR-0144 决定一、四、五——运输履约查阅页 registry 分派的十三册与外部承运轨迹事实当前版，每一册都过一遍上面那套用例。
+// pagedHandoverRecord 造交接册第 index 行。各行裁决时刻相同，缺省序全靠行标识决胜。
+func pagedHandoverRecord(t *testing.T, index int) ports.TransportHandoverRecord {
+	t.Helper()
+	tenant := handoverValue(t, domain.NewTenantID, pagedTenant)
+	object := handoverValue(t, domain.NewCarriedObjectReference, fmt.Sprintf("SYN-PARCEL-%d", index))
+	scope := handoverValue(t, domain.NewHandoverScopeReference, "SYN-SCOPE-1")
+	version := handoverValue(t, domain.NewHandoverResultVersion, fmt.Sprintf("SYN-HV-%d", index))
+	handover, err := domain.FormTransportHandover(domain.TransportHandoverSpec{
+		TenantID:          tenant,
+		Object:            object,
+		Scope:             scope,
+		ReleasedBy:        handoverValue(t, domain.NewHandoverPartyReference, "SYN-NODE-1"),
+		ReceivedBy:        handoverValue(t, domain.NewHandoverPartyReference, "SYN-CARRIER-1"),
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: handoverValue(t, domain.NewHandoverEvidenceReference, "SYN-SEAL-OUT"),
+		ReceivingEvidence: handoverValue(t, domain.NewHandoverEvidenceReference, "SYN-SEAL-IN"),
+		Rule:              handoverValue(t, domain.NewHandoverRuleReference, "SYN-HANDOVER-RULE/v1"),
+		Version:           version,
+		JudgedAt:          handoverJudgedAtFixture,
+	})
+	if err != nil {
+		t.Fatalf("构造交接夹具：%v", err)
+	}
+	return ports.TransportHandoverRecord{
+		Key:           ports.TransportHandoverKey{TenantID: tenant, Object: object, Scope: scope, Version: version},
+		ContentDigest: fmt.Sprintf("SYN-DIGEST-HV-%d", index),
+		Handover:      gateReadingOn(t, handover),
+		RecordedAt:    handoverJudgedAtFixture,
+	}
+}
+
+// pagedDeliveryRecord 造有效交付册第 index 行，交付时刻随 index 递增。
+func pagedDeliveryRecord(t *testing.T, index int) ports.EffectiveDeliveryRecord {
+	t.Helper()
+	tenant := deliveryValue(t, domain.NewTenantID, pagedTenant)
+	object := deliveryValue(t, domain.NewCarriedObjectReference, fmt.Sprintf("SYN-PARCEL-%d", index))
+	attempt := deliveryValue(t, domain.NewAttemptReference, fmt.Sprintf("SYN-ATTEMPT-%d", index))
+	occurredAt := deliveredAtFixture.Add(time.Duration(index) * time.Minute)
+	delivery, err := domain.RehydrateEffectiveDelivery(domain.RehydrateEffectiveDeliverySpec{
+		TenantID:    tenant,
+		Object:      object,
+		Attempt:     attempt,
+		Place:       deliveryValue(t, domain.NewAttemptPlaceReference, "SYN-DOOR-1"),
+		Method:      deliveryValue(t, domain.NewDeliveryMethodReference, "SYN-SIGNATURE"),
+		Recipient:   deliveryValue(t, domain.NewReceivingPartyReference, "SYN-RECIPIENT-1"),
+		Proof:       deliveryValue(t, domain.NewDeliveryProofReference, fmt.Sprintf("SYN-POD-%d", index)),
+		Version:     deliveryValue(t, domain.NewDeliveryResultVersion, fmt.Sprintf("SYN-DV-%d", index)),
+		OccurredAt:  occurredAt,
+		GateReading: deliveryGateReadingFixture(t),
+	})
+	if err != nil {
+		t.Fatalf("重建交付夹具：%v", err)
+	}
+	return ports.EffectiveDeliveryRecord{
+		Key:           ports.EffectiveDeliveryKey{TenantID: tenant, Object: object, Attempt: attempt},
+		ContentDigest: fmt.Sprintf("SYN-DIGEST-POD-%d", index),
+		Delivery:      delivery,
+		RecordedAt:    occurredAt,
+	}
+}
+
+// pagedFactRecord 造外部轨迹事实当前版第 index 行（待判断），发生时刻随 index 递增。
+func pagedFactRecord(t *testing.T, source domain.TrackingSourceReference, index int) ports.ExternalTrackingFactRecord {
+	t.Helper()
+	occurredAt := pagedAt.Add(time.Duration(index) * time.Minute)
+	spec := domain.ExternalTrackingFactSpec{
+		TenantID:    segmentRef(t, domain.NewTenantID, pagedTenant),
+		Fact:        segmentRef(t, domain.NewExternalTrackingFactReference, fmt.Sprintf("SYN-EXTF-%d", index)),
+		Version:     segmentRef(t, domain.NewExternalTrackingFactVersion, fmt.Sprintf("SYN-EXTV-%d", index)),
+		Source:      source,
+		Credential:  segmentRef(t, domain.NewExternalCarrierCredentialReference, fmt.Sprintf("SYN-CARRIER/SYN-AWB-%d", index)),
+		Object:      segmentRef(t, domain.NewCarriedObjectReference, fmt.Sprintf("SYN-PARCEL-%d", index)),
+		SourceEvent: segmentRef(t, domain.NewSourceEventReference, fmt.Sprintf("SYN-EVT-%d", index)),
+		Status:      segmentRef(t, domain.NewRawStatusReference, "SYN-IN-TRANSIT"),
+		OccurredAt:  occurredAt,
+		ReceivedAt:  occurredAt.Add(90 * time.Second),
+		Effective:   domain.PendingEffectiveTime(),
+	}
+	adopted, err := domain.AdoptExternalCarrierTracking(spec)
+	if err != nil {
+		t.Fatalf("形成事实夹具：%v", err)
+	}
+	return ports.ExternalTrackingFactRecord{
+		Key:        ports.ExternalTrackingFactKey{TenantID: spec.TenantID, Fact: spec.Fact, Version: spec.Version},
+		Fact:       adopted,
+		RecordedAt: spec.ReceivedAt.Add(time.Second),
+	}
+}
+
+// pagedPendingAttempt 造一次只带一件对象的履约尝试，到场在 occurredAt 之前五分钟；揽收与派送两侧的待确认行共用这一形状。
+func pagedPendingAttempt(t *testing.T, index int, attempt, object string, occurredAt time.Time) domain.FulfillmentAttempt {
+	t.Helper()
+	arrivedAt := occurredAt.Add(-5 * time.Minute)
+	formed, err := domain.FormFulfillmentAttempt(domain.FulfillmentAttemptSpec{
+		TenantID:    deliveryValue(t, domain.NewTenantID, pagedTenant),
+		Attempt:     deliveryValue(t, domain.NewAttemptReference, attempt),
+		Task:        deliveryValue(t, domain.NewDispatchTaskReference, fmt.Sprintf("SYN-TASK-%d", index)),
+		ExecutedBy:  deliveryValue(t, domain.NewExecutingPartyReference, "SYN-COURIER-1"),
+		Place:       deliveryValue(t, domain.NewAttemptPlaceReference, "SYN-PLACE-1"),
+		PlannedFrom: arrivedAt.Add(-time.Hour),
+		PlannedTo:   arrivedAt.Add(time.Hour),
+		ArrivedAt:   arrivedAt,
+		Objects:     []domain.CarriedObjectReference{deliveryValue(t, domain.NewCarriedObjectReference, object)},
+		Evidence:    deliveryValue(t, domain.NewAttemptEvidenceReference, fmt.Sprintf("SYN-EVIDENCE-%d", index)),
+	})
+	if err != nil {
+		t.Fatalf("构造履约尝试 %s：%v", attempt, err)
+	}
+	return formed
+}
+
+// Covers: ADR-0144 决定一、四、五——运输履约查阅页 registry 分派的各册与外部承运轨迹事实当前版，每一册都过一遍上面那套用例。
 func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnderItsConditions(t *testing.T) {
 	t.Run("transport-schedule", func(t *testing.T) {
 		stores := newReviewCatalogueStores(t)
@@ -127,6 +253,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				return stores.catalogue.ListTransportSchedules(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.TransportScheduleCatalogueRow) string { return row.ScheduleID },
+			newestFirst:   true,
 			alternateSort: "scheduleId",
 			totals: map[string]pagedTotal{
 				"来历为临时班次":     {url.Values{"origin": {"AD_HOC"}}, 6},
@@ -190,19 +317,21 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 		checkPagedRegister(t, pagedRegister[ports.TransportHandoverCatalogueRow]{
 			catalogue: ports.TransportHandoverPages,
 			add: func(index int) string {
-				object, version := fmt.Sprintf("SYN-PARCEL-%d", index), fmt.Sprintf("SYN-HV-%d", index)
-				mustSaveHandover(t, stores.transactor, t.Context(), stores.handovers, catalogueHandoverRecord(t, pagedTenant, object, version))
-				return object + "|" + version
+				record := pagedHandoverRecord(t, index)
+				mustSaveHandover(t, stores.transactor, t.Context(), stores.handovers, record)
+				return record.Key.Object.String() + "|" + record.Key.Version.String()
 			},
 			list: func(tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.TransportHandoverCatalogueRow], error) {
 				return stores.catalogue.ListTransportHandovers(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.TransportHandoverCatalogueRow) string { return row.Object + "|" + row.Version },
+			newestFirst:   true,
 			alternateSort: "object",
 			totals: map[string]pagedTotal{
 				"已交接":       {url.Values{"verdict": {"HANDED_OVER"}}, 6},
 				"拒收":        {url.Values{"verdict": {"REFUSED"}}, 0},
 				"q 命中对象":    {url.Values{"q": {"syn-parcel-3"}}, 1},
+				"q 命中交出方":   {url.Values{"q": {"SYN-NODE-1"}}, 6},
 				"q 的 % 按字面": {url.Values{"q": {"%"}}, 0},
 			},
 		})
@@ -213,21 +342,21 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 		checkPagedRegister(t, pagedRegister[ports.EffectiveDeliveryCatalogueRow]{
 			catalogue: ports.EffectiveDeliveryPages,
 			add: func(index int) string {
-				object := fmt.Sprintf("SYN-PARCEL-%d", index)
-				mustSaveDelivery(t, stores.transactor, t.Context(), stores.deliveries, catalogueDeliveryRecord(t, pagedTenant, object,
-					fmt.Sprintf("SYN-ATTEMPT-%d", index), fmt.Sprintf("SYN-POD-%d", index), fmt.Sprintf("SYN-DV-%d", index),
-					deliveredAtFixture.Add(time.Duration(index)*time.Minute), "", time.Time{}))
-				return object
+				record := pagedDeliveryRecord(t, index)
+				mustSaveDelivery(t, stores.transactor, t.Context(), stores.deliveries, record)
+				return record.Key.Object.String()
 			},
 			list: func(tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.EffectiveDeliveryCatalogueRow], error) {
 				return stores.catalogue.ListEffectiveDeliveries(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.EffectiveDeliveryCatalogueRow) string { return row.Object },
+			newestFirst:   true,
 			alternateSort: "object",
 			totals: map[string]pagedTotal{
 				"门禁读数待定":    {url.Values{"gateReading": {deliveryGateReadingFixture(t).Answer().String()}}, 6},
 				"门禁读数阻断":    {url.Values{"gateReading": {"BLOCKED"}}, 0},
 				"q 命中证明":    {url.Values{"q": {"syn-pod-3"}}, 1},
+				"q 命中地点":    {url.Values{"q": {"syn-door-1"}}, 6},
 				"q 的 % 按字面": {url.Values{"q": {"%"}}, 0},
 			},
 		})
@@ -261,6 +390,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				return stores.catalogue.ListCarrierMasterDocuments(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.CarrierMasterDocumentCatalogueRow) string { return row.Document + "|" + row.Version },
+			newestFirst:   true,
 			alternateSort: "document",
 			totals: map[string]pagedTotal{
 				"有效":        {url.Values{"standing": {"IN_FORCE"}}, 6},
@@ -296,6 +426,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				return stores.catalogue.ListTransportPreparations(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.TransportPreparationCatalogueRow) string { return row.PlannedLeg + "|" + row.Object },
+			newestFirst:   true,
 			alternateSort: "object",
 			totals: map[string]pagedTotal{
 				"未配置":       {url.Values{"outcome": {domain.PreparationNotConfigured.String()}}, 6},
@@ -361,6 +492,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				return catalogue.ListDeliveryDispatchReaskCadences(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.DeliveryDispatchReaskCadenceRecord) string { return row.Cadence.Version().String() },
+			newestFirst:   true,
 			alternateSort: "recordedAt",
 			totals: map[string]pagedTotal{
 				"q 命中版本":    {url.Values{"q": {"syn-reask/v3"}}, 1},
@@ -376,7 +508,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 		if err != nil {
 			t.Fatal(err)
 		}
-		agreement, err := domain.NewSupplierAgreementVersion("SYN-AGREEMENT-1", "v1")
+		agreement, err := domain.NewSupplierAgreementVersion("SYN-AGREEMENT-1", "SYN-AGREEMENT-1/v1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -432,6 +564,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				return stores.catalogue.ListBookingRequests(t.Context(), tenant, limit, query)
 			},
 			key:           func(row ports.BookingRequestCatalogueRow) string { return row.Booking },
+			newestFirst:   true,
 			alternateSort: "booking",
 			totals: map[string]pagedTotal{
 				"q 命中订舱":    {url.Values{"q": {"syn-booking-3"}}, 1},
@@ -469,6 +602,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 			key: func(row ports.BookingAnswerBounceCatalogueRow) string {
 				return row.Source + "|" + row.Booking + "|" + row.Answer + "|" + row.Basis
 			},
+			newestFirst:   true,
 			alternateSort: "-count",
 			totals: map[string]pagedTotal{
 				"订舱不在册":     {url.Values{"basis": {"BOOKING_NOT_REGISTERED"}}, 3},
@@ -487,17 +621,42 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 		checkPagedRegister(t, pagedRegister[ports.PendingAttemptResultRow]{
 			catalogue: ports.PendingAttemptResultPages,
 			add: func(index int) string {
+				object, occurredAt := fmt.Sprintf("SYN-PARCEL-%d", index), pagedAt.Add(time.Duration(index)*time.Minute)
+				objectRef := deliveryValue(t, domain.NewCarriedObjectReference, object)
+				sourceRef := deliveryValue(t, domain.NewAttemptResultSourceReference, "SYN-RESULT-SOURCE/SCAN+GEOFENCE")
+				basisRef := deliveryValue(t, domain.NewAttemptResultBasisReference, "SYN-CONFLICT/SCAN-VS-GEOFENCE")
 				if index%2 == 1 {
-					source := fmt.Sprintf("SYN-DEVICE-%d", index)
-					rig.savePickupAttempt(t, pendingPickupRecord(t, pagedTenant, source))
-					return ports.PendingAttemptSidePickup + "|attempt-1|parcel-2|" + source
+					attemptID, source := fmt.Sprintf("SYN-PICKUP-%d", index), fmt.Sprintf("SYN-DEVICE-%d", index)
+					attempt := pagedPendingAttempt(t, index, attemptID, object, occurredAt)
+					pending, err := domain.FormPendingAttemptObjectResult(attempt, objectRef, sourceRef, basisRef, occurredAt)
+					if err != nil {
+						t.Fatalf("构造揽收待确认：%v", err)
+					}
+					rig.savePickupAttempt(t, ports.PickupAttemptRecord{
+						Key:           ports.PickupAttemptKey{TenantID: attempt.TenantID(), SourceID: source},
+						ContentDigest: "SYN-DIGEST-" + source,
+						Attempt:       attempt,
+						Results:       []domain.AttemptObjectResult{pending},
+						RecordedAt:    occurredAt,
+					})
+					return ports.PendingAttemptSidePickup + "|" + attemptID + "|" + object + "|" + source
 				}
-				attempt := fmt.Sprintf("SYN-ATTEMPT-%d", index)
+				attemptID := fmt.Sprintf("SYN-DELIVERY-%d", index)
+				attempt := pagedPendingAttempt(t, index, attemptID, object, occurredAt)
+				pending, err := domain.FormPendingDeliveryAttemptResult(attempt, objectRef, sourceRef, basisRef, occurredAt)
+				if err != nil {
+					t.Fatalf("构造派送待确认：%v", err)
+				}
 				mustWithinDeliveryTransaction(t, rig.transactor, t.Context(), func(txCtx context.Context) error {
-					_, err := rig.deliveries.Save(txCtx, pendingDeliveryRecord(t, pagedTenant, attempt))
+					_, err := rig.deliveries.Save(txCtx, ports.DeliveryAttemptRecord{
+						Key:        ports.DeliveryAttemptKey{TenantID: attempt.TenantID(), Attempt: attempt.Attempt()},
+						Attempt:    attempt,
+						Results:    []domain.DeliveryAttemptResult{pending},
+						RecordedAt: occurredAt,
+					})
 					return err
 				})
-				return ports.PendingAttemptSideDelivery + "|" + attempt + "|parcel-2|"
+				return ports.PendingAttemptSideDelivery + "|" + attemptID + "|" + object + "|"
 			},
 			list: func(tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.PendingAttemptResultRow], error) {
 				return rig.catalogue.ListPendingAttemptResults(t.Context(), tenant, limit, query)
@@ -510,7 +669,8 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				"揽收一侧":      {url.Values{"side": {ports.PendingAttemptSidePickup}}, 3},
 				"两侧":        {url.Values{"side": {ports.PendingAttemptSidePickup, ports.PendingAttemptSideDelivery}}, 6},
 				"q 命中来源身份":  {url.Values{"q": {"syn-device-3"}}, 1},
-				"q 命中派送尝试":  {url.Values{"q": {"syn-attempt-"}}, 3},
+				"q 命中派送尝试":  {url.Values{"q": {"syn-delivery-"}}, 3},
+				"q 命中对象":    {url.Values{"q": {"syn-parcel-4"}}, 1},
 				"q 的 % 按字面": {url.Values{"q": {"%"}}, 0},
 			},
 		})
@@ -522,12 +682,11 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 		checkPagedRegister(t, pagedRegister[ports.ExternalTrackingFactReviewRow]{
 			catalogue: ports.ExternalTrackingFactPages,
 			add: func(index int) string {
-				fact, version := fmt.Sprintf("SYN-EXTF-%d", index), fmt.Sprintf("SYN-EXTV-%d", index)
-				record := reviewFactRecord(t, pagedTenant, source.String(), fact, version, pagedAt.Add(time.Duration(index)*time.Minute))
+				record := pagedFactRecord(t, source, index)
 				if outcome := mustSaveTrackingFact(t, transactor, t.Context(), repository, record); outcome != ports.ExternalTrackingFactSaved {
-					t.Fatalf("事实 %s 落库 outcome = %s", fact, outcome)
+					t.Fatalf("事实 %s 落库 outcome = %s", record.Key.Fact, outcome)
 				}
-				return fact + "|" + version
+				return record.Key.Fact.String() + "|" + record.Key.Version.String()
 			},
 			list: func(tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.ExternalTrackingFactReviewRow], error) {
 				return repository.ListCurrentExternalTrackingFacts(t.Context(), tenant, source, ports.EveryCurrentVersion, limit, query)
@@ -538,6 +697,7 @@ func TestEveryTransportFulfillmentCataloguePagesWithoutRepeatsOrGapsAndCountsUnd
 				"待判断":       {url.Values{"effectiveBasis": {"PENDING"}}, 6},
 				"所有者显式判断":   {url.Values{"effectiveBasis": {"JUDGED_EXPLICITLY"}}, 0},
 				"q 命中事实":    {url.Values{"q": {"syn-extf-3"}}, 1},
+				"q 命中来源事件":  {url.Values{"q": {"syn-evt-4"}}, 1},
 				"q 的 % 按字面": {url.Values{"q": {"%"}}, 0},
 			},
 		})
