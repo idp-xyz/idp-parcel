@@ -1,7 +1,7 @@
 # 08 settlement-accounting 各册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-08-settlement`，worktree `idp-parcel-crpr-08`，基 `3a20b2bcc`；迁移编号 settlement-accounting `0056`，进 main 时按 tip 重核）
+Status: in-progress——非作者评审（钉 `5191ce705`）无阻断，三条非阻断已由派单方处理，待进 main（分支 `cursor/crpr-08-settlement`，worktree `idp-parcel-crpr-08`，基 `3a20b2bcc`；迁移编号 settlement-accounting `0056`，进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/settlementaccounting/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/settlement_accounting` 的一条新迁移（索引）。
@@ -121,6 +121,7 @@ go test -count=1 -p 1 -v -run 'TestEveryPagedSettlementCatalogue|TestPagedSettle
 - **审核应付的应付单号可缺**，不放作可排维（spec「可排维与行标识的列必须非空」）。
 - **走索引的用例是同形手写语句**。`TestSupplierBillReceptionDefaultOrderWalksTheReceivedAtIndex` EXPLAIN 的是与读面缺省序同形的手写查询：读面 SQL 由 `Plan` 在方法内拼出、不导出。读面形状若再改，这条用例不会跟着报。
 - **票面路由与代码不符**。票面写账单接收的路由是 `/settlement-supplier-bill-receptions`，那是 POST 登记口；列表读是 `GET /settlement-statements?registry=supplier-bill-reception`。
+- **两册的状态维没放（偏离 ADR-0144 决定四）**。账单接收的接收进度是读面派生的，客户对账单的作废也没放成筛选维，理由原先只写在声明注释里。连同 04、05、06、09、12 同类的几处收进 16 号票统一处理，不在本票豁免。
 
 ### 未验
 
@@ -128,3 +129,15 @@ go test -count=1 -p 1 -v -run 'TestEveryPagedSettlementCatalogue|TestPagedSettle
 - 全量 `scripts/test-full.sh` 未跑，由推送方在重放后的 tip 上跑。
 - 迁移 0056 未在演示库（`scripts/demo-seeds` 灌过的库）与任何存量库上跑过；约束对存量行的校验见判断项。
 - 大数据量下的计划选择未量：走索引的用例在小表上关掉顺序扫描与排序，证的是「能走」，不是「会选」。
+
+## 评审记录
+
+**评审 ← 子代理 · 钉 `5191ce705`**：两轴无阻断。`0056` 的 IMMUTABLE 由约束担保成立、迁移逐步在单个事务里执行、改 NOT VALID 无益（建索引仍要逐行求值），评审都核过。
+
+| 评审意见 | 处理 |
+|---|---|
+| 非阻断：`writePageQueryProblem` 的注释说册名「在 Intake 之前判」，与先 Intake 后分派的代码相反，引文全仓搜不到 | 删去那一句 |
+| 非阻断：账单接收的接收进度、客户对账单的作废没放状态维，票面判断项没点名，16 号票会漏掉 | 判断项补一条；派单方已收进 16 号票 |
+| 非阻断：缺省序走表达式索引的 EXPLAIN 用例是同形手写语句，读面形状再改它不会报 | 判断项已写明，保留 |
+
+修订由派单方在本分支上做（作者会话已收工），只动一句注释与本票面。评审用的隔离树在评审移除之前已被不明操作删去，探针都在那之前跑完。
