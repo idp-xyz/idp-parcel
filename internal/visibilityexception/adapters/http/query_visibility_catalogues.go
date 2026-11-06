@@ -105,12 +105,12 @@ var visibilityCataloguePages = map[string]*cataloguepage.Catalogue{
 //
 // 准入复用运营追踪查阅的 OperationsTrackingIntake，不新立一路：目录查阅与投影查阅
 // 同属租户内运营读面，授权边界同为租户（操作者查阅读对两者同形适用）。
-// kind 缺席或集外按坏请求拒：六种册子的行形状互不相同，替调用方选一种就是猜。kind
-// 的在场与取值属传输形状（与方法检查同级，先于 Intake），读它不构成读业务内容——
-// 未配置 Intake 对全部种类同答 403，分支选择不泄露任何东西。
+// kind 缺席或集外按坏请求拒：各种册子的行形状互不相同，替调用方选一种就是猜。kind 与其余
+// 查询参数一样在 Intake 之后才读：未配置 Intake 对一切请求同答 403（ADR-0055 决定三），答复
+// 不随种类、也不随 kind 写对写错而变。
 //
-// 翻页、排序与筛选照 ADR-0144：kind 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
-// 坏参数答 400 带理由散文，答复加 page；kind 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
+// 翻页、排序与筛选照 ADR-0144：kind 选定那一册，按该册声明解码（writePageQueryProblem 头注），
+// 坏参数答 400 带理由散文，答复加 page；kind 缺席或集外答不带理由的坏请求，与迁移前同答。
 func NewQueryVisibilityCataloguesEndpoint(
 	intake OperationsTrackingIntake,
 	reader VisibilityCatalogueReader,
@@ -122,15 +122,15 @@ func NewQueryVisibilityCataloguesEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeOperationsQuery(request.Context(), request)
+		if err != nil {
+			writeOperationsIntakeProblem(response, err)
+			return
+		}
 		kind := request.URL.Query().Get("kind")
 		catalogue, known := visibilityCataloguePages[kind]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, err := intake.IntakeOperationsQuery(request.Context(), request)
-		if err != nil {
-			writeOperationsIntakeProblem(response, err)
 			return
 		}
 		pageQuery, err := catalogue.Decode(request.URL.Query())

@@ -330,27 +330,58 @@ func TestOperationsVersionQueryReadsBackStoredVersions(t *testing.T) {
 	}
 }
 
-// Covers: 传输形状 — 两个定位参数同时在场按坏请求拒,且拒在 Intake 之前(intake 双身
-// 若被调用会答 INTAKE_FAILED,而这里必须是 MALFORMED_REQUEST)。
+// Covers: 两个定位参数同时在场按坏请求拒,读口三个方法都不被触到;定位参数在 Intake 之后才读,所以拒的
+// 是过了 Intake 的请求——Intake 不过时答的是 Intake 那一格(ADR-0055 决定三:未配置渠道同答 403)。
 func TestOperationsQueryRejectsAmbiguousLocators(t *testing.T) {
-	recorder := opsServe(t, operationsIntakeDouble{err: errors.New("must not be reached")},
-		&projectionReaderDouble{}, http.MethodGet,
-		"/tracking-projections?parcel=parcel-1&version=projection-2")
+	const target = "/tracking-projections?parcel=parcel-1&version=projection-2"
+	recorder := opsServe(t, operationsIntakeDouble{query: operationsScope(t)},
+		unreachableProjectionReader{t: t}, http.MethodGet, target)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", recorder.Code)
 	}
 	var body struct {
 		Error struct {
-			Code string `json:"code"`
+			Code   string `json:"code"`
+			Detail string `json:"detail"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Error.Code != "MALFORMED_REQUEST" {
-		t.Fatalf("code = %q, want MALFORMED_REQUEST", body.Error.Code)
+	if body.Error.Code != "MALFORMED_REQUEST" || body.Error.Detail != "" {
+		t.Fatalf("body = %s, want MALFORMED_REQUEST 不带 detail(与迁移前同答)", recorder.Body)
 	}
+
+	refused := opsServe(t, operationsIntakeDouble{err: errors.New("intake down")},
+		unreachableProjectionReader{t: t}, http.MethodGet, target)
+	if refused.Code != http.StatusInternalServerError || problemCode(t, refused) != "INTAKE_FAILED" {
+		t.Fatalf("Intake 不过:status = %d body = %s,want 500 INTAKE_FAILED", refused.Code, refused.Body)
+	}
+}
+
+// unreachableProjectionReader 在请求不该走到读口时被调用就判失败。
+type unreachableProjectionReader struct{ t *testing.T }
+
+func (reader unreachableProjectionReader) ListCurrent(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[domain.TrackingProjection], error) {
+	reader.t.Error("请求走到了追踪投影的列表读口")
+	return cataloguepage.Result[domain.TrackingProjection]{}, nil
+}
+
+func (reader unreachableProjectionReader) FindCurrent(
+	context.Context, domain.TenantID, domain.TrackedParcelReference,
+) (domain.TrackingProjection, bool, error) {
+	reader.t.Error("请求走到了按包裹取当前版的读口")
+	return domain.TrackingProjection{}, false, nil
+}
+
+func (reader unreachableProjectionReader) FindByVersion(
+	context.Context, domain.TenantID, domain.ProjectionVersionID,
+) (domain.TrackingProjection, bool, error) {
+	reader.t.Error("请求走到了按版本读回的读口")
+	return domain.TrackingProjection{}, false, nil
 }
 
 // Covers: ADR-0076 决定三沿 ADR-0055 — 未配置渠道对全部分支同答 403,无 outcome;

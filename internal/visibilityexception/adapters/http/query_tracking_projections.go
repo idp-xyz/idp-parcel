@@ -70,12 +70,11 @@ const (
 // NewQueryTrackingProjectionsEndpoint 交回运营追踪查阅的 HTTP 入口
 // (GET /tracking-projections,ADR-0076)。
 //
-// 列表、单件当前版与按版本读回共用一个端点,按 `parcel` / `version` 查询参数分派:
-// 参数是否在场属传输形状(与方法检查同级,先于 Intake),读它不构成读业务内容——
-// 未配置 Intake 对全部分支同答 403,分支选择不泄露任何东西。两个定位参数同时在场
-// 按坏请求拒:选哪个都是替调用方猜。
+// 列表、单件当前版与按版本读回共用一个端点,按 `parcel` / `version` 查询参数分派。查询参数
+// 一律在 Intake 之后才读,定位参数也不例外:未配置 Intake 对一切请求同答 403(ADR-0055 决定三),
+// 答复不随分支、也不随参数写对写错而变。两个定位参数同时在场按坏请求拒:选哪个都是替调用方猜。
 //
-// 列表那一支照 ADR-0144 在 Intake 之后按 ports.TrackingProjectionPages 解码(writePageQueryProblem 头注),坏参数答
+// 列表那一支照 ADR-0144 按 ports.TrackingProjectionPages 解码(writePageQueryProblem 头注),坏参数答
 // 400 带理由散文,答复加 page;按包裹或按版本取单件的两支先分派、不经解码,它们收的参数与列表的翻页集无关。
 func NewQueryTrackingProjectionsEndpoint(
 	intake OperationsTrackingIntake,
@@ -88,15 +87,15 @@ func NewQueryTrackingProjectionsEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeOperationsQuery(request.Context(), request)
+		if err != nil {
+			writeOperationsIntakeProblem(response, err)
+			return
+		}
 		hasParcel := request.URL.Query().Has("parcel")
 		hasVersion := request.URL.Query().Has("version")
 		if hasParcel && hasVersion {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, err := intake.IntakeOperationsQuery(request.Context(), request)
-		if err != nil {
-			writeOperationsIntakeProblem(response, err)
 			return
 		}
 		tenant := query.Scope.Tenant()

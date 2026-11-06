@@ -88,8 +88,9 @@ func etServe(
 	return recorder
 }
 
-// Covers: registry 是传输形状——缺席或集外按坏请求拒（两本册子行形状不同，替调用方
-// 选就是猜）；方法检查同级先行。
+// Covers: 配置了的渠道上 registry 缺席或集外按坏请求拒（各册行形状不同，替调用方
+// 选就是猜）；方法检查先行。registry 在 Intake 之后才读，未配置渠道的那一面见
+// TestSelectorEndpointsAnswerTheUnconfiguredChannelBeforeReadingSelectors。
 func TestExceptionTriageRecordsRefuseWrongMethodAndForeignRegistry(t *testing.T) {
 	intake := operationsIntakeDouble{query: operationsScope(t)}
 
@@ -114,7 +115,7 @@ func TestExceptionTriageRecordsRefuseWrongMethodAndForeignRegistry(t *testing.T)
 	}
 }
 
-// Covers: 完成标准「未启用隔离读准入时答 403」——未配置 Intake 对两本册子同答
+// Covers: 完成标准「未启用隔离读准入时答 403」——未配置 Intake 对每本册子同答
 // 403 + ACCESS_CHANNEL_NOT_CONFIGURED，读口不被触到，4xx 不带 outcome。
 func TestExceptionTriageRecordsUnconfiguredIntakeRefusesEveryRegistry(t *testing.T) {
 	for _, registry := range triageRegistries {
