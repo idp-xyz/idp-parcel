@@ -15,6 +15,7 @@ import { Field, ReferencePickerFor, fieldLabel, selectClass, useLoaded } from '.
 import { authorizedDeliveringPartyRole } from './authorized-delivery-scope';
 import {
   AdvancedGroup,
+  FormGroup,
   RevisionField,
   SnapshotJsonDetails,
   WallTimeField,
@@ -56,8 +57,11 @@ export interface PartyRelationshipRegistrationFormProps {
   knownRelationships: readonly PartyRelationshipRecord[] | null;
   /** 页面持有的参与方列表答案（给双方候选用）；首取回来之前为 null。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
-  /** 登记册答 `REGISTERED` 时回调，页面借它重取关系列表。 */
-  onRegistered: () => void;
+  /**
+   * 登记册答 `REGISTERED` 时回调，页面借它重取关系列表。逐字段那条路把送出的草稿交回，列表页据它选中刚登的那一段
+   * （票 business-party-ux/06）；JSON 镜像那条路交 null。嵌入形态的调用方不用它也没关系。
+   */
+  onRegistered: (sent: PartyRelationshipDraft | null) => void;
   /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
   onUnsavedChange?: (unsaved: boolean) => void;
   /**
@@ -122,7 +126,8 @@ export function PartyRelationshipRegistrationForm({
             记录谁对谁担任什么角色、从什么时候开始。双方都要先登记为往来单位；没有批准信息的先作为待确认关系，批准后再保存一次。
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* 两段：先说这段关系是谁对谁、什么角色、管哪些业务，再说从何时到何时、依据什么（票 business-party-ux/06）。 */}
+          <FormGroup title="双方与角色">
             <ReferencePickerFor<BusinessPartyListResponseBody>
               label="哪一方 *"
               path="relationships[0].holder"
@@ -217,7 +222,9 @@ export function PartyRelationshipRegistrationForm({
                 <span className="block type-body text-idpxyz-breadcrumb mt-1">这段关系管哪些业务；按公司约定的写法填。</span>
               </Field>
             )}
+          </FormGroup>
 
+          <FormGroup title="有效期与依据">
             <WallTimeField
               label="开始时间 *"
               path="relationships[0].effectiveStartsAt"
@@ -263,7 +270,7 @@ export function PartyRelationshipRegistrationForm({
                   : '给这段关系起一个内部编号，登记后不能改。'}
               </span>
             </Field>
-          </div>
+          </FormGroup>
 
           {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
           <div className="flex flex-col gap-3 rounded border border-idpxyz-border p-3">

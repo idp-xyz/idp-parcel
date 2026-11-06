@@ -33,8 +33,11 @@ import { BusinessPartyIdentificationFields } from './BusinessPartyIdentification
 export interface BusinessPartyRegistrationFormProps {
   /** 页面已取回的参与方列表（给修订号建议用）；列表没取到传 null，建议一律为 1。 */
   knownParties: readonly BusinessPartyRecord[] | null;
-  /** 登记册答 `REGISTERED` 时回调，页面借它重取列表让新行在「往来单位」册立刻可见。 */
-  onRegistered: () => void;
+  /**
+   * 登记册答 `REGISTERED` 时回调，页面借它重取列表让新行在「往来单位」册立刻可见。逐字段那条路把送出的草稿交回，
+   * 页面据它选中刚登的那一行（票 business-party-ux/06）；JSON 镜像那条路交 null。
+   */
+  onRegistered: (sent: BusinessPartyDraft | null) => void;
   /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
   onUnsavedChange?: (unsaved: boolean) => void;
 }
@@ -83,11 +86,13 @@ export function BusinessPartyRegistrationForm({
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* 字段的来历都说在这一段里，格下只留会改变操作的那一句（票 business-party-ux/06）：每格下面各挂一两句，整张表读起来像文档。 */}
           <p className="type-body text-idpxyz-breadcrumb">
-            登记一家新的往来单位。要更正已登记单位的名称或识别信息，到它的对象页用「更正登记信息」，那里会带上它已登的内容。
+            登记一家新的往来单位：名称、内部编码、这次登记依据的单据，以及从何时起可以与它建立合作关系。要更正已登记单位的名称或
+            识别信息，到它的对象页用「更正登记信息」，那里会带上它已登的内容。
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <FormGroup title="单位身份">
             <Field label="名称 *" path="businessParties[0].name" problems={problems}>
               <Input
                 value={draft.name}
@@ -107,9 +112,7 @@ export function BusinessPartyRegistrationForm({
                 onChange={(event) => patch({ partyId: event.target.value })}
               />
               <span className="block type-body text-idpxyz-breadcrumb mt-1">
-                {known
-                  ? `这个编码已登记为「${known.partyName}」；这次保存会更新它的名称或来源单据。`
-                  : '给内部用的短编码，建议用单位简称；登记后不能改，前后不要带空格。'}
+                {known ? `这个编码已登记为「${known.partyName}」；这次保存会更新它的名称或来源单据。` : '登记后不能改；前后不要带空格。'}
               </span>
             </Field>
 
@@ -121,7 +124,6 @@ export function BusinessPartyRegistrationForm({
                 placeholder="合同编号、邮件或审批单号"
                 onChange={(event) => patch({ basis: event.target.value })}
               />
-              <span className="block type-body text-idpxyz-breadcrumb mt-1">这次登记依据的是哪份单据，方便以后追溯。</span>
             </Field>
 
             <WallTimeField
@@ -132,9 +134,9 @@ export function BusinessPartyRegistrationForm({
               locked={locked}
               timeZone={timeZone}
               onChange={(effectiveFrom) => patch({ effectiveFrom })}
-              note="从这一刻起可以与它建立合作关系；填未来的时间就先显示为待生效。"
+              note="填未来的时间就先显示为待生效。"
             />
-          </div>
+          </FormGroup>
 
           <FormGroup
             title="识别信息（选填）"

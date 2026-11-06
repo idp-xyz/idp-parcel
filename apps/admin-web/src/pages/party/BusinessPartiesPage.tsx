@@ -49,10 +49,13 @@ import {
   profileEditHash,
   profileEditRequested,
   registerViewHash,
+  registeredRowHash,
   withoutDeactivationPreset,
   type BusinessPartyRegister,
   type DeactivationPreset,
 } from './business-parties-address';
+import type { BusinessPartyDraft } from './business-party-form';
+import type { PartyRelationshipDraft } from './party-relationship-form';
 import { BusinessPartyDetailPage } from './BusinessPartyDetailPage';
 import { BusinessPartyDetailPanel } from './BusinessPartyDetailPanel';
 import { BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
@@ -354,8 +357,9 @@ function RegisterForms({
   parties,
   knownParties,
   knownRelationships,
-  onPartiesChanged,
-  onRelationshipsChanged,
+  onPartyRegistered,
+  onRelationshipRegistered,
+  onDeactivated,
   preset,
   reportUnsaved,
 }: {
@@ -364,8 +368,10 @@ function RegisterForms({
   parties: ApiResult<BusinessPartyListResponseBody> | null;
   knownParties: readonly BusinessPartyRecord[] | null;
   knownRelationships: readonly PartyRelationshipRecord[] | null;
-  onPartiesChanged: () => void;
-  onRelationshipsChanged: () => void;
+  /** 两张登记表单落册后的回调，带着送出的草稿（JSON 镜像那条路为 null）；页面据它重取并选中刚登的那一行。 */
+  onPartyRegistered: (sent: BusinessPartyDraft | null) => void;
+  onRelationshipRegistered: (sent: PartyRelationshipDraft | null) => void;
+  onDeactivated: () => void;
   /** 深链带来的停用预填。 */
   preset: DeactivationPreset | null;
   reportUnsaved: Record<BusinessPartyRegister, (unsaved: boolean) => void>;
@@ -377,7 +383,7 @@ function RegisterForms({
         <div className={register === 'business-party' ? 'contents' : 'hidden'}>
           <BusinessPartyRegistrationForm
             knownParties={knownParties}
-            onRegistered={onPartiesChanged}
+            onRegistered={onPartyRegistered}
             onUnsavedChange={reportUnsaved['business-party']}
           />
         </div>
@@ -387,7 +393,7 @@ function RegisterForms({
           <PartyRelationshipRegistrationForm
             knownRelationships={knownRelationships}
             parties={parties}
-            onRegistered={onRelationshipsChanged}
+            onRegistered={onRelationshipRegistered}
             onUnsavedChange={reportUnsaved['party-relationship']}
           />
         </div>
@@ -396,7 +402,7 @@ function RegisterForms({
         <div className={register === 'identity-deactivation' ? 'contents' : 'hidden'}>
           <IdentityDeactivationForm
             parties={parties}
-            onDeactivated={onPartiesChanged}
+            onDeactivated={onDeactivated}
             preset={preset}
             onUnsavedChange={reportUnsaved['identity-deactivation']}
           />
@@ -569,6 +575,45 @@ export function BusinessPartiesPage() {
     window.location.replace(registerViewHash(window.location.hash, null));
   };
   const requestLeaveRegister = () => (anyUnsaved ? setConfirmingLeave(true) : leaveRegister());
+  // 登完就去看结果（票 business-party-ux/06）：回列表、选中刚登的那一行，右栏随之打开。地址用替换而不是后退——后退会带回进登记
+  // 视图之前那一条地址上的检索词，刚登的那一行可能正被它筛掉；状态与类型筛选同理由 apply 清掉。别的表单还有没提交的输入时
+  // 不自动离开（离开会把那份草稿连表单一起卸掉），只重取，人自己走。JSON 镜像那条路交回 null：不知道登了谁，只回列表。
+  const showRegistered = (otherUnsaved: boolean, apply: (() => void) | null) => {
+    if (otherUnsaved) return;
+    setConfirmingLeave(false);
+    setPreset(null);
+    pushedRegister.forget();
+    window.location.replace(registeredRowHash(window.location.hash));
+    apply?.();
+  };
+  const onPartyRegistered = (sent: BusinessPartyDraft | null) => {
+    parties.retry();
+    showRegistered(
+      unsaved['party-relationship'] || unsaved['identity-deactivation'],
+      sent &&
+        (() => {
+          setBook('identities');
+          setStatus('ALL');
+          setType('ALL');
+          setSelectedParty(sent.partyId);
+        }),
+    );
+  };
+  const onRelationshipRegistered = (sent: PartyRelationshipDraft | null) => {
+    relationships.retry();
+    showRegistered(
+      unsaved['business-party'] || unsaved['identity-deactivation'],
+      sent &&
+        (() => {
+          setBook('relationships');
+          setRelationshipSearch('');
+          setRole('ALL');
+          setRelationshipStatus('ALL');
+          setAttentionOnly(false);
+          setSelectedRelationship(sent.relationshipId);
+        }),
+    );
+  };
 
   // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
   const knownParties = parties.answer?.kind === 'outcome' ? parties.answer.body.parties : null;
@@ -644,8 +689,9 @@ export function BusinessPartiesPage() {
           parties={parties.answer}
           knownParties={knownParties}
           knownRelationships={knownRelationships}
-          onPartiesChanged={parties.retry}
-          onRelationshipsChanged={relationships.retry}
+          onPartyRegistered={onPartyRegistered}
+          onRelationshipRegistered={onRelationshipRegistered}
+          onDeactivated={parties.retry}
           preset={preset}
           reportUnsaved={reportUnsaved}
         />

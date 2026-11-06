@@ -88,7 +88,7 @@ export function BusinessPartyIdentificationFields({
               emptyNote={`还没有配置任何注册号类型：${numberTypeCatalogueHint}。`}
               readFace="注册号类型目录"
               manualPlaceholder="国家 / 地区码（如 CN、SG）"
-              optionsNote="登了注册号，就能认出同一家公司有没有被登过两次。"
+              optionsNote="注册号的类型按注册地列出，先选它。"
             />
           </div>
     

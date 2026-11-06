@@ -1,7 +1,7 @@
 # 06 登记表单版式：两列、分段、提示一行；保存后选中新单位
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始
 

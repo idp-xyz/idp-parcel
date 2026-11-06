@@ -13,7 +13,7 @@
 // 只带种类与标识，不带修订号、依据与时点：那几格要停用的人自己看过当前修订后填，地址里带过来的值会被当成已核对过。
 // 只带 `deactivate` 与 `id`、不带 `register` 的旧链接同样落到停用表单——那两个键在场本身就说明了去处。
 
-import { decodeHashSegment, hashQueryValue, hashWithQueryValue } from '../../templates/address-query';
+import { ADDRESS_KEYWORD_PARAM, decodeHashSegment, hashQueryValue, hashWithQueryValue } from '../../templates/address-query';
 import { isIdentityKind } from './identity-deactivation-form';
 import type { IdentityKind } from './presentation';
 
@@ -64,6 +64,14 @@ export function businessPartiesViewOf(hash: string): BusinessPartiesView {
 /** 进出登记视图、或在视图里换册的地址：只改登记键，路径与检索词等别的键原样；传 null 即回列表。 */
 export function registerViewHash(hash: string, register: BusinessPartyRegister | null): string {
   return hashWithQueryValue(hash, REGISTER_VIEW_PARAM, register ?? '');
+}
+
+/**
+ * 登完去看结果的地址（票 business-party-ux/06）：回列表并清掉检索词，别的键原样。清检索词是因为页面接着要选中刚登的那一行、
+ * 让右栏打开，而进登记视图之前留在地址上的检索词多半对不上新行，会把它筛掉。
+ */
+export function registeredRowHash(hash: string): string {
+  return hashWithQueryValue(registerViewHash(hash, null), ADDRESS_KEYWORD_PARAM, '');
 }
 
 /** 参与方对象页的地址（hash 二段）。壳层拿前两段作标签 id，对象页因此另开一张标签，列表留在原处。 */
