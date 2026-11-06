@@ -30,7 +30,8 @@ const outcomeReferenceSeriesListed = "REFERENCE_SERIES_LISTED"
 // 装配票)。逐期取值不在响应里:期次的消费口是按计价基准时点的解析,目录只答
 // 「登了哪些版本、什么来源、什么证据等级」。
 //
-// 查询参数（after、sort、kind、seriesId 与 q）按 ports.ReferenceSeriesPages 解码（ADR-0144 决定六），先于 Intake。
+// 查询参数（after、sort、kind、seriesId 与 q）按 ports.ReferenceSeriesPages 解码（ADR-0144 决定六），在 Intake 之后
+// （decodePageQuery 头注）。
 func NewQueryReferenceSeriesEndpoint(
 	intake PricingCatalogueIntake,
 	reader ReferenceSeriesCatalogueReader,
@@ -42,14 +43,14 @@ func NewQueryReferenceSeriesEndpoint(
 			return
 		}
 
-		pageQuery, err := decodePageQuery(ports.ReferenceSeriesPages, request)
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodePageQuery(ports.ReferenceSeriesPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 

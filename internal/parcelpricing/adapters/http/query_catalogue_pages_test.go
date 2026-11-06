@@ -14,8 +14,8 @@ import (
 )
 
 // 本文件对评价、价卡、参考序列与参考序列覆盖四个目录端点证 ADR-0144 的传输半边（票 catalogue-read-pagination-rollout/04）：
-// 查询参数按各册声明解成查询对象原样交给读口、答复带 page；声明外的一问答 400 带理由散文、读口不被调用；查询参数属传输
-// 形状、先于 Intake。草稿视图挂操作者登记 Intake，同一组断言在 query_price_card_drafts_test.go。
+// 查询参数按各册声明解成查询对象原样交给读口、答复带 page；声明外的一问答 400 带理由散文、读口不被调用；解码在 Intake
+// 之后，渠道未配置时参数写对写错都答 403。草稿视图挂操作者登记 Intake，同一组断言在 query_price_card_drafts_test.go。
 
 // pagedCatalogue 是一个目录端点在本文件里用到的几样：怎么搭起来、它的册声明、一条声明内的查询串与读口该收到的条件、
 // 一个合法的游标位置，以及只在本册声明外的几问。
@@ -177,7 +177,7 @@ func TestPricingCataloguesHonourACursorOnlyUnderItsOwnConditions(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定一、三、四——集外的键、集外的排序维、词表外或为空的筛选值、解不开的游标与坏转义都答 400 带理由散文，
-// 读口不被调用；查询参数先于 Intake：渠道未配置时写错参数也先答 400 且理由点到那一格，写对了才答 403。
+// 理由点到那一格，读口不被调用。解码在 Intake 之后：渠道未配置时参数写对写错都答 403，答复不随请求内容变（ADR-0055 决定三）。
 func TestPricingCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	everywhere := map[string]string{
 		"自报租户":   "tenant=SYN-TENANT-02",
@@ -199,13 +199,25 @@ func TestPricingCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 			}
 		}
 
-		t.Run(paged.path+"/先于 Intake", func(t *testing.T) {
-			endpoint, _ := paged.serve(pricinghttp.UnconfiguredIntake{}, pageProbe{})
+		t.Run(paged.path+"/理由点到那一格", func(t *testing.T) {
+			endpoint, _ := paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{})
 			if detail := assertPageQueryRefused(t, getPaged(endpoint, paged.path+"?tenant=SYN-TENANT-02")); !strings.Contains(detail, "tenant") {
 				t.Fatalf("理由散文应点到那一格：%q", detail)
 			}
-			if recorder := getPaged(endpoint, paged.path+"?"+paged.accepted); recorder.Code != http.StatusForbidden {
-				t.Fatalf("参数写对、渠道未配置 status = %d, want 403", recorder.Code)
+		})
+
+		t.Run(paged.path+"/渠道未配置", func(t *testing.T) {
+			endpoint, probe := paged.serve(pricinghttp.UnconfiguredIntake{}, pageProbe{})
+			var answers []string
+			for _, query := range []string{"tenant=SYN-TENANT-02", paged.accepted} {
+				recorder := getPaged(endpoint, paged.path+"?"+query)
+				if recorder.Code != http.StatusForbidden || errorCode(t, recorder) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+					t.Fatalf("%s：status = %d；body = %s", query, recorder.Code, recorder.Body)
+				}
+				answers = append(answers, recorder.Body.String())
+			}
+			if answers[0] != answers[1] || probe.called {
+				t.Fatalf("未配置的渠道答复随查询串变了或走到了读口：%q / %q", answers[0], answers[1])
 			}
 		})
 	}

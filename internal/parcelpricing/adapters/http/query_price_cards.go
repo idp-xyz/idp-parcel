@@ -30,7 +30,7 @@ const outcomePriceCardsListed = "PRICE_CARDS_LISTED"
 // NewQueryPriceCardsEndpoint 交回价卡目录查阅的 HTTP 入口
 // (GET /pricing-price-cards,ADR-0077、票 master-data-wiring/02;最终路径归装配票)。
 //
-// 查询参数（after、sort、direction 与 q）按 ports.PriceCardPages 解码（ADR-0144 决定六），先于 Intake。
+// 查询参数（after、sort、direction 与 q）按 ports.PriceCardPages 解码（ADR-0144 决定六），在 Intake 之后（decodePageQuery 头注）。
 func NewQueryPriceCardsEndpoint(
 	intake PricingCatalogueIntake,
 	reader PriceCardCatalogueReader,
@@ -42,14 +42,14 @@ func NewQueryPriceCardsEndpoint(
 			return
 		}
 
-		pageQuery, err := decodePageQuery(ports.PriceCardPages, request)
-		if err != nil {
-			writePageQueryProblem(response, err)
-			return
-		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := decodePageQuery(ports.PriceCardPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 
