@@ -429,8 +429,8 @@ const noUnsaved: Record<BusinessPartyRegister, boolean> = {
  *
  * 形态照集团与法人页（GroupLegalEntitiesPage，票 business-parties-uiux/01，用户令「参考集团与法人实现」）：命令头指标可点即筛、
  * 状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏
- * `/` 检索。两册之间用页顶一条签切换，签上带各册总数；两册的检索、筛选、排序与选中行都挂在页面上，换册再换回来还在。
- * 没有用工作台模板的插槽放册切换：模板的命令头是一册的指标，册切换得在它上面。
+ * `/` 检索。两册之间用命令头标题旁的一条签切换（模板的 titleAside 插槽，票 business-party-ux/07），签上带各册总数；两册的检索、
+ * 筛选、排序与选中行都挂在页面上，换册再换回来还在。册切换不进 kpis：那是一册的指标，册切换是页面级的。
  *
  * 登记从页头主动作进登记视图，不再是第三个签：主动作登当前读册那一本，另两本收进旁边的「更多」。登记视图住在地址上
  * （`?register=<册>`，判读在 business-parties-address.ts）：刷新仍停在登记视图、换册只换键值不压历史，浏览器后退回列表。
@@ -742,9 +742,10 @@ export function BusinessPartiesPage() {
   ) : undefined;
 
   // 两册的签上带总数：总数只在拿到业务答案后显示——未配置态与错误态下报「0」会与状态区「这不是目录为空」直接矛盾。
+  // 签条放进工作台命令头的标题旁插槽（票 business-party-ux/07），不再在模板上面独占一条。
   const bookStrip = (
     <Tabs value={book} onValueChange={(next) => setBook(next as Book)} className="shrink-0 gap-0">
-      <TabsList className="shrink-0 px-4" aria-label="选择读册">
+      <TabsList className="h-8 shrink-0" aria-label="选择读册">
         <TabsTrigger value="identities">
           往来单位
           {partiesAnswered ? <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{partyRows.length}</span> : null}
@@ -795,10 +796,10 @@ export function BusinessPartiesPage() {
 
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
-        {bookStrip}
         <WorkbenchPageTemplate<BusinessPartyRecord>
           title={info.title}
           subtitle="与我们有业务往来的客户、承运商、代理等单位：在这里登记、查看状态，并建立合作关系"
+          titleAside={bookStrip}
           kpis={kpis}
           // 刷新连法人册一起重取：刚在「公司主体」页登完的公司，回到这里按一下就该显成「我方公司」。
           onRefresh={() => {
@@ -924,10 +925,10 @@ export function BusinessPartiesPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
-      {bookStrip}
       <WorkbenchPageTemplate<PartyRelationshipRecord>
         title={info.title}
         subtitle="谁对谁担任什么角色、合作多久；到期或撤销后，新的业务不再按这段关系办"
+        titleAside={bookStrip}
         kpis={kpis}
         onRefresh={relationships.retry}
         refreshing={relationships.pending}

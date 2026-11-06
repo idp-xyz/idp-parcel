@@ -32,3 +32,15 @@ test('任意值都带 color: 类型提示', () => {
   const html = renderToStaticMarkup(createElement(StatusPill, { code: 'REJECTED' }));
   equal(/-\[var\(/.test(html), false);
 });
+
+// Covers: 图标按语气配（票 business-party-ux/07），色不是唯一载体；图标对读屏隐藏，词仍是文字。
+test('每种语气各配一枚图标，图标对读屏隐藏', () => {
+  const iconOf = (props: Parameters<typeof StatusPill>[0]) =>
+    renderToStaticMarkup(createElement(StatusPill, props)).match(/data-icon="([a-z]+)"/)?.[1];
+  equal(iconOf({ code: 'EFFECTIVE' }), 'check');
+  equal(iconOf({ code: 'REGISTERED' }), 'clock');
+  equal(iconOf({ code: 'PUBLISHED' }), 'info');
+  equal(iconOf({ code: 'REJECTED' }), 'x');
+  equal(iconOf({ code: 'DEACTIVATED' }), 'minus');
+  match(renderToStaticMarkup(createElement(StatusPill, { code: 'EFFECTIVE' })), /<svg aria-hidden="true"/);
+});

@@ -48,6 +48,11 @@ export interface WorkbenchPageTemplateProps<Row> {
   /** 页面内工作台的稳定键；给出时在工作区标签往返中恢复分栏与滚动，多个工作台分别命名。 */
   viewStateKey?: string;
   subtitle?: string;
+  /**
+   * 标题旁的插槽（票 business-party-ux/07）：一页几本读册之间的切换签放这里，与标题同一行，不再在模板上面另占一条。
+   * 它是页面级的切换，不是一册的指标，所以不进 kpis。不传不渲染，渲染逐字节同。
+   */
+  titleAside?: ReactNode;
   kpis?: WorkbenchKpi[];
   /** 刷新钮；refreshing 由调用方按「有没有一问在途」给，收尾时模板报 toast。 */
   onRefresh?: () => void;
@@ -102,6 +107,7 @@ export function WorkbenchPageTemplate<Row>({
   title,
   viewStateKey,
   subtitle,
+  titleAside,
   kpis,
   onRefresh,
   refreshing = false,
@@ -366,6 +372,7 @@ export function WorkbenchPageTemplate<Row>({
           <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
           {subtitle && <p className="truncate type-body text-idpxyz-breadcrumb">{subtitle}</p>}
         </div>
+        {titleAside != null && <div className="flex shrink-0 items-center">{titleAside}</div>}
         {kpis && kpis.length > 0 && (
           <>
             <div className="hidden h-7 w-px shrink-0 bg-idpxyz-border 2xl:block" />
@@ -373,7 +380,8 @@ export function WorkbenchPageTemplate<Row>({
               {kpis.map((kpi) =>
                 kpi.custom != null ? (
                   <div key={kpi.label} className="flex flex-col gap-0.5 px-1">
-                    <span className="whitespace-nowrap type-body uppercase tracking-wide text-idpxyz-breadcrumb">
+                    {/* 指标标签不做大写字距（票 business-party-ux/07）：那是给拉丁字母设计的，本仓标签是中文，对它不起作用。 */}
+                    <span className="whitespace-nowrap type-body text-idpxyz-breadcrumb">
                       {kpi.label}
                     </span>
                     {kpi.custom}
@@ -390,7 +398,7 @@ export function WorkbenchPageTemplate<Row>({
                       kpi.active ? 'bg-idpxyz-activeItem ring-1 ring-idpxyz-accent' : 'hover:bg-idpxyz-hover'
                     }`}
                   >
-                    <span className="flex items-center gap-1 whitespace-nowrap type-body uppercase leading-none tracking-wide text-idpxyz-breadcrumb">
+                    <span className="flex items-center gap-1 whitespace-nowrap type-body leading-none text-idpxyz-breadcrumb">
                       {kpi.icon}
                       {kpi.label}
                     </span>

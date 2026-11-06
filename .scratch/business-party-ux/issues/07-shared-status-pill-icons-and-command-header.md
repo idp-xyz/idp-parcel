@@ -1,7 +1,7 @@
 # 07 共用面：状态胶囊带图标、工作台指标标签中文样式、标题旁插槽放册签
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始
 
