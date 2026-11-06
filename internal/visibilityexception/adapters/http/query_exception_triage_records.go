@@ -59,8 +59,9 @@ var triageRegistryPages = map[string]*cataloguepage.Catalogue{
 // 「处置」语义。发作期册的 outcome 筛选维不是决定参数：它只按行上已记下的分诊结论收窄，
 // 不替任何一段发作期下结论。
 //
-// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
-// 坏参数答 400 带理由散文，答复加 page；registry 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
+// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，按该册声明解码（writePageQueryProblem 头注），坏参数答 400 带
+// 理由散文，答复加 page。registry 与其余查询参数一样在 Intake 之后才读：未配置 Intake 对一切请求同答 403（ADR-0055
+// 决定三）；配置了的渠道上 registry 缺席或集外答不带理由的坏请求，与迁移前同答。
 func NewQueryExceptionTriageRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader TriageReviewReader,
@@ -71,15 +72,15 @@ func NewQueryExceptionTriageRecordsEndpoint(
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		query, err := intake.IntakeOperationsQuery(request.Context(), request)
+		if err != nil {
+			writeOperationsIntakeProblem(response, err)
+			return
+		}
 		registry := request.URL.Query().Get("registry")
 		catalogue, known := triageRegistryPages[registry]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, err := intake.IntakeOperationsQuery(request.Context(), request)
-		if err != nil {
-			writeOperationsIntakeProblem(response, err)
 			return
 		}
 		pageQuery, err := catalogue.Decode(request.URL.Query())

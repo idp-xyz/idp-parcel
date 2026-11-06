@@ -65,8 +65,9 @@ var claimsRecoveryRegistryPages = map[string]*cataloguepage.Catalogue{
 // **金额零字段**：赔付金额、追回金额属结算与财务上下文（CONTEXT「证据、客户索赔与追偿」一节：「`UC-SA-007` 唯一形成赔付和追偿金额」），
 // 各册子的行上连键都不存在，前端模板的金额列由它们的读面回答。
 //
-// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
-// 坏参数答 400 带理由散文，答复加 page；registry 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
+// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，按该册声明解码（writePageQueryProblem 头注），坏参数答 400 带
+// 理由散文，答复加 page。registry 与其余查询参数一样在 Intake 之后才读：未配置 Intake 对一切请求同答 403（ADR-0055
+// 决定三）；配置了的渠道上 registry 缺席或集外答不带理由的坏请求，与迁移前同答。
 func NewQueryClaimsRecoveryRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader ClaimsRecoveryReviewReader,
@@ -77,15 +78,15 @@ func NewQueryClaimsRecoveryRecordsEndpoint(
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		query, err := intake.IntakeOperationsQuery(request.Context(), request)
+		if err != nil {
+			writeOperationsIntakeProblem(response, err)
+			return
+		}
 		registry := request.URL.Query().Get("registry")
 		catalogue, known := claimsRecoveryRegistryPages[registry]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, err := intake.IntakeOperationsQuery(request.Context(), request)
-		if err != nil {
-			writeOperationsIntakeProblem(response, err)
 			return
 		}
 		pageQuery, err := catalogue.Decode(request.URL.Query())

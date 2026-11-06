@@ -187,17 +187,20 @@ func pagedLists() []pagedList {
 	}
 }
 
-// Covers: ADR-0144 决定五、六——各册的列表端点各过一遍：答复带 page（size 取 Intake 给的页大小，next 与 total 原样
-// 带出）；查询参数解成查询对象原样交给读口，选择器只选册、不进筛选。
+// Covers: ADR-0144 决定二、五、六——各册的列表端点各过一遍：答复带 page（size 取 Intake 给的页大小，next 与 total 原样
+// 带出）；查询参数解成查询对象原样交给读口，选择器只选册、不进筛选。Intake 的页大小取一个不像缺省值的数，size 对上
+// 才说明它来自 Intake。
 func TestListEndpointsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	for _, list := range pagedLists() {
 		t.Run(list.name, func(t *testing.T) {
-			response, query, called := list.probe(t, operationsIntakeDouble{query: operationsScope(t)}, list.good)
+			intake := operationsIntakeDouble{query: operationsScope(t)}
+			intake.query.Limit = 13
+			response, query, called := list.probe(t, intake, list.good)
 			if response.Code != http.StatusOK || !called {
 				t.Fatalf("status = %d called = %v；body = %s", response.Code, called, response.Body)
 			}
 			page := pageOf(t, response)
-			if string(page["size"]) != "50" || string(page["next"]) != `"`+pagedCursor+`"` || string(page["total"]) != "7" {
+			if string(page["size"]) != "13" || string(page["next"]) != `"`+pagedCursor+`"` || string(page["total"]) != "7" {
 				t.Fatalf("page 不对：%s", response.Body.Bytes())
 			}
 			if query.Sort != list.wantSort || query.Keyword != "SYN" || query.After != nil ||
@@ -256,8 +259,8 @@ func TestListEndpointsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	}
 }
 
-// Covers: spec 取舍 8 与 ADR-0055 决定三——解码在 Intake 之后：渠道未配置时参数写对写错都答同一个 403，读口不被调用，
-// 没有凭据的调用方探不出各册开放了哪些查询维度。
+// Covers: spec「端点先 Intake、后解码查询参数」与 ADR-0055 决定三——渠道未配置时参数写对写错都答同一个 403，读口不被
+// 调用，没有凭据的调用方探不出各册开放了哪些查询维度。
 func TestListEndpointsAnswerTheUnconfiguredChannelBeforeDecoding(t *testing.T) {
 	for _, list := range pagedLists() {
 		t.Run(list.name, func(t *testing.T) {
@@ -271,6 +274,121 @@ func TestListEndpointsAnswerTheUnconfiguredChannelBeforeDecoding(t *testing.T) {
 			}
 			if !bytes.Equal(bodies[0], bodies[1]) {
 				t.Fatalf("答复随参数变了：%s / %s", bodies[0], bodies[1])
+			}
+		})
+	}
+}
+
+// selectorEndpoint 是按选择器或定位参数分派的一个端点，读口一律换成被调用就判失败的替身。good 是该端点上合规的几问；
+// refusals 是迁移前就有、不经各册声明的坏请求：选择器缺席、取空或集外，定位参数取空或同时在场。
+type selectorEndpoint struct {
+	name     string
+	serve    func(t *testing.T, intake visibilityhttp.OperationsTrackingIntake, target string) *httptest.ResponseRecorder
+	good     []string
+	refusals map[string]string
+}
+
+func selectorEndpoints() []selectorEndpoint {
+	return []selectorEndpoint{
+		{
+			name: "tracking-projections",
+			serve: func(t *testing.T, intake visibilityhttp.OperationsTrackingIntake, target string) *httptest.ResponseRecorder {
+				return opsServe(t, intake, unreachableProjectionReader{t: t}, http.MethodGet, target)
+			},
+			good: []string{
+				"/tracking-projections?sort=parcel",
+				"/tracking-projections?parcel=SYN-PARCEL-1",
+				"/tracking-projections?version=SYN-VERSION-1",
+			},
+			refusals: map[string]string{
+				"定位参数同时在场":   "/tracking-projections?parcel=SYN-PARCEL-1&version=SYN-VERSION-1",
+				"parcel 取空":  "/tracking-projections?parcel=",
+				"version 取空": "/tracking-projections?version=",
+			},
+		},
+		{
+			name: "exception-triage-records",
+			serve: func(t *testing.T, intake visibilityhttp.OperationsTrackingIntake, target string) *httptest.ResponseRecorder {
+				return etServe(t, intake, unreachableTriageReader{t: t}, http.MethodGet, target)
+			},
+			good: []string{"/exception-triage-records?registry=signal-episode&sort=lastHitAt"},
+			refusals: map[string]string{
+				"registry 缺席": "/exception-triage-records?sort=lastHitAt",
+				"registry 取空": "/exception-triage-records?registry=",
+				"registry 集外": "/exception-triage-records?registry=SYN-REGISTRY",
+			},
+		},
+		{
+			name: "claims-recovery-records",
+			serve: func(t *testing.T, intake visibilityhttp.OperationsTrackingIntake, target string) *httptest.ResponseRecorder {
+				return crServe(t, intake, unreachableClaimsReader{t: t}, http.MethodGet, target)
+			},
+			good: []string{"/claims-recovery-records?registry=claim-item&sort=submittedAt"},
+			refusals: map[string]string{
+				"registry 缺席": "/claims-recovery-records?sort=submittedAt",
+				"registry 取空": "/claims-recovery-records?registry=",
+				"registry 集外": "/claims-recovery-records?registry=SYN-REGISTRY",
+			},
+		},
+		{
+			name: "visibility-catalogues",
+			serve: func(t *testing.T, intake visibilityhttp.OperationsTrackingIntake, target string) *httptest.ResponseRecorder {
+				return vcServe(t, intake, unreachableCatalogueReader{t: t}, http.MethodGet, target)
+			},
+			good: []string{"/visibility-catalogues?kind=TRIAGE_RULE&sort=effectiveFrom"},
+			refusals: map[string]string{
+				"kind 缺席": "/visibility-catalogues?sort=effectiveFrom",
+				"kind 取空": "/visibility-catalogues?kind=",
+				"kind 集外": "/visibility-catalogues?kind=SYN-KIND",
+			},
+		},
+	}
+}
+
+// Covers: 选择器与定位参数的既有拒绝照旧——配置了的渠道上，它们写错（含传空值）都答迁移前那个不带理由的 400，
+// 不落到各册声明的解码上，读口不被调用。
+func TestSelectorEndpointsKeepTheirOwnRefusals(t *testing.T) {
+	for _, endpoint := range selectorEndpoints() {
+		t.Run(endpoint.name, func(t *testing.T) {
+			for name, target := range endpoint.refusals {
+				response := endpoint.serve(t, operationsIntakeDouble{query: operationsScope(t)}, target)
+				var body struct {
+					Error struct {
+						Code   string `json:"code"`
+						Detail string `json:"detail"`
+					} `json:"error"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+					t.Fatalf("%s：decode %s: %v", name, response.Body.Bytes(), err)
+				}
+				if response.Code != http.StatusBadRequest || body.Error.Code != "MALFORMED_REQUEST" || body.Error.Detail != "" {
+					t.Fatalf("%s：status = %d body = %s，want 400 MALFORMED_REQUEST 不带 detail", name, response.Code, response.Body)
+				}
+			}
+		})
+	}
+}
+
+// Covers: spec「端点先 Intake、后解码查询参数」与 ADR-0055 决定三，落在选择器与定位参数上——渠道未配置时，合规的几问与
+// 选择器、定位参数写错的各问同答一个 403，读口不被调用：选择器在 Intake 之后才读，没有凭据的调用方探不出端点下有哪些册子。
+func TestSelectorEndpointsAnswerTheUnconfiguredChannelBeforeReadingSelectors(t *testing.T) {
+	for _, endpoint := range selectorEndpoints() {
+		t.Run(endpoint.name, func(t *testing.T) {
+			targets := append([]string{}, endpoint.good...)
+			for _, target := range endpoint.refusals {
+				targets = append(targets, target)
+			}
+			var first []byte
+			for _, target := range targets {
+				response := endpoint.serve(t, visibilityhttp.UnconfiguredIntake{}, target)
+				if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+					t.Fatalf("%s 渠道未配置：status = %d；body = %s", target, response.Code, response.Body)
+				}
+				if first == nil {
+					first = response.Body.Bytes()
+				} else if !bytes.Equal(first, response.Body.Bytes()) {
+					t.Fatalf("答复随参数变了：%s / %s", first, response.Body.Bytes())
+				}
 			}
 		})
 	}

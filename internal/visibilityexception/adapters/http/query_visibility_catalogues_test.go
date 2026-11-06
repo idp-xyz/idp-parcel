@@ -198,8 +198,9 @@ func vcServe(
 	return recorder
 }
 
-// Covers: kind 是传输形状——缺席或集外按坏请求拒（六种册子行形状互不相同，替调用方
-// 选就是猜）；方法检查同级先行。
+// Covers: 配置了的渠道上 kind 缺席或集外按坏请求拒（各种册子行形状互不相同，替调用方
+// 选就是猜）；方法检查先行。kind 在 Intake 之后才读，未配置渠道的那一面见
+// TestSelectorEndpointsAnswerTheUnconfiguredChannelBeforeReadingSelectors。
 func TestVisibilityCataloguesRefuseWrongMethodAndForeignKind(t *testing.T) {
 	intake := operationsIntakeDouble{query: operationsScope(t)}
 
@@ -225,7 +226,7 @@ func TestVisibilityCataloguesRefuseWrongMethodAndForeignKind(t *testing.T) {
 }
 
 // Covers: 完成标准「未启用隔离读准入时答 403，与既有查阅端点同签名」——未配置 Intake
-// 对全部六种 kind 同答 403 + ACCESS_CHANNEL_NOT_CONFIGURED，读口不被触到，4xx 不带
+// 对每种 kind 同答 403 + ACCESS_CHANNEL_NOT_CONFIGURED，读口不被触到，4xx 不带
 // outcome（ADR-0022）。
 func TestVisibilityCataloguesUnconfiguredIntakeRefusesEveryKind(t *testing.T) {
 	for _, kind := range visibilityCatalogueKinds {

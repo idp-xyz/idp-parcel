@@ -8,9 +8,10 @@ import (
 // 本文件是本上下文各列表读口的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/03）：可排维与筛选维按
 // 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。
 //
-// 缺省序保迁移前的次序（该票 spec 取舍 1）；同刻的行按标识与排序维同向收尾（取舍 2），所以迁移前按标识正序收尾的各册如今同刻
-// 倒序收尾。可排维在缺省维之外只放出管理台表格今天已能排的列；筛选维只放出各册的状态或封闭词表，q 覆盖册上列出的标识与名称
-// （取舍 3）。按 registry 或 kind 分派的端点，选择器的每个取值各是一册、各有册名，选择器键登为 Selectors，不兼作筛选维（决定四）。
+// 缺省序保迁移前的次序（该票 spec「缺省序保今天的次序」）；同刻的行按标识与排序维同向收尾（spec「行标识取登记表主键去掉租户
+// 那几段」），所以迁移前按标识正序收尾的各册如今同刻倒序收尾。可排维在缺省维之外只放出管理台表格今天已能排的列；筛选维只放出
+// 各册的状态或封闭词表，q 覆盖册上列出的标识与名称（spec「可排维、筛选维从小放」）。按 registry 或 kind 分派的端点，选择器的
+// 每个取值各是一册、各有册名，选择器键登为 Selectors，不兼作筛选维（决定四）。
 
 // TrackingProjectionPages 是运营追踪投影查阅列表那一支（GET /tracking-projections，parcel 与 version 都不带）的声明；按包裹或
 // 按版本取单件的两支不经它。
@@ -30,7 +31,7 @@ var TrackingProjectionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // ExceptionCasePages 是异常案件查阅（GET /exception-case-records）的声明。
 //
 // 缺省序是建立时刻倒序，与迁移前同一口径。管理台案件表还能按单据号排，但单据号可空（未取得号的案件该格为空），当不了键集游标的
-// 排序列（取舍 6），不放出。phase 放出作筛选维（决定四：有状态的册至少放出状态一维），词表取自领域 CasePhase。q 覆盖案件标识、
+// 排序列（spec「可排维与行标识的列必须非空」），不放出。phase 放出作筛选维（决定四：有状态的册至少放出状态一维），词表取自领域 CasePhase。q 覆盖案件标识、
 // 单据号、根包裹与责任团队。
 var ExceptionCasePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "exception-case-records",
@@ -47,7 +48,7 @@ var ExceptionCasePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // SignalEpisodePages 是分诊查阅信号发作期一册（GET /exception-triage-records?registry=signal-episode）的声明。
 //
-// 缺省序是开始时刻倒序，与迁移前同一口径；同刻收尾从库内序号换成发作期标识，标识取主键去掉租户段（取舍 2）。lastHitAt 随每次命中
+// 缺省序是开始时刻倒序，与迁移前同一口径；同刻收尾从库内序号换成发作期标识，标识取登记表主键（只有发作期标识这一段，不含租户）。lastHitAt 随每次命中
 // 前移，按它翻页时途中再被命中的发作期挪到已翻过的那头，本轮可能不再见到它，但不会重出。outcome 是行上已记下的分诊结论
 // （triage.outcome），词表取自领域 TriageOutcome，尚未分诊的发作期不落在任何一个词上；它只按已有结论收窄，不是分诊决定参数。
 // q 覆盖发作期标识、包裹与信号种类。
@@ -156,8 +157,8 @@ var ClaimAuthorizationCataloguePages = keyedCataloguePages("visibility-catalogue
 
 // ConflictSignalRuleCataloguePages 是冲突信号规则册（kind=CONFLICT_SIGNAL_RULE）的声明。
 //
-// 缺省序按信号种类正序，不取决定三建议的登记时刻倒序：迁移前就按它排（取舍 1），且这本册一个租户至多一行，主键去掉租户段后
-// 不剩一段可作标识，就拿行上的信号种类当标识——一租户一行之下它在租户内唯一，任何次序排出来都是同一页。
+// 缺省序按信号种类正序，不取决定三建议的登记时刻倒序：迁移前就按它排（spec「缺省序保今天的次序」），且这本册一个租户至多一行，
+// 主键去掉租户段后不剩一段可作标识，就拿行上的信号种类当标识——一租户一行之下它在租户内唯一，任何次序排出来都是同一页。
 var ConflictSignalRuleCataloguePages = keyedCataloguePages("visibility-catalogues/CONFLICT_SIGNAL_RULE", "signalKind")
 
 func versionCataloguePages(name string) *cataloguepage.Catalogue {
