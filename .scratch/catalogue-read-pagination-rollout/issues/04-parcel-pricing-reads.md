@@ -1,7 +1,7 @@
 # 04 parcel-pricing 各册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——作者完成；派单方修订轮已照 02 评审拦下的各条自查补齐，待非作者评审（2026-11-06，分支 `cursor/crpr-04-pricing`，基 `d48c5b130`；完成记录与修订记录见文末）。迁移编号 parcel-pricing `0015`（进 main 时按 tip 重核）
+Status: in-progress——非作者评审（钉 `c39f772f2`）无阻断，四条非阻断已由派单方处理，待进 main（2026-11-06，分支 `cursor/crpr-04-pricing`，基 `d48c5b130`；完成记录、修订记录与评审记录见文末）。迁移编号 parcel-pricing `0015`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/parcelpricing/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/parcel_pricing` 的一条新迁移（索引）。
@@ -99,14 +99,15 @@ CHECK `evaluation_issue_series_kind_closed` 封成闭集，答复行数以种类
    草稿查阅由 Intake 解的单值 `?status=` 挪进声明作筛选维（词表不变，现在可重复、维内取或），`DecodePriceCardDraftQuery` 退役。
    既有参数传空值的旧行为照旧：基线的 `DecodePriceCardDraftQuery` 对空值 `?status=`、小写状态词、集外键都答 400（它的用例把空值列在
    拒绝格里），迁移后这几样照旧答 400；只有同一键给两次从 400 放宽成维内取或。其余四个路由迁移前不读任何查询参数，没有既有参数要保。
-5. **价卡状态不作筛选维**：管理台价卡页的状态（admin-web `priceCardStatus`）是页面对适用期与收尾三格现算的，不是登记册上的列。14 若要
-   服务端按它筛，得先在读面导出这一列。
+5. **价卡状态不作筛选维**：管理台价卡页的状态（admin-web `priceCardStatus`）是页面对适用期与收尾三格现算的，不是登记册上的列。要
+   服务端按它筛，得先在读面导出这一列；连同别的票同类的几处收进 16 号票。
 6. **seriesId 筛选维**：为管理台从覆盖摘要「只看这一条序列」留的（今天在客户端收窄）；q 的包含匹配会把同前缀的兄弟序列一并带进来，
    所以另设精确的一维。
 7. **严格解查询串**：`decodePageQuery` 照 `url.ParseQuery` 整条拒（坏转义与分号答 400），不用参照包的 `URL.Query()`——后者静默丢掉坏段、
-   答出整册。若要各上下文一致，宜挪进 `cataloguepage`（本票地盘外，未动）。
+   答出整册。两种口径并存有违 ADR-0144 决定七的「一处定义」，把原始查询串的解析收进 `cataloguepage` 已立 18 号票（本票地盘外，未动）。
 8. **两步取页**：序列册先取一页版本、再只为本页取复核计数；覆盖册先取一页（序列、种类）、再只为本页取明细。total 与本页各一条语句
-   （同首批），两条之间有写入时 total 可能与本页差一拍。覆盖册每页按自己那一问的时钟解「在用」、各自回显 asOf，游标不记时刻。
+   （同首批），两条之间有写入时 total 可能与本页差一拍。序列册取复核计数、覆盖册取明细也是另一条语句，两句之间新落的复核或版本会进本页
+   明细（只多不少）。覆盖册每页按自己那一问的时钟解「在用」、各自回显 asOf，游标不记时刻。
 9. **问题体**：本包没有 `writeProblemWithDetail`，`problemDetail` 加了 `detail`（omitempty），只有查询参数被拒那一格带它。
 10. **自报参数**：`isolated_read_intake_test` 里 `/pricing-price-cards?tenant=` 那一格测的是 Intake 本身、不经端点，Intake 照旧无视自报，原样
     通过；经端点时 `tenant` 是集外键、答 400（端点用例证）。改动过的旧用例沿用既有的 `tenant-a` 一类租户字面量，没有新增；端点表驱动
@@ -136,3 +137,16 @@ CHECK `evaluation_issue_series_kind_closed` 封成闭集，答复行数以种类
 | 注释与票面不引 spec 的取舍序号、不数别处的东西 | 声明头注引了一处序号；票面四处（含立票时正文里那句「点名的大册」） | 都改成引规则原句；数别处的计数已在 `74ad26c40` 清掉 |
 | 新夹具一律 `SYN-`；JSON 数组上的 q 不用 `::text`；既有参数传空值的旧行为保住 | 新夹具已是 `SYN-`；q 都落文本列；草稿 `?status=` 空值迁移前就答 400 | 无需改；判断项 4、10 写明 |
 | 计数队列自带 Next / Total、行标识不取主键去租户的写进判断项 | 没有计数队列；覆盖册行标识取聚合的分组键 | 判断项 11、12；覆盖册声明头注同写 |
+
+## 评审记录
+
+**评审 ← 子代理 · 钉 `c39f772f2`**：两轴无阻断。
+
+| 评审意见 | 处理 |
+|---|---|
+| 非阻断：`ports/catalogue_pages.go` 文件头注与 `PriceCardDraftPages` 头注各有一句变更说明 | 删去这两句，规则本身留下 |
+| 非阻断：查询串解析分成 `url.ParseQuery` 与 `URL.Query()` 两种口径，有违「一处定义」 | 本票不退回；判断项 7 改指 18 号票（收进 `cataloguepage`） |
+| 非阻断：判断项 8 没写明细可能比本页新一拍 | 判断项 8 补上（只多不少） |
+| 非阻断：判断项 5 把价卡状态指给 14，现行 spec 已归 16 | 判断项 5 改指 16 号票 |
+
+修订由派单方在本分支上做（作者会话已收工），只动两段头注与本票面。

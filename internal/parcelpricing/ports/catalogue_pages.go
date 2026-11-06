@@ -7,8 +7,7 @@ import (
 
 // 本文件是本上下文各列表读口的查询声明（ADR-0144 决定三、四、七；票 catalogue-read-pagination-rollout/04）：可排维与筛选维按
 // 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列、q 覆盖哪几列在 postgres 读面里。缺省序保迁移前的次序
-// （该票 spec「缺省序保今天的次序」）；决胜键是行标识、与排序同向（决定三）——迁移前首列倒序、决胜键正序的几册，只在首列
-// 完全相同的行之间次序变了。
+// （spec「缺省序保今天的次序」）；决胜键是行标识、与排序同向（决定三）。
 //
 // /pricing-pending-series-evaluations 不在这里：它答的是按序列种类分组的计数，不是一册行，组数以种类的封闭集为界。
 
@@ -99,8 +98,8 @@ var ReferenceSeriesCoveragePages = cataloguepage.MustCatalogue(cataloguepage.Spe
 //
 // 草稿不是价卡版本、不进登记册，没有登记时间一格；submittedAt 是这一版最近一次录入的时刻，缺省序取它倒序，与迁移前同一口径。
 // 行标识是（方案标识、方案版本），答复体里它们在 plan 对象下、不是顶层字段，所以不作可排维。status 是草稿状态的闭集，放出作
-// 筛选维（决定四），词表取自领域 PriceCardDraftStatus；它接替迁移前 Intake 解的那个单值 status（决定六：查询意图不归 Intake），
-// 现在同一维可重复给、维内为或。q 覆盖方案标识、方案版本与源文件名。
+// 筛选维（决定四），词表取自领域 PriceCardDraftStatus；查询意图不归 Intake（决定六），同一维可重复给、维内为或。q 覆盖
+// 方案标识、方案版本与源文件名。
 //
 // 草稿表就地更新：`已批准`之前再录会换掉 submittedAt，翻页期间被修订的那一版跳到已翻过的那头，与新录入的同一个去向。
 var PriceCardDraftPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
