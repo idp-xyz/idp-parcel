@@ -237,5 +237,6 @@
 |---|---|---|
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 | 已接受委托下某件包裹取消或失败时，释放它在接受前占用里的份额（CONTEXT「取消或失败时显式释放」的包裹粒度） | 转出册与账本已能表达部分转出、余额可放；但 `parcel-shipment` 在委托已接受之后不再请求释放占用，没有触发口，该份额一直占着 | [ADR-0343](../../adr/0343-a-confirmed-charge-converts-its-parcels-pre-acceptance-occupation-in-the-confirming-transaction.md) 决定八 |
+| CONTEXT 费用来源里的仓储作业收费发生项，以及「`warehouse-fulfillment` 拥有仓储作业收费发生项」一条（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定七） | 未做：评价请求只有按运输收费发生项的 BUY 与按包裹计费时点的 SELL 两路，没有按仓储作业收费发生项发起的 SELL 请求，也没有接它的消费门；计价那边为它立评价对象的 ADR 落地之前，也形成不了评价 | 仓配切片立票时承接，计价评价对象的 ADR 先行 |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。
