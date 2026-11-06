@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,33 +362,42 @@ func TestIdentityReviewUnitsPageOnTheirLatestRecording(t *testing.T) {
 }
 
 // Covers: 身份复核单元的行标识是 intake 里的 jsonb 键，库里不保证它在（cataloguepage.Columns 头注：可排维与行标识的列必须非空）。
-// 绕过写口造一行缺键的待识别，与另两件实物同刻：两个方向翻页都在取到它的那一页响亮报错，不会悄悄走完。留着 NULL 的话，正序时游标
-// 停在同刻的第一件上，键集比较对缺键那一组得 NULL，它就从后面各页消失，total 却还数着它。
+// 绕过写口造缺键的待识别行。它与另两件实物同刻时，两个方向翻页都在含它的那一页报缺作业实物那一句错，不会悄悄走完——留着 NULL 的
+// 话，正序时游标停在同刻的第一件上，键集比较对缺键那一组得 NULL，它就从后面各页消失，total 却还数着它。它只是多取来判下一页的
+// 那一行时，本页照常答，翻到含它的那一页才报错。
 func TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit(t *testing.T) {
 	fixture := newPagesFixture(t)
 	ctx := t.Context()
-	const tenant = "SYN-TENANT-CRPR06-K"
 	at := func(minutes int) time.Time { return receivedAt.Add(time.Duration(minutes) * time.Minute) }
-	fixture.save(t,
-		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K1", "SYN-HU-CRPR06-K1", at(3), ""),
-		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K2", "SYN-HU-CRPR06-K2", at(2), ""),
-		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K3", "SYN-HU-CRPR06-K3", at(2), ""),
-		pagedIntake(t, tenant, "SYN-SRC-CRPR06-KX", "SYN-HU-CRPR06-KX", at(2), ""),
-		pagedIntake(t, tenant, "SYN-SRC-CRPR06-K4", "SYN-HU-CRPR06-K4", at(1), ""),
-	)
-	if _, err := fixture.pool.Exec(ctx,
-		`UPDATE node_operations.reception SET intake = intake - 'unit' WHERE tenant_id = $1 AND source_id = $2`,
-		tenant, "SYN-SRC-CRPR06-KX"); err != nil {
-		t.Fatalf("去掉作业实物键：%v", err)
+	dropUnit := func(tenant, sourceID string) {
+		t.Helper()
+		if _, err := fixture.pool.Exec(ctx,
+			`UPDATE node_operations.reception SET intake = intake - 'unit' WHERE tenant_id = $1 AND source_id = $2`,
+			tenant, sourceID); err != nil {
+			t.Fatalf("去掉作业实物键：%v", err)
+		}
 	}
-	tenantID := ref(t, domain.NewTenantID, tenant)
+	const missingUnit = "without an intake unit"
 
+	const tied = "SYN-TENANT-CRPR06-K"
+	fixture.save(t,
+		pagedIntake(t, tied, "SYN-SRC-CRPR06-K1", "SYN-HU-CRPR06-K1", at(3), ""),
+		pagedIntake(t, tied, "SYN-SRC-CRPR06-K2", "SYN-HU-CRPR06-K2", at(2), ""),
+		pagedIntake(t, tied, "SYN-SRC-CRPR06-K3", "SYN-HU-CRPR06-K3", at(2), ""),
+		pagedIntake(t, tied, "SYN-SRC-CRPR06-KX", "SYN-HU-CRPR06-KX", at(2), ""),
+		pagedIntake(t, tied, "SYN-SRC-CRPR06-K4", "SYN-HU-CRPR06-K4", at(1), ""),
+	)
+	dropUnit(tied, "SYN-SRC-CRPR06-KX")
+	tiedID := ref(t, domain.NewTenantID, tied)
 	for _, values := range []url.Values{{}, {"sort": {"latestRecordedAt"}}} {
 		query := pageQuery(t, ports.IdentityReviewUnitPages, values)
 		seen := 0
 		for pages := 1; ; pages++ {
-			page, err := fixture.catalogue.ListIdentityReviewUnits(ctx, tenantID, 2, query)
+			page, err := fixture.catalogue.ListIdentityReviewUnits(ctx, tiedID, 2, query)
 			if err != nil {
+				if !strings.Contains(err.Error(), missingUnit) {
+					t.Fatalf("%q 第 %d 页报的不是缺作业实物那一句：%v", values.Encode(), pages, err)
+				}
 				break
 			}
 			seen += len(page.Rows)
@@ -399,6 +409,31 @@ func TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit(t *testing.T) {
 			}
 			query = nextPage(t, ports.IdentityReviewUnitPages, values, page.Next)
 		}
+	}
+
+	const probed = "SYN-TENANT-CRPR06-P"
+	fixture.save(t,
+		pagedIntake(t, probed, "SYN-SRC-CRPR06-PA", "SYN-HU-CRPR06-PA", at(5), ""),
+		pagedIntake(t, probed, "SYN-SRC-CRPR06-PB", "SYN-HU-CRPR06-PB", at(4), ""),
+		pagedIntake(t, probed, "SYN-SRC-CRPR06-PX", "SYN-HU-CRPR06-PX", at(3), ""),
+		pagedIntake(t, probed, "SYN-SRC-CRPR06-PC", "SYN-HU-CRPR06-PC", at(2), ""),
+	)
+	dropUnit(probed, "SYN-SRC-CRPR06-PX")
+	probedID := ref(t, domain.NewTenantID, probed)
+	first, err := fixture.catalogue.ListIdentityReviewUnits(ctx, probedID, 2, firstPage(t, ports.IdentityReviewUnitPages))
+	if err != nil {
+		t.Fatalf("第一页只有两件完好的实物、缺键那一组只是多取的那一行，却答不出：%v", err)
+	}
+	units := make([]string, len(first.Rows))
+	for index, row := range first.Rows {
+		units[index] = row.Unit
+	}
+	if want := []string{"SYN-HU-CRPR06-PA", "SYN-HU-CRPR06-PB"}; !reflect.DeepEqual(units, want) || first.Next == "" || first.Total != 4 {
+		t.Fatalf("第一页 = %v、next %q、total %d，want %v、有下一页、total 4", units, first.Next, first.Total, want)
+	}
+	_, err = fixture.catalogue.ListIdentityReviewUnits(ctx, probedID, 2, nextPage(t, ports.IdentityReviewUnitPages, url.Values{}, first.Next))
+	if err == nil || !strings.Contains(err.Error(), missingUnit) {
+		t.Fatalf("第二页含缺键那一组，应报缺作业实物那一句：%v", err)
 	}
 }
 

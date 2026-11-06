@@ -261,9 +261,23 @@ func TestNodeOperationsRecordsIntakeFailuresKeepTheirGrades(t *testing.T) {
 	assertNoOutcome(t, response)
 }
 
-// Covers: ADR-0022 — 读库失败没有形成答案：500 + NO_ANSWER_FORMED，不带业务结果格。
+// unitsDownCatalogue 让按实物那一册单独读不动，别的册照替身答；asked 记下那一册被问到过。
+type unitsDownCatalogue struct {
+	*stubReviewCatalogue
+	asked bool
+}
+
+func (catalogue *unitsDownCatalogue) ListIdentityReviewUnits(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.IdentityReviewUnitRow], error) {
+	catalogue.asked = true
+	return cataloguepage.Result[ports.IdentityReviewUnitRow]{}, errors.New("database is down")
+}
+
+// Covers: ADR-0022 — 读库失败没有形成答案：500 + NO_ANSWER_FORMED，不带业务结果格。registry=unidentified-item 的一答由 items
+// 与 units 两册拼成：只 units 那一册读不动、items 完好时也整答 500，不交出缺了 units 的一答。
 func TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails(t *testing.T) {
-	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit", "consolidation-member"} {
+	for _, registry := range []string{"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member"} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{err: errors.New("database is down")}
 			response := serveGet(recordsEndpoint(register), "/node-operations-records?registry="+registry)
@@ -274,6 +288,26 @@ func TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails(t *testing.T) 
 			assertNoOutcome(t, response)
 		})
 	}
+
+	t.Run("unidentified-item with only the units failing", func(t *testing.T) {
+		register := &unitsDownCatalogue{stubReviewCatalogue: &stubReviewCatalogue{
+			items: []ports.UnidentifiedItemCatalogueRow{{
+				SourceID: "SYN-SCAN-1", Unit: "SYN-UNIT-1", Node: "SYN-NODE-1", Candidates: []string{},
+				ReceivedAt: catalogueBaseAt, RecordedAt: catalogueBaseAt.Add(time.Minute),
+			}},
+			total: 1,
+		}}
+		response := serveGet(nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(grantedIntake(), register),
+			"/node-operations-records?registry=unidentified-item")
+
+		if !register.asked {
+			t.Fatalf("units 那一册没被问到：status = %d body = %s", response.Code, response.Body.String())
+		}
+		if response.Code != http.StatusInternalServerError || problemCode(t, response) != "NO_ANSWER_FORMED" {
+			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		}
+		assertNoOutcome(t, response)
+	})
 }
 
 // Covers: 逐格转写 — 收寄册两格各自的形状：形成格带控制转出两键，待识别格不带；

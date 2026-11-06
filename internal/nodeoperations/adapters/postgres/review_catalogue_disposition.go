@@ -23,9 +23,9 @@ var identityReviewUnitPages = ports.IdentityReviewUnitPages.MustBind(cataloguepa
 //
 // 作业实物是 intake 里的 jsonb 键：库里 reception_intake_presence 只保证 intake 本身非空，键在不在靠收寄写口（intakeRow 的 unit
 // 不省略）。分组键因此先导出成非空列（cataloguepage.Columns 头注：可排维与行标识的列必须非空）——留着 NULL 的话，正序翻页时与游标
-// 同刻、排在它后面的那一组会被键集比较悄悄跳过。缺键的行归到空串那一组，取到它的那一页由 ListIdentityReviewUnits 响亮报错，不把
-// 坏行演成一件看起来正常的实物。后面按实物取链头那一读仍按 intake ->> 'unit' 取，与 reception_intake_unit_idx 的表达式同形才
-// 走得上它。
+// 同刻、排在它后面的那一组会被键集比较悄悄跳过。缺键的行归到空串那一组，它落进交回的那一页时由 ListIdentityReviewUnits 响亮报错，
+// 不把坏行演成一件看起来正常的实物。后面按实物取链头那一读仍按 intake ->> 'unit' 取，与 reception_intake_unit_idx 的表达式同形
+// 才走得上它。
 const identityReviewUnits = `WITH u AS (
 		SELECT COALESCE(intake ->> 'unit', '') AS unit, max(recorded_at) AS latest
 		  FROM node_operations.reception
@@ -80,11 +80,6 @@ func (catalogue *ReviewCatalogue) ListIdentityReviewUnits(
 			rows.Close()
 			return fail(err)
 		}
-		if unit == "" {
-			rows.Close()
-			return fail(fmt.Errorf("pending identification rows without an intake unit, latest recorded at %s",
-				latest.UTC().Format(time.RFC3339Nano)))
-		}
 		fetched = append(fetched, ports.IdentityReviewUnitRow{Unit: unit, LatestRecordedAt: latest.UTC()})
 	}
 	rows.Close()
@@ -98,6 +93,13 @@ func (catalogue *ReviewCatalogue) ListIdentityReviewUnits(
 		})
 	if err != nil {
 		return fail(err)
+	}
+	// 缺键那一组切页之后才判：多取来判下一页的那一行是它时，不含它的本页照常答。
+	for _, row := range page.Rows {
+		if row.Unit == "" {
+			return fail(fmt.Errorf("pending identification rows without an intake unit, latest recorded at %s",
+				row.LatestRecordedAt.Format(time.RFC3339Nano)))
+		}
 	}
 	if len(page.Rows) == 0 {
 		return page, nil
