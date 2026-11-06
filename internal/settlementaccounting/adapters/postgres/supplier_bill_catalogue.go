@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -207,31 +208,14 @@ func valueOr(value *int64) int64 {
 	return *value
 }
 
-// ListAuditedPayables 上列审核应付，新形成的在前。供应商与账期取这份主张最早落库的那一版接收记录（见
-// ports.AuditedPayableCatalogueRow）；一笔应付找不到它的接收记录就是册上矛盾——审核只从接收记录起步——答错误，不把它当作
-// 「没有供应商」上列，也不悄悄从列表里漏掉。
-//
-// 供应商检索维放过找不到接收记录的那几笔（r.supplier_ref IS NULL），让它们照样走到扫描时的矛盾检查：供应商只能从接收记录
-// 取，用 join 出来的供应商去比，孤儿在比较这一步就被滤掉了，带不带供应商检索就成了两种答法。
-func (catalogue *StatementCatalogue) ListAuditedPayables(
-	ctx context.Context,
-	tenant domain.TenantID,
-	filter ports.AuditedPayableFilter,
-	limit int,
-) ([]ports.AuditedPayableCatalogueRow, error) {
-	if limit < 1 {
-		return nil, fmt.Errorf("list audited payables: limit must be positive, got %d", limit)
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list audited payables: %w", err)
-	}
-	rows, err := querier.Query(ctx,
-		`SELECT p.payable_id, p.document_number, p.document_number_absence, p.claim_id, p.line_ref, p.expected_version,
-		        r.supplier_ref, r.period_ref, p.legal_entity, p.account_id, p.currency, p.amount_minor,
-		        p.auditor_ref, p.operation_evidence, p.audited_at, p.recorded_at,
-		        d.range_from_minor, d.range_to_minor, d.resolves_decision, n.bill_number
-		   FROM settlement_accounting.audited_payable AS p
+// auditedPayablePages 把审核应付册的声明落到列上。q 覆盖的账单号、供应商与账期来自连接与侧向子查询，总数因此与取页同一个来源。
+var auditedPayablePages = ports.AuditedPayablePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"auditedAt": "p.audited_at"},
+	Identity: []string{"p.payable_id"},
+	Keyword:  []string{"p.payable_id", "p.document_number", "p.claim_id", "n.bill_number", "r.supplier_ref", "r.period_ref"},
+})
+
+const auditedPayableSource = `settlement_accounting.audited_payable AS p
 		   LEFT JOIN settlement_accounting.supplier_bill_audit_decision AS d
 		     ON d.tenant_id = p.tenant_id AND d.decision_id = p.payable_id
 		   LEFT JOIN settlement_accounting.supplier_bill_number AS n
@@ -243,17 +227,52 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 		           AND b.claim_id = p.claim_id
 		         ORDER BY b.recorded_at, b.claim_version
 		         LIMIT 1
-		       ) AS r ON true
-		  WHERE p.tenant_id = $1
+		       ) AS r ON true`
+
+// ListAuditedPayables 上列审核应付的一页，缺省新形成的在前。供应商与账期取这份主张最早落库的那一版接收记录（见
+// ports.AuditedPayableCatalogueRow）；一笔应付找不到它的接收记录就是册上矛盾——审核只从接收记录起步——答错误，不把它当作
+// 「没有供应商」上列，也不悄悄从列表里漏掉。
+//
+// 供应商检索维放过找不到接收记录的那几笔（r.supplier_ref IS NULL），让它们照样走到扫描时的矛盾检查：供应商只能从接收记录
+// 取，用 join 出来的供应商去比，孤儿在比较这一步就被滤掉了，带不带供应商检索就成了两种答法。
+func (catalogue *StatementCatalogue) ListAuditedPayables(
+	ctx context.Context,
+	tenant domain.TenantID,
+	filter ports.AuditedPayableFilter,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AuditedPayableCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.AuditedPayableCatalogueRow], error) {
+		return cataloguepage.Result[ports.AuditedPayableCatalogueRow]{}, fmt.Errorf("list audited payables: %w", err)
+	}
+	if limit < 1 {
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := auditedPayablePages.Plan(query,
+		`p.tenant_id = $1
 		    AND ($2::text = '' OR p.document_number = $2)
 		    AND ($3::text = '' OR p.claim_id = $3)
-		    AND ($4::text = '' OR r.supplier_ref IS NULL OR r.supplier_ref = $4)
-		  ORDER BY p.audited_at DESC, p.payable_id
-		  LIMIT $5`,
-		tenant.String(), filter.DocumentNumber, filter.Claim, filter.Supplier, limit,
-	)
+		    AND ($4::text = '' OR r.supplier_ref IS NULL OR r.supplier_ref = $4)`,
+		[]any{tenant.String(), filter.DocumentNumber, filter.Claim, filter.Supplier}, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list audited payables: %w", err)
+		return fail(err)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(auditedPayableSource), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(
+		`p.payable_id, p.document_number, p.document_number_absence, p.claim_id, p.line_ref, p.expected_version,
+		        r.supplier_ref, r.period_ref, p.legal_entity, p.account_id, p.currency, p.amount_minor,
+		        p.auditor_ref, p.operation_evidence, p.audited_at, p.recorded_at,
+		        d.range_from_minor, d.range_to_minor, d.resolves_decision, n.bill_number`,
+		auditedPayableSource), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
 	}
 	defer rows.Close()
 
@@ -273,14 +292,14 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 			&row.AuditorRef, &evidence, &auditedAt, &recorded,
 			&row.RangeFromMinor, &row.RangeToMinor, &resolves, &billNo,
 		); err != nil {
-			return nil, fmt.Errorf("list audited payables: %w", err)
+			return fail(err)
 		}
 		if supplier == nil || period == nil {
-			return nil, fmt.Errorf("list audited payables: 应付 %s 找不到主张 %s 的接收记录", row.Payable, row.Claim)
+			return fail(fmt.Errorf("应付 %s 找不到主张 %s 的接收记录", row.Payable, row.Claim))
 		}
 		numbering, err := numberingFrom(number, absence)
 		if err != nil {
-			return nil, fmt.Errorf("list audited payables: 应付 %s 的应付单号：%w", row.Payable, err)
+			return fail(fmt.Errorf("应付 %s 的应付单号：%w", row.Payable, err))
 		}
 		row.DocumentNumber, row.DocumentNumberAbsence = numbering.Words()
 		row.Supplier, row.Period = *supplier, *period
@@ -290,7 +309,14 @@ func (catalogue *StatementCatalogue) ListAuditedPayables(
 		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list audited payables: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	page, err := cataloguepage.Finish(query, entries, limit, total,
+		func(row ports.AuditedPayableCatalogueRow, _ string) cataloguepage.Position {
+			return cataloguepage.Position{Value: cataloguepage.FormatInstant(row.AuditedAt), Identity: []string{row.Payable}}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
 }

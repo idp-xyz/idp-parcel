@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	"go.idp.xyz/idp-parcel/migrations"
 )
 
@@ -79,7 +80,7 @@ func TestTheExpectedCostSupplierIsStoredAndLegacyRowsReadAsUnrecorded(t *testing
 		t.Fatalf("旧行供应商 = %q recorded=%v found=%v err=%v，want 未记", supplier, recorded, found, err)
 	}
 
-	rows, err := stack.catalogue.ListSupplierExpectedCosts(ctx, tenant, 10)
+	rows, err := rowsOf(stack.catalogue.ListSupplierExpectedCosts(ctx, tenant, 10, firstPage(t, ports.SupplierExpectedCostPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("读口 %d 行 err=%v", len(rows), err)
 	}

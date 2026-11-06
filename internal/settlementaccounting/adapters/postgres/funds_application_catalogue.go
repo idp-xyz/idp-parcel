@@ -8,6 +8,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -24,7 +25,8 @@ import (
 // 事实面、两笔核销求和与两个挂册**一条语句取回**：ReadExecutor 不保证两条语句同一
 // 快照，分次取会拼出从未同时存在的账面状态——与核销并发登记时尤甚（判据同
 // ChargeCatalogue）。求和走 LATERAL 一次扫过该事实的全部核销，映射与核销明细各走
-// 一个相关子查询 json_agg，各聚各的。
+// 一个相关子查询 json_agg，各聚各的。按 ports.ExternalFundsFactPages 取页时总数另数
+// 一句，与取页不在同一快照里，是此刻的大概。
 //
 // **已核销与已撤销分两笔求和，不给净额。** 「从未核销过」与「核销过又撤销了」在一个
 // 净额上长着同一张脸，而两态的续办相反：前者要人去分配，后者要人去看当初为什么撤。
@@ -62,23 +64,54 @@ type settlementApplicationDocument struct {
 	ReversedAt      *time.Time `json:"reversedAt"`
 }
 
+// externalFundsFactPages 把资金事实册的声明落到列上。固定条件只留链头那一版，总数与取页同一个条件。
+var externalFundsFactPages = ports.ExternalFundsFactPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"fact": "f.fact_id", "occurredAt": "f.occurred_at"},
+	Identity: []string{"f.fact_id", "f.version"},
+	Filters:  map[string]string{"kind": "f.kind"},
+	Keyword:  []string{"f.fact_id", "f.source_ref"},
+})
+
+const (
+	externalFundsFactTable     = `settlement_accounting.external_funds_fact_version AS f`
+	externalFundsFactCondition = `f.tenant_id = $1
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM settlement_accounting.external_funds_fact_version AS successor
+		         WHERE successor.tenant_id = f.tenant_id
+		           AND successor.fact_id = f.fact_id
+		           AND successor.corrects = f.version)`
+)
+
 func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ExternalFundsFactCatalogueRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalFundsFactCatalogueRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ExternalFundsFactCatalogueRow], error) {
+		return cataloguepage.Result[ports.ExternalFundsFactCatalogueRow]{}, fmt.Errorf("list external funds facts: %w", err)
+	}
 	if limit < 1 {
-		return nil, fmt.Errorf("list external funds facts: limit must be positive, got %d", limit)
+		return fail(fmt.Errorf("limit must be positive, got %d", limit))
+	}
+	plan, err := externalFundsFactPages.Plan(query, externalFundsFactCondition, []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := catalogue.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list external funds facts: %w", err)
+		return fail(err)
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(externalFundsFactTable), plan.Args...).Scan(&total); err != nil {
+		return fail(fmt.Errorf("count: %w", err))
 	}
 
 	// SUM(bigint) 在 PG 里是 numeric，显式收窄回 bigint——金额语义就是最小单位整数，
 	// 让类型在语句里说这句话，超界在库内报错而不是静默进小数。
-	rows, err := querier.Query(ctx,
-		`SELECT f.fact_id, f.source_ref, f.kind, f.currency, f.amount_minor, f.version,
+	rows, err := querier.Query(ctx, plan.PageSQL(
+		`f.fact_id, f.source_ref, f.kind, f.currency, f.amount_minor, f.version,
 		        f.occurred_at, f.corrects, f.corrected_at, f.operation_evidence,
 		        applied.applied_minor, applied.reversed_minor, applied.application_count,
 		        (SELECT COUNT(DISTINCT mapped.account_id)
@@ -117,8 +150,8 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		                )
 		           FROM settlement_accounting.settlement_application AS a
 		          WHERE a.tenant_id = f.tenant_id
-		            AND a.fact_id = f.fact_id)
-		   FROM settlement_accounting.external_funds_fact_version AS f
+		            AND a.fact_id = f.fact_id)`,
+		externalFundsFactTable+`
 		   LEFT JOIN LATERAL (
 		        SELECT
 		            COALESCE(SUM(a.applied_minor) FILTER (WHERE a.reversed_at IS NULL),
@@ -129,20 +162,9 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		          FROM settlement_accounting.settlement_application AS a
 		         WHERE a.tenant_id = f.tenant_id
 		           AND a.fact_id = f.fact_id
-		   ) AS applied ON true
-		  WHERE f.tenant_id = $1
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM settlement_accounting.external_funds_fact_version AS successor
-		         WHERE successor.tenant_id = f.tenant_id
-		           AND successor.fact_id = f.fact_id
-		           AND successor.corrects = f.version)
-		  ORDER BY f.fact_id
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
+		   ) AS applied ON true`), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list external funds facts: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
@@ -163,7 +185,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 			&row.AppliedMinor, &row.ReversedMinor, &row.ApplicationCount, &row.CustomerScopeCount,
 			&mappingsJSON, &applicationsJSON,
 		); err != nil {
-			return nil, fmt.Errorf("list external funds facts: %w", err)
+			return fail(err)
 		}
 		row.OccurredAt = occurredAt.UTC()
 		row.Corrects = catalogueText(corrects)
@@ -180,7 +202,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 
 		var mappingDocuments []fundsMappingDocument
 		if err := json.Unmarshal(mappingsJSON, &mappingDocuments); err != nil {
-			return nil, fmt.Errorf("list external funds facts: 映射集解码：%w", err)
+			return fail(fmt.Errorf("映射集解码：%w", err))
 		}
 		mappings := make([]ports.FundsMappingEntry, 0, len(mappingDocuments))
 		for _, document := range mappingDocuments {
@@ -196,7 +218,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 
 		var applicationDocuments []settlementApplicationDocument
 		if err := json.Unmarshal(applicationsJSON, &applicationDocuments); err != nil {
-			return nil, fmt.Errorf("list external funds facts: 核销集解码：%w", err)
+			return fail(fmt.Errorf("核销集解码：%w", err))
 		}
 		applications := make([]ports.SettlementApplicationEntry, 0, len(applicationDocuments))
 		for _, document := range applicationDocuments {
@@ -215,7 +237,18 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		entries = append(entries, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list external funds facts: %w", err)
+		return fail(err)
 	}
-	return entries, nil
+	page, err := cataloguepage.Finish(query, entries, limit, total,
+		func(row ports.ExternalFundsFactCatalogueRow, sortField string) cataloguepage.Position {
+			position := cataloguepage.Position{Value: row.Fact, Identity: []string{row.Fact, row.Version}}
+			if sortField == "occurredAt" {
+				position.Value = cataloguepage.FormatInstant(row.OccurredAt)
+			}
+			return position
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return page, nil
 }

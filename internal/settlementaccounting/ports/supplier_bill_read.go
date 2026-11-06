@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
@@ -133,7 +134,8 @@ type AuditedPayableFilter struct {
 	Supplier       string
 }
 
-// AuditedPayableCatalogueRead 按租户上列审核应付，新形成的在前（按审核时刻倒序、同刻按应付标识）；Limit 必须为正。
+// AuditedPayableCatalogueRead 按租户上列审核应付的一页，按 AuditedPayablePages 的声明取，缺省新形成的在前（按审核时刻倒序、
+// 同刻按应付标识同向）；Limit 必须为正。
 //
 // 一笔应付找不到它所属主张的接收记录是册上矛盾，答错误。按供应商检索时也一样：这一笔属不属于那家供应商无从判断，当它
 // 不属于而滤掉，就是带不带供应商检索两种答法——不带时答错误，带了却悄悄少一笔。
@@ -143,5 +145,6 @@ type AuditedPayableCatalogueRead interface {
 		tenant domain.TenantID,
 		filter AuditedPayableFilter,
 		limit int,
-	) ([]AuditedPayableCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[AuditedPayableCatalogueRow], error)
 }

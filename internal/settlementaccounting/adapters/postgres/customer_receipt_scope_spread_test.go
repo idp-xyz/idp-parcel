@@ -11,6 +11,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件在真实 PostgreSQL 上证一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283，隔离合成 S）：每个作用域取这条
@@ -135,7 +136,7 @@ func (rig spreadRig) assertCatalogued(t *testing.T, fact string, scopes, unscope
 	if err != nil {
 		t.Fatalf("构造资金事实册：%v", err)
 	}
-	rows, err := catalogue.ListExternalFundsFacts(t.Context(), rig.tenant, 50)
+	rows, err := rowsOf(catalogue.ListExternalFundsFacts(t.Context(), rig.tenant, 50, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil {
 		t.Fatalf("列资金事实册：%v", err)
 	}

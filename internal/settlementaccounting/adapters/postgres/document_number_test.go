@@ -364,7 +364,7 @@ func TestADisputeNumberIsIssuedInTheRegistrationTransaction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err := catalogue.ListCustomerStatements(t.Context(), saTenant(t, "tenant-1"), 10)
+		rows, err := rowsOf(catalogue.ListCustomerStatements(t.Context(), saTenant(t, "tenant-1"), 10, firstPage(t, ports.CustomerStatementPages)))
 		if err != nil || len(rows) != 1 {
 			t.Fatalf("rows = %d err = %v", len(rows), err)
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
@@ -119,19 +120,22 @@ type SupplierExpectedCostCatalogueRow struct {
 }
 
 // ChargeCatalogueRead 是费用与计费页的伴生列表读端口：客户费用册与供应商预期成本
-// 版本册各上各的，两册不合流（理由见 SupplierExpectedCostCatalogueRow）。
+// 版本册各上各的，两册不合流（理由见 SupplierExpectedCostCatalogueRow）。两册各按自己的
+// 声明（CustomerChargePages、SupplierExpectedCostPages）取一页。
 type ChargeCatalogueRead interface {
 	ListCustomerCharges(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CustomerChargeCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomerChargeCatalogueRow], error)
 
 	ListSupplierExpectedCosts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]SupplierExpectedCostCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SupplierExpectedCostCatalogueRow], error)
 }
 
 // StatementDisputeEntry 是针对某张对账单某笔费用提出的一项异议，照 statement_dispute
@@ -254,21 +258,24 @@ type SupplierBillReceptionCatalogueRow struct {
 // StatementCatalogueRead 是对账页的伴生列表读端口：客户对账单册（UC-SA-003）与供应商
 // 账单接收册（UC-SA-004）各上各的。
 //
-// 账单接收册按到达的业务时刻倒序上列（同刻按主张身份与版本）：页大小截掉的是最早收到的那些，最新收到的账单总在页上。页外的
-// 那一份按 SupplierBillReceptionFilter 精确检索在全册里找。
+// 账单接收册缺省按到达的业务时刻倒序上列（同刻按主张身份与版本，同向）：最新收到的账单总在第一页上。要找的那一份按
+// SupplierBillReceptionFilter 精确检索在全册里找，或往后翻页。两册各按自己的声明（CustomerStatementPages、
+// SupplierBillReceptionPages）取一页。
 type StatementCatalogueRead interface {
 	ListCustomerStatements(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CustomerStatementCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CustomerStatementCatalogueRow], error)
 
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		filter SupplierBillReceptionFilter,
 		limit int,
-	) ([]SupplierBillReceptionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[SupplierBillReceptionCatalogueRow], error)
 }
 
 // SupplierBillReceptionFilter 是账单接收册的检索维：主张身份、供应商、供应商账单号（取账单号册，ADR-0357 决定一），各自精确相等、
@@ -290,9 +297,13 @@ type SupplierBillReceptionFilter struct {
 // 一起判，而本产品今天不记相对方确认，所以也不数「待确认」：把未作废的单都当待确认，就是拿「没有记录」冒充
 // 「客户还没确认」。
 //
-// Count 是这样的单的全部张数，不受页大小截断；Statements 是其中一页，行形与对账单册同一份。
+// Count 是这样的单的全部张数，不受页与 q 截断（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留
+// 这两格」）；Statements 是其中一页，行形与对账单册同一份；Next 与 Total 是这一页的游标与同一组条件下的总数，与
+// cataloguepage.Result 同义。
 type DisputedCustomerStatements struct {
 	Count      int
+	Next       string
+	Total      int64
 	Statements []CustomerStatementCatalogueRow
 }
 
@@ -317,12 +328,13 @@ type StatementLineRead interface {
 	FindStatementLines(ctx context.Context, tenant domain.TenantID, number string) (StatementLines, bool, error)
 }
 
-// DisputedStatementRead 按租户上列挂着未了结争议的客户对账单，按单号排。
+// DisputedStatementRead 按租户上列挂着未了结争议的客户对账单的一页，按 DisputedCustomerStatementPages 的声明取，缺省按单号排。
 type DisputedStatementRead interface {
 	ListDisputedCustomerStatements(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (DisputedCustomerStatements, error)
 }
 
@@ -394,13 +406,14 @@ type ExternalFundsFactCatalogueRow struct {
 
 // FundsApplicationCatalogueRead 是收付款核销页的伴生列表读端口。行对象是已采用的
 // 外部资金事实，映射与核销挂在它下面——页的行对象就是「已确认外部收付款及其分配
-// 关系」，不是对账单（收付款事实与核销关系同对账单分别管理）。
+// 关系」，不是对账单（收付款事实与核销关系同对账单分别管理）。按 ExternalFundsFactPages 的声明取一页。
 type FundsApplicationCatalogueRead interface {
 	ListExternalFundsFacts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ExternalFundsFactCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExternalFundsFactCatalogueRow], error)
 }
 
 // OperatingComponentEntry 是经营结果的一个组成项：来源金额身份、对指标的封闭二向
@@ -471,17 +484,20 @@ type CostAllocationCatalogueRow struct {
 
 // OperatingCatalogueRead 是经营核算页的伴生列表读端口：经营结果快照册与成本分摊册。
 // 两册同属 UC-SA-006（分摊与指标由同一个用例形成、经同一个 OperatingIntent 交下游），
-// 因此同页上列；分摊只改变经营归因，不转移原债权债务责任，故它不出现在费用页。
+// 因此同页上列；分摊只改变经营归因，不转移原债权债务责任，故它不出现在费用页。两册各按
+// 自己的声明（OperatingResultPages、CostAllocationPages）取一页。
 type OperatingCatalogueRead interface {
 	ListOperatingResults(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]OperatingResultCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[OperatingResultCatalogueRow], error)
 
 	ListCostAllocations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]CostAllocationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[CostAllocationCatalogueRow], error)
 }

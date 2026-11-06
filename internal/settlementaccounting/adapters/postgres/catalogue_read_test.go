@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
@@ -82,38 +83,44 @@ func catalogueTenantID(t *testing.T, raw string) domain.TenantID {
 	return tenant
 }
 
-// Covers: ADR-0077 Decision 四 — 七本册全空时如实答空列表，不是错误也不折成未配置。
+// emptyPage 是一册空页的三样：没有行、没有下一页、总数为 0。
+type emptyPage struct {
+	rows  int
+	next  string
+	total int64
+	err   error
+}
+
+func emptyPageOf[Row any](page cataloguepage.Result[Row], err error) emptyPage {
+	return emptyPage{rows: len(page.Rows), next: page.Next, total: page.Total, err: err}
+}
+
+// Covers: ADR-0077 Decision 四 — 各本册全空时如实答空列表，不是错误也不折成未配置；ADR-0144 决定五：空页总数为 0、没有下一页。
 func TestEmptySettlementRegistersAnswerEmptyLists(t *testing.T) {
 	fixture := newCatalogueFixture(t)
 	ctx, tenant := t.Context(), catalogueTenantID(t, catalogueTenant)
 
-	charges, err := fixture.charges.ListCustomerCharges(ctx, tenant, 10)
-	if err != nil || len(charges) != 0 {
-		t.Fatalf("空客户费用册走样：err=%v rows=%+v", err, charges)
+	disputed, err := fixture.statement.ListDisputedCustomerStatements(ctx, tenant, 10, firstPage(t, ports.DisputedCustomerStatementPages))
+	pages := map[string]emptyPage{
+		"客户费用": emptyPageOf(fixture.charges.ListCustomerCharges(ctx, tenant, 10, firstPage(t, ports.CustomerChargePages))),
+		"预期成本": emptyPageOf(fixture.charges.ListSupplierExpectedCosts(ctx, tenant, 10, firstPage(t, ports.SupplierExpectedCostPages))),
+		"对账单":  emptyPageOf(fixture.statement.ListCustomerStatements(ctx, tenant, 10, firstPage(t, ports.CustomerStatementPages))),
+		"账单接收": emptyPageOf(fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, 10,
+			firstPage(t, ports.SupplierBillReceptionPages))),
+		"争议对账单": {rows: len(disputed.Statements), next: disputed.Next, total: disputed.Total, err: err},
+		"审核应付": emptyPageOf(fixture.statement.ListAuditedPayables(ctx, tenant, ports.AuditedPayableFilter{}, 10,
+			firstPage(t, ports.AuditedPayablePages))),
+		"资金事实": emptyPageOf(fixture.funds.ListExternalFundsFacts(ctx, tenant, 10, firstPage(t, ports.ExternalFundsFactPages))),
+		"经营结果": emptyPageOf(fixture.operating.ListOperatingResults(ctx, tenant, 10, firstPage(t, ports.OperatingResultPages))),
+		"成本分摊": emptyPageOf(fixture.operating.ListCostAllocations(ctx, tenant, 10, firstPage(t, ports.CostAllocationPages))),
 	}
-	costs, err := fixture.charges.ListSupplierExpectedCosts(ctx, tenant, 10)
-	if err != nil || len(costs) != 0 {
-		t.Fatalf("空预期成本册走样：err=%v rows=%+v", err, costs)
+	for name, page := range pages {
+		if page.err != nil || page.rows != 0 || page.next != "" || page.total != 0 {
+			t.Fatalf("空%s册走样：%+v", name, page)
+		}
 	}
-	statements, err := fixture.statement.ListCustomerStatements(ctx, tenant, 10)
-	if err != nil || len(statements) != 0 {
-		t.Fatalf("空对账单册走样：err=%v rows=%+v", err, statements)
-	}
-	receptions, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, 10)
-	if err != nil || len(receptions) != 0 {
-		t.Fatalf("空账单接收册走样：err=%v rows=%+v", err, receptions)
-	}
-	facts, err := fixture.funds.ListExternalFundsFacts(ctx, tenant, 10)
-	if err != nil || len(facts) != 0 {
-		t.Fatalf("空资金事实册走样：err=%v rows=%+v", err, facts)
-	}
-	results, err := fixture.operating.ListOperatingResults(ctx, tenant, 10)
-	if err != nil || len(results) != 0 {
-		t.Fatalf("空经营结果册走样：err=%v rows=%+v", err, results)
-	}
-	allocations, err := fixture.operating.ListCostAllocations(ctx, tenant, 10)
-	if err != nil || len(allocations) != 0 {
-		t.Fatalf("空分摊册走样：err=%v rows=%+v", err, allocations)
+	if disputed.Count != 0 {
+		t.Fatalf("空争议队列张数 = %d", disputed.Count)
 	}
 }
 
@@ -124,31 +131,32 @@ func TestSettlementCataloguesGuardTheirLimit(t *testing.T) {
 
 	for name, read := range map[string]func(int) error{
 		"客户费用": func(limit int) error {
-			_, err := fixture.charges.ListCustomerCharges(ctx, tenant, limit)
+			_, err := fixture.charges.ListCustomerCharges(ctx, tenant, limit, firstPage(t, ports.CustomerChargePages))
 			return err
 		},
 		"预期成本": func(limit int) error {
-			_, err := fixture.charges.ListSupplierExpectedCosts(ctx, tenant, limit)
+			_, err := fixture.charges.ListSupplierExpectedCosts(ctx, tenant, limit, firstPage(t, ports.SupplierExpectedCostPages))
 			return err
 		},
 		"对账单": func(limit int) error {
-			_, err := fixture.statement.ListCustomerStatements(ctx, tenant, limit)
+			_, err := fixture.statement.ListCustomerStatements(ctx, tenant, limit, firstPage(t, ports.CustomerStatementPages))
 			return err
 		},
 		"账单接收": func(limit int) error {
-			_, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, limit)
+			_, err := fixture.statement.ListSupplierBillReceptions(ctx, tenant, ports.SupplierBillReceptionFilter{}, limit,
+				firstPage(t, ports.SupplierBillReceptionPages))
 			return err
 		},
 		"资金事实": func(limit int) error {
-			_, err := fixture.funds.ListExternalFundsFacts(ctx, tenant, limit)
+			_, err := fixture.funds.ListExternalFundsFacts(ctx, tenant, limit, firstPage(t, ports.ExternalFundsFactPages))
 			return err
 		},
 		"经营结果": func(limit int) error {
-			_, err := fixture.operating.ListOperatingResults(ctx, tenant, limit)
+			_, err := fixture.operating.ListOperatingResults(ctx, tenant, limit, firstPage(t, ports.OperatingResultPages))
 			return err
 		},
 		"成本分摊": func(limit int) error {
-			_, err := fixture.operating.ListCostAllocations(ctx, tenant, limit)
+			_, err := fixture.operating.ListCostAllocations(ctx, tenant, limit, firstPage(t, ports.CostAllocationPages))
 			return err
 		},
 	} {
@@ -234,8 +242,8 @@ func TestCustomerChargeCatalogueTranscribesChargesAndTheirBases(t *testing.T) {
 			($1, 'SYN-CHG-01', 'SYN-FEE-01', 'DELIVERY_CONFIRMED', 'SYN-DLV-01', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.charges.ListCustomerCharges(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.charges.ListCustomerCharges(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerChargePages)))
 	if err != nil {
 		t.Fatalf("上列客户费用：%v", err)
 	}
@@ -276,8 +284,8 @@ func TestCustomerChargeCatalogueTranscribesChargesAndTheirBases(t *testing.T) {
 	t.Run("an unconfirmed row carries none of the seven", func(t *testing.T) {
 		fixture.seedCustomerCharge(t, catalogueTenant, "SYN-CHG-02", "SYN-FEE-01", "ESTIMATED",
 			"SYN-CUR-01", 500, "SYN-CUR-01", 500, "", "")
-		rows, err := fixture.charges.ListCustomerCharges(
-			t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+		rows, err := rowsOf(fixture.charges.ListCustomerCharges(
+			t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerChargePages)))
 		if err != nil {
 			t.Fatalf("上列客户费用：%v", err)
 		}
@@ -327,8 +335,8 @@ func TestCustomerChargeCatalogueKeepsUnconfiguredConditionApartFromMissingBasis(
 		 VALUES ($1, 'SYN-FEE-02', 'DELIVERY_CONFIRMED', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.charges.ListCustomerCharges(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.charges.ListCustomerCharges(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerChargePages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列客户费用走样：err=%v rows=%+v", err, rows)
 	}
@@ -381,8 +389,8 @@ func TestSupplierExpectedCostCatalogueKeepsTheVersionChain(t *testing.T) {
 	seedCost("SYN-COST-V1", "", "", 40000)
 	seedCost("SYN-COST-V2", "SYN-COST-V1", "PRICING_CORRECTION", 41000)
 
-	rows, err := fixture.charges.ListSupplierExpectedCosts(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.charges.ListSupplierExpectedCosts(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.SupplierExpectedCostPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列预期成本走样：err=%v rows=%+v", err, rows)
 	}
@@ -445,8 +453,8 @@ func TestCustomerStatementCatalogueAttachesDisputesAndInclusions(t *testing.T) {
 			 'SYN-CHG-03', NULL, $2, 'SYN-DIGEST-I2', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.statement.ListCustomerStatements(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.statement.ListCustomerStatements(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerStatementPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列对账单走样：err=%v rows=%+v", err, rows)
 	}
@@ -502,8 +510,8 @@ func TestCustomerStatementCatalogueKeepsVoidedStatementsInPlace(t *testing.T) {
 		         '[]'::jsonb, $2, 'SYN-VOID-01', $3, $2)`,
 		catalogueTenant, catalogueBaseAt, voidedAt)
 
-	rows, err := fixture.statement.ListCustomerStatements(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.statement.ListCustomerStatements(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerStatementPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列对账单走样：err=%v rows=%+v", err, rows)
 	}
@@ -534,8 +542,9 @@ func TestSupplierBillReceptionCatalogueTranscribesCountsAndAuthority(t *testing.
 		         false, $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.statement.ListSupplierBillReceptions(
-		t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10)
+	rows, err := rowsOf(fixture.statement.ListSupplierBillReceptions(
+		t.Context(), catalogueTenantID(t, catalogueTenant), ports.SupplierBillReceptionFilter{}, 10,
+		firstPage(t, ports.SupplierBillReceptionPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列账单接收走样：err=%v rows=%+v", err, rows)
 	}
@@ -586,8 +595,8 @@ func TestExternalFundsFactCatalogueSplitsAppliedFromReversed(t *testing.T) {
 			 'SYN-ABASIS-02', $2, 'SYN-REV-01', $3, 'SYN-DIGEST-A2', $2)`,
 		catalogueTenant, catalogueBaseAt, reversedAt)
 
-	rows, err := fixture.funds.ListExternalFundsFacts(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.funds.ListExternalFundsFacts(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列资金事实走样：err=%v rows=%+v", err, rows)
 	}
@@ -632,8 +641,8 @@ func TestExternalFundsFactCatalogueKeepsNeverAppliedFactsDistinct(t *testing.T) 
 	fixture := newCatalogueFixture(t)
 	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-01", "FUNDS_RETURNED", 100000, "V1", "", catalogueBaseAt)
 
-	rows, err := fixture.funds.ListExternalFundsFacts(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.funds.ListExternalFundsFacts(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列资金事实走样：err=%v rows=%+v", err, rows)
 	}
@@ -674,8 +683,8 @@ func TestExternalFundsFactCatalogueListsOneRowPerFactWithTheChainHead(t *testing
 			 'SYN-ABASIS-01', $2, 'SYN-DIGEST-A1', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.funds.ListExternalFundsFacts(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.funds.ListExternalFundsFacts(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("两条事实、其一两版，该列两行：err=%v rows=%+v", err, rows)
 	}
@@ -740,8 +749,8 @@ func TestOperatingResultCatalogueTranscribesComponentsWithoutNetting(t *testing.
 		         65000, 'SYN-RESV-01', $2, 'SYN-DIGEST-O1', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.operating.ListOperatingResults(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.operating.ListOperatingResults(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.OperatingResultPages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列经营结果走样：err=%v rows=%+v", err, rows)
 	}
@@ -788,8 +797,8 @@ func TestCostAllocationCatalogueTranscribesPortionsAndUnallocated(t *testing.T) 
 			 '[]'::jsonb, 70000, 'SYN-ALCV-02', $2, 'SYN-DIGEST-L2', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
-	rows, err := fixture.operating.ListCostAllocations(
-		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.operating.ListCostAllocations(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CostAllocationPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列成本分摊走样：err=%v rows=%+v", err, rows)
 	}

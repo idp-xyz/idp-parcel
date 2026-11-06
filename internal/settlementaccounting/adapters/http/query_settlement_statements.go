@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -15,13 +16,15 @@ type StatementCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerStatementCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomerStatementCatalogueRow], error)
 	ListSupplierBillReceptions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		filter ports.SupplierBillReceptionFilter,
 		limit int,
-	) ([]ports.SupplierBillReceptionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -45,6 +48,9 @@ const (
 //
 // **不下推账期归集或裁定参数**：哪些费用进这一期由 UC-SA-003 按截单时刻归集，异议
 // 如何裁定由裁定用例形成；查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。
+// 翻页、排序与 q 由端点按各册的声明（ports.CustomerStatementPages、ports.SupplierBillReceptionPages）
+// 解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先
+// Intake、后解码查询参数」）。
 func NewQuerySettlementStatementsEndpoint(
 	intake CatalogueQueryIntake,
 	reader StatementCatalogueReader,
@@ -53,22 +59,19 @@ func NewQuerySettlementStatementsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		registry := request.URL.Query().Get("registry")
-		if registry != registryCustomerStatement && registry != registrySupplierBillReception {
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
 			return
 		}
 		tenant := query.Scope.Tenant()
 
-		switch registry {
+		switch request.URL.Query().Get("registry") {
 		case registryCustomerStatement:
 			serveCustomerStatements(response, request, reader, tenant, query.Limit)
 		case registrySupplierBillReception:
 			serveSupplierBillReceptions(response, request, reader, tenant, query.Limit)
+		default:
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
 	})
 }
@@ -80,18 +83,24 @@ func serveCustomerStatements(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	rows, err := reader.ListCustomerStatements(request.Context(), tenant, limit)
+	pageQuery, err := ports.CustomerStatementPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListCustomerStatements(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]customerStatementBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]customerStatementBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, customerStatementBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, customerStatementListResponse{
 		Outcome:    outcomeCustomerStatementsListed,
 		Statements: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
@@ -146,23 +155,24 @@ func serveSupplierBillReceptions(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	// 多取一行只为判这一页之外还有没有：读口按收到时间倒序截，多出来的那一行是页外最新的一份，不上列。claim、supplier、
-	// supplierBillNumber 三个可选检索维在全册里精确找（ports.SupplierBillReceptionFilter）；它们是查找，不是处置参数。
+	// claim、supplier、supplierBillNumber 三个可选检索维在全册里精确找（ports.SupplierBillReceptionFilter）；它们是查找，不是
+	// 处置参数，在声明里登为选择器，取值进游标摘要。
 	values := request.URL.Query()
+	pageQuery, err := ports.SupplierBillReceptionPages.Decode(values)
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
 	filter := ports.SupplierBillReceptionFilter{
 		Claim: values.Get("claim"), Supplier: values.Get("supplier"), SupplierBillNumber: values.Get("supplierBillNumber"),
 	}
-	rows, err := reader.ListSupplierBillReceptions(request.Context(), tenant, filter, limit+1)
+	page, err := reader.ListSupplierBillReceptions(request.Context(), tenant, filter, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	truncated := len(rows) > limit
-	if truncated {
-		rows = rows[:limit]
-	}
-	bodies := make([]supplierBillReceptionBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]supplierBillReceptionBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		classifications := make(map[string]int64, len(row.ClassificationCounts))
 		for classification, lines := range row.ClassificationCounts {
 			classifications[classification] = lines
@@ -195,14 +205,16 @@ func serveSupplierBillReceptions(
 	}
 	writeJSON(response, http.StatusOK, supplierBillReceptionListResponse{
 		Outcome:    outcomeSupplierBillReceptionsListed,
-		Truncated:  truncated,
+		Truncated:  page.Next != "",
 		Receptions: bodies,
+		Page:       page.Page(limit),
 	})
 }
 
 type customerStatementListResponse struct {
 	Outcome    string                  `json:"outcome"`
 	Statements []customerStatementBody `json:"statements"`
+	Page       cataloguepage.Page      `json:"page"`
 }
 
 // customerStatementBody 逐字段透出一张已发布对账单。
@@ -261,11 +273,14 @@ type subsequentInclusionBody struct {
 	IncludedAt       string `json:"includedAt"`
 }
 
-// supplierBillReceptionListResponse 的 truncated 为真：页外还有更早收到的账单，这一页只列最近收到的那些。
+// supplierBillReceptionListResponse 的 truncated 为真：本页之后还有，即 page.next 不为空。本册不带计数，truncated 照票
+// catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」对 truncated 的改法；缺省序不带条件的
+// 第一页上，它与迁移前同义——还有更早收到的账单。
 type supplierBillReceptionListResponse struct {
 	Outcome    string                      `json:"outcome"`
 	Truncated  bool                        `json:"truncated"`
 	Receptions []supplierBillReceptionBody `json:"receptions"`
+	Page       cataloguepage.Page          `json:"page"`
 }
 
 // supplierBillReceptionBody 逐字段透出一份供应商账单主张。
@@ -316,6 +331,7 @@ type DisputedStatementReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+		query cataloguepage.Query,
 	) (ports.DisputedCustomerStatements, error)
 }
 
@@ -324,16 +340,21 @@ var _ DisputedStatementReader = ports.DisputedStatementRead(nil)
 // 空清单仍是 LISTED：「此刻没有挂着未了结争议的单」是如实答案，张数 0 只在读口真答了 0 时出现。
 const outcomeDisputedCustomerStatementsListed = "DISPUTED_CUSTOMER_STATEMENTS_LISTED"
 
+// disputedCustomerStatementsResponse 保留迁移前的张数与 truncated，外加 page（票 catalogue-read-pagination-rollout
+// spec「已带计数与 truncated 的待办队列保留这两格」）：disputedCount 仍是整个队列的张数，不随 q 变；truncated 是本页之后还有，
+// 即 page.next 不为空。
 type disputedCustomerStatementsResponse struct {
 	Outcome       string                  `json:"outcome"`
 	DisputedCount int                     `json:"disputedCount"`
 	Truncated     bool                    `json:"truncated"`
 	Statements    []customerStatementBody `json:"statements"`
+	Page          cataloguepage.Page      `json:"page"`
 }
 
 // NewQueryDisputedCustomerStatementsEndpoint 交回挂着未了结争议的客户对账单查阅的 HTTP 入口
 // （GET /settlement-disputed-statements），连同全部张数与是否截断。何为未了结、为何不数相对方待确认，见
-// ports.DisputedCustomerStatements。行形与对账单册同一份，对账单页按同一套列读它。
+// ports.DisputedCustomerStatements。行形与对账单册同一份，对账单页按同一套列读它；翻页、排序与 q 按
+// ports.DisputedCustomerStatementPages 在 Intake 之后解码。
 //
 // 不另立裁定参数，理由同 NewQuerySettlementStatementsEndpoint：争议怎样处理由裁定用例形成，查阅面只答哪些单还在等。
 func NewQueryDisputedCustomerStatementsEndpoint(
@@ -348,7 +369,12 @@ func NewQueryDisputedCustomerStatementsEndpoint(
 		if !ok {
 			return
 		}
-		listed, err := reader.ListDisputedCustomerStatements(request.Context(), query.Scope.Tenant(), query.Limit)
+		pageQuery, err := ports.DisputedCustomerStatementPages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		listed, err := reader.ListDisputedCustomerStatements(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回不伪装成 0 张：首页把 0 读成「没有待对账的」，等人裁的异议就没人看见了。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -361,8 +387,9 @@ func NewQueryDisputedCustomerStatementsEndpoint(
 		writeJSON(response, http.StatusOK, disputedCustomerStatementsResponse{
 			Outcome:       outcomeDisputedCustomerStatementsListed,
 			DisputedCount: listed.Count,
-			Truncated:     listed.Count > len(listed.Statements),
+			Truncated:     listed.Next != "",
 			Statements:    bodies,
+			Page:          cataloguepage.NewPage(query.Limit, listed.Next, listed.Total),
 		})
 	})
 }

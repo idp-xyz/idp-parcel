@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -15,12 +16,14 @@ type ChargeCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerChargeCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomerChargeCatalogueRow], error)
 	ListSupplierExpectedCosts(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.SupplierExpectedCostCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SupplierExpectedCostCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -51,7 +54,10 @@ const (
 //
 // 全部行原样上列，**不下推确认条件、账期或口径参数**：哪笔该确认、该进哪个账期、
 // 按哪个口径采用是各自唯一创建用例伺候的判断输入，查阅面收下判断参数就等于让目录
-// 读口长出第二种「处置」语义（裁决同 /customs-ports-paths 不收评估时点那条）。
+// 读口长出第二种「处置」语义（裁决同 /customs-ports-paths 不收评估时点那条）。翻页、
+// 排序、阶段筛选与 q 由端点按各册的声明（ports.CustomerChargePages、ports.SupplierExpectedCostPages）
+// 解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先
+// Intake、后解码查询参数」）。
 func NewQuerySettlementChargesEndpoint(
 	intake CatalogueQueryIntake,
 	reader ChargeCatalogueReader,
@@ -60,22 +66,19 @@ func NewQuerySettlementChargesEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		registry := request.URL.Query().Get("registry")
-		if registry != registryCustomerCharge && registry != registrySupplierExpectedCost {
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
 			return
 		}
 		tenant := query.Scope.Tenant()
 
-		switch registry {
+		switch request.URL.Query().Get("registry") {
 		case registryCustomerCharge:
 			serveCustomerCharges(response, request, reader, tenant, query.Limit)
 		case registrySupplierExpectedCost:
 			serveSupplierExpectedCosts(response, request, reader, tenant, query.Limit)
+		default:
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
 	})
 }
@@ -87,15 +90,20 @@ func serveCustomerCharges(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	rows, err := reader.ListCustomerCharges(request.Context(), tenant, limit)
+	pageQuery, err := ports.CustomerChargePages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListCustomerCharges(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成终局。
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]customerChargeBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]customerChargeBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bases := make([]chargeConfirmationBasisBody, 0, len(row.ConfirmationBases))
 		for _, basis := range row.ConfirmationBases {
 			bases = append(bases, chargeConfirmationBasisBody{
@@ -133,6 +141,7 @@ func serveCustomerCharges(
 	writeJSON(response, http.StatusOK, customerChargeListResponse{
 		Outcome: outcomeCustomerChargesListed,
 		Charges: bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -143,13 +152,18 @@ func serveSupplierExpectedCosts(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	rows, err := reader.ListSupplierExpectedCosts(request.Context(), tenant, limit)
+	pageQuery, err := ports.SupplierExpectedCostPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListSupplierExpectedCosts(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]supplierExpectedCostBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]supplierExpectedCostBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		bodies = append(bodies, supplierExpectedCostBody{
 			Version:             row.Version,
 			Occurrence:          row.Occurrence,
@@ -175,12 +189,14 @@ func serveSupplierExpectedCosts(
 	writeJSON(response, http.StatusOK, supplierExpectedCostListResponse{
 		Outcome: outcomeSupplierExpectedCostsListed,
 		Costs:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type customerChargeListResponse struct {
 	Outcome string               `json:"outcome"`
 	Charges []customerChargeBody `json:"charges"`
+	Page    cataloguepage.Page   `json:"page"`
 }
 
 // customerChargeBody 逐字段透出一条客户费用。
@@ -234,6 +250,7 @@ type chargeConfirmationBasisBody struct {
 type supplierExpectedCostListResponse struct {
 	Outcome string                     `json:"outcome"`
 	Costs   []supplierExpectedCostBody `json:"costs"`
+	Page    cataloguepage.Page         `json:"page"`
 }
 
 // supplierExpectedCostBody 逐字段透出一版供应商预期成本。

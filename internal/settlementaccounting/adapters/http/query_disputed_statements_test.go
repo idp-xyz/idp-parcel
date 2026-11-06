@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -23,7 +24,7 @@ type stubDisputedStatements struct {
 }
 
 func (stub *stubDisputedStatements) ListDisputedCustomerStatements(
-	_ context.Context, tenant domain.TenantID, limit int,
+	_ context.Context, tenant domain.TenantID, limit int, _ cataloguepage.Query,
 ) (ports.DisputedCustomerStatements, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return stub.listed, stub.err
@@ -37,11 +38,15 @@ func serveDisputed(t *testing.T, stub *stubDisputedStatements, target string) *h
 	return response
 }
 
-// Covers: AT-SA-227 — 张数是读口答的全部张数，不是这一页的行数；页比张数短即标截断；行形与对账单册同一份；
-// 租户与页大小只取自接入面，请求自报的租户不采信。
+// Covers: AT-SA-227 — 张数是读口答的全部张数，不是这一页的行数；本页之后还有（读口给了游标）即标截断，truncated 与 page.next
+// 同义（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）；行形与对账单册同一份；租户与
+// 页大小只取自接入面，请求自报的租户
+// 是集外键，答 400 不带任何行（ADR-0144 决定四）。
 func TestDisputedStatementQueryCarriesTheWholeCountAndMarksTruncation(t *testing.T) {
 	stub := &stubDisputedStatements{listed: ports.DisputedCustomerStatements{
 		Count: 3,
+		Next:  "SYN-CURSOR-NEXT",
+		Total: 3,
 		Statements: []ports.CustomerStatementCatalogueRow{{
 			StatementNumber: "SYN-STMT-01", Account: "SYN-ACC-01", Period: "2026-07", Currency: "SYN-CUR-01",
 			TotalMinor: 250000, LineCount: 2, PublishedAt: catalogueBaseAt,
@@ -50,9 +55,18 @@ func TestDisputedStatementQueryCarriesTheWholeCountAndMarksTruncation(t *testing
 			}},
 		}},
 	}}
-	response := serveDisputed(t, stub, "/settlement-disputed-statements?tenant=TENANT-9")
+	selfReported := serveDisputed(t, stub, "/settlement-disputed-statements?tenant=TENANT-9")
+	assertPageQueryRefused(t, selfReported)
+	assertNoOutcome(t, selfReported)
+	if stub.gotTenant != "" {
+		t.Fatalf("自报租户的请求触到了读口：tenant=%q", stub.gotTenant)
+	}
+	response := serveDisputed(t, stub, "/settlement-disputed-statements")
 	if response.Code != http.StatusOK || stub.gotTenant != "TENANT-1" || stub.gotLimit != 25 {
 		t.Fatalf("status = %d tenant = %q limit = %d", response.Code, stub.gotTenant, stub.gotLimit)
+	}
+	if page := pageOf(t, response); string(page["size"]) != "25" || string(page["next"]) != `"SYN-CURSOR-NEXT"` || string(page["total"]) != "3" {
+		t.Fatalf("page 走样：%s", response.Body.String())
 	}
 	var body struct {
 		Outcome       string `json:"outcome"`
@@ -78,6 +92,32 @@ func TestDisputedStatementQueryCarriesTheWholeCountAndMarksTruncation(t *testing
 		body.Statements[0].TotalAmount != "250000" || len(body.Statements[0].Disputes) != 1 ||
 		body.Statements[0].Disputes[0].DisputedAmount != "1200" || body.Statements[0].Disputes[0].Resolution != "" {
 		t.Fatalf("行形与对账单册不同：%s", response.Body.String())
+	}
+}
+
+// Covers: spec「已带计数与 truncated 的待办队列保留这两格」— 张数与 page.total 是两个数：带 q 时张数仍是整个队列，page.total 是符合 q 的张数；末页不截断，即使这一页
+// 比张数短。
+func TestDisputedStatementCountStaysTheBacklogWhileThePageFollowsTheKeyword(t *testing.T) {
+	stub := &stubDisputedStatements{listed: ports.DisputedCustomerStatements{
+		Count: 5,
+		Total: 1,
+		Statements: []ports.CustomerStatementCatalogueRow{{
+			StatementNumber: "SYN-STMT-04", Account: "SYN-ACC-01", Period: "2026-07", Currency: "SYN-CUR-01", PublishedAt: catalogueBaseAt,
+		}},
+	}}
+	response := serveDisputed(t, stub, "/settlement-disputed-statements?q=SYN-STMT-04")
+	var body struct {
+		DisputedCount int  `json:"disputedCount"`
+		Truncated     bool `json:"truncated"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || body.DisputedCount != 5 || body.Truncated {
+		t.Fatalf("张数要整个队列、末页不截断：%d %s", response.Code, response.Body.String())
+	}
+	if page := pageOf(t, response); string(page["total"]) != "1" || string(page["next"]) != "null" {
+		t.Fatalf("page 走样：%s", response.Body.String())
 	}
 }
 

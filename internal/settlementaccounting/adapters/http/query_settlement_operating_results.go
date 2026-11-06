@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -15,12 +16,14 @@ type OperatingCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.OperatingResultCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.OperatingResultCatalogueRow], error)
 	ListCostAllocations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CostAllocationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CostAllocationCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -45,7 +48,10 @@ const (
 // **本端点不下推口径参数，也不代算任何指标**：毛利只能派生不能直接修改，派生它的门
 // 在写口（重建时复验组成与毛利是否相符）；读口再算一遍就成了第二处定义，且两处一旦
 // 不一致，页面上看到的会是读口那个没人验过的数。空册就是空册——经营口径的数字造不得
-// （见 spec 事实基线）。
+// （见 spec 事实基线）。翻页、排序与 q 由端点按各册的声明（ports.OperatingResultPages、
+// ports.CostAllocationPages）解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后
+// （catalogue-read-pagination-rollout spec「端点先 Intake、后解码查询参数」）。经营结果册的 basis 筛选只挑出册上已有的行，
+// 不是让读口按某个口径重算。
 func NewQuerySettlementOperatingResultsEndpoint(
 	intake CatalogueQueryIntake,
 	reader OperatingCatalogueReader,
@@ -54,22 +60,19 @@ func NewQuerySettlementOperatingResultsEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
-		registry := request.URL.Query().Get("registry")
-		if registry != registryOperatingResult && registry != registryCostAllocation {
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
 			return
 		}
 		tenant := query.Scope.Tenant()
 
-		switch registry {
+		switch request.URL.Query().Get("registry") {
 		case registryOperatingResult:
 			serveOperatingResults(response, request, reader, tenant, query.Limit)
 		case registryCostAllocation:
 			serveCostAllocations(response, request, reader, tenant, query.Limit)
+		default:
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
 	})
 }
@@ -81,13 +84,18 @@ func serveOperatingResults(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	rows, err := reader.ListOperatingResults(request.Context(), tenant, limit)
+	pageQuery, err := ports.OperatingResultPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListOperatingResults(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]operatingResultBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]operatingResultBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		components := make([]operatingComponentBody, 0, len(row.Components))
 		for _, component := range row.Components {
 			components = append(components, operatingComponentBody{
@@ -113,6 +121,7 @@ func serveOperatingResults(
 	writeJSON(response, http.StatusOK, operatingResultListResponse{
 		Outcome: outcomeOperatingResultsListed,
 		Results: bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -123,13 +132,18 @@ func serveCostAllocations(
 	tenant domain.TenantID,
 	limit int,
 ) {
-	rows, err := reader.ListCostAllocations(request.Context(), tenant, limit)
+	pageQuery, err := ports.CostAllocationPages.Decode(request.URL.Query())
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	page, err := reader.ListCostAllocations(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]costAllocationBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]costAllocationBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		portions := make([]allocationPortionBody, 0, len(row.Portions))
 		for _, portion := range row.Portions {
 			portions = append(portions, allocationPortionBody{
@@ -154,12 +168,14 @@ func serveCostAllocations(
 	writeJSON(response, http.StatusOK, costAllocationListResponse{
 		Outcome:     outcomeCostAllocationsListed,
 		Allocations: bodies,
+		Page:        page.Page(limit),
 	})
 }
 
 type operatingResultListResponse struct {
 	Outcome string                `json:"outcome"`
 	Results []operatingResultBody `json:"results"`
+	Page    cataloguepage.Page    `json:"page"`
 }
 
 // operatingResultBody 逐字段透出一份经营结果快照：口径三件（分析范围、账期、基准）、
@@ -200,6 +216,7 @@ type operatingComponentBody struct {
 type costAllocationListResponse struct {
 	Outcome     string               `json:"outcome"`
 	Allocations []costAllocationBody `json:"allocations"`
+	Page        cataloguepage.Page   `json:"page"`
 }
 
 // costAllocationBody 逐字段透出一次成本分摊。

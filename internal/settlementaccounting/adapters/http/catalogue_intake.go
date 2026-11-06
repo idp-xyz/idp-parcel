@@ -88,10 +88,11 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
 }
 
-// 四个端点的门次序一致：方法 → 册名 → 准入（照 /customs-ports-paths）。分成两个
-// 助手而不是一个，是因为带分派的三个端点要在两道门之间插册名判——册名不认识是请求
-// 形状的事，判它不需要先知道调用方是谁。两个助手交回 false 时答复已写出，调用方
-// 直接返回。
+// 各列表端点的门次序一致：方法 → 准入 → 册名 → 翻页参数（翻页参数见 writePageQueryProblem）。
+// 册名与翻页参数都排在准入之后：渠道未配置时答复对一切请求内容一致（ADR-0055 决定三），认不认得
+// 册名、参数写没写对都不先于准入作答，否则没配好渠道的调用方能从 400 与 403 的分别里探出各册收哪些
+// 参数。方法判的是这个路由收不收这个动词，不读请求内容，故在准入之前。两个助手交回 false 时答复
+// 已写出，调用方直接返回。
 
 func guardGet(response http.ResponseWriter, request *http.Request) bool {
 	if request.Method != http.MethodGet {
@@ -121,10 +122,17 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 是给操作者看的散文，只随「改请求才会好」的 4xx 在场，前端原样示出、不据此分支
+	// （同 party-commercial 的同名一格）；没有可说的时候整键不出现。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
-	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+	writeProblemWithDetail(response, status, code, "")
+}
+
+func writeProblemWithDetail(response http.ResponseWriter, status int, code, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

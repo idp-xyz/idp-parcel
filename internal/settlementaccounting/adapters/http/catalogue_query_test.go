@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -64,28 +65,28 @@ func (stub unreachableCatalogues) refuse(register string) {
 }
 
 func (stub unreachableCatalogues) ListCustomerCharges(
-	context.Context, domain.TenantID, int,
-) ([]ports.CustomerChargeCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerChargeCatalogueRow], error) {
 	stub.refuse("customer charge")
-	return nil, nil
+	return cataloguepage.Result[ports.CustomerChargeCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListSupplierExpectedCosts(
-	context.Context, domain.TenantID, int,
-) ([]ports.SupplierExpectedCostCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierExpectedCostCatalogueRow], error) {
 	stub.refuse("supplier expected cost")
-	return nil, nil
+	return cataloguepage.Result[ports.SupplierExpectedCostCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListCustomerStatements(
-	context.Context, domain.TenantID, int,
-) ([]ports.CustomerStatementCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerStatementCatalogueRow], error) {
 	stub.refuse("customer statement")
-	return nil, nil
+	return cataloguepage.Result[ports.CustomerStatementCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListDisputedCustomerStatements(
-	context.Context, domain.TenantID, int,
+	context.Context, domain.TenantID, int, cataloguepage.Query,
 ) (ports.DisputedCustomerStatements, error) {
 	stub.refuse("disputed customer statement")
 	return ports.DisputedCustomerStatements{}, nil
@@ -99,10 +100,10 @@ func (stub unreachableCatalogues) FindStatementLines(
 }
 
 func (stub unreachableCatalogues) ListSupplierBillReceptions(
-	context.Context, domain.TenantID, ports.SupplierBillReceptionFilter, int,
-) ([]ports.SupplierBillReceptionCatalogueRow, error) {
+	context.Context, domain.TenantID, ports.SupplierBillReceptionFilter, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error) {
 	stub.refuse("supplier bill reception")
-	return nil, nil
+	return cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) FindSupplierBillLines(
@@ -113,31 +114,31 @@ func (stub unreachableCatalogues) FindSupplierBillLines(
 }
 
 func (stub unreachableCatalogues) ListAuditedPayables(
-	context.Context, domain.TenantID, ports.AuditedPayableFilter, int,
-) ([]ports.AuditedPayableCatalogueRow, error) {
+	context.Context, domain.TenantID, ports.AuditedPayableFilter, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.AuditedPayableCatalogueRow], error) {
 	stub.refuse("audited payable")
-	return nil, nil
+	return cataloguepage.Result[ports.AuditedPayableCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListExternalFundsFacts(
-	context.Context, domain.TenantID, int,
-) ([]ports.ExternalFundsFactCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalFundsFactCatalogueRow], error) {
 	stub.refuse("external funds fact")
-	return nil, nil
+	return cataloguepage.Result[ports.ExternalFundsFactCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListOperatingResults(
-	context.Context, domain.TenantID, int,
-) ([]ports.OperatingResultCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.OperatingResultCatalogueRow], error) {
 	stub.refuse("operating result")
-	return nil, nil
+	return cataloguepage.Result[ports.OperatingResultCatalogueRow]{}, nil
 }
 
 func (stub unreachableCatalogues) ListCostAllocations(
-	context.Context, domain.TenantID, int,
-) ([]ports.CostAllocationCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CostAllocationCatalogueRow], error) {
 	stub.refuse("cost allocation")
-	return nil, nil
+	return cataloguepage.Result[ports.CostAllocationCatalogueRow]{}, nil
 }
 
 // endpointCase 是一个目录查阅端点：端点入口加一个能取到该册的合法目标。
@@ -343,16 +344,45 @@ func TestOneSettlementPageDoesNotAnswerAnotherPagesRegistry(t *testing.T) {
 	}
 }
 
-// Covers: 门的次序 — 请求形状立不起来先于渠道未配置作答。册名认不出是请求自身的事，
-// 判它不需要先知道调用方是谁；反过来先答 403 会让调用方以为配好渠道这次请求就能成。
-func TestAnUnknownRegistryIsRefusedBeforeTheChannelCheck(t *testing.T) {
-	endpoint := settlementhttp.NewQuerySettlementChargesEndpoint(
-		settlementhttp.UnconfiguredIntake{}, unreachableCatalogues{t: t},
-	)
-	response := serveGet(endpoint, "/settlement-charges?registry=unknown")
-
-	if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
-		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——渠道未配置时，认不出的册名、空册名与合法册名
+// 同答 403：分派排在 Intake 之后，没配好渠道的调用方从答复里探不出本端点认哪些册名。配好的渠道上认不出的册名照答 400，见
+// TestSettlementCatalogueQueriesRejectUnknownRegistries。
+func TestAnUnconfiguredChannelRefusesEvenAnUnknownRegistry(t *testing.T) {
+	unreachable := unreachableCatalogues{t: t}
+	dispatching := []struct {
+		endpointCase
+		known string
+	}{
+		{endpointCase{
+			name:    "charges",
+			target:  "/settlement-charges",
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
+		}, "customer-charge"},
+		{endpointCase{
+			name:    "statements",
+			target:  "/settlement-statements",
+			handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
+		}, "customer-statement"},
+		{endpointCase{
+			name:    "operating-results",
+			target:  "/settlement-operating-results",
+			handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
+		}, "operating-result"},
+	}
+	for _, endpoint := range dispatching {
+		t.Run(endpoint.name, func(t *testing.T) {
+			known := serveGet(endpoint.handler, endpoint.target+"?registry="+endpoint.known)
+			if known.Code != http.StatusForbidden || problemCode(t, known) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+				t.Fatalf("status = %d body = %s", known.Code, known.Body.String())
+			}
+			assertNoOutcome(t, known)
+			for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=customer_charge"} {
+				response := serveGet(endpoint.handler, endpoint.target+registry)
+				if response.Code != http.StatusForbidden || response.Body.String() != known.Body.String() {
+					t.Fatalf("%q：未配置的渠道答复随册名变了：%d %s，合法册名答 %s", registry, response.Code, response.Body, known.Body)
+				}
+			}
+		})
 	}
 }
 

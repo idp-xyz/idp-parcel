@@ -1,6 +1,10 @@
 package postgres_test
 
-import "testing"
+import (
+	"testing"
+
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+)
 
 // Covers: AT-SA-200（读面持久化半边）——资金事实册上列交回链头那一版的操作证据；不记提交方的一版交回空。
 func TestExternalFundsFactCatalogueCarriesTheChainHeadOperationEvidence(t *testing.T) {
@@ -10,7 +14,7 @@ func TestExternalFundsFactCatalogueCarriesTheChainHeadOperationEvidence(t *testi
 	fixture.seed(t, `UPDATE settlement_accounting.external_funds_fact_version SET operation_evidence = $2
 		 WHERE tenant_id = $1 AND fact_id = 'SYN-FACT-01'`, catalogueTenant, "OPERATOR/https://id.syn.example/dex#SYN-FINANCE-01")
 
-	rows, err := fixture.funds.ListExternalFundsFacts(t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	rows, err := rowsOf(fixture.funds.ListExternalFundsFacts(t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.ExternalFundsFactPages)))
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("上列资金事实走样：err=%v rows=%+v", err, rows)
 	}
