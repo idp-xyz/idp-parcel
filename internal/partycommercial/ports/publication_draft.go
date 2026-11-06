@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 待批准发布载体与审批职责规则的端口（ADR-0126 Decision 三）。单立一个文件而不进 ports.go：
@@ -145,8 +146,14 @@ type PublicationDraftRead interface {
 		objectID domain.CommercialObjectID,
 		version domain.CommercialVersionLabel,
 	) (domain.PublicationDraft, bool, error)
-	// ListOpenDrafts 按录入时刻由新到旧交出租户名下还没发布的载体，至多 limit 份；Limit 非正拒，没有就交空切片。
-	ListOpenDrafts(ctx context.Context, tenant domain.TenantID, limit int) ([]OpenPublicationDraft, error)
+	// ListOpenDrafts 收端点按 OpenPublicationDraftPages 解出的查询对象，答租户名下还没发布的载体的一页（ADR-0144），缺省按
+	// 录入时刻由新到旧；Limit 非正拒，没有就交空页。读不回的行同样占页里的位置、计入总数。
+	ListOpenDrafts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[OpenPublicationDraft], error)
 }
 
 // OpenPublicationDraft 是未发布列表里的一行，恰有一格在场：折得回的是整份载体，本构建折不回正文的只剩库上的事实。

@@ -375,7 +375,7 @@ func TestOpenDraftsListPendingAndApprovedNewestFirstWithinTheTenant(t *testing.T
 	}
 	mustAdvanceDraft(t, transactor, ctx, drafts, done)
 
-	openListed, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10)
+	openListed, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10, firstPage(t, ports.OpenPublicationDraftPages)))
 	if err != nil {
 		t.Fatalf("列出未发布载体：%v", err)
 	}
@@ -395,15 +395,15 @@ func TestOpenDraftsListPendingAndApprovedNewestFirstWithinTheTenant(t *testing.T
 		t.Fatalf("已批准的一份没带批准者：%q %v", approver, approved)
 	}
 
-	limited, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 2)
+	limited, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 2, firstPage(t, ports.OpenPublicationDraftPages)))
 	if err != nil || len(limited) != 2 || readableDraftsOf(t, limited)[0].ObjectID().String() != "credit-new" {
 		t.Fatalf("limit=2：%d 份, err = %v", len(limited), err)
 	}
-	none, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-3"), 10)
+	none, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-3"), 10, firstPage(t, ports.OpenPublicationDraftPages)))
 	if err != nil || none == nil || len(none) != 0 {
 		t.Fatalf("没有载体的租户 = (%v, %v)，应是空切片", none, err)
 	}
-	if _, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 0); err == nil {
+	if _, err := rowsOf(drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 0, firstPage(t, ports.OpenPublicationDraftPages))); err == nil {
 		t.Fatal("limit=0 未拒")
 	}
 }

@@ -1680,8 +1680,9 @@ func (unwiredPublicationDraftRead) ListOpenDrafts(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.OpenPublicationDraft, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (cataloguepage.Result[commercialports.OpenPublicationDraft], error) {
+	return cataloguepage.Result[commercialports.OpenPublicationDraft]{}, errOrchestrationNotWired
 }
 
 type unwiredCommercialCatalogue struct{}

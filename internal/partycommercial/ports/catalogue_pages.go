@@ -214,3 +214,27 @@ var ProductChannelMappingPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "registeredAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 })
+
+// openDraftStatuses 是开放中载体 status 的词表：读面只列`待批准`与`已批准`，已发布的不在册，PUBLISHED 进词表只会让筛它恒答
+// 空页，判据同 versionStatuses 不收 DRAFT。
+var openDraftStatuses = []string{
+	domain.PublicationDraftPendingApproval.String(),
+	domain.PublicationDraftApproved.String(),
+}
+
+// OpenPublicationDraftPages 是 /commercial-open-publication-drafts 的查询声明。缺省序录入时刻倒序，即迁移前的首列与方向；
+// 行标识是版本身份去掉租户的三段（类别、对象、版本），类别在库上存领域码、按整数比。kind 取自 domain.CommercialObjectKind。
+// 本构建读不回的载体照样在册（ADR-0344），可读与否是读面经重建门之后才知道的事、库上没有这一列，不作筛选维。
+var OpenPublicationDraftPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-open-publication-drafts",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "submittedAt", Kind: cataloguepage.Instant},
+		{Name: "objectId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "submittedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Integer, cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "status", Vocabulary: openDraftStatuses},
+		{Name: "kind", Vocabulary: cataloguepage.Words[domain.CommercialObjectKind]()},
+	},
+})
