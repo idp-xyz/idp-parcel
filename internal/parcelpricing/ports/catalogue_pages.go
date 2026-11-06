@@ -15,7 +15,7 @@ import (
 // EvaluationPages 是评价登记册（GET /pricing-evaluations）的声明。
 //
 // 答复体没有 registeredAt 一格，recordedAt 是评价落册的时刻、与登记时间同义；缺省序取它倒序，与迁移前同一口径。可排维只放
-// 这一维：评价标识是不透明串，按它换序没有操作意义。status 放出作筛选维（决定四），词表是迁移钉住的封闭五格。q 覆盖
+// 这一维：评价标识是不透明串，按它换序没有操作意义。status 放出作筛选维（决定四），词表是迁移钉住的闭集。q 覆盖
 // evaluationId、semanticDigest 与 planContentDigest。
 //
 // 评价按请求计量，是本上下文行数最多的一册：total 给精确值以「按租户读、租户级规模」为前提（ADR-0144 越权风险点 3），哪天
@@ -39,10 +39,10 @@ var EvaluationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // PriceCardPages 是价卡目录（GET /pricing-price-cards）的声明，一版一行。
 //
 // 缺省序照决定三取 -registeredAt，与迁移前同一口径；行标识是（方案标识、方案版本）。planId 另放作可排维：价卡是按方案看版本
-// 的册（ADR-0144 越权风险点 1），按它排，同一方案的各版挨在一起。direction 是封闭三格，放出作筛选维（决定四）；计算目的与
+// 的册（ADR-0144 越权风险点 1），按它排，同一方案的各版挨在一起。direction 是闭集，放出作筛选维（决定四）；计算目的与
 // 方向首发一一对应，不另开一维。q 覆盖 planId、planVersion 与 scope。
 //
-// 管理台价卡页的状态（admin-web 的 priceCardStatus）是页面拿此刻对适用期与收尾三格现算的，不是登记册上的列，本册不放它。
+// 管理台价卡页的状态（admin-web 的 priceCardStatus）是页面拿此刻对适用期与收尾各格现算的，不是登记册上的列，本册不放它。
 var PriceCardPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "pricing-price-cards",
 	Sorts: []cataloguepage.SortDimension{
@@ -63,7 +63,7 @@ var PriceCardPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // ReferenceSeriesPages 是参考序列登记册（GET /pricing-reference-series）的声明，一版一行。
 //
 // 缺省序照决定三取 -registeredAt，与迁移前同一口径；行标识是（序列标识、序列版本）。seriesId 另放作可排维，理由同价卡的
-// planId。kind 是封闭三格，放出作筛选维（决定四）；seriesId 也放作筛选维、不设词表——管理台从覆盖摘要「只看这一条序列」是按
+// planId。kind 是闭集，放出作筛选维（决定四）；seriesId 也放作筛选维、不设词表——管理台从覆盖摘要「只看这一条序列」是按
 // 标识精确取，q 的包含匹配会把同前缀的兄弟序列一并带进来。q 覆盖 seriesId、sourceIdentifier 与 registrant。
 //
 // 复核事实不进任何一维：它们是按版本从复核册连过来的计数，page 与 total 数的是版本。
@@ -97,7 +97,7 @@ var ReferenceSeriesCoveragePages = cataloguepage.MustCatalogue(cataloguepage.Spe
 // PriceCardDraftPages 是价卡草稿查阅（GET /pricing-price-card-draft-views）的声明，一版一行。
 //
 // 草稿不是价卡版本、不进登记册，没有登记时间一格；submittedAt 是这一版最近一次录入的时刻，缺省序取它倒序，与迁移前同一口径。
-// 行标识是（方案标识、方案版本），答复体里它们在 plan 对象下、不是顶层字段，所以不作可排维。status 是草稿的状态四格，放出作
+// 行标识是（方案标识、方案版本），答复体里它们在 plan 对象下、不是顶层字段，所以不作可排维。status 是草稿状态的闭集，放出作
 // 筛选维（决定四），词表取自领域 PriceCardDraftStatus；它接替迁移前 Intake 解的那个单值 status（决定六：查询意图不归 Intake），
 // 现在同一维可重复给、维内为或。q 覆盖方案标识、方案版本与源文件名。
 //
@@ -112,7 +112,7 @@ var PriceCardDraftPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 })
 
-// referenceSeriesKinds 是序列种类的封闭三格，序列册与覆盖两册共用。
+// referenceSeriesKinds 是序列种类的闭集，序列册与覆盖册共用。
 var referenceSeriesKinds = []string{
 	domain.ReferenceSeriesFuelRate.String(),
 	domain.ReferenceSeriesExchangeRate.String(),

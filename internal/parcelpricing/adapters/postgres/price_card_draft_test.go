@@ -275,7 +275,7 @@ func TestTheDraftListIsPerTenantNewestFirstAndFiltersByStatus(t *testing.T) {
 			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, 0, everything)
 			return err
 		},
-		// 状态不在四格的词在解查询时就被词表拒了（端点用例证）；读口这边守的是查询对象出自本册的声明。
+		// 词表外的状态词在解查询时就被拒了（端点用例证）；读口这边守的是查询对象出自本册的声明。
 		"查询对象出自别的册": func() error {
 			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, 10, firstPage(t, ports.PriceCardPages))
 			return err

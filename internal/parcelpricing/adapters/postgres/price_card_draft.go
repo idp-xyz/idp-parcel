@@ -134,7 +134,7 @@ func revisePriceCardDraft(
 	return ports.PriceCardDraftRevised, nil
 }
 
-// priceCardDraftPages 把 ports.PriceCardDraftPages 落到草稿表的列上。状态列存的是四格的名字（0011），按原词比较。
+// priceCardDraftPages 把 ports.PriceCardDraftPages 落到草稿表的列上。状态列存的是状态名（0011 的 CHECK 钉住），按原词比较。
 var priceCardDraftPages = ports.PriceCardDraftPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"submittedAt": "submitted_at"},
 	Identity: []string{"plan_id", "plan_version"},
