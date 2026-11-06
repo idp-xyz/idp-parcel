@@ -276,7 +276,7 @@ _Avoid in this context_: 计费重量（客户计费重量与供应商计费重�
 - 商品身份是（租户，货主，商品编码）；别名在同一货主内只指一个商品（可以是组合商品），不跨货主解析。
 - 本上下文不记库存成本与价值，不管货主的采购、销售订单与补货计划（ADR-0368 决定二）。
 - 凡按日计的（库龄、仓租计费日、日终在库）都按仓的业务时区；仓的业务时区没登记时这些都答未配置。
-- 入库预报进入已预报、出库请求进入已受理、退货预报经客户渠道登记时，在同一事务内取得单据号，每种一个单据类型；拆单拆出的出库请求是新单据，各取新号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、三）。单据号不替代内部身份。号里的日期按仓的业务时区，仓的业务时区没登记时按租户的单据编号时区。
+- 入库预报进入已预报、出库请求进入已受理时，在同一事务内取得单据号，退货预报在记下它的同一事务内取得，每种一个单据类型；拆单拆出的出库请求是新单据，各取新号（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md) 决定二、三）。单据号不替代内部身份。号里的日期按仓的业务时区，仓的业务时区没登记时按租户的单据编号时区。
 
 ### 库存账与守恒
 
