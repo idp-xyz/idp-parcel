@@ -248,6 +248,18 @@ func (intake *OperatorRegistryIntake) IntakeLegalEntityProfileRegistration(ctx c
 	return document.Profiles[0].command(tenant)
 }
 
+// IntakeBusinessPartyProfileRegistration 译参与方资料登记口的一项（ADR-0369），判据同法人资料口。
+func (intake *OperatorRegistryIntake) IntakeBusinessPartyProfileRegistration(ctx context.Context, request *http.Request) (application.RegisterBusinessPartyProfileCommand, error) {
+	tenant, document, err := authenticateAndDecode[businessPartyProfileBatchDocument](ctx, intake, request, businessPartyProfileBatchTenant)
+	if err != nil {
+		return application.RegisterBusinessPartyProfileCommand{}, err
+	}
+	if err := exactlyOneItem("profiles", len(document.Profiles), len(document.Profiles)); err != nil {
+		return application.RegisterBusinessPartyProfileCommand{}, err
+	}
+	return document.Profiles[0].command(tenant)
+}
+
 // authenticateAndDecode 是各口共用的前半段：先认证，再以封闭形状解外壳（decodeClosedDocument），再执行自报租户那道拒
 // （refuseSelfReportedTenant）——各口走同一份判据，同一形状在本包只有一种答复。
 func authenticateAndDecode[Document any](
@@ -299,6 +311,10 @@ func partyIdentityBatchTenant(document partyIdentityBatchDocument) []byte { retu
 func deactivationBatchTenant(document deactivationBatchDocument) []byte { return document.TenantID }
 
 func legalEntityProfileBatchTenant(document legalEntityProfileBatchDocument) []byte {
+	return document.TenantID
+}
+
+func businessPartyProfileBatchTenant(document businessPartyProfileBatchDocument) []byte {
 	return document.TenantID
 }
 

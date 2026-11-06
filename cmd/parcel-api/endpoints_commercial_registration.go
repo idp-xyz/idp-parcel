@@ -15,6 +15,7 @@ type commercialRegistrationWiring struct {
 	productChannelRegistration         commercialhttp.ProductChannelRegistrar
 	registrationNumberTypeRegistration commercialhttp.RegistrationNumberTypeRegistrar
 	legalEntityProfileRegistration     commercialhttp.LegalEntityProfileRegistrar
+	businessPartyProfileRegistration   commercialhttp.BusinessPartyProfileRegistrar
 	channelAccountUseRegistration      commercialhttp.ChannelAccountUseRegistrar
 	referenceEnablementRegistration    commercialhttp.ReferenceEnablementRegistrar
 }
@@ -40,6 +41,7 @@ func init() {
 			"/commercial-registration-number-type-registrations": {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-registration-number-type-deactivations": {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-legal-entity-profile-registrations":     {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-business-party-profile-registrations":   {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-channel-account-use-registrations":      {method: http.MethodPost, face: registryWriteFace()},
 			"/commercial-channel-account-use-revocations":        {method: http.MethodPost, face: registryWriteFace()},
 			"/reference-data/enablement-registrations":           {method: http.MethodPost, face: registryWriteFace()},
@@ -54,6 +56,7 @@ func init() {
 				productChannelRegistration:         commercialRegistration.productChannel,
 				registrationNumberTypeRegistration: commercialRegistration.registrationNumberType,
 				legalEntityProfileRegistration:     commercialRegistration.legalEntityProfile,
+				businessPartyProfileRegistration:   commercialRegistration.businessPartyProfile,
 				channelAccountUseRegistration:      commercialRegistration.channelAccountUse,
 				referenceEnablementRegistration:    commercialRegistration.referenceEnablement,
 			}, err
@@ -107,6 +110,8 @@ func init() {
 				// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
 				// 一笔。与身份族挂同一个操作者渠道 Intake（票 operator-channel/04）；写开关换不了它（ADR-0150 决定三）。
 				{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(channels.operatorRegistries.commercial, wiring.legalEntityProfileRegistration)},
+				// 参与方资料登记（ADR-0369）同法人资料口：只有登记修订一口，挂同一个操作者渠道 Intake。
+				{Pattern: "/commercial-business-party-profile-registrations", Handler: commercialhttp.NewRegisterBusinessPartyProfileEndpoint(channels.operatorRegistries.commercial, wiring.businessPartyProfileRegistration)},
 				// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 				// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 				// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权

@@ -575,6 +575,12 @@ func (stub stubPartyIdentityRegistry) FindLegalEntitiesPinning(
 	return nil, nil
 }
 
+func (stub stubPartyIdentityRegistry) HasBusinessPartyProfile(
+	context.Context, domain.TenantID, domain.PartyID,
+) (bool, error) {
+	return false, nil
+}
+
 func pcBusinessPartyCommand(t *testing.T, revision int) application.RegisterBusinessPartyCommand {
 	t.Helper()
 	party, err := domain.NewBusinessParty(

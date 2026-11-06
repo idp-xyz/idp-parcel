@@ -46,6 +46,8 @@ import {
   deactivationPresetOf,
   identityEditHash,
   identityEditRequested,
+  profileEditHash,
+  profileEditRequested,
   registerViewHash,
   withoutDeactivationPreset,
   type BusinessPartyRegister,
@@ -65,6 +67,7 @@ import {
   filterBusinessParties,
   indexPartyRoles,
   ourCompanyPartyIds,
+  partiesPinnedByLegalEntities,
   rolesOfParty,
   sortBusinessParties,
   type BusinessPartyStatusFilter,
@@ -434,6 +437,16 @@ export function BusinessPartiesPage() {
   // 直接落在编辑态的用替换；退出后还要去别处时替换再走，并同步 setHash——紧接着切标签时 hashchange 回调已不归本标签，
   // useOwnAddressChange 会把它滤掉。
   const pushedIdentityEdit = usePushedAddress();
+  const pushedProfileEdit = usePushedAddress();
+  const enterProfileEdit = () => pushedProfileEdit.push(profileEditHash(window.location.hash, true));
+  const exitProfileEdit = (then?: () => void) => {
+    if (then === undefined && pushedProfileEdit.back()) return;
+    pushedProfileEdit.forget();
+    const next = profileEditHash(window.location.hash, false);
+    window.location.replace(next);
+    setHash(next);
+    then?.();
+  };
   const enterIdentityEdit = () => pushedIdentityEdit.push(identityEditHash(window.location.hash, true));
   const exitIdentityEdit = (then?: () => void) => {
     if (then === undefined && pushedIdentityEdit.back()) return;
@@ -548,6 +561,7 @@ export function BusinessPartiesPage() {
   const knownAccounts = accounts.answer?.kind === 'outcome' ? accounts.answer.body.accounts : null;
   const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
   const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
+  const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
   const identityColumns = useMemo(() => identityColumnsOf(roleIndex, ourCompanies), [roleIndex, ourCompanies]);
 
   if (view.kind === 'object') {
@@ -564,7 +578,10 @@ export function BusinessPartiesPage() {
         identityEditing={identityEditRequested(hash)}
         onEnterIdentityEdit={enterIdentityEdit}
         onExitIdentityEdit={exitIdentityEdit}
-        ours={ourCompanies.has(view.partyId)}
+        profileEditing={profileEditRequested(hash)}
+        onEnterProfileEdit={enterProfileEdit}
+        onExitProfileEdit={exitProfileEdit}
+        ours={entities.answer == null ? null : pinnedParties.has(view.partyId)}
       />
     );
   }

@@ -102,6 +102,15 @@ export function ourCompanyPartyIds(entities: readonly GroupLegalEntityRecord[] |
   return new Set(entities.filter((row) => ourCompanyBearingStatuses.has(row.status)).map((row) => row.partyId));
 }
 
+/**
+ * 法人册上有公司主体钉着的参与方，已停用的也算——与后端「我方公司不登号、不登参与方资料」那道门同一口径（ADR-0367 决定一、
+ * ADR-0369 决定二）。对象页据它收起这两处写入口；列表类型格的「我方公司」只数在用的（ourCompanyPartyIds），两者用途不同。
+ */
+export function partiesPinnedByLegalEntities(entities: readonly GroupLegalEntityRecord[] | null): OurCompanyIndex {
+  if (entities === null) return emptyOurCompanyIndex;
+  return new Set(entities.map((row) => row.partyId));
+}
+
 /** 「我方公司」在类型列与筛选里的词；只在这一处。 */
 export const ourCompanyLabel = '我方公司';
 

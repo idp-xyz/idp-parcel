@@ -37,6 +37,8 @@ export function LegalEntityProfileFields({
   typeCatalogue,
   onLeave,
   groups,
+  registeredAddressOptional = false,
+  taxNumberCountry,
 }: {
   draft: LegalEntityProfileDraft;
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
@@ -48,6 +50,10 @@ export function LegalEntityProfileFields({
   onLeave: (href: string) => void;
   /** 只渲染这几组（分区抽屉，票 company-subject-section-edit/01）；不给渲染全部。 */
   groups?: readonly ProfileFieldGroupId[];
+  /** 往来单位资料（ADR-0369）各项都可缺：注册地址不标必填，地址组的说明也换一句。法人资料不给。 */
+  registeredAddressOptional?: boolean;
+  /** 监管登记号的类型候选按哪个国家 / 地区取；不给按注册地址国家。往来单位带注册国家时由调用方交它。 */
+  taxNumberCountry?: string;
 }) {
   const show = (group: ProfileFieldGroupId) => groups === undefined || groups.includes(group);
   const platformListId = useId();
@@ -99,7 +105,14 @@ export function LegalEntityProfileFields({
       </FormGroup>
       ) : null}
       {show('addresses') ? (
-      <FormGroup title="地址" description="注册地址须与身份的注册国家 / 地区一致；办公和通信地址可分别登记。">
+      <FormGroup
+        title="地址"
+        description={
+          registeredAddressOptional
+            ? '都可以不填；往来单位登了注册地时，注册地址的国家 / 地区须与它一致。'
+            : '注册地址须与身份的注册国家 / 地区一致；办公和通信地址可分别登记。'
+        }
+      >
         {(
           [
             ['registeredAddress', '注册地址', 'addressCountry', 'addressLines'],
@@ -110,7 +123,7 @@ export function LegalEntityProfileFields({
           <div key={path} className="md:col-span-2 grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <FieldAnchor path={`profiles[0].${path}`}>
               <Field
-                label={`${label}国家 / 地区${path === 'registeredAddress' ? ' *' : ''}`}
+                label={`${label}国家 / 地区${path === 'registeredAddress' && !registeredAddressOptional ? ' *' : ''}`}
                 path={`profiles[0].${path}`}
                 problems={problems}
               >
@@ -125,7 +138,7 @@ export function LegalEntityProfileFields({
             </FieldAnchor>
             <FieldAnchor path={`profiles[0].${path}.lines`}>
               <Field
-                label={`${label}${path === 'registeredAddress' ? ' *' : '（选填）'}`}
+                label={`${label}${path === 'registeredAddress' && !registeredAddressOptional ? ' *' : '（选填）'}`}
                 path={`profiles[0].${path}.lines`}
                 problems={problems}
               >
@@ -226,7 +239,7 @@ export function LegalEntityProfileFields({
             <div key={index} className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3">
               <TaxTypeField
                 index={index}
-                country={draft.addressCountry}
+                country={taxNumberCountry ?? draft.addressCountry}
                 value={row.typeCode}
                 locked={locked}
                 problems={problems}

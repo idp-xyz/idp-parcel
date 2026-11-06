@@ -20,6 +20,7 @@ type commercialCatalogueWiring struct {
 	publicationDrafts          commercialhttp.PublicationDraftReader
 	legalEntityProfiles        commercialhttp.LegalEntityProfileRevisionHistoryReader
 	legalEntityProfileResolver commercialhttp.LegalEntityProfileResolver
+	businessPartyProfiles      commercialhttp.BusinessPartyProfileHistoryReader
 	referenceEnablements       commercialhttp.ReferenceEnablementReader
 }
 
@@ -33,6 +34,9 @@ func init() {
 			"/commercial-business-parties":    {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-business-parties/{partyId}/revisions": {
 				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-business-parties/SYN-PARTY-01/revisions",
+			},
+			"/commercial-business-parties/{partyId}/profile-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-business-parties/SYN-PARTY-01/profile-revisions",
 			},
 			"/commercial-group-legal-entities": {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-group-legal-entities/{legalEntityId}/revisions": {
@@ -75,6 +79,11 @@ func init() {
 			}
 			// 法人资料按时点解析（票 legal-entity-profile/05）交入的是应用读用例：它读法人最新修订与整条资料修订链，交领域判。
 			// 法人那一侧读身份登记册——资料的写入与解析都经窄口 LegalEntityRegistrationLookup 看法人，同一只适配器。
+			// 参与方资料修订历史（ADR-0369）同法人资料：读口在资料登记册适配器上。
+			businessPartyProfiles, err := pcpostgres.NewBusinessPartyProfiles(sources.db)
+			if err != nil {
+				return none, err
+			}
 			partyIdentityRegistrations, err := pcpostgres.NewPartyIdentityRegistrations(sources.db)
 			if err != nil {
 				return none, err
@@ -98,6 +107,7 @@ func init() {
 				registrationNumberTypes:    commercialCatalog,
 				legalEntityProfiles:        legalEntityProfiles,
 				legalEntityProfileResolver: commercialapp.NewResolveLegalEntityProfileHandler(legalEntityProfiles, partyIdentityRegistrations),
+				businessPartyProfiles:      businessPartyProfiles,
 				referenceEnablements:       commercialapp.NewQueryReferenceEnablementsHandler(referenceEnablements, systemClock{}),
 			}, nil
 		},
@@ -120,6 +130,8 @@ func init() {
 				// 整条修订链。同读口参数、同 Intake 变量，裁决与下面法人册那一行一字不改（在 ports.BusinessPartyRevisionHistoryRead）；
 				// {partyId} 由 chi 填进 PathValue，端点按同名取。
 				{Pattern: "/commercial-business-parties/{partyId}/revisions", Handler: commercialhttp.NewQueryBusinessPartyRevisionsEndpoint(commercialCatalogueIntake, wiring.partyIdentities)},
+				// 参与方资料修订历史（ADR-0369）：往来单位资料分区的供数面，交全部修订与此刻有效那一笔的修订号（判法在领域）。
+				{Pattern: "/commercial-business-parties/{partyId}/profile-revisions", Handler: commercialhttp.NewQueryBusinessPartyProfileRevisionsEndpoint(commercialCatalogueIntake, wiring.businessPartyProfiles, systemClock{}.Now)},
 				{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, wiring.partyIdentities)},
 				// 责任法人修订历史（票 admin-web-group-legal-entities/03）：法人册那一页详情抽屉的供数面，按路径里的法人展开
 				// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；

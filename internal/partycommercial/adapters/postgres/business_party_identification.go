@@ -3,7 +3,10 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
@@ -230,6 +233,36 @@ func (repository *PartyIdentityRegistrations) FindExternalReferenceHolders(
 		}
 	}
 	return holders, nil
+}
+
+// HasBusinessPartyProfile 读这个参与方最新一版参与方资料，问它带没带内容；快照的重建与参与方资料登记册同一份函数。
+func (repository *PartyIdentityRegistrations) HasBusinessPartyProfile(
+	ctx context.Context,
+	tenant domain.TenantID,
+	party domain.PartyID,
+) (bool, error) {
+	const operation = "check business party profile"
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	var raw []byte
+	err = querier.QueryRow(ctx,
+		`SELECT snapshot FROM party_commercial.business_party_profile_revision
+		  WHERE tenant_id = $1 AND party_id = $2 ORDER BY revision DESC LIMIT 1`,
+		tenant.String(), party.String(),
+	).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	revision, err := businessPartyProfileFromSnapshot(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return !revision.Content().Empty(), nil
 }
 
 // FindLegalEntitiesPinning 交回最新修订钉着这个参与方的责任法人，已停用的也算：停用了的公司主体仍是我方公司，它的号

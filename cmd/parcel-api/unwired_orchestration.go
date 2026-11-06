@@ -1335,6 +1335,24 @@ func (unwiredLegalEntityProfileRegistration) Register(
 	return commercialapp.LegalEntityProfileResult{}, errOrchestrationNotWired
 }
 
+type unwiredBusinessPartyProfileRegistration struct{}
+
+func (unwiredBusinessPartyProfileRegistration) Register(
+	context.Context,
+	commercialapp.RegisterBusinessPartyProfileCommand,
+) (commercialapp.BusinessPartyProfileResult, error) {
+	return commercialapp.BusinessPartyProfileResult{}, errOrchestrationNotWired
+}
+
+// unwiredBusinessPartyProfileRevisions 是参与方资料修订历史读口的占位，分法同 unwiredLegalEntityProfileRevisions。
+type unwiredBusinessPartyProfileRevisions struct{}
+
+func (unwiredBusinessPartyProfileRevisions) ListBusinessPartyProfileRevisions(
+	context.Context, commercialdomain.TenantID, commercialdomain.PartyID,
+) ([]commercialports.RecordedBusinessPartyProfileRevision, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredLegalEntityProfileRevisions 是法人资料修订历史读口的占位。不挂在 unwiredCommercialCatalogue 上：生产装配交入
 // 的是资料登记册适配器，不是商业目录适配器，占位跟着生产的分法走。
 type unwiredLegalEntityProfileRevisions struct{}

@@ -219,6 +219,25 @@ func (registration transactionalLegalEntityProfileRegistration) Register(
 		})
 }
 
+// transactionalBusinessPartyProfileRegistration 是参与方资料登记（ADR-0369）的事务壳，判据同法人资料那一只：修订连续性、
+// 登记门读的往来单位身份与注册号类型目录、钉住锁与落库都在同一笔事务里。
+type transactionalBusinessPartyProfileRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterBusinessPartyProfileHandler
+}
+
+var _ commercialhttp.BusinessPartyProfileRegistrar = transactionalBusinessPartyProfileRegistration{}
+
+func (registration transactionalBusinessPartyProfileRegistration) Register(
+	ctx context.Context,
+	command commercialapp.RegisterBusinessPartyProfileCommand,
+) (commercialapp.BusinessPartyProfileResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.BusinessPartyProfileResult, error) {
+			return registration.inner.Register(txCtx, command)
+		})
+}
+
 // commercialRegistrationOrchestration 收拢三族，供装配点一次取回。
 type transactionalChannelAccountUse struct {
 	transactor bentoapp.Transactor
@@ -301,6 +320,8 @@ type commercialRegistrationOrchestration struct {
 	registrationNumberType transactionalRegistrationNumberTypeRegistration
 	// 法人资料（ADR-0145 决定三）：只有登记修订一口，资料没有停用。
 	legalEntityProfile transactionalLegalEntityProfileRegistration
+	// 参与方资料（ADR-0369）：同法人资料，只有登记修订一口。
+	businessPartyProfile transactionalBusinessPartyProfileRegistration
 	// 启用范围（ADR-0345）：启用与停用同是追加一笔修订，只有一个登记口。
 	referenceEnablement transactionalReferenceEnablementRegistration
 	// publicationPreview 没有事务壳：预览不读也不写（ADR-0126 Decision 四）。
@@ -337,6 +358,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	legalEntityProfiles, err := pcpostgres.NewLegalEntityProfiles(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: legal entity profile registry: %w", err)
+	}
+	businessPartyProfiles, err := pcpostgres.NewBusinessPartyProfiles(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: business party profile registry: %w", err)
 	}
 	referenceEnablements, err := pcpostgres.NewReferenceEnablements(db)
 	if err != nil {
@@ -398,6 +423,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		legalEntityProfile: transactionalLegalEntityProfileRegistration{
 			transactor: transactor,
 			inner:      commercialapp.NewRegisterLegalEntityProfileHandler(legalEntityProfiles, identities, registrationNumberTypes),
+		},
+		businessPartyProfile: transactionalBusinessPartyProfileRegistration{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterBusinessPartyProfileHandler(businessPartyProfiles, identities, registrationNumberTypes),
 		},
 		referenceEnablement: transactionalReferenceEnablementRegistration{
 			transactor: transactor,

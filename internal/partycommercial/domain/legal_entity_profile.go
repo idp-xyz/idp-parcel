@@ -172,6 +172,28 @@ func NewLegalEntityProfileContent(
 	if !address.valid() {
 		return LegalEntityProfileContent{}, fmt.Errorf("%w: registered address is required", ErrInvalidLegalEntityProfile)
 	}
+	ordered, err := canonicalTaxRegistrationNumbers(taxNumbers)
+	if err != nil {
+		return LegalEntityProfileContent{}, err
+	}
+	content := LegalEntityProfileContent{address: address, taxNumbers: ordered}
+	if invoicing != nil {
+		checked, err := checkedInvoicingDetails(*invoicing)
+		if err != nil {
+			return LegalEntityProfileContent{}, err
+		}
+		content.invoicing = checked
+		content.hasInvoicing = true
+	}
+	if content.contacts, err = checkedProfileContacts(contacts); err != nil {
+		return LegalEntityProfileContent{}, err
+	}
+	return content, nil
+}
+
+// canonicalTaxRegistrationNumbers 把一组监管登记号按类型代码、再按号升序排好并拒同一类型同一个号出现两次：同一组号
+// 只有一种次序，登记册按内容比对重放时不随录入次序变答案。法人资料与参与方资料（ADR-0369）都用它。
+func canonicalTaxRegistrationNumbers(taxNumbers []TaxRegistrationNumber) ([]TaxRegistrationNumber, error) {
 	ordered := make([]TaxRegistrationNumber, len(taxNumbers))
 	copy(ordered, taxNumbers)
 	sort.Slice(ordered, func(i, j int) bool {
@@ -182,44 +204,46 @@ func NewLegalEntityProfileContent(
 	})
 	for index, number := range ordered {
 		if !number.typeCode.valid() || !number.number.valid() {
-			return LegalEntityProfileContent{}, fmt.Errorf("%w: tax registration number needs a type and a number", ErrInvalidLegalEntityProfile)
+			return nil, fmt.Errorf("%w: tax registration number needs a type and a number", ErrInvalidLegalEntityProfile)
 		}
 		if index > 0 && ordered[index-1] == number {
-			return LegalEntityProfileContent{}, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"%w: tax registration number %s %s appears twice", ErrInvalidLegalEntityProfile, number.typeCode, number.number)
 		}
 	}
-	content := LegalEntityProfileContent{address: address, taxNumbers: ordered}
-	if invoicing != nil {
-		if !invoicing.title.valid() {
-			return LegalEntityProfileContent{}, fmt.Errorf("%w: invoicing details need an invoice title", ErrInvalidLegalEntityProfile)
-		}
-		checked, err := invoicing.checked()
-		if err != nil {
-			return LegalEntityProfileContent{}, err
-		}
-		content.invoicing = checked
-		content.hasInvoicing = true
+	return ordered, nil
+}
+
+// checkedInvoicingDetails 把一份外来的开票资料重新过一遍构造门（主抬头必填、语言版本挂在主抬头上），法人资料与参与方资料都用它。
+func checkedInvoicingDetails(invoicing InvoicingDetails) (InvoicingDetails, error) {
+	if !invoicing.title.valid() {
+		return InvoicingDetails{}, fmt.Errorf("%w: invoicing details need an invoice title", ErrInvalidLegalEntityProfile)
 	}
-	content.contacts = make([]LegalEntityContact, len(contacts))
+	return invoicing.checked()
+}
+
+// checkedProfileContacts 逐个复核联系人（姓名必填、用途与社交账号的规则在 NewLegalEntityContactWithDetails），并拒同一用途
+// 出现两位主要联系人；联系人照录入次序保存，次序即内容。法人资料与参与方资料都用它。
+func checkedProfileContacts(contacts []LegalEntityContact) ([]LegalEntityContact, error) {
+	checkedContacts := make([]LegalEntityContact, len(contacts))
 	primary := make(map[ContactPurpose]bool)
 	for index, contact := range contacts {
 		if strings.TrimSpace(contact.name) == "" {
-			return LegalEntityProfileContent{}, fmt.Errorf("%w: contact needs a name", ErrInvalidLegalEntityProfile)
+			return nil, fmt.Errorf("%w: contact needs a name", ErrInvalidLegalEntityProfile)
 		}
 		checked, err := NewLegalEntityContactWithDetails(contact.name, contact.email, contact.phone, contact.Details())
 		if err != nil {
-			return LegalEntityProfileContent{}, err
+			return nil, err
 		}
 		for _, purpose := range checked.details.PrimaryFor {
 			if primary[purpose] {
-				return LegalEntityProfileContent{}, fmt.Errorf("%w: more than one primary contact for %s", ErrInvalidLegalEntityProfile, purpose)
+				return nil, fmt.Errorf("%w: more than one primary contact for %s", ErrInvalidLegalEntityProfile, purpose)
 			}
 			primary[purpose] = true
 		}
-		content.contacts[index] = checked
+		checkedContacts[index] = checked
 	}
-	return content, nil
+	return checkedContacts, nil
 }
 
 func (content LegalEntityProfileContent) Address() RegisteredAddress {

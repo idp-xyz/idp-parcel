@@ -421,29 +421,123 @@ type legalEntityProfileBatchDocument struct {
 	Profiles []legalEntityProfileDocument `json:"profiles"`
 }
 
-// legalEntityProfileDocument 与受控 CLI 的一项逐字同形，子格沿修订历史读口的答复体——一份资料在读写两个方向上同一个样子。
-// 注册地址键可缺：缺即没给，由用例答`未受理`（判据同身份层三格）；给了就得立得住。invoiceTitle 缺席即这笔修订不带开票资料，
+// profileContentDocument 是法人资料与参与方资料（ADR-0369）共有的那几格，两类资料的载荷都内嵌它：同一种资料在两个口上同一个
+// 样子，翻译也只有一份。子格沿修订历史读口的答复体。注册地址键可缺：缺即没给。invoiceTitle 缺席即这笔修订不带开票资料，
 // 给了空串照样拒，不当缺席。taxRegistrationNumbers 收的是监管登记号（税务、海关等，ADR-0359 决定一），键名不改。
 // invoiceTitleLanguage 与 invoiceTitles 挂在主抬头上，没带 invoiceTitle 却带了它们是形状错；bankAccounts 缺席即这一版不带收款账户。
-type legalEntityProfileDocument struct {
-	LegalEntityID          string                          `json:"legalEntityId"`
-	Revision               int                             `json:"revision"`
-	Basis                  string                          `json:"basis"`
-	EffectiveFrom          time.Time                       `json:"effectiveFrom"`
+type profileContentDocument struct {
 	RegisteredAddress      *registeredAddressBody          `json:"registeredAddress,omitempty"`
 	TaxRegistrationNumbers []taxRegistrationNumberBody     `json:"taxRegistrationNumbers,omitempty"`
 	InvoiceTitle           *string                         `json:"invoiceTitle,omitempty"`
 	InvoiceTitleLanguage   *string                         `json:"invoiceTitleLanguage,omitempty"`
 	InvoiceTitles          []domain.LocalizedInvoiceTitle  `json:"invoiceTitles,omitempty"`
 	Contacts               []legalEntityContactBody        `json:"contacts,omitempty"`
-	Representative         *legalEntityRepresentativeBody  `json:"representative,omitempty"`
 	OfficeAddress          *registeredAddressBody          `json:"officeAddress,omitempty"`
 	CorrespondenceAddress  *registeredAddressBody          `json:"correspondenceAddress,omitempty"`
 	BankAccounts           []domain.LegalEntityBankAccount `json:"bankAccounts,omitempty"`
 }
 
-// command 把一次管理台登记的资料项译成法人资料修订登记命令（票 legal-entity-profile/05）。形状级失败包 ErrMalformedRequest；
-// 法人在不在册、地址国家对不对得上身份、税号合不合目录，一律送进用例答`未受理`（判据同法人项）。
+// profileContentParts 是 profileContentDocument 译出来的领域值；指针为空、切片为空即没给。
+type profileContentParts struct {
+	registeredAddress     *domain.RegisteredAddress
+	officeAddress         *domain.RegisteredAddress
+	correspondenceAddress *domain.RegisteredAddress
+	taxNumbers            []domain.TaxRegistrationNumber
+	invoicing             *domain.InvoicingDetails
+	contacts              []domain.LegalEntityContact
+	bankAccounts          []domain.LegalEntityBankAccount
+}
+
+// parts 把共有的几格译成领域值。形状级失败包 ErrMalformedRequest，字段路径随报（项一律在 profiles[0]）；主体在不在册、地址国家
+// 对不对得上、号合不合目录，一律送进用例答`未受理`。
+func (fields profileContentDocument) parts() (profileContentParts, error) {
+	var parts profileContentParts
+	for _, entry := range []struct {
+		path   string
+		raw    *registeredAddressBody
+		target **domain.RegisteredAddress
+	}{
+		{"registeredAddress", fields.RegisteredAddress, &parts.registeredAddress},
+		{"officeAddress", fields.OfficeAddress, &parts.officeAddress},
+		{"correspondenceAddress", fields.CorrespondenceAddress, &parts.correspondenceAddress},
+	} {
+		if entry.raw == nil {
+			continue
+		}
+		country, err := domain.NewRegistrationCountryCode(entry.raw.Country)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].%s.country: %v", ErrMalformedRequest, entry.path, err)
+		}
+		address, err := domain.NewRegisteredAddress(country, entry.raw.Lines)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].%s: %v", ErrMalformedRequest, entry.path, err)
+		}
+		*entry.target = &address
+	}
+	for index, number := range fields.TaxRegistrationNumbers {
+		typeCode, err := domain.NewRegistrationNumberTypeCode(number.TypeCode)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, index, err)
+		}
+		value, err := domain.NewRegistrationNumber(number.Number)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].number: %v", ErrMalformedRequest, index, err)
+		}
+		tax, err := domain.NewTaxRegistrationNumber(typeCode, value)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		parts.taxNumbers = append(parts.taxNumbers, tax)
+	}
+	if fields.InvoiceTitle != nil {
+		title, err := domain.NewInvoiceTitle(*fields.InvoiceTitle)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
+		}
+		language := ""
+		if fields.InvoiceTitleLanguage != nil {
+			language = *fields.InvoiceTitleLanguage
+		}
+		details, err := domain.NewInvoicingDetailsWithLocalizedTitles(title, language, fields.InvoiceTitles)
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].invoiceTitles: %v", ErrMalformedRequest, err)
+		}
+		parts.invoicing = &details
+	} else if fields.InvoiceTitleLanguage != nil || len(fields.InvoiceTitles) > 0 {
+		return parts, fmt.Errorf("%w: profiles[0].invoiceTitles: localized titles hang on invoiceTitle; without a main title there are no invoicing details to carry them", ErrMalformedRequest)
+	}
+	// 收款账户：形状由领域构造门判，币种是否在产品内置目录里由这一写入边界判（ADR-0345 决定五）——目录外的码是改载荷
+	// 才会好的调用方的错，答 400。
+	accounts, err := domain.NewLegalEntityBankAccounts(fields.BankAccounts)
+	if err != nil {
+		return parts, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
+	}
+	if err := domain.BankAccountCurrenciesInCatalogue(accounts); err != nil {
+		return parts, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
+	}
+	parts.bankAccounts = accounts
+	for index, contact := range fields.Contacts {
+		built, err := domain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, domain.LegalEntityContactDetails{Department: contact.Department, Position: contact.Position, Purposes: contact.Purposes, PrimaryFor: contact.PrimaryFor, SocialAccounts: contact.SocialAccounts})
+		if err != nil {
+			return parts, fmt.Errorf("%w: profiles[0].contacts[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		parts.contacts = append(parts.contacts, built)
+	}
+	return parts, nil
+}
+
+// legalEntityProfileDocument 与受控 CLI 的一项逐字同形：主体是法人，另带法定代表人；其余各格在 profileContentDocument。
+// 注册地址对法人是必填的，缺了由用例答`未受理`（判据同身份层三格）。
+type legalEntityProfileDocument struct {
+	LegalEntityID  string                         `json:"legalEntityId"`
+	Revision       int                            `json:"revision"`
+	Basis          string                         `json:"basis"`
+	EffectiveFrom  time.Time                      `json:"effectiveFrom"`
+	Representative *legalEntityRepresentativeBody `json:"representative,omitempty"`
+	profileContentDocument
+}
+
+// command 把一次管理台登记的资料项译成法人资料修订登记命令（票 legal-entity-profile/05）。
 func (item legalEntityProfileDocument) command(tenant domain.TenantID) (application.RegisterLegalEntityProfileCommand, error) {
 	none := application.RegisterLegalEntityProfileCommand{}
 	entity, err := domain.NewLegalEntityReference(item.LegalEntityID)
@@ -454,73 +548,26 @@ func (item legalEntityProfileDocument) command(tenant domain.TenantID) (applicat
 	if err != nil {
 		return none, fmt.Errorf("%w: profiles[0].basis: %v", ErrMalformedRequest, err)
 	}
+	parts, err := item.parts()
+	if err != nil {
+		return none, err
+	}
 	command := application.RegisterLegalEntityProfileCommand{
 		Tenant:        tenant,
 		Entity:        entity,
 		Revision:      item.Revision,
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
+		TaxNumbers:    parts.taxNumbers,
+		Invoicing:     parts.invoicing,
+		Contacts:      parts.contacts,
 	}
-	if item.RegisteredAddress != nil {
-		country, err := domain.NewRegistrationCountryCode(item.RegisteredAddress.Country)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].registeredAddress.country: %v", ErrMalformedRequest, err)
-		}
-		address, err := domain.NewRegisteredAddress(country, item.RegisteredAddress.Lines)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].registeredAddress: %v", ErrMalformedRequest, err)
-		}
-		command.Address = address
+	if parts.registeredAddress != nil {
+		command.Address = *parts.registeredAddress
 	}
-	for index, number := range item.TaxRegistrationNumbers {
-		typeCode, err := domain.NewRegistrationNumberTypeCode(number.TypeCode)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, index, err)
-		}
-		value, err := domain.NewRegistrationNumber(number.Number)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].number: %v", ErrMalformedRequest, index, err)
-		}
-		tax, err := domain.NewTaxRegistrationNumber(typeCode, value)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d]: %v", ErrMalformedRequest, index, err)
-		}
-		command.TaxNumbers = append(command.TaxNumbers, tax)
-	}
-	if item.InvoiceTitle != nil {
-		title, err := domain.NewInvoiceTitle(*item.InvoiceTitle)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
-		}
-		language := ""
-		if item.InvoiceTitleLanguage != nil {
-			language = *item.InvoiceTitleLanguage
-		}
-		details, err := domain.NewInvoicingDetailsWithLocalizedTitles(title, language, item.InvoiceTitles)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].invoiceTitles: %v", ErrMalformedRequest, err)
-		}
-		command.Invoicing = &details
-	} else if item.InvoiceTitleLanguage != nil || len(item.InvoiceTitles) > 0 {
-		return none, fmt.Errorf("%w: profiles[0].invoiceTitles: localized titles hang on invoiceTitle; without a main title there are no invoicing details to carry them", ErrMalformedRequest)
-	}
-	// 收款账户：形状由领域构造门判，币种是否在产品内置目录里由这一写入边界判（ADR-0345 决定五）——目录外的码是改载荷
-	// 才会好的调用方的错，答 400。
-	accounts, err := domain.NewLegalEntityBankAccounts(item.BankAccounts)
-	if err != nil {
-		return none, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
-	}
-	if err := domain.BankAccountCurrenciesInCatalogue(accounts); err != nil {
-		return none, fmt.Errorf("%w: profiles[0].bankAccounts: %v", ErrMalformedRequest, err)
-	}
-	command.Supplement.BankAccounts = accounts
-	for index, contact := range item.Contacts {
-		built, err := domain.NewLegalEntityContactWithDetails(contact.Name, contact.Email, contact.Phone, domain.LegalEntityContactDetails{Department: contact.Department, Position: contact.Position, Purposes: contact.Purposes, PrimaryFor: contact.PrimaryFor, SocialAccounts: contact.SocialAccounts})
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].contacts[%d]: %v", ErrMalformedRequest, index, err)
-		}
-		command.Contacts = append(command.Contacts, built)
-	}
+	command.Supplement.BankAccounts = parts.bankAccounts
+	command.Supplement.OfficeAddress = parts.officeAddress
+	command.Supplement.CorrespondenceAddress = parts.correspondenceAddress
 	if item.Representative != nil {
 		value, err := domain.NewLegalEntityRepresentative(item.Representative.Kind, item.Representative.Name)
 		if err != nil {
@@ -528,25 +575,58 @@ func (item legalEntityProfileDocument) command(tenant domain.TenantID) (applicat
 		}
 		command.Supplement.Representative = &value
 	}
-	for _, entry := range []struct {
-		path   string
-		raw    *registeredAddressBody
-		target **domain.RegisteredAddress
-	}{
-		{"officeAddress", item.OfficeAddress, &command.Supplement.OfficeAddress}, {"correspondenceAddress", item.CorrespondenceAddress, &command.Supplement.CorrespondenceAddress},
-	} {
-		if entry.raw == nil {
-			continue
-		}
-		country, err := domain.NewRegistrationCountryCode(entry.raw.Country)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].%s: %v", ErrMalformedRequest, entry.path, err)
-		}
-		address, err := domain.NewRegisteredAddress(country, entry.raw.Lines)
-		if err != nil {
-			return none, fmt.Errorf("%w: profiles[0].%s: %v", ErrMalformedRequest, entry.path, err)
-		}
-		*entry.target = &address
-	}
 	return command, nil
+}
+
+// businessPartyProfileBatchDocument 是参与方资料登记口的载荷外壳（ADR-0369）；TenantID 一格只为拒而存在，理由同
+// partyIdentityBatchDocument.TenantID。
+type businessPartyProfileBatchDocument struct {
+	TenantID json.RawMessage                `json:"tenantId"`
+	Profiles []businessPartyProfileDocument `json:"profiles"`
+}
+
+// businessPartyProfileDocument 是一笔参与方资料：主体是往来单位，另带其他语言名称；其余各格与法人资料同形、都可缺。
+type businessPartyProfileDocument struct {
+	PartyID       string                      `json:"partyId"`
+	Revision      int                         `json:"revision"`
+	Basis         string                      `json:"basis"`
+	EffectiveFrom time.Time                   `json:"effectiveFrom"`
+	Names         []domain.LocalizedPartyName `json:"names,omitempty"`
+	profileContentDocument
+}
+
+func (item businessPartyProfileDocument) command(tenant domain.TenantID) (application.RegisterBusinessPartyProfileCommand, error) {
+	none := application.RegisterBusinessPartyProfileCommand{}
+	party, err := domain.NewPartyID(item.PartyID)
+	if err != nil {
+		return none, fmt.Errorf("%w: profiles[0].partyId: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewBusinessPartyProfileBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: profiles[0].basis: %v", ErrMalformedRequest, err)
+	}
+	if err := domain.CheckLocalizedPartyNames(item.Names); err != nil {
+		return none, fmt.Errorf("%w: profiles[0].names: %v", ErrMalformedRequest, err)
+	}
+	parts, err := item.parts()
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterBusinessPartyProfileCommand{
+		Tenant:        tenant,
+		Party:         party,
+		Revision:      item.Revision,
+		Basis:         basis,
+		EffectiveFrom: item.EffectiveFrom,
+		Parts: domain.BusinessPartyProfileParts{
+			Names:                 item.Names,
+			RegisteredAddress:     parts.registeredAddress,
+			OfficeAddress:         parts.officeAddress,
+			CorrespondenceAddress: parts.correspondenceAddress,
+			TaxNumbers:            parts.taxNumbers,
+			Invoicing:             parts.invoicing,
+			Contacts:              parts.contacts,
+			BankAccounts:          parts.bankAccounts,
+		},
+	}, nil
 }

@@ -9,6 +9,7 @@ func init() {
 		productChannelRegistration:         unwiredProductChannelRegistration{},
 		registrationNumberTypeRegistration: unwiredRegistrationNumberTypeRegistration{},
 		legalEntityProfileRegistration:     unwiredLegalEntityProfileRegistration{},
+		businessPartyProfileRegistration:   unwiredBusinessPartyProfileRegistration{},
 		channelAccountUseRegistration:      unwiredChannelAccountUseRegistration{},
 		referenceEnablementRegistration:    unwiredReferenceEnablementRegistration{},
 	})

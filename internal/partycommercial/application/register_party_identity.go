@@ -330,6 +330,17 @@ func (handler *RegisterPartyIdentityHandler) RegisterLegalEntity(
 		if err != nil {
 			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
 		}
+		// 参与方资料同一条理由（ADR-0369 决定二）：带着内容的往来单位资料不能随它变成我方公司的资料。
+		hasProfile, err := handler.registry.HasBusinessPartyProfile(ctx, command.Tenant, command.Party)
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
+		}
+		if hasProfile {
+			return notAccepted(fmt.Errorf(
+				"往来单位 %s 登着参与方资料：我方公司的资料只登在公司主体的法人资料上；先给这家往来单位登一版空资料把它撤下，再登公司主体",
+				command.Party,
+			)), nil
+		}
 		if _, partyHasNumbers := lockedParty.IdentityLayer(); partyHasNumbers {
 			return notAccepted(fmt.Errorf(
 				"往来单位 %s 自己登着注册号：我方公司的号只登在公司主体上；先带身份更正依据更正这家往来单位、去掉它的号，再登公司主体",

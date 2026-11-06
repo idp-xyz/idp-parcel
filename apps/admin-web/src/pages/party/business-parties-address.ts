@@ -86,6 +86,15 @@ export function identityEditHash(hash: string, open: boolean): string {
   return hashWithQueryValue(hash, IDENTITY_EDIT_PARAM, open ? 'identity' : '');
 }
 
+/** 「更新资料」的编辑态（ADR-0369）：同一个编辑键，值为 `profile`。两种编辑态互斥，一页一个写口在开。 */
+export function profileEditRequested(hash: string): boolean {
+  return hashQueryValue(hash, IDENTITY_EDIT_PARAM) === 'profile';
+}
+
+export function profileEditHash(hash: string, open: boolean): string {
+  return hashWithQueryValue(hash, IDENTITY_EDIT_PARAM, open ? 'profile' : '');
+}
+
 /** 指向停用表单、带好种类与标识的地址。 */
 export function deactivationLinkHash(preset: DeactivationPreset): string {
   return hashWithQueryValue(

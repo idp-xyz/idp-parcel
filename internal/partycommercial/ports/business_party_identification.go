@@ -75,4 +75,11 @@ type IdentificationHolderLookup interface {
 		tenant domain.TenantID,
 		party domain.PartyID,
 	) ([]string, error)
+	// HasBusinessPartyProfile 回答这个参与方最新一版参与方资料是不是带着内容（ADR-0369 决定二）：拿公司主体钉它之前要问——
+	// 我方公司的资料只在法人资料上。从未登记或最新一版是空的都答 false。调用方须先取钉住锁（FindLegalEntitiesPinning）。
+	HasBusinessPartyProfile(
+		ctx context.Context,
+		tenant domain.TenantID,
+		party domain.PartyID,
+	) (bool, error)
 }

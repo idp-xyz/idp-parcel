@@ -460,6 +460,41 @@ export interface LegalEntityProfileRevisionRecord extends LegalEntityProfileCont
   registeredAt: string;
 }
 
+// 参与方资料（ADR-0369；后端 businessPartyProfileRevisionBody）：往来单位的资料修订。子格与法人资料同形，各项都可缺——注册地址
+// 也可缺，所以不借 LegalEntityProfileContent；names 是其他语言名称。集合格 taxRegistrationNumbers 与 contacts 总是数组。
+export interface LocalizedPartyNameRecord {
+  language: string;
+  name: string;
+}
+
+export interface BusinessPartyProfileRevisionRecord {
+  tenantId: string;
+  partyId: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  registeredAt: string;
+  names?: LocalizedPartyNameRecord[];
+  registeredAddress?: RegisteredAddressRecord;
+  officeAddress?: RegisteredAddressRecord;
+  correspondenceAddress?: RegisteredAddressRecord;
+  taxRegistrationNumbers: TaxRegistrationNumberRecord[];
+  invoicingRegistered: boolean;
+  invoiceTitle?: string;
+  invoiceTitleLanguage?: string;
+  invoiceTitles?: LocalizedInvoiceTitleRecord[];
+  contacts: LegalEntityContactRecord[];
+  bankAccounts?: LegalEntityBankAccountRecord[];
+}
+
+/** effectiveRevision 只在此刻有一笔生效时在场：哪一笔由服务端按领域判法答，页面不另抄一份。 */
+export interface BusinessPartyProfileRevisionListResponseBody {
+  outcome: string;
+  partyId: string;
+  effectiveRevision?: number;
+  revisions: BusinessPartyProfileRevisionRecord[];
+}
+
 export interface LegalEntityProfileRevisionListResponseBody {
   outcome: string;
   legalEntityId: string;
@@ -757,6 +792,15 @@ export function listLegalEntityProfileRevisions(
   );
 }
 
+// 参与方资料的修订历史（ADR-0369），往来单位标识在路径上；答复带此刻有效那一笔的修订号。
+export function listBusinessPartyProfileRevisions(
+  partyId: string,
+): Promise<ApiResult<BusinessPartyProfileRevisionListResponseBody>> {
+  return exchangeMasterData<BusinessPartyProfileRevisionListResponseBody>(
+    `/commercial-business-parties/${encodeURIComponent(partyId)}/profile-revisions`,
+  );
+}
+
 // 时点走查询串 at（RFC 3339）：问的是同一个资源在那一刻的样子，不是另一个资源。
 export function resolveLegalEntityProfile(
   legalEntityId: string,
@@ -840,6 +884,7 @@ export type CommercialRegistrationKind =
   | 'business-party'
   | 'legal-entity'
   | 'legal-entity-profile'
+  | 'business-party-profile'
   | 'customer-account'
   | 'party-relationship'
   | 'identity-deactivation'
@@ -860,6 +905,7 @@ export const commercialRegistrationEndpoints: Record<CommercialRegistrationKind,
   'business-party': '/commercial-business-party-registrations',
   'legal-entity': '/commercial-legal-entity-registrations',
   'legal-entity-profile': '/commercial-legal-entity-profile-registrations',
+  'business-party-profile': '/commercial-business-party-profile-registrations',
   'customer-account': '/commercial-customer-account-registrations',
   'party-relationship': '/commercial-party-relationship-registrations',
   'identity-deactivation': '/commercial-party-identity-deactivations',
@@ -937,6 +983,14 @@ export const legalEntityProfileOutcomeLabels: Record<string, string> = {
   ALREADY_REGISTERED: '已登记过同样的资料，原修订不变。',
   CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的资料。资料修订不能覆盖，要改请用下一个修订号。',
   NOT_ACCEPTED: '未受理：法人不存在、修订号对不上、地址国家与身份不一致或登记号不合要求等。没有写入任何内容。',
+};
+
+/** 参与方资料登记口的答案代数（`application.BusinessPartyProfileOutcome` 原名，ADR-0369）。 */
+export const businessPartyProfileOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记：新的一版从它的生效时间起取代上一版。',
+  ALREADY_REGISTERED: '已登记过同样的资料，原版本不变。',
+  CONTENT_CONFLICT: '内容冲突：这个版本号已登记过不同的资料。资料版本不能覆盖，要改请用下一个版本号。',
+  NOT_ACCEPTED: '未受理：登记册没有接受这一版，原因见下。没有写入任何内容。',
 };
 
 /** 服务形态与产品—渠道映射的登记答案代数（`application.ProductChannelOutcome` 原名）。 */

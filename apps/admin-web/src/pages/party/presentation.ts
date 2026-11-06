@@ -326,6 +326,7 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
   'business-party': '新增往来单位',
   'legal-entity': '新增公司主体',
   'legal-entity-profile': '更新公司资料',
+  'business-party-profile': '更新往来单位资料',
   'customer-account': '新增客户账户',
   'party-relationship': '建立合作关系',
   'identity-deactivation': '停用',
@@ -384,6 +385,12 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
       '身份部分可带 registrationCountry、lifetimeRegistrationNumbers[{typeCode, number}]、identityCorrectionBasis' +
       '（首笔登记两格缺一不可；更正依据只在更正修订上填）。' +
       '所钉的业务参与方必须已登记，且在法人生效时已生效。',
+    { tenantGridFilledByChannel: true },
+  ),
+  'business-party-profile': snapshotHint(
+    'profiles 数组里一项的键：partyId、revision、basis、effectiveFrom；资料各项都可缺：names[{language, name}]、registeredAddress、' +
+      'officeAddress、correspondenceAddress、taxRegistrationNumbers、invoiceTitle 及其语言版本、contacts、bankAccounts。' +
+      '我方公司的往来单位不登这份资料，它的资料在公司主体上。',
     { tenantGridFilledByChannel: true },
   ),
   'legal-entity-profile': snapshotHint(

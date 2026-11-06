@@ -81,6 +81,12 @@ func (registry *fakePartyRegistry) FindExternalReferenceHolders(
 	return holders, nil
 }
 
+func (registry *fakePartyRegistry) HasBusinessPartyProfile(
+	_ context.Context, tenant domain.TenantID, party domain.PartyID,
+) (bool, error) {
+	return registry.profiled[registryKey(tenant.String(), party.String())], nil
+}
+
 func (registry *fakePartyRegistry) FindLegalEntitiesPinning(
 	_ context.Context, tenant domain.TenantID, party domain.PartyID,
 ) ([]string, error) {

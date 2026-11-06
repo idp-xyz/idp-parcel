@@ -26,6 +26,16 @@ import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSect
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { DetailRow, Instant } from './detail-primitives';
 import { BusinessPartyIdentificationRows } from './BusinessPartyIdentificationRows';
+import {
+  BusinessPartyContactsReadout,
+  BusinessPartyProfileEditMode,
+  BusinessPartyProfileReadout,
+  BusinessPartyProfileVersions,
+  effectiveProfileOf,
+  useBusinessPartyProfiles,
+} from './BusinessPartyProfileSection';
+import type { AnswerQuery } from '../../query/answers';
+import type { BusinessPartyProfileRevisionListResponseBody } from './api';
 import { useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -45,6 +55,14 @@ export const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessParty
   timelineOf: (body) => businessPartyRevisionTimeline(body.revisions, formatInstant),
   noteOf: businessPartyRevisionHistoryNote,
 };
+
+/** 「资料版本」分区折起时标题后那一句：此刻是第几版，或还没有。 */
+function profileVersionsSummary(query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>, partyId: string): string | undefined {
+  const { record, body } = effectiveProfileOf(query, partyId);
+  if (body === null) return undefined;
+  if (record) return `当前第 ${record.revision} 版`;
+  return body.revisions.length ? '尚无生效版本' : '未登记';
+}
 
 function muted(text: string): ReactNode {
   return <span className="text-idpxyz-breadcrumb">{text}</span>;
@@ -154,7 +172,10 @@ export function BusinessPartyDetailPage({
   identityEditing,
   onEnterIdentityEdit,
   onExitIdentityEdit,
-  ours,
+  profileEditing,
+  onEnterProfileEdit,
+  onExitProfileEdit,
+  ours: pinned,
 }: {
   partyId: string;
   /** 册上对得上的那一行；册已取回却没有则为 null。 */
@@ -170,9 +191,17 @@ export function BusinessPartyDetailPage({
   onEnterIdentityEdit: () => void;
   /** 出编辑态：调用方改地址（后退或替换，由它按历史判）；`then` 是退出后还要去的地方，给了就替换地址再走。 */
   onExitIdentityEdit: (then?: () => void) => void;
-  /** 是不是法人册上钉着的我方公司（business-party-list.ts 的 ourCompanyPartyIds）；编辑态据此不摆注册号。 */
-  ours: boolean;
+  /** 「更新资料」的编辑态（ADR-0369）：由地址判出（business-parties-address.ts 的 profileEditRequested）。 */
+  profileEditing: boolean;
+  onEnterProfileEdit: () => void;
+  onExitProfileEdit: (then?: () => void) => void;
+  /**
+   * 法人册上有没有公司主体钉着它，已停用的也算（business-party-list.ts 的 partiesPinnedByLegalEntities）：编辑态不摆注册号，也不摆往来单位资料。
+   * null 是法人册还没答出；没取到（未配置、出错）由调用方答 false，写口照旧在服务端判。
+   */
+  ours: boolean | null;
 }) {
+  const ours = pinned === true;
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   const related = usePartyOverviewCount(partyId, relationships);
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
@@ -183,9 +212,18 @@ export function BusinessPartyDetailPage({
   useEffect(() => {
     if (identityEditing && grant.settled && !grant.mayWrite) onExitIdentityEdit();
   }, [identityEditing, grant.settled, grant.mayWrite, onExitIdentityEdit]);
+  useEffect(() => {
+    if (profileEditing && grant.settled && !grant.mayWrite) onExitProfileEdit();
+  }, [profileEditing, grant.settled, grant.mayWrite, onExitProfileEdit]);
+  // 往来单位资料（ADR-0369）：概要、联系人与资料版本几处读同一份修订链。我方公司的资料在公司主体上，不读；法人册答出之前
+  // 也先不读，免得先发一笔再认出是我方公司。
+  const profiles = useBusinessPartyProfiles(partyId, false, pinned === false);
   // 编辑态（票 business-party-edit-mode/02，照公司主体对象页）：概要分区换成「更正名称」表单，「保存 / 取消」钉在模板页脚；
   // 页头的「更正名称」「更多」收起。不是模态，「返回列表」有没提交的输入先问一句。
   const editing = identityEditing && mayWrite && row !== null;
+  const editingProfile = profileEditing && !identityEditing && mayWrite && row !== null && !ours;
+  const anyEditing = editing || editingProfile;
+  const exitEditing = (then?: () => void) => (editingProfile ? onExitProfileEdit(then) : onExitIdentityEdit(then));
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
   const [unsaved, setUnsaved] = useState(false);
   // 要确认才做的那件事（放弃编辑态、放弃关系登记、离开）；null 即没在问。
@@ -197,7 +235,7 @@ export function BusinessPartyDetailPage({
   const [relationshipUnsaved, setRelationshipUnsaved] = useState(false);
   const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
   const relationshipRegistration =
-    mayWrite && row && !editing
+    mayWrite && row && !anyEditing
       ? {
           active: registeringRelationship,
           onOpen: () => setRegisteringRelationship(true),
@@ -230,13 +268,26 @@ export function BusinessPartyDetailPage({
       status={row ? <StatusPill code={row.status} /> : undefined}
       headerActions={
         <>
-          {row && !editing ? (
+          {row && !anyEditing ? (
             <>
-              {mayWrite ? (
+              {mayWrite && !ours ? (
                 <Button
                   size="sm"
                   variant="default"
                   className={`${primaryActionClass} type-body`}
+                  onClick={() => {
+                    setRegisteringRelationship(false);
+                    onEnterProfileEdit();
+                  }}
+                >
+                  更新资料
+                </Button>
+              ) : null}
+              {mayWrite ? (
+                <Button
+                  size="sm"
+                  variant={ours ? 'default' : 'outline'}
+                  className={ours ? `${primaryActionClass} type-body` : 'type-body text-idpxyz-breadcrumb'}
                   onClick={() => {
                     setRegisteringRelationship(false);
                     onEnterIdentityEdit();
@@ -253,9 +304,9 @@ export function BusinessPartyDetailPage({
             size="sm"
             className="type-body text-idpxyz-breadcrumb"
             onClick={() => {
-              if (editing) {
-                if (unsaved) setConfirming(() => () => onExitIdentityEdit(onBack));
-                else onExitIdentityEdit(onBack);
+              if (anyEditing) {
+                if (unsaved) setConfirming(() => () => exitEditing(onBack));
+                else exitEditing(onBack);
               } else if (registeringRelationship && relationshipUnsaved) setConfirming(() => onBack);
               else onBack();
             }}
@@ -264,7 +315,7 @@ export function BusinessPartyDetailPage({
           </Button>
         </>
       }
-      footer={editing ? <div ref={setFooterSlot} /> : undefined}
+      footer={anyEditing ? <div ref={setFooterSlot} /> : undefined}
       meta={row ? buildMeta(row, related) : []}
       basicFields={[]}
       sections={
@@ -296,6 +347,33 @@ export function BusinessPartyDetailPage({
                     },
                   ]
                 : []),
+              ...(editingProfile
+                ? [
+                    {
+                      id: 'profile-edit',
+                      title: '更新资料',
+                      description: '联系人、地址、其他语言名称、税号、开票抬头与收款账户；登记为新的一版，历次版本都保留。',
+                      content: (
+                        <BusinessPartyProfileEditMode
+                          key={row.partyId}
+                          partyId={row.partyId}
+                          registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+                          footerSlot={footerSlot}
+                          onLanded={(sent) => {
+                            addToast({ type: 'success', title: `资料已更新${sent ? `，登记为第 ${sent.revision} 版` : ''}` });
+                            setUnsaved(false);
+                            onExitProfileEdit();
+                          }}
+                          onUnsavedChange={setUnsaved}
+                          onCancel={() => (unsaved ? setConfirming(() => () => onExitProfileEdit()) : onExitProfileEdit())}
+                          onRequestLeave={(href) =>
+                            unsaved ? setConfirming(() => () => onExitProfileEdit(() => (window.location.hash = href))) : onExitProfileEdit(() => (window.location.hash = href))
+                          }
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               ...(businessPartyHasBanners(row)
                 ? [
                     {
@@ -315,7 +393,57 @@ export function BusinessPartyDetailPage({
       tabs={
         row
           ? [
-              ...(editing ? [] : [{ id: 'summary' as const, content: <IdentityReadout row={row} /> }]),
+              ...(anyEditing
+                ? []
+                : [
+                    {
+                      id: 'summary' as const,
+                      content: (
+                        <>
+                          <IdentityReadout row={row} />
+                          <section className="bg-idpxyz-bg px-5 pb-5">
+                            {ours ? (
+                              <p className="type-value leading-6 text-idpxyz-breadcrumb">
+                                这是我方公司的往来单位：联系人、地址、税号与收款账户登在公司主体的资料上。
+                              </p>
+                            ) : (
+                              <BusinessPartyProfileReadout
+                                partyId={row.partyId}
+                                query={profiles}
+                                registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+                              />
+                            )}
+                          </section>
+                        </>
+                      ),
+                    },
+                  ]),
+              ...(ours || anyEditing
+                ? []
+                : [
+                    {
+                      id: 'contacts' as const,
+                      content: (
+                        <section className="bg-idpxyz-bg p-5">
+                          <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} />
+                        </section>
+                      ),
+                    },
+                  ]),
+              ...(ours
+                ? []
+                : [
+                    {
+                      id: 'profile-versions' as const,
+                      collapsed: true,
+                      summary: profileVersionsSummary(profiles, row.partyId),
+                      content: (
+                        <section className="bg-idpxyz-bg p-5">
+                          <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} />
+                        </section>
+                      ),
+                    },
+                  ]),
               {
                 id: 'identity-revisions',
                 collapsed: true,
@@ -338,8 +466,8 @@ export function BusinessPartyDetailPage({
                       relationships={relationships}
                       retryRelationships={retryRelationships}
                       relationshipRegistration={relationshipRegistration}
-                      onRelationshipEnded={mayWrite && !editing ? retryRelationships : undefined}
-                      accountWrites={mayWrite && !editing ? { parties: listAnswer } : undefined}
+                      onRelationshipEnded={mayWrite && !anyEditing ? retryRelationships : undefined}
+                      accountWrites={mayWrite && !anyEditing ? { parties: listAnswer } : undefined}
                     />
                   </section>
                 ),

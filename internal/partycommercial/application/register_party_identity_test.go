@@ -19,6 +19,8 @@ type fakePartyRegistry struct {
 	entities      map[string][]domain.LegalEntityRegistration
 	accounts      map[string][]domain.CustomerAccountRegistration
 	relationships map[string][]domain.PartyRelationshipRegistration
+	// profiled 是登着带内容的参与方资料的参与方（键同 registryKey）；参与方资料在另一本册上，这里只摆查询要的那一格。
+	profiled map[string]bool
 }
 
 func newFakePartyRegistry() *fakePartyRegistry {
@@ -27,6 +29,7 @@ func newFakePartyRegistry() *fakePartyRegistry {
 		entities:      map[string][]domain.LegalEntityRegistration{},
 		accounts:      map[string][]domain.CustomerAccountRegistration{},
 		relationships: map[string][]domain.PartyRelationshipRegistration{},
+		profiled:      map[string]bool{},
 	}
 }
 

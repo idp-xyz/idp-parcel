@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
+  partiesPinnedByLegalEntities,
   businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
@@ -306,4 +307,14 @@ test('我方公司进筛选、搜索与计数', () => {
   deepEqual(businessPartyTypeFilterOptions.slice(0, 2).map((option) => option.value), ['ALL', 'OURS']);
   equal(businessPartyTypeFilterOptions[1].label, '我方公司');
   equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].value, 'NONE');
+});
+
+// Covers: 对象页收起写入口用的口径——已停用的公司主体钉着的参与方也算；法人册没取到为空集。
+test('partiesPinnedByLegalEntities 认已停用的公司主体', () => {
+  const entity = (partyId: string, status: string) =>
+    ({ tenantId: 'T', legalEntityId: `LE-${partyId}`, kind: 'RESPONSIBLE_LEGAL_ENTITY', partyId, partyNameKnown: true, status, revision: 1, basis: 'B', effectiveFrom: '2026-01-01T00:00:00Z', registeredAt: '2026-01-01T00:00:00Z', identityLayerRegistered: false }) as never;
+  const pinned = partiesPinnedByLegalEntities([entity('P1', 'EFFECTIVE'), entity('P2', 'DEACTIVATED')]);
+  equal(pinned.has('P1'), true);
+  equal(pinned.has('P2'), true);
+  equal(partiesPinnedByLegalEntities(null).size, 0);
 });
