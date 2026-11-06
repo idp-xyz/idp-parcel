@@ -143,7 +143,8 @@ func TestTheBookingAnswerBounceRegistryTranscribesRowsAndPassesTheFilter(t *test
 }
 
 // Covers: AT-TF-333 筛选那一支——给了却立不起来的筛选（空串、全空白、带 NUL、订舱标识超过字节界）是坏请求（400），不静默放宽成
-// 全册，读口不被触到。空串由声明解码拒，理由归共用件，这里不钉；其余由端点照迁移前的判据拒，detail 必须是那道判据自己的理由：
+// 全册，读口不被触到。空串与带 NUL 的取值由共用件在解码时拒（空值、库存不下的文本），理由归共用件，这里不钉；其余由端点照迁移前的
+// 判据拒，detail 必须是那道判据自己的理由：
 // 只断言 400 的话，声明里这一维改了名、旧键成了集外键也照样 400，判据静默落空却测不出来。查询键取 ports 导出的维名，与声明、
 // 判据同一处定义；线格式上的键名由逐格转写那条用例按字面量钉。判它在渠道准入之后（spec「端点先 Intake、后解码查询参数」）：
 // 渠道未配置时同一问答 403。
@@ -152,11 +153,11 @@ func TestABookingAnswerBounceFilterThatCannotStandIsRefused(t *testing.T) {
 	for name, testCase := range map[string]struct{ query, reason string }{
 		"空订舱":      {query: "&" + booking + "="},
 		"空白订舱":     {query: "&" + booking + "=%20%20", reason: "不是订舱标识"},
-		"订舱带 NUL":  {query: "&" + booking + "=SYN%00BOOKING", reason: "不是订舱标识"},
+		"订舱带 NUL":  {query: "&" + booking + "=SYN%00BOOKING"},
 		"订舱超界":     {query: "&" + booking + "=" + strings.Repeat("B", 513), reason: "不是订舱标识"},
 		"空答复方":     {query: "&" + source + "="},
 		"空白答复方":    {query: "&" + source + "=%20", reason: "不是答复方的来源身份"},
-		"答复方带 NUL": {query: "&" + source + "=SYN%00CARRIER", reason: "不是答复方的来源身份"},
+		"答复方带 NUL": {query: "&" + source + "=SYN%00CARRIER"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			target := "/transport-fulfillment-records?registry=booking-answer-bounce" + testCase.query
