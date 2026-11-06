@@ -344,42 +344,63 @@ func TestOneSettlementPageDoesNotAnswerAnotherPagesRegistry(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——渠道未配置时，认不出的册名、空册名与合法册名
-// 同答 403：分派排在 Intake 之后，没配好渠道的调用方从答复里探不出本端点认哪些册名。配好的渠道上认不出的册名照答 400，见
-// TestSettlementCatalogueQueriesRejectUnknownRegistries。
-func TestAnUnconfiguredChannelRefusesEvenAnUnknownRegistry(t *testing.T) {
+// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——渠道未配置时，按 registry 分派的端点上认不出的
+// 册名、空册名与缺册名，按一张单取行的端点上缺单号、缺主张或版本，都与合规的一问同答一个 403：这些参数排在 Intake 之后才判，
+// 没配好渠道的调用方从答复里探不出端点认哪些册名、要哪些定位参数。配好的渠道上它们照答 400，见
+// TestSettlementCatalogueQueriesRejectUnknownRegistries 与各取行端点自己的用例。
+func TestAnUnconfiguredChannelAnswersAlikeWhateverTheDispatchOrLocatorParameters(t *testing.T) {
 	unreachable := unreachableCatalogues{t: t}
-	dispatching := []struct {
-		endpointCase
-		known string
+	unconfigured := settlementhttp.UnconfiguredIntake{}
+	for _, endpoint := range []struct {
+		name    string
+		handler http.Handler
+		valid   string
+		others  []string
 	}{
-		{endpointCase{
+		{
 			name:    "charges",
-			target:  "/settlement-charges",
-			handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
-		}, "customer-charge"},
-		{endpointCase{
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-charges?registry=customer-charge",
+			others: []string{"/settlement-charges", "/settlement-charges?registry=", "/settlement-charges?registry=unknown",
+				"/settlement-charges?registry=customer_charge"},
+		},
+		{
 			name:    "statements",
-			target:  "/settlement-statements",
-			handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
-		}, "customer-statement"},
-		{endpointCase{
+			handler: settlementhttp.NewQuerySettlementStatementsEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-statements?registry=customer-statement",
+			others:  []string{"/settlement-statements", "/settlement-statements?registry=", "/settlement-statements?registry=cost-allocation"},
+		},
+		{
 			name:    "operating-results",
-			target:  "/settlement-operating-results",
-			handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementhttp.UnconfiguredIntake{}, unreachable),
-		}, "operating-result"},
-	}
-	for _, endpoint := range dispatching {
+			handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-operating-results?registry=operating-result",
+			others: []string{"/settlement-operating-results", "/settlement-operating-results?registry=",
+				"/settlement-operating-results?registry=customer-charge"},
+		},
+		{
+			name:    "statement-lines",
+			handler: settlementhttp.NewQueryStatementLinesEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-statement-lines?statement=SYN-STMT-01",
+			others:  []string{"/settlement-statement-lines", "/settlement-statement-lines?statement="},
+		},
+		{
+			name:    "supplier-bill-lines",
+			handler: settlementhttp.NewQuerySupplierBillLinesEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-supplier-bill-lines?claim=SYN-SUP-01%2FSYN-INV-01&version=1",
+			others: []string{"/settlement-supplier-bill-lines", "/settlement-supplier-bill-lines?claim=SYN-SUP-01%2FSYN-INV-01",
+				"/settlement-supplier-bill-lines?version=1"},
+		},
+	} {
 		t.Run(endpoint.name, func(t *testing.T) {
-			known := serveGet(endpoint.handler, endpoint.target+"?registry="+endpoint.known)
-			if known.Code != http.StatusForbidden || problemCode(t, known) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-				t.Fatalf("status = %d body = %s", known.Code, known.Body.String())
+			valid := serveGet(endpoint.handler, endpoint.valid)
+			if valid.Code != http.StatusForbidden || problemCode(t, valid) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+				t.Fatalf("status = %d body = %s", valid.Code, valid.Body.String())
 			}
-			assertNoOutcome(t, known)
-			for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=customer_charge"} {
-				response := serveGet(endpoint.handler, endpoint.target+registry)
-				if response.Code != http.StatusForbidden || response.Body.String() != known.Body.String() {
-					t.Fatalf("%q：未配置的渠道答复随册名变了：%d %s，合法册名答 %s", registry, response.Code, response.Body, known.Body)
+			assertNoOutcome(t, valid)
+			for _, target := range endpoint.others {
+				response := serveGet(endpoint.handler, target)
+				if response.Code != http.StatusForbidden || response.Body.String() != valid.Body.String() {
+					t.Fatalf("%s：未配置的渠道答复随请求变了：%d %s，合规的一问答 %s", target, response.Code, response.Body, valid.Body)
 				}
 			}
 		})
