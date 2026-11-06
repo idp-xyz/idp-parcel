@@ -1,7 +1,7 @@
 # 08 settlement-accounting 各册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 settlement-accounting `0056`（进 main 时按 tip 重核）
+Status: in-progress——2026-11-06 在分支 `cursor/crpr-08-settlement` 上做（worktree `idp-parcel-crpr-08`，基 `3a20b2bcc`）。迁移编号 settlement-accounting `0056`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/settlementaccounting/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/settlement_accounting` 的一条新迁移（索引）。
