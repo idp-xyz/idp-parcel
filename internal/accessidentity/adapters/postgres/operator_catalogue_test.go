@@ -47,7 +47,8 @@ func TestListOperatorsListsTheTenantInRecordedOrder(t *testing.T) {
 	revokedAt := grantStartsAt.Add(24 * time.Hour)
 	expectOutcome(t, "revoke write", register.revoke(t, revocationOf(t, tenantOne, "SYN-CAT-GRANT-B", revokedAt, "SYN-REVOKE-BASIS-B")), accessidentity.OperatorRegistrationRecorded)
 
-	rows, err := register.registry.ListOperators(t.Context(), tenantOne)
+	pages := accessidentity.OperatorCataloguePages
+	rows, err := rowsOf(register.registry.ListOperators(t.Context(), tenantOne, 50, firstPage(t, pages)))
 	if err != nil {
 		t.Fatalf("ListOperators：%v", err)
 	}
@@ -89,11 +90,11 @@ func TestListOperatorsListsTheTenantInRecordedOrder(t *testing.T) {
 		t.Fatalf("作业事实登记那笔的范围 = %+v", grants[3].Recorded().Grant().WorkScope())
 	}
 
-	none, err := register.registry.ListOperators(t.Context(), "SYN-TENANT-EMPTY")
+	none, err := rowsOf(register.registry.ListOperators(t.Context(), "SYN-TENANT-EMPTY", 50, firstPage(t, pages)))
 	if err != nil || none == nil || len(none) != 0 {
 		t.Fatalf("空租户 = %v, %v; want 空列表", none, err)
 	}
-	if _, err := register.registry.ListOperators(t.Context(), " "); !errors.Is(err, accessidentity.ErrOperatorCatalogueTenantRequired) {
+	if _, err := register.registry.ListOperators(t.Context(), " ", 50, firstPage(t, pages)); !errors.Is(err, accessidentity.ErrOperatorCatalogueTenantRequired) {
 		t.Fatalf("空白租户 err = %v", err)
 	}
 }

@@ -329,7 +329,8 @@ func TestListDevicesReturnsOnlyThatTenantsRows(t *testing.T) {
 		register.register(t, deviceOf(t, tenantTwo, "SYN-DEVICE-A", node, "SYN-DEVICE-BASIS-OTHER")),
 		accessidentity.DeviceRegistrationRecorded)
 
-	rows, err := register.registry.ListDevices(t.Context(), tenantOne)
+	pages := accessidentity.DeviceCataloguePages
+	rows, err := rowsOf(register.registry.ListDevices(t.Context(), tenantOne, 50, firstPage(t, pages)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,15 +351,15 @@ func TestListDevicesReturnsOnlyThatTenantsRows(t *testing.T) {
 		t.Fatalf("B 的作业范围 = %s %s", rows[1].WorkScope().Kind(), rows[1].WorkScope().Reference())
 	}
 
-	other, err := register.registry.ListDevices(t.Context(), tenantTwo)
+	other, err := rowsOf(register.registry.ListDevices(t.Context(), tenantTwo, 50, firstPage(t, pages)))
 	if err != nil || len(other) != 1 || other[0].DeviceID() != "SYN-DEVICE-A" || other[0].Status() != accessidentity.DeviceCatalogueRegistered {
 		t.Fatalf("乙租户的册 = %v, err %v", deviceIDs(other), err)
 	}
-	empty, err := register.registry.ListDevices(t.Context(), "SYN-TENANT-EMPTY")
+	empty, err := rowsOf(register.registry.ListDevices(t.Context(), "SYN-TENANT-EMPTY", 50, firstPage(t, pages)))
 	if err != nil || len(empty) != 0 || empty == nil {
 		t.Fatalf("空册 = %#v, err %v; want 空切片", empty, err)
 	}
-	if _, err := register.registry.ListDevices(t.Context(), " "); !errors.Is(err, accessidentity.ErrDeviceCatalogueTenantRequired) {
+	if _, err := register.registry.ListDevices(t.Context(), " ", 50, firstPage(t, pages)); !errors.Is(err, accessidentity.ErrDeviceCatalogueTenantRequired) {
 		t.Fatalf("空租户 err = %v", err)
 	}
 }

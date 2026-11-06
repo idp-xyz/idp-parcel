@@ -13,6 +13,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 const catalogueTenant = "SYN-TENANT-01"
@@ -21,18 +22,27 @@ var catalogueAt = time.Date(2026, 9, 25, 2, 0, 0, 0, time.UTC)
 
 type catalogueFake struct {
 	tenant string
+	limit  int
+	query  cataloguepage.Query
 	rows   []accessidentity.DeviceCatalogueRow
+	next   string
+	total  int64
 	err    error
 	calls  int
 }
 
-func (fake *catalogueFake) ListDevices(_ context.Context, tenantID string) ([]accessidentity.DeviceCatalogueRow, error) {
+func (fake *catalogueFake) ListDevices(
+	_ context.Context,
+	tenantID string,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.DeviceCatalogueRow], error) {
 	fake.calls++
-	fake.tenant = tenantID
+	fake.tenant, fake.limit, fake.query = tenantID, limit, query
 	if fake.err != nil {
-		return nil, fake.err
+		return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{}, fake.err
 	}
-	return fake.rows, nil
+	return cataloguepage.Result[accessidentity.DeviceCatalogueRow]{Rows: fake.rows, Next: fake.next, Total: fake.total}, nil
 }
 
 type authenticatorFake struct {
@@ -83,7 +93,7 @@ func TestQueryWorkDevicesListsTheEnvelopeTenant(t *testing.T) {
 	handler := catalogueHandler(t, authenticatorFake{tenant: catalogueTenant}, catalogue)
 
 	body := &readProbe{Reader: strings.NewReader(`{"tenant":"SYN-TENANT-02"}`)}
-	request := httptest.NewRequest(http.MethodGet, identityhttp.WorkDeviceCataloguePath+"?tenant=SYN-TENANT-02", body)
+	request := httptest.NewRequest(http.MethodGet, identityhttp.WorkDeviceCataloguePath, body)
 	request.Header.Set("Authorization", "Bearer presented.operator.token")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -93,6 +103,11 @@ func TestQueryWorkDevicesListsTheEnvelopeTenant(t *testing.T) {
 	}
 	if catalogue.tenant != catalogueTenant {
 		t.Fatalf("册收到的租户 = %s, want 信封上的租户", catalogue.tenant)
+	}
+	// 查询串上自报的租户是集外键：答 400，册不再被读（ADR-0144 决定四）。
+	if refused := serveTarget(handler, identityhttp.WorkDeviceCataloguePath+"?tenant=SYN-TENANT-02"); refused.Code != http.StatusBadRequest ||
+		problemCode(t, refused) != "MALFORMED_REQUEST" || catalogue.calls != 1 {
+		t.Fatalf("自报租户 = %d %s，册读了 %d 次", refused.Code, refused.Body.String(), catalogue.calls)
 	}
 	var listed struct {
 		Outcome string           `json:"outcome"`

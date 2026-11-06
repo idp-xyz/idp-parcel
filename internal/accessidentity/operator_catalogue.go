@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ErrOperatorCatalogueTenantRequired 表示按租户列操作者时没给出租户。空租户不能列成「全部租户的操作者」。
@@ -64,9 +66,16 @@ func (row OperatorCatalogueRow) Grants() []RecordedGrantRow {
 
 // OperatorCatalogue 是操作者册按租户的查阅口与按授予标识的装载口（ADR-0363 决定二、三）。
 //
-// ListOperators 只列本租户：主体按登记时刻排序、授予按登记时刻排序，空册答空列表而不是 error。FindGrant 按（租户、授予
-// 标识）取一笔授予连同撤销，给撤销口在写入前判防锁死；不在册答 found=false 而不返回 error，理由同 OperatorRegistry。
+// ListOperators 只列本租户，按 OperatorCataloguePages 解出的查询取一页（ADR-0144 决定六）：本页的操作者连同名下的授予与
+// 撤销出自同一条查询，绑定与授予不取自两个时点（ADR-0363 决定二）；授予在各自操作者名下按登记时刻排。limit 是页大小，非正
+// 即拒；空册答空页而不是 error。FindGrant 按（租户、授予标识）取一笔授予连同撤销，给撤销口在写入前判防锁死；不在册答
+// found=false 而不返回 error，理由同 OperatorRegistry。
 type OperatorCatalogue interface {
-	ListOperators(ctx context.Context, tenantID string) ([]OperatorCatalogueRow, error)
+	ListOperators(
+		ctx context.Context,
+		tenantID string,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[OperatorCatalogueRow], error)
 	FindGrant(ctx context.Context, tenantID, grantID string) (RecordedGrant, bool, error)
 }

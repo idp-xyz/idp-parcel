@@ -1,7 +1,7 @@
 # 13 access-identity 操作者与工作设备两册迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent——迁移编号预留 access-identity `0041`（进 main 时按 tip 重核）
+Status: in-progress——2026-11-06 作者开工，分支 `cursor/crpr-13-access`，基 `3a20b2bcc`。迁移编号预留 access-identity `0041`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/accessidentity` 里 `ListOperators`、`ListDevices` 的端口、postgres 实现与两个端点及其测试；`migrations/access_identity` 的一条新迁移（索引）。
 出处：ADR-0144 决定三至七；spec「横贯各子票的取舍」。

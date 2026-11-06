@@ -14,10 +14,12 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // Covers: ADR-0363 决定二——操作者接入管理面的四口接在操作者铸造器上、守口是操作者接入管理这一格：发行方未配置答未配置；没令牌答
-// 令牌不过；只持登记册配置写或查阅读答未授予；授予齐备而册读失败答答案未形成；空册答空列表并回本进程信任的发行方。
+// 令牌不过；只持登记册配置写或查阅读答未授予；授予齐备而册读失败答答案未形成；空册答空列表并回本进程信任的发行方。查阅口上请求
+// 自报的 tenant 在认证之前不改变任何一格，认证过了是集外查询键、答 400（ADR-0144 决定四）——租户只取自信封。
 func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T) {
 	for path, constant := range map[string]string{
 		"/operators": identityhttp.OperatorsPath, "/operator-registrations": identityhttp.OperatorRegistrationsPath,
@@ -44,21 +46,24 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 		t.Fatal(err)
 	}
 
+	const selfReportedTenant = "/operators?tenant=SYN-TENANT-02"
 	cases := []struct {
 		name      string
 		minter    *accessidentity.OperatorMinter
 		catalogue accessidentity.OperatorCatalogue
 		token     string
+		target    string
 		status    int
 		code      string
 		outcome   string
 	}{
-		{"issuer unconfigured", unconfigured, emptyOperatorCatalogue{}, "presented.operator.token", http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED", ""},
-		{"no bearer token", granted, emptyOperatorCatalogue{}, "", http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED", ""},
-		{"write grant is not an administration grant", writer, emptyOperatorCatalogue{}, "presented.operator.token", http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
-		{"read grant is not an administration grant", reader, emptyOperatorCatalogue{}, "presented.operator.token", http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
-		{"catalogue down", granted, failingOperatorCatalogue{}, "presented.operator.token", http.StatusInternalServerError, "NO_ANSWER_FORMED", ""},
-		{"empty catalogue", granted, emptyOperatorCatalogue{}, "presented.operator.token", http.StatusOK, "", "OPERATORS_LISTED"},
+		{"issuer unconfigured", unconfigured, emptyOperatorCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED", ""},
+		{"no bearer token", granted, emptyOperatorCatalogue{}, "", selfReportedTenant, http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED", ""},
+		{"write grant is not an administration grant", writer, emptyOperatorCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
+		{"read grant is not an administration grant", reader, emptyOperatorCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusForbidden, "OPERATOR_NOT_GRANTED", ""},
+		{"self-reported tenant is outside the query set", granted, failingOperatorCatalogue{}, "presented.operator.token", selfReportedTenant, http.StatusBadRequest, "MALFORMED_REQUEST", ""},
+		{"catalogue down", granted, failingOperatorCatalogue{}, "presented.operator.token", "/operators", http.StatusInternalServerError, "NO_ANSWER_FORMED", ""},
+		{"empty catalogue", granted, emptyOperatorCatalogue{}, "presented.operator.token", "/operators", http.StatusOK, "", "OPERATORS_LISTED"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -66,7 +71,7 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := httptest.NewRequest(http.MethodGet, "/operators?tenant=SYN-TENANT-02", nil)
+			request := httptest.NewRequest(http.MethodGet, testCase.target, nil)
 			if testCase.token != "" {
 				request.Header.Set("Authorization", "Bearer "+testCase.token)
 			}
@@ -146,8 +151,10 @@ func (accessAdministratorRegister) FindOperator(_ context.Context, subject acces
 
 type emptyOperatorCatalogue struct{}
 
-func (emptyOperatorCatalogue) ListOperators(context.Context, string) ([]accessidentity.OperatorCatalogueRow, error) {
-	return []accessidentity.OperatorCatalogueRow{}, nil
+func (emptyOperatorCatalogue) ListOperators(
+	context.Context, string, int, cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.OperatorCatalogueRow], error) {
+	return cataloguepage.Result[accessidentity.OperatorCatalogueRow]{Rows: []accessidentity.OperatorCatalogueRow{}}, nil
 }
 
 func (emptyOperatorCatalogue) FindGrant(context.Context, string, string) (accessidentity.RecordedGrant, bool, error) {
@@ -156,8 +163,10 @@ func (emptyOperatorCatalogue) FindGrant(context.Context, string, string) (access
 
 type failingOperatorCatalogue struct{}
 
-func (failingOperatorCatalogue) ListOperators(context.Context, string) ([]accessidentity.OperatorCatalogueRow, error) {
-	return nil, errors.New("operator catalogue down")
+func (failingOperatorCatalogue) ListOperators(
+	context.Context, string, int, cataloguepage.Query,
+) (cataloguepage.Result[accessidentity.OperatorCatalogueRow], error) {
+	return cataloguepage.Result[accessidentity.OperatorCatalogueRow]{}, errors.New("operator catalogue down")
 }
 
 func (failingOperatorCatalogue) FindGrant(context.Context, string, string) (accessidentity.RecordedGrant, bool, error) {
