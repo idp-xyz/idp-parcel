@@ -37,14 +37,17 @@ func NewShipmentRequestViews(db *bentopg.DB) (*ShipmentRequestViews, error) {
 
 var _ ports.ShipmentRequestViews = (*ShipmentRequestViews)(nil)
 
-// shipmentRequestViewPages 把 ports.ShipmentRequestViewPages 落到列上。state 落在存代码的 state 列；q 在委托号、单据号（运单号）
-// 与来源请求键上做字面包含——单据号可空，没有号的委托在 q 上只靠另两列命中。
+// shipmentRequestKeyword 是委托查阅与两个委托队列共用的 q 落列：委托号、单据号（运单号）与来源请求键上做字面包含——单据号可空，
+// 没有号的委托在 q 上只靠另两列命中。三册共用这一份，操作者在哪一页搜同一个号都命中同样的行。
+var shipmentRequestKeyword = []string{"shipment_request_id", "document_number", "source_request_key"}
+
+// shipmentRequestViewPages 把 ports.ShipmentRequestViewPages 落到列上。state 落在存代码的 state 列。
 var shipmentRequestViewPages = ports.ShipmentRequestViewPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"submittedAt": "submitted_at", "shipmentRequestId": "shipment_request_id"},
 	Identity: []string{"shipment_request_id"},
 	Filters:  map[string]string{"state": "state", "customerAccountId": "customer_account_id"},
 	Codes:    map[string]func(string) (int64, error){"state": cataloguepage.Code[domain.ShipmentRequestState]},
-	Keyword:  []string{"shipment_request_id", "document_number", "source_request_key"},
+	Keyword:  shipmentRequestKeyword,
 })
 
 // visibleRequests 是作用域那一段固定条件：租户与可见客户账户集合进 WHERE，读面答不出作用域外的行（`统一不可见结果`）。
