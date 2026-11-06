@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件钉并列裁决口与并列读面的传输形状（ADR-0309 决定二、五、六；ADR-0022）：与授权改路决定口同一种授予、同一套认证与接入各格，
@@ -121,14 +122,20 @@ func TestTheTieDecisionEndpointAnswersEachAccessGradeAndDoesNotDisguiseAFailure(
 
 type tieReader struct {
 	rows   []ports.InitialRouteTieCatalogueRow
+	next   string
+	total  int64
 	err    error
+	called bool
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
 }
 
-func (reader *tieReader) ListInitialRouteTies(_ context.Context, tenant domain.TenantID, limit int) ([]ports.InitialRouteTieCatalogueRow, error) {
-	reader.tenant, reader.limit = tenant, limit
-	return reader.rows, reader.err
+func (reader *tieReader) ListInitialRouteTies(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.InitialRouteTieCatalogueRow], error) {
+	reader.called, reader.tenant, reader.limit, reader.query = true, tenant, limit, query
+	return cataloguepage.Result[ports.InitialRouteTieCatalogueRow]{Rows: reader.rows, Next: reader.next, Total: reader.total}, reader.err
 }
 
 // Covers: AT-NR-103（ADR-0309 决定六）——并列读面逐行透出判断键、全部候选、并列的那几家与打平的金额、状态，已决定的带决定；空册答空数组；

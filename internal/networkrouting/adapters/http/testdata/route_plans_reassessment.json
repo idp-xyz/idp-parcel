@@ -30,5 +30,10 @@
       "reassessedAt": "2026-08-20T12:02:00Z",
       "recordedAt": "2026-08-20T12:03:00Z"
     }
-  ]
+  ],
+  "page": {
+    "size": 25,
+    "next": null,
+    "total": 2
+  }
 }

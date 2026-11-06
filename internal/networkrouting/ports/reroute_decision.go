@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // AuthorizedRerouteDecision 是授权角色据一份改路建议形成的改路决定落册的那一份（ADR-0284 决定五）。Suggestion 是建议所在那次
@@ -98,7 +99,9 @@ type RerouteSuggestionCatalogueRow struct {
 	Candidates         []RerouteSuggestionCandidateRow
 	SuggestedAt        time.Time
 	TriggerOccurredAt  time.Time
-	State              RerouteSuggestionState
+	// RecordedAt 是建议所在那次复核落册的时刻，即本册的缺省序（RerouteSuggestionPages）。
+	RecordedAt time.Time
+	State      RerouteSuggestionState
 	// Decision 只在已决定时在场。
 	Decision    RerouteSuggestionDecisionRow
 	HasDecision bool
@@ -120,11 +123,13 @@ type RerouteSuggestionDecisionRow struct {
 	DecidedAt      time.Time
 }
 
-// RerouteSuggestionCatalogueRead 是改路建议的列表读端口。租户在签名上；limit 非正拒；空册如实答空列表。
+// RerouteSuggestionCatalogueRead 是改路建议的列表读端口。租户在签名上；limit 非正拒；空册如实答空页。查询对象由
+// RerouteSuggestionPages 解出。
 type RerouteSuggestionCatalogueRead interface {
 	ListRerouteSuggestions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]RerouteSuggestionCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[RerouteSuggestionCatalogueRow], error)
 }

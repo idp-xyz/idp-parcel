@@ -48,5 +48,10 @@
       "conclusion": "NO_CURRENT_ROUTE",
       "recordedAt": "2026-08-20T12:00:00Z"
     }
-  ]
+  ],
+  "page": {
+    "size": 25,
+    "next": null,
+    "total": 2
+  }
 }

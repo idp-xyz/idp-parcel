@@ -320,7 +320,7 @@ func TestTheRoutePlanCatalogueListsLegsEndingWithTheDeliveryLeg(t *testing.T) {
 		Key: key, Plan: planWithDeliveryLeg(t, key, "RPV-0064"), HasPlan: true,
 	})
 
-	rows, err := fixture.catalogue.ListInitialRoutes(ctx, key.TenantID, 10)
+	rows, err := rowsOf(fixture.catalogue.ListInitialRoutes(ctx, key.TenantID, 10, firstPage(t, ports.InitialRoutePages)))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("上列：%d 行 err=%v", len(rows), err)
 	}

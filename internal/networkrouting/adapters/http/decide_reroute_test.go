@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件钉授权改路决定口与改路建议读面的传输形状（ADR-0284 决定一、六；ADR-0022）：租户与决定方取认证结果，载荷封闭；接入各格
@@ -179,14 +180,20 @@ func TestTheRerouteDecisionEndpointDoesNotDisguiseAFailure(t *testing.T) {
 
 type suggestionReader struct {
 	rows   []ports.RerouteSuggestionCatalogueRow
+	next   string
+	total  int64
 	err    error
+	called bool
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
 }
 
-func (reader *suggestionReader) ListRerouteSuggestions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.RerouteSuggestionCatalogueRow, error) {
-	reader.tenant, reader.limit = tenant, limit
-	return reader.rows, reader.err
+func (reader *suggestionReader) ListRerouteSuggestions(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.RerouteSuggestionCatalogueRow], error) {
+	reader.called, reader.tenant, reader.limit, reader.query = true, tenant, limit, query
+	return cataloguepage.Result[ports.RerouteSuggestionCatalogueRow]{Rows: reader.rows, Next: reader.next, Total: reader.total}, reader.err
 }
 
 type readIntake struct{}
@@ -217,7 +224,8 @@ func TestTheRerouteSuggestionReadFaceListsSuggestionsWithTheirState(t *testing.T
 			{ID: "SYN-LINE-B@1", Outcome: "QUALIFIED"},
 		},
 		SuggestedAt: decidedAt.Add(-time.Hour), TriggerOccurredAt: decidedAt.Add(-2 * time.Hour),
-		State: ports.RerouteSuggestionDecided, HasDecision: true,
+		RecordedAt: decidedAt.Add(-time.Hour + time.Second),
+		State:      ports.RerouteSuggestionDecided, HasDecision: true,
 		Decision: ports.RerouteSuggestionDecisionRow{Candidate: "SYN-LINE-B@1", NewPlanVersion: "SYN-RPV-2",
 			DecidedBy: "OPERATOR/https://issuer.example#ops-7", Basis: "SYN-APPROVAL-7", DecidedAt: decidedAt},
 	}}}
@@ -231,6 +239,7 @@ func TestTheRerouteSuggestionReadFaceListsSuggestionsWithTheirState(t *testing.T
 		Outcome     string `json:"outcome"`
 		Suggestions []struct {
 			CorrelationID string `json:"correlationId"`
+			RecordedAt    string `json:"recordedAt"`
 			State         string `json:"state"`
 			Candidates    []struct {
 				ID      string `json:"id"`
@@ -255,7 +264,8 @@ func TestTheRerouteSuggestionReadFaceListsSuggestionsWithTheirState(t *testing.T
 	row := body.Suggestions[0]
 	if row.CorrelationID != "handover/1:a" || row.State != "DECIDED" || len(row.Candidates) != 2 ||
 		row.Candidates[0].Reason != "HARD_CONSTRAINT_RESTRICTION/X" || len(row.Blockers) != 1 ||
-		row.Decision == nil || row.Decision.NewPlanVersion != "SYN-RPV-2" || row.Decision.DecidedAt != "2026-10-26T09:00:00Z" {
+		row.Decision == nil || row.Decision.NewPlanVersion != "SYN-RPV-2" || row.Decision.DecidedAt != "2026-10-26T09:00:00Z" ||
+		row.RecordedAt != "2026-10-26T08:00:01Z" {
 		t.Fatalf("row = %+v", row)
 	}
 	if reader.tenant.String() != "SYN-TENANT-01" || reader.limit != 200 {

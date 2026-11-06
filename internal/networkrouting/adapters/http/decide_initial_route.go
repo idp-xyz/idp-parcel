@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -176,7 +177,12 @@ func tieKeyBody(key domain.InitialRouteJudgmentKey) *initialRouteTieKey {
 
 // InitialRouteTieCatalogueReader 是并列读面消费的读口（ADR-0309 决定六）。
 type InitialRouteTieCatalogueReader interface {
-	ListInitialRouteTies(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.InitialRouteTieCatalogueRow, error)
+	ListInitialRouteTies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.InitialRouteTieCatalogueRow], error)
 }
 
 var _ InitialRouteTieCatalogueReader = ports.InitialRouteTieCatalogueRead(nil)
@@ -185,7 +191,8 @@ var _ InitialRouteTieCatalogueReader = ports.InitialRouteTieCatalogueRead(nil)
 const outcomeInitialRouteTiesListed = "INITIAL_ROUTE_TIES_LISTED"
 
 // NewQueryInitialRouteTiesEndpoint 交回并列读面（GET /route-initial-route-ties）。复用本包目录查阅的 Intake：并列同属运营查阅，
-// 授权边界同是租户。状态只答此刻的大概，裁决成不成立仍由决定口在判断键锁里判。
+// 授权边界同是租户。状态只答此刻的大概，裁决成不成立仍由决定口在判断键锁里判。查询参数在 Intake 之后由本端点按
+// InitialRouteTiePages 解码（ADR-0144 决定六）：未配置的渠道对一切请求同答 403（ADR-0055 决定三），配置了的渠道上坏参数答 400。
 func NewQueryInitialRouteTiesEndpoint(intake CatalogueQueryIntake, reader InitialRouteTieCatalogueReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -198,22 +205,32 @@ func NewQueryInitialRouteTiesEndpoint(intake CatalogueQueryIntake, reader Initia
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		rows, err := reader.ListInitialRouteTies(request.Context(), query.Scope.Tenant(), query.Limit)
+		pageQuery, err := ports.InitialRouteTiePages.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := reader.ListInitialRouteTies(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		bodies := make([]initialRouteTieBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]initialRouteTieBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, initialRouteTieBodyOf(row))
 		}
-		writeJSON(response, http.StatusOK, initialRouteTieListResponse{Outcome: outcomeInitialRouteTiesListed, Ties: bodies})
+		writeJSON(response, http.StatusOK, initialRouteTieListResponse{
+			Outcome: outcomeInitialRouteTiesListed,
+			Ties:    bodies,
+			Page:    page.Page(query.Limit),
+		})
 	})
 }
 
 type initialRouteTieListResponse struct {
 	Outcome string                `json:"outcome"`
 	Ties    []initialRouteTieBody `json:"ties"`
+	Page    cataloguepage.Page    `json:"page"`
 }
 
 // initialRouteTieBody 逐字段透出一条并列。候选的结局与依据是入账那一刻的评估；`tied` 是并列的那几家与打平的金额；`state` 是

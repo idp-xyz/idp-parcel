@@ -11,6 +11,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -52,6 +53,21 @@ func insertInitialRouteRow(
 	recordedAt time.Time,
 ) {
 	t.Helper()
+	insertJudgmentRow(t, pool, ctx,
+		[6]string{tenantID, "SYN-ACC-1", "SYN-REQ-" + parcelID, "SYN-BASELINE-1", parcelID, "DELIVERY"},
+		formedPlanVersion, recordedAt)
+}
+
+// insertJudgmentRow 同 insertInitialRouteRow，只是判断键由调用方给全六段：租户、客户账户、委托、受理基线、包裹、服务目的。
+func insertJudgmentRow(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	ctx context.Context,
+	key [6]string,
+	formedPlanVersion string,
+	recordedAt time.Time,
+) {
+	t.Helper()
 	conclusion, planVersion, plan, noRoute := "NO_CURRENT_ROUTE", (*string)(nil), []byte(nil), []byte(`{"synthetic":true,"basis":"SYN-NO-ROUTE"}`)
 	if formedPlanVersion != "" {
 		formed := fmt.Sprintf(`{"version":%q,"selected":"SYN-CAND-1",
@@ -68,10 +84,9 @@ func insertInitialRouteRow(
 			 declared_parcel_id, service_purpose, conclusion, plan_version, plan,
 			 no_route, recorded_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		tenantID, "SYN-ACC-1", "SYN-REQ-"+parcelID, "SYN-BASELINE-1",
-		parcelID, "DELIVERY", conclusion, planVersion, plan, noRoute, recordedAt,
+		key[0], key[1], key[2], key[3], key[4], key[5], conclusion, planVersion, plan, noRoute, recordedAt,
 	); err != nil {
-		t.Fatalf("插初始路由行 %s：%v", parcelID, err)
+		t.Fatalf("插初始路由行 %v：%v", key, err)
 	}
 }
 
@@ -123,7 +138,7 @@ func TestInitialRouteCatalogueTranscribesJudgmentsWithApplicability(t *testing.T
 	insertApplicabilityRow(t, pool, ctx, "SYN-PLAN-THEIRS#v1", "CURRENTLY_EFFECTIVE", "", "", routePlanBaseAt)
 	// SYN-PLAN-4#v1 不登适用性：联查列如实缺席。
 
-	rows, err := catalogue.ListInitialRoutes(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListInitialRoutes(ctx, tenant, 10, firstPage(t, ports.InitialRoutePages)))
 	if err != nil {
 		t.Fatalf("上列初始路由：%v", err)
 	}
@@ -180,7 +195,8 @@ func TestInitialRouteCatalogueTranscribesJudgmentsWithApplicability(t *testing.T
 		t.Fatalf("未登适用性的计划行变形：%+v", unregistered)
 	}
 
-	empty, err := catalogue.ListInitialRoutes(ctx, scalar(t, domain.NewTenantID, "tenant-empty"), 10)
+	empty, err := rowsOf(catalogue.ListInitialRoutes(ctx, scalar(t, domain.NewTenantID, "tenant-empty"), 10,
+		firstPage(t, ports.InitialRoutePages)))
 	if err != nil {
 		t.Fatalf("空租户上列：%v", err)
 	}
@@ -240,7 +256,7 @@ func TestRouteReassessmentCatalogueTranscribesTheColumnFace(t *testing.T) {
 	insertReassessmentRow(t, pool, ctx, "tenant-b", "SYN-CORR-THEIRS", "STILL_APPLICABLE",
 		"SYN-PLAN-THEIRS#v1", "", "", routePlanBaseAt.Add(2*time.Hour))
 
-	rows, err := catalogue.ListRouteReassessments(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListRouteReassessments(ctx, tenant, 10, firstPage(t, ports.RouteReassessmentPages)))
 	if err != nil {
 		t.Fatalf("上列复核：%v", err)
 	}
@@ -266,17 +282,17 @@ func TestRouteReassessmentCatalogueTranscribesTheColumnFace(t *testing.T) {
 		t.Fatalf("两个时刻没透出：%+v", still)
 	}
 
-	if _, err := catalogue.ListRouteReassessments(ctx, tenant, 0); err == nil {
+	if _, err := catalogue.ListRouteReassessments(ctx, tenant, 0, firstPage(t, ports.RouteReassessmentPages)); err == nil {
 		t.Fatal("复核册 limit 0 未被拒")
 	}
-	limited, err := catalogue.ListInitialRoutes(ctx, tenant, 1)
+	limited, err := rowsOf(catalogue.ListInitialRoutes(ctx, tenant, 1, firstPage(t, ports.InitialRoutePages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列：%v", err)
 	}
 	if len(limited) > 1 {
 		t.Fatalf("limit 1 交回 %d 行", len(limited))
 	}
-	if _, err := catalogue.ListInitialRoutes(ctx, tenant, -1); err == nil {
+	if _, err := catalogue.ListInitialRoutes(ctx, tenant, -1, firstPage(t, ports.InitialRoutePages)); err == nil {
 		t.Fatal("初始路由册 limit -1 未被拒")
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // RoutePlanCatalogueReader 是路由判断两册端点消费的读口（票 admin-skeleton-closure-batch/03）。
@@ -17,12 +18,14 @@ type RoutePlanCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.InitialRouteCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.InitialRouteCatalogueRow], error)
 	ListRouteReassessments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.RouteReassessmentCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.RouteReassessmentCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -42,14 +45,24 @@ const (
 	registerReassessment = "reassessment"
 )
 
+// registerCatalogues 是两册的查询声明（ADR-0144）：register 选中哪一册，就按哪一册的声明解码其余参数。
+var registerCatalogues = map[string]*cataloguepage.Catalogue{
+	registerInitialRoute: ports.InitialRoutePages,
+	registerReassessment: ports.RouteReassessmentPages,
+}
+
 // NewQueryRoutePlansEndpoint 交回路由判断两册查阅的 HTTP 入口
 // （GET /route-plans，ADR-0077；最终路径归装配票，本批为 closure-batch/07）。
 //
-// 两册共用一个端点，按 `register` 查询参数分派（先例：本包网络目录端点一口七分派）：
-// 参数在场与否、取值在不在封闭集内属传输形状，先于 Intake；未配置 Intake 对两个分支
-// 同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认一册就是替它猜。
+// 两册共用一个端点，按 `register` 查询参数分派（先例：本包网络目录端点一口七分派）。
+// 缺席或取值不在封闭集内按坏请求拒：替调用方默认一册就是替它猜。
 // 复用本包目录查阅的 Intake：判断册查阅同属运营查阅，授权边界同是租户，不为业务
 // 事实册另立第二种准入形（先例：parcelpricing 评价端点同一分法）。
+//
+// register 与其余查询参数（after、sort、筛选维与 q，由本端点按所选册的声明解码，
+// ADR-0144 决定六）都在 Intake 之后才看：未配置的渠道对一切请求同答 403，答复不随
+// 查询串变（ADR-0055 决定三），没有凭据的调用方探不出有哪几册、各册开放了哪些查询
+// 维度。配置了的渠道上不成立即 400。
 func NewQueryRoutePlansEndpoint(
 	intake CatalogueQueryIntake,
 	reader RoutePlanCatalogueReader,
@@ -61,15 +74,22 @@ func NewQueryRoutePlansEndpoint(
 			return
 		}
 
-		register := request.URL.Query().Get("register")
-		if register != registerInitialRoute && register != registerReassessment {
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
+		values := request.URL.Query()
+		register := values.Get("register")
+		catalogue, known := registerCatalogues[register]
+		if !known {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := catalogue.Decode(values)
+		if err != nil {
+			writePageQueryProblem(response, err)
 			return
 		}
 		ctx := request.Context()
@@ -78,34 +98,36 @@ func NewQueryRoutePlansEndpoint(
 
 		switch register {
 		case registerInitialRoute:
-			rows, err := reader.ListInitialRoutes(ctx, tenant, limit)
+			page, err := reader.ListInitialRoutes(ctx, tenant, limit, pageQuery)
 			if err != nil {
 				// 读不回是答案未形成（5xx），不伪装成空册——前者该重试，后者是终局答案。
 				writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 				return
 			}
 			// 空册交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-			bodies := make([]initialRouteBody, 0, len(rows))
-			for _, row := range rows {
+			bodies := make([]initialRouteBody, 0, len(page.Rows))
+			for _, row := range page.Rows {
 				bodies = append(bodies, initialRouteBodyOf(row))
 			}
 			writeJSON(response, http.StatusOK, initialRouteListResponse{
 				Outcome:   outcomeInitialRoutesListed,
 				Judgments: bodies,
+				Page:      page.Page(limit),
 			})
 		case registerReassessment:
-			rows, err := reader.ListRouteReassessments(ctx, tenant, limit)
+			page, err := reader.ListRouteReassessments(ctx, tenant, limit, pageQuery)
 			if err != nil {
 				writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 				return
 			}
-			bodies := make([]reassessmentBody, 0, len(rows))
-			for _, row := range rows {
+			bodies := make([]reassessmentBody, 0, len(page.Rows))
+			for _, row := range page.Rows {
 				bodies = append(bodies, reassessmentBodyOf(row))
 			}
 			writeJSON(response, http.StatusOK, reassessmentListResponse{
 				Outcome:       outcomeRouteReassessmentsListed,
 				Reassessments: bodies,
+				Page:          page.Page(limit),
 			})
 		}
 	})
@@ -114,6 +136,7 @@ func NewQueryRoutePlansEndpoint(
 type initialRouteListResponse struct {
 	Outcome   string             `json:"outcome"`
 	Judgments []initialRouteBody `json:"judgments"`
+	Page      cataloguepage.Page `json:"page"`
 }
 
 // initialRouteBody 逐字段透出检索列面。conclusion 是封闭两格原词——「无当前有效
@@ -196,6 +219,7 @@ func initialRouteBodyOf(row ports.InitialRouteCatalogueRow) initialRouteBody {
 type reassessmentListResponse struct {
 	Outcome       string             `json:"outcome"`
 	Reassessments []reassessmentBody `json:"reassessments"`
+	Page          cataloguepage.Page `json:"page"`
 }
 
 // reassessmentBody 逐字段透出检索列面。conclusion 封闭四走向原词；候选评估与改路
