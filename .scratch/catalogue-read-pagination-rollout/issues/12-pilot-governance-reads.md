@@ -34,7 +34,8 @@ Blocked by: 01
 | `98083c23a` | `internal/pilotgovernance/adapters/http/query_governance_registers.go`、`catalogue_page.go` | 自查轮：`register` 挪到 Intake 之后判。未配置的渠道对一切请求同答 403；配置了的渠道上缺席、空值或词外照旧答 400 |
 | | `internal/pilotgovernance/adapters/http/query_governance_registers_test.go`、`query_governance_registers_page_test.go` | `register` 两头的用例：配置了的渠道上空值 `?register=` 也答 400；未配置的渠道上缺席、空值、词外与写对的一问同答 403 |
 | | `ports/catalogue_pages.go`、`adapters/postgres/registry_read.go`、`registry_read_page_test.go` | 注释引 spec 原句，不引取舍序号；去掉数别处东西的说法与迁移前次序的旁注 |
-| 本笔 | 本票面 | 自查轮的完成记录 |
+| `bc7892ba8` | 本票面 | 自查轮的完成记录 |
+| 本笔 | 本票面 | 完成记录里数代码里东西的说法改成点名（`page` 的格、同刻的行、读方法与索引） |
 
 ### 声明
 
@@ -51,8 +52,8 @@ Blocked by: 01
 
 - ✅ 翻页期间插入新行不重出、不漏行，空册答空页 `total` 为 0：`TestGovernanceRegistersPageByCursorWithoutRepeatsOrGapsWhileRowsAreRegistered`，四册各一遍——翻完第一页后在已翻那头与未翻那头各登一行，第二页接着 `P03`、`P02`，末页带上新登在后头的 `P00`，`total` 5 → 7。
 - ✅ `total` 随 `q` 变、`%` 与 `_` 按字面：`TestGovernanceRegistersTotalFollowsTheKeyword`，四册各一遍。四册都没有筛选维，「随筛选变」一格不适用。
-- ✅ 决胜键同向、跨页续得上：`TestGovernanceRegistersBreakTiesInTheSortDirection`（四册，同刻四行跨页，正倒序各走完全册，时刻带微秒）；接管册行标识里 `COALESCE(to_at, from_at)` 那一段：`TestTakeoverRegistryKeepsOpenAndClosedTwinsApart`（区间四维与起点相同、一开一闭，一行一页翻，各出现一次）。
-- ✅ 端点：未知键（`tenant`、`limit`）、未声明的筛选键、集外排序维与别册的排序维、解不开的游标、换 `q` 拿旧游标、拿暂停册的游标翻恢复册，各答 400 带 `detail`；渠道未配置时一切变体（含 `register` 缺席、空值与词外）同答 403、答复体与写对的一问逐字相同；四册的 `page` 三格，`size` 取 Intake 页大小：`TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration`、`TestGovernanceRegistersCarryThePageAndPassTheDecodedQuery`。
+- ✅ 决胜键同向、跨页续得上：`TestGovernanceRegistersBreakTiesInTheSortDirection`（四册，同刻的一组行跨页，正倒序各走完全册，时刻带微秒）；接管册行标识里 `COALESCE(to_at, from_at)` 那一段：`TestTakeoverRegistryKeepsOpenAndClosedTwinsApart`（区间四维与起点相同、一开一闭，一行一页翻，各出现一次）。
+- ✅ 端点：未知键（`tenant`、`limit`）、未声明的筛选键、集外排序维与别册的排序维、解不开的游标、换 `q` 拿旧游标、拿暂停册的游标翻恢复册，各答 400 带 `detail`；渠道未配置时一切变体（含 `register` 缺席、空值与词外）同答 403、答复体与写对的一问逐字相同；四册的 `page` 带齐 `size`、`next`、`total`，`size` 取 Intake 页大小：`TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration`、`TestGovernanceRegistersCarryThePageAndPassTheDecodedQuery`。
 - ✅ `register` 在 Intake 之后判（`98083c23a`）：配置了的渠道上缺席、空值 `?register=` 与词外 `stage-review` 答 400，读口替身一被调用即判败：`TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister`；未配置的渠道上这三种与写对的四册同答 403、答复体逐字相同：`TestGovernanceRegistersEndpointAnswersForbiddenWhenIntakeUnconfigured`、`TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration`。把端点换回 `a76ad9deb` 的版本（`register` 先于 Intake）重跑，这两条未配置用例各在裸路径上红（答 400 `MALFORMED_REQUEST`），换回后绿。
 - ✅ 迁移按字节无 CR、无 BOM：`0009` 与票面已量。
 - ✅ 自验（自查轮在 `98083c23a` 上重跑，计数与上一轮相同：本轮扩的是既有用例里的表，没有新增用例函数）：`go build ./...`、`go vet ./...` 全仓过。`go test -count=1 -p 1 -v <包>`（带 `IDP_PARCEL_POSTGRES_DSN`）逐包数 `grep -c -- '--- PASS'` 与 `'--- SKIP'`（PASS/SKIP，均 FAIL 0）：
@@ -63,7 +64,7 @@ Blocked by: 01
 
 ### 判断项
 
-- **租户键形状不另裁**：frontier/03 的「不接线」裁决已由 ADR-0083 取代（见该票 Comments）。照 ADR-0083 决定二，四个方法仍只收 `(ctx, limit, query)`，声明、取页条件与索引都没有租户段。
+- **租户键形状不另裁**：frontier/03 的「不接线」裁决已由 ADR-0083 取代（见该票 Comments）。照 ADR-0083 决定二，各册的读方法仍只收 `(ctx, limit, query)`，声明、取页条件与索引都没有租户段。
 - **决胜键改向**：暂停册、恢复册迁移前同刻按 `suspension_id` 正序，接管册同刻按四维与起点正序；迁移后与时刻倒序同向（倒序）。只在排序时刻完全相同时次序与迁移前相反。权威区间册迁移前已是 `interval_id DESC`，不变。
 - **接管册没有主键**（偏离 spec「行标识取登记表主键去掉租户那几段」）：身份是唯一约束 `takeover_record_interval_identity`，含可为空的 `to_at`（`NULLS NOT DISTINCT`）。行标识取区间四维与 `from_at`，再加读面把 `to_at` 导出成的 `COALESCE(to_at, from_at)`（spec「可排维与行标识的列必须非空」）。不撞值的依据是约束 `takeover_record_bounds`：闭区间终点晚于起点，开放区间同维同起点至多一行。索引里对应的一段是同一表达式，两处须逐字一致，读面落列处有注释。
 - **`interval_id` 进游标**：它是权威区间的主键与迁移前的收尾列，但答复体不透出（行注「代理键不透出」）。现在它在游标里，游标对调用方是不透明串。
@@ -73,7 +74,7 @@ Blocked by: 01
 
 ### 自查轮
 
-派单方通道 1 按派单说明「02 的非作者评审拦下过的」逐条核。有缺已补的两条：`register` 先于 Intake；注释与票面引 spec 的取舍序号、数别处的东西（`98083c23a` 与本笔）。其余无缺：
+派单方通道 1 按派单说明「02 的非作者评审拦下过的」逐条核。有缺已补的两条：`register` 先于 Intake；注释与票面引 spec 的取舍序号、数别处的东西（`98083c23a`、`bc7892ba8` 与本笔）。其余无缺：
 
 - 每册真库用例都有翻页途中插入、空册 `total` 为 0、`q` 改变 `total`（四册没有筛选维）。
 - 端点表驱动：合规一问带 `page`、`size` 取 Intake 页大小；集外参数答 400 带 `detail`；未配置时合规与不合规的一问同答 403；换 `q` 拿旧游标答 400。
@@ -83,5 +84,5 @@ Blocked by: 01
 
 ### 未验
 
-- 没有跑 `EXPLAIN` 看四条索引（尤其接管册的表达式末段）是否被缺省序选用；表是产品级小表，只由语句与索引同形支撑。
+- 没有跑 `EXPLAIN` 看各册的索引（尤其接管册索引里的表达式那一段）是否被缺省序选用；表是产品级小表，只由语句与索引同形支撑。
 - 管理台不改（归 14）：今天它只取第一页（Intake 页大小 200）。
