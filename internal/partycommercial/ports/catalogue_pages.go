@@ -130,10 +130,11 @@ var CustomerContractPages = versionShellPages("commercial-customer-contracts")
 var SupplierAgreementPages = versionShellPages("commercial-supplier-agreements")
 
 // 策略目录 /commercial-policies 按 kind 分派册子，每种各是一册（ADR-0144 决定四）：kind 保持册子选择器原义、登为
-// Selectors，取值进游标摘要，拿一种的游标去翻另一种答游标不符。各册缺省序取分页之前的首列与方向：正文册按登记或声明时刻
-// 倒序，以版本壳为行的那几种按发布时刻倒序（版本壳上没有登记时刻这一格）。各册另可按对象号排（声明册是它挂靠的合同或
-// 规则包对象）：策略页同样按对象归组展示，判据同版本壳各册。筛选维只放有封闭词表的那一格；信用政策的权限等级与费用类型
-// 是开放引用，不设筛选维。
+// Selectors，取值进游标摘要，拿一种的游标去翻另一种答游标不符。各册缺省序取分页之前的首列与方向：价格、结算与信用政策按
+// 登记时刻倒序；接单规则包、接受前财务控制声明与时点锚声明的表上只有声明时刻这一格（随声明写入），它就是进册的那一刻，
+// 按它倒序；以版本壳为行的那几种按发布时刻倒序（版本壳上没有登记时刻这一格）。各册另可按对象号排（声明册是它挂靠的合同
+// 或规则包对象）：策略页同样按对象归组展示，判据同版本壳各册。筛选维只放有封闭词表的那一格；信用政策的权限等级与费用
+// 类型是开放引用，不设筛选维。
 
 // policyContentPages 是策略目录里自带版本与生效区间的正文册共用的声明形状：缺省按 at 倒序，另可按对象号排；行标识是对象
 // 与版本（各表的 object_kind 由 CHECK 钉成一格，主键去掉租户与类别即是）。
@@ -225,9 +226,10 @@ var openDraftStatuses = []string{
 	domain.PublicationDraftApproved.String(),
 }
 
-// OpenPublicationDraftPages 是 /commercial-open-publication-drafts 的查询声明。缺省按录入时刻倒序；行标识是版本身份去掉
-// 租户的类别、对象与版本，类别在库上存领域码、按整数比。筛选维只有 status：待批准页按状态分看，不按类别收窄。本构建读不回
-// 的载体照样在册（ADR-0344），可读与否是读面经重建门之后才知道的事、库上没有这一列，不作筛选维。
+// OpenPublicationDraftPages 是 /commercial-open-publication-drafts 的查询声明。缺省按录入时刻倒序：载体表上没有登记时刻
+// 这一格，录入时刻就是它进册的那一刻。行标识是版本身份去掉租户的类别、对象与版本，类别在库上存领域码、按整数比。筛选维
+// 只有 status：待批准页按状态分看，不按类别收窄。本构建读不回的载体照样在册（ADR-0344），可读与否是读面经重建门之后才
+// 知道的事、库上没有这一列，不作筛选维。
 var OpenPublicationDraftPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "commercial-open-publication-drafts",
 	Sorts: []cataloguepage.SortDimension{
