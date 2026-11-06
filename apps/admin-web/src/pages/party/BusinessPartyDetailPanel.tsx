@@ -17,7 +17,8 @@ import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
-import { BusinessPartyIdentificationRows } from './BusinessPartyIdentificationRows';
+import { BusinessPartyIdentificationFacts } from './BusinessPartyIdentificationRows';
+import { RefText } from './copy-affordance';
 
 type PanelTab = 'overview' | 'identity';
 
@@ -121,7 +122,6 @@ export function BusinessPartyDetailPanel({
                   </span>
                 ))
               )}
-              <span className="font-mono type-body text-idpxyz-breadcrumb">编码 {row.partyId}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -138,6 +138,15 @@ export function BusinessPartyDetailPanel({
             </Button>
           </div>
         </div>
+
+        {/* 头区 meta 行照公司主体右栏（票 company-subject-ux/08）：编码与识别信息（ADR-0367）一行小字，号与码点击即复制。
+            头区一直可见，所以识别信息只在这里出现一次，「登记记录」签不再列它。 */}
+        <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+          <Fact inline label="编码">
+            <RefText value={row.partyId} name="编码" />
+          </Fact>
+          <BusinessPartyIdentificationFacts record={row} />
+        </dl>
 
         <BusinessPartyBanners row={row} />
       </div>
@@ -184,15 +193,14 @@ export function BusinessPartyDetailPanel({
             forceMount={visited.has('identity') || undefined}
             className="mt-0 data-[state=inactive]:hidden"
           >
-            <dl>
-              <BusinessPartyIdentificationRows record={row} />
-              {row.deactivationBasis ? (
+            {row.deactivationBasis ? (
+              <dl>
                 <DetailRow label="停用的来源单据" mono>
                   {row.deactivationBasis}
                 </DetailRow>
-              ) : null}
-            </dl>
-            <section className="mt-4">
+              </dl>
+            ) : null}
+            <section className={row.deactivationBasis ? 'mt-4' : ''}>
               <h3 className="type-body font-medium text-idpxyz-text">历次更新</h3>
               <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
             </section>

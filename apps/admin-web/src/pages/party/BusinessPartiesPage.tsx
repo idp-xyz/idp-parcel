@@ -744,7 +744,7 @@ export function BusinessPartiesPage() {
           }}
           refreshing={parties.pending}
           primaryAction={primaryAction}
-          search={{ value: search, onChange: setSearch, placeholder: '搜索名称、编码或类型…' }}
+          search={{ value: search, onChange: setSearch, placeholder: '名称、编码、注册号或外部编码' }}
           statusChips={statusChips}
           // 类型按角色筛，角色多格并排成胶囊太长，留作下拉；与状态胶囊叠加。
           extraFilters={

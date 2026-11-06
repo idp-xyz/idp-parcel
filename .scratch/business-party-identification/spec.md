@@ -1,7 +1,7 @@
 # 往来单位识别信息与「客户」角色只认一处判法
 
 Category: enhancement
-Status: resolved——2026-11-05 子票 01–04 全部进 main
+Status: resolved——2026-11-05 子票全部进 main
 出处：2026-11-05 用户问往来单位与公司主体的关系、设计是否科学；会话对照成熟主数据设计评估后列出两处缺口（对方单位缺识别信息；「是不是客户」两处表达），用户答「按你的建议开工」。
 
 切片：PN-02，主责 party-commercial，非关务专项。权威：[ADR-0367](../../docs/adr/0367-a-business-party-may-carry-identification-and-the-customer-role-is-read-from-a-live-relationship-or-a-live-customer-account.md)，CONTEXT「业务参与方」词条与参与方身份诸句，UC-PC-001「往来单位识别信息补充」。
@@ -20,6 +20,7 @@ Status: resolved——2026-11-05 子票 01–04 全部进 main
 | [02](./issues/02-backend-identification.md) | 后端：领域、迁移、登记册、用例门、在线口与 CLI、读口 | resolved（2026-11-05 进 main） |
 | [03](./issues/03-admin-web-identification.md) | 管理台：登记与更正表单、读出、列表检索 | resolved（2026-11-05 进 main） |
 | [04](./issues/04-admin-web-customer-role.md) | 管理台：客户角色同时认未停用客户账户 | resolved（2026-11-05 进 main） |
+| [05](./issues/05-panel-identification-visible.md) | 右栏页头直接显示识别信息，搜索提示说出能按号与编码搜 | resolved（2026-11-05 进 main） |
 
 ## 评审记录（2026-11-05）
 
