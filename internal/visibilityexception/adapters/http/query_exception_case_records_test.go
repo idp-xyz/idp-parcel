@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -17,30 +18,36 @@ import (
 type caseReaderDouble struct {
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
+	called bool
+	next   string
+	total  int64
 
 	cases []ports.ExceptionCaseCatalogueRow
 	err   error
 }
 
 func (double *caseReaderDouble) ListExceptionCases(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ExceptionCaseCatalogueRow, error) {
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExceptionCaseCatalogueRow], error) {
 	double.tenant = tenant
 	double.limit = limit
+	double.query = query
+	double.called = true
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.ExceptionCaseCatalogueRow]{}, double.err
 	}
-	return double.cases, nil
+	return cataloguepage.Result[ports.ExceptionCaseCatalogueRow]{Rows: double.cases, Next: double.next, Total: double.total}, nil
 }
 
 // unreachableCaseReader 是「被调即失败」的替身。
 type unreachableCaseReader struct{ t *testing.T }
 
 func (reader unreachableCaseReader) ListExceptionCases(
-	context.Context, domain.TenantID, int,
-) ([]ports.ExceptionCaseCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ExceptionCaseCatalogueRow], error) {
 	reader.t.Error("a request passed the unconfigured intake and reached the case reader")
-	return nil, nil
+	return cataloguepage.Result[ports.ExceptionCaseCatalogueRow]{}, nil
 }
 
 func ecServe(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -15,17 +16,20 @@ type ClaimsRecoveryReviewReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerNotificationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.CustomerNotificationCatalogueRow], error)
 	ListClaimItems(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.ClaimItemCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ClaimItemCatalogueRow], error)
 	ListRecoveryMatters(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.RecoveryMatterCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.RecoveryMatterCatalogueRow], error)
 }
 
 var _ ClaimsRecoveryReviewReader = ports.ClaimsRecoveryReviewRead(nil)
@@ -42,6 +46,14 @@ const (
 	registryRecoveryMatter       = "recovery-matter"
 )
 
+// claimsRecoveryRegistryPages 按 registry 取那一册的查询声明：选择器的每个取值各是一册（ADR-0144 决定四），不在表里的取值
+// 即集外。
+var claimsRecoveryRegistryPages = map[string]*cataloguepage.Catalogue{
+	registryCustomerNotification: ports.CustomerNotificationPages,
+	registryClaimItem:            ports.ClaimItemPages,
+	registryRecoveryMatter:       ports.RecoveryMatterPages,
+}
+
 // NewQueryClaimsRecoveryRecordsEndpoint 交回理赔与追偿页各册子的 HTTP 入口
 // （GET /claims-recovery-records，票 admin-skeleton-closure-batch/06）。
 //
@@ -52,6 +64,9 @@ const (
 //
 // **金额零字段**：赔付金额、追回金额属结算与财务上下文（CONTEXT「证据、客户索赔与追偿」一节：「`UC-SA-007` 唯一形成赔付和追偿金额」），
 // 各册子的行上连键都不存在，前端模板的金额列由它们的读面回答。
+//
+// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
+// 坏参数答 400 带理由散文，答复加 page；registry 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
 func NewQueryClaimsRecoveryRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader ClaimsRecoveryReviewReader,
@@ -63,9 +78,8 @@ func NewQueryClaimsRecoveryRecordsEndpoint(
 			return
 		}
 		registry := request.URL.Query().Get("registry")
-		if registry != registryCustomerNotification &&
-			registry != registryClaimItem &&
-			registry != registryRecoveryMatter {
+		catalogue, known := claimsRecoveryRegistryPages[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -74,15 +88,20 @@ func NewQueryClaimsRecoveryRecordsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		tenant := query.Scope.Tenant()
 
 		switch registry {
 		case registryCustomerNotification:
-			serveCustomerNotifications(response, request, reader, tenant, query.Limit)
+			serveCustomerNotifications(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryClaimItem:
-			serveClaimItems(response, request, reader, tenant, query.Limit)
+			serveClaimItems(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryRecoveryMatter:
-			serveRecoveryMatters(response, request, reader, tenant, query.Limit)
+			serveRecoveryMatters(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -93,14 +112,15 @@ func serveCustomerNotifications(
 	reader ClaimsRecoveryReviewReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListCustomerNotifications(request.Context(), tenant, limit)
+	page, err := reader.ListCustomerNotifications(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]customerNotificationBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]customerNotificationBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := customerNotificationBody{
 			NotificationID: row.NotificationID,
 			Customer:       row.Customer,
@@ -126,6 +146,7 @@ func serveCustomerNotifications(
 	writeJSON(response, http.StatusOK, customerNotificationListResponse{
 		Outcome:       outcomeCustomerNotificationsListed,
 		Notifications: bodies,
+		Page:          page.Page(limit),
 	})
 }
 
@@ -135,14 +156,15 @@ func serveClaimItems(
 	reader ClaimsRecoveryReviewReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListClaimItems(request.Context(), tenant, limit)
+	page, err := reader.ListClaimItems(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]claimItemBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]claimItemBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := claimItemBody{
 			Batch:                 row.Batch,
 			ItemID:                row.ItemID,
@@ -182,6 +204,7 @@ func serveClaimItems(
 	writeJSON(response, http.StatusOK, claimItemListResponse{
 		Outcome: outcomeClaimItemsListed,
 		Items:   bodies,
+		Page:    page.Page(limit),
 	})
 }
 
@@ -191,14 +214,15 @@ func serveRecoveryMatters(
 	reader ClaimsRecoveryReviewReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListRecoveryMatters(request.Context(), tenant, limit)
+	page, err := reader.ListRecoveryMatters(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]recoveryMatterBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]recoveryMatterBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := recoveryMatterBody{
 			MatterID:           row.MatterID,
 			CaseID:             row.CaseID,
@@ -222,12 +246,14 @@ func serveRecoveryMatters(
 	writeJSON(response, http.StatusOK, recoveryMatterListResponse{
 		Outcome: outcomeRecoveryMattersListed,
 		Matters: bodies,
+		Page:    page.Page(limit),
 	})
 }
 
 type customerNotificationListResponse struct {
 	Outcome       string                     `json:"outcome"`
 	Notifications []customerNotificationBody `json:"notifications"`
+	Page          cataloguepage.Page         `json:"page"`
 }
 
 // customerNotificationBody 逐字段透出一份客户异常通知义务及其送达里程碑。
@@ -253,8 +279,9 @@ type notificationMilestoneBody struct {
 }
 
 type claimItemListResponse struct {
-	Outcome string          `json:"outcome"`
-	Items   []claimItemBody `json:"items"`
+	Outcome string             `json:"outcome"`
+	Items   []claimItemBody    `json:"items"`
+	Page    cataloguepage.Page `json:"page"`
 }
 
 // claimItemBody 逐字段透出一件客户索赔项的生命周期登记。
@@ -298,6 +325,7 @@ type claimItemBody struct {
 type recoveryMatterListResponse struct {
 	Outcome string               `json:"outcome"`
 	Matters []recoveryMatterBody `json:"matters"`
+	Page    cataloguepage.Page   `json:"page"`
 }
 
 // recoveryMatterBody 逐字段透出一件追偿事项及其两类最新行动节点。

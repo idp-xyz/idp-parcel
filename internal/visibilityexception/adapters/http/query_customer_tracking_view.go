@@ -202,18 +202,25 @@ func newDimensionBody(dimension domain.ViewDimension) dimensionBody {
 	return body
 }
 
-// problemResponse 刻意不带自由文本消息，理由与 shipmenthttp 相同：底层失败的措辞会
-// 捎带账户或对象的存在性，而本用例要求未授权响应不泄露对象是否存在。
+// problemResponse 刻意不带底层失败的措辞，理由与 shipmenthttp 相同：那种措辞会捎带
+// 账户或对象的存在性，而本用例要求未授权响应不泄露对象是否存在。detail 只装目录查询
+// 参数被拒的理由散文（writePageQueryProblem）：那段话出自本册的声明，只说请求自己哪一格
+// 不成立，与库里有什么无关；其余各格不带它。
 type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
 type problemDetail struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+func writeProblemWithDetail(response http.ResponseWriter, status int, code, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

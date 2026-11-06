@@ -571,7 +571,7 @@ func TestACaseNumberLandsWithItsCaseAndRollsBackWithIt(t *testing.T) {
 	if number, err := raise("ep-kept", false); err != nil || number != "EX-20261102-0001" {
 		t.Fatalf("回滚之后下一件拿到 %q（%v），want 退回的那个号", number, err)
 	}
-	rows, err := fixture.review.ListExceptionCases(t.Context(), tenant, 10)
+	rows, err := rowsOf(fixture.review.ListExceptionCases(t.Context(), tenant, 10, firstPage(t, ports.ExceptionCasePages)))
 	if err != nil || len(rows) != 1 || rows[0].CaseID != "case-ep-kept" || rows[0].DocumentNumber != "EX-20261102-0001" || rows[0].DocumentNumberAbsence != "" {
 		t.Fatalf("案件册 = %+v %v", rows, err)
 	}
@@ -658,7 +658,7 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 		 WHERE tenant_id = 'tenant-a' AND case_id = 'case-2'`); err != nil {
 		t.Fatal(err)
 	}
-	cases, err := fixture.review.ListExceptionCases(ctx, tenant, 10)
+	cases, err := rowsOf(fixture.review.ListExceptionCases(ctx, tenant, 10, firstPage(t, ports.ExceptionCasePages)))
 	if err != nil || len(cases) != 3 {
 		t.Fatalf("案件册：%+v %v", cases, err)
 	}
@@ -682,11 +682,11 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 		_, err := fixture.recoveries.Save(txCtx, tenant, openedMatter(t, "recovery-2", "case-3", "supplier-1", "parcel-3/loss"))
 		return err
 	})
-	requests, err := fixture.review.ListDispositionRequests(ctx, tenant, 10)
+	requests, err := rowsOf(fixture.review.ListDispositionRequests(ctx, tenant, 10, firstPage(t, ports.DispositionRequestPages)))
 	if err != nil || len(requests) != 1 || requests[0].CaseID != "case-1" || requests[0].CaseDocumentNumber != "EX-20260302-0001" {
 		t.Fatalf("处置请求册：%+v %v", requests, err)
 	}
-	matters, err := fixture.review.ListRecoveryMatters(ctx, tenant, 10)
+	matters, err := rowsOf(fixture.review.ListRecoveryMatters(ctx, tenant, 10, firstPage(t, ports.RecoveryMatterPages)))
 	if err != nil || len(matters) != 2 {
 		t.Fatalf("追偿册：%+v %v", matters, err)
 	}
@@ -715,7 +715,7 @@ func TestCaseReviewCarriesDocumentNumbersAndTheirAbsence(t *testing.T) {
 		_, err := fixture.claims.Save(txCtx, tenant, numbered)
 		return err
 	})
-	items, err := fixture.review.ListClaimItems(ctx, tenant, 10)
+	items, err := rowsOf(fixture.review.ListClaimItems(ctx, tenant, 10, firstPage(t, ports.ClaimItemPages)))
 	if err != nil || len(items) != 1 || items[0].DocumentNumber != "CLM-202603-00001" || items[0].DocumentNumberAbsence != "" ||
 		items[0].Batch != "batch-1" || items[0].ItemID != "item-1" {
 		t.Fatalf("索赔册：%+v %v", items, err)

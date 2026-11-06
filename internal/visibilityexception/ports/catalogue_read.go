@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
@@ -22,10 +23,13 @@ import (
 // 随抬头一次写全，CatalogRegistry 注释），拆开上列等于把登记原子按表结构切碎。
 //
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
-// 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
+// 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空页、总数为零（Decision 四：空册本身
 // 就是内容，续办是登记责任方去 parcel-ve-register 登记，不折成未配置——注意这与只读
 // 装载口的「未配置」格不冲突：装载口答的是「这个判断作不了」，本口答的是「册上有
 // 什么」，同一份空册对两个问题的如实答案本就不同）。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/03）：每个 kind 各是一册，各读口收端点按该册声明
+// （MilestoneMappingCataloguePages 等）解出的查询对象，答「本页行 + 下一游标 + 总数」。
 
 // MilestoneMappingEntryRow 是一条映射条目的检索列面：某源上下文的某类事实归到哪个
 // 标准里程碑。三列都是登记原词的转写（源上下文封闭五值取 String() 词形）。
@@ -186,40 +190,48 @@ type CatalogueListRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]MilestoneMappingCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[MilestoneMappingCatalogueRow], error)
 	ListTriageRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]TriageRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[TriageRuleCatalogueRow], error)
 	ListNotificationPolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]NotificationPolicyCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[NotificationPolicyCatalogueRow], error)
 	ListClaimEligibilities(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ClaimEligibilityCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ClaimEligibilityCatalogueRow], error)
 	ListClaimAuthorizations(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ClaimAuthorizationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ClaimAuthorizationCatalogueRow], error)
 	ListDisclosurePolicies(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]DisclosurePolicyCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[DisclosurePolicyCatalogueRow], error)
 	ListExceptionDisclosureRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ExceptionDisclosureRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExceptionDisclosureRuleCatalogueRow], error)
 	ListConflictSignalRules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ConflictSignalRuleCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ConflictSignalRuleCatalogueRow], error)
 }

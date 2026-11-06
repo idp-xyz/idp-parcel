@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -17,6 +18,10 @@ import (
 type claimsReaderDouble struct {
 	tenant domain.TenantID
 	limit  int
+	query  cataloguepage.Query
+	called bool
+	next   string
+	total  int64
 
 	notifications []ports.CustomerNotificationCatalogueRow
 	items         []ports.ClaimItemCatalogueRow
@@ -24,37 +29,39 @@ type claimsReaderDouble struct {
 	err           error
 }
 
-func (double *claimsReaderDouble) record(tenant domain.TenantID, limit int) error {
+func (double *claimsReaderDouble) record(tenant domain.TenantID, limit int, query cataloguepage.Query) error {
 	double.tenant = tenant
 	double.limit = limit
+	double.query = query
+	double.called = true
 	return double.err
 }
 
 func (double *claimsReaderDouble) ListCustomerNotifications(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.CustomerNotificationCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerNotificationCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.CustomerNotificationCatalogueRow]{}, err
 	}
-	return double.notifications, nil
+	return cataloguepage.Result[ports.CustomerNotificationCatalogueRow]{Rows: double.notifications, Next: double.next, Total: double.total}, nil
 }
 
 func (double *claimsReaderDouble) ListClaimItems(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.ClaimItemCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimItemCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.ClaimItemCatalogueRow]{}, err
 	}
-	return double.items, nil
+	return cataloguepage.Result[ports.ClaimItemCatalogueRow]{Rows: double.items, Next: double.next, Total: double.total}, nil
 }
 
 func (double *claimsReaderDouble) ListRecoveryMatters(
-	_ context.Context, tenant domain.TenantID, limit int,
-) ([]ports.RecoveryMatterCatalogueRow, error) {
-	if err := double.record(tenant, limit); err != nil {
-		return nil, err
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.RecoveryMatterCatalogueRow], error) {
+	if err := double.record(tenant, limit, query); err != nil {
+		return cataloguepage.Result[ports.RecoveryMatterCatalogueRow]{}, err
 	}
-	return double.matters, nil
+	return cataloguepage.Result[ports.RecoveryMatterCatalogueRow]{Rows: double.matters, Next: double.next, Total: double.total}, nil
 }
 
 // unreachableClaimsReader 是「被调即失败」的替身。
@@ -65,24 +72,24 @@ func (reader unreachableClaimsReader) fail() {
 }
 
 func (reader unreachableClaimsReader) ListCustomerNotifications(
-	context.Context, domain.TenantID, int,
-) ([]ports.CustomerNotificationCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.CustomerNotificationCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.CustomerNotificationCatalogueRow]{}, nil
 }
 
 func (reader unreachableClaimsReader) ListClaimItems(
-	context.Context, domain.TenantID, int,
-) ([]ports.ClaimItemCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimItemCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.ClaimItemCatalogueRow]{}, nil
 }
 
 func (reader unreachableClaimsReader) ListRecoveryMatters(
-	context.Context, domain.TenantID, int,
-) ([]ports.RecoveryMatterCatalogueRow, error) {
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.RecoveryMatterCatalogueRow], error) {
 	reader.fail()
-	return nil, nil
+	return cataloguepage.Result[ports.RecoveryMatterCatalogueRow]{}, nil
 }
 
 var claimsRegistries = []string{"customer-notification", "claim-item", "recovery-matter"}

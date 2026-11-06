@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -15,12 +16,14 @@ type TriageReviewReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.SignalEpisodeCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SignalEpisodeCatalogueRow], error)
 	ListDispositionRequests(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.DispositionRequestCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.DispositionRequestCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -36,6 +39,12 @@ const (
 	registryDispositionRequest = "disposition-request"
 )
 
+// triageRegistryPages 按 registry 取那一册的查询声明：选择器的每个取值各是一册（ADR-0144 决定四），不在表里的取值即集外。
+var triageRegistryPages = map[string]*cataloguepage.Catalogue{
+	registrySignalEpisode:      ports.SignalEpisodePages,
+	registryDispositionRequest: ports.DispositionRequestPages,
+}
+
 // NewQueryExceptionTriageRecordsEndpoint 交回异常分诊与处置协调页两本册子的 HTTP
 // 入口（GET /exception-triage-records，票 admin-skeleton-closure-batch/06）。
 //
@@ -47,7 +56,11 @@ const (
 //
 // **不下推分诊决定参数**：页面的四结果决定集（关联既有案件、自动建立案件、进入人工
 // 复核、不建案）是分诊命令面的事，查阅面收下决定参数就等于让目录读口长出第二种
-// 「处置」语义。
+// 「处置」语义。发作期册的 outcome 筛选维不是决定参数：它只按行上已记下的分诊结论收窄，
+// 不替任何一段发作期下结论。
+//
+// 翻页、排序与筛选照 ADR-0144：registry 选定那一册，Intake 之后按该册声明解码（writePageQueryProblem 头注），
+// 坏参数答 400 带理由散文，答复加 page；registry 缺席或集外仍在 Intake 之前答不带理由的坏请求，与迁移前同答。
 func NewQueryExceptionTriageRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader TriageReviewReader,
@@ -59,7 +72,8 @@ func NewQueryExceptionTriageRecordsEndpoint(
 			return
 		}
 		registry := request.URL.Query().Get("registry")
-		if registry != registrySignalEpisode && registry != registryDispositionRequest {
+		catalogue, known := triageRegistryPages[registry]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -68,13 +82,18 @@ func NewQueryExceptionTriageRecordsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		tenant := query.Scope.Tenant()
 
 		switch registry {
 		case registrySignalEpisode:
-			serveSignalEpisodes(response, request, reader, tenant, query.Limit)
+			serveSignalEpisodes(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryDispositionRequest:
-			serveDispositionRequests(response, request, reader, tenant, query.Limit)
+			serveDispositionRequests(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }
@@ -85,14 +104,15 @@ func serveSignalEpisodes(
 	reader TriageReviewReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListSignalEpisodes(request.Context(), tenant, limit)
+	page, err := reader.ListSignalEpisodes(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]signalEpisodeBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]signalEpisodeBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := signalEpisodeBody{
 			EpisodeID:       row.EpisodeID,
 			Parcel:          row.Parcel,
@@ -125,6 +145,7 @@ func serveSignalEpisodes(
 	writeJSON(response, http.StatusOK, signalEpisodeListResponse{
 		Outcome:  outcomeSignalEpisodesListed,
 		Episodes: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
@@ -134,14 +155,15 @@ func serveDispositionRequests(
 	reader TriageReviewReader,
 	tenant domain.TenantID,
 	limit int,
+	pageQuery cataloguepage.Query,
 ) {
-	rows, err := reader.ListDispositionRequests(request.Context(), tenant, limit)
+	page, err := reader.ListDispositionRequests(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	bodies := make([]dispositionRequestBody, 0, len(rows))
-	for _, row := range rows {
+	bodies := make([]dispositionRequestBody, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		body := dispositionRequestBody{
 			RequestID:          row.RequestID,
 			CaseID:             row.CaseID,
@@ -168,12 +190,14 @@ func serveDispositionRequests(
 	writeJSON(response, http.StatusOK, dispositionRequestListResponse{
 		Outcome:  outcomeDispositionRequestsListed,
 		Requests: bodies,
+		Page:     page.Page(limit),
 	})
 }
 
 type signalEpisodeListResponse struct {
 	Outcome  string              `json:"outcome"`
 	Episodes []signalEpisodeBody `json:"episodes"`
+	Page     cataloguepage.Page  `json:"page"`
 }
 
 // signalEpisodeBody 逐字段透出一段信号发作期连同它的分诊结论。
@@ -216,6 +240,7 @@ type triageConclusionBody struct {
 type dispositionRequestListResponse struct {
 	Outcome  string                   `json:"outcome"`
 	Requests []dispositionRequestBody `json:"requests"`
+	Page     cataloguepage.Page       `json:"page"`
 }
 
 // dispositionRequestBody 逐字段透出一份处置请求。

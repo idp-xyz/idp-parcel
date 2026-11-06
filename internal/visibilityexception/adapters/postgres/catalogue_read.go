@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -41,295 +43,277 @@ func NewOperationsCatalogue(db *bentopg.DB) (*OperationsCatalogue, error) {
 
 var _ ports.CatalogueListRead = (*OperationsCatalogue)(nil)
 
-// requirePositiveLimit 拒绝无意义的页大小。零与负数不是「不限量」：上不封顶的目录
-// 读在租户册涨大后会把一次查阅变成全表搬运，页大小的裁决归接入面，读口只拒错值。
-func requirePositiveLimit(operation string, limit int) error {
-	if limit <= 0 {
-		return fmt.Errorf("%s: limit must be positive, got %d", operation, limit)
+// 目录各册的落列。版本册按生效起点排、版本列作标识，q 在版本与批准人上；声明册的键既是可排维也是标识，q 在键与版本或渠道上。
+// 条目随相关子查询聚进本行，数总数与取页同一张抬头表。
+var (
+	milestoneMappingCataloguePages = ports.MilestoneMappingCataloguePages.MustBind(
+		versionCatalogueColumns("version.mapping_version"))
+	triageRuleCataloguePages = ports.TriageRuleCataloguePages.MustBind(
+		versionCatalogueColumns("version.rule_version"))
+	disclosurePolicyCataloguePages = ports.DisclosurePolicyCataloguePages.MustBind(
+		versionCatalogueColumns("version.policy_version"))
+	exceptionDisclosureRuleCataloguePages = ports.ExceptionDisclosureRuleCataloguePages.MustBind(
+		versionCatalogueColumns("version.rule_version"))
+	notificationPolicyCataloguePages = ports.NotificationPolicyCataloguePages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"policy": "policy.disclosure_policy_ref"},
+		Identity: []string{"policy.disclosure_policy_ref"},
+		Keyword:  []string{"policy.disclosure_policy_ref", "policy.channel_ref"},
+	})
+	claimEligibilityCataloguePages = ports.ClaimEligibilityCataloguePages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"contract": "declaration.contract_scope_ref"},
+		Identity: []string{"declaration.contract_scope_ref"},
+		Keyword:  []string{"declaration.contract_scope_ref", "declaration.rule_version"},
+	})
+	claimAuthorizationCataloguePages = ports.ClaimAuthorizationCataloguePages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"customer": "catalogue.customer_ref"},
+		Identity: []string{"catalogue.customer_ref"},
+		Keyword:  []string{"catalogue.customer_ref", "catalogue.rule_version"},
+	})
+	conflictSignalRuleCataloguePages = ports.ConflictSignalRuleCataloguePages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"signalKind": "rule.signal_kind"},
+		Identity: []string{"rule.signal_kind"},
+		Keyword:  []string{"rule.signal_kind", "rule.rule_version"},
+	})
+)
+
+func versionCatalogueColumns(versionColumn string) cataloguepage.Columns {
+	return cataloguepage.Columns{
+		Sorts:    map[string]string{"effectiveFrom": "version.effective_from"},
+		Identity: []string{versionColumn},
+		Keyword:  []string{versionColumn, "version.approved_by"},
 	}
-	return nil
 }
 
-// ListMilestoneMappings 上列里程碑映射版本连同整版条目（`PAR-VIS-01`）。新版在前
-// （effective_from 降序）：查阅的第一问是「现在适用哪版」。
+// versionPosition 与 keyPosition 取的都是扫描时照列读回的原值：生效起点与版本、或键本身。
+func versionPosition(effectiveFrom time.Time, version string) cataloguepage.Position {
+	return cataloguepage.Position{Value: cataloguepage.FormatInstant(effectiveFrom), Identity: []string{version}}
+}
+
+func keyPosition(key string) cataloguepage.Position {
+	return cataloguepage.Position{Value: key, Identity: []string{key}}
+}
+
+// ListMilestoneMappings 上列里程碑映射版本连同整版条目（`PAR-VIS-01`），按查询的 q 与排序取游标之后的一页。缺省新版在前
+// （effective_from 降序，同刻按版本倒序）：查阅的第一问是「现在适用哪版」。
 func (catalogue *OperationsCatalogue) ListMilestoneMappings(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.MilestoneMappingCatalogueRow, error) {
-	if err := requirePositiveLimit("list milestone mappings", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.MilestoneMappingCatalogueRow], error) {
+	const source = "visibility_exception.milestone_mapping_version AS version"
+	page, err := readPage(ctx, catalogue.db, milestoneMappingCataloguePages, query, tenant, "version.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `version.mapping_version, version.effective_from, version.effective_to,
+				version.approved_by,
+				(SELECT COALESCE(
+				            json_agg(
+				                json_build_object(
+				                    'source',    entry.source_context,
+				                    'factKind',  entry.source_fact_kind,
+				                    'milestone', entry.milestone_ref
+				                )
+				                ORDER BY entry.source_context, entry.source_fact_kind
+				            ),
+				            '[]'::json
+				        )
+				   FROM visibility_exception.milestone_mapping_entry AS entry
+				  WHERE entry.tenant_id       = version.tenant_id
+				    AND entry.mapping_version = version.mapping_version)`,
+		},
+		func(rows pgx.Rows) (ports.MilestoneMappingCatalogueRow, error) {
+			var row ports.MilestoneMappingCatalogueRow
+			var effectiveTo *time.Time
+			var entriesJSON []byte
+			if err := rows.Scan(
+				&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
+			); err != nil {
+				return ports.MilestoneMappingCatalogueRow{}, err
+			}
+			if effectiveTo != nil {
+				row.EffectiveTo = *effectiveTo
+				row.HasEffectiveTo = true
+			}
+			if err := json.Unmarshal(entriesJSON, &row.Entries); err != nil {
+				return ports.MilestoneMappingCatalogueRow{}, fmt.Errorf("条目集解码：%w", err)
+			}
+			return row, nil
+		},
+		func(row ports.MilestoneMappingCatalogueRow, _ string) cataloguepage.Position {
+			return versionPosition(row.EffectiveFrom, row.Version)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list milestone mappings: %w", err)
+		return cataloguepage.Result[ports.MilestoneMappingCatalogueRow]{}, fmt.Errorf("list milestone mappings: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT version.mapping_version, version.effective_from, version.effective_to,
-		        version.approved_by,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'source',    entry.source_context,
-		                            'factKind',  entry.source_fact_kind,
-		                            'milestone', entry.milestone_ref
-		                        )
-		                        ORDER BY entry.source_context, entry.source_fact_kind
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM visibility_exception.milestone_mapping_entry AS entry
-		          WHERE entry.tenant_id       = version.tenant_id
-		            AND entry.mapping_version = version.mapping_version)
-		   FROM visibility_exception.milestone_mapping_version AS version
-		  WHERE version.tenant_id = $1
-		  ORDER BY version.effective_from DESC, version.mapping_version
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list milestone mappings: %w", err)
-	}
-	defer rows.Close()
-
-	mappingRows := make([]ports.MilestoneMappingCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.MilestoneMappingCatalogueRow
-		var effectiveTo *time.Time
-		var entriesJSON []byte
-		if err := rows.Scan(
-			&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
-		); err != nil {
-			return nil, fmt.Errorf("list milestone mappings: %w", err)
-		}
-		if effectiveTo != nil {
-			row.EffectiveTo = *effectiveTo
-			row.HasEffectiveTo = true
-		}
-		if err := json.Unmarshal(entriesJSON, &row.Entries); err != nil {
-			return nil, fmt.Errorf("list milestone mappings: 条目集解码：%w", err)
-		}
-		mappingRows = append(mappingRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list milestone mappings: %w", err)
-	}
-	return mappingRows, nil
+	return page, nil
 }
 
-// ListTriageRules 上列分诊规则版本连同整版条目（`PAR-VIS-05`）。
+// ListTriageRules 上列分诊规则版本连同整版条目（`PAR-VIS-05`），次序同 ListMilestoneMappings。
 func (catalogue *OperationsCatalogue) ListTriageRules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.TriageRuleCatalogueRow, error) {
-	if err := requirePositiveLimit("list triage rules", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.TriageRuleCatalogueRow], error) {
+	const source = "visibility_exception.triage_rule_version AS version"
+	page, err := readPage(ctx, catalogue.db, triageRuleCataloguePages, query, tenant, "version.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `version.rule_version, version.effective_from, version.effective_to,
+				version.approved_by,
+				(SELECT COALESCE(
+				            json_agg(
+				                json_build_object(
+				                    'signalKind', entry.signal_kind,
+				                    'confidence', entry.confidence_ref,
+				                    'outcome',    entry.outcome
+				                )
+				                ORDER BY entry.signal_kind, entry.confidence_ref
+				            ),
+				            '[]'::json
+				        )
+				   FROM visibility_exception.triage_rule_entry AS entry
+				  WHERE entry.tenant_id    = version.tenant_id
+				    AND entry.rule_version = version.rule_version)`,
+		},
+		func(rows pgx.Rows) (ports.TriageRuleCatalogueRow, error) {
+			var row ports.TriageRuleCatalogueRow
+			var effectiveTo *time.Time
+			var entriesJSON []byte
+			if err := rows.Scan(
+				&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
+			); err != nil {
+				return ports.TriageRuleCatalogueRow{}, err
+			}
+			if effectiveTo != nil {
+				row.EffectiveTo = *effectiveTo
+				row.HasEffectiveTo = true
+			}
+			if err := json.Unmarshal(entriesJSON, &row.Entries); err != nil {
+				return ports.TriageRuleCatalogueRow{}, fmt.Errorf("条目集解码：%w", err)
+			}
+			return row, nil
+		},
+		func(row ports.TriageRuleCatalogueRow, _ string) cataloguepage.Position {
+			return versionPosition(row.EffectiveFrom, row.Version)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list triage rules: %w", err)
+		return cataloguepage.Result[ports.TriageRuleCatalogueRow]{}, fmt.Errorf("list triage rules: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT version.rule_version, version.effective_from, version.effective_to,
-		        version.approved_by,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'signalKind', entry.signal_kind,
-		                            'confidence', entry.confidence_ref,
-		                            'outcome',    entry.outcome
-		                        )
-		                        ORDER BY entry.signal_kind, entry.confidence_ref
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM visibility_exception.triage_rule_entry AS entry
-		          WHERE entry.tenant_id    = version.tenant_id
-		            AND entry.rule_version = version.rule_version)
-		   FROM visibility_exception.triage_rule_version AS version
-		  WHERE version.tenant_id = $1
-		  ORDER BY version.effective_from DESC, version.rule_version
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list triage rules: %w", err)
-	}
-	defer rows.Close()
-
-	ruleRows := make([]ports.TriageRuleCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.TriageRuleCatalogueRow
-		var effectiveTo *time.Time
-		var entriesJSON []byte
-		if err := rows.Scan(
-			&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
-		); err != nil {
-			return nil, fmt.Errorf("list triage rules: %w", err)
-		}
-		if effectiveTo != nil {
-			row.EffectiveTo = *effectiveTo
-			row.HasEffectiveTo = true
-		}
-		if err := json.Unmarshal(entriesJSON, &row.Entries); err != nil {
-			return nil, fmt.Errorf("list triage rules: 条目集解码：%w", err)
-		}
-		ruleRows = append(ruleRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list triage rules: %w", err)
-	}
-	return ruleRows, nil
+	return page, nil
 }
 
-// ListNotificationPolicies 上列通知策略（`PAR-VIS-07`）。deadline_after 以 interval
+// ListNotificationPolicies 上列通知策略（`PAR-VIS-07`），按策略引用正序。deadline_after 以 interval
 // 的文本词形转写（如 "72:00:00"）——相对量照库的口径交出，不折回 Go Duration（月与
 // 日的进位语义在库那套里，折算就是改写）。
 func (catalogue *OperationsCatalogue) ListNotificationPolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.NotificationPolicyCatalogueRow, error) {
-	if err := requirePositiveLimit("list notification policies", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.NotificationPolicyCatalogueRow], error) {
+	const source = "visibility_exception.notification_policy AS policy"
+	page, err := readPage(ctx, catalogue.db, notificationPolicyCataloguePages, query, tenant, "policy.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `policy.disclosure_policy_ref, policy.channel_ref,
+				policy.deadline_after::text, policy.obligation_ref, policy.approved_by`,
+		},
+		func(rows pgx.Rows) (ports.NotificationPolicyCatalogueRow, error) {
+			var row ports.NotificationPolicyCatalogueRow
+			err := rows.Scan(&row.Policy, &row.Channel, &row.DeadlineAfter, &row.Obligation, &row.ApprovedBy)
+			return row, err
+		},
+		func(row ports.NotificationPolicyCatalogueRow, _ string) cataloguepage.Position {
+			return keyPosition(row.Policy)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list notification policies: %w", err)
+		return cataloguepage.Result[ports.NotificationPolicyCatalogueRow]{}, fmt.Errorf("list notification policies: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT policy.disclosure_policy_ref, policy.channel_ref,
-		        policy.deadline_after::text, policy.obligation_ref, policy.approved_by
-		   FROM visibility_exception.notification_policy AS policy
-		  WHERE policy.tenant_id = $1
-		  ORDER BY policy.disclosure_policy_ref
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list notification policies: %w", err)
-	}
-	defer rows.Close()
-
-	policyRows := make([]ports.NotificationPolicyCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.NotificationPolicyCatalogueRow
-		if err := rows.Scan(
-			&row.Policy, &row.Channel, &row.DeadlineAfter, &row.Obligation, &row.ApprovedBy,
-		); err != nil {
-			return nil, fmt.Errorf("list notification policies: %w", err)
-		}
-		policyRows = append(policyRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list notification policies: %w", err)
-	}
-	return policyRows, nil
+	return page, nil
 }
 
-// ListClaimEligibilities 上列索赔资格声明连同承担的索赔类型（`PAR-VIS-08` 合同覆盖角）。
+// ListClaimEligibilities 上列索赔资格声明连同承担的索赔类型（`PAR-VIS-08` 合同覆盖角），按合同责任范围正序。
 func (catalogue *OperationsCatalogue) ListClaimEligibilities(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ClaimEligibilityCatalogueRow, error) {
-	if err := requirePositiveLimit("list claim eligibilities", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimEligibilityCatalogueRow], error) {
+	const source = "visibility_exception.claim_contract_scope AS declaration"
+	page, err := readPage(ctx, catalogue.db, claimEligibilityCataloguePages, query, tenant, "declaration.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `declaration.contract_scope_ref, declaration.rule_version,
+				declaration.approved_by,
+				(SELECT COALESCE(json_agg(kind.claim_kind_ref ORDER BY kind.claim_kind_ref), '[]'::json)
+				   FROM visibility_exception.claim_covered_kind AS kind
+				  WHERE kind.tenant_id          = declaration.tenant_id
+				    AND kind.contract_scope_ref = declaration.contract_scope_ref)`,
+		},
+		func(rows pgx.Rows) (ports.ClaimEligibilityCatalogueRow, error) {
+			var row ports.ClaimEligibilityCatalogueRow
+			var kindsJSON []byte
+			if err := rows.Scan(&row.Contract, &row.Version, &row.ApprovedBy, &kindsJSON); err != nil {
+				return ports.ClaimEligibilityCatalogueRow{}, err
+			}
+			if err := json.Unmarshal(kindsJSON, &row.CoveredKinds); err != nil {
+				return ports.ClaimEligibilityCatalogueRow{}, fmt.Errorf("覆盖集解码：%w", err)
+			}
+			return row, nil
+		},
+		func(row ports.ClaimEligibilityCatalogueRow, _ string) cataloguepage.Position {
+			return keyPosition(row.Contract)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list claim eligibilities: %w", err)
+		return cataloguepage.Result[ports.ClaimEligibilityCatalogueRow]{}, fmt.Errorf("list claim eligibilities: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT declaration.contract_scope_ref, declaration.rule_version,
-		        declaration.approved_by,
-		        (SELECT COALESCE(json_agg(kind.claim_kind_ref ORDER BY kind.claim_kind_ref), '[]'::json)
-		           FROM visibility_exception.claim_covered_kind AS kind
-		          WHERE kind.tenant_id          = declaration.tenant_id
-		            AND kind.contract_scope_ref = declaration.contract_scope_ref)
-		   FROM visibility_exception.claim_contract_scope AS declaration
-		  WHERE declaration.tenant_id = $1
-		  ORDER BY declaration.contract_scope_ref
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list claim eligibilities: %w", err)
-	}
-	defer rows.Close()
-
-	declarationRows := make([]ports.ClaimEligibilityCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.ClaimEligibilityCatalogueRow
-		var kindsJSON []byte
-		if err := rows.Scan(&row.Contract, &row.Version, &row.ApprovedBy, &kindsJSON); err != nil {
-			return nil, fmt.Errorf("list claim eligibilities: %w", err)
-		}
-		if err := json.Unmarshal(kindsJSON, &row.CoveredKinds); err != nil {
-			return nil, fmt.Errorf("list claim eligibilities: 覆盖集解码：%w", err)
-		}
-		declarationRows = append(declarationRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list claim eligibilities: %w", err)
-	}
-	return declarationRows, nil
+	return page, nil
 }
 
-// ListClaimAuthorizations 上列申请人授权目录连同名单（`PAR-VIS-08` 申请人授权角）。
+// ListClaimAuthorizations 上列申请人授权目录连同名单（`PAR-VIS-08` 申请人授权角），按客户正序。
 // 空名单如实交回空集合——「目录在场、当前不授权任何人」是一次已作出的授权决定
 // （0018），不是没登记。
 func (catalogue *OperationsCatalogue) ListClaimAuthorizations(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ClaimAuthorizationCatalogueRow, error) {
-	if err := requirePositiveLimit("list claim authorizations", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow], error) {
+	const source = "visibility_exception.claim_authorization_catalogue AS catalogue"
+	page, err := readPage(ctx, catalogue.db, claimAuthorizationCataloguePages, query, tenant, "catalogue.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `catalogue.customer_ref, catalogue.rule_version, catalogue.approved_by,
+				(SELECT COALESCE(json_agg(member.applicant_ref ORDER BY member.applicant_ref), '[]'::json)
+				   FROM visibility_exception.claim_authorized_applicant AS member
+				  WHERE member.tenant_id    = catalogue.tenant_id
+				    AND member.customer_ref = catalogue.customer_ref)`,
+		},
+		func(rows pgx.Rows) (ports.ClaimAuthorizationCatalogueRow, error) {
+			var row ports.ClaimAuthorizationCatalogueRow
+			var applicantsJSON []byte
+			if err := rows.Scan(&row.Customer, &row.Version, &row.ApprovedBy, &applicantsJSON); err != nil {
+				return ports.ClaimAuthorizationCatalogueRow{}, err
+			}
+			if err := json.Unmarshal(applicantsJSON, &row.Applicants); err != nil {
+				return ports.ClaimAuthorizationCatalogueRow{}, fmt.Errorf("名单解码：%w", err)
+			}
+			return row, nil
+		},
+		func(row ports.ClaimAuthorizationCatalogueRow, _ string) cataloguepage.Position {
+			return keyPosition(row.Customer)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list claim authorizations: %w", err)
+		return cataloguepage.Result[ports.ClaimAuthorizationCatalogueRow]{}, fmt.Errorf("list claim authorizations: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT catalogue.customer_ref, catalogue.rule_version, catalogue.approved_by,
-		        (SELECT COALESCE(json_agg(member.applicant_ref ORDER BY member.applicant_ref), '[]'::json)
-		           FROM visibility_exception.claim_authorized_applicant AS member
-		          WHERE member.tenant_id    = catalogue.tenant_id
-		            AND member.customer_ref = catalogue.customer_ref)
-		   FROM visibility_exception.claim_authorization_catalogue AS catalogue
-		  WHERE catalogue.tenant_id = $1
-		  ORDER BY catalogue.customer_ref
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list claim authorizations: %w", err)
-	}
-	defer rows.Close()
-
-	catalogueRows := make([]ports.ClaimAuthorizationCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.ClaimAuthorizationCatalogueRow
-		var applicantsJSON []byte
-		if err := rows.Scan(&row.Customer, &row.Version, &row.ApprovedBy, &applicantsJSON); err != nil {
-			return nil, fmt.Errorf("list claim authorizations: %w", err)
-		}
-		if err := json.Unmarshal(applicantsJSON, &row.Applicants); err != nil {
-			return nil, fmt.Errorf("list claim authorizations: 名单解码：%w", err)
-		}
-		catalogueRows = append(catalogueRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list claim authorizations: %w", err)
-	}
-	return catalogueRows, nil
+	return page, nil
 }
 
 // disclosureCellDocument 是披露条目一维在 json_agg 里的临时词形。content 用指针收
@@ -356,88 +340,77 @@ type disclosureEntryDocument struct {
 	Note       disclosureCellDocument `json:"note"`
 }
 
-// ListDisclosurePolicies 上列披露策略版本连同整版条目（`PAR-VIS-09`）。
+// ListDisclosurePolicies 上列披露策略版本连同整版条目（`PAR-VIS-09`），次序同 ListMilestoneMappings。
 func (catalogue *OperationsCatalogue) ListDisclosurePolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.DisclosurePolicyCatalogueRow, error) {
-	if err := requirePositiveLimit("list disclosure policies", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.DisclosurePolicyCatalogueRow], error) {
+	const source = "visibility_exception.disclosure_policy_version AS version"
+	page, err := readPage(ctx, catalogue.db, disclosurePolicyCataloguePages, query, tenant, "version.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `version.policy_version, version.effective_from, version.effective_to,
+				version.approved_by,
+				(SELECT COALESCE(
+				            json_agg(
+				                json_build_object(
+				                    'customer', entry.customer_account_ref,
+				                    'milestones', json_build_object(
+				                        'state', entry.milestones_state, 'content', entry.milestones_content),
+				                    'eta', json_build_object(
+				                        'state', entry.eta_state, 'content', entry.eta_content),
+				                    'final', json_build_object(
+				                        'state', entry.final_state, 'content', entry.final_content),
+				                    'note', json_build_object(
+				                        'state', entry.note_state, 'content', entry.note_content)
+				                )
+				                ORDER BY entry.customer_account_ref
+				            ),
+				            '[]'::json
+				        )
+				   FROM visibility_exception.disclosure_policy_entry AS entry
+				  WHERE entry.tenant_id      = version.tenant_id
+				    AND entry.policy_version = version.policy_version)`,
+		},
+		func(rows pgx.Rows) (ports.DisclosurePolicyCatalogueRow, error) {
+			var row ports.DisclosurePolicyCatalogueRow
+			var effectiveTo *time.Time
+			var entriesJSON []byte
+			if err := rows.Scan(
+				&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
+			); err != nil {
+				return ports.DisclosurePolicyCatalogueRow{}, err
+			}
+			if effectiveTo != nil {
+				row.EffectiveTo = *effectiveTo
+				row.HasEffectiveTo = true
+			}
+			var documents []disclosureEntryDocument
+			if err := json.Unmarshal(entriesJSON, &documents); err != nil {
+				return ports.DisclosurePolicyCatalogueRow{}, fmt.Errorf("条目集解码：%w", err)
+			}
+			row.Entries = make([]ports.DisclosurePolicyEntryRow, 0, len(documents))
+			for _, document := range documents {
+				row.Entries = append(row.Entries, ports.DisclosurePolicyEntryRow{
+					Customer:   document.Customer,
+					Milestones: document.Milestones.cell(),
+					ETA:        document.ETA.cell(),
+					Final:      document.Final.cell(),
+					Note:       document.Note.cell(),
+				})
+			}
+			return row, nil
+		},
+		func(row ports.DisclosurePolicyCatalogueRow, _ string) cataloguepage.Position {
+			return versionPosition(row.EffectiveFrom, row.Version)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list disclosure policies: %w", err)
+		return cataloguepage.Result[ports.DisclosurePolicyCatalogueRow]{}, fmt.Errorf("list disclosure policies: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT version.policy_version, version.effective_from, version.effective_to,
-		        version.approved_by,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'customer', entry.customer_account_ref,
-		                            'milestones', json_build_object(
-		                                'state', entry.milestones_state, 'content', entry.milestones_content),
-		                            'eta', json_build_object(
-		                                'state', entry.eta_state, 'content', entry.eta_content),
-		                            'final', json_build_object(
-		                                'state', entry.final_state, 'content', entry.final_content),
-		                            'note', json_build_object(
-		                                'state', entry.note_state, 'content', entry.note_content)
-		                        )
-		                        ORDER BY entry.customer_account_ref
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM visibility_exception.disclosure_policy_entry AS entry
-		          WHERE entry.tenant_id      = version.tenant_id
-		            AND entry.policy_version = version.policy_version)
-		   FROM visibility_exception.disclosure_policy_version AS version
-		  WHERE version.tenant_id = $1
-		  ORDER BY version.effective_from DESC, version.policy_version
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list disclosure policies: %w", err)
-	}
-	defer rows.Close()
-
-	policyRows := make([]ports.DisclosurePolicyCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.DisclosurePolicyCatalogueRow
-		var effectiveTo *time.Time
-		var entriesJSON []byte
-		if err := rows.Scan(
-			&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
-		); err != nil {
-			return nil, fmt.Errorf("list disclosure policies: %w", err)
-		}
-		if effectiveTo != nil {
-			row.EffectiveTo = *effectiveTo
-			row.HasEffectiveTo = true
-		}
-		var documents []disclosureEntryDocument
-		if err := json.Unmarshal(entriesJSON, &documents); err != nil {
-			return nil, fmt.Errorf("list disclosure policies: 条目集解码：%w", err)
-		}
-		row.Entries = make([]ports.DisclosurePolicyEntryRow, 0, len(documents))
-		for _, document := range documents {
-			row.Entries = append(row.Entries, ports.DisclosurePolicyEntryRow{
-				Customer:   document.Customer,
-				Milestones: document.Milestones.cell(),
-				ETA:        document.ETA.cell(),
-				Final:      document.Final.cell(),
-				Note:       document.Note.cell(),
-			})
-		}
-		policyRows = append(policyRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list disclosure policies: %w", err)
-	}
-	return policyRows, nil
+	return page, nil
 }
 
 // exceptionDisclosureRuleEntryDocument 是异常披露规则条目在 json_agg 里的临时词形。content
@@ -453,134 +426,108 @@ type exceptionDisclosureRuleEntryDocument struct {
 }
 
 // ListExceptionDisclosureRules 上列异常披露规则版本连同整版条目（`PAR-VIS-07` 的披露与
-// 自动发布范围半边，0023；票 ve-disclosure-policy-view/03）。新版在前，条目按（客户 +
-// 信号类型 + 可信度）——与登记键同序。
+// 自动发布范围半边，0023；票 ve-disclosure-policy-view/03）。次序同 ListMilestoneMappings，
+// 条目按（客户 + 信号类型 + 可信度）——与登记键同序。
 func (catalogue *OperationsCatalogue) ListExceptionDisclosureRules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
-	if err := requirePositiveLimit("list exception disclosure rules", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT version.rule_version, version.effective_from, version.effective_to,
-		        version.approved_by,
-		        (SELECT COALESCE(
-		                    json_agg(
-		                        json_build_object(
-		                            'customer',    entry.customer_account_ref,
-		                            'signalKind',  entry.signal_kind,
-		                            'confidence',  entry.confidence_ref,
-		                            'disclosable', entry.disclosable,
-		                            'autoRelease', entry.auto_release,
-		                            'content',     entry.content_ref
-		                        )
-		                        ORDER BY entry.customer_account_ref, entry.signal_kind, entry.confidence_ref
-		                    ),
-		                    '[]'::json
-		                )
-		           FROM visibility_exception.exception_disclosure_rule_entry AS entry
-		          WHERE entry.tenant_id    = version.tenant_id
-		            AND entry.rule_version = version.rule_version)
-		   FROM visibility_exception.exception_disclosure_rule_version AS version
-		  WHERE version.tenant_id = $1
-		  ORDER BY version.effective_from DESC, version.rule_version
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
-	}
-	defer rows.Close()
-
-	ruleRows := make([]ports.ExceptionDisclosureRuleCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.ExceptionDisclosureRuleCatalogueRow
-		var effectiveTo *time.Time
-		var entriesJSON []byte
-		if err := rows.Scan(
-			&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
-		); err != nil {
-			return nil, fmt.Errorf("list exception disclosure rules: %w", err)
-		}
-		if effectiveTo != nil {
-			row.EffectiveTo = *effectiveTo
-			row.HasEffectiveTo = true
-		}
-		var documents []exceptionDisclosureRuleEntryDocument
-		if err := json.Unmarshal(entriesJSON, &documents); err != nil {
-			return nil, fmt.Errorf("list exception disclosure rules: 条目集解码：%w", err)
-		}
-		row.Entries = make([]ports.ExceptionDisclosureRuleEntryRow, 0, len(documents))
-		for _, document := range documents {
-			entry := ports.ExceptionDisclosureRuleEntryRow{
-				Customer:    document.Customer,
-				SignalKind:  document.SignalKind,
-				Confidence:  document.Confidence,
-				Disclosable: document.Disclosable,
-				AutoRelease: document.AutoRelease,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow], error) {
+	const source = "visibility_exception.exception_disclosure_rule_version AS version"
+	page, err := readPage(ctx, catalogue.db, exceptionDisclosureRuleCataloguePages, query, tenant, "version.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `version.rule_version, version.effective_from, version.effective_to,
+				version.approved_by,
+				(SELECT COALESCE(
+				            json_agg(
+				                json_build_object(
+				                    'customer',    entry.customer_account_ref,
+				                    'signalKind',  entry.signal_kind,
+				                    'confidence',  entry.confidence_ref,
+				                    'disclosable', entry.disclosable,
+				                    'autoRelease', entry.auto_release,
+				                    'content',     entry.content_ref
+				                )
+				                ORDER BY entry.customer_account_ref, entry.signal_kind, entry.confidence_ref
+				            ),
+				            '[]'::json
+				        )
+				   FROM visibility_exception.exception_disclosure_rule_entry AS entry
+				  WHERE entry.tenant_id    = version.tenant_id
+				    AND entry.rule_version = version.rule_version)`,
+		},
+		func(rows pgx.Rows) (ports.ExceptionDisclosureRuleCatalogueRow, error) {
+			var row ports.ExceptionDisclosureRuleCatalogueRow
+			var effectiveTo *time.Time
+			var entriesJSON []byte
+			if err := rows.Scan(
+				&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
+			); err != nil {
+				return ports.ExceptionDisclosureRuleCatalogueRow{}, err
 			}
-			if document.Content != nil {
-				entry.Content = *document.Content
+			if effectiveTo != nil {
+				row.EffectiveTo = *effectiveTo
+				row.HasEffectiveTo = true
 			}
-			row.Entries = append(row.Entries, entry)
-		}
-		ruleRows = append(ruleRows, row)
+			var documents []exceptionDisclosureRuleEntryDocument
+			if err := json.Unmarshal(entriesJSON, &documents); err != nil {
+				return ports.ExceptionDisclosureRuleCatalogueRow{}, fmt.Errorf("条目集解码：%w", err)
+			}
+			row.Entries = make([]ports.ExceptionDisclosureRuleEntryRow, 0, len(documents))
+			for _, document := range documents {
+				entry := ports.ExceptionDisclosureRuleEntryRow{
+					Customer:    document.Customer,
+					SignalKind:  document.SignalKind,
+					Confidence:  document.Confidence,
+					Disclosable: document.Disclosable,
+					AutoRelease: document.AutoRelease,
+				}
+				if document.Content != nil {
+					entry.Content = *document.Content
+				}
+				row.Entries = append(row.Entries, entry)
+			}
+			return row, nil
+		},
+		func(row ports.ExceptionDisclosureRuleCatalogueRow, _ string) cataloguepage.Position {
+			return versionPosition(row.EffectiveFrom, row.Version)
+		})
+	if err != nil {
+		return cataloguepage.Result[ports.ExceptionDisclosureRuleCatalogueRow]{}, fmt.Errorf("list exception disclosure rules: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
-	}
-	return ruleRows, nil
+	return page, nil
 }
 
 // ListConflictSignalRules 上列冲突信号规则（`PAR-VIS-04` 事实冲突那一类，0025；票
-// ve-disclosure-policy-view/03）。一租户至多一行，仍走同族的租户条件 + LIMIT 形状；序取
+// ve-disclosure-policy-view/03）。一租户至多一行，仍走同族的租户条件与翻页形状；序取
 // 信号类型——单行时序无所谓，写成稳定序是为了这一族对「稳定序」不留例外。
 func (catalogue *OperationsCatalogue) ListConflictSignalRules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]ports.ConflictSignalRuleCatalogueRow, error) {
-	if err := requirePositiveLimit("list conflict signal rules", limit); err != nil {
-		return nil, err
-	}
-	querier, err := catalogue.db.ReadExecutor(ctx)
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow], error) {
+	const source = "visibility_exception.conflict_signal_rule AS rule"
+	page, err := readPage(ctx, catalogue.db, conflictSignalRuleCataloguePages, query, tenant, "rule.tenant_id = $1", limit,
+		pageSources{
+			count: source,
+			page:  source,
+			selection: `rule.signal_kind, rule.rule_version, rule.confidence_ref, rule.approved_by,
+				rule.registered_at`,
+		},
+		func(rows pgx.Rows) (ports.ConflictSignalRuleCatalogueRow, error) {
+			var row ports.ConflictSignalRuleCatalogueRow
+			err := rows.Scan(&row.SignalKind, &row.Version, &row.Confidence, &row.ApprovedBy, &row.RegisteredAt)
+			return row, err
+		},
+		func(row ports.ConflictSignalRuleCatalogueRow, _ string) cataloguepage.Position {
+			return keyPosition(row.SignalKind)
+		})
 	if err != nil {
-		return nil, fmt.Errorf("list conflict signal rules: %w", err)
+		return cataloguepage.Result[ports.ConflictSignalRuleCatalogueRow]{}, fmt.Errorf("list conflict signal rules: %w", err)
 	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT rule.signal_kind, rule.rule_version, rule.confidence_ref, rule.approved_by,
-		        rule.registered_at
-		   FROM visibility_exception.conflict_signal_rule AS rule
-		  WHERE rule.tenant_id = $1
-		  ORDER BY rule.signal_kind
-		  LIMIT $2`,
-		tenant.String(), limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list conflict signal rules: %w", err)
-	}
-	defer rows.Close()
-
-	ruleRows := make([]ports.ConflictSignalRuleCatalogueRow, 0, limit)
-	for rows.Next() {
-		var row ports.ConflictSignalRuleCatalogueRow
-		if err := rows.Scan(
-			&row.SignalKind, &row.Version, &row.Confidence, &row.ApprovedBy, &row.RegisteredAt,
-		); err != nil {
-			return nil, fmt.Errorf("list conflict signal rules: %w", err)
-		}
-		ruleRows = append(ruleRows, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list conflict signal rules: %w", err)
-	}
-	return ruleRows, nil
+	return page, nil
 }

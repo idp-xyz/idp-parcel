@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
@@ -98,12 +99,16 @@ type ProjectionStore interface {
 // 长出一个列表方法。
 //
 // Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
+//
+// ListCurrent 的翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/03）：查询对象由端点按
+// TrackingProjectionPages 解出，读口答「本页投影 + 下一游标 + 总数」。
 type OperationsProjectionRead interface {
 	ListCurrent(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]domain.TrackingProjection, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[domain.TrackingProjection], error)
 	FindCurrent(
 		ctx context.Context,
 		tenant domain.TenantID,

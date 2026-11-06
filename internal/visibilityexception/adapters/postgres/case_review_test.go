@@ -118,7 +118,7 @@ func TestCaseReviewListsSignalEpisodesWithConclusions(t *testing.T) {
 			raisedRecord(t, foreign, "tenant-b", "parcel-9", "STALLED", domain.NoCaseNeeded))
 	})
 
-	rows, err := fixture.review.ListSignalEpisodes(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListSignalEpisodes(ctx, tenant, 10, firstPage(t, ports.SignalEpisodePages)))
 	if err != nil {
 		t.Fatalf("上列发作期册：%v", err)
 	}
@@ -157,7 +157,7 @@ func TestCaseReviewListsSignalEpisodesWithConclusions(t *testing.T) {
 		t.Errorf("首启行结论变形：%+v", rows[1])
 	}
 
-	limited, err := fixture.review.ListSignalEpisodes(ctx, tenant, 1)
+	limited, err := rowsOf(fixture.review.ListSignalEpisodes(ctx, tenant, 1, firstPage(t, ports.SignalEpisodePages)))
 	if err != nil || len(limited) != 1 || limited[0].EpisodeID != "ep-2" {
 		t.Errorf("页大小未生效：rows=%+v err=%v", limited, err)
 	}
@@ -179,7 +179,7 @@ func TestCaseReviewListsDispositionRequests(t *testing.T) {
 		return err
 	})
 
-	rows, err := fixture.review.ListDispositionRequests(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListDispositionRequests(ctx, tenant, 10, firstPage(t, ports.DispositionRequestPages)))
 	if err != nil {
 		t.Fatalf("上列处置请求册：%v", err)
 	}
@@ -250,7 +250,7 @@ func TestCaseReviewListsExceptionCases(t *testing.T) {
 	fixture.insertReviewCase(t, "tenant-b", "case-9", "AWAITING_RESPONSE",
 		caseBaseAt, nil, nil, nil, nil)
 
-	rows, err := fixture.review.ListExceptionCases(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListExceptionCases(ctx, tenant, 10, firstPage(t, ports.ExceptionCasePages)))
 	if err != nil {
 		t.Fatalf("上列案件册：%v", err)
 	}
@@ -345,7 +345,7 @@ func TestCaseReviewListsCustomerNotifications(t *testing.T) {
 		return err
 	})
 
-	rows, err := fixture.review.ListCustomerNotifications(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListCustomerNotifications(ctx, tenant, 10, firstPage(t, ports.CustomerNotificationPages)))
 	if err != nil {
 		t.Fatalf("上列通知册：%v", err)
 	}
@@ -379,7 +379,7 @@ func TestCaseReviewListsCustomerNotifications(t *testing.T) {
 
 // TestCaseReviewListsClaimItems 证索赔项册：三判各自的格照行转写不压并——未审行
 // 判断格全缺席、等待补充行带四件与期限版本数、复核换版行带前版、撤回行带撤回时刻；
-// 同刻提交按（批次，项）稳定排序；另一个租户的索赔不可见。
+// 同刻提交按（批次，项）与提交时刻同向倒序收尾（ADR-0144 决定三）；另一个租户的索赔不可见。
 func TestCaseReviewListsClaimItems(t *testing.T) {
 	fixture := newCaseReviewFixture(t)
 	ctx := t.Context()
@@ -428,17 +428,17 @@ func TestCaseReviewListsClaimItems(t *testing.T) {
 
 	saveClaim(receivedClaim(t, "batch-1", "item-9"), "tenant-b")
 
-	rows, err := fixture.review.ListClaimItems(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListClaimItems(ctx, tenant, 10, firstPage(t, ports.ClaimItemPages)))
 	if err != nil {
 		t.Fatalf("上列索赔项册：%v", err)
 	}
 	if len(rows) != 4 ||
-		rows[0].ItemID != "item-1" || rows[1].ItemID != "item-2" ||
-		rows[2].ItemID != "item-3" || rows[3].ItemID != "item-4" {
+		rows[0].ItemID != "item-4" || rows[1].ItemID != "item-3" ||
+		rows[2].ItemID != "item-2" || rows[3].ItemID != "item-1" {
 		t.Fatalf("册面行序变形：%+v", rows)
 	}
 
-	received := rows[0]
+	received := rows[3]
 	if received.Batch != "batch-1" ||
 		received.Customer != "customer-1" ||
 		received.Applicant != "applicant-1" ||
@@ -453,7 +453,7 @@ func TestCaseReviewListsClaimItems(t *testing.T) {
 		t.Errorf("未审行转写变形：%+v", received)
 	}
 
-	supplement := rows[1]
+	supplement := rows[2]
 	if supplement.Screen != "AWAITING_SUPPLEMENT" ||
 		supplement.ScreenBasis != "materials incomplete" ||
 		supplement.MissingMaterials == "" ||
@@ -465,7 +465,7 @@ func TestCaseReviewListsClaimItems(t *testing.T) {
 		t.Errorf("等待补充行转写变形：%+v", supplement)
 	}
 
-	concluded := rows[2]
+	concluded := rows[1]
 	if concluded.Screen != "ELIGIBLE" ||
 		concluded.Conclusion != "PARTIALLY_ESTABLISHED" ||
 		concluded.PriorConclusion != "NOT_ESTABLISHED" ||
@@ -475,9 +475,9 @@ func TestCaseReviewListsClaimItems(t *testing.T) {
 		t.Errorf("复核换版行转写变形：%+v", concluded)
 	}
 
-	if !rows[3].Withdrawn || rows[3].WithdrawnAt == nil ||
-		!rows[3].WithdrawnAt.Equal(claimBaseAt.Add(time.Hour)) {
-		t.Errorf("撤回行转写变形：%+v", rows[3])
+	if !rows[0].Withdrawn || rows[0].WithdrawnAt == nil ||
+		!rows[0].WithdrawnAt.Equal(claimBaseAt.Add(time.Hour)) {
+		t.Errorf("撤回行转写变形：%+v", rows[0])
 	}
 }
 
@@ -522,15 +522,15 @@ func TestCaseReviewListsRecoveryMatters(t *testing.T) {
 	appendAction("recovery-1", domain.FormalAssertion, domain.SubmissionFailed, 1, claimBaseAt.Add(3*time.Hour))
 	appendAction("recovery-1", domain.FormalAssertion, domain.ActionSubmitted, 2, claimBaseAt.Add(4*time.Hour))
 
-	rows, err := fixture.review.ListRecoveryMatters(ctx, tenant, 10)
+	rows, err := rowsOf(fixture.review.ListRecoveryMatters(ctx, tenant, 10, firstPage(t, ports.RecoveryMatterPages)))
 	if err != nil {
 		t.Fatalf("上列追偿事项册：%v", err)
 	}
-	if len(rows) != 2 || rows[0].MatterID != "recovery-1" || rows[1].MatterID != "recovery-2" {
+	if len(rows) != 2 || rows[0].MatterID != "recovery-2" || rows[1].MatterID != "recovery-1" {
 		t.Fatalf("册面行序变形：%+v", rows)
 	}
 
-	acted := rows[0]
+	acted := rows[1]
 	if acted.CaseID != "case-1" ||
 		acted.Counterparty != "supplier-1" ||
 		acted.Scope != "parcel-1/loss" ||
@@ -553,7 +553,7 @@ func TestCaseReviewListsRecoveryMatters(t *testing.T) {
 		!acted.FormalAssertion.OccurredAt.Equal(claimBaseAt.Add(4*time.Hour)) {
 		t.Errorf("正式主张格没取到最近节点（失败后重试是新记录）：%+v", acted.FormalAssertion)
 	}
-	if untouched := rows[1]; untouched.PreliminaryNotice != nil || untouched.FormalAssertion != nil {
+	if untouched := rows[0]; untouched.PreliminaryNotice != nil || untouched.FormalAssertion != nil {
 		t.Errorf("无动作事项凭空长出动作格：%+v", untouched)
 	}
 }
@@ -566,46 +566,46 @@ func TestCaseReviewRejectsNonPositiveLimitAndAnswersEmptyHonestly(t *testing.T) 
 	ctx := t.Context()
 	tenant := reviewValue(t, domain.NewTenantID, "tenant-a")
 
-	if _, err := fixture.review.ListSignalEpisodes(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(fixture.review.ListSignalEpisodes(ctx, tenant, 0, firstPage(t, ports.SignalEpisodePages))); err == nil {
 		t.Error("零页大小的发作期上列没有被拒")
 	}
-	if _, err := fixture.review.ListDispositionRequests(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(fixture.review.ListDispositionRequests(ctx, tenant, -1, firstPage(t, ports.DispositionRequestPages))); err == nil {
 		t.Error("负页大小的处置请求上列没有被拒")
 	}
-	if _, err := fixture.review.ListExceptionCases(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(fixture.review.ListExceptionCases(ctx, tenant, 0, firstPage(t, ports.ExceptionCasePages))); err == nil {
 		t.Error("零页大小的案件上列没有被拒")
 	}
-	if _, err := fixture.review.ListCustomerNotifications(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(fixture.review.ListCustomerNotifications(ctx, tenant, -1, firstPage(t, ports.CustomerNotificationPages))); err == nil {
 		t.Error("负页大小的通知上列没有被拒")
 	}
-	if _, err := fixture.review.ListClaimItems(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(fixture.review.ListClaimItems(ctx, tenant, 0, firstPage(t, ports.ClaimItemPages))); err == nil {
 		t.Error("零页大小的索赔上列没有被拒")
 	}
-	if _, err := fixture.review.ListRecoveryMatters(ctx, tenant, -1); err == nil {
+	if _, err := rowsOf(fixture.review.ListRecoveryMatters(ctx, tenant, -1, firstPage(t, ports.RecoveryMatterPages))); err == nil {
 		t.Error("负页大小的追偿上列没有被拒")
 	}
 
-	episodes, err := fixture.review.ListSignalEpisodes(ctx, tenant, 5)
+	episodes, err := rowsOf(fixture.review.ListSignalEpisodes(ctx, tenant, 5, firstPage(t, ports.SignalEpisodePages)))
 	if err != nil || len(episodes) != 0 {
 		t.Errorf("空发作期册：rows=%+v err=%v", episodes, err)
 	}
-	requests, err := fixture.review.ListDispositionRequests(ctx, tenant, 5)
+	requests, err := rowsOf(fixture.review.ListDispositionRequests(ctx, tenant, 5, firstPage(t, ports.DispositionRequestPages)))
 	if err != nil || len(requests) != 0 {
 		t.Errorf("空处置请求册：rows=%+v err=%v", requests, err)
 	}
-	cases, err := fixture.review.ListExceptionCases(ctx, tenant, 5)
+	cases, err := rowsOf(fixture.review.ListExceptionCases(ctx, tenant, 5, firstPage(t, ports.ExceptionCasePages)))
 	if err != nil || len(cases) != 0 {
 		t.Errorf("空案件册：rows=%+v err=%v", cases, err)
 	}
-	notifications, err := fixture.review.ListCustomerNotifications(ctx, tenant, 5)
+	notifications, err := rowsOf(fixture.review.ListCustomerNotifications(ctx, tenant, 5, firstPage(t, ports.CustomerNotificationPages)))
 	if err != nil || len(notifications) != 0 {
 		t.Errorf("空通知册：rows=%+v err=%v", notifications, err)
 	}
-	claims, err := fixture.review.ListClaimItems(ctx, tenant, 5)
+	claims, err := rowsOf(fixture.review.ListClaimItems(ctx, tenant, 5, firstPage(t, ports.ClaimItemPages)))
 	if err != nil || len(claims) != 0 {
 		t.Errorf("空索赔册：rows=%+v err=%v", claims, err)
 	}
-	recoveries, err := fixture.review.ListRecoveryMatters(ctx, tenant, 5)
+	recoveries, err := rowsOf(fixture.review.ListRecoveryMatters(ctx, tenant, 5, firstPage(t, ports.RecoveryMatterPages)))
 	if err != nil || len(recoveries) != 0 {
 		t.Errorf("空追偿册：rows=%+v err=%v", recoveries, err)
 	}
