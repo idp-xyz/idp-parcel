@@ -21,6 +21,7 @@ Status: resolved——2026-11-05 子票全部进 main
 | [03](./issues/03-admin-web-identification.md) | 管理台：登记与更正表单、读出、列表检索 | resolved（2026-11-05 进 main） |
 | [04](./issues/04-admin-web-customer-role.md) | 管理台：客户角色同时认未停用客户账户 | resolved（2026-11-05 进 main） |
 | [05](./issues/05-panel-identification-visible.md) | 右栏页头直接显示识别信息，搜索提示说出能按号与编码搜 | resolved（2026-11-05 进 main） |
+| [06](./issues/06-list-columns-follow-width.md) | 两册的列随列表宽度增减，照公司主体列表 | resolved（2026-11-05 进 main） |
 
 ## 评审记录（2026-11-05）
 

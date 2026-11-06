@@ -113,14 +113,18 @@ const relationshipStatusDotClass: Record<string, string> = {
 // 身份本体册的列。主列只留运营要看的：名称、类型（我方公司 / 按持有的角色称呼）、状态、生效时点；标识、修订号、登记依据进详情栏
 // 底部的「技术详情」。停用时点与状态同格呈现：看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——
 // 排的键看不见，操作者判不出「为什么这一条在最上面」。类型列要关系册与法人册才算得出，所以列表随两份索引生成。
+// 列随列表可用宽度增减，照公司主体列表（GroupLegalEntitiesPage 的 columnsOf）：名称、类型、状态三列总在，生效时间与登记时间
+// 各有一个宽度门槛，随分栏拖动与窗口缩放收放，不再只看详情栏开没开。前两列给定宽，多出来的宽度落到状态与日期列上；名称格
+// 另上限 22rem，列表比各列之和还宽时名称不跟着长。时刻只显到日（「哪一天」），完整时刻在悬停里。
 function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): WorkbenchColumn<BusinessPartyRecord>[] {
   return [
     {
       key: 'party-name',
       header: '名称',
       sortKey: 'party-name',
+      width: '22rem',
       render: (row) => (
-        <div className="flex min-w-36 items-center gap-1.5">
+        <div className="flex min-w-44 max-w-[22rem] items-center gap-1.5">
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${identityStatusDotClass[row.status] ?? 'bg-idpxyz-textMuted'}`}
             aria-hidden="true"
@@ -137,6 +141,7 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
     {
       key: 'type',
       header: '类型',
+      width: '12rem',
       render: (row) => (
         <span className="whitespace-nowrap text-idpxyz-text">
           {businessPartyTypeLabel(ours.has(row.partyId), rolesOfParty(roles, row.partyId))}
@@ -151,7 +156,7 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
           <StatusPill code={row.status} />
           {row.deactivatedAt ? (
             <span className="font-mono type-body text-idpxyz-breadcrumb">
-              自 <Instant value={row.deactivatedAt} />
+              自 <Instant value={row.deactivatedAt} precision="day" />
             </span>
           ) : null}
         </div>
@@ -161,16 +166,15 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
       key: 'effective-from',
       header: '生效时间',
       sortKey: 'effective-from',
-      // 详情栏开着时收起：时点在栏的事实条上；留名称 / 类型 / 状态三列认行。
-      hideWhenDetailOpen: true,
+      minListWidth: 960,
       // 待生效配一个琥珀色时钟而不是把时刻标成琥珀色：琥珀色字落在选中行底色上不足 4.5:1
       // （票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
       render: (row) => (
-        <span className="inline-flex items-center gap-1 font-mono text-idpxyz-text">
+        <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-idpxyz-text">
           {row.status === 'REGISTERED' ? (
             <Clock className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="尚未生效" />
           ) : null}
-          <Instant value={row.effectiveFrom} />
+          <Instant value={row.effectiveFrom} precision="day" />
         </span>
       ),
     },
@@ -178,10 +182,10 @@ function identityColumnsOf(roles: PartyRoleIndex, ours: OurCompanyIndex): Workbe
       key: 'registered-at',
       header: '登记时间',
       sortKey: 'registered-at',
-      hideWhenDetailOpen: true,
+      minListWidth: 1240,
       render: (row) => (
-        <span className="font-mono text-idpxyz-breadcrumb">
-          <Instant value={row.registeredAt} />
+        <span className="whitespace-nowrap font-mono text-idpxyz-breadcrumb">
+          <Instant value={row.registeredAt} precision="day" />
         </span>
       ),
     },
@@ -241,7 +245,7 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
         <StatusPill code={row.status} />
         {row.endedAt ? (
           <span className="font-mono type-body text-idpxyz-breadcrumb">
-            自 <Instant value={row.endedAt} />
+            自 <Instant value={row.endedAt} precision="day" />
           </span>
         ) : null}
       </div>
@@ -251,15 +255,17 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
     key: 'validity',
     header: '有效期',
     sortKey: 'effective-start',
-    // 详情栏开着时收起：两端在栏的事实条上；这一格最宽，留着会把双方与状态挤出列表栏。
-    hideWhenDetailOpen: true,
-    // 起止各占一行：排成一行要两百多像素，是整表在 1280 宽放不下的那一截。无终点说「长期有效」。
+    // 随列表可用宽度收放（判据同往来单位册的日期列）：这一格最宽，窄了会把双方与状态挤出列表栏；两端另在栏的事实条上。
+    minListWidth: 960,
+    // 起止各占一行、只显到日：排成一行、带到秒要两百多像素。无终点说「长期有效」；完整时刻在悬停里。
     render: (row) => (
       <div className="flex flex-col whitespace-nowrap font-mono text-idpxyz-text">
         <span>
-          <Instant value={row.effectiveStartsAt} />
+          <Instant value={row.effectiveStartsAt} precision="day" />
         </span>
-        <span className="text-idpxyz-breadcrumb">→ {row.effectiveEndsAt ? <Instant value={row.effectiveEndsAt} /> : '长期有效'}</span>
+        <span className="text-idpxyz-breadcrumb">
+          → {row.effectiveEndsAt ? <Instant value={row.effectiveEndsAt} precision="day" /> : '长期有效'}
+        </span>
       </div>
     ),
   },
