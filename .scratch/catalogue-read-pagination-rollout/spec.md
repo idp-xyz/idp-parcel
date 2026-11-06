@@ -92,6 +92,7 @@ Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮
 | [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | ready-for-agent |
 | [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | ready-for-agent |
 | [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、08、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | ready-for-agent（Blocked by 04、05、06、08、09、12） |
+| [17](./issues/17-vocabulary-read-checks-kind-after-intake.md) | 商业发布词表口先 Intake、后校验 kind（11 的评审提出） | `internal/partycommercial/adapters/http` 的词表口 | ready-for-agent（Blocked by 11） |
 
 走法：01–13、15 碰 Go / SQL，走[进 main 的步骤](../../docs/agents/workflow.md#进-main-的步骤)；14 的 diff 只在 `apps/admin-web/**` 与票面，走
 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)，按上下文分笔、随各后端子票进 main 逐页接。
