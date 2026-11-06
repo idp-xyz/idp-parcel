@@ -17,6 +17,12 @@ Blocked by: 逐上下文跟随 02–13——某上下文的后端子票进 main 
 按上下文分笔，每笔只接后端已进 main 的那几册：shipment-request（含 channel-selection）、visibility、pricing、operations（node 与 transport）、network（路线三页）、
 settlement、customs、collection、party（客户账户之外）、governance、operator-access 与 work-devices。
 
+## 后端子票交来的提醒
+
+- **collection（10 的非作者评审提出）**：`CodLedgerPage` 今天的客户端检索会命中客户显示名，`/cod-subledgers` 的 `q` 只覆盖本册的标识列——客户名称在
+  party-commercial，不在 collection-remittance 的表里。照「做什么」把检索下推到 `q` 之后，按客户名称搜会落空。接这一页前先定：保留按名称的页内补充匹配并在页上写明只对本页生效，
+  或另立后端票给读面组合上名称列；不要不声不响地丢掉这项能力。
+
 ## 不做
 
 - 不动模板与外壳（`templates/*`、`shell/*`）；不改未迁读口的页面行为。
