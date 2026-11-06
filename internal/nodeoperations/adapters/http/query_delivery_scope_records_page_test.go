@@ -15,6 +15,18 @@ import (
 // 区间参数登为选择器，原义不变、照旧读成筛选；翻页、排序与 q 照各自的声明解成查询对象原样交给读口，答复带 page；游标只在铸它的
 // 那一条列表、那组条件下有效。夹具全为合成（S 级）。
 
+// scopeReadNamed 按名字从 scopeReads 里挑一条读口：名单的次序归定义它的那个文件管，这里不按下标取。
+func scopeReadNamed(t *testing.T, name string) scopeRead {
+	t.Helper()
+	for _, read := range scopeReads {
+		if read.name == name {
+			return read
+		}
+	}
+	t.Fatalf("scopeReads 里没有 %q", name)
+	return scopeRead{}
+}
+
 // Covers: ADR-0144 决定四、五、六——两条列表的答复都带 page（size 取 Intake 给的页大小，next 与 total 原样带出，空册 total 为 0、
 // next 为 null）；排序与 q 解成查询对象交给读口，节点参数照旧读成筛选。
 func TestDeliveryScopeListsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
@@ -24,8 +36,8 @@ func TestDeliveryScopeListsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 		query    string
 		wantSort cataloguepage.Sort
 	}{
-		{scopeReads[0], "preAdvices", "?node=SYN-NODE-1&sort=expectedArrivalAt&q=SYN", cataloguepage.Sort{Field: "expectedArrivalAt"}},
-		{scopeReads[2], "handoverNotes", "?node=SYN-NODE-1&sort=openedAt&q=SYN", cataloguepage.Sort{Field: "openedAt"}},
+		{scopeReadNamed(t, "pre-advice list"), "preAdvices", "?node=SYN-NODE-1&sort=expectedArrivalAt&q=SYN", cataloguepage.Sort{Field: "expectedArrivalAt"}},
+		{scopeReadNamed(t, "handover note list"), "handoverNotes", "?node=SYN-NODE-1&sort=openedAt&q=SYN", cataloguepage.Sort{Field: "openedAt"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.read.name, func(t *testing.T) {
@@ -59,15 +71,16 @@ func TestDeliveryScopeListsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 // 不被触到；游标只在铸它的那组条件下有效：换了节点、加了区间（选择器进游标摘要），或拿到另一条列表去用，都答 400 带「游标与本次
 // 的排序或筛选不符」那一句；同一组条件下解成位置原样交给读口。
 func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
+	preAdvices, handoverNotes := scopeReadNamed(t, "pre-advice list"), scopeReadNamed(t, "handover note list")
 	for name, testCase := range map[string]struct {
 		read  scopeRead
 		query string
 	}{
-		"预报按开立排":     {scopeReads[0], "?sort=openedAt"},
-		"交接单按预计送达排":  {scopeReads[2], "?sort=-expectedArrivalAt"},
-		"按登记时刻排":     {scopeReads[0], "?sort=-registeredAt"},
-		"解不开的游标":     {scopeReads[2], "?after=SYN-not-a-cursor"},
-		"预报带交接单的区间键": {scopeReads[0], "?openedUntil=2026-10-21T00:00:00Z"},
+		"预报按开立排":     {preAdvices, "?sort=openedAt"},
+		"交接单按预计送达排":  {handoverNotes, "?sort=-expectedArrivalAt"},
+		"按登记时刻排":     {preAdvices, "?sort=-registeredAt"},
+		"解不开的游标":     {handoverNotes, "?after=SYN-not-a-cursor"},
+		"预报带交接单的区间键": {preAdvices, "?openedUntil=2026-10-21T00:00:00Z"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &stubDeliveryScopeCatalogue{}
@@ -88,8 +101,8 @@ func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		t.Fatal(err)
 	}
 	same := &stubDeliveryScopeCatalogue{}
-	if response := scopeReads[0].serve(grantedIntake(), same, http.MethodGet,
-		scopeReads[0].target+"?"+withCursor(conditions, cursor).Encode()); response.Code != http.StatusOK {
+	if response := preAdvices.serve(grantedIntake(), same, http.MethodGet,
+		preAdvices.target+"?"+withCursor(conditions, cursor).Encode()); response.Code != http.StatusOK {
 		t.Fatalf("同一组条件续读：%d %s", response.Code, response.Body.String())
 	}
 	if after := same.gotQuery.After; after == nil || after.Value != cataloguepage.FormatInstant(scopeReadAt) || after.Identity[0] != "SYN-PREADV-1" {
@@ -99,9 +112,9 @@ func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		read       scopeRead
 		conditions url.Values
 	}{
-		"换了节点":    {scopeReads[0], url.Values{"node": {"SYN-NODE-2"}}},
-		"加了区间":    {scopeReads[0], url.Values{"node": {"SYN-NODE-1"}, "expectedArrivalFrom": {"2026-10-20T00:00:00Z"}}},
-		"拿到交接单列表": {scopeReads[2], conditions},
+		"换了节点":    {preAdvices, url.Values{"node": {"SYN-NODE-2"}}},
+		"加了区间":    {preAdvices, url.Values{"node": {"SYN-NODE-1"}, "expectedArrivalFrom": {"2026-10-20T00:00:00Z"}}},
+		"拿到交接单列表": {handoverNotes, conditions},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &stubDeliveryScopeCatalogue{}
@@ -124,8 +137,8 @@ func TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery(t *testing.T
 		read      scopeRead
 		compliant string
 	}{
-		{scopeReads[0], "?node=SYN-NODE-1&sort=expectedArrivalAt&q=SYN"},
-		{scopeReads[2], "?node=SYN-NODE-1&sort=openedAt&q=SYN"},
+		{scopeReadNamed(t, "pre-advice list"), "?node=SYN-NODE-1&sort=expectedArrivalAt&q=SYN"},
+		{scopeReadNamed(t, "handover note list"), "?node=SYN-NODE-1&sort=openedAt&q=SYN"},
 	} {
 		t.Run(testCase.read.name, func(t *testing.T) {
 			reader := &stubDeliveryScopeCatalogue{}
