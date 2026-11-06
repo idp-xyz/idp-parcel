@@ -3,16 +3,14 @@ package httpapi
 import (
 	"net/http"
 	"net/url"
-	"strings"
-	"unicode/utf8"
+
+	"go.idp.xyz/idp-parcel/internal/platform/storable"
 )
 
-// StorableText 判一个值能不能当文本交给库：合法 UTF-8，且不含 NUL。PostgreSQL 的 text 两样都存不下，参数带着它们进读，库拒收，
-// 读口答成 500——调用方据 5xx 退避重发，而这个请求改了才会好。失败按调用方的恢复动作分格（ADR-0029），所以它是坏请求。
-//
-// 各口判单个值、本包判整条请求目标，都经这一处：判据只此一份。
+// StorableText 判一个值能不能当文本交给库，判据与理由在 storable.Text——目录游标的解码也用那一份，而它不该依赖传输层。
+// 各口判单个值、本包判整条请求目标，都经这一处转到那里。
 func StorableText(value string) bool {
-	return utf8.ValidString(value) && strings.IndexByte(value, 0) < 0
+	return storable.Text(value)
 }
 
 // StorableRequestTarget 判请求目标解码之后是不是处处 StorableText：路径，与查询串里每一个键、每一个值。

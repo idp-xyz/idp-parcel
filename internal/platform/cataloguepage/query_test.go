@@ -147,6 +147,29 @@ func TestTheKeywordLengthLimitCountsCharacters(t *testing.T) {
 	}
 }
 
+// Covers: q 与自由取值的筛选值都直接成为 SQL 参数：库存不下的文本（NUL、不合法的 UTF-8）在解码时答 400 带理由，不让库拒收
+// 之后答成 500（判据 storable.Text）。理由点名是哪一格，不回显那个值。
+func TestTextTheDatabaseCannotStoreIsRefusedInTheKeywordAndInFilterValues(t *testing.T) {
+	cases := map[string]struct {
+		values url.Values
+		names  string
+	}{
+		"q 带 NUL":     {values: url.Values{"q": {"SYN\x00ACC"}}, names: "q"},
+		"q 不是 UTF-8":  {values: url.Values{"q": {"SYN\xffACC"}}, names: "q"},
+		"筛选值带 NUL":    {values: url.Values{"customerPartyId": {"SYN-PARTY\x00-01"}}, names: "customerPartyId"},
+		"筛选值不是 UTF-8": {values: url.Values{"customerPartyId": {"SYN-PARTY\xff-01"}}, names: "customerPartyId"},
+		"同维另一值合规也不放行": {values: url.Values{"customerPartyId": {"SYN-PARTY-01", "SYN\x00"}}, names: "customerPartyId"},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			reason := refused(t, test.values)
+			if !strings.Contains(reason, test.names) || strings.ContainsRune(reason, 0) || strings.Contains(reason, "\xff") {
+				t.Fatalf("理由应点名 %s 且不回显坏值，得 %q", test.names, reason)
+			}
+		})
+	}
+}
+
 // Covers: ADR-0144 决定三「一次只按一维排」；q 与游标同样只有一个。给两次时取哪一个都是替调用方做决定。
 func TestASingularKeyGivenTwiceIsRefused(t *testing.T) {
 	for _, values := range []url.Values{
