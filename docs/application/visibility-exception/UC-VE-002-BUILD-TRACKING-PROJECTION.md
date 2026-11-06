@@ -111,3 +111,5 @@
 ## 给开发的交接
 
 把“已接受来源 → 映射判断 → 各维度投影 → 标准里程碑/摘要”分别建模。完成本用例只证明内部投影可解释和可重派生，不证明客户有权查询、客户视图已经发布、ETA、异常、通知或源动作完成。
+
+仓配履约的出库确认（类型词 `warehouse-outbound-confirmed`，[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定六）未做：`warehouse-fulfillment` 还没有实现，本上下文也没有接它的消费门与适配器。接的时候照其余来源的接受与映射规则走，标准里程碑映射由租户登记。

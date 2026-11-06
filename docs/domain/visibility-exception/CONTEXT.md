@@ -144,6 +144,7 @@ Status: Confirmed
 | `external-result-release-full`、`external-result-release-partial`、`external-result-release-conditional` | `customs-compliance` | 放行结果层再按全部、部分、附条件放行分开 |
 | `final-outcome-adopted`、`final-outcome-not-adopted` | `parcel-shipment` | 客户服务终局：已采用、未采用 |
 | `initial-route-formed`、`initial-route-no-current-route` | `network-routing` | 初始路由：已形成计划、无当前有效路由 |
+| `warehouse-outbound-confirmed` | `warehouse-fulfillment` | 出库确认，只对发运方式为本产品网络、已指名小包托运包裹的那一件（[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定六） |
 
 ### ETA 与可见性缺口
 

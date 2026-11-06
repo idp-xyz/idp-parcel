@@ -226,11 +226,11 @@ Status: Confirmed
 
 **拥有**：
 
-- 货主商品身份：货主名下的商品（SKU）、别名与包装层级；不同货主的同名 SKU 互不相干。
-- 库存账与库存流水：按（租户，货主，仓，库位，商品，计量单位，库存状态，入库批次，批号，效期）记数量，余额只由流水派生；出库请求对可用量的预占、释放与消耗。
-- 入库预报、收货与收货差异、上架、库内移动、拣选位补货与盘点。
-- 出库请求、波次与拣货任务、出库复核与打包，以及打包完成后以货主客户账户的名义向 `parcel-shipment` 提交的委托（来源「仓配出库」）。
-- 退货入库与回库处置、代理仓报来的库存声明（带来源、时点与有效期）。
+- 货主商品身份：货主名下的商品（SKU）、别名、组合商品与包装层级；不同货主的同名 SKU 互不相干。
+- 库存账与库存流水：商品库存按（租户，货主，仓，库位，商品，计量单位，库存状态，贴标别名，入库批次，批号，效期）记数量，整箱库存按箱号一箱一件记，余额只由流水派生；出库请求对可用量的预占、释放与消耗。
+- 入库预报、收货与收货差异、上架、库内移动、拣选位补货、加工、商品换标、开箱与盘点。
+- 出库请求（发运方式：本产品网络、自备面单或自提）、拆单、波次与拣货任务、出库复核与打包，以及为本产品网络的出库以货主客户账户的名义向 `parcel-shipment` 提交的委托（来源「仓配出库」）。
+- 退货入库与回库处置、代理仓报来的库存声明（带来源、时点与有效期），以及经连接器转给代理仓执行的代理仓出库。
 - 仓储作业的收费发生项：只证明作业已发生及其数量与单位，不带金额。
 
 **不拥有**：
@@ -238,6 +238,7 @@ Status: Confirmed
 - 客户委托、包裹身份与客户承诺；节点收寄、集运单元、节点内实物控制与交接证据；揽收、运输交接与交付。
 - 货主客户账户与合同、价格、费用与对账。
 - 货主的库存价值与成本、采购与销售订单、补货计划；这些留在货主自己的 ERP 与财务里。
+- 平台仓的入库计划与平台标签（归货主与平台）；不经本产品网络出库的货物离仓之后的去向（归货主与它选的承运方）。
 
 ## 上下文关系
 
@@ -316,6 +317,7 @@ flowchart LR
     WF -->|以货主名义提交的委托（来源「仓配出库」）| PS
     WF -->|仓储作业收费发生项| PP
     WF -->|仓储作业收费发生项| SA
+    WF -->|本产品网络包裹的出库确认| VE
 ```
 
 ### 关系约束
@@ -360,7 +362,7 @@ flowchart LR
 - `customs-compliance → node-operations / transport-fulfillment`：关务提供已接收且适用范围明确的限制、查验或处置决定、范围化协作依据、绑定拟执行动作与监管边界的放行门禁判断及外部监管结果；监管机构仍拥有最终决定和授权权力。节点作业通过 [UC-NO-001](../application/node-operations/UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md) 拥有现场协作承接和执行事实；运输履约只对明确要求实际移动的范围通过 [UC-TF-001](../application/transport-fulfillment/UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md) 拥有监管运输承接、权威交接和移动事实。两者只能消费与当前对象、拟执行动作和监管边界匹配的门禁及外部结果，并只阻断受约束的出库、装载出发、跨关务区域移动、交付等方向性动作，不得复用其他动作的门禁或通过异常关闭绕过限制。未放行不阻止接收、隔离、测量、查验协作及具有有效依据的处置执行；外部监管放行也不自动解除仍有效的内部合规限制，只有各限制来源分别解除后，相应受限动作才可继续。
 - `transport-fulfillment → customs-compliance`（动作准入判断）：运输履约在出发、交出、交付等方向性动作时（出发还有动作之前的出发前门禁问询，[ADR-0219](../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)；交付还有派送出发之前的交付前门禁问询，[ADR-0238](../adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md)），经消费侧适配器同步向关务交对象、动作意图与动作时点（拉取，不订阅），关务按节点关务区域定适用的受门禁动作、按自己的册子解析对象范围，把限制、门禁核对与外部放行折成封闭答复交回（[ADR-0206](../adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md)）。运输履约只翻译答复，动作时随自己的事实保存，两种问询时只交回、不保存（问询与动作时的请求关务都照记判断），不自折三源、不自判是否跨关务区域；答复不是放行结果，运输履约也不据它改写关务事实。
 - `party-commercial / parcel-shipment → visibility-exception`：参与方与商业提供货主客户账户、责任法人、服务产品、客户合同及适用异常服务规则；客户查询授权由共享身份能力的客户渠道册给出（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定二、四），不是参与方与商业的对象；小包托运提供包裹身份谱系、客户承诺和终局服务结果，并按（租户，货主客户账户，委托的单据号）给出委托所处阶段与当前有效包裹，供客户按运单号追踪（[ADR-0356](../adr/0356-customer-tracking-locates-by-the-shipment-document-number-and-lists-the-current-effective-parcels-of-an-accepted-shipment.md)）。全程追踪保存实际采用的追踪公开、响应、披露和责任依据，形成客户账户隔离的普通全程追踪视图，不修改商业版本、包裹身份、承诺或终局。
-- `各事实源 → visibility-exception`：小包托运、网络与路由、节点作业、运输履约和关务上下文拥有各自业务事实、有效性及更正关系；全程追踪只基于已经接受的事实形成标准追踪里程碑、全程追踪投影、ETA、异常信号和案件。关务相关异常、协调和客户披露通过 [UC-VE-001](../application/visibility-exception/UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md) 消费 `customs-compliance` 已接受的事实或判断，不能把原始监管消息、异常信号或客户意见反向改写为关务事实。来源冲突无法裁决时保持待确认并协调核实，不成为第二事实源。
+- `各事实源 → visibility-exception`：小包托运、网络与路由、节点作业、运输履约、关务和仓配履约上下文拥有各自业务事实、有效性及更正关系；全程追踪只基于已经接受的事实形成标准追踪里程碑、全程追踪投影、ETA、异常信号和案件。关务相关异常、协调和客户披露通过 [UC-VE-001](../application/visibility-exception/UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md) 消费 `customs-compliance` 已接受的事实或判断，不能把原始监管消息、异常信号或客户意见反向改写为关务事实。来源冲突无法裁决时保持待确认并协调核实，不成为第二事实源。
 - `network-routing → visibility-exception`：网络与路由拥有路由计划与实际事实的偏离判断，并提供路由版本、选择依据、无当前有效路由和路由偏离结果；全程追踪拥有由此形成的可见投影、异常信号和异常案件，但不能反向改写路由计划或实际事实。
 - `visibility-exception → 业务上下文`：异常处置只能提出带目标、范围和依据的改路、重作业、重新履约或重新申报等请求；发送、接受和实际完成分别记录，是否生效及执行事实仍由拥有相应对象的上下文决定。
 - `visibility-exception → settlement-accounting`：全程追踪与异常提供当前有效的客户合同责任、供应商或保险追偿责任、索赔结论、外部通知/主张与对方响应及证据依据；结算独立形成客户赔付、应追偿金额和追偿认可金额，不把金额结果回写为异常事实，不把通知、认可、真实到账或核销压缩为“追偿成功”，也不只保存净额。
@@ -378,8 +380,9 @@ flowchart LR
 - `parcel-shipment / transport-fulfillment → collection-remittance`：小包托运拥有并提供包裹与客户代收服务要求快照；运输履约拥有并提供履约侧代收证据、渠道代收报告和渠道回款通知，但这些来源都不等于运营企业真实到账。代收与清分据此登记代收指令与代收事实，形成代收分户账结果（资金位置见 [GLOSSARY「代收分户账」](./GLOSSARY.md#代收分户账)），不取得客户要求、履约证据或银行事实所有权。
 - `settlement-accounting ↔ collection-remittance`：结算拥有 COD 服务费和有效协议允许的运费抵扣金额，代收与清分拥有代收本金及汇付。运营企业真实到账同样只经结算的唯一采用口进入本产品：代收与清分登记这一层代收事实时，证据引用指向一条结算已采用、且已整条认作代收本金的外部资金事实（认作之后它在结算一侧不核销、不进运营余额，与别的映射互斥），按引用向结算的只读口读回此刻的链头核对，引用同一条事实的各条真实到账金额之和不超过它、一条事实对一条指令至多一条，移位记账前再核一次（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)、[ADR-0330](../adr/0330-a-collected-principal-bank-arrival-is-registered-against-an-adopted-funds-fact-that-settlement-has-set-aside-as-collected-principal.md)）。未实际收到的代收款不得进入可付客户余额，代收本金也不得计入经营口径物流收入或普通运营结算余额。
 - `party-commercial → warehouse-fulfillment`：参与方与商业拥有货主客户账户与合同；仓配履约引用它们——出库请求属于某个货主客户账户，打包完成后以它的名义提交委托——不取得客户账户或合同的所有权（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定二、四）。
-- `warehouse-fulfillment → parcel-shipment`：仓配履约打包完成时，以出库请求所属货主客户账户的名义向小包托运提交委托，来源「仓配出库」，来源请求键取自（出库请求，包裹序号）；打包称得的重量与尺寸作声明测量；收件人、商品明细与本单申报值作客户原始资料，本单没给的申报格取商品申报资料，两处都没有的照实空着。小包托运对它与客户渠道交来的委托作同一套接受判断，不因来源绕过任何接受规则；委托、包裹身份与接受决定仍归小包托运（ADR-0368 决定四）。
+- `warehouse-fulfillment → parcel-shipment`：发运方式为本产品网络时，仓配履约以出库请求所属货主客户账户的名义向小包托运提交委托，来源「仓配出库」，来源请求键取自（出库请求，包裹序号）：通常在打包完成时提交，打包称得的重量与尺寸作声明测量；预取面单时在波次释放时先按估算的声明测量提交，打包后经资料修订补正；代理仓出库时声明测量取代理仓报来的数。收件人、商品明细与本单申报值作客户原始资料，本单没给的申报格取商品申报资料，两处都没有的照实空着。小包托运对它与客户渠道交来的委托作同一套接受判断，不因来源绕过任何接受规则；委托、包裹身份与接受决定仍归小包托运（ADR-0368 决定四，[ADR-0370](../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一至三）。发运方式为自备面单或自提的出库不经小包托运。
 - `warehouse-fulfillment → parcel-pricing / settlement-accounting`：仓配履约登记仓储作业收费发生项（作业种类、货主、仓、业务时间、来源事实引用，以及一组计量与作业属性），它只证明作业已发生、发生了多少，不带金额。对货主收多少由计价按 `SELL` 价卡评价，结算采用为客户运营应收，双方不回写发生项。计价要为它立新的评价对象（仓租还要按持有期计），另立 ADR；在那之前小包计价 CONTEXT 的评价对象不含它（ADR-0368 决定七）。
+- `warehouse-fulfillment → visibility-exception`：仓配履约把发运方式为本产品网络、已指名小包托运包裹的出库确认交给全程追踪，类型词 `warehouse-outbound-confirmed`，代理仓出库的以代理仓报来的交接结果为来源；全程追踪按它接受事实的规则投影，标准里程碑映射由租户登记。出库请求的受理、预占、拣货、出库复核与打包这些仓内中间事实，以及不经本产品网络的出库，都不进客户全程追踪；货主经仓配履约的客户渠道查出库请求（ADR-0370 决定六）。
 
 ## 文档关系
 

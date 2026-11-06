@@ -77,7 +77,7 @@ _Avoid in this context_: 申报测量、申报重量、实测
 对规范化后的客户请求内容形成的稳定摘要，覆盖成员、范围、基础版本、服务要求以及 `requestEffectiveAt` 的值/存在状态，不覆盖 `occurredAt` 或 `receivedAt`。它用于同一来源身份下的重放与冲突分类。
 
 **来源请求身份**  
-由租户、客户账户、来源和来源请求键组成的完整复合身份。它只用于来源重放与冲突分类，不授予查询或操作权限，也不能替代委托、包裹或其他业务身份。来源除各客户渠道外还有「仓配出库」：`warehouse-fulfillment` 打包完成后，以出库请求所属货主客户账户的名义提交委托，来源请求键取自（出库请求，包裹序号）；这样提交的委托与客户渠道交来的受同一套接受判断（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四）。
+由租户、客户账户、来源和来源请求键组成的完整复合身份。它只用于来源重放与冲突分类，不授予查询或操作权限，也不能替代委托、包裹或其他业务身份。来源除各客户渠道外还有「仓配出库」：`warehouse-fulfillment` 为发运方式是本产品网络的出库请求，以出库请求所属货主客户账户的名义提交委托——通常在打包完成后；预取面单时在波次释放时先按估算的声明测量提交，打包后经资料修订补正。来源请求键取自（出库请求，包裹序号）；这样提交的委托与客户渠道交来的受同一套接受判断（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四，[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一、二）。
 
 **授权查询作用域**  
 由共享身份认证/授权技术能力已经判断并传入的可见范围引用。`parcel-shipment` 消费该引用并按自身对象边界过滤结果，不拥有企业身份主数据、凭据验证或通用授权策略。
