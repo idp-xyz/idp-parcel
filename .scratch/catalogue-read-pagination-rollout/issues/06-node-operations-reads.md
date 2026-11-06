@@ -1,7 +1,7 @@
 # 06 node-operations 八册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——修订轮：非作者评审（钉 `bb8e4f322`）拦下的阻断已修，待复核（分支 `cursor/crpr-06-node`，基 `3a20b2bcc`；完成记录与评审记录见文末）。迁移编号 node-operations `0027`（进 main 时按 tip 重核）
+Status: in-progress——非作者评审修订轮复核（钉 `55280d64d`）无阻断，非阻断已处理，待进 main（分支 `cursor/crpr-06-node`，基 `3a20b2bcc`；完成记录与评审记录见文末）。迁移编号 node-operations `0027`（进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/nodeoperations/{ports,adapters/http,adapters/postgres}` 里下表各册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这些读口的占位；
 `migrations/node_operations` 的一条新迁移（索引）。
@@ -40,7 +40,9 @@ Blocked by: 01
 | `a60f744dc` | `adapters/http/query_node_operations_records.go`、`catalogue_intake.go` 与两份用例 | 册名挪到 Intake 之后（判断项「门的次序」） |
 | `bb8e4f322` | 本票；`adapters/postgres/delivery_scope_catalogue_plan_test.go` 头注 | 完成记录；头注改指迁移 0027 |
 | `e8f309dde` | `adapters/postgres/review_catalogue_disposition.go`、`catalogue_pages_test.go`；`ports/catalogue_pages.go`；`adapters/http/query_delivery_scope_records_page_test.go` | 修订轮：复核单元的作业实物导出成非空列、缺键的组响亮报错；声明头注补导出列前移的两个方向；送站两条列表补未配置用例（见评审记录） |
-| 本笔 | 本票 | 修订轮：引 spec 改引原句；判断项与评审记录 |
+| `55280d64d` | 本票 | 修订轮：引 spec 改引原句；判断项与评审记录 |
+| `bd0dc1b5c` | `adapters/postgres/review_catalogue_disposition.go`、`catalogue_pages_test.go`；`adapters/http/query_node_operations_records_test.go`、`query_delivery_scope_records_page_test.go` | 复核修订：复核单元缺键切页后才判；缺键用例断言报错原句、补坏行只是多取那一行的情形；500 用例补新册与只 `units` 读不动的情形；送站页用例按名字挑读口（见评审记录） |
+| 本笔 | 本票 | 复核修订：Status、判断项 11 的代价与评审记录 |
 
 ### 各册声明
 
@@ -59,8 +61,8 @@ Blocked by: 01
 
 ### 完成判据
 
-- ✅ **真库用例**（`SYN-` 数据，带 DSN）：`adapters/postgres/catalogue_pages_test.go` 八册各一个用例——`TestReceptionsPageWhileNewIntakesArrive`、`TestUnidentifiedItemsPageWhileNewPendingItemsArrive`、`TestIdentityReviewUnitsPageOnTheirLatestRecording`、`TestConsolidationUnitsPageByUnitIDWhileNewUnitsOpen`、`TestConsolidationMembersPageWhileNewFactsArrive`、`TestPhysicalControlTransitionsPageWhileNewTransitionsArrive`、`TestDeliveryPreAdvicesPageWhileNewPreAdvicesArrive`、`TestDeliveryHandoverNotesPageWhileNewNotesOpen`。每个都按页大小 2 走完一遍：取完第一页后在游标之前与之后各落一行，走下来恰是原有各行按缺省序各出一次、再加上游标之后那一行，不重出、不漏，游标之前那行这一趟不出现；`total` 随新落的行变；同一排序维反向再走一遍；每个筛选词与 `q` 各收窄出预期的 `total`（含筛选与 `q` 相与、大小写不敏感，`q=%25` 与 `q=_` 答 0）；没有行的租户答空页、`total` 0、无 `next`。身份复核单元另证导出列：已翻过的实物又登一版待识别，导出列前移，它不在后面的页上重出；修订轮另加 `TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit`：绕过写口造一行缺作业实物键、与另两件同刻的待识别，两个方向翻页都在取到它的那一页报错，不悄悄走完。送站两册另带 `node` 选择器走一遍。
-- ✅ **端点用例**：`adapters/http/query_node_operations_records_page_test.go`（六册表驱动）与 `query_delivery_scope_records_page_test.go`。答复带 `page`，`size` 取 Intake 页大小，`next`、`total` 原样带出；空册 200、空数组、`total` 0、`next` 为 null；查询对象原样交给读口。未知键（含查询串自报租户与页大小）、集外排序维、另一册的筛选维、词表外筛选值、空筛选值、重复的排序、解不开的游标各答 400 带 `detail`，读口不被触到。换筛选、换 `q`、换排序、换选择器或拿到另一册去用的旧游标答 400「游标与本次的排序或筛选不符，请从第一页重取」，原条件下照收。
+- ✅ **真库用例**（`SYN-` 数据，带 DSN）：`adapters/postgres/catalogue_pages_test.go` 八册各一个用例——`TestReceptionsPageWhileNewIntakesArrive`、`TestUnidentifiedItemsPageWhileNewPendingItemsArrive`、`TestIdentityReviewUnitsPageOnTheirLatestRecording`、`TestConsolidationUnitsPageByUnitIDWhileNewUnitsOpen`、`TestConsolidationMembersPageWhileNewFactsArrive`、`TestPhysicalControlTransitionsPageWhileNewTransitionsArrive`、`TestDeliveryPreAdvicesPageWhileNewPreAdvicesArrive`、`TestDeliveryHandoverNotesPageWhileNewNotesOpen`。每个都按页大小 2 走完一遍：取完第一页后在游标之前与之后各落一行，走下来恰是原有各行按缺省序各出一次、再加上游标之后那一行，不重出、不漏，游标之前那行这一趟不出现；`total` 随新落的行变；同一排序维反向再走一遍；每个筛选词与 `q` 各收窄出预期的 `total`（含筛选与 `q` 相与、大小写不敏感，`q=%25` 与 `q=_` 答 0）；没有行的租户答空页、`total` 0、无 `next`。身份复核单元另证导出列：已翻过的实物又登一版待识别，导出列前移，它不在后面的页上重出；修订轮另加 `TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit`：绕过写口造缺作业实物键的待识别行；与另两件同刻时，两个方向翻页都在含它的那一页报缺作业实物那一句错（断言报错原句），不悄悄走完；它只是多取来判下一页的那一行时，本页照常答、带 `next`，翻到含它的那一页才报错（复核修订补）。送站两册另带 `node` 选择器走一遍。
+- ✅ **端点用例**：`adapters/http/query_node_operations_records_page_test.go`（六册表驱动）与 `query_delivery_scope_records_page_test.go`。答复带 `page`，`size` 取 Intake 页大小，`next`、`total` 原样带出；空册 200、空数组、`total` 0、`next` 为 null；查询对象原样交给读口。未知键（含查询串自报租户与页大小）、集外排序维、另一册的筛选维、词表外筛选值、空筛选值、重复的排序、解不开的游标各答 400 带 `detail`，读口不被触到。换筛选、换 `q`、换排序、换选择器或拿到另一册去用的旧游标答 400「游标与本次的排序或筛选不符，请从第一页重取」，原条件下照收。读库失败答 500 `NO_ANSWER_FORMED`、不带 outcome：`TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails` 含新册 `identity-review-unit`，并钉 `registry=unidentified-item` 只 `units` 那一册读不动、`items` 完好时也整答 500（复核修订补）。
 - ✅ **渠道未配置时参数写对写错都答 403**：`TestUnconfiguredRecordsAnswer403WhateverThePageParameters`；册名缺席、为空或认不出时与合规的一问逐字节同答 403：`TestAnUnknownRegistryOnAnUnconfiguredChannelAnswers403`；送站两条列表：`TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery`（修订轮补）对不带参数的一问、带节点排序与 `q` 的合规一问、坏 `sort`、坏 `after`、集外键逐字节同答 403，既有的 `TestDeliveryScopeReadsAnswerTheEnvelopeGradesFirst` 另证信封各格都先于坏参数作答。
 - ✅ **迁移无 CR、无 BOM**：按字节查过 `3a20b2bcc` 以来分支上改动的全部文件。
 
@@ -91,7 +93,7 @@ Blocked by: 01
 8. **管理台与脚本带的参数**：管理台 `NodeOperationsReviewPage` 经 `records-api.ts` 只带 `registry`（`reception`、`unidentified-item`、`consolidation-unit`）；送站两区只带 `node`、`documentNumber` 与区间两端（`expectedArrivalFrom`/`expectedArrivalUntil`、`openedFrom`/`openedUntil`），都已登为选择器，空值照收。`scripts/` 不调这三条路由。成功的答复只多 `page` 与按实物单元行上的 `latestRecordedAt`，管理台不改照旧能用。
 9. **查询串自报租户与页大小从被忽略改为答 400**：`operator_read_intake_test.go` 里那一格原断言被忽略、照答，现改为答 400 且读口不被触到（决定四：集外的键）。
 10. **派生状态没放作筛选维**：预报撤回与否（撤回册上有没有那一行）、交接单关闭与范围成立（关闭册上有没有那一行、声称的账户是否全部确认）、身份复核单元此刻冲突与否与处置过没有（各链的当前有效版本）都是派生的，本票没放作筛选维，理由在 `ports/catalogue_pages.go` 各册声明的头注里。派单方已把它们收进 16 号票（`.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md`，在分支 `cursor/catalogue-pagination-rollout` 上），本票不改那张票。
-11. **复核单元的行标识**：作业实物是 jsonb 键，库里不保证在，非空靠收寄写口（行模型 `intakeRow` 的 `unit` 不省略）。写口若放进缺键的行，`bb8e4f322` 的读面上那一组的作业实物是 NULL：倒序时它排在同刻各件之前，取到它的那一页扫描报错；正序时它排在同刻各件之后，游标若停在同刻的某一件上，键集比较对它得 NULL，那一组就可能从后面各页消失，`total` 却还数着它——spec「可排维与行标识的列必须非空」要防的就是这个。修订轮照 spec 给的办法在读面先导出成非空列：`COALESCE(intake ->> 'unit', '')`，缺键的行归到空串那一组，取到它的那一页一律报错，两个方向都不再悄悄跳过。没让空串那一组当一件实物照常列出：坏行响亮、不演成看起来正常的一件，同 `TestABrokenDispositionDocumentIsLoud` 对坏处置文档的取向。也没在库里加约束：那是改收寄写口的表约束，超出本票的索引迁移，加约束还要在锁下扫全表验旧行。
+11. **复核单元的行标识**：作业实物是 jsonb 键，库里不保证在，非空靠收寄写口（行模型 `intakeRow` 的 `unit` 不省略）。写口若放进缺键的行，`bb8e4f322` 的读面上那一组的作业实物是 NULL：倒序时它排在同刻各件之前，取到它的那一页扫描报错；正序时它排在同刻各件之后，游标若停在同刻的某一件上，键集比较对它得 NULL，那一组就可能从后面各页消失，`total` 却还数着它——spec「可排维与行标识的列必须非空」要防的就是这个。修订轮照 spec 给的办法在读面先导出成非空列：`COALESCE(intake ->> 'unit', '')`，缺键的行归到空串那一组，它落进交回的那一页时报错，两个方向都不再悄悄跳过。这一判在 `cataloguepage.Finish` 切页之后、只查本页的行（复核修订挪的）：多取来判下一页的那一行是它时，不含它的本页照常答；游标位置仍取自 `ORDER BY` 两列的扫描值。没让空串那一组当一件实物照常列出：坏行响亮、不演成看起来正常的一件，同 `TestABrokenDispositionDocumentIsLoud` 对坏处置文档的取向。也没在库里加约束：那是改收寄写口的表约束，超出本票的索引迁移，加约束还要在锁下扫全表验旧行。这个取向有代价（复核修订补）：`registry=unidentified-item` 的 `units` 就是本册的第一页，`serveUnidentifiedItems` 读它出错时整答 500；缺省序是最近登记倒序，新落的缺键行排在最前，于是整条待识别队列连同完好的 `items` 一起答不出，直到登得比它新的实物把它挤出首页（`registry=identity-review-unit` 的第一页同此）。迁移前（`3a20b2bcc`）的读面按 `(r.intake ->> 'unit') = units.unit` JOIN 链头，NULL 那一组连不上任何一行，被悄悄丢掉、照答 200。另：本包 `writeProblem` 不带 `err`、不记日志，报错里带的登记时刻没人看得到；这是全包既有做法，不在本票改。
 
 ### 未验
 
@@ -120,3 +122,23 @@ Blocked by: 01
 | `internal/nodeoperations/adapters/postgres`（真库） | 166 / 225 |
 | `internal/nodeoperations/ports` | 3 / 3 |
 | `cmd/parcel-api`（含真库；读面 SQL 动过） | 446 / 654 |
+
+**复核 ← 非作者评审修订轮复核 · 钉 `55280d64d`**（经通道 1 转来）
+
+结论：上一轮的阻断已解，上一轮的非阻断都已到位，没有新阻断；「缺键那一组响亮报错」这个取舍本身合适，分格到 500 `NO_ANSWER_FORMED` 也对。另提的非阻断与处理：
+
+| 评审意见 | 处理 |
+|---|---|
+| 非阻断：缺键检查写在扫描循环里、早于 `cataloguepage.Finish`，多取来判下一页的那一行是坏行时，不含它的本页也报错（评审的探针：A、B、X、C 按登记时刻倒序，X 缺键，页大小 2 的第一页只该显示 A、B，却报错） | 挪到 `Finish` 之后，只查本页的行，照 07 的 `scannedInitialRoute` 那样切页后再判；扫描时作业实物原样留空串，游标位置仍取自 `ORDER BY` 两列的扫描值。判断项 11 随之改写 |
+| 非阻断：`TestIdentityReviewUnitsAreLoudAboutPendingRowsWithoutAUnit` 遇到任何错误都收手，换回旧读面时倒序那支靠 `cannot scan NULL` 照样通过；读库失败答 500 的用例名单缺新册 `identity-review-unit`，`unidentified-item` 没有只 `units` 读不动的情形 | 缺键用例断言报错含 `without an intake unit`，补「缺键那一组只是多取的那一行」情形：第一页照答 A、B、带 `next`、`total` 4，第二页报那一句错。用例放回 `55280d64d` 的读面上是 FAIL（第一页答不出），放回 `bb8e4f322` 的读面上也是 FAIL（报的是 `cannot scan NULL`，不是那一句）。`TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails` 名单补 `identity-review-unit`，另加子测：`items` 照答、只 `units` 那一册读不动时整答 500 `NO_ANSWER_FORMED`、不带 outcome，替身记着 `units` 那一册确被问到 |
+| 非阻断：判断项 11 没写这个取舍的代价 | 补上：`units` 读不动时 `unidentified-item` 整答 500，新落的缺键行在缺省序里排最前，整条待识别队列连同完好的 `items` 一起答不出，直到登得比它新的实物把它挤出首页；迁移前的 JOIN 悄悄丢掉这一组、照答 200。另记本包 `writeProblem` 不带 `err`、不记日志，报错里的登记时刻没人看得到（全包既有做法，不在本票改） |
+| 非阻断（Standards）：`TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery` 按下标取 `scopeReads`，切片定义在另一个文件 | 同文件加 `scopeReadNamed`，按 `name` 挑；本票在同一文件里写的 `TestDeliveryScopeListsCarryThePageAndPassTheDecodedQuery`、`TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration` 一并改。`query_delivery_scope_records_test.go` 里基上既有的按下标取法不是本票写的，没动 |
+
+复核修订自验（钉 `bd0dc1b5c`，WSL）：改过的 `.go` 跑过 `gofmt -w`；`go build ./...` 与 `go vet ./internal/nodeoperations/... ./cmd/...` 退 0；`IDP_PARCEL_POSTGRES_DSN` 设着，`go test -count=1 -p 1 -v`，顶层 / 含子测 PASS 数如下，SKIP 与 FAIL 全为 0：
+
+| 包 | PASS |
+|---|---|
+| `internal/nodeoperations/adapters/http` | 106 / 391 |
+| `internal/nodeoperations/adapters/postgres`（真库） | 166 / 225 |
+| `internal/nodeoperations/ports` | 3 / 3 |
+| `cmd/parcel-api`（含真库） | 446 / 654 |
