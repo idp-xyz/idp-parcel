@@ -13,6 +13,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对两个目录端点(ADR-0077,票 master-data-wiring/02)证传输面:方法门、
@@ -58,6 +59,7 @@ func catalogueQuery(t *testing.T) pricinghttp.CatalogueQuery {
 }
 
 type cardReaderDouble struct {
+	pageProbe
 	tenant domain.TenantID
 	rows   []ports.PriceCardCatalogueRow
 	err    error
@@ -66,18 +68,21 @@ type cardReaderDouble struct {
 func (double *cardReaderDouble) ListPriceCards(
 	_ context.Context,
 	tenant domain.TenantID,
-	_ int,
-) ([]ports.PriceCardCatalogueRow, error) {
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.PriceCardCatalogueRow], error) {
+	double.record(limit, query)
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.PriceCardCatalogueRow]{}, double.err
 	}
 	if tenant != double.tenant {
-		return nil, nil
+		return cataloguepage.Result[ports.PriceCardCatalogueRow]{}, nil
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.PriceCardCatalogueRow]{Rows: double.rows, Next: double.next, Total: double.total}, nil
 }
 
 type seriesReaderDouble struct {
+	pageProbe
 	tenant domain.TenantID
 	rows   []ports.ReferenceSeriesCatalogueRow
 	err    error
@@ -86,15 +91,17 @@ type seriesReaderDouble struct {
 func (double *seriesReaderDouble) ListReferenceSeries(
 	_ context.Context,
 	tenant domain.TenantID,
-	_ int,
-) ([]ports.ReferenceSeriesCatalogueRow, error) {
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ReferenceSeriesCatalogueRow], error) {
+	double.record(limit, query)
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.ReferenceSeriesCatalogueRow]{}, double.err
 	}
 	if tenant != double.tenant {
-		return nil, nil
+		return cataloguepage.Result[ports.ReferenceSeriesCatalogueRow]{}, nil
 	}
-	return double.rows, nil
+	return cataloguepage.Result[ports.ReferenceSeriesCatalogueRow]{Rows: double.rows, Next: double.next, Total: double.total}, nil
 }
 
 func decodeBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {

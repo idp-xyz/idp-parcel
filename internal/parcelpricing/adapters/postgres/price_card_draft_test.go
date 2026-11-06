@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -58,9 +59,15 @@ func (store draftStore) submit(t *testing.T, draft domain.PriceCardDraft) ports.
 	return outcome
 }
 
+// list 列第一页草稿；status 为零值即不带状态筛选，否则按那一格的词走 PriceCardDraftPages 的 status 维。
 func (store draftStore) list(t *testing.T, tenant string, status domain.PriceCardDraftStatus) []domain.PriceCardDraft {
 	t.Helper()
-	drafts, err := store.drafts.ListPriceCardDrafts(t.Context(), evaluationValue(t, domain.NewTenantID, tenant), status, 50)
+	values := url.Values{}
+	if status != domain.PriceCardDraftStatusInvalid {
+		values.Set("status", status.String())
+	}
+	drafts, err := rowsOf(store.drafts.ListPriceCardDrafts(t.Context(), evaluationValue(t, domain.NewTenantID, tenant), 50,
+		pageQuery(t, ports.PriceCardDraftPages, values)))
 	if err != nil {
 		t.Fatalf("列草稿：%v", err)
 	}
@@ -262,17 +269,19 @@ func TestTheDraftListIsPerTenantNewestFirstAndFiltersByStatus(t *testing.T) {
 
 	ctx := t.Context()
 	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	everything := firstPage(t, ports.PriceCardDraftPages)
 	for name, call := range map[string]func() error{
 		"页大小为零": func() error {
-			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, domain.PriceCardDraftStatusInvalid, 0)
+			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, 0, everything)
 			return err
 		},
-		"状态不在四格": func() error {
-			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, domain.PriceCardDraftStatus(9), 10)
+		// 状态不在四格的词在解查询时就被词表拒了（端点用例证）；读口这边守的是查询对象出自本册的声明。
+		"查询对象出自别的册": func() error {
+			_, err := store.drafts.ListPriceCardDrafts(ctx, tenant, 10, firstPage(t, ports.PriceCardPages))
 			return err
 		},
 		"缺租户": func() error {
-			_, err := store.drafts.ListPriceCardDrafts(ctx, domain.TenantID{}, domain.PriceCardDraftStatusInvalid, 10)
+			_, err := store.drafts.ListPriceCardDrafts(ctx, domain.TenantID{}, 10, everything)
 			return err
 		},
 	} {
@@ -295,7 +304,8 @@ func TestTheDraftListRefusesARowThatWasTamperedWith(t *testing.T) {
 		if _, err := store.pool.Exec(t.Context(), tamper); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if _, err := store.drafts.ListPriceCardDrafts(t.Context(), evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01"), domain.PriceCardDraftStatusInvalid, 10); err == nil {
+		if _, err := store.drafts.ListPriceCardDrafts(t.Context(), evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01"), 10,
+			firstPage(t, ports.PriceCardDraftPages)); err == nil {
 			t.Errorf("%s: 读口照答了", name)
 		}
 	}

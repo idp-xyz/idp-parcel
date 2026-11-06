@@ -1,0 +1,212 @@
+package pricinghttp_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"strings"
+	"testing"
+
+	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
+)
+
+// 本文件对评价、价卡、参考序列与参考序列覆盖四个目录端点证 ADR-0144 的传输半边（票 catalogue-read-pagination-rollout/04）：
+// 查询参数按各册声明解成查询对象原样交给读口、答复带 page；声明外的一问答 400 带理由散文、读口不被调用；查询参数属传输
+// 形状、先于 Intake。草稿视图挂操作者登记 Intake，同一组断言在 query_price_card_drafts_test.go。
+
+// pagedCatalogue 是一个目录端点在本文件里用到的几样：怎么搭起来、它的册声明、一条声明内的查询串与读口该收到的条件、
+// 一个合法的游标位置，以及只在本册声明外的几问。
+type pagedCatalogue struct {
+	path      string
+	catalogue *cataloguepage.Catalogue
+	serve     func(intake pricinghttp.PricingCatalogueIntake, answer pageProbe) (http.Handler, *pageProbe)
+	accepted  string
+	sort      cataloguepage.Sort
+	keyword   string
+	filters   map[string][]string
+	position  cataloguepage.Position
+	outside   map[string]string
+}
+
+func pagedCatalogues(t *testing.T) []pagedCatalogue {
+	t.Helper()
+	tenant := catalogueQuery(t).Scope.Tenant()
+	registeredAt := cataloguepage.FormatInstant(pricingBaseAt)
+	return []pagedCatalogue{
+		{
+			path:      "/pricing-evaluations",
+			catalogue: ports.EvaluationPages,
+			serve: func(intake pricinghttp.PricingCatalogueIntake, answer pageProbe) (http.Handler, *pageProbe) {
+				reader := &evaluationReaderDouble{pageProbe: answer, tenant: tenant}
+				return pricinghttp.NewQueryEvaluationsEndpoint(intake, reader), &reader.pageProbe
+			},
+			accepted: "status=FAILED&status=CONFLICT&q=SYN-EVAL&sort=recordedAt",
+			sort:     cataloguepage.Sort{Field: "recordedAt"},
+			keyword:  "SYN-EVAL",
+			filters:  map[string][]string{"status": {"CONFLICT", "FAILED"}},
+			position: cataloguepage.Position{Value: registeredAt, Identity: []string{"SYN-EVAL-001"}},
+			outside: map[string]string{
+				"集外排序维":  "sort=evaluationId",
+				"词表外筛选值": "status=ARCHIVED",
+			},
+		},
+		{
+			path:      "/pricing-price-cards",
+			catalogue: ports.PriceCardPages,
+			serve: func(intake pricinghttp.PricingCatalogueIntake, answer pageProbe) (http.Handler, *pageProbe) {
+				reader := &cardReaderDouble{pageProbe: answer, tenant: tenant}
+				return pricinghttp.NewQueryPriceCardsEndpoint(intake, reader), &reader.pageProbe
+			},
+			accepted: "direction=SELL&q=SYN-PLAN&sort=-planId",
+			sort:     cataloguepage.Sort{Field: "planId", Descending: true},
+			keyword:  "SYN-PLAN",
+			filters:  map[string][]string{"direction": {"SELL"}},
+			position: cataloguepage.Position{Value: registeredAt, Identity: []string{"SYN-PLAN-01", "v1"}},
+			outside: map[string]string{
+				"集外排序维":  "sort=effectiveFrom",
+				"词表外筛选值": "direction=sell",
+				"状态不是一维": "status=RETIRED",
+			},
+		},
+		{
+			path:      "/pricing-reference-series",
+			catalogue: ports.ReferenceSeriesPages,
+			serve: func(intake pricinghttp.PricingCatalogueIntake, answer pageProbe) (http.Handler, *pageProbe) {
+				reader := &seriesReaderDouble{pageProbe: answer, tenant: tenant}
+				return pricinghttp.NewQueryReferenceSeriesEndpoint(intake, reader), &reader.pageProbe
+			},
+			accepted: "kind=FUEL_RATE&seriesId=SYN-PRC-FUEL-WEEKLY&q=SYN&sort=seriesId",
+			sort:     cataloguepage.Sort{Field: "seriesId"},
+			keyword:  "SYN",
+			filters:  map[string][]string{"kind": {"FUEL_RATE"}, "seriesId": {"SYN-PRC-FUEL-WEEKLY"}},
+			position: cataloguepage.Position{Value: registeredAt, Identity: []string{"SYN-PRC-FUEL-WEEKLY", "v1"}},
+			outside: map[string]string{
+				"集外排序维":  "sort=kind",
+				"词表外筛选值": "kind=fuel",
+				"空筛选值":   "seriesId=",
+			},
+		},
+		{
+			path:      "/pricing-reference-series-coverage",
+			catalogue: ports.ReferenceSeriesCoveragePages,
+			serve: func(intake pricinghttp.PricingCatalogueIntake, answer pageProbe) (http.Handler, *pageProbe) {
+				reader := &coverageReaderDouble{pageProbe: answer}
+				return pricinghttp.NewQueryReferenceSeriesCoverageEndpoint(intake, reader, coverageClockDouble{at: coverageAt}),
+					&reader.pageProbe
+			},
+			accepted: "kind=EXCHANGE_RATE&q=SYN-PRC&sort=-seriesId",
+			sort:     cataloguepage.Sort{Field: "seriesId", Descending: true},
+			keyword:  "SYN-PRC",
+			filters:  map[string][]string{"kind": {"EXCHANGE_RATE"}},
+			position: cataloguepage.Position{Value: "SYN-PRC-FUEL-WEEKLY", Identity: []string{"SYN-PRC-FUEL-WEEKLY", "FUEL_RATE"}},
+			outside: map[string]string{
+				"集外排序维": "sort=registeredAt",
+				"集外筛选维": "seriesId=SYN-PRC-FUEL-WEEKLY",
+			},
+		},
+	}
+}
+
+func getPaged(endpoint http.Handler, target string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+	return recorder
+}
+
+// Covers: ADR-0144 决定五、六——四个目录端点各按自己的册声明解查询参数，查询对象原样交给读口；答复带 page（size 取 Intake
+// 给的页大小，next 与 total 原样带出）；空页答总数 0、没有下一页。
+func TestPricingCataloguesPassTheDecodedQueryAndCarryThePage(t *testing.T) {
+	for _, paged := range pagedCatalogues(t) {
+		t.Run(paged.path, func(t *testing.T) {
+			endpoint, probe := paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{next: "SYN-cursor", total: 7})
+			recorder := getPaged(endpoint, paged.path+"?"+paged.accepted)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d；body = %s", recorder.Code, recorder.Body)
+			}
+			page := pageOf(t, recorder)
+			if string(page["size"]) != "50" || string(page["next"]) != `"SYN-cursor"` || string(page["total"]) != "7" {
+				t.Fatalf("page 不对：%s", recorder.Body.Bytes())
+			}
+			if probe.limit != 50 || probe.query.Sort != paged.sort || probe.query.Keyword != paged.keyword ||
+				!reflect.DeepEqual(probe.query.Filters, paged.filters) || probe.query.After != nil {
+				t.Fatalf("读口收到的查询不对：limit %d，%+v", probe.limit, probe.query)
+			}
+
+			endpoint, _ = paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{})
+			empty := getPaged(endpoint, paged.path)
+			if page := pageOf(t, empty); string(page["total"]) != "0" || string(page["next"]) != "null" {
+				t.Fatalf("空页的 page 不对：%s", empty.Body.Bytes())
+			}
+		})
+	}
+}
+
+// Covers: ADR-0144 决定一——游标只在出它的那组条件下有效：同一组条件带上它，读口收到解出的位置；换了条件（这里换 q）就是
+// 另一问，答 400 带理由散文，不从一个不属于它的位置接着翻。
+func TestPricingCataloguesHonourACursorOnlyUnderItsOwnConditions(t *testing.T) {
+	for _, paged := range pagedCatalogues(t) {
+		t.Run(paged.path, func(t *testing.T) {
+			issued, err := paged.catalogue.Decode(url.Values{"q": {"SYN-A"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cursor, err := issued.CursorAfter(paged.position)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			endpoint, probe := paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{})
+			recorder := getPaged(endpoint, paged.path+"?q=SYN-A&after="+url.QueryEscape(cursor))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("同条件续翻 status = %d；body = %s", recorder.Code, recorder.Body)
+			}
+			if probe.query.After == nil || !reflect.DeepEqual(*probe.query.After, paged.position) {
+				t.Fatalf("读口收到的位置 = %+v，想要 %+v", probe.query.After, paged.position)
+			}
+
+			endpoint, probe = paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{})
+			assertPageQueryRefused(t, getPaged(endpoint, paged.path+"?q=SYN-B&after="+url.QueryEscape(cursor)))
+			if probe.called {
+				t.Fatal("换了条件的游标不该走到读口")
+			}
+		})
+	}
+}
+
+// Covers: ADR-0144 决定一、三、四——集外的键、集外的排序维、词表外或为空的筛选值、解不开的游标与坏转义都答 400 带理由散文，
+// 读口不被调用；查询参数先于 Intake：渠道未配置时写错参数也先答 400 且理由点到那一格，写对了才答 403。
+func TestPricingCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
+	everywhere := map[string]string{
+		"自报租户":   "tenant=SYN-TENANT-02",
+		"自定页大小":  "limit=1000",
+		"排序给两次":  "sort=-registeredAt&sort=registeredAt",
+		"解不开的游标": "after=SYN-not-a-cursor",
+		"坏转义":    "q=%zz",
+	}
+	for _, paged := range pagedCatalogues(t) {
+		for _, cases := range []map[string]string{everywhere, paged.outside} {
+			for name, query := range cases {
+				t.Run(paged.path+"/"+name, func(t *testing.T) {
+					endpoint, probe := paged.serve(intakeDouble{query: catalogueQuery(t)}, pageProbe{})
+					assertPageQueryRefused(t, getPaged(endpoint, paged.path+"?"+query))
+					if probe.called {
+						t.Fatal("坏请求不该走到读口")
+					}
+				})
+			}
+		}
+
+		t.Run(paged.path+"/先于 Intake", func(t *testing.T) {
+			endpoint, _ := paged.serve(pricinghttp.UnconfiguredIntake{}, pageProbe{})
+			if detail := assertPageQueryRefused(t, getPaged(endpoint, paged.path+"?tenant=SYN-TENANT-02")); !strings.Contains(detail, "tenant") {
+				t.Fatalf("理由散文应点到那一格：%q", detail)
+			}
+			if recorder := getPaged(endpoint, paged.path+"?"+paged.accepted); recorder.Code != http.StatusForbidden {
+				t.Fatalf("参数写对、渠道未配置 status = %d, want 403", recorder.Code)
+			}
+		})
+	}
+}

@@ -12,6 +12,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对覆盖地平线端点（票 pricing-reference-series-operations/05 切片 05a）证传输面：
@@ -25,6 +26,7 @@ type coverageClockDouble struct{ at time.Time }
 func (clock coverageClockDouble) Now() time.Time { return clock.at }
 
 type coverageReaderDouble struct {
+	pageProbe
 	tenant domain.TenantID
 	at     time.Time
 	rows   []ports.ReferenceSeriesCoverageRow
@@ -35,14 +37,16 @@ func (double *coverageReaderDouble) ListReferenceSeriesCoverage(
 	_ context.Context,
 	tenant domain.TenantID,
 	at time.Time,
-	_ int,
-) ([]ports.ReferenceSeriesCoverageRow, error) {
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ReferenceSeriesCoverageRow], error) {
+	double.record(limit, query)
 	if double.err != nil {
-		return nil, double.err
+		return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{}, double.err
 	}
 	double.tenant = tenant
 	double.at = at
-	return double.rows, nil
+	return cataloguepage.Result[ports.ReferenceSeriesCoverageRow]{Rows: double.rows, Next: double.next, Total: double.total}, nil
 }
 
 func coverageEndpoint(rows []ports.ReferenceSeriesCoverageRow) (http.Handler, *coverageReaderDouble) {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件是计价评价登记册的伴生列表读端口（票 admin-skeleton-closure-batch/03，读面
@@ -21,6 +22,9 @@ import (
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
 // 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
 // 就是内容——评价的写入方是评价编排，编排在接入渠道墙后面，册空是墙拦不是缺陷）。
+//
+// 翻页、排序与筛选照 ADR-0144（票 catalogue-read-pagination-rollout/04）：查询对象由端点按 EvaluationPages 解出，
+// 读口答「本页评价 + 下一游标 + 总数」。
 
 // EvaluationCatalogueRow 是计价评价登记册上列的一行：一次已落册评价的检索列面。
 // 状态封闭五格（COMPLETED/PENDING/CONFLICT/FAILED/UNRATABLE，迁移 CHECK 钉住）；
@@ -41,5 +45,6 @@ type EvaluationCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]EvaluationCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[EvaluationCatalogueRow], error)
 }

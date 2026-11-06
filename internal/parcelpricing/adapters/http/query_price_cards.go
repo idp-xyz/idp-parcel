@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PriceCardCatalogueReader 是价卡目录端点消费的读口。
@@ -14,7 +15,8 @@ type PriceCardCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.PriceCardCatalogueRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PriceCardCatalogueRow], error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致——本适配器不新造查询语义,只消费 ADR-0077
@@ -27,6 +29,8 @@ const outcomePriceCardsListed = "PRICE_CARDS_LISTED"
 
 // NewQueryPriceCardsEndpoint 交回价卡目录查阅的 HTTP 入口
 // (GET /pricing-price-cards,ADR-0077、票 master-data-wiring/02;最终路径归装配票)。
+//
+// 查询参数（after、sort、direction 与 q）按 ports.PriceCardPages 解码（ADR-0144 决定六），先于 Intake。
 func NewQueryPriceCardsEndpoint(
 	intake PricingCatalogueIntake,
 	reader PriceCardCatalogueReader,
@@ -38,13 +42,18 @@ func NewQueryPriceCardsEndpoint(
 			return
 		}
 
+		pageQuery, err := decodePageQuery(ports.PriceCardPages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListPriceCards(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListPriceCards(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成,不是「空目录」——伪装成后者会让一次该重试的故障
 			// 变成一份看起来如实的空册。
@@ -53,20 +62,22 @@ func NewQueryPriceCardsEndpoint(
 		}
 
 		// 空目录交回空数组而不是 null:调用方判「没有行」不该先判「有没有字段」。
-		bodies := make([]priceCardBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]priceCardBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, priceCardBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, priceCardListResponse{
 			Outcome: outcomePriceCardsListed,
 			Cards:   bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
 
 type priceCardListResponse struct {
-	Outcome string          `json:"outcome"`
-	Cards   []priceCardBody `json:"cards"`
+	Outcome string             `json:"outcome"`
+	Cards   []priceCardBody    `json:"cards"`
+	Page    cataloguepage.Page `json:"page"`
 }
 
 // priceCardBody 逐字段透出检索列面。effectiveTo 缺席即无上界适用期;源文件名与

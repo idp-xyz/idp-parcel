@@ -476,7 +476,8 @@ func TestThePriceCardCatalogueEchoesTheClosures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := catalogue.ListPriceCards(t.Context(), evaluationValue(t, domain.NewTenantID, "tenant-a"), 10)
+	rows, err := rowsOf(catalogue.ListPriceCards(t.Context(), evaluationValue(t, domain.NewTenantID, "tenant-a"), 10,
+		firstPage(t, ports.PriceCardPages)))
 	if err != nil {
 		t.Fatal(err)
 	}

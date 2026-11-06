@@ -11,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // PriceCardDrafts 实现草稿册的写口与查阅读口（0011；ADR-0101 决定三，票 price-card-import/03）。
@@ -133,61 +134,84 @@ func revisePriceCardDraft(
 	return ports.PriceCardDraftRevised, nil
 }
 
-// ListPriceCardDrafts 按租户列草稿，按录入时刻倒序、同刻按方案标识与版本正序收尾，分页可重复。status 为零值即四格都列。
-// 每一行经重建门读回再与比对列交叉核：读不回是答案没形成，不跳过那一行——跳过会让一份坏行看起来像不存在。
+// priceCardDraftPages 把 ports.PriceCardDraftPages 落到草稿表的列上。状态列存的是四格的名字（0011），按原词比较。
+var priceCardDraftPages = ports.PriceCardDraftPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"submittedAt": "submitted_at"},
+	Identity: []string{"plan_id", "plan_version"},
+	Filters:  map[string]string{"status": "status"},
+	Keyword:  []string{"plan_id", "plan_version", "source_file_name"},
+})
+
+// ListPriceCardDrafts 按租户列草稿，按查询的筛选、q 与排序取游标之后的一页；缺省是录入时刻倒序、同刻按方案标识与版本
+// 倒序。本页每一行经重建门读回再与比对列交叉核：读不回是答案没形成，不跳过那一行——跳过会让一份坏行看起来像不存在。
 func (drafts *PriceCardDrafts) ListPriceCardDrafts(
 	ctx context.Context,
 	tenant domain.TenantID,
-	status domain.PriceCardDraftStatus,
 	limit int,
-) ([]domain.PriceCardDraft, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[domain.PriceCardDraft], error) {
+	fail := func(err error) (cataloguepage.Result[domain.PriceCardDraft], error) {
+		return cataloguepage.Result[domain.PriceCardDraft]{}, fmt.Errorf("list price card drafts: %w", err)
+	}
 	if tenant.String() == "" {
-		return nil, fmt.Errorf("list price card drafts: tenant is required")
+		return fail(fmt.Errorf("tenant is required"))
 	}
 	if err := catalogueLimit("list price card drafts", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[domain.PriceCardDraft]{}, err
 	}
-	filter := ""
-	if status != domain.PriceCardDraftStatusInvalid {
-		if status.String() == "" {
-			return nil, fmt.Errorf("list price card drafts: status %d is not one of the four", uint8(status))
-		}
-		filter = status.String()
+	plan, err := priceCardDraftPages.Plan(query, "tenant_id = $1", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
 	}
 	querier, err := drafts.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list price card drafts: %w", err)
+		return fail(err)
 	}
 
-	rows, err := querier.Query(ctx,
-		`SELECT `+priceCardDraftColumns+`
-		   FROM parcel_pricing.price_card_draft
-		  WHERE tenant_id = $1 AND ($2::text = '' OR status = $2::text)
-		  ORDER BY submitted_at DESC, plan_id, plan_version
-		  LIMIT $3`,
-		tenant.String(), filter, limit,
-	)
+	const source = "parcel_pricing.price_card_draft"
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(priceCardDraftColumns, source), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list price card drafts: %w", err)
+		return fail(err)
 	}
 	defer rows.Close()
 
-	listed := make([]domain.PriceCardDraft, 0, limit)
+	fetched := make([]priceCardDraftRow, 0, limit+1)
 	for rows.Next() {
 		row, err := scanPriceCardDraftRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("list price card drafts: %w", err)
+			return fail(err)
 		}
+		fetched = append(fetched, row)
+	}
+	if err := rows.Err(); err != nil {
+		return fail(err)
+	}
+
+	page, err := cataloguepage.Finish(query, fetched, limit, total, priceCardDraftPosition)
+	if err != nil {
+		return fail(err)
+	}
+	listed := make([]domain.PriceCardDraft, 0, len(page.Rows))
+	for _, row := range page.Rows {
 		draft, err := row.draft(tenant)
 		if err != nil {
-			return nil, fmt.Errorf("list price card drafts: %w", err)
+			return fail(err)
 		}
 		listed = append(listed, draft)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list price card drafts: %w", err)
+	return cataloguepage.Result[domain.PriceCardDraft]{Rows: listed, Next: page.Next, Total: page.Total}, nil
+}
+
+// priceCardDraftPosition 的录入时刻取自扫描出的 submitted_at 列，与 ORDER BY 比的是同一个值（cataloguepage.Finish 头注）。
+func priceCardDraftPosition(row priceCardDraftRow, _ string) cataloguepage.Position {
+	return cataloguepage.Position{
+		Value:    cataloguepage.FormatInstant(row.submittedAt),
+		Identity: []string{row.planID, row.planVersion},
 	}
-	return listed, nil
 }
 
 // LoadPriceCardDraft 按键读一版，经重建门读回再与比对列交叉核（票 price-card-import/04）。册上没有即 found=false。

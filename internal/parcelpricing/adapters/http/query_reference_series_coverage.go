@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ReferenceSeriesCoverageReader 是覆盖地平线端点消费的读口。
@@ -16,7 +17,8 @@ type ReferenceSeriesCoverageReader interface {
 		tenant domain.TenantID,
 		at time.Time,
 		limit int,
-	) ([]ports.ReferenceSeriesCoverageRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ReferenceSeriesCoverageRow], error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -39,6 +41,10 @@ const outcomeReferenceSeriesCoverageListed = "REFERENCE_SERIES_COVERAGE_LISTED"
 // pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」;最终路径归装配票)。
 //
 // 一条序列一行,不是一版一行——一版一行的问法归 /pricing-reference-series。
+//
+// 查询参数（after、sort、kind 与 q）按 ports.ReferenceSeriesCoveragePages 解码（ADR-0144 决定六），先于 Intake。每一页
+// 各按自己那一问的时钟解「在用」、各自回显 asOf：游标只记排序位置，不记时刻——翻页顺序按序列标识，与那一刻无关，所以
+// 翻页不重不漏；同一次翻阅的前后两页若跨过一次复核，后一页就按复核之后说话，asOf 如实告诉页面这一点。
 func NewQueryReferenceSeriesCoverageEndpoint(
 	intake PricingCatalogueIntake,
 	reader ReferenceSeriesCoverageReader,
@@ -51,6 +57,11 @@ func NewQueryReferenceSeriesCoverageEndpoint(
 			return
 		}
 
+		pageQuery, err := decodePageQuery(ports.ReferenceSeriesCoveragePages, request)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
@@ -58,20 +69,21 @@ func NewQueryReferenceSeriesCoverageEndpoint(
 		}
 
 		at := clock.Now().UTC()
-		rows, err := reader.ListReferenceSeriesCoverage(request.Context(), query.Scope.Tenant(), at, query.Limit)
+		page, err := reader.ListReferenceSeriesCoverage(request.Context(), query.Scope.Tenant(), at, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 
-		bodies := make([]referenceSeriesCoverageBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]referenceSeriesCoverageBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, referenceSeriesCoverageBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, referenceSeriesCoverageListResponse{
 			Outcome: outcomeReferenceSeriesCoverageListed,
 			AsOf:    rfc3339(at),
 			Series:  bodies,
+			Page:    page.Page(query.Limit),
 		})
 	})
 }
@@ -85,6 +97,7 @@ type referenceSeriesCoverageListResponse struct {
 	Outcome string                        `json:"outcome"`
 	AsOf    string                        `json:"asOf"`
 	Series  []referenceSeriesCoverageBody `json:"series"`
+	Page    cataloguepage.Page            `json:"page"`
 }
 
 // referenceSeriesCoverageBody 逐字段透出一条序列的覆盖摘要。

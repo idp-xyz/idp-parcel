@@ -61,7 +61,7 @@ func TestPriceCardCatalogueTranscribesTheColumnFace(t *testing.T) {
 	registerCard(t, cards, transactor, ctx,
 		cardRegistration(t, "tenant-b", catalogPlan(t, "plan-theirs", "v1", domain.PricingDirectionSell, "9")))
 
-	rows, err := catalogue.ListPriceCards(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListPriceCards(ctx, tenant, 10, firstPage(t, ports.PriceCardPages)))
 	if err != nil {
 		t.Fatalf("上列价卡:%v", err)
 	}
@@ -104,7 +104,8 @@ func TestPriceCardCatalogueTranscribesTheColumnFace(t *testing.T) {
 		t.Fatalf("BUY 卡不完整:%+v", bought)
 	}
 
-	empty, err := catalogue.ListPriceCards(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10)
+	empty, err := rowsOf(catalogue.ListPriceCards(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+		firstPage(t, ports.PriceCardPages)))
 	if err != nil {
 		t.Fatalf("空租户上列:%v", err)
 	}
@@ -172,7 +173,7 @@ func TestReferenceSeriesCatalogueTranscribesTheColumnFace(t *testing.T) {
 		t.Fatalf("他租登记 outcome = %d", outcome)
 	}
 
-	rows, err := catalogue.ListReferenceSeries(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListReferenceSeries(ctx, tenant, 10, firstPage(t, ports.ReferenceSeriesPages)))
 	if err != nil {
 		t.Fatalf("上列序列:%v", err)
 	}
@@ -219,7 +220,8 @@ func TestReferenceSeriesCatalogueTranscribesTheColumnFace(t *testing.T) {
 		t.Fatalf("更正关系没成对透出:%+v", corrected)
 	}
 
-	empty, err := catalogue.ListReferenceSeries(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10)
+	empty, err := rowsOf(catalogue.ListReferenceSeries(ctx, evaluationValue(t, domain.NewTenantID, "tenant-empty"), 10,
+		firstPage(t, ports.ReferenceSeriesPages)))
 	if err != nil {
 		t.Fatalf("空租户上列:%v", err)
 	}
@@ -240,7 +242,7 @@ func TestPricingCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.T) {
 			cardRegistration(t, "tenant-a", catalogPlan(t, planID, "v1", domain.PricingDirectionSell, "10")))
 	}
 
-	rows, err := catalogue.ListPriceCards(ctx, tenant, 2)
+	rows, err := rowsOf(catalogue.ListPriceCards(ctx, tenant, 2, firstPage(t, ports.PriceCardPages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列:%v", err)
 	}
@@ -248,10 +250,10 @@ func TestPricingCatalogueAppliesTheLimitAndRejectsNonPositive(t *testing.T) {
 		t.Fatalf("limit 2 交回 %d 行", len(rows))
 	}
 
-	if _, err := catalogue.ListPriceCards(ctx, tenant, 0); err == nil {
+	if _, err := catalogue.ListPriceCards(ctx, tenant, 0, firstPage(t, ports.PriceCardPages)); err == nil {
 		t.Fatal("价卡目录 limit 0 未被拒")
 	}
-	if _, err := catalogue.ListReferenceSeries(ctx, tenant, -1); err == nil {
+	if _, err := catalogue.ListReferenceSeries(ctx, tenant, -1, firstPage(t, ports.ReferenceSeriesPages)); err == nil {
 		t.Fatal("序列册 limit -1 未被拒")
 	}
 }

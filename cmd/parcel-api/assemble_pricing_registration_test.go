@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -93,6 +95,10 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 	}
 	tenant := mustValue(t, pricingdomain.NewTenantID, "SYN-TENANT-1")
 	const registrant = "SYN-PRC-SERIES-REGISTRAR"
+	firstPage, err := pricingports.ReferenceSeriesPages.Decode(url.Values{})
+	if err != nil {
+		t.Fatalf("解第一页查询：%v", err)
+	}
 
 	first := decodeSeriesPayload(t, `{
 	  "seriesId": "SYN-PRC-PREVIEW-FUEL", "seriesVersion": "v1", "kind": "FUEL_RATE",
@@ -113,8 +119,8 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 	if previewed.Outcome != pricingapp.ReferenceSeriesPreviewed || previewed.EvidenceGrade != pricingdomain.SeriesEvidenceVerifiable {
 		t.Fatalf("预览 outcome/等级 = %s/%s", previewed.Outcome, previewed.EvidenceGrade)
 	}
-	if rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
-		t.Fatalf("预览之后目录应仍为空：rows=%d err=%v", len(rows), err)
+	if page, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10, firstPage); err != nil || len(page.Rows) != 0 {
+		t.Fatalf("预览之后目录应仍为空：rows=%d err=%v", len(page.Rows), err)
 	}
 
 	registerCommand, err := first.RegistrationCommand(tenant, registrant)
@@ -124,7 +130,8 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 	if outcome, err := register.Handle(t.Context(), registerCommand); err != nil || outcome != pricingapp.ReferenceSeriesRecorded {
 		t.Fatalf("登记 outcome = %s err = %v", outcome, err)
 	}
-	rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10)
+	listed, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10, firstPage)
+	rows := listed.Rows
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("登记后上列：rows=%d err=%v", len(rows), err)
 	}
@@ -163,8 +170,8 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 		!compared.Changes[0].ValueChanged() || compared.Changes[1].Kind() != pricingdomain.SeriesPeriodUnchanged {
 		t.Fatalf("更正预览逐期差异变形：%+v", compared.Changes)
 	}
-	if rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10); err != nil || len(rows) != 1 {
-		t.Fatalf("更正预览不该写库：rows=%d err=%v", len(rows), err)
+	if page, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10, firstPage); err != nil || len(page.Rows) != 1 {
+		t.Fatalf("更正预览不该写库：rows=%d err=%v", len(page.Rows), err)
 	}
 }
 
