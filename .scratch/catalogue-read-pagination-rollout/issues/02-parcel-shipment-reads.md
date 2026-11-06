@@ -40,7 +40,8 @@ Blocked by: 01
 | `d48c5b130` | 参照实现：面单交易一册（声明、读端口、Binding 读面、端点、占位、用例），迁移 `0036` 九册索引一次写齐 |
 | `31fcbf4f2` | 其余八册；九个端点改为先 Intake 后解码；`cmd/parcel-api`、`cmd/parcel-dispatch` 的占位、替身与调用点；新用例 |
 | `d6b3f64a5` | 九个端点的表驱动端点用例 |
-| 评审修订（本笔） | 七册真库用例重写、人工项翻页用例独立成文；渠道择优两条分支改为先 Intake；面单交易的 `q` 改落在逐个包裹号上；空 `?parcel=` 照旧落到清单；注释里引 spec 的序数改成原句；夹具一律 `SYN-` |
+| `c3c226b00` | 评审修订：七册真库用例重写、人工项翻页用例独立成文；渠道择优两条分支改为先 Intake；面单交易的 `q` 改落在逐个包裹号上；空 `?parcel=` 照旧落到清单；注释里引 spec 的序数改成原句；夹具一律 `SYN-` |
+| 补 `q`（本笔） | 面单交易的 `q` 补上渠道签发的包裹级标识（管理台叫渠道面单号）：14a 接面单交易页时发现页上按它检索，而本册 `q` 漏了这一列，前端只能撤掉这项检索 |
 
 依赖 01 的两笔：`7b1166838`（落列、取页片段、`Finish`、统一结果类型）、`9726b2f35`（`Words` / `Code`）。
 
@@ -48,7 +49,7 @@ Blocked by: 01
 
 | 册 | 缺省序 | 可排维 | 筛选维 | q 覆盖 | 索引（`0036`） |
 |---|---|---|---|---|---|
-| 面单交易 | `-establishedAt` | establishedAt、transactionId | transactionResult（代码列） | 交易号、快照渠道账户、覆盖包裹（逐个包裹号，不含 JSON 标点） | 换 `label_transaction_by_tenant` 补标识段 |
+| 面单交易 | `-establishedAt` | establishedAt、transactionId | transactionResult（代码列） | 交易号、快照渠道账户、覆盖包裹、渠道面单号（两个数组都只拼元素，不含 JSON 标点） | 换 `label_transaction_by_tenant` 补标识段 |
 | 委托查阅 | `-submittedAt` | submittedAt、shipmentRequestId | state（代码列）、customerAccountId | 委托号、单据号、来源请求键 | 新 `shipment_request_by_tenant_submitted` |
 | 复核队列 / 授权处置队列 | `submittedAt` | 同上 | customerAccountId | 同上 | 两条部分索引补标识段 |
 | 渠道择优并列冲突 | `-decidedAt` | decidedAt、decisionId | —（view / scope / mapping 为选择器） | 决定号、商业范围、映射 | 新 `channel_selection_decision_by_conclusion` |
@@ -57,10 +58,10 @@ Blocked by: 01
 | 等回应的处置请求 | `recordedAt` | recordedAt | — | 请求键、包裹、取消 | 换 `parcel_cancellation_pending_by_tenant` 补标识段 |
 | 待人工处理项 | `decidedAt`（落在 `i.created_at`） | decidedAt | owner、action | 包裹 | 换 `post_intake_disposition_manual_item_by_tenant` 补标识段 |
 
-**完成判据**（钉本笔）
+**完成判据**（钉「补 `q`」那一笔；复核范围是 `3a20b2bcc` 之后各笔）
 
 - ✅ 真库用例（`SYN-` 夹具，带 DSN）：
-  - 面单交易（`label_transaction_views_page_test.go`）：翻页期间新建立一笔，不重出、不漏行，total 由 5 到 6；transactionResult 维内为或、q 命中覆盖包裹与渠道账户、`%` 按字面、查引号与逗号零命中、覆盖两件的交易按一笔计、空册。
+  - 面单交易（`label_transaction_views_page_test.go`）：翻页期间新建立一笔，不重出、不漏行，total 由 5 到 6；transactionResult 维内为或、q 命中覆盖包裹与渠道账户、`%` 按字面、查引号与逗号零命中、覆盖两件的交易按一笔计、空册；q 命中渠道面单号，还没有渠道答复（`parcelResults` 整键缺席）的交易照常参与检索不报错。
   - 委托查阅、复核队列、授权处置队列、渠道择优并列冲突、释放未受理册、取消先后冲突册、等回应的处置请求七册（`catalogue_pages_test.go`）每册都过：按小页走完全部页，拼起来恰是全集、次序即缺省序；走完第一页后插入一行——降序册的新行落在游标之前，后面各页不变、total 加一，升序队列的新行出现在末页；一条筛选或 q 改变 total；空租户 total 为 0；带计数的队列积压数不随筛选与 q 变。渠道择优另证选择器进游标摘要（不收窄时的游标换上收窄选择器解不开）。
   - 待人工处理项（`cmd/parcel-dispatch/post_intake_manual_items_page_test.go`；人工项只能由拦截决定落下，夹具要走整条收寄后处置链）：按小页最早的在前；翻页中途再形成一份决定，新项出现在末页，total 与积压数一起由 4 到 6；按所有者收窄改 total、不改积压数；空租户 total 为 0。
 - ✅ 端点用例：
@@ -69,7 +70,7 @@ Blocked by: 01
   - 渠道择优：渠道未配置时，缺 `view`、`view=all`、只给 `scope`、集外参数与空 `decisionId` 都答 403。
   - 按运单号、按包裹两条有界查找不解码、不带 page；`?parcel=` 带空值照旧落到清单。`unconfigured_intake_test` 的查询串变体照旧答 403。
 - ✅ 迁移无 CR、无 BOM（`migrations` 行尾守卫过）。
-- 门（作者自验，WSL go1.26.8）：`gofmt -l` 空；全仓 `go build`、`go vet` 退 0；带 DSN `-p 1 -count=1`：`internal/parcelshipment/adapters/postgres` 385 PASS / 0 SKIP，`internal/parcelshipment/adapters/http` 175 PASS，`cmd/parcel-api` 654 PASS，`cmd/parcel-dispatch` 507 PASS，`internal/architecture/...` 174 PASS，`migrations`、`internal/platform/migrate` 过；`internal/parcelshipment/...` 其余包与 `internal/platform/cataloguepage`（130 PASS）全过。计数取证：`grep -c -- '--- PASS'` 与 `grep -c -- '--- SKIP'` 打在各包 `-v` 输出上。
+- 门（作者自验，WSL go1.26.8）：`gofmt -l` 空；全仓 `go build`、`go vet` 退 0；带 DSN `-p 1 -count=1`：`internal/parcelshipment/adapters/postgres` 386 PASS / 0 SKIP，`internal/parcelshipment/adapters/http` 175 PASS，`cmd/parcel-api` 654 PASS，`cmd/parcel-dispatch` 507 PASS，`internal/architecture/...` 174 PASS，`migrations`、`internal/platform/migrate` 过；`internal/parcelshipment/...` 其余包与 `internal/platform/cataloguepage`（130 PASS）全过。计数取证：`grep -c -- '--- PASS'` 与 `grep -c -- '--- SKIP'` 打在各包 `-v` 输出上。
 
 **判断项**
 
