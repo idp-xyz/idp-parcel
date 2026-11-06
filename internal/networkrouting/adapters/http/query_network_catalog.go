@@ -102,14 +102,14 @@ var familyCatalogues = map[string]*cataloguepage.Catalogue{
 // NewQueryNetworkCatalogEndpoint 交回网络目录运营查阅的 HTTP 入口
 // （GET /network-catalog，ADR-0077）。
 //
-// 七族共用一个端点，按 `family` 查询参数分派（先例：tracking 端点一口三分派）：参数
-// 在场与否、取值在不在封闭集内属传输形状（与方法检查同级，先于 Intake），读它不构成
-// 读业务内容——未配置 Intake 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏
+// 七族共用一个端点，按 `family` 查询参数分派（先例：tracking 端点一口三分派）。缺席按坏
 // 请求拒：替调用方默认一族就是替它猜。
 //
-// 其余查询参数（after、sort、筛选维与 q）在 Intake 之后按所选族的声明解码（ADR-0144 决定六）：
-// 渠道未配置时七族同答 403、不随这些参数写对写错而变（ADR-0055 决定三），没有凭据的调用方也就
-// 探不出各族开放了哪些查询维度；配置了的渠道上不成立即 400，理由散文放进 detail。
+// family 与其余查询参数（after、sort、筛选维与 q）都在 Intake 之后读：渠道未配置时对一切请求
+// 同答 403，缺 family、族名不在七族内、其余参数写错都与写对的一问逐字节相同（ADR-0055 决定三；
+// 七族名公开也不例外），没有凭据的调用方探不出任何查询面。七族共用一个 Intake，分派不必先于它。
+// 配置了的渠道上 family 不成立答 400；其余参数按所选族的声明解码（ADR-0144 决定六），不成立即
+// 400，理由散文放进 detail。
 func NewQueryNetworkCatalogEndpoint(
 	intake CatalogueQueryIntake,
 	reader OperationsCatalogReader,
@@ -121,16 +121,16 @@ func NewQueryNetworkCatalogEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
 		values := request.URL.Query()
 		family := values.Get("family")
 		catalogue, known := familyCatalogues[family]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 		pageQuery, err := catalogue.Decode(values)

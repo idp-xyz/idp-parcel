@@ -204,11 +204,11 @@ func TestNetworkCatalogQueryRefusesNonGetMethods(t *testing.T) {
 	}
 }
 
-// Covers: family 封闭七族 — 缺席与未知值都是坏请求（替调用方默认一族就是替它猜），
-// 拒在 Intake 之前，属传输形状。
+// Covers: family 封闭七族 — 缺席与未知值都是坏请求（替调用方默认一族就是替它猜）：配置了的渠道上答 400，读口不被
+// 触到；family 在 Intake 之后才读，渠道未配置时这几问与写对的一问同答 403（ADR-0055 决定三，七族名公开也不例外）。
 func TestNetworkCatalogQueryRejectsAnAbsentOrUnknownFamily(t *testing.T) {
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
-		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 25},
 		unreachableCatalogReader{t: t},
 	)
 	for name, query := range map[string]string{
@@ -224,6 +224,7 @@ func TestNetworkCatalogQueryRejectsAnAbsentOrUnknownFamily(t *testing.T) {
 		if got := problemCode(t, response); got != "MALFORMED_REQUEST" {
 			t.Fatalf("%s: code = %q, want MALFORMED_REQUEST", name, got)
 		}
+		assertUnconfiguredCatalogueRefusal(t, query)
 	}
 }
 
@@ -586,8 +587,8 @@ func problemDetailText(t *testing.T, response *httptest.ResponseRecorder) string
 	return body.Error.Detail
 }
 
-// assertUnconfiguredCatalogueRefusal 断言渠道未配置时这一问答 403，且与写对的一问逐字节相同：查询参数在 Intake
-// 之后才解码（ADR-0055 决定三），没有凭据的调用方探不出各族开放了哪些查询维度。
+// assertUnconfiguredCatalogueRefusal 断言渠道未配置时这一问答 403，且与写对的一问逐字节相同：family 与其余查询参数
+// 都在 Intake 之后才读（ADR-0055 决定三），没有凭据的调用方从答复里探不出任何查询面。
 func assertUnconfiguredCatalogueRefusal(t *testing.T, query string) {
 	t.Helper()
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(networkhttp.UnconfiguredIntake{}, unreachableCatalogReader{t: t})
@@ -607,10 +608,10 @@ func assertUnconfiguredCatalogueRefusal(t *testing.T, query string) {
 // 与写对的一问同答 403。
 func TestSelfReportedScopeParametersAreRefused(t *testing.T) {
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
-		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 25},
 		unreachableCatalogReader{t: t},
 	)
-	for _, query := range []string{"?family=node&tenant=TENANT-9", "?family=node&limit=9999"} {
+	for _, query := range []string{"?family=node&tenant=SYN-TENANT-9", "?family=node&limit=9999"} {
 		response := httptest.NewRecorder()
 		endpoint.ServeHTTP(response, catalogRequest(t, query))
 		if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
@@ -627,7 +628,7 @@ func TestSelfReportedScopeParametersAreRefused(t *testing.T) {
 // 渠道上答 400，detail 带理由散文，读口不被触到；渠道未配置时与写对的一问同答 403。
 func TestMalformedQueryParametersAreRefusedWithAReason(t *testing.T) {
 	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
-		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
+		grantedCatalogueIntake{tenant: "SYN-TENANT-1", limit: 25},
 		unreachableCatalogReader{t: t},
 	)
 	nodeQuery, err := ports.NodeVersionCatalogue.Decode(nil)
