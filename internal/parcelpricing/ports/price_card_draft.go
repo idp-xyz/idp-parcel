@@ -47,7 +47,7 @@ type PriceCardDraftRegister interface {
 	SubmitDraft(ctx context.Context, draft domain.PriceCardDraft) (PriceCardDraftSubmitOutcome, error)
 }
 
-// PriceCardDraftRead 是草稿册的查阅读口：按租户列出，只列哪几格状态由查询对象的 status 筛选维说，不给即四格都列。读回经
+// PriceCardDraftRead 是草稿册的查阅读口：按租户列出，只列哪几格状态由查询对象的 status 筛选维说，不给即各格都列。读回经
 // 领域重建门整图重验；limit 必须为正，每页多大由接入面定（判据同目录读口）。翻页、排序与筛选照 ADR-0144（票
 // catalogue-read-pagination-rollout/04）：查询对象由端点按 PriceCardDraftPages 解出，读口答「本页草稿 + 下一游标 + 总数」。
 type PriceCardDraftRead interface {
