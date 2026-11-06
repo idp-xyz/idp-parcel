@@ -7,10 +7,12 @@ import { labelFor, toneFor, toneForLabel, type StatusTone } from '../vocabulary/
 // 画布上对比度不够，`dark:` 又跟系统偏好不跟应用主题）。正文用正文色、语气只落在描边、淡底与图标上——语气字色叠在
 // 淡底上不足 4.5:1，图标是非文字、门槛 3:1。任意值一律带 `color:` 类型提示。
 //
-// 图标按语气（票 business-party-ux/08 同批的票 07）：此前只有一粒圆点，色是唯一载体，色弱与深色主题下几格分不开。图标的
-// 意思取词典文件头「设计原则四」给语气下的定义——待处理（warn）是等着办的，画钟；推进中（info）画 i；成立（good）画勾；
-// 失败 / 阻断（bad）画叉；中性 / 已结束（muted）画横。按语气而不按码：词典几十个码，按码配图是第二张表，会与词典走散。
-// 图标是内联 SVG 而不是图标库：本件只引 react 与词典，node:test 里 renderToStaticMarkup 直接钉。
+// 图标按语气（票 business-party-ux/07）：此前只有一粒圆点，色是唯一载体，色弱与深色主题下几格分不开。图标的意思取词典
+// 文件头「设计原则四」给语气下的定义——待处理（warn）是等着办的，画钟；推进中（info）画 i；成立（good）画勾；失败 / 阻断
+// （bad）画叉；中性 / 已结束（muted）画横。按语气而不按码：词典几十个码，按码配图是第二张表，会与词典走散；代价是语气里的
+// 少数派跟着多数派的图——「已撤销」归 warn 是为了被看见而不是等着办，却也画钟；「已停用」归中性，画横而不是禁止符。
+// 要换它们的图，先在词典里换语气，不在这里按码开例外。图标是内联 SVG 而不是图标库：本件只引 react 与词典，node:test 里
+// renderToStaticMarkup 直接钉。
 
 const toneClass: Record<StatusTone, { pill: string; icon: string }> = {
   good: {
