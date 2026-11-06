@@ -37,9 +37,9 @@ const outcomeCustomerAccountsListed = "CUSTOMER_ACCOUNTS_LISTED"
 // 退役），账户上列的是参与方身份的登记修订（登记→生效→停用），两套状态代数在同一响应形状里
 // 会相互冒充——判据与身份/关系两口分立那条同一句。
 //
-// 查询参数（after、sort、筛选维与 q）按 ports.CustomerAccountCatalogue 解码（ADR-0144 决定六），属传输形状、
-// 先于 Intake：不成立即 400，理由散文放进 detail。与 /network-catalog 同一次序——两册对同一个坏请求答法一致，
-// 未配置渠道时写错参数也先答 400 而不是 403。
+// 查询参数（after、sort、筛选维与 q）在 Intake 之后按 ports.CustomerAccountCatalogue 解码（ADR-0144 决定六）：渠道
+// 未配置时对一切请求同答 403、不随参数写对写错而变（ADR-0055 决定三），没有凭据的调用方也就探不出本册开放了哪些
+// 查询维度；配置了的渠道上不成立即 400，理由散文放进 detail。与 /network-catalog 同一次序。
 func NewQueryCustomerAccountsEndpoint(
 	intake CommercialCatalogueIntake,
 	reader CustomerAccountCatalogueReader,
@@ -51,6 +51,12 @@ func NewQueryCustomerAccountsEndpoint(
 			return
 		}
 
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+
 		pageQuery, err := ports.CustomerAccountCatalogue.Decode(request.URL.Query())
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
@@ -59,12 +65,6 @@ func NewQueryCustomerAccountsEndpoint(
 				return
 			}
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-
-		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
-		if err != nil {
-			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
