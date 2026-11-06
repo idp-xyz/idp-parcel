@@ -65,3 +65,35 @@ var PartyRelationshipPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "role", Vocabulary: cataloguepage.Words[domain.PartyRole]()},
 	},
 })
+
+// RegistrationNumberTypePages 是 /commercial-registration-number-types 的查询声明。行标识是国家 / 地区与类型代码两段（登记册
+// 的键去掉修订号）。status 与身份两册同样三格、同一条时点导出，词表取自 domain.RegistrationNumberTypeStatus；layer 取自
+// domain.RegistrationNumberLayer；countryCode 是开放码，判据同 GroupLegalEntityPages 的 registrationCountry。
+var RegistrationNumberTypePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-registration-number-types",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "registeredAt", Kind: cataloguepage.Instant},
+		{Name: "effectiveFrom", Kind: cataloguepage.Instant},
+		{Name: "countryCode", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "registeredAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "status", Vocabulary: cataloguepage.Words[domain.RegistrationNumberTypeStatus]()},
+		{Name: "layer", Vocabulary: cataloguepage.Words[domain.RegistrationNumberLayer]()},
+		{Name: "countryCode"},
+	},
+})
+
+// ProductChannelMappingPages 是 /commercial-product-channel-mappings 的查询声明。映射没有独立状态代数（行上不导出状态，裁决在
+// ProductChannelMappingRow），本册因此不设筛选维，收窄只靠 q。
+var ProductChannelMappingPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-product-channel-mappings",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "registeredAt", Kind: cataloguepage.Instant},
+		{Name: "effectiveStartsAt", Kind: cataloguepage.Instant},
+		{Name: "mappingId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "registeredAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+})

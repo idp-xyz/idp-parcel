@@ -1252,7 +1252,8 @@ type ProductChannelMappingRow struct {
 // 行形状与修订轴都不同，并进去 kind 参数就开始说谎（判据同
 // PartyIdentityCatalogueRead 的分立那条）。
 //
-// 租户在签名上、Limit 非正拒、空册答空列表，判据同 ServiceProductCatalogueRead。
+// 租户在签名上、Limit 非正拒，判据同 ServiceProductCatalogueRead；ListProductChannelMappings 收端点按
+// ProductChannelMappingPages 解出的查询对象，答一页（ADR-0144），空册答空页。
 //
 // 目录行只交最新一笔修订；同一张登记册上的整条修订链由嵌入的 ProductChannelMappingRevisionHistoryRead 按单个映射展开，
 // 供同一页的详情抽屉——读的是同一张表、同一租户作用域、供的是同一页（读口参数跟着页走），所以嵌在这里，判据同
@@ -1263,7 +1264,8 @@ type ProductChannelMappingCatalogueRead interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ProductChannelMappingRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ProductChannelMappingRow], error)
 }
 
 // ProductChannelMappingRevisionHistoryRead 是渠道产品目录详情抽屉的修订历史读口：按一个映射标识交回登记册上的全部修订，

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // RegistrationNumberTypeSaveOutcome 是一笔注册号类型修订在持久化面的落点（ADR-0031 同款）：
@@ -89,12 +90,13 @@ type RegistrationNumberTypeRow struct {
 }
 
 // RegistrationNumberTypeCatalogueRead 是注册号类型目录的伴生列表读端口（ADR-0077）。上列对象是
-// 各类型的**最新修订**；修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒、空册
-// 答空列表，判据同 ServiceProductCatalogueRead。
+// 各类型的**最新修订**；修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒，判据同
+// ServiceProductCatalogueRead；收端点按 RegistrationNumberTypePages 解出的查询对象，答一页（ADR-0144），空册答空页。
 type RegistrationNumberTypeCatalogueRead interface {
 	ListRegistrationNumberTypes(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]RegistrationNumberTypeRow, error)
+		query cataloguepage.Query,
+	) (cataloguepage.Result[RegistrationNumberTypeRow], error)
 }

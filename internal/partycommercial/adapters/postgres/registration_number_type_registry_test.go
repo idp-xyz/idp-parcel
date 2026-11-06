@@ -174,7 +174,7 @@ func TestRegistrationNumberTypeRegistersRevisesAndDeactivates(t *testing.T) {
 		t.Fatalf("停用修订往返走样：r%d (%s, %v, %v)", loaded.Revision(), basis, at, has)
 	}
 
-	rows, err := catalogue.ListRegistrationNumberTypes(ctx, tenant, 10)
+	rows, err := rowsOf(catalogue.ListRegistrationNumberTypes(ctx, tenant, 10, firstPage(t, ports.RegistrationNumberTypePages)))
 	if err != nil {
 		t.Fatalf("list registration number types: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestRegistrationNumberTypeRegistersRevisesAndDeactivates(t *testing.T) {
 		!row.HasDeactivation || row.DeactivationBasis != "SYN-BASIS-RETIRE" || !row.DeactivatedAt.Equal(deactivatedAt) {
 		t.Fatalf("目录行 = %+v", row)
 	}
-	if _, err := catalogue.ListRegistrationNumberTypes(ctx, tenant, 0); err == nil {
+	if _, err := rowsOf(catalogue.ListRegistrationNumberTypes(ctx, tenant, 0, firstPage(t, ports.RegistrationNumberTypePages))); err == nil {
 		t.Fatalf("limit 0 应被拒")
 	}
 }
@@ -267,7 +267,7 @@ func TestRegistrationNumberTypeRegistryIsTenantScoped(t *testing.T) {
 		pcValue(t, domain.NewRegistrationNumberTypeCode, "SYN-LIFETIME")); err != nil || found {
 		t.Fatalf("他租户点读 = (%v, %v), want (false, nil)", found, err)
 	}
-	if rows, err := catalogue.ListRegistrationNumberTypes(ctx, foreign, 10); err != nil || len(rows) != 0 {
+	if rows, err := rowsOf(catalogue.ListRegistrationNumberTypes(ctx, foreign, 10, firstPage(t, ports.RegistrationNumberTypePages))); err != nil || len(rows) != 0 {
 		t.Fatalf("他租户上列 = (%d, %v), want (0, nil)", len(rows), err)
 	}
 }
