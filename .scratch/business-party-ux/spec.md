@@ -41,7 +41,7 @@ Status: in-progress——第一批子票 01–04 已于 2026-11-06 进 main；�
 | [02](./issues/02-empty-state-and-contact-hint.md) | 资料空状态给下一步，客户缺联系人时提醒 | resolved（2026-11-06 进 main） |
 | [03](./issues/03-object-page-summary.md) | 对象页：meta 行补识别信息，概要去重，时刻只到日 | resolved（2026-11-06 进 main） |
 | [04](./issues/04-list-type-tags-and-country.md) | 列表：类型改标签，加注册地一列 | resolved（2026-11-06 进 main） |
-| [05](./issues/05-list-command-header-merge.md) | 列表命令头：指标行只按类型分格，类型下拉去掉 | ready-for-agent |
+| [05](./issues/05-list-command-header-merge.md) | 列表命令头：指标行只按类型分格，类型下拉去掉 | resolved（2026-11-06 进 main） |
 | [06](./issues/06-registration-forms-layout.md) | 登记表单版式：两列、分段、提示一行；保存后选中新单位 | ready-for-agent |
 | [07](./issues/07-shared-status-pill-icons-and-command-header.md) | 共用面：状态胶囊带图标、指标标签中文样式、标题旁插槽放册签（需非作者评审） | ready-for-agent |
 | [08](./issues/08-panel-first-screen-status-and-counts.md) | 右栏首屏：随状态的提示、关联计数一行、主动作随状态 | ready-for-agent |
