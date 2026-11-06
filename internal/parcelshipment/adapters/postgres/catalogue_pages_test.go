@@ -21,7 +21,7 @@ import (
 // 按小页走完全部页，第一页之后插入一行新行——倒序册的新行落在已翻过的那头、后面各页不再出现；正序队列的新行排在末尾——原有各行
 // 都恰好出现一次，不重出、不漏行；筛选维或 q 改变 total；空册答空页且 total 为 0；带计数的队列积压数不随条件变。
 
-// walk 用同一组条件按页大小 size 走完全部页，交回每页的标识与末页的 total；between 不为 nil 时在第一页之后调一次（插入新行）。
+// walk 用同一组条件走完全部页（页大小在 list 里），交回每页的标识与末页的 total；between 不为 nil 时在第一页之后调一次（插入新行）。
 func walk[Row any](
 	t *testing.T,
 	catalogue *cataloguepage.Catalogue,
@@ -115,7 +115,9 @@ func TestShipmentRequestViewsPageWithinTheScope(t *testing.T) {
 	}
 }
 
-// Covers: 复核队列按提交时刻正序（先来先审）翻页，翻页途中新停等复核的委托排在末尾；customerAccountId 收窄后 total 随之变；空册 total 为 0。
+// Covers: 复核队列按提交时刻正序（先来先审）翻页，翻页途中新停等复核的委托排在末尾；同时停进来一份提交早于游标的（入队常晚于提交），
+// 它排在已翻过的那头、后面各页不出现，已翻过的行也不重出——按偏移取页时这一份会把上一页末行挤进下一页；customerAccountId 收窄后
+// total 随之变；空册 total 为 0。
 func TestAcceptanceReviewQueuePagesOldestFirst(t *testing.T) {
 	views, repository, transactor := newShipmentRequestViews(t)
 	ctx := t.Context()
@@ -135,19 +137,23 @@ func TestAcceptanceReviewQueuePagesOldestFirst(t *testing.T) {
 	}
 	id := func(record ports.AcceptanceReviewQueueRecord) string { return record.ShipmentRequestID.String() }
 
-	pages, total := walk(t, ports.AcceptanceReviewQueuePages, url.Values{}, list, id, func() { await(4, "SYN-CUSTOMER-02") })
-	expectPages(t, "翻页途中新停等一份", pages, total,
-		[][]string{{"SYN-REQ-RVW-1", "SYN-REQ-RVW-2"}, {"SYN-REQ-RVW-3", "SYN-REQ-RVW-4"}}, 4)
+	pages, total := walk(t, ports.AcceptanceReviewQueuePages, url.Values{}, list, id, func() {
+		await(4, "SYN-CUSTOMER-02")
+		await(0, "SYN-CUSTOMER-01")
+	})
+	expectPages(t, "翻页途中新停等两份，一份提交早于游标", pages, total,
+		[][]string{{"SYN-REQ-RVW-1", "SYN-REQ-RVW-2"}, {"SYN-REQ-RVW-3", "SYN-REQ-RVW-4"}}, 5)
 	narrowed, total := walk(t, ports.AcceptanceReviewQueuePages, url.Values{"customerAccountId": {"SYN-CUSTOMER-01"}}, list, id, nil)
-	expectPages(t, "按账户收窄", narrowed, total, [][]string{{"SYN-REQ-RVW-1", "SYN-REQ-RVW-3"}}, 2)
+	expectPages(t, "按账户收窄", narrowed, total, [][]string{{"SYN-REQ-RVW-0", "SYN-REQ-RVW-1"}, {"SYN-REQ-RVW-3"}}, 3)
 	empty, err := views.ListAwaitingManualReview(ctx, viewScope(t, "SYN-TENANT-09", "SYN-CUSTOMER-01"), 2, firstPage(t, ports.AcceptanceReviewQueuePages))
 	if err != nil || len(empty.Rows) != 0 || empty.Total != 0 {
 		t.Fatalf("空册：得 %+v（%v）", empty, err)
 	}
 }
 
-// Covers: 授权处置队列按提交时刻正序翻页（页大小 1），翻页途中新停等的委托排在末尾；受限项只对本页的委托点读、每页都带出；
-// customerAccountId 收窄后 total 随之变；空册 total 为 0。
+// Covers: 授权处置队列按提交时刻正序翻页（页大小 1），翻页途中新停等的委托排在末尾，提交早于游标的那一份不出现、已翻过的行不重出；
+// 受限项只对本页的委托点读、每页都带出；customerAccountId 收窄后 total 随之变；空册 total 为 0。受限控制结果的版本号取旧的共享委托
+// 夹具里的提交版本（它与委托的提交版本对上才读得到），不改成 SYN- 值。
 func TestAuthorizedDispositionQueuePagesOldestFirst(t *testing.T) {
 	fixture := newDispositionQueueFixture(t)
 	ctx := t.Context()
@@ -172,14 +178,17 @@ func TestAuthorizedDispositionQueuePagesOldestFirst(t *testing.T) {
 	}
 	id := func(record ports.AuthorizedDispositionQueueRecord) string { return record.ShipmentRequestID.String() }
 
-	pages, total := walk(t, ports.AuthorizedDispositionQueuePages, url.Values{}, list, id, func() { await(3, "SYN-CUSTOMER-01") })
-	expectPages(t, "翻页途中新停等一份", pages, total,
-		[][]string{{"SYN-REQ-DISP-1"}, {"SYN-REQ-DISP-2"}, {"SYN-REQ-DISP-3"}}, 3)
+	pages, total := walk(t, ports.AuthorizedDispositionQueuePages, url.Values{}, list, id, func() {
+		await(3, "SYN-CUSTOMER-01")
+		await(0, "SYN-CUSTOMER-02")
+	})
+	expectPages(t, "翻页途中新停等两份，一份提交早于游标", pages, total,
+		[][]string{{"SYN-REQ-DISP-1"}, {"SYN-REQ-DISP-2"}, {"SYN-REQ-DISP-3"}}, 4)
 	if !reflect.DeepEqual(restricted, []int{1, 1, 1}) {
 		t.Fatalf("每页的受限项：得 %v，应为各一项", restricted)
 	}
 	narrowed, total := walk(t, ports.AuthorizedDispositionQueuePages, url.Values{"customerAccountId": {"SYN-CUSTOMER-02"}}, list, id, nil)
-	expectPages(t, "按账户收窄", narrowed, total, [][]string{{"SYN-REQ-DISP-2"}}, 1)
+	expectPages(t, "按账户收窄", narrowed, total, [][]string{{"SYN-REQ-DISP-0"}, {"SYN-REQ-DISP-2"}}, 2)
 	empty, err := fixture.views.ListAwaitingAuthorizedDisposition(ctx, viewScope(t, "SYN-TENANT-09", "SYN-CUSTOMER-01"), 1,
 		firstPage(t, ports.AuthorizedDispositionQueuePages))
 	if err != nil || len(empty.Rows) != 0 || empty.Total != 0 {

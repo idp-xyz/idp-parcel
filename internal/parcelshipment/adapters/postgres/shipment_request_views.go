@@ -37,8 +37,8 @@ func NewShipmentRequestViews(db *bentopg.DB) (*ShipmentRequestViews, error) {
 
 var _ ports.ShipmentRequestViews = (*ShipmentRequestViews)(nil)
 
-// shipmentRequestKeyword 是委托查阅与两个委托队列共用的 q 落列：委托号、单据号（运单号）与来源请求键上做字面包含——单据号可空，
-// 没有号的委托在 q 上只靠另两列命中。三册共用这一份，操作者在哪一页搜同一个号都命中同样的行。
+// shipmentRequestKeyword 是委托查阅与各委托队列共用的 q 落列：委托号、单据号（运单号）与来源请求键上做字面包含——单据号可空，
+// 没有号的委托在 q 上只靠另两列命中。共用这一份，操作者在哪一页搜同一个号都命中同样的行。
 var shipmentRequestKeyword = []string{"shipment_request_id", "document_number", "source_request_key"}
 
 // shipmentRequestViewPages 把 ports.ShipmentRequestViewPages 落到列上。state 落在存代码的 state 列。

@@ -1,7 +1,7 @@
 # 01 共用件补件：落列声明、取页 SQL 片段、`Finish` 与统一结果类型
 
 Category: enhancement
-Status: in-progress——作者完成，与 02 一并评审（首轮钉 `3a20b2bcc`，修订轮复核中；之后补的 NUL 缺口见文末完成记录，须一并复核）。2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，worktree `idp-parcel-pagination`，基 main `a1274a6b8`
+Status: in-progress——与 02 一并评审：首轮钉 `3a20b2bcc`，修订轮复核钉 `9c5e302b9`（含之后补的 NUL 缺口）两轴无阻断，非阻断已处理，待进 main。2026-11-06 通道 1，分支 `cursor/catalogue-pagination-rollout`，worktree `idp-parcel-pagination`，基 main `a1274a6b8`
 地盘：`internal/platform/cataloguepage`（新文件与其测试；包头注一句）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定一、三、四、五、七；spec「共用件的补件」。
 
@@ -34,7 +34,7 @@ Status: in-progress——作者完成，与 02 一并评审（首轮钉 `3a20b2b
 |---|---|
 | `7b1166838` | 落列声明 `Columns` / `Bind` / `MustBind`，取页片段 `Plan`（`CountSQL` / `PageSQL`），`Finish` 与统一结果类型 `Result` |
 | `9726b2f35` | 领域枚举的词表与代码换算 `Words` / `Code`；`Finish` 头注写明游标位置取自 ORDER BY 那几列的扫描值 |
-| 补 NUL 缺口（本笔） | 游标里的文本段、`q`、自由取值的筛选值按 `storable.Text` 判，库存不下的答 400；判据从 `httpapi` 挪到新包 `internal/platform/storable`，`httpapi.StorableText` 改为转调 |
+| `672247e38` | 补 NUL 缺口：游标里的文本段、`q`、自由取值的筛选值按 `storable.Text` 判，库存不下的答 400；判据从 `httpapi` 挪到新包 `internal/platform/storable`，`httpapi.StorableText` 改为转调 |
 
 **完成判据**
 
@@ -43,5 +43,12 @@ Status: in-progress——作者完成，与 02 一并评审（首轮钉 `3a20b2b
 
 **判断项**
 
-1. **补 NUL 缺口，偏离本票「不改游标编码与查询解码的既有行为」**：13 的作者交回时指出，游标的文本段解开后不判就进 SQL 参数。游标不防篡改——摘要只用来认出「条件变了」，不是凭证，作用域来自 Intake——改写一个真游标就能把 NUL 带进去，库拒收、读口答 500。`cmd/parcel-api` 登记处的请求目标检查判的是 base64 编过的整条游标，看不到解开后的值。合规请求的答法不变，变的只是原本答 500 的那几类请求；`q` 与筛选值在 `cmd/parcel-api` 上本由那道检查先拦，这里再判是为了不靠装配处：豁免表里的口与别的二进制同样受护。
+1. **补 NUL 缺口，偏离本票「不改游标编码与查询解码的既有行为」**：13 的作者交回时指出，游标的文本段解开后不判就进 SQL 参数。游标不防篡改——摘要只用来认出「条件变了」，不是凭证，作用域来自 Intake——改写一个真游标就能把 NUL 带进去，库拒收、读口答 500。`cmd/parcel-api` 登记处的请求目标检查判的是 base64 编过的整条游标，看不到解开后的值。合规请求的答法不变，变的是带库存不下文本的伪造游标与参数：原本或答 500，或在文本段不进 SQL 的册上照答（如客户追踪那一册，伪造游标原答 200），现在一律 400——都合 ADR-0144 决定一。`q` 与筛选值在 `cmd/parcel-api` 上本由那道检查先拦，这里再判是为了不靠装配处：豁免表里的口与别的二进制同样受护。选择器的取值由端点自己读，`Decode` 只记进摘要、不判，迁移前即如此；收进同一份判据归 18 号票。
 2. **判据挪包，偏离本票地盘**：判据原在 `httpapi`。共用件导入它，各上下文的 `ports` 与 `application` 就会经共用件依赖 `net/http` 与 chi（实测今天没有一个业务 `ports` / `application` 包依赖它们）；在共用件里另写一份又违「单一权威」。所以挪到不属传输层的 `internal/platform/storable`，`httpapi.StorableText` 保留为转调，既有调用方一个不动。
+
+## 评审记录
+
+与 02 一并评审，评审意见与处理的总表在 02 的票面；这里只记本票的结论。
+
+- **首轮 ← 子代理 · 钉 `3a20b2bcc`**：本票判据都有用例覆盖，无阻断。
+- **修订轮复核 ← 子代理 · 钉 `9c5e302b9`**（首个复核会话在交出结论前停住，由另一个非作者会话接替）：两轴无阻断。判据只在 `storable.Text` 一处、与 `read_target_guard.go` 互补无冲突、挪包成立，复核都核过。两条非阻断：判断项 1「变的只是原本答 500 的那几类请求」不确（客户追踪那一册伪造游标原答 200）——已改写；`Decode` 不判选择器的取值——归 18 号票。
