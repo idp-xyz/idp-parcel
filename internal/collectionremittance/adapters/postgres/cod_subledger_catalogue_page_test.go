@@ -5,24 +5,11 @@ import (
 	"net/url"
 	"reflect"
 	"testing"
-	"time"
 
 	adapter "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
 )
-
-// seedSubledgerOpenedAt 开立一本分户账，开立时间由调用方给；按开立时刻排序的用例要它。
-func (fixture *catalogueFixture) seedSubledgerOpenedAt(
-	t *testing.T, tenant, customer, entity, currency, channel string, openedAt time.Time,
-) {
-	t.Helper()
-	fixture.seed(t,
-		`INSERT INTO collection_remittance.subledger
-			(tenant_id, customer_ref, legal_entity_ref, currency, channel_ref, custody_basis_ref, opened_at)
-		 VALUES ($1, $2, $3, $4, $5, 'SYN-CUSTODY-01', $6)`,
-		tenant, customer, entity, currency, channel, openedAt)
-}
 
 // codSubledgerKeys 把一页行写成「客户/责任法人/币种/渠道」四维键，比次序时一眼看得出是哪一段走了样。
 func codSubledgerKeys(rows []ports.CodSubledgerCatalogueRow) []string {
@@ -124,16 +111,15 @@ func TestCodSubledgersPageByCursorWithoutRepeatsOrGapsWhileLedgersOpen(t *testin
 }
 
 // Covers: ADR-0144 决定三——行标识是四维键、与排序同向作决胜键：同一客户名下几本账跨页时按（责任法人、币种、渠道）续上，
-// 正序与倒序各走一遍都恰是全集、次序即四维同向；按开立时刻排时同刻的账也按四维键收尾。
+// 正序与倒序各走一遍都恰是全集、次序即四维同向。
 func TestCodSubledgersBreakTiesOnTheFourDimensionKey(t *testing.T) {
 	catalogue, fixture := newCodSubledgerCatalogue(t)
 	tenant := catalogueValue(t, domain.NewTenantID, "SYN-TENANT-01")
-	earlier, later := catalogueBaseAt, catalogueBaseAt.Add(36*time.Hour+500*time.Microsecond)
-	fixture.seedSubledgerOpenedAt(t, "SYN-TENANT-01", "SYN-CUST-02", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01", later)
-	fixture.seedSubledgerOpenedAt(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-02", "SYN-CUR-01", "SYN-CHAN-01", earlier)
-	fixture.seedSubledgerOpenedAt(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-02", "SYN-CHAN-01", later)
-	fixture.seedSubledgerOpenedAt(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-02", earlier)
-	fixture.seedSubledgerOpenedAt(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01", later)
+	fixture.seedSubledger(t, "SYN-TENANT-01", "SYN-CUST-02", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
+	fixture.seedSubledger(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-02", "SYN-CUR-01", "SYN-CHAN-01")
+	fixture.seedSubledger(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-02", "SYN-CHAN-01")
+	fixture.seedSubledger(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-02")
+	fixture.seedSubledger(t, "SYN-TENANT-01", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
 
 	ascending := []string{
 		"SYN-CUST-01/SYN-LE-01/SYN-CUR-01/SYN-CHAN-01",
@@ -152,20 +138,6 @@ func TestCodSubledgersBreakTiesOnTheFourDimensionKey(t *testing.T) {
 	}{
 		"缺省序":  {url.Values{}, ascending},
 		"客户倒序": {url.Values{"sort": {"-customer"}}, descending},
-		"开立时刻倒序": {url.Values{"sort": {"-openedAt"}}, []string{
-			"SYN-CUST-02/SYN-LE-01/SYN-CUR-01/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-02/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-01/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-02/SYN-CUR-01/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-01/SYN-CHAN-02",
-		}},
-		"开立时刻正序": {url.Values{"sort": {"openedAt"}}, []string{
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-01/SYN-CHAN-02",
-			"SYN-CUST-01/SYN-LE-02/SYN-CUR-01/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-01/SYN-CHAN-01",
-			"SYN-CUST-01/SYN-LE-01/SYN-CUR-02/SYN-CHAN-01",
-			"SYN-CUST-02/SYN-LE-01/SYN-CUR-01/SYN-CHAN-01",
-		}},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

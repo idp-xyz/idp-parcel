@@ -55,7 +55,7 @@ type remittanceBatchDocument struct {
 // 依据上做字面包含。取页语句里 s 先是开立面本表、再是取出的本页(子查询同名),两处列名
 // 同形,同一份落列在两处都成立。
 var codSubledgerPages = ports.CodSubledgerPages.MustBind(cataloguepage.Columns{
-	Sorts:    map[string]string{"customer": "s.customer_ref", "openedAt": "s.opened_at"},
+	Sorts:    map[string]string{"customer": "s.customer_ref"},
 	Identity: []string{"s.customer_ref", "s.legal_entity_ref", "s.currency", "s.channel_ref"},
 	Keyword: []string{
 		"s.customer_ref", "s.legal_entity_ref", "s.currency", "s.channel_ref", "s.custody_basis_ref",
@@ -208,15 +208,11 @@ func (catalogue *CodSubledgerCatalogue) ListCodSubledgers(
 	return page, nil
 }
 
-// codSubledgerPosition 取本页末行扫描回来的列值:四维键与开立时刻都从 s 的列上原样读回,
-// 与 ORDER BY 用的是同一份。
-func codSubledgerPosition(row ports.CodSubledgerCatalogueRow, sortField string) cataloguepage.Position {
-	value := row.Customer
-	if sortField == "openedAt" {
-		value = cataloguepage.FormatInstant(row.OpenedAt)
-	}
+// codSubledgerPosition 取本页末行扫描回来的四维键:都从 s 的列上原样读回,与 ORDER BY 用的是
+// 同一份。本册只按客户排,排序维的值就是行标识的第一段。
+func codSubledgerPosition(row ports.CodSubledgerCatalogueRow, _ string) cataloguepage.Position {
 	return cataloguepage.Position{
-		Value:    value,
+		Value:    row.Customer,
 		Identity: []string{row.Customer, row.LegalEntity, row.Currency, row.Channel},
 	}
 }
