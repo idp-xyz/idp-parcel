@@ -1,7 +1,7 @@
 # 12 pilot-governance 四册迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-12-governance`，基 `3a20b2bcc`；迁移用了预留的 pilot-governance `0009`，进 main 时按 tip 重核）
+Status: 非作者评审（钉 `9700d7ffc`）无阻断，非阻断已处理，待进 main（分支 `cursor/crpr-12-governance`，基 `3a20b2bcc`；迁移用了预留的 pilot-governance `0009`，进 main 时按 tip 重核）
 Blocked by: 01
 地盘：`internal/pilotgovernance/{ports,adapters/http,adapters/postgres}` 里治理登记册的读端口、端点与读面及其测试；`cmd/parcel-api` 里这个读口的占位；
 `migrations/pilot_governance` 的一条新迁移（索引）。
@@ -35,7 +35,9 @@ Blocked by: 01
 | | `internal/pilotgovernance/adapters/http/query_governance_registers_test.go`、`query_governance_registers_page_test.go` | `register` 两头的用例：配置了的渠道上空值 `?register=` 也答 400；未配置的渠道上缺席、空值、词外与写对的一问同答 403 |
 | | `ports/catalogue_pages.go`、`adapters/postgres/registry_read.go`、`registry_read_page_test.go` | 注释引 spec 原句，不引取舍序号；去掉数别处东西的说法与迁移前次序的旁注 |
 | `bc7892ba8` | 本票面 | 自查轮的完成记录 |
-| 本笔 | 本票面 | 完成记录里数代码里东西的说法改成点名（`page` 的格、同刻的行、读方法与索引） |
+| `9700d7ffc` | 本票面 | 完成记录里数代码里东西的说法改成点名（`page` 的格、同刻的行、读方法与索引） |
+| `01665d9d8` | `internal/pilotgovernance/adapters/postgres/registry_read.go` | 评审修订：接管册把 `COALESCE(to_at, from_at)` 随行选出、扫进扫描行，游标位置取它，Go 里的重算删掉；ORDER BY 与选列共用常量 `takeoverIntervalEnd` |
+| 本笔 | 本票面 | 评审记录与 Status |
 
 ### 声明
 
@@ -52,7 +54,7 @@ Blocked by: 01
 
 - ✅ 翻页期间插入新行不重出、不漏行，空册答空页 `total` 为 0：`TestGovernanceRegistersPageByCursorWithoutRepeatsOrGapsWhileRowsAreRegistered`，四册各一遍——翻完第一页后在已翻那头与未翻那头各登一行，第二页接着 `P03`、`P02`，末页带上新登在后头的 `P00`，`total` 5 → 7。
 - ✅ `total` 随 `q` 变、`%` 与 `_` 按字面：`TestGovernanceRegistersTotalFollowsTheKeyword`，四册各一遍。四册都没有筛选维，「随筛选变」一格不适用。
-- ✅ 决胜键同向、跨页续得上：`TestGovernanceRegistersBreakTiesInTheSortDirection`（四册，同刻的一组行跨页，正倒序各走完全册，时刻带微秒）；接管册行标识里 `COALESCE(to_at, from_at)` 那一段：`TestTakeoverRegistryKeepsOpenAndClosedTwinsApart`（区间四维与起点相同、一开一闭，一行一页翻，各出现一次）。
+- ✅ 决胜键同向、跨页续得上：`TestGovernanceRegistersBreakTiesInTheSortDirection`（四册，同刻的一组行跨页，正倒序各走完全册，时刻带微秒）；接管册行标识里 `COALESCE(to_at, from_at)` 那一段：`TestTakeoverRegistryKeepsOpenAndClosedTwinsApart`（区间四维与起点相同、一开一闭，一行一页翻，各出现一次）。游标位置的末段取随行扫回来的 `takeoverIntervalEnd` 那一列（`01665d9d8`）：把它换成起点重跑，孪生用例在倒序上红（开放区间那一行丢了），换回后绿。
 - ✅ 端点：未知键（`tenant`、`limit`）、未声明的筛选键、集外排序维与别册的排序维、解不开的游标、换 `q` 拿旧游标、拿暂停册的游标翻恢复册，各答 400 带 `detail`；渠道未配置时一切变体（含 `register` 缺席、空值与词外）同答 403、答复体与写对的一问逐字相同；四册的 `page` 带齐 `size`、`next`、`total`，`size` 取 Intake 页大小：`TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration`、`TestGovernanceRegistersCarryThePageAndPassTheDecodedQuery`。
 - ✅ `register` 在 Intake 之后判（`98083c23a`）：配置了的渠道上缺席、空值 `?register=` 与词外 `stage-review` 答 400，读口替身一被调用即判败：`TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister`；未配置的渠道上这三种与写对的四册同答 403、答复体逐字相同：`TestGovernanceRegistersEndpointAnswersForbiddenWhenIntakeUnconfigured`、`TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration`。把端点换回 `a76ad9deb` 的版本（`register` 先于 Intake）重跑，这两条未配置用例各在裸路径上红（答 400 `MALFORMED_REQUEST`），换回后绿。
 - ✅ 迁移按字节无 CR、无 BOM：`0009` 与票面已量。
@@ -61,12 +63,13 @@ Blocked by: 01
   `internal/parcelshipment/adapters/accessidentity` 26/0、`internal/parcelshipment/adapters/pilotgovernance` 58/0、`internal/pilotgovernance/adapters/http` 21/0、
   `.../adapters/postgres` 64/0、`.../application` 36/0、`.../domain` 12/0、`internal/platform/migrate` 8/0、`migrations` 1/0。
   反向依赖由 `go list -f '{{.ImportPath}}{{range .Deps}} {{.}}{{end}}' ./...` 反查含 `internal/pilotgovernance/` 者；其中 `internal/pilotgovernance/adapters/accessidentity` 与 `internal/pilotgovernance/ports` 没有测试文件。
+- ✅ 评审修订轮（`01665d9d8`，只动了接管册读面）：改过的 `.go` 跑过 `gofmt -w`；`go build ./...` 过，`go vet ./internal/pilotgovernance/...` 过；带 DSN、`-p 1`：`internal/pilotgovernance/adapters/postgres` 64/0、`.../adapters/http` 21/0，FAIL 0。
 
 ### 判断项
 
 - **租户键形状不另裁**：frontier/03 的「不接线」裁决已由 ADR-0083 取代（见该票 Comments）。照 ADR-0083 决定二，各册的读方法仍只收 `(ctx, limit, query)`，声明、取页条件与索引都没有租户段。
 - **决胜键改向**：暂停册、恢复册迁移前同刻按 `suspension_id` 正序，接管册同刻按四维与起点正序；迁移后与时刻倒序同向（倒序）。只在排序时刻完全相同时次序与迁移前相反。权威区间册迁移前已是 `interval_id DESC`，不变。
-- **接管册没有主键**（偏离 spec「行标识取登记表主键去掉租户那几段」）：身份是唯一约束 `takeover_record_interval_identity`，含可为空的 `to_at`（`NULLS NOT DISTINCT`）。行标识取区间四维与 `from_at`，再加读面把 `to_at` 导出成的 `COALESCE(to_at, from_at)`（spec「可排维与行标识的列必须非空」）。不撞值的依据是约束 `takeover_record_bounds`：闭区间终点晚于起点，开放区间同维同起点至多一行。索引里对应的一段是同一表达式，两处须逐字一致，读面落列处有注释。
+- **接管册没有主键**（偏离 spec「行标识取登记表主键去掉租户那几段」）：身份是唯一约束 `takeover_record_interval_identity`，含可为空的 `to_at`（`NULLS NOT DISTINCT`）。行标识取区间四维与 `from_at`，再加读面把 `to_at` 导出成的 `COALESCE(to_at, from_at)`（spec「可排维与行标识的列必须非空」）。不撞值的依据是约束 `takeover_record_bounds`：闭区间终点晚于起点，开放区间同维同起点至多一行。读面常量 `takeoverIntervalEnd`（ORDER BY 与选列都用它，游标位置取它扫回来的值）与索引里那一段须逐字一致，常量头注写明。
 - **`interval_id` 进游标**：它是权威区间的主键与迁移前的收尾列，但答复体不透出（行注「代理键不透出」）。现在它在游标里，游标对调用方是不透明串。
 - **`register` 挪到 Intake 之后**（自查轮，`98083c23a`）：迁移前与 `ed7178386` 都先判 `register`，未配置的渠道上缺席或词外答 400，答复随请求内容变，不合 ADR-0055 决定三与 spec「端点先 Intake、后解码查询参数」。parcel-shipment 渠道择优册的选择器同形，已被 02 的评审判为阻断并挪后，15 的 `family` 同此裁定。现在分派与解码都在 Intake 之后：配置了的渠道上缺席、空值或词外照旧答 400 `MALFORMED_REQUEST`（不带 `detail`，与迁移前同）；未配置的渠道上与写对的一问同答 403。可见变化只有一处：未配置渠道上的坏 `register` 从 400 改答 403。管理台与探针都只带写对的 `register`（见「管理台与脚本带的参数」一条），不受影响。
 - **不是按包裹或事件计量的大册**：治理登记册是产品级脱敏登记，量级远小于租户级，`total` 给精确值。
@@ -74,7 +77,7 @@ Blocked by: 01
 
 ### 自查轮
 
-派单方通道 1 按派单说明「02 的非作者评审拦下过的」逐条核。有缺已补的两条：`register` 先于 Intake；注释与票面引 spec 的取舍序号、数别处的东西（`98083c23a`、`bc7892ba8` 与本笔）。其余无缺：
+派单方通道 1 按派单说明「02 的非作者评审拦下过的」逐条核。有缺已补的两条：`register` 先于 Intake；注释与票面引 spec 的取舍序号、数别处的东西（`98083c23a`、`bc7892ba8`、`9700d7ffc`）。其余无缺：
 
 - 每册真库用例都有翻页途中插入、空册 `total` 为 0、`q` 改变 `total`（四册没有筛选维）。
 - 端点表驱动：合规一问带 `page`、`size` 取 Intake 页大小；集外参数答 400 带 `detail`；未配置时合规与不合规的一问同答 403；换 `q` 拿旧游标答 400。
@@ -86,3 +89,14 @@ Blocked by: 01
 
 - 没有跑 `EXPLAIN` 看各册的索引（尤其接管册索引里的表达式那一段）是否被缺省序选用；表是产品级小表，只由语句与索引同形支撑。
 - 管理台不改（归 14）：今天它只取第一页（Intake 页大小 200）。
+
+## 评审记录
+
+非作者评审钉 `9700d7ffc`，无阻断。非阻断意见与处理：
+
+| 评审意见 | 处理 |
+|---|---|
+| `takeoverPosition` 在 Go 里重算 `COALESCE(to_at, from_at)`，没有取扫描值。等价、有孪生用例守着，但同一表达式落在读面落列、索引与 Go 里；派单说明与参照要求游标位置取自 ORDER BY 那几列的扫描值 | 已改（`01665d9d8`）：这一列随行选出、扫进扫描行，位置取它，Go 里的重算删掉；ORDER BY 与选列共用常量 `takeoverIntervalEnd`。把位置末段换成起点，孪生用例在倒序上红 |
+| 配置了的渠道上坏 `register` 答 400 不带 `detail` | 保留迁移前的答法，与 02 的渠道择优选择器同形 |
+| 区间开闭、暂停是否已恢复是派生状态，没放筛选维 | 已收进 16 号票 |
+| `cmd/parcel-api/endpoints_governance_registers.go` 头注的「三册一口」已失真 | 不在本票地盘，由推送方进 main 时改 |
