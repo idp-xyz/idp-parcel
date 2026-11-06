@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 const (
@@ -21,10 +22,14 @@ const (
 // 与接管记录的盘点 jsonb 不透出——见 ports.GovernanceRegistryRead 的口面纪律。读口
 // 不收租户，与端点同句（ADR-0083 Decision 二）。
 type GovernanceRegistryReader interface {
-	ListAuthorityIntervals(ctx context.Context, limit int) ([]ports.AuthorityIntervalRegistryRow, error)
-	ListSuspensions(ctx context.Context, limit int) ([]ports.SuspensionRegistryRow, error)
-	ListResumptions(ctx context.Context, limit int) ([]ports.ResumptionRegistryRow, error)
-	ListTakeovers(ctx context.Context, limit int) ([]ports.TakeoverRegistryRow, error)
+	ListAuthorityIntervals(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.AuthorityIntervalRegistryRow], error)
+	ListSuspensions(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.SuspensionRegistryRow], error)
+	ListResumptions(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ResumptionRegistryRow], error)
+	ListTakeovers(ctx context.Context, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.TakeoverRegistryRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -50,13 +55,22 @@ const (
 	registerTakeover          = "takeover"
 )
 
+// registerCatalogues 是四册各自的查询声明（ADR-0144）：register 选中哪一册，就按哪一册的声明解码其余参数。
+var registerCatalogues = map[string]*cataloguepage.Catalogue{
+	registerAuthorityInterval: ports.AuthorityIntervalRegistryPages,
+	registerSuspension:        ports.SuspensionRegistryPages,
+	registerResumption:        ports.ResumptionRegistryPages,
+	registerTakeover:          ports.TakeoverRegistryPages,
+}
+
 // NewQueryGovernanceRegistersEndpoint 交回治理登记册查阅的 HTTP 入口
 // （GET /governance-registers；最终路径归装配票，本批为 closure-batch/07）。
 //
 // 四册共用一个端点，按 `register` 查询参数分派（先例：networkrouting 目录端点一口
 // 七分派）：参数在场与否、取值在不在封闭集内属传输形状，先于 Intake；未配置 Intake
 // 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认一册就是
-// 替它猜。本入口只查阅，不登记接管。
+// 替它猜。本入口只查阅，不登记接管。其余参数（after、sort 与 q）按选中那一册的声明
+// 解码，在 Intake 之后（writePageQueryProblem 头注）。
 func NewQueryGovernanceRegistersEndpoint(
 	intake RegistryQueryIntake,
 	reader GovernanceRegistryReader,
@@ -69,8 +83,8 @@ func NewQueryGovernanceRegistersEndpoint(
 		}
 
 		register := request.URL.Query().Get("register")
-		if register != registerAuthorityInterval && register != registerSuspension &&
-			register != registerResumption && register != registerTakeover {
+		catalogue, known := registerCatalogues[register]
+		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -80,60 +94,67 @@ func NewQueryGovernanceRegistersEndpoint(
 			writeRegistryIntakeProblem(response, err)
 			return
 		}
+		pageQuery, err := catalogue.Decode(request.URL.Query())
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		ctx := request.Context()
 		limit := query.Limit
 
 		switch register {
 		case registerAuthorityInterval:
-			serveRegistryList(response, outcomeAuthorityIntervalsListed, "intervals",
+			serveRegistryList(response, outcomeAuthorityIntervalsListed, "intervals", limit,
 				authorityIntervalBodyOf,
-				func() ([]ports.AuthorityIntervalRegistryRow, error) {
-					return reader.ListAuthorityIntervals(ctx, limit)
+				func() (cataloguepage.Result[ports.AuthorityIntervalRegistryRow], error) {
+					return reader.ListAuthorityIntervals(ctx, limit, pageQuery)
 				})
 		case registerSuspension:
-			serveRegistryList(response, outcomeSuspensionsListed, "suspensions",
+			serveRegistryList(response, outcomeSuspensionsListed, "suspensions", limit,
 				suspensionBodyOf,
-				func() ([]ports.SuspensionRegistryRow, error) {
-					return reader.ListSuspensions(ctx, limit)
+				func() (cataloguepage.Result[ports.SuspensionRegistryRow], error) {
+					return reader.ListSuspensions(ctx, limit, pageQuery)
 				})
 		case registerResumption:
-			serveRegistryList(response, outcomeResumptionsListed, "resumptions",
+			serveRegistryList(response, outcomeResumptionsListed, "resumptions", limit,
 				resumptionBodyOf,
-				func() ([]ports.ResumptionRegistryRow, error) {
-					return reader.ListResumptions(ctx, limit)
+				func() (cataloguepage.Result[ports.ResumptionRegistryRow], error) {
+					return reader.ListResumptions(ctx, limit, pageQuery)
 				})
 		case registerTakeover:
-			serveRegistryList(response, outcomeTakeoversListed, "takeovers",
+			serveRegistryList(response, outcomeTakeoversListed, "takeovers", limit,
 				takeoverBodyOf,
-				func() ([]ports.TakeoverRegistryRow, error) {
-					return reader.ListTakeovers(ctx, limit)
+				func() (cataloguepage.Result[ports.TakeoverRegistryRow], error) {
+					return reader.ListTakeovers(ctx, limit, pageQuery)
 				})
 		}
 	})
 }
 
-// serveRegistryList 是三册共用的转写：读回、逐行转体、2xx 成格。读不回是答案未形成
-// （5xx），不伪装成空册——前者该重试，后者是终局答案。
+// serveRegistryList 是四册共用的转写：读回、逐行转体、带上 page、2xx 成格。读不回是
+// 答案未形成（5xx），不伪装成空册——前者该重试，后者是终局答案。
 func serveRegistryList[Entry any, Body any](
 	response http.ResponseWriter,
 	outcome string,
 	field string,
+	limit int,
 	bodyOf func(Entry) Body,
-	list func() ([]Entry, error),
+	list func() (cataloguepage.Result[Entry], error),
 ) {
-	entries, err := list()
+	page, err := list()
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空册交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]Body, 0, len(entries))
-	for _, entry := range entries {
+	bodies := make([]Body, 0, len(page.Rows))
+	for _, entry := range page.Rows {
 		bodies = append(bodies, bodyOf(entry))
 	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"outcome": outcome,
 		field:     bodies,
+		"page":    page.Page(limit),
 	})
 }
 
@@ -279,12 +300,22 @@ type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
+// problemDetail 的 detail 只随「改请求才会好」的 4xx 在场，是给操作者看的理由散文，
+// 调用方不据此分支；为空时那一格缺席，不写空串。
 type problemDetail struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+// writeProblemWithDetail 是 writeProblem 带理由散文的兄弟。单立一个函数而不是给
+// writeProblem 加变参：交不交 detail 在调用点要一眼读得出来——5xx 照旧只交 code，那是
+// 依赖故障的内部原文，不外泄。
+func writeProblemWithDetail(response http.ResponseWriter, status int, code string, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // GovernanceRegisters 实现治理登记册四册的列表读端口（票 admin-skeleton-closure-batch/02
@@ -19,6 +20,8 @@ import (
 // 只读：上列不重建领域对象、不做冲突判断。语句**没有租户条件**——不是漏了 ADR-0003
 // 那一句，是这些表没有租户列（产品级机制，ADR-0083 Decision 一），往语句里写租户
 // 条件才是错的。恢复决定的盘点 jsonb 不透出，装载归 Resumptions.FindBySuspension。
+//
+// 取页按 ports 上四册的声明（ADR-0144）：总数一句、本页一句，同一组条件，不保证同一快照。
 type GovernanceRegisters struct {
 	db *bentopg.DB
 }
@@ -32,6 +35,33 @@ func NewGovernanceRegisters(db *bentopg.DB) (*GovernanceRegisters, error) {
 
 var _ ports.GovernanceRegistryRead = (*GovernanceRegisters)(nil)
 
+// 四册的落列。q 覆盖的列与各册声明头注同句；表没有租户列，取页的固定条件为空。
+var (
+	authorityIntervalPages = ports.AuthorityIntervalRegistryPages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"insertedAt": "inserted_at"},
+		Identity: []string{"interval_id"},
+		Keyword:  []string{"object_scope", "capability", "fact_kind", "authority"},
+	})
+	suspensionPages = ports.SuspensionRegistryPages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"occurredAt": "occurred_at"},
+		Identity: []string{"suspension_id"},
+		Keyword:  []string{"suspension_id", "trigger_source", "scope", "executed_by"},
+	})
+	resumptionPages = ports.ResumptionRegistryPages.MustBind(cataloguepage.Columns{
+		Sorts:    map[string]string{"decidedAt": "decided_at"},
+		Identity: []string{"suspension_id"},
+		Keyword:  []string{"suspension_id", "decided_by"},
+	})
+	// 终点那一段必须与索引 takeover_record_by_effective 里的表达式逐字相同，规划器才认得那条索引。
+	takeoverPages = ports.TakeoverRegistryPages.MustBind(cataloguepage.Columns{
+		Sorts: map[string]string{"effectiveAt": "effective_at"},
+		Identity: []string{
+			"object_scope", "capability", "fact_kind", "authority", "from_at", "COALESCE(to_at, from_at)",
+		},
+		Keyword: []string{"object_scope", "capability", "fact_kind", "authority"},
+	})
+)
+
 // registryListLimit 判据与各上下文目录读口同款：limit 非正是调用方编程错误，静默
 // 答一页会把「忘了传」变成一个没人决定过的页大小。
 func registryListLimit(operation string, limit int) error {
@@ -41,188 +71,220 @@ func registryListLimit(operation string, limit int) error {
 	return nil
 }
 
-// ListAuthorityIntervals 上列生产权威区间册。排序以登记时间倒序、同刻按追加序倒序
-// 收尾（interval_id 只参与排序不透出），保证分页可重复。
+// registryPage 是四册共用的取页：按 binding 拼出总数与本页两句，逐行交 scan 扫描，再切页编游标。position 只能取
+// scan 扫回来的列值（cataloguepage.Finish 头注）。
+func registryPage[Scanned any](
+	ctx context.Context,
+	db *bentopg.DB,
+	binding *cataloguepage.Binding,
+	query cataloguepage.Query,
+	limit int,
+	selection, source string,
+	scan func(scan func(dest ...any) error) (Scanned, error),
+	position func(row Scanned, sortField string) cataloguepage.Position,
+) (cataloguepage.Result[Scanned], error) {
+	plan, err := binding.Plan(query, "", nil, limit)
+	if err != nil {
+		return cataloguepage.Result[Scanned]{}, err
+	}
+	querier, err := db.ReadExecutor(ctx)
+	if err != nil {
+		return cataloguepage.Result[Scanned]{}, err
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return cataloguepage.Result[Scanned]{}, err
+	}
+	rows, err := querier.Query(ctx, plan.PageSQL(selection, source), plan.PageArgs...)
+	if err != nil {
+		return cataloguepage.Result[Scanned]{}, err
+	}
+	defer rows.Close()
+
+	var fetched []Scanned
+	for rows.Next() {
+		row, err := scan(rows.Scan)
+		if err != nil {
+			return cataloguepage.Result[Scanned]{}, err
+		}
+		fetched = append(fetched, row)
+	}
+	if err := rows.Err(); err != nil {
+		return cataloguepage.Result[Scanned]{}, err
+	}
+	return cataloguepage.Finish(query, fetched, limit, total, position)
+}
+
+// scannedAuthorityInterval 带着代理键：它是行标识、要进游标，却不是区间的身份，不进上列行。
+type scannedAuthorityInterval struct {
+	intervalID int64
+	row        ports.AuthorityIntervalRegistryRow
+}
+
+// ListAuthorityIntervals 上列生产权威区间册。缺省按登记时间倒序、同刻按追加序 interval_id 同向收尾，与迁移前同。
 func (registers *GovernanceRegisters) ListAuthorityIntervals(
 	ctx context.Context,
 	limit int,
-) ([]ports.AuthorityIntervalRegistryRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorityIntervalRegistryRow], error) {
 	if err := registryListLimit("list authority intervals", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.AuthorityIntervalRegistryRow]{}, err
 	}
-	querier, err := registers.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list authority intervals: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT object_scope, capability, fact_kind, authority, from_at, to_at, inserted_at
-		   FROM pilot_governance.authority_interval
-		  ORDER BY inserted_at DESC, interval_id DESC
-		  LIMIT $1`,
-		limit,
+	page, err := registryPage(ctx, registers.db, authorityIntervalPages, query, limit,
+		`interval_id, object_scope, capability, fact_kind, authority, from_at, to_at, inserted_at`,
+		"pilot_governance.authority_interval",
+		func(scan func(dest ...any) error) (scannedAuthorityInterval, error) {
+			var scanned scannedAuthorityInterval
+			var toAt *time.Time
+			row := &scanned.row
+			if err := scan(
+				&scanned.intervalID, &row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
+				&row.FromAt, &toAt, &row.InsertedAt,
+			); err != nil {
+				return scannedAuthorityInterval{}, err
+			}
+			if toAt != nil {
+				row.ToAt, row.HasToAt = *toAt, true
+			}
+			return scanned, nil
+		},
+		func(scanned scannedAuthorityInterval, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(scanned.row.InsertedAt),
+				Identity: []string{cataloguepage.FormatInteger(scanned.intervalID)},
+			}
+		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list authority intervals: %w", err)
+		return cataloguepage.Result[ports.AuthorityIntervalRegistryRow]{}, fmt.Errorf("list authority intervals: %w", err)
 	}
-	defer rows.Close()
-
-	intervals := make([]ports.AuthorityIntervalRegistryRow, 0, limit)
-	for rows.Next() {
-		var row ports.AuthorityIntervalRegistryRow
-		var toAt *time.Time
-		if err := rows.Scan(
-			&row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
-			&row.FromAt, &toAt, &row.InsertedAt,
-		); err != nil {
-			return nil, fmt.Errorf("list authority intervals: %w", err)
-		}
-		if toAt != nil {
-			row.ToAt, row.HasToAt = *toAt, true
-		}
-		intervals = append(intervals, row)
+	intervals := make([]ports.AuthorityIntervalRegistryRow, 0, len(page.Rows))
+	for _, scanned := range page.Rows {
+		intervals = append(intervals, scanned.row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list authority intervals: %w", err)
-	}
-	return intervals, nil
+	return cataloguepage.Result[ports.AuthorityIntervalRegistryRow]{Rows: intervals, Next: page.Next, Total: page.Total}, nil
 }
 
-// ListSuspensions 上列暂停决定册。排序以发生时刻倒序、同刻按暂停标识正序收尾。
+// ListSuspensions 上列暂停决定册。缺省按发生时刻倒序、同刻按暂停标识同向（倒序）收尾；迁移前同刻按标识正序。
 func (registers *GovernanceRegisters) ListSuspensions(
 	ctx context.Context,
 	limit int,
-) ([]ports.SuspensionRegistryRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.SuspensionRegistryRow], error) {
 	if err := registryListLimit("list suspensions", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.SuspensionRegistryRow]{}, err
 	}
-	querier, err := registers.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list suspensions: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT suspension_id, trigger_source, basis, evidence, scope, executed_by,
-		        occurred_at, effective_at, in_transit_note
-		   FROM pilot_governance.suspension_decision
-		  ORDER BY occurred_at DESC, suspension_id
-		  LIMIT $1`,
-		limit,
+	page, err := registryPage(ctx, registers.db, suspensionPages, query, limit,
+		`suspension_id, trigger_source, basis, evidence, scope, executed_by,
+		 occurred_at, effective_at, in_transit_note`,
+		"pilot_governance.suspension_decision",
+		func(scan func(dest ...any) error) (ports.SuspensionRegistryRow, error) {
+			var row ports.SuspensionRegistryRow
+			err := scan(
+				&row.SuspensionID, &row.TriggerSource, &row.Basis, &row.Evidence,
+				&row.Scope, &row.ExecutedBy, &row.OccurredAt, &row.EffectiveAt,
+				&row.InTransitNote,
+			)
+			return row, err
+		},
+		func(row ports.SuspensionRegistryRow, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(row.OccurredAt),
+				Identity: []string{row.SuspensionID},
+			}
+		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list suspensions: %w", err)
+		return cataloguepage.Result[ports.SuspensionRegistryRow]{}, fmt.Errorf("list suspensions: %w", err)
 	}
-	defer rows.Close()
-
-	suspensions := make([]ports.SuspensionRegistryRow, 0, limit)
-	for rows.Next() {
-		var row ports.SuspensionRegistryRow
-		if err := rows.Scan(
-			&row.SuspensionID, &row.TriggerSource, &row.Basis, &row.Evidence,
-			&row.Scope, &row.ExecutedBy, &row.OccurredAt, &row.EffectiveAt,
-			&row.InTransitNote,
-		); err != nil {
-			return nil, fmt.Errorf("list suspensions: %w", err)
-		}
-		suspensions = append(suspensions, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list suspensions: %w", err)
-	}
-	return suspensions, nil
+	return page, nil
 }
 
-// ListResumptions 上列恢复决定册。排序以决定时刻倒序、同刻按被恢复的暂停标识正序
-// 收尾；盘点 jsonb 不选列。
+// ListResumptions 上列恢复决定册。缺省按决定时刻倒序、同刻按被恢复的暂停标识同向（倒序）收尾；迁移前同刻按标识正序。
+// 盘点 jsonb 不选列。
 func (registers *GovernanceRegisters) ListResumptions(
 	ctx context.Context,
 	limit int,
-) ([]ports.ResumptionRegistryRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ResumptionRegistryRow], error) {
 	if err := registryListLimit("list resumptions", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.ResumptionRegistryRow]{}, err
 	}
-	querier, err := registers.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list resumptions: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT suspension_id, release_evidence, consistency_check, inventory_taken_at,
-		        decided_by, decided_at, effective_at
-		   FROM pilot_governance.resumption_decision
-		  ORDER BY decided_at DESC, suspension_id
-		  LIMIT $1`,
-		limit,
+	page, err := registryPage(ctx, registers.db, resumptionPages, query, limit,
+		`suspension_id, release_evidence, consistency_check, inventory_taken_at,
+		 decided_by, decided_at, effective_at`,
+		"pilot_governance.resumption_decision",
+		func(scan func(dest ...any) error) (ports.ResumptionRegistryRow, error) {
+			var row ports.ResumptionRegistryRow
+			err := scan(
+				&row.SuspensionID, &row.ReleaseEvidence, &row.ConsistencyCheck,
+				&row.InventoryTakenAt, &row.DecidedBy, &row.DecidedAt, &row.EffectiveAt,
+			)
+			return row, err
+		},
+		func(row ports.ResumptionRegistryRow, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(row.DecidedAt),
+				Identity: []string{row.SuspensionID},
+			}
+		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list resumptions: %w", err)
+		return cataloguepage.Result[ports.ResumptionRegistryRow]{}, fmt.Errorf("list resumptions: %w", err)
 	}
-	defer rows.Close()
-
-	resumptions := make([]ports.ResumptionRegistryRow, 0, limit)
-	for rows.Next() {
-		var row ports.ResumptionRegistryRow
-		if err := rows.Scan(
-			&row.SuspensionID, &row.ReleaseEvidence, &row.ConsistencyCheck,
-			&row.InventoryTakenAt, &row.DecidedBy, &row.DecidedAt, &row.EffectiveAt,
-		); err != nil {
-			return nil, fmt.Errorf("list resumptions: %w", err)
-		}
-		resumptions = append(resumptions, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list resumptions: %w", err)
-	}
-	return resumptions, nil
+	return page, nil
 }
 
-// ListTakeovers 上列对象级接管册。排序以生效时刻倒序，同刻按区间四维与开始时刻正序
-// 收尾。盘点 jsonb 不选列。
+// ListTakeovers 上列对象级接管册。缺省按生效时刻倒序，同刻按六段行标识同向（倒序）收尾（ports.TakeoverRegistryPages
+// 头注）；迁移前同刻按区间四维与起点正序。盘点 jsonb 不选列。
 func (registers *GovernanceRegisters) ListTakeovers(
 	ctx context.Context,
 	limit int,
-) ([]ports.TakeoverRegistryRow, error) {
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.TakeoverRegistryRow], error) {
 	if err := registryListLimit("list takeovers", limit); err != nil {
-		return nil, err
+		return cataloguepage.Result[ports.TakeoverRegistryRow]{}, err
 	}
-	querier, err := registers.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list takeovers: %w", err)
-	}
-
-	rows, err := querier.Query(ctx,
-		`SELECT object_scope, capability, fact_kind, authority, from_at, to_at,
-		        stop_evidence, accepted_facts, pending_externals, actual_control,
-		        responsibilities, next_action, inventory_taken_at, effective_at
-		   FROM pilot_governance.takeover_record
-		  ORDER BY effective_at DESC, object_scope, capability, fact_kind, authority, from_at
-		  LIMIT $1`,
-		limit,
+	page, err := registryPage(ctx, registers.db, takeoverPages, query, limit,
+		`object_scope, capability, fact_kind, authority, from_at, to_at,
+		 stop_evidence, accepted_facts, pending_externals, actual_control,
+		 responsibilities, next_action, inventory_taken_at, effective_at`,
+		"pilot_governance.takeover_record",
+		func(scan func(dest ...any) error) (ports.TakeoverRegistryRow, error) {
+			var row ports.TakeoverRegistryRow
+			var toAt *time.Time
+			if err := scan(
+				&row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
+				&row.FromAt, &toAt, &row.StopEvidence, &row.AcceptedFacts,
+				&row.PendingExternals, &row.ActualControl, &row.Responsibilities,
+				&row.NextAction, &row.InventoryTakenAt, &row.EffectiveAt,
+			); err != nil {
+				return ports.TakeoverRegistryRow{}, err
+			}
+			if toAt != nil {
+				row.ToAt, row.HasToAt = *toAt, true
+			}
+			return row, nil
+		},
+		takeoverPosition,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list takeovers: %w", err)
+		return cataloguepage.Result[ports.TakeoverRegistryRow]{}, fmt.Errorf("list takeovers: %w", err)
 	}
-	defer rows.Close()
+	return page, nil
+}
 
-	takeovers := make([]ports.TakeoverRegistryRow, 0, limit)
-	for rows.Next() {
-		var row ports.TakeoverRegistryRow
-		var toAt *time.Time
-		if err := rows.Scan(
-			&row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
-			&row.FromAt, &toAt, &row.StopEvidence, &row.AcceptedFacts,
-			&row.PendingExternals, &row.ActualControl, &row.Responsibilities,
-			&row.NextAction, &row.InventoryTakenAt, &row.EffectiveAt,
-		); err != nil {
-			return nil, fmt.Errorf("list takeovers: %w", err)
-		}
-		if toAt != nil {
-			row.ToAt, row.HasToAt = *toAt, true
-		}
-		takeovers = append(takeovers, row)
+// takeoverPosition 的末段是 COALESCE(to_at, from_at) 在 Go 侧的同一算法，两个值都取自扫回来的列。
+func takeoverPosition(row ports.TakeoverRegistryRow, _ string) cataloguepage.Position {
+	end := row.FromAt
+	if row.HasToAt {
+		end = row.ToAt
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list takeovers: %w", err)
+	return cataloguepage.Position{
+		Value: cataloguepage.FormatInstant(row.EffectiveAt),
+		Identity: []string{
+			row.ObjectScope, row.Capability, row.FactKind, row.Authority,
+			cataloguepage.FormatInstant(row.FromAt), cataloguepage.FormatInstant(end),
+		},
 	}
-	return takeovers, nil
 }

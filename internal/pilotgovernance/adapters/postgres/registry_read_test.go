@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -29,6 +31,7 @@ type registryReadFixture struct {
 	resumptions *adapter.Resumptions
 	takeovers   *adapter.Takeovers
 	transactor  bentoapp.Transactor
+	pool        *pgxpool.Pool
 }
 
 func newRegistryReadFixture(t *testing.T) *registryReadFixture {
@@ -65,6 +68,7 @@ func newRegistryReadFixture(t *testing.T) *registryReadFixture {
 		resumptions: resumptions,
 		takeovers:   takeovers,
 		transactor:  db.Transactor(),
+		pool:        pool,
 	}
 }
 
@@ -102,7 +106,7 @@ func TestAuthorityIntervalRegistryTranscribesTheColumnFace(t *testing.T) {
 	fixture := newRegistryReadFixture(t)
 	ctx := t.Context()
 
-	empty, err := fixture.registers.ListAuthorityIntervals(ctx, 10)
+	empty, err := rowsOf(fixture.registers.ListAuthorityIntervals(ctx, 10, firstPage(t, ports.AuthorityIntervalRegistryPages)))
 	if err != nil {
 		t.Fatalf("空册上列：%v", err)
 	}
@@ -131,7 +135,7 @@ func TestAuthorityIntervalRegistryTranscribesTheColumnFace(t *testing.T) {
 		})
 	}
 
-	rows, err := fixture.registers.ListAuthorityIntervals(ctx, 10)
+	rows, err := rowsOf(fixture.registers.ListAuthorityIntervals(ctx, 10, firstPage(t, ports.AuthorityIntervalRegistryPages)))
 	if err != nil {
 		t.Fatalf("上列区间：%v", err)
 	}
@@ -157,7 +161,7 @@ func TestAuthorityIntervalRegistryTranscribesTheColumnFace(t *testing.T) {
 		t.Fatal("登记时间没透出")
 	}
 
-	if _, err := fixture.registers.ListAuthorityIntervals(ctx, 0); err == nil {
+	if _, err := fixture.registers.ListAuthorityIntervals(ctx, 0, firstPage(t, ports.AuthorityIntervalRegistryPages)); err == nil {
 		t.Fatal("区间册 limit 0 未被拒")
 	}
 }
@@ -195,7 +199,7 @@ func TestSuspensionAndResumptionRegistriesTranscribeTheColumnFace(t *testing.T) 
 		return err
 	})
 
-	suspensions, err := fixture.registers.ListSuspensions(ctx, 10)
+	suspensions, err := rowsOf(fixture.registers.ListSuspensions(ctx, 10, firstPage(t, ports.SuspensionRegistryPages)))
 	if err != nil {
 		t.Fatalf("上列暂停：%v", err)
 	}
@@ -219,7 +223,7 @@ func TestSuspensionAndResumptionRegistriesTranscribeTheColumnFace(t *testing.T) 
 		t.Fatalf("暂停两时刻变形：%+v", suspended)
 	}
 
-	resumptions, err := fixture.registers.ListResumptions(ctx, 10)
+	resumptions, err := rowsOf(fixture.registers.ListResumptions(ctx, 10, firstPage(t, ports.ResumptionRegistryPages)))
 	if err != nil {
 		t.Fatalf("上列恢复：%v", err)
 	}
@@ -237,17 +241,17 @@ func TestSuspensionAndResumptionRegistriesTranscribeTheColumnFace(t *testing.T) 
 		t.Fatalf("恢复时刻列变形：%+v", resumed)
 	}
 
-	limited, err := fixture.registers.ListSuspensions(ctx, 1)
+	limited, err := rowsOf(fixture.registers.ListSuspensions(ctx, 1, firstPage(t, ports.SuspensionRegistryPages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列：%v", err)
 	}
 	if len(limited) != 1 {
 		t.Fatalf("limit 1 交回 %d 行", len(limited))
 	}
-	if _, err := fixture.registers.ListSuspensions(ctx, -1); err == nil {
+	if _, err := fixture.registers.ListSuspensions(ctx, -1, firstPage(t, ports.SuspensionRegistryPages)); err == nil {
 		t.Fatal("暂停册 limit -1 未被拒")
 	}
-	if _, err := fixture.registers.ListResumptions(ctx, 0); err == nil {
+	if _, err := fixture.registers.ListResumptions(ctx, 0, firstPage(t, ports.ResumptionRegistryPages)); err == nil {
 		t.Fatal("恢复册 limit 0 未被拒")
 	}
 }
@@ -256,7 +260,7 @@ func TestTakeoverRegistryTranscribesScalarsAndOmitsInventory(t *testing.T) {
 	fixture := newRegistryReadFixture(t)
 	ctx := t.Context()
 
-	empty, err := fixture.registers.ListTakeovers(ctx, 10)
+	empty, err := rowsOf(fixture.registers.ListTakeovers(ctx, 10, firstPage(t, ports.TakeoverRegistryPages)))
 	if err != nil {
 		t.Fatalf("空册上列：%v", err)
 	}
@@ -273,7 +277,7 @@ func TestTakeoverRegistryTranscribesScalarsAndOmitsInventory(t *testing.T) {
 		})
 	}
 
-	listed, err := fixture.registers.ListTakeovers(ctx, 10)
+	listed, err := rowsOf(fixture.registers.ListTakeovers(ctx, 10, firstPage(t, ports.TakeoverRegistryPages)))
 	if err != nil {
 		t.Fatalf("上列接管：%v", err)
 	}
@@ -293,14 +297,14 @@ func TestTakeoverRegistryTranscribesScalarsAndOmitsInventory(t *testing.T) {
 		t.Fatalf("闭合接管上界变形：%+v", closed)
 	}
 
-	limited, err := fixture.registers.ListTakeovers(ctx, 1)
+	limited, err := rowsOf(fixture.registers.ListTakeovers(ctx, 1, firstPage(t, ports.TakeoverRegistryPages)))
 	if err != nil {
 		t.Fatalf("带 limit 上列：%v", err)
 	}
 	if len(limited) != 1 {
 		t.Fatalf("limit 1 交回 %d 行", len(limited))
 	}
-	if _, err := fixture.registers.ListTakeovers(ctx, 0); err == nil {
+	if _, err := fixture.registers.ListTakeovers(ctx, 0, firstPage(t, ports.TakeoverRegistryPages)); err == nil {
 		t.Fatal("接管册 limit 0 未被拒")
 	}
 }

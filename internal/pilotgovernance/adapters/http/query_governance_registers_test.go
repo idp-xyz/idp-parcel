@@ -12,6 +12,7 @@ import (
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对治理登记册端点（票 admin-skeleton-closure-batch/02，接管册 ADR-0155）证
@@ -26,37 +27,42 @@ type stubRegistryReader struct {
 	suspensions []ports.SuspensionRegistryRow
 	resumptions []ports.ResumptionRegistryRow
 	takeovers   []ports.TakeoverRegistryRow
+	next        string
+	total       int64
 	err         error
 
 	gotLimit int
+	gotQuery cataloguepage.Query
+}
+
+func stubPage[Row any](stub *stubRegistryReader, limit int, query cataloguepage.Query, rows []Row,
+) (cataloguepage.Result[Row], error) {
+	stub.gotLimit, stub.gotQuery = limit, query
+	return cataloguepage.Result[Row]{Rows: rows, Next: stub.next, Total: stub.total}, stub.err
 }
 
 func (stub *stubRegistryReader) ListAuthorityIntervals(
-	_ context.Context, limit int,
-) ([]ports.AuthorityIntervalRegistryRow, error) {
-	stub.gotLimit = limit
-	return stub.intervals, stub.err
+	_ context.Context, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorityIntervalRegistryRow], error) {
+	return stubPage(stub, limit, query, stub.intervals)
 }
 
 func (stub *stubRegistryReader) ListSuspensions(
-	_ context.Context, limit int,
-) ([]ports.SuspensionRegistryRow, error) {
-	stub.gotLimit = limit
-	return stub.suspensions, stub.err
+	_ context.Context, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.SuspensionRegistryRow], error) {
+	return stubPage(stub, limit, query, stub.suspensions)
 }
 
 func (stub *stubRegistryReader) ListResumptions(
-	_ context.Context, limit int,
-) ([]ports.ResumptionRegistryRow, error) {
-	stub.gotLimit = limit
-	return stub.resumptions, stub.err
+	_ context.Context, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ResumptionRegistryRow], error) {
+	return stubPage(stub, limit, query, stub.resumptions)
 }
 
 func (stub *stubRegistryReader) ListTakeovers(
-	_ context.Context, limit int,
-) ([]ports.TakeoverRegistryRow, error) {
-	stub.gotLimit = limit
-	return stub.takeovers, stub.err
+	_ context.Context, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.TakeoverRegistryRow], error) {
+	return stubPage(stub, limit, query, stub.takeovers)
 }
 
 // unreachableRegistryReader 断言读口未被触到：传输形状的拒绝与未配置格都发生在
@@ -64,31 +70,31 @@ func (stub *stubRegistryReader) ListTakeovers(
 type unreachableRegistryReader struct{ t *testing.T }
 
 func (reader unreachableRegistryReader) ListAuthorityIntervals(
-	_ context.Context, _ int,
-) ([]ports.AuthorityIntervalRegistryRow, error) {
+	_ context.Context, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.AuthorityIntervalRegistryRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.AuthorityIntervalRegistryRow]{}, nil
 }
 
 func (reader unreachableRegistryReader) ListSuspensions(
-	_ context.Context, _ int,
-) ([]ports.SuspensionRegistryRow, error) {
+	_ context.Context, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.SuspensionRegistryRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.SuspensionRegistryRow]{}, nil
 }
 
 func (reader unreachableRegistryReader) ListResumptions(
-	_ context.Context, _ int,
-) ([]ports.ResumptionRegistryRow, error) {
+	_ context.Context, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.ResumptionRegistryRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.ResumptionRegistryRow]{}, nil
 }
 
 func (reader unreachableRegistryReader) ListTakeovers(
-	_ context.Context, _ int,
-) ([]ports.TakeoverRegistryRow, error) {
+	_ context.Context, _ int, _ cataloguepage.Query,
+) (cataloguepage.Result[ports.TakeoverRegistryRow], error) {
 	reader.t.Fatal("读口不该被触到")
-	return nil, nil
+	return cataloguepage.Result[ports.TakeoverRegistryRow]{}, nil
 }
 
 // grantedRegistryIntake 是已认证、授予齐备的查阅出示：交回给定页大小的作用域，只供本包用例。
