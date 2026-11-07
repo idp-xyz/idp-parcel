@@ -1,14 +1,16 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
 import { ReloginButton } from '../../auth/ReloginButton';
 import { moduleInfoById } from '../../navigation';
+import { useRetryWhenChanged } from '../../query/answers';
 import { StateSlot } from '../../templates';
 import { formatInstant } from '../catalogue-view';
+import { CursorPager } from '../shipment-request/cursor-pager';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import {
   approvePriceCardDraft,
   listPriceCardDrafts,
   publishPriceCardDraft,
-  type ApiResult,
   type PriceCardDraftListResponseBody,
   type PriceCardDraftRow,
 } from './api';
@@ -43,47 +45,38 @@ const noteClass: Record<DraftActionNote['tone'], string> = {
   problem: 'text-idpxyz-danger',
 };
 
+interface DraftOverlay {
+  source: PriceCardDraftListResponseBody;
+  rows: PriceCardDraftRow[];
+  notes: Record<string, DraftActionNote>;
+}
+
 /**
  * 价卡草稿（票 price-card-import/06；ADR-0101 决定五）：草稿册一版一行，录入者与批准者并排；`草稿`行可展开逐格问题，
  * 已校验的那一版给「批准」、已批准的给「发布」，别的状态不给动作。
  *
  * 批准门（审批职责规则、主体相同、授予不足）全在服务端：页面不预判谁能批，按钮按状态给，答回来哪一格就如实呈现哪一格。
  * 端点今天在部署没设发行方参数时答 403，页面只呈现未配置，不拿演示数据顶替。
+ *
+ * 草稿查阅已迁到 ADR-0144，按游标翻页（表下翻页条），次序是读口的缺省序（最近录入在前）。读口另有草稿状态一维与 q，本签没有
+ * 对应的筛选条，不另加。
  */
 export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: number }) {
   // 没有登记册写授予的操作者只看不摆批准 / 发布：写口照旧自己判授予，这里只是呈现（ADR-0315）。
   const mayWrite = useMayWriteRegistry();
-  const [answer, setAnswer] = useState<ApiResult<PriceCardDraftListResponseBody> | null>(null);
-  const [rows, setRows] = useState<PriceCardDraftRow[]>([]);
-  const [reloadToken, setReloadToken] = useState(0);
+  const { answer, pagination, retry } = useCatalogueCursor({}, listPriceCardDrafts);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [pending, setPending] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Record<string, DraftActionNote>>({});
+  // 批准、发布答回的行与那一口的答复只叠在取到它们的那一份答复上：刷新、翻页都是重读，各行按册上重读的样子摆，上一轮动作的
+  // 答复随之作废，不挂到可能已经换了内容的行上。
+  const [overlay, setOverlay] = useState<DraftOverlay | null>(null);
+  // 别的签（新建价卡）存下了新草稿时拧这把钥匙；挂载时那一次由取数自己取。
+  useRetryWhenChanged(refreshSignal, retry);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listPriceCardDrafts().then((result) => {
-      if (cancelled) return;
-      setAnswer(result);
-      setRows(result.kind === 'outcome' ? result.body.drafts : []);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
-  // 刷新后各行按册上重读的样子摆，上一轮动作的答复随之作废，不挂到可能已经换了内容的行上。
-  const reload = () => {
-    setNotes({});
-    setReloadToken((token) => token + 1);
-  };
-
-  // 别的签（新建价卡）存下了新草稿：这一签留在后台没有卸载，靠信号重取一次，切过来就是最新的册。
-  useEffect(() => {
-    if (refreshSignal > 0) reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshSignal]);
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const overlaid = body !== null && overlay?.source === body ? overlay : null;
+  const rows = overlaid?.rows ?? body?.drafts ?? [];
+  const notes = overlaid?.notes ?? {};
 
   function toggle(key: string) {
     setExpanded((current) => {
@@ -95,16 +88,24 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
   }
 
   async function act(row: PriceCardDraftRow, action: PriceCardDraftAction) {
+    if (body === null) return;
+    const source = body;
     const key = draftKey(row.plan);
     setPending(key);
     const payload = draftReferencePayload(row.plan);
     const result = action === 'approve' ? await approvePriceCardDraft(payload) : await publishPriceCardDraft(payload);
-    setRows((current) => withProgressedDraft(current, result));
-    setNotes((current) => ({ ...current, [key]: draftActionNoteOf(action, result) }));
+    setOverlay((previous) => {
+      const base = previous?.source === source ? previous : { source, rows: source.drafts, notes: {} };
+      return {
+        source,
+        rows: withProgressedDraft(base.rows, result),
+        notes: { ...base.notes, [key]: draftActionNoteOf(action, result) },
+      };
+    });
     setPending(null);
   }
 
-  const viewState = draftListViewState(answer, reload, info);
+  const viewState = draftListViewState(answer, retry, info);
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -119,10 +120,10 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
             谁可以批准、录入人能不能自己批准，按贵公司的审批规则。
           </p>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={reload} disabled={answer === null || pending !== null}>
+            <Button variant="outline" onClick={retry} disabled={answer === null || pending !== null}>
               刷新
             </Button>
-            {answer?.kind === 'outcome' ? <span className="type-body leading-4 text-idpxyz-textMuted">共 {rows.length} 个版本</span> : null}
+            {body !== null ? <span className="type-body leading-4 text-idpxyz-textMuted">本页 {rows.length} 个版本</span> : null}
           </div>
           {viewState.kind === 'ready' ? (
             <table className="w-full text-left type-body leading-4">
@@ -183,6 +184,7 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
               <StateSlot state={viewState} />
             </div>
           )}
+          {pagination && viewState.kind === 'ready' ? <CursorPager pagination={pagination} /> : null}
         </CardContent>
       </Card>
     </div>

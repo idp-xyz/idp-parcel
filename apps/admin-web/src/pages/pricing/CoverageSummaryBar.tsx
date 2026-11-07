@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { useCatalogueCursor } from '../use-catalogue-cursor';
 import {
   countPendingSeriesEvaluations,
   listReferenceSeriesCoverage,
   type PendingSeriesEvaluationsResponseBody,
-  type ReferenceSeriesCoverageListResponseBody,
 } from './api';
 import { coverageNote, coverageRowOf, type CoverageRow } from './coverage-rows';
 import { sameSeries, type SeriesKey } from './catalogue-filter';
@@ -41,22 +42,21 @@ interface CoverageSummaryBarProps {
  *    不知道该去找谁。
  * 3. **不隐藏 `asOf`。** 「在用」只对某一刻成立；不把那一刻说出来，这一条摘要就成了一个
  *    看起来永久的权威答案。同一条判据下目录页的状态列被裁为不含「在用」——那一页没有正当
- *    的时刻源，本端点有，代价就是把它显出来。
+ *    的时刻源，本端点有，代价就是把它显出来。翻页之后每一页各按自己那一问的时刻解，「截至」跟着换。
+ *
+ * 覆盖读口已迁到 ADR-0144，一条序列一格、按游标翻页；只有不止一页时才在「截至」旁摆翻页钮。读口另有种类一维与按标识的 q，
+ * 本条没有对应的筛选条，不另加。
  */
 export function CoverageSummaryBar({
   onSelectSeries,
   focusedSeries = null,
 }: CoverageSummaryBarProps = {}) {
-  const [answer, setAnswer] =
-    useState<ApiResult<ReferenceSeriesCoverageListResponseBody> | null>(null);
+  const { answer, pagination } = useCatalogueCursor({}, listReferenceSeriesCoverage);
   const [pendingAnswer, setPendingAnswer] =
     useState<ApiResult<PendingSeriesEvaluationsResponseBody> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listReferenceSeriesCoverage().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
     // 挂起评价数走另一只读口（ADR-0105 Decision 五：伴生读端口，不拓宽覆盖读口）；两次请求各回各的
     // asOf，摆在一起时各标各的时刻，不假装是同一刻。
     void countPendingSeriesEvaluations().then((result) => {
@@ -86,7 +86,8 @@ export function CoverageSummaryBar({
 
   const asOf = answer.body.asOf;
   const rows = answer.body.series.map((record) => coverageRowOf(record, asOf));
-  if (rows.length === 0) {
+  const pager = pagination !== undefined && (pastFirstPage(pagination) || pagination.next !== null) ? pagination : undefined;
+  if (rows.length === 0 && !pastFirstPage(pagination)) {
     return (
       <div className="shrink-0 px-4 pt-3 type-body leading-4 text-idpxyz-textMuted">
         还没有登记任何汇率或燃油费率；在「登记数值」签里登记第一条。
@@ -111,8 +112,11 @@ export function CoverageSummaryBar({
             </button>
           ) : null}
         </span>
-        <span className="type-caption text-idpxyz-textMuted">
-          截至 <span className="font-mono">{formatInstant(asOf)}</span>
+        <span className="inline-flex items-center gap-3 type-caption text-idpxyz-textMuted">
+          <span>
+            截至 <span className="font-mono">{formatInstant(asOf)}</span>
+          </span>
+          {pager ? <CursorPager pagination={pager} /> : null}
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">

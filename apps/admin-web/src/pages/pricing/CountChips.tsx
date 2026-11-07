@@ -1,11 +1,11 @@
-// 列表页过滤条上的「胶囊计数」：全部一格加若干带计数的格，选中实底、`aria-pressed`。样子照 party/VersionStatusChips
-// （集团与法人页工作台的状态胶囊同款）；那件钉死了「全部 / 在用 / 其余」三格，这里格由调用方给，供产品与价格区几张
-// ListPageTemplate 页按结果或种类即筛。再点一次选中的格回到全部。
+// 列表页过滤条上的胶囊：全部一格加若干格，选中实底、`aria-pressed`。样子照 party/VersionStatusChips（集团与法人页工作台的状态
+// 胶囊同款）；那件钉死了「全部 / 在用 / 其余」三格，这里格由调用方给，供产品与价格区几张 ListPageTemplate 页按结果或种类即筛。
+// 再点一次选中的格回到全部。计数可以不给：读口翻页之后，一页里数出来的不是各格的总数，那种页就不摆数。
 
 export interface CountChip {
   id: string;
   label: string;
-  count: number;
+  count?: number;
 }
 
 export function CountChips({
@@ -17,7 +17,7 @@ export function CountChips({
 }: {
   /** 整组的无障碍名（如「结果」）。 */
   label: string;
-  total: number;
+  total?: number;
   chips: readonly CountChip[];
   /** 当前选中的格 id；null 即全部。 */
   value: string | null;
@@ -40,7 +40,7 @@ export function CountChips({
             }`}
           >
             {chip.label}
-            <span className="opacity-70"> {chip.count}</span>
+            {chip.count !== undefined && <span className="opacity-70"> {chip.count}</span>}
           </button>
         );
       })}

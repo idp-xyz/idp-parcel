@@ -7,9 +7,11 @@ import { RegistrationPanel } from '../../components/registration';
 import { StatusPill } from '../../components/StatusPill';
 import { priceDirectionLabels, priceCardPurposeLabels } from '../../vocabulary/price-card';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState } from '../catalogue-view';
 import { InstantRange } from '../party/detail-primitives';
-import { loaderKey, useAnswer } from '../../query/answers';
+import { CursorPager } from '../shipment-request/cursor-pager';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { PriceCardEditorPanel } from './card-editor/PriceCardEditorPanel';
 import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
@@ -18,16 +20,15 @@ import { PriceCardDetailPanel, PriceCardUnits } from './PriceCardDetailPanel';
 import { problemNote } from './presentation';
 import { priceCardStatus, priceCardStatusLabel } from './price-card-content';
 import {
-  countPriceCards,
-  filterPriceCards,
-  priceCardCountSummary,
   priceCardNoMatchNote,
   priceCardRowKey,
+  priceCardsOfStatus,
   priceCardStatusFilterOptions,
+  priceCardStatusNoMatchNote,
+  priceCardStatusScopeNote,
   type PriceCardStatusFilter,
 } from './price-card-list';
 import { listPriceCards, registerPriceCard, registrationOutcomeLabels, type PriceCardRecord } from './api';
-import { pricingAnswersDomain } from './pricing-writes';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -85,43 +86,43 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
  * 价格表：已登记价卡版本的工作台。单击一行在右栏看这张卡有哪些费用项、每项怎么收、什么时候收（价卡内容读口）。
  * 新建、导入、草稿与高级 JSON 四签在同页其余签里。
  *
- * 筛选只在已取回的这一页上做：读口一页答完，不下推查询参数。导入签与草稿签今天在发行方未设时答 403
+ * 读口已迁到 ADR-0144，按游标翻页（工具条右端）。检索词（地址上的 `?q=`，停稳后）下推成 q，覆盖方案标识、版本与适用范围；
+ * 次序是读口的缺省序（新登在前）。状态胶囊是例外：状态是页面拿此刻现算的，读口不能按它筛，胶囊只筛已取回的这一页，旁边照实
+ * 写「状态只筛本页」，也不带计数。读口另有方向一维，本页没有对应的筛选条，不另加。导入签与草稿签今天在发行方未设时答 403
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
 function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCreate: () => void }) {
-  // 经取数层读，键在定价域下（pricing-writes.ts）：发布、登记之后作废的是这个域，目录签回来就是新的。
-  const { answer, retry, pending } = useAnswer(loaderKey(pricingAnswersDomain, listPriceCards), listPriceCards);
   const [search, setSearch] = useAddressKeyword();
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listPriceCards);
   const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const rows = answer?.kind === 'outcome' ? answer.body.cards : [];
-  const now = new Date();
-  const visible = filterPriceCards(rows, { search, status }, now);
-  const counts = countPriceCards(rows, now);
+  const visible = priceCardsOfStatus(rows, status, new Date());
   const answered = answer?.kind === 'outcome';
 
-  const statusChips: WorkbenchChip[] | undefined = answered
-    ? priceCardStatusFilterOptions()
-        .filter((option) => option.value === 'ALL' || option.value === status || counts.byStatus[option.value] > 0)
-        .map((option) => ({
-          id: option.value,
-          label: option.label,
-          count: option.value === 'ALL' ? counts.total : counts.byStatus[option.value],
-          active: status === option.value,
-          onClick: () => setStatus(option.value === 'ALL' || status === option.value ? 'ALL' : option.value),
-        }))
-    : undefined;
+  const statusChips: WorkbenchChip[] = priceCardStatusFilterOptions().map((option) => ({
+    id: option.value,
+    label: option.label,
+    active: status === option.value,
+    onClick: () => setStatus(option.value === 'ALL' || status === option.value ? 'ALL' : option.value),
+  }));
 
   return (
     <WorkbenchPageTemplate<PriceCardRecord>
       title={info.title}
       subtitle="对客户的售价与对供应商的成本价：点开一张价卡，看它收哪些费、怎么收、什么时候收"
       onRefresh={retry}
-      refreshing={pending}
+      refreshing={answer === null}
       search={{ value: search, onChange: setSearch, placeholder: '搜价卡编号或适用范围…' }}
       statusChips={statusChips}
-      toolbarRight={answered ? priceCardCountSummary(rows.length, visible.length) : undefined}
+      extraFilters={
+        <span className="shrink-0 type-caption text-idpxyz-textMuted">
+          {priceCardStatusScopeNote(answered, rows.length, visible.length, status)}
+        </span>
+      }
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       primaryAction={
         mayWrite ? (
           <Button variant="default" className={primaryActionClass} onClick={onCreate}>
@@ -134,7 +135,8 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
       rowKey={priceCardRowKey}
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
-      noMatchText={priceCardNoMatchNote}
+      // 这一页有行却被状态筛空，说的只是这一页；检索词答出零行才是这组条件下没有。
+      noMatchText={rows.length > 0 ? priceCardStatusNoMatchNote : priceCardNoMatchNote}
       onClearFilters={() => {
         setSearch('');
         setStatus('ALL');
@@ -143,7 +145,7 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
         const row = visible.find((card) => priceCardRowKey(card) === key);
         return row ? <PriceCardDetailPanel row={row} onClose={() => setSelectedKey(null)} /> : null;
       }}
-      // 筛出为空不是空态：viewState 按总数判，表格区另显 noMatchText。
+      // 筛出为空不是空态：viewState 按这一页答回的行数与下推的条件判，表格区另显 noMatchText。
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /pricing-price-cards',
@@ -151,6 +153,7 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
         emptyDescription: mayWrite
           ? '点「新建价卡」逐项填写，或在「导入价卡」签上传 Excel；批准、发布后就会出现在这里。'
           : '请有价卡维护权限的同事新建或导入价卡；批准、发布后就会出现在这里。',
+        narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { useRetryWhenChanged } from '../../query/answers';
 import type { StatusTone } from '../../vocabulary/status';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState } from '../catalogue-view';
 import { technicalRows } from '../settlement/ops-ui';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import {
   evidenceGradeLabels,
@@ -20,14 +23,12 @@ import {
   listReferenceSeries,
   registerReferenceSeries,
   registrationOutcomeLabels,
-  type ApiResult,
-  type ReferenceSeriesListResponseBody,
   type ReferenceSeriesRecord,
 } from './api';
 import { SeriesReviewPanel, type SeriesReviewTarget } from './SeriesReviewPanel';
 import { SeriesRegistrationForm } from './SeriesRegistrationForm';
 import { CoverageSummaryBar } from './CoverageSummaryBar';
-import { visibleSeriesRows, type SeriesKey } from './catalogue-filter';
+import { seriesConditions, type SeriesKey } from './catalogue-filter';
 import { correctionDraftOf, emptySeriesDraft } from './series-form';
 import { formatInstant } from '../moment';
 
@@ -178,7 +179,11 @@ function columnsWithActions(
  * 行级动作只有「复核」与「更正此版本」,没有修改或删除面:参考序列只登记不产生数值
  * (ADR-0013),数值由外部来源产生;登记册本身不可覆盖,更正是登记一个回指原版的新版本。
  *
- * `reloadToken` 由页面持有而不在本组件内:登记签与更正面板登记成功后目录要跟着刷新,而
+ * 读口已迁到 ADR-0144,按游标翻页(页底翻页条)。检索词(地址上的 `?q=`,停稳后)下推成 q,「只看这条序列」下推成
+ * seriesId 与 kind 两个精确筛选维(catalogue-filter.ts),不在答回来的那一页上再筛;换条件回第一页。读口另有按标识排的
+ * 一维,本页没有对应的排序钮,不另加。
+ *
+ * `reloadToken` 由页面持有而不在本组件内:登记签与更正面板登记成功后目录要跟着重取当前这一页,而
  * 登记签是本组件的兄弟不是子孙。
  */
 function ReferenceSeriesTable({
@@ -190,30 +195,18 @@ function ReferenceSeriesTable({
   requestReload: () => void;
   mayWrite: boolean;
 }) {
-  const [keyword, setKeyword] = useState('');
-  const [answer, setAnswer] = useState<ApiResult<ReferenceSeriesListResponseBody> | null>(
-    null,
-  );
+  const [keyword, setKeyword] = useAddressKeyword();
   // 复核面板与更正面板只开一个：两者都挂在目录之下，同时开着会让人把 A 的依据写到 B 里。
   const [reviewing, setReviewing] = useState<SeriesReviewTarget | null>(null);
   const [correcting, setCorrecting] = useState<ReferenceSeriesRecord | null>(null);
   // 「只看这条序列」与搜索词是两种收窄，分开持有；判据在 catalogue-filter.ts。
   const [focus, setFocus] = useState<SeriesKey | null>(null);
+  const conditions = seriesConditions({ focus, keyword: useSettledKeyword(keyword) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listReferenceSeries);
+  // 首次挂载由 useCatalogueCursor 自己取，这里只认落册之后的变化。
+  useRetryWhenChanged(reloadToken, retry);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listReferenceSeries().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
-  const retry = requestReload;
   const rows = answer?.kind === 'outcome' ? answer.body.series : [];
-  const visibleRows = visibleSeriesRows(rows, { focus, keyword });
   const openReview = (target: SeriesReviewTarget) => {
     setCorrecting(null);
     setReviewing(target);
@@ -239,14 +232,15 @@ function ReferenceSeriesTable({
         filterSummary={
           answer?.kind === 'outcome'
             ? focus
-              ? `${visibleRows.length} 个版本 · 只看 ${focus.seriesId}（${labelOf(seriesKindLabels, focus.kind)}）`
-              : `${visibleRows.length} 个版本`
+              ? `本页 ${rows.length} 个版本 · 只看 ${focus.seriesId}（${labelOf(seriesKindLabels, focus.kind)}）`
+              : `本页 ${rows.length} 个版本`
             : undefined
         }
         columns={mayWrite ? columnsWithActions(openReview, openCorrection) : columns}
-        rows={visibleRows}
+        rows={rows}
         rowKey={(row) => `${row.seriesId}@${row.seriesVersion}`}
-        emptyRowsNote="没有匹配的版本"
+        emptyRowsNote="当前条件下没有版本"
+        pagination={pagination}
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: 'GET /pricing-reference-series',
@@ -254,6 +248,7 @@ function ReferenceSeriesTable({
           emptyDescription: mayWrite
             ? '在「登记数值」签里登记第一条；价格表里用到汇率或燃油费率的费用项要等它登记、复核通过后才算得出来。'
             : '请有登记权限的同事登记；价格表里用到汇率或燃油费率的费用项要等它登记、复核通过后才算得出来。',
+          narrowed: catalogueConditionsNarrow(conditions),
         })}
       />
       {reviewing ? (

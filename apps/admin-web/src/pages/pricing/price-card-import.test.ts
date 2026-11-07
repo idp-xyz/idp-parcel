@@ -196,7 +196,11 @@ test('草稿册的页面态：空册是空态，未配置说的是草稿查阅�
   const retry = () => {};
   equal(draftListViewState(null, retry, pricingModule).kind, 'loading');
   const listed = (drafts: PriceCardDraftRow[]) =>
-    draftListViewState({ kind: 'outcome', status: 200, body: { outcome: 'PRICE_CARD_DRAFTS_LISTED', drafts } }, retry, pricingModule);
+    draftListViewState(
+      { kind: 'outcome', status: 200, body: { outcome: 'PRICE_CARD_DRAFTS_LISTED', drafts, page: { size: 200, next: null, total: drafts.length } } },
+      retry,
+      pricingModule,
+    );
   equal(listed([]).kind, 'empty');
   equal(listed([draftRow({})]).kind, 'ready');
   const unconfigured = draftListViewState({ kind: 'unconfigured' }, retry, pricingModule);

@@ -4,9 +4,14 @@
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
 // 响应体的 `outcome`。五格判别与全程追踪页同款,传输实现收敛在共享 catalogue-api
 // (装配侧只在 bootstrap 配置那一处前缀),本文件只保留本上下文的类型与查询函数。
+//
+// 评价、价卡、参考序列、参考序列覆盖与价卡草稿五个列表读口按 ADR-0144 翻页:游标、排序、筛选维与 `q` 经
+// catalogueRequestPath 拼进查询串,答复多一格 page;不带参数即裸路径。每册收哪些键以 internal/parcelpricing/ports 的
+// catalogue_pages.go 为准——集外的键答 400,这里不自造。挂起评价计数与价卡内容查阅不是目录读,不翻页,照旧。
 
 import { exchangeMasterData, postMasterData, postMasterDataForm } from '../catalogue-api';
 import type { ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 import { afterPricingWrite } from './pricing-writes';
 
@@ -239,6 +244,7 @@ export const priceCardDraftPublicationPath = '/pricing-price-card-draft-publicat
 export interface PriceCardDraftListResponseBody {
   outcome: string;
   drafts: PriceCardDraftRow[];
+  page: CataloguePage;
 }
 
 export interface PriceCardDraftProgressBody {
@@ -252,8 +258,12 @@ export interface PriceCardDraftReferencePayload {
   planVersion: string;
 }
 
-export function listPriceCardDrafts(): Promise<ApiResult<PriceCardDraftListResponseBody>> {
-  return exchangeMasterData<PriceCardDraftListResponseBody>(priceCardDraftViewsPath);
+/** 价卡草稿查阅,收哪些键见 ports.PriceCardDraftPages(status 可重复给,维内为或)。 */
+export function listPriceCardDrafts(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<PriceCardDraftListResponseBody>> {
+  return exchangeMasterData<PriceCardDraftListResponseBody>(catalogueRequestPath(priceCardDraftViewsPath, conditions, after));
 }
 
 export function approvePriceCardDraft(
@@ -358,6 +368,7 @@ export interface PriceCardRecord {
 export interface PriceCardListResponseBody {
   outcome: 'PRICE_CARDS_LISTED';
   cards: PriceCardRecord[];
+  page: CataloguePage;
 }
 
 /**
@@ -543,10 +554,12 @@ export function listQuoteBasisCandidates() {
 export interface ReferenceSeriesListResponseBody {
   outcome: 'REFERENCE_SERIES_LISTED';
   series: ReferenceSeriesRecord[];
+  page: CataloguePage;
 }
 
-export function listPriceCards() {
-  return exchangeMasterData<PriceCardListResponseBody>('/pricing-price-cards');
+/** 价卡目录,收哪些键见 ports.PriceCardPages。价格政策与供应商协议两张表单的选单不带参数调它,取第一页。 */
+export function listPriceCards(conditions: CatalogueConditions = {}, after: string | null = null) {
+  return exchangeMasterData<PriceCardListResponseBody>(catalogueRequestPath('/pricing-price-cards', conditions, after));
 }
 
 /**
@@ -583,8 +596,11 @@ export function readPriceCardContent(planId: string, planVersion: string) {
   return exchangeMasterData<PriceCardContentBody>(priceCardContentPath(planId, planVersion));
 }
 
-export function listReferenceSeries() {
-  return exchangeMasterData<ReferenceSeriesListResponseBody>('/pricing-reference-series');
+/** 参考序列,收哪些键见 ports.ReferenceSeriesPages。价卡编辑器的序列候选不带参数调它,取第一页。 */
+export function listReferenceSeries(conditions: CatalogueConditions = {}, after: string | null = null) {
+  return exchangeMasterData<ReferenceSeriesListResponseBody>(
+    catalogueRequestPath('/pricing-reference-series', conditions, after),
+  );
 }
 
 // ---- 覆盖地平线（票 pricing-reference-series-operations/05 第 1、3 项）----
@@ -637,13 +653,17 @@ export interface ReferenceSeriesCoverageRecord {
  */
 export interface ReferenceSeriesCoverageListResponseBody {
   outcome: 'REFERENCE_SERIES_COVERAGE_LISTED';
+  /** 每一页各按自己那一问的时刻解「在用」，翻到下一页时这一格可能变。 */
   asOf: string;
   series: ReferenceSeriesCoverageRecord[];
+  /** page 与 total 数的是序列（标识 + 种类），不是版本。 */
+  page: CataloguePage;
 }
 
-export function listReferenceSeriesCoverage() {
+/** 参考序列覆盖,收哪些键见 ports.ReferenceSeriesCoveragePages。 */
+export function listReferenceSeriesCoverage(conditions: CatalogueConditions = {}, after: string | null = null) {
   return exchangeMasterData<ReferenceSeriesCoverageListResponseBody>(
-    '/pricing-reference-series-coverage',
+    catalogueRequestPath('/pricing-reference-series-coverage', conditions, after),
   );
 }
 
@@ -690,10 +710,12 @@ export interface PricingEvaluationRecord {
 export interface PricingEvaluationListResponseBody {
   outcome: 'EVALUATIONS_LISTED';
   evaluations: PricingEvaluationRecord[];
+  page: CataloguePage;
 }
 
-export function listPricingEvaluations() {
-  return exchangeMasterData<PricingEvaluationListResponseBody>('/pricing-evaluations');
+/** 评价登记册,收哪些键见 ports.EvaluationPages。 */
+export function listPricingEvaluations(conditions: CatalogueConditions = {}, after: string | null = null) {
+  return exchangeMasterData<PricingEvaluationListResponseBody>(catalogueRequestPath('/pricing-evaluations', conditions, after));
 }
 
 // ---- 运营试算（UC-PP-001，ADR-0152；票 operator-workspace-gaps/06）----
