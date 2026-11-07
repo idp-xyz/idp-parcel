@@ -25,19 +25,20 @@ const outcomeCarrierPickupChainListed = "CARRIER_FIRST_EFFECTIVE_PICKUP_CHAIN_LI
 // 消费本上下文自己的存储读面，走目录查阅那条准入（CatalogueQueryIntake，ADR-0077/0078）；写半边在
 // judge_carrier_first_effective_pickup.go，挂命令面的准入，两边的 Intake 不可互换。
 //
-// 对象是必备维：一对象一链，缺席不猜「全部对象」。没有链的对象如实交回空列表。
+// 对象是必备维：一对象一链，缺席不猜「全部对象」。没有链的对象如实交回空列表。对象在 Intake 之后判：渠道未配置时
+// 缺席、空白与合规的对象同答一份 403，答复不随请求内容变（ADR-0055 决定三）；过了 Intake，缺席或空白才答 400。
 func NewQueryCarrierFirstEffectivePickupsEndpoint(intake CatalogueQueryIntake, reader CarrierPickupChainReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
 			return
 		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
 		object, err := domain.NewCarriedObjectReference(request.URL.Query().Get("object"))
 		if err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 		records, err := reader.ListByObject(request.Context(), query.Scope.Tenant(), object)

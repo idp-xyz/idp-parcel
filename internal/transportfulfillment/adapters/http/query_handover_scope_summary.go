@@ -28,9 +28,10 @@ const queryParameterScope = "scope"
 // NewQueryHandoverScopeSummaryEndpoint 交回交接范围汇总的 HTTP 入口
 // （GET /transport-fulfillment-handover-scope-summary?scope=…）。
 //
-// 门次序照本包查阅面通例：方法 → 请求形状 → 准入。范围是这个读面的必备维，缺席是坏请求，
-// 判它不需要先知道调用方是谁；租户只来自准入结果（ADR-0077 Decision 二/三），URL 里任何
-// 自报租户都不读。准入交回的页大小在这里用不上——汇总是一个答案不是一页列表。
+// 门次序照本包查阅面通例：方法 → 准入 → 请求内容。范围是这个读面的必备维，缺席或空白是坏请求，
+// 但判在准入之后：渠道未配置时缺席、空白与合规的范围同答一份 403（ADR-0055 决定三）。租户只来自
+// 准入结果（ADR-0077 Decision 二/三），URL 里任何自报租户都不读。准入交回的页大小在这里用不上——
+// 汇总是一个答案不是一页列表。
 func NewQueryHandoverScopeSummaryEndpoint(
 	intake CatalogueQueryIntake,
 	summarizer HandoverScopeSummarizer,
@@ -39,13 +40,13 @@ func NewQueryHandoverScopeSummaryEndpoint(
 		if !guardGet(response, request) {
 			return
 		}
+		query, ok := intakeCatalogueQuery(response, request, intake)
+		if !ok {
+			return
+		}
 		scope := strings.TrimSpace(request.URL.Query().Get(queryParameterScope))
 		if scope == "" {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-			return
-		}
-		query, ok := intakeCatalogueQuery(response, request, intake)
-		if !ok {
 			return
 		}
 
