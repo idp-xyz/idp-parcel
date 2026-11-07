@@ -136,15 +136,17 @@ func TestHandoverScopeSummaryRefusesNonGetMethods(t *testing.T) {
 	}
 }
 
-// Covers: 请求形状 — 范围是这个读面的必备维，缺席或空白是坏请求（400），且判在渠道
-// 准入之前：判它不需要先知道调用方是谁。
-func TestHandoverScopeSummaryRefusesABlankScopeBeforeTheChannelCheck(t *testing.T) {
-	endpoint := tfhttp.NewQueryHandoverScopeSummaryEndpoint(tfhttp.UnconfiguredIntake{}, unreachableSummarizer{t: t})
-	for _, target := range []string{
-		"/transport-fulfillment-handover-scope-summary",
-		"/transport-fulfillment-handover-scope-summary?scope=",
-		"/transport-fulfillment-handover-scope-summary?scope=%20%20",
-	} {
+// blankScopeTargets 是范围缺席、为空与只有空白的三问。
+var blankScopeTargets = []string{
+	"/transport-fulfillment-handover-scope-summary",
+	"/transport-fulfillment-handover-scope-summary?scope=",
+	"/transport-fulfillment-handover-scope-summary?scope=%20%20",
+}
+
+// Covers: 请求形状 — 范围是这个读面的必备维，过了准入，缺席或空白是坏请求（400），读用例不被触到。
+func TestHandoverScopeSummaryRefusesABlankScope(t *testing.T) {
+	endpoint := tfhttp.NewQueryHandoverScopeSummaryEndpoint(grantedIntake(), unreachableSummarizer{t: t})
+	for _, target := range blankScopeTargets {
 		t.Run(target, func(t *testing.T) {
 			response := serveGet(endpoint, target)
 			if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
@@ -152,6 +154,25 @@ func TestHandoverScopeSummaryRefusesABlankScopeBeforeTheChannelCheck(t *testing.
 			}
 			assertNoOutcome(t, response)
 		})
+	}
+}
+
+// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——范围在准入之后判，渠道未配置时
+// 缺席、空值、空白与合规的范围逐字节同答一份 403：答复若随范围变，没有凭据的调用方就能凭它探出必备维的校验规则。
+func TestHandoverScopeSummaryAnswersTheSame403ForEveryScopeWhenUnconfigured(t *testing.T) {
+	endpoint := tfhttp.NewQueryHandoverScopeSummaryEndpoint(tfhttp.UnconfiguredIntake{}, unreachableSummarizer{t: t})
+	reference := serveGet(endpoint, summaryTarget)
+	if reference.Code != http.StatusForbidden || problemCode(t, reference) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("合规范围：status = %d body = %s", reference.Code, reference.Body.String())
+	}
+	for _, target := range blankScopeTargets {
+		response := serveGet(endpoint, target)
+		if response.Code != reference.Code || response.Body.String() != reference.Body.String() ||
+			response.Header().Get("Content-Type") != reference.Header().Get("Content-Type") {
+			t.Fatalf("%s：%d %q %s，应与合规范围同答 %d %q %s", target,
+				response.Code, response.Header().Get("Content-Type"), response.Body.String(),
+				reference.Code, reference.Header().Get("Content-Type"), reference.Body.String())
+		}
 	}
 }
 

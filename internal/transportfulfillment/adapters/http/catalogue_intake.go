@@ -59,8 +59,8 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
 }
 
-// 查询端点的门次序照 settlementhttp：方法 → 册名 → 准入。册名不认识是请求形状的事，
-// 判它不需要先知道调用方是谁。两个助手交回 false 时答复已写出，调用方直接返回。
+// 查询端点的门次序：方法 → 准入 → 请求内容（册名、必备维与翻页、筛选参数）。渠道未配置时对一切请求同答 403，答复不随
+// 请求内容变（ADR-0055 决定三）。两个助手交回 false 时答复已写出，调用方直接返回。
 
 func guardGet(response http.ResponseWriter, request *http.Request) bool {
 	if request.Method != http.MethodGet {

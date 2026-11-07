@@ -184,6 +184,34 @@ func TestAFormedPickupAnswers201AndTheChainIsListedByObject(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——对象在 Intake 之后判，渠道未配置时
+// 缺席、空值、空白与合规的对象逐字节同答一份 403：答复若随对象变，没有凭据的调用方就能凭它探出必备维的校验规则。
+func TestTheCarrierPickupChainAnswersTheSame403ForEveryObjectWhenUnconfigured(t *testing.T) {
+	query := tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(tfhttp.UnconfiguredIntake{}, &carrierPickupRegistryDouble{})
+	serve := func(target string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		query.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+		return recorder
+	}
+	reference := serve("/transport-fulfillment-carrier-first-effective-pickups?object=PCL-1")
+	if reference.Code != http.StatusForbidden || !strings.Contains(reference.Body.String(), `"ACCESS_CHANNEL_NOT_CONFIGURED"`) {
+		t.Fatalf("合规对象：%d %s，应 403 ACCESS_CHANNEL_NOT_CONFIGURED", reference.Code, reference.Body.String())
+	}
+	for name, target := range map[string]string{
+		"缺席": "/transport-fulfillment-carrier-first-effective-pickups",
+		"空值": "/transport-fulfillment-carrier-first-effective-pickups?object=",
+		"空白": "/transport-fulfillment-carrier-first-effective-pickups?object=%20%20",
+	} {
+		recorder := serve(target)
+		if recorder.Code != reference.Code || recorder.Body.String() != reference.Body.String() ||
+			recorder.Header().Get("Content-Type") != reference.Header().Get("Content-Type") {
+			t.Fatalf("%s：%d %q %s，应与合规对象同答 %d %q %s", name,
+				recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.String(),
+				reference.Code, reference.Header().Get("Content-Type"), reference.Body.String())
+		}
+	}
+}
+
 // Covers: 待确认是形成了的答案 → 200 且 outcome 区分、`pickup` 带原因与名称素材；不构成 → 200 无 pickup。
 func TestPendingAndNotAPickupAnswer200WithDistinctOutcomes(t *testing.T) {
 	_, judge, _ := newCarrierPickupHTTPFixture(t, false)

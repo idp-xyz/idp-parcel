@@ -96,15 +96,15 @@ func TestVocabularyEndpointAnswersAnEmptyListForRegistersWithoutClosedSets(t *te
 	}
 }
 
-// Covers: 票 20 裁决四「未知 kind 答问题不答空」——集合外与缺席的 kind 都答 400 + MALFORMED_REQUEST，响应体带
-// kind 那一格的问题（与命令口的逐格问题同一形状）；kind 属传输形状、先于 Intake，未配置 Intake 也不把它盖成 403。
+// Covers: 票 20 裁决四「未知 kind 答问题不答空」——过了 Intake，集合外与缺席的 kind 都答 400 + MALFORMED_REQUEST，
+// 响应体带 kind 那一格的问题（与命令口的逐格问题同一形状）。
 func TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem(t *testing.T) {
 	for name, target := range map[string]string{
 		"unknown": "/commercial-publication-vocabularies?kind=PRICE_CARD",
 		"lower":   "/commercial-publication-vocabularies?kind=settlement_policy",
 		"missing": "/commercial-publication-vocabularies",
 	} {
-		response := serveVocabulary(vocabularyIntakeDouble{err: commercialhttp.ErrAccessChannelNotConfigured}, http.MethodGet, target)
+		response := serveVocabulary(vocabularyIntakeDouble{}, http.MethodGet, target)
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d %s, want 400", name, response.Code, response.Body.Bytes())
 		}
@@ -131,6 +131,30 @@ func TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem(t *testing.T) {
 		}
 		if strings.Contains(response.Body.String(), `"sets"`) || strings.Contains(response.Body.String(), `"outcome"`) {
 			t.Fatalf("%s: a refused kind must not look like an answer: %s", name, response.Body.Bytes())
+		}
+	}
+}
+
+// Covers: ADR-0055 决定三「答复对一切请求内容与自报身份一致，不因内容不同而变」——kind 在 Intake 之后判，渠道未配置时
+// 缺席、集合外与合法的 kind 逐字节同答一份 403：答复若随 kind 变，没有凭据的调用方就能凭它探出类别的封闭集。
+func TestVocabularyEndpointAnswersTheSame403ForEveryKindWhenUnconfigured(t *testing.T) {
+	targets := map[string]string{
+		"missing": "/commercial-publication-vocabularies",
+		"unknown": "/commercial-publication-vocabularies?kind=PRICE_CARD",
+		"lower":   "/commercial-publication-vocabularies?kind=settlement_policy",
+		"legal":   "/commercial-publication-vocabularies?kind=SETTLEMENT_POLICY",
+	}
+	reference := serveVocabulary(commercialhttp.UnconfiguredIntake{}, http.MethodGet, targets["legal"])
+	if reference.Code != http.StatusForbidden || !strings.Contains(reference.Body.String(), `"ACCESS_CHANNEL_NOT_CONFIGURED"`) {
+		t.Fatalf("legal kind: status = %d %s, want 403 ACCESS_CHANNEL_NOT_CONFIGURED", reference.Code, reference.Body.Bytes())
+	}
+	for name, target := range targets {
+		response := serveVocabulary(commercialhttp.UnconfiguredIntake{}, http.MethodGet, target)
+		if response.Code != reference.Code || response.Body.String() != reference.Body.String() ||
+			response.Header().Get("Content-Type") != reference.Header().Get("Content-Type") {
+			t.Fatalf("%s: %d %q %s, want the same answer as the legal kind: %d %q %s", name,
+				response.Code, response.Header().Get("Content-Type"), response.Body.Bytes(),
+				reference.Code, reference.Header().Get("Content-Type"), reference.Body.Bytes())
 		}
 	}
 }

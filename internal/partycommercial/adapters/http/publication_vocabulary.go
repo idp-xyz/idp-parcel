@@ -34,9 +34,9 @@ const outcomePublicationVocabularyListed = "PUBLICATION_VOCABULARY_LISTED"
 // 词表跟着同一条分派走是同一形；一册一口要在装配表加好几行、几张表单票改同一文件，正是第 1 波刻意避开的撞点。
 // 只答码不答中文：中文留在 admin-web 各页词表。
 //
-// kind 今天先于 Intake 判：渠道未配置时集合外的 kind 答 400、合法的答 403，没有凭据的调用方能探出类别的封闭集，与 ADR-0055
-// 决定三不符；挪到 Intake 之后归票 catalogue-read-pagination-rollout/17。集合外或缺席答 400 + MALFORMED_REQUEST 并把 kind 那一格的问题带在响应体里——与命令口
-// 的逐格问题同一形状——不静默答空：「没这一册」与「这一册没词」要人做的事不同。kind 合法而没词答 200 + 空 sets。
+// kind 在 Intake 之后判：渠道未配置时缺席、集合外与合法的 kind 同答一份 403，答复不随请求内容变（ADR-0055 决定三），没有
+// 凭据的调用方也就探不出类别的封闭集。过了 Intake，集合外或缺席答 400 + MALFORMED_REQUEST 并把 kind 那一格的问题带在响应体里
+// ——与命令口的逐格问题同一形状——不静默答空：「没这一册」与「这一册没词」要人做的事不同。kind 合法而没词答 200 + 空 sets。
 // 例外是编码：kind（或查询串里任何一格）解码后含 NUL 或不是合法 UTF-8，装配处挂的 httpapi.RefuseUnstorableReadTarget 在本
 // 处理器之前答 400 + MALFORMED_REQUEST，那一份不带 problems——检查对一切 GET 读口同答一份，不懂各口的逐格问题形状。
 func NewQueryPublicationVocabularyEndpoint(intake PublicationVocabularyIntake) http.Handler {
@@ -44,6 +44,13 @@ func NewQueryPublicationVocabularyEndpoint(intake PublicationVocabularyIntake) h
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+
+		// 与发布四口同一族 Intake、同一组答复格（未配置、凭据被拒、未授予、身份依赖不可用），所以用命令面那份分流，
+		// 不用目录查阅那份——后者没有操作者渠道的三格。
+		if err := intake.IntakePublicationVocabularyQuery(request.Context(), request); err != nil {
+			writeRegistrationIntakeProblem(response, err)
 			return
 		}
 
@@ -56,13 +63,6 @@ func NewQueryPublicationVocabularyEndpoint(intake PublicationVocabularyIntake) h
 				Code:     codeMalformedRequest,
 				Problems: payloadProblemAnswersOf(problems),
 			}})
-			return
-		}
-
-		// 与发布四口同一族 Intake、同一组答复格（未配置、凭据被拒、未授予、身份依赖不可用），所以用命令面那份分流，
-		// 不用目录查阅那份——后者没有操作者渠道的三格。
-		if err := intake.IntakePublicationVocabularyQuery(request.Context(), request); err != nil {
-			writeRegistrationIntakeProblem(response, err)
 			return
 		}
 
