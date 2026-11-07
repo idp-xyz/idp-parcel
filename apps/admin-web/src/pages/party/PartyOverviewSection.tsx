@@ -13,8 +13,11 @@ import {
   listSupplierAgreements,
   type BusinessPartyListResponseBody,
   type CustomerAccountRecord,
+  type GroupLegalEntityRecord,
   type PartyRelationshipListResponseBody,
   type PartyRelationshipRecord,
+  type SettlementPolicyRecord,
+  type SupplierAgreementRecord,
 } from './api';
 import { Instant, InstantRange, UnknownPartyName, statusBadge } from './detail-primitives';
 import {
@@ -22,6 +25,7 @@ import {
   customerAccountsOfParty,
   effectiveRolesOf,
   legalEntitiesOfParty,
+  liveRelationshipStatuses,
   relationshipsOfParty,
   sectionOf,
   settlementPoliciesOfParty,
@@ -178,9 +182,6 @@ function Line({ label, children, mono = false }: { label: string; children: Reac
     </p>
   );
 }
-
-// 还在起作用的关系：候选与已生效；到期、撤销、替代都是终局（CONTEXT「参与方关系」生命周期），收进「已结束」。
-const liveRelationshipStatuses: ReadonlySet<string> = new Set(['CANDIDATE', 'EFFECTIVE']);
 
 /**
  * 合作关系块的行（票 business-parties-object-page/02）：还在起作用的照列，生效中的可就地「结束…」；已结束的收在「已结束 N 条」下，
@@ -423,21 +424,16 @@ function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   );
 }
 
-/**
- * 全景各段的合计（对象页「关联」签上的数，票 business-parties-object-page/01）：与块里那行「合作关系 N · 客户账户 N ……」同一份读法、
- * 同一批缓存的读口，各段数法与那一行逐字相同。任一段还没答出或答不出就是 undefined——签上不显数，
- * 不拿半截数冒充总数。
- */
-/** 全景五段各自的段状态，键即段序。右栏头区的计数行（票 business-party-ux/08）与对象页「关联」签的合计都从它算。 */
+/** 全景各段的段状态，键即段序。右栏头区的计数行（票 business-party-ux/08）、对象页「关联」签的合计与块里各段都从它取。 */
 export interface PartyOverviewStates {
   relationships: OverviewSectionState<PartyRelationshipView>;
   accounts: OverviewSectionState<CustomerAccountRecord>;
-  entities: OverviewSectionState<unknown>;
-  agreements: OverviewSectionState<unknown>;
-  settlement: OverviewSectionState<unknown>;
+  entities: OverviewSectionState<GroupLegalEntityRecord>;
+  agreements: OverviewSectionState<SupplierAgreementRecord>;
+  settlement: OverviewSectionState<SettlementPolicyRecord>;
 }
 
-/** 五段各自的标题，与块里的段名同词。 */
+/** 各段的标题，与块里的段名同词。 */
 export const partyOverviewSectionTitles: Record<keyof PartyOverviewStates, string> = {
   relationships: '合作关系',
   accounts: '客户账户',
@@ -446,29 +442,46 @@ export const partyOverviewSectionTitles: Record<keyof PartyOverviewStates, strin
   settlement: '结算政策',
 };
 
-/**
- * 读四册并按参与方切出五段状态。读口经取数层缓存（register-list.ts 文件头）：头区与「关联」签两处挂着也只取一次，
- * 哪一册没答出那一段就不是 answered。
- */
-export function usePartyOverviewStates(
+/** 全景要读的另外四册（关系册由页面持有、传进来）。读口经取数层缓存（register-list.ts 文件头）：头区与「关联」签两处挂着也只取一次。 */
+function usePartyOverviewLists() {
+  return {
+    accounts: useRegisterList(listCustomerAccounts),
+    entities: useRegisterList(listGroupLegalEntities),
+    agreements: useRegisterList(listSupplierAgreements),
+    settlement: useRegisterList(listSettlementPolicies),
+  };
+}
+
+type PartyOverviewLists = ReturnType<typeof usePartyOverviewLists>;
+
+/** 按参与方把各册答案切成段状态；哪一册没答出那一段就不是 answered。 */
+function partyOverviewStatesOf(
   partyId: string,
   relationships: ApiResult<PartyRelationshipListResponseBody> | null,
+  lists: PartyOverviewLists,
 ): PartyOverviewStates {
-  const accounts = useRegisterList(listCustomerAccounts);
-  const entities = useRegisterList(listGroupLegalEntities);
-  const agreements = useRegisterList(listSupplierAgreements);
-  const settlement = useRegisterList(listSettlementPolicies);
   return {
     relationships: sectionOf(relationships, (body) => relationshipsOfParty(partyId, body.relationships)),
-    accounts: sectionOf(accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts)),
-    entities: sectionOf(entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities)),
-    agreements: sectionOf(agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements)),
-    settlement: sectionOf(settlement.answer, (body) =>
+    accounts: sectionOf(lists.accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts)),
+    entities: sectionOf(lists.entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities)),
+    agreements: sectionOf(lists.agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements)),
+    settlement: sectionOf(lists.settlement.answer, (body) =>
       body.kind === 'SETTLEMENT_POLICY' ? settlementPoliciesOfParty(partyId, body.policies) : null,
     ),
   };
 }
 
+export function usePartyOverviewStates(
+  partyId: string,
+  relationships: ApiResult<PartyRelationshipListResponseBody> | null,
+): PartyOverviewStates {
+  return partyOverviewStatesOf(partyId, relationships, usePartyOverviewLists());
+}
+
+/**
+ * 全景各段的合计（对象页「关联」签上的数，票 business-parties-object-page/01）：与块里各段同一份读法、同一批缓存的读口。
+ * 任一段还没答出或答不出就是 undefined——签上不显数，不拿半截数冒充总数。
+ */
 export function usePartyOverviewCount(
   partyId: string,
   relationships: ApiResult<PartyRelationshipListResponseBody> | null,
@@ -515,18 +528,14 @@ export function PartyOverviewSection({
    */
   summaryCounts?: boolean;
 }) {
-  const accounts = useRegisterList(listCustomerAccounts);
-  const entities = useRegisterList(listGroupLegalEntities);
-  const agreements = useRegisterList(listSupplierAgreements);
-  const settlement = useRegisterList(listSettlementPolicies);
-
-  const relationshipState = sectionOf(relationships, (body) => relationshipsOfParty(partyId, body.relationships));
-  const accountState = sectionOf(accounts.answer, (body) => customerAccountsOfParty(partyId, body.accounts));
-  const entityState = sectionOf(entities.answer, (body) => legalEntitiesOfParty(partyId, body.entities));
-  const agreementState = sectionOf(agreements.answer, (body) => supplierAgreementsOfParty(partyId, body.agreements));
-  const settlementState = sectionOf(settlement.answer, (body) =>
-    body.kind === 'SETTLEMENT_POLICY' ? settlementPoliciesOfParty(partyId, body.policies) : null,
-  );
+  const lists = usePartyOverviewLists();
+  const { accounts, entities, agreements, settlement } = lists;
+  const states = partyOverviewStatesOf(partyId, relationships, lists);
+  const relationshipState = states.relationships;
+  const accountState = states.accounts;
+  const entityState = states.entities;
+  const agreementState = states.agreements;
+  const settlementState = states.settlement;
 
   const roles = relationshipState.kind === 'answered' ? effectiveRolesOf(relationshipState.rows) : null;
 

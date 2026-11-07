@@ -67,10 +67,10 @@ export function registerViewHash(hash: string, register: BusinessPartyRegister |
 }
 
 /**
- * 登完去看结果的地址（票 business-party-ux/06）：回列表并清掉检索词，别的键原样。清检索词是因为页面接着要选中刚登的那一行、
- * 让右栏打开，而进登记视图之前留在地址上的检索词多半对不上新行，会把它筛掉。
+ * 登完回列表去看结果的地址（票 business-party-ux/06）：去掉登记键、清掉检索词，别的键原样。清检索词是因为页面接着要选中刚登的
+ * 那一行、让右栏打开，而进登记视图之前留在地址上的检索词多半对不上新行，会把它筛掉。
  */
-export function registeredRowHash(hash: string): string {
+export function listAfterRegistrationHash(hash: string): string {
   return hashWithQueryValue(registerViewHash(hash, null), ADDRESS_KEYWORD_PARAM, '');
 }
 

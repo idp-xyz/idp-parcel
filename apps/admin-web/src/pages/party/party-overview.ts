@@ -17,6 +17,12 @@ import { partyRoleLabels } from './presentation';
 import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { policiesHash } from './commercial-policies-address';
 
+/**
+ * 还在起作用的关系：候选与已生效；到期、撤销、替代都是终局（CONTEXT「参与方关系」生命周期），边界之后不再依据这段关系。
+ * 全景块的「已结束」折叠、右栏首屏的「还没有合作关系」、类型列的「持有角色」都按它判，只在这里写一遍。
+ */
+export const liveRelationshipStatuses: ReadonlySet<string> = new Set(['CANDIDATE', 'EFFECTIVE']);
+
 /** 本方在一段关系里站哪一侧。方向由关系册「持有方 → 相对方」的字段次序表达（CONTEXT），这里只读次序，不解释成谁是谁的客户。 */
 export type RelationshipSide = 'HOLDER' | 'COUNTERPARTY';
 

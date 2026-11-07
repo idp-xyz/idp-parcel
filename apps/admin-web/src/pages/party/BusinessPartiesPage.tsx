@@ -50,7 +50,7 @@ import {
   profileEditHash,
   profileEditRequested,
   registerViewHash,
-  registeredRowHash,
+  listAfterRegistrationHash,
   withoutDeactivationPreset,
   type BusinessPartyRegister,
   type DeactivationPreset,
@@ -577,22 +577,23 @@ export function BusinessPartiesPage() {
     window.location.replace(registerViewHash(window.location.hash, null));
   };
   const requestLeaveRegister = () => (anyUnsaved ? setConfirmingLeave(true) : leaveRegister());
-  // 登完就去看结果（票 business-party-ux/06）：回列表、选中刚登的那一行，右栏随之打开。地址用替换而不是后退——后退会带回进登记
-  // 视图之前那一条地址上的检索词，刚登的那一行可能正被它筛掉；状态与类型筛选同理由 apply 清掉。别的表单还有没提交的输入时
-  // 不自动离开（离开会把那份草稿连表单一起卸掉），只重取，人自己走。JSON 镜像那条路交回 null：不知道登了谁，只回列表。
-  const showRegistered = (otherUnsaved: boolean, apply: (() => void) | null) => {
+  // 登完就去看结果（票 business-party-ux/06）：回列表、选中刚登的那一行，右栏随之打开。离开登记视图会把表单连它的答复区一起
+  // 卸掉，所以先报一句 toast，成功不至于没有任何文字反馈。地址用替换而不是后退——后退会带回进登记视图之前那一条地址上的
+  // 检索词，刚登的那一行可能正被它筛掉；状态与类型筛选同理由 selectRegistered 清掉。别的表单还有没提交的输入时不自动离开
+  // （离开会把那份草稿连表单一起卸掉），只报 toast 与重取，人自己走。JSON 镜像那条路交回 null：不知道登了谁，只回列表。
+  const showRegistered = (title: string, otherUnsaved: boolean, selectRegistered: (() => void) | null) => {
+    addToast({ type: 'success', title });
     if (otherUnsaved) return;
     setConfirmingLeave(false);
     setPreset(null);
     pushedRegister.forget();
-    window.location.replace(registeredRowHash(window.location.hash));
-    apply?.();
+    window.location.replace(listAfterRegistrationHash(window.location.hash));
+    selectRegistered?.();
   };
-  // 登上了要说一声：离开登记视图后，表单里那句答复随表单卸掉，只剩选中的那一行，读的人分不清是登上了还是本来就在。
   const onPartyRegistered = (sent: BusinessPartyDraft | null) => {
-    addToast({ type: 'success', title: '往来单位已登记' });
     parties.retry();
     showRegistered(
+      '往来单位已登记',
       unsaved['party-relationship'] || unsaved['identity-deactivation'],
       sent &&
         (() => {
@@ -604,9 +605,9 @@ export function BusinessPartiesPage() {
     );
   };
   const onRelationshipRegistered = (sent: PartyRelationshipDraft | null) => {
-    addToast({ type: 'success', title: '合作关系已登记' });
     relationships.retry();
     showRegistered(
+      '合作关系已登记',
       unsaved['business-party'] || unsaved['identity-deactivation'],
       sent &&
         (() => {
@@ -778,7 +779,8 @@ export function BusinessPartiesPage() {
       ? businessPartyTypeKpis(counts).map((cell) => ({
           label: cell.label,
           value: cell.count,
-          tone: statusToneText.info,
+          // 「暂无合作关系」不是一种角色，数值不上语气色；我方公司与各角色是。
+          tone: cell.type === 'NONE' ? undefined : statusToneText.info,
           active: type === cell.type,
           onClick: () => toggleType(cell.type),
         }))

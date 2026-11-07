@@ -29,7 +29,7 @@ import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { PartyOverviewSection, partyOverviewSectionTitles, usePartyOverviewStates, type PartyOverviewStates } from './PartyOverviewSection';
 import { countText } from './party-overview';
-import { liveRelationshipCountOf, panelHintOf, panelPrimaryActionOf } from './business-party-panel-first-screen';
+import { liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -83,8 +83,9 @@ function PanelProfilePart({
  * 「登记记录」（原称身份与修订、变更记录）装剩下的格与身份修订历史，「关联」（原称全景）回答这个参与方对我们是什么。我方公司
  * 不读也不摆资料，判据在 business-party-list.ts 的 businessPartyPanelTabsOf。资料修订链在栏顶读：抬头的英文名与「资料」格要它，
  * 与公司主体栏读当前资料同一做法。
- * 去过的签留着挂载（隐藏而不卸载）：全景一开就读四册、修订历史读一条链，每切回来一次就重取一次会闪一次加载态；只留
- * 「去过的」，方向键逐行翻时不为没看的签取数。签不按参与方重置：↑/↓ 逐行翻时停在哪一签就一直看哪一签，与法人栏同一做法。
+ * 去过的签留着挂载（隐藏而不卸载）：每切回来一次就重取一次会闪一次加载态；只留「去过的」，方向键逐行翻时不为没看的签取数。
+ * 全景那四册是例外：头区的计数行与提示要它们，栏一开就读（usePartyOverviewStates），「关联」签去不去过都是同一份缓存。
+ * 签不按参与方重置：↑/↓ 逐行翻时停在哪一签就一直看哪一签，与法人栏同一做法。
  */
 export function BusinessPartyDetailPanel({
   row,
@@ -163,11 +164,11 @@ export function BusinessPartyDetailPanel({
   const openProfileForm = () => {
     window.location.hash = profileEditHash(businessPartyObjectHash(row.partyId), true);
   };
-  // 首屏那一句提示与主动作（票 business-party-ux/08）：判读在 business-party-panel-first-screen.ts。五段计数与「关联」签读同一份缓存。
+  // 首屏那一句提示与头区动作（票 business-party-ux/08）：判读在 business-party-panel-first-screen.ts。各段计数与「关联」签读同一份缓存。
   const overview = usePartyOverviewStates(row.partyId, relationships);
   const liveRelationships = overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
-  const hint = panelHintOf(row, ours, liveRelationships);
-  const primary = panelPrimaryActionOf(mayWrite, pinned, hint);
+  const hint = panelHintOf(row, ours, liveRelationships, roles.length);
+  const actions = panelHeaderActionsOf(mayWrite, pinned, hint);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开，不另造一处写口。
   const openRelationshipForm = () => {
     selectTab('overview');
@@ -201,19 +202,19 @@ export function BusinessPartyDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {/* 主动作随状态：没有在用关系的单位下一步是登关系，「更新资料」退成描边；其余照旧（panelPrimaryActionOf）。 */}
-            {primary === 'register-relationship' ? (
+            {/* 动作随状态（panelHeaderActionsOf）：没有在用关系的单位下一步是登关系，「更新资料」退成描边；其余照旧。 */}
+            {actions.registerRelationship ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openRelationshipForm}>
                 <Handshake className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 登记合作关系
               </Button>
             ) : null}
-            {primary === 'register-relationship' && pinned !== true ? (
+            {actions.updateProfile === 'outline' ? (
               <Button size="sm" variant="outline" className="type-body text-idpxyz-breadcrumb" onClick={openProfileForm}>
                 更新资料
               </Button>
             ) : null}
-            {primary === 'update-profile' ? (
+            {actions.updateProfile === 'primary' ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openProfileForm}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 更新资料
@@ -294,7 +295,7 @@ export function BusinessPartyDetailPanel({
       </FactStrip>
 
       {/* 关联计数一行（票 business-party-ux/08）：让人在首屏知道「关联」签里有什么，点了切过去；哪一册没答出那一格显「—」
-          （countText），不拿 0 冒充「没有」。签里原来那行计数去掉（summaryCounts），一个事实首屏只出现一处。 */}
+          （countText），不拿 0 冒充「没有」。签里不再摆那行计数（summaryCounts），一个事实首屏只出现一处。 */}
       <button
         type="button"
         onClick={() => selectTab('overview')}

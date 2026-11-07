@@ -24,6 +24,7 @@ import {
 } from './presentation';
 import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter } from './list-order';
 import { partyIdentificationSearchTerms } from './business-party-identification';
+import { liveRelationshipStatuses } from './party-overview';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
@@ -46,8 +47,8 @@ export type PartyRoleIndex = ReadonlyMap<string, readonly PartyRoleCode[]>;
 
 export const emptyPartyRoleIndex: PartyRoleIndex = new Map();
 
-// 在用的两格才算「持有」：到期、撤销、替代都是边界之后不再依据这段关系（CONTEXT），一家只剩过期合同的单位今天就不是客户。
-const roleBearingStatuses = new Set(['CANDIDATE', 'EFFECTIVE']);
+// 在用的关系才算「持有」（party-overview.ts 的 liveRelationshipStatuses）：一家只剩过期合同的单位今天就不是客户。
+const roleBearingStatuses = liveRelationshipStatuses;
 
 // 未停用的客户账户才让所属客户持有客户角色：已登记待生效的算，与关系的「候选」同一条判据——登好了、等着用。
 const customerBearingAccountStatuses = new Set(['REGISTERED', 'EFFECTIVE']);
@@ -242,8 +243,8 @@ export interface BusinessPartyTypeKpi {
 
 /**
  * 命令头按类型分格的指标（票 business-party-ux/05）：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。
- * 计数为零的类型不出格——它筛出来必然为空。类型筛选只有这一个入口：此前工具条上还有一个同义的类型下拉，去掉了；
- * 待生效与已停用两格也不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
+ * 计数为零的类型不出格——它筛出来必然为空。类型筛选只有这一个入口，工具条不另放同义的类型下拉；待生效与已停用两格也
+ * 不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
  */
 export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPartyTypeKpi[] {
   const cells: BusinessPartyTypeKpi[] = [];

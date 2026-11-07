@@ -86,7 +86,7 @@ export function BusinessPartyRegistrationForm({
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {/* 字段的来历都说在这一段里，格下只留会改变操作的那一句（票 business-party-ux/06）：每格下面各挂一两句，整张表读起来像文档。 */}
+          {/* 字段的来历都说在这一段里，格下只留会改变操作的那一句（票 business-party-ux/06）——每格下面都挂一两句解释，整张表读起来像文档。 */}
           <p className="type-body text-idpxyz-breadcrumb">
             登记一家新的往来单位：名称、内部编码（建议用单位简称）、这次登记依据的单据，以及从何时起可以与它建立合作关系。要更正已登记单位的名称或
             识别信息，到它的对象页用「更正登记信息」，那里会带上它已登的内容。

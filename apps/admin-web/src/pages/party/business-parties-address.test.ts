@@ -9,7 +9,7 @@ import {
   identityEditHash,
   identityEditRequested,
   registerViewHash,
-  registeredRowHash,
+  listAfterRegistrationHash,
   withoutDeactivationPreset,
 } from './business-parties-address';
 
@@ -87,10 +87,10 @@ test('登记视图地址只改登记键；对象地址往返不走样', () => {
 });
 
 // Covers: 登完去看结果的地址（票 business-party-ux/06）——去掉登记键、清掉检索词，别的键原样；本来就在列表且没有检索词时原样交回。
-test('登完去看结果的地址回列表并清掉检索词', () => {
-  equal(registeredRowHash('#/business-parties?q=SYN&register=business-party'), '#/business-parties');
-  equal(registeredRowHash('#/business-parties?register=party-relationship&view=saved'), '#/business-parties?view=saved');
-  equal(registeredRowHash('#/business-parties'), '#/business-parties');
+test('登完回列表的地址去掉登记键并清掉检索词', () => {
+  equal(listAfterRegistrationHash('#/business-parties?q=SYN&register=business-party'), '#/business-parties');
+  equal(listAfterRegistrationHash('#/business-parties?register=party-relationship&view=saved'), '#/business-parties?view=saved');
+  equal(listAfterRegistrationHash('#/business-parties'), '#/business-parties');
 });
 
 // Covers: 编辑态只认 `edit=identity`；进出只改这一个键；对象地址上带了编辑键仍是对象页。
