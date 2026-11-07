@@ -1,7 +1,7 @@
 # 09 第二批验收：浏览器全流程、非作者评审
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-07 Cursor 会话认领；Spec 轴评审的三条 BLOCK 已修（见本笔），Standards 轴评审与复评进行中
 父票：[spec](../spec.md)
 Blocked by: 05、06、07、08 全部 resolved
 

@@ -259,12 +259,10 @@ export function BusinessPartyDetailPanel({
           <div className={`flex items-start gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.info}`}>
             <Info className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
             {hint.kind === 'pending' ? (
-              <span>
-                计划于 <Instant value={hint.effectiveFrom} precision="day" /> 生效；在那之前不按它办新业务，合作关系等生效后再登。
-              </span>
+              <span>还没到生效时间：在那之前不按它办新业务；登记合作关系时，开始时间不能早于它的生效时间。</span>
             ) : (
               <span className="flex flex-wrap items-center gap-x-2">
-                <span>还没有合作关系。它是客户还是承运商，由合作关系说。</span>
+                <span>还没有合作关系。</span>
                 {mayWrite ? (
                   <button type="button" className="text-idpxyz-accent hover:underline" onClick={openRelationshipForm}>
                     登记合作关系

@@ -4,6 +4,7 @@ import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
 import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, MoreHorizontal, Plus, UserPlus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { useToast } from '@idpxyz/ui-theme-runtime';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
@@ -451,6 +452,7 @@ export function BusinessPartiesPage() {
   const boundTenant = useBoundTenant();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
+  const { addToast } = useToast();
   const tabReturn = useTabReturn();
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
@@ -586,7 +588,9 @@ export function BusinessPartiesPage() {
     window.location.replace(registeredRowHash(window.location.hash));
     apply?.();
   };
+  // 登上了要说一声：离开登记视图后，表单里那句答复随表单卸掉，只剩选中的那一行，读的人分不清是登上了还是本来就在。
   const onPartyRegistered = (sent: BusinessPartyDraft | null) => {
+    addToast({ type: 'success', title: '往来单位已登记' });
     parties.retry();
     showRegistered(
       unsaved['party-relationship'] || unsaved['identity-deactivation'],
@@ -600,6 +604,7 @@ export function BusinessPartiesPage() {
     );
   };
   const onRelationshipRegistered = (sent: PartyRelationshipDraft | null) => {
+    addToast({ type: 'success', title: '合作关系已登记' });
     relationships.retry();
     showRegistered(
       unsaved['business-party'] || unsaved['identity-deactivation'],

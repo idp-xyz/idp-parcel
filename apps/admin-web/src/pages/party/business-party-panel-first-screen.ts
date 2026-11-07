@@ -1,7 +1,11 @@
 // 往来单位右栏首屏的判读（票 business-party-ux/08）：头区下那一句随状态的提示、主动作该是哪一枚。纯函数，node:test 钉着；栏只负责摆。
 //
 // 提示只翻译生命周期规则，不写「已建立 X 关系」那种结论句（spec「原型的做法怎么取」：关系结论由头部角色标签说）。待生效那句
-// 的依据是 CONTEXT「参与方身份」：生效时点未到的登记不支持新的商业决定；「还没有合作关系」照票 02 空状态的写法给下一步。
+// 的依据是 CONTEXT「参与方身份」：生效时点未到的登记不支持新的商业决定；但关系现在就能登——服务端登记关系时在关系生效起点
+// 判双方已生效，所以只能说「开始时间不能早于它的生效时间」，说成「等生效后再登」就把一条能走的路说没了。生效日期不在这句里
+// 重复：事实行已有，一个事实首屏只出现一处。
+// 「还没有合作关系」照票 02 空状态的写法给下一步，不再接「角色由合作关系说」：持有未停用货主客户账户也算客户（CONTEXT 规则
+// 「一个业务参与方持有客户角色，当且仅当……」），有账户没关系的单位头部正挂着「客户」。
 // 我方公司不提「没有关系」：它多半是关系的相对方，持有的角色本来就少，提了是误报。已停用不在这里——停用横幅已经在说。
 
 import type { PartyRelationshipView } from './party-overview';
@@ -14,17 +18,13 @@ export function liveRelationshipCountOf(views: readonly PartyRelationshipView[])
   return views.filter((view) => liveRelationshipStatuses.has(view.status)).length;
 }
 
-export type PanelHint = { kind: 'pending'; effectiveFrom: string } | { kind: 'no-relationship' } | null;
+export type PanelHint = { kind: 'pending' } | { kind: 'no-relationship' } | null;
 
 /**
  * 头区下的提示。`liveRelationships` 为 null 即关系册还没答出：不知道有没有关系，就不说「还没有」。
  */
-export function panelHintOf(
-  row: { status: string; effectiveFrom: string },
-  ours: boolean,
-  liveRelationships: number | null,
-): PanelHint {
-  if (row.status === 'REGISTERED') return { kind: 'pending', effectiveFrom: row.effectiveFrom };
+export function panelHintOf(row: { status: string }, ours: boolean, liveRelationships: number | null): PanelHint {
+  if (row.status === 'REGISTERED') return { kind: 'pending' };
   if (row.status === 'EFFECTIVE' && !ours && liveRelationships === 0) return { kind: 'no-relationship' };
   return null;
 }
