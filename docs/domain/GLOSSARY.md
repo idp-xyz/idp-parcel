@@ -1045,7 +1045,7 @@ Status: Confirmed
 
 ### 出库请求
 
-货主经客户渠道交来、要求从某个仓发出货物的请求，带要出的货、收件人与地址和发运方式。
+货主经客户渠道交来（或由运营按货主授权录入）、要求从某个仓发出货物的请求，带要出的货、收件人与地址和发运方式。
 
 - 所有者：`warehouse-fulfillment`。
 - 发运方式为本产品网络时，出库请求带要求的服务产品，它的每个包裹以（出库请求，包裹序号）为来源请求键、以来源「仓配出库」各提交一份委托，由 `parcel-shipment` 作与客户渠道交来的委托同一套接受判断；出库请求本身不是委托，也不取得包裹身份（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四）。发运方式为自备面单或自提的出库请求不提交委托（[ADR-0370](../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一）。

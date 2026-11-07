@@ -56,7 +56,7 @@ _Avoid in this context_: 申报测量、申报重量、实测
 针对明确委托、包裹、字段或资料范围形成的不可覆盖客户来源版本。版本保留原始请求、基础版本、补充/更正原因、对象范围、来源、业务时间和适用关系；新版本不删除或覆盖旧版本。版本另保留该资料范围上由本上下文定名的封闭要素内容（声明测量、地址要素），持锚方按锚解析到那一版内容；其余条目只进摘要，不留原文。
 
 **资料补充/更正请求**  
-客户或授权运营角色请求形成客户原始资料新版本的业务请求。请求意图不是资料事实，必须与目标范围、请求方、授权和基础版本分别记录。
+客户、授权运营角色，或以货主名义代办的 `warehouse-fulfillment`（只对来源为「仓配出库」的委托，[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md)）请求形成客户原始资料新版本的业务请求。请求意图不是资料事实，必须与目标范围、请求方、授权和基础版本分别记录。
 
 **资料修订阶段**  
 一份已接受委托或其包裹在资料补充/更正请求到达时所处的生命周期位置，是判断「此刻允许改什么」的维度之一。封闭六格：已接受尚未收寄、已收寄或已测量、已制签或已装袋、关务资料形成中尚未提交、已提交关务、案件已关闭或服务已完成；多格事实同时成立时以靠后的一格为准，作用于整份委托的范围取其成员中最靠后的一格。阶段由 `parcel-shipment` 按自有事实（接受基线、有效网络收寄采用、面单交易包裹结果、终局服务结果）与邻接上下文交出的事实（`node-operations` 的装袋，`customs-compliance` 的申报资料形成、提交与案件关闭）判断；任一所需事实不可知时判断不成，修订请求停在未决，不得默认为最早阶段。允许什么由所采用接单规则包版本的资料修订允许声明说，本上下文不自带矩阵。
@@ -77,7 +77,7 @@ _Avoid in this context_: 申报测量、申报重量、实测
 对规范化后的客户请求内容形成的稳定摘要，覆盖成员、范围、基础版本、服务要求以及 `requestEffectiveAt` 的值/存在状态，不覆盖 `occurredAt` 或 `receivedAt`。它用于同一来源身份下的重放与冲突分类。
 
 **来源请求身份**  
-由租户、客户账户、来源和来源请求键组成的完整复合身份。它只用于来源重放与冲突分类，不授予查询或操作权限，也不能替代委托、包裹或其他业务身份。来源除各客户渠道外还有「仓配出库」：`warehouse-fulfillment` 为发运方式是本产品网络的出库请求，以出库请求所属货主客户账户的名义提交委托——通常在打包完成后；预取面单时在波次释放时先按估算的声明测量提交，打包后经资料修订补正。来源请求键取自（出库请求，包裹序号）；这样提交的委托与客户渠道交来的受同一套接受判断（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四，[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一、二）。
+由租户、客户账户、来源和来源请求键组成的完整复合身份。它只用于来源重放与冲突分类，不授予查询或操作权限，也不能替代委托、包裹或其他业务身份。来源除各客户渠道外还有「仓配出库」：`warehouse-fulfillment` 为发运方式是本产品网络的出库请求，以出库请求所属货主客户账户的名义提交委托——通常在打包完成后；预取面单时在波次释放时先按估算的声明测量提交，打包后经资料修订补正。来源请求键取自（出库请求，包裹序号）；这样提交的委托与客户渠道交来的受同一套接受判断（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四，[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一、二）。这一来源的提交、资料修订、撤回与包裹取消由 `warehouse-fulfillment` 以货主名义代办：请求方记货主客户账户，实际提交方记 `warehouse-fulfillment`，请求证据指名出库请求与包裹序号；授权是租户按货主授予的产品常量等级 `WAREHOUSE_FULFILLMENT_AGENT`，没有授予答`未配置`；停在等待受控补充时由它以货主名义续办（[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md)）。
 
 **授权查询作用域**  
 由共享身份认证/授权技术能力已经判断并传入的可见范围引用。`parcel-shipment` 消费该引用并按自身对象边界过滤结果，不拥有企业身份主数据、凭据验证或通用授权策略。
@@ -176,6 +176,8 @@ _Avoid in this context_: 范围内包裹、按客户过滤、客户匹配
 - 当前适用的版本化硬规则、商业限制和所需权威判断全部通过时，系统自动形成接受决定；只有适用规则显式要求人工业务判断时才进入人工复核。人工处理不得绕过硬规则或把缺少的权威结果改成通过。
 - 运营企业主动拒绝尚未接受的委托时，必须由适用责任法人授权的业务角色形成，并保存结构化原因、证据、适用范围、授权依据、实际决定方和决定时间。普通备注、口头意见或未经授权的操作不能形成拒绝事实。
 - 主动拒绝不为全部委托增加人工等待窗口，只能在委托仍为`已提交`时与自动接受竞争同一个决定提交边界。当前提交版本只能有一个合法决定；接受或拒绝提交后，另一方只能读取既有结果，不能追加相反决定。
+- 接受或拒绝决定无论经哪条路形成——接受链、运营主动拒绝、授权处置选拒绝——都在形成它的同一事务里经接受决定已形成的信封交给下游；信封标识取决定标识，接受链再跑一轮时补交的是同一封。这封信封是发布意图，本上下文不消费它，它不是续办触发（[ADR-0086](../../adr/0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md) 决定三不许主动拒绝再发的续办信封、[ADR-0132](../../adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) 决定二说的「不新增信封类型」都不是它）。撤回不形成决定，不交这封信封（[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 决定五）。
+- 接受判断停进`等待受控补充`时（客户可补充缺口，或授权处置选交客户补充），同一事务交出「委托待受控补充」信封：指名委托、停住的提交版本与缺口原因的引用，不带资料内容。它同样是发布意图，续办照旧由新提交版本已形成的信封驱动（ADR-0371 决定三）。
 - 客户撤回只能作用于仍为`已提交`且尚无接受或拒绝决定的整份委托。撤回、接受和拒绝竞争同一个不可覆盖决定边界；已经合法提交的首个决定获胜，后来到达的请求只能读取既有结果或转入相应后续用例。
 - 委托撤回不能伪装成运营企业拒绝，也不能删除来源或判断历史。已成立控制项形成的占用（预付冻结或信用暴露，见词条「控制项结果」）必须通过原业务关联请求 `settlement-accounting` 显式释放，没有任何控制项成立时不发释放；撤回提交和释放属于可补偿编排，不要求跨上下文分布式事务。撤回成立之后才在接受链里占下的资金同样释放，已撤回的委托不留占用。
 - 一份委托的当前提交版本只形成一个委托级接受或拒绝决定，不支持成员级部分接受。任一成员确定性不满足接受条件时，整份当前提交版本不能接受；不得静默删除失败成员后接受其余成员，也不得先部分接受再补做拆分。
