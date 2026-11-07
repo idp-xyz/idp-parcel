@@ -7,8 +7,13 @@
 // 形状以 internal/visibilityexception/adapters/http/query_visibility_catalogues.go
 // 为准，此处只做镜像不虚构：各种册子的行形状互不相同，kind 由服务端随响应回显，
 // 调用方按 kind 择形状。
+//
+// 查阅口已迁到 ADR-0144：kind 是册子选择器（决定四），游标、排序与 `q` 经 catalogueRequestPath 一并拼进查询串，答复多一格
+// page。各册收哪些键以 internal/visibilityexception/ports 的 catalogue_pages.go 为准——版本册按版本翻页、q 覆盖版本与
+// 批准人，声明册按自己的键翻页、q 覆盖键与版本或渠道；集外的键答 400，这里不自造。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
@@ -167,26 +172,44 @@ export interface ConflictSignalRuleRecord {
 }
 
 // 响应体按 kind 判别：唯一业务成格 VISIBILITY_CATALOGUES_LISTED，空册也是这一格
-// （ADR-0077 Decision 四，空册本身就是内容，不折成未配置）。
+// （ADR-0077 Decision 四，空册本身就是内容，不折成未配置）。page 数的是册上的记录：版本册一版一条，不是摊开后的条目数。
 export type VisibilityCatalogueListResponseBody =
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'MILESTONE_MAPPING'; catalogues: MilestoneMappingCatalogueRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'TRIAGE_RULE'; catalogues: TriageRuleCatalogueRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'NOTIFICATION_POLICY'; catalogues: NotificationPolicyRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_ELIGIBILITY'; catalogues: ClaimEligibilityRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_AUTHORIZATION'; catalogues: ClaimAuthorizationRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'DISCLOSURE_POLICY'; catalogues: DisclosurePolicyCatalogueRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'EXCEPTION_DISCLOSURE_RULE'; catalogues: ExceptionDisclosureRuleCatalogueRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CONFLICT_SIGNAL_RULE'; catalogues: ConflictSignalRuleRecord[] };
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'MILESTONE_MAPPING'; catalogues: MilestoneMappingCatalogueRecord[]; page: CataloguePage }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'TRIAGE_RULE'; catalogues: TriageRuleCatalogueRecord[]; page: CataloguePage }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'NOTIFICATION_POLICY'; catalogues: NotificationPolicyRecord[]; page: CataloguePage }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_ELIGIBILITY'; catalogues: ClaimEligibilityRecord[]; page: CataloguePage }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_AUTHORIZATION'; catalogues: ClaimAuthorizationRecord[]; page: CataloguePage }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'DISCLOSURE_POLICY'; catalogues: DisclosurePolicyCatalogueRecord[]; page: CataloguePage }
+  | {
+      outcome: 'VISIBILITY_CATALOGUES_LISTED';
+      kind: 'EXCEPTION_DISCLOSURE_RULE';
+      catalogues: ExceptionDisclosureRuleCatalogueRecord[];
+      page: CataloguePage;
+    }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CONFLICT_SIGNAL_RULE'; catalogues: ConflictSignalRuleRecord[]; page: CataloguePage };
+
+/** 目录查阅一问的条件：kind 选哪本册，保持原义、不兼作筛选维（ADR-0144 决定四），但同样进游标摘要。 */
+export type VisibilityCatalogueConditions<Kind extends VisibilityCatalogueKind> = CatalogueConditions & {
+  readonly selectors: { readonly kind: Kind };
+};
+
+export function visibilityCatalogueConditions<Kind extends VisibilityCatalogueKind>(
+  kind: Kind,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): VisibilityCatalogueConditions<Kind> {
+  return { ...conditions, selectors: { kind } };
+}
 
 /**
- * 返回类型按请求的 kind 收窄：服务端回显的 kind 与请求同值（传输层封闭集校验后
+ * 返回类型按条件里的 kind 收窄：服务端回显的 kind 与请求同值（传输层封闭集校验后
  * 分派），三张页面各管两册，收窄后页面不必为四种不会到场的册形写空分支。
  */
 export function listVisibilityCatalogues<Kind extends VisibilityCatalogueKind>(
-  kind: Kind,
+  conditions: VisibilityCatalogueConditions<Kind>,
+  after: string | null = null,
 ): Promise<ApiResult<Extract<VisibilityCatalogueListResponseBody, { kind: Kind }>>> {
   return exchangeMasterData<Extract<VisibilityCatalogueListResponseBody, { kind: Kind }>>(
-    `/visibility-catalogues?kind=${encodeURIComponent(kind)}`,
+    catalogueRequestPath('/visibility-catalogues', conditions, after),
   );
 }
 

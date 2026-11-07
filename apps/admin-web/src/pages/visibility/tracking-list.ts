@@ -1,12 +1,11 @@
-// 物流动态工作台的行模型、进度折叠与筛选排序纯逻辑（改版第一步，设计源「五、改版示意」的「物流动态」列）。
-// node:test 钉着；页面只负责摆。
+// 物流动态工作台的行模型、进度折叠与本页状态筛选的纯逻辑（改版第一步，设计源「五、改版示意」的「物流动态」列）。
+// node:test 钉着；页面只负责摆。检索词与表头先后已下推到读口（list-conditions 的 trackingListConditions），这里不再筛、不再排。
 //
 // 行 = 一份当前投影版本，各格全部从端点体派生，不引入端点体之外的字段。五个源上下文不再各占一列、各显英文事实类型，
 // 而是折成一格「进度」：每源最后一条当前有效条目的事实类型经用语词典译成一句短语（「已收寄 · 已放行」），缺的源不显。
 // 这仍不是统一状态机——各源各一段、按服务链顺序排在一起只是阅读便利，GLOSSARY「追踪摘要」禁统一状态机那条规则照旧。
 
-import type { WorkbenchSort } from '../../templates/workbench';
-import { byInstant, byString, matchesSearch } from '../party/list-order';
+import { byInstant, byString } from '../party/list-order';
 import { labelFor } from '../../vocabulary/status';
 import type { ProjectionEntryRecord, TrackingProjectionRecord } from './api';
 
@@ -85,34 +84,12 @@ export function currentStatusLabelOf(row: TrackingRow): string {
   return row.latestMilestone ? labelFor(row.latestMilestone) : unclassifiedNote;
 }
 
-export interface TrackingListFilter {
-  search: string;
-  /** 「全部」或某个当前状态的词（词经词典，胶囊按词筛——同词的里程碑码算一格）。 */
-  status: 'ALL' | string;
-}
-
-/** 搜索命中包裹号或投影版本；外部单号不在投影读模型上，不承诺读模型没有的定位维。 */
-export function filterTrackingRows(rows: readonly TrackingRow[], filter: TrackingListFilter): TrackingRow[] {
-  return rows.filter((row) => {
-    if (filter.status !== 'ALL' && currentStatusLabelOf(row) !== filter.status) return false;
-    return matchesSearch(filter.search, [row.parcelId, row.projectionVersion]);
-  });
-}
-
-export type TrackingSortKey = 'parcel' | 'derived-at';
-
-/** 默认更新时间新→旧：客服先看刚动过的那一票。 */
-export const defaultTrackingSort: WorkbenchSort = { key: 'derived-at', dir: -1 };
-
-export function sortTrackingRows(rows: readonly TrackingRow[], sort: WorkbenchSort): TrackingRow[] {
-  const compare =
-    sort.key === 'parcel'
-      ? (left: TrackingRow, right: TrackingRow) => byString(left.parcelId, right.parcelId)
-      : sort.key === 'derived-at'
-        ? (left: TrackingRow, right: TrackingRow) => byInstant(left.derivedAt, right.derivedAt)
-        : null;
-  if (compare === null) return [...rows];
-  return [...rows].sort((left, right) => sort.dir * compare(left, right));
+/**
+ * 当前状态胶囊只筛本页：状态是从条目派生的词，投影读口没有这一维（ports.TrackingProjectionPages 不放筛选维），下推筛不出来。
+ * status 取「全部」或某个当前状态的词（词经词典，同词的里程碑码算一格）。
+ */
+export function trackingRowsOfStatus(rows: readonly TrackingRow[], status: 'ALL' | string): TrackingRow[] {
+  return status === 'ALL' ? [...rows] : rows.filter((row) => currentStatusLabelOf(row) === status);
 }
 
 export interface TrackingStatusCount {
@@ -132,8 +109,7 @@ export function countTrackingByStatus(rows: readonly TrackingRow[]): TrackingSta
     .sort((left, right) => right.count - left.count || byString(left.label, right.label));
 }
 
-export function trackingCountSummary(total: number, visible: number): string {
-  return `共 ${total} 件，当前显示 ${visible} 件`;
-}
-
 export const trackingNoMatchNote = '当前筛选条件下没有匹配的包裹';
+
+/** 检索与表头已下推，读口这一页都对；本页一格不剩只会是状态胶囊筛空了，说清那只是这一页。 */
+export const trackingNoMatchOnPageNote = '这一页没有该状态的包裹；状态只筛本页，翻页看其余几页';

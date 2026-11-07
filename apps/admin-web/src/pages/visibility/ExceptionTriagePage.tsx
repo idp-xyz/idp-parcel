@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
   useAddressKeyword,
+  type WorkbenchChip,
   type WorkbenchColumn,
   type WorkbenchSort,
 } from '../../templates';
@@ -14,20 +15,34 @@ import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
 import { formatInstant } from '../moment';
 import { matchesSearch } from '../party/list-order';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import {
   listExceptionTriageRecords,
-  type ApiResult,
   type DispositionRequestRecord,
-  type ExceptionTriageRegistry,
+  type ExceptionTriageConditions,
   type SignalEpisodeRecord,
 } from './case-api';
-import { handlerLabel } from './case-presentation';
+import { dispositionJudgmentCodes, handlerLabel, triageOutcomeCodes } from './case-presentation';
 import { caseNumberName } from './document-number';
 import { DocumentNumberCell } from './DocumentNumberCell';
 import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
-import { countByStatus, dispositionStatus, episodeStatus, sortRowsBy, type SortAccessor } from './exception-list';
+import { awaitingJudgmentLabel, dispositionStatus, episodeStatus, untriagedLabel } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
-import { statusFilterParts } from './status-filter';
+import {
+  allStatuses,
+  awaitingJudgmentOnPage,
+  defaultEpisodeSort,
+  defaultRequestSort,
+  dispositionRequestConditions,
+  episodeOnPage,
+  requestOnPage,
+  signalEpisodeConditions,
+  supersededOnPage,
+  untriagedOnPage,
+} from './list-conditions';
+import { PageOnlySearch } from './page-only';
 import { sourceContextLabels } from './presentation';
 
 // 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -40,44 +55,32 @@ const info = moduleInfoById['exception-triage'];
 // 改成右栏一句话说清楚「分诊按规则自动做，这里查看」；端点建成后再把决定区接回来。
 // 信号类型、可信度、处置动作是租户登记的开放引用，经词典分册取参考译法，查不到的码原样显示；规则、因果条件、事实依据、
 // 各种编号进右栏「技术详情」。处置请求以所属案件的案件号（单据号，ADR-0355 决定十一）指认案件，案件内部标识进技术详情。
+//
+// 两本册已迁到 ADR-0144，各按游标翻页（工具条右端）。检索词、分诊结论（outcome）与处置答复（judgment）的胶囊、表头的先后下推
+// （list-conditions 的 signalEpisodeConditions 与 dispositionRequestConditions）。读口不认的派生状态（待分诊、等对方答复、已替代）
+// 留成只筛本页的胶囊；读口检索只认码与编号，码的中文词（异常类型、处置动作、交给哪个环节）留一个只筛本页的小框。胶囊不带计数、
+// 命令头不摆指标——一页里数出来的不是各状态的总数。
 
 const episodeKindScope = 'exception-signal';
 const confidenceScope = 'signal-confidence';
 const actionScope = 'disposition-action';
+const judgmentScope = 'disposition-judgment';
 // 存量发作期的因果条件（VE 迁移 0029 回填的那一格）：不是一个真条件，不进技术详情。
 const recordedBeforeCauses = 'RECORDED_BEFORE_CAUSAL_CONDITION';
 
-/** 一本册的取数：挂载取一次，刷新时保留上一份答案不闪空。两册行形状不同，Body 由调用方按册给。 */
-function useTriageRegistry<Body>(registry: ExceptionTriageRegistry) {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
-    void listExceptionTriageRecords(registry).then((result) => {
-      if (cancelled) return;
-      setAnswer(result as ApiResult<Body>);
-      setRefreshing(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [registry, reloadToken]);
-  const retry = () => {
-    setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  };
-  return { answer, retry, refreshing };
+/** 胶囊一格；只筛本页的那几格词尾写明，不让人当成整册的筛选。 */
+function chip(id: string, label: string, active: string, setActive: (id: string) => void): WorkbenchChip {
+  return { id, label, active: active === id, onClick: () => setActive(active === id ? allStatuses : id) };
+}
+
+function pageOnlyLabel(word: string): string {
+  return `${word} · 只筛本页`;
 }
 
 // —— 异常信号签 ——
 
-const episodeSort: Record<string, SortAccessor<SignalEpisodeRecord>> = {
-  parcel: { value: (row) => row.parcel },
-  started: { value: (row) => row.startedAt, instant: true },
-  'last-hit': { value: (row) => row.lastHitAt, instant: true },
-};
+const loadEpisodes = (conditions: ExceptionTriageConditions<'signal-episode'>, after: string | null) =>
+  listExceptionTriageRecords(conditions, after);
 
 const episodeColumns: WorkbenchColumn<SignalEpisodeRecord>[] = [
   {
@@ -166,34 +169,32 @@ function EpisodeDetail({ episode, onClose }: { episode: SignalEpisodeRecord; onC
 
 function SignalEpisodesWorkbench() {
   const [search, setSearch] = useAddressKeyword();
-  const [status, setStatus] = useState<string>('ALL');
-  const [sort, setSort] = useState<WorkbenchSort>({ key: 'started', dir: -1 });
+  const [refine, setRefine] = useState('');
+  const [status, setStatus] = useState<string>(allStatuses);
+  const [sort, setSort] = useState<WorkbenchSort>(defaultEpisodeSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const { answer, retry, refreshing } = useTriageRegistry<{ episodes: SignalEpisodeRecord[] }>('signal-episode');
-  const answered = answer?.kind === 'outcome';
+  const conditions = signalEpisodeConditions(useSettledKeyword(search), status, sort);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadEpisodes);
   const rows = answer?.kind === 'outcome' ? answer.body.episodes : [];
-  const counts = countByStatus(rows, episodeStatus);
-  const visible = sortRowsBy(
-    rows.filter(
-      (row) =>
-        (status === 'ALL' || episodeStatus(row).label === status) &&
-        matchesSearch(search, [row.parcel, row.episodeId, row.kind, labelFor(row.kind, episodeKindScope)]),
-    ),
-    sort,
-    episodeSort,
+  const visible = rows.filter(
+    (row) => episodeOnPage(row, status) && matchesSearch(refine, [labelFor(row.kind, episodeKindScope)]),
   );
-  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+  const statusChips: WorkbenchChip[] = [
+    chip(allStatuses, '全部', status, setStatus),
+    ...triageOutcomeCodes.map((code) => chip(code, labelFor(code), status, setStatus)),
+    chip(untriagedOnPage, pageOnlyLabel(untriagedLabel), status, setStatus),
+  ];
 
   return (
     <WorkbenchPageTemplate<SignalEpisodeRecord>
       title={info.title}
       subtitle="运输、清关、派送中识别出的异常信号，以及每条信号的分诊结论。待分诊的信号行首亮灯。"
-      kpis={filter?.kpis}
       onRefresh={retry}
-      refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜包裹号、异常类型…' }}
-      statusChips={filter?.chips}
-      toolbarRight={answered ? `共 ${rows.length} 条，当前显示 ${visible.length} 条` : undefined}
+      refreshing={answer === null}
+      search={{ value: search, onChange: setSearch, placeholder: '搜包裹号、信号编号…' }}
+      statusChips={statusChips}
+      extraFilters={<PageOnlySearch value={refine} onChange={setRefine} subject="异常类型" />}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={episodeColumns}
       rows={visible}
       rowKey={(row) => row.episodeId}
@@ -202,10 +203,13 @@ function SignalEpisodesWorkbench() {
       rowAttention={(row) => !row.triage}
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-      noMatchText="当前筛选条件下没有匹配的异常信号"
+      noMatchText={
+        rows.length > 0 ? '这一页上没有匹配的异常信号；只筛本页的条件不看其余几页，翻页看看' : '当前筛选条件下没有匹配的异常信号'
+      }
       onClearFilters={() => {
         setSearch('');
-        setStatus('ALL');
+        setRefine('');
+        setStatus(allStatuses);
       }}
       renderDetail={(key) => {
         const episode = visible.find((row) => row.episodeId === key);
@@ -217,6 +221,7 @@ function SignalEpisodesWorkbench() {
         subject: '异常信号',
         emptyTitle: '还没有异常信号',
         emptyDescription: '派送失败、海关查验、轨迹超时这类情况被识别出来后，信号会出现在这里并按规则分诊。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -224,9 +229,8 @@ function SignalEpisodesWorkbench() {
 
 // —— 处置请求签 ——
 
-const requestSort: Record<string, SortAccessor<DispositionRequestRecord>> = {
-  sent: { value: (row) => row.sentAt, instant: true },
-};
+const loadRequests = (conditions: ExceptionTriageConditions<'disposition-request'>, after: string | null) =>
+  listExceptionTriageRecords(conditions, after);
 
 /** 处置请求所属的案件：有案件号显案件号；案件没有号照旧显案件内部标识。 */
 function caseReference(request: DispositionRequestRecord) {
@@ -296,41 +300,36 @@ function RequestDetail({ request, onClose }: { request: DispositionRequestRecord
 
 function DispositionRequestsWorkbench() {
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<string>('ALL');
-  const [sort, setSort] = useState<WorkbenchSort>({ key: 'sent', dir: -1 });
+  const [refine, setRefine] = useState('');
+  const [status, setStatus] = useState<string>(allStatuses);
+  const [sort, setSort] = useState<WorkbenchSort>(defaultRequestSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const { answer, retry, refreshing } = useTriageRegistry<{ requests: DispositionRequestRecord[] }>('disposition-request');
-  const answered = answer?.kind === 'outcome';
+  const conditions = dispositionRequestConditions(useSettledKeyword(search), status, sort);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadRequests);
   const rows = answer?.kind === 'outcome' ? answer.body.requests : [];
-  const counts = countByStatus(rows, dispositionStatus);
-  const visible = sortRowsBy(
-    rows.filter(
-      (row) =>
-        (status === 'ALL' || dispositionStatus(row).label === status) &&
-        matchesSearch(search, [
-          row.requestId,
-          row.caseDocumentNumber,
-          row.caseId,
-          row.action,
-          labelFor(row.action, actionScope),
-          handlerLabel(row.targetContext),
-        ]),
-    ),
-    sort,
-    requestSort,
+  const visible = rows.filter(
+    (row) =>
+      requestOnPage(row, status) &&
+      matchesSearch(refine, [labelFor(row.action, actionScope), handlerLabel(row.targetContext)]),
   );
-  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+  // 答复胶囊按读口口径筛：被替代的旧版也按它自己的答复参与筛选，行上照旧示「已替代」。
+  const statusChips: WorkbenchChip[] = [
+    chip(allStatuses, '全部', status, setStatus),
+    ...dispositionJudgmentCodes.map((code) => chip(code, labelFor(code, judgmentScope), status, setStatus)),
+    chip(awaitingJudgmentOnPage, pageOnlyLabel(awaitingJudgmentLabel), status, setStatus),
+    chip(supersededOnPage, pageOnlyLabel(labelFor('SUPERSEDED')), status, setStatus),
+  ];
 
   return (
     <WorkbenchPageTemplate<DispositionRequestRecord>
       title="处置请求"
       subtitle="异常案件发给运单、网点、运输、清关等环节的处置，以及对方接不接。被新版替代的请求保留备查。"
-      kpis={filter?.kpis}
       onRefresh={retry}
-      refreshing={refreshing}
-      search={{ value: search, onChange: setSearch, placeholder: '搜处置、案件号…' }}
-      statusChips={filter?.chips}
-      toolbarRight={answered ? `共 ${rows.length} 项，当前显示 ${visible.length} 项` : undefined}
+      refreshing={answer === null}
+      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、请求编号…' }}
+      statusChips={statusChips}
+      extraFilters={<PageOnlySearch value={refine} onChange={setRefine} subject="处置、交给哪个环节" />}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={requestColumns}
       rows={visible}
       rowKey={(row) => row.requestId}
@@ -339,10 +338,13 @@ function DispositionRequestsWorkbench() {
       rowAttention={(row) => row.judgment === 'SUPPLEMENT_REQUIRED'}
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-      noMatchText="当前筛选条件下没有匹配的处置请求"
+      noMatchText={
+        rows.length > 0 ? '这一页上没有匹配的处置请求；只筛本页的条件不看其余几页，翻页看看' : '当前筛选条件下没有匹配的处置请求'
+      }
       onClearFilters={() => {
         setSearch('');
-        setStatus('ALL');
+        setRefine('');
+        setStatus(allStatuses);
       }}
       renderDetail={(key) => {
         const request = visible.find((row) => row.requestId === key);
@@ -354,6 +356,7 @@ function DispositionRequestsWorkbench() {
         subject: '处置请求',
         emptyTitle: '还没有处置请求',
         emptyDescription: '异常案件需要别的环节动手（改路、退运、补资料）时，发出的请求会出现在这里。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

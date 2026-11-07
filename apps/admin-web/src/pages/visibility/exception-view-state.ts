@@ -19,7 +19,16 @@ export interface ExceptionViewOptions {
   subject: string;
   emptyTitle: string;
   emptyDescription: string;
+  /**
+   * 这一问带没带收窄条件（检索词或筛选维下推到读口，catalogue-query 的 catalogueConditionsNarrow），或已翻过第一页。答出零行说的
+   * 是「这组条件下没有」「这一页往后没有了」，不是册为空：仍报 ready，由页面说那一句；不收窄的第一页答零行才配空态。
+   */
+  narrowed?: boolean;
 }
+
+// 本区问题码说明面向登记（exceptionProblemNotes 的 MALFORMED_REQUEST 说「填写的内容格式不对」）；列表读口的 400 是查询条件没被
+// 接受，另说一句，理由散文接在后面。
+const rejectedQueryNote = '这次查询的条件没有被系统接受。';
 
 export function exceptionViewState<Body>(
   answer: ApiResult<Body> | null,
@@ -29,7 +38,9 @@ export function exceptionViewState<Body>(
 ): TemplateViewState {
   if (answer === null) return { kind: 'loading', shape: 'table' };
   if (answer.kind === 'outcome') {
-    return rowCount === 0 ? { kind: 'empty', title: options.emptyTitle, description: options.emptyDescription } : { kind: 'ready' };
+    return rowCount === 0 && !options.narrowed
+      ? { kind: 'empty', title: options.emptyTitle, description: options.emptyDescription }
+      : { kind: 'ready' };
   }
   if (answer.kind === 'unconfigured') {
     return {
@@ -43,10 +54,12 @@ export function exceptionViewState<Body>(
     return { kind: answer.kind, facts: { owner: options.module.owner, source: options.module.source } };
   }
   if (answer.kind === 'callerProblem') {
+    const note = answer.code === 'MALFORMED_REQUEST' ? rejectedQueryNote : exceptionProblemNote(answer.code);
     return {
       kind: 'error',
       title: `这次没有查到${options.subject}`,
-      description: exceptionProblemNote(answer.code),
+      // detail 是读口随 4xx 交回的理由散文（集外的键、坏游标、检索词过长），原样接在后面，不查表、不据此分支。
+      description: answer.detail === undefined ? note : `${note}${answer.detail}`,
       technical: httpRows(answer.status, answer.code),
     };
   }

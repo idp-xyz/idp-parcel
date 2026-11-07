@@ -6,8 +6,13 @@
 // 形状以 internal/visibilityexception/adapters/http/query_exception_triage_records.go、
 // query_exception_case_records.go、query_claims_recovery_records.go 为准，此处只做
 // 镜像不虚构；registry 是传输形状由调用方给定，响应外壳的 outcome 词已把册子分开。
+//
+// 三个读口已迁到 ADR-0144：游标、排序、筛选维与 `q` 经 catalogueRequestPath 拼进查询串，答复多一格 page；不带参数即
+// 裸路径。registry 是册子选择器（决定四），与条件并在同一组里，换册即换条件签名。每册收哪些键以
+// internal/visibilityexception/ports 的 catalogue_pages.go 为准——集外的键答 400，这里不自造。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -82,8 +87,8 @@ export interface DispositionRequestRecord {
 }
 
 export type ExceptionTriageListResponseBody =
-  | { outcome: 'SIGNAL_EPISODES_LISTED'; episodes: SignalEpisodeRecord[] }
-  | { outcome: 'DISPOSITION_REQUESTS_LISTED'; requests: DispositionRequestRecord[] };
+  | { outcome: 'SIGNAL_EPISODES_LISTED'; episodes: SignalEpisodeRecord[]; page: CataloguePage }
+  | { outcome: 'DISPOSITION_REQUESTS_LISTED'; requests: DispositionRequestRecord[]; page: CataloguePage };
 
 interface TriageBodyByRegistry {
   'signal-episode': Extract<
@@ -96,12 +101,25 @@ interface TriageBodyByRegistry {
   >;
 }
 
-/** 返回类型按请求的 registry 收窄：两册行形状不同，页面按视图择形状。 */
-export function listExceptionTriageRecords<Registry extends ExceptionTriageRegistry>(
+/** 分诊查阅一问的条件：registry 选哪本册，保持原义、不兼作筛选维（ADR-0144 决定四），但同样进游标摘要。 */
+export type ExceptionTriageConditions<Registry extends ExceptionTriageRegistry> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function exceptionTriageConditions<Registry extends ExceptionTriageRegistry>(
   registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): ExceptionTriageConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
+
+/** 返回类型按条件里的 registry 收窄：两册行形状不同，页面按视图择形状。收哪些键见 ports.SignalEpisodePages 与 DispositionRequestPages。 */
+export function listExceptionTriageRecords<Registry extends ExceptionTriageRegistry>(
+  conditions: ExceptionTriageConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<TriageBodyByRegistry[Registry]>> {
   return exchangeMasterData<TriageBodyByRegistry[Registry]>(
-    `/exception-triage-records?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/exception-triage-records', conditions, after),
   );
 }
 
@@ -132,11 +150,15 @@ export interface ExceptionCaseRecord {
 export interface ExceptionCaseListResponseBody {
   outcome: 'EXCEPTION_CASES_LISTED';
   cases: ExceptionCaseRecord[];
+  page: CataloguePage;
 }
 
-/** 单册端点无 registry 参数：页面只有一张案件列表。 */
-export function listExceptionCaseRecords(): Promise<ApiResult<ExceptionCaseListResponseBody>> {
-  return exchangeMasterData<ExceptionCaseListResponseBody>('/exception-case-records');
+/** 单册端点无 registry 参数：页面只有一张案件列表。收哪些键见 ports.ExceptionCasePages。 */
+export function listExceptionCaseRecords(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ExceptionCaseListResponseBody>> {
+  return exchangeMasterData<ExceptionCaseListResponseBody>(catalogueRequestPath('/exception-case-records', conditions, after));
 }
 
 // ---- 索赔与追偿（claims-recovery 页三页签） ----
@@ -234,9 +256,9 @@ export interface RecoveryMatterRecord {
 }
 
 export type ClaimsRecoveryListResponseBody =
-  | { outcome: 'CUSTOMER_NOTIFICATIONS_LISTED'; notifications: CustomerNotificationRecord[] }
-  | { outcome: 'CLAIM_ITEMS_LISTED'; items: ClaimItemRecord[] }
-  | { outcome: 'RECOVERY_MATTERS_LISTED'; matters: RecoveryMatterRecord[] };
+  | { outcome: 'CUSTOMER_NOTIFICATIONS_LISTED'; notifications: CustomerNotificationRecord[]; page: CataloguePage }
+  | { outcome: 'CLAIM_ITEMS_LISTED'; items: ClaimItemRecord[]; page: CataloguePage }
+  | { outcome: 'RECOVERY_MATTERS_LISTED'; matters: RecoveryMatterRecord[]; page: CataloguePage };
 
 interface ClaimsBodyByRegistry {
   'customer-notification': Extract<
@@ -250,11 +272,27 @@ interface ClaimsBodyByRegistry {
   >;
 }
 
-/** 返回类型按请求的 registry 收窄，同 listExceptionTriageRecords。 */
-export function listClaimsRecoveryRecords<Registry extends ClaimsRecoveryRegistry>(
+/** 理赔追偿查阅一问的条件，registry 的身份同 ExceptionTriageConditions。 */
+export type ClaimsRecoveryConditions<Registry extends ClaimsRecoveryRegistry> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function claimsRecoveryConditions<Registry extends ClaimsRecoveryRegistry>(
   registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): ClaimsRecoveryConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
+
+/**
+ * 返回类型按条件里的 registry 收窄，同 listExceptionTriageRecords。收哪些键见 ports.CustomerNotificationPages、ClaimItemPages
+ * 与 RecoveryMatterPages。
+ */
+export function listClaimsRecoveryRecords<Registry extends ClaimsRecoveryRegistry>(
+  conditions: ClaimsRecoveryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<ClaimsBodyByRegistry[Registry]>> {
   return exchangeMasterData<ClaimsBodyByRegistry[Registry]>(
-    `/claims-recovery-records?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/claims-recovery-records', conditions, after),
   );
 }

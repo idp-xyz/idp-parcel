@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import type { ModuleInfo } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -7,17 +7,21 @@ import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../.
 import { StatusPill } from '../../components/StatusPill';
 import { shortPrincipalRef } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState } from '../catalogue-view';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { entryHint } from '../operator-grants';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import {
   listVisibilityCatalogues,
   registerVisibilityCatalogue,
+  visibilityCatalogueConditions,
   visibilityRegistrationEndpoints,
-  type ApiResult,
-  type VisibilityCatalogueListResponseBody,
+  type VisibilityCatalogueConditions,
 } from './catalogue-api';
+import { PageOnlySearch } from './page-only';
 import {
   registrationOutcomeLabels,
   registrationProblemNote,
@@ -27,6 +31,7 @@ import {
   visibilityCatalogueKindLabels,
 } from './presentation';
 import {
+  ruleBookKeywordHints,
   ruleBookNotes,
   ruleCountSummary,
   ruleRowMatches,
@@ -41,6 +46,10 @@ import {
 // 列只放运营要看的：管的事（动态 → 状态、信号 → 处理方式、客户 → 能看到什么）、是否生效、生效期；版本号、批准人全串、
 // 原码进右栏「审计」。登记签不是逐字段表单：登记快照的形状与受控登记命令行吃的同一份，渠道原始载荷怎么译成快照属渠道
 // 接入契约（PAR-INT-01），本页只给填写提示。各册都没有覆盖或删除动作，换规则就是登一版新的。
+//
+// 读口已迁到 ADR-0144，按册上的记录游标翻页（模板的翻页条）：版本册一版一条、摊开成几行，按键的册一键一条。册种是选择器 kind，
+// 换册即回第一页。检索框下推成 `q`，读口只认版本号与批准人（按键的册认键与版本或渠道）；条目内容（状态、信号、客户、码）
+// 留一个只筛本页的小框。
 
 /** 一列：表头、格里的字（右栏概要也用它），可选把格渲染成状态胶囊（格里存的是码）。 */
 interface RuleColumn {
@@ -150,7 +159,8 @@ function inspectorOf(kind: RuleBookKind, row: RuleRow): InspectorContent {
 /** 登记签按授予收起时，空态里原本指向它的那半句换成这句：说谁能新增，不让人去找看不见的签。 */
 const hiddenRuleEntryHint = '新增规则需要配置权限，需要时请联系管理员；';
 
-type ListBody = Extract<VisibilityCatalogueListResponseBody, { kind: RuleBookKind }>;
+const loadRuleBook = (conditions: VisibilityCatalogueConditions<RuleBookKind>, after: string | null) =>
+  listVisibilityCatalogues(conditions, after);
 
 function RuleBookTable({
   info,
@@ -165,30 +175,19 @@ function RuleBookTable({
 }) {
   const [kind, setKind] = useState<RuleBookKind>(kinds[0]);
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{ kind: RuleBookKind; answer: ApiResult<ListBody> } | null>(null);
+  const [refine, setRefine] = useState('');
   const names = useCustomerNames();
+  const conditions = visibilityCatalogueConditions(kind, { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadRuleBook);
 
-  useEffect(() => {
-    let cancelled = false;
-    void listVisibilityCatalogues(kind).then((answer) => {
-      if (!cancelled) setLoaded({ kind, answer: answer as ApiResult<ListBody> });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [kind, reloadKey]);
-
-  const answer = loaded?.kind === kind ? loaded.answer : null;
   const rows = answer?.kind === 'outcome' ? ruleRowsOf(answer.body, names, new Date()) : [];
-  const visibleRows = rows.filter((row) => ruleRowMatches(row, search));
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleRows = rows.filter((row) => ruleRowMatches(row, refine));
 
   return (
     <ListPageTemplate<RuleRow>
       title={info.title}
       description={`${description}当前：${ruleBookNotes[kind]}`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜状态、信号、客户或版本号' }}
+      search={{ value: search, onChange: setSearch, placeholder: ruleBookKeywordHints[kind] }}
       filters={
         <>
           {kinds.map((candidate) => (
@@ -202,21 +201,26 @@ function RuleBookTable({
               {visibilityCatalogueKindLabels[candidate]}
             </button>
           ))}
+          <PageOnlySearch value={refine} onChange={setRefine} subject="状态、信号、客户等规则内容" />
         </>
       }
       // 计数只在拿到业务答案后显示，未配置态不报「0 条」。
-      filterSummary={answer?.kind === 'outcome' ? ruleCountSummary(kind, rows) : undefined}
-      emptyRowsNote="当前搜索条件下没有匹配的规则"
+      filterSummary={answer?.kind === 'outcome' ? ruleCountSummary(kind, answer.body.catalogues.length, rows) : undefined}
+      emptyRowsNote={
+        rows.length > 0 ? '这一页上没有匹配的规则；只筛本页的条件不看其余几页，翻页看看' : '当前搜索条件下没有匹配的规则'
+      }
       columns={listColumnsOf(kind)}
       rows={visibleRows}
       rowKey={(row) => row.key}
       inspector={(row) => inspectorOf(kind, row)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /visibility-catalogues?kind=${kind}`,
         emptyTitle: `还没有「${visibilityCatalogueKindLabels[kind]}」规则`,
         // 空册就是没登记：系统不会替公司生成默认规则（租户取值留给租户）。
         emptyDescription: `${ruleBookNotes[kind]}${entryHint(mayWrite, '在旁边的登记签里新增后会出现在这里；', hiddenRuleEntryHint)}系统不会自带默认规则。`,
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

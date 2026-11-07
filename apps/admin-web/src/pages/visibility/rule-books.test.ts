@@ -155,7 +155,40 @@ test('通知时限与动态矛盾两册没有生效期，计数只报条数', ()
     { channel: '邮件', deadline: '72 小时内', obligation: '通知送达客户' },
   );
   equal(rows[0].lifecycle, undefined);
-  equal(ruleCountSummary('NOTIFICATION_POLICY', rows), '通知时限 1 条');
+  equal(ruleCountSummary('NOTIFICATION_POLICY', 1, rows), `${visibilityCatalogueKindLabels.NOTIFICATION_POLICY}：本页 1 条`);
+});
+
+test('版本册的计数分开报本页几版、摊开几条：翻页条的总数数的是版', () => {
+  const rows = ruleRowsOf(
+    {
+      outcome: 'VISIBILITY_CATALOGUES_LISTED',
+      kind: 'MILESTONE_MAPPING',
+      catalogues: [
+        {
+          version: 'SYN-VE-MAP-V2',
+          effectiveFrom: '2026-03-01T00:00:00Z',
+          approvedBy: 'SYN-OPS-TRACKING-LEAD',
+          entries: [
+            { source: 'NODE_OPERATIONS', factKind: 'node-intake', milestone: 'PICKED_UP' },
+            { source: 'TRANSPORT_FULFILLMENT', factKind: 'movement-departure', milestone: 'DEPARTED' },
+          ],
+        },
+        {
+          version: 'SYN-VE-MAP-V1',
+          effectiveFrom: '2026-01-05T00:00:00Z',
+          effectiveTo: '2026-03-01T00:00:00Z',
+          approvedBy: 'SYN-OPS-TRACKING-LEAD',
+          entries: [{ source: 'NODE_OPERATIONS', factKind: 'node-intake', milestone: 'PICKED_UP' }],
+        },
+      ],
+    },
+    new Map(),
+    now,
+  );
+  equal(
+    ruleCountSummary('MILESTONE_MAPPING', 2, rows),
+    `${visibilityCatalogueKindLabels.MILESTONE_MAPPING}：本页 2 版 3 条，其中生效中 2 条`,
+  );
 });
 
 test('签名与填写提示每册都有，提示不出现系统术语', () => {

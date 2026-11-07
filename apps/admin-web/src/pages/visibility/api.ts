@@ -19,11 +19,19 @@
 //                     说明请求根本没到它(前缀/代理未通),与 5xx 分开,恢复动作不同。
 //
 // 作用域与页大小由服务端接入面从认证与授权结果裁决(ADR-0076:运营查阅的授权边界
-// 只有租户,页大小按渠道契约),本目录不送任何自报身份或分页参数。
+// 只有租户,页大小按渠道契约),本目录不送任何自报身份参数,也不送页大小。
+//
+// 列表那一支已迁到 ADR-0144:游标、排序与 `q` 经 catalogueRequestPath 拼进查询串,答复多一格 page;不带参数即
+// 裸路径。收哪些键以 internal/visibilityexception/ports 的 TrackingProjectionPages 为准——集外的键答 400,这里不自造。
+// 按包裹、按版本取单件的两支不翻页,请求照旧。
 
-import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
+import { accessRefusalOf } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
-import { problemCodeOf } from '../problem-body';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
+import { problemCodeOf, problemDetailOf } from '../problem-body';
+
+export type { ApiResult } from '../catalogue-api';
 
 // 路径前缀与委托查阅同一裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧
 // 在 bootstrap 调 configureVisibilityApi({ basePrefix: '/api' }) 注入。
@@ -68,10 +76,11 @@ export interface TrackingProjectionRecord {
   entries: ProjectionEntryRecord[];
 }
 
-/** 列表:空结果仍是 PROJECTIONS_LISTED + 空数组(租户内尚无投影是正常业务答案)。 */
+/** 列表:空结果仍是 PROJECTIONS_LISTED + 空数组(租户内尚无投影是正常业务答案)。一个包裹一行,翻页按包裹计。 */
 export interface ProjectionListResponseBody {
   outcome: 'PROJECTIONS_LISTED';
   projections: TrackingProjectionRecord[];
+  page: CataloguePage;
 }
 
 /**
@@ -90,17 +99,12 @@ export interface ProjectionDetailResponseBody {
   projection?: TrackingProjectionRecord;
 }
 
-// ---- 调用结果 ----
-
-export type ApiResult<Body> =
-  | { kind: 'outcome'; status: number; body: Body }
-  | AccessRefusal
-  | { kind: 'callerProblem'; status: number; code: string }
-  | { kind: 'noAnswer'; status: number; code: string }
-  | { kind: 'transport'; message: string };
-
-export function listTrackingProjections(): Promise<ApiResult<ProjectionListResponseBody>> {
-  return exchange<ProjectionListResponseBody>('/tracking-projections', { method: 'GET' });
+/** 查阅列表,收哪些键见 ports.TrackingProjectionPages。 */
+export function listTrackingProjections(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ProjectionListResponseBody>> {
+  return exchange<ProjectionListResponseBody>(catalogueRequestPath('/tracking-projections', conditions, after), { method: 'GET' });
 }
 
 export function findCurrentProjection(
@@ -155,5 +159,9 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }
-  return { kind: 'callerProblem', status: response.status, code };
+  // 读口按 ADR-0144 拒掉的查询随 400 带一句理由散文；只在服务端真给了字符串时才带这一格，同 catalogue-api。
+  const detail = problemDetailOf(parsed);
+  return detail === undefined
+    ? { kind: 'callerProblem', status: response.status, code }
+    : { kind: 'callerProblem', status: response.status, code, detail };
 }

@@ -4,16 +4,15 @@ import {
   countTrackingByStatus,
   currentEffectiveEntries,
   currentStatusLabelOf,
-  defaultTrackingSort,
-  filterTrackingRows,
   progressPhrasesOf,
-  sortTrackingRows,
   trackingRowOf,
+  trackingRowsOfStatus,
 } from './tracking-list';
 import type { ProjectionEntryRecord, TrackingProjectionRecord } from './api';
 
 // 本文件钉物流动态工作台的纯逻辑：替代关系只在同源同事实的版本间成立；进度按服务链顺序折成中文短语、缺的源不出现、
-// 连续同词只留一个；当前状态经词典、归不上的如实「未归类」；计数按词。
+// 连续同词只留一个；当前状态经词典、归不上的如实「未归类」；计数按词、状态胶囊只筛本页。检索与先后下推到读口，
+// 拼法在 list-conditions.test.ts。
 
 const entry = (overrides: Partial<ProjectionEntryRecord>): ProjectionEntryRecord => ({
   source: 'PARCEL_SHIPMENT',
@@ -78,16 +77,14 @@ test('当前状态取最后一条已归类条目的里程碑经词典；一条�
   equal(currentStatusLabelOf(trackingRowOf(record([entry({})]))), '未归类');
 });
 
-test('搜索命中包裹号或投影版本；状态胶囊按词筛；默认更新时间新→旧', () => {
+test('状态胶囊只在到手的这一页上按词筛，答复次序原样保留；计数按词', () => {
   const rows = [
-    trackingRowOf(record([entry({ milestone: 'DELIVERED' })], { parcel: 'DPCL-A', version: 'PRJ-A', derivedAt: '2026-10-28T10:00:00Z' })),
     trackingRowOf(record([entry({ milestone: 'IN_TRANSIT' })], { parcel: 'DPCL-B', version: 'PRJ-B', derivedAt: '2026-10-28T11:00:00Z' })),
+    trackingRowOf(record([entry({ milestone: 'DELIVERED' })], { parcel: 'DPCL-A', version: 'PRJ-A', derivedAt: '2026-10-28T10:00:00Z' })),
   ];
-  equal(filterTrackingRows(rows, { search: 'prj-b', status: 'ALL' }).length, 1);
-  equal(filterTrackingRows(rows, { search: '', status: '已签收' })[0].parcelId, 'DPCL-A');
-  deepEqual(defaultTrackingSort, { key: 'derived-at', dir: -1 });
-  deepEqual(sortTrackingRows(rows, defaultTrackingSort).map((row) => row.parcelId), ['DPCL-B', 'DPCL-A']);
-  deepEqual(sortTrackingRows(rows, { key: 'parcel', dir: 1 }).map((row) => row.parcelId), ['DPCL-A', 'DPCL-B']);
+  deepEqual(trackingRowsOfStatus(rows, 'ALL').map((row) => row.parcelId), ['DPCL-B', 'DPCL-A']);
+  deepEqual(trackingRowsOfStatus(rows, '已签收').map((row) => row.parcelId), ['DPCL-A']);
+  deepEqual(trackingRowsOfStatus(rows, '未归类'), []);
   deepEqual(countTrackingByStatus(rows), [
     { label: '已签收', count: 1 },
     { label: '运输中', count: 1 },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -8,16 +8,20 @@ import { shortPrincipalRef } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
 import { matchesSearch } from '../party/list-order';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { TwoLine, technicalRows } from '../settlement/ops-ui';
 import { namedRef, usePartyNames, type PartyNames } from '../settlement/party-names';
 import {
   listVisibilityCatalogues,
   registerVisibilityCatalogue,
+  visibilityCatalogueConditions,
   visibilityRegistrationEndpoints,
-  type ApiResult,
   type ClaimAuthorizationRecord,
   type ClaimEligibilityRecord,
+  type VisibilityCatalogueConditions,
 } from './catalogue-api';
 import {
   claimPrerequisiteKindLabels,
@@ -29,6 +33,7 @@ import {
   type ClaimPrerequisiteKind,
 } from './case-presentation';
 import { exceptionViewState } from './exception-view-state';
+import { PageOnlySearch } from './page-only';
 
 // 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['claim-prerequisites'];
@@ -38,23 +43,21 @@ const info = moduleInfoById['claim-prerequisites'];
 // 某一笔索赔够不够资格、由谁提得成是案上判断，在「索赔与追偿」页，不在这里——这里是规则，不是案件。
 //
 // 两册登的是租户自己的规则：册上没有某份合同或某个客户，就是还没设定，页面不补默认值。
+//
+// 两册已迁到 ADR-0144，各按游标翻页（模板的翻页条），按合同、按客户正序。检索框下推成 `q`，读口只认键（合同或客户编码）与版本；
+// 索赔类型的中文词、客户名称、代提申请人不在读口的列里，按它们找留一个只筛本页的小框。
 
 const tabContent = 'flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden';
 
-function useCatalogue<Body>(kind: ClaimPrerequisiteKind) {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listVisibilityCatalogues(kind).then((result) => {
-      if (!cancelled) setAnswer(result as unknown as ApiResult<Body>);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [kind, reloadToken]);
-  return { answer, retry: () => setReloadToken((token) => token + 1) };
+const loadEligibility = (conditions: VisibilityCatalogueConditions<'CLAIM_ELIGIBILITY'>, after: string | null) =>
+  listVisibilityCatalogues(conditions, after);
+
+const loadAuthorization = (conditions: VisibilityCatalogueConditions<'CLAIM_AUTHORIZATION'>, after: string | null) =>
+  listVisibilityCatalogues(conditions, after);
+
+/** 只筛本页的小框把行筛空了，与读口答零行是两句话。 */
+function emptyRowsNoteOf(subject: string, pageRows: number): string {
+  return pageRows > 0 ? `这一页上没有匹配的${subject}；只筛本页的条件不看其余几页，翻页看看` : `没有匹配的${subject}`;
 }
 
 const claimKindsText = (kinds: readonly string[]) => kinds.map((kind) => labelFor(kind, 'claim-kind')).join('、');
@@ -96,25 +99,30 @@ const eligibilityColumns: ListColumn<ClaimEligibilityRecord>[] = [
 
 function EligibilityTable() {
   const [search, setSearch] = useState('');
-  const { answer, retry } = useCatalogue<{ catalogues: ClaimEligibilityRecord[] }>('CLAIM_ELIGIBILITY');
+  const [refine, setRefine] = useState('');
+  const conditions = visibilityCatalogueConditions('CLAIM_ELIGIBILITY', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadEligibility);
   const rows = answer?.kind === 'outcome' ? answer.body.catalogues : [];
-  const visible = rows.filter((row) => matchesSearch(search, [row.contract, row.version, claimKindsText(row.coveredKinds)]));
+  const visible = rows.filter((row) => matchesSearch(refine, [claimKindsText(row.coveredKinds)]));
   return (
     <ListPageTemplate<ClaimEligibilityRecord>
       title={claimPrerequisiteKindLabels.CLAIM_ELIGIBILITY}
       description="每份客户合同可以索赔哪些类型。没有列在这里的合同还没有设定。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜合同、索赔类型…' }}
-      filterSummary={answer?.kind === 'outcome' ? `共 ${rows.length} 份合同` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜合同、版本…' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="索赔类型" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${rows.length} 份合同` : undefined}
       columns={eligibilityColumns}
       rows={visible}
       rowKey={(row) => `${row.contract}@${row.version}`}
-      emptyRowsNote="没有匹配的合同"
+      emptyRowsNote={emptyRowsNoteOf('合同', rows.length)}
+      pagination={pagination}
       viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /visibility-catalogues?kind=CLAIM_ELIGIBILITY',
         subject: '可索赔范围',
         emptyTitle: '还没有设定任何合同的可索赔范围',
         emptyDescription: '在「新增设定」签里为客户合同设定可以索赔的类型；系统不会替你预置。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -154,27 +162,30 @@ function authorizationColumns(names: PartyNames): ListColumn<ClaimAuthorizationR
 
 function AuthorizationTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const { answer, retry } = useCatalogue<{ catalogues: ClaimAuthorizationRecord[] }>('CLAIM_AUTHORIZATION');
+  const [refine, setRefine] = useState('');
+  const conditions = visibilityCatalogueConditions('CLAIM_AUTHORIZATION', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadAuthorization);
   const rows = answer?.kind === 'outcome' ? answer.body.catalogues : [];
-  const visible = rows.filter((row) =>
-    matchesSearch(search, [row.customer, names.account(row.customer), row.version, ...row.applicants]),
-  );
+  const visible = rows.filter((row) => matchesSearch(refine, [names.account(row.customer), ...row.applicants]));
   return (
     <ListPageTemplate<ClaimAuthorizationRecord>
       title={claimPrerequisiteKindLabels.CLAIM_AUTHORIZATION}
       description="每个客户允许谁代他提出索赔。「不允许任何人代提」是一个明确的决定，不是没填。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜客户、申请人…' }}
-      filterSummary={answer?.kind === 'outcome' ? `共 ${rows.length} 个客户` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜客户编码、版本…' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称、申请人" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${rows.length} 个客户` : undefined}
       columns={authorizationColumns(names)}
       rows={visible}
       rowKey={(row) => `${row.customer}@${row.version}`}
-      emptyRowsNote="没有匹配的客户"
+      emptyRowsNote={emptyRowsNoteOf('客户', rows.length)}
+      pagination={pagination}
       viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /visibility-catalogues?kind=CLAIM_AUTHORIZATION',
         subject: '代提索赔授权',
         emptyTitle: '还没有设定任何客户的代提授权',
         emptyDescription: '在「新增设定」签里为客户设定谁可以代他提索赔；系统不会替你预置。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

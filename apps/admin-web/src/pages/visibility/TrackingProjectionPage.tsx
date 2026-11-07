@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
@@ -6,27 +6,27 @@ import {
   type TemplateViewState,
   type WorkbenchChip,
   type WorkbenchColumn,
-  type WorkbenchKpi,
   type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
-import { statusToneText } from '../../components/status-tone';
-import { toneForLabel, type StatusTone } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { problemNote } from './presentation';
 import { listTrackingProjections, type ApiResult, type ProjectionListResponseBody } from './api';
 import { TrackingDetailPanel } from './TrackingDetailPanel';
+import { defaultTrackingSort, trackingListConditions } from './list-conditions';
+import { PageOnlyNote } from './page-only';
 import {
   countTrackingByStatus,
   currentStatusLabelOf,
-  defaultTrackingSort,
-  filterTrackingRows,
   progressPhrasesOf,
-  sortTrackingRows,
-  trackingCountSummary,
   trackingNoMatchNote,
+  trackingNoMatchOnPageNote,
   trackingRowOf,
+  trackingRowsOfStatus,
   type TrackingRow,
 } from './tracking-list';
 import { formatInstant } from '../moment';
@@ -44,13 +44,10 @@ const info = moduleInfoById['tracking-projection'];
 // 进度一格仍不是统一状态机：各源各一段、按服务链顺序排在一起只是阅读便利，GLOSSARY「追踪摘要」禁统一状态机那条规则照旧
 // （折叠的判据在 tracking-list.ts 的 progressPhrasesOf）。追踪摘要、当前 ETA、可见性缺口、异常影响是本上下文拥有的独立对象，
 // 投影读模型未携带，等各自读面落地再上列，不虚构空列。
-
-const kpiToneClass: Partial<Record<StatusTone, string>> = {
-  good: statusToneText.success,
-  info: statusToneText.info,
-  warn: statusToneText.warning,
-  bad: statusToneText.danger,
-};
+//
+// 读口已迁到 ADR-0144，按游标翻页（工具条右端）。检索词（地址上的 `?q=`，停稳后）与包裹号、更新时间两列的先后下推
+// （list-conditions 的 trackingListConditions）。当前状态是从条目派生的词，读口没有这一维：状态胶囊留着、只筛本页，胶囊旁写明；
+// 胶囊不带计数、命令头不摆指标——一页里数出来的不是各状态的总数，当前条件下共几件由翻页条说。
 
 const columns: WorkbenchColumn<TrackingRow>[] = [
   {
@@ -94,12 +91,18 @@ const columns: WorkbenchColumn<TrackingRow>[] = [
   },
 ];
 
-// 取数答案 → 模板页面态。空列表走空态而不是就绪态的空表格；筛出为空不是空态——viewState 按总数判，表格区另显 noMatchText。
-function viewStateOf(answer: ApiResult<ProjectionListResponseBody> | null, rowCount: number, retry: () => void): TemplateViewState {
+// 取数答案 → 模板页面态。空列表走空态而不是就绪态的空表格；带检索词答出零行、翻过第一页答出零行都不是空态（narrowed），
+// 留在就绪态，表格区另显 noMatchText。
+function viewStateOf(
+  answer: ApiResult<ProjectionListResponseBody> | null,
+  rowCount: number,
+  retry: () => void,
+  narrowed: boolean,
+): TemplateViewState {
   if (answer === null) return { kind: 'loading', shape: 'table' };
   switch (answer.kind) {
     case 'outcome':
-      return rowCount === 0
+      return rowCount === 0 && !narrowed
         ? {
             kind: 'empty',
             title: '还没有物流动态',
@@ -120,7 +123,8 @@ function viewStateOf(answer: ApiResult<ProjectionListResponseBody> | null, rowCo
       return {
         kind: 'error',
         title: '这次查询没有被接受',
-        description: problemNote(answer.code),
+        // 读口按 ADR-0144 拒掉的查询（集外的键、坏游标、检索词过长）随答一句理由散文，原样接在后面。
+        description: answer.detail === undefined ? problemNote(answer.code) : `${problemNote(answer.code)} ${answer.detail}`,
         technical: [
           { label: 'HTTP 状态', value: String(answer.status) },
           { label: '问题码', value: answer.code },
@@ -153,55 +157,21 @@ export function TrackingProjectionPage() {
   const [status, setStatus] = useState<'ALL' | string>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultTrackingSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
-  const [answer, setAnswer] = useState<ApiResult<ProjectionListResponseBody> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const conditions = trackingListConditions(useSettledKeyword(search), sort);
+  // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。换条件回第一页、翻页与重取都在 useCatalogueCursor 里。
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listTrackingProjections);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
-    void listTrackingProjections().then((result) => {
-      if (cancelled) return;
-      setAnswer(result);
-      setRefreshing(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
-  const retry = () => {
-    setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  };
   const rows = answer?.kind === 'outcome' ? answer.body.projections.map(trackingRowOf) : [];
   const answered = answer?.kind === 'outcome';
-  const visible = sortTrackingRows(filterTrackingRows(rows, { search, status }), sort);
-  const counts = countTrackingByStatus(rows);
+  const visible = trackingRowsOfStatus(rows, status);
+  // 胶囊只列这一页上出现过的状态词（里程碑是租户登记的开放词表）；选中的那一格翻到没有它的页也留着，好点掉。
+  const labels = countTrackingByStatus(rows).map((item) => item.label);
+  if (status !== 'ALL' && !labels.includes(status)) labels.push(status);
   const toggleStatus = (label: string) => setStatus(status === label ? 'ALL' : label);
-
-  // 指标即筛：按当前状态的词计数，只列真出现过的；里程碑是租户登记的开放词表，格数随数据走。
-  const kpis: WorkbenchKpi[] | undefined = answered
-    ? counts.map((item) => ({
-        label: item.label,
-        value: item.count,
-        tone: kpiToneClass[toneForLabel(item.label)],
-        active: status === item.label,
-        onClick: () => toggleStatus(item.label),
-      }))
-    : undefined;
-
   const statusChips: WorkbenchChip[] | undefined = answered
     ? [
-        { id: 'ALL', label: '全部', count: rows.length, active: status === 'ALL', onClick: () => setStatus('ALL') },
-        ...counts.map((item) => ({
-          id: item.label,
-          label: item.label,
-          count: item.count,
-          active: status === item.label,
-          onClick: () => toggleStatus(item.label),
-        })),
+        { id: 'ALL', label: '全部', active: status === 'ALL', onClick: () => setStatus('ALL') },
+        ...labels.map((label) => ({ id: label, label, active: status === label, onClick: () => toggleStatus(label) })),
       ]
     : undefined;
 
@@ -209,12 +179,12 @@ export function TrackingProjectionPage() {
     <WorkbenchPageTemplate<TrackingRow>
       title={info.title}
       subtitle={info.summary}
-      kpis={kpis}
       onRefresh={retry}
-      refreshing={refreshing}
+      refreshing={answer === null}
       search={{ value: search, onChange: setSearch, placeholder: '搜包裹号…' }}
       statusChips={statusChips}
-      toolbarRight={answered ? trackingCountSummary(rows.length, visible.length) : undefined}
+      extraFilters={answered ? <PageOnlyNote>状态只筛本页</PageOnlyNote> : undefined}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={columns}
       rows={visible}
       rowKey={(row) => row.projectionVersion}
@@ -222,7 +192,7 @@ export function TrackingProjectionPage() {
       onSelect={setSelectedKey}
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-      noMatchText={trackingNoMatchNote}
+      noMatchText={rows.length > 0 ? trackingNoMatchOnPageNote : trackingNoMatchNote}
       onClearFilters={() => {
         setSearch('');
         setStatus('ALL');
@@ -231,7 +201,7 @@ export function TrackingProjectionPage() {
         const row = visible.find((item) => item.projectionVersion === key);
         return row ? <TrackingDetailPanel row={row} onClose={() => setSelectedKey(null)} /> : null;
       }}
-      viewState={viewStateOf(answer, rows.length, retry)}
+      viewState={viewStateOf(answer, rows.length, retry, catalogueConditionsNarrow(conditions) || pastFirstPage(pagination))}
     />
   );
 }

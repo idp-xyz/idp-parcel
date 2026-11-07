@@ -119,7 +119,13 @@ export interface RuleRow {
   words?: string[];
 }
 
-type ListBody<K extends VisibilityCatalogueKind> = Extract<VisibilityCatalogueListResponseBody, { kind: K }>;
+/** 行模型只看册种与记录；翻页那一格与行怎么摊开无关，不要求在场。 */
+type ListBody<K extends VisibilityCatalogueKind> =
+  Extract<VisibilityCatalogueListResponseBody, { kind: K }> extends infer Body
+    ? Body extends unknown
+      ? Omit<Body, 'page'>
+      : never
+    : never;
 
 function range(from: string, to?: string): string {
   return `${formatInstant(from)} 起${to ? `，至 ${formatInstant(to)}` : '，长期有效'}`;
@@ -283,12 +289,28 @@ export function ruleRowMatches(row: RuleRow, needle: string): boolean {
   );
 }
 
-/** 计数摘要：有生效期的册另报其中生效中的条数——旧版本留在册上可追溯，但运营关心的是现在用哪条。 */
-export function ruleCountSummary(kind: RuleBookKind, rows: readonly RuleRow[]): string {
+/**
+ * 计数摘要，数的是这一页：读口按册上的记录翻页，版本册一版一条、一版摊开成几行，翻页条上的总数数的是版，这里把本页几版、
+ * 摊开几条分开报，免得两个数对不上。有生效期的册另报其中生效中的条数——旧版本留在册上可追溯，但运营关心的是现在用哪条。
+ */
+export function ruleCountSummary(kind: RuleBookKind, records: number, rows: readonly RuleRow[]): string {
   const effective = rows.filter((row) => row.lifecycle === 'EFFECTIVE').length;
   const hasLifecycle = rows.some((row) => row.lifecycle !== undefined);
   return hasLifecycle
-    ? `${visibilityCatalogueKindLabels[kind]} ${rows.length} 条，其中生效中 ${effective} 条`
-    : `${visibilityCatalogueKindLabels[kind]} ${rows.length} 条`;
+    ? `${visibilityCatalogueKindLabels[kind]}：本页 ${records} 版 ${rows.length} 条，其中生效中 ${effective} 条`
+    : `${visibilityCatalogueKindLabels[kind]}：本页 ${rows.length} 条`;
 }
+
+/**
+ * 检索框下推成 `q`，提示只写读口真认的列（ports 的 versionCataloguePages 与 keyedCataloguePages 两种册头注）：版本册认版本号与
+ * 批准人，按键的两册认自己的键与版本或渠道。条目里的中文词、客户、状态不在其中，按它们找走本页的小框。
+ */
+export const ruleBookKeywordHints: Record<RuleBookKind, string> = {
+  MILESTONE_MAPPING: '搜版本号、批准人',
+  TRIAGE_RULE: '搜版本号、批准人',
+  CONFLICT_SIGNAL_RULE: '搜信号类型码、版本号',
+  NOTIFICATION_POLICY: '搜显示规则编号、渠道码',
+  DISCLOSURE_POLICY: '搜版本号、批准人',
+  EXCEPTION_DISCLOSURE_RULE: '搜版本号、批准人',
+};
 

@@ -2,8 +2,8 @@ import { statusToneText } from '../../components/status-tone';
 import type { WorkbenchChip, WorkbenchKpi } from '../../templates';
 import type { StatusTone } from '../../vocabulary/status';
 
-// 指标即筛：按状态词计数的每一格既是页头指标，也是筛选胶囊；点一下按这个状态筛，再点一下回到全部。异常处理与异常案件
-// 两页的工作台共用这一份，格数随数据走，计数为零的状态不出格。
+// 指标即筛：按状态词计数的每一格既是页头指标，也是筛选胶囊；点一下按这个状态筛，再点一下回到全部。格数随数据走，计数为零的
+// 状态不出格。计数数的是交进来的行：只对一次拿全的列表是总数，按游标翻页的列表一页里数出来的不是。
 
 const kpiToneClass: Partial<Record<StatusTone, string>> = {
   good: statusToneText.success,

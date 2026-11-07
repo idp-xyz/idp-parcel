@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
   useAddressKeyword,
+  type WorkbenchChip,
   type WorkbenchColumn,
   type WorkbenchSort,
 } from '../../templates';
@@ -10,14 +11,17 @@ import { moduleInfoById } from '../../navigation';
 import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
 import { formatInstant } from '../moment';
-import { matchesSearch } from '../party/list-order';
-import { listExceptionCaseRecords, type ApiResult, type ExceptionCaseListResponseBody, type ExceptionCaseRecord } from './case-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { listExceptionCaseRecords, type ExceptionCaseRecord } from './case-api';
+import { casePhaseCodes } from './case-presentation';
 import { ExceptionDetailPanel, RowStatusPill } from './ExceptionDetailPanel';
 import { absenceText, caseNumberName, primaryReference } from './document-number';
 import { DocumentNumberCell } from './DocumentNumberCell';
-import { codeStatus, countByStatus, sortRowsBy, type SortAccessor } from './exception-list';
+import { codeStatus } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
-import { statusFilterParts } from './status-filter';
+import { allStatuses, defaultCaseSort, exceptionCaseConditions, type CasePhaseFilter } from './list-conditions';
 
 // 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['exception-cases'];
@@ -30,16 +34,12 @@ const info = moduleInfoById['exception-cases'];
 // 严重度、处置优先级、当前工作条件与响应周期不上列：案件行在存储上刻意只落精简主生命周期（0008），那几维结构上不存在，
 // 列出来只能代填，代填会把工作条件升格成第二套主状态。归并与关闭是案件命令面的判断，本页只查阅、不推进。
 // 改版前的「导出所选（CSV）」随列表模板一起退场：工作台没有多选。
+//
+// 读口已迁到 ADR-0144，按游标翻页（工具条右端）。检索词（地址上的 `?q=`，停稳后）、状态胶囊（phase）与包裹号、立案时间两列的
+// 先后下推（list-conditions 的 exceptionCaseConditions）。案件号列不给排：单据号可空，读口不放它作可排维。胶囊不带计数、命令头
+// 不摆指标——一页里数出来的不是各状态的总数，当前条件下共几件由翻页条说。
 
 const caseStatus = (record: ExceptionCaseRecord) => codeStatus(record.phase);
-
-const sortAccessors: Record<string, SortAccessor<ExceptionCaseRecord>> = {
-  number: { value: (row) => row.documentNumber ?? row.caseId },
-  parcel: { value: (row) => row.rootParcel },
-  established: { value: (row) => row.establishedAt, instant: true },
-};
-
-const defaultSort: WorkbenchSort = { key: 'established', dir: -1 };
 
 /** 关闭结论：并入其他案件经词典；其余结论是开放引用，词典查不到就原样显示。 */
 function conclusionText(record: ExceptionCaseRecord): string | undefined {
@@ -50,7 +50,6 @@ const columns: WorkbenchColumn<ExceptionCaseRecord>[] = [
   {
     key: 'number',
     header: caseNumberName,
-    sortKey: 'number',
     render: (row) => <DocumentNumberCell documentNumber={row.documentNumber} internal={row.caseId} absence={row.documentNumberAbsence} />,
   },
   {
@@ -132,56 +131,29 @@ function CaseDetail({ record, onClose }: { record: ExceptionCaseRecord; onClose:
 
 export function ExceptionCasesPage() {
   const [search, setSearch] = useAddressKeyword();
-  const [status, setStatus] = useState<string>('ALL');
-  const [sort, setSort] = useState<WorkbenchSort>(defaultSort);
+  const [phase, setPhase] = useState<CasePhaseFilter>(allStatuses);
+  const [sort, setSort] = useState<WorkbenchSort>(defaultCaseSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<ApiResult<ExceptionCaseListResponseBody> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer((previous) => (previous?.kind === 'outcome' ? previous : null));
-    void listExceptionCaseRecords().then((result) => {
-      if (cancelled) return;
-      setAnswer(result);
-      setRefreshing(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
-
-  const retry = () => {
-    setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  };
-  const answered = answer?.kind === 'outcome';
+  const conditions = exceptionCaseConditions(useSettledKeyword(search), phase, sort);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listExceptionCaseRecords);
   const rows = answer?.kind === 'outcome' ? answer.body.cases : [];
-  const counts = countByStatus(rows, caseStatus);
-  const visible = sortRowsBy(
-    rows.filter(
-      (row) =>
-        (status === 'ALL' || caseStatus(row).label === status) &&
-        matchesSearch(search, [row.documentNumber, row.rootParcel, row.caseId, row.responsibleTeam, caseStatus(row).label]),
-    ),
-    sort,
-    sortAccessors,
-  );
-  const filter = answered ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+  const togglePhase = (code: CasePhaseFilter) => setPhase(phase === code ? allStatuses : code);
+  const statusChips: WorkbenchChip[] = [
+    { id: allStatuses, label: '全部', active: phase === allStatuses, onClick: () => setPhase(allStatuses) },
+    ...casePhaseCodes.map((code) => ({ id: code, label: labelFor(code), active: phase === code, onClick: () => togglePhase(code) })),
+  ];
 
   return (
     <WorkbenchPageTemplate<ExceptionCaseRecord>
       title={info.title}
       subtitle="已立案的异常：哪票货出了问题、谁在处理、处理到哪一步。待响应的案件行首亮灯。"
-      kpis={filter?.kpis}
       onRefresh={retry}
-      refreshing={refreshing}
+      refreshing={answer === null}
       search={{ value: search, onChange: setSearch, placeholder: '搜案件号、包裹号、处理团队…' }}
-      statusChips={filter?.chips}
-      toolbarRight={answered ? `共 ${rows.length} 件，当前显示 ${visible.length} 件` : undefined}
+      statusChips={statusChips}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={columns}
-      rows={visible}
+      rows={rows}
       rowKey={(row) => row.caseId}
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
@@ -191,10 +163,10 @@ export function ExceptionCasesPage() {
       noMatchText="当前筛选条件下没有匹配的案件"
       onClearFilters={() => {
         setSearch('');
-        setStatus('ALL');
+        setPhase(allStatuses);
       }}
       renderDetail={(key) => {
-        const record = visible.find((row) => row.caseId === key);
+        const record = rows.find((row) => row.caseId === key);
         return record ? <CaseDetail record={record} onClose={() => setSelectedKey(null)} /> : null;
       }}
       viewState={exceptionViewState(answer, rows.length, retry, {
@@ -203,6 +175,7 @@ export function ExceptionCasesPage() {
         subject: '异常案件',
         emptyTitle: '还没有异常案件',
         emptyDescription: '异常信号经分诊决定立案后会出现在这里；要看刚进来的异常信号，去「异常处理」。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

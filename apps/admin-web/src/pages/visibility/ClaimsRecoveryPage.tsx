@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -8,12 +8,15 @@ import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
 import { formatInstant } from '../moment';
 import { matchesSearch } from '../party/list-order';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { TwoLine, technicalRows } from '../settlement/ops-ui';
 import { namedRef, usePartyNames, type PartyNames } from '../settlement/party-names';
 import {
   listClaimsRecoveryRecords,
-  type ApiResult,
   type ClaimItemRecord,
+  type ClaimsRecoveryConditions,
   type CustomerNotificationRecord,
   type RecoveryActionRecord,
   type RecoveryMatterRecord,
@@ -24,6 +27,8 @@ import { DocumentNumberCell } from './DocumentNumberCell';
 import { RowStatusPill } from './ExceptionDetailPanel';
 import { claimStatus, countByStatus, notificationStatus, type RowStatus } from './exception-list';
 import { exceptionViewState } from './exception-view-state';
+import { claimsRegistryConditions } from './list-conditions';
+import { PageOnlySearch } from './page-only';
 
 // 页面标题与主责出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['claims-recovery'];
@@ -35,31 +40,22 @@ const info = moduleInfoById['claims-recovery'];
 // 三个对象各有独立的生命周期，分签而不折进一张表：客户赔付不等追偿完成，追偿也不等客户索赔。全页没有金额列——赔付与
 // 追偿的金额在账务区形成，三本册的行上连金额都没有。首次索赔期限、对方响应与外部责任结论在行上没有登记格，不上列、不代填；
 // 「对方没响应」不等于拒绝，这层真话靠不上列保住。
+//
+// 三本册已迁到 ADR-0144，各按游标翻页（模板的翻页条）。检索框下推成 `q`，读口只认本册的编号与编码列；往来单位名称在
+// party-commercial、码的中文词在用语词典，都不在读口的列里——按它们找留一个只筛本页的小框，字面写明。三签今天没有筛选条，
+// 读口另有的筛选维（索赔的 screen、conclusion）不为此新加控件。过滤条右端按状态的计数数的是这一页，字面写「本页」。
 
 const tabContent = 'flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden';
 
-function useClaimsRegistry<Body>(fetchRegistry: () => Promise<ApiResult<Body>>) {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void fetchRegistry().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // fetchRegistry 是模块级函数，身份稳定；依赖只随刷新令牌变。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadToken]);
-  return { answer, retry: () => setReloadToken((token) => token + 1) };
+/** 「本页 n 项 · 待审核 2 · 符合条件 1」：按状态词的计数接在本页条数后面；整册几条由翻页条说。 */
+function countSummary<Row>(unit: string, rows: readonly Row[], statusOf?: (row: Row) => RowStatus): string {
+  const parts = statusOf ? countByStatus(rows, statusOf).map((item) => `${item.label} ${item.count}`) : [];
+  return [`本页 ${rows.length} ${unit}`, ...parts].join(' · ');
 }
 
-/** 「共 n 项 · 待审核 2 · 符合条件 1」：按状态词的计数接在总数后面。 */
-function countSummary<Row>(unit: string, rows: readonly Row[], statusOf: (row: Row) => RowStatus): string {
-  const parts = countByStatus(rows, statusOf).map((item) => `${item.label} ${item.count}`);
-  return [`共 ${rows.length} ${unit}`, ...parts].join(' · ');
+/** 只筛本页的小框把行筛空了，与读口答零行是两句话。 */
+function emptyRowsNoteOf(subject: string, pageRows: number): string {
+  return pageRows > 0 ? `这一页上没有匹配的${subject}；只筛本页的条件不看其余几页，翻页看看` : `没有匹配的${subject}`;
 }
 
 function customerCell(names: PartyNames, account: string) {
@@ -126,40 +122,37 @@ function claimColumns(names: PartyNames): ListColumn<ClaimItemRecord>[] {
   ];
 }
 
-const fetchClaims = () => listClaimsRecoveryRecords('claim-item');
+const loadClaims = (conditions: ClaimsRecoveryConditions<'claim-item'>, after: string | null) =>
+  listClaimsRecoveryRecords(conditions, after);
 
 function CustomerClaimsTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const { answer, retry } = useClaimsRegistry(fetchClaims);
+  const [refine, setRefine] = useState('');
+  const conditions = claimsRegistryConditions('claim-item', useSettledKeyword(search));
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadClaims);
   const rows = answer?.kind === 'outcome' ? answer.body.items : [];
   const visible = rows.filter((row) =>
-    matchesSearch(search, [
-      row.documentNumber,
-      row.target,
-      row.itemId,
-      row.batch,
-      row.customer,
-      names.account(row.customer),
-      labelFor(row.kind, 'claim-kind'),
-      claimStatus(row).label,
-    ]),
+    matchesSearch(refine, [names.account(row.customer), labelFor(row.kind, 'claim-kind'), claimStatus(row).label]),
   );
   return (
     <ListPageTemplate<ClaimItemRecord>
       title="客户索赔"
       description="客户就丢失、破损等提出的索赔：资格审核、责任认定各走到哪一步。赔付金额在账务区。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜索赔号、包裹号、客户、索赔类型…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索赔号、包裹号、客户编码、批次…' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称、索赔类型、状态" />}
       filterSummary={answer?.kind === 'outcome' ? countSummary('项', rows, claimStatus) : undefined}
       columns={claimColumns(names)}
       rows={visible}
       rowKey={(row) => `${row.batch}:${row.itemId}`}
-      emptyRowsNote="没有匹配的索赔"
+      emptyRowsNote={emptyRowsNoteOf('索赔', rows.length)}
+      pagination={pagination}
       viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /claims-recovery-records?registry=claim-item',
         subject: '客户索赔',
         emptyTitle: '还没有客户索赔',
         emptyDescription: '客户通过客户系统提交索赔后会出现在这里；哪些合同能索赔、谁能代客户提，在「索赔资格与授权」里设定。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -189,32 +182,36 @@ function notificationColumns(names: PartyNames): ListColumn<CustomerNotification
   ];
 }
 
-const fetchNotifications = () => listClaimsRecoveryRecords('customer-notification');
+const loadNotifications = (conditions: ClaimsRecoveryConditions<'customer-notification'>, after: string | null) =>
+  listClaimsRecoveryRecords(conditions, after);
 
 function CustomerNoticesTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const { answer, retry } = useClaimsRegistry(fetchNotifications);
+  const [refine, setRefine] = useState('');
+  const conditions = claimsRegistryConditions('customer-notification', useSettledKeyword(search));
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadNotifications);
   const rows = answer?.kind === 'outcome' ? answer.body.notifications : [];
-  const visible = rows.filter((row) =>
-    matchesSearch(search, [row.notificationId, row.customer, names.account(row.customer), row.channel, notificationStatus(row).label]),
-  );
+  const visible = rows.filter((row) => matchesSearch(refine, [names.account(row.customer), notificationStatus(row).label]));
   return (
     <ListPageTemplate<CustomerNotificationRecord>
       title="客户通知"
       // 进度只示最后一步走到哪；渠道接受、送达、客户确认在技术详情里逐条可查，哪一步算「已通知」由客户合同与通知策略定。
       description="出了异常需要告诉客户时的通知：发出、送达、客户确认各走到哪一步，要在什么时间前通知到。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜客户、通知渠道…' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜客户编码、通知渠道、通知编号…' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称、通知进度" />}
       filterSummary={answer?.kind === 'outcome' ? countSummary('条', rows, notificationStatus) : undefined}
       columns={notificationColumns(names)}
       rows={visible}
       rowKey={(row) => row.notificationId}
-      emptyRowsNote="没有匹配的通知"
+      emptyRowsNote={emptyRowsNoteOf('通知', rows.length)}
+      pagination={pagination}
       viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /claims-recovery-records?registry=customer-notification',
         subject: '客户通知',
         emptyTitle: '还没有客户通知',
         emptyDescription: '异常按「设置 · 通知与披露」的规则决定要告诉客户时，通知会出现在这里。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -270,31 +267,35 @@ function recoveryColumns(names: PartyNames): ListColumn<RecoveryMatterRecord>[] 
   ];
 }
 
-const fetchRecoveries = () => listClaimsRecoveryRecords('recovery-matter');
+const loadRecoveries = (conditions: ClaimsRecoveryConditions<'recovery-matter'>, after: string | null) =>
+  listClaimsRecoveryRecords(conditions, after);
 
 function RecoveryMattersTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const { answer, retry } = useClaimsRegistry(fetchRecoveries);
+  const [refine, setRefine] = useState('');
+  const conditions = claimsRegistryConditions('recovery-matter', useSettledKeyword(search));
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadRecoveries);
   const rows = answer?.kind === 'outcome' ? answer.body.matters : [];
-  const visible = rows.filter((row) =>
-    matchesSearch(search, [row.matterId, row.caseDocumentNumber, row.caseId, row.counterparty, names.party(row.counterparty)]),
-  );
+  const visible = rows.filter((row) => matchesSearch(refine, [names.party(row.counterparty)]));
   return (
     <ListPageTemplate<RecoveryMatterRecord>
       title="追偿"
       description="异常的责任在承运商、代理或保险时，向他们追回损失：预先通知与正式主张各走到哪一步。追偿金额在账务区。"
-      search={{ value: search, onChange: setSearch, placeholder: '搜责任方、案件号…' }}
-      filterSummary={answer?.kind === 'outcome' ? `共 ${rows.length} 项` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、责任方编码、追偿编号…' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="责任方名称" />}
+      filterSummary={answer?.kind === 'outcome' ? countSummary('项', rows) : undefined}
       columns={recoveryColumns(names)}
       rows={visible}
       rowKey={(row) => row.matterId}
-      emptyRowsNote="没有匹配的追偿"
+      emptyRowsNote={emptyRowsNoteOf('追偿', rows.length)}
+      pagination={pagination}
       viewState={exceptionViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /claims-recovery-records?registry=recovery-matter',
         subject: '追偿',
         emptyTitle: '还没有追偿',
         emptyDescription: '异常案件查明责任在合作伙伴一方、需要向对方追回时，追偿会出现在这里。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
