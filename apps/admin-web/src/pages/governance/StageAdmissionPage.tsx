@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Table,
   TableHeader,
@@ -14,19 +14,19 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
+import type { CataloguePage } from '../catalogue-query';
 import { formatInstant, formatRange } from '../catalogue-view';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { useCatalogueCursor, type CatalogueCursor } from '../use-catalogue-cursor';
 import {
   listAuthorityIntervals,
   listResumptions,
   listSuspensions,
   listTakeovers,
-  type AuthorityIntervalListResponseBody,
   type AuthorityIntervalRecord,
-  type ResumptionListResponseBody,
+  type GovernanceRegisterConditions,
   type ResumptionRecord,
-  type SuspensionListResponseBody,
   type SuspensionRecord,
-  type TakeoverListResponseBody,
   type TakeoverRecord,
 } from './api';
 import { PrincipalRef } from '../../components/PrincipalRef';
@@ -47,6 +47,11 @@ const info = moduleInfoById['stage-admission'];
 // 队列里逐条消化的复核件。四册各成一个业务区块；阶段评审查阅仍未开，如实说明，
 // 不留白也不造数。决定动作不在本页——登记走受控 CLI，HTTP 命令入口不存在
 // （ADR-0083 Consequences，接管写面仍另票），headerActions 不设。
+//
+// 四册的读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/14）：各册按游标各自翻页，翻页条在区块表下；概况里的条数取
+// 答复的 total，是整册的数，不是这一页的行数。读口没放筛选维、另收 q，本页没有检索框，只接翻页，不为 q 新加控件。
+
+const noConditions: GovernanceRegisterConditions = {};
 
 /** 四册通用的区块小表：空册如实说「册空」而不是留白——留白读起来像数据缺件。 */
 function registryTable<Row>(
@@ -88,51 +93,42 @@ function secondBatchNote(text: string) {
 }
 
 /**
+ * 一册的区块内容：这一页的小表，表下一条翻页条。翻页在途只这一区显读取中，别的区照旧；翻过第一页答出零行说的是「往后没有了」，
+ * 不是册空——册只增不减，多半碰不到，碰到了照实说、翻页条留着好往回翻。
+ */
+function registerContent(cursor: CatalogueCursor<{ page: CataloguePage }>, rowCount: number, table: ReactNode) {
+  if (cursor.answer === null) return <p className="type-body text-idpxyz-textMuted">正在读取这一页…</p>;
+  const past = pastFirstPage(cursor.pagination);
+  return (
+    <div className="space-y-2">
+      {rowCount === 0 && past ? <p className="type-body text-idpxyz-textMuted">这一页往后没有登记了，往前翻看看。</p> : table}
+      {cursor.pagination && (rowCount > 0 || past) ? <CursorPager pagination={cursor.pagination} /> : null}
+    </div>
+  );
+}
+
+/** 概况里一册的条数：整册的 total；没答到业务答案、或读口不给总数时不报数。 */
+function registerCount(answer: ApiResult<{ page: CataloguePage }> | null): string {
+  return answer?.kind === 'outcome' && answer.body.page.total !== null ? `${answer.body.page.total} 条` : '—';
+}
+
+/**
  * 阶段决定与暂停恢复：产品实例级治理登记册的查阅面（ADR-0083）。
  * 四册照登转写——生产权威区间、暂停决定、恢复决定、对象级接管；恢复与接管的盘点
  * 明细住 jsonb，属详情读法，本页列引用与时点。页面只读，不设登记与决定动作。
  */
 export function StageAdmissionPage() {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [intervalsAnswer, setIntervalsAnswer] =
-    useState<ApiResult<AuthorityIntervalListResponseBody> | null>(null);
-  const [suspensionsAnswer, setSuspensionsAnswer] =
-    useState<ApiResult<SuspensionListResponseBody> | null>(null);
-  const [resumptionsAnswer, setResumptionsAnswer] =
-    useState<ApiResult<ResumptionListResponseBody> | null>(null);
-  const [takeoversAnswer, setTakeoversAnswer] =
-    useState<ApiResult<TakeoverListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIntervalsAnswer(null);
-    setSuspensionsAnswer(null);
-    setResumptionsAnswer(null);
-    setTakeoversAnswer(null);
-    void listAuthorityIntervals().then((answer) => {
-      if (!cancelled) setIntervalsAnswer(answer);
-    });
-    void listSuspensions().then((answer) => {
-      if (!cancelled) setSuspensionsAnswer(answer);
-    });
-    void listResumptions().then((answer) => {
-      if (!cancelled) setResumptionsAnswer(answer);
-    });
-    void listTakeovers().then((answer) => {
-      if (!cancelled) setTakeoversAnswer(answer);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  const answers: Array<ApiResult<unknown> | null> = [
-    intervalsAnswer,
-    suspensionsAnswer,
-    resumptionsAnswer,
-    takeoversAnswer,
-  ];
+  const intervalsCursor = useCatalogueCursor(noConditions, listAuthorityIntervals);
+  const suspensionsCursor = useCatalogueCursor(noConditions, listSuspensions);
+  const resumptionsCursor = useCatalogueCursor(noConditions, listResumptions);
+  const takeoversCursor = useCatalogueCursor(noConditions, listTakeovers);
+  const cursors = [intervalsCursor, suspensionsCursor, resumptionsCursor, takeoversCursor];
+  const answers: Array<ApiResult<unknown> | null> = cursors.map((cursor) => cursor.answer);
+  // 重试一次重取四册，各取各此刻所在的那一页。
+  const retry = () => cursors.forEach((cursor) => cursor.retry());
+  // 四册头一次都答到之前整页显加载中；之后某一册翻页在途，只那一区显读取中（registerContent），整页不回加载态。
+  const [settled, setSettled] = useState(false);
+  if (!settled && answers.every((answer) => answer !== null)) setSettled(true);
 
   // 四册合成一个页面态。接入那一格（未配置、需要登录、没有授予）优先于错误：四册共用同一个 Intake，
   // 那是对整个读取入口的确定陈述；错误态只取第一个失败册的事实，重试一次重取四册。
@@ -174,28 +170,32 @@ export function StageAdmissionPage() {
         : {
             kind: 'error',
             title: failed.kind === 'noAnswer' ? '系统暂时没能读出治理登记' : '读取方式有问题',
-            description: failed.kind === 'noAnswer' ? '请稍后重试，重试会重新读取四本登记。' : `请刷新页面后重试；仍然不行请联系系统管理员（错误码 ${failed.code}）。`,
+            // 4xx 带回的理由散文（如游标与条件不符）原样接在后面，不查表。
+            description:
+              failed.kind === 'noAnswer'
+                ? '请稍后重试，重试会重新读取四本登记。'
+                : `请刷新页面后重试；仍然不行请联系系统管理员（错误码 ${failed.code}）。${failed.kind === 'callerProblem' && failed.detail ? ` ${failed.detail}` : ''}`,
             onRetry: failed.kind === 'noAnswer' ? retry : undefined,
           };
-  } else if (answers.some((answer) => answer === null)) {
+  } else if (!settled) {
     viewState = { kind: 'loading' };
   }
 
   const intervals =
-    intervalsAnswer?.kind === 'outcome' ? intervalsAnswer.body.intervals : [];
+    intervalsCursor.answer?.kind === 'outcome' ? intervalsCursor.answer.body.intervals : [];
   const suspensions =
-    suspensionsAnswer?.kind === 'outcome' ? suspensionsAnswer.body.suspensions : [];
+    suspensionsCursor.answer?.kind === 'outcome' ? suspensionsCursor.answer.body.suspensions : [];
   const resumptions =
-    resumptionsAnswer?.kind === 'outcome' ? resumptionsAnswer.body.resumptions : [];
+    resumptionsCursor.answer?.kind === 'outcome' ? resumptionsCursor.answer.body.resumptions : [];
   const takeovers =
-    takeoversAnswer?.kind === 'outcome' ? takeoversAnswer.body.takeovers : [];
+    takeoversCursor.answer?.kind === 'outcome' ? takeoversCursor.answer.body.takeovers : [];
 
   const sections: DetailSection[] = [
     {
       id: 'authority-intervals',
       title: '谁在写生产',
       description: '哪类对象的哪项能力、哪种事实，眼下由哪条线在生产上写；没有截止时间就是现行。',
-      content: registryTable<AuthorityIntervalRecord>(
+      content: registerContent(intervalsCursor, intervals.length, registryTable<AuthorityIntervalRecord>(
         intervals,
         ['对象范围', '能力', '事实种类', '由谁写', '生效期间', '登记时间'],
         (row) => (
@@ -209,13 +209,13 @@ export function StageAdmissionPage() {
           </TableRow>
         ),
         emptyRegisterNote,
-      ),
+      )),
     },
     {
       id: 'suspensions',
       title: '暂停',
       description: '暂停立即生效；在途货物怎么处理照登原文。',
-      content: registryTable<SuspensionRecord>(
+      content: registerContent(suspensionsCursor, suspensions.length, registryTable<SuspensionRecord>(
         suspensions,
         ['暂停编号', '范围', '触发来源', '依据', '证据', '执行人', '发生时间', '生效时间', '在途货物怎么办'],
         (row) => (
@@ -232,13 +232,13 @@ export function StageAdmissionPage() {
           </TableRow>
         ),
         emptyRegisterNote,
-      ),
+      )),
     },
     {
       id: 'resumptions',
       title: '恢复',
       description: '恢复要有放行证据和一致性核对；盘点明细另看，这里列引用与时间。',
-      content: registryTable<ResumptionRecord>(
+      content: registerContent(resumptionsCursor, resumptions.length, registryTable<ResumptionRecord>(
         resumptions,
         ['暂停编号', '放行证据', '一致性核对', '盘点时间', '决定人', '决定时间', '生效时间'],
         (row) => (
@@ -253,7 +253,7 @@ export function StageAdmissionPage() {
           </TableRow>
         ),
         emptyRegisterNote,
-      ),
+      )),
     },
     {
       id: 'stage-review',
@@ -264,7 +264,7 @@ export function StageAdmissionPage() {
       id: 'takeover',
       title: '接管',
       description: '原来那条线停写之后，指定范围由新的一条线接着写。这里列停写证据、期间与时间；盘点明细另看。',
-      content: registryTable<TakeoverRecord>(
+      content: registerContent(takeoversCursor, takeovers.length, registryTable<TakeoverRecord>(
         takeovers,
         [
           '对象范围',
@@ -301,7 +301,7 @@ export function StageAdmissionPage() {
           </TableRow>
         ),
         emptyRegisterNote,
-      ),
+      )),
     },
   ];
 
@@ -312,10 +312,10 @@ export function StageAdmissionPage() {
       basicTitle="概况"
       basicFields={[
         { label: '登记方式', value: '由管理员用命令行工具登记；本页只看' },
-        { label: '谁在写生产', value: `${intervals.length} 条` },
-        { label: '暂停', value: `${suspensions.length} 条` },
-        { label: '恢复', value: `${resumptions.length} 条` },
-        { label: '接管', value: `${takeovers.length} 条` },
+        { label: '谁在写生产', value: registerCount(intervalsCursor.answer) },
+        { label: '暂停', value: registerCount(suspensionsCursor.answer) },
+        { label: '恢复', value: registerCount(resumptionsCursor.answer) },
+        { label: '接管', value: registerCount(takeoversCursor.answer) },
       ]}
       sections={sections}
       viewState={viewState}

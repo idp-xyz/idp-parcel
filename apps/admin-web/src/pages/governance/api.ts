@@ -7,10 +7,24 @@
 // 产品实例级注入（隔离读开关启用时由装配侧配置），前端与其他目录页共用同一套
 // exchangeMasterData，不为治理另起第二种传输。恢复决定的盘点 jsonb 属详情读法，
 // 端点不透出，这里也不虚构。
+//
+// 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/12）：register 是册子选择器，由各册的读口函数带上；翻页走游标，
+// 答复带 page。各册点名的可排维与 q 覆盖的列以读口的声明为准（internal/pilotgovernance/ports 的 catalogue_pages.go），
+// 这里不抄一份。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
+
+/** 治理登记册一问的条件；register 不在其中，由读口函数加上。 */
+export type GovernanceRegisterConditions = Omit<CatalogueConditions, 'selectors'>;
+
+type GovernanceRegister = 'authority-interval' | 'suspension' | 'resumption' | 'takeover';
+
+function registerPath(register: GovernanceRegister, conditions: GovernanceRegisterConditions, after: string | null): string {
+  return catalogueRequestPath('/governance-registers', { ...conditions, selectors: { register } }, after);
+}
 
 /** 生产权威区间一行。toAt 缺席即开放区间（当前权威），不编造「无限远」时刻。 */
 export interface AuthorityIntervalRecord {
@@ -26,6 +40,7 @@ export interface AuthorityIntervalRecord {
 export interface AuthorityIntervalListResponseBody {
   outcome: 'AUTHORITY_INTERVALS_LISTED';
   intervals: AuthorityIntervalRecord[];
+  page: CataloguePage;
 }
 
 /** 暂停决定一行。字段全部是脱敏引用与原词（登记 CLI 纪律保证）。 */
@@ -44,6 +59,7 @@ export interface SuspensionRecord {
 export interface SuspensionListResponseBody {
   outcome: 'SUSPENSIONS_LISTED';
   suspensions: SuspensionRecord[];
+  page: CataloguePage;
 }
 
 /** 恢复决定一行。suspensionId 指回被恢复的暂停；盘点内容住 jsonb，不在列面。 */
@@ -60,24 +76,29 @@ export interface ResumptionRecord {
 export interface ResumptionListResponseBody {
   outcome: 'RESUMPTIONS_LISTED';
   resumptions: ResumptionRecord[];
+  page: CataloguePage;
 }
 
-export function listAuthorityIntervals(): Promise<ApiResult<AuthorityIntervalListResponseBody>> {
-  return exchangeMasterData<AuthorityIntervalListResponseBody>(
-    '/governance-registers?register=authority-interval',
-  );
+/** 游标缺即第一页；不带条件即该册的缺省序第一页。 */
+export function listAuthorityIntervals(
+  conditions: GovernanceRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<AuthorityIntervalListResponseBody>> {
+  return exchangeMasterData<AuthorityIntervalListResponseBody>(registerPath('authority-interval', conditions, after));
 }
 
-export function listSuspensions(): Promise<ApiResult<SuspensionListResponseBody>> {
-  return exchangeMasterData<SuspensionListResponseBody>(
-    '/governance-registers?register=suspension',
-  );
+export function listSuspensions(
+  conditions: GovernanceRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<SuspensionListResponseBody>> {
+  return exchangeMasterData<SuspensionListResponseBody>(registerPath('suspension', conditions, after));
 }
 
-export function listResumptions(): Promise<ApiResult<ResumptionListResponseBody>> {
-  return exchangeMasterData<ResumptionListResponseBody>(
-    '/governance-registers?register=resumption',
-  );
+export function listResumptions(
+  conditions: GovernanceRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ResumptionListResponseBody>> {
+  return exchangeMasterData<ResumptionListResponseBody>(registerPath('resumption', conditions, after));
 }
 
 /** 对象级接管一行。盘点 jsonb 不在列面，只留盘点时刻。toAt 缺席即开放区间。 */
@@ -101,10 +122,12 @@ export interface TakeoverRecord {
 export interface TakeoverListResponseBody {
   outcome: 'TAKEOVERS_LISTED';
   takeovers: TakeoverRecord[];
+  page: CataloguePage;
 }
 
-export function listTakeovers(): Promise<ApiResult<TakeoverListResponseBody>> {
-  return exchangeMasterData<TakeoverListResponseBody>(
-    '/governance-registers?register=takeover',
-  );
+export function listTakeovers(
+  conditions: GovernanceRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<TakeoverListResponseBody>> {
+  return exchangeMasterData<TakeoverListResponseBody>(registerPath('takeover', conditions, after));
 }
