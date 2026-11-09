@@ -49,7 +49,9 @@ const info = moduleInfoById['stage-admission'];
 // （ADR-0083 Consequences，接管写面仍另票），headerActions 不设。
 //
 // 四册的读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/14）：各册按游标各自翻页，翻页条在区块表下；概况里的条数取
-// 答复的 total，是整册的数，不是这一页的行数。读口没放筛选维、另收 q，本页没有检索框，只接翻页，不为 q 新加控件。
+// 答复的 total，是整册的数，不是这一页的行数。读口另收 q，生产权威区间与暂停两册还各放了一维状态（open、resumed，
+// ports.AuthorityIntervalRegistryPages 与 SuspensionRegistryPages）；本页是逐册的区块小表，没有检索框也没有筛选条，只接翻页，
+// 不为它们新加控件。
 
 const noConditions: GovernanceRegisterConditions = {};
 

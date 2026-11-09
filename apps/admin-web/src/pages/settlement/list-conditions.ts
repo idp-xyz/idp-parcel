@@ -12,9 +12,13 @@ import { registryConditions, type CustomerStatementRecord, type RegistryConditio
 
 // —— 客户对账单（ports.CustomerStatementPages 与 DisputedCustomerStatementPages）——
 
-/** 「只看待对账」换接争议队列：另一个读口、另一本游标，不带选择器；不勾时是对账单册，带 registry。两者条件签名不同，切换即回第一页。 */
-export function statementListConditions(disputedOnly: boolean, keyword: string): CatalogueConditions {
-  return disputedOnly ? { q: keyword } : registryConditions('customer-statement', { q: keyword });
+/**
+ * 「只看待对账」换接争议队列：另一个读口、另一本游标，不带选择器；不勾时是对账单册，带 registry。两者条件签名不同，切换即回第一页。
+ * 「不看已作废的单」落成 voided=false，两个读口都认这一维（作废之前已开的争议照旧把已作废的单留在队列里）；勾不勾同样换签名、回第一页。
+ */
+export function statementListConditions(disputedOnly: boolean, keyword: string, voidedHidden = false): CatalogueConditions {
+  const conditions: Omit<CatalogueConditions, 'selectors'> = { q: keyword, filters: voidedHidden ? { voided: ['false'] } : {} };
+  return disputedOnly ? conditions : registryConditions('customer-statement', conditions);
 }
 
 /** 条件是对账单册那一问（带 registry）；不是就是争议队列那一问。 */
@@ -24,15 +28,19 @@ export function isStatementRegistryConditions(
   return conditions.selectors?.registry === 'customer-statement';
 }
 
-/** 对账单签的条数那一句。争议队列的张数是读口答的整个队列，不随页与检索词变；作废几张只数这一页。 */
+/**
+ * 对账单签的条数那一句。争议队列的张数是读口答的整个队列，不随页、检索词与作废与否变；作废几张只数这一页，已按作废筛掉时不报。
+ */
 export function statementSummary(
   statements: readonly Pick<CustomerStatementRecord, 'voidBasis'>[],
   disputedCount: number | undefined,
+  voidedHidden = false,
 ): string {
   const voided = statements.filter((row) => row.voidBasis).length;
+  const onPage = voidedHidden ? `本页 ${statements.length} 张` : null;
   return disputedCount === undefined
-    ? `本页 ${statements.length} 张 · 已作废 ${voided} 张`
-    : `共 ${disputedCount} 张有未了结异议 · 本页 ${statements.length} 张，其中已作废 ${voided} 张`;
+    ? (onPage ?? `本页 ${statements.length} 张 · 已作废 ${voided} 张`)
+    : `共 ${disputedCount} 张有未了结异议 · ${onPage ?? `本页 ${statements.length} 张，其中已作废 ${voided} 张`}`;
 }
 
 // —— 供应商账单（ports.SupplierBillReceptionPages）——

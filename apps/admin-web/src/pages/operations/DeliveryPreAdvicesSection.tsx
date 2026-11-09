@@ -12,7 +12,7 @@ import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword, type CatalogueCursor } from '../use-catalogue-cursor';
 import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
-import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
+import { PageOnlySearch } from '../visibility/page-only';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import {
   listDeliveryPreAdvices,
@@ -31,7 +31,7 @@ import {
   type PreAdviceReviewRow,
 } from './delivery-pre-advice';
 import { DeliveryScopeFilters, DeliveryScopeReadNote, type DeliveryScopeControls } from './DeliveryScopeFilters';
-import { allStatuses, pageStatusChips, rowsOnPage } from './list-conditions';
+import { allStatuses, preAdvicePushedStatus, pushedStatusChips, pushedStatusFilters, rowsOnPage } from './list-conditions';
 
 const info = moduleInfoById['node-operations-review'];
 // 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
@@ -72,13 +72,28 @@ const columns: ListColumn<PreAdviceReviewRow>[] = [
  * 号码集合。只读——预报由客户账户自己提交、撤回（首方客户渠道），运营在这里不登记、不改、不撤；一份预报对哪次送站算数，在收寄时由节点、
  * 时窗与号码逐条判（ADR-0212 决定二），这一区不预判。
  *
- * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端。
+ * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端；
+ * 撤回与否的胶囊下推成 withdrawn 一维，按的是整本册，换胶囊回第一页。
  */
 export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode }) {
   const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
+  const [status, setStatus] = useState(allStatuses);
   const [keyword, setKeyword] = useState('');
-  const conditions = deliveryScopeConditions(preAdviceFilterKeys, filter, useSettledKeyword(keyword));
-  const controls: DeliveryScopeControls = { sections, filter, onFilter: setFilter, keyword, onKeyword: setKeyword };
+  const conditions = deliveryScopeConditions(
+    preAdviceFilterKeys,
+    filter,
+    useSettledKeyword(keyword),
+    pushedStatusFilters(preAdvicePushedStatus, status),
+  );
+  const controls: DeliveryScopeControls = {
+    sections,
+    filter,
+    onFilter: setFilter,
+    status,
+    onStatus: setStatus,
+    keyword,
+    onKeyword: setKeyword,
+  };
   // 日子认不出时不发请求（deliveryScopeConditions 答 null）：取数的那一件只在条件成立时挂上。
   return conditions === null ? (
     <PreAdviceWorkbench controls={controls} cursor={null} />
@@ -91,9 +106,6 @@ function PreAdviceCursor({ controls, conditions }: { controls: DeliveryScopeCont
   return <PreAdviceWorkbench controls={controls} conditions={conditions} cursor={useCatalogueCursor(conditions, listDeliveryPreAdvices)} />;
 }
 
-// 撤回与否是读口派生的状态（withdrawn 恒在场），不是筛选维：胶囊只筛本页。
-const withdrawnStateOf = (row: PreAdviceReviewRow) => row.values.withdrawnState;
-
 function PreAdviceWorkbench({
   controls,
   conditions,
@@ -103,15 +115,14 @@ function PreAdviceWorkbench({
   conditions?: CatalogueConditions;
   cursor: CatalogueCursor<DeliveryPreAdviceListResponseBody> | null;
 }) {
-  const { sections, filter, onFilter, keyword, onKeyword } = controls;
-  const [status, setStatus] = useState(allStatuses);
+  const { sections, filter, onFilter, status, onStatus, keyword, onKeyword } = controls;
   const [refine, setRefine] = useState('');
   const names = useCustomerNames();
   const places = usePlaceNames();
   const answer = cursor?.answer ?? null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const pageRows = body ? withPlaceNames(body.preAdvices.map(preAdviceRowOf), ['node'], places) : [];
-  const rows = rowsOnPage(pageRows, refine, status, withdrawnStateOf);
+  const rows = rowsOnPage(pageRows, refine);
   const viewState: TemplateViewState =
     cursor === null
       ? { kind: 'error', title: '预计送达日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
@@ -134,7 +145,6 @@ function PreAdviceWorkbench({
       extraFilters={
         <>
           <DeliveryScopeFilters filter={filter} dayLabel="预计送达日" numberLabel={numberName} onChange={onFilter} />
-          {body ? <PageOnlyNote>撤回与否只筛本页</PageOnlyNote> : null}
           <PageOnlySearch value={refine} onChange={setRefine} subject="网点名称、谁来送等其余各格" />
         </>
       }
@@ -142,9 +152,9 @@ function PreAdviceWorkbench({
       noun="份"
       rows={rows}
       rowKey={(row) => row.key}
-      statusChips={body ? pageStatusChips(pageRows.map(withdrawnStateOf), status, setStatus) : undefined}
+      statusChips={pushedStatusChips(preAdvicePushedStatus, status, onStatus)}
       onClearFilters={() => {
-        setStatus(allStatuses);
+        onStatus(allStatuses);
         setRefine('');
         onFilter({ node: '', day: '', documentNumber: '' });
       }}

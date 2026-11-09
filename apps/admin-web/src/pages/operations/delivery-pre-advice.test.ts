@@ -44,15 +44,17 @@ test('预计送达日：换成本地零点到次日本地零点，左闭右开',
 });
 
 test('一问的条件：只带填了的格；节点去两端空白；日子换成两端瞬间；两本册各用各的键；检索词下推成 q', () => {
-  deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '' }), { selectors: {}, q: '' });
+  deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '' }), { selectors: {}, filters: {}, q: '' });
   deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: ' SYN-NODE-1 ', day: '' }, 'SYN-ACCOUNT'), {
     selectors: { node: 'SYN-NODE-1' },
+    filters: {},
     q: 'SYN-ACCOUNT',
   });
   const bounds = localDayBoundsOf('2026-10-20');
   ok(bounds);
   deepEqual(deliveryScopeConditions(handoverNoteFilterKeys, { node: 'SYN NODE', day: '2026-10-20' }), {
     selectors: { node: 'SYN NODE', openedFrom: bounds.from, openedUntil: bounds.until },
+    filters: {},
     q: '',
   });
   deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '2026-10-20' })?.selectors, {
@@ -90,14 +92,11 @@ test('预报行：撤回与否、号码数、交付方线索缺席各写各的�
       numbers: '2 个',
       deliveringParty: 'SYN-COURIER-1',
       withdrawal: '未撤回',
-      withdrawnState: '未撤回',
       formedAt: formatInstant('2026-10-19T08:00:00Z'),
     },
   });
   const withdrawn = preAdviceRowOf(preAdvice({ withdrawn: true, withdrawnAt: '2026-10-19T18:00:00Z' }));
   equal(withdrawn.values.withdrawal, `已撤回 · ${formatInstant('2026-10-19T18:00:00Z')}`);
-  // 只筛本页的胶囊认不带时刻的那一格：不同时刻撤回的预报落进同一格。
-  equal(withdrawn.values.withdrawnState, '已撤回');
   equal(withdrawn.values.deliveringParty, '（没给交付方线索）');
 });
 

@@ -657,8 +657,9 @@ const allReadiness = () =>
 const allAuthorities = () =>
   everyPage((after) => listCaseRegisters(registryConditions('submission-authority'), after), (body) => body.authorities);
 
-// 两册按批次并排，各读到末页再并：授权册没有筛选维，按就绪册的一页去挂授权，页外批次的授权会被报成「未登记」；两册各翻各的页又
-// 对不上同一批批次。检索因此在并好的全部批次上做，不下推——下推到两册各筛一遍，一个批次只在一册里命中时另一栏同样会被报成「未登记」。
+// 两册按批次并排，各读到末页再并：授权册没有按批次收窄的筛选维，按就绪册的一页去挂授权，页外批次的授权会被报成「未登记」；两册各翻
+// 各的页又对不上同一批批次。检索因此在并好的全部批次上做，不下推——下推到两册各筛一遍，一个批次只在一册里命中时另一栏同样会被报成
+// 「未登记」。两册各放的 effective 一维同理不下推，本表也不设按现况的筛选：两道准备各自失效，按一册的现况筛，另一册的那一栏就缺了。
 function SubmissionPreconditionsTable() {
   const [search, setSearch] = useState('');
   const readiness = useEveryPageAnswer(allReadiness);

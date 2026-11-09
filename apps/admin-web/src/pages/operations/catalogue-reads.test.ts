@@ -4,7 +4,15 @@ import { bounceFilterDimensions } from './booking-registers';
 import { deliveryScopeConditions, handoverNoteFilterKeys, preAdviceFilterKeys } from './delivery-pre-advice';
 import { listDeliveryHandoverNotes, listDeliveryPreAdvices } from './delivery-scope-api';
 import { externalTrackingFactConditions, listExternalTrackingFacts } from './effective-time-judgment-api';
-import { effectiveBasisStatus, nodePushedStatus, reviewListConditions, transportPushedStatus } from './list-conditions';
+import {
+  effectiveBasisStatus,
+  handoverNotePushedStatus,
+  nodePushedStatus,
+  preAdvicePushedStatus,
+  pushedStatusFilters,
+  reviewListConditions,
+  transportPushedStatus,
+} from './list-conditions';
 import {
   listIdentityReviewUnits,
   listNodeOperationsRecords,
@@ -120,6 +128,37 @@ test('送站预报与交接单的节点、单据号走选择器，检索词与�
     '/node-operations-delivery-pre-advices',
     '/node-operations-delivery-pre-advices?documentNumber=SYN-PA-1&node=SYN-NODE-01&q=SYN-CUST&after=c1',
     '/node-operations-delivery-handover-notes?node=SYN-NODE-01&q=SYN-DRIVER',
+  ]);
+});
+
+// Covers: 送站两区的状态胶囊——预报下推 withdrawn、交接单下推 closed，词即 true / false；与选择器、检索词同进一个查询串；「全部」不带这一维。
+test('送站预报的撤回与否、交接单的开放与否下推成 withdrawn、closed', async () => {
+  const urls = captureRequests();
+  const blank = { node: '', day: '', documentNumber: '' };
+  const withdrawn = deliveryScopeConditions(preAdviceFilterKeys, blank, '', pushedStatusFilters(preAdvicePushedStatus, 'true'));
+  const notWithdrawn = deliveryScopeConditions(
+    preAdviceFilterKeys,
+    { ...blank, node: 'SYN-NODE-01' },
+    'SYN-CUST',
+    pushedStatusFilters(preAdvicePushedStatus, 'false'),
+  );
+  const open = deliveryScopeConditions(handoverNoteFilterKeys, blank, '', pushedStatusFilters(handoverNotePushedStatus, 'false'));
+  const closed = deliveryScopeConditions(handoverNoteFilterKeys, blank, ' SYN-DRIVER ', pushedStatusFilters(handoverNotePushedStatus, 'true'));
+  const all = deliveryScopeConditions(handoverNoteFilterKeys, blank, '', pushedStatusFilters(handoverNotePushedStatus, 'ALL'));
+  if (withdrawn === null || notWithdrawn === null || open === null || closed === null || all === null) {
+    throw new Error('不带日子的条件不该答 null');
+  }
+  await listDeliveryPreAdvices(withdrawn);
+  await listDeliveryPreAdvices(notWithdrawn, 'c1');
+  await listDeliveryHandoverNotes(open);
+  await listDeliveryHandoverNotes(closed);
+  await listDeliveryHandoverNotes(all);
+  deepEqual(urls, [
+    '/node-operations-delivery-pre-advices?withdrawn=true',
+    '/node-operations-delivery-pre-advices?node=SYN-NODE-01&withdrawn=false&q=SYN-CUST&after=c1',
+    '/node-operations-delivery-handover-notes?closed=false',
+    '/node-operations-delivery-handover-notes?closed=true&q=SYN-DRIVER',
+    '/node-operations-delivery-handover-notes',
   ]);
 });
 

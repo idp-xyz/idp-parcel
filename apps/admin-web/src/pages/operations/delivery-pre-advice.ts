@@ -41,12 +41,14 @@ export function localDayBoundsOf(day: string): { from: string; until: string } |
 
 /**
  * 拼一问的条件：节点、单据号与日子的两端瞬间是读口的选择器（ports.DeliveryPreAdvicePages、DeliveryHandoverNotePages），只带填了的格，
- * 节点与单据号去两端空白；检索词下推成 `q`。日子认不出时答 null，页面不发请求——发半截条件，人会把「没按日筛的列表」当成「这一日的」。
+ * 节点与单据号去两端空白；检索词下推成 `q`；状态胶囊落成的筛选维（list-conditions 的 pushedStatusFilters）原样带上。日子认不出时答 null，
+ * 页面不发请求——发半截条件，人会把「没按日筛的列表」当成「这一日的」。
  */
 export function deliveryScopeConditions(
   keys: DeliveryScopeFilterKeys,
   filter: DeliveryScopeListFilter,
   keyword = '',
+  filters: Readonly<Record<string, readonly string[]>> = {},
 ): CatalogueConditions | null {
   const selectors: Record<string, string> = {};
   const node = filter.node.trim();
@@ -59,7 +61,7 @@ export function deliveryScopeConditions(
     selectors[keys.from] = bounds.from;
     selectors[keys.until] = bounds.until;
   }
-  return { selectors, q: keyword };
+  return { selectors, filters, q: keyword };
 }
 
 /**
@@ -112,8 +114,6 @@ export function preAdviceRowOf(record: DeliveryPreAdviceRecord): PreAdviceReview
       withdrawal: record.withdrawn
         ? `已撤回${record.withdrawnAt ? ` · ${formatInstant(record.withdrawnAt)}` : ''}`
         : '未撤回',
-      // 只筛本页的胶囊认这一格：带撤回时刻的那格每个时刻各成一词，按它筛等于没筛。
-      withdrawnState: record.withdrawn ? '已撤回' : '未撤回',
       formedAt: formatInstant(record.formedAt),
     },
   };

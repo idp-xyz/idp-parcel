@@ -34,8 +34,8 @@ import { disputeLabel, disputeNumberName, openDisputesOf } from './dispute-forms
 // 两处列同一本册，就会各说一套状态与指标。
 //
 // 两个读口都已迁到 ADR-0144，按游标翻页（模板的翻页条）；勾不勾「只看待对账」是两问，切换即回第一页。检索框下推成 `q`，读口覆盖
-// 对账单号、结算账户、账期与单上的争议号；客户名称要经费用册与参与方册两跳转写，不在读口的列里——按它找留一个只筛本页的小框，
-// 字面写明。条数只数这一页，字面写「本页」；争议张数是读口答的整个队列。
+// 对账单号、结算账户、账期与单上的争议号；「不看已作废的单」下推成 voided 一维，两个读口都认。客户名称要经费用册与参与方册两跳转写，
+// 不在读口的列里——按它找留一个只筛本页的小框，字面写明。条数只数这一页，字面写「本页」；争议张数是读口答的整个队列。
 const info = moduleInfoById['reconciliation'];
 
 // 列上只有单据状态一栏：册上有作废留痕（依据与时刻成对），二态在库上完备。刻意没有「对账状态」与「结清状态」——
@@ -148,7 +148,8 @@ function CustomerStatementsTable({
 }) {
   const [search, setSearch] = useState('');
   const [refine, setRefine] = useState('');
-  const conditions = statementListConditions(disputedOnly, useSettledKeyword(search));
+  const [voidedHidden, setVoidedHidden] = useState(false);
+  const conditions = statementListConditions(disputedOnly, useSettledKeyword(search), voidedHidden);
   const { answer, pagination, retry: retryStatements } = useCatalogueCursor(conditions, loadStatements);
   const [ownersKey, setOwnersKey] = useState(0);
   const [accountOwners, setAccountOwners] = useState<Map<string, string>>(() => new Map());
@@ -196,6 +197,10 @@ function CustomerStatementsTable({
               ? '只列有异议还没处理完（未处理或待复核）的单；客户确认没确认本系统不记，不在这里筛'
               : '勾上只看有异议还没处理完的单'}
           </span>
+          <label className="flex items-center gap-1.5 type-body leading-5">
+            <input type="checkbox" checked={voidedHidden} onChange={(event) => setVoidedHidden(event.target.checked)} />
+            不看已作废的单
+          </label>
         </div>
         <ListPageTemplate<CustomerStatementRecord>
           title={disputedOnly ? '待对账的客户对账单' : '客户对账单'}
@@ -206,7 +211,7 @@ function CustomerStatementsTable({
           }
           search={{ value: search, onChange: setSearch, placeholder: `搜对账单号、${disputeNumberName}、结算账户、账期` }}
           filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称" />}
-          filterSummary={answer?.kind === 'outcome' ? statementSummary(statements, disputed?.disputedCount) : undefined}
+          filterSummary={answer?.kind === 'outcome' ? statementSummary(statements, disputed?.disputedCount, voidedHidden) : undefined}
           columns={customerStatementColumns(accountOwners, names)}
           rows={visibleStatements}
           // 行键即对账单号：发布后固定，替代单用新单号。

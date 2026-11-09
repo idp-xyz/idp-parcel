@@ -10,6 +10,7 @@ import {
   readPriceCardContent,
 } from './api';
 import type { CatalogueConditions } from '../catalogue-query';
+import { priceCardListConditions } from './price-card-list';
 
 // 本文件钉定价各列表读口在 api 层带上的查询参数与答复的 page（票 catalogue-read-pagination-rollout/14；契约 ADR-0144
 // 决定一、四、五）：不带参数即裸路径，带条件时经 catalogueRequestPath 拼成同一个查询串；挂起评价计数与价卡内容查阅不是目录读，
@@ -50,6 +51,19 @@ test('五个列表读口不带参数即裸路径，带检索词与游标时一�
     await read({ q: ' SYN-PLAN ' }, 'c1');
     deepEqual(urls, [path, `${path}?q=SYN-PLAN&after=c1`], path);
   }
+});
+
+// Covers: 价卡的状态胶囊经 priceCardListConditions 落到 retired 一维，与检索词、游标同进一个查询串；「全部」即裸路径。
+test('价卡按状态胶囊下推 retired', async () => {
+  const urls = captureRequests();
+  await listPriceCards(priceCardListConditions('', 'ALL'));
+  await listPriceCards(priceCardListConditions('', 'RETIRED'));
+  await listPriceCards(priceCardListConditions(' SYN-PLAN ', 'IN_FORCE'), 'c1');
+  deepEqual(urls, [
+    '/pricing-price-cards',
+    '/pricing-price-cards?retired=true',
+    '/pricing-price-cards?retired=false&q=SYN-PLAN&after=c1',
+  ]);
 });
 
 // Covers: 评价的结果胶囊落到 status 一维，与检索词、排序、游标一起下推，键按字典序、游标殿后。

@@ -52,13 +52,15 @@ export function DeliveryScopeFilters({
 }
 
 /**
- * 送站两区的列表条件：筛选条与检索框的值由区组件持有，交给取数的那一件与不取数（日子认不出）的那一件共用——两种挂法来回换时
- * 用户填的字不丢。
+ * 送站两区的列表条件：筛选条、状态胶囊与检索框的值由区组件持有，交给取数的那一件与不取数（日子认不出）的那一件共用——两种挂法来回换时
+ * 用户填的字与点的胶囊不丢。胶囊在条件里（list-conditions 的 pushedStatusFilters），所以也得在拼条件的区组件这一层。
  */
 export interface DeliveryScopeControls {
   sections: ReactNode;
   filter: DeliveryScopeListFilter;
   onFilter: (filter: DeliveryScopeListFilter) => void;
+  status: string;
+  onStatus: (status: string) => void;
   keyword: string;
   onKeyword: (keyword: string) => void;
 }

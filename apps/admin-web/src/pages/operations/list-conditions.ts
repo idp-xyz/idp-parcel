@@ -1,4 +1,4 @@
-// 运输班次、网点作业与外部轨迹时间确认几页的列表条件（票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`，状态胶囊能下推的
+// 运输班次、网点作业、送站两区与外部轨迹时间确认几页的列表条件（票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`，状态胶囊能下推的
 // 下推成读口点名的筛选维；下推不了的——读口派生、不是筛选维的状态词——留成只筛本页的胶囊，页面在胶囊旁字面写明。
 // 单独成模块、不依赖 React：条件拼没拼对、页内筛没筛对，拿 node:test 就能钉住。
 
@@ -37,6 +37,18 @@ export const nodePushedStatus: Partial<Record<NodeOperationsRegistry, PushedStat
 /** 外部轨迹的确认方式按 effectiveBasis（ports.ExternalTrackingFactPages）。 */
 export const effectiveBasisStatus: PushedStatus = { dimension: 'effectiveBasis', labels: effectiveBasisLabels };
 
+/**
+ * 送站两区：预报按 withdrawn、交接单按 closed（ports.DeliveryPreAdvicePages、DeliveryHandoverNotePages）。两维的词表就是答复里那个布尔的
+ * 两种写法，胶囊上的字与行上「撤回了没有」「状态」两格同说一件事。交接单的「送货范围成立没有」不是读口的筛选维，不设胶囊。
+ */
+export const preAdvicePushedStatus: PushedStatus = { dimension: 'withdrawn', labels: { false: '未撤回', true: '已撤回' } };
+export const handoverNotePushedStatus: PushedStatus = { dimension: 'closed', labels: { false: '开放', true: '已关闭' } };
+
+/** 下推的胶囊落成哪一维：选了「全部」或这一册没有可下推的维时，这一维缺席。 */
+export function pushedStatusFilters(pushed: PushedStatus | undefined, status: string): Record<string, readonly string[]> {
+  return pushed && status !== allStatuses ? { [pushed.dimension]: [status] } : {};
+}
+
 /** 检索词、下推的状态胶囊与本册别的筛选维拼成一问的条件；选择器由各读口的 *Conditions 加上。 */
 export function reviewListConditions(
   keyword: string,
@@ -44,9 +56,7 @@ export function reviewListConditions(
   status: string,
   filters: Readonly<Record<string, readonly string[]>> = {},
 ): Omit<CatalogueConditions, 'selectors'> {
-  const dimensions: Record<string, readonly string[]> = { ...filters };
-  if (pushed && status !== allStatuses) dimensions[pushed.dimension] = [status];
-  return { q: keyword, filters: dimensions };
+  return { q: keyword, filters: { ...filters, ...pushedStatusFilters(pushed, status) } };
 }
 
 /** 下推的胶囊：「全部」加词表各词。不带计数——读口分页时到手的只是一页，页上的数不是总数。 */

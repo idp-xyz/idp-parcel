@@ -13,7 +13,7 @@ import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword, type CatalogueCursor } from '../use-catalogue-cursor';
 import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
-import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
+import { PageOnlySearch } from '../visibility/page-only';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { deliveryHandoverConfirmationDecision, hiddenDecisionHint } from '../operator-grants';
@@ -47,7 +47,7 @@ import {
   type HandoverNoteReviewRow,
 } from './delivery-handover-note';
 import { DeliveryScopeFilters, DeliveryScopeReadNote, type DeliveryScopeControls } from './DeliveryScopeFilters';
-import { allStatuses, pageStatusChips, rowsOnPage } from './list-conditions';
+import { allStatuses, handoverNotePushedStatus, pushedStatusChips, pushedStatusFilters, rowsOnPage } from './list-conditions';
 
 const info = moduleInfoById['node-operations-review'];
 // 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
@@ -80,13 +80,28 @@ const columns: ListColumn<HandoverNoteReviewRow>[] = [
  * 每个账户的结论与途径、名下成员与各自的形成方式。写动作只有一样——对待确认的账户「确认」，是运营决定（送站交接确认）：指名交付方参与方与
  * 依据引用，服务端向参与方与商业问授权交付判断，是即确认，否或未配置不落结论。开立、归入、关闭是一线作业端的作业事实，不在这里。
  *
- * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端。
+ * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端；
+ * 开放与否的胶囊下推成 closed 一维，按的是整本册，换胶囊回第一页。
  */
 export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode }) {
   const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
+  const [status, setStatus] = useState(allStatuses);
   const [keyword, setKeyword] = useState('');
-  const conditions = deliveryScopeConditions(handoverNoteFilterKeys, filter, useSettledKeyword(keyword));
-  const controls: DeliveryScopeControls = { sections, filter, onFilter: setFilter, keyword, onKeyword: setKeyword };
+  const conditions = deliveryScopeConditions(
+    handoverNoteFilterKeys,
+    filter,
+    useSettledKeyword(keyword),
+    pushedStatusFilters(handoverNotePushedStatus, status),
+  );
+  const controls: DeliveryScopeControls = {
+    sections,
+    filter,
+    onFilter: setFilter,
+    status,
+    onStatus: setStatus,
+    keyword,
+    onKeyword: setKeyword,
+  };
   // 日子认不出时不发请求（deliveryScopeConditions 答 null）：取数的那一件只在条件成立时挂上。
   return conditions === null ? (
     <HandoverNoteWorkbench controls={controls} cursor={null} />
@@ -101,9 +116,6 @@ function HandoverNoteCursor({ controls, conditions }: { controls: DeliveryScopeC
   );
 }
 
-// 开放与否是读口派生的状态（closed 恒在场），不是筛选维：胶囊只筛本页。
-const openStateOf = (row: HandoverNoteReviewRow) => row.values.openState;
-
 function HandoverNoteWorkbench({
   controls,
   conditions,
@@ -113,14 +125,13 @@ function HandoverNoteWorkbench({
   conditions?: CatalogueConditions;
   cursor: CatalogueCursor<DeliveryHandoverNoteListResponseBody> | null;
 }) {
-  const { sections, filter, onFilter, keyword, onKeyword } = controls;
-  const [status, setStatus] = useState(allStatuses);
+  const { sections, filter, onFilter, status, onStatus, keyword, onKeyword } = controls;
   const [refine, setRefine] = useState('');
   const places = usePlaceNames();
   const answer = cursor?.answer ?? null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const pageRows = body ? withPlaceNames(body.handoverNotes.map(handoverNoteRowOf), ['node'], places) : [];
-  const rows = rowsOnPage(pageRows, refine, status, openStateOf);
+  const rows = rowsOnPage(pageRows, refine);
   const retry = () => cursor?.retry();
   const viewState: TemplateViewState =
     cursor === null
@@ -144,7 +155,6 @@ function HandoverNoteWorkbench({
       extraFilters={
         <>
           <DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={numberName} onChange={onFilter} />
-          {body ? <PageOnlyNote>开放与否只筛本页</PageOnlyNote> : null}
           <PageOnlySearch value={refine} onChange={setRefine} subject="自称的客户、网点名称等其余各格" />
         </>
       }
@@ -152,9 +162,9 @@ function HandoverNoteWorkbench({
       noun="张"
       rows={rows}
       rowKey={(row) => row.key}
-      statusChips={body ? pageStatusChips(pageRows.map(openStateOf), status, setStatus) : undefined}
+      statusChips={pushedStatusChips(handoverNotePushedStatus, status, onStatus)}
       onClearFilters={() => {
-        setStatus(allStatuses);
+        onStatus(allStatuses);
         setRefine('');
         onFilter({ node: '', day: '', documentNumber: '' });
       }}

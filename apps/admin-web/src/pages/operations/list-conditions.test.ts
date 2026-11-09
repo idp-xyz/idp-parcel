@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import {
   allStatuses,
+  handoverNotePushedStatus,
   pageStatusChips,
+  preAdvicePushedStatus,
   pushedStatusChips,
+  pushedStatusFilters,
   reviewListConditions,
   rowsOnPage,
   transportPushedStatus,
@@ -31,6 +34,30 @@ test('下推的胶囊词取自读口词表', () => {
     'REFUSED',
   ]);
   deepEqual(Object.keys(transportPushedStatus['carrier-master-document']?.labels ?? {}).sort(), ['IN_FORCE', 'REVOKED', 'SUPERSEDED']);
+});
+
+// Covers: 送站两册的胶囊只出读口布尔维的两个词，先「否」后「是」；「全部」不带这一维，选了一格即这一维只带它。
+test('送站两册的胶囊下推成布尔维', () => {
+  deepEqual(
+    pushedStatusChips(preAdvicePushedStatus, allStatuses, () => undefined).map((chip) => [chip.id, chip.label]),
+    [
+      [allStatuses, '全部'],
+      ['false', '未撤回'],
+      ['true', '已撤回'],
+    ],
+  );
+  deepEqual(
+    pushedStatusChips(handoverNotePushedStatus, 'true', () => undefined).map((chip) => [chip.id, chip.label, chip.active]),
+    [
+      [allStatuses, '全部', false],
+      ['false', '开放', false],
+      ['true', '已关闭', true],
+    ],
+  );
+  deepEqual(pushedStatusFilters(preAdvicePushedStatus, allStatuses), {});
+  deepEqual(pushedStatusFilters(undefined, 'true'), {});
+  deepEqual(pushedStatusFilters(preAdvicePushedStatus, 'true'), { withdrawn: ['true'] });
+  deepEqual(pushedStatusFilters(handoverNotePushedStatus, 'false'), { closed: ['false'] });
 });
 
 // Covers: 下推的胶囊是「全部」加词表各词、不带计数；点选中的那格回到「全部」。

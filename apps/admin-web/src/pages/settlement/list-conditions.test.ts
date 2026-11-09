@@ -26,11 +26,27 @@ test('对账单签：勾不勾「只看待对账」是两个读口两种条件',
   notEqual(catalogueConditionsQuery(statementListConditions(true, '')), catalogueConditionsQuery(statementListConditions(false, '')));
 });
 
-// Covers: 争议张数是整个队列的数，照读口答的说；作废几张只数这一页，字面写「本页」。
+// Covers: 「不看已作废的单」在两问上都落成 voided=false，与选择器、检索词同进一个查询串；勾不勾签名不同，换勾选就回第一页。
+test('对账单签：不看已作废的单下推成 voided=false', () => {
+  equal(
+    catalogueRequestPath('/settlement-statements', statementListConditions(false, ' SYN-ST-2610 ', true), null),
+    '/settlement-statements?registry=customer-statement&voided=false&q=SYN-ST-2610',
+  );
+  equal(
+    catalogueRequestPath('/settlement-disputed-statements', statementListConditions(true, '', true), 'c1'),
+    '/settlement-disputed-statements?voided=false&after=c1',
+  );
+  equal(catalogueRequestPath('/settlement-disputed-statements', statementListConditions(true, '', false), null), '/settlement-disputed-statements');
+  notEqual(catalogueConditionsQuery(statementListConditions(false, '', true)), catalogueConditionsQuery(statementListConditions(false, '')));
+});
+
+// Covers: 争议张数是整个队列的数，照读口答的说；作废几张只数这一页，字面写「本页」；已按作废筛掉时不报作废张数。
 test('对账单签的条数：争议张数说整个队列，其余只说本页', () => {
   const rows = [{}, { voidBasis: 'SYN-VOID-01' }, {}];
   equal(statementSummary(rows, undefined), '本页 3 张 · 已作废 1 张');
   equal(statementSummary(rows, 12), '共 12 张有未了结异议 · 本页 3 张，其中已作废 1 张');
+  equal(statementSummary([{}, {}], undefined, true), '本页 2 张');
+  equal(statementSummary([{}, {}], 12, true), '共 12 张有未了结异议 · 本页 2 张');
 });
 
 // Covers: 账单签表头两列下推成读口的 receivedAt、period；缺省序（收到时间新→旧）不写进查询串；账单号列没有可排维，存下的旧排序当缺省序。

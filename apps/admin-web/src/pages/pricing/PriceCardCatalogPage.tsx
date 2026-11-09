@@ -20,6 +20,7 @@ import { PriceCardDetailPanel, PriceCardUnits } from './PriceCardDetailPanel';
 import { problemNote } from './presentation';
 import { priceCardStatus, priceCardStatusLabel } from './price-card-content';
 import {
+  priceCardListConditions,
   priceCardNoMatchNote,
   priceCardRowKey,
   priceCardsOfStatus,
@@ -87,20 +88,22 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
  * 新建、导入、草稿与高级 JSON 四签在同页其余签里。
  *
  * 读口已迁到 ADR-0144，按游标翻页（工具条右端）。检索词（地址上的 `?q=`，停稳后）下推成 q，覆盖方案标识、版本与适用范围；
- * 次序是读口的缺省序（新登在前）。状态胶囊是例外：状态是页面拿此刻现算的，读口不能按它筛，胶囊只筛已取回的这一页，旁边照实
- * 写「状态只筛本页」，也不带计数。读口另有方向一维，本页没有对应的筛选条，不另加。导入签与草稿签今天在发行方未设时答 403
+ * 次序是读口的缺省序（新登在前）。状态胶囊一半下推：读口只认退役与否（retired），「已退役」按整本册筛；其余四态是页面拿此刻现算的，
+ * 先下推 retired=false、再只筛已取回的这一页，旁边照实写这几格只筛本页，也不带计数（price-card-list 的 priceCardListConditions）。
+ * 换胶囊即换条件，回第一页。读口另有方向一维，本页没有对应的筛选条，不另加。导入签与草稿签今天在发行方未设时答 403
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
 function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCreate: () => void }) {
   const [search, setSearch] = useAddressKeyword();
-  const conditions = { q: useSettledKeyword(search) };
-  const { answer, pagination, retry } = useCatalogueCursor(conditions, listPriceCards);
   const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
+  const conditions = priceCardListConditions(useSettledKeyword(search), status);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listPriceCards);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const rows = answer?.kind === 'outcome' ? answer.body.cards : [];
   const visible = priceCardsOfStatus(rows, status, new Date());
   const answered = answer?.kind === 'outcome';
+  const scopeNote = priceCardStatusScopeNote(answered, rows.length, visible.length, status);
 
   const statusChips: WorkbenchChip[] = priceCardStatusFilterOptions().map((option) => ({
     id: option.value,
@@ -117,11 +120,7 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
       refreshing={answer === null}
       search={{ value: search, onChange: setSearch, placeholder: '搜价卡编号或适用范围…' }}
       statusChips={statusChips}
-      extraFilters={
-        <span className="shrink-0 type-caption text-idpxyz-textMuted">
-          {priceCardStatusScopeNote(answered, rows.length, visible.length, status)}
-        </span>
-      }
+      extraFilters={scopeNote ? <span className="shrink-0 type-caption text-idpxyz-textMuted">{scopeNote}</span> : undefined}
       toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       primaryAction={
         mayWrite ? (
@@ -135,7 +134,7 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
       rowKey={priceCardRowKey}
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
-      // 这一页有行却被状态筛空，说的只是这一页；检索词答出零行才是这组条件下没有。
+      // 这一页有行却被页内那四态筛空，说的只是这一页；读口按检索词与退役与否答出零行才是这组条件下没有。
       noMatchText={rows.length > 0 ? priceCardStatusNoMatchNote : priceCardNoMatchNote}
       onClearFilters={() => {
         setSearch('');
