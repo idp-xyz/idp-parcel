@@ -86,8 +86,8 @@ test('可缺键缺席：终点留空即开区间、不勾已批准即候选关�
   });
 });
 
-// Covers: 勾了已批准而批准时刻留空 → approval 在场、只带 reference，approvedAt 缺席——批准时刻是否可缺由服务端答
-// （Approve 对零时刻拒），表单不替它补当前时刻。起点留空同理缺席。
+// Covers: 勾了已批准而批准时刻留空 → approval 在场、只带 reference，approvedAt 缺席——载荷这层不替它补当前时刻；
+// 这样的草稿由 partyRelationshipLocalProblems 拦在送之前。起点留空同理缺席。
 test('勾了已批准但时刻留空：approval 只带引用，起点留空缺席', () => {
   const item = partyRelationshipPayloadOf(
     draft({ effectiveStartsAt: '', approved: true, approvalReference: 'SYN-APPROVAL-07', approvedAt: '' }),
@@ -110,7 +110,7 @@ test('空白原样带、空串照送、角色未选照送空串', () => {
   equal(item.basis, '');
 });
 
-// Covers: 本地只报编码层——修订号、各时刻换不出来时报在各自路径上；批准时刻只在勾了已批准时才判；
+// Covers: 本地只报编码层——修订号、各时刻换不出来时报在各自路径上；批准那两格只在勾了已批准时才判，勾了就都要有；
 // 角色未选、双方为空、区间倒置都不是本地的话。
 test('本地只报编码层问题', () => {
   deepEqual(partyRelationshipLocalProblems(draft({}), 'UTC'), {});
@@ -128,6 +128,11 @@ test('本地只报编码层问题', () => {
     { 'relationships[0].approval.approvedAt': ['批准时刻要是可解析的日期时间'] },
   );
   deepEqual(partyRelationshipLocalProblems(draft({ approved: false, approvedAt: 'never' }), 'UTC'), {});
+  deepEqual(partyRelationshipLocalProblems(draft({ approved: true, approvalReference: ' ', approvedAt: '' }), 'UTC'), {
+    'relationships[0].approval.reference': ['勾了「已批准」就要填批准单据'],
+    'relationships[0].approval.approvedAt': ['勾了「已批准」就要填批准时间'],
+  });
+  deepEqual(partyRelationshipLocalProblems(draft({ approved: false, approvalReference: '', approvedAt: '' }), 'UTC'), {});
   deepEqual(
     partyRelationshipLocalProblems(
       draft({ role: '', holder: '', counterparty: '', effectiveStartsAt: '2026-12-31T00:00', effectiveEndsAt: '2026-01-01T00:00' }),

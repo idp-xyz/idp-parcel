@@ -166,8 +166,9 @@ export function partyRelationshipPayloadOf(
 
 /**
  * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、各时刻填了却换不成 RFC 3339、
- * 授权交付方的两格拼不成那一种适用范围；批准时刻只在勾了已批准时才看——不勾时那一格根本不进载荷。角色未选、
- * 双方为空、区间倒置都是服务端的话。
+ * 授权交付方的两格拼不成那一种适用范围；批准那两格只在勾了已批准时才看——不勾时它们根本不进载荷。勾了就两格都要有：
+ * 批准单据空着，服务端在接入口答形状错（400）；批准时刻缺着，用例答的是笼统的状态迁移不成立，都不点名是哪一格，
+ * 所以在这里按格拦下。角色未选、双方为空、区间倒置都是服务端的话。
  */
 export function partyRelationshipLocalProblems(
   draft: PartyRelationshipDraft,
@@ -188,8 +189,15 @@ export function partyRelationshipLocalProblems(
   if (unparseable(draft.effectiveEndsAt)) {
     problems['relationships[0].effectiveEndsAt'] = ['生效终点要是可解析的日期时间'];
   }
-  if (draft.approved && unparseable(draft.approvedAt)) {
-    problems['relationships[0].approval.approvedAt'] = ['批准时刻要是可解析的日期时间'];
+  if (draft.approved) {
+    if (draft.approvalReference.trim() === '') {
+      problems['relationships[0].approval.reference'] = ['勾了「已批准」就要填批准单据'];
+    }
+    if (draft.approvedAt.trim() === '') {
+      problems['relationships[0].approval.approvedAt'] = ['勾了「已批准」就要填批准时间'];
+    } else if (unparseable(draft.approvedAt)) {
+      problems['relationships[0].approval.approvedAt'] = ['批准时刻要是可解析的日期时间'];
+    }
   }
   return problems;
 }
