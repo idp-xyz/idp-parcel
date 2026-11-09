@@ -1,7 +1,7 @@
 # 09 第二批验收：浏览器全流程、非作者评审
 
 Category: enhancement
-Status: in-progress——2026-11-07 Cursor 会话认领；Spec 轴评审的三条 BLOCK 已修（见本笔），Standards 轴评审与复评进行中
+Status: in-progress——2026-11-07 Cursor 会话认领，Spec 轴三条 BLOCK 修于 `d6b03c7ad`；同日 land 树会话的四笔合看评审另修一轮（`e69bece41` 重放）；2026-11-08 Claude Code 会话在 land 树接续验收
 父票：[spec](../spec.md)
 Blocked by: 05、06、07、08 全部 resolved
 
