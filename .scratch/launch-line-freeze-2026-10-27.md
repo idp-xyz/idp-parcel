@@ -47,7 +47,9 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 排期：等 tops-26 名下的 6 张 code 票进 main 后先做 10（量小，与那批同在 customs-compliance），再做 22。解冻条件即本节，不再看「首个租户撞上」。
 
-## 二、冻结（99 张）
+## 二、冻结（100 张）
+
+> 补入（2026-11-09）：operator-access-administration/03 补进 R3（立于冻结之后、一直是草稿），冻结由 99 张增为 100 张，R3 由 58 张增为 59 张；上面「取证基线」与「上调」两处计数照原样保留，是当时的取证。
 
 - 票面 Status 改为 `ready-for-human——2026-10-27 冻结到首个租户上线之后……`，保留「此前…」链；代理不认领，分诊扫描不再重读。`ready-for-human` 不进 `scripts/owner-review-queue.ps1` 的「等 owner 拍板」一节，冻结不给你添待裁项。
 - 草稿（`draft`）与已是 `ready-for-human` 的几张票面不动，以本表为准。
@@ -89,11 +91,12 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md](./no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md) | 同源并发异内容，输家的单元更新照样提交 |
 | [product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md](./product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md) | 关务立案只有运营手工口，无内置派生 |
 
-### R3：不急（58 张）
+### R3：不急（59 张）
 
 | 票 | 一句话（2026-10-26 分诊） |
 |---|---|
 | [auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md](./auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md) | 演示用例与runbook，替身测试已覆盖分派 |
+| [operator-access-administration/issues/03-commercial-small-registrations.md](./operator-access-administration/issues/03-commercial-small-registrations.md) | 2026-11-09 补入：解析键、注册号类型、审批职责规则三类登记只有受控 CLI，管理台没有登记面；不挡上线，与 price-card-import/07 同批解冻 |
 | [demo-chain-gaps/issues/107-demo-notification-policy-names-the-view-disclosure-policy.md](./demo-chain-gaps/issues/107-demo-notification-policy-names-the-view-disclosure-policy.md) | 种子键错，但通知编排无cmd装配 |
 | [demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md](./demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md) | 演示班期覆盖缺守卫用例，整洁性 |
 | [demo-chain-gaps/issues/112-node-control-transfer-out-reference-names-only-the-handover-version.md](./demo-chain-gaps/issues/112-node-control-transfer-out-reference-names-only-the-handover-version.md) | 转出引用指不回具体交接，控制正确性不受影响 |

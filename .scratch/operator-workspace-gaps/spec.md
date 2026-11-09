@@ -1,7 +1,7 @@
 # 从外来原型反看本仓：运营工作台层的四个缺口
 
 Category: enhancement
-Status: in-progress
+Status: ready-for-human——2026-11-09 剩余子票全部冻结到首个租户上线之后（[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)），本专项没有在做的票：其余子票已 resolved；03 草稿冻结；解冻照冻结清单「二」的条件（首个租户真实用到，或用户点名），解冻时父票回 in-progress；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress
 出处：用户 2026-09-25 经 IDP 队列通道 3 连问「`IDP_Parcel_Commercial_Party_UX_V1.0_Full_Package` 对我们有借鉴意义吗 → 你直接跑起来看看 →
 你的看法 → 反过来看，我们的实现有巨大缺陷吗 → 按你的理解和建议，你自己独立完成吧」。本规格是那几轮评估的落笔，票按缺口拆。
 

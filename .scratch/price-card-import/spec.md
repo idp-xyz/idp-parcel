@@ -1,7 +1,7 @@
 # 落地 ADR-0101 价卡导入：模板 → 草稿 → 批准 → 发布
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子票 01–06 已全数立好并写明阻塞边，同日转 ready-for-agent
+Status: ready-for-human——2026-11-09 剩余子票全部冻结到首个租户上线之后（[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)），本专项没有在做的票：01–06、08、09 已 resolved；07 冻结；解冻照冻结清单「二」的条件（首个租户真实用到，或用户点名），解冻时父票回 in-progress；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-09-25 通道 3 立（用户授权自决）；子票 01–06 已全数立好并写明阻塞边，同日转 ready-for-agent
 出处：票 [operator-workspace-gaps/04](../operator-workspace-gaps/issues/04-price-card-template-import-per-adr-0101.md)，该票转为跟踪容器指到这里。用户 2026-09-25 经 IDP 队列通道 3 问「能帮我完成03/04吗，需要完成吗」；此前已授权通道 3 自决、独立完成（原话「你是业务和系统专家，请你自决」「下一步的工作都你自己完成，没其他人了」）。
 
 ## 为什么要做

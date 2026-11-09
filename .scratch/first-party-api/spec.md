@@ -1,7 +1,7 @@
 # 首方 API：随首方 Intake 实施并行的三张机制票
 
 Category: enhancement
-Status: in-progress——2026-10-19 ADR-0139–0142 已由用户在 Claude Code 会话里答「接受」（按复核建议修订后接受），本批激活；首方 Intake 实施票立为 [00](./issues/00-first-party-customer-intake.md)。此前 draft
+Status: ready-for-human——2026-11-09 剩余子票全部冻结到首个租户上线之后（[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)），本专项没有在做的票：00 与 06–12 等已 resolved；01、02、03、05 冻结；解冻照冻结清单「二」的条件（首个租户真实用到，或用户点名），解冻时父票回 in-progress；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-10-19 ADR-0139–0142 已由用户在 Claude Code 会话里答「接受」（按复核建议修订后接受），本批激活；首方 Intake 实施票立为 [00](./issues/00-first-party-customer-intake.md)。此前 draft
 
 取证基线 `a608536d`（ADR-0139 草案修订落 main 的那一笔）。本批与 ADR-0140 / 0141 / 0142 三份草案同笔起草，全部 `Status: draft`，**在 ADR-0139 被接受之前不激活**——三张票都建在首方族的客户渠道册与两步校验上，那两件今天只是草案里的形状。
 

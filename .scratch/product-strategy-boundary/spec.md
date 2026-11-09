@@ -1,7 +1,7 @@
 # 产品策略边界：ADR-0146 落地
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 并拆票；子票待派
+Status: ready-for-human——2026-11-09 剩余子票全部冻结到首个租户上线之后（[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)），本专项没有在做的票：其余子票已 resolved；06–11、13、14、33、35、36 冻结（10 的第 1 项已随 ADR-0342 进 main，余项冻结）；解冻照冻结清单「二」的条件（首个租户真实用到，或用户点名），解冻时父票回 in-progress；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 并拆票；子票待派
 出处：用户 2026-09-24「我们是软件公司，不可能等到租户就绪、业务就绪再去补系统」→ [ADR-0146](../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)；
 运行定义在[开发主线](../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「切片的机制半边与实例半边」一节。
 

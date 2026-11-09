@@ -1,7 +1,7 @@
 # 管理台构建块压回告警线内：页面按域懒加载 + 上游图标选择器移出主入口
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 1 按用户令开票；01 ready-for-agent，02 ready-for-human（上游半边归用户）
+Status: ready-for-human——2026-11-09 剩余子票全部冻结到首个租户上线之后（[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)），本专项没有在做的票：01 已 resolved；02 是上线后再做的 ready-for-human；解冻照冻结清单「二」的条件（首个租户真实用到，或用户点名），解冻时父票回 in-progress；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-09-24 通道 1 按用户令开票；01 ready-for-agent，02 ready-for-human（上游半边归用户）
 出处：2026-09-24 用户问 `vite build` 的 500 kB 分块告警是不是 legal-entity-profile/04 的改动造成的——查明不是（干净 `HEAD` 同样告警，`vendor` 块逐字节不变）；再按用户「看看如何彻底解决」做原型实测，用户同意按建议开票。
 
 ## 现状（钉 `4244b1bb`，干净检出实测）

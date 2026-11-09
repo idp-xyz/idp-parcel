@@ -1,7 +1,7 @@
 # 06 管理台跟上跨境主体资料扩展：监管登记号、收款账户、多语言抬头
 
 Category: enhancement
-Status: in-progress（分支 `claude-csux-06`，票 04 已进 main；票 05 分支 `claude-csux-05` tip `a34565442` 评审中，本票对着它的契约做）
+Status: resolved——2026-11-03 进 main（见文末「进 main 记录」），状态行当时漏改，2026-11-09 补；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress（分支 `claude-csux-06`，票 04 已进 main；票 05 分支 `claude-csux-05` tip `a34565442` 评审中，本票对着它的契约做）
 父票：[spec](../spec.md)
 Blocked by: 无（04、05 已进 main）
 出处：票 05 决定；评估「四、国际小包视角」。
