@@ -1,7 +1,7 @@
 # 16 状态由读面派生的几册补状态筛选维
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 worktree-agent-a898ab22097add99e）
+Status: resolved——2026-11-09 进 main；七个状态维已放，五处导不出的写在判断项并有 ADR-0372 草案（Proposed，待 owner 复核）
 Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它们落成的读面上加）
 地盘：下表各册所在上下文的 `ports` 声明、postgres 读面、端点答复体与用例；需要时各上下文一条索引迁移。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四；spec「可排维、筛选维从小放」。
@@ -117,3 +117,19 @@ Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它�
 - 没在租户级数据量上跑 `EXPLAIN`：`EXISTS` 几维是否按留痕册主键探、没有实测。
 - 管理台未改、未在浏览器里点；接这几维归 14。
 - `go run ./tools/adr-index -check` 未过（新草案未入索引，见判断项 8）；全量 `scripts/test-full.sh` 由推送方在重放后的 tip 上跑。
+
+## 评审记录
+
+- 2026-11-09 非作者两轴评审（推送方 Claude Code 会话另起的隔离子代理，只读，钉作者分支尖 `110a17de5`，基 `f117de0aa`）：跑过全仓 `go build`、`go vet`，改过的十六个包带 DSN `go test -count=1 -p 1`（11 ok、5 无测试文件），新增五个真库用例 `-v` 单跑 41 PASS。
+  - Spec 轴：无阻断。核过各落列表达式与领域读法一致（撤销两列配对约束、四本留痕册的 `EXISTS` 按主键探且带租户条件、退役取登记时刻、治理区间只追加），维名都等于答复体字段名，五处导不出的判断都站得住，待对账队列加 `voided` 后张数与成员口径不变，没有改写面与领域包，ADR-0144 未动、ADR-0372 正确停在 Proposed。非阻断四条：新维管理台没人接（见下「进 main 记录」）；六处 Go 注释写死「ADR-0372 草案」；ADR-0372 引文出处、指针位置与 ADR-0144 无 Links 节三处小问题；待对账队列两处注释漏写筛选维。
+  - Standards 轴：无阻断。非阻断一条：`true` / `false` 词表散在五处，与 Postgres `boolean::text` 隐式耦合。
+  - 修订：推送方在重放线上修于 `01783b9be`（词表收成 `cataloguepage.BooleanVocabulary`，注释只写编号，两处队列注释补全，ADR-0372 与本票判断项的引文出处改正、「拟收窄」挪到索引注记之前、写明 ADR-0144 要新建 Links 节）。同一评审者复评：阻断 0，非阻断一条（删词表变量后留下两段悬空注释），修于 `a30f83205`。
+
+## 进 main 记录（2026-11-09，推送方 Claude Code 会话）
+
+- 重放：在隔离 worktree 里把作者分支八笔 cherry-pick 到 `origin/main`，无冲突（作者分支基点以来 main 上没有与它重叠的文件）；评审期间 main 只前进了管理台几笔，随后 rebase 到 `491cfb776`。作者分支 `worktree-agent-a898ab22097add99e` 的 `4ddf1c16e`、`93c51caa1`、`40b84fba5`、`58f3b60a8`、`92144084c`、`3f738f6d8`、`0da0c8c6b`、`110a17de5` 在 main 上依次为 `1935e1707`、`482003377`、`b49ab6a79`、`269625e4c`、`ddfd039d0`、`a50d4b39c`、`142505fe7`、`ab2157618`；评审修订 `01783b9be`、`a30f83205`。
+- 生成物：ADR 索引重生成两笔（`0b922aea5`、`e22455557`），`adr-index -check`、`at-coverage-counts -check` 退 0，机制清点重生成无变化。
+- 全量真库：`scripts/test-full.sh` 在重放后的 `214c43281` 与 rebase 后的 `e22455557` 上各跑一次，都退 0、175 个包 ok。`a30f83205` 只删两段注释，未重跑全量，跑了 `go build`、`go vet` 与两包测试。
+- 种子：`scripts/demo-seeds/seed.sh` 在 `214c43281` 上灌进一次性库，退 0，用后删库。
+- 管理台接这七维：归票 14，同日随后一笔接上（见票 14）。
+- ADR-0372 仍为 Proposed，待 TF、NO、PP、SA owner 复核；接受时照它的 Consequences 给 ADR-0144 挂前向指针、新建 Links 节。

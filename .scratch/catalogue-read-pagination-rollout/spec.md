@@ -91,7 +91,7 @@ Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮
 | [13](./issues/13-access-identity-reads.md) | access-identity 操作者与工作设备两册（今天不设上限） | `internal/accessidentity`、`migrations/access_identity` | resolved（`098767b1e`） |
 | [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | in-progress（parcel-shipment 一笔随 `098767b1e` 进 main，其余待接） |
 | [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | resolved（`098767b1e`） |
-| [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、08、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | ready-for-agent（Blocked by 04、05、06、08、09、12） |
+| [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、08、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | resolved（2026-11-09 进 main；导不出的五处见 ADR-0372 草案） |
 | [17](./issues/17-vocabulary-read-checks-kind-after-intake.md) | 商业发布词表口先 Intake、后校验 kind（11 的评审提出） | `internal/partycommercial/adapters/http` 的词表口 | resolved（2026-11-09 进 main，`8b2885be2`） |
 | [18](./issues/18-raw-query-parsing-in-cataloguepage.md) | 目录读口的原始查询串解析收进共用件（04 的评审提出） | `internal/platform/cataloguepage` 与各目录端点取查询串那一行 | resolved（2026-11-09 进 main，`8b2885be2`） |
 
