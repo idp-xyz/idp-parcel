@@ -1,7 +1,7 @@
 # 01 合作关系登记：勾了「已批准」时批准单据与批准时间本地必填
 
 Category: bug
-Status: in-progress
+Status: resolved——2026-11-09 进 main（`7484c6e07`）
 出处：票 business-party-ux/09 验收期间 Cursor 会话的旁见（未提交的完成记录草稿，存档在本地分支 `cursor/t09fix-standards-wip`）：合作关系登记表单勾选「已批准」后，「批准单据」「批准时间」空着也能点保存，服务端答 400 `MALFORMED_REQUEST`。2026-11-09 用户让会话代决，会话决定立票并修。
 
 ## 现象与原因
@@ -18,3 +18,10 @@ Status: in-progress
 
 - node:test 钉住：勾了且两格空 → 两条问题；不勾且两格空 → 无问题；已有各例不变。
 - 浏览器：登记视图与右栏内联表单都是这张表单；勾「已批准」后两格下出提示、保存不可点，零写请求。
+
+## 完成记录（2026-11-09，直接推 `main`）
+
+- 落点：`party-relationship-form.ts` 的 `partyRelationshipLocalProblems` 勾了已批准时按格判空，批准时间填了才判能否解析；文件里两处注释改成现行说法。`party-relationship-form.test.ts` 加两例（勾了两格空、不勾两格空）。代码笔 `7484c6e07`。
+- ✅ 三道门：tsc、node:test 1281 例全过（新例并在已有用例里）、vite build。
+- ✅ 浏览器（5173 预览树检出 `7484c6e07`，接演示 API 19080，配置操作者）：登记视图与右栏内联表单各走一遍——勾「已批准」后两格下各出一条提示、保存不可点；填了批准单据只剩批准时间那条；取消勾选提示消失。零写请求、零 4xx/5xx、零页面错误。证据 S。
+- 评审：diff 全在 `pages/**`，按 workflow「前端切片」第 5 条自审。
