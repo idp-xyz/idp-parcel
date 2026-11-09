@@ -1,7 +1,7 @@
 # 16 状态由读面派生的几册补状态筛选维
 
 Category: enhancement
-Status: resolved——2026-11-09 进 main；七个状态维已放，五处导不出的写在判断项并有 ADR-0372 草案（Proposed，待 owner 复核）
+Status: resolved——2026-11-09 进 main；七个状态维已放，五处导不出的写在判断项，ADR-0372 同日接受
 Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它们落成的读面上加）
 地盘：下表各册所在上下文的 `ports` 声明、postgres 读面、端点答复体与用例；需要时各上下文一条索引迁移。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四；spec「可排维、筛选维从小放」。
@@ -132,4 +132,4 @@ Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它�
 - 全量真库：`scripts/test-full.sh` 在重放后的 `214c43281` 与 rebase 后的 `e22455557` 上各跑一次，都退 0、175 个包 ok。`a30f83205` 只删两段注释，未重跑全量，跑了 `go build`、`go vet` 与两包测试。
 - 种子：`scripts/demo-seeds/seed.sh` 在 `214c43281` 上灌进一次性库，退 0，用后删库。
 - 管理台接这七维：归票 14，同日随后一笔接上（见票 14）。
-- ADR-0372 仍为 Proposed，待 TF、NO、PP、SA owner 复核；接受时照它的 Consequences 给 ADR-0144 挂前向指针、新建 Links 节。
+- ADR-0372 同日接受（会话代 owner 决，用户授权），ADR-0144 已挂前向指针、新建 Links 节；越权风险点待 TF、NO、PP、SA owner 复核。

@@ -49,10 +49,11 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 ## 二、冻结（100 张）
 
-> 补入（2026-11-09）：operator-access-administration/03 补进 R3（立于冻结之后、一直是草稿），冻结由 99 张增为 100 张，R3 由 58 张增为 59 张；上面「取证基线」与「上调」两处计数照原样保留，是当时的取证。
+> 补入（2026-11-09）：operator-access-administration/03 补进「未进那次分诊的」一表（立于冻结之后、一直是草稿），冻结由 99 张增为 100 张，该表由 11 张增为 12 张；上面「取证基线」与「上调」两处计数照原样保留，是当时的取证。
 
 - 票面 Status 改为 `ready-for-human——2026-10-27 冻结到首个租户上线之后……`，保留「此前…」链；代理不认领，分诊扫描不再重读。`ready-for-human` 不进 `scripts/owner-review-queue.ps1` 的「等 owner 拍板」一节，冻结不给你添待裁项。
 - 草稿（`draft`）与已是 `ready-for-human` 的几张票面不动，以本表为准。
+- 父票：剩余子票全部在本表上时转 `ready-for-human`，解冻即回 `in-progress`；规则在 [issue-tracker](../docs/agents/issue-tracker.md)「Complete a parent」，此处不复述。
 - 解冻：首个租户的真实使用撞上了，或用户点名。R2 是首批候选，按租户实际用到的流程挑，例如租户用集运袋，就把 80、81、92、122 同批解冻。
 - 解冻时按 2026-10-26 分诊「同一个毛病可合并的」A–G 成族做，不逐张做。
 
@@ -91,12 +92,11 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md](./no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md) | 同源并发异内容，输家的单元更新照样提交 |
 | [product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md](./product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md) | 关务立案只有运营手工口，无内置派生 |
 
-### R3：不急（59 张）
+### R3：不急（58 张）
 
 | 票 | 一句话（2026-10-26 分诊） |
 |---|---|
 | [auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md](./auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md) | 演示用例与runbook，替身测试已覆盖分派 |
-| [operator-access-administration/issues/03-commercial-small-registrations.md](./operator-access-administration/issues/03-commercial-small-registrations.md) | 2026-11-09 补入：解析键、注册号类型、审批职责规则三类登记只有受控 CLI，管理台没有登记面；不挡上线，与 price-card-import/07 同批解冻 |
 | [demo-chain-gaps/issues/107-demo-notification-policy-names-the-view-disclosure-policy.md](./demo-chain-gaps/issues/107-demo-notification-policy-names-the-view-disclosure-policy.md) | 种子键错，但通知编排无cmd装配 |
 | [demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md](./demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md) | 演示班期覆盖缺守卫用例，整洁性 |
 | [demo-chain-gaps/issues/112-node-control-transfer-out-reference-names-only-the-handover-version.md](./demo-chain-gaps/issues/112-node-control-transfer-out-reference-names-only-the-handover-version.md) | 转出引用指不回具体交接，控制正确性不受影响 |
@@ -155,7 +155,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [product-strategy-boundary/issues/36-submission-authorization-business-role-face-remainder.md](./product-strategy-boundary/issues/36-submission-authorization-business-role-face-remainder.md) | 结算余项触发/节点作证/关务授权其余格 |
 | [ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md](./ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md) | 读面、文档词条、运维重放口 |
 
-### 未进那次分诊的（11 张）
+### 未进那次分诊的（12 张）
 
 | 票 | 现状 |
 |---|---|
@@ -168,6 +168,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [label-channel-service-first-release/issues/22-rejudge-pending-facts-by-registered-rule.md](./label-channel-service-first-release/issues/22-rejudge-pending-facts-by-registered-rule.md) | draft；随票 20 |
 | [operator-workspace-gaps/issues/03-customer-account-onboarding-readiness.md](./operator-workspace-gaps/issues/03-customer-account-onboarding-readiness.md) | draft；开户就绪清单——首个客户开户时若人工核对太费事，第一个解冻 |
 | [pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md](./pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md) | draft；NO 实际测量登记册 |
+| [operator-access-administration/issues/03-commercial-small-registrations.md](./operator-access-administration/issues/03-commercial-small-registrations.md) | draft；2026-11-09 补入：解析键、注册号类型、审批职责规则三类登记只有受控 CLI，管理台没有登记面，不挡上线；与 price-card-import/07 同批解冻 |
 | [admin-web-bundle-size/issues/02-icon-picker-off-main-entry-and-chunk-gate.md](./admin-web-bundle-size/issues/02-icon-picker-off-main-entry-and-chunk-gate.md) | 已是 ready-for-human（上线后再做），不改 |
 | [seed-completeness/issues/03-pricing-network-and-gaps.md](./seed-completeness/issues/03-pricing-network-and-gaps.md) | block 1、2 已了；接管写侧另立 takeover-write-side，不改 |
 

@@ -34,7 +34,12 @@ Used by `/to-tickets` and `/implement`.
   verification result.
 - **Complete a parent**: read every file in the recorded child set. Set the parent
   spec to `Status: resolved` only when every child says `Status: resolved`;
-  otherwise leave it `in-progress`.
+  otherwise leave it `in-progress` — with one exception: when every child that
+  is not resolved is frozen on the launch-line freeze list
+  (`.scratch/launch-line-freeze-2026-10-27.md`, section 二), set the parent to
+  `Status: ready-for-human` and name the frozen children in that line. Nobody is
+  working on such a parent, and `in-progress` would claim someone is. When any of
+  those children thaws, the parent goes back to `in-progress`.
 
 ## Wayfinding operations
 

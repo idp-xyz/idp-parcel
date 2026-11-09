@@ -1,7 +1,7 @@
 # 单据编号：按规则给单据开立业务编号
 
 Category: enhancement
-Status: resolved——2026-11-09 子票 01–11 全部 resolved（收尾票 10、补页票 11 也已进 main），父票随之收口；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-11-02 子票 01–09 全部进 main（ADR-0355）；收尾票 10、补页票 11 已立。此前 in-progress——2026-11-02 协调方起草；用户对草稿答「继续」，「定下的几条」与默认格式照此采纳，决定落在 [ADR-0355](../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)（Accepted）；子票 01–09 已立并写明阻塞边
+Status: resolved——2026-11-09 子票 01–16 全部 resolved，父票随之收口；用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」，会话分诊。此前 in-progress——2026-11-02 子票 01–09 全部进 main（ADR-0355）；收尾票 10、补页票 11 已立。此前 in-progress——2026-11-02 协调方起草；用户对草稿答「继续」，「定下的几条」与默认格式照此采纳，决定落在 [ADR-0355](../../docs/adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)（Accepted）；子票 01–09 已立并写明阻塞边
 出处：用户 2026-11-01 问「项目中有 document number 的定义吗」，2026-11-02 答「打算加一套单据编号规则」。同日经提问裁定：覆盖下表全部十一类单据；编号能力用公司平台库 `idp-platform-go` 的 `numbering`（先给它发版再接）；规则由产品内置默认、租户可改。
 
 ## 为什么要做
