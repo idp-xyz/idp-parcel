@@ -31,7 +31,7 @@ const outcomeReferenceSeriesListed = "REFERENCE_SERIES_LISTED"
 // 「登了哪些版本、什么来源、什么证据等级」。
 //
 // 查询参数（after、sort、kind、seriesId 与 q）按 ports.ReferenceSeriesPages 解码（ADR-0144 决定六），在 Intake 之后
-// （decodePageQuery 头注）。
+// （渠道未配置时答复不随查询串变，ADR-0055 决定三）。
 func NewQueryReferenceSeriesEndpoint(
 	intake PricingCatalogueIntake,
 	reader ReferenceSeriesCatalogueReader,

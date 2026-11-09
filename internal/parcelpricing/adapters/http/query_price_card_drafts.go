@@ -45,7 +45,7 @@ const outcomePriceCardDraftsListed = "PRICE_CARD_DRAFTS_LISTED"
 // NewQueryPriceCardDraftsEndpoint 交回草稿查阅读口（GET /pricing-price-card-draft-views）。
 //
 // 查询参数（after、sort、status 与 q）按 ports.PriceCardDraftPages 解码（ADR-0144 决定六），在 Intake 之后
-// （decodePageQuery 头注），因而也在认证之后：没带令牌的一问不论查询串写得对不对都答 401。
+// （渠道未配置时答复不随查询串变，ADR-0055 决定三），因而也在认证之后：没带令牌的一问不论查询串写得对不对都答 401。
 func NewQueryPriceCardDraftsEndpoint(intake PriceCardDraftQueryIntake, reader PriceCardDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {

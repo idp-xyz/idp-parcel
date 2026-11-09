@@ -30,7 +30,7 @@ const outcomePriceCardsListed = "PRICE_CARDS_LISTED"
 // NewQueryPriceCardsEndpoint 交回价卡目录查阅的 HTTP 入口
 // (GET /pricing-price-cards,ADR-0077、票 master-data-wiring/02;最终路径归装配票)。
 //
-// 查询参数（after、sort、direction 与 q）按 ports.PriceCardPages 解码（ADR-0144 决定六），在 Intake 之后（decodePageQuery 头注）。
+// 查询参数（after、sort、direction 与 q）按 ports.PriceCardPages 解码（ADR-0144 决定六），在 Intake 之后（渠道未配置时答复不随查询串变，ADR-0055 决定三）。
 func NewQueryPriceCardsEndpoint(
 	intake PricingCatalogueIntake,
 	reader PriceCardCatalogueReader,

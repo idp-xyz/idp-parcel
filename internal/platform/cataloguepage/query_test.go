@@ -185,13 +185,13 @@ func TestTextTheDatabaseCannotStoreIsRefusedInSelectorValues(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0144 决定四「不静默忽略坏参数」、决定七「查询契约一处定义」——原始查询串里百分号转义不完整或用分号分隔的
-// 那一段解不开，整条答 MalformedQuery；URL.Query() 会把那一段丢下、答出整册。理由说「解不开的一段」，不回显那一段。
+// Covers: ADR-0144 决定四、七——原始查询串里百分号转义无效（含不完整）或用分号分隔的那一段解不开，整条答 MalformedQuery；
+// URL.Query() 会把那一段丢下、答出整册。理由说「解不开的一段」，不回显那一段。
 func TestARawQueryWithASegmentThatCannotBeDecodedIsRefused(t *testing.T) {
 	for name, raw := range map[string]string{
-		"q 的转义不完整":     "q=%zz",
+		"q 的转义无效":      "q=%zz",
 		"筛选值的转义不完整":    "status=EFFECTIVE&customerPartyId=SYN%2",
-		"键的转义不完整":      "sta%tus=EFFECTIVE",
+		"键的转义无效":       "sta%tus=EFFECTIVE",
 		"分号分隔":         "status=EFFECTIVE;customerPartyId=SYN-PARTY-01",
 		"合规的段也不让坏段混过去": "sort=-revision&q=%zz&status=EFFECTIVE",
 	} {

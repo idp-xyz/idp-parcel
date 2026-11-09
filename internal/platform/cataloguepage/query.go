@@ -38,7 +38,7 @@ func malformed(format string, arguments ...any) *MalformedQuery {
 	return &MalformedQuery{Reason: fmt.Sprintf(format, arguments...)}
 }
 
-// ParseQuery 照 url.ParseQuery 解请求的原始查询串（ADR-0144 决定四、七）。百分号转义不完整或用了分号分隔的那一段解不开，
+// ParseQuery 照 url.ParseQuery 解请求的原始查询串（ADR-0144 决定四、七）。百分号转义无效（含不完整）或用了分号分隔的那一段解不开，
 // 整条答 *MalformedQuery：URL.Query() 会把那一段静默丢下、余下的照常作答，一个写坏的筛选值就成了没给，答出整册。理由不回显
 // 那一段——解不开的字节原样回给调用方，日志与界面都得再防一次。
 //
@@ -50,7 +50,7 @@ func malformed(format string, arguments ...any) *MalformedQuery {
 func ParseQuery(raw string) (url.Values, error) {
 	values, err := url.ParseQuery(raw)
 	if err != nil {
-		return nil, malformed("查询串里有解不开的一段：百分号转义不完整，或用了分号分隔")
+		return nil, malformed("查询串里有解不开的一段：百分号转义无效，或用了分号分隔")
 	}
 	return values, nil
 }
