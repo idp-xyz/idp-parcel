@@ -188,8 +188,9 @@ var ActualFulfillmentUnformedPages = cataloguepage.MustCatalogue(cataloguepage.S
 // BookingRequestPages 是订舱册（registry=booking-request）的声明。
 //
 // 一次订舱一行，行标识是订舱标识。申请量记在 quantity 一格，订多少都只占一行，不按包裹计量，不是该票 spec「total 一律给精确值」
-// 点名的那类大册。缺省序是申请时刻倒序，与迁移前同一口径。不放筛选维：状态词是读口从当前那一份答复派生的，库里没有它的列，
-// 按它筛只能先读后筛，total 就不再是真数。
+// 点名的那类大册。缺省序是申请时刻倒序，与迁移前同一口径。不放状态维：状态词是读口从名下各份承运答复里选出当前那一份、再比
+// 接受量与申请量派生的，选法只在 domain.CurrentCarrierAcceptance 一处定义，SQL 里再选一遍就是第二处；先读后筛又让 total 不再
+// 是真数。这一类的取舍在 ADR-0372 草案：要服务端按它筛，先在写面把领域判出的状态词随写入落列。
 var BookingRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/booking-request",
 	Sorts: []cataloguepage.SortDimension{
