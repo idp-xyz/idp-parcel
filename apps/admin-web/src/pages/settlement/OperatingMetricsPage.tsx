@@ -1,23 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
 import {
   listSettlementOperatingResults,
-  type CostAllocationListResponseBody,
+  registryConditions,
   type CostAllocationRecord,
-  type OperatingResultListResponseBody,
   type OperatingResultRecord,
+  type RegistryConditions,
 } from './api';
 import { formatMoney, technicalRows } from './ops-ui';
 
 // 经营核算页（主责上下文 settlement-accounting，UC-SA-006 按口径、版本、币种与截至时点派生经营毛利）。两签都接
 // GET /settlement-operating-results 按 registry 分派。成本分摊在本页而不在费用页：分摊只改变经营归因、不转移原债权债务责任。
+//
+// 两本册已迁到 ADR-0144，各按游标翻页（模板的翻页条）。检索框下推成 `q`，两签检索的列读口都覆盖，页内不再筛；读口另有的
+// 可排维（落库时刻）与经营结果的 basis 一维，页面今天没有对应的表头排序与筛选条，不为此新加控件。条数只数这一页，字面写「本页」。
 const info = moduleInfoById['operating-metrics'];
 
 // 组成项逐项呈现而不按角色合计成四栏：求和这一层放在页面就成了第二处定义，而「审核应付与贷项按各自借贷方向分别计入
@@ -91,45 +96,33 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
   },
 ];
 
+const loadOperatingResults = (conditions: RegistryConditions<'operating-result'>, after: string | null) =>
+  listSettlementOperatingResults(conditions, after);
+
 function OperatingResultsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<OperatingResultListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementOperatingResults('operating-result').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const conditions = registryConditions('operating-result', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadOperatingResults);
   const results = answer?.kind === 'outcome' ? answer.body.results : [];
-  const needle = search.trim().toLowerCase();
-  const visibleResults = needle
-    ? results.filter((row) => [row.scope, row.period, row.version].some((value) => value.toLowerCase().includes(needle)))
-    : results;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<OperatingResultRecord>
       title="经营结果"
       description="按范围和账期算出的毛利，分预估、已确认、已结算三种口径"
-      search={{ value: search, onChange: setSearch, placeholder: '搜分析范围、账期' }}
-      filterSummary={answer?.kind === 'outcome' ? `${results.length} 份快照` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜分析范围、账期、计算版本' }}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${results.length} 份快照` : undefined}
       columns={operatingResultColumns}
-      rows={visibleResults}
+      rows={results}
       // 行键循口径三件加计算版本：同一范围同一账期下各口径各版本分别成行。
       rowKey={(row) => [row.scope, row.period, row.basis, row.version].join(':')}
       emptyRowsNote="没有匹配的快照"
+      pagination={pagination}
       viewState={catalogueViewState(answer, results.length, retry, {
         module: info,
         endpoint: 'GET /settlement-operating-results?registry=operating-result',
         emptyTitle: '还没有经营结果',
         emptyDescription: '费用确认、账单审核之后系统按口径算出毛利，这里会随之出现；页面不会为好看造任何毛利或损失数字。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -196,45 +189,33 @@ const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
   },
 ];
 
+const loadCostAllocations = (conditions: RegistryConditions<'cost-allocation'>, after: string | null) =>
+  listSettlementOperatingResults(conditions, after);
+
 function CostAllocationsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CostAllocationListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementOperatingResults('cost-allocation').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const conditions = registryConditions('cost-allocation', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadCostAllocations);
   const allocations = answer?.kind === 'outcome' ? answer.body.allocations : [];
-  const needle = search.trim().toLowerCase();
-  const visibleAllocations = needle
-    ? allocations.filter((row) => [row.allocation, row.source, row.rule].some((value) => value.toLowerCase().includes(needle)))
-    : allocations;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<CostAllocationRecord>
       title="成本分摊"
       description="把一笔成本按规则分到各个分析对象上；只改经营归因，不改谁欠谁的钱"
-      search={{ value: search, onChange: setSearch, placeholder: '搜来源成本、规则' }}
-      filterSummary={answer?.kind === 'outcome' ? `${allocations.length} 次分摊` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜分摊、来源成本、规则' }}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${allocations.length} 次分摊` : undefined}
       columns={costAllocationColumns}
-      rows={visibleAllocations}
+      rows={allocations}
       // 行键循分摊标识加版本：纠错重算换版本，原分摊保留。
       rowKey={(row) => `${row.allocation}:${row.version}`}
       emptyRowsNote="没有匹配的分摊"
+      pagination={pagination}
       viewState={catalogueViewState(answer, allocations.length, retry, {
         module: info,
         endpoint: 'GET /settlement-operating-results?registry=cost-allocation',
         emptyTitle: '还没有成本分摊',
         emptyDescription: '分摊规则登记后系统按规则分摊成本，这里会随之出现；页面不会预置分摊。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

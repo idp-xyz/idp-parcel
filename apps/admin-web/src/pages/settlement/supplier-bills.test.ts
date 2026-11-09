@@ -5,6 +5,7 @@ import {
   billLabel,
   billNumberOf,
   billProgress,
+  billProgressOrder,
   claimIdForBill,
   claimOfBillKey,
   classificationChoices,
@@ -17,18 +18,18 @@ import {
   matchSummary,
   NO_EXPECTED_COST,
   operatorWords,
-  pageCountSummary,
   payableLabel,
   payableNumberAbsenceNote,
   payableNumberName,
+  payableNumberState,
+  payableNumberStateOrder,
   receptionAnswerText,
   receptionPayload,
   receptionProblems,
   unrecordedSupplierCount,
-  withExactHits,
   type ReceptionDraft,
 } from './supplier-bills';
-import type { AuditedPayableRecord, SupplierBillReceptionRecord, SupplierExpectedCostRecord } from './api';
+import type { SupplierBillReceptionRecord, SupplierExpectedCostRecord } from './api';
 
 const bill = (overrides: Partial<SupplierBillReceptionRecord> = {}): SupplierBillReceptionRecord => ({
   claim: 'SYN-PARTY-CARRIER-TRUNK-01/INV-2610-001',
@@ -283,40 +284,15 @@ test('对不上的分类从取值表取界面词：不含已对上，不出英�
   equal(/[A-Z_]{4,}/.test(words), false);
 });
 
-test('两本册截了页就不说「共几份」，只说列出了最近的几份、指标不算页外的', () => {
-  equal(pageCountSummary(3, 2, false, '份', '收到'), '共 3 份，当前显示 2 份');
-  const cut = pageCountSummary(200, 12, true, '份', '收到');
-  match(cut, /只列出最近收到的 200 份/);
-  match(cut, /指标也不算它们/);
-  equal(cut.includes('共 '), false);
-});
-
-test('应付签的检索池：页上那些加上按应付单号在全册里检索到的页外那一笔，同一笔不重复', () => {
-  const payable = (id: string, number?: string): AuditedPayableRecord => ({
-    payable: id,
-    ...(number ? { documentNumber: number } : {}),
-    claim: 'C',
-    line: '1',
-    expectedVersion: 'V1',
-    supplier: 'S',
-    period: '2026-10',
-    legalEntity: 'LE',
-    account: 'ACC',
-    currency: 'CNY',
-    amount: '1',
-    auditor: 'A',
-    auditedAt: '2026-10-31T08:00:00Z',
-    recordedAt: '2026-10-31T08:00:00Z',
-  });
-  const page = [payable('P-1', 'AP-202611-00002'), payable('P-2', 'AP-202611-00001')];
-  deepEqual(
-    withExactHits(page, [payable('P-OLD', 'AP-202501-00001')]).map((row) => row.payable),
-    ['P-1', 'P-2', 'P-OLD'],
-  );
-  deepEqual(
-    withExactHits(page, [payable('P-1', 'AP-202611-00002')]).map((row) => row.payable),
-    ['P-1', 'P-2'],
-  );
+test('状态胶囊的先后表盖住两个判法答得出的每一格，先要人动手的在前', () => {
+  const progress = [
+    bill(),
+    bill({ auditAuthorityConfiguredNow: false }),
+    bill({ undecidedAmount: '0', openDisputeAmount: '300' }),
+    bill({ undecidedAmount: '0' }),
+  ].map((row) => billProgress(row).label);
+  deepEqual(progress, [...billProgressOrder]);
+  deepEqual([payableNumberState({ documentNumber: 'AP-202611-00001' }).label, payableNumberState({}).label], [...payableNumberStateOrder]);
 });
 
 test('选中的账单不在页上时按主张读回：从 billKey 取回主张身份，主张标识里带斜杠也取得对', () => {

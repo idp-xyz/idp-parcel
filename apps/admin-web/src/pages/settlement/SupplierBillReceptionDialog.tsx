@@ -20,6 +20,7 @@ import {
   findSupplierBillReceptions,
   listSettlementCharges,
   receiveSupplierBill,
+  registryConditions,
   type ApiResult,
   type SupplierBillReceptionRecord,
   type SupplierBillReceptionResponseBody,
@@ -93,7 +94,8 @@ function useReceptionCatalogues(open: boolean): Catalogues | null {
     if (!open) return;
     let cancelled = false;
     setCatalogues(null);
-    void Promise.all([listBusinessParties(), listCurrencies(), listSettlementCharges('supplier-expected-cost')]).then(
+    // 预期成本册按页答，这里只取第一页：页外的那几版在这张表单里选不到。
+    void Promise.all([listBusinessParties(), listCurrencies(), listSettlementCharges(registryConditions('supplier-expected-cost'))]).then(
       ([parties, currencies, costs]) => {
         if (cancelled) return;
         const failed = [
@@ -140,7 +142,7 @@ function ReceptionForm({
     [catalogues.costs, draft.currency, draft.supplier],
   );
   const unrecorded = useMemo(() => unrecordedSupplierCount(catalogues.costs, draft.currency), [catalogues.costs, draft.currency]);
-  // 被追加的原账单：页上这家供应商的那几份，加上按账单号在全册里找到的页外那几份（同一份只留一个）。页只列最近收到的，更早的
+  // 被追加的原账单：列表当前那一页上这家供应商的那几份，加上按账单号在全册里找到的页外那几份（同一份只留一个）。别的页上的
   // 原账单不在上面，靠下面那一格去找（findSupplierBillReceptions）。
   const [found, setFound] = useState<SupplierBillReceptionRecord[]>([]);
   const [lookup, setLookup] = useState('');

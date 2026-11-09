@@ -7,12 +7,32 @@
 // 各端点合在这一个文件而不按页面分份：四页同属一个上下文、镜像的是同一个 Go 包，
 // 拆开就会有几处各自维护同一批字段，而 Go 那侧改一个键时只会有一处跟上。对账单与收付款
 // 核销两页曾落在 pages/governance/ 时也是从此处引入的，归位本目录后这条理由不变。
+//
+// 各列表读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/08、14）：游标、排序、筛选维与 `q` 经 catalogueRequestPath
+// 拼进查询串，答复多一格 page；不带条件即裸路径，答第一页。各册点名了哪些维只在 internal/settlementaccounting/ports 的
+// catalogue_pages.go 一处。账单册的精确检索只带选择器，请求一字不变；对账单行与账单行两个取行端点不是目录读，也不变。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 import type { RangedAuditAnswer, RangedAuditPayload } from './supplier-bill-audit';
 
 export type { ApiResult } from '../catalogue-api';
+
+/**
+ * 按册分派的三个读口（费用、对账、经营）一问的条件：registry 选哪本册，是选择器——保持原义、不兼作筛选维，但同样进游标摘要
+ * （ADR-0144 决定四），换册即回第一页。
+ */
+export type RegistryConditions<Registry extends string> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function registryConditions<Registry extends string>(
+  registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): RegistryConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
 
 // —— 费用与计费页（GET /settlement-charges）——
 
@@ -104,11 +124,13 @@ export interface SupplierExpectedCostRecord {
 export interface CustomerChargeListResponseBody {
   outcome: 'CUSTOMER_CHARGES_LISTED';
   charges: CustomerChargeRecord[];
+  page: CataloguePage;
 }
 
 export interface SupplierExpectedCostListResponseBody {
   outcome: 'SUPPLIER_EXPECTED_COSTS_LISTED';
   costs: SupplierExpectedCostRecord[];
+  page: CataloguePage;
 }
 
 // registry → 结果格的对照，判据同 customs 目录的同名对照表：调用侧按 registry 收窄后拿到
@@ -118,12 +140,12 @@ interface ChargeBodyByRegistry {
   'supplier-expected-cost': SupplierExpectedCostListResponseBody;
 }
 
+/** 收哪些键见 ports.CustomerChargePages 与 SupplierExpectedCostPages。 */
 export function listSettlementCharges<Registry extends ChargeRegistry>(
-  registry: Registry,
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<ChargeBodyByRegistry[Registry]>> {
-  return exchangeMasterData<ChargeBodyByRegistry[Registry]>(
-    `/settlement-charges?registry=${encodeURIComponent(registry)}`,
-  );
+  return exchangeMasterData<ChargeBodyByRegistry[Registry]>(catalogueRequestPath('/settlement-charges', conditions, after));
 }
 
 // —— 对账单页（GET /settlement-statements）——
@@ -242,13 +264,15 @@ export interface SupplierBillReceptionRecord {
 export interface CustomerStatementListResponseBody {
   outcome: 'CUSTOMER_STATEMENTS_LISTED';
   statements: CustomerStatementRecord[];
+  page: CataloguePage;
 }
 
-/** 账单册按收到时间倒序截页；truncated 为真即页外还有更早收到的账单。 */
+/** 账单册缺省按收到时间倒序；truncated 与 page.next 不为空同义，页面读 page。 */
 export interface SupplierBillReceptionListResponseBody {
   outcome: 'SUPPLIER_BILL_RECEPTIONS_LISTED';
   truncated: boolean;
   receptions: SupplierBillReceptionRecord[];
+  page: CataloguePage;
 }
 
 interface StatementBodyByRegistry {
@@ -256,18 +280,18 @@ interface StatementBodyByRegistry {
   'supplier-bill-reception': SupplierBillReceptionListResponseBody;
 }
 
+/** 收哪些键见 ports.CustomerStatementPages 与 SupplierBillReceptionPages。 */
 export function listSettlementStatements<Registry extends StatementRegistry>(
-  registry: Registry,
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<StatementBodyByRegistry[Registry]>> {
-  return exchangeMasterData<StatementBodyByRegistry[Registry]>(
-    `/settlement-statements?registry=${encodeURIComponent(registry)}`,
-  );
+  return exchangeMasterData<StatementBodyByRegistry[Registry]>(catalogueRequestPath('/settlement-statements', conditions, after));
 }
 
 /**
- * 账单册的精确检索（按主张、供应商、供应商账单号，逐字比，在全册里找；给了账单号时供应商比的是号的分配方）：登记表单找页外更早的原账单、新登的账单
- * 不在页上时右栏读回它，都用它——只在取回的那一页里筛，册一超过一页就会静默找不到。账单号只认服务端的账单号册：票 11 期间
- * 「供应商/账单号」形的旧主张没进册，要按主张身份找。
+ * 账单册的精确检索（按主张、供应商、供应商账单号，逐字比，在全册里找；给了账单号时供应商比的是号的分配方）：登记表单找别的页上的
+ * 原账单、选中的账单不在这一页时右栏读回它，都用它——`q` 是包含匹配，会带进同前缀的别的账单。三个参数在读口登为选择器、保持原义。
+ * 账单号只认服务端的账单号册：票 11 期间「供应商/账单号」形的旧主张没进册，要按主张身份找。
  */
 export function findSupplierBillReceptions(filter: {
   claim?: string;
@@ -282,19 +306,26 @@ export function findSupplierBillReceptions(filter: {
 }
 
 /**
- * 挂着未了结争议的客户对账单：至少挂着一项还没有终局结果（未处理或待复核）的争议的单。disputedCount 是全部张数，不受页大小截断；
- * statements 是其中一页，行形与对账单册同一份。何为未了结、为何不数相对方待确认，以 internal/settlementaccounting/ports
- * 的 DisputedCustomerStatements 为准，此处只做镜像。
+ * 挂着未了结争议的客户对账单：至少挂着一项还没有终局结果（未处理或待复核）的争议的单。disputedCount 是整个队列的张数，不随页、
+ * 也不随检索词变；statements 是其中一页，行形与对账单册同一份。何为未了结、为何不数相对方待确认，以 internal/settlementaccounting/ports
+ * 的 DisputedCustomerStatements 为准，此处只做镜像。truncated 与 page.next 不为空同义，页面读 page。
  */
 export interface DisputedCustomerStatementListResponseBody {
   outcome: 'DISPUTED_CUSTOMER_STATEMENTS_LISTED';
   disputedCount: number;
   truncated: boolean;
   statements: CustomerStatementRecord[];
+  page: CataloguePage;
 }
 
-export function listDisputedCustomerStatements(): Promise<ApiResult<DisputedCustomerStatementListResponseBody>> {
-  return exchangeMasterData<DisputedCustomerStatementListResponseBody>('/settlement-disputed-statements');
+/** 收哪些键见 ports.DisputedCustomerStatementPages；首页待办只数 disputedCount，不带条件调。 */
+export function listDisputedCustomerStatements(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<DisputedCustomerStatementListResponseBody>> {
+  return exchangeMasterData<DisputedCustomerStatementListResponseBody>(
+    catalogueRequestPath('/settlement-disputed-statements', conditions, after),
+  );
 }
 
 // —— 收付款核销页（GET /settlement-funds-applications）——
@@ -371,17 +402,21 @@ export interface ExternalFundsFactRecord {
 export interface ExternalFundsFactListResponseBody {
   outcome: 'EXTERNAL_FUNDS_FACTS_LISTED';
   facts: ExternalFundsFactRecord[];
+  page: CataloguePage;
 }
 
 /**
  * 资金事实册只有一本，故本函数不收分派参数——封闭集为一时参数只会造出一个恒定值
  * （判据同 listCodSubledgers）。资金冻结册不在本端点：冻结是接受前财务控制的产物，
- * 与真实收付是两条链。
+ * 与真实收付是两条链。收哪些键见 ports.ExternalFundsFactPages。
  */
-export function listSettlementFundsApplications(): Promise<
-  ApiResult<ExternalFundsFactListResponseBody>
-> {
-  return exchangeMasterData<ExternalFundsFactListResponseBody>('/settlement-funds-applications');
+export function listSettlementFundsApplications(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ExternalFundsFactListResponseBody>> {
+  return exchangeMasterData<ExternalFundsFactListResponseBody>(
+    catalogueRequestPath('/settlement-funds-applications', conditions, after),
+  );
 }
 
 // —— 经营核算页（GET /settlement-operating-results）——
@@ -455,11 +490,13 @@ export interface CostAllocationRecord {
 export interface OperatingResultListResponseBody {
   outcome: 'OPERATING_RESULTS_LISTED';
   results: OperatingResultRecord[];
+  page: CataloguePage;
 }
 
 export interface CostAllocationListResponseBody {
   outcome: 'COST_ALLOCATIONS_LISTED';
   allocations: CostAllocationRecord[];
+  page: CataloguePage;
 }
 
 interface OperatingBodyByRegistry {
@@ -467,11 +504,13 @@ interface OperatingBodyByRegistry {
   'cost-allocation': CostAllocationListResponseBody;
 }
 
+/** 收哪些键见 ports.OperatingResultPages 与 CostAllocationPages。 */
 export function listSettlementOperatingResults<Registry extends OperatingRegistry>(
-  registry: Registry,
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<OperatingBodyByRegistry[Registry]>> {
   return exchangeMasterData<OperatingBodyByRegistry[Registry]>(
-    `/settlement-operating-results?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/settlement-operating-results', conditions, after),
   );
 }
 
@@ -694,22 +733,23 @@ export interface AuditedPayableRecord {
   supplierBillNumber?: string;
 }
 
-/** 审核应付册按审核时间倒序截页；truncated 为真即同样的检索维之下页外还有更早形成的应付。 */
+/** 审核应付册缺省按审核时间倒序；truncated 与 page.next 不为空同义，页面读 page。 */
 export interface AuditedPayableListResponseBody {
   outcome: 'AUDITED_PAYABLES_LISTED';
   truncated: boolean;
   payables: AuditedPayableRecord[];
+  page: CataloguePage;
 }
 
 /**
- * 审核应付册。documentNumber 给了就按应付单号精确检索：服务端在全册里筛，页外的那一笔也找得到（ADR-0355 决定十一「可按单据号
- * 检索」）；只在取回的那一页里筛，册一超过一页就会静默搜不到。读口另收按主张与按供应商的检索，本页不用。
+ * 审核应付册，收哪些键见 ports.AuditedPayablePages。按应付单号检索（ADR-0355 决定十一）走 `q`：它在全册里包含匹配应付单号，
+ * 页外的那一笔也找得到。documentNumber、claim、supplier 三个逐字比的选择器读口照收，本页不用。
  */
-export function listAuditedPayables(filter: { documentNumber?: string } = {}): Promise<ApiResult<AuditedPayableListResponseBody>> {
-  const number = filter.documentNumber?.trim();
-  return exchangeMasterData<AuditedPayableListResponseBody>(
-    number ? `/settlement-audited-payables?documentNumber=${encodeURIComponent(number)}` : '/settlement-audited-payables',
-  );
+export function listAuditedPayables(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<AuditedPayableListResponseBody>> {
+  return exchangeMasterData<AuditedPayableListResponseBody>(catalogueRequestPath('/settlement-audited-payables', conditions, after));
 }
 
 /** 接收口的载荷（registrationjson.SupplierBillReceptionFromJSONForTenant）：未知字段按坏报文拒，可缺的几格缺就不写。 */

@@ -1,26 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlySearch } from '../visibility/page-only';
 import {
   listSettlementCharges,
-  type CustomerChargeListResponseBody,
+  registryConditions,
   type CustomerChargeRecord,
-  type SupplierExpectedCostListResponseBody,
+  type RegistryConditions,
   type SupplierExpectedCostRecord,
 } from './api';
 import { labelFor } from '../../vocabulary/status';
 import { objectNouns } from '../../vocabulary/objects';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { pageEmptyNote } from './list-conditions';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
 import { feeItemLabel, parcelFromRef, sourceFactLabel } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 
 // 费用与计费页（主责上下文 settlement-accounting：费用项目、费用明细与费用调整的版本与依据）。
 // 页头与列只说运营的话；上下文名、用例号与各种引用都留在本文件的注释和每行的「技术详情」折叠里。
+//
+// 两本册已迁到 ADR-0144，各按游标翻页（模板的翻页条）。检索框下推成 `q`：客户费用册覆盖费用标识、费用项目码、评价、结算相对方
+// 编码与来源事实、确认依据（包裹号在这两格里），预期成本册覆盖版本、发生项、费用项目码、协议、供应商与评价。客户名称在
+// party-commercial、费用项目的中文名在用语词典，都不在读口的列里——按它们找留一个只筛本页的小框，字面写明。客户费用册另有
+// stage 一维，页面今天没有阶段筛选条，不为此新加控件。条数只数这一页，字面写「本页」。
 const info = moduleInfoById['charges-billing'];
 
 // 两册各自成签而不合流成一张「费用明细」表：客户费用有阶段与确认依据、无价卡版本，供应商预期成本有版本链与纠错原因、
@@ -126,39 +136,16 @@ function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeReco
   ];
 }
 
+const loadCustomerCharges = (conditions: RegistryConditions<'customer-charge'>, after: string | null) =>
+  listSettlementCharges(conditions, after);
+
 function CustomerChargesTable({ names }: { names: PartyNames }) {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CustomerChargeListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementCharges('customer-charge').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = registryConditions('customer-charge', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadCustomerCharges);
   const charges = answer?.kind === 'outcome' ? answer.body.charges : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。检索的词包括转写出来的客户名与包裹号。
-  const visibleCharges = needle
-    ? charges.filter((row) =>
-        [
-          row.charge,
-          row.feeItem,
-          feeItemLabel(row.feeItem),
-          row.evaluation,
-          row.counterparty,
-          names.party(row.counterparty),
-          parcelFromRef(row.sourceFact) ?? parcelFromRef(row.confirmationBasis),
-        ].some((value) => value?.toLowerCase().includes(needle)),
-      )
-    : charges;
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleCharges = charges.filter((row) => matchesSearch(refine, [names.party(row.counterparty), feeItemLabel(row.feeItem)]));
   const confirmed = charges.filter((row) => row.stage === 'CONFIRMED').length;
 
   return (
@@ -168,22 +155,27 @@ function CustomerChargesTable({ names }: { names: PartyNames }) {
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: `搜${objectNouns.parcelNumber}、客户、费用项目`,
+        placeholder: `搜${objectNouns.parcelNumber}、客户编码、费用项目码…`,
       }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称、费用项目名称" />}
       filterSummary={
         // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区「这不是登记册为空」直接矛盾。
-        answer?.kind === 'outcome' ? `${charges.length} 笔 · 已确认 ${confirmed} 笔 · 待确认 ${charges.length - confirmed} 笔` : undefined
+        answer?.kind === 'outcome'
+          ? `本页 ${charges.length} 笔 · 已确认 ${confirmed} 笔 · 待确认 ${charges.length - confirmed} 笔`
+          : undefined
       }
       columns={customerChargeColumns(names)}
       rows={visibleCharges}
       // 行键循库主键（租户，费用）：一费用一行，册上没有版本列。
       rowKey={(row) => row.charge}
-      emptyRowsNote="没有匹配的费用"
+      emptyRowsNote={pageEmptyNote('费用', charges.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, charges.length, retry, {
         module: info,
         endpoint: 'GET /settlement-charges?registry=customer-charge',
         emptyTitle: '还没有客户费用',
         emptyDescription: '运单收寄、签收之后系统会按价格表自动算出费用，这里会随之出现；页面不会预置任何费用。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -256,32 +248,16 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
   },
 ];
 
+const loadSupplierExpectedCosts = (conditions: RegistryConditions<'supplier-expected-cost'>, after: string | null) =>
+  listSettlementCharges(conditions, after);
+
 function SupplierExpectedCostsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<SupplierExpectedCostListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementCharges('supplier-expected-cost').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = registryConditions('supplier-expected-cost', { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadSupplierExpectedCosts);
   const costs = answer?.kind === 'outcome' ? answer.body.costs : [];
-  const needle = search.trim().toLowerCase();
-  const visibleCosts = needle
-    ? costs.filter((row) =>
-        [row.version, row.feeItem, feeItemLabel(row.feeItem), row.occurrence, row.agreement].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
-    : costs;
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleCosts = costs.filter((row) => matchesSearch(refine, [feeItemLabel(row.feeItem)]));
 
   return (
     <ListPageTemplate<SupplierExpectedCostRecord>
@@ -290,19 +266,22 @@ function SupplierExpectedCostsTable() {
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜供应商协议、费用项目',
+        placeholder: '搜供应商协议、费用项目码、发生项、版本…',
       }}
-      filterSummary={answer?.kind === 'outcome' ? `${costs.length} 版预期成本` : undefined}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="费用项目名称" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${costs.length} 版预期成本` : undefined}
       columns={supplierExpectedCostColumns}
       rows={visibleCosts}
       // 行键即版本标识：一版一行，历史版本连同当前版一并在册。
       rowKey={(row) => row.version}
-      emptyRowsNote="没有匹配的成本"
+      emptyRowsNote={pageEmptyNote('成本', costs.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, costs.length, retry, {
         module: info,
         endpoint: 'GET /settlement-charges?registry=supplier-expected-cost',
         emptyTitle: '还没有供应商预期成本',
         emptyDescription: '运输交接登记之后系统会按供应商协议算出预期成本，这里会随之出现；页面不会预置任何成本。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

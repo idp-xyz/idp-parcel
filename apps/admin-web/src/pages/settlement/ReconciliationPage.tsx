@@ -6,15 +6,22 @@ import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlySearch } from '../visibility/page-only';
 import {
   listDisputedCustomerStatements,
   listSettlementCharges,
   listSettlementStatements,
+  registryConditions,
   type CustomerStatementListResponseBody,
   type DisputedCustomerStatementListResponseBody,
   type CustomerStatementRecord,
 } from './api';
+import { isStatementRegistryConditions, pageEmptyNote, statementListConditions, statementSummary } from './list-conditions';
 import { TwoLine, formatMoney, technicalRows } from './ops-ui';
 import { accountCounterparties } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
@@ -25,6 +32,10 @@ import { disputeLabel, disputeNumberName, openDisputesOf } from './dispute-forms
 // 对账单页（主责上下文 settlement-accounting「结算账户、对账与争议」）。客户对账单接 GET /settlement-statements?registry=customer-statement；
 // 「只看有未了结异议的」换接 GET /settlement-disputed-statements。供应商账单接收册只在「供应商账单与应付」页（SupplierBillsPage）列：
 // 两处列同一本册，就会各说一套状态与指标。
+//
+// 两个读口都已迁到 ADR-0144，按游标翻页（模板的翻页条）；勾不勾「只看待对账」是两问，切换即回第一页。检索框下推成 `q`，读口覆盖
+// 对账单号、结算账户、账期与单上的争议号；客户名称要经费用册与参与方册两跳转写，不在读口的列里——按它找留一个只筛本页的小框，
+// 字面写明。条数只数这一页，字面写「本页」；争议张数是读口答的整个队列。
 const info = moduleInfoById['reconciliation'];
 
 // 列上只有单据状态一栏：册上有作废留痕（依据与时刻成对），二态在库上完备。刻意没有「对账状态」与「结清状态」——
@@ -114,6 +125,16 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
   ];
 }
 
+/** 两问一个取数函数：带 registry 的问对账单册，不带的问争议队列（list-conditions 的 statementListConditions）。 */
+function loadStatements(
+  conditions: CatalogueConditions,
+  after: string | null,
+): Promise<ApiResult<CustomerStatementListResponseBody | DisputedCustomerStatementListResponseBody>> {
+  return isStatementRegistryConditions(conditions)
+    ? listSettlementStatements(conditions, after)
+    : listDisputedCustomerStatements(conditions, after);
+}
+
 // 「只看有未了结异议的」是按单上已记的异议筛（至少一项还没有终局结果），不是给单下对账状态：对账状态要连相对方确认一起判，
 // 本产品不记相对方确认。张数取读口答的全部张数——在对账单册上自己数只数得到服务端交回的那一页。首页「今日待办」的待对账格点进来就落在这里。
 function CustomerStatementsTable({
@@ -126,43 +147,33 @@ function CustomerStatementsTable({
   onDisputedOnlyChange: (next: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CustomerStatementListResponseBody | DisputedCustomerStatementListResponseBody> | null>(
-    null,
-  );
+  const [refine, setRefine] = useState('');
+  const conditions = statementListConditions(disputedOnly, useSettledKeyword(search));
+  const { answer, pagination, retry: retryStatements } = useCatalogueCursor(conditions, loadStatements);
+  const [ownersKey, setOwnersKey] = useState(0);
   const [accountOwners, setAccountOwners] = useState<Map<string, string>>(() => new Map());
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setAnswer(null);
-    const load = disputedOnly ? listDisputedCustomerStatements() : listSettlementStatements('customer-statement');
-    void load.then((next: ApiResult<CustomerStatementListResponseBody | DisputedCustomerStatementListResponseBody>) => {
-      if (!cancelled) setAnswer(next);
-    });
-    // 账户归谁的对应只是名称转写的辅助一问：它不成也不影响对账单本身的呈现，列上退回显账户号。
-    void listSettlementCharges('customer-charge').then((next) => {
+    // 账户归谁的对应只是名称转写的辅助一问：它不成也不影响对账单本身的呈现，列上退回显账户号。读口按页答，这里只取客户费用册的
+    // 第一页，账户只登在页外费用上的单转写不出客户名。
+    void listSettlementCharges(registryConditions('customer-charge')).then((next) => {
       if (!cancelled && next.kind === 'outcome') setAccountOwners(accountCounterparties(next.body.charges));
     });
     return () => {
       cancelled = true;
     };
-  }, [disputedOnly, reloadKey]);
+  }, [disputedOnly, ownersKey]);
 
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const statements = body ? body.statements : [];
   const disputed = body && 'disputedCount' in body ? body : null;
-  const needle = search.trim().toLowerCase();
-  const visibleStatements = needle
-    ? statements.filter((row) =>
-        // 争议号也能检索到它所在的那张单：客户报的是争议号，争议挂在单上、不另成一页（ADR-0355 决定十一）。
-        [row.statementNumber, row.account, row.period, names.party(accountOwners.get(row.account)), ...row.disputes.map((d) => d.documentNumber)].some(
-          (value) => value?.toLowerCase().includes(needle),
-        ),
-      )
-    : statements;
-  const retry = () => setReloadKey((value) => value + 1);
-  const voided = statements.filter((row) => row.voidBasis).length;
+  const visibleStatements = statements.filter((row) => matchesSearch(refine, [names.party(accountOwners.get(row.account))]));
+  const retry = () => {
+    retryStatements();
+    setOwnersKey((value) => value + 1);
+  };
   // 登记或处理之后重读这一签时列表先清空：右栏留着上一次读到的那张单，表单与刚才的答复不随之卸掉。
   const current = statements.find((row) => row.statementNumber === selected);
   const [pinned, setPinned] = useState<CustomerStatementRecord | undefined>(undefined);
@@ -171,12 +182,6 @@ function CustomerStatementsTable({
   }, [current]);
   const panelStatement = current ?? (pinned?.statementNumber === selected ? pinned : undefined);
   const panelGone = answer?.kind === 'outcome' && current === undefined && panelStatement !== undefined;
-
-  const summary = disputed
-    ? `共 ${disputed.disputedCount} 张有未了结异议${
-        disputed.truncated ? ` · 只列出前 ${statements.length} 张，这一页里已作废 ${voided} 张` : ` · 其中已作废 ${voided} 张`
-      }`
-    : `${statements.length} 张 · 已作废 ${voided} 张`;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
@@ -199,32 +204,31 @@ function CustomerStatementsTable({
               ? '单上至少一项异议还没有处理结果，或处理为待复核；接受、部分接受、拒绝都算处理完'
               : '已发给客户的对账单；有异议另记在单上，不改单的金额'
           }
-          search={{ value: search, onChange: setSearch, placeholder: `搜对账单号、${disputeNumberName}、客户、账期` }}
-          filterSummary={answer?.kind === 'outcome' ? summary : undefined}
+          search={{ value: search, onChange: setSearch, placeholder: `搜对账单号、${disputeNumberName}、结算账户、账期` }}
+          filters={<PageOnlySearch value={refine} onChange={setRefine} subject="客户名称" />}
+          filterSummary={answer?.kind === 'outcome' ? statementSummary(statements, disputed?.disputedCount) : undefined}
           columns={customerStatementColumns(accountOwners, names)}
           rows={visibleStatements}
           // 行键即对账单号：发布后固定，替代单用新单号。
           rowKey={(row) => row.statementNumber}
           onRowClick={(row) => setSelected(row.statementNumber)}
-          emptyRowsNote="没有匹配的对账单"
-          viewState={catalogueViewState(
-            answer,
-            statements.length,
-            retry,
-            disputedOnly
+          emptyRowsNote={pageEmptyNote('对账单', statements.length)}
+          pagination={pagination}
+          viewState={catalogueViewState(answer, statements.length, retry, {
+            module: info,
+            ...(disputedOnly
               ? {
-                  module: info,
                   endpoint: 'GET /settlement-disputed-statements',
                   emptyTitle: '没有待对账的单',
                   emptyDescription: '已发布的对账单上没有还没处理完的异议。',
                 }
               : {
-                  module: info,
                   endpoint: 'GET /settlement-statements?registry=customer-statement',
                   emptyTitle: '还没有发布过对账单',
                   emptyDescription: '费用确认后按账期归集成对账单，发布后在这里出现；页面不会预置对账单。',
-                },
-          )}
+                }),
+            narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+          })}
         />
       </div>
       {/* 登记或处理落定后重读这一签：单上的争议与首页待对账的件数都从读口来，页面不自己往行上补。 */}

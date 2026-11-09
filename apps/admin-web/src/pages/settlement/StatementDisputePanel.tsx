@@ -319,8 +319,8 @@ function DisputeList({ statement }: { statement: CustomerStatementRecord }) {
 }
 
 /**
- * 对账单页右栏。statement 为空时只说先选一张单。gone 为真：最近一次重读的列表里已经没有这张单（比如列表只列还有争议在等的单，
- * 刚处理完的那张就出列了）——手上那一份是旧的，表单不再按它摆，只留刚才那一次的答复。
+ * 对账单页右栏。statement 为空时只说先选一张单。gone 为真：最近一次读到的那一页上已经没有这张单（比如列表只列还有争议在等的单，
+ * 刚处理完的那张就出列了；或者翻到了别的页）——手上那一份是旧的，表单不再按它摆，只留刚才那一次的答复。
  */
 export function StatementDisputePanel({
   statement,
@@ -353,7 +353,7 @@ export function StatementDisputePanel({
               {lastAnswer.text}
             </p>
           ) : null}
-          <p className="mt-3 type-body leading-5 text-idpxyz-textMuted">这张单已不在当前列表里；要再登记或处理，换个筛选后重新点它。</p>
+          <p className="mt-3 type-body leading-5 text-idpxyz-textMuted">这张单不在当前列出的这一页上；要再登记或处理，翻页或换个筛选找到它，重新点它。</p>
         </>
       ) : statement ? (
         <>

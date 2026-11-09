@@ -127,26 +127,8 @@ export function matchSummary(row: Pick<SupplierBillReceptionRecord, 'lineCount' 
   return [`对上 ${matched}/${row.lineCount} 行`, ...parts].join(' · ');
 }
 
-// —— 两本册的页与检索 ——
-
-/**
- * 工具条右边那一句。两本册都按时间倒序截页（读口多取一行判页外有没有）：截了就不能说「共几份」，只能说列出了最近的几份——
- * 指标与筛选也只数这些，页外的不在里面。
- */
-export function pageCountSummary(listed: number, visible: number, truncated: boolean, unit: string, latest: string): string {
-  return truncated
-    ? `只列出最近${latest}的 ${listed} ${unit}，更早的没有列出、指标也不算它们；当前显示 ${visible} ${unit}`
-    : `共 ${listed} ${unit}，当前显示 ${visible} ${unit}`;
-}
-
-/**
- * 应付签的检索池：取回的那一页，加上按应付单号在全册里精确检索到的那几笔（同一笔只留一份）。页外的应付只靠后者才找得到；
- * 前者照旧给账单号、供应商这些字段做页内模糊检索。
- */
-export function withExactHits(page: readonly AuditedPayableRecord[], hits: readonly AuditedPayableRecord[]): AuditedPayableRecord[] {
-  const listed = new Set(page.map((row) => row.payable));
-  return [...page, ...hits.filter((row) => !listed.has(row.payable))];
-}
+/** 账单状态胶囊的先后：先要人动手的在前，同 billProgress 的判法次序。 */
+export const billProgressOrder: readonly string[] = [awaitingAuditLabel, auditorUnconfiguredLabel, disputedLabel, auditedLabel];
 
 // —— 一行走到哪一步 ——
 
@@ -177,9 +159,15 @@ export function payableNumberAbsenceNote(
   return documentNumberAbsenceNote(payable.documentNumberAbsence);
 }
 
+const payableNumberedLabel = `有${payableNumberName}`;
+const payableUnnumberedLabel = `无${payableNumberName}`;
+
+/** 审核应付签状态胶囊的先后。 */
+export const payableNumberStateOrder: readonly string[] = [payableNumberedLabel, payableUnnumberedLabel];
+
 /** 审核应付签的状态胶囊：有应付单号与没有号分开，没有号的原因由技术详情说。 */
 export function payableNumberState(payable: Pick<AuditedPayableRecord, 'documentNumber'>): BillProgress {
-  return payable.documentNumber ? { label: `有${payableNumberName}`, tone: 'good' } : { label: `无${payableNumberName}`, tone: 'muted' };
+  return payable.documentNumber ? { label: payableNumberedLabel, tone: 'good' } : { label: payableUnnumberedLabel, tone: 'muted' };
 }
 
 // —— 登记供应商账单 ——

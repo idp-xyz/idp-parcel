@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -6,23 +6,31 @@ import { MultiRegistrationPanel, type RegistrationTarget } from '../../component
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlySearch } from '../visibility/page-only';
 import {
   fundsRegistrationEndpoints,
   fundsRegistrationOutcomeLabels,
   listSettlementFundsApplications,
   registerExternalFundsFact,
-  type ExternalFundsFactListResponseBody,
   type ExternalFundsFactRecord,
   type FundsMappingRecord,
   type FundsRegistrationKind,
 } from './api';
+import { pageEmptyNote } from './list-conditions';
 import { fundsRegistrationSnapshotHints, fundsRegistrationTitles, problemNote, scopePostingText } from './presentation';
 import { formatMoney, technicalRows } from './ops-ui';
 
 // 收付款核销页（主责上下文 settlement-accounting，UC-SA-005 映射外部收付款并形成运营核销）。接 GET /settlement-funds-applications，
 // 资金事实册只有一本、不设 registry 分派。
+//
+// 资金事实册已迁到 ADR-0144，按游标翻页（模板的翻页条）。检索框下推成 `q`，读口覆盖流水号与来源系统；币种与核销目标不在
+// 读口检索的列里，按它们找留一个只筛本页的小框，字面写明。读口另有的 kind 一维与发生时刻排序，页面今天没有对应的筛选条与
+// 表头排序，不为此新加控件。条数只数这一页，字面写「本页」。
 const info = moduleInfoById['settlement-application'];
 
 // 列只留运营对账要看的：流水号、来自哪个系统、种类、金额、核了多少、核到哪里、发生时间。版本、更正回指、登记人、入账余额
@@ -152,47 +160,32 @@ const fundsRegistrationTargets: RegistrationTarget[] = (
 
 function ExternalFundsFactsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<ExternalFundsFactListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listSettlementFundsApplications().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listSettlementFundsApplications);
   const facts = answer?.kind === 'outcome' ? answer.body.facts : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleFacts = needle
-    ? facts.filter((row) =>
-        [row.fact, row.source, row.currency, mappedTo(row.mappings)].some((value) => value.toLowerCase().includes(needle)),
-      )
-    : facts;
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleFacts = facts.filter((row) => matchesSearch(refine, [row.currency, mappedTo(row.mappings)]));
   const unapplied = facts.filter((row) => row.unappliedAmount !== '0').length;
 
   return (
     <ListPageTemplate<ExternalFundsFactRecord>
       title="收付款"
       description="银行和支付系统传来的每一笔收付款，以及它核到了哪张对账单或账户上"
-      search={{ value: search, onChange: setSearch, placeholder: '搜流水号、来源系统、核销目标' }}
-      filterSummary={answer?.kind === 'outcome' ? `${facts.length} 笔 · 有未核销金额 ${unapplied} 笔` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜流水号、来源系统' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="币种、核销目标" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${facts.length} 笔 · 有未核销金额 ${unapplied} 笔` : undefined}
       columns={columns}
       rows={visibleFacts}
       // 行键循身份加版本：相同身份与版本只采用一次，更正形成新有效版本。
       rowKey={(row) => `${row.fact}:${row.version}`}
-      emptyRowsNote="没有匹配的收付款"
+      emptyRowsNote={pageEmptyNote('收付款', facts.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, facts.length, retry, {
         module: info,
         endpoint: 'GET /settlement-funds-applications',
         emptyTitle: '还没有收付款记录',
         emptyDescription: '收付款由银行或支付系统传入，或在「登记收付款」里手工登记后出现在这里；页面不会预置任何收付款。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
