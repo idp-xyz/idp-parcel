@@ -238,12 +238,14 @@ func pagedCatalogues() []pagedCatalogue {
 		{
 			name: "就绪判断", target: "/customs-case-registers?registry=readiness",
 			catalogue: ports.ReadinessJudgmentPages, endpoint: serving(customshttp.NewQueryCaseRegistersEndpoint),
-			sort: "-judgedAt", at: at(pageInstant, "SYN-UNIT-01"), list: "judgments",
+			sort: "-judgedAt", at: at(pageInstant, "SYN-UNIT-01"),
+			filters: url.Values{"effective": {"false"}}, outOfVocabulary: outside("effective"), list: "judgments",
 		},
 		{
 			name: "提交授权", target: "/customs-case-registers?registry=submission-authority",
 			catalogue: ports.SubmissionAuthorityPages, endpoint: serving(customshttp.NewQueryCaseRegistersEndpoint),
-			sort: "-grantedAt", at: at(pageInstant, "SYN-UNIT-01"), list: "authorities",
+			sort: "-grantedAt", at: at(pageInstant, "SYN-UNIT-01"),
+			filters: url.Values{"effective": {"true", "false"}}, outOfVocabulary: outside("effective"), list: "authorities",
 		},
 		{
 			name: "关闭义务目录", target: "/customs-case-registers?registry=closure-obligation",

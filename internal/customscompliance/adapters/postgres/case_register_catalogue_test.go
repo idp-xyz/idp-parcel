@@ -1,6 +1,8 @@
 package postgres_test
 
 import (
+	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
@@ -136,6 +138,85 @@ func TestReadinessAndAuthorityListsCarryRevocationHonestly(t *testing.T) {
 		if judgment.Unit().String() == "unit-9" {
 			t.Fatal("跨租户可见")
 		}
+	}
+}
+
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——就绪判断与提交授权两册按 effective 筛出的行，经重建门读回的
+// Effective() 与所给的词一致，total 随这一维变；两册各筛各的，就绪仍有效不让授权跟着算有效。
+func TestReadinessAndAuthorityStatusDimensionAgreesWithTheEffectiveField(t *testing.T) {
+	catalogue, fixture := newCaseRegisterCatalogue(t)
+	tenant := viewValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.readiness_judgment
+			(tenant_id, unit_id, basis_ref, judged_at, revoked_by, revoked_at)
+		 VALUES
+			('SYN-TENANT-01', 'SYN-UNIT-01', 'SYN-BASIS-01', $1, NULL, NULL),
+			('SYN-TENANT-01', 'SYN-UNIT-02', 'SYN-BASIS-02', $1, 'SYN-RULES-CHANGED', $2),
+			('SYN-TENANT-01', 'SYN-UNIT-03', 'SYN-BASIS-03', $1, NULL, NULL),
+			('SYN-TENANT-02', 'SYN-UNIT-09', 'SYN-BASIS-09', $1, 'SYN-RULES-CHANGED', $2)`,
+		viewBaseAt, viewBaseAt.Add(time.Hour))
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.submission_authority
+			(tenant_id, unit_id, authority_ref, granted_at, revoked_by, revoked_at)
+		 VALUES
+			('SYN-TENANT-01', 'SYN-UNIT-01', 'SYN-AUTHORITY-01', $1, 'SYN-MANDATE-WITHDRAWN', $2),
+			('SYN-TENANT-01', 'SYN-UNIT-02', 'SYN-AUTHORITY-02', $1, NULL, NULL),
+			('SYN-TENANT-01', 'SYN-UNIT-03', 'SYN-AUTHORITY-03', $1, 'SYN-MANDATE-WITHDRAWN', $2)`,
+		viewBaseAt, viewBaseAt.Add(time.Hour))
+
+	type statusCase struct {
+		values url.Values
+		units  []string
+	}
+	units := func(values ...string) []string { return append([]string{}, values...) }
+	readiness := map[string]statusCase{
+		"不带条件":      {values: url.Values{}, units: units("SYN-UNIT-01", "SYN-UNIT-02", "SYN-UNIT-03")},
+		"仍有效":       {values: url.Values{"effective": {"true"}}, units: units("SYN-UNIT-01", "SYN-UNIT-03")},
+		"已失效":       {values: url.Values{"effective": {"false"}}, units: units("SYN-UNIT-02")},
+		"维内为或":      {values: url.Values{"effective": {"true", "false"}}, units: units("SYN-UNIT-01", "SYN-UNIT-02", "SYN-UNIT-03")},
+		"已失效且 q 不中": {values: url.Values{"effective": {"false"}, "q": {"SYN-UNIT-01"}}, units: units()},
+	}
+	for name, test := range readiness {
+		t.Run("就绪判断/"+name, func(t *testing.T) {
+			page, err := catalogue.ListReadinessJudgments(t.Context(), tenant, 10, pageQuery(t, ports.ReadinessJudgmentPages, test.values))
+			if err != nil {
+				t.Fatalf("取页：%v", err)
+			}
+			got := make([]string, 0, len(page.Rows))
+			for _, judgment := range page.Rows {
+				got = append(got, judgment.Unit().String())
+				if words := test.values["effective"]; len(words) == 1 && judgment.Effective() != (words[0] == "true") {
+					t.Fatalf("按 effective=%s 筛出的 %s 读回 Effective()=%v", words[0], judgment.Unit(), judgment.Effective())
+				}
+			}
+			if !reflect.DeepEqual(got, test.units) || page.Total != int64(len(test.units)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", got, page.Total, test.units, len(test.units))
+			}
+		})
+	}
+
+	authorities := map[string]statusCase{
+		"仍有效": {values: url.Values{"effective": {"true"}}, units: units("SYN-UNIT-02")},
+		"已失效": {values: url.Values{"effective": {"false"}}, units: units("SYN-UNIT-01", "SYN-UNIT-03")},
+	}
+	for name, test := range authorities {
+		t.Run("提交授权/"+name, func(t *testing.T) {
+			page, err := catalogue.ListSubmissionAuthorities(t.Context(), tenant, 10, pageQuery(t, ports.SubmissionAuthorityPages, test.values))
+			if err != nil {
+				t.Fatalf("取页：%v", err)
+			}
+			got := make([]string, 0, len(page.Rows))
+			for _, authorization := range page.Rows {
+				got = append(got, authorization.Unit().String())
+				if authorization.Effective() != (test.values["effective"][0] == "true") {
+					t.Fatalf("按 effective=%s 筛出的 %s 读回 Effective()=%v",
+						test.values["effective"][0], authorization.Unit(), authorization.Effective())
+				}
+			}
+			if !reflect.DeepEqual(got, test.units) || page.Total != int64(len(test.units)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", got, page.Total, test.units, len(test.units))
+			}
+		})
 	}
 }
 

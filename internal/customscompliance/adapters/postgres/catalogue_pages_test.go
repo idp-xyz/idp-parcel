@@ -105,6 +105,21 @@ func pagedRegisters() []pagedRegister {
 	tenantOf := func(t *testing.T, tenant string) domain.TenantID { return viewValue(t, domain.NewTenantID, tenant) }
 	minutes := func(n int) time.Time { return viewBaseAt.Add(time.Duration(n) * time.Minute) }
 	nonLayer, layer := twoWords(cataloguepage.Words[domain.ResultLayer]())
+	// 就绪与授权两册 n 大于 2 的行已撤销，落在状态维 effective=false 那一组里；撤销两列同生同灭。
+	revokedBy := func(n int) *string {
+		if n <= 2 {
+			return nil
+		}
+		cause := "SYN-CAUSE-01"
+		return &cause
+	}
+	revokedAt := func(n int) *time.Time {
+		if n <= 2 {
+			return nil
+		}
+		at := viewBaseAt.Add(time.Hour)
+		return &at
+	}
 
 	operations := func(t *testing.T, fixture *viewFixture) *adapter.OperationsRecordViews {
 		return built(adapter.NewOperationsRecordViews(fixture.db))(t)
@@ -245,27 +260,29 @@ func pagedRegisters() []pagedRegister {
 			name: "就绪判断", catalogue: ports.ReadinessJudgmentPages, key: synKey("UNIT"),
 			add: func(t *testing.T, fixture *viewFixture, tenant string, n int) {
 				fixture.seed(t,
-					`INSERT INTO customs_compliance.readiness_judgment (tenant_id, unit_id, basis_ref, judged_at)
-					 VALUES ($1, $2, 'SYN-BASIS-01', $3)`,
-					tenant, synKey("UNIT")(n), viewBaseAt)
+					`INSERT INTO customs_compliance.readiness_judgment (tenant_id, unit_id, basis_ref, judged_at, revoked_by, revoked_at)
+					 VALUES ($1, $2, 'SYN-BASIS-01', $3, $4, $5)`,
+					tenant, synKey("UNIT")(n), viewBaseAt, revokedBy(n), revokedAt(n))
 			},
 			list: func(t *testing.T, fixture *viewFixture, tenant string, limit int, query cataloguepage.Query) keyedPage {
 				page, err := caseRegisters(t, fixture).ListReadinessJudgments(t.Context(), tenantOf(t, tenant), limit, query)
 				return keyed(t, page, err, func(row domain.ReadinessJudgment) string { return row.Unit().String() })
 			},
+			filter: url.Values{"effective": {"false"}}, other: url.Values{"effective": {"true"}},
 		},
 		{
 			name: "提交授权", catalogue: ports.SubmissionAuthorityPages, key: synKey("UNIT"),
 			add: func(t *testing.T, fixture *viewFixture, tenant string, n int) {
 				fixture.seed(t,
-					`INSERT INTO customs_compliance.submission_authority (tenant_id, unit_id, authority_ref, granted_at)
-					 VALUES ($1, $2, 'SYN-AUTHORITY-01', $3)`,
-					tenant, synKey("UNIT")(n), viewBaseAt)
+					`INSERT INTO customs_compliance.submission_authority (tenant_id, unit_id, authority_ref, granted_at, revoked_by, revoked_at)
+					 VALUES ($1, $2, 'SYN-AUTHORITY-01', $3, $4, $5)`,
+					tenant, synKey("UNIT")(n), viewBaseAt, revokedBy(n), revokedAt(n))
 			},
 			list: func(t *testing.T, fixture *viewFixture, tenant string, limit int, query cataloguepage.Query) keyedPage {
 				page, err := caseRegisters(t, fixture).ListSubmissionAuthorities(t.Context(), tenantOf(t, tenant), limit, query)
 				return keyed(t, page, err, func(row domain.SubmissionAuthorization) string { return row.Unit().String() })
 			},
+			filter: url.Values{"effective": {"false"}}, other: url.Values{"effective": {"true"}},
 		},
 		{
 			name: "关闭义务目录", catalogue: ports.ClosureObligationPages, key: synKey("CASE"),

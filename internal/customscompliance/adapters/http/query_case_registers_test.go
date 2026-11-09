@@ -174,7 +174,7 @@ func TestUnconfiguredCaseRegisterIntakeRefusesAllRegistriesIdentically(t *testin
 }
 
 // Covers: CONTEXT「提交授权与就绪判断分别形成和失效」 / 票 05 形状约束一二 — 就绪与授权分册分格转写：有效行撤销两列
-// 缺席，失效行原判断与失效两列同场；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
+// 缺席，失效行原判断与失效两列同场；状态维那一格 effective 恒在场、与撤销两列同说一件事；租户与页大小从作用域来（请求自报的 tenant、limit 是集外键，解码处就答 400，见
 // TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration）。
 func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 	revoked, err := readinessOf(t, "unit-2", "basis-2", catalogueBaseAt).
@@ -207,6 +207,7 @@ func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 			Unit      string `json:"unit"`
 			Basis     string `json:"basis"`
 			JudgedAt  string `json:"judgedAt"`
+			Effective *bool  `json:"effective"`
 			RevokedBy string `json:"revokedBy"`
 			RevokedAt string `json:"revokedAt"`
 		} `json:"judgments"`
@@ -220,6 +221,9 @@ func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 	active, lapsed := body.Judgments[0], body.Judgments[1]
 	if active.Unit != "unit-1" || active.RevokedBy != "" || active.RevokedAt != "" {
 		t.Fatalf("有效行不该带失效两列：%+v", active)
+	}
+	if active.Effective == nil || !*active.Effective || lapsed.Effective == nil || *lapsed.Effective {
+		t.Fatalf("effective 要恒在场、有效行为 true、失效行为 false：%s", response.Body.String())
 	}
 	if lapsed.Unit != "unit-2" || lapsed.Basis != "basis-2" ||
 		lapsed.RevokedBy != "RULES-CHANGED" ||
@@ -242,6 +246,7 @@ func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 		Authorities []struct {
 			Unit      string `json:"unit"`
 			Authority string `json:"authority"`
+			Effective *bool  `json:"effective"`
 			RevokedBy string `json:"revokedBy"`
 		} `json:"authorities"`
 	}
@@ -251,7 +256,8 @@ func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 	if authorityBody.Outcome != "SUBMISSION_AUTHORITIES_LISTED" ||
 		len(authorityBody.Authorities) != 1 ||
 		authorityBody.Authorities[0].Authority != "authority-1" ||
-		authorityBody.Authorities[0].RevokedBy != "MANDATE-WITHDRAWN" {
+		authorityBody.Authorities[0].RevokedBy != "MANDATE-WITHDRAWN" ||
+		authorityBody.Authorities[0].Effective == nil || *authorityBody.Authorities[0].Effective {
 		t.Fatalf("授权册转写走样：%s", response.Body.String())
 	}
 }

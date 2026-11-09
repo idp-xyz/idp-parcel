@@ -44,10 +44,17 @@ func NewCaseRegisterCatalogue(db *bentopg.DB) (*CaseRegisterCatalogue, error) {
 
 var _ ports.CaseRegisterCatalogueRead = (*CaseRegisterCatalogue)(nil)
 
+// revocationAbsent 是就绪与授权两册状态维 effective 的落列：撤销时刻缺席的文本形（'true' / 'false'，与词表同词）。撤销两列
+// 同生同灭（约束 readiness_judgment_revocation_paired 与 submission_authority_revocation_paired），只看时刻一列，与领域
+// Effective() 读的是同一格；重建门照同一行再走一遍，筛出的行与答复里的 effective 对不上的路没有。不建索引：两册按单元键
+// 上列，这一维只在本租户的行上再滤一遍。
+const revocationAbsent = "(revoked_at IS NULL)::text"
+
 // readinessJudgmentPages 把 ports.ReadinessJudgmentPages 落到列上。q 在单元、就绪依据与撤销方上做字面包含。
 var readinessJudgmentPages = ports.ReadinessJudgmentPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"unit": "unit_id", "judgedAt": "judged_at"},
 	Identity: []string{"unit_id"},
+	Filters:  map[string]string{"effective": revocationAbsent},
 	Keyword:  []string{"unit_id", "basis_ref", "revoked_by"},
 })
 
@@ -131,6 +138,7 @@ func (catalogue *CaseRegisterCatalogue) ListReadinessJudgments(
 var submissionAuthorityPages = ports.SubmissionAuthorityPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"unit": "unit_id", "grantedAt": "granted_at"},
 	Identity: []string{"unit_id"},
+	Filters:  map[string]string{"effective": revocationAbsent},
 	Keyword:  []string{"unit_id", "authority_ref", "revoked_by"},
 })
 

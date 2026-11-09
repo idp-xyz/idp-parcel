@@ -153,10 +153,14 @@ var InterpretationRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Selectors: []string{"registry"},
 })
 
+// effectiveWords 是就绪判断与提交授权两册状态维的词表：答复体里 effective 那个布尔的两种写法，与领域 Effective() 同义——
+// 已就绪与不再就绪、授权有效与授权已失效，在登记册上就是撤销两列缺席与在场。
+var effectiveWords = []string{"true", "false"}
+
 // ReadinessJudgmentPages 是就绪判断（GET /customs-case-registers?registry=readiness）的声明。
 //
-// 缺省序是申报单元升序，行标识是单元（主键）。不放筛选维：失效与否由 revokedBy、revokedAt 的在场表达，答复体刻意不设状态字段
-// （customshttp 的 readinessJudgmentBody 头注），筛选维名又只取答复体的字段名（决定四），不为筛选另造一格。
+// 缺省序是申报单元升序，行标识是单元（主键）。effective 是状态维（决定四「有状态的册至少放出状态一维」）：失效与否由本行的撤销
+// 两列在场与否定，读面在 SQL 里由本行导出，筛的与答复体里 effective 那一格是同一格事实。
 var ReadinessJudgmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-case-registers/readiness",
 	Sorts: []cataloguepage.SortDimension{
@@ -165,11 +169,13 @@ var ReadinessJudgmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	DefaultSort: cataloguepage.Sort{Field: "unit"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: effectiveWords}},
 	Selectors:   []string{"registry"},
 })
 
 // SubmissionAuthorityPages 是提交授权（GET /customs-case-registers?registry=submission-authority）的声明，与就绪判断
-// 同形：缺省序是申报单元升序，行标识是单元（主键），不放筛选维的理由也同 ReadinessJudgmentPages。
+// 同形：缺省序是申报单元升序，行标识是单元（主键），状态维 effective 的来由也同 ReadinessJudgmentPages。两册各放各的一维，
+// 不合成一个「可提交」（CONTEXT「申报就绪判断与提交授权必须独立存在」）。
 var SubmissionAuthorityPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "customs-case-registers/submission-authority",
 	Sorts: []cataloguepage.SortDimension{
@@ -178,6 +184,7 @@ var SubmissionAuthorityPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	DefaultSort: cataloguepage.Sort{Field: "unit"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: effectiveWords}},
 	Selectors:   []string{"registry"},
 })
 

@@ -135,9 +135,10 @@ func serveReadinessJudgments(
 	bodies := make([]readinessJudgmentBody, 0, len(page.Rows))
 	for _, judgment := range page.Rows {
 		body := readinessJudgmentBody{
-			Unit:     judgment.Unit().String(),
-			Basis:    judgment.Basis().String(),
-			JudgedAt: judgment.JudgedAt().UTC().Format(time.RFC3339Nano),
+			Unit:      judgment.Unit().String(),
+			Basis:     judgment.Basis().String(),
+			JudgedAt:  judgment.JudgedAt().UTC().Format(time.RFC3339Nano),
+			Effective: judgment.Effective(),
 		}
 		if cause, at, revoked := judgment.Revocation(); revoked {
 			body.RevokedBy = cause
@@ -171,6 +172,7 @@ func serveSubmissionAuthorities(
 			Unit:      authorization.Unit().String(),
 			Authority: authorization.Authority().String(),
 			GrantedAt: authorization.GrantedAt().UTC().Format(time.RFC3339Nano),
+			Effective: authorization.Effective(),
 		}
 		if cause, at, revoked := authorization.Revocation(); revoked {
 			body.RevokedBy = cause
@@ -249,23 +251,27 @@ type closureObligationListResponse struct {
 }
 
 // readinessJudgmentBody 逐字段透出一条就绪判断。撤销两列同现同缺（领域 Revoke 两者
-// 缺一构造不出）：缺席即仍有效，在场即已失效且原判断原样保留——调用方判「已失效」
-// 看这对字段，不用第二个布尔（0006 自注：失效不得谎报成未配置）。
+// 缺一构造不出）：缺席即仍有效，在场即已失效且原判断原样保留（0006 自注：失效不得谎报成未配置）。
+//
+// effective 恒在场，取领域 Effective()：它是本册状态维的名字（ports.ReadinessJudgmentPages），筛选维名只取答复体的
+// 字段名（ADR-0144 决定四），状态维得有一格可指。它与撤销两列读的是同一格事实，两者对不上的路没有。
 type readinessJudgmentBody struct {
 	Unit      string `json:"unit"`
 	Basis     string `json:"basis"`
 	JudgedAt  string `json:"judgedAt"`
+	Effective bool   `json:"effective"`
 	RevokedBy string `json:"revokedBy,omitempty"`
 	RevokedAt string `json:"revokedAt,omitempty"`
 }
 
 // submissionAuthorityBody 与就绪同形的另一条轨（CONTEXT「提交授权与就绪判断分别形成和失效」）。两册
 // 分端点分派、分格转写，页面上分列两栏——不得合成一个「可提交」标记（CONTEXT「申报就绪判断与提交授权必须独立存在」，
-// 票 05 形状约束一）。
+// 票 05 形状约束一）。effective 的读法同 readinessJudgmentBody，只说授权自己有效与否。
 type submissionAuthorityBody struct {
 	Unit      string `json:"unit"`
 	Authority string `json:"authority"`
 	GrantedAt string `json:"grantedAt"`
+	Effective bool   `json:"effective"`
 	RevokedBy string `json:"revokedBy,omitempty"`
 	RevokedAt string `json:"revokedAt,omitempty"`
 }
