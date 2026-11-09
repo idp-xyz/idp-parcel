@@ -48,6 +48,11 @@ type FilterDimension struct {
 	Vocabulary []string
 }
 
+// BooleanVocabulary 是布尔筛选维的词表。落列时把布尔列或 EXISTS 读成 Postgres 的 boolean::text，那只会是 true 与 false；
+// 词表与它逐字一致才筛得出行——哪一册把词写成 TRUE 或 yes，接入口照收、SQL 却一行也比不中，不报错，只答零行。所以各册的
+// 布尔维都取这一份，不各写字面量。每次交一份新切片，调用方改了它也碰不到别册。
+func BooleanVocabulary() []string { return []string{"true", "false"} }
+
 // Sort 是一次的排序。一次只按一维排；决胜键总是行标识，与排序同向（ADR-0144 决定三）。
 type Sort struct {
 	Field      string

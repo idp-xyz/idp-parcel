@@ -44,7 +44,7 @@ var EvaluationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // retired 是状态维：册上的一版只有「已发布 → 已退役」一次状态迁移（CONTEXT 生命周期「定价方案与价表版本」），退役是退役册上
 // 这一版那一行，读面在 SQL 里由本册导出；词即答复体里 retired 那个布尔的两种写法。截止不是状态迁移（同一条），不另成一维。
 // 管理台价卡页的五态（admin-web 的 priceCardStatus）是页面拿此刻对适用期与收尾各格现算的读数，不是领域状态，本册不放它——
-// 这一类的取舍在 ADR-0372 草案。
+// 这一类的取舍在 ADR-0372。
 var PriceCardPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "pricing-price-cards",
 	Sorts: []cataloguepage.SortDimension{
@@ -59,7 +59,7 @@ var PriceCardPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 			domain.PricingDirectionSell.String(),
 			domain.PricingDirectionInternal.String(),
 		}},
-		{Name: "retired", Vocabulary: []string{"true", "false"}},
+		{Name: "retired", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
 

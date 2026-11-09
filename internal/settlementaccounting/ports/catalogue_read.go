@@ -297,7 +297,7 @@ type SupplierBillReceptionFilter struct {
 // 一起判，而本产品今天不记相对方确认，所以也不数「待确认」：把未作废的单都当待确认，就是拿「没有记录」冒充
 // 「客户还没确认」。
 //
-// Count 是这样的单的全部张数，不受页与 q 截断（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留
+// Count 是这样的单的全部张数，不受页、q 与筛选维截断（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留
 // 这两格」）；Statements 是其中一页，行形与对账单册同一份；Next 与 Total 是这一页的游标与同一组条件下的总数，与
 // cataloguepage.Result 同义。
 type DisputedCustomerStatements struct {

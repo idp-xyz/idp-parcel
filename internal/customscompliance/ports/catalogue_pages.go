@@ -50,7 +50,7 @@ var SubmissionVersionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "version"},
-		{Name: "isCurrent", Vocabulary: []string{"true", "false"}},
+		{Name: "isCurrent", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
 
@@ -153,9 +153,8 @@ var InterpretationRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Selectors: []string{"registry"},
 })
 
-// effectiveWords 是就绪判断与提交授权两册状态维的词表：答复体里 effective 那个布尔的两种写法，与领域 Effective() 同义——
-// 已就绪与不再就绪、授权有效与授权已失效，在登记册上就是撤销两列缺席与在场。
-var effectiveWords = []string{"true", "false"}
+// 就绪判断与提交授权两册的状态维 effective 是答复体里那个布尔，与领域 Effective() 同义——已就绪与不再就绪、授权有效与授权
+// 已失效，在登记册上就是撤销两列缺席与在场。
 
 // ReadinessJudgmentPages 是就绪判断（GET /customs-case-registers?registry=readiness）的声明。
 //
@@ -169,7 +168,7 @@ var ReadinessJudgmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	DefaultSort: cataloguepage.Sort{Field: "unit"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
-	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: effectiveWords}},
+	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: cataloguepage.BooleanVocabulary()}},
 	Selectors:   []string{"registry"},
 })
 
@@ -184,7 +183,7 @@ var SubmissionAuthorityPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	DefaultSort: cataloguepage.Sort{Field: "unit"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
-	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: effectiveWords}},
+	Filters:     []cataloguepage.FilterDimension{{Name: "effective", Vocabulary: cataloguepage.BooleanVocabulary()}},
 	Selectors:   []string{"registry"},
 })
 

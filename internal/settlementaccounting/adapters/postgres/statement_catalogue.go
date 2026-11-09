@@ -209,9 +209,8 @@ const disputedCustomerStatementCondition = `s.tenant_id = $1
 		           AND (o.resolved_at IS NULL OR o.resolution <> ALL($2)))`
 
 // ListDisputedCustomerStatements 上列至少挂着一项没有终局结果的争议的对账单的一页（见 ports.DisputedCustomerStatements）。
-// 张数是整个待对账队列的积压数，不随 q 变（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列保留这两格」）：
-// 本次没有任何条件时它就是
-// total，不多数一次；带了 q 时另数一次只带固定条件的。几句不在同一快照里，张数与清单是此刻的大概；一张都没有时张数如实是 0。
+// 张数是整个待对账队列的积压数，不随 q 与筛选维变（票 catalogue-read-pagination-rollout spec「已带计数与 truncated 的待办队列
+// 保留这两格」）：本次没有任何条件时它就是 total，不多数一次；带了 q 或筛选维时另数一次只带固定条件的。几句不在同一快照里，张数与清单是此刻的大概；一张都没有时张数如实是 0。
 func (catalogue *StatementCatalogue) ListDisputedCustomerStatements(
 	ctx context.Context,
 	tenant domain.TenantID,

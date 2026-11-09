@@ -70,7 +70,7 @@ func customerStatementSpec(name string, selectors ...string) cataloguepage.Spec 
 		},
 		DefaultSort: cataloguepage.Sort{Field: "statementNumber"},
 		Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
-		Filters:     []cataloguepage.FilterDimension{{Name: "voided", Vocabulary: []string{"true", "false"}}},
+		Filters:     []cataloguepage.FilterDimension{{Name: "voided", Vocabulary: cataloguepage.BooleanVocabulary()}},
 		Selectors:   selectors,
 	}
 }
@@ -82,7 +82,7 @@ func customerStatementSpec(name string, selectors ...string) cataloguepage.Spec 
 // 表达式索引（该票 spec「可排维与行标识的列必须非空」）。同刻的决胜键（主张身份、版本）改为与排序同向倒序。另放
 // 账期 period。不放状态维：账单册上没有领域状态，管理台的接收进度（待审核、审核人未配置、有争议待再审、已审完）是页面从读口的
 // 几个和派生的呈现词，其中一格还读此刻审核授权册上有没有这一组——把它搬进 SQL 就是在服务端另立一份状态规则，这一类的取舍在
-// ADR-0372 草案。q 覆盖主张身份、账单号、供应商、账期与法人。claim、supplier、supplierBillNumber 是登记表单精确检索页外账单的
+// ADR-0372。q 覆盖主张身份、账单号、供应商、账期与法人。claim、supplier、supplierBillNumber 是登记表单精确检索页外账单的
 // 参数，登为选择器（见文件头注）。
 var SupplierBillReceptionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "supplier-bill-receptions",

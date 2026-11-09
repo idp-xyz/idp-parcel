@@ -11,9 +11,6 @@ import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 // 登记列全是脱敏引用、没有封闭词表；有状态的两册各放出状态一维（决定四）：权威区间的开闭、暂停有没有恢复决定，都由本册（与以
 // 暂停标识为键的恢复册）上的行直接读出。其余两册不放筛选维，找行走 q。可排维只放缺省那一维。
 
-// presenceWords 是两册状态维的词表：答复体里 open、resumed 那个布尔的两种写法。
-var presenceWords = []string{"true", "false"}
-
 // registerSelector 是四册共用的选择器键，词同端点的 register 查询参数。
 var registerSelector = []string{"register"}
 
@@ -26,7 +23,7 @@ var AuthorityIntervalRegistryPages = cataloguepage.MustCatalogue(cataloguepage.S
 	Sorts:       []cataloguepage.SortDimension{{Name: "insertedAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "insertedAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Integer},
-	Filters:     []cataloguepage.FilterDimension{{Name: "open", Vocabulary: presenceWords}},
+	Filters:     []cataloguepage.FilterDimension{{Name: "open", Vocabulary: cataloguepage.BooleanVocabulary()}},
 	Selectors:   registerSelector,
 })
 
@@ -39,7 +36,7 @@ var SuspensionRegistryPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Sorts:       []cataloguepage.SortDimension{{Name: "occurredAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "occurredAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
-	Filters:     []cataloguepage.FilterDimension{{Name: "resumed", Vocabulary: presenceWords}},
+	Filters:     []cataloguepage.FilterDimension{{Name: "resumed", Vocabulary: cataloguepage.BooleanVocabulary()}},
 	Selectors:   registerSelector,
 })
 

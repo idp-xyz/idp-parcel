@@ -1,6 +1,6 @@
 # ADR-0372：目录读口的状态筛选维只放「由本册登记行直接读出」的状态——领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维；答复照旧带它们，管理台对它们只在页内筛并标明
 
-Status: Proposed（2026-11-09，票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草；接受与否待 TF、NO、PP、SA owner 复核，越权风险点见文末。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**草案**：Status 为 Proposed，尚非依据；拟收窄 ADR-0144 决定四「有状态的册至少放出状态一维」的适用范围
+Status: Proposed（2026-11-09，票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草；接受与否待 TF、NO、PP、SA owner 复核，越权风险点见文末。拟收窄 ADR-0144 决定四「有状态的册至少放出状态一维」的适用范围。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**草案**：Status 为 Proposed，尚非依据
 Date: 2026-11-09
 
 ## Context
@@ -26,7 +26,7 @@ ADR-0144 决定四要求「有状态的册至少放出状态一维」，维度�
    - 送站交接单的范围成立（`scopeEstablished`）：`DeliveryHandoverNoteState` 的 `ScopeEstablished` 按声称的每个客户账户的绑定结论判全部已确认（[ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定三「成立」），头注写明范围成立是派生、不落列。它不是交接单的生命周期——交接单的生命周期「开放 → 已关闭」已作 `closed` 放出。
    - 身份复核单元（一件作业实物一行）此刻冲突与否、处置过没有：领域把这件实物各条判断链的当前有效版本合起来作身份判断（`domain.JudgeIdentityBasis`，处置编排的 `headsInConflict` 经它判冲突）；答复里没有实物一级的状态格，复核页据各链头自己判。
 2. **按读取时点现算的读数。** 管理台价卡页的五态（生效中、未生效、已过期、已截止、已退役；`priceCardStatus(row, now)`）拿此刻对适用期与收尾各格现算。parcel-pricing `CONTEXT.md` 写明截止只收窄此后可选的区间、不是状态迁移；领域状态只有「已发布 → 已退役」，已作 `retired` 放出。
-3. **册上没有领域状态，状态词是管理台的呈现词。** 供应商账单接收册的接收进度（待审核、审核人未配置、有争议待再审、已审完；`billProgress`）是页面从读口的几个和派生的，函数头注自称「呈现词：从读口的和派生，不是领域状态」；其中「审核人未配置」一格还读此刻审核授权册上有没有这一组。
+3. **册上没有领域状态，状态词是管理台的呈现词。** 供应商账单接收册的接收进度（待审核、审核人未配置、有争议待再审、已审完；`billProgress`）是页面从读口的几个和派生的，`supplier-bills.ts` 文件头与它上方的词表块注都自称呈现词、不是领域状态；其中「审核人未配置」一格还读此刻审核授权册上有没有这一组。
 
 **三类各自为什么不能照抄进 SQL。**
 
@@ -62,7 +62,7 @@ ADR-0144 决定四要求「有状态的册至少放出状态一维」，维度�
 
 ## Consequences
 
-- ADR-0144 决定四其余各句不变。本记录接受时，ADR-0144 的 `Status` 行与 Links 各加一条前向指针（被收窄的条款即「有状态的册至少放出状态一维」一句），`.scratch/catalogue-read-pagination-rollout/spec.md`「横贯各子票的取舍」里「可排维、筛选维从小放」那一条的「有状态（或同类封闭词表）的册放出那一维作筛选维」照此改读。
+- ADR-0144 决定四其余各句不变。各册声明头注里指到本记录的那几句，接受与否都不用改：它们只写编号，不写本记录的状态。本记录接受时，ADR-0144 的 `Status` 行加一条前向指针、并新建 Links 一节放同一条（ADR-0144 今天没有 Links 节）（被收窄的条款即「有状态的册至少放出状态一维」一句），`.scratch/catalogue-read-pagination-rollout/spec.md`「横贯各子票的取舍」里「可排维、筛选维从小放」那一条的「有状态（或同类封闭词表）的册放出那一维作筛选维」照此改读。
 - 订舱册、交接单的范围成立、复核单元三处若运营确需服务端筛，各立写面落列票，归各自上下文 owner。
 - 票 14 接各页时，对这几册保留页内筛并标明只筛本页；已放出状态维的那几册改为下推。
 
