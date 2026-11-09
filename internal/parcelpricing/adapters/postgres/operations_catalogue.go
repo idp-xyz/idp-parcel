@@ -138,11 +138,20 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 }
 
 // priceCardPages 把 ports.PriceCardPages 落到价卡版本表(别名 v)的列上。
+//
+// retired 落在「退役册上有这一版那一行」的文本形上('true' / 'false',与词表同词)。总数那一句只从版本表取,取页那一句左连的
+// 退役行要等页切出来才在,所以这一维落成 EXISTS 而不是连接列;两处读的是同一行——退役以版本为主键,ListPriceCards 据它填
+// HasRetirement。子查询走退役册主键 price_card_version_retirement_pkey,不另建索引。
 var priceCardPages = ports.PriceCardPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"registeredAt": "v.registered_at", "planId": "v.plan_id"},
 	Identity: []string{"v.plan_id", "v.plan_version"},
-	Filters:  map[string]string{"direction": "v.direction"},
-	Keyword:  []string{"v.plan_id", "v.plan_version", "v.scope"},
+	Filters: map[string]string{
+		"direction": "v.direction",
+		"retired": `(EXISTS (
+			SELECT 1 FROM parcel_pricing.price_card_version_retirement AS r
+			 WHERE r.tenant_id = v.tenant_id AND r.plan_id = v.plan_id AND r.plan_version = v.plan_version))::text`,
+	},
+	Keyword: []string{"v.plan_id", "v.plan_version", "v.scope"},
 })
 
 // priceCardPosition 的登记时间取自扫描出的 registered_at 列,与 ORDER BY 比的是同一个值(cataloguepage.Finish 头注)。

@@ -234,7 +234,7 @@ func TestPriceCardsEndpointTranscribesRows(t *testing.T) {
 }
 
 // Covers: AT-PP-007、AT-PP-008 的目录半边——收尾三格照行转写:截过的那一版带截止点与后继、发布时的适用期照旧;退役的那一版
-// 带退役时刻与后继;没收尾的那一版三键都缺席。
+// 带退役时刻与后继;没收尾的那一版三键都缺席。状态维那一格 retired 恒在场,只有退役的那一版为 true——截止不是状态迁移。
 func TestPriceCardsEndpointEchoesTheClosures(t *testing.T) {
 	query := catalogueQuery(t)
 	reader := &cardReaderDouble{
@@ -266,6 +266,10 @@ func TestPriceCardsEndpointEchoesTheClosures(t *testing.T) {
 		if _, has := open[key]; has {
 			t.Fatalf("没收尾的那一版长出了 %s 键：%v", key, open)
 		}
+	}
+	if cut["retired"] != false || retired["retired"] != true || open["retired"] != false {
+		t.Fatalf("retired 要恒在场、只有退役的那一版为 true：截过的 %v、退役的 %v、没收尾的 %v",
+			cut["retired"], retired["retired"], open["retired"])
 	}
 }
 

@@ -70,15 +70,17 @@ func pagedCatalogues(t *testing.T) []pagedCatalogue {
 				reader := &cardReaderDouble{pageProbe: answer, tenant: tenant}
 				return pricinghttp.NewQueryPriceCardsEndpoint(catalogueIntake(t, configured), reader), &reader.pageProbe
 			},
-			accepted: "direction=SELL&q=SYN-PLAN&sort=-planId",
+			accepted: "direction=SELL&retired=false&retired=true&q=SYN-PLAN&sort=-planId",
 			sort:     cataloguepage.Sort{Field: "planId", Descending: true},
 			keyword:  "SYN-PLAN",
-			filters:  map[string][]string{"direction": {"SELL"}},
+			filters:  map[string][]string{"direction": {"SELL"}, "retired": {"false", "true"}},
 			position: cataloguepage.Position{Value: registeredAt, Identity: []string{"SYN-PLAN-01", "v1"}},
 			outside: map[string]string{
-				"集外排序维":  "sort=effectiveFrom",
-				"词表外筛选值": "direction=sell",
-				"状态不是一维": "status=RETIRED",
+				"集外排序维":      "sort=effectiveFrom",
+				"词表外筛选值":     "direction=sell",
+				"状态维词表外":     "retired=yes",
+				"页面五态不是一维":   "status=RETIRED",
+				"状态维的取值不收空串": "retired=",
 			},
 		},
 		{

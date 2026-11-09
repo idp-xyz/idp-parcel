@@ -84,6 +84,9 @@ type priceCardListResponse struct {
 // SHA-256 是证据索引(真实价卡文件外置于受限证据库,ADR-0008),照登转写。收尾三格
 // (ADR-0234)缺席即没有那一种收尾:selectionEndsAt 是最新一条截止的终点,retiredAt 是退役
 // 时刻,successorVersion 是此刻管着这一版的那次收尾指名的后继;发布时的适用期两格照旧。
+//
+// retired 恒在场,与 retiredAt 在场与否同说一件事:它是本册状态维的名字(ports.PriceCardPages),筛选维名只取答复体的
+// 字段名(ADR-0144 决定四),状态维得有一格可指。
 type priceCardBody struct {
 	PlanID               string `json:"planId"`
 	PlanVersion          string `json:"planVersion"`
@@ -103,6 +106,7 @@ type priceCardBody struct {
 	PublicationApprover  string `json:"publicationApprover"`
 	RegisteredAt         string `json:"registeredAt"`
 	SelectionEndsAt      string `json:"selectionEndsAt,omitempty"`
+	Retired              bool   `json:"retired"`
 	RetiredAt            string `json:"retiredAt,omitempty"`
 	SuccessorVersion     string `json:"successorVersion,omitempty"`
 }
@@ -125,6 +129,7 @@ func priceCardBodyOf(row ports.PriceCardCatalogueRow) priceCardBody {
 		AuthorizationVersion: row.AuthorizationVersion,
 		PublicationApprover:  row.PublicationApprover,
 		RegisteredAt:         rfc3339(row.RegisteredAt),
+		Retired:              row.HasRetirement,
 	}
 	if row.HasEffectiveTo {
 		body.EffectiveTo = rfc3339(row.EffectiveTo)

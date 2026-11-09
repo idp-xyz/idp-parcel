@@ -318,6 +318,52 @@ func TestPriceCardPagesFilterSearchAndSortInTheDatabase(t *testing.T) {
 	assertPage(t, "空租户", planKeysOf(empty.Rows), empty.Total, empty.Next, []string{}, 0, false)
 }
 
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——价卡目录按 retired 筛出的版本，读回的退役格（HasRetirement）与所给的
+// 词一致，total 随这一维变、与 direction 和 q 为与；别的租户同方案同版本退役了，不让本租户的那一版跟着算退役。
+func TestPriceCardRetiredDimensionAgreesWithTheRetirementOnTheRow(t *testing.T) {
+	fixture := newPagedPricing(t)
+	ctx := t.Context()
+	tenant := evaluationValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	seedPriceCards(t, fixture)
+	fixture.card(t, "SYN-TENANT-02", "SYN-PLAN-B", "v1", domain.PricingDirectionBuy, 0)
+	fixture.card(t, "SYN-TENANT-02", "SYN-PLAN-B", "v2", domain.PricingDirectionBuy, time.Hour)
+	for _, retirement := range [][3]string{
+		{"SYN-TENANT-01", "SYN-PLAN-A", "v1"},
+		{"SYN-TENANT-02", "SYN-PLAN-B", "v1"},
+	} {
+		if _, err := fixture.pool.Exec(ctx,
+			`INSERT INTO parcel_pricing.price_card_version_retirement
+				(tenant_id, plan_id, plan_version, successor_version, closure_reference, retired_at)
+			 VALUES ($1, $2, $3, 'v2', 'SYN-RETIRE-' || $2, $4)`,
+			retirement[0], retirement[1], retirement[2], pageBase.Add(5*time.Hour)); err != nil {
+			t.Fatalf("登退役：%v", err)
+		}
+	}
+
+	list := func(label string, values url.Values, want ...string) {
+		t.Helper()
+		page, err := fixture.catalogue.ListPriceCards(ctx, tenant, 10, pageQuery(t, ports.PriceCardPages, values))
+		if err != nil {
+			t.Fatalf("%s：%v", label, err)
+		}
+		if words := values["retired"]; len(words) == 1 {
+			for _, row := range page.Rows {
+				if row.HasRetirement != (words[0] == "true") {
+					t.Fatalf("%s：按 retired=%s 筛出的 %s@%s 读回 HasRetirement=%v", label, words[0], row.PlanID, row.PlanVersion, row.HasRetirement)
+				}
+			}
+		}
+		assertPage(t, label, planKeysOf(page.Rows), page.Total, page.Next, append([]string{}, want...), int64(len(want)), false)
+	}
+	list("不带条件", url.Values{}, "SYN-PLAN-A@v2", "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1", "SYN-PLAN-A@v1")
+	list("已退役", url.Values{"retired": {"true"}}, "SYN-PLAN-A@v1")
+	list("未退役", url.Values{"retired": {"false"}}, "SYN-PLAN-A@v2", "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1")
+	list("维内为或", url.Values{"retired": {"true", "false"}},
+		"SYN-PLAN-A@v2", "SYN-PLAN-D@v1", "SYN-PLAN-C@v1", "SYN-PLAN-B@v1", "SYN-PLAN-A@v1")
+	list("与方向为与", url.Values{"retired": {"true"}, "direction": {"BUY"}})
+	list("与 q 为与", url.Values{"retired": {"false"}, "q": {"plan-a"}}, "SYN-PLAN-A@v2")
+}
+
 // Covers: ADR-0144 决定一、三、五——序列册按登记时刻倒序、同刻按（序列、版本）倒序翻页。翻页途中新登两版：比游标新的那版不再
 // 出现，与游标同刻而标识排在其后的那版在下一页出现。复核事实只为本页各版去复核册里取，落在后面几页的版本复核计数与最近一次
 // 复核照样完整，期次与引用 digest 照样转写。
