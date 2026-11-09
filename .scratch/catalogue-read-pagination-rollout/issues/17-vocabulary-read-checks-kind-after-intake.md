@@ -1,8 +1,8 @@
 # 17 商业发布词表口先 Intake、后校验 kind
 
 Category: bug
-Status: ready-for-agent
-Blocked by: 11（同一个文件的头注由 11 改过，11 进 main 之后再动）
+Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-1718-followups`，基 `6191110eb`；与 18 同一分支，两票各自成笔）
+Blocked by: 11（同一个文件的头注由 11 改过，11 进 main 之后再动）——已满足，11 随 `098767b1e` 进 main
 地盘：`internal/partycommercial/adapters/http/publication_vocabulary.go` 及其用例。
 出处：ADR-0055 决定三；11 的非作者评审（钉 `5b91b6517`）。
 
@@ -20,3 +20,35 @@ Blocked by: 11（同一个文件的头注由 11 改过，11 进 main 之后再�
 ## 完成判据
 
 - 端点用例：渠道未配置时，缺 `kind`、集合外 `kind`、合法 `kind` 三问逐字节同答 403；配置了的渠道上前两问照旧答 400 带逐格问题。
+
+## 完成记录
+
+### 落点
+
+| 笔 | 文件 | 做了什么 |
+|---|---|---|
+| `940a32ef2` | `internal/partycommercial/adapters/http/publication_vocabulary.go` 及用例 | Intake 挪到读 `kind` 之前，头注改成现状。新用例 `TestVocabularyEndpointAnswersTheSame403ForEveryKindWhenUnconfigured`：缺席、集合外、小写与合法的 `kind` 逐字节同答 403（状态、体、`Content-Type`）；`TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem` 改在放行的 Intake 上证 400 带 `kind` 那一格的问题 |
+| | `internal/transportfulfillment/adapters/http/query_carrier_first_effective_pickups.go`，用例在 `judge_carrier_first_effective_pickup_test.go` | 普查查到的同形一口：收寄链的 `object` 原先先于 Intake 判。改成先 Intake；新用例 `TestTheCarrierPickupChainAnswersTheSame403ForEveryObjectWhenUnconfigured` 证缺席、空值、空白与合规四问逐字节同答 403 |
+| | `internal/transportfulfillment/adapters/http/query_handover_scope_summary.go` 及用例 | 同形第二口：交接范围汇总的 `scope`。头注写着「方法 → 请求形状 → 准入」，`TestHandoverScopeSummaryRefusesABlankScopeBeforeTheChannelCheck` 钉的正是旧次序。改成先 Intake；旧用例拆成 `TestHandoverScopeSummaryRefusesABlankScope`（放行时缺席、空值、空白答 400）与 `TestHandoverScopeSummaryAnswersTheSame403ForEveryScopeWhenUnconfigured` |
+| | `internal/transportfulfillment/adapters/http/catalogue_intake.go` | 本包查阅面门次序的头注还写着「方法 → 册名 → 准入」，05 迁移后册名早已在 Intake 之后判；改成现状「方法 → 准入 → 请求内容」。交接范围汇总照的正是这句旧注释 |
+| `88a3eb272` | `cmd/parcel-api/endpoints.go` | `probe` 的注释写成现状。原说探针是「走得到 Intake 的请求目标」；三口挪完，不带参数的路径本身就走得到 Intake，探针还得留着，是因为操作者查阅读的装配用例要一问过得了本行请求形状、答到读口那一格 |
+| 本笔 | 本票面 | 完成记录与 Status |
+
+### 普查：别的非目录读口有没有同形的「先校验、后 Intake」
+
+取证于基 `6191110eb`，两路：
+
+- 读代码：`internal/*/adapters/http` 与 `cmd/parcel-api` 里每个端点构造、每个共用外壳，看 Intake 之前跑了什么。除上表三口，都是方法门之后紧跟 Intake 或认证；各上下文的 Intake 实现先认证、后读载荷。委托查阅、复核队列与渠道择优按查询键在不在分派，分派先于 Intake，两支未配置时同答 403，不算校验。
+- 跑装配：登记处每一行带探针的，拿不带参数的路径去问全未配置的装配（一次性用例，跑完即删）。改前只有交接范围汇总答 400 `MALFORMED_REQUEST`、不答未配置的 403；改后全部答 403。收寄链与词表口的探针带着合规参数，这一路查不出来，是读代码查到的。
+
+不在本票：装配处的请求目标检查（`httpapi.RefuseUnstorableReadTarget`）在一切 GET 读口之前拦含 NUL 或不合法 UTF-8 的目标、答 400。那是对整条目标的编码检查，对每一口同答一份，理由在它自己的头注（票 document-numbering/15），不是某一口的逐格校验。
+
+### 完成判据对照
+
+- 渠道未配置时缺 `kind`、集合外 `kind`、合法 `kind` 逐字节同答 403：`TestVocabularyEndpointAnswersTheSame403ForEveryKindWhenUnconfigured`，另加小写一问。
+- 配置了的渠道上缺席与集合外照旧答 400 带逐格问题：`TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem`。
+- 反证：把运输履约两口临时换回旧次序，两条新用例都失败（缺席一问答 400）；换回来再过。
+
+### 验证
+
+`go test`、`go vet` 过两个端点包与 `cmd/parcel-api`，`gofmt` 无输出。全量真库与种子在进 main 那一轮跑。
