@@ -148,6 +148,7 @@ func customerStatementBodyOf(row ports.CustomerStatementCatalogueRow) customerSt
 		LineCount:            row.LineCount,
 		AdjustmentCount:      row.AdjustmentCount,
 		PublishedAt:          rfc3339(row.PublishedAt),
+		Voided:               row.VoidedAt != nil,
 		VoidBasis:            row.VoidBasis,
 		VoidedAt:             optionalInstant(row.VoidedAt),
 		Disputes:             disputes,
@@ -232,7 +233,8 @@ type customerStatementListResponse struct {
 // 只会在两处各说一套。两个计数是行数不是金额，故用数不用串。
 //
 // voidBasis 与 voidedAt 成对缺席表示未作废。作废不删行不改总额，替代单用新单号，
-// 所以「已作废」是这一行上的留痕而不是它的消失。
+// 所以「已作废」是这一行上的留痕而不是它的消失。voided 恒在场，与作废两格在场与否同说一件事：
+// 它是两册状态维的名字（ports.CustomerStatementPages），筛选维名只取答复体的字段名（ADR-0144 决定四）。
 type customerStatementBody struct {
 	StatementNumber      string                    `json:"statementNumber"`
 	Account              string                    `json:"account"`
@@ -242,6 +244,7 @@ type customerStatementBody struct {
 	LineCount            int64                     `json:"lineCount"`
 	AdjustmentCount      int64                     `json:"adjustmentCount"`
 	PublishedAt          string                    `json:"publishedAt"`
+	Voided               bool                      `json:"voided"`
 	VoidBasis            string                    `json:"voidBasis,omitempty"`
 	VoidedAt             string                    `json:"voidedAt,omitempty"`
 	Disputes             []statementDisputeBody    `json:"disputes"`

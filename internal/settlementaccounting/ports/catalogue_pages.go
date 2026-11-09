@@ -50,12 +50,15 @@ var SupplierExpectedCostPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // CustomerStatementPages 是已发布客户对账单册（GET /settlement-statements?registry=customer-statement）的声明。
 //
-// 缺省序是单号正序，与迁移前同一口径；另放发布时刻 publishedAt。作废是单上的留痕而不是一格状态词，不放筛选维。q 覆盖单号、
-// 结算账户、账期与单上各项争议的争议号——客户报来的常是争议号，争议挂在单上、不另成一册。
+// 缺省序是单号正序，与迁移前同一口径；另放发布时刻 publishedAt。voided 是状态维：单据状态「已发布 → 已作废」（CONTEXT 生命周期
+// 「对账单」）在册上就是这一行作废留痕两格的在场，读面在 SQL 里由本行导出；词即答复体里 voided 那个布尔的两种写法。「已替代」
+// 不另成一词：替代单用新单号另成一行，本册的行上没有替代关系可读。对账状态与结清状态分别表达（CONTEXT），不并进这一维。q 覆盖
+// 单号、结算账户、账期与单上各项争议的争议号——客户报来的常是争议号，争议挂在单上、不另成一册。
 var CustomerStatementPages = cataloguepage.MustCatalogue(customerStatementSpec("customer-statements", "registry"))
 
-// DisputedCustomerStatementPages 是挂着未了结争议的对账单（GET /settlement-disputed-statements）的声明：行形、次序与 q 同
-// 对账单册，册名分开——两份列表的游标不通用。张数与 truncated 两格的口径见 DisputedCustomerStatements。
+// DisputedCustomerStatementPages 是挂着未了结争议的对账单（GET /settlement-disputed-statements）的声明：行形、次序、状态维与 q
+// 同对账单册（作废之前已开的争议照旧等人处理到终局，队列里也有已作废的单），册名分开——两份列表的游标不通用。张数与 truncated
+// 两格的口径见 DisputedCustomerStatements。
 var DisputedCustomerStatementPages = cataloguepage.MustCatalogue(customerStatementSpec("disputed-customer-statements"))
 
 func customerStatementSpec(name string, selectors ...string) cataloguepage.Spec {
@@ -67,6 +70,7 @@ func customerStatementSpec(name string, selectors ...string) cataloguepage.Spec 
 		},
 		DefaultSort: cataloguepage.Sort{Field: "statementNumber"},
 		Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+		Filters:     []cataloguepage.FilterDimension{{Name: "voided", Vocabulary: []string{"true", "false"}}},
 		Selectors:   selectors,
 	}
 }
@@ -76,8 +80,10 @@ func customerStatementSpec(name string, selectors ...string) cataloguepage.Spec 
 // 缺省序是收到时刻倒序，与迁移前同一口径：收到时刻是账单到达的业务时刻，比落库时刻更贴近操作者说的「新来的账单」。它原本只
 // 在主张文档里，迁移 0056 把它导出成取值函数 settlement_accounting.supplier_bill_received_at，以约束保证非空、可比，再建同形的
 // 表达式索引（该票 spec「可排维与行标识的列必须非空」）。同刻的决胜键（主张身份、版本）改为与排序同向倒序。另放
-// 账期 period。接收进度是派生的，不放筛选维。q 覆盖主张身份、账单号、供应商、账期与法人。claim、supplier、supplierBillNumber
-// 是登记表单精确检索页外账单的参数，登为选择器（见文件头注）。
+// 账期 period。不放状态维：账单册上没有领域状态，管理台的接收进度（待审核、审核人未配置、有争议待再审、已审完）是页面从读口的
+// 几个和派生的呈现词，其中一格还读此刻审核授权册上有没有这一组——把它搬进 SQL 就是在服务端另立一份状态规则，这一类的取舍在
+// ADR-0372 草案。q 覆盖主张身份、账单号、供应商、账期与法人。claim、supplier、supplierBillNumber 是登记表单精确检索页外账单的
+// 参数，登为选择器（见文件头注）。
 var SupplierBillReceptionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "supplier-bill-receptions",
 	Sorts: []cataloguepage.SortDimension{

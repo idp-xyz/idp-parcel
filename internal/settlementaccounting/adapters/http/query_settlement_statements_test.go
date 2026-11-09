@@ -206,7 +206,7 @@ func TestCustomerStatementQueryAttachesDisputesAndInclusions(t *testing.T) {
 }
 
 // Covers: 作废是留痕不是消失 — 已作废单仍在册，总额与两个计数原样保留，作废两键成对
-// 在场；未作废单两键成对缺席。
+// 在场；未作废单两键成对缺席。状态维那一格 voided 两张单都在场，与作废两键同说一件事。
 func TestCustomerStatementQueryKeepsVoidedStatementsInPlace(t *testing.T) {
 	voidedAt := catalogueBaseAt.Add(96 * time.Hour)
 	register := &stubStatementCatalogue{
@@ -258,6 +258,9 @@ func TestCustomerStatementQueryKeepsVoidedStatementsInPlace(t *testing.T) {
 		if _, present := live[absent]; present {
 			t.Fatalf("未作废单不该带 %q：%s", absent, response.Body.String())
 		}
+	}
+	if string(voided["voided"]) != "true" || string(live["voided"]) != "false" {
+		t.Fatalf("voided 要恒在场、作废单为 true、未作废单为 false：%s", response.Body.String())
 	}
 }
 

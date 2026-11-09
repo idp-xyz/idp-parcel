@@ -124,10 +124,14 @@ const statementDisputeNumbers = `(SELECT string_agg(d.document_number, E'\n')
 		  WHERE d.tenant_id = s.tenant_id
 		    AND d.statement_number = s.statement_number)`
 
-// customerStatementPageColumns 是对账单册与挂着未了结争议的单两册共用的落列：两册同列同解码，次序与 q 也同一份。
+// customerStatementPageColumns 是对账单册与挂着未了结争议的单两册共用的落列：两册同列同解码，次序、状态维与 q 也同一份。
+//
+// voided 落在作废时刻在场的文本形上（'true' / 'false'，与词表同词）。作废两格同生同灭（约束 customer_statement_void_trace_coherent），
+// 只看时刻一列，与答复里 voided 读的是同一格。不建索引：这一维只在本租户的行上再滤一遍。
 var customerStatementPageColumns = cataloguepage.Columns{
 	Sorts:    map[string]string{"statementNumber": "s.statement_number", "publishedAt": "s.published_at"},
 	Identity: []string{"s.statement_number"},
+	Filters:  map[string]string{"voided": "(s.voided_at IS NOT NULL)::text"},
 	Keyword:  []string{"s.statement_number", "s.account_id", "s.period_ref", statementDisputeNumbers},
 }
 

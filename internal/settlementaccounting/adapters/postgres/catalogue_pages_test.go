@@ -303,6 +303,83 @@ func TestDisputedStatementCountStaysTheBacklogWhileTheKeywordNarrowsThePage(t *t
 	}
 }
 
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——对账单册与待对账队列按 voided 筛出的单，读回的作废时刻在场与否与所给的
+// 词一致，total 随这一维变、与 q 为与；待对账队列的张数仍是整个队列的积压，不随这一维变（spec「已带计数与 truncated 的待办队列
+// 保留这两格」），作废之前已开的争议照旧让那张已作废的单留在队列里。
+func TestCustomerStatementVoidedDimensionAgreesWithTheVoidTrace(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	tenant := catalogueTenantID(t, catalogueTenant)
+	for number, voided := range map[string]bool{
+		"SYN-STMT-V-1": false, "SYN-STMT-V-2": true, "SYN-STMT-V-3": false, "SYN-STMT-V-4": true,
+	} {
+		fixture.seedStatement(t, catalogueTenant, number, voided)
+	}
+	fixture.seedStatement(t, "tenant-b", "SYN-STMT-V-1", true)
+	fixture.seedDispute(t, catalogueTenant, "SYN-STMT-V-2", "SYN-DSP-V-2", "")
+	fixture.seedDispute(t, catalogueTenant, "SYN-STMT-V-3", "SYN-DSP-V-3", "")
+	numbers := func(rows []ports.CustomerStatementCatalogueRow) []string {
+		return catalogueIDs(rows, func(row ports.CustomerStatementCatalogueRow) string { return row.StatementNumber })
+	}
+	// agree 核一页里每张单的作废时刻在场与否与 voided 那一维给的唯一取值一致；没给或给了两个时不按单个词核。
+	agree := func(t *testing.T, values url.Values, rows []ports.CustomerStatementCatalogueRow) {
+		t.Helper()
+		words := values["voided"]
+		if len(words) != 1 {
+			return
+		}
+		for _, row := range rows {
+			if (row.VoidedAt != nil) != (words[0] == "true") {
+				t.Fatalf("按 voided=%s 筛出的 %s 读回作废时刻 %v", words[0], row.StatementNumber, row.VoidedAt)
+			}
+		}
+	}
+
+	for name, test := range map[string]struct {
+		values url.Values
+		want   []string
+	}{
+		"不带条件":      {values: url.Values{}, want: []string{"SYN-STMT-V-1", "SYN-STMT-V-2", "SYN-STMT-V-3", "SYN-STMT-V-4"}},
+		"已作废":       {values: url.Values{"voided": {"true"}}, want: []string{"SYN-STMT-V-2", "SYN-STMT-V-4"}},
+		"未作废":       {values: url.Values{"voided": {"false"}}, want: []string{"SYN-STMT-V-1", "SYN-STMT-V-3"}},
+		"维内为或":      {values: url.Values{"voided": {"false", "true"}}, want: []string{"SYN-STMT-V-1", "SYN-STMT-V-2", "SYN-STMT-V-3", "SYN-STMT-V-4"}},
+		"已作废且 q 命中": {values: url.Values{"voided": {"true"}, "q": {"syn-stmt-v-4"}}, want: []string{"SYN-STMT-V-4"}},
+		"未作废且 q 不中": {values: url.Values{"voided": {"false"}, "q": {"SYN-STMT-V-2"}}, want: []string{}},
+	} {
+		t.Run("对账单册/"+name, func(t *testing.T) {
+			page, err := fixture.statement.ListCustomerStatements(t.Context(), tenant, 10, pageQuery(t, ports.CustomerStatementPages, test.values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			agree(t, test.values, page.Rows)
+			if got := numbers(page.Rows); !reflect.DeepEqual(got, test.want) || page.Total != int64(len(test.want)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", got, page.Total, test.want, len(test.want))
+			}
+		})
+	}
+
+	for name, test := range map[string]struct {
+		values url.Values
+		want   []string
+	}{
+		"不带条件": {values: url.Values{}, want: []string{"SYN-STMT-V-2", "SYN-STMT-V-3"}},
+		"已作废":  {values: url.Values{"voided": {"true"}}, want: []string{"SYN-STMT-V-2"}},
+		"未作废":  {values: url.Values{"voided": {"false"}}, want: []string{"SYN-STMT-V-3"}},
+	} {
+		t.Run("待对账队列/"+name, func(t *testing.T) {
+			listed, err := fixture.statement.ListDisputedCustomerStatements(t.Context(), tenant, 10,
+				pageQuery(t, ports.DisputedCustomerStatementPages, test.values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			agree(t, test.values, listed.Statements)
+			if got := numbers(listed.Statements); !reflect.DeepEqual(got, test.want) || listed.Total != int64(len(test.want)) || listed.Count != 2 {
+				t.Fatalf("得 %v / total %d / count %d，应为 %v / total %d / count 仍是 2",
+					got, listed.Total, listed.Count, test.want, len(test.want))
+			}
+		})
+	}
+}
+
 // Covers: spec「行标识取登记表主键去掉租户那几段」「可排维与行标识的列必须非空」——账单接收册按收到时刻倒序翻页，同刻按（主张身份、版本）同向倒序：页大小 2 时第二、三页的分界落在同刻同
 // 主张的两个版本之间，照样接得上；翻页期间新收到的账单（排在已翻过那头）不让后面的页重出，更早收到的那份在末页出现。period 落在
 // 账期列上，同账期按主张身份与版本正序；q 命中供应商，% 按字面，与检索选择器为与。
