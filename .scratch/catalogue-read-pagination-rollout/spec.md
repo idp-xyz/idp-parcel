@@ -1,7 +1,7 @@
 # 目录读口分页、排序与筛选下推：ADR-0144 第二批——其余各册全部迁完
 
 Category: enhancement
-Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮我全面解决这些问题吧」，指首批收口后其余列表读口仍答满一页就停）；子票全部 ready-for-agent
+Status: resolved——2026-11-09 子票 01–18 全部进 main；ADR-0372（Proposed）待 owner 复核。2026-11-06 通道 1 立（用户在 IDP 队列令「帮我全面解决这些问题吧」，指首批收口后其余列表读口仍答满一页就停）；
 出处：[ADR-0144](../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定七「一处定义，逐册迁移」；首批 [catalogue-read-pagination](../catalogue-read-pagination/spec.md) 收口时写明「其余各册按同一形状逐册拆票，另立」，本 spec 即那一批。
 
 契约只在 ADR-0144 一处定义；本 spec 与子票只引它的决定号，不复述参数名、答复形状与校验规则。
@@ -89,7 +89,7 @@ Status: in-progress——2026-11-06 通道 1 立（用户在 IDP 队列令「帮
 | [11](./issues/11-party-commercial-remaining-reads.md) | party-commercial 其余十八册 | `internal/partycommercial`（客户账户之外）、`migrations/party_commercial` | resolved（`098767b1e`） |
 | [12](./issues/12-pilot-governance-reads.md) | pilot-governance 四册 | `internal/pilotgovernance`、`migrations/pilot_governance` | resolved（`098767b1e`） |
 | [13](./issues/13-access-identity-reads.md) | access-identity 操作者与工作设备两册（今天不设上限） | `internal/accessidentity`、`migrations/access_identity` | resolved（`098767b1e`） |
-| [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | in-progress（parcel-shipment 一笔随 `098767b1e` 进 main，其余待接） |
+| [14](./issues/14-admin-web-pages-push-down.md) | 管理台各列表页改游标翻页、筛选与检索下推 | `apps/admin-web/src/pages/**` | resolved（2026-11-09 各上下文进 main，末笔 `1461f4e1e`） |
 | [15](./issues/15-first-batch-onto-binding.md) | 首批两册改用 01 的补件、两份页类型并入统一结果类型 | 首批两册的读面与端口 | resolved（`098767b1e`） |
 | [16](./issues/16-derived-state-filter-dimensions.md) | 状态由读面派生的几册补状态筛选维（04、05、06、08、09、12 交回与评审提出） | 各册所在上下文的声明、读面与答复体 | resolved（2026-11-09 进 main；导不出的五处见 ADR-0372 草案） |
 | [17](./issues/17-vocabulary-read-checks-kind-after-intake.md) | 商业发布词表口先 Intake、后校验 kind（11 的评审提出） | `internal/partycommercial/adapters/http` 的词表口 | resolved（2026-11-09 进 main，`8b2885be2`） |

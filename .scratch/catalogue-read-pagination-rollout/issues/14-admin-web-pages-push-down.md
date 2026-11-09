@@ -1,7 +1,7 @@
 # 14 管理台各列表页改游标翻页、筛选与检索下推
 
 Category: enhancement
-Status: ready-for-agent——已进 main 的几笔：parcel-shipment（含 channel-selection）、visibility、pricing、operations、settlement；其余上下文的页面待接，没有会话在做。party 与 customs 两侧有未完成的半成品，存档在本地分支（见 Comments 2026-11-09）
+Status: resolved——2026-11-09 各上下文都已进 main（见文末各笔完成记录）
 Blocked by: 逐上下文跟随 02–13——某上下文的后端子票进 main 之后，才接该上下文的页面
 地盘：`apps/admin-web/src/pages/**` 里消费 02–13 各册的 api 层与列表页；`apps/admin-web/README.md`「列表页上列通则」只在需要时改一句。
 出处：ADR-0144 决定四、八；首批 [05](../../catalogue-read-pagination/issues/05-first-two-pages-push-down.md) 的接法（`pages/catalogue-query.ts`、
@@ -139,3 +139,22 @@ settlement、customs、collection、party（客户账户之外）、governance�
   - `crpr-14-pga` 尖 `b697b62ec`：参与方各列表页（`apps/admin-web/src/pages/party/**`）接游标翻页、检索与筛选下推，基于 `d6b03c7ad`。
   - `crpr-14-pscc` 尖 `a2a0c70ad`：关务读口的查询函数接游标与按册分派的选择器、新增 `pages/customs/every-page.ts`，基于 `a74aa0e39`。
   - 两份都没验证、没评审。接手时先 rebase 到 main 再过三道门；参与方那份基点之后 main 上往来单位各页又改过几轮（票 business-party-ux/09、party-relationship-approval-fields/01），预计有冲突。
+
+## 完成记录 · 其余各上下文（2026-11-09，Claude Code 会话派隔离子代理分头做，会话逐笔落 main）
+
+做法：每组一个子代理在自己的隔离 worktree 里做、自过三道门与浏览器检查，会话把提交 cherry-pick 到 main、在 main 上重跑三道门后逐笔推送。diff 全在 `apps/admin-web/**`，按 workflow「前端切片」走；没碰 `templates/*`、`shell/*`、`components/*`，评审按第 5 条自审。演示种子每册都不满一页（页长 200），「翻页」一步各组都是让探针把真实答复切成小页、配假游标验的；检索与筛选走的是真读口。
+
+| 上下文 | main 上的提交 | 落点与取舍 |
+|---|---|---|
+| customs | `e4e608c77` | 半成品 `crpr-14-pscc` 为起点。规则、放行检查、税费付款与核对、凭证、清关单各签接游标，`q` 下推；`q` 够不着的列（中文码名、派生进度、查来的名称）另一格标「只筛本页」。解释规则、口岸、申报路径三册按答复次序上列、旧版在前，页上写明。按 `registry` 分派的三个读口把册名放进条件，换册即丢游标。申报准备签两册按单元合并，读到末页后合并检索，不分页。地名查找（`network/use-place-names.ts`）改为读口岸册的全部页。 |
+| collection | `764b1aef1` | `/collection-subledgers` 没有声明客户筛选维，按派单的决定不做「选客户」：`q` 下推，按客户名称匹配留作一格「客户名称（只筛本页）」。 |
+| network | `3dcd868de` | 路线四册接游标，`q`、结论与状态胶囊、表头先后下推；运单号、客户名、网点名不在 `q` 里，挪到标「只筛本页」的一格。复核页与建议页按读口缺省序（`recordedAt`），时间列不再可排。首次定路线的行键补上包裹，同一委托下两件不再撞键。 |
+| governance | `cea631e07` | 四册接游标，概况条数取整册总数（`page.total`）；页面没有检索框。 |
+| operator-access | `8eed31e53`、`491cfb776` | 操作者与扫描设备接游标。按派单的决定，操作者检索只下推到 `q`（主体标识与登记依据），提示改成「搜主体标识、登记依据」，不在页内补搜授予与能力面。设备页的状态胶囊下推成 `status`；胶囊计数与「共 N 台，在用 N 台」照下一行的判据恢复。 |
+| party | `872fbad8d`、`9e4c94d17`、`491cfb776` | 半成品 `crpr-14-pga` 为起点。往来单位两册、公司主体、服务产品、客户合同、供应商协议、商业规则、渠道产品、审批与发布接游标，`q` 与声明过的维下推；读口筛不了的派生维（往来单位类型、关系待查、公司主体待处理、读不出的内容）标「只筛本页」；客户账户不在本笔。命令头与胶囊的计数只在**整册一页装得下**时摆（`completeRegisterRows`，不带条件那一问没有下一页且行数等于总数）：那时按整册数的是真数、派生维页内筛也精确，票 business-party-ux/05 的类型指标格照旧可点即筛；装不下就不摆计数、派生维标「只筛本页」。这条判据随后提到 `pages/complete-register.ts` 供各上下文共用（`491cfb776`）。 |
+| 票 16 放出的状态维 | `1461f4e1e` | 送站预报 `withdrawn`、送站交接单 `closed` 的胶囊下推；价卡「已退役」下推 `retired=true`，其余四态先带 `retired=false` 再只筛本页并写明；对账单与待对账队列加「不看已作废的单」下推 `voided=false`。关务申报准备的 `effective` 与试点治理的 `open`、`resumed` 没接：那两页没有筛选行，申报准备签还把两册按单元合并，单筛一册会让另一列错显「未登记」。 |
+
+- ✅ 三道门：每笔落 main 后在 main 上重跑 tsc、node:test、vite build，退 0；末笔之后 node:test 1310 例全过。各 api 层有 node:test 钉查询串与 `page` 的接收、400 的 `detail`。
+- ◑ 「检索 → 翻页 → 换检索回第一页」：各上下文都在演示种子上走过检索与筛选（真读口），翻页一步用探针切小页模拟，理由见上。会话另在 5173 上把这些页逐个打开一遍：零页面错误、零 4xx/5xx、零写请求。
+- 未做：各册声明了而页面没摆控件的维（如政策的 `direction`、`method`，关务的 `layer`、`isCurrent`）没接；按客户名称跨册检索的「选客户」控件没做（collection 读口没有客户维）。
+- 半成品分支 `crpr-14-pga`、`crpr-14-pscc` 已用作起点，内容随上面两笔进 main，分支已删。
