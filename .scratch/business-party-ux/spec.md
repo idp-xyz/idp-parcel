@@ -1,7 +1,7 @@
 # 往来单位 UX：参照 Fiori 原型取长，追平公司主体那一轮的版式与用语
 
 Category: enhancement
-Status: in-progress——第一批子票 01–04 已于 2026-11-06 进 main；第二批 05–09 立于 2026-11-06 晚（见「第二批」）
+Status: resolved——第一批子票 01–04 于 2026-11-06 进 main；第二批 05–09 于 2026-11-06 至 11-08 进 main
 出处：2026-11-06 用户在 5173 看往来单位问「为什么还是老的界面」；补上右栏资料（[business-party-profile/04](../business-party-profile/issues/04-detail-panel-profile.md)）之后，用户打开外来原型 `ux/IDP_Parcel_Partner_Fiori_Prototype_V1.0.html`（主树下未入库），答「需要，但不是完全照抄，你是 ux 专家，目标是专业，美观，ux 友好」。
 
 切片：PN-02，主责 party-commercial，非关务专项。只改 `apps/admin-web/**`，走 workflow「前端切片」。机制：无新增，读口与写口都已有。产品策略：页面形态与提示语。租户取值：无。
@@ -45,7 +45,7 @@ Status: in-progress——第一批子票 01–04 已于 2026-11-06 进 main；�
 | [06](./issues/06-registration-forms-layout.md) | 登记表单版式：两列、分段、提示一行；保存后选中新单位 | resolved（2026-11-06 进 main） |
 | [07](./issues/07-shared-status-pill-icons-and-command-header.md) | 共用面：状态胶囊带图标、指标标签中文样式、标题旁插槽放册签（需非作者评审） | resolved（2026-11-06 进 main，非作者 Spec 轴评审 0 BLOCK） |
 | [08](./issues/08-panel-first-screen-status-and-counts.md) | 右栏首屏：随状态的提示、关联计数一行、主动作随状态 | resolved（2026-11-06 进 main） |
-| [09](./issues/09-second-batch-acceptance.md) | 第二批验收：浏览器全流程、非作者评审（阻塞于 05–08） | ready-for-agent |
+| [09](./issues/09-second-batch-acceptance.md) | 第二批验收：浏览器全流程、非作者评审（阻塞于 05–08） | resolved（2026-11-08 进 main） |
 
 ## 第二批（2026-11-06 晚）
 
