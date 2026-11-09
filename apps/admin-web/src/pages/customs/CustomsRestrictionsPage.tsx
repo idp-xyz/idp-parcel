@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -6,8 +6,13 @@ import { MultiRegistrationPanel, type RegistrationTarget } from '../../component
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { pageEmptyNote } from '../settlement/list-conditions';
+import { PageOnlySearch } from '../visibility/page-only';
 import {
   customsRegistrationEndpoints,
   dutyRegistrationEndpoints,
@@ -19,11 +24,8 @@ import {
   registerCustomsConfiguration,
   registerDutyReconciliation,
   registrationOutcomeLabels,
-  type DutyCollaborationListResponseBody,
   type DutyRegistrationKind,
-  type DutyVerificationListResponseBody,
   type GateConditionCatalogueRecord,
-  type GateConditionListResponseBody,
 } from './api';
 import {
   dutyRegistrationSnapshotHints,
@@ -40,6 +42,11 @@ import { technicalRows } from '../settlement/ops-ui';
 // 内部限制与监管核定税费两族的列表端点未建，如实占位。
 const info = moduleInfoById['customs-restrictions'];
 
+// 已接线的三张读签迁到 ADR-0144，各按游标翻页（模板的翻页条），条数只数这一页。检索框下推成 `q`：门禁条件册覆盖申报范围与监管
+// 边界，付款事项册覆盖申报范围、税费与法定义务人，付款核对册覆盖税费、收付款流水与申报范围。检查项目、码的中文词与交接对象这几格
+// 读口检索不到，按它们找留一个只筛本页的小框，字面写明。三册另有 action、kind 与核对三轴各一维，页面今天没有对应的筛选条，不为此
+// 新加控件。
+//
 // 两条 CONTEXT 硬句落进表形：①「外部放行不自动解除内部限制，内部限制解除也不证明监管机构已经放行」——限制表把两类解除
 // 分成两列，永不合并为一个「已解除」；②「尚未放行或存在方向性限制时，必须阻断其明确约束的出库、装载出发、跨关务区域移动
 // 或交付」——放行检查绑定具体动作，判断不复用于其他动作或监管边界。
@@ -117,26 +124,18 @@ function gateRows(gates: GateConditionCatalogueRecord[]): GateRow[] {
   });
 }
 
+/** 一行里的各格都在页内补充检索的范围里：读口检索不覆盖的那几格（检查项目、码的中文词）正在其中。 */
+function onPage<Row extends GateRow>(rows: Row[], refine: string): Row[] {
+  return rows.filter((row) => matchesSearch(refine, Object.values(row.values)));
+}
+
 function ReleaseGatesTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<GateConditionListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listGateConditions().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listGateConditions);
   const gates = answer?.kind === 'outcome' ? answer.body.gates : [];
   const rows = gateRows(gates);
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle ? rows.filter((row) => Object.values(row.values).some((value) => value.toLowerCase().includes(needle))) : rows;
-  const retry = () => setReloadKey((value) => value + 1);
   const unmet = gates.reduce((sum, gate) => sum + gate.findings.filter((finding) => finding.state !== 'MET').length, 0);
 
   return (
@@ -144,17 +143,20 @@ function ReleaseGatesTable() {
       title="放行检查"
       // 页头说本页最容易读错的那一格：没登记不等于不用检查。
       description="货物出库、装车、跨关区、交付前要过的检查项目和每项的认定；没登记的那一步按未决处理，不是不用检查"
-      search={{ value: search, onChange: setSearch, placeholder: '搜申报范围、检查项目' }}
-      filterSummary={answer?.kind === 'outcome' ? `${gates.length} 组 · 未满足或冲突 ${unmet} 项` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜申报范围、监管边界' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="检查项目、检查哪一步、认定" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${gates.length} 组 · 未满足或冲突 ${unmet} 项` : undefined}
       columns={gateConditionColumns}
-      rows={visibleRows}
+      rows={onPage(rows, refine)}
       rowKey={(row) => row.key}
-      emptyRowsNote="没有匹配的检查项目"
+      emptyRowsNote={pageEmptyNote('检查项目', rows.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /customs-gate-conditions',
         emptyTitle: '还没有登记放行检查项目',
         emptyDescription: '没登记检查项目的动作一律按未决处理，不会当作不用检查。请在「登记」里按申报范围和动作新增。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -177,24 +179,11 @@ const collaborationColumns: ListColumn<RegisterRow>[] = [
 
 function DutyCollaborationsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<DutyCollaborationListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listDutyCollaborations().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listDutyCollaborations);
   const collaborations = answer?.kind === 'outcome' ? answer.body.collaborations : [];
   const rows = collaborationRows(collaborations);
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle ? rows.filter((row) => Object.values(row.values).some((value) => value.toLowerCase().includes(needle))) : rows;
-  const retry = () => setReloadKey((value) => value + 1);
   const notRequired = collaborations.filter((item) => item.kind === 'EXPLICITLY_NOT_REQUIRED').length;
 
   return (
@@ -202,16 +191,19 @@ function DutyCollaborationsTable() {
       title="税费付款事项"
       description="每个申报范围的税费该不该付、由谁付、交给谁办；没有海关税费结果不等于不用付"
       search={{ value: search, onChange: setSearch, placeholder: '搜申报范围、税费、义务人' }}
-      filterSummary={answer?.kind === 'outcome' ? `${collaborations.length} 项 · 明确无需付款 ${notRequired} 项` : undefined}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="怎么付、交接给谁" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${collaborations.length} 项 · 明确无需付款 ${notRequired} 项` : undefined}
       columns={collaborationColumns}
-      rows={visibleRows}
+      rows={onPage(rows, refine)}
       rowKey={(row) => row.key}
-      emptyRowsNote="没有匹配的事项"
+      emptyRowsNote={pageEmptyNote('事项', rows.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /customs-duty-collaborations',
         emptyTitle: '还没有税费付款事项',
         emptyDescription: '海关核定税费或登记了明确无需付款的依据之后，在「登记」里登记付款事项；没有事项时放行检查的税费那一道停在未决。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
@@ -236,41 +228,31 @@ const verificationColumns: ListColumn<RegisterRow>[] = [
 
 function DutyVerificationsTable() {
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<DutyVerificationListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listDutyVerifications().then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [refine, setRefine] = useState('');
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listDutyVerifications);
   const verifications = answer?.kind === 'outcome' ? answer.body.verifications : [];
   const rows = verificationRows(verifications);
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle ? rows.filter((row) => Object.values(row.values).some((value) => value.toLowerCase().includes(needle))) : rows;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<RegisterRow>
       title="税费付款核对"
       description="每笔税费对上了哪笔收付款：盖住多少、差多少、这笔钱还算不算数，三项分开记"
       search={{ value: search, onChange: setSearch, placeholder: '搜税费版本、收付款流水、申报范围' }}
+      filters={<PageOnlySearch value={refine} onChange={setRefine} subject="覆盖、差额、有效性" />}
       // 摘要只报版本数，不数「几版悬着 / 几版可放」：那两个数都要先把三轴折一次，正是本签不做的事。
-      filterSummary={answer?.kind === 'outcome' ? `${verifications.length} 版` : undefined}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${verifications.length} 版` : undefined}
       columns={verificationColumns}
-      rows={visibleRows}
+      rows={onPage(rows, refine)}
       rowKey={(row) => row.key}
-      emptyRowsNote="没有匹配的核对"
+      emptyRowsNote={pageEmptyNote('核对', rows.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /customs-duty-verifications',
         emptyTitle: '还没有税费付款核对',
         emptyDescription: '收付款登记后在「登记」里核对到税费上；没有核对时放行检查的税费那一道停在未决，不会当作已付。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

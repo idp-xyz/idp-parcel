@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatRange } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { allStatuses, pageStatusChips } from '../operations/list-conditions';
+import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
 import {
   customsRegistrationEndpoints,
   listPortsPaths,
   registerCustomsConfiguration,
   registrationOutcomeLabels,
+  registryConditions,
   type CandidatePortListResponseBody,
   type DeclarationPathListResponseBody,
   type PortsPathsRegistry,
@@ -35,6 +41,11 @@ const info = moduleInfoById['customs-ports-paths'];
 //
 // 「可用区域」如实占位：区域维未建模（等自己的票），不为它虚构列表，也不发请求。口岸行没有「所属区域」「关务适用性判断」
 // 「限制及解除结果」：目录事实只有键与区间，适用性是判断链的产物、限制归 customs-restrictions 页，都不是本册的列。
+//
+// 两册已迁到 ADR-0144，按游标翻页（工具条右端），行照答复的次序上列、页内不再排：缺省按口岸（路径）编码升序，同一口岸（路径）
+// 的各版按生效起点旧的在前（ports.CandidatePortPages、DeclarationPathPages），这一序在页上原样看得见。检索框下推成 `q`：口岸册
+// 覆盖口岸编码与名称，路径册覆盖路径、口岸编码与申报模式。路径行上的口岸名称是从口岸册查来的、方向是码的中文词，读口检索不到——
+// 按它们找留一个只筛本页的小框。在不在期是拿区间与此刻现算的，读口没有这一维：状态胶囊只筛本页、不带计数，胶囊旁写明。
 
 type View = 'ports' | 'paths' | 'regions';
 
@@ -67,7 +78,6 @@ function statusOf(row: CatalogueRow): RowStatus | undefined {
 const nameColumn = (header: string): WorkbenchColumn<CatalogueRow> => ({
   key: 'name',
   header,
-  sortKey: 'name',
   // 编码用等宽字，名称不用：没登名称的那几版一眼看得出。
   render: (row) => (
     <span className={`truncate font-medium text-[color:var(--ds-text-link-hover)] ${row.displayName ? '' : 'font-mono'}`.trim()}>
@@ -103,7 +113,7 @@ const columnsOf: Record<View, WorkbenchColumn<CatalogueRow>[]> = {
 };
 
 function portRows(body: CandidatePortListResponseBody): CatalogueRow[] {
-  // 行键循库主键 (tenant, port_ref, applies_from)：同口岸各版本起点唯一。版本序由服务端定（键升序、版本新在前）。
+  // 行键循库主键 (tenant, port_ref, applies_from)：同口岸各版本起点唯一。次序照答复，不在页内重排。
   return body.ports.map((record) => ({
     key: `port:${record.port}:${record.appliesFrom}`,
     name: record.port,
@@ -164,79 +174,92 @@ function CatalogueDetail({ view, row, onClose }: { view: View; row: CatalogueRow
   );
 }
 
-type Loaded =
-  | { view: 'ports'; answer: ApiResult<CandidatePortListResponseBody> }
-  | { view: 'paths'; answer: ApiResult<DeclarationPathListResponseBody> };
+const registryOf: Record<Exclude<View, 'regions'>, PortsPathsRegistry> = { ports: 'candidate-port', paths: 'declaration-path' };
+
+/** 有册的一签：按读口分页取数，检索下推，在不在期与只筛本页的框在到手的这一页上筛。换签由调用方给新的 key 重挂。 */
+function CatalogueSection({ view, sections }: { view: Exclude<View, 'regions'>; sections: ReactNode }) {
+  const names = usePlaceNames();
+  const registry = registryOf[view];
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState(allStatuses);
+  const [refine, setRefine] = useState('');
+  const conditions = registryConditions(registry, { q: useSettledKeyword(keyword) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listPortsPaths);
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const pageRows: CatalogueRow[] =
+    body === null
+      ? []
+      : body.outcome === 'CANDIDATE_PORTS_LISTED'
+        ? portRows(body)
+        : pathRows(body).map((row) => ({ ...row, portLabel: placeLabel(names, row.port) }));
+  const statusLabel = (row: CatalogueRow) => statusOf(row)?.label ?? '';
+  const rows = pageRows.filter(
+    (row) =>
+      (status === allStatuses || statusLabel(row) === status) &&
+      matchesSearch(refine, [row.portLabel, row.direction ? labelFor(row.direction) : undefined]),
+  );
+
+  return (
+    <RouteWorkbench<CatalogueRow>
+      title={info.title}
+      subtitle="公司可以走的口岸，以及从哪个口岸、按哪个方向、用哪种申报模式报关；路线规划只在这些里面选。同一口岸或路径登过几版的，按生效先后排，旧的在前。"
+      sections={sections}
+      extraFilters={
+        <>
+          {body ? <PageOnlyNote>状态只筛本页</PageOnlyNote> : null}
+          {view === 'paths' ? <PageOnlySearch value={refine} onChange={setRefine} subject="口岸名称、方向" /> : null}
+        </>
+      }
+      answered={body !== null}
+      rows={rows}
+      rowKey={(row) => row.key}
+      statusOf={statusOf}
+      statusChips={body ? pageStatusChips(pageRows.map(statusLabel), status, setStatus) : undefined}
+      onClearFilters={() => {
+        setStatus(allStatuses);
+        setRefine('');
+      }}
+      searchCells={() => []}
+      search={{ value: keyword, onChange: setKeyword, pushedDown: true }}
+      searchPlaceholder={view === 'paths' ? '搜路径、口岸编码、申报模式' : '搜口岸编码、名称'}
+      columns={columnsOf[view]}
+      renderDetail={(row, close) => <CatalogueDetail view={view} row={row} onClose={close} />}
+      onRefresh={retry}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
+      viewState={catalogueViewState(answer, pageRows.length, retry, {
+        module: info,
+        endpoint: `GET /customs-ports-paths?registry=${registry}`,
+        emptyTitle: view === 'ports' ? '还没有登记可用口岸' : '还没有登记申报路径',
+        emptyDescription:
+          view === 'ports'
+            ? '在「登记」里新增口岸后在这里出现；没登记口岸之前路线规划选不出口岸。'
+            : '在「登记」里新增申报路径后在这里出现；没登记路径之前路线规划选不出申报路径。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+      })}
+    />
+  );
+}
 
 function PortsPathsWorkbench() {
   const [view, setView] = useState<View>('ports');
-  const names = usePlaceNames();
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (view === 'ports') {
-      void listPortsPaths('candidate-port').then((answer) => {
-        if (!cancelled) setLoaded({ view: 'ports', answer });
-      });
-    } else if (view === 'paths') {
-      void listPortsPaths('declaration-path').then((answer) => {
-        if (!cancelled) setLoaded({ view: 'paths', answer });
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [view, reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  // 两册答复体不同形，判读只用它的格（kind），所以在这里放宽成 unknown 体。
-  const answer: ApiResult<unknown> | null = loaded && loaded.view === view ? loaded.answer : null;
-  const rows: CatalogueRow[] =
-    loaded?.view === view && loaded.answer.kind === 'outcome'
-      ? loaded.view === 'ports'
-        ? portRows(loaded.answer.body as CandidatePortListResponseBody)
-        : pathRows(loaded.answer.body as DeclarationPathListResponseBody).map((row) => ({ ...row, portLabel: placeLabel(names, row.port) }))
-      : [];
-
-  const viewState =
-    view === 'regions'
-      ? ({ kind: 'unconfigured' } as const)
-      : catalogueViewState(answer, rows.length, retry, {
-          module: info,
-          endpoint: `GET /customs-ports-paths?registry=${view === 'ports' ? 'candidate-port' : 'declaration-path'}`,
-          emptyTitle: view === 'ports' ? '还没有登记可用口岸' : '还没有登记申报路径',
-          emptyDescription:
-            view === 'ports'
-              ? '在「登记」里新增口岸后在这里出现；没登记口岸之前路线规划选不出口岸。'
-              : '在「登记」里新增申报路径后在这里出现；没登记路径之前路线规划选不出申报路径。',
-        });
-
+  const sections = <SectionTabs sections={views} active={view} onChange={setView} />;
+  if (view !== 'regions') return <CatalogueSection key={view} view={view} sections={sections} />;
+  // 区域维未建模：说「还不能在这里查看」，与「没有记录」「接入渠道未配置」都分开；不发请求。
   return (
     <RouteWorkbench<CatalogueRow>
       key={view}
       title={info.title}
       subtitle="公司可以走的口岸，以及从哪个口岸、按哪个方向、用哪种申报模式报关；路线规划只在这些里面选。"
-      sections={<SectionTabs sections={views} active={view} onChange={setView} />}
-      answered={view !== 'regions' && answer?.kind === 'outcome'}
-      rows={rows}
+      sections={sections}
+      answered={false}
+      rows={[]}
       rowKey={(row) => row.key}
-      statusOf={statusOf}
-      searchCells={(row) => [row.name, row.displayName, row.port, row.portLabel, row.mode, row.direction ? labelFor(row.direction) : undefined]}
-      searchPlaceholder={view === 'paths' ? '搜路径、口岸、申报模式' : '搜口岸'}
-      columns={columnsOf[view]}
-      sortAccessors={{ name: { value: (row) => row.displayName ?? row.name } }}
-      defaultSort={{ key: 'name', dir: 1 }}
-      renderDetail={(row, close) => <CatalogueDetail view={view} row={row} onClose={close} />}
-      onRefresh={view === 'regions' ? undefined : retry}
-      viewState={viewState}
-      // 区域维未建模：说「还不能在这里查看」，与「没有记录」「接入渠道未配置」都分开。
-      stateOverride={
-        view === 'regions'
-          ? notConnectedOverride('可用区域还不能在这里查看', '可用区域的登记与查询还在建设中，这不是「没有区域」；口岸与申报路径两签已经可用。')
-          : undefined
-      }
+      searchCells={(row) => [row.name]}
+      searchPlaceholder="搜区域"
+      columns={columnsOf.regions}
+      renderDetail={() => null}
+      viewState={{ kind: 'unconfigured' }}
+      stateOverride={notConnectedOverride('可用区域还不能在这里查看', '可用区域的登记与查询还在建设中，这不是「没有区域」；口岸与申报路径两签已经可用。')}
     />
   );
 }

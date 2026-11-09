@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { listPortsPaths } from '../customs/api';
+import { listPortsPaths, registryConditions } from '../customs/api';
+import { everyPage } from '../customs/every-page';
 import { listNetworkCatalog, networkCatalogConditions } from './api';
 import { placeNameIndexOf, type NamedVersion, type PlaceNameIndex } from './place-names';
 
-// 网点与口岸的名称一处取、各页共用（照 use-customer-names 的做法）：网点读网络目录的网点册（分页走到末页），口岸读合规候选
-// 口岸册，各折成「编码 → 此刻生效那一版的名称」。模块级缓存：一个标签页里只读一次；读不到（未配置、拒绝、依赖故障）不缓存，
+// 网点与口岸的名称一处取、各页共用（照 use-customer-names 的做法）：网点读网络目录的网点册，口岸读合规候选口岸册，两册都分页
+// 走到末页，各折成「编码 → 此刻生效那一版的名称」。模块级缓存：一个标签页里只读一次；读不到（未配置、拒绝、依赖故障）不缓存，
 // 下次挂载再问，读不到时各页显编码，不把一次读不到当成「没有名称」。
 
 const emptyIndex: PlaceNameIndex = new Map();
@@ -24,9 +25,9 @@ async function loadNodeVersions(): Promise<NamedVersion[] | null> {
 }
 
 async function loadPortVersions(): Promise<NamedVersion[] | null> {
-  const answer = await listPortsPaths('candidate-port');
+  const answer = await everyPage((after) => listPortsPaths(registryConditions('candidate-port'), after), (body) => body.ports);
   if (answer.kind !== 'outcome') return null;
-  return answer.body.ports.map((record) => ({ code: record.port, displayName: record.displayName, from: record.appliesFrom, to: record.appliesUntil }));
+  return answer.body.map((record) => ({ code: record.port, displayName: record.displayName, from: record.appliesFrom, to: record.appliesUntil }));
 }
 
 let pending: Promise<PlaceNameIndex> | null = null;

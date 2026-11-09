@@ -4,11 +4,33 @@
 // 与口岸/申报路径册(GET /customs-ports-paths,票 admin-remainder-mechanism-batch/03)。
 // 除门禁册只有一本不设分派参数外,其余按 ?registry= 分派、各端点各自封闭集。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
+//
+// 各列表读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/09、14）：游标、排序、筛选维与 `q` 经 catalogueRequestPath
+// 拼进查询串，答复多一格 page；不带条件即裸路径，答第一页。按 ?registry= 分派的三个读口把册名收进条件（registryConditions），
+// 当选择器拼在最前。各册点名了哪些维只在 internal/customscompliance/ports 的 catalogue_pages.go 一处。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { everyPage } from './every-page';
 
 export type { ApiResult } from '../catalogue-api';
+
+/**
+ * 按册分派的三个读口（合规规则、案件配置、口岸与申报路径）一问的条件：registry 选哪本册，是选择器——保持原义、不兼作筛选维，
+ * 但同样进游标摘要（ADR-0144 决定四），换册即回第一页。册名收在条件里而不另作参数：游标轨迹认的是条件签名，册名不在签名里，
+ * 换册时旧游标就会被带到另一本册上。
+ */
+export type RegistryConditions<Registry extends string> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function registryConditions<Registry extends string>(
+  registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): RegistryConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
 
 export type ComplianceRegistry = 'case-requirement' | 'interpretation';
 
@@ -31,22 +53,33 @@ export interface InterpretationRuleRecord {
 export interface CaseRequirementListResponseBody {
   outcome: 'CASE_REQUIREMENT_RULES_LISTED';
   rules: CaseRequirementRuleRecord[];
+  page: CataloguePage;
 }
 
+/** 缺省按结果层升序；同一选择键下的各版按生效起点旧的在前。 */
 export interface InterpretationListResponseBody {
   outcome: 'INTERPRETATION_RULES_LISTED';
   rules: InterpretationRuleRecord[];
+  page: CataloguePage;
 }
 
 export type ComplianceRulesListResponseBody =
   | CaseRequirementListResponseBody
   | InterpretationListResponseBody;
 
-export function listComplianceRules(
-  registry: ComplianceRegistry,
-): Promise<ApiResult<ComplianceRulesListResponseBody>> {
-  return exchangeMasterData<ComplianceRulesListResponseBody>(
-    `/customs-compliance-rules?registry=${encodeURIComponent(registry)}`,
+// registry → 结果格的对照，判据同 CaseRegisterBodyByRegistry。
+interface ComplianceRulesBodyByRegistry {
+  'case-requirement': CaseRequirementListResponseBody;
+  interpretation: InterpretationListResponseBody;
+}
+
+/** 收哪些键见 ports.CaseRequirementRulePages 与 InterpretationRulePages。 */
+export function listComplianceRules<Registry extends ComplianceRegistry>(
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
+): Promise<ApiResult<ComplianceRulesBodyByRegistry[Registry]>> {
+  return exchangeMasterData<ComplianceRulesBodyByRegistry[Registry]>(
+    catalogueRequestPath('/customs-compliance-rules', conditions, after),
   );
 }
 
@@ -105,16 +138,19 @@ export interface ClosureObligationCatalogueRecord {
 export interface ReadinessJudgmentListResponseBody {
   outcome: 'READINESS_JUDGMENTS_LISTED';
   judgments: ReadinessJudgmentRecord[];
+  page: CataloguePage;
 }
 
 export interface SubmissionAuthorityListResponseBody {
   outcome: 'SUBMISSION_AUTHORITIES_LISTED';
   authorities: SubmissionAuthorityRecord[];
+  page: CataloguePage;
 }
 
 export interface ClosureObligationListResponseBody {
   outcome: 'CLOSURE_OBLIGATIONS_LISTED';
   catalogues: ClosureObligationCatalogueRecord[];
+  page: CataloguePage;
 }
 
 export type CaseRegisterListResponseBody =
@@ -131,11 +167,13 @@ interface CaseRegisterBodyByRegistry {
   'closure-obligation': ClosureObligationListResponseBody;
 }
 
+/** 收哪些键见 ports.ReadinessJudgmentPages、SubmissionAuthorityPages 与 ClosureObligationPages。 */
 export function listCaseRegisters<Registry extends CaseRegisterRegistry>(
-  registry: Registry,
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<CaseRegisterBodyByRegistry[Registry]>> {
   return exchangeMasterData<CaseRegisterBodyByRegistry[Registry]>(
-    `/customs-case-registers?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/customs-case-registers', conditions, after),
   );
 }
 
@@ -174,14 +212,18 @@ export interface GateConditionCatalogueRecord {
 export interface GateConditionListResponseBody {
   outcome: 'GATE_CONDITIONS_LISTED';
   gates: GateConditionCatalogueRecord[];
+  page: CataloguePage;
 }
 
 /**
  * 门禁册只有一本,故本函数不收分派参数——封闭集为一时参数只会造出一个恒定值。
- * 它与上面两个查询函数形状不同,正是「各立入口 vs 一页里的页签」那道裁决的表形。
+ * 它与上面两个查询函数形状不同,正是「各立入口 vs 一页里的页签」那道裁决的表形。收哪些键见 ports.GateConditionPages。
  */
-export function listGateConditions(): Promise<ApiResult<GateConditionListResponseBody>> {
-  return exchangeMasterData<GateConditionListResponseBody>('/customs-gate-conditions');
+export function listGateConditions(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<GateConditionListResponseBody>> {
+  return exchangeMasterData<GateConditionListResponseBody>(catalogueRequestPath('/customs-gate-conditions', conditions, after));
 }
 
 // —— 口岸目录与申报路径目录(customs-ports-paths 页两签查阅面) ——
@@ -224,14 +266,18 @@ export interface DeclarationPathRecord {
   appliesUntil?: string;
 }
 
+/** 缺省按口岸升序；同一口岸的各版按生效起点旧的在前。 */
 export interface CandidatePortListResponseBody {
   outcome: 'CANDIDATE_PORTS_LISTED';
   ports: CandidatePortRecord[];
+  page: CataloguePage;
 }
 
+/** 缺省按路径升序；同一路径的各版按生效起点旧的在前。 */
 export interface DeclarationPathListResponseBody {
   outcome: 'DECLARATION_PATHS_LISTED';
   paths: DeclarationPathRecord[];
+  page: CataloguePage;
 }
 
 // registry → 结果格的对照,判据同 CaseRegisterBodyByRegistry:调用侧按 registry 收窄
@@ -241,11 +287,13 @@ interface PortsPathsBodyByRegistry {
   'declaration-path': DeclarationPathListResponseBody;
 }
 
+/** 收哪些键见 ports.CandidatePortPages 与 DeclarationPathPages。 */
 export function listPortsPaths<Registry extends PortsPathsRegistry>(
-  registry: Registry,
+  conditions: RegistryConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<PortsPathsBodyByRegistry[Registry]>> {
   return exchangeMasterData<PortsPathsBodyByRegistry[Registry]>(
-    `/customs-ports-paths?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/customs-ports-paths', conditions, after),
   );
 }
 
@@ -278,11 +326,15 @@ export interface CredentialRecord {
 export interface CredentialListResponseBody {
   outcome: 'CREDENTIALS_LISTED';
   credentials: CredentialRecord[];
+  page: CataloguePage;
 }
 
-/** 凭证册只有一本,不收分派参数(判据同 listGateConditions)。 */
-export function listCredentials(): Promise<ApiResult<CredentialListResponseBody>> {
-  return exchangeMasterData<CredentialListResponseBody>('/customs-credentials');
+/** 凭证册只有一本,不收分派参数(判据同 listGateConditions)。收哪些键见 ports.CredentialPages。 */
+export function listCredentials(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<CredentialListResponseBody>> {
+  return exchangeMasterData<CredentialListResponseBody>(catalogueRequestPath('/customs-credentials', conditions, after));
 }
 
 // —— 税费付款协作事项册与税费付款核对册(customs-restrictions 页两签,票 sa-cc/10) ——
@@ -310,10 +362,15 @@ export interface DutyCollaborationRecord {
 export interface DutyCollaborationListResponseBody {
   outcome: 'DUTY_COLLABORATIONS_LISTED';
   collaborations: DutyCollaborationRecord[];
+  page: CataloguePage;
 }
 
-export function listDutyCollaborations(): Promise<ApiResult<DutyCollaborationListResponseBody>> {
-  return exchangeMasterData<DutyCollaborationListResponseBody>('/customs-duty-collaborations');
+/** 收哪些键见 ports.DutyCollaborationPages。 */
+export function listDutyCollaborations(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<DutyCollaborationListResponseBody>> {
+  return exchangeMasterData<DutyCollaborationListResponseBody>(catalogueRequestPath('/customs-duty-collaborations', conditions, after));
 }
 
 /**
@@ -344,10 +401,15 @@ export interface DutyVerificationRecord {
 export interface DutyVerificationListResponseBody {
   outcome: 'DUTY_VERIFICATIONS_LISTED';
   verifications: DutyVerificationRecord[];
+  page: CataloguePage;
 }
 
-export function listDutyVerifications(): Promise<ApiResult<DutyVerificationListResponseBody>> {
-  return exchangeMasterData<DutyVerificationListResponseBody>('/customs-duty-verifications');
+/** 收哪些键见 ports.DutyVerificationPages。 */
+export function listDutyVerifications(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<DutyVerificationListResponseBody>> {
+  return exchangeMasterData<DutyVerificationListResponseBody>(catalogueRequestPath('/customs-duty-verifications', conditions, after));
 }
 
 // —— 五类配置登记的在线登记口(ADR-0085,票 admin-write-faces/02 切片 02b) ——
@@ -549,10 +611,35 @@ export interface CustomsCaseBody {
 export interface CustomsCaseListResponseBody {
   outcome: 'CUSTOMS_CASES_LISTED';
   cases: CustomsCaseBody[];
+  page: CataloguePage;
 }
 
-export function listCustomsCases(): Promise<ApiResult<CustomsCaseListResponseBody>> {
-  return exchangeMasterData<CustomsCaseListResponseBody>('/customs-case-records');
+/** 收哪些键见 ports.CustomsCasePages。 */
+export function listCustomsCases(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<CustomsCaseListResponseBody>> {
+  return exchangeMasterData<CustomsCaseListResponseBody>(catalogueRequestPath('/customs-case-records', conditions, after));
+}
+
+/** 一问带几个案件标识。几百个标识拼进一条查询串会超出代理对请求行长度的上限，分批问。 */
+export const CASE_LOOKUP_BATCH = 50;
+
+/**
+ * 别的册只带案件标识时（关闭核对目录），按筛选维 case（逐字比、可多值）把那几张清关单读回来换号。分批问、每批读到末页，
+ * 任一批没答出就交回那一批的答复，不拿半份冒充全部；没找到的标识不在答复里。
+ */
+export async function findCustomsCasesById(caseIds: readonly string[]): Promise<ApiResult<CustomsCaseBody[]>> {
+  const found: CustomsCaseBody[] = [];
+  let status = 200;
+  for (let start = 0; start < caseIds.length; start += CASE_LOOKUP_BATCH) {
+    const batch = caseIds.slice(start, start + CASE_LOOKUP_BATCH);
+    const answer = await everyPage((after) => listCustomsCases({ filters: { case: batch } }, after), (body) => body.cases);
+    if (answer.kind !== 'outcome') return answer;
+    found.push(...answer.body);
+    status = answer.status;
+  }
+  return { kind: 'outcome', status, body: found };
 }
 
 export interface TechnicalReceiptBody {
@@ -599,10 +686,15 @@ export interface SubmissionVersionBody {
 export interface SubmissionVersionListResponseBody {
   outcome: 'SUBMISSION_VERSIONS_LISTED';
   submissions: SubmissionVersionBody[];
+  page: CataloguePage;
 }
 
-export function listSubmissionVersions(): Promise<ApiResult<SubmissionVersionListResponseBody>> {
-  return exchangeMasterData<SubmissionVersionListResponseBody>('/customs-submission-records');
+/** 收哪些键见 ports.SubmissionVersionPages。 */
+export function listSubmissionVersions(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<SubmissionVersionListResponseBody>> {
+  return exchangeMasterData<SubmissionVersionListResponseBody>(catalogueRequestPath('/customs-submission-records', conditions, after));
 }
 
 export interface ReleaseBody {
@@ -635,10 +727,15 @@ export interface ExternalResultBody {
 export interface ExternalResultListResponseBody {
   outcome: 'EXTERNAL_RESULTS_LISTED';
   results: ExternalResultBody[];
+  page: CataloguePage;
 }
 
-export function listExternalResults(): Promise<ApiResult<ExternalResultListResponseBody>> {
-  return exchangeMasterData<ExternalResultListResponseBody>('/customs-external-result-records');
+/** 收哪些键见 ports.ExternalResultPages；按归属的提交版本收窄是选择器 version，本目录的页面不用。 */
+export function listExternalResults(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ExternalResultListResponseBody>> {
+  return exchangeMasterData<ExternalResultListResponseBody>(catalogueRequestPath('/customs-external-result-records', conditions, after));
 }
 
 export interface AdmissionBasisBody {
@@ -677,30 +774,36 @@ export interface AdmissionJudgementBody {
 export interface AdmissionJudgementListResponseBody {
   outcome: 'ACTION_ADMISSION_JUDGEMENTS_LISTED';
   judgements: AdmissionJudgementBody[];
+  page: CataloguePage;
 }
 
-/** object 空串即不按对象过滤;非空按包裹号精确查（判断册的对象是声明包裹，传申报单元号得空册）,最近的判断在前。 */
+/** 收哪些键见 ports.AdmissionJudgementPages。按包裹号查走筛选维 object（判断册的对象是声明包裹，传申报单元号得空册）；缺省最近的判断在前。 */
 export function listAdmissionJudgements(
-  object: string,
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
 ): Promise<ApiResult<AdmissionJudgementListResponseBody>> {
-  const query = object ? `?object=${encodeURIComponent(object)}` : '';
   return exchangeMasterData<AdmissionJudgementListResponseBody>(
-    `/customs-action-admission-judgements${query}`,
+    catalogueRequestPath('/customs-action-admission-judgements', conditions, after),
   );
 }
 
 /**
  * 卡关对象：每个对象最近那一刻的放行检查（动作准入判断）里有一份没让动作过门的（阻断、未决、未配置）。unadmittedCount 是全部件数，
- * 不受页大小截断；judgements 是其中一页，每个对象一行、卡得最久的在前，行形与判断册同一份。哪一格算不过门、「最近」怎么取，
- * 以 internal/customscompliance/ports 的 UnadmittedObjects 为准，此处只做镜像。
+ * 不随翻页与检索变；judgements 是其中一页，每个对象一行、卡得最久的在前，行形与判断册同一份。哪一格算不过门、「最近」怎么取，
+ * 以 internal/customscompliance/ports 的 UnadmittedObjects 为准，此处只做镜像。truncated 与 page.next 不为空同义，页面读 page。
  */
 export interface UnadmittedObjectListResponseBody {
   outcome: 'UNADMITTED_OBJECTS_LISTED';
   unadmittedCount: number;
   truncated: boolean;
   judgements: AdmissionJudgementBody[];
+  page: CataloguePage;
 }
 
-export function listUnadmittedObjects(): Promise<ApiResult<UnadmittedObjectListResponseBody>> {
-  return exchangeMasterData<UnadmittedObjectListResponseBody>('/customs-unadmitted-objects');
+/** 收哪些键见 ports.UnadmittedObjectPages；首页待办只数 unadmittedCount，不带条件调。 */
+export function listUnadmittedObjects(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<UnadmittedObjectListResponseBody>> {
+  return exchangeMasterData<UnadmittedObjectListResponseBody>(catalogueRequestPath('/customs-unadmitted-objects', conditions, after));
 }

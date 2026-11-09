@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatRange } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { pageEmptyNote } from '../settlement/list-conditions';
+import { PageOnlySearch } from '../visibility/page-only';
 import {
   customsRegistrationEndpoints,
   listComplianceRules,
   registerCustomsConfiguration,
+  registryConditions,
   registrationOutcomeLabels,
   type ComplianceRegistry,
   type ComplianceRulesListResponseBody,
@@ -17,6 +23,11 @@ import { problemNote, registrationSnapshotHints, registrationTitles, registryLab
 import { labelFor } from '../../vocabulary/status';
 
 const info = moduleInfoById['compliance-rules'];
+
+// 两册已迁到 ADR-0144，各按游标翻页（模板的翻页条），行照答复的次序上列、页内不再排：解释规则缺省按结果层升序，同一选择键下的
+// 各版按生效起点旧的在前（ports.InterpretationRulePages），这一序在页上原样看得见。检索框下推成 `q`：建案要求规则覆盖辖区、
+// 程序与依据，解释规则覆盖辖区与读法规则。方向、结果层是码的中文词，「要不要立」与适用期间是页面转写的，读口检索不到——按它们找
+// 留一个只筛本页的小框，字面写明。两册另有 direction、layer 一维，页面今天没有对应的筛选条，不为此新加控件。条数只数这一页。
 
 interface RuleRow {
   key: string;
@@ -37,6 +48,8 @@ function col(id: string, header: string, mono = false): ListColumn<RuleRow> {
 const registries: ReadonlyArray<{
   id: ComplianceRegistry;
   columns: ListColumn<RuleRow>[];
+  keywordHint: string;
+  pageOnly: string;
 }> = [
   {
     id: 'case-requirement',
@@ -47,6 +60,8 @@ const registries: ReadonlyArray<{
       col('required', '要不要立清关单'),
       col('basis', '依据', true),
     ],
+    keywordHint: '搜辖区、程序、依据',
+    pageOnly: '方向、要不要立',
   },
   {
     id: 'interpretation',
@@ -56,6 +71,8 @@ const registries: ReadonlyArray<{
       col('rule', '读法', true),
       col('applies', '适用期间', true),
     ],
+    keywordHint: '搜辖区、读法规则',
+    pageOnly: '结果层、适用期间',
   },
 ];
 
@@ -89,38 +106,19 @@ function rowsOf(body: ComplianceRulesListResponseBody): RuleRow[] {
 function ComplianceRulesTable() {
   const [registry, setRegistry] = useState<ComplianceRegistry>('case-requirement');
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{
-    registry: ComplianceRegistry;
-    answer: ApiResult<ComplianceRulesListResponseBody>;
-  } | null>(null);
+  const [refine, setRefine] = useState('');
   const selected = registries.find((candidate) => candidate.id === registry) ?? registries[0];
-
-  useEffect(() => {
-    let cancelled = false;
-    void listComplianceRules(registry).then((answer) => {
-      if (!cancelled) setLoaded({ registry, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [registry, reloadKey]);
-
-  const answer = loaded?.registry === registry ? loaded.answer : null;
+  // 册名在条件里：换册即换了条件签名，回第一页，旧册的游标不会带到新册上。
+  const conditions = registryConditions(registry, { q: useSettledKeyword(search) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listComplianceRules);
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
-  const needle = search.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleRows = rows.filter((row) => matchesSearch(refine, Object.values(row.values)));
 
   return (
     <ListPageTemplate<RuleRow>
       title="合规规则"
-      description="按辖区和程序定下的两类规则：什么情况要立清关单、海关回执怎么读；新规则只管以后的判断"
-      search={{ value: search, onChange: setSearch, placeholder: '搜辖区、程序、规则' }}
+      description="按辖区和程序定下的两类规则：什么情况要立清关单、海关回执怎么读；新规则只管以后的判断，同一条规则的几版按生效先后排"
+      search={{ value: search, onChange: setSearch, placeholder: selected.keywordHint }}
       filters={
         <>
           {registries.map((candidate) => (
@@ -133,22 +131,26 @@ function ComplianceRulesTable() {
               {registryLabels[candidate.id]}
             </button>
           ))}
+          <PageOnlySearch value={refine} onChange={setRefine} subject={selected.pageOnly} />
         </>
       }
       filterSummary={
         // 计数只在拿到业务答案后显示,未配置态不报「0 条」(与 pricing 两页同一守卫)。
         answer?.kind === 'outcome'
-          ? `${registryLabels[registry]} ${rows.length} 条`
+          ? `本页${registryLabels[registry]} ${rows.length} 条`
           : undefined
       }
       columns={selected.columns}
       rows={visibleRows}
       rowKey={(row) => row.key}
+      emptyRowsNote={pageEmptyNote('规则', rows.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /customs-compliance-rules?registry=${registry}`,
         emptyTitle: `还没有登记「${registryLabels[registry]}」的规则`,
         emptyDescription: '在「登记合规规则」里新增后在这里出现；页面不会预置规则。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

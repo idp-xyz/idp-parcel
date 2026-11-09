@@ -93,8 +93,8 @@ export interface CaseNumberCell {
 }
 
 /**
- * 别的读口（如关闭核对目录）只带案件标识时，按清关单读口那一页把它换成清关单号。cases 为 null 是清关单读口没答：
- * 只让号这一格降级——显案件标识并注明读不到，不拖垮引用它的那一签。不在那一页里的案件照旧显标识，不另作说明。
+ * 别的读口（如关闭核对目录）只带案件标识时，按读回来的那几张清关单把它换成清关单号。cases 为 null 是清关单读口没答：
+ * 只让号这一格降级——显案件标识并注明读不到，不拖垮引用它的那一签。没读回来的案件照旧显标识，不另作说明。
  */
 export function caseNumberReader(cases: CustomsCaseBody[] | null): (caseRef: string) => CaseNumberCell {
   if (cases === null) {
