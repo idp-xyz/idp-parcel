@@ -143,4 +143,4 @@
 |---|---|---|
 | `AT-PC-042` | 已补：`Authorize` 命中多于一条授予、`resolveDecider` 命中委派方不同的多条委派，都答适用冲突，不取首个；装载顺序仍按对象与版本标签稳定，但不再决定采用哪一版 | 票 [docs-consistency/code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
 | `AT-PC-059`、`AT-PC-060`、`AT-PC-061` | 已补：授予与委派的装载连退役册与最新一条区间更正，已退役那一版不交出、截止点之后的旧版不交出；同起点重发并退役旧版之后只命中后继 | 同上 |
-| CONTEXT「仓配代办是与前述各动作并列的授权动作……」一条（无对应 AT，[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 决定二） | 未做：`AuthorizedAction` 没有这一动作，授权治理册登不了「仓配代办 × `WAREHOUSE_FULFILLMENT_AGENT`」的授予，`Authorize` 也不对它作答；实际决定方取货主客户账户、不经合同委派这一格同样未做 | 仓配切片立票时承接 |
+| CONTEXT「仓配代办是与前述各动作并列的授权动作……」一条（无对应 AT，[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 决定二） | 未做：`AuthorizedAction` 没有这一动作，授权治理册登不了「仓配代办 × `WAREHOUSE_FULFILLMENT_AGENT`」的授予，`Authorize` 也不对它作答；实际决定方取货主客户账户、不经合同委派这一格同样未做；演示租户的两条参考授予（仓配代办与资料修订，各配 `WAREHOUSE_FULFILLMENT_AGENT`）也没登 | 仓配切片立票时承接 |

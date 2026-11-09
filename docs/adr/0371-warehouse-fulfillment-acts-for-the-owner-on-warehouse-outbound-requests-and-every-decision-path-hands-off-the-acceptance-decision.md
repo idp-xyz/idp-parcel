@@ -1,6 +1,6 @@
 # ADR-0371：来源为「仓配出库」的委托由仓配履约以货主名义代办——请求方记货主客户账户、实际提交方记仓配履约，授权是 PC 新增的「仓配代办」动作配产品常量等级、由租户按货主授予；停在等待受控补充时由仓配履约续办；资料修订的采用经资料版本信封交回；接受或拒绝无论经哪条路形成都交出接受决定信封；本产品网络从海外仓发出时只用面单渠道服务
 
-Status: Accepted（2026-11-06，Cursor 会话代 PS owner 决：用户原话「请你起一个agent 作为owner来评审吧」，子代理代各 owner 评审后给出本记录要定的几格（报告 [owner-review-2026-11-06](../../.scratch/warehouse-fulfillment/owner-review-2026-11-06.md)，钉 `0874218c9`）；用户随后在问题卡上选「现在全部落实：立小包托运「仓配代货主」请求方的 ADR，改各处文档，非作者评审后合入 main」。决定六是产品 owner 一格：用户答「我们是集货到海外，然后走的本地小包的方式，你的判断呢」，2026-11-09 在问题卡上确认读法时选「两种都有」（专线小包与海外仓），决定六是会话据此作的判断。票 [warehouse-fulfillment/04](../../.scratch/warehouse-fulfillment/issues/04-carry-out-the-owner-review-conditions.md)。回答 [ADR-0368](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 越权风险点 2 与 [ADR-0370](./0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 越权风险点 2、3（无条款停用），限定 ADR-0370 决定一、决定三里「本产品网络」的读法（不是停用），见「对已接受记录的作用」。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**判据**：来源为「仓配出库」的委托，提交、补充、资料修订、撤回与包裹取消由仓配履约以货主名义代办——请求方记货主客户账户、实际提交方记仓配履约、证据指名出库请求与包裹序号，提交之外各请求的来源请求键加命令前缀；授权是 PC 授权册上新增的授权动作「仓配代办」配产品常量等级 `WAREHOUSE_FULFILLMENT_AGENT`，资料修订照旧以资料修订动作配这一等级，租户按货主授予，两条互不蕴含，包裹取消另要取消授权规则覆盖仓配代办，没有授予答未配置；接受判断停进等待受控补充时同一事务交「委托待受控补充」信封，仓配出库的委托由仓配履约续办；仓配履约提交的资料修订，采用结果经资料版本已形成的信封交回；接受或拒绝无论经接受链、主动拒绝还是授权处置形成，都在同一事务交接受决定已形成的信封，它是发布意图不是续办触发，撤回不交；本产品网络从起运侧的仓提交国际小包委托，海外仓与目的国代理仓发给当地收件人的件选本产品网络时只能提交面单渠道服务产品的委托（把尾程单独对客销售），不用运营企业自己的网络服务产品
+Status: Accepted（2026-11-06，Cursor 会话代 PS owner 决：用户原话「请你起一个agent 作为owner来评审吧」，子代理代各 owner 评审后给出本记录要定的几格（报告 [owner-review-2026-11-06](../../.scratch/warehouse-fulfillment/owner-review-2026-11-06.md)，钉 `0874218c9`）；用户随后在问题卡上选「现在全部落实：立小包托运「仓配代货主」请求方的 ADR，改各处文档，非作者评审后合入 main」。决定六是产品 owner 一格：用户答「我们是集货到海外，然后走的本地小包的方式，你的判断呢」，2026-11-09 在问题卡上确认读法时选「两种都有」（专线小包与海外仓），决定六是会话据此作的判断。票 [warehouse-fulfillment/04](../../.scratch/warehouse-fulfillment/issues/04-carry-out-the-owner-review-conditions.md)。回答 [ADR-0368](./0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 越权风险点 2 与 [ADR-0370](./0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 越权风险点 2、3（无条款停用），限定 ADR-0370 决定一、决定三里「本产品网络」的读法（不是停用），见「对已接受记录的作用」。越权风险点见文末，2026-11-09 由子代理代 PS、PC、结算与经营核算和产品 owner 复核（用户原话「请你起一个agent 作为owner来评审吧」），记录在文末越权风险点之后。）<!-- 索引注记 -->｜**判据**：来源为「仓配出库」的委托，提交、补充、资料修订、撤回与包裹取消由仓配履约以货主名义代办——请求方记货主客户账户、实际提交方记仓配履约、证据指名出库请求与包裹序号，提交之外各请求的来源请求键加命令前缀；授权是 PC 授权册上新增的授权动作「仓配代办」配产品常量等级 `WAREHOUSE_FULFILLMENT_AGENT`，资料修订照旧以资料修订动作配这一等级，租户按货主授予，两条互不蕴含，包裹取消另要取消授权规则覆盖仓配代办，没有授予答未配置；接受判断停进等待受控补充时同一事务交「委托待受控补充」信封，仓配出库的委托由仓配履约续办；仓配履约提交的资料修订，采用结果经资料版本已形成的信封交回；接受或拒绝无论经接受链、主动拒绝还是授权处置形成，都在同一事务交接受决定已形成的信封，它是发布意图不是续办触发，撤回不交；本产品网络从起运侧的仓提交国际小包委托，海外仓与目的国代理仓发给当地收件人的件选本产品网络时只能提交面单渠道服务产品的委托（把尾程单独对客销售），不用运营企业自己的网络服务产品
 
 ## Context
 
@@ -80,7 +80,7 @@ Status: Accepted（2026-11-06，Cursor 会话代 PS owner 决：用户原话「�
 - [小包托运 CONTEXT](../domain/parcel-shipment/CONTEXT.md)：「委托」「资料补充/更正请求」两个词条；规则补决定一、二、三、五。
 - [参与方与商业 CONTEXT](../domain/party-commercial/CONTEXT.md)：规则补「仓配代办」这一授权动作；UC-PC-003「给开发的交接」记它未做。
 - [仓配履约 CONTEXT](../domain/warehouse-fulfillment/CONTEXT.md)：决定一至六落到仓配的规则，以及 owner 评审的其余条件（见票 04）。
-- [CONTEXT-MAP](../domain/CONTEXT-MAP.md)：仓配履约与小包托运之间两条关系约束与关系图的边；[GLOSSARY](../domain/GLOSSARY.md)「出库请求」。
+- [CONTEXT-MAP](../domain/CONTEXT-MAP.md)：仓配履约与小包托运之间两条关系约束与关系图的边；[GLOSSARY](../domain/GLOSSARY.md)「出库请求」「委托」「服务产品」。
 - UC-PS-001、UC-PS-002、UC-PS-005、UC-PS-006「给开发的交接」：代办请求方、授权等级、两封信封与采用回传的实现差距。
 - [开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)三层表 3PL 行补仓配形态（owner 评审 ADR-0368·1 的条件）。
 - ADR-0368、ADR-0370：Status 行加本记录的来向指针，Links 各加一条；越权风险点旁记 owner 复核。ADR 索引由推送方重生成。
@@ -108,6 +108,8 @@ Status: Accepted（2026-11-06，Cursor 会话代 PS owner 决：用户原话「�
 2. 决定三新增一种小包托运出向信封；它与 ADR-0132 决定二「不新增信封类型」的分界（不驱动接受链）归 PS owner。
 3. 决定五把主动拒绝与授权处置纳入出向；现有消费方对拒绝入账收工，新消费方要按决定标识认领。归 PS owner。
 4. 决定六是会话按用户确认的两种业务模式作的判断，属产品 owner；把单独销售的尾程读进小包托运「委托」的国际小包服务，归 PS owner 复核。
+
+- owner 复核 2026-11-09 认可（复审时有条件认可的各格，条件在合入前已落地，终审核过。用户 2026-11-06 原话「请你起一个agent 作为owner来评审吧」，子代理代 PS、PC、结算与经营核算和产品 owner 复核，复审 [owner-rereview-2026-11-07](../../.scratch/warehouse-fulfillment/owner-rereview-2026-11-07.md)，终审 [owner-final-2026-11-09](../../.scratch/warehouse-fulfillment/owner-final-2026-11-09.md)；逐条）：1. PS 与 PC owner 认可：「仓配代办」动作与代办等级照此命名；取消授权规则按请求方分格写，客户系统与仓配代办各一格，演示租户各登一条参考配置，真实租户上线时自登；2. PS owner 认可：新信封不驱动接受链，不违 ADR-0132 决定二；3. PS owner 认可：现有消费方对拒绝入账收工，新消费方按决定标识认领；4. 产品 owner 一格认可（子代理代看，用户可推翻），PS owner 认可：决定六是读法，不放宽客户群，GLOSSARY「委托」「服务产品」同笔写明单独销售的尾程。
 
 ## Links
 
