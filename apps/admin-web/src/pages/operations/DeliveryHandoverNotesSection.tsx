@@ -3,13 +3,17 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ListColumn, TemplateViewState } from '../../templates';
 import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-workbench';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
-import { reviewStatusOf, withPlaceNames, workbenchColumnsOf } from './review-workbench';
+import { withPlaceNames, workbenchColumnsOf } from './review-workbench';
 import { usePlaceNames } from '../network/use-place-names';
 import { placeLabel } from '../network/place-names';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword, type CatalogueCursor } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { deliveryHandoverConfirmationDecision, hiddenDecisionHint } from '../operator-grants';
@@ -25,7 +29,8 @@ import {
   type DeliveryHandoverNoteListResponseBody,
 } from './delivery-scope-api';
 import {
-  deliveryScopeListPathOf,
+  deliveryScopeConditions,
+  deliveryScopeFilterNarrow,
   documentNumberDetailOf,
   handoverNoteFilterKeys,
   type DeliveryScopeListFilter,
@@ -41,7 +46,8 @@ import {
   type ConfirmationDraft,
   type HandoverNoteReviewRow,
 } from './delivery-handover-note';
-import { DeliveryScopeFilters, DeliveryScopeReadNote } from './DeliveryScopeFilters';
+import { DeliveryScopeFilters, DeliveryScopeReadNote, type DeliveryScopeControls } from './DeliveryScopeFilters';
+import { allStatuses, pageStatusChips, rowsOnPage } from './list-conditions';
 
 const info = moduleInfoById['node-operations-review'];
 // 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
@@ -73,39 +79,61 @@ const columns: ListColumn<HandoverNoteReviewRow>[] = [
  * 节点作业查阅页的「送站交接单」区（票 ps-external-mark-relations/13；UC-NO-006）：按节点与开立日列节点当场开立的交接单，点一行看声称的
  * 每个账户的结论与途径、名下成员与各自的形成方式。写动作只有一样——对待确认的账户「确认」，是运营决定（送站交接确认）：指名交付方参与方与
  * 依据引用，服务端向参与方与商业问授权交付判断，是即确认，否或未配置不落结论。开立、归入、关闭是一线作业端的作业事实，不在这里。
+ *
+ * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端。
  */
 export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode }) {
   const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{ path: string; answer: ApiResult<DeliveryHandoverNoteListResponseBody> } | null>(null);
-  const path = deliveryScopeListPathOf(listBase, handoverNoteFilterKeys, filter);
+  const [keyword, setKeyword] = useState('');
+  const conditions = deliveryScopeConditions(handoverNoteFilterKeys, filter, useSettledKeyword(keyword));
+  const controls: DeliveryScopeControls = { sections, filter, onFilter: setFilter, keyword, onKeyword: setKeyword };
+  // 日子认不出时不发请求（deliveryScopeConditions 答 null）：取数的那一件只在条件成立时挂上。
+  return conditions === null ? (
+    <HandoverNoteWorkbench controls={controls} cursor={null} />
+  ) : (
+    <HandoverNoteCursor controls={controls} conditions={conditions} />
+  );
+}
 
-  useEffect(() => {
-    if (path === null) return undefined;
-    let cancelled = false;
-    void listDeliveryHandoverNotes(path).then((answer) => {
-      if (!cancelled) setLoaded({ path, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [path, reloadKey]);
+function HandoverNoteCursor({ controls, conditions }: { controls: DeliveryScopeControls; conditions: CatalogueConditions }) {
+  return (
+    <HandoverNoteWorkbench controls={controls} conditions={conditions} cursor={useCatalogueCursor(conditions, listDeliveryHandoverNotes)} />
+  );
+}
 
-  const answer = path !== null && loaded?.path === path ? loaded.answer : null;
-  const body = answer?.kind === 'outcome' ? answer.body : null;
+// 开放与否是读口派生的状态（closed 恒在场），不是筛选维：胶囊只筛本页。
+const openStateOf = (row: HandoverNoteReviewRow) => row.values.openState;
+
+function HandoverNoteWorkbench({
+  controls,
+  conditions,
+  cursor,
+}: {
+  controls: DeliveryScopeControls;
+  conditions?: CatalogueConditions;
+  cursor: CatalogueCursor<DeliveryHandoverNoteListResponseBody> | null;
+}) {
+  const { sections, filter, onFilter, keyword, onKeyword } = controls;
+  const [status, setStatus] = useState(allStatuses);
+  const [refine, setRefine] = useState('');
   const places = usePlaceNames();
-  const rows = body ? withPlaceNames(body.handoverNotes.map(handoverNoteRowOf), ['node'], places) : [];
-  const retry = () => setReloadKey((value) => value + 1);
-  const narrowed = filter.node.trim() !== '' || filter.day !== '' || (filter.documentNumber ?? '').trim() !== '';
+  const answer = cursor?.answer ?? null;
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const pageRows = body ? withPlaceNames(body.handoverNotes.map(handoverNoteRowOf), ['node'], places) : [];
+  const rows = rowsOnPage(pageRows, refine, status, openStateOf);
+  const retry = () => cursor?.retry();
   const viewState: TemplateViewState =
-    path === null
+    cursor === null
       ? { kind: 'error', title: '开单日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
-      : catalogueViewState(answer, rows.length, retry, {
+      : catalogueViewState(answer, pageRows.length, cursor.retry, {
           module: info,
           endpoint: `GET ${listBase}`,
           emptyTitle: '还没有送货交接单',
           emptyDescription: '客户或司机到网点送货时，网点在作业终端上当场开交接单，开了之后会出现在这里。',
-          narrowed,
+          narrowed:
+            deliveryScopeFilterNarrow(filter) ||
+            (conditions !== undefined && catalogueConditionsNarrow(conditions)) ||
+            pastFirstPage(cursor.pagination),
         });
 
   return (
@@ -113,17 +141,30 @@ export function DeliveryHandoverNotesSection({ sections }: { sections: ReactNode
       title={info.title}
       subtitle="网点收货时当场开的交接单。单上自称的客户全部确认后，这批货的送货范围才算成立；待确认的客户可以在右栏里确认。"
       sections={sections}
-      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={numberName} onChange={setFilter} />}
+      extraFilters={
+        <>
+          <DeliveryScopeFilters filter={filter} dayLabel="开单日" numberLabel={numberName} onChange={onFilter} />
+          {body ? <PageOnlyNote>开放与否只筛本页</PageOnlyNote> : null}
+          <PageOnlySearch value={refine} onChange={setRefine} subject="自称的客户、网点名称等其余各格" />
+        </>
+      }
       answered={body !== null}
       noun="张"
       rows={rows}
       rowKey={(row) => row.key}
-      statusOf={(row) => reviewStatusOf(row, { labelKey: 'state' })}
-      searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder={`在结果里搜${numberName} / 网点 / 客户`}
+      statusChips={body ? pageStatusChips(pageRows.map(openStateOf), status, setStatus) : undefined}
+      onClearFilters={() => {
+        setStatus(allStatuses);
+        setRefine('');
+        onFilter({ node: '', day: '', documentNumber: '' });
+      }}
+      searchCells={() => []}
+      search={{ value: keyword, onChange: onKeyword, pushedDown: true }}
+      searchPlaceholder={`搜${numberName}、交接单标识、网点编码、谁来送`}
       columns={workbenchColumnsOf(columns, { labelKey: 'state' })}
       renderDetail={(row, close) => <HandoverNoteDetail key={row.noteId} noteId={row.noteId} onClose={close} onLanded={retry} />}
-      onRefresh={retry}
+      onRefresh={cursor?.retry}
+      toolbarRight={cursor?.pagination ? <CursorPager pagination={cursor.pagination} /> : undefined}
       viewState={viewState}
     />
   );

@@ -6,8 +6,8 @@ import {
   bookingRowOf,
   bookingStandingLabels,
   bounceBasisLabels,
+  bounceFilterDimensions,
   bounceRowOf,
-  transportRecordsPathOf,
 } from './booking-registers';
 import type { BookingAnswerBounceRecord, BookingRequestRecord } from './records-api';
 import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
@@ -120,14 +120,9 @@ test('挡回两种依据照 CONTEXT 词条示文', () => {
   equal(bounceRowOf(record('NEW_BASIS')).values.basis, 'NEW_BASIS');
 });
 
-test('筛选参数拼装：缺席与空白不发、两端空白去掉、值转义、只挡回册带', () => {
-  const bounce = 'booking-answer-bounce';
-  equal(transportRecordsPathOf(bounce), '/transport-fulfillment-records?registry=booking-answer-bounce');
-  equal(transportRecordsPathOf(bounce, { booking: '  ', source: '' }), '/transport-fulfillment-records?registry=booking-answer-bounce');
-  equal(
-    transportRecordsPathOf(bounce, { booking: ' B 1 ', source: 'OPERATOR/x#1' }),
-    '/transport-fulfillment-records?registry=booking-answer-bounce&booking=B%201&source=OPERATOR%2Fx%231',
-  );
-  equal(transportRecordsPathOf(bounce, { source: 'S' }), '/transport-fulfillment-records?registry=booking-answer-bounce&source=S');
-  equal(transportRecordsPathOf('booking-request', { booking: 'B' }), '/transport-fulfillment-records?registry=booking-request');
+test('挡回册两个筛选框换成筛选维：缺席与空白不发、两端空白去掉', () => {
+  deepEqual(bounceFilterDimensions({}), {});
+  deepEqual(bounceFilterDimensions({ booking: '  ', source: '' }), {});
+  deepEqual(bounceFilterDimensions({ booking: ' B 1 ', source: 'OPERATOR/x#1' }), { booking: ['B 1'], source: ['OPERATOR/x#1'] });
+  deepEqual(bounceFilterDimensions({ source: 'S' }), { source: ['S'] });
 });

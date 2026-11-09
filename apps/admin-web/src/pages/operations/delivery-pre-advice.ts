@@ -4,6 +4,7 @@
 // 本地零点的左闭右开区间；换错一格，零点那一份就落进前一日。页面组件要 React 与 DOM，这几格是纯函数就能拿 node:test 钉住。
 
 import { formatInstant } from '../catalogue-view';
+import type { CatalogueConditions } from '../catalogue-query';
 import { documentNumberAbsenceNote } from '../../vocabulary/document-numbering';
 import type { DeliveryPreAdviceRecord, DocumentNumberFields } from './delivery-scope-api';
 
@@ -39,26 +40,34 @@ export function localDayBoundsOf(day: string): { from: string; until: string } |
 }
 
 /**
- * 拼列表路径：只带填了的格，节点去两端空白。日子认不出时答 null，页面不发请求——发半截条件，人会把「没按日筛的列表」当成「这一日的」。
+ * 拼一问的条件：节点、单据号与日子的两端瞬间是读口的选择器（ports.DeliveryPreAdvicePages、DeliveryHandoverNotePages），只带填了的格，
+ * 节点与单据号去两端空白；检索词下推成 `q`。日子认不出时答 null，页面不发请求——发半截条件，人会把「没按日筛的列表」当成「这一日的」。
  */
-export function deliveryScopeListPathOf(
-  path: string,
+export function deliveryScopeConditions(
   keys: DeliveryScopeFilterKeys,
   filter: DeliveryScopeListFilter,
-): string | null {
-  const query = new URLSearchParams();
+  keyword = '',
+): CatalogueConditions | null {
+  const selectors: Record<string, string> = {};
   const node = filter.node.trim();
-  if (node !== '') query.set('node', node);
+  if (node !== '') selectors.node = node;
   const documentNumber = (filter.documentNumber ?? '').trim();
-  if (documentNumber !== '') query.set('documentNumber', documentNumber);
+  if (documentNumber !== '') selectors.documentNumber = documentNumber;
   if (filter.day !== '') {
     const bounds = localDayBoundsOf(filter.day);
     if (!bounds) return null;
-    query.set(keys.from, bounds.from);
-    query.set(keys.until, bounds.until);
+    selectors[keys.from] = bounds.from;
+    selectors[keys.until] = bounds.until;
   }
-  const encoded = query.toString();
-  return encoded === '' ? path : `${path}?${encoded}`;
+  return { selectors, q: keyword };
+}
+
+/**
+ * 筛选条上填了格没有。这几格在读口是选择器，catalogue-query 的 catalogueConditionsNarrow 不把它们算作收窄；可它们一样圈小了列表，
+ * 答出零行说的是「这个网点、这一日没有」，不是册为空。
+ */
+export function deliveryScopeFilterNarrow(filter: DeliveryScopeListFilter): boolean {
+  return filter.node.trim() !== '' || filter.day !== '' || (filter.documentNumber ?? '').trim() !== '';
 }
 
 /**
@@ -103,6 +112,8 @@ export function preAdviceRowOf(record: DeliveryPreAdviceRecord): PreAdviceReview
       withdrawal: record.withdrawn
         ? `已撤回${record.withdrawnAt ? ` · ${formatInstant(record.withdrawnAt)}` : ''}`
         : '未撤回',
+      // 只筛本页的胶囊认这一格：带撤回时刻的那格每个时刻各成一词，按它筛等于没筛。
+      withdrawnState: record.withdrawn ? '已撤回' : '未撤回',
       formedAt: formatInstant(record.formedAt),
     },
   };

@@ -59,6 +59,7 @@ test('交接单行：开放与关闭、成员数、绑定进度与范围成立�
       deliveringParty: 'SYN-DRIVER-PSXM13',
       openedAt: formatInstant('2026-10-20T09:00:00Z'),
       state: '开放',
+      openState: '开放',
       members: '0',
       claims: 'SYN-ACCOUNT-01、SYN-ACCOUNT-03',
       bindings: '已确认 0 · 已否认 0 · 待确认 2',
@@ -76,6 +77,7 @@ test('交接单行：开放与关闭、成员数、绑定进度与范围成立�
     }),
   );
   equal(established.values.state, `已关闭 · ${formatInstant('2026-10-20T10:00:00Z')}`);
+  equal(established.values.openState, '已关闭');
   equal(established.values.scope, `已成立 · ${formatInstant('2026-10-20T11:00:00Z')}`);
   equal(established.values.bindings, '已确认 1 · 已否认 0 · 待确认 0');
   const refused = handoverNoteRowOf(note({ claims: [{ customerAccount: 'SYN-ACCOUNT-01' }, deniedByCustomer] }));

@@ -79,6 +79,8 @@ export function handoverNoteRowOf(record: DeliveryHandoverNoteRecord): HandoverN
       deliveringParty: record.deliveringParty,
       openedAt: formatInstant(record.openedAt),
       state: record.closed ? `已关闭${record.closedAt ? ` · ${formatInstant(record.closedAt)}` : ''}` : '开放',
+      // 只筛本页的胶囊认这一格：带关闭时刻的那格每个时刻各成一词，按它筛等于没筛。
+      openState: record.closed ? '已关闭' : '开放',
       members: String(record.memberCount),
       claims: record.claims.map((claim) => claim.customerAccount).join('、'),
       bindings: `已确认 ${conclusionCount(record, 'CONFIRMED')} · 已否认 ${denied} · 待确认 ${conclusionCount(record, undefined)}`,

@@ -4,6 +4,7 @@
 // 读行走 exchangeMasterData（主数据与运营查阅读），确认走 postMasterData（运营决定的送站交接确认一种）：两者不是同一个准入，调用点分开写。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -34,6 +35,7 @@ export interface DeliveryPreAdviceRecord extends DocumentNumberFields {
 export interface DeliveryPreAdviceListResponseBody {
   outcome: 'DELIVERY_PRE_ADVICES_LISTED';
   preAdvices: DeliveryPreAdviceRecord[];
+  page: CataloguePage;
 }
 
 export interface DeliveryPreAdviceFoundResponseBody {
@@ -82,6 +84,7 @@ export interface HandoverMemberRecord {
 export interface DeliveryHandoverNoteListResponseBody {
   outcome: 'DELIVERY_HANDOVER_NOTES_LISTED';
   handoverNotes: DeliveryHandoverNoteRecord[];
+  page: CataloguePage;
 }
 
 export interface DeliveryHandoverNoteFoundResponseBody {
@@ -123,9 +126,17 @@ export interface DeliveryHandoverConfirmationResponseBody {
   scopeEstablishedAt?: string;
 }
 
-/** 列表路径由 delivery-pre-advice 的 deliveryScopeListPathOf 拼好交进来：筛选的写法只在那一处。 */
-export function listDeliveryPreAdvices(path: string): Promise<ApiResult<DeliveryPreAdviceListResponseBody>> {
-  return exchangeMasterData<DeliveryPreAdviceListResponseBody>(path);
+/**
+ * 条件由 delivery-pre-advice 的 deliveryScopeConditions 拼好交进来：节点、单据号与时窗是选择器，筛选的写法只在那一处。收哪些键见
+ * ports.DeliveryPreAdvicePages。
+ */
+export function listDeliveryPreAdvices(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<DeliveryPreAdviceListResponseBody>> {
+  return exchangeMasterData<DeliveryPreAdviceListResponseBody>(
+    catalogueRequestPath('/node-operations-delivery-pre-advices', conditions, after),
+  );
 }
 
 export function readDeliveryPreAdvice(preAdviceId: string): Promise<ApiResult<DeliveryPreAdviceFoundResponseBody>> {
@@ -134,8 +145,14 @@ export function readDeliveryPreAdvice(preAdviceId: string): Promise<ApiResult<De
   );
 }
 
-export function listDeliveryHandoverNotes(path: string): Promise<ApiResult<DeliveryHandoverNoteListResponseBody>> {
-  return exchangeMasterData<DeliveryHandoverNoteListResponseBody>(path);
+/** 条件的来历同 listDeliveryPreAdvices；收哪些键见 ports.DeliveryHandoverNotePages。 */
+export function listDeliveryHandoverNotes(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<DeliveryHandoverNoteListResponseBody>> {
+  return exchangeMasterData<DeliveryHandoverNoteListResponseBody>(
+    catalogueRequestPath('/node-operations-delivery-handover-notes', conditions, after),
+  );
 }
 
 export function readDeliveryHandoverNote(noteId: string): Promise<ApiResult<DeliveryHandoverNoteFoundResponseBody>> {

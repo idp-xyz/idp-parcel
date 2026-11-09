@@ -1,22 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { RouteWorkbench, SectionTabs, notConnectedOverride } from '../network/route-workbench';
 import { usePlaceNames } from '../network/use-place-names';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
 import { ReviewDetail, reviewStatusOf, withPlaceNames, workbenchColumnsOf, type ReviewColumn, type ReviewStatusSpec } from './review-workbench';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { hiddenDecisionHint, pendingIdentityRecheckDecision } from '../operator-grants';
 import { labelFor } from '../../vocabulary/status';
 import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import {
+  listIdentityReviewUnits,
   listNodeOperationsRecords,
+  nodeOperationsConditions,
   type ApiResult,
+  type NodeOperationsConditions,
   type NodeOperationsListResponseBody,
   type NodeOperationsRegistry,
 } from './records-api';
+import {
+  allStatuses,
+  nodePushedStatus,
+  pageStatusChips,
+  pushedStatusChips,
+  reviewListConditions,
+  rowsOnPage,
+} from './list-conditions';
 import { consolidationPhaseLabels, labelOf } from './presentation';
 import { receptionRowOf } from './reception-rows';
 import { recheckPendingIdentity, type IdentityRecheckResponseBody } from './identity-recheck-api';
@@ -50,6 +65,10 @@ const info = moduleInfoById['node-operations-review'];
  * 送站预报与送站交接单两区各走自己的读口（GET /node-operations-delivery-pre-advices、/node-operations-delivery-handover-notes，
  * 票 ps-external-mark-relations/13），筛选与详情各在自己的组件里；交接单详情上的「确认」是又一样运营决定（送站交接确认，UC-NO-006
  * 步骤 5B），依授权交付关系确认一个账户的绑定，不确认身份。
+ *
+ * 各区接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`，收货记录与集包的状态胶囊下推成筛选维；
+ * 「为什么认不出」由页面按几格派生、不是筛选维，胶囊只筛本页。读口检索只认标识与编码，网点名称、中文词这些在「只筛本页」的框里
+ * 再筛。按实物列的处置面板是另一本册（registry=identity-review-unit），自己翻页。
  */
 interface ReviewRow {
   key: string;
@@ -121,6 +140,8 @@ interface ReviewSection {
   word: string;
   /** 对应册名；无册区缺席（该区在存储上没有登记册，不发请求）。 */
   registry?: NodeOperationsRegistry;
+  /** 检索框的提示：只写读口 `q` 覆盖的那几列（internal/nodeoperations/adapters/postgres 各册的 Keyword）。 */
+  keywordHint?: string;
   columns: ReviewColumn<ReviewRow>[];
   /** 无册区的如实呈现；与「登记册为空」严格分词。 */
   absence?: { title: string; description: string; unlock: string };
@@ -133,6 +154,7 @@ const sections: ReviewSection[] = [
     id: 'node-intake',
     word: '收货记录',
     registry: 'reception',
+    keywordHint: '搜货物标签、网点编码、交货人、作业来源',
     status: { labelKey: 'kind', codeKey: 'kindCode' },
     // 节点收寄=客户或其授权交付方在节点直接交付作业实物,节点完成明确接收并取得
     // 控制(CONTEXT);到站扫描、卸载或发现实物本身都不等于节点收寄——本册由服务端
@@ -159,6 +181,7 @@ const sections: ReviewSection[] = [
     id: 'consolidation-units',
     word: '集包',
     registry: 'consolidation-unit',
+    keywordHint: '搜袋 / 箱、封签、集包标识',
     status: { labelKey: 'phase', codeKey: 'phaseCode', scope: 'consolidation' },
     // 集运单元实例贯穿一次使用周期,同一实体载具的下一次使用必须创建新实例
     // (CONTEXT);实例阶段封闭三相(开放装入/已封装/已关闭)。集运成员列的是当前
@@ -229,6 +252,7 @@ const sections: ReviewSection[] = [
     id: 'unidentified-items',
     word: '待识别货物',
     registry: 'unidentified-item',
+    keywordHint: '搜货物标签、网点编码、扫到的号、作业来源',
     status: { labelKey: 'pendingCause' },
     // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。正式包裹及其身份由
     // parcel-shipment 给出,「正式包裹关联」一列只放登记时已有的关联引用;识别成功不回写本行
@@ -301,46 +325,20 @@ type RecheckState =
   | { kind: 'submitting'; judgmentVersion: string }
   | { kind: 'answered'; judgmentVersion: string; answer: ApiResult<IdentityRecheckResponseBody> };
 
+const subtitle =
+  '网点收了哪些货、货现在还在不在网点、哪些货认不出是谁的。扫描与装卸在网点的作业终端上完成，这里查看结果，并处理认不出身份的货。';
+
+// useCatalogueCursor 要稳定引用；按 registry 收窄的泛型读口在这里定成各册答复的并集，rowsOf 按 outcome 择形状。
+const loadNodeRecords = (conditions: NodeOperationsConditions<NodeOperationsRegistry>, after: string | null) =>
+  listNodeOperationsRecords(conditions, after);
+
+// 「为什么认不出」由页面按核对态、冲突与候选几格派生（delivery-scope-check 的 pendingCauseOf），读口没有这一维：胶囊只筛本页。
+const pendingCauseOfRow = (row: ReviewRow) => row.values.pendingCause;
+
 export function NodeOperationsReviewPage() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
-  const [recheck, setRecheck] = useState<RecheckState | null>(null);
-  const mayRecheck = useMayMakeDecision(pendingIdentityRecheckDecision);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{
-    registry: NodeOperationsRegistry;
-    answer: ApiResult<NodeOperationsListResponseBody>;
-  } | null>(null);
   const delivery = deliverySections.find((candidate) => candidate.id === sectionId);
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
-  // 送站两区不读 /node-operations-records：落空的 section 回退到第一区，不能让它顺带发一次收寄册的请求。
-  const registry = delivery ? undefined : section.registry;
-
-  useEffect(() => {
-    // 无册区不发请求：服务端册名封闭集没有那两格，发了只会收 400。
-    if (!registry) return undefined;
-    let cancelled = false;
-    void listNodeOperationsRecords(registry).then((answer) => {
-      if (!cancelled) setLoaded({ registry, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [registry, reloadKey]);
-
-  const answer = registry && loaded?.registry === registry ? loaded.answer : null;
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const places = usePlaceNames();
-  // 网点一格按此刻生效那一版显名称，编码进技术详情（review-workbench 的 withPlaceNames）。
-  const rows = body ? withPlaceNames(rowsOf(body), ['node'], places) : [];
-  const retry = () => setReloadKey((value) => value + 1);
-  const startRecheck = (judgmentVersion: string) => {
-    setRecheck({ kind: 'submitting', judgmentVersion });
-    void recheckPendingIdentity({ judgmentVersion }).then((answer) => {
-      setRecheck({ kind: 'answered', judgmentVersion, answer });
-      // 追加了一版（关联收寄或冲突版）才重读：册上多了行、被重核那一行有了接续。
-      if (answer.kind === 'outcome' && describeRecheckAnswer(answer.body).landed) retry();
-    });
-  };
 
   const tabs = (
     <SectionTabs
@@ -349,17 +347,68 @@ export function NodeOperationsReviewPage() {
       onChange={setSectionId}
     />
   );
+  // 送站两区不读 /node-operations-records：落空的 section 回退到第一区，不能让它顺带发一次收寄册的请求。
   if (delivery?.id === 'delivery-pre-advices') return <DeliveryPreAdvicesSection key={delivery.id} sections={tabs} />;
   if (delivery?.id === 'delivery-handover-notes') return <DeliveryHandoverNotesSection key={delivery.id} sections={tabs} />;
+  // 换区重挂：上一区的检索、胶囊、翻页位置与选中行不带进下一区。
+  return section.registry ? (
+    <RegistrySection key={section.id} section={section} registry={section.registry} tabs={tabs} />
+  ) : (
+    <AbsentSection key={section.id} section={section} tabs={tabs} />
+  );
+}
 
-  const viewState: TemplateViewState = section.absence
-    ? { kind: 'unconfigured' }
-    : catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: `GET /node-operations-records?registry=${registry ?? ''}`,
-        emptyTitle: `还没有${section.word}`,
-        emptyDescription: '网点现场扫描、收货后，记录会出现在这里。',
-      });
+/** 有册的一区：按读口分页取数，检索与能下推的胶囊下推，「为什么认不出」与「只筛本页」的框在到手的这一页上筛。 */
+function RegistrySection({
+  section,
+  registry,
+  tabs,
+}: {
+  section: ReviewSection;
+  registry: NodeOperationsRegistry;
+  tabs: ReactNode;
+}) {
+  const pushed = nodePushedStatus[registry];
+  const pageStatus = registry === 'unidentified-item' ? pendingCauseOfRow : undefined;
+  const [keyword, setKeyword] = useState('');
+  // 下推的胶囊存读口词表里的词，只筛本页的胶囊存页上的状态词；一区只有其中一种。
+  const [status, setStatus] = useState(allStatuses);
+  const [refine, setRefine] = useState('');
+  const [recheck, setRecheck] = useState<RecheckState | null>(null);
+  const mayRecheck = useMayMakeDecision(pendingIdentityRecheckDecision);
+  // 处置面板是另一本册、自己翻页；作业落地后随上方列表一起重读，重挂即回到它的第一页。
+  const [unitsKey, setUnitsKey] = useState(0);
+  const conditions = nodeOperationsConditions(registry, reviewListConditions(useSettledKeyword(keyword), pushed, status));
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, loadNodeRecords);
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const places = usePlaceNames();
+  // 网点一格按此刻生效那一版显名称，编码进技术详情（review-workbench 的 withPlaceNames）。
+  const pageRows = body ? withPlaceNames(rowsOf(body), ['node'], places) : [];
+  const rows = rowsOnPage(pageRows, refine, status, pageStatus);
+  const refresh = () => {
+    retry();
+    setUnitsKey((value) => value + 1);
+  };
+  const startRecheck = (judgmentVersion: string) => {
+    setRecheck({ kind: 'submitting', judgmentVersion });
+    void recheckPendingIdentity({ judgmentVersion }).then((answer) => {
+      setRecheck({ kind: 'answered', judgmentVersion, answer });
+      // 追加了一版（关联收寄或冲突版）才重读：册上多了行、被重核那一行有了接续。
+      if (answer.kind === 'outcome' && describeRecheckAnswer(answer.body).landed) refresh();
+    });
+  };
+  const statusChips = pushed
+    ? pushedStatusChips(pushed, status, setStatus)
+    : pageStatus && body
+      ? pageStatusChips(pageRows.map(pageStatus), status, setStatus)
+      : undefined;
+  const viewState = catalogueViewState(answer, pageRows.length, retry, {
+    module: info,
+    endpoint: `GET /node-operations-records?registry=${registry}`,
+    emptyTitle: `还没有${section.word}`,
+    emptyDescription: '网点现场扫描、收货后，记录会出现在这里。',
+    narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+  });
 
   /**
    * 待识别货物的右栏动作：「再核对一次」（重核）。不能发起的行照说为什么，不给一个必然答「不重核」的按钮；明确没有「待识别复核」
@@ -384,17 +433,27 @@ export function NodeOperationsReviewPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <RouteWorkbench<ReviewRow>
-        key={section.id}
         title={info.title}
-        subtitle="网点收了哪些货、货现在还在不在网点、哪些货认不出是谁的。扫描与装卸在网点的作业终端上完成，这里查看结果，并处理认不出身份的货。"
+        subtitle={subtitle}
         sections={tabs}
+        extraFilters={
+          <>
+            {pageStatus && body ? <PageOnlyNote>状态只筛本页</PageOnlyNote> : null}
+            <PageOnlySearch value={refine} onChange={setRefine} subject="名称等其余各格" />
+          </>
+        }
         answered={body !== null}
         rows={rows}
         rowKey={(row) => row.key}
-        statusOf={section.status ? (row) => reviewStatusOf(row, section.status) : undefined}
+        statusChips={statusChips}
+        onClearFilters={() => {
+          setStatus(allStatuses);
+          setRefine('');
+        }}
         rowAttention={(row) => row.values.identityConflict === '有冲突'}
-        searchCells={(row) => Object.values(row.values)}
-        searchPlaceholder="搜货物标签 / 网点 / 交货人"
+        searchCells={() => []}
+        search={{ value: keyword, onChange: setKeyword, pushedDown: true }}
+        searchPlaceholder={section.keywordHint ?? `搜${section.word}`}
         columns={workbenchColumnsOf(section.columns, section.status)}
         renderDetail={(row, close) => (
           <ReviewDetail
@@ -406,17 +465,75 @@ export function NodeOperationsReviewPage() {
             onClose={close}
           />
         )}
-        onRefresh={section.absence ? undefined : retry}
+        onRefresh={refresh}
+        toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
+        viewState={viewState}
+      />
+      {registry === 'unidentified-item' ? <IdentityReviewUnits key={unitsKey} onLanded={refresh} /> : null}
+    </div>
+  );
+}
+
+const noConditions: CatalogueConditions = {};
+const loadIdentityReviewUnits = (_conditions: CatalogueConditions, after: string | null) => listIdentityReviewUnits(after);
+
+/**
+ * 身份冲突处置按实物看各链当前有效版本（一件实物可能横跨几行），不是按行，所以留在列表下方而不进右栏。它读按实物那一本册
+ * （registry=identity-review-unit）：待识别册答复里的 units 只是这本册不带条件的第一页，往后翻、看总数都得走这一口。上方的检索与
+ * 胶囊筛的是逐行那本册，不套到这里。
+ */
+function IdentityReviewUnits({ onLanded }: { onLanded: () => void }) {
+  const { answer, pagination, retry } = useCatalogueCursor(noConditions, loadIdentityReviewUnits);
+  if (answer === null) return null;
+  if (answer.kind !== 'outcome') {
+    const reason =
+      answer.kind === 'transport'
+        ? `连不上服务：${answer.message}`
+        : answer.kind === 'callerProblem' || answer.kind === 'noAnswer'
+          ? `错误码 ${answer.code}`
+          : '没有查看权限或入口未配置，同上方列表';
+    return (
+      <div className="flex shrink-0 items-center gap-2 border-t border-idpxyz-border px-4 py-2 type-body text-idpxyz-danger">
+        <span>处理身份冲突的货：按实物列的清单这次没有读出来（{reason}）。</span>
+        <Button variant="ghost" size="sm" onClick={retry}>
+          重试
+        </Button>
+      </div>
+    );
+  }
+  if (answer.body.units.length === 0 && !pastFirstPage(pagination)) return null;
+  return (
+    <div className="max-h-[45%] shrink-0 overflow-y-auto border-t border-idpxyz-border p-4">
+      <IdentityDispositionPanel units={answer.body.units} onLanded={onLanded} />
+      {pagination ? (
+        <div className="mt-2">
+          <CursorPager pagination={pagination} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** 存储上还没有登记册的两区：不发请求，如实说「还不能在这里查看」。 */
+function AbsentSection({ section, tabs }: { section: ReviewSection; tabs: ReactNode }) {
+  const viewState: TemplateViewState = { kind: 'unconfigured' };
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <RouteWorkbench<ReviewRow>
+        title={info.title}
+        subtitle={subtitle}
+        sections={tabs}
+        answered={false}
+        rows={[]}
+        rowKey={(row) => row.key}
+        searchCells={(row) => Object.values(row.values)}
+        searchPlaceholder={`搜${section.word}`}
+        columns={workbenchColumnsOf(section.columns, section.status)}
+        renderDetail={(row, close) => <ReviewDetail row={row} columns={section.columns} subtitle={section.word} onClose={close} />}
         viewState={viewState}
         // 还没接进管理台的册：说「还不能在这里查看」，不露接入渠道的错误码（那个码说的是口没接渠道，不是册没建）。
         stateOverride={section.absence ? notConnectedOverride(section.absence.title, section.absence.description) : undefined}
       />
-      {section.id === 'unidentified-items' && body?.outcome === 'UNIDENTIFIED_ITEMS_LISTED' && (body.units ?? []).length > 0 ? (
-        // 身份冲突处置按实物看各链当前有效版本（一件实物可能横跨几行），不是按行，所以留在列表下方而不进右栏。
-        <div className="max-h-[45%] shrink-0 overflow-y-auto border-t border-idpxyz-border p-4">
-          <IdentityDispositionPanel units={body.units ?? []} onLanded={retry} />
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -9,9 +9,12 @@
 // 页面五区里没有对应册子的区（节点侧的实际测量与交接证据、运输侧的承运总单与
 // 运输舱单）在这里也没有函数——服务端的册名封闭集刻意不含那几格（没有表就没有
 // 读法，票 05 Comments），本文件不造会被 400 拒掉的查询。
+//
+// 两条列表读口已迁 ADR-0144（票 catalogue-read-pagination-rollout/05、06）：registry 是选册的选择器，不兼作筛选维；各册收哪些
+// 排序维、筛选维与 `q` 只在 internal/*/ports/catalogue_pages.go 的声明里，答复多一格 page。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
-import { transportRecordsPathOf, type BounceFilter } from './booking-registers';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -167,10 +170,11 @@ export interface ConsolidationUnitRecord {
   closedAt?: string;
 }
 
+/** page 说的是行所在那一册；待识别册的 units 恒是按实物那一册的第一页，往后翻走 listIdentityReviewUnits。 */
 export type NodeOperationsListResponseBody =
-  | { outcome: 'RECEPTIONS_LISTED'; receptions: ReceptionRecord[] }
-  | { outcome: 'UNIDENTIFIED_ITEMS_LISTED'; items: UnidentifiedItemRecord[]; units?: IdentityReviewUnit[] }
-  | { outcome: 'CONSOLIDATION_UNITS_LISTED'; units: ConsolidationUnitRecord[] };
+  | { outcome: 'RECEPTIONS_LISTED'; receptions: ReceptionRecord[]; page: CataloguePage }
+  | { outcome: 'UNIDENTIFIED_ITEMS_LISTED'; items: UnidentifiedItemRecord[]; units?: IdentityReviewUnit[]; page: CataloguePage }
+  | { outcome: 'CONSOLIDATION_UNITS_LISTED'; units: ConsolidationUnitRecord[]; page: CataloguePage };
 
 interface NodeBodyByRegistry {
   reception: Extract<NodeOperationsListResponseBody, { outcome: 'RECEPTIONS_LISTED' }>;
@@ -184,12 +188,40 @@ interface NodeBodyByRegistry {
   >;
 }
 
-/** 返回类型按请求的 registry 收窄：三册行形状互不相同，页面按区择形状。 */
-export function listNodeOperationsRecords<Registry extends NodeOperationsRegistry>(
+/** 节点作业查阅一问的条件：registry 选哪本册，保持原义、不兼作筛选维（ADR-0144 决定四），但同样进游标摘要。 */
+export type NodeOperationsConditions<Registry extends NodeOperationsRegistry> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function nodeOperationsConditions<Registry extends NodeOperationsRegistry>(
   registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): NodeOperationsConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
+
+/** 返回类型按条件里的 registry 收窄：三册行形状互不相同，页面按区择形状。收哪些键见 ports.ReceptionPages、UnidentifiedItemPages 与 ConsolidationUnitPages。 */
+export function listNodeOperationsRecords<Registry extends NodeOperationsRegistry>(
+  conditions: NodeOperationsConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<NodeBodyByRegistry[Registry]>> {
   return exchangeMasterData<NodeBodyByRegistry[Registry]>(
-    `/node-operations-records?registry=${encodeURIComponent(registry)}`,
+    catalogueRequestPath('/node-operations-records', conditions, after),
+  );
+}
+
+export interface IdentityReviewUnitListResponseBody {
+  outcome: 'IDENTITY_REVIEW_UNITS_LISTED';
+  units: IdentityReviewUnit[];
+  page: CataloguePage;
+}
+
+/** 按实物列的待识别实物册（registry=identity-review-unit，ports.IdentityReviewUnitPages）；处置面板不带条件，只翻页。 */
+export function listIdentityReviewUnits(
+  after: string | null = null,
+): Promise<ApiResult<IdentityReviewUnitListResponseBody>> {
+  return exchangeMasterData<IdentityReviewUnitListResponseBody>(
+    catalogueRequestPath('/node-operations-records', { selectors: { registry: 'identity-review-unit' } }, after),
   );
 }
 
@@ -359,16 +391,17 @@ export interface BookingAnswerBounceRecord {
 }
 
 export type TransportFulfillmentListResponseBody =
-  | { outcome: 'TRANSPORT_SCHEDULES_LISTED'; schedules: TransportScheduleRecord[] }
-  | { outcome: 'CAPACITY_POOLS_LISTED'; pools: CapacityPoolRecord[] }
-  | { outcome: 'TRANSPORT_HANDOVERS_LISTED'; handovers: TransportHandoverRecord[] }
-  | { outcome: 'EFFECTIVE_DELIVERIES_LISTED'; deliveries: EffectiveDeliveryRecord[] }
+  | { outcome: 'TRANSPORT_SCHEDULES_LISTED'; schedules: TransportScheduleRecord[]; page: CataloguePage }
+  | { outcome: 'CAPACITY_POOLS_LISTED'; pools: CapacityPoolRecord[]; page: CataloguePage }
+  | { outcome: 'TRANSPORT_HANDOVERS_LISTED'; handovers: TransportHandoverRecord[]; page: CataloguePage }
+  | { outcome: 'EFFECTIVE_DELIVERIES_LISTED'; deliveries: EffectiveDeliveryRecord[]; page: CataloguePage }
   | {
       outcome: 'CARRIER_MASTER_DOCUMENTS_LISTED';
       masterDocuments: CarrierMasterDocumentRecord[];
+      page: CataloguePage;
     }
-  | { outcome: 'BOOKING_REQUESTS_LISTED'; bookings: BookingRequestRecord[] }
-  | { outcome: 'BOOKING_ANSWER_BOUNCES_LISTED'; bounces: BookingAnswerBounceRecord[] };
+  | { outcome: 'BOOKING_REQUESTS_LISTED'; bookings: BookingRequestRecord[]; page: CataloguePage }
+  | { outcome: 'BOOKING_ANSWER_BOUNCES_LISTED'; bounces: BookingAnswerBounceRecord[]; page: CataloguePage };
 
 interface TransportBodyByRegistry {
   'transport-schedule': Extract<
@@ -401,15 +434,30 @@ interface TransportBodyByRegistry {
   >;
 }
 
-/** 返回类型按请求的 registry 收窄，同 listNodeOperationsRecords。filter 只对挡回册生效。 */
+/** 运输履约查阅一问的条件，registry 的身份同 NodeOperationsConditions。 */
+export type TransportFulfillmentConditions<Registry extends TransportFulfillmentRegistry> = CatalogueConditions & {
+  readonly selectors: { readonly registry: Registry };
+};
+
+export function transportFulfillmentConditions<Registry extends TransportFulfillmentRegistry>(
+  registry: Registry,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): TransportFulfillmentConditions<Registry> {
+  return { ...conditions, selectors: { registry } };
+}
+
+/**
+ * 返回类型按条件里的 registry 收窄，同 listNodeOperationsRecords。收哪些键见 ports.TransportSchedulePages、CapacityPoolPages、
+ * TransportHandoverPages、EffectiveDeliveryPages、CarrierMasterDocumentPages、BookingRequestPages 与 BookingAnswerBouncePages。
+ */
 export function listTransportFulfillmentRecords<
   Registry extends TransportFulfillmentRegistry,
 >(
-  registry: Registry,
-  filter?: BounceFilter,
+  conditions: TransportFulfillmentConditions<Registry>,
+  after: string | null = null,
 ): Promise<ApiResult<TransportBodyByRegistry[Registry]>> {
   return exchangeMasterData<TransportBodyByRegistry[Registry]>(
-    transportRecordsPathOf(registry, filter),
+    catalogueRequestPath('/transport-fulfillment-records', conditions, after),
   );
 }
 

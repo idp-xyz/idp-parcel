@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import { formatInstant } from '../catalogue-view';
 import {
-  deliveryScopeListPathOf,
+  deliveryScopeConditions,
+  deliveryScopeFilterNarrow,
   deliveryScopeReadProblemNote,
   documentNumberCellOf,
   documentNumberDetailOf,
@@ -42,33 +43,38 @@ test('预计送达日：换成本地零点到次日本地零点，左闭右开',
   }
 });
 
-test('列表路径：只带填了的格；节点去两端空白；日子换成两端瞬间；两本册各用各的键', () => {
-  equal(deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '' }), '/node-operations-delivery-pre-advices');
-  equal(
-    deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: ' SYN-NODE-1 ', day: '' }),
-    '/node-operations-delivery-pre-advices?node=SYN-NODE-1',
-  );
+test('一问的条件：只带填了的格；节点去两端空白；日子换成两端瞬间；两本册各用各的键；检索词下推成 q', () => {
+  deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '' }), { selectors: {}, q: '' });
+  deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: ' SYN-NODE-1 ', day: '' }, 'SYN-ACCOUNT'), {
+    selectors: { node: 'SYN-NODE-1' },
+    q: 'SYN-ACCOUNT',
+  });
   const bounds = localDayBoundsOf('2026-10-20');
   ok(bounds);
-  equal(
-    deliveryScopeListPathOf('/node-operations-delivery-handover-notes', handoverNoteFilterKeys, { node: 'SYN NODE', day: '2026-10-20' }),
-    `/node-operations-delivery-handover-notes?node=SYN+NODE&openedFrom=${encodeURIComponent(bounds.from)}&openedUntil=${encodeURIComponent(bounds.until)}`,
-  );
-  equal(
-    deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '2026-10-20' }),
-    `/node-operations-delivery-pre-advices?expectedArrivalFrom=${encodeURIComponent(bounds.from)}&expectedArrivalUntil=${encodeURIComponent(bounds.until)}`,
-  );
+  deepEqual(deliveryScopeConditions(handoverNoteFilterKeys, { node: 'SYN NODE', day: '2026-10-20' }), {
+    selectors: { node: 'SYN NODE', openedFrom: bounds.from, openedUntil: bounds.until },
+    q: '',
+  });
+  deepEqual(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '2026-10-20' })?.selectors, {
+    expectedArrivalFrom: bounds.from,
+    expectedArrivalUntil: bounds.until,
+  });
   // 单据号交服务端逐字找：去两端空白，只填空格即不按单据号筛。
-  equal(
-    deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '', documentNumber: ' PA-20261102-00045 ' }),
-    '/node-operations-delivery-pre-advices?documentNumber=PA-20261102-00045',
+  deepEqual(
+    deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '', documentNumber: ' PA-20261102-00045 ' })?.selectors,
+    { documentNumber: 'PA-20261102-00045' },
   );
-  equal(
-    deliveryScopeListPathOf('/node-operations-delivery-handover-notes', handoverNoteFilterKeys, { node: '', day: '', documentNumber: '  ' }),
-    '/node-operations-delivery-handover-notes',
-  );
+  deepEqual(deliveryScopeConditions(handoverNoteFilterKeys, { node: '', day: '', documentNumber: '  ' })?.selectors, {});
   // 认不出的日子不发半截条件：宁可不筛，也不把「坏日子」读成「这一日」。
-  equal(deliveryScopeListPathOf('/node-operations-delivery-pre-advices', preAdviceFilterKeys, { node: '', day: '2026-02-30' }), null);
+  equal(deliveryScopeConditions(preAdviceFilterKeys, { node: '', day: '2026-02-30' }), null);
+});
+
+test('筛选条填了格就算收窄（选择器不进 catalogueConditionsNarrow），只填空格不算', () => {
+  equal(deliveryScopeFilterNarrow({ node: '', day: '' }), false);
+  equal(deliveryScopeFilterNarrow({ node: '  ', day: '', documentNumber: ' ' }), false);
+  equal(deliveryScopeFilterNarrow({ node: 'SYN-NODE-1', day: '' }), true);
+  equal(deliveryScopeFilterNarrow({ node: '', day: '2026-10-20' }), true);
+  equal(deliveryScopeFilterNarrow({ node: '', day: '', documentNumber: 'PA-1' }), true);
 });
 
 test('预报行：撤回与否、号码数、交付方线索缺席各写各的字', () => {
@@ -84,11 +90,14 @@ test('预报行：撤回与否、号码数、交付方线索缺席各写各的�
       numbers: '2 个',
       deliveringParty: 'SYN-COURIER-1',
       withdrawal: '未撤回',
+      withdrawnState: '未撤回',
       formedAt: formatInstant('2026-10-19T08:00:00Z'),
     },
   });
   const withdrawn = preAdviceRowOf(preAdvice({ withdrawn: true, withdrawnAt: '2026-10-19T18:00:00Z' }));
   equal(withdrawn.values.withdrawal, `已撤回 · ${formatInstant('2026-10-19T18:00:00Z')}`);
+  // 只筛本页的胶囊认不带时刻的那一格：不同时刻撤回的预报落进同一格。
+  equal(withdrawn.values.withdrawnState, '已撤回');
   equal(withdrawn.values.deliveringParty, '（没给交付方线索）');
 });
 

@@ -51,6 +51,18 @@ export function DeliveryScopeFilters({
   );
 }
 
+/**
+ * 送站两区的列表条件：筛选条与检索框的值由区组件持有，交给取数的那一件与不取数（日子认不出）的那一件共用——两种挂法来回换时
+ * 用户填的字不丢。
+ */
+export interface DeliveryScopeControls {
+  sections: ReactNode;
+  filter: DeliveryScopeListFilter;
+  onFilter: (filter: DeliveryScopeListFilter) => void;
+  keyword: string;
+  onKeyword: (keyword: string) => void;
+}
+
 /** 详情读（按标识读一份）没拿到业务答案时的那一句：未配置、未授予、看不见、没形成答案、没到达各写各的。 */
 export function DeliveryScopeReadNote({ answer, what }: { answer: Exclude<ApiResult<unknown>, { kind: 'outcome' }>; what: string }) {
   const frame = 'type-body leading-4';

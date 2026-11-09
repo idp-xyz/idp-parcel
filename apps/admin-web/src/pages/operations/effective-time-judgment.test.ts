@@ -57,8 +57,10 @@ function outcome<Body>(body: Body): ApiResult<Body> {
   return { kind: 'outcome', status: 200, body };
 }
 
+const onlyPage = { size: 200, next: null, total: 1 };
+
 test('待判断行：三个时间只有两个在场，有效时间与依据明细都是缺席不是零值', () => {
-  const [row] = factRowsOf({ outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED', facts: [pendingFact] });
+  const [row] = factRowsOf({ outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED', facts: [pendingFact], page: onlyPage });
 
   equal(row.key, 'fact:EXTF-1@EXTV-1');
   equal(row.fact, 'EXTF-1');
@@ -76,6 +78,7 @@ test('判断版本行：依据、规则版本与前版原样上列，状态词�
   const [row] = factRowsOf({
     outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED',
     facts: [judgedByRuleFact],
+    page: onlyPage,
   });
 
   equal(row.values.effectiveBasis, '按规则自动确认');
@@ -90,6 +93,7 @@ test('词表没收录的依据词原样示码，不猜词', () => {
   const [row] = factRowsOf({
     outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED',
     facts: [{ ...pendingFact, effectiveBasis: 'SOMETHING_NEW' }],
+    page: onlyPage,
   });
   equal(row.values.effectiveBasis, 'SOMETHING_NEW');
 });
@@ -107,6 +111,7 @@ test('待判断视图空册：点名源，说清它是真答案而不是渠道�
   const body: ExternalTrackingFactListResponseBody = {
     outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED',
     facts: [],
+    page: { ...onlyPage, total: 0 },
   };
   const state = factListViewState(outcome(body), 'aggregator-a', 'pending', 0, noRetry, options);
   equal(state.kind, 'empty');
@@ -120,6 +125,7 @@ test('全部当前版视图空册：措辞与待判断空册分开——这家�
   const body: ExternalTrackingFactListResponseBody = {
     outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED',
     facts: [],
+    page: { ...onlyPage, total: 0 },
   };
   const state = factListViewState(outcome(body), 'aggregator-a', 'current', 0, noRetry, options);
   equal(state.kind, 'empty');
@@ -128,10 +134,20 @@ test('全部当前版视图空册：措辞与待判断空册分开——这家�
   ok(!state.title?.includes('待确认'), `全部轨迹的空册不该说成待确认：${state.title}`);
 });
 
+// Covers: 带了检索或确认方式胶囊的零行说的是「这组条件下没有」，仍报就绪、由模板说那一句，不说这家源没有轨迹。
+test('带条件的零行不配空态', () => {
+  const body: ExternalTrackingFactListResponseBody = {
+    outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED',
+    facts: [],
+    page: { ...onlyPage, total: 0 },
+  };
+  equal(factListViewState(outcome(body), 'aggregator-a', 'current', 0, noRetry, { ...options, narrowed: true }).kind, 'ready');
+});
+
 test('有行即就绪；未配置与未形成答案走全站那套 HTTP 代数', () => {
   equal(
     factListViewState(
-      outcome({ outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED', facts: [pendingFact] }),
+      outcome({ outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED', facts: [pendingFact], page: onlyPage }),
       'aggregator-a',
       'pending',
       1,

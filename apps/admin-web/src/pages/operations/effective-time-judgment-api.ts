@@ -8,6 +8,7 @@
 // 隔离读准入（ADR-0078）换得了读行换不了写行，调用点长得一样会让这条区别在阅读时消失。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -40,16 +41,31 @@ export interface ExternalTrackingFactRecord {
 }
 
 export type ExternalTrackingFactListResponseBody =
-  | { outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED'; facts: ExternalTrackingFactRecord[] }
-  | { outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED'; facts: ExternalTrackingFactRecord[] };
+  | { outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED'; facts: ExternalTrackingFactRecord[]; page: CataloguePage }
+  | { outcome: 'CURRENT_EXTERNAL_TRACKING_FACTS_LISTED'; facts: ExternalTrackingFactRecord[]; page: CataloguePage };
 
-/** 源与视图都是必备维——缺席在服务端是 400，本函数不替调用方兜。 */
-export function listExternalTrackingFacts(
+/**
+ * 一问的条件：源与视图是选择器（ports.ExternalTrackingFactPages），都是必备维——缺席在服务端是 400，本函数不替调用方兜；二者
+ * 进游标摘要，换源、换视图旧游标作废。
+ */
+export type ExternalTrackingFactConditions = CatalogueConditions & {
+  readonly selectors: { readonly source: string; readonly view: ExternalTrackingFactView };
+};
+
+export function externalTrackingFactConditions(
   source: string,
   view: ExternalTrackingFactView,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): ExternalTrackingFactConditions {
+  return { ...conditions, selectors: { source, view } };
+}
+
+export function listExternalTrackingFacts(
+  conditions: ExternalTrackingFactConditions,
+  after: string | null = null,
 ): Promise<ApiResult<ExternalTrackingFactListResponseBody>> {
   return exchangeMasterData<ExternalTrackingFactListResponseBody>(
-    `/transport-fulfillment-external-tracking-facts?source=${encodeURIComponent(source)}&view=${view}`,
+    catalogueRequestPath('/transport-fulfillment-external-tracking-facts', conditions, after),
   );
 }
 

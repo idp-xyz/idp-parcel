@@ -6,6 +6,7 @@ import {
   toggleWorkbenchSort,
   type ListCursorPaginationProps,
   type TemplateViewState,
+  type WorkbenchChip,
   type WorkbenchColumn,
   type WorkbenchSort,
 } from '../../templates';
@@ -54,6 +55,15 @@ export interface RouteWorkbenchProps<Row> {
   onRefresh?: () => void;
   /** 读口分页时的游标（useCatalogueCursor 交回的那一份）；给了就在工具条右侧摆上一页 / 下一页。 */
   pagination?: ListCursorPaginationProps;
+  /**
+   * 调用方持有的状态胶囊：已下推到读口的筛选维，或字面注明只筛本页的页内筛选。给了就不摆本件按到手行计数的胶囊与指标，也不在本件里
+   * 按状态再筛——读口分页时到手的只是一页，按它计的数不是总数。
+   */
+  statusChips?: WorkbenchChip[];
+  /** 「清除筛选」时调用方一并清掉的那几格（它持有的胶囊、页内筛选框）。 */
+  onClearFilters?: () => void;
+  /** 工具条右端由调用方摆（如带总数的翻页条）；给了就不摆本件的条数摘要与上一页 / 下一页。 */
+  toolbarRight?: ReactNode;
   noun?: string;
 }
 
@@ -79,6 +89,9 @@ export function RouteWorkbench<Row>({
   stateOverride,
   onRefresh,
   pagination,
+  statusChips,
+  onClearFilters,
+  toolbarRight,
   noun = '条',
 }: RouteWorkbenchProps<Row>) {
   const [localSearch, setLocalSearch] = useState('');
@@ -96,7 +109,7 @@ export function RouteWorkbench<Row>({
       (pushedDown || matchesSearch(search.value, [...searchCells(row), statusLabel(row)])),
   );
   const visible = sortAccessors ? sortRowsBy(filtered, sort, sortAccessors) : filtered;
-  const filter = answered && statusOf ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
+  const filter = answered && statusOf && !statusChips ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
   const close = () => setSelectedKey(null);
 
   const summary = answered ? `共 ${rows.length} ${noun}${visible.length === rows.length ? '' : `，当前显示 ${visible.length} ${noun}`}` : undefined;
@@ -109,7 +122,7 @@ export function RouteWorkbench<Row>({
       onRefresh={onRefresh}
       primaryAction={primaryAction}
       search={{ value: search.value, onChange: search.onChange, placeholder: searchPlaceholder }}
-      statusChips={filter?.chips}
+      statusChips={statusChips ?? filter?.chips}
       extraFilters={
         sections || extraFilters ? (
           <>
@@ -119,14 +132,15 @@ export function RouteWorkbench<Row>({
         ) : undefined
       }
       toolbarRight={
-        pagination ? (
+        toolbarRight ??
+        (pagination ? (
           <span className="inline-flex items-center gap-2">
             {summary ? <span>{summary}</span> : null}
             <CursorPager pagination={pagination} />
           </span>
         ) : (
           summary
-        )
+        ))
       }
       columns={columns}
       rows={visible}
@@ -140,6 +154,7 @@ export function RouteWorkbench<Row>({
       onClearFilters={() => {
         search.onChange('');
         setStatus('ALL');
+        onClearFilters?.();
       }}
       renderDetail={(key) => {
         const row = visible.find((candidate) => rowKey(candidate) === key);

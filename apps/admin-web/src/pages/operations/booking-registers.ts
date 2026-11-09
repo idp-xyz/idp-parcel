@@ -10,7 +10,6 @@ import type {
   BookingAnswerBounceRecord,
   BookingAnswerRecord,
   BookingRequestRecord,
-  TransportFulfillmentRegistry,
 } from './records-api';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 import { referenceNoteOf, referencedNumberOf } from './transport-document-numbers';
@@ -114,26 +113,21 @@ export function bounceRowOf(record: BookingAnswerBounceRecord): BookingRegisterR
   };
 }
 
-/** 挡回册的两个筛选参数；缺席即不筛。 */
+/** 挡回册的两个筛选框；空着即不筛。 */
 export interface BounceFilter {
   booking?: string;
   source?: string;
 }
 
 /**
- * 册名加（挡回册才有的）筛选参数拼成查询路径。空白筛选值不发——服务端把给了却空白的参数判坏请求，
- * 而页面上输入框空着说的是「没筛」；两端空白去掉。筛选只对挡回册生效，其余册子不带。
+ * 两个框换成挡回册的筛选维（ports.BookingAnswerBouncePages 的 booking、source）。空白值不发——服务端把给了却空白的值判坏请求，
+ * 而框空着说的是「没筛」；两端空白去掉。
  */
-export function transportRecordsPathOf(
-  registry: TransportFulfillmentRegistry,
-  filter?: BounceFilter,
-): string {
-  let path = `/transport-fulfillment-records?registry=${encodeURIComponent(registry)}`;
-  if (registry === 'booking-answer-bounce' && filter) {
-    const booking = filter.booking?.trim();
-    const source = filter.source?.trim();
-    if (booking) path += `&booking=${encodeURIComponent(booking)}`;
-    if (source) path += `&source=${encodeURIComponent(source)}`;
-  }
-  return path;
+export function bounceFilterDimensions(filter: BounceFilter): Record<string, string[]> {
+  const dimensions: Record<string, string[]> = {};
+  const booking = filter.booking?.trim();
+  const source = filter.source?.trim();
+  if (booking) dimensions.booking = [booking];
+  if (source) dimensions.source = [source];
+  return dimensions;
 }

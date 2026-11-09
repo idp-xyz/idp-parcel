@@ -31,6 +31,13 @@ export const handoverVerdictLabels: Record<string, string> = {
   PENDING_CONFIRMATION: '待确认',
 };
 
+/** 总单适用状态封闭三格（transportfulfillment domain MasterDocumentStanding），中文取 CONTEXT 原词。 */
+export const masterDocumentStandingLabels: Record<string, string> = {
+  IN_FORCE: '生效中',
+  REVOKED: '已撤销',
+  SUPERSEDED: '已替代',
+};
+
 /** 词表没收录的码原样示码，不猜词——封闭集扩了、页面还没跟上时如实露码。 */
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;

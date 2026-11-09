@@ -83,6 +83,8 @@ export function factRowsOf(body: ExternalTrackingFactListResponseBody): FactRow[
 interface FactListViewOptions {
   module: ModuleInfo;
   endpoint: string;
+  /** 带了检索、胶囊或已翻过第一页：空答复说「没有符合条件的」，不说来源没有轨迹。 */
+  narrowed?: boolean;
 }
 
 /**
@@ -124,6 +126,7 @@ export function factListViewState(
     endpoint: options.endpoint,
     emptyTitle: empty.title,
     emptyDescription: empty.description,
+    narrowed: options.narrowed,
   });
 }
 

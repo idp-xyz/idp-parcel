@@ -4,11 +4,15 @@ import { RecordDetailPanel, RouteWorkbench, techRows } from '../network/route-wo
 import { codeStatus } from '../visibility/exception-list';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
-import { reviewStatusOf, withPlaceNames, workbenchColumnsOf } from './review-workbench';
+import { withPlaceNames, workbenchColumnsOf } from './review-workbench';
 import { usePlaceNames } from '../network/use-place-names';
 import { placeLabel } from '../network/place-names';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword, type CatalogueCursor } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
+import { PageOnlyNote, PageOnlySearch } from '../visibility/page-only';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import {
   listDeliveryPreAdvices,
@@ -18,14 +22,16 @@ import {
   type DeliveryPreAdviceListResponseBody,
 } from './delivery-scope-api';
 import {
-  deliveryScopeListPathOf,
+  deliveryScopeConditions,
+  deliveryScopeFilterNarrow,
   documentNumberDetailOf,
   preAdviceFilterKeys,
   preAdviceRowOf,
   type DeliveryScopeListFilter,
   type PreAdviceReviewRow,
 } from './delivery-pre-advice';
-import { DeliveryScopeFilters, DeliveryScopeReadNote } from './DeliveryScopeFilters';
+import { DeliveryScopeFilters, DeliveryScopeReadNote, type DeliveryScopeControls } from './DeliveryScopeFilters';
+import { allStatuses, pageStatusChips, rowsOnPage } from './list-conditions';
 
 const info = moduleInfoById['node-operations-review'];
 // 号名取单据编号词典（设置 → 单据编号同一份），不在本页另起叫法。
@@ -65,40 +71,59 @@ const columns: ListColumn<PreAdviceReviewRow>[] = [
  * 节点作业查阅页的「送站预报」区（票 ps-external-mark-relations/13；UC-NO-006）：按节点与预计送达日列客户经客户渠道交来的预报，点一行看
  * 号码集合。只读——预报由客户账户自己提交、撤回（首方客户渠道），运营在这里不登记、不改、不撤；一份预报对哪次送站算数，在收寄时由节点、
  * 时窗与号码逐条判（ADR-0212 决定二），这一区不预判。
+ *
+ * 列表接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14）：检索框下推成 `q`；节点、日子与单据号是读口的选择器，照旧交服务端。
  */
 export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode }) {
   const [filter, setFilter] = useState<DeliveryScopeListFilter>({ node: '', day: '', documentNumber: '' });
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{ path: string; answer: ApiResult<DeliveryPreAdviceListResponseBody> } | null>(null);
+  const [keyword, setKeyword] = useState('');
+  const conditions = deliveryScopeConditions(preAdviceFilterKeys, filter, useSettledKeyword(keyword));
+  const controls: DeliveryScopeControls = { sections, filter, onFilter: setFilter, keyword, onKeyword: setKeyword };
+  // 日子认不出时不发请求（deliveryScopeConditions 答 null）：取数的那一件只在条件成立时挂上。
+  return conditions === null ? (
+    <PreAdviceWorkbench controls={controls} cursor={null} />
+  ) : (
+    <PreAdviceCursor controls={controls} conditions={conditions} />
+  );
+}
+
+function PreAdviceCursor({ controls, conditions }: { controls: DeliveryScopeControls; conditions: CatalogueConditions }) {
+  return <PreAdviceWorkbench controls={controls} conditions={conditions} cursor={useCatalogueCursor(conditions, listDeliveryPreAdvices)} />;
+}
+
+// 撤回与否是读口派生的状态（withdrawn 恒在场），不是筛选维：胶囊只筛本页。
+const withdrawnStateOf = (row: PreAdviceReviewRow) => row.values.withdrawnState;
+
+function PreAdviceWorkbench({
+  controls,
+  conditions,
+  cursor,
+}: {
+  controls: DeliveryScopeControls;
+  conditions?: CatalogueConditions;
+  cursor: CatalogueCursor<DeliveryPreAdviceListResponseBody> | null;
+}) {
+  const { sections, filter, onFilter, keyword, onKeyword } = controls;
+  const [status, setStatus] = useState(allStatuses);
+  const [refine, setRefine] = useState('');
   const names = useCustomerNames();
-  const path = deliveryScopeListPathOf(listBase, preAdviceFilterKeys, filter);
-
-  useEffect(() => {
-    if (path === null) return undefined;
-    let cancelled = false;
-    void listDeliveryPreAdvices(path).then((answer) => {
-      if (!cancelled) setLoaded({ path, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [path, reloadKey]);
-
-  const answer = path !== null && loaded?.path === path ? loaded.answer : null;
-  const body = answer?.kind === 'outcome' ? answer.body : null;
   const places = usePlaceNames();
-  const rows = body ? withPlaceNames(body.preAdvices.map(preAdviceRowOf), ['node'], places) : [];
-  const retry = () => setReloadKey((value) => value + 1);
-  const narrowed = filter.node.trim() !== '' || filter.day !== '' || (filter.documentNumber ?? '').trim() !== '';
+  const answer = cursor?.answer ?? null;
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const pageRows = body ? withPlaceNames(body.preAdvices.map(preAdviceRowOf), ['node'], places) : [];
+  const rows = rowsOnPage(pageRows, refine, status, withdrawnStateOf);
   const viewState: TemplateViewState =
-    path === null
+    cursor === null
       ? { kind: 'error', title: '预计送达日期写得不对', description: '这一天在日历上不存在；改正日期后再查。' }
-      : catalogueViewState(answer, rows.length, retry, {
+      : catalogueViewState(answer, pageRows.length, cursor.retry, {
           module: info,
           endpoint: `GET ${listBase}`,
           emptyTitle: '还没有客户送货预报',
           emptyDescription: '客户在送货到网点之前提交预报（送到哪个网点、几点到、送哪些包裹），提交后会出现在这里。',
-          narrowed,
+          narrowed:
+            deliveryScopeFilterNarrow(filter) ||
+            (conditions !== undefined && catalogueConditionsNarrow(conditions)) ||
+            pastFirstPage(cursor.pagination),
         });
 
   return (
@@ -106,17 +131,30 @@ export function DeliveryPreAdvicesSection({ sections }: { sections: ReactNode })
       title={info.title}
       subtitle="客户送货到网点之前交来的到货计划：送到哪个网点、预计几点到、送哪些包裹。这里只查看；点一行看包裹号清单。"
       sections={sections}
-      extraFilters={<DeliveryScopeFilters filter={filter} dayLabel="预计送达日" numberLabel={numberName} onChange={setFilter} />}
+      extraFilters={
+        <>
+          <DeliveryScopeFilters filter={filter} dayLabel="预计送达日" numberLabel={numberName} onChange={onFilter} />
+          {body ? <PageOnlyNote>撤回与否只筛本页</PageOnlyNote> : null}
+          <PageOnlySearch value={refine} onChange={setRefine} subject="网点名称、谁来送等其余各格" />
+        </>
+      }
       answered={body !== null}
       noun="份"
       rows={rows}
       rowKey={(row) => row.key}
-      statusOf={(row) => reviewStatusOf(row, { labelKey: 'withdrawal' })}
-      searchCells={(row) => Object.values(row.values)}
-      searchPlaceholder={`在结果里搜${numberName} / 客户 / 网点`}
+      statusChips={body ? pageStatusChips(pageRows.map(withdrawnStateOf), status, setStatus) : undefined}
+      onClearFilters={() => {
+        setStatus(allStatuses);
+        setRefine('');
+        onFilter({ node: '', day: '', documentNumber: '' });
+      }}
+      searchCells={() => []}
+      search={{ value: keyword, onChange: onKeyword, pushedDown: true }}
+      searchPlaceholder={`搜${numberName}、预报标识、客户编码、网点编码`}
       columns={workbenchColumnsOf(columnsWith(names), { labelKey: 'withdrawal' })}
       renderDetail={(row, close) => <PreAdviceDetail key={row.preAdviceId} preAdviceId={row.preAdviceId} onClose={close} />}
-      onRefresh={retry}
+      onRefresh={cursor?.retry}
+      toolbarRight={cursor?.pagination ? <CursorPager pagination={cursor.pagination} /> : undefined}
       viewState={viewState}
     />
   );
