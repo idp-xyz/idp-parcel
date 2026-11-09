@@ -805,3 +805,159 @@ func TestDeliveryHandoverNotesPageWhileNewNotesOpen(t *testing.T) {
 	page, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, must(t, domain.NewTenantID, "SYN-TENANT-CRPR06-NONE"), ports.DeliveryScopeCatalogueFilter{}, 2, firstPage(t, ports.DeliveryHandoverNotePages))
 	expectEmpty(t, page, err)
 }
+
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——预报按 withdrawn、交接单按 closed 筛出的行，经两本册还原门读回的
+// Withdrawn()、Closed() 与所给的词一致，total 随这一维变，与 q 为与；别的租户同标识的那一份撤回或关闭了，不让本租户的那一份
+// 跟着算撤回或关闭。
+func TestDeliveryScopeStatusDimensionsAgreeWithTheAnswerFields(t *testing.T) {
+	fixture := newDeliveryScopeCatalogueFixture(t)
+	ctx := t.Context()
+	const tenant, otherTenant = "SYN-TENANT-CRPR16-D", "SYN-TENANT-CRPR16-E"
+	channel := "https://id.syn.example/dex#syn-customer-client-crpr16"
+
+	preAdvices := []domain.DeliveryPreAdvice{
+		preAdviceForCatalogue(t, tenant, "SYN-PREADV-CRPR16-1", pagesHub, catalogueInstant(20, 10), "", "SYN-NUMBER-CRPR16-1"),
+		preAdviceForCatalogue(t, tenant, "SYN-PREADV-CRPR16-2", pagesHub, catalogueInstant(20, 11), "", "SYN-NUMBER-CRPR16-2"),
+		preAdviceForCatalogue(t, tenant, "SYN-PREADV-CRPR16-3", pagesEdge, catalogueInstant(20, 12), "", "SYN-NUMBER-CRPR16-3"),
+		preAdviceForCatalogue(t, tenant, "SYN-PREADV-CRPR16-4", pagesEdge, catalogueInstant(20, 13), "", "SYN-NUMBER-CRPR16-4"),
+		preAdviceForCatalogue(t, otherTenant, "SYN-PREADV-CRPR16-1", pagesHub, catalogueInstant(20, 10), "", "SYN-NUMBER-CRPR16-9"),
+	}
+	withdraw := func(owner string, preAdvice domain.DeliveryPreAdvice) domain.DeliveryPreAdviceWithdrawal {
+		t.Helper()
+		withdrawal, err := domain.FormDeliveryPreAdviceWithdrawal(domain.DeliveryPreAdviceWithdrawalSpec{
+			TenantID:        must(t, domain.NewTenantID, owner),
+			PreAdvice:       preAdvice.ID(),
+			CustomerAccount: preAdvice.CustomerAccount(),
+			Source: domain.CustomerRequestSource{
+				Channel: channel, RequestKey: "SYN-REQUEST-WITHDRAW-" + preAdvice.ID().String(), ContentDigest: "sha256:withdraw",
+			},
+			WithdrawnAt: catalogueInstant(19, 18),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return withdrawal
+	}
+	withdrawals := []domain.DeliveryPreAdviceWithdrawal{
+		withdraw(tenant, preAdvices[1]), withdraw(tenant, preAdvices[3]), withdraw(otherTenant, preAdvices[4]),
+	}
+
+	notes := []domain.DeliveryHandoverNote{
+		noteForCatalogue(t, tenant, "SYN-HN-CRPR16-1", pagesHub, catalogueInstant(20, 9), "SYN-ACCOUNT-CRPR16-1"),
+		noteForCatalogue(t, tenant, "SYN-HN-CRPR16-2", pagesHub, catalogueInstant(20, 11), "SYN-ACCOUNT-CRPR16-1"),
+		noteForCatalogue(t, tenant, "SYN-HN-CRPR16-3", pagesEdge, catalogueInstant(20, 13), "SYN-ACCOUNT-CRPR16-1"),
+		noteForCatalogue(t, otherTenant, "SYN-HN-CRPR16-1", pagesHub, catalogueInstant(20, 9), "SYN-ACCOUNT-CRPR16-9"),
+	}
+	closing := func(owner string, note domain.DeliveryHandoverNote) domain.DeliveryHandoverClosure {
+		t.Helper()
+		closure, err := domain.FormDeliveryHandoverClosure(domain.DeliveryHandoverClosureSpec{
+			TenantID: must(t, domain.NewTenantID, owner), Note: note.ID(), FactID: "SYN-CLOSE-" + note.ID().String(),
+			ClosedAt: note.OpenedAt().Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return closure
+	}
+	closures := []domain.DeliveryHandoverClosure{closing(tenant, notes[1]), closing(otherTenant, notes[3])}
+
+	if err := inTransaction(fixture.transactor, func(txCtx context.Context) error {
+		for _, preAdvice := range preAdvices {
+			if _, _, err := fixture.preAdvices.RecordDeliveryPreAdvice(txCtx, preAdvice); err != nil {
+				return err
+			}
+		}
+		for _, withdrawal := range withdrawals {
+			if _, _, err := fixture.preAdvices.RecordDeliveryPreAdviceWithdrawal(txCtx, withdrawal); err != nil {
+				return err
+			}
+		}
+		for _, note := range notes {
+			if _, _, err := fixture.notes.OpenDeliveryHandoverNote(txCtx, note); err != nil {
+				return err
+			}
+		}
+		for _, closure := range closures {
+			if _, _, err := fixture.notes.CloseDeliveryHandoverNote(txCtx, closure); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("落预报与交接单：%v", err)
+	}
+	tenantID := must(t, domain.NewTenantID, tenant)
+
+	type statusCase struct {
+		raw  string
+		want []string
+	}
+	ids := func(values ...string) []string { return append([]string{}, values...) }
+	// stated 交回一组条件在这一维上给的唯一取值；没给或给了两个时，这一页不按单个词核。
+	stated := func(values url.Values, dimension string) (bool, bool) {
+		if words := values[dimension]; len(words) == 1 {
+			return words[0] == "true", true
+		}
+		return false, false
+	}
+
+	for _, test := range []statusCase{
+		{raw: "", want: ids("SYN-PREADV-CRPR16-4", "SYN-PREADV-CRPR16-3", "SYN-PREADV-CRPR16-2", "SYN-PREADV-CRPR16-1")},
+		{raw: "withdrawn=true", want: ids("SYN-PREADV-CRPR16-4", "SYN-PREADV-CRPR16-2")},
+		{raw: "withdrawn=false", want: ids("SYN-PREADV-CRPR16-3", "SYN-PREADV-CRPR16-1")},
+		{raw: "withdrawn=true&withdrawn=false", want: ids("SYN-PREADV-CRPR16-4", "SYN-PREADV-CRPR16-3", "SYN-PREADV-CRPR16-2", "SYN-PREADV-CRPR16-1")},
+		{raw: "withdrawn=true&q=preadv-crpr16-3", want: ids()},
+		{raw: "withdrawn=false&q=CRPR06-EDGE", want: ids("SYN-PREADV-CRPR16-3")},
+	} {
+		t.Run("预报/"+test.raw, func(t *testing.T) {
+			values, err := url.ParseQuery(test.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenantID, ports.DeliveryScopeCatalogueFilter{}, 10,
+				pageQuery(t, ports.DeliveryPreAdvicePages, values))
+			if err != nil {
+				t.Fatalf("取页：%v", err)
+			}
+			want, single := stated(values, "withdrawn")
+			for _, state := range page.Rows {
+				if single && state.Withdrawn() != want {
+					t.Fatalf("按 %s 筛出的 %s 读回 Withdrawn()=%v", test.raw, state.PreAdvice.ID(), state.Withdrawn())
+				}
+			}
+			if got := preAdviceIDsOf(page.Rows); !reflect.DeepEqual(got, test.want) || page.Total != int64(len(test.want)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", got, page.Total, test.want, len(test.want))
+			}
+		})
+	}
+
+	for _, test := range []statusCase{
+		{raw: "", want: ids("SYN-HN-CRPR16-3", "SYN-HN-CRPR16-2", "SYN-HN-CRPR16-1")},
+		{raw: "closed=true", want: ids("SYN-HN-CRPR16-2")},
+		{raw: "closed=false", want: ids("SYN-HN-CRPR16-3", "SYN-HN-CRPR16-1")},
+		{raw: "closed=false&q=hn-crpr16-3", want: ids("SYN-HN-CRPR16-3")},
+	} {
+		t.Run("交接单/"+test.raw, func(t *testing.T) {
+			values, err := url.ParseQuery(test.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenantID, ports.DeliveryScopeCatalogueFilter{}, 10,
+				pageQuery(t, ports.DeliveryHandoverNotePages, values))
+			if err != nil {
+				t.Fatalf("取页：%v", err)
+			}
+			want, single := stated(values, "closed")
+			got := make([]string, 0, len(page.Rows))
+			for _, row := range page.Rows {
+				got = append(got, handoverNoteID(row))
+				if single && row.State.Closed() != want {
+					t.Fatalf("按 %s 筛出的 %s 读回 Closed()=%v", test.raw, handoverNoteID(row), row.State.Closed())
+				}
+			}
+			if !reflect.DeepEqual(got, test.want) || page.Total != int64(len(test.want)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", got, page.Total, test.want, len(test.want))
+			}
+		})
+	}
+}

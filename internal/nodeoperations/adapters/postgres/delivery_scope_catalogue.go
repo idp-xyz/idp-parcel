@@ -62,10 +62,18 @@ const preAdviceRegister = "node_operations.delivery_pre_advice"
 
 // preAdvicePages 把 ports.DeliveryPreAdvicePages 落到预报册的列上；q 在预报标识、单号、客户账户与节点上做字面包含（没有单号的行只靠
 // 另几列命中）。
+//
+// withdrawn 落在「撤回册上有这份预报那一行」的文本形上（'true' / 'false'，与词表同词）：取页之后按本页标识取撤回、还原进
+// DeliveryPreAdviceState 的也是那一行，领域 Withdrawn() 只看它在不在，筛与答因此读同一格事实。外层的列按表名限定——子查询里
+// 不限定的 tenant_id 会落到撤回册自己那一列上。子查询走撤回册主键 delivery_pre_advice_withdrawal_pkey，不另建索引。
 var preAdvicePages = ports.DeliveryPreAdvicePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"expectedArrivalAt": "expected_arrival_at"},
 	Identity: []string{"pre_advice_id"},
-	Keyword:  []string{"pre_advice_id", "document_number", "customer_account_id", "node_ref"},
+	Filters: map[string]string{"withdrawn": `(EXISTS (
+		SELECT 1 FROM node_operations.delivery_pre_advice_withdrawal AS withdrawal
+		 WHERE withdrawal.tenant_id = delivery_pre_advice.tenant_id
+		   AND withdrawal.pre_advice_id = delivery_pre_advice.pre_advice_id))::text`},
+	Keyword: []string{"pre_advice_id", "document_number", "customer_account_id", "node_ref"},
 })
 
 // listedPreAdvices 是预报册在选择器筛选下的定义：四个参数由 catalogueFilterArgs 给出，为空即不设那一界。
@@ -189,10 +197,17 @@ const handoverNoteRegister = "node_operations.delivery_handover_note AS note"
 
 // handoverNotePages 把 ports.DeliveryHandoverNotePages 落到交接单册（别名 note）的列上；q 在单据标识、单号、节点与交付方上做字面
 // 包含（没有单号、未登交付方的行只靠另几列命中）。
+//
+// closed 落在「关闭册上有这张单那一行」的文本形上，理由同 preAdvicePages 的 withdrawn：noteEvidence 还原进
+// DeliveryHandoverNoteState 的是同一行，领域 Closed() 只看它在不在。子查询走关闭册主键 delivery_handover_closure_pkey。
 var handoverNotePages = ports.DeliveryHandoverNotePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"openedAt": "note.opened_at"},
 	Identity: []string{"note.note_id"},
-	Keyword:  []string{"note.note_id", "note.document_number", "note.node_ref", "note.delivering_party"},
+	Filters: map[string]string{"closed": `(EXISTS (
+		SELECT 1 FROM node_operations.delivery_handover_closure AS closure
+		 WHERE closure.tenant_id = note.tenant_id
+		   AND closure.note_id = note.note_id))::text`},
+	Keyword: []string{"note.note_id", "note.document_number", "note.node_ref", "note.delivering_party"},
 })
 
 // listedHandoverNotes 是交接单册在选择器筛选下的定义，参数同 listedPreAdvices。

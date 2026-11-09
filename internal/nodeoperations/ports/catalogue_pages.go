@@ -54,8 +54,9 @@ var UnidentifiedItemPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // 不带条件的第一页）的声明。
 //
 // 本册的行是聚合：一件有过待识别那一格的作业实物一行。缺省序是它待识别各版里最近一次登记时刻（latestRecordedAt）倒序，与迁移前
-// 同一口径；这一维是读面在公用表表达式里导出的列，键集落在导出列上。行标识是作业实物——聚合的分组键，册上没有别的主键。一件实物
-// 此刻冲突与否、处置过没有都由它各链的当前有效版本派生，派生的不作筛选维。q 只覆盖作业实物。
+// 同一口径；这一维是读面在公用表表达式里导出的列，键集落在导出列上。行标识是作业实物——聚合的分组键，册上没有别的主键。不放状态维：
+// 一件实物此刻冲突与否、处置过没有，是领域对它各链当前有效版本合起来作的身份判断（domain.JudgeIdentityBasis，处置编排经它判冲突），
+// 答复里没有实物一级的状态格，SQL 里再判一遍就是同一条规则的第二处定义——这一类的取舍在 ADR-0372 草案。q 只覆盖作业实物。
 //
 // 导出列会前移：一件实物又登一版待识别，它的 latestRecordedAt 就换成那一版的登记时刻，在册上的位置跟着挪。倒序翻页时，还没翻到的
 // 那件因此挤到已翻过的那头，这一趟可能漏掉它；已翻过的那件仍在已翻过的那头，不重出。正序翻页时反过来：已翻过的那件跳到游标之后，
@@ -119,28 +120,37 @@ var PhysicalControlTransitionPages = cataloguepage.MustCatalogue(cataloguepage.S
 	Selectors: []string{registrySelector},
 })
 
+// presenceWords 是预报与交接单两册状态维的词表：答复体里 withdrawn、closed 那个布尔的两种写法。两格都是「名下那本留痕册上有没有
+// 这一份的那一行」，与领域 Withdrawn()、Closed() 同义。
+var presenceWords = []string{"true", "false"}
+
 // DeliveryPreAdvicePages 是送站预报列表（GET /node-operations-delivery-pre-advices）的声明。
 //
 // 缺省序是预计送达倒序，不是登记时刻倒序：迁移前就按预计送达排，列表的时间区间筛的也是这一格，人按到站的先后看预报。行标识是预报
-// 标识。node、documentNumber 与预计送达区间两端是端点既有的参数，保持原义登为选择器（决定四），取值进游标摘要。撤回与否由撤回册上
-// 有没有那一行派生，不作筛选维。q 覆盖预报标识、单据号、客户账户与节点。
+// 标识。node、documentNumber 与预计送达区间两端是端点既有的参数，保持原义登为选择器（决定四），取值进游标摘要。withdrawn 是状态维
+// （CONTEXT 生命周期「已登记 → 已撤回」）：撤回册上有没有这份预报那一行，读面在 SQL 里由本册导出。有效时窗不是状态（同一节），
+// 不作筛选维。q 覆盖预报标识、单据号、客户账户与节点。
 var DeliveryPreAdvicePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "node-operations-delivery-pre-advices",
 	Sorts:       []cataloguepage.SortDimension{{Name: "expectedArrivalAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "expectedArrivalAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters:     []cataloguepage.FilterDimension{{Name: "withdrawn", Vocabulary: presenceWords}},
 	Selectors:   []string{"node", "documentNumber", "expectedArrivalFrom", "expectedArrivalUntil"},
 })
 
 // DeliveryHandoverNotePages 是送站交接单列表（GET /node-operations-delivery-handover-notes）的声明。
 //
 // 缺省序是开立时刻倒序，与迁移前同一口径；交接单没有另立登记时刻，开立就是它进册的时刻。行标识是交接单标识。node、documentNumber
-// 与开立区间两端是端点既有的参数，登为选择器，理由同预报。关闭与范围成立都是派生（关闭册上有没有那一行、声称的账户是否全部确认），
-// 不作筛选维。q 覆盖交接单标识、单据号、节点与交付方线索。
+// 与开立区间两端是端点既有的参数，登为选择器，理由同预报。closed 是状态维（CONTEXT 生命周期「开放 → 已关闭」）：关闭册上有没有这张
+// 单那一行，读面在 SQL 里由本册导出。范围成立（scopeEstablished）不放：它不是交接单的生命周期，而是领域按声称账户的绑定结论求出的
+// 结论（domain.DeliveryHandoverNoteState 的 ScopeEstablished），SQL 里再求一遍就是同一条规则的第二处定义——这一类的取舍在
+// ADR-0372 草案。q 覆盖交接单标识、单据号、节点与交付方线索。
 var DeliveryHandoverNotePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "node-operations-delivery-handover-notes",
 	Sorts:       []cataloguepage.SortDimension{{Name: "openedAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "openedAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters:     []cataloguepage.FilterDimension{{Name: "closed", Vocabulary: presenceWords}},
 	Selectors:   []string{"node", "documentNumber", "openedFrom", "openedUntil"},
 })

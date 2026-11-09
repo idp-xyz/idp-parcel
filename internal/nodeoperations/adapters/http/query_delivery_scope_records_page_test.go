@@ -67,9 +67,37 @@ func TestDeliveryScopeListsCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0144 决定一、三、四——集外的排序维（另一条列表的业务时刻、没有放出的登记时刻）与解不开的游标答 400 带理由散文，读口
-// 不被触到；游标只在铸它的那组条件下有效：换了节点、加了区间（选择器进游标摘要），或拿到另一条列表去用，都答 400 带「游标与本次
-// 的排序或筛选不符」那一句；同一组条件下解成位置原样交给读口。
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——预报的 withdrawn、交接单的 closed 照各自声明解成查询对象的筛选，维内为或、
+// 去重升序，原样交给读口；选择器照旧读成筛选，不进查询对象。
+func TestDeliveryScopeListsHandTheStatusDimensionToTheReader(t *testing.T) {
+	for _, testCase := range []struct {
+		read      scopeRead
+		query     string
+		dimension string
+		want      []string
+	}{
+		{scopeReadNamed(t, "pre-advice list"), "?node=SYN-NODE-1&withdrawn=true&withdrawn=false&withdrawn=true", "withdrawn", []string{"false", "true"}},
+		{scopeReadNamed(t, "handover note list"), "?node=SYN-NODE-1&closed=false", "closed", []string{"false"}},
+	} {
+		t.Run(testCase.read.name, func(t *testing.T) {
+			reader := &stubDeliveryScopeCatalogue{}
+			response := testCase.read.serve(grantedIntake(), reader, http.MethodGet, testCase.read.target+testCase.query)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+			}
+			if got := reader.gotQuery.Filters; len(got) != 1 || strings.Join(got[testCase.dimension], ",") != strings.Join(testCase.want, ",") {
+				t.Fatalf("读口收到的筛选 = %v，应只有 %s=%v", got, testCase.dimension, testCase.want)
+			}
+			if reader.gotFilter.Node.String() != "SYN-NODE-1" {
+				t.Fatalf("节点参数没有照旧读成筛选：%+v", reader.gotFilter)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0144 决定一、三、四——集外的排序维（另一条列表的业务时刻、没有放出的登记时刻）、状态维词表外的取值、另一条列表的
+// 状态维与解不开的游标答 400 带理由散文，读口不被触到；游标只在铸它的那组条件下有效：换了节点、加了区间（选择器进游标摘要），
+// 或拿到另一条列表去用，都答 400 带「游标与本次的排序或筛选不符」那一句；同一组条件下解成位置原样交给读口。
 func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	preAdvices, handoverNotes := scopeReadNamed(t, "pre-advice list"), scopeReadNamed(t, "handover note list")
 	for name, testCase := range map[string]struct {
@@ -83,6 +111,10 @@ func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"预报带交接单的区间键": {preAdvices, "?openedUntil=2026-10-21T00:00:00Z"},
 		"预报的坏转义":     {preAdvices, "?q=%zz"},
 		"交接单的坏转义":    {handoverNotes, "?node=SYN-NODE-1&q=%zz"},
+		"预报状态词表外":    {preAdvices, "?withdrawn=SYN-NOT-A-WORD"},
+		"交接单状态词表外":   {handoverNotes, "?closed=yes"},
+		"预报带交接单的状态维": {preAdvices, "?closed=true"},
+		"交接单带预报的状态维": {handoverNotes, "?withdrawn=false"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &stubDeliveryScopeCatalogue{}
@@ -149,7 +181,10 @@ func TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery(t *testing.T
 				t.Fatalf("不带参数的一问：status = %d body = %s", want.Code, want.Body.String())
 			}
 			assertNoOutcome(t, want)
-			for _, query := range []string{testCase.compliant, "?sort=nowhere", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02", "?q=%zz"} {
+			for _, query := range []string{
+				testCase.compliant, "?sort=nowhere", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02", "?q=%zz",
+				"?withdrawn=maybe", "?closed=maybe",
+			} {
 				response := testCase.read.serve(nodeopshttp.UnconfiguredIntake{}, reader, http.MethodGet, testCase.read.target+query)
 				if response.Code != want.Code || response.Body.String() != want.Body.String() {
 					t.Fatalf("%s：status = %d body = %s，应与不带参数的一问逐字相同", query, response.Code, response.Body.String())

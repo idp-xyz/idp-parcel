@@ -271,7 +271,8 @@ type preAdviceFoundResponse struct {
 }
 
 // preAdviceCatalogueBody 是查阅读里的一份预报：提交口回显的那几格（同一个形，取 preAdviceBodyOf），加撤回与否。withdrawn 恒在场，
-// withdrawnAt 只随已撤回出现。来源请求键与内容摘要照提交口不回显。
+// withdrawnAt 只随已撤回出现。withdrawn 也是列表状态维的名字（ports.DeliveryPreAdvicePages），按它筛与这一格读的是同一行撤回。
+// 来源请求键与内容摘要照提交口不回显。
 type preAdviceCatalogueBody struct {
 	deliveryPreAdviceBody
 	Withdrawn   bool   `json:"withdrawn"`
@@ -300,8 +301,8 @@ type handoverNoteFoundResponse struct {
 }
 
 // handoverNoteCatalogueBody 是查阅读里的一张交接单。单据号与无号原因的读法同 deliveryHandoverNoteBody；交付方线索照开立时的原样；closed
-// 恒在场，关闭的事实身份与时刻只随已关闭出现；claims 是声称的每个客户账户各一格，按标识定序；scopeEstablished 恒在场，取领域按结论
-// 派生的那一格（声称的全部已确认），成立才带 scopeEstablishedAt。
+// 恒在场，关闭的事实身份与时刻只随已关闭出现，closed 也是列表状态维的名字（ports.DeliveryHandoverNotePages）；claims 是声称的每个
+// 客户账户各一格，按标识定序；scopeEstablished 恒在场，取领域按结论派生的那一格（声称的全部已确认），成立才带 scopeEstablishedAt。
 type handoverNoteCatalogueBody struct {
 	NoteID                string                    `json:"noteId"`
 	DocumentNumber        string                    `json:"documentNumber,omitempty"`
