@@ -36,7 +36,8 @@ type endpointLine struct {
 	face   accessFace
 	// ownIntake 为真：这一行的 Intake 由本特性从生产共享件自建，不经 endpointChannels，装配测试里它恒为未配置即拒。
 	ownIntake bool
-	// probe 只给装配测试用：带分派参数或路径参数的行要一条走得到 Intake 的请求目标；空则取路径本身。
+	// probe 只给装配测试用：一条过得了本行自己的请求形状、到得了读口的请求目标——带分派参数、必备维或路径参数的行要写；
+	// 空则取路径本身。
 	probe string
 	// multipartUpload 为真：这一行除 JSON 外另收 multipart/form-data 上传，请求体检查放过上传（见 requestBodyGuard）。
 	multipartUpload bool
