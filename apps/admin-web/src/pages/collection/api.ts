@@ -3,8 +3,12 @@
 // internal/collectionremittance/adapters/http/query_cod_subledgers.go 为准,此处只做
 // 镜像不虚构。传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与
 // 查询函数。
+//
+// 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/10、14）：游标、排序与 `q` 经 catalogueRequestPath 拼进查询串，答复多一格
+// page；不带条件即裸路径，答第一页。点名了哪些维只在 internal/collectionremittance/ports 的 catalogue_pages.go 一处。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -69,12 +73,16 @@ export interface CodSubledgerRecord {
 export interface CodSubledgerListResponseBody {
   outcome: 'COD_SUBLEDGERS_LISTED';
   subledgers: CodSubledgerRecord[];
+  page: CataloguePage;
 }
 
 /**
  * 分户账册只有一本,故本函数不收分派参数——封闭集为一时参数只会造出一个恒定值
- * (判据同 /customs-gate-conditions 那句)。
+ * (判据同 /customs-gate-conditions 那句)。收哪些键见 ports.CodSubledgerPages。
  */
-export function listCodSubledgers(): Promise<ApiResult<CodSubledgerListResponseBody>> {
-  return exchangeMasterData<CodSubledgerListResponseBody>('/collection-subledgers');
+export function listCodSubledgers(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<CodSubledgerListResponseBody>> {
+  return exchangeMasterData<CodSubledgerListResponseBody>(catalogueRequestPath('/collection-subledgers', conditions, after));
 }

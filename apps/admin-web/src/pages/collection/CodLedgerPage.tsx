@@ -1,18 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { labelFor } from '../../vocabulary/status';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { listCodSubledgers, type CodSubledgerListResponseBody, type CodSubledgerRecord } from './api';
+import { matchesSearch } from '../party/list-order';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
+import { pageEmptyNote } from '../settlement/list-conditions';
+import { PageOnlySearch } from '../visibility/page-only';
+import { listCodSubledgers, type CodSubledgerRecord } from './api';
 import { TwoLine, formatMoney, technicalRows } from '../settlement/ops-ui';
 import { CurrencyLabel } from '../refdata-labels';
 import { namedRef, usePartyNames, type PartyNames } from '../settlement/party-names';
 
 // 代收货款页（主责上下文 collection-remittance：代收指令、代收事实、代收分户账、回汇批次与差异事项）。行对象是一本代收分户账
 // ——按（货主客户，公司主体，币种，代收渠道）四维隔离的受托保管账，接 GET /collection-subledgers。
+//
+// 读口已迁到 ADR-0144，按游标翻页（模板的翻页条），行照读口的缺省序（货主客户编码升序）上列，条数只数这一页。检索框下推成 `q`，
+// 覆盖四维键与保管依据——客户编码、公司主体、币种、渠道都在里面。客户名称在 party-commercial，不在本册的列里，`q` 搜不到；读口也
+// 没有放客户一维的筛选维（ports.CodSubledgerPages），接不了「先按名称查客户账户、再按账户号收窄」的选客户控件。按客户名称找因此留
+// 一个只筛本页的小框，字面写明只对当前这一页生效——不悄悄丢掉这项能力，也不让人以为它搜的是全册。
 const info = moduleInfoById['cod-ledger'];
 
 // 列上只放运营盯的钱：应付客户多少、还有多少在渠道手里没回来、回来了还没清到客户头上的、已经汇出去的、差异。
@@ -104,47 +114,30 @@ function rowKey(row: CodSubledgerRecord): string {
 export function CodLedgerPage() {
   const names = usePartyNames();
   const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CodSubledgerListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listCodSubledgers().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [customerName, setCustomerName] = useState('');
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listCodSubledgers);
   const subledgers = answer?.kind === 'outcome' ? answer.body.subledgers : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleSubledgers = needle
-    ? subledgers.filter((row) =>
-        [row.customer, names.account(row.customer), row.legalEntity, row.currency, row.channel].some((value) =>
-          value?.toLowerCase().includes(needle),
-        ),
-      )
-    : subledgers;
-  const retry = () => setReloadKey((value) => value + 1);
+  const visibleSubledgers = subledgers.filter((row) => matchesSearch(customerName, [names.account(row.customer)]));
 
   return (
     <ListPageTemplate<CodSubledgerRecord>
       title="代收货款"
       description="替客户代收的货款分户账：收到多少、清到客户头上多少、汇出去多少"
-      search={{ value: search, onChange: setSearch, placeholder: '搜客户、渠道、币种' }}
-      filterSummary={answer?.kind === 'outcome' ? `${subledgers.length} 本分户账` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜客户编码、公司主体、渠道、币种…' }}
+      filters={<PageOnlySearch value={customerName} onChange={setCustomerName} subject="客户名称" />}
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${subledgers.length} 本分户账` : undefined}
       columns={columns(names)}
       rows={visibleSubledgers}
       rowKey={rowKey}
-      emptyRowsNote="没有匹配的分户账"
+      emptyRowsNote={pageEmptyNote('分户账', subledgers.length)}
+      pagination={pagination}
       viewState={catalogueViewState(answer, subledgers.length, retry, {
         module: info,
         endpoint: 'GET /collection-subledgers',
         emptyTitle: '还没有代收货款分户账',
         emptyDescription: '客户开通代收货款服务并开立分户账后在这里出现；页面不会预置分户账。',
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );
