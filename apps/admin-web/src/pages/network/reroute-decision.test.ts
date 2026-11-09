@@ -23,6 +23,7 @@ function suggestion(overrides: Partial<RerouteSuggestionRecord> = {}): RerouteSu
       { id: 'SYN-CANDIDATE-02', outcome: 'QUALIFIED' },
     ],
     suggestedAt: '2026-10-26T01:00:00Z',
+    recordedAt: '2026-10-26T01:00:01Z',
     state: 'PENDING',
     ...overrides,
   };

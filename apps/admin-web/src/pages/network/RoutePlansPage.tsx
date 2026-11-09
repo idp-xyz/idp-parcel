@@ -1,31 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { useCustomerNames } from '../shipment-request/use-customer-names';
 import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
-import type { ApiResult } from '../catalogue-api';
+import { CursorPager } from '../shipment-request/cursor-pager';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { matchesSearch } from '../party/list-order';
 import { codeStatus } from '../visibility/exception-list';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { PageOnlySearch } from '../visibility/page-only';
 import { labelFor } from '../../vocabulary/status';
-import {
-  listInitialRoutes,
-  listRouteReassessments,
-  type InitialRouteListResponseBody,
-  type InitialRouteRecord,
-  type RouteReassessmentListResponseBody,
-  type RouteReassessmentRecord,
-} from './api';
+import { listInitialRoutes, listRouteReassessments, type InitialRouteRecord, type RouteReassessmentRecord } from './api';
 import { routeSummaryOf } from './network-rows';
 import { placeLabel, type PlaceNameIndex } from './place-names';
 import { usePlaceNames } from './use-place-names';
+import { routeKeywordPlaceholders } from './presentation';
+import type { RouteRegister } from './route-plan-conditions';
+import { useRouteRegisterList } from './use-route-register-list';
 import { RecordDetailPanel, RouteWorkbench, SectionTabs, techRows } from './route-workbench';
 import {
   customerText,
   parcelCell,
   parcelColumnHeader,
-  parcelSearchCells,
+  parcelPageOnlyCells,
   parcelSubtitle,
   parcelTitle,
   shipmentTechnicalRows,
@@ -41,12 +39,17 @@ const info = moduleInfoById['route-plans'];
 // 路线规划，工作台形态：四本册（首次定路线 / 路线复核 / 改路建议 / 成本并列待裁）的签在工具条里切，前两册接
 // GET /route-plans 按 ?register= 分派，后两册各走自己的读口与决定口（RerouteSuggestionsView、InitialRouteTiesView）。
 //
-// 行首是运营认的：哪票货（运单号，包裹号挂在下面）、哪个客户（名称从客户账户册转写，读不到显编码）、结论胶囊（即指标即筛）、
+// 行首是运营认的：哪票货（运单号，包裹号挂在下面）、哪个客户（名称从客户账户册转写，读不到显编码）、结论胶囊、
 // 路线一句话、时间。运单号按页上的委托标识经委托查阅取回（route-plan-cells 文件头）。委托标识、计划版本、受理基线、服务目的、
 // 复核关联、失效依据与各段明细进右栏「技术详情」。
 //
 // 「无可用路线」与改路判定如实单列（CONTEXT 硬句）：前者是初始判断结论的封闭一格，照词呈现不折进成计划行；改路判定缺席是
 // 没评估过改路，与「不许改路」分开说。路线一句话取读口随行带出的各段（network-rows 的 routeSummaryOf），不拆快照另立读法。
+//
+// 各册接读口分页（ADR-0144，票 catalogue-read-pagination-rollout/14；条件怎样拼在 route-plan-conditions.ts）：检索框下推成 `q`，
+// 结论、状态胶囊下推成各册的筛选维，胶囊不带计数；次序是读口的缺省序（最新的在前）。列上显的正是读口可排那一维时（定路线时间、
+// 发现并列的时间）表头先后下推；复核时间、建议时间不是可排维，那两列不给排。读口检索只认标识，运单号、客户名称与路线上的网点
+// 名称在「只筛本页」的框里再找。
 
 
 // 一句话路线里的网点按此刻生效那一版查名（use-place-names），没有名称的显编码；编码在右栏技术详情的逐段里。
@@ -159,7 +162,6 @@ function reassessmentColumns(names: CustomerNameIndex, numberOf: ShipmentNumberO
     {
       key: 'reassessed-at',
       header: '复核时间',
-      sortKey: 'reassessed-at',
       hideWhenDetailOpen: true,
       render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{formatInstant(row.reassessedAt)}</span>,
     },
@@ -211,125 +213,110 @@ function ReassessmentDetail({
   );
 }
 
-type RoutePlansView = 'initial-route' | 'reassessment' | 'reroute-suggestion' | 'initial-route-tie';
-
-const routePlansViews: { id: RoutePlansView; label: string }[] = [
+const routePlansViews: { id: RouteRegister; label: string }[] = [
   { id: 'initial-route', label: '首次定路线' },
   { id: 'reassessment', label: '路线复核' },
   { id: 'reroute-suggestion', label: '改路建议' },
   { id: 'initial-route-tie', label: '成本并列待裁' },
 ];
 
-// 按册装载的答案：register 与答案体绑定成判别联合，切册期间旧册答案不冒充新册。
-type LoadedAnswer =
-  | { register: 'initial-route'; answer: ApiResult<InitialRouteListResponseBody> }
-  | { register: 'reassessment'; answer: ApiResult<RouteReassessmentListResponseBody> };
-
-/** 已装载那一册上出现的委托标识；没答或在读时为空。 */
-function loadedShipmentRequestIds(loaded: LoadedAnswer | null): string[] {
-  if (loaded === null) return [];
-  if (loaded.register === 'initial-route') {
-    return loaded.answer.kind === 'outcome' ? loaded.answer.body.judgments.map((row) => row.shipmentRequestId) : [];
-  }
-  return loaded.answer.kind === 'outcome' ? loaded.answer.body.reassessments.map((row) => row.shipmentRequestId) : [];
-}
-
 const emptyDescription = '运单受理后，系统会为每件包裹定路线并在运输途中复核；有了这样的记录就会出现在这里。';
+
+// 列上的定路线时间就是读口的可排维 recordedAt（ports.InitialRoutePages）。
+const initialRouteSort = { key: 'recorded-at', field: 'recordedAt' };
+
+// 判断键去掉租户后余下的各段（客户账户随委托定，不必进键）：同一委托的几件包裹各是一行。
+const initialRouteKey = (row: InitialRouteRecord) =>
+  `${row.shipmentRequestId}/${row.acceptanceBaseline}/${row.declaredParcelId}/${row.servicePurpose}`;
 
 /**
  * 路线规划：路由判断两册的查阅面，外加改路建议与成本并列两册的决定面。计划以包裹为单位、同一业务时点只有一个当前有效
  * 计划——这句约束由判断库与适用性登记保证，本页照登转写，不维护执行状态、不选版。
  */
 export function RoutePlansPage() {
-  const [register, setRegister] = useState<RoutePlansView>('initial-route');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<LoadedAnswer | null>(null);
-  const names = useCustomerNames();
-  const places = usePlaceNames();
-
-  useEffect(() => {
-    let cancelled = false;
-    if (register === 'initial-route') {
-      void listInitialRoutes().then((answer) => {
-        if (!cancelled) setLoaded({ register: 'initial-route', answer });
-      });
-    } else if (register === 'reassessment') {
-      void listRouteReassessments().then((answer) => {
-        if (!cancelled) setLoaded({ register: 'reassessment', answer });
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [register, reloadKey]);
-  // 两册的行都按委托标识取运单号；hook 要在切到另两册的早退之前调。
-  const numberOf = useShipmentNumbers(loadedShipmentRequestIds(loaded), reloadKey);
-
-  const retry = () => setReloadKey((value) => value + 1);
+  const [register, setRegister] = useState<RouteRegister>('initial-route');
   const header: RoutePlansHeader = {
     title: info.title,
     subtitle: '每件包裹走哪条路线、复核过几次、要不要改路。定不出路线或不能自动改路时，到「改路建议」「成本并列待裁」里处理。',
     sections: <SectionTabs sections={routePlansViews} active={register} onChange={setRegister} />,
   };
 
+  // 换册重挂：上一册的胶囊、只筛本页的框、表头先后、翻页位置与选中行不带进下一册；检索词在地址上，跟着留下。
   if (register === 'reroute-suggestion') return <RerouteSuggestionsView key={register} header={header} />;
   if (register === 'initial-route-tie') return <InitialRouteTiesView key={register} header={header} />;
+  if (register === 'initial-route') return <InitialRoutesView key={register} header={header} />;
+  return <ReassessmentsView key={register} header={header} />;
+}
 
-  if (register === 'initial-route') {
-    const answer = loaded?.register === 'initial-route' ? loaded.answer : null;
-    const judgments: InitialRouteRecord[] = answer?.kind === 'outcome' ? answer.body.judgments : [];
-    return (
-      <RouteWorkbench<InitialRouteRecord>
-        key={register}
-        {...header}
-        answered={answer?.kind === 'outcome'}
-        noun="件"
-        rows={judgments}
-        // 同一托运申请同一服务目的一行（判断库唯一键），键取五维里够定行的三维。
-        rowKey={(row) => `${row.shipmentRequestId}#${row.servicePurpose}#${row.acceptanceBaseline}`}
-        statusOf={(row) => codeStatus(row.conclusion)}
-        rowAttention={(row) => row.conclusion === 'NO_CURRENT_ROUTE'}
-        searchCells={(row) => [...parcelSearchCells(row, names, numberOf), routeText(row, places)]}
-        searchPlaceholder="搜运单号 / 包裹号 / 客户 / 网点"
-        columns={initialRouteColumns(names, places, numberOf)}
-        sortAccessors={{ 'recorded-at': { value: (row) => row.recordedAt, instant: true } }}
-        defaultSort={{ key: 'recorded-at', dir: -1 }}
-        renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} places={places} numberOf={numberOf} onClose={close} />}
-        onRefresh={retry}
-        viewState={catalogueViewState(answer, judgments.length, retry, {
-          module: info,
-          endpoint: 'GET /route-plans?register=initial-route',
-          emptyTitle: '还没有定过路线',
-          emptyDescription,
-        })}
-      />
-    );
-  }
+function InitialRoutesView({ header }: { header: RoutePlansHeader }) {
+  const names = useCustomerNames();
+  const places = usePlaceNames();
+  const list = useRouteRegisterList('initial-route', listInitialRoutes, initialRouteSort);
+  const judgments = list.answer?.kind === 'outcome' ? list.answer.body.judgments : [];
+  const numberOf = useShipmentNumbers(judgments.map((row) => row.shipmentRequestId), list.refreshes);
+  const rows = judgments.filter((row) =>
+    matchesSearch(list.refine, [...parcelPageOnlyCells(row, names, numberOf), routeText(row, places)]),
+  );
+  return (
+    <RouteWorkbench<InitialRouteRecord>
+      {...header}
+      extraFilters={<PageOnlySearch value={list.refine} onChange={list.setRefine} subject="运单号、客户名称、网点" />}
+      answered={list.answer?.kind === 'outcome'}
+      noun="件"
+      rows={rows}
+      rowKey={initialRouteKey}
+      statusChips={list.statusChips}
+      onClearFilters={list.clearFilters}
+      rowAttention={(row) => row.conclusion === 'NO_CURRENT_ROUTE'}
+      searchCells={() => []}
+      search={{ value: list.keyword, onChange: list.setKeyword, pushedDown: true }}
+      searchPlaceholder={routeKeywordPlaceholders['initial-route']}
+      columns={initialRouteColumns(names, places, numberOf)}
+      pushedSort={list.pushedSort}
+      renderDetail={(row, close) => <InitialRouteDetail row={row} names={names} places={places} numberOf={numberOf} onClose={close} />}
+      onRefresh={list.refresh}
+      toolbarRight={list.pagination ? <CursorPager pagination={list.pagination} /> : undefined}
+      viewState={catalogueViewState(list.answer, judgments.length, list.refresh, {
+        module: info,
+        endpoint: 'GET /route-plans?register=initial-route',
+        emptyTitle: '还没有定过路线',
+        emptyDescription,
+        narrowed: list.narrowed,
+      })}
+    />
+  );
+}
 
-  const answer = loaded?.register === 'reassessment' ? loaded.answer : null;
-  const reassessments = answer?.kind === 'outcome' ? answer.body.reassessments : [];
+function ReassessmentsView({ header }: { header: RoutePlansHeader }) {
+  const names = useCustomerNames();
+  const list = useRouteRegisterList('reassessment', listRouteReassessments);
+  const reassessments = list.answer?.kind === 'outcome' ? list.answer.body.reassessments : [];
+  const numberOf = useShipmentNumbers(reassessments.map((row) => row.shipmentRequestId), list.refreshes);
+  const rows = reassessments.filter((row) => matchesSearch(list.refine, parcelPageOnlyCells(row, names, numberOf)));
   return (
     <RouteWorkbench<RouteReassessmentRecord>
-      key={register}
       {...header}
-      answered={answer?.kind === 'outcome'}
+      extraFilters={<PageOnlySearch value={list.refine} onChange={list.setRefine} subject="运单号、客户名称" />}
+      answered={list.answer?.kind === 'outcome'}
       noun="次"
-      rows={reassessments}
+      rows={rows}
       rowKey={(row) => row.correlationId}
-      statusOf={(row) => codeStatus(row.conclusion)}
+      statusChips={list.statusChips}
+      onClearFilters={list.clearFilters}
       rowAttention={(row) => row.conclusion === 'PLAN_LAPSED'}
-      searchCells={(row) => parcelSearchCells(row, names, numberOf)}
-      searchPlaceholder="搜运单号 / 包裹号 / 客户"
+      searchCells={() => []}
+      search={{ value: list.keyword, onChange: list.setKeyword, pushedDown: true }}
+      searchPlaceholder={routeKeywordPlaceholders.reassessment}
       columns={reassessmentColumns(names, numberOf)}
-      sortAccessors={{ 'reassessed-at': { value: (row) => row.reassessedAt, instant: true } }}
-      defaultSort={{ key: 'reassessed-at', dir: -1 }}
       renderDetail={(row, close) => <ReassessmentDetail row={row} names={names} numberOf={numberOf} onClose={close} />}
-      onRefresh={retry}
-      viewState={catalogueViewState(answer, reassessments.length, retry, {
+      onRefresh={list.refresh}
+      toolbarRight={list.pagination ? <CursorPager pagination={list.pagination} /> : undefined}
+      viewState={catalogueViewState(list.answer, reassessments.length, list.refresh, {
         module: info,
         endpoint: 'GET /route-plans?register=reassessment',
         emptyTitle: '还没有复核过路线',
         emptyDescription,
+        narrowed: list.narrowed,
       })}
     />
   );

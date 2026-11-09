@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -12,11 +12,14 @@ import { useCustomerNames } from '../shipment-request/use-customer-names';
 import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { StatusTone } from '../../vocabulary/status';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { PageOnlySearch } from '../visibility/page-only';
+import { CursorPager } from '../shipment-request/cursor-pager';
+import { matchesSearch } from '../party/list-order';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
 import {
   parcelCell,
   parcelColumnHeader,
-  parcelSearchCells,
+  parcelPageOnlyCells,
   parcelSubtitle,
   parcelTitle,
   shipmentTechnicalRows,
@@ -28,10 +31,11 @@ import {
   listInitialRouteTies,
   type ApiResult,
   type InitialRouteTieDecisionResponseBody,
-  type InitialRouteTieListResponseBody,
   type InitialRouteTieRecord,
 } from './api';
-import { labelOf } from './presentation';
+import { labelOf, routeKeywordPlaceholders } from './presentation';
+import { stateWordOf } from './route-plan-conditions';
+import { useRouteRegisterList } from './use-route-register-list';
 import {
   describeInitialRouteTieAnswer,
   initialRouteTieAvailabilityOf,
@@ -49,34 +53,28 @@ const info = moduleInfoById['route-plans'];
  * 路由计划页「并列」一册（ADR-0309 决定六）：初始路由最低成本并列的包裹，逐件列全部候选、并列的那几家与打平的金额；待裁决的那几件可在
  * 并列的那几家里择一、填决定依据，经并列裁决口提交（ADR-0309 决定二）。决定方是登录的操作者，本页不收也不送；成不成立由服务端在判断键
  * 锁里按此刻的证据重判，本页的状态只是读到时的大概。
+ *
+ * 按游标翻页（ADR-0144）：检索框下推成 `q`，状态胶囊下推成 state，发现并列的时间一列的先后下推成 settledAt——它就是读口的
+ * 排序维（最近一次停住的时刻，同一件再停一次会前移，翻页期间那一件可能挪进已翻过的区间）。裁决落地后重取当前这一页。
  */
 const stateTone: Record<string, StatusTone> = { PENDING: 'warn', DECIDED: 'good', FORMED_OTHERWISE: 'muted' };
 
 /** 并列状态：词取本册的词表（待裁决 / 已裁决 / 已另定路线），破折号之后的说明进详情。 */
 function tieStatus(row: InitialRouteTieRecord): RowStatus {
-  return { label: labelOf(initialRouteTieStateLabels, row.state).split('——')[0], tone: stateTone[row.state] ?? 'muted' };
+  return { label: stateWordOf(initialRouteTieStateLabels, row.state), tone: stateTone[row.state] ?? 'muted' };
 }
 
 const tieKey = (row: InitialRouteTieRecord) => `${row.shipmentRequestId}/${row.acceptanceBaseline}/${row.declaredParcelId}/${row.servicePurpose}`;
 
+// 列上的发现并列的时间就是读口的可排维 settledAt（ports.InitialRouteTiePages）。
+const tieSort = { key: 'settled-at', field: 'settledAt' };
+
 export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<InitialRouteTieListResponseBody> | null>(null);
   const names = useCustomerNames();
-
-  useEffect(() => {
-    let cancelled = false;
-    void listInitialRouteTies().then((loaded) => {
-      if (!cancelled) setAnswer(loaded);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  const ties = answer?.kind === 'outcome' ? answer.body.ties : [];
-  const numberOf = useShipmentNumbers(ties.map((row) => row.shipmentRequestId), reloadKey);
+  const list = useRouteRegisterList('initial-route-tie', listInitialRouteTies, tieSort);
+  const ties = list.answer?.kind === 'outcome' ? list.answer.body.ties : [];
+  const numberOf = useShipmentNumbers(ties.map((row) => row.shipmentRequestId), list.refreshes);
+  const rows = ties.filter((row) => matchesSearch(list.refine, parcelPageOnlyCells(row, names, numberOf)));
 
   const columns: WorkbenchColumn<InitialRouteTieRecord>[] = [
     { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
@@ -93,24 +91,30 @@ export function InitialRouteTiesView({ header }: { header: RoutePlansHeader }) {
   return (
     <RouteWorkbench<InitialRouteTieRecord>
       {...header}
-      answered={answer?.kind === 'outcome'}
+      extraFilters={<PageOnlySearch value={list.refine} onChange={list.setRefine} subject="运单号、客户名称" />}
+      answered={list.answer?.kind === 'outcome'}
       noun="件"
-      rows={ties}
+      rows={rows}
       rowKey={tieKey}
-      statusOf={tieStatus}
+      statusChips={list.statusChips}
+      onClearFilters={list.clearFilters}
       rowAttention={(row) => row.state === 'PENDING'}
-      searchCells={(row) => parcelSearchCells(row, names, numberOf)}
-      searchPlaceholder="搜运单号 / 包裹号 / 客户"
+      searchCells={() => []}
+      search={{ value: list.keyword, onChange: list.setKeyword, pushedDown: true }}
+      searchPlaceholder={routeKeywordPlaceholders['initial-route-tie']}
       columns={columns}
-      sortAccessors={{ 'settled-at': { value: (row) => row.settledAt, instant: true } }}
-      defaultSort={{ key: 'settled-at', dir: -1 }}
-      renderDetail={(row, close) => <TieDetail key={tieKey(row)} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={retry} />}
-      onRefresh={retry}
-      viewState={catalogueViewState(answer, ties.length, retry, {
+      pushedSort={list.pushedSort}
+      renderDetail={(row, close) => (
+        <TieDetail key={tieKey(row)} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={list.refresh} />
+      )}
+      onRefresh={list.refresh}
+      toolbarRight={list.pagination ? <CursorPager pagination={list.pagination} /> : undefined}
+      viewState={catalogueViewState(list.answer, ties.length, list.refresh, {
         module: info,
         endpoint: 'GET /route-initial-route-ties',
         emptyTitle: '没有等裁决的成本并列',
         emptyDescription: '定路线时几条备选路线成本一样、选不出唯一一条时，会停在这里等你选一条。',
+        narrowed: list.narrowed,
       })}
     />
   );

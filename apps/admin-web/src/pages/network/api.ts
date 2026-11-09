@@ -184,6 +184,12 @@ export const registrationRefusalReasonLabels: Record<string, string> = {
 // ——以下为路由判断两册的检索列面(GET /route-plans,票 admin-skeleton-closure-batch/03)。
 // 两册按 ?register= 分派;计划本体、无路可走判断与改路决定住在判断快照(jsonb)内,
 // 属各判断口的权威读法,端点不透出,这里也不虚构。
+//
+// 路线规划各册的读口(这两册与下面的改路建议、成本并列)已迁到 ADR-0144:翻页走游标,检索、筛选维与排序下推。各册点名了
+// 哪几维以读口的声明为准(internal/networkrouting/ports 的 catalogue_pages.go),这里不抄一份;页面怎样拼条件在 route-plan-conditions.ts。
+
+/** 路线规划一册一问的条件。register 是册子选择器,由两册各自的读口函数带上,页面只给检索、筛选与排序。 */
+export type RouteRegisterConditions = Omit<CatalogueConditions, 'selectors'>;
 
 /** 计划适用性组;仅计划版本已有适用性登记时在场。basis/successor 逐态在场。 */
 export interface RoutePlanApplicability {
@@ -256,12 +262,23 @@ export interface RouteReassessmentListResponseBody {
   page: CataloguePage;
 }
 
-export function listInitialRoutes(): Promise<ApiResult<InitialRouteListResponseBody>> {
-  return exchangeMasterData<InitialRouteListResponseBody>('/route-plans?register=initial-route');
+/** 游标缺即第一页;不带条件即该册的缺省序第一页。 */
+export function listInitialRoutes(
+  conditions: RouteRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<InitialRouteListResponseBody>> {
+  return exchangeMasterData<InitialRouteListResponseBody>(
+    catalogueRequestPath('/route-plans', { ...conditions, selectors: { register: 'initial-route' } }, after),
+  );
 }
 
-export function listRouteReassessments(): Promise<ApiResult<RouteReassessmentListResponseBody>> {
-  return exchangeMasterData<RouteReassessmentListResponseBody>('/route-plans?register=reassessment');
+export function listRouteReassessments(
+  conditions: RouteRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<RouteReassessmentListResponseBody>> {
+  return exchangeMasterData<RouteReassessmentListResponseBody>(
+    catalogueRequestPath('/route-plans', { ...conditions, selectors: { register: 'reassessment' } }, after),
+  );
 }
 
 // ——以下为改路建议读面与授权改路决定口（ADR-0284 决定一、六；票 docs-consistency/code/29）。形状以
@@ -297,6 +314,8 @@ export interface RerouteSuggestionRecord {
   candidates: RerouteSuggestionCandidate[];
   suggestedAt: string;
   triggerOccurredAt?: string;
+  /** 建议所在那次复核落册的时刻：读口按它排（缺省最新在前），不是建议形成的时刻 suggestedAt。 */
+  recordedAt: string;
   /** 封闭三格原词：PENDING / DECIDED / SUPERSEDED。 */
   state: string;
   decision?: RerouteSuggestionDecision;
@@ -305,10 +324,17 @@ export interface RerouteSuggestionRecord {
 export interface RerouteSuggestionListResponseBody {
   outcome: 'REROUTE_SUGGESTIONS_LISTED';
   suggestions: RerouteSuggestionRecord[];
+  page: CataloguePage;
 }
 
-export function listRerouteSuggestions(): Promise<ApiResult<RerouteSuggestionListResponseBody>> {
-  return exchangeMasterData<RerouteSuggestionListResponseBody>('/route-reroute-suggestions');
+/** 游标缺即第一页。 */
+export function listRerouteSuggestions(
+  conditions: RouteRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<RerouteSuggestionListResponseBody>> {
+  return exchangeMasterData<RerouteSuggestionListResponseBody>(
+    catalogueRequestPath('/route-reroute-suggestions', conditions, after),
+  );
 }
 
 /** 一次授权改路决定的载荷。**没有租户、没有决定方**——身份从操作者信封来，服务端对载荷里出现的身份键一律按未知键拒。 */
@@ -383,10 +409,17 @@ export interface InitialRouteTieRecord {
 export interface InitialRouteTieListResponseBody {
   outcome: 'INITIAL_ROUTE_TIES_LISTED';
   ties: InitialRouteTieRecord[];
+  page: CataloguePage;
 }
 
-export function listInitialRouteTies(): Promise<ApiResult<InitialRouteTieListResponseBody>> {
-  return exchangeMasterData<InitialRouteTieListResponseBody>('/route-initial-route-ties');
+/** 游标缺即第一页。 */
+export function listInitialRouteTies(
+  conditions: RouteRegisterConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<InitialRouteTieListResponseBody>> {
+  return exchangeMasterData<InitialRouteTieListResponseBody>(
+    catalogueRequestPath('/route-initial-route-ties', conditions, after),
+  );
 }
 
 /** 一次并列裁决的载荷。**没有租户、没有决定方**——身份从操作者信封来，服务端对载荷里出现的身份键一律按未知键拒。 */

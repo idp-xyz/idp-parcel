@@ -48,6 +48,11 @@ export interface RouteWorkbenchProps<Row> {
   columns: WorkbenchColumn<Row>[];
   sortAccessors?: Readonly<Record<string, SortAccessor<Row>>>;
   defaultSort?: WorkbenchSort;
+  /**
+   * 已下推到读口的表头先后（调用方持有）：给了就把表头的点击交给调用方、不在本件里按到手的行排——读口分页时到手的只是一页，
+   * 页内重排只排这一页。与 sortAccessors 二选一。
+   */
+  pushedSort?: { value: WorkbenchSort; onChange: (sort: WorkbenchSort) => void };
   rowAttention?: (row: Row) => boolean;
   renderDetail: (row: Row, close: () => void) => ReactNode;
   viewState: TemplateViewState;
@@ -83,6 +88,7 @@ export function RouteWorkbench<Row>({
   columns,
   sortAccessors,
   defaultSort,
+  pushedSort,
   rowAttention,
   renderDetail,
   viewState,
@@ -108,7 +114,7 @@ export function RouteWorkbench<Row>({
       (status === 'ALL' || statusLabel(row) === status) &&
       (pushedDown || matchesSearch(search.value, [...searchCells(row), statusLabel(row)])),
   );
-  const visible = sortAccessors ? sortRowsBy(filtered, sort, sortAccessors) : filtered;
+  const visible = sortAccessors && !pushedSort ? sortRowsBy(filtered, sort, sortAccessors) : filtered;
   const filter = answered && statusOf && !statusChips ? statusFilterParts(counts, rows.length, status, setStatus) : undefined;
   const close = () => setSelectedKey(null);
 
@@ -148,8 +154,14 @@ export function RouteWorkbench<Row>({
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
       rowAttention={rowAttention}
-      sort={sortAccessors ? sort : undefined}
-      onSort={sortAccessors ? (key) => setSort(toggleWorkbenchSort(sort, key)) : undefined}
+      sort={pushedSort ? pushedSort.value : sortAccessors ? sort : undefined}
+      onSort={
+        pushedSort
+          ? (key) => pushedSort.onChange(toggleWorkbenchSort(pushedSort.value, key))
+          : sortAccessors
+            ? (key) => setSort(toggleWorkbenchSort(sort, key))
+            : undefined
+      }
       noMatchText="当前筛选条件下没有匹配的记录"
       onClearFilters={() => {
         search.onChange('');

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -12,13 +12,16 @@ import { useCustomerNames } from '../shipment-request/use-customer-names';
 import { useShipmentNumbers } from '../shipment-request/use-shipment-numbers';
 import type { StatusTone } from '../../vocabulary/status';
 import { RowStatusPill } from '../visibility/ExceptionDetailPanel';
+import { PageOnlySearch } from '../visibility/page-only';
+import { CursorPager } from '../shipment-request/cursor-pager';
+import { matchesSearch } from '../party/list-order';
 import { placeLabel } from './place-names';
 import { usePlaceNames } from './use-place-names';
 import { RecordDetailPanel, RouteWorkbench, techRows, type RowStatus } from './route-workbench';
 import {
   parcelCell,
   parcelColumnHeader,
-  parcelSearchCells,
+  parcelPageOnlyCells,
   parcelSubtitle,
   parcelTitle,
   shipmentTechnicalRows,
@@ -30,10 +33,11 @@ import {
   listRerouteSuggestions,
   type ApiResult,
   type RerouteDecisionResponseBody,
-  type RerouteSuggestionListResponseBody,
   type RerouteSuggestionRecord,
 } from './api';
-import { labelOf } from './presentation';
+import { labelOf, routeKeywordPlaceholders } from './presentation';
+import { stateWordOf } from './route-plan-conditions';
+import { useRouteRegisterList } from './use-route-register-list';
 import {
   describeRerouteDecisionAnswer,
   rerouteDecisionAvailabilityOf,
@@ -50,32 +54,23 @@ const info = moduleInfoById['route-plans'];
  * 路由计划页「改路建议」一册（ADR-0284 决定六）：复核在原计划失效后形成的改路建议，逐份列阻塞、候选与状态；待决定的那几份可择一
  * 合格候选、填决定依据，经授权改路决定口提交（ADR-0284 决定一）。决定方是登录的操作者，本页不收也不送；成不成立由服务端在判断键
  * 锁里按此刻的证据重判，本页的状态只是读到时的大概。
+ *
+ * 按游标翻页（ADR-0144）：检索框下推成 `q`，状态胶囊下推成 state。次序是读口的缺省序——建议所在那次复核落册的时刻倒序，不是
+ * 建议时间，所以建议时间一列不给排。决定落地后重取当前这一页。
  */
 const stateTone: Record<string, StatusTone> = { PENDING: 'warn', DECIDED: 'good', SUPERSEDED: 'muted' };
 
 /** 建议状态：词取本册的词表（待决定 / 已决定 / 已过时），色调待决定琥珀、已决定绿、已过时灰。 */
 function suggestionStatus(row: RerouteSuggestionRecord): RowStatus {
-  return { label: labelOf(rerouteSuggestionStateLabels, row.state).split('——')[0], tone: stateTone[row.state] ?? 'muted' };
+  return { label: stateWordOf(rerouteSuggestionStateLabels, row.state), tone: stateTone[row.state] ?? 'muted' };
 }
 
 export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader }) {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<RerouteSuggestionListResponseBody> | null>(null);
   const names = useCustomerNames();
-
-  useEffect(() => {
-    let cancelled = false;
-    void listRerouteSuggestions().then((loaded) => {
-      if (!cancelled) setAnswer(loaded);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  const suggestions = answer?.kind === 'outcome' ? answer.body.suggestions : [];
-  const numberOf = useShipmentNumbers(suggestions.map((row) => row.shipmentRequestId), reloadKey);
+  const list = useRouteRegisterList('reroute-suggestion', listRerouteSuggestions);
+  const suggestions = list.answer?.kind === 'outcome' ? list.answer.body.suggestions : [];
+  const numberOf = useShipmentNumbers(suggestions.map((row) => row.shipmentRequestId), list.refreshes);
+  const rows = suggestions.filter((row) => matchesSearch(list.refine, parcelPageOnlyCells(row, names, numberOf)));
 
   const columns: WorkbenchColumn<RerouteSuggestionRecord>[] = [
     { key: 'parcel', header: parcelColumnHeader, render: parcelCell(numberOf) },
@@ -89,7 +84,6 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
     {
       key: 'suggested-at',
       header: '建议时间',
-      sortKey: 'suggested-at',
       render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{formatInstant(row.suggestedAt)}</span>,
     },
   ];
@@ -97,24 +91,29 @@ export function RerouteSuggestionsView({ header }: { header: RoutePlansHeader })
   return (
     <RouteWorkbench<RerouteSuggestionRecord>
       {...header}
-      answered={answer?.kind === 'outcome'}
+      extraFilters={<PageOnlySearch value={list.refine} onChange={list.setRefine} subject="运单号、客户名称" />}
+      answered={list.answer?.kind === 'outcome'}
       noun="份"
-      rows={suggestions}
+      rows={rows}
       rowKey={(row) => row.correlationId}
-      statusOf={suggestionStatus}
+      statusChips={list.statusChips}
+      onClearFilters={list.clearFilters}
       rowAttention={(row) => row.state === 'PENDING'}
-      searchCells={(row) => [...parcelSearchCells(row, names, numberOf), row.correlationId, row.reviewedPlan]}
-      searchPlaceholder="搜运单号 / 包裹号 / 客户"
+      searchCells={() => []}
+      search={{ value: list.keyword, onChange: list.setKeyword, pushedDown: true }}
+      searchPlaceholder={routeKeywordPlaceholders['reroute-suggestion']}
       columns={columns}
-      sortAccessors={{ 'suggested-at': { value: (row) => row.suggestedAt, instant: true } }}
-      defaultSort={{ key: 'suggested-at', dir: -1 }}
-      renderDetail={(row, close) => <SuggestionDetail key={row.correlationId} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={retry} />}
-      onRefresh={retry}
-      viewState={catalogueViewState(answer, suggestions.length, retry, {
+      renderDetail={(row, close) => (
+        <SuggestionDetail key={row.correlationId} row={row} names={names} numberOf={numberOf} onClose={close} onLanded={list.refresh} />
+      )}
+      onRefresh={list.refresh}
+      toolbarRight={list.pagination ? <CursorPager pagination={list.pagination} /> : undefined}
+      viewState={catalogueViewState(list.answer, suggestions.length, list.refresh, {
         module: info,
         endpoint: 'GET /route-reroute-suggestions',
         emptyTitle: '没有待处理的改路建议',
         emptyDescription: '运输途中路线失效、又不能自动改路时，系统会在这里给出改路建议，等你选一条备选路线。',
+        narrowed: list.narrowed,
       })}
     />
   );
@@ -163,6 +162,7 @@ function SuggestionDetail({
         { label: '决定人', value: row.decision?.decidedBy },
         { label: '决定依据', value: row.decision?.basis },
         { label: '状态码', value: row.state },
+        { label: '所在复核登记时间', value: formatInstant(row.recordedAt) },
       ])}
       actions={
         availability.kind === 'available' && mayDecide ? (

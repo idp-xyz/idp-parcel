@@ -2,6 +2,7 @@
 // 网络可用性调整叫停运与恢复（network-routing CONTEXT 的原词在代码与注释里）。
 
 import type { NetworkCatalogFamily } from './api';
+import type { RouteRegister } from './route-plan-conditions';
 
 export const familyLabels: Record<NetworkCatalogFamily, string> = {
   node: '网点',
@@ -23,6 +24,15 @@ export const keywordPlaceholders: Record<NetworkCatalogFamily, string> = {
   'service-calendar': '搜网点、连接或线路编码',
   'availability-adjustment': '搜调整编码、对象编码或来源',
   'route-strategy': '搜策略编码',
+};
+
+// 路线规划各册检索框的提示,照 networkrouting postgres 读面各册绑定的 Keyword 列写,口径同 keywordPlaceholders。词取页上技术详情里那一格的叫法;
+// 运单号与客户名称不在这几列里,归「只筛本页」的框。
+export const routeKeywordPlaceholders: Record<RouteRegister, string> = {
+  'initial-route': '搜包裹号、委托标识、客户编码、受理基线、计划版本',
+  reassessment: '搜包裹号、委托标识、客户编码、受理基线、复核关联、被复核计划',
+  'reroute-suggestion': '搜包裹号、委托标识、客户编码、受理基线、所在复核、失效的计划',
+  'initial-route-tie': '搜包裹号、委托标识、客户编码、受理基线',
 };
 
 /** 网络与网点页的六个签:服务区域另有专页,这里不露。 */

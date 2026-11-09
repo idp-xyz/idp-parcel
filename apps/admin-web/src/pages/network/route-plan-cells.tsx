@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
-import { parcelNoOf, shipmentNoOf } from '../shipment-request/ref-no';
+import { parcelNoOf } from '../shipment-request/ref-no';
 import type { ShipmentNumberCell } from '../shipment-request/shipment-numbers';
 import type { CustomerNameIndex } from '../shipment-request/shipment-request-list';
 
-// 路线规划四本册共用的几格：运单号 + 包裹号的行首格、客户名、检索命中的格、详情栏标题与副标题、技术详情里委托那两行，以及
+// 路线规划四本册共用的几格：运单号 + 包裹号的行首格、客户名、只筛本页的格、详情栏标题与副标题、技术详情里委托那两行，以及
 // 页头。单放一处，免得两个决定面的视图回头去引页面本身（那会成环）。
 //
 // 读模型里只有委托标识：委托与它的单据号归 parcel-shipment，路由判断不复制（CONTEXT-MAP 的所有权）。运单号由各册按页上的
@@ -48,17 +48,12 @@ export function customerText(account: string, names: CustomerNameIndex): ReactNo
   return name ? <span title={account}>{name}</span> : <span className="font-mono">{account}</span>;
 }
 
-/** 运单号、委托标识与包裹号（整串与短写法）、客户名称与编码都能搜。 */
-export function parcelSearchCells(row: ParcelRef, names: CustomerNameIndex, numberOf: ShipmentNumberOf): string[] {
-  return [
-    numberOf(row.shipmentRequestId).documentNumber ?? '',
-    row.shipmentRequestId,
-    shipmentNoOf(row.shipmentRequestId),
-    row.declaredParcelId,
-    parcelNoOf(row.declaredParcelId),
-    row.customerAccountId,
-    names.get(row.customerAccountId) ?? '',
-  ];
+/**
+ * 只筛本页那一框认的几格：运单号与客户名称。检索框下推到读口，读口认的是各册的标识列（包裹、委托、客户编码这些，短写法是整串的
+ * 一段，包含匹配照样命中）；运单号是委托的单据号、客户名称从客户账户册转写，都不在路由判断的表里，只能在到手的这一页上找。
+ */
+export function parcelPageOnlyCells(row: ParcelRef, names: CustomerNameIndex, numberOf: ShipmentNumberOf): string[] {
+  return [numberOf(row.shipmentRequestId).documentNumber ?? '', names.get(row.customerAccountId) ?? ''];
 }
 
 /** 详情栏标题：运单号；没有运单号时去前缀的委托标识。 */
