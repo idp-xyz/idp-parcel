@@ -59,6 +59,32 @@ func TestGovernanceRegistersCarryThePageAndPassTheDecodedQuery(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——权威区间的 open、暂停的 resumed 照选中那一册的声明解成查询对象的
+// 筛选，维内为或、去重升序，原样交给读口。
+func TestGovernanceRegistersHandTheStatusDimensionToTheReader(t *testing.T) {
+	for _, testCase := range []struct {
+		query     string
+		dimension string
+		want      string
+	}{
+		{"?register=authority-interval&open=true&open=false", "open", "false,true"},
+		{"?register=suspension&resumed=false&resumed=false", "resumed", "false"},
+	} {
+		t.Run(testCase.dimension, func(t *testing.T) {
+			reader := &stubRegistryReader{}
+			response := httptest.NewRecorder()
+			governancehttp.NewQueryGovernanceRegistersEndpoint(grantedIntake(t, 25), reader).
+				ServeHTTP(response, registryRequest(testCase.query))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d；body = %s", response.Code, response.Body)
+			}
+			if got := reader.gotQuery.Filters; len(got) != 1 || strings.Join(got[testCase.dimension], ",") != testCase.want {
+				t.Fatalf("读口收到的筛选 = %v，应只有 %s=%s", got, testCase.dimension, testCase.want)
+			}
+		})
+	}
+}
+
 // Covers: ADR-0144 决定一、三、四——集外的键、排序维与筛选键，解不开的游标、换了条件或换了一册还拿来的旧游标，都答 400
 // 带理由散文，读口不被调用。register 是选择器、取值进游标摘要：暂停册的游标拿去翻恢复册即拒。register 与解码都在 Intake
 // 之后：渠道未配置时参数写对写错、register 缺席或写错都答 403，答复不随请求内容变（ADR-0055 决定三）。
@@ -89,6 +115,9 @@ func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"换了条件的旧游标":  {"?register=suspension&q=SYN-B&after=" + stale, "游标"},
 		"换了一册的旧游标":  {"?register=resumption&q=SYN-A&after=" + stale, "游标"},
 		"坏转义":       {"?register=suspension&q=%zz", "解不开的一段"},
+		"区间状态词表外":   {"?register=authority-interval&open=maybe", "open"},
+		"暂停状态词表外":   {"?register=suspension&resumed=yes", "resumed"},
+		"恢复册没有状态维":  {"?register=resumption&resumed=true", "resumed"},
 	}
 	for name, refusal := range refusals {
 		t.Run(name, func(t *testing.T) {
@@ -124,6 +153,8 @@ func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"?register=suspension&q=%zz",
 		"?register=suspension&tenant=SYN-TENANT-02",
 		"?register=takeover&authority=SYN-AUTH/successor",
+		"?register=suspension&resumed=yes",
+		"?register=authority-interval&open=maybe",
 		"",
 		"?register=",
 		"?register=stage-review&q=SYN",

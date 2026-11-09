@@ -349,3 +349,104 @@ func TestTakeoverRegistryKeepsOpenAndClosedTwinsApart(t *testing.T) {
 		}
 	}
 }
+
+// Covers: ADR-0144 决定四「有状态的册至少放出状态一维」——权威区间按 open、暂停按 resumed 筛出的行，读回的终点在场与否、
+// Resumed 与所给的词一致，total 随这一维变、与 q 为与。恢复的生效时点落在将来也算有恢复决定：这一维说的是登记，不说此刻。
+func TestGovernanceStatusDimensionsAgreeWithTheAnswerFields(t *testing.T) {
+	ctx := t.Context()
+	fixture := newRegistryReadFixture(t)
+	for index, closed := range map[int]bool{1: false, 2: true, 3: false} {
+		var to any
+		if closed {
+			to = registryReadAt.Add(24 * time.Hour)
+		}
+		if _, err := fixture.pool.Exec(ctx,
+			`INSERT INTO pilot_governance.authority_interval
+				(object_scope, capability, fact_kind, authority, from_at, to_at, inserted_at)
+			 VALUES ($1, 'SYN-CAP/route-planning', 'SYN-FACT/route-plan', 'SYN-AUTH/pilot-engine', $2, $3, $4)`,
+			pageKey("SYN-SCOPE/", index), registryReadAt, to, registryReadAt.Add(time.Duration(index)*time.Hour)); err != nil {
+			t.Fatalf("登区间 %d：%v", index, err)
+		}
+	}
+	for index := 1; index <= 3; index++ {
+		id := pageKey("SYN-GOV-SUS-", index)
+		at := registryReadAt.Add(time.Duration(index) * time.Hour)
+		suspension := registrySuspension(t, id, "SYN-PILOT-SCOPE@v3", at)
+		fixture.write(t, ctx, func(txCtx context.Context) error {
+			_, err := fixture.suspensions.Save(txCtx, suspension)
+			return err
+		})
+		if index != 2 {
+			continue
+		}
+		resumption, err := domain.RecordResumption(domain.ResumptionDecisionSpec{
+			Suspension:       govRef(t, domain.NewSuspensionID, id),
+			ReleaseEvidence:  "SYN-EVIDENCE/release",
+			ConsistencyCheck: "SYN-CHECK/ledger-consistent",
+			Inventory:        pageInventory(t, at.Add(time.Hour)),
+			DecidedBy:        "SYN-GOV-OPERATOR",
+			DecidedAt:        at.Add(2 * time.Hour),
+			EffectiveAt:      at.Add(365 * 24 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("形成恢复：%v", err)
+		}
+		fixture.write(t, ctx, func(txCtx context.Context) error {
+			_, err := fixture.resumptions.Save(txCtx, resumption)
+			return err
+		})
+	}
+
+	type statusCase struct {
+		values url.Values
+		want   []string
+	}
+	for name, test := range map[string]statusCase{
+		"不带条件":       {values: url.Values{}, want: pageKeys("SYN-SCOPE/", 3, 2, 1)},
+		"开放":         {values: url.Values{"open": {"true"}}, want: pageKeys("SYN-SCOPE/", 3, 1)},
+		"已有终点":       {values: url.Values{"open": {"false"}}, want: pageKeys("SYN-SCOPE/", 2)},
+		"维内为或":       {values: url.Values{"open": {"true", "false"}}, want: pageKeys("SYN-SCOPE/", 3, 2, 1)},
+		"开放且 q 命中":   {values: url.Values{"open": {"true"}, "q": {"p01"}}, want: pageKeys("SYN-SCOPE/", 1)},
+		"已有终点且 q 不中": {values: url.Values{"open": {"false"}, "q": {"p01"}}, want: []string{}},
+	} {
+		t.Run("权威区间/"+name, func(t *testing.T) {
+			page, err := fixture.registers.ListAuthorityIntervals(ctx, 10, pageQuery(t, ports.AuthorityIntervalRegistryPages, test.values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			keys := make([]string, 0, len(page.Rows))
+			for _, row := range page.Rows {
+				keys = append(keys, row.ObjectScope)
+				if words := test.values["open"]; len(words) == 1 && row.HasToAt == (words[0] == "true") {
+					t.Fatalf("按 open=%s 筛出的 %s 读回终点在场 %v", words[0], row.ObjectScope, row.HasToAt)
+				}
+			}
+			if !reflect.DeepEqual(keys, test.want) || page.Total != int64(len(test.want)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", keys, page.Total, test.want, len(test.want))
+			}
+		})
+	}
+	for name, test := range map[string]statusCase{
+		"不带条件":       {values: url.Values{}, want: pageKeys("SYN-GOV-SUS-", 3, 2, 1)},
+		"有恢复决定":      {values: url.Values{"resumed": {"true"}}, want: pageKeys("SYN-GOV-SUS-", 2)},
+		"没有恢复决定":     {values: url.Values{"resumed": {"false"}}, want: pageKeys("SYN-GOV-SUS-", 3, 1)},
+		"没有恢复且 q 命中": {values: url.Values{"resumed": {"false"}, "q": {"p03"}}, want: pageKeys("SYN-GOV-SUS-", 3)},
+	} {
+		t.Run("暂停/"+name, func(t *testing.T) {
+			page, err := fixture.registers.ListSuspensions(ctx, 10, pageQuery(t, ports.SuspensionRegistryPages, test.values))
+			if err != nil {
+				t.Fatal(err)
+			}
+			keys := make([]string, 0, len(page.Rows))
+			for _, row := range page.Rows {
+				keys = append(keys, row.SuspensionID)
+				if words := test.values["resumed"]; len(words) == 1 && row.Resumed != (words[0] == "true") {
+					t.Fatalf("按 resumed=%s 筛出的 %s 读回 Resumed=%v", words[0], row.SuspensionID, row.Resumed)
+				}
+			}
+			if !reflect.DeepEqual(keys, test.want) || page.Total != int64(len(test.want)) {
+				t.Fatalf("得 %v / total %d，应为 %v / total %d", keys, page.Total, test.want, len(test.want))
+			}
+		})
+	}
+}

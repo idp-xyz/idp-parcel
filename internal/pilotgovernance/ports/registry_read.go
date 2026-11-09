@@ -42,6 +42,9 @@ type AuthorityIntervalRegistryRow struct {
 
 // SuspensionRegistryRow 是暂停决定册上列的一行。暂停的是指定范围的新委托纳入，
 // 不取消、不迁移、不回退在途——语义边界是结构性的，列面照登记原文转写。
+//
+// Resumed 是这条暂停名下有没有恢复决定，读法见 SuspensionRegistryPages 的 resumed 一维：它与那一维出自读面同一个表达式，
+// 不说范围此刻还拦不拦新准入。
 type SuspensionRegistryRow struct {
 	SuspensionID  string
 	TriggerSource string
@@ -52,6 +55,7 @@ type SuspensionRegistryRow struct {
 	OccurredAt    time.Time
 	EffectiveAt   time.Time
 	InTransitNote string
+	Resumed       bool
 }
 
 // ResumptionRegistryRow 是恢复决定册上列的一行。一个暂停至多一次恢复（主键即被

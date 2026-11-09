@@ -244,6 +244,10 @@ func TestGovernanceRegistersEndpointTranscribesAuthorityIntervals(t *testing.T) 
 	if _, present := ended["toAt"].(string); !present {
 		t.Fatalf("已闭区间的上界没透出：%v", ended)
 	}
+	// 状态维那一格 open 恒在场，与 toAt 在场与否同说一件事。
+	if open["open"] != true || ended["open"] != false {
+		t.Fatalf("open 要恒在场、开放区间为 true、已有终点的为 false：%v / %v", open["open"], ended["open"])
+	}
 }
 
 func TestGovernanceRegistersEndpointTranscribesSuspensionsAndResumptions(t *testing.T) {
@@ -257,6 +261,17 @@ func TestGovernanceRegistersEndpointTranscribesSuspensionsAndResumptions(t *test
 			ExecutedBy:    "SYN-GOV-OPERATOR",
 			OccurredAt:    registryEndpointAt,
 			EffectiveAt:   registryEndpointAt.Add(time.Hour),
+			InTransitNote: "SYN-NOTE/in-transit objects stay with current authority",
+			Resumed:       true,
+		}, {
+			SuspensionID:  "SYN-GOV-SUS-0002",
+			TriggerSource: "SYN-TRIGGER/shadow-diff-alarm",
+			Basis:         "SYN-BASIS/stage-review-no-go",
+			Evidence:      "SYN-EVIDENCE/incident-260805",
+			Scope:         "SYN-PILOT-SCOPE@v3",
+			ExecutedBy:    "SYN-GOV-OPERATOR",
+			OccurredAt:    registryEndpointAt.Add(48 * time.Hour),
+			EffectiveAt:   registryEndpointAt.Add(49 * time.Hour),
 			InTransitNote: "SYN-NOTE/in-transit objects stay with current authority",
 		}},
 		resumptions: []ports.ResumptionRegistryRow{{
@@ -282,7 +297,7 @@ func TestGovernanceRegistersEndpointTranscribesSuspensionsAndResumptions(t *test
 		t.Fatalf("outcome = %v", body["outcome"])
 	}
 	suspensions, _ := body["suspensions"].([]any)
-	if len(suspensions) != 1 {
+	if len(suspensions) != 2 {
 		t.Fatalf("suspensions 形状变形：%v", body["suspensions"])
 	}
 	suspended, _ := suspensions[0].(map[string]any)
@@ -290,6 +305,10 @@ func TestGovernanceRegistersEndpointTranscribesSuspensionsAndResumptions(t *test
 		suspended["scope"] != "SYN-PILOT-SCOPE@v3" ||
 		suspended["inTransitNote"] != "SYN-NOTE/in-transit objects stay with current authority" {
 		t.Fatalf("暂停行转写变形：%v", suspended)
+	}
+	// 状态维那一格 resumed 恒在场：有恢复决定的为 true，没有的为 false 而不是缺席。
+	if still, _ := suspensions[1].(map[string]any); suspended["resumed"] != true || still["resumed"] != false {
+		t.Fatalf("resumed 要恒在场、照读口转写：%v / %v", suspended["resumed"], still["resumed"])
 	}
 
 	recorder = httptest.NewRecorder()

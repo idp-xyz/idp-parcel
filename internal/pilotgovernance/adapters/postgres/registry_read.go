@@ -40,11 +40,14 @@ var (
 	authorityIntervalPages = ports.AuthorityIntervalRegistryPages.MustBind(cataloguepage.Columns{
 		Sorts:    map[string]string{"insertedAt": "inserted_at"},
 		Identity: []string{"interval_id"},
-		Keyword:  []string{"object_scope", "capability", "fact_kind", "authority"},
+		// open 落在终点缺席的文本形上（'true' / 'false'，与词表同词），与扫进 HasToAt 的是同一列。
+		Filters: map[string]string{"open": "(to_at IS NULL)::text"},
+		Keyword: []string{"object_scope", "capability", "fact_kind", "authority"},
 	})
 	suspensionPages = ports.SuspensionRegistryPages.MustBind(cataloguepage.Columns{
 		Sorts:    map[string]string{"occurredAt": "occurred_at"},
 		Identity: []string{"suspension_id"},
+		Filters:  map[string]string{"resumed": "(" + suspensionResumed + ")::text"},
 		Keyword:  []string{"suspension_id", "trigger_source", "scope", "executed_by"},
 	})
 	resumptionPages = ports.ResumptionRegistryPages.MustBind(cataloguepage.Columns{
@@ -60,6 +63,13 @@ var (
 		Keyword: []string{"object_scope", "capability", "fact_kind", "authority"},
 	})
 )
+
+// suspensionResumed 是暂停册状态维 resumed 的表达式：恢复册上有没有这条暂停那一行。筛选维与随行选出、扫进 Resumed 的用的都是
+// 这一份，筛与答读同一格。外层的列按表名限定——子查询里不限定的 suspension_id 会落到恢复册自己那一列上。子查询走恢复册主键
+// resumption_decision_pkey，不另建索引。
+const suspensionResumed = `EXISTS (
+		SELECT 1 FROM pilot_governance.resumption_decision AS resumption
+		 WHERE resumption.suspension_id = suspension_decision.suspension_id)`
 
 // takeoverIntervalEnd 是接管册行标识里「区间终点，开放区间取起点」那一段的落列。ORDER BY 与选列用的都是这一份，游标
 // 位置取它随行扫回来的值，不在 Go 里照着重算。它必须与索引 takeover_record_by_effective 里的表达式逐字相同，规划器才
@@ -180,14 +190,14 @@ func (registers *GovernanceRegisters) ListSuspensions(
 	}
 	page, err := registryPage(ctx, registers.db, suspensionPages, query, limit,
 		`suspension_id, trigger_source, basis, evidence, scope, executed_by,
-		 occurred_at, effective_at, in_transit_note`,
+		 occurred_at, effective_at, in_transit_note, `+suspensionResumed,
 		"pilot_governance.suspension_decision",
 		func(scan func(dest ...any) error) (ports.SuspensionRegistryRow, error) {
 			var row ports.SuspensionRegistryRow
 			err := scan(
 				&row.SuspensionID, &row.TriggerSource, &row.Basis, &row.Evidence,
 				&row.Scope, &row.ExecutedBy, &row.OccurredAt, &row.EffectiveAt,
-				&row.InTransitNote,
+				&row.InTransitNote, &row.Resumed,
 			)
 			return row, err
 		},

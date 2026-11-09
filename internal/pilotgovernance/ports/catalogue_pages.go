@@ -8,29 +8,38 @@ import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 //
 // 四册同在 GET /governance-registers 下，按 register 选择器分派，各是一册、各有册名；register 登为选择器（端点自己读、保持
 // 原义、取值进游标摘要），换一册就得从第一页重取。治理登记册没有租户维（ADR-0083 决定一），取页条件里也就没有租户那一段。
-// 四册都不放筛选维：登记列全是脱敏引用、没有状态或封闭词表（spec「可排维、筛选维从小放」）；找行走 q。可排维只放缺省那一维。
+// 登记列全是脱敏引用、没有封闭词表；有状态的两册各放出状态一维（决定四）：权威区间的开闭、暂停有没有恢复决定，都由本册（与以
+// 暂停标识为键的恢复册）上的行直接读出。其余两册不放筛选维，找行走 q。可排维只放缺省那一维。
+
+// presenceWords 是两册状态维的词表：答复体里 open、resumed 那个布尔的两种写法。
+var presenceWords = []string{"true", "false"}
 
 // registerSelector 是四册共用的选择器键，词同端点的 register 查询参数。
 var registerSelector = []string{"register"}
 
 // AuthorityIntervalRegistryPages 是生产权威区间册的声明。缺省序是登记时间倒序，即决定三的缺省；行标识是库面代理键
-// interval_id——它是主键，只进游标、不作答复字段（AuthorityIntervalRegistryRow 头注）。
+// interval_id——它是主键，只进游标、不作答复字段（AuthorityIntervalRegistryRow 头注）。open 是状态维：区间还没有终点即开放
+// （domain.AuthorityInterval 的 To 为零值），读面由本行导出。它不说区间此刻在不在效——终点可以落在将来，那是读者拿区间判读的事。
 // q 在区间四维（对象范围、能力、事实类型、权威方）上做字面包含。
 var AuthorityIntervalRegistryPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "governance-registers/authority-interval",
 	Sorts:       []cataloguepage.SortDimension{{Name: "insertedAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "insertedAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Integer},
+	Filters:     []cataloguepage.FilterDimension{{Name: "open", Vocabulary: presenceWords}},
 	Selectors:   registerSelector,
 })
 
 // SuspensionRegistryPages 是暂停决定册的声明。缺省序是发生时刻倒序：暂停决定没有另记登记时间，发生时刻就是它进册的
-// 那一刻。行标识是暂停标识（主键）。q 在暂停标识、触发来源、暂停范围与执行人上做字面包含。
+// 那一刻。行标识是暂停标识（主键）。resumed 是状态维：这条暂停名下有没有恢复决定（恢复册以暂停标识为主键，一个暂停至多一次
+// 恢复；重复恢复按已恢复作答，与 GovernIncidentHandler.Resume 同一个读法）。它不说范围此刻还拦不拦新准入——恢复与暂停各有生效
+// 时点，那一问按时点现算（Suspensions.FindUnresumedSuspension），不在本维。q 在暂停标识、触发来源、暂停范围与执行人上做字面包含。
 var SuspensionRegistryPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "governance-registers/suspension",
 	Sorts:       []cataloguepage.SortDimension{{Name: "occurredAt", Kind: cataloguepage.Instant}},
 	DefaultSort: cataloguepage.Sort{Field: "occurredAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters:     []cataloguepage.FilterDimension{{Name: "resumed", Vocabulary: presenceWords}},
 	Selectors:   registerSelector,
 })
 

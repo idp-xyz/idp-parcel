@@ -183,7 +183,8 @@ func writeRegistryIntakeProblem(response http.ResponseWriter, err error) {
 }
 
 // 行体逐字段透出检索列面，全部是脱敏引用（建表纪律与登记 CLI 纪律保证）。toAt 缺席
-// 即开放区间——缺席是真话不是缺陷，不为区间齐整补一个编造的「无限远」时刻。
+// 即开放区间——缺席是真话不是缺陷，不为区间齐整补一个编造的「无限远」时刻。open 恒在场，与 toAt 在场与否
+// 同说一件事：它是本册状态维的名字（ports.AuthorityIntervalRegistryPages），筛选维名只取答复体的字段名（ADR-0144 决定四）。
 type authorityIntervalBody struct {
 	ObjectScope string `json:"objectScope"`
 	Capability  string `json:"capability"`
@@ -191,6 +192,7 @@ type authorityIntervalBody struct {
 	Authority   string `json:"authority"`
 	FromAt      string `json:"fromAt"`
 	ToAt        string `json:"toAt,omitempty"`
+	Open        bool   `json:"open"`
 	InsertedAt  string `json:"insertedAt"`
 }
 
@@ -201,6 +203,7 @@ func authorityIntervalBodyOf(row ports.AuthorityIntervalRegistryRow) authorityIn
 		FactKind:    row.FactKind,
 		Authority:   row.Authority,
 		FromAt:      rfc3339(row.FromAt),
+		Open:        !row.HasToAt,
 		InsertedAt:  rfc3339(row.InsertedAt),
 	}
 	if row.HasToAt {
@@ -209,6 +212,8 @@ func authorityIntervalBodyOf(row ports.AuthorityIntervalRegistryRow) authorityIn
 	return body
 }
 
+// suspensionBody 的 resumed 恒在场：这条暂停名下有没有恢复决定，也是本册状态维的名字（ports.SuspensionRegistryPages）；
+// 恢复从哪一刻起作数看恢复册那一行的 effectiveAt。
 type suspensionBody struct {
 	SuspensionID  string `json:"suspensionId"`
 	TriggerSource string `json:"triggerSource"`
@@ -219,6 +224,7 @@ type suspensionBody struct {
 	OccurredAt    string `json:"occurredAt"`
 	EffectiveAt   string `json:"effectiveAt"`
 	InTransitNote string `json:"inTransitNote"`
+	Resumed       bool   `json:"resumed"`
 }
 
 func suspensionBodyOf(row ports.SuspensionRegistryRow) suspensionBody {
@@ -232,6 +238,7 @@ func suspensionBodyOf(row ports.SuspensionRegistryRow) suspensionBody {
 		OccurredAt:    rfc3339(row.OccurredAt),
 		EffectiveAt:   rfc3339(row.EffectiveAt),
 		InTransitNote: row.InTransitNote,
+		Resumed:       row.Resumed,
 	}
 }
 
