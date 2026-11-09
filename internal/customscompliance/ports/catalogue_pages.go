@@ -153,9 +153,6 @@ var InterpretationRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Selectors: []string{"registry"},
 })
 
-// 就绪判断与提交授权两册的状态维 effective 是答复体里那个布尔，与领域 Effective() 同义——已就绪与不再就绪、授权有效与授权
-// 已失效，在登记册上就是撤销两列缺席与在场。
-
 // ReadinessJudgmentPages 是就绪判断（GET /customs-case-registers?registry=readiness）的声明。
 //
 // 缺省序是申报单元升序，行标识是单元（主键）。effective 是状态维（决定四「有状态的册至少放出状态一维」）：失效与否由本行的撤销

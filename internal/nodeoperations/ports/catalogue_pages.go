@@ -120,9 +120,6 @@ var PhysicalControlTransitionPages = cataloguepage.MustCatalogue(cataloguepage.S
 	Selectors: []string{registrySelector},
 })
 
-// 预报与交接单两册的状态维 withdrawn、closed 是答复体里那两个布尔，都是「名下那本留痕册上有没有这一份的那一行」，与领域
-// Withdrawn()、Closed() 同义。
-
 // DeliveryPreAdvicePages 是送站预报列表（GET /node-operations-delivery-pre-advices）的声明。
 //
 // 缺省序是预计送达倒序，不是登记时刻倒序：迁移前就按预计送达排，列表的时间区间筛的也是这一格，人按到站的先后看预报。行标识是预报
