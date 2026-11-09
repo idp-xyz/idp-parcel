@@ -1,7 +1,7 @@
 # 18 目录读口的原始查询串解析收进共用件
 
 Category: enhancement
-Status: in-progress——作者完成，待非作者评审（分支 `cursor/crpr-1718-followups`，基 `6191110eb`；与 17 同一分支，两票各自成笔）
+Status: resolved——2026-11-09 进 main（`8b2885be2`）
 Blocked by: 02–13、15（各册端点进 main 之后再统一）——已满足，随 `098767b1e` 进 main
 地盘：`internal/platform/cataloguepage`；各上下文目录端点里取查询串的那一行。
 出处：ADR-0144 决定四、七；04 的非作者评审（钉 `c39f772f2`）。
@@ -65,3 +65,17 @@ Blocked by: 02–13、15（各册端点进 main 之后再统一）——已满�
 ### 验证
 
 改到的各包与 `cmd/parcel-api` 的 `go test`、`go vet` 过，`gofmt` 无输出。全量真库与种子在进 main 那一轮跑。
+
+## 评审记录
+
+- 2026-11-09 非作者两轴评审（推送方 Claude Code 会话另起的隔离子代理，只读，钉分支尖 `ef6f5e31d`，基线 `6191110eb`，17、18 合看）。跑过：全仓 `go build`、`go vet`；`cataloguepage`、十二个上下文的 `adapters/http`、带 DSN 的 `cmd/parcel-api` 各 `go test -count=1`，全 ok。
+  - Spec 轴：无阻断。核过 17 的三口先 Intake 再判 `kind` / `object` / `scope`，未配置渠道一律同一个 403；18 的目录解码全经 `ParseQuery` / `DecodeRaw`，新调用都在 Intake 之后，选择器的库存判在进读口之前，坏段答 400 不回显原值。非阻断一条：坏转义的理由说「不完整」，而 `%zz` 是无效转义。
+  - Standards 轴：阻断一条——`da7fa5f48` 删了 `decodePageQuery` 连同说明「为什么在 Intake 之后解码」的头注，价格五个读口的头注仍指着它。非阻断两条：`businessEndpointProbe` 的注释仍以「先于 Intake 判的分派参数」为由，与 `endpointLine.probe` 已改的说法不一；`cataloguepage` 用例的 Covers 行引了 ADR-0144 里没有的原句。
+  - 修订：推送方在重放线上修于 `8b2885be2`（五处头注改为直接写理由与出处 ADR-0055 决定三；理由与用例名改说「无效」；两处注释对齐；Covers 行只写决定号）。同一评审者在 `8b2885be2` 上复评 Standards 轴：无发现；并用 `git patch-id --stable` 核过重放的四笔与它评的四笔内容一致。
+
+## 进 main 记录（2026-11-09，推送方 Claude Code 会话）
+
+- 重放：在隔离 worktree 里把分支四笔 cherry-pick 到 `origin/main` 尖 `a0305c7d4`，无冲突（自分支基点以来 main 上没有与这四笔重叠的 `.go` / `.sql`）。分支 `940a32ef2` → main `c9f08fafc`（17）、`88a3eb272` → `08cf2a718`（17）、`da7fa5f48` → `889ff5ffe`（18）、`ef6f5e31d` → `a2da99917`（票面）；评审修订 `8b2885be2`。推 `8b2885be2:main`。另一处早先的重放（`crpr-land/1718`，基 `a74aa0e39`）没有用，main 已越过它的基点。
+- 生成物：`adr-index -check`、`at-coverage-counts -check` 退 0；机制清点重生成无变化，未成笔。
+- 全量真库：`scripts/test-full.sh` 在 `a2da99917` 与 `8b2885be2` 上各跑一次，都退 0、175 个包 ok、无 FAIL。
+- 种子：`scripts/demo-seeds/seed.sh` 在 `a2da99917` 上灌进一次性库（`seed_1718_*`），退 0，用后删库。`8b2885be2` 只改注释、一句理由文字与用例名，种子未重跑。
