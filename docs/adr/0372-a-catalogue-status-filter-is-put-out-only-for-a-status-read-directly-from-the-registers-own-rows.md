@@ -1,6 +1,6 @@
 # ADR-0372：目录读口的状态筛选维只放「由本册登记行直接读出」的状态——领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维；答复照旧带它们，管理台对它们只在页内筛并标明
 
-Status: Proposed（2026-11-09，票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草；接受与否待 TF、NO、PP、SA owner 复核，越权风险点见文末。拟收窄 ADR-0144 决定四「有状态的册至少放出状态一维」的适用范围。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**草案**：Status 为 Proposed，尚非依据
+Status: Accepted（2026-11-09，Claude Code 会话代 TF、NO、PP、SA owner 决，用户授权代决——用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」；同日票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草，非作者评审两轮无阻断；部分停用 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四「有状态的册至少放出状态一维」一句的适用范围；越权风险点见文末，待 TF、NO、PP、SA owner 复核。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**判据**：状态筛选维只放由本册登记行直接读出的状态（含「以该行为键的留痕册上有没有那一行」）；领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维，答复照旧带它们，管理台对它们只在页内筛并标明
 Date: 2026-11-09
 
 ## Context
@@ -75,7 +75,7 @@ ADR-0144 决定四要求「有状态的册至少放出状态一维」，维度�
 
 ## Links
 
-- [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md)：拟收窄其决定四「有状态的册至少放出状态一维」
+- [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md)：部分停用其决定四「有状态的册至少放出状态一维」一句的适用范围
 - [ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：订舱答复史与「当前那一份」
 - [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)：交接单范围成立
 - [ADR-0234](./0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)：价卡截止与退役
