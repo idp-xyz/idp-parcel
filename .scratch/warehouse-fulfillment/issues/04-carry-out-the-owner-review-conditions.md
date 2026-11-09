@@ -1,7 +1,7 @@
 # 04 落实仓配履约 owner 评审的条件
 
 Category: docs
-Status: in-progress
+Status: resolved——2026-11-09 进 main
 Blocked by: 03
 
 依据：
@@ -75,3 +75,6 @@ Blocked by: 03
 - 2026-11-09 终审（同一子代理，钉 `ab70155d5`，报告 [owner-final-2026-11-09](../owner-final-2026-11-09.md)）：复审的阻断与非阻断都照改法落地；阻断 1（「国际小包服务」的新读法没进 GLOSSARY），非阻断 1（演示租户的参考配置与授予没记）。结论：PC、SA owner 认可；PS owner 认可决定一至五，决定六那一格待 GLOSSARY 落地；产品 owner（代看）认可新决定六，判它是读法、不放宽客户群；GLOSSARY 落地后仓配履约 CONTEXT 可在同一笔转 Confirmed，不需再审，并给了它接受的 Status 行。处理：GLOSSARY「委托」「服务产品」补上那句；UC-PS-006、UC-PC-003 记演示租户的参考配置与授予；ADR-0371 去掉「待 PS owner 复核」，越权风险点后记 owner 复核；仓配履约 CONTEXT 照评审接受的 Status 行转 Confirmed，只把合入提交号一格改为「合入记录在该票」（同一笔里写不出自己的提交号），并给终审补了报告链接。
 
 ## 进 main 记录
+
+- 2026-11-09 进 main。main 上的内容提交是本笔之前的五笔：四笔内容（落实 owner 评审条件并立 ADR-0371、复审修订、决定六按「两种都有」改、终审修订与仓配履约 CONTEXT 转 Confirmed），与一笔在 main 的 tip 上重生成的 ADR 索引（ADR-0368、0370、0371 行首都派生〔代决〕）。出处：分支 `cursor/wf-owner-review` 的 `aa6b5abd4`、`0439b1141`、`ab70155d5`、`345acfbf8`。
+- 重放到 main 的 tip，无冲突；推送前 main 前进过（别的会话的提交，与本票文件不重叠），每次换到新的 tip 重放。`adr-index -check` 与 `at-coverage-counts -check` 退 0，机制清点无变化。只改 `.md`，全量真库测试与种子灌库未跑。
