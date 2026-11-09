@@ -36,7 +36,8 @@ Used by `/to-tickets` and `/implement`.
   spec to `Status: resolved` only when every child says `Status: resolved`;
   otherwise leave it `in-progress` — with one exception: when every child that
   is not resolved is frozen on the launch-line freeze list
-  (`.scratch/launch-line-freeze-2026-10-27.md`, section 二), set the parent to
+  (`.scratch/launch-line-freeze-2026-10-27.md`: listed in section 二, or the
+  remainder that section 一之二 keeps frozen), set the parent to
   `Status: ready-for-human` and name the frozen children in that line. Nobody is
   working on such a parent, and `in-progress` would claim someone is. When any of
   those children thaws, the parent goes back to `in-progress`.

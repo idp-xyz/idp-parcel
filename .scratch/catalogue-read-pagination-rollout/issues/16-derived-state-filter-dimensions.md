@@ -51,7 +51,7 @@ Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它�
      `headsInConflict` 经它判）；答复里没有实物一级的状态格。
    - 价卡的页面五态（04）：管理台 `priceCardStatus(row, now)` 按此刻现算；CONTEXT 写明截止不是状态迁移。领域状态「已发布 → 已退役」已作 `retired` 放出。
    - 供应商账单接收进度（08）：管理台 `billProgress` 从读口的几个和派生，`supplier-bills.ts` 文件头与它上方的词表块注都自称呈现词、不是领域状态；「审核人未配置」一格还读此刻审核授权册。
-   五处的理由各写进声明头注并指到 ADR-0372 草案（Proposed，拟收窄 ADR-0144 决定四），没有在代码里默默豁免。
+   五处的理由各写进声明头注并指到 ADR-0372（收窄 ADR-0144 决定四），没有在代码里默默豁免。
 3. **词表取 `true` / `false`。** 补上的几维在领域里都是一个布尔（`Effective()`、`Withdrawn()`、`Closed()`、退役与否、作废与否、终点缺席、有无恢复决定），
    照 customs-compliance 提交版本册 `isCurrent` 的先例，词即答复体里那个布尔的两种写法。要领域词得先立枚举，列在 ADR-0372 越权风险点「布尔词表取 `true` / `false`」。
 4. **答复体加了六格、复用两格。** 新加且恒在场：就绪判断与提交授权的 `effective`、价卡的 `retired`、对账单的 `voided`、权威区间的 `open`、暂停的
@@ -89,7 +89,7 @@ Blocked by: 04、05、06、08、09、12（这几张票进 main 之后，在它�
 |---|---|---|---|
 | 就绪判断 | 导出 | `effective` · `(revoked_at IS NULL)::text` | ✅ 真库 `TestReadinessAndAuthorityStatusDimensionAgreesWithTheEffectiveField`（筛出的行经重建门读回的 `Effective()` 与词一致、total 随之变、与 q 为与），表驱动 `pagedRegisters` 带上这一维；✅ 端点 `pagedCatalogues` 的词表外取值答 400 带 `detail`，`TestReadinessAndAuthorityListsTranscribeRevocationVerbatim` 证答复里 `effective` 恒在场 |
 | 提交授权 | 导出 | 同上 | ✅ 同上两组用例各过一遍 |
-| 订舱请求 | 导不出 | — | ◑ 票面判断项 2、ADR-0372 草案、声明头注；无代码改动 |
+| 订舱请求 | 导不出 | — | ◑ 票面判断项 2、ADR-0372、声明头注；无代码改动 |
 | 送站预报 | 导出 | `withdrawn` · `EXISTS` 撤回册 | ✅ 真库 `TestDeliveryScopeStatusDimensionsAgreeWithTheAnswerFields`（`Withdrawn()` 与词一致、total 随之变、与 q 为与、别的租户同标识的撤回不串进来）；✅ 端点 `TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration`（词表外、另一条列表的状态维答 400 带 `detail`）、`TestDeliveryScopeListsHandTheStatusDimensionToTheReader`、未配置渠道同答 403 |
 | 送站交接单 | 导出 `closed`；范围成立导不出 | `closed` · `EXISTS` 关闭册 | ✅ 同上两组用例（`Closed()`）；◑ 范围成立见判断项 2 |
 | 身份复核单元 | 导不出 | — | ◑ 判断项 2、ADR-0372、声明头注 |
