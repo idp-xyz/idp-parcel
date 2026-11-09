@@ -37,7 +37,7 @@ test('liveRelationshipCountOf 只数候选与已生效，两侧都算', () => {
 });
 
 // Covers: 待生效就提示（日期在事实行，不进提示）；已生效、没有在用关系、也没有别处认出的角色才提「还没有合作关系」；只凭客户账户
-// 就是客户的不提；我方公司不提；关系册没答出不提；已停用不提（横幅在说）。
+// 就是客户的不提；我方公司不提；关系册或客户账户册没答出不提；已停用不提（横幅在说）。
 test('panelHintOf 按身份状态、在用关系数与持有角色数选提示', () => {
   const effective = { status: 'EFFECTIVE' };
   deepEqual(panelHintOf({ status: 'REGISTERED' }, false, 0, 0), { kind: 'pending' });
@@ -47,6 +47,7 @@ test('panelHintOf 按身份状态、在用关系数与持有角色数选提示',
   equal(panelHintOf(effective, false, 0, 1), null);
   equal(panelHintOf(effective, true, 0, 0), null);
   equal(panelHintOf(effective, false, null, 0), null);
+  equal(panelHintOf(effective, false, 0, null), null);
   equal(panelHintOf({ status: 'DEACTIVATED' }, false, 0, 0), null);
 });
 

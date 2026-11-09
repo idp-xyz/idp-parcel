@@ -72,7 +72,7 @@ function PanelProfilePart({
 /**
  * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（名称 + 状态徽章 +
  * 其他语言名称一行 + 角色标签）· 主动作 +「更多」菜单 + 打开对象页 + 关闭 · meta 行 · 停用横幅 · 随状态的提示 · 一行事实 ·
- * 关联计数一行 · 签。主动作随状态（票 business-party-ux/08）：没有在用关系的单位是「登记合作关系」，其余是「更新资料」；
+ * 关联计数一行 · 签。主动作随提示（票 business-party-ux/08）：提示是「还没有合作关系」时是「登记合作关系」，其余是「更新资料」；
  * 判读在 business-party-panel-first-screen.ts。
  *
  * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：生效、停用、登记版次与资料版本归那一行事实，只显到日，照公司
@@ -84,7 +84,8 @@ function PanelProfilePart({
  * 不读也不摆资料，判据在 business-party-list.ts 的 businessPartyPanelTabsOf。资料修订链在栏顶读：抬头的英文名与「资料」格要它，
  * 与公司主体栏读当前资料同一做法。
  * 去过的签留着挂载（隐藏而不卸载）：每切回来一次就重取一次会闪一次加载态；只留「去过的」，方向键逐行翻时不为没看的签取数。
- * 全景那四册是例外：头区的计数行与提示要它们，栏一开就读（usePartyOverviewStates），「关联」签去不去过都是同一份缓存。
+ * 全景各册（PartyOverviewSection.tsx 的 usePartyOverviewLists）是例外：头区的计数行与提示要它们，栏一开就读
+ * （usePartyOverviewStates），「关联」签去不去过都是同一份缓存。
  * 签不按参与方重置：↑/↓ 逐行翻时停在哪一签就一直看哪一签，与法人栏同一做法。
  */
 export function BusinessPartyDetailPanel({
@@ -167,7 +168,7 @@ export function BusinessPartyDetailPanel({
   // 首屏那一句提示与头区动作（票 business-party-ux/08）：判读在 business-party-panel-first-screen.ts。各段计数与「关联」签读同一份缓存。
   const overview = usePartyOverviewStates(row.partyId, relationships);
   const liveRelationships = overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
-  const hint = panelHintOf(row, ours, liveRelationships, roles.length);
+  const hint = panelHintOf(row, ours, liveRelationships, overview.accounts.kind === 'answered' ? roles.length : null);
   const actions = panelHeaderActionsOf(mayWrite, pinned, hint);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开，不另造一处写口。
   const openRelationshipForm = () => {
@@ -202,7 +203,7 @@ export function BusinessPartyDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {/* 动作随状态（panelHeaderActionsOf）：没有在用关系的单位下一步是登关系，「更新资料」退成描边；其余照旧。 */}
+            {/* 动作随提示（panelHeaderActionsOf）：提示是「还没有合作关系」时下一步是登关系，「更新资料」退成描边。 */}
             {actions.registerRelationship ? (
               <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openRelationshipForm}>
                 <Handshake className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -245,7 +246,7 @@ export function BusinessPartyDetailPanel({
         </div>
 
         {/* 头区 meta 行照公司主体右栏（票 company-subject-ux/08）：编码与识别信息（ADR-0367）一行小字，号与码点击即复制。
-            头区一直可见，所以识别信息只在这里出现一次，「登记记录」签不再列它。 */}
+            头区一直可见，所以识别信息只在这里出现一次，「登记记录」签不列它。 */}
         <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
           <Fact inline label="编码">
             <RefText value={row.partyId} name="编码" />
@@ -255,7 +256,7 @@ export function BusinessPartyDetailPanel({
 
         <BusinessPartyBanners row={row} />
 
-        {/* 随状态的提示，`info` 语气、照票 02 空状态那种「给下一步」的写法；已停用由上面的横幅说，这里不再说一遍。 */}
+        {/* 随状态的提示，`info` 语气、照票 business-party-ux/02 空状态那种「给下一步」的写法；已停用由上面的横幅说，这里不再说一遍。 */}
         {hint ? (
           <div className={`flex items-start gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.info}`}>
             <Info className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
@@ -295,7 +296,7 @@ export function BusinessPartyDetailPanel({
       </FactStrip>
 
       {/* 关联计数一行（票 business-party-ux/08）：让人在首屏知道「关联」签里有什么，点了切过去；哪一册没答出那一格显「—」
-          （countText），不拿 0 冒充「没有」。签里不再摆那行计数（summaryCounts），一个事实首屏只出现一处。 */}
+          （countText），不拿 0 冒充「没有」。「关联」签里不摆那行计数（summaryCounts 关掉），一个事实首屏只出现一处。 */}
       <button
         type="button"
         onClick={() => selectTab('overview')}
