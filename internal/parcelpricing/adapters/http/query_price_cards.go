@@ -47,7 +47,7 @@ func NewQueryPriceCardsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.PriceCardPages, request)
+		pageQuery, err := ports.PriceCardPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

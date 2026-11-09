@@ -142,12 +142,17 @@ func scopeReadEndpoint(intake CatalogueQueryIntake, serve func(http.ResponseWrit
 // 缺省新近在前。空册答 200 + []，page.total 为 0。
 func NewQueryDeliveryPreAdvicesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
-		pageQuery, err := ports.DeliveryPreAdvicePages.Decode(request.URL.Query())
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
 		}
-		filter, ok := catalogueFilterOf(request.URL.Query(), preAdviceFilterKeys)
+		pageQuery, err := ports.DeliveryPreAdvicePages.Decode(values)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		filter, ok := catalogueFilterOf(values, preAdviceFilterKeys)
 		if !ok {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -193,12 +198,17 @@ func NewQueryDeliveryPreAdviceEndpoint(intake CatalogueQueryIntake, reader Deliv
 // 空册答 200 + []，page.total 为 0。
 func NewQueryDeliveryHandoverNotesEndpoint(intake CatalogueQueryIntake, reader DeliveryScopeCatalogueReader) http.Handler {
 	return scopeReadEndpoint(intake, func(response http.ResponseWriter, request *http.Request, query CatalogueQuery) {
-		pageQuery, err := ports.DeliveryHandoverNotePages.Decode(request.URL.Query())
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
 		}
-		filter, ok := catalogueFilterOf(request.URL.Query(), handoverNoteFilterKeys)
+		pageQuery, err := ports.DeliveryHandoverNotePages.Decode(values)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		filter, ok := catalogueFilterOf(values, handoverNoteFilterKeys)
 		if !ok {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return

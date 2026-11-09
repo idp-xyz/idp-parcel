@@ -114,7 +114,7 @@ func NewQueryWorkDevicesEndpoint(
 			writeCatalogueProblem(response, err)
 			return
 		}
-		query, err := accessidentity.DeviceCataloguePages.Decode(request.URL.Query())
+		query, err := accessidentity.DeviceCataloguePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

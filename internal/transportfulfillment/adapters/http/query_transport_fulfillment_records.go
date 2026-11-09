@@ -125,7 +125,11 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		if !ok {
 			return
 		}
-		values := request.URL.Query()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		registry := values.Get(ports.RecordsRegistrySelector)
 		catalogue, known := recordsCatalogues[registry]
 		if !known {

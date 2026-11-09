@@ -236,6 +236,7 @@ func TestCustomerAccountsEndpointRefusesQueriesOutsideTheDeclaration(t *testing.
 		{"status=ARCHIVED", "ARCHIVED"},
 		{"q=" + strings.Repeat("字", cataloguepage.MaxKeywordRunes+1), "q"},
 		{"after=not-a-cursor", "请从第一页重取"},
+		{"q=%zz", "解不开的一段"},
 	} {
 		recorder, problem := getCustomerAccounts(t, endpoint, tc.query)
 		if recorder.Code != http.StatusBadRequest || problem.Error.Code != "MALFORMED_REQUEST" ||

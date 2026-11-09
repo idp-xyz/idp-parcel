@@ -600,6 +600,7 @@ func TestMigratedCatalogueEndpointsRefuseQueriesOutsideTheDeclaration(t *testing
 			{"sort=" + tc.badSort, tc.badSort},
 			{"sort=-" + tc.badSort, tc.badSort},
 			{"after=SYN-not-a-cursor", "请从第一页重取"},
+			{"q=%zz", "解不开的一段"},
 		}
 		if tc.badFilter != "" {
 			_, value, _ := strings.Cut(tc.badFilter, "=")

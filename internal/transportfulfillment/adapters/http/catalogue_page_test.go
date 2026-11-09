@@ -178,6 +178,7 @@ func TestRecordsCatalogueRefusesQueriesOutsideTheDeclaration(t *testing.T) {
 		"订舱册的状态不是筛选维": "registry=booking-request&standing=CONFIRMED",
 		"待形成册没有筛选维":   "registry=delivery-dispatch-pending&reason=NOPE",
 		"解不开的游标":      "registry=effective-delivery&after=not-a-cursor",
+		"坏转义":         "registry=effective-delivery&q=%zz",
 	}
 	for name, query := range refused {
 		t.Run(name, func(t *testing.T) {
@@ -335,6 +336,7 @@ func TestExternalTrackingFactsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"集外排序维":     "&sort=recordedAt",
 		"有效时间依据词表外": "&effectiveBasis=JUDGED",
 		"解不开的游标":    "&after=not-a-cursor",
+		"坏转义":       "&q=%zz",
 		"自报租户":      "&tenant=SYN-TENANT-09",
 		"自报页大小":     "&limit=999",
 	} {

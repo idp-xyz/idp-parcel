@@ -170,6 +170,71 @@ func TestTextTheDatabaseCannotStoreIsRefusedInTheKeywordAndInFilterValues(t *tes
 	}
 }
 
+// Covers: 选择器的取值由端点拿去查库，判据同筛选值：库存不下的文本答 400 带理由，理由点名选择器、不回显坏值。
+func TestTextTheDatabaseCannotStoreIsRefusedInSelectorValues(t *testing.T) {
+	for name, values := range map[string]url.Values{
+		"选择器带 NUL":    {"family": {"SYN\x00FAMILY"}},
+		"选择器不是 UTF-8": {"family": {"SYN\xffFAMILY"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reason := refused(t, values)
+			if !strings.Contains(reason, "family") || strings.ContainsRune(reason, 0) || strings.Contains(reason, "\xff") {
+				t.Fatalf("理由应点名 family 且不回显坏值，得 %q", reason)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0144 决定四「不静默忽略坏参数」、决定七「查询契约一处定义」——原始查询串里百分号转义不完整或用分号分隔的
+// 那一段解不开，整条答 MalformedQuery；URL.Query() 会把那一段丢下、答出整册。理由说「解不开的一段」，不回显那一段。
+func TestARawQueryWithASegmentThatCannotBeDecodedIsRefused(t *testing.T) {
+	for name, raw := range map[string]string{
+		"q 的转义不完整":     "q=%zz",
+		"筛选值的转义不完整":    "status=EFFECTIVE&customerPartyId=SYN%2",
+		"键的转义不完整":      "sta%tus=EFFECTIVE",
+		"分号分隔":         "status=EFFECTIVE;customerPartyId=SYN-PARTY-01",
+		"合规的段也不让坏段混过去": "sort=-revision&q=%zz&status=EFFECTIVE",
+	} {
+		t.Run(name, func(t *testing.T) {
+			for entry, decode := range map[string]func(string) error{
+				"ParseQuery": func(raw string) error { _, err := cataloguepage.ParseQuery(raw); return err },
+				"DecodeRaw":  func(raw string) error { _, err := accounts.DecodeRaw(raw); return err },
+			} {
+				var malformed *cataloguepage.MalformedQuery
+				if err := decode(raw); !errors.As(err, &malformed) {
+					t.Fatalf("%s(%q) 应拒成 MalformedQuery，实得 %v", entry, raw, err)
+				}
+				if !strings.Contains(malformed.Reason, "解不开的一段") || strings.Contains(malformed.Reason, "%") || strings.Contains(malformed.Reason, "zz") {
+					t.Fatalf("%s(%q) 的理由应说「解不开的一段」且不回显坏段，得 %q", entry, raw, malformed.Reason)
+				}
+			}
+		})
+	}
+}
+
+// Covers: 端点自己读的选择器与共用件解的条件出自同一份取值——ParseQuery 交回的就是 Decode 收的；DecodeRaw 与「ParseQuery
+// 再 Decode」解出同一个查询对象。
+func TestDecodeRawAndParseQueryAgreeWithDecode(t *testing.T) {
+	const raw = "family=SYN-FAMILY&sort=-revision&status=REGISTERED&status=EFFECTIVE&q=%20SYN-ACC%20"
+	values, err := cataloguepage.ParseQuery(raw)
+	if err != nil {
+		t.Fatalf("ParseQuery：%v", err)
+	}
+	if values.Get("family") != "SYN-FAMILY" {
+		t.Fatalf("选择器应从同一份取值里读得到，得 %q", values.Get("family"))
+	}
+	fromRaw, err := accounts.DecodeRaw(raw)
+	if err != nil {
+		t.Fatalf("DecodeRaw：%v", err)
+	}
+	if fromValues := decode(t, values); !reflect.DeepEqual(fromRaw, fromValues) {
+		t.Fatalf("DecodeRaw 得 %+v，ParseQuery 再 Decode 得 %+v", fromRaw, fromValues)
+	}
+	if fromRaw.Keyword != "SYN-ACC" || !reflect.DeepEqual(fromRaw.Filters["status"], []string{"EFFECTIVE", "REGISTERED"}) {
+		t.Fatalf("解出的条件走样：%+v", fromRaw)
+	}
+}
+
 // Covers: ADR-0144 决定三「一次只按一维排」；q 与游标同样只有一个。给两次时取哪一个都是替调用方做决定。
 func TestASingularKeyGivenTwiceIsRefused(t *testing.T) {
 	for _, values := range []url.Values{

@@ -78,7 +78,7 @@ func NewQueryBusinessPartiesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.BusinessPartyPages.Decode(request.URL.Query())
+		pageQuery, err := ports.BusinessPartyPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
@@ -191,7 +191,7 @@ func NewQueryGroupLegalEntitiesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.GroupLegalEntityPages.Decode(request.URL.Query())
+		pageQuery, err := ports.GroupLegalEntityPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
@@ -236,7 +236,7 @@ func NewQueryPartyRelationshipsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.PartyRelationshipPages.Decode(request.URL.Query())
+		pageQuery, err := ports.PartyRelationshipPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

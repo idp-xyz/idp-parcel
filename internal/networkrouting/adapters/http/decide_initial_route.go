@@ -205,7 +205,7 @@ func NewQueryInitialRouteTiesEndpoint(intake CatalogueQueryIntake, reader Initia
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.InitialRouteTiePages.Decode(request.URL.Query())
+		pageQuery, err := ports.InitialRouteTiePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

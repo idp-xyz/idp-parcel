@@ -3,6 +3,7 @@ package settlementhttp
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -64,12 +65,17 @@ func NewQuerySettlementStatementsEndpoint(
 			return
 		}
 		tenant := query.Scope.Tenant()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 
-		switch request.URL.Query().Get("registry") {
+		switch values.Get("registry") {
 		case registryCustomerStatement:
-			serveCustomerStatements(response, request, reader, tenant, query.Limit)
+			serveCustomerStatements(response, request, values, reader, tenant, query.Limit)
 		case registrySupplierBillReception:
-			serveSupplierBillReceptions(response, request, reader, tenant, query.Limit)
+			serveSupplierBillReceptions(response, request, values, reader, tenant, query.Limit)
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
@@ -79,11 +85,12 @@ func NewQuerySettlementStatementsEndpoint(
 func serveCustomerStatements(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader StatementCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.CustomerStatementPages.Decode(request.URL.Query())
+	pageQuery, err := ports.CustomerStatementPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
@@ -151,13 +158,13 @@ func customerStatementBodyOf(row ports.CustomerStatementCatalogueRow) customerSt
 func serveSupplierBillReceptions(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader StatementCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
 	// claim、supplier、supplierBillNumber 三个可选检索维在全册里精确找（ports.SupplierBillReceptionFilter）；它们是查找，不是
 	// 处置参数，在声明里登为选择器，取值进游标摘要。
-	values := request.URL.Query()
 	pageQuery, err := ports.SupplierBillReceptionPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
@@ -369,7 +376,7 @@ func NewQueryDisputedCustomerStatementsEndpoint(
 		if !ok {
 			return
 		}
-		pageQuery, err := ports.DisputedCustomerStatementPages.Decode(request.URL.Query())
+		pageQuery, err := ports.DisputedCustomerStatementPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

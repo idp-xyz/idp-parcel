@@ -57,7 +57,7 @@ func NewQueryCustomerAccountsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.CustomerAccountCatalogue.Decode(request.URL.Query())
+		pageQuery, err := ports.CustomerAccountCatalogue.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
 			if errors.As(err, &malformed) {

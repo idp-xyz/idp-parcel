@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,6 +100,7 @@ func NewQueryChannelSelectionDecisionsEndpoint(
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		// 分派先于 Intake，只能照 URL.Query() 宽松地看键在不在，理由在 cataloguepage.ParseQuery 头注。
 		if request.URL.Query().Has("decisionId") {
 			serveChannelSelectionDecision(response, request, intake, reader)
 			return
@@ -119,13 +121,18 @@ func serveTiedChannelSelectionDecisions(
 		writeIntakeProblem(response, err)
 		return
 	}
-	filter, err := tiedChannelSelectionFilterOf(request)
+	values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
+	filter, err := tiedChannelSelectionFilterOf(values)
 	if err != nil {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return
 	}
 	// view、scope、mapping 在声明里登为选择器（端点自己读、保持原义），其余键按 ADR-0144 解码。
-	pageQuery, err := ports.TiedChannelSelectionPages.Decode(request.URL.Query())
+	pageQuery, err := ports.TiedChannelSelectionPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
@@ -149,8 +156,7 @@ func serveTiedChannelSelectionDecisions(
 }
 
 // tiedChannelSelectionFilterOf 从查询参数读列表分支的传输形状：视图词与可选的对象收窄。
-func tiedChannelSelectionFilterOf(request *http.Request) (ports.TiedChannelSelectionFilter, error) {
-	values := request.URL.Query()
+func tiedChannelSelectionFilterOf(values url.Values) (ports.TiedChannelSelectionFilter, error) {
 	if values.Get("view") != viewTiedChannelSelections {
 		return ports.TiedChannelSelectionFilter{}, fmt.Errorf("%w: view must be %q", ErrMalformedRequest, viewTiedChannelSelections)
 	}

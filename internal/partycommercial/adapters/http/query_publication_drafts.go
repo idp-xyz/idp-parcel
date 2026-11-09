@@ -67,7 +67,7 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.OpenPublicationDraftPages.Decode(request.URL.Query())
+		pageQuery, err := ports.OpenPublicationDraftPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

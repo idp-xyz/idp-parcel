@@ -80,7 +80,7 @@ func NewQueryCustomerContractsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.CustomerContractPages.Decode(request.URL.Query())
+		pageQuery, err := ports.CustomerContractPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
@@ -125,7 +125,7 @@ func NewQuerySupplierAgreementsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.SupplierAgreementPages.Decode(request.URL.Query())
+		pageQuery, err := ports.SupplierAgreementPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

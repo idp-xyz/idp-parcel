@@ -336,6 +336,18 @@ func (paged pagedCatalogue) serve(
 	return response
 }
 
+// serveBadEscape 在本册的选择器后面原样带一段转义坏掉的 q：url.Values 编码不出解不开的段，只能照原样拼。
+func (paged pagedCatalogue) serveBadEscape(
+	t *testing.T, intake customshttp.CatalogueQueryIntake, recorder *pageRecorder,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	path, _, _ := strings.Cut(paged.target, "?")
+	response := httptest.NewRecorder()
+	target := path + "?" + paged.values(t, nil).Encode() + "&q=%zz"
+	paged.endpoint(intake, recorder).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	return response
+}
+
 // cursor 在 values 那组条件下编一枚指向 at 的真游标，与读面经 cataloguepage.Finish 编出的同一种。
 func (paged pagedCatalogue) cursor(t *testing.T, values url.Values, at cataloguepage.Position) string {
 	t.Helper()
@@ -440,6 +452,13 @@ func TestCustomsCataloguesRefuseQueriesOutsideTheirDeclaration(t *testing.T) {
 					}
 				})
 			}
+			t.Run("坏转义", func(t *testing.T) {
+				recorder := &pageRecorder{}
+				assertPageQueryRefused(t, paged.serveBadEscape(t, grantedPageIntake, recorder))
+				if recorder.called {
+					t.Fatal("坏请求不该走到读口")
+				}
+			})
 		})
 	}
 }
@@ -472,6 +491,12 @@ func TestUnconfiguredChannelsAnswerEveryCatalogueQueryIdentically(t *testing.T) 
 				}
 				answers[response.Body.String()] = name
 			}
+			recorder := &pageRecorder{}
+			escaped := paged.serveBadEscape(t, customshttp.UnconfiguredIntake{}, recorder)
+			if escaped.Code != http.StatusForbidden || recorder.called {
+				t.Fatalf("坏转义：status = %d（want 403），读口被调用 = %v", escaped.Code, recorder.called)
+			}
+			answers[escaped.Body.String()] = "坏转义"
 			if len(answers) != 1 {
 				t.Fatalf("未配置的答复随请求内容变了：%v", answers)
 			}

@@ -118,6 +118,7 @@ func TestCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 			"解不开的游标":    {"?after=SYN-not-a-cursor", "游标"},
 			"换了条件的旧游标":  {"?q=SYN-B&after=" + deviceCursor, "游标"},
 			"换了一册的旧游标":  {"?q=SYN-A&after=" + operatorCursor, "游标"},
+			"坏转义":       {"?q=%zz", "解不开的一段"},
 		},
 		"operators": {
 			"未知键":       {"?tenant=SYN-TENANT-02", "tenant"},
@@ -127,6 +128,7 @@ func TestCataloguesRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 			"解不开的游标":    {"?after=SYN-not-a-cursor", "游标"},
 			"换了条件的旧游标":  {"?q=SYN-B&after=" + operatorCursor, "游标"},
 			"换了一册的旧游标":  {"?q=SYN-A&after=" + deviceCursor, "游标"},
+			"坏转义":       {"?q=%zz", "解不开的一段"},
 		},
 	}
 	for name, catalogue := range pagedCatalogues() {

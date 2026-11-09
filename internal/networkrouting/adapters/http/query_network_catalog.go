@@ -126,7 +126,11 @@ func NewQueryNetworkCatalogEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		values := request.URL.Query()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		family := values.Get("family")
 		catalogue, known := familyCatalogues[family]
 		if !known {

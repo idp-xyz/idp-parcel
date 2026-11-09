@@ -89,7 +89,7 @@ func NewQueryLabelTransactionsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.LabelTransactionPages.Decode(request.URL.Query())
+		pageQuery, err := ports.LabelTransactionPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

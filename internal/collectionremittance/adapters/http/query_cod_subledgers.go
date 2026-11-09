@@ -91,7 +91,7 @@ func NewQueryCodSubledgersEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.CodSubledgerPages.Decode(request.URL.Query())
+		pageQuery, err := ports.CodSubledgerPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

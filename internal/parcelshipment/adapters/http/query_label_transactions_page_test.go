@@ -67,6 +67,7 @@ func TestLabelTransactionsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"集外排序维":  "/label-transactions?sort=parcelId",
 		"词表外筛选值": "/label-transactions?transactionResult=ARCHIVED",
 		"解不开的游标": "/label-transactions?after=SYN-not-a-cursor",
+		"坏转义":    "/label-transactions?q=%zz",
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &labelTransactionsReaderDouble{}
@@ -82,7 +83,7 @@ func TestLabelTransactionsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 	if detail := assertPageQueryRefused(t, refused); !strings.Contains(detail, "parcelId") {
 		t.Fatalf("理由散文应点到那一格：%q", detail)
 	}
-	for _, target := range []string{"/label-transactions?sort=parcelId", "/label-transactions?sort=-establishedAt"} {
+	for _, target := range []string{"/label-transactions?sort=parcelId", "/label-transactions?sort=-establishedAt", "/label-transactions?q=%zz"} {
 		unconfigured := requestLabelTransactions(t, shipmenthttp.UnconfiguredIntake{}, &labelTransactionsReaderDouble{},
 			http.MethodGet, target)
 		if unconfigured.Code != http.StatusForbidden {

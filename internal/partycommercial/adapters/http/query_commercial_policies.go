@@ -180,13 +180,18 @@ func NewQueryCommercialPoliciesEndpoint(
 			return
 		}
 
-		kind := request.URL.Query().Get("kind")
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		kind := values.Get("kind")
 		pages, known := commercialPolicyPages[kind]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		pageQuery, err := pages.Decode(request.URL.Query())
+		pageQuery, err := pages.Decode(values)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

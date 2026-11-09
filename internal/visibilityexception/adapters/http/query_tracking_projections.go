@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -92,8 +93,14 @@ func NewQueryTrackingProjectionsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
-		hasParcel := request.URL.Query().Has("parcel")
-		hasVersion := request.URL.Query().Has("version")
+		// 三支从同一份解好的取值里读：`?parcel=%zz` 若照 URL.Query() 被丢下，取单件的一问就落进列表那一支、答出整册。
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		hasParcel := values.Has("parcel")
+		hasVersion := values.Has("version")
 		if hasParcel && hasVersion {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -102,11 +109,11 @@ func NewQueryTrackingProjectionsEndpoint(
 
 		switch {
 		case hasParcel:
-			serveCurrentProjection(response, request, reader, tenant)
+			serveCurrentProjection(response, request, values, reader, tenant)
 		case hasVersion:
-			serveProjectionVersion(response, request, reader, tenant)
+			serveProjectionVersion(response, request, values, reader, tenant)
 		default:
-			serveProjectionList(response, request, reader, tenant, query.Limit)
+			serveProjectionList(response, request, values, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -114,11 +121,12 @@ func NewQueryTrackingProjectionsEndpoint(
 func serveProjectionList(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader OperationsProjectionReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.TrackingProjectionPages.Decode(request.URL.Query())
+	pageQuery, err := ports.TrackingProjectionPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
@@ -143,10 +151,11 @@ func serveProjectionList(
 func serveCurrentProjection(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader OperationsProjectionReader,
 	tenant domain.TenantID,
 ) {
-	parcel, err := domain.NewTrackedParcelReference(request.URL.Query().Get("parcel"))
+	parcel, err := domain.NewTrackedParcelReference(values.Get("parcel"))
 	if err != nil {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return
@@ -172,10 +181,11 @@ func serveCurrentProjection(
 func serveProjectionVersion(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader OperationsProjectionReader,
 	tenant domain.TenantID,
 ) {
-	version, err := domain.NewProjectionVersionID(request.URL.Query().Get("version"))
+	version, err := domain.NewProjectionVersionID(values.Get("version"))
 	if err != nil {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return

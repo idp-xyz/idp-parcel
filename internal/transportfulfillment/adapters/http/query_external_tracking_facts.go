@@ -64,7 +64,11 @@ func NewQueryExternalTrackingFactsEndpoint(
 		if !ok {
 			return
 		}
-		values := request.URL.Query()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		source, err := domain.NewTrackingSourceReference(values.Get("source"))
 		if err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)

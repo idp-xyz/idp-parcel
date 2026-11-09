@@ -63,7 +63,7 @@ func NewQueryPostIntakeDispositionRequestsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.PostIntakeDispositionRequestPages.Decode(request.URL.Query())
+		pageQuery, err := ports.PostIntakeDispositionRequestPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

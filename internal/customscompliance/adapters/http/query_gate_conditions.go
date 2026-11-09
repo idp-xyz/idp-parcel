@@ -58,7 +58,7 @@ func NewQueryGateConditionsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.GateConditionPages.Decode(request.URL.Query())
+		pageQuery, err := ports.GateConditionPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
