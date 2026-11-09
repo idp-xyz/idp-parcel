@@ -1,10 +1,11 @@
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
-import { invalidateWhenAnswered } from '../../query/answers';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 // 操作者册的读面与三个写面（ADR-0363；票 operator-access-administration/02）。形状以票 01 的契约为准：租户只取自信封，载荷不带
 // tenantId；答复沿用 OperatorRegistrationOutcome 代数，RECORDED 答 201、其余 200。
-
-export const accessAnswersDomain = 'access';
+//
+// 读面已迁到 ADR-0144（票 catalogue-read-pagination-rollout/13）：翻页走游标，答复带 page；没有筛选维，q 只认主体标识与绑定
+// 依据（accessidentity 的 OperatorCataloguePages）。列表按游标取、不经取数层（ADR-0360），写口答到之后由页面重取当前这一页。
 
 export interface OperatorGrantRevocationRecord {
   revokedAt: string;
@@ -40,19 +41,19 @@ export interface OperatorListResponseBody {
   decisionKinds: string[];
   workScopeKinds: string[];
   operators: OperatorRecord[];
+  page: CataloguePage;
 }
 
 export interface OperatorWriteResponseBody {
   outcome: string;
 }
 
-export function listOperators(): Promise<ApiResult<OperatorListResponseBody>> {
-  return exchangeMasterData<OperatorListResponseBody>('/operators');
-}
-
-/** 写口答到之后整域作废（ADR-0360 决定三的做法）：操作者页的列表随之重问。授予自查（use-operator-grants.ts）是一页一问的模块级缓存，不在此域，换授予要整页重载。 */
-function afterAccessWrite<Answer extends { kind: string }>(request: Promise<Answer>): Promise<Answer> {
-  return invalidateWhenAnswered([accessAnswersDomain], request);
+/** 游标缺即第一页；不带条件即缺省序（登记先后）的第一页。 */
+export function listOperators(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<OperatorListResponseBody>> {
+  return exchangeMasterData<OperatorListResponseBody>(catalogueRequestPath('/operators', conditions, after));
 }
 
 export interface OperatorRegistrationPayload {
@@ -62,7 +63,7 @@ export interface OperatorRegistrationPayload {
 }
 
 export function registerOperator(payload: OperatorRegistrationPayload): Promise<ApiResult<OperatorWriteResponseBody>> {
-  return afterAccessWrite(postMasterData<OperatorWriteResponseBody>('/operator-registrations', payload));
+  return postMasterData<OperatorWriteResponseBody>('/operator-registrations', payload);
 }
 
 export interface OperatorGrantPayload {
@@ -78,7 +79,7 @@ export interface OperatorGrantPayload {
 }
 
 export function registerOperatorGrant(payload: OperatorGrantPayload): Promise<ApiResult<OperatorWriteResponseBody>> {
-  return afterAccessWrite(postMasterData<OperatorWriteResponseBody>('/operator-grant-registrations', payload));
+  return postMasterData<OperatorWriteResponseBody>('/operator-grant-registrations', payload);
 }
 
 export interface OperatorGrantRevocationPayload {
@@ -88,5 +89,5 @@ export interface OperatorGrantRevocationPayload {
 }
 
 export function revokeOperatorGrant(payload: OperatorGrantRevocationPayload): Promise<ApiResult<OperatorWriteResponseBody>> {
-  return afterAccessWrite(postMasterData<OperatorWriteResponseBody>('/operator-grant-revocations', payload));
+  return postMasterData<OperatorWriteResponseBody>('/operator-grant-revocations', payload);
 }

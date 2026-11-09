@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
-import { effectiveGrantCount, grantQualifier, grantStandingAt, operatorSearchText, shortSubject } from './presentation';
+import { effectiveGrantCount, grantQualifier, grantStandingAt, shortSubject } from './presentation';
 
 const now = new Date('2026-11-04T12:00:00Z');
 const grant = (over: Partial<Parameters<typeof grantStandingAt>[0]>) => ({
@@ -24,10 +24,9 @@ test('授予此刻的状态照区间与撤销判', () => {
   equal(grantQualifier({}), '');
 });
 
-test('操作者的生效授予数与检索串', () => {
+test('操作者的生效授予数与主体标识的短写法', () => {
   const operator = { issuer: 'i', subject: 'ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA', basis: 'SYN-OP-01', recordedAt: '2026-01-01T00:00:00Z', grants: [grant({}), grant({ grantId: 'G-2', effectiveEndsAt: '2026-02-01T00:00:00Z' })] };
   equal(effectiveGrantCount(operator, now), 1);
-  equal(operatorSearchText(operator).includes('主数据与运营查阅读'), true);
   equal(shortSubject(operator.subject), 'ChZTWU4tT1…b2NhbA');
   equal(shortSubject('short'), 'short');
 });

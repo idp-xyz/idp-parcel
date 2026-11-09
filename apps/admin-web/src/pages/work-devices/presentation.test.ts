@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
 import { moduleInfoById } from '../../navigation';
-import { countWorkDevices, filterWorkDevices, workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
+import { catalogueConditionsQuery } from '../catalogue-query';
+import { workDeviceConditions, workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
 
 test('状态与作业范围经词典译成一线的词，集外取值原样显示', () => {
   equal(workDeviceStatusLabel('REGISTERED'), '在用');
@@ -14,7 +15,7 @@ test('状态与作业范围经词典译成一线的词，集外取值原样显�
 
 test('空册是空列表，不是渠道未配置', () => {
   const state = workDeviceViewState(
-    { kind: 'outcome', status: 200, body: { outcome: 'WORK_DEVICES_LISTED', devices: [] } },
+    { kind: 'outcome', status: 200, body: { outcome: 'WORK_DEVICES_LISTED', devices: [], page: { size: 200, next: null, total: 0 } } },
     0,
     () => undefined,
     moduleInfoById['work-devices'],
@@ -41,6 +42,7 @@ test('有行则是就绪，未配置与未授予各自一格', () => {
             status: 'REGISTERED',
           },
         ],
+        page: { size: 200, next: null, total: 1 },
       },
     },
     1,
@@ -52,22 +54,20 @@ test('有行则是就绪，未配置与未授予各自一格', () => {
   equal(workDeviceViewState({ kind: 'notGranted' }, 0, () => undefined, module).kind, 'notGranted');
 });
 
-test('胶囊筛按状态，检索认设备号、地点编号与地点种类的中文词', () => {
-  const devices = [
-    { deviceId: 'SYN-DEVICE-SHA-HUB-01', workScopeKind: 'NODE', workScopeRef: 'SYN-NODE-SHA-HUB', status: 'REGISTERED' },
-    {
-      deviceId: 'SYN-DEVICE-OFFSITE-01',
-      workScopeKind: 'OFFSITE',
-      workScopeRef: 'SYN-OFFSITE-CN-EAST',
-      status: 'DEACTIVATED',
-      deactivatedAt: '2026-10-01T00:00:00Z',
-    },
-  ];
-  equal(filterWorkDevices(devices, { search: '', status: 'DEACTIVATED' }).length, 1);
-  equal(filterWorkDevices(devices, { search: '场外', status: 'ALL' })[0].deviceId, 'SYN-DEVICE-OFFSITE-01');
-  equal(filterWorkDevices(devices, { search: 'sha-hub', status: 'ALL' }).length, 1);
-  const counts = countWorkDevices(devices);
-  equal(counts.ALL, 2);
-  equal(counts.REGISTERED, 1);
-  equal(counts.DEACTIVATED, 1);
+// Covers: 带检索词或状态的一问答出零行是「这组条件下没有」，仍报就绪，由表区说「没有匹配」；不带条件的零行才是册空。
+test('带条件的零行不是册空', () => {
+  const empty = {
+    kind: 'outcome' as const,
+    status: 200,
+    body: { outcome: 'WORK_DEVICES_LISTED' as const, devices: [], page: { size: 200, next: null, total: 0 } },
+  };
+  const module = moduleInfoById['work-devices'];
+  equal(workDeviceViewState(empty, 0, () => undefined, module).kind, 'empty');
+  equal(workDeviceViewState(empty, 0, () => undefined, module, true).kind, 'ready');
+});
+
+// Covers: 胶囊「全部」不带 status；选一格即 status 的一个值；检索词下推成 q（去首尾空白由 catalogueRequestPath 做）。
+test('状态胶囊与检索词拼成读口的条件', () => {
+  equal(catalogueConditionsQuery(workDeviceConditions({ search: '', status: 'ALL' })), '');
+  equal(catalogueConditionsQuery(workDeviceConditions({ search: ' sha-hub ', status: 'DEACTIVATED' })), 'status=DEACTIVATED&q=sha-hub');
 });

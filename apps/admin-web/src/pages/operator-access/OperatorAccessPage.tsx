@@ -11,17 +11,18 @@ import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
-import { useAnswer } from '../../query/answers';
 import { ensureSession } from '../../auth/oidc';
 import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { currentDisplayTimeZone, wallTimeOf, wallTimeToRfc3339 } from '../moment';
 import { useOperatorAccessGrant } from '../use-operator-grants';
 import { DetailRow } from '../party/detail-primitives';
 import { RegisterView } from '../party/RegisterView';
 import { selectClass } from '../party/PublicationFormFields';
 import {
-  accessAnswersDomain,
   listOperators,
   registerOperator,
   registerOperatorGrant,
@@ -37,7 +38,6 @@ import {
   grantQualifier,
   grantStandingAt,
   grantStandingLabels,
-  operatorSearchText,
   operatorWriteOutcomeLabel,
   shortSubject,
   workScopeKindLabels,
@@ -296,17 +296,22 @@ function RevokeDialog({ grant, onClose, onRevoked }: { grant: OperatorGrantRecor
   );
 }
 
-/** 右栏：绑定事实、授予表、「授予…」与各条「撤销…」。没有管理授予（readOnly）时只看。落册后不手动重取：写口整域作废，列表自己重问。 */
+/**
+ * 右栏：绑定事实、授予表、「授予…」与各条「撤销…」。没有管理授予（readOnly）时只看。落册后经 onWritten 重取列表当前这一页：
+ * 列表按游标翻页、不经取数层（ADR-0360），没有缓存可供写口作废，只能由页面自己重取。
+ */
 function OperatorDetailPanel({
   operator,
   vocabulary,
   readOnly,
   onClose,
+  onWritten,
 }: {
   operator: OperatorRecord;
   vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds'>;
   readOnly: boolean;
   onClose: () => void;
+  onWritten: () => void;
 }) {
   const [granting, setGranting] = useState(false);
   const [revoking, setRevoking] = useState<OperatorGrantRecord | null>(null);
@@ -347,7 +352,10 @@ function OperatorDetailPanel({
           <GrantForm
             operator={operator}
             vocabulary={vocabulary}
-            onRecorded={() => setGranting(false)}
+            onRecorded={() => {
+              setGranting(false);
+              onWritten();
+            }}
             onClose={() => setGranting(false)}
           />
         ) : null}
@@ -398,14 +406,17 @@ function OperatorDetailPanel({
       <RevokeDialog
         grant={revoking}
         onClose={() => setRevoking(null)}
-        onRevoked={() => setRevoking(null)}
+        onRevoked={() => {
+          setRevoking(null);
+          onWritten();
+        }}
       />
     </div>
   );
 }
 
-/** 「新增操作者」登记视图里的表单：发行方从读口预填，主体标识与依据要人给；落册后写口整域作废、目录自己重取，回到目录由人决定。 */
-function OperatorRegistrationForm({ issuer }: { issuer: string }) {
+/** 「新增操作者」登记视图里的表单：发行方从读口预填，主体标识与依据要人给；落册后经 onRecorded 记下目录要重取，回到目录由人决定。 */
+function OperatorRegistrationForm({ issuer, onRecorded }: { issuer: string; onRecorded: () => void }) {
   const [subject, setSubject] = useState('');
   const [basis, setBasis] = useState('');
   const [busy, setBusy] = useState(false);
@@ -417,6 +428,7 @@ function OperatorRegistrationForm({ issuer }: { issuer: string }) {
     void registerOperator({ issuer, subject: subject.trim(), basis: basis.trim() }).then((next) => {
       setBusy(false);
       setAnswer(next);
+      if (next.kind === 'outcome' && next.body.outcome === 'RECORDED') onRecorded();
     });
   };
   return (
@@ -465,6 +477,11 @@ function useOwnSubject(): { issuer: string; subject: string } | null {
  * 操作者与授予（ADR-0363 决定五）：工作台列本租户的操作者，右栏显绑定与授予、就地授予、对话框撤销；「新增操作者」是
  * `?tab=register` 的登记视图。没有操作者接入管理授予的人不摆写入口（ADR-0315 同款）；读口答未授予时，状态区把本人的发行方
  * 与主体标识显出来——未在册的人靠它把标识交给管理员登记。
+ *
+ * 列表按游标翻页（ADR-0144，票 catalogue-read-pagination-rollout/14），次序是读口的缺省序（登记先后）。检索词（地址 `?q=`）停稳后
+ * 下推成 q，读口只在主体标识与绑定依据上找：授予的标识与能力面挂在各个操作者名下、不是这一册的列（accessidentity 的
+ * OperatorCataloguePages）。这一页原先在页内也按授予与能力面找，迁过来就只搜这两格——检索框的提示照实只写这两格，收窄在框上
+ * 看得见；页内不再补搜，补搜只对这一页成立，会让人以为整册都按授予找过了。
  */
 export function OperatorAccessPage() {
   const grant = useOperatorAccessGrant();
@@ -491,19 +508,27 @@ export function OperatorAccessPage() {
 
   const [search, setSearch] = useAddressKeyword();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const { answer, retry, pending } = useAnswer([accessAnswersDomain, 'operators'], listOperators);
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listOperators);
   const own = useOwnSubject();
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const operators = body?.operators ?? [];
-  const needle = search.trim().toLowerCase();
-  const visible = needle ? operators.filter((operator) => operatorSearchText(operator).includes(needle)) : operators;
   const keyOf = (operator: OperatorRecord) => `${operator.issuer}|${operator.subject}`;
   let viewState: TemplateViewState = catalogueViewState(answer, operators.length, retry, {
     module: info,
     endpoint: 'GET /operators',
     emptyTitle: '还没有任何操作者',
     emptyDescription: '租户的第一个操作者与它的操作者接入管理授予由实施方经受控命令行登记；之后在这里新增。',
+    narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
   });
+  // 登记视图里落了册，回到目录时才重取当前这一页：当场重取的话，登记表单上取自答复的发行方一格会随重取闪空。
+  const [registeredAway, setRegisteredAway] = useState(false);
+  useEffect(() => {
+    if (view !== 'catalogue' || !registeredAway) return;
+    setRegisteredAway(false);
+    retry();
+    // retry 每次渲染是新函数，只认视图与落册标记。
+  }, [view, registeredAway]);
   if (viewState.kind === 'notGranted' && own) {
     viewState = {
       ...viewState,
@@ -514,7 +539,7 @@ export function OperatorAccessPage() {
   if (view === 'register') {
     return (
       <RegisterView title="新增操作者" subtitle="把一个已在发行方登录过的账号登进本租户的操作者册；授予在目录的右栏里给" onBack={leaveRegister}>
-        <OperatorRegistrationForm issuer={body?.issuer ?? ''} />
+        <OperatorRegistrationForm issuer={body?.issuer ?? ''} onRecorded={() => setRegisteredAway(true)} />
       </RegisterView>
     );
   }
@@ -525,7 +550,7 @@ export function OperatorAccessPage() {
       viewStateKey="operator-access"
       subtitle={info.summary}
       onRefresh={retry}
-      refreshing={pending}
+      refreshing={answer === null}
       primaryAction={
         mayWrite ? (
           <Button variant="default" className={primaryActionClass} onClick={openRegister}>
@@ -533,10 +558,10 @@ export function OperatorAccessPage() {
           </Button>
         ) : undefined
       }
-      search={{ value: search, onChange: setSearch, placeholder: '搜主体标识、依据或能力面' }}
-      toolbarRight={body ? `共 ${operators.length} 个操作者` : undefined}
+      search={{ value: search, onChange: setSearch, placeholder: '搜主体标识、登记依据' }}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={columns}
-      rows={visible}
+      rows={operators}
       rowKey={keyOf}
       selectedKey={selectedKey}
       onSelect={setSelectedKey}
@@ -552,6 +577,7 @@ export function OperatorAccessPage() {
             vocabulary={body}
             readOnly={!mayWrite}
             onClose={() => setSelectedKey(null)}
+            onWritten={retry}
           />
         );
       }}

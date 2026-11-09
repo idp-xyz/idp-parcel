@@ -1,6 +1,10 @@
 // 作业设备册查阅（GET /work-devices）。形状镜像 internal/accessidentity/adapters/http 的查阅答复。
+//
+// 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/13）：翻页走游标，答复带 page；status 一维与 q 下推，各维与 q 覆盖
+// 的列以读口的声明为准（accessidentity 的 DeviceCataloguePages），这里不抄一份。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -19,8 +23,13 @@ export interface WorkDeviceRecord {
 export interface WorkDeviceListResponseBody {
   outcome: 'WORK_DEVICES_LISTED';
   devices: WorkDeviceRecord[];
+  page: CataloguePage;
 }
 
-export function listWorkDevices(): Promise<ApiResult<WorkDeviceListResponseBody>> {
-  return exchangeMasterData<WorkDeviceListResponseBody>('/work-devices');
+/** 游标缺即第一页；不带条件即缺省序（设备号）的第一页。 */
+export function listWorkDevices(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<WorkDeviceListResponseBody>> {
+  return exchangeMasterData<WorkDeviceListResponseBody>(catalogueRequestPath('/work-devices', conditions, after));
 }

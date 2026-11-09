@@ -2,7 +2,8 @@ import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState } from '../catalogue-view';
 import type { ApiResult } from '../catalogue-api';
-import type { WorkDeviceListResponseBody, WorkDeviceRecord } from './api';
+import type { CatalogueConditions } from '../catalogue-query';
+import type { WorkDeviceListResponseBody } from './api';
 
 import { labelFor } from '../../vocabulary/status';
 
@@ -18,17 +19,20 @@ export function workScopeText(kind: string, reference: string): string {
   return `${labelFor(kind)} ${reference}`;
 }
 
+/** narrowed：这一问带了检索词或状态，或已翻过第一页——零行是「这组条件下没有」，不是册空（catalogueViewState 的 narrowed）。 */
 export function workDeviceViewState(
   answer: ApiResult<WorkDeviceListResponseBody> | null,
   rowCount: number,
   retry: () => void,
   module: ModuleInfo,
+  narrowed = false,
 ): TemplateViewState {
   return catalogueViewState(answer, rowCount, retry, {
     module,
     endpoint: 'GET /work-devices',
     emptyTitle: '还没有登记扫描设备',
     emptyDescription: '网点和场外作业用的扫描设备登记后会出现在这里。新增或停用设备请联系管理员。',
+    narrowed,
   });
 }
 
@@ -40,20 +44,10 @@ export interface WorkDeviceFilter {
   status: WorkDeviceStatusFilter;
 }
 
-/** 检索命中设备号、地点编号与地点种类的中文词；状态由胶囊筛，不进检索。 */
-export function filterWorkDevices(devices: readonly WorkDeviceRecord[], filter: WorkDeviceFilter): WorkDeviceRecord[] {
-  const needle = filter.search.trim().toLowerCase();
-  return devices.filter((row) => {
-    if (filter.status !== 'ALL' && row.status !== filter.status) return false;
-    if (needle === '') return true;
-    return [row.deviceId, row.workScopeRef, labelFor(row.workScopeKind)].some((value) => value.toLowerCase().includes(needle));
-  });
-}
-
-export function countWorkDevices(devices: readonly WorkDeviceRecord[]): Record<WorkDeviceStatusFilter, number> {
-  return {
-    ALL: devices.length,
-    REGISTERED: devices.filter((row) => row.status === 'REGISTERED').length,
-    DEACTIVATED: devices.filter((row) => row.status === 'DEACTIVATED').length,
-  };
+/**
+ * 屏上的检索词与状态胶囊 → 读口的条件（ADR-0144 决定四）：胶囊下推成 status 一维，检索词下推成 q。q 只认设备号与地点编号
+ * （accessidentity 的 DeviceCataloguePages）；地点种类的中文词（网点、场外）不是这一册的列，搜不到，检索框的提示也只写这两格。
+ */
+export function workDeviceConditions(filter: WorkDeviceFilter): CatalogueConditions {
+  return { q: filter.search, filters: filter.status === 'ALL' ? {} : { status: [filter.status] } };
 }

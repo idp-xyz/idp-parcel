@@ -1,21 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorContent } from '../../templates/inspector';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { formatInstant } from '../catalogue-view';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { labelFor } from '../../vocabulary/status';
-import {
-  listWorkDevices,
-  type WorkDeviceListResponseBody,
-  type WorkDeviceRecord,
-} from './api';
+import { listWorkDevices, type WorkDeviceRecord } from './api';
 import { StatusPill } from '../../components/StatusPill';
 import {
   WORK_DEVICE_SCOPE,
-  countWorkDevices,
-  filterWorkDevices,
+  workDeviceConditions,
   workDeviceStatusLabel,
   workDeviceViewState,
   type WorkDeviceStatusFilter,
@@ -90,28 +87,17 @@ const statusFilters: ReadonlyArray<{ id: WorkDeviceStatusFilter; label: string }
 /**
  * 作业设备册：只看已登记的行（ADR-0149 决定二、越权风险点 2）。
  * 不做设备管理，不扫描现场。登记与停用走受控登记口，本页没有写入口。
+ *
+ * 按游标翻页（ADR-0144，票 catalogue-read-pagination-rollout/14），次序是读口的缺省序（设备号）：检索词停稳后下推成 q，状态胶囊
+ * 下推成 status 一维（presentation 的 workDeviceConditions）。胶囊不带计数、页头不再报「在用 N 台」——到手的只是一页，页上数出来的
+ * 不是整册；整册条数在翻页条上（答复的 total，随胶囊与检索变）。
  */
 export function WorkDeviceCataloguePage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<WorkDeviceStatusFilter>('ALL');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<WorkDeviceListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listWorkDevices().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const conditions = workDeviceConditions({ search: useSettledKeyword(search), status });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listWorkDevices);
   const devices = answer?.kind === 'outcome' ? answer.body.devices : [];
-  const counts = countWorkDevices(devices);
-  const visible = filterWorkDevices(devices, { search, status });
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<WorkDeviceRecord>
@@ -119,8 +105,9 @@ export function WorkDeviceCataloguePage() {
       title={info.title}
       description="网点和场外作业点在用的扫描设备，各在哪儿用、还在不在用。新增或停用设备请联系管理员。"
       search={{ value: search, onChange: setSearch, placeholder: '搜设备号、地点编号' }}
+      // 换胶囊之后那一问在途时胶囊照摆，不随加载闪掉；读口答了接入那一格或错误时不摆。
       filters={
-        devices.length > 0 ? (
+        answer === null || answer.kind === 'outcome' ? (
           <>
             {statusFilters.map((filter) => (
               <button
@@ -130,19 +117,25 @@ export function WorkDeviceCataloguePage() {
                 aria-pressed={filter.id === status}
                 onClick={() => setStatus(filter.id === status ? 'ALL' : filter.id)}
               >
-                {filter.label} {counts[filter.id]}
+                {filter.label}
               </button>
             ))}
           </>
         ) : undefined
       }
-      filterSummary={answer?.kind === 'outcome' ? `共 ${counts.ALL} 台，在用 ${counts.REGISTERED} 台` : undefined}
       emptyRowsNote="当前筛选条件下没有匹配的设备"
       columns={columns}
-      rows={visible}
+      rows={devices}
       rowKey={(row) => row.deviceId}
       inspector={inspectorOf}
-      viewState={workDeviceViewState(answer, devices.length, retry, info)}
+      pagination={pagination}
+      viewState={workDeviceViewState(
+        answer,
+        devices.length,
+        retry,
+        info,
+        catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+      )}
     />
   );
 }

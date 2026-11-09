@@ -52,13 +52,6 @@ export function effectiveGrantCount(operator: OperatorRecord, now: Date): number
   return operator.grants.filter((grant) => grantStandingAt(grant, now) === 'effective').length;
 }
 
-/** 检索：主体、依据、各条授予的面与细分格都搜得到。 */
-export function operatorSearchText(operator: OperatorRecord): string {
-  return [operator.subject, operator.basis, ...operator.grants.flatMap((grant) => [grant.grantId, grant.capabilityFace, faceLabel(grant.capabilityFace), grantQualifier(grant)])]
-    .join(' ')
-    .toLowerCase();
-}
-
 /** 写口答复的中文；代数原词取自 accessidentity.OperatorRegistrationOutcome 与 ADR-0363 新增的那一格。 */
 export const operatorWriteOutcomeLabels: Record<string, string> = {
   RECORDED: '已登记',
