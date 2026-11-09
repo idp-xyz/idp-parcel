@@ -3,6 +3,7 @@ package settlementhttp
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -65,12 +66,17 @@ func NewQuerySettlementOperatingResultsEndpoint(
 			return
 		}
 		tenant := query.Scope.Tenant()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 
-		switch request.URL.Query().Get("registry") {
+		switch values.Get("registry") {
 		case registryOperatingResult:
-			serveOperatingResults(response, request, reader, tenant, query.Limit)
+			serveOperatingResults(response, request, values, reader, tenant, query.Limit)
 		case registryCostAllocation:
-			serveCostAllocations(response, request, reader, tenant, query.Limit)
+			serveCostAllocations(response, request, values, reader, tenant, query.Limit)
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
@@ -80,11 +86,12 @@ func NewQuerySettlementOperatingResultsEndpoint(
 func serveOperatingResults(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader OperatingCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.OperatingResultPages.Decode(request.URL.Query())
+	pageQuery, err := ports.OperatingResultPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
@@ -128,11 +135,12 @@ func serveOperatingResults(
 func serveCostAllocations(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader OperatingCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.CostAllocationPages.Decode(request.URL.Query())
+	pageQuery, err := ports.CostAllocationPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return

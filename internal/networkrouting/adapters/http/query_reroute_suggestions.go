@@ -39,7 +39,7 @@ func NewQueryRerouteSuggestionsEndpoint(intake CatalogueQueryIntake, reader Rero
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.RerouteSuggestionPages.Decode(request.URL.Query())
+		pageQuery, err := ports.RerouteSuggestionPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

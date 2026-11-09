@@ -147,7 +147,7 @@ func NewQueryOperatorsEndpoint(
 			writeCatalogueProblem(response, err)
 			return
 		}
-		query, err := accessidentity.OperatorCataloguePages.Decode(request.URL.Query())
+		query, err := accessidentity.OperatorCataloguePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

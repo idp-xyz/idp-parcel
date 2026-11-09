@@ -53,7 +53,7 @@ func NewQueryProductChannelMappingsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.ProductChannelMappingPages.Decode(request.URL.Query())
+		pageQuery, err := ports.ProductChannelMappingPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

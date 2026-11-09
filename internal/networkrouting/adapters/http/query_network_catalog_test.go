@@ -648,6 +648,7 @@ func TestMalformedQueryParametersAreRefusedWithAReason(t *testing.T) {
 		"别族的游标":    "?family=line&after=" + nodeCursor,
 		"换条件后的旧游标": "?family=node&code=SYN-NODE-02&after=" + nodeCursor,
 		"超长的 q":    "?family=node&q=" + strings.Repeat("S", cataloguepage.MaxKeywordRunes+1),
+		"坏转义":      "?family=node&q=%zz",
 	}
 	for name, query := range cases {
 		t.Run(name, func(t *testing.T) {

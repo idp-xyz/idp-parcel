@@ -69,7 +69,7 @@ func NewQueryControlReleaseRefusalsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.ControlReleaseRefusalPages.Decode(request.URL.Query())
+		pageQuery, err := ports.ControlReleaseRefusalPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

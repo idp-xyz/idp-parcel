@@ -50,7 +50,7 @@ func NewQueryEvaluationsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.EvaluationPages, request)
+		pageQuery, err := ports.EvaluationPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

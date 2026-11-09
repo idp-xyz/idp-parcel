@@ -199,7 +199,11 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 			writeIntakeProblem(response, err)
 			return
 		}
-		values := request.URL.Query()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		ofParcel := values.Get("parcel")
 		var pageQuery cataloguepage.Query
 		if ofParcel == "" {

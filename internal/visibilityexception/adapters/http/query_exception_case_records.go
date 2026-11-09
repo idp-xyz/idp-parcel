@@ -49,7 +49,7 @@ func NewQueryExceptionCaseRecordsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.ExceptionCasePages.Decode(request.URL.Query())
+		pageQuery, err := ports.ExceptionCasePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

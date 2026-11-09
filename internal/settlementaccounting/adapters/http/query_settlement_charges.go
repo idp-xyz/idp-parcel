@@ -3,6 +3,7 @@ package settlementhttp
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -71,12 +72,17 @@ func NewQuerySettlementChargesEndpoint(
 			return
 		}
 		tenant := query.Scope.Tenant()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 
-		switch request.URL.Query().Get("registry") {
+		switch values.Get("registry") {
 		case registryCustomerCharge:
-			serveCustomerCharges(response, request, reader, tenant, query.Limit)
+			serveCustomerCharges(response, request, values, reader, tenant, query.Limit)
 		case registrySupplierExpectedCost:
-			serveSupplierExpectedCosts(response, request, reader, tenant, query.Limit)
+			serveSupplierExpectedCosts(response, request, values, reader, tenant, query.Limit)
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		}
@@ -86,11 +92,12 @@ func NewQuerySettlementChargesEndpoint(
 func serveCustomerCharges(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader ChargeCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.CustomerChargePages.Decode(request.URL.Query())
+	pageQuery, err := ports.CustomerChargePages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
@@ -148,11 +155,12 @@ func serveCustomerCharges(
 func serveSupplierExpectedCosts(
 	response http.ResponseWriter,
 	request *http.Request,
+	values url.Values,
 	reader ChargeCatalogueReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
-	pageQuery, err := ports.SupplierExpectedCostPages.Decode(request.URL.Query())
+	pageQuery, err := ports.SupplierExpectedCostPages.Decode(values)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return

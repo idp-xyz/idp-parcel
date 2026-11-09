@@ -68,7 +68,7 @@ func NewQueryCancellationOrderConflictsEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.CancellationOrderConflictPages.Decode(request.URL.Query())
+		pageQuery, err := ports.CancellationOrderConflictPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

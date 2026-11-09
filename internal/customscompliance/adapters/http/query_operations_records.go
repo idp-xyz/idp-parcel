@@ -61,15 +61,15 @@ var (
 	_ ActionAdmissionJudgementReader = ports.ActionAdmissionJudgementRead(nil)
 )
 
-// serveRecordList 收拢四口共有的外壳：方法、Intake、按本册声明解码查询参数、读、成形。read 拿到请求本身，
-// 选择器（外部结果的 version）由它自己读。
+// serveRecordList 收拢四口共有的外壳：方法、Intake、按本册声明解码查询参数、读、成形。read 拿到请求与解好的那一份
+// 查询参数，选择器（外部结果的 version）从这份取值里读，不另解一遍。
 func serveRecordList[Record any, Body any](
 	intake CatalogueQueryIntake,
 	catalogue *cataloguepage.Catalogue,
 	outcome string,
 	key string,
 	read func(
-		request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		request *http.Request, values url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 	) (cataloguepage.Result[Record], error),
 	transcribe func(Record) Body,
 ) http.Handler {
@@ -84,12 +84,17 @@ func serveRecordList[Record any, Body any](
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodeRecordQuery(catalogue, request.URL.Query())
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
 		}
-		page, err := read(request, query.Scope.Tenant(), query.Limit, pageQuery)
+		pageQuery, err := decodeRecordQuery(catalogue, values)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := read(request, values, query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -194,7 +199,7 @@ type caseClosureBody struct {
 func NewQueryCustomsCasesEndpoint(intake CatalogueQueryIntake, reader CustomsCaseRecordReader) http.Handler {
 	return serveRecordList(intake, ports.CustomsCasePages, outcomeCustomsCasesListed, "cases",
 		func(
-			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+			request *http.Request, _ url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 		) (cataloguepage.Result[ports.CustomsCaseRecord], error) {
 			return reader.ListCustomsCases(request.Context(), tenant, limit, query)
 		},
@@ -282,7 +287,7 @@ type receiptBody struct {
 func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader SubmissionRecordReader) http.Handler {
 	return serveRecordList(intake, ports.SubmissionVersionPages, outcomeSubmissionVersionsListed, "submissions",
 		func(
-			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+			request *http.Request, _ url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 		) (cataloguepage.Result[ports.SubmissionVersionRecord], error) {
 			return reader.ListSubmissionVersions(request.Context(), tenant, limit, query)
 		},
@@ -359,9 +364,9 @@ type releaseBody struct {
 func NewQueryExternalResultsEndpoint(intake CatalogueQueryIntake, reader ExternalResultViewReader) http.Handler {
 	return serveRecordList(intake, ports.ExternalResultPages, outcomeExternalResultsListed, "results",
 		func(
-			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+			request *http.Request, values url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 		) (cataloguepage.Result[ports.ExternalResultViewRecord], error) {
-			return reader.ListExternalResults(request.Context(), tenant, request.URL.Query().Get("version"), limit, query)
+			return reader.ListExternalResults(request.Context(), tenant, values.Get("version"), limit, query)
 		},
 		func(record ports.ExternalResultViewRecord) externalResultBody {
 			body := externalResultBody{
@@ -425,7 +430,7 @@ type admissionBasisBody struct {
 func NewQueryActionAdmissionJudgementsEndpoint(intake CatalogueQueryIntake, reader ActionAdmissionJudgementReader) http.Handler {
 	return serveRecordList(intake, ports.AdmissionJudgementPages, outcomeAdmissionJudgementsListed, "judgements",
 		func(
-			request *http.Request, tenant domain.TenantID, limit int, query cataloguepage.Query,
+			request *http.Request, _ url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 		) (cataloguepage.Result[ports.ActionAdmissionJudgementRecord], error) {
 			return reader.ListActionAdmissionJudgements(request.Context(), tenant, limit, query)
 		},
@@ -503,7 +508,7 @@ func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader Unadm
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.UnadmittedObjectPages.Decode(request.URL.Query())
+		pageQuery, err := ports.UnadmittedObjectPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

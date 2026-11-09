@@ -76,6 +76,7 @@ func TestCodSubledgersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"筛选维不在声明里": {"?currency=SYN-CUR-01", "currency"},
 		"集外排序维":    {"?sort=payableToCustomer", "payableToCustomer"},
 		"解不开的游标":   {"?after=SYN-not-a-cursor", "游标"},
+		"坏转义":      {"?q=%zz", "解不开的一段"},
 		"换了条件的旧游标": {"?q=SYN-B&after=" + stale, "游标"},
 	}
 	for name, refusal := range refusals {

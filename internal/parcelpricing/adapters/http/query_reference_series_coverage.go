@@ -62,7 +62,7 @@ func NewQueryReferenceSeriesCoverageEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.ReferenceSeriesCoveragePages, request)
+		pageQuery, err := ports.ReferenceSeriesCoveragePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

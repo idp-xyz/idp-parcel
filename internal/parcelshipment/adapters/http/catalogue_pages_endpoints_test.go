@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
@@ -109,8 +110,17 @@ func serve(handler http.Handler, target string) *httptest.ResponseRecorder {
 	return response
 }
 
+// withBadEscape 在一问后面多带一段转义坏掉的 q。
+func withBadEscape(target string) string {
+	if strings.Contains(target, "?") {
+		return target + "&q=%zz"
+	}
+	return target + "?q=%zz"
+}
+
 // Covers: ADR-0144 决定四、五与 spec「端点先 Intake、后解码查询参数」——九个端点各自：合规的一问带 page、size 取 Intake 的页大小；集外参数答 400 带理由散文；
-// 渠道未配置时合规与不合规的一问都答 403。
+// 渠道未配置时合规与不合规的一问都答 403。票 catalogue-read-pagination-rollout/18：查询串里转义坏掉的一段同样答 400，不丢下那一段答出整册；
+// 渠道未配置时它也答 403。
 func TestEveryMigratedEndpointCarriesThePageAndDecodesAfterTheIntake(t *testing.T) {
 	for name, endpoint := range pagedEndpoints(t) {
 		t.Run(name, func(t *testing.T) {
@@ -122,7 +132,8 @@ func TestEveryMigratedEndpointCarriesThePageAndDecodesAfterTheIntake(t *testing.
 				t.Fatalf("page.size = %s, want %s（取 Intake 的页大小）", size, endpoint.size)
 			}
 			assertPageQueryRefused(t, serve(endpoint.configured, endpoint.bad))
-			for _, target := range []string{endpoint.good, endpoint.bad} {
+			assertPageQueryRefused(t, serve(endpoint.configured, withBadEscape(endpoint.good)))
+			for _, target := range []string{endpoint.good, endpoint.bad, withBadEscape(endpoint.good)} {
 				if unconfigured := serve(endpoint.unconfigured, target); unconfigured.Code != http.StatusForbidden {
 					t.Fatalf("渠道未配置时 %s status = %d, want 403；body = %s", target, unconfigured.Code, unconfigured.Body)
 				}

@@ -81,6 +81,8 @@ func TestDeliveryScopeListsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"按登记时刻排":     {preAdvices, "?sort=-registeredAt"},
 		"解不开的游标":     {handoverNotes, "?after=SYN-not-a-cursor"},
 		"预报带交接单的区间键": {preAdvices, "?openedUntil=2026-10-21T00:00:00Z"},
+		"预报的坏转义":     {preAdvices, "?q=%zz"},
+		"交接单的坏转义":    {handoverNotes, "?node=SYN-NODE-1&q=%zz"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader := &stubDeliveryScopeCatalogue{}
@@ -147,7 +149,7 @@ func TestUnconfiguredDeliveryScopeListsAnswerOne403WhateverTheQuery(t *testing.T
 				t.Fatalf("不带参数的一问：status = %d body = %s", want.Code, want.Body.String())
 			}
 			assertNoOutcome(t, want)
-			for _, query := range []string{testCase.compliant, "?sort=nowhere", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02"} {
+			for _, query := range []string{testCase.compliant, "?sort=nowhere", "?after=SYN-not-a-cursor", "?tenant=SYN-TENANT-02", "?q=%zz"} {
 				response := testCase.read.serve(nodeopshttp.UnconfiguredIntake{}, reader, http.MethodGet, testCase.read.target+query)
 				if response.Code != want.Code || response.Body.String() != want.Body.String() {
 					t.Fatalf("%s：status = %d body = %s，应与不带参数的一问逐字相同", query, response.Code, response.Body.String())

@@ -88,6 +88,7 @@ func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"解不开的游标":    {"?register=suspension&after=SYN-not-a-cursor", "游标"},
 		"换了条件的旧游标":  {"?register=suspension&q=SYN-B&after=" + stale, "游标"},
 		"换了一册的旧游标":  {"?register=resumption&q=SYN-A&after=" + stale, "游标"},
+		"坏转义":       {"?register=suspension&q=%zz", "解不开的一段"},
 	}
 	for name, refusal := range refusals {
 		t.Run(name, func(t *testing.T) {
@@ -120,6 +121,7 @@ func TestGovernanceRegistersRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"?register=suspension&sort=fromAt",
 		"?register=suspension&sort=-occurredAt&q=SYN",
 		"?register=suspension&after=SYN-not-a-cursor",
+		"?register=suspension&q=%zz",
 		"?register=suspension&tenant=SYN-TENANT-02",
 		"?register=takeover&authority=SYN-AUTH/successor",
 		"",

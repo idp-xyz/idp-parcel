@@ -105,6 +105,7 @@ func NewQueryShipmentRequestViewsEndpoint(
 			return
 		}
 
+		// 分派先于 Intake，只能照 URL.Query() 宽松地看键在不在，理由在 cataloguepage.ParseQuery 头注。
 		if request.URL.Query().Has("shipmentRequestId") {
 			serveDetail(response, request, intake, reader)
 			return
@@ -124,7 +125,11 @@ func serveList(
 		writeIntakeProblem(response, err)
 		return
 	}
-	values := request.URL.Query()
+	values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		writePageQueryProblem(response, err)
+		return
+	}
 	var pageQuery cataloguepage.Query
 	if !values.Has("documentNumber") && !values.Has("shipmentRequestIds") {
 		if pageQuery, err = ports.ShipmentRequestViewPages.Decode(values); err != nil {

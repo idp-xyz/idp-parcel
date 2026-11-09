@@ -235,13 +235,17 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 		if !guardGet(response, request) {
 			return
 		}
-		values := request.URL.Query()
-		filter := ports.AuditedPayableFilter{
-			DocumentNumber: values.Get("documentNumber"), Claim: values.Get("claim"), Supplier: values.Get("supplier"),
-		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
 			return
+		}
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		filter := ports.AuditedPayableFilter{
+			DocumentNumber: values.Get("documentNumber"), Claim: values.Get("claim"), Supplier: values.Get("supplier"),
 		}
 		pageQuery, err := ports.AuditedPayablePages.Decode(values)
 		if err != nil {

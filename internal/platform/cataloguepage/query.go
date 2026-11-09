@@ -38,8 +38,36 @@ func malformed(format string, arguments ...any) *MalformedQuery {
 	return &MalformedQuery{Reason: fmt.Sprintf(format, arguments...)}
 }
 
-// Decode 从查询串解出本册的一次查询。集外键、集外排序维、词表外或为空的筛选值、超长的 q、库存不下的 q 与筛选值、
-// 只能给一次却给了多次的键、解不开或与本次条件不符的游标，一律答 *MalformedQuery。
+// ParseQuery 照 url.ParseQuery 解请求的原始查询串（ADR-0144 决定四、七）。百分号转义不完整或用了分号分隔的那一段解不开，
+// 整条答 *MalformedQuery：URL.Query() 会把那一段静默丢下、余下的照常作答，一个写坏的筛选值就成了没给，答出整册。理由不回显
+// 那一段——解不开的字节原样回给调用方，日志与界面都得再防一次。
+//
+// 册名、选择器这类由端点自己读的键，从这里交回的同一份取值里读，再把整份交给 Decode，不另解一遍。
+//
+// 唯一的例外是 Intake 之前的分派：按某个键在不在选 Intake 的口，只能照 URL.Query() 宽松地看。在那里调本函数，解不开的段就会
+// 在 Intake 之前答 400，渠道未配置时答复随请求内容变（ADR-0055 决定三）。分派键本身写坏时，宽松读把它丢下，请求落进不带
+// 该键的列表那一支；那一支在 Intake 之后照本函数再解，坏段仍答 400。
+func ParseQuery(raw string) (url.Values, error) {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return nil, malformed("查询串里有解不开的一段：百分号转义不完整，或用了分号分隔")
+	}
+	return values, nil
+}
+
+// DecodeRaw 从请求的原始查询串解出本册的一次查询：先 ParseQuery，再 Decode。端点不自己读任何键时用它。
+func (catalogue *Catalogue) DecodeRaw(raw string) (Query, error) {
+	values, err := ParseQuery(raw)
+	if err != nil {
+		return Query{}, err
+	}
+	return catalogue.Decode(values)
+}
+
+// Decode 从解好的查询参数解出本册的一次查询。集外键、集外排序维、词表外或为空的筛选值、超长的 q、库存不下的 q、筛选值与
+// 选择器取值、只能给一次却给了多次的键、解不开或与本次条件不符的游标，一律答 *MalformedQuery。
+//
+// 端点不拿 URL.Query() 喂它：那一份已把解不开的段静默丢下，到这里再也看不见。从请求来的取值走 DecodeRaw，或先经 ParseQuery。
 func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 	query := Query{Sort: catalogue.defaultSort, Filters: map[string][]string{}, catalogue: catalogue}
 	selectors := map[string][]string{}
@@ -85,7 +113,13 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 			}
 			cursor, hasCursor = value, true
 		case catalogue.selectors[key]:
-			// 选择器由端点自己读；这里只记下取值进摘要。
+			// 选择器的取值归端点自己读、自己判含义；这里只判它存不存得进库，再记进摘要。端点拿它去查库之前都要过这一步，
+			// 带 NUL 的选择器就和筛选值一样进不了 SQL。
+			for _, value := range given {
+				if !storable.Text(value) {
+					return Query{}, malformed("选择器 %s 的取值含库存不下的字符（NUL 或不合法的 UTF-8）", key)
+				}
+			}
 			selectors[key] = canonical(given)
 		default:
 			vocabulary, isFilter := catalogue.filters[key]

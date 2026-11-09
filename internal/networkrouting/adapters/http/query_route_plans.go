@@ -80,7 +80,11 @@ func NewQueryRoutePlansEndpoint(
 			return
 		}
 
-		values := request.URL.Query()
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		register := values.Get("register")
 		catalogue, known := registerCatalogues[register]
 		if !known {

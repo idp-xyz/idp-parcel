@@ -46,7 +46,7 @@ func NewQueryRegistrationNumberTypesEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.RegistrationNumberTypePages.Decode(request.URL.Query())
+		pageQuery, err := ports.RegistrationNumberTypePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

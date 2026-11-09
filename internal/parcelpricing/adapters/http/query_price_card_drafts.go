@@ -60,7 +60,7 @@ func NewQueryPriceCardDraftsEndpoint(intake PriceCardDraftQueryIntake, reader Pr
 			writeRegistrationIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.PriceCardDraftPages, request)
+		pageQuery, err := ports.PriceCardDraftPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

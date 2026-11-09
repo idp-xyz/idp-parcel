@@ -233,6 +233,7 @@ func TestListEndpointsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 				"集外排序维":   "sort=SYN-unknown",
 				"解不开的游标":  "after=SYN-not-a-cursor",
 				"换条件拿旧游标": "q=SYN-B&after=" + url.QueryEscape(cursor),
+				"坏转义":     "q=%zz",
 			}
 			if list.badFilter != "" {
 				refusals["词表外筛选值"] = list.badFilter
@@ -265,7 +266,7 @@ func TestListEndpointsAnswerTheUnconfiguredChannelBeforeDecoding(t *testing.T) {
 	for _, list := range pagedLists() {
 		t.Run(list.name, func(t *testing.T) {
 			var bodies [][]byte
-			for _, extra := range []string{list.good, "sort=SYN-unknown&tenant=SYN-TENANT-02"} {
+			for _, extra := range []string{list.good, "sort=SYN-unknown&tenant=SYN-TENANT-02", "q=%zz"} {
 				response, _, called := list.probe(t, visibilityhttp.UnconfiguredIntake{}, extra)
 				if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" || called {
 					t.Fatalf("%q 渠道未配置：status = %d called = %v；body = %s", extra, response.Code, called, response.Body)

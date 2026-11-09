@@ -57,7 +57,7 @@ func NewQueryDutyCollaborationsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.DutyCollaborationPages.Decode(request.URL.Query())
+		pageQuery, err := ports.DutyCollaborationPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

@@ -110,13 +110,18 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		if !ok {
 			return
 		}
-		registry := request.URL.Query().Get(registrySelector)
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		registry := values.Get(registrySelector)
 		catalogue, known := registryCatalogues[registry]
 		if !known {
 			writePageQueryProblem(response, &cataloguepage.MalformedQuery{Reason: unknownRegistryReason})
 			return
 		}
-		pageQuery, err := catalogue.Decode(request.URL.Query())
+		pageQuery, err := catalogue.Decode(values)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

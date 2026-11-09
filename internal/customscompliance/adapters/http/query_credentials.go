@@ -58,7 +58,7 @@ func NewQueryCredentialsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.CredentialPages.Decode(request.URL.Query())
+		pageQuery, err := ports.CredentialPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

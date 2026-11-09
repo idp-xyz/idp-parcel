@@ -266,6 +266,7 @@ func malformedPageQueries(catalogue pagedCatalogue) map[string]string {
 		"sort twice":         "sort=" + catalogue.sort + "&sort=" + catalogue.sort,
 		"bad cursor":         "after=not-a-cursor",
 		"keyword too long":   "q=" + url.QueryEscape(strings.Repeat("字", cataloguepage.MaxKeywordRunes+1)),
+		"bad escape":         "q=%zz",
 	}
 	if catalogue.filter != "" {
 		malformed["word outside vocabulary"] = catalogue.filter + "=NOT_A_WORD"

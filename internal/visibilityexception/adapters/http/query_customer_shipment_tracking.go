@@ -101,7 +101,7 @@ func NewQueryCustomerShipmentTrackingEndpoint(
 // decodeShipmentTrackingPage 解本次的翻页：号取 Intake 立好的那一个（与查询键同源，游标因此绑在真正被查的号上），after 取查询串
 // 原样。游标解不开、与本次号不符、位次不是正整数，都答坏请求；伪造的位次在这里拦下，不带进读。
 func decodeShipmentTrackingPage(request *http.Request, query ShipmentTrackingQuery) (cataloguepage.Query, int, bool) {
-	parameters, err := url.ParseQuery(request.URL.RawQuery)
+	parameters, err := cataloguepage.ParseQuery(request.URL.RawQuery)
 	if err != nil {
 		return cataloguepage.Query{}, 0, false
 	}

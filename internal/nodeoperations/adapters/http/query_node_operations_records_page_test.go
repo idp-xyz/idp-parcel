@@ -153,6 +153,7 @@ func TestNodeOperationsRecordsRefuseQueriesOutsideTheDeclaration(t *testing.T) {
 		"空筛选值":      "registry=physical-control&outcome=",
 		"重复的排序":     "registry=consolidation-member&sort=recordedAt&sort=-recordedAt",
 		"解不开的游标":    "registry=unidentified-item&after=SYN-not-a-cursor",
+		"坏转义":       "registry=reception&q=%zz",
 	} {
 		t.Run(name, func(t *testing.T) {
 			assertPageQueryRefused(t, serveGet(endpoint, "/node-operations-records?"+query))
@@ -196,7 +197,7 @@ func TestNodeOperationsRecordsCursorsBelongToTheirCatalogueAndConditions(t *test
 func TestUnconfiguredRecordsAnswer403WhateverThePageParameters(t *testing.T) {
 	endpoint := nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeopshttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t})
 	for _, registry := range recordsRegistries {
-		for _, parameters := range []string{registry.parameters, "&sort=nowhere", "&tenant=SYN-TENANT-02", "&after=SYN-not-a-cursor"} {
+		for _, parameters := range []string{registry.parameters, "&sort=nowhere", "&tenant=SYN-TENANT-02", "&after=SYN-not-a-cursor", "&q=%zz"} {
 			t.Run(registry.name+parameters, func(t *testing.T) {
 				response := serveGet(endpoint, "/node-operations-records?registry="+registry.name+parameters)
 				if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {

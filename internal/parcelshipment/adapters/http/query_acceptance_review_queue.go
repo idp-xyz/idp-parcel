@@ -75,6 +75,7 @@ func NewQueryAcceptanceReviewQueueEndpoint(
 			return
 		}
 
+		// 分派先于 Intake，只能照 URL.Query() 宽松地看键在不在，理由在 cataloguepage.ParseQuery 头注。
 		if request.URL.Query().Has("shipmentRequestId") {
 			serveReviewCase(response, request, intake, reader, judgments)
 			return
@@ -94,7 +95,7 @@ func serveReviewQueue(
 		writeIntakeProblem(response, err)
 		return
 	}
-	pageQuery, err := ports.AcceptanceReviewQueuePages.Decode(request.URL.Query())
+	pageQuery, err := ports.AcceptanceReviewQueuePages.DecodeRaw(request.URL.RawQuery)
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return

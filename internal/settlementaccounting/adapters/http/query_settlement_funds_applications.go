@@ -52,7 +52,7 @@ func NewQuerySettlementFundsApplicationsEndpoint(
 		if !ok {
 			return
 		}
-		pageQuery, err := ports.ExternalFundsFactPages.Decode(request.URL.Query())
+		pageQuery, err := ports.ExternalFundsFactPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

@@ -56,7 +56,7 @@ func NewQueryAuthorizedDispositionQueueEndpoint(
 			writeIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.AuthorizedDispositionQueuePages.Decode(request.URL.Query())
+		pageQuery, err := ports.AuthorizedDispositionQueuePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

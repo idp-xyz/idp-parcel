@@ -83,13 +83,18 @@ func NewQueryClaimsRecoveryRecordsEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
-		registry := request.URL.Query().Get("registry")
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		registry := values.Get("registry")
 		catalogue, known := claimsRecoveryRegistryPages[registry]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		pageQuery, err := catalogue.Decode(request.URL.Query())
+		pageQuery, err := catalogue.Decode(values)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

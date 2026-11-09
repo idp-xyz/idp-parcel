@@ -127,13 +127,18 @@ func NewQueryVisibilityCataloguesEndpoint(
 			writeOperationsIntakeProblem(response, err)
 			return
 		}
-		kind := request.URL.Query().Get("kind")
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		kind := values.Get("kind")
 		catalogue, known := visibilityCataloguePages[kind]
 		if !known {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		pageQuery, err := catalogue.Decode(request.URL.Query())
+		pageQuery, err := catalogue.Decode(values)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

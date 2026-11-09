@@ -48,7 +48,7 @@ func NewQueryReferenceSeriesEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := decodePageQuery(ports.ReferenceSeriesPages, request)
+		pageQuery, err := ports.ReferenceSeriesPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

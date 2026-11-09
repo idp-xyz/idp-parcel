@@ -53,7 +53,7 @@ func NewQueryServiceProductsEndpoint(
 			return
 		}
 
-		pageQuery, err := ports.ServiceProductPages.Decode(request.URL.Query())
+		pageQuery, err := ports.ServiceProductPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return

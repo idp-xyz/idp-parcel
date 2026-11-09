@@ -235,11 +235,24 @@ func TestEachRouteCatalogueRefusesMalformedParametersWithAReason(t *testing.T) {
 				}
 				assertNoOutcome(t, response)
 			}
+			escaped := serveRoute(endpoint, withBadEscape(face.target(nil)))
+			if escaped.Code != http.StatusBadRequest || problemCode(t, escaped) != "MALFORMED_REQUEST" ||
+				!strings.Contains(problemDetailText(t, escaped), "解不开的一段") {
+				t.Fatalf("坏转义：%d %s", escaped.Code, escaped.Body.String())
+			}
 			if _, called := asked(); called {
 				t.Fatal("坏参数问到了读口")
 			}
 		})
 	}
+}
+
+// withBadEscape 在一问后面原样多带一段转义坏掉的 q：url.Values 编码不出解不开的段。
+func withBadEscape(target string) string {
+	if strings.Contains(target, "?") {
+		return target + "&q=%zz"
+	}
+	return target + "?q=%zz"
 }
 
 // Covers: spec「端点先 Intake、后解码查询参数」（ADR-0055 决定三）——渠道未配置时，参数写对写错都答同一个 403
@@ -256,6 +269,7 @@ func TestEachRouteCatalogueAnswersForbiddenWhateverTheQueryWhenUnconfigured(t *t
 				face.target(url.Values{"sort": {"-declaredParcelId"}}),
 				face.target(url.Values{face.filter: {"SYN-NOT-A-WORD"}}),
 				face.target(url.Values{"after": {"SYN-NOT-A-CURSOR"}}),
+				withBadEscape(face.target(nil)),
 			}
 			if face.path == "/route-plans" {
 				targets = append(targets, "/route-plans", "/route-plans?register=SYN-NOT-A-REGISTER")

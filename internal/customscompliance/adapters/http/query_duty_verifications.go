@@ -55,7 +55,7 @@ func NewQueryDutyVerificationsEndpoint(
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
-		pageQuery, err := ports.DutyVerificationPages.Decode(request.URL.Query())
+		pageQuery, err := ports.DutyVerificationPages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
