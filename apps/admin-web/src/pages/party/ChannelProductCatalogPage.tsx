@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { partyAnswersDomain } from './party-writes';
 import { useAnswer } from '../../query/answers';
-import { useRegisterList } from './register-list';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -99,23 +101,19 @@ const workbenchColumns: WorkbenchColumn<ProductChannelMappingRecord>[] = columns
  * 区间形成新修订，不覆盖历史。
  *
  * 目录是工作台，行详情在右栏（票 commercial-registers-edit-containers/05）；右栏里点历史的某一笔，详情换成那一笔修订。
+ *
+ * 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词沿地址上的 `?q=` 停稳后下推，翻页走游标，换检索词回第一页；
+ * 次序是读口的缺省序，本册不设筛选维。检索覆盖哪几格以读口为准。
  */
 function ProductChannelMappingWorkbench({ mayWrite, onOpenRegister }: { mayWrite: boolean; onOpenRegister: () => void }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   // 点行打开的映射详情：记映射标识（票 party-commercial-uiux/21）。
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { answer, retry, pending } = useRegisterList(listProductChannelMappings);
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listProductChannelMappings);
 
   const mappings = answer?.kind === 'outcome' ? answer.body.mappings : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleMappings = needle
-    ? mappings.filter((row) =>
-        [row.mappingId, row.productObjectId, row.productVersionLabel, row.basis, ...row.channels]
-          .some((value) => value.toLowerCase().includes(needle)),
-      )
-    : mappings;
 
   // 历史里点的是哪一笔修订；没点就看最新一笔（目录行本身）。
   const [revisionNo, setRevisionNo] = useState<number | null>(null);
@@ -145,7 +143,7 @@ function ProductChannelMappingWorkbench({ mayWrite, onOpenRegister }: { mayWrite
       // 渠道本体还没有读口，渠道只能按标识显示。
       subtitle="每个服务产品能走哪些渠道平台的产品；下单择优只在这些渠道里选"
       onRefresh={retry}
-      refreshing={pending}
+      refreshing={answer === null}
       primaryAction={
         mayWrite ? (
           <Button variant="default" className={primaryActionClass} onClick={onOpenRegister}>
@@ -154,10 +152,9 @@ function ProductChannelMappingWorkbench({ mayWrite, onOpenRegister }: { mayWrite
         ) : undefined
       }
       search={{ value: search, onChange: setSearch, placeholder: '搜索服务产品或渠道' }}
-      // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 笔」会与状态区「这不是目录为空」直接矛盾。
-      toolbarRight={answer?.kind === 'outcome' ? `共 ${mappings.length} 个产品的渠道设置` : undefined}
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={workbenchColumns}
-      rows={visibleMappings}
+      rows={mappings}
       rowKey={(row) => row.mappingId}
       selectedKey={selectedId}
       onSelect={select}
@@ -192,6 +189,7 @@ function ProductChannelMappingWorkbench({ mayWrite, onOpenRegister }: { mayWrite
         endpoint: 'GET /commercial-product-channel-mappings',
         emptyTitle: '还没有给任何产品设置渠道',
         emptyDescription: `产品没有可走的渠道，渠道择优就无从选起。${entryHint(mayWrite, '用页头的「设置产品渠道」登记第一条。')}`,
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
       })}
     />
   );

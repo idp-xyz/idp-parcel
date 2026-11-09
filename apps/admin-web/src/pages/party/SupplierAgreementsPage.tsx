@@ -12,6 +12,9 @@ import { moduleInfoById } from '../../navigation';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState } from '../catalogue-view';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
@@ -21,13 +24,7 @@ import { useReplaceDraftGuard } from './ReplaceDraftGuard';
 import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
 import { supplierAgreementDraftFromRecord } from './supplier-agreement-form';
 import { VersionStatusChips } from './VersionStatusChips';
-import {
-  groupedByObject,
-  matchesVersionStatus,
-  versionCountSummary,
-  versionStatusCounts,
-  type VersionStatusFilter,
-} from './version-groups';
+import { groupedByObject, versionListConditions, versionPoolOf, type VersionStatusFilter } from './version-groups';
 import { useNameDirectory, withRefLinks } from './RefLink';
 import { withStatusBadge } from './detail-primitives';
 import {
@@ -59,8 +56,10 @@ const info = moduleInfoById['supplier-agreements'];
 // 右栏打开时收起的次要列：窄栏里仍读得清协议、供应商、我方与状态。
 const hiddenWhenDetailOpen = new Set(['purchasePlan', 'agreementEffective', 'contentRegistered']);
 
-// 目录读面。reloadToken 由页面在登记视图落定后递增，让回到目录时立刻刷新可见（票 admin-write-faces/11 完成判据）；
-// 自己的「重试」另有一把键，两把任一变都重取。
+// 目录读面。reloadToken 由页面在登记视图落定后递增，让回到目录时立刻刷新可见（票 admin-write-faces/11 完成判据）。
+//
+// 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词沿地址上的 `?q=` 停稳后下推，「在用 / 其余」下推成 status
+// 维，按协议号翻页（version-groups.ts）；换条件回第一页。检索覆盖哪几格以读口为准（版本壳之外另有正文里的供应商、我方与价格表）。
 function SupplierAgreementWorkbench({
   reloadToken,
   onStartNewVersion,
@@ -77,7 +76,12 @@ function SupplierAgreementWorkbench({
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const { answer, retry, pending } = useRegisterList(listSupplierAgreements);
+  const conditions = versionListConditions(useSettledKeyword(search), statusFilter);
+  const narrowed = catalogueConditionsNarrow(conditions);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listSupplierAgreements);
+  // 这一页可能带着条件、也只是一页，缺同一协议被筛掉或落在页外的版本：右栏的历史与「收尾…」再并进不带条件的那一页（取数层
+  // 缓存，发布表单与收尾对话框读的是同一份）。写口答到后那一页随参与方整域作废自己重取，游标这一页由写后的 retry 重取。
+  const unfiltered = useRegisterList(listSupplierAgreements);
   useRetryWhenChanged(reloadToken, retry);
   // 右栏里的「收尾…」：记下是哪一版，对话框据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
@@ -85,18 +89,14 @@ function SupplierAgreementWorkbench({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const rows = answer?.kind === 'outcome' ? supplierAgreementRowsOf(answer.body) : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。搜的是转写后的各格，
-  // 正文列（供应商、方案引用）因此也搜得到。
-  const searchedRows = needle
-    ? rows.filter((row) => Object.values(row.values).some((value) => value.toLowerCase().includes(needle)))
-    : rows;
+  const unfilteredBody = unfiltered.answer?.kind === 'outcome' ? unfiltered.answer.body : null;
   // 同一协议的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
-  const visibleRows = groupedByObject(
-    searchedRows.filter((row) => matchesVersionStatus(row.version, statusFilter)),
-    (row) => row.version,
-  );
-  const closable = closableKeys(answer?.kind === 'outcome' ? agreementKnownVersions(answer.body) : []);
+  const visibleRows = groupedByObject(rows, (row) => row.version);
+  const pool = versionPoolOf(rows, unfilteredBody ? supplierAgreementRowsOf(unfilteredBody) : [], (row) => row.key);
+  const closable = closableKeys([
+    ...(answer?.kind === 'outcome' ? agreementKnownVersions(answer.body) : []),
+    ...(unfilteredBody ? agreementKnownVersions(unfilteredBody) : []),
+  ]);
   // 目录表与右栏详情用同一份列（引用链接与状态徽章已套好）；工作台的列按 key 认，照列的 id 搬过来。
   const detailColumns = withRefLinks(withStatusBadge(supplierAgreementColumns), directory);
   const workbenchColumns: WorkbenchColumn<SupplierAgreementRow>[] = detailColumns.map((column) => ({
@@ -105,7 +105,6 @@ function SupplierAgreementWorkbench({
     render: column.render,
     hideWhenDetailOpen: hiddenWhenDetailOpen.has(column.id),
   }));
-  const answered = answer?.kind === 'outcome';
 
   return (
     <>
@@ -114,7 +113,7 @@ function SupplierAgreementWorkbench({
         viewStateKey="supplier-agreements"
         subtitle="与承运商、代理等供应商签的协议：谁、按哪份采购价格表、有效到什么时候；要改条款就签新版本"
         onRefresh={retry}
-        refreshing={pending}
+        refreshing={answer === null}
         primaryAction={
           mayWrite ? (
             <Button variant="default" className={primaryActionClass} onClick={onOpenPublish}>
@@ -123,13 +122,9 @@ function SupplierAgreementWorkbench({
           ) : undefined
         }
         search={{ value: search, onChange: setSearch, placeholder: '搜索协议、供应商或价格表' }}
-        extraFilters={
-          answered && rows.length > 0 ? (
-            <VersionStatusChips counts={versionStatusCounts(rows, (row) => row.version)} value={statusFilter} onChange={setStatusFilter} />
-          ) : undefined
-        }
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区「这不是目录为空」直接矛盾。
-        toolbarRight={answered ? versionCountSummary(rows.length, visibleRows.length, '份', '协议版本') : undefined}
+        // 胶囊常摆：筛空了也要能点回「全部」。
+        extraFilters={<VersionStatusChips value={statusFilter} onChange={setStatusFilter} />}
+        toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
         columns={workbenchColumns}
         rows={visibleRows}
         rowKey={(row) => row.key}
@@ -141,7 +136,7 @@ function SupplierAgreementWorkbench({
           setStatusFilter('all');
         }}
         renderDetail={(key) => {
-          const row = rows.find((candidate) => candidate.key === key);
+          const row = pool.find((candidate) => candidate.key === key);
           return row ? (
             <VersionDetailPanel<SupplierAgreementRow>
               row={row}
@@ -150,10 +145,10 @@ function SupplierAgreementWorkbench({
               subtitle={(record) => `供应商协议 · ${record.values.contentRegistered === '已登记' ? '正文已登记' : record.values.contentRegistered}`}
               technical={supplierAgreementTechnicalRows}
               status={(record) => record.source.status}
-              history={(record) => versionHistoryOf(rows.map((candidate) => candidate.source), record.source)}
+              history={(record) => versionHistoryOf(pool.map((candidate) => candidate.source), record.source)}
               currentVersion={(record) => record.source.version}
               onSelectVersion={(version) => {
-                const next = rows.find(
+                const next = pool.find(
                   (candidate) =>
                     candidate.source.objectId === row.source.objectId &&
                     candidate.source.scope === row.source.scope &&
@@ -191,6 +186,7 @@ function SupplierAgreementWorkbench({
           endpoint: 'GET /commercial-supplier-agreements',
           emptyTitle: '还没有签订任何供应商协议',
           emptyDescription: `找承运商、代理走货要先有协议。${entryHint(mayWrite, '用页头的「签订协议」签第一份。')}`,
+          narrowed: narrowed || pastFirstPage(pagination),
         })}
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />
@@ -216,7 +212,7 @@ function SupplierAgreementObjectPage({ objectId, version }: VersionObjectAddress
     { fresh: true },
   );
   const record = readVersionOf(readback.answer);
-  const row = record ? supplierAgreementRowsOf({ outcome: 'SUPPLIER_AGREEMENTS_LISTED', agreements: [record] })[0] ?? null : null;
+  const row = record ? supplierAgreementRowsOf({ agreements: [record] })[0] ?? null : null;
   const list = useRegisterList(listSupplierAgreements);
   const agreements = list.answer?.kind === 'outcome' ? list.answer.body.agreements : [];
   const closable = closableKeys(list.answer?.kind === 'outcome' ? agreementKnownVersions(list.answer.body) : []);

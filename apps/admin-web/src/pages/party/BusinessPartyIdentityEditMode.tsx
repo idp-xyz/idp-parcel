@@ -5,7 +5,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote } from '../../components/registration';
 import { moduleInfoById } from '../../navigation';
 import { currentDisplayTimeZone, wallTimeOf } from '../moment';
-import { listRegistrationNumberTypes, partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
+import { partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
 import {
   businessPartyLocalProblems,
   businessPartyPayloadOf,
@@ -19,7 +19,7 @@ import {
 import { BusinessPartyIdentificationFields } from './BusinessPartyIdentificationFields';
 import { AdvancedGroup, FormGroup, RevisionField, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import { problemNote, updateOrdinalLabel } from './presentation';
-import { Field, useLoaded } from './PublicationFormFields';
+import { Field } from './PublicationFormFields';
 import { advancedGroupOpen } from './registration-form';
 
 const info = moduleInfoById['business-parties'];
@@ -69,8 +69,6 @@ export function BusinessPartyIdentityEditMode({
     }),
     [row.partyId, row.partyName, identificationKey, timeZone],
   );
-  // 注册号类型目录读一次：国家格与每一行的类型格共用。
-  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   const form = useRegistrationForm<BusinessPartyDraft>({
     kind,
     empty: () => opening,
@@ -133,7 +131,6 @@ export function BusinessPartyIdentityEditMode({
           patch={patch}
           problems={problems}
           locked={locked}
-          typeCatalogue={typeCatalogue}
           ourCompany={ours}
           correction={
             correcting

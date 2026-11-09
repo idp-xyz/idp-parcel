@@ -1,22 +1,18 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { GroupLegalEntityRecord } from './api';
+import type { GroupLegalEntityRecord, RegistrationNumberTypeRecord } from './api';
 import {
-  countLegalEntities,
   defaultLegalEntitySort,
-  effectiveShareOfInUse,
-  filterLegalEntities,
-  legalEntityCountSummary,
+  legalEntityListConditions,
   legalEntityNeedsAttention,
   legalEntityNoMatchNote,
   legalEntityStatusFilterOptions,
-  sortLegalEntities,
-  type LegalEntityFilter,
+  registrationCountryOptions,
 } from './legal-entity-list';
+import { catalogueConditionsQuery } from '../catalogue-query';
 
-// 本文件钉的是筛选、排序与计数都只在已取回的行上做（README 列表页上列通则：不下推成查询参数），
-// 且「筛出为空」与「登记册为空」是两个事实——前者由调用页按裁决 1 另显，这里只保证筛选
-// 不把行吞掉也不多算。
+// 本文件钉法人册的列表纯逻辑：检索、状态、注册地与表头排序编成读口的条件（ADR-0144，可排维与筛选维照后端 GroupLegalEntityPages
+// 的声明）；「待处理」由身份层与名称转写推出来，只筛到手的这一页；「筛出为空」与「登记册为空」是两个事实，由调用页按裁决 1 另显。
 
 function record(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
   return {
@@ -65,98 +61,49 @@ const rows: GroupLegalEntityRecord[] = [
 ];
 
 const ids = (list: GroupLegalEntityRecord[]) => list.map((row) => row.legalEntityId);
-const filter = (over: Partial<LegalEntityFilter>): LegalEntityFilter => ({
-  search: '',
-  status: 'ALL',
-  registrationCountry: 'ALL',
-  attentionOnly: false,
-  ...over,
-});
 
-// Covers: 搜索是包含匹配、不分大小写，命中身份标识 / 名称 / 状态 / 注册号任一格；名称未知的行按空串参与、不抛。
-test('搜索按包含匹配身份标识、名称、状态与注册号', () => {
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: 'le-0' }))), ['SYN-LE-02', 'SYN-LE-01', 'SYN-LE-03', 'SYN-LE-04']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: '停用示例' }))), ['SYN-LE-03']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: 'retired' }))), ['SYN-LE-03']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: '91310000syn00002' }))), ['SYN-LE-02']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: '  ' }))), ids(rows));
-});
-
-// Covers: 状态筛选精确到封闭词；ALL 不筛；筛出为空交回空数组而不是原行。
-test('状态筛选精确匹配封闭词', () => {
-  deepEqual(ids(filterLegalEntities(rows, filter({ status: 'DEACTIVATED' }))), ['SYN-LE-03']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ status: 'REGISTERED' }))), ['SYN-LE-02']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ search: 'LE-01', status: 'DEACTIVATED' }))), []);
-});
-
-// Covers: 注册地筛选只看身份层登记的国家 / 地区；未登记的行不冒充任何国家。
-test('注册地筛选按身份层国家匹配', () => {
-  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'CN' }))), ['SYN-LE-01', 'SYN-LE-04']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'US' }))), ['SYN-LE-02']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ registrationCountry: 'CN', attentionOnly: true }))), ['SYN-LE-04']);
-  const absentIdentityLayer = record({ legalEntityId: 'SYN-LE-05', identityLayerRegistered: false, registrationCountry: 'US' });
-  deepEqual(filterLegalEntities([absentIdentityLayer], filter({ registrationCountry: 'US' })), []);
-});
-
-// Covers: 待补 = 身份层两格没有，或参与方册查无此身份；停用本身不算待补。只看待补与状态筛选叠加。
-test('待补判据与只看待补', () => {
-  deepEqual(rows.map(legalEntityNeedsAttention), [false, false, true, true]);
-  deepEqual(ids(filterLegalEntities(rows, filter({ attentionOnly: true }))), ['SYN-LE-03', 'SYN-LE-04']);
-  deepEqual(ids(filterLegalEntities(rows, filter({ attentionOnly: true, status: 'EFFECTIVE' }))), ['SYN-LE-04']);
-});
-
-// Covers: 计数按状态分格、待补单独计，数的是传进来的这一页；词表之外的状态码不进任何格也不抛。
-test('countLegalEntities 按状态与待补计数', () => {
-  deepEqual(countLegalEntities(rows), {
-    total: 4,
-    byStatus: { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 },
-    attention: 2,
-  });
-  deepEqual(countLegalEntities([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
-});
-
-// Covers: 占比分母只数在用两格——已停用的不进分母；没有在用法人答 null 而不是 0。
-test('effectiveShareOfInUse 只按在用法人算', () => {
-  equal(effectiveShareOfInUse(countLegalEntities(rows)), 67);
-  equal(effectiveShareOfInUse(countLegalEntities([record({ status: 'EFFECTIVE' })])), 100);
-  equal(effectiveShareOfInUse(countLegalEntities([record({ status: 'DEACTIVATED' })])), null);
-  equal(effectiveShareOfInUse(countLegalEntities([])), null);
-});
-
-// Covers: 默认按登记时间新→旧；四列各按其键，方向随 dir；排序不改原数组；认不得的键原样交回。
-test('表头排序各按其键与方向，且不改原数组', () => {
-  const before = ids(rows);
+// Covers: 检索词、状态、注册地与排序编成一问——「全部」即那一维缺席，登记时间新→旧是读口的缺省序、不写进查询串；生效时间两向
+// 都下推；公司主体（名称）列与认不得的列不在读口的可排维里，按缺省序问。
+test('legalEntityListConditions 按读口声明的维下推', () => {
+  equal(catalogueConditionsQuery(legalEntityListConditions('', 'ALL', 'ALL', defaultLegalEntitySort)), '');
+  equal(
+    catalogueConditionsQuery(legalEntityListConditions(' SYN-LE ', 'EFFECTIVE', 'CN', { key: 'effective-from', dir: -1 })),
+    'sort=-effectiveFrom&registrationCountry=CN&status=EFFECTIVE&q=SYN-LE',
+  );
+  equal(catalogueConditionsQuery(legalEntityListConditions('', 'ALL', 'ALL', { key: 'registered-at', dir: 1 })), 'sort=registeredAt');
+  equal(catalogueConditionsQuery(legalEntityListConditions('', 'ALL', 'US', { key: 'party-name', dir: 1 })), 'registrationCountry=US');
   deepEqual(defaultLegalEntitySort, { key: 'registered-at', dir: -1 });
-  deepEqual(ids(sortLegalEntities(rows, defaultLegalEntitySort)), ['SYN-LE-02', 'SYN-LE-01', 'SYN-LE-04', 'SYN-LE-03']);
-  deepEqual(ids(sortLegalEntities(rows, { key: 'legal-entity', dir: 1 })), ['SYN-LE-01', 'SYN-LE-02', 'SYN-LE-03', 'SYN-LE-04']);
-  deepEqual(ids(sortLegalEntities(rows, { key: 'legal-entity', dir: -1 })), ['SYN-LE-04', 'SYN-LE-03', 'SYN-LE-02', 'SYN-LE-01']);
-  deepEqual(ids(sortLegalEntities(rows, { key: 'effective-from', dir: 1 })), ['SYN-LE-03', 'SYN-LE-01', 'SYN-LE-04', 'SYN-LE-02']);
-  // 名称未知按空串排最前；同名两行保持原序。
-  deepEqual(ids(sortLegalEntities(rows, { key: 'party-name', dir: 1 })), ['SYN-LE-04', 'SYN-LE-03', 'SYN-LE-02', 'SYN-LE-01']);
-  deepEqual(ids(sortLegalEntities(rows, { key: 'no-such-column', dir: 1 })), before);
-  deepEqual(ids(rows), before);
 });
 
-// Covers: 时刻比按解析值不按字典序——端点用 RFC3339Nano 剪尾零，同一秒内小数位数不定，字典序会把
-// `55Z` 排到 `55.939Z` 之后、`55.9Z` 排到 `55.93Z` 之后（评审 ← 通道 3 · 钉 71c7d5a3 · Standards 1）。
-// 解析不了的值退回字符串比，不抛、不丢行。
-test('同一秒内小数位数不定的时刻按真实先后排', () => {
-  const sameSecond = [
-    record({ legalEntityId: 'A', registeredAt: '2026-09-16T04:27:55.9Z' }),
-    record({ legalEntityId: 'B', registeredAt: '2026-09-16T04:27:55Z' }),
-    record({ legalEntityId: 'C', registeredAt: '2026-09-16T04:27:55.939Z' }),
-    record({ legalEntityId: 'D', registeredAt: '2026-09-16T04:27:55.93Z' }),
-  ];
-  deepEqual(ids(sortLegalEntities(sameSecond, defaultLegalEntitySort)), ['C', 'D', 'A', 'B']);
-  const unparsable = [record({ legalEntityId: 'X', registeredAt: 'not-a-time' }), record({ legalEntityId: 'Y' })];
-  deepEqual(ids(sortLegalEntities(unparsable, defaultLegalEntitySort)), ['X', 'Y']);
+function numberType(over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord {
+  return {
+    tenantId: 'SYN-TENANT-01',
+    countryCode: 'CN',
+    typeCode: 'USCC',
+    revision: 1,
+    typeName: '统一社会信用代码',
+    layer: 'IDENTITY',
+    formatPattern: '^[0-9A-Z]{18}$',
+    basis: 'SYN-TYPE-BASIS-01',
+    status: 'EFFECTIVE',
+    effectiveFrom: '2026-01-01T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z',
+    ...over,
+  };
+}
+
+// Covers: 注册地选项是目录里身份层类型的国家，并上这一页行上的与此刻选中的那一个（目录只取一页、类型后来撤了都不丢）；资料层
+// 类型的国家不算；去重、按码排，「全部」不进选项。
+test('registrationCountryOptions 并起目录、本页与选中的国家', () => {
+  const types = [numberType({}), numberType({ countryCode: 'SG', typeCode: 'UEN' }), numberType({ countryCode: 'JP', layer: 'PROFILE' })];
+  deepEqual(registrationCountryOptions(types, rows, 'ALL'), ['CN', 'SG', 'US']);
+  deepEqual(registrationCountryOptions([], rows, 'HK'), ['CN', 'HK', 'US']);
+  deepEqual(registrationCountryOptions([], [], 'ALL'), []);
 });
 
-// Covers: 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
-// 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」（两者续办不同：前者改条件，后者去登记）。
-test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
-  equal(legalEntityCountSummary(4, 4), '共 4 个公司主体，当前显示 4 个');
-  equal(legalEntityCountSummary(4, 0), '共 4 个公司主体，当前显示 0 个');
+// Covers: 待补 = 身份层两格没有，或参与方册查无此身份；停用本身不算待补。
+test('待补判据', () => {
+  deepEqual(rows.map(legalEntityNeedsAttention), [false, false, true, true]);
   equal(legalEntityNoMatchNote, '当前筛选条件下没有匹配的公司主体');
 });
 

@@ -409,7 +409,6 @@ function ProfileRegistrationForm({
                 patch={patch}
                 problems={problems}
                 locked={locked}
-                typeCatalogue={typeCatalogue}
                 onLeave={onRequestLeave}
                 groups={renderContacts ? groupsOutsideContacts : undefined}
               />
@@ -420,7 +419,6 @@ function ProfileRegistrationForm({
                       patch={patch}
                       problems={problems}
                       locked={locked}
-                      typeCatalogue={typeCatalogue}
                       onLeave={onRequestLeave}
                       groups={contactsOnly}
                     />,

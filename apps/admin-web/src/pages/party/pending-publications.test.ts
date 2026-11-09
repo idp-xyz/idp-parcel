@@ -7,14 +7,15 @@ import {
   draftDecisions,
   draftFacts,
   draftKeyOf,
-  draftSearchText,
   draftTechnicalRows,
-  matchesPendingStatus,
-  pendingCountSummary,
-  pendingCountsOf,
+  pendingListConditions,
   pendingRowsOf,
+  pendingRowsOnPage,
   unreadableRecovery,
 } from './pending-publications';
+import { catalogueRequestPath } from '../catalogue-query';
+
+const firstPage = { size: 200, next: null, total: null };
 
 // 本文件钉的是「待批准发布」页的纯逻辑（ADR-0314 决定三）：行的身份、按状态摆出的动作、抽屉复述的事实。
 // 不算摘要、不判谁能批准——摘要原样取自读回，批准职责由服务端判。
@@ -43,11 +44,11 @@ test('行键取版本身份三元，顺序保服务端给的', () => {
   const first = record({ objectId: 'CP-B' });
   const second = record({ objectId: 'CP-A', version: 'v1' });
   deepEqual(
-    pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [first, second] }).map((row) => row.key),
+    pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [first, second], page: firstPage }).map((row) => row.key),
     ['CREDIT_POLICY|CP-B|v2', 'CREDIT_POLICY|CP-A|v1'],
   );
   equal(draftKeyOf(second), 'CREDIT_POLICY|CP-A|v1');
-  deepEqual(pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [] }), []);
+  deepEqual(pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [], page: firstPage }), []);
 });
 
 // Covers: AT-PC-068——待批准才摆批准、已批准才摆发布、已发布两样都不摆；陌生状态词一样都不摆（宁可不亮）。
@@ -94,20 +95,14 @@ test('规范化文档缩进排版，缺席为空串', () => {
   equal(canonicalDocumentText(undefined), '');
 });
 
-// Covers: AT-PC-068——检索命中类别中文名、编号、版本、范围、状态词与提交人；大小写不分。
-test('检索串覆盖各列', () => {
-  const text = draftSearchText(record({ approver: 'dex#op-2', status: 'APPROVED' }), '信用政策');
-  for (const needle of ['信用政策', 'cp-syn-1', 'v2', 'syn-scope-01', '已批准', 'dex#op-1', 'dex#op-2']) {
-    equal(text.includes(needle), true, needle);
-  }
-});
-
-// Covers: AT-PC-068——计数摘要分状态数。
-test('计数摘要分待批准与已批准', () => {
-  equal(
-    pendingCountSummary([record(), record({ objectId: 'B' }), record({ objectId: 'C', status: 'APPROVED' })]),
-    '共 3 份：待批准 2，已批准待发布 1',
-  );
+// 检索词与按状态的两格下推到读口（ADR-0144）；「全部」与「读不出」都不带 status 维——读不出不是库上的一列。
+test('检索词与状态下推成查询串，读不出不下推', () => {
+  const path = (filter: Parameters<typeof pendingListConditions>[1]) =>
+    catalogueRequestPath('/commercial-open-publication-drafts', pendingListConditions(' SYN-CP ', filter), null);
+  equal(path('ALL'), '/commercial-open-publication-drafts?q=SYN-CP');
+  equal(path('PENDING_APPROVAL'), '/commercial-open-publication-drafts?status=PENDING_APPROVAL&q=SYN-CP');
+  equal(path('APPROVED'), '/commercial-open-publication-drafts?status=APPROVED&q=SYN-CP');
+  equal(path('UNREADABLE'), '/commercial-open-publication-drafts?q=SYN-CP');
 });
 
 // Covers: AT-PC-071——本构建读不回的载体（readable 为假）照样是列表里的一行，动作一个都不摆：待批准不摆批准、已批准不摆发布；
@@ -127,27 +122,17 @@ test('读不回的恢复动作按状态说，陌生状态不猜', () => {
   equal(unreadableRecovery('SOMETHING_NEW'), '');
 });
 
-// Covers: AT-PC-071——计数摘要把读不回的另报；搜「读不回」能找到它们；没有读不回的行时摘要与从前同形。
-test('计数摘要另报读不回的，检索认得读不回', () => {
-  const records = [record(), record({ objectId: 'CP-2', readable: false, canonicalization: 'PCC-9', contentDigest: 'PCC-9:x' })];
-  equal(pendingCountSummary(records), '共 2 份：待批准 2，已批准待发布 0，其中 1 份内容读不出');
-  equal(pendingCountSummary([record()]), '共 1 份：待批准 1，已批准待发布 0');
-  equal(draftSearchText(records[1], '信用政策').includes('内容读不出'), true);
-  equal(draftSearchText(records[0], '信用政策').includes('内容读不出'), false);
-});
-
-// 胶囊筛：读不出的单列一格，且仍按状态算进「待批准」——计数与筛选同一判据。
-test('胶囊筛按状态与读不出各算各的', () => {
-  const unreadable = record({ readable: false });
-  equal(matchesPendingStatus(unreadable, 'UNREADABLE'), true);
-  equal(matchesPendingStatus(unreadable, 'PENDING_APPROVAL'), true);
-  equal(matchesPendingStatus(record(), 'UNREADABLE'), false);
-  equal(matchesPendingStatus(record({ status: 'APPROVED' }), 'APPROVED'), true);
-  equal(matchesPendingStatus(record({ status: 'APPROVED' }), 'ALL'), true);
-  deepEqual(pendingCountsOf([record(), unreadable, record({ status: 'APPROVED' })]), {
-    total: 3,
-    pending: 2,
-    approved: 1,
-    unreadable: 1,
+// Covers: AT-PC-071——读不出的那一格只筛到手的这一页；按状态的两格读口已筛过，页上不再筛一遍。
+test('读不出只筛本页，按状态的两格照读口答的摆', () => {
+  const rows = pendingRowsOf({
+    outcome: 'PUBLICATION_DRAFTS_LISTED',
+    drafts: [record(), record({ objectId: 'CP-2', readable: false }), record({ objectId: 'CP-3', status: 'APPROVED' })],
+    page: firstPage,
   });
+  deepEqual(
+    pendingRowsOnPage(rows, 'UNREADABLE').map((row) => row.source.objectId),
+    ['CP-2'],
+  );
+  equal(pendingRowsOnPage(rows, 'ALL').length, 3);
+  equal(pendingRowsOnPage(rows, 'PENDING_APPROVAL').length, 3);
 });

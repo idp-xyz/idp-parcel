@@ -1,8 +1,8 @@
 import { useId, type ReactNode } from 'react';
 import { Button, Input, Textarea } from '@idpxyz/ui-primitives';
-import type { ApiResult } from '../catalogue-api';
-import type { ContactPurpose, RegistrationNumberTypeListResponseBody } from './api';
+import type { ContactPurpose } from './api';
 import { policiesHash } from './commercial-policies-address';
+import { useRegistrationNumberTypeCandidates } from './registration-number-type-candidates';
 import { useRefdataNames } from '../use-refdata-names';
 import type { RefdataNames } from '../refdata-names';
 import {
@@ -34,7 +34,6 @@ export function LegalEntityProfileFields({
   patch,
   problems,
   locked,
-  typeCatalogue,
   onLeave,
   groups,
   registeredAddressOptional = false,
@@ -44,8 +43,6 @@ export function LegalEntityProfileFields({
   patch: (change: Partial<LegalEntityProfileDraft>) => void;
   problems: Record<string, string[]>;
   locked: boolean;
-  /** 注册号类型目录的答案（监管登记号类型候选从里面取资料层）；还在读为 null。 */
-  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 表单里的站内链接要离开本页时交给调用方：有没提交的输入时先确认再走，不让一个链接把表单静默关掉。 */
   onLeave: (href: string) => void;
   /** 只渲染这几组（分区抽屉，票 company-subject-section-edit/01）；不给渲染全部。 */
@@ -243,7 +240,6 @@ export function LegalEntityProfileFields({
                 value={row.typeCode}
                 locked={locked}
                 problems={problems}
-                typeCatalogue={typeCatalogue}
                 onChange={(typeCode) => setTaxNumber(index, { typeCode })}
               />
               <Field label="号码" path={`profiles[0].taxRegistrationNumbers[${index}].number`} problems={problems}>
@@ -546,9 +542,9 @@ function BankAccountCurrencyField({
 }
 
 /**
- * 监管登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，显目录译名，
- * 码进载荷。目录里这一国家没有资料层类型、或目录读不到时退回手填类型码并指路——要加类型得先到基础数据配置，
- * 表单不替目录造码。选出来的只是类型码，合不合目录仍由服务端登记时判。
+ * 监管登记号的类型格（票 company-subject-ux/04 第 6 项）：候选是目录里资料层、国家 = 注册地址国家的类型，由读口按这两格收窄
+ * （registration-number-type-candidates.ts），显目录译名，码进载荷。目录里这一国家没有资料层类型、或目录读不到时退回手填类型码
+ * 并指路——要加类型得先到基础数据配置，表单不替目录造码。选出来的只是类型码，合不合目录仍由服务端登记时判。
  */
 function TaxTypeField({
   index,
@@ -556,7 +552,6 @@ function TaxTypeField({
   value,
   locked,
   problems,
-  typeCatalogue,
   onChange,
 }: {
   index: number;
@@ -564,11 +559,11 @@ function TaxTypeField({
   value: string;
   locked: boolean;
   problems: Record<string, string[]>;
-  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   onChange: (typeCode: string) => void;
 }) {
   const path = `profiles[0].taxRegistrationNumbers[${index}].typeCode`;
-  const options = typeCatalogue?.kind === 'outcome' ? profileTaxTypeOptions(typeCatalogue.body.registrationNumberTypes, country) : [];
+  const candidates = useRegistrationNumberTypeCandidates('PROFILE', country);
+  const options = candidates?.kind === 'outcome' ? profileTaxTypeOptions(candidates.body.registrationNumberTypes, country) : [];
   if (options.length > 0) {
     return (
       <Field label="类型" path={path} problems={problems}>
@@ -577,13 +572,13 @@ function TaxTypeField({
     );
   }
   const reason =
-    typeCatalogue === null
-      ? '正在读注册号类型目录…'
-      : typeCatalogue.kind === 'outcome'
-        ? country.trim() === ''
-          ? '先填注册地址国家 / 地区，这里才有候选。'
-          : `目录里「${country.trim()}」还没有资料层的注册号类型，可先手填类型码。`
-        : '注册号类型目录暂时读不到，可先手填类型码。';
+    country.trim() === ''
+      ? '先填注册地址国家 / 地区，这里才有候选。'
+      : candidates === null
+        ? '正在读注册号类型目录…'
+        : candidates.kind === 'outcome'
+          ? `目录里「${country.trim()}」还没有资料层的注册号类型，可先手填类型码。`
+          : '注册号类型目录暂时读不到，可先手填类型码。';
   return (
     <Field label="类型" path={path} problems={problems}>
       <Input

@@ -8,6 +8,7 @@ import { supplierAgreementColumns, supplierAgreementRowsOf } from './supplier-ag
 // 登记时刻晚于发布一小时）与只有壳。正文各键只在 contentRegistered 为真时在场是后端契约，壳在正文缺是合法状态。
 const agreements: SupplierAgreementListResponseBody = {
   outcome: 'SUPPLIER_AGREEMENTS_LISTED',
+  page: { size: 200, next: null, total: null },
   agreements: [
     {
       objectId: 'agreement-1',

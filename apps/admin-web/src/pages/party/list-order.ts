@@ -1,6 +1,9 @@
 // 参与方模块各册页列表的排序比较器、搜索匹配与筛选下拉的形状（票 admin-web-group-legal-entities/09 立，票 13 第 8 条
 // 把法人页那份私有副本切过来并统一筛选码的类型）。纯函数，各册的 *-list.ts（legal-entity-list.ts / business-party-list.ts /
-// party-relationship-list.ts……）共用。
+// party-relationship-list.ts……）共用。参与方各册的表头排序经 catalogueSortOf 下推到目录读口（ADR-0144）；比较器与搜索
+// 匹配给在一页之内排、筛的调用方。
+
+import type { WorkbenchSort } from '../../templates/workbench';
 
 export interface SelectOption<Value extends string> {
   value: Value;
@@ -47,4 +50,31 @@ export function matchesSearch(search: string, cells: readonly (string | undefine
   const needle = search.trim().toLowerCase();
   if (needle === '') return true;
   return cells.some((value) => (value ?? '').toLowerCase().includes(needle));
+}
+
+/**
+ * 表头列键 → 目录读口声明的可排维。只收读口点了名的维：别的列在页面上排，排的只是这一页，与读口给的次序打架，所以那些列
+ * 不可排。
+ */
+export type CatalogueSortColumns = Readonly<Record<string, string>>;
+
+// 只认对照自己的键：列键是任意串，按下标取会摸到原型链上的同名成员。
+function sortableColumnOf(columns: CatalogueSortColumns, key: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(columns, key) ? columns[key] : undefined;
+}
+
+/**
+ * 表头排序编成读口的 sort（ADR-0144 决定三：一次一维，前缀 `-` 为倒序）。列不在对照里交 undefined，即读口的缺省序；编出来正是
+ * 读口缺省序（`readDefault`，照后端声明抄）时也不写进查询串——不带条件的第一页是裸路径，与不翻页的调用方问的是同一个地址。
+ */
+export function catalogueSortOf(sort: WorkbenchSort, columns: CatalogueSortColumns, readDefault?: string): string | undefined {
+  const field = sortableColumnOf(columns, sort.key);
+  if (field === undefined) return undefined;
+  const encoded = sort.dir < 0 ? `-${field}` : field;
+  return encoded === readDefault ? undefined : encoded;
+}
+
+/** 记下的排序（换标签回来恢复的那一份）落在不可排的列上时退回页面缺省序：表头的箭头与实际次序才对得上。 */
+export function sortableOr(sort: WorkbenchSort, columns: CatalogueSortColumns, fallback: WorkbenchSort): WorkbenchSort {
+  return sortableColumnOf(columns, sort.key) !== undefined ? sort : fallback;
 }

@@ -14,9 +14,7 @@ import {
   listRegistrationNumberTypes,
   type BusinessPartyProfileRevisionListResponseBody,
   type BusinessPartyProfileRevisionRecord,
-  type RegistrationNumberTypeListResponseBody,
 } from './api';
-import type { ApiResult } from '../catalogue-api';
 import {
   businessPartyProfileChanged,
   businessPartyProfileDraftBasedOn,
@@ -358,7 +356,6 @@ export function BusinessPartyProfileEditMode({
   onRequestLeave: (href: string) => void;
 }) {
   const query = useBusinessPartyProfiles(partyId, true);
-  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   const renderFooter = (node: ReactNode) => (footerSlot ? createPortal(node, footerSlot) : node);
   const { record, body } = effectiveProfileOf(query, partyId);
   if (body === null) {
@@ -384,7 +381,6 @@ export function BusinessPartyProfileEditMode({
       scheduled={latest}
       known={body.revisions}
       registrationCountry={registrationCountry}
-      typeCatalogue={typeCatalogue}
       renderFooter={renderFooter}
       onLanded={onLanded}
       onUnsavedChange={onUnsavedChange}
@@ -400,7 +396,6 @@ function ProfileForm({
   scheduled,
   known,
   registrationCountry,
-  typeCatalogue,
   renderFooter,
   onLanded,
   onUnsavedChange,
@@ -413,7 +408,6 @@ function ProfileForm({
   scheduled: BusinessPartyProfileRevisionRecord | null;
   known: BusinessPartyProfileRevisionRecord[];
   registrationCountry?: string;
-  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   renderFooter: (node: ReactNode) => ReactNode;
   onLanded: (sent: BusinessPartyProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
@@ -518,7 +512,6 @@ function ProfileForm({
           patch={patch}
           problems={problems}
           locked={locked}
-          typeCatalogue={typeCatalogue}
           onLeave={onRequestLeave}
           groups={fieldGroups}
           registeredAddressOptional

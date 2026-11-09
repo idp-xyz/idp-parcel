@@ -1,17 +1,18 @@
-// 业务参与方页身份本体册的筛选、排序与计数纯逻辑（票 admin-web-group-legal-entities/09 立，票 business-parties-uiux/01 改成
-// 工作台口径，与 legal-entity-list.ts 同形）。全部是纯函数，node:test 钉着；页面只负责摆。
+// 业务参与方页身份本体册的列表纯逻辑（票 admin-web-group-legal-entities/09 立，票 business-parties-uiux/01 改成工作台口径，与
+// legal-entity-list.ts 同形）。全部是纯函数，node:test 钉着；页面只负责摆。
 //
-// 几件事都只在**已取回的行**上做（README 列表页上列通则：不下推成查询参数——那要改端点契约，
-// 归票 04）。端点今天答的是每个参与方的最新修订、上限 isolatedReadLimit 一页，这里的排序与计数是对这一页，
-// 不是对册；分页下推之前这条限制如实存在，页面不假装成全量。
+// 检索、状态筛选与表头排序下推到目录读口（ADR-0144；读口的可排维与筛选维由后端 BusinessPartyPages 声明）：businessPartyListConditions
+// 编条件，页面按游标翻页。读口按参与方标识、名称、注册号与外部编码检索；状态词与类型词不在其内，要按状态看用状态胶囊。
 //
 // 「类型」一列不是册上的字段：参与方是客户还是承运商，由它在关系册上持有的角色说（CONTEXT：角色由关系表达，身份本体不带
-// 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表与筛选按它称呼；一个角色都没有的显「暂无合作关系」。客户角色
-// 另认一处事实：未停用客户账户的所属客户也持有它（CONTEXT 参与方身份诸句，ADR-0367 决定四）——账户不要求先登客户关系。
+// 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表按它称呼；一个角色都没有的显「暂无合作关系」。客户角色另认一处
+// 事实：未停用客户账户的所属客户也持有它（CONTEXT 参与方身份诸句，ADR-0367 决定四）——账户不要求先登客户关系。
 // 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
-// 按法人册算出参与方标识集合，类型列与筛选按它称呼，与角色并列显示。
+// 按法人册算出参与方标识集合，类型列按它称呼，与角色并列显示。类型由这几本册算出，读口筛不了，所以类型筛选只筛已取回的这一页
+// （filterBusinessPartiesByType），控件上如实标出；这几本册各只取不带条件的第一页，角色与我方公司也只按那一页算。
 
 import type { WorkbenchSort } from '../../templates/workbench';
+import type { CatalogueConditions } from '../catalogue-query';
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   identityStatusLabels,
@@ -22,8 +23,7 @@ import {
   type IdentityStatusCode,
   type PartyRoleCode,
 } from './presentation';
-import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter } from './list-order';
-import { partyIdentificationSearchTerms } from './business-party-identification';
+import { catalogueSortOf, codeFilterOptions, type CatalogueSortColumns, type CodeFilter, type SelectOption } from './list-order';
 import { liveRelationshipStatuses } from './party-overview';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
@@ -31,13 +31,6 @@ export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
 
 /** 类型筛选：全部、某个角色、OURS——法人册上钉着的「我方公司」，或 NONE——既不是我方公司、一个角色也没有的（类型格显「暂无合作关系」）。 */
 export type BusinessPartyTypeFilter = CodeFilter<PartyRoleCode> | 'NONE' | 'OURS';
-
-export interface BusinessPartyFilter {
-  search: string;
-  status: BusinessPartyStatusFilter;
-  /** 按持有的角色筛；缺省不筛。 */
-  type?: BusinessPartyTypeFilter;
-}
 
 // 胶囊的码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
 export const businessPartyStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部');
@@ -164,128 +157,54 @@ export function businessPartyTypeLabel(ours: boolean, roles: readonly string[]):
   return [ourCompanyLabel, ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' / ');
 }
 
-/** 表头可排的四列。 */
-export type BusinessPartySortKey = 'party' | 'party-name' | 'effective-from' | 'registered-at';
+/** 类型筛选的选项：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。 */
+export const businessPartyTypeFilterOptions: readonly SelectOption<BusinessPartyTypeFilter>[] = [
+  { value: 'ALL', label: '全部类型' },
+  { value: 'OURS', label: ourCompanyLabel },
+  ...(Object.keys(partyRoleLabels) as PartyRoleCode[]).map((role) => ({ value: role, label: partyRoleLabels[role] })),
+  { value: 'NONE', label: partyTypeFallbackLabel },
+];
+
+/** 表头可排的列 → 读口声明的可排维。名称列不可排：读口不按名称排。 */
+export const businessPartySortColumns: CatalogueSortColumns = {
+  'effective-from': 'effectiveFrom',
+  'registered-at': 'registeredAt',
+};
 
 /** 默认登记时间新→旧（票 09 裁决 1，判据同票 01 裁决 2：运营配置员最常看「刚登进去的那条」）。 */
 export const defaultBusinessPartySort: WorkbenchSort = { key: 'registered-at', dir: -1 };
 
+/** 身份本体册一问的条件：检索词、状态（「全部」即这一维缺席）与表头排序；登记时间新→旧是读口的缺省序，不写进查询串。 */
+export function businessPartyListConditions(
+  keyword: string,
+  status: BusinessPartyStatusFilter,
+  sort: WorkbenchSort,
+): CatalogueConditions {
+  return {
+    q: keyword,
+    filters: status === 'ALL' ? {} : { status: [status] },
+    sort: catalogueSortOf(sort, businessPartySortColumns, '-registeredAt'),
+  };
+}
+
 /**
- * 搜索是包含匹配、不分大小写，命中参与方标识 / 名称 / 状态原名与中文 / 类型中文 / 注册号 / 外部编码任一格；类型筛选精确到角色码，
- * OURS 只留我方公司，NONE 只留既不是我方公司、一个角色也没有的。
+ * 类型筛选，只筛已取回的这一页：类型精确到角色码，OURS 只留我方公司，NONE 只留既不是我方公司、一个角色也没有的。
  */
-export function filterBusinessParties(
+export function filterBusinessPartiesByType(
   rows: readonly BusinessPartyRecord[],
-  filter: BusinessPartyFilter,
+  type: BusinessPartyTypeFilter,
   roles: PartyRoleIndex = emptyPartyRoleIndex,
   ours: OurCompanyIndex = emptyOurCompanyIndex,
 ): BusinessPartyRecord[] {
-  const type = filter.type ?? 'ALL';
+  if (type === 'ALL') return [...rows];
   return rows.filter((row) => {
-    if (filter.status !== 'ALL' && row.status !== filter.status) return false;
     const held = rolesOfParty(roles, row.partyId);
     const isOurs = ours.has(row.partyId);
-    if (type === 'OURS' && !isOurs) return false;
-    if (type === 'NONE' && (held.length > 0 || isOurs)) return false;
-    if (type !== 'ALL' && type !== 'NONE' && type !== 'OURS' && !held.includes(type)) return false;
-    return matchesSearch(filter.search, [
-      row.partyId,
-      row.partyName,
-      row.status,
-      identityStatusLabels[row.status as IdentityStatusCode] ?? '',
-      businessPartyTypeLabel(isOurs, held),
-      ...partyIdentificationSearchTerms(row),
-    ]);
+    if (type === 'OURS') return isOurs;
+    if (type === 'NONE') return held.length === 0 && !isOurs;
+    return held.includes(type);
   });
-}
-
-export interface BusinessPartyCounts {
-  total: number;
-  byStatus: Record<IdentityStatusCode, number>;
-  /** 持有每个角色的参与方数；一个参与方持有两个角色时两格各记一次。 */
-  byRole: Record<PartyRoleCode, number>;
-  /** 法人册上钉着的「我方公司」数；同时持有角色的也各记一次。 */
-  ours: number;
-  /** 既不是我方公司、一个角色都没有的（「往来单位」）。 */
-  withoutRole: number;
-}
-
-/**
- * 命令头指标与状态胶囊的计数，数的是已取回的这一页。本册没有「待补」一格：参与方册是名称的来源，没有转写不到的格；
- * 身份层两格是法人册的事。所以按状态与角色分格。
- */
-export function countBusinessParties(
-  rows: readonly BusinessPartyRecord[],
-  roles: PartyRoleIndex = emptyPartyRoleIndex,
-  ours: OurCompanyIndex = emptyOurCompanyIndex,
-): BusinessPartyCounts {
-  const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
-  const byRole = Object.fromEntries(Object.keys(partyRoleLabels).map((role) => [role, 0])) as Record<PartyRoleCode, number>;
-  let oursCount = 0;
-  let withoutRole = 0;
-  for (const row of rows) {
-    if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
-    const held = rolesOfParty(roles, row.partyId);
-    const isOurs = ours.has(row.partyId);
-    if (isOurs) oursCount += 1;
-    if (held.length === 0 && !isOurs) withoutRole += 1;
-    for (const role of held) byRole[role] += 1;
-  }
-  return { total: rows.length, byStatus, byRole, ours: oursCount, withoutRole };
-}
-
-/** 命令头上按类型分的一格指标：筛选值、词与计数。 */
-export interface BusinessPartyTypeKpi {
-  type: Exclude<BusinessPartyTypeFilter, 'ALL'>;
-  label: string;
-  count: number;
-}
-
-/**
- * 命令头按类型分格的指标（票 business-party-ux/05）：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。
- * 计数为零的类型不出格——它筛出来必然为空。类型筛选只有这一个入口，工具条不另放同义的类型下拉；待生效与已停用两格也
- * 不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
- */
-export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPartyTypeKpi[] {
-  const cells: BusinessPartyTypeKpi[] = [];
-  if (counts.ours > 0) cells.push({ type: 'OURS', label: ourCompanyLabel, count: counts.ours });
-  for (const role of Object.keys(partyRoleLabels) as PartyRoleCode[]) {
-    if (counts.byRole[role] > 0) cells.push({ type: role, label: partyRoleLabels[role], count: counts.byRole[role] });
-  }
-  if (counts.withoutRole > 0) cells.push({ type: 'NONE', label: partyTypeFallbackLabel, count: counts.withoutRole });
-  return cells;
-}
-
-/**
- * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。页面态里的空态说的是「登记册为空」，
- * 筛选筛没了是「当前条件下无匹配」，两者续办不同（前者去登记，后者改条件）——所以筛空时这里照显
- * 「共 N 家，当前显示 0 家」，表格区另显 businessPartyNoMatchNote，不把页面切成空态。
- */
-export function businessPartyCountSummary(total: number, visible: number): string {
-  return `共 ${total} 家单位，当前显示 ${visible} 家`;
 }
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const businessPartyNoMatchNote = '当前筛选条件下没有匹配的单位';
-
-/** 按表头排序交回新数组，不改输入；同值保持原序。认不得的键原样交回。 */
-export function sortBusinessParties(rows: readonly BusinessPartyRecord[], sort: WorkbenchSort): BusinessPartyRecord[] {
-  const compare = comparatorOf(sort.key as BusinessPartySortKey);
-  if (compare === null) return [...rows];
-  return [...rows].sort((left, right) => sort.dir * compare(left, right));
-}
-
-function comparatorOf(key: BusinessPartySortKey): ((left: BusinessPartyRecord, right: BusinessPartyRecord) => number) | null {
-  switch (key) {
-    case 'party':
-      return (left, right) => byString(left.partyId, right.partyId);
-    case 'party-name':
-      return (left, right) => byString(left.partyName, right.partyName);
-    case 'effective-from':
-      return (left, right) => byInstant(left.effectiveFrom, right.effectiveFrom);
-    case 'registered-at':
-      return (left, right) => byInstant(left.registeredAt, right.registeredAt);
-    default:
-      return null;
-  }
-}

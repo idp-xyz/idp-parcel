@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useRegisterList } from './register-list';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState } from '../catalogue-view';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { entryHint } from '../operator-grants';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
@@ -12,16 +14,14 @@ import { Instant } from './detail-primitives';
 import { PendingDraftPanel, type PendingDraftIdentity } from './PendingDraftPanel';
 import {
   draftKeyOf,
-  draftSearchText,
-  matchesPendingStatus,
-  pendingCountSummary,
-  pendingCountsOf,
+  pendingListConditions,
   pendingRowsOf,
+  pendingRowsOnPage,
   unreadableWord,
   type PendingDraftRow,
   type PendingStatusFilter,
 } from './pending-publications';
-import { listOpenPublicationDrafts, type PublicationDraftListResponseBody } from './publication-draft-api';
+import { listOpenPublicationDrafts } from './publication-draft-api';
 import { publicationKindLabels } from './publication-summary';
 import { PrincipalRef } from '../../components/PrincipalRef';
 
@@ -90,7 +90,7 @@ const statusFilters: ReadonlyArray<{ id: PendingStatusFilter; label: string }> =
   { id: 'ALL', label: '全部' },
   { id: 'PENDING_APPROVAL', label: '待批准' },
   { id: 'APPROVED', label: '已批准待发布' },
-  { id: 'UNREADABLE', label: unreadableWord },
+  { id: 'UNREADABLE', label: `${unreadableWord}（只筛本页）` },
 ];
 
 /**
@@ -98,40 +98,33 @@ const statusFilters: ReadonlyArray<{ id: PendingStatusFilter; label: string }> =
  *
  * 列出来是为了换个人批准、隔天再来、刷新页面都找得回在途的改动：点开一行在右栏读回内容，批准与发布就在栏底做，带的是
  * 栏里看到的那份内容与版本壳的摘要（容器照票 commercial-registers-edit-containers/06）。录入仍在各册自己的页面。
+ *
+ * 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词沿地址上的 `?q=` 停稳后下推，「待批准 / 已批准待发布」下推成
+ * status 维，翻页走游标，换条件回第一页；次序是读口的缺省序（录入时刻新→旧）。「内容读不出」读口筛不了，只筛到手的这一页
+ * （pending-publications.ts）。胶囊不带计数：一页里数出来的不是各状态的总数。检索覆盖哪几格以读口为准，类别不在其内。
  */
 export function PendingPublicationsPage() {
   // 检索词在地址里（`?q=`），刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<PendingStatusFilter>('ALL');
-  const { answer, retry, pending } = useRegisterList(listOpenPublicationDrafts);
+  const conditions = pendingListConditions(useSettledKeyword(search), status);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listOpenPublicationDrafts);
   // 右栏开着的那一行。记整行而不只记键：发布之后那一行离开列表，栏不能跟着关——人要看完发布的答复；行留在表里直到换行或关栏。
   const [selected, setSelected] = useState<PendingDraftRow | null>(null);
 
   const rows = answer?.kind === 'outcome' ? pendingRowsOf(answer.body) : [];
-  const records = rows.map((row) => row.source);
-  const counts = pendingCountsOf(records);
-  const needle = search.trim().toLowerCase();
-  const visible = rows.filter(
-    (row) =>
-      matchesPendingStatus(row.source, status) &&
-      (needle === '' ||
-        draftSearchText(row.source, publicationKindLabels[row.source.kind] ?? row.source.kind).includes(needle)),
-  );
+  const visible = pendingRowsOnPage(rows, status);
   // 选中的那一行已不在（发布后离开列表、或被筛掉）时钉在表尾，栏才开得住。钉着的行标成「已离开列表」而不显旧状态：
   // 列表里的状态是上一次取回的，栏里读回的才是现在的，两处并排显两个状态会让人以为没发出去。
   const shown = selected !== null && !visible.some((row) => row.key === selected.key) ? [...visible, { ...selected, left: true }] : visible;
   // 录入入口在各册自己的页面，没有登记册配置写授予的操作者看不到它们（ADR-0315）；本页自己没有那个入口，说明文案不往那里指，
   // 也不解释一个本页没有的入口。
   const mayWrite = useMayWriteRegistry();
-  const countOf: Record<PendingStatusFilter, number> = {
-    ALL: counts.total,
-    PENDING_APPROVAL: counts.pending,
-    APPROVED: counts.approved,
-    UNREADABLE: counts.unreadable,
-  };
-  // 读不出的一格只在真有这样的行时才摆：平常摆一个恒为 0 的「内容读不出」只会让人以为出过事。
-  const shownFilters = statusFilters.filter((filter) => filter.id !== 'UNREADABLE' || counts.unreadable > 0);
-  const answered = answer?.kind === 'outcome';
+  // 读不出的一格只在这一页真有这样的行（或正选着它）时才摆：平常摆一个恒空的「内容读不出」只会让人以为出过事。
+  const shownFilters = statusFilters.filter(
+    (filter) => filter.id !== 'UNREADABLE' || status === 'UNREADABLE' || rows.some((row) => !row.source.readable),
+  );
+  const pageOnly = status === 'UNREADABLE';
 
   return (
     <WorkbenchPageTemplate<ShownRow>
@@ -139,28 +132,30 @@ export function PendingPublicationsPage() {
       viewStateKey="pending-publications"
       subtitle={`客户合同、服务产品、价格政策等改动先存为待批准，在这里核对内容后批准，再发布生效。点一行查看内容。${entryHint(mayWrite, '新的改动在各自的页面里录入。', '')}`}
       onRefresh={retry}
-      refreshing={pending}
-      search={{ value: search, onChange: setSearch, placeholder: '搜编号、类别、版本或提交人' }}
+      refreshing={answer === null}
+      search={{ value: search, onChange: setSearch, placeholder: '搜编号、版本或提交人' }}
+      // 胶囊常摆：筛空了也要能点回「全部」。
       extraFilters={
-        answered && rows.length > 0 ? (
-          <>
-            {shownFilters.map((filter) => (
-              <button
-                key={filter.id}
-                type="button"
-                className={chipClass(filter.id === status)}
-                aria-pressed={filter.id === status}
-                onClick={() => setStatus(filter.id === status ? 'ALL' : filter.id)}
-              >
-                {filter.label} {countOf[filter.id]}
-              </button>
-            ))}
-          </>
-        ) : undefined
+        <>
+          {shownFilters.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={chipClass(filter.id === status)}
+              aria-pressed={filter.id === status}
+              onClick={() => setStatus(filter.id === status ? 'ALL' : filter.id)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </>
       }
-      // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区矛盾。
-      toolbarRight={answered ? pendingCountSummary(records) : undefined}
-      noMatchText="当前筛选条件下没有匹配的改动"
+      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
+      noMatchText={
+        pageOnly && rows.length > 0
+          ? `这一页上没有${unreadableWord}的改动；只筛本页的条件不看其余几页，翻页看看`
+          : '当前筛选条件下没有匹配的改动'
+      }
       onClearFilters={() => {
         setSearch('');
         setStatus('ALL');
@@ -174,7 +169,7 @@ export function PendingPublicationsPage() {
         const row = shown.find((candidate) => candidate.key === key);
         if (!row) return null;
         const identity: PendingDraftIdentity = { kind: row.source.kind, objectId: row.source.objectId, version: row.source.version };
-        // 按载体身份给 key：换一行整个重挂，上一份的批准与发布答复不留。
+        // 按载体身份给 key：换一行整个重挂，上一份的批准与发布答复不留。游标这一页不在取数层里，批准、发布之后由 retry 重取。
         return <PendingDraftPanel key={draftKeyOf(identity)} target={identity} onClose={() => setSelected(null)} onChanged={retry} />;
       }}
       // 空态按摆出来的行数判：列表空了而钉着的那一行还在，表就还在，栏才开得住。
@@ -187,6 +182,7 @@ export function PendingPublicationsPage() {
           '在客户合同、服务产品、价格政策等页面录入新版本并「存为待批准」后，会出现在这里等人批准。',
           '有同事录入新版本并存为待批准后，会出现在这里。',
         ),
+        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination) || pageOnly,
       })}
     />
   );

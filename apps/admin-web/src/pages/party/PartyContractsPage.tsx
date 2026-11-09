@@ -38,12 +38,12 @@ import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
-  matchesVersionStatus,
-  versionCountSummary,
-  versionStatusCounts,
+  versionListConditions,
+  versionPoolOf,
   type VersionFacts,
   type VersionStatusFilter,
 } from './version-groups';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { RefLink } from './RefLink';
 import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { useLoaded } from './PublicationFormFields';
@@ -288,7 +288,14 @@ function CustomerContractsWorkbench({
   const [search, setSearch] = useAddressKeyword();
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const { answer, retry, pending } = useRegisterList(listCustomerContracts);
+  // 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词停稳后下推，「在用 / 其余」下推成 status 维，按合同号
+  // 翻页（version-groups.ts）；换条件回第一页。检索覆盖哪几格以读口为准。
+  const conditions = versionListConditions(useSettledKeyword(search), statusFilter);
+  const narrowed = catalogueConditionsNarrow(conditions);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listCustomerContracts);
+  // 这一页可能带着条件、也只是一页，缺同一合同被筛掉或落在页外的版本：右栏的历史与「收尾…」再并进不带条件的那一页（取数层
+  // 缓存，发布表单与收尾对话框读的是同一份）。写口答到后那一页随参与方整域作废自己重取，游标这一页由写后的 retry 重取。
+  const unfiltered = useRegisterList(listCustomerContracts);
   useRetryWhenChanged(publishedKey, retry);
   const contractColumns = useContractColumns();
   // 右栏里的「收尾…」：记下是哪一版，对话框据此重读册面（票 party-commercial-uiux/16）。
@@ -297,23 +304,15 @@ function CustomerContractsWorkbench({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const contracts = answer?.kind === 'outcome' ? answer.body.contracts : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const searchedContracts = needle
-    ? contracts.filter((row) =>
-        [row.objectId, row.version, row.scope, row.status, row.rulePackageId ?? '', row.customerAccountId ?? ''].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
-    : contracts;
-  // 同一合同的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
-  const visibleContracts = groupedByObject(
-    searchedContracts.filter((row) => matchesVersionStatus(contractFacts(row), statusFilter)),
-    contractFacts,
-  );
-  const closable = closableKeys(answer?.kind === 'outcome' ? contractKnownVersions(answer.body) : []);
+  const unfilteredBody = unfiltered.answer?.kind === 'outcome' ? unfiltered.answer.body : null;
   const keyOf = (row: CustomerContractRecord) => `${row.objectId}@${row.version}`;
-  const answered = answer?.kind === 'outcome';
+  // 同一合同的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
+  const visibleContracts = groupedByObject(contracts, contractFacts);
+  const pool = versionPoolOf(contracts, unfilteredBody?.contracts ?? [], keyOf);
+  const closable = closableKeys([
+    ...(answer?.kind === 'outcome' ? contractKnownVersions(answer.body) : []),
+    ...(unfilteredBody ? contractKnownVersions(unfilteredBody) : []),
+  ]);
 
   return (
     <>
@@ -322,7 +321,7 @@ function CustomerContractsWorkbench({
         viewStateKey="party-contracts"
         subtitle="每份客户合同签了什么、什么时候生效：客户、接单规则、财务控制约定与交付条件；要改条款就签新版本"
         onRefresh={retry}
-        refreshing={pending}
+        refreshing={answer === null}
         primaryAction={
           mayWrite ? (
             <Button variant="default" className={primaryActionClass} onClick={() => onOpenView('publish-contract')}>
@@ -330,14 +329,10 @@ function CustomerContractsWorkbench({
             </Button>
           ) : undefined
         }
-        search={{ value: search, onChange: setSearch, placeholder: '搜索合同、客户或规则包' }}
-        extraFilters={
-          answered && contracts.length > 0 ? (
-            <VersionStatusChips counts={versionStatusCounts(contracts, contractFacts)} value={statusFilter} onChange={setStatusFilter} />
-          ) : undefined
-        }
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区「这不是目录为空」直接矛盾。
-        toolbarRight={answered ? versionCountSummary(contracts.length, visibleContracts.length, '份', '合同版本') : undefined}
+        search={{ value: search, onChange: setSearch, placeholder: '搜索合同、客户账户或规则包' }}
+        // 胶囊常摆：筛空了也要能点回「全部」。
+        extraFilters={<VersionStatusChips value={statusFilter} onChange={setStatusFilter} />}
+        toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
         columns={contractColumns}
         rows={visibleContracts}
         rowKey={keyOf}
@@ -349,7 +344,7 @@ function CustomerContractsWorkbench({
           setStatusFilter('all');
         }}
         renderDetail={(key) => {
-          const row = contracts.find((candidate) => keyOf(candidate) === key);
+          const row = pool.find((candidate) => keyOf(candidate) === key);
           return row ? (
             <VersionDetailPanel<CustomerContractRecord>
               row={row}
@@ -365,10 +360,10 @@ function CustomerContractsWorkbench({
                 { label: '正文登记时间', value: record.declaredAt ?? '' },
               ]}
               status={(record) => record.status}
-              history={(record) => versionHistoryOf(contracts, record)}
+              history={(record) => versionHistoryOf(pool, record)}
               currentVersion={(record) => record.version}
               onSelectVersion={(version) => {
-                const next = contracts.find(
+                const next = pool.find(
                   (candidate) => candidate.objectId === row.objectId && candidate.scope === row.scope && candidate.version === version,
                 );
                 if (next) setSelectedKey(keyOf(next));
@@ -403,6 +398,7 @@ function CustomerContractsWorkbench({
           endpoint: 'GET /commercial-customer-contracts',
           emptyTitle: '还没有签订任何客户合同',
           emptyDescription: `客户下单要按合同办。${entryHint(mayWrite, '用页头的「签订合同」签第一份。')}`,
+          narrowed: narrowed || pastFirstPage(pagination),
         })}
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />

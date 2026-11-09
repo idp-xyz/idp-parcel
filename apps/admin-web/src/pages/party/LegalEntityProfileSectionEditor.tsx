@@ -215,7 +215,6 @@ function SectionForm({
             patch={patch}
             problems={problems}
             locked={locked}
-            typeCatalogue={typeCatalogue}
             onLeave={requestLeave}
             groups={section.groups}
           />

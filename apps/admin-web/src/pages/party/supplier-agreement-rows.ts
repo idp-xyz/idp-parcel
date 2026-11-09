@@ -97,7 +97,7 @@ function bodyValues(record: SupplierAgreementRecord): Record<string, string> {
   };
 }
 
-export function supplierAgreementRowsOf(body: SupplierAgreementListResponseBody): SupplierAgreementRow[] {
+export function supplierAgreementRowsOf(body: Pick<SupplierAgreementListResponseBody, 'agreements'>): SupplierAgreementRow[] {
   return body.agreements.map((record) => ({
     key: `${record.objectId}@${record.version}`,
     source: record,

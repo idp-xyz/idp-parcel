@@ -15,6 +15,7 @@
 // 点亮，本文件一行不用改。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import { afterPartyWrite } from './party-writes';
 
 /**
@@ -405,10 +406,11 @@ export interface PublicationDraftRecord {
   content?: unknown;
 }
 
-/** 列表答复（Go `publicationDraftListResponse`）：租户名下还没发布的载体，录入时刻由新到旧；空是 200 加空数组。 */
+/** 列表答复（Go `publicationDraftListResponse`）：租户名下还没发布的载体，缺省按录入时刻由新到旧；空是 200 加空数组。 */
 export interface PublicationDraftListResponseBody {
   outcome: string;
   drafts: PublicationDraftRecord[];
+  page: CataloguePage;
 }
 
 /**
@@ -500,8 +502,15 @@ export const publicationDraftEndpoints = {
 
 export const openPublicationDraftsEndpoint = '/commercial-open-publication-drafts';
 
-export function listOpenPublicationDrafts(): Promise<ApiResult<PublicationDraftListResponseBody>> {
-  return exchangeMasterData<PublicationDraftListResponseBody>(openPublicationDraftsEndpoint);
+// 列表口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：收条件与游标，答复带 page；两样都可缺，工作台待办格的无参调用
+// 照旧拿第一页。筛选维只有 status，本构建读不回与否不在其列（后端声明的注释）。
+export function listOpenPublicationDrafts(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<PublicationDraftListResponseBody>> {
+  return exchangeMasterData<PublicationDraftListResponseBody>(
+    catalogueRequestPath(openPublicationDraftsEndpoint, conditions, after),
+  );
 }
 
 // 读回按（类别、对象、版本）三格取，三格都在路径上，与目录口共用同一个 Intake。

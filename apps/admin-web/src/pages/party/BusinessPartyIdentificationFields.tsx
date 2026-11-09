@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import type { ApiResult } from '../catalogue-api';
 import type { RegistrationNumberTypeListResponseBody } from './api';
 import type { BusinessPartyDraft, PartyExternalReferenceRow, PartyNumberRow } from './business-party-form';
 import { identityCountryOptions, identityTypeOptions } from './legal-entity-form';
 import { externalReferencePurposeLabels } from './presentation';
-import { Field, Problems, ReferencePickerFor, SearchableSelect, fieldLabel } from './PublicationFormFields';
+import { Field, Problems, ReferencePickerFor, SearchableSelect, fieldLabel, useLoaded } from './PublicationFormFields';
+import { listIdentityRegistrationNumberTypes, useRegistrationNumberTypeCandidates } from './registration-number-type-candidates';
 
 const numberTypeCatalogueHint = '先到「基础数据 › 注册号类型」配置';
 
@@ -33,7 +33,6 @@ export function BusinessPartyIdentificationFields({
   patch,
   problems,
   locked,
-  typeCatalogue,
   correction,
   ourCompany = false,
   notice,
@@ -42,8 +41,6 @@ export function BusinessPartyIdentificationFields({
   patch: (change: Partial<BusinessPartyDraft>) => void;
   problems: Record<string, string[]>;
   locked: boolean;
-  /** 注册号类型目录的答案；表单读一次，国家格与每一行的类型格共用。 */
-  typeCatalogue: ApiResult<RegistrationNumberTypeListResponseBody> | null;
   /** 给了就摆身份更正依据那一格；note 是那一格下的一句。 */
   correction?: { note: string };
   /** 我方公司的往来单位：不摆注册地与注册号，换成一句说明。 */
@@ -52,6 +49,11 @@ export function BusinessPartyIdentificationFields({
   notice?: string;
 }) {
   const correcting = correction !== undefined;
+  // 国家格读身份层类型那一问，每一行的类型格共用按注册地收窄的那一问（registration-number-type-candidates.ts）；还没选注册地时
+  // 类型格交国家那一问，按空国家挑出零项，显「先选注册地」那句。
+  const identityTypes = useLoaded(listIdentityRegistrationNumberTypes);
+  const countryTypes = useRegistrationNumberTypeCandidates('IDENTITY', draft.registrationCountry);
+  const typeCandidates = draft.registrationCountry.trim() === '' ? identityTypes : countryTypes;
   useEffect(() => {
     if (!correcting && draft.identityCorrectionBasis !== '') patch({ identityCorrectionBasis: '' });
   }, [correcting, draft.identityCorrectionBasis, patch]);
@@ -77,7 +79,7 @@ export function BusinessPartyIdentificationFields({
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
-              answer={typeCatalogue}
+              answer={identityTypes}
               label="注册地（国家 / 地区）"
               path="businessParties[0].registrationCountry"
               problems={problems}
@@ -98,7 +100,7 @@ export function BusinessPartyIdentificationFields({
               {draft.lifetimeNumbers.map((row, index) => (
                 <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-start gap-3">
                   <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
-                    answer={typeCatalogue}
+                    answer={typeCandidates}
                     label={`类型（第 ${index + 1} 行）`}
                     path={`${numberPaths[index]}.typeCode`}
                     problems={problems}

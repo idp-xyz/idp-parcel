@@ -264,6 +264,7 @@ test('partyNameOfAnswer 只在册答到且有名时译名', () => {
           registeredAt: '2026-01-01T00:00:00Z',
         },
       ],
+      page: { size: 200, next: null, total: 2 },
     },
   };
   const nameOf = partyNameOfAnswer(listed);

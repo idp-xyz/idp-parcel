@@ -3,27 +3,25 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { BusinessPartyRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
 import {
   partiesPinnedByLegalEntities,
+  businessPartyListConditions,
   businessPartyPanelTabsOf,
   businessPartyRegistrationCountry,
+  businessPartyTypeFilterOptions,
   partyRegistrationCountriesOf,
   shownBusinessPartyPanelTab,
-  businessPartyCountSummary,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
-  businessPartyTypeKpis,
   businessPartyTypeLabel,
-  countBusinessParties,
   defaultBusinessPartySort,
-  filterBusinessParties,
+  filterBusinessPartiesByType,
   indexPartyRoles,
   ourCompanyPartyIds,
   rolesOfParty,
-  sortBusinessParties,
 } from './business-party-list';
-import { effectiveShareOfInUse } from './legal-entity-list';
+import { catalogueConditionsQuery } from '../catalogue-query';
 
-// 本文件钉的是身份本体册的筛选、排序与计数都只在已取回的行上做（README 列表页上列通则：不下推成查询参数），
-// 且「筛出为空」与「登记册为空」是两个事实——前者由调用页按票 01 裁决 1 另显，这里只保证筛选不把行吞掉也不多算。
+// 本文件钉的是身份本体册的列表纯逻辑：检索、状态与表头排序编成读口的条件（ADR-0144，可排维与筛选维照后端 BusinessPartyPages
+// 的声明），类型由别的册推出来、只筛到手的这一页；「筛出为空」与「登记册为空」是两个事实，由调用页按票 01 裁决 1 另显。
 
 function record(over: Partial<BusinessPartyRecord>): BusinessPartyRecord {
   return {
@@ -62,91 +60,19 @@ const rows: BusinessPartyRecord[] = [
 
 const ids = (list: BusinessPartyRecord[]) => list.map((row) => row.partyId);
 
-// Covers: 搜索是包含匹配、不分大小写，命中参与方标识 / 名称 / 状态原名任一格；空白搜索不筛。
-test('搜索按包含匹配三格之一', () => {
-  deepEqual(ids(filterBusinessParties(rows, { search: 'party-', status: 'ALL' })), ids(rows));
-  deepEqual(ids(filterBusinessParties(rows, { search: '停用示例', status: 'ALL' })), ['SYN-PARTY-RETIRED-01']);
-  deepEqual(ids(filterBusinessParties(rows, { search: 'registered', status: 'ALL' })), ['SYN-PARTY-CARRIER-02']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '  ', status: 'ALL' })), ids(rows));
-});
-
-// Covers: 状态筛选精确到封闭词；ALL 不筛；筛出为空交回空数组而不是原行。
-test('状态筛选精确匹配封闭词', () => {
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'DEACTIVATED' })), ['SYN-PARTY-RETIRED-01']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'REGISTERED' })), ['SYN-PARTY-CARRIER-02']);
-  deepEqual(ids(filterBusinessParties(rows, { search: 'OPERATOR', status: 'DEACTIVATED' })), []);
-});
-
-// Covers: 计数按状态分格，数的是传进来的这一页；词表之外的状态码不进任何格也不抛。占比公式借法人册那一份：分母只数在用两格。
-test('countBusinessParties 按状态计数，占比只按在用身份算', () => {
-  const counts = countBusinessParties(rows);
-  equal(counts.total, 4);
-  deepEqual(counts.byStatus, { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 });
-  // 没有关系册时谁都没有角色：四家都是「往来单位」。
-  equal(counts.withoutRole, 4);
-  deepEqual(countBusinessParties([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
-  equal(effectiveShareOfInUse(countBusinessParties(rows)), 67);
-  equal(effectiveShareOfInUse(countBusinessParties([record({ status: 'DEACTIVATED' })])), null);
-});
-
-// Covers: 默认按登记时间新→旧（裁决 1）；四列各按其键，方向随 dir；排序不改原数组；认不得的键原样交回。
-test('表头排序各按其键与方向，且不改原数组', () => {
-  const before = ids(rows);
+// Covers: 检索词、状态与排序编成一问——「全部」即 status 一维缺席，登记时间新→旧是读口的缺省序、不写进查询串（不带条件的第一页
+// 是裸路径）；生效时间两向都下推；名称列与认不得的列不在读口的可排维里，按缺省序问，不带 sort。
+test('businessPartyListConditions 按读口声明的维下推', () => {
+  equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', defaultBusinessPartySort)), '');
+  equal(
+    catalogueConditionsQuery(businessPartyListConditions(' 承运 ', 'DEACTIVATED', { key: 'effective-from', dir: 1 })),
+    'sort=effectiveFrom&status=DEACTIVATED&q=%E6%89%BF%E8%BF%90',
+  );
+  equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', { key: 'effective-from', dir: -1 })), 'sort=-effectiveFrom');
+  equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', { key: 'registered-at', dir: 1 })), 'sort=registeredAt');
+  equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', { key: 'party-name', dir: 1 })), '');
+  equal(catalogueConditionsQuery(businessPartyListConditions('', 'REGISTERED', { key: 'no-such-column', dir: 1 })), 'status=REGISTERED');
   deepEqual(defaultBusinessPartySort, { key: 'registered-at', dir: -1 });
-  deepEqual(ids(sortBusinessParties(rows, defaultBusinessPartySort)), [
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-AGENT-04',
-    'SYN-PARTY-RETIRED-01',
-  ]);
-  deepEqual(ids(sortBusinessParties(rows, { key: 'party', dir: 1 })), [
-    'SYN-PARTY-AGENT-04',
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-RETIRED-01',
-  ]);
-  deepEqual(ids(sortBusinessParties(rows, { key: 'party', dir: -1 })), [
-    'SYN-PARTY-RETIRED-01',
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-AGENT-04',
-  ]);
-  deepEqual(ids(sortBusinessParties(rows, { key: 'effective-from', dir: 1 })), [
-    'SYN-PARTY-RETIRED-01',
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-AGENT-04',
-    'SYN-PARTY-CARRIER-02',
-  ]);
-  // 名称按码位字典序（byString 不按 locale）：代 < 停 < 承 < 运。
-  deepEqual(ids(sortBusinessParties(rows, { key: 'party-name', dir: 1 })), [
-    'SYN-PARTY-AGENT-04',
-    'SYN-PARTY-RETIRED-01',
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-OPERATOR-01',
-  ]);
-  deepEqual(ids(sortBusinessParties(rows, { key: 'no-such-column', dir: 1 })), before);
-  deepEqual(ids(rows), before);
-});
-
-// Covers: 时刻比按解析值不按字典序——端点用 RFC3339Nano 剪尾零，同一秒内小数位数不定，字典序会把 `55Z` 排到
-// `55.939Z` 之后（票 01 评审 Standards 1 的教训）。解析不了的值退回字符串比，不抛、不丢行。
-test('同一秒内小数位数不定的时刻按真实先后排', () => {
-  const sameSecond = [
-    record({ partyId: 'A', registeredAt: '2026-09-16T04:27:55.9Z' }),
-    record({ partyId: 'B', registeredAt: '2026-09-16T04:27:55Z' }),
-    record({ partyId: 'C', registeredAt: '2026-09-16T04:27:55.939Z' }),
-    record({ partyId: 'D', registeredAt: '2026-09-16T04:27:55.93Z' }),
-  ];
-  deepEqual(ids(sortBusinessParties(sameSecond, defaultBusinessPartySort)), ['C', 'D', 'A', 'B']);
-  const unparsable = [record({ partyId: 'X', registeredAt: 'not-a-time' }), record({ partyId: 'Y' })];
-  deepEqual(ids(sortBusinessParties(unparsable, defaultBusinessPartySort)), ['X', 'Y']);
-});
-
-// Covers: 票 01 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
-// 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」。
-test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
-  equal(businessPartyCountSummary(4, 4), '共 4 家单位，当前显示 4 家');
-  equal(businessPartyCountSummary(4, 0), '共 4 家单位，当前显示 0 家');
   equal(businessPartyNoMatchNote, '当前筛选条件下没有匹配的单位');
 });
 
@@ -221,32 +147,29 @@ test('indexPartyRoles 把未停用客户账户的所属客户算作客户', () =
   deepEqual(rolesOfParty(indexPartyRoles(null, [account('A4', 'SYN-PARTY-SHIPPER-04', 'EFFECTIVE')]), 'SYN-PARTY-SHIPPER-04'), ['CUSTOMER']);
 });
 
-// Covers: 类型筛选精确到角色；NONE 只留没有角色的；类型中文也能被搜索命中；计数按角色与「无角色」分格。
-test('类型筛选与计数按持有的角色', () => {
+// Covers: 类型筛选只筛传进来的这一页、精确到角色；NONE 只留没有角色的；「全部」交回原行的副本，不改输入。
+test('类型筛选按持有的角色', () => {
   const index = indexPartyRoles([
     relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' }),
     relationship({ relationshipId: 'R2', holderId: 'SYN-PARTY-AGENT-04', role: 'CARRIER_AGENT' }),
   ]);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'CUSTOMER' }, index)), ['SYN-PARTY-OPERATOR-01']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'NONE' }, index)), [
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-RETIRED-01',
-  ]);
-  deepEqual(ids(filterBusinessParties(rows, { search: '承运商代理', status: 'ALL' }, index)), ['SYN-PARTY-AGENT-04']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '暂无合作关系', status: 'ALL' }, index)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
-  const counts = countBusinessParties(rows, index);
-  equal(counts.byRole.CUSTOMER, 1);
-  equal(counts.byRole.CARRIER_AGENT, 1);
-  equal(counts.withoutRole, 2);
-  // 指标格只出有数的类型，角色按词表序，「暂无合作关系」在最后。
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'CUSTOMER', index)), ['SYN-PARTY-OPERATOR-01']);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'NONE', index)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'SUPPLIER', index)), []);
+  const all = filterBusinessPartiesByType(rows, 'ALL', index);
+  deepEqual(ids(all), ids(rows));
+  equal(all === rows, false);
+});
+
+// Covers: 类型选项——「全部类型」在首位，我方公司在角色之前，「暂无合作关系」在最后，与类型列里的次序一样。
+test('类型筛选选项表', () => {
   deepEqual(
-    businessPartyTypeKpis(counts).map((cell) => [cell.type, cell.count]),
-    [
-      ['CUSTOMER', 1],
-      ['CARRIER_AGENT', 1],
-      ['NONE', 2],
-    ],
+    businessPartyTypeFilterOptions.map((option) => option.value),
+    ['ALL', 'OURS', 'CUSTOMER', 'SUPPLIER', 'CARRIER_AGENT', 'RESELLER', 'ACCOUNT_HOLDER', 'AUTHORIZED_DELIVERING_PARTY', 'NONE'],
   );
+  equal(businessPartyTypeFilterOptions[0].label, '全部类型');
+  equal(businessPartyTypeFilterOptions[1].label, '我方公司');
+  equal(businessPartyTypeFilterOptions[businessPartyTypeFilterOptions.length - 1].label, '暂无合作关系');
 });
 
 function legalEntity(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
@@ -288,42 +211,14 @@ test('businessPartyTypeLabel 把我方公司排在角色前面', () => {
   equal(businessPartyTypeLabel(false, []), '暂无合作关系');
 });
 
-// Covers: 筛选 OURS 只留我方公司；NONE 不再把我方公司算成「往来单位」；搜索能按「我方公司」命中；计数分出 ours、
-// withoutRole 不含我方公司；指标格里「我方公司」在角色之前、「暂无合作关系」在最后，计数为零的类型不出格。
-test('我方公司进筛选、搜索与计数', () => {
+// Covers: 类型筛选 OURS 只留我方公司；NONE 不再把我方公司算成「往来单位」；法人册没取到时谁都不是我方公司。
+test('我方公司进类型筛选', () => {
   const index = indexPartyRoles([relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' })]);
   const ours = ourCompanyPartyIds([legalEntity({}), legalEntity({ legalEntityId: 'SYN-LE-02', partyId: 'SYN-PARTY-AGENT-04' })]);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'OURS' }, index, ours)), [
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-AGENT-04',
-  ]);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'NONE' }, index, ours)), [
-    'SYN-PARTY-CARRIER-02',
-    'SYN-PARTY-RETIRED-01',
-  ]);
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'CUSTOMER' }, index, ours)), ['SYN-PARTY-OPERATOR-01']);
-  deepEqual(ids(filterBusinessParties(rows, { search: '我方公司', status: 'ALL' }, index, ours)), [
-    'SYN-PARTY-OPERATOR-01',
-    'SYN-PARTY-AGENT-04',
-  ]);
-  // 法人册没取到：谁都不是我方公司，与此前的口径一样。
-  deepEqual(ids(filterBusinessParties(rows, { search: '', status: 'ALL', type: 'OURS' }, index)), []);
-
-  const counts = countBusinessParties(rows, index, ours);
-  equal(counts.ours, 2);
-  equal(counts.byRole.CUSTOMER, 1);
-  equal(counts.withoutRole, 2);
-  equal(countBusinessParties(rows, index).withoutRole, 3);
-
-  deepEqual(
-    businessPartyTypeKpis(counts).map((cell) => [cell.type, cell.label, cell.count]),
-    [
-      ['OURS', '我方公司', 2],
-      ['CUSTOMER', '客户', 1],
-      ['NONE', '暂无合作关系', 2],
-    ],
-  );
-  deepEqual(businessPartyTypeKpis(countBusinessParties([], index, ours)), []);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'OURS', index, ours)), ['SYN-PARTY-OPERATOR-01', 'SYN-PARTY-AGENT-04']);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'NONE', index, ours)), ['SYN-PARTY-CARRIER-02', 'SYN-PARTY-RETIRED-01']);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'CUSTOMER', index, ours)), ['SYN-PARTY-OPERATOR-01']);
+  deepEqual(ids(filterBusinessPartiesByType(rows, 'OURS', index)), []);
 });
 
 // Covers: 对象页收起写入口用的口径——已停用的公司主体钉着的参与方也算；法人册没取到为空集。

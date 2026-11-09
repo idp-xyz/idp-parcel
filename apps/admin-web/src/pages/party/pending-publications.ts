@@ -1,5 +1,5 @@
 // 「审批与发布」页的纯逻辑（ADR-0314 决定三）：把列表读口交回的载体折成行、给详情抽屉复述的几项、批准与发布各在哪个状态
-// 下可做、胶囊筛与计数。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftPanel.tsx 只负责摆。
+// 下可做、胶囊筛的查询条件。全部是纯函数，node:test 钉着；组件 PendingPublicationsPage.tsx / PendingDraftPanel.tsx 只负责摆。
 //
 // **本文件不算摘要、不判谁能批准**：摘要原样取自服务端的读回，批准职责由服务端的审批职责规则判。这里只按状态词决定按钮
 // 亮不亮——状态词是服务端的，亮了按下去服务端仍会答它的结果。
@@ -7,6 +7,7 @@
 import type { TechnicalRow } from '../../components/TechnicalDetails';
 import { shortPrincipalRef } from '../../components/principal-ref';
 import { labelFor } from '../../vocabulary/status';
+import type { CatalogueConditions } from '../catalogue-query';
 import { momentText, publicationKindLabels, publicationSummary, type PublicationFact } from './publication-summary';
 import type { PublicationDraftListResponseBody, PublicationDraftRecord } from './publication-draft-api';
 
@@ -101,54 +102,22 @@ export function canonicalDocumentText(content: unknown): string {
   return content === undefined ? '' : JSON.stringify(content, null, 2);
 }
 
-/** 读不出的行在搜索与筛选里叫的那个词；列表与详情同一个说法。 */
+/** 读不出的行在筛选里叫的那个词；列表与详情同一个说法。 */
 export const unreadableWord = '内容读不出';
 
-/** 检索用的一串：各格拼起来小写比较，搜类别、编号、版本、状态与提交人都能命中。 */
-export function draftSearchText(record: PublicationDraftRecord, kindLabel: string): string {
-  return [
-    kindLabel,
-    record.kind,
-    record.objectId,
-    record.version,
-    record.scope,
-    labelFor(record.status),
-    record.submitter,
-    record.approver ?? '',
-    record.readable ? '' : unreadableWord,
-  ]
-    .join(' ')
-    .toLowerCase();
-}
-
-/** 胶囊筛：全部、按状态码，或只看读不出的。读不出的单列一格，免得混在「待批准」里被当成能批的。 */
+/**
+ * 胶囊筛：全部、按状态码，或只看读不出的。读不出的单列一格，免得混在「待批准」里被当成能批的。
+ * 按状态的两格下推成读口的 status 维（ADR-0144）；读不出不是库上的一列——可读与否经重建门之后才知道（ADR-0344）——读口筛不了，
+ * 那一格只筛到手的这一页（pendingRowsOnPage）。
+ */
 export type PendingStatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'UNREADABLE';
 
-export function matchesPendingStatus(record: PublicationDraftRecord, filter: PendingStatusFilter): boolean {
-  if (filter === 'ALL') return true;
-  if (filter === 'UNREADABLE') return !record.readable;
-  return record.status === filter;
+/** 待批准清单一问的条件：检索词与状态（「全部」与「读不出」都不带这一维）；录入时刻新→旧是读口的缺省序，不写进查询串。 */
+export function pendingListConditions(keyword: string, filter: PendingStatusFilter): CatalogueConditions {
+  return { q: keyword, filters: { status: filter === 'PENDING_APPROVAL' || filter === 'APPROVED' ? [filter] : [] } };
 }
 
-export interface PendingCounts {
-  total: number;
-  pending: number;
-  approved: number;
-  unreadable: number;
-}
-
-export function pendingCountsOf(records: readonly PublicationDraftRecord[]): PendingCounts {
-  return {
-    total: records.length,
-    pending: records.filter((record) => record.status === 'PENDING_APPROVAL').length,
-    approved: records.filter((record) => record.status === 'APPROVED').length,
-    unreadable: records.filter((record) => !record.readable).length,
-  };
-}
-
-/** 计数摘要：只在拿到业务答案后用；分状态数，让批准者一眼看出多少在等，读不出的另报，免得它们被当成能批的。 */
-export function pendingCountSummary(records: readonly PublicationDraftRecord[]): string {
-  const counts = pendingCountsOf(records);
-  const tail = counts.unreadable > 0 ? `，其中 ${counts.unreadable} 份${unreadableWord}` : '';
-  return `共 ${counts.total} 份：待批准 ${counts.pending}，已批准待发布 ${counts.approved}${tail}`;
+/** 这一页上摆哪几行：按状态的两格读口已筛过，这里只做读不出那一格。 */
+export function pendingRowsOnPage(rows: readonly PendingDraftRow[], filter: PendingStatusFilter): PendingDraftRow[] {
+  return filter === 'UNREADABLE' ? rows.filter((row) => !row.source.readable) : [...rows];
 }

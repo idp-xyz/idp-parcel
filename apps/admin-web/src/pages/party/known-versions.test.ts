@@ -16,6 +16,8 @@ import {
   type KnownVersion,
 } from './known-versions';
 
+const firstPage = { size: 200, next: null, total: null };
+
 // 演示种子里供应商协议：TRUNK 三版（v1、v2 已退役，v3 在用）夹着 LASTMILE 一版。
 const known: KnownVersion[] = [
   { objectId: 'SYN-TRUNK', version: 'v1', status: 'RETIRED', effectiveStartsAt: '2026-01-01T00:00:00Z' },
@@ -107,6 +109,7 @@ test('政策册响应按册判别：带状态的给状态，没有状态的不�
         registeredAt: '2026-01-01T00:00:00Z',
       },
     ],
+    page: firstPage,
   } satisfies CommercialPolicyListResponseBody;
   deepEqual(policyKnownVersions(credit), [{ objectId: 'CP', version: 'v1', effectiveStartsAt: '2026-01-01T00:00:00Z', effectiveEndsAt: undefined }]);
   const authorization = {
@@ -124,9 +127,10 @@ test('政策册响应按册判别：带状态的给状态，没有状态的不�
         cancellationAuthorities: [],
       },
     ],
+    page: firstPage,
   } satisfies CommercialPolicyListResponseBody;
   equal(policyKnownVersions(authorization)[0].status, 'EFFECTIVE');
-  deepEqual(policyKnownVersions({ outcome: 'COMMERCIAL_POLICIES_LISTED', kind: 'AS_OF_POLICY', policies: [] }), []);
+  deepEqual(policyKnownVersions({ outcome: 'COMMERCIAL_POLICIES_LISTED', kind: 'AS_OF_POLICY', policies: [], page: firstPage }), []);
 });
 
 test('被截止的协议版本按截止点算区间：截止后不再与之后的新版重叠', () => {
@@ -144,6 +148,7 @@ test('被截止的协议版本按截止点算区间：截止后不再与之后�
         selectionEndsAt: '2026-06-01T00:00:00Z',
       },
     ],
+    page: firstPage,
   } satisfies SupplierAgreementListResponseBody;
   const known = agreementKnownVersions(body);
   equal(known[0].effectiveEndsAt, '2026-06-01T00:00:00Z');

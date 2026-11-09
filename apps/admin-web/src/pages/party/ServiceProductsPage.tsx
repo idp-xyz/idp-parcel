@@ -13,6 +13,9 @@ import { RegistrationPanel } from '../../components/registration';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
@@ -37,9 +40,8 @@ import { RegisterView } from './RegisterView';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
-  matchesVersionStatus,
-  versionCountSummary,
-  versionStatusCounts,
+  versionListConditions,
+  versionPoolOf,
   type VersionFacts,
   type VersionStatusFilter,
 } from './version-groups';
@@ -118,6 +120,9 @@ const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
 // 端点，不并进本页——那边上列登记册信封，这边上列版本壳，行形状与修订轴不同。
 //
 // `refreshKey` 由页面递增：登记视图里的载体到达发布那一步时刷本读面，让新版本回到目录时立刻可见。
+//
+// 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词沿地址上的 `?q=` 停稳后下推，「在用 / 其余」下推成 status
+// 维，按产品号翻页（version-groups.ts）；换条件回第一页。检索覆盖哪几格以读口为准。
 function ServiceProductVersionsWorkbench({
   refreshKey,
   onStartNewVersion,
@@ -134,7 +139,13 @@ function ServiceProductVersionsWorkbench({
   const [search, setSearch] = useAddressKeyword();
   // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const { answer, retry, pending } = useRegisterList(listServiceProducts);
+  const conditions = versionListConditions(useSettledKeyword(search), statusFilter);
+  const narrowed = catalogueConditionsNarrow(conditions);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listServiceProducts);
+  // 这一页可能带着条件、也只是一页，缺同一产品被筛掉或落在页外的版本：右栏的历史与「收尾…」再并进不带条件的那一页（取数层
+  // 缓存，发布表单与收尾对话框读的是同一份）。写口答到后那一页随参与方整域作废自己重取，游标这一页不在取数层里，由写后的
+  // retry 重取。
+  const unfiltered = useRegisterList(listServiceProducts);
   useRetryWhenChanged(refreshKey, retry);
   // 右栏里的「收尾…」：记下是哪一版，对话框据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
@@ -142,21 +153,14 @@ function ServiceProductVersionsWorkbench({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const products = answer?.kind === 'outcome' ? answer.body.products : [];
-  const needle = search.trim().toLowerCase();
-  const searchedProducts = needle
-    ? products.filter((row) =>
-        [row.objectId, row.version, row.scope, row.status, row.form ?? ''].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
-    : products;
+  const unfilteredBody = unfiltered.answer?.kind === 'outcome' ? unfiltered.answer.body : null;
   // 同一产品的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
-  const visibleProducts = groupedByObject(
-    searchedProducts.filter((row) => matchesVersionStatus(productFacts(row), statusFilter)),
-    productFacts,
-  );
-  const closable = closableKeys(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []);
-  const answered = answer?.kind === 'outcome';
+  const visibleProducts = groupedByObject(products, productFacts);
+  const pool = versionPoolOf(products, unfilteredBody?.products ?? [], keyOf);
+  const closable = closableKeys([
+    ...(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []),
+    ...(unfilteredBody ? productKnownVersions(unfilteredBody) : []),
+  ]);
 
   return (
     <>
@@ -166,7 +170,7 @@ function ServiceProductVersionsWorkbench({
         // 渠道账号的业务使用授权还没有读口，本页不为它留列。
         subtitle="我们对外卖的服务产品及其版本、形态与交付条件；要改条款就发新版本。产品能走哪些渠道，看「渠道产品」页"
         onRefresh={retry}
-        refreshing={pending}
+        refreshing={answer === null}
         primaryAction={
           mayWrite ? (
             <>
@@ -180,13 +184,9 @@ function ServiceProductVersionsWorkbench({
           ) : undefined
         }
         search={{ value: search, onChange: setSearch, placeholder: '搜索服务产品或版本' }}
-        extraFilters={
-          answered && products.length > 0 ? (
-            <VersionStatusChips counts={versionStatusCounts(products, productFacts)} value={statusFilter} onChange={setStatusFilter} />
-          ) : undefined
-        }
-        // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
-        toolbarRight={answered ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined}
+        // 胶囊常摆：筛空了也要能点回「全部」。
+        extraFilters={<VersionStatusChips value={statusFilter} onChange={setStatusFilter} />}
+        toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
         columns={columns}
         rows={visibleProducts}
         rowKey={keyOf}
@@ -198,7 +198,7 @@ function ServiceProductVersionsWorkbench({
           setStatusFilter('all');
         }}
         renderDetail={(key) => {
-          const row = products.find((candidate) => keyOf(candidate) === key);
+          const row = pool.find((candidate) => keyOf(candidate) === key);
           return row ? (
             <VersionDetailPanel<ServiceProductRecord>
               row={row}
@@ -212,10 +212,10 @@ function ServiceProductVersionsWorkbench({
                 { label: '服务形态码', value: record.form ?? '' },
               ]}
               status={(record) => record.status}
-              history={(record) => versionHistoryOf(products, record)}
+              history={(record) => versionHistoryOf(pool, record)}
               currentVersion={(record) => record.version}
               onSelectVersion={(version) => {
-                const next = products.find(
+                const next = pool.find(
                   (candidate) => candidate.objectId === row.objectId && candidate.scope === row.scope && candidate.version === version,
                 );
                 if (next) setSelectedKey(keyOf(next));
@@ -253,6 +253,7 @@ function ServiceProductVersionsWorkbench({
             mayWrite,
             '用页头的「新增产品版本」发布第一个版本；「登记服务形态」只给已有版本补形态。',
           )}`,
+          narrowed: narrowed || pastFirstPage(pagination),
         })}
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />

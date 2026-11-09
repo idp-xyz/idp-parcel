@@ -16,9 +16,14 @@ import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/addre
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { RegistrationPanel, chipClass } from '../../components/registration';
 import { catalogueViewState } from '../catalogue-view';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import {
+  commercialPolicyConditions,
   commercialPolicyLoaders,
   commercialRegistrationEndpoints,
+  listCommercialPolicyPage,
   declarationLandingLabels,
   publicationOutcomeLabels,
   registerCommercial,
@@ -43,15 +48,7 @@ import { pricePolicyDraftFromRecord } from './price-policy-form';
 import { settlementPolicyDraftFromRecord } from './settlement-policy-form';
 import { useVisited } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
-import {
-  groupedByObject,
-  hasVersionStatus,
-  matchesVersionStatus,
-  versionCountSummary,
-  versionStatusCounts,
-  type VersionFacts,
-  type VersionStatusFilter,
-} from './version-groups';
+import { groupedByObject, versionPoolOf, type VersionFacts, type VersionStatusFilter } from './version-groups';
 import { useNameDirectory, withRefLinks } from './RefLink';
 import type { NameDirectory } from './ref-links';
 import {
@@ -70,7 +67,7 @@ import { PricePolicyPublicationForm } from './PricePolicyPublicationForm';
 import { AcceptanceRulePackagePublicationForm } from './AcceptanceRulePackagePublicationForm';
 import { PreAcceptanceFinancialControlPolicyPublicationForm } from './PreAcceptanceFinancialControlPolicyPublicationForm';
 import { CustomerServiceRulePublicationForm } from './CustomerServiceRulePublicationForm';
-import { kindColumns, rowsOf, type PolicyRow, type PolicySource } from './policy-rows';
+import { kindColumns, policyKindHasVersionStatus, policyListConditions, rowsOf, type PolicyRow, type PolicySource } from './policy-rows';
 import {
   commercialPolicyKinds,
   policyKindLabels,
@@ -138,25 +135,28 @@ function PolicyRegisters({
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // 每册一个读函数（commercialPolicyLoaders）：换册就是另一份缓存，上一册的答案不会显在这一册下。
-  const { answer, retry, pending } = useRegisterList(commercialPolicyLoaders[kind]);
+  // 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：册名是选择器，检索词停稳后下推，「在用 / 其余」只在带状态的
+  // 册下推成 status 维（policy-rows.ts 的 policyKindHasVersionStatus），按对象号翻页（同文件的 policyListConditions）；换册、
+  // 换条件都回第一页。各册检索覆盖哪几格以读口为准。
+  const withStatus = policyKindHasVersionStatus(kind);
+  const conditions = commercialPolicyConditions(kind, policyListConditions(kind, useSettledKeyword(search), statusFilter));
+  const narrowed = catalogueConditionsNarrow(conditions);
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listCommercialPolicyPage);
+  // 这一页可能带着条件、也只是一页，缺同一对象被筛掉或落在页外的版本：右栏的历史与「收尾…」再并进这本册不带条件的那一页（每册
+  // 一个读函数，换册就是另一份缓存）。写口答到后那一页随参与方整域作废自己重取，游标这一页由写后的 retry 重取。
+  const unfiltered = useRegisterList(commercialPolicyLoaders[kind]);
   useRetryWhenChanged(externalReloadKey, retry);
   // 行里的币种经 currencyLabel 译名；订阅名表只为名表读回时重绘这些行。
   useRefdataNames();
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
-  const needle = search.trim().toLowerCase();
-  const searchedRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  // 同一对象的各版排在一起、新版在上（声明类两册按所属版本）；只有带状态的册才有「在用」筛选（票 party-commercial-uiux/08）。
-  const withStatus = hasVersionStatus(rows, (row) => row.version);
-  const visibleRows = groupedByObject(
-    searchedRows.filter((row) => !withStatus || matchesVersionStatus(policyFacts(row), statusFilter)),
-    policyFacts,
-  );
-  const closable = closableKeys(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []);
+  const unfilteredBody = unfiltered.answer?.kind === 'outcome' ? unfiltered.answer.body : null;
+  // 同一对象的各版排在一起、新版在上（声明类两册按所属版本，票 party-commercial-uiux/08）。
+  const visibleRows = groupedByObject(rows, policyFacts);
+  const pool = versionPoolOf(rows, unfilteredBody ? rowsOf(unfilteredBody) : [], (row) => row.key);
+  const closable = closableKeys([
+    ...(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []),
+    ...(unfilteredBody ? policyKnownVersions(unfilteredBody) : []),
+  ]);
   // 目录表与右栏详情用同一份列（引用链接与状态徽章已套好）；工作台的列按 key 认，照列的 id 搬过来。九本册列形各异，
   // 右栏打开时统一只留前三列（对象、版本与状态一类的主身份列），其余收起。
   const detailColumns = withRefLinks(withStatusBadge(kindColumns[kind]), directory);
@@ -166,8 +166,7 @@ function PolicyRegisters({
     render: column.render,
     hideWhenDetailOpen: index >= 3,
   }));
-  const historyPool = rows.flatMap((row) => (row.source ? [row.source.record] : []));
-  const answered = answer?.kind === 'outcome';
+  const historyPool = pool.flatMap((row) => (row.source ? [row.source.record] : []));
 
   return (
     <>
@@ -176,7 +175,7 @@ function PolicyRegisters({
         viewStateKey={`commercial-policies:${kind}`}
         subtitle={policyKindSources[kind]}
         onRefresh={retry}
-        refreshing={pending}
+        refreshing={answer === null}
         primaryAction={
           mayWrite ? (
             <Button variant="default" className={primaryActionClass} onClick={onOpenPublish}>
@@ -184,14 +183,10 @@ function PolicyRegisters({
             </Button>
           ) : undefined
         }
-        search={{ value: search, onChange: setSearch, placeholder: '搜规则编号、服务产品、客户合同' }}
-        extraFilters={
-          answered && withStatus ? (
-            <VersionStatusChips counts={versionStatusCounts(rows, policyFacts)} value={statusFilter} onChange={setStatusFilter} />
-          ) : undefined
-        }
-        // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
-        toolbarRight={answered ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined}
+        search={{ value: search, onChange: setSearch, placeholder: '搜编号、版本或引用' }}
+        // 带状态的册胶囊常摆：筛空了也要能点回「全部」。
+        extraFilters={withStatus ? <VersionStatusChips value={statusFilter} onChange={setStatusFilter} /> : undefined}
+        toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
         columns={workbenchColumns}
         rows={visibleRows}
         rowKey={(row) => row.key}
@@ -203,7 +198,7 @@ function PolicyRegisters({
           setStatusFilter('all');
         }}
         renderDetail={(key) => {
-          const row = rows.find((candidate) => candidate.key === key);
+          const row = pool.find((candidate) => candidate.key === key);
           if (!row) return null;
           const target = policyClosureTarget(row.source);
           return (
@@ -221,7 +216,7 @@ function PolicyRegisters({
               history={(record) => (record.source ? versionHistoryOf(historyPool, record.source.record) : [])}
               currentVersion={(record) => record.version?.version ?? ''}
               onSelectVersion={(version) => {
-                const next = rows.find((candidate) => candidate.version?.objectId === row.version?.objectId && candidate.version?.version === version);
+                const next = pool.find((candidate) => candidate.version?.objectId === row.version?.objectId && candidate.version?.version === version);
                 if (next) setSelectedKey(next.key);
               }}
               readOnly={!mayWrite}
@@ -262,6 +257,7 @@ function PolicyRegisters({
           endpoint: `GET /commercial-policies?kind=${kind}`,
           emptyTitle: `还没有任何${policyKindLabels[kind]}`,
           emptyDescription: '这本册还是空的；用页头的「发布新版本」发布第一版。',
+          narrowed: narrowed || pastFirstPage(pagination),
         })}
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />

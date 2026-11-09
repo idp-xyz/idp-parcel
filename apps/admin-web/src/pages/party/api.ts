@@ -44,6 +44,7 @@ export interface DeliveryConditionRecord {
 export interface ServiceProductListResponseBody {
   outcome: 'SERVICE_PRODUCTS_LISTED';
   products: ServiceProductRecord[];
+  page: CataloguePage;
 }
 
 export type CommercialPolicyKind =
@@ -259,8 +260,8 @@ export interface CustomerServiceRuleRecord extends VersionClosureEcho {
 }
 
 // 响应体按 kind 判别:各册子的行形状互不相同(传输层注释原话),合成一个字段并集
-// 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
-export type CommercialPolicyListResponseBody =
+// 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。page 各种共用一格。
+export type CommercialPolicyListResponseBody = { page: CataloguePage } & (
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'ACCEPTANCE_RULE_PACKAGE'; policies: RulePackageRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRE_ACCEPTANCE_CONTROL'; policies: PreAcceptanceControlRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRICE_POLICY'; policies: PricePolicyRecord[] }
@@ -273,7 +274,8 @@ export type CommercialPolicyListResponseBody =
       kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
       policies: PreAcceptanceFinancialControlPolicyRecord[];
     }
-  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CUSTOMER_SERVICE_RULE'; policies: CustomerServiceRuleRecord[] };
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CUSTOMER_SERVICE_RULE'; policies: CustomerServiceRuleRecord[] }
+);
 
 export interface ControlBindingRecord {
   chargeScope: string;
@@ -305,6 +307,7 @@ export interface CustomerContractRecord extends VersionClosureEcho {
 export interface CustomerContractListResponseBody {
   outcome: 'CUSTOMER_CONTRACTS_LISTED';
   contracts: CustomerContractRecord[];
+  page: CataloguePage;
 }
 
 // 供应商协议册（0021 正文；读口逐键透出见后端 supplierAgreementBody 注释，票 admin-write-faces/19 在这里镜像）。
@@ -339,6 +342,7 @@ export interface SupplierAgreementRecord {
 export interface SupplierAgreementListResponseBody {
   outcome: 'SUPPLIER_AGREEMENTS_LISTED';
   agreements: SupplierAgreementRecord[];
+  page: CataloguePage;
 }
 
 // 法人身份层在答复里的四格（ADR-0145 决定一、二；后端 identityLayerBody，目录行与修订历史行共用）。
@@ -379,6 +383,7 @@ export interface RegistrationNumberTypeRecord {
 export interface RegistrationNumberTypeListResponseBody {
   outcome: string;
   registrationNumberTypes: RegistrationNumberTypeRecord[];
+  page: CataloguePage;
 }
 
 // 法人资料（ADR-0145 决定三；后端 legalEntityProfileRevisionBody 与 legalEntityProfileEffectiveRevisionBody）：修订历史行、
@@ -535,6 +540,7 @@ export interface GroupLegalEntityRecord extends IdentityLayerRecord {
 export interface GroupLegalEntityListResponseBody {
   outcome: 'GROUP_LEGAL_ENTITIES_LISTED';
   entities: GroupLegalEntityRecord[];
+  page: CataloguePage;
 }
 
 // 责任法人修订链上的一笔（票 admin-web-group-legal-entities/03；后端 legalEntityRevisionBody）。与目录行
@@ -591,6 +597,7 @@ export interface PartyRelationshipRecord {
 export interface PartyRelationshipListResponseBody {
   outcome: 'PARTY_RELATIONSHIPS_LISTED';
   relationships: PartyRelationshipRecord[];
+  page: CataloguePage;
 }
 
 // 参与方身份本体册（票 admin-remainder-mechanism-batch/01 的补格裁定）。它与法人册、
@@ -634,6 +641,7 @@ export interface BusinessPartyRecord extends BusinessPartyIdentificationRecord {
 export interface BusinessPartyListResponseBody {
   outcome: 'BUSINESS_PARTIES_LISTED';
   parties: BusinessPartyRecord[];
+  page: CataloguePage;
 }
 
 // 业务参与方修订链上的一笔（票 admin-web-group-legal-entities/12；后端 businessPartyRevisionBody）。与目录行
@@ -707,6 +715,7 @@ export interface ProductChannelMappingRecord {
 export interface ProductChannelMappingListResponseBody {
   outcome: 'PRODUCT_CHANNEL_MAPPINGS_LISTED';
   mappings: ProductChannelMappingRecord[];
+  page: CataloguePage;
 }
 
 /** 一个映射的整条修订链，按修订号升序；顶层回显映射标识，供抽屉核对答的是不是此刻问的那个映射。 */
@@ -725,16 +734,46 @@ export function listProductChannelMappingRevisions(
   );
 }
 
-export function listServiceProducts(): Promise<ApiResult<ServiceProductListResponseBody>> {
-  return exchangeMasterData<ServiceProductListResponseBody>('/commercial-service-products');
+// 本文件的目录读口都已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：收条件与游标，答复带 page。两样都可缺——缺即
+// 第一页、缺省序、不筛，表单候选与名称转写这些不翻页的调用方照旧拿到第一页。可排维与筛选维以读口的声明为准，这里不抄一份。
+export function listServiceProducts(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ServiceProductListResponseBody>> {
+  return exchangeMasterData<ServiceProductListResponseBody>(
+    catalogueRequestPath('/commercial-service-products', conditions, after),
+  );
 }
 
+/**
+ * 策略目录一问的条件。kind 是册子选择器（ADR-0144 决定四）：保持原义、不兼作筛选维，但与检索、筛选、排序并在同一组条件里——
+ * 游标摘要覆盖它，页面的条件签名也就覆盖它，换册即回第一页。
+ */
+export type CommercialPolicyConditions = CatalogueConditions & {
+  readonly selectors: { readonly kind: CommercialPolicyKind };
+};
+
+export function commercialPolicyConditions(
+  kind: CommercialPolicyKind,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): CommercialPolicyConditions {
+  return { ...conditions, selectors: { kind } };
+}
+
+export function listCommercialPolicyPage(
+  conditions: CommercialPolicyConditions,
+  after: string | null = null,
+): Promise<ApiResult<CommercialPolicyListResponseBody>> {
+  return exchangeMasterData<CommercialPolicyListResponseBody>(
+    catalogueRequestPath('/commercial-policies', conditions, after),
+  );
+}
+
+/** 某一种的第一页、缺省序、不筛：表单候选与已知版本用它。 */
 export function listCommercialPolicies(
   kind: CommercialPolicyKind,
 ): Promise<ApiResult<CommercialPolicyListResponseBody>> {
-  return exchangeMasterData<CommercialPolicyListResponseBody>(
-    `/commercial-policies?kind=${encodeURIComponent(kind)}`,
-  );
+  return listCommercialPolicyPage(commercialPolicyConditions(kind));
 }
 
 /**
@@ -758,19 +797,34 @@ export const commercialPolicyLoaders: {
 // 合同与协议各走自己的路径,不并进 /commercial-policies 的 kind 分派:那个参数分的是
 // 「商业规则与策略」一页里的五个页签,而这两样是管理台上两张独立的页(裁决与理由在
 // 后端 query_commercial_relations.go 的文件注释)。
-export function listCustomerContracts(): Promise<ApiResult<CustomerContractListResponseBody>> {
-  return exchangeMasterData<CustomerContractListResponseBody>('/commercial-customer-contracts');
+export function listCustomerContracts(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<CustomerContractListResponseBody>> {
+  return exchangeMasterData<CustomerContractListResponseBody>(
+    catalogueRequestPath('/commercial-customer-contracts', conditions, after),
+  );
 }
 
-export function listSupplierAgreements(): Promise<ApiResult<SupplierAgreementListResponseBody>> {
-  return exchangeMasterData<SupplierAgreementListResponseBody>('/commercial-supplier-agreements');
+export function listSupplierAgreements(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<SupplierAgreementListResponseBody>> {
+  return exchangeMasterData<SupplierAgreementListResponseBody>(
+    catalogueRequestPath('/commercial-supplier-agreements', conditions, after),
+  );
 }
 
 // 集团与法人、业务参与方各走自己的路径，判据与合同/协议同一条：管理台上两张独立的
 // 页一页一入口，且两册的状态代数不同（身份状态按时点导出、关系状态是登记事实），
 // 折进一个带 kind 的入口会让两种状态在同一响应形状里相互冒充。
-export function listGroupLegalEntities(): Promise<ApiResult<GroupLegalEntityListResponseBody>> {
-  return exchangeMasterData<GroupLegalEntityListResponseBody>('/commercial-group-legal-entities');
+export function listGroupLegalEntities(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<GroupLegalEntityListResponseBody>> {
+  return exchangeMasterData<GroupLegalEntityListResponseBody>(
+    catalogueRequestPath('/commercial-group-legal-entities', conditions, after),
+  );
 }
 
 // 修订历史按法人取，法人标识在路径上而不在查询串：它定位的是资源本身（这个法人的历史），不是在一份列表上
@@ -811,18 +865,33 @@ export function resolveLegalEntityProfile(
   );
 }
 
-// 法人登记表单的国家与号类型候选从这里取（票 legal-entity-profile/04 第 1 项）。只是候选：目录里有没有这一国家、
-// 号合不合那一类的格式，登记时由服务端按目录判（ADR-0145 决定一），表单不据此拦。
-export function listRegistrationNumberTypes(): Promise<ApiResult<RegistrationNumberTypeListResponseBody>> {
-  return exchangeMasterData<RegistrationNumberTypeListResponseBody>('/commercial-registration-number-types');
+// 登记表单的国家与号类型候选从这里取（票 legal-entity-profile/04 第 1 项），按层与国家由读口收窄（registration-number-type-
+// candidates.ts）。只是候选：目录里有没有这一国家、号合不合那一类的格式，登记时由服务端按目录判（ADR-0145 决定一），表单不据此拦。
+export function listRegistrationNumberTypes(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<RegistrationNumberTypeListResponseBody>> {
+  return exchangeMasterData<RegistrationNumberTypeListResponseBody>(
+    catalogueRequestPath('/commercial-registration-number-types', conditions, after),
+  );
 }
 
-export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {
-  return exchangeMasterData<PartyRelationshipListResponseBody>('/commercial-party-relationships');
+export function listPartyRelationships(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<PartyRelationshipListResponseBody>> {
+  return exchangeMasterData<PartyRelationshipListResponseBody>(
+    catalogueRequestPath('/commercial-party-relationships', conditions, after),
+  );
 }
 
-export function listBusinessParties(): Promise<ApiResult<BusinessPartyListResponseBody>> {
-  return exchangeMasterData<BusinessPartyListResponseBody>('/commercial-business-parties');
+export function listBusinessParties(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<BusinessPartyListResponseBody>> {
+  return exchangeMasterData<BusinessPartyListResponseBody>(
+    catalogueRequestPath('/commercial-business-parties', conditions, after),
+  );
 }
 
 // 修订历史按参与方取，参与方标识在路径上而不在查询串，与目录口共用同一个 Intake——判据同 listLegalEntityRevisions。
@@ -851,11 +920,12 @@ export function listCustomerAccounts(
 
 // 映射目录不并进 /commercial-service-products：那边上列版本壳（自票 25 起外加一节可缺的产品层交付条件），
 // 这边上列登记册信封（产品×渠道×区间的修订），行形状与修订轴不同（后端读口注释同一条裁决）。
-export function listProductChannelMappings(): Promise<
-  ApiResult<ProductChannelMappingListResponseBody>
-> {
+export function listProductChannelMappings(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ProductChannelMappingListResponseBody>> {
   return exchangeMasterData<ProductChannelMappingListResponseBody>(
-    '/commercial-product-channel-mappings',
+    catalogueRequestPath('/commercial-product-channel-mappings', conditions, after),
   );
 }
 

@@ -10,11 +10,14 @@ import {
   registrationSnapshotHints,
 } from './presentation';
 
+const firstPage = { size: 200, next: null, total: null };
+
 // 输入取后端 query_commercial_catalogue_test.go 里
 // TestPoliciesEndpointTranscribesCreditLimitAsExactlyOneKey 钉住的两行：零金额（开放结束）与比例
 // （带结束）。额度两键恰一在场是后端契约，零额度是合法声明——前端不得把 0 显示成缺席。
 const creditPolicies: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
+  page: firstPage,
   kind: 'CREDIT_POLICY',
   policies: [
     {
@@ -115,6 +118,7 @@ test('接受前财务控制策略册：chip 词表、列集与「谁喂它」都
 // TestPoliciesEndpointTranscribesControlPolicyContentOnlyWhenRegistered 钉住的两行：只有壳、带两项组合正文。
 const controlPolicies: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
+  page: firstPage,
   kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY',
   policies: [
     {
@@ -213,6 +217,7 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
 // 无行的子表是空数组不是缺键。
 const customerServiceRules: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
+  page: firstPage,
   kind: 'CUSTOMER_SERVICE_RULE',
   policies: [
     {
@@ -386,6 +391,7 @@ test('额度两键都缺是响应不合契约，如实点名而不是显示成�
 // 每种形状取一行：带汇率的销售口径、不涉外币且税务不适用的采购口径、只有正文没有口径的行。可缺的键缺席即「没有」，不是空串。
 const pricePolicies: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
+  page: firstPage,
   kind: 'PRICE_POLICY',
   policies: [
     {
@@ -497,6 +503,7 @@ test('信用政策的责任法人交引用原值', () => {
 test('结算政策的币种列译名，目录读不回或码在目录之外时原样显示', () => {
   const body: CommercialPolicyListResponseBody = {
     outcome: 'COMMERCIAL_POLICIES_LISTED',
+    page: firstPage,
     kind: 'SETTLEMENT_POLICY',
     policies: [
       {

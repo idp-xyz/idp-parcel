@@ -6,7 +6,6 @@ import { RegistrationAnswerNote, RegistrationPanel, type RegistrationPanelState 
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
-  listRegistrationNumberTypes,
   partyIdentityOutcomeLabels,
   registerCommercial,
   type BusinessPartyListResponseBody,
@@ -24,6 +23,7 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import { advancedGroupOpen } from './registration-form';
+import { listIdentityRegistrationNumberTypes, useRegistrationNumberTypeCandidates } from './registration-number-type-candidates';
 import { businessPartyPayloadOf } from './business-party-form';
 import {
   companionPartyIdOf,
@@ -111,8 +111,11 @@ export function LegalEntityRegistrationForm({
   }, [onUnsavedChange, unsaved]);
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
-  // 国家与号类型的候选读一次：一张表单里国家格与每一行的类型格共用这一份目录答案。
-  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
+  // 国家候选读身份层类型那一问，每一行的类型格共用按注册地收窄的那一问（registration-number-type-candidates.ts）。还没选注册地时
+  // 类型格交国家那一问：它答了，按空国家挑出零项，显「先选注册地」那句。
+  const identityTypes = useLoaded(listIdentityRegistrationNumberTypes);
+  const countryTypes = useRegistrationNumberTypeCandidates('IDENTITY', draft.registrationCountry);
+  const typeCandidates = draft.registrationCountry.trim() === '' ? identityTypes : countryTypes;
   // 参与方册读一次：选已有档案的下拉与一并登记那组的「编码已在册」提示共用这一份。
   const partyCatalogue = useLoaded(listBusinessParties);
   const knownParties = partyCatalogue?.kind === 'outcome' ? partyCatalogue.body.parties : null;
@@ -204,7 +207,7 @@ export function LegalEntityRegistrationForm({
             </Field>
 
             <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
-              answer={typeCatalogue}
+              answer={identityTypes}
               label="注册地（国家 / 地区）*"
               path="legalEntities[0].registrationCountry"
               problems={problems}
@@ -313,7 +316,7 @@ export function LegalEntityRegistrationForm({
                 {draft.lifetimeNumbers.map((row, index) => (
                   <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-start gap-3">
                     <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
-                      answer={typeCatalogue}
+                      answer={typeCandidates}
                       label={`类型（第 ${index + 1} 行）`}
                       path={`legalEntities[0].lifetimeRegistrationNumbers[${index}].typeCode`}
                       problems={problems}

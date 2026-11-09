@@ -31,7 +31,8 @@ import {
 } from './presentation';
 import type { RowRefs } from './ref-links';
 import { judgmentTypeLabels, ruleCategoryLabels } from './acceptance-rule-package-form';
-import type { VersionFacts } from './version-groups';
+import type { CatalogueConditions } from '../catalogue-query';
+import { versionListConditions, type VersionFacts, type VersionStatusFilter } from './version-groups';
 
 /**
  * 这一行对应的读口记录，按册判别（票 party-commercial-uiux/14）：「发新版本」要从记录还原发布表单的草稿，行上只有转写好的
@@ -503,4 +504,27 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
         refs: serviceRuleRefs(record),
       }));
   }
+}
+
+// 各册按对象号翻页，同一对象的各版才不被页界拆开；随所属版本发布的两本册按所挂靠的合同、规则包对象号（读口各自声明的维名）。
+const policyGroupSorts: Record<CommercialPolicyKind, string> = {
+  ACCEPTANCE_RULE_PACKAGE: 'objectId',
+  PRE_ACCEPTANCE_CONTROL: 'contractObjectId',
+  PRICE_POLICY: 'objectId',
+  SETTLEMENT_POLICY: 'objectId',
+  AS_OF_POLICY: 'rulePackageObjectId',
+  AUTHORIZATION_RULE: 'objectId',
+  CREDIT_POLICY: 'objectId',
+  PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: 'objectId',
+  CUSTOMER_SERVICE_RULE: 'objectId',
+};
+
+/** 以版本壳为行的三本册：读面带状态，读口也只给它们声明了 status 维；别的册带上它答 400。 */
+export function policyKindHasVersionStatus(kind: CommercialPolicyKind): boolean {
+  return kind === 'AUTHORIZATION_RULE' || kind === 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY' || kind === 'CUSTOMER_SERVICE_RULE';
+}
+
+/** 一本政策册一问的条件（册子选择器由 api.ts 的 commercialPolicyConditions 加上）：检索词、「在用 / 其余」（只带状态的册有）与按对象号排。 */
+export function policyListConditions(kind: CommercialPolicyKind, keyword: string, filter: VersionStatusFilter): CatalogueConditions {
+  return versionListConditions(keyword, policyKindHasVersionStatus(kind) ? filter : 'all', policyGroupSorts[kind]);
 }

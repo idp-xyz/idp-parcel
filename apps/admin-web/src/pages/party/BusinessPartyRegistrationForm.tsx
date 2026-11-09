@@ -3,9 +3,9 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
-import { listRegistrationNumberTypes, partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
+import { partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
 import { problemNote, registrationTitles } from './presentation';
-import { Field, useLoaded } from './PublicationFormFields';
+import { Field } from './PublicationFormFields';
 import { AdvancedGroup, FormGroup, RevisionField, SnapshotJsonDetails, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import { advancedGroupOpen } from './registration-form';
 import {
@@ -69,7 +69,6 @@ export function BusinessPartyRegistrationForm({
 
   // 按原串找而不裁空白：载荷也不裁，" X" 送上去就是另一个身份，这里若裁了就会把它说成「已在册」。
   const known = knownParties?.find((row) => row.partyId === draft.partyId);
-  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
   // 高级组：null 即操作者还没点过，按 advancedGroupOpen 的缺省走（编码已在册时展开——这一笔是更新，让人看见序号）。
   const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
   const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, known !== undefined);
@@ -147,7 +146,6 @@ export function BusinessPartyRegistrationForm({
               patch={patch}
               problems={problems}
               locked={locked}
-              typeCatalogue={typeCatalogue}
               notice={
                 known && identificationChanged(known, draft)
                   ? '这个编码已登记过，它已登的注册号或外部编码与本表单不同：保存后以本表单为准，没填的就去掉了。'
