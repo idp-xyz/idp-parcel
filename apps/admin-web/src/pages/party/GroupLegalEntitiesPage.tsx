@@ -55,7 +55,9 @@ import { StatusPill } from '../../components/StatusPill';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { useRegisterList } from './register-list';
 import { sortableOr } from './list-order';
+import { completeRegisterRows } from './complete-register';
 import {
+  countLegalEntities,
   defaultLegalEntitySort,
   legalEntityListConditions,
   legalEntityNeedsAttention,
@@ -83,10 +85,14 @@ function emptyDescriptionOf(mayWrite: boolean): string {
 /** 「待处理」胶囊的悬停说明：判据在 legal-entity-list.ts 的 legalEntityNeedsAttention，这里只把它说成运营的话。 */
 const attentionFilterTitle = '注册地或注册号缺失，或关联的往来单位查不到';
 
-// 胶囊不带计数：一页里数出来的不是各状态的总数，按状态的总数读口不给；当前条件下共几家由翻页条说。
+// 胶囊的计数只在整册一页装得下时给（complete-register.ts）：那时按整册数的是真数；装不下时一页里数出来的不是各状态的总数，
+// 不给，当前条件下共几家由翻页条说。
 interface LegalEntityFilterItem {
   label: string;
+  /** 整册里有几家；不给即不显计数。 */
+  count?: number;
   active: boolean;
+  disabled?: boolean;
   /** 悬停说明；只有判据不自明的胶囊（待处理）给。 */
   title?: string;
   onClick: () => void;
@@ -99,13 +105,15 @@ function LegalEntityFilterButton({ item }: { item: LegalEntityFilterItem }) {
       onClick={item.onClick}
       aria-pressed={item.active}
       title={item.title}
-      className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent type-body leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none ${
+      disabled={item.disabled ?? (item.count === 0 && !item.active)}
+      className={`inline-flex h-[34px] items-center gap-1 whitespace-nowrap border-y-2 border-transparent type-body leading-normal transition-colors focus-visible:border-b-idpxyz-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
         item.active
           ? 'border-b-idpxyz-accent font-semibold text-idpxyz-textBright'
           : 'text-idpxyz-breadcrumb hover:text-idpxyz-textBright'
       }`}
     >
       <span>{item.label}</span>
+      {item.count === undefined ? null : <span className="font-medium tabular-nums text-idpxyz-textBright">{item.count}家</span>}
     </button>
   );
 }
@@ -260,7 +268,8 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
  * 详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。登记从页头主动作进登记视图，不再是第二个签。
  *
  * 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/11）：检索词、状态、注册地与表头排序下推（legal-entity-list.ts），
- * 翻页走游标，换条件回第一页，翻页条在工具位右端。「待处理」读口筛不了，只筛到手的这一页。参照页有而这里没有的，都是因为册上
+ * 翻页走游标，换条件回第一页，翻页条在工具位右端。「待处理」读口筛不了，在到手的那一页上筛；胶囊计数只在整册一页装得下时给，
+ * 那时「待处理」也是精确的，装不下时它标「只筛本页」（complete-register.ts）。参照页有而这里没有的，都是因为册上
  * 没有对应的事实或端点：批量勾选（没有批量命令端点）、收货 / 证据 / 协作（法人册不承载）。
  *
  * 没有行级编辑或删除面：更正占下一个修订号翻旧插新，停用形成新修订。停用留在业务参与方页——那一页读得最全，
@@ -290,8 +299,8 @@ export function GroupLegalEntitiesPage() {
   const pushedRegister = usePushedAddress();
   const [registerUnsaved, setRegisterUnsaved] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
-  // 登记视图的修订号建议取不带条件的那一页（取数层缓存）；列表按游标翻页、对象页按标识检索，那两处都不问它。
-  const register = useRegisterList(listGroupLegalEntities, { enabled: view.kind === 'register' });
+  // 登记视图的修订号建议取不带条件的那一页（取数层缓存，列表视图的计数读同一份）；对象页按标识检索，不问它。
+  const register = useRegisterList(listGroupLegalEntities, { enabled: view.kind !== 'object' });
   // 注册号类型目录读一次，给「注册地与注册号」列把类型码译成名。读不到（未配置、拒绝、故障）就按码显，不报错、不挡列表：
   // 译名是锦上添花，号本身在答复里。与资料版本的对比表同一份缓存（useLoaded 按读函数认），再开这一页时译名与表同一帧出来。
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
@@ -475,7 +484,15 @@ function LegalEntityListView({
   const pageEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
   const entities = pageEntities ?? [];
   const visible = attentionOnly ? entities.filter(legalEntityNeedsAttention) : entities;
-  const registrationCountries = registrationCountryOptions(types, entities, registrationCountry);
+  // 不带条件的那一页（取数层缓存，登记表单与引用名目录读的同一份）：整册一页装得下时按它计数，「待处理」这时也是精确的
+  // （complete-register.ts）；装不下就不显计数，「待处理」标「只筛本页」。
+  const unfiltered = useRegisterList(listGroupLegalEntities);
+  const completeEntities = completeRegisterRows(
+    unfiltered.answer?.kind === 'outcome' ? unfiltered.answer.body : null,
+    (body) => body.entities,
+  );
+  const counts = completeEntities === null ? null : countLegalEntities(completeEntities);
+  const registrationCountries = registrationCountryOptions(types, completeEntities ?? entities, registrationCountry);
 
   // 右栏的三种读预先读好（legal-entity-reads.ts）：这一页取回后先把前若干行读进取数层的缓存，选中一行后再把它在当前
   // 次序下的上下邻行读好——点哪一行、方向键走到哪一行，右栏都直接显，不再先清空成「正在读取」再撑开。前若干行之外的行点到
@@ -496,22 +513,26 @@ function LegalEntityListView({
   const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
   const allFilter: LegalEntityFilterItem = {
     label: '全部',
+    count: counts?.total,
     active: status === 'ALL' && !attentionOnly,
+    disabled: false,
     onClick: () => {
       setStatus('ALL');
       setAttentionOnly(false);
     },
   };
-  const attentionFilter: LegalEntityFilterItem = {
-    label: '待处理（只筛本页）',
-    active: attentionOnly,
-    title: `${attentionFilterTitle}。读口筛不了这一项，只在当前这一页上筛，翻页后照新的一页再筛。`,
-    onClick: () => setAttentionOnly(!attentionOnly),
-  };
+  const attentionFilter: LegalEntityFilterItem = counts
+    ? { label: '待处理', count: counts.attention, active: attentionOnly, title: attentionFilterTitle, onClick: () => setAttentionOnly(!attentionOnly) }
+    : {
+        label: '待处理（只筛本页）',
+        active: attentionOnly,
+        title: `${attentionFilterTitle}。读口筛不了这一项，只在当前这一页上筛，翻页后照新的一页再筛。`,
+        onClick: () => setAttentionOnly(!attentionOnly),
+      };
   const statusItems: LegalEntityFilterItem[] = [
-    { label: '待生效', active: status === 'REGISTERED', onClick: () => toggleStatus('REGISTERED') },
-    { label: '已生效', active: status === 'EFFECTIVE', onClick: () => toggleStatus('EFFECTIVE') },
-    { label: '已停用', active: status === 'DEACTIVATED', onClick: () => toggleStatus('DEACTIVATED') },
+    { label: '待生效', count: counts?.byStatus.REGISTERED, active: status === 'REGISTERED', onClick: () => toggleStatus('REGISTERED') },
+    { label: '已生效', count: counts?.byStatus.EFFECTIVE, active: status === 'EFFECTIVE', onClick: () => toggleStatus('EFFECTIVE') },
+    { label: '已停用', count: counts?.byStatus.DEACTIVATED, active: status === 'DEACTIVATED', onClick: () => toggleStatus('DEACTIVATED') },
   ];
   const hasActiveFilters = search.length > 0 || status !== 'ALL' || registrationCountry !== 'ALL' || attentionOnly;
   const clearFilters = () => {
@@ -527,7 +548,10 @@ function LegalEntityListView({
       title={info.title}
       viewStateKey="legal-entities"
       subtitle="我们自己签约、开票、结算用的公司"
-      onRefresh={retry}
+      onRefresh={() => {
+        retry();
+        unfiltered.retry();
+      }}
       refreshing={answer === null}
       primaryAction={
         <>
@@ -595,7 +619,7 @@ function LegalEntityListView({
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
       noMatchText={
-        attentionOnly && entities.length > 0
+        counts === null && attentionOnly && entities.length > 0
           ? '这一页上没有待处理的公司主体；只筛本页的条件不看其余几页，翻页看看'
           : legalEntityNoMatchNote
       }

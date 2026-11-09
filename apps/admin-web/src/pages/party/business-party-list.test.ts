@@ -7,6 +7,8 @@ import {
   businessPartyPanelTabsOf,
   businessPartyRegistrationCountry,
   businessPartyTypeFilterOptions,
+  businessPartyTypeKpis,
+  countBusinessParties,
   partyRegistrationCountriesOf,
   shownBusinessPartyPanelTab,
   businessPartyNoMatchNote,
@@ -257,4 +259,35 @@ test('shownBusinessPartyPanelTab 记下的签这一行没有就显概要', () =>
   equal(shownBusinessPartyPanelTab('contacts', businessPartyPanelTabsOf(true)), 'summary');
   equal(shownBusinessPartyPanelTab('overview', businessPartyPanelTabsOf(true)), 'overview');
   equal(shownBusinessPartyPanelTab('contacts', businessPartyPanelTabsOf(false)), 'contacts');
+});
+
+// Covers: 计数（只在整册到手时用，complete-register.ts）按状态、角色、我方公司与「暂无合作关系」分格；词表之外的状态码不进任何格
+// 也不抛。指标格只出有数的类型：我方公司在角色之前、角色按词表序、「暂无合作关系」在最后。
+test('countBusinessParties 与类型指标格', () => {
+  const plain = countBusinessParties(rows);
+  equal(plain.total, 4);
+  deepEqual(plain.byStatus, { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 });
+  equal(plain.withoutRole, 4);
+  deepEqual(countBusinessParties([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
+
+  const index = indexPartyRoles([
+    relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' }),
+    relationship({ relationshipId: 'R2', holderId: 'SYN-PARTY-AGENT-04', role: 'CARRIER_AGENT' }),
+  ]);
+  const ours = ourCompanyPartyIds([legalEntity({})]);
+  const counts = countBusinessParties(rows, index, ours);
+  equal(counts.ours, 1);
+  equal(counts.byRole.CUSTOMER, 1);
+  equal(counts.byRole.CARRIER_AGENT, 1);
+  equal(counts.withoutRole, 2);
+  deepEqual(
+    businessPartyTypeKpis(counts).map((cell) => [cell.type, cell.label, cell.count]),
+    [
+      ['OURS', '我方公司', 1],
+      ['CUSTOMER', '客户', 1],
+      ['CARRIER_AGENT', '承运商代理', 1],
+      ['NONE', '暂无合作关系', 2],
+    ],
+  );
+  deepEqual(businessPartyTypeKpis(countBusinessParties([], index, ours)), []);
 });

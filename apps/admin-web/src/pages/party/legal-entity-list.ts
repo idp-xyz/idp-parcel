@@ -3,7 +3,8 @@
 //
 // 检索、状态与注册地筛选、表头排序下推到目录读口（ADR-0144；读口的可排维与筛选维由后端 GroupLegalEntityPages 声明）：
 // legalEntityListConditions 编条件，页面按游标翻页。读口按法人标识、参与方标识与名称、注册地与注册号检索；状态词不在其内，
-// 要按状态看用状态筛选。「待处理」由身份层与名称转写推出来，读口筛不了，只筛已取回的这一页（legalEntityNeedsAttention）。
+// 要按状态看用状态筛选。「待处理」由身份层与名称转写推出来，读口筛不了，在到手的那一页上筛（legalEntityNeedsAttention）：
+// 整册一页装得下时它是精确的，否则只筛本页（complete-register.ts）。
 
 import type { WorkbenchSort } from '../../templates/workbench';
 import type { CatalogueConditions } from '../catalogue-query';
@@ -69,6 +70,23 @@ export function registrationCountryOptions(
  */
 export function legalEntityNeedsAttention(row: GroupLegalEntityRecord): boolean {
   return !row.identityLayerRegistered || !row.partyNameKnown;
+}
+
+export interface LegalEntityCounts {
+  total: number;
+  byStatus: Record<IdentityStatusCode, number>;
+  attention: number;
+}
+
+/** 工具栏筛选胶囊的计数。只拿整册来数（complete-register.ts 的 completeRegisterRows 判过的那一份）。 */
+export function countLegalEntities(rows: readonly GroupLegalEntityRecord[]): LegalEntityCounts {
+  const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
+  let attention = 0;
+  for (const row of rows) {
+    if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
+    if (legalEntityNeedsAttention(row)) attention += 1;
+  }
+  return { total: rows.length, byStatus, attention };
 }
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */

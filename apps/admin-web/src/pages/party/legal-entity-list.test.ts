@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { GroupLegalEntityRecord, RegistrationNumberTypeRecord } from './api';
 import {
+  countLegalEntities,
   defaultLegalEntitySort,
   legalEntityListConditions,
   legalEntityNeedsAttention,
@@ -118,4 +119,14 @@ test('状态胶囊选项表', () => {
     legalEntityStatusFilterOptions.map((option) => option.label),
     ['全部', '待生效', '已生效', '已停用'],
   );
+});
+
+// Covers: 计数（只在整册到手时用，complete-register.ts）按状态分格、待补单独计；词表之外的状态码不进任何格也不抛。
+test('countLegalEntities 按状态与待补计数', () => {
+  deepEqual(countLegalEntities(rows), {
+    total: 4,
+    byStatus: { REGISTERED: 1, EFFECTIVE: 2, DEACTIVATED: 1 },
+    attention: 2,
+  });
+  deepEqual(countLegalEntities([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
 });

@@ -8,8 +8,9 @@
 // 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表按它称呼；一个角色都没有的显「暂无合作关系」。客户角色另认一处
 // 事实：未停用客户账户的所属客户也持有它（CONTEXT 参与方身份诸句，ADR-0367 决定四）——账户不要求先登客户关系。
 // 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
-// 按法人册算出参与方标识集合，类型列按它称呼，与角色并列显示。类型由这几本册算出，读口筛不了，所以类型筛选只筛已取回的这一页
-// （filterBusinessPartiesByType），控件上如实标出；这几本册各只取不带条件的第一页，角色与我方公司也只按那一页算。
+// 按法人册算出参与方标识集合，类型列按它称呼，与角色并列显示。类型由这几本册算出，读口筛不了，所以类型筛选在到手的那一页上做
+// （filterBusinessPartiesByType）：整册一页装得下时它是精确的，否则只筛本页、控件上如实标出（complete-register.ts）。这几本册
+// 各只取不带条件的第一页，角色与我方公司也只按那一页算。
 
 import type { WorkbenchSort } from '../../templates/workbench';
 import type { CatalogueConditions } from '../catalogue-query';
@@ -204,6 +205,63 @@ export function filterBusinessPartiesByType(
     if (type === 'NONE') return held.length === 0 && !isOurs;
     return held.includes(type);
   });
+}
+
+export interface BusinessPartyCounts {
+  total: number;
+  byStatus: Record<IdentityStatusCode, number>;
+  /** 持有每个角色的参与方数；一个参与方持有两个角色时两格各记一次。 */
+  byRole: Record<PartyRoleCode, number>;
+  /** 法人册上钉着的「我方公司」数；同时持有角色的也各记一次。 */
+  ours: number;
+  /** 既不是我方公司、一个角色都没有的（「往来单位」）。 */
+  withoutRole: number;
+}
+
+/**
+ * 命令头指标与状态胶囊的计数。只拿整册来数（complete-register.ts 的 completeRegisterRows 判过的那一份）：拿一页来数，数出来的
+ * 不是册上的数。本册没有「待补」一格：参与方册是名称的来源，没有转写不到的格；身份层两格是法人册的事。所以按状态与角色分格。
+ */
+export function countBusinessParties(
+  rows: readonly BusinessPartyRecord[],
+  roles: PartyRoleIndex = emptyPartyRoleIndex,
+  ours: OurCompanyIndex = emptyOurCompanyIndex,
+): BusinessPartyCounts {
+  const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
+  const byRole = Object.fromEntries(Object.keys(partyRoleLabels).map((role) => [role, 0])) as Record<PartyRoleCode, number>;
+  let oursCount = 0;
+  let withoutRole = 0;
+  for (const row of rows) {
+    if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
+    const held = rolesOfParty(roles, row.partyId);
+    const isOurs = ours.has(row.partyId);
+    if (isOurs) oursCount += 1;
+    if (held.length === 0 && !isOurs) withoutRole += 1;
+    for (const role of held) byRole[role] += 1;
+  }
+  return { total: rows.length, byStatus, byRole, ours: oursCount, withoutRole };
+}
+
+/** 命令头上按类型分的一格指标：筛选值、词与计数。 */
+export interface BusinessPartyTypeKpi {
+  type: Exclude<BusinessPartyTypeFilter, 'ALL'>;
+  label: string;
+  count: number;
+}
+
+/**
+ * 命令头按类型分格的指标（票 business-party-ux/05）：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。
+ * 计数为零的类型不出格——它筛出来必然为空。整册到手时类型筛选只有这一个入口，工具条不另放同义的类型下拉；待生效与已停用两格
+ * 也不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
+ */
+export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPartyTypeKpi[] {
+  const cells: BusinessPartyTypeKpi[] = [];
+  if (counts.ours > 0) cells.push({ type: 'OURS', label: ourCompanyLabel, count: counts.ours });
+  for (const role of Object.keys(partyRoleLabels) as PartyRoleCode[]) {
+    if (counts.byRole[role] > 0) cells.push({ type: role, label: partyRoleLabels[role], count: counts.byRole[role] });
+  }
+  if (counts.withoutRole > 0) cells.push({ type: 'NONE', label: partyTypeFallbackLabel, count: counts.withoutRole });
+  return cells;
 }
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
