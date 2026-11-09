@@ -1,8 +1,8 @@
 import { test } from 'node:test';
-import { equal } from 'node:assert/strict';
+import { deepEqual, equal } from 'node:assert/strict';
 import { moduleInfoById } from '../../navigation';
 import { catalogueConditionsQuery } from '../catalogue-query';
-import { workDeviceConditions, workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
+import { countWorkDevices, workDeviceConditions, workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
 
 test('状态与作业范围经词典译成一线的词，集外取值原样显示', () => {
   equal(workDeviceStatusLabel('REGISTERED'), '在用');
@@ -70,4 +70,14 @@ test('带条件的零行不是册空', () => {
 test('状态胶囊与检索词拼成读口的条件', () => {
   equal(catalogueConditionsQuery(workDeviceConditions({ search: '', status: 'ALL' })), '');
   equal(catalogueConditionsQuery(workDeviceConditions({ search: ' sha-hub ', status: 'DEACTIVATED' })), 'status=DEACTIVATED&q=sha-hub');
+});
+
+// Covers: 胶囊与页头的计数按整册分状态数（整册由 completeRegisterRows 判过才交进来）。
+test('countWorkDevices 按状态计数', () => {
+  const row = (deviceId: string, status: string) => ({ deviceId, workScopeKind: 'NODE', workScopeRef: 'SYN-NODE-01', status });
+  deepEqual(countWorkDevices([row('D1', 'REGISTERED'), row('D2', 'DEACTIVATED'), row('D3', 'REGISTERED')]), {
+    ALL: 3,
+    REGISTERED: 2,
+    DEACTIVATED: 1,
+  });
 });

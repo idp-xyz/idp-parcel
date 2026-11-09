@@ -3,7 +3,7 @@ import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState } from '../catalogue-view';
 import type { ApiResult } from '../catalogue-api';
 import type { CatalogueConditions } from '../catalogue-query';
-import type { WorkDeviceListResponseBody } from './api';
+import type { WorkDeviceListResponseBody, WorkDeviceRecord } from './api';
 
 import { labelFor } from '../../vocabulary/status';
 
@@ -42,6 +42,18 @@ export type WorkDeviceStatusFilter = 'ALL' | 'REGISTERED' | 'DEACTIVATED';
 export interface WorkDeviceFilter {
   search: string;
   status: WorkDeviceStatusFilter;
+}
+
+/**
+ * 胶囊与页头「共 N 台，在用 N 台」的计数。只拿整册来数（complete-register.ts 的 completeRegisterRows 判过的那一份）：拿一页来数，
+ * 数出来的不是册上的数。
+ */
+export function countWorkDevices(devices: readonly WorkDeviceRecord[]): Record<WorkDeviceStatusFilter, number> {
+  return {
+    ALL: devices.length,
+    REGISTERED: devices.filter((row) => row.status === 'REGISTERED').length,
+    DEACTIVATED: devices.filter((row) => row.status === 'DEACTIVATED').length,
+  };
 }
 
 /**

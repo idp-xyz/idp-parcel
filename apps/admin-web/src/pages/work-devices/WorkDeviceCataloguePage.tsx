@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorContent } from '../../templates/inspector';
 import { moduleInfoById } from '../../navigation';
@@ -8,10 +8,13 @@ import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { labelFor } from '../../vocabulary/status';
-import { listWorkDevices, type WorkDeviceRecord } from './api';
+import { listWorkDevices, type WorkDeviceListResponseBody, type WorkDeviceRecord } from './api';
+import type { ApiResult } from '../catalogue-api';
+import { completeRegisterRows } from '../complete-register';
 import { StatusPill } from '../../components/StatusPill';
 import {
   WORK_DEVICE_SCOPE,
+  countWorkDevices,
   workDeviceConditions,
   workDeviceStatusLabel,
   workDeviceViewState,
@@ -89,8 +92,9 @@ const statusFilters: ReadonlyArray<{ id: WorkDeviceStatusFilter; label: string }
  * 不做设备管理，不扫描现场。登记与停用走受控登记口，本页没有写入口。
  *
  * 按游标翻页（ADR-0144，票 catalogue-read-pagination-rollout/14），次序是读口的缺省序（设备号）：检索词停稳后下推成 q，状态胶囊
- * 下推成 status 一维（presentation 的 workDeviceConditions）。胶囊不带计数、页头不再报「在用 N 台」——到手的只是一页，页上数出来的
- * 不是整册；整册条数在翻页条上（答复的 total，随胶囊与检索变）。
+ * 下推成 status 一维（presentation 的 workDeviceConditions）。胶囊计数与页头「共 N 台，在用 N 台」只在整册一页装得下时摆
+ * （complete-register.ts）：另取一次不带条件的第一页，它已是整册就按它数；装不下就不摆——到手的只是一页，页上数出来的不是整册，
+ * 那时条数看翻页条（答复的 total，随胶囊与检索变）。
  */
 export function WorkDeviceCataloguePage() {
   const [search, setSearch] = useState('');
@@ -98,6 +102,18 @@ export function WorkDeviceCataloguePage() {
   const conditions = workDeviceConditions({ search: useSettledKeyword(search), status });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listWorkDevices);
   const devices = answer?.kind === 'outcome' ? answer.body.devices : [];
+  const [whole, setWhole] = useState<ApiResult<WorkDeviceListResponseBody> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void listWorkDevices().then((next) => {
+      if (!cancelled) setWhole(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const complete = completeRegisterRows(whole?.kind === 'outcome' ? whole.body : null, (body) => body.devices);
+  const counts = complete === null ? null : countWorkDevices(complete);
 
   return (
     <ListPageTemplate<WorkDeviceRecord>
@@ -117,12 +133,13 @@ export function WorkDeviceCataloguePage() {
                 aria-pressed={filter.id === status}
                 onClick={() => setStatus(filter.id === status ? 'ALL' : filter.id)}
               >
-                {filter.label}
+                {counts === null ? filter.label : `${filter.label} ${counts[filter.id]}`}
               </button>
             ))}
           </>
         ) : undefined
       }
+      filterSummary={counts === null ? undefined : `共 ${counts.ALL} 台，在用 ${counts.REGISTERED} 台`}
       emptyRowsNote="当前筛选条件下没有匹配的设备"
       columns={columns}
       rows={devices}

@@ -55,7 +55,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { useRegisterList } from './register-list';
 import { sortableOr } from './list-order';
-import { completeRegisterRows } from './complete-register';
+import { completeRegisterRows } from '../complete-register';
 import {
   countLegalEntities,
   defaultLegalEntitySort,

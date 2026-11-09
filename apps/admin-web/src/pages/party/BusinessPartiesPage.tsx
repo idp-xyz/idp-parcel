@@ -98,7 +98,7 @@ import {
   type PartyRelationshipStatusFilter,
 } from './party-relationship-list';
 import { PageOnlyNote } from '../visibility/page-only';
-import { completeRegisterRows } from './complete-register';
+import { completeRegisterRows } from '../complete-register';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
