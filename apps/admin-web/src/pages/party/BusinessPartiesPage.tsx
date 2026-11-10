@@ -469,7 +469,7 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。各册之间用
  * 页顶一条签切换，签上带各册总数；摆法同客户与合同页（PartyContractsPage）：签下面的整块——副标题、指标、主动作、工具条与
  * 列表——都随所选的册换，签不属于其中任何一行。签不摆在命令头标题旁：那样它的横向位置随各册副标题的长短移动，宽屏上又与
- * 标题、指标挤成一行，分不出哪个是切换、哪个是数（票 business-party-ux/10）。两册的检索、筛选、排序与选中行
+ * 标题、指标挤成一行，分不出哪个是切换、哪个是数（票 business-party-ux/10）。各册的检索、筛选、排序与选中行
  * 都挂在页面上，换册再换回来还在。
  *
  * 两册的读口都在 ADR-0144 下（票 catalogue-read-pagination-rollout/11、14）：检索词、状态、角色与表头排序下推
@@ -806,9 +806,9 @@ export function BusinessPartiesPage() {
     </>
   ) : undefined;
 
-  // 两册的签上带总数：总数只在拿到业务答案后显示——未配置态与错误态下报「0」会与状态区「这不是目录为空」直接矛盾。
-  // 签条在工作台模板上面独占一条（理由在本组件头注）。左内边距是为了让第一枚签的字与下面的页标题、检索框、表格首列落在同一条
-  // 竖线上。
+  // 签上带总数：总数只在拿到业务答案后显示——未配置态与错误态下报「0」会与状态区「这不是目录为空」直接矛盾。
+  // 签条摆在工作台模板上面的理由在本组件头注。左内边距取到第一枚签的字与下面的页标题、检索框、表格首列落在同一条竖线上：
+  // 页标题与第一枚签同名，上下两行错开几个像素一眼看得出。
   const bookStrip = (
     <Tabs value={book} onValueChange={(next) => setBook(next as Book)} className="shrink-0 gap-0">
       <TabsList className="shrink-0 px-2" aria-label="选择读册">

@@ -1,7 +1,7 @@
 # 往来单位 UX：参照 Fiori 原型取长，追平公司主体那一轮的版式与用语
 
 Category: enhancement
-Status: in-progress——第一批子票 01–04 于 2026-11-06 进 main；第二批 05–09 于 2026-11-06 至 11-08 进 main；第三批 10 在做（2026-11-10 立）
+Status: in-progress——第一批子票 01–04 于 2026-11-06 进 main；第二批 05–09 于 2026-11-06 至 11-08 进 main；第三批 10 于 2026-11-10 在分支上做完，等用户看过再落 main
 出处：2026-11-06 用户在 5173 看往来单位问「为什么还是老的界面」；补上右栏资料（[business-party-profile/04](../business-party-profile/issues/04-detail-panel-profile.md)）之后，用户打开外来原型 `ux/IDP_Parcel_Partner_Fiori_Prototype_V1.0.html`（主树下未入库），答「需要，但不是完全照抄，你是 ux 专家，目标是专业，美观，ux 友好」。
 
 切片：PN-02，主责 party-commercial，非关务专项。只改 `apps/admin-web/**`，走 workflow「前端切片」。机制：无新增，读口与写口都已有。产品策略：页面形态与提示语。租户取值：无。
@@ -46,7 +46,7 @@ Status: in-progress——第一批子票 01–04 于 2026-11-06 进 main；第�
 | [07](./issues/07-shared-status-pill-icons-and-command-header.md) | 共用面：状态胶囊带图标、指标标签中文样式、标题旁插槽放册签（需非作者评审） | resolved（2026-11-06 进 main，非作者 Spec 轴评审 0 BLOCK） |
 | [08](./issues/08-panel-first-screen-status-and-counts.md) | 右栏首屏：随状态的提示、关联计数一行、主动作随状态 | resolved（2026-11-06 进 main） |
 | [09](./issues/09-second-batch-acceptance.md) | 第二批验收：浏览器全流程、非作者评审（阻塞于 05–08） | resolved（2026-11-08 进 main） |
-| [10](./issues/10-book-strip-back-to-page-top.md) | 册签回到页顶，命令头只留标题、指标与动作；改回票 07 的第三条（碰共用面，需非作者评审） | in-progress |
+| [10](./issues/10-book-strip-back-to-page-top.md) | 册签回到页顶，命令头只留标题、指标与动作；改回票 07 的第三条（碰共用面） | needs-info（2026-11-10 在分支上做完并实测，等用户决定落 main；非作者评审没起来，自审） |
 
 ## 第二批（2026-11-06 晚）
 
@@ -70,4 +70,4 @@ Status: in-progress——第一批子票 01–04 于 2026-11-06 进 main；第�
 出处：用户在 5173 看往来单位，说页面「有点凌乱，特别是左边 header 部分，和头部的 tab」。实看的数、三种摆法的取舍与理由在[票 10](./issues/10-book-strip-back-to-page-top.md)，这里只记它改了前面哪一条：
 
 - 第二批票 07 的第三条（册签进命令头标题旁的插槽）改回：册签回到页顶独占一条，插槽删除。票 07 的另两条（状态胶囊带图标、指标标签去掉大写字距）照旧。
-- 第二批开头那句「列表命令头四层」随之修正：视口 1536 宽以上是册签、命令头、工具条三层；四层只在 1536 宽以下出现，多出的是工作台模板在窄视口下让指标独占的那一行。
+- 第二批开头那句「列表命令头四层」今天各宽度下是几层、多出的是哪一层，见票 10「裁决」一节末段与完成记录。
