@@ -1,0 +1,5 @@
+echo "== 合作关系网演示（party-commercial：我方各家公司各挂客户、代理、供应商与转售；证据 S） =="
+# 票 business-party-relationship-graph/03：给往来单位「关联」签的关系图与「我方关联」一册铺数据。排在 800 之后——关系的
+# 相对方要用到 800 登记的上海、深圳、香港、美国四家我方公司。运营方一号挂九家客户、上海挂五家，好让两处的合成节点在演示里
+# 看得见；深圳对末端承运方持有渠道账号，图右列也有一段；香港、上海各有一段待确认（不带批准）。
+"$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-relationship-network-demo.json"

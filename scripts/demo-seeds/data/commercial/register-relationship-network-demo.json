@@ -1,0 +1,384 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "businessParties": [
+    {
+      "partyId": "SYN-PARTY-SHIPPER-03",
+      "name": "合成跨境电商三号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-03-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-04",
+      "name": "合成跨境电商四号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-04-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-05",
+      "name": "合成品牌出海五号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-05-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-06",
+      "name": "合成家居出口六号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-06-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-07",
+      "name": "合成数码卖家七号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-07-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-08",
+      "name": "合成服饰出口八号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-08-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-09",
+      "name": "合成母婴出口九号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SHIPPER-09-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-AGENT-02",
+      "name": "合成香港清关代理二号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-AGENT-02-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-AGENT-03",
+      "name": "合成美国尾程代理三号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-AGENT-03-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SUPPLIER-01",
+      "name": "合成航空货运供应商一号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-SUPPLIER-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-RESELLER-01",
+      "name": "合成渠道转售商一号（演示）",
+      "revision": 1,
+      "basis": "SYN-NETWORK-DEMO-RESELLER-01-V1",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "SYN-REL-NET-01",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-03",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-01",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-01",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-02",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-04",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-02",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-02",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-03",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-05",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-03",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-03",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-04",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-06",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-04",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-04",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-05",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-07",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-05",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-05",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-06",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-08",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-06",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-06",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-07",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-09",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-07",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-07",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-08",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-01",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-08",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-08",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-09",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-03",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-09",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-09",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-10",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-04",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-10",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-10",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-11",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-05",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-11",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-11",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-12",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-06",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-12",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z"
+    },
+    {
+      "relationshipId": "SYN-REL-NET-13",
+      "revision": 1,
+      "holder": "SYN-PARTY-CARRIER-TRUNK-01",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "SUPPLIER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-13",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-13",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-14",
+      "revision": 1,
+      "holder": "SYN-PARTY-RESELLER-01",
+      "counterparty": "SYN-PARTY-CN-SH-01",
+      "role": "RESELLER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-14",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-14",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-15",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-02",
+      "counterparty": "SYN-PARTY-CN-SZ-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-15",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-15",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-16",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-07",
+      "counterparty": "SYN-PARTY-CN-SZ-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-16",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-16",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-17",
+      "revision": 1,
+      "holder": "SYN-PARTY-CN-SZ-01",
+      "counterparty": "SYN-PARTY-CARRIER-LM-01",
+      "role": "ACCOUNT_HOLDER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-17",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-17",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-18",
+      "revision": 1,
+      "holder": "SYN-PARTY-AGENT-02",
+      "counterparty": "SYN-PARTY-HK-01",
+      "role": "CARRIER_AGENT",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-18",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-18",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-19",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-03",
+      "counterparty": "SYN-PARTY-HK-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-19",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-19",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-20",
+      "revision": 1,
+      "holder": "SYN-PARTY-SUPPLIER-01",
+      "counterparty": "SYN-PARTY-HK-01",
+      "role": "SUPPLIER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-20",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z"
+    },
+    {
+      "relationshipId": "SYN-REL-NET-21",
+      "revision": 1,
+      "holder": "SYN-PARTY-AGENT-03",
+      "counterparty": "SYN-PARTY-US-01",
+      "role": "CARRIER_AGENT",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-21",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-21",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-NET-22",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-05",
+      "counterparty": "SYN-PARTY-US-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-NET-01",
+      "basis": "SYN-NETWORK-DEMO-CONTRACT-22",
+      "effectiveStartsAt": "2026-02-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-NET-22",
+        "approvedAt": "2026-01-31T00:00:00Z"
+      }
+    }
+  ]
+}
