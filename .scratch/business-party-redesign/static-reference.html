@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>往来单位 · 重构静态参考 v3</title>
+<title>往来单位 · 重构静态参考 v4</title>
 <style>
 /*
   往来单位页重构的静态参考：只为看版式与交互走向，数据全是合成的，不接后端。
@@ -15,6 +15,8 @@
   - 结构贴边、内容留白：大块面板之间只有分隔线；右栏里按话题分组的字段用卡片，表格与时间线通栏。
   - 页面态（首次加载、重取、读取失败、未配置、空册、只读、多页）用状态栏里虚线框的「演示状态」下拉切着看；
     那个下拉只有这份静态页有，不是产品里的控件。
+  - 写操作点得动但不存盘：更新资料、登记合作关系、新增往来单位、停用都走得通，登进去的东西只在这次打开期间有，
+    刷新就回到原样。表单里的格与校验以现有实现为准，这里只表达它们摆在哪、长什么样。
 */
 :root{
   --canvas:#f5f7f9; --surface:#fff; --line:#d9e1e8; --line-soft:#e8edf2;
@@ -198,7 +200,8 @@ table.grid{width:100%;border-collapse:separate;border-spacing:0;table-layout:fix
 .mtools .search{grid-column:1/-1}
 .mtools .select{width:100%;height:30px}
 .mlist{flex:1;min-height:0;overflow:auto;border-top:1px solid var(--line-soft)}
-.mrow{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+/* 名录栏一条两行字，行高 60：比整页表格的行松一档——这里是拿来挑一家点开的，不是拿来对着列读的 */
+.mrow{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer}
 .mrow:hover{background:var(--hover)}
 .mrow.on{background:var(--selected);box-shadow:inset 3px 0 0 var(--accent)}
 .mrow .tx{flex:1;min-width:0}
@@ -323,6 +326,123 @@ dl.kv dd.mono{font-size:12px;line-height:20px}
 .thint{display:inline-flex;vertical-align:-3px;margin-left:4px;color:var(--warn)}
 .empty .clear{display:inline-block;margin-top:8px;color:var(--accent)}
 .empty .clear:hover{text-decoration:underline}
+/* ───── 联系人：人、用途、三类联系方式。没有的项整行不摆；号码类的值整个是按钮，点了就复制 ───── */
+.avatar{width:32px;height:32px;border-radius:50%;background:#eef3f8;color:#4d6a88;display:grid;place-items:center;font-size:13px;flex:none}
+.avatar.lg{width:40px;height:40px;font-size:14px}
+.tag.prim{background:var(--accent-tint);color:var(--accent-strong)}
+.cp{color:inherit;text-align:left;border-radius:3px}
+.cp:hover{color:var(--accent-strong);text-decoration:underline}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
+.ccard{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:14px;min-width:0}
+.ccard>header{display:flex;align-items:center;gap:10px}
+.ccard .cname{font-size:14px;line-height:20px;color:var(--ink-strong)}
+.ccard small{color:var(--muted);font-size:12px}
+.ccard .tags{margin-top:10px}
+dl.chan{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px 12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)}
+dl.chan dt{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;line-height:20px}
+dl.chan dt svg{width:14px;height:14px}
+dl.chan dd{min-width:0;line-height:20px;word-break:break-all}
+.soc{display:inline-flex;align-items:baseline;gap:6px;margin-right:14px;white-space:nowrap}
+.soc i{font-style:normal;color:var(--muted);font-size:12px}
+dl.chan .mono{font-size:12px}
+
+/*
+  ───── 关系图 ─────
+  以这家单位为中心：左边是对它担任角色的单位，右边是它对其担任角色的单位，箭头一律从持有方指向相对方，
+  左右读下来就是「谁 → 担任什么 → 对谁」。五列网格，节点多少都自己排得开，不用量坐标。
+*/
+.gwrap{padding:16px 24px 18px;border-bottom:1px solid var(--line-soft);overflow-x:auto}
+.graph,.ghead{display:grid;grid-template-columns:minmax(150px,1fr) minmax(96px,140px) minmax(140px,180px) minmax(96px,140px) minmax(150px,1fr)}
+.ghead{color:var(--muted);font-size:12px;margin-bottom:8px}
+.ghead span:last-child{grid-column:5}
+.graph{row-gap:8px;align-items:center}
+.gnode{display:flex;align-items:center;gap:8px;min-width:0;height:48px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-align:left}
+.gnode:hover{background:var(--hover);border-color:#bccad8}
+.gnode .tile{width:28px;height:28px;border-radius:6px}
+.gnode .tile svg{width:15px;height:15px}
+.gnode .tx{min-width:0;display:flex;flex-direction:column}
+.gnode .nm{font-size:13px;line-height:18px;color:var(--ink-strong)}
+.gnode small{font-size:12px;line-height:16px;color:var(--muted)}
+.gnode.pend{border-style:dashed}
+.gnode.draft{border:1px dashed var(--accent);background:var(--accent-tint)}
+.gedge{display:flex;flex-direction:column;align-items:stretch;justify-content:center;height:48px;color:var(--accent);font-size:12px;text-align:center;padding:0 4px 0 2px}
+.gedge .rl{color:var(--ink);line-height:16px}
+.gedge .ln{position:relative;height:0;border-top:2px solid currentColor;margin:2px 6px 2px 0}
+.gedge .ln:after{content:"";position:absolute;right:-7px;top:-5px;border:4px solid transparent;border-left:6px solid currentColor}
+.gedge .st{line-height:16px;min-height:16px}
+.gedge.pend{color:var(--warn)}
+.gedge.pend .ln{border-top-style:dashed}
+.gcenter{grid-column:3;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:0 6px;padding:12px 10px;min-height:72px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-tint);text-align:center}
+.gcenter .nm{font-size:13px;line-height:18px;color:var(--ink-strong)}
+.gcenter small{font-size:12px;color:var(--muted)}
+.gvoid{color:var(--muted);font-size:12px}
+.gnote{margin-top:10px;color:var(--muted);font-size:12px}
+
+/*
+  ───── 写操作 ─────
+  改一家单位自己的资料：这一页进入编辑态——右栏展开到整页，原来的分区原位变成可填，底部一条固定的动作条。
+  登记合作关系：在「关联」签的合作关系一区就地填，关系图同步画出正在填的那一段。停用：对话框。
+*/
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+.fgrid.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@container (max-width:759px){.fgrid.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld>span{font-size:12px;line-height:16px;color:var(--muted)}
+.fld.full{grid-column:1/-1}
+.fld small{font-size:12px;color:var(--muted)}
+.inp{height:32px;width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:0 10px;outline:0}
+.inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,110,209,.14)}
+.inp.mono{font-size:12px}
+.cks{display:flex;flex-wrap:wrap;gap:6px 16px;min-height:32px;align-items:center}
+.cks label{display:inline-flex;align-items:center;gap:6px}
+.ebody{flex:1;min-height:0;overflow:auto;background:var(--head);padding:16px 24px 24px;border-top:1px solid var(--line);container-type:inline-size}
+.eform{max-width:1040px;margin:0 auto;display:grid;gap:12px}
+/* 表单长，左边留一列分段的锚点：点了跳到那一段，滚动时它不动。窄屏放不下就不摆 */
+.ewrap{display:grid;grid-template-columns:132px minmax(0,1040px);gap:24px;justify-content:center;align-items:start}
+.ewrap .eform{margin:0;max-width:none}
+.enav{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding-top:2px}
+.enav button{height:30px;padding:0 10px;border-radius:6px;text-align:left;color:var(--muted)}
+.enav button:hover{background:#e9eef3;color:var(--ink)}
+@container (max-width:1099px){.ewrap{grid-template-columns:minmax(0,1040px)}.enav{display:none}}
+.erow{border:1px solid var(--line-soft);border-radius:8px;padding:12px;display:grid;gap:12px}
+.erow+.erow,.erow+.addrow,.srow+.srow,.srow+.addrow{margin-top:8px}
+.erow>header{display:flex;align-items:center;color:var(--ink-strong)}
+.erow>header .more{margin-left:auto;color:var(--muted);font-size:12px}
+.erow>header .more:hover{color:#b42318}
+.srow{display:grid;grid-template-columns:160px minmax(0,1fr) auto;gap:8px;align-items:center}
+.addrow{color:var(--accent);font-size:12px;align-self:flex-start}
+.addrow:hover{text-decoration:underline}
+.ebar{flex:none;display:flex;align-items:center;gap:8px;padding:10px 24px;border-top:1px solid var(--line);background:var(--surface)}
+.ebar .grow,.ract .grow{flex:1;color:var(--muted);font-size:12px}
+.editbadge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;background:var(--warn-bg);color:var(--warn);font-size:12px;white-space:nowrap}
+.editbadge svg{width:13px;height:13px}
+.diff td:nth-child(2){color:var(--muted)}
+.diff td:nth-child(2) s{text-decoration-color:var(--deco)}
+.rform{padding:16px 24px;background:#f6faff;border-bottom:1px solid var(--line-soft);display:grid;gap:12px;container-type:inline-size}
+.rsent{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.rsent .me{display:inline-flex;align-items:center;height:32px;padding:0 10px;border-radius:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-strong)}
+.rsent select{width:auto;min-width:200px;max-width:320px;color:var(--ink)}
+.ract{display:flex;align-items:center;gap:8px}
+.subhead{display:flex;align-items:center;gap:12px;padding:8px 24px 8px 14px;border-bottom:1px solid var(--line);flex:none}
+.subhead h2{font-size:16px;font-weight:600;color:var(--ink-strong)}
+.cbody{flex:1;min-height:0;overflow:auto;background:var(--head);padding:16px 24px;display:grid;grid-template-columns:minmax(0,720px) minmax(260px,360px);gap:16px;align-content:start;justify-content:center;container-type:inline-size}
+@media (max-width:1359px){.cbody{grid-template-columns:minmax(0,1fr)}}
+.menuwrap{position:relative;display:inline-flex}
+.menu{position:absolute;right:0;top:32px;z-index:20;min-width:210px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,45,64,.14);display:flex;flex-direction:column}
+.menu button{height:32px;padding:0 10px;border-radius:4px;text-align:left;display:flex;align-items:center;gap:8px}
+.menu button:hover{background:var(--hover)}
+.menu button svg{color:var(--muted)}
+.menu hr{border:0;border-top:1px solid var(--line-soft);margin:4px 0;width:100%}
+.menu .danger,.menu .danger svg{color:#b42318}
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(15,45,64,.32);display:grid;place-items:center}
+.dialog{width:480px;max-width:calc(100vw - 32px);background:var(--surface);border-radius:10px;box-shadow:0 16px 48px rgba(15,45,64,.24)}
+.dialog>header{padding:18px 20px 0;font-size:16px;line-height:24px;color:var(--ink-strong)}
+.dialog .dbd{padding:10px 20px 4px;display:grid;gap:14px}
+.dialog>footer{display:flex;justify-content:flex-end;gap:8px;padding:16px 20px}
+.btn.danger{background:#b42318;border-color:#b42318;color:#fff}
+.btn.danger:hover{background:#912018;border-color:#912018}
+.toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);z-index:60;background:#1d2d3e;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(15,45,64,.24)}
+
 /* 演示状态的下拉只有这份静态页有，用虚线框与产品里的控件分开 */
 .demo{margin-left:auto;display:flex;align-items:center;gap:6px}
 .demo select{height:18px;font-size:12px;color:#fff;background:#354a5f;border:1px dashed rgba(255,255,255,.65);border-radius:3px;padding:0 2px}
@@ -362,6 +482,10 @@ dl.kv dd.mono{font-size:12px;line-height:20px}
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.500 6.500l4 4"/></symbol>
   <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 9l9-5 9 5z"/><path d="M5 9v8M9.500 9v8M14.500 9v8M19 9v8M3 20h18"/></symbol>
   <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 3h4l2 5-2.500 1.500a11 11 0 0 0 5 5L16 12l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 8h11l-3-3M17 16H6l3 3"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4.500M12 17.500v.5"/></symbol>
   <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
   <symbol id="i-dot" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.500"/></symbol>
@@ -410,7 +534,7 @@ dl.kv dd.mono{font-size:12px;line-height:20px}
   </div>
   <footer class="statusbar"><span>往来单位</span>
     <label class="demo" title="只有这份静态页有：真实页面处在哪种状态由读口答什么决定，这里切着看">演示状态<select id="demo" aria-label="演示状态"></select></label>
-    <span class="note">静态参考 v3 · 合成数据 · 不接后端 · 外壳（顶栏、侧栏、标签条）照现状未改</span></footer>
+    <span class="note">静态参考 v4 · 合成数据 · 不接后端、不存盘 · 外壳（顶栏、侧栏、标签条）照现状未改</span></footer>
 </div>
 
 <script>
@@ -565,7 +689,9 @@ const typeMatch = (p, t) => t === 'ALL' || (t === 'OURS' ? !!p.ours : t === 'NON
 // 过渡期的多页里，没读到角色不等于没有：它的关系可能排在合作关系册的第一页之后
 const typeUnknown = (p) => interim() && !p.ours && rolesOf(p.id).length === 0;
 
-const state = { view: 'parties', q: '', type: 'ALL', status: 'ALL', sel: null, dtab: 'overview', rq: '', rrole: 'ALL', rstatus: 'ALL', nq: '', page: 0, rpage: 0, npage: 0 };
+const state = { view: 'parties', q: '', type: 'ALL', status: 'ALL', sel: null, dtab: 'overview', rq: '', rrole: 'ALL', rstatus: 'ALL', nq: '', page: 0, rpage: 0, npage: 0,
+  // 我方关联里选中的公司；右栏「更多」开没开；对话框；一句话提示；编辑态；正在填的合作关系；正在登记的新单位
+  nsel: null, menu: false, modal: null, toast: null, edit: null, relForm: null, creating: null };
 
 /* ───── 小件 ───── */
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -643,8 +769,8 @@ function pageHead() {
     <div class="ptitle"><h1>往来单位</h1><p class="desc trunc">客户、供应商、承运代理等与我们有业务往来的单位，以及它们与我方公司之间的合作关系</p></div>
     <div class="acts">
       <button class="btn ghost icon" title="刷新" aria-label="刷新" data-act="refresh">${ic('refresh')}</button>
-      ${mayWrite() ? `<button class="btn"${demo === 'empty' ? ' disabled' : ''}>${ic('link')}建立合作关系</button>
-      <button class="btn primary">${ic('plus')}新增往来单位</button>
+      ${mayWrite() && !state.creating ? `<button class="btn" data-act="rel-new-global"${demo === 'empty' ? ' disabled' : ''}>${ic('link')}建立合作关系</button>
+      <button class="btn primary" data-act="create">${ic('plus')}新增往来单位</button>
       <button class="btn ghost icon" title="更多：停用…" aria-label="更多">${ic('more', 'fill')}</button>` : ''}
     </div>
   </div>`;
@@ -684,7 +810,7 @@ function stateBody(view, colgroup, thead) {
   if (demo === 'empty') {
     const [icon, title, text] = EMPTY[view];
     // 主按钮整页只有页头那一枚；空册里再摆一枚是为了就手，用普通样式
-    const action = view === 'parties' ? `<button class="btn">${ic('plus')}新增往来单位</button>` : view === 'rels' ? `<button class="btn" data-act="view" data-v="parties">去「单位名录」</button>` : '';
+    const action = view === 'parties' ? `<button class="btn" data-act="create">${ic('plus')}新增往来单位</button>` : view === 'rels' ? `<button class="btn" data-act="view" data-v="parties">去「单位名录」</button>` : '';
     return { toolbar: false, html: `<div class="statewrap"><div class="stateblock"><span class="tile">${ic(icon)}</span><h3>${title}</h3><p>${text}</p>${action}</div></div>` };
   }
   return null;
@@ -762,7 +888,7 @@ function partiesSplit() {
       <span class="st"><i style="background:${STATUS[x.status].dot}"></i>${STATUS[x.status].label}</span></div>`).join('');
   return `<aside class="panel master" aria-label="单位名录">
     <div class="mhead"><h2>往来单位</h2>
-      ${mayWrite() ? `<button class="btn primary sm">${ic('plus')}新增</button>
+      ${mayWrite() ? `<button class="btn primary sm" data-act="create">${ic('plus')}新增</button>
       <button class="btn ghost sm icon" title="更多：建立合作关系、停用…" aria-label="更多">${ic('more', 'fill')}</button>` : ''}</div>
     ${tabs(false)}
     <div class="mtools">
@@ -778,6 +904,65 @@ function partiesSplit() {
   ${detail(p)}`;
 }
 
+/* ───── 联系人：照资料里的形状——姓名、部门与职务、用途（可指名某用途的主要联系人）、电话、邮箱、社交账号（平台加账号，可多个） ───── */
+const PURPOSES = { GENERAL: '日常联系', BUSINESS: '商务', OPERATIONS: '运营', FINANCE: '财务', LEGAL: '法务' };
+const PLATFORMS = ['微信', '企业微信', 'WhatsApp', 'Telegram', 'LINE', 'QQ', 'LinkedIn', 'Skype'];
+const TODAY = '2026-11-10';
+const contactsOf = (p) => (p.ours || p.noProfile ? [] : [
+  { name: '合成联系人甲', department: '跨境业务部', position: '客户经理', purposes: ['BUSINESS', 'GENERAL'], primaryFor: ['BUSINESS'], phone: '+86 000 0000 0001', email: 'syn-contact-a@example.invalid', social: [['微信', 'syn-wx-a'], ['企业微信', 'syn-wecom-a'], ['WhatsApp', '+86 000 0000 0001']] },
+  { name: '合成联系人乙', department: '财务部', position: '应收会计', purposes: ['FINANCE'], primaryFor: ['FINANCE'], phone: '+86 000 0000 0002', email: 'syn-contact-b@example.invalid', social: [['微信', 'syn-wx-b'], ['Telegram', '@syn_contact_b']] },
+  { name: '合成联系人丙', position: '仓库主管', purposes: ['OPERATIONS'], primaryFor: [], phone: '+86 000 0000 0003', social: [['WhatsApp', '+86 000 0000 0003'], ['LINE', 'syn-line-c']] },
+]);
+const affiliation = (c) => [c.department, c.position].filter(Boolean).join(' · ');
+const purposeChips = (c) => c.purposes.map((code) => `<span class="tag${c.primaryFor.includes(code) ? ' prim' : ''}">${PURPOSES[code]}${c.primaryFor.includes(code) ? ' · 主要' : ''}</span>`).join('');
+const copyBtn = (text, cls = '') => `<button class="cp ${cls}" data-act="copy" data-v="${esc(text)}" title="点击复制">${esc(text)}</button>`;
+// 概要里的一行：人、用途、电话；社交账号只报有哪几个平台，账号在「联系人」签里
+const contactRow = (c) => `<div><span class="avatar">${esc(c.name.slice(-1))}</span><div class="grow"><span>${esc(c.name)}</span> ${purposeChips(c)}<small>${esc(affiliation(c))}</small></div>
+  <div style="text-align:right">${c.phone ? copyBtn(c.phone, 'num') : ''}<small>${c.social.map(([platform]) => esc(platform)).join(' · ')}</small></div></div>`;
+// 「联系人」签里的一张卡
+const contactCard = (c) => `<article class="ccard"><header><span class="avatar lg">${esc(c.name.slice(-1))}</span><div class="grow"><div class="cname">${esc(c.name)}</div><small>${esc(affiliation(c))}</small></div></header>
+  <div class="tags">${purposeChips(c)}</div>
+  <dl class="chan">${c.phone ? `<dt>${ic('phone')}电话</dt><dd>${copyBtn(c.phone, 'num')}</dd>` : ''}${c.email ? `<dt>${ic('mail')}邮箱</dt><dd>${copyBtn(c.email, 'mono')}</dd>` : ''}${
+    c.social.length ? `<dt>${ic('chat')}社交账号</dt><dd>${c.social.map(([platform, account]) => `<span class="soc"><i>${esc(platform)}</i>${copyBtn(account, 'mono')}</span>`).join('')}</dd>` : ''}</dl></article>`;
+
+/*
+  ───── 关系图 ─────
+  同一侧同一角色超过 roleLimit 家就合成一个计数节点，不让一列拖成名单；一侧超过 columnLimit 个节点就把这一侧每个角色都合成。
+  结束了的关系不上图，图下报一句。draft 是正在填、还没保存的那一段，单独画一个虚线框。
+*/
+function graphOf(p, mine, roleLimit = 3, columnLimit = 6) {
+  const side = (list, otherOf) => {
+    const byRole = Object.keys(ROLES).map((role) => [role, list.filter((r) => r.role === role)]).filter(([, rs]) => rs.length);
+    const nodes = (all) => byRole.flatMap(([role, rs]) => (all || rs.length > roleLimit
+      ? [{ group: true, role, count: rs.length, pending: rs.filter((r) => r.status === 'CANDIDATE').length }]
+      : rs.map((r) => ({ party: byId[otherOf(r)], role, status: r.status }))));
+    const spread = nodes(false);
+    return spread.length > columnLimit ? nodes(true) : spread;
+  };
+  const alive = mine.filter(live);
+  return { toward: side(alive.filter((r) => r.counterparty === p.id), (r) => r.holder), from: side(alive.filter((r) => r.holder === p.id), (r) => r.counterparty), ended: mine.length - alive.length };
+}
+function graph(p, mine, { roleLimit, columnLimit, draft, roles } = {}) {
+  const g = graphOf(p, mine, roleLimit, columnLimit);
+  if (draft) g[draft.side].unshift(draft.node);
+  const rows = Math.max(g.toward.length, g.from.length, 1);
+  const pend = (n) => (n.group ? n.pending > 0 : n.status === 'CANDIDATE');
+  const at = (row, col) => `style="grid-row:${row + 1};grid-column:${col}"`;
+  const node = (n, place) => (n.group
+    ? `<button ${place} class="gnode${pend(n) ? ' pend' : ''}" data-act="rels-of" data-id="${p.id}" data-role="${n.role}" title="点开看这一组的明细"><span class="tile ${n.role}">${ic(ROLES[n.role].icon)}</span><span class="tx"><span class="nm">${fmt(n.count)} 家单位</span><small>点开看明细</small></span></button>`
+    : `<button ${place} class="gnode${n.draft ? ' draft' : pend(n) ? ' pend' : ''}" ${n.draft ? 'disabled' : `data-act="open" data-id="${n.party.id}"`}>${tile(n.party)}<span class="tx"><span class="nm trunc">${esc(n.party.name)}</span><small class="trunc">${n.draft ? '正在填，还没有保存' : `<span class="mono">${n.party.id}</span>`}</small></span></button>`);
+  const edge = (n, place) => `<span ${place} class="gedge${pend(n) || n.draft ? ' pend' : ''}" aria-hidden="true"><span class="rl">${ROLES[n.role].label}</span><span class="ln"></span><span class="st">${n.group ? (n.pending ? `${n.pending} 段待确认` : '') : n.draft ? '未保存' : REL_STATUS[n.status].label}</span></span>`;
+  const cells = [];
+  g.toward.forEach((n, i) => cells.push(node(n, at(i, 1)), edge(n, at(i, 2))));
+  g.from.forEach((n, i) => cells.push(edge(n, at(i, 4)), node(n, at(i, 5))));
+  if (!g.toward.length) cells.push(`<span class="gvoid" style="grid-row:1;grid-column:1 / span 2">没有单位对它担任角色</span>`);
+  if (!g.from.length) cells.push(`<span class="gvoid" style="grid-row:1;grid-column:4 / span 2;text-align:right">它没有对别的单位担任角色</span>`);
+  return `<div class="ghead"><span>对它担任角色的单位</span><span></span><span></span><span></span><span style="text-align:right">它对其担任角色的单位</span></div>
+    <div class="graph" role="group" aria-label="关系图">${cells.join('')}
+      <div class="gcenter" style="grid-row:1 / span ${rows}">${tile(p, roles)}<span class="nm">${esc(p.name)}</span><small>${p.ours ? '我方公司' : '本单位'}</small></div></div>
+    ${g.ended ? `<p class="gnote">另有 ${fmt(g.ended)} 段已结束的关系不在图上，见下面的明细。</p>` : ''}`;
+}
+
 function detail(p) {
   const mine = rels.filter((r) => r.holder === p.id || r.counterparty === p.id);
   // 右栏按这家单位自己的关系说类型，不靠列表那份在多页时只看得到第一页的索引
@@ -785,9 +970,11 @@ function detail(p) {
   const tags = (p.ours ? ['<span class="tag ours">我方公司</span>'] : []).concat(roles.map(roleTag));
   const liveRels = mine.filter(live);
   const w = mayWrite();
-  const edit = w ? '<button class="more">编辑</button>' : '';
+  // 卡头的「编辑」进同一个编辑态，并落到那一段
+  const editLink = (sec) => (w ? `<button class="more" data-act="edit" data-sec="${sec}">编辑</button>` : '');
   const hasProfile = !p.ours && !p.noProfile;
-  const contacts = hasProfile ? [['合成联系人甲', '业务联系人 · 主要', 'syn-contact-a@example.invalid', '+86 000 0000 0001'], ['合成联系人乙', '财务对账', 'syn-contact-b@example.invalid', '+86 000 0000 0002']] : [];
+  const contacts = contactsOf(p);
+  const form = state.relForm && state.relForm.ctx === p.id ? state.relForm : null;
   const linkCounts = [['客户账户', roles.includes('CUSTOMER') ? 1 : 0], ['供应商协议', roles.includes('SUPPLIER') || roles.includes('CARRIER_AGENT') ? 1 : 0], ['结算政策', liveRels.length ? 1 : 0], ['公司主体', p.ours ? 1 : 0]];
   const dtabs = [['overview', '概要', 'file', null], ['contacts', '联系人', 'card', contacts.length], ['versions', '资料版本', 'layers', hasProfile ? 2 : 0], ['records', '登记记录', 'history', null], ['links', '关联', 'link', mine.length + linkCounts.reduce((a, [, n]) => a + n, 0)]]
     // 我方公司不收往来单位资料：联系人与资料版本两签不摆。记着的签这一行没有就显概要，记着的值不动
@@ -798,7 +985,7 @@ function detail(p) {
   const banners = [
     p.status === 'REGISTERED' ? `<div class="banner warn">${ic('clock')}<span>还没到生效时间：<b class="num">${p.from}</b> 之前不按它办新业务；登记合作关系时，开始时间不能早于它的生效时间。</span></div>` : '',
     p.status === 'DEACTIVATED' ? `<div class="banner mute">${ic('minus')}<span>自 <b class="num">${p.deactivatedAt}</b> 起停用，新的业务不再找它；已有记录保留。</span></div>` : '',
-    p.status === 'EFFECTIVE' && !p.ours && liveRels.length === 0 ? `<div class="banner info">${ic('info')}<span>还没有合作关系。它是客户还是供应商，由合作关系说。</span>${w ? `<button class="btn sm">${ic('link')}登记合作关系</button>` : ''}</div>` : '',
+    p.status === 'EFFECTIVE' && !p.ours && liveRels.length === 0 ? `<div class="banner info">${ic('info')}<span>还没有合作关系。它是客户还是供应商，由合作关系说。</span>${w && !form ? `<button class="btn sm" data-act="rel-new">${ic('link')}登记合作关系</button>` : ''}</div>` : '',
   ].join('');
 
   // 概要里只列最近几段；我方公司名下可以有几百上千段，整份去「关联」签或「合作关系」视图看
@@ -808,7 +995,7 @@ function detail(p) {
     return `<div><div class="grow"><span class="dir">${dir}</span> ${roleTag(r.role)}<small class="num">${r.start} → ${r.end || '长期有效'} · <span class="mono">${r.id}</span></small></div>${pill(REL_STATUS[r.status])}${ic('right', 'go')}</div>`;
   }).join('')}</div>` : `<div class="ph" style="padding:24px 16px">还没有合作关系</div>`;
   const linkLines = `<div class="lines">${linkCounts.map(([label, n]) => `<div><span class="grow">${label}</span><span class="cntn${n ? '' : ' zero'}">${n}</span>${ic('right', 'go')}</div>`).join('')}</div>`;
-  const contactLines = contacts.length ? `<div class="lines">${contacts.map(([name, role, mail, tel]) => `<div><span class="tile" style="border-radius:50%">${ic('card')}</span><div class="grow"><b>${name}</b><small>${role}</small></div><div style="text-align:right"><span class="mono" style="font-size:12px">${mail}</span><small class="num">${tel}</small></div></div>`).join('')}</div>` : `<div class="ph" style="padding:24px 16px">还没有联系人</div>`;
+  const contactLines = contacts.length ? `<div class="lines">${contacts.map(contactRow).join('')}</div>` : `<div class="ph" style="padding:24px 16px">还没有联系人</div>`;
   const relSec = `<section class="sec"><header>${ic('link')}合作关系<button class="more" data-act="dtab" data-d="links">全部 ${fmt(mine.length)} 段</button></header>${relLines}</section>`;
   const linkSec = `<section class="sec"><header>${ic('layers')}关联对象</header>${linkLines}</section>`;
 
@@ -818,20 +1005,25 @@ function detail(p) {
     const left = p.ours
       ? `<section class="sec"><div class="ph"><b>这是我方公司</b>公司资料（注册号、开票与收款信息）在「公司主体」里维护，这里不另收一份。<br><button class="btn sm">${ic('external')}打开公司主体 <span class="mono">${p.le}</span></button></div></section>`
       : !hasProfile
-        ? `<section class="sec"><div class="ph"><b>还没有登记资料</b>联系人、地址、税号与收款账户都在「更新资料」里登记。${roles.includes('CUSTOMER') ? '<br>这家单位是客户，建议先登记一位联系人，下单和对账时找得到人。' : ''}<br>${w ? `<button class="btn primary sm">${ic('edit')}更新资料</button>` : hiddenEntryHint}</div></section>`
-        : `<section class="sec"><header>${ic('building')}名称与地址${edit}</header><div class="bd"><dl class="kv">
+        ? `<section class="sec"><div class="ph"><b>还没有登记资料</b>联系人、地址、税号与收款账户都在「更新资料」里登记。${roles.includes('CUSTOMER') ? '<br>这家单位是客户，建议先登记一位联系人，下单和对账时找得到人。' : ''}<br>${w ? `<button class="btn primary sm" data-act="edit">${ic('edit')}更新资料</button>` : hiddenEntryHint}</div></section>`
+        : `<section class="sec"><header>${ic('building')}名称与地址${editLink('names')}</header><div class="bd"><dl class="kv">
               <dt>名称</dt><dd>${esc(p.name)}</dd><dt>其他语言名称</dt><dd>${p.alt ? esc(p.alt) : '<span class="none">未登记</span>'}</dd>
               <dt>注册地</dt><dd>${p.country ? esc(p.country) : '<span class="none">未登记</span>'}</dd><dt>注册号</dt><dd class="mono">SYN-REG-${p.id.slice(-2)}01</dd>
               <dt>外部编码</dt><dd class="mono">SYN-EXT-${p.id.slice(-2)}</dd><dt>注册地址</dt><dd>（合成地址）示例市示例区示例路 ${Number(p.id.slice(-2)) || 1} 号</dd></dl></div></section>
-           <section class="sec"><header>${ic('receipt')}税务与开票${edit}</header><div class="bd"><dl class="kv">
+           <section class="sec"><header>${ic('receipt')}税务与开票${editLink('tax')}</header><div class="bd"><dl class="kv">
               <dt>纳税人识别号</dt><dd class="mono">SYN-TAX-${p.id.slice(-2)}0001</dd><dt>开票抬头</dt><dd>${esc(p.name)}</dd><dt>开票地址</dt><dd>同注册地址</dd></dl></div></section>
-           <section class="sec"><header>${ic('bank')}收款账户${edit}</header><div class="bd"><dl class="kv">
+           <section class="sec"><header>${ic('bank')}收款账户${editLink('bank')}</header><div class="bd"><dl class="kv">
               <dt>开户行</dt><dd>合成银行示例支行</dd><dt>账号</dt><dd class="mono">SYN-BANK-${p.id.slice(-2)}-0001</dd><dt>币种</dt><dd>CNY</dd></dl></div></section>`;
     const contactSec = hasProfile ? `<section class="sec"><header>${ic('card')}联系人<button class="more" data-act="dtab" data-d="contacts">全部 ${contacts.length} 位</button></header>${contactLines}</section>` : '';
     body = `${banners}<div class="cols"><div class="col">${left}</div><div class="col">${contactSec}${relSec}${linkSec}</div></div>`;
   } else if (dtab === 'contacts') {
-    body = `<div class="secs"><section class="sec"><header>${ic('card')}联系人</header>${contactLines}</section></div>`;
+    // 一人一张卡，卡的宽度够放下最长的那串账号；右栏宽就并排，窄就一列
+    body = contacts.length
+      ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span class="meta">${contacts.length} 位联系人 · 电话、邮箱与账号点一下就复制</span>${w ? `<button class="btn sm" data-act="edit" data-sec="contacts">${ic('edit')}编辑联系人</button>` : ''}</div>
+         <div class="cgrid">${contacts.map(contactCard).join('')}</div>`
+      : `<div class="secs"><section class="sec"><div class="ph"><b>还没有联系人</b>联系人随「更新资料」一起登记。${w ? `<br><button class="btn sm" data-act="edit" data-sec="contacts">${ic('edit')}更新资料</button>` : ''}</div></section></div>`;
   } else if (dtab === 'links') {
+    const draft = form && form.other && form.role ? { side: form.dir, node: { party: byId[form.other], role: form.role, status: form.as, draft: true } } : null;
     // 关系一多就是一张表：通栏铺满，列对齐着读；不再是卡片里一行一句话。
     const relTable = mine.length ? `<table class="grid"><colgroup><col style="width:36%"><col><col style="width:110px"><col style="width:210px"><col style="width:48px"></colgroup>
       <thead><tr><th>对方</th><th>关系</th><th>状态</th><th>有效期</th><th></th></tr></thead><tbody>${mine.slice(0, 50).map((r) => {
@@ -842,7 +1034,9 @@ function detail(p) {
         <td class="num">${r.start} <span style="color:var(--deco)">→</span> ${r.end ? r.end : '<span style="color:var(--muted)">长期有效</span>'}</td>
         <td class="go">${ic('right')}</td></tr>`;
     }).join('')}</tbody></table>${mine.length > 50 ? `<div class="morerow">这里只列最近 50 段<button class="more" data-act="rels-of" data-id="${p.id}">在「合作关系」里看全部 ${fmt(mine.length)} 段</button></div>` : ''}` : `<div class="ph" style="padding:24px 16px">还没有合作关系</div>`;
-    body = `<div class="secs"><section class="sec"><header>${ic('link')}合作关系<span class="hcnt">${fmt(mine.length)} 段</span>${w && p.status === 'EFFECTIVE' ? '<button class="more">登记合作关系</button>' : ''}</header>${relTable}</section>
+    // 先看图再看表：图说的是「谁对谁担任什么」，表给每一段的状态与有效期。登记新关系就地在这一区填，图上同步画出虚线的那一段
+    body = `<div class="secs"><section class="sec"><header>${ic('link')}合作关系<span class="hcnt">${fmt(mine.length)} 段</span>${w && p.status === 'EFFECTIVE' && !form ? '<button class="more" data-act="rel-new">登记合作关系</button>' : ''}</header>
+      ${form ? relFormHtml(p) : ''}${mine.length || draft ? `<div class="gwrap">${graph(p, mine, { draft, roles })}</div>` : ''}${relTable}</section>
       <section class="sec"><header>${ic('layers')}关联对象</header>${linkLines}</section></div>`;
   } else if (dtab === 'records') {
     body = `<div class="secs"><section class="sec"><header>${ic('history')}登记记录</header><div class="bd"><div class="tl">
@@ -861,10 +1055,13 @@ function detail(p) {
           <div style="margin-top:6px">${tags.length ? `<div class="tags">${tags.join('')}</div>` : '<span class="none">暂无合作关系</span>'}</div>
         </div>
         <div class="dacts">
-          ${p.ours || !w ? '' : `<button class="btn${liveRels.length ? ' primary' : ''} sm">${ic('edit')}更新资料</button>`}
-          ${w && p.status === 'EFFECTIVE' && !p.ours ? `<button class="btn${liveRels.length ? '' : ' primary'} sm">${ic('link')}登记合作关系</button>` : ''}
+          ${p.ours || !w ? '' : `<button class="btn${liveRels.length ? ' primary' : ''} sm" data-act="edit">${ic('edit')}更新资料</button>`}
+          ${w && p.status === 'EFFECTIVE' && !p.ours ? `<button class="btn${liveRels.length ? '' : ' primary'} sm" data-act="rel-new">${ic('link')}登记合作关系</button>` : ''}
           <button class="btn ghost sm icon" title="在新标签打开整页" aria-label="在新标签打开">${ic('external')}</button>
-          <button class="btn ghost sm icon" title="更多：复制编码、停用…" aria-label="更多">${ic('more', 'fill')}</button>
+          <span class="menuwrap"><button class="btn ghost sm icon" title="更多" aria-label="更多" aria-expanded="${state.menu}" data-act="menu">${ic('more', 'fill')}</button>${state.menu ? `<div class="menu" role="menu">
+            <button role="menuitem" data-act="copy" data-v="${p.id}">${ic('copy')}复制编码</button>
+            ${w && !p.ours ? `<button role="menuitem" data-act="edit" data-kind="identity">${ic('edit')}更正名称与识别信息</button>` : ''}
+            ${w && !p.ours && p.status !== 'DEACTIVATED' ? `<hr><button role="menuitem" class="danger" data-act="deactivate">${ic('minus')}停用…</button>` : ''}</div>` : ''}</span>
           <button class="btn ghost sm icon" title="关闭（Esc）" aria-label="关闭" data-act="close">${ic('x')}</button>
         </div>
       </div>
@@ -874,6 +1071,192 @@ function detail(p) {
       `<button class="tab${dtab === id ? ' on' : ''}" role="tab" aria-selected="${dtab === id}" data-act="dtab" data-d="${id}">${ic(icon)}${label}${n ? `<span class="cnt">${fmt(n)}</span>` : ''}</button>`).join('')}</div>
     <div class="dbody${dtab === 'links' || dtab === 'records' ? ' flush' : ''}">${body}</div>
   </section>`;
+}
+
+/*
+  ───── 登记合作关系 ─────
+  一句话式的表单：「谁 对 谁 担任 什么」。从某家单位进来时它已经在句子里，可以换方向；从页头进来时两方都要选。
+  就地摆在合作关系一区里，填的时候看得到已有的关系，关系图同步画出正在填的那一段。
+*/
+function nextRelId() {
+  let n = baseRels.length + 1;
+  const idOf = (i) => 'SYN-REL-' + String(i).padStart(4, '0');
+  while (rels.some((r) => r.id === idOf(n))) n += 1;
+  return idOf(n);
+}
+function openRelForm(ctx) {
+  state.relForm = { ctx, dir: 'from', holder: '', other: '', role: '', scope: '', start: '2026-11-11', end: '', basis: '', id: nextRelId(), as: 'CANDIDATE', approval: '', approvedAt: TODAY };
+}
+function relFormHtml(self) {
+  const f = state.relForm;
+  const options = (list, chosen) => list.map((x) => `<option value="${x.id}"${chosen === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
+  const others = parties.filter((x) => !self || x.id !== self.id).slice(0, 60);
+  const party = (field, label) => `<select class="inp" data-rf="${field}" aria-label="${label}"><option value="">${label}…</option><optgroup label="我方公司">${options(others.filter((x) => x.ours), f[field])}</optgroup><optgroup label="其他单位">${options(others.filter((x) => !x.ours), f[field])}</optgroup></select>`;
+  const role = `<select class="inp" data-rf="role" aria-label="角色"><option value="">选择角色…</option>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}"${f.role === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select>`;
+  const me = self ? `<span class="me">${esc(self.name)}</span>` : '';
+  const sentence = !self ? `${party('holder', '哪一方')}<span>对</span>${party('other', '对哪一方')}<span>担任</span>${role}`
+    : f.dir === 'from' ? `${me}<span>对</span>${party('other', '对哪一方')}<span>担任</span>${role}`
+    : `${party('other', '哪一方')}<span>对</span>${me}<span>担任</span>${role}`;
+  const inp = (field, label, attrs = '') => `<label class="fld"><span>${label}</span><input class="inp" data-rf="${field}" value="${esc(f[field])}" ${attrs}></label>`;
+  return `<div class="rform" role="form" aria-label="登记合作关系">
+    <div class="rsent">${sentence}${self ? `<button class="btn ghost sm" data-act="rf-swap" title="换成另一方担任角色">${ic('swap')}换方向</button>` : ''}</div>
+    <div class="fgrid four">
+      ${inp('scope', '覆盖范围 *', 'placeholder="这段关系管哪一块业务"')}${inp('start', '开始时间 *', 'type="date"')}${inp('end', '结束时间', 'type="date"')}${inp('basis', '来源单据 *', 'placeholder="合同或审批单号"')}
+      ${inp('id', '关系编号 *', 'style="font-family:var(--mono)"')}
+      <div class="fld"><span>登记为</span><div class="cks"><label><input type="radio" name="rf-as" data-rf="as" value="CANDIDATE"${f.as === 'CANDIDATE' ? ' checked' : ''}>待确认</label><label><input type="radio" name="rf-as" data-rf="as" value="EFFECTIVE"${f.as === 'EFFECTIVE' ? ' checked' : ''}>已生效</label></div></div>
+      ${f.as === 'EFFECTIVE' ? inp('approval', '批准单据 *') + inp('approvedAt', '批准时间 *', 'type="date"') : ''}
+    </div>
+    <div class="ract"><span class="grow">${self ? '下面关系图里虚线的那一段就是正在填的，还没有保存。' : '登记之后在下面的表里就能看到。'}</span><button class="btn" data-act="rf-cancel">取消</button><button class="btn primary" data-act="rf-save">登记</button></div>
+  </div>`;
+}
+function saveRel() {
+  const f = state.relForm;
+  const holder = f.ctx ? (f.dir === 'from' ? f.ctx : f.other) : f.holder;
+  const counterparty = f.ctx ? (f.dir === 'from' ? f.other : f.ctx) : f.other;
+  if (!holder || !counterparty || !f.role) return toast('先选好双方与角色');
+  if (holder === counterparty) return toast('双方不能是同一家单位');
+  const rel = { id: f.id, holder, role: f.role, counterparty, status: f.as, start: f.start, end: f.end || null };
+  rels.unshift(rel);
+  if (rels !== baseRels) baseRels.unshift(rel);
+  state.relForm = null;
+  useData();
+  return toast(`已登记 ${rel.id} · ${REL_STATUS[rel.status].label}`);
+}
+
+/*
+  ───── 编辑态 ─────
+  「更新资料」不另开一页也不弹抽屉：这家单位的页进入编辑态，右栏展开到整页，原来的分区原位变成可填，底部一条固定的动作条。
+  保存前先看一遍改了哪几处、登记成第几版、哪天起生效。「更正名称与识别信息」用同一个容器，只是格子少。
+*/
+const fld = (label, value = '', attrs = '', cls = '') => `<label class="fld ${cls}"><span>${label}</span><input class="inp" value="${esc(value)}" ${attrs}></label>`;
+const socialRow = (platform = '', account = '') => `<div class="srow"><input class="inp" list="platforms" value="${esc(platform)}" placeholder="平台，可自填" aria-label="平台"><input class="inp mono" value="${esc(account)}" placeholder="账号" aria-label="账号"><button class="btn ghost sm" data-act="row-del">移除</button></div>`;
+const pairRow = (kind = '', value = '', kindHint = '类型') => `<div class="srow"><input class="inp" value="${esc(kind)}" placeholder="${kindHint}" aria-label="${kindHint}"><input class="inp mono" value="${esc(value)}" placeholder="号码" aria-label="号码"><button class="btn ghost sm" data-act="row-del">移除</button></div>`;
+const checks = (chosen) => Object.entries(PURPOSES).map(([k, v]) => `<label><input type="checkbox"${chosen.includes(k) ? ' checked' : ''}>${v}</label>`).join('');
+const contactEdit = (c = { name: '', purposes: [], primaryFor: [], social: [] }) => `<div class="erow"><header>联系人<button class="more" data-act="row-del">移除这位联系人</button></header>
+  <div class="fgrid">${fld('姓名 *', c.name)}${fld('电话', c.phone || '')}${fld('部门', c.department || '')}${fld('职务', c.position || '')}${fld('邮箱', c.email || '', '', 'full')}
+    <div class="fld"><span>用途（可多选）</span><div class="cks">${checks(c.purposes)}</div></div>
+    <div class="fld"><span>是哪些用途的主要联系人（每个用途只指名一位）</span><div class="cks">${checks(c.primaryFor)}</div></div>
+    <div class="fld full"><span>社交账号（选填，可添加多个）</span>${c.social.map(([platform, account]) => socialRow(platform, account)).join('')}<button class="addrow" data-act="row-add" data-kind="social">+ 添加社交账号</button></div></div></div>`;
+const bankEdit = (b = {}) => `<div class="erow"><header>收款账户<button class="more" data-act="row-del">移除这个账户</button></header>
+  <div class="fgrid four">${fld('户名 *', b.holder || '')}${fld('开户行 *', b.bank || '')}${fld('账号 *', b.no || '', 'style="font-family:var(--mono)"')}${fld('币种 *', b.currency || '')}${fld('SWIFT', b.swift || '')}${fld('账户标签', b.label || '')}${fld('开户行地址', b.address || '')}${fld('备注', b.note || '')}</div></div>`;
+const ROW_TEMPLATES = { social: () => socialRow(), contact: () => contactEdit(), bank: () => bankEdit(), pair: () => pairRow() };
+
+function editView(p) {
+  const e = state.edit;
+  const identity = e.kind === 'identity';
+  const tail = p.id.slice(-2);
+  const head = `<div class="dhead" style="padding-bottom:14px"><div class="dtop">${tile(p)}
+      <div class="tx"><div class="dname"><h2>${esc(p.name)}</h2>${pill(STATUS[p.status])}</div><div class="dalt mono" style="font-size:12px">${p.id}</div></div>
+      <span class="editbadge">${ic('edit')}${identity ? '正在更正名称与识别信息' : p.noProfile ? '正在登记资料 · 第 1 版' : '正在更新资料 · 在第 2 版的基础上改'}</span></div></div>`;
+  const sec = (id, icon, title, inner, note = '') => `<section class="sec" id="esec-${id}"><header>${ic(icon)}${title}${note ? `<span style="margin-left:8px;color:var(--muted);font-size:12px">${note}</span>` : ''}</header><div class="bd">${inner}</div></section>`;
+  if (e.step === 'review') {
+    const first = p.noProfile || identity;
+    return `<section class="panel detail editing" aria-label="保存前核对">${head}
+      <div class="ebody"><div class="eform"><section class="sec"><header>${ic('layers')}保存前核对</header>
+        <div class="bd"><p>${identity ? '更正也是登记一笔新的，原来那一笔留在登记记录里。' : p.noProfile ? '这是这家单位的第一版资料。' : '与当前生效的第 2 版相比，有 3 处改动。'}确认后${identity ? '' : `登记为第 ${p.noProfile ? 1 : 3} 版，`}<span class="num">2026-11-11 00:00</span>（Asia/Shanghai）起生效${first ? '' : '；在那之前仍按第 2 版'}。登记之后不能改，只能再登一笔。</p></div>
+        ${first ? '' : `<table class="grid diff" style="border-top:1px solid var(--line-soft)"><colgroup><col style="width:34%"><col><col></colgroup>
+          <thead><tr><th>项目</th><th>第 2 版</th><th>第 3 版</th></tr></thead><tbody>
+          <tr style="cursor:default"><td>联系人 · 合成联系人甲 · 微信</td><td class="mono"><s>syn-wx-a</s></td><td class="mono">syn-wx-a-2026</td></tr>
+          <tr style="cursor:default"><td>联系人 · 合成联系人丙 · LINE</td><td class="mono"><s>syn-line-c</s></td><td><span class="none">移除</span></td></tr>
+          <tr style="cursor:default"><td>税务与开票 · 开票地址</td><td><s>同注册地址</s></td><td>（合成地址）示例市示例区示例路 9 号</td></tr></tbody></table>
+          <div class="morerow">这三条改动是静态页写死的示意，不随上一步填的内容变。</div>`}</section></div></div>
+      <div class="ebar"><span class="grow">核对无误再登记；要改就回上一步。</span><button class="btn" data-act="edit-back">返回修改</button><button class="btn primary" data-act="edit-save">确认登记</button></div></section>`;
+  }
+  const meta = sec('meta', 'history', identity ? '这一次更正' : '这一次更新',
+    `<div class="fgrid four">${fld('来源单据 *', '', 'placeholder="这次变更依据的单据号"')}${fld('生效时间 *', '2026-11-11T00:00', 'type="datetime-local"')}${fld(identity ? '更新序号' : '版本号', identity ? '2' : p.noProfile ? '1' : '3')}</div>`,
+    identity ? '' : '这几格说的是这一次更新，不沿用上一版');
+  const body = identity
+    ? meta + sec('id', 'building', '单位身份', `<div class="fgrid">${fld('名称 *', p.name)}${fld('编码', p.id, 'disabled')}${fld('注册国家 / 地区', p.country || '')}
+        <div class="fld"><span>终身注册号</span>${pairRow('统一社会信用代码', 'SYN-REG-' + tail + '01')}</div>
+        <div class="fld full"><span>外部系统编码（按系统与用途各一）</span>${pairRow('财务系统 · 客户编码', 'SYN-EXT-' + tail, '系统与用途')}<button class="addrow" data-act="row-add" data-kind="pair">+ 添加外部编码</button></div></div>`, '编码登记后不能改')
+    : meta
+      + sec('names', 'building', '名称与地址', `<div class="fgrid">${fld('其他语言名称', p.alt || '')}<div class="fld"><span>名称、注册地与注册号</span><small style="line-height:32px">不在资料里改，去「更多 › 更正名称与识别信息」</small></div>
+          ${fld('注册地址', p.noProfile ? '' : `（合成地址）示例市示例区示例路 ${Number(tail) || 1} 号`, '', 'full')}${fld('办公地址', '', 'placeholder="与注册地址相同可不填"', 'full')}${fld('通信地址', '', 'placeholder="与注册地址相同可不填"', 'full')}</div>`)
+      + sec('tax', 'receipt', '税务与开票', `<div class="fgrid"><div class="fld full"><span>监管登记号</span>${p.noProfile ? '' : pairRow('纳税人识别号', 'SYN-TAX-' + tail + '0001')}<button class="addrow" data-act="row-add" data-kind="pair">+ 添加登记号</button></div>
+          ${fld('开票抬头', p.noProfile ? '' : p.name)}${fld('开票地址', p.noProfile ? '' : '同注册地址')}</div>`)
+      + sec('contacts', 'card', '联系人', `${contactsOf(p).map((c) => contactEdit(c)).join('')}<button class="addrow" data-act="row-add" data-kind="contact">+ 添加联系人</button>`)
+      + sec('bank', 'bank', '收款账户', `${p.noProfile ? '' : bankEdit({ holder: p.name, bank: '合成银行示例支行', no: 'SYN-BANK-' + tail + '-0001', currency: 'CNY' })}<button class="addrow" data-act="row-add" data-kind="bank">+ 添加收款账户</button>`);
+  return `<section class="panel detail editing" aria-label="${identity ? '更正名称与识别信息' : '更新资料'}">${head}
+    <div class="ebody"><div class="ewrap"><nav class="enav" aria-label="表单分段">${(identity ? [['meta', '这一次更正'], ['id', '单位身份']] : [['meta', '这一次更新'], ['names', '名称与地址'], ['tax', '税务与开票'], ['contacts', '联系人'], ['bank', '收款账户']])
+      .map(([id, label]) => `<button data-act="esec" data-sec="${id}">${label}</button>`).join('')}</nav><div class="eform">${body}</div></div><datalist id="platforms">${PLATFORMS.map((x) => `<option value="${x}">`).join('')}</datalist></div>
+    <div class="ebar"><span class="grow">${identity ? '更正也是登记一笔新的，原来那一笔留在登记记录里。' : '保存前会先给你看改了哪几处。'}</span><button class="btn" data-act="edit-cancel">取消</button><button class="btn primary" data-act="edit-review">核对并保存</button></div></section>`;
+}
+
+/* ───── 新增往来单位：整页的登记视图。右边随打字列出名录里相近的单位——主数据最怕同一家登两次 ───── */
+function dupesHtml() {
+  const c = state.creating;
+  const name = needle(c.name);
+  const id = needle(c.id);
+  const typed = name.length >= 2 || id.length >= 2;
+  const hits = typed ? parties.filter((p) => (name.length >= 2 && p.name.toLowerCase().includes(name)) || (id.length >= 2 && p.id.toLowerCase().includes(id))).slice(0, 6) : [];
+  return `<header>${ic('search')}名录里相近的单位</header>${hits.length
+    ? `<div class="lines">${hits.map((p) => `<div data-act="open-existing" data-id="${p.id}" style="cursor:pointer">${tile(p)}<div class="grow"><span>${esc(p.name)}</span><small class="mono">${p.id}</small></div>${pill(STATUS[p.status])}</div>`).join('')}</div>
+       <div class="morerow" style="padding:10px 14px">已经有了就不要再登一家：点开看看是不是同一家。</div>`
+    : `<div class="ph" style="padding:24px 16px">${typed ? '没有相近的单位，可以登记。' : '输入名称或编码，这里会列出名录里相近的单位，避免同一家登两次。'}</div>`}`;
+}
+function createView() {
+  const c = state.creating;
+  const inp = (field, label, attrs = '', cls = '') => `<label class="fld ${cls}"><span>${label}</span><input class="inp" data-cf="${field}" value="${esc(c[field])}" ${attrs}></label>`;
+  return `${pageHead()}
+  <section class="panel" style="flex:1">
+    <div class="subhead"><button class="btn ghost sm" data-act="create-cancel">${ic('left')}返回名录</button><h2>新增往来单位</h2></div>
+    <div class="cbody">
+      <div class="eform" style="margin:0;max-width:none">
+        <section class="sec"><header>${ic('building')}单位身份</header><div class="bd"><div class="fgrid">
+          ${inp('name', '名称 *', 'placeholder="营业执照或合同上的全称"', 'full')}
+          ${inp('id', '编码 *', 'placeholder="如 SYN-PARTY-…" style="font-family:var(--mono)"')}<div class="fld"><span>&nbsp;</span><small style="line-height:32px">登记后不能改；建议沿用现有的客户或供应商编码</small></div>
+          ${inp('from', '生效时间 *', 'type="date"')}${inp('basis', '来源单据 *', 'placeholder="登记依据的单据号"')}</div></div></section>
+        <section class="sec"><header>${ic('receipt')}识别信息<span style="margin-left:8px;color:var(--muted);font-size:12px">选填，以后可以在「更正名称与识别信息」里补</span></header><div class="bd"><div class="fgrid">
+          ${inp('country', '注册国家 / 地区', 'placeholder="如 CN"')}<div class="fld"><span>终身注册号</span>${pairRow()}</div>
+          <div class="fld full"><span>外部系统编码（按系统与用途各一）</span><button class="addrow" data-act="row-add" data-kind="pair">+ 添加外部编码</button></div></div></div></section>
+        <p class="meta" style="white-space:normal;line-height:20px">这里登记的是单位本身。它是客户还是供应商，登记之后用「登记合作关系」说；联系人、地址与收款账户在「更新资料」里登。</p>
+      </div>
+      <aside class="sec" id="dupes" aria-live="polite" style="align-self:start">${dupesHtml()}</aside>
+    </div>
+    <div class="ebar"><span class="grow">保存后直接打开这家单位。</span><button class="btn" data-act="create-cancel">取消</button><button class="btn primary" data-act="create-save">保存并打开</button></div>
+  </section>`;
+}
+function saveParty() {
+  const c = state.creating;
+  const id = c.id.trim();
+  const name = c.name.trim();
+  if (!name || !id) return toast('名称与编码必填');
+  // 空册里登了第一家，演示状态跟着回到「有数据」：静态页的空册只是一张空表，存不住东西
+  if (demo === 'empty') { demo = 'ready'; demoSelect.value = 'ready'; useData(); }
+  if (byId[id]) return toast('这个编码已经登记过了');
+  const p = { id, name, status: c.from > TODAY ? 'REGISTERED' : 'EFFECTIVE', from: c.from, reg: TODAY, country: c.country.trim() || null, noProfile: true };
+  parties.unshift(p);
+  if (parties !== baseParties) baseParties.unshift(p);
+  useData();
+  Object.assign(state, { creating: null, q: '', type: 'ALL', status: 'ALL', page: 0, sel: id, dtab: 'overview' });
+  return toast(`已登记 ${name}`);
+}
+
+/* ───── 对话框与一句话提示 ───── */
+let toastTimer = 0;
+function toast(text) {
+  state.toast = text;
+  clearTimeout(toastTimer);
+  // 到点只摘掉这一个节点，不整页重画：这时候人可能正在别的格里打字
+  toastTimer = setTimeout(() => { state.toast = null; const node = page.querySelector('.toast'); if (node) node.remove(); }, 2600);
+}
+function overlays() {
+  const m = state.modal;
+  let html = '';
+  if (m && m.kind === 'deactivate') {
+    const p = byId[m.id];
+    const n = rels.filter((r) => live(r) && (r.holder === p.id || r.counterparty === p.id)).length;
+    html = `<div class="scrim"><div class="dialog" role="dialog" aria-modal="true" aria-label="停用"><header>停用「${esc(p.name)}」</header>
+      <div class="dbd"><p style="color:var(--muted)">停用之后新的业务不再找它；已有的记录保留，停用本身也留一条登记记录。${n ? `它名下还有 ${fmt(n)} 段在用的合作关系。` : ''}</p>
+        <div class="fgrid"><label class="fld"><span>停用时间 *</span><input class="inp" type="date" value="${TODAY}"></label><label class="fld"><span>版本号</span><input class="inp" value="2"></label>
+          <label class="fld full"><span>来源单据 *</span><input class="inp" placeholder="停用依据的单据号"></label></div></div>
+      <footer><button class="btn" data-act="modal-close">取消</button><button class="btn danger" data-act="deactivate-confirm">停用</button></footer></div></div>`;
+  } else if (m && m.kind === 'discard') {
+    html = `<div class="scrim"><div class="dialog" role="alertdialog" aria-modal="true" aria-label="放弃修改"><header>放弃修改？</header>
+      <div class="dbd"><p style="color:var(--muted)">${m.what}还没有保存，离开后填写的内容不会保留。</p></div>
+      <footer><button class="btn" data-act="modal-close">继续编辑</button><button class="btn danger" data-act="discard-confirm">放弃</button></footer></div></div>`;
+  }
+  return html + (state.toast ? `<div class="toast" role="status">${ic('check')}${esc(state.toast)}</div>` : '');
 }
 
 /* ───── 合作关系 ───── */
@@ -906,7 +1289,7 @@ function relsFull() {
       <td class="num">${r.start} <span style="color:var(--deco)">→</span> ${r.end ? r.end : '<span style="color:var(--muted)">长期有效</span>'}</td></tr>`).join('');
   return `${pageHead()}
   <section class="panel" style="flex:1">
-    ${tabs(true)}${toolbar}
+    ${tabs(true)}${toolbar}${state.relForm && state.relForm.ctx === null ? relFormHtml(null) : ''}
     <div class="tablewrap${busy() ? ' busy' : ''}">${progress()}${list.length ? `<table class="grid">${colgroup}${thead}<tbody>${rows}</tbody></table>`
       : '<div class="empty"><b>当前筛选条件下没有匹配的合作关系</b><button class="clear" data-act="rclear">清除筛选</button></div>'}</div>
     ${foot('lfoot', all.length, '段', 'rpage')}
@@ -933,7 +1316,7 @@ function networkFull() {
     const toward = seen.filter((r) => r.counterparty === p.id && live(r));
     const from = seen.filter((r) => r.holder === p.id && live(r));
     const pending = toward.concat(from).filter((r) => r.status === 'CANDIDATE').length;
-    return `<tr><td>${ident(p)}</td><td>${cell(count(toward))}</td><td>${cell(count(from))}</td>
+    return `<tr data-act="nopen" data-id="${p.id}"><td>${ident(p)}</td><td>${cell(count(toward))}</td><td>${cell(count(from))}</td>
       <td>${pending ? `<span class="pill warn">${ic('clock')}${fmt(pending)} 段</span>` : '<span class="none">—</span>'}</td>
       <td class="mono" style="font-size:12px;color:var(--muted)">${p.le}</td></tr>`;
   }).join('');
@@ -945,15 +1328,62 @@ function networkFull() {
   </section>`;
 }
 
+/* 我方关联选中一家：左边是我方公司的名录栏，右边是它的关系图。图上合成节点的门槛比往来单位右栏里宽一些，这里地方大 */
+function networkSplit() {
+  const p = byId[state.nsel];
+  const q = needle(state.nq);
+  const seen = interim() ? rels.slice(0, PAGE) : rels;
+  const list = ours.filter((x) => !q || x.name.toLowerCase().includes(q) || x.id.toLowerCase().includes(q) || x.le.toLowerCase().includes(q));
+  const summary = (x) => { const c = relIdx.get(x.id); return c ? `${fmt(c.n)} 段在用${c.pending ? ` · ${fmt(c.pending)} 段待确认` : ''}` : '暂无合作关系'; };
+  const rows = list.map((x) => `<div class="mrow${x.id === p.id ? ' on' : ''}" data-act="nopen" data-id="${x.id}">${tile(x)}<div class="tx"><div class="nm trunc">${esc(x.name)}</div><div class="sub trunc">${summary(x)}</div></div></div>`).join('');
+  const mine = seen.filter((r) => r.holder === p.id || r.counterparty === p.id);
+  const alive = mine.filter(live);
+  const byRole = (toward) => Object.keys(ROLES).map((role) => [role, alive.filter((r) => r.role === role && (toward ? r.counterparty === p.id : r.holder === p.id))]).filter(([, rs]) => rs.length);
+  const roleLines = (toward) => byRole(toward).map(([role, rs]) => {
+    const pending = rs.filter((r) => r.status === 'CANDIDATE').length;
+    return `<div data-act="rels-of" data-id="${p.id}" data-role="${role}" style="cursor:pointer"><span class="tile ${role}" style="width:28px;height:28px;border-radius:6px">${ic(ROLES[role].icon)}</span>
+      <div class="grow"><span>${ROLES[role].label}</span><small>${pending ? `其中 ${fmt(pending)} 段待确认` : '都已生效'}</small></div><span class="cntn">${fmt(rs.length)}</span>${ic('right', 'go')}</div>`;
+  }).join('');
+  const block = (icon, title, toward, none) => `<section class="sec"><header>${ic(icon)}${title}</header>${byRole(toward).length ? `<div class="lines">${roleLines(toward)}</div>` : `<div class="ph" style="padding:24px 16px">${none}</div>`}</section>`;
+  return `<aside class="panel master" aria-label="我方公司">
+    <div class="mhead"><h2>往来单位</h2></div>
+    ${tabs(false)}
+    <div class="mtools"><label class="search">${ic('search')}<input id="q" value="${esc(state.nq)}" placeholder="搜索我方公司" aria-label="搜索"><kbd>/</kbd></label></div>
+    <div class="mlist">${rows || '<div class="empty"><b>没有匹配的我方公司</b></div>'}</div>
+    ${foot('mfoot', list.length, '家', 'npage')}
+  </aside>
+  <section class="panel detail" aria-label="${esc(p.name)}">
+    <div class="dhead" style="padding-bottom:14px"><div class="dtop">${tile(p)}
+      <div class="tx"><div class="dname"><h2>${esc(p.name)}</h2>${pill(STATUS[p.status])}</div><div style="margin-top:6px">${typeTags(p)}</div></div>
+      <div class="dacts"><button class="btn sm">${ic('external')}打开公司主体 <span class="mono">${p.le}</span></button><button class="btn sm" data-act="open" data-id="${p.id}">在单位名录里看</button>
+        <button class="btn ghost sm icon" title="关闭（Esc）" aria-label="关闭" data-act="nclose">${ic('x')}</button></div></div></div>
+    <div class="dbody flush" style="border-top:1px solid var(--line)"><div class="secs">
+      <section class="sec"><header>${ic('link')}关系图<span class="hcnt">${fmt(alive.length)} 段在用</span><button class="more" data-act="rels-of" data-id="${p.id}">在「合作关系」里看全部</button></header>
+        <div class="gwrap">${graph(p, mine, { roleLimit: 5, columnLimit: 8 })}</div></section>
+      ${block('users', '对它担任角色的单位', true, '没有单位对它担任角色')}${block('route', '它对别的单位担任的角色', false, '它没有对别的单位担任角色')}</div></div>
+  </section>`;
+}
+
 /* ───── 渲染与事件 ───── */
 const page = document.getElementById('page');
 function render() {
   const focused = document.activeElement && document.activeElement.id === 'q';
-  const split = state.view === 'parties' && listed() && state.sel && byId[state.sel];
+  const editing = listed() && state.edit && byId[state.edit.id];
+  const creating = answered() && state.creating;
+  const split = !editing && !creating && listed() && ((state.view === 'parties' && state.sel && byId[state.sel]) || (state.view === 'network' && state.nsel && byId[state.nsel]));
   page.className = 'page' + (split ? ' split' : '');
-  page.innerHTML = state.view === 'rels' ? relsFull() : state.view === 'network' ? networkFull() : split ? partiesSplit() : partiesFull();
+  const main = editing ? editView(byId[state.edit.id])
+    : creating ? createView()
+    : state.view === 'rels' ? relsFull()
+    : state.view === 'network' ? (split ? networkSplit() : networkFull())
+    : split ? partiesSplit() : partiesFull();
+  page.innerHTML = main + overlays();
   if (focused) { const q = document.getElementById('q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   const on = page.querySelector('.mrow.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  if (editing && state.edit.sec) {
+    const target = document.getElementById('esec-' + state.edit.sec); if (target) target.scrollIntoView({ block: 'start' });
+    state.edit.sec = null;
+  }
 }
 // 换演示状态：换数据、回第一页；新状态里没有的选中与筛选项一并放下
 const demoSelect = document.getElementById('demo');
@@ -964,25 +1394,66 @@ function setDemo(value) {
   useData();
   state.page = 0; state.rpage = 0;
   if (!listed() || !byId[state.sel]) state.sel = null;
+  if (!listed() || !byId[state.nsel]) state.nsel = null;
   if (interim() && state.type === 'NONE') state.type = 'ALL';
+  Object.assign(state, { menu: false, modal: null, edit: null, relForm: null, creating: null });
   render();
 }
 demoSelect.addEventListener('change', (event) => setDemo(event.target.value));
 page.addEventListener('click', (event) => {
-  const el = event.target.closest('[data-act]'); if (!el) return;
+  const el = event.target.closest('[data-act]');
+  if (!el) { if (state.menu) { state.menu = false; render(); } return; }
   const act = el.dataset.act;
+  if (act !== 'menu') state.menu = false;
   // 换条件回第一页：游标跟着条件走
-  if (act === 'view') { state.view = el.dataset.v; }
+  if (act === 'view') { state.view = el.dataset.v; state.relForm = null; }
+  else if (act === 'menu') { state.menu = !state.menu; }
+  else if (act === 'copy') { if (navigator.clipboard) navigator.clipboard.writeText(el.dataset.v).catch(() => {}); toast(`已复制 ${el.dataset.v}`); }
+  else if (act === 'nopen') { state.nsel = el.dataset.id; }
+  else if (act === 'nclose') { state.nsel = null; }
+  else if (act === 'rel-new') { state.dtab = 'links'; openRelForm(state.sel); }
+  else if (act === 'rel-new-global') { state.view = 'rels'; openRelForm(null); }
+  else if (act === 'rf-swap') { state.relForm.dir = state.relForm.dir === 'from' ? 'toward' : 'from'; }
+  else if (act === 'rf-cancel') { state.relForm = null; }
+  else if (act === 'rf-save') { saveRel(); }
+  else if (act === 'edit') { state.edit = { id: state.sel, step: 'form', kind: el.dataset.kind || 'profile', sec: el.dataset.sec || null, dirty: false }; }
+  else if (act === 'esec') { const target = document.getElementById('esec-' + el.dataset.sec); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  else if (act === 'edit-review') { state.edit.step = 'review'; }
+  else if (act === 'edit-back') { state.edit.step = 'form'; }
+  else if (act === 'edit-save') {
+    const done = state.edit;
+    state.edit = null;
+    if (done.kind === 'profile') delete byId[done.id].noProfile;
+    toast(done.kind === 'identity' ? '已登记更正，2026-11-11 起生效' : '已登记资料，2026-11-11 起生效');
+  }
+  else if (act === 'edit-cancel') { if (state.edit.dirty) state.modal = { kind: 'discard', what: '这次修改', target: 'edit' }; else state.edit = null; }
+  // 增删一行直接动页面上的节点，不整页重画：别的格里已经填的字要留着
+  else if (act === 'row-add') { el.insertAdjacentHTML('beforebegin', ROW_TEMPLATES[el.dataset.kind]()); if (state.edit) state.edit.dirty = true; return; }
+  else if (act === 'row-del') { (el.closest('.srow') || el.closest('.erow')).remove(); if (state.edit) state.edit.dirty = true; return; }
+  else if (act === 'deactivate') { state.modal = { kind: 'deactivate', id: state.sel }; }
+  else if (act === 'deactivate-confirm') {
+    const p = byId[state.modal.id];
+    p.status = 'DEACTIVATED'; p.deactivatedAt = TODAY;
+    state.modal = null;
+    useData();
+    toast(`已登记停用，自 ${TODAY} 起`);
+  }
+  else if (act === 'modal-close') { state.modal = null; }
+  else if (act === 'discard-confirm') { const target = state.modal.target; state.modal = null; if (target === 'edit') state.edit = null; else state.creating = null; }
+  else if (act === 'create') { state.view = 'parties'; state.creating = { name: '', id: '', from: TODAY, basis: '', country: '' }; }
+  else if (act === 'create-cancel') { const c = state.creating; if (c.name || c.id || c.basis) state.modal = { kind: 'discard', what: '这家新单位', target: 'create' }; else state.creating = null; }
+  else if (act === 'create-save') { saveParty(); }
+  else if (act === 'open-existing') { state.creating = null; state.sel = el.dataset.id; state.dtab = 'overview'; }
   else if (act === 'type') { state.type = state.type === el.dataset.t ? 'ALL' : el.dataset.t; state.page = 0; }
   else if (act === 'rstatus') { state.rstatus = state.rstatus === el.dataset.s ? 'ALL' : el.dataset.s; state.rpage = 0; }
   else if (act === 'clear') { state.q = ''; state.type = 'ALL'; state.status = 'ALL'; state.page = 0; }
   else if (act === 'rclear') { state.rq = ''; state.rrole = 'ALL'; state.rstatus = 'ALL'; state.rpage = 0; }
-  else if (act === 'open') { state.sel = el.dataset.id; state.dtab = 'overview'; }
-  else if (act === 'close') { state.sel = null; }
+  else if (act === 'open') { state.view = 'parties'; state.sel = el.dataset.id; state.dtab = 'overview'; state.relForm = null; }
+  else if (act === 'close') { state.sel = null; state.relForm = null; }
   else if (act === 'dtab') { state.dtab = el.dataset.d; }
   else if (act === 'attn-rel') { state.view = 'rels'; state.rstatus = 'CANDIDATE'; state.rq = ''; state.rrole = 'ALL'; state.rpage = 0; }
   else if (act === 'attn-future') { state.view = 'parties'; state.status = 'REGISTERED'; state.type = 'ALL'; state.q = ''; state.sel = null; state.page = 0; }
-  else if (act === 'rels-of') { state.view = 'rels'; state.rq = el.dataset.id; state.rrole = 'ALL'; state.rstatus = 'ALL'; state.rpage = 0; }
+  else if (act === 'rels-of') { state.view = 'rels'; state.rq = el.dataset.id; state.rrole = el.dataset.role || 'ALL'; state.rstatus = 'ALL'; state.rpage = 0; state.relForm = null; }
   else if (act === 'turn') {
     state[el.dataset.k] += Number(el.dataset.step);
     render();
@@ -999,6 +1470,11 @@ page.addEventListener('click', (event) => {
   render();
 });
 page.addEventListener('input', (event) => {
+  const data = event.target.dataset;
+  // 表单里打字只记值，不重画；新增单位时顺手刷新右边的查重提示
+  if (data.rf && state.relForm) { state.relForm[data.rf] = event.target.value; return; }
+  if (data.cf && state.creating) { state.creating[data.cf] = event.target.value; document.getElementById('dupes').innerHTML = dupesHtml(); return; }
+  if (state.edit && event.target.closest('.editing')) { state.edit.dirty = true; return; }
   if (event.target.id !== 'q') return;
   if (state.view === 'rels') { state.rq = event.target.value; state.rpage = 0; }
   else if (state.view === 'network') state.nq = event.target.value;
@@ -1007,6 +1483,13 @@ page.addEventListener('input', (event) => {
 });
 page.addEventListener('change', (event) => {
   const { id, value } = event.target;
+  const field = event.target.dataset.rf;
+  if (field && state.relForm) {
+    state.relForm[field] = value;
+    // 选了对方、角色或登记成什么，图上的虚线与要填的格跟着变；别的格只记值
+    if (field === 'other' || field === 'holder' || field === 'role' || field === 'as') render();
+    return;
+  }
   if (id === 'status') state.status = value; else if (id === 'type') state.type = value; else if (id === 'rrole') state.rrole = value; else return;
   state.page = 0; state.rpage = 0;
   render();
@@ -1014,8 +1497,17 @@ page.addEventListener('change', (event) => {
 document.addEventListener('keydown', (event) => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName);
   if (event.key === '/' && !typing) { event.preventDefault(); const q = document.getElementById('q'); if (q) q.focus(); return; }
-  if (event.key === 'Escape') { if (typing) event.target.blur(); else if (state.sel) { state.sel = null; render(); } return; }
-  if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !typing && state.view === 'parties' && listed()) {
+  if (event.key === 'Escape') {
+    // 先关最上面那一层：对话框、菜单；正在填的东西不因为按了一下 Esc 就丢
+    if (state.modal) { state.modal = null; render(); }
+    else if (state.menu) { state.menu = false; render(); }
+    else if (typing) event.target.blur();
+    else if (state.edit || state.creating || state.relForm) return;
+    else if (state.view === 'network' && state.nsel) { state.nsel = null; render(); }
+    else if (state.sel) { state.sel = null; render(); }
+    return;
+  }
+  if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !typing && state.view === 'parties' && listed() && !state.edit && !state.creating && !state.modal && !state.relForm) {
     const list = shownParties(); if (!list.length) return;
     const index = list.findIndex((p) => p.id === state.sel);
     const next = index === -1 ? (event.key === 'ArrowDown' ? 0 : list.length - 1) : Math.min(list.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)));

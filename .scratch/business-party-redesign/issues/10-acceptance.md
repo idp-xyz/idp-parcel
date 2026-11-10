@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 02、03、04、05、06
+Blocked by: 02、03、04、05、06、11
 
 ## 要做的
 
