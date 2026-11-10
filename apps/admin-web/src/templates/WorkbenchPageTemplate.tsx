@@ -48,11 +48,6 @@ export interface WorkbenchPageTemplateProps<Row> {
   /** 页面内工作台的稳定键；给出时在工作区标签往返中恢复分栏与滚动，多个工作台分别命名。 */
   viewStateKey?: string;
   subtitle?: string;
-  /**
-   * 标题旁的插槽（票 business-party-ux/07）：一页几本读册之间的切换签放这里，与标题同一行，不再在模板上面另占一条。
-   * 它是页面级的切换，不是一册的指标，所以不进 kpis。不传不渲染，渲染逐字节同。
-   */
-  titleAside?: ReactNode;
   kpis?: WorkbenchKpi[];
   /** 刷新钮；refreshing 由调用方按「有没有一问在途」给，收尾时模板报 toast。 */
   onRefresh?: () => void;
@@ -102,12 +97,14 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
  * 与参照页的差别都是本仓规矩逼出来的：页面态走 StateSlot（未配置 ≠ 暂无数据）；没有批量勾选列与分页位——今天接它的
  * 册既没有批量命令端点，读口也不分页，摆出来就是假动作；键盘只在本标签是工作区活动标签时生效，壳层会把非活动标签
  * 留在 DOM 里。行上不接双击：第一击开栏会收列、行跟着重排，第二击可能落到另一行上；开整页对象归详情栏的动作。
+ *
+ * 命令头里不给「一页几本读册」的切换签留位：换册时副标题、指标与主动作整套跟着换，签比它们高一层，由页面摆在模板上面。
+ * 摆在标题旁的话，签的横向位置随副标题长短移动，宽屏上又与标题、指标挤成一行（票 business-party-ux/10）。
  */
 export function WorkbenchPageTemplate<Row>({
   title,
   viewStateKey,
   subtitle,
-  titleAside,
   kpis,
   onRefresh,
   refreshing = false,
@@ -372,7 +369,6 @@ export function WorkbenchPageTemplate<Row>({
           <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
           {subtitle && <p className="truncate type-body text-idpxyz-breadcrumb">{subtitle}</p>}
         </div>
-        {titleAside != null && <div className="flex shrink-0 items-center">{titleAside}</div>}
         {kpis && kpis.length > 0 && (
           <>
             <div className="hidden h-7 w-px shrink-0 bg-idpxyz-border 2xl:block" />

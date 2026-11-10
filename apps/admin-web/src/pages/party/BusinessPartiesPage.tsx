@@ -466,8 +466,10 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 按时点导出、关系状态是登记进来的事实，所以分册而不是并表。
  *
  * 形态照集团与法人页（GroupLegalEntitiesPage，票 business-parties-uiux/01，用户令「参考集团与法人实现」）：命令头指标可点即筛、
- * 状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。两册之间用
- * 命令头标题旁的一条签切换（模板的 titleAside 插槽，票 business-party-ux/07），签上带各册总数；两册的检索、筛选、排序与选中行
+ * 状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。各册之间用
+ * 页顶一条签切换，签上带各册总数；摆法同客户与合同页（PartyContractsPage）：签下面的整块——副标题、指标、主动作、工具条与
+ * 列表——都随所选的册换，签不属于其中任何一行。签不摆在命令头标题旁：那样它的横向位置随各册副标题的长短移动，宽屏上又与
+ * 标题、指标挤成一行，分不出哪个是切换、哪个是数（票 business-party-ux/10）。两册的检索、筛选、排序与选中行
  * 都挂在页面上，换册再换回来还在。
  *
  * 两册的读口都在 ADR-0144 下（票 catalogue-read-pagination-rollout/11、14）：检索词、状态、角色与表头排序下推
@@ -805,10 +807,11 @@ export function BusinessPartiesPage() {
   ) : undefined;
 
   // 两册的签上带总数：总数只在拿到业务答案后显示——未配置态与错误态下报「0」会与状态区「这不是目录为空」直接矛盾。
-  // 签条放进工作台命令头的标题旁插槽（票 business-party-ux/07），不再在模板上面独占一条。
+  // 签条在工作台模板上面独占一条（理由在本组件头注）。左内边距是为了让第一枚签的字与下面的页标题、检索框、表格首列落在同一条
+  // 竖线上。
   const bookStrip = (
     <Tabs value={book} onValueChange={(next) => setBook(next as Book)} className="shrink-0 gap-0">
-      <TabsList className="h-8 shrink-0" aria-label="选择读册">
+      <TabsList className="shrink-0 px-2" aria-label="选择读册">
         <TabsTrigger value="identities">
           往来单位
           {partyTotal !== null ? <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{partyTotal}</span> : null}
@@ -867,10 +870,10 @@ export function BusinessPartiesPage() {
     };
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+        {bookStrip}
         <WorkbenchPageTemplate<OurCompanyNetworkRow>
           title={info.title}
           subtitle="以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图"
-          titleAside={bookStrip}
           onRefresh={() => {
             entities.retry();
             relationships.retry();
@@ -971,6 +974,7 @@ export function BusinessPartiesPage() {
 
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+        {bookStrip}
         <CatalogueCursorScope conditions={conditions} load={listBusinessParties}>
           {({ answer, pagination, retry }) => {
             const pageRows = answer?.kind === 'outcome' ? answer.body.parties : [];
@@ -978,8 +982,9 @@ export function BusinessPartiesPage() {
             return (
               <WorkbenchPageTemplate<BusinessPartyRecord>
                 title={info.title}
-                subtitle="与我们有业务往来的客户、承运商、代理等单位：在这里登记、查看状态，并建立合作关系"
-                titleAside={bookStrip}
+                // 副标题只说这一册装的是谁，不带操作说明：宽屏上指标与标题同行，副标题一长，指标那一组就排不进这一行，
+                // 连同页头动作一起被挤到下一行。
+                subtitle="与我们有业务往来的客户、承运商、代理等单位"
                 kpis={kpis}
                 // 刷新连法人册一起重取：刚在「公司主体」页登完的公司，回到这里按一下就该显成「我方公司」。
                 onRefresh={() => {
@@ -1150,6 +1155,7 @@ export function BusinessPartiesPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+      {bookStrip}
       <CatalogueCursorScope conditions={relationshipConditions} load={listPartyRelationships}>
         {({ answer, pagination, retry }) => {
           const pageRows = answer?.kind === 'outcome' ? answer.body.relationships : [];
@@ -1158,7 +1164,6 @@ export function BusinessPartiesPage() {
             <WorkbenchPageTemplate<PartyRelationshipRecord>
               title={info.title}
               subtitle="谁对谁担任什么角色、合作多久；到期或撤销后，新的业务不再按这段关系办"
-              titleAside={bookStrip}
               kpis={relationshipKpis}
               onRefresh={() => {
                 retry();
