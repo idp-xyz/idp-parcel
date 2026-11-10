@@ -72,7 +72,15 @@ function groupNode(side: string, role: string, views: readonly PartyRelationship
   };
 }
 
-function columnOf(side: string, views: readonly PartyRelationshipView[]): RelationshipGraphNode[] {
+/** 合成的门槛。缺省照上面两个常量；地方更大的视图（「我方关联」的右栏）可以放宽一些。 */
+export interface RelationshipGraphLimits {
+  role: number;
+  column: number;
+}
+
+const defaultLimits: RelationshipGraphLimits = { role: relationshipGraphRoleLimit, column: relationshipGraphColumnLimit };
+
+function columnOf(side: string, views: readonly PartyRelationshipView[], limits: RelationshipGraphLimits): RelationshipGraphNode[] {
   const byRole = new Map<string, PartyRelationshipView[]>();
   for (const view of views) byRole.set(view.role, [...(byRole.get(view.role) ?? []), view]);
   const roles = [...byRole.keys()].sort((left, right) => roleRank(left) - roleRank(right) || left.localeCompare(right));
@@ -80,19 +88,22 @@ function columnOf(side: string, views: readonly PartyRelationshipView[]): Relati
   const spelled = (collapseAll: boolean) =>
     roles.flatMap((role) => {
       const members = byRole.get(role) ?? [];
-      if (members.length > relationshipGraphRoleLimit || (collapseAll && members.length > 1)) return [groupNode(side, role, members)];
+      if (members.length > limits.role || (collapseAll && members.length > 1)) return [groupNode(side, role, members)];
       return [...members].sort((left, right) => nameOf(left).localeCompare(nameOf(right), 'zh-CN')).map(partyNode);
     });
   const nodes = spelled(false);
-  return nodes.length > relationshipGraphColumnLimit ? spelled(true) : nodes;
+  return nodes.length > limits.column ? spelled(true) : nodes;
 }
 
 /** 把一家单位名下的关系摆成图：只摆还在起作用的段（liveRelationshipStatuses），左右按它在关系里站哪一侧分。 */
-export function relationshipGraphOf(views: readonly PartyRelationshipView[]): RelationshipGraph {
+export function relationshipGraphOf(
+  views: readonly PartyRelationshipView[],
+  limits: RelationshipGraphLimits = defaultLimits,
+): RelationshipGraph {
   const live = views.filter((view) => liveRelationshipStatuses.has(view.status));
   return {
-    towardIt: columnOf('toward', live.filter((view) => view.side === 'COUNTERPARTY')),
-    fromIt: columnOf('from', live.filter((view) => view.side === 'HOLDER')),
+    towardIt: columnOf('toward', live.filter((view) => view.side === 'COUNTERPARTY'), limits),
+    fromIt: columnOf('from', live.filter((view) => view.side === 'HOLDER'), limits),
     ended: views.length - live.length,
   };
 }

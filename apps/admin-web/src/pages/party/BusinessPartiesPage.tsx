@@ -99,14 +99,19 @@ import {
 } from './party-relationship-list';
 import { PageOnlyNote } from '../visibility/page-only';
 import { completeRegisterRows } from '../complete-register';
+import { OurCompanyNetworkPanel } from './OurCompanyNetworkPanel';
+import { matchesOurCompanySearch, ourCompanyNetworkRows, type OurCompanyNetworkRow, type RoleCount } from './our-company-network';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
 
-/** 本页两本读册。身份册与关系册分册而不并表，理由见 BusinessPartiesPage 头注。 */
-type Book = 'identities' | 'relationships';
+/**
+ * 本页三本读册。身份册与关系册分册而不并表，理由见 BusinessPartiesPage 头注。「我方关联」不是第三本登记册，是以我方公司为
+ * 主体把关系册重新组合一遍（our-company-network.ts，票 business-party-relationship-graph/02）。
+ */
+type Book = 'identities' | 'relationships' | 'network';
 
 // 行首圆点的颜色随身份状态，与法人页同一个记号。
 const identityStatusDotClass: Record<string, string> = {
@@ -338,7 +343,15 @@ const registerHeadings: Record<BusinessPartyRegister, { title: string; subtitle:
 const primaryRegisterOf: Record<Book, BusinessPartyRegister> = {
   identities: 'business-party',
   relationships: 'party-relationship',
+  network: 'party-relationship',
 };
+
+/** 「我方关联」一行里按角色的段数：「客户 2 · 承运商代理 1」；关系册没答出显「—」，不拿 0 冒充「没有」。 */
+function roleCountsText(counts: readonly RoleCount[], answered: boolean): string {
+  if (!answered) return '—';
+  if (counts.length === 0) return '—';
+  return counts.map(({ role, count }) => `${labelOf(partyRoleLabels, role)} ${count}`).join(' · ');
+}
 
 /**
  * 登记视图里的三张表单（ADR-0085，票 admin-write-faces/02 切片 02c；自票 admin-web-group-legal-entities/10 起三册都是逐字段
@@ -545,6 +558,9 @@ export function BusinessPartiesPage() {
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [relationshipSort, setRelationshipSort] = useState<WorkbenchSort>(defaultPartyRelationshipSort);
   const [selectedRelationship, setSelectedRelationship] = useState<string | null>(null);
+  // 「我方关联」一册：检索只在手上这几行里找（our-company-network.ts 的 matchesOurCompanySearch）。
+  const [networkSearch, setNetworkSearch] = useState('');
+  const [selectedOurCompany, setSelectedOurCompany] = useState<string | null>(null);
   // 发出去的检索词等它停稳（useSettledKeyword）；框里的字照旧逐字跟手。钩子不能挂在下面的提前返回之后，两册的都在这里取。
   const settledSearch = useSettledKeyword(search);
   const settledRelationshipSearch = useSettledKeyword(relationshipSearch);
@@ -666,6 +682,7 @@ export function BusinessPartiesPage() {
   const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
   const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
   const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
+  const networkRows = useMemo(() => ourCompanyNetworkRows(knownEntities, knownRelationships ?? []), [knownEntities, knownRelationships]);
   const entityCountries = useMemo(() => partyRegistrationCountriesOf(knownEntities), [knownEntities]);
   const identityColumns = useMemo(
     () => identityColumnsOf(roleIndex, ourCompanies, entityCountries),
@@ -802,9 +819,102 @@ export function BusinessPartiesPage() {
             <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{relationshipTotal}</span>
           ) : null}
         </TabsTrigger>
+        <TabsTrigger value="network">
+          我方关联
+          {knownEntities !== null ? <span className="ml-1.5 font-mono type-body text-idpxyz-breadcrumb">{networkRows.length}</span> : null}
+        </TabsTrigger>
       </TabsList>
     </Tabs>
   );
+
+  if (book === 'network') {
+    const visible = networkRows.filter((row) => matchesOurCompanySearch(row, networkSearch));
+    const relationshipsAnswered = knownRelationships !== null;
+    const networkColumns: WorkbenchColumn<OurCompanyNetworkRow>[] = [
+      {
+        key: 'company',
+        header: '我方公司',
+        render: (row) => (
+          <div className="min-w-0">
+            <div className="truncate text-idpxyz-text">{row.partyName ?? <UnknownPartyName />}</div>
+            <div className="truncate font-mono type-caption text-idpxyz-breadcrumb">{row.partyId}</div>
+          </div>
+        ),
+      },
+      { key: 'toward', header: '对它担任角色的单位', render: (row) => roleCountsText(row.towardIt, relationshipsAnswered) },
+      { key: 'from', header: '它对其担任角色', hideWhenDetailOpen: true, render: (row) => roleCountsText(row.fromIt, relationshipsAnswered) },
+      {
+        key: 'candidates',
+        header: '待确认',
+        right: true,
+        render: (row) => (relationshipsAnswered && row.candidates > 0 ? <span className="font-mono">{row.candidates}</span> : '—'),
+      },
+      {
+        key: 'entities',
+        header: '公司主体',
+        minListWidth: 760,
+        render: (row) => <span className="font-mono type-caption text-idpxyz-breadcrumb">{row.legalEntityIds.join('、')}</span>,
+      },
+    ];
+    // 合成节点与「已结束」那句点了：切到关系册、按这家公司的编码检索，看它名下的全部关系。
+    const showRelationshipsOf = (partyId: string) => {
+      setBook('relationships');
+      setRelationshipSearch(partyId);
+      setRole('ALL');
+      setRelationshipStatus('ALL');
+      setAttentionOnly(false);
+      setSelectedRelationship(null);
+    };
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+        <WorkbenchPageTemplate<OurCompanyNetworkRow>
+          title={info.title}
+          subtitle="以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图"
+          titleAside={bookStrip}
+          onRefresh={() => {
+            entities.retry();
+            relationships.retry();
+          }}
+          refreshing={entities.pending || relationships.pending}
+          primaryAction={primaryAction}
+          search={{ value: networkSearch, onChange: setNetworkSearch, placeholder: '搜我方公司名称、编码或公司主体' }}
+          toolbarRight={
+            knownEntities !== null ? (
+              <span className="type-body text-idpxyz-breadcrumb">
+                共 {networkRows.length} 家我方公司
+                {completeRelationships === null && relationshipsAnswered ? '；合作关系册不止一页，段数只按第一页数' : ''}
+              </span>
+            ) : undefined
+          }
+          columns={networkColumns}
+          rows={visible}
+          rowKey={(row) => row.partyId}
+          selectedKey={selectedOurCompany}
+          onSelect={setSelectedOurCompany}
+          noMatchText="没有匹配的我方公司"
+          onClearFilters={() => setNetworkSearch('')}
+          renderDetail={(key) => {
+            const row = networkRows.find((candidate) => candidate.partyId === key);
+            return row ? (
+              <OurCompanyNetworkPanel
+                row={row}
+                relationshipsComplete={completeRelationships !== null}
+                onClose={() => setSelectedOurCompany(null)}
+                onShowRelationships={() => showRelationshipsOf(row.partyId)}
+              />
+            ) : null;
+          }}
+          viewState={catalogueViewState(entities.answer, networkRows.length, entities.retry, {
+            module: info,
+            endpoint: 'GET /group-legal-entities',
+            emptyTitle: '还没有在用的我方公司',
+            emptyDescription: '我方公司在「公司主体」页登记；登记之后，这里按公司列出各自的合作关系。',
+            narrowed: networkSearch.trim() !== '',
+          })}
+        />
+      </div>
+    );
+  }
 
   if (book === 'identities') {
     const conditions = businessPartyListConditions(settledSearch, status, sort);
