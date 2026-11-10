@@ -7,9 +7,17 @@ import {
   businessPartyPanelTabsOf,
   businessPartyRegistrationCountry,
   businessPartyTypeFilterOptions,
+  businessPartyTypeFilterOptionsOf,
+  businessPartyTypeFilterWords,
   businessPartyTypeKpis,
+  businessPartyTypeKpisWhenComplete,
+  businessPartyTypeNoMatchNote,
   countBusinessParties,
+  effectiveBusinessPartyTypeFilter,
   partyRegistrationCountriesOf,
+  partyTypeAbsenceOf,
+  partyTypeSourcesComplete,
+  partyTypeUnreadMark,
   shownBusinessPartyPanelTab,
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
@@ -21,6 +29,7 @@ import {
   rolesOfParty,
 } from './business-party-list';
 import { catalogueConditionsQuery } from '../catalogue-query';
+import { completeRegisterRows } from '../complete-register';
 
 // 本文件钉的是身份本体册的列表纯逻辑：检索、状态与表头排序编成读口的条件（ADR-0144，可排维与筛选维照后端 BusinessPartyPages
 // 的声明），类型由别的册推出来、只筛到手的这一页；「筛出为空」与「登记册为空」是两个事实，由调用页按票 01 裁决 1 另显。
@@ -290,4 +299,60 @@ test('countBusinessParties 与类型指标格', () => {
     ],
   );
   deepEqual(businessPartyTypeKpis(countBusinessParties([], index, ours)), []);
+});
+
+// Covers: 票 business-party-redesign/01——推类型用的册（合作关系、客户账户、公司主体）有一本没读全时，页面不把没读到说成没有。
+// 合作关系的答复还有下一页即没读全：按类型的指标不摆；推不出角色的行缺的是「没读到」而不是「没有」；类型筛选里没有
+// 「暂无合作关系」，记着的这一项当作没筛。还没答出、没读成的那一本同样算没读全。都读全时每一项与此前相同。
+test('推类型用的册没读全时不把没读到说成没有', () => {
+  const held = [relationship({ relationshipId: 'R1', holderId: 'SYN-PARTY-OPERATOR-01', role: 'CUSTOMER' })];
+  const partial = { relationships: held, page: { size: 1, next: 'cursor-after-R1', total: 3 } };
+  const whole = { relationships: held, page: { size: 200, next: null, total: 1 } };
+  const rowsOf = (body: { relationships: PartyRelationshipRecord[] }) => body.relationships;
+  const unread = partyTypeSourcesComplete([completeRegisterRows(partial, rowsOf), [], []]);
+  const read = partyTypeSourcesComplete([completeRegisterRows(whole, rowsOf), [], []]);
+  equal(unread, false);
+  equal(read, true);
+  equal(partyTypeSourcesComplete([completeRegisterRows(whole, rowsOf), null, []]), false);
+  equal(partyTypeSourcesComplete([]), true);
+
+  const index = indexPartyRoles(held);
+  const counts = countBusinessParties(rows, index);
+  equal(businessPartyTypeKpisWhenComplete(counts, unread), null);
+  deepEqual(businessPartyTypeKpisWhenComplete(counts, read), businessPartyTypeKpis(counts));
+  equal(businessPartyTypeKpisWhenComplete(null, read), null);
+
+  equal(partyTypeAbsenceOf(false, rolesOfParty(index, 'SYN-PARTY-AGENT-04'), unread), 'unread');
+  equal(partyTypeAbsenceOf(false, rolesOfParty(index, 'SYN-PARTY-AGENT-04'), read), 'none');
+  equal(partyTypeAbsenceOf(false, rolesOfParty(index, 'SYN-PARTY-OPERATOR-01'), unread), null);
+  equal(partyTypeAbsenceOf(true, [], unread), null);
+  equal(partyTypeUnreadMark, '—');
+
+  deepEqual(businessPartyTypeFilterOptionsOf(read), businessPartyTypeFilterOptions);
+  deepEqual(
+    businessPartyTypeFilterOptionsOf(unread).map((option) => option.value),
+    businessPartyTypeFilterOptions.map((option) => option.value).filter((value) => value !== 'NONE'),
+  );
+  equal(effectiveBusinessPartyTypeFilter('NONE', unread), 'ALL');
+  equal(effectiveBusinessPartyTypeFilter('NONE', read), 'NONE');
+  equal(effectiveBusinessPartyTypeFilter('CUSTOMER', unread), 'CUSTOMER');
+});
+
+// Covers: 类型给不出数时工具条下拉的自称与筛空那句话——只筛本页、没有读全两种原因各说各的，都有就都说；两样都读全了不摆
+// 下拉，筛空就是普通的筛空。只筛本页那一套字与此前逐字相同。
+test('类型下拉的自称与筛空的话随给不出数的原因走', () => {
+  equal(businessPartyTypeFilterWords(true, true), null);
+  deepEqual(businessPartyTypeFilterWords(false, true), {
+    label: '类型（只筛本页）',
+    note: '类型只筛本页',
+    title: '类型由合作关系、客户账户与公司主体推出来，读口筛不了：只在当前这一页上筛，翻页后照新的一页再筛。',
+  });
+  equal(businessPartyTypeFilterWords(true, false)?.label, '类型（没有读全）');
+  equal(businessPartyTypeFilterWords(true, false)?.note, '类型没有读全，筛出的可能不全');
+  equal(businessPartyTypeFilterWords(false, false)?.note, '类型只筛本页，且没有读全');
+
+  equal(businessPartyTypeNoMatchNote(true, true), businessPartyNoMatchNote);
+  equal(businessPartyTypeNoMatchNote(false, true), '这一页上没有这一类单位；类型只筛本页，不看其余几页，翻页看看');
+  equal(businessPartyTypeNoMatchNote(false, false), '这一页上没有这一类单位；类型只筛本页，不看其余几页，翻页看看');
+  equal(businessPartyTypeNoMatchNote(true, false), '没有读到这一类单位；类型没有读全，不等于没有');
 });

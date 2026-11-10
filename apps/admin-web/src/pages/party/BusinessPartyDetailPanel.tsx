@@ -92,6 +92,7 @@ export function BusinessPartyDetailPanel({
   row,
   roles,
   ours,
+  typeUnread = false,
   pinned,
   relationships,
   retryRelationships,
@@ -105,6 +106,11 @@ export function BusinessPartyDetailPanel({
   roles: readonly string[];
   /** 是不是法人册上钉着的我方公司；与列表类型格同一判据（business-party-list.ts 的 businessPartyTypeLabel）。 */
   ours: boolean;
+  /**
+   * 推类型用的册没读全（business-party-list.ts 的 partyTypeSourcesComplete 为假）。这时 `roles` 与 `ours` 只是读到的那一部分：
+   * 头部推不出类型就显「—」，也不说「还没有合作关系」、不把「登记合作关系」提成主动作——它的关系可能只是没读到。
+   */
+  typeUnread?: boolean;
   /**
    * 法人册上有没有公司主体钉着它，已停用的也算（business-party-list.ts 的 partiesPinnedByLegalEntities），与对象页收资料入口
    * 同一判据；null 是法人册还没答出。头部的「我方公司」只数在用的（ours），两者用途不同。
@@ -167,8 +173,10 @@ export function BusinessPartyDetailPanel({
   };
   // 首屏那一句提示与头区动作（票 business-party-ux/08）：判读在 business-party-panel-first-screen.ts。各段计数与「关联」签读同一份缓存。
   const overview = usePartyOverviewStates(row.partyId, relationships);
-  const liveRelationships = overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
-  const hint = panelHintOf(row, ours, liveRelationships, overview.accounts.kind === 'answered' ? roles.length : null);
+  // 册没读全时两格都按「不知道」交给 panelHintOf：它对 null 的做法就是不说「还没有」。
+  const liveRelationships =
+    !typeUnread && overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
+  const hint = panelHintOf(row, ours, liveRelationships, !typeUnread && overview.accounts.kind === 'answered' ? roles.length : null);
   const actions = panelHeaderActionsOf(mayWrite, pinned, hint);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开，不另造一处写口。
   const openRelationshipForm = () => {
@@ -197,9 +205,9 @@ export function BusinessPartyDetailPanel({
                 </CopyAside>
               </p>
             ) : null}
-            {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，不留空。 */}
+            {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，册没读全时显「—」，不留空。 */}
             <div className="mt-1">
-              <BusinessPartyTypeTags ours={ours} roles={roles} />
+              <BusinessPartyTypeTags ours={ours} roles={roles} unread={typeUnread} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

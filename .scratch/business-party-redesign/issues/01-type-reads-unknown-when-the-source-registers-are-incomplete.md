@@ -1,7 +1,7 @@
 # 01 止血：推类型用的册不止一页时，没读到的显示「—」并标明，不再显示「暂无合作关系」
 
 Category: bug
-Status: ready-for-agent
+Status: in-progress
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始，与票 02 互不相干
 

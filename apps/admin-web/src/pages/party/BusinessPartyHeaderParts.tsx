@@ -5,7 +5,7 @@ import { statusToneBanner, statusToneText, type StatusTone } from '../../compone
 import type { BusinessPartyRecord, PartyRelationshipRecord, BusinessPartyListResponseBody } from './api';
 import { businessPartyObjectHash } from './business-parties-address';
 import { labelOf, partyNameUnknownNote, partyRoleLabels, partyTypeFallbackLabel, relationshipStatusLabels } from './presentation';
-import { ourCompanyLabel } from './business-party-list';
+import { ourCompanyLabel, partyTypeAbsenceOf, partyTypeUnreadMark, partyTypeUnreadNote } from './business-party-list';
 import { partyRelationshipNeedsAttention } from './party-relationship-list';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -21,9 +21,20 @@ import { BusinessPartyDeactivationDialog } from './BusinessPartyDeactivationDial
  * 类型标签，列表类型格与右栏头部同一份（票 business-party-ux/04），说法同 business-party-list.ts 的 businessPartyTypeLabel：
  * 我方公司一枚、排在前面，用提示语气的淡底与描边好与角色分开——强调色作字在画布上不足 4.5:1，所以字仍是正文色；各角色各一枚，
  * 中性灰底；两样都没有时是弱色字「暂无合作关系」，不做成标签——它说的是「没有」，不该和有的东西一样醒目。
+ * `unread` 为真即推类型用的册没读全（business-party-list.ts 的 partyTypeSourcesComplete）：两样都没有时只显一个「—」，
+ * 悬停与读屏说明是没读到——这时说「暂无合作关系」是把没读到说成没有。
  */
-export function BusinessPartyTypeTags({ ours, roles }: { ours: boolean; roles: readonly string[] }) {
-  if (!ours && roles.length === 0) {
+export function BusinessPartyTypeTags({ ours, roles, unread = false }: { ours: boolean; roles: readonly string[]; unread?: boolean }) {
+  const absence = partyTypeAbsenceOf(ours, roles, !unread);
+  if (absence === 'unread') {
+    return (
+      <span className="whitespace-nowrap type-body text-idpxyz-breadcrumb" title={partyTypeUnreadNote}>
+        <span aria-hidden="true">{partyTypeUnreadMark}</span>
+        <span className="sr-only">{partyTypeUnreadNote}</span>
+      </span>
+    );
+  }
+  if (absence === 'none') {
     return <span className="whitespace-nowrap type-body text-idpxyz-breadcrumb">{partyTypeFallbackLabel}</span>;
   }
   return (

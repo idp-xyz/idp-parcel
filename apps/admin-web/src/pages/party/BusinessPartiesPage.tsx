@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
-import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, MoreHorizontal, Plus, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, Info, MoreHorizontal, Plus, UserPlus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import {
@@ -71,15 +71,20 @@ import {
   businessPartyNoMatchNote,
   businessPartyStatusFilterOptions,
   businessPartyRegistrationCountry,
-  businessPartyTypeFilterOptions,
-  businessPartyTypeKpis,
+  businessPartyTypeFilterOptionsOf,
+  businessPartyTypeFilterWords,
+  businessPartyTypeKpisWhenComplete,
+  businessPartyTypeNoMatchNote,
   countBusinessParties,
   defaultBusinessPartySort,
+  effectiveBusinessPartyTypeFilter,
   filterBusinessPartiesByType,
   indexPartyRoles,
   ourCompanyPartyIds,
   partiesPinnedByLegalEntities,
   partyRegistrationCountriesOf,
+  partyTypeSourcesComplete,
+  partyTypeUnreadNote,
   rolesOfParty,
   type BusinessPartyStatusFilter,
   type BusinessPartyTypeFilter,
@@ -137,10 +142,12 @@ const relationshipStatusDotClass: Record<string, string> = {
 // 常用（票 business-party-ux/04）。前两列给定宽，多出来的宽度落到状态与日期列上；名称格另上限 22rem，列表比各列之和还宽时
 // 名称不跟着长。时刻只显到日（「哪一天」），完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
 // （business-party-list.ts 的 businessPartySortColumns），读口不按名称排。
+// 推类型用的册没读全时（typeSourcesComplete 为假）：类型表头旁带一个提示记号，推不出类型的格显「—」而不是「暂无合作关系」。
 function identityColumnsOf(
   roles: PartyRoleIndex,
   ours: OurCompanyIndex,
   countries: ReadonlyMap<string, string>,
+  typeSourcesComplete: boolean,
 ): WorkbenchColumn<BusinessPartyRecord>[] {
   return [
     {
@@ -164,9 +171,20 @@ function identityColumnsOf(
     },
     {
       key: 'type',
-      header: '类型',
+      header: typeSourcesComplete ? (
+        '类型'
+      ) : (
+        <span className="inline-flex items-center gap-1" title={partyTypeUnreadNote}>
+          类型
+          {/* 警示色只落在图标上：图标是非文字，门槛 3:1；字仍是表头自己的颜色。 */}
+          <Info className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
+          <span className="sr-only">{partyTypeUnreadNote}</span>
+        </span>
+      ),
       width: '12rem',
-      render: (row) => <BusinessPartyTypeTags ours={ours.has(row.partyId)} roles={rolesOfParty(roles, row.partyId)} />,
+      render: (row) => (
+        <BusinessPartyTypeTags ours={ours.has(row.partyId)} roles={rolesOfParty(roles, row.partyId)} unread={!typeSourcesComplete} />
+      ),
     },
     {
       key: 'country',
@@ -476,7 +494,8 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 回到第一页。类型与待查是页面从别的册推出来的，读口筛不了，在到手的那一页上筛。指标与胶囊计数只在整册一页装得下时摆
  * （complete-register.ts 的 completeRegisterRows）：那时按整册数的是真数，页内筛也是精确的；装不下时一页里数出来的不是册上的
  * 数，计数不摆、指标格收起，类型与待查改成标「只筛本页」的控件，当前条件下共几条由翻页条说。册切换不进 kpis：那是一册的指标，
- * 册切换是页面级的。
+ * 册切换是页面级的。身份册的类型另有一道：推类型用的那几本册要都读全，按类型的指标与「暂无合作关系」才作数，否则类型格
+ * 推不出来的显「—」并标明（business-party-list.ts 文件头）。
  *
  * 登记从页头主动作进登记视图，不再是第三个签：主动作登当前读册那一本，另两本收进旁边的「更多」。登记视图住在地址上
  * （`?register=<册>`，判读在 business-parties-address.ts）：刷新仍停在登记视图、换册只换键值不压历史，浏览器后退回列表。
@@ -684,9 +703,16 @@ export function BusinessPartiesPage() {
   const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
   const networkRows = useMemo(() => ourCompanyNetworkRows(knownEntities, knownRelationships ?? []), [knownEntities, knownRelationships]);
   const entityCountries = useMemo(() => partyRegistrationCountriesOf(knownEntities), [knownEntities]);
+  // 推类型用的那几本册读全了没有（business-party-list.ts 文件头）。没读全——多于一页、还没答出、没读成——类型一列就只是
+  // 读到的那一部分：推不出类型的格显「—」，按类型的数不摆，「暂无合作关系」这一项不给筛。
+  const typeSourcesComplete = partyTypeSourcesComplete([
+    completeRegisterRows(relationships.answer?.kind === 'outcome' ? relationships.answer.body : null, (body) => body.relationships),
+    completeRegisterRows(accounts.answer?.kind === 'outcome' ? accounts.answer.body : null, (body) => body.accounts),
+    completeRegisterRows(entities.answer?.kind === 'outcome' ? entities.answer.body : null, (body) => body.entities),
+  ]);
   const identityColumns = useMemo(
-    () => identityColumnsOf(roleIndex, ourCompanies, entityCountries),
-    [roleIndex, ourCompanies, entityCountries],
+    () => identityColumnsOf(roleIndex, ourCompanies, entityCountries, typeSourcesComplete),
+    [roleIndex, ourCompanies, entityCountries, typeSourcesComplete],
   );
 
   if (view.kind === 'object') {
@@ -925,8 +951,10 @@ export function BusinessPartiesPage() {
     const counts = completeParties === null ? null : countBusinessParties(completeParties, roleIndex, ourCompanies);
     // 指标只按类型分格（票 business-party-ux/05）：运营问的是「有几家客户、几家承运商」，不是「有几条已登记修订」。哪几格、
     // 什么序在 businessPartyTypeKpis；状态（待生效、已停用）不在这里，归下面的状态胶囊——一个筛选器不开两个入口。
-    const kpis: WorkbenchKpi[] | undefined = counts
-      ? businessPartyTypeKpis(counts).map((cell) => ({
+    // 按类型的数还要推类型用的册都读全才摆（businessPartyTypeKpisWhenComplete）；状态胶囊的数只看往来单位册自己，不受它影响。
+    const typeKpis = businessPartyTypeKpisWhenComplete(counts, typeSourcesComplete);
+    const kpis: WorkbenchKpi[] | undefined = typeKpis
+      ? typeKpis.map((cell) => ({
           label: cell.label,
           value: cell.count,
           // 「暂无合作关系」不是一种角色，数值不上语气色；我方公司与各角色是。
@@ -949,32 +977,36 @@ export function BusinessPartiesPage() {
         onClick: () => (option.value === 'ALL' ? setStatus('ALL') : toggleStatus(option.value)),
       }));
     // 类型由关系册、客户账户册与法人册推出来（business-party-list.ts 文件头），读口没有这一维：整册装不下时只筛到手的这一页，
-    // 控件上写明；装得下时类型的入口是上面的指标格。
-    const typeFilter = counts ? undefined : (
-      <>
-        <select
-          className={filterSelectClass}
-          value={type}
-          aria-label="类型（只筛本页）"
-          title="类型由合作关系、客户账户与公司主体推出来，读口筛不了：只在当前这一页上筛，翻页后照新的一页再筛。"
-          onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
-        >
-          {businessPartyTypeFilterOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <PageOnlyNote>类型只筛本页</PageOnlyNote>
-      </>
-    );
+    // 推类型用的册没读全时筛出的只是读到的那一部分，控件上各自写明（businessPartyTypeFilterWords）；都读全时类型的入口是
+    // 上面的指标格。没读全时「暂无合作关系」不给筛，记着的这一项当作没筛（effectiveBusinessPartyTypeFilter）。
+    const typeWords = businessPartyTypeFilterWords(completeParties !== null, typeSourcesComplete);
+    const shownType = effectiveBusinessPartyTypeFilter(type, typeSourcesComplete);
+    const typeFilter =
+      typeWords === null ? undefined : (
+        <>
+          <select
+            className={filterSelectClass}
+            value={shownType}
+            aria-label={typeWords.label}
+            title={typeWords.title}
+            onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
+          >
+            {businessPartyTypeFilterOptionsOf(typeSourcesComplete).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <PageOnlyNote>{typeWords.note}</PageOnlyNote>
+        </>
+      );
 
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <CatalogueCursorScope conditions={conditions} load={listBusinessParties}>
           {({ answer, pagination, retry }) => {
             const pageRows = answer?.kind === 'outcome' ? answer.body.parties : [];
-            const visible = filterBusinessPartiesByType(pageRows, type, roleIndex, ourCompanies);
+            const visible = filterBusinessPartiesByType(pageRows, shownType, roleIndex, ourCompanies);
             return (
               <WorkbenchPageTemplate<BusinessPartyRecord>
                 title={info.title}
@@ -1001,8 +1033,8 @@ export function BusinessPartiesPage() {
                 sort={sort}
                 onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
                 noMatchText={
-                  counts === null && type !== 'ALL' && pageRows.length > 0
-                    ? '这一页上没有这一类单位；类型只筛本页，不看其余几页，翻页看看'
+                  shownType !== 'ALL' && pageRows.length > 0
+                    ? businessPartyTypeNoMatchNote(completeParties !== null, typeSourcesComplete)
                     : businessPartyNoMatchNote
                 }
                 onClearFilters={() => {
@@ -1017,6 +1049,7 @@ export function BusinessPartiesPage() {
                       row={row}
                       roles={rolesOfParty(roleIndex, row.partyId)}
                       ours={ourCompanies.has(row.partyId)}
+                      typeUnread={!typeSourcesComplete}
                       pinned={entities.answer == null ? null : pinnedParties.has(row.partyId)}
                       relationships={relationships.answer}
                       retryRelationships={relationships.retry}

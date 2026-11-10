@@ -10,7 +10,9 @@
 // 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
 // 按法人册算出参与方标识集合，类型列按它称呼，与角色并列显示。类型由这几本册算出，读口筛不了，所以类型筛选在到手的那一页上做
 // （filterBusinessPartiesByType）：整册一页装得下时它是精确的，否则只筛本页、控件上如实标出（complete-register.ts）。这几本册
-// 各只取不带条件的第一页，角色与我方公司也只按那一页算。
+// 各只取不带条件的第一页，角色与我方公司也只按那一页算。所以哪一本没读全（多于一页、还没答出、没读成），推不出角色的行
+// 只说得出「没读到」，不说「暂无合作关系」；按类型的数与「暂无合作关系」这一项筛选也不摆（partyTypeSourcesComplete 起的几个
+// 函数）——它的关系或账户可能排在那一本的第一页之后，把没读到说成没有，操作者会照着去重登一段已有的关系。
 
 import type { WorkbenchSort } from '../../templates/workbench';
 import type { CatalogueConditions } from '../catalogue-query';
@@ -166,6 +168,77 @@ export const businessPartyTypeFilterOptions: readonly SelectOption<BusinessParty
   { value: 'NONE', label: partyTypeFallbackLabel },
 ];
 
+/**
+ * 推类型用的那几本册——合作关系、客户账户、公司主体——是不是都读全了。传进来的是各册经 complete-register.ts 的
+ * completeRegisterRows 判过的结果：读全了是行，没读全（多于一页、还没答出、没读成）是 null。
+ */
+export function partyTypeSourcesComplete(sources: readonly (readonly unknown[] | null)[]): boolean {
+  return sources.every((rows) => rows !== null);
+}
+
+/** 推不出角色、又不是我方公司的一行缺的是什么：册读全了是真没有（none），没读全只是没读到（unread）。 */
+export type PartyTypeAbsence = 'none' | 'unread';
+
+/** 类型格在这一行上要不要说「缺」、说哪一种；是我方公司或推得出角色的交 null，照常摆标签。 */
+export function partyTypeAbsenceOf(ours: boolean, roles: readonly string[], sourcesComplete: boolean): PartyTypeAbsence | null {
+  if (ours || roles.length > 0) return null;
+  return sourcesComplete ? 'none' : 'unread';
+}
+
+/** 「没读到」在类型格里显的记号。 */
+export const partyTypeUnreadMark = '—';
+
+/** 「没读到」的那一句，格上的悬停、读屏与表头的提示都念它。 */
+export const partyTypeUnreadNote = '合作关系、客户账户或公司主体没有读全：类型一列可能不全，没读到的显示「—」，不等于没有';
+
+/** 类型筛选的选项。册没读全时不摆「暂无合作关系」：这时分不出没有与没读到，筛出来的会把没读到的也算进去。 */
+export function businessPartyTypeFilterOptionsOf(sourcesComplete: boolean): readonly SelectOption<BusinessPartyTypeFilter>[] {
+  return sourcesComplete ? businessPartyTypeFilterOptions : businessPartyTypeFilterOptions.filter((option) => option.value !== 'NONE');
+}
+
+/** 记着的类型筛选此刻作不作数：册没读全时「暂无合作关系」筛不了，当作没筛。记着的值不动，读全了它又作数。 */
+export function effectiveBusinessPartyTypeFilter(type: BusinessPartyTypeFilter, sourcesComplete: boolean): BusinessPartyTypeFilter {
+  return type === 'NONE' && !sourcesComplete ? 'ALL' : type;
+}
+
+export interface BusinessPartyTypeFilterWords {
+  /** 下拉的名字，读屏念它。 */
+  label: string;
+  /** 下拉旁的一句。 */
+  note: string;
+  /** 悬停的整句解释。 */
+  title: string;
+}
+
+/**
+ * 类型给不出数、改由工具条上的下拉筛时，那个下拉怎么自称。给不出数有两种原因，各说各的，都有就都说：往来单位册不止一页
+ * （partiesComplete 为假），类型只筛得了到手的这一页；推类型用的册没读全（sourcesComplete 为假），筛出的只是读到的那一部分。
+ * 两样都读全了交 null——那时类型由指标格筛，不摆下拉。
+ */
+export function businessPartyTypeFilterWords(partiesComplete: boolean, sourcesComplete: boolean): BusinessPartyTypeFilterWords | null {
+  if (partiesComplete && sourcesComplete) return null;
+  const derived = '类型由合作关系、客户账户与公司主体推出来';
+  if (sourcesComplete) {
+    return {
+      label: '类型（只筛本页）',
+      note: '类型只筛本页',
+      title: `${derived}，读口筛不了：只在当前这一页上筛，翻页后照新的一页再筛。`,
+    };
+  }
+  if (partiesComplete) {
+    return {
+      label: '类型（没有读全）',
+      note: '类型没有读全，筛出的可能不全',
+      title: `${derived}，这几本册没有读全：筛出的只是读到的那一部分。`,
+    };
+  }
+  return {
+    label: '类型（只筛本页，且没有读全）',
+    note: '类型只筛本页，且没有读全',
+    title: `${derived}，读口筛不了，这几本册也没有读全：只在当前这一页上筛，筛出的只是读到的那一部分。`,
+  };
+}
+
 /** 表头可排的列 → 读口声明的可排维。名称列不可排：读口不按名称排。 */
 export const businessPartySortColumns: CatalogueSortColumns = {
   'effective-from': 'effectiveFrom',
@@ -264,5 +337,23 @@ export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPart
   return cells;
 }
 
+/**
+ * 按类型分格的指标摆不摆：要往来单位册读全（counts 不为 null），还要推类型用的册都读全。差一样就交 null，类型改由工具条上
+ * 的下拉筛——按不全的关系数出来的「几家客户」不是册上的数。
+ */
+export function businessPartyTypeKpisWhenComplete(counts: BusinessPartyCounts | null, sourcesComplete: boolean): BusinessPartyTypeKpi[] | null {
+  return counts !== null && sourcesComplete ? businessPartyTypeKpis(counts) : null;
+}
+
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const businessPartyNoMatchNote = '当前筛选条件下没有匹配的单位';
+
+/**
+ * 按类型筛空时表格区那一行的话：只筛得了本页时叫人翻页；本页就是整册、但推类型用的册没读全时，说明筛空不等于没有；
+ * 两样都读全了就是普通的筛空。
+ */
+export function businessPartyTypeNoMatchNote(partiesComplete: boolean, sourcesComplete: boolean): string {
+  if (!partiesComplete) return '这一页上没有这一类单位；类型只筛本页，不看其余几页，翻页看看';
+  if (!sourcesComplete) return '没有读到这一类单位；类型没有读全，不等于没有';
+  return businessPartyNoMatchNote;
+}
