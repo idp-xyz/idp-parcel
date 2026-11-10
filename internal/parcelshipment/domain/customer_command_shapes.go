@@ -31,7 +31,7 @@ const (
 // CanonicalizeCustomerSupplement 是首方补充口的规范化入口（形状 PSU-1，票 first-party-api/08）。内容段与 PSC-1 同构——补充重报
 // 整份内容、不从旧版本继承（FormNewSubmissionVersionCommand 的同名纪律），规格里的 BasisVersion 必须带上客户带回的基准：基准
 // 不同即内容不同，同一补充请求标识换基准重发是来源冲突、不是重放。版本名 PSU-1 进摘要前缀，补充的判重空间因此不与提交的
-// PSC-1 摘要相混。
+// PSC-1 摘要相混。同构也就随 PSC-1 一起同号加了货物明细与平台货件两个可缺键，前提相同（ADR-0373 决定八）。
 func CanonicalizeCustomerSupplement(spec SubmissionPayloadSpec) (CanonicalSubmission, error) {
 	if !spec.BasisVersion.valid() {
 		return CanonicalSubmission{}, ErrInvalidSubmissionPayload

@@ -22,10 +22,13 @@ import (
 var ErrInvalidSubmissionPayload = errors.New("parcel shipment: invalid submission payload")
 
 // payloadCanonicalizationVersion 标识规范化形状（ADR-0014）：版本进摘要输入，形状变更
-// 走新版本、不改旧形状的产出。PSC-1 的强类型段只覆盖领域已建模的内容（成员及其测量
-// 画像、基础版本、requestEffectiveAt）；寄收件范围与服务要求尚无领域模型（地址边界
-// 属 T3 待裁），以规范化条目承载。等这些内容拿到自己的模型，按 ADR-0014 开 PSC-2，
-// 不在 PSC-1 上就地扩列。
+// 走新版本、不改旧形状的产出。PSC-1 的强类型段覆盖领域已建模的内容（成员及其测量
+// 画像、基础版本、requestEffectiveAt，以及货物明细与平台货件）；寄收件范围与服务要求
+// 尚无领域模型（地址边界属 T3 待裁），以规范化条目承载。
+//
+// 货物明细与平台货件是在 PSC-1 上同号加进来的可缺键（ADR-0373 决定八）：前提照 ADR-0267
+// 决定三，首个租户实例进生产之前，已存摘要只在演示库与测试夹具里；可缺键没报即不编码，
+// 旧载荷逐字节同前，连重灌都不必。首个租户实例进生产之后再改形，照 ADR-0014 换号。
 const payloadCanonicalizationVersion = "PSC-1"
 
 // CanonicalContentEntry 是尚无领域模型的规范化内容条目。名做键：去空白后必须非空；
@@ -110,6 +113,11 @@ type SubmissionPayloadSpec struct {
 	// 排序、去重与编码纪律。
 	Scope   []CanonicalContentEntry
 	Service []CanonicalContentEntry
+	// Goods 是委托的货物明细（ADR-0373），零值即没报。装箱分配指的包裹要在成员集合里。
+	Goods GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是平台货件号、平台参考号与每箱的平台箱标号（ADR-0374 决定四），零值即没报。
+	PlatformShipment  PlatformShipmentDeclaration
+	PlatformBoxLabels []PlatformBoxLabelDeclaration
 }
 
 // CanonicalizeSubmissionPayload 按当前规范化版本把规范化业务内容变成 PayloadDigest。
@@ -131,7 +139,18 @@ func canonicalizeSubmissionPayloadUnder(version string, spec SubmissionPayloadSp
 	if !spec.RequestReference.valid() {
 		return PayloadDigest{}, ErrInvalidSubmissionPayload
 	}
-	members, err := canonicalMemberDocuments(spec.DeclaredParcelIDs, spec.Profiles)
+	members, declared, err := canonicalMemberDocuments(spec.DeclaredParcelIDs, spec.Profiles)
+	if err != nil {
+		return PayloadDigest{}, err
+	}
+	labels, err := platformBoxLabelsByParcel(spec.PlatformBoxLabels, spec.PlatformShipment, declared)
+	if err != nil {
+		return PayloadDigest{}, fmt.Errorf("%w: %w", ErrInvalidSubmissionPayload, err)
+	}
+	for index := range members {
+		members[index].PlatformBoxLabel = labels[members[index].Reference]
+	}
+	goods, err := canonicalGoodsDocumentOf(spec.Goods, declared)
 	if err != nil {
 		return PayloadDigest{}, err
 	}
@@ -152,6 +171,8 @@ func canonicalizeSubmissionPayloadUnder(version string, spec SubmissionPayloadSp
 		Members:          members,
 		Scope:            scope,
 		Service:          service,
+		Goods:            goods,
+		PlatformShipment: canonicalPlatformShipmentOf(spec.PlatformShipment),
 	}
 	encoded, err := json.Marshal(document)
 	if err != nil {
@@ -208,17 +229,19 @@ func canonicalSubmissionOf(digest PayloadDigest, spec SubmissionPayloadSpec) Can
 	}
 }
 
-// canonicalSubmissionDocument 是 PSC-1 的封闭编码形状。所有段常在场、缺席以显式空值
-// 表达，不用 omitempty——那是给「老摘要要保持可比」的形状演进用的（见计价侧先例），
-// 全新版本用不上，省掉它换取「读形状即读全集」。
+// canonicalSubmissionDocument 是 PSC-1 的封闭编码形状。原有各段常在场、缺席以显式空值
+// 表达；货物明细与平台货件两段是后来同号加进来的，用 omitempty 正是为了「老摘要要保持
+// 可比」（ADR-0373 决定八），段内的键仍常在。
 type canonicalSubmissionDocument struct {
-	Canonicalization string                       `json:"canonicalization"`
-	RequestReference string                       `json:"request_reference"`
-	BasisVersion     string                       `json:"basis_version"`
-	EffectiveAt      canonicalEffectiveAtDocument `json:"request_effective_at"`
-	Members          []canonicalMemberDocument    `json:"members"`
-	Scope            []canonicalEntryDocument     `json:"scope"`
-	Service          []canonicalEntryDocument     `json:"service"`
+	Canonicalization string                             `json:"canonicalization"`
+	RequestReference string                             `json:"request_reference"`
+	BasisVersion     string                             `json:"basis_version"`
+	EffectiveAt      canonicalEffectiveAtDocument       `json:"request_effective_at"`
+	Members          []canonicalMemberDocument          `json:"members"`
+	Scope            []canonicalEntryDocument           `json:"scope"`
+	Service          []canonicalEntryDocument           `json:"service"`
+	Goods            *canonicalGoodsDocument            `json:"goods,omitempty"`
+	PlatformShipment *canonicalPlatformShipmentDocument `json:"platform_shipment,omitempty"`
 }
 
 // canonicalEffectiveAtDocument 把值与存在状态各占一格：缺失不是一种特殊的值，是另一种
@@ -240,6 +263,8 @@ type canonicalMemberDocument struct {
 	Reference  string                       `json:"reference"`
 	Weight     *canonicalWeightDocument     `json:"weight"`
 	Dimensions *canonicalDimensionsDocument `json:"dimensions"`
+	// PlatformBoxLabel 是同号加进来的可缺键，没报的成员逐字节同前（ADR-0373 决定八）。
+	PlatformBoxLabel string `json:"platform_box_label,omitempty"`
 }
 
 type canonicalWeightDocument struct {
@@ -259,20 +284,21 @@ type canonicalEntryDocument struct {
 	Value string `json:"value"`
 }
 
+// canonicalMemberDocuments 交回成员文档与成员集合；集合给货物明细与平台箱标号核「只指成员」用。
 func canonicalMemberDocuments(
 	parcels []DeclaredParcelID,
 	profiles []DeclaredParcelProfile,
-) ([]canonicalMemberDocument, error) {
+) ([]canonicalMemberDocument, map[DeclaredParcelID]struct{}, error) {
 	if len(parcels) == 0 {
-		return nil, ErrNoDeclaredParcels
+		return nil, nil, ErrNoDeclaredParcels
 	}
 	declared := make(map[DeclaredParcelID]struct{}, len(parcels))
 	for _, parcelID := range parcels {
 		if !parcelID.valid() {
-			return nil, ErrInvalidSubmissionPayload
+			return nil, nil, ErrInvalidSubmissionPayload
 		}
 		if _, duplicated := declared[parcelID]; duplicated {
-			return nil, ErrDuplicateDeclaredParcel
+			return nil, nil, ErrDuplicateDeclaredParcel
 		}
 		declared[parcelID] = struct{}{}
 	}
@@ -280,10 +306,10 @@ func canonicalMemberDocuments(
 	measurements := make(map[DeclaredParcelID]DeclaredMeasurement, len(profiles))
 	for _, profile := range profiles {
 		if _, member := declared[profile.parcel]; !member || !profile.measurement.declared() {
-			return nil, ErrInvalidDeclaredMeasurement
+			return nil, nil, ErrInvalidDeclaredMeasurement
 		}
 		if _, duplicated := measurements[profile.parcel]; duplicated {
-			return nil, ErrInvalidDeclaredMeasurement
+			return nil, nil, ErrInvalidDeclaredMeasurement
 		}
 		measurements[profile.parcel] = profile.measurement
 	}
@@ -312,7 +338,7 @@ func canonicalMemberDocuments(
 	sort.Slice(documents, func(left, right int) bool {
 		return documents[left].Reference < documents[right].Reference
 	})
-	return documents, nil
+	return documents, declared, nil
 }
 
 func canonicalEntryDocuments(entries []CanonicalContentEntry) ([]canonicalEntryDocument, error) {
