@@ -640,3 +640,7 @@ internal/networkrouting/domain ArbitrateLoadingConcurrency
 # 或别的上下文经端口来问「这家单位是不是客户 / 是不是我方公司」；届时接上并剪掉这一行。在那之前不为了出名单
 # 给它造一个生产调用点：读面若拿它在 Go 里再判一遍，同一问就有两处在答，正是镜像加对照要避免的。
 internal/partycommercial/domain PartyCategoriesAt
+# 平台货件与平台箱标号的声明工厂（ADR-0374 决定四，票 declared-goods-lines/02）：生产调用方是首方提交口把载荷译成
+# SubmissionPayloadSpec 那一步，等票 declared-goods-lines/03 接上；接上那天两行一起出名单。
+internal/parcelshipment/domain DeclarePlatformBoxLabel
+internal/parcelshipment/domain DeclarePlatformShipment

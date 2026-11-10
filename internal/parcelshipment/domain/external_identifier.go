@@ -158,8 +158,7 @@ func (declaration CustomerParcelNumberDeclaration) Number() ExternalIdentifierNu
 	return declaration.number
 }
 
-// customerParcelNumbersFor 校验配对贴合成员集合并交回拷贝：每件至多一个号，指着成员集合外即拒。两件同号
-// 不拒——节点会答身份冲突；在提交时就拒是一条没有 CONTEXT 依据的新门（ADR-0184 越权风险点 4）。
+// customerParcelNumbersFor 校验配对贴合成员集合并交回拷贝（pairsFitMembers）。
 func customerParcelNumbersFor(
 	declarations []CustomerParcelNumberDeclaration,
 	members []DeclaredParcelID,
@@ -171,22 +170,37 @@ func customerParcelNumbersFor(
 	for _, member := range members {
 		declared[member] = struct{}{}
 	}
-	seen := make(map[DeclaredParcelID]struct{}, len(declarations))
-	copied := make([]CustomerParcelNumberDeclaration, 0, len(declarations))
-	for _, declaration := range declarations {
-		if !declaration.parcel.valid() || !declaration.number.valid() {
-			return nil, ErrInvalidCustomerParcelNumber
-		}
-		if _, member := declared[declaration.parcel]; !member {
-			return nil, ErrInvalidCustomerParcelNumber
-		}
-		if _, twice := seen[declaration.parcel]; twice {
-			return nil, ErrInvalidCustomerParcelNumber
-		}
-		seen[declaration.parcel] = struct{}{}
-		copied = append(copied, declaration)
+	fits := pairsFitMembers(len(declarations), func(index int) (DeclaredParcelID, ExternalIdentifierNumber) {
+		return declarations[index].parcel, declarations[index].number
+	}, declared)
+	if !fits {
+		return nil, ErrInvalidCustomerParcelNumber
 	}
-	return copied, nil
+	return append([]CustomerParcelNumberDeclaration(nil), declarations...), nil
+}
+
+// pairsFitMembers 是委托上各类（声明包裹，号码）配对共用的核对：两边都立得起来、只指成员、一件至多一个号。两件同号
+// 不拒——节点会答身份冲突；在提交时就拒是一条没有 CONTEXT 依据的新门（ADR-0184 越权风险点 4）。
+func pairsFitMembers(
+	count int,
+	pairAt func(index int) (DeclaredParcelID, ExternalIdentifierNumber),
+	members map[DeclaredParcelID]struct{},
+) bool {
+	seen := make(map[DeclaredParcelID]struct{}, count)
+	for index := 0; index < count; index++ {
+		parcel, number := pairAt(index)
+		if !parcel.valid() || !number.valid() {
+			return false
+		}
+		if _, member := members[parcel]; !member {
+			return false
+		}
+		if _, twice := seen[parcel]; twice {
+			return false
+		}
+		seen[parcel] = struct{}{}
+	}
+	return true
 }
 
 // ExternalIdentifierRelation 是一条外部标识关联（PS CONTEXT「外部标识关联」）。它是产物：只由形成它的

@@ -95,6 +95,16 @@ internal/parcelpricing/domain WeightPolicyID
 # 二类：只由 NewSubmissionBatchCandidate 交出，零生产调用、零测试。PS 所有者判接线或删。
 internal/parcelshipment/domain SubmissionBatchCandidate
 
+# 货物明细的输入类型（ADR-0373，票 declared-goods-lines/02）：只经 NewGoodsDetails 的参数拿得到，NewGoodsDetails 的生产
+# 调用方是首方提交口把载荷译成 SubmissionPayloadSpec 那一步，等票 declared-goods-lines/03 接上；接上那天这几行一起出名单。
+internal/parcelshipment/domain CommodityCodeSpec
+internal/parcelshipment/domain GoodsCellSpec
+internal/parcelshipment/domain GoodsDescriptionSpec
+internal/parcelshipment/domain GoodsDetailsSpec
+internal/parcelshipment/domain GoodsLineSpec
+internal/parcelshipment/domain PackingAllocationSpec
+internal/parcelshipment/domain SalesOrderReferenceSpec
+
 # ---- party-commercial ----
 
 # CreditBasis 曾在这里（一类，理由行明写「经 ResolveCreditPolicy 取得，它在函数名棘轮基线里。随它出
