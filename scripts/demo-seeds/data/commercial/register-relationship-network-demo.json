@@ -52,7 +52,7 @@
     },
     {
       "partyId": "SYN-PARTY-AGENT-02",
-      "name": "合成香港清关代理二号（演示）",
+      "name": "合成香港承运代理二号（演示）",
       "revision": 1,
       "basis": "SYN-NETWORK-DEMO-AGENT-02-V1",
       "effectiveFrom": "2026-01-01T00:00:00Z"

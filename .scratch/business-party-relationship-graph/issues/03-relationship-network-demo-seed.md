@@ -6,8 +6,8 @@ Status: in-progress——2026-11-10 会话自立自做（用户答「你自己�
 
 ## 要做的
 
-- 新增步骤 `scripts/demo-seeds/steps/850-relationship-network-demo.sh`（排在 800 之后：要用到 800 登记的四家我方公司）与输入 `data/commercial/register-relationship-network-demo.json`，经 `parcel-commercial register-parties` 一批灌入：十一家 `SYN-` 合成往来单位（七家货主、香港清关代理、美国尾程代理、航空货运供应商、渠道转售商）与二十二段关系。
-- 分布：运营方一号再挂七家客户，共九家，「我方关联」右栏合成「客户 · 9 家」；上海五家客户（一家待确认），往来单位「关联」签合成「客户 · 5 家」，另有供应商与转售；深圳两家客户，另由深圳对末端承运方持有渠道账号，图右列有一段；香港清关代理、一家客户、一家待确认的航空货运供应商；美国尾程代理与一家客户。
+- 新增步骤 `scripts/demo-seeds/steps/850-commercial-relationship-network-demo.sh`（排在 800 之后：要用到 800 登记的四家我方公司）与输入 `data/commercial/register-relationship-network-demo.json`，经 `parcel-commercial register-parties` 一批灌入：十一家 `SYN-` 合成往来单位（七家货主、香港与美国各一家承运代理、航空货运供应商、渠道转售商）与二十二段关系。
+- 分布：运营方一号再挂七家客户，共九家，「我方关联」右栏合成「客户 · 9 家」；上海五家客户（一家待确认），往来单位「关联」签合成「客户 · 5 家」，另有供应商与转售；深圳两家客户，另由深圳对末端承运方持有渠道账号，图右列有一段；香港承运代理、一家客户、一家待确认的航空货运供应商；美国尾程代理与一家客户。
 - 全部合成值，证据 S；不指向真实企业，不进参数登记册。
 
 ## 完成判据
