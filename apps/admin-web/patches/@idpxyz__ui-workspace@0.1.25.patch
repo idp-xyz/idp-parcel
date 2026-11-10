@@ -1,0 +1,88 @@
+diff --git a/dist/index.js b/dist/index.js
+index a882d8e..e7fb98d 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -612,6 +612,7 @@ function EditorGroup({
+   const [tabListOpen, setTabListOpen] = useState(false);
+   const [canScrollLeft, setCanScrollLeft] = useState(false);
+   const [canScrollRight, setCanScrollRight] = useState(false);
++  const [capTabs, setCapTabs] = useState(false);
+   const [ctxMenu, setCtxMenu] = useState(null);
+   const [dragOverIdx, setDragOverIdx] = useState(null);
+   const dragSrcIdx = useRef(null);
+@@ -647,6 +648,12 @@ function EditorGroup({
+     if (!el) return;
+     setCanScrollLeft(el.scrollLeft > 1);
+     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
++    let natural = 20;
++    for (const tab of el.querySelectorAll(":scope > [data-tab-id]")) {
++      const label = tab.querySelector(".truncate");
++      natural += tab.offsetWidth + (label ? label.scrollWidth - label.clientWidth : 0);
++    }
++    setCapTabs(natural > el.clientWidth + 1);
+   }, []);
+   useEffect(() => {
+     const el = tabsRef.current;
+@@ -654,6 +661,7 @@ function EditorGroup({
+     checkOverflow();
+     const ro = new ResizeObserver(checkOverflow);
+     ro.observe(el);
++    el.querySelectorAll(":scope > [data-tab-id]").forEach((tab) => ro.observe(tab));
+     el.addEventListener("scroll", checkOverflow, { passive: true });
+     return () => {
+       ro.disconnect();
+@@ -671,7 +679,7 @@ function EditorGroup({
+     if (!el) return;
+     el.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+   };
+-  const isOverflowing = canScrollLeft || canScrollRight;
++  const isOverflowing = capTabs;
+   return /* @__PURE__ */ jsxs(
+     "div",
+     {
+diff --git a/src/EditorGroup.tsx b/src/EditorGroup.tsx
+index 83da5e2..f573659 100644
+--- a/src/EditorGroup.tsx
++++ b/src/EditorGroup.tsx
+@@ -123,6 +123,10 @@ export default function EditorGroup({
+   const [tabListOpen, setTabListOpen] = useState(false);
+   const [canScrollLeft, setCanScrollLeft] = useState(false);
+   const [canScrollRight, setCanScrollRight] = useState(false);
++  // 标签要不要收窄（idp-parcel 本地补丁，修标签条闪烁）：按各标签的自然宽度合计判，不按收窄之后还溢不溢出判——后者在
++  // 「不收窄放不下、收窄放得下」时会自己来回翻。自然宽度 = 标签现宽 + 截断文字藏住的那一截；只数标签，末尾的弹性占位块
++  // 只算它的最小宽度，否则它吃掉收窄空出来的宽度，标签收窄后就再也放不开。
++  const [capTabs, setCapTabs] = useState(false);
+   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
+   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+   const dragSrcIdx = useRef<number | null>(null);
+@@ -162,6 +166,12 @@ export default function EditorGroup({
+     if (!el) return;
+     setCanScrollLeft(el.scrollLeft > 1);
+     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
++    let natural = 20; // 末尾占位块的 min-w-[20px]
++    for (const tab of el.querySelectorAll<HTMLElement>(':scope > [data-tab-id]')) {
++      const label = tab.querySelector<HTMLElement>('.truncate');
++      natural += tab.offsetWidth + (label ? label.scrollWidth - label.clientWidth : 0);
++    }
++    setCapTabs(natural > el.clientWidth + 1);
+   }, []);
+ 
+   useEffect(() => {
+@@ -170,6 +180,8 @@ export default function EditorGroup({
+     checkOverflow();
+     const ro = new ResizeObserver(checkOverflow);
+     ro.observe(el);
++    // 各标签自己的宽度变了（改名、钉住、修改点）也重判。
++    el.querySelectorAll<HTMLElement>(':scope > [data-tab-id]').forEach((tab) => ro.observe(tab));
+     el.addEventListener('scroll', checkOverflow, { passive: true });
+     return () => { ro.disconnect(); el.removeEventListener('scroll', checkOverflow); };
+   }, [checkOverflow, group.tabs.length]);
+@@ -188,7 +200,7 @@ export default function EditorGroup({
+     el.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
+   };
+ 
+-  const isOverflowing = canScrollLeft || canScrollRight;
++  const isOverflowing = capTabs;
+ 
+   return (
+     <div

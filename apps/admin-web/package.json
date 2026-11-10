@@ -45,6 +45,9 @@
       "@idpxyz/ui-tokens": "file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz",
       "@idpxyz/ui-utils": "file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz",
       "@idpxyz/ui-workspace": "file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz"
+    },
+    "patchedDependencies": {
+      "@idpxyz/ui-workspace@0.1.25": "patches/@idpxyz__ui-workspace@0.1.25.patch"
     }
   }
 }

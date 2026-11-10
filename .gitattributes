@@ -21,3 +21,7 @@ scripts/git-hooks/* text eol=lf
 # 参考配置的发布清单按原文字节钉 sha256（ADR-0147）：text=auto 在 Windows 检出给 CRLF，嵌进二进制的原文
 # 就与清单对不上，Open 答「发布后被改过」——与上面 *.sql 因校验和钉 LF 同一个理由。
 referenceconfig/** text eol=lf
+
+# pnpm 补丁（apps/admin-web/patches/）按原字节保存：lockfile 记着补丁文件的哈希，上游源码又是 CRLF，补丁里那几段带 CR。
+# 让 text=auto 改了行尾，全新检出算出的哈希就对不上，`pnpm install --frozen-lockfile` 当场失败。
+*.patch -text

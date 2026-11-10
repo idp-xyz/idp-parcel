@@ -35,6 +35,8 @@ Vite + React 19 + TypeScript + Tailwind CSS 3，UI 组件来自 [`idpxyz/idp-ui`
 
 `@idpxyz/*` 七个包**不从注册表装**：tarball 随仓放在 `vendor/idpxyz-ui/`（idp-ui `master` 构建，0.1.23 / 0.1.25），`package.json` 的 `pnpm.overrides` 把每个包——包括只作传递依赖出现的 `ui-icons`——钉到对应文件。这样任何一次全新检出都能 `pnpm install --frozen-lockfile`，不需要读包凭据；`.npmrc` 里那行 scope 注册表只标明上游发布在哪，overrides 之下不会被访问。换版本的动作是三件一起：替换 tarball、改 overrides 那几行、不带 `--frozen-lockfile` 重装一次让 lockfile 跟上。
 
+`@idpxyz/ui-workspace` 0.1.25 另带一份本地补丁 `patches/@idpxyz__ui-workspace@0.1.25.patch`（`package.json` 的 `pnpm.patchedDependencies` 登记，装包时自动打上）：标签条 `EditorGroup` 原先按「收窄之后还溢不溢出」决定要不要收窄标签，开着的标签恰好「不收窄放不下、收窄放得下」时会自己来回翻、整条闪烁；补丁改按各标签的自然宽度合计判（票 workspace-tab-bar-flicker/01）。`dist` 与 `src` 两份同改。这是上游 idp-ui 的缺陷，修复应回到上游；换 `ui-workspace` 版本时先看上游是否已含此修，含了就删掉补丁文件与 `patchedDependencies` 那一行，没含就把补丁改到新版本号上重打。
+
 ## 前置与安装
 
 - Node 20+、pnpm 10（`package.json` 的 `packageManager` 钉 `10.32.1`，pnpm 10 默认会自行切到该版本）

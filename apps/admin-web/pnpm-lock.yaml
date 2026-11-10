@@ -13,6 +13,11 @@ overrides:
   '@idpxyz/ui-utils': file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
   '@idpxyz/ui-workspace': file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz
 
+patchedDependencies:
+  '@idpxyz/ui-workspace@0.1.25':
+    hash: d11ae2ccc3a2969447561e4660b18bff049dcd228511ccebb5518e81b046d67a
+    path: patches/@idpxyz__ui-workspace@0.1.25.patch
+
 importers:
 
   .:
@@ -34,7 +39,7 @@ importers:
         version: file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
       '@idpxyz/ui-workspace':
         specifier: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz
-        version: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(patch_hash=d11ae2ccc3a2969447561e4660b18bff049dcd228511ccebb5518e81b046d67a)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-query':
         specifier: 5.104.5
         version: 5.104.5(@types/react@19.2.18)(react@19.2.8)
@@ -1820,7 +1825,7 @@ snapshots:
       clsx: 2.1.1
       tailwind-merge: 2.6.1
 
-  '@idpxyz/ui-workspace@file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@idpxyz/ui-workspace@file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(patch_hash=d11ae2ccc3a2969447561e4660b18bff049dcd228511ccebb5518e81b046d67a)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@idpxyz/ui-patterns': file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@idpxyz/ui-primitives': file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
