@@ -257,6 +257,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-11-05｜分区与偏远档位目录没有「其余邮编」写法；已代决加显式一行，不做未命中兜底。目录登记的规范化版本（`PRC-1`）换号没有部署门，ADR-0352 的开关只管价卡，要先补｜ADR-0364 决定四、决定五与越权风险点｜R3
 - 2026-11-05｜带始发维度的目录一律取寄件邮编作始发，按入口分区的尾程卡查出的区不对；已代决改由价卡声明始发来源（寄件邮编或这一段起始节点的计费起点），要 NR 取数侧按段交起始节点、TF 发生项读口答实际履约段的起始节点｜[ADR-0365](../docs/adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)｜R2（首个租户的线路有按入口分区的尾程时），否则 R3
 - 2026-11-05｜经营毛利只给数、没有低毛利提示；已代决只在预估口径上按租户阈值提示，接单与择优都不设毛利门槛｜[ADR-0366](../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三；`UC-SA-006`｜R3
+- 2026-11-10｜`cmd/parcel-api` 的 `TestConcurrentReplaysOfAStoppedAmendmentFormTheVersionOnlyOnceOnARealDatabase` 在 CI `Test (rest)` 分片红过一次（并发重放 0 答 `SOURCE_DATA_VERSION_NOT_HANDED_OFF`，期望 `STALE_SHIPMENT_REQUEST_REVISION`），run `42763343558`；同一提交 `5945769b6` 本机 `-count=20` 全过，该用例自 `205282278` 后未改，判为并发时序偶发｜CI 观察｜R3（再红一次就立票查并发重放的判定次序）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
