@@ -1,6 +1,6 @@
 # ADR-0372：目录读口的状态筛选维只放「由本册登记行直接读出」的状态——领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维；答复照旧带它们，管理台对它们只在页内筛并标明
 
-Status: Accepted（2026-11-09，Claude Code 会话代 TF、NO、PP、SA owner 决，用户授权代决——用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」；同日票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草，非作者评审两轮无阻断；部分停用 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四「有状态的册至少放出状态一维」一句的适用范围；越权风险点见文末，待 TF、NO、PP、SA owner 复核。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**判据**：状态筛选维只放由本册登记行直接读出的状态（含「以该行为键的留痕册上有没有那一行」）；领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维，答复照旧带它们，管理台对它们只在页内筛并标明
+Status: Accepted（2026-11-09，Claude Code 会话代 TF、NO、PP、SA owner 决，用户授权代决——用户答「按你的建议全部收掉吧，你是业务和系统专家，你来决定」；同日票 [catalogue-read-pagination-rollout/16](../../.scratch/catalogue-read-pagination-rollout/issues/16-derived-state-filter-dimensions.md) 的作者会话起草，非作者评审两轮无阻断；部分停用 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四「有状态的册至少放出状态一维」一句的适用范围；越权风险点 2026-11-10 由会话代 TF、NO、PP、SA owner 复核，四条维持原判（用户答「你自己处理就行了，没有限制，你是业务和系统专家」；逐条见文末）。起草能力边界：读过 [ADR-0144](./0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 全文；该票与其 spec「横贯各子票的取舍」；下表各册的声明（各上下文 `ports/catalogue_pages.go`）、读面与答复体；`domain.CurrentCarrierAcceptance`、`DeliveryHandoverNoteState` 的 `ScopeEstablished`、`domain.JudgeIdentityBasis` 与处置编排的 `headsInConflict`、`SelectablePriceCardPeriod`；管理台 `priceCardStatus`、`billProgress` 两个函数；TF、NO、PP、SA 与 customs-compliance 的 `CONTEXT.md` 生命周期节。没读：各上下文其余读面、管理台其余页面）<!-- 索引注记 -->｜**判据**：状态筛选维只放由本册登记行直接读出的状态（含「以该行为键的留痕册上有没有那一行」）；领域规则在多行之上求出的结论、按读取时点现算的读数、管理台的呈现词不放成筛选维，答复照旧带它们，管理台对它们只在页内筛并标明
 Date: 2026-11-09
 
 ## Context
@@ -72,6 +72,8 @@ ADR-0144 决定四要求「有状态的册至少放出状态一维」，维度�
 2. **布尔词表取 `true` / `false`**：若产品要领域词（如「已就绪 / 不再就绪」的代码），要先立领域枚举，属另一项决定。
 3. **价卡此刻生效与否**：若运营要服务端按它筛，可以让调用方把时点作选择器传入、读面按那一刻判——那是新的查询语义，本记录不定，归 PP owner。
 4. **订舱状态落列**会动答复编排的写口，归 TF owner 复核；交接单范围成立、复核单元冲突落列归 NO owner。
+
+- owner 复核 2026-11-10，会话代 TF、NO、PP、SA owner（用户授权：「你自己处理就行了，没有限制，你是业务和系统专家」），逐条：1. 维持。四本留痕册都以本册登记行为键、由本上下文同一事务写入，领域的 `Withdrawn()`、`Closed()`、退役与恢复判的也只是那一行在不在；「在不在」与登记行读出的是同一个事实，不是第二处定义，四维保留。2. 维持。这几格是「有没有」的二值读数，不是带领域词的生命周期状态，`true` / `false` 与答复体里的布尔同形；哪一册日后立了带词的封闭状态，筛选维随它改，届时另记。3. 不做。今天没有运营要服务端按此刻生效与否筛价卡，管理台在页内筛并标明；要做就是新的查询语义（时点作选择器），另立记录。4. 不做。订舱当前答复、交接单范围成立与复核单元冲突都要领域规则在多行之上判，落列就是在写口另起一份判定；没有运营需求，维持页内筛。
 
 ## Links
 
