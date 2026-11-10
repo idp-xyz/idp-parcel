@@ -22,3 +22,4 @@ Status: resolved——2026-11-09 进 main（见文末完成记录）
 - ✅ 浏览器（本树起 vite 5236 接演示 API 19080，配置操作者，只读）：册签「往来单位 16 · 合作关系 4 · 我方关联 5」；左表五家我方公司，合成运营方一号「客户 2 · 承运商代理 1」、待确认 1，其余四家都是「—」；选中运营方一号，右栏图上左列两家客户已生效、承运代理一号待确认画虚线，右列空态；检索「深圳」剩一行。1280 宽同样。零页面错误、零 4xx/5xx。证据 S。
 - ◑ 演示数据里只有运营方一号挂着关系，其余四家我方公司都还没有；合成节点与「关系册多于一页」那句只由 node:test 与代码路径覆盖。
 - 评审：diff 全在 `pages/**`，按 workflow「前端切片」第 5 条自审。
+- 追记：推送后 CI 的 `Test (rest)` 红在 `internal/architecture` 的 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`——空态说明里的端点写成了 `GET /group-legal-entities`，实际读口是 `/commercial-group-legal-entities`。前端三道门不跑这道 Go 门禁，本地漏过；改正后本地 `go test ./internal/architecture/...` 退 0，随下一笔推送。

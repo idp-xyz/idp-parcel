@@ -906,7 +906,7 @@ export function BusinessPartiesPage() {
           }}
           viewState={catalogueViewState(entities.answer, networkRows.length, entities.retry, {
             module: info,
-            endpoint: 'GET /group-legal-entities',
+            endpoint: 'GET /commercial-group-legal-entities',
             emptyTitle: '还没有在用的我方公司',
             emptyDescription: '我方公司在「公司主体」页登记；登记之后，这里按公司列出各自的合作关系。',
             narrowed: networkSearch.trim() !== '',
