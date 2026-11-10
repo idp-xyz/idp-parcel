@@ -68,7 +68,7 @@ Status: in-progress
 
 | 票 | 内容 | 路径 | 状态 |
 |---|---|---|---|
-| [01](./issues/01-type-reads-unknown-when-the-source-registers-are-incomplete.md) | 止血（bug）：推类型用的册不止一页时，没读到的显示「—」并标明，不再显示「暂无合作关系」，也不摆按类型的数 | 前端切片 | ready-for-agent |
+| [01](./issues/01-type-reads-unknown-when-the-source-registers-are-incomplete.md) | 止血（bug）：推类型用的册不止一页时，没读到的显示「—」并标明，不再显示「暂无合作关系」，也不摆按类型的数 | 前端切片 | resolved（2026-11-10 进 main） |
 | [02](./issues/02-identity-list-and-page-states.md) | 单位名录的整页列表态与各页面态 | 前端切片 | ready-for-agent |
 | [03](./issues/03-master-detail-split.md) | 主从分栏：名录栏与右栏头区（阻塞于 02） | 前端切片 | ready-for-agent |
 | [04](./issues/04-relationships-and-our-companies-views.md) | 合作关系、我方关联两个视图换同一套（阻塞于 02） | 前端切片 | ready-for-agent |
