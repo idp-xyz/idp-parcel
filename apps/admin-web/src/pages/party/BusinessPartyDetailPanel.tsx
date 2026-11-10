@@ -358,6 +358,8 @@ export function BusinessPartyDetailPanel({
           >
             <PartyOverviewSection
               partyId={row.partyId}
+              partyName={row.partyName}
+              ours={ours}
               relationships={relationships}
               retryRelationships={retryRelationships}
               relationshipRegistration={relationshipRegistration}

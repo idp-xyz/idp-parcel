@@ -49,6 +49,8 @@ import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
 import { CustomerAccountRegistrationForm } from './CustomerAccountRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 import { businessPartyObjectHash } from './business-parties-address';
+import { PartyRelationshipGraph } from './PartyRelationshipGraph';
+import { relationshipGraphOf } from './party-relationship-graph';
 
 // 参与方详情抽屉的「全景」签（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
 // 关系册答案由页面持有、传进来（与关系签同一份，登一段关系后两处一起更新）；另四册在打开时各取一次，一段未配置或出错只影响那一段。
@@ -503,8 +505,14 @@ export function PartyOverviewSection({
   onRelationshipEnded,
   accountWrites,
   summaryCounts,
+  partyName,
+  ours,
 }: {
   partyId: string;
+  /** 关系图中心那家的名称；不给或不知道时图上显标识。 */
+  partyName?: string | null;
+  /** 法人册上有公司主体钉着它：关系图中心标「我方公司」。不知道时按 false。 */
+  ours?: boolean;
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
   /**
@@ -538,9 +546,81 @@ export function PartyOverviewSection({
   const settlementState = states.settlement;
 
   const roles = relationshipState.kind === 'answered' ? effectiveRolesOf(relationshipState.rows) : null;
+  // 图示与明细（票 business-party-relationship-graph/01，照参考原型「业务关系视图」的切换）：缺省看图；就地登记合作关系的表单
+  // 只在明细的「合作关系」一段里，表单开着时一律摆明细，不让主动作点了却看不见表单。
+  const [chosenView, setChosenView] = useState<'graph' | 'detail'>('graph');
+  const view = relationshipRegistration?.active ? 'detail' : chosenView;
+  const showDetail = () => setChosenView('detail');
+
+  const viewSwitch = (
+    <div className="flex justify-end pt-2" role="group" aria-label="关联的看法">
+      {(
+        [
+          ['graph', '图示'],
+          ['detail', '明细'],
+        ] as const
+      ).map(([id, label], index) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={view === id}
+          onClick={() => setChosenView(id)}
+          className={`border border-idpxyz-border px-2.5 py-0.5 type-caption ${index === 0 ? 'rounded-l' : '-ml-px rounded-r'} ${
+            view === id ? 'bg-idpxyz-activeItem text-idpxyz-textBright' : 'text-idpxyz-breadcrumb hover:bg-idpxyz-hover'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === 'graph') {
+    const objects: { label: string; state: OverviewSectionState<unknown> }[] = [
+      { label: '客户账户', state: accountState },
+      { label: '公司主体', state: entityState },
+      { label: '供应商协议', state: agreementState },
+      { label: '结算政策', state: settlementState },
+    ];
+    return (
+      <div>
+        {viewSwitch}
+        <section className="py-3 border-b border-idpxyz-border">
+          {relationshipState.kind === 'answered' ? (
+            <PartyRelationshipGraph
+              graph={relationshipGraphOf(relationshipState.rows)}
+              centerName={partyName ?? null}
+              centerId={partyId}
+              ours={ours === true}
+              onShowDetail={showDetail}
+            />
+          ) : (
+            <SectionBody state={relationshipState} what="合作关系" emptyNote="" retry={retryRelationships} renderRow={() => null} />
+          )}
+        </section>
+        <section className="py-3">
+          <h3 className="type-body font-medium text-idpxyz-text">挂在它名下的业务对象</h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {objects.map(({ label, state }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={showDetail}
+                className="rounded border border-idpxyz-border px-2.5 py-1 type-body text-idpxyz-text hover:bg-idpxyz-hover"
+              >
+                {label} <span className="font-mono">{countText(state)}</span>
+              </button>
+            ))}
+          </div>
+          <p className={`mt-2 ${note}`}>点了看明细；授信、余额与运单不在这里显示。</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div>
+      {viewSwitch}
       <section className="py-3 border-b border-idpxyz-border">
         <h3 className="type-body font-medium text-idpxyz-text">它对我们是什么</h3>
         {roles === null ? (

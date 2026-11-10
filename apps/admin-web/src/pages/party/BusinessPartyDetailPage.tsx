@@ -438,6 +438,8 @@ export function BusinessPartyDetailPage({
                   <section className="bg-idpxyz-bg p-5">
                     <PartyOverviewSection
                       partyId={row.partyId}
+                      partyName={row.partyName}
+                      ours={ours}
                       relationships={relationships}
                       retryRelationships={retryRelationships}
                       relationshipRegistration={relationshipRegistration}
