@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>往来单位 · 重构静态参考 v3</title>
+<style>
+/*
+  往来单位页重构的静态参考：只为看版式与交互走向，数据全是合成的，不接后端。
+  色值、字体、外壳尺寸取自管理台现行浅色主题在浏览器里的实测值；外壳（顶栏、侧栏、标签条、状态栏）照现状画，不在重构范围内。
+
+  本页自己守的几条：
+  - 字号只用五档：12 次要与等宽的值、13 正文、14 名称、页签与卡片标题、16 栏标题、20 页名。
+  - 承载意思的字一律用对比度够的灰（--muted 5.5:1、--faint 4.8:1）；更浅的 --deco 只给不承载意思的图形。
+  - 结构贴边、内容留白：大块面板之间只有分隔线；右栏里按话题分组的字段用卡片，表格与时间线通栏。
+  - 页面态（首次加载、重取、读取失败、未配置、空册、只读、多页）用状态栏里虚线框的「演示状态」下拉切着看；
+    那个下拉只有这份静态页有，不是产品里的控件。
+*/
+:root{
+  --canvas:#f5f7f9; --surface:#fff; --line:#d9e1e8; --line-soft:#e8edf2;
+  --ink:#1d2d3e; --ink-strong:#0f2d40; --muted:#536b82; --faint:#5f7589; --deco:#7d8fa1;
+  --accent:#0a6ed1; --accent-strong:#0854a0; --accent-tint:#e9f3fd;
+  --hover:#f3f7fb; --selected:#e9f3fd; --head:#fafbfc;
+  --ok:#1a7f3c; --ok-bg:rgba(34,197,94,.12); --ok-line:rgba(34,197,94,.30);
+  --warn:#b45309; --warn-bg:rgba(245,158,11,.14); --warn-line:rgba(217,119,6,.32);
+  --mute-bg:rgba(107,114,128,.12); --mute-line:rgba(75,85,99,.28);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:13px/1.5 var(--font);color:var(--ink);background:var(--canvas);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{border:0;background:none;padding:0;cursor:pointer}
+h1,h2,h3,p,dl,dd{margin:0}
+/*
+  本页的粗体只给 16 像素以上的标题：页名、右栏的单位名、名录栏标题。外壳照现状，不在此列。
+  Windows 上中文落到微软雅黑，它只有常规与粗体两档：600 渲染出来就是粗体，放在 12 到 14 像素的名称与卡片标题上又黑又重；
+  500 只让英文与数字变粗、中文不变，中英混排的名称会一半粗一半细。所以正文里的主次不靠字重，靠字号与颜色：
+  b 在这里只是换成更深的字色。
+*/
+b,strong{font-weight:400;color:var(--ink-strong)}
+svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+svg.i.fill{fill:currentColor;stroke:none}
+.mono{font-family:var(--mono)}
+.num{font-variant-numeric:tabular-nums}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ───── 外壳（照现状，未改） ───── */
+.app{height:100vh;display:flex;flex-direction:column}
+.topbar{height:48px;flex:none;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 16px}
+.brand{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.brand svg{width:20px;height:20px;color:var(--accent)}
+.brand b{color:var(--ink-strong);font-size:14px;font-weight:600}
+.gsearch{margin-left:auto;width:280px;height:30px;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--muted)}
+.gsearch kbd{margin-left:auto;font:11px var(--font);background:#eef2f6;border-radius:4px;padding:1px 6px}
+.tenant{height:26px;padding:0 10px;border:1px solid var(--line);border-radius:13px;display:flex;align-items:center;gap:6px;font-size:12px}
+.topbar .who{color:var(--muted);font-size:12px}
+.shellbody{flex:1;min-height:0;display:flex}
+.sidebar{width:240px;flex:none;background:var(--surface);border-right:1px solid var(--line);overflow:auto;padding:6px 0 12px}
+.sidebar h3{font-size:11px;font-weight:600;color:var(--muted);padding:12px 16px 4px}
+.sidebar a{display:flex;align-items:center;gap:8px;height:30px;padding:0 16px 0 28px;color:var(--ink);text-decoration:none;font-size:13px}
+.sidebar a svg{width:14px;height:14px;color:var(--muted)}
+.sidebar a.on{background:#eaf2fb;border-radius:0 6px 6px 0;margin-right:8px}
+.workarea{flex:1;min-width:0;display:flex;flex-direction:column}
+.wstabs{height:35px;flex:none;background:var(--surface);border-bottom:1px solid var(--line);display:flex}
+.wstabs span{display:flex;align-items:center;gap:6px;padding:0 14px;border-right:1px solid var(--line-soft);font-size:13px;color:var(--muted)}
+.wstabs span.on{background:var(--canvas);color:var(--ink-strong);box-shadow:inset 0 2px 0 var(--accent)}
+.wstabs svg{width:14px;height:14px}
+.statusbar{height:22px;flex:none;background:#354a5f;color:#fff;font-size:12px;display:flex;align-items:center;gap:16px;padding:0 12px}
+.statusbar .note{opacity:.85}
+
+/* ───── 通用件 ───── */
+.btn{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--hover);border-color:#c3cfdb}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:#e9eef3;color:var(--ink)}
+.btn.icon{width:32px;padding:0;justify-content:center}
+.btn.sm{height:28px;padding:0 10px;font-size:12px}
+.btn.sm.icon{width:28px;padding:0}
+/* 大块面板贴边：不留外圈留白、不要圆角与投影，块与块之间只用一条分隔线。文字的左缘统一缩进 24（名录栏里 16）。 */
+.panel{background:var(--surface);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+
+.tabs{display:flex;align-items:stretch;gap:2px;height:42px;padding:0 12px;border-bottom:1px solid var(--line);flex:none}
+.tab{display:inline-flex;align-items:center;gap:8px;padding:0 12px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink-strong);border-bottom-color:var(--accent)}
+.tab .cnt{min-width:20px;height:18px;padding:0 6px;border-radius:9px;background:#eef2f6;color:var(--muted);font-size:12px;font-weight:400;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.tab.on .cnt{background:var(--accent-tint);color:var(--accent-strong)}
+/* 待办跟在视图签同一行的右端：只在有的时候出现，不为它单占一行 */
+.attn{margin-left:auto;display:flex;align-items:center;gap:18px;padding-right:12px;min-width:0}
+.attn button{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);white-space:nowrap}
+.attn button:hover{color:var(--accent-strong);text-decoration:underline}
+.attn i{width:7px;height:7px;border-radius:50%;background:#e8930c;flex:none}
+.attn .go{color:var(--accent);font-weight:500}
+
+.search{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--surface);display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--muted)}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,110,209,.14)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink)}
+.search input::placeholder{color:var(--faint)}
+.search kbd{font:12px var(--font);border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--muted)}
+.select{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23536b82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;padding:0 30px 0 10px;appearance:none;-webkit-appearance:none}
+.select:hover{border-color:#c3cfdb}
+.select.on{border-color:var(--accent);background-color:var(--accent-tint);color:var(--accent-strong)}
+
+.chip{height:28px;padding:0 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface);display:inline-flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.chip:hover{background:var(--hover);border-color:#bccad8}
+.chip .n{color:var(--muted);font-variant-numeric:tabular-nums}
+.chip i{width:6px;height:6px;border-radius:50%;flex:none}
+.chip.on{background:var(--accent-tint);border-color:var(--accent);color:var(--accent-strong)}
+.chip.on .n{color:var(--accent-strong)}
+
+/* 图标块按类型取图标与底色：一眼分得出客户、供应商、代理与我方公司，不再是每行同一个楼房 */
+.tile{width:32px;height:32px;border-radius:8px;background:#eef3f8;color:#4d6a88;display:grid;place-items:center;flex:none}
+.tile svg{width:17px;height:17px}
+.tile.ours{background:var(--accent);color:#fff}
+.tile.CUSTOMER{background:#e9f3fd;color:#0a6ed1}
+.tile.SUPPLIER{background:#e2f4f5;color:#0f828f}
+.tile.CARRIER_AGENT{background:#f0eafc;color:#7b4bd6}
+.tile.RESELLER{background:#fdf1df;color:#b96506}
+.tile.ACCOUNT_HOLDER{background:#eaecf8;color:#3f51b5}
+.tile.AUTHORIZED_DELIVERING_PARTY{background:#e4f5e9;color:#188a42}
+.tag{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:4px;background:#f0f3f6;font-size:12px;white-space:nowrap}
+.tag i{width:6px;height:6px;border-radius:50%;flex:none}
+.tag.ours{background:var(--accent-tint);color:var(--accent-strong);font-weight:500}
+.none{color:var(--muted);font-size:12px}
+.pill{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px 0 6px;border:1px solid;border-radius:11px;font-size:12px;white-space:nowrap}
+.pill svg{width:12px;height:12px;stroke-width:2.2}
+.pill.ok{background:var(--ok-bg);border-color:var(--ok-line)} .pill.ok svg{color:var(--ok)}
+.pill.warn{background:var(--warn-bg);border-color:var(--warn-line)} .pill.warn svg{color:var(--warn)}
+.pill.mute{background:var(--mute-bg);border-color:var(--mute-line);color:var(--muted)}
+.meta{color:var(--muted);font-size:12px;white-space:nowrap}
+.meta b{color:var(--ink)}
+.pager{display:flex;align-items:center;gap:2px}
+
+/* ───── 整页（没有选中行） ───── */
+.page{flex:1;min-height:0;display:flex;flex-direction:column}
+/* 页头一行：页名、一句说明（放不下就截断）、动作。列表上方每多一行，就少看一行数据。 */
+.phead{display:flex;align-items:center;gap:24px;flex:none;padding:12px 24px;border-bottom:1px solid var(--line)}
+.ptitle{display:flex;align-items:baseline;gap:12px;min-width:0;flex:1}
+.ptitle h1{font-size:20px;line-height:28px;font-weight:600;color:var(--ink-strong);white-space:nowrap}
+.ptitle .desc{color:var(--muted);min-width:0}
+.phead .acts{display:flex;align-items:center;gap:8px;flex:none}
+
+/* 检索、状态与类型在一行；视口不够宽时类型芯片收成一个下拉，不折成第二行 */
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 24px;flex:none}
+.toolbar .search{width:260px;flex:none}
+.toolbar .vsep{width:1px;height:20px;background:var(--line);flex:none}
+.chipset{display:flex;align-items:center;gap:6px;min-width:0}
+.chipset .lab{color:var(--muted);font-size:12px;margin-right:2px;white-space:nowrap}
+.chipset .sep{width:1px;height:16px;background:var(--line);margin:0 2px;flex:none}
+.toolbar .clear{color:var(--accent);font-size:12px;white-space:nowrap}
+.toolbar .clear:hover{text-decoration:underline}
+.toolbar .hint{color:var(--muted);font-size:12px}
+@media (max-width:1559px){.toolbar .chipset.types,.toolbar .vsep.types{display:none}}
+@media (min-width:1560px){.toolbar .type-select{display:none}}
+
+/* 各列给定宽，多出来的宽度全落在行尾：数据靠左成一块，不在列与列之间留大空当 */
+.tablewrap{flex:1;min-height:0;overflow:auto}
+table.grid{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.grid th{position:sticky;top:0;z-index:1;background:var(--head);height:36px;padding:0 12px;text-align:left;font-size:12px;font-weight:500;color:var(--muted);white-space:nowrap;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line)}
+.grid td{height:48px;padding:0 12px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+.grid th:first-child,.grid td:first-child{padding-left:24px}
+.grid th:last-child,.grid td:last-child{padding-right:24px}
+.grid tbody tr{cursor:pointer}
+.grid tbody tr:hover{background:var(--hover)}
+.grid td.go{color:var(--deco);text-align:right}
+.grid tbody tr:hover td.go{color:var(--accent)}
+@media (max-width:1359px){.grid .c-reg{display:none}}
+/* 名称列的宽度按视口分档写死：定宽表格里它不能靠内容撑，也不该吃掉行尾的余量 */
+.grid col.c-name{width:380px}
+@media (max-width:1279px){.grid col.c-name{width:300px}}
+.ident{display:flex;align-items:center;gap:10px;min-width:0}
+.ident .tx{min-width:0}
+.ident .nm{font-size:14px;line-height:20px;color:var(--ink-strong)}
+.ident .cd{font-size:12px;line-height:16px;color:var(--muted)}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.stack{display:flex;flex-direction:column;gap:1px;align-items:flex-start}
+.stack small{font-size:12px;color:var(--muted)}
+.pend{display:block;font-size:12px;line-height:16px;color:var(--warn)}
+.arrow{color:var(--deco);display:inline-flex;vertical-align:middle;margin:0 2px}
+.empty{padding:56px 16px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:14px;margin-bottom:4px}
+.lfoot{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 14px 0 24px;border-top:1px solid var(--line);flex:none}
+
+/* ───── 主从分栏（选中一行之后） ───── */
+.page.split{flex-direction:row}
+.master{width:420px;flex:none;border-right:1px solid var(--line)}
+@media (max-width:1439px){.master{width:360px}}
+.mhead{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 16px;flex:none;background:var(--canvas);border-bottom:1px solid var(--line)}
+.mhead h2{font-size:16px;font-weight:600;color:var(--ink-strong);margin-right:auto}
+.master .tabs{height:38px;padding:0 8px}
+.master .tab{font-size:13px;padding:0 8px;gap:6px}
+.mtools{padding:8px 16px;display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;flex:none}
+.mtools .search{grid-column:1/-1}
+.mtools .select{width:100%;height:30px}
+.mlist{flex:1;min-height:0;overflow:auto;border-top:1px solid var(--line-soft)}
+.mrow{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.mrow:hover{background:var(--hover)}
+.mrow.on{background:var(--selected);box-shadow:inset 3px 0 0 var(--accent)}
+.mrow .tx{flex:1;min-width:0}
+.mrow .nm{font-size:14px;line-height:20px;color:var(--ink-strong)}
+.mrow .sub{font-size:12px;line-height:16px;color:var(--muted)}
+.mrow .st{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);flex:none}
+.mrow .st i{width:7px;height:7px;border-radius:50%}
+.mfoot{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 10px 0 16px;border-top:1px solid var(--line);flex:none}
+
+.detail{flex:1;min-width:0}
+.dhead{padding:16px 24px 0;flex:none}
+/* 右栏窄的时候动作区整组折到名称下面，不去挤名称：名称被挤成三行比动作换行难看得多 */
+.dtop{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 14px}
+.dtop .tile{width:48px;height:48px;border-radius:10px}
+.dtop .tile svg{width:24px;height:24px}
+.dtop .tx{flex:1 1 280px;min-width:0}
+.dname{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dname h2{font-size:20px;line-height:28px;font-weight:600;color:var(--ink-strong)}
+.dalt{color:var(--muted)}
+.dacts{display:flex;align-items:center;gap:6px;flex:none;margin-left:auto}
+.facts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:10px;color:var(--muted);font-size:12px}
+.facts b{color:var(--ink)}
+.facts .copy{color:var(--deco);display:inline-flex;vertical-align:-2px;margin-left:2px}
+.facts .copy:hover{color:var(--accent)}
+.detail .tabs{margin-top:12px;padding:0 14px}
+.detail .tab{font-size:13px;padding:0 10px;gap:6px}
+.detail .tab svg{width:15px;height:15px}
+/* 右栏正文四周的留白取同一个值：左右与上面一样宽，卡片不贴边，也不比上边空得多。 */
+.dbody{flex:1;min-height:0;overflow:auto;padding:16px;background:var(--head);container-type:inline-size}
+.banner{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid;border-radius:8px;margin-bottom:12px;background:var(--surface)}
+.banner.warn{border-color:var(--warn-line);background:#fffaf1} .banner.warn>svg{color:var(--warn)}
+.banner.info{border-color:#bcd9f5;background:#f4f9fe} .banner.info>svg{color:var(--accent)}
+.banner.mute{border-color:var(--mute-line);background:#f6f7f8} .banner.mute>svg{color:var(--muted)}
+.banner .btn{margin-left:auto}
+/* 概要两列各排各的：左列是资料，右列是联系人与关系。两列不按行对齐，卡片就不会为了等高而留一截空白。 */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+@container (max-width:719px){.cols{grid-template-columns:minmax(0,1fr)}}
+.col,.secs{display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;overflow:hidden;min-width:0}
+.sec>header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-soft);font-size:14px;color:var(--ink-strong)}
+.sec>header svg{color:var(--muted)}
+.sec>header .more{margin-left:auto;color:var(--accent);font-size:12px}
+.sec>header .more:hover{text-decoration:underline}
+.sec .bd{padding:12px 14px}
+/*
+  以列表为主的签（关联、登记记录）通栏：列表自己就是面，不再外套一张带留白的卡片——卡片边框叠表格边线是两层框，
+  两侧还白白少掉几十像素。贴边的只是底色与分隔线，行里的文字仍缩进到与上面头区同一条竖线。
+*/
+.dbody.flush{padding:0;background:var(--surface)}
+.dbody.flush .sec{border:0;border-radius:0;border-bottom:1px solid var(--line-soft)}
+.dbody.flush .secs{gap:0}
+.dbody.flush .sec>header{padding:10px 24px;background:var(--head)}
+.dbody.flush .sec>header .hcnt{color:var(--muted);font-size:12px}
+.dbody.flush .sec .bd{padding:16px 24px}
+.dbody.flush .lines>div{padding:10px 24px}
+.dbody.flush .grid th{position:static;border-top:0}
+.dbody.flush .grid .tile{width:28px;height:28px;border-radius:6px}
+.dbody.flush .grid .tile svg{width:15px;height:15px}
+.dbody.flush .grid .ident .nm{font-size:13px}
+dl.kv{display:grid;grid-template-columns:92px 1fr;gap:8px 12px}
+dl.kv dt{color:var(--muted);font-size:12px;line-height:20px}
+dl.kv dd{min-width:0;word-break:break-word}
+/* 等宽字的笔画比正文粗，同字号摆在一起像加了粗：等宽的值比正文小一档，与管理台「等宽标识比读出值小一档」的做法一样 */
+dl.kv dd.mono{font-size:12px;line-height:20px}
+.lines>div{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line-soft)}
+.lines>div:last-child{border-bottom:0}
+.lines .grow{flex:1;min-width:0}
+.lines small{display:block;color:var(--muted);font-size:12px}
+/* 一句话里的连接词退成灰，对方的名称留深色：这一行的重点由颜色给出 */
+.lines .dir{color:var(--muted)}
+.lines .cntn{font-variant-numeric:tabular-nums;color:var(--ink-strong)}
+.lines .cntn.zero{color:var(--muted)}
+.lines svg.go{color:var(--deco)}
+.ph{padding:36px 16px;text-align:center;color:var(--muted)}
+.ph b{display:block;font-size:14px;color:var(--ink);margin-bottom:4px}
+.ph .btn{margin-top:12px}
+.tl{position:relative;padding-left:18px}
+.tl:before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.tl>div{position:relative;padding:0 0 14px}
+.tl>div:before{content:"";position:absolute;left:-17px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+.tl small{display:block;color:var(--muted);font-size:12px}
+.morerow{display:flex;align-items:center;gap:12px;padding:10px 24px;border-top:1px solid var(--line-soft);color:var(--muted);font-size:12px}
+.morerow .more{color:var(--accent)}
+.morerow .more:hover{text-decoration:underline}
+
+/*
+  ───── 页面态 ─────
+  还没有答案、读不出来、读出来是空的，都只换表格那一块：页头与页签留在原位，页面不因为状态变了而整体跳一下。
+  页签上的数等答案到了才摆；没有答案时不摆「0」——「0」是一句真话，不能拿它占位。
+*/
+.btn:disabled,.chip:disabled{opacity:.45;cursor:default;pointer-events:none}
+/* 说明块落在上三分之一，贴近工具条和视线，不垂直居中：屏幕一高，居中的块会掉到下半屏 */
+.statewrap{flex:1;min-height:0;overflow:auto;display:grid;justify-items:center;align-content:start;padding:min(16vh,150px) 24px 32px;border-top:1px solid var(--line-soft)}
+.stateblock{max-width:460px;text-align:center;color:var(--muted)}
+.stateblock>.tile{width:48px;height:48px;border-radius:12px;margin:0 auto 12px}
+.stateblock>.tile svg{width:24px;height:24px}
+.stateblock>.tile.bad{background:#fdf1df;color:var(--warn)}
+.stateblock h3{font-size:16px;font-weight:400;line-height:24px;color:var(--ink-strong);margin-bottom:4px}
+.stateblock p{line-height:20px}
+.stateblock>.btn{margin-top:16px}
+.stateblock details{margin-top:12px;font-size:12px}
+.stateblock summary{cursor:pointer;display:inline-block}
+.stateblock summary:hover{color:var(--ink)}
+.stateblock dl{display:inline-grid;grid-template-columns:auto auto;gap:4px 12px;margin:8px 0 0;text-align:left;font-size:12px}
+.stateblock dd{color:var(--ink);min-width:0;word-break:break-word}
+/* 骨架：长成将要出现的那张表的样子，列宽与行高和真表一样，答案到了行不跳 */
+.sk{display:block;height:10px;max-width:100%;border-radius:5px;background:linear-gradient(90deg,#edf1f5 25%,#f6f8fa 37%,#edf1f5 63%);background-size:400% 100%;animation:sk 1.4s ease infinite}
+.sk.tile{width:32px;height:32px;border-radius:8px;flex:none}
+.sk.chipsk{height:28px;border-radius:14px;flex:none}
+@keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.grid.skel tbody tr{cursor:default}
+.grid.skel tbody tr:hover{background:none}
+/* 换条件、翻页、刷新时旧的一页留着、压淡，顶上走一条细线：表不闪成骨架，眼睛不用重新找位置 */
+.progress{position:sticky;top:0;z-index:2;height:2px;margin-bottom:-2px;overflow:hidden}
+.progress:before{content:"";display:block;height:100%;width:30%;background:var(--accent);animation:prog 1.1s ease-in-out infinite}
+@keyframes prog{0%{transform:translateX(-110%)}100%{transform:translateX(340%)}}
+.busy tbody,.busy .mrow{opacity:.5;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.sk,.progress:before{animation:none}}
+/* 「只筛本页」是一句提醒，不是装饰：用提醒色，带图标，悬停有整句解释 */
+.pnote{display:inline-flex;align-items:center;gap:4px;color:var(--warn);font-size:12px;white-space:nowrap}
+.pnote svg,.thint svg{width:14px;height:14px}
+.thint{display:inline-flex;vertical-align:-3px;margin-left:4px;color:var(--warn)}
+.empty .clear{display:inline-block;margin-top:8px;color:var(--accent)}
+.empty .clear:hover{text-decoration:underline}
+/* 演示状态的下拉只有这份静态页有，用虚线框与产品里的控件分开 */
+.demo{margin-left:auto;display:flex;align-items:center;gap:6px}
+.demo select{height:18px;font-size:12px;color:#fff;background:#354a5f;border:1px dashed rgba(255,255,255,.65);border-radius:3px;padding:0 2px}
+</style>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="10" height="18" rx="1"/><path d="M14 9h5a1 1 0 0 1 1 1v11h-6"/><path d="M8 7h2M8 11h2M8 15h2"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/><path d="M17.5 14.5c2 .8 3.5 2.8 3.5 5.5"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9z"/><path d="M5 9v11h14V9"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M16 7l3 3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.800-1.200-8-4.500-8-9V6z"/><path d="M8.5 12l2.500 2.500 4.500-5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1"/><path d="M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.300-4.600L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.300 4.600L20 16"/><path d="M20 20v-4h-4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.600"/><circle cx="12" cy="12" r="1.600"/><circle cx="19" cy="12" r="1.600"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7.500V12l3 2"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 11v5M12 7.500v.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M5.500 16c.6-1.500 2-2.500 3.500-2.500s2.900 1 3.500 2.500"/><path d="M15.500 10h3M15.500 14h3"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 16l9 5 9-5"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.600-5.900L4 8"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.500 6.500l4 4"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 9l9-5 9 5z"/><path d="M5 9v8M9.500 9v8M14.500 9v8M19 9v8M3 20h18"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4.500M12 17.500v.5"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.500"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><svg class="i"><use href="#i-box"/></svg><span>Parcel / IDP</span><span>·</span><b>往来单位</b></div>
+    <div class="gsearch"><svg class="i"><use href="#i-search"/></svg>搜索或跳转…<kbd>Ctrl K</kbd></div>
+    <div class="tenant"><svg class="i"><use href="#i-building"/></svg>公司 · SYN-TENANT-01</div>
+    <span class="who">syn-operator-config-01@syn-t…</span>
+  </header>
+  <div class="shellbody">
+    <nav class="sidebar" aria-label="导航（照现状）">
+      <h3>工作台</h3>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>工作台</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>最近打开</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>保存的视图</a>
+      <h3>运单</h3>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>运单</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>物流动态</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>新建与撤回</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>待受理复核</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>受限运单处置</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>资金释放待处理</a>
+      <h3>客户</h3>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>客户与合同</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>商业规则</a>
+      <h3>合作伙伴</h3>
+      <a href="#" class="on"><svg class="i"><use href="#i-users"/></svg>往来单位</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>供应商协议</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>渠道产品</a>
+      <h3>产品与价格</h3>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>服务产品</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>价格表</a>
+      <a href="#"><svg class="i"><use href="#i-dot"/></svg>汇率与燃油费率</a>
+    </nav>
+    <div class="workarea">
+      <div class="wstabs">
+        <span class="on"><svg class="i"><use href="#i-users"/></svg>往来单位<svg class="i"><use href="#i-x"/></svg></span>
+        <span><svg class="i"><use href="#i-building"/></svg>公司主体</span>
+        <span><svg class="i"><use href="#i-file"/></svg>客户与合同</span>
+      </div>
+      <main id="page" class="page"></main>
+    </div>
+  </div>
+  <footer class="statusbar"><span>往来单位</span>
+    <label class="demo" title="只有这份静态页有：真实页面处在哪种状态由读口答什么决定，这里切着看">演示状态<select id="demo" aria-label="演示状态"></select></label>
+    <span class="note">静态参考 v3 · 合成数据 · 不接后端 · 外壳（顶栏、侧栏、标签条）照现状未改</span></footer>
+</div>
+
+<script>
+/* ───── 合成数据（SYN-，仅供看版式） ───── */
+const ROLES = {
+  CUSTOMER: { label: '客户', color: '#0a6ed1', icon: 'users' },
+  SUPPLIER: { label: '供应商', color: '#0f828f', icon: 'truck' },
+  CARRIER_AGENT: { label: '承运商代理', color: '#7b4bd6', icon: 'route' },
+  RESELLER: { label: '转售', color: '#c9730a', icon: 'store' },
+  ACCOUNT_HOLDER: { label: '渠道账号持有', color: '#3f51b5', icon: 'key' },
+  AUTHORIZED_DELIVERING_PARTY: { label: '授权交付方', color: '#188a42', icon: 'shield' },
+};
+const STATUS = {
+  EFFECTIVE: { label: '已生效', tone: 'ok', icon: 'check', dot: '#22a35a' },
+  REGISTERED: { label: '待生效', tone: 'warn', icon: 'clock', dot: '#e8930c' },
+  DEACTIVATED: { label: '已停用', tone: 'mute', icon: 'minus', dot: '#9aa7b4' },
+};
+const REL_STATUS = {
+  EFFECTIVE: { label: '已生效', tone: 'ok', icon: 'check' },
+  CANDIDATE: { label: '待确认', tone: 'warn', icon: 'clock' },
+  EXPIRED: { label: '已到期', tone: 'mute', icon: 'minus' },
+  REVOKED: { label: '已撤销', tone: 'mute', icon: 'minus' },
+};
+const P = (id, name, x = {}) => ({ id, name, status: 'EFFECTIVE', from: '2026-01-01', reg: '2026-11-10', country: null, ...x });
+const baseParties = [
+  P('SYN-PARTY-RESELLER-01', '合成渠道转售商一号（演示）'),
+  P('SYN-PARTY-SUPPLIER-01', '合成航空货运供应商一号（演示）'),
+  P('SYN-PARTY-AGENT-03', '合成美国尾程代理三号（演示）', { country: '美国（US）' }),
+  P('SYN-PARTY-AGENT-02', '合成香港承运代理二号（演示）', { country: '中国香港（HK）' }),
+  P('SYN-PARTY-SHIPPER-09', '合成母婴出口九号（演示）', { noProfile: true }),
+  P('SYN-PARTY-SHIPPER-08', '合成服饰出口八号（演示）'),
+  P('SYN-PARTY-SHIPPER-07', '合成数码卖家七号（演示）'),
+  P('SYN-PARTY-SHIPPER-06', '合成家居出口六号（演示）'),
+  P('SYN-PARTY-SHIPPER-05', '合成品牌出海五号（演示）'),
+  P('SYN-PARTY-SHIPPER-04', '合成跨境电商四号（演示）'),
+  P('SYN-PARTY-SHIPPER-03', '合成跨境电商三号（演示）'),
+  P('SYN-PARTY-UX09-02', '合成验收单位二号', { from: '2026-11-09', reg: '2026-11-09', noProfile: true }),
+  P('SYN-PARTY-FUTURE-01', '合成待生效单位（演示）', { status: 'REGISTERED', from: '2027-01-01', reg: '2026-11-08', noProfile: true }),
+  P('SYN-PARTY-DELIVERER-01', '合成授权交付方（演示）', { reg: '2026-11-06' }),
+  P('SYN-PARTY-SHIPPER-01', '合成货主一号（演示）', { country: '中国（CN）', from: '2026-11-05', reg: '2026-11-05', alt: 'SYN Shipper One (Demo)' }),
+  P('SYN-PARTY-SHIPPER-02', '合成货主二号（演示）', { country: '中国（CN）', reg: '2026-11-05' }),
+  P('SYN-PARTY-CARRIER-TRUNK-01', '合成干线承运方（演示）', { country: '德国（DE）', reg: '2026-11-02' }),
+  P('SYN-PARTY-CARRIER-LM-01', '合成末端承运方（演示）', { country: '美国（US）', reg: '2026-11-02' }),
+  P('SYN-PARTY-RETIRED-01', '合成已停用单位（演示）', { status: 'DEACTIVATED', deactivatedAt: '2026-10-01', reg: '2026-09-12' }),
+  P('SYN-PARTY-CN-SZ-01', 'IDP供应链（深圳）有限公司（演示）', { ours: true, le: 'SYN-LE-CN-SZ-01', country: '中国（CN）', reg: '2026-10-30' }),
+  P('SYN-PARTY-US-01', 'IDP Parcel USA Inc.（演示）', { ours: true, le: 'SYN-LE-US-01', country: '美国（US）', reg: '2026-10-30' }),
+  P('SYN-PARTY-HK-01', 'IDP Parcel Hong Kong Limited（演示）', { ours: true, le: 'SYN-LE-HK-01', country: '中国香港（HK）', reg: '2026-10-30' }),
+  P('SYN-PARTY-CN-SH-01', 'IDP物流科技（上海）有限公司（演示）', { ours: true, le: 'SYN-LE-CN-SH-01', country: '中国（CN）', reg: '2026-10-30' }),
+  P('SYN-PARTY-OPERATOR-01', '合成运营方一号（演示）', { ours: true, le: 'SYN-LE-01', country: '中国（CN）', reg: '2026-10-28' }),
+];
+const R = (n, holder, role, counterparty, status = 'EFFECTIVE', start = '2026-02-01', end = null) =>
+  ({ id: 'SYN-REL-' + String(n).padStart(4, '0'), holder: 'SYN-PARTY-' + holder, role, counterparty: 'SYN-PARTY-' + counterparty, status, start, end });
+const baseRels = [
+  R(1, 'SHIPPER-05', 'CUSTOMER', 'US-01'),
+  R(2, 'AGENT-03', 'CARRIER_AGENT', 'US-01'),
+  R(3, 'SUPPLIER-01', 'SUPPLIER', 'HK-01', 'CANDIDATE'),
+  R(4, 'SHIPPER-03', 'CUSTOMER', 'HK-01'),
+  R(5, 'AGENT-02', 'CARRIER_AGENT', 'HK-01'),
+  R(6, 'CN-SZ-01', 'ACCOUNT_HOLDER', 'CARRIER-LM-01'),
+  R(7, 'SHIPPER-07', 'CUSTOMER', 'CN-SZ-01'),
+  R(8, 'SHIPPER-02', 'CUSTOMER', 'CN-SZ-01'),
+  R(9, 'RESELLER-01', 'RESELLER', 'CN-SH-01'),
+  R(10, 'CARRIER-TRUNK-01', 'SUPPLIER', 'CN-SH-01'),
+  R(11, 'SHIPPER-06', 'CUSTOMER', 'CN-SH-01', 'CANDIDATE'),
+  R(12, 'SHIPPER-09', 'CUSTOMER', 'OPERATOR-01'),
+  R(13, 'SHIPPER-08', 'CUSTOMER', 'OPERATOR-01'),
+  R(14, 'SHIPPER-04', 'CUSTOMER', 'OPERATOR-01'),
+  R(15, 'SHIPPER-01', 'CUSTOMER', 'OPERATOR-01', 'EFFECTIVE', '2026-01-01'),
+  R(16, 'DELIVERER-01', 'AUTHORIZED_DELIVERING_PARTY', 'OPERATOR-01'),
+  R(17, 'SHIPPER-01', 'CUSTOMER', 'CN-SH-01', 'EXPIRED', '2025-01-01', '2025-12-31'),
+];
+
+/*
+  ───── 演示状态 ─────
+  只有这份静态页有，用状态栏里那个虚线框的下拉切。真实页面处在哪一种，由读口答什么决定。
+  「多页」两种的差别在类型由谁算：目标形态里读口随每一行答类型、能按类型筛、给各类型的家数；过渡期照现行页面，
+  类型由浏览器拿合作关系册的第一页推，所以只筛得了本页、给不出数，排在第一页之后的关系读不到。
+*/
+const DEMOS = [
+  ['ready', '有数据 · 一页装得下'],
+  ['loading', '首次加载'],
+  ['refetch', '换条件或翻页时重取'],
+  ['error', '读取失败'],
+  ['unconfigured', '访问通道未配置'],
+  ['empty', '空册 · 一家都没登记'],
+  ['readonly', '只读 · 没有登记权限'],
+  ['paged', '多页 · 类型由读口给（目标）'],
+  ['paged-interim', '多页 · 类型只筛本页（过渡期）'],
+];
+let demo = 'ready';
+let flash = false;
+const interim = () => demo === 'paged-interim';
+const mayWrite = () => demo !== 'readonly';
+// 有没有答案：没有答案的三种状态里页签不摆数，筛选项不摆计数
+const answered = () => demo !== 'loading' && demo !== 'error' && demo !== 'unconfigured';
+// 表格区摆的是不是行：不是行的状态里没有选中、没有分栏
+const listed = () => answered() && demo !== 'empty';
+// 筛选项上摆不摆数：要整册的数，过渡期的多页给不出
+const counted = () => answered() && !interim();
+const busy = () => demo === 'refetch' || flash;
+
+/* ───── 大册（只为演示多页）：在手写的那些后面按序号生成，够翻几页、够看千位数 ───── */
+const PAGE = 200;
+const BIG = 1286;
+function makeBig() {
+  const ps = baseParties.slice();
+  const rs = baseRels.slice();
+  const ourIds = baseParties.filter((p) => p.ours).map((p) => p.id);
+  const others = [[53, 'SUPPLIER', '供应商'], [67, 'CARRIER_AGENT', '承运代理'], [97, 'RESELLER', '转售商']];
+  const countries = ['中国（CN）', null, '中国（CN）', '中国香港（HK）', null, '美国（US）', '中国（CN）', '德国（DE）'];
+  const day = (i) => new Date(Date.UTC(2026, 8, 10) - i * 51840000).toISOString().slice(0, 10);
+  for (let i = 1; ps.length < BIG; i += 1) {
+    const other = others.find(([every]) => i % every === 0);
+    const role = i % 71 === 0 ? null : other ? other[1] : 'CUSTOMER';
+    const n = String(i).padStart(4, '0');
+    const id = `SYN-PARTY-G-${n}`;
+    const reg = day(i);
+    const status = i % 89 === 0 ? 'DEACTIVATED' : i % 131 === 0 ? 'REGISTERED' : 'EFFECTIVE';
+    ps.push({
+      id, name: `合成${role === null ? '单位' : other ? other[2] : '货主'} ${n}（演示）`, status, reg,
+      from: status === 'REGISTERED' ? '2027-01-01' : reg, country: countries[i % countries.length], noProfile: i % 9 === 0,
+      ...(status === 'DEACTIVATED' ? { deactivatedAt: '2026-10-01' } : {}),
+    });
+    if (role) rs.push({ id: `SYN-REL-G-${n}`, holder: id, role, counterparty: ourIds[i % ourIds.length], status: i % 41 === 0 ? 'CANDIDATE' : 'EFFECTIVE', start: reg, end: null });
+  }
+  return { ps, rs };
+}
+
+/* ───── 派生 ───── */
+const live = (r) => r.status === 'EFFECTIVE' || r.status === 'CANDIDATE';
+let parties, rels, byId, ours, roleIdx, relIdx, typeTotals;
+function useData() {
+  const big = demo === 'paged' || interim() ? (makeBig.made ||= makeBig()) : null;
+  parties = demo === 'empty' ? [] : big ? big.ps : baseParties;
+  rels = demo === 'empty' ? [] : big ? big.rs : baseRels;
+  byId = Object.fromEntries(parties.map((p) => [p.id, p]));
+  ours = parties.filter((p) => p.ours);
+  roleIdx = new Map();
+  relIdx = new Map();
+  const tally = (id, r) => { const c = relIdx.get(id) || { n: 0, pending: 0 }; c.n += 1; if (r.status === 'CANDIDATE') c.pending += 1; relIdx.set(id, c); };
+  for (const r of interim() ? rels.slice(0, PAGE) : rels) {
+    if (!live(r)) continue;
+    roleIdx.set(r.holder, (roleIdx.get(r.holder) || new Set()).add(r.role));
+    // 段数与类型同一口径：只数它担任角色的关系；我方公司不靠角色定类型，两边的关系都数
+    tally(r.holder, r);
+    if (byId[r.counterparty] && byId[r.counterparty].ours) tally(r.counterparty, r);
+  }
+  typeTotals = Object.fromEntries(Object.keys(ROLES).concat('OURS', 'NONE').map((t) => [t, parties.filter((p) => typeMatch(p, t)).length]));
+}
+const rolesOf = (id) => { const held = roleIdx.get(id); return held ? Object.keys(ROLES).filter((role) => held.has(role)) : []; };
+const typeMatch = (p, t) => t === 'ALL' || (t === 'OURS' ? !!p.ours : t === 'NONE' ? !p.ours && rolesOf(p.id).length === 0 : rolesOf(p.id).includes(t));
+// 过渡期的多页里，没读到角色不等于没有：它的关系可能排在合作关系册的第一页之后
+const typeUnknown = (p) => interim() && !p.ours && rolesOf(p.id).length === 0;
+
+const state = { view: 'parties', q: '', type: 'ALL', status: 'ALL', sel: null, dtab: 'overview', rq: '', rrole: 'ALL', rstatus: 'ALL', nq: '', page: 0, rpage: 0, npage: 0 };
+
+/* ───── 小件 ───── */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ic = (n, cls = '') => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const tile = (p, roles = rolesOf(p.id)) => {
+  const role = roles[0];
+  return `<span class="tile ${p.ours ? 'ours' : role || ''}">${ic(p.ours ? 'home' : role ? ROLES[role].icon : 'building')}</span>`;
+};
+const roleTag = (role) => `<span class="tag"><i style="background:${ROLES[role].color}"></i>${ROLES[role].label}</span>`;
+const fmt = (n) => n.toLocaleString('en-US');
+const typeHint = '合作关系册不止一页：类型与段数按它的第一页推，没读到的显示「—」，不等于没有';
+const unread = `<span class="none" title="${typeHint}">—</span>`;
+const typeTags = (p) => {
+  const tags = (p.ours ? ['<span class="tag ours">我方公司</span>'] : []).concat(rolesOf(p.id).map(roleTag));
+  return tags.length ? `<div class="tags">${tags.join('')}</div>` : typeUnknown(p) ? unread : '<span class="none">暂无合作关系</span>';
+};
+const typeText = (p) => (p.ours ? ['我方公司'] : []).concat(rolesOf(p.id).map((r) => ROLES[r].label)).join(' · ') || (typeUnknown(p) ? '类型没读到' : '暂无合作关系');
+const pill = (def) => `<span class="pill ${def.tone}">${ic(def.icon)}${def.label}</span>`;
+// 名称下一行是编码，有注册地就跟在后面：没有的不占一格「—」
+const ident = (p, small) => `<div class="ident">${tile(p)}<div class="tx"><div class="nm trunc">${esc(p.name)}</div>${small ? '' : `<div class="cd trunc"><span class="mono">${p.id}</span>${p.country ? ` · ${esc(p.country)}` : ''}</div>`}</div></div>`;
+// 这一列数的是「它担任角色的关系」，与类型列同一口径；我方公司不靠角色定类型，两边的关系都数。
+// 只当别人关系里的相对方的单位，类型是「暂无合作关系」，这里也是「—」，两格不打架。
+const relCell = (p) => {
+  const c = relIdx.get(p.id);
+  if (!c) return typeUnknown(p) ? unread : '<span class="none">—</span>';
+  return `<span class="num">${fmt(c.n)} 段</span>${c.pending ? `<span class="pend">${fmt(c.pending)} 段待确认</span>` : ''}`;
+};
+
+const needle = (s) => s.trim().toLowerCase();
+const partyPass = (p, q, type, status) => (!q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) && typeMatch(p, type) && (status === 'ALL' || p.status === status);
+// 读口答的那一册：检索词与状态由读口筛；类型在目标形态里也由读口筛，过渡期读口筛不了，留到页内
+const filteredParties = () => parties.filter((p) => partyPass(p, needle(state.q), interim() ? 'ALL' : state.type, state.status));
+const pageOf = (list, page) => list.slice(page * PAGE, (page + 1) * PAGE);
+const pagesOf = (total) => Math.max(1, Math.ceil(total / PAGE));
+// 表里摆出来的行：读口答回的这一页；过渡期再在这一页上按类型筛一遍
+function shownParties() {
+  const rows = pageOf(filteredParties(), state.page);
+  return interim() && state.type !== 'ALL' ? rows.filter((p) => typeMatch(p, state.type)) : rows;
+}
+// 筛选项上的数随另外两项条件走，不随自己那一项走：点下去会得到几行，上面写的就是几
+const typeCount = (t) => parties.filter((p) => partyPass(p, needle(state.q), t, state.status)).length;
+const statusCount = (s) => parties.filter((p) => partyPass(p, needle(state.q), interim() ? 'ALL' : state.type, s)).length;
+const relText = (r) => (byId[r.holder].name + byId[r.counterparty].name + r.id + r.holder + r.counterparty).toLowerCase();
+const relPass = (r, q, role, status) => (!q || relText(r).includes(q)) && (role === 'ALL' || r.role === role) && (status === 'ALL' || r.status === status);
+const filteredRels = () => rels.filter((r) => relPass(r, needle(state.rq), state.rrole, state.rstatus));
+const relStatusCount = (s) => rels.filter((r) => relPass(r, needle(state.rq), state.rrole, s)).length;
+
+/* ───── 视图签：三处共用一种写法，数只在这里出现一次；整页时待办跟在同一行右端 ───── */
+function tabs(withAttention) {
+  const known = answered();
+  const items = [['parties', '单位名录', parties.length], ['rels', '合作关系', rels.length], ['network', '我方关联', ours.length]];
+  const pending = rels.filter((r) => r.status === 'CANDIDATE').length;
+  const future = parties.filter((p) => p.status === 'REGISTERED').length;
+  const attn = withAttention && known ? [
+    pending ? `<button data-act="attn-rel"><i></i>${fmt(pending)} 段合作关系待确认<span class="go">查看</span></button>` : '',
+    future ? `<button data-act="attn-future"><i></i>${fmt(future)} 家单位尚未生效<span class="go">查看</span></button>` : '',
+  ].join('') : '';
+  return `<div class="tabs" role="tablist" aria-label="视图">${items.map(([id, label, n]) =>
+    `<button class="tab${state.view === id ? ' on' : ''}" role="tab" aria-selected="${state.view === id}" data-act="view" data-v="${id}">${label}${known ? `<span class="cnt">${fmt(n)}</span>` : ''}</button>`).join('')}${attn ? `<div class="attn">${attn}</div>` : ''}</div>`;
+}
+// 翻页条。读口按游标翻页：只有上一页与下一页，不能跳页；总数是读口随这一页答回的真数。名录栏窄，两个钮只留箭头。
+function foot(cls, total, unit, key, note = '') {
+  const page = state[key];
+  const pages = pagesOf(total);
+  const tight = cls === 'mfoot';
+  const turn = (step, label, off) => `<button class="btn ghost sm${tight ? ' icon' : ''}" data-act="turn" data-k="${key}" data-step="${step}" aria-label="${label}"${off ? ' disabled' : ''}>${step < 0 ? ic('left') : ''}${tight ? '' : label}${step > 0 ? ic('right') : ''}</button>`;
+  return `<div class="${cls}"><span class="meta">共 <b class="num">${fmt(total)}</b> ${unit}${note}${busy() ? ' · 正在读取…' : ''}</span>
+    <span class="pager">${turn(-1, '上一页', page === 0)}<span class="meta num">${tight ? `${page + 1} / ${pages}` : `第 ${page + 1} / ${pages} 页`}</span>${turn(1, '下一页', page >= pages - 1)}</span></div>`;
+}
+const progress = () => (busy() ? '<div class="progress" role="progressbar" aria-label="正在读取"></div>' : '');
+
+/* ───── 页头：一行——页名、一句说明、动作。没有登记权限时写入口整组不摆，刷新留着 ───── */
+function pageHead() {
+  return `<div class="phead">
+    <div class="ptitle"><h1>往来单位</h1><p class="desc trunc">客户、供应商、承运代理等与我们有业务往来的单位，以及它们与我方公司之间的合作关系</p></div>
+    <div class="acts">
+      <button class="btn ghost icon" title="刷新" aria-label="刷新" data-act="refresh">${ic('refresh')}</button>
+      ${mayWrite() ? `<button class="btn"${demo === 'empty' ? ' disabled' : ''}>${ic('link')}建立合作关系</button>
+      <button class="btn primary">${ic('plus')}新增往来单位</button>
+      <button class="btn ghost icon" title="更多：停用…" aria-label="更多">${ic('more', 'fill')}</button>` : ''}
+    </div>
+  </div>`;
+}
+
+/*
+  ───── 页面态：只换表格区 ─────
+  标题与说明取现行页面的原话。骨架照着将要出现的那张表的列来排；读取失败留着工具条（可以改条件再试），
+  未配置与空册不留——没有东西可筛。
+*/
+const hiddenEntryHint = '登记与发布入口只对持登记册配置写授予的操作者显示。';
+const EMPTY = {
+  parties: ['building', '还没有登记任何往来单位', '客户、承运商、代理都从这里登记。'],
+  rels: ['link', '还没有登记任何合作关系', '谁是我们的客户、谁是承运商，都由合作关系说。先在「单位名录」登记往来单位，才有双方可选。'],
+  network: ['home', '还没有在用的我方公司', '我方公司在「公司主体」页登记；登记之后，这里按公司列出各自的合作关系。'],
+};
+function stateBody(view, colgroup, thead) {
+  if (demo === 'loading') {
+    const cols = [...colgroup.matchAll(/<col(?=[ >])(?: class="([^"]*)")?/g)].map((m) => m[1] || '');
+    const bars = [0, 96, 44, 64, 76, 76, 0];
+    const row = (i) => `<tr><td><div class="ident"><span class="sk tile"></span><div class="tx" style="flex:1"><span class="sk" style="width:${[62, 48, 70, 55][i % 4]}%"></span><span class="sk" style="width:${[38, 30, 44][i % 3]}%;height:8px;margin-top:8px"></span></div></div></td>${
+      cols.slice(1).map((cls, c) => `<td class="${cls}">${bars[c + 1] ? `<span class="sk" style="width:${bars[c + 1]}px"></span>` : ''}</td>`).join('')}</tr>`;
+    return { toolbar: true, html: `<div class="tablewrap" style="overflow:hidden" role="status" aria-label="加载中"><table class="grid skel">${colgroup}${thead}<tbody>${Array.from({ length: 24 }, (_, i) => row(i)).join('')}</tbody></table></div>
+      <div class="lfoot"><span class="meta">正在读取…</span></div>` };
+  }
+  if (demo === 'error') {
+    return { toolbar: true, html: `<div class="statewrap"><div class="stateblock" role="alert"><span class="tile bad">${ic('alert')}</span>
+      <h3>服务端没有形成答案</h3><p>目录读取依赖未能形成答案，可稍后重试。若持续失败，请展开「技术详情」，携其中的问题码求助。</p>
+      <button class="btn" data-act="retry">${ic('refresh')}重试</button>
+      <details><summary>技术详情</summary><dl><dt>HTTP 状态</dt><dd class="mono">502</dd><dt>问题码</dt><dd class="mono">NO_ANSWER_FORMED</dd></dl></details></div></div>` };
+  }
+  if (demo === 'unconfigured') {
+    return { toolbar: false, html: `<div class="statewrap"><div class="stateblock"><span class="tile">${ic('plug')}</span>
+      <h3>访问通道尚未配置</h3><p>目录的读取入口当前不可用；这不是“目录为空”。配置该上下文的访问通道后重新查询；页面不会用演示数据代替。</p>
+      <details><summary>技术详情</summary><dl><dt>HTTP 状态</dt><dd class="mono">403</dd><dt>问题码</dt><dd class="mono">ACCESS_CHANNEL_NOT_CONFIGURED</dd><dt>主责上下文</dt><dd>参与方与商业（party-commercial）</dd></dl></details></div></div>` };
+  }
+  if (demo === 'empty') {
+    const [icon, title, text] = EMPTY[view];
+    // 主按钮整页只有页头那一枚；空册里再摆一枚是为了就手，用普通样式
+    const action = view === 'parties' ? `<button class="btn">${ic('plus')}新增往来单位</button>` : view === 'rels' ? `<button class="btn" data-act="view" data-v="parties">去「单位名录」</button>` : '';
+    return { toolbar: false, html: `<div class="statewrap"><div class="stateblock"><span class="tile">${ic(icon)}</span><h3>${title}</h3><p>${text}</p>${action}</div></div>` };
+  }
+  return null;
+}
+
+/* ───── 单位名录（整页） ───── */
+// 摆哪几枚看整册：整册里一家都没有的类型不摆；摆出来的那几枚不随检索词增减，免得边打字边跳。
+// 条件下数到零的那一枚留在原位、压淡、点不动。过渡期分不出「没有关系」与「没读到」，那一枚不摆。
+const typeEntries = () => [['ALL', '全部']].concat(Object.entries(ROLES).map(([k, v]) => [k, v.label, v.color]), [['OURS', '我方公司']], interim() ? [] : [['NONE', '暂无合作关系']])
+  .filter(([k]) => k === 'ALL' || typeTotals[k] > 0 || state.type === k);
+function typeChips() {
+  if (demo === 'loading') return `<div class="chipset types"><span class="lab">类型</span>${[58, 64, 76, 100, 64, 112].map((w) => `<span class="sk chipsk" style="width:${w}px"></span>`).join('')}</div>`;
+  const chip = ([t, label, color]) => {
+    const n = typeCount(t);
+    return `<button class="chip${state.type === t ? ' on' : ''}" aria-pressed="${state.type === t}" data-act="type" data-t="${t}"${n === 0 && state.type !== t ? ' disabled' : ''}>${color ? `<i style="background:${color}"></i>` : ''}${label}<span class="n">${fmt(n)}</span></button>`;
+  };
+  const entries = typeEntries();
+  const roles = entries.filter(([k]) => k === 'ALL' || ROLES[k]);
+  const rest = entries.filter(([k]) => k === 'OURS' || k === 'NONE');
+  return `<div class="chipset types"><span class="lab">类型</span>${roles.map(chip).join('')}${rest.length ? '<span class="sep"></span>' : ''}${rest.map(chip).join('')}</div>`;
+}
+// 没有数的时候（还没答案、或过渡期的多页）选项上只写词
+const typeSelect = (cls = '', pageOnly = false) => `<select class="select ${cls}${state.type !== 'ALL' ? ' on' : ''}" id="type" aria-label="${pageOnly ? '类型（只筛本页）' : '类型'}">${(answered() ? typeEntries() : [['ALL', '全部']]).map(([k, label]) =>
+  `<option value="${k}"${state.type === k ? ' selected' : ''}>${k === 'ALL' ? (pageOnly ? '类型（只筛本页）' : '类型：全部') : counted() ? `${label}（${fmt(typeCount(k))}）` : label}</option>`).join('')}</select>`;
+const statusSelect = () => `<select class="select${state.status !== 'ALL' ? ' on' : ''}" id="status" aria-label="状态">
+  <option value="ALL">状态：全部</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.status === k ? ' selected' : ''}>状态：${v.label}${counted() ? `（${fmt(statusCount(k))}）` : ''}</option>`).join('')}</select>`;
+const pageOnlyNote = '类型由合作关系、客户账户与公司主体推出来，读口筛不了：只在当前这一页上筛，翻页后照新的一页再筛';
+
+function partiesFull() {
+  const total = filteredParties().length;
+  const list = shownParties();
+  const filtered = state.q || state.type !== 'ALL' || state.status !== 'ALL';
+  const pageOnly = interim() && state.type !== 'ALL';
+  const mark = interim() ? `<span class="thint" title="${typeHint}">${ic('info')}</span>` : '';
+  const colgroup = '<colgroup><col class="c-name"><col style="width:240px"><col style="width:130px"><col style="width:120px"><col style="width:120px"><col class="c-reg" style="width:120px"><col></colgroup>';
+  const thead = `<thead><tr><th>单位</th><th>类型${mark}</th><th>合作关系${mark}</th><th>状态</th><th>生效日期</th><th class="c-reg">登记日期</th><th></th></tr></thead>`;
+  // 类型的三种摆法：有数时是芯片（窄屏收成下拉）；过渡期的多页是标明「只筛本页」的下拉；读取失败时摆不出有哪几类，不摆
+  const typeControl = interim() ? `${typeSelect('', true)}<span class="pnote" title="${pageOnlyNote}">${ic('info')}类型只筛本页</span>`
+    : demo === 'error' ? ''
+    : `${typeSelect('type-select')}<span class="vsep types"></span>${typeChips()}`;
+  const toolbar = `<div class="toolbar">
+      <label class="search">${ic('search')}<input id="q" value="${esc(state.q)}" placeholder="搜索名称、编码、注册号或外部编码" aria-label="搜索"><kbd>/</kbd></label>
+      ${statusSelect()}${typeControl}
+      ${filtered ? '<button class="clear" data-act="clear">清除筛选</button>' : ''}
+    </div>`;
+  const other = stateBody('parties', colgroup, thead);
+  if (other) return `${pageHead()}<section class="panel" style="flex:1">${tabs(true)}${other.toolbar ? toolbar : ''}${other.html}</section>`;
+  const none = pageOnly && total
+    ? '<div class="empty"><b>这一页上没有这一类单位</b>类型只筛本页，不看其余几页，翻页看看。</div>'
+    : '<div class="empty"><b>当前筛选条件下没有匹配的单位</b><button class="clear" data-act="clear">清除筛选</button></div>';
+  const rows = list.map((p) => `<tr data-act="open" data-id="${p.id}">
+      <td>${ident(p)}</td>
+      <td>${typeTags(p)}</td>
+      <td>${relCell(p)}</td>
+      <td><div class="stack">${pill(STATUS[p.status])}${p.deactivatedAt ? `<small class="num">自 ${p.deactivatedAt}</small>` : ''}</div></td>
+      <td class="num">${p.from}</td>
+      <td class="num c-reg" style="color:var(--muted)">${p.reg}</td>
+      <td class="go">${ic('right')}</td></tr>`).join('');
+  return `${pageHead()}
+  <section class="panel" style="flex:1">
+    ${tabs(true)}${toolbar}
+    <div class="tablewrap${busy() ? ' busy' : ''}">${progress()}${list.length ? `<table class="grid">${colgroup}${thead}<tbody>${rows}</tbody></table>` : none}</div>
+    ${foot('lfoot', total, '家', 'page', pageOnly ? ` · 本页筛出 ${fmt(list.length)} 家` : '')}
+  </section>`;
+}
+
+/* ───── 主从分栏：左边是名录栏，右边是这家单位 ───── */
+function partiesSplit() {
+  const total = filteredParties().length;
+  const list = shownParties();
+  const p = byId[state.sel];
+  const rows = list.map((x) => `<div class="mrow${x.id === state.sel ? ' on' : ''}" data-act="open" data-id="${x.id}">
+      ${tile(x)}
+      <div class="tx"><div class="nm trunc">${esc(x.name)}</div><div class="sub trunc">${typeText(x)}</div></div>
+      <span class="st"><i style="background:${STATUS[x.status].dot}"></i>${STATUS[x.status].label}</span></div>`).join('');
+  return `<aside class="panel master" aria-label="单位名录">
+    <div class="mhead"><h2>往来单位</h2>
+      ${mayWrite() ? `<button class="btn primary sm">${ic('plus')}新增</button>
+      <button class="btn ghost sm icon" title="更多：建立合作关系、停用…" aria-label="更多">${ic('more', 'fill')}</button>` : ''}</div>
+    ${tabs(false)}
+    <div class="mtools">
+      <label class="search">${ic('search')}<input id="q" value="${esc(state.q)}" placeholder="搜索名称或编码" aria-label="搜索"><kbd>/</kbd></label>
+      ${typeSelect('', interim())}
+      ${statusSelect()}
+    </div>
+    <div class="mlist${busy() ? ' busy' : ''}">${progress()}${rows || (interim() && state.type !== 'ALL' && total
+      ? '<div class="empty"><b>这一页上没有这一类单位</b>类型只筛本页，翻页看看。</div>'
+      : '<div class="empty"><b>当前筛选条件下没有匹配的单位</b><button class="clear" data-act="clear">清除筛选</button></div>')}</div>
+    ${foot('mfoot', total, '家', 'page')}
+  </aside>
+  ${detail(p)}`;
+}
+
+function detail(p) {
+  const mine = rels.filter((r) => r.holder === p.id || r.counterparty === p.id);
+  // 右栏按这家单位自己的关系说类型，不靠列表那份在多页时只看得到第一页的索引
+  const roles = Object.keys(ROLES).filter((role) => mine.some((r) => r.holder === p.id && r.role === role && live(r)));
+  const tags = (p.ours ? ['<span class="tag ours">我方公司</span>'] : []).concat(roles.map(roleTag));
+  const liveRels = mine.filter(live);
+  const w = mayWrite();
+  const edit = w ? '<button class="more">编辑</button>' : '';
+  const hasProfile = !p.ours && !p.noProfile;
+  const contacts = hasProfile ? [['合成联系人甲', '业务联系人 · 主要', 'syn-contact-a@example.invalid', '+86 000 0000 0001'], ['合成联系人乙', '财务对账', 'syn-contact-b@example.invalid', '+86 000 0000 0002']] : [];
+  const linkCounts = [['客户账户', roles.includes('CUSTOMER') ? 1 : 0], ['供应商协议', roles.includes('SUPPLIER') || roles.includes('CARRIER_AGENT') ? 1 : 0], ['结算政策', liveRels.length ? 1 : 0], ['公司主体', p.ours ? 1 : 0]];
+  const dtabs = [['overview', '概要', 'file', null], ['contacts', '联系人', 'card', contacts.length], ['versions', '资料版本', 'layers', hasProfile ? 2 : 0], ['records', '登记记录', 'history', null], ['links', '关联', 'link', mine.length + linkCounts.reduce((a, [, n]) => a + n, 0)]]
+    // 我方公司不收往来单位资料：联系人与资料版本两签不摆。记着的签这一行没有就显概要，记着的值不动
+    .filter(([id]) => !p.ours || (id !== 'contacts' && id !== 'versions'));
+  const dtab = dtabs.some(([id]) => id === state.dtab) ? state.dtab : 'overview';
+  const facts = [`编码 <b class="mono">${p.id}</b><button class="copy" title="复制编码">${ic('copy')}</button>`, p.country ? `注册地 <b>${esc(p.country)}</b>` : '', `${p.status === 'REGISTERED' ? '将于' : '自'} <b class="num">${p.from}</b> 生效`, hasProfile ? '资料 <b>第 2 版</b>' : p.ours ? '' : '资料 <b>未登记</b>'].filter(Boolean);
+
+  const banners = [
+    p.status === 'REGISTERED' ? `<div class="banner warn">${ic('clock')}<span>还没到生效时间：<b class="num">${p.from}</b> 之前不按它办新业务；登记合作关系时，开始时间不能早于它的生效时间。</span></div>` : '',
+    p.status === 'DEACTIVATED' ? `<div class="banner mute">${ic('minus')}<span>自 <b class="num">${p.deactivatedAt}</b> 起停用，新的业务不再找它；已有记录保留。</span></div>` : '',
+    p.status === 'EFFECTIVE' && !p.ours && liveRels.length === 0 ? `<div class="banner info">${ic('info')}<span>还没有合作关系。它是客户还是供应商，由合作关系说。</span>${w ? `<button class="btn sm">${ic('link')}登记合作关系</button>` : ''}</div>` : '',
+  ].join('');
+
+  // 概要里只列最近几段；我方公司名下可以有几百上千段，整份去「关联」签或「合作关系」视图看
+  const relLines = mine.length ? `<div class="lines">${mine.slice(0, 5).map((r) => {
+    const other = byId[r.holder === p.id ? r.counterparty : r.holder];
+    const dir = r.holder === p.id ? `对 <b>${esc(other.name)}</b> 担任` : `<b>${esc(other.name)}</b> 对它担任`;
+    return `<div><div class="grow"><span class="dir">${dir}</span> ${roleTag(r.role)}<small class="num">${r.start} → ${r.end || '长期有效'} · <span class="mono">${r.id}</span></small></div>${pill(REL_STATUS[r.status])}${ic('right', 'go')}</div>`;
+  }).join('')}</div>` : `<div class="ph" style="padding:24px 16px">还没有合作关系</div>`;
+  const linkLines = `<div class="lines">${linkCounts.map(([label, n]) => `<div><span class="grow">${label}</span><span class="cntn${n ? '' : ' zero'}">${n}</span>${ic('right', 'go')}</div>`).join('')}</div>`;
+  const contactLines = contacts.length ? `<div class="lines">${contacts.map(([name, role, mail, tel]) => `<div><span class="tile" style="border-radius:50%">${ic('card')}</span><div class="grow"><b>${name}</b><small>${role}</small></div><div style="text-align:right"><span class="mono" style="font-size:12px">${mail}</span><small class="num">${tel}</small></div></div>`).join('')}</div>` : `<div class="ph" style="padding:24px 16px">还没有联系人</div>`;
+  const relSec = `<section class="sec"><header>${ic('link')}合作关系<button class="more" data-act="dtab" data-d="links">全部 ${fmt(mine.length)} 段</button></header>${relLines}</section>`;
+  const linkSec = `<section class="sec"><header>${ic('layers')}关联对象</header>${linkLines}</section>`;
+
+  let body = '';
+  if (dtab === 'overview') {
+    // 左列是这家单位自己的资料，右列是它和别人的关系：两列各排各的
+    const left = p.ours
+      ? `<section class="sec"><div class="ph"><b>这是我方公司</b>公司资料（注册号、开票与收款信息）在「公司主体」里维护，这里不另收一份。<br><button class="btn sm">${ic('external')}打开公司主体 <span class="mono">${p.le}</span></button></div></section>`
+      : !hasProfile
+        ? `<section class="sec"><div class="ph"><b>还没有登记资料</b>联系人、地址、税号与收款账户都在「更新资料」里登记。${roles.includes('CUSTOMER') ? '<br>这家单位是客户，建议先登记一位联系人，下单和对账时找得到人。' : ''}<br>${w ? `<button class="btn primary sm">${ic('edit')}更新资料</button>` : hiddenEntryHint}</div></section>`
+        : `<section class="sec"><header>${ic('building')}名称与地址${edit}</header><div class="bd"><dl class="kv">
+              <dt>名称</dt><dd>${esc(p.name)}</dd><dt>其他语言名称</dt><dd>${p.alt ? esc(p.alt) : '<span class="none">未登记</span>'}</dd>
+              <dt>注册地</dt><dd>${p.country ? esc(p.country) : '<span class="none">未登记</span>'}</dd><dt>注册号</dt><dd class="mono">SYN-REG-${p.id.slice(-2)}01</dd>
+              <dt>外部编码</dt><dd class="mono">SYN-EXT-${p.id.slice(-2)}</dd><dt>注册地址</dt><dd>（合成地址）示例市示例区示例路 ${Number(p.id.slice(-2)) || 1} 号</dd></dl></div></section>
+           <section class="sec"><header>${ic('receipt')}税务与开票${edit}</header><div class="bd"><dl class="kv">
+              <dt>纳税人识别号</dt><dd class="mono">SYN-TAX-${p.id.slice(-2)}0001</dd><dt>开票抬头</dt><dd>${esc(p.name)}</dd><dt>开票地址</dt><dd>同注册地址</dd></dl></div></section>
+           <section class="sec"><header>${ic('bank')}收款账户${edit}</header><div class="bd"><dl class="kv">
+              <dt>开户行</dt><dd>合成银行示例支行</dd><dt>账号</dt><dd class="mono">SYN-BANK-${p.id.slice(-2)}-0001</dd><dt>币种</dt><dd>CNY</dd></dl></div></section>`;
+    const contactSec = hasProfile ? `<section class="sec"><header>${ic('card')}联系人<button class="more" data-act="dtab" data-d="contacts">全部 ${contacts.length} 位</button></header>${contactLines}</section>` : '';
+    body = `${banners}<div class="cols"><div class="col">${left}</div><div class="col">${contactSec}${relSec}${linkSec}</div></div>`;
+  } else if (dtab === 'contacts') {
+    body = `<div class="secs"><section class="sec"><header>${ic('card')}联系人</header>${contactLines}</section></div>`;
+  } else if (dtab === 'links') {
+    // 关系一多就是一张表：通栏铺满，列对齐着读；不再是卡片里一行一句话。
+    const relTable = mine.length ? `<table class="grid"><colgroup><col style="width:36%"><col><col style="width:110px"><col style="width:210px"><col style="width:48px"></colgroup>
+      <thead><tr><th>对方</th><th>关系</th><th>状态</th><th>有效期</th><th></th></tr></thead><tbody>${mine.slice(0, 50).map((r) => {
+      const holder = r.holder === p.id;
+      return `<tr><td>${ident(byId[holder ? r.counterparty : r.holder], true)}</td>
+        <td><span style="color:var(--muted)">${holder ? '本单位对它担任' : '它对本单位担任'}</span> ${roleTag(r.role)}</td>
+        <td>${pill(REL_STATUS[r.status])}</td>
+        <td class="num">${r.start} <span style="color:var(--deco)">→</span> ${r.end ? r.end : '<span style="color:var(--muted)">长期有效</span>'}</td>
+        <td class="go">${ic('right')}</td></tr>`;
+    }).join('')}</tbody></table>${mine.length > 50 ? `<div class="morerow">这里只列最近 50 段<button class="more" data-act="rels-of" data-id="${p.id}">在「合作关系」里看全部 ${fmt(mine.length)} 段</button></div>` : ''}` : `<div class="ph" style="padding:24px 16px">还没有合作关系</div>`;
+    body = `<div class="secs"><section class="sec"><header>${ic('link')}合作关系<span class="hcnt">${fmt(mine.length)} 段</span>${w && p.status === 'EFFECTIVE' ? '<button class="more">登记合作关系</button>' : ''}</header>${relTable}</section>
+      <section class="sec"><header>${ic('layers')}关联对象</header>${linkLines}</section></div>`;
+  } else if (dtab === 'records') {
+    body = `<div class="secs"><section class="sec"><header>${ic('history')}登记记录</header><div class="bd"><div class="tl">
+      ${hasProfile ? `<div><b>更新资料（第 2 版）</b><small class="num">2026-11-08 · 来源单据 <span class="mono">SYN-BASIS-0002</span></small></div>` : ''}
+      <div><b>登记往来单位</b><small class="num">${p.reg} · 来源单据 <span class="mono">SYN-BASIS-0001</span></small></div></div></div></section></div>`;
+  } else {
+    body = `<div class="secs"><section class="sec"><div class="ph"><b>资料版本</b>这一签的内容沿用现有实现（版本选择与逐项比较），静态页没有展开。</div></section></div>`;
+  }
+
+  return `<section class="panel detail" aria-label="${esc(p.name)}">
+    <div class="dhead">
+      <div class="dtop">${tile(p, roles)}
+        <div class="tx">
+          <div class="dname"><h2>${esc(p.name)}</h2>${pill(STATUS[p.status])}</div>
+          ${p.alt ? `<div class="dalt">${esc(p.alt)}</div>` : ''}
+          <div style="margin-top:6px">${tags.length ? `<div class="tags">${tags.join('')}</div>` : '<span class="none">暂无合作关系</span>'}</div>
+        </div>
+        <div class="dacts">
+          ${p.ours || !w ? '' : `<button class="btn${liveRels.length ? ' primary' : ''} sm">${ic('edit')}更新资料</button>`}
+          ${w && p.status === 'EFFECTIVE' && !p.ours ? `<button class="btn${liveRels.length ? '' : ' primary'} sm">${ic('link')}登记合作关系</button>` : ''}
+          <button class="btn ghost sm icon" title="在新标签打开整页" aria-label="在新标签打开">${ic('external')}</button>
+          <button class="btn ghost sm icon" title="更多：复制编码、停用…" aria-label="更多">${ic('more', 'fill')}</button>
+          <button class="btn ghost sm icon" title="关闭（Esc）" aria-label="关闭" data-act="close">${ic('x')}</button>
+        </div>
+      </div>
+      <div class="facts">${facts.map((f) => `<span>${f}</span>`).join('')}</div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="详情">${dtabs.map(([id, label, icon, n]) =>
+      `<button class="tab${dtab === id ? ' on' : ''}" role="tab" aria-selected="${dtab === id}" data-act="dtab" data-d="${id}">${ic(icon)}${label}${n ? `<span class="cnt">${fmt(n)}</span>` : ''}</button>`).join('')}</div>
+    <div class="dbody${dtab === 'links' || dtab === 'records' ? ' flush' : ''}">${body}</div>
+  </section>`;
+}
+
+/* ───── 合作关系 ───── */
+function relsFull() {
+  const all = filteredRels();
+  const list = pageOf(all, state.rpage);
+  const filtered = state.rq || state.rrole !== 'ALL' || state.rstatus !== 'ALL';
+  // 状态与角色读口本来就能筛，多页时照样精确；过渡期只是给不出各状态的数，芯片上只写词
+  const chip = (s, label) => {
+    if (s !== 'ALL' && state.rstatus !== s && !rels.some((r) => r.status === s)) return '';
+    const n = relStatusCount(s);
+    return `<button class="chip${state.rstatus === s ? ' on' : ''}" aria-pressed="${state.rstatus === s}" data-act="rstatus" data-s="${s}"${counted() && n === 0 && state.rstatus !== s ? ' disabled' : ''}>${s === 'CANDIDATE' ? '<i style="background:#e8930c"></i>' : ''}${label}${counted() ? `<span class="n">${fmt(n)}</span>` : ''}</button>`;
+  };
+  const colgroup = '<colgroup><col style="width:30%"><col style="width:180px"><col style="width:26%"><col style="width:120px"><col></colgroup>';
+  const thead = '<thead><tr><th>单位</th><th>担任的角色</th><th>对方</th><th>状态</th><th>有效期</th></tr></thead>';
+  const toolbar = `<div class="toolbar">
+      <label class="search">${ic('search')}<input id="q" value="${esc(state.rq)}" placeholder="搜索单位名称、编码或关系编号" aria-label="搜索"><kbd>/</kbd></label>
+      <select class="select${state.rrole !== 'ALL' ? ' on' : ''}" id="rrole" aria-label="角色"><option value="ALL">角色：全部</option>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}"${state.rrole === k ? ' selected' : ''}>角色：${v.label}</option>`).join('')}</select>
+      ${demo === 'loading' ? '' : `<span class="vsep"></span>
+      <div class="chipset"><span class="lab">状态</span>${chip('ALL', '全部')}${Object.entries(REL_STATUS).map(([k, v]) => chip(k, v.label)).join('')}</div>`}
+      ${filtered ? '<button class="clear" data-act="rclear">清除筛选</button>' : ''}
+    </div>`;
+  const other = stateBody('rels', colgroup, thead);
+  if (other) return `${pageHead()}<section class="panel" style="flex:1">${tabs(true)}${other.toolbar ? toolbar : ''}${other.html}</section>`;
+  const rows = list.map((r) => `<tr>
+      <td>${ident(byId[r.holder])}</td>
+      <td><span class="arrow">${ic('arrow')}</span>${roleTag(r.role)}<span class="arrow">${ic('arrow')}</span></td>
+      <td>${ident(byId[r.counterparty], true)}</td>
+      <td>${pill(REL_STATUS[r.status])}</td>
+      <td class="num">${r.start} <span style="color:var(--deco)">→</span> ${r.end ? r.end : '<span style="color:var(--muted)">长期有效</span>'}</td></tr>`).join('');
+  return `${pageHead()}
+  <section class="panel" style="flex:1">
+    ${tabs(true)}${toolbar}
+    <div class="tablewrap${busy() ? ' busy' : ''}">${progress()}${list.length ? `<table class="grid">${colgroup}${thead}<tbody>${rows}</tbody></table>`
+      : '<div class="empty"><b>当前筛选条件下没有匹配的合作关系</b><button class="clear" data-act="rclear">清除筛选</button></div>'}</div>
+    ${foot('lfoot', all.length, '段', 'rpage')}
+  </section>`;
+}
+
+/* ───── 我方关联 ───── */
+function networkFull() {
+  const q = needle(state.nq);
+  // 过渡期照现行页面：这一视图的段数从合作关系册的第一页数，页上写明
+  const seen = interim() ? rels.slice(0, PAGE) : rels;
+  const count = (list) => Object.keys(ROLES).map((role) => [role, list.filter((r) => r.role === role).length]).filter(([, n]) => n > 0);
+  const cell = (pairs) => pairs.length ? `<div class="tags">${pairs.map(([role, n]) => `<span class="tag"><i style="background:${ROLES[role].color}"></i>${ROLES[role].label} <b class="num">${fmt(n)}</b></span>`).join('')}</div>` : '<span class="none">—</span>';
+  const list = ours.filter((p) => !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.le.toLowerCase().includes(q));
+  const colgroup = '<colgroup><col class="c-name"><col style="width:28%"><col style="width:18%"><col style="width:110px"><col></colgroup>';
+  const thead = '<thead><tr><th>我方公司</th><th>对它担任角色的单位</th><th>它对其担任角色</th><th>待确认</th><th>公司主体</th></tr></thead>';
+  const toolbar = `<div class="toolbar">
+      <label class="search">${ic('search')}<input id="q" value="${esc(state.nq)}" placeholder="搜索我方公司名称、编码或公司主体" aria-label="搜索"><kbd>/</kbd></label>
+      ${interim() ? `<span class="pnote">${ic('info')}合作关系册不止一页，段数只按第一页数</span>` : '<span class="hint">以我方每家公司为主体看合作关系；选一家在右边看它的关系图</span>'}
+    </div>`;
+  const other = stateBody('network', colgroup, thead);
+  if (other) return `${pageHead()}<section class="panel" style="flex:1">${tabs(true)}${other.toolbar ? toolbar : ''}${other.html}</section>`;
+  const rows = list.map((p) => {
+    const toward = seen.filter((r) => r.counterparty === p.id && live(r));
+    const from = seen.filter((r) => r.holder === p.id && live(r));
+    const pending = toward.concat(from).filter((r) => r.status === 'CANDIDATE').length;
+    return `<tr><td>${ident(p)}</td><td>${cell(count(toward))}</td><td>${cell(count(from))}</td>
+      <td>${pending ? `<span class="pill warn">${ic('clock')}${fmt(pending)} 段</span>` : '<span class="none">—</span>'}</td>
+      <td class="mono" style="font-size:12px;color:var(--muted)">${p.le}</td></tr>`;
+  }).join('');
+  return `${pageHead()}
+  <section class="panel" style="flex:1">
+    ${tabs(true)}${toolbar}
+    <div class="tablewrap${busy() ? ' busy' : ''}">${progress()}${list.length ? `<table class="grid">${colgroup}${thead}<tbody>${rows}</tbody></table>` : '<div class="empty"><b>没有匹配的我方公司</b></div>'}</div>
+    ${foot('lfoot', list.length, '家', 'npage')}
+  </section>`;
+}
+
+/* ───── 渲染与事件 ───── */
+const page = document.getElementById('page');
+function render() {
+  const focused = document.activeElement && document.activeElement.id === 'q';
+  const split = state.view === 'parties' && listed() && state.sel && byId[state.sel];
+  page.className = 'page' + (split ? ' split' : '');
+  page.innerHTML = state.view === 'rels' ? relsFull() : state.view === 'network' ? networkFull() : split ? partiesSplit() : partiesFull();
+  if (focused) { const q = document.getElementById('q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+  const on = page.querySelector('.mrow.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+}
+// 换演示状态：换数据、回第一页；新状态里没有的选中与筛选项一并放下
+const demoSelect = document.getElementById('demo');
+demoSelect.innerHTML = DEMOS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+function setDemo(value) {
+  demo = value;
+  demoSelect.value = value;
+  useData();
+  state.page = 0; state.rpage = 0;
+  if (!listed() || !byId[state.sel]) state.sel = null;
+  if (interim() && state.type === 'NONE') state.type = 'ALL';
+  render();
+}
+demoSelect.addEventListener('change', (event) => setDemo(event.target.value));
+page.addEventListener('click', (event) => {
+  const el = event.target.closest('[data-act]'); if (!el) return;
+  const act = el.dataset.act;
+  // 换条件回第一页：游标跟着条件走
+  if (act === 'view') { state.view = el.dataset.v; }
+  else if (act === 'type') { state.type = state.type === el.dataset.t ? 'ALL' : el.dataset.t; state.page = 0; }
+  else if (act === 'rstatus') { state.rstatus = state.rstatus === el.dataset.s ? 'ALL' : el.dataset.s; state.rpage = 0; }
+  else if (act === 'clear') { state.q = ''; state.type = 'ALL'; state.status = 'ALL'; state.page = 0; }
+  else if (act === 'rclear') { state.rq = ''; state.rrole = 'ALL'; state.rstatus = 'ALL'; state.rpage = 0; }
+  else if (act === 'open') { state.sel = el.dataset.id; state.dtab = 'overview'; }
+  else if (act === 'close') { state.sel = null; }
+  else if (act === 'dtab') { state.dtab = el.dataset.d; }
+  else if (act === 'attn-rel') { state.view = 'rels'; state.rstatus = 'CANDIDATE'; state.rq = ''; state.rrole = 'ALL'; state.rpage = 0; }
+  else if (act === 'attn-future') { state.view = 'parties'; state.status = 'REGISTERED'; state.type = 'ALL'; state.q = ''; state.sel = null; state.page = 0; }
+  else if (act === 'rels-of') { state.view = 'rels'; state.rq = el.dataset.id; state.rrole = 'ALL'; state.rstatus = 'ALL'; state.rpage = 0; }
+  else if (act === 'turn') {
+    state[el.dataset.k] += Number(el.dataset.step);
+    render();
+    const box = page.querySelector('.tablewrap,.mlist'); if (box) box.scrollTop = 0;
+    return;
+  }
+  else if (act === 'retry') { setDemo('loading'); setTimeout(() => setDemo('ready'), 900); return; }
+  else if (act === 'refresh') {
+    if (!listed() || flash) return;
+    flash = true; render();
+    setTimeout(() => { flash = false; render(); }, 700);
+    return;
+  }
+  render();
+});
+page.addEventListener('input', (event) => {
+  if (event.target.id !== 'q') return;
+  if (state.view === 'rels') { state.rq = event.target.value; state.rpage = 0; }
+  else if (state.view === 'network') state.nq = event.target.value;
+  else { state.q = event.target.value; state.page = 0; }
+  render();
+});
+page.addEventListener('change', (event) => {
+  const { id, value } = event.target;
+  if (id === 'status') state.status = value; else if (id === 'type') state.type = value; else if (id === 'rrole') state.rrole = value; else return;
+  state.page = 0; state.rpage = 0;
+  render();
+});
+document.addEventListener('keydown', (event) => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName);
+  if (event.key === '/' && !typing) { event.preventDefault(); const q = document.getElementById('q'); if (q) q.focus(); return; }
+  if (event.key === 'Escape') { if (typing) event.target.blur(); else if (state.sel) { state.sel = null; render(); } return; }
+  if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !typing && state.view === 'parties' && listed()) {
+    const list = shownParties(); if (!list.length) return;
+    const index = list.findIndex((p) => p.id === state.sel);
+    const next = index === -1 ? (event.key === 'ArrowDown' ? 0 : list.length - 1) : Math.min(list.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)));
+    event.preventDefault(); state.sel = list[next].id; state.dtab = 'overview'; render();
+  }
+});
+setDemo('ready');
+</script>
+</body>
+</html>
