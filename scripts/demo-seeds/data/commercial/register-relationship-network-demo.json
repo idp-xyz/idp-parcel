@@ -181,7 +181,7 @@
     {
       "relationshipId": "SYN-REL-NET-08",
       "revision": 1,
-      "holder": "SYN-PARTY-SHIPPER-01",
+      "holder": "SYN-PARTY-SHIPPER-08",
       "counterparty": "SYN-PARTY-CN-SH-01",
       "role": "CUSTOMER",
       "scope": "SYN-SCOPE-NET-01",

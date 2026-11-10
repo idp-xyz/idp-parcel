@@ -65,7 +65,7 @@ function Neighbor({
   onShowDetail: () => void;
 }) {
   const label = sentence(node, center, side);
-  const frame = `flex min-w-0 flex-col gap-0.5 rounded-md border px-2.5 py-1.5 text-left hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
+  const frame = `flex w-full min-w-0 flex-col gap-0.5 rounded-md border px-2.5 py-1.5 text-left hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
     pending(node) ? 'border-dashed border-idpxyz-border' : 'border-idpxyz-border'
   } bg-idpxyz-bg`;
   if (node.kind === 'group') {
