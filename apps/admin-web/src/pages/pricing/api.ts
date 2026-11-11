@@ -64,9 +64,9 @@ export function registerPriceCard(
 export const priceCardPreviewPath = '/pricing-price-card-previews';
 export const priceCardDraftPath = '/pricing-price-card-drafts';
 
-/** 空白模板。文件名带模板版本，与 `pricecardtemplate.TemplateFileName` 同一份；旧版 PPT-1 的文件仍可上传。 */
-export const priceCardTemplateHref = '/templates/price-card-import-template-PPT-2.xlsx';
-export const priceCardTemplateFileName = 'price-card-import-template-PPT-2.xlsx';
+/** 空白模板。文件名带模板版本，与 `pricecardtemplate.TemplateFileName` 同一份；旧版模板的文件仍可上传。 */
+export const priceCardTemplateHref = '/templates/price-card-import-template-PPT-3.xlsx';
+export const priceCardTemplateFileName = 'price-card-import-template-PPT-3.xlsx';
 
 /** 表单字段名与 `DecodePriceCardUpload` 认的那一格相同：多一格服务端就拒。 */
 export const priceCardUploadField = 'file';
