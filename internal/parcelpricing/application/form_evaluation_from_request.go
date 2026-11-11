@@ -132,6 +132,9 @@ type FormEvaluationFromRequestResult struct {
 	HandoffReference string
 	// Candidates 只在适用冲突时有值：同时适用的每一版价卡的引用。
 	Candidates []domain.VersionReference
+	// ServiceProduct 是选卡用的服务产品（ADR-0378 决定三），在未配置与适用冲突两格上交回：消费侧说「哪个产品没有卡」「哪个
+	// 产品上撞了几张」要用它。零值即没按产品选。
+	ServiceProduct domain.ServiceProductReference
 	// Missing 只在输入不可得时有值：缺的读口或事实，一条一件，文字给人读。
 	Missing []string
 }
@@ -218,11 +221,12 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	switch resolution.Outcome {
 	case ports.PriceCardVersionInForce:
 	case ports.PriceCardNotConfigured:
-		return FormEvaluationFromRequestResult{Outcome: RequestPriceCardNotConfigured}, nil
+		return FormEvaluationFromRequestResult{Outcome: RequestPriceCardNotConfigured, ServiceProduct: product}, nil
 	case ports.PriceCardApplicabilityConflict:
 		return FormEvaluationFromRequestResult{
-			Outcome:    RequestPriceCardApplicabilityConflict,
-			Candidates: append([]domain.VersionReference(nil), resolution.Candidates...),
+			Outcome:        RequestPriceCardApplicabilityConflict,
+			Candidates:     append([]domain.VersionReference(nil), resolution.Candidates...),
+			ServiceProduct: product,
 		}, nil
 	default:
 		return FormEvaluationFromRequestResult{}, fmt.Errorf("%w: price card in-force outcome %d", ErrUnexpectedInForceOutcome, resolution.Outcome)
@@ -233,8 +237,10 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 		return result, nil
 	}
 	if product.Declared() {
+		// 读口交来的产品已立得住、输入读口交来的快照已立得住，记不上就是结构上到不了的那一格——不折成「命令不成形」，那会让
+		// 消费侧把它说成请求译错了。
 		if input, err = input.WithServiceProduct(product); err != nil {
-			return FormEvaluationFromRequestResult{Outcome: RequestEvaluationNotAccepted}, nil
+			return FormEvaluationFromRequestResult{}, fmt.Errorf("record service product %s on the pricing input: %w", product, err)
 		}
 	}
 

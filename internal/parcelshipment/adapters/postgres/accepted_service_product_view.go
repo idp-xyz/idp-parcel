@@ -14,7 +14,8 @@ import (
 
 var _ ports.AcceptedServiceProductView = (*ShipmentRequests)(nil)
 
-// LoadAcceptedServiceProduct 按（租户，声明包裹身份）答覆盖它的已接受委托申报的服务产品。零行答没有产品；多于一行是歧义 error。
+// LoadAcceptedServiceProduct 按（租户，声明包裹身份）答覆盖它的已接受委托申报的服务产品。零行答没有产品；多于一行是歧义 error；
+// 读回的委托答不出（基线版本缺席）同样是 error。
 func (repository *ShipmentRequests) LoadAcceptedServiceProduct(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -27,5 +28,9 @@ func (repository *ShipmentRequests) LoadAcceptedServiceProduct(
 	if !found {
 		return domain.DeclaredServiceProduct{}, nil
 	}
-	return request.AcceptedServiceProductFor(parcel), nil
+	product, err := request.AcceptedServiceProductFor(parcel)
+	if err != nil {
+		return domain.DeclaredServiceProduct{}, fmt.Errorf("load accepted service product: %w", err)
+	}
+	return product, nil
 }

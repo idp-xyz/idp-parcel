@@ -304,6 +304,10 @@ func (payload EstimatePayload) Command(tenant domain.TenantID) (application.Form
 		command.AddressNature = &nature
 	}
 	if payload.ServiceProduct != "" {
+		// 只有售价卡按产品选（ADR-0378 决定一）；别的方向带了产品是发起方的错，答 400 而不是悄悄丢掉。
+		if direction != domain.PricingDirectionSell {
+			return malformed("serviceProduct", fmt.Errorf("only a SELL estimate selects its price card by service product, direction is %s", direction))
+		}
 		product, err := domain.NewServiceProductReference(payload.ServiceProduct)
 		if err != nil {
 			return malformed("serviceProduct", err)
