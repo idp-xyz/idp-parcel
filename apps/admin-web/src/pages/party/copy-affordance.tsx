@@ -152,8 +152,8 @@ export function CopyAside({
   children: ReactNode;
   className?: string;
   /**
-   * 给图标留出整枚的位置。摆在按内容定宽、又裁溢出的祖先里（flex 里带 truncate 的标题）时要给：那里块有多宽祖先就有多宽，
-   * 图标伸出去的那一截会被整个裁掉。
+   * 给图标留出整枚的位置。两种地方要给：按内容定宽、又裁溢出的祖先里（flex 里带 truncate 的标题）——那里块有多宽祖先就有
+   * 多宽，图标伸出去的那一截会被整个裁掉；横向可滚的容器的最右端（可滚的表的末列）——伸出去的那一截会撑出一条滚动条。
    */
   reserveIcon?: boolean;
 }) {
@@ -169,12 +169,13 @@ export function CopyAside({
   //
   // 值排满时图标伸到这一格右边的留白里。块的右内边距就是为这个留的：读出卡（ProfileReadoutCard、往来单位右栏的 PanelCard）
   // 会裁掉伸出卡边的东西，留的宽加上两种卡里较窄的那个卡身内边距，要够图标可见的部分（按钮的左内边距加图标的宽）伸出去。
-  // 改按钮的内边距、图标的宽或卡身的内边距时，这一条要重新算。
+  // 改按钮的内边距、图标的宽或卡身的内边距时，这一条要重新算。留这一段的代价是字早折这么多；读出表里不是末列的格右边
+  // 没有会裁图标的边，在 legal-entity-profile-readout.css 里按 copy-aside 这个类名把它免掉了。
   //
   // 按钮左边用内边距而不是外边距与值隔开：外边距不属于谁，鼠标从文字挪向图标时经过那条缝会掉出悬停区。
   // 反馈显出来的那两秒按钮恢复占位：那句话排在它后面，按钮不占位它就压在图标上。
   return (
-    <span className={`group/copy inline-block max-w-full ${reserveIcon ? 'pr-6' : 'pr-1.5'} align-top ${className ?? ''}`.trim()}>
+    <span className={`group/copy copy-aside inline-block max-w-full ${reserveIcon ? 'pr-6' : 'pr-1.5'} align-top ${className ?? ''}`.trim()}>
       {children}
       <button
         type="button"

@@ -79,6 +79,13 @@
   padding-right: 0.75rem;
 }
 
+/* 复制图标不占行宽，值排满时伸到这一格的右边（copy-affordance.tsx 的 CopyAside；值的块上那一小段右内边距是为读出卡的卡边
+   留的，卡会裁掉伸出去的东西）。表里不是末列的格，右边是自己与下一列的内边距，图标伸出去碰不到会裁它的边，不用留——
+   留了，只差几像素排得下的一行就要多折一行。末列的格右边就是表的边，照留。 */
+.legal-entity-readout-table td:not(:last-child) .copy-aside {
+  padding-right: 0;
+}
+
 /* 联系人卡组（票 company-subject-ux/11 第 1 条）：卡组自己就是容器——「联系人」签里没有资料读出的外框可量，概要签里
    卡组又套在读出卡内、比外框窄两个内边距；量自己的宽，两处才按同一把尺排列。容器名与读出共用，两列的断点也共用。 */
 .legal-entity-contact-cards {

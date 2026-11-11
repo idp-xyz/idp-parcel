@@ -32,24 +32,25 @@ test('文本类：文字在按钮外照常可选，末尾的图标按钮只叫�
       children: ['SYN 一行', createElement('br', { key: 'br' }), 'SYN 二行'],
     }),
   );
-  match(html, /^<span class="group\/copy inline-block max-w-full pr-1\.5 align-top">SYN 一行<br\/>SYN 二行<button type="button" aria-label="复制注册地址" title="复制注册地址"/);
+  match(html, /^<span class="group\/copy copy-aside inline-block max-w-full pr-1\.5 align-top">SYN 一行<br\/>SYN 二行<button type="button" aria-label="复制注册地址" title="复制注册地址"/);
   match(html, /group-hover\/copy:opacity-100[^>]*><svg[^>]*lucide-copy/);
   equal(html.includes('SYN 一行\nSYN 二行'), false);
   match(html, /<span role="status" class="sr-only"><\/span><\/span>$/);
 });
 
 // Covers: 图标不占行宽（票 business-party-redesign/12）——没有反馈在显时按钮带着抵掉自身宽度的负外边距，与值之间靠自己的
-// 内边距隔开、不留外边距的缝；块默认只留一小段右内边距，reserveIcon 才留出整枚图标的位置。
+// 内边距隔开、不留外边距的缝；块默认只留一小段右内边距，reserveIcon 才留出整枚图标的位置。copy-aside 这个类名是读出表的
+// 样式表免掉那一小段时认的钩子，改名要两边一起改。
 test('文本类：图标按钮在行内的净宽为零，块的右边默认只留一小段，reserveIcon 留整枚', () => {
   const idle = renderToStaticMarkup(createElement(CopyAside, { value: 'SYN 名称', name: '名称', children: 'SYN 名称' }));
   const button = /<button[^>]*class="([^"]*)"/.exec(idle)?.[1].split(/\s+/) ?? [];
   equal(button.includes('-mr-6'), true);
   equal(button.includes('pl-1.5') && button.includes('pr-1'), true);
   equal(button.some((name) => /^-?m[lx]-/.test(name)), false);
-  match(idle, /^<span class="group\/copy inline-block max-w-full pr-1\.5 align-top">/);
+  match(idle, /^<span class="group\/copy copy-aside inline-block max-w-full pr-1\.5 align-top">/);
 
   const reserved = renderToStaticMarkup(createElement(CopyAside, { value: 'SYN 名称', name: '名称', children: 'SYN 名称', reserveIcon: true }));
-  match(reserved, /^<span class="group\/copy inline-block max-w-full pr-6 align-top">/);
+  match(reserved, /^<span class="group\/copy copy-aside inline-block max-w-full pr-6 align-top">/);
 });
 
 test('三种结局各有一句：写成功「已复制」、被拒「复制失败」、没有剪贴板「无法复制」', async () => {
