@@ -1768,6 +1768,16 @@
 | `AT-NO-022` | 包裹无当前有效路由（同 `AT-NO-031`：方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
+| `AT-PS-181` | 单件委托报两行货物，各带中英文品名、单价、出口侧编码与原产国，不报装箱分配（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-182` | 单价与行总价对不上、只有行总价、行净重合计大于毛重，照样保全不核对（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-183` | 货物明细与装箱分配形状错：空行、超过 999 行、同语言两条品名、同口径两条编码、数量不是数、分配只报一部分或和对不上（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-184` | 仓配整箱出的货物明细逐格带来源标记，缺的照实空着（货物明细与仓配出库提交都未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-185` | 海关退单后以委托级资料组「货物明细」整组替换，只交一行按整组读（货物明细修订未落地，ADR-0373） | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
+| `AT-PS-186` | 快递式一票多件只报整票清单、不报装箱分配，照收（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-187` | 合单与拆单：行级销售订单引用原样保全、不核对（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-188` | FBA 空派一个平台货件 50 箱同款：一份委托、平台号挂委托与包裹、整票受理（平台外部标识与货物明细未落地，ADR-0374） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-189` | 仓配平台备货整份提交一份委托，键（出库请求，提交轮次），重提加一（仓配出库提交未落地，ADR-0374） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
+| `AT-PS-190` | 文件件只报内件性质、没有货物明细行照收，礼品没有行答形状不对（货物明细未落地，ADR-0373） | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-TF-054` | 封签连续的集运单元整体交接（成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-087` | 预占后节点新测量使体积增加（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-088` | 集运单元成员在舱单冻结前变化（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
@@ -2276,4 +2286,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-11-03 追记（票 company-subject-ux/05，ADR-0359）：UC-PC-001 新立 `AT-PC-078`（法人资料的监管登记号、收款账户与多语言开票抬头：登记 / 重放 / 同修订改明细冲突、（币种，账号）与语言重复拒收、目录外币种在接入拒、旧修订读作缺席不回填、`资料不全`判据不变、快照 LEP-4 与旧形状字节不变、0044 在有数据的库上可施加），领域、真库快照与登记册、在线口译装与受控 CLI 用例点名，入①，PC 加 1，②③④不变。总览计数未重算，由推送方重算。
 
+<<<<<<< HEAD
 2026-11-12 追记（票 warehouse-fulfillment/07，ADR-0375）：`warehouse-fulfillment` 此前没有 UC，新立 UC-WF-001 至 UC-WF-006（主数据与入库），`AT-WF-001`–`084`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
+=======
+2026-11-10 追记（票 declared-goods-lines/01，ADR-0373、ADR-0374）：UC-PS-001 新立 `AT-PS-181` 至 `AT-PS-184`、`AT-PS-186` 至 `AT-PS-190`（货物明细保全、保真不核对、形状错、仓配来源标记、整票清单、销售订单引用、FBA 平台货件、仓配平台备货整份提交、文件件可以没有行），UC-PS-002 新立 `AT-PS-185`（委托级资料组「货物明细」整组替换），机制都未落地，入④。总览计数未动，由推送方重算。
+>>>>>>> dc10ab1aa (docs: 委托的货物明细与专线型 FBA 头程——ADR-0373、ADR-0374 与各上下文同步（票 declared-goods-lines/01）)
