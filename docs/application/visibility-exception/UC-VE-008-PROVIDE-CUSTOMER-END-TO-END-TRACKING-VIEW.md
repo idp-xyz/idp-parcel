@@ -130,3 +130,5 @@
 结果语义「查询标识」中的委托的单据号、「按单据号的整单结果」一行与 `AT-VE-231` 至 `AT-VE-234`、`AT-VE-236` 的现状缺口已由票 [document-numbering/12](../../../.scratch/document-numbering/issues/12-customer-tracking-by-shipment-number.md) 补齐（2026-11-02）：首方客户族另开 `GET /v1/customer-shipment-tracking`，授予是它自己的词 `CUSTOMER_SHIPMENT_TRACKING_QUERY`；`parcel-shipment` 按（租户，客户账户，单据号）一条语句读委托所处状态与当前有效包裹，账户在查询条件里；`visibility-exception` 经消费侧适配器译成整单四格，逐件列出时每一件走与按包裹查同一个单件判据，任一读失败整页未形成。各行预期结果不变。`AT-VE-235` 仍未补，等包裹身份谱系在 `parcel-shipment` 落模型：此前当前有效包裹就是接受基线的声明成员，次序同首方提交答复，后继与 `replaces` 都不会出现；端口与答复已留出来源关系那一格。
 
 把内部全程追踪投影、客户全程追踪视图、客户可见异常和主动通知分别建模。客户视图必须同时受客户账户、对象授权和信息公开规则约束，并只引用当前有效里程碑、客户可见 ETA、终局和更正关系。完成本用例只证明授权客户可以安全查询普通全程轨迹，不证明异常已经通知、客户已经确认或任何源事实已经改变。
+
+[ADR-0374](../../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定六要求客户面多件委托逐件列跟踪号与平台箱标号：按运单号追踪的答复（ADR-0356）今天逐件只带包裹号、来源关系与客户包裹件号。未做，待 VE owner 会签决定六的客户面一半后另立票。

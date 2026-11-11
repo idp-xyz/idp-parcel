@@ -118,6 +118,14 @@ Status: Confirmed
 - 运营企业不采纳或改写声明价值，只在委托接受时依适用的保价条件判断它能否受理，并把要求与所依据的保价条件引用一并固定进委托接受基线。
 - 避免使用：保费、赔付金额、保险单、保额（保额是保价条件里的上限，不是客户要求）。
 
+### 货物明细
+
+客户对一份委托装了什么的声明：委托级一格内件性质；有序的货物明细行，相当于商业发票的行，每行说一种货（品名、数量、价值、申报商品编码、原产国、货主商品编码与销售订单引用等）；加说每个包裹装了哪几行、各多少的装箱分配，相当于装箱单。申报格带申报格来源标记。它是客户原始资料的一部分，随客户原始资料版本整组演进。
+
+- 所有者：`parcel-shipment`；`customs-compliance` 按（资料版本锚，委托，行号）取行、按装箱分配推到包裹，形成正式申报资料时逐行溯源；来源为「仓配出库」的委托由 `warehouse-fulfillment` 由装箱记录汇成行与分配交来。
+- 它是客户的声明，不是销售订单、仓配履约的商品、正式申报资料或申报货物项；行上的销售订单引用只是引用。并项、换算、折算、归类与合规判断归 `customs-compliance`。定义与各格以 [parcel-shipment/CONTEXT.md](./parcel-shipment/CONTEXT.md) 同名词条为准（[ADR-0373](../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md)）。
+- 避免使用：商品明细（仓配履约的词）、订单明细、申报货物项、装箱单（单说）、货物行。
+
 ### 客户原始资料版本
 
 针对明确委托、包裹、字段或资料范围形成的不可覆盖客户来源版本。版本记录基础版本、补充/更正原因、来源、对象范围、请求方、实际决定方、授权快照、业务时间和适用关系；来源更正或撤销通过追加关系表达。
@@ -187,7 +195,7 @@ Status: Confirmed
 
 ### 外部标识
 
-由客户、面单渠道、干线、尾程服务方或监管机构等外部参与方分配、用于标识明确业务对象的号码或代码。外部标识不必标识包裹；客户参考号、渠道订单号、主号、包裹件号、尾程号、总单号、供应商账单号和监管编号可以分别属于不同对象。
+由客户、销售平台、面单渠道、干线、尾程服务方或监管机构等外部参与方分配、用于标识明确业务对象的号码或代码。外部标识不必标识包裹；客户参考号、平台货件号、平台参考号、渠道订单号、主号、包裹件号、尾程号、平台箱标号、总单号、供应商账单号和监管编号可以分别属于不同对象。管理台与客户面前各号的叫法见 [parcel-shipment/CONTEXT.md](./parcel-shipment/CONTEXT.md)「号码的界面词」（[ADR-0374](../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定四、六）。
 
 - 所有者：各对象所属上下文保存与外部标识的关系；`parcel-shipment` 拥有委托、面单交易和包裹范围内的标识关联，外部参与方仍是号码分配来源。
 - 必须记录标识类型、分配方、被标识对象、适用范围和替代关系；作废、替换或失效只改变适用关系，不删除历史标识。
@@ -216,7 +224,7 @@ Status: Confirmed
 
 ### 歧义信号
 
-按外部标识核对包裹身份时，`parcel-shipment` 随包裹候选一并答出的一个是否值：被核对的号码此刻是否同时被本租户里一份`已提交`委托声明为客户包裹件号。委托生命周期里未终局又未接受的只有`已提交`一格，接受判断任务等补充、等复核、等登记或等授权处置时，委托都仍是`已提交`。声明它的委托一经拒绝或撤回就不再算；一经接受，号码随接受形成关联、成为候选，也不再经信号。信号只说有没有，不说是哪份委托、哪个客户账户或哪件声明包裹；声明包裹也不因信号成为候选。核对带着 `node-operations` 给出的可验证交付范围时，只认范围内客户账户的`已提交`委托所作的声明；没带时在租户内认。
+按外部标识核对包裹身份时，`parcel-shipment` 随包裹候选一并答出的一个是否值：被核对的号码此刻是否同时被本租户里一份`已提交`委托声明为客户包裹件号或平台箱标号（平台箱标号见 [ADR-0374](../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定四）。委托生命周期里未终局又未接受的只有`已提交`一格，接受判断任务等补充、等复核、等登记或等授权处置时，委托都仍是`已提交`。声明它的委托一经拒绝或撤回就不再算；一经接受，号码随接受形成关联、成为候选，也不再经信号。信号只说有没有，不说是哪份委托、哪个客户账户或哪件声明包裹；声明包裹也不因信号成为候选。核对带着 `node-operations` 给出的可验证交付范围时，只认范围内客户账户的`已提交`委托所作的声明；没带时在租户内认。
 
 - 所有者：`parcel-shipment` 答出；`node-operations` 据以判身份冲突来由，不另立判法（[ADR-0195](../adr/0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)、[ADR-0211](../adr/0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)）。
 - 避免使用：重号告警、候选冲突。
@@ -557,6 +565,14 @@ Status: Confirmed
 - 每个字段必须追溯来源、转换规则、决定人或决定方式及适用时间；必要字段存在未解决冲突时不得形成申报就绪。
 - 正式申报资料快照不覆盖客户原始资料、节点实测或此前快照，也不等于已经对外提交。
 - 避免使用：客户申报原文、当前申报字段、已提交申报。
+
+### 申报货物项
+
+`customs-compliance` 在正式申报资料快照里按适用监管规则形成的一项货物：由一条或多条客户货物明细行按归类、原产地等并成，每一格溯源到所并的行（欧盟低值包裹按件计征的「件」即按此并）。
+
+- 所有者：`customs-compliance`；客户的货物明细行归 `parcel-shipment`（[ADR-0373](../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md) 决定九）。
+- 它不是客户的货物明细行，也不覆盖它；并成哪几行、取单价还是行总价、怎样补算与折算，是关务的形成规则。
+- 避免使用：货物明细行、商品明细、申报行（单说）。
 
 ### 申报就绪判断
 
@@ -1048,7 +1064,7 @@ Status: Confirmed
 货主经客户渠道交来（或由运营按货主授权录入）、要求从某个仓发出货物的请求，带要出的货、收件人与地址和发运方式。
 
 - 所有者：`warehouse-fulfillment`。
-- 发运方式为本产品网络时，出库请求带要求的服务产品，它的每个包裹以（出库请求，包裹序号）为来源请求键、以来源「仓配出库」各提交一份委托，由 `parcel-shipment` 作与客户渠道交来的委托同一套接受判断；出库请求本身不是委托，也不取得包裹身份（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四）。发运方式为自备面单或自提的出库请求不提交委托（[ADR-0370](../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一）。
+- 发运方式为本产品网络时，出库请求带要求的服务产品，它的每个包裹以（出库请求，包裹序号）为来源请求键、以来源「仓配出库」各提交一份委托（平台备货整份出库请求提交一份委托，来源请求键是（出库请求，提交轮次），[ADR-0374](../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定五），由 `parcel-shipment` 作与客户渠道交来的委托同一套接受判断；出库请求本身不是委托，也不取得包裹身份（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四）。发运方式为自备面单或自提的出库请求不提交委托（[ADR-0370](../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定一）。
 - 仓配履约说的出库请求、出库确认，指货离开仓里的库存；`customs-compliance` 受门禁的「出库」动作是节点上的交出，两者不是同一动作。仓配履约的出库截单是货主撤回出库请求，不是 `settlement-accounting` 的对账截单。
 - 避免使用：出库单、订单、委托。
 
