@@ -7,7 +7,7 @@ import { useTabViewState } from '../../templates/workspace-view-state';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
 import { businessPartyPanelTabsOf, shownBusinessPartyPanelTab, type BusinessPartyPanelTab } from './business-party-list';
-import { businessPartyObjectHash, profileEditHash } from './business-parties-address';
+import { businessPartyObjectHash, identityEditHash, profileEditHash } from './business-parties-address';
 import { markEditFromRoster, type ProfileEditSectionId } from './business-party-edit-origin';
 import { effectiveProfileOf, useBusinessPartyProfiles } from './BusinessPartyProfileSection';
 import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
@@ -178,6 +178,11 @@ export function BusinessPartyDetailPanel({
     markEditFromRoster(row.partyId, section);
     window.location.hash = profileEditHash(businessPartyObjectHash(row.partyId), true);
   };
+  // 「更正登记信息」是同一个容器里的另一张表单（「更多」菜单里的那一项），去处与来处的记法同上。
+  const openIdentityForm = () => {
+    markEditFromRoster(row.partyId);
+    window.location.hash = identityEditHash(businessPartyObjectHash(row.partyId), true);
+  };
   // 提示、头区动作（票 business-party-ux/08，判读在 business-party-panel-first-screen.ts）、签上的数、概要的卡与「关联」签读同一份缓存。
   const lists = usePartyOverviewLists();
   const overview = partyOverviewStatesOf(row.partyId, relationships, lists);
@@ -260,6 +265,7 @@ export function BusinessPartyDetailPanel({
               parties={parties}
               liveRelationships={liveRelationships}
               onOpenObjectPage={onOpenObjectPage}
+              onCorrectIdentity={openIdentityForm}
               onChanged={onChanged}
             />
             <Button

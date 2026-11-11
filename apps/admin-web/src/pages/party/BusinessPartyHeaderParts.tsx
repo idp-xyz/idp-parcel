@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
+import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal, PencilLine } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
 import { statusToneBanner, statusToneText, type StatusTone } from '../../components/status-tone';
 import type { BusinessPartyRecord, PartyRelationshipRecord, BusinessPartyListResponseBody } from './api';
@@ -87,6 +87,7 @@ export function BusinessPartyMoreMenu({
   parties,
   liveRelationships = null,
   onOpenObjectPage,
+  onCorrectIdentity,
   onChanged,
 }: {
   row: BusinessPartyRecord;
@@ -95,6 +96,11 @@ export function BusinessPartyMoreMenu({
   /** 它名下在用的合作关系有几段，给停用对话框的说明；不知道就是 null。 */
   liveRelationships?: number | null;
   onOpenObjectPage?: () => void;
+  /**
+   * 去「更正登记信息」的编辑态。只有详情栏给：对象页的页头自己摆着这一枚按钮，菜单里不再重复。摆不摆照对象页那一枚的规则——
+   * 有写授予就摆，我方公司也摆（改的是名称，注册号那几格表单自己不摆）。
+   */
+  onCorrectIdentity?: () => void;
   /** 停用落册后回调；页面借它重取参与方册让「已停用」立刻可见。 */
   onChanged?: () => void;
 }) {
@@ -123,6 +129,12 @@ export function BusinessPartyMoreMenu({
         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
         复制编码
       </MenuItem>
+      {mayWrite && onCorrectIdentity ? (
+        <MenuItem onSelect={onCorrectIdentity}>
+          <PencilLine className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+          更正登记信息…
+        </MenuItem>
+      ) : null}
       {mayWrite ? <MenuSeparator /> : null}
       {mayWrite ? (
         <MenuItem onSelect={() => setDeactivating(true)}>
