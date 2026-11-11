@@ -44,19 +44,23 @@ import {
   deactivationPresetOf,
   identityEditHash,
   identityEditRequested,
+  isRegisterPageBook,
   profileEditHash,
   profileEditRequested,
+  registerPageBooks,
   registerViewHash,
   listAfterRegistrationHash,
   withoutDeactivationPreset,
   type BusinessPartyRegister,
   type DeactivationPreset,
+  type RegisterPageBook,
 } from './business-parties-address';
 import type { BusinessPartyDraft } from './business-party-form';
 import type { PartyRelationshipDraft } from './party-relationship-form';
 import { BusinessPartyDetailPage } from './BusinessPartyDetailPage';
 import { BusinessPartyDetailPanel } from './BusinessPartyDetailPanel';
 import { BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
+import { PanelBand } from './BusinessPartyPanelParts';
 import {
   AttentionItem,
   BusinessPartiesPageHead,
@@ -408,10 +412,12 @@ const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
   },
 ];
 
-/** 登记入口与登记视图的用词。册名取读册自己的词，不为登记另造说法；「停用」取身份状态格里的封闭词（已停用）。 */
-const registerBookLabels: Record<BusinessPartyRegister, string> = {
+/**
+ * 登记入口与登记视图的用词。册名取读册自己的词，不为登记另造说法；「停用」取身份状态格里的封闭词（已停用）。切换条与页头
+ * 只属于占整页的那两本册；合作关系的表单摆在合作关系视图里，它的说明在表单自己的头一段。
+ */
+const registerBookLabels: Record<RegisterPageBook, string> = {
   'business-party': '往来单位',
-  'party-relationship': '合作关系',
   'identity-deactivation': '停用',
 };
 
@@ -421,20 +427,20 @@ const registerActionLabels: Record<BusinessPartyRegister, string> = {
   'identity-deactivation': '停用…',
 };
 
-const registerHeadings: Record<BusinessPartyRegister, { title: string; subtitle: string }> = {
+const registerHeadings: Record<RegisterPageBook, { title: string; subtitle: string }> = {
   'business-party': {
     title: '新增往来单位',
     subtitle: '先登记名称与编码；它是客户还是承运商，之后在「建立合作关系」里按角色登记',
-  },
-  'party-relationship': {
-    title: '建立合作关系',
-    subtitle: '记录谁对谁担任什么角色、从什么时候开始；没有批准信息的先作为待确认关系',
   },
   'identity-deactivation': {
     title: '停用',
     subtitle: '停用后不再按它办新业务，已有记录保留；公司主体与客户账户也在这里停用',
   },
 };
+
+// 列表视图里就地开着的表单有没提交的输入、又要被收掉时问的那句话。
+const rosterDraftDiscardNote = '有内容还没有保存，离开名录后填写的内容不会保留。';
+const relationshipFormDiscardNote = '合作关系登记还没有保存，离开后填写的内容不会保留。';
 
 /** 「我方关联」一行里按角色的段数：「客户 2 · 承运商代理 1」；关系册没答出显「—」，不拿 0 冒充「没有」。 */
 function roleCountsText(counts: readonly RoleCount[], answered: boolean): string {
@@ -444,10 +450,11 @@ function roleCountsText(counts: readonly RoleCount[], answered: boolean): string
 }
 
 /**
- * 登记视图里的三张表单（ADR-0085，票 admin-write-faces/02 切片 02c；自票 admin-web-group-legal-entities/10 起三册都是逐字段
- * 表单，ADR-0101 决定八自裁，JSON 快照签降为各表单底部的折叠区）。
+ * 整页登记视图里的两张表单：往来单位与停用（ADR-0085，票 admin-write-faces/02 切片 02c；自票 admin-web-group-legal-entities/10
+ * 起各册都是逐字段表单，ADR-0101 决定八自裁，JSON 快照签降为各表单底部的折叠区）。合作关系那一册的表单不在这里：它摆在
+ * 合作关系视图里、表的上方（票 business-party-redesign/11）。
  *
- * 第三本停用摆在本页，理由是本页读得见它刚写进去的那两件：停用每项必填 basis，而三个身份读面里只有身份本体册把
+ * 停用这一本摆在本页，理由是本页读得见它刚写进去的那两件：停用每项必填 basis，而三个身份读面里只有身份本体册把
  * 停用时点与停用依据都渲染出来——法人册那格只有时点。登在哪里看得见结果就摆哪里，这是「写签跟着读签走」在本册
  * 上的落法。
  *
@@ -455,29 +462,25 @@ function roleCountsText(counts: readonly RoleCount[], answered: boolean): string
  * 那是管理台编一条服务端没有的约束——页面不教一条不真的规则。停用表单里种类是一格下拉，别处读面上结果的去处由
  * 格下那句说出。
  *
- * 换册即换表单：各册草稿是各自表单的内部状态，三册的格互不相容，一册的草稿从不带进另一册。访问过的表单切走后仍挂着、
+ * 换册即换表单：各册草稿是各自表单的内部状态，各册的格互不相容，一册的草稿从不带进另一册。访问过的表单切走后仍挂着、
  * 只藏起来，切回来草稿还在（票 party-commercial-uiux/09）：此前切走即卸载，切到别的册查一眼再回来，填了一半的整张表单
- * 就没了。离开登记视图才卸载，卸载前页面按三张表单报上来的「有没提交的输入」先确认。
+ * 就没了。离开登记视图才卸载，卸载前页面按各表单报上来的「有没提交的输入」先确认。
  */
 function RegisterForms({
   register,
   parties,
   knownParties,
-  knownRelationships,
   onPartyRegistered,
-  onRelationshipRegistered,
   onDeactivated,
   preset,
   reportUnsaved,
 }: {
-  register: BusinessPartyRegister;
-  /** 页面持有的参与方列表答案：关系表单双方候选与停用表单参与方那一册都取它，不各自再读（票 13 第 5 条）。 */
+  register: RegisterPageBook;
+  /** 页面持有的参与方列表答案：停用表单参与方那一册取它，不另读（票 13 第 5 条）。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
   knownParties: readonly BusinessPartyRecord[] | null;
-  knownRelationships: readonly PartyRelationshipRecord[] | null;
-  /** 两张登记表单落册后的回调，带着送出的草稿（JSON 镜像那条路为 null）；页面据它重取并选中刚登的那一行。 */
+  /** 登记表单落册后的回调，带着送出的草稿（JSON 镜像那条路为 null）；页面据它重取并选中刚登的那一行。 */
   onPartyRegistered: (sent: BusinessPartyDraft | null) => void;
-  onRelationshipRegistered: (sent: PartyRelationshipDraft | null) => void;
   onDeactivated: () => void;
   /** 深链带来的停用预填。 */
   preset: DeactivationPreset | null;
@@ -492,16 +495,6 @@ function RegisterForms({
             knownParties={knownParties}
             onRegistered={onPartyRegistered}
             onUnsavedChange={reportUnsaved['business-party']}
-          />
-        </div>
-      ) : null}
-      {seen('party-relationship') ? (
-        <div className={register === 'party-relationship' ? 'contents' : 'hidden'}>
-          <PartyRelationshipRegistrationForm
-            knownRelationships={knownRelationships}
-            parties={parties}
-            onRegistered={onRelationshipRegistered}
-            onUnsavedChange={reportUnsaved['party-relationship']}
           />
         </div>
       ) : null}
@@ -642,12 +635,14 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 册上的数，数不摆，类型与待查改成标「只筛本页」的控件，当前条件下共几条由表底说。名录的类型另有一道：推类型用的那几本册要都
  * 读全，带数的类型芯片与「暂无合作关系」才作数，否则类型格推不出来的显「—」并标明（business-party-list.ts 文件头）。
  *
- * 登记从页头进登记视图：「建立合作关系」「新增往来单位」两枚按钮位置固定、不随视图换，停用收进旁边的「更多」。登记视图住在地址上
- * （`?register=<册>`，判读在 business-parties-address.ts）：刷新仍停在登记视图、换册只换键值不压历史，浏览器后退回列表。
- * 草稿有没提交的输入时，页内「返回列表」先确认，刷新与关页由 beforeunload 拦；浏览器后退不拦——拦它得改写历史栈，壳层按
- * hashchange 记每张标签的地址，改写会让两边对不上。
+ * 登记从页头进：「建立合作关系」「新增往来单位」两枚按钮位置固定、不随视图换，停用收进旁边的「更多」。「新增往来单位」与停用
+ * 各占整页的登记视图；「建立合作关系」不换整页，落到合作关系视图、表单摆在表的上方——登一段关系时人要看得见已有的那些
+ * （票 business-party-redesign/11）。三者都住在地址上（`?register=<册>`，判读在 business-parties-address.ts）：刷新仍停在
+ * 原处、整页那两本之间换册只换键值不压历史，浏览器后退回列表。草稿有没提交的输入时，页内会把表单收掉的动作（「返回列表」、
+ * 「取消」、换视图、去另一本册）先确认，刷新与关页由 beforeunload 拦；浏览器后退不拦——拦它得改写历史栈，壳层按 hashchange
+ * 记每张标签的地址，改写会让两边对不上。
  *
- * 页面另持有两册不带条件的那一页（票 10 第 5 条）：登记视图从这份答案取修订号建议与双方候选，类型列的角色索引、对象页与
+ * 页面另持有两册不带条件的那一页（票 10 第 5 条）：登记表单从这份答案取修订号建议与双方候选，类型列的角色索引、对象页与
  * 签上的总数也取它；登记册答 REGISTERED / DEACTIVATED 时触发对应读册重取，两册各自一份重取序号——登一段关系不必重取参与方册，
  * 反过来也一样。
  */
@@ -698,7 +693,19 @@ export function BusinessPartiesPage() {
   const [preset, setPreset] = useState<DeactivationPreset | null>(null);
   const [unsaved, setUnsaved] = useState<Record<BusinessPartyRegister, boolean>>(noUnsaved);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
-  const [book, setBook] = useState<Book>('identities');
+  const [chosenBook, setBook] = useState<Book>('identities');
+  // 地址上的登记键落到哪：占整页的那两本册进整页的登记视图；合作关系的表单不占整页，摆在合作关系视图里、表的上方
+  // （票 business-party-redesign/11）。没有登记写授予时哪一种都不认，落回列表——地址可能是别人发来的链接。
+  const registerPage = view.kind === 'register' && mayWrite && isRegisterPageBook(view.register) ? view.register : null;
+  const registeringRelationship = view.kind === 'register' && mayWrite && view.register === 'party-relationship';
+  // 列表此刻摆没摆着：不是对象页，也不是整页的登记视图。
+  const listShown = view.kind !== 'object' && registerPage === null;
+  // 地址上带着合作关系的登记键时视图一律是合作关系，不看记着的是哪一个。
+  const book: Book = registeringRelationship ? 'relationships' : chosenBook;
+  // 记着的视图跟过去：取消或登完之后人留在合作关系视图，不跳回点入口之前的那一个。
+  useEffect(() => {
+    if (registeringRelationship) setBook('relationships');
+  }, [registeringRelationship]);
 
   // 身份册的列表状态。检索词放在地址 `?q=`：别处的引用链接带着它过来，这一册挂载时已经筛到那一行。
   // 筛选、排序与选中的那一家按标签保留（templates/workspace-view-state.tsx），不是普通的组件状态：离开这张标签满新鲜期再回来，
@@ -747,9 +754,15 @@ export function BusinessPartiesPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const tabFocusPending = useRef(false);
   const changeBook = (next: Book) => {
-    tabFocusPending.current = document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-view-tab');
-    closedParty.current = null;
-    setBook(next);
+    if (next === book) return;
+    // 焦点在不在视图签上要在这里看：下面可能先问一句确认，等人答完焦点早不在签上了。
+    const fromTab = document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-view-tab');
+    afterDiscardingDrafts(() => {
+      closeRelationshipForm();
+      tabFocusPending.current = fromTab;
+      closedParty.current = null;
+      setBook(next);
+    });
   };
   useLayoutEffect(() => {
     if (!tabFocusPending.current) return;
@@ -778,15 +791,11 @@ export function BusinessPartiesPage() {
   };
   // 从名录右栏去：名录这一块连右栏一起换掉，「关联」签里就地开着的表单有没提交的输入时先问一句（与换行同一判据）。点的那个
   // 链接随右栏一起卸掉，换过去之后焦点落到「合作关系」那一枚视图签上。
-  const [pendingRelationshipsOf, setPendingRelationshipsOf] = useState<string | null>(null);
   const leaveRosterForRelationshipsOf = (partyId: string) => {
     tabFocusPending.current = true;
     showRelationshipsOf(partyId);
   };
-  const showRelationshipsFromPanel = (partyId: string) => {
-    if (panelDraftUnsaved()) setPendingRelationshipsOf(partyId);
-    else leaveRosterForRelationshipsOf(partyId);
-  };
+  const showRelationshipsFromPanel = (partyId: string) => afterDiscardingDrafts(() => leaveRosterForRelationshipsOf(partyId));
   // 发出去的检索词等它停稳（useSettledKeyword）；框里的字照旧逐字跟手。钩子不能挂在下面的提前返回之后，两册的都在这里取。
   const settledSearch = useSettledKeyword(search);
   const settledRelationshipSearch = useSettledKeyword(relationshipSearch);
@@ -840,19 +849,45 @@ export function BusinessPartiesPage() {
     window.history.replaceState(window.history.state, '', next);
     setHash(next);
   };
+  // 要先问一句「放弃修改？」才做的事与问的那句话；`run` 为 null 即没在问（话留着，对话框收起的那一下不至于空着）。
+  const [pendingDiscard, setPendingDiscard] = useState<{ message: string; run: (() => void) | null }>({ message: '', run: null });
+  /**
+   * 做一件会把列表视图里就地开着的表单收掉的事（换视图、点待办去别的视图、去登记另一本册、表单自己的「取消」）：表单有没提交
+   * 的输入时先问一句，放弃了再做。就地开着的表单是名录右栏「关联」签里的两种（panelDraftUnsaved），或合作关系视图里表上方的
+   * 那一张。
+   */
+  const afterDiscardingDrafts = (run: () => void) => {
+    const message = registeringRelationship
+      ? unsaved['party-relationship']
+        ? relationshipFormDiscardNote
+        : null
+      : listShown && book === 'identities' && panelDraftUnsaved()
+        ? rosterDraftDiscardNote
+        : null;
+    if (message === null) run();
+    else setPendingDiscard({ message, run });
+  };
   const openRegister = (register: BusinessPartyRegister) => {
-    // 已在登记视图里换册只换键值、不压历史：三张表单是一个视图的三页，后退一次就该回列表。
-    if (view.kind === 'register') {
-      replaceHash(registerViewHash(window.location.hash, register));
-      return;
-    }
-    pushedRegister.push(registerViewHash(window.location.hash, register));
+    // 这一本已经开着：什么都不换，填了一半的不动。
+    if (view.kind === 'register' && view.register === register) return;
+    afterDiscardingDrafts(() => {
+      // 地址上已经带着登记键时换册只换键值、不压历史：后退一次就该回列表。
+      if (view.kind === 'register') {
+        replaceHash(registerViewHash(window.location.hash, register));
+        return;
+      }
+      pushedRegister.push(registerViewHash(window.location.hash, register));
+    });
   };
   const leaveRegister = () => {
     setConfirmingLeave(false);
     setPreset(null);
     if (pushedRegister.back()) return;
     window.location.replace(registerViewHash(window.location.hash, null));
+  };
+  /** 合作关系视图里表上方的登记表单开着就收掉它（去掉地址上的登记键）；没开着什么都不做。 */
+  const closeRelationshipForm = () => {
+    if (registeringRelationship) leaveRegister();
   };
   const requestLeaveRegister = () => (anyUnsaved ? setConfirmingLeave(true) : leaveRegister());
   // 登完就去看结果（票 business-party-ux/06）：回列表、选中刚登的那一行，右栏随之打开。离开登记视图会把表单连它的答复区一起
@@ -872,7 +907,7 @@ export function BusinessPartiesPage() {
     parties.retry();
     showRegistered(
       '往来单位已登记',
-      unsaved['party-relationship'] || unsaved['identity-deactivation'],
+      unsaved['identity-deactivation'],
       sent &&
         (() => {
           setBook('identities');
@@ -883,10 +918,13 @@ export function BusinessPartiesPage() {
     );
   };
   const onRelationshipRegistered = (sent: PartyRelationshipDraft | null) => {
-    relationships.retry();
+    // 表单摆在合作关系视图里，下面的表一直挂着：游标那一页不在取数层里，写口的整域作废碰不到它，这里连同不带条件的那一页一起
+    // 重取（cursorRetry 此刻是合作关系视图报上来的那一个），刚登的那一段才进得了表。另两张表单在整页的登记视图里，这时都没
+    // 挂着，没有别的草稿要顾。
+    cursorRetry.current();
     showRegistered(
       '合作关系已登记',
-      unsaved['business-party'] || unsaved['identity-deactivation'],
+      false,
       sent &&
         (() => {
           setBook('relationships');
@@ -928,12 +966,12 @@ export function BusinessPartiesPage() {
     completeRegisterRows(accounts.answer?.kind === 'outcome' ? accounts.answer.body : null, (body) => body.accounts),
     completeRegisterRows(entities.answer?.kind === 'outcome' ? entities.answer.body : null, (body) => body.entities),
   ]);
-  // 视图签右端两项待办的数，册读不全时才另问（读全了从手上的行数）；只在列表视图里问。
+  // 视图签右端两项待办的数，册读不全时才另问（读全了从手上的行数）；只在列表摆着时问。
   const candidateRelationships = useRegisterList(listCandidateRelationships, {
-    enabled: view.kind === 'list' && knownRelationships !== null && completeRelationships === null,
+    enabled: listShown && knownRelationships !== null && completeRelationships === null,
   });
   const registeredParties = useRegisterList(listRegisteredParties, {
-    enabled: view.kind === 'list' && knownParties !== null && completeParties === null,
+    enabled: listShown && knownParties !== null && completeParties === null,
   });
   // 名录与关系两个视图的那一页游标挂在视图里面，页头的刷新钮经这两样够到它（CursorRefreshReport）。
   const cursorRetry = useRef<() => void>(() => {});
@@ -968,9 +1006,9 @@ export function BusinessPartiesPage() {
     );
   }
 
-  // 地址里的登记视图可能是别人发来的链接：没有登记写授予时不进，落回列表。
-  if (view.kind === 'register' && mayWrite) {
-    const heading = registerHeadings[view.register];
+  // 整页的登记视图。registerPage 为 null 的两种——没有登记写授予、登的是合作关系——都不进这里，往下摆列表。
+  if (registerPage !== null) {
+    const heading = registerHeadings[registerPage];
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-idpxyz-border px-6 py-3">
@@ -982,14 +1020,14 @@ export function BusinessPartiesPage() {
             <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{heading.title}</h1>
             <p className="truncate type-body text-idpxyz-breadcrumb">{heading.subtitle}</p>
           </div>
-          {/* 三本册的切换：换册只换地址键值（openRegister），切走的表单留着挂载。 */}
+          {/* 占整页的两本册之间切换：换册只换地址键值（openRegister），切走的表单留着挂载。 */}
           <Tabs
-            value={view.register}
-            onValueChange={(next) => openRegister(next as BusinessPartyRegister)}
+            value={registerPage}
+            onValueChange={(next) => openRegister(next as RegisterPageBook)}
             className="ml-auto shrink-0 gap-0"
           >
             <TabsList aria-label="选择登记册">
-              {businessPartyRegisters.map((id) => (
+              {registerPageBooks.map((id) => (
                 <TabsTrigger key={id} value={id} className="type-body text-idpxyz-breadcrumb">
                   {registerBookLabels[id]}
                 </TabsTrigger>
@@ -998,12 +1036,10 @@ export function BusinessPartiesPage() {
           </Tabs>
         </div>
         <RegisterForms
-          register={view.register}
+          register={registerPage}
           parties={parties.answer}
           knownParties={knownParties}
-          knownRelationships={knownRelationships}
           onPartyRegistered={onPartyRegistered}
-          onRelationshipRegistered={onRelationshipRegistered}
           onDeactivated={parties.retry}
           preset={preset}
           reportUnsaved={reportUnsaved}
@@ -1131,7 +1167,19 @@ export function BusinessPartiesPage() {
         {candidateCount ? (
           <AttentionItem onClick={showCandidateRelationships}>{formatCount(candidateCount)} 段合作关系待确认</AttentionItem>
         ) : null}
-        {registeredCount ? <AttentionItem onClick={showRegisteredParties}>{formatCount(registeredCount)} 家单位尚未生效</AttentionItem> : null}
+        {registeredCount ? (
+          // 这一项去的是名录：合作关系视图里表上方的登记表单开着时，先过确认、再连表单一起收掉。
+          <AttentionItem
+            onClick={() =>
+              afterDiscardingDrafts(() => {
+                closeRelationshipForm();
+                showRegisteredParties();
+              })
+            }
+          >
+            {formatCount(registeredCount)} 家单位尚未生效
+          </AttentionItem>
+        ) : null}
       </>
     ) : undefined;
 
@@ -1717,6 +1765,24 @@ export function BusinessPartiesPage() {
                   ) : null;
                 }}
                 viewState={viewState}
+                // 「建立合作关系」的表单摆在这里：表的上方、同一个滚动区里。没有本方，两方都选；JSON 快照的折叠区随它带着。
+                aboveRows={
+                  registeringRelationship ? (
+                    <section aria-label={registerActionLabels['party-relationship']} className="bg-idpxyz-panelBg">
+                      <PanelBand icon={Handshake} title={registerActionLabels['party-relationship']} />
+                      <div className="px-6 py-4">
+                        <PartyRelationshipRegistrationForm
+                          knownRelationships={knownRelationships}
+                          parties={parties.answer}
+                          onRegistered={onRelationshipRegistered}
+                          onUnsavedChange={reportUnsaved['party-relationship']}
+                          onCancel={() => afterDiscardingDrafts(leaveRegister)}
+                          snapshotJson
+                        />
+                      </div>
+                    </section>
+                  ) : undefined
+                }
               />
             </>
           );
@@ -1756,18 +1822,18 @@ export function BusinessPartiesPage() {
       />
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
-        open={pendingRelationshipsOf !== null}
+        open={pendingDiscard.run !== null}
         tone="warning"
         title="放弃修改？"
-        message="有内容还没有保存，离开名录后填写的内容不会保留。"
+        message={pendingDiscard.message}
         confirmLabel="放弃"
         cancelLabel="继续编辑"
         onConfirm={() => {
-          const partyId = pendingRelationshipsOf;
-          setPendingRelationshipsOf(null);
-          if (partyId !== null) leaveRosterForRelationshipsOf(partyId);
+          const run = pendingDiscard.run;
+          setPendingDiscard((previous) => ({ ...previous, run: null }));
+          run?.();
         }}
-        onCancel={() => setPendingRelationshipsOf(null)}
+        onCancel={() => setPendingDiscard((previous) => ({ ...previous, run: null }))}
       />
     </div>
   );

@@ -170,7 +170,7 @@ export function BusinessPartyDetailPanel({
               retryRelationships();
             }}
             onUnsavedChange={setRelationshipUnsaved}
-            inline={{ onCancel: () => (relationshipUnsaved ? setConfirmingCancel(true) : setRegistering(null)) }}
+            onCancel={() => (relationshipUnsaved ? setConfirmingCancel(true) : setRegistering(null))}
           />
         ),
       }

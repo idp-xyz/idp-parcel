@@ -78,6 +78,11 @@ export interface PartyWorkbenchProps<Row> {
    * 的那一行，↑/↓ 才接得上。只在焦点确实没了着落时落，不从别处抢。
    */
   initialFocusKey?: string | null;
+  /**
+   * 摆在表上方的一块（合作关系视图里的登记表单）。它在表的滚动区里面、与表一起滚，不另占一个定高的区：表单比视口还高的时候，
+   * 定高的区里只能再套一层滚动，人得在两层之间找「保存」。页面态不是 ready 时也照摆——空册正是要登第一段的时候。
+   */
+  aboveRows?: ReactNode;
 }
 
 /** 检索框：放大镜、输入、`/` 键位提示。表的工具条与名录栏共用；宽度由调用方经 className 给。 */
@@ -139,6 +144,7 @@ export function PartyWorkbench<Row>({
   viewState,
   stateOverride,
   initialFocusKey = null,
+  aboveRows,
 }: PartyWorkbenchProps<Row>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -185,6 +191,12 @@ export function PartyWorkbench<Row>({
     listRef.current.scrollTop = layoutSnapshot.current.scrollTop;
     listRef.current.scrollLeft = layoutSnapshot.current.scrollLeft;
   }, [ready, layoutSnapshot]);
+  // 表上方那一块刚摆上来时滚回顶：它在滚动区的最上面，列表正停在下面某一行的话，点了入口却什么都没看见。排在恢复滚动位置的
+  // 那一条之后：带着这一块挂上来（地址上带着登记键刷新）时也以它为准。
+  const hasAboveRows = aboveRows != null;
+  useLayoutEffect(() => {
+    if (hasAboveRows && listRef.current) listRef.current.scrollTop = 0;
+  }, [hasAboveRows]);
 
   usePartyListKeys({ listRef, searchRef, keys: rows.map(rowKey), selectedKey, detailOpen, ready, onSelect });
 
@@ -327,13 +339,20 @@ export function PartyWorkbench<Row>({
         >
           <div
             ref={listRef}
-            className={`min-h-0 flex-1 ${viewState.kind === 'loading' ? 'overflow-hidden' : 'overflow-auto'}`}
+            // 加载中骨架不滚（行数是照视口估的，滚起来没有意义）；上方摆着一块时要滚得到它的底，照常滚。
+            className={`min-h-0 flex-1 ${viewState.kind === 'loading' && !hasAboveRows ? 'overflow-hidden' : 'overflow-auto'}`}
             onScroll={(event) => {
               if (!ready) return;
               layoutSnapshot.current.scrollTop = event.currentTarget.scrollTop;
               layoutSnapshot.current.scrollLeft = event.currentTarget.scrollLeft;
             }}
           >
+            {/* 表比这一栏宽、横向滚的时候，这一块贴着左缘不跟着走：它与栏同宽，不与表同宽。 */}
+            {hasAboveRows ? (
+              <div data-above-rows className="sticky left-0 border-b border-idpxyz-border">
+                {aboveRows}
+              </div>
+            ) : null}
             {ready ? (
               table
             ) : viewState.kind === 'loading' ? (

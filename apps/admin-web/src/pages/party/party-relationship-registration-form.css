@@ -1,0 +1,18 @@
+/* 合作关系登记表单（PartyRelationshipRegistrationForm.tsx）在宽处的排法（票 business-party-redesign/11）。
+   表单开在两种地方：某家单位页的「合作关系」一区里，与合作关系视图里表的上方。后一处是整页宽，各组照两列排会把表单拉得很高、
+   把下面的表整个挤出视口，所以够宽时各组排四列。按表单此刻的宽度定，不按视口：合作关系视图里右栏一开，表单所在的那一栏窄了
+   一半，这时要自己退回两列。 */
+.party-relationship-form {
+  container: party-relationship-form / inline-size;
+}
+
+@container party-relationship-form (min-width: 1200px) {
+  .party-relationship-form .form-group-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* 覆盖范围占两列，与占另两列的那句话并排；选了授权交付方时这一格里是并排的两个输入，一列放不下。 */
+  .party-relationship-form .party-relationship-scope {
+    grid-column: span 2;
+  }
+}

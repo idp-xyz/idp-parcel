@@ -301,7 +301,10 @@ export function SnapshotJsonDetails({
   );
 }
 
-/** 表单里的一组格：组名、一句说明、两列格。组只管排版，不管哪格必填——必填由格名上的「*」说。 */
+/**
+ * 表单里的一组格：组名、一句说明、两列格。组只管排版，不管哪格必填——必填由格名上的「*」说。格子那一层带一个钩子类
+ * `form-group-grid`，自己不带任何样式：要在宽处换列数的表单在自己的样式表里按它改（合作关系登记表单）。
+ */
 export function FormGroup({
   title,
   description,
@@ -324,7 +327,7 @@ export function FormGroup({
           {description ? <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">{description}</p> : null}
         </div>
       )}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
+      <div className="form-group-grid grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
   );
 }

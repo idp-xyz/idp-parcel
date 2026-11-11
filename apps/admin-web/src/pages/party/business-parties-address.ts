@@ -3,7 +3,8 @@
 // 三种视图都由 hash 定，hash 是位置的唯一权威（做法同 group-legal-entities-address.ts）：
 // - 对象页 `#/business-parties/<参与方标识>`——壳层拿前两段作标签 id，对象页因此是自己的一张标签；
 // - 登记视图 `#/business-parties?register=<册>`——还是列表那张标签，刷新与浏览器后退都按地址走。本页登记有三本册
-//   （参与方身份、参与方关系、身份停用），键值点名是哪一本，三张表单在视图里切换只换这个值；
+//   （参与方身份、参与方关系、身份停用），键值点名是哪一本。身份与停用两本各占整页，在视图里切换只换这个值；关系那一本的
+//   表单不占整页，摆在列表的合作关系视图里、表的上方（registerPageBooks），键值照旧，所以刷新与后退对它一样按地址走；
 // - 其余是列表。
 // 登记视图不占路径第二段：第二段是参与方标识，标识是自由文本，拿一个保留词占它，同名参与方的对象页就打不开了。
 // 也不用 `?view=`：那个键已归保存视图（address-query.ts 文件头）。
@@ -24,13 +25,25 @@ export const REGISTER_VIEW_PARAM = 'register';
 export const DEACTIVATE_KIND_PARAM = 'deactivate';
 export const DEACTIVATE_ID_PARAM = 'id';
 
-/** 本页三本登记册，顺序即登记视图里切换条的顺序。 */
+/** 本页三本登记册：登记键认得的值。 */
 export const businessPartyRegisters = ['business-party', 'party-relationship', 'identity-deactivation'] as const;
 
 export type BusinessPartyRegister = (typeof businessPartyRegisters)[number];
 
 export function isBusinessPartyRegister(value: string): value is BusinessPartyRegister {
   return (businessPartyRegisters as readonly string[]).includes(value);
+}
+
+/**
+ * 占整页登记视图的册，顺序即视图里切换条的顺序。合作关系不在其中（票 business-party-redesign/11）：登一段关系时人要看得见已有
+ * 的那些，它的表单摆在合作关系视图里、表的上方，页面不为它换整页。
+ */
+export type RegisterPageBook = Exclude<BusinessPartyRegister, 'party-relationship'>;
+
+export const registerPageBooks: readonly RegisterPageBook[] = ['business-party', 'identity-deactivation'];
+
+export function isRegisterPageBook(register: BusinessPartyRegister): register is RegisterPageBook {
+  return (registerPageBooks as readonly string[]).includes(register);
 }
 
 export type BusinessPartiesView =

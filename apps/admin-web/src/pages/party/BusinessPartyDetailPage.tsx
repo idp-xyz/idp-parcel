@@ -262,10 +262,9 @@ export function BusinessPartyDetailPage({
                 retryRelationships();
               }}
               onUnsavedChange={setRelationshipUnsaved}
-              inline={{
-                onCancel: () =>
-                  relationshipUnsaved ? setConfirming(() => () => setRegisteringRelationship(false)) : setRegisteringRelationship(false),
-              }}
+              onCancel={() =>
+                relationshipUnsaved ? setConfirming(() => () => setRegisteringRelationship(false)) : setRegisteringRelationship(false)
+              }
             />
           ),
         }

@@ -8,6 +8,8 @@ import {
   deactivationPresetOf,
   identityEditHash,
   identityEditRequested,
+  isRegisterPageBook,
+  registerPageBooks,
   registerViewHash,
   listAfterRegistrationHash,
   withoutDeactivationPreset,
@@ -72,6 +74,16 @@ test('地址判出列表、登记视图与对象页', () => {
   deepEqual(businessPartiesViewOf('#/business-parties/register'), { kind: 'object', partyId: 'register' });
   deepEqual(businessPartiesViewOf('#/business-parties/%E0'), { kind: 'list' });
   deepEqual(businessPartiesViewOf('#/group-legal-entities/SYN-LE-01'), { kind: 'list' });
+});
+
+// Covers: 三本册里只有身份与停用占整页；合作关系的登记键照样认（「地址判出列表、登记视图与对象页」那一例），但它不在整页那
+// 一组里——页面据此把表单摆进合作关系视图，而不是换整页（票 business-party-redesign/11）。
+test('占整页登记视图的只有身份与停用两本册', () => {
+  deepEqual(registerPageBooks, ['business-party', 'identity-deactivation']);
+  deepEqual(
+    businessPartyRegisters.filter((register) => !isRegisterPageBook(register)),
+    ['party-relationship'],
+  );
 });
 
 // Covers: 进出登记视图与换册只改登记键，检索词等别的键原样；对象地址编码标识、经判读往返不走样。
