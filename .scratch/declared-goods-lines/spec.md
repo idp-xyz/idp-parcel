@@ -29,6 +29,9 @@ Status: in-progress
 | [06](./issues/06-amend-goods-details-as-a-shipment-level-data-group.md) | 资料修订：委托级资料组「货物明细」 | 03 | 后端 |
 | [07](./issues/07-customs-reads-goods-lines-by-anchor-shipment-and-line.md) | 关务读口：按（资料版本锚，委托，行号）取行 | 03 | 后端 |
 | [08](./issues/08-demo-seeds-walk-a-synthetic-fba-shipment.md) | 演示种子：`SYN-TENANT-01` 走通一票 FBA 货件 | 03、05 | 种子与脚本 |
-| [09](./issues/09-cross-field-condition-executor-for-acceptance-rule-packages.md) | 接单规则包的必填与跨字段条件执行器（`BD-PS-006`），随它发布 FBA 头程提交条件参考配置 | 用户决定（见票内「要先定的」） | 后端；票 08 补出 |
+| [09](./issues/09-cross-field-condition-executor-for-acceptance-rule-packages.md) | 接单规则包的必填与跨字段条件执行器（`BD-PS-006`），随它发布 FBA 头程提交条件参考配置 | — （ADR-0376 已定） | 后端；票 08 补出 |
+| [10](./issues/10-controlled-supplement-carries-platform-identifiers-before-acceptance.md) | 受控补充收平台号，受理前补报或更正 | — | 后端 |
+| [11](./issues/11-customer-contract-need-not-name-an-acceptance-rule-package.md) | 客户合同不必指名接单规则包 | — | 后端 + 管理台 |
+| [12](./issues/12-demo-fba-product-stops-for-missing-box-labels-and-resumes-on-supplement.md) | 演示：FBA 产品缺箱标号停下，补齐后受理 | 09、10、11 | 种子与脚本 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
