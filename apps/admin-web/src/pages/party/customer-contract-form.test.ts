@@ -67,7 +67,8 @@ test('可缺的格留空即不进载荷：区间上界、指名引用、约定�
   equal('effectiveEndsAt' in payload, false);
   equal('references' in payload, false);
   equal('bindings' in payload.customerContract!.contractContent, false);
-  equal(payload.customerContract!.contractContent.rulePackage, '');
+  // 规则包可缺（ADR-0376 决定三）：留空即壳上不指名、正文也不带这一键。
+  equal('rulePackage' in payload.customerContract!.contractContent, false);
   // 客户账户是必填格（ADR-0177 决定一）：留空也照送空串，由服务端点名这一格，表单不代填、不从别处推。
   equal(payloadOf(filled({ customerAccount: '' })).customerContract!.contractContent.customerAccount, '');
   for (const forbidden of ['tenantId', 'submitter', 'contentDigest', 'approval']) {

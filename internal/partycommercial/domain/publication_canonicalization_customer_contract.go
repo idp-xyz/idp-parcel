@@ -17,8 +17,8 @@ import (
 //
 // Control 可缺：批文里 preAcceptanceControl 缺键是合法的（本版没说「要不要」，下游到接受判断时得到的是
 // `未声明`，不是放行），缺席不折进文档、不影响正文那一层的字节。DeliveryConditions 同理可缺——这一版没有合同层
-// 交付条件就是没有，不默认「本人签收」也不默认沿用产品层。RulePackage 与约定表不可缺席——它们就是 0012 的正文，
-// 读面「正文未登记」说的正是这一层。
+// 交付条件就是没有，不默认「本人签收」也不默认沿用产品层。约定表不可缺席——它就是 0012 的正文，读面「正文未登记」
+// 说的正是这一层。RulePackage 可缺（ADR-0376 决定三），零值即这一版合同不指名接单规则包。
 type CustomerContractBody struct {
 	CustomerAccount    CustomerAccountID
 	RulePackage        CommercialObjectID
@@ -33,11 +33,11 @@ type PreAcceptanceControlBody struct {
 	Basis       ControlNotApplicableBasis
 }
 
-// validate 在折成文档前把各层过一遍与发布时相同的门：规则包非零（NewCustomerContract 的那一判）、约定表经
+// validate 在折成文档前把各层过一遍与发布时相同的门：客户账户非零（NewCustomerContract 的那一判）、约定表经
 // declaredBindingsByScope、声明在场时经 preAcceptanceControlDeclared、交付条件在场时经合同层那道门。不另造校验
 // ——各处判的都是同一条规则，而预览要在录入之前就把「恰一」与「不适用必带依据」答给操作者，不能等到发布那一刻。
 func (body CustomerContractBody) validate() error {
-	if !body.CustomerAccount.valid() || !body.RulePackage.valid() {
+	if !body.CustomerAccount.valid() {
 		return ErrInvalidCustomerContract
 	}
 	if _, err := declaredBindingsByScope(body.Bindings); err != nil {
@@ -64,9 +64,12 @@ type canonicalCustomerContractBody struct {
 }
 
 // CustomerAccount 不带 omitempty（ADR-0177 决定三）：这一格恒在场，缺了正文立不住，文档里不留「可缺」的第二种形状。
+//
+// RulePackage 是可缺键（ADR-0376 决定三）：没指名即不编码，指名了的文档逐字节同前，已存摘要照旧成立。这是 PCC-1 上的
+// 同号改形，前提照 ADR-0267 决定三（首个租户实例进生产之前），ADR-0376 写明了它并部分停用 ADR-0014 Consequences 一句。
 type canonicalContractContent struct {
 	CustomerAccount string                    `json:"customerAccount"`
-	RulePackage     string                    `json:"rulePackage"`
+	RulePackage     string                    `json:"rulePackage,omitempty"`
 	Bindings        []canonicalControlBinding `json:"bindings,omitempty"`
 }
 
@@ -90,10 +93,10 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 		return bindings[left].Scope().String() < bindings[right].Scope().String()
 	})
 	document := &canonicalCustomerContractBody{
-		ContractContent: canonicalContractContent{
-			CustomerAccount: body.CustomerAccount.String(),
-			RulePackage:     body.RulePackage.String(),
-		},
+		ContractContent: canonicalContractContent{CustomerAccount: body.CustomerAccount.String()},
+	}
+	if body.RulePackage.valid() {
+		document.ContractContent.RulePackage = body.RulePackage.String()
 	}
 	for _, binding := range bindings {
 		row := canonicalControlBinding{ChargeScope: binding.Scope().String()}
@@ -123,11 +126,12 @@ func (document canonicalCustomerContractBody) body() (CustomerContractBody, erro
 	if err != nil {
 		return CustomerContractBody{}, fmt.Errorf("contractContent.customerAccount: %w", err)
 	}
-	rulePackage, err := NewCommercialObjectID(document.ContractContent.RulePackage)
-	if err != nil {
-		return CustomerContractBody{}, fmt.Errorf("contractContent.rulePackage: %w", err)
+	body := CustomerContractBody{CustomerAccount: account}
+	if document.ContractContent.RulePackage != "" {
+		if body.RulePackage, err = NewCommercialObjectID(document.ContractContent.RulePackage); err != nil {
+			return CustomerContractBody{}, fmt.Errorf("contractContent.rulePackage: %w", err)
+		}
 	}
-	body := CustomerContractBody{CustomerAccount: account, RulePackage: rulePackage}
 	for _, row := range document.ContractContent.Bindings {
 		binding, err := financialControlBindingOf(row.ChargeScope, row.Policy, row.InapplicabilityBasis)
 		if err != nil {

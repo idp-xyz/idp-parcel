@@ -131,9 +131,10 @@ type preAcceptanceControlDocument struct {
 	NotApplicableBasis string `json:"notApplicableBasis,omitempty"`
 }
 
+// RulePackage 可缺（ADR-0376 决定三）：缺键或空串即这一版合同不指名接单规则包，规则包随服务产品选。
 type contractContentDocument struct {
 	CustomerAccount string                   `json:"customerAccount"`
-	RulePackage     string                   `json:"rulePackage"`
+	RulePackage     string                   `json:"rulePackage,omitempty"`
 	Bindings        []controlBindingDocument `json:"bindings,omitempty"`
 }
 
@@ -544,9 +545,11 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		if err != nil {
 			return declarations, fmt.Errorf("contractContent.customerAccount: %w", err)
 		}
-		rulePackage, err := pcdomain.NewCommercialObjectID(document.ContractContent.RulePackage)
-		if err != nil {
-			return declarations, err
+		var rulePackage pcdomain.CommercialObjectID
+		if document.ContractContent.RulePackage != "" {
+			if rulePackage, err = pcdomain.NewCommercialObjectID(document.ContractContent.RulePackage); err != nil {
+				return declarations, fmt.Errorf("contractContent.rulePackage: %w", err)
+			}
 		}
 		bindings := make([]pcdomain.FinancialControlBinding, 0, len(document.ContractContent.Bindings))
 		for _, binding := range document.ContractContent.Bindings {

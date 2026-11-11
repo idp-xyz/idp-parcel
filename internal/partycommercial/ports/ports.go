@@ -1879,7 +1879,7 @@ type ControlBindingRow struct {
 // **无正文行 = 正文未登记**,**有正文行零绑定 = 明确的空约定**——后者是合同已登记
 // 且对任何费用范围都没作约定,与前者的恢复动作完全不同(前者去登记正文,后者无事
 // 可做)。两态在「零绑定」上撞成同一个可观察签名,只有这个布尔分得开。
-// RulePackageID 同理只在 HasContent 为真时有意义:它必存于正文行(库上 NOT NULL)。
+// RulePackageID 同理只在 HasContent 为真时有意义;正文行上它也可缺(0048,ADR-0376 决定三:多产品合同不指名),空串即没指名。
 // DeliveryConditions 是这一版的合同层交付条件(0030,票 admin-write-faces/25),nil 即这一版
 // 没有合同层声明;它与 0012 正文是两层、各自可缺,不拿一层的在场推另一层。
 type CustomerContractCatalogueRow struct {

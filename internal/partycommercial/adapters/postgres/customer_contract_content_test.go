@@ -29,7 +29,7 @@ func TestAnUnregisteredContractIsNotConfigured(t *testing.T) {
 	if found {
 		t.Fatal("查无父行却答已配置")
 	}
-	if got.AcceptanceRulePackage().String() != "" {
+	if _, named := got.AcceptanceRulePackage(); named {
 		t.Fatal("未配置的答复带了规则包——那等于替租户拟了一份正文")
 	}
 }
@@ -44,8 +44,8 @@ func TestAnExplicitEmptyBindingSetIsConfigured(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("读回空约定：found = %v err = %v", found, err)
 	}
-	if got.AcceptanceRulePackage().String() != "rules-1" {
-		t.Fatalf("rule package = %q", got.AcceptanceRulePackage())
+	if rulePackage, _ := got.AcceptanceRulePackage(); rulePackage.String() != "rules-1" {
+		t.Fatalf("rule package = %q", rulePackage)
 	}
 	if _, present := got.FinancialControlFor(pcValue(t, domain.NewChargeScopeReference, "charge-express")); present {
 		t.Fatal("零绑定合同对未约定范围给出了约定")
@@ -109,8 +109,8 @@ func TestContentRulePackageMustAgreeWithTheVersionShell(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("壳上没指名却拒了：found = %v err = %v", found, err)
 		}
-		if got.AcceptanceRulePackage().String() != "rules-alone" {
-			t.Fatalf("rule package = %q", got.AcceptanceRulePackage())
+		if rulePackage, _ := got.AcceptanceRulePackage(); rulePackage.String() != "rules-alone" {
+			t.Fatalf("rule package = %q", rulePackage)
 		}
 	})
 }
@@ -130,8 +130,8 @@ func TestMismatchedTenantDoesNotReturnEitherTenantsContract(t *testing.T) {
 	if err == nil || found {
 		t.Fatalf("租户不一致被收下：found = %v err = %v", found, err)
 	}
-	if got.AcceptanceRulePackage().String() != "" {
-		t.Fatalf("交回了规则包 %q——不得返回任一方内容", got.AcceptanceRulePackage())
+	if rulePackage, named := got.AcceptanceRulePackage(); named {
+		t.Fatalf("交回了规则包 %q——不得返回任一方内容", rulePackage)
 	}
 	if _, present := got.FinancialControlFor(pcValue(t, domain.NewChargeScopeReference, "charge-a")); present {
 		t.Fatal("交回了 A 的绑定")

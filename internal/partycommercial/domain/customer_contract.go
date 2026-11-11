@@ -9,11 +9,10 @@ var (
 	ErrInvalidCustomerContract            = errors.New("party commercial: invalid customer contract")
 	ErrInvalidFinancialControlBinding     = errors.New("party commercial: invalid financial control binding")
 	ErrConflictingFinancialControlBinding = errors.New("party commercial: one charge scope is both applied and inapplicable")
-	// ErrRulePackageReferenceMismatch 是装载核对：正文件的规则包引用与版本壳
-	// ReferenceTo(AcceptanceRulePackageObject) **都在场时必须相等**。两处不是一处派生
-	// 另一处（declaredReferences 不强制合同指名规则包），但两处都写了还悄悄分歧，
-	// 消费方就会各读各的。缺席的那一处不参与比对——正文件列仍是 NewCustomerContract
-	// 要的入参。
+	// ErrRulePackageReferenceMismatch 是装载核对：版本壳 ReferenceTo(AcceptanceRulePackageObject) 指名了规则包，
+	// 正文必须指名同一个。两处不是一处派生另一处（declaredReferences 不强制合同指名规则包），但壳上写了、正文没写
+	// 或写了另一个，消费方就会各读各的——壳上那一格解析拿去确认（ADR-0032），正文那一格目录拿去展示。壳上没指名
+	// 时正文写不写都放行：正文的这一格只是说明，不参与选择。
 	ErrRulePackageReferenceMismatch = errors.New("party commercial: contract content rule package disagrees with the version shell")
 )
 
@@ -73,8 +72,8 @@ func (binding FinancialControlBinding) InapplicabilityBasis() InapplicabilityBas
 	return binding.basis
 }
 
-// CustomerContract 是一个客户合同版本的正文：它属于哪个货主客户账户、引用哪个接单规则包，以及它按费用
-// 范围对财务控制作了什么约定。
+// CustomerContract 是一个客户合同版本的正文：它属于哪个货主客户账户、（可缺地）指名哪个接单规则包，以及它按
+// 费用范围对财务控制作了什么约定。
 type CustomerContract struct {
 	version         CommercialVersion
 	customerAccount CustomerAccountID
@@ -82,10 +81,13 @@ type CustomerContract struct {
 	bindings        map[ChargeScopeReference]FinancialControlBinding
 }
 
-// NewCustomerContract 要求在构造时就给出货主客户账户与接单规则包引用。缺了规则包的合同不能用于接受
-// 任何委托，而等到形成接受判断时才发现已经太晚；本上下文规定：规则或策略缺失不得被解释为允许接受。
-// 缺了客户账户，闭包就答不出这份合同是不是键上那一户的（CONTEXT「合同版本必须明确关联…货主客户账户」，
-// ADR-0177 决定一），不从委派人、客户关系或范围推。
+// NewCustomerContract 要求在构造时就给出货主客户账户。缺了客户账户，闭包就答不出这份合同是不是键上那一户的
+// （CONTEXT「合同版本必须明确关联…货主客户账户」，ADR-0177 决定一），不从委派人、客户关系或范围推。
+//
+// 接单规则包可缺（ADR-0376 决定三）：规则包随服务产品选——规则包版本指名它的服务产品，解析按委托申报的产品收窄
+// （ADR-0153 决定四）——一个货主账户同时用几个各带规则包的服务产品时，合同指名哪一份都不对。「规则缺失不得被解释为
+// 允许接受」照旧成立，守它的是解析：申报的产品解不出规则包，受理就停在无适用依据，不在合同这一格。rulePackage 传
+// 零值即不指名。
 func NewCustomerContract(
 	version CommercialVersion,
 	customerAccount CustomerAccountID,
@@ -94,8 +96,7 @@ func NewCustomerContract(
 ) (CustomerContract, error) {
 	if version.kind != CustomerContractObject ||
 		version.status != CommercialVersionEffective ||
-		!customerAccount.valid() ||
-		!rulePackage.valid() {
+		!customerAccount.valid() {
 		return CustomerContract{}, ErrInvalidCustomerContract
 	}
 
@@ -135,8 +136,9 @@ func (contract CustomerContract) Version() CommercialVersion {
 	return contract.version
 }
 
-func (contract CustomerContract) AcceptanceRulePackage() CommercialObjectID {
-	return contract.rulePackage
+// AcceptanceRulePackage 的第二个返回值为假即这份合同没指名接单规则包（ADR-0376 决定三），不是读不到。
+func (contract CustomerContract) AcceptanceRulePackage() (CommercialObjectID, bool) {
+	return contract.rulePackage, contract.rulePackage.valid()
 }
 
 // FinancialControlFor 报出合同对某个范围的约定。未绑定的范围答「不存在」而不是
@@ -160,14 +162,14 @@ func (contract CustomerContract) Bindings() []FinancialControlBinding {
 	return bindings
 }
 
-// ConsistentAcceptanceRulePackage 核版本壳与正文件的规则包引用。壳上没指名时放行
-// （正文件列仍须在场，由 NewCustomerContract 守）；两处都在场且不等则拒，不静默选一处。
+// ConsistentAcceptanceRulePackage 核版本壳与正文的规则包引用。壳上没指名时放行，正文写不写都行；壳上指名了，正文
+// 要写同一个——不等或正文缺都拒，不静默选一处。content 零值即正文没指名。
 func ConsistentAcceptanceRulePackage(version CommercialVersion, content CommercialObjectID) error {
 	named, present := version.ReferenceTo(AcceptanceRulePackageObject)
 	if !present {
 		return nil
 	}
-	if named != content {
+	if !content.valid() || named != content {
 		return ErrRulePackageReferenceMismatch
 	}
 	return nil
