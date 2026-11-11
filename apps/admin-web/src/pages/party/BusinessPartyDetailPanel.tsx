@@ -16,6 +16,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { BusinessPartyMoreMenu, BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
+import { relationshipGraphDraftOf } from './party-relationship-graph';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { partyOverviewStatesOf, usePartyOverviewLists } from './PartyOverviewSection';
@@ -142,6 +143,15 @@ export function BusinessPartyDetailPanel({
   const [relatedTarget, setRelatedTarget] = useState<PanelRelatedTarget | null>(null);
   const clearRelatedTarget = useCallback(() => setRelatedTarget(null), []);
   const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
+  // 表单里双方与角色三格此刻的值（表单报上来的，关着时是 null）：「关联」签拿去在关系图上先画出正在填的这一段
+  // （party-relationship-graph.ts 的 relationshipGraphDraftOf）。
+  const [draftParties, setDraftParties] = useState<{ holder: string; counterparty: string; role: string } | null>(null);
+  const relationshipDraft =
+    draftParties === null || registering !== row.partyId
+      ? null
+      : relationshipGraphDraftOf(row.partyId, draftParties, (partyId) =>
+          parties?.kind === 'outcome' ? (parties.body.parties.find((party) => party.partyId === partyId)?.partyName ?? null) : null,
+        );
   const relationshipRegistration = mayWrite
     ? {
         active: registering === row.partyId,
@@ -151,7 +161,8 @@ export function BusinessPartyDetailPanel({
             key={row.partyId}
             knownRelationships={knownRelationships}
             parties={parties}
-            preset={{ holder: row.partyId }}
+            self={{ partyId: row.partyId, name: row.partyName }}
+            onPartiesChange={setDraftParties}
             onRegistered={() => {
               addToast({ type: 'success', title: '合作关系已登记' });
               setRelationshipUnsaved(false);
@@ -370,6 +381,7 @@ export function BusinessPartyDetailPanel({
             retryRelationships={retryRelationships}
             relationshipsComplete={relationshipsComplete}
             relationshipRegistration={relationshipRegistration}
+            relationshipDraft={relationshipDraft}
             onRelationshipEnded={mayWrite ? retryRelationships : undefined}
             accountWrites={mayWrite ? { parties } : undefined}
             onShowRelationships={onShowRelationships}

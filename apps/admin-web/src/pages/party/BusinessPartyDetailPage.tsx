@@ -254,7 +254,7 @@ export function BusinessPartyDetailPage({
               key={row.partyId}
               knownRelationships={knownRelationships}
               parties={listAnswer}
-              preset={{ holder: row.partyId }}
+              self={{ partyId: row.partyId, name: row.partyName }}
               onRegistered={() => {
                 addToast({ type: 'success', title: '合作关系已登记' });
                 setRelationshipUnsaved(false);

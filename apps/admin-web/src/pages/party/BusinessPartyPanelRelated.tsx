@@ -27,7 +27,7 @@ import {
 import { countText, overviewSectionHash, type OverviewSectionState, type PartyRelationshipView } from './party-overview';
 import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
 import { PartyRelationshipGraph } from './PartyRelationshipGraph';
-import { relationshipGraphOf } from './party-relationship-graph';
+import { relationshipGraphOf, relationshipGraphWithDraft, type RelationshipGraphDraft } from './party-relationship-graph';
 import { PartyRoleTag, PartyTile, partyRoleTileKind } from './party-role-visuals';
 import { commercialStatusLabels, identityLayerAbsentNote, identityStatusLabels, labelOf, settlementMethodLabels } from './presentation';
 
@@ -271,6 +271,7 @@ export function BusinessPartyPanelRelated({
   retryRelationships,
   relationshipsComplete,
   relationshipRegistration,
+  relationshipDraft = null,
   onRelationshipEnded,
   accountWrites,
   onShowRelationships,
@@ -293,6 +294,8 @@ export function BusinessPartyPanelRelated({
   relationshipsComplete: boolean;
   /** 就地登记合作关系：有写授予的页面给；`active` 为真时段头下摆 `form`，段头的入口收起。不给就只读。 */
   relationshipRegistration?: { active: boolean; onOpen: () => void; form: ReactNode };
+  /** 登记表单里正在填的那一段（双方与角色都选了才有）：关系图上先把它画出来，虚线、标「未保存」。 */
+  relationshipDraft?: RelationshipGraphDraft | null;
   /** 生效中的关系就地「结束…」，答 `ENDED` 时回调（页面借它重取关系册）。不给就只读。 */
   onRelationshipEnded?: () => void;
   /** 客户账户的写入口（useCustomerAccountWrites）；不给就只读。 */
@@ -364,15 +367,18 @@ export function BusinessPartyPanelRelated({
                 </button>
               </p>
             )}
-            {relationshipState.rows.length === 0 ? (
+            {relationshipState.rows.length === 0 && relationshipDraft === null ? (
               relationshipsComplete ? (
                 <p className="px-6 py-6 text-center type-value leading-6 text-idpxyz-breadcrumb">还没有与这家单位的合作关系。</p>
               ) : null
             ) : (
               <>
-                <div className="overflow-x-auto border-b border-idpxyz-border px-6 pb-[18px] pt-4">
+                {/* 一段关系都没有、只有正在填的那一段时，图照画，表不摆（没有行的表只剩一条表头）；图下没有表，就不再画那道分隔线。 */}
+                <div
+                  className={`overflow-x-auto px-6 pb-[18px] pt-4 ${relationshipState.rows.length === 0 ? '' : 'border-b border-idpxyz-border'}`}
+                >
                   <PartyRelationshipGraph
-                    graph={relationshipGraphOf(relationshipState.rows)}
+                    graph={relationshipGraphWithDraft(relationshipGraphOf(relationshipState.rows), relationshipDraft)}
                     centerName={row.partyName}
                     centerId={row.partyId}
                     ours={ours}
@@ -382,48 +388,50 @@ export function BusinessPartyPanelRelated({
                     onShowEnded={() => scrollTo('[data-relationship-table]')}
                   />
                 </div>
-                <div role="table" aria-label="合作关系" data-relationship-table className="type-value leading-5">
-                  <div role="rowgroup">
-                    <div
-                      role="row"
-                      className="business-party-relationship-row h-9 border-b border-idpxyz-border bg-idpxyz-editor type-body text-idpxyz-breadcrumb"
-                    >
-                      <span role="columnheader" className="pl-6 pr-3">
-                        对方
-                      </span>
-                      <span role="columnheader" className="px-3">
-                        关系
-                      </span>
-                      <span role="columnheader" className="px-3">
-                        状态
-                      </span>
-                      <span role="columnheader" className="business-party-relationship-period-column px-3">
-                        有效期
-                      </span>
-                      <span role="columnheader" className="pr-6">
-                        <span className="sr-only">明细</span>
-                      </span>
+                {relationshipState.rows.length === 0 ? null : (
+                  <div role="table" aria-label="合作关系" data-relationship-table className="type-value leading-5">
+                    <div role="rowgroup">
+                      <div
+                        role="row"
+                        className="business-party-relationship-row h-9 border-b border-idpxyz-border bg-idpxyz-editor type-body text-idpxyz-breadcrumb"
+                      >
+                        <span role="columnheader" className="pl-6 pr-3">
+                          对方
+                        </span>
+                        <span role="columnheader" className="px-3">
+                          关系
+                        </span>
+                        <span role="columnheader" className="px-3">
+                          状态
+                        </span>
+                        <span role="columnheader" className="business-party-relationship-period-column px-3">
+                          有效期
+                        </span>
+                        <span role="columnheader" className="pr-6">
+                          <span className="sr-only">明细</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div role="rowgroup">
+                      {leadingRows(relationshipState.rows, relatedRelationshipLimit).listed.map((view) => (
+                        <RelationshipRow
+                          key={view.relationshipId}
+                          view={view}
+                          record={records.find((candidate) => candidate.relationshipId === view.relationshipId)}
+                          tileKind={tileOf(view)}
+                          open={expanded === view.relationshipId}
+                          onToggle={() => {
+                            setExpanded((current) => (current === view.relationshipId ? null : view.relationshipId));
+                            setEnding(null);
+                          }}
+                          ending={ending === view.relationshipId}
+                          onEndingChange={(next) => setEnding(next ? view.relationshipId : null)}
+                          onEnded={onRelationshipEnded}
+                        />
+                      ))}
                     </div>
                   </div>
-                  <div role="rowgroup">
-                    {leadingRows(relationshipState.rows, relatedRelationshipLimit).listed.map((view) => (
-                      <RelationshipRow
-                        key={view.relationshipId}
-                        view={view}
-                        record={records.find((candidate) => candidate.relationshipId === view.relationshipId)}
-                        tileKind={tileOf(view)}
-                        open={expanded === view.relationshipId}
-                        onToggle={() => {
-                          setExpanded((current) => (current === view.relationshipId ? null : view.relationshipId));
-                          setEnding(null);
-                        }}
-                        ending={ending === view.relationshipId}
-                        onEndingChange={(next) => setEnding(next ? view.relationshipId : null)}
-                        onEnded={onRelationshipEnded}
-                      />
-                    ))}
-                  </div>
-                </div>
+                )}
                 {relationshipState.rows.length > relatedRelationshipLimit ? (
                   <p className="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2.5 type-body leading-5 text-idpxyz-breadcrumb">
                     这里只列最近 {relatedRelationshipLimit} 段

@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { ArrowLeftRight } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
@@ -11,7 +12,7 @@ import {
 } from './api';
 import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { labelOf, partyRoleLabels, problemNote, registrationTitles } from './presentation';
-import { Field, ReferencePickerFor, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, Problems, ReferencePickerFor, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { authorizedDeliveringPartyRole } from './authorized-delivery-scope';
 import {
   AdvancedGroup,
@@ -65,10 +66,16 @@ export interface PartyRelationshipRegistrationFormProps {
   /** 草稿有没有没提交的输入；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
   onUnsavedChange?: (unsaved: boolean) => void;
   /**
-   * 预填的格（票 business-party-edit-mode/03）：从某家单位的页上登记时「哪一方」就是它，预填并锁死——开在谁的页上就登谁担任
-   * 角色的关系。只在挂载时读；换一家单位由调用方换 key 重挂。
+   * 表单开在哪一家单位的页上（右栏的「关联」签、对象页的「合作关系」块；票 business-party-edit-mode/03、business-party-redesign/11）：
+   * 头一行写成一句话——「本单位 对〔对方〕担任〔角色〕」，本单位那一方预填并锁死，只选对方与角色；「换方向」把本单位换到另一侧，
+   * 登的就是别人对它担任角色的那一种。只在挂载时读；换一家单位由调用方换 key 重挂。不给即两方都要选（列表页的登记视图）。
    */
-  preset?: Partial<PartyRelationshipDraft>;
+  self?: { partyId: string; name: string };
+  /**
+   * 双方与角色三格每变一次报一次，卸载时报 null：页面拿去在关系图上先画出正在填的这一段。要给稳定的引用（状态的 set 函数），
+   * 每次渲染换一个新函数会让它报个不停。
+   */
+  onPartiesChange?: (parties: { holder: string; counterparty: string; role: string } | null) => void;
   /**
    * 嵌在对象页全景区「合作关系」块里（票 business-party-edit-mode/03）：不带卡片外壳与 JSON 导入，动作行多一枚「取消」。
    * 不给即列表页登记视图里的整页形态。
@@ -86,13 +93,18 @@ export function PartyRelationshipRegistrationForm({
   parties,
   onRegistered,
   onUnsavedChange,
-  preset,
+  self,
+  onPartiesChange,
   inline,
 }: PartyRelationshipRegistrationFormProps) {
-  const holderLocked = preset?.holder !== undefined;
+  // 本单位站在这段关系的哪一侧：缺省是它担任角色（持有方）；「换方向」之后是别人对它担任（相对方）。
+  const [selfSide, setSelfSide] = useState<'HOLDER' | 'COUNTERPARTY'>('HOLDER');
+  const selfFields = (side: 'HOLDER' | 'COUNTERPARTY'): Partial<PartyRelationshipDraft> =>
+    self === undefined ? {} : side === 'HOLDER' ? { holder: self.partyId } : { counterparty: self.partyId };
   const form = useRegistrationForm<PartyRelationshipDraft>({
     kind,
-    empty: () => ({ ...emptyPartyRelationshipDraft(), ...preset }),
+    // 空白草稿随方向走：只点了「换方向」、别的什么都没填，不算有没提交的输入。
+    empty: () => ({ ...emptyPartyRelationshipDraft(), ...selfFields(selfSide) }),
     suggestion: (draft) => suggestedPartyRelationshipRevision(knownRelationships, draft.relationshipId),
     localProblems: partyRelationshipLocalProblems,
     payloadOf: partyRelationshipPayloadOf,
@@ -104,6 +116,18 @@ export function PartyRelationshipRegistrationForm({
     onUnsavedChange?.(unsaved);
   }, [onUnsavedChange, unsaved]);
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+  useEffect(() => {
+    onPartiesChange?.({ holder: draft.holder, counterparty: draft.counterparty, role: draft.role });
+  }, [onPartiesChange, draft.holder, draft.counterparty, draft.role]);
+  useEffect(() => () => onPartiesChange?.(null), [onPartiesChange]);
+  // 一句话那一行里「对方」那一格落在草稿的哪一格上，随方向换。
+  const otherParty = selfSide === 'HOLDER' ? draft.counterparty : draft.holder;
+  const swapDirection = () => {
+    if (self === undefined) return;
+    const next = selfSide === 'HOLDER' ? 'COUNTERPARTY' : 'HOLDER';
+    setSelfSide(next);
+    patch(next === 'HOLDER' ? { holder: self.partyId, counterparty: otherParty } : { holder: otherParty, counterparty: self.partyId });
+  };
 
   const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
   const deliveryScope = draft.role === authorizedDeliveringPartyRole ? deliveryScopeSpellingOf(draft) : null;
@@ -120,6 +144,48 @@ export function PartyRelationshipRegistrationForm({
       ? `这是关系 ${known.relationshipId} 的第 ${form.revisionField.suggestion} 次更新，序号已算好`
       : '首次登记，序号由系统填';
 
+  const roleSelect = (
+    <select className={selectClass} value={draft.role} disabled={locked} aria-label="角色" onChange={(event) => patch({ role: event.target.value })}>
+      <option value="">请选择</option>
+      {roleOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+  // 一句话那一行的几件（只在 `self` 给了时用）：本单位那一格、对方那一格、句子里的字。
+  const selfBox = self ? (
+    <div className="min-w-0">
+      <span className={fieldLabel}>本单位</span>
+      <div className="flex h-9 items-center rounded-md border border-idpxyz-border bg-idpxyz-editor px-3 type-value text-idpxyz-text" title={self.name}>
+        <span className="truncate">{self.name}</span>
+      </div>
+    </div>
+  ) : null;
+  const otherPartyPicker = (
+    <ReferencePickerFor<BusinessPartyListResponseBody>
+      label="对方 *"
+      path={selfSide === 'HOLDER' ? 'relationships[0].counterparty' : 'relationships[0].holder'}
+      problems={problems}
+      value={otherParty}
+      locked={locked}
+      onChange={(value) => patch(selfSide === 'HOLDER' ? { counterparty: value } : { holder: value })}
+      answer={parties}
+      optionsOf={businessPartyPickerOptions}
+      emptyNote="还没有登记任何往来单位；先在「新增往来单位」里登记对方，或直接填编码。"
+      readFace="往来单位"
+    />
+  );
+  const sentenceWord = (word: string) => (
+    <div className="shrink-0">
+      <span className={fieldLabel} aria-hidden="true">
+        &nbsp;
+      </span>
+      <span className="flex h-9 items-center type-value text-idpxyz-text">{word}</span>
+    </div>
+  );
+
   const body = (
     <>
           <p className="type-body text-idpxyz-breadcrumb">
@@ -128,50 +194,81 @@ export function PartyRelationshipRegistrationForm({
 
           {/* 两段：先说这段关系是谁对谁、什么角色、管哪些业务，再说从何时到何时、依据什么（票 business-party-ux/06）。 */}
           <FormGroup title="双方与角色">
-            <ReferencePickerFor<BusinessPartyListResponseBody>
-              label="哪一方 *"
-              path="relationships[0].holder"
-              problems={problems}
-              value={draft.holder}
-              locked={locked || holderLocked}
-              onChange={(holder) => patch({ holder })}
-              answer={parties}
-              optionsOf={businessPartyPickerOptions}
-              emptyNote="还没有登记任何往来单位；先在「新增往来单位」里登记双方，或直接填编码。"
-              readFace="往来单位"
-              optionsNote={`担任${roleWord}的单位，例如客户、承运商。`}
-            />
+            {self ? (
+              // 开在一家单位的右栏里：头一行是一句话，照着读就是这段关系——〔担任角色的一方〕对〔另一方〕担任〔角色〕。本单位那一格
+              // 不能改，另一格选对方；两格谁在前由方向定。各格上面留同样高的一行标签位，句子里的字才与控件在同一条线上。
+              <div className="flex flex-col gap-2 md:col-span-2">
+                <div className="flex flex-wrap items-start gap-x-2.5 gap-y-3">
+                  <div className="min-w-[180px] flex-[1_1_180px]">{selfSide === 'HOLDER' ? selfBox : otherPartyPicker}</div>
+                  {sentenceWord('对')}
+                  <div className="min-w-[180px] flex-[1_1_180px]">{selfSide === 'HOLDER' ? otherPartyPicker : selfBox}</div>
+                  {sentenceWord('担任')}
+                  <div className="min-w-[150px] flex-[0_1_210px]">
+                    <Field label="角色 *" path="relationships[0].role" problems={problems}>
+                      {roleSelect}
+                    </Field>
+                  </div>
+                  <div className="shrink-0">
+                    <span className={fieldLabel} aria-hidden="true">
+                      &nbsp;
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 type-body text-idpxyz-breadcrumb"
+                      disabled={locked}
+                      onClick={swapDirection}
+                      title={selfSide === 'HOLDER' ? '换成别的单位对本单位担任角色' : '换成本单位对别的单位担任角色'}
+                    >
+                      <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      换方向
+                    </Button>
+                  </div>
+                </div>
+                {/* 本单位那一格是锁死的，登记册在它那一格上报的问题没有控件可挂，显在句子下面。 */}
+                <Problems lines={problems[selfSide === 'HOLDER' ? 'relationships[0].holder' : 'relationships[0].counterparty']} />
+                <p className="type-body leading-5 text-idpxyz-breadcrumb">
+                  {selfSide === 'HOLDER'
+                    ? '担任角色的是本单位。要登记别的单位对它担任角色，点「换方向」。'
+                    : '担任角色的是对方，本单位是它面对的那一方。要登记本单位担任角色，点「换方向」。'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <ReferencePickerFor<BusinessPartyListResponseBody>
+                  label="哪一方 *"
+                  path="relationships[0].holder"
+                  problems={problems}
+                  value={draft.holder}
+                  locked={locked}
+                  onChange={(holder) => patch({ holder })}
+                  answer={parties}
+                  optionsOf={businessPartyPickerOptions}
+                  emptyNote="还没有登记任何往来单位；先在「新增往来单位」里登记双方，或直接填编码。"
+                  readFace="往来单位"
+                  optionsNote={`担任${roleWord}的单位，例如客户、承运商。`}
+                />
 
-            <Field label="角色 *" path="relationships[0].role" problems={problems}>
-              <select
-                className={selectClass}
-                value={draft.role}
-                disabled={locked}
-                onChange={(event) => patch({ role: event.target.value })}
-              >
-                <option value="">请选择</option>
-                {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="block type-body text-idpxyz-breadcrumb mt-1">它对对方是什么：客户、供应商、承运商代理……</span>
-            </Field>
+                <Field label="角色 *" path="relationships[0].role" problems={problems}>
+                  {roleSelect}
+                  <span className="block type-body text-idpxyz-breadcrumb mt-1">它对对方是什么：客户、供应商、承运商代理……</span>
+                </Field>
 
-            <ReferencePickerFor<BusinessPartyListResponseBody>
-              label="对哪一方 *"
-              path="relationships[0].counterparty"
-              problems={problems}
-              value={draft.counterparty}
-              locked={locked}
-              onChange={(counterparty) => patch({ counterparty })}
-              answer={parties}
-              optionsOf={businessPartyPickerOptions}
-              emptyNote="还没有登记任何往来单位；先在「新增往来单位」里登记双方，或直接填编码。"
-              readFace="往来单位"
-              optionsNote="通常是我们自己的公司主体；授权交付时是客户所属的单位。"
-            />
+                <ReferencePickerFor<BusinessPartyListResponseBody>
+                  label="对哪一方 *"
+                  path="relationships[0].counterparty"
+                  problems={problems}
+                  value={draft.counterparty}
+                  locked={locked}
+                  onChange={(counterparty) => patch({ counterparty })}
+                  answer={parties}
+                  optionsOf={businessPartyPickerOptions}
+                  emptyNote="还没有登记任何往来单位；先在「新增往来单位」里登记双方，或直接填编码。"
+                  readFace="往来单位"
+                  optionsNote="通常是我们自己的公司主体；授权交付时是客户所属的单位。"
+                />
+              </>
+            )}
 
             {deliveryScope ? (
               <Field label="覆盖范围 *" path="relationships[0].scope" problems={problems} as="div">

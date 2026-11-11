@@ -33,6 +33,15 @@ export type RelationshipGraphNode =
       count: number;
       /** 组里待确认的段数：连线画成虚线要看它。 */
       candidates: number;
+    }
+  | {
+      /** 登记表单里正在填、还没有保存的那一段（票 business-party-redesign/11）：不在册上，只是让人填的时候看得见它会落在哪。 */
+      kind: 'draft';
+      key: string;
+      partyId: string;
+      /** 候选里认不出这个标识（手填的、读面没读回）时为 null。 */
+      name: string | null;
+      role: string;
     };
 
 export interface RelationshipGraph {
@@ -106,4 +115,41 @@ export function relationshipGraphOf(
     fromIt: columnOf('from', live.filter((view) => view.side === 'HOLDER'), limits),
     ended: views.length - live.length,
   };
+}
+
+/** 正在填的那一段在图上的样子：中心这家单位站哪一侧、另一方是谁、什么角色。 */
+export interface RelationshipGraphDraft {
+  /** 中心这家单位在这一段里站哪一侧：它担任角色（HOLDER，另一方画在右边），还是别人对它担任（COUNTERPARTY，画在左边）。 */
+  side: 'HOLDER' | 'COUNTERPARTY';
+  otherPartyId: string;
+  otherPartyName: string | null;
+  role: string;
+}
+
+/**
+ * 登记表单里的三格折成图上那一段。双方与角色都选了、其中一方正是中心这家单位、另一方不是它自己，才画得出来；少一样就是
+ * null——图上不摆半段。这只是给填的人看的预览，不是校验：双方能不能是这两家、角色配不配，照旧送上去由登记册答。
+ */
+export function relationshipGraphDraftOf(
+  centerId: string,
+  form: { holder: string; counterparty: string; role: string },
+  nameOf: (partyId: string) => string | null,
+): RelationshipGraphDraft | null {
+  const holder = form.holder.trim();
+  const counterparty = form.counterparty.trim();
+  const role = form.role.trim();
+  if (role === '' || holder === '' || counterparty === '' || holder === counterparty) return null;
+  if (holder === centerId) return { side: 'HOLDER', otherPartyId: counterparty, otherPartyName: nameOf(counterparty), role };
+  if (counterparty === centerId) return { side: 'COUNTERPARTY', otherPartyId: holder, otherPartyName: nameOf(holder), role };
+  return null;
+}
+
+/**
+ * 把正在填的那一段并进图：排在它那一侧的最后——已在册的各段不因为人在填表而换位置，新的一段出现在末尾。不参与合成：同一
+ * 角色已经合成了计数节点时它也单独一枚，人要看见的正是「这一段」。没有草稿就原样交回。
+ */
+export function relationshipGraphWithDraft(graph: RelationshipGraph, draft: RelationshipGraphDraft | null): RelationshipGraph {
+  if (draft === null) return graph;
+  const node: RelationshipGraphNode = { kind: 'draft', key: 'draft', partyId: draft.otherPartyId, name: draft.otherPartyName, role: draft.role };
+  return draft.side === 'HOLDER' ? { ...graph, fromIt: [...graph.fromIt, node] } : { ...graph, towardIt: [...graph.towardIt, node] };
 }

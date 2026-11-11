@@ -20,24 +20,34 @@ const statusLabel = (status: string) => relationshipStatusLabels[status as keyof
 
 /** 待确认的段画虚线、用警示色；已生效的画实线、用主色。合成节点只要有一段待确认就按待确认画，提示组里有没定下来的。 */
 function pending(node: RelationshipGraphNode): boolean {
+  if (node.kind === 'draft') return false;
   return node.kind === 'group' ? node.candidates > 0 : node.status === 'CANDIDATE';
 }
+
+/** 正在填、还没有保存的那一段的连线下方那两个字；图下的说明也用它，两处同一个词。 */
+const draftEdgeLabel = '未保存';
 
 /** 连线下方那半句：单段写状态，合成节点写其中待确认几段（全都已生效就不写）。角色写在连线上方，两半分开放，窄栏里也不截断。 */
 function edgeStatus(node: RelationshipGraphNode): string | null {
   if (node.kind === 'group') return node.candidates > 0 ? `${node.candidates} 段待确认` : null;
+  if (node.kind === 'draft') return draftEdgeLabel;
   return statusLabel(node.status);
 }
 
+/**
+ * 正在填的那一段（node.kind === 'draft'）也画虚线，但用弱色而不是警示色：它不在册上，不该和「待确认」读成同一种东西，
+ * 也不抢已在册各段的颜色。
+ */
 function Connector({ node }: { node: RelationshipGraphNode }) {
   const waiting = pending(node);
+  const draft = node.kind === 'draft';
   return (
     <div
-      className={`flex h-12 flex-col justify-center px-1 text-center type-body ${waiting ? statusToneText.warning : 'text-idpxyz-accent'}`}
+      className={`flex h-12 flex-col justify-center px-1 text-center type-body ${draft ? 'text-idpxyz-breadcrumb' : waiting ? statusToneText.warning : 'text-idpxyz-accent'}`}
       aria-hidden="true"
     >
       <span className="truncate leading-4 text-idpxyz-text">{roleLabel(node.role)}</span>
-      <span className={`party-relationship-graph-line relative my-0.5 mr-1.5 block h-0 border-t-2 border-current ${waiting ? 'border-dashed' : ''}`} />
+      <span className={`party-relationship-graph-line relative my-0.5 mr-1.5 block h-0 border-t-2 border-current ${waiting || draft ? 'border-dashed' : ''}`} />
       <span className="min-h-4 truncate leading-4">{edgeStatus(node) ?? ''}</span>
     </div>
   );
@@ -51,7 +61,7 @@ function sentence(node: RelationshipGraphNode, center: string, side: 'toward' | 
     return side === 'toward' ? `${who}对${center}担任${roleLabel(node.role)}${tail}；点开看明细` : `${center}对${who}担任${roleLabel(node.role)}${tail}；点开看明细`;
   }
   const other = node.name ?? `${node.partyId}（${partyNameUnknownNote}）`;
-  const relation = `担任${roleLabel(node.role)}（${statusLabel(node.status)}）`;
+  const relation = node.kind === 'draft' ? `担任${roleLabel(node.role)}（正在填，还没有保存）` : `担任${roleLabel(node.role)}（${statusLabel(node.status)}）`;
   return side === 'toward' ? `${other}对${center}${relation}` : `${center}对${other}${relation}`;
 }
 
@@ -69,11 +79,24 @@ function Neighbor({
   onShowDetail: () => void;
 }) {
   const label = sentence(node, center, side);
-  const frame = `flex h-12 w-full min-w-0 items-center gap-2 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-2.5 text-left hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
+  const box = 'flex h-12 w-full min-w-0 items-center gap-2 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-2.5 text-left';
+  const frame = `${box} hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
     pending(node) ? 'border-dashed' : ''
   }`;
   const name = 'truncate type-value leading-[18px] text-idpxyz-textBright';
   const sub = 'truncate type-body leading-4 text-idpxyz-breadcrumb';
+  // 正在填的那一段不是链接：它还不在册上，点它去那家单位的页会把没保存的表单带走。
+  if (node.kind === 'draft') {
+    return (
+      <div role="img" className={`${box} border-dashed`} aria-label={label} title={label}>
+        <PartyTile small kind={tileKind} />
+        <span className="flex min-w-0 flex-col">
+          <span className={name}>{node.name ?? <span className="text-idpxyz-breadcrumb">{partyNameUnknownNote}</span>}</span>
+          <span className={`font-mono ${sub}`}>{node.partyId}</span>
+        </span>
+      </div>
+    );
+  }
   if (node.kind === 'group') {
     return (
       <button type="button" className={frame} onClick={onShowDetail} aria-label={label} title={label}>
@@ -134,6 +157,7 @@ export function PartyRelationshipGraph({
     if (tileKindOf) return tileKindOf(node.partyId);
     return side === 'toward' ? partyRoleTileKind(node.role) : 'NONE';
   };
+  const hasDraft = [...graph.towardIt, ...graph.fromIt].some((node) => node.kind === 'draft');
 
   return (
     <div className="party-relationship-graph">
@@ -194,6 +218,7 @@ export function PartyRelationshipGraph({
       </div>
       <p className="mt-2.5 type-body text-idpxyz-breadcrumb">
         箭头从担任角色的一方指向对方；虚线是待确认的关系。
+        {hasDraft ? `标着「${draftEdgeLabel}」的灰色虚线是正在填的这一段，保存之后才算数。` : null}
         {graph.ended > 0 ? (
           <>
             {' '}
