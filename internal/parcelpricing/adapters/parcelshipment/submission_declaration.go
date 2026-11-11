@@ -1,5 +1,5 @@
 // Package parcelshipment 是 parcel-pricing 消费 parcel-shipment 的一侧（ADR-0025 消费方侧）：受理前试算按提交版本读申报
-// （ADR-0179 决定四）。只翻译不判断——单位符号按原词进计价单位表、两段邮编拼成邮编路线；哪张卡要哪一格、缺了怎么停，归入口。
+// （ADR-0179 决定四），正式 SELL 评价按包裹读已接受委托申报的服务产品（ADR-0378 决定三）。只翻译不判断——单位符号按原词进计价单位表、两段邮编拼成邮编路线；哪张卡要哪一格、缺了怎么停，归入口。
 package parcelshipment
 
 import (
@@ -58,8 +58,9 @@ func (adapter *SubmissionDeclarations) LoadSubmissionDeclaration(
 
 	parcels := declaration.Parcels()
 	translated := ppports.SubmissionDeclaration{
-		Parcels: make([]ppports.DeclaredParcel, 0, len(parcels)),
-		Route:   postalRouteOf(declaration),
+		Parcels:        make([]ppports.DeclaredParcel, 0, len(parcels)),
+		Route:          postalRouteOf(declaration),
+		ServiceProduct: serviceProductOf(declaration.RequestedServiceProduct()),
 	}
 	for _, parcel := range parcels {
 		declared := ppports.DeclaredParcel{Parcel: parcel.Parcel().String()}

@@ -382,6 +382,11 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
+	// 按哪个产品选的卡写在解释最前：读评价的人先看到这张卡为什么是它（ADR-0378 决定三）。不进语义摘要，理由同快照那一格。
+	if product, declared := request.input.ServiceProduct(); declared {
+		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("price card selected for declared service product %s", product.String()))
+	}
+
 	// 分区与偏远档位在一切判定之前先定下来（ADR-0109 Decision 四）：拒收条款与附加费条件可能读分区，
 	// 基础运费查表更离不开它。绑了目录的卡只认目录读数，没绑的卡读调用方给的分区；两边都没有即待判断。
 	categories, categoriesErr := request.plan.structures.resolveCatalogues(request.input)

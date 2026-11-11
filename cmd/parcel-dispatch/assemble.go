@@ -1243,7 +1243,8 @@ func acceptanceFinancialControl(
 const preAcceptanceTrialEvidence = ppdomain.EvidenceSynthetic
 
 // preAcceptanceTrials 接结算的受理前试算口（ADR-0179 决定一、三、四）：SA 的 PP 消费侧适配器 → PP「按委托提交版本形成受理前
-// 试算」入口 → 在用 SELL·客户费用价卡解析、PS 提交版本申报读口（经 PP 的 PS 消费侧适配器）与对给定价卡形成试算的入口。补齐读数
+// 试算」入口 → PS 提交版本申报读口（经 PP 的 PS 消费侧适配器，连同申报的服务产品）、按申报产品的在用 SELL·客户费用价卡解析
+// （ADR-0378 决定三）与对给定价卡形成试算的入口。补齐读数
 // 那两对与正式评价（formEvaluationFromRequest）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
 // 这条链上没有评价库写口与交付口：试算只算不存、不交付（ADR-0152 决定二）。
 func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAcceptanceTrials, error) {
@@ -2767,12 +2768,23 @@ func formEvaluationFromRequest(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
 	}
+	// SELL 请求选卡前读覆盖包裹的已接受委托申报的服务产品（ADR-0378 决定三），经 PP 的 PS 消费侧适配器；BUY 那一路同装、
+	// 不问它——选卡只有一种装法。
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: accepted service product source: %w", err)
+	}
+	products, err := ppshipment.NewAcceptedServiceProducts(shipments)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: accepted service product view: %w", err)
+	}
 	form, err := ppapplication.NewFormEvaluationFromRequestHandler(ppapplication.FormEvaluationFromRequestDeps{
-		Evaluations: evaluations,
-		PriceCards:  cards,
-		Identity:    identities,
-		Evaluate:    evaluate,
-		Inputs:      inputs,
+		Evaluations:     evaluations,
+		PriceCards:      cards,
+		Identity:        identities,
+		Evaluate:        evaluate,
+		Inputs:          inputs,
+		ServiceProducts: products,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form evaluation from request: %w", err)

@@ -51,16 +51,20 @@ func (outcome FormPlanGivenEstimateEvaluationsOutcome) String() string {
 //
 // Comparison 与 Facts 是选路比价那一路要的（ADR-0189 决定一）：比较币种让各段按同一币种出比较金额，事实引用标明这份声明取自
 // 哪一份客户申报。两格都只随输入走、不改分区给法，也不参与选卡。
+//
+// ServiceProduct 是调用方选这张卡时用的服务产品（ADR-0378 决定三），零值即没按产品选。卡已经选定，本入口不再选卡，它只随输入
+// 记进快照。
 type PlanGivenEstimateDeclaration struct {
-	Subject    string
-	BasisAt    time.Time
-	Weight     domain.Weight
-	Dimensions *domain.Dimensions
-	Zone       string
-	Route      *domain.PostalRoute
-	Settlement *domain.Currency
-	Comparison *domain.Currency
-	Facts      []domain.VersionedFactReference
+	Subject        string
+	BasisAt        time.Time
+	Weight         domain.Weight
+	Dimensions     *domain.Dimensions
+	Zone           string
+	Route          *domain.PostalRoute
+	Settlement     *domain.Currency
+	Comparison     *domain.Currency
+	Facts          []domain.VersionedFactReference
+	ServiceProduct domain.ServiceProductReference
 }
 
 // FormPlanGivenEstimateEvaluationsCommand 是一次调用：一张卡、一个证据层级、一组声明。租户由调用方从自己的信封交进来。计价
@@ -214,15 +218,16 @@ func (command FormPlanGivenEstimateEvaluationsCommand) accepted() bool {
 // （estimateIdentity）都只在那一侧写，这里借用、不复写；计价范围与价格方向取卡自己的。
 func (declaration PlanGivenEstimateDeclaration) estimateCommand(tenant domain.TenantID, plan domain.PricingPlanVersion) FormEstimateEvaluationsCommand {
 	return FormEstimateEvaluationsCommand{
-		Tenant:     tenant,
-		Scope:      plan.Scope(),
-		Direction:  plan.Direction(),
-		BasisAt:    declaration.BasisAt,
-		Weight:     declaration.Weight,
-		Dimensions: declaration.Dimensions,
-		Zone:       declaration.Zone,
-		Route:      declaration.Route,
-		Settlement: declaration.Settlement,
+		Tenant:         tenant,
+		Scope:          plan.Scope(),
+		Direction:      plan.Direction(),
+		BasisAt:        declaration.BasisAt,
+		Weight:         declaration.Weight,
+		Dimensions:     declaration.Dimensions,
+		Zone:           declaration.Zone,
+		Route:          declaration.Route,
+		Settlement:     declaration.Settlement,
+		ServiceProduct: declaration.ServiceProduct,
 	}
 }
 

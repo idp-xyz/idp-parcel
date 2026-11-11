@@ -104,6 +104,8 @@ type inputSnapshotDocument struct {
 	Comparison        *string                    `json:"comparison,omitempty"`
 	// 未声明地址性质的评价不写这一键，旧快照没有它照样读回（ADR-0347 决定四）。
 	AddressNature string `json:"addressNature,omitempty"`
+	// 没按产品选卡的评价不写这一键，旧快照没有它照样读回（ADR-0378 决定三）。
+	ServiceProduct string `json:"serviceProduct,omitempty"`
 }
 
 type weightResultSnapshot struct {
@@ -561,6 +563,7 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 		document.Comparison = &comparison
 	}
 	document.AddressNature = string(input.addressNature)
+	document.ServiceProduct = input.serviceProduct.value
 	if input.postal != nil {
 		document.Postal = &postalRouteSnapshot{Origin: input.postal.origin, Destination: input.postal.destination}
 	}
@@ -633,6 +636,7 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 		input.comparison = &comparison
 	}
 	input.addressNature = AddressNature(document.AddressNature)
+	input.serviceProduct = ServiceProductReference{identifier{value: document.ServiceProduct}}
 	if document.Postal != nil {
 		input.postal = &PostalRoute{origin: document.Postal.Origin, destination: document.Postal.Destination}
 	}
