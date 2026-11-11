@@ -70,6 +70,8 @@ func fbaSellCardSnapshot() []byte {
 	plan, err = plan.WithServiceProducts(product)
 	must("FBA 卡声明适用服务产品", err)
 
-	// 方向授权照演示的其余售价卡引 SYN-AUTH-PRICE-DIR-01：计价只引不解析，登记只核它是一份商业授权引用。
+	// 方向授权照演示的其余售价卡引 SYN-AUTH-PRICE-DIR-01。那份授权挂的价格规则 SYN-PRICE-RULE-CN-SG 正文指名的是
+	// SYN-PLAN-CN-SG-01 与快递产品；计价只引授权、从不解析，登记只核它是一份商业授权引用，所以这里的引用背后没有一份指名
+	// FBA 卡的价格规则——引得进来不等于授权覆盖了这张卡。
 	return marshalCard(plan, "SYN-CARD-CN-SG-FBA-01.xlsx", "SYN-AUTH-PRICE-DIR-01")
 }
