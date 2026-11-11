@@ -38,6 +38,7 @@
 - **实重**（值与单位）与可缺的**尺寸**（三边与单位）。
 - **分区**与**邮编路线**（始发、目的）：哪张卡用哪一种由卡自己的目录绑定决定，见下方流程第 3 步。
 - 可缺的**结算币种**。
+- 可缺的**服务产品**：带了，取适用价卡时先看指名它的卡；不带，只看不声明产品的卡（[ADR-0378](../../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定二）。
 - 可缺的**收件地址性质**（`COMMERCIAL` 商业 / `RESIDENTIAL` 住宅，封闭词）：计价既不推断也不从别处读它，卡有规则按它判定时要发起方声明；没声明就如实点名缺项，不套默认住宅或商业。
 
 租户只从操作者信封来；声明里出现租户或任何身份格即为畸形声明。
@@ -60,7 +61,7 @@
 ## 应用流程
 
 1. **受理**：校验声明各项成形、方向可配对、没有身份格。不成形即未受理，不再往下。
-2. **取适用价卡**：按（租户、价格方向、主要范围、计价基准时点）取全部适用价卡。零张即价卡未配置；同一方案身份两版同时适用即价卡适用冲突，交回候选。读不回即未决。
+2. **取适用价卡**：按（租户、价格方向、主要范围、计价基准时点）取全部适用价卡；`SELL` 方向再按声明的服务产品分层，有指名它的卡就只取这一层，没有取不声明产品的那一层，没声明产品只取后一层。零张即价卡未配置；同一方案身份两版同时适用即价卡适用冲突，交回候选。读不回即未决。
 3. **逐卡造试算输入**：
    - 卡绑了分区目录：用声明的邮编路线，分区由目录解析；没有邮编路线即这张卡输入不全。
    - 卡没绑分区目录：用声明的分区；没有分区即这张卡输入不全。卡另绑了偏远档位目录时还要邮编路线。
@@ -100,7 +101,7 @@
 
 ## 价卡收尾：换版时旧版离开新的选择
 
-试算与按评价请求形成评价都按范围选卡，同一方案两版同时适用即答适用冲突。旧版怎样经指名后继的截止或退役离开新的选择、收尾怎样续办停着的请求，由 [ADR-0234](../../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 定；本节只列计价这一侧的验收。截止点、退役时刻都由服务端定，哪一版何时让位给哪一版是租户取值。
+试算与按评价请求形成评价都按范围选卡，`SELL` 卡另按服务产品分层（[ADR-0378](../../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)）；同一方案两版落在同一层、同时适用即答适用冲突，分在两层时各取其层。旧版怎样经指名后继的截止或退役离开新的选择、收尾怎样续办停着的请求，由 [ADR-0234](../../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 定；本节只列计价这一侧的验收。截止点、退役时刻都由服务端定，哪一版何时让位给哪一版是租户取值。
 
 | 编号 | 场景 | 期望结果 |
 |---|---|---|
@@ -208,4 +209,5 @@
 - 判定条件读的体积重与自身计价重量落在 `internal/parcelpricing/domain/package_weight_features.go`：评价只在方案有条件读它们时才在特征阶段多算一遍（`packageOwnWeights`，与正式计价重量同一件实现、不带抬高），装配与读回门是同一道（`checkPackageWeightReads`）；这两个量的取整边界并入换算截断位数的 `g`（`conditionScale`）。收件地址性质落在 `address_nature.go`：输入快照可缺的一格、独立的特征槽 `ADDRESS_NATURE`；试算编排在评价前按 `PricingPlanStructures.ReadsFeature` 点名缺项。地址类型那一槽（`FeatureAddressType`）仍承载偏远档位，不改指。
 - **收件地址性质的来源归 `parcel-shipment`，另票。** PS 的地址要素（`AddressElementName`）今天只有邮编与国家 / 地区码，没有结构化的地址性质；要提供它，先回 PS CONTEXT「地址要素」词条加一格，再由 `adapters/parcelshipment` 与正式评价的输入解析器译进 `WithAddressNature`。计价不造这一格、不在适配器里从地址文字猜。在那之前，读地址性质的卡走不通正式评价、受理前估价与路由比价（评价待判断 / 输入不全），只有试算（发起方自己声明）走得通。
 - **价表档位边界、总额上下限的基数、票级计价重量的聚合方式由卡声明，目录可登「其余邮编」行**（[ADR-0364](../../adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md)）：代码尚未做到。`RateEntry.contains` 只认含下界不含上界；`total_bounds.go` 只对整票、只在附加费之后施加，评价读回门只认补差行是最后一行（`AT-PP-034`）；票级快照只带合计量；目录没有「其余」行；评价解释不记这几项用的哪一种读法。几项都是规范化文档里的新键，同批一次换号：价卡登记照 ADR-0352 要部署开关，目录登记（`PRC-1`）没有同类的门，换号前要补；价卡导入模板 `PPT-2` 不认它们，下一版模板把它们做成必填。承接见[冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md)里出处写 ADR-0364 的各行。
+- **售价卡的适用服务产品与按产品分层选卡**（[ADR-0378](../../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)）：代码尚未做到——价卡声明与两层选卡归票 declared-goods-lines/14，申报的产品进估价、正式评价与试算归 15，管理台归 16。
 - **带始发维度目录的卡声明始发来源**（[ADR-0365](../../adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)）：代码尚未做到。始发今天一律取寄件邮编（`PostalRouteFromDeclared`）；卡上的「节点 → 计费起点邮编」映射、`SELL` 卡声明它时登记即拒、路由比价按段交起始节点、发生项读口答实际履约段的起始节点、评价解释记下始发取的哪一种，都还没有。在那之前，按入口分区的尾程卡查出的区不对，不宜登记生产卡。承接见[冻结清单「记录」](../../../.scratch/launch-line-freeze-2026-10-27.md)里出处写 ADR-0365 的那一行。
