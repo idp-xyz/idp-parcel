@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: in-progress
-Blocked by: 无（「要先定的」三项已由 [ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 定下；演示那一项另立 12，依赖 10、11）
+Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`。「要先定的」三项已由 [ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 定下；演示那一项另立 12，依赖 10、11）
 
 依据：ADR-0374 决定三（FBA 的平台货件号、箱标号、装箱分配报全是服务产品所采用接单规则包的必填与跨字段条件，产品不内置，没配置不判）；UC-PS-001 `BD-PS-006` 一行与业务决策简报同名一节；ADR-0146 决定三、ADR-0147 决定四、决定五（参考配置显式采用才生效，构造门或样例不过的文件不能发布）。起因：票 03 欠下一份 FBA 头程提交条件参考配置；票 08 写过一份，评审指出它没有过构造门、正文又替本票还没定的事下了结论，已撤下，改由本票随执行器一起发布。
 
@@ -40,3 +40,27 @@ Blocked by: 无（「要先定的」三项已由 [ADR-0376](../../../docs/adr/03
 ## 不做的
 
 客户字段映射到条件的实例半边（租户自己写的条件）；批量导入模板的必填提示。
+
+## 完成记录（作者一侧，2026-11-11）
+
+- 提交：分支 `feat/goods-details-admin` 上的 `d7075c48d` 与评审修订 `76a8e4858`，未推送、未进 main。ADR-0376 与本票、10、11、12 的票面在文档分支 `docs/declared-goods-lines`，须与代码一起进 main。
+- 落点：
+  - 参考配置 `REFCFG-1:parcel-shipment/submission-conditions/FBA-HEADHAUL@1` 随执行器同一笔发布：平台货件在场、每件有平台箱标号、装箱分配在场三条。说明写明规则包要同时声明「必要资料」组适用并引用这一版才判。构造门 `SubmissionConditionsOf` 认不得的条件码、标识或版本对不上、一条没有都答错；已发布的每一版由测试逐版过。
+  - 商业依据解析（PS 消费侧适配器）：规则包声明「必要资料」组适用时，读它 `CROSS_FIELD_CONDITION` 一类的规则引用。读得懂的提交条件固定进依据快照（位集，快照仍可整值比较，落库带 `submissionConditions`）；不带 `REFCFG-1:` 前缀的不透明引用不判。读不回规则包、规则包没登、引了提交条件目录之外的参考配置，各答一个无法判定原因，内部重试，不当成没有条件；读口没接上是装配缺件，报错。dispatch 装配接上 PC 的规则包正文读口。
+  - 受理判断：「必要资料」组按快照上的条件判。委托级缺口出一条版本级`未定`，箱标号按缺的包裹各一条，续办方是客户（`ResumeByCustomerSupplement`）；全满足或快照上没有条件出一条通过。
+  - 缺项：受理任务停在等客户补充时记下（判组、包裹、原因），别的路径清掉；落库、重建、委托查阅面（`acceptanceTask.supplementGaps`）与管理台运单详情（「等客户补 · 某箱/整票」）照实交出。
+  - party-commercial：规则包登记时，带 `REFCFG-1:` 前缀的规则引用要打开得到已发布的那一版，打不开答登记不成立。
+- 判据：
+  - FBA 头程三条各有缺与不缺的领域用例；缺平台货件、缺箱标号、没报装箱的委托停在等客户补充，缺项说清哪一条、哪几箱 ✅。
+  - 补充补齐箱标号后重判为接受 ✅（领域用例；经受控补充补平台号由 10 落地，演示由 12 走通）。
+  - 没声明「必要资料」组的规则包不读、不判，既有行为不变 ✅（适配器与受理判断两层）。
+  - 参考配置读不回或引错目录答无法判定，不当成满足 ✅；条件码未知时构造门答错，那一版发布不了 ✅。
+  - 快照条件与任务缺项真库往返，接受后缺项清空 ✅；查阅面与管理台显示缺项 ✅（HTTP 与前端单测，未在浏览器里点过）。
+- 评审（非作者，2026-11-11）：无阻断，以下已改（`76a8e4858`）：
+  - 规则包读口没接上时静默当无法判定，改为报错；读不回与没登记共用一个原因码，拆开；在这一类下引了别的目录的参考配置原被当不透明引用跳过，改为无法判定（否则「登进去、永远不判」）。
+  - 缺项在拒绝、转人工与接受路径上没清，留在任务上；改为只在等客户补充时有。
+  - 条件码遍历用最后一个条件作上界，新条件会在落库时静默丢掉；加了遍历上界。
+  - 参考配置说明只写「引用这一版才生效」，漏了「声明必要资料组适用」；又写了一句会过时的实现说明。已改，同版号重写、发布摘要随之更新：这一版还没进 main，没有哪个环境发布过它。
+  - 补测：补齐后重判接受；受理判断层的停下与不判；落库往返核缺项清空。
+- 全量门禁（含 10、11）：带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0；`gofmt`、`go vet` 干净；管理台 `tsc`、`run-tests` 1345 过 0 败、`vite build` 退 0。`scripts/test-full.sh` 未跑。
+- 证据记 `S`，参数登记册未动。
