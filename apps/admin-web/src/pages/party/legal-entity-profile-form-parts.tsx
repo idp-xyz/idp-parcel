@@ -46,8 +46,10 @@ export function ChangePreview({
   effectiveFrom,
   timeZone,
   basis,
+  baselineQualifier = '当前生效的',
 }: {
   comparison: ProfileComparison;
+  /** 拿来比的那一版。公司主体的表单比的总是当前生效版；往来单位没有生效版时比的是最新登记、尚未生效的那一版，由 baselineQualifier 说清。 */
   current: ProfileContent;
   nextRevision: string;
   /** datetime-local 原值，按操作者时区读；送出时才换 RFC 3339。 */
@@ -55,6 +57,8 @@ export function ChangePreview({
   timeZone: string;
   /** 分区保存时把将要送的来源单据也复述一遍——它多半是自动写的，人在确认前该看到。 */
   basis?: string;
+  /** 「与……第 N 版相比」里版本前的那个限定词；不给就是「当前生效的」。 */
+  baselineQualifier?: string;
 }) {
   const changed = comparison.fields.filter((field) => field.kind !== 'unchanged');
   return (
@@ -62,7 +66,7 @@ export function ChangePreview({
       <div>
         <h3 className="type-section font-semibold text-idpxyz-textBright">这次改了什么</h3>
         <p className="mt-1 type-body leading-5 text-idpxyz-breadcrumb">
-          与当前生效的{profileRevisionLabel(current.revision)}相比。确认后登记为第 {nextRevision.trim() || '?'} 版，{effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；
+          与{baselineQualifier}{profileRevisionLabel(current.revision)}相比。确认后登记为第 {nextRevision.trim() || '?'} 版，{effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；
           版本连不连续、国家对不对得上由服务端判。
           {basis !== undefined ? <>来源单据：<span className="font-mono text-idpxyz-text">{basis}</span>。</> : null}
         </p>

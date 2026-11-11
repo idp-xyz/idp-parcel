@@ -4,7 +4,10 @@ import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
+import { BusinessPartyEditShell, type EditSlots } from './BusinessPartyEditShell';
 import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
+import { partyTileKindOf } from './business-parties-workbench';
+import { peekEditOrigin, takeEditOrigin, type EditOrigin } from './business-party-edit-origin';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { DetailPageTemplate, type DetailMeta, type TemplateViewState, type WorkspaceTabId } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -199,13 +202,33 @@ export function BusinessPartyDetailPage({
   // 往来单位资料（ADR-0369）：概要、联系人与资料版本几处读同一份修订链。我方公司的资料在公司主体上，不读；法人册答出之前
   // 也先不读，免得先发一笔再认出是我方公司。
   const profiles = useBusinessPartyProfiles(partyId, false, pinned === false);
-  // 编辑态（票 business-party-edit-mode/02，照公司主体对象页）：概要分区换成「更正名称」表单，「保存 / 取消」钉在模板页脚；
-  // 页头的「更正名称」「更多」收起。不是模态，「返回列表」有没提交的输入先问一句。
+  // 编辑态（票 business-party-edit-mode/02 定了它住在对象页的地址上；版式是票 business-party-redesign/11 的）：这一页换成编辑
+  // 外壳（BusinessPartyEditShell）——页头、分段的表单、底部固定的动作条，只读时的各分区都不摆。不是模态，离开前有没提交的
+  // 输入先问一句。
   const editing = identityEditing && mayWrite && row !== null;
   const editingProfile = profileEditing && !identityEditing && mayWrite && row !== null && !ours;
   const anyEditing = editing || editingProfile;
-  const exitEditing = (then?: () => void) => (editingProfile ? onExitProfileEdit(then) : onExitIdentityEdit(then));
+  // 这一次编辑是不是从名录右栏进来的（business-party-edit-origin.ts）：是，退出后回名录那张标签——它一直挂着，进来之前的分栏
+  // 与选中行都还在；不是（在本页自己点的、刷新或深链进来的），照旧留在本页。渲染时只看不取，取走放在提交之后。
+  const editRequested = identityEditing || profileEditing;
+  const [takenOrigin, setTakenOrigin] = useState<EditOrigin | null>(null);
+  useEffect(() => {
+    if (!editRequested) {
+      setTakenOrigin(null);
+      return;
+    }
+    const taken = takeEditOrigin(partyId);
+    if (taken !== null) setTakenOrigin(taken);
+  }, [editRequested, partyId]);
+  const origin = takenOrigin ?? (editRequested ? peekEditOrigin(partyId) : null);
+  const leaveTo = origin !== null ? onBack : undefined;
+  // `then` 是退出后还要去的地方（表单里的站内链接）；没给就按来处走。
+  const exitEditing = (then?: () => void) => (editingProfile ? onExitProfileEdit(then ?? leaveTo) : onExitIdentityEdit(then ?? leaveTo));
+  // 外壳留给表单的三个槽位：页头右端的标记、锚点列、底部的动作条。
+  const [tagSlot, setTagSlot] = useState<HTMLElement | null>(null);
+  const [navSlot, setNavSlot] = useState<HTMLElement | null>(null);
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const slots: EditSlots = { tag: tagSlot, nav: navSlot, footer: footerSlot };
   const [unsaved, setUnsaved] = useState(false);
   // 要确认才做的那件事（放弃编辑态、放弃关系登记、离开）；null 即没在问。
   const [confirming, setConfirming] = useState<(() => void) | null>(null);
@@ -247,6 +270,78 @@ export function BusinessPartyDetailPage({
           ),
         }
       : undefined;
+  const confirmDialog = (
+    <ConfirmDialog
+      renderFooter={confirmDialogFooter}
+      open={confirming !== null}
+      tone="warning"
+      title="放弃修改？"
+      message="有内容还没有保存，离开后填写的内容不会保留。"
+      confirmLabel="放弃"
+      cancelLabel="继续编辑"
+      onConfirm={() => {
+        const run = confirming;
+        setConfirming(null);
+        run?.();
+      }}
+      onCancel={() => setConfirming(null)}
+    />
+  );
+
+  if (anyEditing && row) {
+    return (
+      <>
+        <BusinessPartyEditShell
+          row={row}
+          tileKind={partyTileKindOf(ours, roles)}
+          label={editingProfile ? '更新资料' : '更正登记信息'}
+          onTagSlot={setTagSlot}
+          onNavSlot={setNavSlot}
+          onFooterSlot={setFooterSlot}
+        >
+          {editingProfile ? (
+            <BusinessPartyProfileEditMode
+              key={row.partyId}
+              partyId={row.partyId}
+              registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
+              slots={slots}
+              initialSection={origin?.section ?? null}
+              onLanded={(sent) => {
+                addToast({ type: 'success', title: `资料已更新${sent ? `，登记为第 ${sent.revision} 版` : ''}` });
+                setUnsaved(false);
+                exitEditing();
+              }}
+              onUnsavedChange={setUnsaved}
+              onCancel={() => (unsaved ? setConfirming(() => () => exitEditing()) : exitEditing())}
+              onRequestLeave={(href) => {
+                const leave = () => exitEditing(() => (window.location.hash = href));
+                if (unsaved) setConfirming(() => leave);
+                else leave();
+              }}
+            />
+          ) : (
+            <BusinessPartyIdentityEditMode
+              key={row.partyId}
+              row={row}
+              ours={ours}
+              knownParties={knownParties}
+              slots={slots}
+              onLanded={(sent) => {
+                addToast({ type: 'success', title: `登记信息已更正${sent ? `，登记为${updateOrdinalLabel(Number(sent.revision))}` : ''}` });
+                setUnsaved(false);
+                retry();
+                exitEditing();
+              }}
+              onUnsavedChange={setUnsaved}
+              onCancel={() => (unsaved ? setConfirming(() => () => exitEditing()) : exitEditing())}
+            />
+          )}
+        </BusinessPartyEditShell>
+        {confirmDialog}
+      </>
+    );
+  }
+
   return (
     <>
     <DetailPageTemplate
@@ -283,10 +378,7 @@ export function BusinessPartyDetailPage({
             size="sm"
             className="type-body text-idpxyz-breadcrumb"
             onClick={() => {
-              if (anyEditing) {
-                if (unsaved) setConfirming(() => () => exitEditing(onBack));
-                else exitEditing(onBack);
-              } else if (registeringRelationship && relationshipUnsaved) setConfirming(() => onBack);
+              if (registeringRelationship && relationshipUnsaved) setConfirming(() => onBack);
               else onBack();
             }}
           >
@@ -294,65 +386,11 @@ export function BusinessPartyDetailPage({
           </Button>
         </>
       }
-      footer={anyEditing ? <div ref={setFooterSlot} /> : undefined}
       meta={row ? buildMeta(row, related, identificationMeta) : []}
       basicFields={[]}
       sections={
         row
           ? [
-              ...(editing
-                ? [
-                    {
-                      id: 'identity-edit',
-                      title: '更正登记信息',
-                      description: '改的是这家单位登记在册的名称与识别信息；合作关系、合同与账户照旧指向它。',
-                      content: (
-                        <BusinessPartyIdentityEditMode
-                          key={row.partyId}
-                          row={row}
-                          ours={ours}
-                          knownParties={knownParties}
-                          footerSlot={footerSlot}
-                          onLanded={(sent) => {
-                            addToast({ type: 'success', title: `登记信息已更正${sent ? `，登记为${updateOrdinalLabel(Number(sent.revision))}` : ''}` });
-                            setUnsaved(false);
-                            retry();
-                            onExitIdentityEdit();
-                          }}
-                          onUnsavedChange={setUnsaved}
-                          onCancel={() => (unsaved ? setConfirming(() => () => onExitIdentityEdit()) : onExitIdentityEdit())}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-              ...(editingProfile
-                ? [
-                    {
-                      id: 'profile-edit',
-                      title: '更新资料',
-                      description: '联系人、地址、其他语言名称、税号、开票抬头与收款账户；登记为新的一版，历次版本都保留。',
-                      content: (
-                        <BusinessPartyProfileEditMode
-                          key={row.partyId}
-                          partyId={row.partyId}
-                          registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
-                          footerSlot={footerSlot}
-                          onLanded={(sent) => {
-                            addToast({ type: 'success', title: `资料已更新${sent ? `，登记为第 ${sent.revision} 版` : ''}` });
-                            setUnsaved(false);
-                            onExitProfileEdit();
-                          }}
-                          onUnsavedChange={setUnsaved}
-                          onCancel={() => (unsaved ? setConfirming(() => () => onExitProfileEdit()) : onExitProfileEdit())}
-                          onRequestLeave={(href) =>
-                            unsaved ? setConfirming(() => () => onExitProfileEdit(() => (window.location.hash = href))) : onExitProfileEdit(() => (window.location.hash = href))
-                          }
-                        />
-                      ),
-                    },
-                  ]
-                : []),
               ...(businessPartyHasBanners(row)
                 ? [
                     {
@@ -463,21 +501,7 @@ export function BusinessPartyDetailPage({
       layout="sections"
       viewState={viewState}
     />
-    <ConfirmDialog
-      renderFooter={confirmDialogFooter}
-      open={confirming !== null}
-      tone="warning"
-      title="放弃修改？"
-      message="有内容还没有保存，离开后填写的内容不会保留。"
-      confirmLabel="放弃"
-      cancelLabel="继续编辑"
-      onConfirm={() => {
-        const run = confirming;
-        setConfirming(null);
-        run?.();
-      }}
-      onCancel={() => setConfirming(null)}
-    />
+    {confirmDialog}
     </>
   );
 }

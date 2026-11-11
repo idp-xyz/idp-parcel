@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { BusinessPartyProfileRevisionRecord } from './api';
+import { languageTagLabel } from './legal-entity-profile';
 import {
   businessPartyProfileChanged,
+  businessPartyProfileComparisonOf,
   businessPartyProfileDraftBasedOn,
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
@@ -14,6 +16,7 @@ import {
   emptyBusinessPartyProfileDraft,
   otherLanguageNameOf,
   profileContactsEmptyNoteOf,
+  profileEditTagText,
   profileSummaryEmptyNoteOf,
   suggestedBusinessPartyProfileRevision,
 } from './business-party-profile';
@@ -147,4 +150,41 @@ test('资料空着时的标题与说明', () => {
   deepEqual(profileContactsEmptyNoteOf({ kind: 'present', record: { ...record, contacts: [] }, body }), { title: '还没有登记联系人', lines });
   deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: true, body }), { title: '还没有生效的资料', lines });
   deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: false, body: { ...body, revisions: [] } }), { title: '还没有登记资料', lines });
+});
+
+// Covers: 保存前核对的比较（票 business-party-redesign/11）——预填后不动，没有一行有变化；其他语言名称按语言比、排在最前：
+// 名称变了是修改、多一种语言是新增、去掉是移除，整行空着的不算；内容各格的改动借法人资料的比较，排在名称之后。
+test('businessPartyProfileComparisonOf：其他语言名称排在最前，内容各格借法人资料的比较', () => {
+  const untouched = businessPartyProfileDraftBasedOn(record.partyId, record);
+  const changedOf = (draft: typeof untouched) =>
+    businessPartyProfileComparisonOf(record, draft, 'UTC')
+      .fields.filter((field) => field.kind !== 'unchanged')
+      .map((field) => [field.field, field.kind, field.before, field.after]);
+  deepEqual(changedOf(untouched), []);
+
+  const renamed = {
+    ...untouched,
+    names: [
+      { language: 'en', name: ' SYN Shipper 1 ' },
+      { language: 'ja', name: 'SYN 荷主' },
+      { language: '', name: '' },
+    ],
+  };
+  deepEqual(changedOf(renamed), [
+    [`其他语言名称 · ${languageTagLabel('en')}`, 'modified', 'SYN Shipper One', 'SYN Shipper 1'],
+    [`其他语言名称 · ${languageTagLabel('ja')}`, 'added', '', 'SYN 荷主'],
+  ]);
+
+  const dropped = { ...untouched, names: [], invoiceTitle: '合成货主一号有限公司' };
+  deepEqual(changedOf(dropped), [
+    [`其他语言名称 · ${languageTagLabel('en')}`, 'removed', 'SYN Shipper One', ''],
+    ['开票抬头', 'modified', '合成货主一号', '合成货主一号有限公司'],
+  ]);
+});
+
+// Covers: 编辑态页头那枚标记——有生效版说在第几版的基础上改；基于的那一版还没生效时说清；一版都没有是登记第一版。
+test('profileEditTagText 说清在哪一版的基础上改', () => {
+  equal(profileEditTagText(null, false), '正在登记资料 · 第 1 版');
+  equal(profileEditTagText({ revision: 2 }, false), '正在更新资料 · 在第 2 版的基础上改');
+  equal(profileEditTagText({ revision: 3 }, true), '正在更新资料 · 在尚未生效的第 3 版的基础上改');
 });

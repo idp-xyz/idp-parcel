@@ -8,6 +8,7 @@ import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
 import { businessPartyPanelTabsOf, shownBusinessPartyPanelTab, type BusinessPartyPanelTab } from './business-party-list';
 import { businessPartyObjectHash, profileEditHash } from './business-parties-address';
+import { markEditFromRoster, type ProfileEditSectionId } from './business-party-edit-origin';
 import { effectiveProfileOf, useBusinessPartyProfiles } from './BusinessPartyProfileSection';
 import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
@@ -171,8 +172,10 @@ export function BusinessPartyDetailPanel({
     selectTab('overview');
     setRelatedTarget(target);
   };
-  // 整份「更新资料」是对象页的编辑态，照公司主体栏：带编辑键去对象页，栏里不开表单。
-  const openProfileForm = () => {
+  // 整份「更新资料」是对象页的编辑态，照公司主体栏：带编辑键去对象页，栏里不开表单。去之前记一笔「从名录来、落到哪一段」
+  // （business-party-edit-origin.ts）：地址键不带来处，对象页退出编辑态时凭这一笔回到名录这张标签。
+  const openProfileForm = (section: ProfileEditSectionId | null = null) => {
+    markEditFromRoster(row.partyId, section);
     window.location.hash = profileEditHash(businessPartyObjectHash(row.partyId), true);
   };
   // 提示、头区动作（票 business-party-ux/08，判读在 business-party-panel-first-screen.ts）、签上的数、概要的卡与「关联」签读同一份缓存。
@@ -225,7 +228,7 @@ export function BusinessPartyDetailPanel({
                 size="sm"
                 variant={actions.updateProfile === 'primary' ? 'default' : 'outline'}
                 className={actions.updateProfile === 'primary' ? `${primaryActionClass} type-body` : 'type-body text-idpxyz-breadcrumb'}
-                onClick={openProfileForm}
+                onClick={() => openProfileForm()}
               >
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 更新资料

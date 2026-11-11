@@ -36,6 +36,7 @@ export function LegalEntityProfileFields({
   locked,
   onLeave,
   groups,
+  hideTitleOf,
   registeredAddressOptional = false,
   taxNumberCountry,
 }: {
@@ -47,12 +48,15 @@ export function LegalEntityProfileFields({
   onLeave: (href: string) => void;
   /** 只渲染这几组（分区抽屉，票 company-subject-section-edit/01）；不给渲染全部。 */
   groups?: readonly ProfileFieldGroupId[];
+  /** 这几组不画自己的标题：调用方已经把同一个标题摆成了卡头（往来单位的编辑态），再画一遍就是上下两行同一个词。 */
+  hideTitleOf?: readonly ProfileFieldGroupId[];
   /** 往来单位资料（ADR-0369）各项都可缺：注册地址不标必填，地址组的说明也换一句。法人资料不给。 */
   registeredAddressOptional?: boolean;
   /** 监管登记号的类型候选按哪个国家 / 地区取；不给按注册地址国家。往来单位带注册国家时由调用方交它。 */
   taxNumberCountry?: string;
 }) {
   const show = (group: ProfileFieldGroupId) => groups === undefined || groups.includes(group);
+  const titleHidden = (group: ProfileFieldGroupId) => hideTitleOf?.includes(group) ?? false;
   const platformListId = useId();
   // 语言标签用 datalist 而不是选单：常用的四种一点即选，别的 BCP 47 标签照样能手填（ADR-0359 决定四只锁形状）。
   const languageListId = useId();
@@ -75,7 +79,7 @@ export function LegalEntityProfileFields({
         {invoiceTitleLanguageOptions.map((option) => <option key={option.value} value={option.value} label={option.label} />)}
       </datalist>
       {show('representative') ? (
-      <FormGroup title="代表人 / 负责人" description="按登记资料填写；与业务联系人分别管理。">
+      <FormGroup title="代表人 / 负责人" description="按登记资料填写；与业务联系人分别管理。" titleHidden={titleHidden('representative')}>
         <Field label="身份类型" path="profiles[0].representative" problems={problems}>
           <select
             aria-label="代表人身份类型"
@@ -104,6 +108,7 @@ export function LegalEntityProfileFields({
       {show('addresses') ? (
       <FormGroup
         title="地址"
+        titleHidden={titleHidden('addresses')}
         description={
           registeredAddressOptional
             ? '都可以不填；往来单位登了注册地时，注册地址的国家 / 地区须与它一致。'
@@ -153,7 +158,11 @@ export function LegalEntityProfileFields({
       </FormGroup>
       ) : null}
       {show('invoicing') ? (
-      <FormGroup title="税务与开票" description="开票抬头留空表示此版本不带开票资料；其他语言的抬头挂在它上面，哪种语言印到单据上由开单方按收件方定。">
+      <FormGroup
+        title="税务与开票"
+        titleHidden={titleHidden('invoicing')}
+        description="开票抬头留空表示此版本不带开票资料；其他语言的抬头挂在它上面，哪种语言印到单据上由开单方按收件方定。"
+      >
         <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
           <Input
             aria-label="开票抬头"
@@ -281,6 +290,7 @@ export function LegalEntityProfileFields({
       {show('bankAccounts') ? (
       <FormGroup
         title="收款账户"
+        titleHidden={titleHidden('bankAccounts')}
         description="对账单与发票上印的我方银行账户，可按币种登记多个。币种只说这个账户收哪种钱，不决定结算币种。"
       >
         <div className="md:col-span-2 space-y-4">
@@ -361,7 +371,7 @@ export function LegalEntityProfileFields({
       </FormGroup>
       ) : null}
       {show('contacts') ? (
-      <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。">
+      <FormGroup title="联系人" description="可配置多个用途；每种用途可分别指名一位主要联系人。" titleHidden={titleHidden('contacts')}>
         <div className="md:col-span-2 space-y-4">
           {draft.contacts.map((row, index) => (
             <fieldset key={index} disabled={locked} className="min-w-0 border-t border-idpxyz-border pt-3">

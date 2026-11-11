@@ -125,6 +125,41 @@ export function identificationChanged(row: BusinessPartyIdentificationRecord, dr
   );
 }
 
+export interface IdentityCorrectionChange {
+  field: string;
+  before: string;
+  after: string;
+}
+
+const numbersText = (rows: readonly PartyNumberRow[]) =>
+  [...rows].map((row) => `${row.typeCode} ${row.number}`.trim()).sort().join('；');
+const referencesText = (rows: readonly PartyExternalReferenceRow[]) =>
+  [...rows].map((row) => `${[row.system, row.purpose].filter(Boolean).join(' · ')} ${row.code}`.trim()).sort().join('；');
+
+/**
+ * 「更正登记信息」保存前核对的那几行（票 business-party-redesign/11）：名称、注册国家 / 地区、注册号、外部系统编码，只列有改动的。
+ * 号与编码各折成一段文字比，与录入次序无关，没填的空行不算——与 identificationChanged 判「有没有改动」同一个口径。码照原样列
+ * （国家码、类型码），列的是将要送上去的值。
+ */
+export function identityCorrectionChanges(
+  row: BusinessPartyIdentificationRecord,
+  currentName: string,
+  draft: BusinessPartyDraft,
+): IdentityCorrectionChange[] {
+  const before = identificationDraftOf(row);
+  const rows: IdentityCorrectionChange[] = [
+    { field: '名称', before: currentName, after: draft.name.trim() },
+    { field: '注册国家 / 地区', before: before.registrationCountry, after: draft.registrationCountry.trim() },
+    { field: '注册号', before: numbersText(before.lifetimeNumbers), after: numbersText(filledNumbers(draft.lifetimeNumbers)) },
+    {
+      field: '外部系统编码',
+      before: referencesText(before.externalReferences),
+      after: referencesText(filledReferences(draft.externalReferences)),
+    },
+  ];
+  return rows.filter((entry) => entry.before !== entry.after);
+}
+
 /** 表单认领的 JSON 路径；一项一批，下标固定 0。 */
 export const businessPartyFieldPaths = [
   'businessParties[0].partyId',
