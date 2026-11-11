@@ -91,9 +91,6 @@ var releases = []release{
 	{"party-commercial/registration-number-types/SI", 1, "8cad3f39e10b99059f001045ca303b5bcb8eae5ba1c919f0b4a24d6e08cf9e30"},
 	{"party-commercial/registration-number-types/SK", 1, "b891afd0b84686f937c7022cfbfe5a328cc6c79bed9e01c54f0e394b2b5d9f10"},
 	{"party-commercial/registration-number-types/US", 1, "42ca69905eb38616291c5f0fbebefd7a4093ee0ae89bff02d3b3187aee81cae8"},
-	// ADR-0374 决定三：专线型 FBA 头程的提交条件，供服务产品的接单规则包以 CROSS_FIELD_CONDITION 引用采用（票
-	// declared-goods-lines/08）。判法在 BD-PS-006 的执行器里，执行器落地之前引了也不判。
-	{"parcel-shipment/submission-conditions/FBA-HEADHAUL", 1, "7edfc41dc96ef4d145f785fdeb24e3a58011f6a744000854935a61f2c83fbeb6"},
 }
 
 // Reference 指名一份参考配置的一个版本。
