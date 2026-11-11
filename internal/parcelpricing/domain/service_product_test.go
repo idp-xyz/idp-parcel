@@ -172,3 +172,56 @@ func TestAnEvaluationOfAPPC7PlanIsWrittenUnderPPC7AndReplaysToTheSameDigest(t *t
 		t.Fatalf("重放：%s，摘要 %s 对 %s", replayed.Status(), replayed.SemanticDigest(), original.SemanticDigest())
 	}
 }
+
+// 计价输入快照记选卡用的服务产品（ADR-0378 决定三）：可缺的一格，进评价快照与解释、不进语义摘要——同一张卡、同一份输入算出的
+// 价不随它变。
+func TestTheInputSnapshotRecordsTheServiceProductOutsideTheSemanticDigest(t *testing.T) {
+	plan := sellUnnamedPlan(t)
+	plain := syntheticInput(t, "3", "Z1")
+	if _, declared := plain.ServiceProduct(); declared {
+		t.Fatal("没记产品的输入报成记了")
+	}
+	if _, err := plain.WithServiceProduct(domain.ServiceProductReference{}); !errors.Is(err, domain.ErrPricingInputInvalid) {
+		t.Fatalf("零值产品：%v，没按产品选就别调", err)
+	}
+	withProduct, err := plain.WithServiceProduct(product(t, "SYN-PROD-FBA"))
+	if err != nil {
+		t.Fatalf("记产品：%v", err)
+	}
+
+	without := evaluate(t, "eval-product", plan, plain)
+	with := evaluate(t, "eval-product", plan, withProduct)
+	if with.SemanticDigest() != without.SemanticDigest() {
+		t.Fatal("服务产品进了语义摘要")
+	}
+	if explanation := with.Explanation(); len(explanation) == 0 || !strings.Contains(explanation[0], "SYN-PROD-FBA") {
+		t.Fatalf("解释没点出按哪个产品选的卡：%v", explanation)
+	}
+	for _, line := range without.Explanation() {
+		if strings.Contains(line, "service product") {
+			t.Fatalf("没按产品选的评价解释里出现了产品：%v", without.Explanation())
+		}
+	}
+
+	raw, err := domain.MarshalEvaluationSnapshot(with)
+	if err != nil {
+		t.Fatalf("折装评价快照：%v", err)
+	}
+	if !strings.Contains(string(raw), `"serviceProduct":"SYN-PROD-FBA"`) {
+		t.Fatalf("评价快照没记产品：%s", raw)
+	}
+	restored, err := domain.RehydrateEvaluationSnapshot(raw)
+	if err != nil {
+		t.Fatalf("重建评价：%v", err)
+	}
+	if got, declared := restored.Input().ServiceProduct(); !declared || got.String() != "SYN-PROD-FBA" {
+		t.Fatalf("重建后的产品 = %q %v", got.String(), declared)
+	}
+	plainRaw, err := domain.MarshalEvaluationSnapshot(without)
+	if err != nil {
+		t.Fatalf("折装评价快照：%v", err)
+	}
+	if strings.Contains(string(plainRaw), "serviceProduct") {
+		t.Fatalf("没按产品选的评价快照带了 serviceProduct 键：%s", plainRaw)
+	}
+}

@@ -162,6 +162,10 @@ type PricingInputSnapshot struct {
 	// 不套默认。它不进规范化文档——影响评价结果的方式只有「读它的规则是否命中」，那已落在费用行与状态上，与结算币种
 	// 同一种放法；只进评价快照。
 	addressNature AddressNature
+	// serviceProduct 是选售价卡用的服务产品（ADR-0378 决定三），可缺：零值即委托没申报，或这次评价不按产品选卡。它记的是
+	// 「这张卡是按哪个产品选的」，不进规范化文档——同一张卡、同一份输入算出的价不随它变，选卡已经落在方案引用上；与地址
+	// 性质同一种放法，只进评价快照。产品取委托的申报，不是商业依据（ADR-0260 决定一）。
+	serviceProduct ServiceProductReference
 	// comparison 是本次评价的比较币种（ADR-0148 决定四）：路由策略版本的租户取值，只服务内部
 	// 择优比较，不改结算。与 settlement 同路随快照进来，不另立来源。
 	comparison *Currency
@@ -294,6 +298,21 @@ func (input PricingInputSnapshot) WithAddressNature(nature AddressNature) (Prici
 // AddressNature 报出输入声明的收件地址性质；未声明时第二个返回值为假。
 func (input PricingInputSnapshot) AddressNature() (AddressNature, bool) {
 	return input.addressNature, input.addressNature != ""
+}
+
+// WithServiceProduct 记下选售价卡用的服务产品（ADR-0378 决定三）。零值不收：没申报就不调用，快照缺这一格即没按产品选。
+func (input PricingInputSnapshot) WithServiceProduct(product ServiceProductReference) (PricingInputSnapshot, error) {
+	if !input.valid() || !product.Declared() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	updated.serviceProduct = product
+	return updated, nil
+}
+
+// ServiceProduct 报出选售价卡用的服务产品；没按产品选时第二个返回值为假。
+func (input PricingInputSnapshot) ServiceProduct() (ServiceProductReference, bool) {
+	return input.serviceProduct, input.serviceProduct.Declared()
 }
 
 // ComparisonCurrency 报出本次评价声明的比较币种；未声明即只按卡币种计价，不多算一笔比较换算。
@@ -462,6 +481,9 @@ func (input PricingInputSnapshot) valid() bool {
 		return false
 	}
 	if input.addressNature != "" && !input.addressNature.valid() {
+		return false
+	}
+	if input.serviceProduct.value != "" && !input.serviceProduct.valid() {
 		return false
 	}
 	// 成员清单与主体种类成对：聚合主体必有且合计实重就是快照的实重，单包裹主体必无。

@@ -216,9 +216,9 @@ func TestPreAcceptanceEstimatesAreReproducibleForTheSameSubmissionVersion(t *tes
 	}
 }
 
-// 选卡那一步的三格各自停、不挑卡（决定三）：未配置与适用冲突照答，冲突交回候选；解析口读不回是未决。三格都不读客户的申报：卡都
-// 没有，读了也是白读。
-func TestPreAcceptanceEstimatesStopAtEachCardCellWithoutReadingTheDeclaration(t *testing.T) {
+// 选卡那一步的三格各自停、不挑卡（决定三）：未配置与适用冲突照答，冲突交回候选；解析口读不回是未决。申报先读了一次——选哪张卡
+// 要看这一版申报的服务产品（ADR-0378 决定三）——但一件都不算。
+func TestPreAcceptanceEstimatesStopAtEachCardCellAfterReadingTheDeclarationOnce(t *testing.T) {
 	conflicting := []domain.VersionReference{minimalPlan(t).Reference(), catalogueBoundPlan(t).Reference()}
 	for name, tc := range map[string]struct {
 		resolution ports.PriceCardInForceResolution
@@ -254,8 +254,8 @@ func TestPreAcceptanceEstimatesStopAtEachCardCellWithoutReadingTheDeclaration(t 
 				!slices.Equal(result.Conflict, tc.conflict) {
 				t.Fatalf("result = %+v, 想要 %s / %s、候选 %+v、一件不算", result, tc.outcome, tc.reason, tc.conflict)
 			}
-			if fixture.declarations.calls != 0 {
-				t.Fatalf("申报读口被问 %d 次, 想要选卡停下时一次都不问", fixture.declarations.calls)
+			if fixture.declarations.calls != 1 || fixture.cards.calls != 1 {
+				t.Fatalf("申报读口 %d 次、在用解析 %d 次, 想要各一次：先读申报、再按申报的产品选卡", fixture.declarations.calls, fixture.cards.calls)
 			}
 		})
 	}
@@ -321,7 +321,7 @@ func TestPreAcceptanceEstimatesNameEachMissingCellWithoutFillingIt(t *testing.T)
 	}
 }
 
-// 委托或版本不可见是自己的一格，不是一份零件的已形成；读口读不回是未决。
+// 委托或版本不可见是自己的一格，不是一份零件的已形成；读口读不回是未决。两格都停在选卡之前：没有申报就不知道按哪个产品选。
 func TestPreAcceptanceEstimatesAnswerAnInvisibleSubmissionAndAnUnreachableReadSeparately(t *testing.T) {
 	invisible := newPreAcceptanceFixture(t, inForceCard(catalogueBoundPlan(t)), ports.SubmissionDeclaration{})
 	invisible.declarations.found = false
@@ -336,6 +336,9 @@ func TestPreAcceptanceEstimatesAnswerAnInvisibleSubmissionAndAnUnreachableReadSe
 	if err != nil || result.Outcome != application.PreAcceptanceEstimatesUndecided ||
 		result.Reason != application.PreAcceptanceSubmissionDeclarationUnavailable {
 		t.Fatalf("读不回：result = %+v err = %v, 想要未决、点名申报读口", result, err)
+	}
+	if invisible.cards.calls != 0 || unreachable.cards.calls != 0 {
+		t.Fatalf("在用解析被问 %d / %d 次, 想要申报停下时一次都不问", invisible.cards.calls, unreachable.cards.calls)
 	}
 }
 

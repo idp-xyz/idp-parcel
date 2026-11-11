@@ -77,6 +77,7 @@ const (
 	RequestPricingInputResolutionUnavailable
 	RequestEvaluationIdentityUnavailable
 	RequestEvaluationFormationUndecided
+	RequestServiceProductUnavailable
 )
 
 func (reason FormEvaluationFromRequestUndecidedReason) String() string {
@@ -91,6 +92,8 @@ func (reason FormEvaluationFromRequestUndecidedReason) String() string {
 		return "EVALUATION_IDENTITY_UNAVAILABLE"
 	case RequestEvaluationFormationUndecided:
 		return "EVALUATION_FORMATION_UNDECIDED"
+	case RequestServiceProductUnavailable:
+		return "SERVICE_PRODUCT_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -133,15 +136,18 @@ type FormEvaluationFromRequestResult struct {
 	Missing []string
 }
 
-// FormEvaluationFromRequestDeps 是入口的依赖。四口必备：回指读口守「同一请求一份评价」、解析读口是第 ① 步、
-// 铸造口签评价标识、既有评价编排是第 ③ 步。Inputs 可缺席，是给还没装消费侧解析器的调用方：缺席时入口答
-// 「输入不可得」并点名三只读口。生产装配装的是 adapters/transportfulfillment 的解析器（ADR-0171）。
+// FormEvaluationFromRequestDeps 是入口的依赖。除 Inputs 外都必备：回指读口守「同一请求一份评价」、解析读口是第 ① 步、
+// 铸造口签评价标识、既有评价编排是第 ③ 步；ServiceProducts 是 SELL 请求选卡前读委托申报产品的那一口（ADR-0378 决定三）。
+// 它必备而不是可缺：漏装了，申报了产品的委托会静默落到不声明产品的卡上，算出的价看不出错。Inputs 可缺席，是给还没装
+// 消费侧解析器的调用方：缺席时入口答「输入不可得」并点名三只读口。生产装配装的是 adapters/transportfulfillment 的解析器
+// （ADR-0171）。
 type FormEvaluationFromRequestDeps struct {
-	Evaluations ports.EvaluationByRequestView
-	PriceCards  ports.PriceCardInForceResolver
-	Identity    ports.EvaluationIdentityFactory
-	Evaluate    *EvaluatePricingHandler
-	Inputs      ports.PricingInputResolver
+	Evaluations     ports.EvaluationByRequestView
+	PriceCards      ports.PriceCardInForceResolver
+	Identity        ports.EvaluationIdentityFactory
+	Evaluate        *EvaluatePricingHandler
+	Inputs          ports.PricingInputResolver
+	ServiceProducts ports.AcceptedServiceProductView
 }
 
 // FormEvaluationFromRequestHandler 是「按评价请求形成评价」的编排。计算一步都不在这里；它只做解析、造快照、
@@ -161,6 +167,7 @@ func NewFormEvaluationFromRequestHandler(deps FormEvaluationFromRequestDeps) (*F
 		{"price card in-force resolver", deps.PriceCards == nil},
 		{"evaluation identity factory", deps.Identity == nil},
 		{"evaluate pricing handler", deps.Evaluate == nil},
+		{"accepted service product view", deps.ServiceProducts == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -176,9 +183,10 @@ var missingInputReadPorts = []string{
 	"parcel-shipment: no read port for the origin / destination postal route (zone)",
 }
 
-// Handle 把一份评价请求推进到本入口的答案：受理 → 按回指找先到者（有则 `已存在`）→ ① 解析在用价卡（未配置 /
-// 适用冲突各自成格）→ ② 造快照（没有读口或读口答不可得都是 `输入不可得`）→ 铸标识 → ③ 造评价请求、带回指、
-// 交 EvaluatePricingHandler。铸标识放在造快照之后：停在前几格的请求不该消耗一个谁都不会引用的标识。
+// Handle 把一份评价请求推进到本入口的答案：受理 → 按回指找先到者（有则 `已存在`）→ SELL 请求读委托申报的服务产品 →
+// ① 解析在用价卡（未配置 / 适用冲突各自成格）→ ② 造快照（没有读口或读口答不可得都是 `输入不可得`），记上选卡用的产品
+// → 铸标识 → ③ 造评价请求、带回指、交 EvaluatePricingHandler。铸标识放在造快照之后：停在前几格的请求不该消耗一个谁都
+// 不会引用的标识。
 //
 // 依赖故障不上抛而答 `未决` 并指名停在哪一口：消费者据此重投，与 EvaluatePricingHandler 对依赖故障的处置同形；
 // 只有结构上到不了的答案才是 error。
@@ -198,8 +206,12 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 		return FormEvaluationFromRequestResult{Outcome: RequestEvaluationExisting, Evaluation: existing, HasEvaluation: true}, nil
 	}
 
+	product, err := handler.declaredServiceProduct(ctx, command)
+	if err != nil {
+		return undecidedFormation(RequestServiceProductUnavailable), nil
+	}
 	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction, command.Purpose, command.BasisAt,
-		domain.ServiceProductReference{})
+		product)
 	if err != nil {
 		return undecidedFormation(RequestPriceCardResolutionUnavailable), nil
 	}
@@ -219,6 +231,11 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	input, result, stopped := handler.resolveInput(ctx, command)
 	if stopped {
 		return result, nil
+	}
+	if product.Declared() {
+		if input, err = input.WithServiceProduct(product); err != nil {
+			return FormEvaluationFromRequestResult{Outcome: RequestEvaluationNotAccepted}, nil
+		}
 	}
 
 	id, err := handler.deps.Identity.MintEvaluationID(ctx)
@@ -254,6 +271,19 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	default:
 		return FormEvaluationFromRequestResult{}, fmt.Errorf("%w: %s", ErrUnexpectedFormationOutcome, formed.Outcome())
 	}
+}
+
+// declaredServiceProduct 取 SELL·客户费用请求选卡用的服务产品：覆盖被评价包裹的已接受委托申报的那一个（ADR-0378 决定三）。
+// 取委托的申报，不取商业解析——快照不带商业依据（ADR-0260 决定一）。BUY 请求按供应商协议的商业范围选卡，卡也声明不了产品，
+// 答零值、一口都不问。结算的评价请求不带产品，产品只从小包托运这一口来。
+func (handler *FormEvaluationFromRequestHandler) declaredServiceProduct(
+	ctx context.Context,
+	command FormEvaluationFromRequestCommand,
+) (domain.ServiceProductReference, error) {
+	if command.Direction != domain.PricingDirectionSell || !command.Sources.ParcelReferenced() {
+		return domain.ServiceProductReference{}, nil
+	}
+	return handler.deps.ServiceProducts.LoadAcceptedServiceProduct(ctx, command.Tenant, command.Sources.Parcel)
 }
 
 // resolveInput 是第 ② 步。没接读口与读口答不可得落同一格，缺项来路不同：前者由本入口点名三只读口，后者照读口

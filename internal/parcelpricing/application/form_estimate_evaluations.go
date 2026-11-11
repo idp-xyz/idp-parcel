@@ -137,6 +137,9 @@ type FormEstimateEvaluationsCommand struct {
 	// AddressNature 是收件地址性质。计价既不推断它也不从别处读它（PS 今天没有结构化的地址性质，ADR-0347 决定四）：
 	// 读它的卡要发起方声明，没声明就点名缺项，不套默认住宅或商业。
 	AddressNature *domain.AddressNature
+	// ServiceProduct 是按哪个服务产品选售价卡（ADR-0378 决定二、三），零值即没声明：只看不声明产品的卡。受理前估价由委托的申报
+	// 带进来，试算由发起方声明。
+	ServiceProduct domain.ServiceProductReference
 }
 
 // FormEstimateEvaluationsResult 是入口的答复。字段导出、不设访问器，形状随 FormEvaluationFromRequestResult。
@@ -205,7 +208,7 @@ func (handler *FormEstimateEvaluationsHandler) Handle(
 		return FormEstimateEvaluationsResult{Outcome: EstimateNotAccepted}, nil
 	}
 	plans, err := handler.deps.PriceCards.LoadApplicable(ctx, command.Tenant, command.Direction, command.Scope, command.BasisAt,
-		domain.ServiceProductReference{})
+		command.ServiceProduct)
 	if errors.Is(err, ports.ErrAmbiguousPriceCard) {
 		return handler.applicabilityConflict(ctx, command), nil
 	}
@@ -238,7 +241,7 @@ func (handler *FormEstimateEvaluationsHandler) applicabilityConflict(
 	command FormEstimateEvaluationsCommand,
 ) FormEstimateEvaluationsResult {
 	resolution, err := handler.deps.InForce.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction,
-		pairedPurpose(command.Direction), command.BasisAt, domain.ServiceProductReference{})
+		pairedPurpose(command.Direction), command.BasisAt, command.ServiceProduct)
 	if err != nil || resolution.Outcome != ports.PriceCardApplicabilityConflict {
 		return undecidedEstimate(EstimateConflictCandidatesUnavailable)
 	}
@@ -369,6 +372,12 @@ func estimateInput(
 			return domain.PricingInputSnapshot{}, nil, err
 		}
 	}
+	if command.ServiceProduct.Declared() {
+		input, err = input.WithServiceProduct(command.ServiceProduct)
+		if err != nil {
+			return domain.PricingInputSnapshot{}, nil, err
+		}
+	}
 	return input, nil, nil
 }
 
@@ -410,6 +419,8 @@ func estimateIdentity(command FormEstimateEvaluationsCommand, plan domain.Pricin
 	if command.AddressNature != nil {
 		parts = append(parts, "address-nature", command.AddressNature.String())
 	}
+	// 服务产品不进标识：它只定选哪张卡，卡的引用已经在上面；同一份声明、同一张卡算出的价不随它变。加进来会让受理前估价留痕里
+	// 存着的标识（ADR-0179 决定六）在申报了产品、仍选中同一张卡的委托上对不上复算。
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "EST-" + hex.EncodeToString(digest[:8])
 }

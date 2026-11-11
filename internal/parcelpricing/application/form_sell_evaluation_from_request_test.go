@@ -119,11 +119,12 @@ func newSellFixture(t *testing.T) *sellFixture {
 		Clock:      fixedClock{at: sellBasisAt.Add(time.Minute)},
 	})
 	handler, err := application.NewFormEvaluationFromRequestHandler(application.FormEvaluationFromRequestDeps{
-		Evaluations: base.byRequest,
-		PriceCards:  cards,
-		Identity:    base.identity,
-		Evaluate:    evaluate,
-		Inputs:      base.inputs,
+		Evaluations:     base.byRequest,
+		PriceCards:      cards,
+		Identity:        base.identity,
+		Evaluate:        evaluate,
+		Inputs:          base.inputs,
+		ServiceProducts: base.products,
 	})
 	if err != nil {
 		t.Fatalf("construct handler: %v", err)
