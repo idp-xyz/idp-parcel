@@ -117,6 +117,12 @@ type SubmitShipmentRequestCommand struct {
 	// CustomerParcelNumbers 是客户为声明包裹给出的包裹件号（ADR-0184 决定四），由接单入口与现签的内部标识配好带入，
 	// 允许缺席。委托接受时据它形成外部标识关联。
 	CustomerParcelNumbers []domain.CustomerParcelNumberDeclaration
+	// DeclaredGoods 随首个提交版本声明的货物明细（ADR-0373），允许缺席。它与 PayloadDigest 出自同一份草案内容，但装箱
+	// 分配挂在 DeclaredParcelIDs（现签的成员）上——摘要那一份挂的是客户包裹参考，两份不能互换。本编排不重算。
+	DeclaredGoods domain.GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是平台货件与每箱的平台箱标号（ADR-0374 决定四），允许缺席。
+	PlatformShipment  domain.PlatformShipmentDeclaration
+	PlatformBoxLabels []domain.PlatformBoxLabelDeclaration
 }
 
 // SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
@@ -489,10 +495,14 @@ func (handler *SubmitShipmentRequestHandler) proceed(
 		Elements:              command.DeclaredElements,
 		RequestedProduct:      command.RequestedServiceProduct,
 		CustomerParcelNumbers: command.CustomerParcelNumbers,
+		Goods:                 command.DeclaredGoods,
+		PlatformShipment:      command.PlatformShipment,
+		PlatformBoxLabels:     command.PlatformBoxLabels,
 	})
-	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) || errors.Is(err, domain.ErrInvalidCustomerParcelNumber) {
-		// 画像或客户包裹件号不贴合成员集合（指着不存在的成员、一员两张或两个号、半截测量）与候选立不起来同格：
-		// 客户输入的问题，答`输入未受理`让他改请求，不是本方的故障。
+	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) || errors.Is(err, domain.ErrInvalidCustomerParcelNumber) ||
+		errors.Is(err, domain.ErrInvalidGoodsDetails) || errors.Is(err, domain.ErrInvalidPlatformIdentifier) {
+		// 画像、客户包裹件号、货物明细或平台箱标号不贴合成员集合（指着不存在的成员、一员两张或两个号、半截测量、
+		// 装箱分配漏了成员）与候选立不起来同格：客户输入的问题，答`输入未受理`让他改请求，不是本方的故障。
 		return handler.refuse(ctx, command.Identity, ports.SubmissionRefusedInputNotAccepted)
 	}
 	if err != nil {

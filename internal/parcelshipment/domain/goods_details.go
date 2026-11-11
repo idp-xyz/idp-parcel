@@ -15,6 +15,10 @@ import (
 // 接入口答请求形状不对，重发同样内容不会好。
 var ErrInvalidGoodsDetails = errors.New("parcel shipment: invalid goods details")
 
+// ErrInvalidPacking 是货物明细里装箱分配那一部分的形状错，同时是 ErrInvalidGoodsDetails：接入口据它把出错位置指到包裹的
+// packing，而不是笼统的货物明细。
+var ErrInvalidPacking = fmt.Errorf("%w: invalid packing", ErrInvalidGoodsDetails)
+
 // maxGoodsLines 是产品机制，防一份声明无限增长；不是任何渠道或申报口的取值，它们更严的上限归各自（ADR-0373 决定二）。
 const maxGoodsLines = 999
 
@@ -476,7 +480,7 @@ func packingOf(specs []PackingAllocationSpec, lines []GoodsLineSpec, parcels []D
 	}
 	// 同一包裹同一行至多一条，所以条数到不了行数乘包裹数之上；先拦住，不为一份过大的声明逐条解析数量。
 	if len(specs) > len(lines)*len(members) {
-		return nil, fmt.Errorf("%w: packing has more entries than lines times parcels", ErrInvalidGoodsDetails)
+		return nil, fmt.Errorf("%w: packing has more entries than lines times parcels", ErrInvalidPacking)
 	}
 	type cellKey struct {
 		parcel DeclaredParcelID
@@ -487,19 +491,19 @@ func packingOf(specs []PackingAllocationSpec, lines []GoodsLineSpec, parcels []D
 	allocations := make([]PackingAllocation, 0, len(specs))
 	for _, spec := range specs {
 		if _, member := members[spec.Parcel]; !member {
-			return nil, fmt.Errorf("%w: packing names a parcel outside the request", ErrInvalidGoodsDetails)
+			return nil, fmt.Errorf("%w: packing names parcel %q, which is outside the request", ErrInvalidPacking, spec.Parcel)
 		}
 		if spec.Line < 1 || spec.Line > len(lines) {
-			return nil, fmt.Errorf("%w: packing names line %d, the declaration has %d", ErrInvalidGoodsDetails, spec.Line, len(lines))
+			return nil, fmt.Errorf("%w: parcel %q names line %d, the declaration has %d", ErrInvalidPacking, spec.Parcel, spec.Line, len(lines))
 		}
 		key := cellKey{parcel: spec.Parcel, line: spec.Line}
 		if _, twice := seen[key]; twice {
-			return nil, fmt.Errorf("%w: packing names line %d of one parcel twice", ErrInvalidGoodsDetails, spec.Line)
+			return nil, fmt.Errorf("%w: parcel %q names line %d twice", ErrInvalidPacking, spec.Parcel, spec.Line)
 		}
 		seen[key] = struct{}{}
 		// 分配一条就是说这一箱装了这一行若干：零件说不出任何事，所以要正数。
 		if !decimalShape(spec.Quantity) || !positiveDecimal(spec.Quantity) {
-			return nil, fmt.Errorf("%w: packing quantity %q is not a positive number", ErrInvalidGoodsDetails, spec.Quantity)
+			return nil, fmt.Errorf("%w: parcel %q packs %q of line %d, which is not a positive number", ErrInvalidPacking, spec.Parcel, spec.Quantity, spec.Line)
 		}
 		quantity, _ := new(big.Rat).SetString(spec.Quantity)
 		if sums[spec.Line-1] == nil {
@@ -513,7 +517,7 @@ func packingOf(specs []PackingAllocationSpec, lines []GoodsLineSpec, parcels []D
 	}
 	for index, line := range lines {
 		if !line.Quantity.present() {
-			return nil, fmt.Errorf("%w: line %d has packing but no quantity", ErrInvalidGoodsDetails, index+1)
+			return nil, fmt.Errorf("%w: line %d has packing but no quantity", ErrInvalidPacking, index+1)
 		}
 		total, _ := new(big.Rat).SetString(line.Quantity.Value)
 		allocated := sums[index]
@@ -522,10 +526,20 @@ func packingOf(specs []PackingAllocationSpec, lines []GoodsLineSpec, parcels []D
 		}
 		if total.Cmp(allocated) != 0 {
 			return nil, fmt.Errorf("%w: line %d declares %s but packing adds up to %s",
-				ErrInvalidGoodsDetails, index+1, line.Quantity.Value, allocated.FloatString(6))
+				ErrInvalidPacking, index+1, line.Quantity.Value, allocated.FloatString(6))
 		}
 	}
 	return allocations, nil
+}
+
+// goodsFitMembers 对着一个提交版本的成员集合核货物明细（checkPackingCoversMembers）。建单、补充与重建各核一次：货物明细与
+// 成员是分开交进来的，聚合不收两边对不上的一份。
+func goodsFitMembers(goods GoodsDetails, parcels []DeclaredParcelID) error {
+	members := make(map[DeclaredParcelID]struct{}, len(parcels))
+	for _, parcel := range parcels {
+		members[parcel] = struct{}{}
+	}
+	return checkPackingCoversMembers(goods.packing, members)
 }
 
 // checkPackingCoversMembers 核装箱分配只指成员、每个成员至少一条。构造时与算摘要时各核一次，后者对着这份提交的成员集合：
@@ -537,14 +551,41 @@ func checkPackingCoversMembers(packing []PackingAllocation, members map[Declared
 	covered := make(map[DeclaredParcelID]struct{}, len(members))
 	for _, allocation := range packing {
 		if _, member := members[allocation.parcel]; !member {
-			return fmt.Errorf("%w: packing names a parcel outside the request", ErrInvalidGoodsDetails)
+			return fmt.Errorf("%w: packing names parcel %q, which is outside the request", ErrInvalidPacking, allocation.parcel)
 		}
 		covered[allocation.parcel] = struct{}{}
 	}
-	if len(covered) != len(members) {
-		return fmt.Errorf("%w: packing leaves a parcel out; declare it for every parcel or not at all", ErrInvalidGoodsDetails)
+	for member := range members {
+		if _, packed := covered[member]; !packed {
+			return fmt.Errorf("%w: packing leaves parcel %q out; declare it for every parcel or not at all", ErrInvalidPacking, member)
+		}
 	}
 	return nil
+}
+
+// WithPackingParcels 交回装箱分配换了包裹标识的一份拷贝，其余不动。接入口用它把对着客户包裹参考造好、校验过的货物明细
+// 挪到现签或回执里的成员上：两边是同一份内容，不必为第二套标识再解析、再求和一遍。renamed 要覆盖分配指到的每个包裹。
+func (details GoodsDetails) WithPackingParcels(renamed map[DeclaredParcelID]DeclaredParcelID) (GoodsDetails, error) {
+	// 换名要一一对应：两个来源包裹换成同一个成员，同一个成员同一行就会有两条分配，破坏「至多一条」。
+	targets := make(map[DeclaredParcelID]DeclaredParcelID, len(renamed))
+	for source, target := range renamed {
+		if earlier, taken := targets[target]; taken && earlier != source {
+			return GoodsDetails{}, fmt.Errorf("%w: parcels %q and %q both become %q", ErrInvalidPacking, earlier, source, target)
+		}
+		targets[target] = source
+	}
+	copied := details
+	copied.packing = make([]PackingAllocation, 0, len(details.packing))
+	for _, allocation := range details.packing {
+		parcel, known := renamed[allocation.parcel]
+		if !known || !parcel.valid() {
+			return GoodsDetails{}, fmt.Errorf("%w: no member for packed parcel %q", ErrInvalidPacking, allocation.parcel)
+		}
+		allocation.parcel = parcel
+		copied.packing = append(copied.packing, allocation)
+	}
+	copied.lines = append([]GoodsLine(nil), details.lines...)
+	return copied, nil
 }
 
 func goodsLineOf(number int, spec GoodsLineSpec) (GoodsLine, error) {
@@ -554,6 +595,11 @@ func goodsLineOf(number int, spec GoodsLineSpec) (GoodsLine, error) {
 	if err := spec.checkShape(); err != nil {
 		return GoodsLine{}, fmt.Errorf("%w: line %d: %v", ErrInvalidGoodsDetails, number, err)
 	}
+	return goodsLineValueOf(number, spec), nil
+}
+
+// goodsLineValueOf 只把输入搬成值，不核形状；接入走 goodsLineOf 先核，读回走 RehydrateGoodsDetails 不核。
+func goodsLineValueOf(number int, spec GoodsLineSpec) GoodsLine {
 	descriptions := make([]GoodsDescription, 0, len(spec.Descriptions))
 	for _, description := range spec.Descriptions {
 		descriptions = append(descriptions, GoodsDescription{language: description.Language, text: goodsCellOf(description.Text)})
@@ -580,5 +626,52 @@ func goodsLineOf(number int, spec GoodsLineSpec) (GoodsLine, error) {
 			orderNumber: goodsCellOf(spec.SalesOrder.OrderNumber),
 			orderLine:   goodsCellOf(spec.SalesOrder.OrderLine),
 		},
-	}, nil
+	}
+}
+
+// RehydrateGoodsDetails 还原库里已经存下的货物明细，不再过接入的门（行数上限、可存文本、十进制形状、分配求和）：门守的是进
+// 来，不守读回——门日后收紧，已存的委托照样要读得回来（与 RehydrateExternalIdentifierNumber 同一个理由）。装箱分配是否贴合
+// 成员，由聚合重建时对着版本的成员核一次（goodsFitMembers）。只给仓储还原用，新内容一律走 NewGoodsDetails。
+func RehydrateGoodsDetails(spec GoodsDetailsSpec) GoodsDetails {
+	details := GoodsDetails{
+		category:     spec.Category,
+		categoryMark: spec.CategoryMark,
+		categoryNote: goodsCellOf(spec.CategoryNote),
+	}
+	for index, line := range spec.Lines {
+		details.lines = append(details.lines, goodsLineValueOf(index+1, line))
+	}
+	for _, allocation := range spec.Packing {
+		details.packing = append(details.packing, PackingAllocation{parcel: allocation.Parcel, line: allocation.Line, quantity: allocation.Quantity})
+	}
+	return details
+}
+
+// ParseDeclarationSourceMark、ParseContentCategory 与 ParseCommodityCodeSide 把封闭集合的词译回取值，给接入口与仓储共用：
+// 词表只在各自的 String 一处，解析按它逐格比对，不另写一份。第二个返回值为假即这个词不在集合里。
+func ParseDeclarationSourceMark(word string) (DeclarationSourceMark, bool) {
+	for _, mark := range []DeclarationSourceMark{SourceMarkThisDeclaration, SourceMarkBoxList, SourceMarkCommodityDeclaration} {
+		if mark.String() == word {
+			return mark, true
+		}
+	}
+	return DeclarationSourceMarkInvalid, false
+}
+
+func ParseContentCategory(word string) (ContentCategory, bool) {
+	for category := ContentCategoryGift; category <= ContentCategoryOther; category++ {
+		if category.String() == word {
+			return category, true
+		}
+	}
+	return ContentCategoryInvalid, false
+}
+
+func ParseCommodityCodeSide(word string) (CommodityCodeSide, bool) {
+	for _, side := range []CommodityCodeSide{CommodityCodeExportSide, CommodityCodeImportSide} {
+		if side.String() == word {
+			return side, true
+		}
+	}
+	return CommodityCodeSideInvalid, false
 }

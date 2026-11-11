@@ -90,6 +90,9 @@ const (
 	// ChannelParcelNumber 是渠道在面单交易包裹结果里签发的包裹级标识（件号、尾程号一类）：分配方是该交易的渠道
 	// 服务方，标识包裹。
 	ChannelParcelNumber
+	// PlatformBoxLabel 是销售平台给每一箱的箱标号（如亚马逊 FBA 箱标）：客户在委托里为声明包裹报上，分配方是委托所报
+	// 平台货件的销售平台，标识包裹（ADR-0374 决定四）。来源与客户包裹件号同一条：首次提交时声明、接受时形成关联。
+	PlatformBoxLabel
 )
 
 func (kind ExternalIdentifierKind) String() string {
@@ -98,6 +101,8 @@ func (kind ExternalIdentifierKind) String() string {
 		return "CUSTOMER_PARCEL_NUMBER"
 	case ChannelParcelNumber:
 		return "CHANNEL_PARCEL_NUMBER"
+	case PlatformBoxLabel:
+		return "PLATFORM_BOX_LABEL"
 	default:
 		return ""
 	}
@@ -118,7 +123,7 @@ func (kind ExternalIdentifierKind) CountsInCustomerAccountSpace() bool {
 // CustomerAccountSpaceKinds 交回在客户账户编号空间里算数的各类型。身份核对读口按它比范围相容，分类只在这里一处。
 func CustomerAccountSpaceKinds() []ExternalIdentifierKind {
 	var kinds []ExternalIdentifierKind
-	for _, kind := range []ExternalIdentifierKind{CustomerParcelNumber, ChannelParcelNumber} {
+	for _, kind := range []ExternalIdentifierKind{CustomerParcelNumber, ChannelParcelNumber, PlatformBoxLabel} {
 		if kind.CountsInCustomerAccountSpace() {
 			kinds = append(kinds, kind)
 		}
@@ -282,6 +287,29 @@ func (request ShipmentRequest) ExternalIdentifierRelationsFormedByAcceptance(ide
 			scope:     ExternalIdentifierScope{requiredValue{value: customer}},
 			number:    declaration.number,
 			parcel:    declaration.parcel,
+			basis:     ExternalIdentifierBasis{requiredValue{value: decision.DecisionID().String()}},
+			formedAt:  baseline.FixedAt(),
+		})
+	}
+	// 平台箱标号同一时刻、同一依据形成；分配方与适用范围是委托所报平台货件的销售平台——号在平台的编号空间里算数，不在
+	// 客户账户的（ADR-0374 决定四），所以 CountsInCustomerAccountSpace 对它答否、核对时恒范围相容。
+	platform := request.platformShipment.Platform()
+	for _, label := range request.platformBoxLabels {
+		if !baseline.covers(label.parcel) {
+			continue
+		}
+		// 读回的声明不再过入册门（RehydratePlatformBoxLabel）：门日后收紧，存得下快照的号未必存得进关联册。这样的号不形成关联，
+		// 不让整笔接受回滚——这一箱照旧能按包裹号、客户件号认出来，只是按箱标号认不出。
+		if passesRegisterGate(label.number) != nil || len(platform) > externalIdentifierNumberMaxBytes {
+			continue
+		}
+		relations = append(relations, ExternalIdentifierRelation{
+			tenant:    identity.TenantID(),
+			kind:      PlatformBoxLabel,
+			allocator: ExternalIdentifierAllocator{requiredValue{value: platform}},
+			scope:     ExternalIdentifierScope{requiredValue{value: platform}},
+			number:    label.number,
+			parcel:    label.parcel,
 			basis:     ExternalIdentifierBasis{requiredValue{value: decision.DecisionID().String()}},
 			formedAt:  baseline.FixedAt(),
 		})

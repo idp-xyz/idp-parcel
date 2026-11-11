@@ -261,6 +261,10 @@ type requestDocument struct {
 	SourceDataVersions []sourceDataVersionDocument `json:"sourceDataVersions,omitempty"`
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四）。未给号即 omitempty 不写，旧形快照读回为空。
 	CustomerParcelNumbers []customerParcelNumberDocument `json:"customerParcelNumbers,omitempty"`
+	// PlatformShipment 与 PlatformBoxLabels 是委托上的平台声明（ADR-0374 决定四），落法照 CustomerParcelNumbers：没报即
+	// omitempty 不写，旧形快照读回为空。零迁移。
+	PlatformShipment  *platformShipmentDocument  `json:"platformShipment,omitempty"`
+	PlatformBoxLabels []platformBoxLabelDocument `json:"platformBoxLabels,omitempty"`
 	// Withdrawal 是撤回决定（ADR-0286），只有`已撤回`委托写它。没有这一格时撤回决定在落库那一刻就丢了，只剩状态列
 	// 一个数字：重复撤回答不出原撤回，PS CONTEXT 要求保留的撤回决定标识、授权、请求方与原因事后补不回来。
 	Withdrawal *withdrawalDocument `json:"withdrawal,omitempty"`
@@ -358,8 +362,11 @@ type versionDocument struct {
 	Elements *elementsDocument `json:"elements,omitempty"`
 	// RequestedProduct 是随本版本声明的服务产品（票 psb/17），落法照 Elements：未声明即 omitempty 不写，早于本票的
 	// 快照读回即未声明。值原样落，不去空白。零迁移。
-	RequestedProduct string    `json:"requestedProduct,omitempty"`
-	EstablishedAt    time.Time `json:"establishedAt"`
+	RequestedProduct string `json:"requestedProduct,omitempty"`
+	// Goods 是随本版本声明的货物明细（ADR-0373 决定五），落法照 Elements：没报即 omitempty 整段不写，早于本票的快照
+	// 读回即没报。零迁移。
+	Goods         *goodsDocument `json:"goods,omitempty"`
+	EstablishedAt time.Time      `json:"establishedAt"`
 }
 
 // elementsDocument 按资料范围分两段；哪一段缺席就不写哪一段。
@@ -493,6 +500,13 @@ func documentOf(request domain.ShipmentRequest) requestDocument {
 			Number: declaration.Number().String(),
 		})
 	}
+	document.PlatformShipment = platformShipmentDocumentOf(request)
+	for _, label := range request.PlatformBoxLabels() {
+		document.PlatformBoxLabels = append(document.PlatformBoxLabels, platformBoxLabelDocument{
+			Parcel: label.Parcel().String(),
+			Number: label.Number().String(),
+		})
+	}
 	return document
 }
 
@@ -525,6 +539,7 @@ func versionDocumentOf(version domain.SubmissionVersion) versionDocument {
 	}
 	document.Elements = elementsDocumentOf(version.DeclaredElements())
 	document.RequestedProduct = version.RequestedServiceProduct().String()
+	document.Goods = goodsDocumentOf(version.Goods())
 	return document
 }
 
@@ -743,6 +758,18 @@ func (document requestDocument) rehydrationSpec(
 		}
 		spec.CustomerParcelNumbers = append(spec.CustomerParcelNumbers, declaration)
 	}
+	shipment, err := document.PlatformShipment.declaration()
+	if err != nil {
+		return domain.RehydrateShipmentRequestSpec{}, fmt.Errorf("%w：平台货件：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+	}
+	spec.PlatformShipment = shipment
+	for _, raw := range document.PlatformBoxLabels {
+		label, err := raw.declaration()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, fmt.Errorf("%w：平台箱标号：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+		}
+		spec.PlatformBoxLabels = append(spec.PlatformBoxLabels, label)
+	}
 	if document.Withdrawal != nil {
 		withdrawal, err := document.Withdrawal.spec()
 		if err != nil {
@@ -836,6 +863,11 @@ func (document versionDocument) spec() (domain.RehydrateSubmissionVersionSpec, e
 		}
 		spec.RequestedProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
 	}
+	goods, err := document.Goods.goods()
+	if err != nil {
+		return domain.RehydrateSubmissionVersionSpec{}, fmt.Errorf("%w：货物明细：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+	}
+	spec.Goods = goods
 	return spec, nil
 }
 

@@ -46,8 +46,9 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 //
 // 候选、范围相容与歧义信号在同一条语句里取：同一个快照里，一份委托要么还是`已提交`（算信号），要么已接受、关联已在册（是
 // 候选），因为接受与关联同一笔事务写下。两个数组取自同一个 CTE、按同一个键定序，逐位对齐。信号只认`已提交`，取值由领域常量传参；
-// 谓词与迁移 0026 的部分索引同形，按客户账户收窄是同一条语句里多一个条件。客户包裹件号只在快照里（ADR-0184 决定四），按包含查，
-// 不展开数组。范围为空时两个数组参数都要是空数组而不是 NULL：NULL 会让「没带范围认全租户」那一支整个落空。
+// 客户包裹件号一支与迁移 0026 的部分索引同形，平台箱标号一支与迁移 0037 的同形，两支各走各的索引。按客户账户收窄只加在客户
+// 包裹件号那一支：平台箱标号在销售平台的编号空间里算数（ADR-0374 决定四），候选那一侧对它恒范围相容，信号这一侧也就不按客户
+// 账户收——别的账户声明了同一个箱标号，同样是这个号此刻说不清指谁。两类号都只在快照里，按包含查，不展开数组。范围为空时两个数组参数都要是空数组而不是 NULL：NULL 会让「没带范围认全租户」那一支整个落空。
 func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -100,9 +101,11 @@ func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 		          FROM parcel_shipment.shipment_request AS request
 		         WHERE request.tenant_id = $1
 		           AND request.state = $3
-		           AND (cardinality($5::text[]) = 0 OR request.customer_account_id = ANY($5::text[]))
-		           AND (request.snapshot -> 'customerParcelNumbers')
-		               @> jsonb_build_array(jsonb_build_object('number', $2::text)))`,
+		           AND (((cardinality($5::text[]) = 0 OR request.customer_account_id = ANY($5::text[]))
+		                 AND (request.snapshot -> 'customerParcelNumbers')
+		                     @> jsonb_build_array(jsonb_build_object('number', $2::text)))
+		                OR (request.snapshot -> 'platformBoxLabels')
+		                     @> jsonb_build_array(jsonb_build_object('number', $2::text))))`,
 		tenant.String(),
 		number.String(),
 		uint8(domain.ShipmentRequestSubmitted),

@@ -2,6 +2,7 @@ package shipmenthttp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -78,6 +79,9 @@ type supplementDraft struct {
 	RecipientCountryCode      string                  `json:"recipientCountryCode"`
 	DestinationServiceScope   string                  `json:"destinationServiceScope"`
 	Parcels                   []supplementParcelDraft `json:"parcels"`
+	// Goods 是新版本的货物明细，补充整份重报（ADR-0373 决定四）。平台货件段不在补充里：平台声明首次提交时固定（ADR-0374
+	// 决定四），载荷带它即未知字段。
+	Goods *goodsDraft `json:"goods"`
 }
 
 // supplementParcelDraft 是提交的包裹草案加回执里的 parcelId：补充不现签成员标识，成员就是回执里那几件。
@@ -107,6 +111,7 @@ func (draft supplementDraft) content() submissionDraft {
 		RecipientCountryCode:      draft.RecipientCountryCode,
 		DestinationServiceScope:   draft.DestinationServiceScope,
 		Parcels:                   parcels,
+		Goods:                     draft.Goods,
 	}
 }
 
@@ -162,6 +167,17 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, err
 	}
+	// 平台箱标号首次提交时固定（ADR-0374 决定四）：包裹草案与提交口共用，带了这一格就答形状不对，不悄悄丢掉。
+	for index, parcel := range content.Parcels {
+		if parcel.PlatformBoxLabel != "" {
+			return application.FormNewSubmissionVersionCommand{}, malformedField(fmt.Sprintf("parcels[%d].platformBoxLabel", index),
+				errors.New("platform box labels are declared once, at first submission"))
+		}
+	}
+	goodsForDigest, err := declaredGoods(content, customerParcels)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
 	canonical, err := domain.CanonicalizeCustomerSupplement(domain.SubmissionPayloadSpec{
 		RequestReference:  customerReference,
 		BasisVersion:      basis,
@@ -169,11 +185,16 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		DeclaredParcelIDs: customerParcels,
 		Scope:             append(scopeEntries(content), supplementNamingEntries(draft, shipmentRequestID, members)...),
 		Service:           serviceEntries(content),
+		Goods:             goodsForDigest,
 	})
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	profiles, err := declaredProfiles(content, members)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
+	goods, err := goodsOnMembers(goodsForDigest, customerParcels, members)
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, err
 	}
@@ -191,6 +212,7 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		DeclaredProfiles:        profiles,
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
+		DeclaredGoods:           goods,
 	}, nil
 }
 
