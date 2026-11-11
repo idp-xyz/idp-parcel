@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -56,15 +55,7 @@ func (repository *ShipmentRequests) LoadSubmissionVersionDeclaration(
 		return none, false, fmt.Errorf("load submission version declaration: %w", err)
 	}
 
-	var document requestDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return none, false, fmt.Errorf("load submission version declaration: 快照不是本适配器写下的形状：%w", err)
-	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
-	if err != nil {
-		return none, false, fmt.Errorf("load submission version declaration: %w", err)
-	}
-	request, err := domain.RehydrateShipmentRequest(spec)
+	request, err := rehydratedRequest(raw, revision, state, numbering)
 	if err != nil {
 		return none, false, fmt.Errorf("load submission version declaration: %w", err)
 	}

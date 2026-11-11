@@ -21,11 +21,12 @@ type GoodsDetailsView interface {
 		shipmentRequestID domain.ShipmentRequestID,
 	) (domain.GoodsDetailsResolution, bool, error)
 
-	// LoadGoodsDetailsAt 按资料版本锚答那一版的货物明细。found=false 同上，另含锚指的版本不在这份委托的货物明细范围上。
+	// LoadGoodsDetailsAt 按资料版本锚答那一版的货物明细，带锚与接受基线的成员。found=false 同上，另含锚指的版本不在这份委托
+	// 的货物明细范围上。
 	LoadGoodsDetailsAt(
 		ctx context.Context,
 		tenant domain.TenantID,
 		shipmentRequestID domain.ShipmentRequestID,
 		anchor domain.SourceDataVersionAnchor,
-	) (domain.GoodsDetails, bool, error)
+	) (domain.GoodsDetailsResolution, bool, error)
 }

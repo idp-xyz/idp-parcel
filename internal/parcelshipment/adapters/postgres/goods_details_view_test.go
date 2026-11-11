@@ -97,12 +97,50 @@ func TestTheGoodsDetailsViewReadsByAnchorAndKeepsAnOldAnchorStable(t *testing.T)
 	if err != nil || !found || adopted.String() != "SDV-GV1" || len(current.Goods().Lines()) != 1 {
 		t.Fatalf("修订后当前：found=%v err=%v anchor=%s 行数=%d, want SDV-GV1 一行", found, err, adopted, len(current.Goods().Lines()))
 	}
-	baselineGoods, found, err := repository.LoadGoodsDetailsAt(ctx, tenant, requestID, domain.NewAcceptanceBaselineAnchor())
-	if err != nil || !found || len(baselineGoods.Lines()) != 2 {
-		t.Fatalf("基线锚读回：found=%v err=%v 行数=%d, want 照旧两行", found, err, len(baselineGoods.Lines()))
+	onBaseline, found, err := repository.LoadGoodsDetailsAt(ctx, tenant, requestID, domain.NewAcceptanceBaselineAnchor())
+	if err != nil || !found || len(onBaseline.Goods().Lines()) != 2 || len(onBaseline.Members()) != 2 {
+		t.Fatalf("基线锚读回：found=%v err=%v 行数=%d, want 照旧两行、两个成员", found, err, len(onBaseline.Goods().Lines()))
 	}
 
+	// 别的资料组的一版：收件资料范围上一份不带内容的补充。拿它的版本号当货物明细的锚，答不可见，不答「没报」。
+	deliveryScope, err := domain.NewShipmentScopedSourceData(requestID, domain.DeliveryPlaceDataGroup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := domain.FormCustomerSourceDataVersion(domain.CustomerSourceDataVersionSpec{
+		VersionID: mustBuild(t, domain.NewSourceDataVersionID, "SDV-GV-DELIVERY"),
+		Scope:     deliveryScope,
+		Basis:     domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:    domain.SupplementIntent,
+		Request:   requestFingerprint(t, "goods-view-1-amend-2", "digest-goods-view-2"),
+		Reason:    mustBuild(t, domain.NewAmendmentReasonReference, "ADDRESS_RESTATED"),
+		Requester: mustBuild(t, domain.NewRequesterReference, "CUSTOMER-1"),
+		Decider:   mustBuild(t, domain.NewDeciderReference, "OPERATOR-1"),
+		Authority: mustBuild(t, domain.NewAmendmentAuthoritySnapshot, "AUTH-SNAP-1"),
+		FormedAt:  submittedAtFixture.Add(3 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _, err = repository.FindBySourceIdentity(ctx, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withOther, err := stored.AmendCustomerSourceData(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustSave(t, transactor, ctx, repository, identity, withOther)
+
 	for name, read := range map[string]func() (bool, error){
+		"锚指别的资料组的一版": func() (bool, error) {
+			anchor, err := domain.NewSourceDataVersionAnchor(mustBuild(t, domain.NewSourceDataVersionID, "SDV-GV-DELIVERY"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, found, err := repository.LoadGoodsDetailsAt(ctx, tenant, requestID, anchor)
+			return found, err
+		},
 		"锚指的版本不存在": func() (bool, error) {
 			anchor, err := domain.NewSourceDataVersionAnchor(mustBuild(t, domain.NewSourceDataVersionID, "SDV-NOPE"))
 			if err != nil {

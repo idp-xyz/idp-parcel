@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -36,13 +35,13 @@ func (repository *ShipmentRequests) LoadGoodsDetailsAt(
 	tenant domain.TenantID,
 	shipmentRequestID domain.ShipmentRequestID,
 	anchor domain.SourceDataVersionAnchor,
-) (domain.GoodsDetails, bool, error) {
+) (domain.GoodsDetailsResolution, bool, error) {
 	request, found, err := repository.findAcceptedRequest(ctx, tenant, shipmentRequestID)
 	if err != nil || !found {
-		return domain.GoodsDetails{}, false, wrapGoodsDetailsView(err)
+		return domain.GoodsDetailsResolution{}, false, wrapGoodsDetailsView(err)
 	}
-	goods, found := request.GoodsDetailsAt(anchor)
-	return goods, found, nil
+	resolution, found := request.GoodsDetailsResolutionAt(anchor)
+	return resolution, found, nil
 }
 
 func wrapGoodsDetailsView(err error) error {
@@ -85,15 +84,7 @@ func (repository *ShipmentRequests) findAcceptedRequest(
 	if err != nil {
 		return none, false, err
 	}
-	var document requestDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return none, false, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
-	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
-	if err != nil {
-		return none, false, err
-	}
-	request, err := domain.RehydrateShipmentRequest(spec)
+	request, err := rehydratedRequest(raw, revision, state, numbering)
 	if err != nil {
 		return none, false, err
 	}

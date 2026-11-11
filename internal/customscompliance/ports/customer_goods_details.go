@@ -10,16 +10,41 @@ import (
 // 货物明细归小包托运，关务只读、只按（资料版本锚，委托，行号）引用：正式申报资料由关务按自己的形成规则从这些行里形成，并项、
 // 补算、折算与选哪种语言的品名都在关务那一侧，正式资料不写回客户原始资料。
 //
-// 这里的记录是关务自己的词：来源标记、行与装箱分配照客户给的原样交来，不在适配器里解释或换算。
+// 这里的记录是关务自己的词：来源标记、内件性质与编码口径都译成本包的常量，提供方改了线上的词，适配器的对应表就对不上、
+// 答读不动，不会静默换了关务的数据；各格的值与装箱分配照客户给的原样交来，不在适配器里解释或换算。
 
 // CustomerSourceDataAnchor 是关务记下的「按客户原始资料的哪一版形成」：要么在接受基线上（委托接受时那一版提交），要么指名一版
 // 资料修订。版本不可覆盖，锚记下之后按它读回的永远是同一份行。
+//
+// 锚只从 FindCurrentCustomerGoodsDetails 的答复里来，不自己拼：接受基线只有 OnAcceptanceBaseline 一种写法，建案引用
+// （AcceptedParcelSource.SourceRef）里的提交版本不是 SourceDataVersion——拿它当版本锚读，答的是不可见。
 type CustomerSourceDataAnchor struct {
 	OnAcceptanceBaseline bool
 	SourceDataVersion    string
 }
 
-// CustomerGoodsCellSource 是一格申报内容出自哪里。三格照小包托运的来源标记一一对应，关务形成正式资料时按它判这一格可不可以
+// CustomerContentCategory 是内件性质（UPU CN23 的勾选格）；各申报口怎样从它映射出口原因是关务的形成规则。
+type CustomerContentCategory string
+
+const (
+	CustomerContentNotDeclared      CustomerContentCategory = ""
+	CustomerContentGift             CustomerContentCategory = "GIFT"
+	CustomerContentDocuments        CustomerContentCategory = "DOCUMENTS"
+	CustomerContentCommercialSample CustomerContentCategory = "COMMERCIAL_SAMPLE"
+	CustomerContentReturnedGoods    CustomerContentCategory = "RETURNED_GOODS"
+	CustomerContentSaleOfGoods      CustomerContentCategory = "SALE_OF_GOODS"
+	CustomerContentOther            CustomerContentCategory = "OTHER"
+)
+
+// CustomerCommodityCodeSide 是申报商品编码的口径：出口国还是进口国的编码。取哪一口径是关务的形成规则。
+type CustomerCommodityCodeSide string
+
+const (
+	CustomerCommodityCodeExport CustomerCommodityCodeSide = "EXPORT"
+	CustomerCommodityCodeImport CustomerCommodityCodeSide = "IMPORT"
+)
+
+// CustomerGoodsCellSource 是一格申报内容出自哪里，与小包托运的来源标记逐格对应；关务形成正式资料时按它判这一格可不可以
 // 直接用（例如箱单上的品名与商品申报资料里的编码，可信度不同）。
 type CustomerGoodsCellSource uint8
 
@@ -44,9 +69,8 @@ type CustomerGoodsDescription struct {
 	Text     CustomerGoodsCell
 }
 
-// CustomerCommodityCode 是一条申报商品编码；Side 是 EXPORT 或 IMPORT，取哪一口径的编码是关务的形成规则。
 type CustomerCommodityCode struct {
-	Side string
+	Side CustomerCommodityCodeSide
 	Code CustomerGoodsCell
 }
 
@@ -81,16 +105,19 @@ type CustomerGoodsPacking struct {
 }
 
 // CustomerGoodsDetails 是一版客户原始资料上的货物明细。Declared 为假即那一版上没有货物明细（首次提交没报，或显式清空被
-// 采用）——缺席是真话，关务该停在「输入不可得」，不拿别的版本顶。ContentCategory 是 UPU CN23 的六格之一，没报为空串；
-// 各申报口怎样从它映射出口原因是关务的形成规则。
+// 采用）——缺席是真话，关务该停在「输入不可得」，不拿别的版本顶。
+//
+// Parcels 是这份委托接受时的全部包裹，锚换了也不变。没报装箱分配时要靠它分两种情形：只有一件，那一件装的就是全部行；不止
+// 一件，就是整票清单，说不出哪件装了什么（ADR-0373 决定三）——逐包裹申报的口拿不到逐件内容，是资料缺口，不是零。
 type CustomerGoodsDetails struct {
 	Anchor                CustomerSourceDataAnchor
 	Declared              bool
-	ContentCategory       string
+	ContentCategory       CustomerContentCategory
 	ContentCategorySource CustomerGoodsCellSource
 	ContentCategoryNote   *CustomerGoodsCell
 	Lines                 []CustomerGoodsLine
 	Packing               []CustomerGoodsPacking
+	Parcels               []string
 }
 
 // CustomerGoodsDetailsView 是关务读货物明细的口。found=false 是统一不可见结果：这个租户下没有这份委托、委托还没接受、或锚
