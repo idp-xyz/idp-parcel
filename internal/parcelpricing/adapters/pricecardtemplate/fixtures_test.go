@@ -34,6 +34,22 @@ func (card filled) clone() filled {
 	return copied
 }
 
+// cardFieldsOfItsVersion 是这份卡声明的模板版本里有的 card 字段（没写版本按最新一版）：旧版文件长的就是旧版的样子，
+// 不带后来才有的字段行。
+func (card filled) cardFieldsOfItsVersion() []column {
+	version := card.card["templateVersion"]
+	if version == "" {
+		version = TemplateVersion
+	}
+	var kept []column
+	for _, entry := range cardFields {
+		if availableIn(cardFieldSince[entry.key], version) {
+			kept = append(kept, entry)
+		}
+	}
+	return kept
+}
+
 // sheets 按模板写成工作表；card 表每个字段一行、按模板行序。
 func (card filled) sheets(t *testing.T) []spreadsheet.WriteSheet {
 	t.Helper()
@@ -41,7 +57,7 @@ func (card filled) sheets(t *testing.T) []spreadsheet.WriteSheet {
 	for _, spec := range sheets {
 		sheet := spreadsheet.WriteSheet{Name: spec.name, Columns: textColumns(spec.columns)}
 		if spec.name == sheetCard {
-			for _, entry := range cardFields {
+			for _, entry := range card.cardFieldsOfItsVersion() {
 				sheet.Rows = append(sheet.Rows, []string{entry.key, card.card[entry.key]})
 			}
 		}

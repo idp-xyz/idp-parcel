@@ -28,6 +28,7 @@ type preAcceptanceCardDouble struct {
 	lastDirection domain.PricingDirection
 	lastPurpose   domain.PricingPurpose
 	lastAt        time.Time
+	products      []domain.ServiceProductReference
 }
 
 func (double *preAcceptanceCardDouble) ResolveInForce(
@@ -37,8 +38,10 @@ func (double *preAcceptanceCardDouble) ResolveInForce(
 	direction domain.PricingDirection,
 	purpose domain.PricingPurpose,
 	at time.Time,
+	product domain.ServiceProductReference,
 ) (ports.PriceCardInForceResolution, error) {
 	double.calls++
+	double.products = append(double.products, product)
 	double.lastTenant, double.lastScope, double.lastDirection, double.lastPurpose, double.lastAt = tenant, scope, direction, purpose, at
 	if double.err != nil {
 		return ports.PriceCardInForceResolution{}, double.err

@@ -52,7 +52,7 @@ func TestFull03ReExpressedInTheTemplateImportsToTheSeedPlan(t *testing.T) {
 	if !reading.Plan.SameIdentity(seed.Plan().Reference()) || !reading.Content.DirectionAuthorization.SameIdentity(seed.DirectionAuthorization()) {
 		t.Fatal("方案身份或方向授权对不上")
 	}
-	if reading.TemplateVersion != TemplateVersion {
+	if reading.TemplateVersion != templateVersionV2 {
 		t.Fatalf("template version %q", reading.TemplateVersion)
 	}
 	got, want := registrationPlanBlock(t, plan, reading.Content.DirectionAuthorization), planBlockOf(t, seedRaw)
@@ -267,13 +267,13 @@ func TestRemoteTierLookupNeedsTheCatalogueAndOnlyNewStructuresWritePPC6(t *testi
 	}
 }
 
-// 空白模板新带 total_bounds 表与说明行，且模板版本是 PPT-2；说明表点出 PPT-1 仍接受。
+// 空白模板新带 total_bounds 表与说明行，且模板版本是最新的 PPT-3；说明表点出 PPT-1、PPT-2 仍接受。
 func TestBlankTemplateCarriesThePPT2Sheet(t *testing.T) {
 	var buffer bytes.Buffer
 	if err := WriteTemplate(&buffer); err != nil {
 		t.Fatal(err)
 	}
-	if TemplateFileName != "price-card-import-template-PPT-2.xlsx" {
+	if TemplateFileName != "price-card-import-template-PPT-3.xlsx" {
 		t.Fatalf("file name %s", TemplateFileName)
 	}
 	book := mustReadBook(t, buffer.Bytes())
@@ -293,7 +293,7 @@ func TestBlankTemplateCarriesThePPT2Sheet(t *testing.T) {
 		t.Fatalf("sheets = %v", names)
 	}
 	text := strings.Join(readme, "\n")
-	for _, want := range []string{"最低收费", "最高收费", methodTableLookupByRemoteTier, "旧版 PPT-1 的文件仍然接受", "补足到最低收费"} {
+	for _, want := range []string{"最低收费", "最高收费", methodTableLookupByRemoteTier, "旧版 PPT-1 与 PPT-2 的文件仍然接受", "补足到最低收费"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("说明表缺「%s」", want)
 		}

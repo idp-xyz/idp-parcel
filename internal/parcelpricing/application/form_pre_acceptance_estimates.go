@@ -153,7 +153,7 @@ func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceEstimatesNotAccepted}, nil
 	}
 	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope,
-		domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, command.At)
+		domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, command.At, domain.ServiceProductReference{})
 	if err != nil {
 		return undecidedPreAcceptance(PreAcceptancePriceCardResolutionUnavailable, domain.VersionReference{}), nil
 	}

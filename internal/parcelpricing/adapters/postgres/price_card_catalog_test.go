@@ -199,7 +199,7 @@ func TestPriceCardRegisterAndLoadApplicable(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("装载适用价卡：%v", err)
 	}
@@ -225,7 +225,7 @@ func TestPriceCardDirectionIsolation(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	buySide, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionBuy, scope, catalogAsOf)
+	buySide, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionBuy, scope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("装载 BUY 侧：%v", err)
 	}
@@ -248,7 +248,7 @@ func TestPriceCardApplicabilityFilters(t *testing.T) {
 	otherScope := evaluationValue(t, domain.NewPricingScopeID, "scope-2")
 
 	late, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope,
-		time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC))
+		time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC), domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("装载期外时点：%v", err)
 	}
@@ -256,7 +256,7 @@ func TestPriceCardApplicabilityFilters(t *testing.T) {
 		t.Fatalf("适用期外不该有候选，得到 %d 份", len(late))
 	}
 
-	elsewhere, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, otherScope, catalogAsOf)
+	elsewhere, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, otherScope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("装载别范围：%v", err)
 	}
@@ -301,7 +301,7 @@ func TestPriceCardContentConflictIsAnswered(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil || len(loaded) != 1 {
 		t.Fatalf("装载原行：err=%v n=%d", err, len(loaded))
 	}
@@ -323,7 +323,7 @@ func TestPriceCardAmbiguousVersionsAreRefused(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	_, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	_, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf, domain.ServiceProductReference{})
 	if !errors.Is(err, adapter.ErrAmbiguousPriceCard) {
 		t.Fatalf("err = %v, 想要 ErrAmbiguousPriceCard", err)
 	}
@@ -346,7 +346,7 @@ func TestPriceCardMultipleCandidatesAllReturned(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	loaded, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("装载多候选：%v", err)
 	}
@@ -375,7 +375,7 @@ func TestPriceCardFindByReferenceReturnsTheVersionTheEvaluationUsedNotTheOneInFo
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	applicable, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	applicable, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf, domain.ServiceProductReference{})
 	if err != nil || len(applicable) != 1 || applicable[0].Reference().Version() != "v2" {
 		t.Fatalf("此刻适用的该只有 v2：n=%d err=%v", len(applicable), err)
 	}

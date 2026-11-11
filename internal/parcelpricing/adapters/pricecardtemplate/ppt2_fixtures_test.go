@@ -26,7 +26,7 @@ const (
 func full03Card() filled {
 	return filled{
 		card: map[string]string{
-			"templateVersion": TemplateVersion, "planId": "SYN-PLAN-CN-SG-FULL-03", "planVersion": "v1",
+			"templateVersion": templateVersionV2, "planId": "SYN-PLAN-CN-SG-FULL-03", "planVersion": "v1",
 			"scope": "SYN-SCOPE-04", "direction": "SELL", "purpose": "CUSTOMER_CHARGE", "aggregation": "PER_PACKAGE",
 			"baseChargeCode": "BASE_FREIGHT", "periodStartsAt": synStart, "rateTableId": "SYN-TABLE-CN-SG-FULL-03",
 			"weightPolicyId": "SYN-WEIGHT-CN-SG-FULL-03", "weightPolicyVersion": "v1", "weightMethod": "MAX",
@@ -103,11 +103,17 @@ func (card filled) asPPT1(t *testing.T) []byte {
 			continue
 		}
 		if sheet.Name == sheetCard {
-			for index, row := range sheet.Rows {
-				if row[0] == "templateVersion" {
-					sheet.Rows[index] = []string{"templateVersion", templateVersionV1}
+			var rows [][]string
+			for _, row := range sheet.Rows {
+				if !availableIn(cardFieldSince[row[0]], templateVersionV1) {
+					continue
 				}
+				if row[0] == "templateVersion" {
+					row = []string{"templateVersion", templateVersionV1}
+				}
+				rows = append(rows, row)
 			}
+			sheet.Rows = rows
 		}
 		kept = append(kept, sheet)
 	}
@@ -120,7 +126,7 @@ func (card filled) workbookJSON(t *testing.T) []byte {
 	t.Helper()
 	sheetsOut := map[string]any{}
 	cardRows := make([]any, 0, len(cardFields))
-	for _, entry := range cardFields {
+	for _, entry := range card.cardFieldsOfItsVersion() {
 		var value any
 		if text := card.card[entry.key]; text != "" {
 			value = text

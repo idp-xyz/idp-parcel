@@ -19,14 +19,21 @@ import (
 // TemplateVersion 是本构建写出的模板版本，也是最新的一版（规范「版本」一节）。表集合、列集合或列语义变化时进位，
 // 可取值的增减也算列语义变化。进位不等于旧版作废：旧版文件仍按旧版的表集合与取值读，读出的内容与进位之前
 // 逐位相同（acceptedTemplateVersions）。
-const TemplateVersion = "PPT-2"
+const TemplateVersion = templateVersionV3
 
 // templateVersionV1 是第一版。PPT-2 只增不改：新增 total_bounds 表与 TABLE_LOOKUP_BY_REMOTE_TIER 计算类型，
 // 既有的表、列与取值一个不动，所以 PPT-1 文件照旧读通，且不会因新增的东西而多出任何问题。
 const templateVersionV1 = "PPT-1"
 
+// templateVersionV2 是第二版（ADR-0349）。
+const templateVersionV2 = "PPT-2"
+
+// templateVersionV3 是第三版，同样只增不改：card 表新增一个可缺的字段 serviceProducts，售价卡声明的适用服务产品
+// （ADR-0378 决定一）。PPT-1、PPT-2 文件照旧读通，读出的方案与问题清单逐位相同。
+const templateVersionV3 = "PPT-3"
+
 // acceptedTemplateVersions 按先后排列，最后一格是 TemplateVersion。
-var acceptedTemplateVersions = []string{templateVersionV1, TemplateVersion}
+var acceptedTemplateVersions = []string{templateVersionV1, templateVersionV2, templateVersionV3}
 
 // versionRank 报出一版在先后序里的位置；空串与不认的串取最新一格（给不带版本的调用方：规格口）。
 func versionRank(version string) int {
@@ -206,7 +213,7 @@ func (vocab vocabulary) valuesFor(version string) []string {
 	return kept
 }
 
-var remoteTierMethodSince = map[string]string{methodTableLookupByRemoteTier: TemplateVersion}
+var remoteTierMethodSince = map[string]string{methodTableLookupByRemoteTier: templateVersionV2}
 
 func refdataCurrencyCodes() []string {
 	currencies := refdata.Currencies()
@@ -320,7 +327,19 @@ var cardFields = []column{
 	{"amountRoundingPoints", "金额取整应用点", requiredConditional, "金额取整的应用点，以英文分号分隔：PER_LINE、AFTER_CONVERSION、TOTAL"},
 	{"directionAuthorizationId", "价格方向授权标识", requiredAlways, "价格方向授权标识（party-commercial 签发）"},
 	{"directionAuthorizationVersion", "价格方向授权版本号", requiredAlways, "价格方向授权版本号"},
+	{cardFieldServiceProducts, "适用服务产品", requiredOptional, "这张卡计价的服务产品，写参与方与商业的服务产品对象标识（不带版本），以英文分号分隔；" +
+		"只有价格方向为 SELL 的卡能写。空或不写这一行即不声明：接其余产品，即同一计价范围里没有别的卡指名的那些产品"},
 }
+
+// cardFieldServiceProducts 是 card 表上的适用服务产品字段（ADR-0378 决定一）。
+const cardFieldServiceProducts = "serviceProducts"
+
+// cardFieldSince 登记自某一版才有的 card 字段：更早版本的文件里写了它，要说清是版本问题。
+var cardFieldSince = map[string]string{cardFieldServiceProducts: templateVersionV3}
+
+// omittableCardFields 是 card 表里整行可以不写的字段。其余字段一行都不能少（用不到的留空），这一格例外：没写即不声明，
+// 与写了空值同一个意思，而 PPT-1、PPT-2 的文件本来就没有这一行，要它们补一行空的就是无故改旧文件。
+var omittableCardFields = map[string]bool{cardFieldServiceProducts: true}
 
 // sheets 是表集合，顺序即模板里的表序，也是问题清单的排序依据。
 var sheets = []sheetSpec{
@@ -404,7 +423,7 @@ var sheets = []sheetSpec{
 	{name: sheetCalculations, title: "计算树", note: "计算树：一行一个节点；只有 GREATER_OF 能当父节点，且恰好两个子节点", columns: []column{
 		{"nodeId", "节点标识", requiredAlways, "节点标识，本表内唯一"},
 		{"parentId", "父节点", requiredOptional, "父节点的 nodeId；空即根"},
-		{"method", "计算类型", requiredAlways, "FIXED_AMOUNT、TABLE_LOOKUP、PERCENT_OF_BASIS、GREATER_OF、SERIES_AMOUNT；" + methodTableLookupByRemoteTier + "（" + TemplateVersion + " 起）按偏远档位查价表，价表行的 zone 列写档位，并须在 reference_catalogues 绑一份 REMOTE_TIER 目录"},
+		{"method", "计算类型", requiredAlways, "FIXED_AMOUNT、TABLE_LOOKUP、PERCENT_OF_BASIS、GREATER_OF、SERIES_AMOUNT；" + methodTableLookupByRemoteTier + "（" + templateVersionV2 + " 起）按偏远档位查价表，价表行的 zone 列写档位，并须在 reference_catalogues 绑一份 REMOTE_TIER 目录"},
 		{"amount", "固定金额", requiredConditional, "FIXED_AMOUNT 的金额，按主价表币种"},
 		{"tableId", "查的价表", requiredConditional, "TABLE_LOOKUP 与 " + methodTableLookupByRemoteTier + " 查的表，指 tables"},
 		{"percentage", "百分数", requiredConditional, "PERCENT_OF_BASIS 的百分数（12.5 即 12.5%）；与 seriesKind 二选一"},
@@ -421,7 +440,7 @@ var sheets = []sheetSpec{
 		{"includes", "计入的费用", requiredConditional, "LISTED_CHARGES 必填、否则必空：费用代码，以英文分号分隔"},
 		{"excludes", "排除的费用", requiredOptional, "排除的费用代码，以英文分号分隔"},
 	}},
-	{name: sheetTotalBounds, title: "最低 / 最高收费", single: true, since: TemplateVersion,
+	{name: sheetTotalBounds, title: "最低 / 最高收费", single: true, since: templateVersionV2,
 		note: "最低 / 最高收费：对整票合计声明下限与上限，至多一行，两端可只填一端。各行合计低于最低收费时补足到最低收费，高于最高收费时封顶到最高收费", columns: []column{
 			{"minimum", "最低收费", requiredConditional, "最低收费（整票合计的下限，按主价表币种）：合计低于它就补一条 MINIMUM_CHARGE 补足行；与 maximum 至少填一个。卡声明了金额取整时，须落在进位单位的整数倍上"},
 			{"maximum", "最高收费", requiredConditional, "最高收费（整票合计的上限，按主价表币种）：合计高于它就补一条 MAXIMUM_CHARGE 冲减行；不低于 minimum。卡声明了金额取整时，须落在进位单位的整数倍上"},

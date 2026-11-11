@@ -275,7 +275,7 @@ func TestWorkbookJSONCarrierConventions(t *testing.T) {
 		}
 
 		onlyEnvelope := []byte(`{"templateVersion":"PPT-2","sheets":{"card":[{"field":"planId","value":"P"},{"field":"planVersion","value":"v1"}]}}`)
-		if reading := readWorkbookJSON(t, onlyEnvelope); !reading.Accepted || reading.TemplateVersion != TemplateVersion {
+		if reading := readWorkbookJSON(t, onlyEnvelope); !reading.Accepted || reading.TemplateVersion != templateVersionV2 {
 			t.Fatalf("card 表里压根没有版本这一行：%s", describe(reading.Problems))
 		}
 

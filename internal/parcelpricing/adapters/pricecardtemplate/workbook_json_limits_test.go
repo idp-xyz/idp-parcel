@@ -252,7 +252,7 @@ func TestAPaddedEnvelopeVersionIsReadAsTheTrimmedOne(t *testing.T) {
 	// 没有 card 表里的版本行时才靠外层补：把 card 表里的版本值去掉。
 	bare := sellCard()
 	bare.card["templateVersion"] = ""
-	bareBody := bytes.Replace(bare.workbookJSON(t), []byte(`"templateVersion": "PPT-2"`), []byte(`"templateVersion": " PPT-1 "`), 1)
+	bareBody := bytes.Replace(bare.workbookJSON(t), []byte(`"templateVersion": "`+TemplateVersion+`"`), []byte(`"templateVersion": " PPT-1 "`), 1)
 
 	for name, raw := range map[string][]byte{"card 表写了版本": padded.Bytes(), "card 表没写版本": bareBody} {
 		reading := readWorkbookJSON(t, raw)
