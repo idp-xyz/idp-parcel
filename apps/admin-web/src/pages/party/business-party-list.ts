@@ -271,13 +271,22 @@ export function filterBusinessPartiesByType(
   ours: OurCompanyIndex = emptyOurCompanyIndex,
 ): BusinessPartyRecord[] {
   if (type === 'ALL') return [...rows];
-  return rows.filter((row) => {
-    const held = rolesOfParty(roles, row.partyId);
-    const isOurs = ours.has(row.partyId);
-    if (type === 'OURS') return isOurs;
-    if (type === 'NONE') return held.length === 0 && !isOurs;
-    return held.includes(type);
-  });
+  return rows.filter((row) => businessPartyIsOfType(row, type, roles, ours));
+}
+
+/** 一行属不属于某个类型筛选值；判据就是 filterBusinessPartiesByType 逐行用的那一条，数状态下拉上的数时也用它。 */
+export function businessPartyIsOfType(
+  row: Pick<BusinessPartyRecord, 'partyId'>,
+  type: BusinessPartyTypeFilter,
+  roles: PartyRoleIndex = emptyPartyRoleIndex,
+  ours: OurCompanyIndex = emptyOurCompanyIndex,
+): boolean {
+  if (type === 'ALL') return true;
+  const held = rolesOfParty(roles, row.partyId);
+  const isOurs = ours.has(row.partyId);
+  if (type === 'OURS') return isOurs;
+  if (type === 'NONE') return held.length === 0 && !isOurs;
+  return held.includes(type);
 }
 
 export interface BusinessPartyCounts {

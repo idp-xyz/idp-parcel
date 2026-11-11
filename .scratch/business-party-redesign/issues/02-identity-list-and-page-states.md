@@ -1,7 +1,7 @@
 # 02 单位名录：整页列表态与各页面态
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-11 起
 父票：[spec](../spec.md)
 Blocked by: 无——可直接开始
 
