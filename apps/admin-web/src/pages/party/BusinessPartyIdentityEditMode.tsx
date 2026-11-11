@@ -87,7 +87,9 @@ export function BusinessPartyIdentityEditMode({
     onUnsavedChange(form.unsaved);
   }, [onUnsavedChange, form.unsaved]);
   useEffect(() => () => onUnsavedChange(false), [onUnsavedChange]);
-  const advancedOpen = advancedGroupOpen(null, problems, advancedPaths, false);
+  // 「高级」一组默认收着，人可以点开；格上有问题时自己打开（advancedGroupOpen）。
+  const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
+  const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, false);
   const advancedSummary = `生效时间 ${draft.effectiveFrom.trim().replace('T', ' ') || '未填'} · 更新序号 ${
     form.revisionField.value.trim() || '未填'
   }${form.revisionField.edited ? '（手填）' : '（建议值）'}`;
@@ -167,7 +169,7 @@ export function BusinessPartyIdentityEditMode({
                   <span className="mt-1 block type-body text-idpxyz-breadcrumb">这次更正依据的是哪份单据，方便以后追溯。</span>
                 </Field>
               </div>
-              <AdvancedGroup open={advancedOpen} onToggle={() => undefined} summary={advancedSummary}>
+              <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
                 <WallTimeField
                   label="生效时间 *"
                   path="businessParties[0].effectiveFrom"

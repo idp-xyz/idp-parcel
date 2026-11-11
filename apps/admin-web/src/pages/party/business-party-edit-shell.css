@@ -4,6 +4,9 @@
 .business-party-edit-body {
   container: business-party-edit / inline-size;
   padding: 16px 24px 24px;
+  /* 正文区与底部动作条都留出滚动条的位置，内容不够长、没有滚动条时也留：两边的可用宽度一样，表单卡片的左右缘与动作条里
+     文字、按钮的左右缘才在同一条竖线上；填写与核对两步之间内容一长一短，表单也不会横向挪一下。 */
+  scrollbar-gutter: stable;
 }
 
 .business-party-edit-wrap {
@@ -32,8 +35,11 @@
 }
 
 /* 底部动作条里的内容与正文同宽：有锚点列时算上它那一列与间隙，按钮的右缘才与表单的右缘对齐。 */
+/* 动作条自己不滚：overflow 设成 hidden 只为让 scrollbar-gutter 在它身上生效（留位置的规则只对会裁溢出的盒子起作用）。 */
 .business-party-edit-footer {
   container: business-party-edit-footer / inline-size;
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 .business-party-edit-footer-inner {
