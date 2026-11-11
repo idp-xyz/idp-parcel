@@ -19,6 +19,7 @@ import {
   type ReferenceRow,
 } from './price-card-content';
 import { usePriceCardContent } from './use-price-card-content';
+import { servedProductsLabel, servedProductsText } from './service-products';
 
 // 价格表工作台的详情栏：点开一张价卡，直接看到它有哪些费用项、每项怎么收、什么时候收，不用靠试算一个个试。
 // 内容来自价卡内容读口（GET /pricing-price-cards/content）原样交出的规范化文档，翻成人话在 price-card-content.ts；
@@ -265,6 +266,7 @@ export function PriceCardDetailPanel({ row, onClose }: { row: PriceCardRecord; o
   const status = priceCardStatusLabel(priceCardStatus(row, new Date()));
   const direction = priceDirectionLabels[row.direction] ?? row.direction;
   const purpose = priceCardPurposeLabels[row.purpose] ?? row.purpose;
+  const products = servedProductsText(row.direction, row.serviceProducts);
 
   return (
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`价卡 ${row.planId}`}>
@@ -279,6 +281,11 @@ export function PriceCardDetailPanel({ row, onClose }: { row: PriceCardRecord; o
             <p className="mt-0.5 type-body text-idpxyz-breadcrumb">
               {direction} · {purpose} · 适用范围 {row.scope}
             </p>
+            {products !== null ? (
+              <p className="mt-0.5 break-all type-body text-idpxyz-breadcrumb">
+                {servedProductsLabel} {products}
+              </p>
+            ) : null}
           </div>
           <Button
             className="shrink-0 text-idpxyz-breadcrumb"

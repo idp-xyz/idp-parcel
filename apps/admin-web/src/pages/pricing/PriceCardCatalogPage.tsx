@@ -30,6 +30,7 @@ import {
   type PriceCardStatusFilter,
 } from './price-card-list';
 import { listPriceCards, registerPriceCard, registrationOutcomeLabels, type PriceCardRecord } from './api';
+import { servedProductsLabel, servedProductsText } from './service-products';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -56,7 +57,24 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
       </div>
     ),
   },
-  { key: 'scope', header: '适用范围', render: (row) => <span className="break-all">{row.scope}</span> },
+  {
+    key: 'scope',
+    header: '适用范围',
+    render: (row) => {
+      // 适用产品挂在范围下面一行：选卡先按范围、再在范围里按产品分层（ADR-0378 决定二）。不是售价卡就没有这一行。
+      const products = servedProductsText(row.direction, row.serviceProducts);
+      return (
+        <div>
+          <span className="break-all">{row.scope}</span>
+          {products !== null ? (
+            <div className="mt-0.5 break-all type-body text-idpxyz-breadcrumb">
+              {servedProductsLabel} {products}
+            </div>
+          ) : null}
+        </div>
+      );
+    },
+  },
   {
     key: 'units',
     header: '币种与单位',
