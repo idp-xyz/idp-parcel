@@ -39,7 +39,7 @@ Status: in-progress
 
 ## 改掉的旧裁决
 
-下面几条是 [business-party-ux](../business-party-ux/spec.md) 里用户点过头的，这次改了，逐条写明。
+下面几条是用户点过头的旧裁决（出处一栏只写票号的，出自 [business-party-ux](../business-party-ux/spec.md)），这次改了，逐条写明。
 
 | 旧裁决 | 出处 | 现在 | 为什么改 |
 |---|---|---|---|
@@ -49,6 +49,8 @@ Status: in-progress
 | 类型图标与角色标签重复，不加 | 第一批取舍表 | 图标块按类型取图标与底色，标签照旧 | 每行同一个楼房图标占着位置却不帮人认行 |
 | 业务关联数要逐行读四册，不做 | 第一批取舍表 | 加「合作关系」一列 | 票 08 之后随行答回；之前按页面已有的那份索引算，不另读 |
 | 字号整体放大不做（本轮） | 第二批取舍表 | 全站调，另票 | 当时写的是「要动等用户决定」，用户这次授权决定 |
+| 右栏事实行下一行的关联计数，点了去「关联」签 | 票 08 | 撤掉；签条上带数，概要右列的合作关系卡与关联对象卡里有分册的数 | 概要有了那两张卡之后，这一行是同一组数的第三处（本 spec 票 05 定） |
+| 「关联」签「图示 / 明细」可切，缺省图示 | [business-party-relationship-graph 票 01](../business-party-relationship-graph/issues/01-association-tab-relationship-graph.md) | 先图后表，同屏，不切 | 上节「关系图」一行定的先图后表；图与表同屏之后切换没有用处 |
 
 ## 类型为什么不能留在浏览器里算
 
@@ -72,13 +74,14 @@ Status: in-progress
 | [02](./issues/02-identity-list-and-page-states.md) | 单位名录的整页列表态与各页面态 | 前端切片 | resolved（2026-11-11 进 main） |
 | [03](./issues/03-master-detail-split.md) | 主从分栏：名录栏与右栏头区（阻塞于 02） | 前端切片 | resolved（2026-11-11 进 main） |
 | [04](./issues/04-relationships-and-our-companies-views.md) | 合作关系、我方关联两个视图换同一套（两个视图的列表区已随 02 换过，剩右栏外框与我方关联的主从分栏） | 前端切片 | ready-for-agent |
-| [05](./issues/05-detail-tabs-content.md) | 右栏各签内容重排（阻塞于 03） | 前端切片 | ready-for-agent |
+| [05](./issues/05-detail-tabs-content.md) | 右栏各签内容重排（阻塞于 03） | 前端切片 | resolved（2026-11-11 进 main） |
 | [06](./issues/06-keep-the-previous-page-while-refetching.md) | 换条件、翻页、刷新时留着旧的一页（阻塞于 02；共用取数件，需非作者评审） | 前端切片 | ready-for-agent |
 | [07](./issues/07-adr-party-categories-on-the-read.md) | ADR 草案的非作者评审、编号与接受 | 文档票 | ready-for-agent |
 | [08](./issues/08-read-answers-categories-filter-and-facets.md) | 读口随行答类别与关系段数、按类别筛、分面计数（阻塞于 07） | 后端票 | ready-for-agent |
 | [09](./issues/09-admin-web-takes-categories-from-the-read.md) | 管理台改取读口的类别，删掉自己的推导（阻塞于 02、08） | 前端切片 | ready-for-agent |
 | [10](./issues/10-acceptance.md) | 验收：浏览器全流程、深浅主题、非作者评审（阻塞于 02–06、11） | 前端切片 | ready-for-agent |
 | [11](./issues/11-write-flows-in-the-new-layout.md) | 写操作在新版式里的样子：编辑态、就地登记合作关系、新增往来单位的查重提示、停用对话框（阻塞于 03、05） | 前端切片 | ready-for-agent |
+| [12](./issues/12-copy-icon-must-not-take-a-line-of-its-own.md) | bug：文本类的值末行刚好排满时，悬停才显的复制图标单独掉到下一行、底下多一行空白（票 05 走查时见到；病在公司主体页、对象页同用的 `CopyAside`） | 前端切片 | ready-for-agent |
 
 01 与 02 互不相干，可以同时开工；07 与前端各票互不相干。
 
