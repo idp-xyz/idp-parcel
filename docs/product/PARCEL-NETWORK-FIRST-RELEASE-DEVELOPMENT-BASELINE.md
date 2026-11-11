@@ -379,6 +379,7 @@ TF 0；其余上下文的增减各归各票，本条不追）。**一句要如�
 | `PA-PP-03` | 进位可能在同一渠道内按重量分段 | 同上 | 决定重量取整策略的规范化形状 |
 | `PA-CR-01` | 跨境出口小包在中东/东南亚等目的市场以 COD 为常规收款形态，承运/渠道商代收货款并周期回汇 | 行业形态，专家判断，无一手协议 | 决定 `collection-remittance` 上下文按能力范围判据准入及其分户账/回汇批次的机制形状（2026-08-28 受托裁定，批次记录见 `.scratch/admin-remainder-mechanism-batch/spec.md`）；汇率、回汇周期、手续费等取值一律等真实协议 |
 | `PA-WF-01` | 以仓配为主业的租户（「3PL 与集运干线运营商」一层）里，有一部分会用本产品的仓配履约承担自己的仓库作业，而不是只把自有 WMS 接进来——至少没有 WMS、或 WMS 接不上跨境干线的那部分 | 行业判断，专家判断，无一手数据 | 决定 `warehouse-fulfillment` 按能力范围判据准入（[ADR-0368](../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)）；自带 WMS 的租户照[外部 WMS 协作缝设计备忘](../design/external-wms-collaboration-seams-design-note.md)接入；某个租户用哪一种是租户取值 |
+| `PA-WF-02` | 3PL 仓储费的常规形态是逐笔作业按计量收费：一条规则由若干条件对一个计费变量，带减免量、单位数量、是否进位、单价、基础费与最低最高收费；仓租按体积或按库位计，按库龄分段，免租期照计量而金额为零 | 行业形态，取自一套商用海外仓系统（领星 OMP）的公开帮助文档（2026-11-11 核对），无一手报价单 | 决定 `parcel-pricing` 仓储计费方案与计量费用规则的文法（[ADR-0377](../adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)）；规则、条件取值与各项数值一律等真实报价单，第一份真实仓储报价单到来时复核 |
 
 「依据强度」一栏写明这些不是已确认参数。据其决定**能力范围**允许，据其决定**任何取值**不允许。
 

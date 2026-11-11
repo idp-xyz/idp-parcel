@@ -1062,10 +1062,11 @@ Status: Confirmed
 
 ### 仓储作业收费发生项
 
-证明一项仓储作业已经发生的事实：作业种类、货主、仓、业务时间、来源事实引用，以及一组计量与作业属性（仓与作业属性是 ADR-0368 决定七所列之外另带的）；它不带金额。
+证明一项仓储作业已经发生的事实：作业种类、货主、仓、业务时间、来源事实引用，以及一组计量与作业属性（仓与作业属性是 ADR-0368 决定七所列之外另带的），可带明细行；它不带金额。
 
 - 所有者：`warehouse-fulfillment`。
-- 对货主收多少由 `parcel-pricing` 按 `SELL` 价卡评价，`settlement-accounting` 采用为客户运营应收，两者都不回写发生项；计价为它立评价对象另立 ADR（ADR-0368 决定七）。
+- 对货主收多少由 `parcel-pricing` 按 `SELL` 价卡评价，`settlement-accounting` 采用为客户运营应收，两者都不回写发生项（ADR-0368 决定七）。它是小包计价的一种评价对象，由仓储计费方案按计量费用规则评价；结算凭「仓储作业收费发生项已形成」信封发起 SELL 评价请求（[ADR-0377](../adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)）。
+- 形成之后不改写；更正追加版本，重述或作废，指名被更正的那一版。
 - 它与运输收费发生项是两种事实，所有者不同。
 - 避免使用：仓储费、仓租账单、运输收费发生项。
 
@@ -1844,10 +1845,10 @@ Status: Confirmed
 
 ### 停因
 
-一份评价请求停下的原因，或一拍包裹计费时点、一版运输收费发生项还没发出请求就停下的原因。封闭集，分发起之前、计价没形成评价、评价采用不了三段；评价待判断再按缺的是什么分格（目录、序列、价表上的一段、包裹事实，分不出的落笼统那一格）。
+一份评价请求停下的原因，或一拍包裹计费时点、一版运输收费发生项、一版仓储作业收费发生项还没发出请求就停下的原因。封闭集，分发起之前、计价没形成评价、评价采用不了三段；评价待判断再按缺的是什么分格（目录、序列、价表上的一段、包裹事实，分不出的落笼统那一格）。
 
 - 所有者：`settlement-accounting`，记在评价请求与[发起停办](#发起停办)上；计价没形成评价那几格由 `parcel-pricing` 经[评价未形成](#评价未形成)交来，结算记。
-- 停因是如实的答复，不是缺省值的替身。续办按它找解得开它的那一类[参数已登记](#参数已登记)；哪一类登记解得开哪些停因只在 [ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定一处。
+- 停因是如实的答复，不是缺省值的替身。续办按它找解得开它的那一类[参数已登记](#参数已登记)；哪一类登记解得开哪些停因只在 [ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定一处；仓储作业收费发生项那一路多出的一格与解得开它的登记由 [ADR-0377](../adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 决定九扩进去。
 - 避免使用：错误码、失败原因、未决原因。
 
 ### 代次
@@ -1860,7 +1861,7 @@ Status: Confirmed
 
 ### 发起停办
 
-一拍包裹计费时点或一版运输收费发生项，走到发出评价请求之前就停下（答`未配置`，或包裹没有商业解析）时，按自然键记下的那一拍的输入与[停因](#停因)。
+一拍包裹计费时点、一版运输收费发生项或一版仓储作业收费发生项，走到发出评价请求之前就停下（答`未配置`，或包裹没有商业解析）时，按自然键记下的那一拍的输入与[停因](#停因)。
 
 - 所有者：`settlement-accounting`。
 - 它不是评价请求：此刻请求要的结算账户、计价范围或费用项目还答不出。续办时按记下的输入原样重跑发起；这一拍有了请求就不再等着，重跑答`采用了别的时点`就落终止（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
