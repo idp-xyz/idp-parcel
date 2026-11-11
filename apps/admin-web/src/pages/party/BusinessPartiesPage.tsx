@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
+import { useTabViewRef, useTabViewState } from '../../templates/workspace-view-state';
 import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, Info, MoreHorizontal, Plus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
@@ -69,7 +70,7 @@ import {
 } from './BusinessPartiesChrome';
 import { PartyWorkbench, type PartyWorkbenchColumn } from './PartyWorkbench';
 import { PartyRoster, PartyRosterStatus, partyRosterSelectClass } from './PartyRoster';
-import { partyRosterTypeOf, rememberedPartyExpired, selectedPartyRowOf, type RememberedParty } from './party-roster';
+import { partyRosterTypeOf, rememberedPartyExpired, rememberedPartyOnReturn, selectedPartyRowOf, type RememberedParty } from './party-roster';
 import { PartyTile } from './party-role-visuals';
 import {
   formatCount,
@@ -700,14 +701,22 @@ export function BusinessPartiesPage() {
   const [book, setBook] = useState<Book>('identities');
 
   // 身份册的列表状态。检索词放在地址 `?q=`：别处的引用链接带着它过来，这一册挂载时已经筛到那一行。
+  // 筛选、排序与选中的那一家按标签保留（templates/workspace-view-state.tsx），不是普通的组件状态：离开这张标签满新鲜期再回来，
+  // 壳层按新开页把本页重挂（Layout.tsx 的 returnNeedsFreshMount）。从名录右栏去对象页更新资料、改完回来，多半已经过了那段
+  // 时间——不保留的话，回来时分栏收了、选中的那一行也没了（票 business-party-redesign/11）。
   const [search, setSearch] = useAddressKeyword();
-  const [status, setStatus] = useState<BusinessPartyStatusFilter>('ALL');
-  const [type, setType] = useState<BusinessPartyTypeFilter>('ALL');
-  const [sort, setSort] = useState<WorkbenchSort>(defaultBusinessPartySort);
-  const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  const [status, setStatus] = useTabViewState<BusinessPartyStatusFilter>('business-parties.status', 'ALL');
+  const [type, setType] = useTabViewState<BusinessPartyTypeFilter>('business-parties.type', 'ALL');
+  const [sort, setSort] = useTabViewState<WorkbenchSort>('business-parties.sort', defaultBusinessPartySort);
+  const [selectedParty, setSelectedParty] = useTabViewState<string | null>('business-parties.selected', null);
   // 选中的那家最后一次在列表里读到的那一行（party-roster.ts 的 selectedPartyRowOf）：翻了页、换了条件之后它不在手上的任何一页里，
-  // 右栏靠这一份接着显。
-  const [rememberedParty, setRememberedParty] = useState<RememberedParty | null>(null);
+  // 右栏靠这一份接着显。它也按标签保留，但重挂后取回来的那一份要先标成「可能已经变了」（rememberedPartyOnReturn），所以不用
+  // useTabViewState 而自己接那一格快照：取初值时过一道折算。
+  const rememberedSnapshot = useTabViewRef<RememberedParty | null>('business-parties.selected-row', null);
+  const [rememberedParty, setRememberedParty] = useState<RememberedParty | null>(() => rememberedPartyOnReturn(rememberedSnapshot.current));
+  useLayoutEffect(() => {
+    rememberedSnapshot.current = rememberedParty;
+  }, [rememberedSnapshot, rememberedParty]);
   // 右栏刚收起的那一家：名录从主从分栏收回成表时把焦点落回它那一行（PartyWorkbench 的 initialFocusKey）。
   const closedParty = useRef<string | null>(null);
   const applyPartySelection = (key: string | null, row: BusinessPartyRecord | null) => {
