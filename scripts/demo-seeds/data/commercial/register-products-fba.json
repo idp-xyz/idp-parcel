@@ -1,0 +1,25 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scope": "SYN-SCOPE-01",
+  "forms": [
+    {
+      "productId": "SYN-PROD-CN-SG-FBA",
+      "version": "v1",
+      "form": "NETWORK_SERVICE"
+    }
+  ],
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-CN-SG-FBA-01",
+      "revision": 1,
+      "productId": "SYN-PROD-CN-SG-FBA",
+      "productVersion": "v1",
+      "channels": [
+        "SYN-CH-SG-POST-STD",
+        "SYN-CH-AGG-SEA-01"
+      ],
+      "basis": "SYN-DEC-CHANNEL-2026-011",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z"
+    }
+  ]
+}
