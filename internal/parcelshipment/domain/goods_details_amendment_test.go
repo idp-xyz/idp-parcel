@@ -114,7 +114,9 @@ func TestACorrectionReplacesTheGoodsDetailsAsAWholeAndRenumbersTheLines(t *testi
 
 	corrected := goodsOf(t, [][2]string{{"Cotton T-shirt", "48"}, {"Socks", "10"}},
 		[3]string{"parcel-1", "1", "24"}, [3]string{"parcel-2", "1", "24"}, [3]string{"parcel-2", "2", "10"})
-	request, err := request.AmendCustomerSourceData(goodsVersion(t, "goods-v1", "", domain.SupplementIntent, corrected))
+	baselineAtStart, _ := request.AcceptanceBaseline()
+	request, err := request.AmendCustomerSourceData(goodsVersion(t, "goods-v1", baselineAtStart.SubmissionVersionID().String(),
+		domain.CorrectionIntent, corrected))
 	if err != nil {
 		t.Fatalf("修订：%v", err)
 	}
@@ -139,6 +141,29 @@ func TestACorrectionReplacesTheGoodsDetailsAsAWholeAndRenumbersTheLines(t *testi
 	if got := descriptionsOf(current.Goods()); len(got) != 3 || got[1] != "Cap" {
 		t.Fatalf("接受基线那一版的货物明细被动了：%v", got)
 	}
+
+	// 再改一次：旧版本 goods-v1 照旧是它自己那两行，后来者不覆盖它。
+	request, err = request.AmendCustomerSourceData(goodsVersion(t, "goods-v2", "goods-v1", domain.CorrectionIntent,
+		goodsOf(t, [][2]string{{"Socks", "10"}}, [3]string{"parcel-1", "1", "5"}, [3]string{"parcel-2", "1", "5"})))
+	if err != nil {
+		t.Fatalf("再修订：%v", err)
+	}
+	earlier, _ := request.GoodsDetailsAt(mustAnchor(t, "goods-v1"))
+	if got := descriptionsOf(earlier); len(got) != 2 || got[0] != "Cotton T-shirt" {
+		t.Fatalf("旧版本 goods-v1 被动了：%v", got)
+	}
+	if latest, _ := request.GoodsDetailsInEffect(); len(latest.Lines()) != 1 {
+		t.Fatalf("在用的应是 goods-v2 的一行，得 %d 行", len(latest.Lines()))
+	}
+}
+
+func mustAnchor(t *testing.T, version string) domain.SourceDataVersionAnchor {
+	t.Helper()
+	anchor, err := domain.NewSourceDataVersionAnchor(mustValue(t, domain.NewSourceDataVersionID, version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return anchor
 }
 
 // Covers: AT-PS-185 后半——另一请求只交改动的那一行：按整组读，新货物明细只剩那一行，不按行与旧版本合并。
@@ -155,14 +180,15 @@ func TestAnAmendmentCarryingOneLineIsReadAsTheWholeGroup(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0373 决定四「增删行或改分配不是增删委托成员」——装箱分配只能指接受基线上的成员：指到基线外答同一个业务拒绝
-// （与范围越过基线同格），漏了成员是内容自己没写全。
+// Covers: ADR-0373 决定三「指不存在的包裹……答请求形状不对」与决定四「增删行或改分配不是增删委托成员」——装箱分配只能指
+// 接受基线上的成员、报就每个都报；指到基线外与漏了成员同是形状错，不是越过基线的业务拒绝。
 func TestAGoodsAmendmentsPackingIsBoundByTheAcceptanceBaseline(t *testing.T) {
 	request := acceptedWithGoods(t, domain.GoodsDetails{})
 	outside := goodsOf(t, [][2]string{{"T-shirt", "3"}},
 		[3]string{"parcel-1", "1", "1"}, [3]string{"parcel-2", "1", "1"}, [3]string{"parcel-9", "1", "1"})
-	if _, err := request.AmendCustomerSourceData(goodsVersion(t, "goods-v1", "", domain.SupplementIntent, outside)); !errors.Is(err, domain.ErrParcelOutsideAcceptanceBaseline) {
-		t.Fatalf("指到基线外：err = %v, want ErrParcelOutsideAcceptanceBaseline", err)
+	if _, err := request.AmendCustomerSourceData(goodsVersion(t, "goods-v1", "", domain.SupplementIntent, outside)); !errors.Is(err, domain.ErrInvalidPacking) ||
+		errors.Is(err, domain.ErrParcelOutsideAcceptanceBaseline) {
+		t.Fatalf("指到基线外：err = %v, want ErrInvalidPacking（形状错，不是越过基线）", err)
 	}
 	partial := goodsOf(t, [][2]string{{"T-shirt", "3"}}, [3]string{"parcel-1", "1", "3"})
 	if _, err := request.AmendCustomerSourceData(goodsVersion(t, "goods-v1", "", domain.SupplementIntent, partial)); !errors.Is(err, domain.ErrInvalidPacking) {

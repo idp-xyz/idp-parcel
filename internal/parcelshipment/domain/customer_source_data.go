@@ -452,8 +452,9 @@ func (request ShipmentRequest) CurrentSourceDataAdoption(
 
 // adoptionAmong 是 CurrentSourceDataAdoption 的判法本身，收散的版本：查阅读面不重建聚合也要用同一段（GoodsDetailsInEffect）。
 //
-// root 是接受基线那一版提交版本。范围上还没有采用任何修订时，基准指名它的更正接的就是链头：客户更正首次提交的值，首方契约
-// 要它带提交回执的 submissionVersionId——那一版就是接受基线，不是一份过期的基准。不认它，这类更正头一条就停在`待复核`，
+// root 是接受基线那一版提交版本。范围上还没有采用任何修订时，基准指名它的更正接的就是链头（PS CONTEXT「当前客户资料版本
+// 采用判断」基础版本是否过期那一句）：客户更正首次提交的值，首方契约要它带提交回执的 submissionVersionId——那一版就是接受
+// 基线，不是一份过期的基准。不认它，这类更正头一条就停在`待复核`，
 // 而那里并没有分叉可并。已有修订被采用之后再指名它，就是对着过期基准改，照旧判分叉。
 func adoptionAmong(versions []CustomerSourceDataVersion, scope SourceDataScope, root SubmissionVersionID) (SourceDataAdoptionJudgment, bool) {
 	judgment := SourceDataAdoptionJudgment{}

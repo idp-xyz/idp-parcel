@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
 // SourceDataAmendmentIntake 把一次已认证的接入请求翻译成一条资料修订命令（UC-PS-002 的编排半边，
@@ -83,7 +84,9 @@ func writeAmendmentOutcome(response http.ResponseWriter, problem problemWriter, 
 	body := amendmentResponse{Outcome: outcome}
 	if version, present := result.Version(); present {
 		body.SourceDataVersionID = version.VersionID().String()
-		if goods, declared := version.Content().Goods(); declared {
+		// 显式清空也回显 0 / 0：清掉整组与误删到一行不剩是要分得开的两件事，客户系统都得看得见。
+		if version.Scope().DataGroup() == domain.GoodsDetailsDataGroup() {
+			goods, _ := version.Content().Goods()
 			lines, allocations := len(goods.Lines()), len(goods.Packing())
 			body.GoodsLineCount, body.PackingAllocationCount = &lines, &allocations
 		}

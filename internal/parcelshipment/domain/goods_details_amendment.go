@@ -1,7 +1,5 @@
 package domain
 
-import "fmt"
-
 // 本文件是委托级资料组「货物明细」的修订半边（ADR-0373 决定四，票 declared-goods-lines/06）：资料修订以这一组整组替换——内件
 // 性质、行与装箱分配一起；补充与更正交来完整的新货物明细，显式清空清掉整组。行号是版本内的序号，新版本从 1 重编，旧版本与
 // 接受基线不动，所以（资料版本锚，委托，行号）这个引用本身稳定。
@@ -45,21 +43,16 @@ func (content SourceDataVersionContent) fitsGoodsDetailsScope(scope SourceDataSc
 }
 
 // CheckSourceDataContentAgainstBaseline 核一份修订内容能不能落在这份委托的接受基线上：货物明细的装箱分配只能指基线成员，
-// 报了就每个成员都报。指到基线之外的包裹交回 ErrParcelOutsideAcceptanceBaseline——与范围指名基线外成员同一个业务答案
-// （AT-PS-023）：增删行或改分配不是增删委托成员，多出来的那一箱要走关联新委托；漏了成员交回 ErrInvalidPacking，是这份
-// 内容自己没写全。
+// 报了就每个成员都报，不合即 ErrInvalidPacking。指到基线外的包裹与漏了成员同是请求形状不对（ADR-0373 决定三），不是
+// 越过基线的业务拒绝：增删行或改分配不是增删委托成员（决定四），这份修订本就没打算动成员，多半是包裹号写错了——答形状错
+// 客户改了载荷就好，答不允许会让它去等一个永远不会变的条件。
 //
-// 它单独暴露，判据同 SourceDataScopeOutsideAcceptanceBaseline：编排要在问矩阵之前就答这一拒，AmendCustomerSourceData
-// 再核一次守住聚合，两处共用这一段判断。别的内容形不涉成员，恒过。
+// 它单独暴露，判据同 SourceDataScopeOutsideAcceptanceBaseline：编排在问矩阵之前就问，AmendCustomerSourceData 再核一次守住
+// 聚合，判断只在这里。别的内容形不涉成员，恒过。
 func (request ShipmentRequest) CheckSourceDataContentAgainstBaseline(content SourceDataVersionContent) error {
 	goods, declared := content.Goods()
 	if !declared || request.state != ShipmentRequestAccepted {
 		return nil
-	}
-	for _, allocation := range goods.Packing() {
-		if !request.baseline.covers(allocation.Parcel()) {
-			return fmt.Errorf("%w: packing names parcel %q", ErrParcelOutsideAcceptanceBaseline, allocation.Parcel())
-		}
 	}
 	return goodsFitMembers(goods, request.baseline.DeclaredParcelIDs())
 }

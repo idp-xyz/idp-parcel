@@ -7,8 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件钉资料修订的规范化形状 PAM-1 在货物明细上的同号改形（ADR-0373 决定八的前提，UC-PS-002「给开发的交接」那一行；票
-// declared-goods-lines/06）：不带货物明细的修订逐字节同前，已存摘要与重放照旧成立；带了就进摘要，装箱分配的给入次序不是内容。
+// 本文件钉资料修订的规范化形状 PAM-1 在货物明细上的同号改形（ADR-0373 决定八的前提；UC-PS-002「给开发的交接」里「目标范围」、
+// 资料组「货物明细」那一行；票 declared-goods-lines/06）：不带货物明细的修订逐字节同前，已存摘要与重放照旧成立；带了就进摘要，装箱分配的给入次序不是内容。
 
 func pam1MeasurementSpec(t *testing.T) domain.SourceDataAmendmentPayloadSpec {
 	t.Helper()

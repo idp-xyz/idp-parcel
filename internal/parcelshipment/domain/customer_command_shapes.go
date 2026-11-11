@@ -171,7 +171,7 @@ type canonicalAmendmentDocument struct {
 	Weight           *canonicalWeightDocument     `json:"weight"`
 	Dimensions       *canonicalDimensionsDocument `json:"dimensions"`
 	// Goods 是可缺键：没交货物明细即不编码，旧载荷逐字节同前，已存的 PAM-1 摘要与重放照旧成立。同号改形的前提与提交的
-	// PSC-1 相同（ADR-0373 决定八，UC-PS-002「给开发的交接」那一行）。
+	// PSC-1 相同（ADR-0373 决定八；UC-PS-002「给开发的交接」里输入语义契约「目标范围」、资料组「货物明细」那一行）。
 	Goods *canonicalGoodsDocument `json:"goods,omitempty"`
 }
 
@@ -236,8 +236,8 @@ func CanonicalizeCustomerSourceDataAmendment(spec SourceDataAmendmentPayloadSpec
 		content = NewAddressElementsContent(AddressElementsOf(group, entries))
 	}
 	if spec.Goods.Declared() {
-		// 成员集合在这里不可得（修订口不读委托）：对着分配自己指名的包裹编，只核分配的内部形状；指没指全、指没指到基线外，
-		// 由聚合对着接受基线核（CheckSourceDataContentAgainstBaseline）。
+		// 成员集合在这里不可得（修订口不读委托）：对着分配自己指名的包裹编，编码里那道成员核对因此恒过，只剩分配的内部形状；
+		// 指没指全、指没指到基线外，由聚合对着接受基线核（CheckSourceDataContentAgainstBaseline）。
 		named := make(map[DeclaredParcelID]struct{}, len(spec.Goods.packing))
 		for _, allocation := range spec.Goods.packing {
 			named[allocation.parcel] = struct{}{}

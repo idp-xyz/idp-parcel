@@ -314,7 +314,8 @@ type requestDetailBody struct {
 	PriorVersionCount int                  `json:"priorVersionCount"`
 	AcceptanceTask    acceptanceTaskBody   `json:"acceptanceTask"`
 	Decision          *decisionBody        `json:"decision,omitempty"`
-	// Goods 与 PlatformShipment 是当前版本的货物明细与委托上的平台货件（ADR-0373、ADR-0374），没报即整键缺席。
+	// Goods 是此刻在用的货物明细（有已采用的资料修订就是那一版），PlatformShipment 是委托上的平台货件（ADR-0373、ADR-0374），
+	// 没报即整键缺席。
 	Goods            *goodsViewBody            `json:"goods,omitempty"`
 	PlatformShipment *platformShipmentViewBody `json:"platformShipment,omitempty"`
 	// GoodsStanding 说 goods 出自哪里：ON_SUBMISSION（提交时报的）、ON_ADOPTED_VERSION（资料修订后的那一版）或

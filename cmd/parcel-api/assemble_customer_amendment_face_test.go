@@ -499,7 +499,8 @@ func TestACustomerClientReplacesTheGoodsDetailsThroughTheFirstPartyLineAgainstAR
 	rules := rulePackageOf(t, "SYN-TENANT-01")
 	seedClosureFor(t, line.db, identity, rules)
 	declareAmendmentAllowance(t, line.db, rules, false,
-		amendmentCell(t, "GOODS_DETAILS", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentAllowed))
+		amendmentCell(t, "GOODS_DETAILS", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentAllowed),
+		amendmentCell(t, "GOODS_DETAILS", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredExplicitClearIntent, pcdomain.AmendmentAllowed))
 	registerSelfServiceKey(t, line.db)
 	seedSelfServiceGrant(t, line.db)
 
@@ -545,5 +546,28 @@ func TestACustomerClientReplacesTheGoodsDetailsThroughTheFirstPartyLineAgainstAR
 	if detail.GoodsStanding != domain.GoodsDetailsOnAdoptedVersion || len(lines) != 1 ||
 		lines[0].Descriptions()[0].Text().Value() != "Cotton T-shirt" || len(detail.Goods.Packing()) != 1 {
 		t.Fatalf("视图里的货物明细：standing = %v、%d 行，want 资料修订后的那一版 1 行 Cotton T-shirt", detail.GoodsStanding, len(lines))
+	}
+
+	// 显式清空整组：照样回显 0 行 0 条（与误删到一行不剩分得开），视图答已采用那一版、货物明细如实缺席，不回退到提交时那两行。
+	cleared := line.post(line.amend, amendmentPath, syntheticCustomerSubject, `{
+  "accessRequestId": "SYN-ACCESS-REQUEST-GD-0003",
+  "originalAccessRequestId": "`+original+`",
+  "shipmentRequestId": "`+requestID+`",
+  "dataGroup": "GOODS_DETAILS",
+  "basisVersionId": "`+sourceDataVersionOf(t, recorded)+`",
+  "intent": "EXPLICIT_CLEAR",
+  "reason": "SYN-REASON-CUSTOMS-RETURN"
+}`)
+	answer.GoodsLineCount, answer.PackingAllocationCount = nil, nil
+	if err := jsonUnmarshal(cleared, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Code != http.StatusCreated || answer.AdoptionOutcome != "ADOPTED" || answer.GoodsLineCount == nil || *answer.GoodsLineCount != 0 ||
+		answer.PackingAllocationCount == nil || *answer.PackingAllocationCount != 0 {
+		t.Fatalf("显式清空 = %d %s, want 201 ADOPTED、回显 0 行 0 条", cleared.Code, cleared.Body.String())
+	}
+	detail, _, err = views.FindVisibleByID(t.Context(), scope, mustValue(t, domain.NewShipmentRequestID, requestID))
+	if err != nil || detail.GoodsStanding != domain.GoodsDetailsOnAdoptedVersion || detail.Goods.Declared() {
+		t.Fatalf("清空后的视图：err=%v standing=%v declared=%v, want 已采用那一版且货物明细缺席", err, detail.GoodsStanding, detail.Goods.Declared())
 	}
 }

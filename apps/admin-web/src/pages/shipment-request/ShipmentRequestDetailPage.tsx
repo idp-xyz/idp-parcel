@@ -104,13 +104,22 @@ function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
       ),
     });
   }
-  // 分叉待复核时服务端不交 goods:说不出该按哪一版,页面也不挑一版显示,只说明停在哪。
+  // 服务端不交 goods 的两种情形各说一句,不显空表:分叉待复核时说不出该按哪一版,页面也不挑一版;客户经资料修订清空了整组,
+  // 与「从没报过」要分得开。
   if (view.goodsStanding === 'UNDETERMINED') {
     sections.push({
       id: 'goods-details',
       title: objectNouns.goodsDetails,
-      description: '这票的货物明细有两条资料修订各自改了同一版,待复核并掉之后才说得出在用的是哪一版。',
+      description: '这票的货物明细有资料修订对着过期或不认识的基础版本改,待复核并掉之后才说得出在用的是哪一版。',
       content: <p className="type-body text-idpxyz-textMuted">待复核</p>,
+    });
+  }
+  if (view.goodsStanding === 'ON_ADOPTED_VERSION' && !view.goods) {
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: '客户经资料修订清空了这票的货物明细;提交时报的那一份仍留在历史版本里,不再在用。',
+      content: <p className="type-body text-idpxyz-textMuted">已清空</p>,
     });
   }
   if (view.goods) {

@@ -169,6 +169,14 @@ func (intake *CustomerAmendmentIntake) IntakeSourceDataAmendment(
 	if err != nil {
 		return none, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
+	// 货物明细范围的形状（整份委托、补充与更正必须带整组）在这里就答 400，不等编排：编排在来源保全之后才判，客户改好载荷用
+	// 同一个修订请求标识重发会撞来源冲突。别的范围的错配在 amendmentContent 里同样先答。判断仍是领域那一道（FitsAmendment）。
+	if group == domain.GoodsDetailsDataGroup() && !canonical.Content().FitsAmendment(scope, intent) {
+		if _, named := scope.DeclaredParcelID(); named {
+			return none, malformedField("parcelId", fmt.Errorf("%s applies to the whole shipment request", group))
+		}
+		return none, malformedField("goods", fmt.Errorf("SUPPLEMENT and CORRECTION carry the whole new goods details; EXPLICIT_CLEAR carries none"))
+	}
 	requester, err := domain.NewRequesterReference("CUSTOMER_ACCOUNT:" + amendmentIdentity.CustomerAccountID().String())
 	if err != nil {
 		return none, err

@@ -382,8 +382,8 @@ func (row summaryRow) record() (ports.ShipmentRequestSummaryRecord, error) {
 	}, nil
 }
 
-// detailRecord 从快照文档摊出详情。只读文档已有的字段，不重算任何判断；文档里没有的
-// （如撤回记录明细）如实缺席，不代拟。
+// detailRecord 从快照文档摊出详情。只读文档已有的字段，不另立判断；唯一派生的是在用的货物明细，交给领域的
+// GoodsDetailsInEffect 判，与聚合的采用判断同一段。文档里没有的（如撤回记录明细）如实缺席，不代拟。
 func detailRecord(
 	summary ports.ShipmentRequestSummaryRecord,
 	document requestDocument,
