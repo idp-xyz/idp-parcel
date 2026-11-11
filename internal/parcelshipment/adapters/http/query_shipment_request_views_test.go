@@ -564,3 +564,100 @@ func TestViewsTransportFailuresSplitByRetryAction(t *testing.T) {
 		t.Fatalf("allow = %q", allow)
 	}
 }
+
+// Covers: ADR-0373、ADR-0374 决定六（票 declared-goods-lines/04）——详情交出委托级货物明细（每格带值与来源标记）与平台货件，逐件交
+// 客户件号、平台箱标号与这一箱的装箱分配，形状与提交口对应；没报的整键缺席。
+func TestViewsDetailReportsGoodsAndPlatformDeclarations(t *testing.T) {
+	record := viewDetailRecord(t)
+	parcel1 := mustValue(t, domain.NewDeclaredParcelID, "parcel-1")
+	parcel2 := mustValue(t, domain.NewDeclaredParcelID, "parcel-2")
+	this := domain.SourceMarkThisDeclaration
+	goods, err := domain.NewGoodsDetails(domain.GoodsDetailsSpec{
+		Category: domain.ContentCategorySaleOfGoods, CategoryMark: this,
+		Lines: []domain.GoodsLineSpec{
+			{Descriptions: []domain.GoodsDescriptionSpec{{Language: "en", Text: domain.GoodsCellSpec{Value: "T-shirt", Mark: domain.SourceMarkBoxList}}},
+				Quantity:       domain.GoodsCellSpec{Value: "48", Mark: this},
+				CommodityCodes: []domain.CommodityCodeSpec{{Side: domain.CommodityCodeExportSide, Code: domain.GoodsCellSpec{Value: "6109100000", Mark: this}}},
+				SalesOrder:     domain.SalesOrderReferenceSpec{OrderNumber: domain.GoodsCellSpec{Value: "1001", Mark: this}}},
+		},
+		Packing: []domain.PackingAllocationSpec{{Parcel: parcel1, Line: 1, Quantity: "24"}, {Parcel: parcel2, Line: 1, Quantity: "24"}},
+	}, []domain.DeclaredParcelID{parcel1, parcel2})
+	if err != nil {
+		t.Fatalf("货物明细：%v", err)
+	}
+	record.Goods = goods
+	shipment, err := domain.DeclarePlatformShipment("AMAZON", mustValue(t, domain.NewExternalIdentifierNumber, "FBA15SYNVIEW"), "")
+	if err != nil {
+		t.Fatalf("平台货件：%v", err)
+	}
+	record.PlatformShipment = shipment
+	record.DeclaredParcels[0].CustomerParcelNumber = "CUST-0001"
+	record.DeclaredParcels[1].PlatformBoxLabel = "FBA15SYNVIEWU000002"
+
+	response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+	var body struct {
+		Request struct {
+			Goods *struct {
+				ContentCategory string `json:"contentCategory"`
+				Lines           []struct {
+					Line         int `json:"line"`
+					Descriptions []struct {
+						Lang string `json:"lang"`
+						Text struct{ Value, Mark string }
+					} `json:"descriptions"`
+					Quantity       *struct{ Value, Mark string } `json:"quantity"`
+					LineValue      *struct{ Value, Mark string } `json:"lineValue"`
+					CommodityCodes []struct {
+						Side string                       `json:"side"`
+						Code struct{ Value, Mark string } `json:"code"`
+					} `json:"commodityCodes"`
+					SalesOrder *struct {
+						OrderNumber *struct{ Value, Mark string } `json:"orderNumber"`
+					} `json:"salesOrder"`
+				} `json:"lines"`
+			} `json:"goods"`
+			PlatformShipment *struct {
+				Platform    string `json:"platform"`
+				ShipmentID  string `json:"shipmentId"`
+				ReferenceID string `json:"referenceId"`
+			} `json:"platformShipment"`
+			DeclaredParcels []struct {
+				ParcelID             string `json:"parcelId"`
+				CustomerParcelNumber string `json:"customerParcelNumber"`
+				PlatformBoxLabel     string `json:"platformBoxLabel"`
+				Packing              []struct {
+					Line     int    `json:"line"`
+					Quantity string `json:"quantity"`
+				} `json:"packing"`
+			} `json:"declaredParcels"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	view := body.Request
+	if view.Goods == nil || view.Goods.ContentCategory != "SALE_OF_GOODS" || len(view.Goods.Lines) != 1 {
+		t.Fatalf("goods = %+v", view.Goods)
+	}
+	line := view.Goods.Lines[0]
+	if line.Line != 1 || line.Descriptions[0].Text.Value != "T-shirt" || line.Descriptions[0].Text.Mark != "BOX_LIST" ||
+		line.Quantity == nil || line.Quantity.Value != "48" || line.LineValue != nil ||
+		line.CommodityCodes[0].Side != "EXPORT" || line.SalesOrder == nil || line.SalesOrder.OrderNumber.Value != "1001" {
+		t.Fatalf("line = %+v；没报的格整键缺席", line)
+	}
+	if view.PlatformShipment == nil || view.PlatformShipment.ShipmentID != "FBA15SYNVIEW" || view.PlatformShipment.ReferenceID != "" {
+		t.Fatalf("platform shipment = %+v", view.PlatformShipment)
+	}
+	parcels := view.DeclaredParcels
+	if parcels[0].CustomerParcelNumber != "CUST-0001" || parcels[1].PlatformBoxLabel != "FBA15SYNVIEWU000002" ||
+		len(parcels[0].Packing) != 1 || parcels[0].Packing[0].Quantity != "24" || parcels[1].Packing[0].Line != 1 {
+		t.Fatalf("parcels = %+v", parcels)
+	}
+
+	plain := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: viewDetailRecord(t), found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+	if strings.Contains(plain.Body.String(), `"goods"`) || strings.Contains(plain.Body.String(), `"platformShipment"`) {
+		t.Fatalf("没报货物与平台货件的委托交出了这两键：%s", plain.Body.String())
+	}
+}

@@ -314,6 +314,9 @@ type requestDetailBody struct {
 	PriorVersionCount int                  `json:"priorVersionCount"`
 	AcceptanceTask    acceptanceTaskBody   `json:"acceptanceTask"`
 	Decision          *decisionBody        `json:"decision,omitempty"`
+	// Goods 与 PlatformShipment 是当前版本的货物明细与委托上的平台货件（ADR-0373、ADR-0374），没报即整键缺席。
+	Goods            *goodsViewBody            `json:"goods,omitempty"`
+	PlatformShipment *platformShipmentViewBody `json:"platformShipment,omitempty"`
 }
 
 type declaredParcelBody struct {
@@ -321,6 +324,10 @@ type declaredParcelBody struct {
 	DeclaredWeightValue string                `json:"declaredWeightValue,omitempty"`
 	DeclaredWeightUnit  string                `json:"declaredWeightUnit,omitempty"`
 	Dimensions          *parcelDimensionsBody `json:"dimensions,omitempty"`
+	// 这一件的客户件号、平台箱标号与装箱分配，形状与提交口的包裹草案对应；没报即整键缺席。
+	CustomerParcelNumber string            `json:"customerParcelNumber,omitempty"`
+	PlatformBoxLabel     string            `json:"platformBoxLabel,omitempty"`
+	Packing              []packingViewBody `json:"packing,omitempty"`
 }
 
 type parcelDimensionsBody struct {
@@ -377,9 +384,12 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 	}
 	for _, parcel := range record.DeclaredParcels {
 		parcelBody := declaredParcelBody{
-			ParcelID:            parcel.Parcel.String(),
-			DeclaredWeightValue: parcel.WeightValue,
-			DeclaredWeightUnit:  parcel.WeightUnit,
+			ParcelID:             parcel.Parcel.String(),
+			DeclaredWeightValue:  parcel.WeightValue,
+			DeclaredWeightUnit:   parcel.WeightUnit,
+			CustomerParcelNumber: parcel.CustomerParcelNumber,
+			PlatformBoxLabel:     parcel.PlatformBoxLabel,
+			Packing:              packingViewBodiesFor(record.Goods, parcel.Parcel),
 		}
 		if parcel.HasDimensions {
 			parcelBody.Dimensions = &parcelDimensionsBody{
@@ -391,6 +401,8 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		}
 		body.DeclaredParcels = append(body.DeclaredParcels, parcelBody)
 	}
+	body.Goods = goodsViewBodyOf(record.Goods)
+	body.PlatformShipment = platformShipmentViewBodyOf(record.PlatformShipment)
 	if record.Task.HasAttempt {
 		body.AcceptanceTask.LastAttemptReason = record.Task.LastAttemptReason
 		body.AcceptanceTask.LastAttemptContinuation = record.Task.LastAttemptContinuation

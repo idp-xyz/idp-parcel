@@ -377,3 +377,55 @@ func TestAWithdrawnRequestStaysVisibleToTheView(t *testing.T) {
 		t.Fatalf("task state = %s, want STOPPED", detail.Task.State)
 	}
 }
+
+// Covers: ADR-0373 决定五、ADR-0374 决定四与决定六——委托详情摊出当前版本的货物明细、平台货件，逐件带客户件号与平台箱标号（票
+// declared-goods-lines/04）；没报的照实缺席。
+func TestFindVisibleCarriesGoodsAndPlatformDeclarations(t *testing.T) {
+	views, repository, transactor := newShipmentRequestViews(t)
+	ctx := t.Context()
+	request := numberedRequestWith(t, "tenant-1", "customer-1", "view-g1", "REQ-G1", []string{"parcel-1", "parcel-2"},
+		map[string]string{"parcel-1": "CUST-0001"}, func(spec *domain.SubmitShipmentRequestSpec) {
+			shipment, err := domain.DeclarePlatformShipment("AMAZON", mustBuild(t, domain.NewExternalIdentifierNumber, "FBA15SYNVIEW"), "SYN-REF-V")
+			if err != nil {
+				t.Fatalf("平台货件：%v", err)
+			}
+			spec.PlatformShipment = shipment
+			label, err := domain.DeclarePlatformBoxLabel(mustBuild(t, domain.NewDeclaredParcelID, "parcel-2"),
+				mustBuild(t, domain.NewExternalIdentifierNumber, "FBA15SYNVIEWU000002"))
+			if err != nil {
+				t.Fatalf("箱标号：%v", err)
+			}
+			spec.PlatformBoxLabels = []domain.PlatformBoxLabelDeclaration{label}
+			spec.Goods = roundTripGoods(t)
+		})
+	mustInsert(t, transactor, ctx, repository, request)
+	mustInsert(t, transactor, ctx, repository,
+		scopedSubmittedRequest(t, "tenant-1", "customer-1", "view-g2", "REQ-G2", submittedAtFixture))
+
+	detail, found, err := views.FindVisibleByID(ctx, viewScope(t, "tenant-1", "customer-1"), mustBuild(t, domain.NewShipmentRequestID, "REQ-G1"))
+	if err != nil || !found {
+		t.Fatalf("查阅详情：found=%v err=%v", found, err)
+	}
+	if lines := detail.Goods.Lines(); len(lines) != 2 || len(detail.Goods.Packing()) != 3 {
+		t.Fatalf("货物明细 %d 行 %d 条分配, want 2 / 3", len(lines), len(detail.Goods.Packing()))
+	}
+	if shipment := detail.PlatformShipment; !shipment.Declared() || shipment.ShipmentNumber().String() != "FBA15SYNVIEW" {
+		t.Fatalf("平台货件 = %+v", shipment)
+	}
+	byParcel := map[string]ports.DeclaredParcelViewRecord{}
+	for _, parcel := range detail.DeclaredParcels {
+		byParcel[parcel.Parcel.String()] = parcel
+	}
+	if byParcel["parcel-1"].CustomerParcelNumber != "CUST-0001" || byParcel["parcel-1"].PlatformBoxLabel != "" ||
+		byParcel["parcel-2"].PlatformBoxLabel != "FBA15SYNVIEWU000002" || byParcel["parcel-2"].CustomerParcelNumber != "" {
+		t.Fatalf("逐件的号 = %+v", byParcel)
+	}
+
+	plain, _, err := views.FindVisibleByID(ctx, viewScope(t, "tenant-1", "customer-1"), mustBuild(t, domain.NewShipmentRequestID, "REQ-G2"))
+	if err != nil {
+		t.Fatalf("查阅没报货物的委托：%v", err)
+	}
+	if plain.Goods.Declared() || plain.PlatformShipment.Declared() {
+		t.Fatal("没报货物明细与平台货件的委托读成了报了")
+	}
+}
