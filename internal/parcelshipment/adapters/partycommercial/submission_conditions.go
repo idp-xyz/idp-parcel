@@ -19,8 +19,11 @@ import (
 const (
 	submissionConditionsDirectory = "parcel-shipment/submission-conditions/"
 
-	reasonRulePackageUnreadable       = "PC-RULE_PACKAGE_UNREADABLE"
-	reasonSubmissionConditionsMissing = "PS-SUBMISSION_CONDITIONS_UNREADABLE"
+	// 规则包读不回、没登记译的是提供方的答复，带 PC- 前缀；提交条件的参考配置打不开、或引了别的目录，是本上下文自己随产品
+	// 发布的东西，不带前缀（commercial_basis.go 头注的分法）。
+	reasonRulePackageUnreadable     = "PC-RULE_PACKAGE_UNREADABLE"
+	reasonRulePackageNotConfigured  = "PC-RULE_PACKAGE_NOT_CONFIGURED"
+	reasonSubmissionConditionsUnfit = "SUBMISSION_CONDITIONS_UNREADABLE"
 )
 
 // submissionConditionDocument 是提交条件参考配置的形：只读条件码，说明文字给人看、不进判断。
@@ -79,11 +82,15 @@ func (adapter *CommercialBasisAdapter) submissionConditionsFor(
 		return psdomain.SubmissionConditions{}, "", nil
 	}
 	if adapter.rules == nil {
-		return psdomain.SubmissionConditions{}, reasonRulePackageUnreadable, nil
+		// 装配缺件响亮报错，不当成未决：未决会让每一份声明了这一组的委托无休止重试，而缺的是一根接线。
+		return psdomain.SubmissionConditions{}, "", fmt.Errorf("%w: rule package content view is not wired", ErrUntranslatableAnswer)
 	}
 	pack, found, err := adapter.rules.LoadAcceptanceRulePackage(ctx, tenant, adopted.Version())
-	if err != nil || !found {
+	if err != nil {
 		return psdomain.SubmissionConditions{}, reasonRulePackageUnreadable, nil
+	}
+	if !found {
+		return psdomain.SubmissionConditions{}, reasonRulePackageNotConfigured, nil
 	}
 	var conditions psdomain.SubmissionConditions
 	for _, rule := range pack.RulesIn(pcdomain.CrossFieldConditionRules) {
@@ -92,11 +99,12 @@ func (adapter *CommercialBasisAdapter) submissionConditionsFor(
 			continue
 		}
 		if err != nil {
-			return psdomain.SubmissionConditions{}, reasonSubmissionConditionsMissing, nil
+			return psdomain.SubmissionConditions{}, reasonSubmissionConditionsUnfit, nil
 		}
 		if !strings.HasPrefix(reference.Identifier(), submissionConditionsDirectory) {
-			// 引的是别的目录（不是提交条件）：不是本执行器的，照不透明引用办。
-			continue
+			// 在这一类下引了参考配置却不是提交条件：登记的人以为它在判，本执行器却读不懂。照不透明引用跳过，就成了「登进去、
+			// 然后永远不判」；停在无法判定，等有人改规则包。
+			return psdomain.SubmissionConditions{}, reasonSubmissionConditionsUnfit, nil
 		}
 		set, err := SubmissionConditionsOf(reference)
 		if err != nil {

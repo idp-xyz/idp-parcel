@@ -21,8 +21,12 @@ const (
 	PlatformShipmentDeclaredCondition
 	// EveryParcelHasPlatformBoxLabelCondition：当前提交版本的每件包裹都报了平台箱标号。
 	EveryParcelHasPlatformBoxLabelCondition
-	// PackingDeclaredCondition：当前提交版本报了货物明细与装箱分配。报了就是报全，由提交口的形状规则保证，这一条只要求在场。
+	// PackingDeclaredCondition：当前提交版本报了货物明细与装箱分配。这一条只要求在场：报了就是报全，NewGoodsDetails 拒收漏掉
+	// 任何一件的装箱分配。
 	PackingDeclaredCondition
+
+	// submissionConditionEnd 不是条件，是遍历的上界：新条件加在它前面，Conditions 与落库就都看得见，不会存时静默丢掉。
+	submissionConditionEnd
 )
 
 var submissionConditionWords = map[SubmissionCondition]string{
@@ -68,7 +72,7 @@ func (set SubmissionConditions) Has(condition SubmissionCondition) bool {
 // Conditions 按条件码的定义次序交回，次序稳定，落库与显示都用它。
 func (set SubmissionConditions) Conditions() []SubmissionCondition {
 	var conditions []SubmissionCondition
-	for condition := PlatformShipmentDeclaredCondition; condition <= PackingDeclaredCondition; condition++ {
+	for condition := PlatformShipmentDeclaredCondition; condition < submissionConditionEnd; condition++ {
 		if set.Has(condition) {
 			conditions = append(conditions, condition)
 		}

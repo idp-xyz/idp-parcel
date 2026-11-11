@@ -83,6 +83,10 @@ func (applicable ApplicableCheckGroups) Declared() bool {
 }
 
 // Groups 交回声明的适用校验组。重建与快照往返按公开访问器保全，不能读未导出切片。
+func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
+	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
+}
+
 // Includes 回答规则包是否声明某一组适用。
 func (applicable ApplicableCheckGroups) Includes(group AcceptanceCheckGroup) bool {
 	for _, declared := range applicable.groups {
@@ -91,10 +95,6 @@ func (applicable ApplicableCheckGroups) Includes(group AcceptanceCheckGroup) boo
 		}
 	}
 	return false
-}
-
-func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
-	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
 }
 
 // ManualReviewPolicy 是所采用接单规则包对「这份委托要不要人工复核」的声明。

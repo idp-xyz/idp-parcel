@@ -172,3 +172,57 @@ func TestSubmissionConditionsAreAClosedSet(t *testing.T) {
 		t.Fatal("集合外的码认成了")
 	}
 }
+
+// Covers: 补齐后重判（ADR-0376 决定一、决定二）——缺一箱箱标号停在等客户补；客户经受控补充交来带全部箱标号的新提交版本，新
+// 任务不带旧缺口，重判同一组通过即接受。
+func TestASupplementCarryingTheMissingBoxLabelResumesToAcceptance(t *testing.T) {
+	without := func(checks []domain.AcceptanceCheck, group domain.AcceptanceCheckGroup) []domain.AcceptanceCheck {
+		var kept []domain.AcceptanceCheck
+		for _, check := range checks {
+			if check.Group() != group {
+				kept = append(kept, check)
+			}
+		}
+		return kept
+	}
+	waiting := fbaSubmitted(t, true, true, "parcel-1")
+	documents, err := waiting.RequiredDocumentChecks(fbaConditions(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waiting, err = waiting.Decide(decisionSpec(t, append(without(allGroupsPassing(t), domain.RequiredDocumentCheck), documents...))); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if len(waiting.AcceptanceDecisionTask().SupplementGaps()) != 1 {
+		t.Fatal("缺一箱箱标号却没记下缺口")
+	}
+
+	spec := supersessionSpecFor(t, "parcel-1", "parcel-2")
+	spec.PlatformShipment, _ = waiting.PlatformShipment()
+	for index, parcel := range []string{"parcel-1", "parcel-2"} {
+		label, err := domain.DeclarePlatformBoxLabel(mustValue(t, domain.NewDeclaredParcelID, parcel),
+			mustValue(t, domain.NewExternalIdentifierNumber, "SYN-FBA-1U00000"+string(rune('1'+index))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec.PlatformBoxLabels = append(spec.PlatformBoxLabels, label)
+	}
+	spec.Goods = goodsOf(t, [][2]string{{"T-shirt", "2"}}, [3]string{"parcel-1", "1", "1"}, [3]string{"parcel-2", "1", "1"})
+	supplemented, err := waiting.FormNewSubmissionVersion(spec)
+	if err != nil {
+		t.Fatalf("受控补充：%v", err)
+	}
+	if len(supplemented.AcceptanceDecisionTask().SupplementGaps()) != 0 {
+		t.Fatal("新任务带着旧缺口")
+	}
+	if documents, err = supplemented.RequiredDocumentChecks(fbaConditions(t)); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := supplemented.Decide(decisionSpec(t, append(without(allGroupsPassing(t), domain.RequiredDocumentCheck), documents...)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if accepted.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("补齐后 state = %v, want 已接受", accepted.State())
+	}
+}
