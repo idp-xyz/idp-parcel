@@ -5,6 +5,7 @@ import { countBusinessParties, indexPartyRoles, ourCompanyPartyIds, rolesOfParty
 import {
   formatCount,
   partyAttentionCount,
+  partyColumnLayoutOf,
   partyFilteredFooterCountText,
   partyFooterCountText,
   partyFooterPageText,
@@ -13,11 +14,12 @@ import {
   partyTileKindOf,
   partyTypeChipsFit,
   partyTypeChipsOf,
+  statusCountsUnderConditions,
   tallyPartyRelationships,
 } from './business-parties-workbench';
 
 // 本文件钉的是往来单位页新版式（票 business-party-redesign/02）的列表纯逻辑：筛选项上的数随别的条件走、「合作关系」一格与
-// 类型列同一口径、图标块取哪一种、类型芯片摆不摆得下、视图签右端待办的数、表底两句话。
+// 类型列同一口径、图标块取哪一种、类型芯片摆不摆得下、各列怎么排、视图签右端待办的数、表底两句话。
 
 function party(partyId: string, over: Partial<BusinessPartyRecord> = {}): BusinessPartyRecord {
   return {
@@ -143,6 +145,12 @@ test('partyTypeChipsOf 摆哪几枚看整册，数看当前条件', () => {
   equal(partyTypeChipsOf(whole, empty, 'CUSTOMER').find((chip) => chip.type === 'CUSTOMER')?.disabled, false);
   equal(partyTypeChipsOf(whole, whole, 'SUPPLIER').some((chip) => chip.type === 'SUPPLIER'), true);
   equal(partyTypeChipsOf(whole, whole, 'ALL').some((chip) => chip.type === 'SUPPLIER'), false);
+  // 当前条件的那一问还没答出：摆的还是那几枚，不摆数、也不压淡——0 是一句真话，不拿它占位；整册的数照记，估宽度用
+  const unanswered = partyTypeChipsOf(whole, null, 'ALL');
+  deepEqual(unanswered.map((chip) => chip.type), all.map((chip) => chip.type));
+  equal(unanswered.every((chip) => chip.count === null && !chip.disabled), true);
+  deepEqual(narrowed.map((chip) => chip.registerCount), [5, 2, 1, 1, 1, 1]);
+  deepEqual(unanswered.map((chip) => chip.registerCount), [5, 2, 1, 1, 1, 1]);
 });
 
 // Covers: 状态下拉上的数随检索词与类型走、不随状态自己走。没有检索词按整册数；有检索词且状态是「全部」按读口答回的行数；
@@ -189,6 +197,37 @@ test('partyStatusOptionsOf 的数随别的条件走', () => {
     partyStatusOptionsOf({ whole: null, conditioned: register, keyword: '', status: 'ALL', ofType: anyType }).every((option) => option.count === null),
     true,
   );
+  // 带检索词的那一问还没答出：数不出，一律不给；没有检索词时按整册数，不等那一问
+  equal(
+    partyStatusOptionsOf({ whole: register, conditioned: null, keyword: 'CUSTOMER', status: 'ALL', ofType: anyType }).every(
+      (option) => option.count === null,
+    ),
+    true,
+  );
+  deepEqual(counts(partyStatusOptionsOf({ whole: register, conditioned: null, keyword: '', status: 'ALL', ofType: anyType })), [
+    ['ALL', 5],
+    ['REGISTERED', 1],
+    ['EFFECTIVE', 3],
+    ['DEACTIVATED', 1],
+  ]);
+});
+
+// Covers: 合作关系的状态芯片用同一条规矩，「别的筛选」是角色——选了角色，各状态与「全部」只数这个角色的；有检索词又选了状态，
+// 只有选中的那一项数得出。
+test('statusCountsUnderConditions 用在合作关系上：数随角色与检索词走', () => {
+  const isCustomer = (row: PartyRelationshipRecord) => row.role === 'CUSTOMER';
+  const noKeyword = statusCountsUnderConditions({ whole: relationships, conditioned: null, keyword: '', status: 'ALL', matchesOthers: isCustomer });
+  deepEqual(['ALL', 'CANDIDATE', 'EFFECTIVE', 'EXPIRED', 'REVOKED'].map(noKeyword), [3, 1, 1, 1, 0]);
+  const everyRole = statusCountsUnderConditions({ whole: relationships, conditioned: null, keyword: '', status: 'CANDIDATE', matchesOthers: () => true });
+  deepEqual(['ALL', 'CANDIDATE', 'EFFECTIVE'].map(everyRole), [5, 1, 3]);
+  const searched = statusCountsUnderConditions({
+    whole: relationships,
+    conditioned: [relationships[1]],
+    keyword: 'CUSTOMER-02',
+    status: 'CANDIDATE',
+    matchesOthers: isCustomer,
+  });
+  deepEqual(['ALL', 'CANDIDATE', 'EFFECTIVE'].map(searched), [null, 1, null]);
 });
 
 // Covers: 表底两句——总数千位分节；读口不给总数时只说本页几家、只说第几页。
@@ -224,6 +263,31 @@ test('partyAttentionCount 的两个来源', () => {
   equal(partyAttentionCount(null, isRegistered, null), null);
 });
 
+// Covers: 各列怎么排——放得下各按定宽、余量归行尾；放不下时首列拿剩下的，首列还够定宽别的列不动，不够了别的列按比例收、
+// 只收到补上缺口；都收到窄宽后首列再让；表的最小宽度是各窄宽加首列下限，再窄横向滚。
+test('partyColumnLayoutOf 放不下时别的列按需收，首列留下限', () => {
+  const columns = [{ width: 380 }, { width: 240, narrowWidth: 180 }, { width: 120 }];
+  const layout = (listWidth: number | null) => partyColumnLayoutOf(listWidth, columns, 48, 200);
+  deepEqual(layout(null), { fits: true, widths: [380, 240, 120], minWidth: null });
+  deepEqual(layout(788), { fits: true, widths: [380, 240, 120], minWidth: null });
+  // 只差行尾的箭头：别的列不动，首列拿剩下的（还比定宽宽）
+  deepEqual(layout(787), { fits: false, widths: [null, 240, 120], minWidth: 500 });
+  deepEqual(layout(740), { fits: false, widths: [null, 240, 120], minWidth: 500 });
+  // 缺 30：能收的那一列收 30，首列正好还是 380
+  deepEqual(layout(710).widths, [null, 210, 120]);
+  // 缺口比能收的多：收到窄宽为止，余下的首列让（600 − 180 − 120 = 300）
+  deepEqual(layout(600).widths, [null, 180, 120]);
+  deepEqual(layout(420).widths, [null, 180, 120]);
+  // 没有一列给窄宽：谁都不收，只有首列让
+  deepEqual(partyColumnLayoutOf(500, [{ width: 380 }, { width: 240 }], 48, 200), { fits: false, widths: [null, 240], minWidth: 440 });
+  // 几列按各自能收的比例分摊：缺 60，能收 100 与 20
+  deepEqual(partyColumnLayoutOf(640, [{ width: 280 }, { width: 280, narrowWidth: 180 }, { width: 140, narrowWidth: 120 }], 48, 200).widths, [
+    null,
+    230,
+    130,
+  ]);
+});
+
 // Covers: 类型芯片摆不摆得下工具条那一行——宽度还没量到不摆（收成下拉）；够宽摆，不够宽收；芯片多了、数的位数多了要的宽度随之变大。
 test('partyTypeChipsFit 按工具条宽度判', () => {
   const whole = countBusinessParties(register, roles, ours);
@@ -236,6 +300,13 @@ test('partyTypeChipsFit 按工具条宽度判', () => {
   while (!partyTypeChipsFit(width, chips)) width += 1;
   equal(partyTypeChipsFit(width - 1, chips), false);
   equal(partyTypeChipsFit(width - 1, chips.slice(0, -1)), true);
-  const wider = chips.map((chip) => ({ ...chip, count: 12_345 }));
+  const wider = chips.map((chip) => ({ ...chip, registerCount: 12_345 }));
   equal(partyTypeChipsFit(width, wider), false);
+  // 摆芯片还是下拉不随当前条件下的数变：筛到每枚都是零、或那一问还没答出，判出来的一样
+  const conditionedToZero = chips.map((chip) => ({ ...chip, count: 0 }));
+  const unanswered = chips.map((chip) => ({ ...chip, count: null }));
+  equal(partyTypeChipsFit(width, conditionedToZero), true);
+  equal(partyTypeChipsFit(width - 1, conditionedToZero), false);
+  equal(partyTypeChipsFit(width, unanswered), true);
+  equal(partyTypeChipsFit(width - 1, unanswered), false);
 });

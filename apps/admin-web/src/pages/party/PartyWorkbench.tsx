@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Search } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
@@ -8,12 +16,13 @@ import type { ListCursorPaginationProps } from '../../templates/ListPageTemplate
 import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../templates/state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from '../../templates/workbench';
 import { useTabViewRef } from '../../templates/workspace-view-state';
-import { partyFooterPageText } from './business-parties-workbench';
+import { partyColumnLayoutOf, partyFooterPageText } from './business-parties-workbench';
 
 // 往来单位页新版式的列表区（票 business-party-redesign/02）：工具条一行、定宽列的表、表底翻页条，页面态只换表格那一块。
 // 本页自己的布局，不改 WorkbenchPageTemplate——那张模板别的页还在用，这套版式先在这一页试，验收后再收进共用模板。
 // 键盘、选中、滚动位置与分栏比例的记忆照搬模板的做法（同一组纯函数与钩子），换的只是长相：
-// - 各列给定宽，多出来的宽度全落在行尾；列表窄到放不下时首列让宽、行尾的箭头不摆。
+// - 各列给定宽，多出来的宽度全落在行尾；列表窄到放不下时行尾的箭头不摆，别的列先往各自的窄宽收、首列再让，首列留一个
+//   下限，再窄就横向滚（business-parties-workbench.ts 的 partyColumnLayoutOf）。
 // - 翻页在表底，不在工具条右端：工具条那一行留给筛选。
 // - 首次加载的骨架照将要出现的列来排，行高与真表一样，答案到了行不跳。
 // 行上没有悬停底色（用户 2026-11-03 裁定：浅色主题里悬停与选中两种底色太像），与模板同。
@@ -23,6 +32,8 @@ export interface PartyWorkbenchColumn<Row> {
   header: ReactNode;
   /** 定宽（像素）。 */
   width: number;
+  /** 列表窄到首列不够它的定宽时（右栏开着），这一列最多收到这么宽；首列不看它。不给就不收。 */
+  narrowWidth?: number;
   /** 给了才能点表头排序；值交给 onSort。 */
   sortKey?: string;
   /** 列表可用宽度达到此像素值才展示。 */
@@ -75,6 +86,8 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
 
 /** 行尾留给箭头的最小宽度；各定宽列加上它还放得下，才算「放得下」。 */
 const TRAILING_MIN = 48;
+/** 各列定宽放不下时，首列至少留这么宽（图标块加一个看得出是谁的名称）。 */
+const FIRST_COLUMN_MIN = 200;
 const SKELETON_ROWS = 14;
 
 export function PartyWorkbench<Row>({
@@ -186,13 +199,16 @@ export function PartyWorkbench<Row>({
   const visibleColumns = columns.filter(
     (column) => column.minListWidth === undefined || listWidth === null || listWidth >= column.minListWidth,
   );
-  // 各定宽列加行尾的箭头放得下，余量就全落在行尾；放不下时首列让宽，箭头不摆。
-  const fits = listWidth === null || visibleColumns.reduce((sum, column) => sum + column.width, 0) + TRAILING_MIN <= listWidth;
+  // 各列怎么排由 partyColumnLayoutOf 定：放得下余量落在行尾；放不下箭头不摆、首列拿剩下的，别的列按需往窄宽收。
+  const layout = partyColumnLayoutOf(listWidth, visibleColumns, TRAILING_MIN, FIRST_COLUMN_MIN);
+  const fits = layout.fits;
+  const tableStyle = layout.minWidth === null ? undefined : { minWidth: layout.minWidth };
   const colgroup = (
     <colgroup>
-      {visibleColumns.map((column, index) => (
-        <col key={column.key} style={fits || index > 0 ? { width: column.width } : undefined} />
-      ))}
+      {visibleColumns.map((column, index) => {
+        const width = layout.widths[index];
+        return <col key={column.key} style={width === null ? undefined : { width }} />;
+      })}
       {fits ? <col /> : null}
     </colgroup>
   );
@@ -250,7 +266,7 @@ export function PartyWorkbench<Row>({
         )}
       </div>
     ) : (
-      <table className="w-full table-fixed type-body">
+      <table className="w-full table-fixed type-body" style={tableStyle}>
         {colgroup}
         {head}
         <tbody>
@@ -291,7 +307,9 @@ export function PartyWorkbench<Row>({
       </table>
     );
 
-  const skeleton = <WorkbenchSkeleton colgroup={colgroup} head={head} columns={visibleColumns} cellPadding={cellPadding} trailing={fits} />;
+  const skeleton = (
+    <WorkbenchSkeleton colgroup={colgroup} head={head} columns={visibleColumns} cellPadding={cellPadding} trailing={fits} tableStyle={tableStyle} />
+  );
 
   const pagination = footer.pagination;
   const pager = pagination ? cursorPagerControls(pagination.page, pagination.next) : null;
@@ -385,17 +403,19 @@ function WorkbenchSkeleton<Row>({
   columns,
   cellPadding,
   trailing,
+  tableStyle,
 }: {
   colgroup: ReactNode;
   head: ReactNode;
   columns: PartyWorkbenchColumn<Row>[];
   cellPadding: (index: number) => string;
   trailing: boolean;
+  tableStyle: CSSProperties | undefined;
 }) {
   const revealCls = revealClass(useDelayedReveal());
   const bar = 'block h-2.5 rounded bg-idpxyz-hover';
   return (
-    <table className={`w-full table-fixed type-body ${revealCls}`} role="status" aria-label="加载中">
+    <table className={`w-full table-fixed type-body ${revealCls}`} style={tableStyle} role="status" aria-label="加载中">
       {colgroup}
       {head}
       <tbody className="animate-pulse">

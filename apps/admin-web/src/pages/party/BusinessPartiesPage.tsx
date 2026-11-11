@@ -77,6 +77,7 @@ import {
   partyTileKindOf,
   partyTypeChipsFit,
   partyTypeChipsOf,
+  statusCountsUnderConditions,
   tallyPartyRelationships,
   type PartyRelationshipTallies,
 } from './business-parties-workbench';
@@ -156,7 +157,7 @@ const relationshipStatusDotClass: Record<string, string> = {
 // 看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——排的键看不见，操作者判不出「为什么
 // 这一条在最上面」。
 // 各列定宽，多出来的宽度落在行尾，数据靠左成一块（PartyWorkbench.tsx）；列表窄了先收登记时间，再收生效时间与合作关系，
-// 单位、类型、状态三列总在。时刻只显到日，完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
+// 单位、类型、状态三列总在；右栏开着、三列也放不下时类型一列先收窄，名称那一列后让。时刻只显到日，完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
 // （business-party-list.ts 的 businessPartySortColumns），读口不按名称排。
 // 类型与合作关系两列要关系册、客户账户册与法人册才算得出；它们没读全时（typeSourcesComplete 为假）表头旁带一个提示记号，
 // 推不出来的格显「—」而不是「暂无合作关系」（票 01）。
@@ -219,6 +220,7 @@ function identityColumnsOf(
         </span>
       ),
       width: 240,
+      narrowWidth: 180,
       skeleton: 96,
       render: (row) => (
         <BusinessPartyTypeTags ours={ours.has(row.partyId)} roles={rolesOfParty(roles, row.partyId)} unread={!typeSourcesComplete} />
@@ -274,7 +276,7 @@ function identityColumnsOf(
       width: 120,
       skeleton: 76,
       sortKey: 'effective-from',
-      minListWidth: 1040,
+      minListWidth: 1030,
       // 待生效配一个琥珀色时钟而不是把时刻标成琥珀色：琥珀色字落在选中行底色上不足 4.5:1
       // （票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
       render: (row) => (
@@ -319,7 +321,7 @@ function PartyCell({ id, name, nameKnown }: { id: string; name: string | undefin
 // 持有方 → 相对方的两列次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」表达），单设一列没有第二份事实可载。
 // 终止时点是状态格的内容：撤销或到期只影响生效边界后的新决定，看这格的人需要知道边界在哪。表头只有有效期可排：排序下推到
 // 读口（party-relationship-list.ts 的 partyRelationshipSortColumns），读口不按双方排。列表窄了先收有效期：这一格最宽，
-// 两端另在详情栏的事实条上。
+// 两端另在详情栏的事实条上；右栏开着时角色、对方、状态三列各收窄一些，好给持有方的名称留出位置。
 const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
   {
     key: 'holder',
@@ -341,13 +343,22 @@ const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
     key: 'role',
     header: '角色',
     width: 140,
+    narrowWidth: 100,
     skeleton: 60,
-    render: (row) => <span className="whitespace-nowrap text-idpxyz-text">{labelOf(partyRoleLabels, row.role)}</span>,
+    render: (row) => {
+      const label = labelOf(partyRoleLabels, row.role);
+      return (
+        <span className="block truncate text-idpxyz-text" title={label}>
+          {label}
+        </span>
+      );
+    },
   },
   {
     key: 'counterparty',
     header: '对方',
     width: 280,
+    narrowWidth: 180,
     skeleton: 150,
     render: (row) => <PartyCell id={row.counterpartyId} name={row.counterpartyName} nameKnown={row.counterpartyNameKnown} />,
   },
@@ -355,6 +366,7 @@ const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
     key: 'status',
     header: '状态',
     width: 130,
+    narrowWidth: 120,
     skeleton: 64,
     render: (row) => (
       <div className="flex flex-col items-start gap-0.5 whitespace-nowrap">
@@ -586,8 +598,9 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * （business-party-list.ts 的 businessPartyListConditions、party-relationship-list.ts 的 partyRelationshipListConditions），
  * 列表按游标翻页，换条件回第一页；游标只在列表视图里挂（CatalogueCursorScope），换视图、进登记视图或对象页再回来是重新挂上、
  * 回到第一页。类型与待查是页面从别的册推出来的，读口筛不了，在到手的那一页上筛。筛选项上的数只在整册一页装得下时摆
- * （complete-register.ts 的 completeRegisterRows）：那时按整册数的是真数，页内筛也是精确的；装不下时一页里数出来的不是册上的
- * 数，数不摆，类型与待查改成标「只筛本页」的控件，当前条件下共几条由表底说。名录的类型另有一道：推类型用的那几本册要都
+ * （complete-register.ts 的 completeRegisterRows）：那时按整册数的是真数，页内筛也是精确的；摆出来的数随别的条件走、不随
+ * 这一项自己走（选了角色，各状态只数这个角色的），当前条件的那一问还没答出就先不摆，不拿 0 占位；装不下时一页里数出来的不是
+ * 册上的数，数不摆，类型与待查改成标「只筛本页」的控件，当前条件下共几条由表底说。名录的类型另有一道：推类型用的那几本册要都
  * 读全，带数的类型芯片与「暂无合作关系」才作数，否则类型格推不出来的显「—」并标明（business-party-list.ts 文件头）。
  *
  * 登记从页头进登记视图：「建立合作关系」「新增往来单位」两枚按钮位置固定、不随视图换，停用收进旁边的「更多」。登记视图住在地址上
@@ -988,11 +1001,12 @@ export function BusinessPartiesPage() {
     const visible = networkRows.filter((row) => matchesOurCompanySearch(row, networkSearch));
     const relationshipsAnswered = knownRelationships !== null;
     // 我方公司、对它担任角色的单位、待确认三列总在；列表窄了先收公司主体，再收「它对其担任角色」（右栏开着时就是这样）。
+    // 公司名称这一列给得宽：这个视图一行就是一家公司，名称是唯一认得出它的东西。
     const networkColumns: PartyWorkbenchColumn<OurCompanyNetworkRow>[] = [
       {
         key: 'company',
         header: '我方公司',
-        width: 280,
+        width: 340,
         render: (row) => (
           <div className="flex min-w-0 items-center gap-2.5">
             <PartyTile kind="OURS" />
@@ -1007,6 +1021,7 @@ export function BusinessPartiesPage() {
         key: 'toward',
         header: '对它担任角色的单位',
         width: 280,
+        narrowWidth: 200,
         skeleton: 140,
         render: (row) => <span className="block truncate text-idpxyz-text">{roleCountsText(row.towardIt, relationshipsAnswered)}</span>,
       },
@@ -1015,13 +1030,14 @@ export function BusinessPartiesPage() {
         header: '它对其担任角色',
         width: 280,
         skeleton: 140,
-        minListWidth: 980,
+        minListWidth: 990,
         render: (row) => <span className="block truncate text-idpxyz-text">{roleCountsText(row.fromIt, relationshipsAnswered)}</span>,
       },
       {
         key: 'candidates',
         header: '待确认',
         width: 90,
+        narrowWidth: 64,
         skeleton: 24,
         render: (row) =>
           relationshipsAnswered && row.candidates > 0 ? (
@@ -1035,7 +1051,7 @@ export function BusinessPartiesPage() {
         header: '公司主体',
         width: 200,
         skeleton: 110,
-        minListWidth: 1180,
+        minListWidth: 1190,
         render: (row) => <span className="block truncate font-mono type-caption text-idpxyz-breadcrumb">{row.legalEntityIds.join('、')}</span>,
       },
     ];
@@ -1112,6 +1128,9 @@ export function BusinessPartiesPage() {
     const typeWords = businessPartyTypeFilterWords(completeParties !== null, typeSourcesComplete);
     // 没读全时「暂无合作关系」不给筛，记着的这一项当作没筛（effectiveBusinessPartyTypeFilter）。
     const shownType = effectiveBusinessPartyTypeFilter(type, typeSourcesComplete);
+    // 类型这一件等名录与推类型的三本册都答过一次再摆：名录没答成时它筛不了任何东西；别的册还在途时摆出来的只会是「只筛本页」
+    // 的下拉，一两百毫秒后又换成芯片。答过之后重取在途照旧显上一份（register-list.ts），刷新时这一件不会消失再出现。
+    const typeControlReady = knownParties !== null && relationships.answer !== null && accounts.answer !== null && entities.answer !== null;
     const narrowed = search.trim() !== '' || status !== 'ALL' || shownType !== 'ALL';
     const clearFilters = () => {
       setSearch('');
@@ -1134,12 +1153,16 @@ export function BusinessPartiesPage() {
             emptyDescription,
             narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
           });
-          // 芯片上的数看当前条件下答回的行，摆哪几枚看整册（business-parties-workbench.ts 文件头）。
+          // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
+          const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
+          // 芯片上的数看当前条件下答回的行，摆哪几枚看整册（business-parties-workbench.ts 的 partyTypeChipsOf）。
           const typeChips =
-            typeCountsUsable && counts !== null ? partyTypeChipsOf(counts, countBusinessParties(pageRows, roleIndex, ourCompanies), shownType) : null;
+            typeCountsUsable && counts !== null
+              ? partyTypeChipsOf(counts, answeredRows && countBusinessParties(answeredRows, roleIndex, ourCompanies), shownType)
+              : null;
           const statusOptions = partyStatusOptionsOf({
             whole: completeParties,
-            conditioned: pageRows,
+            conditioned: answeredRows,
             keyword: settledSearch,
             status,
             ofType: (row) => businessPartyIsOfType(row, shownType, roleIndex, ourCompanies),
@@ -1175,7 +1198,7 @@ export function BusinessPartiesPage() {
                         </option>
                       ))}
                     </select>
-                    {typeChips !== null ? (
+                    {!typeControlReady ? null : typeChips !== null ? (
                       // 放得下摆一排芯片，放不下收成下拉，不折成第二行（partyTypeChipsFit）。
                       partyTypeChipsFit(toolbarWidth, typeChips) ? (
                         <PartyTypeChipRow chips={typeChips} onPick={(next) => setType(next === shownType ? 'ALL' : next)} />
@@ -1188,7 +1211,7 @@ export function BusinessPartiesPage() {
                         >
                           {typeChips.map((chip) => (
                             <option key={chip.type} value={chip.type} disabled={chip.disabled}>
-                              {`类型：${chip.label}（${formatCount(chip.count)}）`}
+                              {`类型：${chip.label}${chip.count !== null ? `（${formatCount(chip.count)}）` : ''}`}
                             </option>
                           ))}
                         </select>
@@ -1294,7 +1317,8 @@ export function BusinessPartiesPage() {
       setRelationshipStatus(relationshipStatus === code ? 'ALL' : code);
     // 判据同名录（complete-register.ts）：整册一页装得下时状态芯片与「待查」带数、待查筛得准；装不下就不摆数，待查标「只筛本页」。
     const relationshipCounts = completeRelationships === null ? null : countPartyRelationships(completeRelationships);
-    // 状态与角色下推成读口的 status 与 role 维。有数时整册里一段都没有的状态不摆；没有数时全摆：筛空了也要能点回「全部」。
+    // 状态与角色下推成读口的 status 与 role 维。摆哪几枚状态看整册：有数时整册里一段都没有的状态不摆，摆出来的不随角色与
+    // 检索词增减；没有数时全摆：筛空了也要能点回「全部」。每枚上的数另算，随角色与检索词走（下面的 statusCountOf）。
     const statusChips = partyRelationshipStatusFilterOptions.filter(
       (option) =>
         relationshipCounts === null ||
@@ -1302,12 +1326,6 @@ export function BusinessPartiesPage() {
         option.value === relationshipStatus ||
         relationshipCounts.byStatus[option.value as RelationshipStatusCode] > 0,
     );
-    const statusCountOf = (value: PartyRelationshipStatusFilter): number | null =>
-      relationshipCounts === null
-        ? null
-        : value === 'ALL'
-          ? relationshipCounts.total
-          : relationshipCounts.byStatus[value as RelationshipStatusCode];
     const narrowed = relationshipSearch.trim() !== '' || role !== 'ALL' || relationshipStatus !== 'ALL' || attentionOnly;
     const clearFilters = () => {
       setRelationshipSearch('');
@@ -1329,6 +1347,19 @@ export function BusinessPartiesPage() {
             emptyDescription: `谁是我们的客户、谁是承运商，都由合作关系说。${entryHint(mayWrite, '用页头的「建立合作关系」登记第一段。')}`,
             narrowed: catalogueConditionsNarrow(relationshipConditions) || pastFirstPage(pagination),
           });
+          // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
+          const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
+          // 状态芯片上的数随角色与检索词走、不随状态自己走，与名录的状态下拉同一条规矩（statusCountsUnderConditions）。
+          const statusCountOf = statusCountsUnderConditions({
+            whole: completeRelationships,
+            conditioned: answeredRows,
+            keyword: settledRelationshipSearch,
+            status: relationshipStatus,
+            matchesOthers: (row) => role === 'ALL' || row.role === role,
+          });
+          // 待查的数看当前条件（检索词、角色、状态）下答回的行里有几段：整册一页装得下时，带条件答回的那一页也是全的。
+          const attentionCount =
+            completeRelationships === null || answeredRows === null ? null : answeredRows.filter(partyRelationshipNeedsAttention).length;
           return (
             <>
               <CursorRefreshReport
@@ -1359,23 +1390,29 @@ export function BusinessPartiesPage() {
                       ))}
                     </select>
                     <div role="group" aria-label="状态" className="flex shrink-0 items-center gap-1.5">
-                      {statusChips.map((option) => (
-                        <PartyFilterChip
-                          key={option.value}
-                          label={option.label}
-                          count={statusCountOf(option.value)}
-                          active={relationshipStatus === option.value}
-                          onClick={() => (option.value === 'ALL' ? setRelationshipStatus('ALL') : toggleRelationshipStatus(option.value))}
-                        />
-                      ))}
+                      {statusChips.map((option) => {
+                        const count = statusCountOf(option.value);
+                        const active = relationshipStatus === option.value;
+                        return (
+                          <PartyFilterChip
+                            key={option.value}
+                            label={option.label}
+                            count={count}
+                            active={active}
+                            // 这个角色、这个检索词下一段都没有的状态留在原位、点不动；「全部」总点得动。
+                            disabled={count === 0 && !active && option.value !== 'ALL'}
+                            onClick={() => (option.value === 'ALL' ? setRelationshipStatus('ALL') : toggleRelationshipStatus(option.value))}
+                          />
+                        );
+                      })}
                     </div>
                     <span className="mx-0.5 h-4 w-px shrink-0 bg-idpxyz-border" aria-hidden="true" />
                     {/* 待查由名称转写推出来（partyRelationshipNeedsAttention），读口没有这一维：整册装不下时只筛到手的这一页。 */}
                     <PartyFilterChip
                       label={relationshipCounts ? '待查' : '待查（只筛本页）'}
-                      count={relationshipCounts ? relationshipCounts.attention : null}
+                      count={attentionCount}
                       active={attentionOnly}
-                      disabled={relationshipCounts !== null && relationshipCounts.attention === 0 && !attentionOnly}
+                      disabled={attentionCount === 0 && !attentionOnly}
                       title={
                         relationshipCounts
                           ? '双方有名称查不到的合作关系'
