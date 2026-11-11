@@ -156,8 +156,8 @@ const relationshipStatusDotClass: Record<string, string> = {
 // 登记时间；修订号与登记依据进详情栏底部的「技术详情」。注册地不单占一列：登了的不多，一列大半是「—」。停用时点与状态同格：
 // 看这格的人要知道自何时起停用。登记时间上列是因为默认排序按它排（票 09 裁决 1）——排的键看不见，操作者判不出「为什么
 // 这一条在最上面」。
-// 各列定宽，多出来的宽度落在行尾，数据靠左成一块（PartyWorkbench.tsx）；列表窄了先收登记时间，再收生效时间与合作关系，
-// 单位、类型、状态三列总在；右栏开着、三列也放不下时类型一列先收窄，名称那一列后让。时刻只显到日，完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
+// 各列定宽，多出来的宽度落在行尾，数据靠左成一块（PartyWorkbench.tsx）；列表窄了先收登记时间，再收生效时间与合作关系
+// （两个时间列的门槛就是连它在内各列定宽之和：放得下就摆，行尾的箭头让给它），单位、类型、状态三列总在；右栏开着、三列也放不下时类型一列先收窄，名称那一列后让。时刻只显到日，完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
 // （business-party-list.ts 的 businessPartySortColumns），读口不按名称排。
 // 类型与合作关系两列要关系册、客户账户册与法人册才算得出；它们没读全时（typeSourcesComplete 为假）表头旁带一个提示记号，
 // 推不出来的格显「—」而不是「暂无合作关系」（票 01）。
@@ -276,7 +276,7 @@ function identityColumnsOf(
       width: 120,
       skeleton: 76,
       sortKey: 'effective-from',
-      minListWidth: 1030,
+      minListWidth: 990,
       // 待生效配一个琥珀色时钟而不是把时刻标成琥珀色：琥珀色字落在选中行底色上不足 4.5:1
       // （票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
       render: (row) => (
@@ -294,7 +294,7 @@ function identityColumnsOf(
       width: 120,
       skeleton: 76,
       sortKey: 'registered-at',
-      minListWidth: 1160,
+      minListWidth: 1110,
       render: (row) => (
         <span className="whitespace-nowrap tabular-nums text-idpxyz-breadcrumb">
           <Instant value={row.registeredAt} precision="day" />
@@ -321,7 +321,7 @@ function PartyCell({ id, name, nameKnown }: { id: string; name: string | undefin
 // 持有方 → 相对方的两列次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」表达），单设一列没有第二份事实可载。
 // 终止时点是状态格的内容：撤销或到期只影响生效边界后的新决定，看这格的人需要知道边界在哪。表头只有有效期可排：排序下推到
 // 读口（party-relationship-list.ts 的 partyRelationshipSortColumns），读口不按双方排。列表窄了先收有效期：这一格最宽，
-// 两端另在详情栏的事实条上；右栏开着时角色、对方、状态三列各收窄一些，好给持有方的名称留出位置。
+// 两端另在详情栏的事实条上；右栏开着时角色、对方、状态三列各收窄一些，好给持有方的名称留出位置，再窄状态一列也收。
 const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
   {
     key: 'holder',
@@ -358,7 +358,7 @@ const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
     key: 'counterparty',
     header: '对方',
     width: 280,
-    narrowWidth: 180,
+    narrowWidth: 170,
     skeleton: 150,
     render: (row) => <PartyCell id={row.counterpartyId} name={row.counterpartyName} nameKnown={row.counterpartyNameKnown} />,
   },
@@ -367,6 +367,8 @@ const relationshipColumns: PartyWorkbenchColumn<PartyRelationshipRecord>[] = [
     header: '状态',
     width: 130,
     narrowWidth: 120,
+    // 右栏开着、列表窄到四列收到最窄也放不下时这一列不摆：行首的圆点仍说在不在用，选中的那一段的状态在右栏里。
+    minListWidth: 570,
     skeleton: 64,
     render: (row) => (
       <div className="flex flex-col items-start gap-0.5 whitespace-nowrap">

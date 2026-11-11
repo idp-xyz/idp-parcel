@@ -87,7 +87,7 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
 /** 行尾留给箭头的最小宽度；各定宽列加上它还放得下，才算「放得下」。 */
 const TRAILING_MIN = 48;
 /** 各列定宽放不下时，首列至少留这么宽（图标块加一个看得出是谁的名称）。 */
-const FIRST_COLUMN_MIN = 200;
+const FIRST_COLUMN_MIN = 180;
 const SKELETON_ROWS = 14;
 
 export function PartyWorkbench<Row>({
