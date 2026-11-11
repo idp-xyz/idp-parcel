@@ -122,6 +122,7 @@ step "提交快递小包（首方客户令牌）" "$CT" POST /v1/shipment-reques
 SMALL_REQ="$(jget "$LAST" shipmentRequestId)"
 SMALL_DOC="$(jget "$LAST" documentNumber)"
 SMALL_PARCEL="$(jget "$LAST" parcels.0.parcelId)"
+[[ -n "$SMALL_PARCEL" ]] || { printf '[失败] 快递小包的提交回执里没有 parcels.0.parcelId：\n' >&2; cat "$LAST" >&2; exit 1; }
 
 # 受理判断在 dispatch 下一拍。判过一轮的读面信号有三种：委托离开已提交；任务不在跑了；或查阅面列出了缺项——等受控补充时
 # 任务仍是 RUNNING（只是续办方换成客户），读面上能看见的只有 supplementGaps。$1 是委托号，$2 给了就还要求查阅面已读到
@@ -233,17 +234,20 @@ print(f"{'受理判断（补充后的版本）':<28} → request.state=ACCEPTED 
 PY
 
 section "售价：同一计价范围两张卡，各计各的产品"
-# 价卡目录：FBA 卡指名 FBA 产品、快递卡不声明产品，两张同在 SYN-SCOPE-01。取两张卡的内容摘要，后面拿评价对。
-curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-price-cards" > "$LAST"
-CARD_DIGESTS="$(python3 - "$LAST" <<'PY'
+# 价卡目录：FBA 卡指名 FBA 产品、快递卡不声明产品，两张同在 SYN-SCOPE-01。按方案标识 q 各取一次（目录分页，不靠第一页
+# 里碰巧有），取两张卡的内容摘要，后面拿评价对。
+cards_named() {
+  curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-price-cards?q=$1" \
+    | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("cards", [])))'
+}
+CARD_DIGESTS="$(python3 - "$(cards_named SYN-PLAN-CN-SG-FBA-01)" "$(cards_named SYN-PLAN-CN-SG-01)" <<'PY'
 import json, sys
-cards = json.load(open(sys.argv[1], encoding="utf-8")).get("cards", [])
-def one(plan):
-    rows = [c for c in cards if c.get("planId") == plan and c.get("planVersion") == "v1"]
+def one(raw, plan):
+    rows = [c for c in json.loads(raw) if c.get("planId") == plan and c.get("planVersion") == "v1"]
     if len(rows) != 1:
         sys.exit(f"[失败] 价卡目录里 {plan}@v1 有 {len(rows)} 行，要 1 行——种子步骤 170 登过没有")
     return rows[0]
-fba, express = one("SYN-PLAN-CN-SG-FBA-01"), one("SYN-PLAN-CN-SG-01")
+fba, express = one(sys.argv[1], "SYN-PLAN-CN-SG-FBA-01"), one(sys.argv[2], "SYN-PLAN-CN-SG-01")
 problems = []
 for card in (fba, express):
     if card.get("scope") != "SYN-SCOPE-01" or card.get("direction") != "SELL" or card.get("retired"):
@@ -288,8 +292,8 @@ PY
 trial SYN-PROD-CN-SG-FBA SYN-PLAN-CN-SG-FBA-01
 trial SYN-PROD-CN-SG-EXPRESS SYN-PLAN-CN-SG-01
 
-# 正式 SELL 评价在网络收寄已采用时形成（演示账户采用的计费时点），所以 FBA 第 1 箱与快递小包各送站预报、收寄一次。客户费用行
-# 不带包裹号：收寄前先记下已有的费用号，收寄后新出现的那一笔就是这一件的；两件逐一收，不并发。
+# 正式 SELL 评价在网络收寄已采用时形成（演示账户采用的计费时点），所以 FBA 第 1 箱与快递小包各送站预报、收寄一次，逐一收，
+# 不并发。
 FBA_BOX1_REF="SYN-CTN55-${STAMP}-001"
 FBA_BOX1="$(python3 -c 'import json,sys; print({p["customerParcelReference"]: p["parcelId"] for p in json.loads(sys.argv[1])["parcels"]}[sys.argv[2]])' \
   "$FBA_SUBMIT" "$FBA_BOX1_REF")"
@@ -308,46 +312,55 @@ PRE="$(bash "$SEEDS_DIR/submit-one-pre-advice.sh" "$FBA_BOX1_REF" "$SMALL_REF" 2
   || { printf '[失败] submit-one-pre-advice.sh\n' >&2; exit 1; }
 printf '%-34s → DELIVERY_PRE_ADVICE_REGISTERED preAdvice=%s（FBA 第 1 箱与快递小包）\n' "送站预报（首方客户令牌）" "$PRE"
 
-charge_ids() {
-  curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=customer-charge" \
-    | python3 -c 'import json,sys; print(",".join(r["charge"] for r in json.load(sys.stdin).get("charges",[])))'
-}
 intake_priced() { # $1 标签 $2 客户件号 $3 应选的卡 $4 该卡的内容摘要
-  local before out
-  before="$(charge_ids)"
+  local label=$1 mark out
+  # 估价阶段的客户费用行还没有包裹号：来源事实与确认依据两格到确认才落，按包裹号 q 检索不到它。所以按形成时刻认——收寄
+  # 之前记下此刻，费用册按 formedAt 倒序取第一页，此刻之后形成的恰一笔就是这一件的；两件逐一收寄，前一件的费用形成了才收
+  # 下一件，不会认错。
+  mark="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
   out="$(IDP_PARCEL_PRE_ADVICE_ID="$PRE" bash "$SEEDS_DIR/receive-one-delivery.sh" "$2")" \
     || { printf '[失败] receive-one-delivery.sh：%s\n' "$out" >&2; exit 1; }
   [[ "$out" == 201\ INTAKE_FORMED* ]] || { printf '[失败] %s 收寄答复不是 201 INTAKE_FORMED：%s\n' "$1" "$out" >&2; exit 1; }
   printf '%-34s → %s\n' "收寄 ${1}（上海枢纽作业设备）" "${out%%，候选*}"
   _charged() {
-    curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=customer-charge" > "$LAST"
-    CHARGE_ROW="$(python3 - "$LAST" "$before" <<'PY'
-import json, sys
-before = set(sys.argv[2].split(","))
-fresh = [r for r in json.load(open(sys.argv[1])).get("charges", []) if r["charge"] not in before]
+    curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=customer-charge&sort=-formedAt" > "$LAST"
+    CHARGE_ROW="$(python3 - "$LAST" "$mark" "$label" <<'PY'
+import json, re, sys
+from datetime import datetime
+
+def instant(text):
+    # 纳秒截到微秒再比：fromisoformat 只认到微秒，同一台机器的两只钟差不到这一位。
+    return datetime.fromisoformat(re.sub(r"(\.\d{6})\d+", r"\1", text).replace("Z", "+00:00"))
+
+mark, label = instant(sys.argv[2]), sys.argv[3]
+fresh = [r for r in json.load(open(sys.argv[1])).get("charges", []) if instant(r["formedAt"]) >= mark]
+if len(fresh) > 1:
+    sys.exit(f"[失败] {label} 收寄之后形成了 {len(fresh)} 笔客户费用，认不出哪笔是它的：" + json.dumps(fresh, ensure_ascii=False))
 print(json.dumps(fresh[0]) if fresh else "")
 PY
-)"
+)" || exit 1
     [[ -n "$CHARGE_ROW" ]]
   }
   poll "${1} 的预估客户费用形成" 90 _charged
-  curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-evaluations" > "$LAST"
+  local evaluation
+  evaluation="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["evaluation"])' "$CHARGE_ROW")"
+  curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-evaluations?q=${evaluation}" > "$LAST"
   python3 - "$LAST" "$CHARGE_ROW" "$1" "$3" "$4" <<'PY'
 import json, sys
 evaluations = json.load(open(sys.argv[1], encoding="utf-8")).get("evaluations", [])
 charge, label, plan, digest = json.loads(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 rows = [e for e in evaluations if e.get("evaluationId") == charge.get("evaluation")]
-if len(rows) != 1 or rows[0].get("status") != "COMPLETED" or rows[0].get("planContentDigest") != digest:
-    print(json.dumps({"charge": charge, "evaluations": rows}, ensure_ascii=False), file=sys.stderr)
-    sys.exit(f"[失败] {label}：客户费用 {charge.get('charge')} 的评价 {charge.get('evaluation')} 没对到 {plan} 的内容摘要 {digest}")
+if charge.get("stage") != "ESTIMATED" or len(rows) != 1 or rows[0].get("status") != "COMPLETED" \
+        or rows[0].get("planContentDigest") != digest:
+    print(json.dumps({"charge": charge, "evaluations": evaluations}, ensure_ascii=False), file=sys.stderr)
+    sys.exit(f"[失败] {label}：客户费用 {charge.get('charge')}（{charge.get('stage')}）的评价 {charge.get('evaluation')}"
+             f" 没对到 {plan} 的内容摘要 {digest}")
 amount = int(charge["originalAmount"])
 print(f"{'正式 SELL 评价 ' + label:<34} → charge={charge['charge']} evaluation={charge['evaluation']} "
       f"plan={plan}（内容摘要对上，{rows[0]['canonicalization']}） {amount // 100}.{amount % 100:02d} {charge['originalCurrency']}")
 PY
 }
 intake_priced "FBA 第 1 箱" "$FBA_BOX1_REF" SYN-PLAN-CN-SG-FBA-01 "$FBA_CARD_DIGEST"
-# 收寄脚本的来源标识按 UTC 秒起，两次收寄隔开一秒，不撞同一个来源。
-sleep 1
 intake_priced "快递小包" "$SMALL_REF" SYN-PLAN-CN-SG-01 "$EXPRESS_CARD_DIGEST"
 
 printf '\nFBA 头程货件 运单号 %s（委托 %s，平台货件号 %s，补过一版，第 1 箱已收寄）；快递小包 运单号 %s（委托 %s，已收寄）。\n' \
