@@ -43,6 +43,7 @@ type CommercialBasisAdapter struct {
 	judgments    *pcapplication.FormJudgmentAsOfHandler
 	asOfPolicies pcports.AsOfPolicyDeclaration
 	contents     pcports.AcceptanceContentDeclaration
+	rules        pcports.AcceptanceRulePackageContentView
 	keys         ResolutionKeySource
 	values       AsOfValueSource
 }
@@ -54,8 +55,11 @@ type CommercialBasisAdapterDeps struct {
 	Judgments    *pcapplication.FormJudgmentAsOfHandler
 	AsOfPolicies pcports.AsOfPolicyDeclaration
 	Contents     pcports.AcceptanceContentDeclaration
-	Keys         ResolutionKeySource
-	Values       AsOfValueSource
+	// Rules 读采用的规则包正文里的规则引用，只为提交条件（submission_conditions.go）。nil 时声明了「必要资料」组适用的
+	// 规则包答无法判定，不当成没有条件。
+	Rules  pcports.AcceptanceRulePackageContentView
+	Keys   ResolutionKeySource
+	Values AsOfValueSource
 }
 
 // NewCommercialBasisAdapter 装配三个阶段。Keys 与 Values 允许为 nil：今天没有任何租户
@@ -68,6 +72,7 @@ func NewCommercialBasisAdapter(deps CommercialBasisAdapterDeps) *CommercialBasis
 		judgments:    deps.Judgments,
 		asOfPolicies: deps.AsOfPolicies,
 		contents:     deps.Contents,
+		rules:        deps.Rules,
 		keys:         deps.Keys,
 		values:       deps.Values,
 	}
@@ -283,11 +288,20 @@ func (adapter *CommercialBasisAdapter) adoptedResolution(
 		return resolution, err
 	}
 
+	conditions, unreadable, err := adapter.submissionConditionsFor(ctx, tenant, adopted, applicable)
+	if err != nil {
+		return psports.CommercialBasisResolution{}, err
+	}
+	if unreadable != "" {
+		return undeterminedResolution(unreadable)
+	}
+
 	snapshot, err := snapshotFor(closure, adopted, viewRevision, snapshotDeclarations{
-		DeclaredAsOf:   declared,
-		Applicable:     applicable,
-		ManualReview:   review,
-		PendingRouting: allowance,
+		DeclaredAsOf:         declared,
+		Applicable:           applicable,
+		ManualReview:         review,
+		PendingRouting:       allowance,
+		SubmissionConditions: conditions,
 	})
 	if err != nil {
 		return psports.CommercialBasisResolution{}, err
@@ -332,12 +346,13 @@ func (adapter *CommercialBasisAdapter) pendingRoutingFor(
 	return allowance, psports.CommercialBasisResolution{}, false, nil
 }
 
-// snapshotDeclarations 收拢快照里由提供方声明而非闭包本体携带的四项。
+// snapshotDeclarations 收拢快照里由提供方声明而非闭包本体携带的几项。
 type snapshotDeclarations struct {
-	DeclaredAsOf   []psdomain.DeclaredAsOf
-	Applicable     psdomain.ApplicableCheckGroups
-	ManualReview   psdomain.ManualReviewPolicy
-	PendingRouting psdomain.PendingRoutingAllowance
+	DeclaredAsOf         []psdomain.DeclaredAsOf
+	Applicable           psdomain.ApplicableCheckGroups
+	ManualReview         psdomain.ManualReviewPolicy
+	PendingRouting       psdomain.PendingRoutingAllowance
+	SubmissionConditions psdomain.SubmissionConditions
 }
 
 func snapshotFor(
@@ -374,6 +389,8 @@ func snapshotFor(
 		ManualReview:    declarations.ManualReview,
 		PendingRouting:  declarations.PendingRouting,
 		SettlementTerms: terms,
+
+		SubmissionConditions: declarations.SubmissionConditions,
 	})
 	if err != nil {
 		return psdomain.CommercialBasisSnapshot{}, fmt.Errorf("%w: commercial basis snapshot: %v", ErrUntranslatableAnswer, err)

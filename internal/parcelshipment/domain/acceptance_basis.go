@@ -83,6 +83,16 @@ func (applicable ApplicableCheckGroups) Declared() bool {
 }
 
 // Groups 交回声明的适用校验组。重建与快照往返按公开访问器保全，不能读未导出切片。
+// Includes 回答规则包是否声明某一组适用。
+func (applicable ApplicableCheckGroups) Includes(group AcceptanceCheckGroup) bool {
+	for _, declared := range applicable.groups {
+		if declared == group {
+			return true
+		}
+	}
+	return false
+}
+
 func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
 	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
 }
@@ -456,6 +466,9 @@ type CommercialBasisSnapshot struct {
 	manualReview    ManualReviewPolicy
 	pendingRouting  PendingRoutingAllowance
 	settlementTerms AdoptedSettlementTerms
+	// submissionConditions 是采用的接单规则包以 CROSS_FIELD_CONDITION 引用、本上下文读得懂的提交条件（ADR-0376 决定一）。
+	// 它随规则包一起固定在快照里：委托按哪一版规则包接受，就按那一版引用的条件判过，事后读回的是同一份。
+	submissionConditions SubmissionConditions
 }
 
 // CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。
@@ -493,6 +506,8 @@ type CommercialBasisSnapshotSpec struct {
 	// SettlementTerms 缺席即解析未采用结算政策（闭包不要求结算依据的场景）；非零值只能
 	// 来自 NewAdoptedSettlementTerms，五维齐备由它保证。
 	SettlementTerms AdoptedSettlementTerms
+	// SubmissionConditions 零值即规则包没有引用本上下文读得懂的提交条件。
+	SubmissionConditions SubmissionConditions
 }
 
 func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBasisSnapshot, error) {
@@ -518,7 +533,14 @@ func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBas
 		manualReview:    spec.ManualReview,
 		pendingRouting:  spec.PendingRouting,
 		settlementTerms: spec.SettlementTerms,
+
+		submissionConditions: spec.SubmissionConditions,
 	}, nil
+}
+
+// SubmissionConditions 交回快照上要在「必要资料」组判的提交条件。
+func (snapshot CommercialBasisSnapshot) SubmissionConditions() SubmissionConditions {
+	return snapshot.submissionConditions
 }
 
 // SettlementTerms 交回解析采用的结算政策回显。缺席是真话：这次解析不含结算依据，作用域
@@ -586,7 +608,8 @@ func (snapshot CommercialBasisSnapshot) sameAs(other CommercialBasisSnapshot) bo
 		snapshot.viewRevision != other.viewRevision ||
 		snapshot.manualReview != other.manualReview ||
 		snapshot.pendingRouting != other.pendingRouting ||
-		snapshot.settlementTerms != other.settlementTerms {
+		snapshot.settlementTerms != other.settlementTerms ||
+		snapshot.submissionConditions != other.submissionConditions {
 		return false
 	}
 	if len(snapshot.declaredAsOf) != len(other.declaredAsOf) {

@@ -1738,6 +1738,15 @@ type AcceptanceTaskViewRecord struct {
 	ReviewReviewer          string
 	ReviewEvidence          string
 	ReviewCompletedAt       time.Time
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一），不在等补充时为空。
+	SupplementGaps []SupplementGapViewRecord
+}
+
+// SupplementGapViewRecord 是一项受控补充缺口：判组与原因取领域的原词，包裹为空即委托级。
+type SupplementGapViewRecord struct {
+	Group  domain.AcceptanceCheckGroup
+	Parcel string
+	Reason string
 }
 
 // ShipmentRequestDetailRecord 是单份委托的查阅详情。

@@ -25,6 +25,7 @@ import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-li
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
 import { contentCategoryDisplayOf, foldedRowsOf, goodsLineRowsOf, packingSummaryOf } from './goods-view';
+import { supplementGapLinesOf } from './supplement-gaps';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
@@ -221,6 +222,13 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
           {view.acceptanceTask.lastAttemptedAt !== undefined && (
             <FieldRow label="最近处理时间" value={formatInstant(view.acceptanceTask.lastAttemptedAt)} mono />
           )}
+          {supplementGapLinesOf(view.acceptanceTask.supplementGaps).map((line) => (
+            <FieldRow
+              key={line.parcelId || 'shipment'}
+              label={line.parcelId ? `等客户补 · ${line.parcelId}` : '等客户补 · 整票'}
+              value={`缺${line.missing}`}
+            />
+          ))}
         </dl>
       ),
     },

@@ -227,6 +227,15 @@ export interface AcceptanceTaskRecord {
   lastAttemptReason?: string;
   lastAttemptContinuation?: string;
   lastAttemptedAt?: string;
+  /** 受理停在等客户补充时缺的各项(ADR-0376 决定一);不在等补充时缺席。 */
+  supplementGaps?: SupplementGapRecord[];
+}
+
+/** 一项受控补充缺口:判组与原因取服务端原词,包裹号缺席即委托级。 */
+export interface SupplementGapRecord {
+  group: string;
+  parcelId?: string;
+  reason: string;
 }
 
 /** 已形成的接受/拒绝决定(kind 词汇与撤回端点的 decisionKind 同一套)。 */

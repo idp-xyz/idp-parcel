@@ -56,6 +56,9 @@ var releases = []release{
 	{"party-commercial/registration-number-types/SG", 1, "928d06b9ee6b96ded103aad5bc636c5e40e408a2620e67b026811cd0bb96767c"},
 	{"parcel-shipment/as-of-semantics/submission-receipt", 1, "299a3e122322e3b44bef185ee42fd3a97991942efd866cf731f9d2493d6764b2"},
 	{"network-routing/network-catalog/SYN-CN-SG", 1, "ad25370891505b9f5a11615f7206ed73539ca65f96e764da31daca7b5f0f05e5"},
+	// ADR-0376 决定一：专线型 FBA 头程的提交条件，服务产品的接单规则包以 CROSS_FIELD_CONDITION 引用；构造门是小包托运消费侧
+	// 适配器的 SubmissionConditionsOf，已发布的每一版由它的测试逐版过一遍。
+	{"parcel-shipment/submission-conditions/FBA-HEADHAUL", 1, "f559b48364f511945a6708e2835b778e556352486303d760331adc4ebc9b9325"},
 	// ADR-0359 决定二：注册号类型参考表——CN、SG 各出第 2 版增列资料层类型，另加 HK、US、GB、JP 与欧盟各成员国；
 	// 只收公开规范有明确格式的类型，其余不随附、不猜。
 	{"party-commercial/registration-number-types/AT", 1, "04edd2c49a01c8164d29a4f9e2c2c2273ef59edea857d2ae3480cc7cb7be11ca"},

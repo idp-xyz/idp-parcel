@@ -337,6 +337,8 @@ type commercialBasisDocument struct {
 	ManualReview   uint8                    `json:"manualReview"`
 	PendingRouting string                   `json:"pendingRouting,omitempty"`
 	Settlement     *settlementTermsDocument `json:"settlementTerms,omitempty"`
+	// SubmissionConditions 是提交条件码（ADR-0376 决定一），按条件码的定义次序；没有即整键缺席，早于本票的快照读回即零值。
+	SubmissionConditions []string `json:"submissionConditions,omitempty"`
 }
 
 type declaredAsOfDocument struct {
@@ -426,6 +428,14 @@ type taskDocument struct {
 	ReviewCompletion    *reviewDocument   `json:"reviewCompletion,omitempty"`
 	// AuthorizedDisposition 是本版本上已记录的授权处置（ADR-0132），落法照 ReviewCompletion：缺席即没处置过。
 	AuthorizedDisposition *dispositionDocument `json:"authorizedDisposition,omitempty"`
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）；不在等补充时整键缺席，早于本票的快照读回即零值。
+	SupplementGaps []supplementGapDocument `json:"supplementGaps,omitempty"`
+}
+
+type supplementGapDocument struct {
+	Group  uint8  `json:"group"`
+	Parcel string `json:"parcel,omitempty"`
+	Reason string `json:"reason"`
 }
 
 type attemptDocument struct {
@@ -623,6 +633,12 @@ func taskDocumentOf(task domain.AcceptanceDecisionTask) taskDocument {
 	}
 	if waiting, present := task.WaitingOn(); present {
 		document.WaitingOn = uint8(waiting)
+	}
+	for _, gap := range task.SupplementGaps() {
+		parcel, _ := gap.Parcel()
+		document.SupplementGaps = append(document.SupplementGaps, supplementGapDocument{
+			Group: uint8(gap.Group()), Parcel: parcel.String(), Reason: gap.Reason().String(),
+		})
 	}
 	for _, attempt := range task.ProcessingAttempts() {
 		document.ProcessingAttempts = append(document.ProcessingAttempts, attemptDocument{
@@ -990,6 +1006,23 @@ func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) 
 		State:               domain.AcceptanceTaskState(document.State),
 		WaitingOn:           domain.ResumePath(document.WaitingOn),
 	}
+	for _, gapDoc := range document.SupplementGaps {
+		var parcel domain.DeclaredParcelID
+		if gapDoc.Parcel != "" {
+			if parcel, err = domain.NewDeclaredParcelID(gapDoc.Parcel); err != nil {
+				return domain.RehydrateAcceptanceTaskSpec{}, err
+			}
+		}
+		reason, err := domain.NewCheckReason(gapDoc.Reason)
+		if err != nil {
+			return domain.RehydrateAcceptanceTaskSpec{}, err
+		}
+		gap, err := domain.NewSupplementGap(domain.AcceptanceCheckGroup(gapDoc.Group), parcel, reason)
+		if err != nil {
+			return domain.RehydrateAcceptanceTaskSpec{}, err
+		}
+		spec.SupplementGaps = append(spec.SupplementGaps, gap)
+	}
 	for _, attemptDoc := range document.ProcessingAttempts {
 		reason, err := domain.NewProcessingAttemptReason(attemptDoc.Reason)
 		if err != nil {
@@ -1158,6 +1191,9 @@ func commercialBasisDocumentOf(snapshot domain.CommercialBasisSnapshot) commerci
 	}
 	if allowance := snapshot.PendingRoutingAllowance(); allowance.Allowed() {
 		document.PendingRouting = allowance.Basis().String()
+	}
+	for _, condition := range snapshot.SubmissionConditions().Conditions() {
+		document.SubmissionConditions = append(document.SubmissionConditions, condition.String())
 	}
 	if terms, present := snapshot.SettlementTerms(); present {
 		document.Settlement = &settlementTermsDocument{
@@ -1397,5 +1433,18 @@ func (document commercialBasisDocument) snapshot() (domain.CommercialBasisSnapsh
 		}
 		spec.SettlementTerms = terms
 	}
+	conditions := make([]domain.SubmissionCondition, 0, len(document.SubmissionConditions))
+	for _, word := range document.SubmissionConditions {
+		condition, ok := domain.ParseSubmissionCondition(word)
+		if !ok {
+			return domain.CommercialBasisSnapshot{}, fmt.Errorf("提交条件 %q 不在封闭集合里", word)
+		}
+		conditions = append(conditions, condition)
+	}
+	submissionConditions, err := domain.NewSubmissionConditions(conditions...)
+	if err != nil {
+		return domain.CommercialBasisSnapshot{}, err
+	}
+	spec.SubmissionConditions = submissionConditions
 	return domain.NewCommercialBasisSnapshot(spec)
 }

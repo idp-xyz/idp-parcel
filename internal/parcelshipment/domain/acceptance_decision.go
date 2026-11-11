@@ -352,6 +352,10 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		if classified.awaitingSupplement {
 			request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
 		}
+		request.acceptanceTask.supplementGaps = nil
+		if request.acceptanceTask.waitingOn == ResumeByCustomerSupplement {
+			request.acceptanceTask.supplementGaps = supplementGapsOf(spec.Checks)
+		}
 		return request, nil
 	}
 	if manualReview != ManualReviewNotRequired && manualReview != ManualReviewCompleted {
