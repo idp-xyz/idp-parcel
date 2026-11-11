@@ -1,6 +1,6 @@
 # ADR-0015: 以封闭文法与开放词汇实现多承运商通用计价
 
-Status: Accepted<!-- 索引注记 -->｜**读法限定**（不是停用）：Decision「词汇按证据增长」一段末尾「并按 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 形成新的规范化版本」这半句按本记录「与 ADR-0014 的分工」一节读——是否形成新版本由**规范化文档的形状是否改变**决定，不由词汇是否扩充决定，判据在 ADR-0014 的 Decision；本记录正文不改写，其余内容不变。  
+Status: Accepted<!-- 索引注记 -->｜**读法限定**（不是停用）：Decision「词汇按证据增长」一段末尾「并按 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 形成新的规范化版本」这半句按本记录「与 ADR-0014 的分工」一节读——是否形成新版本由**规范化文档的形状是否改变**决定，不由词汇是否扩充决定，判据在 ADR-0014 的 Decision；本记录正文不改写，其余内容不变。｜**部分停用**（2026-11-11）：其 Decision「一次计价由下列环节构成，形状不随承运商变化」一句已由 [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 停用。**适用场景**：只限评价对象是仓储作业收费发生项的评价——它不走「由声明的变换得出计价重量」与「由计价重量与分区等维度查得基础金额」两个环节，派生特征、谓词判定与按声明的计算方法得出金额照旧；别的评价对象照原句。Decision「扩充仍受范围判据约束：没有真实价卡证据的取值不进。」一句里「没有真实价卡证据的取值不进」那一半同由该记录停用——改为按[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#能力范围判据)的能力范围判据读。**适用场景**：只限该记录引入的仓储计费方案的文法与词汇，依据强度登在开发主线「产品需求假设」的 `PA-WF-02`；其余各条不变  
 Date: 2026-08-08
 
 ## Context
@@ -76,3 +76,4 @@ Date: 2026-08-08
 - [ADR-0014：为内容摘要的规范化形状引入版本号](./0014-versioned-canonicalization-shape-for-content-digest.md)：词汇扩充得以分批进行的前提
 - [ADR-0012：在 idp-parcel 内建立小包计价上下文](./0012-parcel-pricing-context-within-idp-parcel.md)：外部参考设计不具权威性
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-16` 比价择优、`PAR-SET-03` 逐份价卡的价表族与体积系数取证
+- [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)：前向指针——部分停用 Decision 两句，限评价对象是仓储作业收费发生项的评价与仓储计费方案的文法、词汇
