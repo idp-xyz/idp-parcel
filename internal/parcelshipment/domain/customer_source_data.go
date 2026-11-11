@@ -342,6 +342,9 @@ func (request ShipmentRequest) AmendCustomerSourceData(
 	if request.SourceDataScopeOutsideAcceptanceBaseline(version.scope) {
 		return ShipmentRequest{}, ErrParcelOutsideAcceptanceBaseline
 	}
+	if err := request.CheckSourceDataContentAgainstBaseline(version.content); err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	// 复制而不是就地 append：ShipmentRequest 按值传递，共用底层数组会让两条从同一份委托
 	// 分出去的修订互相覆盖对方追加的版本。
@@ -444,14 +447,24 @@ func (judgment SourceDataAdoptionJudgment) AdoptedVersion() (SourceDataVersionID
 func (request ShipmentRequest) CurrentSourceDataAdoption(
 	scope SourceDataScope,
 ) (SourceDataAdoptionJudgment, bool) {
+	return adoptionAmong(request.sourceDataVersions, scope, request.baseline.SubmissionVersionID())
+}
+
+// adoptionAmong 是 CurrentSourceDataAdoption 的判法本身，收散的版本：查阅读面不重建聚合也要用同一段（GoodsDetailsInEffect）。
+//
+// root 是接受基线那一版提交版本。范围上还没有采用任何修订时，基准指名它的更正接的就是链头：客户更正首次提交的值，首方契约
+// 要它带提交回执的 submissionVersionId——那一版就是接受基线，不是一份过期的基准。不认它，这类更正头一条就停在`待复核`，
+// 而那里并没有分叉可并。已有修订被采用之后再指名它，就是对着过期基准改，照旧判分叉。
+func adoptionAmong(versions []CustomerSourceDataVersion, scope SourceDataScope, root SubmissionVersionID) (SourceDataAdoptionJudgment, bool) {
 	judgment := SourceDataAdoptionJudgment{}
 	forked := false
-	for _, version := range request.sourceDataVersions {
+	for _, version := range versions {
 		if version.scope != scope {
 			continue
 		}
 		prior, chained := version.basis.PriorVersion()
-		if !chained || prior == judgment.adopted {
+		onRoot := chained && !judgment.adopted.valid() && root.valid() && prior.String() == root.String()
+		if !chained || onRoot || prior == judgment.adopted {
 			judgment.outcome = SourceDataAdopted
 			judgment.adopted = version.versionID
 			continue

@@ -1751,8 +1751,11 @@ type ShipmentRequestDetailRecord struct {
 	Task              AcceptanceTaskViewRecord
 	HasDecision       bool
 	Decision          AcceptanceDecisionViewRecord
-	// Goods 是当前提交版本的货物明细，PlatformShipment 是委托上的平台货件（ADR-0373、ADR-0374），零值即没报。
+	// Goods 是此刻在用的货物明细（domain.GoodsDetailsInEffect）：货物明细范围上有已采用的资料修订就是那一版，没有就是当前
+	// 提交版本上的那一份；GoodsStanding 说出自哪里——`待复核`时 Goods 为零值，不是没报。PlatformShipment 是委托上的平台货件
+	// （ADR-0373、ADR-0374），零值即没报。
 	Goods            domain.GoodsDetails
+	GoodsStanding    domain.GoodsDetailsStanding
 	PlatformShipment domain.PlatformShipmentDeclaration
 }
 

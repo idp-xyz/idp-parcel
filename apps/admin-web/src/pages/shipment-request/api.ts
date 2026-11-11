@@ -245,6 +245,11 @@ export interface ShipmentRequestDetail extends ShipmentRequestSummary {
   acceptanceTask: AcceptanceTaskRecord;
   decision?: DecisionRecord;
   goods?: GoodsView;
+  /**
+   * goods 出自哪里(票 declared-goods-lines/06):ON_SUBMISSION 提交时报的、ON_ADOPTED_VERSION 资料修订后采用的那一版、
+   * UNDETERMINED 两条修订分叉待复核(此时不交 goods)。提交时没报、也没修订过的委托不带这一格。
+   */
+  goodsStanding?: string;
   platformShipment?: PlatformShipmentView;
 }
 

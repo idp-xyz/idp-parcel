@@ -124,3 +124,64 @@ func TestCustomerAmendmentIntakeTakesIdentitiesFromAuthenticationAndContentFromT
 		t.Fatalf("未授予：err = %v", err)
 	}
 }
+
+const customerGoodsAmendmentDraft = `{
+  "accessRequestId": "SYN-ACCESS-REQUEST-0004",
+  "originalAccessRequestId": "SYN-ACCESS-REQUEST-0001",
+  "shipmentRequestId": "SHR-SYN-1",
+  "basisVersionId": "SYN-VERSION-1",
+  "dataGroup": "GOODS_DETAILS",
+  "intent": "CORRECTION",
+  "reason": "SYN-REASON-CUSTOMS-RETURN",
+  "goods": {"contentCategory": "SALE_OF_GOODS", "lines": [
+    {"descriptions": [{"lang": "en", "text": "Cotton T-shirt"}], "quantity": "48"},
+    {"descriptions": [{"lang": "en", "text": "Cap"}], "quantity": "2"}]},
+  "packing": [
+    {"parcelId": "DPCL-SYN-1", "line": 1, "quantity": "24"}, {"parcelId": "DPCL-SYN-1", "line": 2, "quantity": "2"},
+    {"parcelId": "DPCL-SYN-2", "line": 1, "quantity": "24"}]
+}`
+
+// Covers: 票 declared-goods-lines/06——资料修订口在资料组「货物明细」上收整组 goods 与按包裹号指的 packing，作用于整份委托；
+// 货物明细字段落在别的资料组、只有 packing 没有 goods、显式清空带货物明细、分配数不成形都答 400，错指到出错的那一格。
+func TestCustomerAmendmentIntakeTakesAWholeGoodsGroupWithItsPacking(t *testing.T) {
+	intake, request := intakeAmendmentOf(t, amendmentAuthenticatorDouble{}, customerGoodsAmendmentDraft)
+	command, err := intake.IntakeSourceDataAmendment(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, named := command.Scope.DeclaredParcelID(); named || command.Scope.DataGroup() != domain.GoodsDetailsDataGroup() {
+		t.Fatalf("范围 = %+v, want 整份委托上的 GOODS_DETAILS", command.Scope)
+	}
+	goods, declared := command.Content.Goods()
+	if !declared || len(goods.Lines()) != 2 || len(goods.Packing()) != 3 {
+		t.Fatalf("内容：declared = %v", declared)
+	}
+	if !strings.HasPrefix(command.PayloadDigest.String(), domain.CustomerSourceDataAmendmentShapeVersion+":") {
+		t.Fatalf("摘要 %q 不是 PAM-1", command.PayloadDigest)
+	}
+
+	for name, item := range map[string]struct {
+		mutate func(string) string
+		field  string
+	}{
+		"货物明细落在收件范围": {func(b string) string { return strings.Replace(b, "GOODS_DETAILS", "DELIVERY_PLACE", 1) }, ""},
+		"只有分配没有货物": {func(b string) string {
+			return b[:strings.Index(b, `  "goods"`)] + b[strings.Index(b, `  "packing"`):]
+		}, "packing"},
+		"显式清空带货物明细": {func(b string) string { return strings.Replace(b, "CORRECTION", "EXPLICIT_CLEAR", 1) }, ""},
+		"分配数不成形": {func(b string) string {
+			return strings.Replace(b, `"line": 2, "quantity": "2"`, `"line": 2, "quantity": "2 件"`, 1)
+		}, "packing"},
+		"分配的包裹号空着": {func(b string) string { return strings.Replace(b, `"parcelId": "DPCL-SYN-2"`, `"parcelId": " "`, 1) }, "packing[2].parcelId"},
+	} {
+		intake, request := intakeAmendmentOf(t, amendmentAuthenticatorDouble{}, item.mutate(customerGoodsAmendmentDraft))
+		_, err := intake.IntakeSourceDataAmendment(t.Context(), request)
+		if !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Errorf("%s：err = %v, want ErrMalformedRequest", name, err)
+			continue
+		}
+		if item.field != "" && !strings.Contains(err.Error(), item.field) {
+			t.Errorf("%s：err = %v, 要指到 %s", name, err, item.field)
+		}
+	}
+}

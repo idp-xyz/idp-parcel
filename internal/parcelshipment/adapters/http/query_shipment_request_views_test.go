@@ -696,3 +696,23 @@ func TestViewsDetailReportsAWholeShipmentListWithoutPacking(t *testing.T) {
 		})
 	}
 }
+
+// Covers: 票 declared-goods-lines/06——货物明细范围上两条修订分叉时，详情不交 goods 而说 UNDETERMINED：查阅的人要分得清
+// 「没报」与「说不出该按哪一版」；修订后的那一版被采用时说 ON_ADOPTED_VERSION。
+func TestViewsDetailSaysWhereTheGoodsDetailsComeFrom(t *testing.T) {
+	record := viewDetailRecord(t)
+	record.GoodsStanding = domain.GoodsDetailsUndetermined
+	body := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if !strings.Contains(body, `"goodsStanding":"UNDETERMINED"`) || strings.Contains(body, `"goods":`) {
+		t.Fatalf("分叉时要说 UNDETERMINED 且不交 goods：%s", body)
+	}
+
+	plain := viewDetailRecord(t)
+	plain.GoodsStanding = domain.GoodsDetailsOnSubmission
+	body = getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: plain, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if strings.Contains(body, `"goodsStanding"`) {
+		t.Fatalf("没报也没修订过的委托不带 goodsStanding：%s", body)
+	}
+}

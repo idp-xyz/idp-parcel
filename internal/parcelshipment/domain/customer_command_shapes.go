@@ -129,8 +129,8 @@ func CanonicalizeCustomerParcelCancellation(spec CustomerParcelCancellationSpec)
 }
 
 // SourceDataAmendmentPayloadSpec 是首方资料修订口（形状 PAM-1，票 first-party-api/10）的规范化输入：指名（原提交的接入请求
-// 标识、资料范围）、基准、意图、原因、适用时间与内容。内容有两种形——地址要素条目（沿提交的条目命名，由 AddressElementsOf 挑）
-// 与声明测量；两者最多一种在场，显式清空时都缺席。
+// 标识、资料范围）、基准、意图、原因、适用时间与内容。内容有三种形——地址要素条目（沿提交的条目命名，由 AddressElementsOf 挑）、
+// 声明测量与货物明细；至多一种在场，显式清空时都缺席。
 type SourceDataAmendmentPayloadSpec struct {
 	OriginalAccessRequestID string
 	Scope                   SourceDataScope
@@ -141,6 +141,8 @@ type SourceDataAmendmentPayloadSpec struct {
 	// Entries 是落在寄 / 收件范围上的要素条目，名字由 AddressElementEntryName 拼出。
 	Entries     []CanonicalContentEntry
 	Measurement DeclaredMeasurement
+	// Goods 是货物明细范围上交来的整组新货物明细（ADR-0373 决定四），装箱分配按包裹标识指成员。
+	Goods GoodsDetails
 }
 
 // CanonicalSourceDataAmendment 是一次修订规范化的成对产出：摘要与同一份输入挑出的内容，二者出自同一道门。
@@ -168,6 +170,9 @@ type canonicalAmendmentDocument struct {
 	Entries          []canonicalEntryDocument     `json:"entries"`
 	Weight           *canonicalWeightDocument     `json:"weight"`
 	Dimensions       *canonicalDimensionsDocument `json:"dimensions"`
+	// Goods 是可缺键：没交货物明细即不编码，旧载荷逐字节同前，已存的 PAM-1 摘要与重放照旧成立。同号改形的前提与提交的
+	// PSC-1 相同（ADR-0373 决定八，UC-PS-002「给开发的交接」那一行）。
+	Goods *canonicalGoodsDocument `json:"goods,omitempty"`
 }
 
 // CanonicalizeCustomerSourceDataAmendment 是首方资料修订口的规范化入口（形状 PAM-1）。要素内容复用提交的
@@ -177,6 +182,10 @@ type canonicalAmendmentDocument struct {
 func CanonicalizeCustomerSourceDataAmendment(spec SourceDataAmendmentPayloadSpec) (CanonicalSourceDataAmendment, error) {
 	if strings.TrimSpace(spec.OriginalAccessRequestID) == "" || !spec.Scope.valid() ||
 		!spec.Basis.valid() || !spec.Intent.valid() || !spec.Reason.valid() {
+		return CanonicalSourceDataAmendment{}, ErrInvalidSubmissionPayload
+	}
+	// 内容至多一种形：同一份修订既改测量又改货物明细，版本上只能留一种，另一半会被静默丢掉。
+	if spec.Goods.Declared() && (spec.Measurement.declared() || len(spec.Entries) > 0) {
 		return CanonicalSourceDataAmendment{}, ErrInvalidSubmissionPayload
 	}
 	entries := append([]CanonicalContentEntry(nil), spec.Entries...)
@@ -225,6 +234,22 @@ func CanonicalizeCustomerSourceDataAmendment(spec SourceDataAmendmentPayloadSpec
 		content = measured
 	} else if group := spec.Scope.DataGroup(); group == SenderPlaceDataGroup() || group == DeliveryPlaceDataGroup() {
 		content = NewAddressElementsContent(AddressElementsOf(group, entries))
+	}
+	if spec.Goods.Declared() {
+		// 成员集合在这里不可得（修订口不读委托）：对着分配自己指名的包裹编，只核分配的内部形状；指没指全、指没指到基线外，
+		// 由聚合对着接受基线核（CheckSourceDataContentAgainstBaseline）。
+		named := make(map[DeclaredParcelID]struct{}, len(spec.Goods.packing))
+		for _, allocation := range spec.Goods.packing {
+			named[allocation.parcel] = struct{}{}
+		}
+		goods, err := canonicalGoodsDocumentOf(spec.Goods, named)
+		if err != nil {
+			return CanonicalSourceDataAmendment{}, err
+		}
+		document.Goods = goods
+		if content, err = NewGoodsDetailsContent(spec.Goods); err != nil {
+			return CanonicalSourceDataAmendment{}, err
+		}
 	}
 	encoded, err := json.Marshal(document)
 	if err != nil {

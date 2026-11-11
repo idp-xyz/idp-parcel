@@ -409,10 +409,25 @@ func detailRecord(
 		parcels[index].CustomerParcelNumber = numbers[parcels[index].Parcel.String()]
 		parcels[index].PlatformBoxLabel = labels[parcels[index].Parcel.String()]
 	}
-	goods, err := document.CurrentVersion.Goods.goods()
+	submitted, err := document.CurrentVersion.Goods.goods()
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, err
 	}
+	versions := make([]domain.CustomerSourceDataVersion, 0, len(document.SourceDataVersions))
+	for _, raw := range document.SourceDataVersions {
+		version, err := raw.version()
+		if err != nil {
+			return ports.ShipmentRequestDetailRecord{}, err
+		}
+		versions = append(versions, version)
+	}
+	var root domain.SubmissionVersionID
+	if document.Baseline != nil {
+		if root, err = domain.NewSubmissionVersionID(document.Baseline.SubmissionVersion); err != nil {
+			return ports.ShipmentRequestDetailRecord{}, err
+		}
+	}
+	goods, standing := domain.GoodsDetailsInEffect(submitted, versions, root)
 	shipment, err := document.PlatformShipment.declaration()
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, err
@@ -432,6 +447,7 @@ func detailRecord(
 		PriorVersionCount:            len(document.PriorVersions),
 		Task:                         task,
 		Goods:                        goods,
+		GoodsStanding:                standing,
 		PlatformShipment:             shipment,
 	}
 	if document.Decision != nil {

@@ -104,14 +104,26 @@ function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
       ),
     });
   }
+  // 分叉待复核时服务端不交 goods:说不出该按哪一版,页面也不挑一版显示,只说明停在哪。
+  if (view.goodsStanding === 'UNDETERMINED') {
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: '这票的货物明细有两条资料修订各自改了同一版,待复核并掉之后才说得出在用的是哪一版。',
+      content: <p className="type-body text-idpxyz-textMuted">待复核</p>,
+    });
+  }
   if (view.goods) {
     const goods = view.goods;
+    const amended = view.goodsStanding === 'ON_ADOPTED_VERSION';
     const rows = goodsLineRowsOf(goods);
     const category = contentCategoryDisplayOf(goods);
     sections.push({
       id: 'goods-details',
       title: objectNouns.goodsDetails,
-      description: '客户申报的货物，每行一种货，值按客户给的原样显示、不换算；取自箱单或商品申报资料的格在行下注明。',
+      description: `客户申报的货物，每行一种货，值按客户给的原样显示、不换算；取自箱单或商品申报资料的格在行下注明。${
+        amended ? '按客户资料修订后采用的那一版显示，行号随那一版重编。' : ''
+      }`,
       content: (
         <div className="space-y-2">
           {category.text && (

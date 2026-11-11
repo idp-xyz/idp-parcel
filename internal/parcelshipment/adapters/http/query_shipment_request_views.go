@@ -317,6 +317,9 @@ type requestDetailBody struct {
 	// Goods 与 PlatformShipment 是当前版本的货物明细与委托上的平台货件（ADR-0373、ADR-0374），没报即整键缺席。
 	Goods            *goodsViewBody            `json:"goods,omitempty"`
 	PlatformShipment *platformShipmentViewBody `json:"platformShipment,omitempty"`
+	// GoodsStanding 说 goods 出自哪里：ON_SUBMISSION（提交时报的）、ON_ADOPTED_VERSION（资料修订后的那一版）或
+	// UNDETERMINED（两条修订分叉待复核，不交 goods）。查阅的人要分得清「没报」与「说不出该按哪一版」。
+	GoodsStanding string `json:"goodsStanding,omitempty"`
 }
 
 type declaredParcelBody struct {
@@ -405,6 +408,10 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		body.DeclaredParcels = append(body.DeclaredParcels, parcelBody)
 	}
 	body.Goods = goodsViewBodyOf(record.Goods)
+	// 提交时没报、也没修订过的委托不带这一格：那是绝大多数委托，交一个「出自提交」却没有 goods 只是噪声。
+	if record.Goods.Declared() || record.GoodsStanding != domain.GoodsDetailsOnSubmission {
+		body.GoodsStanding = record.GoodsStanding.String()
+	}
 	body.PlatformShipment = platformShipmentViewBodyOf(record.PlatformShipment)
 	if record.Task.HasAttempt {
 		body.AcceptanceTask.LastAttemptReason = record.Task.LastAttemptReason

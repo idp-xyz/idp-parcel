@@ -539,3 +539,42 @@ func TestAMissingRequestEffectiveAtIsRecordedAsAbsentRatherThanBackfilled(t *tes
 		t.Fatalf("effective at = %v, want it backfilled by nothing", version.EffectiveAt())
 	}
 }
+
+// Covers: 首方契约「`CORRECTION` 必须带基准，取提交回执的 `submissionVersionId` 或前一次修订答复的 `sourceDataVersionId`」——
+// 范围上还没有修订时，指名接受基线那一版提交版本的更正接在链头上，直接采用，不判分叉；已有修订被采用之后再指名它，是对着
+// 过期基准改，照旧停在待复核。
+func TestACorrectionNamingTheAcceptedSubmissionVersionChainsOntoTheBaseline(t *testing.T) {
+	request, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	baseline, _ := request.AcceptanceBaseline()
+	correctionOn := func(id, prior string) domain.CustomerSourceDataVersion {
+		spec := amendmentSpec(t)
+		spec.VersionID = mustValue(t, domain.NewSourceDataVersionID, id)
+		spec.Intent = domain.CorrectionIntent
+		if spec.Basis, err = domain.NewAmendmentOfVersion(mustValue(t, domain.NewSourceDataVersionID, prior)); err != nil {
+			t.Fatalf("basis: %v", err)
+		}
+		version, err := domain.FormCustomerSourceDataVersion(spec)
+		if err != nil {
+			t.Fatalf("form %s: %v", id, err)
+		}
+		return version
+	}
+
+	if request, err = request.AmendCustomerSourceData(correctionOn("data-version-1", baseline.SubmissionVersionID().String())); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	judgment, _ := request.CurrentSourceDataAdoption(consigneeScope(t))
+	if adopted, _ := judgment.AdoptedVersion(); judgment.Outcome() != domain.SourceDataAdopted || adopted.String() != "data-version-1" {
+		t.Fatalf("首条更正：outcome = %s adopted = %s, want ADOPTED data-version-1", judgment.Outcome(), adopted)
+	}
+
+	if request, err = request.AmendCustomerSourceData(correctionOn("data-version-2", baseline.SubmissionVersionID().String())); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if judgment, _ = request.CurrentSourceDataAdoption(consigneeScope(t)); judgment.Outcome() != domain.SourceDataAwaitingReview {
+		t.Fatalf("对着过期基准的更正：outcome = %s, want AWAITING_REVIEW", judgment.Outcome())
+	}
+}

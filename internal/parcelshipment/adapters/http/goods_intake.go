@@ -3,11 +3,12 @@ package shipmenthttp
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件把首方载荷里的货物明细与平台声明译成领域值（ADR-0373、ADR-0374）。提交口与补充口共用：词表只此一份。
+// 本文件把首方载荷里的货物明细与平台声明译成领域值（ADR-0373、ADR-0374）。提交口、补充口与资料修订口共用：词表只此一份。
 //
 // 同一份货物明细要交两处——对着客户包裹参考的那一份进摘要（摘要按客户给的内容算，现签的内部标识不是内容），对着现签或
 // 回执里的成员的那一份进命令（版本按成员取画像与分配）。只译、只校验一次：先对着客户参考造好，再用 WithPackingParcels
@@ -83,22 +84,9 @@ func declaredGoods(draft submissionDraft, members []domain.DeclaredParcelID) (do
 		}
 		return domain.GoodsDetails{}, nil
 	}
-	spec := domain.GoodsDetailsSpec{}
-	if draft.Goods.ContentCategory != "" {
-		category, ok := domain.ParseContentCategory(draft.Goods.ContentCategory)
-		if !ok {
-			return domain.GoodsDetails{}, malformedField("goods.contentCategory",
-				fmt.Errorf("%q is not one of the content categories", draft.Goods.ContentCategory))
-		}
-		spec.Category, spec.CategoryMark = category, domain.SourceMarkThisDeclaration
-	}
-	spec.CategoryNote = declared(draft.Goods.ContentCategoryNote)
-	for index, line := range draft.Goods.Lines {
-		lineSpec, err := declaredGoodsLine(line)
-		if err != nil {
-			return domain.GoodsDetails{}, malformedField(fmt.Sprintf("goods.lines[%d]", index), err)
-		}
-		spec.Lines = append(spec.Lines, lineSpec)
+	spec, err := goodsSpecOf(*draft.Goods)
+	if err != nil {
+		return domain.GoodsDetails{}, err
 	}
 	for index, parcel := range draft.Parcels {
 		for _, allocation := range parcel.Packing {
@@ -107,15 +95,73 @@ func declaredGoods(draft submissionDraft, members []domain.DeclaredParcelID) (do
 			})
 		}
 	}
+	// 装箱分配错写在包裹上（parcels[i].packing），其余写在 goods 上；原因里点名了是哪个包裹参考、哪一行。
+	return goodsDetailsOf(spec, members, "parcels[].packing")
+}
+
+// goodsSpecOf 把委托级的内件性质与货物明细行译成领域规格；装箱分配由调用方按各口的写法另加。
+func goodsSpecOf(draft goodsDraft) (domain.GoodsDetailsSpec, error) {
+	spec := domain.GoodsDetailsSpec{}
+	if draft.ContentCategory != "" {
+		category, ok := domain.ParseContentCategory(draft.ContentCategory)
+		if !ok {
+			return domain.GoodsDetailsSpec{}, malformedField("goods.contentCategory",
+				fmt.Errorf("%q is not one of the content categories", draft.ContentCategory))
+		}
+		spec.Category, spec.CategoryMark = category, domain.SourceMarkThisDeclaration
+	}
+	spec.CategoryNote = declared(draft.ContentCategoryNote)
+	for index, line := range draft.Lines {
+		lineSpec, err := declaredGoodsLine(line)
+		if err != nil {
+			return domain.GoodsDetailsSpec{}, malformedField(fmt.Sprintf("goods.lines[%d]", index), err)
+		}
+		spec.Lines = append(spec.Lines, lineSpec)
+	}
+	return spec, nil
+}
+
+// goodsDetailsOf 立货物明细，装箱分配的错指到 packingField，其余指到 goods。
+func goodsDetailsOf(spec domain.GoodsDetailsSpec, members []domain.DeclaredParcelID, packingField string) (domain.GoodsDetails, error) {
 	goods, err := domain.NewGoodsDetails(spec, members)
 	if err != nil {
-		// 装箱分配错写在包裹上（parcels[i].packing），其余写在 goods 上；原因里点名了是哪个包裹参考、哪一行。
 		if errors.Is(err, domain.ErrInvalidPacking) {
-			return domain.GoodsDetails{}, malformedField("parcels[].packing", err)
+			return domain.GoodsDetails{}, malformedField(packingField, err)
 		}
 		return domain.GoodsDetails{}, malformedField("goods", err)
 	}
 	return goods, nil
+}
+
+// amendmentPackingDraft 是资料修订口上的一条装箱分配。修订作用于已接受的委托，客户手里有提交答复带回的包裹号
+// （ADR-0223），所以按 parcelId 指包裹，不按客户包裹参考——参考在接受后不再是这份委托的键。
+type amendmentPackingDraft struct {
+	ParcelID string `json:"parcelId"`
+	Line     int    `json:"line"`
+	Quantity string `json:"quantity"`
+}
+
+// amendedGoods 把资料修订口交来的整组新货物明细译成领域值。成员集合在这里不可得（修订口不读委托）：对着分配自己指名的
+// 包裹立，只核分配的内部形状；指没指全、指没指到基线之外，由聚合对着接受基线核。
+func amendedGoods(goods goodsDraft, packing []amendmentPackingDraft) (domain.GoodsDetails, error) {
+	spec, err := goodsSpecOf(goods)
+	if err != nil {
+		return domain.GoodsDetails{}, err
+	}
+	var members []domain.DeclaredParcelID
+	seen := make(map[domain.DeclaredParcelID]struct{})
+	for index, allocation := range packing {
+		parcel, err := domain.NewDeclaredParcelID(strings.TrimSpace(allocation.ParcelID))
+		if err != nil {
+			return domain.GoodsDetails{}, malformedField(fmt.Sprintf("packing[%d].parcelId", index), err)
+		}
+		if _, known := seen[parcel]; !known {
+			seen[parcel] = struct{}{}
+			members = append(members, parcel)
+		}
+		spec.Packing = append(spec.Packing, domain.PackingAllocationSpec{Parcel: parcel, Line: allocation.Line, Quantity: allocation.Quantity})
+	}
+	return goodsDetailsOf(spec, members, "packing")
 }
 
 // goodsOnMembers 把对着客户包裹参考造好的货物明细挪到成员上：customerParcels 与 members 按草案次序一一对应。
