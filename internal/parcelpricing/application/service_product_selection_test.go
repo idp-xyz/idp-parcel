@@ -118,3 +118,41 @@ func TestATrialPassesItsProductToTheCardSetAndTheSnapshot(t *testing.T) {
 }
 
 var _ ports.AcceptedServiceProductView = (*acceptedProductDouble)(nil)
+
+// 只有 SELL·客户费用的卡能声明适用产品（ADR-0378 决定一）：BUY 或 INTERNAL 的试算带了产品，受理门拒，卡集一次都不装——否则
+// 快照与解释会说那张卡是按产品选的。
+func TestATrialOnANonSellDirectionRefusesAServiceProduct(t *testing.T) {
+	for _, direction := range []domain.PricingDirection{domain.PricingDirectionBuy, domain.PricingDirectionInternal} {
+		cards := &applicablePriceCardsDouble{plans: []domain.PricingPlanVersion{minimalPlan(t)}}
+		handler, err := application.NewFormEstimateEvaluationsHandler(application.FormEstimateEvaluationsDeps{
+			PriceCards: cards, InForce: &priceCardResolverDouble{}, Clock: fixedClock{at: requestBasisAt},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := handler.Handle(context.Background(), application.FormEstimateEvaluationsCommand{
+			Tenant: mustValue(t, domain.NewTenantID, "tenant-1"), Scope: mustValue(t, domain.NewPricingScopeID, "scope-1"),
+			Direction: direction, BasisAt: requestBasisAt, Weight: mustWeight(t, "1"), Zone: "Z1",
+			ServiceProduct: mustValue(t, domain.NewServiceProductReference, "SYN-PROD-CN-SG-FBA"),
+		})
+		if err != nil || result.Outcome != application.EstimateNotAccepted || cards.calls != 0 {
+			t.Fatalf("%s 带产品：%s err = %v 装载 %d 次，want 未受理、一次都不装", direction, result.Outcome, err, cards.calls)
+		}
+	}
+}
+
+// 未配置与适用冲突两格交回选卡用的产品：消费侧要说清是哪个产品没有卡、哪个产品上撞了。
+func TestTheFormalStopCellsCarryTheProductTheySelectedBy(t *testing.T) {
+	for name, resolution := range map[string]ports.PriceCardInForceResolution{
+		"未配置":  {Outcome: ports.PriceCardNotConfigured},
+		"适用冲突": {Outcome: ports.PriceCardApplicabilityConflict, Candidates: []domain.VersionReference{sellPlan(t).Reference()}},
+	} {
+		sell := newSellFixture(t)
+		sell.priceCards.resolution = resolution
+		sell.products.product = mustValue(t, domain.NewServiceProductReference, "SYN-PROD-CN-SG-FBA")
+		result, err := sell.handler.Handle(context.Background(), sellCommand(t))
+		if err != nil || result.ServiceProduct.String() != "SYN-PROD-CN-SG-FBA" {
+			t.Fatalf("%s：%s 带的产品 = %q err = %v", name, result.Outcome, result.ServiceProduct.String(), err)
+		}
+	}
+}

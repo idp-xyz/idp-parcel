@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // ServiceProductReference 是一个服务产品在本上下文里的引用：参与方与商业的服务产品对象标识，不带版本（ADR-0378 决定一）。
@@ -10,13 +11,28 @@ import (
 // 什么价，带了就得每换一版重登一次价卡。本上下文不核它在不在册、不解释它：在不在册由商业解析答。零值即没有产品。
 type ServiceProductReference struct{ identifier }
 
+// serviceProductListSeparator 是价卡导入模板里产品列表的分隔符。标识里不许有它：否则同一格分号列表能拆出两种读法，一个产品
+// 会被读成两个，或两个被读成一个。构造门守住它，任何一处解码（快照、模板、试算载荷、小包托运的申报）就都守住了。
+const serviceProductListSeparator = ";"
+
 func NewServiceProductReference(value string) (ServiceProductReference, error) {
 	identifier, err := newIdentifier("service product reference", value)
-	return ServiceProductReference{identifier: identifier}, err
+	if err != nil {
+		return ServiceProductReference{}, err
+	}
+	if strings.Contains(value, serviceProductListSeparator) {
+		return ServiceProductReference{}, fmt.Errorf("%w: service product reference %q contains %q", ErrInvalidIdentifier, value, serviceProductListSeparator)
+	}
+	return ServiceProductReference{identifier: identifier}, nil
 }
 
 // Declared 报出这一格有没有产品。选卡收到零值即委托没申报，只看不声明产品的卡（ADR-0378 决定二）。
 func (product ServiceProductReference) Declared() bool { return product.valid() }
+
+// valid 比通用标识多一道：不含列表分隔符。读回门、输入快照门都经它，绕过构造门的快照同样拒。
+func (product ServiceProductReference) valid() bool {
+	return product.identifier.valid() && !strings.Contains(product.value, serviceProductListSeparator)
+}
 
 // ServiceProducts 交回卡声明的适用服务产品，按标识升序。空即不声明：这张卡接其余产品，即同一计价范围、方向与目的上时点没有
 // 任何在用卡指名的那些产品（PP CONTEXT「适用服务产品」）。

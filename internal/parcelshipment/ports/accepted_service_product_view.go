@@ -14,7 +14,8 @@ import (
 // ADR-0133 读口一口一问）。内部与其余按（租户，包裹）答问的读口走同一条取行 + 重建的路。
 //
 // 两格：产品（Declared 为真）/ 没有产品（零值、error 为空——包裹不属任何已接受委托的成员集合，或那一版没申报；按统一不可见结果，
-// 不区分不存在、他租户与未授权）。error 只表示读面坏了或两份已接受委托同时声明这件包裹（歧义）。
+// 不区分不存在、他租户与未授权）。error 只表示读面坏了（含接受基线指向的提交版本不在委托上）或两份已接受委托同时声明这件
+// 包裹（歧义）。
 type AcceptedServiceProductView interface {
 	LoadAcceptedServiceProduct(
 		ctx context.Context,

@@ -43,3 +43,21 @@ func TestEstimatePayloadTranslatesTheOptionalServiceProduct(t *testing.T) {
 		t.Fatalf("带首尾空白的产品：err = %v, want ErrMalformedRequest", err)
 	}
 }
+
+// 别的方向带 serviceProduct 是畸形请求（ADR-0378 决定一：只有售价卡按产品选），答 400，不悄悄丢掉。
+func TestAServiceProductOnANonSellEstimateIsMalformed(t *testing.T) {
+	tenant, err := domain.NewTenantID("SYN-TENANT-01")
+	if err != nil {
+		t.Fatalf("tenant: %v", err)
+	}
+	for _, direction := range []string{"BUY", "INTERNAL"} {
+		payload, err := pricinghttp.DecodeEstimatePayload(strings.NewReader(`{"scope":"SYN-SCOPE-01","direction":"` + direction +
+			`","basisAt":"2026-06-01T08:00:00Z","weight":{"value":"1","unit":"KG"},"serviceProduct":"SYN-PROD-CN-SG-FBA"}`))
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if _, err := payload.Command(tenant); !errors.Is(err, pricinghttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "serviceProduct") {
+			t.Fatalf("%s 带产品：err = %v，want serviceProduct 一格的 ErrMalformedRequest", direction, err)
+		}
+	}
+}

@@ -59,6 +59,9 @@ func TestOnlyASellCustomerChargePlanMayNameServiceProducts(t *testing.T) {
 	if _, err := domain.NewServiceProductReference(" SYN-PROD-FBA"); err == nil {
 		t.Fatal("带首尾空白的产品标识立住了")
 	}
+	if _, err := domain.NewServiceProductReference("SYN-PROD-A;SYN-PROD-B"); !errors.Is(err, domain.ErrInvalidIdentifier) {
+		t.Fatalf("带分号的产品标识：%v，分号是模板列表的分隔符，标识里不许有", err)
+	}
 	if (domain.ServiceProductReference{}).Declared() {
 		t.Fatal("零值报成有产品")
 	}
@@ -126,6 +129,7 @@ func TestTheRegistrationSnapshotCarriesServiceProductsAndTheReadbackGateHoldsThe
 		"带产品却记着 PPC-6":   func(plan map[string]any) { plan["canonicalization"] = "PPC-6" },
 		"去掉产品却仍记着 PPC-7": func(plan map[string]any) { delete(plan, "serviceProducts") },
 		"写了键却是空列表":       func(plan map[string]any) { plan["serviceProducts"] = []any{} },
+		"标识带分号":          func(plan map[string]any) { plan["serviceProducts"] = []any{"SYN-PROD-EXPRESS;SYN-PROD-FBA"} },
 		"空标识":            func(plan map[string]any) { plan["serviceProducts"] = []any{"", "SYN-PROD-FBA"} },
 	} {
 		if _, err := domain.RehydratePriceCardRegistration(tamperedDocument(t, raw, func(document map[string]any) {

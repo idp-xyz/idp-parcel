@@ -434,6 +434,10 @@ func (command FormEstimateEvaluationsCommand) accepted() bool {
 	if pairedPurpose(command.Direction) == "" || command.Weight.Unit().String() == "" {
 		return false
 	}
+	// 只有 SELL·客户费用的卡能声明适用产品（ADR-0378 决定一）：别的方向带产品，选卡不看它，快照与解释却会说卡是按它选的。
+	if command.ServiceProduct.Declared() && command.Direction != domain.PricingDirectionSell {
+		return false
+	}
 	return strings.TrimSpace(command.Zone) == command.Zone
 }
 

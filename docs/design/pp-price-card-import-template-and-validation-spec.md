@@ -293,7 +293,7 @@
 - **金额、小数、重量**：`ParseDecimal` 的写法，十进制、可带正负号、不收科学计数法。单位与币种由列或表头给出，不写在格里。
 - **时刻**：RFC 3339，必须带时区，如 `2026-01-01T00:00:00Z` 或 `2026-01-01T08:00:00+08:00`。
   - 日期类型的格与不带时区的文本都不收：电子表格的日期序列号没有时区，替它选一个时区就是替租户定生效时刻。
-- **列表**（`amountRoundingPoints`、`includes`、`excludes`、`serviceProducts`）：元素以英文分号 `;` 分隔，逐个去首尾空白。空元素、重复元素报 `CELL_INVALID`。元素都是封闭代码或费用代码，费用代码只由大写字母、数字与下划线组成，分号不会有歧义。
+- **列表**（`amountRoundingPoints`、`includes`、`excludes`、`serviceProducts`）：元素以英文分号 `;` 分隔，逐个去首尾空白。空元素、重复元素报 `CELL_INVALID`。`amountRoundingPoints`、`includes`、`excludes` 的元素是封闭代码或费用代码，费用代码只由大写字母、数字与下划线组成；`serviceProducts` 的元素是服务产品对象标识，标识里不许有分号（`NewServiceProductReference` 拒收，快照、试算载荷等别处解码同一道门）。所以分号不会有歧义。
 - **封闭代码**（方向、目的、方法、单位……）：与领域代码逐字相同，不做大小写折叠。多数是大写，版本清单依赖的工件种类是小写连字符（如 `commercial-policy`）。写错报 `CELL_INVALID`，并列出可取值。
 
 ## 六、问题清单

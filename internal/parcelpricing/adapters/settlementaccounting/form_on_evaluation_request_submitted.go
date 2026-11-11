@@ -123,12 +123,13 @@ func foldFormation(
 		return nil
 	case ppapplication.RequestPriceCardNotConfigured:
 		return handOffUnformed(ctx, unformed, command, ppports.UnformedPriceCardNotConfigured, []string{
-			fmt.Sprintf("no price card in force for scope %s %s/%s at %s",
-				command.Scope, command.Direction, command.Purpose, command.BasisAt.UTC().Format("2006-01-02T15:04:05Z07:00")),
+			fmt.Sprintf("no price card in force for scope %s %s/%s at %s%s",
+				command.Scope, command.Direction, command.Purpose, command.BasisAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+				forServiceProduct(result.ServiceProduct)),
 		})
 	case ppapplication.RequestPriceCardApplicabilityConflict:
 		return handOffUnformed(ctx, unformed, command, ppports.UnformedPriceCardApplicabilityConflict, []string{
-			"candidates " + describeCandidates(result.Candidates),
+			"candidates " + describeCandidates(result.Candidates) + forServiceProduct(result.ServiceProduct),
 		})
 	case ppapplication.RequestPricingInputUnavailable:
 		return handOffUnformed(ctx, unformed, command, ppports.UnformedPricingInputUnavailable, result.Missing)
@@ -165,6 +166,15 @@ func handOffUnformed(
 	default:
 		return fmt.Errorf("%w: hand off evaluation request %s unformed (%s): %v", ErrEvaluationFormationUndecided, command.Request, cause, err)
 	}
+}
+
+// forServiceProduct 在说明里点名选卡用的服务产品（ADR-0378 决定二）：同一计价范围只有别的产品的指名卡时，「没有卡」要说清是
+// 哪个产品没有，补登的人才知道该登指名它的卡还是一张不声明的卡。没按产品选就不加，说明与此前逐字相同。
+func forServiceProduct(product ppdomain.ServiceProductReference) string {
+	if !product.Declared() {
+		return ""
+	}
+	return " for declared service product " + product.String()
 }
 
 // describeCandidates 把冲突候选写成「标识@版本」逐条列出，供裁的人知道在哪几张之间裁。

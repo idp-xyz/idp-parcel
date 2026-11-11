@@ -338,3 +338,44 @@ func TestThePriceCardCatalogueTranscribesTheServiceProductsColumn(t *testing.T) 
 		t.Fatalf("不声明的卡的适用产品 = %v", got)
 	}
 }
+
+// 同一方案 v1 不声明、v2 指名 X，两版同时在用（ADR-0378 决定五：后继可以改适用产品）：X 只看指名那一层，得 v2；别的产品与零值只看
+// 不声明那一层，得 v1。两版落在不同的层，所以试算的卡集也不报同一方案两版。
+func TestTwoVersionsOfOnePlanThatDifferInProductsLandInDifferentTiers(t *testing.T) {
+	catalog, transactor := newPriceCards(t)
+	registerCard(t, catalog, transactor, t.Context(), cardRegistration(t, "tenant-a", catalogPlan(t, "plan-a", "v1", domain.PricingDirectionSell, "10")))
+	registerCard(t, catalog, transactor, t.Context(),
+		cardRegistration(t, "tenant-a", named(t, catalogPlan(t, "plan-a", "v2", domain.PricingDirectionSell, "11"), productFBA)))
+
+	for product, want := range map[string]string{productFBA: "v2", productExpress: "v1", "": "v1"} {
+		resolution := resolveForProduct(t, catalog, product)
+		if resolution.Outcome != ports.PriceCardVersionInForce || resolution.Plan.Reference().Version() != want {
+			t.Fatalf("在用解析（%q）：%s %v %v，want plan-a@%s", product, resolution.Outcome, resolution.Plan.Reference(), resolution.Candidates, want)
+		}
+		plans, err := loadForProduct(t, catalog, product)
+		if err != nil || len(plans) != 1 || plans[0].Reference().Version() != want {
+			t.Fatalf("试算卡集（%q）：%d 张 err = %v，want 恰 plan-a@%s、不报同一方案两版", product, len(plans), err, want)
+		}
+	}
+}
+
+// 指名 X 的卡过了适用期，X 落回不声明的那张卡：取层在选得中的行里取，过期的指名卡不挡路。
+func TestAnExpiredNamedCardFallsThroughToTheUnnamedCard(t *testing.T) {
+	catalog, transactor := newPriceCards(t)
+	registerCard(t, catalog, transactor, t.Context(),
+		cardRegistration(t, "tenant-a", named(t, sellClosedPlanFor(t, "SYN-PLAN-FBA-OLD", "v1", closureJanuary, closureJune), productFBA)))
+	registerCard(t, catalog, transactor, t.Context(),
+		cardRegistration(t, "tenant-a", sellClosedPlanFor(t, "SYN-PLAN-REST", "v1", closureJanuary, time.Time{})))
+
+	tenant, scope := evaluationValue(t, domain.NewTenantID, "tenant-a"), evaluationValue(t, domain.NewPricingScopeID, closureScope)
+	for at, want := range map[time.Time]string{closureJune.Add(-time.Hour): "SYN-PLAN-FBA-OLD", closureSeptember: "SYN-PLAN-REST"} {
+		resolution, err := catalog.ResolveInForce(t.Context(), tenant, scope, domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, at, productOf(t, productFBA))
+		if err != nil || resolution.Outcome != ports.PriceCardVersionInForce || resolution.Plan.Reference().ID() != want {
+			t.Fatalf("%s：%s %v err = %v，want %s", at.Format(time.RFC3339), resolution.Outcome, resolution.Plan.Reference(), err, want)
+		}
+		plans, err := catalog.LoadApplicable(t.Context(), tenant, domain.PricingDirectionSell, scope, at, productOf(t, productFBA))
+		if err != nil || len(plans) != 1 || plans[0].Reference().ID() != want {
+			t.Fatalf("%s 试算卡集：%d 张 err = %v，want 恰 %s", at.Format(time.RFC3339), len(plans), err, want)
+		}
+	}
+}

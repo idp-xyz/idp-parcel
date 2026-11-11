@@ -77,7 +77,8 @@ func (row priceCardRow) namesProduct(product domain.ServiceProductReference) boo
 
 // tierForProduct 是 ADR-0378 决定二的指名优先：时点选得中的各行里，先取指名这个产品的那一层；一张都没有才取不声明产品
 // 的那一层。指名了别的产品的行哪一层都不进。零值产品（没申报）只有不声明的那一层。层内几行怎么答由调用方各按自己的口径：
-// 在用解析多于一行即适用冲突，试算的卡集照旧只拦同一方案两版。两口共用这一处，同一份申报在两口上才落在同一层。
+// 在用解析多于一行即适用冲突，试算的卡集照旧只拦同一方案两版。ResolveInForce 与 LoadApplicable 都经这一处取层，同一份申报在
+// 两边才落在同一层。
 func tierForProduct(rows []priceCardRow, product domain.ServiceProductReference) []priceCardRow {
 	var named, unnamed []priceCardRow
 	for _, row := range rows {
