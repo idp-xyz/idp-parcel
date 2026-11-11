@@ -52,7 +52,25 @@ Blocked by: 03、05
 
 四条路各一步，各自提交、验证、推送：
 
-1. 编辑态的版式（更新资料与更正名称共用）。
-2. 登记合作关系：一句话式的头一行、图上未保存的虚线、页头「建立合作关系」落到合作关系视图。
-3. 新增往来单位：登记视图的版式与相近单位的提示。
-4. 停用：「更多」里的入口与对话框。
+1. 编辑态的版式（更新资料与更正名称共用）。——未做
+2. 登记合作关系：一句话式的头一行、图上未保存的虚线、页头「建立合作关系」落到合作关系视图。——未做
+3. 新增往来单位：登记视图的版式与相近单位的提示。——未做
+4. 停用：「更多」里的入口与对话框。——已做，见下
+
+### 第 4 步完成记录（2026-11-11，直接推 `main`，代码在 `a949a8c8a`）
+
+- 入口与对话框是现成的（票 business-party-edit-mode/01）：右栏与对象页的「更多」里有「停用这家单位…」，对话框的标题带单位名、种类与对象锁死，三格是版本号（按已登记的记录预填）、来源单据、停用时间。没有写授予时菜单里没有这一项（票 05 的只读核对里看过）。本步只补票面要的那一句。
+- 落点：`business-party-panel-first-screen.ts` 的 `deactivationLiveRelationshipsNote`（纯函数，node:test 钉着）；`BusinessPartyDeactivationDialog.tsx` 说明后面跟这一句；数经 `BusinessPartyMoreMenu` 传进去——右栏用它已有的那个数，对象页照同一口径补算（关系册读全了才数）。
+- ✅ 三道门退 0（tsc、node:test 1342/1342、vite build）。
+- ✅ 浏览器（演示租户、配置操作者，1734 与 1280），每次打开对话框、读说明、点「关闭」，不填不提交：
+  - 右栏入口：`SYN-PARTY-SHIPPER-03`「它名下还有 3 段在用的合作关系。」；`SYN-PARTY-OPERATOR-01` 10 段（含 1 段待确认）；`SYN-PARTY-CARRIER-LM-01` 1 段（它是相对方的那一段，两侧都算）；`SYN-PARTY-FUTURE-01` 没有在用的关系，不提。
+  - 对象页入口：`SYN-PARTY-SHIPPER-03` 3 段、`SYN-PARTY-OPERATOR-01` 10 段、`SYN-PARTY-FUTURE-01` 不提，与右栏一致。
+  - 对话框 576 宽、无横向溢出；两个宽度下都居中。
+- ✅ 零写请求：这段会话 21 问全是 GET，没有点过「停用」。
+- 未核：关系册没读全时不提这一句——只由单测里数为 null 的那一例钉着，演示数据造不出多页的关系册。
+
+### 第 1 步的落点（读代码所得，实测于 `a949a8c8a`，下次开工不用重查）
+
+- 编辑态由对象页承载：`BusinessPartyDetailPage` 用共用的 `DetailPageTemplate`。编辑时表单（`BusinessPartyProfileEditMode`、`BusinessPartyIdentityEditMode`）放进模板的 `sections`，「取消」「保存」经 `footerSlot` 传送到模板页脚；`tabs` 在编辑时只去掉了概要与联系人，资料版本、登记记录、关联照旧渲染在表单下面；头区动作在编辑时只剩「返回列表」。
+- 进编辑态：右栏的 `openProfileForm` 直接把地址改成对象页的编辑地址。出编辑态：对象页调 `onExitProfileEdit` / `onExitIdentityEdit`，去哪由 `BusinessPartiesPage` 定——现在落在对象页的只读态。
+- 版式要在本页自己的件里做，不动共用模板（spec「别的页」一行）：编辑时资料版本等几节不渲染、头区右端换成「正在更新资料 · 在第几版的基础上改」的标记、表单外加一列分段锚点，都落在 `BusinessPartyDetailPage` 与两个编辑态组件里。
