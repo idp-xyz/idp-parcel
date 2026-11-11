@@ -516,6 +516,13 @@ func taskViewRecord(document taskDocument) (ports.AcceptanceTaskViewRecord, erro
 		}
 		record.WaitingOn = waiting
 	}
+	for _, gap := range document.SupplementGaps {
+		group := domain.AcceptanceCheckGroup(gap.Group)
+		if group.String() == "" {
+			return ports.AcceptanceTaskViewRecord{}, fmt.Errorf("补充缺口的判组不是本上下文的取值：%d", gap.Group)
+		}
+		record.SupplementGaps = append(record.SupplementGaps, ports.SupplementGapViewRecord{Group: group, Parcel: gap.Parcel, Reason: gap.Reason})
+	}
 	if document.ReviewCompletion != nil {
 		record.ReviewCompleted = true
 		record.ReviewAuthority = document.ReviewCompletion.Authority

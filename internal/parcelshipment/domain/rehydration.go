@@ -165,6 +165,8 @@ type RehydrateAcceptanceTaskSpec struct {
 	EstablishedAt       time.Time
 	State               AcceptanceTaskState
 	WaitingOn           ResumePath
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）；漏了它，重建后查阅面就说不出缺的是哪一条、哪几箱。
+	SupplementGaps []SupplementGap
 	// ProcessingAttempts 与 ReviewCompletion 收成品类型，不另造 Rehydrate*Spec：两者是判断的
 	// **输入**而非产物，本就有公开构造函数，字段又未导出，包外造不出半截的一份。多一个 Spec
 	// 就多一格「相信输入」，而 ADR-0028 要这个面尽可能小。
@@ -212,6 +214,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			establishedAt:         prior.EstablishedAt,
 			state:                 prior.State,
 			waitingOn:             prior.WaitingOn,
+			supplementGaps:        append([]SupplementGap(nil), prior.SupplementGaps...),
 			processingAttempts:    append([]ProcessingAttempt(nil), prior.ProcessingAttempts...),
 			reviewCompletion:      prior.ReviewCompletion,
 			authorizedDisposition: prior.AuthorizedDisposition,
@@ -247,6 +250,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			establishedAt:       snapshot.AcceptanceTask.EstablishedAt,
 			state:               snapshot.AcceptanceTask.State,
 			waitingOn:           snapshot.AcceptanceTask.WaitingOn,
+			supplementGaps:      append([]SupplementGap(nil), snapshot.AcceptanceTask.SupplementGaps...),
 			processingAttempts: append(
 				[]ProcessingAttempt(nil), snapshot.AcceptanceTask.ProcessingAttempts...,
 			),

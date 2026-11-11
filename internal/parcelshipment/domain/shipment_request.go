@@ -167,6 +167,8 @@ type AcceptanceDecisionTask struct {
 	authorizedDisposition AuthorizedDisposition
 	waitingOn             ResumePath
 	state                 AcceptanceTaskState
+	// supplementGaps 只在 waitingOn 为等待受控补充时非空（supplement_gaps.go）。
+	supplementGaps []SupplementGap
 }
 
 // AcceptanceTaskState 区分任务的两个终态。CONTEXT 把它们分开写：`已完成`只在接受或拒绝决定

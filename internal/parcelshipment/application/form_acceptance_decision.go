@@ -219,6 +219,16 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	}
 	checks = append(commercialChecks, checks...)
 
+	// 「必要资料」组只在依据适用、规则包声明它适用时判（ADR-0376 决定一）：判法与条件都已在领域与依据快照里，这里不读任何
+	// 依赖，只把那一组的结果并进本轮。没声明就不出这一组的结果——出了会让一份不要求它的委托多一道判断。
+	if resolution.Applicability == domain.CommerciallyApplicable && basis.Applicable().Includes(domain.RequiredDocumentCheck) {
+		documents, err := request.RequiredDocumentChecks(basis.SubmissionConditions())
+		if err != nil {
+			return FormAcceptanceDecisionResult{}, fmt.Errorf("judge required documents: %w", err)
+		}
+		checks = append(checks, documents...)
+	}
+
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
 		return handler.undecided(ctx, command, DecisionIdentityUnavailable, request.State()), nil

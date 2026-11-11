@@ -347,6 +347,15 @@ type acceptanceTaskBody struct {
 	LastAttemptReason       string `json:"lastAttemptReason,omitempty"`
 	LastAttemptContinuation string `json:"lastAttemptContinuation,omitempty"`
 	LastAttemptedAt         string `json:"lastAttemptedAt,omitempty"`
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）：查阅的人要知道缺的是哪一条、哪几箱，而不只是
+	// 「在等补充」。
+	SupplementGaps []supplementGapBody `json:"supplementGaps,omitempty"`
+}
+
+type supplementGapBody struct {
+	Group    string `json:"group"`
+	ParcelID string `json:"parcelId,omitempty"`
+	Reason   string `json:"reason"`
 }
 
 // decisionBody 的 kind 词汇与撤回端点的 decisionKind 同一套（ACCEPTED/REJECTED），
@@ -386,6 +395,10 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		DeclaredParcels:    make([]declaredParcelBody, 0, len(record.DeclaredParcels)),
 		PriorVersionCount:  record.PriorVersionCount,
 		AcceptanceTask:     acceptanceTaskBody{State: record.Task.State.String()},
+	}
+	for _, gap := range record.Task.SupplementGaps {
+		body.AcceptanceTask.SupplementGaps = append(body.AcceptanceTask.SupplementGaps,
+			supplementGapBody{Group: gap.Group.String(), ParcelID: gap.Parcel, Reason: gap.Reason})
 	}
 	packing := packingViewBodiesByParcel(record.Goods)
 	for _, parcel := range record.DeclaredParcels {

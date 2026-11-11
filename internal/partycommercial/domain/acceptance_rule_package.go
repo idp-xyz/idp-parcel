@@ -1,6 +1,11 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"go.idp.xyz/idp-parcel/referenceconfig"
+)
 
 var (
 	ErrInvalidAssembledRule            = errors.New("party commercial: invalid assembled rule")
@@ -11,9 +16,15 @@ var (
 // RuleReference 指向一条规则，其所有权属于执行该规则的那个上下文。它只是引用：
 // 规则正文、阈值和取值都留在权威方那里，所以装配规则包永远不等于替某个具体委托
 // 选择判断值。
+//
+// 带参考配置引用前缀的值，登记时必须能解析且该版已发布，否则立不起来（ADR-0376 决定一，写法同 ADR-0157 决定三）：执行方
+// 只判读得懂的引用，一条拼错或指向未发布版本的引用登进去，就永远不判，而登记的人以为它在判。不带前缀的值仍是不透明引用。
 type RuleReference struct{ requiredValue }
 
 func NewRuleReference(value string) (RuleReference, error) {
+	if _, claimed, err := referenceconfig.OpenCitation(value); claimed && err != nil {
+		return RuleReference{}, fmt.Errorf("rule reference: %w", err)
+	}
 	required, err := newRequiredValue("rule reference", value)
 	return RuleReference{required}, err
 }

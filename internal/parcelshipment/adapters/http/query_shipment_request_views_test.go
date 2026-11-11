@@ -716,3 +716,29 @@ func TestViewsDetailSaysWhereTheGoodsDetailsComeFrom(t *testing.T) {
 		t.Fatalf("没报也没修订过的委托不带 goodsStanding：%s", body)
 	}
 }
+
+// Covers: ADR-0376 决定一——受理任务停在等待受控补充时，详情交出缺的各项（判组、包裹、原因），查阅的人看得到缺的是哪一条、
+// 哪几箱；不在等补充时整键缺席。
+func TestViewsDetailNamesWhatTheSupplementIsWaitingFor(t *testing.T) {
+	record := viewDetailRecord(t)
+	record.Task.SupplementGaps = []ports.SupplementGapViewRecord{
+		{Group: domain.RequiredDocumentCheck, Parcel: "parcel-2", Reason: "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL"},
+		{Group: domain.RequiredDocumentCheck, Reason: "PACKING_DECLARED"},
+	}
+	body := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	for _, want := range []string{
+		`"supplementGaps":[`,
+		`{"group":"` + domain.RequiredDocumentCheck.String() + `","parcelId":"parcel-2","reason":"EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL"}`,
+		`{"group":"` + domain.RequiredDocumentCheck.String() + `","reason":"PACKING_DECLARED"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("缺 %s：%s", want, body)
+		}
+	}
+	plain := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: viewDetailRecord(t), found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if strings.Contains(plain, `"supplementGaps"`) {
+		t.Fatalf("不在等补充也带了缺口：%s", plain)
+	}
+}

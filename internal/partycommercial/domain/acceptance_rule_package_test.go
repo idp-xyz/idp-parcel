@@ -199,3 +199,22 @@ func TestRulePackageContentBindsToItsOwnUsableVersion(t *testing.T) {
 		}
 	})
 }
+
+// Covers: ADR-0376 决定一（写法同 ADR-0157 决定三）——规则引用带参考配置前缀时，登记就要打开得到已发布的那一版；拼错或指向
+// 未发布版本立不起来，不带前缀的不透明引用照旧收。
+func TestARuleReferenceCitingReferenceConfigurationMustOpenAReleasedVersion(t *testing.T) {
+	for name, item := range map[string]struct {
+		value string
+		ok    bool
+	}{
+		"已发布":   {"REFCFG-1:parcel-shipment/submission-conditions/FBA-HEADHAUL@1", true},
+		"未发布版本": {"REFCFG-1:parcel-shipment/submission-conditions/FBA-HEADHAUL@9", false},
+		"拼错形状":  {"REFCFG-1:parcel-shipment/FBA-HEADHAUL", false},
+		"不透明引用": {"SYN-RULE-CROSS-FIELD-01", true},
+	} {
+		_, err := domain.NewRuleReference(item.value)
+		if (err == nil) != item.ok {
+			t.Errorf("%s：err = %v, want ok=%v", name, err, item.ok)
+		}
+	}
+}

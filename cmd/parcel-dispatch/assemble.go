@@ -1033,6 +1033,11 @@ func acceptanceCommercialBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: acceptance content declarations: %w", err)
 	}
+	// 规则包正文只为提交条件读（ADR-0376 决定一）：规则包声明「必要资料」组适用时，按它引用的参考配置判。
+	rulePackages, err := pcpostgres.NewAcceptanceRulePackages(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rule packages: %w", err)
+	}
 	keyStore, err := pspostgres.NewCommercialResolutionKeyStore(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: resolution key store: %w", err)
@@ -1061,6 +1066,7 @@ func acceptanceCommercialBasis(
 		Judgments:    pcapplication.NewFormJudgmentAsOfHandler(resolutions, asOfPolicies),
 		AsOfPolicies: asOfPolicies,
 		Contents:     contents,
+		Rules:        rulePackages,
 		Keys:         keys,
 		Values:       values,
 	}), nil

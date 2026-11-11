@@ -1,0 +1,21 @@
+{
+  "identifier": "parcel-shipment/submission-conditions/FBA-HEADHAUL",
+  "version": 1,
+  "title": "专线型 FBA 头程的提交条件",
+  "source": "ADR-0374 决定三（平台货件号、每箱平台箱标号、装箱分配报全是 FBA 头程服务产品所采用接单规则包的必填与跨字段条件）；ADR-0376 决定一（在「必要资料」组判，未满足等客户受控补充）。",
+  "note": "判断方法随产品发布，服务产品的接单规则包以一条 CROSS_FIELD_CONDITION 规则引用这一版才生效（ADR-0146 决定三、ADR-0147 决定四）。各条按委托当前提交版本与委托上的平台声明判；判法在消费方执行器里，不在这份文件里。只写条件，不含任何租户、平台或承运商的取值。",
+  "conditions": [
+    {
+      "code": "PLATFORM_SHIPMENT_DECLARED",
+      "requirement": "委托报了平台货件：销售平台与平台货件号同在。平台参考号不要求。"
+    },
+    {
+      "code": "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL",
+      "requirement": "当前提交版本的每件包裹都报了平台箱标号。"
+    },
+    {
+      "code": "PACKING_DECLARED",
+      "requirement": "当前提交版本报了货物明细与装箱分配。报了就是报全，由提交的形状规则保证，这一条只要求在场。"
+    }
+  ]
+}
