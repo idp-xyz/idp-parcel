@@ -290,8 +290,9 @@ type ShipmentRequest struct {
 	// customerParcelNumbers 挂在委托上而不在提交版本上：号码标识的是成员，新版本的成员集合必须与当前版本相等，
 	// 所以它首次提交时固定、不随版本重报（ADR-0184 决定四）。接受时据它形成外部标识关联。
 	customerParcelNumbers []CustomerParcelNumberDeclaration
-	// platformShipment 与 platformBoxLabels 同客户包裹件号挂在委托上、首次提交时固定（ADR-0374 决定四）：箱标号标识的是
-	// 成员，新版本的成员集合必须与当前版本相等，平台货件则是这一票本身的号。
+	// platformShipment 与 platformBoxLabels 同客户包裹件号挂在委托上：箱标号标识的是成员，平台货件是这一票本身的号，都不是
+	// 某一版的内容。与客户包裹件号不同的是，受理前的受控补充可以整份换掉它们（ADR-0376 决定二）——这里存的是委托此刻的现行
+	// 声明，被换下的那一份不另留历史，每次补充的载荷摘要在来源保全里。接受后不再变，关联按它形成。
 	platformShipment  PlatformShipmentDeclaration
 	platformBoxLabels []PlatformBoxLabelDeclaration
 	// documentNumbering 是委托的单据号这一格（ADR-0355）。它不进快照文档，随两列读回：号在建单那一笔事务里开立、此后

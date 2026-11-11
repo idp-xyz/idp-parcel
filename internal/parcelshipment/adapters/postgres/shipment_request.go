@@ -150,8 +150,9 @@ func (repository *ShipmentRequests) Insert(
 // 版本，转移一律不动它），UPDATE 的 WHERE 带上它并加一：零行命中即`版本冲突`——抢先
 // 那一方已经落库，本方要重读再重放。
 //
-// 同一条语句交回预期版本那一行原来的状态：委托由`已提交`转出而未接受时要交声明撤除门铃（ADR-0211 决定三），判的是这一次
-// 保存前后两个状态。原状态取自预期版本那一行，版本每存一次加一，那一行的状态因此就是这次转移的起点；另读一次也行，只是多一趟。
+// 同一条语句交回预期版本那一行原来的状态与原来的平台箱标号：委托由`已提交`转出而未接受时要交声明撤除门铃（ADR-0211 决定三），
+// 受理前的补充换下箱标号时同样要交（ADR-0376 决定二），判的都是这一次保存前后两份。原状态与原箱标号取自预期版本那一行，版本
+// 每存一次加一，那一行因此就是这次转移的起点；另读一次也行，只是多一趟。
 func (repository *ShipmentRequests) Save(
 	ctx context.Context,
 	identity domain.SourceIdentity,
@@ -168,6 +169,7 @@ func (repository *ShipmentRequests) Save(
 	}
 	versionID, parcels := currentParcelProjection(request)
 	var prior uint8
+	var priorLabels []byte
 	var savedAt time.Time
 	err = executor.QueryRow(ctx,
 		`UPDATE parcel_shipment.shipment_request AS saved
@@ -178,7 +180,7 @@ func (repository *ShipmentRequests) Save(
 		        current_submission_version_id = $8,
 		        declared_parcel_ids = $9,
 		        task_waiting_on = $10
-		   FROM (SELECT state
+		   FROM (SELECT state, snapshot -> 'platformBoxLabels' AS box_labels
 		           FROM parcel_shipment.shipment_request
 		          WHERE tenant_id = $1
 		            AND customer_account_id = $2
@@ -190,7 +192,7 @@ func (repository *ShipmentRequests) Save(
 		    AND saved.source = $3
 		    AND saved.source_request_key = $4
 		    AND saved.revision = $5
-		RETURNING prior.state, saved.saved_at`,
+		RETURNING prior.state, prior.box_labels, saved.saved_at`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
 		identity.Source().String(),
@@ -201,7 +203,7 @@ func (repository *ShipmentRequests) Save(
 		versionID,
 		parcels,
 		taskWaitingOnProjection(request),
-	).Scan(&prior, &savedAt)
+	).Scan(&prior, &priorLabels, &savedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
@@ -223,6 +225,14 @@ func (repository *ShipmentRequests) Save(
 	// 客户撤回；补充期满的确定性拒绝若有单独的编排，同样只能经这里——门铃因此只挂这一处。
 	retired := declarationsRetiredBy(domain.ShipmentRequestState(prior), request)
 	if err := repository.doorbell.RingDeclarationsRetired(ctx, identity.TenantID(), request, retired, savedAt); err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
+	// 受理前的补充换下了箱标号：被换下的号从此不再算歧义信号（读口读的就是这份快照），同一笔交撤除门铃，理由同上。
+	withdrawn, err := boxLabelsWithdrawnBySupplement(domain.ShipmentRequestState(prior), priorLabels, request)
+	if err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
+	if err := repository.doorbell.RingBoxLabelsWithdrawn(ctx, identity.TenantID(), request, withdrawn, savedAt); err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
 	}
 	return ports.ShipmentRequestSaved, nil

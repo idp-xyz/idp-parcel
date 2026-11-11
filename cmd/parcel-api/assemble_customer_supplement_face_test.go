@@ -292,4 +292,23 @@ func TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase(
 	if _, replayedVersion, _ := receiptOf(t, replayed); replayedVersion == basis {
 		t.Fatalf("重放回执仍是补充前的基准版本 %s", basis)
 	}
+	// ADR-0376 决定二：受理前的补充可以补报平台号——带平台货件段与这一件的箱标号形成新版本；同一份重发答已处理、同一版本；
+	// 同一补充请求标识改了箱标号答来源冲突。
+	withLabel := func(label string) string {
+		body := supplementBody("SYN-ACCESS-REQUEST-SU-0010", original, requestID, formed, parcelID, "合成收件地址",
+			",\n  \"platformShipment\": {\"platform\": \"AMAZON\", \"shipmentId\": \"FBA15SYNSU\"}")
+		return strings.Replace(body, `"declaredWeightUnit": "KG"}]`, `"declaredWeightUnit": "KG", "platformBoxLabel": "`+label+`"}]`, 1)
+	}
+	labelled := post(supplement, supplementPath, syntheticCustomerSubject, withLabel("FBA15SYNSUU000001"))
+	if labelled.Code != http.StatusCreated || outcomeOf(t, labelled) != "SUPPLEMENT_RECORDED" {
+		t.Fatalf("补报箱标号的补充 = %d %s, want 201 SUPPLEMENT_RECORDED", labelled.Code, labelled.Body.String())
+	}
+	labelledAgain := post(supplement, supplementPath, syntheticCustomerSubject, withLabel("FBA15SYNSUU000001"))
+	if outcomeOf(t, labelledAgain) != "SUPPLEMENT_ALREADY_HANDLED" || versionOf(t, labelledAgain) != versionOf(t, labelled) {
+		t.Fatalf("重发补报箱标号的补充 = %d %s, want SUPPLEMENT_ALREADY_HANDLED 同一版本", labelledAgain.Code, labelledAgain.Body.String())
+	}
+	relabelled := post(supplement, supplementPath, syntheticCustomerSubject, withLabel("FBA15SYNSUU000009"))
+	if outcomeOf(t, relabelled) != "SUPPLEMENT_SOURCE_CONFLICT" {
+		t.Fatalf("同一补充请求标识改了箱标号 = %d %s, want SUPPLEMENT_SOURCE_CONFLICT", relabelled.Code, relabelled.Body.String())
+	}
 }

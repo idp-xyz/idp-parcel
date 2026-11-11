@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
@@ -103,8 +104,9 @@ func TestCustomerSubmissionIntakeRefusesMalformedGoodsAndPlatformDeclarations(t 
 	}
 }
 
-// Covers: ADR-0373 决定四、ADR-0374 决定四——补充整份重报货物明细，分配挂在回执里的成员上；平台箱标号首次提交时固定，补充里带了答 400。
-func TestCustomerSupplementIntakeCarriesGoodsAndRefusesBoxLabels(t *testing.T) {
+// Covers: ADR-0373 决定四、ADR-0376 决定二——补充整份重报货物明细与平台声明：分配与箱标号都挂在回执里的成员上；带箱标号而没有
+// 平台货件答 400，形状规则与提交口同一处；同一份载荷交两次摘要相同（重放），改了箱标号摘要就变（来源冲突）。
+func TestCustomerSupplementIntakeCarriesGoodsAndPlatformDeclarations(t *testing.T) {
 	withGoods := strings.Replace(customerSupplementDraft, `"parcels": [{"parcelId": "DPCL-SYN-1", "customerParcelReference": "SYN-PCLREF-0001", "declaredWeightValue": "1.50", "declaredWeightUnit": "KG"}]`,
 		`"goods": {"lines": [{"descriptions": [{"lang": "en", "text": "Wrist watch"}], "quantity": "1"}]},
   "parcels": [{"parcelId": "DPCL-SYN-1", "customerParcelReference": "SYN-PCLREF-0001", "declaredWeightValue": "1.50", "declaredWeightUnit": "KG", "packing": [{"line": 1, "quantity": "1"}]}]`, 1)
@@ -117,11 +119,39 @@ func TestCustomerSupplementIntakeCarriesGoodsAndRefusesBoxLabels(t *testing.T) {
 	if len(command.DeclaredGoods.Lines()) != 1 || len(packing) != 1 || packing[0].Parcel().String() != "DPCL-SYN-1" {
 		t.Fatalf("补充的货物明细 = %+v；分配要挂在回执里的成员上", packing)
 	}
+	if command.PlatformShipment.Declared() || len(command.PlatformBoxLabels) != 0 {
+		t.Fatal("没带平台段的补充交出了平台声明")
+	}
 
-	labelled := strings.Replace(withGoods, `"declaredWeightUnit": "KG", "packing"`, `"declaredWeightUnit": "KG", "platformBoxLabel": "FBA15SYNTESTU000001", "packing"`, 1)
-	intake, request = intakeSupplementOf(t, supplementAuthenticatorDouble{}, labelled)
+	labelOnly := strings.Replace(withGoods, `"declaredWeightUnit": "KG", "packing"`, `"declaredWeightUnit": "KG", "platformBoxLabel": "FBA15SYNTESTU000001", "packing"`, 1)
+	intake, request = intakeSupplementOf(t, supplementAuthenticatorDouble{}, labelOnly)
 	if _, err := intake.IntakeSupplement(t.Context(), request); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
-		t.Fatalf("补充带箱标号 err = %v, want ErrMalformedRequest", err)
+		t.Fatalf("补充带箱标号而没有平台货件 err = %v, want ErrMalformedRequest", err)
+	}
+
+	withPlatform := func(label string) string {
+		body := strings.Replace(labelOnly, "FBA15SYNTESTU000001", label, 1)
+		return strings.Replace(body, `"goods"`, `"platformShipment": {"platform": "AMAZON", "shipmentId": "FBA15SYNTEST", "referenceId": "SYN-REF-2"},
+  "goods"`, 1)
+	}
+	digestOf := func(body string) application.FormNewSubmissionVersionCommand {
+		t.Helper()
+		intake, request := intakeSupplementOf(t, supplementAuthenticatorDouble{}, body)
+		command, err := intake.IntakeSupplement(t.Context(), request)
+		if err != nil {
+			t.Fatalf("接入带平台段的补充：%v", err)
+		}
+		return command
+	}
+	first, again, changed := digestOf(withPlatform("FBA15SYNTESTU000001")), digestOf(withPlatform("FBA15SYNTESTU000001")), digestOf(withPlatform("FBA15SYNTESTU000009"))
+	if !first.PlatformShipment.Declared() || len(first.PlatformBoxLabels) != 1 || first.PlatformBoxLabels[0].Parcel().String() != "DPCL-SYN-1" {
+		t.Fatalf("补充的平台声明 = %+v；箱标号要挂在回执里的成员上", first.PlatformBoxLabels)
+	}
+	if first.PayloadDigest != again.PayloadDigest || first.PayloadDigest == changed.PayloadDigest {
+		t.Fatal("同一份平台段摘要要相同、改了箱标号摘要要变")
+	}
+	if first.PayloadDigest == command.PayloadDigest {
+		t.Fatal("带平台段与不带平台段的补充摘要相同")
 	}
 }
 

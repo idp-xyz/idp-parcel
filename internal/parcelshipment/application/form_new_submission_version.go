@@ -78,6 +78,10 @@ type FormNewSubmissionVersionCommand struct {
 	// 这一遍出自同一份草案、同一个包裹次序，前一遍过了这一遍必过；成员集合变了先撞 ErrSubmissionBoundaryChanged。走到它
 	// 只能是装配错误，照技术失败上抛。
 	DeclaredGoods domain.GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是这一版起委托的平台声明（ADR-0376 决定二），补充整份重报、可缺席；箱标号挂在
+	// DeclaredParcelIDs 上。聚合再核那一道同 DeclaredGoods：接单入口对着客户包裹参考已核过同一份草案，走到聚合拒只能是装配错误。
+	PlatformShipment  domain.PlatformShipmentDeclaration
+	PlatformBoxLabels []domain.PlatformBoxLabelDeclaration
 }
 
 type FormNewSubmissionVersionResult struct {
@@ -205,6 +209,8 @@ func (handler *FormNewSubmissionVersionHandler) Handle(
 		Elements:          command.DeclaredElements,
 		RequestedProduct:  command.RequestedServiceProduct,
 		Goods:             command.DeclaredGoods,
+		PlatformShipment:  command.PlatformShipment,
+		PlatformBoxLabels: command.PlatformBoxLabels,
 		EstablishedAt:     handler.deps.Clock.Now(),
 	})
 	if err != nil {

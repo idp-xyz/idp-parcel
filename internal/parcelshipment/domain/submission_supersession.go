@@ -32,8 +32,12 @@ type NewSubmissionVersionSpec struct {
 	// RequestedProduct 是随新版本声明的服务产品（票 psb/17），同 Elements 纪律随本版本重报、不继承。
 	RequestedProduct DeclaredServiceProduct
 	// Goods 是新版本的货物明细：补充整份重报，零值即这一版没报（ADR-0373 决定四）。
-	Goods         GoodsDetails
-	EstablishedAt time.Time
+	Goods GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是这一版起委托的平台声明（ADR-0376 决定二）：补充整份重报，带了就替换委托上的
+	// 平台货件与全部箱标号，零值即这一版不报——与画像、货物明细同一条纪律，不从旧声明继承。
+	PlatformShipment  PlatformShipmentDeclaration
+	PlatformBoxLabels []PlatformBoxLabelDeclaration
+	EstablishedAt     time.Time
 }
 
 // FormNewSubmissionVersion 在`已提交`态用受控补充或纠错形成同一委托的新提交版本
@@ -88,6 +92,12 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 	if err := goodsFitMembers(spec.Goods, members); err != nil {
 		return ShipmentRequest{}, err
 	}
+	// 平台声明对着新版本的成员核，规则与首次提交同一处（platformBoxLabelsFor）：箱标号要有平台货件、只指成员、每件至多
+	// 一个、委托内不重号。受理前才走得到这里（上面的状态门），接受后平台号随关联固定，ADR-0376 决定二不放开那一侧。
+	boxLabels, err := platformBoxLabelsFor(spec.PlatformBoxLabels, spec.PlatformShipment, members)
+	if err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	// 复制而不是就地 append，理由同 AmendCustomerSourceData：聚合按值传递，共用底层数组
 	// 会让两条从同一份委托分出去的转移互相覆盖对方追加的历史。
@@ -112,6 +122,8 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 		goods:             spec.Goods,
 		establishedAt:     spec.EstablishedAt,
 	}
+	request.platformShipment = spec.PlatformShipment
+	request.platformBoxLabels = boxLabels
 	request.acceptanceTask = AcceptanceDecisionTask{
 		taskID:              spec.TaskID,
 		submissionVersionID: spec.VersionID,
