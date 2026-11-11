@@ -396,7 +396,7 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"priorLink": true,
 		// 客户包裹件号首次提交时固定（ADR-0184 决定四），`已提交`下就有值，接受时据它形成外部标识关联。
 		"customerParcelNumbers": true,
-		// 平台货件与箱标号同客户包裹件号首次提交时固定（ADR-0374 决定四），`已提交`下就有值。
+		// 平台货件与箱标号随首次提交声明在委托上、受理前可经补充换（ADR-0376 决定二），`已提交`下就有值。
 		"platformShipment":  true,
 		"platformBoxLabels": true,
 		// 已接受产物：门开到 ACCEPTED 后必须随快照往返，已提交下由 validForRehydration 拒绝携带。

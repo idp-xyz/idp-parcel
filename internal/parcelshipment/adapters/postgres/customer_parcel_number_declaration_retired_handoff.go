@@ -15,7 +15,8 @@ import (
 // 本文件是客户包裹件号声明撤除时交出的门铃（ADR-0211 决定三；CONTEXT-MAP `parcel-shipment → node-operations` 客户包裹件号声明
 // 撤除的交接）：一份带客户包裹件号的委托由`已提交`转为`已拒绝`或`已撤回`的那一笔保存，按它声明的每个号各交一封只带（租户，
 // 号码）的信封。那份声明从此不再算歧义信号（PS CONTEXT「歧义信号」），node-operations 收到后照旧经身份核对读口问本上下文，
-// 只因歧义信号落下的身份冲突由此可能答出唯一命中。
+// 只因歧义信号落下的身份冲突由此可能答出唯一命中。受理前的补充换下平台箱标号（ADR-0376 决定二）是同一件事的另一个来由，交
+// 同一种门铃。
 
 // CustomerParcelNumberDeclarationRetiredEventType 是声明撤除门铃的事件类型。导出给组合根的对照用例：消费方自己写一份同字面的串，
 // 两串由那条用例钉住。
@@ -66,6 +67,46 @@ func declarationsRetiredBy(prior domain.ShipmentRequestState, request domain.Shi
 	return numbers
 }
 
+// boxLabelsWithdrawnBySupplement 交回这一次保存里被补充换下的平台箱标号：保存前后委托都在`已提交`，保存前那一行声明过、
+// 保存后的委托不再声明的号，按保存前的次序。只有补充会改委托上的箱标号（FormNewSubmissionVersion），别的`已提交`内保存前后
+// 一样，交空。委托离开`已提交`那一笔归 declarationsRetiredBy，这里不重复响。
+//
+// priorLabels 是保存前那一行快照里的 platformBoxLabels 原文（缺席即 NULL）；读不懂是那一行不是本适配器写下的形状，上抛。
+func boxLabelsWithdrawnBySupplement(
+	prior domain.ShipmentRequestState,
+	priorLabels []byte,
+	request domain.ShipmentRequest,
+) ([]domain.ExternalIdentifierNumber, error) {
+	if prior != domain.ShipmentRequestSubmitted || request.State() != domain.ShipmentRequestSubmitted || len(priorLabels) == 0 {
+		return nil, nil
+	}
+	var documents []platformBoxLabelDocument
+	if err := json.Unmarshal(priorLabels, &documents); err != nil {
+		return nil, fmt.Errorf("保存前那一行的平台箱标号不是本适配器写下的形状：%w", err)
+	}
+	still := make(map[string]struct{}, len(request.PlatformBoxLabels()))
+	for _, label := range request.PlatformBoxLabels() {
+		still[label.Number().String()] = struct{}{}
+	}
+	var withdrawn []domain.ExternalIdentifierNumber
+	seen := map[string]struct{}{}
+	for _, document := range documents {
+		if _, kept := still[document.Number]; kept {
+			continue
+		}
+		if _, twice := seen[document.Number]; twice {
+			continue
+		}
+		seen[document.Number] = struct{}{}
+		number, err := domain.NewExternalIdentifierNumber(document.Number)
+		if err != nil {
+			return nil, fmt.Errorf("保存前那一行的平台箱标号 %q 读不回：%w", document.Number, err)
+		}
+		withdrawn = append(withdrawn, number)
+	}
+	return withdrawn, nil
+}
+
 // retiredAt 是撤下那一刻的业务时间：拒绝取决定时刻，撤回取撤回决定时刻。两者都在委托离开`已提交`的那一次转移里写下。
 func retiredAt(request domain.ShipmentRequest) time.Time {
 	if withdrawal, withdrawn := request.Withdrawal(); withdrawn {
@@ -90,7 +131,40 @@ func (doorbell *ExternalIdentifierDoorbell) RingDeclarationsRetired(
 		return fmt.Errorf("ring declaration retired doorbell: %w", err)
 	}
 	for _, number := range numbers {
-		envelope, err := declarationRetiredEnvelope(tenant, request, number, recordedAt)
+		id := outboxintent.FingerprintEventID(customerParcelNumberDeclarationRetiredEventIDPort,
+			tenant.String(), request.ShipmentRequestID().String(), number.String())
+		envelope, err := declarationRetiredEnvelope(tenant, id, number, retiredAt(request), recordedAt)
+		if err != nil {
+			return err
+		}
+		if err := outboxintent.EnqueueOnce(ctx, doorbell.db, doorbell.store, envelope); err != nil {
+			return fmt.Errorf("ring declaration retired doorbell: %w", err)
+		}
+	}
+	return nil
+}
+
+// RingBoxLabelsWithdrawn 给受理前补充换下的每个平台箱标号入队一封撤除门铃，与补充那一笔同一事务。信封 ID 另带新提交版本：同一份
+// 委托上一个号可以先被补充换下、再被后一份补充报回来、最后随拒绝撤下——三次都要响，只按（租户，委托，号码）认领，后两次会被当成
+// 第一封的重放吞掉。业务时间取新版本的形成时刻：撤下就发生在那一份补充成立的时候。
+func (doorbell *ExternalIdentifierDoorbell) RingBoxLabelsWithdrawn(
+	ctx context.Context,
+	tenant domain.TenantID,
+	request domain.ShipmentRequest,
+	numbers []domain.ExternalIdentifierNumber,
+	recordedAt time.Time,
+) error {
+	if len(numbers) == 0 {
+		return nil
+	}
+	if _, err := doorbell.db.RequireExecutor(ctx); err != nil {
+		return fmt.Errorf("ring declaration retired doorbell: %w", err)
+	}
+	version := request.CurrentSubmissionVersion()
+	for _, number := range numbers {
+		id := outboxintent.FingerprintEventID(customerParcelNumberDeclarationRetiredEventIDPort,
+			tenant.String(), request.ShipmentRequestID().String(), version.VersionID().String(), number.String())
+		envelope, err := declarationRetiredEnvelope(tenant, id, number, version.EstablishedAt(), recordedAt)
 		if err != nil {
 			return err
 		}
@@ -103,15 +177,17 @@ func (doorbell *ExternalIdentifierDoorbell) RingDeclarationsRetired(
 
 // declarationRetiredEnvelope 组一封声明撤除门铃。
 //
-//   - ID 是（租户，委托，号码）的定长指纹：重放撞同一个 ID，EnqueueOnce 不出第二封。
+//   - ID 由调用方按撤下的来由认领（委托离开`已提交`按（租户，委托，号码），补充换下另带新版本）：重放撞同一个 ID，EnqueueOnce
+//     不出第二封。
 //   - 分区键与关联已形成那一只同一个式子、同一个口名：同一个号的两种门铃排一条队。两种门铃都叫 NO 按这个号重核同一批待识别，
 //     分两条队并发处理，两笔重核会在同一行上抢着追加。
 //   - Subject 原样带号码，越界或带控制字符时换成号码的摘要，与关联已形成那一只同一个做法（externalIdentifierSubject）。
 //   - Scope 是租户，与各上下文的信封同一口径。
 func declarationRetiredEnvelope(
 	tenant domain.TenantID,
-	request domain.ShipmentRequest,
+	id eventing.EventID,
 	number domain.ExternalIdentifierNumber,
+	occurredAt time.Time,
 	recordedAt time.Time,
 ) (eventing.Envelope, error) {
 	payload, err := json.Marshal(customerParcelNumberDeclarationRetiredPayload{TenantID: tenant.String(), Number: number.String()})
@@ -119,16 +195,15 @@ func declarationRetiredEnvelope(
 		return eventing.Envelope{}, fmt.Errorf("ring declaration retired doorbell: %w", err)
 	}
 	return eventing.Envelope{
-		SpecVersion: eventing.SpecVersion,
-		ID: outboxintent.FingerprintEventID(customerParcelNumberDeclarationRetiredEventIDPort,
-			tenant.String(), request.ShipmentRequestID().String(), number.String()),
+		SpecVersion:  eventing.SpecVersion,
+		ID:           id,
 		Source:       eventSource,
 		Type:         CustomerParcelNumberDeclarationRetiredEventType,
 		Version:      1,
 		Scope:        tenant.String(),
 		Subject:      externalIdentifierSubject(number.String()),
 		PartitionKey: string(outboxintent.FingerprintEventID(externalIdentifierNumberPartitionPort, tenant.String(), number.String())),
-		OccurredAt:   retiredAt(request).UTC(),
+		OccurredAt:   occurredAt.UTC(),
 		RecordedAt:   recordedAt.UTC(),
 		ContentType:  eventing.JSONContentType,
 		Payload:      payload,

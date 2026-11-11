@@ -66,8 +66,9 @@ func TestSubmitRefusesGoodsOrBoxLabelsThatDoNotFitTheMembers(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0373 决定四、ADR-0374 决定四——补充形成的新版本整份重报货物明细；旧版本留着原来的；平台声明首次提交时固定，不随版本改。
-func TestANewSubmissionVersionCarriesItsOwnGoodsAndKeepsThePlatformDeclarations(t *testing.T) {
+// Covers: ADR-0373 决定四、ADR-0376 决定二——补充形成的新版本整份重报货物明细，旧版本留着原来的；平台声明同样整份重报，
+// 这一份补充没带平台段，委托上的平台声明随之撤下。
+func TestANewSubmissionVersionCarriesItsOwnGoodsAndPlatformDeclarations(t *testing.T) {
 	request, err := domain.SubmitShipmentRequest(withGoodsAndPlatform(t, submitSpec(t, "parcel-1", "parcel-2")))
 	if err != nil {
 		t.Fatalf("submit shipment request: %v", err)
@@ -86,8 +87,8 @@ func TestANewSubmissionVersionCarriesItsOwnGoodsAndKeepsThePlatformDeclarations(
 	if prior := superseded.PriorSubmissionVersions(); len(prior) != 1 || len(prior[0].Goods().Lines()) != 2 {
 		t.Fatal("prior version lost its goods; 旧版本不被覆盖")
 	}
-	if _, declared := superseded.PlatformShipment(); !declared || len(superseded.PlatformBoxLabels()) != 2 {
-		t.Fatal("platform declarations changed with the version; 它们首次提交时固定")
+	if _, declared := superseded.PlatformShipment(); declared || len(superseded.PlatformBoxLabels()) != 0 {
+		t.Fatal("补充没带平台段，委托上的平台声明却留着：补充整份重报，没带即这一版不报")
 	}
 
 	misfit := supersessionSpecFor(t, "parcel-1", "parcel-2")
