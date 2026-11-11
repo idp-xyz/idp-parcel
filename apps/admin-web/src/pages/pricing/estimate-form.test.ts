@@ -71,14 +71,17 @@ test('本地只判编码层问题', () => {
   equal(estimateLocalProblems(draft({ origin: '200000' }), SHANGHAI).postalRoute, '邮编路线要始发与目的一起填，或都不填');
 });
 
-// Covers: 选了服务产品载荷带 serviceProduct；不选即缺席，不发空串——缺席是「只看不声明产品的卡」（ADR-0378 决定二、三）。
-test('服务产品：选了才带 serviceProduct，不选即缺席', () => {
+// Covers: 售价方向选了服务产品载荷带 serviceProduct（手填的去掉首尾空白）；不选即缺席，不发空串——缺席是「只看不声明产品的卡」
+// （ADR-0378 决定二、三）。方向不是售价时草稿里留着的产品也不发。
+test('服务产品：售价方向选了才带 serviceProduct，不选或不是售价即缺席', () => {
   const base = { scope: 'SYN-SCOPE-01', direction: 'SELL', basisAt: '2026-06-01T16:00', weightValue: '1', weightUnit: 'KG' };
-  const withProduct = estimatePayloadOf(draft({ ...base, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI);
-  equal(withProduct.serviceProduct, 'SYN-SP-FBA');
-  const without = estimatePayloadOf(draft(base), SHANGHAI);
-  equal('serviceProduct' in without, false);
+  equal(estimatePayloadOf(draft({ ...base, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI).serviceProduct, 'SYN-SP-FBA');
+  equal(estimatePayloadOf(draft({ ...base, serviceProduct: '  SYN-SP-FBA ' }), SHANGHAI).serviceProduct, 'SYN-SP-FBA');
+  equal('serviceProduct' in estimatePayloadOf(draft(base), SHANGHAI), false);
   equal('serviceProduct' in estimatePayloadOf(draft({ ...base, serviceProduct: '  ' }), SHANGHAI), false);
+  for (const direction of ['BUY', 'INTERNAL', '']) {
+    equal('serviceProduct' in estimatePayloadOf(draft({ ...base, direction, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI), false, direction);
+  }
 });
 
 // Covers: 不选时说清只按不指名产品的卡试算；选了说先用指名它的卡、没有再用不指名的卡。

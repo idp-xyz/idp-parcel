@@ -17,6 +17,9 @@ export const restProductsText = '其余产品（不指名）';
 /** 编辑器里「适用服务产品」一格的说明。 */
 export const restProductsHint = '不选即接其余产品：同一计价范围里没有别的卡指名的那些产品';
 
+/** 规格口的模板版本还不收适用服务产品时，编辑器在这一格的位置只说这一句。 */
+export const serviceProductsNotTakenNote = '当前模板版本不收适用服务产品；这张售价卡不指名产品，接其余产品。';
+
 /** 试算不选产品时的说明：选卡只看不声明产品的那一层（ADR-0378 决定二）。 */
 export const estimateWithoutProductNote = '只按不指名产品的卡试算';
 
@@ -43,6 +46,14 @@ export function toggleServiceProduct(chosen: readonly string[], objectId: string
   if (id === '') return [...chosen];
   if (!on) return chosen.filter((product) => product !== id);
   return chosen.includes(id) ? [...chosen] : [...chosen, id];
+}
+
+/**
+ * 册读不到时按标识添加。输入框里的分号拆成几个标识各自添加：工作簿那一格本就以分号分隔，整串当一个标识收下，写出去就
+ * 成了几个，与运营看到的那一项对不上。
+ */
+export function addTypedServiceProducts(chosen: readonly string[], typed: string): string[] {
+  return typed.split(';').reduce<string[]>((current, part) => toggleServiceProduct(current, part, true), [...chosen]);
 }
 
 /** 写进工作簿与文档的那一份：去重、排序，同一组选择永远写成同一串，与服务端规范化时的去重排序同向。 */

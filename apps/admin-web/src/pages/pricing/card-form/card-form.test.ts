@@ -21,7 +21,7 @@ import { conditionCategoryChoices, currencyChoices } from './options';
 import { mapProblems, problemCountsByStep, problemWords, unlocatedWords } from './problems';
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
-import { formToWorkbook } from './workbook';
+import { formToWorkbook, specTakesServiceProducts } from './workbook';
 import { workbookToForm } from './workbook-to-form';
 
 // 价卡编辑器的纯函数验收。参照物有两个，各自独立：
@@ -674,7 +674,10 @@ test('生成的工作簿里每一格都是字符串或 null，没有数字：金
 
 const purposeCodes = ['CUSTOMER_CHARGE', 'SUPPLIER_COST', 'INTERNAL_PRICE'];
 
-/** 规格口升级后的样子：模板进到 PPT-3，card 表多一个可缺字段 serviceProducts。今天的规格取数里还没有它，这里按约定的字段名补一份。 */
+/**
+ * 规格口升到 PPT-3 的样子：card 表多一个字段 serviceProducts（PPT-3 里这一行总在，null 即不声明）。今天的规格取数里还没有它，
+ * 这里按钉住的字段名补一份。
+ */
 function specWithServiceProducts(): PriceCardTemplateSpec {
   const upgraded = JSON.parse(JSON.stringify(spec)) as PriceCardTemplateSpec;
   upgraded.templateVersion = 'PPT-3';
@@ -694,6 +697,7 @@ function sellCardState(products: string[]): CardFormState {
 }
 
 const cardRowsOf = (workbook: PriceCardWorkbook) => Object.fromEntries(workbook.sheets.card.map((row) => [row.field as string, row.value]));
+const cardKeysOf = (target: PriceCardTemplateSpec) => target.sheets.find((sheet) => sheet.name === 'card')?.columns.map((column) => column.key);
 
 // Covers: 方向离开售价时丢掉已选产品，切回售价也不复原；用途跟着方向配对，运营改过的用途不动。
 test('换价格方向：离开售价丢掉适用服务产品，用途照旧跟着配对', () => {
@@ -710,57 +714,48 @@ test('换价格方向：离开售价丢掉适用服务产品，用途照旧跟�
   equal(basicsWithDirection({ ...emptyState().basics }, 'SELL', ['SUPPLIER_COST']).purpose, '');
 });
 
-// Covers: 售价卡选了产品，card 表在用途后面多写一行去重排序的分号串，模板版本进到 PPT-3（顶层与 card 表两处）；规格口还没列这个
-// 字段时照写，由服务端把不认它标回这一格。
-test('工作簿：售价卡选了产品写 serviceProducts 一行，去重排序，模板版本写 PPT-3', () => {
-  const { workbook } = formToWorkbook(sellCardState(['SYN-SP-FBA', 'SYN-SP-EXPRESS', 'SYN-SP-FBA']), spec);
-  const fields = workbook.sheets.card.map((row) => row.field);
-  equal(fields.indexOf('serviceProducts'), fields.indexOf('purpose') + 1);
-  deepEqual(workbook.sheets.card[fields.indexOf('serviceProducts')], { field: 'serviceProducts', value: 'SYN-SP-EXPRESS;SYN-SP-FBA' });
-  equal(workbook.templateVersion, 'PPT-3');
-  equal(cardRowsOf(workbook).templateVersion, 'PPT-3');
-  deepEqual(workbookServiceProducts(workbook), ['SYN-SP-EXPRESS', 'SYN-SP-FBA']);
+// Covers: 规格口列了 serviceProducts（PPT-3）就照「字段列全」总写这一行，次序随规格口：售价卡选了产品写去重排序的分号串，
+// 没选或不是售价卡写 null；模板版本照规格口。
+test('工作簿：规格口列了 serviceProducts 就总写这一行，值随方向与选择', () => {
+  const upgraded = specWithServiceProducts();
+  const named = formToWorkbook(sellCardState(['SYN-SP-FBA', 'SYN-SP-EXPRESS', 'SYN-SP-FBA']), upgraded).workbook;
+  deepEqual(named.sheets.card.map((row) => row.field), cardKeysOf(upgraded));
+  equal(cardRowsOf(named).serviceProducts, 'SYN-SP-EXPRESS;SYN-SP-FBA');
+  equal(named.templateVersion, 'PPT-3');
+  equal(cardRowsOf(named).templateVersion, 'PPT-3');
+  deepEqual(workbookServiceProducts(named), ['SYN-SP-EXPRESS', 'SYN-SP-FBA']);
+
+  const none = formToWorkbook(sellCardState([]), upgraded).workbook;
+  deepEqual(none.sheets.card.map((row) => row.field), cardKeysOf(upgraded));
+  equal(cardRowsOf(none).serviceProducts, null);
+
+  const buy = costCardState();
+  buy.basics.serviceProducts = ['SYN-SP-FBA'];
+  equal(cardRowsOf(formToWorkbook(buy, upgraded).workbook).serviceProducts, null);
 });
 
-// Covers: 不选即接其余产品——card 表一行都不多、模板版本照规格口，与这一格出现之前的工作簿逐行相同；不是售价卡就算状态里残留了
-// 产品也不写。规格口列了这个字段也不写 null 行：缺这一行才是不声明。
-test('工作簿：不选产品、或不是售价卡，都不写 serviceProducts，模板版本照规格口', () => {
-  const cardKeys = spec.sheets.find((sheet) => sheet.name === 'card')?.columns.map((column) => column.key);
-  for (const target of [spec, specWithServiceProducts()]) {
-    const none = formToWorkbook(sellCardState([]), target).workbook;
-    deepEqual(none.sheets.card.map((row) => row.field), cardKeys);
-    equal(none.templateVersion, target.templateVersion);
-    equal(cardRowsOf(none).templateVersion, target.templateVersion);
-    const buy = costCardState();
-    buy.basics.serviceProducts = ['SYN-SP-FBA'];
-    const buyWorkbook = formToWorkbook(buy, target).workbook;
-    ok(!('serviceProducts' in cardRowsOf(buyWorkbook)));
-    equal(buyWorkbook.templateVersion, target.templateVersion);
-  }
-});
-
-// Covers: 规格口列了这个字段时，选了产品照样只写一行、写在用途后面。
-test('工作簿：规格口列了 serviceProducts 时选了产品只写一行', () => {
-  const { workbook } = formToWorkbook(sellCardState(['SYN-SP-FBA']), specWithServiceProducts());
-  deepEqual(
-    workbook.sheets.card.filter((row) => row.field === 'serviceProducts'),
-    [{ field: 'serviceProducts', value: 'SYN-SP-FBA' }],
-  );
-  equal(workbook.templateVersion, 'PPT-3');
+// Covers: 规格口没列 serviceProducts（PPT-1、PPT-2）就一行都不写，选了产品也不写，模板版本照规格口——不替服务端把版本往上抬。
+test('工作簿：规格口没列 serviceProducts 就不写这一行，模板版本照规格口', () => {
+  const { workbook } = formToWorkbook(sellCardState(['SYN-SP-FBA']), spec);
+  deepEqual(workbook.sheets.card.map((row) => row.field), cardKeysOf(spec));
+  ok(!('serviceProducts' in cardRowsOf(workbook)));
+  equal(workbook.templateVersion, spec.templateVersion);
+  equal(cardRowsOf(workbook).templateVersion, spec.templateVersion);
+  equal(specTakesServiceProducts(spec), false);
+  equal(specTakesServiceProducts(specWithServiceProducts()), true);
 });
 
 // Covers: 文档映射——带产品时方案文档带 serviceProducts 键，不带时键缺席；详情解析认得这个键，不当「未识别的内容」。
 test('文档：带产品才有 serviceProducts 键，解析不把它当未识别的内容', () => {
-  const named = workbookToDocument(formToWorkbook(sellCardState(['SYN-SP-FBA', 'SYN-SP-EXPRESS']), spec).workbook);
+  const upgraded = specWithServiceProducts();
+  const named = workbookToDocument(formToWorkbook(sellCardState(['SYN-SP-FBA', 'SYN-SP-EXPRESS']), upgraded).workbook);
   deepEqual(named.serviceProducts, ['SYN-SP-EXPRESS', 'SYN-SP-FBA']);
   equal(parsePriceCardContent(named).unsupportedCount, 0);
-  const rest = workbookToDocument(formToWorkbook(sellCardState([]), spec).workbook);
-  ok(!('serviceProducts' in rest));
-  const buy = workbookToDocument(formToWorkbook(costCardState(), specWithServiceProducts()).workbook);
-  ok(!('serviceProducts' in buy));
+  ok(!('serviceProducts' in workbookToDocument(formToWorkbook(sellCardState([]), upgraded).workbook)));
+  ok(!('serviceProducts' in workbookToDocument(formToWorkbook(costCardState(), upgraded).workbook)));
 });
 
-// Covers: 工作簿还原成表单时带回适用产品，再生成回来一字不差。
+// Covers: 工作簿还原成表单时带回适用产品（null 即没选），再生成回来一字不差。
 test('还原：工作簿里的适用产品回到表单，再生成回来相同', () => {
   const upgraded = specWithServiceProducts();
   const { workbook } = formToWorkbook(sellCardState(['SYN-SP-FBA', 'SYN-SP-EXPRESS']), upgraded);
@@ -770,25 +765,26 @@ test('还原：工作簿里的适用产品回到表单，再生成回来相同',
   deepEqual(workbookToForm(formToWorkbook(sellCardState([]), upgraded).workbook).basics.serviceProducts, []);
 });
 
-// Covers: 服务端对 serviceProducts 那一格的问题（产品标识不对、旧后端不认这个字段）与因它进位的模板版本不被收，都标回基本信息里
-// 的「适用服务产品」；没写产品时模板版本的问题照旧说不到格子。
-test('serviceProducts 那一格与它带来的模板版本问题落在基本信息的适用服务产品上', () => {
-  const { workbook, origins } = formToWorkbook(sellCardState(['SYN-SP-FBA']), spec);
-  const rowOf = (field: string) => workbook.sheets.card.findIndex((candidate) => candidate.field === field) + 2;
-  const { located } = mapProblems(
+// Covers: 服务端对 card 表 serviceProducts 那一行的问题（字段缺、字段不认、值不对）都标回基本信息里的「适用服务产品」；
+// 模板版本不收（TEMPLATE_VERSION_UNSUPPORTED，表名为空）是整份层面的问题，说不到格子。问题码取自后端 ports 的模板问题码。
+test('card 表 serviceProducts 的问题落在适用服务产品上，模板版本不收说不到格子', () => {
+  const upgraded = specWithServiceProducts();
+  const { workbook, origins } = formToWorkbook(sellCardState(['SYN-SP-FBA']), upgraded);
+  const row = workbook.sheets.card.findIndex((candidate) => candidate.field === 'serviceProducts') + 2;
+  const { located, unlocated } = mapProblems(
     [
-      { sheet: 'card', row: rowOf('serviceProducts'), column: 'serviceProducts', code: 'TEMPLATE_FIELD_UNKNOWN', message: '字段 serviceProducts 不在 card 表的字段集合里' },
-      { sheet: 'card', row: rowOf('templateVersion'), column: 'templateVersion', code: 'CELL_INVALID', message: '模板版本不被接受' },
+      { sheet: 'card', row, column: 'serviceProducts', code: 'FIELD_UNKNOWN', message: '字段 serviceProducts 不在 card 表的字段集合里' },
+      { sheet: 'card', row: 0, column: 'serviceProducts', code: 'FIELD_MISSING', message: '缺字段 serviceProducts' },
+      { sheet: 'card', row, column: 'serviceProducts', code: 'CELL_INVALID', message: '只有售价卡能声明适用服务产品' },
+      { sheet: '', row: 0, column: '', code: 'TEMPLATE_VERSION_UNSUPPORTED', message: '本构建认 PPT-1、PPT-2' },
     ],
     origins,
   );
-  equal(located.length, 2);
+  equal(located.length, 3);
   for (const entry of located) {
     equal(entry.field, 'basics.serviceProducts');
     equal(entry.step, 'basics');
     equal(entry.where, '基本信息 · 适用服务产品');
   }
-  const plain = formToWorkbook(sellCardState([]), spec).origins;
-  const { unlocated } = mapProblems([{ sheet: 'card', row: 2, column: 'templateVersion', code: 'CELL_INVALID', message: '模板版本不被接受' }], plain);
-  equal(unlocated.length, 1);
+  deepEqual(unlocated.map((problem) => problem.code), ['TEMPLATE_VERSION_UNSUPPORTED']);
 });

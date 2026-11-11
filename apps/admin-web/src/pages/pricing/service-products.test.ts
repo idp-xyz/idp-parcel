@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import {
+  addTypedServiceProducts,
   canonicalServiceProducts,
   declaresServiceProducts,
   restProductsText,
@@ -47,4 +48,11 @@ test('多选框：册上的产品在前，已选却不在册上的接在后面',
     { value: 'SYN-SP-GONE', label: 'SYN-SP-GONE（不在服务产品册上）', checked: true, listed: false },
   ]);
   deepEqual(serviceProductChoices([], []), []);
+});
+
+// Covers: 册读不到时手填，输入里的英文分号拆成几个标识、各自去掉首尾空白再添加；空段不记，已选的不重复记。
+test('按标识添加：分号拆开、逐个去空白', () => {
+  deepEqual(addTypedServiceProducts([], ' SYN-SP-FBA '), ['SYN-SP-FBA']);
+  deepEqual(addTypedServiceProducts(['SYN-SP-FBA'], 'SYN-SP-EXPRESS ; SYN-SP-FBA;; SYN-SP-POST '), ['SYN-SP-FBA', 'SYN-SP-EXPRESS', 'SYN-SP-POST']);
+  deepEqual(addTypedServiceProducts(['SYN-SP-FBA'], ' ; '), ['SYN-SP-FBA']);
 });

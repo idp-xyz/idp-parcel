@@ -47,6 +47,7 @@ export function FieldBox({
   children,
   className,
   labelsControl = true,
+  labelId,
 }: {
   id: string;
   label: string;
@@ -56,6 +57,8 @@ export function FieldBox({
   className?: string;
   /** 标签指向 id 同名的控件；一组复选框这类没有单一控件的格设为 false。 */
   labelsControl?: boolean;
+  /** 标签自己的 id：一组复选框没有单一控件可指，由组用 aria-labelledby 反指标签。 */
+  labelId?: string;
 }) {
   const errors = useFieldErrors(id);
   const text = (
@@ -67,11 +70,13 @@ export function FieldBox({
   return (
     <div className={className}>
       {labelsControl ? (
-        <label htmlFor={id} className={fieldLabel}>
+        <label id={labelId} htmlFor={id} className={fieldLabel}>
           {text}
         </label>
       ) : (
-        <span className={fieldLabel}>{text}</span>
+        <span id={labelId} className={fieldLabel}>
+          {text}
+        </span>
       )}
       {children}
       {hint ? <p className={`${hintClass} mt-1`}>{hint}</p> : null}
