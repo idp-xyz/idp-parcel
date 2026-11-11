@@ -18,12 +18,14 @@ export const partyTileVisuals: Record<PartyTileKind, { icon: LucideIcon; tile: s
   NONE: { icon: Building2, tile: 'bg-idpxyz-hover text-idpxyz-breadcrumb', dot: 'bg-idpxyz-breadcrumb' },
 };
 
-/** 行首的图标块。只是视觉记号，对读屏隐藏：这一行是什么类型，类型一列有字。 */
-export function PartyTile({ kind }: { kind: PartyTileKind }) {
+/**
+ * 行首的图标块；`large` 是右栏头区名称旁的那一枚。只是视觉记号，对读屏隐藏：这一家是什么类型，类型一列与头区的类型标签有字。
+ */
+export function PartyTile({ kind, large = false }: { kind: PartyTileKind; large?: boolean }) {
   const { icon: Icon, tile } = partyTileVisuals[kind];
   return (
-    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${tile}`} aria-hidden="true">
-      <Icon className="h-4 w-4" />
+    <span className={`grid shrink-0 place-items-center ${large ? 'h-12 w-12 rounded-[10px]' : 'h-8 w-8 rounded-lg'} ${tile}`} aria-hidden="true">
+      <Icon className={large ? 'h-6 w-6' : 'h-4 w-4'} />
     </span>
   );
 }

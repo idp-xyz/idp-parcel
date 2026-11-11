@@ -19,7 +19,6 @@ import {
 import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
 import type { AnswerQuery } from '../../query/answers';
 import type { BusinessPartyProfileRevisionListResponseBody } from './api';
-import { updateOrdinalLabel } from './presentation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
@@ -33,7 +32,9 @@ import { liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './bu
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
-import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
+import { DetailRow, Fact, Instant } from './detail-primitives';
+import { partyTileKindOf } from './business-parties-workbench';
+import { PartyTile } from './party-role-visuals';
 import { BusinessPartyIdentificationFacts } from './BusinessPartyIdentificationRows';
 import { CopyAside, RefText } from './copy-affordance';
 
@@ -70,14 +71,15 @@ function PanelProfilePart({
 }
 
 /**
- * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01）：形态照 LegalEntityDetailPanel——头部（名称 + 状态徽章 +
- * 其他语言名称一行 + 角色标签）· 主动作 +「更多」菜单 + 打开对象页 + 关闭 · meta 行 · 停用横幅 · 随状态的提示 · 一行事实 ·
- * 关联计数一行 · 签。主动作随提示（票 business-party-ux/08）：提示是「还没有合作关系」时是「登记合作关系」，其余是「更新资料」；
- * 判读在 business-party-panel-first-screen.ts。
+ * 业务参与方工作台身份册的详情栏（票 business-parties-uiux/01；头区的排法自票 business-party-redesign/03）：头区第一排是
+ * 图标块（与列表行同一套，按类型取）· 名称 + 状态徽章 + 其他语言名称一行 + 类型标签 · 动作；下面一行事实 · 停用横幅 ·
+ * 随状态的提示 · 关联计数一行 · 签。动作的位置固定——更新资料、登记合作关系、打开对象页、「更多」、关闭——人记的是位置；
+ * 谁是主动作随提示（票 business-party-ux/08）：提示是「还没有合作关系」时是「登记合作关系」，其余是「更新资料」，判读在
+ * business-party-panel-first-screen.ts。栏窄到名称与动作排不成一行时动作整组折到名称下面、仍靠右，名称最多两行。
  *
- * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：生效、停用、登记版次与资料版本归那一行事实，只显到日，照公司
- * 主体栏（票 business-party-ux/01）；登记时刻在「登记记录」签；名称是标题，编码与识别信息在 meta 行；标识、修订号、登记依据、
- * 租户这类排查用的字收进「登记记录」签底部的「技术详情」。
+ * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：编码、识别信息、生效日与资料版本归那一行事实，只显到日；
+ * 停用的时点由横幅说，不在事实行再摆一格；名称是标题；登记时刻、登记版次与修订历史在「登记记录」签，标识、修订号、登记依据、
+ * 租户这类排查用的字收进那一签底部的「技术详情」。
  *
  * 签照公司主体栏（票 business-party-profile/04）：「概要」（默认）读出往来单位资料，「联系人」「资料版本」读同一份资料修订链，
  * 「登记记录」（原称身份与修订、变更记录）装剩下的格与身份修订历史，「关联」（原称全景）回答这个参与方对我们是什么。我方公司
@@ -177,7 +179,7 @@ export function BusinessPartyDetailPanel({
   const liveRelationships =
     !typeUnread && overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
   const hint = panelHintOf(row, ours, liveRelationships, !typeUnread && overview.accounts.kind === 'answered' ? roles.length : null);
-  const actions = panelHeaderActionsOf(mayWrite, pinned, hint);
+  const actions = panelHeaderActionsOf(mayWrite, pinned, hint, row.status);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开，不另造一处写口。
   const openRelationshipForm = () => {
     selectTab('overview');
@@ -190,11 +192,15 @@ export function BusinessPartyDetailPanel({
   return (
     <>
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`业务参与方 ${row.partyId}`}>
-      <div className="space-y-3 border-b border-idpxyz-border px-5 pb-3 pt-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate type-title font-semibold text-idpxyz-textBright">{row.partyName}</h2>
+      <div className="space-y-3 border-b border-idpxyz-border px-6 pb-3 pt-4">
+        {/* 名称那一块要 280 才排得开；这一排放不下它与动作时动作整组折到下一行、靠右（ml-auto），不去挤名称。 */}
+        <div className="flex flex-wrap items-start gap-x-3.5 gap-y-2.5">
+          <PartyTile large kind={partyTileKindOf(ours, roles)} />
+          <div className="min-w-0 flex-[1_1_280px]">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h2 className="line-clamp-2 min-w-0 break-words type-display font-semibold leading-7 text-idpxyz-textBright" title={row.partyName}>
+                {row.partyName}
+              </h2>
               <StatusPill code={row.status} />
             </div>
             {/* 对外单据与海外往来认的写法（多半是英文名）紧跟在名称下面；文本类，悬停复制（票 company-subject-ux/14）。 */}
@@ -206,30 +212,34 @@ export function BusinessPartyDetailPanel({
               </p>
             ) : null}
             {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，册没读全时显「—」，不留空。 */}
-            <div className="mt-1">
+            <div className="mt-1.5">
               <BusinessPartyTypeTags ours={ours} roles={roles} unread={typeUnread} />
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {/* 动作随提示（panelHeaderActionsOf）：提示是「还没有合作关系」时下一步是登关系，「更新资料」退成描边。 */}
-            {actions.registerRelationship ? (
-              <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openRelationshipForm}>
-                <Handshake className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                登记合作关系
-              </Button>
-            ) : null}
-            {actions.updateProfile === 'outline' ? (
-              <Button size="sm" variant="outline" className="type-body text-idpxyz-breadcrumb" onClick={openProfileForm}>
-                更新资料
-              </Button>
-            ) : null}
-            {actions.updateProfile === 'primary' ? (
-              <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={openProfileForm}>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {/* 两枚写动作摆不摆、谁是主动作都照 panelHeaderActionsOf；次序不随主次换。 */}
+            {actions.updateProfile ? (
+              <Button
+                size="sm"
+                variant={actions.updateProfile === 'primary' ? 'default' : 'outline'}
+                className={actions.updateProfile === 'primary' ? `${primaryActionClass} type-body` : 'type-body text-idpxyz-breadcrumb'}
+                onClick={openProfileForm}
+              >
                 <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 更新资料
               </Button>
             ) : null}
-            <BusinessPartyMoreMenu row={row} parties={parties} onOpenObjectPage={onOpenObjectPage} onChanged={onChanged} />
+            {actions.registerRelationship ? (
+              <Button
+                size="sm"
+                variant={actions.registerRelationship === 'primary' ? 'default' : 'outline'}
+                className={actions.registerRelationship === 'primary' ? `${primaryActionClass} type-body` : 'type-body text-idpxyz-breadcrumb'}
+                onClick={openRelationshipForm}
+              >
+                <Handshake className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                登记合作关系
+              </Button>
+            ) : null}
             <Button
               className="text-idpxyz-breadcrumb"
               variant="ghost"
@@ -240,6 +250,7 @@ export function BusinessPartyDetailPanel({
             >
               <Maximize2 className="h-4 w-4" aria-hidden="true" />
             </Button>
+            <BusinessPartyMoreMenu row={row} parties={parties} onOpenObjectPage={onOpenObjectPage} onChanged={onChanged} />
             <Button
               className="text-idpxyz-breadcrumb"
               variant="ghost"
@@ -253,13 +264,21 @@ export function BusinessPartyDetailPanel({
           </div>
         </div>
 
-        {/* 头区 meta 行照公司主体右栏（票 company-subject-ux/08）：编码与识别信息（ADR-0367）一行小字，号与码点击即复制。
-            头区一直可见，所以识别信息只在这里出现一次，「登记记录」签不列它。 */}
-        <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+        {/* 一行事实：编码与识别信息（ADR-0367）、生效日、资料版本，号与码点击即复制，放不下才折行。头区一直可见，所以识别信息
+            只在这里出现一次，「登记记录」签不列它。生效日照状态说：还没到的是「将于…生效」，到了的是「自…生效」。 */}
+        <dl className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1">
           <Fact inline label="编码">
             <RefText value={row.partyId} name="编码" />
           </Fact>
           <BusinessPartyIdentificationFacts record={row} />
+          <Fact inline label={row.status === 'REGISTERED' ? '将于' : '自'}>
+            <Instant value={row.effectiveFrom} precision="day" /> 生效
+          </Fact>
+          {pinned === true ? null : (
+            <Fact inline label="资料">
+              {businessPartyProfileVersionFact(profiles.answer, row.partyId)}
+            </Fact>
+          )}
         </dl>
 
         <BusinessPartyBanners row={row} />
@@ -284,32 +303,13 @@ export function BusinessPartyDetailPanel({
         ) : null}
       </div>
 
-      <FactStrip inline>
-        <Fact inline label="生效">
-          <Instant value={row.effectiveFrom} precision="day" />
-        </Fact>
-        {row.deactivatedAt ? (
-          <Fact inline label="停用">
-            <Instant value={row.deactivatedAt} precision="day" />
-          </Fact>
-        ) : null}
-        <Fact inline label="登记">
-          {updateOrdinalLabel(row.revision)}
-        </Fact>
-        {pinned === true ? null : (
-          <Fact inline label="资料">
-            {businessPartyProfileVersionFact(profiles.answer, row.partyId)}
-          </Fact>
-        )}
-      </FactStrip>
-
       {/* 关联计数一行（票 business-party-ux/08）：让人在首屏知道「关联」签里有什么，点了切过去；哪一册没答出那一格显「—」
           （countText），不拿 0 冒充「没有」。「关联」签里不摆那行计数（summaryCounts 关掉），一个事实首屏只出现一处。 */}
       <button
         type="button"
         onClick={() => selectTab('overview')}
         aria-label={`查看关联：${countsLineLabel}`}
-        className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-b border-idpxyz-border px-5 py-1.5 text-left type-body text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent"
+        className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-b border-idpxyz-border px-6 py-1.5 text-left type-body text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent"
       >
         {(Object.keys(partyOverviewSectionTitles) as (keyof PartyOverviewStates)[]).map((key, index) => (
           <span key={key} className="flex items-center gap-x-1.5">
@@ -324,7 +324,7 @@ export function BusinessPartyDetailPanel({
       <Tabs value={shown} onValueChange={(value) => selectTab(value as BusinessPartyPanelTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* 签名与图标取对象工作区签的固定表（票 company-subject-ux/10），与对象页同名（票 business-parties-object-page/01）：
             「关联」是这家单位和我们有哪些往来，「登记记录」是身份修订链——同一种内容同一个词、同一个图标。 */}
-        <TabsList className="mx-5 mt-2 h-9 w-auto shrink-0 gap-5">
+        <TabsList className="mx-6 mt-2 h-9 w-auto shrink-0 gap-5">
           <TabsTrigger value="summary" className={tabTriggerClass}>
             <WorkspaceTabLabel id="summary" />
           </TabsTrigger>
@@ -345,7 +345,7 @@ export function BusinessPartyDetailPanel({
             <WorkspaceTabLabel id="related" />
           </TabsTrigger>
         </TabsList>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="summary" forceMount={visited.has('summary') || undefined} className="mt-0 data-[state=inactive]:hidden">
             <PanelProfilePart row={row} pinned={pinned} profiles={profiles} roles={roles} onUpdate={mayWrite ? openProfileForm : undefined} part="summary" />
           </TabsContent>

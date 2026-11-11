@@ -6,21 +6,23 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Search } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
+import { useSplitResize } from '@idpxyz/ui-workspace';
 import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import { cursorPagerControls } from '../../templates/cursor-pagination';
 import type { ListCursorPaginationProps } from '../../templates/ListPageTemplate';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../templates/state-slot';
-import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from '../../templates/workbench';
+import type { WorkbenchSort } from '../../templates/workbench';
 import { useTabViewRef } from '../../templates/workspace-view-state';
 import { partyColumnLayoutOf, partyFooterPageText } from './business-parties-workbench';
+import { usePartyListKeys } from './use-party-list-keys';
 
 // 往来单位页新版式的列表区（票 business-party-redesign/02）：工具条一行、定宽列的表、表底翻页条，页面态只换表格那一块。
 // 本页自己的布局，不改 WorkbenchPageTemplate——那张模板别的页还在用，这套版式先在这一页试，验收后再收进共用模板。
-// 键盘、选中、滚动位置与分栏比例的记忆照搬模板的做法（同一组纯函数与钩子），换的只是长相：
+// 键盘（use-party-list-keys.ts）、选中、滚动位置与分栏比例的记忆照搬模板的做法（同一组纯函数与钩子），换的只是长相：
 // - 各列给定宽，多出来的宽度全落在行尾；列表窄到放不下时行尾的箭头不摆，别的列先往各自的窄宽收、首列再让，首列留一个
 //   下限，再窄就横向滚（business-parties-workbench.ts 的 partyColumnLayoutOf）。
 // - 翻页在表底，不在工具条右端：工具条那一行留给筛选。
@@ -71,17 +73,45 @@ export interface PartyWorkbenchProps<Row> {
   renderDetail: (key: string) => ReactNode;
   viewState: TemplateViewState;
   stateOverride?: StateSlotProps['override'];
+  /**
+   * 挂上来时把焦点落到这一行：名录从主从分栏收回成表时，焦点原在的那一件（名录栏的行、右栏的关闭钮）已经卸掉，落回刚才开着
+   * 的那一行，↑/↓ 才接得上。只在焦点确实没了着落时落，不从别处抢。
+   */
+  initialFocusKey?: string | null;
 }
 
-const OVERLAY_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="combobox"]';
-
-function focusOf(target: EventTarget | null): WorkbenchFocus {
-  if (!(target instanceof HTMLElement)) return 'free';
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return 'typing';
-  if (target.closest(OVERLAY_SELECTOR)) return 'overlay';
-  if (target.closest('[role="tablist"]')) return 'tablist';
-  return 'free';
+/** 检索框：放大镜、输入、`/` 键位提示。表的工具条与名录栏共用；宽度由调用方经 className 给。 */
+export function PartySearchBox({
+  inputRef,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  className: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 type-body focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent ${className}`}
+    >
+      <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
+        onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
+      />
+      <kbd className="rounded border border-idpxyz-border px-1 type-caption text-idpxyz-breadcrumb">/</kbd>
+    </div>
+  );
 }
 
 /** 行尾留给箭头的最小宽度；各定宽列加上它还放得下，才算「放得下」。 */
@@ -108,6 +138,7 @@ export function PartyWorkbench<Row>({
   renderDetail,
   viewState,
   stateOverride,
+  initialFocusKey = null,
 }: PartyWorkbenchProps<Row>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -155,46 +186,13 @@ export function PartyWorkbench<Row>({
     listRef.current.scrollLeft = layoutSnapshot.current.scrollLeft;
   }, [ready, layoutSnapshot]);
 
-  const tabPanel = useWorkspaceTabPanel();
-  const activeTab = tabPanel?.isActiveTab ?? true;
-  const keys = rows.map(rowKey);
-  const keysRef = useRef(keys);
-  keysRef.current = keys;
-  useEffect(() => {
-    if (!activeTab) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      const action = workbenchKeyAction(event.key, focusOf(event.target), detailOpen);
-      if (action === null) return;
-      event.preventDefault();
-      if (action === 'focus-search') searchRef.current?.focus();
-      else if (action === 'close-detail') onSelect(null);
-      else if (ready) {
-        // 焦点在列表某一行上时从那一行起步，不从原先选中的那行起步。
-        const focusedRowKey =
-          event.target instanceof HTMLElement && event.target.matches('tr[data-row-key]') && listRef.current?.contains(event.target)
-            ? event.target.dataset.rowKey ?? null
-            : null;
-        const next = stepSelection(keysRef.current, focusedRowKey ?? selectedKey, action);
-        if (next !== null) onSelect(next);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [activeTab, selectedKey, detailOpen, onSelect, ready]);
+  usePartyListKeys({ listRef, searchRef, keys: rows.map(rowKey), selectedKey, detailOpen, ready, onSelect });
 
-  // 选中行换了就滚进可视区；焦点原在列表的某一行上时跟到新选中的行，在别处时不被拉回列表。
+  // 只在挂上来的那一刻看一次（initialFocusKey 的说明），所以不把它作依赖：之后焦点去哪由人定。
   useEffect(() => {
-    if (selectedKey === null) return;
-    const list = listRef.current;
-    const row = list?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`);
-    if (!row) return;
-    row.scrollIntoView({ block: 'nearest' });
-    const focused = document.activeElement;
-    if (focused instanceof HTMLElement && focused !== row && focused.matches('tr[data-row-key]') && list?.contains(focused)) {
-      row.focus({ preventScroll: true });
-    }
-  }, [selectedKey]);
+    if (initialFocusKey === null || document.activeElement !== document.body) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(initialFocusKey)}"]`)?.focus();
+  }, []);
 
   const visibleColumns = columns.filter(
     (column) => column.minListWidth === undefined || listWidth === null || listWidth >= column.minListWidth,
@@ -317,20 +315,7 @@ export function PartyWorkbench<Row>({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-idpxyz-panelBg">
       <div ref={toolbarRef} className="flex shrink-0 items-center gap-2.5 overflow-hidden px-6 py-2.5">
-        <div className="flex w-64 shrink-0 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 type-body focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
-          <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            placeholder={search.placeholder}
-            aria-label={search.placeholder}
-            className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
-            onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
-          />
-          <kbd className="rounded border border-idpxyz-border px-1 type-caption text-idpxyz-breadcrumb">/</kbd>
-        </div>
+        <PartySearchBox inputRef={searchRef} {...search} className="w-64 shrink-0" />
         {filters?.(toolbarWidth)}
       </div>
 

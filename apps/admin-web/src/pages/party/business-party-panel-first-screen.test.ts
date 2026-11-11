@@ -51,16 +51,18 @@ test('panelHintOf 按身份状态、在用关系数与持有角色数选提示',
   equal(panelHintOf({ status: 'DEACTIVATED' }, false, 0, 0), null);
 });
 
-// Covers: 没有写授予什么都不摆；没有在用关系时「登记合作关系」作主动作、「更新资料」退成描边；我方公司（公司主体钉着）
-// 不摆「更新资料」、也不让它以描边出现；法人册没答出（null）先摆「更新资料」，与对象页同一做法。
-test('panelHeaderActionsOf 随提示与授予摆头区动作', () => {
+// Covers: 没有写授予什么都不摆；没有在用关系时「登记合作关系」作主动作、「更新资料」退成描边；有在用关系的已生效单位两枚
+// 都在、「登记合作关系」是描边；待生效与已停用的不摆「登记合作关系」；我方公司（公司主体钉着）两枚都不摆，只有提示是
+// 「还没有合作关系」时留「登记合作关系」；法人册没答出（null）两枚都先摆，与对象页同一做法。
+test('panelHeaderActionsOf 随提示、状态与授予摆头区动作', () => {
   const none = { kind: 'no-relationship' } as const;
-  deepEqual(panelHeaderActionsOf(false, false, none), { registerRelationship: false, updateProfile: null });
-  deepEqual(panelHeaderActionsOf(true, false, none), { registerRelationship: true, updateProfile: 'outline' });
-  deepEqual(panelHeaderActionsOf(true, false, null), { registerRelationship: false, updateProfile: 'primary' });
-  deepEqual(panelHeaderActionsOf(true, false, { kind: 'pending' }), { registerRelationship: false, updateProfile: 'primary' });
-  deepEqual(panelHeaderActionsOf(true, true, null), { registerRelationship: false, updateProfile: null });
-  deepEqual(panelHeaderActionsOf(true, true, none), { registerRelationship: true, updateProfile: null });
-  deepEqual(panelHeaderActionsOf(true, null, null), { registerRelationship: false, updateProfile: 'primary' });
-  deepEqual(panelHeaderActionsOf(true, null, none), { registerRelationship: true, updateProfile: 'outline' });
+  deepEqual(panelHeaderActionsOf(false, false, none, 'EFFECTIVE'), { registerRelationship: null, updateProfile: null });
+  deepEqual(panelHeaderActionsOf(true, false, none, 'EFFECTIVE'), { registerRelationship: 'primary', updateProfile: 'outline' });
+  deepEqual(panelHeaderActionsOf(true, false, null, 'EFFECTIVE'), { registerRelationship: 'outline', updateProfile: 'primary' });
+  deepEqual(panelHeaderActionsOf(true, false, { kind: 'pending' }, 'REGISTERED'), { registerRelationship: null, updateProfile: 'primary' });
+  deepEqual(panelHeaderActionsOf(true, false, null, 'DEACTIVATED'), { registerRelationship: null, updateProfile: 'primary' });
+  deepEqual(panelHeaderActionsOf(true, true, null, 'EFFECTIVE'), { registerRelationship: null, updateProfile: null });
+  deepEqual(panelHeaderActionsOf(true, true, none, 'EFFECTIVE'), { registerRelationship: 'primary', updateProfile: null });
+  deepEqual(panelHeaderActionsOf(true, null, null, 'EFFECTIVE'), { registerRelationship: 'outline', updateProfile: 'primary' });
+  deepEqual(panelHeaderActionsOf(true, null, none, 'EFFECTIVE'), { registerRelationship: 'primary', updateProfile: 'outline' });
 });

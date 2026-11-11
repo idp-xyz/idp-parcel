@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
@@ -61,11 +61,15 @@ import {
   BusinessPartiesPageHead,
   BusinessPartiesViewTabs,
   PartyFilterChip,
+  PartyRosterHead,
   PartyTypeChipRow,
+  type PartyRefresh,
   type RefreshOutcome,
   type ViewTab,
 } from './BusinessPartiesChrome';
 import { PartyWorkbench, type PartyWorkbenchColumn } from './PartyWorkbench';
+import { PartyRoster, PartyRosterStatus, partyRosterSelectClass } from './PartyRoster';
+import { partyRosterTypeOf, rememberedPartyExpired, selectedPartyRowOf, type RememberedParty } from './party-roster';
 import { PartyTile } from './party-role-visuals';
 import {
   formatCount,
@@ -571,6 +575,32 @@ function CursorRefreshReport({
   return null;
 }
 
+/**
+ * 把选中的那家在当前这一页上的行报给页面记下，并在记着的那一行过期时让页面收起右栏（party-roster.ts 的 selectedPartyRowOf 与
+ * rememberedPartyExpired）。分不分栏在页面那一层判，当前这一页挂在视图里面（CatalogueCursorScope）——页面够不着它，由视图报
+ * 上去，做法同 CursorRefreshReport。不画任何东西。两个回调要是稳定引用。
+ */
+function SelectedPartyMemory({
+  pageRow,
+  expired,
+  onSeen,
+  onExpired,
+}: {
+  /** 选中的那家在当前这一页上的行；不在这一页上、或没有选中是 null。 */
+  pageRow: BusinessPartyRecord | null;
+  expired: boolean;
+  onSeen: (row: BusinessPartyRecord) => void;
+  onExpired: () => void;
+}) {
+  useEffect(() => {
+    if (pageRow !== null) onSeen(pageRow);
+  }, [pageRow, onSeen]);
+  useEffect(() => {
+    if (expired) onExpired();
+  }, [expired, onExpired]);
+  return null;
+}
+
 /** 页头刷新钮收尾时报什么：答出来了（空册也是答出来了）报成功，别的把状态件的说明带上。在途时报什么都不会被用到。 */
 function refreshOutcomeOf(viewState: TemplateViewState): RefreshOutcome {
   if (viewState.kind === 'ready' || viewState.kind === 'empty' || viewState.kind === 'loading') return { ok: true };
@@ -594,8 +624,13 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 版式（票 business-party-redesign/02）：页头一行——页名、一句说明、刷新与登记入口；下面一行视图签——单位名录、合作关系、
  * 我方关联，签上带各自的总数，右端是待办（几段合作关系待确认、几家单位尚未生效，点了带着筛选跳过去）；再下面是各视图自己的
  * 工具条、表与表底翻页条（PartyWorkbench.tsx）。页头与视图签三个视图共用、换视图不重挂；各视图的检索、筛选、排序与选中行
- * 都挂在页面上，换视图再换回来还在。表头点排序、单击行在右栏开详情（可拖宽）、详情栏「更多」或对象地址开整页对象标签、
+ * 都挂在页面上，换视图再换回来还在。表头点排序、单击行在右栏开详情、详情栏「更多」或对象地址开整页对象标签、
  * ↑/↓ 换行 Esc 收栏 `/` 检索。
+ *
+ * 名录的右栏是主从分栏（票 business-party-redesign/03，PartyRoster.tsx）：选中一家之后表换成左边一条定宽的名录栏——栏头
+ * （页名、刷新、写入口）、视图签、检索与类型和状态两个下拉、一行两句的名单、栏底翻页——右边整块是这一家的详情，页头与整行的
+ * 视图签这时不摆。选中的那家不在当前这一页上（翻了页、换了条件）右栏照旧显它，名录栏不为它跳页（party-roster.ts 的
+ * selectedPartyRowOf）。合作关系与我方关联两个视图的右栏仍在表里对半开、可拖宽。
  *
  * 两册的读口都在 ADR-0144 下（票 catalogue-read-pagination-rollout/11、14）：检索词、状态、角色与表头排序下推
  * （business-party-list.ts 的 businessPartyListConditions、party-relationship-list.ts 的 partyRelationshipListConditions），
@@ -670,15 +705,48 @@ export function BusinessPartiesPage() {
   const [type, setType] = useState<BusinessPartyTypeFilter>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultBusinessPartySort);
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  // 选中的那家最后一次在列表里读到的那一行（party-roster.ts 的 selectedPartyRowOf）：翻了页、换了条件之后它不在手上的任何一页里，
+  // 右栏靠这一份接着显。
+  const [rememberedParty, setRememberedParty] = useState<RememberedParty | null>(null);
+  // 右栏刚收起的那一家：名录从主从分栏收回成表时把焦点落回它那一行（PartyWorkbench 的 initialFocusKey）。
+  const closedParty = useRef<string | null>(null);
+  const applyPartySelection = (key: string | null, row: BusinessPartyRecord | null) => {
+    closedParty.current = key === null ? selectedParty : null;
+    setSelectedParty(key);
+    setRememberedParty(row === null ? null : { row, stale: false });
+  };
   // 详情栏全景签里的关系登记不是模态（票 business-party-edit-mode/03）：换行、关栏会把表单连草稿一起卸掉，有没提交的输入时先问一句。
   // 登记簿按组查（unsaved-guard.ts）：列表视图里挂着的关系表单只有详情栏这一份。
-  const [pendingSelect, setPendingSelect] = useState<{ key: string | null } | null>(null);
-  const selectParty = (key: string | null) => {
+  const [pendingSelect, setPendingSelect] = useState<{ key: string | null; row: BusinessPartyRecord | null } | null>(null);
+  /** 换行或收栏；`row` 是点的那一行，随选中一起记下，右栏当帧就有行可显。 */
+  const selectParty = (key: string | null, row: BusinessPartyRecord | null = null) => {
     // 右栏关联签里就地开着的两种表单（登记合作关系、新增客户账户）有没提交的输入时，换行先问一句。
     if (key !== selectedParty && (hasUnsavedDraft(registrationGroup('party-relationship')) || hasUnsavedDraft(registrationGroup('customer-account'))))
-      setPendingSelect({ key });
-    else setSelectedParty(key);
+      setPendingSelect({ key, row });
+    else applyPartySelection(key, row);
   };
+  const rememberPartyRow = useCallback(
+    (row: BusinessPartyRecord) => setRememberedParty((previous) => (previous !== null && previous.row === row && !previous.stale ? previous : { row, stale: false })),
+    [],
+  );
+  const dropSelectedParty = useCallback(() => {
+    setSelectedParty(null);
+    setRememberedParty(null);
+  }, []);
+  // 换视图时焦点若在视图签上，换完落到新的那一枚签上：主从分栏时签在名录栏里、不分栏时在整行的签条里，换视图可能把焦点所在的
+  // 那一条卸掉。
+  const pageRef = useRef<HTMLDivElement>(null);
+  const tabFocusPending = useRef(false);
+  const changeBook = (next: Book) => {
+    tabFocusPending.current = document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-view-tab');
+    closedParty.current = null;
+    setBook(next);
+  };
+  useLayoutEffect(() => {
+    if (!tabFocusPending.current) return;
+    tabFocusPending.current = false;
+    pageRef.current?.querySelector<HTMLElement>(`[data-view-tab="${book}"]`)?.focus();
+  }, [book]);
   // 关系册的列表状态。检索留在页内：停用入口与引用链接定位的是身份这一册。
   const [relationshipSearch, setRelationshipSearch] = useState('');
   const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
@@ -922,6 +990,9 @@ export function BusinessPartiesPage() {
 
   const partyTotal = registerTotalOf(parties.answer);
   const relationshipTotal = registerTotalOf(relationships.answer);
+  // 名录选中了一家、又读得到它那一行，就摆主从分栏（PartyRoster.tsx）：页头与整行的视图签让出来，右栏从页面顶到底。这里只看
+  // 不带条件的那一页与记着的那一行；当前这一页上的行挂在视图里面，由 SelectedPartyMemory 报上来。
+  const partySplit = book === 'identities' && selectedPartyRowOf(selectedParty, [], knownParties, rememberedParty) !== null;
   // 页名下不写集团标识：一家公司一套系统，租户是谁不必告诉运营；绑定仍读着，壳层顶栏显公司名用它。
   void boundTenant;
 
@@ -951,6 +1022,39 @@ export function BusinessPartiesPage() {
           </Button>
         }
       >
+        <MenuItem onSelect={() => openRegister('identity-deactivation')}>
+          <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+          {registerActionLabels['identity-deactivation']}
+        </MenuItem>
+      </DropdownMenu>
+    </>
+  ) : undefined;
+  // 名录栏栏头里的同一组入口（主从分栏时页头不摆）：栏窄，主入口只写「新增」，另外两个收进「更多」。分栏时册上至少有选中的
+  // 那一家，「建立合作关系」不必再判空册。
+  const rosterActions = mayWrite ? (
+    <>
+      <Button
+        size="sm"
+        variant="default"
+        className={`${primaryActionClass} type-body`}
+        title={registerActionLabels['business-party']}
+        onClick={() => openRegister('business-party')}
+      >
+        <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+        新增
+      </Button>
+      <DropdownMenu
+        align="right"
+        trigger={
+          <Button variant="outline" size="sm" className="px-2 text-idpxyz-breadcrumb" aria-label="更多登记入口">
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        }
+      >
+        <MenuItem onSelect={() => openRegister('party-relationship')}>
+          <Handshake className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+          {registerActionLabels['party-relationship']}
+        </MenuItem>
         <MenuItem onSelect={() => openRegister('identity-deactivation')}>
           <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
           {registerActionLabels['identity-deactivation']}
@@ -997,8 +1101,14 @@ export function BusinessPartiesPage() {
     ) : undefined;
 
   // 每个视图交出两样：页头刷新钮要的那一组（怎么重取、在不在途、答成了没有），与视图签下面的那一块。
-  let refresh: { run: () => void; pending: boolean; outcome: RefreshOutcome };
+  let refresh: PartyRefresh;
   let body: ReactNode;
+  // 名录与关系两个视图的刷新都经游标那一页报上来的那一组（CursorRefreshReport）。
+  const cursorPageRefresh: PartyRefresh = {
+    onRefresh: () => cursorRetry.current(),
+    refreshing: cursorRefresh.pending,
+    refreshOutcome: cursorRefresh.outcome,
+  };
 
   if (book === 'network') {
     const visible = networkRows.filter((row) => matchesOurCompanySearch(row, networkSearch));
@@ -1075,12 +1185,12 @@ export function BusinessPartiesPage() {
       narrowed: networkSearch.trim() !== '',
     });
     refresh = {
-      run: () => {
+      onRefresh: () => {
         entities.retry();
         relationships.retry();
       },
-      pending: entities.pending || relationships.pending,
-      outcome: refreshOutcomeOf(viewState),
+      refreshing: entities.pending || relationships.pending,
+      refreshOutcome: refreshOutcomeOf(viewState),
     };
     const networkNote = '以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图';
     body = (
@@ -1142,7 +1252,7 @@ export function BusinessPartiesPage() {
     };
     const emptyTitle = '还没有登记任何往来单位';
     const emptyDescription = `客户、承运商、代理都从这里登记。${entryHint(mayWrite, '用页头的「新增往来单位」登记第一家。')}`;
-    refresh = { run: () => cursorRetry.current(), ...cursorRefresh };
+    refresh = cursorPageRefresh;
     body = (
       <CatalogueCursorScope key="identities" conditions={conditions} load={listBusinessParties}>
         {({ answer, pagination, retry }) => {
@@ -1170,7 +1280,28 @@ export function BusinessPartiesPage() {
             status,
             ofType: (row) => businessPartyIsOfType(row, shownType, roleIndex, ourCompanies),
           });
-          return (
+          const searchBox = { value: search, onChange: setSearch, placeholder: '搜索名称、编码、注册号或外部编码' };
+          const noMatchText =
+            shownType !== 'ALL' && pageRows.length > 0
+              ? businessPartyTypeNoMatchNote(completeParties !== null, typeSourcesComplete)
+              : businessPartyNoMatchNote;
+          const footer = {
+            countText: partyFilteredFooterCountText({
+              exact: typeCountsUsable,
+              total: pagination?.total ?? null,
+              pageRows: pageRows.length,
+              shown: visible.length,
+              pageFiltered: shownType !== 'ALL',
+              unit: '家',
+            }),
+            pagination,
+          };
+          // 点的、方向键走到的都是这一页上摆着的行：连行一起交给页面记下。
+          const selectVisible = (key: string | null) => selectParty(key, visible.find((party) => party.partyId === key) ?? null);
+          // 右栏显哪一行（party-roster.ts 的 selectedPartyRowOf）。分不分栏在页面那一层按不带条件的那一页与记着的那一行判
+          // （partySplit）；这一页上才读得到、页面还没记下的那一行由下面的 SelectedPartyMemory 报上去，下一帧就分栏。
+          const detailRow = partySplit ? selectedPartyRowOf(selectedParty, pageRows, knownParties, rememberedParty) : null;
+          const report = (
             <>
               <CursorRefreshReport
                 // 刷新连法人册一起重取：刚在「公司主体」页登完的公司，回到这里按一下就该显成「我方公司」。
@@ -1184,9 +1315,135 @@ export function BusinessPartiesPage() {
                 retryRef={cursorRetry}
                 onReport={setCursorRefresh}
               />
+              <SelectedPartyMemory
+                pageRow={selectedParty === null ? null : pageRows.find((party) => party.partyId === selectedParty) ?? null}
+                expired={rememberedPartyExpired(selectedParty, answer !== null, pageRows, knownParties, rememberedParty)}
+                onSeen={rememberPartyRow}
+                onExpired={dropSelectedParty}
+              />
+            </>
+          );
+          if (detailRow !== null) {
+            // 名录栏里类型与状态各是一个下拉：栏窄，摆不下一排芯片。项上的数与表的工具条是同一份。
+            const rosterTypeSelect = !typeControlReady ? null : typeChips !== null ? (
+              <select
+                className={partyRosterSelectClass(shownType !== 'ALL')}
+                value={shownType}
+                aria-label="类型"
+                onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
+              >
+                {typeChips.map((chip) => (
+                  <option key={chip.type} value={chip.type} disabled={chip.disabled}>
+                    {`${chip.type === 'ALL' ? '全部类型' : chip.label}${chip.count !== null ? `（${formatCount(chip.count)}）` : ''}`}
+                  </option>
+                ))}
+              </select>
+            ) : typeWords !== null ? (
+              <select
+                className={partyRosterSelectClass(shownType !== 'ALL')}
+                value={shownType}
+                aria-label={typeWords.label}
+                title={typeWords.title}
+                onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
+              >
+                {businessPartyTypeFilterOptionsOf(typeSourcesComplete).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : null;
+            return (
+              <>
+                {report}
+                <PartyRoster<BusinessPartyRecord>
+                  label="单位名录"
+                  head={<PartyRosterHead title={info.title} refresh={cursorPageRefresh} actions={rosterActions} />}
+                  tabs={<BusinessPartiesViewTabs compact tabs={viewTabs} value={book} onChange={changeBook} />}
+                  search={searchBox}
+                  tools={
+                    <>
+                      {rosterTypeSelect}
+                      {/* 状态总在右边那一格：类型那一件晚到或不摆时它不挪位。 */}
+                      <select
+                        className={`${partyRosterSelectClass(status !== 'ALL')} col-start-2`}
+                        value={status}
+                        aria-label="状态"
+                        onChange={(event) => setStatus(event.target.value as BusinessPartyStatusFilter)}
+                      >
+                        {statusOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {`${option.value === 'ALL' ? '全部状态' : option.label}${option.count !== null ? `（${formatCount(option.count)}）` : ''}`}
+                          </option>
+                        ))}
+                      </select>
+                      {typeControlReady && typeChips === null && typeWords !== null ? (
+                        <span className="col-span-2 flex">
+                          <PageOnlyNote>{typeWords.note}</PageOnlyNote>
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                  rows={visible}
+                  rowKey={(row) => row.partyId}
+                  selectedKey={selectedParty}
+                  onSelect={selectVisible}
+                  renderRow={(row) => {
+                    const rowOurs = ourCompanies.has(row.partyId);
+                    const rowRoles = rolesOfParty(roleIndex, row.partyId);
+                    const rowType = partyRosterTypeOf(rowOurs, rowRoles, typeSourcesComplete);
+                    return (
+                      <>
+                        <PartyTile kind={partyTileKindOf(rowOurs, rowRoles)} />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate type-section leading-5 text-idpxyz-textBright" title={row.partyName}>
+                            {row.partyName}
+                          </span>
+                          <span className="truncate type-body leading-4 text-idpxyz-breadcrumb" title={rowType.unread ? partyTypeUnreadNote : undefined}>
+                            {rowType.text}
+                          </span>
+                        </span>
+                        <PartyRosterStatus code={row.status} />
+                      </>
+                    );
+                  }}
+                  noMatchText={noMatchText}
+                  onClearFilters={clearFilters}
+                  footer={footer}
+                  viewState={viewState}
+                  detail={
+                    <BusinessPartyDetailPanel
+                      row={detailRow}
+                      roles={rolesOfParty(roleIndex, detailRow.partyId)}
+                      ours={ourCompanies.has(detailRow.partyId)}
+                      typeUnread={!typeSourcesComplete}
+                      pinned={entities.answer == null ? null : pinnedParties.has(detailRow.partyId)}
+                      relationships={relationships.answer}
+                      retryRelationships={relationships.retry}
+                      onClose={() => selectParty(null)}
+                      onOpenObjectPage={() => {
+                        window.location.hash = businessPartyObjectHash(detailRow.partyId);
+                      }}
+                      parties={parties.answer}
+                      // 游标这一页不在取数层里，参与方写口的整域作废碰不到它：写后由这里重取。记着的那一行从此可能是旧的，
+                      // 标出来，重新读到之前不拿它当新的（party-roster.ts 的 rememberedPartyExpired）。
+                      onChanged={() => {
+                        setRememberedParty((previous) => previous && { ...previous, stale: true });
+                        parties.retry();
+                        retry();
+                      }}
+                    />
+                  }
+                />
+              </>
+            );
+          }
+          return (
+            <>
+              {report}
               <PartyWorkbench<BusinessPartyRecord>
                 viewStateKey="business-parties.identities"
-                search={{ value: search, onChange: setSearch, placeholder: '搜索名称、编码、注册号或外部编码' }}
+                search={searchBox}
                 filters={(toolbarWidth) => (
                   <>
                     <select
@@ -1243,51 +1500,16 @@ export function BusinessPartiesPage() {
                 columns={identityColumns}
                 rows={visible}
                 rowKey={(row) => row.partyId}
-                selectedKey={selectedParty}
-                onSelect={selectParty}
+                // 名录的右栏不在表里开：选中一家就换成主从分栏（上面的 PartyRoster），这张表只在没有右栏时摆。
+                selectedKey={null}
+                onSelect={selectVisible}
+                renderDetail={() => null}
+                initialFocusKey={closedParty.current}
                 sort={sort}
                 onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-                noMatchText={
-                  shownType !== 'ALL' && pageRows.length > 0
-                    ? businessPartyTypeNoMatchNote(completeParties !== null, typeSourcesComplete)
-                    : businessPartyNoMatchNote
-                }
+                noMatchText={noMatchText}
                 onClearFilters={clearFilters}
-                footer={{
-                  countText: partyFilteredFooterCountText({
-                    exact: typeCountsUsable,
-                    total: pagination?.total ?? null,
-                    pageRows: pageRows.length,
-                    shown: visible.length,
-                    pageFiltered: shownType !== 'ALL',
-                    unit: '家',
-                  }),
-                  pagination,
-                }}
-                renderDetail={(key) => {
-                  const row = visible.find((party) => party.partyId === key);
-                  return row ? (
-                    <BusinessPartyDetailPanel
-                      row={row}
-                      roles={rolesOfParty(roleIndex, row.partyId)}
-                      ours={ourCompanies.has(row.partyId)}
-                      typeUnread={!typeSourcesComplete}
-                      pinned={entities.answer == null ? null : pinnedParties.has(row.partyId)}
-                      relationships={relationships.answer}
-                      retryRelationships={relationships.retry}
-                      onClose={() => selectParty(null)}
-                      onOpenObjectPage={() => {
-                        window.location.hash = businessPartyObjectHash(row.partyId);
-                      }}
-                      parties={parties.answer}
-                      // 游标这一页不在取数层里，参与方写口的整域作废碰不到它：写后由这里重取。
-                      onChanged={() => {
-                        parties.retry();
-                        retry();
-                      }}
-                    />
-                  ) : null;
-                }}
+                footer={footer}
                 viewState={viewState}
                 // 空册不是死胡同：有登记权限时说明下面另给一枚「新增往来单位」，主按钮仍只有页头那一枚。
                 stateOverride={
@@ -1336,7 +1558,7 @@ export function BusinessPartiesPage() {
       setRelationshipStatus('ALL');
       setAttentionOnly(false);
     };
-    refresh = { run: () => cursorRetry.current(), ...cursorRefresh };
+    refresh = cursorPageRefresh;
     body = (
       <CatalogueCursorScope key="relationships" conditions={relationshipConditions} load={listPartyRelationships}>
         {({ answer, pagination, retry }) => {
@@ -1475,16 +1697,18 @@ export function BusinessPartiesPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
-      <BusinessPartiesPageHead
-        title={info.title}
-        description="客户、供应商、承运代理等与我们有业务往来的单位，以及它们与我方公司之间的合作关系"
-        onRefresh={refresh.run}
-        refreshing={refresh.pending}
-        refreshOutcome={refresh.outcome}
-        actions={headActions}
-      />
-      <BusinessPartiesViewTabs tabs={viewTabs} value={book} onChange={setBook} attention={attention} />
+    <div ref={pageRef} className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+      {/* 主从分栏时页头与整行的视图签不摆（名录栏自己带栏头与签），位置留空而不是抽掉：下面那一块在子节点里的位置不变，
+          游标那一页才不会因为分栏开合而重挂、退回第一页。 */}
+      {partySplit ? null : (
+        <BusinessPartiesPageHead
+          title={info.title}
+          description="客户、供应商、承运代理等与我们有业务往来的单位，以及它们与我方公司之间的合作关系"
+          refresh={refresh}
+          actions={headActions}
+        />
+      )}
+      {partySplit ? null : <BusinessPartiesViewTabs tabs={viewTabs} value={book} onChange={changeBook} attention={attention} />}
       {body}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
@@ -1495,9 +1719,9 @@ export function BusinessPartiesPage() {
         confirmLabel="放弃"
         cancelLabel="继续编辑"
         onConfirm={() => {
-          const next = pendingSelect?.key ?? null;
+          const next = pendingSelect;
           setPendingSelect(null);
-          setSelectedParty(next);
+          applyPartySelection(next?.key ?? null, next?.row ?? null);
         }}
         onCancel={() => setPendingSelect(null)}
       />

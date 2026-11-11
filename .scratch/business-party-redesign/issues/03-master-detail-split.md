@@ -1,7 +1,7 @@
 # 03 主从分栏：名录栏与右栏头区
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-11 起
 父票：[spec](../spec.md)
 Blocked by: 02
 

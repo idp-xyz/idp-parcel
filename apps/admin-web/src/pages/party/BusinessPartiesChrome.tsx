@@ -6,30 +6,22 @@ import { formatCount, type PartyTypeChip } from './business-parties-workbench';
 import type { BusinessPartyTypeFilter } from './business-party-list';
 import { partyTileVisuals } from './party-role-visuals';
 
-// 往来单位页新版式的页头、视图签与工具条上的筛选芯片（票 business-party-redesign/02）。
+// 往来单位页新版式的页头、视图签与工具条上的筛选芯片（票 business-party-redesign/02），以及主从分栏时名录栏的栏头（票 03）。
 // 页头只做一件事，一行：页名、一句说明（放不下就截断）、动作。列表上方每多一行就少看一行数据，所以待办不另占一行，
 // 跟在视图签的右端；各视图自己的数只在签上出现一次。
 
 /** 刷新收尾时报什么：答出来了报「已刷新」，没答出来报原因。 */
 export type RefreshOutcome = { ok: true } | { ok: false; message?: string };
 
-export function BusinessPartiesPageHead({
-  title,
-  description,
-  onRefresh,
-  refreshing,
-  refreshOutcome,
-  actions,
-}: {
-  title: string;
-  description: string;
+export interface PartyRefresh {
   onRefresh: () => void;
   /** 有没有一问在途，由调用方给。 */
   refreshing: boolean;
   refreshOutcome: RefreshOutcome;
-  /** 写入口；没有登记权限时调用方不给，这里只剩刷新。 */
-  actions?: ReactNode;
-}) {
+}
+
+/** 刷新钮，页头与名录栏的栏头各摆一枚：按了转起来，收尾报一句。 */
+export function PartyRefreshButton({ onRefresh, refreshing, refreshOutcome }: PartyRefresh) {
   const { addToast } = useToast();
   // 只报用户按钮触发的那一次刷新，且要先看到在途再看到结束：首取或别处触发的重取不冒这一句（做法同 WorkbenchPageTemplate）。
   const requested = useRef(false);
@@ -55,25 +47,56 @@ export function BusinessPartiesPageHead({
   };
 
   return (
+    <Button
+      className="text-idpxyz-breadcrumb"
+      variant="ghost"
+      size="icon"
+      onClick={handleRefresh}
+      disabled={refreshing}
+      title={refreshing ? '刷新中…' : '刷新'}
+      aria-label={refreshing ? '刷新中…' : '刷新'}
+    >
+      <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+    </Button>
+  );
+}
+
+export function BusinessPartiesPageHead({
+  title,
+  description,
+  refresh,
+  actions,
+}: {
+  title: string;
+  description: string;
+  refresh: PartyRefresh;
+  /** 写入口；没有登记权限时调用方不给，这里只剩刷新。 */
+  actions?: ReactNode;
+}) {
+  return (
     <div className="flex shrink-0 items-center gap-6 border-b border-idpxyz-border px-6 py-3">
       <div className="flex min-w-0 flex-1 items-baseline gap-3">
         <h1 className="shrink-0 type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
         <p className="min-w-0 truncate type-body text-idpxyz-breadcrumb">{description}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Button
-          className="text-idpxyz-breadcrumb"
-          variant="ghost"
-          size="icon"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          title={refreshing ? '刷新中…' : '刷新'}
-          aria-label={refreshing ? '刷新中…' : '刷新'}
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-        </Button>
+        <PartyRefreshButton {...refresh} />
         {actions}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 名录栏的栏头（票 business-party-redesign/03）：主从分栏时页头不摆，页名、刷新与写入口收在这里。栏窄，不摆那句说明；
+ * 写入口由调用方给短的一组。页名仍是这一页的一级标题。
+ */
+export function PartyRosterHead({ title, refresh, actions }: { title: string; refresh: PartyRefresh; actions?: ReactNode }) {
+  return (
+    <div className="flex h-[52px] shrink-0 items-center gap-1.5 border-b border-idpxyz-border bg-idpxyz-editor pl-4 pr-3">
+      <h1 className="min-w-0 flex-1 truncate type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
+      <PartyRefreshButton {...refresh} />
+      {actions}
     </div>
   );
 }
@@ -85,17 +108,22 @@ export interface ViewTab<Id extends string> {
   count: number | null;
 }
 
-/** 视图签：同一份主数据的几种看法，同级、一键换。待办跟在同一行右端，有才出现。 */
+/**
+ * 视图签：同一份主数据的几种看法，同级、一键换。待办跟在同一行右端，有才出现。`compact` 是名录栏里的那一形
+ * （票 business-party-redesign/03）：矮一些、签与签挨得近，三枚签带着数也放得进最窄的栏；栏里不摆待办。
+ */
 export function BusinessPartiesViewTabs<Id extends string>({
   tabs,
   value,
   onChange,
   attention,
+  compact = false,
 }: {
   tabs: readonly ViewTab<Id>[];
   value: Id;
   onChange: (next: Id) => void;
   attention?: ReactNode;
+  compact?: boolean;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -106,7 +134,9 @@ export function BusinessPartiesViewTabs<Id extends string>({
     event.currentTarget.querySelector<HTMLElement>(`[data-view-tab="${next.id}"]`)?.focus();
   };
   return (
-    <div className="flex h-[42px] shrink-0 items-stretch border-b border-idpxyz-border bg-idpxyz-panelBg px-3">
+    <div
+      className={`flex shrink-0 items-stretch border-b border-idpxyz-border bg-idpxyz-panelBg ${compact ? 'h-[38px] px-2' : 'h-[42px] px-3'}`}
+    >
       <div role="tablist" aria-label="视图" className="flex items-stretch gap-0.5" onKeyDown={onKeyDown}>
         {tabs.map((tab) => {
           const active = tab.id === value;
@@ -119,9 +149,9 @@ export function BusinessPartiesViewTabs<Id extends string>({
               aria-selected={active}
               tabIndex={active ? 0 : -1}
               onClick={() => onChange(tab.id)}
-              className={`-mb-px inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 type-section focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent ${
-                active ? 'border-idpxyz-accent text-idpxyz-textBright' : 'border-transparent text-idpxyz-breadcrumb hover:text-idpxyz-text'
-              }`}
+              className={`-mb-px inline-flex items-center whitespace-nowrap border-b-2 type-section focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent ${
+                compact ? 'gap-1.5 px-2' : 'gap-2 px-3'
+              } ${active ? 'border-idpxyz-accent text-idpxyz-textBright' : 'border-transparent text-idpxyz-breadcrumb hover:text-idpxyz-text'}`}
             >
               {tab.label}
               {tab.count !== null ? (
@@ -137,7 +167,7 @@ export function BusinessPartiesViewTabs<Id extends string>({
           );
         })}
       </div>
-      {attention ? <div className="ml-auto flex min-w-0 items-center gap-5 pr-3">{attention}</div> : null}
+      {attention && !compact ? <div className="ml-auto flex min-w-0 items-center gap-5 pr-3">{attention}</div> : null}
     </div>
   );
 }

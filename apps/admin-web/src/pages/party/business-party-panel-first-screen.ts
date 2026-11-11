@@ -35,21 +35,29 @@ export function panelHintOf(
 }
 
 export interface PanelHeaderActions {
-  /** 摆「登记合作关系」作主动作。 */
-  registerRelationship: boolean;
+  /** 「登记合作关系」怎么摆：主动作、描边、不摆。 */
+  registerRelationship: 'primary' | 'outline' | null;
   /** 「更新资料」怎么摆：主动作、让位给登记关系后的描边、不摆。 */
   updateProfile: 'primary' | 'outline' | null;
 }
 
 /**
- * 头区的动作随提示走：提示是「还没有合作关系」时下一步就是登关系，「更新资料」退成描边；其余「更新资料」是主动作——只凭
- * 客户账户就是客户的单位没有那句提示，主动作也就是「更新资料」。公司主体钉着的（`pinned` 为真，已停用的也算）不登往来单位
- * 资料，没有「更新资料」；法人册没答出（null）先摆它，与对象页同一做法。没有写授予什么都不摆。栏里的 JSX 只照这里的答案摆，
- * 不另判 pinned。
+ * 头区的两枚写动作。位置固定、主次随提示走：提示是「还没有合作关系」时下一步就是登关系，它是主动作、「更新资料」退成描边；
+ * 其余「更新资料」是主动作——只凭客户账户就是客户的单位没有那句提示，主动作也就是「更新资料」。
+ * 「登记合作关系」不是主动作时也留在原位（描边），但只给已生效、又不是公司主体钉着的单位：待生效的那句提示已经说了关系怎么登，
+ * 已停用的不再登新关系，我方公司多半是关系的相对方——这几种要登仍可去「关联」签。
+ * 公司主体钉着的（`pinned` 为真，已停用的也算）不登往来单位资料，没有「更新资料」；法人册没答出（null）两枚都先摆，与对象页
+ * 同一做法。没有写授予什么都不摆。栏里的 JSX 只照这里的答案摆，不另判 pinned 与状态。
  */
-export function panelHeaderActionsOf(mayWrite: boolean, pinned: boolean | null, hint: PanelHint): PanelHeaderActions {
-  if (!mayWrite) return { registerRelationship: false, updateProfile: null };
-  const registerRelationship = hint?.kind === 'no-relationship';
-  const updateProfile = pinned === true ? null : registerRelationship ? 'outline' : 'primary';
+export function panelHeaderActionsOf(
+  mayWrite: boolean,
+  pinned: boolean | null,
+  hint: PanelHint,
+  status: string,
+): PanelHeaderActions {
+  if (!mayWrite) return { registerRelationship: null, updateProfile: null };
+  const registerFirst = hint?.kind === 'no-relationship';
+  const registerRelationship = registerFirst ? 'primary' : status === 'EFFECTIVE' && pinned !== true ? 'outline' : null;
+  const updateProfile = pinned === true ? null : registerFirst ? 'outline' : 'primary';
   return { registerRelationship, updateProfile };
 }
