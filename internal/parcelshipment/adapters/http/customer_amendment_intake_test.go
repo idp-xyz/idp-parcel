@@ -173,6 +173,13 @@ func TestCustomerAmendmentIntakeTakesAWholeGoodsGroupWithItsPacking(t *testing.T
 			return strings.Replace(b, `"line": 2, "quantity": "2"`, `"line": 2, "quantity": "2 件"`, 1)
 		}, "packing"},
 		"分配的包裹号空着": {func(b string) string { return strings.Replace(b, `"parcelId": "DPCL-SYN-2"`, `"parcelId": " "`, 1) }, "packing[2].parcelId"},
+		// 下面两格在来源保全之前就答：编排之后才答，客户改好载荷用同一个修订请求标识重发会撞来源冲突。
+		"更正不带货物明细": {func(b string) string {
+			return b[:strings.Index(b, ",\n  \"goods\"")] + "\n}"
+		}, "goods"},
+		"按包裹指货物明细": {func(b string) string {
+			return strings.Replace(b, `"dataGroup": "GOODS_DETAILS",`, `"dataGroup": "GOODS_DETAILS", "parcelId": "DPCL-SYN-1",`, 1)
+		}, "parcelId"},
 	} {
 		intake, request := intakeAmendmentOf(t, amendmentAuthenticatorDouble{}, item.mutate(customerGoodsAmendmentDraft))
 		_, err := intake.IntakeSourceDataAmendment(t.Context(), request)

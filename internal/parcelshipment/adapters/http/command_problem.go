@@ -36,7 +36,7 @@ func answerAmendmentFailure(problem problemWriter, err error) {
 	case errors.Is(err, application.ErrAmendmentIntentNotDeclared):
 		problem(http.StatusBadRequest, codeMalformedRequest, "intent: the amendment intent is not declared")
 	case errors.Is(err, application.ErrAmendmentContentUnfit) && errors.Is(err, domain.ErrInvalidPacking):
-		problem(http.StatusBadRequest, codeMalformedRequest, "packing: declare it for every parcel of the accepted shipment, or not at all")
+		problem(http.StatusBadRequest, codeMalformedRequest, "packing: name only the parcels of the accepted shipment, and every one of them, or declare no packing")
 	case errors.Is(err, application.ErrAmendmentContentUnfit):
 		problem(http.StatusBadRequest, codeMalformedRequest, "content: does not fit the declared scope and intent")
 	case errors.Is(err, application.ErrAmendedRequestNotAccepted):

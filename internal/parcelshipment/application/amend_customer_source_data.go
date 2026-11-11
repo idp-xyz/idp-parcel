@@ -259,12 +259,9 @@ func (handler *AmendCustomerSourceDataHandler) decide(
 	if request.SourceDataScopeOutsideAcceptanceBaseline(command.Scope) {
 		return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
 	}
-	// 货物明细的装箱分配同样以接受基线为界，排在矩阵之前的理由同上：指到基线外的包裹是同一个业务拒绝（增删行或改分配
-	// 不是增删委托成员），漏了成员是这份内容自己没写全——后者是调用方的错，改请求才会好。
+	// 货物明细的装箱分配同样以接受基线为界，排在矩阵之前的理由同上：指错或漏了包裹是请求形状不对，改载荷才会好，矩阵怎么
+	// 登记都救不了它。它要读委托，所以只能在来源保全之后答；客户改了载荷重发要换一个修订请求标识（首方契约写明）。
 	if err := request.CheckSourceDataContentAgainstBaseline(command.Content); err != nil {
-		if errors.Is(err, domain.ErrParcelOutsideAcceptanceBaseline) {
-			return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
-		}
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w: %w", ErrAmendmentContentUnfit, err)
 	}
 

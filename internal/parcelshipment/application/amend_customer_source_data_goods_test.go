@@ -97,29 +97,24 @@ func TestAGoodsAmendmentWithoutADeclaredAllowanceAwaitsReview(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0373 决定四「增删行或改分配不是增删委托成员」——装箱分配指到接受基线外的包裹，与范围越过基线同答不允许，且排在
-// 矩阵之前（矩阵一次读不回也不该把它变成未决）；漏了成员是调用方的错，答内容不配。
+// Covers: ADR-0373 决定三「指不存在的包裹……答请求形状不对」——装箱分配指到接受基线外的包裹或漏了成员，都是调用方的错，答
+// 内容不配；排在矩阵之前：矩阵一次读不回也不该把一份形状错的请求变成未决。
 func TestAGoodsAmendmentsPackingIsCheckedAgainstTheBaselineBeforeTheMatrix(t *testing.T) {
-	outside := newAmendmentFixture(t)
-	outside.rules.err = errors.New("rule declaration unreachable")
-	command := outside.command(t)
-	command.Scope = goodsDataScope(t)
-	command.Content = goodsContent(t, "parcel-1", "parcel-2", "parcel-9")
-	result, err := outside.handler.Handle(context.Background(), command)
-	if err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	if result.Outcome() != application.AmendmentDisallowed {
-		t.Fatalf("指到基线外：outcome = %v, want DISALLOWED", result.Outcome())
-	}
-
-	partial := newAmendmentFixture(t)
-	command = partial.command(t)
-	command.Scope = goodsDataScope(t)
-	command.Content = goodsContent(t, "parcel-1")
-	if _, err := partial.handler.Handle(context.Background(), command); !errors.Is(err, application.ErrAmendmentContentUnfit) ||
-		!errors.Is(err, domain.ErrInvalidPacking) {
-		t.Fatalf("漏了成员：err = %v, want ErrAmendmentContentUnfit 且 ErrInvalidPacking", err)
+	for name, parcels := range map[string][]string{"指到基线外": {"parcel-1", "parcel-2", "parcel-9"}, "漏了成员": {"parcel-1"}} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAmendmentFixture(t)
+			fixture.rules.err = errors.New("rule declaration unreachable")
+			command := fixture.command(t)
+			command.Scope = goodsDataScope(t)
+			command.Content = goodsContent(t, parcels...)
+			if _, err := fixture.handler.Handle(context.Background(), command); !errors.Is(err, application.ErrAmendmentContentUnfit) ||
+				!errors.Is(err, domain.ErrInvalidPacking) {
+				t.Fatalf("err = %v, want ErrAmendmentContentUnfit 且 ErrInvalidPacking", err)
+			}
+			if fixture.requests.saved != nil {
+				t.Fatal("形状错的请求写进了委托")
+			}
+		})
 	}
 }
 
