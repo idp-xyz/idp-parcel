@@ -6,6 +6,8 @@
 
 起草收尾时远端已前进到 `a276ddae2`。`git diff --stat 11bfa1ffb a276ddae2` 在本表引到的路径上，改动落在管理台法人资料页的复制图标、仓配履约的 ADR（新增一篇，另一篇的 `Status` 行与 ADR 索引随之变）与上下文地图里仓配的几行。本表引的代码符号与文档句子都不在其中。再往后的提交没有核。
 
+同日自查更正时补的几句——第 17 至 21 项的「现状」，以及文末「读这张表要注意的五处」的第 2、第 4 处——核在 `535202926`。各项的结论没有变。
+
 **三种结论**：
 
 - **满足**：有生产入口，有管理台页面或命令入口，行为与要求对得上。
@@ -22,7 +24,7 @@
 | 2 | 签署证据 | 待开发 | 发布只记批准依据（批准引用、来源引用、时刻），没有签署方、签署时间或签署件索引 | `ApprovalBasis`；在 `internal/partycommercial` 的非测试代码里检索「签署、签章、signature、signed」，只命中联系人用途的一句注释 | [03](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) |
 | 3 | 独立审批 | 满足 | 批准与录入是两个操作者动作。两人须否不同、批准者须持哪一格授予，由租户登记的审批职责规则定；没登记不放行 | `PublicationDraft` 的 `Approve`、`ApprovalDutyRule`；`POST /commercial-publication-draft-approvals`；规则登记命令 `parcel-commercial register-approval-duty-rule`（ADR-0362）；页面 `pending-publications` | — |
 | 4 | 生效 | 满足 | 发布时按有效区间答已生效或计划生效，到点生效；换版要显式收尾旧版 | `publish_commercial_authority.go` 的 `PUBLISHED_EFFECTIVE`、`PLANNED_EFFECTIVE`；`POST /commercial-publication-draft-publications`、`/commercial-version-successor-cuts`、`/commercial-version-retirements`；按身份读回 `GET /commercial-version-readbacks/{kind}/{objectId}/{version}`（ADR-0361） | — |
-| 5 | 价卡授权 | 部分满足 | 授权有记录：价卡登记必须引用一条价格方向授权，销售与采购方向的价格政策各绑定一份定价方案。没有核对：计价不查那条授权是否已发布、方向是否相符；选卡也不读绑定 | `PriceCardRegistration` 的方向授权引用、`ArtifactCommercialAuthorization`（注释「这里只登引用不解析其内容」）；`CommercialPricePolicy` 的 `PricingPlan`；ADR-0260 决定一；`internal/parcelpricing/adapters/` 下没有读参与方与商业的适配器 | [04](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) |
+| 5 | 价卡授权 | 部分满足 | 授权有记录：价卡登记必须引用一条价格方向授权，销售与采购方向的价格政策各绑定一份定价方案。没有核对：计价不查那条授权是否已发布、方向是否相符；选卡也不读绑定 | `PriceCardRegistration` 的方向授权引用、`ArtifactCommercialAuthorization`（注释「这里只登引用不解析其内容」）；`CommercialPricePolicy` 的 `PricingPlan`；ADR-0260 决定一；`internal/parcelpricing/adapters/` 下没有读参与方与商业的适配器 | [15](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)、[04](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) |
 
 ## Pricing
 
@@ -49,11 +51,11 @@
 
 | # | 要求 | 结论 | 现状 | 票 |
 |---|---|---|---|---|
-| 17 | 报价创建 | 待开发 | 没有报价对象 | [10](./issues/10-quotation-object-entry-and-approval.md) |
-| 18 | 报价审批 | 待开发 | 同上 | [10](./issues/10-quotation-object-entry-and-approval.md) |
-| 19 | 报价发出 | 待开发 | 同上；对客通知的出向连接器也还没有实现 | [11](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) |
-| 20 | 客户接受 | 待开发 | 同上 | [12](./issues/12-customer-acceptance-of-a-quotation.md) |
-| 21 | 价格生效申请 | 待开发 | 同上 | [13](./issues/13-price-effectiveness-application.md) |
+| 17 | 报价创建 | 待开发 | 没有报价对象。价格内容的录入今天就有（价卡草稿）；报给谁、有效到何时没有地方记 | [11](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) |
+| 18 | 报价审批 | 待开发 | 没有报价对象。价格内容的批准今天就有（价卡草稿的批准，第 9 项）；报价接上之后由它回答，不另立一道 | [11](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) |
+| 19 | 报价发出 | 待开发 | 没有报价对象；对客通知的出向连接器也还没有实现 | [11](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) |
+| 20 | 客户接受 | 待开发 | 没有报价对象。被拒绝的报价所引的已批准草稿也没有撤下的路 | [12](./issues/12-customer-acceptance-of-a-quotation.md)、[10](./issues/10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md) |
+| 21 | 价格生效申请 | 待开发 | 没有报价对象。价卡草稿的发布今天就有，但记不下它因哪一条接受而发 | [13](./issues/13-price-effectiveness-application.md) |
 
 这五项的证据是同一组：
 
@@ -64,7 +66,7 @@
 ## 读这张表要注意的五处
 
 1. **「生效」没有单独的人工动作。** 发布时带有效区间，到点自动生效。客户要的若是批准之后另有一步人工生效，第 4 项要改判部分满足。
-2. **「毛利」不在计费里。** 计价只出评价金额；毛利由结算与经营核算从费用和成本派生。毛利也不是接单或择优的门槛（ADR-0366）。客户要的若是计费时随每票给出销售价减采购价，那是另一项能力。
+2. **「毛利」不在计费里。** 计价只出评价金额；毛利由结算与经营核算从费用和成本派生。毛利也不是接单或择优的门槛（ADR-0366）。客户要的若是计费时随每票给出销售价减采购价，那是另一项能力。补上派生入口也只先对面单渠道服务的包裹成立：网络服务产品的成本大头要分摊，只算按件的成本会把毛利算高（票 05「这一口径对谁成立」）。
 3. **「分票」读作一票多件按整票计费。** 这是从「分票/分件」的并列读出来的。没有可以去确认的对方，会话对着行业做法核过一遍（[spec](./spec.md)「待用户确认」Q2，依据在[行业做法笔记](./industry-practice-notes.md)）。
-4. **「价卡授权」读作合同一侧对价卡的授权。** 今天与它最近的两样是价格方向授权和价格政策的定价方案绑定，两样都只留痕。照行业做法，要补的是登记门上的核对，不是让评价去读合同（Q4）。
+4. **「价卡授权」读作合同一侧对价卡的授权。** 今天与它最近的两样是价格方向授权和价格政策的定价方案绑定，两样都只留痕。参与方与商业的 `CONTEXT.md` 把后者写成价格政策「授权的定价方案」；ADR-0260 决定一把它定为商业留痕，不决定选卡，并把让它起作用留作重启条件。要不要重开归用户（[spec](./spec.md) Q4、票 15）。会话 2026-11-11 给过一个「在登记门上核对」的答案，已撤回：ADR-0260 否决过同一类做法。
 5. **演示时登记新形态的价卡要先开部署开关。** 方案记着基础版之外规范化版本的价卡，登记口在开关关着时答 `NEWER_CANONICALIZATION_NOT_ENABLED`（ADR-0352）。它不影响第 9 项的结论，但会影响现场。
