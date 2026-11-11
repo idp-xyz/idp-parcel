@@ -1,7 +1,7 @@
 # 10 已批准的价卡草稿没有撤下的路——批准之后才发现不该发布的草稿，只能一直停在已批准，随时可以被人发布
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [09](./09-quotation-domain-language-and-use-case.md)（撤下这一格由票 08 的 ADR 定，由票 09 写进计价 `CONTEXT.md`）
 地盘：`internal/parcelpricing`（领域、应用、`adapters/postgres`、`adapters/http`）、计价草稿册的迁移、`cmd/parcel-api` 端点表、`apps/admin-web/src/pages/pricing`

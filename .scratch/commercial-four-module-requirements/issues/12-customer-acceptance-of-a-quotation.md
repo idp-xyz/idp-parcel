@@ -1,7 +1,7 @@
 # 12 报价答复：运营代录客户的接受或拒绝并带证据，报价的状态读时派生
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [11](./11-quotation-is-sent-as-an-exported-rate-sheet.md)
 地盘：`internal/partycommercial`、`cmd/parcel-api`、`apps/admin-web/src/pages/party`

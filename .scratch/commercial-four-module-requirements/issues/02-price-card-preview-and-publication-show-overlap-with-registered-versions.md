@@ -1,7 +1,7 @@
 # 02 价卡预览、批准与发布都不提示与在册版本的适用期重叠——操作者要等下游的评价请求停住才知道
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/parcelpricing/application`、`internal/parcelpricing/adapters/postgres`、`internal/parcelpricing/adapters/http`、`apps/admin-web/src/pages/pricing`

@@ -1,9 +1,9 @@
 # 06 票级计价重量的聚合方式已有决定、代码未到——票级卡今天只会合计后派生，按件算计费重再相加的卡算不对
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 无。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 已接受（会话代决，越权风险点待计价 owner 复核）；激活本票即承接冻结清单「记录」里出处写它决定三的那一行
+Blocked by: 无。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 已接受（会话代决，越权风险点待计价 owner 复核）；冻结清单「记录」里出处写它决定三的那一行，2026-11-11 激活时已注明由本票承接
 地盘：`internal/parcelpricing/domain`、`internal/parcelpricing/adapters/pricecardtemplate`、`apps/admin-web/src/pages/pricing`
 
 对应要求：Rating「分票计费」的领域一半。生产路径在票 [07](./07-shipment-level-sell-charging-enters-production.md)。
@@ -30,7 +30,7 @@ Blocked by: 无。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-
 
 ## 范围说明
 
-ADR-0364 同一篇里还有档位边界、总额上下限的基数、「其余邮编」行三项，冻结清单各有一行。它们不在客户要求清单里，本票不承接；但它们与本票共用同一次规范化版本换号（ADR-0364 决定五），激活时要一起排，不要各换一次号。
+ADR-0364 同一篇里还有档位边界、总额上下限的基数、「其余邮编」行三项，冻结清单各有一行。它们不在客户要求清单里，本票不承接；但它们与本票共用同一次规范化版本换号（ADR-0364 决定五）。本票 2026-11-11 已激活，那三项还只是冻结清单上的记录。**开工前先向用户问一次**：那三项同批做、只换一次号，还是本票先单独换一次。
 
 ## 要裁的
 

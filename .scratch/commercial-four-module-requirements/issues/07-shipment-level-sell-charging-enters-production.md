@@ -1,9 +1,9 @@
 # 07 票级销售价卡登得进、用不上——销售计费请求按包裹发起，没有任何生产路径形成票级评价
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)。Q2 已由会话按行业做法代答、待用户认可（见 [spec](../spec.md)「待用户确认」）。开工时随票立一篇 ADR：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 的销售评价请求是按包裹的，本票要扩出委托一路，照 `docs/adr/README.md` 顶部要挂指针
+Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)。Q2 的答案用户 2026-11-11 已认可（见 [spec](../spec.md)「用户的决定」）。开工时随票立一篇 ADR：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 的销售评价请求是按包裹的，本票要扩出委托一路，照 `docs/adr/README.md` 顶部要挂指针
 地盘：`internal/settlementaccounting`、`internal/parcelpricing`（输入解析与适配器）、`internal/parcelshipment`（读口）、`cmd/parcel-dispatch` 装配
 
 对应要求：Rating「分票计费」的生产一半。
@@ -24,7 +24,7 @@ Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-
 
 下面是建议形态，由随票的 ADR 定。
 
-1. **委托级销售评价请求**：请求身份、自然键与计费时点。
+1. **委托级销售评价请求**：请求身份、自然键与计费时点。另立一种销售请求身份有先例：[ADR-0377](../../../docs/adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 决定八给仓储作业收费发生项立了它自己的请求，写的是「形照 ADR-0190 决定一，不动包裹计费时点那一路与 BUY」（核在 `31d1cd16b`，代码尚未做到）。
 2. **票级输入组装**：成员清单、合计量或逐件实重与尺寸（声明还是实测，照 [ADR-0171](../../../docs/adr/0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md) 的取源）、邮编路线。
 3. **票级客户费用**：主要计费范围是委托。
 4. **受理前估价**：账户采用的计价范围上是票级卡时，按委托整票试算，不逐件合计。
@@ -53,3 +53,7 @@ Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-
 - 把票级金额摊到每件包裹看毛利。那是成本分摊（ADR-0111 决定三），仍在冻结；对客户收一笔票级费用本身不需要它。
 - 采购一侧多成员的运输收费发生项。它归票 [14](./14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md)。
 - 主单级计费。它等运输履约的承运总单登记册。
+
+## Comments
+
+- 2026-11-11：用户认可 Q2 的答案并答「q6 全部激活」，本票转 `ready-for-agent`。同日 `main` 新接受 ADR-0377，补一条另立销售请求身份的先例。

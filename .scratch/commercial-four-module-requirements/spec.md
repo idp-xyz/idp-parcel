@@ -1,12 +1,14 @@
 # 客户要求清单（Contract / Pricing / Rating / Quotation）：逐条对照、缺口与排序
 
 Category: enhancement
-Status: needs-triage——子票全部 `draft`，没有激活。激活等于把这些项从冻结里解出来，归用户（见「与冻结清单的关系」）。
-出处：2026-11-11 用户在 Cursor 会话里贴出一张四个模块的清单，问「我们的现有实现是这样的吗」。对照之后用户说「我没有方向了，基于现在的实现，你的专家做法呢」；会话建议不追这张表、只点名解冻毛利，并说明这张表的来源会改变结论。用户随后选定「这张表是客户或招标的要求，按它重排优先级」，再答「都要做」：逐条对照表、报价的 ADR 草稿与范围文档改动、规格和票。这张表在仓库与历史会话里查不到出处。同日稍后，会话请用户向对方确认四处口径，用户答「没有可问的人，分析，参考行业头部软件的做法」；会话查了公开文档后作答，用户选定把调研笔记与结论写进本目录。同日更晚，用户问「你作为国际小包业务和系统设计专家， 你觉得现在你的这个设计科学，专业，合理吗」；会话自查后答不完全，其中一处是给错了结论，并列出五处要改的。用户选定「按上面五条改分支：更正 Q4、缩小报价、写明毛利范围，并推送」。改了什么记在文末「Comments」。
+Status: in-progress——2026-11-11 用户答「q6 全部激活」，子票 01 至 15 转 `ready-for-agent`；此前 needs-triage（子票全是 `draft`）。这些改动在分支 `cursor/commercial-four-module-requirements` 上，还没有进 `main`，见「与冻结清单的关系」。
+出处：2026-11-11 用户在 Cursor 会话里贴出一张四个模块的清单，问「我们的现有实现是这样的吗」。对照之后用户说「我没有方向了，基于现在的实现，你的专家做法呢」；会话建议不追这张表、只点名解冻毛利，并说明这张表的来源会改变结论。用户随后选定「这张表是客户或招标的要求，按它重排优先级」，再答「都要做」：逐条对照表、报价的 ADR 草稿与范围文档改动、规格和票。这张表在仓库与历史会话里查不到出处。同日稍后，会话请用户向对方确认四处口径，用户答「没有可问的人，分析，参考行业头部软件的做法」；会话查了公开文档后作答，用户选定把调研笔记与结论写进本目录。同日更晚，用户问「你作为国际小包业务和系统设计专家， 你觉得现在你的这个设计科学，专业，合理吗」；会话自查后答不完全，其中一处是给错了结论，并列出五处要改的。用户选定「按上面五条改分支：更正 Q4、缩小报价、写明毛利范围，并推送」。随后用户答「q1-q3 确认， q4重开， q5 首发， q6 全部激活」。各次改了什么记在文末「Comments」。
 
 切片：合同与报价属 PN-02，主责 `party-commercial`；价卡、计费与毛利属 PN-07，主责 `parcel-pricing` 与 `settlement-accounting`。非关务专项。三类归属写在各票。证据层级 `S`（演示租户）。
 
 取证：钉 `11bfa1ffb`（`origin/main`，2026-11-11 用 `git ls-remote origin main` 当场确认）。**起草时的工作树不在这个提交上**：它停在分支 `codex/company-subject-profile`（`871f3cdd4`），当时 `git rev-list --count HEAD..origin/main` 为 750。本目录下的文件都照 `11bfa1ffb` 写，随后提交在从 `origin/main` 起的分支 `cursor/commercial-four-module-requirements` 上，没有进那条旧分支。起草收尾时远端已前进到 `a276ddae2`，这一段没有碰到本规格引的代码与文档句子（核法见[对照表](./compliance-matrix.md)开头）。同日稍后的增补（行业做法笔记、票 14 与几张票的改动）里新引的代码与文档句子，核在 `48ca93e2d`。同日更晚的自查更正里新引的，核在 `535202926`。
+
+激活时（同日）对着 `31d1cd16b` 把本目录引自仓库的句子与代码符号重扫了一遍：都还对得上；`11bfa1ffb` 之后 `main` 上没有动过 `internal`、`cmd`、`migrations`、`scripts` 与 `tools`。这一段 `main` 新接受了 ADR-0377：仓储作业收费发生项成为第五种评价对象，仓储费的结算账户与计价范围取自结算新开的仓储计费采用登记。票 07、14、15 随之补了几处，各自核在 `31d1cd16b`。
 
 ## 要求清单（用户原文）
 
@@ -28,83 +30,92 @@ Status: needs-triage——子票全部 `draft`，没有激活。激活等于把�
 
 ## 两处读法
 
-要求清单只有一行字，下面两处是读出来的。没有可以去确认的对方；2026-11-11 会话对着行业头部软件的公开做法核过一遍，两处读法都站得住，依据在[行业做法笔记](./industry-practice-notes.md)。
+要求清单只有一行字，下面两处是读出来的。没有可以去确认的对方；2026-11-11 会话对着行业头部软件的公开做法核过一遍，依据在[行业做法笔记](./industry-practice-notes.md)。用户同日认可了这两处读法（见「用户的决定」Q1、Q2）。
 
 - **Quotation 读作报一套价。** 依据是「客户接受与价格生效申请」：接受之后申请的是价格生效，不是锁价或下单。这样读，报价可以搭在现有的价卡批准与发布上，不必有自己的批准与状态机；计价 `CONTEXT.md` 点名的两个难题（承诺哪一期参考序列取值、跨期差价归谁）不出现。理由全文在 [ADR 草案](./adr-draft-quotation-offers-a-set-of-prices.md)。
 - **分票读作一票多件按整票合计计费。** 依据是「分票/分件」并列。
 
-## 待用户确认
+## 用户的决定
 
-Q1 至 Q3 原本要向给出要求清单的一方问。没有可问的人，2026-11-11 由会话参考行业头部软件的公开做法代答，待用户认可；依据逐条写在[行业做法笔记](./industry-practice-notes.md)。
+2026-11-11 用户答：「q1-q3 确认， q4重开， q5 首发， q6 全部激活」。
 
-| # | 问题 | 会话的答案 | 影响 |
+Q1 至 Q3 原本要向给出要求清单的一方问。没有可问的人，由会话参考行业头部软件的公开做法代答，依据逐条写在[行业做法笔记](./industry-practice-notes.md)。用户认可的是这三条答案；它们仍然没有经过任何一位真实客户。
+
+| # | 问题 | 答案（用户 2026-11-11 认可） | 影响 |
 |---|---|---|---|
 | Q1 | 报价是报一套价，还是逐票报价并锁价 | 报一套价。按运单的事后改价不归报价，归费用调整 | ADR 草案的决定一 |
-| Q2 | 分票是不是一票多件按整票计费；是合计后算计费重，还是逐件算计费重再相加；是不是主营 | 是一票多件按整票计费。两种算法都要，由价卡声明。是不是主营答不了：「小包多为一票一件」只是会话的判断，没有一手来源 | 票 06、07、14 排在哪里未定；采购一侧另立票 14 |
+| Q2 | 分票是不是一票多件按整票计费；是合计后算计费重，还是逐件算计费重再相加；是不是主营 | 是一票多件按整票计费。两种算法都要，由价卡声明。是不是主营仍然答不了：「小包多为一票一件」只是会话的判断，没有一手来源 | 票 06、07、14；采购一侧是票 14 |
 | Q3 | 签署证据要到哪一步 | 登记签署信息与签署件索引。电子签章以后作为可选的对接另做 | 票 03 |
 
 Q4 至 Q6 是用户自己的决定。
 
-| # | 仍待用户决定 | 影响 |
-|---|---|---|
-| Q4 | 要不要重开「哪位客户用哪套价由哪一处说了算」。要求里的价卡授权，就是合同的价格政策授权哪份定价方案；它今天只留痕、不决定选卡，让它起作用是 [ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 留下的重启条件。那篇当时不走这条路，理由是首发没有客户差异化销售价的证据；这张要求清单算不算证据，由用户定。会话给过一个「在登记门上核对、不重开」的答案，已撤回 | 票 15。票 04 与 Quotation 一行都排在它之后 |
-| Q5 | 报价进首发试点范围，还是试点范围之外的产品能力 | 决定 `PILOT-SCOPE.md` 那一句怎么改 |
-| Q6 | 激活哪几张票 | 见「排序」末尾会话的建议，与「与冻结清单的关系」 |
+| # | 问题 | 用户的决定（2026-11-11） | 影响 |
+|---|---|---|---|
+| Q4 | 要不要重开「哪位客户用哪套价由哪一处说了算」。要求里的价卡授权，就是合同的价格政策授权哪份定价方案；它今天只留痕、不决定选卡，让它起作用是 [ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 留下的重启条件。那篇当时不走这条路，理由是首发没有客户差异化销售价的证据。会话给过一个「在登记门上核对、不重开」的答案，已撤回 | 重开 | 票 15 解除阻塞。它只出决定：一篇 ADR，进 `main` 前要一份非作者评审。票 04 与 Quotation 一行仍排在它之后 |
+| Q5 | 报价进首发试点范围，还是试点范围之外的产品能力 | 进首发试点范围 | `PILOT-SCOPE.md`「明确不包含」一节里讲不对客户形成价格承诺的那一句，在报价的 ADR 接受时收窄到逐票价格承诺与锁价（票 08）。现在没有改 |
+| Q6 | 激活哪几张票 | 全部激活 | 子票 01 至 15 转 `ready-for-agent`，本规格转 `in-progress`；冻结清单同笔改，见「与冻结清单的关系」。会话此前的建议是最多激活 01、02，没有被采纳 |
 
 ## 排序
 
-| 批 | 票 | 补上要求里的 | 为什么排这里 |
+全部激活之后，先后只由阻塞边定。
+
+| 线 | 票 | 补上要求里的 | 现在能不能开工 |
 |---|---|---|---|
-| 1 | 01、02 | 草稿编辑、发布冲突检测 | 不依赖任何一处读法，不改模型，没有租户取值。01 也是报价「发出」的底座：对客价格表从价卡读回口导出 |
-| 2 | 03 | 签署证据 | 形态已有答案（Q3），随票立一篇 ADR |
-| 3 | 15 → 04 | 价卡授权 | 15 只出决定，等 Q4。04 等 15：卡上那条引用是留着核还是撤，取决于 15 的结论 |
-| 4 | 15 → 08 → 09 → 10 → 11 → 12 → 13 | Quotation 一行 | 文档先行。等 15 与 Q5：报的价格内容是什么形状、生效落在哪一处，都由 15 定。11 另等 01 |
-| 5 | 05 | 毛利 | 等用户点名解冻。先只对面单渠道服务的包裹成立；网络服务产品的毛利要与成本分摊一起解冻。它也是低毛利提示（[ADR-0366](../../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）的前置 |
-| 未定 | 06 → 07、14 | 分票 | 位置不定。它取决于要求方或首个租户做不做一票多件的渠道，例如快递代理与专线；这一点没有一手来源，知道之前不排 |
+| 价卡流程 | 01、02 | 草稿编辑、发布冲突检测 | 能，互不依赖。01 也是报价「发出」的底座：对客价格表从价卡读回口导出 |
+| 签署 | 03 | 签署证据 | 能。随票立一篇 ADR |
+| 客户价 | 15 → 04 | 价卡授权 | 15 能：只出决定，一篇 ADR。04 等 15 |
+| 报价 | 15 → 08 → 09 → 10 → 11 → 12 → 13 | Quotation 一行 | 等 15。文档先行。11 另等 01；13 另等 15 拆出的实现票 |
+| 毛利 | 05 | 毛利 | 能。先只对面单渠道服务的包裹；随票立一篇 ADR。它也是低毛利提示（[ADR-0366](../../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）的前置 |
+| 分票 | 06 → 07、14 | 分票 | 06 能。07、14 等 06，各随票立一篇 ADR |
 
-批号只是列举的顺序。除了表里的箭头，各批之间没有先后。
+**会话建议的先后（2026-11-11）。** 这是建议，不是阻塞边。
 
-**会话的建议（2026-11-11）：现在最多激活 01、02。**
+1. **先做 15。** 它卡着 04 与报价一整行；它是三个上下文的模型取舍，ADR 进 `main` 前要非作者评审，周期最长。
+2. **01、02 可以同时做。** 它们改的是今天就在用的价卡流程，不依赖任何一处读法。
+3. **06 开工前先定一件事。** ADR-0364 另外三项（档位边界、总额上下限的基数、「其余邮编」行）与它共用一次规范化版本换号，那三项还只是冻结清单上的记录。同批做只换一次号。
+4. **05 开工前先核一件事。** 面单渠道服务的包裹，成本今天是不是都能逐件形成。票面「要裁的」里写着没有走通。
+5. **03 随时可以做**，没有人在等它。
 
-- 01、02 改的是今天就在用的价卡流程，价值不依赖这张要求清单的任何一处读法。
-- 15 是一个决定，不是开发。建议用户先答 Q4：它卡着价卡授权与 Quotation 一整行。
-- Quotation 一行在 15 之前开工，等于在一个还没定的客户价模型上搭流程。
-- 05 先要用户决定解冻，范围也比原先小。
-- 03 形态站得住，但没有人在等它。
-- 这张要求清单的出处没有核实过，会话的各条答案也没有经过任何一位真实客户。在它被证实之前，不值得为它解冻更多。
+这张要求清单的出处没有核实过，各条答案也没有经过任何一位真实客户。会话此前因此建议最多激活 01、02；用户选定全部激活。
 
 ## 子票
 
 | # | 标题 | Blocked by | Status |
 |---|---|---|---|
-| 01 | [已登记价卡与价卡草稿读回成可编辑的工作簿](./issues/01-registered-price-card-reads-back-as-an-editable-workbook.md) | 无；随票立 ADR | draft |
-| 02 | [价卡预览、批准与发布时提示与在册版本的适用期重叠](./issues/02-price-card-preview-and-publication-show-overlap-with-registered-versions.md) | 无 | draft |
-| 03 | [合同与协议版本的签署证据](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) | 无；随票立 ADR | draft |
-| 04 | [价卡登记时核对它引用的价格方向授权](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) | 15 | draft |
-| 05 | [经营结果按包裹从直接费用与成本派生，先限面单渠道服务](./issues/05-operating-results-are-derived-per-parcel-from-direct-charges-and-costs.md) | 用户点名解冻；随票立 ADR | draft |
-| 06 | [票级计价重量的聚合方式落到领域与导入模板](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md) | 无（ADR-0364 已接受） | draft |
-| 07 | [票级销售计费接进生产](./issues/07-shipment-level-sell-charging-enters-production.md) | 06；随票立 ADR | draft |
-| 08 | [ADR 草案「对客报价」的非作者评审、编号与接受](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) | 15、Q5 | draft |
-| 09 | [报价的领域语言与用例落文](./issues/09-quotation-domain-language-and-use-case.md) | 08 | draft |
-| 10 | [已批准的价卡草稿可以撤下](./issues/10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md) | 09 | draft |
-| 11 | [报价发出：登记报给谁、有效到何时，并导出对客价格表](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) | 09、10、01 | draft |
-| 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | draft |
-| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、15 | draft |
-| 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | draft |
-| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | Q4（用户决定） | draft |
+| 01 | [已登记价卡与价卡草稿读回成可编辑的工作簿](./issues/01-registered-price-card-reads-back-as-an-editable-workbook.md) | 无；随票立 ADR | ready-for-agent |
+| 02 | [价卡预览、批准与发布时提示与在册版本的适用期重叠](./issues/02-price-card-preview-and-publication-show-overlap-with-registered-versions.md) | 无 | ready-for-agent |
+| 03 | [合同与协议版本的签署证据](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) | 无；随票立 ADR | ready-for-agent |
+| 04 | [价卡登记时核对它引用的价格方向授权](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) | 15 | ready-for-agent |
+| 05 | [经营结果按包裹从直接费用与成本派生，先限面单渠道服务](./issues/05-operating-results-are-derived-per-parcel-from-direct-charges-and-costs.md) | 无；随票立 ADR | ready-for-agent |
+| 06 | [票级计价重量的聚合方式落到领域与导入模板](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md) | 无（ADR-0364 已接受） | ready-for-agent |
+| 07 | [票级销售计费接进生产](./issues/07-shipment-level-sell-charging-enters-production.md) | 06；随票立 ADR | ready-for-agent |
+| 08 | [ADR 草案「对客报价」的非作者评审、编号与接受](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) | 15 | ready-for-agent |
+| 09 | [报价的领域语言与用例落文](./issues/09-quotation-domain-language-and-use-case.md) | 08 | ready-for-agent |
+| 10 | [已批准的价卡草稿可以撤下](./issues/10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md) | 09 | ready-for-agent |
+| 11 | [报价发出：登记报给谁、有效到何时，并导出对客价格表](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) | 09、10、01 | ready-for-agent |
+| 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | ready-for-agent |
+| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、15 | ready-for-agent |
+| 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
+| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | ready-for-agent |
 
 ## 与冻结清单的关系
 
-[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)是冻结范围的单一权威。它「新发现怎么记」一节写着：不挡上线的不立票、不派代理，只在「记录」追加一行。本规格立了票，是因为用户点名要票；但没有一张激活，也没有改冻结清单。
+[上线线与冻结清单](../launch-line-freeze-2026-10-27.md)是冻结范围的单一权威。它「新发现怎么记」一节写着：不挡上线的不立票、不派代理，只在「记录」追加一行；它「二、冻结」一节写着解冻的条件之一是用户点名。本规格立票与激活，走的都是用户点名。
 
-激活时要同笔做三件事：
+激活的那一笔（2026-11-11）同笔改了冻结清单这几处：
 
-1. 在冻结清单「记录」追加一行，建议写法：
+- 「记录」追加一行：用户点名，子票 01 至 15 已激活，其中哪几张接清单上已有的行。
+- 「一之二」表里 product-strategy-boundary/22 那一行「留在冻结里的」一格：注明成本分摊之中派生经营结果的那一半已由用户点名解冻，由票 05 承接，先只对面单渠道服务的包裹。共享成本的分摊、费用调整与赔付金额照旧冻结。
+- 「记录」里出处写 ADR-0364 决定三的那一行：注明由票 06 承接。
+- 「记录」里 2026-10-29 讲价卡编辑器的那一行：注明其中「打开已有价卡改一版」一项由票 01 承接。
 
-   `- 2026-11-11｜用户点名：客户或招标的要求清单（Contract / Pricing / Rating / Quotation）；逐条对照、报价 ADR 草案与子票已立为草稿｜[commercial-four-module-requirements/spec](./commercial-four-module-requirements/spec.md)｜用户点名，激活时逐票定级`
+没有动的：
 
-2. 票 05 只解冻清单「一之二」表里 product-strategy-boundary/22 那一行「留在冻结里的」所列成本分摊之中，派生经营结果的那一半，并且先只对面单渠道服务的包裹。共享成本的分摊照旧冻结。
-3. 冻结清单「记录」里出处写 ADR-0364 决定三的那一行，由票 06 承接。出处写 ADR-0366 决定三的那一行（低毛利提示）以票 05 为前置，本规格不承接。
+- 「上线线」与「一、上线前必须」「一之二、限量生产前必须」两节的范围。报价进了首发试点范围（Q5）之后，算不算限量生产前必须，用户没有说，本规格不替用户定。
+- 「记录」里出处写 ADR-0366 决定三的那一行（低毛利提示）。它以票 05 为前置，本规格不承接。
+- ADR-0364 另外三项的记录行。
+
+**这些改动在分支上，`main` 上的冻结清单还没有变。** 分支进 `main` 之前，别的会话照 `main` 读到的仍是冻结；激活在进 `main` 的那一刻才对它们生效。
 
 ## 不在本 spec
 
@@ -127,7 +138,7 @@ Q4 至 Q6 是用户自己的决定。
 
 ## 这份规格没有做的
 
-没有改任何现行文档，没有进 `main`，没有跑测试，没有在管理台上实走。对照表的取证方法与边界写在它的开头。会话的各条答案都没有经过任何一位真实客户，也没有经过非作者评审。
+除冻结清单上面那几处之外，没有改任何现行文档；没有进 `main`；没有跑测试，没有在管理台上实走。对照表的取证方法与边界写在它的开头。各条答案由用户认可，没有经过任何一位真实客户；本目录也没有经过非作者评审。
 
 ## Comments
 
@@ -137,3 +148,7 @@ Q4 至 Q6 是用户自己的决定。
   3. **写明毛利的范围。** 票 05 先只对面单渠道服务的包裹成立；网络服务产品的毛利要与成本分摊一起解冻。
   4. **分票不排位置。** 原来排在报价之后，依据是「小包多为一票一件」，那只是会话的判断。
   5. **建议现在最多激活 01、02。**
+- 2026-11-11（用户的决定与激活）：用户答「q1-q3 确认， q4重开， q5 首发， q6 全部激活」。改之前的版本在提交 `1dcf20bfd`。
+  1. **记下六项决定。** Q1 至 Q3 的答案记为用户认可；Q4 记为重开，票 15 解除阻塞；Q5 记为进首发试点范围，票 08 不再等它；Q6 记为全部激活。「待用户确认」一节改名「用户的决定」。
+  2. **激活。** 子票 01 至 15 转 `ready-for-agent`，本规格转 `in-progress`，冻结清单同笔改。分支先合入了当时的 `origin/main`，冻结清单是在合入后的那一版上改的。
+  3. **对着最新的 `main` 补正三张票。** 同日 `main` 新接受了 ADR-0377。票 14 原来没有写明它要改的是 ADR-0171 决定四已经定下的做法，评价对象也已是五种，现已补上。票 15 补上第三处登记（仓储计费采用登记），以及 ADR-0190 决定三已有的那条从合同到结算账户的链。票 07 补一条另立 SELL 请求身份的先例。

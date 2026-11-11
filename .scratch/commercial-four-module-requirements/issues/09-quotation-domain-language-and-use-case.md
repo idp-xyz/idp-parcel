@@ -1,7 +1,7 @@
 # 09 报价的领域语言与用例落文
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [08](./08-adr-draft-quotation-review-numbering-and-acceptance.md)（ADR 接受之后才有规则可写）
 地盘：`docs/domain/party-commercial/CONTEXT.md`、`docs/domain/parcel-pricing/CONTEXT.md`、`docs/domain/CONTEXT-MAP.md`、`docs/domain/GLOSSARY.md`、`docs/application/party-commercial/`、`docs/application/parcel-pricing/`、`docs/application/README.md`、`docs/product/PILOT-PARAMETER-REGISTER.md`

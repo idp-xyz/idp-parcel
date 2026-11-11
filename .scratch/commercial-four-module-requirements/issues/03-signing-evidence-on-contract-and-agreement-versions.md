@@ -1,9 +1,9 @@
 # 03 合同与协议版本上没有签署证据——发布只记谁批准，记不下谁在何时签了哪一份文件
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 无。Q3 已由会话按行业做法代答、待用户认可：先登记，电子签章以后作为可选的对接另做（见 [spec](../spec.md)「待用户确认」与[行业做法笔记](../industry-practice-notes.md) R13 至 R15）。开工时随票立一篇 ADR，并在 `party-commercial` 的 `CONTEXT.md` 加词条
+Blocked by: 无。Q3 的答案用户 2026-11-11 已认可：先登记，电子签章以后作为可选的对接另做（见 [spec](../spec.md)「用户的决定」与[行业做法笔记](../industry-practice-notes.md) R13 至 R15）。开工时随票立一篇 ADR，并在 `party-commercial` 的 `CONTEXT.md` 加词条
 地盘：`internal/partycommercial`、`cmd/parcel-api` 与 `cmd/parcel-commercial`、`apps/admin-web/src/pages/party`
 
 对应要求：Contract「签署证据」。
