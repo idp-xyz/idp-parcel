@@ -55,10 +55,11 @@
 | R16 | 同 R2 | 直接抓取 | 已核实 | 「The system determines the agreement based on the organization, business partner, validity period, and preconditions.」找到协议与协议项之后，按它的计算表取费率表 |
 | R17 | [Oracle OTM：Rate Offering](https://docs.oracle.com/en/cloud/saas/transportation/26c/otmol/planning/rate_manager/create_rate_offering.htm) | 存下的全文 | 已核实 | 费率协议可带客户域约束：有约束且订单所在域相容时，只返回带约束的那一份。视角分采购、销售与两者皆是。另有一格「Contract Rate」标明这是客户专属费率，可配合权限检查，按销售运单用的是不是客户专属费率来拦订舱动作 |
 | R18 | 同 R5、R7 | 直接抓取 | 已核实 | Salesforce 的合同价挂在客户账户上，给这位客户报价时自动取用；易仓的客户协议价先于等级价与销售价被取用，且要审核后才生效 |
+| R19 | 同 R7 | 直接抓取 | 已核实 | 价格套餐维护：「在这里面可以将销售产品设置不同的等级和绑定不同的杂费，销售价格启用的时候也可以绑定这里面的价格套餐。」客户价格维护：「根据不同的客户去设置不同的价格套餐。」客户协议价格维护：「引用了公布价之后这里面就只能是在公布价的基础上进行折扣」。成本运费的名词解释：「服务商给货代公司的一个价格，会低于公布价和销售价。」 |
 
 ## 据此的读法
 
-下面是会话的读法，不是事实。四条都由会话代答，待用户认可。
+下面是会话的读法，不是事实。Q1 至 Q3 由会话代答，待用户认可。Q4 的读法撤回过一次，现在留下的是一个要用户做的决定。
 
 ### Q1 报价：报一套价，不做逐票锁价
 
@@ -73,24 +74,26 @@
 - 国内系统里两种并存：分泡按票合计（R11）；服务渠道上分票总重与件总重（R12，未核实）。
 - 这与 [ADR-0364](../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 决定三一致：聚合方式由价卡声明，两种都给。
 - 三大快递对多件货件都按票计费，这是采购成本。采购一侧算不了一票多件，成本就对不上。见下面「多出来的三处」。
-- 是不是主营：会话的判断是小包多为一票一件，一票多件主要在快递代理与专线渠道。这一句没有找到一手来源。分票排在报价之后是依它定的。
+- 是不是主营：会话的判断是小包多为一票一件，一票多件主要在快递代理与专线渠道。这一句没有找到一手来源，所以分票排在哪里不定，等知道要求方或首个租户做不做这类渠道再排。
 
 ### Q3 签署证据：先登记，电子签章以后做成可选的对接
 
 - 头部企业软件不自建签署，都对接专门的服务商（R13、R15），并且允许不走电子签章、直接手签（R14）。
 - 所以票 03 的形态不变：登记签署信息与签署件索引。将来接电子签章时，它的回执落成同一种签署证据，只是来源不同。
 
-### Q4 价卡授权：不改选卡路径，在登记门上核对合同
+### Q4 价卡授权：原读法已撤回，留下一个要用户做的决定
 
 - 头部软件里，客户专属价都经一个受管的客户绑定取到：协议（R16）、带客户约束的费率协议（R17）、挂在账户上的合同价、审核后生效的客户协议价（R18）。
-- 本产品的选卡是同一个形状：客户的结算账户登记一个销售计价范围，评价按范围选卡（[ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)、[ADR-0280](../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。差别在这一步登记不核对合同。
-- 所以不必让评价去读合同。要补的是两道登记门：价卡登记时核对它引用的授权；登记某位客户用哪个销售计价范围时核对他的合同。
+- 这几条只说明客户专属价要有一个受管的绑定，说明不了本产品该把它放在哪一处。会话 2026-11-11 先据此推出「不必让评价去读合同，在两道登记门上核对」，那一步没有依据，同日撤回。
+- 本产品今天有两处：合同的价格政策上的定价方案绑定，与结算账户登记的销售计价范围（[ADR-0280](../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。起作用的是后一处。[ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 的「候选与反方」否决过「两处都留，计价核两处相等，不等即冲突」，越权风险点 2 写明不加两侧一致性核对。它把按合同选卡留作重启条件，理由是首发没有客户差异化销售价的证据。
+- 国内同类系统的客户价是分层的：销售价、等级价与客户协议价，取价有先后；协议价可以写成公布价上的折扣；按客户挂价格套餐（R7、R19）。本产品的销售价只有一层：同一个计价范围上只有一张在用的销售卡，结算账户登了范围之后不能换。
+- 所以这里要的不是一道门，是先定两件事：哪一处说了算，客户价要不要分层与回退。它们归票 [15](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)，要不要重开由用户定。
 
 ## 多出来的三处
 
 1. **采购一侧的一票多件。** 立票 [14](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md)。
 2. **进位叠不叠两次。** 易仓的件总重写的是逐件进位、相加之后再进位一次（R12，未核实）。ADR-0364 决定三写的是逐件进位后求和，或求和之后进位一次，「不叠两次」。进位按重量分段时，两种读法结果不同。记在票 [06](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)「要裁的」。
-3. **登记客户用哪套价时核对合同。** 并进票 [04](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md)。
+3. **客户价的层次与回退。** 易仓是销售价、等级价与客户协议价三层，并按客户挂价格套餐（R7、R19）；本产品只有一层。立票 15。这里原来写的是「登记客户用哪套价时核对合同，并进票 04」，已撤回。
 
 另有一条顺带的对照：Salesforce 对重叠的合同价是任取一条、且无法指定取哪条（R5）。本产品对重叠的在册版本答适用冲突、不任取，票 [02](./issues/02-price-card-preview-and-publication-show-overlap-with-registered-versions.md) 只是把这个冲突提前到发布时提示。
 
@@ -100,3 +103,5 @@
 - 没看的那几家写在开头。
 - 各家文档描述的是它们自己的产品，面向的行业与本产品不尽相同：SAP TM 与 OTM 主要服务货代与大宗运输，Salesforce 与 Conga 是通用的报价软件。只有易仓与三大快递的规则直接落在跨境小包与快递上。
 - 「小包多为一票一件」是判断，不是核到的事实。
+- 客户价分层只核了易仓一家。
+- 这些事实回答得了「同行怎么做」，回答不了「本产品的某一格该放在哪个上下文、由哪一处说了算」。后一类是模型取舍，要对着本仓已接受的 ADR 定。Q4 第一次的读法错在这里：拿行业做法直接推出了一个本仓 ADR 已经否决的做法。
