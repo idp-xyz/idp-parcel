@@ -1,6 +1,6 @@
 # ADR 草案：对客报价进入产品范围，报的是一套价而不是逐票价格承诺——报价不立自己的批准、发布与状态机：创建与审批就是销售价卡草稿的录入与批准，新增的是归 `party-commercial` 的发出与答复两类记录，外加已批准的价卡草稿可以撤下；价格生效申请落在现有的发布上，落在哪一处等「哪位客户用哪套价」的权威定了再定；逐票报价与锁价仍不做
 
-Status: 草案第二稿，未编号，未经评审（2026-11-11，Cursor 会话起草，同日自查后改稿，改了什么见「改稿说明」。票 [commercial-four-module-requirements/08](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) 负责评审、编号与接受，排在票 [15](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 之后。放在 `.scratch` 里是因为它还不是规则：下面「对已接受记录与现行文档的作用」列的每一处都没有改。起草能力边界与越权风险点见文末。）
+Status: 草案第二稿，未编号，未经评审（2026-11-11，Cursor 会话起草，同日自查后改稿，改了什么见「改稿说明」。票 [commercial-four-module-requirements/08](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) 负责评审、编号与接受，排在票 [15](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 之后。放在 `.scratch` 里是因为它还不是规则：下面「对已接受记录与现行文档的作用」列的每一处都没有改。用户 2026-11-11 认可形态是报一套价，并定报价进首发试点范围；这两条答的是形态与范围，不是接受本草案。起草能力边界与越权风险点见文末。）
 Date: 2026-11-11
 
 ## Context
@@ -118,7 +118,7 @@ Date: 2026-11-11
 
 本草案接受时同一笔改下面各处。草案阶段一处都没改。
 
-- `docs/product/PILOT-SCOPE.md`：「首发不对客户形成价格承诺：报价有效期、锁价和报价接受不进入首发。」一句，改为只排除逐票价格承诺与锁价，并写明对客报一套价的发出、答复与生效归本记录。这一句进的是首发试点范围，还是试点范围之外的产品能力，由用户定（越权风险点 1）。
+- `docs/product/PILOT-SCOPE.md`：「首发不对客户形成价格承诺：报价有效期、锁价和报价接受不进入首发。」一句，改为只排除逐票价格承诺与锁价，并写明对客报一套价的发出、答复与生效归本记录。用户 2026-11-11 定：报价进首发试点范围。那一句今天在「明确不包含」一节；接受时把对客报一套价写进「已确认目标」一节。
 - `docs/domain/parcel-pricing/CONTEXT.md`：Rules 里「**正式报价接受、锁价及 Quote 生命周期仍不进入首发**」一句收窄到逐票报价，并补一句：对客报一套价的发出与答复归 `party-commercial`，本上下文只提供被引用的价卡草稿与价卡版本，评价照旧不自动形成客户承诺。「计算目的」词条末尾「首发不做对客报价」改为「首发不做逐票对客报价」。Lifecycles「定价方案与价表版本」加一条：已批准 → 已撤下。「评价对象」词条的「避免使用：报价单、锁价结果」不动：评价不是报价。
 - `docs/application/README.md`：「它不单独建立报价、合同或账务用例。」一句不动，`parcel-pricing` 仍不立报价用例；补一句报价用例归 `party-commercial`，并登新用例。
 - `docs/domain/party-commercial/CONTEXT.md`：Language 加「报价」「报价答复」；Rules 加决定三、四、六、七各条；Lifecycles 加报价一节，写明状态都是读时派生；Boundaries 写明拥有发出与答复，不拥有所引的价格内容。
@@ -170,8 +170,8 @@ Date: 2026-11-11
 
 **越权风险点**：
 
-0. 形态是从要求清单的一行措辞读出来的。没有可以去确认的对方；用户要求参考行业头部软件，[行业做法笔记](./industry-practice-notes.md)支持这一读法，但它仍然没有经过任何一位真实客户确认。日后有客户要的是逐票报价，决定一就不成立，整篇要重写。
-1. 进不进首发试点范围是产品范围取舍，归用户。
+0. 形态是从要求清单的一行措辞读出来的。没有可以去确认的对方；用户要求参考行业头部软件，[行业做法笔记](./industry-practice-notes.md)支持这一读法，用户 2026-11-11 认可了它。它仍然没有经过任何一位真实客户确认。日后有客户要的是逐票报价，决定一就不成立，整篇要重写。
+1. 进不进首发试点范围是产品范围取舍，归用户。用户 2026-11-11 定：进。
 2. 发出与答复归 `party-commercial`、并新增一条它读 `parcel-pricing` 的依赖，是上下文边界取舍，归两个上下文的 owner。
 3. 「报价审批」读作价格内容的批准。要求方要的若是对「报给这位客户、这个有效期、这些条款」的批准，或按折扣分级的批准，决定二不够。
 4. 报价在发出时才成立。要求方要的若是一张批准之前就存在、可以流转的报价单，要回到对象形态。
@@ -179,6 +179,7 @@ Date: 2026-11-11
 6. 过期读时派生：有效期终点按哪个业务时区、两个系统的时钟不一致时怎么判，没有裁。
 7. 草稿加`已撤下`，改的是 ADR-0101 与计价 `CONTEXT.md` 定的草稿生命周期，归计价 owner。
 8. 决定六的大半等票 15。票 15 的结论若让客户价不再是一张完整的卡，决定三所引的价格内容是什么也要跟着改。
+9. 本草案起草之后，`main` 同日新接受了 [ADR-0377](../../docs/adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)：销售价卡多出仓储计费方案这一种，登在它自己的计价范围上，由结算的仓储计费采用登记指到货主。报价能不能引这种方案、它的生效落在哪一处，本草案没有考虑；照票 15 的结论补完时一并看（核在 `31d1cd16b`）。
 
 ## Links
 

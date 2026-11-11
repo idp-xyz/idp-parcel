@@ -1,9 +1,9 @@
 # 01 已登记价卡与价卡草稿读不回成工作簿——改一个价要整张重录，编辑器只能新建，也导不出对客价格表
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 无。开工时随票立一篇 ADR：它接上 ADR-0349 决定八「已登记价卡反推成模板」一条，照 `docs/adr/README.md` 顶部「接上」也算部分停用，要挂前向指针
+Blocked by: 无。开工时随票立一篇 ADR：它接上 ADR-0349 决定八「已登记价卡反推成模板」一条，照 `docs/adr/README.md` 顶部「接上」也算部分停用，要挂前向指针。冻结清单「记录」里 2026-10-29 讲价卡编辑器的那一行，其中「打开已有价卡改一版」一项，2026-11-11 激活时已注明由本票承接
 地盘：`internal/parcelpricing/adapters/pricecardtemplate`、`internal/parcelpricing/adapters/http`、`internal/parcelpricing/application`、`cmd/parcel-api` 端点表、`apps/admin-web/src/pages/pricing`
 
 对应要求：Pricing「草稿编辑」。它也是票 [11](./11-quotation-is-sent-as-an-exported-rate-sheet.md) 的底座。

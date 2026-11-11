@@ -1,7 +1,7 @@
 # 13 价格生效申请：接受之后发起现有的发布并记下依据，报价读面如实答生效到了哪一步
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)（「这位客户用这套价」那一步落在哪一处由它定；它拆出实现票之后，本行改指那一张）
 相关：票 [02](./02-price-card-preview-and-publication-show-overlap-with-registered-versions.md)（没有它，发布时看不到同范围已有在册版本）

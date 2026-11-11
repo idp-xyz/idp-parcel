@@ -1,7 +1,7 @@
 # 04 价卡登记只记下它引用的价格方向授权，不核对——引一条不存在或方向不符的授权照样入册
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)。卡上这条引用与价格政策上的定价方案绑定，是方向相反的两个指针：卡指向授权，政策指向方案。票 15 定了哪一处说了算，这条引用是留着核、还是撤，才有答案
 地盘：`internal/parcelpricing`（新增消费侧适配器）、`internal/partycommercial`（新增只读口）、`apps/admin-web/src/pages/pricing` 与 `pages/party`

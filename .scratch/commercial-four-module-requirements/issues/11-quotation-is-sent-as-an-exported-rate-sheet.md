@@ -1,7 +1,7 @@
 # 11 报价发出：给一份内容已固定的销售价格内容登记报给谁、有效到何时，并导出对客价格表
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [09](./09-quotation-domain-language-and-use-case.md)、票 [10](./10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md)（门里要认`已撤下`）、票 [01](./01-registered-price-card-reads-back-as-an-editable-workbook.md)
 地盘：`internal/partycommercial`（领域、应用、仓储、HTTP）、`internal/partycommercial/adapters/parcelpricing`（新增消费侧适配器）、`internal/parcelpricing`（草稿与价卡的只读口、对客版式）、`migrations/party_commercial`、`cmd/parcel-api`、`apps/admin-web/src/pages/party` 与 `pages/pricing`

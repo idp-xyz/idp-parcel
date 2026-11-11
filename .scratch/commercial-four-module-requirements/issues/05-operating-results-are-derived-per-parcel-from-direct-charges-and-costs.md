@@ -1,9 +1,9 @@
 # 05 经营结果的派生没有生产入口——领域、落库、读口、页面都在，经营核算页却是空的
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 用户决定——点名解冻冻结清单「一之二」表里留在冻结的成本分摊之中，派生经营结果的那一半（见 [spec](../spec.md)「与冻结清单的关系」）。开工时随票立一篇 ADR
+Blocked by: 无。用户 2026-11-11 答「q6 全部激活」，本票随之解冻：只解冻冻结清单「一之二」表里留在冻结的成本分摊之中派生经营结果的那一半，且先只对面单渠道服务的包裹（见 [spec](../spec.md)「与冻结清单的关系」）。开工时随票立一篇 ADR
 地盘：`internal/settlementaccounting`、`cmd/parcel-api` 与 `cmd/parcel-dispatch` 的装配、`scripts/demo-seeds`、`apps/admin-web/src/pages/settlement`
 
 对应要求：Rating「毛利」。
@@ -71,4 +71,5 @@ Blocked by: 用户决定——点名解冻冻结清单「一之二」表里留�
 
 ## Comments
 
+- 2026-11-11：用户答「q6 全部激活」，本票解冻并转 `ready-for-agent`；冻结清单「一之二」表里那一格同笔注明。解冻的范围就是本票的范围，共享成本的分摊照旧冻结。
 - 2026-11-11：补「这一口径对谁成立」一节，并把范围从全部包裹收窄到面单渠道服务的包裹。原稿写「直接成本归得到单票，不需要分摊」，对网络服务产品不成立：它的大头成本要分摊，只算按件成本会把毛利算高。
