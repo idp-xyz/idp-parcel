@@ -19,7 +19,7 @@ Blocked by: 14
   - 结算的评价请求不带产品，结算不改。
 - **试算**：
   - `POST /pricing-estimates` 的载荷加可缺的 `serviceProduct`（字符串）。
-  - `FormEstimateEvaluationsCommand` 带上它，传进 `LoadApplicable` 与冲突候选的解析。
+  - `FormEstimateEvaluationsCommand` 带上它，传进 `LoadApplicable` 与冲突候选的解析；试算层内照旧不同方案并列（票 14）。
 - **快照**：
   - 计价输入快照记选卡用的服务产品，作可缺的一格（文档键 `serviceProduct`，不进评价的规范化文档，照 `addressNature` 的做法）。
   - 评价解释与评价查阅交出它。

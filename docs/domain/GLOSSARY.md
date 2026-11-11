@@ -1705,7 +1705,7 @@ Status: Confirmed
 
 ### 计价输入快照
 
-一次 `PricingEvaluation` 固定采用的评价对象、地址、尺寸、声明、测量/承运商认定引用、履约发生项、适用的计价参考序列取值和业务时间集合。它不带 `party-commercial` 的商业依据：评价按范围选卡、计价条款只从价卡读（[ADR-0260](../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）。它只引用已版本化的事实，不取得其所有权，也不在快照内产生新数值。
+一次 `PricingEvaluation` 固定采用的评价对象、地址、尺寸、声明、测量/承运商认定引用、履约发生项、适用的计价参考序列取值和业务时间集合。它不带 `party-commercial` 的商业依据：评价按范围选卡、计价条款只从价卡读（[ADR-0260](../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）；选 `SELL` 卡另按委托申报的服务产品，那个产品作可缺的一格记在快照上（[ADR-0378](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)）。它只引用已版本化的事实，不取得其所有权，也不在快照内产生新数值。
 
 - 所有者：`parcel-pricing`（快照）；来源事实仍由来源上下文拥有。
 - 尺寸进入快照，体积重由 `parcel-pricing` 按版本化体积系数算出，不接收外部算好的体积重。
