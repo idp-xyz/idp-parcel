@@ -1,4 +1,4 @@
-// 往来单位右栏首屏的判读（票 business-party-ux/08）：头区下那一句随状态的提示、主动作该是哪一枚。纯函数，node:test 钉着；栏只负责摆。
+// 往来单位右栏首屏的判读（票 business-party-ux/08）：「概要」签顶上那一条随状态的提示、主动作该是哪一枚。纯函数，node:test 钉着；栏只负责摆。
 //
 // 提示只翻译生命周期规则，不写「已建立 X 关系」那种结论句（spec「原型的做法怎么取」：关系结论由头部角色标签说）。待生效那句
 // 的依据是 CONTEXT「参与方身份」：生效时点未到的登记不支持新的商业决定；但关系现在就能登——服务端登记关系时在关系生效起点
@@ -18,7 +18,7 @@ export function liveRelationshipCountOf(views: readonly PartyRelationshipView[])
 export type PanelHint = { kind: 'pending' } | { kind: 'no-relationship' } | null;
 
 /**
- * 头区下的提示。`liveRelationships` 为 null 即关系册还没答出：不知道有没有关系，就不说「还没有」。`rolesHeld` 是头部标签
+ * 「概要」签顶上的提示。`liveRelationships` 为 null 即关系册还没答出：不知道有没有关系，就不说「还没有」。`rolesHeld` 是头部标签
  * 认出的角色数（business-party-list.ts 的 indexPartyRoles，含未停用客户账户带来的「客户」，ADR-0367 决定四）：只凭客户账户
  * 就是客户的单位不提「还没有合作关系」——账户不要求先登客户关系，提了就与头部的「客户」标签互相打架。客户账户册还没答出时
  * 它是 null，同样不说「还没有」：先说了再收回，会闪一下提示和「登记合作关系」主动作。

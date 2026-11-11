@@ -132,6 +132,61 @@ export function businessPartyProfileVersionFact(
   return answer.body.revisions.length > 0 ? '尚无生效版本' : '未登记';
 }
 
+/**
+ * 读出几处共用的资料状态：还在读或读不到只给一句灰字；读到了却没有生效的一版是空状态（登过、都在未来生效的另说一句）；
+ * 有生效版就交出那一版。别家的答复（换行时上一家的还没换掉）当作还在读。对象页的读出与工作台右栏各签都从这里判。
+ */
+export type BusinessPartyProfileState =
+  | { kind: 'note'; text: string }
+  | { kind: 'empty'; scheduled: boolean; body: BusinessPartyProfileRevisionListResponseBody }
+  | { kind: 'present'; record: BusinessPartyProfileRevisionRecord; body: BusinessPartyProfileRevisionListResponseBody };
+
+export function businessPartyProfileStateOf(
+  answer: ApiResult<BusinessPartyProfileRevisionListResponseBody> | null,
+  partyId: string,
+): BusinessPartyProfileState {
+  if (answer === null) return { kind: 'note', text: '正在读取资料…' };
+  if (answer.kind !== 'outcome') return { kind: 'note', text: '资料暂时读不到，稍后刷新再看。' };
+  if (answer.body.partyId !== partyId) return { kind: 'note', text: '正在读取资料…' };
+  const record = effectiveBusinessPartyProfile(answer.body);
+  if (record) return { kind: 'present', record, body: answer.body };
+  return { kind: 'empty', scheduled: answer.body.revisions.length > 0, body: answer.body };
+}
+
+/** 资料空着时那一块的话：一句标题，下面几行说空在哪、下一步去哪。 */
+export interface ProfileEmptyNote {
+  title: string;
+  lines: string[];
+}
+
+/** 客户有资料却没有联系人时的那句提示（判据 customerLacksContacts）。 */
+export const customerWithoutContactsLine = '这家单位是客户，资料里还没有联系人；建议登记一位，下单和对账时找得到人。';
+
+/** 「概要」里资料空着：没登过与登过却都在未来生效分开说；是客户再补一句建议。 */
+export function profileSummaryEmptyNoteOf(scheduled: boolean, roles: readonly string[]): ProfileEmptyNote {
+  return {
+    title: scheduled ? '还没有生效的资料' : '还没有登记资料',
+    lines: [
+      scheduled ? '已登记的版本都在未来生效。' : '联系人、地址、税号与收款账户都在「更新资料」里登记。',
+      ...(customerLacksContacts(roles, null) ? ['这家单位是客户，建议登记一位联系人，下单和对账时找得到人。'] : []),
+    ],
+  };
+}
+
+/** 「联系人」里一位都没有：资料在而没有联系人、登过却没有生效的资料、没登过资料各一个标题。 */
+export function profileContactsEmptyNoteOf(state: Exclude<BusinessPartyProfileState, { kind: 'note' }>): ProfileEmptyNote {
+  return {
+    title: state.kind === 'present' ? '还没有登记联系人' : state.scheduled ? '还没有生效的资料' : '还没有登记资料',
+    lines: ['联系人与地址、税号一起在「更新资料」里登记。'],
+  };
+}
+
+/** 「资料版本」里一版都没有。 */
+export const profileVersionsEmptyNote: ProfileEmptyNote = {
+  title: '还没有登记资料',
+  lines: ['登记后每一版都列在这里，旧版本不会被覆盖。'],
+};
+
 /** 往来单位的修订折成法人资料内容的形状，好借法人资料的预填折算：注册地址缺席折成空的。 */
 function asProfileContent(record: BusinessPartyProfileRevisionRecord): LegalEntityProfileContent {
   return {

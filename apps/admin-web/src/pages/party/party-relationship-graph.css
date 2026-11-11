@@ -1,0 +1,28 @@
+/* 关系图的五列：左邻居 · 连线 · 中心 · 连线 · 右邻居。图自己是容器——同一份图摆在往来单位右栏的「关联」签与「我方关联」的
+   右栏里，两处宽度不同，列宽按图自己的宽度定，不按视口。 */
+.party-relationship-graph {
+  container: party-relationship-graph / inline-size;
+}
+
+/* 窄时连线定宽、三列节点平分余下的：节点要放得下名称，连线只要放得下角色词。 */
+.party-relationship-graph-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem minmax(0, 1fr) 5.5rem minmax(0, 1fr);
+}
+
+/* 够宽时连线与中心各自长到上限，再宽的都给节点；节点不窄于 150。 */
+@container party-relationship-graph (min-width: 704px) {
+  .party-relationship-graph-columns {
+    grid-template-columns: minmax(150px, 1fr) minmax(96px, 140px) minmax(140px, 180px) minmax(96px, 140px) minmax(150px, 1fr);
+  }
+}
+
+/* 连线末端的箭头：朝右的三角，颜色随连线。 */
+.party-relationship-graph-line::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: -5px;
+  border: 4px solid transparent;
+  border-left: 6px solid currentColor;
+}

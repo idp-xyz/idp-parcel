@@ -1,0 +1,53 @@
+/* 往来单位工作台右栏各签的正文（票 business-party-redesign/05）。每一签的正文区自己是容器：概要排一列还是两列、合作关系表
+   摆几列，按右栏此刻的宽度定，不按视口——右栏的宽随窗口大小与名录栏的宽变。 */
+.business-party-panel-body {
+  container: business-party-panel / inline-size;
+}
+
+/* 概要的两列各排各的（左：这家单位自己的资料；右：它与别人的关系），不按行对齐、不为等高留白。放不下两列时并成一列。 */
+.business-party-panel-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.business-party-panel-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+@container business-party-panel (min-width: 720px) {
+  .business-party-panel-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* 「关联」签的合作关系表：对方 · 关系 · 状态 · 展开四列。有效期在窄栏里折到「关系」那一格的第二行——单独一列要两百多像素，
+   四列之外再摆它，对方的名称就只剩几个字。 */
+.business-party-relationship-row {
+  display: grid;
+  grid-template-columns: minmax(0, 42fr) minmax(0, 58fr) 104px 44px;
+  align-items: center;
+}
+
+.business-party-relationship-period-column {
+  display: none;
+}
+
+/* 够宽时有效期自成一列，「关系」格里的那一行收起。 */
+@container business-party-panel (min-width: 900px) {
+  .business-party-relationship-row {
+    grid-template-columns: 36% minmax(0, 1fr) 110px 210px 48px;
+  }
+
+  .business-party-relationship-period-column {
+    display: block;
+  }
+
+  .business-party-relationship-period-inline {
+    display: none;
+  }
+}

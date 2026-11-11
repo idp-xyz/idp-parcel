@@ -1,5 +1,6 @@
 import { Building2, KeyRound, Route, ShieldCheck, Store, Truck, Users, type LucideIcon } from 'lucide-react';
 import type { PartyTileKind } from './business-parties-workbench';
+import { labelOf, partyRoleLabels, type PartyRoleCode } from './presentation';
 
 // 往来单位按类型取的图标与颜色（票 business-party-redesign/02）：行首的图标块、类型标签上的色点都从这里取，一种类型只有一套。
 // 此前每一行都是同一个记号，占着位置却不帮人认行；现在客户、供应商、代理与我方公司一眼分得出。颜色不是唯一的载体——
@@ -19,13 +20,31 @@ export const partyTileVisuals: Record<PartyTileKind, { icon: LucideIcon; tile: s
 };
 
 /**
- * 行首的图标块；`large` 是右栏头区名称旁的那一枚。只是视觉记号，对读屏隐藏：这一家是什么类型，类型一列与头区的类型标签有字。
+ * 行首的图标块；`large` 是右栏头区名称旁的那一枚，`small` 是关系图节点与右栏表格行里的那一枚。只是视觉记号，对读屏隐藏：
+ * 这一家是什么类型，类型一列与头区的类型标签有字。
  */
-export function PartyTile({ kind, large = false }: { kind: PartyTileKind; large?: boolean }) {
+export function PartyTile({ kind, large = false, small = false }: { kind: PartyTileKind; large?: boolean; small?: boolean }) {
   const { icon: Icon, tile } = partyTileVisuals[kind];
+  const box = large ? 'h-12 w-12 rounded-[10px]' : small ? 'h-7 w-7 rounded-md' : 'h-8 w-8 rounded-lg';
   return (
-    <span className={`grid shrink-0 place-items-center ${large ? 'h-12 w-12 rounded-[10px]' : 'h-8 w-8 rounded-lg'} ${tile}`} aria-hidden="true">
-      <Icon className={large ? 'h-6 w-6' : 'h-4 w-4'} />
+    <span className={`grid shrink-0 place-items-center ${box} ${tile}`} aria-hidden="true">
+      <Icon className={large ? 'h-6 w-6' : small ? 'h-[15px] w-[15px]' : 'h-4 w-4'} />
+    </span>
+  );
+}
+
+/** 角色码对应哪一种图标块；词表里没有的码（服务端新增的一格）按「都不是」画。 */
+export function partyRoleTileKind(role: string): PartyTileKind {
+  return role in partyRoleLabels ? (role as PartyRoleCode) : 'NONE';
+}
+
+/** 一枚角色标签：色点加词，色点与行首图标块同一套颜色。词表里没有的码原样显、不带色点。 */
+export function PartyRoleTag({ role }: { role: string }) {
+  const kind = partyRoleTileKind(role);
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded border border-idpxyz-border bg-idpxyz-editor px-1.5 py-0.5 type-body leading-4 text-idpxyz-text">
+      {kind === 'NONE' ? null : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${partyTileVisuals[kind].dot}`} aria-hidden="true" />}
+      {labelOf(partyRoleLabels, role)}
     </span>
   );
 }

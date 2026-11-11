@@ -1,15 +1,19 @@
-import { ArrowRight, Building2, Users } from 'lucide-react';
 import { statusToneText } from '../../components/status-tone';
 import { businessPartyObjectHash } from './business-parties-address';
+import { formatCount, type PartyTileKind } from './business-parties-workbench';
+import { ourCompanyLabel } from './business-party-list';
 import type { RelationshipGraph, RelationshipGraphNode } from './party-relationship-graph';
+import { PartyTile, partyRoleTileKind } from './party-role-visuals';
 import { partyNameUnknownNote, partyRoleLabels, relationshipStatusLabels } from './presentation';
+import './party-relationship-graph.css';
 
 // 往来单位「关联」签的关系图（票 business-party-relationship-graph/01）。摆法在 party-relationship-graph.ts 的
 // relationshipGraphOf；这里只画。
 //
-// 画法是五列的 CSS 网格：左邻居 · 连线 · 中心 · 连线 · 右邻居，中心纵跨所有行，每个邻居与它那段连线同一行。不用画布或
-// SVG 量坐标：节点数随数据变，网格自己排得开，窄的右栏里也不会错位；每个邻居是一个带完整关系句的链接，读屏照样读得出
-// 「谁对谁担任什么、状态如何」，连线只是给眼睛看的，对读屏隐藏。
+// 画法是五列的 CSS 网格：左邻居 · 连线 · 中心 · 连线 · 右邻居，中心纵跨所有行，每个邻居与它那段连线同一行；列宽在
+// party-relationship-graph.css。不用画布或 SVG 量坐标：节点数随数据变，网格自己排得开，窄的右栏里也不会错位；每个邻居是一个
+// 带完整关系句的链接，读屏照样读得出「谁对谁担任什么、状态如何」，连线只是给眼睛看的，对读屏隐藏。
+// 节点与名录的行同一种长相（图标块、名称、编码），一眼认得出图上的这一家就是名录里的那一家。
 
 const roleLabel = (role: string) => partyRoleLabels[role as keyof typeof partyRoleLabels] ?? role;
 const statusLabel = (status: string) => relationshipStatusLabels[status as keyof typeof relationshipStatusLabels] ?? status;
@@ -26,17 +30,15 @@ function edgeStatus(node: RelationshipGraphNode): string | null {
 }
 
 function Connector({ node }: { node: RelationshipGraphNode }) {
-  const tone = pending(node) ? statusToneText.warning : 'text-idpxyz-accent';
+  const waiting = pending(node);
   return (
-    <div className={`relative flex h-full min-h-[3.5rem] items-center ${tone}`} aria-hidden="true">
-      <span className={`w-full border-t-2 border-current ${pending(node) ? 'border-dashed' : ''}`} />
-      <ArrowRight className="absolute -right-1 h-3.5 w-3.5" />
-      <span className="absolute bottom-1/2 left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap type-caption text-idpxyz-text">
-        {roleLabel(node.role)}
-      </span>
-      {edgeStatus(node) ? (
-        <span className="absolute left-1/2 top-1/2 mt-1 -translate-x-1/2 whitespace-nowrap type-caption">{edgeStatus(node)}</span>
-      ) : null}
+    <div
+      className={`flex h-12 flex-col justify-center px-1 text-center type-body ${waiting ? statusToneText.warning : 'text-idpxyz-accent'}`}
+      aria-hidden="true"
+    >
+      <span className="truncate leading-4 text-idpxyz-text">{roleLabel(node.role)}</span>
+      <span className={`party-relationship-graph-line relative my-0.5 mr-1.5 block h-0 border-t-2 border-current ${waiting ? 'border-dashed' : ''}`} />
+      <span className="min-h-4 truncate leading-4">{edgeStatus(node) ?? ''}</span>
     </div>
   );
 }
@@ -57,42 +59,41 @@ function Neighbor({
   node,
   center,
   side,
+  tileKind,
   onShowDetail,
 }: {
   node: RelationshipGraphNode;
   center: string;
   side: 'toward' | 'from';
+  tileKind: PartyTileKind;
   onShowDetail: () => void;
 }) {
   const label = sentence(node, center, side);
-  const frame = `flex w-full min-w-0 flex-col gap-0.5 rounded-md border px-2.5 py-1.5 text-left hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
-    pending(node) ? 'border-dashed border-idpxyz-border' : 'border-idpxyz-border'
-  } bg-idpxyz-bg`;
+  const frame = `flex h-12 w-full min-w-0 items-center gap-2 rounded-lg border border-idpxyz-border bg-idpxyz-bg px-2.5 text-left hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${
+    pending(node) ? 'border-dashed' : ''
+  }`;
+  const name = 'truncate type-value leading-[18px] text-idpxyz-textBright';
+  const sub = 'truncate type-body leading-4 text-idpxyz-breadcrumb';
   if (node.kind === 'group') {
     return (
       <button type="button" className={frame} onClick={onShowDetail} aria-label={label} title={label}>
-        <span className="flex items-center gap-1.5 type-body text-idpxyz-text">
-          <Users className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-          <span className="truncate">
-            {roleLabel(node.role)} · {node.count} 家
-          </span>
+        <PartyTile small kind={tileKind} />
+        <span className="flex min-w-0 flex-col">
+          <span className={name}>{formatCount(node.count)} 家单位</span>
+          <span className={sub}>点开看明细</span>
         </span>
-        <span className="type-caption text-idpxyz-breadcrumb">点开看明细</span>
       </button>
     );
   }
   return (
     <a href={businessPartyObjectHash(node.partyId)} className={frame} aria-label={label} title={label}>
-      <span className="line-clamp-2 break-words type-body text-idpxyz-text">
-        {node.name ?? <span className="text-idpxyz-breadcrumb">{partyNameUnknownNote}</span>}
+      <PartyTile small kind={tileKind} />
+      <span className="flex min-w-0 flex-col">
+        <span className={name}>{node.name ?? <span className="text-idpxyz-breadcrumb">{partyNameUnknownNote}</span>}</span>
+        <span className={`font-mono ${sub}`}>{node.partyId}</span>
       </span>
-      <span className="truncate font-mono type-caption text-idpxyz-breadcrumb">{node.partyId}</span>
     </a>
   );
-}
-
-function EmptySide({ text }: { text: string }) {
-  return <p className="rounded-md border border-dashed border-idpxyz-border px-2.5 py-1.5 type-caption text-idpxyz-breadcrumb">{text}</p>;
 }
 
 export function PartyRelationshipGraph({
@@ -100,7 +101,10 @@ export function PartyRelationshipGraph({
   centerName,
   centerId,
   ours,
+  centerKind,
+  tileKindOf,
   onShowDetail,
+  onShowEnded,
 }: {
   graph: RelationshipGraph;
   /** 中心那家的名称；不知道时显标识。 */
@@ -108,82 +112,93 @@ export function PartyRelationshipGraph({
   centerId: string;
   /** 法人册上有公司主体钉着它：中心标「我方公司」。 */
   ours: boolean;
-  /** 合成节点与「已结束」那句点了去明细。 */
+  /** 中心那家的图标块；不给时我方公司按我方公司画，其余按「都不是」画。 */
+  centerKind?: PartyTileKind;
+  /**
+   * 邻居的图标块按它自己的类型取（与名录的行同一份）；调用方手上有全册的角色索引时给。不给就按这段关系猜：对中心担任角色的
+   * 一侧按那个角色画，另一侧不知道它是什么，按「都不是」画。
+   */
+  tileKindOf?: (partyId: string) => PartyTileKind;
+  /** 合成节点点了去哪看这一组的明细。 */
   onShowDetail: () => void;
+  /** 「已结束」那句点了去哪看；不给就与合成节点同一处。 */
+  onShowEnded?: () => void;
 }) {
   const center = centerName ?? centerId;
   const rows = Math.max(graph.towardIt.length, graph.fromIt.length, 1);
   const startOf = (count: number) => Math.floor((rows - Math.max(count, 1)) / 2) + 1;
   const towardStart = startOf(graph.towardIt.length);
   const fromStart = startOf(graph.fromIt.length);
+  const tileOf = (node: RelationshipGraphNode, side: 'toward' | 'from'): PartyTileKind => {
+    if (node.kind === 'group') return partyRoleTileKind(node.role);
+    if (tileKindOf) return tileKindOf(node.partyId);
+    return side === 'toward' ? partyRoleTileKind(node.role) : 'NONE';
+  };
 
   return (
-    <div>
-      <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1fr)_4.5rem_minmax(0,1fr)] type-caption text-idpxyz-breadcrumb">
+    <div className="party-relationship-graph">
+      <div className="party-relationship-graph-columns mb-2 type-body text-idpxyz-breadcrumb">
         <span>对它担任角色的单位</span>
-        <span />
-        <span className="text-center">这家单位</span>
-        <span />
-        <span className="text-right">它对其担任角色的单位</span>
+        <span className="col-start-5 text-right">它对其担任角色的单位</span>
       </div>
       <div
         role="group"
         aria-label={`${center}的合作关系图`}
-        className="grid grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1fr)_4.5rem_minmax(0,1fr)] items-center gap-y-2"
-        style={{ gridTemplateRows: `repeat(${rows}, minmax(3.5rem, auto))` }}
+        className="party-relationship-graph-columns items-center gap-y-2"
+        style={{ gridTemplateRows: `repeat(${rows}, minmax(3rem, auto))` }}
       >
         {graph.towardIt.length === 0 ? (
-          <div style={{ gridColumn: 1, gridRow: towardStart }}>
-            <EmptySide text="还没有单位对它担任角色" />
-          </div>
+          <p style={{ gridColumn: '1 / span 2', gridRow: towardStart }} className="type-body text-idpxyz-breadcrumb">
+            还没有单位对它担任角色
+          </p>
         ) : (
           graph.towardIt.map((node, index) => (
             <div key={node.key} className="contents">
               <div style={{ gridColumn: 1, gridRow: towardStart + index }} className="min-w-0">
-                <Neighbor node={node} center={center} side="toward" onShowDetail={onShowDetail} />
+                <Neighbor node={node} center={center} side="toward" tileKind={tileOf(node, 'toward')} onShowDetail={onShowDetail} />
               </div>
-              <div style={{ gridColumn: 2, gridRow: towardStart + index }} className="h-full px-1">
+              <div style={{ gridColumn: 2, gridRow: towardStart + index }} className="min-w-0">
                 <Connector node={node} />
               </div>
             </div>
           ))
         )}
 
-        <div style={{ gridColumn: 3, gridRow: `1 / span ${rows}` }} className="min-w-0 self-center">
-          <div className="flex min-w-0 flex-col items-center gap-1 rounded-md border-2 border-idpxyz-accent bg-idpxyz-bg px-3 py-2 text-center">
-            <Building2 className="h-4 w-4 text-idpxyz-accent" aria-hidden="true" />
-            <span className="line-clamp-2 max-w-full break-words type-body font-medium text-idpxyz-textBright" title={center}>
-              {center}
-            </span>
-            <span className="max-w-full truncate font-mono type-caption text-idpxyz-breadcrumb">{centerId}</span>
-            {ours ? <span className="rounded border border-idpxyz-border px-1.5 type-caption text-idpxyz-text">我方公司</span> : null}
-          </div>
+        <div
+          style={{ gridColumn: 3, gridRow: `1 / span ${rows}` }}
+          className="mx-1.5 flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 self-stretch rounded-[10px] border border-idpxyz-accent bg-idpxyz-activeItem px-2.5 py-3 text-center"
+        >
+          <PartyTile kind={centerKind ?? (ours ? 'OURS' : 'NONE')} />
+          <span className="line-clamp-2 max-w-full break-words type-value leading-[18px] text-idpxyz-textBright" title={center}>
+            {center}
+          </span>
+          <span className="type-body leading-4 text-idpxyz-breadcrumb">{ours ? ourCompanyLabel : '本单位'}</span>
         </div>
 
         {graph.fromIt.length === 0 ? (
-          <div style={{ gridColumn: 5, gridRow: fromStart }}>
-            <EmptySide text="它还没有对谁担任角色" />
-          </div>
+          <p style={{ gridColumn: '4 / span 2', gridRow: fromStart }} className="text-right type-body text-idpxyz-breadcrumb">
+            它还没有对谁担任角色
+          </p>
         ) : (
           graph.fromIt.map((node, index) => (
             <div key={node.key} className="contents">
-              <div style={{ gridColumn: 4, gridRow: fromStart + index }} className="h-full px-1">
+              <div style={{ gridColumn: 4, gridRow: fromStart + index }} className="min-w-0">
                 <Connector node={node} />
               </div>
               <div style={{ gridColumn: 5, gridRow: fromStart + index }} className="min-w-0">
-                <Neighbor node={node} center={center} side="from" onShowDetail={onShowDetail} />
+                <Neighbor node={node} center={center} side="from" tileKind={tileOf(node, 'from')} onShowDetail={onShowDetail} />
               </div>
             </div>
           ))
         )}
       </div>
-      <p className="mt-2 type-caption text-idpxyz-breadcrumb">
+      <p className="mt-2.5 type-body text-idpxyz-breadcrumb">
         箭头从担任角色的一方指向对方；虚线是待确认的关系。
         {graph.ended > 0 ? (
           <>
             {' '}
             另有 {graph.ended} 段已结束的关系不上图，
-            <button type="button" className="text-idpxyz-accent hover:underline" onClick={onShowDetail}>
+            <button type="button" className="text-[color:var(--ds-text-link-hover)] hover:underline" onClick={onShowEnded ?? onShowDetail}>
               在明细里看
             </button>
             。

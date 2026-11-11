@@ -718,11 +718,11 @@ export function BusinessPartiesPage() {
   // 详情栏全景签里的关系登记不是模态（票 business-party-edit-mode/03）：换行、关栏会把表单连草稿一起卸掉，有没提交的输入时先问一句。
   // 登记簿按组查（unsaved-guard.ts）：列表视图里挂着的关系表单只有详情栏这一份。
   const [pendingSelect, setPendingSelect] = useState<{ key: string | null; row: BusinessPartyRecord | null } | null>(null);
-  /** 换行或收栏；`row` 是点的那一行，随选中一起记下，右栏当帧就有行可显。 */
+  // 右栏关联签里就地开着的两种表单（登记合作关系、新增客户账户）有没有没提交的输入。
+  const panelDraftUnsaved = () => hasUnsavedDraft(registrationGroup('party-relationship')) || hasUnsavedDraft(registrationGroup('customer-account'));
+  /** 换行或收栏；`row` 是点的那一行，随选中一起记下，右栏当帧就有行可显。有没提交的输入时，换行先问一句。 */
   const selectParty = (key: string | null, row: BusinessPartyRecord | null = null) => {
-    // 右栏关联签里就地开着的两种表单（登记合作关系、新增客户账户）有没提交的输入时，换行先问一句。
-    if (key !== selectedParty && (hasUnsavedDraft(registrationGroup('party-relationship')) || hasUnsavedDraft(registrationGroup('customer-account'))))
-      setPendingSelect({ key, row });
+    if (key !== selectedParty && panelDraftUnsaved()) setPendingSelect({ key, row });
     else applyPartySelection(key, row);
   };
   const rememberPartyRow = useCallback(
@@ -757,6 +757,27 @@ export function BusinessPartiesPage() {
   // 「我方关联」一册：检索只在手上这几行里找（our-company-network.ts 的 matchesOurCompanySearch）。
   const [networkSearch, setNetworkSearch] = useState('');
   const [selectedOurCompany, setSelectedOurCompany] = useState<string | null>(null);
+  // 切到合作关系视图、按这家单位的编码检索，看它名下的全部关系。名录右栏（概要与「关联」签的「在「合作关系」里看全部」、
+  // 关系图的合成节点）与「我方关联」右栏（合成节点、「已结束」那句）都从这里去。
+  const showRelationshipsOf = (partyId: string) => {
+    setBook('relationships');
+    setRelationshipSearch(partyId);
+    setRole('ALL');
+    setRelationshipStatus('ALL');
+    setAttentionOnly(false);
+    setSelectedRelationship(null);
+  };
+  // 从名录右栏去：名录这一块连右栏一起换掉，「关联」签里就地开着的表单有没提交的输入时先问一句（与换行同一判据）。点的那个
+  // 链接随右栏一起卸掉，换过去之后焦点落到「合作关系」那一枚视图签上。
+  const [pendingRelationshipsOf, setPendingRelationshipsOf] = useState<string | null>(null);
+  const leaveRosterForRelationshipsOf = (partyId: string) => {
+    tabFocusPending.current = true;
+    showRelationshipsOf(partyId);
+  };
+  const showRelationshipsFromPanel = (partyId: string) => {
+    if (panelDraftUnsaved()) setPendingRelationshipsOf(partyId);
+    else leaveRosterForRelationshipsOf(partyId);
+  };
   // 发出去的检索词等它停稳（useSettledKeyword）；框里的字照旧逐字跟手。钩子不能挂在下面的提前返回之后，两册的都在这里取。
   const settledSearch = useSettledKeyword(search);
   const settledRelationshipSearch = useSettledKeyword(relationshipSearch);
@@ -878,6 +899,11 @@ export function BusinessPartiesPage() {
   const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
   const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
   const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
+  // 一家单位的图标块，与名录的行同一个算法：右栏的关系图与关系表里的对方按它画。
+  const tileKindOf = useCallback(
+    (partyId: string) => partyTileKindOf(ourCompanies.has(partyId), rolesOfParty(roleIndex, partyId)),
+    [ourCompanies, roleIndex],
+  );
   const networkRows = useMemo(() => ourCompanyNetworkRows(knownEntities, knownRelationships ?? []), [knownEntities, knownRelationships]);
   const entityCountries = useMemo(() => partyRegistrationCountriesOf(knownEntities), [knownEntities]);
   // 不带条件的那一页若已是整册就交出它的行（complete-register.ts）：筛选项上的数、视图签右端的待办都按它数；不是就 null。
@@ -1168,15 +1194,6 @@ export function BusinessPartiesPage() {
         render: (row) => <span className="block truncate font-mono type-caption text-idpxyz-breadcrumb">{row.legalEntityIds.join('、')}</span>,
       },
     ];
-    // 合成节点与「已结束」那句点了：切到合作关系视图、按这家公司的编码检索，看它名下的全部关系。
-    const showRelationshipsOf = (partyId: string) => {
-      setBook('relationships');
-      setRelationshipSearch(partyId);
-      setRole('ALL');
-      setRelationshipStatus('ALL');
-      setAttentionOnly(false);
-      setSelectedRelationship(null);
-    };
     const viewState = catalogueViewState(entities.answer, networkRows.length, entities.retry, {
       module: info,
       endpoint: 'GET /commercial-group-legal-entities',
@@ -1420,6 +1437,9 @@ export function BusinessPartiesPage() {
                       pinned={entities.answer == null ? null : pinnedParties.has(detailRow.partyId)}
                       relationships={relationships.answer}
                       retryRelationships={relationships.retry}
+                      relationshipsComplete={completeRelationships !== null}
+                      tileKindOf={tileKindOf}
+                      onShowRelationships={() => showRelationshipsFromPanel(detailRow.partyId)}
                       onClose={() => selectParty(null)}
                       onOpenObjectPage={() => {
                         window.location.hash = businessPartyObjectHash(detailRow.partyId);
@@ -1724,6 +1744,21 @@ export function BusinessPartiesPage() {
           applyPartySelection(next?.key ?? null, next?.row ?? null);
         }}
         onCancel={() => setPendingSelect(null)}
+      />
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={pendingRelationshipsOf !== null}
+        tone="warning"
+        title="放弃修改？"
+        message="有内容还没有保存，离开名录后填写的内容不会保留。"
+        confirmLabel="放弃"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          const partyId = pendingRelationshipsOf;
+          setPendingRelationshipsOf(null);
+          if (partyId !== null) leaveRosterForRelationshipsOf(partyId);
+        }}
+        onCancel={() => setPendingRelationshipsOf(null)}
       />
     </div>
   );

@@ -21,8 +21,13 @@ import {
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
   businessPartyProfilePayloadOf,
+  businessPartyProfileStateOf,
   customerLacksContacts,
+  customerWithoutContactsLine,
   effectiveBusinessPartyProfile,
+  profileContactsEmptyNoteOf,
+  profileSummaryEmptyNoteOf,
+  profileVersionsEmptyNote,
   suggestedBusinessPartyProfileRevision,
   type BusinessPartyProfileDraft,
 } from './business-party-profile';
@@ -79,30 +84,15 @@ export function effectiveProfileOf(
   return { record: effectiveBusinessPartyProfile(answer.body), body: answer.body };
 }
 
-/** 我方公司的往来单位在资料位置上的那句话：它的资料登在公司主体上（ADR-0369 决定二）。对象页与详情栏共用。 */
-export const ourCompanyProfileNote = '这是我方公司的往来单位：联系人、地址、税号与收款账户登在公司主体的资料上。';
-
 /**
- * 读出几处共用的资料状态：还在读或读不到只给一句灰字；读到了却没有生效的一版是空状态（登过、都在未来生效的另说一句）；
- * 有生效版就交出那一版。别家的答复（换行时上一家的还没换掉）当作还在读。
+ * 我方公司的往来单位在资料位置上的那句话：它的资料登在公司主体上（ADR-0369 决定二）。对象页摆成一句；工作台右栏的说明卡
+ * 把冒号前后分成标题与正文，两处是同一句话。
  */
-type ProfileState =
-  | { kind: 'note'; text: string }
-  | { kind: 'empty'; scheduled: boolean; body: BusinessPartyProfileRevisionListResponseBody }
-  | { kind: 'present'; record: BusinessPartyProfileRevisionRecord; body: BusinessPartyProfileRevisionListResponseBody };
-
-function profileStateOf(query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>, partyId: string): ProfileState {
-  const answer = query.answer;
-  if (answer === null) return { kind: 'note', text: '正在读取资料…' };
-  if (answer.kind !== 'outcome') return { kind: 'note', text: '资料暂时读不到，稍后刷新再看。' };
-  const { record, body } = effectiveProfileOf(query, partyId);
-  if (body === null) return { kind: 'note', text: '正在读取资料…' };
-  if (record) return { kind: 'present', record, body };
-  return { kind: 'empty', scheduled: body.revisions.length > 0, body };
-}
-
-const customerEmptyLine = '这家单位是客户，建议登记一位联系人，下单和对账时找得到人。';
-const customerHintLine = '这家单位是客户，资料里还没有联系人；建议登记一位，下单和对账时找得到人。';
+export const ourCompanyProfileNoteParts = {
+  title: '这是我方公司的往来单位',
+  line: '联系人、地址、税号与收款账户登在公司主体的资料上。',
+};
+export const ourCompanyProfileNote = `${ourCompanyProfileNoteParts.title}：${ourCompanyProfileNoteParts.line}`;
 
 /**
  * 资料空着时的那一块：说清空在哪、下一步去哪。有写授予的给「更新资料」——描边按钮：页头已有一枚实心的主动作，两枚实心会抢；
@@ -146,38 +136,19 @@ export function BusinessPartyProfileReadout({
   /** 空状态与提示里的「更新资料」；不给就不摆按钮（查看者）。 */
   onUpdate?: () => void;
 }) {
-  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
-  const typeNameOf = useTypeNameOf(typeCatalogue);
-  const state = profileStateOf(query, partyId);
+  const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   if (state.kind === 'empty') {
-    return (
-      <ProfileEmptyState
-        title={state.scheduled ? '还没有生效的资料' : '还没有登记资料'}
-        lines={[
-          state.scheduled ? '已登记的版本都在未来生效。' : '联系人、地址、税号与收款账户都在「更新资料」里登记。',
-          ...(customerLacksContacts(roles, null) ? [customerEmptyLine] : []),
-        ]}
-        onUpdate={onUpdate}
-      />
-    );
+    return <ProfileEmptyState {...profileSummaryEmptyNoteOf(state.scheduled, roles)} onUpdate={onUpdate} />;
   }
   const record = state.record;
-  const names = record.names ?? [];
-  const addresses = [
-    ...(record.registeredAddress ? [{ key: 'registered', label: '注册地址', address: record.registeredAddress }] : []),
-    ...(record.officeAddress ? [{ key: 'office', label: '办公地址', address: record.officeAddress }] : []),
-    ...(record.correspondenceAddress ? [{ key: 'correspondence', label: '通信地址', address: record.correspondenceAddress }] : []),
-  ];
-  const invoiceTitleRows = invoiceTitleRowsOf(record);
-  const taxCountry = registrationCountry ?? record.registeredAddress?.country ?? '';
   const bankAccounts = record.bankAccounts ?? [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
       {customerLacksContacts(roles, record) ? (
         <div className={`flex items-center gap-2 rounded border px-3 py-2 type-body ${statusToneBanner.info}`}>
           <UserPlus className={`h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
-          <span className="min-w-0 flex-1 leading-5">{customerHintLine}</span>
+          <span className="min-w-0 flex-1 leading-5">{customerWithoutContactsLine}</span>
           {onUpdate ? (
             <Button size="sm" variant="outline" className="h-7 shrink-0 type-body" onClick={onUpdate}>
               更新资料
@@ -186,87 +157,120 @@ export function BusinessPartyProfileReadout({
         </div>
       ) : null}
       <ProfileReadoutCard icon={MapPin} title="名称与地址">
-        <ProfileReadoutGrid>
-          <ProfileReadoutField
-            label="其他语言名称"
-            wide
-            value={
-              names.length ? (
-                <ProfileReadoutPairs
-                  headNowrap
-                  rows={names.map((row) => ({
-                    key: row.language,
-                    head: languageTagLabel(row.language),
-                    value: (
-                      <CopyAside value={row.name} name="名称">
-                        <ReadoutText text={row.name} />
-                      </CopyAside>
-                    ),
-                  }))}
-                />
-              ) : undefined
-            }
-          />
-        </ProfileReadoutGrid>
-        <div className="mt-3">
-          {addresses.length ? (
-            <ProfileReadoutAddresses items={addresses} />
-          ) : (
-            <ProfileReadoutGrid>
-              <ProfileReadoutField label="地址" value={undefined} wide />
-            </ProfileReadoutGrid>
-          )}
-        </div>
+        <BusinessPartyNamesAndAddresses record={record} />
       </ProfileReadoutCard>
       <ProfileReadoutCard icon={Receipt} title="税务与开票">
-        <ProfileReadoutGrid>
-          <ProfileReadoutField
-            label="开票抬头"
-            wide
-            value={
-              invoiceTitleRows.length ? (
-                <ProfileReadoutPairs
-                  headNowrap
-                  rows={invoiceTitleRows.map((row, index) => ({
-                    key: `${row.language}-${index}`,
-                    head: row.language ? languageTagLabel(row.language) : absentValueMark,
-                    value: (
-                      <CopyAside value={row.title} name="开票抬头">
-                        <ReadoutText text={row.title} />
-                      </CopyAside>
-                    ),
-                  }))}
-                />
-              ) : undefined
-            }
-          />
-          <ProfileReadoutField
-            label="监管登记号"
-            title="税务 / 海关的监管登记号"
-            wide
-            value={
-              record.taxRegistrationNumbers.length ? (
-                <ProfileReadoutPairs
-                  mono
-                  rows={record.taxRegistrationNumbers.map((row, index) => {
-                    const typeName = typeNameOf(taxCountry, row.typeCode, 'PROFILE') ?? row.typeCode;
-                    return {
-                      key: `${row.typeCode}-${row.number}-${index}`,
-                      head: typeName,
-                      headTitle: row.typeCode,
-                      value: <RefText value={row.number} name={typeName} />,
-                    };
-                  })}
-                />
-              ) : undefined
-            }
-          />
-        </ProfileReadoutGrid>
+        <BusinessPartyTaxAndInvoicing record={record} registrationCountry={registrationCountry} />
       </ProfileReadoutCard>
       <ProfileReadoutCard icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined}>
         <LegalEntityBankAccountsTable accounts={bankAccounts} />
       </ProfileReadoutCard>
     </div>
+  );
+}
+
+/** 「名称与地址」卡里的格：其他语言名称与三个地址。对象页的读出与工作台右栏的概要各套各的卡框，格只在这里写一遍。 */
+export function BusinessPartyNamesAndAddresses({ record }: { record: BusinessPartyProfileRevisionRecord }) {
+  const names = record.names ?? [];
+  const addresses = [
+    ...(record.registeredAddress ? [{ key: 'registered', label: '注册地址', address: record.registeredAddress }] : []),
+    ...(record.officeAddress ? [{ key: 'office', label: '办公地址', address: record.officeAddress }] : []),
+    ...(record.correspondenceAddress ? [{ key: 'correspondence', label: '通信地址', address: record.correspondenceAddress }] : []),
+  ];
+  return (
+    <>
+      <ProfileReadoutGrid>
+        <ProfileReadoutField
+          label="其他语言名称"
+          wide
+          value={
+            names.length ? (
+              <ProfileReadoutPairs
+                headNowrap
+                rows={names.map((row) => ({
+                  key: row.language,
+                  head: languageTagLabel(row.language),
+                  value: (
+                    <CopyAside value={row.name} name="名称">
+                      <ReadoutText text={row.name} />
+                    </CopyAside>
+                  ),
+                }))}
+              />
+            ) : undefined
+          }
+        />
+      </ProfileReadoutGrid>
+      <div className="mt-3">
+        {addresses.length ? (
+          <ProfileReadoutAddresses items={addresses} />
+        ) : (
+          <ProfileReadoutGrid>
+            <ProfileReadoutField label="地址" value={undefined} wide />
+          </ProfileReadoutGrid>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** 「税务与开票」卡里的格：开票抬头与监管登记号。用处同 BusinessPartyNamesAndAddresses。 */
+export function BusinessPartyTaxAndInvoicing({
+  record,
+  registrationCountry,
+}: {
+  record: BusinessPartyProfileRevisionRecord;
+  /** 往来单位登记的注册国家：监管登记号的类型名按它查，没有按注册地址国家。 */
+  registrationCountry?: string;
+}) {
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
+  const typeNameOf = useTypeNameOf(typeCatalogue);
+  const invoiceTitleRows = invoiceTitleRowsOf(record);
+  const taxCountry = registrationCountry ?? record.registeredAddress?.country ?? '';
+  return (
+    <ProfileReadoutGrid>
+      <ProfileReadoutField
+        label="开票抬头"
+        wide
+        value={
+          invoiceTitleRows.length ? (
+            <ProfileReadoutPairs
+              headNowrap
+              rows={invoiceTitleRows.map((row, index) => ({
+                key: `${row.language}-${index}`,
+                head: row.language ? languageTagLabel(row.language) : absentValueMark,
+                value: (
+                  <CopyAside value={row.title} name="开票抬头">
+                    <ReadoutText text={row.title} />
+                  </CopyAside>
+                ),
+              }))}
+            />
+          ) : undefined
+        }
+      />
+      <ProfileReadoutField
+        label="监管登记号"
+        title="税务 / 海关的监管登记号"
+        wide
+        value={
+          record.taxRegistrationNumbers.length ? (
+            <ProfileReadoutPairs
+              mono
+              rows={record.taxRegistrationNumbers.map((row, index) => {
+                const typeName = typeNameOf(taxCountry, row.typeCode, 'PROFILE') ?? row.typeCode;
+                return {
+                  key: `${row.typeCode}-${row.number}-${index}`,
+                  head: typeName,
+                  headTitle: row.typeCode,
+                  value: <RefText value={row.number} name={typeName} />,
+                };
+              })}
+            />
+          ) : undefined
+        }
+      />
+    </ProfileReadoutGrid>
   );
 }
 
@@ -280,18 +284,10 @@ export function BusinessPartyContactsReadout({
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
   onUpdate?: () => void;
 }) {
-  const state = profileStateOf(query, partyId);
+  const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   const contacts = state.kind === 'present' ? state.record.contacts : [];
-  if (contacts.length === 0) {
-    return (
-      <ProfileEmptyState
-        title={state.kind === 'present' ? '还没有登记联系人' : state.scheduled ? '还没有生效的资料' : '还没有登记资料'}
-        lines={['联系人与地址、税号一起在「更新资料」里登记。']}
-        onUpdate={onUpdate}
-      />
-    );
-  }
+  if (contacts.length === 0) return <ProfileEmptyState {...profileContactsEmptyNoteOf(state)} onUpdate={onUpdate} />;
   return <LegalEntityContactCards contacts={contacts} />;
 }
 
@@ -305,12 +301,10 @@ export function BusinessPartyProfileVersions({
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
   onUpdate?: () => void;
 }) {
-  const state = profileStateOf(query, partyId);
+  const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   const body = state.body;
-  if (body.revisions.length === 0) {
-    return <ProfileEmptyState title="还没有登记资料" lines={['登记后每一版都列在这里，旧版本不会被覆盖。']} onUpdate={onUpdate} />;
-  }
+  if (body.revisions.length === 0) return <ProfileEmptyState {...profileVersionsEmptyNote} onUpdate={onUpdate} />;
   const now = Date.now();
   const rows = [...body.revisions].sort((left, right) => right.revision - left.revision);
   return (

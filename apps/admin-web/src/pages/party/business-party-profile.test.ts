@@ -7,11 +7,14 @@ import {
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
   businessPartyProfilePayloadOf,
+  businessPartyProfileStateOf,
   businessPartyProfileVersionFact,
   customerLacksContacts,
   effectiveBusinessPartyProfile,
   emptyBusinessPartyProfileDraft,
   otherLanguageNameOf,
+  profileContactsEmptyNoteOf,
+  profileSummaryEmptyNoteOf,
   suggestedBusinessPartyProfileRevision,
 } from './business-party-profile';
 
@@ -109,4 +112,39 @@ test('businessPartyProfileVersionFact 分清没登与读不到', () => {
   equal(businessPartyProfileVersionFact(answer(undefined, [{ ...record, effectiveFrom: '2099-01-01T00:00:00Z' }]), party), '尚无生效版本');
   equal(businessPartyProfileVersionFact(answer(1, [record]), party), '第 1 版');
   equal(businessPartyProfileVersionFact(answer(1, [record], 'SYN-PARTY-OTHER'), party), '…');
+});
+
+// Covers: 资料状态分清在读、读不到、别家的答复（当作在读）、没登过、登过却都在未来生效、有生效版；有生效版交出的就是那一版。
+test('businessPartyProfileStateOf 分清在读、空着与有生效版', () => {
+  const party = 'SYN-PARTY-SHIPPER-01';
+  const answer = (effectiveRevision: number | undefined, revisions: BusinessPartyProfileRevisionRecord[], partyId = party) =>
+    ({ kind: 'outcome', status: 200, body: { outcome: 'X', partyId, effectiveRevision, revisions } }) as const;
+  deepEqual(businessPartyProfileStateOf(null, party), { kind: 'note', text: '正在读取资料…' });
+  deepEqual(businessPartyProfileStateOf({ kind: 'transport', message: 'down' }, party), { kind: 'note', text: '资料暂时读不到，稍后刷新再看。' });
+  deepEqual(businessPartyProfileStateOf(answer(1, [record], 'SYN-PARTY-OTHER'), party), { kind: 'note', text: '正在读取资料…' });
+  const unregistered = businessPartyProfileStateOf(answer(undefined, []), party);
+  deepEqual([unregistered.kind, unregistered.kind === 'empty' && unregistered.scheduled], ['empty', false]);
+  const scheduled = businessPartyProfileStateOf(answer(undefined, [{ ...record, effectiveFrom: '2099-01-01T00:00:00Z' }]), party);
+  deepEqual([scheduled.kind, scheduled.kind === 'empty' && scheduled.scheduled], ['empty', true]);
+  const present = businessPartyProfileStateOf(answer(1, [record, { ...record, revision: 2, effectiveFrom: '2099-01-01T00:00:00Z' }]), party);
+  deepEqual([present.kind, present.kind === 'present' && present.record.revision], ['present', 1]);
+});
+
+// Covers: 资料空着时各处的话——概要里没登过与都在未来生效各一句，是客户才补建议那一行；联系人签按「有资料没联系人 / 没有生效的
+// 资料 / 没登过」各一个标题、同一句去处。
+test('资料空着时的标题与说明', () => {
+  deepEqual(profileSummaryEmptyNoteOf(false, ['SUPPLIER']), {
+    title: '还没有登记资料',
+    lines: ['联系人、地址、税号与收款账户都在「更新资料」里登记。'],
+  });
+  deepEqual(profileSummaryEmptyNoteOf(false, ['CUSTOMER']), {
+    title: '还没有登记资料',
+    lines: ['联系人、地址、税号与收款账户都在「更新资料」里登记。', '这家单位是客户，建议登记一位联系人，下单和对账时找得到人。'],
+  });
+  deepEqual(profileSummaryEmptyNoteOf(true, []), { title: '还没有生效的资料', lines: ['已登记的版本都在未来生效。'] });
+  const body = { outcome: 'X', partyId: record.partyId, revisions: [record] };
+  const lines = ['联系人与地址、税号一起在「更新资料」里登记。'];
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'present', record: { ...record, contacts: [] }, body }), { title: '还没有登记联系人', lines });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: true, body }), { title: '还没有生效的资料', lines });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: false, body: { ...body, revisions: [] } }), { title: '还没有登记资料', lines });
 });

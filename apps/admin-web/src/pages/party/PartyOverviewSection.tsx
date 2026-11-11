@@ -52,27 +52,28 @@ import { businessPartyObjectHash } from './business-parties-address';
 import { PartyRelationshipGraph } from './PartyRelationshipGraph';
 import { relationshipGraphOf } from './party-relationship-graph';
 
-// 参与方详情抽屉的「全景」签（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
+// 往来单位对象页的「关联」分区（票 operator-workspace-gaps/01）。判读全在 party-overview.ts，这里只摆。
 // 关系册答案由页面持有、传进来（与关系签同一份，登一段关系后两处一起更新）；另四册在打开时各取一次，一段未配置或出错只影响那一段。
+// 工作台右栏的「关联」签另有一套通栏的摆法（BusinessPartyPanelRelated.tsx），与这里共用段状态、读不到时的那几句与客户账户的写入口。
 
 // useRegisterList 要稳定引用：带参数的读口包成模块级函数，写成内联箭头每次渲染都是新键、永远读不完。
 const listSettlementPolicies = commercialPolicyLoaders.SETTLEMENT_POLICY;
 
 const note = 'type-body text-idpxyz-breadcrumb';
 
-function SectionBody<Row>({
+/**
+ * 一段还没有业务答案时摆什么：正在读、未配置、被拒、调用方式问题、没有答案、连不上、答非所问各一句或一块。对象页的全景块与
+ * 工作台右栏的「关联」签共用；有了答案之后怎么摆行，各归各的。
+ */
+export function OverviewSectionStateNote({
   state,
   what,
-  emptyNote,
   retry,
-  renderRow,
 }: {
-  state: OverviewSectionState<Row>;
+  state: Exclude<OverviewSectionState<unknown>, { kind: 'answered' }>;
   /** 这一段读的是什么，用在读不到时的说明里；读的人是配置员，不给端点。 */
   what: string;
-  emptyNote: string;
   retry: () => void;
-  renderRow: (row: Row) => ReactNode;
 }) {
   switch (state.kind) {
     case 'loading':
@@ -116,13 +117,28 @@ function SectionBody<Row>({
           </Button>
         </p>
       );
-    case 'answered':
-      return state.rows.length === 0 ? (
-        <p className={note}>{emptyNote}</p>
-      ) : (
-        <ul className="flex flex-col gap-2">{state.rows.map(renderRow)}</ul>
-      );
   }
+}
+
+function SectionBody<Row>({
+  state,
+  what,
+  emptyNote,
+  retry,
+  renderRow,
+}: {
+  state: OverviewSectionState<Row>;
+  what: string;
+  emptyNote: string;
+  retry: () => void;
+  renderRow: (row: Row) => ReactNode;
+}) {
+  if (state.kind !== 'answered') return <OverviewSectionStateNote state={state} what={what} retry={retry} />;
+  return state.rows.length === 0 ? (
+    <p className={note}>{emptyNote}</p>
+  ) : (
+    <ul className="flex flex-col gap-2">{state.rows.map(renderRow)}</ul>
+  );
 }
 
 function Section<Row>({
@@ -278,90 +294,38 @@ function RelationshipRows({
 // 还能停用的账户：已生效与待生效（CONTEXT「参与方身份」：未到生效时点的登记也可以停用，那是撤下一笔还没生效的登记）。
 const deactivatableAccountStatuses: ReadonlySet<string> = new Set(['REGISTERED', 'EFFECTIVE']);
 
+export type CustomerAccountsRead = { answer: ApiResult<{ accounts: CustomerAccountRecord[] }> | null; retry: () => void };
+export type CustomerAccountWrites = { parties: ApiResult<BusinessPartyListResponseBody> | null };
+
 /**
- * 客户账户块（票 business-parties-object-page/03）：账户行显状态；有写授予时块头「新增客户账户」就地换成表单（所属客户锁成本单位），
- * 每个还能停用的账户一行「停用…」，对话框里是停用表单锁成这个账户。有没提交的输入时「取消」先问一句。落册后重读账户册。
+ * 客户账户的写入口（票 business-parties-object-page/03）：有写授予时「新增客户账户」就地换成表单（所属客户锁成本单位），每个还能
+ * 停用的账户一枚「停用…」，对话框里是停用表单锁成这个账户；有没提交的输入时「取消」先问一句；落册后重读账户册。对象页的全景块
+ * 与工作台右栏的「关联」签各摆各的行，这几样只在这里写一遍。`writes` 不给就只读：两个「可以」都答否，表单是空的。
  */
-function CustomerAccountsBlock({
-  partyId,
-  state,
-  accounts,
-  writes,
-}: {
-  partyId: string;
-  state: OverviewSectionState<CustomerAccountRecord>;
-  accounts: { answer: ApiResult<{ accounts: CustomerAccountRecord[] }> | null; retry: () => void };
-  writes?: { parties: ApiResult<BusinessPartyListResponseBody> | null };
-}) {
+export function useCustomerAccountWrites(partyId: string, accounts: CustomerAccountsRead, writes: CustomerAccountWrites | undefined) {
   const [registering, setRegistering] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [deactivating, setDeactivating] = useState<CustomerAccountRecord | null>(null);
   const knownAccounts = accounts.answer?.kind === 'outcome' ? accounts.answer.body.accounts : null;
-  return (
+  const form =
+    registering && writes ? (
+      <CustomerAccountRegistrationForm
+        key={partyId}
+        knownAccounts={knownAccounts}
+        parties={writes.parties}
+        preset={{ customerPartyId: partyId }}
+        onRegistered={() => {
+          setUnsaved(false);
+          setRegistering(false);
+          accounts.retry();
+        }}
+        onUnsavedChange={setUnsaved}
+        inline={{ onCancel: () => (unsaved ? setConfirmingDiscard(true) : setRegistering(false)) }}
+      />
+    ) : null;
+  const dialogs = (
     <>
-      <Section
-        title="客户账户"
-        moduleId="party-contracts"
-        partyId={partyId}
-        state={state}
-        action={
-          writes && !registering ? (
-            <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={() => setRegistering(true)}>
-              新增客户账户
-            </Button>
-          ) : undefined
-        }
-      >
-        {registering && writes ? (
-          <div className="mb-2 rounded-md border border-idpxyz-border bg-idpxyz-bg p-3">
-            <CustomerAccountRegistrationForm
-              key={partyId}
-              knownAccounts={knownAccounts}
-              parties={writes.parties}
-              preset={{ customerPartyId: partyId }}
-              onRegistered={() => {
-                setUnsaved(false);
-                setRegistering(false);
-                accounts.retry();
-              }}
-              onUnsavedChange={setUnsaved}
-              inline={{ onCancel: () => (unsaved ? setConfirmingDiscard(true) : setRegistering(false)) }}
-            />
-          </div>
-        ) : null}
-        <SectionBody
-          state={state}
-          what="客户账户"
-          emptyNote="还没有关联到这家单位的客户账户。"
-          retry={accounts.retry}
-          renderRow={(row) => (
-            <RowCard key={row.accountId}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono">
-                  {row.accountId} r{row.revision}
-                </span>
-                <span className="flex items-center gap-2">
-                  {writes && deactivatableAccountStatuses.has(row.status) ? (
-                    <Button variant="ghost" size="sm" className="h-6 px-1.5 type-body text-idpxyz-breadcrumb" onClick={() => setDeactivating(row)}>
-                      停用…
-                    </Button>
-                  ) : null}
-                  {statusBadge(identityStatusLabels, row.status)}
-                </span>
-              </div>
-              <Line label="生效时间" mono>
-                <Instant value={row.effectiveFrom} precision="day" />
-              </Line>
-              {row.deactivatedAt ? (
-                <Line label="停用时间" mono>
-                  <Instant value={row.deactivatedAt} precision="day" />
-                </Line>
-              ) : null}
-            </RowCard>
-          )}
-        />
-      </Section>
       {writes ? (
         <Dialog open={deactivating !== null} onOpenChange={(open) => (open ? undefined : setDeactivating(null))}>
           <DialogContent size="xl" className="max-h-[85vh] overflow-y-auto">
@@ -410,6 +374,84 @@ function CustomerAccountsBlock({
       />
     </>
   );
+  return {
+    /** 「新增客户账户」摆不摆：有写授予、表单没开着。 */
+    canRegister: writes !== undefined && !registering,
+    openForm: () => setRegistering(true),
+    /** 开着的登记表单；没开或只读是 null。 */
+    form,
+    /** 这个账户摆不摆「停用…」。 */
+    canDeactivate: (row: CustomerAccountRecord) => writes !== undefined && deactivatableAccountStatuses.has(row.status),
+    startDeactivation: (row: CustomerAccountRecord) => setDeactivating(row),
+    /** 停用对话框与「放弃修改？」；调用方摆在块外。 */
+    dialogs,
+  };
+}
+
+/** 客户账户块：账户行显状态；写入口照 useCustomerAccountWrites。 */
+function CustomerAccountsBlock({
+  partyId,
+  state,
+  accounts,
+  writes,
+}: {
+  partyId: string;
+  state: OverviewSectionState<CustomerAccountRecord>;
+  accounts: CustomerAccountsRead;
+  writes?: CustomerAccountWrites;
+}) {
+  const flow = useCustomerAccountWrites(partyId, accounts, writes);
+  return (
+    <>
+      <Section
+        title="客户账户"
+        moduleId="party-contracts"
+        partyId={partyId}
+        state={state}
+        action={
+          flow.canRegister ? (
+            <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={flow.openForm}>
+              新增客户账户
+            </Button>
+          ) : undefined
+        }
+      >
+        {flow.form ? <div className="mb-2 rounded-md border border-idpxyz-border bg-idpxyz-bg p-3">{flow.form}</div> : null}
+        <SectionBody
+          state={state}
+          what="客户账户"
+          emptyNote="还没有关联到这家单位的客户账户。"
+          retry={accounts.retry}
+          renderRow={(row) => (
+            <RowCard key={row.accountId}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono">
+                  {row.accountId} r{row.revision}
+                </span>
+                <span className="flex items-center gap-2">
+                  {flow.canDeactivate(row) ? (
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 type-body text-idpxyz-breadcrumb" onClick={() => flow.startDeactivation(row)}>
+                      停用…
+                    </Button>
+                  ) : null}
+                  {statusBadge(identityStatusLabels, row.status)}
+                </span>
+              </div>
+              <Line label="生效时间" mono>
+                <Instant value={row.effectiveFrom} precision="day" />
+              </Line>
+              {row.deactivatedAt ? (
+                <Line label="停用时间" mono>
+                  <Instant value={row.deactivatedAt} precision="day" />
+                </Line>
+              ) : null}
+            </RowCard>
+          )}
+        />
+      </Section>
+      {flow.dialogs}
+    </>
+  );
 }
 
 function RoleTags({ label, roles }: { label: string; roles: string[] }) {
@@ -426,7 +468,7 @@ function RoleTags({ label, roles }: { label: string; roles: string[] }) {
   );
 }
 
-/** 全景各段的段状态，键即段序。右栏头区的计数行（票 business-party-ux/08）、对象页「关联」签的合计与块里各段都从它取。 */
+/** 全景各段的段状态。对象页「关联」签的合计与块里各段、工作台右栏的概要卡与「关联」签都从它取。 */
 export interface PartyOverviewStates {
   relationships: OverviewSectionState<PartyRelationshipView>;
   accounts: OverviewSectionState<CustomerAccountRecord>;
@@ -444,8 +486,8 @@ export const partyOverviewSectionTitles: Record<keyof PartyOverviewStates, strin
   settlement: '结算政策',
 };
 
-/** 全景要读的另外四册（关系册由页面持有、传进来）。读口经取数层缓存（register-list.ts 文件头）：头区与「关联」签两处挂着也只取一次。 */
-function usePartyOverviewLists() {
+/** 全景要读的另外四册（关系册由页面持有、传进来）。读口经取数层缓存（register-list.ts 文件头）：几处挂着也只取一次。 */
+export function usePartyOverviewLists() {
   return {
     accounts: useRegisterList(listCustomerAccounts),
     entities: useRegisterList(listGroupLegalEntities),
@@ -454,10 +496,10 @@ function usePartyOverviewLists() {
   };
 }
 
-type PartyOverviewLists = ReturnType<typeof usePartyOverviewLists>;
+export type PartyOverviewLists = ReturnType<typeof usePartyOverviewLists>;
 
 /** 按参与方把各册答案切成段状态；哪一册没答出那一段就不是 answered。 */
-function partyOverviewStatesOf(
+export function partyOverviewStatesOf(
   partyId: string,
   relationships: ApiResult<PartyRelationshipListResponseBody> | null,
   lists: PartyOverviewLists,
@@ -504,7 +546,6 @@ export function PartyOverviewSection({
   relationshipRegistration,
   onRelationshipEnded,
   accountWrites,
-  summaryCounts,
   partyName,
   ours,
 }: {
@@ -529,12 +570,7 @@ export function PartyOverviewSection({
    * 客户账户块的写入口（票 business-parties-object-page/03）：有写授予的页面给，带上页面持有的往来单位列表答案（新增表单的候选、
    * 停用表单的版本建议都从它取）。给了才摆「新增客户账户」与各账户的「停用…」；不给就只读。
    */
-  accountWrites?: { parties: ApiResult<BusinessPartyListResponseBody> | null };
-  /**
-   * 顶部「它对我们是什么」里要不要带那行五册计数。右栏把计数摆在头区（票 business-party-ux/08），签里就不再重复——一个事实
-   * 首屏只出现一处；对象页没有那一行，照旧带。缺省带。
-   */
-  summaryCounts?: boolean;
+  accountWrites?: CustomerAccountWrites;
 }) {
   const lists = usePartyOverviewLists();
   const { accounts, entities, agreements, settlement } = lists;
@@ -633,12 +669,10 @@ export function PartyOverviewSection({
             <RoleTags label="对方担任：" roles={roles.asCounterparty} />
           </>
         )}
-        {summaryCounts !== false ? (
-          <p className={`mt-2 ${note}`}>
-            合作关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 公司主体 {countText(entityState)} · 供应商协议{' '}
-            {countText(agreementState)} · 结算政策 {countText(settlementState)}
-          </p>
-        ) : null}
+        <p className={`mt-2 ${note}`}>
+          合作关系 {countText(relationshipState)} · 客户账户 {countText(accountState)} · 公司主体 {countText(entityState)} · 供应商协议{' '}
+          {countText(agreementState)} · 结算政策 {countText(settlementState)}
+        </p>
         <p className={`mt-1 ${note}`}>
           授信、余额与运单不在这里显示；角色只数已生效的关系。
         </p>

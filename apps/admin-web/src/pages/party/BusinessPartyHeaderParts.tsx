@@ -56,15 +56,22 @@ export function businessPartyHasBanners(row: BusinessPartyRecord): boolean {
   return row.deactivatedAt !== undefined;
 }
 
+/** 停用那一句：从哪一刻起、依据哪张单据。对象页的横幅与工作台右栏概要上方的提示条各套各的框，话只在这里写一遍。 */
+export function BusinessPartyDeactivationNote({ deactivatedAt, deactivationBasis }: { deactivatedAt: string; deactivationBasis?: string }) {
+  return (
+    <span>
+      自 <Instant value={deactivatedAt} /> 起停用，新的业务不再找它
+      {deactivationBasis ? ` — 来源单据 ${deactivationBasis}` : ''}
+    </span>
+  );
+}
+
 export function BusinessPartyBanners({ row }: { row: BusinessPartyRecord }) {
   if (!row.deactivatedAt) return null;
   return (
     <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 type-body ${statusToneBanner.danger}`}>
       <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText.danger}`} aria-hidden="true" />
-      <span>
-        自 <Instant value={row.deactivatedAt} /> 起停用，新的业务不再找它
-        {row.deactivationBasis ? ` — 来源单据 ${row.deactivationBasis}` : ''}
-      </span>
+      <BusinessPartyDeactivationNote deactivatedAt={row.deactivatedAt} deactivationBasis={row.deactivationBasis} />
     </div>
   );
 }
