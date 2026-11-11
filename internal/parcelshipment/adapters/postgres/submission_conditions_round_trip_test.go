@@ -78,7 +78,11 @@ func TestSubmissionConditionsAndSupplementGapsSurviveTheRoundTrip(t *testing.T) 
 		t.Fatalf("decide: %v", err)
 	}
 	mustSave(t, transactor, ctx, repository, requestIdentity(t, "req-gap-1"), accepted)
-	decision, formed := mustFind(t, repository, ctx, "req-gap-1").AcceptanceDecision()
+	reloaded := mustFind(t, repository, ctx, "req-gap-1")
+	if gaps := reloaded.AcceptanceDecisionTask().SupplementGaps(); len(gaps) != 0 {
+		t.Fatalf("接受之后还留着缺口：%+v", gaps)
+	}
+	decision, formed := reloaded.AcceptanceDecision()
 	if !formed {
 		t.Fatal("决定没读回来")
 	}

@@ -445,6 +445,7 @@ type commercialBasisDouble struct {
 	manualReview                 domain.ManualReviewPolicy
 	applicable                   []domain.AcceptanceCheckGroup
 	pendingRouting               domain.PendingRoutingAllowance
+	conditions                   domain.SubmissionConditions
 	err                          error
 	record                       func(string)
 	calls                        int
@@ -506,6 +507,8 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 		Applicable:     applicable,
 		ManualReview:   double.manualReview,
 		PendingRouting: double.pendingRouting,
+
+		SubmissionConditions: double.conditions,
 	})
 	if err != nil {
 		double.t.Fatalf("new commercial basis snapshot: %v", err)

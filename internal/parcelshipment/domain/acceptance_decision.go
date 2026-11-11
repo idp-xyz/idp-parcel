@@ -323,6 +323,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		request.decisionFormed = true
 		request.acceptanceTask.waitingOn = ResumePathInvalid
 		request.acceptanceTask.state = AcceptanceTaskComplete
+		request.acceptanceTask.supplementGaps = nil
 		return request, nil
 	}
 
@@ -358,6 +359,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		}
 		return request, nil
 	}
+	request.acceptanceTask.supplementGaps = nil
 	if manualReview != ManualReviewNotRequired && manualReview != ManualReviewCompleted {
 		request.acceptanceTask.waitingOn = ResumeByManualReview
 		return request, nil

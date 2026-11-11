@@ -48,7 +48,7 @@ type CommercialBasisAdapter struct {
 	values       AsOfValueSource
 }
 
-// CommercialBasisAdapterDeps 收拢七个协作方；≥5 个输入按本仓分界用结构体。
+// CommercialBasisAdapterDeps 收拢各协作方；≥5 个输入按本仓分界用结构体。
 type CommercialBasisAdapterDeps struct {
 	Resolve      *pcapplication.ResolveCommercialBasisHandler
 	Revalidate   *pcapplication.ValidateCommercialBasisHandler
@@ -232,9 +232,10 @@ func (adapter *CommercialBasisAdapter) resolutionOf(
 	}
 }
 
-// adoptedResolution 把一份唯一闭包译成携带快照的`适用`结果。快照四类内容各有其源：
+// adoptedResolution 把一份唯一闭包译成携带快照的`适用`结果。快照的内容各有其源：
 // 标识/规则包/视图修订取自闭包本身，时点声明与内容声明按已选对象经提供方端口读取
-// （ADR-0042「在唯一选出后取用」），待路由许可按已选服务产品读取。
+// （ADR-0042「在唯一选出后取用」），待路由许可按已选服务产品读取，提交条件按已选规则包
+// 正文里的规则引用读取（submission_conditions.go）。
 //
 // 声明读不回或未配置时交回`无法判定`而不是造一份缺声明的快照：空适用组等于无条件接受，
 // 正是提供方 DeclareAcceptanceRuleContent 拒绝表达的东西，适配器不得在翻译里把它造出来。

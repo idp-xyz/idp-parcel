@@ -35,7 +35,11 @@ func supplementGapsOf(checks []AcceptanceCheck) []SupplementGap {
 	return gaps
 }
 
-// SupplementGaps 交回任务停在等待受控补充时缺的各项；不在等补充时为空。
+// SupplementGaps 交回任务停在等待受控补充时缺的各项；不在等补充时为空。读侧按等待态把关，不靠每条改等待态的路都记得清
+// 缺口：委托被撤回、主动拒绝或被新提交版本顶掉时任务都不再等补充，缺口照留在那里就会在详情上说「等客户补」。
 func (task AcceptanceDecisionTask) SupplementGaps() []SupplementGap {
+	if task.waitingOn != ResumeByCustomerSupplement {
+		return nil
+	}
 	return append([]SupplementGap(nil), task.supplementGaps...)
 }

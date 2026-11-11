@@ -163,14 +163,14 @@ func TestARulePackageNotDeclaringRequiredDocumentsIsNotRead(t *testing.T) {
 	}
 }
 
-// Covers: 读不回规则包、规则包没登、没接上规则包读口，解析都停在无法判定：依赖读不回，内部重试，不当成没有条件——当成没有条件
-// 会让一票缺箱标号的货件因为一次读取失败被接受。引了没发布的版本那一格在规则包登记时就立不起来（NewRuleReference 的门），
-// 这里造不出来；适配器对它的防御分支照留。
+// Covers: 读不回规则包、规则包没登、在这一类下引了别的目录的参考配置，解析都停在无法判定：依赖读不回或规则包登错了，不当成
+// 没有条件——当成没有条件会让一票缺箱标号的货件被接受。引了没发布的版本那一格在规则包登记时就立不起来（NewRuleReference 的
+// 门），这里造不出来，适配器对它的防御分支照留。读口没接上是装配缺件，响亮报错。
 func TestUnreadableSubmissionConditionsKeepTheResolutionUndetermined(t *testing.T) {
 	for name, rules := range map[string]pcports.AcceptanceRulePackageContentView{
-		"规则包读不回": &rulePackageDouble{err: errors.New("读不动")},
-		"规则包没登":  &rulePackageDouble{},
-		"读口没接上":  nil,
+		"规则包读不回":      &rulePackageDouble{err: errors.New("读不动")},
+		"规则包没登":       &rulePackageDouble{},
+		"引了别的目录的参考配置": &rulePackageDouble{pack: rulePackageCiting(t, "REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@1"), found: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			fixture := documentsFixture(t, rules, true)
@@ -183,5 +183,11 @@ func TestUnreadableSubmissionConditionsKeepTheResolutionUndetermined(t *testing.
 				t.Fatalf("applicability = %q, want 无法判定", resolution.Applicability)
 			}
 		})
+	}
+
+	unwired := documentsFixture(t, nil, true)
+	unwired.fixResolution(t)
+	if _, err := unwired.adapter.ResolveCommercialBasis(context.Background(), unwired.resolveQuery(t)); err == nil {
+		t.Fatal("规则包读口没接上却没报错")
 	}
 }
