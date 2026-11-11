@@ -561,14 +561,58 @@ export interface DeclaredParcelDraft {
   declaredWidth?: string;
   declaredHeight?: string;
   declaredDimensionsUnit?: string;
-  /** 申报原始资料:具体必填字段由真实产品和关务区域决定,页面不发明必填。 */
-  goodsDescription?: string;
-  quantity?: string;
-  declaredValue?: string;
-  currency?: string;
-  originCountry?: string;
   /** 货物和服务资料的补充说明。 */
   serviceNotes?: string;
+  /** 这一箱的平台箱标号(如亚马逊 FBA 箱标,ADR-0374 决定四)。 */
+  platformBoxLabel?: string;
+  /** 这一箱装了货物明细的哪几行各多少(ADR-0373 决定三);要么各箱都报、要么都不报。 */
+  packing?: PackingDraft[];
+}
+
+/** 装箱分配的一条:行号从 1 起,与 goods.lines 的次序对应;数量随该行的计量单位。 */
+export interface PackingDraft {
+  line: number;
+  quantity: string;
+}
+
+/**
+ * 委托的货物明细(ADR-0373):货物明细行相当于商业发票的行,一种货的值只写一处。各格原样交给服务端,只认形状、
+ * 不核对;具体必填字段由真实产品和关务区域决定,页面不发明必填。
+ */
+export interface GoodsDraft {
+  /** 内件性质,UPU CN23 六格:GIFT / DOCUMENTS / COMMERCIAL_SAMPLE / RETURNED_GOODS / SALE_OF_GOODS / OTHER。 */
+  contentCategory?: string;
+  /** 只随 OTHER 说明一句是什么。 */
+  contentCategoryNote?: string;
+  lines: GoodsLineDraft[];
+}
+
+export interface GoodsLineDraft {
+  /** 品名,同一语言至多一条;lang 原样交,不知道语言时记 und。 */
+  descriptions?: { lang: string; text: string }[];
+  quantity?: string;
+  unit?: string;
+  /** 单价与行总价可只报一格,两格同用 currency。 */
+  unitValue?: string;
+  lineValue?: string;
+  currency?: string;
+  /** 整行的净重。 */
+  netWeight?: string;
+  netWeightUnit?: string;
+  /** 申报商品编码,口径 EXPORT / IMPORT 各至多一条。 */
+  commodityCodes?: { side: string; code: string }[];
+  originCountry?: string;
+  /** 货主自己的商品编码。 */
+  sku?: string;
+  /** 这一行货出自哪张销售订单;只是引用,服务端不核对。 */
+  salesOrder?: { platform?: string; orderNumber?: string; orderLine?: string };
+}
+
+/** 平台货件(ADR-0374):一个平台货件一份委托。 */
+export interface PlatformShipmentDraft {
+  platform: string;
+  shipmentId: string;
+  referenceId?: string;
 }
 
 export interface ShipmentRequestDraft {
@@ -588,6 +632,8 @@ export interface ShipmentRequestDraft {
   /** 目的服务范围。 */
   destinationServiceScope: string;
   parcels: DeclaredParcelDraft[];
+  goods?: GoodsDraft;
+  platformShipment?: PlatformShipmentDraft;
 }
 
 export interface WithdrawalDraft {

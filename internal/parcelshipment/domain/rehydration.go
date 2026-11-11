@@ -50,6 +50,9 @@ type RehydrateShipmentRequestSpec struct {
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四），收成品类型：包外只能经
 	// DeclareCustomerParcelNumber 造它。它在`已提交`下就有值；漏带回，接受时就形成不出外部标识关联。
 	CustomerParcelNumbers []CustomerParcelNumberDeclaration
+	// PlatformShipment 与 PlatformBoxLabels 是委托上的平台声明（ADR-0374 决定四），收成品类型；旧形快照没有，读回即没报。
+	PlatformShipment  PlatformShipmentDeclaration
+	PlatformBoxLabels []PlatformBoxLabelDeclaration
 	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空；`已拒绝`下只有
 	// 决定在场，其余三项必然缺席（ADR-0188 对账表）；`已撤回`下四项都缺席，决定边界由 DecisionFormed 与
 	// Withdrawal 表达。
@@ -150,7 +153,9 @@ type RehydrateSubmissionVersionSpec struct {
 	// RequestedProduct 同理收成品（票 psb/17）：包外只能经 RequestedServiceProductOf 或零值造它；旧形快照没有这一格，
 	// 读回即未声明——不回填、不猜。
 	RequestedProduct DeclaredServiceProduct
-	EstablishedAt    time.Time
+	// Goods 同理收成品（ADR-0373）：包外只能经 NewGoodsDetails 造它；旧形快照没有这一段，读回即没报——不回填、不猜。
+	Goods         GoodsDetails
+	EstablishedAt time.Time
 }
 
 // RehydrateAcceptanceTaskSpec 是接受判断任务在库里的样子。
@@ -192,8 +197,12 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			profiles:          append([]DeclaredParcelProfile(nil), prior.Profiles...),
 			elements:          prior.Elements,
 			requestedProduct:  prior.RequestedProduct,
+			goods:             prior.Goods,
 			establishedAt:     prior.EstablishedAt,
 		})
+		if err := goodsFitMembers(prior.Goods, prior.DeclaredParcelIDs); err != nil {
+			return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("历史版本的货物明细与成员对不上：%v", err))
+		}
 	}
 	priorTasks := make([]AcceptanceDecisionTask, 0, len(snapshot.PriorTasks))
 	for _, prior := range snapshot.PriorTasks {
@@ -208,6 +217,14 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			authorizedDisposition: prior.AuthorizedDisposition,
 		})
 	}
+	// 快照立不起来是库里那一行或适配器的问题，不是客户输入的问题（ADR-0029 按恢复动作分格）：一律包成重建拒绝。
+	if err := goodsFitMembers(snapshot.CurrentVersion.Goods, snapshot.CurrentVersion.DeclaredParcelIDs); err != nil {
+		return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("当前版本的货物明细与成员对不上：%v", err))
+	}
+	boxLabels, err := platformBoxLabelsFor(snapshot.PlatformBoxLabels, snapshot.PlatformShipment, snapshot.CurrentVersion.DeclaredParcelIDs)
+	if err != nil {
+		return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("平台箱标号与成员或平台货件对不上：%v", err))
+	}
 	request := ShipmentRequest{
 		revision:          snapshot.Revision,
 		shipmentRequestID: snapshot.ShipmentRequestID,
@@ -221,6 +238,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			profiles:          append([]DeclaredParcelProfile(nil), snapshot.CurrentVersion.Profiles...),
 			elements:          snapshot.CurrentVersion.Elements,
 			requestedProduct:  snapshot.CurrentVersion.RequestedProduct,
+			goods:             snapshot.CurrentVersion.Goods,
 			establishedAt:     snapshot.CurrentVersion.EstablishedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
@@ -242,6 +260,8 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			kind:  snapshot.PriorLink.Kind,
 		},
 		customerParcelNumbers: append([]CustomerParcelNumberDeclaration(nil), snapshot.CustomerParcelNumbers...),
+		platformShipment:      snapshot.PlatformShipment,
+		platformBoxLabels:     boxLabels,
 		decision: AcceptanceDecision{
 			decisionID:   snapshot.Decision.DecisionID,
 			accepted:     snapshot.Decision.Accepted,

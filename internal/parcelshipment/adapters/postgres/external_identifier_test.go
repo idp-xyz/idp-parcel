@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -53,6 +54,18 @@ func numberedRequest(
 	numbers map[string]string,
 ) domain.ShipmentRequest {
 	t.Helper()
+	return numberedRequestWith(t, tenant, customer, key, requestID, parcels, numbers, nil)
+}
+
+// numberedRequestWith 同 numberedRequest，另给一个钩子在建单前改规格（如加平台箱标号）；钩子为 nil 即不改。
+func numberedRequestWith(
+	t *testing.T,
+	tenant, customer, key, requestID string,
+	parcels []string,
+	numbers map[string]string,
+	amend func(*domain.SubmitShipmentRequestSpec),
+) domain.ShipmentRequest {
+	t.Helper()
 	spec := submittedShipmentRequestSpec(t, key, requestID)
 	fingerprint, err := domain.NewSourceSubmissionFingerprint(
 		requestScopedIdentity(t, tenant, customer, key),
@@ -85,6 +98,9 @@ func numberedRequest(
 			t.Fatalf("配对：%v", err)
 		}
 		spec.CustomerParcelNumbers = append(spec.CustomerParcelNumbers, declaration)
+	}
+	if amend != nil {
+		amend(&spec)
 	}
 	request, err := domain.SubmitShipmentRequest(spec)
 	if err != nil {
@@ -688,5 +704,128 @@ func TestReSigningTheSameNumberFormsANewRelation(t *testing.T) {
 	}
 	if successorBasis != "label-txn-2" {
 		t.Fatalf("后继依据 = %q, want label-txn-2", successorBasis)
+	}
+}
+
+// labelledRequest 是一份带平台货件与逐箱平台箱标号的委托，成员按 labels 的键。
+func labelledRequest(t *testing.T, tenant, customer, key, requestID string, labels map[string]string) domain.ShipmentRequest {
+	t.Helper()
+	parcels := make([]string, 0, len(labels))
+	for parcel := range labels {
+		parcels = append(parcels, parcel)
+	}
+	slices.Sort(parcels)
+	return numberedRequestWith(t, tenant, customer, key, requestID, parcels, nil, func(spec *domain.SubmitShipmentRequestSpec) {
+		shipment, err := domain.DeclarePlatformShipment("AMAZON", mustBuild(t, domain.NewExternalIdentifierNumber, "FBA15-"+key), "")
+		if err != nil {
+			t.Fatalf("平台货件：%v", err)
+		}
+		spec.PlatformShipment = shipment
+		for _, parcel := range parcels {
+			label, err := domain.DeclarePlatformBoxLabel(mustBuild(t, domain.NewDeclaredParcelID, parcel),
+				mustBuild(t, domain.NewExternalIdentifierNumber, labels[parcel]))
+			if err != nil {
+				t.Fatalf("箱标号：%v", err)
+			}
+			spec.PlatformBoxLabels = append(spec.PlatformBoxLabels, label)
+		}
+	})
+}
+
+// Covers: ADR-0374 决定四——平台箱标号与客户包裹件号同一套：接受后按箱标号查得到那件包裹，类型的封闭集在库里也认它；另一份委托
+// 还在`已提交`就声明了同一个箱标号，答歧义信号、不成为候选——FBA 箱子在委托未接受时到站，节点据此答身份冲突。
+func TestAPlatformBoxLabelIsFoundAfterAcceptanceAndSignalsAmbiguityWhileSubmitted(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	ctx := t.Context()
+	fixture.insertAndAccept(t, labelledRequest(t, "tenant-1", "customer-1", "req-key-a", "request-a",
+		map[string]string{"parcel-a1": "FBA15SYNU000001", "parcel-a2": "FBA15SYNU000002"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "FBA15SYNU000002"); !slices.Equal(parcels, []string{"parcel-a2"}) || signalled {
+		t.Fatalf("接受后按箱标号答 %v / %v, want [parcel-a2] 不带信号", parcels, signalled)
+	}
+
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, labelledRequest(t, "tenant-1", "customer-2", "req-key-b", "request-b",
+		map[string]string{"parcel-b1": "FBA15SYNU000002"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "FBA15SYNU000002"); !slices.Equal(parcels, []string{"parcel-a2"}) || !signalled {
+		t.Fatalf("另有已提交声明同一箱标号时答 %v / %v, want [parcel-a2] 带信号", parcels, signalled)
+	}
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, labelledRequest(t, "tenant-1", "customer-3", "req-key-c", "request-c",
+		map[string]string{"parcel-c1": "FBA15SYNU000099"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "FBA15SYNU000099"); len(parcels) != 0 || !signalled {
+		t.Fatalf("册里没有、只有声明时答 %v / %v, want 零候选带信号", parcels, signalled)
+	}
+}
+
+// Covers: `AT-PS-188` 的真库半边——一票 50 箱同款的 FBA 货件：一份委托 50 个包裹，一行货物加 50 条分配，每箱一个平台箱标号；
+// 存进去读得回，接受后按任一箱的箱标号查得到那一件。
+func TestAFiftyCartonFBAShipmentRoundTripsAndEveryBoxLabelFindsItsCarton(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	parcels := make([]string, 50)
+	labels := make(map[string]string, 50)
+	for index := range parcels {
+		parcels[index] = fmt.Sprintf("carton-%02d", index+1)
+		labels[parcels[index]] = fmt.Sprintf("FBA15SYN50U%06d", index+1)
+	}
+	request := numberedRequestWith(t, "tenant-1", "customer-1", "req-key-fba", "request-fba", parcels, nil, func(spec *domain.SubmitShipmentRequestSpec) {
+		shipment, err := domain.DeclarePlatformShipment("AMAZON", mustBuild(t, domain.NewExternalIdentifierNumber, "FBA15SYN50"), "SYN-REF-50")
+		if err != nil {
+			t.Fatalf("平台货件：%v", err)
+		}
+		spec.PlatformShipment = shipment
+		members := spec.Candidate.DeclaredParcelIDs()
+		packing := make([]domain.PackingAllocationSpec, 0, len(members))
+		for _, member := range members {
+			label, err := domain.DeclarePlatformBoxLabel(member, mustBuild(t, domain.NewExternalIdentifierNumber, labels[member.String()]))
+			if err != nil {
+				t.Fatalf("箱标号：%v", err)
+			}
+			spec.PlatformBoxLabels = append(spec.PlatformBoxLabels, label)
+			packing = append(packing, domain.PackingAllocationSpec{Parcel: member, Line: 1, Quantity: "24"})
+		}
+		this := domain.SourceMarkThisDeclaration
+		goods, err := domain.NewGoodsDetails(domain.GoodsDetailsSpec{
+			Lines: []domain.GoodsLineSpec{{
+				Descriptions: []domain.GoodsDescriptionSpec{{Language: "en", Text: domain.GoodsCellSpec{Value: "Men's cotton T-shirt", Mark: this}}},
+				Quantity:     domain.GoodsCellSpec{Value: "1200", Mark: this},
+			}},
+			Packing: packing,
+		}, members)
+		if err != nil {
+			t.Fatalf("货物明细：%v", err)
+		}
+		spec.Goods = goods
+	})
+	fixture.insertAndAccept(t, request)
+
+	found := mustFind(t, fixture.requests, t.Context(), "req-key-fba")
+	if len(found.CurrentSubmissionVersion().DeclaredParcelIDs()) != 50 || len(found.CurrentSubmissionVersion().Goods().Packing()) != 50 ||
+		len(found.PlatformBoxLabels()) != 50 {
+		t.Fatalf("读回 %d 件、%d 条分配、%d 个箱标号, want 50 each", len(found.CurrentSubmissionVersion().DeclaredParcelIDs()),
+			len(found.CurrentSubmissionVersion().Goods().Packing()), len(found.PlatformBoxLabels()))
+	}
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "FBA15SYN50U000037"); !slices.Equal(parcels, []string{"carton-37"}) || signalled {
+		t.Fatalf("按第 37 箱的箱标号答 %v / %v, want [carton-37] 不带信号", parcels, signalled)
+	}
+}
+
+// Covers: ADR-0374 决定四、ADR-0212 决定四——平台箱标号在销售平台的编号空间里算数：带了交付范围的核对，别的客户账户还在`已提交`
+// 声明的同一个箱标号照样算歧义信号；客户包裹件号那一支照旧按范围收窄。
+func TestAPlatformBoxLabelSignalsAmbiguityAcrossAccountsEvenWithADeliveryScope(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	ctx := t.Context()
+	fixture.insertAndAccept(t, labelledRequest(t, "tenant-1", "customer-1", "req-key-a", "request-a",
+		map[string]string{"parcel-a1": "FBA15SYNSCOPEU1"}))
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, labelledRequest(t, "tenant-1", "customer-2", "req-key-b", "request-b",
+		map[string]string{"parcel-b1": "FBA15SYNSCOPEU1"}))
+	answer, err := fixture.identifiers.FindParcelsByExternalIdentifier(ctx, mustBuild(t, domain.NewTenantID, "tenant-1"),
+		mustBuild(t, domain.NewExternalIdentifierLookupNumber, "FBA15SYNSCOPEU1"),
+		[]domain.CustomerAccountID{mustBuild(t, domain.NewCustomerAccountID, "customer-1")})
+	if err != nil {
+		t.Fatalf("按范围核对：%v", err)
+	}
+	if len(answer.Candidates) != 1 || answer.Candidates[0].Parcel.String() != "parcel-a1" || !answer.Candidates[0].ScopeCompatible {
+		t.Fatalf("候选 = %+v, want [parcel-a1] 范围相容", answer.Candidates)
+	}
+	if !answer.DeclaredBySubmittedRequest {
+		t.Fatal("范围外账户声明了同一个箱标号却不算歧义；箱标号不在客户账户的编号空间里")
 	}
 }

@@ -335,3 +335,29 @@ func TestCellsThatAreNotStorableTextAreRefused(t *testing.T) {
 		t.Errorf("NUL in category note: err = %v, want ErrInvalidGoodsDetails", err)
 	}
 }
+
+// Covers: 封闭集合的词与取值一一对应，词表外的词译不回来。
+func TestClosedSetWordsParseBackToTheirValues(t *testing.T) {
+	for _, mark := range []domain.DeclarationSourceMark{domain.SourceMarkThisDeclaration, domain.SourceMarkBoxList, domain.SourceMarkCommodityDeclaration} {
+		if parsed, ok := domain.ParseDeclarationSourceMark(mark.String()); !ok || parsed != mark {
+			t.Errorf("mark %q parsed to %v ok=%v", mark, parsed, ok)
+		}
+	}
+	for _, category := range []domain.ContentCategory{domain.ContentCategoryGift, domain.ContentCategoryDocuments, domain.ContentCategoryCommercialSample,
+		domain.ContentCategoryReturnedGoods, domain.ContentCategorySaleOfGoods, domain.ContentCategoryOther} {
+		if parsed, ok := domain.ParseContentCategory(category.String()); !ok || parsed != category {
+			t.Errorf("category %q parsed to %v ok=%v", category, parsed, ok)
+		}
+	}
+	for _, side := range []domain.CommodityCodeSide{domain.CommodityCodeExportSide, domain.CommodityCodeImportSide} {
+		if parsed, ok := domain.ParseCommodityCodeSide(side.String()); !ok || parsed != side {
+			t.Errorf("side %q parsed to %v ok=%v", side, parsed, ok)
+		}
+	}
+	if _, ok := domain.ParseContentCategory("gift"); ok {
+		t.Error("lower-case word parsed; 词逐字比对")
+	}
+	if _, ok := domain.ParseDeclarationSourceMark(""); ok {
+		t.Error("empty word parsed")
+	}
+}

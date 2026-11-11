@@ -631,8 +631,3 @@ internal/networkrouting/domain ArbitrateLoadingConcurrency
 #
 # 留这段是因为：本门禁按判据本就不管这一类，删掉之后**不会再有任何机制提醒下一个人这里曾有
 # 过一对影子函数**。而它俩当初能长出来，正是因为同文件里已有正主却没有东西拦住第二个写法。
-#
-# 平台货件与平台箱标号的声明工厂（ADR-0374 决定四，票 declared-goods-lines/02）：生产调用方是首方提交口把载荷译成
-# SubmissionPayloadSpec 那一步，等票 declared-goods-lines/03 接上；接上那天两行一起出名单。
-internal/parcelshipment/domain DeclarePlatformBoxLabel
-internal/parcelshipment/domain DeclarePlatformShipment

@@ -206,3 +206,16 @@ func TestTheRetiredDoorbellRefusesToRingOutsideATransaction(t *testing.T) {
 		t.Fatalf("无事务响门铃 err = %v, want ErrTransactionRequired", err)
 	}
 }
+
+// Covers: ADR-0374 决定四、ADR-0211 决定三——平台箱标号在`已提交`期间同样算歧义信号，委托被拒绝那一笔保存也按它声明的每个箱标号
+// 各交一封声明撤除门铃；不交，节点那件因它停在身份冲突上的包裹等不来重核。
+func TestARejectionRingsADoorbellPerDeclaredPlatformBoxLabel(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	request := labelledRequest(t, "tenant-1", "customer-1", "req-key-1", "request-1",
+		map[string]string{"parcel-1": "FBA15SYNBELLU000001", "parcel-2": "FBA15SYNBELLU000002"})
+	mustInsert(t, fixture.transactor, t.Context(), fixture.requests, request)
+	fixture.end(t, request, domain.ShipmentRequestRejected, rejectByContract(t))
+	if got := retiredNumbers(retiredDoorbellsOf(t, fixture.pool)); !slices.Equal(got, []string{"FBA15SYNBELLU000001", "FBA15SYNBELLU000002"}) {
+		t.Fatalf("门铃的号 = %v, want 两个箱标号各一封", got)
+	}
+}

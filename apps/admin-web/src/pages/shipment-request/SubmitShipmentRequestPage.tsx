@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { pendingText } from '../../components/action-feedback';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { submitShipmentRequest, type ApiResult, type DeclaredParcelDraft, type ShipmentRequestDraft, type SubmitResponseBody } from './api';
+import { goodsDraftOf } from './goods-draft';
 import { admissionControlLabels, authorityLabels, submitOutcomeViews, type OutcomeView } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
 import { ShipmentNo } from './refs';
@@ -167,13 +168,10 @@ function buildDraft(head: HeadFormState, parcels: ParcelFormState[]): ShipmentRe
       declaredWidth: optional(parcel.declaredWidth),
       declaredHeight: optional(parcel.declaredHeight),
       declaredDimensionsUnit: optional(parcel.declaredDimensionsUnit),
-      goodsDescription: optional(parcel.goodsDescription),
-      quantity: optional(parcel.quantity),
-      declaredValue: optional(parcel.declaredValue),
-      currency: optional(parcel.currency),
-      originCountry: optional(parcel.originCountry),
       serviceNotes: optional(parcel.serviceNotes),
     })),
+    // 货物不再挂在包裹上:逐包裹填的货物格并成委托级的货物明细行(ADR-0373),一格都没填就整段缺席。
+    goods: goodsDraftOf(parcels),
   };
 }
 

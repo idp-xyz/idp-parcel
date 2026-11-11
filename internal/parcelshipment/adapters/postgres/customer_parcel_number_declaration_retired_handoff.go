@@ -54,6 +54,15 @@ func declarationsRetiredBy(prior domain.ShipmentRequestState, request domain.Shi
 		seen[declaration.Number().String()] = struct{}{}
 		numbers = append(numbers, declaration.Number())
 	}
+	// 平台箱标号在`已提交`期间同样算歧义信号（ADR-0374 决定四），撤下时同样要响：不响，节点那件因它停在身份冲突上的包裹
+	// 就等不来重核（ADR-0211 决定三）。载荷只有租户与号码，NO 按号重核，不用分是哪一类号。
+	for _, label := range request.PlatformBoxLabels() {
+		if _, twice := seen[label.Number().String()]; twice {
+			continue
+		}
+		seen[label.Number().String()] = struct{}{}
+		numbers = append(numbers, label.Number())
+	}
 	return numbers
 }
 
