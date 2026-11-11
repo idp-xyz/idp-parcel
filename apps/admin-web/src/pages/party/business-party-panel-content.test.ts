@@ -84,6 +84,19 @@ test('contactInitialOf 取头像里的那个字', () => {
   equal(contactInitialOf('  '), '');
 });
 
+// Covers: 名字尾部的括注不是名字——先剥掉再取，带括注的与不带的取到同一个字；可以连着几个、全角半角都算；整个名字都在括号
+// 里时不剥；不是字母数字的开头跳过去。
+test('contactInitialOf 不把尾部的括注当成名字', () => {
+  equal(contactInitialOf('林悦（演示）'), '悦');
+  equal(contactInitialOf('王伟 (财务)'), '伟');
+  equal(contactInitialOf('周航（财务）（已离职）'), '航');
+  equal(contactInitialOf('陈静【对账】'), '静');
+  equal(contactInitialOf('Lynn (demo)'), 'L');
+  equal(contactInitialOf('（演示）'), '演');
+  equal(contactInitialOf('(demo) lynn'), 'D');
+  equal(contactInitialOf('#7 ops'), '7');
+});
+
 // Covers: 概要里联系人行只报平台——按登记先后、同一平台只报一次、没写平台的不报；没有社交账号就是空。
 test('contactPlatformsOf 只报有哪几个平台', () => {
   deepEqual(

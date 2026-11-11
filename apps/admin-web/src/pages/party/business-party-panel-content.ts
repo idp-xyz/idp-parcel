@@ -69,16 +69,30 @@ export function panelRelatedCountOf(states: PanelRelatedStates, relationshipsCom
 }
 
 const lastCharacterNames = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u;
+const trailingBracketedNote = /\s*[（(［[【][^（(［[【）)］\]】]*[）)］\]】]\s*$/u;
+const letterOrDigit = /[\p{L}\p{N}]/u;
+
+/** 名字去掉尾部的括注（「林悦（财务）」里的「（财务）」），可以连着几个；整个名字都在括号里时不剥，那就是名字本身。 */
+function nameWithoutTrailingNotes(name: string): string {
+  let core = name.trim();
+  for (;;) {
+    const stripped = core.replace(trailingBracketedNote, '');
+    if (stripped === core || stripped === '') return core;
+    core = stripped;
+  }
+}
 
 /**
- * 联系人头像里的那一个字。汉字、假名、谚文写的名字取末字——同姓的几位末字多半不同，取姓就都一样了；其余文字取首字母大写。
- * 按码点取，不把一个字劈成半个；名字空着就不放字。
+ * 联系人头像里的那一个字。汉字、假名、谚文写的名字取末字——同姓的几位末字多半不同，取姓就都一样了；其余文字取第一个字母或
+ * 数字、大写。尾部的括注不是名字，先剥掉再取：不剥的话末字落在括号上，带括注的那几位又退成取姓。按码点取，不把一个字劈成
+ * 半个；名字空着就不放字。
  */
 export function contactInitialOf(name: string): string {
-  const characters = [...name.trim()];
+  const characters = [...nameWithoutTrailingNotes(name)];
   if (characters.length === 0) return '';
   const last = characters[characters.length - 1];
-  return lastCharacterNames.test(last) ? last : characters[0].toLocaleUpperCase();
+  if (lastCharacterNames.test(last)) return last;
+  return (characters.find((character) => letterOrDigit.test(character)) ?? characters[0]).toLocaleUpperCase();
 }
 
 /** 概要里联系人那一行只报有哪几个平台（账号在「联系人」签）：按登记的先后，同一个平台只报一次，没写平台的不报。 */

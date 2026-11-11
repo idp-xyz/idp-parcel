@@ -250,17 +250,20 @@ function SummaryRelationshipRow({ view, onOpen }: { view: PartyRelationshipView;
     <li className="border-b border-idpxyz-border last:border-b-0">
       <button type="button" className={rowButtonClass} onClick={onOpen}>
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 type-value leading-5 text-idpxyz-breadcrumb">
+          {/* 一句话顺着排：对方名称长了就在句子里折行，角色标签跟在句尾，不各占一行。 */}
+          <span className="block break-words type-value leading-6 text-idpxyz-breadcrumb">
             {view.side === 'HOLDER' ? (
               <>
                 对 {name} 担任
               </>
             ) : (
               <>{name} 对它担任</>
-            )}
-            <PartyRoleTag role={view.role} />
+            )}{' '}
+            <span className="inline-flex align-middle">
+              <PartyRoleTag role={view.role} />
+            </span>
           </span>
-          <span className="mt-0.5 block truncate type-body leading-4 tabular-nums text-idpxyz-breadcrumb">
+          <span className="block truncate type-body leading-4 tabular-nums text-idpxyz-breadcrumb">
             <RelationshipPeriod view={view} /> · <span className="font-mono">{view.relationshipId}</span>
           </span>
         </span>

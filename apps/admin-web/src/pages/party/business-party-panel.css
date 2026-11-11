@@ -26,10 +26,11 @@
 }
 
 /* 「关联」签的合作关系表：对方 · 关系 · 状态 · 展开四列。有效期在窄栏里折到「关系」那一格的第二行——单独一列要两百多像素，
-   四列之外再摆它，对方的名称就只剩几个字。 */
+   四列之外再摆它，对方的名称就只剩几个字。余下的宽度多给「对方」：名称是这张表里唯一会被截的字，「关系」那一格只是一句
+   定长的话加角色标签，留够它排成一行的下限即可。 */
 .business-party-relationship-row {
   display: grid;
-  grid-template-columns: minmax(0, 42fr) minmax(0, 58fr) 104px 44px;
+  grid-template-columns: minmax(0, 3fr) minmax(216px, 2fr) 104px 44px;
   align-items: center;
 }
 
