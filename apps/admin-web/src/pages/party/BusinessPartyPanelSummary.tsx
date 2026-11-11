@@ -28,6 +28,7 @@ import type {
   LegalEntityBankAccountRecord,
 } from './api';
 import { formatCount } from './business-parties-workbench';
+import type { ProfileEditSectionId } from './business-party-edit-origin';
 import {
   contactInitialOf,
   contactPlatformsOf,
@@ -206,7 +207,7 @@ function ContactsCard({
   roles: readonly string[];
   mayWrite: boolean;
   onOpenContacts: () => void;
-  onUpdateProfile: () => void;
+  onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const cards = state.record.contacts.map(contactCardOf);
   const hinted = customerLacksContacts(roles, state.record);
@@ -226,7 +227,7 @@ function ContactsCard({
       {cards.length === 0 ? (
         <PanelCardEmpty title={profileContactsEmptyNoteOf(state).title} lines={hinted ? [customerWithoutContactsLine] : []}>
           {hinted && mayWrite ? (
-            <Button size="sm" variant="outline" className="type-body" onClick={onUpdateProfile}>
+            <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile('contacts')}>
               更新资料
             </Button>
           ) : null}
@@ -415,7 +416,7 @@ function ProfileColumn({
   state: BusinessPartyProfileState | null;
   entities: OverviewSectionState<GroupLegalEntityRecord>;
   mayWrite: boolean;
-  onUpdateProfile: () => void;
+  onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   if (state === null) {
     return (
@@ -437,7 +438,7 @@ function ProfileColumn({
     return (
       <PanelNoteCard {...profileSummaryEmptyNoteOf(state.scheduled, roles)}>
         {mayWrite ? (
-          <Button size="sm" variant="outline" className="type-body" onClick={onUpdateProfile}>
+          <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile()}>
             更新资料
           </Button>
         ) : null}
@@ -446,21 +447,22 @@ function ProfileColumn({
   }
   const record: BusinessPartyProfileRevisionRecord = state.record;
   const bankAccounts = record.bankAccounts ?? [];
-  // 三张卡的「编辑」进的是同一个编辑态（对象页的「更新资料」）。
-  const edit = mayWrite ? (
-    <button type="button" className={panelLinkClass} onClick={onUpdateProfile}>
-      编辑
-    </button>
-  ) : undefined;
+  // 三张卡的「编辑」进的是同一个编辑态（对象页的「更新资料」），各落到表单里自己那一段。
+  const editOf = (section: ProfileEditSectionId) =>
+    mayWrite ? (
+      <button type="button" className={panelLinkClass} onClick={() => onUpdateProfile(section)}>
+        编辑
+      </button>
+    ) : undefined;
   return (
     <>
-      <PanelCard readout icon={MapPin} title="名称与地址" action={edit}>
+      <PanelCard readout icon={MapPin} title="名称与地址" action={editOf('names-addresses')}>
         <BusinessPartyNamesAndAddresses record={record} />
       </PanelCard>
-      <PanelCard readout icon={Receipt} title="税务与开票" action={edit}>
+      <PanelCard readout icon={Receipt} title="税务与开票" action={editOf('invoicing')}>
         <BusinessPartyTaxAndInvoicing record={record} registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined} />
       </PanelCard>
-      <PanelCard readout icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined} action={edit}>
+      <PanelCard readout icon={Landmark} title="收款账户" extra={bankAccounts.length ? `${bankAccounts.length} 个` : undefined} action={editOf('bank-accounts')}>
         <BankAccounts accounts={bankAccounts} />
       </PanelCard>
     </>
@@ -499,7 +501,7 @@ export function BusinessPartyPanelSummary({
   mayWrite: boolean;
   /** 「关联」签里登记合作关系的表单开着：提示条上的入口先收起。 */
   relationshipFormOpen: boolean;
-  onUpdateProfile: () => void;
+  onUpdateProfile: (section?: ProfileEditSectionId) => void;
   onRegisterRelationship: () => void;
   onOpenContacts: () => void;
   onOpenRelated: (target: PanelRelatedTarget) => void;
@@ -627,7 +629,7 @@ export function BusinessPartyPanelContacts({
   partyId: string;
   profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
   mayWrite: boolean;
-  onUpdateProfile: () => void;
+  onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const state = businessPartyProfileStateOf(profiles.answer, partyId);
   if (state.kind === 'note') return <PanelNoteCard lines={[state.text]} />;
@@ -636,7 +638,7 @@ export function BusinessPartyPanelContacts({
     return (
       <PanelNoteCard {...profileContactsEmptyNoteOf(state)}>
         {mayWrite ? (
-          <Button size="sm" variant="outline" className="type-body" onClick={onUpdateProfile}>
+          <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile('contacts')}>
             更新资料
           </Button>
         ) : null}
@@ -648,7 +650,7 @@ export function BusinessPartyPanelContacts({
       <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p className="type-body leading-5 text-idpxyz-breadcrumb">{formatCount(contacts.length)} 位联系人 · 电话、邮箱与账号点一下就复制</p>
         {mayWrite ? (
-          <Button size="sm" variant="outline" className="h-7 shrink-0 type-body" onClick={onUpdateProfile}>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 type-body" onClick={() => onUpdateProfile('contacts')}>
             编辑联系人
           </Button>
         ) : null}
@@ -672,7 +674,7 @@ export function BusinessPartyPanelVersions({
   partyId: string;
   profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
   mayWrite: boolean;
-  onUpdateProfile: () => void;
+  onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const state = businessPartyProfileStateOf(profiles.answer, partyId);
   if (state.kind === 'note') return <PanelNoteCard lines={[state.text]} />;
@@ -680,7 +682,7 @@ export function BusinessPartyPanelVersions({
     return (
       <PanelNoteCard {...profileVersionsEmptyNote}>
         {mayWrite ? (
-          <Button size="sm" variant="outline" className="type-body" onClick={onUpdateProfile}>
+          <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile()}>
             更新资料
           </Button>
         ) : null}

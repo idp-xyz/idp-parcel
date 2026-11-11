@@ -8,6 +8,7 @@ import {
   emptyBusinessPartyDraft,
   identificationChanged,
   identificationDraftOf,
+  identityCorrectionChanges,
   registeredNumbersChanged,
   suggestedBusinessPartyRevision,
   type BusinessPartyDraft,
@@ -171,4 +172,34 @@ test('识别信息的预填与改动判读', () => {
   const removed = draft({ ...prefilled, registrationCountry: '', lifetimeNumbers: [] });
   equal(registeredNumbersChanged(row, removed), true);
   equal(registeredNumbersChanged({}, draft({ registrationCountry: 'CN', lifetimeNumbers: [{ typeCode: 'A', number: '1' }] })), false);
+});
+
+// Covers: 「更正登记信息」保存前核对的那几行（票 business-party-redesign/11）——预填后不动一行都没有；号与编码按内容比、与次序
+// 无关，没填的空行不算；改了的只列改了的那几格，值是将要送上去的（去首尾空白）。
+test('identityCorrectionChanges 只列有改动的格', () => {
+  const row = {
+    identityLayerRegistered: true,
+    registrationCountry: 'CN',
+    lifetimeRegistrationNumbers: [{ typeCode: 'A', number: '1' }, { typeCode: 'B', number: '2' }],
+    externalReferences: [{ system: 'ERP', purpose: 'CUSTOMER', code: 'C-1' }],
+  };
+  const prefilled = draft({ ...identificationDraftOf(row), name: '合成代理七号' });
+  deepEqual(identityCorrectionChanges(row, '合成代理七号', prefilled), []);
+  const reshuffled = draft({
+    ...prefilled,
+    lifetimeNumbers: [...prefilled.lifetimeNumbers].reverse(),
+    externalReferences: [...prefilled.externalReferences, { system: '', purpose: '', code: '' }],
+  });
+  deepEqual(identityCorrectionChanges(row, '合成代理七号', reshuffled), []);
+  const corrected = draft({
+    ...prefilled,
+    name: ' 合成代理七号（更名） ',
+    lifetimeNumbers: [{ typeCode: 'A', number: '1' }],
+    externalReferences: [],
+  });
+  deepEqual(identityCorrectionChanges(row, '合成代理七号', corrected), [
+    { field: '名称', before: '合成代理七号', after: '合成代理七号（更名）' },
+    { field: '注册号', before: 'A 1；B 2', after: 'A 1' },
+    { field: '外部系统编码', before: 'ERP · CUSTOMER C-1', after: '' },
+  ]);
 });

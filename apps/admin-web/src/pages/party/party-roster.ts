@@ -40,6 +40,16 @@ export interface RememberedParty {
 }
 
 /**
+ * 页面按新开页重挂之后取回来的那一行。选中的那一家按标签保留（templates/workspace-view-state.tsx），离开这张标签满新鲜期再回来
+ * 时页面整个重挂、列表重读；离开的那段时间里这一行可能已经变了——从右栏去对象页更正了名称、停用了，或者别人动过——所以取回来
+ * 的这一份一律按「可能已经不是册上的样子」对待：重新读到之前先拿它显着，右栏不闪；读回来的两处都没有它就收起右栏
+ * （rememberedPartyExpired），不拿一行没有重读过的旧样子接着显。
+ */
+export function rememberedPartyOnReturn(remembered: RememberedParty | null): RememberedParty | null {
+  return remembered === null ? null : { ...remembered, stale: true };
+}
+
+/**
  * 右栏显哪一行。选中的那家不一定在当前这一页上——翻了页、换了条件把它筛掉了——右栏不因此关，名录栏也不为它跳页。先在当前
  * 这一页里找，再在不带条件的那一页里找（两处都是刚读到的），都没有才用记着的那一行。
  */

@@ -6,6 +6,7 @@ import {
   partyRosterTypeOf,
   partyRosterTypeUnreadText,
   rememberedPartyExpired,
+  rememberedPartyOnReturn,
   selectedPartyRowOf,
 } from './party-roster';
 
@@ -72,4 +73,17 @@ test('rememberedPartyExpired 写入之后两处都读不到才算过期', () => 
   equal(rememberedPartyExpired('SYN-P-01', true, [], null, fresh), false);
   equal(rememberedPartyExpired('SYN-P-01', true, [], null, null), false);
   equal(rememberedPartyExpired(null, true, [], null, stale), false);
+});
+
+// Covers: 页面重挂之后取回来的那一行一律按「可能已经变了」对待（票 business-party-redesign/11）——行本身不动，只标上；
+// 没记着就是没有。标上之后的去留照 rememberedPartyExpired：重读回来两处都没有它才算过期，还在读、或读到了都不算。
+test('rememberedPartyOnReturn 把取回来的那一行标成可能已经变了', () => {
+  const row = party('SYN-P-01', { revision: 2 });
+  equal(rememberedPartyOnReturn(null), null);
+  deepEqual(rememberedPartyOnReturn({ row, stale: false }), { row, stale: true });
+  deepEqual(rememberedPartyOnReturn({ row, stale: true }), { row, stale: true });
+  const returned = rememberedPartyOnReturn({ row, stale: false });
+  equal(rememberedPartyExpired('SYN-P-01', false, [], null, returned), false);
+  equal(rememberedPartyExpired('SYN-P-01', true, [party('SYN-P-01', { revision: 3 })], null, returned), false);
+  equal(rememberedPartyExpired('SYN-P-01', true, [], [party('SYN-P-02')], returned), true);
 });

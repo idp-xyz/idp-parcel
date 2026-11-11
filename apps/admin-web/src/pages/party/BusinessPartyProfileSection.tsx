@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { FileText, Landmark, MapPin, Receipt, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Contact, FileText, History, Landmark, ListChecks, MapPin, Receipt, UserPlus } from 'lucide-react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
@@ -15,8 +14,11 @@ import {
   type BusinessPartyProfileRevisionListResponseBody,
   type BusinessPartyProfileRevisionRecord,
 } from './api';
+import { profileEditSections, type ProfileEditSectionId } from './business-party-edit-origin';
 import {
   businessPartyProfileChanged,
+  businessPartyProfileComparisonOf,
+  businessPartyProfileContentOf,
   businessPartyProfileDraftBasedOn,
   businessPartyProfileLocalProblems,
   businessPartyProfileMissingFields,
@@ -26,11 +28,13 @@ import {
   customerWithoutContactsLine,
   effectiveBusinessPartyProfile,
   profileContactsEmptyNoteOf,
+  profileEditTagText,
   profileSummaryEmptyNoteOf,
   profileVersionsEmptyNote,
   suggestedBusinessPartyProfileRevision,
   type BusinessPartyProfileDraft,
 } from './business-party-profile';
+import { EditSectionCard, EditSectionNav, EditTag, intoSlot, scrollToEditSection, type EditSlots } from './BusinessPartyEditShell';
 import { LegalEntityBankAccountsTable } from './LegalEntityProfileContent';
 import { LegalEntityContactCards } from './LegalEntityContactCards';
 import { FieldAnchor, LegalEntityProfileFields } from './LegalEntityProfileFields';
@@ -43,8 +47,10 @@ import {
   ReadoutText,
   absentValueMark,
 } from './LegalEntityProfileReadout';
+import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import { invoiceTitleRowsOf, languageTagLabel, problemsWithMissing } from './legal-entity-profile';
-import { scrollToField, useTypeNameOf } from './legal-entity-profile-form-parts';
+import { ChangePreview, scrollToField, useTypeNameOf } from './legal-entity-profile-form-parts';
+import type { ProfileComparison } from './legal-entity-profile-history';
 import { CopyAside, RefText } from './detail-primitives';
 import { AdvancedGroup, FormGroup, RevisionField, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import { partyAnswersDomain } from './party-writes';
@@ -57,7 +63,11 @@ import { advancedGroupOpen } from './registration-form';
 
 const info = moduleInfoById['business-parties'];
 const kind = 'business-party-profile';
-const fieldGroups = ['addresses', 'invoicing', 'bankAccounts', 'contacts'] as const;
+// 编辑态里字段组件一段挂一次、各渲染一组：每一段是一张自己的卡（票 business-party-redesign/11）。
+const addressesGroup = ['addresses'] as const;
+const invoicingGroup = ['invoicing'] as const;
+const bankAccountsGroup = ['bankAccounts'] as const;
+const contactsGroup = ['contacts'] as const;
 const advancedPaths = ['profiles[0].revision'];
 
 /**
@@ -329,12 +339,14 @@ export function BusinessPartyProfileVersions({
 
 /**
  * 「更新资料」编辑态：先把修订链读回来（打开时现问，不拿缓存那份预填——缓存那份可能早于别人刚落的一版），基于此刻有效的一版
- * 预填，再挂表单。资料各项都可缺；登记一版就是整份内容，留空的项这一版就不带。「保存 / 取消」与答复经 `footerSlot` 钉进页脚。
+ * 预填，再挂表单。资料各项都可缺；登记一版就是整份内容，留空的项这一版就不带。页头右端的标记、锚点列与底部的动作条经外壳的
+ * 槽位送出去（BusinessPartyEditShell.tsx 的 EditSlots）。
  */
 export function BusinessPartyProfileEditMode({
   partyId,
   registrationCountry,
-  footerSlot,
+  slots,
+  initialSection,
   onLanded,
   onUnsavedChange,
   onCancel,
@@ -342,7 +354,9 @@ export function BusinessPartyProfileEditMode({
 }: {
   partyId: string;
   registrationCountry?: string;
-  footerSlot: HTMLElement | null;
+  slots: EditSlots;
+  /** 进来时落到哪一段（名录右栏卡头的「编辑」）；不指定就在表单开头。 */
+  initialSection: ProfileEditSectionId | null;
   onLanded: (sent: BusinessPartyProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
   onCancel: () => void;
@@ -350,13 +364,14 @@ export function BusinessPartyProfileEditMode({
   onRequestLeave: (href: string) => void;
 }) {
   const query = useBusinessPartyProfiles(partyId, true);
-  const renderFooter = (node: ReactNode) => (footerSlot ? createPortal(node, footerSlot) : node);
   const { record, body } = effectiveProfileOf(query, partyId);
   if (body === null) {
     return (
       <>
+        {intoSlot(slots.tag, <EditTag>正在更新资料</EditTag>)}
         <p className="type-body text-idpxyz-breadcrumb">{query.answer === null ? '正在读取资料，表单会基于此刻有效的一版预填…' : '资料暂时读不到，稍后再试。'}</p>
-        {renderFooter(
+        {intoSlot(
+          slots.footer,
           <div className="flex justify-end">
             <Button variant="outline" onClick={onCancel}>
               取消
@@ -375,7 +390,8 @@ export function BusinessPartyProfileEditMode({
       scheduled={latest}
       known={body.revisions}
       registrationCountry={registrationCountry}
-      renderFooter={renderFooter}
+      slots={slots}
+      initialSection={initialSection}
       onLanded={onLanded}
       onUnsavedChange={onUnsavedChange}
       onCancel={onCancel}
@@ -384,13 +400,17 @@ export function BusinessPartyProfileEditMode({
   );
 }
 
+/** 「核对」一步正在看的东西：有基线时是与它的比较；第一版没有可比的，只有一句话。 */
+type ProfileReview = { comparison: ProfileComparison | null };
+
 function ProfileForm({
   partyId,
   base,
   scheduled,
   known,
   registrationCountry,
-  renderFooter,
+  slots,
+  initialSection,
   onLanded,
   onUnsavedChange,
   onCancel,
@@ -402,7 +422,8 @@ function ProfileForm({
   scheduled: BusinessPartyProfileRevisionRecord | null;
   known: BusinessPartyProfileRevisionRecord[];
   registrationCountry?: string;
-  renderFooter: (node: ReactNode) => ReactNode;
+  slots: EditSlots;
+  initialSection: ProfileEditSectionId | null;
   onLanded: (sent: BusinessPartyProfileDraft | null) => void;
   onUnsavedChange: (unsaved: boolean) => void;
   onCancel: () => void;
@@ -430,147 +451,229 @@ function ProfileForm({
   const bodyRef = useRef<HTMLDivElement>(null);
   // 内容没变就不登新版：只改来源单据或生效时间不算改动。第一版照旧可存。
   const changed = base === null || businessPartyProfileChanged(baseDraft, form.effectiveDraft, timeZone);
+  // 保存前先核对一遍（票 business-party-redesign/11）：登记之后不能改，只能再登一版。比的是将要送上去的那一份与表单基于的那一版。
+  // 监管登记号的类型名按往来单位登记的注册国家查（读出也是这样查的），没有才按注册地址的国家。
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
+  const catalogueTypeNameOf = useTypeNameOf(typeCatalogue);
+  const [review, setReview] = useState<ProfileReview | null>(null);
+  // 核对那一张卡比表单短得多：正文区是滚动的，内容一换短，停着的位置上就什么都没有了——把它滚回顶上。
+  useEffect(() => {
+    if (review !== null) bodyRef.current?.scrollIntoView({ block: 'start' });
+  }, [review]);
   const save = () => {
     if (missing.length > 0) {
       setAttempted(true);
       scrollToField(bodyRef.current, missing[0].path);
       return;
     }
-    form.send();
+    const typeNameOf: RegistrationNumberTypeNameOf = (country, ...rest) => catalogueTypeNameOf(registrationCountry ?? country, ...rest);
+    setReview({ comparison: base === null ? null : businessPartyProfileComparisonOf(base, form.effectiveDraft, timeZone, typeNameOf) });
   };
   const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
   const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, false);
   const setName = (index: number, change: Partial<BusinessPartyProfileDraft['names'][number]>) =>
     patch({ names: draft.names.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  // 从卡头的「编辑」进来的落到那一段。只在表单挂上的那一下做一次，所以记在 ref 里、不随后来的渲染变。
+  const landing = useRef(initialSection);
+  useEffect(() => {
+    if (landing.current) scrollToEditSection(landing.current);
+  }, []);
+  const fields = { draft, patch, problems, locked, onLeave: onRequestLeave, registeredAddressOptional: true, taxNumberCountry: registrationCountry };
+  const missingNote =
+    attempted && missing.length > 0 ? (
+      <p role="alert" className="text-idpxyz-danger">
+        还有 {missing.length} 项必填未填：{missing.map((field) => field.label).join('、')}
+      </p>
+    ) : null;
 
   return (
     <>
-      <div ref={bodyRef} className="flex min-w-0 scroll-mt-14 flex-col gap-5">
-        <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body leading-5 text-idpxyz-text">
-          {scheduled
-            ? `还没有生效的资料：第 ${scheduled.revision} 版定在 ${formatInstant(scheduled.effectiveFrom, { precision: 'day' })} 起生效，表单基于它预填。保存后登记为版本号更大的新一版，从它的生效时间起取代第 ${scheduled.revision} 版；要改第 ${scheduled.revision} 版，就在这里改好再保存。`
-            : base
-              ? `基于此刻有效的第 ${base.revision} 版预填；保存后登记为新的一版，从它的生效时间起取代上一版，历次版本都保留。`
-              : '还没有登记资料，从空白开始；保存后登记为第一版。'}
-        </div>
-        <FormGroup title="其他语言名称" description="对外单据与海外往来要用的写法，如英文名；身份上的名称不变。都可以不填。">
-          <div className="md:col-span-2 flex flex-col gap-2">
-            {draft.names.map((row, index) => (
-              <div key={index} className="grid grid-cols-[10rem_minmax(0,1fr)_auto] items-start gap-2">
-                <FieldAnchor path={`profiles[0].names[${index}]`}>
-                  <Input
-                    aria-label={`其他语言名称 ${index + 1} 语言`}
-                    placeholder="语言，如 en"
-                    className="font-mono type-value"
-                    value={row.language}
-                    readOnly={locked}
-                    onChange={(event) => setName(index, { language: event.target.value })}
+      {intoSlot(slots.tag, <EditTag>{profileEditTagText(base, scheduled !== null)}</EditTag>)}
+      {review === null ? intoSlot(slots.nav, <EditSectionNav sections={profileEditSections} />) : null}
+      <div ref={bodyRef} className="flex min-w-0 scroll-mt-4 flex-col gap-3">
+        {review !== null ? (
+          <EditSectionCard id="review" icon={ListChecks} title="保存前核对" note="登记之后不能改，只能再登一版">
+            {review.comparison !== null && base !== null ? (
+              <ChangePreview
+                comparison={review.comparison}
+                current={businessPartyProfileContentOf(base)}
+                nextRevision={form.effectiveDraft.revision}
+                effectiveFrom={draft.effectiveFrom}
+                timeZone={timeZone}
+                basis={form.effectiveDraft.basis}
+                baselineQualifier={scheduled ? '尚未生效的' : undefined}
+              />
+            ) : (
+              <p className="type-value leading-6 text-idpxyz-text">
+                这是这家单位的第一版资料。确认后登记为第 {form.effectiveDraft.revision.trim() || '?'} 版，{draft.effectiveFrom.replace('T', ' ')}（{timeZone}）起生效；来源单据：
+                <span className="font-mono type-body">{form.effectiveDraft.basis}</span>。
+              </p>
+            )}
+          </EditSectionCard>
+        ) : (
+          <>
+            <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body leading-5 text-idpxyz-text">
+              {scheduled
+                ? `还没有生效的资料：第 ${scheduled.revision} 版定在 ${formatInstant(scheduled.effectiveFrom, { precision: 'day' })} 起生效，表单基于它预填。保存后登记为版本号更大的新一版，从它的生效时间起取代第 ${scheduled.revision} 版；要改第 ${scheduled.revision} 版，就在这里改好再保存。`
+                : base
+                  ? `基于此刻有效的第 ${base.revision} 版预填；保存后登记为新的一版，从它的生效时间起取代上一版，历次版本都保留。`
+                  : '还没有登记资料，从空白开始；保存后登记为第一版。'}
+            </div>
+
+            <EditSectionCard id="this-update" icon={History} title="这次更新" note="这几格说的是这一次更新，不沿用上一版">
+              <FormGroup title="这次更新" titleHidden description="依据哪份单据、从什么时候起生效；生效时间可以在未来。">
+                <FieldAnchor path="profiles[0].basis">
+                  <Field label="来源单据 *" path="profiles[0].basis" problems={problems}>
+                    <Input
+                      value={draft.basis}
+                      readOnly={locked}
+                      className="font-mono type-value"
+                      aria-label="来源单据"
+                      placeholder="合同、营业执照或对方来函编号"
+                      onChange={(event) => patch({ basis: event.target.value })}
+                    />
+                  </Field>
+                </FieldAnchor>
+                <FieldAnchor path="profiles[0].effectiveFrom">
+                  <WallTimeField
+                    label="生效时间 *"
+                    path="profiles[0].effectiveFrom"
+                    problems={problems}
+                    value={draft.effectiveFrom}
+                    locked={locked}
+                    timeZone={timeZone}
+                    onChange={(effectiveFrom) => patch({ effectiveFrom })}
                   />
                 </FieldAnchor>
-                <Input
-                  aria-label={`其他语言名称 ${index + 1} 名称`}
-                  placeholder="该语言的名称"
-                  className="type-value"
-                  value={row.name}
-                  readOnly={locked}
-                  onChange={(event) => setName(index, { name: event.target.value })}
-                />
-                <Button
-                  variant="ghost"
-                  className="text-idpxyz-breadcrumb"
-                  disabled={locked}
-                  onClick={() => patch({ names: draft.names.filter((_, at) => at !== index) })}
-                >
-                  移除
-                </Button>
-                <div className="col-span-3">
-                  <Problems lines={problems[`profiles[0].names[${index}]`]} />
-                </div>
-              </div>
-            ))}
-            <div>
-              <Button
-                variant="outline"
-                className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb"
-                disabled={locked}
-                onClick={() => patch({ names: [...draft.names, { language: '', name: '' }] })}
+              </FormGroup>
+              <AdvancedGroup
+                open={advancedOpen}
+                onToggle={() => setAdvancedChoice(!advancedOpen)}
+                summary={`版本号 ${form.revisionField.value.trim() || '未填'}${form.revisionField.edited ? '（手填）' : '（建议值）'}`}
               >
-                添加一个名称
-              </Button>
-            </div>
-          </div>
-        </FormGroup>
+                <RevisionField
+                  label="版本号"
+                  path="profiles[0].revision"
+                  problems={problems}
+                  {...form.revisionField}
+                  note="系统按已登记的版本自动算好，一般不用改。"
+                />
+              </AdvancedGroup>
+            </EditSectionCard>
 
-        <LegalEntityProfileFields
-          draft={draft}
-          patch={patch}
-          problems={problems}
-          locked={locked}
-          onLeave={onRequestLeave}
-          groups={fieldGroups}
-          registeredAddressOptional
-          taxNumberCountry={registrationCountry}
-        />
+            <EditSectionCard id="names-addresses" icon={MapPin} title="名称与地址">
+              <FormGroup title="其他语言名称" description="对外单据与海外往来要用的写法，如英文名；身份上的名称不变。都可以不填。">
+                <div className="md:col-span-2 flex flex-col gap-2">
+                  {draft.names.map((row, index) => (
+                    <div key={index} className="grid grid-cols-[10rem_minmax(0,1fr)_auto] items-start gap-2">
+                      <FieldAnchor path={`profiles[0].names[${index}]`}>
+                        <Input
+                          aria-label={`其他语言名称 ${index + 1} 语言`}
+                          placeholder="语言，如 en"
+                          className="font-mono type-value"
+                          value={row.language}
+                          readOnly={locked}
+                          onChange={(event) => setName(index, { language: event.target.value })}
+                        />
+                      </FieldAnchor>
+                      <Input
+                        aria-label={`其他语言名称 ${index + 1} 名称`}
+                        placeholder="该语言的名称"
+                        className="type-value"
+                        value={row.name}
+                        readOnly={locked}
+                        onChange={(event) => setName(index, { name: event.target.value })}
+                      />
+                      <Button
+                        variant="ghost"
+                        className="text-idpxyz-breadcrumb"
+                        disabled={locked}
+                        onClick={() => patch({ names: draft.names.filter((_, at) => at !== index) })}
+                      >
+                        移除
+                      </Button>
+                      <div className="col-span-3">
+                        <Problems lines={problems[`profiles[0].names[${index}]`]} />
+                      </div>
+                    </div>
+                  ))}
+                  <div>
+                    <Button
+                      variant="outline"
+                      className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb"
+                      disabled={locked}
+                      onClick={() => patch({ names: [...draft.names, { language: '', name: '' }] })}
+                    >
+                      添加一个名称
+                    </Button>
+                  </div>
+                </div>
+              </FormGroup>
+              <LegalEntityProfileFields {...fields} groups={addressesGroup} />
+            </EditSectionCard>
 
-        <FormGroup title="这次更新" description="依据哪份单据、从什么时候起生效；生效时间可以在未来。">
-          <FieldAnchor path="profiles[0].basis">
-            <Field label="来源单据 *" path="profiles[0].basis" problems={problems}>
-              <Input
-                value={draft.basis}
-                readOnly={locked}
-                className="font-mono type-value"
-                aria-label="来源单据"
-                placeholder="合同、营业执照或对方来函编号"
-                onChange={(event) => patch({ basis: event.target.value })}
-              />
-            </Field>
-          </FieldAnchor>
-          <FieldAnchor path="profiles[0].effectiveFrom">
-            <WallTimeField
-              label="生效时间 *"
-              path="profiles[0].effectiveFrom"
-              problems={problems}
-              value={draft.effectiveFrom}
-              locked={locked}
-              timeZone={timeZone}
-              onChange={(effectiveFrom) => patch({ effectiveFrom })}
-            />
-          </FieldAnchor>
-        </FormGroup>
+            <EditSectionCard id="invoicing" icon={Receipt} title="税务与开票">
+              <LegalEntityProfileFields {...fields} groups={invoicingGroup} hideTitleOf={invoicingGroup} />
+            </EditSectionCard>
 
-        <AdvancedGroup
-          open={advancedOpen}
-          onToggle={() => setAdvancedChoice(!advancedOpen)}
-          summary={`版本号 ${form.revisionField.value.trim() || '未填'}${form.revisionField.edited ? '（手填）' : '（建议值）'}`}
-        >
-          <RevisionField
-            label="版本号"
-            path="profiles[0].revision"
-            problems={problems}
-            {...form.revisionField}
-            note="系统按已登记的版本自动算好，一般不用改。"
-          />
-        </AdvancedGroup>
-        <p className={fieldLabel}>对方的税号与收款账户在这里登记、供对账与付款指令使用；开票与付款仍由财务系统执行。</p>
+            <EditSectionCard id="bank-accounts" icon={Landmark} title="收款账户">
+              <LegalEntityProfileFields {...fields} groups={bankAccountsGroup} hideTitleOf={bankAccountsGroup} />
+            </EditSectionCard>
+
+            <EditSectionCard id="contacts" icon={Contact} title="联系人">
+              <LegalEntityProfileFields {...fields} groups={contactsGroup} hideTitleOf={contactsGroup} />
+            </EditSectionCard>
+
+            <p className={fieldLabel}>对方的税号与收款账户在这里登记、供对账与付款指令使用；开票与付款仍由财务系统执行。</p>
+          </>
+        )}
       </div>
-      {renderFooter(
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      {intoSlot(
+        slots.footer,
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="min-w-0 flex-1 type-body">
-            {attempted && missing.length > 0 ? (
-              <p role="alert" className="text-idpxyz-danger">
-                还有 {missing.length} 项必填未填：{missing.map((field) => field.label).join('、')}
+            {missingNote}
+            <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={businessPartyProfileOutcomeLabels} problemNote={problemNote} />
+            {form.state.kind === 'idle' && missingNote === null ? (
+              <p className="text-idpxyz-breadcrumb">
+                {review !== null
+                  ? '核对无误再登记；要改就回上一步。'
+                  : !changed
+                    ? '资料没有改动，不用保存。'
+                    : base === null
+                      ? '这是第一版资料；保存前会先让你再看一眼。'
+                      : '保存前会先给你看改了哪几处。'}
               </p>
             ) : null}
-            <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={businessPartyProfileOutcomeLabels} problemNote={problemNote} />
-            {!changed && form.state.kind === 'idle' ? <p className="text-idpxyz-breadcrumb">资料没有改动，不用保存。</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" disabled={locked} onClick={onCancel}>
-              取消
-            </Button>
-            <Button variant="default" className={primaryActionClass} onClick={save} disabled={locked || !form.canSend || !changed}>
-              {locked ? '保存中…' : '保存'}
-            </Button>
+            {review !== null ? (
+              <>
+                <Button variant="outline" disabled={locked} onClick={() => setReview(null)}>
+                  返回修改
+                </Button>
+                <Button
+                  variant="default"
+                  className={primaryActionClass}
+                  disabled={locked}
+                  onClick={() => {
+                    setReview(null);
+                    form.send();
+                  }}
+                >
+                  确认登记
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" disabled={locked} onClick={onCancel}>
+                  取消
+                </Button>
+                <Button variant="default" className={primaryActionClass} onClick={save} disabled={locked || !form.canSend || !changed}>
+                  {locked ? '保存中…' : '核对并保存'}
+                </Button>
+              </>
+            )}
           </div>
         </div>,
       )}

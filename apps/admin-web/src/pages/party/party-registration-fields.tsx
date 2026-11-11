@@ -302,13 +302,28 @@ export function SnapshotJsonDetails({
 }
 
 /** 表单里的一组格：组名、一句说明、两列格。组只管排版，不管哪格必填——必填由格名上的「*」说。 */
-export function FormGroup({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+export function FormGroup({
+  title,
+  description,
+  titleHidden = false,
+  children,
+}: {
+  title: string;
+  description?: string;
+  /** 外面的容器已经用同一个标题当了卡头时给：这里不再画一遍标题，只留说明；组仍以这个标题为读屏名。 */
+  titleHidden?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <section className="flex flex-col gap-3">
-      <div>
-        <h3 className="type-value font-semibold text-idpxyz-text">{title}</h3>
-        {description ? <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">{description}</p> : null}
-      </div>
+    <section className="flex flex-col gap-3" aria-label={titleHidden ? title : undefined}>
+      {titleHidden ? (
+        description ? <p className="type-body leading-4 text-idpxyz-breadcrumb">{description}</p> : null
+      ) : (
+        <div>
+          <h3 className="type-value font-semibold text-idpxyz-text">{title}</h3>
+          {description ? <p className="mt-1 type-body leading-4 text-idpxyz-breadcrumb">{description}</p> : null}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
   );

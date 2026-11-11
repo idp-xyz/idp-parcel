@@ -11,16 +11,25 @@ import type {
   LegalEntityProfileContent,
   LocalizedPartyNameRecord,
 } from './api';
+import type { RegistrationNumberTypeNameOf } from './legal-entity-identity';
 import {
   emptyLegalEntityProfileDraft,
+  languageTagLabel,
   legalEntityProfileLocalProblems,
   legalEntityProfileMissingFields,
   legalEntityProfilePayloadOf,
+  profileComparisonContentOf,
   profileDraftContentOf,
   type LegalEntityProfileDraft,
   type LegalEntityProfileItem,
   type ProfileMissingField,
 } from './legal-entity-profile';
+import {
+  compareLegalEntityProfiles,
+  type ProfileChangeKind,
+  type ProfileComparison,
+  type ProfileFieldChange,
+} from './legal-entity-profile-history';
 
 /** 法人资料草稿的那一份（legalEntityId 一格不用，留空）外加往来单位编码与其他语言名称。 */
 export interface BusinessPartyProfileDraft extends LegalEntityProfileDraft {
@@ -187,8 +196,8 @@ export const profileVersionsEmptyNote: ProfileEmptyNote = {
   lines: ['登记后每一版都列在这里，旧版本不会被覆盖。'],
 };
 
-/** 往来单位的修订折成法人资料内容的形状，好借法人资料的预填折算：注册地址缺席折成空的。 */
-function asProfileContent(record: BusinessPartyProfileRevisionRecord): LegalEntityProfileContent {
+/** 往来单位的修订折成法人资料内容的形状，好借法人资料的预填折算与保存前的比较：注册地址缺席折成空的。 */
+export function businessPartyProfileContentOf(record: BusinessPartyProfileRevisionRecord): LegalEntityProfileContent {
   return {
     revision: record.revision,
     basis: record.basis,
@@ -216,7 +225,64 @@ export function businessPartyProfileDraftBasedOn(
 ): BusinessPartyProfileDraft {
   const empty = emptyBusinessPartyProfileDraft(partyId);
   if (base === null) return empty;
-  return { ...empty, ...profileDraftContentOf(asProfileContent(base)), names: (base.names ?? []).map((row) => ({ ...row })) };
+  return { ...empty, ...profileDraftContentOf(businessPartyProfileContentOf(base)), names: (base.names ?? []).map((row) => ({ ...row })) };
+}
+
+/**
+ * 其他语言名称的改动，一种语言一行：语言是键（服务端也按语言判重复、不分大小写），换了语言是一移除一新增，名称变了才是修改。
+ * 法人资料没有这一格，借来的那份比较（compareLegalEntityProfiles）不管它。
+ */
+function otherLanguageNameChanges(
+  before: readonly LocalizedPartyNameRecord[],
+  after: readonly LocalizedPartyNameRecord[],
+): ProfileFieldChange[] {
+  const keyed = (rows: readonly LocalizedPartyNameRecord[]) =>
+    new Map(rows.filter((row) => row.language.trim() !== '').map((row) => [row.language.trim().toLowerCase(), row] as const));
+  const left = keyed(before);
+  const right = keyed(after);
+  const changes: ProfileFieldChange[] = [];
+  let sequence = 0;
+  for (const key of new Set([...left.keys(), ...right.keys()])) {
+    const was = left.get(key)?.name.trim() ?? '';
+    const now = right.get(key)?.name.trim() ?? '';
+    const kind: ProfileChangeKind = was === now ? 'unchanged' : !was ? 'added' : !now ? 'removed' : 'modified';
+    changes.push({
+      id: `other-language-name-${++sequence}`,
+      group: '名称与地址',
+      subject: '',
+      detail: '',
+      field: `其他语言名称 · ${languageTagLabel((right.get(key) ?? left.get(key))!.language.trim())}`,
+      before: was,
+      after: now,
+      kind,
+    });
+  }
+  return changes;
+}
+
+/**
+ * 保存前核对用的比较（票 business-party-redesign/11）：将要送上去的内容与表单基于的那一版比。内容各格借法人资料那一份比较；
+ * 其他语言名称另比、排在最前——读出里它也在「名称与地址」卡的头一格。比的是将要送的那一份（经载荷折过），去空白、空行不送
+ * 都已经算进去，与 businessPartyProfileChanged 判「有没有改动」用的是同一份载荷。
+ */
+export function businessPartyProfileComparisonOf(
+  base: BusinessPartyProfileRevisionRecord,
+  draft: BusinessPartyProfileDraft,
+  timeZone: string,
+  typeNameOf?: RegistrationNumberTypeNameOf,
+): ProfileComparison {
+  const comparison = compareLegalEntityProfiles(businessPartyProfileContentOf(base), profileComparisonContentOf(draft, timeZone), typeNameOf);
+  const sending = businessPartyProfilePayloadOf(draft, timeZone).profiles[0].names ?? [];
+  return { ...comparison, fields: [...otherLanguageNameChanges(base.names ?? [], sending), ...comparison.fields] };
+}
+
+/**
+ * 编辑态页头右端那枚标记上的话：在哪一版的基础上改。表单基于的那一版还没生效时（已登记的都在未来生效，预填用的是最新登记的
+ * 那一版）说清它还没生效；一版都没有就是登记第一版。
+ */
+export function profileEditTagText(base: Pick<BusinessPartyProfileRevisionRecord, 'revision'> | null, scheduled: boolean): string {
+  if (base === null) return '正在登记资料 · 第 1 版';
+  return scheduled ? `正在更新资料 · 在尚未生效的第 ${base.revision} 版的基础上改` : `正在更新资料 · 在第 ${base.revision} 版的基础上改`;
 }
 
 /** 将要送上去的内容与基线比有没有改动：只比内容各格，版本号、来源单据与生效时间不算。 */

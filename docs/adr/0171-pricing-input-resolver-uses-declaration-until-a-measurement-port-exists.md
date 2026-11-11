@@ -1,6 +1,6 @@
 # ADR-0171：计价输入在没有实测读口时用申报，并标明来源
 
-Status: Accepted（2026-09-30。本项是机制。接受依据是 ADR-0146 决定一。）<!-- 索引注记 -->｜**输入**：发生项成员、申报测量、地址要素三口接上。没有实测时用申报。集运单元不可得。
+Status: Accepted（2026-09-30。本项是机制。接受依据是 ADR-0146 决定一。）<!-- 索引注记 -->｜**输入**：发生项成员、申报测量、地址要素三口接上。没有实测时用申报。集运单元不可得。｜**部分停用**（2026-11-11）：其决定四「不给 `EvaluationSubjectKind` 加第五种。」一句已由 [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 停用——评价对象的第五种是仓储作业收费发生项，只由聚合方式为逐仓储发生项的方案评价；运输收费发生项那一路照旧不为集运单元与别的非单件成员加评价对象种类。**适用场景**：只限评价对象有哪几种这一层；该决定其余各句与其余各条不变
 Date: 2026-09-30
 
 ## Context
@@ -43,3 +43,4 @@ Date: 2026-09-30
 - [ADR-0109](./0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)：分区由目录解，调用方不造
 - [parcel-pricing CONTEXT「计价输入快照」](../domain/parcel-pricing/CONTEXT.md)
 - 票 `.scratch/pp-pricing-input-seams/spec.md`「不在本目录」第一条
+- [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)：前向指针——部分停用决定四「不给 `EvaluationSubjectKind` 加第五种。」一句，第五种评价对象是仓储作业收费发生项
