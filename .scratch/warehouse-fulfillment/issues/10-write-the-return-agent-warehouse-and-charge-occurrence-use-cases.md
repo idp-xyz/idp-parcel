@@ -2,7 +2,7 @@
 
 Category: docs
 Status: ready-for-agent
-Blocked by: 05、06
+Blocked by: 05、06、07、08、09（收费发生项挂在票 07 至 09 写成的作业事实上，并要回填它们的指针）
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「退货」「代理仓」「收费发生项」词条与规则，「退货入库」「代理仓库存声明」两条生命周期；ADR-0370 决定三；票 06 的 ADR（收费发生项怎样被计价与结算消费）。
 
