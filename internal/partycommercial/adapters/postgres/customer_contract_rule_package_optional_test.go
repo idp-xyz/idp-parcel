@@ -78,3 +78,25 @@ func TestAContractContentNamingNoRulePackageRoundTrips(t *testing.T) {
 		t.Fatalf("目录行 = %+v, want 正文已登记、规则包空、一条约定", rows)
 	}
 }
+
+// Covers: 反方向同样是内容不同——先登了指名规则包的正文，同一版本再登一份不指名的，不能被当成重放吞掉，否则那一格的
+// 指名会在重放判等时无声丢掉。
+func TestAContractContentDroppingItsRulePackageIsAConflict(t *testing.T) {
+	repository, transactor, _ := newDeclarationFixture(t)
+	ctx := t.Context()
+	contract := effectiveDeclarationOwner(t, domain.CustomerContractObject, "contract-named-first", "v1")
+	mustSaveVersion(t, transactor, ctx, repository, contract)
+
+	unnamed := contractContentNamingNoRulePackage(t, contract)
+	naming, err := domain.NewCustomerContract(contract, pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		pcValue(t, domain.NewCommercialObjectID, "rules-1"), unnamed.Bindings())
+	if err != nil {
+		t.Fatalf("组合同正文：%v", err)
+	}
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveCustomerContractContent(txCtx, naming)
+	}, ports.DeclarationSaved)
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveCustomerContractContent(txCtx, unnamed)
+	}, ports.DeclarationContentConflict)
+}
