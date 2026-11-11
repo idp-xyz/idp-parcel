@@ -7,6 +7,13 @@ import { stepSelection, workbenchKeyAction, type WorkbenchFocus } from '../../te
 // 行由 `data-row-key` 认，不问它是表格行还是按钮。
 
 const OVERLAY_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="combobox"]';
+// 方向键另有主的地方，判读与页签条同一档（templates/workbench.ts 的 workbenchKeyAction：只让出方向键与 `/`，Esc 照旧归列表
+// 收右栏）：
+// - 页签条：方向键切签。
+// - 弹层的触发钮（`aria-haspopup`：菜单、选单、带搜索的选单）：方向键按惯例是展开它。带搜索的那种自己不接方向键，漏给列表
+//   的话，人在表单里想展开候选，列表却换了选中行、右栏也跟着开。
+// - 声明了方向键不归列表的一块（`data-own-arrow-keys`）：表上方的登记表单——焦点在它的按钮上按方向键，不该动下面的表。
+const ARROW_OWNER_SELECTOR = '[role="tablist"],[aria-haspopup],[data-own-arrow-keys]';
 const ROW_SELECTOR = '[data-row-key]';
 
 function focusOf(target: EventTarget | null): WorkbenchFocus {
@@ -14,7 +21,7 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
   const tag = target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return 'typing';
   if (target.closest(OVERLAY_SELECTOR)) return 'overlay';
-  if (target.closest('[role="tablist"]')) return 'tablist';
+  if (target.closest(ARROW_OWNER_SELECTOR)) return 'tablist';
   return 'free';
 }
 

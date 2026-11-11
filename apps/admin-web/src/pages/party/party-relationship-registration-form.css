@@ -15,4 +15,18 @@
   .party-relationship-form .party-relationship-scope {
     grid-column: span 2;
   }
+
+  /* 「已批准」与「高级」两块并排：各自收着时都只有一行，上下排白占一行的高。哪一块展开都只往下长，不把另一块拉高。 */
+  .party-relationship-form .party-relationship-extras {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+
+  /* 并排时两块收着要一样高：「已批准」那一块的上下留白收到与「高级」的那一行相同。 */
+  .party-relationship-form .party-relationship-approval {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
 }

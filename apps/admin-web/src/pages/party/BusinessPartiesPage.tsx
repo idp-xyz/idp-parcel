@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
@@ -56,11 +56,10 @@ import {
   type RegisterPageBook,
 } from './business-parties-address';
 import type { BusinessPartyDraft } from './business-party-form';
-import type { PartyRelationshipDraft } from './party-relationship-form';
+import { partyRelationshipFormIntro, type PartyRelationshipDraft } from './party-relationship-form';
 import { BusinessPartyDetailPage } from './BusinessPartyDetailPage';
 import { BusinessPartyDetailPanel } from './BusinessPartyDetailPanel';
 import { BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
-import { PanelBand } from './BusinessPartyPanelParts';
 import {
   AttentionItem,
   BusinessPartiesPageHead,
@@ -706,6 +705,7 @@ export function BusinessPartiesPage() {
   useEffect(() => {
     if (registeringRelationship) setBook('relationships');
   }, [registeringRelationship]);
+  const relationshipFormHeadingId = useId();
 
   // 身份册的列表状态。检索词放在地址 `?q=`：别处的引用链接带着它过来，这一册挂载时已经筛到那一行。
   // 筛选、排序与选中的那一家按标签保留（templates/workspace-view-state.tsx），不是普通的组件状态：离开这张标签满新鲜期再回来，
@@ -1766,10 +1766,17 @@ export function BusinessPartiesPage() {
                 }}
                 viewState={viewState}
                 // 「建立合作关系」的表单摆在这里：表的上方、同一个滚动区里。没有本方，两方都选；JSON 快照的折叠区随它带着。
+                // 表单开头的那段说明摆在段头上、跟在标题后面：表单每矮一行，下面的表就多露一行。
                 aboveRows={
                   registeringRelationship ? (
-                    <section aria-label={registerActionLabels['party-relationship']} className="bg-idpxyz-panelBg">
-                      <PanelBand icon={Handshake} title={registerActionLabels['party-relationship']} />
+                    <section aria-labelledby={relationshipFormHeadingId} className="bg-idpxyz-panelBg">
+                      <header className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border-b border-idpxyz-border bg-idpxyz-editor px-6 py-2.5">
+                        <Handshake className="h-4 w-4 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+                        <h2 id={relationshipFormHeadingId} className="shrink-0 type-section leading-5 text-idpxyz-textBright">
+                          {registerActionLabels['party-relationship']}
+                        </h2>
+                        <p className="min-w-0 pl-1 type-body leading-5 text-idpxyz-breadcrumb">{partyRelationshipFormIntro}</p>
+                      </header>
                       <div className="px-6 py-4">
                         <PartyRelationshipRegistrationForm
                           knownRelationships={knownRelationships}
@@ -1778,6 +1785,7 @@ export function BusinessPartiesPage() {
                           onUnsavedChange={reportUnsaved['party-relationship']}
                           onCancel={() => afterDiscardingDrafts(leaveRegister)}
                           snapshotJson
+                          introHidden
                         />
                       </div>
                     </section>

@@ -347,9 +347,10 @@ export function PartyWorkbench<Row>({
               layoutSnapshot.current.scrollLeft = event.currentTarget.scrollLeft;
             }}
           >
-            {/* 表比这一栏宽、横向滚的时候，这一块贴着左缘不跟着走：它与栏同宽，不与表同宽。 */}
+            {/* 表比这一栏宽、横向滚的时候，这一块贴着左缘不跟着走：它与栏同宽，不与表同宽。方向键在这一块里不归列表
+                （use-party-list-keys.ts 的 ARROW_OWNER_SELECTOR）。 */}
             {hasAboveRows ? (
-              <div data-above-rows className="sticky left-0 border-b border-idpxyz-border">
+              <div data-above-rows data-own-arrow-keys className="sticky left-0 border-b border-idpxyz-border">
                 {aboveRows}
               </div>
             ) : null}

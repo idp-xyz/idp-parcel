@@ -109,6 +109,13 @@ export const partyRelationshipFieldPaths = [
 
 export type PartyRelationshipFieldPath = (typeof partyRelationshipFieldPaths)[number];
 
+/**
+ * 表单开头的那段说明。单列在这里是因为它有两处可摆：表单自己的开头，或调用方的段头上（合作关系视图为了让表单矮一行，把它
+ * 摆在段头，表单那一处就不再摆）——两处用的是同一句。
+ */
+export const partyRelationshipFormIntro =
+  '记录谁对谁担任什么角色、从什么时候开始。双方都要先登记为往来单位；没有批准信息的先作为待确认关系，批准后再保存一次。';
+
 /** 角色下拉的选项：只从 partyRoleLabels 派生，码是它的键、顺序同它——不在这里再抄一份封闭集。 */
 export function partyRoleOptions(): PickerOption[] {
   return Object.entries(partyRoleLabels).map(([code, label]) => ({ value: code, label: `${label} · ${code}` }));

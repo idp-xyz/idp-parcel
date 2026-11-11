@@ -28,6 +28,7 @@ import { advancedGroupOpen } from './registration-form';
 import {
   deliveryScopeSpellingOf,
   emptyPartyRelationshipDraft,
+  partyRelationshipFormIntro,
   partyRelationshipLocalProblems,
   partyRelationshipPayloadOf,
   partyRoleOptions,
@@ -89,6 +90,11 @@ export interface PartyRelationshipRegistrationFormProps {
    * 页上的不带。
    */
   snapshotJson?: boolean;
+  /**
+   * 开头那段说明（party-relationship-form.ts 的 partyRelationshipFormIntro）调用方已经摆在别处时给——合作关系视图把它摆在
+   * 段头上，表单省下一行的高。
+   */
+  introHidden?: boolean;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -105,6 +111,7 @@ export function PartyRelationshipRegistrationForm({
   onPartiesChange,
   onCancel,
   snapshotJson = false,
+  introHidden = false,
 }: PartyRelationshipRegistrationFormProps) {
   // 本单位站在这段关系的哪一侧：缺省是它担任角色（持有方）；「换方向」之后是别人对它担任（相对方）。
   const [selfSide, setSelfSide] = useState<'HOLDER' | 'COUNTERPARTY'>('HOLDER');
@@ -212,9 +219,7 @@ export function PartyRelationshipRegistrationForm({
 
   const body = (
     <>
-          <p className="type-body text-idpxyz-breadcrumb">
-            记录谁对谁担任什么角色、从什么时候开始。双方都要先登记为往来单位；没有批准信息的先作为待确认关系，批准后再保存一次。
-          </p>
+          {introHidden ? null : <p className="type-body text-idpxyz-breadcrumb">{partyRelationshipFormIntro}</p>}
 
           {/* 两段：先说这段关系是谁对谁、什么角色、管哪些业务，再说从何时到何时、依据什么（票 business-party-ux/06）。 */}
           <FormGroup title="双方与角色">
@@ -357,51 +362,54 @@ export function PartyRelationshipRegistrationForm({
             </Field>
           </FormGroup>
 
-          {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
-          <div className="flex flex-col gap-3 rounded border border-idpxyz-border p-3">
-            <label className="flex items-center gap-2 type-value text-idpxyz-text">
-              <input
-                type="checkbox"
-                checked={draft.approved}
-                disabled={locked}
-                onChange={(event) => patch({ approved: event.target.checked })}
-              />
-              已批准
-              <span className="type-body text-idpxyz-breadcrumb">不勾则先作为待确认关系，批准后再保存一次</span>
-            </label>
-            {draft.approved ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="批准单据 *" path="relationships[0].approval.reference" problems={problems}>
-                  <Input
-                    value={draft.approvalReference}
-                    readOnly={locked}
-                    className="font-mono type-value"
-                    placeholder="审批单号或批准邮件"
-                    onChange={(event) => patch({ approvalReference: event.target.value })}
-                  />
-                </Field>
-                <WallTimeField
-                  label="批准时间 *"
-                  path="relationships[0].approval.approvedAt"
-                  problems={problems}
-                  value={draft.approvedAt}
-                  locked={locked}
-                  timeZone={timeZone}
-                  onChange={(approvedAt) => patch({ approvedAt })}
+          {/* 批准与「高级」两块各自收着时都只有一行：窄处上下排，宽处并排（party-relationship-registration-form.css）。 */}
+          <div className="party-relationship-extras flex flex-col gap-4">
+            {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
+            <div className="party-relationship-approval flex flex-col gap-3 rounded border border-idpxyz-border p-3">
+              <label className="flex items-center gap-2 type-value text-idpxyz-text">
+                <input
+                  type="checkbox"
+                  checked={draft.approved}
+                  disabled={locked}
+                  onChange={(event) => patch({ approved: event.target.checked })}
                 />
-              </div>
-            ) : null}
-          </div>
+                已批准
+                <span className="type-body text-idpxyz-breadcrumb">不勾则先作为待确认关系，批准后再保存一次</span>
+              </label>
+              {draft.approved ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="批准单据 *" path="relationships[0].approval.reference" problems={problems}>
+                    <Input
+                      value={draft.approvalReference}
+                      readOnly={locked}
+                      className="font-mono type-value"
+                      placeholder="审批单号或批准邮件"
+                      onChange={(event) => patch({ approvalReference: event.target.value })}
+                    />
+                  </Field>
+                  <WallTimeField
+                    label="批准时间 *"
+                    path="relationships[0].approval.approvedAt"
+                    problems={problems}
+                    value={draft.approvedAt}
+                    locked={locked}
+                    timeZone={timeZone}
+                    onChange={(approvedAt) => patch({ approvedAt })}
+                  />
+                </div>
+              ) : null}
+            </div>
 
-          <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
-            <RevisionField
-              label="更新序号"
-              path="relationships[0].revision"
-              problems={problems}
-              {...form.revisionField}
-              note="系统按已登记的记录自动算好，一般不用改。保存时提示序号对不上，说明列表已过时，刷新后再试。"
-            />
-          </AdvancedGroup>
+            <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
+              <RevisionField
+                label="更新序号"
+                path="relationships[0].revision"
+                problems={problems}
+                {...form.revisionField}
+                note="系统按已登记的记录自动算好，一般不用改。保存时提示序号对不上，说明列表已过时，刷新后再试。"
+              />
+            </AdvancedGroup>
+          </div>
 
     </>
   );
