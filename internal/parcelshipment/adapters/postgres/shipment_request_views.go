@@ -343,6 +343,26 @@ func detailRecord(
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, err
 	}
+	numbers := make(map[string]string, len(document.CustomerParcelNumbers))
+	for _, declaration := range document.CustomerParcelNumbers {
+		numbers[declaration.Parcel] = declaration.Number
+	}
+	labels := make(map[string]string, len(document.PlatformBoxLabels))
+	for _, label := range document.PlatformBoxLabels {
+		labels[label.Parcel] = label.Number
+	}
+	for index := range parcels {
+		parcels[index].CustomerParcelNumber = numbers[parcels[index].Parcel.String()]
+		parcels[index].PlatformBoxLabel = labels[parcels[index].Parcel.String()]
+	}
+	goods, err := document.CurrentVersion.Goods.goods()
+	if err != nil {
+		return ports.ShipmentRequestDetailRecord{}, err
+	}
+	shipment, err := document.PlatformShipment.declaration()
+	if err != nil {
+		return ports.ShipmentRequestDetailRecord{}, err
+	}
 
 	task, err := taskViewRecord(document.AcceptanceTask)
 	if err != nil {
@@ -357,6 +377,8 @@ func detailRecord(
 		DeclaredParcels:              parcels,
 		PriorVersionCount:            len(document.PriorVersions),
 		Task:                         task,
+		Goods:                        goods,
+		PlatformShipment:             shipment,
 	}
 	if document.Decision != nil {
 		decisionID, err := domain.NewAcceptanceDecisionID(document.Decision.DecisionID)

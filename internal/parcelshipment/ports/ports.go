@@ -1704,6 +1704,10 @@ type DeclaredParcelViewRecord struct {
 	Width          string
 	Height         string
 	DimensionsUnit string
+	// CustomerParcelNumber 与 PlatformBoxLabel 是委托上为这一件声明的客户包裹件号与平台箱标号（ADR-0184 决定四、ADR-0374
+	// 决定四），空串即没报。界面上叫客户件号与平台箱标号（PS CONTEXT「号码的界面词」）。
+	CustomerParcelNumber string
+	PlatformBoxLabel     string
 }
 
 // AcceptanceDecisionViewRecord 是详情里已形成的接受决定摘要。只带查阅要用的三样，
@@ -1744,6 +1748,9 @@ type ShipmentRequestDetailRecord struct {
 	Task              AcceptanceTaskViewRecord
 	HasDecision       bool
 	Decision          AcceptanceDecisionViewRecord
+	// Goods 是当前提交版本的货物明细，PlatformShipment 是委托上的平台货件（ADR-0373、ADR-0374），零值即没报。
+	Goods            domain.GoodsDetails
+	PlatformShipment domain.PlatformShipmentDeclaration
 }
 
 // ShipmentRequestViews 是委托查阅的读口（CONTEXT「授权查询作用域」）。

@@ -176,6 +176,47 @@ export interface DeclaredParcelRecord {
   declaredWeightValue?: string;
   declaredWeightUnit?: string;
   dimensions?: ParcelDimensions;
+  /** 客户件号(客户为这一件给的号)与平台箱标号(ADR-0374 决定四),没报整键缺席。 */
+  customerParcelNumber?: string;
+  platformBoxLabel?: string;
+  /** 这一箱装了货物明细的哪几行各多少;整票清单时缺席。 */
+  packing?: PackingDraft[];
+}
+
+/** 详情里的一格申报内容:值原样;mark 说这一格是谁说的(THIS_DECLARATION 本单申报 / BOX_LIST 箱单 / COMMODITY_DECLARATION 商品申报资料)。 */
+export interface GoodsCellView {
+  value: string;
+  mark: string;
+}
+
+export interface GoodsLineView {
+  line: number;
+  descriptions?: { lang: string; text: GoodsCellView }[];
+  quantity?: GoodsCellView;
+  unit?: GoodsCellView;
+  unitValue?: GoodsCellView;
+  lineValue?: GoodsCellView;
+  currency?: GoodsCellView;
+  netWeight?: GoodsCellView;
+  netWeightUnit?: GoodsCellView;
+  commodityCodes?: { side: string; code: GoodsCellView }[];
+  originCountry?: GoodsCellView;
+  sku?: GoodsCellView;
+  salesOrder?: { platform?: GoodsCellView; orderNumber?: GoodsCellView; orderLine?: GoodsCellView };
+}
+
+/** 委托当前版本的货物明细(ADR-0373),形状同提交草案,每格多带来源标记。 */
+export interface GoodsView {
+  contentCategory?: string;
+  contentCategoryMark?: string;
+  contentCategoryNote?: GoodsCellView;
+  lines: GoodsLineView[];
+}
+
+export interface PlatformShipmentView {
+  platform: string;
+  shipmentId: string;
+  referenceId?: string;
 }
 
 /** 接受判断任务查阅面:任务阶段 + 最近一次没能推进的处理记录(有过才在场)。 */
@@ -201,6 +242,8 @@ export interface ShipmentRequestDetail extends ShipmentRequestSummary {
   priorVersionCount: number;
   acceptanceTask: AcceptanceTaskRecord;
   decision?: DecisionRecord;
+  goods?: GoodsView;
+  platformShipment?: PlatformShipmentView;
 }
 
 /** 列表:空结果仍是 LISTED + 空数组(空列表不泄露任何存在性,是正常业务答案)。 */

@@ -24,6 +24,7 @@ import { shipmentDetailSourceOf, type ShipmentRef } from './shipment-ref';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
+import { contentCategoryLabel, goodsLineRowsOf, packingSummaryOf } from './goods-view';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
@@ -86,19 +87,106 @@ function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
   ];
 }
 
+// 货物明细与平台货件两个区块（ADR-0373、ADR-0374，票 declared-goods-lines/04）。没报就不出区块，不显一个空表。
+function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
+  const sections: DetailSection[] = [];
+  if (view.platformShipment) {
+    sections.push({
+      id: 'platform-shipment',
+      title: '平台货件',
+      description: '客户报的平台货件：一个平台货件一张运单，每箱的平台箱标号在上面的包裹表里。号由客户交来，本系统不向平台核对。',
+      content: (
+        <dl className="space-y-1">
+          <FieldRow label="平台" value={view.platformShipment.platform} />
+          <FieldRow label={objectNouns.platformShipmentNumber} value={view.platformShipment.shipmentId} mono />
+          <FieldRow label={objectNouns.platformReferenceNumber} value={view.platformShipment.referenceId ?? '—'} mono />
+        </dl>
+      ),
+    });
+  }
+  if (view.goods) {
+    const goods = view.goods;
+    const rows = goodsLineRowsOf(goods);
+    const category = contentCategoryLabel(goods.contentCategory);
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: '客户申报的货物，每行一种货，值按客户给的原样显示、不换算；取自箱单或商品申报资料的格在行下注明。',
+      content: (
+        <div className="space-y-2">
+          {category && (
+            <dl className="space-y-1">
+              <FieldRow
+                label={objectNouns.contentCategory}
+                value={goods.contentCategoryNote ? `${category}（${goods.contentCategoryNote.value}）` : category}
+              />
+            </dl>
+          )}
+          {rows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>行</TableHead>
+                  <TableHead>品名</TableHead>
+                  <TableHead>数量</TableHead>
+                  <TableHead>单价</TableHead>
+                  <TableHead>行总价</TableHead>
+                  <TableHead>币种</TableHead>
+                  <TableHead>净重</TableHead>
+                  <TableHead>编码</TableHead>
+                  <TableHead>原产国</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>销售订单</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.line}>
+                    <TableCell>{row.line}</TableCell>
+                    <TableCell>
+                      <div>{row.description}</div>
+                      {row.sourceNotes.length > 0 && (
+                        <div className="type-caption text-idpxyz-textMuted">{row.sourceNotes.join('；')}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>{row.quantity}</TableCell>
+                    <TableCell className="font-mono">{row.unitValue}</TableCell>
+                    <TableCell className="font-mono">{row.lineValue}</TableCell>
+                    <TableCell>{row.currency}</TableCell>
+                    <TableCell>{row.netWeight}</TableCell>
+                    <TableCell className="font-mono">{row.commodityCodes}</TableCell>
+                    <TableCell>{row.originCountry}</TableCell>
+                    <TableCell className="font-mono">{row.sku}</TableCell>
+                    <TableCell className="font-mono">{row.salesOrder}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      ),
+    });
+  }
+  return sections;
+}
+
 function buildSections(view: ShipmentRequestDetail): DetailSection[] {
   const sections: DetailSection[] = [
     {
       id: 'declared-parcels',
       title: objectNouns.parcel,
-      description: '客户申报的每一件：重量与尺寸按客户填的原样显示；受理后件数固定，增减要走取消或新建关联运单。',
+      description:
+        '客户申报的每一件：重量与尺寸按客户填的原样显示；受理后件数固定，增减要走取消或新建关联运单。「装箱」一列是这一箱装了货物明细的哪几行，没报即整票清单。',
       content: (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>包裹号</TableHead>
+              <TableHead>{objectNouns.parcelNumber}</TableHead>
+              <TableHead>{objectNouns.customerParcelNumber}</TableHead>
+              <TableHead>{objectNouns.platformBoxLabel}</TableHead>
               <TableHead>申报重量</TableHead>
               <TableHead>申报尺寸</TableHead>
+              <TableHead>{objectNouns.packing}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -108,6 +196,12 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
                   <span className="font-mono type-body">{parcel.parcelId}</span>
                 </TableCell>
                 <TableCell>
+                  <span className="font-mono type-body">{parcel.customerParcelNumber ?? '—'}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono type-body">{parcel.platformBoxLabel ?? '—'}</span>
+                </TableCell>
+                <TableCell>
                   {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
                 </TableCell>
                 <TableCell>
@@ -115,12 +209,14 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
                     ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
                     : '未填'}
                 </TableCell>
+                <TableCell>{packingSummaryOf(parcel.packing) || '—'}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       ),
     },
+    ...goodsSectionsOf(view),
     {
       id: 'acceptance-task',
       title: '受理进度',
