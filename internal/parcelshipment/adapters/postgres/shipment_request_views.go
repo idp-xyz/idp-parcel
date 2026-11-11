@@ -244,7 +244,61 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
 	}
+	if err := attachTrackingNumbers(ctx, querier, scope.TenantID(), detail.DeclaredParcels); err != nil {
+		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
+	}
 	return detail, true, nil
+}
+
+// attachTrackingNumbers 给每件包裹挂上此刻仍适用的渠道包裹件号（界面词「跟踪号」，ADR-0374 决定六）。号在外部标识关联册里，不在
+// 委托快照里：渠道随面单交易签发，与委托分开写下。已有终态（作废、被替代）的关联不算，与按号核对同一条判法。
+func attachTrackingNumbers(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	parcels []ports.DeclaredParcelViewRecord,
+) error {
+	if len(parcels) == 0 {
+		return nil
+	}
+	refs := make([]string, len(parcels))
+	at := make(map[string]int, len(parcels))
+	for index, parcel := range parcels {
+		refs[index] = parcel.Parcel.String()
+		at[refs[index]] = index
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT relation.object_ref, relation.identifier_number
+		   FROM parcel_shipment.external_identifier_relation AS relation
+		  WHERE relation.tenant_id = $1
+		    AND relation.identifier_kind = $2
+		    AND relation.object_kind = 'PARCEL'
+		    AND relation.object_ref = ANY($3::text[])
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM parcel_shipment.external_identifier_relation_change AS change
+		         WHERE change.tenant_id = relation.tenant_id
+		           AND change.identifier_kind = relation.identifier_kind
+		           AND change.allocator = relation.allocator
+		           AND change.identifier_number = relation.identifier_number
+		           AND change.object_ref = relation.object_ref
+		           AND change.basis = relation.basis)
+		  ORDER BY relation.object_ref, relation.formed_at, relation.identifier_number`,
+		tenant.String(), domain.ChannelParcelNumber.String(), refs)
+	if err != nil {
+		return fmt.Errorf("tracking numbers: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var parcel, number string
+		if err := rows.Scan(&parcel, &number); err != nil {
+			return fmt.Errorf("tracking numbers: %w", err)
+		}
+		if index, known := at[parcel]; known {
+			parcels[index].TrackingNumbers = append(parcels[index].TrackingNumbers, number)
+		}
+	}
+	return rows.Err()
 }
 
 func visibleAccounts(scope domain.AuthorizedQueryScope) []string {

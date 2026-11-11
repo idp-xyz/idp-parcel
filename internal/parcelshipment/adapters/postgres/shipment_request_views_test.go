@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -20,8 +21,13 @@ import (
 
 func newShipmentRequestViews(t *testing.T) (*adapter.ShipmentRequestViews, *adapter.ShipmentRequests, bentoapp.Transactor) {
 	t.Helper()
+	return newShipmentRequestViewsOn(t, pgtest.Pool(t))
+}
 
-	pool := pgtest.Pool(t)
+// newShipmentRequestViewsOn 同 newShipmentRequestViews，只是用调用方给的库：pgtest.Pool 每调一次就是一个新库，测试要在同一个库里
+// 另写别的表时用它。
+func newShipmentRequestViewsOn(t *testing.T, pool *pgxpool.Pool) (*adapter.ShipmentRequestViews, *adapter.ShipmentRequests, bentoapp.Transactor) {
+	t.Helper()
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
@@ -427,5 +433,46 @@ func TestFindVisibleCarriesGoodsAndPlatformDeclarations(t *testing.T) {
 	}
 	if plain.Goods.Declared() || plain.PlatformShipment.Declared() {
 		t.Fatal("没报货物明细与平台货件的委托读成了报了")
+	}
+}
+
+// Covers: ADR-0374 决定六（票 declared-goods-lines/04）——详情逐件列跟踪号：此刻仍适用、标识这一件的渠道包裹件号；已作废的不列，
+// 没号的件不列。号在外部标识关联册里，本例直接写两条关联，其一随后作废。
+func TestFindVisibleListsEachParcelsTrackingNumbers(t *testing.T) {
+	pool := pgtest.Pool(t)
+	views, repository, transactor := newShipmentRequestViewsOn(t, pool)
+	ctx := t.Context()
+	mustInsert(t, transactor, ctx, repository,
+		scopedSubmittedRequest(t, "tenant-1", "customer-1", "view-t1", "REQ-T1", submittedAtFixture))
+	for _, row := range []struct{ number, basis string }{{"SYN-TRACK-OLD", "label-1"}, {"SYN-TRACK-NEW", "label-2"}} {
+		if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment.external_identifier_relation
+		      (tenant_id, identifier_kind, allocator, identifier_number, object_kind, object_ref, scope, basis, formed_at)
+		      VALUES ('tenant-1', 'CHANNEL_PARCEL_NUMBER', 'SYN-CHANNEL', $1, 'PARCEL', 'parcel-1', 'SYN-CHANNEL', $2, $3)`,
+			row.number, row.basis, submittedAtFixture); err != nil {
+			t.Fatalf("写渠道包裹件号关联：%v", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment.external_identifier_relation_change
+	      (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis, change_kind, cause, changed_at)
+	      VALUES ('tenant-1', 'CHANNEL_PARCEL_NUMBER', 'SYN-CHANNEL', 'SYN-TRACK-OLD', 'parcel-1', 'label-1', 'VOIDED', 'label-1', $1)`,
+		submittedAtFixture); err != nil {
+		t.Fatalf("作废旧号：%v", err)
+	}
+
+	detail, found, err := views.FindVisibleByID(ctx, viewScope(t, "tenant-1", "customer-1"), mustBuild(t, domain.NewShipmentRequestID, "REQ-T1"))
+	if err != nil || !found {
+		t.Fatalf("查阅详情：found=%v err=%v", found, err)
+	}
+	if len(detail.DeclaredParcels) != 2 {
+		t.Fatalf("包裹 %d 件, want 2", len(detail.DeclaredParcels))
+	}
+	for _, parcel := range detail.DeclaredParcels {
+		want := []string(nil)
+		if parcel.Parcel.String() == "parcel-1" {
+			want = []string{"SYN-TRACK-NEW"}
+		}
+		if len(parcel.TrackingNumbers) != len(want) || (len(want) == 1 && parcel.TrackingNumbers[0] != want[0]) {
+			t.Fatalf("%s 跟踪号 = %v, want %v", parcel.Parcel, parcel.TrackingNumbers, want)
+		}
 	}
 }

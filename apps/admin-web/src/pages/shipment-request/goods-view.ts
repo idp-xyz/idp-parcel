@@ -47,9 +47,10 @@ function valueOf(cell: GoodsCellView | undefined): string {
   return cell?.value ?? '';
 }
 
+// 单位没有自己的一列,只跟着数量或净重显示;量没报而单位报了,单位照显,不随量一起丢。
 function withUnit(amount: GoodsCellView | undefined, unit: GoodsCellView | undefined): string {
-  if (!amount) return absent;
-  return unit ? `${amount.value} ${unit.value}` : amount.value;
+  if (!unit) return amount ? amount.value : absent;
+  return `${amount ? amount.value : absent} ${unit.value}`;
 }
 
 function descriptionOf(line: GoodsLineView): string {
@@ -64,8 +65,8 @@ function salesOrderOf(line: GoodsLineView): string {
   const order = line.salesOrder;
   if (!order) return absent;
   const head = [valueOf(order.platform), valueOf(order.orderNumber)].filter(Boolean).join(' ');
-  const tail = order.orderLine ? ` #${order.orderLine.value}` : '';
-  return `${head}${tail}`.trim() || absent;
+  const orderLine = order.orderLine ? `订单行 ${order.orderLine.value}` : '';
+  return [head, orderLine].filter(Boolean).join(' · ') || absent;
 }
 
 function sourceNotesOf(line: GoodsLineView): string[] {
@@ -88,6 +89,19 @@ function sourceNotesOf(line: GoodsLineView): string[] {
   return notes;
 }
 
+/** 内件性质一格的屏上写法:「其他」带客户的说明;来源不是本单申报时另起一句点名,与货物行同一写法。没报为空。 */
+export function contentCategoryDisplayOf(goods: GoodsView): { text: string; sourceNotes: string[] } {
+  const label = contentCategoryLabel(goods.contentCategory);
+  if (!label) return { text: '', sourceNotes: [] };
+  const note = goods.contentCategoryNote;
+  const sourceNotes: string[] = [];
+  const categorySource = goods.contentCategoryMark ? sourceMarkLabels[goods.contentCategoryMark] : undefined;
+  if (categorySource) sourceNotes.push(`内件性质取自${categorySource}`);
+  const noteSource = note ? sourceMarkLabels[note.mark] : undefined;
+  if (noteSource) sourceNotes.push(`说明取自${noteSource}`);
+  return { text: note ? `${label}（${note.value}）` : label, sourceNotes };
+}
+
 /** 把货物明细的每一行摊成屏上的几格,行的次序就是行号的次序。 */
 export function goodsLineRowsOf(goods: GoodsView): GoodsLineRow[] {
   return goods.lines.map((line) => ({
@@ -107,6 +121,16 @@ export function goodsLineRowsOf(goods: GoodsView): GoodsLineRow[] {
     salesOrder: salesOrderOf(line),
     sourceNotes: sourceNotesOf(line),
   }));
+}
+
+/**
+ * 包裹表的折叠:件数不多时全列;多了只列前 foldAt 件,其余等人展开。FBA 货件动辄几十箱,全列会把下面的货物明细与受理进度推到
+ * 屏外——人打开详情多半先看那几块,不是逐箱翻。
+ */
+export function foldedRowsOf<T>(rows: T[], expanded: boolean, foldAt = 10): { shown: T[]; hidden: number } {
+  // 只多出一两件时折起来省不了什么,还要多点一下。
+  if (expanded || rows.length <= foldAt + 2) return { shown: rows, hidden: 0 };
+  return { shown: rows.slice(0, foldAt), hidden: rows.length - foldAt };
 }
 
 /** 一箱的装箱分配摊成「第 1 行 ×24；第 2 行 ×2」;整票清单(没报)为空串。 */

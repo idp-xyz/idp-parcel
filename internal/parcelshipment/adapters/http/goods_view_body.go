@@ -128,14 +128,17 @@ func platformShipmentViewBodyOf(shipment domain.PlatformShipmentDeclaration) *pl
 	return body
 }
 
-// packingViewBodiesFor 交回这一件的装箱分配，按行号次序；整票清单（没报分配）交空，整键缺席。
-func packingViewBodiesFor(goods domain.GoodsDetails, parcel domain.DeclaredParcelID) []packingViewBody {
-	var bodies []packingViewBody
+// packingViewBodiesByParcel 把装箱分配按包裹分好，每件按行号次序；整票清单（没报分配）交空表，各件整键缺席。一次分组，不按件
+// 各扫一遍全部分配——50 箱的货件逐件扫就是 50 遍。
+func packingViewBodiesByParcel(goods domain.GoodsDetails) map[domain.DeclaredParcelID][]packingViewBody {
+	byParcel := make(map[domain.DeclaredParcelID][]packingViewBody)
 	for _, allocation := range goods.Packing() {
-		if allocation.Parcel() == parcel {
-			bodies = append(bodies, packingViewBody{Line: allocation.Line(), Quantity: allocation.Quantity()})
-		}
+		byParcel[allocation.Parcel()] = append(byParcel[allocation.Parcel()],
+			packingViewBody{Line: allocation.Line(), Quantity: allocation.Quantity()})
 	}
-	sort.Slice(bodies, func(left, right int) bool { return bodies[left].Line < bodies[right].Line })
-	return bodies
+	for parcel := range byParcel {
+		bodies := byParcel[parcel]
+		sort.Slice(bodies, func(left, right int) bool { return bodies[left].Line < bodies[right].Line })
+	}
+	return byParcel
 }
