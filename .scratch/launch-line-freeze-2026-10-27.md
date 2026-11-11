@@ -258,6 +258,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-11-05｜带始发维度的目录一律取寄件邮编作始发，按入口分区的尾程卡查出的区不对；已代决改由价卡声明始发来源（寄件邮编或这一段起始节点的计费起点），要 NR 取数侧按段交起始节点、TF 发生项读口答实际履约段的起始节点｜[ADR-0365](../docs/adr/0365-an-origin-dimension-zone-catalogue-takes-the-origin-the-price-card-declares-sender-postal-code-or-the-billing-origin-of-the-legs-start-node.md)｜R2（首个租户的线路有按入口分区的尾程时），否则 R3
 - 2026-11-05｜经营毛利只给数、没有低毛利提示；已代决只在预估口径上按租户阈值提示，接单与择优都不设毛利门槛｜[ADR-0366](../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三；`UC-SA-006`｜R3
 - 2026-11-10｜`cmd/parcel-api` 的 `TestConcurrentReplaysOfAStoppedAmendmentFormTheVersionOnlyOnceOnARealDatabase` 在 CI `Test (rest)` 分片红过一次（并发重放 0 答 `SOURCE_DATA_VERSION_NOT_HANDED_OFF`，期望 `STALE_SHIPMENT_REQUEST_REVISION`），run `42763343558`；同一提交 `5945769b6` 本机 `-count=20` 全过，该用例自 `205282278` 后未改，判为并发时序偶发｜CI 观察｜R3（再红一次就立票查并发重放的判定次序）
+- 2026-11-10｜亚马逊箱内明细模板（Excel）导入不做：等真实租户拿出模板再做；今天平台货件页靠矩阵与「同款每箱 N 件」快捷填法录入｜[declared-goods-lines/05](./declared-goods-lines/issues/05-admin-web-fba-shipment-and-multi-line-goods-entry.md)「不做的」｜R2（第一个 FBA 租户到来时）
+- 2026-11-10｜演示租户上一票 32 箱平台货件（每箱 12.5 kg）受理被拒：余额补足后预付冻结能过，授信检查仍答 `AVAILABLE_CREDIT_INSUFFICIENT`（演示授信额度 0，同 2026-10-28 那条）；同款 3 箱可受理，箱标号照常形成关联。现场演示大货件前要先给演示账户配授信或换结算策略｜declared-goods-lines/05 本地实测（库 `demo_goods05`）｜R3（演示数据）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
