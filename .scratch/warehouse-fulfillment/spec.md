@@ -27,9 +27,9 @@ PN-09 的机制半边可以开工：切片已立，仓储作业费的计价与�
 |---|---|---|---|
 | [01](./issues/01-write-the-warehouse-fulfillment-context.md) | 写仓配履约 CONTEXT | — | resolved |
 | [02](./issues/02-close-the-warehouse-fulfillment-gaps.md) | 补齐首版差距（ADR-0370） | 01 | resolved |
-| [03](./issues/03-align-the-warehouse-fulfillment-docs-with-the-current-implementation.md) | 文档与现实现对齐 | 02 | resolved |
+| [03](./issues/03-align-the-warehouse-fulfillment-docs-with-the-current-implementation.md) | 文档与现实现对齐 | 01、02 | resolved |
 | [04](./issues/04-carry-out-the-owner-review-conditions.md) | 落实 owner 评审条件（ADR-0371） | 03 | resolved |
-| [05](./issues/05-stand-up-the-pn-09-slice-and-make-warehouse-fulfillment-an-optional-capability.md) | 立 PN-09 切片，定「可选能力」的口径（ADR-0375） | 04 | in-progress |
+| [05](./issues/05-stand-up-the-pn-09-slice-and-make-warehouse-fulfillment-an-optional-capability.md) | 立 PN-09 切片，定「可选能力」的口径（ADR-0375） | 04 | resolved |
 | [06](./issues/06-decide-how-warehouse-charge-occurrences-are-priced-and-settled.md) | 仓储作业费的计价与结算（ADR） | — | ready-for-agent |
 | [07](./issues/07-write-the-inbound-use-cases.md) | `UC-WF`：主数据与入库 | 05 | ready-for-agent |
 | [08](./issues/08-write-the-in-warehouse-use-cases.md) | `UC-WF`：库内作业、冻结、盘点与差异 | 05 | ready-for-agent |
