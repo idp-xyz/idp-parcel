@@ -1,0 +1,33 @@
+{
+  "identifier": "parcel-shipment/submission-conditions/FBA-HEADHAUL",
+  "version": 1,
+  "title": "专线型 FBA 头程的提交条件",
+  "source": "ADR-0374 决定三、四（平台货件号、每箱平台箱标号、装箱分配报全由服务产品所采用接单规则包的必填与跨字段条件承载）；ADR-0373 决定三（装箱分配要么不报、报就报全）。条件只指提交载荷里的格，不含任何租户、平台或承运商的取值。",
+  "note": "判断方法随产品发布，租户显式采用才生效（ADR-0146 决定三、ADR-0147 决定四）：服务产品的接单规则包以一条 CROSS_FIELD_CONDITION 规则引用 REFCFG-1:parcel-shipment/submission-conditions/FBA-HEADHAUL@1 采用；没采用的服务产品不判这些条件。各条按委托当前提交版本判，未满足即这份委托还缺客户能补的资料，续办方是客户（受控补充）。判法在消费方执行器里，不在这份文件里；执行器（BD-PS-006）尚未落地，落地前引了也不判。「收件人是平台仓」一条不在其中：收件资料今天是自由文本，没有可判的格。",
+  "conditions": [
+    {
+      "code": "PLATFORM_SHIPMENT_DECLARED",
+      "subject": "SHIPMENT_REQUEST",
+      "fields": ["platformShipment.platform", "platformShipment.shipmentId"],
+      "requirement": "报了平台货件：销售平台与平台货件号同在。平台参考号不要求。"
+    },
+    {
+      "code": "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL",
+      "subject": "DECLARED_PARCEL",
+      "fields": ["parcels[].platformBoxLabel"],
+      "requirement": "每件包裹都报了平台箱标号。"
+    },
+    {
+      "code": "PACKING_DECLARED",
+      "subject": "SHIPMENT_REQUEST",
+      "fields": ["goods.lines", "parcels[].packing"],
+      "requirement": "报了货物明细行与装箱分配。报了就是报全，由提交口的形状规则保证，这一条只要求在场。"
+    },
+    {
+      "code": "CONTENT_CATEGORY_DECLARED",
+      "subject": "SHIPMENT_REQUEST",
+      "fields": ["goods.contentCategory"],
+      "requirement": "报了内件性质。"
+    }
+  ]
+}
