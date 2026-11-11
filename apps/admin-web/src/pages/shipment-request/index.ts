@@ -3,6 +3,8 @@
 export { ShipmentRequestPage } from './ShipmentRequestPage';
 export { SubmitShipmentRequestPage } from './SubmitShipmentRequestPage';
 export { WithdrawShipmentRequestPage } from './WithdrawShipmentRequestPage';
+// FBA 货件下单:同一个提交口,按平台货件的场景排表单(ADR-0374 决定三,票 declared-goods-lines/05)。
+export { FbaShipmentPage } from './FbaShipmentPage';
 // 委托查阅面:列表页内含钻取到详情的组合,可独立作一个导航位;详情页也单独导出。
 // 查阅面的行/详情形状是查询契约的镜像,住 api.ts,从下方 api 类型块一并导出。
 export { ShipmentRequestListPage } from './ShipmentRequestListPage';

@@ -90,6 +90,7 @@ export const pageById: Record<string, ComponentType> = {
   'recent-objects': page(loadMyWork, (m) => m.RecentObjectsPage),
   'saved-views': page(loadMyWork, (m) => m.SavedViewsPage),
   'shipment-request': page(loadShipmentRequest, (m) => m.ShipmentRequestPage),
+  'fba-shipment': page(loadShipmentRequest, (m) => m.FbaShipmentPage),
   'shipment-request-inquiry': page(loadShipmentRequest, (m) => m.ShipmentRequestListPage),
   'label-transactions': page(loadShipmentRequest, (m) => m.LabelTransactionsPage),
   'channel-selection-decisions': page(loadChannelSelection, (m) => m.ChannelSelectionDecisionsPage),
@@ -151,6 +152,7 @@ export const pageById: Record<string, ComponentType> = {
  */
 export const liveIds: ReadonlySet<string> = new Set([
   'shipment-request',
+  'fba-shipment',
   'shipment-request-inquiry',
   'cancel-parcel',
   'post-intake-disposition',
