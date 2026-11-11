@@ -9,14 +9,23 @@ import { field } from '../card-form/fields';
 import { basicsWithDirection, defaultBaseChargeCode, type BasicsState } from '../card-form/model';
 import { currencyChoices } from '../card-form/options';
 import { allowedValues, sheetNames } from '../card-form/spec';
-import { declaresServiceProducts, restProductsHint, serviceProductChoices, toggleServiceProduct } from '../service-products';
+import { specTakesServiceProducts } from '../card-form/workbook';
+import {
+  addTypedServiceProducts,
+  declaresServiceProducts,
+  restProductsHint,
+  serviceProductChoices,
+  serviceProductsNotTakenNote,
+  toggleServiceProduct,
+} from '../service-products';
 import { FieldBox, SelectField, TextField, SectionTitle, hintClass } from './controls';
 import { useEditor } from './EditorContext';
 import { labelled, weightUnitOptions } from './options';
 
 /**
  * 适用服务产品：从服务产品册勾选，可多选、可不选（ADR-0378 决定一）。册读不到时退回按标识添加，并说清为什么——表单不因此
- * 变死；标识在不在册由服务端在预览时判。
+ * 变死；标识在不在册由服务端在预览时判。还在读册时只说在读，不先摆手填框：册一读回来手填框就换成勾选，先摆出来只会让人
+ * 白敲一遍。
  */
 function ServiceProductsField({ chosen, onChange }: { chosen: readonly string[]; onChange: (next: string[]) => void }) {
   const answer = useLoaded(listServiceProducts);
@@ -24,24 +33,23 @@ function ServiceProductsField({ chosen, onChange }: { chosen: readonly string[];
   const options = answer?.kind === 'outcome' ? serviceProductObjectOptions(answer.body) : null;
   const choices = serviceProductChoices(options ?? [], chosen);
   const id = field.basics('serviceProducts');
+  const labelId = `${id}.label`;
   const add = () => {
-    onChange(toggleServiceProduct(chosen, typed, true));
+    onChange(addTypedServiceProducts(chosen, typed));
     setTyped('');
   };
   const unreadable =
-    answer === null
-      ? '正在读服务产品册…'
+    answer === null || answer.kind === 'outcome'
+      ? null
       : answer.kind === 'unconfigured'
-        ? '暂时读不到服务产品册（接入渠道未配置），先按标识添加；标识对不对由预览时检查。'
+        ? '暂时读不到服务产品册（接入渠道未配置），先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。'
         : isOperatorRefusal(answer)
-          ? `暂时读不到服务产品册（${accessRefusalTitle(answer.kind)}），先按标识添加；标识对不对由预览时检查。`
-          : answer.kind !== 'outcome'
-            ? '服务产品册读不到，先按标识添加；标识对不对由预览时检查。'
-            : null;
+          ? `暂时读不到服务产品册（${accessRefusalTitle(answer.kind)}），先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。`
+          : '服务产品册读不到，先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。';
 
   return (
-    <FieldBox id={id} label="适用服务产品" labelsControl={false} className="md:col-span-2" hint={restProductsHint}>
-      <div className="space-y-2" data-field={id} tabIndex={-1}>
+    <FieldBox id={id} label="适用服务产品" labelsControl={false} labelId={labelId} className="md:col-span-2" hint={restProductsHint}>
+      <div className="space-y-2" data-field={id} tabIndex={-1} role="group" aria-labelledby={labelId}>
         {choices.length > 0 ? (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             {choices.map((choice) => (
@@ -52,6 +60,7 @@ function ServiceProductsField({ chosen, onChange }: { chosen: readonly string[];
             ))}
           </div>
         ) : null}
+        {answer === null ? <p className={hintClass}>正在读服务产品册…</p> : null}
         {options !== null && options.length === 0 ? <p className={hintClass}>还没有发布任何服务产品，这一格可以不选。</p> : null}
         {unreadable !== null ? (
           <>
@@ -122,9 +131,14 @@ export function StepBasics() {
             onChange={(aggregation) => patch({ aggregation })}
             hint="选「每件计价」就是按每个包裹算钱，必须明确选，不替你默认"
           />
-          {/* 只有售价卡能声明适用产品（ADR-0378 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。 */}
+          {/* 只有售价卡能声明适用产品（ADR-0378 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。
+              规格口的模板版本收不收这一格由规格口说，不收就只说一句，不摆一个提交不上去的选择。 */}
           {declaresServiceProducts(basics.direction) ? (
-            <ServiceProductsField chosen={basics.serviceProducts} onChange={(serviceProducts) => patch({ serviceProducts })} />
+            specTakesServiceProducts(spec) ? (
+              <ServiceProductsField chosen={basics.serviceProducts} onChange={(serviceProducts) => patch({ serviceProducts })} />
+            ) : (
+              <p className={`${hintClass} md:col-span-2`}>{serviceProductsNotTakenNote}</p>
+            )
           ) : null}
         </div>
       </section>

@@ -31,8 +31,8 @@ import { StepWeight } from './StepWeight';
 import { useEditorEnv } from './use-editor-env';
 
 /**
- * 本页按这几版模板设计。规格口报出别的版本说明模板进位了，页面不照旧提交（ADR-0349 决定七）。PPT-3 只多 card 表的适用
- * 服务产品一格，页面写它（card-form/workbook.ts）。
+ * 本页按这几版模板设计。规格口报出别的版本说明模板进位了，页面不照旧提交（ADR-0349 决定七）。PPT-3 起 card 表收适用服务
+ * 产品，页面照规格口写它（card-form/workbook.ts）。
  */
 const knownTemplateVersions: readonly string[] = ['PPT-2', 'PPT-3'];
 
