@@ -32,6 +32,9 @@ func TestRegisteringANewerCanonicalizationNeedsTheDeploymentSwitch(t *testing.T)
 		{"基础版·开关开", minimalPlan, true, application.PriceCardRecorded, true},
 		{"较新版·开关关", totalBoundedPlan, false, application.PriceCardRegistrationNewerCanonicalizationNotEnabled, false},
 		{"较新版·开关开", totalBoundedPlan, true, application.PriceCardRecorded, true},
+		// 指名适用服务产品的卡写 PPC-7（ADR-0378 决定四），照 ADR-0352 同一道门。
+		{"PPC-7·开关关", serviceProductPlan, false, application.PriceCardRegistrationNewerCanonicalizationNotEnabled, false},
+		{"PPC-7·开关开", serviceProductPlan, true, application.PriceCardRecorded, true},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -118,4 +121,17 @@ func TestAPublicationRefusedByTheSwitchCanBeRetriedOnceItIsOn(t *testing.T) {
 	if retried.Outcome != application.PriceCardDraftPublished || retried.Registration != application.PriceCardRecorded {
 		t.Fatalf("开关开后重试 = %+v", retried)
 	}
+}
+
+// serviceProductPlan 是 minimalPlan 指名一个适用服务产品：带了这一格，方案写 PPC-7。
+func serviceProductPlan(t *testing.T) domain.PricingPlanVersion {
+	t.Helper()
+	plan, err := minimalPlan(t).WithServiceProducts(mustValue(t, domain.NewServiceProductReference, "SYN-PROD-FBA"))
+	if err != nil {
+		t.Fatalf("声明适用产品：%v", err)
+	}
+	if plan.CanonicalizationVersion() != "PPC-7" {
+		t.Fatalf("指名产品的方案记 %s，要 PPC-7", plan.CanonicalizationVersion())
+	}
+	return plan
 }

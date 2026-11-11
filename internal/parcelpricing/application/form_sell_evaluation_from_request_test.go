@@ -81,6 +81,7 @@ type selectionRecordingCards struct {
 	inner      *priceCardResolverDouble
 	directions []domain.PricingDirection
 	purposes   []domain.PricingPurpose
+	products   []domain.ServiceProductReference
 }
 
 func (double *selectionRecordingCards) ResolveInForce(
@@ -90,10 +91,12 @@ func (double *selectionRecordingCards) ResolveInForce(
 	direction domain.PricingDirection,
 	purpose domain.PricingPurpose,
 	at time.Time,
+	product domain.ServiceProductReference,
 ) (ports.PriceCardInForceResolution, error) {
 	double.directions = append(double.directions, direction)
+	double.products = append(double.products, product)
 	double.purposes = append(double.purposes, purpose)
-	return double.inner.ResolveInForce(ctx, tenant, scope, direction, purpose, at)
+	return double.inner.ResolveInForce(ctx, tenant, scope, direction, purpose, at, product)
 }
 
 type sellFixture struct {

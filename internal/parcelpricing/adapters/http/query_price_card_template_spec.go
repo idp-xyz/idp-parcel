@@ -68,6 +68,8 @@ type priceCardTemplateColumnSpecBody struct {
 	MultiValued   bool     `json:"multiValued,omitempty"`
 	// AllowedValuesWhen 只在「平时开放、满足条件才封闭」的列上有：同一行的 column 格等于 equals 时，本列只收 allowedValues。
 	AllowedValuesWhen []priceCardTemplateValuesWhenBody `json:"allowedValuesWhen,omitempty"`
+	// Since 只在自较晚版本才有的列或字段上有：编辑器按它判这一格能不能写进它选的模板版本。
+	Since string `json:"since,omitempty"`
 }
 
 type priceCardTemplateValuesWhenBody struct {
@@ -91,7 +93,7 @@ func priceCardTemplateSpecResponseOf(spec ports.PriceCardTemplateSpec) priceCard
 		for _, column := range sheet.Columns {
 			body := priceCardTemplateColumnSpecBody{
 				Key: column.Key, Title: column.Title, Requirement: column.Requirement, Description: column.Description,
-				AllowedValues: column.AllowedValues, MultiValued: column.MultiValued,
+				AllowedValues: column.AllowedValues, MultiValued: column.MultiValued, Since: column.Since,
 			}
 			for _, when := range column.AllowedValuesWhen {
 				body.AllowedValuesWhen = append(body.AllowedValuesWhen, priceCardTemplateValuesWhenBody{Column: when.Column, Equals: when.Equals, AllowedValues: when.Values})

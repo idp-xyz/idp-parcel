@@ -28,7 +28,7 @@ type trialCardDouble struct {
 }
 
 func (double trialCardDouble) ResolveInForce(context.Context, ppdomain.TenantID, ppdomain.PricingScopeID,
-	ppdomain.PricingDirection, ppdomain.PricingPurpose, time.Time) (ppports.PriceCardInForceResolution, error) {
+	ppdomain.PricingDirection, ppdomain.PricingPurpose, time.Time, ppdomain.ServiceProductReference) (ppports.PriceCardInForceResolution, error) {
 	return double.resolution, double.err
 }
 

@@ -21,7 +21,7 @@ import (
 // ApplicablePriceCards 是试算要的那一口：只装载，不登记。收窄成这一个方法，是让依赖里结构上没有价卡登记册的写口
 // （ports.PriceCardCatalog 同时带着 Register）。
 type ApplicablePriceCards interface {
-	LoadApplicable(ctx context.Context, tenant domain.TenantID, direction domain.PricingDirection, scope domain.PricingScopeID, asOf time.Time) ([]domain.PricingPlanVersion, error)
+	LoadApplicable(ctx context.Context, tenant domain.TenantID, direction domain.PricingDirection, scope domain.PricingScopeID, asOf time.Time, product domain.ServiceProductReference) ([]domain.PricingPlanVersion, error)
 }
 
 // FormEstimateEvaluationsOutcome 是试算的封闭结果，只说编排、不替评价说话（ADR-0152 决定七）；按恢复动作分格（ADR-0029）。
@@ -204,7 +204,8 @@ func (handler *FormEstimateEvaluationsHandler) Handle(
 	if !command.accepted() {
 		return FormEstimateEvaluationsResult{Outcome: EstimateNotAccepted}, nil
 	}
-	plans, err := handler.deps.PriceCards.LoadApplicable(ctx, command.Tenant, command.Direction, command.Scope, command.BasisAt)
+	plans, err := handler.deps.PriceCards.LoadApplicable(ctx, command.Tenant, command.Direction, command.Scope, command.BasisAt,
+		domain.ServiceProductReference{})
 	if errors.Is(err, ports.ErrAmbiguousPriceCard) {
 		return handler.applicabilityConflict(ctx, command), nil
 	}
@@ -237,7 +238,7 @@ func (handler *FormEstimateEvaluationsHandler) applicabilityConflict(
 	command FormEstimateEvaluationsCommand,
 ) FormEstimateEvaluationsResult {
 	resolution, err := handler.deps.InForce.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction,
-		pairedPurpose(command.Direction), command.BasisAt)
+		pairedPurpose(command.Direction), command.BasisAt, domain.ServiceProductReference{})
 	if err != nil || resolution.Outcome != ports.PriceCardApplicabilityConflict {
 		return undecidedEstimate(EstimateConflictCandidatesUnavailable)
 	}

@@ -49,6 +49,7 @@ func (double *priceCardResolverDouble) ResolveInForce(
 	_ domain.PricingDirection,
 	_ domain.PricingPurpose,
 	at time.Time,
+	_ domain.ServiceProductReference,
 ) (ports.PriceCardInForceResolution, error) {
 	double.asked = append(double.asked, at)
 	if double.err != nil {

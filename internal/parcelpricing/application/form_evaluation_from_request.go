@@ -198,7 +198,8 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 		return FormEvaluationFromRequestResult{Outcome: RequestEvaluationExisting, Evaluation: existing, HasEvaluation: true}, nil
 	}
 
-	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction, command.Purpose, command.BasisAt)
+	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction, command.Purpose, command.BasisAt,
+		domain.ServiceProductReference{})
 	if err != nil {
 		return undecidedFormation(RequestPriceCardResolutionUnavailable), nil
 	}

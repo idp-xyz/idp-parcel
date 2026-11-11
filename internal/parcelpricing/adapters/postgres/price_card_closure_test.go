@@ -159,7 +159,7 @@ func (fixture closureFixture) retire(t *testing.T, tenant, version, successor, r
 func (fixture closureFixture) resolve(t *testing.T, tenant string, at time.Time) ports.PriceCardInForceResolution {
 	t.Helper()
 	resolution, err := fixture.catalog.ResolveInForce(t.Context(), evaluationValue(t, domain.NewTenantID, tenant),
-		evaluationValue(t, domain.NewPricingScopeID, closureScope), domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, at)
+		evaluationValue(t, domain.NewPricingScopeID, closureScope), domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, at, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("解析在用价卡：%v", err)
 	}
@@ -174,7 +174,7 @@ func (fixture closureFixture) resolvesTo(t *testing.T, at time.Time, version str
 		t.Fatalf("%s 在用解析 = %s %v，want 恰选中 %s", at.Format(time.RFC3339), resolution.Outcome, resolution.Candidates, version)
 	}
 	plans, err := fixture.catalog.LoadApplicable(t.Context(), evaluationValue(t, domain.NewTenantID, "tenant-a"),
-		domain.PricingDirectionBuy, evaluationValue(t, domain.NewPricingScopeID, closureScope), at)
+		domain.PricingDirectionBuy, evaluationValue(t, domain.NewPricingScopeID, closureScope), at, domain.ServiceProductReference{})
 	if err != nil || len(plans) != 1 || plans[0].Reference().Version() != version {
 		t.Fatalf("%s 装载适用价卡 = %d 张 err=%v，want 恰一张 %s", at.Format(time.RFC3339), len(plans), err, version)
 	}

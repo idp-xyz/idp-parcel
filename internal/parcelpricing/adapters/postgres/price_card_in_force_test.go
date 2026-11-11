@@ -17,7 +17,7 @@ func resolveInForce(t *testing.T, catalog ports.PriceCardInForceResolver, tenant
 	resolution, err := catalog.ResolveInForce(t.Context(),
 		evaluationValue(t, domain.NewTenantID, tenant),
 		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
-		direction, purpose, at)
+		direction, purpose, at, domain.ServiceProductReference{})
 	if err != nil {
 		t.Fatalf("解析在用价卡：%v", err)
 	}
@@ -123,12 +123,12 @@ func TestInForcePriceCardRejectsBlankKey(t *testing.T) {
 
 	if _, err := catalog.ResolveInForce(t.Context(), domain.TenantID{},
 		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
-		domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, catalogAsOf); err == nil {
+		domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, catalogAsOf, domain.ServiceProductReference{}); err == nil {
 		t.Fatalf("空租户被接受了")
 	}
 	if _, err := catalog.ResolveInForce(t.Context(), evaluationValue(t, domain.NewTenantID, "tenant-a"),
 		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
-		domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, time.Time{}); err == nil {
+		domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, time.Time{}, domain.ServiceProductReference{}); err == nil {
 		t.Fatalf("零时点被接受了")
 	}
 }

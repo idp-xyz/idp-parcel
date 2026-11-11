@@ -83,7 +83,7 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 		 v.canonicalization, v.content_digest, v.source_file_name, v.source_file_sha256,
 		 v.authorization_id, v.authorization_version, v.publication_approver, v.registered_at,
 		 latest_cut.selection_ends_at, latest_cut.successor_version,
-		 retirement.retired_at, retirement.successor_version`,
+		 retirement.retired_at, retirement.successor_version, v.service_products`,
 		`parcel_pricing.price_card_version v
 		 LEFT JOIN LATERAL (
 		      SELECT c.selection_ends_at, c.successor_version
@@ -110,7 +110,7 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 			&row.RateTableID, &row.RateTableVersion, &row.EffectiveFrom, &effectiveTo,
 			&row.Canonicalization, &row.ContentDigest, &row.SourceFileName, &row.SourceFileSHA256,
 			&row.AuthorizationID, &row.AuthorizationVersion, &row.PublicationApprover, &row.RegisteredAt,
-			&cutEnd, &cutSuccessor, &retiredAt, &retirementSuccessor,
+			&cutEnd, &cutSuccessor, &retiredAt, &retirementSuccessor, &row.ServiceProducts,
 		); err != nil {
 			return fail(err)
 		}

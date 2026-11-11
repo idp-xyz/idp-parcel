@@ -102,6 +102,7 @@ func TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChanne
 			Columns []struct {
 				Key           string   `json:"key"`
 				AllowedValues []string `json:"allowedValues"`
+				Since         string   `json:"since"`
 			} `json:"columns"`
 		} `json:"sheets"`
 	}
@@ -112,7 +113,7 @@ func TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChanne
 	if body.TemplateVersion != spec.TemplateVersion || len(body.Sheets) != len(spec.Sheets) {
 		t.Fatalf("答复与规格源不一致：%s", response.Body)
 	}
-	var sawBounds, sawRemoteTierMethod bool
+	var sawBounds, sawRemoteTierMethod, sawServiceProducts bool
 	for _, sheet := range body.Sheets {
 		if sheet.Name == "total_bounds" && sheet.Since == "PPT-2" {
 			sawBounds = true
@@ -121,10 +122,16 @@ func TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChanne
 			if sheet.Name == "calculations" && column.Key == "method" {
 				sawRemoteTierMethod = strings.Contains(strings.Join(column.AllowedValues, ","), "TABLE_LOOKUP_BY_REMOTE_TIER")
 			}
+			if sheet.Name == "card" && column.Key == "serviceProducts" && column.Since == "PPT-3" {
+				sawServiceProducts = true
+			}
 		}
 	}
-	if !sawBounds || !sawRemoteTierMethod || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2" {
+	if !sawBounds || !sawRemoteTierMethod || body.TemplateVersion != "PPT-3" || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3" {
 		t.Fatalf("规格里缺 PPT-2 的新东西：%s", response.Body)
+	}
+	if !sawServiceProducts {
+		t.Fatalf("规格里缺 PPT-3 的 card.serviceProducts：%s", response.Body)
 	}
 
 	// 租户无关：别的租户的操作者读到逐字节相同的答复。
