@@ -22,8 +22,9 @@ import (
 // 两串由那条用例钉住。
 const CustomerParcelNumberDeclarationRetiredEventType = "parcel-shipment.customer-parcel-number-declaration.retired"
 
-// customerParcelNumberDeclarationRetiredEventIDPort 是声明撤除门铃信封 ID 的口名：ID 由（租户，委托，号码）认领——一份委托只会
-// 离开`已提交`一次，同一份委托同一个号至多一封。
+// customerParcelNumberDeclarationRetiredEventIDPort 是声明撤除门铃信封 ID 的口名。ID 按撤下的来由认领：委托离开`已提交`按（租户，
+// 委托，号码）——一份委托只离开一次，同一个号至多一封；受理前补充换下另带新提交版本——一份版本只形成一次，同一版本同一个号
+// 至多一封。
 const customerParcelNumberDeclarationRetiredEventIDPort = "customer-parcel-number-declaration-retired"
 
 // customerParcelNumberDeclarationRetiredPayload 是门铃载荷的传输形状：只有租户与号码，同关联已形成那一只。不带委托、客户账户、
@@ -145,8 +146,9 @@ func (doorbell *ExternalIdentifierDoorbell) RingDeclarationsRetired(
 }
 
 // RingBoxLabelsWithdrawn 给受理前补充换下的每个平台箱标号入队一封撤除门铃，与补充那一笔同一事务。信封 ID 另带新提交版本：同一份
-// 委托上一个号可以先被补充换下、再被后一份补充报回来、最后随拒绝撤下——三次都要响，只按（租户，委托，号码）认领，后两次会被当成
-// 第一封的重放吞掉。业务时间取新版本的形成时刻：撤下就发生在那一份补充成立的时候。
+// 委托上一个号可以先被补充换下、再被后一份补充报回来、最后随拒绝撤下——换下与撤下两次都要响（报回来不响），只按（租户，委托，
+// 号码）认领，后一次会被当成前一封的重放吞掉；同一个号被两份补充先后换下，也靠版本分开。业务时间取新版本的形成时刻：撤下就
+// 发生在那一份补充成立的时候。
 func (doorbell *ExternalIdentifierDoorbell) RingBoxLabelsWithdrawn(
 	ctx context.Context,
 	tenant domain.TenantID,
