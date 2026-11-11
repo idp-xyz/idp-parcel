@@ -13,6 +13,21 @@ import { field } from './fields';
 import { featureMeasure } from '../price-card-content';
 import { feeHasGroup, type CardFormState, type ConditionRow, type FeeItemState, type RateRow } from './model';
 import { cardFieldKeys, columnTitle, familySheet, sheetNames } from './spec';
+import { canonicalServiceProducts, declaresServiceProducts } from '../service-products';
+
+/** card 表里适用服务产品那一格的字段名，与方案文档的键同名（ADR-0378）；多个产品以英文分号分隔，同 amountRoundingPoints。 */
+export const serviceProductsCardField = 'serviceProducts';
+
+/** 模板从这一版起收适用服务产品那一格。 */
+export const serviceProductsSince = 'PPT-3';
+
+/** card 表那一格的分号串 → 产品标识；空串答空数组。 */
+export function serviceProductsOfCell(text: string): string[] {
+  return text
+    .split(';')
+    .map((product) => product.trim())
+    .filter((product) => product !== '');
+}
 
 export interface Target {
   field: string;
@@ -432,14 +447,18 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   }
   defaultSheet(sheetNames.referenceCatalogues, '参考数据', { field: field.refs('zoneCatalogue'), label: '分区目录' });
 
-  // ---- card 表：字段列全，没填的写 null ----
+  // ---- card 表：字段列全，没填的写 null；适用服务产品例外，见下 ----
+  const serviceProducts = serviceProductsText(state);
+  // 写了适用服务产品就按收这一格的那一版模板写；没写的卡照规格口的版本，与这一格出现之前的工作簿逐字相同。
+  const templateVersion = serviceProducts === undefined ? spec.templateVersion : serviceProductsSince;
   const cardValues: Record<string, string | undefined> = {
-    templateVersion: spec.templateVersion,
+    templateVersion,
     planId,
     planVersion,
     scope: trim(basics.scope),
     direction: trim(basics.direction),
     purpose: trim(basics.purpose),
+    [serviceProductsCardField]: serviceProducts,
     aggregation: trim(basics.aggregation),
     baseChargeCode: trim(basics.baseChargeCode),
     periodStartsAt: startsAt,
@@ -462,6 +481,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     scope: basicsTarget('scope', '适用范围'),
     direction: basicsTarget('direction', '价格方向'),
     purpose: basicsTarget('purpose', '用途'),
+    [serviceProductsCardField]: basicsTarget('serviceProducts', '适用服务产品'),
     aggregation: basicsTarget('aggregation', '计价对象'),
     baseChargeCode: basicsTarget('baseChargeCode', '基础运费代码'),
     periodStartsAt: basicsTarget('periodStartsAt', '生效起点'),
@@ -478,14 +498,31 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     directionAuthorizationId: basicsTarget('authId', '价格方向授权标识'),
     directionAuthorizationVersion: basicsTarget('authVersion', '价格方向授权版本'),
   };
+  // 模板版本是因为写了适用服务产品才进到 PPT-3 的；服务端不收这一版时，问题落回让它进位的那一格。
+  if (serviceProducts !== undefined) cardTargets.templateVersion = cardTargets[serviceProductsCardField];
   origins.cardFields = cardTargets;
-  const cardRows = cardFieldKeys(spec).map((key) => {
+  // 适用服务产品这一行只在售价卡选了产品时写，不写 null 行：缺这一行就是不声明、接其余产品（ADR-0378 决定一）。
+  // 规格口列不列它都照此办——规格口还没列它时（后端未升级）运营选了产品也照写，服务端答不认，问题标回这一格；
+  // 悄悄丢掉，存下的就是一张接其余产品的卡，与运营选的相反。写在用途后面，与方案文档里的位置一致。
+  const cardKeys = cardFieldKeys(spec).filter((key) => key !== serviceProductsCardField);
+  if (serviceProducts !== undefined) {
+    const after = cardKeys.indexOf('purpose');
+    cardKeys.splice(after < 0 ? cardKeys.length : after + 1, 0, serviceProductsCardField);
+  }
+  const cardRows = cardKeys.map((key) => {
     const value = cardValues[key];
     return { field: key, value: value === undefined || value === '' ? null : value } as Record<string, PriceCardWorkbookCell>;
   });
   sheets[sheetNames.card] = cardRows;
 
-  return { workbook: { templateVersion: spec.templateVersion, sheets }, origins };
+  return { workbook: { templateVersion, sheets }, origins };
+}
+
+/** 只有售价卡写适用服务产品；没选就不写，卡即接其余产品（ADR-0378 决定一）。 */
+function serviceProductsText(state: CardFormState): string | undefined {
+  if (!declaresServiceProducts(state.basics.direction)) return undefined;
+  const products = canonicalServiceProducts(state.basics.serviceProducts);
+  return products.length === 0 ? undefined : products.join(';');
 }
 
 function basisCells(fee: FeeItemState, dependencyId: string, baseChargeCode: string): Cells {

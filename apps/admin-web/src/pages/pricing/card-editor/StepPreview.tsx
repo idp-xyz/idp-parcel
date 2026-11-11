@@ -5,7 +5,7 @@ import { TechnicalDetails } from '../../../components/states';
 import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels } from '../../../vocabulary/price-card';
 import type { ApiResult } from '../../catalogue-api';
 import type { PriceCardDraftSubmissionBody, PriceCardImportReading, PriceCardProblem, PriceCardWorkbook } from '../api';
-import { workbookToDocument } from '../card-form/document';
+import { workbookServiceProducts, workbookToDocument } from '../card-form/document';
 import type { Issue } from '../card-form/validate';
 import { unlocatedWords, type LocatedProblem, type MappedProblems } from '../card-form/problems';
 import { parsePriceCardContent, type PriceCardContentView } from '../price-card-content';
@@ -16,6 +16,7 @@ import { ChannelProblem } from './ChannelProblem';
 import { stepTitles } from '../card-form/model';
 import { stepOfField } from '../card-form/fields';
 import { CurrencyLabel } from '../../refdata-labels';
+import { servedProductsLabel, servedProductsText } from '../service-products';
 
 /** 存草稿的结果，用运营听得懂的话。 */
 const draftOutcomeText: Record<string, string> = {
@@ -114,6 +115,8 @@ export function StepPreview({
   const view = useMemo(() => (passed && preview ? localView(preview.workbook) : null), [passed, preview]);
   const content = reading?.content;
   const savable = passed && fresh && !draftSaved;
+  // 适用产品念的是送去预览的那份工作簿：服务端读过、预览通过的就是它，不靠预览答复回显这一格。
+  const products = content && preview ? servedProductsText(content.direction, workbookServiceProducts(preview.workbook)) : null;
 
   return (
     <div className="space-y-5">
@@ -223,6 +226,12 @@ export function StepPreview({
             </dd>
             <dt className="text-idpxyz-breadcrumb">适用范围</dt>
             <dd className="font-mono">{content.scope}</dd>
+            {products !== null ? (
+              <>
+                <dt className="text-idpxyz-breadcrumb">{servedProductsLabel}</dt>
+                <dd>{products}</dd>
+              </>
+            ) : null}
             <dt className="text-idpxyz-breadcrumb">币种与单位</dt>
             <dd>
               <CurrencyLabel code={content.rateTable.currency} /> · {view?.header.weightUnit ?? content.rateTable.weightUnit}

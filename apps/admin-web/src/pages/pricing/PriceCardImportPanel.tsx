@@ -8,6 +8,7 @@ import { labelOf, problemNote } from './presentation';
 import { priceCardPurposeLabels, priceDirectionLabels } from '../../vocabulary/price-card';
 import { TechnicalDetails, httpRows } from '../../components/TechnicalDetails';
 import { technicalRows } from '../settlement/ops-ui';
+import { servedProductsLabel, servedProductsText } from './service-products';
 import {
   previewPriceCardImport,
   priceCardTemplateFileName,
@@ -192,6 +193,7 @@ function DraftAnswer({ answer }: { answer: ApiResult<PriceCardDraftSubmissionBod
 }
 
 function ContentSummary({ content }: { content: PriceCardImportContent }) {
+  const products = servedProductsText(content.direction, content.serviceProducts);
   return (
     <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-idpxyz-textMuted">
       <dt>方向</dt>
@@ -200,6 +202,12 @@ function ContentSummary({ content }: { content: PriceCardImportContent }) {
       </dd>
       <dt>适用范围</dt>
       <dd className="font-mono">{content.scope}</dd>
+      {products !== null ? (
+        <>
+          <dt>{servedProductsLabel}</dt>
+          <dd>{products}</dd>
+        </>
+      ) : null}
       <dt>生效自</dt>
       <dd className="font-mono">{content.startsAt.includes('T') ? formatInstant(content.startsAt) : content.startsAt}</dd>
       <dt>价表</dt>
