@@ -252,7 +252,13 @@ export function BusinessPartyDetailPanel({
             >
               <Maximize2 className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <BusinessPartyMoreMenu row={row} parties={parties} onOpenObjectPage={onOpenObjectPage} onChanged={onChanged} />
+            <BusinessPartyMoreMenu
+              row={row}
+              parties={parties}
+              liveRelationships={liveRelationships}
+              onOpenObjectPage={onOpenObjectPage}
+              onChanged={onChanged}
+            />
             <Button
               className="text-idpxyz-breadcrumb"
               variant="ghost"

@@ -8,11 +8,22 @@
 // （CONTEXT 规则「一个业务参与方持有客户角色，当且仅当……」），有账户没关系的单位头部正挂着「客户」。
 // 我方公司不提「没有关系」：它多半是关系的相对方，持有的角色本来就少，提了是误报。已停用不在这里——停用横幅已经在说。
 
+import { formatCount } from './business-parties-workbench';
 import { liveRelationshipStatuses, type PartyRelationshipView } from './party-overview';
 
 /** 这家单位名下还在起作用的关系有几段，持有方与相对方两侧都算——两侧都是「与它有往来」。 */
 export function liveRelationshipCountOf(views: readonly PartyRelationshipView[]): number {
   return views.filter((view) => liveRelationshipStatuses.has(view.status)).length;
+}
+
+/**
+ * 停用对话框说明后面跟的那一句（票 business-party-redesign/11）：这家单位名下还有几段在用的合作关系，与「还没有合作关系」
+ * 数的是同一个数。停用不因此被拦——已有的记录保留——但按下之前该知道还有几段挂在它名下。没有就不说；数是 null（关系册还没
+ * 答出，或没读全）也不说：到手的那一页上数出来的不是全数，报出来会被当成「就这些」。
+ */
+export function deactivationLiveRelationshipsNote(liveRelationships: number | null): string | null {
+  if (liveRelationships === null || liveRelationships <= 0) return null;
+  return `它名下还有 ${formatCount(liveRelationships)} 段在用的合作关系。`;
 }
 
 export type PanelHint = { kind: 'pending' } | { kind: 'no-relationship' } | null;

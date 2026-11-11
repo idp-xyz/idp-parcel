@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Button, Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyListResponseBody, BusinessPartyRecord } from './api';
+import { deactivationLiveRelationshipsNote } from './business-party-panel-first-screen';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 
 /**
@@ -15,6 +16,7 @@ import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 export function BusinessPartyDeactivationDialog({
   row,
   parties,
+  liveRelationships = null,
   open,
   onOpenChange,
   onDeactivated,
@@ -22,6 +24,8 @@ export function BusinessPartyDeactivationDialog({
   row: BusinessPartyRecord;
   /** 页面持有的参与方列表答案；首取回来之前为 null。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
+  /** 它名下在用的合作关系有几段（business-party-panel-first-screen.ts 的 liveRelationshipCountOf）；不知道就是 null，说明里不提。 */
+  liveRelationships?: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** 登记册答 `DEACTIVATED` 后回调；对话框已先关掉，页面借它重取列表让「已停用」立刻可见。 */
@@ -33,7 +37,10 @@ export function BusinessPartyDeactivationDialog({
         <DialogHeader className="items-start">
           <div>
             <DialogTitle>停用往来单位 {row.partyName}</DialogTitle>
-            <DialogDescription className="mt-1">从停用时间起，不再与它建立新的合作关系、合同与账户；已有记录保留，停用后不能撤回。</DialogDescription>
+            <DialogDescription className="mt-1">
+              从停用时间起，不再与它建立新的合作关系、合同与账户；已有记录保留，停用后不能撤回。
+              {deactivationLiveRelationshipsNote(liveRelationships)}
+            </DialogDescription>
           </div>
           <Button type="button" variant="ghost" size="icon" aria-label="关闭" onClick={() => onOpenChange(false)}>
             <X className="h-4 w-4" aria-hidden="true" />

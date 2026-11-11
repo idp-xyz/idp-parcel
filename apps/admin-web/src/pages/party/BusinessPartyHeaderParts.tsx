@@ -85,12 +85,15 @@ export function BusinessPartyBanners({ row }: { row: BusinessPartyRecord }) {
 export function BusinessPartyMoreMenu({
   row,
   parties,
+  liveRelationships = null,
   onOpenObjectPage,
   onChanged,
 }: {
   row: BusinessPartyRecord;
   /** 页面持有的参与方列表答案，给停用对话框（候选与版本号建议）；首取回来之前为 null。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
+  /** 它名下在用的合作关系有几段，给停用对话框的说明；不知道就是 null。 */
+  liveRelationships?: number | null;
   onOpenObjectPage?: () => void;
   /** 停用落册后回调；页面借它重取参与方册让「已停用」立刻可见。 */
   onChanged?: () => void;
@@ -132,6 +135,7 @@ export function BusinessPartyMoreMenu({
       <BusinessPartyDeactivationDialog
         row={row}
         parties={parties}
+        liveRelationships={liveRelationships}
         open={deactivating}
         onOpenChange={setDeactivating}
         onDeactivated={() => onChanged?.()}

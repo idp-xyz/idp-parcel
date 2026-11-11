@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
+import { deactivationLiveRelationshipsNote, liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
 import type { PartyRelationshipView } from './party-overview';
 
 // 本文件钉的是右栏首屏那两句话与主动作怎么选（票 business-party-ux/08）：提示只在待生效、或已生效却没有在用关系时出现，
@@ -34,6 +34,14 @@ test('liveRelationshipCountOf 只数候选与已生效，两侧都算', () => {
     2,
   );
   equal(liveRelationshipCountOf([]), 0);
+});
+
+// Covers: 停用对话框说明后面那一句——名下有在用的合作关系才说、报出段数；没有不说；数不知道（关系册没答出或没读全）也不说。
+test('deactivationLiveRelationshipsNote 有在用的关系才报段数，不知道就不说', () => {
+  equal(deactivationLiveRelationshipsNote(3), '它名下还有 3 段在用的合作关系。');
+  equal(deactivationLiveRelationshipsNote(1286), '它名下还有 1,286 段在用的合作关系。');
+  equal(deactivationLiveRelationshipsNote(0), null);
+  equal(deactivationLiveRelationshipsNote(null), null);
 });
 
 // Covers: 待生效就提示（日期在事实行，不进提示）；已生效、没有在用关系、也没有别处认出的角色才提「还没有合作关系」；只凭客户账户

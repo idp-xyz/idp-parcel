@@ -22,6 +22,9 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
+import { completeRegisterRows } from '../complete-register';
+import { liveRelationshipCountOf } from './business-party-panel-first-screen';
+import { relationshipsOfParty } from './party-overview';
 import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant } from './detail-primitives';
@@ -178,6 +181,9 @@ export function BusinessPartyDetailPage({
   const ours = pinned === true;
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
   const related = usePartyOverviewCount(partyId, relationships);
+  // 停用对话框说明里「名下还有几段在用的合作关系」的数：关系册读全了才数（与工作台右栏同一个口径），没答出、没读全都是 null。
+  const completeRelationships = completeRegisterRows(relationships?.kind === 'outcome' ? relationships.body : null, (body) => body.relationships);
+  const liveRelationships = completeRelationships === null ? null : liveRelationshipCountOf(relationshipsOfParty(partyId, completeRelationships));
   const identificationMeta = useBusinessPartyIdentificationMeta(row);
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const grant = useRegistryWriteGrant();
@@ -269,7 +275,7 @@ export function BusinessPartyDetailPage({
                   更正登记信息
                 </Button>
               ) : null}
-              <BusinessPartyMoreMenu row={row} parties={listAnswer} onChanged={retry} />
+              <BusinessPartyMoreMenu row={row} parties={listAnswer} liveRelationships={liveRelationships} onChanged={retry} />
             </>
           ) : null}
           <Button
