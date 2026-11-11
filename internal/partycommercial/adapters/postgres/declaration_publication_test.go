@@ -349,8 +349,8 @@ func TestPublishedDeclarationsRoundTripThroughTheirReadPorts(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("读回 found=%v err=%v", found, err)
 		}
-		if loaded.AcceptanceRulePackage().String() != "rules-1" {
-			t.Fatalf("读回的规则包引用变形：%q", loaded.AcceptanceRulePackage())
+		if rulePackage, _ := loaded.AcceptanceRulePackage(); rulePackage.String() != "rules-1" {
+			t.Fatalf("读回的规则包引用变形：%q", rulePackage)
 		}
 		binding, bound := loaded.FinancialControlFor(pcValue(t, domain.NewChargeScopeReference, "charge-scope-2"))
 		if !bound || !binding.ExplicitlyInapplicable() {

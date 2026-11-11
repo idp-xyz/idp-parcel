@@ -102,8 +102,10 @@ func TestACustomerContractBodyIsReconciledAgainstTheCanonicalDigest(t *testing.T
 		if result.Outcome() != application.CommercialVersionPublishedEffective {
 			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
 		}
-		if len(registry.savedContract) != 1 || registry.savedContract[0].AcceptanceRulePackage().String() != "rules-1" ||
-			len(registry.savedContract[0].Bindings()) != 2 {
+		if len(registry.savedContract) != 1 || len(registry.savedContract[0].Bindings()) != 2 {
+			t.Fatalf("saved contract content = %#v", registry.savedContract)
+		}
+		if rulePackage, named := registry.savedContract[0].AcceptanceRulePackage(); !named || rulePackage.String() != "rules-1" {
 			t.Fatalf("saved contract content = %#v", registry.savedContract)
 		}
 		if strings.Join(registry.declarationLog, ",") != "pre-acceptance-control,contract-content" {

@@ -209,3 +209,18 @@ func TestCustomerContractPayloadUnderAnotherKindIsRefused(t *testing.T) {
 		t.Fatalf("outcome = %q, cause = %v, err = %v", answer.Outcome(), answer.RefusalCause(), err)
 	}
 }
+
+// Covers: ADR-0376 决定三——多产品合同不指名接单规则包：载荷里壳上没有引用、正文没有 rulePackage 键，照样折成正文，规则包
+// 一格是没指名，不点名成缺格。
+func TestCustomerContractPayloadMayNameNoRulePackage(t *testing.T) {
+	unnamed := strings.Replace(customerContractPayload, `"references": {"ACCEPTANCE_RULE_PACKAGE": "rules-1"},`, "", 1)
+	unnamed = strings.Replace(unnamed, `"rulePackage": "rules-1",`, "", 1)
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+	_, content, err := decodePublication(t, unnamed).Publication(tenant)
+	if err != nil {
+		t.Fatalf("publication: %v", err)
+	}
+	if content.CustomerContract == nil || content.CustomerContract.RulePackage != (domain.CommercialObjectID{}) {
+		t.Fatalf("body = %#v, want 规则包没指名", content.CustomerContract)
+	}
+}

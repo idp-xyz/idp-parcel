@@ -61,7 +61,7 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 
 	// 父 LEFT JOIN 子一次取回：ReadExecutor 不保证两条语句同一快照，分两次会拼出从未
 	// 同时存在的父子状态。无父行 = 零行（found=false）；有父零子 = 一行空 json 数组。
-	var rulePackageID string
+	var rulePackageID *string
 	var accountID *string
 	var bindingsJSON []byte
 	err = querier.QueryRow(ctx,
@@ -101,9 +101,12 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 
-	rulePackage, err := domain.NewCommercialObjectID(rulePackageID)
-	if err != nil {
-		return none, false, fmt.Errorf("load customer contract: %w", err)
+	// 规则包可缺（0048，ADR-0376 决定三）：NULL 即这一版合同没指名，读回零值；在场的值照旧过构造门。
+	var rulePackage domain.CommercialObjectID
+	if rulePackageID != nil {
+		if rulePackage, err = domain.NewCommercialObjectID(*rulePackageID); err != nil {
+			return none, false, fmt.Errorf("load customer contract: %w", err)
+		}
 	}
 	if err := domain.ConsistentAcceptanceRulePackage(contract, rulePackage); err != nil {
 		return none, false, fmt.Errorf("load customer contract: %w", err)

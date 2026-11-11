@@ -190,7 +190,8 @@ function ShellFields({
   );
 }
 
-// ——合同正文（0012）：接单规则包 + 按费用范围的约定表。规则包同时进壳上的指名引用与正文，两处必须相等由服务端核。
+// ——合同正文（0012）：接单规则包（可缺，ADR-0376 决定三）+ 按费用范围的约定表。规则包填了同时进壳上的指名引用与正文，
+// 两处必须相等由服务端核。
 
 function ContractContentFields({
   draft,
@@ -226,7 +227,7 @@ function ContractContentFields({
         placeholder="这份合同属于哪个客户账户"
       />
       <Field
-        label="接单规则包 *"
+        label="接单规则包"
         path="customerContract.contractContent.rulePackage"
         alsoPaths={['references.ACCEPTANCE_RULE_PACKAGE', 'customerContract.contractContent']}
         problems={form.problems}
@@ -238,6 +239,7 @@ function ContractContentFields({
           registerName="接单规则包册"
           onChange={(rulePackage) => patch({ rulePackage })}
         />
+        <span className="block type-caption text-idpxyz-textMuted mt-1">多产品合同不指名，规则包随服务产品选。</span>
       </Field>
 
       <div className="flex items-center justify-between mt-1">

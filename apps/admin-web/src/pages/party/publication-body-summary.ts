@@ -67,7 +67,7 @@ function contractFacts(body: CustomerContractBodyPayload | undefined): Publicati
   );
   const facts: PublicationFact[] = [
     { label: '货主客户账户', value: contractContent.customerAccount },
-    { label: '接单规则包', value: contractContent.rulePackage },
+    { label: '接单规则包', value: contractContent.rulePackage ?? '不指名（规则包随服务产品选）' },
     { label: '费用范围约定', value: bindings.length > 0 ? bindings.join('；') : '没有对任何费用范围作约定' },
   ];
   if (preAcceptanceControl) {

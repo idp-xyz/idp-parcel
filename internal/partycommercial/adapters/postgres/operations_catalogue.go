@@ -793,11 +793,12 @@ func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, er
 		row.EffectiveEndsAt = *endsAt
 		row.HasEffectiveEnd = true
 	}
-	// rule_package_id 在正文表上 NOT NULL,它的在场即正文行的在场——不必再多取
-	// 一列去问「有没有正文」。
+	// 正文行在不在看 declared_at（库上 NOT NULL、有缺省）：rule_package_id 自 0048 起可缺，不再能兼作「有没有正文」。
+	if declaredAt != nil {
+		row.HasContent = true
+	}
 	if rulePackage != nil {
 		row.RulePackageID = *rulePackage
-		row.HasContent = true
 	}
 	// customer_account_id 在 0037 之前写下的旧行上是 NULL(没有这一格可补),如实交回空串。
 	if customerAccount != nil {

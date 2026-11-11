@@ -285,7 +285,7 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 	}
 	tenant, kind, objectID, label := ownerColumns(contract.Version())
 
-	var existingRulePackage string
+	var existingRulePackage *string
 	var existingAccount *string
 	present := true
 	err = executor.QueryRow(ctx,
@@ -305,9 +305,10 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 		if err != nil {
 			return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save customer contract content: %w", err)
 		}
-		// 迁移 0037 之前写下的行没有账户：同一版本再登一份带账户的正文不是重放，是内容不同。
+		// 迁移 0037 之前写下的行没有账户：同一版本再登一份带账户的正文不是重放，是内容不同。规则包可缺（0048）：
+		// 一边指名、一边没指名同样是内容不同。
 		if existingAccount == nil || *existingAccount != contract.CustomerAccount().String() ||
-			existingRulePackage != contract.AcceptanceRulePackage().String() || len(existing) != len(incoming) {
+			!sameOptionalText(existingRulePackage, rulePackageColumn(contract)) || len(existing) != len(incoming) {
 			return ports.DeclarationContentConflict, nil
 		}
 		for _, binding := range incoming {
@@ -325,7 +326,7 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 		`INSERT INTO party_commercial.customer_contract_content
 			(tenant_id, object_kind, object_id, version_label, rule_package_id, customer_account_id)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		tenant, kind, objectID, label, contract.AcceptanceRulePackage().String(), contract.CustomerAccount().String(),
+		tenant, kind, objectID, label, rulePackageColumn(contract), contract.CustomerAccount().String(),
 	); err != nil {
 		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save customer contract content: %w", err)
 	}
@@ -823,4 +824,14 @@ func scanTextPairs(
 		pairs[key] = value
 	}
 	return pairs, rows.Err()
+}
+
+// rulePackageColumn 是合同正文规则包一格的落库值：没指名即 NULL（0048），不写空串——空串与缺席在读面上是两种说法。
+func rulePackageColumn(contract domain.CustomerContract) *string {
+	rulePackage, named := contract.AcceptanceRulePackage()
+	if !named {
+		return nil
+	}
+	value := rulePackage.String()
+	return &value
 }
