@@ -140,7 +140,7 @@
 | 法人与合同 | 取得明确责任法人和当前适用客户合同版本 | 按适用规则拒绝 | 尚未决定 | `PC-RULE`、`PS-RULE` |
 | 产品与服务 | 取得已发布服务产品版本并判断客户要求与适用范围 | 按适用规则拒绝 | 尚未决定 | `PC-RULE`、`PS-RULE` |
 | 成员基线 | 验证至少一个包裹及同一委托共享约束 | 整份当前提交版本不得接受；资料纠错形成新提交版本，成员重组先撤回原委托再关联重提 | 尚未决定 | `PS-RULE`、`BD-PS-007` |
-| 必要资料 | 按产品、合同、法人、服务/关务范围和有效期装配版本化资料规则 | 按适用规则形成拒绝、待补充或受控纠正 | 尚未决定 | `PS-RULE`、`BD-PS-001`、`BD-PS-006` |
+| 必要资料 | 按产品、合同、法人、服务/关务范围和有效期装配版本化资料规则；服务产品所采用接单规则包引用的提交条件在此逐条判（[ADR-0376](../../adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定一） | 按适用规则形成拒绝、待补充或受控纠正；提交条件未满足是待补充，续办方是客户 | 尚未决定 | `PS-RULE`、`BD-PS-001`、`BD-PS-006` |
 | 接受前财务控制 | 执行合同策略要求的预付冻结、信用校验、明确无控制或合同明确组合；逐项保留控制项结果与策略的共同通过条件（[PS CONTEXT](../../domain/parcel-shipment/CONTEXT.md) 词条「接受前财务控制采用结果」） | 按策略的共同通过条件判定不成立时按策略拒绝或进入授权处置：任一受限项在正文里登记 `REJECT` 即确定不通过；全部受限项登记 `AUTHORIZED_DISPOSITION` 时任务停`等待授权处置`，由授权角色决定去向（`拒绝`或`交客户补充`），放行不在集内（[ADR-0132](../../adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md)）；不得默认放行 | 尚未决定 | `PC-RULE`、`BD-PS-003` |
 | 标准网络可达性 | 为每个相关包裹保留三值判断原结果 | 明确不可达时整份当前提交版本不能直接接受；允许待路由产品除外 | 资料不足不得映射为不可达；按适用规则待补充、拒绝或保持未决 | `NR-REACH`、`PS-RULE`、`BD-PS-001`、`BD-PS-007` |
 
