@@ -259,6 +259,14 @@ func (handler *AmendCustomerSourceDataHandler) decide(
 	if request.SourceDataScopeOutsideAcceptanceBaseline(command.Scope) {
 		return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
 	}
+	// 货物明细的装箱分配同样以接受基线为界，排在矩阵之前的理由同上：指到基线外的包裹是同一个业务拒绝（增删行或改分配
+	// 不是增删委托成员），漏了成员是这份内容自己没写全——后者是调用方的错，改请求才会好。
+	if err := request.CheckSourceDataContentAgainstBaseline(command.Content); err != nil {
+		if errors.Is(err, domain.ErrParcelOutsideAcceptanceBaseline) {
+			return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
+		}
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w: %w", ErrAmendmentContentUnfit, err)
+	}
 
 	// 步骤 6 的前半：先判阶段，再问矩阵。矩阵按（资料组 × 阶段 × 意图）登记，阶段是本上下文对
 	// 自己对象生命周期位置的判断，规则包只声明「在某阶段允许什么」；判不出就停在未决，不猜一个
