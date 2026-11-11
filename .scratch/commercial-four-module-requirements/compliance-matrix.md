@@ -38,7 +38,7 @@
 
 | # | 要求 | 结论 | 现状 | 证据 | 票 |
 |---|---|---|---|---|---|
-| 11 | 分票计费 | 部分满足 | 领域能按委托合计计价，导入模板能登记这样的卡。生产上没有形成票级输入的路径，销售计费请求按包裹发起。按件派生再求和的聚合方式已有决定，代码未到 | `AggregationPerShipment`、`NewAggregatePricingInputSnapshot`（生产代码无调用方）；`SellEvaluationRequestSpec` 的 `Parcel`；`internal/parcelpricing/adapters/transportfulfillment` 的 `missingSingleMember`；ADR-0364 决定三，与冻结清单「记录」里出处写它的那一行 | [06](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)、[07](./issues/07-shipment-level-sell-charging-enters-production.md) |
+| 11 | 分票计费 | 部分满足 | 领域能按委托合计计价，导入模板能登记这样的卡。生产上没有形成票级输入的路径，销售计费请求按包裹发起。按件派生再求和的聚合方式已有决定，代码未到 | `AggregationPerShipment`、`NewAggregatePricingInputSnapshot`（生产代码无调用方）；`SellEvaluationRequestSpec` 的 `Parcel`；`internal/parcelpricing/adapters/transportfulfillment` 的 `missingSingleMember`；ADR-0364 决定三，与冻结清单「记录」里出处写它的那一行 | [06](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)、[07](./issues/07-shipment-level-sell-charging-enters-production.md)、[14](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) |
 | 12 | 分件计费 | 满足 | 正式评价逐包裹形成：销售按包裹计费时点，采购按运输收费发生项 | `AggregationPerPackage`、`EvaluatePricing`；ADR-0190 | — |
 | 13 | 体积重 | 满足 | 重量方法取实重，或实重与体积重的较大者；体积系数由价卡声明 | `PricingWeightActualOnly`、`PricingWeightMax`、`CalculatePricingWeight` | — |
 | 14 | 阶梯运费 | 满足 | 价表有重量段乘分区、首重加续重、计费重乘单价三种 | `RateTableFamilyWeightZone`、`RateTableFamilyFirstContinue`、`RateTableFamilyUnitPrice` | — |
@@ -65,6 +65,6 @@
 
 1. **「生效」没有单独的人工动作。** 发布时带有效区间，到点自动生效。客户要的若是批准之后另有一步人工生效，第 4 项要改判部分满足。
 2. **「毛利」不在计费里。** 计价只出评价金额；毛利由结算与经营核算从费用和成本派生。毛利也不是接单或择优的门槛（ADR-0366）。客户要的若是计费时随每票给出销售价减采购价，那是另一项能力。
-3. **「分票」读作一票多件按整票合计计费。** 这是从「分票/分件」的并列读出来的，没有向客户确认（[spec](./spec.md)「待用户确认」Q2）。
-4. **「价卡授权」读作合同一侧对价卡的授权。** 今天与它最近的两样是价格方向授权和价格政策的定价方案绑定，两样都只留痕。客户要的若是「没授权就不能计费」，要重开 ADR-0260（Q4）。
+3. **「分票」读作一票多件按整票计费。** 这是从「分票/分件」的并列读出来的。没有可以去确认的对方，会话对着行业做法核过一遍（[spec](./spec.md)「待用户确认」Q2，依据在[行业做法笔记](./industry-practice-notes.md)）。
+4. **「价卡授权」读作合同一侧对价卡的授权。** 今天与它最近的两样是价格方向授权和价格政策的定价方案绑定，两样都只留痕。照行业做法，要补的是登记门上的核对，不是让评价去读合同（Q4）。
 5. **演示时登记新形态的价卡要先开部署开关。** 方案记着基础版之外规范化版本的价卡，登记口在开关关着时答 `NEWER_CANONICALIZATION_NOT_ENABLED`（ADR-0352）。它不影响第 9 项的结论，但会影响现场。

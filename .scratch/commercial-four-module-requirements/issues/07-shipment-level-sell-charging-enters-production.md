@@ -3,7 +3,7 @@
 Category: enhancement
 Status: draft
 父票：[spec](../spec.md)
-Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)；用户决定 Q2（见 [spec](../spec.md)「待用户确认」）。开工时随票立一篇 ADR：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 的销售评价请求是按包裹的，本票要扩出委托一路，照 `docs/adr/README.md` 顶部要挂指针
+Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)。Q2 已由会话按行业做法代答、待用户认可（见 [spec](../spec.md)「待用户确认」）。开工时随票立一篇 ADR：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 的销售评价请求是按包裹的，本票要扩出委托一路，照 `docs/adr/README.md` 顶部要挂指针
 地盘：`internal/settlementaccounting`、`internal/parcelpricing`（输入解析与适配器）、`internal/parcelshipment`（读口）、`cmd/parcel-dispatch` 装配
 
 对应要求：Rating「分票计费」的生产一半。
@@ -51,5 +51,5 @@ Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-
 ## 不在本票
 
 - 把票级金额摊到每件包裹看毛利。那是成本分摊（ADR-0111 决定三），仍在冻结；对客户收一笔票级费用本身不需要它。
-- 采购一侧多成员的运输收费发生项。
+- 采购一侧多成员的运输收费发生项。它归票 [14](./14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md)。
 - 主单级计费。它等运输履约的承运总单登记册。

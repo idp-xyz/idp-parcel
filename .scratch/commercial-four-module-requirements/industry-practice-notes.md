@@ -1,0 +1,102 @@
+# 行业做法笔记：报价、一票多件、签署证据与价卡授权
+
+本文件是 [spec](./spec.md)「待用户确认」Q1 至 Q4 的取证附件，不是规则，也不是[竞品公开事实台账](../../docs/product/COMPETITOR-FACT-LEDGER.md)的一部分。要不要把其中某几条升进台账，另行决定。
+
+**为什么查**：这四问原本要向给出要求清单的一方确认。2026-11-11 用户在会话里答「没有可问的人，分析，参考行业头部软件的做法」。
+
+**核对日期**：2026-11-11。公开文档随时会改，引用任何一条都连这个日期一起引；照台账的规矩，超过一个季度没重核的视为过期。
+
+**取法**分三种，写在每条的「取法」一栏：
+
+- **直接抓取**：用抓取工具读过该页正文。
+- **存下的全文**：搜索工具把该页全文存成了本地文件，在文件里检索到了引的那句。
+- **摘录**：只看到搜索工具返回的该页正文摘录，没有另行抓取。PDF 都属这一种。
+
+**状态**沿用台账的三态：`已核实`、`部分未核`、`未取到`。
+
+**看了谁**：SAP TM、Oracle OTM（运输管理软件）；Salesforce CPQ、Conga CPQ（报价到合同）；金蝶云星空（国内企业软件的合同与签章）；易仓 TMS（国内跨境快递、小包、专线系统）；DHL、FedEx、UPS（一票多件的计费规则）。**没看**：CargoWise、Magaya、K5，以及 nShift、Metapack 这类多承运商发货软件。台账里已有的 Shippo 与 Easyship 两家，取价都发生在建运单那一步，没有报价对象，本文件不重复登。
+
+## 核到的事实
+
+### 报价
+
+| # | 来源 | 取法 | 状态 | 核到了什么 |
+|---|---|---|---|---|
+| R1 | [SAP Learning：Creating Forwarding Quotations](https://learning.sap.com/courses/exploring-sap-s-4hana-transportation-management-for-logistics-service-providers/creating-forwarding-quotations) | 直接抓取 | 已核实 | Forwarding Quotation 针对一次具体运输的询价。可设有效期以保证算出的价格；客户须在有效期内接受或拒绝；接受后由报价生成 Forwarding Order，费用取自报价。报价上不能开始计划 |
+| R2 | [SAP Learning：Managing Forwarding Agreements](https://learning.sap.com/courses/exploring-sap-s-4hana-transportation-management-for-logistics-service-providers/managing-forwarding-agreements) | 直接抓取 | 已核实 | Forwarding Agreement 是与客户的长期合同，是计算对客费用的依据。客户发来询价后，承运方建 Forwarding Agreement Quotation；原文：「If the customer accepts the offer and signs a contract, the forwarding agreement quotation is turned into a forwarding agreement」。也可以从一份已有协议里发起协议报价，用来更新这份协议 |
+| R3 | [SAP TM 9.1 SP04 Release Notes](https://help.sap.com/doc/0b591ffbcf6845dea7e2c5554406a6d4/9.1/en-US/Release_Notes_SAP_Transportation_Management_91,_SP04E.PDF) | 摘录 | 已核实 | 「You use forwarding agreement quotations to publish your transportation rates in a trade lane.」 |
+| R4 | [Oracle OTM：Quote Request](https://docs.oracle.com/en/cloud/saas/transportation/26c/otmol/planning/order_manager/quote/quote_request.htm) | 直接抓取 | 已核实 | 报价请求页用来「search for valid rates in order to provide the customer with the quote they requested」，必填的只有起运地与目的地；可勾选只取与该客户所在域相同的专属费率；分采购与销售两个视角 |
+| R5 | [Salesforce Trailhead：Create Account-Based Contracted Pricing](https://trailhead.salesforce.com/content/learn/modules/pricing-methods-for-salesforce-cpq/create-account-based-contracted-pricing) | 直接抓取 | 已核实 | 合同价是挂在客户账户上的记录，可带生效日与失效日；给这位客户的报价加行时自动取用；已加的行是快照，之后改合同价不影响它。文中提醒不要让同一账户的两条合同价作用于同一产品，否则「there's no way to dictate which contracted price is used」 |
+| R6 | [Conga CPQ：Configure Contract Pricing through Price Agreements](https://documentation.conga.com/en/cpq-for-salesforce/current/cpq-for-administrators/managing-pricing/contract-pricing/when-to-use-contract-price-lists/configure-contract-pricing-through-price-agreements) | 摘录 | 已核实 | 意图为价格协议的报价定稿并被接受后，系统按报价里谈定的价格自动生成一份合同价目表，带合同号，供以后的报价取用 |
+| R7 | [易仓：销售操作教程](https://www.eccang.com/manual-24.html) | 直接抓取 | 已核实 | 客户协议价格维护：「系统默认的最先取这里面的价格，其次是等级价，最后才是销售价」。协议等级价审核：「只有在这里面审核了客户协议等级价才会生效」。运费报价申请：「根据运单号来调整运费金额」，其后是审核与审批，「建议不同的操作人员来进行申请，审核，审批」。另有销售运费试算，用来验证价格表 |
+
+### 一票多件
+
+| # | 来源 | 取法 | 状态 | 核到了什么 |
+|---|---|---|---|---|
+| R8 | [DHL UK：Weight and Dimensions](https://www.dhl.com/discover/en-gb/ship-with-dhl/products-and-services/weight-and-dimensions)（页面日期 2023-11-21） | 直接抓取 | 已核实 | 「If you are sending multiple packages, calculate each weight separately and this is the 'total chargeable weight'. The chargeable weight is always the greater of the actual or volumetric weight.」 |
+| R9 | [FedEx 亚太：多件货件计费重逻辑调整说明](https://www.fedex.com/content/dam/fedex/apac-asia-pacific/downloads/fedex-invoice-sample-en-jp.pdf) | 摘录 | 已核实 | 此前多件货件按整票合计的实重与体积重取大者计费；自 2022-04-25 起改为逐件取实重与体积重的大者，各件相加作为整票的计费重 |
+| R10 | [UPS 2026 Tariff Guide（英国）](https://assets.ups.com/adobe/assets/urn:aaid:aem:9b3de62a-351c-48f8-bcd0-07203835d6a2/original/as/tariff-guide-in-gb-en.pdf) | 存下的全文 | 已核实 | 逐件比较实重与体积重取大者；「For multiple-package shipments, total the billable weight of all packages in the shipment.」 |
+| R11 | [易仓 TMS 11 月版本功能更新要点](https://www.eccang.com/bbgx_107) | 直接抓取 | 已核实 | 「按票分泡时，先将总实重和总材积重进位，再按分泡比例分泡，最后再进位取整」；同一票货可以用两个进位值不同的计费重，分别算干线运费与末端派送运费 |
+| R12 | [易仓：服务渠道](https://bbs.eccang.com/notbook/112) | 摘录 | 未取到 | 直接抓取答 403。搜索引擎的摘录里有：「票总重：一票货里面所有的件之和来进行进位之后产生计费重。」「件总重：货物每件进行进位之后相加的和再进行进位，最后产生计费重。」这一条没有核实，下面凡用到它的地方都注明 |
+
+### 签署
+
+| # | 来源 | 取法 | 状态 | 核到了什么 |
+|---|---|---|---|---|
+| R13 | [SAP Signature and Agreement Management by Docusign](https://www.sap.com/products/crm/signature-and-agreement-management.html) | 直接抓取 | 已核实 | SAP 的签署能力是与 Docusign 合作的产品，嵌在 SAP Sales Cloud 与 SuccessFactors 的流程里：在 SAP 里发起、发送、跟踪，签完的数据同步回 SAP |
+| R14 | [金蝶官网：金蝶云・星空合同中心](https://www.kingdee.com/resources/articles/1426272354573791137)（2025-10-09） | 直接抓取 | 已核实 | 「起草过程中，用户可根据需求自由选择针对本合同启用电子签章，或直接采用手签方式。」电子签章的合同附件同步为业务合同附件 |
+| R15 | [金蝶云社区：合同电子签章使用方式](https://vip.kingdee.com/article/651377910552445696) | 摘录 | 已核实 | 要先启用电子签章集成配置，并到电子签章服务商处认证；合同保存、提交、审核之后上传到服务商，参与方凭短信或邮件里的链接签署 |
+
+### 客户专属价怎么取到
+
+| # | 来源 | 取法 | 状态 | 核到了什么 |
+|---|---|---|---|---|
+| R16 | 同 R2 | 直接抓取 | 已核实 | 「The system determines the agreement based on the organization, business partner, validity period, and preconditions.」找到协议与协议项之后，按它的计算表取费率表 |
+| R17 | [Oracle OTM：Rate Offering](https://docs.oracle.com/en/cloud/saas/transportation/26c/otmol/planning/rate_manager/create_rate_offering.htm) | 存下的全文 | 已核实 | 费率协议可带客户域约束：有约束且订单所在域相容时，只返回带约束的那一份。视角分采购、销售与两者皆是。另有一格「Contract Rate」标明这是客户专属费率，可配合权限检查，按销售运单用的是不是客户专属费率来拦订舱动作 |
+| R18 | 同 R5、R7 | 直接抓取 | 已核实 | Salesforce 的合同价挂在客户账户上，给这位客户报价时自动取用；易仓的客户协议价先于等级价与销售价被取用，且要审核后才生效 |
+
+## 据此的读法
+
+下面是会话的读法，不是事实。四条都由会话代答，待用户认可。
+
+### Q1 报价：报一套价，不做逐票锁价
+
+- 头部软件把两种报价做成两个对象。针对一次运输的报价，终点是一张订单（R1、R4）。针对一段期间费率的报价，终点是一份协议或一套合同价（R2、R3、R5、R6）。
+- 要求清单写的是「客户接受与价格生效申请」。接受之后生效的是价格，不是订单，对上的是后一种。
+- 国内的同类系统里，对客价是销售价、等级价与客户协议价三层，协议价审核后生效（R7）。它没有事前的逐票报价；按运单的那一种是事后改价，走申请、审核、审批。
+- 所以 [ADR 草案](./adr-draft-quotation-offers-a-set-of-prices.md)的决定一不变。按运单的事后改价不归报价，归费用调整。
+
+### Q2 分票：两种算法都要，由价卡声明
+
+- 三大快递现行的口径都是逐件取大者再相加（R8、R9、R10）。FedEx 在 2022 年之前是整票合计后取大者（R9）。
+- 国内系统里两种并存：分泡按票合计（R11）；服务渠道上分票总重与件总重（R12，未核实）。
+- 这与 [ADR-0364](../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 决定三一致：聚合方式由价卡声明，两种都给。
+- 三大快递对多件货件都按票计费，这是采购成本。采购一侧算不了一票多件，成本就对不上。见下面「多出来的三处」。
+- 是不是主营：会话的判断是小包多为一票一件，一票多件主要在快递代理与专线渠道。这一句没有找到一手来源。分票排在报价之后是依它定的。
+
+### Q3 签署证据：先登记，电子签章以后做成可选的对接
+
+- 头部企业软件不自建签署，都对接专门的服务商（R13、R15），并且允许不走电子签章、直接手签（R14）。
+- 所以票 03 的形态不变：登记签署信息与签署件索引。将来接电子签章时，它的回执落成同一种签署证据，只是来源不同。
+
+### Q4 价卡授权：不改选卡路径，在登记门上核对合同
+
+- 头部软件里，客户专属价都经一个受管的客户绑定取到：协议（R16）、带客户约束的费率协议（R17）、挂在账户上的合同价、审核后生效的客户协议价（R18）。
+- 本产品的选卡是同一个形状：客户的结算账户登记一个销售计价范围，评价按范围选卡（[ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)、[ADR-0280](../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。差别在这一步登记不核对合同。
+- 所以不必让评价去读合同。要补的是两道登记门：价卡登记时核对它引用的授权；登记某位客户用哪个销售计价范围时核对他的合同。
+
+## 多出来的三处
+
+1. **采购一侧的一票多件。** 立票 [14](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md)。
+2. **进位叠不叠两次。** 易仓的件总重写的是逐件进位、相加之后再进位一次（R12，未核实）。ADR-0364 决定三写的是逐件进位后求和，或求和之后进位一次，「不叠两次」。进位按重量分段时，两种读法结果不同。记在票 [06](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md)「要裁的」。
+3. **登记客户用哪套价时核对合同。** 并进票 [04](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md)。
+
+另有一条顺带的对照：Salesforce 对重叠的合同价是任取一条、且无法指定取哪条（R5）。本产品对重叠的在册版本答适用冲突、不任取，票 [02](./issues/02-price-card-preview-and-publication-show-overlap-with-registered-versions.md) 只是把这个冲突提前到发布时提示。
+
+## 这份笔记的边界
+
+- R12 没有核实，用到它的两处都已注明。
+- 没看的那几家写在开头。
+- 各家文档描述的是它们自己的产品，面向的行业与本产品不尽相同：SAP TM 与 OTM 主要服务货代与大宗运输，Salesforce 与 Conga 是通用的报价软件。只有易仓与三大快递的规则直接落在跨境小包与快递上。
+- 「小包多为一票一件」是判断，不是核到的事实。

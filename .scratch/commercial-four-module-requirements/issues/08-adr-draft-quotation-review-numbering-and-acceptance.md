@@ -3,7 +3,7 @@
 Category: enhancement
 Status: draft
 父票：[spec](../spec.md)
-Blocked by: 用户决定 Q1 与 Q5（见 [spec](../spec.md)「待用户确认」）
+Blocked by: 用户决定 Q5（见 [spec](../spec.md)「待用户确认」）。Q1 已由会话按行业做法代答、待用户认可
 
 对应要求：Quotation 一行的前置。
 
@@ -11,7 +11,7 @@ Blocked by: 用户决定 Q1 与 Q5（见 [spec](../spec.md)「待用户确认」
 
 草案在 [adr-draft-quotation-offers-a-set-of-prices.md](../adr-draft-quotation-offers-a-set-of-prices.md)，由本 spec 的作者会话起草，没有编号，没有经过评审，放在 `.scratch` 里而不是 `docs/adr/`：它还不是规则。
 
-1. **先拿到 Q1 的答案。** 草案的全部决定都建立在「报的是一套价」上。客户答的若是逐票报价并锁价，草案不进评审，本票改为重写。
+1. **先认可 Q1 的答案。** 草案的全部决定都建立在「报的是一套价」上。这一条没有可问的客户，由会话参考行业头部软件的公开做法代答，依据在[行业做法笔记](../industry-practice-notes.md)；评审时把那份笔记一并复核，尤其是标着摘录与未取到的几条。用户不认可这个答案，或日后有客户要的是逐票报价并锁价，草案不进评审，本票改为重写。
 2. **非作者评审。** 重点看草案「越权风险点」里的这几条：
    - 报价对象归 `party-commercial`、价格内容留在 `parcel-pricing`，这条界划得对不对；新增的那条 `party-commercial` 读 `parcel-pricing` 的依赖有没有别的连带。
    - 价格生效申请不设自己的批准，与客户要求里的「申请」对不对得上。
@@ -25,4 +25,4 @@ Blocked by: 用户决定 Q1 与 Q5（见 [spec](../spec.md)「待用户确认」
 - 评审记录写明钉的 SHA、结论与每条越权风险点的判词。
 - ADR 进 `docs/adr/` 并带编号；`go run ./tools/adr-index -check` 退 0。
 - 被改的句子在同一笔里改成现行；票 09 的「Blocked by」随之解除。
-- 评审否决或客户答逐票报价时：本票写明结论，父票「两处读法」与票 09 至 13 照新结论改。
+- 评审否决，或 Q1 的答案被推翻时：本票写明结论，父票「两处读法」与票 09 至 13 照新结论改。
