@@ -5,13 +5,16 @@
 # 正是那两箱；客户经受控补充口整份重报、带上全部箱标号（决定二），新版本的受理判断走到已接受，缺项随之消失。
 # 同一趟再提交一票快递小包，确认快递产品照旧采用 SYN-RULEPKG-01、不受 FBA 条件影响（决定三：规则包随服务产品选）。
 #
-# FBA 产品沿用快递那张按件计重的售价卡：选卡按（定价范围，方向，目的，时点），没有服务产品一维，定价范围取自账户的结算
-# 采用、一户一个，同一账户的不同产品现在选不了各自的卡——这是缺的机制，归票 declared-goods-lines/13。
+# 接受之后再看售价（票 declared-goods-lines/17；ADR-0378）：同一计价范围 SYN-SCOPE-01 里两张售价卡各计各的产品——指名 FBA
+# 产品的 SYN-PLAN-CN-SG-FBA-01 逐箱按公斤计价、不收首重，不声明产品的 SYN-PLAN-CN-SG-01 接其余产品。断言两条看得见的路：
+# 试算（同一只箱子按两个产品各算一次，答复带选卡用的产品与解释）与正式 SELL 评价（FBA 第 1 箱与快递小包各收寄一次，
+# 新形成的客户费用经评价号对到价卡的内容摘要）。接受前估价也走同一套两层选卡，但它用了哪张卡今天没有读口——结算的
+# 估价留痕只写不读——本段不断言它。售价仍逐件评价，按整票汇总计费重的卖法表达不了（ADR-0378 越权风险点 8）。
 # 平台、平台货件号与箱标号全是 SYN- 合成值，证据只记 S。每跑一次先补一笔余额、多两票委托；
 # 标识前缀都带 55（SYN-ACCESS-FBA55-、SYN-FBA55-、SYN-CTN55- 等），与 50 那一段的不相撞。
 #
 # 用法：55-fba-supplement.sh [--hold]。带 --hold 停在缺项读出之后、不发补充，那票货件留在等客户补的样子，供在管理台运单
-# 详情里讲「等客户补 · 缺平台箱标号」；不带就走完补充到已接受。
+# 详情里讲「等客户补 · 缺平台箱标号」；不带就走完补充到已接受，再看售价。
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_env
@@ -118,6 +121,7 @@ PY
 step "提交快递小包（首方客户令牌）" "$CT" POST /v1/shipment-requests "$SMALL_BODY" 201:SUBMITTED shipmentRequestId documentNumber
 SMALL_REQ="$(jget "$LAST" shipmentRequestId)"
 SMALL_DOC="$(jget "$LAST" documentNumber)"
+SMALL_PARCEL="$(jget "$LAST" parcels.0.parcelId)"
 
 # 受理判断在 dispatch 下一拍。判过一轮的读面信号有三种：委托离开已提交；任务不在跑了；或查阅面列出了缺项——等受控补充时
 # 任务仍是 RUNNING（只是续办方换成客户），读面上能看见的只有 supplementGaps。$1 是委托号，$2 给了就还要求查阅面已读到
@@ -228,7 +232,126 @@ print(f"{'受理判断（补充后的版本）':<28} → request.state=ACCEPTED 
       f"supplementGaps=无，4 箱箱标号与补充所发逐一相同")
 PY
 
-printf '\nFBA 头程货件 运单号 %s（委托 %s，平台货件号 %s，补过一版）；快递小包 运单号 %s（委托 %s）。\n' \
+section "售价：同一计价范围两张卡，各计各的产品"
+# 价卡目录：FBA 卡指名 FBA 产品、快递卡不声明产品，两张同在 SYN-SCOPE-01。取两张卡的内容摘要，后面拿评价对。
+curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-price-cards" > "$LAST"
+CARD_DIGESTS="$(python3 - "$LAST" <<'PY'
+import json, sys
+cards = json.load(open(sys.argv[1], encoding="utf-8")).get("cards", [])
+def one(plan):
+    rows = [c for c in cards if c.get("planId") == plan and c.get("planVersion") == "v1"]
+    if len(rows) != 1:
+        sys.exit(f"[失败] 价卡目录里 {plan}@v1 有 {len(rows)} 行，要 1 行——种子步骤 170 登过没有")
+    return rows[0]
+fba, express = one("SYN-PLAN-CN-SG-FBA-01"), one("SYN-PLAN-CN-SG-01")
+problems = []
+for card in (fba, express):
+    if card.get("scope") != "SYN-SCOPE-01" or card.get("direction") != "SELL" or card.get("retired"):
+        problems.append(f"{card['planId']} 范围 {card.get('scope')}、方向 {card.get('direction')}、已退役 {card.get('retired')}")
+if fba.get("serviceProducts") != ["SYN-PROD-CN-SG-FBA"] or fba.get("canonicalization") != "PPC-7":
+    problems.append(f"FBA 卡适用产品 {fba.get('serviceProducts')}、规范化 {fba.get('canonicalization')}，要只指名 FBA 产品、PPC-7")
+if express.get("serviceProducts"):
+    problems.append(f"快递卡声明了适用产品 {express['serviceProducts']}，要不声明（接其余产品）")
+if problems:
+    sys.exit("[失败] 价卡目录：" + "；".join(problems))
+print(fba["contentDigest"], express["contentDigest"])
+PY
+)"
+FBA_CARD_DIGEST="${CARD_DIGESTS% *}"
+EXPRESS_CARD_DIGEST="${CARD_DIGESTS#* }"
+printf '%-34s → SYN-PLAN-CN-SG-FBA-01 指名 SYN-PROD-CN-SG-FBA（PPC-7）；SYN-PLAN-CN-SG-01 不声明产品，同在 SYN-SCOPE-01\n' "价卡目录"
+
+# 试算：同一只箱子（12.5 kg、60×40×40 cm，上海 200000 → 新加坡 018000）按两个产品各算一次。试算答复交出选卡用的产品与
+# 解释，是今天唯一读得到「按哪个产品选的卡」的面；正式评价的快照同样记着产品，但计价没有评价详情读口。
+trial() { # $1 产品 $2 应选的卡
+  step "试算 ${1}" "$OP" POST /pricing-estimates \
+    "$(pj scope=SYN-SCOPE-01 direction=SELL basisAt="$(now_utc)" weight:='{"value":"12.5","unit":"KG"}' \
+        dimensions:='{"length":"60","width":"40","height":"40","unit":"CM"}' \
+        postalRoute:='{"origin":"200000","destination":"018000"}' settlementCurrency=CNY serviceProduct="$1")" \
+    200:FORMED >/dev/null
+  python3 - "$LAST" "$1" "$2" <<'PY'
+import json, sys
+answer, product, plan = json.load(open(sys.argv[1], encoding="utf-8")), sys.argv[2], sys.argv[3]
+candidates = answer.get("candidates") or []
+evaluation = (candidates[0].get("evaluation") or {}) if len(candidates) == 1 else {}
+first = (evaluation.get("explanation") or [""])[0]
+if (len(candidates) != 1 or candidates[0]["plan"]["id"] != plan or evaluation.get("status") != "COMPLETED"
+        or evaluation.get("serviceProduct") != product
+        or first != f"price card selected for declared service product {product}"):
+    print(json.dumps(answer, ensure_ascii=False), file=sys.stderr)
+    sys.exit(f"[失败] 试算 {product}：要恰一张 {plan}、评价 COMPLETED、快照与解释首行都写 {product}")
+total = evaluation["total"]
+print(f"{'试算 ' + product:<34} → plan={plan} serviceProduct={product} total={total['amount']} {total['currency']}"
+      f"（解释首行：{first}）")
+PY
+}
+trial SYN-PROD-CN-SG-FBA SYN-PLAN-CN-SG-FBA-01
+trial SYN-PROD-CN-SG-EXPRESS SYN-PLAN-CN-SG-01
+
+# 正式 SELL 评价在网络收寄已采用时形成（演示账户采用的计费时点），所以 FBA 第 1 箱与快递小包各送站预报、收寄一次。客户费用行
+# 不带包裹号：收寄前先记下已有的费用号，收寄后新出现的那一笔就是这一件的；两件逐一收，不并发。
+FBA_BOX1_REF="SYN-CTN55-${STAMP}-001"
+FBA_BOX1="$(python3 -c 'import json,sys; print({p["customerParcelReference"]: p["parcelId"] for p in json.loads(sys.argv[1])["parcels"]}[sys.argv[2]])' \
+  "$FBA_SUBMIT" "$FBA_BOX1_REF")"
+SMALL_REF="SYN-PCLREF55-${STAMP}"
+_prepared() { # 收寄前等三段运输准备都有结果，同主链 chain.sh 的 ch_submit。
+  curl -s -H "Authorization: Bearer $OP" "$API_BASE/transport-fulfillment-records?registry=transport-preparation" > "$LAST"
+  python3 - "$LAST" "$1" <<'PY'
+import json, sys
+rows = [r for r in json.load(open(sys.argv[1])).get("preparations", []) if r["object"] == sys.argv[2]]
+sys.exit(0 if len(rows) >= 3 and all(r["outcome"] == "OPPORTUNITY_PREPARED" for r in rows) else 1)
+PY
+}
+poll "FBA 第 1 箱 ${FBA_BOX1} 三段运输准备" 90 _prepared "$FBA_BOX1"
+poll "快递小包 ${SMALL_PARCEL} 三段运输准备" 90 _prepared "$SMALL_PARCEL"
+PRE="$(bash "$SEEDS_DIR/submit-one-pre-advice.sh" "$FBA_BOX1_REF" "$SMALL_REF" 2>/dev/null)" \
+  || { printf '[失败] submit-one-pre-advice.sh\n' >&2; exit 1; }
+printf '%-34s → DELIVERY_PRE_ADVICE_REGISTERED preAdvice=%s（FBA 第 1 箱与快递小包）\n' "送站预报（首方客户令牌）" "$PRE"
+
+charge_ids() {
+  curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=customer-charge" \
+    | python3 -c 'import json,sys; print(",".join(r["charge"] for r in json.load(sys.stdin).get("charges",[])))'
+}
+intake_priced() { # $1 标签 $2 客户件号 $3 应选的卡 $4 该卡的内容摘要
+  local before out
+  before="$(charge_ids)"
+  out="$(IDP_PARCEL_PRE_ADVICE_ID="$PRE" bash "$SEEDS_DIR/receive-one-delivery.sh" "$2")" \
+    || { printf '[失败] receive-one-delivery.sh：%s\n' "$out" >&2; exit 1; }
+  [[ "$out" == 201\ INTAKE_FORMED* ]] || { printf '[失败] %s 收寄答复不是 201 INTAKE_FORMED：%s\n' "$1" "$out" >&2; exit 1; }
+  printf '%-34s → %s\n' "收寄 ${1}（上海枢纽作业设备）" "${out%%，候选*}"
+  _charged() {
+    curl -s -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=customer-charge" > "$LAST"
+    CHARGE_ROW="$(python3 - "$LAST" "$before" <<'PY'
+import json, sys
+before = set(sys.argv[2].split(","))
+fresh = [r for r in json.load(open(sys.argv[1])).get("charges", []) if r["charge"] not in before]
+print(json.dumps(fresh[0]) if fresh else "")
+PY
+)"
+    [[ -n "$CHARGE_ROW" ]]
+  }
+  poll "${1} 的预估客户费用形成" 90 _charged
+  curl -s -H "Authorization: Bearer $OP" "$API_BASE/pricing-evaluations" > "$LAST"
+  python3 - "$LAST" "$CHARGE_ROW" "$1" "$3" "$4" <<'PY'
+import json, sys
+evaluations = json.load(open(sys.argv[1], encoding="utf-8")).get("evaluations", [])
+charge, label, plan, digest = json.loads(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+rows = [e for e in evaluations if e.get("evaluationId") == charge.get("evaluation")]
+if len(rows) != 1 or rows[0].get("status") != "COMPLETED" or rows[0].get("planContentDigest") != digest:
+    print(json.dumps({"charge": charge, "evaluations": rows}, ensure_ascii=False), file=sys.stderr)
+    sys.exit(f"[失败] {label}：客户费用 {charge.get('charge')} 的评价 {charge.get('evaluation')} 没对到 {plan} 的内容摘要 {digest}")
+amount = int(charge["originalAmount"])
+print(f"{'正式 SELL 评价 ' + label:<34} → charge={charge['charge']} evaluation={charge['evaluation']} "
+      f"plan={plan}（内容摘要对上，{rows[0]['canonicalization']}） {amount // 100}.{amount % 100:02d} {charge['originalCurrency']}")
+PY
+}
+intake_priced "FBA 第 1 箱" "$FBA_BOX1_REF" SYN-PLAN-CN-SG-FBA-01 "$FBA_CARD_DIGEST"
+# 收寄脚本的来源标识按 UTC 秒起，两次收寄隔开一秒，不撞同一个来源。
+sleep 1
+intake_priced "快递小包" "$SMALL_REF" SYN-PLAN-CN-SG-01 "$EXPRESS_CARD_DIGEST"
+
+printf '\nFBA 头程货件 运单号 %s（委托 %s，平台货件号 %s，补过一版，第 1 箱已收寄）；快递小包 运单号 %s（委托 %s，已收寄）。\n' \
   "$FBA_DOC" "$FBA_REQ" "$SHIPMENT_ID" "$SMALL_DOC" "$SMALL_REQ"
-printf '去管理台：#/shipment-request-inquiry/%s 看补充后的平台货件与逐箱箱标号；#/shipment-request-inquiry/%s 看快递小包。\n' \
+printf '去管理台：#/shipment-request-inquiry/%s 看补充后的平台货件与逐箱箱标号；#/shipment-request-inquiry/%s 看快递小包；\n' \
   "$FBA_DOC" "$SMALL_DOC"
+printf '#/price-card-catalog 看两张卡的适用服务产品；#/pricing-estimate 选产品试算；#/charges-billing 看两笔预估客户费用。\n'
