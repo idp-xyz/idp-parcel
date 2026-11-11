@@ -186,8 +186,9 @@ func TestContentRulePackageMustAgreeWithTheVersionShellWhenBothArePresent(t *tes
 	}
 
 	// 壳上指名了、正文没写：两处说法不一（ADR-0376 决定三之后正文可缺，但可缺不等于可以与壳分歧）。
-	if err := domain.ConsistentAcceptanceRulePackage(live, domain.CommercialObjectID{}); !errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
-		t.Fatalf("壳上指名、正文缺：error = %v, want ErrRulePackageReferenceMismatch", err)
+	if err := domain.ConsistentAcceptanceRulePackage(live, domain.CommercialObjectID{}); !errors.Is(err, domain.ErrRulePackageMissingFromContent) ||
+		!errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
+		t.Fatalf("壳上指名、正文缺：error = %v, want ErrRulePackageMissingFromContent（包着 ErrRulePackageReferenceMismatch）", err)
 	}
 	// 两处都不写：多产品合同的常态，放行。
 	if err := domain.ConsistentAcceptanceRulePackage(unnamed, domain.CommercialObjectID{}); err != nil {

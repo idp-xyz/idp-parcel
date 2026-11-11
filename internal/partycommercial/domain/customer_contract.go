@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 )
 
@@ -14,6 +15,10 @@ var (
 	// 或写了另一个，消费方就会各读各的——壳上那一格解析拿去确认（ADR-0032），正文那一格目录拿去展示。壳上没指名
 	// 时正文写不写都放行：正文的这一格只是说明，不参与选择。
 	ErrRulePackageReferenceMismatch = errors.New("party commercial: contract content rule package disagrees with the version shell")
+	// ErrRulePackageMissingFromContent 是同一道核对的另一格：版本壳指名了规则包而正文漏写。与「写了却不一样」分开说，要改的
+	// 地方不同；包住 ErrRulePackageReferenceMismatch，按那一格认的调用方照旧认得。
+	ErrRulePackageMissingFromContent = fmt.Errorf("%w: the version shell names a rule package the contract content leaves out",
+		ErrRulePackageReferenceMismatch)
 )
 
 // InapplicabilityBasis 是某个费用范围不带接受前财务控制的原因。本上下文要求显式
@@ -162,14 +167,18 @@ func (contract CustomerContract) Bindings() []FinancialControlBinding {
 	return bindings
 }
 
-// ConsistentAcceptanceRulePackage 核版本壳与正文的规则包引用。壳上没指名时放行，正文写不写都行；壳上指名了，正文
-// 要写同一个——不等或正文缺都拒，不静默选一处。content 零值即正文没指名。
+// ConsistentAcceptanceRulePackage 核版本壳与正文的规则包引用，登记与装载两处共用。壳上没指名时放行，正文写不写都行——正文
+// 那一格只是说明，确认只读壳上的引用（ADR-0032）；壳上指名了，正文要写同一个：正文漏写答 ErrRulePackageMissingFromContent，
+// 写了另一个答 ErrRulePackageReferenceMismatch，不静默选一处。content 零值即正文没指名。
 func ConsistentAcceptanceRulePackage(version CommercialVersion, content CommercialObjectID) error {
 	named, present := version.ReferenceTo(AcceptanceRulePackageObject)
 	if !present {
 		return nil
 	}
-	if !content.valid() || named != content {
+	if !content.valid() {
+		return ErrRulePackageMissingFromContent
+	}
+	if named != content {
 		return ErrRulePackageReferenceMismatch
 	}
 	return nil
