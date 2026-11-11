@@ -1,8 +1,8 @@
 # 13 同一账户的不同服务产品各用各的售价卡
 
 Category: enhancement
-Status: needs-triage
-Blocked by: 一篇待写的 ADR（按什么选卡：定价范围之外加服务产品一维，或按产品分范围；见下）
+Status: in-progress
+Blocked by: 14、15、16、17（「要定的」两项已由 [ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 定下，实现拆成这四张）
 
 依据：票 12 评审（2026-11-11）；[ADR-0260](../../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)（评价按范围选卡、计价条款只从价卡读）；[ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定三（一个货主账户用几个服务产品）。
 
@@ -20,3 +20,11 @@ Blocked by: 一篇待写的 ADR（按什么选卡：定价范围之外加服务�
 ## 不做的
 
 价格方向、成本侧的选卡（同一问题，等售价侧定了再照办）；演示数据里的整票计费卡（ADR 落地后随演示另立）。
+
+## 决定（2026-11-11）
+
+按头部系统的做法定，写成 [ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)：价格等级是客户的，价格表是产品的。
+
+- 选卡在计价范围之外加服务产品一维。计价范围仍是客户这一侧的价格分层，结算账户只采用一个 SELL 范围，不按产品分范围。
+- 售价卡可以声明它计价的服务产品；不声明的卡接其余产品——这正是既有卡的原义，不用重登。指名卡与不声明的卡在同一个产品上不同时适用，计价照旧不挑卡。
+- 产品取委托的申报；接受前估价、正式 SELL 评价与试算三条路同一笔改。

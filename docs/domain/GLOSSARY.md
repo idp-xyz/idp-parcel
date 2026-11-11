@@ -1669,6 +1669,7 @@ Status: Confirmed
 
 - 所有者：`parcel-pricing`。
 - 发布后正文不可覆盖；变化形成新版本。截止与退役是册上追加的收尾事实，不形成新版本、不改写版本行（[ADR-0234](../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)）。
+- `SELL`·客户费用卡可声明它计价的服务产品，不声明的卡接其余产品；选卡另按委托申报的服务产品（[ADR-0378](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)）。
 - 避免使用：商业价格政策、当前价格、费用明细。
 
 ### 价格方向
