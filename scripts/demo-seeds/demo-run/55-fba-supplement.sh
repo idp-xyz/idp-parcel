@@ -5,8 +5,10 @@
 # 正是那两箱；客户经受控补充口整份重报、带上全部箱标号（决定二），新版本的受理判断走到已接受，缺项随之消失。
 # 同一趟再提交一票快递小包，确认快递产品照旧采用 SYN-RULEPKG-01、不受 FBA 条件影响（决定三：规则包随服务产品选）。
 #
-# FBA 产品与快递产品共用 SYN-SCOPE-01 那张按件计重的售价卡：试算按定价范围选卡，同范围再登一张按票的卡会冲突（票 12
-# 完成记录写了为什么）。平台、平台货件号与箱标号全是 SYN- 合成值，证据只记 S。每跑一次先补一笔余额、多两票委托。
+# FBA 产品沿用快递那张按件计重的售价卡：选卡按（定价范围，方向，目的，时点），没有服务产品一维，定价范围取自账户的结算
+# 采用、一户一个，同一账户的不同产品现在选不了各自的卡——这是缺的机制，归票 declared-goods-lines/13。
+# 平台、平台货件号与箱标号全是 SYN- 合成值，证据只记 S。每跑一次先补一笔余额、多两票委托；
+# 标识前缀都带 55（SYN-ACCESS-FBA55-、SYN-FBA55-、SYN-CTN55- 等），与 50 那一段的不相撞。
 #
 # 用法：55-fba-supplement.sh [--hold]。带 --hold 停在缺项读出之后、不发补充，那票货件留在等客户补的样子，供在管理台运单
 # 详情里讲「等客户补 · 缺平台箱标号」；不带就走完补充到已接受。
@@ -28,7 +30,7 @@ bash "$DEMO_DIR/topup-funds.sh" 1000000 "FBASUPP${STAMP}"
 
 CT="$(customer_token)"
 OP="$(operator_token)"
-SHIPMENT_ID="SYN-FBA-${STAMP}"
+SHIPMENT_ID="SYN-FBA55-${STAMP}"
 UNLABELLED="2,4"
 
 # 四箱同款，每箱 24 件；第 2、4 箱不报平台箱标号。$1 写 all 时四箱都带（补充用）。
@@ -40,7 +42,7 @@ skip = set() if mode == "all" else {int(box) for box in unlabelled.split(",")}
 parcels = []
 for box in range(1, 5):
     parcel = {
-        "customerParcelReference": f"SYN-CTN-{stamp}-{box:03d}",
+        "customerParcelReference": f"SYN-CTN55-{stamp}-{box:03d}",
         "declaredWeightValue": "12.5",
         "declaredWeightUnit": "KG",
         "declaredLength": "60",
@@ -53,8 +55,8 @@ for box in range(1, 5):
         parcel["platformBoxLabel"] = f"{shipment}U{box:06d}"
     parcels.append(parcel)
 print(json.dumps({
-    "accessRequestId": f"SYN-ACCESS-FBA-{stamp}",
-    "customerShipmentReference": f"SYN-FBA-REF-{stamp}",
+    "accessRequestId": f"SYN-ACCESS-FBA55-{stamp}",
+    "customerShipmentReference": f"SYN-FBA55-REF-{stamp}",
     "requestedServiceProduct": "SYN-PROD-CN-SG-FBA",
     "senderRelation": "SYN-SENDER-01",
     "senderAddress": "合成寄件地址",
@@ -65,7 +67,7 @@ print(json.dumps({
     "recipientPostalCode": "018000",
     "recipientCountryCode": "SG",
     "destinationServiceScope": "SYN-DEST/SG",
-    "platformShipment": {"platform": "SYN-MARKETPLACE-01", "shipmentId": shipment, "referenceId": f"SYN-REF-{stamp}"},
+    "platformShipment": {"platform": "SYN-MARKETPLACE-01", "shipmentId": shipment, "referenceId": f"SYN-REF55-{stamp}"},
     "goods": {
         "contentCategory": "SALE_OF_GOODS",
         "lines": [
@@ -91,8 +93,8 @@ SMALL_BODY="$(python3 - "$STAMP" <<'PY'
 import json, sys
 stamp = sys.argv[1]
 print(json.dumps({
-    "accessRequestId": f"SYN-ACCESS-SMALL-{stamp}",
-    "customerShipmentReference": f"SYN-SMALL-REF-{stamp}",
+    "accessRequestId": f"SYN-ACCESS-SMALL55-{stamp}",
+    "customerShipmentReference": f"SYN-SMALL55-REF-{stamp}",
     "requestedServiceProduct": "SYN-PROD-CN-SG-EXPRESS",
     "senderRelation": "SYN-SENDER-01",
     "senderAddress": "合成寄件地址",
@@ -108,7 +110,7 @@ print(json.dumps({
         "lines": [{"descriptions": [{"lang": "zh", "text": "合成手表"}], "quantity": "1", "unit": "PCS", "unitValue": "25.00",
                    "currency": "USD", "originCountry": "CN"}],
     },
-    "parcels": [{"customerParcelReference": f"SYN-PCLREF-{stamp}", "declaredWeightValue": "0.50", "declaredWeightUnit": "KG",
+    "parcels": [{"customerParcelReference": f"SYN-PCLREF55-{stamp}", "declaredWeightValue": "0.50", "declaredWeightUnit": "KG",
                  "declaredLength": "20", "declaredWidth": "15", "declaredHeight": "10", "declaredDimensionsUnit": "CM"}],
 }, ensure_ascii=False))
 PY
@@ -120,8 +122,19 @@ SMALL_DOC="$(jget "$LAST" documentNumber)"
 # 受理判断在 dispatch 下一拍。判过一轮的读面信号有三种：委托离开已提交；任务不在跑了；或查阅面列出了缺项——等受控补充时
 # 任务仍是 RUNNING（只是续办方换成客户），读面上能看见的只有 supplementGaps。$1 是委托号，$2 给了就还要求查阅面已读到
 # 这一版：补充落库时新版本的任务同一笔起跑、缺项清空，这一格只防读到补充前的旧行。
+# 查阅答不出这份委托就地停下并打出原始答复，不让空答复漏进后面的断言，也不让 poll 的超时把它说成 dispatch 没跑。
+# 404 也停：查阅直读提交同一笔写下的行，提交答过 201 之后读不到不是「还没到」，是统一不可见——委托号不对，或这位
+# 操作者的作用域（令牌）看不到它。
 _decided() {
-  curl -s -H "Authorization: Bearer $OP" "$API_BASE/shipment-request-views?shipmentRequestId=$1" > "$LAST"
+  local code
+  code="$(curl -sS -o "$LAST" -w '%{http_code}' -H "Authorization: Bearer $OP" \
+    "$API_BASE/shipment-request-views?shipmentRequestId=$1" 2>/dev/null)" || code="${code:-000}"
+  if [[ "$code" != 200 || -z "$(jget "$LAST" request.state)" ]]; then
+    printf '\n[失败] 读委托 %s 的查阅答 HTTP %s（000 即连不上 API；404 是看不到这份委托：委托号或操作者令牌不对），没有可判的委托。原始答复：\n' "$1" "$code" >&2
+    cat "$LAST" >&2 2>/dev/null || true
+    printf '\n' >&2
+    exit 1
+  fi
   [[ -z "${2:-}" || "$(jget "$LAST" request.submissionVersionId)" == "$2" ]] || return 1
   [[ "$(jget "$LAST" request.state)" != SUBMITTED || "$(jget "$LAST" request.acceptanceTask.state)" != RUNNING ||
     -n "$(jget "$LAST" request.acceptanceTask.supplementGaps)" ]]
@@ -141,23 +154,25 @@ must_be_accepted "$SMALL_REQ"
 printf '%-34s → request.state=ACCEPTED（快递产品照旧采用 SYN-RULEPKG-01）\n' "受理判断 ${SMALL_REQ}"
 
 poll "FBA 货件 ${FBA_REQ} 停下" 120 _decided "$FBA_REQ"
-# 停下的样子要逐格对上：仍是已提交、任务仍在（RUNNING，等客户）、缺项正好是第 2、4 箱的箱标号——多一条（平台货件、装箱）
-# 或少一箱都不算。
+# 停下的样子要逐格对上：仍是已提交、任务仍在（RUNNING，等客户）、缺项正好是第 2、4 箱的箱标号且判在「必要资料」组
+# （ADR-0376 决定一的要点就是这一组）——多一条（平台货件、装箱）、少一箱或归错组都不算。
 python3 - "$LAST" "$FBA_SUBMIT" "$STAMP" "$UNLABELLED" <<'PY'
 import json, sys
 view = json.load(open(sys.argv[1], encoding="utf-8"))["request"]
 submitted = json.loads(sys.argv[2])
 stamp, unlabelled = sys.argv[3], sys.argv[4]
 ids = {p["customerParcelReference"]: p["parcelId"] for p in submitted["parcels"]}
-want = {ids[f"SYN-CTN-{stamp}-{int(box):03d}"] for box in unlabelled.split(",")}
+want = {ids[f"SYN-CTN55-{stamp}-{int(box):03d}"] for box in unlabelled.split(",")}
 task = view.get("acceptanceTask") or {}
 gaps = task.get("supplementGaps") or []
 got = {g.get("parcelId") for g in gaps}
 problems = []
 if view.get("state") != "SUBMITTED" or task.get("state") != "RUNNING":
     problems.append(f"委托 {view.get('state')}、任务 {task.get('state')}，要 SUBMITTED、RUNNING（等客户补充）")
-if len(gaps) != 2 or got != want or any(g.get("reason") != "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL" for g in gaps):
-    problems.append(f"缺项 = {json.dumps(gaps, ensure_ascii=False)}，要第 2、4 箱 {sorted(want)} 各一条 EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL")
+if len(gaps) != 2 or got != want or any(
+        g.get("group") != "REQUIRED_DOCUMENT" or g.get("reason") != "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL" for g in gaps):
+    problems.append(f"缺项 = {json.dumps(gaps, ensure_ascii=False)}，要第 2、4 箱 {sorted(want)} 各一条"
+                    " REQUIRED_DOCUMENT / EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL")
 if problems:
     print(json.dumps(view, ensure_ascii=False), file=sys.stderr)
     sys.exit("[失败] FBA 货件停下的样子：" + "；".join(problems))
@@ -180,7 +195,7 @@ import json, sys
 content, submitted, stamp = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
 ids = {p["customerParcelReference"]: p["parcelId"] for p in submitted["parcels"]}
 original = content["accessRequestId"]
-content["accessRequestId"] = f"SYN-ACCESS-FBA-SUPP-{stamp}"
+content["accessRequestId"] = f"SYN-ACCESS-FBA55-SUPP-{stamp}"
 content["parcels"] = [{"parcelId": ids[p["customerParcelReference"]], **p} for p in content["parcels"]]
 print(json.dumps({"originalAccessRequestId": original, "shipmentRequestId": submitted["shipmentRequestId"],
                   "basisSubmissionVersionId": submitted["submissionVersionId"], **content}, ensure_ascii=False))
@@ -192,22 +207,25 @@ NEW_VERSION="$(jget "$LAST" submissionVersionId)"
 
 poll "FBA 货件 ${FBA_REQ} 按新版本形成受理判断" 120 _decided "$FBA_REQ" "$NEW_VERSION"
 must_be_accepted "$FBA_REQ"
-python3 - "$LAST" "$FBA_VERSION" <<'PY'
+python3 - "$LAST" "$FBA_VERSION" "$SUPPLEMENT_BODY" <<'PY'
 import json, sys
 view = json.load(open(sys.argv[1], encoding="utf-8"))["request"]
+sent = {p["parcelId"]: p["platformBoxLabel"] for p in json.loads(sys.argv[3])["parcels"]}
 gaps = (view.get("acceptanceTask") or {}).get("supplementGaps")
-parcels = view.get("declaredParcels") or []
+got = {p.get("parcelId"): p.get("platformBoxLabel") for p in view.get("declaredParcels") or []}
 problems = []
 if gaps:
     problems.append(f"缺项还在：{json.dumps(gaps, ensure_ascii=False)}")
-if len(parcels) != 4 or not all(p.get("platformBoxLabel") for p in parcels):
-    problems.append("4 箱没有都带回平台箱标号")
+if got != sent:
+    problems.append(f"逐箱箱标号 = {json.dumps(got, ensure_ascii=False)}，要补充里发出的 {json.dumps(sent, ensure_ascii=False)}")
 if view.get("submissionVersionId") == sys.argv[2]:
     problems.append("判的还是补充前那一版")
+if view.get("priorVersionCount") != 1:
+    problems.append(f"priorVersionCount = {view.get('priorVersionCount')!r}，补过一版要 1")
 if problems:
     sys.exit("[失败] FBA 货件补充后：" + "；".join(problems))
 print(f"{'受理判断（补充后的版本）':<28} → request.state=ACCEPTED priorVersionCount={view.get('priorVersionCount')} "
-      f"supplementGaps=无，4 箱都带平台箱标号")
+      f"supplementGaps=无，4 箱箱标号与补充所发逐一相同")
 PY
 
 printf '\nFBA 头程货件 运单号 %s（委托 %s，平台货件号 %s，补过一版）；快递小包 运单号 %s（委托 %s）。\n' \

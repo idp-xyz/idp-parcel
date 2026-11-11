@@ -3,10 +3,11 @@
 # 加两箱混装，带平台货件号、逐箱平台箱标号与报全的装箱分配——和一票两行货物的小包，两票都等到已接受，再从委托查阅读回
 # 货物明细、装箱分配与平台号。之后在管理台运单详情看。
 #
-# 服务产品用演示种子里的快递产品 SYN-PROD-CN-SG-EXPRESS：ADR-0374 决定一里快递头程就是这条模型，这一票报全了，走不到
-# 提交条件。单列的 FBA 头程产品 SYN-PROD-CN-SG-FBA 与它缺箱标号停下、补齐续走的那条线在 55-fba-supplement.sh（票 12）。
-# 这张售价卡按件计重（PER_PACKAGE）、逐箱估价再求和，每箱都付一次首重——试算按定价范围选卡，按整票汇总重量计费的卡
-# 要另立范围，没登。
+# 服务产品用演示种子里的快递产品 SYN-PROD-CN-SG-EXPRESS：ADR-0374 决定一里快递头程就是这条模型。快递产品采用的规则包
+# SYN-RULEPKG-01 既不声明「必要资料」组适用、也不引用 FBA-HEADHAUL，所以这一票不判提交条件。
+# 单列的 FBA 头程产品 SYN-PROD-CN-SG-FBA 与它缺箱标号停下、补齐续走的那条线在 55-fba-supplement.sh（票 12）。
+# 这张售价卡按件计重（PER_PACKAGE）、逐箱估价再求和，每箱都付一次首重。按整票汇总重量计费的卡登不进来：选卡没有服务
+# 产品一维，定价范围取自账户的结算采用、一户一个，同一账户的不同产品现在选不了各自的卡（缺的机制，票 declared-goods-lines/13）。
 # 平台、平台货件号、箱标号与平台仓全是 SYN- 合成值；平台仓只是这票货的收件资料，没有平台仓登记册可登。
 #
 # 一票三十来箱按演示售价卡两万多元：预付冻结与信用暴露各占一份。本段每跑一次先补一笔余额（后缀带本次戳，事实号不重），
@@ -111,7 +112,7 @@ SMALL_DOC="$(jget "$LAST" documentNumber)"
 
 for req in "$FBA_REQ" "$SMALL_REQ"; do
   # 受理判断在 dispatch 下一拍；被拒、或任务不在跑了都如实报出那一份的状态，不当成超时。等受控补充时任务仍是 RUNNING、
-  # 读面上只多出 supplementGaps，这一票报全了不会走到那里；那条线的轮询在 55-fba-supplement.sh。
+  # 读面上只多出 supplementGaps；快递产品的规则包不判提交条件，这两票走不到那里，那条线的轮询在 55-fba-supplement.sh。
   _decided() {
     curl -s -H "Authorization: Bearer $OP" "$API_BASE/shipment-request-views?shipmentRequestId=${req}" > "$LAST"
     [[ "$(jget "$LAST" request.state)" != SUBMITTED || "$(jget "$LAST" request.acceptanceTask.state)" != RUNNING ]]
