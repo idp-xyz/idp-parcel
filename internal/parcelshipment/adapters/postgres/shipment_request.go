@@ -75,19 +75,25 @@ func (repository *ShipmentRequests) FindBySourceIdentity(
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
 	}
 
-	var document requestDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: 快照不是本适配器写下的形状：%w", err)
-	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
-	if err != nil {
-		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
-	}
-	request, err := domain.RehydrateShipmentRequest(spec)
+	request, err := rehydratedRequest(raw, revision, state, numbering)
 	if err != nil {
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
 	}
 	return request, true, nil
+}
+
+// rehydratedRequest 把读到的一行（快照、修订号、状态、单据号两列）重建成聚合，过重建门。各条取行的路共用这一段：
+// 解析、拼规格、重建任何一步拒绝，都说明这一行不是本适配器写下的形状，错误如实上抛，由调用方加自己的前缀。
+func rehydratedRequest(raw []byte, revision int64, state uint8, numbering documentNumberingColumns) (domain.ShipmentRequest, error) {
+	var document requestDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
+	}
+	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
+	if err != nil {
+		return domain.ShipmentRequest{}, err
+	}
+	return domain.RehydrateShipmentRequest(spec)
 }
 
 // Insert 建单只发生一次：revision 从 1 起写入，主键冲突译成`已存在`——那是业务答案

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -72,15 +71,7 @@ func (repository *ShipmentRequests) findAcceptedRequestCoveringParcel(
 		return none, false, domain.ErrAmbiguousParcelTarget
 	}
 
-	var document requestDocument
-	if err := json.Unmarshal(hits[0].raw, &document); err != nil {
-		return none, false, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
-	}
-	spec, err := document.rehydrationSpec(hits[0].revision, domain.ShipmentRequestState(hits[0].state), hits[0].numbering)
-	if err != nil {
-		return none, false, err
-	}
-	request, err := domain.RehydrateShipmentRequest(spec)
+	request, err := rehydratedRequest(hits[0].raw, hits[0].revision, hits[0].state, hits[0].numbering)
 	if err != nil {
 		return none, false, err
 	}
