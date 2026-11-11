@@ -6,6 +6,8 @@ Blocked by: 无
 
 依据：ADR-0368 决定七把仓租按持有期计价留给「另立 ADR」；CONTEXT-MAP「关系约束」`warehouse-fulfillment → parcel-pricing / settlement-accounting` 一条写着「同一份 ADR 还要定结算怎样为它发起 SELL 请求、它的商业依据在哪一刻由谁固定、用什么确认依据确认。」；UC-SA-002「给开发的交接」仓储那一行的承接格写「计价评价对象与结算发起、商业依据、确认依据的 ADR 先行」。这份 ADR 还没有。
 
+另受 [ADR-0375](../../../docs/adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md) 决定三、四约束：结算与计价消费仓配事实的几处只在有仓配事实时被触发；开关关着时派发不登记仓配自己各类信封的路。结算发起评价请求的触发面要落在这两条之内。
+
 ## 要做的
 
 按 /grill-with-docs 写一份 ADR，定下面各格，并同笔改小包计价 CONTEXT、结算与经营核算 CONTEXT、CONTEXT-MAP 那一条、UC-SA-002 与 UC-PP-001「给开发的交接」。
@@ -19,7 +21,7 @@ Blocked by: 无
 - **更正**：发生项的更正版本怎样成为费用调整。
 - **BUY 侧**：代理仓与外包仓向租户收的费，UC-SA-002 已记首版不做；本票只确认这一格不动。
 
-参照出处同票 01 裁决 23、24（领星 OMP 报价的公开帮助文档）；外部页面会变，以落进票面的要点为准。
+参照出处见票 01「裁决」里收费发生项与仓租各条所引的领星 OMP 报价公开帮助文档；外部页面会变，以落进票面的要点为准。
 
 不动 `internal/**`。
 
