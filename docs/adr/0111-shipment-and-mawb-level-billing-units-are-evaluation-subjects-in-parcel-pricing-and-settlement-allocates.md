@@ -1,6 +1,6 @@
 # ADR-0111: 按票、按 MAWB 计费的项目在 `parcel-pricing` 有自己的评价主体与聚合方式，`settlement-accounting` 用既有分摊把票级 / 主单级金额归因到包裹；主单主体引用 `transport-fulfillment` 的承运总单身份，那本登记册今天不存在
 
-Status: Accepted<!-- 索引注记 -->｜**落点判据**：SA CONTEXT「不拥有可执行价卡或第二套算价规则」——费率只能在 PP 算，归因才归 SA；CONTEXT-MAP 把承运总单身份判给 TF——主体身份各引其所有者，PP 不铸。**适用场景**：评价对象从两种扩到四种（加委托、承运总单），快照带成员清单进语义摘要；主单级那一半形状定、身份来源缺，等 TF 立承运总单登记册（应立而未立），此前 E2 不平摊不折进按件；换号与 ADR-0107–0110 同期合并｜**部分停用**（2026-11-05）：其决定二「携带成员包裹引用与合计量（件数、总实重、总体积重——按重量策略派生的合计计价重量是评价内的中间结果，与逐包裹时同形）」一句已由 [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 扩成——票级卡可声明逐件派生后求和，这类卡的快照另带逐件实重与尺寸，计价重量为逐件派生之和，进位点另声明。**适用场景**：只限声明了逐件聚合的票级卡；主单级与不声明的票级卡照原句，其余各条不变
+Status: Accepted<!-- 索引注记 -->｜**落点判据**：SA CONTEXT「不拥有可执行价卡或第二套算价规则」——费率只能在 PP 算，归因才归 SA；CONTEXT-MAP 把承运总单身份判给 TF——主体身份各引其所有者，PP 不铸。**适用场景**：评价对象从两种扩到四种（加委托、承运总单），快照带成员清单进语义摘要；主单级那一半形状定、身份来源缺，等 TF 立承运总单登记册（应立而未立），此前 E2 不平摊不折进按件；换号与 ADR-0107–0110 同期合并｜**部分停用**（2026-11-05）：其决定二「携带成员包裹引用与合计量（件数、总实重、总体积重——按重量策略派生的合计计价重量是评价内的中间结果，与逐包裹时同形）」一句已由 [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 扩成——票级卡可声明逐件派生后求和，这类卡的快照另带逐件实重与尺寸，计价重量为逐件派生之和，进位点另声明。**适用场景**：只限声明了逐件聚合的票级卡；主单级与不声明的票级卡照原句，其余各条不变｜**部分停用**（扩成，2026-11-11）：其决定五「「有且只有两种」改为四种」一句已由 [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 扩成——评价对象是五种，第五种是仓储作业收费发生项；聚合方式另多「逐仓储发生项」一格。**适用场景**：只限评价对象与聚合方式有哪几种；委托与承运总单两种主体的各条不变
 Date: 2026-09-04
 
 ## Context
@@ -47,3 +47,4 @@ Date: 2026-09-04
 - [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)：规范化版本换号
 - [票 admin-skeleton-closure-batch/05](../../.scratch/admin-skeleton-closure-batch/issues/05-node-operations-and-transport-fulfillment-read-faces.md)：承运总单一区「无处可登」的记录
 - [ADR-0364](./0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md)：扩成决定二一句（只限声明了逐件聚合的票级卡）
+- [ADR-0377](./0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)：前向指针——决定五「「有且只有两种」改为四种」一句扩成五种
