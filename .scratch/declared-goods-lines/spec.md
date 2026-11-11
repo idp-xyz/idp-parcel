@@ -14,7 +14,6 @@ Status: in-progress
 ## 不在本轮
 
 - 仓配平台备货整份提交（ADR-0374 决定五）：`internal/` 下还没有仓配履约的代码，随仓配实现切片做，届时另立票。
-- 必填与跨字段规则的执行器（`BD-PS-006`）：FBA 服务产品要求平台号与装箱分配报全，是接单规则包的取值；执行器不在本轮，未配置即不判。
 - 货物特性与危险品、送仓预约、进口商、平台收货差异：两份 ADR 已划在边界外。
 
 ## 子票
@@ -33,5 +32,6 @@ Status: in-progress
 | [10](./issues/10-controlled-supplement-carries-platform-identifiers-before-acceptance.md) | 受控补充收平台号，受理前补报或更正 | — | 后端 |
 | [11](./issues/11-customer-contract-need-not-name-an-acceptance-rule-package.md) | 客户合同不必指名接单规则包 | — | 后端 + 管理台 |
 | [12](./issues/12-demo-fba-product-stops-for-missing-box-labels-and-resumes-on-supplement.md) | 演示：FBA 产品缺箱标号停下，补齐后受理 | 09、10、11 | 种子与脚本 |
+| [13](./issues/13-one-account-prices-each-service-product-on-its-own-card.md) | 同一账户的不同服务产品各用各的售价卡（needs-triage，先写 ADR） | 待写 ADR | 计价 + 结算 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
