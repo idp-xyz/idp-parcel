@@ -4,7 +4,8 @@
 # 货物明细、装箱分配与平台号。之后在管理台运单详情看。
 #
 # 服务产品用演示种子里的快递产品 SYN-PROD-CN-SG-EXPRESS：ADR-0374 决定一里快递头程就是这条模型，「这是 FBA」本该由服务
-# 产品说，演示租户还没有单列的 FBA 产品（票 08 完成记录写了为什么）。计费按整票汇总重量，是这张售价卡今天的派生方式。
+# 产品说，演示租户还没有单列的 FBA 产品（票 08 完成记录写了为什么）。这张售价卡按件计重（PER_PACKAGE）、逐箱估价再求和，
+# 每箱都付一次首重——按整票汇总重量计费的卡要另立范围或产品，同一原因没登。
 # 平台、平台货件号、箱标号与平台仓全是 SYN- 合成值；平台仓只是这票货的收件资料，没有平台仓登记册可登。
 #
 # 一票三十来箱按演示售价卡两万多元：预付冻结与信用暴露各占一份。本段每跑一次先补一笔余额（后缀带本次戳，事实号不重），
@@ -108,14 +109,19 @@ SMALL_REQ="$(jget "$LAST" shipmentRequestId)"
 SMALL_DOC="$(jget "$LAST" documentNumber)"
 
 for req in "$FBA_REQ" "$SMALL_REQ"; do
-  # 受理判断在 dispatch 下一拍；被拒或停在复核时如实报出那一份的状态，不当成超时。
+  # 受理判断在 dispatch 下一拍；被拒、或任务停下（人工复核、等受控补充时委托仍是已提交，只有任务不在跑了）都如实报出那一份
+  # 的状态，不当成超时。
   _decided() {
     curl -s -H "Authorization: Bearer $OP" "$API_BASE/shipment-request-views?shipmentRequestId=${req}" > "$LAST"
-    [[ "$(jget "$LAST" request.state)" != SUBMITTED ]]
+    [[ "$(jget "$LAST" request.state)" != SUBMITTED || "$(jget "$LAST" request.acceptanceTask.state)" != RUNNING ]]
   }
   poll "委托 ${req} 形成受理判断" 120 _decided
   state="$(jget "$LAST" request.state)"
-  [[ "$state" == ACCEPTED ]] || { printf '[失败] 委托 %s 答 %s，要 ACCEPTED。详情：\n' "$req" "$state" >&2; cat "$LAST" >&2; exit 1; }
+  [[ "$state" == ACCEPTED ]] || {
+    printf '[失败] 委托 %s 答 %s（受理任务 %s），要 ACCEPTED。详情：\n' "$req" "$state" "$(jget "$LAST" request.acceptanceTask.state)" >&2
+    cat "$LAST" >&2
+    exit 1
+  }
   printf '%-34s → request.state=ACCEPTED\n' "受理判断 ${req}"
 done
 
