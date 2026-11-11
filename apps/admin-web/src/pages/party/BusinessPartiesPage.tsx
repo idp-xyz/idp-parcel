@@ -694,17 +694,20 @@ export function BusinessPartiesPage() {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [chosenBook, setBook] = useState<Book>('identities');
   // 地址上的登记键落到哪：占整页的那两本册进整页的登记视图；合作关系的表单不占整页，摆在合作关系视图里、表的上方
-  // （票 business-party-redesign/11）。没有登记写授予时哪一种都不认，落回列表——地址可能是别人发来的链接。
+  // （票 business-party-redesign/11）。没有登记写授予时整页视图与表单都不摆，落回列表——地址可能是别人发来的链接。
   const registerPage = view.kind === 'register' && mayWrite && isRegisterPageBook(view.register) ? view.register : null;
-  const registeringRelationship = view.kind === 'register' && mayWrite && view.register === 'party-relationship';
+  const relationshipRegisterAddress = view.kind === 'register' && view.register === 'party-relationship';
+  const registeringRelationship = relationshipRegisterAddress && mayWrite;
   // 列表此刻摆没摆着：不是对象页，也不是整页的登记视图。
   const listShown = view.kind !== 'object' && registerPage === null;
-  // 地址上带着合作关系的登记键时视图一律是合作关系，不看记着的是哪一个。
-  const book: Book = registeringRelationship ? 'relationships' : chosenBook;
+  // 地址上带着合作关系的登记键时视图一律是合作关系：不看记着的是哪一个，也不看有没有授予。没有授予的人拿到这条链接，表单不摆，
+  // 落在合作关系上也比落在名录上对题；而授予在答出之前先当有（use-operator-grants.ts 的 useMayWriteRegistry），落点要是跟着
+  // 授予走，就会随答复来得早晚而不同。
+  const book: Book = relationshipRegisterAddress ? 'relationships' : chosenBook;
   // 记着的视图跟过去：取消或登完之后人留在合作关系视图，不跳回点入口之前的那一个。
   useEffect(() => {
-    if (registeringRelationship) setBook('relationships');
-  }, [registeringRelationship]);
+    if (relationshipRegisterAddress) setBook('relationships');
+  }, [relationshipRegisterAddress]);
   const relationshipFormHeadingId = useId();
 
   // 身份册的列表状态。检索词放在地址 `?q=`：别处的引用链接带着它过来，这一册挂载时已经筛到那一行。
@@ -885,9 +888,12 @@ export function BusinessPartiesPage() {
     if (pushedRegister.back()) return;
     window.location.replace(registerViewHash(window.location.hash, null));
   };
-  /** 合作关系视图里表上方的登记表单开着就收掉它（去掉地址上的登记键）；没开着什么都不做。 */
+  /**
+   * 地址上带着合作关系的登记键就去掉它，表上方的登记表单随之收起；没带着什么都不做。按地址判而不按表单开没开着：没有授予的人
+   * 带着这个键进来时表单不摆，但视图是被这个键定在合作关系上的，不去掉它就换不了视图。
+   */
   const closeRelationshipForm = () => {
-    if (registeringRelationship) leaveRegister();
+    if (relationshipRegisterAddress) leaveRegister();
   };
   const requestLeaveRegister = () => (anyUnsaved ? setConfirmingLeave(true) : leaveRegister());
   // 登完就去看结果（票 business-party-ux/06）：回列表、选中刚登的那一行，右栏随之打开。离开登记视图会把表单连它的答复区一起
