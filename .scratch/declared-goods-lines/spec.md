@@ -32,6 +32,10 @@ Status: in-progress
 | [10](./issues/10-controlled-supplement-carries-platform-identifiers-before-acceptance.md) | 受控补充收平台号，受理前补报或更正 | — | 后端 |
 | [11](./issues/11-customer-contract-need-not-name-an-acceptance-rule-package.md) | 客户合同不必指名接单规则包 | — | 后端 + 管理台 |
 | [12](./issues/12-demo-fba-product-stops-for-missing-box-labels-and-resumes-on-supplement.md) | 演示：FBA 产品缺箱标号停下，补齐后受理 | 09、10、11 | 种子与脚本 |
-| [13](./issues/13-one-account-prices-each-service-product-on-its-own-card.md) | 同一账户的不同服务产品各用各的售价卡（needs-triage，先写 ADR） | 待写 ADR | 计价 + 结算 |
+| [13](./issues/13-one-account-prices-each-service-product-on-its-own-card.md) | 同一账户的不同服务产品各用各的售价卡：决定（ADR-0378） | 14–17 | 文档票 |
+| [14](./issues/14-a-sell-price-card-names-its-service-products-and-selection-has-two-tiers.md) | 售价卡声明适用服务产品，选卡分两层 | — | 后端 |
+| [15](./issues/15-the-declared-service-product-reaches-sell-card-selection.md) | 申报的服务产品进售价卡选卡：估价、正式评价与试算 | 14 | 后端 |
+| [16](./issues/16-admin-web-price-cards-show-and-take-service-products.md) | 管理台：价卡录入与查阅带适用产品，试算可选产品 | —（联调等 14、15） | 前端 |
+| [17](./issues/17-demo-fba-product-is-priced-on-its-own-per-shipment-card.md) | 演示：FBA 产品用自己的按票计费售价卡 | 14、15 | 种子与脚本 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
