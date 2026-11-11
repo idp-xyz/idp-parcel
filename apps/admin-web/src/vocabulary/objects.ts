@@ -22,6 +22,10 @@ export const objectNouns = {
   customerParcelNumber: '客户件号',
   /** 收件人在末端承运商处查得到的号（领域：渠道包裹件号，含尾程件号）；运单号不当它用（ADR-0374 决定六）。 */
   trackingNumber: '跟踪号',
+  /** 客户报的销售平台（如 AMAZON），与平台货件号一起认这票货件；值是客户给的串，原样显示。 */
+  platform: '销售平台',
+  /** 领域：平台货件（一个平台货件一张运单，ADR-0374 决定二）。 */
+  platformShipment: '平台货件',
   /** 平台给一票货件的号与参考号（如亚马逊 FBA 的 Shipment ID 与 Reference ID，ADR-0374 决定四）。 */
   platformShipmentNumber: '平台货件号',
   platformReferenceNumber: '平台参考号',

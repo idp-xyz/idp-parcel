@@ -324,9 +324,10 @@ type declaredParcelBody struct {
 	DeclaredWeightValue string                `json:"declaredWeightValue,omitempty"`
 	DeclaredWeightUnit  string                `json:"declaredWeightUnit,omitempty"`
 	Dimensions          *parcelDimensionsBody `json:"dimensions,omitempty"`
-	// 这一件的客户件号、平台箱标号与装箱分配，形状与提交口的包裹草案对应；没报即整键缺席。
+	// 这一件的客户件号、平台箱标号与装箱分配，形状与提交口的包裹草案对应；跟踪号是渠道签发的，不在提交口。没有即整键缺席。
 	CustomerParcelNumber string            `json:"customerParcelNumber,omitempty"`
 	PlatformBoxLabel     string            `json:"platformBoxLabel,omitempty"`
+	TrackingNumbers      []string          `json:"trackingNumbers,omitempty"`
 	Packing              []packingViewBody `json:"packing,omitempty"`
 }
 
@@ -382,6 +383,7 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		PriorVersionCount:  record.PriorVersionCount,
 		AcceptanceTask:     acceptanceTaskBody{State: record.Task.State.String()},
 	}
+	packing := packingViewBodiesByParcel(record.Goods)
 	for _, parcel := range record.DeclaredParcels {
 		parcelBody := declaredParcelBody{
 			ParcelID:             parcel.Parcel.String(),
@@ -389,7 +391,8 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 			DeclaredWeightUnit:   parcel.WeightUnit,
 			CustomerParcelNumber: parcel.CustomerParcelNumber,
 			PlatformBoxLabel:     parcel.PlatformBoxLabel,
-			Packing:              packingViewBodiesFor(record.Goods, parcel.Parcel),
+			TrackingNumbers:      parcel.TrackingNumbers,
+			Packing:              packing[parcel.Parcel],
 		}
 		if parcel.HasDimensions {
 			parcelBody.Dimensions = &parcelDimensionsBody{

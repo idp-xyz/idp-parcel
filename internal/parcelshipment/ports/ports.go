@@ -1708,6 +1708,9 @@ type DeclaredParcelViewRecord struct {
 	// 决定四），空串即没报。界面上叫客户件号与平台箱标号（PS CONTEXT「号码的界面词」）。
 	CustomerParcelNumber string
 	PlatformBoxLabel     string
+	// TrackingNumbers 是此刻仍适用、标识这一件的渠道包裹件号（含尾程件号），按形成先后；界面上叫跟踪号。作废或被替代的
+	// 不在内。一件包裹换过渠道可以有几个。
+	TrackingNumbers []string
 }
 
 // AcceptanceDecisionViewRecord 是详情里已形成的接受决定摘要。只带查阅要用的三样，

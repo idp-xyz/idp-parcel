@@ -179,6 +179,8 @@ export interface DeclaredParcelRecord {
   /** 客户件号(客户为这一件给的号)与平台箱标号(ADR-0374 决定四),没报整键缺席。 */
   customerParcelNumber?: string;
   platformBoxLabel?: string;
+  /** 跟踪号:此刻仍适用的渠道包裹件号,按形成先后;还没打面单时缺席(ADR-0374 决定六)。 */
+  trackingNumbers?: string[];
   /** 这一箱装了货物明细的哪几行各多少;整票清单时缺席。 */
   packing?: PackingDraft[];
 }

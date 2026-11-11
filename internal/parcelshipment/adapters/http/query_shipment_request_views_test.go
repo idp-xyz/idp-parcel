@@ -661,3 +661,38 @@ func TestViewsDetailReportsGoodsAndPlatformDeclarations(t *testing.T) {
 		t.Fatalf("没报货物与平台货件的委托交出了这两键：%s", plain.Body.String())
 	}
 }
+
+// Covers: 票 declared-goods-lines/04 完成判据「单件委托、多件不报分配」——只报整票清单时货物明细照交、各件不带 packing，单件委托
+// 同样不带；跟踪号逐件交。
+func TestViewsDetailReportsAWholeShipmentListWithoutPacking(t *testing.T) {
+	for name, parcels := range map[string]int{"单件委托": 1, "多件整票清单": 2} {
+		t.Run(name, func(t *testing.T) {
+			record := viewDetailRecord(t)
+			record.DeclaredParcels = record.DeclaredParcels[:parcels]
+			members := make([]domain.DeclaredParcelID, 0, parcels)
+			for _, parcel := range record.DeclaredParcels {
+				members = append(members, parcel.Parcel)
+			}
+			goods, err := domain.NewGoodsDetails(domain.GoodsDetailsSpec{Lines: []domain.GoodsLineSpec{
+				{Quantity: domain.GoodsCellSpec{Value: "3", Mark: domain.SourceMarkThisDeclaration}},
+			}}, members)
+			if err != nil {
+				t.Fatalf("货物明细：%v", err)
+			}
+			record.Goods = goods
+			record.DeclaredParcels[0].TrackingNumbers = []string{"SYN-TRACK-1"}
+			response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+				http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", response.Code, response.Body.String())
+			}
+			body := response.Body.String()
+			if !strings.Contains(body, `"goods":{`) || strings.Contains(body, `"packing"`) {
+				t.Fatalf("整票清单要交货物明细、不带 packing：%s", body)
+			}
+			if !strings.Contains(body, `"trackingNumbers":["SYN-TRACK-1"]`) || strings.Count(body, `"trackingNumbers"`) != 1 {
+				t.Fatalf("跟踪号要只挂在有号的那一件上：%s", body)
+			}
+		})
+	}
+}

@@ -7,7 +7,7 @@ import {
   type DetailSummaryStat,
   type TemplateViewState,
 } from '../../templates';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@idpxyz/ui-primitives';
+import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@idpxyz/ui-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
 import { objectNouns } from '../../vocabulary/objects';
@@ -24,7 +24,7 @@ import { shipmentDetailSourceOf, type ShipmentRef } from './shipment-ref';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
-import { contentCategoryLabel, goodsLineRowsOf, packingSummaryOf } from './goods-view';
+import { contentCategoryDisplayOf, foldedRowsOf, goodsLineRowsOf, packingSummaryOf } from './goods-view';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
@@ -93,11 +93,11 @@ function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
   if (view.platformShipment) {
     sections.push({
       id: 'platform-shipment',
-      title: '平台货件',
+      title: objectNouns.platformShipment,
       description: '客户报的平台货件：一个平台货件一张运单，每箱的平台箱标号在上面的包裹表里。号由客户交来，本系统不向平台核对。',
       content: (
         <dl className="space-y-1">
-          <FieldRow label="平台" value={view.platformShipment.platform} />
+          <FieldRow label={objectNouns.platform} value={view.platformShipment.platform} />
           <FieldRow label={objectNouns.platformShipmentNumber} value={view.platformShipment.shipmentId} mono />
           <FieldRow label={objectNouns.platformReferenceNumber} value={view.platformShipment.referenceId ?? '—'} mono />
         </dl>
@@ -107,18 +107,25 @@ function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
   if (view.goods) {
     const goods = view.goods;
     const rows = goodsLineRowsOf(goods);
-    const category = contentCategoryLabel(goods.contentCategory);
+    const category = contentCategoryDisplayOf(goods);
     sections.push({
       id: 'goods-details',
       title: objectNouns.goodsDetails,
       description: '客户申报的货物，每行一种货，值按客户给的原样显示、不换算；取自箱单或商品申报资料的格在行下注明。',
       content: (
         <div className="space-y-2">
-          {category && (
+          {category.text && (
             <dl className="space-y-1">
               <FieldRow
                 label={objectNouns.contentCategory}
-                value={goods.contentCategoryNote ? `${category}（${goods.contentCategoryNote.value}）` : category}
+                value={
+                  <>
+                    <div>{category.text}</div>
+                    {category.sourceNotes.length > 0 && (
+                      <div className="type-caption text-idpxyz-textMuted">{category.sourceNotes.join('；')}</div>
+                    )}
+                  </>
+                }
               />
             </dl>
           )}
@@ -177,44 +184,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
       title: objectNouns.parcel,
       description:
         '客户申报的每一件：重量与尺寸按客户填的原样显示；受理后件数固定，增减要走取消或新建关联运单。「装箱」一列是这一箱装了货物明细的哪几行，没报即整票清单。',
-      content: (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{objectNouns.parcelNumber}</TableHead>
-              <TableHead>{objectNouns.customerParcelNumber}</TableHead>
-              <TableHead>{objectNouns.platformBoxLabel}</TableHead>
-              <TableHead>申报重量</TableHead>
-              <TableHead>申报尺寸</TableHead>
-              <TableHead>{objectNouns.packing}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {view.declaredParcels.map((parcel) => (
-              <TableRow key={parcel.parcelId}>
-                <TableCell>
-                  <span className="font-mono type-body">{parcel.parcelId}</span>
-                </TableCell>
-                <TableCell>
-                  <span className="font-mono type-body">{parcel.customerParcelNumber ?? '—'}</span>
-                </TableCell>
-                <TableCell>
-                  <span className="font-mono type-body">{parcel.platformBoxLabel ?? '—'}</span>
-                </TableCell>
-                <TableCell>
-                  {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
-                </TableCell>
-                <TableCell>
-                  {parcel.dimensions
-                    ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
-                    : '未填'}
-                </TableCell>
-                <TableCell>{packingSummaryOf(parcel.packing) || '—'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ),
+      content: <DeclaredParcelsTable parcels={view.declaredParcels} />,
     },
     ...goodsSectionsOf(view),
     {
@@ -260,6 +230,78 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
 }
 
 /** 区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
+/**
+ * 包裹表：逐件列包裹号与跟踪号（ADR-0374 决定六，运单号指整张委托，不当跟踪号）。客户件号、平台箱标号与装箱三列只在有件报了时出：
+ * 一件小包整列「—」只是噪声。件数多时折起（foldedRowsOf），FBA 几十箱不把下面的区块推出屏。
+ */
+function DeclaredParcelsTable({ parcels }: { parcels: ShipmentRequestDetail['declaredParcels'] }) {
+  const [expanded, setExpanded] = useState(false);
+  const { shown, hidden } = foldedRowsOf(parcels, expanded);
+  const withCustomerNumbers = parcels.some((parcel) => parcel.customerParcelNumber);
+  const withBoxLabels = parcels.some((parcel) => parcel.platformBoxLabel);
+  const withPacking = parcels.some((parcel) => parcel.packing && parcel.packing.length > 0);
+  return (
+    <div className="space-y-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{objectNouns.parcelNumber}</TableHead>
+            {withCustomerNumbers && <TableHead>{objectNouns.customerParcelNumber}</TableHead>}
+            {withBoxLabels && <TableHead>{objectNouns.platformBoxLabel}</TableHead>}
+            <TableHead>{objectNouns.trackingNumber}</TableHead>
+            <TableHead>申报重量</TableHead>
+            <TableHead>申报尺寸</TableHead>
+            {withPacking && <TableHead>{objectNouns.packing}</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {shown.map((parcel) => (
+            <TableRow key={parcel.parcelId}>
+              <TableCell>
+                <span className="font-mono type-body">{parcel.parcelId}</span>
+              </TableCell>
+              {withCustomerNumbers && (
+                <TableCell>
+                  <span className="font-mono type-body">{parcel.customerParcelNumber ?? '—'}</span>
+                </TableCell>
+              )}
+              {withBoxLabels && (
+                <TableCell>
+                  <span className="font-mono type-body">{parcel.platformBoxLabel ?? '—'}</span>
+                </TableCell>
+              )}
+              <TableCell>
+                <span className="font-mono type-body">
+                  {parcel.trackingNumbers && parcel.trackingNumbers.length > 0 ? parcel.trackingNumbers.join('、') : '—'}
+                </span>
+              </TableCell>
+              <TableCell>
+                {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
+              </TableCell>
+              <TableCell>
+                {parcel.dimensions
+                  ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
+                  : '未填'}
+              </TableCell>
+              {withPacking && <TableCell>{packingSummaryOf(parcel.packing) || '—'}</TableCell>}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {hidden > 0 && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
+          展开其余 {hidden} 件
+        </Button>
+      )}
+      {expanded && foldedRowsOf(parcels, false).hidden > 0 && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
+          收起
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex gap-3 type-body leading-5">
