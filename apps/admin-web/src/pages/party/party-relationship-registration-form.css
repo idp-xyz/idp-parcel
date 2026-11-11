@@ -15,17 +15,20 @@
   .party-relationship-form .party-relationship-scope {
     grid-column: span 2;
   }
+}
 
-  /* 「已批准」与「高级」两块并排：各自收着时都只有一行，上下排白占一行的高。哪一块展开都只往下长，不把另一块拉高。 */
-  .party-relationship-form .party-relationship-extras {
+/* 「已批准」与「高级」两块都收着时并排：各只有一行，上下排白占一行的高。不必等到四列那么宽，两块各有三百多像素就排得下。
+   哪一块展开了，组件就摘掉这个类、退回上下排各占整行——展开后里面是并排的两格，半行放不下。 */
+@container party-relationship-form (min-width: 760px) {
+  .party-relationship-form .party-relationship-extras-collapsed {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: 12px;
   }
 
-  /* 并排时两块收着要一样高：「已批准」那一块的上下留白收到与「高级」的那一行相同。 */
-  .party-relationship-form .party-relationship-approval {
+  /* 并排时两块要一样高：「已批准」那一块的上下留白收到与「高级」的那一行相同。 */
+  .party-relationship-form .party-relationship-extras-collapsed .party-relationship-approval {
     padding-top: 8px;
     padding-bottom: 8px;
   }

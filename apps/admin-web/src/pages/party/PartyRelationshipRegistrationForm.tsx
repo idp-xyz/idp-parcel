@@ -362,8 +362,9 @@ export function PartyRelationshipRegistrationForm({
             </Field>
           </FormGroup>
 
-          {/* 批准与「高级」两块各自收着时都只有一行：窄处上下排，宽处并排（party-relationship-registration-form.css）。 */}
-          <div className="party-relationship-extras flex flex-col gap-4">
+          {/* 批准与「高级」两块都收着时各只有一行，够宽就并排（party-relationship-registration-form.css）；哪一块展开了就
+              退回上下排。 */}
+          <div className={`flex flex-col gap-4 ${!draft.approved && !advancedOpen ? 'party-relationship-extras-collapsed' : ''}`}>
             {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
             <div className="party-relationship-approval flex flex-col gap-3 rounded border border-idpxyz-border p-3">
               <label className="flex items-center gap-2 type-value text-idpxyz-text">
