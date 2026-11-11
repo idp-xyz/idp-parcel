@@ -450,4 +450,5 @@ _Avoid in this context_: 计费重量（客户计费重量与供应商计费重�
 - `parcel-pricing` 评价仓储作业收费发生项，`settlement-accounting` 形成费用与客户运营应收；本上下文不带金额，也不据它们改写发生项。评价时能不能用货主声明的尺寸重量，由计价定。
 - `visibility-exception` 只投影事实所有者已接受的事实。本上下文把发运方式为本产品网络、已指名小包托运包裹的出库确认交给它（类型词 `warehouse-outbound-confirmed`），标准里程碑映射由租户登记；出库请求的受理、预占、拣货、出库复核与打包这些仓内中间事实，以及不经本产品网络发出的货，都不进客户全程追踪，货主经本上下文的客户渠道查出库请求（ADR-0370 决定六）。
 - 代理仓由合作方经营；本上下文只保全它报来的事实，不替它铸作业事实，也不记它的库存账。平台仓的入库计划与平台标签归货主与平台，本上下文不对接平台。
+- 本上下文是可选能力：租户可以不用它，部署可以不启用它。仓由租户登记，一个仓都没登记的租户，各写口答未配置或查无所指的仓、各读口答空，不建默认仓；其他上下文的规则不以本上下文为前提（[ADR-0375](../../adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md) 决定一、三、五）。
 - 跨上下文的提供与消费关系以 [CONTEXT-MAP「关系约束」](../CONTEXT-MAP.md#关系约束)为准。

@@ -49,7 +49,7 @@
 
 | 前缀 | 例 | 是什么 | 去哪查 |
 |---|---|---|---|
-| `PN-` | `PN-06` | 首发开发切片编号 | [开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md) |
+| `PN-` | `PN-06` | 开发切片编号：首发切片，与首发之外的可选能力切片 | [开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md) |
 | `PAR-` | `PAR-COM-17` | 首发试点参数与证据登记条目 | [参数登记册](./product/PILOT-PARAMETER-REGISTER.md) |
 | `UC-` | `UC-VE-002` | 应用用例 | [应用用例索引](./application/README.md) |
 | `AT-` | `AT-VE-044` | 用例内的验收场景 | 对应 `UC-*` 的「首发约束与验收」表 |

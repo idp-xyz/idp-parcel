@@ -11,6 +11,7 @@
 | 记号 | 是什么 | 权威定义 |
 |---|---|---|
 | `PN-01`..`PN-08` | 首发纵向开发切片编号 | [首发开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#首发纵向开发切片) |
+| `PN-09` | 首发之外的可选能力切片（仓配履约），不计入产品就绪 | [首发开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#首发之外的可选能力切片) |
 | `W01`..`W09` | 一个切片内的工作包编号；全称带切片前缀，如 `PN03-W01`、`CC-S0-W01`、`S02-W01` | 各 `docs/design/*handoff*` 的「取证与开发工作包」 |
 | `P` `R` `S` `N/A` | 证据层级：真实生产、历史回放、受控模拟、本期不适用 | [验收矩阵](../product/PILOT-ACCEPTANCE-MATRIX.md#证据层级) |
 | `UC-*` | 应用用例，形如 `UC-PS-001` | [应用用例编写约定](../application/README.md#编写约定) |
