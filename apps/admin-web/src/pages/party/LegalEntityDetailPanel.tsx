@@ -136,9 +136,10 @@ export function LegalEntityDetailPanel({
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {/* 公司名是文本类（票 company-subject-ux/14）：文字照常可选，末尾悬停出复制图标；转写不到的那句话不是值，不挂。 */}
+            {/* 公司名是文本类（票 company-subject-ux/14）：文字照常可选，末尾悬停出复制图标；转写不到的那句话不是值，不挂。
+                这个标题按内容定宽又裁溢出，图标要占着自己的位置（reserveIcon），不然整枚被裁掉。 */}
             <h2 className="truncate type-title font-semibold text-idpxyz-textBright">
-              {row.partyNameKnown && row.partyName ? <CopyAside value={row.partyName} name="公司名">{row.partyName}</CopyAside> : <UnknownPartyName />}
+              {row.partyNameKnown && row.partyName ? <CopyAside value={row.partyName} name="公司名" reserveIcon>{row.partyName}</CopyAside> : <UnknownPartyName />}
             </h2>
             <StatusPill code={row.status} />
           </div>

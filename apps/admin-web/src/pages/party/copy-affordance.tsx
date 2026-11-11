@@ -145,18 +145,36 @@ export function CopyAside({
   name,
   children,
   className,
+  reserveIcon = false,
 }: {
   value: string;
   name: string;
   children: ReactNode;
   className?: string;
+  /**
+   * 给图标留出整枚的位置。摆在按内容定宽、又裁溢出的祖先里（flex 里带 truncate 的标题）时要给：那里块有多宽祖先就有多宽，
+   * 图标伸出去的那一截会被整个裁掉。
+   */
+  reserveIcon?: boolean;
 }) {
   const { note, copy } = useCopyNote();
   // 悬停区是值的整块矩形（inline-block），不是逐个字形：多行地址的行间空隙、末字到图标之间的空隙都还在区里，鼠标从文字
-  // 挪向图标的路上图标不会消失（用户 2026-11-03 指出「点中这个图标很麻烦」）。按钮四周各垫 4px、负外边距抵回，可点
-  // 范围 22px 而版面不变。
+  // 挪向图标的路上图标不会消失（用户 2026-11-03 指出「点中这个图标很麻烦」）。按钮上下各垫 4px、负外边距抵回，可点的
+  // 高度 22px 而行高不变。
+  //
+  // 图标不占行宽（票 business-party-redesign/12）：按钮的右外边距取负值抵掉自己的宽，在行内的净宽为零，于是永远排得下。
+  // 占着行宽时，值的末行刚好排满、只差图标那一点位置，图标就单独掉到下一行——它悬停之前是透明的，这一格底下凭空多一行
+  // 空白。把图标粘在末字后面这条路走不通：资料读出的格是「不在字间折、排不下才在格边强行折」
+  // （legal-entity-profile-readout.css），强行折不理会连接符，折的那一刀照样落在图标前面。
+  //
+  // 值排满时图标伸到这一格右边的留白里。块的右内边距就是为这个留的：读出卡（ProfileReadoutCard、往来单位右栏的 PanelCard）
+  // 会裁掉伸出卡边的东西，留的宽加上两种卡里较窄的那个卡身内边距，要够图标可见的部分（按钮的左内边距加图标的宽）伸出去。
+  // 改按钮的内边距、图标的宽或卡身的内边距时，这一条要重新算。
+  //
+  // 按钮左边用内边距而不是外边距与值隔开：外边距不属于谁，鼠标从文字挪向图标时经过那条缝会掉出悬停区。
+  // 反馈显出来的那两秒按钮恢复占位：那句话排在它后面，按钮不占位它就压在图标上。
   return (
-    <span className={`group/copy inline-block max-w-full align-top ${className ?? ''}`.trim()}>
+    <span className={`group/copy inline-block max-w-full ${reserveIcon ? 'pr-6' : 'pr-1.5'} align-top ${className ?? ''}`.trim()}>
       {children}
       <button
         type="button"
@@ -166,7 +184,7 @@ export function CopyAside({
           event.stopPropagation();
           copy(value);
         }}
-        className={`-my-1 ml-0.5 inline-flex rounded p-1 align-[-6px] text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${hoverRevealClass('copy')}`}
+        className={`-my-1 ${note === null ? '-mr-6' : ''} inline-flex rounded py-1 pl-1.5 pr-1 align-[-6px] text-idpxyz-breadcrumb hover:bg-idpxyz-hover hover:text-idpxyz-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-idpxyz-accent ${hoverRevealClass('copy')}`}
       >
         <Copy aria-hidden="true" className={copyIconClass} />
       </button>
