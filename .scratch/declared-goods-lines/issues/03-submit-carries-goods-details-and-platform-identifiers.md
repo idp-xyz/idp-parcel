@@ -1,7 +1,7 @@
 # 03 提交链路：首方 API 收货物明细与平台号，落库，重放与冲突，接受基线保留
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 02（作者一侧已提交 `1cd0528bc`，未进 main；按用户「提交，然后开工」叠在其上做，分支 `feat/goods-details-submit`，工作树 `idp-parcel-goods-domain`，基线 `1cd0528bc`）
 
 依据：ADR-0373 决定四、五、七、八；ADR-0374 决定二、三、四；UC-PS-001 输入语义契约「服务请求」「声明包裹」「申报原始资料」三行，`AT-PS-181` 至 `AT-PS-183`、`AT-PS-186` 至 `AT-PS-188`；ADR-0140（首方契约）。
@@ -56,3 +56,6 @@ Blocked by: 02（作者一侧已提交 `1cd0528bc`，未进 main；按用户「�
   - 第三轮（low）：无可处理发现。
 - 留作记录、未改：客户包裹件号读回后同样可能超过入册门再写册，属既有代码，不在本票范围。
 - 进 main 时同笔改：UC-PS-001「给开发的交接」货物明细与平台号两行、UC-PS-002 交接一行按实现现状改写（规则与实现的差距只写在 UC 交接）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

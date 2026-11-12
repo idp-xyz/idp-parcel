@@ -1,7 +1,7 @@
 # 26 申报不全的估价按缺项分流：计价点名缺项、结算逐件带回、客户可补的停等受控补充并记缺口
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未进 main；本票接着它做）
 
 依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定一至四；ADR-0094 决定三、五（先存等待、处理尝试同笔落库）；ADR-0383 决定一、三（等运营登记那一路与尝试两格的既有落点）。
@@ -58,3 +58,6 @@ Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未�
 - 与票面的偏差：端口评估加的是两格（译后缺口 `SupplementGaps` ＋原样码 `EstimateGapCodes`）而非「加一格」——登记那一路没有译后缺口可推，原样码单独一格才能随两路等待都落尝试。既有边界未动：卡只有重量段规则且无尺寸申报时急读尺寸那一格照旧走无合计，不在本票分流里。补件队列记录形状照票 23 先例未扩列（缺口从详情与任务上读）。
 - 评审（非作者，2026-11-12）：无阻断、无应改。两条自报偏差均判成立（端口两格比票面一格更忠于 ADR-0381 决定四「两路等待都记缺项码」）。四条备注：急读尺寸的遗留边界（只带实重附加费/拒收条款的卡、无尺寸申报，经 `PACKAGE_FEATURES_UNAVAILABLE` 落无合计、归等运营登记，既登不开也没人补）另立票 28 承接；缺项码顺序被多处测试钉成精确数组——顺序来源确定（申报件序×点名序）、不会运行时飘红，当作「顺序变了要有人看一眼」的显式门留着；`originPostalRequired` 与补齐读数各自取钟属房内惯例，记录在案；评审复跑 `gofmt`/`go vet` 与九个相关包测试（含真库）、五个端到端用例 5/5 PASS。
 - 拣入：在 `feat/goods-details-admin` 上是 `cd2474100`，无冲突；迁移 `0039` 两边 sha256 一致（`91a1b94e…`）。合并头全量门禁结果记在票 25 收口处。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

@@ -1,7 +1,7 @@
 # 20 委托详情交出受理判断记下的财务控制结论
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
 依据：[ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定三；PS CONTEXT（小包托运不拥有金额、余额、冻结）。
@@ -40,3 +40,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 - 评审（非作者，2026-11-11）：无阻断；改一处（`1e909e6ae`，与票 19 的评审修订同一笔，未推送）：
   - 复核详情只留一份财务控制：`serveReviewCase` 清掉 `request.financialControl`，复核页读 `recordedJudgments` 那一格。`FindVisibleByID` 与 `LoadRecordedJudgments` 是两条语句，两读之间记下一次判断会让两格不同。`reviewCaseResponse` 注释改写；上面落点里「复核详情上两格同在」一句以此为准。补测：读模型上带着结论，复核详情的 `request` 也不交，`recordedJudgments.financialControl` 仍与委托详情逐字节相同。
   - 评审后全量门禁（含 PG，`IDP_PARCEL_POSTGRES_DSN` 指 55432）：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；`go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

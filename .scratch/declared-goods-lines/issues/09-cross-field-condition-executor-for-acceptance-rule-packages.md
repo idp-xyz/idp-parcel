@@ -1,7 +1,7 @@
 # 09 接单规则包的必填与跨字段条件执行器（`BD-PS-006`）
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`。「要先定的」三项已由 [ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 定下；演示那一项另立 12，依赖 10、11）
 
 依据：ADR-0374 决定三（FBA 的平台货件号、箱标号、装箱分配报全是服务产品所采用接单规则包的必填与跨字段条件，产品不内置，没配置不判）；UC-PS-001 `BD-PS-006` 一行与业务决策简报同名一节；ADR-0146 决定三、ADR-0147 决定四、决定五（参考配置显式采用才生效，构造门或样例不过的文件不能发布）。起因：票 03 欠下一份 FBA 头程提交条件参考配置；票 08 写过一份，评审指出它没有过构造门、正文又替本票还没定的事下了结论，已撤下，改由本票随执行器一起发布。
@@ -64,3 +64,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`。
   - 补测：补齐后重判接受；受理判断层的停下与不判；落库往返核缺项清空。
 - 全量门禁（含 10、11）：带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0；`gofmt`、`go vet` 干净；管理台 `tsc`、`run-tests` 1345 过 0 败、`vite build` 退 0。`scripts/test-full.sh` 未跑。
 - 证据记 `S`，参数登记册未动。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

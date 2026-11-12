@@ -1,7 +1,7 @@
 # 15 申报的服务产品进售价卡选卡：接受前估价、正式 SELL 评价与试算
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定二、三；ADR-0179 决定三（两处同一笔改）；ADR-0260 决定一（计价输入快照不带商业依据）。
@@ -67,3 +67,6 @@ Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admi
   - `FormEvaluationFromRequestResult.ServiceProduct` 在未配置与适用冲突两格交回选卡用的产品；结算未形成交接的说明点名「for declared service product …」，没按产品选时说明与此前逐字相同。
   - 评审后全量门禁：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
 
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

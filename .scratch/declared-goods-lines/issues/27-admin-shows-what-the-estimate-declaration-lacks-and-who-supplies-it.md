@@ -1,7 +1,7 @@
 # 27 管理台写明估价申报缺什么、谁来补
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 26（已解除：票 26 实现与评审完毕，拣入 `feat/goods-details-admin` 为 `cd2474100`；详情新字段 `lastAttemptEstimateGapCodes`，与票 23 的 `lastAttemptSettlementReason`、`lastAttemptServiceProduct` 同组）
 
 依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定五；票 24 的停因展示（续办方取处理尝试那一格）与票 26 钉下的字段。
@@ -38,3 +38,6 @@ Blocked by: 26（已解除：票 26 实现与评审完毕，拣入 `feat/goods-d
   - 措辞：`estimateMissingLabels` 补 `MEASUREMENT` 词条（封闭集六码至此全覆盖，与上述契约测试互为支撑）；`declarationIncompleteViewOf` 头注点明卡侧分支有意不看续办方（后端若违约交来卡侧码＋客户补充续办方，宁可少一句也不照错的那一格催客户）。
   - 留给下笔：详情与复核页技术详情未随缺项码补原码行（票 24 给结算原因码、续办方加过原码行，`lastAttemptEstimateGapCodes` 尚无对应行）。
   - 修订后门禁（apps/admin-web，Node 24）：`tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 1414 过 0 败；`vite build` 退 0。分支头 `d93e85a01`，仅动 `apps/admin-web/**`。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

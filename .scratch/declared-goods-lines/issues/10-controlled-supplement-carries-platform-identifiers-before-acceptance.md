@@ -1,7 +1,7 @@
 # 10 受控补充收平台号：受理前补报或更正平台货件号、平台参考号与平台箱标号
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`，与 09、11、12 同一条线）
 
 依据：[ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定二（部分停用 ADR-0374 决定四一句）；PS CONTEXT「外部标识」词条。
@@ -46,3 +46,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`，
   - `RingBoxLabelsWithdrawn` 的举例说「三次都要响」，报回来并不响，改为换下与撤下两次；
   - CONTEXT-MAP `parcel-shipment → node-operations` 声明撤除的交接与 PS CONTEXT 同一条规则句补上补充这一来由，以及同一个号被几份补充换下各算一封。
 - 全量门禁（拣入 `feat/goods-details-admin` 后、含 09 与 11）：带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0；管理台 `tsc`、`run-tests` 1345 过 0 败、`vite build` 退 0。`scripts/test-full.sh` 未跑。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

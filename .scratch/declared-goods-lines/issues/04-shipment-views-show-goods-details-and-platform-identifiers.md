@@ -1,7 +1,7 @@
 # 04 查阅：委托视图返回货物明细与平台号；管理台详情与号码界面词
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「继续做04和05」叠在其上做，分支 `feat/goods-details-admin`，工作树 `idp-parcel-goods-domain`，基线 `bdab5a273`）
 
 依据：ADR-0373 决定五；ADR-0374 决定四、六；小包托运 CONTEXT「号码的界面词」。
@@ -41,3 +41,6 @@ Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「�
   - 量没报时单位跟着丢；
   - 只报订单行时显成「#2」；
   - 装箱分配逐件扫全表。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

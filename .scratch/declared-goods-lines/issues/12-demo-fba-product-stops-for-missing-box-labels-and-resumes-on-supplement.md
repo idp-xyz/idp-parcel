@@ -1,7 +1,7 @@
 # 12 演示：FBA 产品缺箱标号停下，受控补充补齐后受理
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 09、10、11（均已提交，未进 main；本票与它们同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 三项决定；票 08 完成记录「未做」两项。
@@ -102,3 +102,6 @@ Blocked by: 09、10、11（均已提交，未进 main；本票与它们同在分
 - 拣入后复验（2026-11-11）：`37c172945` 叠在 09、10、11 的评审修订之上（09 的修订改了 `FBA-HEADHAUL@1` 的说明文字与发布摘要，收紧了读不回规则包的处理）。
   - 从这一提交重建二进制，`up.sh demo_goods12 --reset` 退 0；`55`、`50`、`10-main-chain.sh` 各退 0。缺项、补充与接受各行与前一轮相同。规则包按标识与版本引用参考配置，摘要变化不影响；日志里没有新的无法判定原因。
   - 读种子数据的测试包在 `feat/goods-details-admin` 上全部重跑 ok，名单同上。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

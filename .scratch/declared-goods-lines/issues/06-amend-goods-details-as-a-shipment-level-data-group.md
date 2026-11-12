@@ -1,7 +1,7 @@
 # 06 资料修订：委托级资料组「货物明细」
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「继续做06到08」叠在 05 的 `ad522127e` 之上做，分支 `feat/goods-details-admin`，工作树 `idp-parcel-goods-domain`）
 
 依据：ADR-0373 决定四、八；UC-PS-002 输入语义契约「目标范围」一行与给开发的交接相应一行，`AT-PS-185`。
@@ -45,3 +45,6 @@ Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「�
   - 采用判断的改动出票面、没有领域说法、缺两条测——补测、写进 CONTEXT 与 UC，改动在两个提交的说明与本记录里点名（没拆成单独提交：已在本分支本地，评审已覆盖它）；
   - 显式清空不回显、管理台清空后什么都不显、两处陈旧注释、跨文件引用写法、测试名不副实与缺「旧版本不变」、规范化里一处恒过的核对——全改。
 - 进 main 时同笔改：UC-PS-002「给开发的交接」货物明细那一行按实现现状改写；AT 盘点 `AT-PS-185` 出④（总览计数由推送方重算）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

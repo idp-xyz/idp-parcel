@@ -1,7 +1,7 @@
 # 19 估价留痕补记产品、计价重量与费用行，结算按委托交出读口
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
 依据：[ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定一、二；ADR-0179 决定六（被部分停用的那一句）；ADR-0382 决定三（试算评价的输入快照记服务产品）。
@@ -102,3 +102,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 - 去掉的说法：`55` 头注与演示 README 里「接受前估价没有读口、本段不断言」。演示 README 改写为经本读口逐版读回，并注明管理台还没有这页。票 17 记录里的同一条在文档工作树，不在 README 里，没动。
 - 证据记 `S`，参数登记册不动。
 
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

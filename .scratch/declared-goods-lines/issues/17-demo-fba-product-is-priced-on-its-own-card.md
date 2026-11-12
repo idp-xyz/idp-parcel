@@ -1,7 +1,7 @@
 # 17 演示：FBA 产品用自己的售价卡（逐箱计价）
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 14、15（均已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)；票 12 完成记录「价卡没另登」一条。
@@ -77,3 +77,6 @@ Blocked by: 14、15（均已提交，未进 main；同在分支 `feat/goods-deta
     - 加了钉住演示 FBA 卡的测试；
     - 去掉多余的 `sleep 1`，收寄脚本的来源按纳秒起；
     - 快递小包的包裹号取不到就地停。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

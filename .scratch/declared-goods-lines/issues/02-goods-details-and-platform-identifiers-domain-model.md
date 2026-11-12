@@ -1,7 +1,7 @@
 # 02 领域：货物明细、装箱分配、平台号声明与规范化
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 01（用户 2026-11-10 原话「现在就开工02，不等评审」，按此越过；实现在分支 `feat/goods-details-domain`，工作树 `idp-parcel-goods-domain`，基线 `f55370512`）
 
 依据：ADR-0373 决定二、三、六、七、八；ADR-0374 决定四；小包托运 CONTEXT「货物明细」「货物明细行」「装箱分配」「内件性质」「申报格来源标记」「销售订单引用」「外部标识关联」；UC-PS-001 `AT-PS-181`、`AT-PS-182`、`AT-PS-183`、`AT-PS-186`、`AT-PS-187` 的领域半边。
@@ -41,3 +41,6 @@ Blocked by: 01（用户 2026-11-10 原话「现在就开工02，不等评审」�
 - 验证：`go build ./...`、`gofmt`、`go vet ./internal/parcelshipment/...` 通过；`go test ./internal/parcelshipment/... ./internal/architecture/... ./internal/platform/storable/...` 23 个包 ok（无 DSN，真库用例跳过）。
 - 评审：`/code-review` 三轮（high → medium → low），对着基线 `f55370512`。第一轮 9 条（装箱分配摘要时不重核成员、空标记、错误未包两个哨兵、NUL、`PSU-1` 前提未记、两处重复、基线注释计数等）全改；第二轮 8 条（非法 UTF-8、箱标号重号、入册门可被重建号绕过、平台名无字节界、分配条数上限与先核成员、先核覆盖、两条测试）全改；第三轮无可处理发现。未改、留作记录：`external_identifier.go` 既有的 `refuseNUL` 只拦 NUL、不拦非法 UTF-8，属既有号码入册门、不在本票范围；每行品名条数没有上限，靠请求体大小兜底。
 - 未做：非作者评审（进 main 步骤 2）、进 main 各步；票面 `Status` 照 workflow 在进 main 时改 `resolved`。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

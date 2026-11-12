@@ -1,7 +1,7 @@
 # 24 管理台：估价停因带结算原因与服务产品，写明谁来续办
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 23（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0383](../../../docs/adr/0383-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 决定五；票 21 的停因译法（`shipment-request/stall-reasons.ts`）。
@@ -57,3 +57,6 @@ Blocked by: 23（已提交，未进 main；同在分支 `feat/goods-details-admi
   - 联调等票 23。价卡一侧那份名单与后端适配器的分法对不对得上，今天没有契约测试核：票 23 落地后，那份名单在适配器里才有，可补一条对着它核。
 - 验证（`e6acc3f58`）：`apps/admin-web` 下 `node node_modules/typescript/bin/tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 1406 过 0 败（基线 1391；`096ec1bb3` 时 1405）；`node_modules/.bin/vite build` 退 0。
 - 评审（非作者，2026-11-11）：无阻断。应改与小意见都在 `e6acc3f58` 改了——服务产品只接在财务控制那一步的停因上，等客户补充等照旧；复核页技术详情补结算未形成原因码与续办方两行原码；单测整份钉住价卡一侧的结算原因；记录里对 ADR-0383 决定一的说法改成与现行名单一致、不计数；注释去掉「两处」；价格表的地址只留 `ref-links.ts` 一处；复核页照旧把空串停因当缺席；续办另起一句时停因不重说「等运营登记」。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

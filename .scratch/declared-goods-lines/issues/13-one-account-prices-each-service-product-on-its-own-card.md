@@ -1,7 +1,7 @@
 # 13 同一账户的不同服务产品各用各的售价卡
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（14–17 均已提交，未进 main；「要定的」两项已由 [ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 定下，实现拆成 14–17）
 
 依据：票 12 评审（2026-11-11）；[ADR-0260](../../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)（评价按范围选卡、计价条款只从价卡读）；[ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定三（一个货主账户用几个服务产品）。
@@ -35,3 +35,6 @@ Blocked by: 无（14–17 均已提交，未进 main；「要定的」两项已�
 - 实现：票 14–17 均已提交在 `feat/goods-details-admin`，各自经非作者评审并修订，提交与验证见各票记录。最终分支头 `a73304a3e`，演示段 `55`、`50`、`10-main-chain.sh` 在合并后的代码上各退 0。
 - 衍生：票 18（受理前估价的留痕没有读口，演示断言不了估价用的卡）。
 - 证据记 `S`，参数登记册未动。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

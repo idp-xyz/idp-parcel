@@ -1,7 +1,7 @@
 # 货物明细与专线型 FBA 头程：实施
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 
 依据：[ADR-0373](../../docs/adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md)（委托的货物明细）、[ADR-0374](../../docs/adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md)（专线型 FBA 头程是普通委托）；决定过程见票 [01](./issues/01-decide-goods-details-order-references-and-fba-headhaul.md)。
 
@@ -44,6 +44,10 @@ Status: in-progress
 | [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因：决定（ADR-0383） | 23、24 | 文档票 |
 | [23](./issues/23-pricing-side-estimate-stalls-wait-for-registration-and-the-attempt-says-why.md) | 价卡一侧答不出的估价等运营登记、参数登记后续办；处理尝试记原因与产品，详情从落处读 | — | 后端 |
 | [24](./issues/24-admin-shows-the-settlement-reason-and-who-resumes-a-stalled-estimate.md) | 管理台：估价停因带结算原因与产品，写明谁来续办 | —（联调等 23） | 前端 |
-| [25](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md) | 估价因申报不全没形成时等客户补充（needs-triage） | — | 小包托运 + 结算 + 计价 |
+| [25](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md) | 估价因申报不全没形成时等客户补充 | — | 小包托运 + 结算 + 计价 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
+
+## 收口（2026-11-12）
+
+链 01–27 全部进 main，main 尖 `c5001b3de`；完整记录见 [25 号票](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。派生票 [28](./issues/28-a-card-with-only-actual-weight-rules-still-stalls-untotaled-when-dimensions-are-undeclared.md) 留 needs-triage。

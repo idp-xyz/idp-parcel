@@ -1,7 +1,7 @@
 # 08 演示种子：SYN-TENANT-01 走通一票 FBA 货件
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 03, 05（作者一侧已提交，未进 main；分支 `feat/goods-details-seeds`，工作树 `idp-parcel-goods-seeds`，基线 05 的 `ad522127e`）；「缺箱标号的货件停下等客户」那一段 by 09（且与 ADR-0374 决定四相抵，见记录）
 
 依据：AGENTS.md 红线「软件产品」一段（演示租户 `SYN-TENANT-01` 按真实租户对待，证据记 `S`）；ADR-0374 决定三；ADR-0364。
@@ -51,3 +51,6 @@ Blocked by: 03, 05（作者一侧已提交，未进 main；分支 `feat/goods-de
   - 09 缺登记时的引用核对——补进 09「要做的」；
   - 参考配置的出处多引了决定四、内件性质一条无凭据——记进 09「要做的」；
   - 轮询在任务停下时不收、README 没写授信上限、冻结清单那条没更新、步骤 115 注释多写了对 110 的依赖——全改。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

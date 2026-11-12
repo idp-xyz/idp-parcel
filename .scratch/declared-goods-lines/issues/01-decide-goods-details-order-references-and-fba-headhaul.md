@@ -1,7 +1,7 @@
 # 01 定下货物明细、销售订单引用与 FBA 头程的承接方式
 
 Category: docs
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无
 
 依据：用户 2026-11-10 在同一会话里的几句原话——
@@ -127,3 +127,6 @@ Blocked by: 无
 - 建议项采纳：1、2、3、4、5、8、9、10、12、13、14、15、16、19；6、7、11、17、18 记入实施票 03、06、07、08 与 ADR-0374 越权风险点；20（带电件）转告用户。
 - 实现时另改一处：ADR-0373 决定八由「开 `PSC-2`」改为「在 `PSC-1` 上同号加可缺键」，前提照 ADR-0267 决定三，理由见该记录 Alternatives。
 - 未做：评审人对修订后版本的复核（进 main 步骤 3「修订轮」要求评审人在修完的 tip 上重跑探针）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

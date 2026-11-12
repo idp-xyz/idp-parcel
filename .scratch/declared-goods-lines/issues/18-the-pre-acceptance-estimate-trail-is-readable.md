@@ -1,7 +1,7 @@
 # 18 受理前估价的留痕可读：用了哪张卡、按哪个服务产品
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（19–21 均已提交，未进 main；「要定的」两项已由 [ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 定下，实现拆成这三张）
 
 依据：ADR-0179 决定六（估价连同价卡版本、逐件评价标识与版本清单随控制结果留痕）；[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定三（选卡按申报的服务产品）；票 17 评审。
@@ -37,3 +37,6 @@ Blocked by: 无（19–21 均已提交，未进 main；「要定的」两项已�
 - 最终分支头 `cf9fdb50a`：带 PG 全量 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0，`go vet` 干净；管理台 `tsc`、`run-tests` 1391 过 0 败、`vite build` 退 0。演示三段在 `4fc4cd758`（票 19、20 评审修订之前）上各退 0；修订只动产品不一致时不记、复核详情去掉重复一份、重放按数比，演示没有重跑。
 - 衍生：票 22（估价没形成的结算细原因读不回）。
 - 证据记 `S`，参数登记册未动；管理台没在浏览器里点过。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

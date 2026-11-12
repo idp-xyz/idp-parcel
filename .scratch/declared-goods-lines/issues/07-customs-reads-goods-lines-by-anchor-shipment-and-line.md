@@ -1,7 +1,7 @@
 # 07 关务读口：按（资料版本锚，委托，行号）取货物明细行
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；叠在 06 之上做，分支 `feat/goods-details-admin`，工作树 `idp-parcel-goods-domain`）
 
 依据：ADR-0373 决定九；CONTEXT-MAP「`parcel-shipment → customs-compliance`」；关务 CONTEXT Boundaries 里小包托运拥有什么那一句；UC-CC-002 输入「客户原始资料」一行。
@@ -38,3 +38,6 @@ Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；叠在 06 之
   - 既没锚又不是待复核的答复被当成找到了——答读不动；
   - 构造器注释说错、内件性质与编码口径直接抄提供方的词、逐格翻译靠解引用——全改。
 - 进 main 时同笔改：UC-CC-002「给开发的交接」「客户原始资料」一行补读口已有、形成规则仍未做。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

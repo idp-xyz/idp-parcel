@@ -1,7 +1,7 @@
 # 21 管理台运单详情显示「受理前财务控制」
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 19、20（均已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定四。
@@ -63,3 +63,6 @@ Blocked by: 19、20（均已提交，未进 main；同在分支 `feat/goods-deta
 - 验证（`34d9fc2b4`）：`apps/admin-web` 下 `node node_modules/typescript/bin/tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 1391 过 0 败（基线 1358；`9da274b53` 时 1385）；`node_modules/.bin/vite build` 退 0。契约测试删掉一个词条时会红并点名那个码（在测试产物上改一次实测）。
   - Go 门：`TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable` 在票 19 的端点挂上 `cmd/parcel-api` 端点表之前红（管理台多了 `/settlement-pre-acceptance-estimates`）。本票与票 19、20 一起落，不单独进 main。
 - 评审（非作者，2026-11-11）：阻断一条，是落地次序：上面那条 Go 门要等票 19，随 19、20 一起落。应改与小意见都在 `34d9fc2b4` 改了——估价数组为 null 时先收数组并加单测；结论传进估价判读（不适用、没有占用只在当前版本且受限时说控制受限）；失败态改用 `SectionError` 与 `OperatorRefusalNote`，在读一行 `role="status"`；加契约测试对着 Go 源核词表；占用按标识作键；包裹号表头取 `objectNouns`；补已释放带已扣金额与版本次序的单测、版本按试算时点新的在前；复核页同用停因译法；删去列调用方、叙述改动的注释；等待运营登记那一停没保存改成描述句；计价重量一格的注释照「未记」改。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

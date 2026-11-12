@@ -1,7 +1,7 @@
 # 16 管理台：价卡录入与查阅带适用服务产品，试算可选产品
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二。
@@ -65,3 +65,6 @@ Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admi
   - 导入预览与草稿内容概要里的 `serviceProducts` 假定与目录行同名同形，未经后端证实；后端不回显时，售价卡的概要会念成「其余产品（不指名）」。编辑器预览不受此影响（念自己发的工作簿）。
 - 验证（`098f3a451`）：`apps/admin-web` 下 `node node_modules/typescript/bin/tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 1358 过 0 败（基线 1345）；`node_modules/.bin/vite build` 退 0。联调等票 14、15。
 - 评审（非作者，2026-11-11）：无阻断；所提意见都在 `098f3a451` 改了——适用服务产品照规格口写、不再自抬 `PPT-3`；规格口列了就总写这一行（null 即不声明）；错误映射单测换成后端真问题码；读册时不摆手填框；手填按分号拆；复选框组加 `role="group"` 与 `aria-labelledby`；试算的服务产品只在售价方向出现与发送、手填去空白；`knownTemplateVersions` 注释不再数别处的内容；本记录补上为何在分支上做。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

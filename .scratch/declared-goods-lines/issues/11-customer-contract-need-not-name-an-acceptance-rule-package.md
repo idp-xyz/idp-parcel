@@ -1,7 +1,7 @@
 # 11 客户合同不必指名接单规则包
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`，与 09、10、12 同一条线）
 
 依据：[ADR-0376](../../../docs/adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定三（PC CONTEXT 合同不变量已改）；ADR-0153 决定四（规则包按申报的服务产品选）；ADR-0032（合同指名只作确认）；ADR-0267 决定三（同号改形的前提）。
@@ -45,3 +45,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`，
   - 顺带：壳指名了规则包而正文漏写，单独答 `ErrRulePackageMissingFromContent`（包住 `ErrRulePackageReferenceMismatch`，按原错误认的调用方不受影响），与两边都写了却不一样分开。
 - 评审另提一条，未采纳：登记时拒收「壳不指名、正文指名」。这是 `ErrRulePackageReferenceMismatch` 注释里早已写明的语义（壳上没指名时正文那一格只是说明，确认只读壳上，ADR-0032），本票不改；照改会让 PC 一批既有登记用例失败，要改须另立 ADR。
 - 全量门禁（拣入 `feat/goods-details-admin` 后、含 09 与 10）：带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0；管理台 `tsc`、`run-tests` 1345 过 0 败、`vite build` 退 0。`scripts/test-full.sh` 未跑。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

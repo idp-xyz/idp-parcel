@@ -1,7 +1,7 @@
 # 23 价卡一侧答不出的估价等运营登记、计价参数登记后续办；处理尝试记下原因与产品，委托详情从落处读
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
 依据：[ADR-0383](../../../docs/adr/0383-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 决定一至四；ADR-0094 决定三至五（等运营登记的落库、续办触发同笔落地、先存等待）；ADR-0229（计价「参数已登记」信封）。
@@ -81,3 +81,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
   - 上次处理逐份取一条走索引：迁移 `0038`（原地改，未进 main）加 `acceptance_processing_attempt_latest`（租户、委托、版本、发生时刻倒序、续办引用倒序），等待运营登记的队列索引补齐标识段；`lastAttempts` 改为 `CROSS JOIN LATERAL`，有版本那一支与无版本旧行那一支（发生时刻不早于任务建立）各 `LIMIT 1` 再取一条。EXPLAIN（关掉顺序扫描）有版本那一支走新索引、不排序。改后 `0038` 的 sha256 `05872582f4e60a36c653c1e8063fd58410e03981949fb1379fadbcd6ad678de3`，拣入时两份要一致。
   - 措辞：ADR-0383 越权风险点改按标题引（「多唤醒」「哪几种原因算『登记解得开』是产品策略」），不按序号。财务控制腿 `undecided` 的 `detail` 注释照实写：结算原因在内部重试那几停也带着、不另清，那一轮整笔回滚、尝试随之不留；产品只在等运营登记的等待落库时才有（选了改注释，不改行为）。
   - 评审后全量门禁（含 PG，`IDP_PARCEL_POSTGRES_DSN` 指 55432）：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；`go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

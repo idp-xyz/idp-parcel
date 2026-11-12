@@ -1,7 +1,7 @@
 # 14 售价卡声明适用服务产品，选卡分两层
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
 依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二、四、五；ADR-0234（收尾）、ADR-0267 与 ADR-0348（加键换版、旧版字节不动）、ADR-0352（较新版本登记要部署开关）。
@@ -59,3 +59,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
   - 补测（真库）：同一方案 v1 不声明、v2 指名 X——X 得 v2，别的产品与零值得 v1，试算卡集不报同一方案两版（ADR-0382 决定五）；过期的指名卡落回不声明的卡。
   - 评审后全量门禁：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
 
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

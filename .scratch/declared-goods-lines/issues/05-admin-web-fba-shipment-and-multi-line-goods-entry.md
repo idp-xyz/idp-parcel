@@ -1,7 +1,7 @@
 # 05 管理台：FBA 货件下单页，小包下单改多行货物
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「继续做04和05」叠在 04 的 `5aa0a4266` 之上做，分支 `feat/goods-details-admin`。diff 只在 `apps/admin-web/**`，但 03 不在 main，不能照「前端切片」在 main 上直接做）
 
 依据：ADR-0374 决定三（模型统一、入口按场景分）；ADR-0373 决定二、三、六。diff 只落在 `apps/admin-web/**` 时走 [workflow.md「前端切片」](../../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。
@@ -61,3 +61,6 @@ Blocked by: 03（作者一侧已提交 `bdab5a273`，未进 main；按用户「�
   - 30 箱以上时左列不固定、快捷填法平方复杂度、单位写死「件」；
   - 屏上行号与服务端行号在有空行时不一致；
   - 重复的正则、核对块与未用上的行号助手。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。

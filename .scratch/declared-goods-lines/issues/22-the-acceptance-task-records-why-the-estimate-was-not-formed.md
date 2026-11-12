@@ -1,7 +1,7 @@
 # 22 受理任务记下估价没形成的结算原因
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无（23、24 均已提交，未进 main；「要定的」两项已由 [ADR-0383](../../../docs/adr/0383-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 定下）
 
 依据：ADR-0379 决定三与越权风险点 6；票 21 实现时发现。
@@ -37,3 +37,6 @@ Blocked by: 无（23、24 均已提交，未进 main；「要定的」两项已�
 - 最终分支头 `7947bdad3`：带 PG 全量 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0，`go vet` 干净；管理台 `tsc`、`run-tests` 1406 过 0 败、`vite build` 退 0。
 - 衍生：票 25（申报不全的估价改等客户补充，needs-triage）。上线时对此前被放弃的这一类委托做一次重驱（ADR-0383 Consequences）。
 - 证据记 `S`，参数登记册未动；管理台没在浏览器里点过；演示段没有加这一路（演示租户的卡都覆盖，走不到没有在用价卡）。
+## 进 main 记录
+
+- 2026-11-12 随 declared-goods-lines 链进 main，main 尖 `c5001b3de`；重放、改号（分支 0378、0380 落地为 ADR-0382、ADR-0383）、生成物与门禁的完整记录见 [25 号票](./25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。
