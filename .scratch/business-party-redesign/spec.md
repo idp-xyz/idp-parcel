@@ -86,7 +86,7 @@ Status: in-progress
 | [14](./issues/14-close-the-object-tab-when-leaving-an-edit-started-from-the-roster.md) | 从名录进编辑态，退出时把对象页那张标签一并关掉（要给壳层加一个口，共享面，需非作者评审） | 前端切片 | resolved（2026-11-12 进 main；评审按用户当日裁定没有做） |
 | [15](./issues/15-three-decisions-left-open-one-sided-graph-no-role-label-no-second-deactivation.md) | 前面各票留着「等用户定」的三条，用户交给实现方定：关系图只有一侧有关系时收成三列；不担任角色的单位类型写「未担任角色」、「合作关系」一列两侧都数；已登过停用的单位与公司主体不摆停用入口 | 前端切片 | resolved（2026-11-12 进 main；没有做评审，用户当日裁定） |
 | [16](./issues/16-entries-the-registry-is-sure-to-refuse-on-a-deactivated-identity.md) | bug：登过停用的身份上必被拒的写入口不摆——票 15 留的三处：补核已停用公司主体的菜单；往来单位的「更正登记信息」；客户账户的「停用…」按登过停用没有判 | 前端切片 | resolved（2026-11-12 进 main；没有做评审，用户当日裁定） |
-| [17](./issues/17-a-deactivated-business-party-no-longer-offers-profile-updates.md) | bug：登过停用的往来单位不再摆「更新资料」，空着的资料也不再说「去更新资料里登记」（查票 16 时查到的；阻塞于 16） | 前端切片 | in-progress |
+| [17](./issues/17-a-deactivated-business-party-no-longer-offers-profile-updates.md) | bug：登过停用的往来单位不再摆「更新资料」，空着的资料也不再说「去更新资料里登记」（查票 16 时查到的；阻塞于 16） | 前端切片 | resolved（2026-11-12 进 main；没有做评审，用户当日裁定） |
 
 01 与 02 互不相干，可以同时开工；07 与前端各票互不相干。
 

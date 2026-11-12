@@ -1,7 +1,7 @@
 # 17 登过停用的往来单位不再摆「更新资料」，空着的资料也不再说「去更新资料里登记」
 
 Category: bug
-Status: in-progress——2026-11-12 立票，票 16 进 main 后开工
+Status: resolved——2026-11-12 进 main（没有做评审，用户当日裁定）
 父票：[spec](../spec.md)
 Blocked by: [票 16](./16-entries-the-registry-is-sure-to-refuse-on-a-deactivated-identity.md)（用它立的那个判断；同改对象页的同一段）——已进 main
 
@@ -36,3 +36,29 @@ Blocked by: [票 16](./16-entries-the-registry-is-sure-to-refuse-on-a-deactivate
 
 - 三道门退 0；判读与说明文字钉 node:test。
 - 浏览器只读核对（`SYN-PARTY-RETIRED-01`），零写请求。
+
+## 完成记录（2026-11-12，直接推 `main`，代码在 `3fe103fb5`）
+
+- 落点：
+  - 判读：`identity-write-entries.ts` 的 `identityTakesRevisions`（票 16 立的，这里把「新的一版资料」也归它）；`business-party-panel-first-screen.ts` 的 `panelHeaderActionsOf` 多收一格。
+  - 说明文字：`business-party-profile.ts` 的 `profileClosedLine`；`profileSummaryEmptyNoteOf`、`profileContactsEmptyNoteOf` 多收一格，`profileVersionsEmptyNote` 改成 `profileVersionsEmptyNoteOf`。
+  - 右栏：`BusinessPartyDetailPanel.tsx`、`BusinessPartyPanelSummary.tsx`（概要的两张卡、联系人签、资料版本签）。
+  - 对象页：`BusinessPartyDetailPage.tsx`（页头那一枚、各块的「更新资料」、编辑态的守卫与清地址）、`BusinessPartyProfileSection.tsx`（三块读出）。
+- 自己拿的主意：
+  - **说「已登记停用」，不说「已停用」**：停用时点还没到的单位状态仍是已生效，登记册同样不收，「已停用」对它不准。
+  - **那一格做成必填的属性**（`takesRevisions`），不给缺省值：哪一处忘了传，类型检查就拦下，不会悄悄照「还收」的口径摆。
+  - **客户缺联系人的那句建议一并不提**：登不了的事不建议。资料在、只是没有联系人时，概要里那张联系人卡只剩标题，不另加说明。
+- ✅ 三道门退 0（tsc、node:test 1378/1378、vite build），跑的是提交前的那份内容。`panelHeaderActionsOf` 那条用例改了口径（已停用的由「『更新资料』是主动作」改成两枚都不摆，另加停用时点在将来的两行）；说明文字的用例补了登过停用的几行。用例总数没变：都是在原有的用例里加行。
+- ✅ 浏览器（配置操作者，1734，900 高；看的是 `3fe103fb5`）：
+  - **`SYN-PARTY-RETIRED-01` 的右栏**：页头没有「更新资料」（「登记合作关系」原来就不摆）；「更多」是「在新标签打开对象页、复制编码」；概要、联系人签、资料版本签三处都写「还没有登记资料 / 这家单位已登记停用，不再收新的资料。」，三签里都没有「更新资料」「编辑」「编辑联系人」。
+  - **它的对象页**：页头没有「更新资料」「更正登记信息」，「更多」只有「复制编码」；资料一块写的是同一句。带着 `?edit=profile` 进来：地址里的编辑键被清掉，表单不开。
+  - **在用的 `SYN-PARTY-SUPPLIER-01` 照旧**：右栏页头与空着的资料卡各有「更新资料」，三签的说明还是原来的三句；对象页页头两枚都在；带着 `?edit=profile` 进来表单打开（「取消」「核对并保存」），点「取消」退出、不问。
+- ✅ 零写请求：这一段 19 笔全是 GET，闸没有拦到任何一笔；没有叠假答复。
+- 未核：
+  - **停用时点在将来的单位**（状态仍是已生效）：演示数据里没有，没有造；判读的用例里有这两行（「登记合作关系」照摆、「更新资料」不摆）。
+  - **登记过资料的已停用单位**（三张资料卡没有「编辑」、联系人签没有「编辑联系人」、缺联系人的客户不提建议）：演示数据里已停用的那一家没有登记过资料，这几处只有类型检查与用例守着，浏览器里没有看到。
+  - 人正在编辑时这家单位被别人停用：表单会随行重读而收起，没有试。
+  - 深色主题没有看。`main` 上的 CI：这台机器上查不到。
+- 看到了、没有在本票修的：
+  - 公司主体页（责任法人已停用同样不收新的资料修订）没有看，见「不做」。
+- 评审：没有做，按用户 2026-11-12 的裁定（自测通过即推）。diff 全在 `pages/party/**`。
