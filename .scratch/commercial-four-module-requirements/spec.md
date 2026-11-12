@@ -85,18 +85,24 @@ Q4 至 Q6 是用户自己的决定。
 | 01 | [已登记价卡与价卡草稿读回成可编辑的工作簿](./issues/01-registered-price-card-reads-back-as-an-editable-workbook.md) | 无；随票立 ADR | ready-for-agent |
 | 02 | [价卡预览、批准与发布时提示与在册版本的适用期重叠](./issues/02-price-card-preview-and-publication-show-overlap-with-registered-versions.md) | 无 | ready-for-agent |
 | 03 | [合同与协议版本的签署证据](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) | 无；随票立 ADR | ready-for-agent |
-| 04 | [价卡登记时核对它引用的价格方向授权](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) | 15 | ready-for-agent |
+| 04 | [价卡登记时核对它引用的价格方向授权](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) | 无（票 15 已答，ADR-0380） | ready-for-agent |
 | 05 | [经营结果按包裹从直接费用与成本派生，先限面单渠道服务](./issues/05-operating-results-are-derived-per-parcel-from-direct-charges-and-costs.md) | 无；随票立 ADR | ready-for-agent |
 | 06 | [票级计价重量的聚合方式落到领域与导入模板](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md) | 一项用户决定：ADR-0364 另两项是否同批换号（ADR-0364 已接受） | ready-for-agent |
 | 07 | [票级销售计费接进生产](./issues/07-shipment-level-sell-charging-enters-production.md) | 06；随票立 ADR | ready-for-agent |
-| 08 | [ADR 草案「对客报价」的非作者评审、编号与接受](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) | 15 | ready-for-agent |
+| 08 | [ADR 草案「对客报价」的非作者评审、编号与接受](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) | 无（票 15 已答，ADR-0380） | ready-for-agent |
 | 09 | [报价的领域语言与用例落文](./issues/09-quotation-domain-language-and-use-case.md) | 08 | ready-for-agent |
 | 10 | [已批准的价卡草稿可以撤下](./issues/10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md) | 09 | ready-for-agent |
 | 11 | [报价发出：登记报给谁、有效到何时，并导出对客价格表](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) | 09、10、01 | ready-for-agent |
 | 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | ready-for-agent |
-| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、15 | ready-for-agent |
+| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、16 | ready-for-agent |
 | 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
-| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR 草案第一稿](./adr-draft-the-customer-contract-declares-ordered-sell-price-sources.md)已出，等用户看结论） |
+| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 已接受，实现拆成 16 至 21；非作者评审与进 `main` 待做） |
+| 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | draft |
+| 17 | [销售价格来源随接受时固定的商业解析一起固定，结算有口读它](./issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) | 16 | draft |
+| 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | draft |
+| 19 | [结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围](./issues/19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md) | 17、18 | draft |
+| 20 | [管理台：合同页录入与显示销售价格来源](./issues/20-admin-web-contract-page-declares-sell-price-sources.md) | 16 | draft |
+| 21 | [演示租户的种子合同声明销售价格来源，演示动线走通](./issues/21-demo-seeds-and-walkthrough-for-contract-declared-sell-price-sources.md) | 19、20 | draft |
 
 ## 与冻结清单的关系
 
@@ -178,4 +184,5 @@ Q4 至 Q6 是用户自己的决定。
   4. **ADR 草案决定六与票 13 的「没登记不设门」。** 与红线里租户取值拒绝默认值相抵，也与草案自己「三类」一段不一致；票 03 把同一处写进了「要裁的」，这两处没写。补上读面答未配置，并记进草案的越权风险点与票 13「要裁的」。这一条没有裁，只是写明了。
   5. **票 07 引的 ADR-0190 决定一那一句已被 ADR-0229 部分停用。** 补注自然键另加代次。
   6. **本规格写「三类归属写在各票」，票 08、09、15 没有这一节。** 改成如实的说法。
-- 2026-11-12（票 15 开工）：用户选定开工票 15，只出决定。分支 `cursor/cfmr-15-customer-price-authority`，从 `54b32c1b8` 起，没有进 `main`。出了 [ADR 草案第一稿](./adr-draft-the-customer-contract-declares-ordered-sell-price-sources.md)，行业做法笔记补 R20 至 R29。取证推翻了会话写在票 15 上的倾向，票面已更正，经过记在票 15 的 Comments。草案未编号、未经非作者评审，用户还没有看过结论；它之外的文档一处未改。
+- 2026-11-12（票 15 开工）：用户选定开工票 15，只出决定。分支 `cursor/cfmr-15-customer-price-authority`，从 `54b32c1b8` 起，没有进 `main`。出了 ADR 草案第一稿（后来编号为 ADR-0380，草案文件已删），行业做法笔记补 R20 至 R29。取证推翻了会话写在票 15 上的倾向，票面已更正，经过记在票 15 的 Comments。草案未编号、未经非作者评审，用户还没有看过结论；它之外的文档一处未改。
+- 2026-11-12（票 15 用户接受之后）：用户看过草案结论后选定接受。草案编号为 [ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)，移入 `docs/adr`，`.scratch` 里的草案删去；相关 `CONTEXT.md`、`GLOSSARY.md`、`CONTEXT-MAP.md`、`UC-PC-002`、`UC-SA-002` 与参数登记册 `PAR-COM-15` 同笔改成现行。实现拆成票 16 至 21，都是 `draft`，没有随「q6 全部激活」激活——那一句说的是当时的 01 至 15；也没有进冻结清单。票 04、08 解除对票 15 的阻塞，票 13 改指票 16。编号时发现本机在途分支 `docs/declared-goods-lines` 上的 ADR-0378 与它有两句相抵，记在 ADR-0380 越权风险点 5 与票 15 的 Comments。非作者评审与进 `main` 待做。

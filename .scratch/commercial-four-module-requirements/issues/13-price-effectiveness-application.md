@@ -3,9 +3,9 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)（「这位客户用这套价」那一步落在哪一处由它定；它拆出实现票之后，本行改指那一张）
+Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)（「这位客户用这套价」那一步是客户合同版本的销售价格来源，见 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)）
 相关：票 [02](./02-price-card-preview-and-publication-show-overlap-with-registered-versions.md)（没有它，发布时看不到同范围已有在册版本）
-地盘：等票 15 的结论。至少有 `internal/partycommercial`（读时派生）、`internal/partycommercial/adapters/parcelpricing`、`internal/parcelpricing`（发布记下依据）、`apps/admin-web/src/pages/party`
+地盘：至少有 `internal/partycommercial`（读时派生）、`internal/partycommercial/adapters/parcelpricing`、`internal/parcelpricing`（发布记下依据）、`apps/admin-web/src/pages/party`
 
 对应要求：Quotation「价格生效申请」。
 
@@ -52,3 +52,4 @@ Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [15](./15
 
 - 2026-11-11：随 ADR 草案第二稿改。原稿立一个申请对象，把价卡草稿、合同版本与价格政策版本分别送进各自的流程。合同上的绑定与结算账户上的登记由哪一处说了算还没定（票 15），不该先在上面搭一层。改为落在现有的发布上，并加对票 15 的阻塞。
 - 2026-11-12（非作者评审后）：评审指出第 5 条「没登记不设门」与红线「租户取值拒绝默认值」相抵，票 03 把同一处写进了「要裁的」而本票没写。补上读面答未配置，并把方向相反这一点写进「要裁的」。
+- 2026-11-12：票 15 的结论是 ADR-0380，阻塞边改指它拆出的票 16。照它读本票：「要做的」第 3 条那一步，是客户合同版本的销售价格来源指名价卡所在的计价范围；合同已经指名这个范围时，生效只差价卡的发布，还没有指名时要发新一版合同。第 4 条「这位客户是否已经用上」读的是：他的委托采用到的那一版合同的来源列表里有没有这个范围，这个范围此刻有没有在用的卡。第 5 条的门放在哪一个发布上，ADR-0380 没有定，仍归票 08 的评审。「现象」里引的 ADR-0280 决定二那一句，对带销售价格约定的合同版本已由 ADR-0380 停用；但给一位已登记的客户换来源列表，在 `product-strategy-boundary/06` 解冻之前仍然走不通（ADR-0380 越权风险点 2），「老客户接受专属价之后生效」这条完成判据受它限制。

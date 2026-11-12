@@ -1,0 +1,35 @@
+# 20 管理台：合同页录入与显示销售价格来源，逐个来源标出此刻有没有在用的卡
+
+Category: enhancement
+Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+父票：[spec](../spec.md)
+Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
+地盘：`apps/admin-web/**`。diff 全在这里时照 `docs/agents/workflow.md`「前端切片」一节，一人在 `main` 上直接做
+
+对应要求：Contract「价卡授权」的操作面。规则在 ADR-0380 决定一与越权风险点 3、7。
+
+## 现象
+
+合同的录入与详情页没有销售价格约定这一格。运营看不到一位客户按哪几个范围、依什么顺序取价。
+
+## 要做的
+
+1. **录入**：合同版本的表单加销售价格约定。二选一；列表可增删、可调顺序；不计销售价时必填依据。
+2. **详情**：按顺序列出各个来源。旧规范化版本的合同如实显示「本版合同没有销售价格约定，计价范围取自结算账户的采用登记」。
+3. **逐个来源标出此刻有没有在用的 SELL 卡。** 这是读面拼接，不是门：写错的范围名与卡还没发的范围，在这里看得出来（ADR-0380 越权风险点 3）。读计价哪一个现有的读口，开工时先核；没有合用的读口时另立后端票，本票不在前端猜。
+4. **价格政策发布页的定价方案绑定**：加一句说明它是留痕，不决定选卡，选卡看合同的销售价格来源（ADR-0380 越权风险点 7 说的误解）。
+5. 待批准发布的批准页显示这一格，批准的人看得到自己批的是什么。
+
+## 三类
+
+全部是机制。页面不预填任何范围。
+
+## 完成判据
+
+- 演示租户上录入、批准、发布一份带两个来源的合同版本，详情页顺序与录入相同。
+- 其中一个范围没有在用的卡时，详情页标得出来。
+- 旧规范化版本的合同显示第 2 条那一句，不显示空列表。
+
+## Comments
+
+- 2026-11-12：由票 15 拆出。

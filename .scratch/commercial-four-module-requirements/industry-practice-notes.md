@@ -107,7 +107,7 @@
 - 本产品今天有两处：合同的价格政策上的定价方案绑定，与结算账户登记的销售计价范围（[ADR-0280](../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。起作用的是后一处。[ADR-0260](../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 的「候选与反方」否决过「两处都留，计价核两处相等，不等即冲突」，越权风险点 2 写明不加两侧一致性核对。它把按合同选卡留作重启条件，理由是首发没有客户差异化销售价的证据。
 - 国内同类系统的客户价是分层的：销售价、等级价与客户协议价，取价有先后；协议价可以写成公布价上的折扣；按客户挂价格套餐（R7、R19）。本产品的销售价只有一层：同一个计价范围上只有一张在用的销售卡，结算账户登了范围之后不能换。
 - 所以这里要的不是一道门，是先定两件事：哪一处说了算，客户价要不要分层与回退。它们归票 [15](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)。用户 2026-11-11 定：重开。
-- 2026-11-12 补查的 R20 至 R29 给出三点：客户价声明在合同或协议上的与声明在客户记录上的都有（R21、R23、R28 对 R25、R26）；有回退的，顺序都是配置或声明出来的，或者写死成固定几层（R20、R22、R28 对 R26、R7），Salesforce 不回退（R25）；取价时点各家不同（R21、R24、R27、R28）。票 15 的 [ADR 草案](./adr-draft-the-customer-contract-declares-ordered-sell-price-sources.md)用到的是前两点；它把声明放在合同上、让合同声明回退顺序，是对着本仓已接受的记录定的，这几条只是旁证。
+- 2026-11-12 补查的 R20 至 R29 给出三点：客户价声明在合同或协议上的与声明在客户记录上的都有（R21、R23、R28 对 R25、R26）；有回退的，顺序都是配置或声明出来的，或者写死成固定几层（R20、R22、R28 对 R26、R7），Salesforce 不回退（R25）；取价时点各家不同（R21、R24、R27、R28）。票 15 的 [ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 用到的是前两点；它把声明放在合同上、让合同声明回退顺序，是对着本仓已接受的记录定的，这几条只是旁证。
 
 ## 多出来的三处
 

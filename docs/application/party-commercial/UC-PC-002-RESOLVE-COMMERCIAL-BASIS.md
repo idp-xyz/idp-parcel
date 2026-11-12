@@ -76,7 +76,7 @@
 ## 一致性、缓存与并发
 
 - 解析键至少包含租户、客户账户、责任法人候选、服务范围、商业选择锚点及适用对象类型；请求结算依据时还必须包含能够区分合同、服务/费用或控制范围的业务维度。必需依据含服务产品且委托声明了服务产品时，还包含该产品的对象身份（不是版本，[ADR-0153](../../adr/0153-declared-service-product-identity-narrows-commercial-resolution.md)）；未声明时这一维缺席，不得补默认产品。缓存不得省略这些维度，也不得缓存一个客户级预付/账期默认值。
-- 请求计价依据时，解析键的解析目的取 `PRICING` 并必须包含价格方向；同一范围的 BUY、SELL 与 INTERNAL 解析和缓存不能互相复用。解析目的是本上下文自己的轴，不是 `parcel-pricing` 的计算目的。计价目的的解析带回价格政策及其定价方案绑定（[ADR-0034](../../adr/0034-pricing-closure-adopts-via-price-policy.md)），但 `parcel-pricing` 按范围选卡、评价不读它（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）；首发同一计价范围只有一张在用 `SELL` 卡，客户差异化的销售价表达不了（ADR-0260 越权风险点 1）。
+- 请求计价依据时，解析键的解析目的取 `PRICING` 并必须包含价格方向；同一范围的 BUY、SELL 与 INTERNAL 解析和缓存不能互相复用。解析目的是本上下文自己的轴，不是 `parcel-pricing` 的计算目的。计价目的的解析带回价格政策及其定价方案绑定（[ADR-0034](../../adr/0034-pricing-closure-adopts-via-price-policy.md)），但 `parcel-pricing` 按范围选卡、评价不读它（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）。客户差异化的销售价不经计价目的的解析表达：客户合同版本的销售价格约定声明有序的销售价格来源，随接受控制目的的解析所采用的那一版合同一起固定，由结算读出交给计价（[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)）。
 - 当前修订标识只用于检测权威视图变化，不代替对象版本。相同解析输入与相同修订可以返回原结果；新修订必须重新检查是否仍相容。
 - 发布、截止、退役和解析并发时，已提交的历史业务决定保留原快照；尚未提交的新决定必须使用当前有效解析或保持未决。收尾推进该范围的视图修订，提交前重校据此答已失效（[ADR-0233](../../adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 决定五）。
 - 依赖调用超时与权威确认“无适用依据”是不同结果。缓存过期、读取失败或修订无法确认只能形成解析未决。
@@ -118,6 +118,8 @@
 消费者端口返回结构化的唯一成功、无适用依据、适用冲突、解析未决、输入未受理、依据未解析和已失效结果（`domain.ResolutionOutcome`：`UNIQUELY_RESOLVED`、`NO_APPLICABLE_BASIS`、`APPLICABILITY_CONFLICT`、`RESOLUTION_PENDING`、`INPUT_NOT_ACCEPTED`、`BASIS_NOT_RESOLVED`、`STALE`），不能只返回对象或通用错误。第一阶段解析与第二阶段逐项 `asOf` 在类型和测试中可见；结算政策结果携带解析得到的预付/账期方式和明确适用范围，调用方不得预选方式，也不能退化成客户布尔字段。生产解析库与发布册是 PostgreSQL 适配器，不建伪造的商业数据适配器，也不预置真实商业默认值。
 
 计价目的的解析今天没有调用方：生产装配给 `domain.ResolveCommercialClosure` 的方案存续答复是 `nil`，问到即答`解析未决`（`BOUND_PLAN_NOT_CONFIRMED`）；ADR-0260 定按范围选卡、不补这一路的提供方，`AT-PC-035`、`AT-PC-036` 只在领域层钉住。
+
+销售价格约定（PC CONTEXT「客户合同版本」词条，[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定一、二）代码尚未做到：客户合同版本的正文没有这一格（`CustomerContract` 只有货主客户账户、接单规则包引用与财务控制约定），闭包快照的 `adoptedDocument` 没有固定下来的销售价格来源，也没有供结算读它的口。承接：[commercial-four-module-requirements/16](../../../.scratch/commercial-four-module-requirements/issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md)（合同正文、规范化版本与发布面）、[17](../../../.scratch/commercial-four-module-requirements/issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md)（随闭包固定与读口）。
 
 客户服务规则采纳挂合同的那一版时的继承底座已补（[code/61](../../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)）：同一次解析选出底座、记在那一项采纳上随闭包快照固定，底座多候选在解析时答`适用冲突`，底座与采用的成员同受指名引用核对；层次读口按闭包上固定的那一版读。没有底座一格的旧快照照旧按锚点现选，只在演示库与测试夹具里（PC CONTEXT 客户服务规则那几条，[ADR-0268](../../adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md) 决定一、三）。
 

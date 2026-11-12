@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)（它的 ADR 接受之后，草案「等票 15 定的」一节才补得完）。Q1 与 Q5 用户 2026-11-11 已答（见 [spec](../spec.md)「用户的决定」）：报的是一套价；报价进首发试点范围
+Blocked by: 无。原来等票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)；它的结论是 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)，草案「等票 15 定的」一节现在可以补。Q1 与 Q5 用户 2026-11-11 已答（见 [spec](../spec.md)「用户的决定」）：报的是一套价；报价进首发试点范围
 
 对应要求：Quotation 一行的前置。
 
@@ -39,3 +39,4 @@ Blocked by: 票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-
 
 - 2026-11-11：用户认可 Q1、定 Q5 为进首发试点范围，并答「q6 全部激活」。本票不再等 Q5，转 `ready-for-agent`，仍等票 15。
 - 2026-11-11：草案同日改成第二稿，报价不再有自己的状态、审批职责规则与价格生效申请对象。本票加一道阻塞（票 15）与一步（照票 15 的结论补完草案），评审重点随之换过。
+- 2026-11-12：票 15 的结论是 ADR-0380，本票解除对它的阻塞。「要做的」第 2 步要补的三项，ADR-0380 给出的落点是（见它的 Consequences）：报的价格内容仍是销售价卡草稿，发到客户自己的计价范围里；所引价格内容的计价范围与客户的关系，是客户合同版本的销售价格来源指名这个范围；「价格生效申请」是两个现有发布之一——合同已经指名这个范围时是价卡的发布，还没有指名时是新一版合同的发布。「发布以接受为前提」的门设在哪一个发布上，ADR-0380 没有定，仍归本票的评审。另有一条限制要写进草案：给一位已登记的客户换来源列表，在 `product-strategy-boundary/06` 解冻之前走不通（ADR-0380 越权风险点 2）。

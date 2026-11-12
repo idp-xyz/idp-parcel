@@ -1,0 +1,34 @@
+# 17 销售价格来源随接受时固定的商业解析一起固定，结算有口读它
+
+Category: enhancement
+Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+父票：[spec](../spec.md)
+Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
+地盘：`internal/partycommercial`（闭包、快照与读口）、`internal/settlementaccounting/adapters/partycommercial`
+
+对应要求：Contract「价卡授权」。规则在 ADR-0380 决定二。
+
+## 现象
+
+取证钉 `54b32c1b8`。接受时固定的闭包快照（`adoptedDocument`）带采用的文档种类与版本、形态、结算政策、信用依据与产品底座，没有销售价格来源。结算凭回指读这份闭包找结算账户（适配器里的 `AdoptedSettlementTerms`），读不到合同说的价。
+
+## 要做的
+
+1. **固定。** 一份已固定的解析采用了哪一版合同，读出的就是那一版的销售价格约定；合同之后发新版，已固定的解析不改口。办法二选一，由实现定：整份写进快照，或按快照里固定下来的那一版点读正文。两种在 `adoptedDocument` 上都有先例；选之前先看读回的门（ADR-0380「起草能力边界」写明没看）。
+2. **读口。** 结算顺着找结算账户的同一条链多取一格。答复分得开三种：一份有序列表；显式不计销售价；这一版合同没有销售价格约定（旧规范化版本）。三种不合并，也不拿空列表顶。
+3. **旧快照。** 没有这一格的旧快照读出来是第三种，不报错。
+
+## 三类
+
+全部是机制。
+
+## 完成判据
+
+- 委托接受之后合同发了新一版、列表不同：按原回指读到的仍是旧列表。
+- 三种答复各有一条测试；跨租户读不到。
+- 领域包不依赖 HTTP 与 `pgx`；结算一侧只经它自己的消费侧端口读。
+- `UC-PC-002`「给开发的交接」里讲销售价格约定的那一段随之删去或改成现状。
+
+## Comments
+
+- 2026-11-12：由票 15 拆出。解析键上的锚点是登记行上的一个时刻（ADR-0380 越权风险点 2）：一位已登记的客户发了新一版合同，新委托能不能采用到它，取决于冻结着的 `product-strategy-boundary/06`，不在本票。
