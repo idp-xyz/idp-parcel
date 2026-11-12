@@ -1,0 +1,64 @@
+/* 「新增往来单位」登记视图的排法（票 business-party-redesign/11）：左边一列表单，右边一栏「名录里相近的单位」，底部一条
+   固定的动作条。按正文区此刻的宽度定，不按视口——侧栏可以拖宽，同一个视口下正文区的宽并不固定。 */
+.business-party-create-body {
+  container: business-party-create / inline-size;
+  padding: 16px 24px 24px;
+  /* 与底部动作条一样留出滚动条的位置：两边可用的宽度相同，表单的左缘、右栏的右缘才与动作条里文字、按钮的左右缘在同一条
+     竖线上。 */
+  scrollbar-gutter: stable;
+}
+
+/* 行与行之间的空隙用各块自己的下外边距，不用 row-gap：宽处右栏跨着很多行（见下），多出来的空行高为零，有 row-gap 的话每
+   一条空行还要占一份间隙，表单底下会多出一截空白。 */
+.business-party-create-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 720px);
+  justify-content: center;
+  align-items: start;
+}
+
+.business-party-create-wrap > * {
+  grid-column: 1;
+  margin-bottom: 12px;
+}
+
+.business-party-create-wrap > *:last-child {
+  margin-bottom: 0;
+}
+
+/* 相近单位那一栏在文档里排在「单位身份」那张卡的后面：窄处只有一列，它就紧跟在人正在填的名称与编码下面，不沉到表单底下；
+   宽处挪到第二列、从头一行跨到底，滚动时粘在正文区顶上。跨的行数只要比左边一列的块数多就行，多出来的行是空的。 */
+@container business-party-create (min-width: 900px) {
+  .business-party-create-wrap {
+    grid-template-columns: minmax(0, 720px) clamp(260px, 28cqi, 360px);
+    column-gap: 16px;
+  }
+
+  .business-party-create-similar {
+    grid-column: 2;
+    grid-row: 1 / span 24;
+    margin-bottom: 0;
+    position: sticky;
+    top: 16px;
+  }
+}
+
+/* 动作条自己不滚：overflow 设成 hidden 只为让 scrollbar-gutter 在它身上生效（留位置的规则只对会裁溢出的盒子起作用）。 */
+.business-party-create-footer {
+  container: business-party-create-footer / inline-size;
+  padding: 12px 24px;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* 动作条里的内容与正文同宽：只有一列时是表单那一列，两列时算上右栏与间隙。 */
+.business-party-create-footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+@container business-party-create-footer (min-width: 900px) {
+  .business-party-create-footer-inner {
+    max-width: calc(720px + 16px + clamp(260px, 28cqi, 360px));
+  }
+}

@@ -88,6 +88,7 @@ import {
   statusCountsUnderConditions,
   tallyPartyRelationships,
   type PartyRelationshipTallies,
+  type PartyTileKind,
 } from './business-parties-workbench';
 import { EmptyState } from '../../components/states';
 import { CountryLabel } from '../refdata-labels';
@@ -437,6 +438,13 @@ const registerHeadings: Record<RegisterPageBook, { title: string; subtitle: stri
   },
 };
 
+// 整页登记视图左上角那枚返回钮的字：退出后回到的是进来之前停着的那个视图，钮上就叫它的名字，不一律叫「返回列表」。
+const registerReturnLabels: Record<Book, string> = {
+  identities: '返回名录',
+  relationships: '返回合作关系',
+  network: '返回我方关联',
+};
+
 // 列表视图里就地开着的表单有没提交的输入、又要被收掉时问的那句话。
 const rosterDraftDiscardNote = '有内容还没有保存，离开名录后填写的内容不会保留。';
 const relationshipFormDiscardNote = '合作关系登记还没有保存，离开后填写的内容不会保留。';
@@ -473,6 +481,8 @@ function RegisterForms({
   onDeactivated,
   preset,
   reportUnsaved,
+  onCancelPartyRegistration,
+  tileKindOf,
 }: {
   register: RegisterPageBook;
   /** 页面持有的参与方列表答案：停用表单参与方那一册取它，不另读（票 13 第 5 条）。 */
@@ -484,6 +494,10 @@ function RegisterForms({
   /** 深链带来的停用预填。 */
   preset: DeactivationPreset | null;
   reportUnsaved: Record<BusinessPartyRegister, (unsaved: boolean) => void>;
+  /** 新增往来单位那张表单动作条里的「取消」：与页头的返回钮同一件事，有没提交的输入时页面先问。 */
+  onCancelPartyRegistration: () => void;
+  /** 一家单位的图标块（与名录的行同一个算法），新增表单旁「名录里相近的单位」一栏按它画。 */
+  tileKindOf: (partyId: string) => PartyTileKind;
 }) {
   const seen = useVisited(register);
   return (
@@ -494,6 +508,8 @@ function RegisterForms({
             knownParties={knownParties}
             onRegistered={onPartyRegistered}
             onUnsavedChange={reportUnsaved['business-party']}
+            onCancel={onCancelPartyRegistration}
+            tileKindOf={tileKindOf}
           />
         </div>
       ) : null}
@@ -637,7 +653,7 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 登记从页头进：「建立合作关系」「新增往来单位」两枚按钮位置固定、不随视图换，停用收进旁边的「更多」。「新增往来单位」与停用
  * 各占整页的登记视图；「建立合作关系」不换整页，落到合作关系视图、表单摆在表的上方——登一段关系时人要看得见已有的那些
  * （票 business-party-redesign/11）。三者都住在地址上（`?register=<册>`，判读在 business-parties-address.ts）：刷新仍停在
- * 原处、整页那两本之间换册只换键值不压历史，浏览器后退回列表。草稿有没提交的输入时，页内会把表单收掉的动作（「返回列表」、
+ * 原处、整页那两本之间换册只换键值不压历史，浏览器后退回列表。草稿有没提交的输入时，页内会把表单收掉的动作（左上角的返回钮、
  * 「取消」、换视图、去另一本册）先确认，刷新与关页由 beforeunload 拦；浏览器后退不拦——拦它得改写历史栈，壳层按 hashchange
  * 记每张标签的地址，改写会让两边对不上。
  *
@@ -1020,7 +1036,7 @@ export function BusinessPartiesPage() {
         <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-idpxyz-border px-6 py-3">
           <Button variant="ghost" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            返回列表
+            {registerReturnLabels[chosenBook]}
           </Button>
           <div className="min-w-0">
             <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{heading.title}</h1>
@@ -1049,6 +1065,8 @@ export function BusinessPartiesPage() {
           onDeactivated={parties.retry}
           preset={preset}
           reportUnsaved={reportUnsaved}
+          onCancelPartyRegistration={requestLeaveRegister}
+          tileKindOf={tileKindOf}
         />
         <ConfirmDialog
           renderFooter={confirmDialogFooter}
