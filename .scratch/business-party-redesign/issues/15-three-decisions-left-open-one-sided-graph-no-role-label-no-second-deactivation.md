@@ -49,7 +49,7 @@ Blocked by: 无
 - 落点：
   - 一：`party-relationship-graph.ts` 的 `relationshipGraphShapeOf`；`PartyRelationshipGraph.tsx` 按形状选列类与各件所在的列；`party-relationship-graph.css` 的 `.party-relationship-graph-toward`、`.party-relationship-graph-from`。
   - 二：`presentation.ts` 的 `partyTypeFallbackLabel`；`business-parties-workbench.ts` 的 `partyRelationshipCellOf`。
-  - 三：`identity-deactivation-form.ts` 的 `identityMayBeDeactivated`；`BusinessPartyMoreMenu`、`LegalEntityMoreMenu`。
+  - 三：`identity-deactivation-form.ts` 的 `identityMayBeDeactivated`；`BusinessPartyMoreMenu`、`LegalEntityMoreMenu`。（放错了文件——那个文件的头注写明只做编码层；[票 16](./16-entries-the-registry-is-sure-to-refuse-on-a-deactivated-identity.md) 挪到了 `identity-write-entries.ts`。）
 - ✅ 三道门退 0（tsc、node:test 1377/1377、vite build），跑在三笔都在的树上（`8e370fafb` 的内容）。前两笔没有单独跑：三笔改的文件互不相交，各自的用例只读自己那几个文件。新增的用例钉图的形状与停用入口摆不摆，「合作关系」一格的那一条改了口径。
 - ✅ 浏览器（配置操作者，视口 1734 与 1180，900 高）。看到一半时调过一次样式（见下面「中途调过一次」），所以分两段：类型一列、宽栏的图、往来单位的菜单是在调之前的那一版上看的，它与 `8e370fafb` 只差样式表里窄栏中心封顶的那一个数；窄栏的两张图（`SYN-PARTY-CARRIER-LM-01`、`SYN-PARTY-SHIPPER-05`）与公司主体的菜单是在 `8e370fafb` 上看的。`SYN-PARTY-US-01` 与 `SYN-PARTY-CN-SZ-01` 两张窄栏的图是套着临时样式量的，那条样式与落进样式表的规则相同：
   - **类型与「合作关系」一列**（1734，表格）：类型芯片是「全部 24、客户 9、供应商 2、承运商代理 3、转售 1、渠道账号持有 1、授权交付方 1、我方公司 5、未担任角色 3」。`SYN-PARTY-CARRIER-LM-01` 一行是「未担任角色 / 1 段」，右栏的图上正是一段（深圳那家公司对它担任渠道账号持有）；`SYN-PARTY-RETIRED-01`、`SYN-PARTY-FUTURE-01` 是「未担任角色 / —」。分栏时名录栏那一句同是「未担任角色」。改前这一行的样子没有在这张票里重量：旧口径的用例钉着「不担任角色、只在相对方一侧有关系的，这一格交空」。
