@@ -20,9 +20,9 @@
 本用例不执行：
 
 - 入库预报的受理与撤回（[UC-WF-003](./UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md)）。
-- 上架与其他库内移动、待检转良品或次品的状态转换：归库内作业的用例。
-- 更正已入账的收货：已入账的流水不改不删，收错了走库存差异与库存调整。
-- 开箱时实点与箱单的差额：它同属收货差异，由开箱的用例形成，结论照本用例作。
+- 上架与其他库内移动、待检转良品或次品的状态转换（[UC-WF-007](./UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md)）。
+- 更正已入账的收货：已入账的流水不改不删，收错了走库存差异与库存调整（[UC-WF-011](./UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md)）。
+- 开箱时实点与箱单的差额：它同属收货差异，由开箱（[UC-WF-008](./UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md)）形成，结论照本用例作。
 - 形成入库作业收费发生项：归收费发生项的用例，本用例只留下收货确认这一作业事实。
 - 没有预报、认不出预报的到货的登记与认领（[UC-WF-005](./UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md)）。
 
@@ -195,8 +195,8 @@
 | 收货确认口、完结口、差异结论口（货主与代录）与读口 | 未做。收货挂「作业事实登记」能力面，要定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；完结与代录挂「运营决定」能力面；货主作结论挂首方客户渠道 | PN-09 开发交接划包 |
 | 入库作业收费发生项 | CONTEXT「收费发生项」写入库作业在收货确认时按每次收货形成；本用例只把收货确认写成作业事实，发生项的形成、计量与作业属性没有写。收货行上的实点箱数是给它留的计量来源，托数与柜型本用例没有带 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md)，写成之后回填指针 |
 | 离线迟到的收货的入库时间 | 入库批次的入库时间照 CONTEXT「库存账与守恒」取入账那一刻，不取设备的发生时间；迟到的收货，库龄因此从入账那天起算 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) 写仓租时核一遍 |
-| 上架、待检的状态转换 | 收货暂存里的库存可见但不可分配；上架与状态转换没有写 | 票 [warehouse-fulfillment/08](../../../.scratch/warehouse-fulfillment/issues/08-write-the-in-warehouse-use-cases.md) |
-| 收错了怎么改；货主有异议之后 | 已入账的收货不改不删。数量、批号、库存状态收错了，或货主提了异议、仓复点之后要改账，都走库存差异与库存调整；本用例只记结论 | 票 [warehouse-fulfillment/08](../../../.scratch/warehouse-fulfillment/issues/08-write-the-in-warehouse-use-cases.md) |
+| 上架、待检的状态转换 | 收货暂存里的库存可见但不可分配；上架与状态转换写在 [UC-WF-007](./UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md)，还没有实现 | PN-09 开发交接划包 |
+| 收错了怎么改；货主有异议之后 | 已入账的收货不改不删。数量、批号、库存状态收错了，或货主提了异议、仓复点之后要改账，都以库存调整表达，写在 [UC-WF-011](./UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md)：调整可以引用收货差异与所更正的收货事实，不以结论为前提；本用例只记结论 | PN-09 开发交接划包 |
 | 接入词：作业事实类型「收货确认」，作业范围种类「仓」，运营决定种类「入库预报完结」「收货差异结论代录」，客户面能力「收货差异确认」「仓配查阅」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | `AT-WF-045`，一线作业端读可收货的预报、收货暂存库位、商品与别名 | 下发的内容、有效区间与离线边界没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 离线记下的收货到达时被答收货内容不合 | 计量单位与跟踪属性按入账那一刻的当前修订判，离线记下的收货可能整条不成立；设备怎样把这一格呈现给作业人员、怎样补齐重交，没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |

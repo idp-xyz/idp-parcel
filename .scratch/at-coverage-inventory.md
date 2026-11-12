@@ -1975,6 +1975,102 @@
 | `AT-WF-082` | 货主更新入库预报的告知各格：每次留一版，不改明细、状态与单据号，已取消或已完结的答预报状态不符 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
 | `AT-WF-083` | 运营代录告知更新：货主取自所指的预报，与货主的更新按到达先后各成一版，撤回先成立的答预报状态不符 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
 | `AT-WF-084` | 运营代录收货差异的结论：货主取自所指的差异，货主本人之后的结论取代它、被取代的照留，代录不取代任何已有的结论 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-085` | 上架照记入账：移出与移入相等、入库批次不变，事实身份重放与内容冲突 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-086` | 一次收货分几次上架，余下的留在收货暂存、可见但不可分配 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-087` | 移入的库区须与库存状态相容，移入次品库区的同笔转为次品 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-088` | 拣选位补货在同一笔里带形态转换，两头折成基本单位相等 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-089` | 所报的比账上多时照记：取得走的入账，差额成库存差异记在移入的那一格，余额不为负 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-090` | 已分配、被冻结或在盘点中的数量不被移走，其余的成库存差异 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-091` | 把货移出可分配库存不得挤占已成立的预占 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-092` | 没点名入库批次的从早到晚取，点名的只从那一格取，入库批次随货移入 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-093` | 整箱按箱移动，被预占或冻结的箱不入账、一箱成一份库存差异 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-094` | 停用的库位与仓照记移入的事实，不比发生时间与停用谁先 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-095` | 库内作业事实整条不成立答作业内容不合，不落册、不占事实身份 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-096` | 形态转换登记：两头折成基本单位相等才成立，取得走的整份入账、入库批次不变，其余成库存差异记在转成的那一格 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-097` | 状态转换登记只在收货暂存与退货暂存库区，只收待检转良品、待检转次品与良品转次品 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-098` | 短少登记照记观察、各成一份库存差异，库存账不变 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-099` | 次品转良品是带原因的运营决定，只在暂存库区，整份成立或整份不成立 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-100` | 次品库区里的次品转回良品分移库、状态转换、上架三步各自入账 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-101` | 取得走多少按入账那一刻的账判，按到达先后串行，不按设备的发生时间 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-102` | 库内作业事实只在操作者面查阅，货主经流水读口看到入账结果 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-103` | 一个仓都没登记时库内各写口答查无所指的仓，代理仓答仓不受理 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-104` | 库内作业各口的设备、授予、自带身份格与准入范围 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-105` | 部署开关关着时库内作业各登记口、次品转良品口与读口不提供业务答复，其他上下文答复不变 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-106` | 货主提交加工指令进入待加工：组成版本受理时固定，库存账与可用量不变、不取单据号，同一接入请求重放与来源冲突 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-107` | 加工指令的内容校验；拆解照受理；组件不在库的照受理 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-108` | 指令指名的仓没登记答查无所指的仓，代理仓答仓不受理，停用的仓照常受理 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-109` | 加工执行在同一笔流水里消耗投入、记入产出，产出形成新的入库批次，事实身份重放与内容冲突 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-110` | 一份指令执行一次：实做少于指令数量的余下不再做，多于的答作业内容不合 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-111` | 加工执行的事实整条不成立答作业内容不合，指令留在待加工 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-112` | 组件在账上不够或被占着时答库存不可用：不入账、不预支、不占事实身份，账理顺之后原样重交 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-113` | 拆解在同一笔流水里成品减、组件增，组件形成新的入库批次 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-114` | 货主撤回自己提交的指令：重放、来源冲突与指令状态不符，运营发起的答撤回不成立 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-115` | 运营作废指令必带原因，货主取自所指的指令，货主读得到是仓一侧作废的 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-116` | 作废与执行按到达先后只成立一个，不按设备的发生时间 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-117` | 运营决定发起加工指令：原因必带，货主客户账户须在本租户，决定标识重放与来源冲突 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-118` | 商品换标指令的贴上、换成与去掉，两个别名的校验，受理时不核库存 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-119` | 商品换标执行在同一笔流水里移数，入库批次与库龄不变，实做不多于指令数量 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-120` | 换标取未贴标库存时不得挤占不带别名条件的预占，已分配的答库存不可用 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-121` | 开箱一箱一笔：箱出、商品按实点入并沿用该箱的入库批次，再开同一箱答查无此箱 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-122` | 开箱的实点与箱单的差额同笔成一份收货差异，认不出的货不入账，空箱照开 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-123` | 被占着或在待出库库区的箱开箱答库存不可用，实点不成立答作业内容不合 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-124` | 停用的库位作产出或转入的目标照记，停用的仓照常受理指令、执行与开箱 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-125` | 货主读自己的指令与开箱记录，带发起途径与作废是哪一侧作的，不带操作者 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-126` | 一个仓都没登记时指令的提交、发起、执行与开箱答查无所指的仓，撤回与作废答未配置 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-127` | 加工与换标各口的客户端能力、运营决定授予、设备、作业范围与准入范围 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-128` | 部署开关关着时指令各口、执行口、开箱口与读口不提供业务答复，其他上下文答复不变 | UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md |
+| `AT-WF-129` | 运营冻结一格里的数量：库存账不变、可用量减少，决定标识重放与来源冲突 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-130` | 冻结只对可分配库存，数量不够或会违反占用规则时不成立，不挤占预占与分配 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-131` | 冻结所指的库位、商品、入库批次或箱查不到答冻结内容不合 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-132` | 冻结着的数量不被预占、移走或调减，冻结的数量始终不变 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-133` | 整箱按箱冻结，已被预占或不可分配的箱冻结不成立 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-134` | 解冻整份解除、数量回到可用量，没有部分解冻的口 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-135` | 冻结与预占并发争同一批可用量时在库存账内串行判 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-136` | 运营按格、按箱、按汇总读库存，读各项占用与流水，可用量与余额对得上 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-137` | 货主读自己的在库量、占用、可用量与流水，不带库位与冻结的原因，读不到别的货主的 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-138` | 库龄按仓的业务时区计日，没登记答未配置；开箱转入与加工产出各自的起算 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-139` | 一个仓都没登记时冻结答查无所指的仓、解冻答未配置；读口不把代理仓的声明加进来 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-140` | 冻结与库存读口的授予与准入范围，读口不判准入范围 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-141` | 部署开关关着时冻结口、解冻口与两个面的读口不提供业务答复，其他上下文答复不变 | UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md |
+| `AT-WF-142` | 运营创建盘点进入待盘点、不加作业锁定，决定标识重放与来源冲突 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-143` | 盘点所涉库位与范围的校验，停用的库位与仓照常，代理仓答仓不受理 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-144` | 开始盘点对所涉库位上范围内没被冻结的库存加作业锁定，库存账不变 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-145` | 有未完成的拣货任务、会违反占用规则或库存已在另一份盘点中时盘点不能开始 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-146` | 作业锁定不与冻结重叠，不可分配的同样不取走，范围外的商品不加锁 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-147` | 盘点中从所涉库位移走的不入账、成库存差异，移入的照记 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-148` | 清点结果按库位登记、库存账不变，同一库位现行的一份按发生次序取最后一份，没列的格到完成时算实点为零 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-149` | 清点结果整条不成立答作业内容不合，不落册、不占事实身份 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-150` | 清点结果到达时盘点不在盘点中答盘点状态不符，按到达先后判 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-151` | 完成盘点逐格比出差额各成一份库存差异、不比入库批次，解除作业锁定，库存账不变 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-152` | 还有库位没有清点结果时完成答清点未齐，盘点留在盘点中 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-153` | 作废盘点解除作业锁定、不形成差异，已盘点的答盘点状态不符 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-154` | 清点时认不出的货只记观察，认得出而账上没有的成库存差异 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-155` | 盘点只在操作者面查阅，货主经库存读口看到作业锁定占着多少 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-156` | 一个仓都没登记时创建盘点与清点结果答查无所指的仓，开始、完成与作废答未配置 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-157` | 盘点各口的授予、设备、作业范围、自带身份格与准入范围 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-158` | 部署开关关着时盘点各口不提供业务答复，其他上下文答复不变 | UC-WF-010-COUNT-STOCK.md |
+| `AT-WF-159` | 运营提交库存调整进入待批准，库存账与占用不变，调整标识重放与来源冲突 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-160` | 库存调整指名的仓没登记答查无所指的仓，代理仓答仓不受理，停用的仓照常 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-161` | 库存调整的行照册不成立答调整内容不合，整份不落 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-162` | 调减的余额不够、调增归不出入库批次答调整内容不合，被占着的到批准时再判 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-163` | 库存调整经批准后各行同笔以调减、调增、销毁流水入账，记下两个身份与所据的规则修订 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-164` | 调增不另起入库批次，归哪一个照点名、同库位同格、同批号、同商品的次序；更正批号保留入库时间 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-165` | 批准时照那一刻的账重判，被占着、已移走或库位停用的整份不入账、留在待批准 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-166` | 销毁必带货主授权的依据引用，批准后以销毁流水出账，货主在流水读口看得到 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-167` | 整箱的调减、销毁与调增按箱入账，调增只对在这个仓在过库的箱 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-168` | 批准库存差异：盘点差异以盘盈、盘亏，其余以调增、调减流水入账，照形成时记下的格与差额 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-169` | 库存差异批准时已不成立的留在待处理；驳回必带原因、不改账；状态不符与重放 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-170` | 批准职责规则没登记时批准答未配置、不自动调账，驳回照常 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-171` | 批准职责规则按租户登记、只追加修订，登记不判准入范围 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-172` | 规则写明须不同主体时提交人批准自己的那一份答职责规则不放行，两个身份每一笔都记下 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-173` | 建账导入的批准与驳回走同一套口，入账与重判照 UC-WF-006 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-174` | 过了处理时限的差异只在读口标出、不自动处理，时限按经过的时间算 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-175` | 库存调整引用收货差异只作留痕；代录的已确认被货主本人改成有异议时，已入账的调整不回退 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-176` | 库存差异与库存调整只在操作者面查阅，货主经流水读口看到入账结果 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-177` | 同一份上的批准与驳回串行判，争同一格的两份调整后批准的照那一刻的账 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-178` | 一个仓都没登记时提交库存调整答查无所指的仓，批准、驳回与规则登记答未配置 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-179` | 库存调整各口的授予、自带身份格与准入范围 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-180` | 部署开关关着时库存调整的提交、批准、驳回、规则登记口与读口不提供业务答复，其他上下文答复不变 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2277,3 +2373,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-03 追记（票 company-subject-ux/05，ADR-0359）：UC-PC-001 新立 `AT-PC-078`（法人资料的监管登记号、收款账户与多语言开票抬头：登记 / 重放 / 同修订改明细冲突、（币种，账号）与语言重复拒收、目录外币种在接入拒、旧修订读作缺席不回填、`资料不全`判据不变、快照 LEP-4 与旧形状字节不变、0044 在有数据的库上可施加），领域、真库快照与登记册、在线口译装与受控 CLI 用例点名，入①，PC 加 1，②③④不变。总览计数未重算，由推送方重算。
 
 2026-11-12 追记（票 warehouse-fulfillment/07，ADR-0375）：`warehouse-fulfillment` 此前没有 UC，新立 UC-WF-001 至 UC-WF-006（主数据与入库），`AT-WF-001`–`084`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
+
+2026-11-12 追记（票 warehouse-fulfillment/08）：新立 UC-WF-007 至 UC-WF-011（库内作业、加工与商品换标、冻结与库存查阅、盘点、库存差异与库存调整），`AT-WF-085`–`180`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
