@@ -1,11 +1,10 @@
+import { refPageHash } from '../party/ref-links';
 import type { AcceptanceTaskRecord } from './api';
 import { settlementReasonOf, stallReasonOf } from './stall-reasons';
 
 // 受理任务「最近一次没能推进」那一条在运单详情上怎么说（ADR-0380 决定五，票 declared-goods-lines/24）：停因带上结算的细原因与
-// 这一版申报的服务产品，再说谁来续办。「受理进度」与「受理前财务控制」两处读同一份，免得一处说没有在用价卡、另一处只说缺登记。
+// 这一版申报的服务产品，再说谁来续办。「受理进度」与「受理前财务控制」读同一份，免得一处说没有在用价卡、另一处只说缺登记。
 // 纯函数，node:test 直接钉。
-
-export const PRICE_CARD_CATALOG_HASH = '#/price-card-catalog';
 
 /** 续办方，领域 ResumePath 的全部原词；与 Go 源对得上由 stall-reasons.contract.test.ts 核。 */
 export const knownResumePaths = [
@@ -33,6 +32,9 @@ export interface LastAttemptView {
   resume?: ResumeNote;
 }
 
+// 等运营登记那一族停因的句尾，照 stall-reasons.ts 词表的写法。续办另起一句时，它与「…登记后自动续办」说的是同一件事。
+const REGISTRATION_WAIT_TAIL = '，等运营登记';
+
 function isResumePath(word: string | undefined): word is ResumePath {
   return (knownResumePaths as readonly string[]).includes(word ?? '');
 }
@@ -52,7 +54,11 @@ function resumeNoteOf(task: AcceptanceTaskRecord, priceCardSide: boolean): Resum
       // 估价按提交的接收时点取卡：只从现在起生效的卡解不开这一单，所以要写明生效期得覆盖提交时点。别的登记（授权规则、财务
       // 控制策略、估价采用）不在价格表里，指过去是指错地方。
       return priceCardSide
-        ? { path, text: '登记一张生效期覆盖提交时点的价卡后自动续办', link: { href: PRICE_CARD_CATALOG_HASH, label: '去价格表' } }
+        ? {
+            path,
+            text: '登记一张生效期覆盖提交时点的价卡后自动续办',
+            link: { href: refPageHash('price-card'), label: '去价格表' },
+          }
         : { path, text: '运营登记后自动续办' };
     case 'INTERNAL_RETRY':
       return { path, text: '系统会自动重试' };
@@ -65,25 +71,33 @@ function resumeNoteOf(task: AcceptanceTaskRecord, priceCardSide: boolean): Resum
   }
 }
 
-/** 没有处理尝试时答 null。 */
-export function lastAttemptOf(task: AcceptanceTaskRecord): LastAttemptView | null {
-  const reasonCode = task.lastAttemptReason;
-  const settlementCode = task.lastAttemptSettlementReason;
+/**
+ * 没有处理尝试（两格都缺席或是空串）时答 null。`resume: false` 给不另起续办一行的页：停因整句说全，不带续办那一截。
+ *
+ * 服务产品只接在财务控制那一步的停因上：它说的是哪个产品估不出价，接到等客户补充、等人工复核上只是噪声，那几种的写法照旧
+ * （ADR-0380 决定五）。
+ */
+export function lastAttemptOf(task: AcceptanceTaskRecord, options: { resume?: boolean } = {}): LastAttemptView | null {
+  const withResume = options.resume !== false;
   const product = task.lastAttemptServiceProduct ? `（服务产品 ${task.lastAttemptServiceProduct}）` : '';
-  if (settlementCode) {
-    const settlement = settlementReasonOf(settlementCode);
+  if (task.lastAttemptSettlementReason) {
+    const settlement = settlementReasonOf(task.lastAttemptSettlementReason);
     const detail = `${settlement.text}${product}`;
     const view: LastAttemptView = {
       text: `${settlement.estimate ? '估价没形成' : '财务控制没形成'}：${detail}`,
       financialStall: detail,
     };
-    const resume = resumeNoteOf(task, settlement.priceCardSide);
+    const resume = withResume ? resumeNoteOf(task, settlement.priceCardSide) : undefined;
     return resume ? { ...view, resume } : view;
   }
-  if (reasonCode === undefined) return null;
-  const stall = stallReasonOf(reasonCode);
-  const text = `${stall.text}${product}`;
-  const view: LastAttemptView = stall.financialControl ? { text, financialStall: text } : { text };
-  const resume = resumeNoteOf(task, false);
-  return resume ? { ...view, resume } : view;
+  if (!task.lastAttemptReason) return null;
+  const stall = stallReasonOf(task.lastAttemptReason);
+  const resume = withResume ? resumeNoteOf(task, false) : undefined;
+  const reasonText =
+    resume?.path === 'OPERATOR_REGISTRATION' && stall.text.endsWith(REGISTRATION_WAIT_TAIL)
+      ? stall.text.slice(0, -REGISTRATION_WAIT_TAIL.length)
+      : stall.text;
+  if (!stall.financialControl) return resume ? { text: reasonText, resume } : { text: reasonText };
+  const text = `${reasonText}${product}`;
+  return resume ? { text, financialStall: text, resume } : { text, financialStall: text };
 }

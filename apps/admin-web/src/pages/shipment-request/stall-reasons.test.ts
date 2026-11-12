@@ -67,7 +67,16 @@ test('处理尝试上的结算细原因（不带前缀）查同一张 `SA-` 表�
   deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').priceCardSide, false);
   deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').estimate, true);
   deepEqual(settlementReasonOf('CONTROL_POLICY_NOT_CONFIGURED').estimate, false);
-  // 币种对不上登一张卡解不开，不归价卡一侧。
-  deepEqual(settlementReasonOf('ESTIMATE_CURRENCY_MISMATCH').priceCardSide, false);
+  // 价卡一侧整份钉住（ADR-0380 决定一）：多一种就会把人指去价格表登一张解不开它的卡，少一种就少给一条该给的路。
+  deepEqual(
+    knownSettlementStallCodes.filter((code) => settlementReasonOf(code.replace(/^SA-/, '')).priceCardSide).sort(),
+    [
+      'SA-ESTIMATE_NOT_POSITIVE',
+      'SA-ESTIMATE_PRICE_CARD_CONFLICT',
+      'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED',
+      'SA-ESTIMATE_TRIAL_NEGATIVE',
+      'SA-ESTIMATE_TRIAL_WITHOUT_TOTAL',
+    ],
+  );
   deepEqual(settlementReasonOf('SOMETHING_NEW'), { code: 'SOMETHING_NEW', text: 'SOMETHING_NEW', known: false, estimate: false, priceCardSide: false });
 });

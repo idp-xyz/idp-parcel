@@ -3,8 +3,9 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { AcceptanceTaskRecord } from './api';
 import { lastAttemptOf } from './last-attempt';
 
-// 本文件钉运单详情上「最近处理结果」与「谁来续办」的写法（ADR-0380 决定五）：带与不带结算细原因、带与不带服务产品、续办方各词
-// （等运营登记分价卡一侧与别处、内部重试、等客户补充照旧、复核与授权处置）、续办方缺席或认不得、任务已不在运行、认不得的码。
+// 本文件钉运单详情上「最近处理结果」与「谁来续办」的写法（ADR-0380 决定五）：带与不带结算细原因、带与不带服务产品（只接在财务
+// 控制那一步）、续办方各词（等运营登记分价卡一侧与别处、内部重试、等客户补充照旧、复核与授权处置）、续办另起一句时停因不重说
+// 等运营登记、不要续办的页、续办方缺席或认不得、任务已不在运行、认不得的码。
 
 const running = (extra: Partial<AcceptanceTaskRecord>): AcceptanceTaskRecord => ({ state: 'RUNNING', ...extra });
 
@@ -16,8 +17,9 @@ const priceCardWait = {
 
 const registrationWait = { path: 'OPERATOR_REGISTRATION', text: '运营登记后自动续办' };
 
-test('没有处理尝试：答 null', () => {
+test('没有处理尝试：答 null；空串同缺席', () => {
   equal(lastAttemptOf({ state: 'RUNNING' }), null);
+  equal(lastAttemptOf(running({ lastAttemptReason: '', lastAttemptSettlementReason: '', lastAttemptResumePath: 'INTERNAL_RETRY' })), null);
   equal(lastAttemptOf({ state: 'COMPLETE', lastAttemptContinuation: 'CONT-abc', lastAttemptResumePath: 'INTERNAL_RETRY' }), null);
 });
 
@@ -81,16 +83,17 @@ test('等运营登记而登记不在价卡一侧：不说登价卡，也不链�
     ),
     { text: '估价没形成：这户没有登记受理前估价采用', financialStall: '这户没有登记受理前估价采用', resume: registrationWait },
   );
+  // 续办另起一句说了登记后续办，停因就不再重说「等运营登记」。
   deepEqual(lastAttemptOf(running({ lastAttemptReason: 'REJECTION_AUTHORITY_RULES_NOT_CONFIGURED', lastAttemptResumePath: 'OPERATOR_REGISTRATION' })), {
-    text: '拒绝授权规则未配置，等运营登记',
+    text: '拒绝授权规则未配置',
     resume: registrationWait,
   });
 });
 
-test('不带结算细原因：停因照票 21 的译法；带服务产品时接在后面', () => {
+test('不带结算细原因：停因照票 21 的译法，续办另起一句时去掉句尾的等运营登记；停在财务控制时带服务产品', () => {
   deepEqual(lastAttemptOf(running({ lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED', lastAttemptResumePath: 'OPERATOR_REGISTRATION' })), {
-    text: '财务控制缺一项登记，等运营登记',
-    financialStall: '财务控制缺一项登记，等运营登记',
+    text: '财务控制缺一项登记',
+    financialStall: '财务控制缺一项登记',
     resume: registrationWait,
   });
   deepEqual(
@@ -102,10 +105,47 @@ test('不带结算细原因：停因照票 21 的译法；带服务产品时接�
       }),
     ),
     {
-      text: '财务控制缺一项登记，等运营登记（服务产品 SYN-PROD-01）',
-      financialStall: '财务控制缺一项登记，等运营登记（服务产品 SYN-PROD-01）',
+      text: '财务控制缺一项登记（服务产品 SYN-PROD-01）',
+      financialStall: '财务控制缺一项登记（服务产品 SYN-PROD-01）',
       resume: registrationWait,
     },
+  );
+  // 续办方缺席、或任务已不在运行：没有续办那一句，停因整句说全。
+  deepEqual(lastAttemptOf(running({ lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED' })), {
+    text: '财务控制缺一项登记，等运营登记',
+    financialStall: '财务控制缺一项登记，等运营登记',
+  });
+  deepEqual(
+    lastAttemptOf({ state: 'COMPLETE', lastAttemptReason: 'REJECTION_AUTHORITY_RULES_NOT_CONFIGURED', lastAttemptResumePath: 'OPERATOR_REGISTRATION' }),
+    { text: '拒绝授权规则未配置，等运营登记' },
+  );
+});
+
+test('不另起续办一行的页（resume: false）：不带续办，停因整句说全', () => {
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED',
+        lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+        lastAttemptServiceProduct: 'SYN-PROD-01',
+      }),
+      { resume: false },
+    ),
+    {
+      text: '财务控制缺一项登记，等运营登记（服务产品 SYN-PROD-01）',
+      financialStall: '财务控制缺一项登记，等运营登记（服务产品 SYN-PROD-01）',
+    },
+  );
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED',
+        lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+        lastAttemptSettlementReason: 'ESTIMATE_PRICE_CARD_NOT_CONFIGURED',
+      }),
+      { resume: false },
+    ),
+    { text: '估价没形成：没有在用价卡', financialStall: '没有在用价卡' },
   );
 });
 
@@ -126,7 +166,7 @@ test('内部重试：说系统会自动重试；币种对不上不归价卡一�
   );
 });
 
-test('等客户补充照旧：不另起续办那一句', () => {
+test('等客户补充照旧：不另起续办那一句，也不接服务产品', () => {
   deepEqual(
     lastAttemptOf(
       running({
@@ -135,15 +175,17 @@ test('等客户补充照旧：不另起续办那一句', () => {
         lastAttemptServiceProduct: 'SYN-PROD-FBA-01',
       }),
     ),
-    { text: '等客户补充（服务产品 SYN-PROD-FBA-01）' },
+    { text: '等客户补充' },
   );
 });
 
-test('等人工复核与等授权处置：说由哪个角色动手', () => {
-  deepEqual(lastAttemptOf(running({ lastAttemptReason: 'MANUAL_REVIEW_PENDING', lastAttemptResumePath: 'MANUAL_REVIEW' })), {
-    text: '等人工复核',
-    resume: { path: 'MANUAL_REVIEW', text: '复核角色记下复核后续办' },
-  });
+test('等人工复核与等授权处置：说由哪个角色动手，不接服务产品', () => {
+  deepEqual(
+    lastAttemptOf(
+      running({ lastAttemptReason: 'MANUAL_REVIEW_PENDING', lastAttemptResumePath: 'MANUAL_REVIEW', lastAttemptServiceProduct: 'SYN-PROD-01' }),
+    ),
+    { text: '等人工复核', resume: { path: 'MANUAL_REVIEW', text: '复核角色记下复核后续办' } },
+  );
   deepEqual(lastAttemptOf(running({ lastAttemptReason: 'AUTHORIZED_DISPOSITION_PENDING', lastAttemptResumePath: 'AUTHORIZED_DISPOSITION' })), {
     text: '等授权处置',
     resume: { path: 'AUTHORIZED_DISPOSITION', text: '授权处置角色选定去向后续办' },

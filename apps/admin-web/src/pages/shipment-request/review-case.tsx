@@ -26,11 +26,9 @@ export function caseBusinessFields(request: ShipmentRequestDetail): DetailField[
     { label: '提交时间', value: formatInstant(request.submittedAt) },
     { label: '处理进度', value: <StatusPill code={task.state} /> },
   ];
-  const lastAttempt = lastAttemptOf(task);
-  if (lastAttempt) {
-    // 与运单详情「受理进度」读同一句（带结算细原因与服务产品）；原码留在技术详情「上次未推进原因」。
-    fields.push({ label: '上次没推进', value: lastAttempt.text });
-  }
+  // 复核页不另起「谁来续办」一行，停因得整句说全，所以不要续办那一截；原码留在技术详情「上次未推进原因」。
+  const lastAttempt = task.lastAttemptReason ? lastAttemptOf(task, { resume: false }) : null;
+  if (lastAttempt) fields.push({ label: '上次没推进', value: lastAttempt.text });
   if (request.decision) {
     fields.push({
       label: '已有决定',
@@ -59,6 +57,8 @@ export function caseTechnicalRows(request: ShipmentRequestDetail, extras: Techni
     { label: '委托状态码', value: request.state },
     { label: '判断任务状态', value: task.state },
     { label: '上次未推进原因', value: task.lastAttemptReason ?? '' },
+    { label: '结算未形成原因码', value: task.lastAttemptSettlementReason ?? '' },
+    { label: '续办方', value: task.lastAttemptResumePath ?? '' },
     { label: '续办引用', value: task.lastAttemptContinuation ?? '' },
     { label: '决定标识', value: request.decision?.decisionId ?? '' },
     ...extras,

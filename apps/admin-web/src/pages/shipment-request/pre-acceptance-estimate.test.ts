@@ -275,6 +275,12 @@ test('没有留痕：不适用说合同约定不做；停在财务控制时说�
     kind: 'none',
     note: '估价没形成，停在：财务控制缺一项登记，等运营登记。',
   });
+  // 续办另起一句说了登记后续办，停因不再重说等运营登记。
+  deepEqual(estimateBlockStateOf(empty, current, stalledOn('FINANCIAL_CONTROL_NOT_CONFIGURED', { lastAttemptResumePath: 'OPERATOR_REGISTRATION' })), {
+    kind: 'none',
+    note: '估价没形成，停在：财务控制缺一项登记。',
+    resume: { path: 'OPERATOR_REGISTRATION', text: '运营登记后自动续办' },
+  });
   deepEqual(estimateBlockStateOf(empty, current, stalledOn('SA-NEW_REASON')), { kind: 'none', note: '估价没形成，停在：SA-NEW_REASON。' });
   deepEqual(estimateBlockStateOf(empty, current, stalledOn('MANUAL_REVIEW_PENDING')), { kind: 'none', note: '这张运单还没有受理前估价。' });
   deepEqual(estimateBlockStateOf(empty, current, null), { kind: 'none', note: '这张运单还没有受理前估价。' });
