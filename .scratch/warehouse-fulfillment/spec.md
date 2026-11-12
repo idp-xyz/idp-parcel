@@ -32,7 +32,7 @@ PN-09 的机制半边可以开工：切片已立，仓储作业费的计价与�
 | [05](./issues/05-stand-up-the-pn-09-slice-and-make-warehouse-fulfillment-an-optional-capability.md) | 立 PN-09 切片，定「可选能力」的口径（ADR-0375） | 04 | resolved |
 | [06](./issues/06-decide-how-warehouse-charge-occurrences-are-priced-and-settled.md) | 仓储作业费的计价与结算（ADR-0377） | — | resolved |
 | [07](./issues/07-write-the-inbound-use-cases.md) | `UC-WF`：主数据与入库 | 05 | resolved |
-| [08](./issues/08-write-the-in-warehouse-use-cases.md) | `UC-WF`：库内作业、冻结、盘点与差异 | 05 | ready-for-agent |
+| [08](./issues/08-write-the-in-warehouse-use-cases.md) | `UC-WF`：库内作业、冻结、盘点与差异 | 05 | in-progress |
 | [09](./issues/09-write-the-outbound-use-cases.md) | `UC-WF`：出库请求到出库确认 | 05；平台备货一节另等 declared-goods-lines/01 进 main | ready-for-agent |
 | [10](./issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) | `UC-WF`：退货、代理仓与收费发生项 | 05、06、07、08、09 | ready-for-agent |
 | [11](./issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) | 首方客户面、一线作业端与接入词表 | 07、08、09、10 | ready-for-agent |

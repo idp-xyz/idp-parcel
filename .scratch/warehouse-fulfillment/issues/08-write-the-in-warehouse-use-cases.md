@@ -1,7 +1,7 @@
 # 08 写 `UC-WF`：库内作业、冻结、盘点与差异
 
 Category: docs
-Status: ready-for-agent
+Status: in-progress（2026-11-12 认领，分支 `cursor/wf-in-warehouse`，工作树 `idp-parcel-wf-in-warehouse`）
 Blocked by: 05
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「库存账」「占用与可用量」「盘点、差异与调整」词条，「库存账与守恒」「占用、预占与分配」「盘点、差异与调整」规则，与「加工」「盘点」「库存差异」「冻结」生命周期。
