@@ -1,8 +1,8 @@
 # 18 受理前估价的留痕可读：用了哪张卡、按哪个服务产品
 
 Category: enhancement
-Status: needs-triage
-Blocked by: 无
+Status: in-progress
+Blocked by: 19、20、21（「要定的」两项已由 [ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 定下，实现拆成这三张）
 
 依据：ADR-0179 决定六（估价连同价卡版本、逐件评价标识与版本清单随控制结果留痕）；[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定三（选卡按申报的服务产品）；票 17 评审。
 
@@ -20,3 +20,12 @@ Blocked by: 无
 ## 不做的
 
 改估价的算法；按票计价（ADR-0378 越权风险点 8）。
+
+## 决定（2026-11-11）
+
+按头部系统的做法定，写成 [ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)：预估运费在订单详情上显示，带所用的模板与重量；下单时按估算冻结；预估与实际分开。
+
+- 留痕补记选卡用的服务产品、逐件计价重量与费用行，只作留痕。
+- 结算按委托交出运营读口：逐提交版本的估价与它的冻结或信用暴露。
+- 受理判断的财务控制结论由小包托运在委托详情上交出，不带金额。
+- 管理台运单详情显示「受理前财务控制」一块，两侧各交各的、页面拼。只对运营，不对客户。

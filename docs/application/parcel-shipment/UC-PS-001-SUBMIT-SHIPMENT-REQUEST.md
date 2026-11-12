@@ -331,6 +331,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| 委托详情交出最近一次受理判断记下的接受前财务控制结论（结论、各项满足或受限与依据、判断时点），不带金额（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定三） | 结论只在审核队列交出，委托详情不交 | 票 declared-goods-lines/20 |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 已补：提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，接受链判新版本之前先按原关联放掉旧版本已成立的占用；放不掉停在 `SUPERSEDED_CONTROL_RELEASE` 内部重试，新版本不判 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」，停在`等待受控补充`那一格 | 已补：形成决定处停进`等待受控补充`、暂停落库之后，按原关联放掉停住那一版已成立的占用；放不掉不撤销暂停；这一路的补偿引用不透出、不持久，兜底是补件之后接受链开头对同一笔再请求一次，以及撤回逐版释放，提供方都按幂等答原释放 | [code/72](../../../.scratch/docs-consistency/code/72-a-customer-supplement-pause-releases-the-paused-versions-occupation.md) |
 | `AT-PS-035` 同一句，被取代版本在终局路径上那一格 | 已补：自动拒绝、主动拒绝与授权处置都放这份委托各版已成立的占用，不只是当前版本；一版放不掉不挡其余各版，补偿续办，不回滚决定 | [code/73](../../../.scratch/docs-consistency/code/73-terminal-paths-release-every-superseded-versions-occupation.md) |

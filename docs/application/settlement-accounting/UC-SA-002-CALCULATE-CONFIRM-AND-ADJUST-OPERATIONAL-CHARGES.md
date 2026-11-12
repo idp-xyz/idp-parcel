@@ -124,6 +124,7 @@
 - 接受失败、拒绝、放弃或冻结依据失效时形成 `已释放`；接受已经成立但响应或事件投递失败时保留合法冻结并等待查询/补偿。
 - `已冻结 → 已扣费` 只在费用确认和业务关联条件满足时发生；最终费用高于冻结时完整形成费用并留下差额，不截断金额。
 - 合同明确“无财务控制”时保存商业不适用依据，不制造零金额冻结或虚假信用通过。
+- 估价留痕另记选卡用的服务产品、逐件计价重量与费用行，只作留痕；运营按委托读各提交版本的估价与它的冻结或信用暴露（状态、金额、时刻），不对客户交出。补记之前形成的留痕答「未记」（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)）。
 
 ## 一致性、幂等与并发
 
@@ -236,6 +237,7 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 包裹的 `SELL` 客户费用与受理前估价按合同声明的销售价格来源选卡（SA CONTEXT 接受前财务控制那一条，[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定二、三、七） | 未做：两条发起路仍取采用册上的计价范围（`adoption.PricingScope()`），评价请求只带一个范围；没有从商业解析读销售价格约定的读口；估价整票一张卡、留痕不逐件带范围；停因不逐个范围记，续办按单个范围收窄；确认事实的主要计费范围取请求上那一个范围；两本采用册的登记面仍必填计价范围，「采用行没有计价范围」这一格发起停因没有；合同声明不计销售价的两格没有 | [commercial-four-module-requirements/19](../../../.scratch/commercial-four-module-requirements/issues/19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md)，先做 [17](../../../.scratch/commercial-four-module-requirements/issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) 与 [18](../../../.scratch/commercial-four-module-requirements/issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) |
+| 接受前财务控制：估价留痕补记服务产品、计价重量与费用行，按委托的运营读口（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)） | 留痕只记价卡、评价标识、版本清单与合计；没有任何读口交出留痕、冻结或信用暴露 | 票 declared-goods-lines/19 |
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围（对正文没有销售价格约定的旧规范化版本合同） | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 | 已接受委托下某件包裹取消或失败时，释放它在接受前占用里的份额（CONTEXT「取消或失败时显式释放」的包裹粒度） | 转出册与账本已能表达部分转出、余额可放；但 `parcel-shipment` 在委托已接受之后不再请求释放占用，没有触发口，该份额一直占着 | [ADR-0343](../../adr/0343-a-confirmed-charge-converts-its-parcels-pre-acceptance-occupation-in-the-confirming-transaction.md) 决定八 |
 | CONTEXT 费用来源里的仓储作业收费发生项，以及仓储作业收费发生项那一路的发起、仓储计费采用、形成与确认、更正版本各条（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定七，[ADR-0377](../../adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md) 决定八至十一） | 未做：没有消费「仓储作业收费发生项已形成」信封的门，也没有仓储这一路的 SELL 请求身份；仓储计费采用册、它的登记口与随登记交出的「评价参数已登记」没有，停因「仓储计费没采用」与这一路的发起停办没有；内置确认依据只有`有效交付已终局`，`仓储作业已发生`未加，形成那一笔也不记它；更正版本的取代、计价纠错调整与全额贷记没有编排；费用调整的编排（`RecordChargeAdjustmentHandler`）在而入口还冻结着（[上线线与冻结清单](../../../.scratch/launch-line-freeze-2026-10-27.md)「一之二」product-strategy-boundary/22 一行），形成门 `FormChargeAdjustment` 要求计价纠错挂一份新评价，作废引起的全额贷记没有新评价、要为它开一格。计价那一侧的评价对象与仓储计费方案同样未做，见 [UC-PP-001](../parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md)「给开发的交接」。代理仓与外包仓向租户收的费没有 BUY 侧来源事实，首版不做 | 仓配切片立票时承接 |
