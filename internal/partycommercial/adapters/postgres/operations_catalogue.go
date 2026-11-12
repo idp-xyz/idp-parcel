@@ -728,7 +728,7 @@ var customerContractListed = `WITH listed AS (
                        ORDER BY binding.charge_scope_ref
                    ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
                    '[]'::json
-               ) AS bindings,` + deliveryConditionColumns + `,
+               ) AS bindings,` + deliveryConditionColumns + `,` + sellPriceArrangementColumns + `,
                ` + versionStatusCode + ` AS status_code
           FROM party_commercial.commercial_version AS version
           LEFT JOIN party_commercial.customer_contract_content AS content
@@ -759,7 +759,7 @@ var customerContractRead = catalogueRead[ports.CustomerContractCatalogueRow]{
 	binding: ports.CustomerContractPages.MustBind(versionShellColumns("rule_package_id", "customer_account_id")),
 	listed:  customerContractListed,
 	selection: versionShellSelection + `, rule_package_id, customer_account_id, content_declared_at, bindings, ` +
-		deliveryConditionSelection,
+		deliveryConditionSelection + `, ` + sellPriceArrangementSelection,
 	scan: scanCustomerContract,
 	position: func(row ports.CustomerContractCatalogueRow, sortField string) cataloguepage.Position {
 		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
@@ -776,11 +776,13 @@ func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, er
 	var declaredAt *time.Time
 	var bindingsJSON []byte
 	var delivery deliveryConditionScan
+	var sellPrice sellPriceArrangementScan
 	targets := append([]any{
 		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 	targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
 	targets = append(targets, delivery.targets()...)
+	targets = append(targets, sellPrice.targets()...)
 	if err := rows.Scan(targets...); err != nil {
 		return row, err
 	}
@@ -810,6 +812,9 @@ func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, er
 		return row, err
 	}
 	if row.DeliveryConditions, err = delivery.row(); err != nil {
+		return row, err
+	}
+	if row.SellPrice, err = sellPrice.row(); err != nil {
 		return row, err
 	}
 	return row, nil

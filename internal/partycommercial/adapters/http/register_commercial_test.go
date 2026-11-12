@@ -1085,6 +1085,12 @@ func (stub stubPublicationRegistry) SaveCustomerContractContent(
 	return stub.declaration()
 }
 
+func (stub stubPublicationRegistry) SaveContractSellPriceArrangement(
+	context.Context, domain.ContractSellPriceArrangement,
+) (ports.DeclarationSaveOutcome, error) {
+	return stub.declaration()
+}
+
 func (stub stubPublicationRegistry) SaveIntakeQualification(
 	context.Context, domain.IntakeQualificationContent,
 ) (ports.DeclarationSaveOutcome, error) {

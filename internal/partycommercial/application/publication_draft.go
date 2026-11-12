@@ -578,6 +578,13 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 		if body.DeliveryConditions != nil {
 			declarations.DeliveryConditions = deliveryConditionDeclarationOf(*body.DeliveryConditions)
 		}
+		// 销售价格约定同理：载体上没有这一层就不交这一通道，发布用例不替它补一份列表。
+		if body.SellPrice != nil {
+			declarations.SellPriceArrangement = &SellPriceArrangementDeclaration{
+				Sources:          body.SellPrice.Sources,
+				NoSellPriceBasis: body.SellPrice.NoSellPriceBasis,
+			}
+		}
 	}
 	if content.AuthorizationRule != nil {
 		// 授权规则的正文就是取消授权目录一通道（票 admin-write-faces/17）；行照载体上的原样交给发布用例，目录门在那里再过一遍。
