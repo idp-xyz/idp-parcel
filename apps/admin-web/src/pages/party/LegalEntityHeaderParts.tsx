@@ -4,7 +4,7 @@ import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primit
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
-import { identityMayBeDeactivated } from './identity-deactivation-form';
+import { identityMayBeDeactivated } from './identity-write-entries';
 import { identityLayerAbsentNote, partyNameUnknownNote, profileRevisionLabel } from './presentation';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -116,7 +116,7 @@ export function LegalEntityMoreMenu({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [deactivating, setDeactivating] = useState(false);
-  // 已经登过停用的不摆这一项（identity-deactivation-form.ts 的 identityMayBeDeactivated）；分隔线只为它画，一并不摆。
+  // 已经登过停用的不摆这一项（identity-write-entries.ts 的 identityMayBeDeactivated）；分隔线只为它画，一并不摆。
   const canDeactivate = mayWrite && identityMayBeDeactivated(row);
   return (
     <>

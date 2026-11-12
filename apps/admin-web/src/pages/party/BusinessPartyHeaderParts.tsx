@@ -11,7 +11,7 @@ import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import type { ApiResult } from '../catalogue-api';
 import { BusinessPartyDeactivationDialog } from './BusinessPartyDeactivationDialog';
-import { identityMayBeDeactivated } from './identity-deactivation-form';
+import { identityMayBeDeactivated, identityTakesRevisions } from './identity-write-entries';
 
 // 业务参与方页两册头区的件：类型标签、横幅与「更多」菜单。身份册的详情栏与对象页各摆一份同样的头区（照 LegalEntityHeaderParts.tsx，
 // 票 group-legal-entities-uiux/09：同一对象两处结构一致），件只在这里写一遍，两处各自排版。不摆生命周期步进：状态药丸
@@ -89,7 +89,7 @@ export function BusinessPartyMoreMenu({
   onOpenObjectPage?: () => void;
   /**
    * 去「更正登记信息」的编辑态。只有详情栏给：对象页的页头自己摆着这一枚按钮，菜单里不再重复。摆不摆照对象页那一枚的规则——
-   * 有写授予就摆，我方公司也摆（改的是名称，注册号那几格表单自己不摆）。
+   * 有写授予、这个身份还收新修订就摆（identityTakesRevisions），我方公司也摆（改的是名称，注册号那几格表单自己不摆）。
    */
   onCorrectIdentity?: () => void;
   /** 停用落册后回调；页面借它重取参与方册让「已停用」立刻可见。 */
@@ -100,8 +100,9 @@ export function BusinessPartyMoreMenu({
   const mayWrite = useMayWriteRegistry();
   // 停用开在本页的对话框里（票 business-party-edit-mode/01），不再送去列表页登记视图的停用表单。
   const [deactivating, setDeactivating] = useState(false);
-  // 已经登过停用的不摆这一项（identityMayBeDeactivated）；分隔线只为它画，一并不摆。
+  // 登过停用的身份上，登记册必拒的两项不摆（identity-write-entries.ts）：再停用一次、再更正一笔。分隔线只为停用那一项画，一并不摆。
   const canDeactivate = mayWrite && identityMayBeDeactivated(row);
+  const canCorrect = mayWrite && onCorrectIdentity !== undefined && identityTakesRevisions(row);
   return (
     <>
     <DropdownMenu
@@ -122,7 +123,7 @@ export function BusinessPartyMoreMenu({
         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
         复制编码
       </MenuItem>
-      {mayWrite && onCorrectIdentity ? (
+      {canCorrect ? (
         <MenuItem onSelect={onCorrectIdentity}>
           <PencilLine className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
           更正登记信息…

@@ -21,6 +21,7 @@ import {
   type PartyRelationshipListResponseBody,
 } from './api';
 import { updateOrdinalLabel } from './presentation';
+import { identityTakesRevisions } from './identity-write-entries';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
@@ -205,13 +206,20 @@ export function BusinessPartyDetailPage({
   useEffect(() => {
     if (profileEditing && grant.settled && !grant.mayWrite) onExitProfileEdit();
   }, [profileEditing, grant.settled, grant.mayWrite, onExitProfileEdit]);
+  // 登过停用的身份不再收新修订（identity-write-entries.ts 的 identityTakesRevisions）：「更正登记信息」的编辑态不开，页头那一枚
+  // 也不摆。拿着编辑态地址进来的，与上面查看者那一种同样处理——行读到了、确知不收，就清掉编辑键；行还没读到时不动。
+  const takesRevisions = row !== null && identityTakesRevisions(row);
+  const refusesRevisions = row !== null && !takesRevisions;
+  useEffect(() => {
+    if (identityEditing && refusesRevisions) onExitIdentityEdit();
+  }, [identityEditing, refusesRevisions, onExitIdentityEdit]);
   // 往来单位资料（ADR-0369）：概要、联系人与资料版本几处读同一份修订链。我方公司的资料在公司主体上，不读；法人册答出之前
   // 也先不读，免得先发一笔再认出是我方公司。
   const profiles = useBusinessPartyProfiles(partyId, false, pinned === false);
   // 编辑态（票 business-party-edit-mode/02 定了它住在对象页的地址上；版式是票 business-party-redesign/11 的）：这一页换成编辑
   // 外壳（BusinessPartyEditShell）——页头、分段的表单、底部固定的动作条，只读时的各分区都不摆。不是模态，离开前有没提交的
   // 输入先问一句。
-  const editing = identityEditing && mayWrite && row !== null;
+  const editing = identityEditing && mayWrite && takesRevisions;
   const editingProfile = profileEditing && !identityEditing && mayWrite && row !== null && !ours;
   const anyEditing = editing || editingProfile;
   // 这一次编辑是不是从名录右栏进来的（business-party-edit-origin.ts）：是，退出后回名录那张标签——它一直挂着，进来之前的分栏
@@ -364,7 +372,7 @@ export function BusinessPartyDetailPage({
                   更新资料
                 </Button>
               ) : null}
-              {mayWrite ? (
+              {mayWrite && takesRevisions ? (
                 <Button
                   size="sm"
                   variant={ours ? 'default' : 'outline'}
