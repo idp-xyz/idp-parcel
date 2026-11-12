@@ -24,51 +24,41 @@ func internalAttempt(t *testing.T, reason string, at time.Time) domain.Processin
 	return attempt
 }
 
-// Covers: UC-PS-001「已经建立委托时保持`已提交`，建立或续办独立接受判断任务并追加判断与
-// 处理尝试」— 追加是追加，第二次尝试不覆盖第一次。覆盖了就说不出这份委托卡过几轮、各卡在
-// 哪里，而用例要求未决按原因分类统计。
-func TestProcessingAttemptsAccumulateRatherThanOverwrite(t *testing.T) {
-	request := submitted(t)
+// Covers: ADR-0380 决定三——处理尝试在原因、续办方、续办引用、时刻之外另记结算的未形成原因与这一版申报的服务产品；
+// 两格都可缺，缺即那一轮没有，不代拟。
+func TestAProcessingAttemptCarriesTheSettlementReasonAndTheServiceProductOnlyWhenGiven(t *testing.T) {
+	bare := internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt)
+	if reason, present := bare.SettlementReason(); present || reason.String() != "" {
+		t.Fatalf("settlement reason = %q（present=%v），want 缺席", reason, present)
+	}
+	if bare.ServiceProduct().Declared() {
+		t.Fatalf("service product = %q，want 没申报", bare.ServiceProduct())
+	}
 
-	first, err := request.RecordProcessingAttempt(internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt))
+	entry, err := domain.NewCanonicalContentEntry(domain.RequestedServiceProductEntryName, "SYN-PROD-01")
 	if err != nil {
-		t.Fatalf("record first attempt: %v", err)
+		t.Fatalf("canonical entry: %v", err)
 	}
-	second, err := first.RecordProcessingAttempt(
-		internalAttempt(t, "RECORDED_JUDGMENTS_UNAVAILABLE", firstAttemptAt.Add(time.Hour)),
-	)
+	product := domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
+	detailed, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
+		Reason:           mustValue(t, domain.NewProcessingAttemptReason, "FINANCIAL_CONTROL_NOT_CONFIGURED"),
+		ResumePath:       domain.ResumeByOperatorRegistration,
+		Continuation:     mustValue(t, domain.NewOwnershipContinuationReference, "CONT-PRICE-CARD"),
+		AttemptedAt:      firstAttemptAt,
+		SettlementReason: mustValue(t, domain.NewSettlementNotFormedReason, "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"),
+		ServiceProduct:   product,
+	})
 	if err != nil {
-		t.Fatalf("record second attempt: %v", err)
+		t.Fatalf("new processing attempt: %v", err)
 	}
-
-	attempts := second.AcceptanceDecisionTask().ProcessingAttempts()
-	if len(attempts) != 2 {
-		t.Fatalf("attempts = %d, want 2", len(attempts))
+	if reason, present := detailed.SettlementReason(); !present || reason.String() != "ESTIMATE_PRICE_CARD_NOT_CONFIGURED" {
+		t.Fatalf("settlement reason = %q（present=%v），want ESTIMATE_PRICE_CARD_NOT_CONFIGURED", reason, present)
 	}
-	if attempts[0].Reason().String() != "COMMERCIAL_BASIS_UNAVAILABLE" {
-		t.Fatalf("first attempt = %q; the earlier attempt was overwritten", attempts[0].Reason())
+	if detailed.ServiceProduct().String() != "SYN-PROD-01" {
+		t.Fatalf("service product = %q，want SYN-PROD-01", detailed.ServiceProduct())
 	}
-	// 委托没有因为记录尝试而离开`已提交`：尝试是处理记录，不是业务决定。
-	if second.State() != domain.ShipmentRequestSubmitted {
-		t.Fatalf("state = %q, want SUBMITTED", second.State())
-	}
-}
-
-// Covers: CONTEXT 接受判断任务生命周期「判断任务 → 已完成：只有接受或拒绝决定已经越过提交
-// 边界时完成」— 已完成的任务不再累积尝试。允许追加等于让一份已决委托看起来还在处理中。
-func TestACompletedTaskRefusesFurtherAttempts(t *testing.T) {
-	decided, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
-	if err != nil {
-		t.Fatalf("decide: %v", err)
-	}
-	if !decided.AcceptanceDecisionTask().IsComplete() {
-		t.Fatal("a formed decision left the acceptance judgment task incomplete")
-	}
-
-	if _, err := decided.RecordProcessingAttempt(
-		internalAttempt(t, "RECORDED_JUDGMENTS_UNAVAILABLE", firstAttemptAt),
-	); !errors.Is(err, domain.ErrAcceptanceTaskComplete) {
-		t.Fatalf("error = %v, want ErrAcceptanceTaskComplete", err)
+	if _, err := domain.NewSettlementNotFormedReason("  "); err == nil {
+		t.Fatal("空白的结算原因不该立得起来：空白与缺席读起来一样")
 	}
 }
 

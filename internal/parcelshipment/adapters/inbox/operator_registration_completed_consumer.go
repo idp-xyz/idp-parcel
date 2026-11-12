@@ -31,8 +31,11 @@ const OperatorRegistrationCompletedEventType eventing.EventType = "party-commerc
 // operatorRegistrationCompleted 是译出来的信封内容：只有租户。登记种类在载荷里但本门不按它
 // 分派（ADR-0094 Decision 四原话「不在消费门认原因名字」）——一次登记解开的是该租户下所有停
 // 在`等待运营登记`的委托，链自己会在重跑时发现哪一格仍未配置并再次停下。
+//
+// passOver 为真：这封信说的登记解不开任何一份等运营登记的委托（计价的 BUY 方向），本门照常入账、不问队列。
 type operatorRegistrationCompleted struct {
-	tenant domain.TenantID
+	tenant   domain.TenantID
+	passOver bool
 }
 
 // OperatorRegistrationCompletedConsumer 把「参数已登记」信封译成一轮重驱：按租户取回全部停在
@@ -49,13 +52,15 @@ type operatorRegistrationCompleted struct {
 // 队列里，已入账等待的各自续办），于是这封信就是那几份的重投驱动，重投不重做已提交的工作。
 // 全部落定即入账。装配或编程错误（集合外结果、缺件）不折进未决，响亮上抛让整封 publish_failed。
 //
-// 「参数已登记」类信封不止一个发布方：party-commercial 发声明通道那几类，settlement-accounting 发结算账户那一类
-// （NewSettlementAccountRegisteredConsumer）。几封信的契约同为两键、重驱同一张队列，所以是同一扇门的几份实例，
-// 各认各的类型、各记各的账本名——共名会让 inbox 键在两个来源之间互相吞没。
+// 「参数已登记」类信封不止一个发布方：party-commercial 发声明通道那几类，settlement-accounting 发结算账户与受理前估价
+// 采用那两类，parcel-pricing 发价卡、序列与目录那一类（NewPricingParameterRegisteredConsumer）。几封信重驱同一张队列，
+// 所以是同一扇门的几份实例，各认各的类型、各记各的账本名——共名会让 inbox 键在几个来源之间互相吞没；载荷各按发布侧的
+// 契约译，译法随实例给。
 type OperatorRegistrationCompletedConsumer struct {
 	name       string
 	eventType  eventing.EventType
 	verb       string
+	decode     func([]byte) (operatorRegistrationCompleted, error)
 	transactor bentoapp.Transactor
 	store      *inbox.Store
 	queue      ports.OperatorRegistrationQueue
@@ -77,6 +82,7 @@ func NewOperatorRegistrationCompletedConsumer(
 		operatorRegistrationResumeConsumerName,
 		OperatorRegistrationCompletedEventType,
 		"advance acceptance chain on operator registration",
+		decodeOperatorRegistrationCompleted,
 		transactor, store, queue, advancer, pageSize,
 	)
 }
@@ -85,6 +91,7 @@ func newRegistrationResumeConsumer(
 	name string,
 	eventType eventing.EventType,
 	verb string,
+	decode func([]byte) (operatorRegistrationCompleted, error),
 	transactor bentoapp.Transactor,
 	store *inbox.Store,
 	queue ports.OperatorRegistrationQueue,
@@ -110,6 +117,7 @@ func newRegistrationResumeConsumer(
 		name:       name,
 		eventType:  eventType,
 		verb:       verb,
+		decode:     decode,
 		transactor: transactor,
 		store:      store,
 		queue:      queue,
@@ -131,8 +139,11 @@ func (consumer *OperatorRegistrationCompletedConsumer) Consume(
 		Store:      consumer.store,
 		Name:       consumer.name,
 		EventType:  consumer.eventType,
-		Decode:     decodeOperatorRegistrationCompleted,
+		Decode:     consumer.decode,
 		Handle: func(_ context.Context, registration operatorRegistrationCompleted) error {
+			if registration.passOver {
+				return nil
+			}
 			return consumer.redriveWaitingRequests(ctx, registration.tenant)
 		},
 		UnexpectedType: "parcel shipment inbox",

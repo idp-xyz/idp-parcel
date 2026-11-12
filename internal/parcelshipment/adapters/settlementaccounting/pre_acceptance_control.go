@@ -341,7 +341,17 @@ func assessmentFor(
 		if err != nil {
 			return psports.PreAcceptanceControlAssessment{}, err
 		}
-		return refusedAssessment(outcome, "SA-"+answer.NotFormedReason().String())
+		assessment, err := refusedAssessment(outcome, "SA-"+answer.NotFormedReason().String())
+		if err != nil {
+			return psports.PreAcceptanceControlAssessment{}, err
+		}
+		// 原因码原样另交一格（ADR-0380 决定三）：编排要把它记到处理尝试上，而它不解析 Reason 的字面。
+		if assessment.SettlementReason, err = psdomain.NewSettlementNotFormedReason(
+			answer.NotFormedReason().String()); err != nil {
+			return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: settlement not-formed reason: %v",
+				ErrUntranslatableAnswer, err)
+		}
+		return assessment, nil
 	default:
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control outcome %d",
 			ErrUntranslatableAnswer, answer.Outcome())
@@ -387,15 +397,23 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.EstimatePriceCardNotConfigured,
 		saapplication.EstimatePriceCardConflict,
-		saapplication.EstimateSubmissionNotVisible,
+		saapplication.EstimateTrialWithoutTotal,
+		saapplication.EstimateNotPositive,
+		saapplication.EstimateTrialNegative:
+		// 价卡、序列或目录这一侧登记解得开（ADR-0380 决定一）：登卡、收尾旧卡、序列与目录复核通过时 parcel-pricing 都交
+		// 「参数已登记」，计价参数那一份登记续办门按租户重驱。试算没有合计也可能是申报缺了某一格——归哪一格是产品策略，
+		// 记录在 ADR-0380 越权风险点。
+		return psports.PreAcceptanceControlNotConfigured, nil
+	case saapplication.EstimateCurrencyMismatch:
+		// 结算把作用域币种交进试算，计价要么换算、要么停在汇率没解出——后者答的是试算没有合计，不是这一格；走到这里只能是
+		// 缺陷，登记推不动它。
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.EstimateSubmissionNotVisible,
 		saapplication.EstimateDeclarationIncomplete,
 		saapplication.EstimateHasNoTrial,
-		saapplication.EstimateTrialWithoutTotal,
-		saapplication.EstimateCurrencyMismatch,
-		saapplication.EstimateNotPositive,
-		saapplication.EstimateTrialNegative,
 		saapplication.EstimateSumOverflow:
-		// 补价卡、补件或改卡都推得动它们，但没有一样会发信封来重驱这份委托：挪到`未配置`只换来一次没人来推的等待。
+		// 提交版本看不见、一件试算都没有、合计溢出是数据或缺陷，不是登记解得开的。申报不全要等客户补，那一路另立
+		// （ADR-0380 决定一）；在那之前照旧内部重试。
 		return psports.PreAcceptanceControlNotFormed, nil
 	default:
 		return psports.PreAcceptanceControlOutcomeInvalid, fmt.Errorf("%w: not-formed reason %d",

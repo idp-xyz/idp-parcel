@@ -810,6 +810,8 @@ type acceptanceChainGates struct {
 	estimateAdoptionRegistration  dispatch.Consumer
 	submissionVersionFormed       dispatch.Consumer
 	controlReleaseRefusalHandled  dispatch.Consumer
+	// pricingParameterRegistration 收计价「参数已登记」（ADR-0380 决定二）。
+	pricingParameterRegistration dispatch.Consumer
 }
 
 // operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
@@ -977,6 +979,13 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoption resume consumer: %w", err)
 	}
+	// 计价「参数已登记」那一份：发布侧是 parcel-pricing 价卡登记、价卡收尾与序列、目录复核的事务边界（ADR-0229 决定五），解开的
+	// 是控制那一步停在价卡一侧的等待（ADR-0380 决定一、二）。只认 SELL 方向，队列读口同上。
+	pricingParameterRegistration, err := psinbox.NewPricingParameterRegisteredConsumer(
+		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: pricing parameter resume consumer: %w", err)
+	}
 	// ADR-0106 Decision 三的续办门：PS「新提交版本已形成」信封 → 同一条链拿新版本的任务再驱一拍，
 	// 停在`等待受控补充`的那一版已随入账留在库里。发布侧是 cmd/parcel-api 受控补充的事务边界壳。
 	submissionVersionFormed, err := psinbox.NewSubmissionVersionFormedConsumer(db.Transactor(), inboxStore, chain)
@@ -998,6 +1007,7 @@ func acceptanceChainConsumers(
 		estimateAdoptionRegistration:  estimateAdoptionRegistration,
 		submissionVersionFormed:       submissionVersionFormed,
 		controlReleaseRefusalHandled:  controlReleaseRefusalHandled,
+		pricingParameterRegistration:  pricingParameterRegistration,
 	}, nil
 }
 

@@ -1255,6 +1255,12 @@ func (store *decidableRequestStore) Save(
 // 本编排的被测行为从委托已经存在开始，把建单那一段拉进来只会让失败原因难定位。
 func submittedRequest(t *testing.T) domain.ShipmentRequest {
 	t.Helper()
+	return submittedRequestWith(t, nil)
+}
+
+// submittedRequestWith 是 submittedRequest 的同一份配方，adjust 在建单之前改一格（如申报的服务产品）。
+func submittedRequestWith(t *testing.T, adjust func(*domain.SubmitShipmentRequestSpec)) domain.ShipmentRequest {
+	t.Helper()
 	scope, err := domain.NewAdmissionScope(
 		mustValue(t, domain.NewAdmissionScopeReference, "scope-ref-1"),
 		mustValue(t, domain.NewAdmissionScopeDigest, "scope-1"),
@@ -1298,13 +1304,17 @@ func submittedRequest(t *testing.T) domain.ShipmentRequest {
 	if err != nil {
 		t.Fatalf("new submission candidate: %v", err)
 	}
-	request, err := domain.SubmitShipmentRequest(domain.SubmitShipmentRequestSpec{
+	spec := domain.SubmitShipmentRequestSpec{
 		Candidate:   candidate,
 		Gate:        gate,
 		VersionID:   mustValue(t, domain.NewSubmissionVersionID, "version-1"),
 		TaskID:      mustValue(t, domain.NewAcceptanceDecisionTaskID, "task-1"),
 		SubmittedAt: decidedAt,
-	})
+	}
+	if adjust != nil {
+		adjust(&spec)
+	}
+	request, err := domain.SubmitShipmentRequest(spec)
 	if err != nil {
 		t.Fatalf("submit shipment request: %v", err)
 	}

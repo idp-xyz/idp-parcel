@@ -30,6 +30,7 @@ func NewPreAcceptanceEstimateAdoptionRegisteredConsumer(
 		estimateAdoptionResumeConsumerName,
 		PreAcceptanceEstimateAdoptionRegisteredEventType,
 		"advance acceptance chain on pre-acceptance estimate adoption registration",
+		decodeOperatorRegistrationCompleted,
 		transactor, store, queue, advancer, pageSize,
 	)
 }

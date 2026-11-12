@@ -24,9 +24,9 @@ var evaluationResumptionUndecidedSentinels = []error{
 	sainbox.ErrEvaluationResumptionUndecided,
 }
 
-// PP 评价未形成 → SA 记停因；三类「参数已登记」→ SA 续办（ADR-0229）。「结算账户已登记」这一类信封 PS 那扇作用域续办门
-// 也收（routes_acceptance_chain.go），本路排在计费名次：先让受理链续办委托，再续办停在发起之前的计费那一拍。另两类信封
-// 只有本路收。
+// PP 评价未形成 → SA 记停因；三类「参数已登记」→ SA 续办（ADR-0229）。「结算账户已登记」与计价「参数已登记」这两类信封 PS
+// 的登记续办门也收（routes_acceptance_chain.go；计价那一类见 ADR-0380 决定二），本路在这两类上排在计费名次：先让受理链续办
+// 委托，再续办停在发起之前的计费那一拍。结算的评价参数那一类只有本路收。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
 		unformed, err := recordEvaluationUnformedConsumer(sources.db, sources.inbox, sources.clock)
@@ -44,7 +44,7 @@ func init() {
 		}{
 			{sainbox.SettlementAccountRegisteredResumption, positionBilling, "evaluation resumption on settlement account"},
 			{sainbox.EvaluationParameterRegisteredResumption, positionPrimary, "evaluation resumption on evaluation parameter"},
-			{sainbox.PricingParameterRegisteredResumption, positionPrimary, "evaluation resumption on pricing parameter"},
+			{sainbox.PricingParameterRegisteredResumption, positionBilling, "evaluation resumption on pricing parameter"},
 		} {
 			consumer, err := evaluationResumptionConsumer(
 				registration.registration, sources.db, sources.outbox, sources.inbox, sources.clock)

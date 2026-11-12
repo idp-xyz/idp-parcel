@@ -159,7 +159,6 @@ type AcceptanceDecisionTask struct {
 	taskID              AcceptanceDecisionTaskID
 	submissionVersionID SubmissionVersionID
 	establishedAt       time.Time
-	processingAttempts  []ProcessingAttempt
 	reviewCompletion    ManualReviewCompletion
 	// authorizedDisposition 是本版本上已记录的授权处置（ADR-0132），一版至多一次、不覆盖。
 	// 它与 reviewCompletion 并列而不合成一格：复核完成之后决定仍由任务按规则形成，处置则

@@ -457,11 +457,13 @@ type financialControlDouble struct {
 	outcome     domain.FinancialControlOutcome
 	portOutcome ports.PreAcceptanceControlOutcome
 	// reason 是非`已形成`时提供方交回的原因引用；空串时按端口格造一个。
-	reason   string
-	err      error
-	record   func(string)
-	calls    int
-	lastAsOf domain.JudgmentAsOf
+	reason string
+	// settlementReason 是结算的未形成原因码原样，非空时随答复交回（ADR-0380 决定三）。
+	settlementReason string
+	err              error
+	record           func(string)
+	calls            int
+	lastAsOf         domain.JudgmentAsOf
 }
 
 func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
@@ -485,10 +487,14 @@ func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
 		if reason == "" {
 			reason = "SAC-" + outcome.String()
 		}
-		return ports.PreAcceptanceControlAssessment{
+		assessment := ports.PreAcceptanceControlAssessment{
 			Outcome: outcome,
 			Reason:  mustValue(double.t, domain.NewCheckReason, reason),
-		}, nil
+		}
+		if double.settlementReason != "" {
+			assessment.SettlementReason = mustValue(double.t, domain.NewSettlementNotFormedReason, double.settlementReason)
+		}
+		return assessment, nil
 	}
 
 	// `明确无控制`下提供方不形成冻结，也就没有结果标识可交回；夹具按结论挑逐项（financialControlOf）。

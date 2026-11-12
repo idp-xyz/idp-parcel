@@ -219,9 +219,9 @@ func (fixture *customerSupplementLoopFixture) wireSettlement(t *testing.T, ctx c
 }
 
 // synRPricedTrials 让试算口为每一版答一份带合计的试算（一件、synRSupersededFreezeMinor），控制据此占下一笔冻结。
-func synRPricedTrials(t *testing.T) func(saports.PreAcceptanceTrialQuery) saports.PreAcceptanceTrialAnswer {
+func synRPricedTrials(t *testing.T) func(context.Context, saports.PreAcceptanceTrialQuery) saports.PreAcceptanceTrialAnswer {
 	t.Helper()
-	return func(query saports.PreAcceptanceTrialQuery) saports.PreAcceptanceTrialAnswer {
+	return func(_ context.Context, query saports.PreAcceptanceTrialQuery) saports.PreAcceptanceTrialAnswer {
 		trial, err := sadomain.NewPreAcceptanceTrial("SYN-PARCEL-01", "SYN-TRIAL-"+query.SubmissionVersion,
 			[]string{"SYN-CARD-R1/v1"}, synRSupersededFreezeMinor, query.Currency)
 		if err != nil {

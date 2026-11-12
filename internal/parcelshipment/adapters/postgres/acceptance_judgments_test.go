@@ -581,13 +581,13 @@ func TestProcessingAttemptsAccumulateAcrossRounds(t *testing.T) {
 	waitingOnCustomer := taskAttempt(t, "CUSTOMER_SUPPLEMENT_PENDING",
 		domain.ResumeByCustomerSupplement, "CONT-c3d4", taskAttemptedAt.Add(time.Hour))
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, stalled); err != nil {
+		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), stalled); err != nil {
 			return err
 		}
-		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, stalled); err != nil {
+		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), stalled); err != nil {
 			return err
 		}
-		return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, waitingOnCustomer)
+		return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), waitingOnCustomer)
 	})
 
 	if rows := countTaskRows(t, pool,
@@ -602,6 +602,61 @@ func TestProcessingAttemptsAccumulateAcrossRounds(t *testing.T) {
 		    AND resume_path = 'CUSTOMER_SUPPLEMENT'`,
 		"tenant-1", "REQ-1"); rows != 1 {
 		t.Fatalf("等待客户补充那一条没有按自己的续办路径落库（实得 %d 条）", rows)
+	}
+}
+
+// TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion 证迁移 0038 加的那几列随处理尝试落库（ADR-0380 决定三、四）：
+// 结算的原因码原样、这一版申报的服务产品与被判的那一版；缺席的那几格落空，不落空串——空串与缺席读起来一样，读口会多一种
+// 「记了但没内容」要解释。在场却空白的结算原因被约束拒收。
+func TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	entry, err := domain.NewCanonicalContentEntry(domain.RequestedServiceProductEntryName, "SYN-PROD-01")
+	if err != nil {
+		t.Fatalf("canonical entry: %v", err)
+	}
+	detailed, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
+		Reason:           mustBuild(t, domain.NewProcessingAttemptReason, "FINANCIAL_CONTROL_NOT_CONFIGURED"),
+		ResumePath:       domain.ResumeByOperatorRegistration,
+		Continuation:     mustBuild(t, domain.NewOwnershipContinuationReference, "CONT-card"),
+		AttemptedAt:      taskAttemptedAt,
+		SettlementReason: mustBuild(t, domain.NewSettlementNotFormedReason, "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"),
+		ServiceProduct:   domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry}),
+	})
+	if err != nil {
+		t.Fatalf("形成处理尝试：%v", err)
+	}
+	bare := taskAttempt(t, "REACHABILITY_AUTHORITY_UNAVAILABLE", domain.ResumeByInternalRetry, "CONT-bare",
+		taskAttemptedAt.Add(time.Minute))
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), detailed); err != nil {
+			return err
+		}
+		return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-2"), bare)
+	})
+
+	if rows := countTaskRows(t, pool,
+		`SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
+		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND continuation_ref = 'CONT-card'
+		    AND settlement_reason = 'ESTIMATE_PRICE_CARD_NOT_CONFIGURED' AND service_product = 'SYN-PROD-01'
+		    AND submission_version = 'VER-1'`,
+		"tenant-1", "REQ-1"); rows != 1 {
+		t.Fatalf("带三格的那一条落了 %d 行, want 1", rows)
+	}
+	if rows := countTaskRows(t, pool,
+		`SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
+		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND continuation_ref = 'CONT-bare'
+		    AND settlement_reason IS NULL AND service_product IS NULL AND submission_version = 'VER-2'`,
+		"tenant-1", "REQ-1"); rows != 1 {
+		t.Fatalf("不带两格的那一条落了 %d 行, want 1（缺席的两格要落空）", rows)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_processing_attempt
+			(tenant_id, shipment_request_id, continuation_ref, attempted_at, reason_ref, resume_path, settlement_reason)
+		 VALUES ('tenant-1', 'REQ-x', 'CONT-x', now(), 'SOME_REASON', 'INTERNAL_RETRY', '  ')`); err == nil {
+		t.Error("空白的结算原因溜进了处理尝试库")
 	}
 }
 
@@ -838,7 +893,7 @@ func TestEveryResumePathLandsInTheAttemptTable(t *testing.T) {
 	for path := domain.ResumePath(1); path.String() != ""; path++ {
 		attempt := taskAttempt(t, "SOME_REASON", path, "CONT-"+path.String(), taskAttemptedAt)
 		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, attempt)
+			return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), attempt)
 		}); err != nil {
 			t.Errorf("续办路径 %s 写不进处理尝试库——库面镜像落后于领域封闭集合：%v", path, err)
 		}
@@ -897,7 +952,7 @@ func TestAcceptanceJudgmentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录控制结果应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if err := judgments.RecordProcessingAttempt(ctx, tenant, requestID,
+	if err := judgments.RecordProcessingAttempt(ctx, tenant, requestID, taskVersion(t, "VER-1"),
 		taskAttempt(t, "JUDGMENT_NOT_RECORDED", domain.ResumeByInternalRetry, "CONT-a1b2", taskAttemptedAt),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录处理尝试应返回 ErrTransactionRequired，实得：%v", err)
@@ -930,7 +985,7 @@ func TestAcceptanceJudgmentRollbackLeavesNothingBehind(t *testing.T) {
 		if err := judgments.RecordAdoptedCommercialResolution(txCtx, tenant, requestID, resolution); err != nil {
 			return err
 		}
-		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, attempt); err != nil {
+		if err := judgments.RecordProcessingAttempt(txCtx, tenant, requestID, taskVersion(t, "VER-1"), attempt); err != nil {
 			return err
 		}
 		return rollback

@@ -121,12 +121,10 @@ func TestListAwaitingAuthorizedDispositionFiltersAndTranscribesRestrictedItems(t
 
 	seedAdvanced(t, fixture.repository, fixture.transactor, "tenant-1", "customer-1", "adq-a", "REQ-DISP-A",
 		submittedAtFixture, func(request domain.ShipmentRequest) domain.ShipmentRequest {
-			appended, err := request.RecordProcessingAttempt(processingAttempt(t))
-			if err != nil {
-				t.Fatalf("记处理尝试：%v", err)
-			}
-			return awaitDisposition(t, appended, "dispose-a")
+			return awaitDisposition(t, request, "dispose-a")
 		})
+	recordAttemptOnCurrentVersion(t, fixture.repository, fixture.judgments, fixture.transactor,
+		requestScopedIdentity(t, "tenant-1", "customer-1", "adq-a"), processingAttempt(t))
 	recordAdoptedRestrictedControl(t, fixture, "tenant-1", "REQ-DISP-A", "version-1", "REQ-DISP-A/version-1")
 	// 反例三行：停等复核、他租户停等处置、作用域外账户停等处置。
 	seedAdvanced(t, fixture.repository, fixture.transactor, "tenant-1", "customer-2", "adq-b", "REQ-DISP-B",
