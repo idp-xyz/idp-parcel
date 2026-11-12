@@ -41,5 +41,6 @@ Status: in-progress
 | [19](./issues/19-the-estimate-trail-records-product-weight-and-lines-and-settlement-reads-it-by-shipment.md) | 估价留痕补记产品、计价重量与费用行，结算按委托交出读口 | — | 后端 |
 | [20](./issues/20-shipment-detail-shows-the-recorded-financial-control-conclusion.md) | 委托详情交出受理判断记下的财务控制结论 | — | 后端 |
 | [21](./issues/21-admin-shipment-detail-shows-pre-acceptance-financial-control.md) | 管理台运单详情显示「受理前财务控制」 | —（联调等 19、20） | 前端 |
+| [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因（needs-triage） | — | 小包托运 + 结算 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
