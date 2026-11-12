@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress
 Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
-依据：[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定二、三；ADR-0179 决定三（两处同一笔改）；ADR-0260 决定一（计价输入快照不带商业依据）。
+依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定二、三；ADR-0179 决定三（两处同一笔改）；ADR-0260 决定一（计价输入快照不带商业依据）。
 
 ## 要做的
 
@@ -61,7 +61,7 @@ Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admi
 - 未做：管理台（票 16）；演示（票 17）。协调方更正四：SELL 计价照旧逐包裹，没有按票的 SELL 评价。
 - 验证（含 PG，`IDP_PARCEL_POSTGRES_DSN` 指 55432）：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；`go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
 - 评审（非作者，2026-11-11）：无阻断；该改一处、细处若干，已改（`6622695b0`，同分支一笔，自足可拣）：
-  - 该改：试算方向不是 SELL 却带 `serviceProduct`，原先照收、快照与解释会说卡是按产品选的，违 ADR-0378 决定一。现在 `FormEstimateEvaluationsCommand.accepted` 拒（未受理，卡集一次都不装），HTTP 载荷在 `serviceProduct` 一格答 400。
+  - 该改：试算方向不是 SELL 却带 `serviceProduct`，原先照收、快照与解释会说卡是按产品选的，违 ADR-0382 决定一。现在 `FormEstimateEvaluationsCommand.accepted` 拒（未受理，卡集一次都不装），HTTP 载荷在 `serviceProduct` 一格答 400。
   - `AcceptedServiceProductFor` 在接受基线指向的提交版本缺席时报 `ErrInvalidAcceptedServiceProduct`，与 `AddressElementsFor`、`DeclaredMeasurementFor` 同一处置，不再答零值；postgres 读口照报 error。这一格没有专门的测试，前例那两处同样没有，造不出基线指向缺席版本的聚合。
   - 正式评价记不上快照产品改报 error（结构上到不了），不再折成 `RequestEvaluationNotAccepted`——那会让结算消费侧说成「译出的命令不被受理」。
   - `FormEvaluationFromRequestResult.ServiceProduct` 在未配置与适用冲突两格交回选卡用的产品；结算未形成交接的说明点名「for declared service product …」，没按产品选时说明与此前逐字相同。

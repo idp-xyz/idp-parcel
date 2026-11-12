@@ -331,7 +331,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| 价卡一侧答不出的受理前估价等运营登记，计价「参数已登记」后续办；等待落库的处理尝试另记结算原因与申报的服务产品，委托详情从处理尝试落处读（[ADR-0380](../../adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md)） | 这一类走内部重试、回滚不留痕、重投用完即放弃；小包托运不收计价的「参数已登记」；委托详情的「上次处理」读一份没有生产写入的列表 | 票 declared-goods-lines/23、24 |
+| 价卡一侧答不出的受理前估价等运营登记，计价「参数已登记」后续办；等待落库的处理尝试另记结算原因与申报的服务产品，委托详情从处理尝试落处读（[ADR-0383](../../adr/0383-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md)） | 这一类走内部重试、回滚不留痕、重投用完即放弃；小包托运不收计价的「参数已登记」；委托详情的「上次处理」读一份没有生产写入的列表 | 票 declared-goods-lines/23、24 |
 | 申报不全的受理前估价按缺项该谁补分流：客户可补的（测量、尺寸、收寄邮编）在财务控制那一步停进`等待受控补充`、缺口按件或按委托级记在任务上；缺分区、缺地址性质的归`等待运营登记`；计价在估价口点名缺项、结算逐件原样带回、处理尝试另记缺项码（[ADR-0381](../../adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md)） | 申报不全今天照旧内部重试、回滚不留痕、重投用完即放弃；计价把「卡要而申报没给」的寄件邮编与尺寸评成解不出的无合计、归了等运营登记；结算把逐件缺项折掉 | 票 declared-goods-lines/26、27 |
 | 委托详情交出最近一次受理判断记下的接受前财务控制结论（结论、各项满足或受限与依据、判断时点），不带金额（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定三） | 结论只在审核队列交出，委托详情不交 | 票 declared-goods-lines/20 |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 已补：提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，接受链判新版本之前先按原关联放掉旧版本已成立的占用；放不掉停在 `SUPERSEDED_CONTROL_RELEASE` 内部重试，新版本不判 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |

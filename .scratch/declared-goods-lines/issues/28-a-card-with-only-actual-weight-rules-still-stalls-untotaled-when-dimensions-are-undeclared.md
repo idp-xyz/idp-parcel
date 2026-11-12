@@ -8,7 +8,7 @@ Blocked by: 无
 
 ## 现状
 
-计价引擎对带任何附加费规则或拒收条款的卡急读特征派生量：`internal/parcelpricing/domain/evaluation.go` 在 `surchargeRules` 或 `exclusions` 非空时无条件调 `request.input.Features()`，而 `Features()` 对单件输入无条件要尺寸（`ErrMissingDimensions`）。于是一张只按**实重**判附加费或拒收的卡、申报没带尺寸时，评价落 `PACKAGE_FEATURES_UNAVAILABLE` 的无合计 → 结算折 `ESTIMATE_TRIAL_WITHOUT_TOTAL` → 等运营登记（ADR-0380 决定一）。
+计价引擎对带任何附加费规则或拒收条款的卡急读特征派生量：`internal/parcelpricing/domain/evaluation.go` 在 `surchargeRules` 或 `exclusions` 非空时无条件调 `request.input.Features()`，而 `Features()` 对单件输入无条件要尺寸（`ErrMissingDimensions`）。于是一张只按**实重**判附加费或拒收的卡、申报没带尺寸时，评价落 `PACKAGE_FEATURES_UNAVAILABLE` 的无合计 → 结算折 `ESTIMATE_TRIAL_WITHOUT_TOTAL` → 等运营登记（ADR-0383 决定一）。
 
 这一停两头都不对：运营登不出什么能解开它（卡本身没问题），客户也收不到「缺尺寸」的信号。ADR-0381 决定二只分流「卡有按尺寸判的规则而尺寸没报」（`RequiresDeclaredDimensions` 按判定条件读的派生源与重量策略体积重判），只读实重的规则不在其内——与 ADR 文字一致，但 ADR-0381「对已接受记录的作用」里「那一格此后剩下的才真是价卡一侧的」对这个口子不成立。
 

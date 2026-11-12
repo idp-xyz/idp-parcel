@@ -4,12 +4,12 @@ Category: enhancement
 Status: in-progress
 Blocked by: 14、15（均已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
-依据：[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)；票 12 完成记录「价卡没另登」一条。
+依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)；票 12 完成记录「价卡没另登」一条。
 
 ## 要做的
 
 - **种子**：演示租户在 `SYN-SCOPE-01` 登一张指名 `SYN-PROD-CN-SG-FBA` 的 SELL·客户费用卡。
-  - 接受前估价与正式 `SELL` 评价都逐件评价（ADR-0378 越权风险点 8），这张卡逐箱计价：合成取值，用与快递卡不同的价表（例如按公斤计价、不收首重），让两张卡算出的价看得出差别。
+  - 接受前估价与正式 `SELL` 评价都逐件评价（ADR-0382 越权风险点 8），这张卡逐箱计价：合成取值，用与快递卡不同的价表（例如按公斤计价、不收首重），让两张卡算出的价看得出差别。
   - 规范化版本 `PPC-7`，演示的部署开关已开。
   - 快递那张 `SYN-PLAN-CN-SG-01` 不动，照旧接其余产品。
 - **演示段 `55`**：断言 FBA 货件的接受前估价与正式 SELL 评价用的是 FBA 卡，同一趟的快递小包用的是 `SYN-PLAN-CN-SG-01`。
@@ -67,7 +67,7 @@ Blocked by: 14、15（均已提交，未进 main；同在分支 `feat/goods-deta
   - **接受前估价没有在段里断言**：它用了哪张卡今天没有读口——结算的估价留痕（`PreAcceptanceEstimateTraces`）只写不读，计价一侧不留估价。段里断言的是试算与正式 SELL 评价两条路；接受前估价靠上面那次只读查库。补读口要动 Go，不在本票地盘。
   - **正式评价只收寄了 FBA 第 1 箱**：一箱足以对上卡；四箱都收寄只多三轮等待。收寄也让这两件进了网络，后续段不受影响（`10` 照旧走完）。
   - **方向授权**：FBA 卡照演示其余售价卡（含 `SCOPE-02/03/04` 那三张）引 `SYN-AUTH-PRICE-DIR-01`。计价只引授权、从不解析，登记只核它是一份商业授权引用。那份授权挂的价格规则 `SYN-PRICE-RULE-CN-SG` 正文指名的是 `SYN-PLAN-CN-SG-01` 与快递产品，所以 FBA 卡的引用背后没有一份指名它的价格规则——引得进来不等于授权覆盖了它；这一句也记在 `fba_card.go` 与种子 README 那一行。授权对象没重新登：另登一份，目前没有任何一方读它（口径读口 `PricePolicyCaliberView` 没有装配消费方）。
-  - **售价仍逐件评价**：FBA 卡逐箱计价，整票汇总计费重的卖法表达不了（ADR-0378 越权风险点 8），README 与 50、55 头注照实写了。
+  - **售价仍逐件评价**：FBA 卡逐箱计价，整票汇总计费重的卖法表达不了（ADR-0382 越权风险点 8），README 与 50、55 头注照实写了。
 - 评审：非作者评审一轮，无阻断项；修正在 `a73304a3e`，全改：
   - 种子 README 配价一段的 FBA 句子读成绑燃油序列——挪到分区目录分句之后；材积除数按卡说。
   - 「别的步骤不设」已不成立——README、步骤 165 与 `up.sh` 改成只在登记较新规范化版本的步骤、只对那一次调用设。

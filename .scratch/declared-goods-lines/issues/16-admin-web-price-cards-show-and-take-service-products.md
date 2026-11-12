@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress
 Blocked by: 14（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
-依据：[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二。
+依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二。
 
 ## 要做的
 

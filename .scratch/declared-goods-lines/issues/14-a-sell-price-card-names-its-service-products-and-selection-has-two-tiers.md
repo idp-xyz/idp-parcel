@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
-依据：[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二、四、五；ADR-0234（收尾）、ADR-0267 与 ADR-0348（加键换版、旧版字节不动）、ADR-0352（较新版本登记要部署开关）。
+依据：[ADR-0382](../../../docs/adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一、二、四、五；ADR-0234（收尾）、ADR-0267 与 ADR-0348（加键换版、旧版字节不动）、ADR-0352（较新版本登记要部署开关）。
 
 ## 要做的
 
@@ -32,7 +32,7 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
 ## 不做的
 
-申报的产品接进三条路（票 15）；管理台（票 16）；演示（票 17）；BUY 与 INTERNAL 卡按渠道产品分卡（ADR-0378 决定一，另立）。
+申报的产品接进三条路（票 15）；管理台（票 16）；演示（票 17）；BUY 与 INTERNAL 卡按渠道产品分卡（ADR-0382 决定一，另立）。
 
 ## 完成记录（作者一侧，2026-11-11）
 
@@ -43,7 +43,7 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
   - 规范化：`canonicalPricingPlan` 加可缺键 `service_products`；带它的卡写 `PPC-7`（`canonicalizationVersionServiceProducts`），是 `PPC-6` 的超集；方案级 `requiredCanonicalization` 取最低一版。`PPC-7` 进 `supportedCanonicalizations`，「不认的版本」用例改为 `PPC-8`。
   - 快照：`pricingPlanSnapshot` 加可缺键 `serviceProducts`，登记、草稿、批准发布都经这一份形状。读回门 `serviceProductsHold`：只在 SELL·客户费用、严格升序；**写了键却是空列表拒**（协调方更正二）。
   - 登记册：迁移 `0016_price_card_version_service_products.sql` 加 `service_products text[] NOT NULL DEFAULT '{}'`，另加检查 `price_card_version_service_products_sell_only`；`Register` 写列，`priceCardRow.plan` 与快照核对（`productsMatch`）。各条读法改用 `priceCardRow.scanTargets` 一处列目标。
-  - 选卡：`ResolveInForce`、`LoadApplicable` 加最后一个入参。取层只在 `tierForProduct` 一处，是 ADR-0378 的指名优先：指名这个产品的那一层有行就只看它，没有才看不声明的那一层，零值只看后一层；层在折完截止与退役之后取。`ResolveInForce` 同层多于一张答适用冲突；`LoadApplicable` 层内照旧是试算的卡集，不同方案并列、同一方案两版才是 `ErrAmbiguousPriceCard`（协调方更正一）。解析口注释「不加列（裁决 3）」改写为指名优先的说法（协调方更正五）。三个处理器先传零值。
+  - 选卡：`ResolveInForce`、`LoadApplicable` 加最后一个入参。取层只在 `tierForProduct` 一处，是 ADR-0382 的指名优先：指名这个产品的那一层有行就只看它，没有才看不声明的那一层，零值只看后一层；层在折完截止与退役之后取。`ResolveInForce` 同层多于一张答适用冲突；`LoadApplicable` 层内照旧是试算的卡集，不同方案并列、同一方案两版才是 `ErrAmbiguousPriceCard`（协调方更正一）。解析口注释「不加列（裁决 3）」改写为指名优先的说法（协调方更正五）。三个处理器先传零值。
   - 导入模板（协调方更正三，票面原未列）：`TemplateVersion` 进位 `PPT-3`，`PPT-1`、`PPT-2` 照旧接受、读出逐位相同。`card` 表新增字段 `serviceProducts`（`requiredOptional`，分号列表，逐个交 `NewServiceProductReference`，方案立住后 `WithServiceProducts`）。旧版文件里这一行填了值答 `FIELD_UNKNOWN`「自模板 PPT-3 起才可用」，留空不算；PPT-3 里整行缺席或留空都是不声明；非 SELL 卡填了值答 `CELL_NOT_APPLICABLE`（规范既有「不适用的格填了值」那一码）；重复、空元素照列表读法答 `CELL_INVALID`。规格口逐列加 `since`，`card.serviceProducts` 标 `PPT-3`。`cmd/parcel-pricing-template` 重新生成 `apps/admin-web/public/templates/price-card-import-template-PPT-3.xlsx`（PPT-1、PPT-2 两份照留）。模板规范文档 `docs/design/pp-price-card-import-template-and-validation-spec.md` 与 `docs/README.md` 同步。
   - 查阅：价卡目录行、导入预览与草稿概要（同一份 `priceCardContentBody`）交出 `serviceProducts`，同名同形，不声明即缺键。
 - 判据：
@@ -56,6 +56,6 @@ Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 - 评审（非作者，2026-11-11）：无阻断；该改一处、细处若干，已改（`6622695b0`，同分支一笔，自足可拣）：
   - 产品标识不许带分号：`NewServiceProductReference` 与读回门都拒，模板的分号列表永远拆不开一个标识；模板规范「列表」一条改写为按列说明元素是什么，`serviceProducts` 的元素不许含分号。
   - `tierForProduct` 注释不再数口，点名 `ResolveInForce`、`LoadApplicable`。
-  - 补测（真库）：同一方案 v1 不声明、v2 指名 X——X 得 v2，别的产品与零值得 v1，试算卡集不报同一方案两版（ADR-0378 决定五）；过期的指名卡落回不声明的卡。
+  - 补测（真库）：同一方案 v1 不声明、v2 指名 X——X 得 v2，别的产品与零值得 v1，试算卡集不报同一方案两版（ADR-0382 决定五）；过期的指名卡落回不声明的卡。
   - 评审后全量门禁：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；带 PG 的 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
 
