@@ -260,6 +260,11 @@ export interface ShipmentRequestDetail extends ShipmentRequestSummary {
    */
   goodsStanding?: string;
   platformShipment?: PlatformShipmentView;
+  /**
+   * 最近一次受理判断记下的接受前财务控制结论（ADR-0379 决定三，票 declared-goods-lines/20）：与复核队列 recordedJudgments.financialControl
+   * 同一形状、同一个编码函数。没判过即不带；不带任何金额，金额在结算的受理前估价读口。
+   */
+  financialControl?: ReviewFinancialControlRecord;
 }
 
 /** 列表:空结果仍是 LISTED + 空数组(空列表不泄露任何存在性,是正常业务答案)。 */
@@ -349,6 +354,10 @@ export interface ReviewFinancialControlRecord {
   asOfAt?: string;
   asOfSemantics?: string;
   asOfPolicyVersion?: string;
+  /** 按哪个共同通过条件推出的结论(ALL_CONTROLS_PASS);`明确无控制`没有条件,缺席。 */
+  jointPassCondition?: string;
+  /** 有没有占着钱;结论受限时第一项仍可能占着,不能从 outcome 读出来。 */
+  occupationFormed?: boolean;
   /** 逐项控制项结果,空数组而不是缺席;`明确无控制`没有项,照实为空。 */
   items: ReviewControlItemRecord[];
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { TechnicalRow } from '../../components/TechnicalDetails';
+import { formatMoney } from './money';
 
 // 清关 · 账务 · 设置三区列表页共用的几个小件。状态胶囊、编码格与「技术详情」折叠都用 src/components 的共享件；
 // 这里只放那几件之外、这三区的表格反复要用的小格：名称下挂编码的两行格、原币与结算币同格的金额格，以及把可缺席的
@@ -50,12 +51,5 @@ export function AmountCell({
   );
 }
 
-/**
- * 金额串只加千分位，不换单位：传输用的是币种最小单位的十进制计数串，小数位属币种语义，页面不代判精度。
- * 非纯数字的串原样回显。
- */
-export function formatMoney(amount: string | undefined, currency: string): string {
-  if (amount === undefined) return '';
-  const grouped = /^-?\d+$/.test(amount) ? amount.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : amount;
-  return currency ? `${grouped} ${currency}` : grouped;
-}
+// 写法本身在 money.ts；各页照旧从这里引。
+export { formatMoney };
