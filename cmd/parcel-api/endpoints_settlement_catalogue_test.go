@@ -6,6 +6,7 @@ func init() {
 		settlementStatements:        unwiredSettlementStatements{},
 		settlementDisputed:          unwiredSettlementStatements{},
 		settlementStatementLines:    unwiredSettlementStatements{},
+		preAcceptanceEstimates:      unwiredPreAcceptanceEstimates{},
 		supplierBillLines:           unwiredSettlementStatements{},
 		auditedPayables:             unwiredSettlementStatements{},
 		settlementFundsApplications: unwiredSettlementFundsApplications{},

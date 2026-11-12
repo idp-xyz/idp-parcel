@@ -63,6 +63,12 @@ func (double zoneRegisterDouble) ResolveAt(_ context.Context, _ ppdomain.TenantI
 // zoneBoundCard 是一张 SELL·客户费用卡：Z1 一行、每件 rate 元，绑一份「目的前缀 902 → Z1」的分区目录。
 func zoneBoundCard(t *testing.T, rate string) ppdomain.PricingPlanVersion {
 	t.Helper()
+	return zoneBoundCardRounding(t, rate, nil)
+}
+
+// zoneBoundCardRounding 同 zoneBoundCard，另声明金额取整策略；nil 即不声明。
+func zoneBoundCardRounding(t *testing.T, rate string, rounding *pptest.AmountRoundingSpec) ppdomain.PricingPlanVersion {
+	t.Helper()
 	period := pptest.Period{StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	base := pptest.Plan(t, pptest.PlanSpec{
 		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-PLAN-SELL", "v1"),
@@ -81,6 +87,7 @@ func zoneBoundCard(t *testing.T, rate string) ppdomain.PricingPlanVersion {
 		RateAmount:            rate,
 		WeightRounding:        ppdomain.RoundingCeiling,
 		WeightStepKilograms:   "1",
+		AmountRounding:        rounding,
 	})
 	link, err := ppdomain.NewReferenceCatalogueLink(ppdomain.CatalogueKindZone, "SYN-CAT-ZONE")
 	if err != nil {
@@ -283,4 +290,61 @@ func mustPlanGiven(t *testing.T) *ppapplication.FormPlanGivenEstimateEvaluations
 		t.Fatalf("plan-given handler: %v", err)
 	}
 	return handler
+}
+
+// Covers: 票 declared-goods-lines/19、ADR-0379 决定一——适配器从每件试算评价里多留三格：选卡用的服务产品（取自输入快照，各件相同，
+// 随答复带回）、进位之后的计价重量（值与单位）、费用行（代码、增减、评价的十进制金额原文与卡本币）。没申报产品的委托答复里没有产品。
+func TestPreAcceptanceTrialsKeepTheServiceProductPricingWeightAndChargeLines(t *testing.T) {
+	declaration := twoParcels(t)
+	declaration.ServiceProduct = pptest.Value(t, ppdomain.NewServiceProductReference, "SYN-PRODUCT-FBA")
+	answer, err := trialAdapter(t, ppports.PriceCardInForceResolution{Outcome: ppports.PriceCardVersionInForce, Plan: zoneBoundCard(t, "12.50")}, declaration).
+		FormPreAcceptanceTrials(context.Background(), trialQuery(t))
+	if err != nil || answer.Outcome != saports.PreAcceptanceTrialsFormed || len(answer.Trials) != 2 {
+		t.Fatalf("answer = %+v err = %v", answer, err)
+	}
+	if answer.ServiceProduct != "SYN-PRODUCT-FBA" {
+		t.Fatalf("服务产品 = %q, 想要申报的那一个", answer.ServiceProduct)
+	}
+	for index, trial := range answer.Trials {
+		weight, weighed := trial.PricingWeight()
+		if !weighed || weight.Value() != "1" || weight.Unit() != "KG" {
+			t.Fatalf("第 %d 份计价重量 = %+v %t, 想要 1 KG", index+1, weight, weighed)
+		}
+		lines, listed := trial.ChargeLines()
+		if !listed || len(lines) != 1 {
+			t.Fatalf("第 %d 份费用行 = %+v %t, 想要基础运费一行", index+1, lines, listed)
+		}
+		if line := lines[0]; line.Code().String() != "BASE" || line.Effect() != sadomain.ChargeLineAdd ||
+			line.Amount() != "12.5" || line.Currency().String() != "CNY" {
+			t.Fatalf("第 %d 份费用行 = %s %s %s %s, 想要 BASE ADD 12.5 CNY", index+1,
+				line.Code(), line.Effect(), line.Amount(), line.Currency())
+		}
+	}
+
+	undeclared, err := trialAdapter(t, ppports.PriceCardInForceResolution{Outcome: ppports.PriceCardVersionInForce, Plan: zoneBoundCard(t, "12.50")}, twoParcels(t)).
+		FormPreAcceptanceTrials(context.Background(), trialQuery(t))
+	if err != nil || undeclared.ServiceProduct != "" {
+		t.Fatalf("没申报：产品 = %q err = %v", undeclared.ServiceProduct, err)
+	}
+}
+
+// Covers: ADR-0379 决定一「补记只作留痕」——费用行的金额位数多于币种的最小币单位时照原文留下，不截断、也不让估价停下；合计照旧按
+// 币种位数换写。这里卡上逐行不取整、合计按两位取整，正是一行多出位数而合计成立的那一种。
+func TestAChargeLineFinerThanTheCurrencyIsKeptVerbatim(t *testing.T) {
+	card := zoneBoundCardRounding(t, "12.505", &pptest.AmountRoundingSpec{
+		Mode: ppdomain.RoundingHalfUp, Increment: "0.01", Points: []ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal},
+	})
+	answer, err := trialAdapter(t, ppports.PriceCardInForceResolution{Outcome: ppports.PriceCardVersionInForce, Plan: card}, twoParcels(t)).
+		FormPreAcceptanceTrials(context.Background(), trialQuery(t))
+	if err != nil || answer.Outcome != saports.PreAcceptanceTrialsFormed || len(answer.Trials) != 2 {
+		t.Fatalf("answer = %+v err = %v", answer, err)
+	}
+	minor, _, present := answer.Trials[0].Total()
+	lines, listed := answer.Trials[0].ChargeLines()
+	if !present || minor != 1251 {
+		t.Fatalf("合计 = %d %t, 想要按两位取整的 1251", minor, present)
+	}
+	if !listed || len(lines) != 1 || lines[0].Amount() != "12.505" {
+		t.Fatalf("费用行 = %+v %t, 想要原文 12.505", lines, listed)
+	}
 }

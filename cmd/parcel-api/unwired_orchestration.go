@@ -2178,6 +2178,18 @@ func (unwiredSettlementStatements) FindStatementLines(
 	return settlementports.StatementLines{}, false, errOrchestrationNotWired
 }
 
+// unwiredPreAcceptanceEstimates 的方法表与 settlementports.PreAcceptanceEstimateRead 对上。不并进 unwiredSettlementStatements：生产上
+// 它接的是留痕册的适配器，不是对账单册的。
+type unwiredPreAcceptanceEstimates struct{}
+
+func (unwiredPreAcceptanceEstimates) ListPreAcceptanceEstimates(
+	context.Context,
+	settlementdomain.TenantID,
+	string,
+) ([]settlementports.PreAcceptanceEstimateEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredSettlementStatements) ListDisputedCustomerStatements(
 	context.Context,
 	settlementdomain.TenantID,

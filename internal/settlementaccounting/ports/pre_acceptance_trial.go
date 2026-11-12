@@ -50,11 +50,14 @@ func (outcome PreAcceptanceTrialOutcome) String() string {
 	}
 }
 
-// PreAcceptanceTrialAnswer 是一次试算的答复。PriceCard 是所用价卡版本引用的字面，选到卡之后的各格都有值；Trials 只在已形成时有值。
+// PreAcceptanceTrialAnswer 是一次试算的答复。PriceCard 是所用价卡版本引用的字面（domain.VersionReferenceLiteral），选到卡之后的各格
+// 都有值；Trials 只在已形成时有值。ServiceProduct 是选卡用的服务产品，取自评价的输入快照（ADR-0378 决定三），只在已形成时可能有值，
+// 空即没申报。
 type PreAcceptanceTrialAnswer struct {
-	Outcome   PreAcceptanceTrialOutcome
-	PriceCard string
-	Trials    []domain.PreAcceptanceTrial
+	Outcome        PreAcceptanceTrialOutcome
+	PriceCard      string
+	ServiceProduct string
+	Trials         []domain.PreAcceptanceTrial
 }
 
 // ErrPreAcceptanceTrialsUnavailable 表示试算那一侧读不回、形成与否未知。施加编排据此停在待判断等重试，不读成未配置。

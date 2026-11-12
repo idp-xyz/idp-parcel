@@ -91,9 +91,9 @@ func (rig *conversionRig) seedTrace(request, parcel string, totalMinor int64) {
 		`INSERT INTO settlement_accounting.pre_acceptance_estimate_trace
 			(tenant_id, legal_entity, account_id, currency, control_request_id,
 			 shipment_request_ref, submission_version_ref, trial_at, form, pricing_scope_id,
-			 price_card, total_minor, trials, recorded_at)
+			 price_card, total_minor, trials, recorded_at, detail_recorded)
 		 VALUES ('tenant-receipt', 'le-1', 'acct-1', 'CNY', $1, $2, 'v1', now(),
-		         'PER_PARCEL_SELL_TRIAL_SUM', 'scope-1', 'card-1', $3, $4::jsonb, now())`,
+		         'PER_PARCEL_SELL_TRIAL_SUM', 'scope-1', 'card-1', $3, $4::jsonb, now(), false)`,
 		request, "ship-"+parcel, totalMinor, trials); err != nil {
 		rig.t.Fatalf("估价留痕：%v", err)
 	}
@@ -490,9 +490,9 @@ func TestAMultiParcelRequestKeepsTheOtherParcelsShareUntilItsOwnChargeIsConfirme
 		`INSERT INTO settlement_accounting.pre_acceptance_estimate_trace
 			(tenant_id, legal_entity, account_id, currency, control_request_id,
 			 shipment_request_ref, submission_version_ref, trial_at, form, pricing_scope_id,
-			 price_card, total_minor, trials, recorded_at)
+			 price_card, total_minor, trials, recorded_at, detail_recorded)
 		 VALUES ('tenant-receipt', 'le-1', 'acct-1', 'CNY', 'ship-1/v1', 'ship-1', 'v1', now(),
-		         'PER_PARCEL_SELL_TRIAL_SUM', 'scope-1', 'card-1', 10000, $1::jsonb, now())`, trials); err != nil {
+		         'PER_PARCEL_SELL_TRIAL_SUM', 'scope-1', 'card-1', 10000, $1::jsonb, now(), false)`, trials); err != nil {
 		t.Fatalf("估价留痕：%v", err)
 	}
 	rig.within(func(ctx context.Context) error {
