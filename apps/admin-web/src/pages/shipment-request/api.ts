@@ -239,6 +239,11 @@ export interface AcceptanceTaskRecord {
   lastAttemptSettlementReason?: string;
   /** 同一次尝试判的那一版申报的服务产品;没申报不带。 */
   lastAttemptServiceProduct?: string;
+  /**
+   * 申报不全那一轮计价点名的缺项码原样、去重(ADR-0381 决定四,票 declared-goods-lines/26):MEASUREMENT、ZONE 等计价原词。
+   * 只在申报不全分出的两路等待(等受控补充、等运营登记)上在场。
+   */
+  lastAttemptEstimateGapCodes?: string[];
   /** 受理停在等客户补充时缺的各项(ADR-0376 决定一);不在等补充时缺席。 */
   supplementGaps?: SupplementGapRecord[];
 }

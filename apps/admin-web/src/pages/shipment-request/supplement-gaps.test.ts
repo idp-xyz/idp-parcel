@@ -20,3 +20,19 @@ test('缺口摊成行:委托级在前、逐件按包裹号,同一件并成一行
   );
   deepEqual(supplementGapLinesOf(undefined), []);
 });
+
+test('受理前估价的四个缺口码有中文词条(ADR-0381 决定四),封闭集外的码照旧原码回退', () => {
+  deepEqual(
+    supplementGapLinesOf([
+      { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', parcelId: 'DPCL-1', reason: 'ESTIMATE_MEASUREMENT_MISSING' },
+      { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', parcelId: 'DPCL-1', reason: 'ESTIMATE_DIMENSIONS_MISSING' },
+      { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', reason: 'ESTIMATE_RECIPIENT_POSTAL_MISSING' },
+      { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', reason: 'ESTIMATE_ORIGIN_POSTAL_MISSING' },
+      { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', reason: 'ESTIMATE_SOMETHING_NEW' },
+    ]),
+    [
+      { parcelId: '', missing: '收件邮编、寄件邮编、ESTIMATE_SOMETHING_NEW' },
+      { parcelId: 'DPCL-1', missing: '重量或量纲、尺寸' },
+    ],
+  );
+});

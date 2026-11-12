@@ -5,7 +5,8 @@ import { lastAttemptOf } from './last-attempt';
 
 // 本文件钉运单详情上「最近处理结果」与「谁来续办」的写法（ADR-0380 决定五）：带与不带结算细原因、带与不带服务产品（只接在财务
 // 控制那一步）、续办方各词（等运营登记分价卡一侧与别处、内部重试、等客户补充照旧、复核与授权处置）、续办另起一句时停因不重说
-// 等运营登记、不要续办的页、续办方缺席或认不得、任务已不在运行、认不得的码。
+// 等运营登记、不要续办的页、续办方缺席或认不得、任务已不在运行、认不得的码；申报不全（ADR-0381 决定五）按缺项该谁补说细：
+// 等客户补充列缺口清单、卡侧缺项写明这张卡做不了受理前估价与该登什么。
 
 const running = (extra: Partial<AcceptanceTaskRecord>): AcceptanceTaskRecord => ({ state: 'RUNNING', ...extra });
 
@@ -219,6 +220,120 @@ test('任务已完成或已停止：停因照留，不再说谁来续办', () =>
       { text: '估价没形成：没有在用价卡', financialStall: '没有在用价卡' },
     );
   }
+});
+
+test('申报不全等客户补充：括号里逐条列任务缺口（委托级在前、指件的带件），句尾说客户补充后自动续办，不另起续办一行', () => {
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'CUSTOMER_SUPPLEMENT_PENDING',
+        lastAttemptResumePath: 'CUSTOMER_SUPPLEMENT',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+        lastAttemptEstimateGapCodes: ['MEASUREMENT', 'POSTAL_ROUTE'],
+        supplementGaps: [
+          { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', parcelId: 'DPCL-2', reason: 'ESTIMATE_MEASUREMENT_MISSING' },
+          { group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', reason: 'ESTIMATE_RECIPIENT_POSTAL_MISSING' },
+          // 别组的缺口不混进估价这一句。
+          { group: 'REQUIRED_DOCUMENT', parcelId: 'DPCL-2', reason: 'EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL' },
+        ],
+      }),
+    ),
+    {
+      text: '估价没形成：申报缺了计价要的资料（委托缺收件邮编、DPCL-2 缺重量或量纲）——客户补充后自动续办',
+      financialStall: '申报缺了计价要的资料（委托缺收件邮编、DPCL-2 缺重量或量纲）——客户补充后自动续办',
+    },
+  );
+  // 服务产品照旧接在停因上；任务缺口缺席（不该有，但读面不猜）时不带括号。
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'CUSTOMER_SUPPLEMENT_PENDING',
+        lastAttemptResumePath: 'CUSTOMER_SUPPLEMENT',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+        lastAttemptServiceProduct: 'SYN-PROD-FBA-01',
+      }),
+    ),
+    {
+      text: '估价没形成：申报缺了计价要的资料（服务产品 SYN-PROD-FBA-01）——客户补充后自动续办',
+      financialStall: '申报缺了计价要的资料（服务产品 SYN-PROD-FBA-01）——客户补充后自动续办',
+    },
+  );
+});
+
+test('申报不全而缺项在卡侧：写明这张卡做不了受理前估价，续办说该登什么样的售价卡并链到价格表', () => {
+  const zoneStalled = running({
+    lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED',
+    lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+    lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+    lastAttemptEstimateGapCodes: ['ZONE'],
+  });
+  deepEqual(lastAttemptOf(zoneStalled), {
+    text: '估价没形成：在用的卡要直接给分区，受理前估价给不出',
+    financialStall: '在用的卡要直接给分区，受理前估价给不出',
+    resume: {
+      path: 'OPERATOR_REGISTRATION',
+      text: '登记一张带分区目录、生效期覆盖提交时点的售价卡后自动续办',
+      link: { href: '#/price-card-catalog', label: '去价格表' },
+    },
+  });
+  // 缺收件地址性质，带服务产品；两码同时在场时并说。
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED',
+        lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+        lastAttemptEstimateGapCodes: ['ADDRESS_NATURE', 'MEASUREMENT'],
+        lastAttemptServiceProduct: 'SYN-PROD-FBA-01',
+      }),
+    ),
+    {
+      text: '估价没形成：在用的卡要收件地址性质，受理前估价给不出（服务产品 SYN-PROD-FBA-01）',
+      financialStall: '在用的卡要收件地址性质，受理前估价给不出（服务产品 SYN-PROD-FBA-01）',
+      resume: {
+        path: 'OPERATOR_REGISTRATION',
+        text: '登记一张不按收件地址性质判价、生效期覆盖提交时点的售价卡后自动续办',
+        link: { href: '#/price-card-catalog', label: '去价格表' },
+      },
+    },
+  );
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'FINANCIAL_CONTROL_NOT_CONFIGURED',
+        lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+        lastAttemptEstimateGapCodes: ['ADDRESS_NATURE', 'ZONE'],
+      }),
+    )?.resume?.text,
+    '登记一张带分区目录、不按收件地址性质判价、生效期覆盖提交时点的售价卡后自动续办',
+  );
+  // 任务已不在运行：卡侧停因照留，不再说谁来续办；resume: false 的页同样取整句。
+  deepEqual(lastAttemptOf({ ...zoneStalled, state: 'COMPLETE' }), {
+    text: '估价没形成：在用的卡要直接给分区，受理前估价给不出',
+    financialStall: '在用的卡要直接给分区，受理前估价给不出',
+  });
+  deepEqual(lastAttemptOf(zoneStalled, { resume: false }), {
+    text: '估价没形成：在用的卡要直接给分区，受理前估价给不出',
+    financialStall: '在用的卡要直接给分区，受理前估价给不出',
+  });
+});
+
+test('申报不全而缺项码与续办方都说不出细的（照旧内部重试那一路）：走底句', () => {
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'FINANCIAL_CONTROL_NOT_FORMED',
+        lastAttemptResumePath: 'INTERNAL_RETRY',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+      }),
+    ),
+    {
+      text: '估价没形成：申报缺了计价要的资料',
+      financialStall: '申报缺了计价要的资料',
+      resume: { path: 'INTERNAL_RETRY', text: '系统会自动重试' },
+    },
+  );
 });
 
 test('认不得的码照原样：结算细原因露出服务端交来的原码，不补前缀', () => {

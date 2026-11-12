@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual } from 'node:assert/strict';
 import { statusVocabulary } from '../../vocabulary/status';
-import { knownSettlementStallCodes, knownShipmentStallCodes, settlementReasonOf, stallReasonOf } from './stall-reasons';
+import { estimateGapCardSideWords, knownSettlementStallCodes, knownShipmentStallCodes, settlementReasonOf, stallReasonOf } from './stall-reasons';
 
 // 本文件钉受理任务停因的屏上写法：今天任务上记的财务控制未决原因（FINANCIAL_CONTROL_*）与结算的 `SA-` 停因都译成中文并标明停在
 // 财务控制那一步；别的未决原因照样译；认不得的码照原样，`SA-` 前缀的仍算财务控制那一步。
@@ -21,7 +21,7 @@ test('任务上今天记的财务控制两格译成中文，标明停在财务�
   });
 });
 
-test('结算的 `SA-` 停因：没有在用价卡、价卡适用冲突、输入不可得', () => {
+test('结算的 `SA-` 停因：没有在用价卡、价卡适用冲突、申报不全', () => {
   deepEqual(stallReasonOf('SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED'), {
     code: 'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED',
     text: '没有在用价卡',
@@ -29,7 +29,7 @@ test('结算的 `SA-` 停因：没有在用价卡、价卡适用冲突、输入�
     financialControl: true,
   });
   deepEqual(stallReasonOf('SA-ESTIMATE_PRICE_CARD_CONFLICT').text, '价卡适用冲突');
-  deepEqual(stallReasonOf('SA-ESTIMATE_DECLARATION_INCOMPLETE').text, '输入不可得：有包裹缺测量或缺价卡要的那一格');
+  deepEqual(stallReasonOf('SA-ESTIMATE_DECLARATION_INCOMPLETE').text, '申报缺了计价要的资料');
   deepEqual(stallReasonOf('SA-CONTROL_AMOUNT_NOT_CONFIGURED').text, '这户没有登记受理前估价采用');
 });
 
@@ -79,4 +79,8 @@ test('处理尝试上的结算细原因（不带前缀）查同一张 `SA-` 表�
     ],
   );
   deepEqual(settlementReasonOf('SOMETHING_NEW'), { code: 'SOMETHING_NEW', text: 'SOMETHING_NEW', known: false, estimate: false, priceCardSide: false });
+});
+
+test('申报不全的卡侧缺项词条整份钉住（ADR-0381 决定一）：只有分区与收件地址性质两码，封闭集其余四码归客户补', () => {
+  deepEqual(Object.keys(estimateGapCardSideWords).sort(), ['ADDRESS_NATURE', 'ZONE']);
 });
