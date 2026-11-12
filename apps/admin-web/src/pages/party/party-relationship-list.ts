@@ -40,6 +40,14 @@ export const defaultPartyRelationshipSort: WorkbenchSort = { key: 'effective-sta
 export const partyRelationshipRoleFilterOptions = codeFilterOptions(partyRoleLabels, '全部角色');
 export const partyRelationshipStatusFilterOptions = codeFilterOptions(relationshipStatusLabels, '全部');
 
+/**
+ * 一段关系上的角色码 → 角色筛选的值：别处带着「这家单位、这个角色」跳到这一视图时用。词表里有的原样；词表之外的码（服务端
+ * 新增的一格）下拉里没有这一项，筛不了，交「全部」——带一个下拉显不出来的值过来，人看不出正在筛什么。
+ */
+export function partyRelationshipRoleFilterOf(role: string): PartyRelationshipRoleFilter {
+  return role in partyRoleLabels ? (role as PartyRoleCode) : 'ALL';
+}
+
 /** 关系册一问的条件：检索词、角色与状态（「全部」即那一维缺席）与表头排序。 */
 export function partyRelationshipListConditions(
   keyword: string,

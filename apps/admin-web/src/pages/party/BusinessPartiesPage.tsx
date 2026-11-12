@@ -124,6 +124,7 @@ import {
   partyRelationshipListConditions,
   partyRelationshipNeedsAttention,
   partyRelationshipNoMatchNote,
+  partyRelationshipRoleFilterOf,
   partyRelationshipRoleFilterOptions,
   partyRelationshipStatusFilterOptions,
   type PartyRelationshipRoleFilter,
@@ -132,7 +133,14 @@ import {
 import { PageOnlyNote } from '../visibility/page-only';
 import { completeRegisterRows } from '../complete-register';
 import { OurCompanyNetworkPanel } from './OurCompanyNetworkPanel';
-import { matchesOurCompanySearch, ourCompanyNetworkRows, type OurCompanyNetworkRow, type RoleCount } from './our-company-network';
+import {
+  matchesOurCompanySearch,
+  ourCompanyNetworkRows,
+  ourCompanyRelationshipsReadOf,
+  ourCompanyRosterLineOf,
+  type OurCompanyNetworkRow,
+  type RoleCount,
+} from './our-company-network';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -639,7 +647,8 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 名录的右栏是主从分栏（票 business-party-redesign/03，PartyRoster.tsx）：选中一家之后表换成左边一条定宽的名录栏——栏头
  * （页名、刷新、写入口）、视图签、检索与类型和状态两个下拉、一行两句的名单、栏底翻页——右边整块是这一家的详情，页头与整行的
  * 视图签这时不摆。选中的那家不在当前这一页上（翻了页、换了条件）右栏照旧显它，名录栏不为它跳页（party-roster.ts 的
- * selectedPartyRowOf）。合作关系与我方关联两个视图的右栏仍在表里对半开、可拖宽。
+ * selectedPartyRowOf）。「我方关联」选中一家也是同一种分栏（票 business-party-redesign/04）：左边是我方公司的名录栏，右边是这家
+ * 公司的关系图与按角色的汇总。合作关系视图的右栏仍在表里对半开、可拖宽——一段关系要与它上下的几段比着看，表留着。
  *
  * 两册的读口都在 ADR-0144 下（票 catalogue-read-pagination-rollout/11、14）：检索词、状态、角色与表头排序下推
  * （business-party-list.ts 的 businessPartyListConditions、party-relationship-list.ts 的 partyRelationshipListConditions），
@@ -798,12 +807,19 @@ export function BusinessPartiesPage() {
   // 「我方关联」一册：检索只在手上这几行里找（our-company-network.ts 的 matchesOurCompanySearch）。
   const [networkSearch, setNetworkSearch] = useState('');
   const [selectedOurCompany, setSelectedOurCompany] = useState<string | null>(null);
-  // 切到合作关系视图、按这家单位的编码检索，看它名下的全部关系。名录右栏（概要与「关联」签的「在「合作关系」里看全部」、
-  // 关系图的合成节点）与「我方关联」右栏（合成节点、「已结束」那句）都从这里去。
-  const showRelationshipsOf = (partyId: string) => {
+  // 右栏刚收起的那一家：这一视图从主从分栏收回成表时把焦点落回它那一行，做法同名录的 closedParty。
+  const closedOurCompany = useRef<string | null>(null);
+  const selectOurCompany = (key: string | null) => {
+    closedOurCompany.current = key === null ? selectedOurCompany : null;
+    setSelectedOurCompany(key);
+  };
+  // 切到合作关系视图、按这家单位的编码检索，看它名下的关系；给了角色就连角色一起筛（「我方关联」右栏按角色的汇总）。名录右栏
+  // （概要与「关联」签的「在「合作关系」里看全部」、关系图的合成节点）与「我方关联」右栏（合成节点、「已结束」那句、段头的
+  // 「看全部」）都从这里去。
+  const showRelationshipsOf = (partyId: string, relationshipRole: PartyRelationshipRoleFilter = 'ALL') => {
     setBook('relationships');
     setRelationshipSearch(partyId);
-    setRole('ALL');
+    setRole(relationshipRole);
     setRelationshipStatus('ALL');
     setAttentionOnly(false);
     setSelectedRelationship(null);
@@ -1088,6 +1104,11 @@ export function BusinessPartiesPage() {
   // 名录选中了一家、又读得到它那一行，就摆主从分栏（PartyRoster.tsx）：页头与整行的视图签让出来，右栏从页面顶到底。这里只看
   // 不带条件的那一页与记着的那一行；当前这一页上的行挂在视图里面，由 SelectedPartyMemory 报上来。
   const partySplit = book === 'identities' && selectedPartyRowOf(selectedParty, [], knownParties, rememberedParty) !== null;
+  // 「我方关联」同理（票 business-party-redesign/04）：选中的那家还在手上的行里，就摆同一种主从分栏——左边是我方公司的名录栏，
+  // 右边是这家公司。这一视图的行是从法人册与关系册组合出来的，都在手上，不必另记一行。
+  const networkDetailRow =
+    book === 'network' && selectedOurCompany !== null ? (networkRows.find((row) => row.partyId === selectedOurCompany) ?? null) : null;
+  const split = partySplit || networkDetailRow !== null;
   // 页名下不写集团标识：一家公司一套系统，租户是谁不必告诉运营；绑定仍读着，壳层顶栏显公司名用它。
   void boundTenant;
 
@@ -1291,43 +1312,115 @@ export function BusinessPartiesPage() {
       refreshOutcome: refreshOutcomeOf(viewState),
     };
     const networkNote = '以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图';
-    body = (
-      <PartyWorkbench<OurCompanyNetworkRow>
-        key="network"
-        viewStateKey="business-parties.network"
-        search={{ value: networkSearch, onChange: setNetworkSearch, placeholder: '搜我方公司名称、编码或公司主体' }}
-        filters={() => (
-          <>
-            {/* 段数不全的那一句排在前面、不参与截断：它是提醒，后面那句只是说明。 */}
-            {completeRelationships === null && relationshipsAnswered ? <PageOnlyNote>合作关系册不止一页，段数只按第一页数</PageOnlyNote> : null}
-            <span className="min-w-0 truncate type-caption text-idpxyz-breadcrumb" title={networkNote}>
-              {networkNote}
-            </span>
-          </>
-        )}
-        columns={networkColumns}
-        rows={visible}
-        rowKey={(row) => row.partyId}
-        selectedKey={selectedOurCompany}
-        onSelect={setSelectedOurCompany}
-        noMatchText="没有匹配的我方公司"
-        onClearFilters={() => setNetworkSearch('')}
-        // 检索只在手上这几行里找，摆出来几家就是几家。
-        footer={{ countText: partyFooterCountText(visible.length, visible.length, '家') }}
-        renderDetail={(key) => {
-          const row = networkRows.find((candidate) => candidate.partyId === key);
-          return row ? (
+    const searchBox = { value: networkSearch, onChange: setNetworkSearch, placeholder: '搜我方公司名称、编码或公司主体' };
+    // 段数不全的那一句：表的工具条与名录栏里是同一句。
+    const firstPageNote =
+      completeRelationships === null && relationshipsAnswered ? <PageOnlyNote>合作关系册不止一页，段数只按第一页数</PageOnlyNote> : null;
+    const clearNetworkSearch = () => setNetworkSearch('');
+    // 检索只在手上这几行里找，摆出来几家就是几家。
+    const footer = { countText: partyFooterCountText(visible.length, visible.length, '家') };
+    if (networkDetailRow !== null) {
+      // 选中了一家：主从分栏（PartyRoster.tsx，与名录同一个框）。左边一行两句——名称、在用几段与待确认几段——别的都在右边。
+      const detailRow = networkDetailRow;
+      const relationshipsRead = ourCompanyRelationshipsReadOf(relationships.answer?.kind ?? null, completeRelationships !== null);
+      // 头区的状态取它在往来单位册上的那一行；只在不带条件的那一页里找，没有就不摆（OurCompanyNetworkPanel 的 party）。
+      const detailParty = knownParties?.find((party) => party.partyId === detailRow.partyId) ?? null;
+      // 去单位名录看这一家：不带条件的那一页里有它，就清掉名录的筛选、直接选中，右栏当帧就有行可显；没有（往来单位册不止
+      // 一页）就按它的编码检索——当前这一页上读得到它，名录才分得了栏（SelectedPartyMemory）。
+      const showInRoster = () => {
+        setBook('identities');
+        setStatus('ALL');
+        setType('ALL');
+        setSearch(detailParty === null ? detailRow.partyId : '');
+        applyPartySelection(detailRow.partyId, detailParty);
+      };
+      body = (
+        <PartyRoster<OurCompanyNetworkRow>
+          key="network"
+          label="我方公司"
+          // 写入口与名录分栏时同一组、同一个位置：人记的是位置，不因为换了视图就没了。
+          head={<PartyRosterHead title={info.title} refresh={refresh} actions={rosterActions} />}
+          tabs={<BusinessPartiesViewTabs compact tabs={viewTabs} value={book} onChange={changeBook} />}
+          search={searchBox}
+          tools={firstPageNote ? <span className="col-span-2 flex">{firstPageNote}</span> : undefined}
+          rows={visible}
+          rowKey={(row) => row.partyId}
+          selectedKey={selectedOurCompany}
+          onSelect={selectOurCompany}
+          renderRow={(row) => (
+            <>
+              <PartyTile kind="OURS" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                {row.partyName ? (
+                  <span className="truncate type-section leading-5 text-idpxyz-textBright" title={row.partyName}>
+                    {row.partyName}
+                  </span>
+                ) : (
+                  // 名称转写不到：拿编码认它，不留一行「名称查不到」而不说是谁。
+                  <span className="truncate font-mono type-value leading-5 text-idpxyz-textBright" title={row.partyId}>
+                    {row.partyId}
+                  </span>
+                )}
+                <span className="truncate type-body leading-4 text-idpxyz-breadcrumb">{ourCompanyRosterLineOf(row, relationshipsRead)}</span>
+              </span>
+            </>
+          )}
+          noMatchText="没有匹配的我方公司"
+          onClearFilters={clearNetworkSearch}
+          footer={footer}
+          viewState={viewState}
+          detail={
+            // 按公司重挂：换一家时正文从头看，不停在上一家滚到的位置。
             <OurCompanyNetworkPanel
-              row={row}
+              key={detailRow.partyId}
+              row={detailRow}
+              party={detailParty}
+              roles={rolesOfParty(roleIndex, detailRow.partyId)}
+              relationships={relationships.answer}
               relationshipsComplete={completeRelationships !== null}
-              onClose={() => setSelectedOurCompany(null)}
-              onShowRelationships={() => showRelationshipsOf(row.partyId)}
+              retryRelationships={relationships.retry}
+              tileKindOf={tileKindOf}
+              onClose={() => selectOurCompany(null)}
+              onShowRelationships={(relationshipRole) => {
+                // 点的那一枚随右栏一起卸掉，换过去之后焦点落到「合作关系」那一枚视图签上，与从名录右栏去时同。
+                tabFocusPending.current = true;
+                showRelationshipsOf(detailRow.partyId, relationshipRole === undefined ? 'ALL' : partyRelationshipRoleFilterOf(relationshipRole));
+              }}
+              onShowInRoster={showInRoster}
             />
-          ) : null;
-        }}
-        viewState={viewState}
-      />
-    );
+          }
+        />
+      );
+    } else {
+      body = (
+        <PartyWorkbench<OurCompanyNetworkRow>
+          key="network"
+          viewStateKey="business-parties.network"
+          search={searchBox}
+          filters={() => (
+            <>
+              {/* 段数不全的那一句排在前面、不参与截断：它是提醒，后面那句只是说明。 */}
+              {firstPageNote}
+              <span className="min-w-0 truncate type-caption text-idpxyz-breadcrumb" title={networkNote}>
+                {networkNote}
+              </span>
+            </>
+          )}
+          columns={networkColumns}
+          rows={visible}
+          rowKey={(row) => row.partyId}
+          // 这一视图的右栏不在表里开：选中一家就换成主从分栏（上面的 PartyRoster），这张表只在没有右栏时摆。
+          selectedKey={null}
+          onSelect={selectOurCompany}
+          renderDetail={() => null}
+          initialFocusKey={closedOurCompany.current}
+          noMatchText="没有匹配的我方公司"
+          onClearFilters={clearNetworkSearch}
+          footer={footer}
+          viewState={viewState}
+        />
+      );
+    }
   } else if (book === 'identities') {
     const conditions = businessPartyListConditions(settledSearch, status, sort);
     // 整册一页装得下时按整册计数（complete-register.ts）；装不下就 null，筛选项上不摆数。
@@ -1827,7 +1920,7 @@ export function BusinessPartiesPage() {
     <div ref={pageRef} className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
       {/* 主从分栏时页头与整行的视图签不摆（名录栏自己带栏头与签），位置留空而不是抽掉：下面那一块在子节点里的位置不变，
           游标那一页才不会因为分栏开合而重挂、退回第一页。 */}
-      {partySplit ? null : (
+      {split ? null : (
         <BusinessPartiesPageHead
           title={info.title}
           description="客户、供应商、承运代理等与我们有业务往来的单位，以及它们与我方公司之间的合作关系"
@@ -1835,7 +1928,7 @@ export function BusinessPartiesPage() {
           actions={headActions}
         />
       )}
-      {partySplit ? null : <BusinessPartiesViewTabs tabs={viewTabs} value={book} onChange={changeBook} attention={attention} />}
+      {split ? null : <BusinessPartiesViewTabs tabs={viewTabs} value={book} onChange={changeBook} attention={attention} />}
       {body}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}

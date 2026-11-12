@@ -7,6 +7,7 @@ import {
   partyRelationshipListConditions,
   partyRelationshipNeedsAttention,
   partyRelationshipNoMatchNote,
+  partyRelationshipRoleFilterOf,
   partyRelationshipRoleFilterOptions,
   partyRelationshipStatusFilterOptions,
 } from './party-relationship-list';
@@ -118,6 +119,15 @@ test('筛选选项表', () => {
     partyRelationshipStatusFilterOptions.map((option) => option.label),
     ['全部', '待确认', '已生效', '已到期', '已撤销', '已替代'],
   );
+});
+
+// Covers: 别处带着角色跳过来时角色码怎么落到筛选上——词表里的原样；词表之外的下拉里没有这一项，交「全部」。
+test('partyRelationshipRoleFilterOf 只认词表里的角色', () => {
+  equal(partyRelationshipRoleFilterOf('CUSTOMER'), 'CUSTOMER');
+  equal(partyRelationshipRoleFilterOf('AUTHORIZED_DELIVERING_PARTY'), 'AUTHORIZED_DELIVERING_PARTY');
+  equal(partyRelationshipRoleFilterOf('SOMETHING_NEW'), 'ALL');
+  // 「全部」不是角色码：交回去的仍是「全部」，不会被当成一个角色下推。
+  equal(partyRelationshipRoleFilterOf('ALL'), 'ALL');
 });
 
 // Covers: 计数（只在整册到手时用，complete-register.ts）按状态分格、待查单独计；词表之外的状态码不进任何格也不抛。
