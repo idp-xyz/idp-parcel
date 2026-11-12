@@ -82,7 +82,7 @@ Status: in-progress
 | [10](./issues/10-acceptance.md) | 验收：浏览器全流程、深浅主题、非作者评审（阻塞于 02–06、11） | 前端切片 | ready-for-agent |
 | [11](./issues/11-write-flows-in-the-new-layout.md) | 写操作在新版式里的样子：编辑态、就地登记合作关系、新增往来单位的查重提示、停用对话框（阻塞于 03、05） | 前端切片 | resolved（2026-11-12 进 main） |
 | [12](./issues/12-copy-icon-must-not-take-a-line-of-its-own.md) | bug：文本类的值末行刚好排满时，悬停才显的复制图标单独掉到下一行、底下多一行空白（票 05 走查时见到；病在公司主体页、对象页同用的 `CopyAside`） | 前端切片 | resolved（2026-11-11 进 main） |
-| [13](./issues/13-keep-the-other-two-views-state-per-tab.md) | bug：合作关系、我方关联两个视图的筛选与选中行、以及此刻停在哪个视图，离开这张标签满 30 秒再回来就回到初值（票 11 第 1 步只做了单位名录那一册） | 前端切片 | ready-for-agent |
+| [13](./issues/13-keep-the-other-two-views-state-per-tab.md) | bug：合作关系、我方关联两个视图的筛选与选中行、以及此刻停在哪个视图，离开这张标签满 30 秒再回来就回到初值（票 11 第 1 步只做了单位名录那一册） | 前端切片 | resolved（2026-11-12 进 main） |
 | [14](./issues/14-close-the-object-tab-when-leaving-an-edit-started-from-the-roster.md) | 从名录进编辑态，退出时把对象页那张标签一并关掉（要给壳层加一个口，共享面，需非作者评审） | 前端切片 | ready-for-agent |
 
 01 与 02 互不相干，可以同时开工；07 与前端各票互不相干。
