@@ -2,7 +2,7 @@ import { statusToneText } from '../../components/status-tone';
 import { businessPartyObjectHash } from './business-parties-address';
 import { formatCount, type PartyTileKind } from './business-parties-workbench';
 import { ourCompanyLabel } from './business-party-list';
-import type { RelationshipGraph, RelationshipGraphNode } from './party-relationship-graph';
+import { relationshipGraphShapeOf, type RelationshipGraph, type RelationshipGraphNode } from './party-relationship-graph';
 import { PartyTile, partyRoleTileKind } from './party-role-visuals';
 import { partyNameUnknownNote, partyRoleLabels, relationshipStatusLabels } from './presentation';
 import './party-relationship-graph.css';
@@ -11,7 +11,7 @@ import './party-relationship-graph.css';
 // relationshipGraphOf；这里只画。
 //
 // 画法是五列的 CSS 网格：左邻居 · 连线 · 中心 · 连线 · 右邻居，中心纵跨所有行，每个邻居与它那段连线同一行；列宽在
-// party-relationship-graph.css。不用画布或 SVG 量坐标：节点数随数据变，网格自己排得开，窄的右栏里也不会错位；每个邻居是一个
+// party-relationship-graph.css。只有一侧有关系时不为空着的那一侧留位置，收成三列靠左排（票 business-party-redesign/15）。不用画布或 SVG 量坐标：节点数随数据变，网格自己排得开，窄的右栏里也不会错位；每个邻居是一个
 // 带完整关系句的链接，读屏照样读得出「谁对谁担任什么、状态如何」，连线只是给眼睛看的，对读屏隐藏。
 // 节点与名录的行同一种长相（图标块、名称、编码），一眼认得出图上的这一家就是名录里的那一家。
 
@@ -26,6 +26,10 @@ function pending(node: RelationshipGraphNode): boolean {
 
 /** 正在填、还没有保存的那一段的连线下方那两个字；图下的说明也用它，两处同一个词。 */
 const draftEdgeLabel = '未保存';
+
+/** 某一侧一段关系都没有时的那一句。两侧都空时写在图上各自那一侧；只空一侧时那一侧不留位置，写进图下的说明。 */
+const towardVoidNote = '还没有单位对它担任角色';
+const fromVoidNote = '它还没有对谁担任角色';
 
 /** 连线下方那半句：单段写状态，合成节点写其中待确认几段（全都已生效就不写）。角色写在连线上方，两半分开放，窄栏里也不截断。 */
 function edgeStatus(node: RelationshipGraphNode): string | null {
@@ -157,30 +161,47 @@ export function PartyRelationshipGraph({
     return tileKindOf?.(node.partyId) ?? (side === 'toward' ? partyRoleTileKind(node.role) : 'NONE');
   };
   const hasDraft = [...graph.towardIt, ...graph.fromIt].some((node) => node.kind === 'draft');
+  // 只有一侧有关系时不为空着的那一侧留位置（party-relationship-graph.ts 的 relationshipGraphShapeOf）：三列靠左排，空着的那一侧
+  // 改在图下的说明里说一句。两侧都有、或两侧都没有，照旧五列。
+  const shape = relationshipGraphShapeOf(graph);
+  const columnsClass =
+    shape === 'toward-only' ? 'party-relationship-graph-toward' : shape === 'from-only' ? 'party-relationship-graph-from' : 'party-relationship-graph-columns';
+  // 各件落在第几列：只有「它对其担任角色」那一侧时中心排在最前，其余两种次序与五列时相同（只有前一侧时用到前三列）。
+  const column = shape === 'from-only' ? { towardNode: 1, towardConnector: 2, center: 1, fromConnector: 2, fromNode: 3 } : { towardNode: 1, towardConnector: 2, center: 3, fromConnector: 4, fromNode: 5 };
+  // 中心与两边连线之间留的那点空只留在有连线的一侧：排在最前或最后时，靠边的那一侧与栏里别的内容对齐。
+  const centerMargin = shape === 'from-only' ? 'mr-1.5' : shape === 'toward-only' ? 'ml-1.5' : 'mx-1.5';
+  const towardLabel = '对它担任角色的单位';
+  const fromLabel = '它对其担任角色的单位';
 
   return (
     <div className="party-relationship-graph">
-      <div className="party-relationship-graph-columns mb-2 type-body text-idpxyz-breadcrumb">
-        <span>对它担任角色的单位</span>
-        <span className="col-start-5 text-right">它对其担任角色的单位</span>
+      <div className={`${columnsClass} mb-2 type-body text-idpxyz-breadcrumb`}>
+        {shape === 'from-only' ? null : <span>{towardLabel}</span>}
+        {shape === 'toward-only' ? null : (
+          <span style={{ gridColumn: column.fromNode }} className={shape === 'from-only' ? undefined : 'text-right'}>
+            {fromLabel}
+          </span>
+        )}
       </div>
       <div
         role="group"
         aria-label={`${center}的合作关系图`}
-        className="party-relationship-graph-columns items-center gap-y-2"
+        className={`${columnsClass} items-center gap-y-2`}
         style={{ gridTemplateRows: `repeat(${rows}, minmax(3rem, auto))` }}
       >
         {graph.towardIt.length === 0 ? (
-          <p style={{ gridColumn: '1 / span 2', gridRow: towardStart }} className="type-body text-idpxyz-breadcrumb">
-            还没有单位对它担任角色
-          </p>
+          shape === 'none' ? (
+            <p style={{ gridColumn: '1 / span 2', gridRow: towardStart }} className="type-body text-idpxyz-breadcrumb">
+              {towardVoidNote}
+            </p>
+          ) : null
         ) : (
           graph.towardIt.map((node, index) => (
             <div key={node.key} className="contents">
-              <div style={{ gridColumn: 1, gridRow: towardStart + index }} className="min-w-0">
+              <div style={{ gridColumn: column.towardNode, gridRow: towardStart + index }} className="min-w-0">
                 <Neighbor node={node} center={center} side="toward" tileKind={tileOf(node, 'toward')} onShowDetail={onShowDetail} />
               </div>
-              <div style={{ gridColumn: 2, gridRow: towardStart + index }} className="min-w-0">
+              <div style={{ gridColumn: column.towardConnector, gridRow: towardStart + index }} className="min-w-0">
                 <Connector node={node} />
               </div>
             </div>
@@ -188,8 +209,8 @@ export function PartyRelationshipGraph({
         )}
 
         <div
-          style={{ gridColumn: 3, gridRow: `1 / span ${rows}` }}
-          className="mx-1.5 flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 self-stretch rounded-[10px] border border-idpxyz-accent bg-idpxyz-activeItem px-2.5 py-3 text-center"
+          style={{ gridColumn: column.center, gridRow: `1 / span ${rows}` }}
+          className={`${centerMargin} flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 self-stretch rounded-[10px] border border-idpxyz-accent bg-idpxyz-activeItem px-2.5 py-3 text-center`}
         >
           <PartyTile kind={centerKind ?? (ours ? 'OURS' : 'NONE')} />
           <span className="line-clamp-2 max-w-full break-words type-value leading-[18px] text-idpxyz-textBright" title={center}>
@@ -199,16 +220,18 @@ export function PartyRelationshipGraph({
         </div>
 
         {graph.fromIt.length === 0 ? (
-          <p style={{ gridColumn: '4 / span 2', gridRow: fromStart }} className="text-right type-body text-idpxyz-breadcrumb">
-            它还没有对谁担任角色
-          </p>
+          shape === 'none' ? (
+            <p style={{ gridColumn: '4 / span 2', gridRow: fromStart }} className="text-right type-body text-idpxyz-breadcrumb">
+              {fromVoidNote}
+            </p>
+          ) : null
         ) : (
           graph.fromIt.map((node, index) => (
             <div key={node.key} className="contents">
-              <div style={{ gridColumn: 4, gridRow: fromStart + index }} className="min-w-0">
+              <div style={{ gridColumn: column.fromConnector, gridRow: fromStart + index }} className="min-w-0">
                 <Connector node={node} />
               </div>
-              <div style={{ gridColumn: 5, gridRow: fromStart + index }} className="min-w-0">
+              <div style={{ gridColumn: column.fromNode, gridRow: fromStart + index }} className="min-w-0">
                 <Neighbor node={node} center={center} side="from" tileKind={tileOf(node, 'from')} onShowDetail={onShowDetail} />
               </div>
             </div>
@@ -217,6 +240,8 @@ export function PartyRelationshipGraph({
       </div>
       <p className="mt-2.5 type-body text-idpxyz-breadcrumb">
         箭头从担任角色的一方指向对方；虚线是待确认的关系。
+        {/* 空着的那一侧图上不留位置，在这里说一句：没画不是漏画。 */}
+        {shape === 'toward-only' ? `${fromVoidNote}。` : shape === 'from-only' ? `${towardVoidNote}。` : null}
         {hasDraft ? `标着「${draftEdgeLabel}」的灰色虚线是正在填的这一段，保存之后才算数。` : null}
         {graph.ended > 0 ? (
           <>

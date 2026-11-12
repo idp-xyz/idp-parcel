@@ -17,6 +17,34 @@
   }
 }
 
+/* 只有一侧有关系时（party-relationship-graph.ts 的 relationshipGraphShapeOf）不为空着的那一侧留两列：三列靠左排——邻居、连线、
+   中心，或反过来。大多数单位都是这一种：客户只对我方担任角色，我方公司多半只是别人的相对方。照五列排，半张图是空的，窄栏里有
+   内容的那一半名称却被截断。邻居一列封顶在 360：宽栏里一个节点不拉成一长条。窄栏里省下来的宽度尽量给邻居——中心到 140 就
+   不再长：它的名称可以折两行，而且就是这一栏头部写着的那家单位；邻居的名称只有一行，截断了就得靠悬停看全。 */
+.party-relationship-graph-toward,
+.party-relationship-graph-from {
+  display: grid;
+  justify-content: start;
+}
+
+.party-relationship-graph-toward {
+  grid-template-columns: minmax(0, 360px) 5.5rem minmax(0, 140px);
+}
+
+.party-relationship-graph-from {
+  grid-template-columns: minmax(0, 140px) 5.5rem minmax(0, 360px);
+}
+
+@container party-relationship-graph (min-width: 704px) {
+  .party-relationship-graph-toward {
+    grid-template-columns: minmax(150px, 360px) minmax(96px, 140px) minmax(140px, 180px);
+  }
+
+  .party-relationship-graph-from {
+    grid-template-columns: minmax(140px, 180px) minmax(96px, 140px) minmax(150px, 360px);
+  }
+}
+
 /* 连线末端的箭头：朝右的三角，颜色随连线。 */
 .party-relationship-graph-line::after {
   content: '';

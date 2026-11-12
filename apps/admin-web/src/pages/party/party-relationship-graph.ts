@@ -153,3 +153,19 @@ export function relationshipGraphWithDraft(graph: RelationshipGraph, draft: Rela
   const node: RelationshipGraphNode = { kind: 'draft', key: 'draft', partyId: draft.otherPartyId, name: draft.otherPartyName, role: draft.role };
   return draft.side === 'HOLDER' ? { ...graph, fromIt: [...graph.fromIt, node] } : { ...graph, towardIt: [...graph.towardIt, node] };
 }
+
+/**
+ * 图排成哪一种：两侧都有邻居（both），只有对它担任角色的一侧有（toward-only），只有它对其担任角色的一侧有（from-only），
+ * 两侧都没有（none）。只有一侧有时图不为空着的那一侧留位置，三列靠左排（PartyRelationshipGraph.tsx）——大多数单位都是这一种：
+ * 客户只对我方担任角色，我方公司多半只是别人的相对方；照五列排半张图是空的，窄栏里有内容的那一半名称却被截断。正在填的那一段
+ * 也算邻居：它落在空着的那一侧时，图随之展开成两侧。
+ */
+export type RelationshipGraphShape = 'both' | 'toward-only' | 'from-only' | 'none';
+
+export function relationshipGraphShapeOf(graph: Pick<RelationshipGraph, 'towardIt' | 'fromIt'>): RelationshipGraphShape {
+  const toward = graph.towardIt.length > 0;
+  const from = graph.fromIt.length > 0;
+  if (toward && from) return 'both';
+  if (toward) return 'toward-only';
+  return from ? 'from-only' : 'none';
+}

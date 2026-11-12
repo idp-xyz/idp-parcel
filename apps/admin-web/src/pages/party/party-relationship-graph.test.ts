@@ -5,6 +5,7 @@ import {
   relationshipGraphDraftOf,
   relationshipGraphOf,
   relationshipGraphRoleLimit,
+  relationshipGraphShapeOf,
   relationshipGraphWithDraft,
 } from './party-relationship-graph';
 import type { PartyRelationshipView } from './party-overview';
@@ -113,4 +114,18 @@ test('relationshipGraphWithDraft 把正在填的一段排在那一侧的末尾',
   deepEqual(left.fromIt, graph.fromIt);
   deepEqual(left.towardIt.map((node) => `${node.kind}:${node.kind === 'group' ? node.role : node.partyId}`), ['party:AG-1', 'draft:D-9']);
   equal(left.ended, graph.ended);
+});
+
+// Covers: 图的形状看两侧各有没有邻居；正在填的那一段也算——它落在空着的那一侧，单侧就成了两侧。
+test('relationshipGraphShapeOf 看两侧各有没有邻居', () => {
+  const holder = view({ relationshipId: 'R1', side: 'HOLDER' });
+  const counterparty = view({ relationshipId: 'R2', side: 'COUNTERPARTY' });
+  equal(relationshipGraphShapeOf(relationshipGraphOf([holder, counterparty])), 'both');
+  equal(relationshipGraphShapeOf(relationshipGraphOf([holder])), 'from-only');
+  equal(relationshipGraphShapeOf(relationshipGraphOf([counterparty])), 'toward-only');
+  equal(relationshipGraphShapeOf(relationshipGraphOf([])), 'none');
+  // 只剩已结束的段：图上没有邻居。
+  equal(relationshipGraphShapeOf(relationshipGraphOf([view({ status: 'REVOKED' })])), 'none');
+  const drafted = relationshipGraphWithDraft(relationshipGraphOf([holder]), { side: 'COUNTERPARTY', otherPartyId: 'P-NEW', otherPartyName: '新单位', role: 'SUPPLIER' });
+  equal(relationshipGraphShapeOf(drafted), 'both');
 });
