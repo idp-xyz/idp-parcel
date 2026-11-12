@@ -96,7 +96,7 @@ Q4 至 Q6 是用户自己的决定。
 | 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | ready-for-agent |
 | 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、16、19 | ready-for-agent |
 | 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
-| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 已接受，实现拆成 16 至 21；非作者评审与进 `main` 待做） |
+| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 已接受，实现拆成 16 至 21；非作者评审已做，进 `main` 待用户定与在途分支的先后） |
 | 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | draft |
 | 17 | [销售价格来源随接受时固定的商业解析一起固定，结算有口读它](./issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) | 16 | draft |
 | 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | draft |
@@ -186,3 +186,4 @@ Q4 至 Q6 是用户自己的决定。
   6. **本规格写「三类归属写在各票」，票 08、09、15 没有这一节。** 改成如实的说法。
 - 2026-11-12（票 15 开工）：用户选定开工票 15，只出决定。分支 `cursor/cfmr-15-customer-price-authority`，从 `54b32c1b8` 起，没有进 `main`。出了 ADR 草案第一稿（后来编号为 ADR-0380，草案文件已删），行业做法笔记补 R20 至 R29。取证推翻了会话写在票 15 上的倾向，票面已更正，经过记在票 15 的 Comments。草案未编号、未经非作者评审，用户还没有看过结论；它之外的文档一处未改。
 - 2026-11-12（票 15 用户接受之后）：用户看过草案结论后选定接受。草案编号为 [ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)，移入 `docs/adr`，`.scratch` 里的草案删去；相关 `CONTEXT.md`、`GLOSSARY.md`、`CONTEXT-MAP.md`、`UC-PC-002`、`UC-SA-002` 与参数登记册 `PAR-COM-15` 同笔改成现行。实现拆成票 16 至 21，都是 `draft`，没有随「q6 全部激活」激活——那一句说的是当时的 01 至 15；也没有进冻结清单。票 04、08 解除对票 15 的阻塞，票 13 改指票 16。编号时发现本机在途分支 `docs/declared-goods-lines` 上的 ADR-0378 与它有两句相抵，记在 ADR-0380 越权风险点 5 与票 15 的 Comments。非作者评审与进 `main` 待做。
+- 2026-11-12（票 15 非作者评审之后）：评审三次，SHA、结论与处置记在票 15 的 Comments。修订给 ADR-0380 的决定三、七、九加了细则，决定二改了一条（受理前估价读接受前财务控制所凭的那一份解析）；票 13 因此多等票 19。那条在途分支后来自己也立了一篇编号 ADR-0380 的记录，撞号；进 `main` 的先后待用户定。
