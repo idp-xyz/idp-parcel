@@ -1,7 +1,7 @@
 # 26 申报不全的估价按缺项分流：计价点名缺项、结算逐件带回、客户可补的停等受控补充并记缺口
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未进 main；本票接着它做）
 
 依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定一至四；ADR-0094 决定三、五（先存等待、处理尝试同笔落库）；ADR-0380 决定一、三（等运营登记那一路与尝试两格的既有落点）。
@@ -43,3 +43,18 @@ Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未�
 - 补充届满处置（租户取值，PS CONTEXT 既有那句）。
 - 演示种子不加这条路（演示租户种子都带齐资料；要演示补件动线另立）。
 - 按原因或计价范围收窄重驱（ADR-0380 越权风险点「多唤醒」）。
+
+## 完成记录（作者一侧，2026-11-12）
+
+- 提交：分支 `feat/estimate-incomplete-waits`（工作树 `idp-parcel-goods-t26`，基线 `7947bdad3`）上的 `5c5eda0ed`，一笔，未推送、未进 main。
+- 落点：
+  - 计价：`ports/reference_catalogue.go` 加试算编排宽一格的目录口 `EstimateReferenceCatalogues`（含 `LoadVersion`）；`domain/package_weight_features.go` 的 `PricingPlanVersion.RequiresDeclaredDimensions`（判定条件读尺寸派生量，或重量策略走体积重那一路）；`application/reading_completion.go` 的 `originPostalRequired`（读在用分区目录版本的始发维度声明，没有在用版本不点名）；`form_estimate_evaluations.go` 封闭集加 `EstimateMissingOriginPostal`、`EstimateMissingDimensions`，`estimateInput` 带 `originSplitByPrefix` 点名；`form_plan_given_estimate_evaluations.go` 逐件声明走同一道门。
+  - 结算：`ports/pre_acceptance_trial.go` 的 `PreAcceptanceTrialAnswer.Gaps []PreAcceptanceTrialGap{Parcel, Missing}`（码原样逐件带回）；`adapters/parcelpricing/pre_acceptance_trials.go` 的 `trialGapsOf` 只摘不译；`apply_pre_acceptance_control.go` 的 `DeclarationGaps()`，原因码照旧。
+  - 小包托运：消费侧适配器 `declarationIncompleteLanding` 分流（ZONE / ADDRESS_NATURE → 等运营登记、登记优先；其余译成 `ESTIMATE_MEASUREMENT_MISSING` / `ESTIMATE_DIMENSIONS_MISSING` / `ESTIMATE_RECIPIENT_POSTAL_MISSING` / `ESTIMATE_ORIGIN_POSTAL_MISSING` 走新端口格 `PreAcceptanceControlCustomerSupplementRequired`；缺项缺席 → 内部重试；集外码报 `ErrUntranslatableAnswer`）；领域 `ShipmentRequest.AwaitCustomerSupplement(gaps)` 与 `ProcessingAttemptSpec.EstimateGapCodes`；应用 `awaitCustomerSupplement`（先 Save 再交回 `CustomerSupplementPending`，没存下落 `CUSTOMER_SUPPLEMENT_WAIT_NOT_SAVED`），两路等待都把缺项码记上尝试；postgres 落列与读回。
+  - 迁移 `migrations/parcel_shipment/0039_processing_attempt_estimate_gap_codes.sql`：`acceptance_processing_attempt` 加可空列 `estimate_gap_codes text[]`（非空数组约束，旧行不回填）。
+  - HTTP 读面钉给票 27：`lastAttemptEstimateGapCodes`（与票 23 的 `lastAttemptSettlementReason`、`lastAttemptServiceProduct` 同组）。
+- 判据：真库端到端（`cmd/parcel-dispatch/estimate_gap_split_resume_loop_test.go`，试算走生产受理前试算链）——缺重量＋缺收件邮编停等受控补充、缺口两条、尝试带三格、补件队列列出、补件后新版本接受 ✅；始发前缀目录＋空寄件邮编 → `ORIGIN_POSTAL` 停等受控补充 ✅；无目录卡 → `ZONE` 停等运营登记，按 ADR-0234 收尾后登新卡重驱接受（中途直登落适用冲突照停）✅；两类同场登记优先、不落补件缺口 ✅；缺项缺席整笔回滚无痕 ✅。
+- 验证（含 PG，DSN 指 `idp-parcel-postgres-gate` 55432，串行 `-p 1`）：`gofmt -l` 空、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；全量 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0。
+- 与票面的偏差：端口评估加的是两格（译后缺口 `SupplementGaps` ＋原样码 `EstimateGapCodes`）而非「加一格」——登记那一路没有译后缺口可推，原样码单独一格才能随两路等待都落尝试。既有边界未动：卡只有重量段规则且无尺寸申报时急读尺寸那一格照旧走无合计，不在本票分流里。补件队列记录形状照票 23 先例未扩列（缺口从详情与任务上读）。
+- 评审（非作者，2026-11-12）：无阻断、无应改。两条自报偏差均判成立（端口两格比票面一格更忠于 ADR-0381 决定四「两路等待都记缺项码」）。四条备注：急读尺寸的遗留边界（只带实重附加费/拒收条款的卡、无尺寸申报，经 `PACKAGE_FEATURES_UNAVAILABLE` 落无合计、归等运营登记，既登不开也没人补）另立票 28 承接；缺项码顺序被多处测试钉成精确数组——顺序来源确定（申报件序×点名序）、不会运行时飘红，当作「顺序变了要有人看一眼」的显式门留着；`originPostalRequired` 与补齐读数各自取钟属房内惯例，记录在案；评审复跑 `gofmt`/`go vet` 与九个相关包测试（含真库）、五个端到端用例 5/5 PASS。
+- 拣入：在 `feat/goods-details-admin` 上是 `cd2474100`，无冲突；迁移 `0039` 两边 sha256 一致（`91a1b94e…`）。合并头全量门禁结果记在票 25 收口处。

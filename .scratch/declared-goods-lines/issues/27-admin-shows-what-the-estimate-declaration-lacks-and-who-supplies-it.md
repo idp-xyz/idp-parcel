@@ -1,8 +1,8 @@
 # 27 管理台写明估价申报缺什么、谁来补
 
 Category: enhancement
-Status: ready-for-agent
-Blocked by: 26
+Status: in-progress
+Blocked by: 26（已解除：票 26 实现与评审完毕，拣入 `feat/goods-details-admin` 为 `cd2474100`；详情新字段 `lastAttemptEstimateGapCodes`，与票 23 的 `lastAttemptSettlementReason`、`lastAttemptServiceProduct` 同组）
 
 依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定五；票 24 的停因展示（续办方取处理尝试那一格）与票 26 钉下的字段。
 
