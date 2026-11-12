@@ -1,7 +1,7 @@
 # 15 「哪位客户用哪套价」有两处说法，客户价只有一层——重开 ADR-0260 留下的重启条件：定一处说了算，并定客户价的结构
 
 Category: enhancement
-Status: in-progress——2026-11-12 Cursor 会话认领，分支 `cursor/cfmr-15-customer-price-authority`。用户 2026-11-12 看过草案结论后选定接受；草案编号为 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 并移入 `docs/adr`，`CONTEXT.md` 等同笔改成现行，实现拆成票 16 至 21。非作者评审已做（钉 `677f9a247` 有阻断；修订后钉 `1d0752181` 有应改无阻断；再钉 `756b70d7c` 确认，剩的应改只在本票 Comments，已改），进 `main` 待用户定与在途分支 `docs/declared-goods-lines` 的先后。此前 ready-for-agent
+Status: resolved——2026-11-12 进 `main` `486a4e8fe`，见「进 main 记录」；ADR-0380 已接受，实现拆成票 16 至 21（`draft`，等用户激活）。此前 in-progress——2026-11-12 Cursor 会话认领，分支 `cursor/cfmr-15-customer-price-authority`。用户 2026-11-12 看过草案结论后选定接受；草案编号为 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 并移入 `docs/adr`，`CONTEXT.md` 等同笔改成现行，实现拆成票 16 至 21。非作者评审已做（钉 `677f9a247` 有阻断；修订后钉 `1d0752181` 有应改无阻断；再钉 `756b70d7c` 确认，剩的应改只在本票 Comments，已改），进 `main` 待用户定与在途分支 `docs/declared-goods-lines` 的先后。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无。用户 2026-11-11 答「q4重开」（[spec](../spec.md)「用户的决定」Q4）。这是模型取舍：重开会改销售选卡的依据，牵动计价、结算、参与方与商业三个上下文；ADR 进 main 前要一份非作者评审
 地盘：本票只出决定——一篇 ADR 与相关的 `CONTEXT.md`、`CONTEXT-MAP.md`；实现在 ADR 接受之后另拆票
@@ -104,6 +104,23 @@ Blocked by: 无。用户 2026-11-11 答「q4重开」（[spec](../spec.md)「用
 - 一篇 ADR 过非作者评审并接受：写明哪一处说了算、客户价的层次与回退、上面第三节的三项、对 ADR-0260、ADR-0280 与 ADR-0377 的作用（照 `docs/adr/README.md` 顶部挂指针）。
 - 被改的 `CONTEXT.md` 句子同一笔改成现行，`UC-PC-002` 里那句「客户差异化的销售价表达不了」随之改。
 - 实现拆成票，各带阻塞边；票 04 与票 08 至 13 照结论核一遍。
+
+## 进 main 记录
+
+2026-11-12，照 `docs/agents/workflow.md`「进 main 的步骤」。用户在问题卡上选定「现在落 main，保留 0380；在途分支落地时改它自己的号并合并重叠的句子」。推送方就是作者会话（Cursor）。
+
+- **`main` 上的 SHA**：`4fbd46531`、`44310e747`、`1cc4737ba`、`9babb206d`、`f8d81b30b`、`e00e2113b`、`486a4e8fe`，底是 `a9d8b27dd`。推的是核过的那个 SHA 本身，非强推；推后 `git ls-remote origin refs/heads/main` 答 `486a4e8fe`。
+- **出处**：分支 `cursor/cfmr-15-customer-price-authority`，tip `5491f82cd`，留在远端不删。重放换了 SHA，新旧对应：`e68fe08ce` → `4fbd46531`，`677f9a247` → `44310e747`，`1d0752181` → `1cc4737ba`，`756b70d7c` → `9babb206d`，`5491f82cd` → `f8d81b30b`。`e00e2113b` 与 `486a4e8fe` 是推送方在重放之后加的，分支上没有。本票 Comments 里写的 SHA 都是分支上的。
+- **非作者评审**：评审者是作者会话派出的一个子代理，拿不到作者的对话，在隔离检出上只读。各次的 SHA、范围、结论与处置见 Comments「非作者评审与修订」一条：钉 `677f9a247` 有阻断；钉 `1d0752181` 有应改无阻断；钉 `756b70d7c` 有应改无阻断，剩的应改只在本票 Comments。分支上最后一笔 `5491f82cd` 与重放之后的 `e00e2113b` 没有再送评审，推送方自审。
+- **重放**：在隔离树上逐笔重放到 `a9d8b27dd`，没有碰共享工作树、它的 index 与 HEAD。分叉点 `54b32c1b8` 之后 `main` 新进的那一段，与本票重叠的文件只有 `docs/domain/party-commercial/CONTEXT.md`：那边加了讲业务参与方类别的一条规则，与本票改的两个词条不在同一处，自动合并，无冲突。重放 tip 上本票动过的文件，除这一份多出那一条之外，与分支 tip 逐字节一致。
+- **重放时的对齐（`e00e2113b`）**：`main` 在这期间进了另一篇 ADR-0378（业务参与方读口的类别）。本票写的「ADR-0378」「ADR-0379」指的是在途分支 `docs/declared-goods-lines` 上没进 `main` 的记录，照原样进来会指错。ADR-0380 的 Context、越权风险点 5、「起草能力边界」与票 18 因此改成按那条分支上的编号加题目指，撞号一条写成已定的事实；本票与 `spec.md` 的旧记录各加一句注。决定各条未动。
+- **编号**：留 0380。进 `main` 的那一刻，`main` 上 0378 是另一篇，0379 空着。在途分支落地时，它的分支 0378 与分支 0380 都要改号，并合并两边在同一句上的指针与替换文字（ADR-0380 越权风险点 5）；那条分支的会话本会话通知不到，由用户转告。
+- **生成物**（在重放 tip 的干净检出上）：ADR 索引重生成有变化，单独成笔 `486a4e8fe`——ADR-0380 入列，ADR-0179、0190、0229、0260、0280、0336 行尾多出注记；其后 `go run ./tools/adr-index -check` 退 0。AT 盘点计数重算无变化，`go run ./tools/at-coverage-counts -check` 退 0。机制清点重生成后无变化，没有单独成笔。
+- **全量真库测试**：未跑。只动 `.md`。
+- **灌一次性库**：未跑。只动 `.md`。
+- **CI**：`486a4e8fe` 那一次推送的 Parcel CI 全部作业成功（静态检查——含 ADR 索引、AT 盘点计数与机制清点三道核对，管理台，各测试分片）。
+- **收口这一笔**：只改本票与 `spec.md`，推送方自审，没有另请评审。
+- **还开着的**：票 16 至 21 是 `draft`，等用户激活；ADR-0380 的越权风险点待 PC、SA、PP owner 复核，其中决定二在评审之后改过的那一条见越权风险点 11。
 
 ## Comments
 
