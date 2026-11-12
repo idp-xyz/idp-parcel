@@ -180,7 +180,7 @@ Date: 2026-11-11
 7. 草稿加`已撤下`，改的是 ADR-0101 与计价 `CONTEXT.md` 定的草稿生命周期，归计价 owner。
 8. 决定六的大半等票 15。票 15 的结论若让客户价不再是一张完整的卡，决定三所引的价格内容是什么也要跟着改。
 9. 本草案起草之后，`main` 同日新接受了 [ADR-0377](../../docs/adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)：销售价卡多出仓储计费方案这一种，登在它自己的计价范围上，由结算的仓储计费采用登记指到货主。报价能不能引这种方案、它的生效落在哪一处，本草案没有考虑；照票 15 的结论补完时一并看（核在 `31d1cd16b`）。
-10. 决定六那道「发布以接受为前提」的门，没登记时不设门、读面答未配置。这与审批职责规则「没登记不放行」方向相反，实际效果是「不设门」成了没登记时的做法。理由是今天没有任何规则要求发布以接受为前提，没登记就拦会让现有的价卡发布全部停住。它算不算 `AGENTS.md` 红线里要拒绝的默认值，归计价与参与方与商业两个上下文的 owner 裁；票 [03](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) 的签署证据门是同一个问题，两处要一个口径。2026-11-11 非作者评审指出，补记在此。
+10. 决定六那道「发布以接受为前提」的门，没登记时不设门、读面答未配置。这与审批职责规则「没登记不放行」方向相反，实际效果是「不设门」成了没登记时的做法。理由是今天没有任何规则要求发布以接受为前提，没登记就拦会让现有的价卡发布全部停住。它算不算 `AGENTS.md` 红线里要拒绝的默认值，归计价与参与方与商业两个上下文的 owner 裁；票 [03](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) 的签署证据门是同一个问题，两处要一个口径。2026-11-12 非作者评审指出，补记在此。
 
 ## Links
 
