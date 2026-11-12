@@ -167,11 +167,12 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 // RecordProcessingAttempt 追加一条没能推进的处理记录。
 //
 // 同一续办引用同一时刻是同一次尝试的重放；真卡了两轮会有两个时刻，各占一行——只留最近一条
-// 就说不出这份委托卡过几轮、各卡在哪里。
+// 就说不出这份委托卡过几轮、各卡在哪里。结算原因、服务产品与版本缺席时写空（迁移 0038）。
 func (repository *AcceptanceJudgments) RecordProcessingAttempt(
 	ctx context.Context,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	attempt domain.ProcessingAttempt,
 ) error {
 	executor, err := repository.db.RequireExecutor(ctx)
@@ -179,11 +180,12 @@ func (repository *AcceptanceJudgments) RecordProcessingAttempt(
 		return fmt.Errorf("record processing attempt: %w", err)
 	}
 
+	settlementReason, _ := attempt.SettlementReason()
 	_, err = executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_processing_attempt
 			(tenant_id, shipment_request_id, continuation_ref, attempted_at,
-			 reason_ref, resume_path)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+			 reason_ref, resume_path, settlement_reason, service_product, submission_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
@@ -191,6 +193,9 @@ func (repository *AcceptanceJudgments) RecordProcessingAttempt(
 		attempt.AttemptedAt().UTC(),
 		attempt.Reason().String(),
 		attempt.ResumePath().String(),
+		nullableText(settlementReason.String()),
+		nullableText(attempt.ServiceProduct().String()),
+		nullableText(version.String()),
 	)
 	if err != nil {
 		return fmt.Errorf("record processing attempt: %w", err)

@@ -677,11 +677,13 @@ func (double *reachabilityDouble) AssessParcelReachability(
 }
 
 type judgmentRequestStore struct {
-	rejected          bool
-	err               error
-	basisErr          error
-	recordedControl   []domain.FinancialControlResult
-	recordedAttempts  []domain.ProcessingAttempt
+	rejected         bool
+	err              error
+	basisErr         error
+	recordedControl  []domain.FinancialControlResult
+	recordedAttempts []domain.ProcessingAttempt
+	// attemptVersions 收下每条处理尝试记在哪一版上：委托详情按版本读最近一条（ADR-0380 决定四），版本漏传在替身上不报错。
+	attemptVersions   []domain.SubmissionVersionID
 	adoptedResolution []domain.CommercialResolutionID
 	// recordedTenants 收下每次记录时编排给出的租户。它存在是为了让「编排确实把租户传下去了」
 	// 可被断言——租户漏传在替身上不会报错，只会在真库里变成一次跨租户读写。
@@ -741,10 +743,12 @@ func (store *judgmentRequestStore) RecordProcessingAttempt(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	attempt domain.ProcessingAttempt,
 ) error {
 	store.recordedTenants = append(store.recordedTenants, tenant)
 	store.recordedAttempts = append(store.recordedAttempts, attempt)
+	store.attemptVersions = append(store.attemptVersions, version)
 	return nil
 }
 

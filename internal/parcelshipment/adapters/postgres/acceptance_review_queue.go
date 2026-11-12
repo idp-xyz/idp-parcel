@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -71,25 +73,17 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 	}
 	defer rows.Close()
 
-	var records []ports.AcceptanceReviewQueueRecord
-	for rows.Next() {
-		var row summaryRow
-		var rawTask []byte
-		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
-			return fail(err)
-		}
-		summary, err := row.record()
-		if err != nil {
-			return fail(err)
-		}
-		var task taskDocument
-		if err := json.Unmarshal(rawTask, &task); err != nil {
-			return fail(fmt.Errorf("快照不是本适配器写下的形状：%w", err))
-		}
-		taskView, err := taskViewRecord(task)
-		if err != nil {
-			return fail(err)
-		}
+	summaries, sources, err := scanQueueRows(rows)
+	if err != nil {
+		return fail(err)
+	}
+	taskViews, err := taskViewRecords(ctx, querier, scope.TenantID(), sources)
+	if err != nil {
+		return fail(err)
+	}
+	records := make([]ports.AcceptanceReviewQueueRecord, 0, len(summaries))
+	for index, summary := range summaries {
+		taskView := taskViews[index]
 		records = append(records, ports.AcceptanceReviewQueueRecord{
 			ShipmentRequestSummaryRecord: summary,
 			HasAttempt:                   taskView.HasAttempt,
@@ -103,9 +97,6 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 			ReviewCompletedAt:            taskView.ReviewCompletedAt,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return fail(err)
-	}
 	page, err := cataloguepage.Finish(query, records, limit, total,
 		func(record ports.AcceptanceReviewQueueRecord, sortField string) cataloguepage.Position {
 			return summaryPosition(record.ShipmentRequestSummaryRecord, sortField)
@@ -114,4 +105,35 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 		return fail(err)
 	}
 	return page, nil
+}
+
+// scanQueueRows 把一页委托队列（概要列加任务文档）读完并关掉游标：任务视图要另读处理尝试表，同一个执行器上不套第二个
+// 游标。各委托队列共用它。
+func scanQueueRows(rows pgx.Rows) ([]ports.ShipmentRequestSummaryRecord, []taskViewSource, error) {
+	defer rows.Close()
+	var (
+		summaries []ports.ShipmentRequestSummaryRecord
+		sources   []taskViewSource
+	)
+	for rows.Next() {
+		var row summaryRow
+		var rawTask []byte
+		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
+			return nil, nil, err
+		}
+		summary, err := row.record()
+		if err != nil {
+			return nil, nil, err
+		}
+		var task taskDocument
+		if err := json.Unmarshal(rawTask, &task); err != nil {
+			return nil, nil, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
+		}
+		summaries = append(summaries, summary)
+		sources = append(sources, taskViewSource{request: summary.ShipmentRequestID, task: task})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return summaries, sources, nil
 }

@@ -148,7 +148,8 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		return AdvanceAcceptanceJudgmentResult{}, err
 	}
 	if stall.stopped() {
-		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall.reason)
+		reason, product, err := awaitOperatorRegistration(
+			ctx, handler.requests, command.Identity, command.SubmissionVersion, stall.reason)
 		if err != nil {
 			return AdvanceAcceptanceJudgmentResult{}, err
 		}
@@ -158,12 +159,12 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 			// 拼新原因会造出一条谁也查不回来的引用。
 			scope = nil
 		}
-		return handler.undecided(ctx, command, reason, scope...), nil
+		return handler.undecided(ctx, command, reason, attemptDetail{serviceProduct: product}, scope...), nil
 	}
 
 	request, found, err := handler.requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil
+		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable, attemptDetail{}), nil
 	}
 	var geo domain.CarriedGeoProjection
 	if found {
@@ -181,21 +182,21 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		Geo:               geo,
 	})
 	if err != nil {
-		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil
+		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable, attemptDetail{}), nil
 	}
 	if assessment.Outcome != ports.ReachabilityAssessed {
 		reason, ok := reachabilityStallReasons[assessment.Outcome]
 		if !ok {
 			return AdvanceAcceptanceJudgmentResult{}, ErrUnexpectedAssessmentOutcome
 		}
-		return handler.undecided(ctx, command, reason), nil
+		return handler.undecided(ctx, command, reason, attemptDetail{}), nil
 	}
 	judgment := assessment.Judgment.FormedUnder(adopted.snapshot.ResolutionID())
 	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
 	// 的依据。
 	if err := handler.recorder.RecordReachabilityJudgment(
 		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, judgment); err != nil {
-		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
+		return handler.undecided(ctx, command, JudgmentNotRecorded, attemptDetail{}), nil
 	}
 
 	return AdvanceAcceptanceJudgmentResult{
@@ -211,6 +212,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
 	reason JudgmentPendingReason,
+	detail attemptDetail,
 	scope ...string,
 ) AdvanceAcceptanceJudgmentResult {
 	continuation := judgmentContinuation(
@@ -224,7 +226,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
 		}, scope...)...,
 	)
 	recordAttempt(ctx, handler.recorder, handler.clock,
-		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
+		command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, reason, continuation, detail)
 
 	return AdvanceAcceptanceJudgmentResult{
 		outcome:      AcceptanceJudgmentUndecided,

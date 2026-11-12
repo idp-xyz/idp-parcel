@@ -44,11 +44,6 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		"CompleteManualReview": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.CompleteManualReview(reviewCompletion(t))
 		},
-		"RecordProcessingAttempt": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
-			return request.RecordProcessingAttempt(
-				internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
-			)
-		},
 		"AwaitOperatorRegistration": func(_ *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.AwaitOperatorRegistration()
 		},

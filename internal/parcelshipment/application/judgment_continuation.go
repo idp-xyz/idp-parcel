@@ -586,33 +586,49 @@ func formAdoptedBasis(
 // 下一轮重新走到这里——与 pauseForManualReview 对`等待人工复核`的处置同一判断。
 //
 // 转移被聚合拒绝（已越过决定边界、任务已停）时原因照交不改：那份委托已经不在`已提交`的判断路上，
-// 没有等待态要落，也没有队列条目要保；本轮真实停在哪一步仍由原因说出来。随后 recordAttempt 对
-// 已完成的任务同样会被拒，两处是同一道门。
+// 没有等待态要落，也没有队列条目要保；本轮真实停在哪一步仍由原因说出来。
+//
+// 等待态落了库时一并交回这一版申报的服务产品（ADR-0380 决定三）：落库的处理尝试要记它，而委托此刻就在手上，
+// 不经结算与计价转交。其余几种结局不交——内部重试那一路回滚，记了也不留；没落等待的那一份不在等登记。
 func awaitOperatorRegistration(
 	ctx context.Context,
 	requests ports.ShipmentRequestRepository,
 	identity domain.SourceIdentity,
+	version domain.SubmissionVersionID,
 	stall JudgmentPendingReason,
-) (JudgmentPendingReason, error) {
+) (JudgmentPendingReason, domain.DeclaredServiceProduct, error) {
+	none := domain.DeclaredServiceProduct{}
 	if stall.resumePath() != domain.ResumeByOperatorRegistration {
-		return stall, nil
+		return stall, none, nil
 	}
 	request, found, err := requests.FindBySourceIdentity(ctx, identity)
 	if err != nil || !found {
-		return ShipmentRequestUnavailable, nil
+		return ShipmentRequestUnavailable, none, nil
 	}
 	waiting, err := request.AwaitOperatorRegistration()
 	if err != nil {
-		return stall, nil
+		return stall, none, nil
 	}
 	saved, err := requests.Save(ctx, identity, waiting)
 	if err != nil {
-		return OperatorRegistrationWaitNotSaved, nil
+		return OperatorRegistrationWaitNotSaved, none, nil
 	}
 	if saved != ports.ShipmentRequestSaved {
-		return saveStallReason(saved)
+		reason, err := saveStallReason(saved)
+		return reason, none, err
 	}
-	return stall, nil
+	judged, ok := waiting.SubmissionVersionByID(version)
+	if !ok {
+		return stall, none, nil
+	}
+	return stall, judged.RequestedServiceProduct(), nil
+}
+
+// attemptDetail 是处理尝试在原因、续办方、续办引用、时刻之外另记的两格（ADR-0380 决定三）。零值即两格都没有：
+// 结算没答未形成、或这一轮不是等运营登记的那一种，都不代拟。
+type attemptDetail struct {
+	settlementReason domain.SettlementNotFormedReason
+	serviceProduct   domain.DeclaredServiceProduct
 }
 
 // recordAttempt 把没能推进的这一轮追加到接受判断任务上。用例要求任务同时留下判断与处理
@@ -623,15 +639,18 @@ func awaitOperatorRegistration(
 // 补写。
 //
 // 续办路径由原因导出，不在这里给定值：谁能补上这个缺口是原因自带的属性，写死在记录处会让
-// 同一个原因在不同调用点走不同路径。
+// 同一个原因在不同调用点走不同路径。版本随记录落下：委托详情的「上次处理」读当前这一版任务的
+// 最近一条（ADR-0380 决定四），续办引用虽由版本派生，却是摘要、读不回来。
 func recordAttempt(
 	ctx context.Context,
 	recorder ports.AcceptanceJudgmentRecorder,
 	clock ports.Clock,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	reason JudgmentPendingReason,
 	continuation domain.OwnershipContinuationReference,
+	detail attemptDetail,
 ) {
 	// 只有空串会走到这里，而空串只可能来自一个漏补 String() 的取值——那是编程错误，不是
 	// 依赖答不出，因此它不该变成一条记着空原因的处理尝试。它由 judgmentPendingReasonEnd 那
@@ -641,15 +660,17 @@ func recordAttempt(
 		return
 	}
 	attempt, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
-		Reason:       attemptReason,
-		ResumePath:   reason.resumePath(),
-		Continuation: continuation,
-		AttemptedAt:  clock.Now(),
+		Reason:           attemptReason,
+		ResumePath:       reason.resumePath(),
+		Continuation:     continuation,
+		AttemptedAt:      clock.Now(),
+		SettlementReason: detail.settlementReason,
+		ServiceProduct:   detail.serviceProduct,
 	})
 	if err != nil {
 		return
 	}
-	_ = recorder.RecordProcessingAttempt(ctx, tenant, requestID, attempt)
+	_ = recorder.RecordProcessingAttempt(ctx, tenant, requestID, version, attempt)
 }
 
 // judgmentContinuation 由未决原因与判断范围共同派生，因此同一范围因同一原因停滞时拿到的

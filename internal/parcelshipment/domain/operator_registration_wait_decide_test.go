@@ -88,9 +88,6 @@ func TestAwaitOperatorRegistrationParksARunningTaskWithoutDeciding(t *testing.T)
 	if waiting.Revision() != request.Revision() {
 		t.Fatalf("revision moved from %d to %d; 转移一律不动版本", request.Revision(), waiting.Revision())
 	}
-	if got := len(waiting.AcceptanceDecisionTask().ProcessingAttempts()); got != 0 {
-		t.Fatalf("等待登记追加了 %d 条处理记录；那是 RecordProcessingAttempt 的事", got)
-	}
 }
 
 // Covers: 已越过决定边界的委托不再进入任何等待态——第二次尝试要说出真实原因。

@@ -108,10 +108,9 @@ func mustEntry(t *testing.T, name, value string) domain.CanonicalContentEntry {
 	return entry
 }
 
-// TestHistoryAndAttemptsSurviveTheRoundTrip 证受控补充历史（ADR-0045）与处理记录随
-// 快照往返：丢历史，一份补充过的委托重建后看起来像从未补充过；丢处理记录，「卡过几轮」
-// 从头数起。
-func TestHistoryAndAttemptsSurviveTheRoundTrip(t *testing.T) {
+// TestHistorySurvivesTheRoundTrip 证受控补充历史（ADR-0045）随快照往返：丢历史，一份补充过的委托重建后看起来像
+// 从未补充过。处理尝试不随快照走，它们落在自己的表里（ADR-0380 决定四）。
+func TestHistorySurvivesTheRoundTrip(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	ctx := t.Context()
 
@@ -122,12 +121,8 @@ func TestHistoryAndAttemptsSurviveTheRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读回：%v", err)
 	}
-	withAttempt, err := loaded.RecordProcessingAttempt(processingAttempt(t))
-	if err != nil {
-		t.Fatalf("记处理尝试：%v", err)
-	}
 	// 新版本必须以自己的来源身份到达（领域守卫）：换一个来源请求键。
-	superseded, err := withAttempt.FormNewSubmissionVersion(domain.NewSubmissionVersionSpec{
+	superseded, err := loaded.FormNewSubmissionVersion(domain.NewSubmissionVersionSpec{
 		VersionID:        mustBuild(t, domain.NewSubmissionVersionID, "version-2"),
 		TaskID:           mustBuild(t, domain.NewAcceptanceDecisionTaskID, "task-2"),
 		SourceSubmission: requestFingerprint(t, "req-key-1-supplement", "digest-2"),
@@ -167,8 +162,8 @@ func TestHistoryAndAttemptsSurviveTheRoundTrip(t *testing.T) {
 		t.Fatalf("历史版本 = %+v；补充过的委托读回后像从未补充过", priors)
 	}
 	priorTasks := found.PriorAcceptanceTasks()
-	if len(priorTasks) != 1 || len(priorTasks[0].ProcessingAttempts()) != 1 {
-		t.Fatalf("历史任务或处理记录丢失：%+v", priorTasks)
+	if len(priorTasks) != 1 || priorTasks[0].SubmissionVersionID() != mustBuild(t, domain.NewSubmissionVersionID, "version-1") {
+		t.Fatalf("历史任务丢失：%+v", priorTasks)
 	}
 }
 

@@ -240,7 +240,12 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 		return ports.ShipmentRequestDetailRecord{}, false,
 			fmt.Errorf("find shipment request view: 快照不是本适配器写下的形状：%w", err)
 	}
-	detail, err := detailRecord(summary, document)
+	tasks, err := taskViewRecords(ctx, querier, scope.TenantID(),
+		[]taskViewSource{{request: summary.ShipmentRequestID, task: document.AcceptanceTask}})
+	if err != nil {
+		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
+	}
+	detail, err := detailRecord(summary, document, tasks[0])
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
 	}
@@ -389,10 +394,12 @@ func (row summaryRow) record() (ports.ShipmentRequestSummaryRecord, error) {
 }
 
 // detailRecord 从快照文档摊出详情。只读文档已有的字段，不另立判断；唯一派生的是在用的货物明细，交给领域的
-// GoodsDetailsInEffect 判，与聚合的采用判断同一段。文档里没有的（如撤回记录明细）如实缺席，不代拟。
+// GoodsDetailsInEffect 判，与聚合的采用判断同一段。文档里没有的（如撤回记录明细）如实缺席，不代拟。任务视图由调用方经
+// taskViewRecords 读好交进来：「上次处理」不在文档里。
 func detailRecord(
 	summary ports.ShipmentRequestSummaryRecord,
 	document requestDocument,
+	task ports.AcceptanceTaskViewRecord,
 ) (ports.ShipmentRequestDetailRecord, error) {
 	batchID, err := domain.NewSubmissionBatchID(document.BatchID)
 	if err != nil {
@@ -435,11 +442,6 @@ func detailRecord(
 	}
 	goods, standing := domain.GoodsDetailsInEffect(submitted, versions, root)
 	shipment, err := document.PlatformShipment.declaration()
-	if err != nil {
-		return ports.ShipmentRequestDetailRecord{}, err
-	}
-
-	task, err := taskViewRecord(document.AcceptanceTask)
 	if err != nil {
 		return ports.ShipmentRequestDetailRecord{}, err
 	}
@@ -500,18 +502,140 @@ func declaredParcelRecords(version versionDocument) ([]ports.DeclaredParcelViewR
 	return records, nil
 }
 
-func taskViewRecord(document taskDocument) (ports.AcceptanceTaskViewRecord, error) {
+// taskViewSource 是取一份任务视图要的料：任务文档，与它在处理尝试表上的键（委托，任务所属的提交版本）。
+type taskViewSource struct {
+	request domain.ShipmentRequestID
+	task    taskDocument
+}
+
+// lastAttemptRecord 是处理尝试表上这一版任务最近的一条。
+type lastAttemptRecord struct {
+	reason           string
+	resumePath       domain.ResumePath
+	continuation     string
+	attemptedAt      time.Time
+	settlementReason string
+	serviceProduct   string
+}
+
+// taskViewRecords 是委托详情与各委托队列（人工复核、授权处置、受控补充）取任务视图的唯一入口：处理尝试从它实际
+// 落库的那一处读（ADR-0380 决定四），这几处读面一起读、一起变。快照文档里曾有一份处理尝试列表，生产从没写过它，
+// 这几处读面却从它取「上次处理」，于是一律空着。
+//
+// 一页委托一次读回各自最近的一条，不逐行点读；调用方须在委托那一页的游标关掉之后再调——同一个执行器上不套第二个游标。
+func taskViewRecords(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	sources []taskViewSource,
+) ([]ports.AcceptanceTaskViewRecord, error) {
+	attempts, err := lastAttempts(ctx, querier, tenant, sources)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]ports.AcceptanceTaskViewRecord, 0, len(sources))
+	for _, source := range sources {
+		attempt, found := attempts[source.request.String()]
+		record, err := taskViewRecord(source.task, attempt, found)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
+// lastAttempts 按委托取当前这一版任务最近落下的那条处理尝试。
+//
+// 「这一版」凭版本列认；迁移 0038 之前落下的旧行没有版本，按任务建立时刻圈定——旧任务的尝试都早于新版本立起新任务的
+// 那一刻。最近按发生时刻取，同一时刻再按续办引用定先后：（委托、续办引用、发生时刻）是主键，两条并列时总有一个确定的
+// 答案，不随扫描顺序变。
+func lastAttempts(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	sources []taskViewSource,
+) (map[string]lastAttemptRecord, error) {
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	requests := make([]string, len(sources))
+	versions := make([]string, len(sources))
+	established := make([]time.Time, len(sources))
+	for index, source := range sources {
+		requests[index] = source.request.String()
+		versions[index] = source.task.SubmissionVersionID
+		established[index] = source.task.EstablishedAt.UTC()
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT DISTINCT ON (task.shipment_request_id)
+		        task.shipment_request_id, attempt.reason_ref, attempt.resume_path, attempt.continuation_ref,
+		        attempt.attempted_at, attempt.settlement_reason, attempt.service_product
+		   FROM unnest($2::text[], $3::text[], $4::timestamptz[]) AS task(shipment_request_id, submission_version, established_at)
+		   JOIN parcel_shipment.acceptance_processing_attempt AS attempt
+		     ON attempt.tenant_id = $1
+		    AND attempt.shipment_request_id = task.shipment_request_id
+		    AND (attempt.submission_version = task.submission_version
+		         OR (attempt.submission_version IS NULL AND attempt.attempted_at >= task.established_at))
+		  ORDER BY task.shipment_request_id, attempt.attempted_at DESC, attempt.continuation_ref DESC`,
+		tenant.String(), requests, versions, established)
+	if err != nil {
+		return nil, fmt.Errorf("last processing attempts: %w", err)
+	}
+	defer rows.Close()
+	attempts := make(map[string]lastAttemptRecord, len(sources))
+	for rows.Next() {
+		var (
+			request, path             string
+			attempt                   lastAttemptRecord
+			settlementReason, product *string
+		)
+		if err := rows.Scan(&request, &attempt.reason, &path, &attempt.continuation,
+			&attempt.attemptedAt, &settlementReason, &product); err != nil {
+			return nil, fmt.Errorf("last processing attempts: %w", err)
+		}
+		if attempt.resumePath, err = resumePathNamed(path); err != nil {
+			return nil, fmt.Errorf("last processing attempts: %w", err)
+		}
+		if settlementReason != nil {
+			attempt.settlementReason = *settlementReason
+		}
+		if product != nil {
+			attempt.serviceProduct = *product
+		}
+		attempts[request] = attempt
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("last processing attempts: %w", err)
+	}
+	return attempts, nil
+}
+
+// resumePathNamed 把库里的续办方原词认回领域取值。表上的 CHECK 已把它圈在封闭集里，认不出就是库与本构建不同步，
+// 报错而不是读成缺席——缺席会让一条等运营登记的尝试看起来不等任何人。
+func resumePathNamed(name string) (domain.ResumePath, error) {
+	for path := domain.ResumePath(1); path.String() != ""; path++ {
+		if path.String() == name {
+			return path, nil
+		}
+	}
+	return domain.ResumePathInvalid, fmt.Errorf("处理尝试的续办方不是本上下文的取值：%q", name)
+}
+
+func taskViewRecord(document taskDocument, attempt lastAttemptRecord, attempted bool) (ports.AcceptanceTaskViewRecord, error) {
 	state := domain.AcceptanceTaskState(document.State)
 	if state.String() == "" {
 		return ports.AcceptanceTaskViewRecord{}, fmt.Errorf("任务状态不是本上下文的取值：%d", document.State)
 	}
 	record := ports.AcceptanceTaskViewRecord{State: state}
-	if count := len(document.ProcessingAttempts); count > 0 {
-		last := document.ProcessingAttempts[count-1]
+	if attempted {
 		record.HasAttempt = true
-		record.LastAttemptReason = last.Reason
-		record.LastAttemptContinuation = last.Continuation
-		record.LastAttemptedAt = last.AttemptedAt
+		record.LastAttemptReason = attempt.reason
+		record.LastAttemptResumePath = attempt.resumePath
+		record.LastAttemptContinuation = attempt.continuation
+		record.LastAttemptedAt = attempt.attemptedAt
+		record.LastAttemptSettlementReason = attempt.settlementReason
+		record.LastAttemptServiceProduct = attempt.serviceProduct
 	}
 	// 等待态值域在读面也查一道（判据同重建侧）：越界值不校会被读成缺席——「这任务
 	// 不等任何人」——而不是被拒成一行坏数据。零值即缺席，照实留零。

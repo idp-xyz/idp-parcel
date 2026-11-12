@@ -8,7 +8,8 @@ import (
 // 链的续办门（ADR-0086；两扇门同一编排、各记各的 inbox 账）、PC 参数已登记 → 同一条链
 // 的第三扇门（ADR-0094 Decision 四：按信封里的租户取`等待运营登记`队列逐份重驱；本进程
 // 里唯一一封由 party-commercial 发、parcel-shipment 收的信）、PS 释放拒收已处理 → 同一条链的续办门（ADR-0293 决定四：
-// 人处理完释放未受理册上的一笔之后，链拿委托此刻的当前版本再驱一拍）。
+// 人处理完释放未受理册上的一笔之后，链拿委托此刻的当前版本再驱一拍）；SA 结算账户与受理前估价采用已登记、PP 计价参数已登记
+// 各是同一张`等待运营登记`队列的一份登记续办门。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
 		chainGates, err := acceptanceChainConsumers(sources.db, sources.outbox, sources.inbox, sources.settings, sources.clock)
@@ -40,6 +41,12 @@ func init() {
 			{
 				event: psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType, position: positionPrimary, consumer: chainGates.estimateAdoptionRegistration,
 				sentinels: acceptanceChainUndecidedSentinels, label: "pre-acceptance estimate adoption resume",
+			},
+			// 计价参数那一份登记续办门同一份哨兵（ADR-0380 决定二）。同一类信封 SA 的评价续办也收（routes_evaluation_resumption.go），
+			// 那一路排在计费名次：先让受理链续办委托，再续办停在发起之前的计费那一拍，与「结算账户已登记」同一先后。
+			{
+				event: psinbox.PricingParameterRegisteredEventType, position: positionPrimary, consumer: chainGates.pricingParameterRegistration,
+				sentinels: acceptanceChainUndecidedSentinels, label: "pricing parameter resume",
 			},
 			// 受控补充续办门同一份哨兵，理由同复核续办门：同一条链、同一张未决面（ADR-0106 Decision 三）。
 			{

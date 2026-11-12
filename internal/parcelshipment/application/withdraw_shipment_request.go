@@ -402,7 +402,7 @@ func (handler *WithdrawShipmentRequestHandler) undecided(
 		command.SubmissionVersion.String(),
 	)
 	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock,
-		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
+		command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, reason, continuation, attemptDetail{})
 
 	return WithdrawShipmentRequestResult{
 		outcome:      WithdrawalUndecided,

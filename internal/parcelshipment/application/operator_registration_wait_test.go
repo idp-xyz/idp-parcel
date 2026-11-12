@@ -304,10 +304,113 @@ func TestAControlWaitThatDidNotLandFallsBackToInternalRetry(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0380 决定三——价卡一侧答不出的估价停成等运营登记时，落库的处理尝试另记结算的原因码原样（不冠 SA-）与这一版
+// 申报的服务产品（取本上下文自己的提交版本），并记在被判的那一版上。
+func TestAPriceCardSideStallRecordsTheSettlementReasonAndTheDeclaredProduct(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	fixture.controller.reason = "SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	fixture.controller.settlementReason = "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	fixture.repository.product = "SYN-PROD-01"
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.PendingReason() != application.FinancialControlNotConfigured || fixture.repository.saved == nil {
+		t.Fatalf("pending reason = %q、等待落库 = %v，want FINANCIAL_CONTROL_NOT_CONFIGURED 且等待先落库",
+			result.PendingReason(), fixture.repository.saved != nil)
+	}
+	if len(fixture.requests.recordedAttempts) != 1 {
+		t.Fatalf("processing attempts = %d, want 1", len(fixture.requests.recordedAttempts))
+	}
+	attempt := fixture.requests.recordedAttempts[0]
+	if reason, present := attempt.SettlementReason(); !present || reason.String() != "ESTIMATE_PRICE_CARD_NOT_CONFIGURED" {
+		t.Fatalf("settlement reason = %q（present=%v），want ESTIMATE_PRICE_CARD_NOT_CONFIGURED", reason, present)
+	}
+	if attempt.ServiceProduct().String() != "SYN-PROD-01" {
+		t.Fatalf("service product = %q, want SYN-PROD-01——取的不是这一版申报的那一个", attempt.ServiceProduct())
+	}
+	if got := fixture.requests.attemptVersions[0].String(); got != "version-1" {
+		t.Fatalf("attempt recorded on %q, want version-1", got)
+	}
+}
+
+// Covers: ADR-0380 决定三「只在落库的尝试上记」的两面——没申报的委托不记产品；依赖读不回照旧内部重试、不落等待，产品不记
+// （那一轮整笔回滚）；等待没落库时原因换成保存那一格，结算原因与产品随范围一起放下：它们说的是控制为何没形成，不是保存
+// 为何没落。
+func TestTheTwoAttemptCellsStayEmptyWhereTheyDoNotApply(t *testing.T) {
+	undeclared := newFinancialControlFixture(t)
+	undeclared.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	undeclared.controller.reason = "SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	undeclared.controller.settlementReason = "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	if _, err := undeclared.handler.Handle(context.Background(), undeclared.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if product := undeclared.requests.recordedAttempts[0].ServiceProduct(); product.Declared() {
+		t.Fatalf("没申报却记了产品 %q", product)
+	}
+
+	retried := newFinancialControlFixture(t)
+	retried.controller.portOutcome = ports.PreAcceptanceControlNotFormed
+	retried.controller.reason = "SA-ESTIMATE_TRIALS_UNAVAILABLE"
+	retried.controller.settlementReason = "ESTIMATE_TRIALS_UNAVAILABLE"
+	retried.repository.product = "SYN-PROD-01"
+	result, err := retried.handler.Handle(context.Background(), retried.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.PendingReason() != application.FinancialControlNotFormed || retried.repository.saved != nil {
+		t.Fatalf("pending reason = %q、等待落库 = %v，want FINANCIAL_CONTROL_NOT_FORMED 且不落等待",
+			result.PendingReason(), retried.repository.saved != nil)
+	}
+	if path := retried.requests.recordedAttempts[0].ResumePath(); path != domain.ResumeByInternalRetry {
+		t.Fatalf("attempt resume path = %q, want INTERNAL_RETRY", path)
+	}
+	if product := retried.requests.recordedAttempts[0].ServiceProduct(); product.Declared() {
+		t.Fatalf("内部重试那一轮记了产品 %q——它不落等待，也就没读委托", product)
+	}
+
+	unsaved := newFinancialControlFixture(t)
+	unsaved.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	unsaved.controller.reason = "SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	unsaved.controller.settlementReason = "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	unsaved.repository.product = "SYN-PROD-01"
+	unsaved.repository.saveErr = errors.New("库不可达")
+	if _, err := unsaved.handler.Handle(context.Background(), unsaved.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	attempt := unsaved.requests.recordedAttempts[0]
+	if _, present := attempt.SettlementReason(); present || attempt.ServiceProduct().Declared() {
+		t.Fatalf("等待没落库的那一轮带着结算原因或产品：%+v", attempt)
+	}
+}
+
+// Covers: ADR-0380 决定三对时点那一停同样成立——可达性腿的`判断时点未配置`落等待态时，处理尝试记下这一版申报的产品；
+// 那一停不是结算答的，结算原因缺席。
+func TestAnAsOfWaitRecordsTheDeclaredProductWithoutASettlementReason(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	fixture.commercial.asOfOutcome = ports.JudgmentAsOfNotConfigured
+	fixture.repository.product = "SYN-PROD-01"
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	attempt := fixture.requests.recordedAttempts[0]
+	if attempt.ServiceProduct().String() != "SYN-PROD-01" {
+		t.Fatalf("service product = %q, want SYN-PROD-01", attempt.ServiceProduct())
+	}
+	if _, present := attempt.SettlementReason(); present {
+		t.Fatal("时点那一停不是结算答的，却记了结算原因")
+	}
+}
+
 // awaitingRequestStore 是两条 as-of 编排的委托仓储替身：默认交回一份`已提交`委托并记下保存的那一份；
 // 三个开关各造一种「没落库」，decided 造一份真经领域形成的已决委托（假状态挡不住领域门）。
 type awaitingRequestStore struct {
-	t          *testing.T
+	t *testing.T
+	// product 非空时交回的委托申报了这一服务产品。
+	product    string
 	missing    bool
 	decided    bool
 	conflicted bool
@@ -338,6 +441,15 @@ func (store *awaitingRequestStore) FindBySourceIdentity(
 			store.t.Fatalf("form the earlier decision: %v", err)
 		}
 		return rejected, true, nil
+	}
+	if store.product != "" {
+		entry, err := domain.NewCanonicalContentEntry(domain.RequestedServiceProductEntryName, store.product)
+		if err != nil {
+			store.t.Fatalf("canonical entry: %v", err)
+		}
+		return submittedRequestWith(store.t, func(spec *domain.SubmitShipmentRequestSpec) {
+			spec.RequestedProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
+		}), true, nil
 	}
 	return submittedRequest(store.t), true, nil
 }

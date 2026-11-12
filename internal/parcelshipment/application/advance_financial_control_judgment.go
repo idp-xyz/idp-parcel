@@ -143,7 +143,8 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		return AdvanceFinancialControlJudgmentResult{}, err
 	}
 	if stall.stopped() {
-		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall.reason)
+		reason, product, err := awaitOperatorRegistration(
+			ctx, handler.requests, command.Identity, command.SubmissionVersion, stall.reason)
 		if err != nil {
 			return AdvanceFinancialControlJudgmentResult{}, err
 		}
@@ -152,7 +153,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 			// 理由同可达性那一支：原因换了，范围随之放下。
 			scope = nil
 		}
-		return handler.undecided(ctx, command, reason, scope...), nil
+		return handler.undecided(ctx, command, reason, attemptDetail{serviceProduct: product}, scope...), nil
 	}
 
 	assessment, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{
@@ -167,7 +168,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 			// 预算耗尽，看起来像一直在等依赖（ADR-0081 决定三）。原样上抛，消费门落 publish_failed。
 			return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("apply pre-acceptance financial control: %w", err)
 		}
-		return handler.undecided(ctx, command, FinancialControlUnavailable), nil
+		return handler.undecided(ctx, command, FinancialControlUnavailable, attemptDetail{}), nil
 	}
 	if assessment.Outcome != ports.PreAcceptanceControlFormed {
 		stall, ok := controlStallReasons[assessment.Outcome]
@@ -175,18 +176,21 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 			return AdvanceFinancialControlJudgmentResult{}, ErrUnexpectedAssessmentOutcome
 		}
 		// 与时点那一支同一道护栏：只有续办路径为`等待运营登记`的那一格会在这里落等待态，其余原样交回。
-		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall)
+		reason, product, err := awaitOperatorRegistration(
+			ctx, handler.requests, command.Identity, command.SubmissionVersion, stall)
 		if err != nil {
 			return AdvanceFinancialControlJudgmentResult{}, err
 		}
 		// 提供方的原因引用进范围，与商业依据那一支带 resolution.Reason 同一纪律：作用域、金额、策略、
-		// 授信几种停在端口上可以同格，续办引用却各是各的，按引用查回来的就是那一种缺口。
+		// 授信、价卡几种停在端口上可以同格，续办引用却各是各的，按引用查回来的就是那一种缺口。结算的原因码
+		// 另记在处理尝试上（ADR-0380 决定三）：那一格是给人读的「结算说了什么」，范围是续办派生的料。
 		scope := []string{assessment.Reason.String()}
+		detail := attemptDetail{settlementReason: assessment.SettlementReason, serviceProduct: product}
 		if reason != stall {
-			// 理由同时点那一支：原因换了，范围随之放下。
-			scope = nil
+			// 理由同时点那一支：原因换了，范围随之放下；结算原因说的是控制为何没形成，不是保存为何没落。
+			scope, detail = nil, attemptDetail{}
 		}
-		return handler.undecided(ctx, command, reason, scope...), nil
+		return handler.undecided(ctx, command, reason, detail, scope...), nil
 	}
 	control := assessment.Result
 	if control.Outcome() == domain.FinancialControlRestricted {
@@ -195,7 +199,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		// 会按 ADR-0125 的过渡口径把正文登了`进入授权处置`的合同也拒掉。
 		adopted, stall := handler.adoptDispositions(ctx, command, adoptedBasisOf(adopted), control)
 		if stall != PendingReasonNone {
-			return handler.undecided(ctx, command, stall), nil
+			return handler.undecided(ctx, command, stall, attemptDetail{}), nil
 		}
 		control = adopted
 	}
@@ -203,7 +207,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(
 		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, control); err != nil {
-		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
+		return handler.undecided(ctx, command, JudgmentNotRecorded, attemptDetail{}), nil
 	}
 
 	return AdvanceFinancialControlJudgmentResult{
@@ -247,11 +251,13 @@ func (handler *AdvanceFinancialControlJudgmentHandler) adoptDispositions(
 	return adopted, PendingReasonNone
 }
 
-// undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。
+// undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。detail 是处理尝试另记的
+// 两格，只在等运营登记那一格的停顿上在场。
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
 	reason JudgmentPendingReason,
+	detail attemptDetail,
 	scope ...string,
 ) AdvanceFinancialControlJudgmentResult {
 	continuation := judgmentContinuation(
@@ -264,7 +270,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 		}, scope...)...,
 	)
 	recordAttempt(ctx, handler.recorder, handler.clock,
-		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
+		command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, reason, continuation, detail)
 
 	return AdvanceFinancialControlJudgmentResult{
 		outcome:      AcceptanceJudgmentUndecided,

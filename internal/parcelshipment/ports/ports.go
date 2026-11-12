@@ -1184,10 +1184,15 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 //
 // 其余取值一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
 // 看起来像通过了。数字不写进来，理由同 JudgmentAsOfFormation。
+//
+// SettlementReason 只在提供方答未形成时在场，是它的原因码原样（ADR-0380 决定三）。它与 Reason 分开：Reason 是续办
+// 派生用的引用，消费侧适配器自己形成的停因（作用域没形成）也在那一格；编排不解析 Reason 的字面，要记下「结算说了
+// 什么」只能另交一格。
 type PreAcceptanceControlAssessment struct {
-	Outcome PreAcceptanceControlOutcome
-	Result  domain.FinancialControlResult
-	Reason  domain.CheckReason
+	Outcome          PreAcceptanceControlOutcome
+	Result           domain.FinancialControlResult
+	Reason           domain.CheckReason
+	SettlementReason domain.SettlementNotFormedReason
 }
 
 // ErrUntranslatableProviderAnswer 是消费侧适配器把提供方的答复译不进本上下文端口封闭集合时交回的错误所包的
@@ -1726,18 +1731,25 @@ type AcceptanceDecisionViewRecord struct {
 // 成功判断，一份卡了十轮的委托看起来会和刚建单的一模一样；后两样是复核队列查阅面
 // （票 acceptance-review-read-face/01）要如实呈现的「停在哪、复核录了没」——WaitingOn
 // 零值即缺席（决定已形成或任务已完成），复核留痕四字段只在 ReviewCompleted 时在场。
+//
+// 最近一次处理记录读自处理尝试实际落库的那一处，即这一版任务最近落下的一条（ADR-0380 决定四）。续办方单列一格
+// （LastAttemptResumePath）：谁来动手要照记下的那一格交，读的一侧从原因名或续办引用推，就是第二处定义。结算原因与
+// 服务产品可缺，缺即那一轮没有（ADR-0380 决定三）。
 type AcceptanceTaskViewRecord struct {
-	State                   domain.AcceptanceTaskState
-	HasAttempt              bool
-	LastAttemptReason       string
-	LastAttemptContinuation string
-	LastAttemptedAt         time.Time
-	WaitingOn               domain.ResumePath
-	ReviewCompleted         bool
-	ReviewAuthority         string
-	ReviewReviewer          string
-	ReviewEvidence          string
-	ReviewCompletedAt       time.Time
+	State                       domain.AcceptanceTaskState
+	HasAttempt                  bool
+	LastAttemptReason           string
+	LastAttemptResumePath       domain.ResumePath
+	LastAttemptContinuation     string
+	LastAttemptedAt             time.Time
+	LastAttemptSettlementReason string
+	LastAttemptServiceProduct   string
+	WaitingOn                   domain.ResumePath
+	ReviewCompleted             bool
+	ReviewAuthority             string
+	ReviewReviewer              string
+	ReviewEvidence              string
+	ReviewCompletedAt           time.Time
 	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一），不在等补充时为空。
 	SupplementGaps []SupplementGapViewRecord
 }
@@ -2157,8 +2169,9 @@ type LabelTransactionViews interface {
 // 四个方法都收租户，理由与 RecordedJudgmentReader 同一条：委托标识的唯一性按租户圈定。
 //
 // 两类判断还收提交版本：判断是对某一版内容作出的，任务随版本重立（ADR-0045），记下它属于哪一版，
-// 读口才能只把当前版本的判断交给形成决定那一步。处理尝试与采用解析不收——尝试不参与决定，续办
-// 引用的派生已含版本；采用解析每轮按版本重解、后写覆盖。
+// 读口才能只把当前版本的判断交给形成决定那一步。处理尝试同样收版本：尝试不参与决定，但委托详情的
+// 「上次处理」读的是当前这一版任务最近的一条（ADR-0380 决定四），续办引用的派生虽含版本，却是摘要、
+// 读不回来。采用解析不收——每轮按版本重解、后写覆盖。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(
 		ctx context.Context,
@@ -2178,6 +2191,7 @@ type AcceptanceJudgmentRecorder interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 		attempt domain.ProcessingAttempt,
 	) error
 	// RecordAdoptedCommercialResolution 记下本轮采用的那次商业解析，供提交决定前按它重解。

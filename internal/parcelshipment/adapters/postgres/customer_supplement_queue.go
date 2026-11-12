@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -57,27 +56,17 @@ func (views *ShipmentRequestViews) ListWaitingOnCustomerSupplement(
 	if err != nil {
 		return nil, fmt.Errorf("list customer supplement queue: %w", err)
 	}
-	defer rows.Close()
-
-	var records []ports.CustomerSupplementQueueRecord
-	for rows.Next() {
-		var row summaryRow
-		var rawTask []byte
-		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
-			return nil, fmt.Errorf("list customer supplement queue: %w", err)
-		}
-		summary, err := row.record()
-		if err != nil {
-			return nil, fmt.Errorf("list customer supplement queue: %w", err)
-		}
-		var task taskDocument
-		if err := json.Unmarshal(rawTask, &task); err != nil {
-			return nil, fmt.Errorf("list customer supplement queue: 快照不是本适配器写下的形状：%w", err)
-		}
-		taskView, err := taskViewRecord(task)
-		if err != nil {
-			return nil, fmt.Errorf("list customer supplement queue: %w", err)
-		}
+	summaries, sources, err := scanQueueRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("list customer supplement queue: %w", err)
+	}
+	taskViews, err := taskViewRecords(ctx, querier, scope.TenantID(), sources)
+	if err != nil {
+		return nil, fmt.Errorf("list customer supplement queue: %w", err)
+	}
+	records := make([]ports.CustomerSupplementQueueRecord, 0, len(summaries))
+	for index, summary := range summaries {
+		taskView := taskViews[index]
 		records = append(records, ports.CustomerSupplementQueueRecord{
 			ShipmentRequestSummaryRecord: summary,
 			HasAttempt:                   taskView.HasAttempt,
@@ -85,9 +74,6 @@ func (views *ShipmentRequestViews) ListWaitingOnCustomerSupplement(
 			LastAttemptContinuation:      taskView.LastAttemptContinuation,
 			LastAttemptedAt:              taskView.LastAttemptedAt,
 		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list customer supplement queue: %w", err)
 	}
 	return records, nil
 }

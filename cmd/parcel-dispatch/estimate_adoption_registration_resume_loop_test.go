@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +21,15 @@ import (
 //
 // 装配与作用域那条闭环（TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope）同一份：生产的 PS 适配器、作用域源与
 // 账户目录，生产的 SA 施加编排（两本账、采用册、留痕册真库），控制策略与试算两口替身。结算账户先登好，作用域一开始就形成。试算
-// 替身答「没有在用的售价卡」：那一格是`未形成`、回滚重投，所以重驱那一轮整封交回未决哨兵，账本无痕等重投——选卡那一格的登记
-// 不在本票。
+// 替身答「没有在用的售价卡」：那一格自 ADR-0380 决定一起也是等运营登记，重驱那一轮把新的等待连同带结算原因的处理尝试落库、
+// 本封入账，不再回滚重投——之前这一路回滚，委托留着上一次「金额未配置」的尝试，采用登记的信封一直重投到被放弃。价卡登上之后
+// 怎么被重驱解开，见 pricing_parameter_registration_resume_loop_test.go。
 
 const estimateAdoptionResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-pre-acceptance-estimate-adoption"
 
 // Covers: 票 product-strategy-boundary/25 完成判据一（空册：控制停在金额未配置；委托进`等待运营登记`，处理尝试落库，信封入账而不是
-// ABANDONED。登记采用行之后，信封重驱同一委托，越过金额格）。
+// ABANDONED。登记采用行之后，信封重驱同一委托，越过金额格）；票 declared-goods-lines/23 完成判据二（越过金额之后停在「没有在用价卡」
+// 不再回滚：新的等待落库，这一条尝试取代金额那一条成为最近一条）。
 func TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope(t *testing.T) {
 	control := &synRLateBoundControl{}
 	fixture := newOperatorRegistrationLoopFixtureWith(t, control)
@@ -122,29 +122,36 @@ func TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope(t *testing.T) {
 		t.Fatalf("「受理前估价采用已登记」信封 = %d 封, want 恰好 1——消费侧认的类型串与发布侧写的不是同一个", n)
 	}
 
-	// 估价采用那一份续办门：按租户取队列再驱一拍——越过金额那一格、按登记的计价范围问到试算；试算答没有在用的售价卡，那一格
-	// `未形成`、回滚重投。
+	// 估价采用那一份续办门：按租户取队列再驱一拍——越过金额那一格、按登记的计价范围问到试算；试算答没有在用的售价卡。那一格是
+	// 价卡一侧登记解得开的（ADR-0380 决定一）：等待态换成价卡那一停再落库，本封入账，处理尝试多一行、带结算原因，成为最近一条。
 	adoptionDelivery := fixture.claimDeliveryOfType(t, string(psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType))
-	err = fixture.estimateAdoptionGate.Consume(ctx, adoptionDelivery.Envelope)
-	if !errors.Is(err, psinbox.ErrAcceptanceChainUndecided) {
-		t.Fatalf("越过金额之后停在选卡那一格，整封应交回未决哨兵等重投，实际 err = %v", err)
-	}
-	if !strings.Contains(err.Error(), "FINANCIAL_CONTROL_NOT_FORMED") {
-		t.Fatalf("重驱停在的不是`未形成`那一格：%v", err)
+	if err := fixture.estimateAdoptionGate.Consume(ctx, adoptionDelivery.Envelope); err != nil {
+		t.Fatalf("越过金额之后停在价卡那一格的等运营登记，本封应按处理完毕入账：%v", err)
 	}
 	if settlement.trials.asked != 1 || settlement.trials.query.PricingScope.String() != "SYN-PRICING-SCOPE-R1" ||
 		settlement.trials.query.ShipmentRequest != fixture.requestID.String() {
 		t.Fatalf("试算被问 %d 次、问法 %+v, want 问一次、计价范围取登记的那一行、委托就是这一份——金额那一格没有越过",
 			settlement.trials.asked, settlement.trials.query)
 	}
-	if n := fixture.countInbox(t, estimateAdoptionResumeConsumer, string(adoptionDelivery.Envelope.ID)); n != 0 {
-		t.Fatalf("未决必须让账本无痕等重投，实际 inbox 行数 = %d", n)
+	if n := fixture.countInbox(t, estimateAdoptionResumeConsumer, string(adoptionDelivery.Envelope.ID)); n != 1 {
+		t.Fatalf("新的等待落库之后本封要入账，实际 inbox 行数 = %d", n)
 	}
 	still := fixture.mustLoadRequest(t, ctx)
-	if still.State() != psdomain.ShipmentRequestSubmitted {
-		t.Fatalf("重驱后状态 = %q, want SUBMITTED", still.State())
+	if waitingOn, present := still.AcceptanceDecisionTask().WaitingOn(); still.State() != psdomain.ShipmentRequestSubmitted ||
+		!present || waitingOn != psdomain.ResumeByOperatorRegistration {
+		t.Fatalf("重驱后状态 = %q、等待 %v（present=%v）, want SUBMITTED、仍在等运营登记", still.State(), waitingOn, present)
 	}
-	if n := fixture.countSQL(t, attemptsOnTheAmountWait); n != 1 {
-		t.Fatalf("重驱那一轮回滚之后处理尝试 = %d 行, want 仍为 1", n)
+	if n := fixture.countSQL(t, attemptsOnTheAmountWait); n != 2 {
+		t.Fatalf("处理尝试 = %d 行, want 2——金额那一停与价卡那一停各留一行", n)
+	}
+	var latestSettlementReason string
+	if err := fixture.pool.QueryRow(ctx,
+		`SELECT coalesce(settlement_reason, '') FROM parcel_shipment.acceptance_processing_attempt
+		  WHERE shipment_request_id = $1 ORDER BY attempted_at DESC, continuation_ref DESC LIMIT 1`,
+		fixture.requestID.String()).Scan(&latestSettlementReason); err != nil {
+		t.Fatalf("读最近一条处理尝试：%v", err)
+	}
+	if latestSettlementReason != "ESTIMATE_PRICE_CARD_NOT_CONFIGURED" {
+		t.Fatalf("最近一条处理尝试的结算原因 = %q, want ESTIMATE_PRICE_CARD_NOT_CONFIGURED——金额那一条没有被取代", latestSettlementReason)
 	}
 }

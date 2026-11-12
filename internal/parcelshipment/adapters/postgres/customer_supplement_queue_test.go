@@ -43,18 +43,16 @@ func awaitSupplement(t *testing.T, request domain.ShipmentRequest, decisionID st
 // 停等内部续办的、停等人工复核的、他租户与作用域外账户停等补充的都不出现；先停的在前；最近
 // 处理记录照登记转写。
 func TestListWaitingOnCustomerSupplementFiltersOrdersAndTranscribes(t *testing.T) {
-	views, repository, transactor := newShipmentRequestViews(t)
+	views, repository, judgments, transactor := newShipmentRequestViewsWithJudgments(t)
 	ctx := t.Context()
 
 	// 老的等待行：带一条处理记录。
 	seedAdvanced(t, repository, transactor, "tenant-1", "customer-1", "csq-a", "REQ-SUP-A",
 		submittedAtFixture, func(request domain.ShipmentRequest) domain.ShipmentRequest {
-			appended, err := request.RecordProcessingAttempt(processingAttempt(t))
-			if err != nil {
-				t.Fatalf("记处理尝试：%v", err)
-			}
-			return awaitSupplement(t, appended, "supplement-a")
+			return awaitSupplement(t, request, "supplement-a")
 		})
+	recordAttemptOnCurrentVersion(t, repository, judgments, transactor,
+		requestScopedIdentity(t, "tenant-1", "customer-1", "csq-a"), processingAttempt(t))
 	// 新的等待行：没记过处理尝试。
 	seedAdvanced(t, repository, transactor, "tenant-1", "customer-2", "csq-b", "REQ-SUP-B",
 		submittedAtFixture.Add(time.Hour), func(request domain.ShipmentRequest) domain.ShipmentRequest {

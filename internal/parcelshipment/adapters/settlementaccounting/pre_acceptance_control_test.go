@@ -3,6 +3,7 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -883,7 +884,10 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 // 比例额度没声明基数落`未配置`（发布对应声明时交「参数已登记」），授信依据未配置、基数尚无事实与各读口答
 // 不出（`*_UNAVAILABLE` 一族逐个列）留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停
 // 各拿一条续办引用。估价那一口（ADR-0179）的各格同表：金额未配置落`未配置`（登记采用行时交信封，票
-// product-strategy-boundary/25 第 6 条）；选卡、不可见、缺件与合计停法都没有登记会来重驱，留在`未形成`。
+// product-strategy-boundary/25 第 6 条）；价卡一侧答不出的那几格——没有在用价卡、价卡适用冲突、试算没有合计、合计
+// 不为正、某件为负——落`未配置`（ADR-0380 决定一，计价「参数已登记」来重驱）；币种对不上、不可见、缺件、一件试算
+// 都没有与合计溢出留在`未形成`。结算答未形成的每一格另把原因码原样（不冠 SA-）交在 SettlementReason 上（ADR-0380
+// 决定三）。
 func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 	policyVersion := func(t *testing.T) sadomain.CreditPolicyReference {
 		return value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1")
@@ -947,14 +951,14 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 			arrange: func(t *testing.T) *controlFixture {
 				return trialsAnswering(t, saports.PreAcceptanceTrialPriceCardNotConfigured)
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED",
 		},
 		"选卡适用冲突": {
 			arrange: func(t *testing.T) *controlFixture {
 				return trialsAnswering(t, saports.PreAcceptanceTrialPriceCardConflict)
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-ESTIMATE_PRICE_CARD_CONFLICT",
 		},
 		"提交版本不可见": {
@@ -980,7 +984,7 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 					return sadomain.NewUntotaledPreAcceptanceTrial("P-2", "EST-P-2", nil)
 				})
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-ESTIMATE_TRIAL_WITHOUT_TOTAL",
 		},
 		"币种不是作用域的": {
@@ -998,7 +1002,7 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 				fixture.trials.set(t, 0)
 				return fixture
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-ESTIMATE_NOT_POSITIVE",
 		},
 		"一份为负": {
@@ -1007,7 +1011,7 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 					return sadomain.NewPreAcceptanceTrial("P-2", "EST-P-2", nil, -1, value(t, sadomain.NewCurrencyCode, "CNY"))
 				})
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-ESTIMATE_TRIAL_NEGATIVE",
 		},
 		"合计加不进 int64": {
@@ -1134,6 +1138,9 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 			}
 			if assessment.Reason.String() != tc.wantReason {
 				t.Fatalf("reason = %q, want %q", assessment.Reason, tc.wantReason)
+			}
+			if want := strings.TrimPrefix(tc.wantReason, "SA-"); assessment.SettlementReason.String() != want {
+				t.Fatalf("settlement reason = %q, want %q——结算的原因码要原样另交一格", assessment.SettlementReason, want)
 			}
 			if assessment.Result.ResultID().String() != "" {
 				t.Fatal("一次没形成的控制交回了结果")

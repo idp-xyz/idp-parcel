@@ -429,13 +429,12 @@ type dimensionsDocument struct {
 }
 
 type taskDocument struct {
-	TaskID              string            `json:"taskId"`
-	SubmissionVersionID string            `json:"submissionVersionId"`
-	EstablishedAt       time.Time         `json:"establishedAt"`
-	State               uint8             `json:"state"`
-	WaitingOn           uint8             `json:"waitingOn,omitempty"`
-	ProcessingAttempts  []attemptDocument `json:"processingAttempts,omitempty"`
-	ReviewCompletion    *reviewDocument   `json:"reviewCompletion,omitempty"`
+	TaskID              string          `json:"taskId"`
+	SubmissionVersionID string          `json:"submissionVersionId"`
+	EstablishedAt       time.Time       `json:"establishedAt"`
+	State               uint8           `json:"state"`
+	WaitingOn           uint8           `json:"waitingOn,omitempty"`
+	ReviewCompletion    *reviewDocument `json:"reviewCompletion,omitempty"`
 	// AuthorizedDisposition 是本版本上已记录的授权处置（ADR-0132），落法照 ReviewCompletion：缺席即没处置过。
 	AuthorizedDisposition *dispositionDocument `json:"authorizedDisposition,omitempty"`
 	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）；不在等补充时整键缺席，早于本票的快照读回即零值。
@@ -446,13 +445,6 @@ type supplementGapDocument struct {
 	Group  uint8  `json:"group"`
 	Parcel string `json:"parcel,omitempty"`
 	Reason string `json:"reason"`
-}
-
-type attemptDocument struct {
-	Reason       string    `json:"reason"`
-	ResumePath   uint8     `json:"resumePath"`
-	Continuation string    `json:"continuation"`
-	AttemptedAt  time.Time `json:"attemptedAt"`
 }
 
 type reviewDocument struct {
@@ -648,14 +640,6 @@ func taskDocumentOf(task domain.AcceptanceDecisionTask) taskDocument {
 		parcel, _ := gap.Parcel()
 		document.SupplementGaps = append(document.SupplementGaps, supplementGapDocument{
 			Group: uint8(gap.Group()), Parcel: parcel.String(), Reason: gap.Reason().String(),
-		})
-	}
-	for _, attempt := range task.ProcessingAttempts() {
-		document.ProcessingAttempts = append(document.ProcessingAttempts, attemptDocument{
-			Reason:       attempt.Reason().String(),
-			ResumePath:   uint8(attempt.ResumePath()),
-			Continuation: attempt.ContinuationReference().String(),
-			AttemptedAt:  attempt.AttemptedAt().UTC(),
 		})
 	}
 	if completion, done := task.ManualReviewCompletion(); done {
@@ -1032,26 +1016,6 @@ func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) 
 			return domain.RehydrateAcceptanceTaskSpec{}, err
 		}
 		spec.SupplementGaps = append(spec.SupplementGaps, gap)
-	}
-	for _, attemptDoc := range document.ProcessingAttempts {
-		reason, err := domain.NewProcessingAttemptReason(attemptDoc.Reason)
-		if err != nil {
-			return domain.RehydrateAcceptanceTaskSpec{}, err
-		}
-		continuation, err := domain.NewOwnershipContinuationReference(attemptDoc.Continuation)
-		if err != nil {
-			return domain.RehydrateAcceptanceTaskSpec{}, err
-		}
-		attempt, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
-			Reason:       reason,
-			ResumePath:   domain.ResumePath(attemptDoc.ResumePath),
-			Continuation: continuation,
-			AttemptedAt:  attemptDoc.AttemptedAt,
-		})
-		if err != nil {
-			return domain.RehydrateAcceptanceTaskSpec{}, err
-		}
-		spec.ProcessingAttempts = append(spec.ProcessingAttempts, attempt)
 	}
 	if document.ReviewCompletion != nil {
 		authority, err := domain.NewReviewAuthorityReference(document.ReviewCompletion.Authority)

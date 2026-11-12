@@ -32,6 +32,7 @@ func NewSettlementAccountRegisteredConsumer(
 		settlementAccountResumeConsumerName,
 		SettlementAccountRegisteredEventType,
 		"advance acceptance chain on settlement account registration",
+		decodeOperatorRegistrationCompleted,
 		transactor, store, queue, advancer, pageSize,
 	)
 }
