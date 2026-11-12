@@ -717,7 +717,9 @@ export function BusinessPartiesPage() {
   const [preset, setPreset] = useState<DeactivationPreset | null>(null);
   const [unsaved, setUnsaved] = useState<Record<BusinessPartyRegister, boolean>>(noUnsaved);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
-  const [chosenBook, setBook] = useState<Book>('identities');
+  // 此刻停在哪个视图按标签保留（票 business-party-redesign/13），理由同下面名录那几格：离开这张标签满新鲜期再回来，壳层按
+  // 新开页把本页重挂。不保留的话，从名录右栏「在「合作关系」里看全部」过去、去别的标签查一样东西，回来人却在单位名录。
+  const [chosenBook, setBook] = useTabViewState<Book>('business-parties.view', 'identities');
   // 地址上的登记键落到哪：占整页的那两本册进整页的登记视图；合作关系的表单不占整页，摆在合作关系视图里、表的上方
   // （票 business-party-redesign/11）。没有登记写授予时整页视图与表单都不摆，落回列表——地址可能是别人发来的链接。
   const registerPage = view.kind === 'register' && mayWrite && isRegisterPageBook(view.register) ? view.register : null;
@@ -798,16 +800,20 @@ export function BusinessPartiesPage() {
     tabFocusPending.current = false;
     pageRef.current?.querySelector<HTMLElement>(`[data-view-tab="${book}"]`)?.focus();
   }, [book]);
-  // 关系册的列表状态。检索留在页内：停用入口与引用链接定位的是身份这一册。
-  const [relationshipSearch, setRelationshipSearch] = useState('');
-  const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
-  const [relationshipStatus, setRelationshipStatus] = useState<PartyRelationshipStatusFilter>('ALL');
-  const [attentionOnly, setAttentionOnly] = useState(false);
-  const [relationshipSort, setRelationshipSort] = useState<WorkbenchSort>(defaultPartyRelationshipSort);
-  const [selectedRelationship, setSelectedRelationship] = useState<string | null>(null);
+  // 关系册的列表状态。检索留在页内、不进地址：地址上的 `?q=` 归身份这一册，停用入口与引用链接定位的是它。
+  // 这几格与「我方关联」的两格同样按标签保留（票 business-party-redesign/13）。选中的只记标识、不记行：右栏显哪一行每次都从
+  // 当前读到的行里认（合作关系是这一页上的行，我方关联是法人册与关系册组合出来的行），重挂之后读回来的册上没有它、或被
+  // 筛掉了，右栏就不开——不会拿一行没有重读过的旧样子接着显，所以不必像名录那样另记一行再标「可能已经变了」。
+  // 翻到第几页不保留：重挂即重读，游标从第一页起。
+  const [relationshipSearch, setRelationshipSearch] = useTabViewState('business-parties.relationships.search', '');
+  const [role, setRole] = useTabViewState<PartyRelationshipRoleFilter>('business-parties.relationships.role', 'ALL');
+  const [relationshipStatus, setRelationshipStatus] = useTabViewState<PartyRelationshipStatusFilter>('business-parties.relationships.status', 'ALL');
+  const [attentionOnly, setAttentionOnly] = useTabViewState('business-parties.relationships.attention-only', false);
+  const [relationshipSort, setRelationshipSort] = useTabViewState<WorkbenchSort>('business-parties.relationships.sort', defaultPartyRelationshipSort);
+  const [selectedRelationship, setSelectedRelationship] = useTabViewState<string | null>('business-parties.relationships.selected', null);
   // 「我方关联」一册：检索只在手上这几行里找（our-company-network.ts 的 matchesOurCompanySearch）。
-  const [networkSearch, setNetworkSearch] = useState('');
-  const [selectedOurCompany, setSelectedOurCompany] = useState<string | null>(null);
+  const [networkSearch, setNetworkSearch] = useTabViewState('business-parties.network.search', '');
+  const [selectedOurCompany, setSelectedOurCompany] = useTabViewState<string | null>('business-parties.network.selected', null);
   // 右栏刚收起的那一家：这一视图从主从分栏收回成表时把焦点落回它那一行，做法同名录的 closedParty。
   const closedOurCompany = useRef<string | null>(null);
   const selectOurCompany = (key: string | null) => {
