@@ -24,7 +24,7 @@ const PricingParameterRegisteredEventType eventing.EventType = "parcel-pricing.p
 
 // NewPricingParameterRegisteredConsumer 装配收计价「参数已登记」的那一份登记续办门。重驱纪律与另几份完全相同：按租户取回
 // `等待运营登记`的队列逐份再驱一拍，不认是哪一张卡、哪一个计价范围——链重跑到估价那一步自会去选卡，这一张对不上这份委托就
-// 再停一次（ADR-0380 决定二）。按原因或计价范围收窄另立（ADR-0380 越权风险点 2）。
+// 再停一次（ADR-0380 决定二）。按原因或计价范围收窄另立（ADR-0380 越权风险点「多唤醒」）。
 func NewPricingParameterRegisteredConsumer(
 	transactor bentoapp.Transactor,
 	store *inbox.Store,

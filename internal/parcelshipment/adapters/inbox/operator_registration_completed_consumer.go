@@ -69,8 +69,7 @@ type OperatorRegistrationCompletedConsumer struct {
 }
 
 // NewOperatorRegistrationCompletedConsumer 装配收 party-commercial「参数已登记」的那一份。pageSize 是每次
-// 向队列读口要多少行；读口要求正数，本门按页反复取直到没有新的委托可驱（已驱过的不再驱，停住的那几份
-// 下一页仍会出现，靠「本页有没有新面孔」终止）。
+// 向队列读口要多少行；读口要求正数，本门按位置往后一页页取，取到不足一页为止。
 func NewOperatorRegistrationCompletedConsumer(
 	transactor bentoapp.Transactor,
 	store *inbox.Store,
@@ -159,28 +158,26 @@ func (consumer *OperatorRegistrationCompletedConsumer) Consume(
 // 一拍。三类结局分开收：落定（决定形成或等待态入账，已提交）、停在回滚重投那一格（已回滚，
 // 记下等本封重投）、硬错误（集合外结果、装配缺件，记下并继续驱其余）。硬错误压过未决上抛
 // ——它要人改代码或装配，折进未决会重投到预算耗尽。
+//
+// 翻页按位置往后取（ports.OperatorRegistrationQueuePosition 写了为什么不每页重读队首）：被重驱又停回等运营登记的委托
+// 位置不变，留在已翻过的那一段，不会再挤占后面的页。
 func (consumer *OperatorRegistrationCompletedConsumer) redriveWaitingRequests(
 	ctx context.Context,
 	tenant domain.TenantID,
 ) error {
-	attempted := map[domain.ShipmentRequestID]bool{}
 	var (
+		after          ports.OperatorRegistrationQueuePosition
 		total, settled int
 		undecided      []error
 		failures       []error
 	)
 	for {
-		records, err := consumer.queue.ListWaitingOnOperatorRegistration(ctx, tenant, consumer.pageSize)
+		records, err := consumer.queue.ListWaitingOnOperatorRegistration(ctx, tenant, after, consumer.pageSize)
 		if err != nil {
 			return fmt.Errorf("list requests waiting on operator registration: %w", err)
 		}
-		fresh := 0
 		for _, record := range records {
-			if attempted[record.ShipmentRequestID] {
-				continue
-			}
-			attempted[record.ShipmentRequestID] = true
-			fresh++
+			after = record.Position()
 			total++
 
 			err := consumer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -200,9 +197,7 @@ func (consumer *OperatorRegistrationCompletedConsumer) redriveWaitingRequests(
 				failures = append(failures, fmt.Errorf("%s: %w", record.ShipmentRequestID, err))
 			}
 		}
-		// 一页里没有新面孔即到底：停住的那几份下一页仍会排在前面，只按它们判会无限翻页；
-		// 不足一页也到底。
-		if fresh == 0 || len(records) < consumer.pageSize {
+		if len(records) < consumer.pageSize {
 			break
 		}
 	}

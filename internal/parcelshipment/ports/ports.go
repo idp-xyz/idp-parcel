@@ -1948,6 +1948,20 @@ type OperatorRegistrationQueueRecord struct {
 	SubmittedAt       time.Time
 }
 
+// Position 是这一行在队列上的位置，下一页从它之后取。
+func (record OperatorRegistrationQueueRecord) Position() OperatorRegistrationQueuePosition {
+	return OperatorRegistrationQueuePosition{SubmittedAt: record.SubmittedAt, ShipmentRequestID: record.ShipmentRequestID}
+}
+
+// OperatorRegistrationQueuePosition 是队列上的一个位置，与排序同列：（提交时刻、委托标识）。零值即从队首取。
+//
+// 翻页按位置往后取，不每页重读队首：自 ADR-0380 起，「被重驱、仍停着」是常态——一次登记只解得开它管的那几份，其余照旧
+// 等。每页重读队首时，比满一页还多的旧委托停着，后面的委托就永远轮不到，哪怕这次登记正是它们等的那一份。
+type OperatorRegistrationQueuePosition struct {
+	SubmittedAt       time.Time
+	ShipmentRequestID domain.ShipmentRequestID
+}
+
 // OperatorRegistrationQueue 按租户列出当前停在`等待运营登记`的`已提交`委托，老的在前，同刻按
 // 委托标识正序保证分页可重复（ADR-0094 Decision 五）。
 //
@@ -1957,11 +1971,13 @@ type OperatorRegistrationQueueRecord struct {
 //
 // 队列的定义就是投影列上的 `waitingOn = OPERATOR_REGISTRATION` 且 `state = SUBMITTED`（迁移 0013
 // 的部分索引逐字吻合）。等待态由 AwaitOperatorRegistration 在决定之前写下，由 Decide 与各终态
-// 转移改写或清零；读口照登记过滤，不在读侧重推。Limit 必须为正，判据同 ShipmentRequestViews。
+// 转移改写或清零；读口照登记过滤，不在读侧重推。after 之后（不含）取至多 limit 行；Limit 必须为正，判据同
+// ShipmentRequestViews。
 type OperatorRegistrationQueue interface {
 	ListWaitingOnOperatorRegistration(
 		ctx context.Context,
 		tenant domain.TenantID,
+		after OperatorRegistrationQueuePosition,
 		limit int,
 	) ([]OperatorRegistrationQueueRecord, error)
 }

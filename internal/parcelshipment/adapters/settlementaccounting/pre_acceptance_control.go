@@ -402,7 +402,7 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		saapplication.EstimateTrialNegative:
 		// 价卡、序列或目录这一侧登记解得开（ADR-0380 决定一）：登卡、收尾旧卡、序列与目录复核通过时 parcel-pricing 都交
 		// 「参数已登记」，计价参数那一份登记续办门按租户重驱。试算没有合计也可能是申报缺了某一格——归哪一格是产品策略，
-		// 记录在 ADR-0380 越权风险点。
+		// 见 ADR-0380 越权风险点「哪几种原因算『登记解得开』是产品策略」。
 		return psports.PreAcceptanceControlNotConfigured, nil
 	case saapplication.EstimateCurrencyMismatch:
 		// 结算把作用域币种交进试算，计价要么换算、要么停在汇率没解出——后者答的是试算没有合计，不是这一格；走到这里只能是

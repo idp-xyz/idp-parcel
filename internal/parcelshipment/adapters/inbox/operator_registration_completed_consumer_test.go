@@ -30,20 +30,23 @@ import (
 // operator_registration_resume_loop_test 按真链取证。
 
 // queueDouble 是 ports.OperatorRegistrationQueue 的替身：按调用次数逐页交回预置名单，并记下
-// 每次要的租户与页大小。
+// 每次要的租户、起点位置与页大小。
 type queueDouble struct {
 	pages   [][]ports.OperatorRegistrationQueueRecord
 	calls   int
 	tenants []string
+	afters  []ports.OperatorRegistrationQueuePosition
 	limits  []int
 }
 
 func (double *queueDouble) ListWaitingOnOperatorRegistration(
 	_ context.Context,
 	tenant domain.TenantID,
+	after ports.OperatorRegistrationQueuePosition,
 	limit int,
 ) ([]ports.OperatorRegistrationQueueRecord, error) {
 	double.tenants = append(double.tenants, tenant.String())
+	double.afters = append(double.afters, after)
 	double.limits = append(double.limits, limit)
 	index := double.calls
 	double.calls++
@@ -218,7 +221,7 @@ func TestAHardFailureOnOneRequestIsLoudAndDoesNotStopTheOthers(t *testing.T) {
 }
 
 // Covers: 队列为空时本封处理完毕入账——没有谁在等，这封信的工作就是零；重投由账本跳过，
-// 队列不再被问。翻页终止：只有停住的旧面孔的一页不再翻。
+// 队列不再被问。
 func TestAnEmptyQueueSettlesTheEnvelopeAndReplayIsSkipped(t *testing.T) {
 	queue := &queueDouble{}
 	advancer := &perRequestAdvancer{answers: map[string]error{}}
@@ -239,13 +242,12 @@ func TestAnEmptyQueueSettlesTheEnvelopeAndReplayIsSkipped(t *testing.T) {
 	}
 }
 
-// Covers: 翻页——第一页满且都是新面孔就再取一页；第二页只剩第一页停住的旧面孔时到底，不再
-// 无限翻。三份各被驱恰好一次。
-func TestPagingStopsWhenAPageBringsNoNewRequests(t *testing.T) {
+// Covers: 翻页按位置往后取——第一页满就从它最后一行之后再取一页，不重读队首；取到不足一页即到底。第一页停住的那几份不再
+// 出现，每份恰被驱一次，第二页从第一页最后一份的位置起问。
+func TestPagingMovesPastTheLastRequestOfTheFullPage(t *testing.T) {
 	queue := &queueDouble{pages: [][]ports.OperatorRegistrationQueueRecord{
 		{waitingRecord(t, "request-1"), waitingRecord(t, "request-2")},
-		{waitingRecord(t, "request-1"), waitingRecord(t, "request-3")},
-		{waitingRecord(t, "request-1"), waitingRecord(t, "request-3")},
+		{waitingRecord(t, "request-3")},
 	}}
 	advancer := &perRequestAdvancer{answers: map[string]error{}}
 	consumer, _ := newRegistrationFixture(t, queue, advancer, 2)
@@ -254,8 +256,12 @@ func TestPagingStopsWhenAPageBringsNoNewRequests(t *testing.T) {
 	if !errors.Is(err, psinbox.ErrAcceptanceChainUndecided) {
 		t.Fatalf("三份都停住应交回未决哨兵，实际 err = %v", err)
 	}
-	if queue.calls != 3 {
-		t.Fatalf("翻页次数 = %d，要 3（第三页无新面孔即止）", queue.calls)
+	if queue.calls != 2 {
+		t.Fatalf("翻页次数 = %d，要 2（第二页不足一页即止）", queue.calls)
+	}
+	if queue.afters[0] != (ports.OperatorRegistrationQueuePosition{}) ||
+		queue.afters[1].ShipmentRequestID.String() != "request-2" {
+		t.Fatalf("起点位置 = %+v，要第一页从队首、第二页从 request-2 之后", queue.afters)
 	}
 	if len(advancer.driven) != 3 || advancer.driven[0] != "request-1" || advancer.driven[1] != "request-2" || advancer.driven[2] != "request-3" {
 		t.Fatalf("被驱的委托 = %v，要三份各一次", advancer.driven)

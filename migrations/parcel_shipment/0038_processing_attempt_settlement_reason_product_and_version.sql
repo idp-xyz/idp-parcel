@@ -15,6 +15,13 @@
 -- 结算原因与服务产品只在落库的尝试上有意义：内部重试那一路整笔回滚，写了也不留。三列旧行一律不回填——本迁移之前落下的
 -- 尝试当时没记这几格，事后推出来的值说的是今天的提交版本，不是那一轮停下时的；读口对版本为空的旧行按任务建立时刻圈定。
 --
+-- 读口取「这一版任务最近一条」：按（租户、委托、版本）定位，发生时刻倒序、续办引用定先后，取一条即止。每一封售价卡的
+-- 「参数已登记」都给每一份仍在等的委托再添一条尝试，不建这条索引，每次读详情或队列都要把一份委托的全部尝试排一遍。版本
+-- 为空的旧行同一条索引也走得到（btree 收 IS NULL）。
+--
+-- 等待运营登记的队列索引补齐标识段（形照 0036）：登记续办门按（提交时刻、委托标识）往后翻页，同一提交时刻的几份要靠
+-- 标识分先后。谓词不变。
+--
 -- 只加可空列、不回填，在有数据的库上直接施加。
 
 ALTER TABLE parcel_shipment.acceptance_processing_attempt
@@ -27,3 +34,12 @@ ALTER TABLE parcel_shipment.acceptance_processing_attempt
         CHECK (settlement_reason IS NULL OR btrim(settlement_reason) <> ''),
     ADD CONSTRAINT acceptance_processing_attempt_submission_version_not_blank
         CHECK (submission_version IS NULL OR btrim(submission_version) <> '');
+
+CREATE INDEX acceptance_processing_attempt_latest
+    ON parcel_shipment.acceptance_processing_attempt
+        (tenant_id, shipment_request_id, submission_version, attempted_at DESC, continuation_ref DESC);
+
+DROP INDEX parcel_shipment.shipment_request_operator_registration_queue;
+CREATE INDEX shipment_request_operator_registration_queue
+    ON parcel_shipment.shipment_request (tenant_id, submitted_at, shipment_request_id)
+    WHERE task_waiting_on = 4 AND state = 1;
