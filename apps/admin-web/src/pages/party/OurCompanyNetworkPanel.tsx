@@ -1,26 +1,30 @@
 import { Building2, ChevronDown, ChevronRight, Link2, Route, Users, X, type LucideIcon } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem } from '@idpxyz/ui-primitives';
 import { StatusPill } from '../../components/StatusPill';
-import type { ApiResult } from '../catalogue-api';
-import type { BusinessPartyRecord, PartyRelationshipListResponseBody } from './api';
+import type { BusinessPartyRecord } from './api';
 import { formatCount, type PartyTileKind } from './business-parties-workbench';
 import { BusinessPartyTypeTags } from './BusinessPartyHeaderParts';
 import { PanelBand, panelLinkClass } from './BusinessPartyPanelParts';
 import { RefText } from './copy-affordance';
 import { Fact } from './detail-primitives';
 import { objectHash as legalEntityObjectHash } from './group-legal-entities-address';
-import { ourCompanyLiveText, roleCountNoteOf, type OurCompanyNetworkRow, type RoleCount } from './our-company-network';
+import { ourCompanyLiveText, roleCountNoteOf, roleCountsBySide, type OurCompanyNetworkRow, type RoleCount } from './our-company-network';
 import { OverviewSectionStateNote } from './PartyOverviewSection';
-import { sectionOf } from './party-overview';
+import { relationshipsOfParty, sectionOf } from './party-overview';
 import { PartyRelationshipGraph } from './PartyRelationshipGraph';
 import { relationshipGraphOf, type RelationshipGraphLimits } from './party-relationship-graph';
+import { partyRelationshipsComplete } from './party-relationships-of';
 import { PartyTile, partyRoleTileKind } from './party-role-visuals';
 import { labelOf, partyRoleLabels } from './presentation';
+import { usePartyRelationships } from './use-party-relationships';
 
 // 「我方关联」一册的右栏（票 business-party-relationship-graph/02 立；外框与两张汇总自票 business-party-redesign/04）：以选中的
 // 那家我方公司为中心。头区与往来单位右栏同一种排法——图标块、名称与状态、类型标签，右端是去处与关闭，下面一行事实；正文通栏
 // 三段，段头是带底色的窄带（BusinessPartyPanelParts.tsx 的 PanelBand）：关系图，再按「谁对它担任角色」「它对谁担任角色」
 // 各一张按角色的汇总，每行点了去合作关系视图看这家公司的这一类关系。
+//
+// 图与汇总画的是这家公司名下的关系，栏里按它筛着读（票 business-party-redesign/09，party-relationships-of.ts）：不从合作关系册
+// 的第一页里挑，册再大也读得全。段头上「几段在用」是读口在这家公司那一行上答的数。
 //
 // 图与往来单位「关联」签是同一个组件、同一套摆法（party-relationship-graph.ts）；这里地方更大，合成门槛放宽一些，一家公司名下
 // 十来个客户也逐家摆出。
@@ -75,28 +79,17 @@ export function OurCompanyNetworkPanel({
   row,
   party,
   roles,
-  relationships,
-  relationshipsComplete,
-  retryRelationships,
   tileKindOf,
   onClose,
   onShowRelationships,
   onShowInRoster,
 }: {
   row: OurCompanyNetworkRow;
-  /**
-   * 这家公司在往来单位册上的那一行，头区的状态取它。页面只在不带条件的那一页里找：册不止一页、那一页里没有它时是 null，
-   * 状态不摆——不拿公司主体的状态顶，那是另一本册上的另一个状态。
-   */
+  /** 这家公司在往来单位读口上的那一行，头区的状态取它；这一视图的行就是从那一问来的，读到之前是 null，状态先不摆。 */
   party: BusinessPartyRecord | null;
-  /** 它持有的角色（与名录类型格同一份索引），头区的类型标签按它称呼；「我方公司」那一枚总在。 */
+  /** 它持有的角色（读口在那一行上答的类别），头区的类型标签按它称呼；「我方公司」那一枚总在。 */
   roles: readonly string[];
-  /** 合作关系册不带条件那一问的答复：没答成时图画不出来，原处说明是怎么回事，不拿一张空图冒充「没有关系」。 */
-  relationships: ApiResult<PartyRelationshipListResponseBody> | null;
-  /** 那一问已是整册（complete-register.ts）：不是就写明图与数只按到手的那一页。 */
-  relationshipsComplete: boolean;
-  retryRelationships: () => void;
-  /** 关系图上各家单位的图标块按它自己的类型取，与名录的行同一份。 */
+  /** 关系图上各家单位的图标块按它自己的类型取，与名录的行同一份；页面认不得的交 null，由图按这段关系里的角色画。 */
   tileKindOf?: (partyId: string) => PartyTileKind | null;
   onClose: () => void;
   /** 去合作关系视图看这家公司名下的关系；给了角色就连角色一起带上。 */
@@ -104,9 +97,11 @@ export function OurCompanyNetworkPanel({
   /** 去单位名录，选中这一家。 */
   onShowInRoster: () => void;
 }) {
-  const name = row.partyName ?? row.partyId;
-  // 只借段状态的那几种说法（还在读、未配置、无权、出错）；答出来之后的行在 row 里，这里不再切一遍。
-  const relationshipState = sectionOf(relationships, () => []);
+  const name = row.partyName;
+  // 这家公司名下的合作关系：没答成时图画不出来，原处说明是怎么回事，不拿一张空图冒充「没有关系」。
+  const own = usePartyRelationships(row.partyId);
+  const relationshipState = sectionOf(own.answer, (body) => relationshipsOfParty(row.partyId, body.relationships));
+  const complete = partyRelationshipsComplete(own.answer);
   const openLegalEntity = (legalEntityId: string) => {
     window.location.hash = legalEntityObjectHash(legalEntityId);
   };
@@ -165,38 +160,41 @@ export function OurCompanyNetworkPanel({
           <Fact inline label="编码">
             <RefText value={row.partyId} name="编码" />
           </Fact>
-          <Fact inline label="公司主体">
-            {row.legalEntityIds.map((id, index) => (
-              <span key={id}>
-                {index > 0 ? '、' : null}
-                <RefText value={id} name="公司主体编号" />
-              </span>
-            ))}
-          </Fact>
+          {/* 法人册没读到时编号列不出来，这一格不摆：不留一个空着的标签。 */}
+          {row.legalEntityIds.length > 0 ? (
+            <Fact inline label="公司主体">
+              {row.legalEntityIds.map((id, index) => (
+                <span key={id}>
+                  {index > 0 ? '、' : null}
+                  <RefText value={id} name="公司主体编号" />
+                </span>
+              ))}
+            </Fact>
+          ) : null}
         </dl>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <section className="border-b border-idpxyz-border">
-          <PanelBand icon={Link2} title="关系图" count={relationshipState.kind === 'answered' ? ourCompanyLiveText(row) : undefined}>
+          <PanelBand icon={Link2} title="关系图" count={ourCompanyLiveText(row)}>
             <button type="button" className={panelLinkClass} onClick={() => onShowRelationships()}>
               在「合作关系」里看全部
             </button>
           </PanelBand>
           {relationshipState.kind !== 'answered' ? (
             <div className="px-6 py-4">
-              <OverviewSectionStateNote state={relationshipState} what="合作关系" retry={retryRelationships} />
+              <OverviewSectionStateNote state={relationshipState} what="合作关系" retry={own.retry} />
             </div>
           ) : (
             <>
-              {relationshipsComplete ? null : (
+              {complete ? null : (
                 <p className="border-b border-idpxyz-border px-6 py-2.5 type-body leading-5 text-idpxyz-breadcrumb">
-                  合作关系册不止一页，图与下面的段数只按已取到的那一页。
+                  这家公司名下的合作关系不止一页，图与下面按角色的段数只按已取到的那一部分。
                 </p>
               )}
               <div className="overflow-x-auto px-6 pb-[18px] pt-4">
                 <PartyRelationshipGraph
-                  graph={relationshipGraphOf(row.views, networkLimits)}
+                  graph={relationshipGraphOf(relationshipState.rows, networkLimits)}
                   centerName={row.partyName}
                   centerId={row.partyId}
                   ours
@@ -212,14 +210,14 @@ export function OurCompanyNetworkPanel({
             <RoleSummary
               icon={Users}
               title="对它担任角色的单位"
-              counts={row.towardIt}
+              counts={roleCountsBySide(relationshipState.rows).towardIt}
               emptyNote="还没有单位对它担任角色。"
               onPick={onShowRelationships}
             />
             <RoleSummary
               icon={Route}
               title="它对别的单位担任的角色"
-              counts={row.fromIt}
+              counts={roleCountsBySide(relationshipState.rows).fromIt}
               emptyNote="它还没有对谁担任角色。"
               onPick={onShowRelationships}
             />

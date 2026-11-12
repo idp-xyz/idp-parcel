@@ -9,12 +9,6 @@
 // 我方公司不提「没有关系」：它多半是关系的相对方，持有的角色本来就少，提了是误报。已停用不在这里——停用横幅已经在说。
 
 import { formatCount } from './business-parties-workbench';
-import { liveRelationshipStatuses, type PartyRelationshipView } from './party-overview';
-
-/** 这家单位名下还在起作用的关系有几段，持有方与相对方两侧都算——两侧都是「与它有往来」。 */
-export function liveRelationshipCountOf(views: readonly PartyRelationshipView[]): number {
-  return views.filter((view) => liveRelationshipStatuses.has(view.status)).length;
-}
 
 /**
  * 停用对话框说明后面跟的那一句（票 business-party-redesign/11）：这家单位名下还有几段在用的合作关系，与「还没有合作关系」

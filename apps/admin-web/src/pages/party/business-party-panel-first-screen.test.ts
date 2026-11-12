@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { deactivationLiveRelationshipsNote, liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
+import { deactivationLiveRelationshipsNote, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
 import type { PartyRelationshipView } from './party-overview';
 
 // 本文件钉的是右栏首屏那两句话与主动作怎么选（票 business-party-ux/08）：提示只在待生效、或已生效却没有在用关系时出现，
@@ -20,21 +20,6 @@ function view(over: Partial<PartyRelationshipView>): PartyRelationshipView {
     ...over,
   };
 }
-
-// Covers: 在用 = 候选与已生效，两侧都算；到期、撤销、替代不算。
-test('liveRelationshipCountOf 只数候选与已生效，两侧都算', () => {
-  equal(
-    liveRelationshipCountOf([
-      view({}),
-      view({ relationshipId: 'R2', status: 'CANDIDATE', side: 'COUNTERPARTY' }),
-      view({ relationshipId: 'R3', status: 'EXPIRED' }),
-      view({ relationshipId: 'R4', status: 'REVOKED' }),
-      view({ relationshipId: 'R5', status: 'SUPERSEDED' }),
-    ]),
-    2,
-  );
-  equal(liveRelationshipCountOf([]), 0);
-});
 
 // Covers: 停用对话框说明后面那一句——名下有在用的合作关系才说、报出段数；没有不说；数不知道（关系册没答出或没读全）也不说。
 test('deactivationLiveRelationshipsNote 有在用的关系才报段数，不知道就不说', () => {

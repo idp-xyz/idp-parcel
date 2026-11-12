@@ -323,7 +323,7 @@ function RelationshipsCard({
       ) : null}
       {complete ? null : (
         <p className={`px-3.5 py-2.5 type-body leading-5 text-idpxyz-breadcrumb ${total > 0 ? 'border-t border-idpxyz-border' : ''}`}>
-          合作关系册不止一页，这里只按已取到的那一页列。
+          这家单位名下的合作关系不止一页，这里只列已取到的那一部分。
         </p>
       )}
     </PanelCard>

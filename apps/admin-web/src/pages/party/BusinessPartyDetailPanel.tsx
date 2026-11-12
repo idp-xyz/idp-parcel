@@ -18,6 +18,8 @@ import { BusinessPartyMoreMenu, BusinessPartyTypeTags } from './BusinessPartyHea
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { relationshipGraphDraftOf } from './party-relationship-graph';
+import { partyRelationshipsComplete } from './party-relationships-of';
+import { usePartyRelationships } from './use-party-relationships';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { partyOverviewStatesOf, usePartyOverviewLists } from './PartyOverviewSection';
@@ -83,7 +85,6 @@ export function BusinessPartyDetailPanel({
   pinned,
   relationships,
   retryRelationships,
-  relationshipsComplete,
   tileKindOf,
   onShowRelationships,
   onClose,
@@ -101,14 +102,12 @@ export function BusinessPartyDetailPanel({
    * 同一判据；null 是法人册还没答出。头部的「我方公司」只数在用的（ours），两者用途不同。
    */
   pinned: boolean | null;
-  /** 关系册答案随页面持有、交给概要与「关联」签，与关系册工作台同一份，不另取。 */
+  /**
+   * 合作关系册不带条件的那一页，页面持有：就地登记关系的表单按它建议修订号。这家单位名下的关系栏里另按它筛着读
+   * （usePartyRelationships），概要与「关联」签摆的是那一份。
+   */
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
-  /**
-   * 关系册不带条件那一问已是整册（complete-register.ts）。不是的话 `relationships` 只是一页：这家单位有几段关系数不出来，
-   * 「关联」签上不显数，概要与「关联」签里写明只按已取到的那一页列。
-   */
-  relationshipsComplete: boolean;
   /** 关系图与关系表里对方的图标块按它自己的类型取，与名录的行同一份；页面手上有全册的角色索引。 */
   tileKindOf?: (partyId: string) => PartyTileKind | null;
   /** 去「合作关系」视图看这家单位名下的全部关系。 */
@@ -138,6 +137,15 @@ export function BusinessPartyDetailPanel({
   const [relatedTarget, setRelatedTarget] = useState<PanelRelatedTarget | null>(null);
   const clearRelatedTarget = useCallback(() => setRelatedTarget(null), []);
   const knownRelationships = relationships?.kind === 'outcome' ? relationships.body.relationships : null;
+  // 这家单位名下的合作关系按它筛着读（party-relationships-of.ts），不从整册的第一页里挑：册再大也读得全。读不全只剩一种
+  // 情形——它一家在某一侧的关系就超过一页——那时签上不显数，概要与「关联」签里写明。
+  const ownRelationships = usePartyRelationships(row.partyId);
+  const relationshipsComplete = partyRelationshipsComplete(ownRelationships.answer);
+  // 登记或结束一段关系之后两份都重读：整册的那一页（表单的修订号建议、别的视图）与这家单位自己的这一份。
+  const retryAllRelationships = () => {
+    retryRelationships();
+    ownRelationships.retry();
+  };
   // 表单里双方与角色三格此刻的值（表单报上来的，关着时是 null）：「关联」签拿去在关系图上先画出正在填的这一段
   // （party-relationship-graph.ts 的 relationshipGraphDraftOf）。
   const [draftParties, setDraftParties] = useState<{ holder: string; counterparty: string; role: string } | null>(null);
@@ -162,7 +170,7 @@ export function BusinessPartyDetailPanel({
               addToast({ type: 'success', title: '合作关系已登记' });
               setRelationshipUnsaved(false);
               setRegistering(null);
-              retryRelationships();
+              retryAllRelationships();
             }}
             onUnsavedChange={setRelationshipUnsaved}
             onCancel={() => (relationshipUnsaved ? setConfirmingCancel(true) : setRegistering(null))}
@@ -195,7 +203,7 @@ export function BusinessPartyDetailPanel({
   };
   // 提示、头区动作（票 business-party-ux/08，判读在 business-party-panel-first-screen.ts）、签上的数、概要的卡与「关联」签读同一份缓存。
   const lists = usePartyOverviewLists();
-  const overview = partyOverviewStatesOf(row.partyId, relationships, lists);
+  const overview = partyOverviewStatesOf(row.partyId, ownRelationships.answer, lists);
   // 在用的段数取读口在这一行上答的（两侧都算），不随合作关系册读到第几页而变；角色也在行上，不必等别的册答出。
   const liveRelationships = partyLiveRelationshipsOf(row).live;
   const hint = panelHintOf(row, ours, liveRelationships, roles.length);
@@ -343,7 +351,7 @@ export function BusinessPartyDetailPanel({
             pinned={pinned}
             profiles={profiles}
             overview={overview}
-            retryRelationships={retryRelationships}
+            retryRelationships={ownRelationships.retry}
             relationshipsComplete={relationshipsComplete}
             hint={hint}
             mayWrite={mayWrite}
@@ -375,12 +383,12 @@ export function BusinessPartyDetailPanel({
             tileKindOf={tileKindOf}
             overview={overview}
             lists={lists}
-            relationships={relationships}
-            retryRelationships={retryRelationships}
+            relationships={ownRelationships.answer}
+            retryRelationships={ownRelationships.retry}
             relationshipsComplete={relationshipsComplete}
             relationshipRegistration={relationshipRegistration}
             relationshipDraft={relationshipDraft}
-            onRelationshipEnded={mayWrite ? retryRelationships : undefined}
+            onRelationshipEnded={mayWrite ? retryAllRelationships : undefined}
             accountWrites={mayWrite ? { parties } : undefined}
             onShowRelationships={onShowRelationships}
             target={relatedTarget}

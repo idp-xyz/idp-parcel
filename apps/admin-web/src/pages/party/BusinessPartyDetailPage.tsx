@@ -6,7 +6,7 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { BusinessPartyEditShell, type EditSlots } from './BusinessPartyEditShell';
 import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
-import { partyTileKindOf } from './business-parties-workbench';
+import { partyLiveRelationshipsOf, partyTileKindOf } from './business-parties-workbench';
 import { closesTabOnExit, peekEditOrigin, takeEditOrigin, type EditOrigin } from './business-party-edit-origin';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { DetailPageTemplate, type DetailMeta, type TemplateViewState, type WorkspaceTabId } from '../../templates';
@@ -25,9 +25,7 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
-import { completeRegisterRows } from '../complete-register';
-import { liveRelationshipCountOf } from './business-party-panel-first-screen';
-import { relationshipsOfParty } from './party-overview';
+import { usePartyRelationships } from './use-party-relationships';
 import { PartyOverviewSection, usePartyOverviewCount } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant } from './detail-primitives';
@@ -186,10 +184,15 @@ export function BusinessPartyDetailPage({
 }) {
   const ours = pinned === true;
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
-  const related = usePartyOverviewCount(partyId, relationships);
-  // 停用对话框说明里「名下还有几段在用的合作关系」的数：关系册读全了才数（与工作台右栏同一个口径），没答出、没读全都是 null。
-  const completeRelationships = completeRegisterRows(relationships?.kind === 'outcome' ? relationships.body : null, (body) => body.relationships);
-  const liveRelationships = completeRelationships === null ? null : liveRelationshipCountOf(relationshipsOfParty(partyId, completeRelationships));
+  // 这家单位名下的合作关系按它筛着读（party-relationships-of.ts），不从整册的第一页里挑；整册的那一页只给登记表单建议修订号。
+  const ownRelationships = usePartyRelationships(partyId);
+  const retryAllRelationships = () => {
+    retryRelationships();
+    ownRelationships.retry();
+  };
+  const related = usePartyOverviewCount(partyId, ownRelationships.answer);
+  // 停用对话框说明里「名下还有几段在用的合作关系」的数取读口在这一行上答的（与工作台右栏同一个数）；行还没读到是 null。
+  const liveRelationships = row === null ? null : partyLiveRelationshipsOf(row).live;
   const identificationMeta = useBusinessPartyIdentificationMeta(row);
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const grant = useRegistryWriteGrant();
@@ -264,7 +267,7 @@ export function BusinessPartyDetailPage({
                 addToast({ type: 'success', title: '合作关系已登记' });
                 setRelationshipUnsaved(false);
                 setRegisteringRelationship(false);
-                retryRelationships();
+                retryAllRelationships();
               }}
               onUnsavedChange={setRelationshipUnsaved}
               onCancel={() =>
@@ -488,10 +491,10 @@ export function BusinessPartyDetailPage({
                       partyId={row.partyId}
                       partyName={row.partyName}
                       ours={ours}
-                      relationships={relationships}
-                      retryRelationships={retryRelationships}
+                      relationships={ownRelationships.answer}
+                      retryRelationships={retryAllRelationships}
                       relationshipRegistration={relationshipRegistration}
-                      onRelationshipEnded={mayWrite && !anyEditing ? retryRelationships : undefined}
+                      onRelationshipEnded={mayWrite && !anyEditing ? retryAllRelationships : undefined}
                       accountWrites={mayWrite && !anyEditing ? { parties: listAnswer } : undefined}
                     />
                   </section>

@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { PartyRelationshipRecord } from './api';
 import {
-  countPartyRelationships,
   defaultPartyRelationshipSort,
   partyRelationshipListConditions,
   partyRelationshipNeedsAttention,

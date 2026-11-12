@@ -290,7 +290,7 @@ export function BusinessPartyPanelRelated({
   /** 关系册答案：「结束…」要整行记录（修订号、依据），段状态里的只是这家单位看出去的那一面。 */
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
-  /** 合作关系册不带条件那一问已是整册；不是的话到手的只是一页，段数不报，并写明。 */
+  /** 这家单位名下的合作关系读全了（party-relationships-of.ts 的 partyRelationshipsComplete）；没读全时段数不报，并写明。 */
   relationshipsComplete: boolean;
   /** 就地登记合作关系：有写授予的页面给；`active` 为真时段头下摆 `form`，段头的入口收起。不给就只读。 */
   relationshipRegistration?: { active: boolean; onOpen: () => void; form: ReactNode };
@@ -361,7 +361,7 @@ export function BusinessPartyPanelRelated({
           <>
             {relationshipsComplete ? null : (
               <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-idpxyz-border px-6 py-2.5 type-body leading-5 text-idpxyz-breadcrumb">
-                合作关系册不止一页，这里只按已取到的那一页列。
+                这家单位名下的合作关系不止一页，这里只列已取到的那一部分。
                 <button type="button" className={panelLinkClass} onClick={onShowRelationships}>
                   在「合作关系」里看全部
                 </button>

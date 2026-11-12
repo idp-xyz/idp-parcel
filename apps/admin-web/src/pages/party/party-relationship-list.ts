@@ -71,22 +71,5 @@ export function partyRelationshipNeedsAttention(row: PartyRelationshipRecord): b
   return !row.holderNameKnown || !row.counterpartyNameKnown;
 }
 
-export interface PartyRelationshipCounts {
-  total: number;
-  byStatus: Record<RelationshipStatusCode, number>;
-  attention: number;
-}
-
-/** 命令头指标与状态胶囊的计数。只拿整册来数（complete-register.ts 的 completeRegisterRows 判过的那一份）。 */
-export function countPartyRelationships(rows: readonly PartyRelationshipRecord[]): PartyRelationshipCounts {
-  const byStatus: Record<RelationshipStatusCode, number> = { CANDIDATE: 0, EFFECTIVE: 0, EXPIRED: 0, REVOKED: 0, SUPERSEDED: 0 };
-  let attention = 0;
-  for (const row of rows) {
-    if (row.status in byStatus) byStatus[row.status as RelationshipStatusCode] += 1;
-    if (partyRelationshipNeedsAttention(row)) attention += 1;
-  }
-  return { total: rows.length, byStatus, attention };
-}
-
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const partyRelationshipNoMatchNote = '当前筛选条件下没有匹配的合作关系';

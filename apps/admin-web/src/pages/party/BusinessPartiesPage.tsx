@@ -1233,7 +1233,7 @@ export function BusinessPartiesPage() {
         narrowWidth: 64,
         skeleton: 24,
         render: (row) =>
-          relationshipsAnswered && row.candidates > 0 ? (
+          row.candidates > 0 ? (
             <span className="tabular-nums text-idpxyz-text">{formatCount(row.candidates)}</span>
           ) : (
             <span className="text-idpxyz-breadcrumb">—</span>
@@ -1266,7 +1266,8 @@ export function BusinessPartiesPage() {
     };
     const networkNote = '以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图';
     const searchBox = { value: networkSearch, onChange: setNetworkSearch, placeholder: '搜我方公司名称、编码或公司主体' };
-    // 段数不全的那一句：表的工具条与名录栏里是同一句。
+    // 表里按角色分的段数是从合作关系册不带条件的那一页数的，册不止一页时在工具条上写明。分栏之后不必：名录栏那一句是读口在行上
+    // 答的真数，右栏按这家公司筛着读。
     const firstPageNote =
       completeRelationships === null && relationshipsAnswered ? <PageOnlyNote>合作关系册不止一页，段数只按第一页数</PageOnlyNote> : null;
     const clearNetworkSearch = () => setNetworkSearch('');
@@ -1294,7 +1295,6 @@ export function BusinessPartiesPage() {
           head={<PartyRosterHead title={info.title} refresh={refresh} actions={rosterActions} />}
           tabs={<BusinessPartiesViewTabs compact tabs={viewTabs} value={book} onChange={changeBook} />}
           search={searchBox}
-          tools={firstPageNote ? <span className="col-span-2 flex">{firstPageNote}</span> : undefined}
           rows={visible}
           rowKey={(row) => row.partyId}
           selectedKey={selectedOurCompany}
@@ -1322,9 +1322,6 @@ export function BusinessPartiesPage() {
               row={detailRow}
               party={detailParty}
               roles={detailParty === null ? [] : partyRolesOf(detailParty)}
-              relationships={relationships.answer}
-              relationshipsComplete={completeRelationships !== null}
-              retryRelationships={relationships.retry}
               tileKindOf={tileKindOf}
               onClose={() => selectOurCompany(null)}
               onShowRelationships={(relationshipRole) => {
@@ -1528,7 +1525,6 @@ export function BusinessPartiesPage() {
                       pinned={entities.answer == null ? null : pinnedParties.has(detailRow.partyId)}
                       relationships={relationships.answer}
                       retryRelationships={relationships.retry}
-                      relationshipsComplete={completeRelationships !== null}
                       tileKindOf={tileKindOf}
                       onShowRelationships={() => showRelationshipsFromPanel(detailRow.partyId)}
                       onClose={() => selectParty(null)}

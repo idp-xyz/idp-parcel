@@ -56,7 +56,7 @@ export interface PanelRelatedTarget {
 
 /**
  * 「关联」签上的数：合作关系的段数加另外四册里与这家有关的行数。五段都拿到业务答案才报——少一段就不是全数，报出来会被当成
- * 「就这些」；合作关系册不止一页时到手的只是其中一页，同样不报。
+ * 「就这些」；这家单位名下的合作关系不止一页时到手的只是其中一部分，同样不报。
  */
 export function panelRelatedCountOf(states: PanelRelatedStates, relationshipsComplete: boolean): number | null {
   if (!relationshipsComplete) return null;

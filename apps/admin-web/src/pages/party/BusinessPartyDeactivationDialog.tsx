@@ -24,7 +24,7 @@ export function BusinessPartyDeactivationDialog({
   row: BusinessPartyRecord;
   /** 页面持有的参与方列表答案；首取回来之前为 null。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
-  /** 它名下在用的合作关系有几段（business-party-panel-first-screen.ts 的 liveRelationshipCountOf）；不知道就是 null，说明里不提。 */
+  /** 它名下在用的合作关系有几段（business-parties-workbench.ts 的 partyLiveRelationshipsOf）；不知道就是 null，说明里不提。 */
   liveRelationships?: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
