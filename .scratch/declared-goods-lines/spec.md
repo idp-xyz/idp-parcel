@@ -41,6 +41,9 @@ Status: in-progress
 | [19](./issues/19-the-estimate-trail-records-product-weight-and-lines-and-settlement-reads-it-by-shipment.md) | 估价留痕补记产品、计价重量与费用行，结算按委托交出读口 | — | 后端 |
 | [20](./issues/20-shipment-detail-shows-the-recorded-financial-control-conclusion.md) | 委托详情交出受理判断记下的财务控制结论 | — | 后端 |
 | [21](./issues/21-admin-shipment-detail-shows-pre-acceptance-financial-control.md) | 管理台运单详情显示「受理前财务控制」 | —（联调等 19、20） | 前端 |
-| [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因（needs-triage） | — | 小包托运 + 结算 |
+| [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因：决定（ADR-0380） | 23、24 | 文档票 |
+| [23](./issues/23-pricing-side-estimate-stalls-wait-for-registration-and-the-attempt-says-why.md) | 价卡一侧答不出的估价等运营登记、参数登记后续办；处理尝试记原因与产品，详情从落处读 | — | 后端 |
+| [24](./issues/24-admin-shows-the-settlement-reason-and-who-resumes-a-stalled-estimate.md) | 管理台：估价停因带结算原因与产品，写明谁来续办 | —（联调等 23） | 前端 |
+| [25](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md) | 估价因申报不全没形成时等客户补充（needs-triage） | — | 小包托运 + 结算 + 计价 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。
