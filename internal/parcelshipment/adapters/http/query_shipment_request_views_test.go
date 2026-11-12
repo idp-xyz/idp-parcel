@@ -494,7 +494,7 @@ func TestViewsDetailReportsTheWholeView(t *testing.T) {
 	if view.PriorVersionCount != 1 {
 		t.Fatalf("prior versions = %d", view.PriorVersionCount)
 	}
-	// 这几格字段名与管理台票 declared-goods-lines/24 钉死（ADR-0380 决定三、四）：续办方交领域原词，结算原因不冠 SA-。
+	// 这几格字段名与管理台票 declared-goods-lines/24 钉死（ADR-0383 决定三、四）：续办方交领域原词，结算原因不冠 SA-。
 	// lastAttemptEstimateGapCodes 与管理台票 declared-goods-lines/27 钉死（ADR-0381 决定四）：计价的缺项码原样。
 	if view.AcceptanceTask.State != "COMPLETE" ||
 		view.AcceptanceTask.LastAttemptReason != "FINANCIAL_CONTROL_NOT_CONFIGURED" ||

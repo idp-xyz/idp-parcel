@@ -42,7 +42,7 @@ type operatorRegistrationLoopFixture struct {
 	settlementAccountGate *psinbox.OperatorRegistrationCompletedConsumer
 	// estimateAdoptionGate 是同一条链上收「受理前估价采用已登记」的那一份。
 	estimateAdoptionGate *psinbox.OperatorRegistrationCompletedConsumer
-	// pricingParameterGate 是同一条链上收计价「参数已登记」的那一份（ADR-0380 决定二）。
+	// pricingParameterGate 是同一条链上收计价「参数已登记」的那一份（ADR-0383 决定二）。
 	pricingParameterGate *psinbox.OperatorRegistrationCompletedConsumer
 	// chain 与 inboxStore 留给要换页大小另装一扇门的用例：门与上面几扇同链、同账本。
 	chain            *psapplication.AdvanceAcceptanceChainHandler

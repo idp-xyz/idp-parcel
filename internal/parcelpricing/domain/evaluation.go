@@ -382,7 +382,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
-	// 按哪个产品选的卡写在解释最前：读评价的人先看到这张卡为什么是它（ADR-0378 决定三）。不进语义摘要，理由同快照那一格。
+	// 按哪个产品选的卡写在解释最前：读评价的人先看到这张卡为什么是它（ADR-0382 决定三）。不进语义摘要，理由同快照那一格。
 	if product, declared := request.input.ServiceProduct(); declared {
 		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("price card selected for declared service product %s", product.String()))
 	}

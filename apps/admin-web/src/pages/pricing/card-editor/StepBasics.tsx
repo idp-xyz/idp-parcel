@@ -23,7 +23,7 @@ import { useEditor } from './EditorContext';
 import { labelled, weightUnitOptions } from './options';
 
 /**
- * 适用服务产品：从服务产品册勾选，可多选、可不选（ADR-0378 决定一）。册读不到时退回按标识添加，并说清为什么——表单不因此
+ * 适用服务产品：从服务产品册勾选，可多选、可不选（ADR-0382 决定一）。册读不到时退回按标识添加，并说清为什么——表单不因此
  * 变死；标识在不在册由服务端在预览时判。还在读册时只说在读，不先摆手填框：册一读回来手填框就换成勾选，先摆出来只会让人
  * 白敲一遍。
  */
@@ -131,7 +131,7 @@ export function StepBasics() {
             onChange={(aggregation) => patch({ aggregation })}
             hint="选「每件计价」就是按每个包裹算钱，必须明确选，不替你默认"
           />
-          {/* 只有售价卡能声明适用产品（ADR-0378 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。
+          {/* 只有售价卡能声明适用产品（ADR-0382 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。
               规格口的模板版本收不收这一格由规格口说，不收就只说一句，不摆一个提交不上去的选择。 */}
           {declaresServiceProducts(basics.direction) ? (
             specTakesServiceProducts(spec) ? (

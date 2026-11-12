@@ -670,7 +670,7 @@ test('生成的工作簿里每一格都是字符串或 null，没有数字：金
   equal(handling.sheets.fixed_charges[0].amount, '3');
 });
 
-// ---- 适用服务产品（ADR-0378 决定一、四）----
+// ---- 适用服务产品（ADR-0382 决定一、四）----
 
 const purposeCodes = ['CUSTOMER_CHARGE', 'SUPPLIER_COST', 'INTERNAL_PRICE'];
 

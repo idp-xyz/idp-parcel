@@ -32,7 +32,7 @@ func TestRegisteringANewerCanonicalizationNeedsTheDeploymentSwitch(t *testing.T)
 		{"基础版·开关开", minimalPlan, true, application.PriceCardRecorded, true},
 		{"较新版·开关关", totalBoundedPlan, false, application.PriceCardRegistrationNewerCanonicalizationNotEnabled, false},
 		{"较新版·开关开", totalBoundedPlan, true, application.PriceCardRecorded, true},
-		// 指名适用服务产品的卡写 PPC-7（ADR-0378 决定四），照 ADR-0352 同一道门。
+		// 指名适用服务产品的卡写 PPC-7（ADR-0382 决定四），照 ADR-0352 同一道门。
 		{"PPC-7·开关关", serviceProductPlan, false, application.PriceCardRegistrationNewerCanonicalizationNotEnabled, false},
 		{"PPC-7·开关开", serviceProductPlan, true, application.PriceCardRecorded, true},
 	}

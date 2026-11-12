@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 本文件证 PPT-3：card 表的 serviceProducts 字段把售价卡的适用服务产品带进方案（ADR-0378 决定一、四）。两种载体读出同一张卡；
+// 本文件证 PPT-3：card 表的 serviceProducts 字段把售价卡的适用服务产品带进方案（ADR-0382 决定一、四）。两种载体读出同一张卡；
 // 不写这一行与写空值都是不声明；旧版文件里填了它说清是版本问题；不是 SELL 的卡填了它报不适用。
 
 func namedSellCard(products string) filled {

@@ -21,7 +21,7 @@ import (
 //
 // 装配与作用域那条闭环（TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope）同一份：生产的 PS 适配器、作用域源与
 // 账户目录，生产的 SA 施加编排（两本账、采用册、留痕册真库），控制策略与试算两口替身。结算账户先登好，作用域一开始就形成。试算
-// 替身答「没有在用的售价卡」：那一格自 ADR-0380 决定一起也是等运营登记，重驱那一轮把新的等待连同带结算原因的处理尝试落库、
+// 替身答「没有在用的售价卡」：那一格自 ADR-0383 决定一起也是等运营登记，重驱那一轮把新的等待连同带结算原因的处理尝试落库、
 // 本封入账，不再回滚重投——之前这一路回滚，委托留着上一次「金额未配置」的尝试，采用登记的信封一直重投到被放弃。价卡登上之后
 // 怎么被重驱解开，见 pricing_parameter_registration_resume_loop_test.go。
 
@@ -123,7 +123,7 @@ func TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope(t *testing.T) {
 	}
 
 	// 估价采用那一份续办门：按租户取队列再驱一拍——越过金额那一格、按登记的计价范围问到试算；试算答没有在用的售价卡。那一格是
-	// 价卡一侧登记解得开的（ADR-0380 决定一）：等待态换成价卡那一停再落库，本封入账，处理尝试多一行、带结算原因，成为最近一条。
+	// 价卡一侧登记解得开的（ADR-0383 决定一）：等待态换成价卡那一停再落库，本封入账，处理尝试多一行、带结算原因，成为最近一条。
 	adoptionDelivery := fixture.claimDeliveryOfType(t, string(psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType))
 	if err := fixture.estimateAdoptionGate.Consume(ctx, adoptionDelivery.Envelope); err != nil {
 		t.Fatalf("越过金额之后停在价卡那一格的等运营登记，本封应按处理完毕入账：%v", err)

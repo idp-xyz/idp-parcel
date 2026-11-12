@@ -886,8 +886,8 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 // 不出（`*_UNAVAILABLE` 一族逐个列）留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停
 // 各拿一条续办引用。估价那一口（ADR-0179）的各格同表：金额未配置落`未配置`（登记采用行时交信封，票
 // product-strategy-boundary/25 第 6 条）；价卡一侧答不出的那几格——没有在用价卡、价卡适用冲突、试算没有合计、合计
-// 不为正、某件为负——落`未配置`（ADR-0380 决定一，计价「参数已登记」来重驱）；币种对不上、不可见、缺件、一件试算
-// 都没有与合计溢出留在`未形成`。结算答未形成的每一格另把原因码原样（不冠 SA-）交在 SettlementReason 上（ADR-0380
+// 不为正、某件为负——落`未配置`（ADR-0383 决定一，计价「参数已登记」来重驱）；币种对不上、不可见、缺件、一件试算
+// 都没有与合计溢出留在`未形成`。结算答未形成的每一格另把原因码原样（不冠 SA-）交在 SettlementReason 上（ADR-0383
 // 决定三）。缺件自 ADR-0381 起按缺项分流，这里只留「缺项缺席」那一格；分流的几种落点另见
 // TestADeclarationIncompleteAnswerSplitsByWhoSuppliesTheGaps。
 func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {

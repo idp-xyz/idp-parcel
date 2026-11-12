@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证计价「参数已登记」那一份登记续办门自己的几件事（ADR-0380 决定二）：认 parcel-pricing 写的那一串
+// 本文件对真实 PostgreSQL 16 证计价「参数已登记」那一份登记续办门自己的几件事（ADR-0383 决定二）：认 parcel-pricing 写的那一串
 // 类型、只有 SELL 重驱、BUY 入账不问队列、方向漂了是毒丸、账本记在自己名下。重驱纪律与另几份同一份代码。
 
 const pricingParameterResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-pricing-parameter-registration"
@@ -76,7 +76,7 @@ func TestThePricingParameterGateAcceptsTheTypeThePublisherWrites(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0380 决定二——SELL 那一封译出租户去问同一张`等待运营登记`队列、逐份驱到；账本记在本门名下，另几份名下无痕。
+// Covers: ADR-0383 决定二——SELL 那一封译出租户去问同一张`等待运营登记`队列、逐份驱到；账本记在本门名下，另几份名下无痕。
 func TestASellPricingParameterEnvelopeRedrivesTheTenantQueueUnderItsOwnLedgerName(t *testing.T) {
 	queue := &queueDouble{pages: [][]ports.OperatorRegistrationQueueRecord{
 		{waitingRecord(t, "request-1"), waitingRecord(t, "request-2")},
@@ -109,7 +109,7 @@ func TestASellPricingParameterEnvelopeRedrivesTheTenantQueueUnderItsOwnLedgerNam
 	}
 }
 
-// Covers: ADR-0380 决定二「只认 SELL 方向」——BUY 那一封入账、不问队列、不驱链；方向缺席或不在 BUY/SELL 里是契约漂了，
+// Covers: ADR-0383 决定二「只认 SELL 方向」——BUY 那一封入账、不问队列、不驱链；方向缺席或不在 BUY/SELL 里是契约漂了，
 // 拒收入账、重投也不问队列：当成 BUY 放过，一次 SELL 登记就会静默地叫不醒任何委托。
 func TestABuyPricingParameterEnvelopeSettlesWithoutAskingTheQueue(t *testing.T) {
 	queue := &queueDouble{pages: [][]ports.OperatorRegistrationQueueRecord{{waitingRecord(t, "request-1")}}}

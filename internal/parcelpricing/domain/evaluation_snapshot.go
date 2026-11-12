@@ -104,7 +104,7 @@ type inputSnapshotDocument struct {
 	Comparison        *string                    `json:"comparison,omitempty"`
 	// 未声明地址性质的评价不写这一键，旧快照没有它照样读回（ADR-0347 决定四）。
 	AddressNature string `json:"addressNature,omitempty"`
-	// 没按产品选卡的评价不写这一键，旧快照没有它照样读回（ADR-0378 决定三）。
+	// 没按产品选卡的评价不写这一键，旧快照没有它照样读回（ADR-0382 决定三）。
 	ServiceProduct string `json:"serviceProduct,omitempty"`
 }
 

@@ -115,7 +115,7 @@ func TestEachUnformableSellOutcomeHandsOffUnformedAndWaitingOnesStayUndecided(t 
 			cause:    ppports.UnformedPriceCardApplicabilityConflict,
 			mentions: "SYN-SELL-PLAN-B@v1",
 		},
-		// 按申报产品选卡时，说明点名是哪个产品没有卡、哪个产品上撞了几张（ADR-0378 决定二）。
+		// 按申报产品选卡时，说明点名是哪个产品没有卡、哪个产品上撞了几张（ADR-0382 决定二）。
 		"申报产品未配置": {
 			result: ppapplication.FormEvaluationFromRequestResult{
 				Outcome:        ppapplication.RequestPriceCardNotConfigured,

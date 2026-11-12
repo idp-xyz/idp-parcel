@@ -682,7 +682,7 @@ type judgmentRequestStore struct {
 	basisErr         error
 	recordedControl  []domain.FinancialControlResult
 	recordedAttempts []domain.ProcessingAttempt
-	// attemptVersions 收下每条处理尝试记在哪一版上：委托详情按版本读最近一条（ADR-0380 决定四），版本漏传在替身上不报错。
+	// attemptVersions 收下每条处理尝试记在哪一版上：委托详情按版本读最近一条（ADR-0383 决定四），版本漏传在替身上不报错。
 	attemptVersions   []domain.SubmissionVersionID
 	adoptedResolution []domain.CommercialResolutionID
 	// recordedTenants 收下每次记录时编排给出的租户。它存在是为了让「编排确实把租户传下去了」

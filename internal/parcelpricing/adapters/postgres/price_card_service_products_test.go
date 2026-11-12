@@ -33,7 +33,7 @@ func newPriceCardsOnPool(t *testing.T) (*adapter.PriceCards, bentoapp.Transactor
 	return catalog, db.Transactor(), pool
 }
 
-// 本文件对真实 PostgreSQL 16 证售价卡的适用服务产品（ADR-0378 决定二、四、五）：登记写列、读回与快照核对；内容冲突照摘要判；
+// 本文件对真实 PostgreSQL 16 证售价卡的适用服务产品（ADR-0382 决定二、四、五）：登记写列、读回与快照核对；内容冲突照摘要判；
 // 在用解析按指名优先分两层，同一层多于一张答适用冲突；试算的卡集先取同一层、层内照旧并列；收尾不看产品。夹具全为合成价卡，
 // 证据只记 S。
 
@@ -158,7 +158,7 @@ func TestOnlySellCustomerChargeRowsMayCarryServiceProductsInTheRegister(t *testi
 	}
 }
 
-// 两层选卡的各格（ADR-0378 决定二），每格一册干净的库。
+// 两层选卡的各格（ADR-0382 决定二），每格一册干净的库。
 func TestInForceSelectionByDeclaredProductHasTwoTiers(t *testing.T) {
 	type cell struct {
 		cards   []domain.PricingPlanVersion
@@ -249,7 +249,7 @@ func TestLoadApplicableTakesTheSameTierAndKeepsTheTrialRulesWithinIt(t *testing.
 	}
 }
 
-// 收尾不看产品（ADR-0378 决定五）：同一方案的后继改了适用产品照样收尾；后继不再指名的产品自截止起由不声明的卡接，没有就答
+// 收尾不看产品（ADR-0382 决定五）：同一方案的后继改了适用产品照样收尾；后继不再指名的产品自截止起由不声明的卡接，没有就答
 // 未配置，不回到旧版。
 func TestClosureIgnoresProductsAndADroppedProductMovesToTheRestOrNowhere(t *testing.T) {
 	fixture := newClosureFixture(t)
@@ -339,7 +339,7 @@ func TestThePriceCardCatalogueTranscribesTheServiceProductsColumn(t *testing.T) 
 	}
 }
 
-// 同一方案 v1 不声明、v2 指名 X，两版同时在用（ADR-0378 决定五：后继可以改适用产品）：X 只看指名那一层，得 v2；别的产品与零值只看
+// 同一方案 v1 不声明、v2 指名 X，两版同时在用（ADR-0382 决定五：后继可以改适用产品）：X 只看指名那一层，得 v2；别的产品与零值只看
 // 不声明那一层，得 v1。两版落在不同的层，所以试算的卡集也不报同一方案两版。
 func TestTwoVersionsOfOnePlanThatDifferInProductsLandInDifferentTiers(t *testing.T) {
 	catalog, transactor := newPriceCards(t)

@@ -606,7 +606,7 @@ func TestProcessingAttemptsAccumulateAcrossRounds(t *testing.T) {
 }
 
 // TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion 证迁移 0038 加的那几列与迁移 0039 加的缺项码列随
-// 处理尝试落库（ADR-0380 决定三、四；ADR-0381 决定四）：结算的原因码原样、这一版申报的服务产品、计价点名的缺项码原样
+// 处理尝试落库（ADR-0383 决定三、四；ADR-0381 决定四）：结算的原因码原样、这一版申报的服务产品、计价点名的缺项码原样
 // 与被判的那一版；缺席的那几格落空，不落空串或空数组——空串、空数组与缺席读起来一样，读口会多一种「记了但没内容」要
 // 解释。在场却空白的结算原因、在场却空的缺项码数组都被约束拒收。
 func TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion(t *testing.T) {

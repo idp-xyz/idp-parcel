@@ -304,7 +304,7 @@ func TestAControlWaitThatDidNotLandFallsBackToInternalRetry(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0380 决定三——价卡一侧答不出的估价停成等运营登记时，落库的处理尝试另记结算的原因码原样（不冠 SA-）与这一版
+// Covers: ADR-0383 决定三——价卡一侧答不出的估价停成等运营登记时，落库的处理尝试另记结算的原因码原样（不冠 SA-）与这一版
 // 申报的服务产品（取本上下文自己的提交版本），并记在被判的那一版上。
 func TestAPriceCardSideStallRecordsTheSettlementReasonAndTheDeclaredProduct(t *testing.T) {
 	fixture := newFinancialControlFixture(t)
@@ -336,7 +336,7 @@ func TestAPriceCardSideStallRecordsTheSettlementReasonAndTheDeclaredProduct(t *t
 	}
 }
 
-// Covers: ADR-0380 决定三「只在落库的尝试上记」的两面——没申报的委托不记产品；依赖读不回照旧内部重试、不落等待，产品不记
+// Covers: ADR-0383 决定三「只在落库的尝试上记」的两面——没申报的委托不记产品；依赖读不回照旧内部重试、不落等待，产品不记
 // （那一轮整笔回滚）；等待没落库时原因换成保存那一格，结算原因与产品随范围一起放下：它们说的是控制为何没形成，不是保存
 // 为何没落。
 func TestTheTwoAttemptCellsStayEmptyWhereTheyDoNotApply(t *testing.T) {
@@ -386,7 +386,7 @@ func TestTheTwoAttemptCellsStayEmptyWhereTheyDoNotApply(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0380 决定三对时点那一停同样成立——可达性腿的`判断时点未配置`落等待态时，处理尝试记下这一版申报的产品；
+// Covers: ADR-0383 决定三对时点那一停同样成立——可达性腿的`判断时点未配置`落等待态时，处理尝试记下这一版申报的产品；
 // 那一停不是结算答的，结算原因缺席。
 func TestAnAsOfWaitRecordsTheDeclaredProductWithoutASettlementReason(t *testing.T) {
 	fixture := newJudgmentFixture(t)

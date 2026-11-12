@@ -29,7 +29,7 @@ const templateVersionV1 = "PPT-1"
 const templateVersionV2 = "PPT-2"
 
 // templateVersionV3 是第三版，同样只增不改：card 表新增一个可缺的字段 serviceProducts，售价卡声明的适用服务产品
-// （ADR-0378 决定一）。PPT-1、PPT-2 文件照旧读通，读出的方案与问题清单逐位相同。
+// （ADR-0382 决定一）。PPT-1、PPT-2 文件照旧读通，读出的方案与问题清单逐位相同。
 const templateVersionV3 = "PPT-3"
 
 // acceptedTemplateVersions 按先后排列，最后一格是 TemplateVersion。
@@ -331,7 +331,7 @@ var cardFields = []column{
 		"只有价格方向为 SELL 的卡能写。空或不写这一行即不声明：接其余产品，即同一计价范围里没有别的卡指名的那些产品"},
 }
 
-// cardFieldServiceProducts 是 card 表上的适用服务产品字段（ADR-0378 决定一）。
+// cardFieldServiceProducts 是 card 表上的适用服务产品字段（ADR-0382 决定一）。
 const cardFieldServiceProducts = "serviceProducts"
 
 // cardFieldSince 登记自某一版才有的 card 字段：更早版本的文件里写了它，要说清是版本问题。

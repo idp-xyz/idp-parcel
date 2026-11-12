@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 )
 
-// 本文件证适用服务产品（ADR-0378 决定一）在答复体里的写法：导入预览与草稿共用的方案概要、价卡目录行都交 serviceProducts，
+// 本文件证适用服务产品（ADR-0382 决定一）在答复体里的写法：导入预览与草稿共用的方案概要、价卡目录行都交 serviceProducts，
 // 同名同形（字符串数组），不声明即缺键——缺键就是接其余产品。
 
 func namedEstimatePlan(t *testing.T) domain.PricingPlanVersion {

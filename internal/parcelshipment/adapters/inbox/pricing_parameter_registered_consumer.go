@@ -18,13 +18,13 @@ import (
 const pricingParameterResumeConsumerName = "parcel-shipment/advance-acceptance-chain-on-pricing-parameter-registration"
 
 // PricingParameterRegisteredEventType 是本门认的事件类型：parcel-pricing 登记价卡、收尾价卡、序列与目录复核通过时与登记同一
-// 事务交出（ADR-0229 决定五）。它要解开的是接受前财务控制停在价卡那一侧的等待（ADR-0380 决定一、二）。发布侧是
+// 事务交出（ADR-0229 决定五）。它要解开的是接受前财务控制停在价卡那一侧的等待（ADR-0383 决定一、二）。发布侧是
 // parcel-pricing 的 Outbox 交接适配器，两边各写各的字面；两串相等由 cmd/parcel-dispatch 用发布侧真交接口铸封的用例钉住。
 const PricingParameterRegisteredEventType eventing.EventType = "parcel-pricing.pricing-parameter.registered"
 
 // NewPricingParameterRegisteredConsumer 装配收计价「参数已登记」的那一份登记续办门。重驱纪律与另几份完全相同：按租户取回
 // `等待运营登记`的队列逐份再驱一拍，不认是哪一张卡、哪一个计价范围——链重跑到估价那一步自会去选卡，这一张对不上这份委托就
-// 再停一次（ADR-0380 决定二）。按原因或计价范围收窄另立（ADR-0380 越权风险点「多唤醒」）。
+// 再停一次（ADR-0383 决定二）。按原因或计价范围收窄另立（ADR-0383 越权风险点「多唤醒」）。
 func NewPricingParameterRegisteredConsumer(
 	transactor bentoapp.Transactor,
 	store *inbox.Store,

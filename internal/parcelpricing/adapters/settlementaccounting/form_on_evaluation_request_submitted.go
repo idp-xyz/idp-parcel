@@ -168,7 +168,7 @@ func handOffUnformed(
 	}
 }
 
-// forServiceProduct 在说明里点名选卡用的服务产品（ADR-0378 决定二）：同一计价范围只有别的产品的指名卡时，「没有卡」要说清是
+// forServiceProduct 在说明里点名选卡用的服务产品（ADR-0382 决定二）：同一计价范围只有别的产品的指名卡时，「没有卡」要说清是
 // 哪个产品没有，补登的人才知道该登指名它的卡还是一张不声明的卡。没按产品选就不加，说明与此前逐字相同。
 func forServiceProduct(product ppdomain.ServiceProductReference) string {
 	if !product.Declared() {

@@ -72,7 +72,7 @@ test('本地只判编码层问题', () => {
 });
 
 // Covers: 售价方向选了服务产品载荷带 serviceProduct（手填的去掉首尾空白）；不选即缺席，不发空串——缺席是「只看不声明产品的卡」
-// （ADR-0378 决定二、三）。方向不是售价时草稿里留着的产品也不发。
+// （ADR-0382 决定二、三）。方向不是售价时草稿里留着的产品也不发。
 test('服务产品：售价方向选了才带 serviceProduct，不选或不是售价即缺席', () => {
   const base = { scope: 'SYN-SCOPE-01', direction: 'SELL', basisAt: '2026-06-01T16:00', weightValue: '1', weightUnit: 'KG' };
   equal(estimatePayloadOf(draft({ ...base, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI).serviceProduct, 'SYN-SP-FBA');

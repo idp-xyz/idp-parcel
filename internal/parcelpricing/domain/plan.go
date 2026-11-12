@@ -167,7 +167,7 @@ type PricingPlanVersion struct {
 	manifest         VersionManifest
 	canonicalization string
 	contentDigest    string
-	// serviceProducts 是卡声明的适用服务产品（ADR-0378 决定一），去重后按标识升序；空即不声明，接其余产品。
+	// serviceProducts 是卡声明的适用服务产品（ADR-0382 决定一），去重后按标识升序；空即不声明，接其余产品。
 	serviceProducts []ServiceProductReference
 }
 
@@ -336,7 +336,7 @@ func (plan PricingPlanVersion) valid() bool {
 	}
 	// 方案记的规范化版本必须是能表达它内容的最低一版：声明了适用服务产品的写 PPC-7，带总额上下限或偏远档位查档价表的
 	// 写 PPC-6，其余写 PPC-5。反过来也成立——不带新内容却记着新版、或带了新内容却记着旧版，都是读回的数据对不上
-	// （ADR-0348 决定四、ADR-0378 决定四）。
+	// （ADR-0348 决定四、ADR-0382 决定四）。
 	if plan.canonicalization != plan.requiredCanonicalization() || !plan.serviceProductsHold() {
 		return false
 	}

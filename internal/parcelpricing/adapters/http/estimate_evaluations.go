@@ -94,7 +94,7 @@ type estimateEvaluationBody struct {
 	Issues         []estimateIssueBody  `json:"issues"`
 	Explanation    []string             `json:"explanation"`
 	Manifest       []manifestEntryBody  `json:"manifest"`
-	// ServiceProduct 是这份评价按哪个服务产品选的卡（ADR-0378 决定三），记在计价输入快照上；没按产品选即缺键。
+	// ServiceProduct 是这份评价按哪个服务产品选的卡（ADR-0382 决定三），记在计价输入快照上；没按产品选即缺键。
 	ServiceProduct string `json:"serviceProduct,omitempty"`
 }
 
@@ -205,7 +205,7 @@ type EstimatePayload struct {
 	// AddressNature 是收件地址性质，封闭词 COMMERCIAL / RESIDENTIAL。键名不叫 addressType：计价引擎里「地址类型」
 	// 那一格承载的是偏远档位（ADR-0109），性质另有一格 ADDRESS_NATURE（ADR-0347 决定四），线上的键名跟着后者走。
 	AddressNature string `json:"addressNature"`
-	// ServiceProduct 是按哪个服务产品选售价卡，写参与方与商业的服务产品对象标识（ADR-0378 决定二、三）。不带即只看不声明产品
+	// ServiceProduct 是按哪个服务产品选售价卡，写参与方与商业的服务产品对象标识（ADR-0382 决定二、三）。不带即只看不声明产品
 	// 的卡，不替发起方猜一个产品。
 	ServiceProduct string `json:"serviceProduct"`
 }
@@ -304,7 +304,7 @@ func (payload EstimatePayload) Command(tenant domain.TenantID) (application.Form
 		command.AddressNature = &nature
 	}
 	if payload.ServiceProduct != "" {
-		// 只有售价卡按产品选（ADR-0378 决定一）；别的方向带了产品是发起方的错，答 400 而不是悄悄丢掉。
+		// 只有售价卡按产品选（ADR-0382 决定一）；别的方向带了产品是发起方的错，答 400 而不是悄悄丢掉。
 		if direction != domain.PricingDirectionSell {
 			return malformed("serviceProduct", fmt.Errorf("only a SELL estimate selects its price card by service product, direction is %s", direction))
 		}

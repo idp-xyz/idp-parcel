@@ -8,7 +8,7 @@ import (
 
 // SubmissionDeclaration 是一份委托的一个提交版本上、在本上下文词汇里的客户申报（ADR-0179 决定四）。Route 为 nil 即寄收两段邮编没报
 // 全：邮编随委托级的寄收件资料申报，各件共用这一条路线。要不要路线由卡的目录绑定定，这里不判。ServiceProduct 是这一版申报的服务
-// 产品，零值即没申报；受理前估价按它选售价卡（ADR-0378 决定三）。
+// 产品，零值即没申报；受理前估价按它选售价卡（ADR-0382 决定三）。
 type SubmissionDeclaration struct {
 	Parcels        []DeclaredParcel
 	Route          *domain.PostalRoute

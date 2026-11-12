@@ -36,7 +36,7 @@ export interface BasicsState {
   direction: string;
   purpose: string;
   /**
-   * 适用服务产品：服务产品对象标识，不带版本（ADR-0378 决定一）。空即不声明、接其余产品；只有售价卡有这一格，方向一离开
+   * 适用服务产品：服务产品对象标识，不带版本（ADR-0382 决定一）。空即不声明、接其余产品；只有售价卡有这一格，方向一离开
    * 售价就清空（basicsWithDirection）。
    */
   serviceProducts: string[];
@@ -155,7 +155,7 @@ const pairedPurpose: Readonly<Record<string, string>> = {
 
 /**
  * 换价格方向。用途还空着、或还是旧方向配的那个，就换成新方向配的那个（规格口收它才换）；运营改过的用途不动。
- * 方向离开售价时丢掉已选的适用服务产品：采购与内部价卡不能声明产品（ADR-0378 决定一），留着它，切回售价时会冒出一组
+ * 方向离开售价时丢掉已选的适用服务产品：采购与内部价卡不能声明产品（ADR-0382 决定一），留着它，切回售价时会冒出一组
  * 运营已经看不见、也没再确认过的选择。
  */
 export function basicsWithDirection(basics: BasicsState, direction: string, purposes: readonly string[]): BasicsState {

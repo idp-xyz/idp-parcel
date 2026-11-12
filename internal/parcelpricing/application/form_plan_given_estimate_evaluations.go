@@ -52,7 +52,7 @@ func (outcome FormPlanGivenEstimateEvaluationsOutcome) String() string {
 // Comparison 与 Facts 是选路比价那一路要的（ADR-0189 决定一）：比较币种让各段按同一币种出比较金额，事实引用标明这份声明取自
 // 哪一份客户申报。两格都只随输入走、不改分区给法，也不参与选卡。
 //
-// ServiceProduct 是调用方选这张卡时用的服务产品（ADR-0378 决定三），零值即没按产品选。卡已经选定，本入口不再选卡，它只随输入
+// ServiceProduct 是调用方选这张卡时用的服务产品（ADR-0382 决定三），零值即没按产品选。卡已经选定，本入口不再选卡，它只随输入
 // 记进快照。
 type PlanGivenEstimateDeclaration struct {
 	Subject        string

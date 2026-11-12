@@ -1640,7 +1640,7 @@ func (t *translation) readAmountRounding() {
 	t.amountRounding, t.amountRoundingOK = &policy, true
 }
 
-// readServiceProducts 读 card 表的适用服务产品：没写或留空即不声明。写了就只在 SELL 卡上收（ADR-0378 决定一），方向本身读不出
+// readServiceProducts 读 card 表的适用服务产品：没写或留空即不声明。写了就只在 SELL 卡上收（ADR-0382 决定一），方向本身读不出
 // 时不再多报一条——那一格已经报过。每个元素交领域的产品引用构造门；同一个写两遍按列表读法报重复，不替运营去重。
 func (t *translation) readServiceProducts() {
 	d := t.d

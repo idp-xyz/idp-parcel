@@ -214,7 +214,7 @@ type pricingPlanSnapshot struct {
 	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
 	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
 	TotalBounds      *totalBoundsSnapshot             `json:"totalChargeBounds,omitempty"`
-	// ServiceProducts 是卡声明的适用服务产品（ADR-0378 决定一）；不声明即缺键，既有各卡的快照读回不变。
+	// ServiceProducts 是卡声明的适用服务产品（ADR-0382 决定一）；不声明即缺键，既有各卡的快照读回不变。
 	ServiceProducts []string                   `json:"serviceProducts,omitempty"`
 	Manifest        []versionReferenceSnapshot `json:"manifest"`
 	ContentDigest   string                     `json:"contentDigest"`

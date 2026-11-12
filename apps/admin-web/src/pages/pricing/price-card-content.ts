@@ -688,7 +688,7 @@ function referenceId(value: unknown): string {
 
 /**
  * 本模块认识的顶层键。出现别的键，说明文档比这份代码新（将来新增的规则种类），各占一行降级。
- * serviceProducts（ADR-0378）认得但不在这里念：它说的是这张卡给哪些产品计价，不是一项收费；详情栏页头取价卡目录行
+ * serviceProducts（ADR-0382）认得但不在这里念：它说的是这张卡给哪些产品计价，不是一项收费；详情栏页头取价卡目录行
  * 上的同名一格。
  */
 const knownPlanKeys = new Set([

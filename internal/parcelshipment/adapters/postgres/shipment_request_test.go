@@ -109,7 +109,7 @@ func mustEntry(t *testing.T, name, value string) domain.CanonicalContentEntry {
 }
 
 // TestHistorySurvivesTheRoundTrip 证受控补充历史（ADR-0045）随快照往返：丢历史，一份补充过的委托重建后看起来像
-// 从未补充过。处理尝试不随快照走，它们落在自己的表里（ADR-0380 决定四）。
+// 从未补充过。处理尝试不随快照走，它们落在自己的表里（ADR-0383 决定四）。
 func TestHistorySurvivesTheRoundTrip(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	ctx := t.Context()

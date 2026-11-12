@@ -56,7 +56,7 @@ var (
 	ErrInvalidPlanStructures          = errors.New("parcel pricing: invalid pricing plan structures")
 	ErrPlanStructuresNotExecutable    = errors.New("parcel pricing: declared plan structures are not executable")
 	ErrInvalidPricingPlan             = errors.New("parcel pricing: invalid pricing plan")
-	// ErrServiceProductsOnlyOnSellCustomerCharge 表示 BUY 或 INTERNAL 的卡要声明适用服务产品（ADR-0378 决定一）。
+	// ErrServiceProductsOnlyOnSellCustomerCharge 表示 BUY 或 INTERNAL 的卡要声明适用服务产品（ADR-0382 决定一）。
 	ErrServiceProductsOnlyOnSellCustomerCharge = fmt.Errorf("%w: only SELL customer-charge plans declare service products", ErrInvalidPricingPlan)
 	ErrPricingScopeMismatch                    = errors.New("parcel pricing: pricing scope mismatch")
 	ErrPricingInputInvalid                     = errors.New("parcel pricing: invalid pricing input")

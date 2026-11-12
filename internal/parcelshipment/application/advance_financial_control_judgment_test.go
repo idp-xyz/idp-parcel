@@ -458,7 +458,7 @@ type financialControlDouble struct {
 	portOutcome ports.PreAcceptanceControlOutcome
 	// reason 是非`已形成`时提供方交回的原因引用；空串时按端口格造一个。
 	reason string
-	// settlementReason 是结算的未形成原因码原样，非空时随答复交回（ADR-0380 决定三）。
+	// settlementReason 是结算的未形成原因码原样，非空时随答复交回（ADR-0383 决定三）。
 	settlementReason string
 	// supplementGaps 与 estimateGapCodes 是申报不全分流那两格（ADR-0381 决定四）：译好的缺口与计价点名的
 	// 缺项码原样，非空时随非`已形成`的答复交回。

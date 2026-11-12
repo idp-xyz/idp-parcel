@@ -42,7 +42,7 @@ func init() {
 				event: psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType, position: positionPrimary, consumer: chainGates.estimateAdoptionRegistration,
 				sentinels: acceptanceChainUndecidedSentinels, label: "pre-acceptance estimate adoption resume",
 			},
-			// 计价参数那一份登记续办门同一份哨兵（ADR-0380 决定二）。同一类信封 SA 的评价续办也收（routes_evaluation_resumption.go），
+			// 计价参数那一份登记续办门同一份哨兵（ADR-0383 决定二）。同一类信封 SA 的评价续办也收（routes_evaluation_resumption.go），
 			// 那一路排在计费名次：先让受理链续办委托，再续办停在发起之前的计费那一拍，与「结算账户已登记」同一先后。
 			{
 				event: psinbox.PricingParameterRegisteredEventType, position: positionPrimary, consumer: chainGates.pricingParameterRegistration,

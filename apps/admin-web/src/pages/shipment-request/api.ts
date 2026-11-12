@@ -233,7 +233,7 @@ export interface AcceptanceTaskRecord {
    */
   lastAttemptResumePath?: string;
   /**
-   * 最近一次处理尝试上记的结算未形成原因(ADR-0380 决定三,票 declared-goods-lines/23):结算的 NotFormedReason 原词,不带
+   * 最近一次处理尝试上记的结算未形成原因(ADR-0383 决定三,票 declared-goods-lines/23):结算的 NotFormedReason 原词,不带
    * `SA-` 前缀。只在财务控制那一步停下、且这次尝试落了库时在场。
    */
   lastAttemptSettlementReason?: string;

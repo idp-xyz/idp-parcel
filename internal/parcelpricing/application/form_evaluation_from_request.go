@@ -132,7 +132,7 @@ type FormEvaluationFromRequestResult struct {
 	HandoffReference string
 	// Candidates 只在适用冲突时有值：同时适用的每一版价卡的引用。
 	Candidates []domain.VersionReference
-	// ServiceProduct 是选卡用的服务产品（ADR-0378 决定三），在未配置与适用冲突两格上交回：消费侧说「哪个产品没有卡」「哪个
+	// ServiceProduct 是选卡用的服务产品（ADR-0382 决定三），在未配置与适用冲突两格上交回：消费侧说「哪个产品没有卡」「哪个
 	// 产品上撞了几张」要用它。零值即没按产品选。
 	ServiceProduct domain.ServiceProductReference
 	// Missing 只在输入不可得时有值：缺的读口或事实，一条一件，文字给人读。
@@ -140,7 +140,7 @@ type FormEvaluationFromRequestResult struct {
 }
 
 // FormEvaluationFromRequestDeps 是入口的依赖。除 Inputs 外都必备：回指读口守「同一请求一份评价」、解析读口是第 ① 步、
-// 铸造口签评价标识、既有评价编排是第 ③ 步；ServiceProducts 是 SELL 请求选卡前读委托申报产品的那一口（ADR-0378 决定三）。
+// 铸造口签评价标识、既有评价编排是第 ③ 步；ServiceProducts 是 SELL 请求选卡前读委托申报产品的那一口（ADR-0382 决定三）。
 // 它必备而不是可缺：漏装了，申报了产品的委托会静默落到不声明产品的卡上，算出的价看不出错。Inputs 可缺席，是给还没装
 // 消费侧解析器的调用方：缺席时入口答「输入不可得」并点名三只读口。生产装配装的是 adapters/transportfulfillment 的解析器
 // （ADR-0171）。
@@ -279,7 +279,7 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	}
 }
 
-// declaredServiceProduct 取 SELL·客户费用请求选卡用的服务产品：覆盖被评价包裹的已接受委托申报的那一个（ADR-0378 决定三）。
+// declaredServiceProduct 取 SELL·客户费用请求选卡用的服务产品：覆盖被评价包裹的已接受委托申报的那一个（ADR-0382 决定三）。
 // 取委托的申报，不取商业解析——快照不带商业依据（ADR-0260 决定一）。BUY 请求按供应商协议的商业范围选卡，卡也声明不了产品，
 // 答零值、一口都不问。结算的评价请求不带产品，产品只从小包托运这一口来。
 func (handler *FormEvaluationFromRequestHandler) declaredServiceProduct(

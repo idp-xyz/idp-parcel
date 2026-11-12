@@ -6,7 +6,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// AcceptedServiceProductView 按（租户，声明包裹身份）答覆盖它的已接受委托申报的服务产品（ADR-0378 决定三）。消费方是 `parcel-pricing`
+// AcceptedServiceProductView 按（租户，声明包裹身份）答覆盖它的已接受委托申报的服务产品（ADR-0382 决定三）。消费方是 `parcel-pricing`
 // 正式 SELL·客户费用评价的消费侧适配器：评价点名包裹，选售价卡要知道委托申报的是哪个产品。它是事实读口，不是商业依据——产品取
 // 委托的申报，不取商业解析（ADR-0260 决定一「计价输入快照不带商业依据」）。
 //

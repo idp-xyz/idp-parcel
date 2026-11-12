@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ServiceProductReference 是一个服务产品在本上下文里的引用：参与方与商业的服务产品对象标识，不带版本（ADR-0378 决定一）。
+// ServiceProductReference 是一个服务产品在本上下文里的引用：参与方与商业的服务产品对象标识，不带版本（ADR-0382 决定一）。
 // 售价卡用它声明自己计价的产品，选卡用它带委托申报的那一个。不带版本是因为产品换版（交付条件、规则包引用变了）不改它卖
 // 什么价，带了就得每换一版重登一次价卡。本上下文不核它在不在册、不解释它：在不在册由商业解析答。零值即没有产品。
 type ServiceProductReference struct{ identifier }
@@ -26,7 +26,7 @@ func NewServiceProductReference(value string) (ServiceProductReference, error) {
 	return ServiceProductReference{identifier: identifier}, nil
 }
 
-// Declared 报出这一格有没有产品。选卡收到零值即委托没申报，只看不声明产品的卡（ADR-0378 决定二）。
+// Declared 报出这一格有没有产品。选卡收到零值即委托没申报，只看不声明产品的卡（ADR-0382 决定二）。
 func (product ServiceProductReference) Declared() bool { return product.valid() }
 
 // valid 比通用标识多一道：不含列表分隔符。读回门、输入快照门都经它，绕过构造门的快照同样拒。
@@ -41,7 +41,7 @@ func (plan PricingPlanVersion) ServiceProducts() []ServiceProductReference {
 }
 
 // WithServiceProducts 交回声明了这组适用服务产品的副本，原有的声明整组换掉。至少一个，同一个写两遍按一个算，按标识排序后
-// 保存：两张只差书写次序的卡是同一份内容，摘要不该因此分开。只有 SELL·客户费用的卡能声明（ADR-0378 决定一）：采购方向按
+// 保存：两张只差书写次序的卡是同一份内容，摘要不该因此分开。只有 SELL·客户费用的卡能声明（ADR-0382 决定一）：采购方向按
 // 供应商协议的商业范围选卡，渠道比价另有来源，那两个方向上没有哪一次选卡会读这一格，收下它只会让摘要多出一处没人读的差异。
 // 带产品的卡写 PPC-7（决定四），规范化版本与摘要随之重算。
 func (plan PricingPlanVersion) WithServiceProducts(products ...ServiceProductReference) (PricingPlanVersion, error) {
@@ -98,7 +98,7 @@ func (plan PricingPlanVersion) serviceProductsHold() bool {
 }
 
 // requiredCanonicalization 取能表达这张卡内容的最低一版（ADR-0267 决定一）：声明了适用服务产品的写 PPC-7，其余照结构件取
-// PPC-5 或 PPC-6，字节不动（ADR-0378 决定四）。
+// PPC-5 或 PPC-6，字节不动（ADR-0382 决定四）。
 func (plan PricingPlanVersion) requiredCanonicalization() string {
 	if len(plan.serviceProducts) > 0 {
 		return canonicalizationVersionServiceProducts

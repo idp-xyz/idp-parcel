@@ -1,4 +1,4 @@
-// 售价卡的适用服务产品（ADR-0378 决定一、二）：价卡录入、列表、详情、导入预览与试算页共用的几句话与判法。
+// 售价卡的适用服务产品（ADR-0382 决定一、二）：价卡录入、列表、详情、导入预览与试算页共用的几句话与判法。
 // 纯函数，node:test 直接钉；页面只摆。
 //
 // 产品写参与方与商业的服务产品对象标识，不带版本：产品换版不改它卖什么价。只有售价卡能声明；不声明的售价卡接其余产品，
@@ -6,7 +6,7 @@
 
 import type { PickerOption } from '../party/PublicationFormFields';
 
-/** 只有这个方向的价卡能声明适用服务产品；采购与内部价卡按别的维度选卡（ADR-0378 决定一）。 */
+/** 只有这个方向的价卡能声明适用服务产品；采购与内部价卡按别的维度选卡（ADR-0382 决定一）。 */
 export const serviceProductDirection = 'SELL';
 
 export const servedProductsLabel = '适用产品';
@@ -20,7 +20,7 @@ export const restProductsHint = '不选即接其余产品：同一计价范围�
 /** 规格口的模板版本还不收适用服务产品时，编辑器在这一格的位置只说这一句。 */
 export const serviceProductsNotTakenNote = '当前模板版本不收适用服务产品；这张售价卡不指名产品，接其余产品。';
 
-/** 试算不选产品时的说明：选卡只看不声明产品的那一层（ADR-0378 决定二）。 */
+/** 试算不选产品时的说明：选卡只看不声明产品的那一层（ADR-0382 决定二）。 */
 export const estimateWithoutProductNote = '只按不指名产品的卡试算';
 
 /** 试算选了产品时的说明：先找指名它的卡，一张都没有才看不声明的卡。 */
@@ -40,7 +40,7 @@ export function servedProductsText(direction: string, serviceProducts: readonly 
   return named.length === 0 ? restProductsText : named.join('、');
 }
 
-/** 勾选或取消一个产品。同一个产品写两遍按一个算（ADR-0378 决定一），勾第二遍不重复记。 */
+/** 勾选或取消一个产品。同一个产品写两遍按一个算（ADR-0382 决定一），勾第二遍不重复记。 */
 export function toggleServiceProduct(chosen: readonly string[], objectId: string, on: boolean): string[] {
   const id = objectId.trim();
   if (id === '') return [...chosen];

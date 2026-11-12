@@ -3,7 +3,7 @@
 // 入口（FormPlanGivenEstimateEvaluationsHandler）形成试算评价，逐件交回。合计不在这里：怎么合、哪几种结果停，是结算的估价形态。
 //
 // 选卡与正式 SELL·客户费用评价同口径：按（租户、计价范围、SELL、客户费用、时点）与这一版申报的服务产品经 PriceCardInForceResolver
-// 解析唯一在用版本（ADR-0378 决定二、三），时点取调用方交来的控制判断时点。未配置与适用冲突各自停，不挑卡；缺件自成一格，逐件点名，
+// 解析唯一在用版本（ADR-0382 决定二、三），时点取调用方交来的控制判断时点。未配置与适用冲突各自停，不挑卡；缺件自成一格，逐件点名，
 // 不拿零或别件顶。
 // 不入册、不交付（ADR-0152 决定二）：依赖里没有评价库写口，也没有交付口。
 package application
@@ -146,7 +146,7 @@ func NewFormPreAcceptanceEstimatesHandler(deps FormPreAcceptanceEstimatesDeps) (
 }
 
 // Handle 把一次受理前试算推进到答案：受理 → 读申报 → 按申报的服务产品选卡 → 逐件交给定价卡的入口。先读申报后选卡：选哪张卡取决于
-// 这一版申报的服务产品（ADR-0378 决定三），不读申报就选不出卡。不可见的委托因此在选卡之前就停，在用解析口一次都不问。
+// 这一版申报的服务产品（ADR-0382 决定三），不读申报就选不出卡。不可见的委托因此在选卡之前就停，在用解析口一次都不问。
 func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 	ctx context.Context,
 	command FormPreAcceptanceEstimatesCommand,

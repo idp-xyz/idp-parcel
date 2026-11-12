@@ -1193,7 +1193,7 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 // 其余取值一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
 // 看起来像通过了。数字不写进来，理由同 JudgmentAsOfFormation。
 //
-// SettlementReason 只在提供方答未形成时在场，是它的原因码原样（ADR-0380 决定三）。它与 Reason 分开：Reason 是续办
+// SettlementReason 只在提供方答未形成时在场，是它的原因码原样（ADR-0383 决定三）。它与 Reason 分开：Reason 是续办
 // 派生用的引用，消费侧适配器自己形成的停因（作用域没形成）也在那一格；编排不解析 Reason 的字面，要记下「结算说了
 // 什么」只能另交一格。
 //
@@ -1747,9 +1747,9 @@ type AcceptanceDecisionViewRecord struct {
 // （票 acceptance-review-read-face/01）要如实呈现的「停在哪、复核录了没」——WaitingOn
 // 零值即缺席（决定已形成或任务已完成），复核留痕四字段只在 ReviewCompleted 时在场。
 //
-// 最近一次处理记录读自处理尝试实际落库的那一处，即这一版任务最近落下的一条（ADR-0380 决定四）。续办方单列一格
+// 最近一次处理记录读自处理尝试实际落库的那一处，即这一版任务最近落下的一条（ADR-0383 决定四）。续办方单列一格
 // （LastAttemptResumePath）：谁来动手要照记下的那一格交，读的一侧从原因名或续办引用推，就是第二处定义。结算原因与
-// 服务产品可缺，缺即那一轮没有（ADR-0380 决定三）。
+// 服务产品可缺，缺即那一轮没有（ADR-0383 决定三）。
 type AcceptanceTaskViewRecord struct {
 	State                       domain.AcceptanceTaskState
 	HasAttempt                  bool
@@ -1973,7 +1973,7 @@ func (record OperatorRegistrationQueueRecord) Position() OperatorRegistrationQue
 
 // OperatorRegistrationQueuePosition 是队列上的一个位置，与排序同列：（提交时刻、委托标识）。零值即从队首取。
 //
-// 翻页按位置往后取，不每页重读队首：自 ADR-0380 起，「被重驱、仍停着」是常态——一次登记只解得开它管的那几份，其余照旧
+// 翻页按位置往后取，不每页重读队首：自 ADR-0383 起，「被重驱、仍停着」是常态——一次登记只解得开它管的那几份，其余照旧
 // 等。每页重读队首时，比满一页还多的旧委托停着，后面的委托就永远轮不到，哪怕这次登记正是它们等的那一份。
 type OperatorRegistrationQueuePosition struct {
 	SubmittedAt       time.Time
@@ -2204,7 +2204,7 @@ type LabelTransactionViews interface {
 //
 // 两类判断还收提交版本：判断是对某一版内容作出的，任务随版本重立（ADR-0045），记下它属于哪一版，
 // 读口才能只把当前版本的判断交给形成决定那一步。处理尝试同样收版本：尝试不参与决定，但委托详情的
-// 「上次处理」读的是当前这一版任务最近的一条（ADR-0380 决定四），续办引用的派生虽含版本，却是摘要、
+// 「上次处理」读的是当前这一版任务最近的一条（ADR-0383 决定四），续办引用的派生虽含版本，却是摘要、
 // 读不回来。采用解析不收——每轮按版本重解、后写覆盖。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(

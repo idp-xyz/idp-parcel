@@ -90,7 +90,7 @@ export interface PriceCardImportContent {
   scope: string;
   direction: string;
   purpose: string;
-  /** 适用服务产品（ADR-0378）：与价卡目录行同名同形，不声明即缺席。 */
+  /** 适用服务产品（ADR-0382）：与价卡目录行同名同形，不声明即缺席。 */
   serviceProducts?: string[];
   aggregation: string;
   baseChargeCode: string;
@@ -349,7 +349,7 @@ export interface PriceCardRecord {
   direction: string;
   purpose: string;
   scope: string;
-  /** 适用服务产品的对象标识，不带版本（ADR-0378 决定一）。缺席即没声明：售价卡接其余产品，别的方向本就不能声明。 */
+  /** 适用服务产品的对象标识，不带版本（ADR-0382 决定一）。缺席即没声明：售价卡接其余产品，别的方向本就不能声明。 */
   serviceProducts?: string[];
   rateTableId: string;
   rateTableVersion: string;
@@ -739,7 +739,7 @@ export interface EstimatePayload {
   settlementCurrency?: string;
   /** 收件地址性质，封闭词；键名不叫 addressType——引擎里「地址类型」那一格承载偏远档位（ADR-0347 决定四）。 */
   addressNature?: string;
-  /** 按哪个服务产品选卡（对象标识，不带版本）；缺席即只看不声明产品的卡（ADR-0378 决定二、三）。 */
+  /** 按哪个服务产品选卡（对象标识，不带版本）；缺席即只看不声明产品的卡（ADR-0382 决定二、三）。 */
   serviceProduct?: string;
 }
 

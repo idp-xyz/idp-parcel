@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 本文件证三条路把申报的服务产品交给选卡、记进快照（ADR-0378 决定三）：接受前估价取这一版申报的产品；正式 SELL 评价取覆盖包裹的
+// 本文件证三条路把申报的服务产品交给选卡、记进快照（ADR-0382 决定三）：接受前估价取这一版申报的产品；正式 SELL 评价取覆盖包裹的
 // 已接受委托申报的产品，BUY 不问；试算取请求带的。真库上的选卡结果见 adapters/postgres 的 service_product_selection_paths_test。
 
 func TestPreAcceptanceSelectsByTheDeclaredProductAndRecordsItOnEachEstimate(t *testing.T) {
@@ -119,7 +119,7 @@ func TestATrialPassesItsProductToTheCardSetAndTheSnapshot(t *testing.T) {
 
 var _ ports.AcceptedServiceProductView = (*acceptedProductDouble)(nil)
 
-// 只有 SELL·客户费用的卡能声明适用产品（ADR-0378 决定一）：BUY 或 INTERNAL 的试算带了产品，受理门拒，卡集一次都不装——否则
+// 只有 SELL·客户费用的卡能声明适用产品（ADR-0382 决定一）：BUY 或 INTERNAL 的试算带了产品，受理门拒，卡集一次都不装——否则
 // 快照与解释会说那张卡是按产品选的。
 func TestATrialOnANonSellDirectionRefusesAServiceProduct(t *testing.T) {
 	for _, direction := range []domain.PricingDirection{domain.PricingDirectionBuy, domain.PricingDirectionInternal} {

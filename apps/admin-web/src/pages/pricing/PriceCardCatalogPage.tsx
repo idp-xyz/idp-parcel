@@ -61,7 +61,7 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
     key: 'scope',
     header: '适用范围',
     render: (row) => {
-      // 适用产品挂在范围下面一行：选卡先按范围、再在范围里按产品分层（ADR-0378 决定二）。不是售价卡就没有这一行。
+      // 适用产品挂在范围下面一行：选卡先按范围、再在范围里按产品分层（ADR-0382 决定二）。不是售价卡就没有这一行。
       const products = servedProductsText(row.direction, row.serviceProducts);
       return (
         <div>

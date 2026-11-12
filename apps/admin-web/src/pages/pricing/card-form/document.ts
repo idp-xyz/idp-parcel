@@ -182,7 +182,7 @@ export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
     scope: card('scope'),
     direction: card('direction'),
     purpose: card('purpose'),
-    // 方案文档里这一键可缺，不声明就缺席（ADR-0378 决定四）；空数组不是它的写法。
+    // 方案文档里这一键可缺，不声明就缺席（ADR-0382 决定四）；空数组不是它的写法。
     ...(serviceProducts.length === 0 ? {} : { serviceProducts }),
     baseChargeCode: card('baseChargeCode'),
     aggregation: card('aggregation'),

@@ -8,11 +8,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// 本文件证售价卡声明适用服务产品的领域一半（ADR-0378 决定一、四）：只有 SELL·客户费用能声明，去重排序后保存，带产品的卡写
+// 本文件证售价卡声明适用服务产品的领域一半（ADR-0382 决定一、四）：只有 SELL·客户费用能声明，去重排序后保存，带产品的卡写
 // PPC-7、进内容摘要，不带的卡摘要与改动前逐字节相同。
 
 // unnamedSellPinnedDigest 取证于改动前提交 37c172945：同一张不声明产品的 SELL·客户费用卡（sellUnnamedPlan）那时算出的内容
-// 摘要。适用产品是可缺键，不声明的卡必须仍落在这一串上（ADR-0378 决定四「不带的……字节与摘要不动」）。
+// 摘要。适用产品是可缺键，不声明的卡必须仍落在这一串上（ADR-0382 决定四「不带的……字节与摘要不动」）。
 const unnamedSellPinnedDigest = "881e0a73099cabf819a2fd54a3f8e2a2c86b02d6c7560ee7860dbf34271608a5"
 
 func sellUnnamedPlan(t *testing.T) domain.PricingPlanVersion {
@@ -177,7 +177,7 @@ func TestAnEvaluationOfAPPC7PlanIsWrittenUnderPPC7AndReplaysToTheSameDigest(t *t
 	}
 }
 
-// 计价输入快照记选卡用的服务产品（ADR-0378 决定三）：可缺的一格，进评价快照与解释、不进语义摘要——同一张卡、同一份输入算出的
+// 计价输入快照记选卡用的服务产品（ADR-0382 决定三）：可缺的一格，进评价快照与解释、不进语义摘要——同一张卡、同一份输入算出的
 // 价不随它变。
 func TestTheInputSnapshotRecordsTheServiceProductOutsideTheSemanticDigest(t *testing.T) {
 	plan := sellUnnamedPlan(t)

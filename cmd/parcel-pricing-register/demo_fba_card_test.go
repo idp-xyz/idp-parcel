@@ -16,7 +16,7 @@ import (
 // 大于实重 12.5，整公斤进位仍是 16 kg；Z1 每公斤 24 → 384，Z2 每公斤 21 → 336。种子被改动、引擎语义变了，这里先红；演示段
 // 55 断言的「FBA 卡算 384」也就跟着有了出处。证据只记 S。
 //
-// Covers: ADR-0378 决定一、四在演示种子上的那一面——卡只指名 FBA 产品、写 PPC-7、内容摘要钉住。
+// Covers: ADR-0382 决定一、四在演示种子上的那一面——卡只指名 FBA 产品、写 PPC-7、内容摘要钉住。
 func TestTheDemoFBACardNamesItsProductAndPricesTheDemoBoxPerKilogramByHand(t *testing.T) {
 	seeds := filepath.Join("..", "..", "scripts", "demo-seeds", "data", "pricing")
 	read := func(name string) []byte {
