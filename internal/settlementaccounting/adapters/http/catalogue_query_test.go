@@ -99,6 +99,13 @@ func (stub unreachableCatalogues) FindStatementLines(
 	return ports.StatementLines{}, false, nil
 }
 
+func (stub unreachableCatalogues) ListPreAcceptanceEstimates(
+	context.Context, domain.TenantID, string,
+) ([]ports.PreAcceptanceEstimateEntry, error) {
+	stub.refuse("pre-acceptance estimate trace")
+	return nil, nil
+}
+
 func (stub unreachableCatalogues) ListSupplierBillReceptions(
 	context.Context, domain.TenantID, ports.SupplierBillReceptionFilter, int, cataloguepage.Query,
 ) (cataloguepage.Result[ports.SupplierBillReceptionCatalogueRow], error) {
@@ -172,6 +179,11 @@ func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQuer
 			name:    "statement-lines",
 			target:  "/settlement-statement-lines?statement=SYN-STMT-01",
 			handler: settlementhttp.NewQueryStatementLinesEndpoint(intake, unreachable),
+		},
+		{
+			name:    "pre-acceptance-estimates",
+			target:  "/settlement-pre-acceptance-estimates?shipmentRequest=SYN-SHR-01",
+			handler: settlementhttp.NewQueryPreAcceptanceEstimatesEndpoint(intake, unreachable),
 		},
 		{
 			name:    "supplier-bill-lines",
@@ -382,6 +394,12 @@ func TestAnUnconfiguredChannelAnswersAlikeWhateverTheDispatchOrLocatorParameters
 			handler: settlementhttp.NewQueryStatementLinesEndpoint(unconfigured, unreachable),
 			valid:   "/settlement-statement-lines?statement=SYN-STMT-01",
 			others:  []string{"/settlement-statement-lines", "/settlement-statement-lines?statement="},
+		},
+		{
+			name:    "pre-acceptance-estimates",
+			handler: settlementhttp.NewQueryPreAcceptanceEstimatesEndpoint(unconfigured, unreachable),
+			valid:   "/settlement-pre-acceptance-estimates?shipmentRequest=SYN-SHR-01",
+			others:  []string{"/settlement-pre-acceptance-estimates", "/settlement-pre-acceptance-estimates?shipmentRequest="},
 		},
 		{
 			name:    "supplier-bill-lines",

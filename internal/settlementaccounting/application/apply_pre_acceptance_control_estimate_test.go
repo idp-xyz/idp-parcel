@@ -258,6 +258,35 @@ func TestACombinedPolicyOccupiesOneEstimateOnBothLedgers(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0379 决定一——试算答复带来的服务产品随估价留痕；同一请求再来时产品照旧在、答重放。没申报的估价留痕里没有产品。
+func TestTheServiceProductTheCardWasSelectedForIsTraced(t *testing.T) {
+	trials := estimating(t, 1_250, 800)
+	trials.answer.ServiceProduct = "SYN-PRODUCT-FBA"
+	traces := &traceDouble{}
+	handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, traces,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+
+	for round := 1; round <= 2; round++ {
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil || result.Outcome() != application.ControlApplied {
+			t.Fatalf("第 %d 轮 outcome = %q err = %v", round, result.Outcome(), err)
+		}
+	}
+	if product, declared := traces.only(t).Estimate.ServiceProduct(); !declared || product != "SYN-PRODUCT-FBA" {
+		t.Fatalf("留痕的服务产品 = %q %t", product, declared)
+	}
+
+	undeclared := &traceDouble{}
+	plain := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), estimating(t, 1_250), undeclared,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+	if _, err := plain.Handle(context.Background(), command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if _, declared := undeclared.only(t).Estimate.ServiceProduct(); declared {
+		t.Fatal("没申报的估价留痕里长出了产品")
+	}
+}
+
 // Covers: ADR-0179 决定五 / 票 product-strategy-boundary/25 完成判据一的 SA 半边——采用册上没有这一户时停在金额未配置：不默认形态、
 // 不拿零顶，带续办引用；试算不问、余额不读、两本账与留痕都不碰。它与采用册读不回分两格：一个等登记，一个等重试。
 func TestAnUnadoptedAccountStopsAtAmountNotConfiguredBeforeAnyLedger(t *testing.T) {

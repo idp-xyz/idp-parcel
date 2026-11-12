@@ -576,6 +576,12 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 	if stopped {
 		return none, handler.haltNotFormed(command, reason), nil
 	}
+	if answer.ServiceProduct != "" {
+		// 选卡用的产品随估价留痕（ADR-0379 决定一）；它不进合计，所以在合计成形之后才记。
+		if estimate, err = estimate.WithServiceProduct(answer.ServiceProduct); err != nil {
+			return none, nil, fmt.Errorf("form pre-acceptance estimate: %w", err)
+		}
+	}
 
 	effect, err := handler.traces.RecordEstimate(ctx, ports.PreAcceptanceEstimateTrace{
 		Tenant:            command.TenantID,
