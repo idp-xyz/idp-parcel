@@ -15,7 +15,8 @@ export type RefKind =
   | 'contract'
   | 'service-product'
   | 'rule-package'
-  | 'financial-control-policy';
+  | 'financial-control-policy'
+  | 'price-card';
 
 function policyRegisterHash(register: CommercialPolicyKind): string {
   return policiesHash('#/commercial-policies', { tab: 'registers', register });
@@ -28,6 +29,8 @@ const pageOf: Record<RefKind, () => string> = {
   'service-product': () => '#/service-products',
   'rule-package': () => policyRegisterHash('ACCEPTANCE_RULE_PACKAGE'),
   'financial-control-policy': () => policyRegisterHash('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY'),
+  // 价格表没有按地址直接打开某一版的入口；检索词交方案标识，读口的 q 覆盖方案标识，筛出来的是这个方案的各版本，那一版在其中。
+  'price-card': () => '#/price-card-catalog',
 };
 
 /** 引用的去处：对象所在的页，带上它的标识作检索词。 */

@@ -28,6 +28,9 @@ import { contentCategoryDisplayOf, foldedRowsOf, goodsLineRowsOf, packingSummary
 import { supplementGapLinesOf } from './supplement-gaps';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { FieldRow } from './field-row';
+import { PreAcceptanceFinancialControl } from './PreAcceptanceFinancialControl';
+import { stallReasonOf } from './stall-reasons';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。地址第二段是屏上那个号——有运单号
 // 是运单号、老运单是去前缀的委托标识，壳层的标签、状态栏与最近打开照地址写字；打开时按运单号与这个号可能对应的委托标识一起
@@ -83,6 +86,8 @@ function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
     { label: '提交主体', value: view.source },
     { label: '来源请求键', value: view.sourceRequestKey },
     { label: '当前提交版本', value: view.submissionVersionId },
+    // 「受理进度」上的停因译成中文，原码留在这里对日志。
+    { label: '最近处理原因码', value: view.acceptanceTask.lastAttemptReason ?? '' },
     { label: '续办引用', value: view.acceptanceTask.lastAttemptContinuation ?? '' },
     { label: '决定标识', value: view.decision?.decisionId ?? '' },
   ];
@@ -217,7 +222,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
         <dl className="space-y-1">
           <FieldRow label="进度" value={<StatusPill code={view.acceptanceTask.state} />} />
           {view.acceptanceTask.lastAttemptReason !== undefined && (
-            <FieldRow label="最近处理结果" value={view.acceptanceTask.lastAttemptReason} />
+            <FieldRow label="最近处理结果" value={stallReasonOf(view.acceptanceTask.lastAttemptReason).text} />
           )}
           {view.acceptanceTask.lastAttemptedAt !== undefined && (
             <FieldRow label="最近处理时间" value={formatInstant(view.acceptanceTask.lastAttemptedAt)} mono />
@@ -231,6 +236,13 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
           ))}
         </dl>
       ),
+    },
+    {
+      id: 'pre-acceptance-financial-control',
+      title: '受理前财务控制',
+      description:
+        '受理前按估价冻结资金或占用信用，结论与限制原因、逐版本的估价与占用都在这里。结论来自运单，估价与占用来自结算，各读各的：一边读不到不影响另一边。',
+      content: <PreAcceptanceFinancialControl view={view} />,
     },
   ];
 
@@ -258,7 +270,6 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
   return sections;
 }
 
-/** 区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
 /**
  * 包裹表：逐件列包裹号与跟踪号（ADR-0374 决定六，运单号指整张委托，不当跟踪号）。客户件号、平台箱标号与装箱三列只在有件报了时出：
  * 一件小包整列「—」只是噪声。件数多时折起（foldedRowsOf），FBA 几十箱不把下面的区块推出屏。
@@ -327,15 +338,6 @@ function DeclaredParcelsTable({ parcels }: { parcels: ShipmentRequestDetail['dec
           收起
         </Button>
       )}
-    </div>
-  );
-}
-
-function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="flex gap-3 type-body leading-5">
-      <dt className="w-[128px] shrink-0 text-idpxyz-textMuted">{label}</dt>
-      <dd className={`min-w-0 flex-1 break-words text-idpxyz-text ${mono ? 'font-mono' : ''}`}>{value}</dd>
     </div>
   );
 }
@@ -452,7 +454,7 @@ export function ShipmentRequestDetailPage({
       title={objectNouns.shipment}
       identifier={view ? shipmentDisplayNoOf(view) : shipmentRef}
       status={view ? <StatusPill code={view.state} /> : undefined}
-      description="这张运单的客户、件数、受理进度与决定。物流动态在「物流动态」页按包裹号查。"
+      description="这张运单的客户、件数、受理进度、受理前财务控制与决定。物流动态在「物流动态」页按包裹号查。"
       headerActions={
         onBack ? (
           <button

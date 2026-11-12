@@ -1,27 +1,13 @@
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
-import { labelFor } from '../../vocabulary/status';
 import { formatInstant } from '../catalogue-view';
-import type { RecordedJudgmentsRecord, ReviewControlItemRecord } from './api';
+import type { RecordedJudgmentsRecord } from './api';
 import { ParcelNo } from './refs';
-import { controlFailureDispositionLabels } from './presentation';
+import { controlItemText } from './financial-control';
 
 // 已记录的权威判断三组,复核页与授权处置页共用一份呈现:两页审的都是判断表上这批行,
 // 分两处写就得在两处约定哪一份是准的。屏上按运营的问法分三段:能否送达、付款控制、采用的商务条款;
-// 判断标识、依据引用与时点语义进技术详情。
-
-/**
- * 一项控制的一行:种类与结论经词典译;受限项上的两格采用引用(正文登记的失败处置与责任引用,ADR-0132 决定三、四)
- * 有才显——成立项与采用之前记下的受限项两格缺席,不写「无」冒充登记过。
- */
-function controlItemText(item: ReviewControlItemRecord): string {
-  const parts = [`${labelFor(item.kind)}:${labelFor(item.conclusion)}`];
-  if (item.failureDisposition) {
-    parts.push(`不通过时${controlFailureDispositionLabels[item.failureDisposition] ?? item.failureDisposition}`);
-  }
-  if (item.responsibility) parts.push(`责任方 ${item.responsibility}`);
-  return parts.join(' · ');
-}
+// 判断标识、依据引用与时点语义进技术详情。控制项一行的写法与运单详情共用,在 financial-control.ts。
 
 function technicalRowsOf(recorded: RecordedJudgmentsRecord): TechnicalRow[] {
   const rows: TechnicalRow[] = [];
