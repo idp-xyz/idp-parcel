@@ -781,10 +781,11 @@ export function BusinessPartiesPage() {
   // 那一条卸掉。
   const pageRef = useRef<HTMLDivElement>(null);
   const tabFocusPending = useRef(false);
-  const changeBook = (next: Book) => {
+  /** `focusTab`：点的不是视图签、而那一件换过去之后就卸掉了（空册里的「去「单位名录」」）时给，焦点同样落到新的那一枚签上。 */
+  const changeBook = (next: Book, focusTab = false) => {
     if (next === book) return;
     // 焦点在不在视图签上要在这里看：下面可能先问一句确认，等人答完焦点早不在签上了。
-    const fromTab = document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-view-tab');
+    const fromTab = focusTab || (document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-view-tab'));
     afterDiscardingDrafts(() => {
       closeRelationshipForm();
       tabFocusPending.current = fromTab;
@@ -1897,7 +1898,8 @@ export function BusinessPartiesPage() {
                             title={emptyTitle}
                             description={emptyDescription}
                             action={
-                              <Button variant="outline" onClick={() => changeBook('identities')}>
+                              // 这一枚随空册一起卸掉：换过去之后焦点落到「单位名录」那一枚视图签上。
+                              <Button variant="outline" onClick={() => changeBook('identities', true)}>
                                 去「单位名录」
                               </Button>
                             }
