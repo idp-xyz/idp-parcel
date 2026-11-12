@@ -79,6 +79,21 @@ type declarationsDocument struct {
 	// party-commercial-context-gaps/11）：允许的交付方式集合 + 收件范围规则引用 + 交付证明规则引用；合同层多一键 tightens
 	// 指名所收紧的产品版本。缺键 = 整节没声明（这一版没有交付条件，不默认「本人签收」）。
 	DeliveryConditions *deliveryConditionDocument `json:"deliveryConditions,omitempty"`
+	// sellPriceArrangement 挂在客户合同版本上（ADR-0380 决定一）：包裹的 SELL 客户费用按哪几个计价范围、依什么顺序
+	// 取价，或显式不计销售价并带依据。缺键 = 这一版合同没有销售价格约定，既有批文一字不改。
+	SellPriceArrangement *sellPriceArrangementDocument `json:"sellPriceArrangement,omitempty"`
+}
+
+// sellPriceArrangementDocument 是销售价格约定（ADR-0380 决定一）。两个键恰一在场：sources（有序，至少一项）或
+// noSellPriceBasis。sources 的顺序就是取价的先后，翻译层照批文的顺序搬运、不排序。每一项今天只有 pricingScope 一格，
+// 是开放引用：只查非空，不核它在计价一侧有没有卡。同一范围两次由领域构造门拒。
+type sellPriceArrangementDocument struct {
+	Sources          []sellPriceSourceDocument `json:"sources,omitempty"`
+	NoSellPriceBasis string                    `json:"noSellPriceBasis,omitempty"`
+}
+
+type sellPriceSourceDocument struct {
+	PricingScope string `json:"pricingScope"`
 }
 
 // deliveryConditionDocument 是交付条件声明（ADR-0133 决定四）。三格都是开放引用（PAR-NET-09 / PAR-COM-05 / PAR-COM-06
@@ -710,7 +725,41 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.DeliveryConditions = declared
 	}
 
+	if document.SellPriceArrangement != nil {
+		declared, err := sellPriceArrangementFrom(*document.SellPriceArrangement)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.SellPriceArrangement = declared
+	}
+
 	return declarations, nil
+}
+
+// sellPriceArrangementFrom 只认恰一格在场（判据同 creditLimitFrom）：两格都给时不挑一格读；都没给时不折成
+// 「不计销售价」——那会把缺声明读成一句没人说过的话。来源照批文的顺序搬运。
+func sellPriceArrangementFrom(
+	document sellPriceArrangementDocument,
+) (*pcapplication.SellPriceArrangementDeclaration, error) {
+	if (len(document.Sources) > 0) == (document.NoSellPriceBasis != "") {
+		return nil, fmt.Errorf("销售价格约定必须恰好给出 sources 或 noSellPriceBasis 之一")
+	}
+	declared := &pcapplication.SellPriceArrangementDeclaration{}
+	for index, source := range document.Sources {
+		scope, err := pcdomain.NewPricingScopeReference(source.PricingScope)
+		if err != nil {
+			return nil, fmt.Errorf("销售价格来源第 %d 项的计价范围：%w", index+1, err)
+		}
+		declared.Sources = append(declared.Sources, scope)
+	}
+	if document.NoSellPriceBasis != "" {
+		basis, err := pcdomain.NewNoSellPriceBasis(document.NoSellPriceBasis)
+		if err != nil {
+			return nil, fmt.Errorf("不计销售价的依据：%w", err)
+		}
+		declared.NoSellPriceBasis = basis
+	}
+	return declared, nil
 }
 
 // deliveryConditionsFrom 把批文一节译成发布用例的声明输入：每一格只做非空，方式与规则引用照字面搬运——本上下文

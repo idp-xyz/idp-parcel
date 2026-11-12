@@ -18,6 +18,42 @@ type CustomerContractBodyPayload struct {
 	ContractContent      *ContractContentPayload      `json:"contractContent"`
 	PreAcceptanceControl *PreAcceptanceControlPayload `json:"preAcceptanceControl,omitempty"`
 	DeliveryConditions   *DeliveryConditionPayload    `json:"deliveryConditions,omitempty"`
+	// SellPriceArrangement 是销售价格约定一层（ADR-0380 决定一），可缺：这一版合同没有销售价格约定就是没有，表单
+	// 不代填一份列表。
+	SellPriceArrangement *SellPriceArrangementPayload `json:"sellPriceArrangement,omitempty"`
+}
+
+// SellPriceArrangementPayload 镜像批文 sellPriceArrangementDocument：sources 按录入的顺序（顺序就是取价的先后），或
+// noSellPriceBasis。恰一由解码判并点名这一节；同一计价范围两次是跨项的问题，留给领域规范化。
+type SellPriceArrangementPayload struct {
+	Sources          []SellPriceSourcePayload `json:"sources,omitempty"`
+	NoSellPriceBasis string                   `json:"noSellPriceBasis,omitempty"`
+}
+
+// SellPriceSourcePayload 是一项销售价格来源：今天只指名计价范围一格（开放引用，只查非空）。
+type SellPriceSourcePayload struct {
+	PricingScope string `json:"pricingScope"`
+}
+
+// body 把销售价格约定逐格过领域构造门。两格恰一：两空与两满都是这一节的问题，不由这里挑一格读——都没给时不折成
+// 「不计销售价」。
+func (payload SellPriceArrangementPayload) body(problems *PublicationPayloadProblems) domain.SellPriceArrangementBody {
+	var body domain.SellPriceArrangementBody
+	if (len(payload.Sources) > 0) == (payload.NoSellPriceBasis != "") {
+		problems.add("customerContract.sellPriceArrangement",
+			exactlyOne("销售价格约定", "销售价格约定须恰一格在场：sources 或 noSellPriceBasis"))
+		return body
+	}
+	for index, source := range payload.Sources {
+		body.Sources = append(body.Sources, requireField(problems,
+			fmt.Sprintf("customerContract.sellPriceArrangement.sources[%d].pricingScope", index),
+			domain.NewPricingScopeReference, source.PricingScope))
+	}
+	if payload.NoSellPriceBasis != "" {
+		body.NoSellPriceBasis = requireField(problems, "customerContract.sellPriceArrangement.noSellPriceBasis",
+			domain.NewNoSellPriceBasis, payload.NoSellPriceBasis)
+	}
+	return body
 }
 
 // ContractContentPayload 镜像批文 contractContentDocument：合同属于哪个货主客户账户（必填，ADR-0177 决定一）、接单规则包
@@ -66,6 +102,10 @@ func (payload CustomerContractBodyPayload) body(problems *PublicationPayloadProb
 	if payload.DeliveryConditions != nil {
 		conditions := payload.DeliveryConditions.body(problems, "customerContract.deliveryConditions")
 		body.DeliveryConditions = &conditions
+	}
+	if payload.SellPriceArrangement != nil {
+		arrangement := payload.SellPriceArrangement.body(problems)
+		body.SellPrice = &arrangement
 	}
 	return body
 }

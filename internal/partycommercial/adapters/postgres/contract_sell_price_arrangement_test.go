@@ -102,6 +102,49 @@ func TestCustomerContractCatalogueReadsSellPriceSourcesBackInTheDeclaredOrder(t 
 	}
 }
 
+// Covers: ADR-0126 Decision 三在载体册的落法——带销售价格约定的客户合同载体（PCC-3 的正文快照）经真库往返：读回
+// 的正文里来源顺序与录入相同，规范化版本与摘要原样。载体册不认版本名单，只要求摘要自带它的规范化版本。
+func TestAContractDraftWithSellPriceSourcesRoundTripsThroughTheRehydrationGate(t *testing.T) {
+	drafts, _, transactor, _ := newDraftRegistry(t)
+	ctx := t.Context()
+	shell := draftShellIn(t, "tenant-1", "scope-1", "contract-1", "v1")
+	shell.Kind = domain.CustomerContractObject
+	shell.References = nil
+	content := domain.PublicationContent{Kind: domain.CustomerContractObject, CustomerContract: &domain.CustomerContractBody{
+		CustomerAccount: pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		RulePackage:     pcValue(t, domain.NewCommercialObjectID, "rules-1"),
+		SellPrice: &domain.SellPriceArrangementBody{Sources: []domain.PricingScopeReference{
+			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-M"),
+			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-Z"),
+			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-A"),
+		}},
+	}}
+	submitted, err := domain.SubmitPublicationDraft(shell, content,
+		pcValue(t, domain.NewOperatorSubjectReference, "op-submitter"), draftSubmittedAt)
+	if err != nil {
+		t.Fatalf("录入载体：%v", err)
+	}
+	if outcome := mustSubmitDraft(t, transactor, ctx, drafts, submitted); outcome != ports.PublicationDraftSaved {
+		t.Fatalf("submit outcome = %s, want SAVED", outcome)
+	}
+
+	stored, found := loadDraft(t, ctx, drafts, "tenant-1", shell)
+	if !found {
+		t.Fatal("录入的载体读不回来")
+	}
+	if stored.Canonical().Canonicalization() != "PCC-3" || stored.Canonical().Digest() != submitted.Canonical().Digest() {
+		t.Fatalf("读回的载体 = %s，want 录入的那份 %s", stored.Canonical().Digest(), submitted.Canonical().Digest())
+	}
+	arrangement := stored.Content().CustomerContract.SellPrice
+	if arrangement == nil || len(arrangement.Sources) != 3 {
+		t.Fatalf("读回的销售价格约定 = %#v", arrangement)
+	}
+	got := []string{arrangement.Sources[0].String(), arrangement.Sources[1].String(), arrangement.Sources[2].String()}
+	if strings.Join(got, ",") != "SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A" {
+		t.Fatalf("读回的来源 = %v，want 录入的顺序", got)
+	}
+}
+
 // Covers: 声明写口的共同纪律——销售价格约定的写入不在事务里即拒，不自己开一笔：约定与版本壳、正文同一事务落库，
 // 半份发布不该存在。
 func TestContractSellPriceArrangementWritesRefuseToRunOutsideATransaction(t *testing.T) {
