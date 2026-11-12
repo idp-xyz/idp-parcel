@@ -26,11 +26,12 @@
     grid-template-columns: 132px minmax(0, 1040px);
   }
 
-  /* top 取正文区的上内边距：粘住之后锚点列与表单第一张卡的上缘仍在同一条线上，不往上蹿。 */
+  /* top 取 0：粘住的参照是正文区去掉内边距之后的那一块，取 0 时锚点列的上缘就停在内边距的下沿，与表单第一块的上缘同一条线，
+     滚动时也不往上蹿。取成内边距那么多的话，它不滚时就比第一块低一截（实测于 Chromium）。 */
   .business-party-edit-nav {
     display: block;
     position: sticky;
-    top: 16px;
+    top: 0;
   }
 }
 
