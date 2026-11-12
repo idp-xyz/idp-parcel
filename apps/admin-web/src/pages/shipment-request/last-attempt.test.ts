@@ -258,6 +258,22 @@ test('申报不全等客户补充：括号里逐条列任务缺口（委托级�
       financialStall: '申报缺了计价要的资料（服务产品 SYN-PROD-FBA-01）——客户补充后自动续办',
     },
   );
+  // 缺口清单与服务产品同场：产品那一括接在缺口括号之后、客户补充尾句之前。
+  deepEqual(
+    lastAttemptOf(
+      running({
+        lastAttemptReason: 'CUSTOMER_SUPPLEMENT_PENDING',
+        lastAttemptResumePath: 'CUSTOMER_SUPPLEMENT',
+        lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
+        lastAttemptServiceProduct: 'SYN-PROD-FBA-01',
+        supplementGaps: [{ group: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL', reason: 'ESTIMATE_ORIGIN_POSTAL_MISSING' }],
+      }),
+    ),
+    {
+      text: '估价没形成：申报缺了计价要的资料（委托缺寄件邮编）（服务产品 SYN-PROD-FBA-01）——客户补充后自动续办',
+      financialStall: '申报缺了计价要的资料（委托缺寄件邮编）（服务产品 SYN-PROD-FBA-01）——客户补充后自动续办',
+    },
+  );
 });
 
 test('申报不全而缺项在卡侧：写明这张卡做不了受理前估价，续办说该登什么样的售价卡并链到价格表', () => {
@@ -297,6 +313,7 @@ test('申报不全而缺项在卡侧：写明这张卡做不了受理前估价�
       },
     },
   );
+  // 两码同场：停因句与续办句都按词表顺序并说（分区在前），不随来码顺序。
   deepEqual(
     lastAttemptOf(
       running({
@@ -305,8 +322,16 @@ test('申报不全而缺项在卡侧：写明这张卡做不了受理前估价�
         lastAttemptSettlementReason: 'ESTIMATE_DECLARATION_INCOMPLETE',
         lastAttemptEstimateGapCodes: ['ADDRESS_NATURE', 'ZONE'],
       }),
-    )?.resume?.text,
-    '登记一张带分区目录、不按收件地址性质判价、生效期覆盖提交时点的售价卡后自动续办',
+    ),
+    {
+      text: '估价没形成：在用的卡要直接给分区、要收件地址性质，受理前估价给不出',
+      financialStall: '在用的卡要直接给分区、要收件地址性质，受理前估价给不出',
+      resume: {
+        path: 'OPERATOR_REGISTRATION',
+        text: '登记一张带分区目录、不按收件地址性质判价、生效期覆盖提交时点的售价卡后自动续办',
+        link: { href: '#/price-card-catalog', label: '去价格表' },
+      },
+    },
   );
   // 任务已不在运行：卡侧停因照留，不再说谁来续办；resume: false 的页同样取整句。
   deepEqual(lastAttemptOf({ ...zoneStalled, state: 'COMPLETE' }), {

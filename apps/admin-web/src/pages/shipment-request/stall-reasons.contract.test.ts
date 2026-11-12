@@ -3,7 +3,9 @@ import { deepEqual, ok } from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { knownRestrictionReasonCodes } from './financial-control';
 import { knownResumePaths } from './last-attempt';
-import { knownSettlementStallCodes, knownShipmentStallCodes } from './stall-reasons';
+import { estimateGapCardSideWords, knownSettlementStallCodes, knownShipmentStallCodes } from './stall-reasons';
+import { knownEstimateSupplementGapCodes } from './supplement-gaps';
+import { estimateMissingLabels } from '../pricing/presentation';
 
 // 停因、续办方与限制原因的词表对着 Go 源核（做法同 pages/network/route-plans.contract.test.ts：读同一份源，不在前端树里抄第二份）。
 // Go 侧加了码、词表没跟上就红，红的那条点名漏了哪个码；词表里留着 Go 侧已经没有的码也红，免得改了名的旧码一直挂着。
@@ -62,6 +64,29 @@ test('结算的 `SA-` 停因：未形成原因与两种拒收都有译法，词�
   );
   ok(notFormed.length > 0 && refused.length > 0, '结算停因一个都没读出来');
   deepEqual(sorted(knownSettlementStallCodes), sorted([...notFormed, ...refused]));
+});
+
+test('受理前估价的补件缺口码：词表那一族与小包托运适配器的常量字面一致', () => {
+  const goCodes = literalCodes(
+    goSource('internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control.go'),
+    /gap[A-Za-z]+Missing\s*=\s*"([A-Z_]+)"/g,
+  );
+  ok(goCodes.length > 0, '一个缺口码都没读出来');
+  deepEqual(sorted(knownEstimateSupplementGapCodes), sorted(goCodes));
+});
+
+test('计价缺项的封闭集：卡侧词表的键都在集内，运营译法盖满整集', () => {
+  const goCodes = literalCodes(
+    goSource('internal/parcelpricing/application/form_estimate_evaluations.go'),
+    /EstimateMissing[A-Za-z]+\s*=\s*"([A-Z_]+)"/g,
+  );
+  ok(goCodes.length > 0, '一个缺项码都没读出来');
+  // 卡侧分流（declarationIncompleteViewOf）拿字面码判：计价一旦改码，这里先红，不让卡侧停因静默退化成客户补充那一句。
+  deepEqual(
+    Object.keys(estimateGapCardSideWords).filter((code) => !goCodes.includes(code)),
+    [],
+  );
+  deepEqual(sorted(Object.keys(estimateMissingLabels)), sorted(goCodes));
 });
 
 test('结算的限制原因：两本账写下的码都有译法，词表里没有 Go 侧已经没有的码', () => {

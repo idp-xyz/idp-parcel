@@ -88,6 +88,7 @@ export const estimateMissingLabels: Record<string, string> = {
   ADDRESS_NATURE: '收件地址性质（这张价卡对商业 / 住宅地址收费不同，要选一个，系统不替你假定）',
   ORIGIN_POSTAL: '寄件邮编（这张价卡的分区目录按始发邮编前缀分区）',
   DIMENSIONS: '尺寸（这张价卡按尺寸或体积重判价，要逐件给长宽高）',
+  MEASUREMENT: '重量或量纲（这一件的重量或重量单位读不出，计价只取申报的测量，不替你补）',
 };
 
 // 收件地址性质（ADR-0347 决定四）：封闭词，声明由发起方给，计价不推断。
