@@ -25,6 +25,8 @@ type CustomerContractBody struct {
 	Bindings           []FinancialControlBinding
 	Control            *PreAcceptanceControlBody
 	DeliveryConditions *DeliveryConditionBody
+	// SellPrice 是销售价格约定一层（ADR-0380 决定一），可缺：缺席即这一版合同没有销售价格约定，文档仍是 PCC-1。
+	SellPrice *SellPriceArrangementBody
 }
 
 // PreAcceptanceControlBody 是合同级声明的输入面：要求二值，加只在`不适用`时在场的依据。
@@ -48,6 +50,11 @@ func (body CustomerContractBody) validate() error {
 			return err
 		}
 	}
+	if body.SellPrice != nil {
+		if err := body.SellPrice.validate(); err != nil {
+			return err
+		}
+	}
 	if body.DeliveryConditions != nil {
 		return body.DeliveryConditions.validate(CustomerContractObject)
 	}
@@ -61,6 +68,8 @@ type canonicalCustomerContractBody struct {
 	ContractContent      canonicalContractContent       `json:"contractContent"`
 	PreAcceptanceControl *canonicalPreAcceptanceControl `json:"preAcceptanceControl,omitempty"`
 	DeliveryConditions   *canonicalDeliveryConditions   `json:"deliveryConditions,omitempty"`
+	// 销售价格约定一节只在 PCC-3 的文档里出现（见 publication_canonicalization_customer_contract_sell_price.go）。
+	SellPriceArrangement *canonicalSellPriceArrangement `json:"sellPriceArrangement,omitempty"`
 }
 
 // CustomerAccount 不带 omitempty（ADR-0177 决定三）：这一格恒在场，缺了正文立不住，文档里不留「可缺」的第二种形状。
@@ -113,6 +122,9 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 	if body.DeliveryConditions != nil {
 		document.DeliveryConditions = canonicalDeliveryConditionsOf(*body.DeliveryConditions)
 	}
+	if body.SellPrice != nil {
+		document.SellPriceArrangement = canonicalSellPriceArrangementOf(*body.SellPrice)
+	}
 	return document
 }
 
@@ -155,6 +167,13 @@ func (document canonicalCustomerContractBody) body() (CustomerContractBody, erro
 			return CustomerContractBody{}, fmt.Errorf("deliveryConditions.%w", err)
 		}
 		body.DeliveryConditions = &conditions
+	}
+	if document.SellPriceArrangement != nil {
+		arrangement, err := document.SellPriceArrangement.body()
+		if err != nil {
+			return CustomerContractBody{}, fmt.Errorf("sellPriceArrangement.%w", err)
+		}
+		body.SellPrice = &arrangement
 	}
 	if err := body.validate(); err != nil {
 		return CustomerContractBody{}, err
