@@ -50,4 +50,4 @@ Status: resolved——2026-11-12 进 main
 
 ## 收口（2026-11-12）
 
-链 01–27 全部进 main，main 尖 `c5001b3de`；完整记录见 [25 号票](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。派生票 [28](./issues/28-a-card-with-only-actual-weight-rules-still-stalls-untotaled-when-dimensions-are-undeclared.md) 留 needs-triage。
+链 01–27 全部进 main，main 尖 `c5001b3de`；完整记录见 [25 号票](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md)「进 main 记录」。派生票 [28](./issues/28-a-card-with-only-actual-weight-rules-still-stalls-untotaled-when-dimensions-are-undeclared.md) 当时留 needs-triage，2026-11-12 当日分诊、修复并进 main（main 尖 `0a78ce438`，见其「进 main 记录」）；链上 28 张票至此全部 resolved。

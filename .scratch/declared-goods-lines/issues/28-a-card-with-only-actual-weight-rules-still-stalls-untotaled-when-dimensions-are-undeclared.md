@@ -1,7 +1,7 @@
 # 28 只带实重规则的卡在无尺寸申报时仍落无合计、归等运营登记——既登不开也没人补
 
 Category: bug
-Status: in-progress
+Status: resolved——2026-11-12 进 main
 Blocked by: 无
 
 依据：票 26 评审发现（2026-11-12）；[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定二的边界之外。
@@ -42,3 +42,11 @@ Blocked by: 无
 
 - 非作者评审一轮（子代理，隔离检出钉 `052785a88`）：阻断 1——UC-PP-001 `AT-PP-024`「缺尺寸→待判断」与新行为相抵、未同笔更新；应改 3——ADR-0347 缺读法注记、存量等运营登记委托无解法注记、存量停驻评价重放改判没记录；可留 3——`weightOnlyFeatures` 错误分支不可达（防御性，留）、`settleAgainstExisting` 注释说摘要含解释与事实不符（顺手修了）、UC-PP-001「给开发的交接」承接票 26 那行陈旧（顺手补了落地注）。机制核验全过：判据覆盖完备（重量策略封闭两值、五种尺寸派生源全在清单、条件最低计价重量的触发也进 triggers）、解释行不进语义摘要与重放判等、改动只落在「缺尺寸且判据为假」这一必停支、编排与结算消费侧不需跟改（估价路修复后 `PACKAGE_FEATURES_UNAVAILABLE` 不可达，正式路映射照旧成立）。
 - 修订：按阻断与应改各条改 UC-PP-001 `AT-PP-024` 行（补限定与票指针）、ADR-0347 Status 读法注记、票面存量与重放两条注记，并顺手修可留两条。
+
+## 进 main 记录
+
+- 2026-11-12 进 main，main 尖 `0a78ce438`，快进推送（分支直接立在当时的 main 尖 `673b49438` 上，推前 fetch 核对 main 未动，无需重放）。main 上的提交四笔：实现 `052785a88`、评审修订 `760fee96d`、ADR 索引重生成 `86f7d1eeb`（ADR-0347、ADR-0381 行尾多出票 28 的读法注）、机制盘点重生成 `0a78ce438`；AT 盘点计数无变化不成笔。出处：分支 `fix/weight-only-rules-skip-dimensions`（已推远端），工作树 `idp-parcel-t28`。
+- 生成物：`adr-index -check` 与 `at-coverage-counts -check` 退 0，机制盘点重生成后再跑无变化。
+- 门禁：`scripts/test-full.sh` 两跑全绿——作者笔 `052785a88` 一跑、推送前在确切 tip `0a78ce438` 再跑（175 包 ok，EXIT=0，专用一次性 PG）。admin-web 三道门与 demo 种子未跑：本票不动 `apps/`、迁移与种子。
+- 评审：非作者评审一轮（阻断 1、应改 3、可留 3，见「评审」节），修订笔 `760fee96d` 处理全部阻断与应改；收口与进 main 记录是票面簿记，自审。
+- 分诊的改法裁决（取懒读、不取点名 `DIMENSIONS`）是会话代小包计价 owner 定，可推翻；ADR-0347、ADR-0381 的读法注记随之，推翻时一并撤。
