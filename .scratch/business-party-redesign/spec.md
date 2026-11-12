@@ -77,7 +77,7 @@ Status: in-progress
 | [05](./issues/05-detail-tabs-content.md) | 右栏各签内容重排（阻塞于 03） | 前端切片 | resolved（2026-11-11 进 main） |
 | [06](./issues/06-keep-the-previous-page-while-refetching.md) | 换条件、翻页、刷新时留着旧的一页（阻塞于 02；共用取数件，需非作者评审） | 前端切片 | resolved（2026-11-12 进 main；评审按用户当日裁定没有做） |
 | [07](./issues/07-adr-party-categories-on-the-read.md) | ADR 草案的非作者评审、编号与接受 | 文档票 | resolved（2026-11-12 进 main，ADR-0378；评审按用户当日裁定没有做） |
-| [08](./issues/08-read-answers-categories-filter-and-facets.md) | 读口随行答类别与关系段数、按类别筛、分面计数（阻塞于 07） | 后端票 | ready-for-agent |
+| [08](./issues/08-read-answers-categories-filter-and-facets.md) | 读口随行答类别与关系段数、按类别筛、分面计数（阻塞于 07） | 后端票 | resolved（2026-11-12 进 main；评审按用户当日裁定没有做） |
 | [09](./issues/09-admin-web-takes-categories-from-the-read.md) | 管理台改取读口的类别，删掉自己的推导（阻塞于 02、08） | 前端切片 | ready-for-agent |
 | [10](./issues/10-acceptance.md) | 验收：浏览器全流程、深浅主题、非作者评审（阻塞于 02–06、11） | 前端切片 | wontfix（用户 2026-11-12 裁定不做验收与评审；没补上的几样列在票里） |
 | [11](./issues/11-write-flows-in-the-new-layout.md) | 写操作在新版式里的样子：编辑态、就地登记合作关系、新增往来单位的查重提示、停用对话框（阻塞于 03、05） | 前端切片 | resolved（2026-11-12 进 main） |
