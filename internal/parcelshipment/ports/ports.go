@@ -1766,6 +1766,9 @@ type ShipmentRequestDetailRecord struct {
 	Goods            domain.GoodsDetails
 	GoodsStanding    domain.GoodsDetailsStanding
 	PlatformShipment domain.PlatformShipmentDeclaration
+	// FinancialControl 是当前提交版本上最近一次受理判断记下的接受前财务控制结论（ADR-0379 决定三），与 RecordedJudgments 的那一格
+	// 同一份读法、同一个约定：零值即没判过。只在详情上，列表行不带——目录一页几十份委托，每份多一次读判断表换来的是列表不显示的一格。
+	FinancialControl domain.FinancialControlResult
 }
 
 // ShipmentRequestViews 是委托查阅的读口（CONTEXT「授权查询作用域」）。
