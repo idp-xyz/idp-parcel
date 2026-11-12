@@ -38,8 +38,10 @@
     grid-column: 2;
     grid-row: 1 / span 24;
     margin-bottom: 0;
+    /* top 取 0：粘住的参照是正文区去掉内边距之后的那一块，取 0 时这一栏的上缘就停在内边距的下沿，与不滚时同一条线。
+       取成内边距那么多的话，它不滚时就比左边第一块低一截（实测于 Chromium）。 */
     position: sticky;
-    top: 16px;
+    top: 0;
   }
 }
 
