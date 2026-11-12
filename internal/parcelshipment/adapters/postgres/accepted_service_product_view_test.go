@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件对真实 PostgreSQL 16 证 ports.AcceptedServiceProductView 与提交版本申报读口带出的服务产品（ADR-0378 决定三）：已接受委托
+// 本文件对真实 PostgreSQL 16 证 ports.AcceptedServiceProductView 与提交版本申报读口带出的服务产品（ADR-0382 决定三）：已接受委托
 // 申报了产品，成员都答那个产品；没申报、仅已提交、他租户与从未声明的包裹都答没有产品；受理前按提交版本读的申报同样带出产品。
 // 夹具走真接受（Decide → Save），合成 SYN- 值，证据只记 S。
 

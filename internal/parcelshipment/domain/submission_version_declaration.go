@@ -1,7 +1,7 @@
 package domain
 
 // SubmissionVersionDeclaration 是一份提交版本上客户申报的计价要素：逐件的声明测量，寄、收两段邮编（ADR-0179 决定四），与申报的
-// 服务产品（ADR-0378 决定三）。
+// 服务产品（ADR-0382 决定三）。
 //
 // 它按提交版本取，不经接受基线：受理前估价发生在接受之前，没有基线可走；提交版本是不可覆盖的记录（ADR-0048 决定二随它保全
 // 画像），答的就是那一版上客户报了什么。客户原始资料的修订只在接受之后形成，这一版上没有可采用的修订，所以资料版本锚不参与。
@@ -14,7 +14,7 @@ type SubmissionVersionDeclaration struct {
 	parcels     []DeclaredParcelDeclaration
 	origin      AddressElements
 	destination AddressElements
-	// serviceProduct 是这一版申报的服务产品，可缺。受理前估价按它选售价卡（ADR-0378 决定三），与测量、邮编同取自这一版。
+	// serviceProduct 是这一版申报的服务产品，可缺。受理前估价按它选售价卡（ADR-0382 决定三），与测量、邮编同取自这一版。
 	serviceProduct DeclaredServiceProduct
 }
 

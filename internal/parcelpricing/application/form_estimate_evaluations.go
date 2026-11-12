@@ -144,7 +144,7 @@ type FormEstimateEvaluationsCommand struct {
 	// AddressNature 是收件地址性质。计价既不推断它也不从别处读它（PS 今天没有结构化的地址性质，ADR-0347 决定四）：
 	// 读它的卡要发起方声明，没声明就点名缺项，不套默认住宅或商业。
 	AddressNature *domain.AddressNature
-	// ServiceProduct 是按哪个服务产品选售价卡（ADR-0378 决定二、三），零值即没声明：只看不声明产品的卡。受理前估价由委托的申报
+	// ServiceProduct 是按哪个服务产品选售价卡（ADR-0382 决定二、三），零值即没声明：只看不声明产品的卡。受理前估价由委托的申报
 	// 带进来，试算由发起方声明。
 	ServiceProduct domain.ServiceProductReference
 }
@@ -459,7 +459,7 @@ func (command FormEstimateEvaluationsCommand) accepted() bool {
 	if pairedPurpose(command.Direction) == "" || command.Weight.Unit().String() == "" {
 		return false
 	}
-	// 只有 SELL·客户费用的卡能声明适用产品（ADR-0378 决定一）：别的方向带产品，选卡不看它，快照与解释却会说卡是按它选的。
+	// 只有 SELL·客户费用的卡能声明适用产品（ADR-0382 决定一）：别的方向带产品，选卡不看它，快照与解释却会说卡是按它选的。
 	if command.ServiceProduct.Declared() && command.Direction != domain.PricingDirectionSell {
 		return false
 	}

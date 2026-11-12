@@ -15,7 +15,7 @@ import { feeHasGroup, type CardFormState, type ConditionRow, type FeeItemState, 
 import { cardFieldKeys, columnTitle, familySheet, sheetNames } from './spec';
 import { canonicalServiceProducts, declaresServiceProducts } from '../service-products';
 
-/** card 表里适用服务产品那一格的字段名，与方案文档的键同名（ADR-0378）；多个产品以英文分号分隔，同 amountRoundingPoints。 */
+/** card 表里适用服务产品那一格的字段名，与方案文档的键同名（ADR-0382）；多个产品以英文分号分隔，同 amountRoundingPoints。 */
 export const serviceProductsCardField = 'serviceProducts';
 
 /** 规格口的 card 表收不收适用服务产品：收的那几版模板这一行总在，不收的版本写了就是未知字段。 */
@@ -509,7 +509,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   return { workbook: { templateVersion: spec.templateVersion, sheets }, origins };
 }
 
-/** 只有售价卡有适用服务产品；没选或不是售价卡答空，那一行写 null，卡即接其余产品（ADR-0378 决定一）。 */
+/** 只有售价卡有适用服务产品；没选或不是售价卡答空，那一行写 null，卡即接其余产品（ADR-0382 决定一）。 */
 function serviceProductsText(state: CardFormState): string | undefined {
   if (!declaresServiceProducts(state.basics.direction)) return undefined;
   const products = canonicalServiceProducts(state.basics.serviceProducts);

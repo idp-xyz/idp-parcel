@@ -3,7 +3,7 @@ import type { AcceptanceTaskRecord } from './api';
 import { estimateGapCardSideWords, settlementReasonOf, stallReasonOf } from './stall-reasons';
 import { supplementGapLinesOf } from './supplement-gaps';
 
-// 受理任务「最近一次没能推进」那一条在运单详情上怎么说（ADR-0380 决定五，票 declared-goods-lines/24）：停因带上结算的细原因与
+// 受理任务「最近一次没能推进」那一条在运单详情上怎么说（ADR-0383 决定五，票 declared-goods-lines/24）：停因带上结算的细原因与
 // 这一版申报的服务产品，再说谁来续办。「受理进度」与「受理前财务控制」读同一份，免得一处说没有在用价卡、另一处只说缺登记。
 // 申报不全的估价（ADR-0381 决定五，票 declared-goods-lines/27）再按缺项该谁补说细：客户可补的列缺口清单、卡侧缺项写明这张卡
 // 做不了受理前估价与该登什么。纯函数，node:test 直接钉。
@@ -122,7 +122,7 @@ function declarationIncompleteViewOf(task: AcceptanceTaskRecord): DeclarationInc
  * 没有处理尝试（两格都缺席或是空串）时答 null。`resume: false` 给不另起续办一行的页：停因整句说全，不带续办那一截。
  *
  * 服务产品只接在财务控制那一步的停因上：它说的是哪个产品估不出价，接到等客户补充、等人工复核上只是噪声，那几种的写法照旧
- * （ADR-0380 决定五）。
+ * （ADR-0383 决定五）。
  */
 export function lastAttemptOf(task: AcceptanceTaskRecord, options: { resume?: boolean } = {}): LastAttemptView | null {
   const withResume = options.resume !== false;

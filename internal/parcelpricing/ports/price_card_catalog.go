@@ -42,7 +42,7 @@ type PriceCardCatalog interface {
 	// 内容摘要)比对译成结果代数，原行永不被顶替。
 	Register(ctx context.Context, registration domain.PriceCardRegistration) (PriceCardRegistrationOutcome, error)
 	// LoadApplicable 取该租户在（方向 + 适用范围 + 计价基准时点）与申报的服务产品下的全部
-	// 适用价卡版本，供评价用例消费。产品先按 ADR-0378 的指名优先取层：指名这个产品的卡有就只取
+	// 适用价卡版本，供评价用例消费。产品先按 ADR-0382 的指名优先取层：指名这个产品的卡有就只取
 	// 它们，没有才取不声明产品的卡；零值产品只取后者。层内多份适用价卡是正当形态（每个候选形成
 	// 自己的评价，择优归 network-routing）；同一方案身份两版同时适用则交回错误——挑任何一版都是替
 	// 发布责任方作它没作的决定。

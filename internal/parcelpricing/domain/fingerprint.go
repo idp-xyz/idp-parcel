@@ -436,7 +436,7 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // PPC-6 新增的都是可缺键（ADR-0348，照 ADR-0267 决定一换号并取能表达内容的最低一版）：方案级的总额上下限，与
 // 查表型附加费计算的查档维度。不带这些键的方案仍写 PPC-5、字节一个不动，本构建 PPC-5 与 PPC-6 都认、都能折回；
 // 带的写 PPC-6。canonicalizationVersion 是其中基础的那一版 PPC-5。
-// PPC-7 同一做法再加一个可缺键：售价卡声明的适用服务产品（ADR-0378 决定四）。它是 PPC-6 的超集——带产品的卡同时带
+// PPC-7 同一做法再加一个可缺键：售价卡声明的适用服务产品（ADR-0382 决定四）。它是 PPC-6 的超集——带产品的卡同时带
 // 总额上下限也写 PPC-7；不带产品的卡照旧取 PPC-5 或 PPC-6，字节不动。
 const canonicalizationVersion = "PPC-5"
 
@@ -505,7 +505,7 @@ type canonicalPricingPlan struct {
 	ReferenceCatalogues []canonicalReferenceCatalogueDocument `json:"reference_catalogues,omitempty"`
 	// 总额上下限（ADR-0348）：只有声明了的方案有这一键，写 PPC-6；没声明的方案省略，PPC-5 字节不变。
 	TotalBounds *canonicalTotalBoundsDocument `json:"total_bounds,omitempty"`
-	// 适用服务产品（ADR-0378 决定四）：进内容摘要——两张只差适用产品的卡是不同的内容，与计价范围同理。只有声明了的
+	// 适用服务产品（ADR-0382 决定四）：进内容摘要——两张只差适用产品的卡是不同的内容，与计价范围同理。只有声明了的
 	// 方案有这一键，写 PPC-7；不声明的方案省略，PPC-5 / PPC-6 字节不变。
 	ServiceProducts []string `json:"service_products,omitempty"`
 }

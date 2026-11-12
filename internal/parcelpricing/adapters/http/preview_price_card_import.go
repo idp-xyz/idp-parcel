@@ -84,7 +84,7 @@ type priceCardContentBody struct {
 	Surcharges             int                 `json:"surcharges"`
 	Manifest               []manifestEntryBody `json:"manifest"`
 	DirectionAuthorization planReferenceBody   `json:"directionAuthorization"`
-	// ServiceProducts 与价卡目录列出的同名同形：卡声明的适用服务产品（ADR-0378 决定一），不声明即缺键。预览与草稿都经这一份
+	// ServiceProducts 与价卡目录列出的同名同形：卡声明的适用服务产品（ADR-0382 决定一），不声明即缺键。预览与草稿都经这一份
 	// 概要交出，缺了它，页面会把指名了产品的售价卡显示成接其余产品的那一张。
 	ServiceProducts []string `json:"serviceProducts,omitempty"`
 }

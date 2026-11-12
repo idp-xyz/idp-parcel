@@ -26,7 +26,7 @@ import (
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 本文件对真实 PostgreSQL 16 证票 declared-goods-lines/23 的闭环（ADR-0380 决定一至四）：受理前估价按登记的计价范围选不到在用的
+// 本文件对真实 PostgreSQL 16 证票 declared-goods-lines/23 的闭环（ADR-0383 决定一至四）：受理前估价按登记的计价范围选不到在用的
 // 售价卡时，接受前财务控制答端口的`未配置`，链落`等待运营登记`，提交门入账；处理尝试落库，带结算的原因码、这一版申报的服务产品与
 // 版本，委托详情的「上次处理」从那里读出四格。计价登卡时经真交接适配器铸出「参数已登记」信封，计价参数那一份登记续办门按租户重驱：
 // BUY 那一封不重驱；只在判断时点之后才生效的 SELL 卡叫醒委托、它照旧停、多一条尝试；判断时点在用的 SELL 卡登上之后委托被接受。
@@ -134,7 +134,7 @@ func TestAPriceCardWaitIsResumedBySellPricingParameterRegistration(t *testing.T)
 	}
 }
 
-// Covers: ADR-0380 决定一「依赖读不回照旧内部重试」——试算那一口读不回（SA-ESTIMATE_TRIALS_UNAVAILABLE）时，链停在`未形成`，提交门
+// Covers: ADR-0383 决定一「依赖读不回照旧内部重试」——试算那一口读不回（SA-ESTIMATE_TRIALS_UNAVAILABLE）时，链停在`未形成`，提交门
 // 交回未决哨兵、整笔回滚：等待态不落、处理尝试一行不留，信封等重投。
 func TestAnUnavailableEstimateStillRollsBack(t *testing.T) {
 	control := &synRLateBoundControl{}
@@ -167,7 +167,7 @@ func TestAnUnavailableEstimateStillRollsBack(t *testing.T) {
 	}
 }
 
-// Covers: 路由表「计价参数已登记」那一份登记续办门（ADR-0380 决定二），且它在生产依赖图上接得起来：信封由 parcel-pricing 真交接
+// Covers: 路由表「计价参数已登记」那一份登记续办门（ADR-0383 决定二），且它在生产依赖图上接得起来：信封由 parcel-pricing 真交接
 // 适配器随登卡铸出，类型与小包托运、结算两个消费方各写的字面对上；一拍扇出给两路，两路各记各的 inbox，该租户没有委托在等、
 // 没有评价停着，本封定稿。漏挂的话，PS 这一路收不到；排位撞了，装配即拒。
 func TestARegisteredPricingParameterReachesBothResumeGatesOnTheProductionGraph(t *testing.T) {

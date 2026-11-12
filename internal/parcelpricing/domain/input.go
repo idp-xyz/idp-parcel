@@ -162,7 +162,7 @@ type PricingInputSnapshot struct {
 	// 不套默认。它不进规范化文档——影响评价结果的方式只有「读它的规则是否命中」，那已落在费用行与状态上，与结算币种
 	// 同一种放法；只进评价快照。
 	addressNature AddressNature
-	// serviceProduct 是选售价卡用的服务产品（ADR-0378 决定三），可缺：零值即委托没申报，或这次评价不按产品选卡。它记的是
+	// serviceProduct 是选售价卡用的服务产品（ADR-0382 决定三），可缺：零值即委托没申报，或这次评价不按产品选卡。它记的是
 	// 「这张卡是按哪个产品选的」，不进规范化文档——同一张卡、同一份输入算出的价不随它变，选卡已经落在方案引用上；与地址
 	// 性质同一种放法，只进评价快照。产品取委托的申报，不是商业依据（ADR-0260 决定一）。
 	serviceProduct ServiceProductReference
@@ -300,7 +300,7 @@ func (input PricingInputSnapshot) AddressNature() (AddressNature, bool) {
 	return input.addressNature, input.addressNature != ""
 }
 
-// WithServiceProduct 记下选售价卡用的服务产品（ADR-0378 决定三）。零值不收：没申报就不调用，快照缺这一格即没按产品选。
+// WithServiceProduct 记下选售价卡用的服务产品（ADR-0382 决定三）。零值不收：没申报就不调用，快照缺这一格即没按产品选。
 func (input PricingInputSnapshot) WithServiceProduct(product ServiceProductReference) (PricingInputSnapshot, error) {
 	if !input.valid() || !product.Declared() {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid

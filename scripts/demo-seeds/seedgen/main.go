@@ -70,7 +70,7 @@ func main() {
 	// 已登记的同一批目录与燃油序列，不另登。
 	write(outDir, "price-card-cn-sg-full-03.json", fullSellCard03Snapshot())
 	// FBA 头程售价卡（范围 SYN-SCOPE-01，见 fba_card.go）：指名 SYN-PROD-CN-SG-FBA，与上面那张不声明产品的售价卡同范围并存，
-	// 各计各的产品（ADR-0378）。与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
+	// 各计各的产品（ADR-0382）。与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
 	write(outDir, "price-card-cn-sg-fba.json", fbaSellCardSnapshot())
 }
 

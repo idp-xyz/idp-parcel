@@ -345,10 +345,10 @@ type parcelDimensionsBody struct {
 	Unit   string `json:"unit"`
 }
 
-// acceptanceTaskBody 的「上次处理」几格读自处理尝试实际落库的那一处（ADR-0380 决定四）。lastAttemptResumePath 交续办方原词
+// acceptanceTaskBody 的「上次处理」几格读自处理尝试实际落库的那一处（ADR-0383 决定四）。lastAttemptResumePath 交续办方原词
 // （INTERNAL_RETRY、OPERATOR_REGISTRATION……，与 waitingOn 同一套）：谁来动手照记下的那一格读，不从原因名或 CONT- 引用推。
 // lastAttemptSettlementReason 是结算的未形成原因码原样（不冠 SA-），lastAttemptServiceProduct 是这一版申报的服务产品，
-// 两格都只在那一轮有时在场（ADR-0380 决定三）。字段名与管理台票 declared-goods-lines/24 钉死。
+// 两格都只在那一轮有时在场（ADR-0383 决定三）。字段名与管理台票 declared-goods-lines/24 钉死。
 // lastAttemptEstimateGapCodes 是申报不全那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的两路
 // 等待上在场；字段名钉死给管理台票 declared-goods-lines/27。
 type acceptanceTaskBody struct {

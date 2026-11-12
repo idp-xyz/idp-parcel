@@ -12,7 +12,7 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件对真实 PostgreSQL 16 证登记续办门的翻页（票 declared-goods-lines/23 评审）：自 ADR-0380 起，一次登记只解得开它管的那几份，
+// 本文件对真实 PostgreSQL 16 证登记续办门的翻页（票 declared-goods-lines/23 评审）：自 ADR-0383 起，一次登记只解得开它管的那几份，
 // 被重驱又停回`等待运营登记`是常态。翻页若每页重读队首，比满一页还多的旧委托停着，后面那份这次登记正好解得开的委托就永远
 // 轮不到。这里把页大小压到 2，先停四份——前三份这次照旧停、最新的一份解得开——一封 SELL「参数已登记」之后，最新那份必须
 // 被重驱并接受，前三份各被问恰一次、照旧等。

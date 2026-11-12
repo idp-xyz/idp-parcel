@@ -17,7 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证申报的服务产品进售价卡选卡的三条路（ADR-0378 决定二、三；票 declared-goods-lines/15）：同一计价
+// 本文件对真实 PostgreSQL 16 证申报的服务产品进售价卡选卡的三条路（ADR-0382 决定二、三；票 declared-goods-lines/15）：同一计价
 // 范围登一张不声明的卡与一张指名 FBA 的卡，接受前估价、正式 SELL 评价与试算都按申报的产品走指名优先；正式评价与试算的快照记着
 // 产品；只有指名卡而委托没申报时估价停在未配置。价卡登记册、在用解析与评价库是真的，小包托运那两口与输入读口用替身。夹具全为
 // 合成值，证据只记 S。

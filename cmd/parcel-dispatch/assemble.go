@@ -810,7 +810,7 @@ type acceptanceChainGates struct {
 	estimateAdoptionRegistration  dispatch.Consumer
 	submissionVersionFormed       dispatch.Consumer
 	controlReleaseRefusalHandled  dispatch.Consumer
-	// pricingParameterRegistration 收计价「参数已登记」（ADR-0380 决定二）。
+	// pricingParameterRegistration 收计价「参数已登记」（ADR-0383 决定二）。
 	pricingParameterRegistration dispatch.Consumer
 }
 
@@ -980,7 +980,7 @@ func acceptanceChainConsumers(
 		return none, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoption resume consumer: %w", err)
 	}
 	// 计价「参数已登记」那一份：发布侧是 parcel-pricing 价卡登记、价卡收尾与序列、目录复核的事务边界（ADR-0229 决定五），解开的
-	// 是控制那一步停在价卡一侧的等待（ADR-0380 决定一、二）。只认 SELL 方向，队列读口同上。
+	// 是控制那一步停在价卡一侧的等待（ADR-0383 决定一、二）。只认 SELL 方向，队列读口同上。
 	pricingParameterRegistration, err := psinbox.NewPricingParameterRegisteredConsumer(
 		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
 	if err != nil {
@@ -1254,7 +1254,7 @@ const preAcceptanceTrialEvidence = ppdomain.EvidenceSynthetic
 
 // preAcceptanceTrials 接结算的受理前试算口（ADR-0179 决定一、三、四）：SA 的 PP 消费侧适配器 → PP「按委托提交版本形成受理前
 // 试算」入口 → PS 提交版本申报读口（经 PP 的 PS 消费侧适配器，连同申报的服务产品）、按申报产品的在用 SELL·客户费用价卡解析
-// （ADR-0378 决定三）与对给定价卡形成试算的入口。补齐读数
+// （ADR-0382 决定三）与对给定价卡形成试算的入口。补齐读数
 // 那两对与正式评价（formEvaluationFromRequest）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
 // 这条链上没有评价库写口与交付口：试算只算不存、不交付（ADR-0152 决定二）。
 func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAcceptanceTrials, error) {
@@ -2778,7 +2778,7 @@ func formEvaluationFromRequest(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
 	}
-	// SELL 请求选卡前读覆盖包裹的已接受委托申报的服务产品（ADR-0378 决定三），经 PP 的 PS 消费侧适配器；BUY 那一路同装、
+	// SELL 请求选卡前读覆盖包裹的已接受委托申报的服务产品（ADR-0382 决定三），经 PP 的 PS 消费侧适配器；BUY 那一路同装、
 	// 不问它——选卡只有一种装法。
 	shipments, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {

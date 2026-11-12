@@ -59,7 +59,7 @@ type PreAcceptanceTrialGap struct {
 }
 
 // PreAcceptanceTrialAnswer 是一次试算的答复。PriceCard 是所用价卡版本引用的字面（domain.VersionReferenceLiteral），选到卡之后的各格
-// 都有值；Trials 只在已形成时有值。ServiceProduct 是选卡用的服务产品，取自评价的输入快照（ADR-0378 决定三），只在已形成时可能有值，
+// 都有值；Trials 只在已形成时有值。ServiceProduct 是选卡用的服务产品，取自评价的输入快照（ADR-0382 决定三），只在已形成时可能有值，
 // 空即没申报。Gaps 只在`缺件`时有值：缺的那几件逐件点名，齐的件不占一行。
 type PreAcceptanceTrialAnswer struct {
 	Outcome        PreAcceptanceTrialOutcome

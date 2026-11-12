@@ -46,7 +46,7 @@ func newShipmentRequestViewsOn(t *testing.T, pool *pgxpool.Pool) (*adapter.Shipm
 }
 
 // newShipmentRequestViewsWithJudgments 同 newShipmentRequestViews，另交同一个库上的判断登记册：委托详情与各委托队列的「上次处理」读自
-// 处理尝试表（ADR-0380 决定四），要在读面上看见一条，得经生产写口记进那里。
+// 处理尝试表（ADR-0383 决定四），要在读面上看见一条，得经生产写口记进那里。
 func newShipmentRequestViewsWithJudgments(t *testing.T) (
 	*adapter.ShipmentRequestViews, *adapter.ShipmentRequests, *adapter.AcceptanceJudgments, bentoapp.Transactor,
 ) {
@@ -357,11 +357,11 @@ func TestFindVisibleReturnsTheWholeDetail(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0380 决定四——委托详情的「上次处理」读处理尝试表上这份委托当前这一版任务最近落下的一条：
+// Covers: ADR-0383 决定四——委托详情的「上次处理」读处理尝试表上这份委托当前这一版任务最近落下的一条：
 //   - 按发生时刻取最近，同一时刻按续办引用定先后，答案不随扫描顺序变；
 //   - 别的版本上的尝试不算（任务随版本重立，ADR-0045）；
 //   - 迁移 0038 之前落下、没有版本的旧行按任务建立时刻圈定：晚于它的算，早于它的属上一份任务；
-//   - 续办方、结算原因与服务产品照那一行交出（ADR-0380 决定三）；缺项码同理（迁移 0039，ADR-0381 决定四）。
+//   - 续办方、结算原因与服务产品照那一行交出（ADR-0383 决定三）；缺项码同理（迁移 0039，ADR-0381 决定四）。
 func TestTheDetailReadsTheLatestAttemptOfTheCurrentTask(t *testing.T) {
 	pool := pgtest.Pool(t)
 	views, repository, transactor := newShipmentRequestViewsOn(t, pool)

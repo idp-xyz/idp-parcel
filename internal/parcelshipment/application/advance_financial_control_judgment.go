@@ -196,7 +196,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		}
 		// 提供方的原因引用进范围，与商业依据那一支带 resolution.Reason 同一纪律：作用域、金额、策略、
 		// 授信、价卡几种停在端口上可以同格，续办引用却各是各的，按引用查回来的就是那一种缺口。结算的原因码
-		// 与计价的缺项码另记在处理尝试上（ADR-0380 决定三；ADR-0381 决定四）：那两格是给人读的「提供方
+		// 与计价的缺项码另记在处理尝试上（ADR-0383 决定三；ADR-0381 决定四）：那两格是给人读的「提供方
 		// 说了什么」，范围是续办派生的料。
 		scope := []string{assessment.Reason.String()}
 		detail := attemptDetail{
@@ -271,7 +271,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) adoptDispositions(
 
 // undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。detail 是处理尝试另记的
 // 两格：结算原因在控制端口答了未形成、且原因没换成保存那一格时都带着，服务产品只在等运营登记的等待落了库时才有。
-// 内部重试那几停也带着结算原因，不另清：那一轮整笔回滚，记下的尝试随之不留（ADR-0380 决定三「只在落库的尝试上记」）。
+// 内部重试那几停也带着结算原因，不另清：那一轮整笔回滚，记下的尝试随之不留（ADR-0383 决定三「只在落库的尝试上记」）。
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,

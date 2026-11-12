@@ -1,12 +1,12 @@
 # 价卡导入模板与校验规范（parcel-pricing）
 
 - **模板版本**：`PPT-3`（最新，本构建写出的版本）；`PPT-1`、`PPT-2` 的文件仍然接受，见第二节
-- **对应规范化版本**：不是一对一——按内容取能表达它的最低一版：声明了适用服务产品的方案写 `PPC-7`，用到最低 / 最高收费或按偏远档位查表的方案写 `PPC-6`，其余写 `PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0348](../adr/0348-a-price-card-may-declare-total-charge-bounds-and-key-a-surcharge-table-by-remote-tier-and-plans-using-them-are-written-as-ppc-6.md) 决定四、[ADR-0378](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定四）
+- **对应规范化版本**：不是一对一——按内容取能表达它的最低一版：声明了适用服务产品的方案写 `PPC-7`，用到最低 / 最高收费或按偏远档位查表的方案写 `PPC-6`，其余写 `PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0348](../adr/0348-a-price-card-may-declare-total-charge-bounds-and-key-a-surcharge-table-by-remote-tier-and-plans-using-them-are-written-as-ppc-6.md) 决定四、[ADR-0382](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定四）
 - **状态**：生效，2026-09-25，票 `.scratch/price-card-import/issues/01`；2026-10-29 进位 `PPT-2`，票 `.scratch/price-card-import/issues/08`；2026-11-11 进位 `PPT-3`，票 `.scratch/declared-goods-lines/issues/14`
 - **依据**：
   - [ADR-0101](../adr/0101-operator-facing-registration-payload-shape-is-product-defined.md) 决定二至四；
   - [ADR-0349](../adr/0349-the-price-card-import-template-advances-to-ppt-2-and-its-structured-workbook-is-a-second-carrier-read-through-the-same-path.md)：`PPT-2`、结构化工作簿载体、模板规格口；
-  - [ADR-0378](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一：`PPT-3` 的 `card.serviceProducts`，售价卡的适用服务产品；
+  - [ADR-0382](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一：`PPT-3` 的 `card.serviceProducts`，售价卡的适用服务产品；
   - [ADR-0015](../adr/0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md) 封闭文法；
   - parcel-pricing [`CONTEXT.md`](../domain/parcel-pricing/CONTEXT.md)「定价方案与价表版本」生命周期与「金额保真度：不可默认成立」。
 
@@ -107,7 +107,7 @@
 | `volumetricDivisor`、`volumetricLengthUnit` | 成对 | `NewVolumetricFactor` 的除数（`ParseDecimal`）与长度单位（`CM`、`IN`）；进位段见 `weight_rounding` 的 `VOLUMETRIC` 行。计重方法与体积重因子怎么搭配交构造门 |
 | `amountRoundingMode`、`amountRoundingIncrement`、`amountRoundingPoints` | 三格同有同无 | `NewAmountRoundingPolicy`：模式（`NONE`、`CEILING`、`HALF_UP`）、进位单位（按主价表币种，`NewMoneyFromString`）、应用点列表（`PER_LINE`、`AFTER_CONVERSION`、`TOTAL`） |
 | `directionAuthorizationId`、`directionAuthorizationVersion` | 是 | `NewVersionReferenceIdentity(ArtifactCommercialAuthorization, …)`，即 `NewPriceCardRegistration` 的方向授权引用 |
-| `serviceProducts`（`PPT-3` 起） | 否，整行可不写 | 列表，逐个交 `NewServiceProductReference`（参与方与商业的服务产品对象标识，不带版本），方案立住之后交 `WithServiceProducts`。只有 `direction` 为 `SELL` 的卡能填，别的方向填了报 `CELL_NOT_APPLICABLE`；不写或留空即不声明，这张卡接其余产品（ADR-0378 决定一） |
+| `serviceProducts`（`PPT-3` 起） | 否，整行可不写 | 列表，逐个交 `NewServiceProductReference`（参与方与商业的服务产品对象标识，不带版本），方案立住之后交 `WithServiceProducts`。只有 `direction` 为 `SELL` 的卡能填，别的方向填了报 `CELL_NOT_APPLICABLE`；不写或留空即不声明，这张卡接其余产品（ADR-0382 决定一） |
 
 **不进模板的**：
 - 租户、录入者、批准者：取自操作者信封，ADR-0101 决定三、五。

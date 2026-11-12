@@ -177,7 +177,7 @@ func (path ResumePath) String() string {
 
 // SettlementNotFormedReason 是 settlement-accounting 答接受前财务控制`未形成`时交回的原因码原样（如
 // ESTIMATE_PRICE_CARD_NOT_CONFIGURED）。它与 ProcessingAttemptReason 分开记：后者是本上下文的待判原因，同一个
-// `财务控制未配置`下压着作用域、策略、金额、价卡几种缺口，运营要知道该去登哪一样，只能看提供方那一格（ADR-0380
+// `财务控制未配置`下压着作用域、策略、金额、价卡几种缺口，运营要知道该去登哪一样，只能看提供方那一格（ADR-0383
 // 决定三）。本上下文不解释、不复制结算的原因集合，只原样留下；零值即结算没答未形成。
 type SettlementNotFormedReason struct{ requiredValue }
 
@@ -186,7 +186,7 @@ func NewSettlementNotFormedReason(value string) (SettlementNotFormedReason, erro
 	return SettlementNotFormedReason{required}, err
 }
 
-// ProcessingAttemptSpec 的 SettlementReason 与 ServiceProduct 可缺（ADR-0380 决定三）：结算没答未形成、这一版没申报服务产品时都不记，不代拟。
+// ProcessingAttemptSpec 的 SettlementReason 与 ServiceProduct 可缺（ADR-0383 决定三）：结算没答未形成、这一版没申报服务产品时都不记，不代拟。
 type ProcessingAttemptSpec struct {
 	Reason       ProcessingAttemptReason
 	ResumePath   ResumePath
@@ -205,7 +205,7 @@ type ProcessingAttemptSpec struct {
 // 引用续办，以及发生时间；它不是业务决定，因此累积多少条都不改变委托状态。
 //
 // 它不挂在聚合上：处理尝试经 AcceptanceJudgmentRecorder 落进自己的表，委托详情的「上次处理」从那里读
-// （ADR-0380 决定四）。聚合上曾有一份处理尝试列表，生产从没写过它，读面却拿它当读源，于是「上次处理」恒空。
+// （ADR-0383 决定四）。聚合上曾有一份处理尝试列表，生产从没写过它，读面却拿它当读源，于是「上次处理」恒空。
 type ProcessingAttempt struct {
 	reason           ProcessingAttemptReason
 	resumePath       ResumePath

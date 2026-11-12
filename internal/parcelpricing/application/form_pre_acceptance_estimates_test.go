@@ -217,7 +217,7 @@ func TestPreAcceptanceEstimatesAreReproducibleForTheSameSubmissionVersion(t *tes
 }
 
 // 选卡那一步的三格各自停、不挑卡（决定三）：未配置与适用冲突照答，冲突交回候选；解析口读不回是未决。申报先读了一次——选哪张卡
-// 要看这一版申报的服务产品（ADR-0378 决定三）——但一件都不算。
+// 要看这一版申报的服务产品（ADR-0382 决定三）——但一件都不算。
 func TestPreAcceptanceEstimatesStopAtEachCardCellAfterReadingTheDeclarationOnce(t *testing.T) {
 	conflicting := []domain.VersionReference{minimalPlan(t).Reference(), catalogueBoundPlan(t).Reference()}
 	for name, tc := range map[string]struct {

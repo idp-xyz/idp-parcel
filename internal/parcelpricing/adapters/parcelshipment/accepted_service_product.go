@@ -10,7 +10,7 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// AcceptedServiceProducts 实现 ppports.AcceptedServiceProductView：正式 SELL 评价按包裹读覆盖它的已接受委托申报的服务产品（ADR-0378
+// AcceptedServiceProducts 实现 ppports.AcceptedServiceProductView：正式 SELL 评价按包裹读覆盖它的已接受委托申报的服务产品（ADR-0382
 // 决定三）。只翻译不判断。
 type AcceptedServiceProducts struct {
 	products psports.AcceptedServiceProductView

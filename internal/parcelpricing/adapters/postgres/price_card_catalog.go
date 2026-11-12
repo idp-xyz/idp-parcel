@@ -47,7 +47,7 @@ type priceCardRow struct {
 	effectiveTo                                    *time.Time
 	canonicalization, digest, sourceSHA            string
 	snapshot                                       []byte
-	// serviceProducts 是卡声明的适用服务产品（ADR-0378 决定四），空即不声明。
+	// serviceProducts 是卡声明的适用服务产品（ADR-0382 决定四），空即不声明。
 	serviceProducts []string
 }
 
@@ -75,7 +75,7 @@ func (row priceCardRow) namesProduct(product domain.ServiceProductReference) boo
 	return false
 }
 
-// tierForProduct 是 ADR-0378 决定二的指名优先：时点选得中的各行里，先取指名这个产品的那一层；一张都没有才取不声明产品
+// tierForProduct 是 ADR-0382 决定二的指名优先：时点选得中的各行里，先取指名这个产品的那一层；一张都没有才取不声明产品
 // 的那一层。指名了别的产品的行哪一层都不进。零值产品（没申报）只有不声明的那一层。层内几行怎么答由调用方各按自己的口径：
 // 在用解析多于一行即适用冲突，试算的卡集照旧只拦同一方案两版。ResolveInForce 与 LoadApplicable 都经这一处取层，同一份申报在
 // 两边才落在同一层。
@@ -224,7 +224,7 @@ func (catalog *PriceCards) Register(
 // 隔离在查询谓词上（BUY 的册面不进 SELL 的答案）；选版按此刻的选用区间含 asOf——发布时的
 // [effective_from, effective_to) 在 SQL 里预筛，册上的截止与退役由 selectablePriceCardRow 折进来
 // （ADR-0234），与 ResolveInForce 同一口径：试算答适用冲突时要回头问那一口要候选，两口折法不同就会
-// 互相对不上。产品这一维先按 ADR-0378 的指名优先取层（tierForProduct，与 ResolveInForce 同一处），层内照旧是
+// 互相对不上。产品这一维先按 ADR-0382 的指名优先取层（tierForProduct，与 ResolveInForce 同一处），层内照旧是
 // 试算的卡集：不同方案并列各评各的（ADR-0152），只有同一方案两版同时适用才交回错误。读回逐行经领域整图重验
 // （含按规范化版本重算内容摘要自校），再与比对列交叉核——列与快照分岔说明行被改过。
 func (catalog *PriceCards) LoadApplicable(

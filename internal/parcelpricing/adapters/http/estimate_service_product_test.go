@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// 试算载荷的 serviceProduct（ADR-0378 决定二、三）：可缺，缺席即只看不声明产品的卡；有值必须立得成服务产品引用，立不住是畸形
+// 试算载荷的 serviceProduct（ADR-0382 决定二、三）：可缺，缺席即只看不声明产品的卡；有值必须立得成服务产品引用，立不住是畸形
 // 请求（400），不是零值。
 func TestEstimatePayloadTranslatesTheOptionalServiceProduct(t *testing.T) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")
@@ -44,7 +44,7 @@ func TestEstimatePayloadTranslatesTheOptionalServiceProduct(t *testing.T) {
 	}
 }
 
-// 别的方向带 serviceProduct 是畸形请求（ADR-0378 决定一：只有售价卡按产品选），答 400，不悄悄丢掉。
+// 别的方向带 serviceProduct 是畸形请求（ADR-0382 决定一：只有售价卡按产品选），答 400，不悄悄丢掉。
 func TestAServiceProductOnANonSellEstimateIsMalformed(t *testing.T) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")
 	if err != nil {

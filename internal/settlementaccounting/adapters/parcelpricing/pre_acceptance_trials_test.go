@@ -274,7 +274,7 @@ func TestPricingCellsStaySeparateAndUndecidedIsUnavailable(t *testing.T) {
 
 	unreachable, err := ppapplication.NewFormPreAcceptanceEstimatesHandler(ppapplication.FormPreAcceptanceEstimatesDeps{
 		PriceCards: trialCardDouble{err: errors.New("price card register unreachable")},
-		// 申报要读得到：选卡按这一版申报的服务产品问（ADR-0378 决定三），读不到申报就停在选卡之前。
+		// 申报要读得到：选卡按这一版申报的服务产品问（ADR-0382 决定三），读不到申报就停在选卡之前。
 		Declarations: trialDeclarationDouble{declaration: twoParcels(t), found: true},
 		Estimates:    mustPlanGiven(t),
 		Evidence:     ppdomain.EvidenceSynthetic,

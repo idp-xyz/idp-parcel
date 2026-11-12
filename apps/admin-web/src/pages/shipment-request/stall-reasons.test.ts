@@ -67,7 +67,7 @@ test('处理尝试上的结算细原因（不带前缀）查同一张 `SA-` 表�
   deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').priceCardSide, false);
   deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').estimate, true);
   deepEqual(settlementReasonOf('CONTROL_POLICY_NOT_CONFIGURED').estimate, false);
-  // 价卡一侧整份钉住（ADR-0380 决定一）：多一种就会把人指去价格表登一张解不开它的卡，少一种就少给一条该给的路。
+  // 价卡一侧整份钉住（ADR-0383 决定一）：多一种就会把人指去价格表登一张解不开它的卡，少一种就少给一条该给的路。
   deepEqual(
     knownSettlementStallCodes.filter((code) => settlementReasonOf(code.replace(/^SA-/, '')).priceCardSide).sort(),
     [

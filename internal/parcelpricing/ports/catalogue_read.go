@@ -58,7 +58,7 @@ type PriceCardCatalogueRow struct {
 	RetiredAt            time.Time
 	HasRetirement        bool
 	SuccessorVersion     string
-	// ServiceProducts 是卡声明的适用服务产品（ADR-0378 决定一），按标识升序；空即不声明。
+	// ServiceProducts 是卡声明的适用服务产品（ADR-0382 决定一），按标识升序；空即不声明。
 	ServiceProducts []string
 }
 

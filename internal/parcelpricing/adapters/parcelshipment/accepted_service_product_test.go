@@ -10,7 +10,7 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件证消费侧适配器 AcceptedServiceProducts 与 SubmissionDeclarations 把申报的服务产品译成计价的产品引用（ADR-0378 决定三）：值照搬；没申报是零值；写成计价引用立不起来的值
+// 本文件证消费侧适配器 AcceptedServiceProducts 与 SubmissionDeclarations 把申报的服务产品译成计价的产品引用（ADR-0382 决定三）：值照搬；没申报是零值；写成计价引用立不起来的值
 // （首尾空白）任何一张卡都指名不了它，折成零值——与没申报落在同一层；读面坏了照报。
 
 type acceptedProductViewDouble struct {

@@ -596,7 +596,7 @@ func formAdoptedBasis(
 // 转移被聚合拒绝（已越过决定边界、任务已停）时原因照交不改：那份委托已经不在`已提交`的判断路上，
 // 没有等待态要落，也没有队列条目要保；本轮真实停在哪一步仍由原因说出来。
 //
-// 等待态落了库时一并交回这一版申报的服务产品（ADR-0380 决定三）：落库的处理尝试要记它，而委托此刻就在手上，
+// 等待态落了库时一并交回这一版申报的服务产品（ADR-0383 决定三）：落库的处理尝试要记它，而委托此刻就在手上，
 // 不经结算与计价转交。其余几种结局不交——内部重试那一路回滚，记了也不留；没落等待的那一份不在等登记。
 func awaitOperatorRegistration(
 	ctx context.Context,
@@ -681,7 +681,7 @@ func awaitCustomerSupplement(
 	return stall, judged.RequestedServiceProduct(), nil
 }
 
-// attemptDetail 是处理尝试在原因、续办方、续办引用、时刻之外另记的几格（ADR-0380 决定三；ADR-0381 决定四）。
+// attemptDetail 是处理尝试在原因、续办方、续办引用、时刻之外另记的几格（ADR-0383 决定三；ADR-0381 决定四）。
 // 零值即都没有：结算没答未形成、或这一轮不是那几种停法，都不代拟。
 type attemptDetail struct {
 	settlementReason domain.SettlementNotFormedReason
@@ -698,7 +698,7 @@ type attemptDetail struct {
 //
 // 续办路径由原因导出，不在这里给定值：谁能补上这个缺口是原因自带的属性，写死在记录处会让
 // 同一个原因在不同调用点走不同路径。版本随记录落下：委托详情的「上次处理」读当前这一版任务的
-// 最近一条（ADR-0380 决定四），续办引用虽由版本派生，却是摘要、读不回来。
+// 最近一条（ADR-0383 决定四），续办引用虽由版本派生，却是摘要、读不回来。
 func recordAttempt(
 	ctx context.Context,
 	recorder ports.AcceptanceJudgmentRecorder,

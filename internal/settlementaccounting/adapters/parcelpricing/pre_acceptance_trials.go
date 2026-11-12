@@ -112,7 +112,7 @@ func trialGapsOf(estimates []ppapplication.PreAcceptanceParcelEstimate) []saport
 	return gaps
 }
 
-// serviceProductOf 取选卡用的服务产品（ADR-0379 决定一）：每件评价的输入快照都记着它（ADR-0378 决定三），一份估价只选一张卡、按一个
+// serviceProductOf 取选卡用的服务产品（ADR-0379 决定一）：每件评价的输入快照都记着它（ADR-0382 决定三），一份估价只选一张卡、按一个
 // 产品选，各件本该相同。各件不同时不记——不挑一个顶，也不报错：产品只作留痕，补记不得挡住一份已经形成的估价。
 func serviceProductOf(estimates []ppapplication.PreAcceptanceParcelEstimate) string {
 	product := ""

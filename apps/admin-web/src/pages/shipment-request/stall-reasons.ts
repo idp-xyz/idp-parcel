@@ -2,7 +2,7 @@
 // 词表跟不跟得上 Go 侧的取值，由 stall-reasons.contract.test.ts 对着 Go 源核。
 //
 // 任务上记的是小包托运编排给的未决原因原词（application 包的 JudgmentPendingReason），财务控制那一步停下时是
-// FINANCIAL_CONTROL_* 那一族。结算答的细原因另在一格（lastAttemptSettlementReason，不带前缀，ADR-0380 决定三）；它与适配器
+// FINANCIAL_CONTROL_* 那一族。结算答的细原因另在一格（lastAttemptSettlementReason，不带前缀，ADR-0383 决定三）；它与适配器
 // 写进停因码时加了 `SA-` 的那一族是同一组码，查同一张表，免得两份词表各自漂。
 //
 // 认得的译成中文，认不得的照原码——页面落后于服务端时宁可露出原码，也不把它并进某个认得的说法。
@@ -13,7 +13,7 @@ interface StallWords {
   financialControl?: true;
   /** 停在结算估价那一口（采用册、试算、留痕与合计各格）：细原因前说「估价没形成」，不笼统说财务控制没形成。 */
   estimate?: true;
-  /** 登一张价卡解得开（ADR-0380 决定一）：等运营登记时说清登什么，链到价格表。 */
+  /** 登一张价卡解得开（ADR-0383 决定一）：等运营登记时说清登什么，链到价格表。 */
   priceCardSide?: true;
 }
 

@@ -24,7 +24,7 @@ func internalAttempt(t *testing.T, reason string, at time.Time) domain.Processin
 	return attempt
 }
 
-// Covers: ADR-0380 决定三——处理尝试在原因、续办方、续办引用、时刻之外另记结算的未形成原因与这一版申报的服务产品；
+// Covers: ADR-0383 决定三——处理尝试在原因、续办方、续办引用、时刻之外另记结算的未形成原因与这一版申报的服务产品；
 // 两格都可缺，缺即那一轮没有，不代拟。
 func TestAProcessingAttemptCarriesTheSettlementReasonAndTheServiceProductOnlyWhenGiven(t *testing.T) {
 	bare := internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt)

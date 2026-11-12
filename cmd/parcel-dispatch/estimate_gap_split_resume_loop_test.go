@@ -110,7 +110,7 @@ func TestDeclarationGapsStallForCustomerSupplementAndResumeOnTheSupplementedVers
 		t.Fatalf("补件队列 = %+v, want 恰好这一份委托", queue)
 	}
 	// 处理尝试：待判原因与续办方用受控补充既有语言，结算原因码、申报产品照票 23 的两格，计价缺项码原样去重
-	// （ADR-0380 决定三；ADR-0381 决定四）。
+	// （ADR-0383 决定三；ADR-0381 决定四）。
 	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
 		WHERE reason_ref = 'CUSTOMER_SUPPLEMENT_PENDING' AND resume_path = 'CUSTOMER_SUPPLEMENT'
 		  AND settlement_reason = 'ESTIMATE_DECLARATION_INCOMPLETE' AND service_product = '`+pricingResumeProduct+`'
