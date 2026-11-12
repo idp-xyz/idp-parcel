@@ -1,8 +1,8 @@
 # 22 受理任务记下估价没形成的结算原因
 
 Category: enhancement
-Status: needs-triage
-Blocked by: 无
+Status: in-progress
+Blocked by: 23、24（「要定的」两项已由 [ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 定下）
 
 依据：ADR-0379 决定三与越权风险点 6；票 21 实现时发现。
 
@@ -20,3 +20,12 @@ Blocked by: 无
 ## 不做的
 
 结算另存停因（ADR-0379 否决的候选）。
+
+## 决定（2026-11-11）
+
+按头部系统的做法定，写成 [ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md)：报不出价时订单上写明原因，原因分给该动手的人，配好或补好之后接着走。
+
+- 摸代码时多发现两处：价卡一侧答不出的估价今天走内部重试、回滚不留痕、价卡登上之后也没有续办；委托详情的「上次处理」读一份没有生产写入的列表。
+- 价卡一侧答不出的（没有在用价卡、价卡适用冲突、试算没有合计、币种对不上、合计不为正、某件为负）改等运营登记，计价「参数已登记」后按租户重驱。
+- 等待落库的处理尝试另记结算原因与这一版申报的服务产品；委托详情从处理尝试落处读。
+- 申报不全该等客户补充，另立票 25。
