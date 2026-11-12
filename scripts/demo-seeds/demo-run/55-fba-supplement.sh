@@ -8,8 +8,9 @@
 # 接受之后再看售价（票 declared-goods-lines/17；ADR-0378）：同一计价范围 SYN-SCOPE-01 里两张售价卡各计各的产品——指名 FBA
 # 产品的 SYN-PLAN-CN-SG-FBA-01 逐箱按公斤计价、不收首重，不声明产品的 SYN-PLAN-CN-SG-01 接其余产品。断言两条看得见的路：
 # 试算（同一只箱子按两个产品各算一次，答复带选卡用的产品与解释）与正式 SELL 评价（FBA 第 1 箱与快递小包各收寄一次，
-# 新形成的客户费用经评价号对到价卡的内容摘要）。接受前估价也走同一套两层选卡，但它用了哪张卡今天没有读口——结算的
-# 估价留痕只写不读——本段不断言它。售价仍逐件评价，按整票汇总计费重的卖法表达不了（ADR-0378 越权风险点 8）。
+# 新形成的客户费用经评价号对到价卡的内容摘要）。接受前估价走同一套两层选卡，经结算的估价留痕读口按委托读回（ADR-0379）：
+# 判过的每一版各一份，核用的卡、选卡用的产品、逐件明细与两本账上的占用。售价仍逐件评价，按整票汇总计费重的卖法表达不了
+# （ADR-0378 越权风险点 8）。
 # 平台、平台货件号与箱标号全是 SYN- 合成值，证据只记 S。每跑一次先补一笔余额、多两票委托；
 # 标识前缀都带 55（SYN-ACCESS-FBA55-、SYN-FBA55-、SYN-CTN55- 等），与 50 那一段的不相撞。
 #
@@ -122,6 +123,7 @@ step "提交快递小包（首方客户令牌）" "$CT" POST /v1/shipment-reques
 SMALL_REQ="$(jget "$LAST" shipmentRequestId)"
 SMALL_DOC="$(jget "$LAST" documentNumber)"
 SMALL_PARCEL="$(jget "$LAST" parcels.0.parcelId)"
+SMALL_VERSION="$(jget "$LAST" submissionVersionId)"
 [[ -n "$SMALL_PARCEL" ]] || { printf '[失败] 快递小包的提交回执里没有 parcels.0.parcelId：\n' >&2; cat "$LAST" >&2; exit 1; }
 
 # 受理判断在 dispatch 下一拍。判过一轮的读面信号有三种：委托离开已提交；任务不在跑了；或查阅面列出了缺项——等受控补充时
@@ -264,6 +266,54 @@ PY
 FBA_CARD_DIGEST="${CARD_DIGESTS% *}"
 EXPRESS_CARD_DIGEST="${CARD_DIGESTS#* }"
 printf '%-34s → SYN-PLAN-CN-SG-FBA-01 指名 SYN-PROD-CN-SG-FBA（PPC-7）；SYN-PLAN-CN-SG-01 不声明产品，同在 SYN-SCOPE-01\n' "价卡目录"
+
+# 接受前估价：结算按委托交出每次受理前估价的留痕（ADR-0379）。演示账户的受理前财务控制策略 SYN-FIN-CONTROL-01 先预付冻结、
+# 再信用检查，两条都要过，所以每一版估价在两本账上各占一笔，冻结在前：资金冻结与信用暴露。被接受的那一版占着（冻结 HELD、
+# 暴露 RECORDED）——后面收寄形成的预估客户费用不转出它们，转出在费用确认时；FBA 货件补充前那一版被新版本换下，两笔都已释放。
+estimates_of() { # $1 委托 $2 标签 $3 应选的卡 $4 应带的产品 $5 件数 $6 「版本=冻结状态/暴露状态」，逗号分隔，按提交先后
+  step "读接受前估价 ${2}" "$OP" GET "/settlement-pre-acceptance-estimates?shipmentRequest=$1" - 200:PRE_ACCEPTANCE_ESTIMATES_LISTED >/dev/null
+  python3 - "$LAST" "$2" "$3" "$4" "$5" "$6" <<'PY'
+import json, sys
+estimates = json.load(open(sys.argv[1], encoding="utf-8")).get("estimates", [])
+label, plan, product, count = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+expected = [item.split("=", 1) for item in sys.argv[6].split(",")]
+by_version = {}
+for estimate in estimates:
+    by_version.setdefault(estimate.get("submissionVersion"), []).append(estimate)
+problems = []
+if sorted(by_version) != sorted(version for version, _ in expected) or any(len(rows) != 1 for rows in by_version.values()):
+    problems.append(f"估价按版本 {json.dumps({v: len(r) for v, r in by_version.items()})}，要判过的每一版恰一份："
+                    + "、".join(version for version, _ in expected))
+for index, (version, statuses) in enumerate(expected, start=1):
+    rows = by_version.get(version) or [{}]
+    estimate = rows[0]
+    parcels = estimate.get("parcels") or []
+    occupations = estimate.get("occupations") or []
+    total = int(estimate.get("totalAmount") or 0)
+    want = [("FUNDS_FREEZE", statuses.split("/")[0]), ("CREDIT_EXPOSURE", statuses.split("/")[1])]
+    got = [(o.get("kind"), o.get("status")) for o in occupations]
+    if (estimate.get("priceCard") or {}).get("plan") != plan or estimate.get("serviceProduct") != product:
+        problems.append(f"{version} 价卡 {estimate.get('priceCard')}、产品 {estimate.get('serviceProduct')}，要 {plan}、{product}")
+    if estimate.get("detailRecorded") is not True or len(parcels) != count \
+            or not all(p.get("pricingWeight") and p.get("chargeLines") for p in parcels):
+        problems.append(f"{version} 明细：detailRecorded={estimate.get('detailRecorded')}、{len(parcels)} 件，"
+                        f"要补记过明细、{count} 件、每件都有计价重量与费用行")
+    if sum(int(p.get("totalAmount") or 0) for p in parcels) != total:
+        problems.append(f"{version} 各件合计与整份合计 {total} 对不上")
+    if got != want or any(o.get("amount") != estimate.get("totalAmount") for o in occupations):
+        problems.append(f"{version} 占用 {got}，要 {want}，金额都是整份合计 {total}")
+    if not problems:
+        occupied = " ".join(f"{kind}/{status}" for kind, status in got)
+        print(f"{'接受前估价 ' + label + ' 第 ' + str(index) + ' 版':<34} → {version} plan={plan} product={product} "
+              f"total={total // 100}.{total % 100:02d} {estimate['currency']}（{count} 件，各件计价重量与费用行齐） {occupied}")
+if problems:
+    print(json.dumps(estimates, ensure_ascii=False), file=sys.stderr)
+    sys.exit(f"[失败] 接受前估价 {label}：" + "；".join(problems))
+PY
+}
+estimates_of "$FBA_REQ" "FBA 货件" SYN-PLAN-CN-SG-FBA-01 SYN-PROD-CN-SG-FBA 4 \
+  "${FBA_VERSION}=RELEASED/RELEASED,${NEW_VERSION}=HELD/RECORDED"
+estimates_of "$SMALL_REQ" "快递小包" SYN-PLAN-CN-SG-01 SYN-PROD-CN-SG-EXPRESS 1 "${SMALL_VERSION}=HELD/RECORDED"
 
 # 试算：同一只箱子（12.5 kg、60×40×40 cm，上海 200000 → 新加坡 018000）按两个产品各算一次。试算答复交出选卡用的产品与
 # 解释，是今天唯一读得到「按哪个产品选的卡」的面；正式评价的快照同样记着产品，但计价没有评价详情读口。
