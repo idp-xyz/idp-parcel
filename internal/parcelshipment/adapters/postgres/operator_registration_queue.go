@@ -22,11 +22,13 @@ import (
 var _ ports.OperatorRegistrationQueue = (*ShipmentRequests)(nil)
 
 // ListWaitingOnOperatorRegistration 按租户取回当前停在`等待运营登记`的委托，老的在前，同刻按
-// 委托标识正序。逐字段过领域构造函数：库里一行坏数据在这道门上暴露，不会变成一条看起来合法的
+// 委托标识正序；after 在场时只取它之后的行（行值比较，与排序同列，迁移 0038 把队列索引补齐了标识段）。
+// 逐字段过领域构造函数：库里一行坏数据在这道门上暴露，不会变成一条看起来合法的
 // 重驱命令（ADR-0028）。limit 非正是调用方编程错误，判据同 ListVisible。
 func (repository *ShipmentRequests) ListWaitingOnOperatorRegistration(
 	ctx context.Context,
 	tenant domain.TenantID,
+	after ports.OperatorRegistrationQueuePosition,
 	limit int,
 ) ([]ports.OperatorRegistrationQueueRecord, error) {
 	if limit < 1 {
@@ -37,6 +39,18 @@ func (repository *ShipmentRequests) ListWaitingOnOperatorRegistration(
 		return nil, fmt.Errorf("list operator registration queue: %w", err)
 	}
 
+	// 位置缺席即从队首取。行值比较只在有位置时拼进谓词：写成「参数为空或比较成立」会让规划器拿不准走不走索引。
+	args := []any{
+		tenant.String(),
+		uint8(domain.ResumeByOperatorRegistration),
+		uint8(domain.ShipmentRequestSubmitted),
+		limit,
+	}
+	keyset := ""
+	if after.ShipmentRequestID.String() != "" {
+		keyset = ` AND (submitted_at, shipment_request_id) > ($5, $6)`
+		args = append(args, after.SubmittedAt.UTC(), after.ShipmentRequestID.String())
+	}
 	rows, err := querier.Query(ctx,
 		`SELECT customer_account_id, source, source_request_key,
 		        shipment_request_id, current_submission_version_id,
@@ -44,13 +58,10 @@ func (repository *ShipmentRequests) ListWaitingOnOperatorRegistration(
 		   FROM parcel_shipment.shipment_request
 		  WHERE tenant_id = $1
 		    AND task_waiting_on = $2
-		    AND state = $3
+		    AND state = $3`+keyset+`
 		  ORDER BY submitted_at ASC, shipment_request_id ASC
 		  LIMIT $4`,
-		tenant.String(),
-		uint8(domain.ResumeByOperatorRegistration),
-		uint8(domain.ShipmentRequestSubmitted),
-		limit,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list operator registration queue: %w", err)

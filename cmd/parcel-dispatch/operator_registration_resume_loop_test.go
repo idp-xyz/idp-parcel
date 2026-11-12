@@ -44,8 +44,11 @@ type operatorRegistrationLoopFixture struct {
 	estimateAdoptionGate *psinbox.OperatorRegistrationCompletedConsumer
 	// pricingParameterGate 是同一条链上收计价「参数已登记」的那一份（ADR-0380 决定二）。
 	pricingParameterGate *psinbox.OperatorRegistrationCompletedConsumer
-	submittedHandoff     *pspostgres.OutboxShipmentRequestSubmittedHandoff
-	registration         *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
+	// chain 与 inboxStore 留给要换页大小另装一扇门的用例：门与上面几扇同链、同账本。
+	chain            *psapplication.AdvanceAcceptanceChainHandler
+	inboxStore       *inbox.Store
+	submittedHandoff *pspostgres.OutboxShipmentRequestSubmittedHandoff
+	registration     *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
 }
 
 const operatorRegistrationResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-operator-registration"
@@ -140,6 +143,8 @@ func newOperatorRegistrationLoopFixtureWith(
 		settlementAccountGate: settlementAccountGate,
 		estimateAdoptionGate:  estimateAdoptionGate,
 		pricingParameterGate:  pricingParameterGate,
+		chain:                 chain,
+		inboxStore:            inboxStore,
 		submittedHandoff:      submittedHandoff,
 		registration:          registration,
 	}
@@ -266,7 +271,7 @@ func (fixture *operatorRegistrationLoopFixture) listRegistrationQueue(
 	ctx context.Context,
 ) []psports.OperatorRegistrationQueueRecord {
 	t.Helper()
-	records, err := fixture.requests.ListWaitingOnOperatorRegistration(ctx, fixture.identity.TenantID(), 10)
+	records, err := fixture.requests.ListWaitingOnOperatorRegistration(ctx, fixture.identity.TenantID(), psports.OperatorRegistrationQueuePosition{}, 10)
 	if err != nil {
 		t.Fatalf("列等待运营登记队列：%v", err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // 本文件对真实 PostgreSQL 证「等待运营登记」队列读口（ADR-0094 Decision 五，票
@@ -39,7 +40,7 @@ func TestOperatorRegistrationQueueListsParkedSubmittedRequestsOldestFirst(t *tes
 		t.Fatalf("回拨提交时间：%v", err)
 	}
 
-	records, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, 10)
+	records, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, ports.OperatorRegistrationQueuePosition{}, 10)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -71,12 +72,23 @@ func TestOperatorRegistrationQueueListsParkedSubmittedRequestsOldestFirst(t *tes
 	}
 
 	// 分页可重复：limit 1 取到的正是老的那一份。
-	page, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, 1)
+	page, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, ports.OperatorRegistrationQueuePosition{}, 1)
 	if err != nil {
 		t.Fatalf("list limit 1: %v", err)
 	}
 	if len(page) != 1 || page[0].ShipmentRequestID.String() != "REQ-ORQ-EARLIER" {
 		t.Fatalf("page = %v, want just REQ-ORQ-EARLIER", page)
+	}
+	// 按位置往后取：从老的那一份之后起，取到的正是后一份；再往后为空。
+	next, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, page[0].Position(), 1)
+	if err != nil {
+		t.Fatalf("list after the first: %v", err)
+	}
+	if len(next) != 1 || next[0].ShipmentRequestID.String() != "REQ-ORQ-LATER" {
+		t.Fatalf("next = %v, want just REQ-ORQ-LATER", next)
+	}
+	if rest, err := repository.ListWaitingOnOperatorRegistration(ctx, tenant, next[0].Position(), 1); err != nil || len(rest) != 0 {
+		t.Fatalf("rest = %v（err=%v），want 空", rest, err)
 	}
 }
 
@@ -88,7 +100,7 @@ func TestOperatorRegistrationQueueIsScopedByTenantAndSubmittedState(t *testing.T
 
 	parkOnOperatorRegistration(t, transactor, ctx, repository, "orq-scope", "REQ-ORQ-SCOPE")
 
-	others, err := repository.ListWaitingOnOperatorRegistration(ctx, psTenant(t, "tenant-2"), 10)
+	others, err := repository.ListWaitingOnOperatorRegistration(ctx, psTenant(t, "tenant-2"), ports.OperatorRegistrationQueuePosition{}, 10)
 	if err != nil {
 		t.Fatalf("list other tenant: %v", err)
 	}
@@ -104,7 +116,7 @@ func TestOperatorRegistrationQueueIsScopedByTenantAndSubmittedState(t *testing.T
 		uint8(domain.ShipmentRequestWithdrawn)); err != nil {
 		t.Fatalf("裸写状态：%v", err)
 	}
-	stale, err := repository.ListWaitingOnOperatorRegistration(ctx, psTenant(t, "tenant-1"), 10)
+	stale, err := repository.ListWaitingOnOperatorRegistration(ctx, psTenant(t, "tenant-1"), ports.OperatorRegistrationQueuePosition{}, 10)
 	if err != nil {
 		t.Fatalf("list after state change: %v", err)
 	}
@@ -116,7 +128,7 @@ func TestOperatorRegistrationQueueIsScopedByTenantAndSubmittedState(t *testing.T
 // Covers: limit 非正是调用方编程错误，判据同 ListVisible——不静默取空页。
 func TestOperatorRegistrationQueueRejectsANonPositiveLimit(t *testing.T) {
 	repository, _, _ := newShipmentRequests(t)
-	if _, err := repository.ListWaitingOnOperatorRegistration(t.Context(), psTenant(t, "tenant-1"), 0); err == nil {
+	if _, err := repository.ListWaitingOnOperatorRegistration(t.Context(), psTenant(t, "tenant-1"), ports.OperatorRegistrationQueuePosition{}, 0); err == nil {
 		t.Fatal("limit 0 被静默接受了")
 	}
 }

@@ -252,7 +252,8 @@ func (handler *AdvanceFinancialControlJudgmentHandler) adoptDispositions(
 }
 
 // undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。detail 是处理尝试另记的
-// 两格，只在等运营登记那一格的停顿上在场。
+// 两格：结算原因在控制端口答了未形成、且原因没换成保存那一格时都带着，服务产品只在等运营登记的等待落了库时才有。
+// 内部重试那几停也带着结算原因，不另清：那一轮整笔回滚，记下的尝试随之不留（ADR-0380 决定三「只在落库的尝试上记」）。
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,

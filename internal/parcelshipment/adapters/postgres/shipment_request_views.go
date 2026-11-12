@@ -550,6 +550,9 @@ func taskViewRecords(
 // 「这一版」凭版本列认；迁移 0038 之前落下的旧行没有版本，按任务建立时刻圈定——旧任务的尝试都早于新版本立起新任务的
 // 那一刻。最近按发生时刻取，同一时刻再按续办引用定先后：（委托、续办引用、发生时刻）是主键，两条并列时总有一个确定的
 // 答案，不随扫描顺序变。
+//
+// 每份委托各取一条即止（LATERAL 里两支各 LIMIT 1，走迁移 0038 的 acceptance_processing_attempt_latest）：每封售价卡的
+// 「参数已登记」都给每份仍在等的委托添一条尝试，按全部尝试去重排序会随停等的轮数无界地变慢。
 func lastAttempts(
 	ctx context.Context,
 	querier bentopg.Querier,
@@ -568,16 +571,30 @@ func lastAttempts(
 		established[index] = source.task.EstablishedAt.UTC()
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT DISTINCT ON (task.shipment_request_id)
-		        task.shipment_request_id, attempt.reason_ref, attempt.resume_path, attempt.continuation_ref,
-		        attempt.attempted_at, attempt.settlement_reason, attempt.service_product
+		`SELECT task.shipment_request_id, latest.reason_ref, latest.resume_path, latest.continuation_ref,
+		        latest.attempted_at, latest.settlement_reason, latest.service_product
 		   FROM unnest($2::text[], $3::text[], $4::timestamptz[]) AS task(shipment_request_id, submission_version, established_at)
-		   JOIN parcel_shipment.acceptance_processing_attempt AS attempt
-		     ON attempt.tenant_id = $1
-		    AND attempt.shipment_request_id = task.shipment_request_id
-		    AND (attempt.submission_version = task.submission_version
-		         OR (attempt.submission_version IS NULL AND attempt.attempted_at >= task.established_at))
-		  ORDER BY task.shipment_request_id, attempt.attempted_at DESC, attempt.continuation_ref DESC`,
+		  CROSS JOIN LATERAL (
+		        SELECT candidate.*
+		          FROM ((SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product
+		                   FROM parcel_shipment.acceptance_processing_attempt
+		                  WHERE tenant_id = $1
+		                    AND shipment_request_id = task.shipment_request_id
+		                    AND submission_version = task.submission_version
+		                  ORDER BY attempted_at DESC, continuation_ref DESC
+		                  LIMIT 1)
+		                UNION ALL
+		                (SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product
+		                   FROM parcel_shipment.acceptance_processing_attempt
+		                  WHERE tenant_id = $1
+		                    AND shipment_request_id = task.shipment_request_id
+		                    AND submission_version IS NULL
+		                    AND attempted_at >= task.established_at
+		                  ORDER BY attempted_at DESC, continuation_ref DESC
+		                  LIMIT 1)) AS candidate
+		         ORDER BY candidate.attempted_at DESC, candidate.continuation_ref DESC
+		         LIMIT 1
+		  ) AS latest`,
 		tenant.String(), requests, versions, established)
 	if err != nil {
 		return nil, fmt.Errorf("last processing attempts: %w", err)
