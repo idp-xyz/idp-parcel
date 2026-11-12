@@ -1,6 +1,6 @@
 # ADR-0336：七项确认事实随预估客户费用同笔落下；「有效交付已终局」是内置的确认依据，依据到了而这一户登了确认时点就当场确认
 
-Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的三件决定答「按你的建议开始吧」；票 product-strategy-boundary/22 第 1 笔，起因 psb/05「预走」停点 1。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：确认编排已装在 parcel-api，却永远走不到——七项确认事实只能按笔经受控登记口登，确认依据在生产上没有任何写入方。**取法**：形成预估客户费用时同笔从 SELL 请求与它指名的账户登七项事实；PS 终局信封与费用形成两头都给费用记「有效交付已终局」依据，这一户登了确认时点就当场确认；确认条件目录开受控登记口。
+Status: Accepted（2026-10-28，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-27 对会话提出的三件决定答「按你的建议开始吧」；票 product-strategy-boundary/22 第 1 笔，起因 psb/05「预走」停点 1。越权风险点待 SA owner 复核。）<!-- 索引注记 -->｜**入口**：确认编排已装在 parcel-api，却永远走不到——七项确认事实只能按笔经受控登记口登，确认依据在生产上没有任何写入方。**取法**：形成预估客户费用时同笔从 SELL 请求与它指名的账户登七项事实；PS 终局信封与费用形成两头都给费用记「有效交付已终局」依据，这一户登了确认时点就当场确认；确认条件目录开受控登记口。｜**部分停用**（按口解，2026-11-12）：其决定一「主要计费范围（取 SELL 请求的计价范围）」已由 [ADR-0380](./0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 按口解——SELL 请求带的是合同声明的有序销售价格来源时，主要计费范围取评价实际用上的那一个来源；越权风险点 1「首发每户一个计价范围，读法相同。」的前提随之改变，一户可以不止一个范围。**适用场景**：只限正文带销售价格约定的客户合同版本；其余照原句。其余各条不变
 Date: 2026-10-28
 
 ## Context
@@ -61,3 +61,4 @@ Date: 2026-10-28
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)：「费用形成与证据」
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-217`–`220`
 - 票 [product-strategy-boundary/22](../../.scratch/product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)
+- [ADR-0380](./0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)：前向指针——按口解决定一「主要计费范围（取 SELL 请求的计价范围）」（限正文带销售价格约定的客户合同版本）

@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)（「这位客户用这套价」那一步是客户合同版本的销售价格来源，见 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)）
+Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [19](./19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md)（完成判据里「这位客户的一件包裹按新卡形成销售评价」要结算读合同的列表）；票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)（「这位客户用这套价」那一步是客户合同版本的销售价格来源，见 [ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)）
 相关：票 [02](./02-price-card-preview-and-publication-show-overlap-with-registered-versions.md)（没有它，发布时看不到同范围已有在册版本）
 地盘：至少有 `internal/partycommercial`（读时派生）、`internal/partycommercial/adapters/parcelpricing`、`internal/parcelpricing`（发布记下依据）、`apps/admin-web/src/pages/party`
 
@@ -20,7 +20,7 @@ Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [16](./16
 
 ## 要做的
 
-下面按 ADR 草案第二稿列。落在哪一处等票 15。
+下面按 ADR 草案第二稿列。落在哪一处见 Comments 里 2026-11-12 讲 ADR-0380 的那一条。
 
 1. **不新立申请对象，不新立批准。** 接受之后，所引的若是草稿，由运营对它发起现有的发布；所引的已是在册价卡时没有这一步。
 2. **发布记下依据**：发布多一格可缺的引用，指名那条接受。
@@ -34,7 +34,7 @@ Blocked by: 票 [12](./12-customer-acceptance-of-a-quotation.md)；票 [16](./16
 
 - 客户要求里的「申请」若本身要一道独立审批，与第 1 条相抵。这是 ADR 草案的越权风险点之一，由票 08 的评审定。
 - 第 5 条的门没登记时不设门，与审批职责规则「没登记不放行」方向相反。理由是今天没有任何规则要求发布以接受为前提，没登记就拦会让现有的价卡发布全部停住。它算不算红线里要拒绝的默认值，由票 08 的评审定；票 [03](./03-signing-evidence-on-contract-and-agreement-versions.md) 的签署证据门是同一个问题，两处要一个口径（ADR 草案越权风险点里讲这道门的那一条）。
-- 第 5 条的门放在哪一处。放在计价的发布口，计价要读参与方与商业才判得了；放在参与方与商业一侧，要由它去发起发布。等票 15。
+- 第 5 条的门放在哪一处。放在计价的发布口，计价要读参与方与商业才判得了；放在参与方与商业一侧，要由它去发起发布。ADR-0380 没有定，归票 08 的评审。
 - 所引的价格内容被别人直接发布、没有带依据时，报价读面怎么答。
 
 ## 三类

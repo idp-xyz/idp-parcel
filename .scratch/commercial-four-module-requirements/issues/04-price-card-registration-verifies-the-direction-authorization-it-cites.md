@@ -19,7 +19,7 @@ Blocked by: 无。原来等票 [15](./15-one-authority-for-which-price-a-custome
 
 ## 要做的
 
-下面是这条引用留下来时的形态。票 15 若把它撤掉，本票随之关闭。
+下面是这条引用留下来时的形态。票 15 的结论（ADR-0380）没有撤它。
 
 1. **登记时核对**：价卡入册之前核它引用的授权——在 `party-commercial` 是一版已发布的授权规则；登记时刻落在它的有效区间内，且它没被收尾；它授权的方向与价卡的方向相同。
 2. **门只有一处**：放在价卡登记用例里，登记口、草稿发布与受控命令行共用，位置照 [ADR-0352](../../../docs/adr/0352-registering-a-price-card-in-a-canonicalization-newer-than-the-base-one-needs-an-explicit-deployment-switch-that-is-off-by-default.md) 决定一。

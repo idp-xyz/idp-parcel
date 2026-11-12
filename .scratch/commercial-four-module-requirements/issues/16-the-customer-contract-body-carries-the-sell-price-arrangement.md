@@ -18,7 +18,7 @@ Blocked by: 无
 2. **换规范化版本号**（[ADR-0267](../../../docs/adr/0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md)）。旧版本的合同照旧读得回、摘要不变，读出来是「没有销售价格约定」，不补默认。
 3. **录入、批准与发布面带上这一格**：在线口、受控批文与待批准发布的正文快照。批准与发布绑定的内容摘要随之包含它。
 4. **读面带出这一格**，供管理台（票 [20](./20-admin-web-contract-page-declares-sell-price-sources.md)）与闭包固定（票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md)）用。
-5. **不核范围在计价一侧有没有卡。** 参与方与商业不读计价的册（ADR-0380 决定一末条）。
+5. **不核范围在计价一侧有没有卡。** 参与方与商业不读计价的册（ADR-0380 决定一「参与方与商业不核列表里的范围在计价一侧有没有卡」）。
 
 ## 要裁的
 

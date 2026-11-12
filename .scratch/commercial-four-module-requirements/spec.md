@@ -94,7 +94,7 @@ Q4 至 Q6 是用户自己的决定。
 | 10 | [已批准的价卡草稿可以撤下](./issues/10-an-approved-price-card-draft-has-no-way-to-be-withdrawn.md) | 09 | ready-for-agent |
 | 11 | [报价发出：登记报给谁、有效到何时，并导出对客价格表](./issues/11-quotation-is-sent-as-an-exported-rate-sheet.md) | 09、10、01 | ready-for-agent |
 | 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | ready-for-agent |
-| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、16 | ready-for-agent |
+| 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、16、19 | ready-for-agent |
 | 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
 | 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 已接受，实现拆成 16 至 21；非作者评审与进 `main` 待做） |
 | 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | draft |
