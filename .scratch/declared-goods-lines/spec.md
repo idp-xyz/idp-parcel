@@ -37,6 +37,9 @@ Status: in-progress
 | [15](./issues/15-the-declared-service-product-reaches-sell-card-selection.md) | 申报的服务产品进售价卡选卡：估价、正式评价与试算 | 14 | 后端 |
 | [16](./issues/16-admin-web-price-cards-show-and-take-service-products.md) | 管理台：价卡录入与查阅带适用产品，试算可选产品 | 14（模板一格；可并行写） | 前端 |
 | [17](./issues/17-demo-fba-product-is-priced-on-its-own-card.md) | 演示：FBA 产品用自己的售价卡（逐箱计价） | 14、15 | 种子与脚本 |
-| [18](./issues/18-the-pre-acceptance-estimate-trail-is-readable.md) | 受理前估价的留痕可读：用了哪张卡、按哪个产品（needs-triage） | — | 结算 + 管理台 |
+| [18](./issues/18-the-pre-acceptance-estimate-trail-is-readable.md) | 受理前估价的留痕可读：决定（ADR-0379） | 19–21 | 文档票 |
+| [19](./issues/19-the-estimate-trail-records-product-weight-and-lines-and-settlement-reads-it-by-shipment.md) | 估价留痕补记产品、计价重量与费用行，结算按委托交出读口 | — | 后端 |
+| [20](./issues/20-shipment-detail-shows-the-recorded-financial-control-conclusion.md) | 委托详情交出受理判断记下的财务控制结论 | — | 后端 |
+| [21](./issues/21-admin-shipment-detail-shows-pre-acceptance-financial-control.md) | 管理台运单详情显示「受理前财务控制」 | —（联调等 19、20） | 前端 |
 
 03 定下 API 形状之后，04、05、06、07 可以并行。

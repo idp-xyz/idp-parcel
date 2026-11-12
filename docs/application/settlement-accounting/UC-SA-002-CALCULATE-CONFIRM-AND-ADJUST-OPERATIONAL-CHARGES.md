@@ -124,6 +124,7 @@
 - 接受失败、拒绝、放弃或冻结依据失效时形成 `已释放`；接受已经成立但响应或事件投递失败时保留合法冻结并等待查询/补偿。
 - `已冻结 → 已扣费` 只在费用确认和业务关联条件满足时发生；最终费用高于冻结时完整形成费用并留下差额，不截断金额。
 - 合同明确“无财务控制”时保存商业不适用依据，不制造零金额冻结或虚假信用通过。
+- 估价留痕另记选卡用的服务产品、逐件计价重量与费用行，只作留痕；运营按委托读各提交版本的估价与它的冻结或信用暴露（状态、金额、时刻），不对客户交出。补记之前形成的留痕答「未记」（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)）。
 
 ## 一致性、幂等与并发
 
@@ -235,6 +236,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| 接受前财务控制：估价留痕补记服务产品、计价重量与费用行，按委托的运营读口（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)） | 留痕只记价卡、评价标识、版本清单与合计；没有任何读口交出留痕、冻结或信用暴露 | 票 declared-goods-lines/19 |
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 | 已接受委托下某件包裹取消或失败时，释放它在接受前占用里的份额（CONTEXT「取消或失败时显式释放」的包裹粒度） | 转出册与账本已能表达部分转出、余额可放；但 `parcel-shipment` 在委托已接受之后不再请求释放占用，没有触发口，该份额一直占着 | [ADR-0343](../../adr/0343-a-confirmed-charge-converts-its-parcels-pre-acceptance-occupation-in-the-confirming-transaction.md) 决定八 |
 | CONTEXT 费用来源里的仓储作业收费发生项，以及「`warehouse-fulfillment` 拥有仓储作业收费发生项」一条（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定七） | 未做：评价请求里没有按仓储作业收费发生项发起的 SELL 请求，也没有接它的消费门；计价那边为它立评价对象的 ADR 落地之前，也形成不了评价。规则层面另有三格没有来处：发生项不带接受时的商业解析，确认费用要固定的责任法人、结算相对方、结算账户、合同或责任依据与主要计费范围无处可取，不得按当前客户属性推断；内置确认依据只有包裹的`有效交付已终局`，仓储费用项目无依据可确认；发生项的更正版本怎样成为费用调整未定。代理仓与外包仓向租户收的费没有 BUY 侧来源事实，首版不做 | 仓配切片立票时承接，计价评价对象与结算发起、商业依据、确认依据的 ADR 先行 |
