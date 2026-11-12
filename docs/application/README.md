@@ -1,6 +1,6 @@
 # IDP Parcel 应用用例
 
-状态：PN-02 商业权威/接单/撤回、PN-03 初始路由/真实收寄/节点作业、PN-04 常规运输履约/逐包裹取消与终局、PN-06 通用追踪/客户视图/异常和 PN-07 通用运营结算用例已形成，关务控制域用例已有专项闭环，PN-09 仓配履约（首发之外的可选能力）的主数据与入库用例已写成、待实现；真实参数、联合验证和代码实现仍待按产品主线推进
+状态：PN-02 商业权威/接单/撤回、PN-03 初始路由/真实收寄/节点作业、PN-04 常规运输履约/逐包裹取消与终局、PN-06 通用追踪/客户视图/异常和 PN-07 通用运营结算用例已形成，关务控制域用例已有专项闭环，PN-09 仓配履约（首发之外的可选能力）的主数据、入库与库内用例已写成、待实现；真实参数、联合验证和代码实现仍待按产品主线推进
 
 本目录把已经确认的产品与领域规则组织成开发可执行的应用用例。应用用例描述参与者如何触发业务、各限界上下文如何协作、应用必须返回什么业务结果，以及如何验证实现；它不重新定义领域对象、业务规则或生命周期。
 
@@ -8,7 +8,7 @@
 
 当前用例数量不能代表产品核心优先级。`UC-NO-001`、`UC-TF-001`、`UC-VE-001` 和 `UC-SA-001` 分别只覆盖关务触发的节点、运输、异常和代垫协作；它们不能替代正常运营主链。PN-02 的 `UC-PC-001/002` 与 `UC-PS-001/002/005` 已补齐商业权威、唯一解析、接单和决定前撤回，PN-04 的 `UC-TF-003..007` 与 `UC-PS-004/006` 已补齐常规运输、收费发生事实、逐包裹取消/收寄后处置和包裹终局，PN-06 的 `UC-VE-002..008` 已补齐内部投影、普通客户追踪、ETA/缺口、异常案件、客户通知和证据索赔编排，PN-07 的 `UC-SA-002..007` 已补齐价格评价采用、调整所有权、对账纳入、供应商账单、真实收付映射、核销、经营结果和金额结算编排。`collection-remittance` 的 `UC-CR-001` 收拢代收指令、代收事实、分户账记账、差异事项与回汇批次的登记编排；它不属任何一个 PN 切片，COD 首发不在试点范围。
 
-`warehouse-fulfillment` 的 `UC-WF-*` 属 PN-09，是首发之外的可选能力（[ADR-0375](../adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md)），不进首发主链，也不是其他上下文用例的前提。已写成的是主数据与入库：仓、库区、库位与包材的登记，货主商品与仓测尺寸重量，入库预报，收货、收货差异与完结，待认领到货，建账导入；这些用例都还没有实现。
+`warehouse-fulfillment` 的 `UC-WF-*` 属 PN-09，是首发之外的可选能力（[ADR-0375](../adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md)），不进首发主链，也不是其他上下文用例的前提。已写成的是主数据、入库与库内：仓、库区、库位与包材的登记，货主商品与仓测尺寸重量，入库预报，收货、收货差异与完结，待认领到货，建账导入，上架、移库、补货与形态、状态转换，按指令加工、商品换标与开箱，冻结与库存查阅，盘点，库存差异与库存调整；这些用例都还没有实现。
 
 `parcel-pricing` 当前作为 PN-07 的内部纯计价前置能力，由 `UC-SA-002` 编排输入和消费评价；它不单独建立报价、合同或账务用例。后续只有在确认独立报价接受、锁价或外部计价服务责任后，才新增相应 `UC-PP-*` 用例。运营发起的试算不在此列：它不形成承诺、不进结算、不锁价，由 `UC-PP-001` 承担（[ADR-0152](../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定一收窄本句的适用场景）。
 
@@ -111,4 +111,9 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-WF-003` | [受理入库预报](./warehouse-fulfillment/UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；受理校验、同事务取单据号、告知各格的更新与留版、收货前撤回与运营代录已形成，单据号的类型代码与默认模板未定，仓的业务时区、编号规则与代录授予待租户提供 |
 | `UC-WF-004` | [确认收货并了结入库预报](./warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；收货确认即入账、不入账的货、收货差异的成份与货主结论（含货主本人取代代录的结论）、完结已形成，上架与入库作业收费发生项归后续用例，各仓的收货暂存库位与授予待租户提供 |
 | `UC-WF-005` | [登记、认领与处置待认领到货](./warehouse-fulfillment/UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；到货保全、认领与撤销、入账对到货的引用、按规则处置已形成，退件的入账归退货的用例，各仓的处置规则待租户提供 |
-| `UC-WF-006` | [建账导入](./warehouse-fulfillment/UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；提交校验、批准时重判与同笔入账已形成，批准与驳回的口归库存调整的用例，批准权限待租户提供 |
+| `UC-WF-006` | [建账导入](./warehouse-fulfillment/UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；提交校验、批准时重判与同笔入账已形成，批准与驳回的口在 UC-WF-011，批准职责规则待租户提供 |
+| `UC-WF-007` | [上架、移库、补货与形态、状态转换](./warehouse-fulfillment/UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；库内作业事实照记、取得走的部分入账、差额成库存差异与次品转良品的运营决定已形成，待出库库区的移动归出库的用例，各仓的库区与库位、授予待租户提供 |
+| `UC-WF-008` | [按指令加工与商品换标并开箱](./warehouse-fulfillment/UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；加工与商品换标指令的提交、撤回与作废，执行时整笔相抵入账，开箱按实点入账并比出收货差异已形成，客户面契约与收费发生项归后续用例，授予待租户提供 |
+| `UC-WF-009` | [冻结、解冻并查阅库存](./warehouse-fulfillment/UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；冻结的原子判定与解冻，库存账、占用、可用量与流水的读口已形成，预占与分配归出库的用例，仓的业务时区与授予待租户提供 |
+| `UC-WF-010` | [盘点](./warehouse-fulfillment/UC-WF-010-COUNT-STOCK.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；静盘的作业锁定、按库位的清点结果、完成时逐格比出库存差异与作废已形成，授予待租户提供 |
+| `UC-WF-011` | [处理库存差异并批准库存调整](./warehouse-fulfillment/UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；库存调整的提交，库存差异、库存调整与建账导入的批准与驳回，批准时重判与批准职责规则的登记已形成，批准职责规则与授予待租户提供 |
