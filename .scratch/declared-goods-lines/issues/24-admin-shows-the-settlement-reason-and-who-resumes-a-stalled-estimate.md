@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: in-progress
-Blocked by: 无（字段名在票 23 里钉死，可并行；联调等 23）
+Blocked by: 23（已提交，未进 main；同在分支 `feat/goods-details-admin`）
 
 依据：[ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 决定五；票 21 的停因译法（`shipment-request/stall-reasons.ts`）。
 
@@ -26,6 +26,7 @@ Blocked by: 无（字段名在票 23 里钉死，可并行；联调等 23）
 ## 完成记录（作者一侧，2026-11-11）
 
 - 提交：分支 `feat/admin-stall-reason-detail` 上的 `096ec1bb3` 与评审修订 `e6acc3f58`（基线 `cf9fdb50a`），全部改动在 `apps/admin-web/`，未推送、未进 main。后端（票 23）不在这棵树上，照钉死的字段名写，没联调。
+- 拣入：在 `feat/goods-details-admin` 上是 `b536b71e3` 与评审修订 `0f49f0556`，叠在票 23 之后。
 - 与票面不同的几处（含开工后协调方按评审改钉的）：
   - **续办方读 `lastAttemptResumePath`。** 开工时票面写「按 `lastAttemptContinuation`（续办方）」；实测于 `cf9fdb50a`，那一格是续办引用（由未决原因与范围派生的 `CONT-…` 串），说不出续办方，委托详情也没有交续办方的格。先按 Go 的 `JudgmentPendingReason.resumePath()` 从停因推过一版，评审改钉为后端另交 `lastAttemptResumePath`（取处理尝试落库的续办方），不从停因或续办引用推；现行做法只读这一格，缺席或认不得的词不说。
   - **价卡一侧那句的写法改钉**为「登记一张生效期覆盖提交时点的价卡后自动续办」（估价按提交的接收时点取卡，只从现在起生效的卡解不开），链到价格表 `#/price-card-catalog`，链接字是「去价格表」。
