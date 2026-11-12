@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress——2026-11-11 用户答「q6 全部激活」，子票 01 至 15 转 `ready-for-agent`；此前 needs-triage（子票全是 `draft`）。这些改动在分支 `cursor/commercial-four-module-requirements` 上，还没有进 `main`，见「与冻结清单的关系」。
 出处：2026-11-11 用户在 Cursor 会话里贴出一张四个模块的清单，问「我们的现有实现是这样的吗」。对照之后用户说「我没有方向了，基于现在的实现，你的专家做法呢」；会话建议不追这张表、只点名解冻毛利，并说明这张表的来源会改变结论。用户随后选定「这张表是客户或招标的要求，按它重排优先级」，再答「都要做」：逐条对照表、报价的 ADR 草稿与范围文档改动、规格和票。这张表在仓库与历史会话里查不到出处。同日稍后，会话请用户向对方确认四处口径，用户答「没有可问的人，分析，参考行业头部软件的做法」；会话查了公开文档后作答，用户选定把调研笔记与结论写进本目录。同日更晚，用户问「你作为国际小包业务和系统设计专家， 你觉得现在你的这个设计科学，专业，合理吗」；会话自查后答不完全，其中一处是给错了结论，并列出五处要改的。用户选定「按上面五条改分支：更正 Q4、缩小报价、写明毛利范围，并推送」。随后用户答「q1-q3 确认， q4重开， q5 首发， q6 全部激活」。各次改了什么记在文末「Comments」。
 
-切片：合同与报价属 PN-02，主责 `party-commercial`；价卡、计费与毛利属 PN-07，主责 `parcel-pricing` 与 `settlement-accounting`。非关务专项。三类归属写在各票。证据层级 `S`（演示租户）。
+切片：合同与报价属 PN-02，主责 `party-commercial`；价卡、计费与毛利属 PN-07，主责 `parcel-pricing` 与 `settlement-accounting`。非关务专项。三类归属写在各实现票的「三类」一节；票 08、09、15 只出决定与文档，三类由它们产出的 ADR 与用例写。证据层级 `S`（演示租户）。
 
 取证：钉 `11bfa1ffb`（`origin/main`，2026-11-11 用 `git ls-remote origin main` 当场确认）。**起草时的工作树不在这个提交上**：它停在分支 `codex/company-subject-profile`（`871f3cdd4`），当时 `git rev-list --count HEAD..origin/main` 为 750。本目录下的文件都照 `11bfa1ffb` 写，随后提交在从 `origin/main` 起的分支 `cursor/commercial-four-module-requirements` 上，没有进那条旧分支。起草收尾时远端已前进到 `a276ddae2`，这一段没有碰到本规格引的代码与文档句子（核法见[对照表](./compliance-matrix.md)开头）。同日稍后的增补（行业做法笔记、票 14 与几张票的改动）里新引的代码与文档句子，核在 `48ca93e2d`。同日更晚的自查更正里新引的，核在 `535202926`。
 
@@ -66,13 +66,13 @@ Q4 至 Q6 是用户自己的决定。
 | 客户价 | 15 → 04 | 价卡授权 | 15 能：只出决定，一篇 ADR。04 等 15 |
 | 报价 | 15 → 08 → 09 → 10 → 11 → 12 → 13 | Quotation 一行 | 等 15。文档先行。11 另等 01；13 另等 15 拆出的实现票 |
 | 毛利 | 05 | 毛利 | 能。先只对面单渠道服务的包裹；随票立一篇 ADR。它也是低毛利提示（[ADR-0366](../../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）的前置 |
-| 分票 | 06 → 07、14 | 分票 | 06 能。07、14 等 06，各随票立一篇 ADR |
+| 分票 | 06 → 07、14 | 分票 | 06 等一项用户决定（见下面建议里讲 06 的那一条）。07、14 等 06，各随票立一篇 ADR |
 
 **会话建议的先后（2026-11-11）。** 这是建议，不是阻塞边。
 
 1. **先做 15。** 它卡着 04 与报价一整行；它是三个上下文的模型取舍，ADR 进 `main` 前要非作者评审，周期最长。
 2. **01、02 可以同时做。** 它们改的是今天就在用的价卡流程，不依赖任何一处读法。
-3. **06 开工前先定一件事。** ADR-0364 另外三项（档位边界、总额上下限的基数、「其余邮编」行）与它共用一次规范化版本换号，那三项还只是冻结清单上的记录。同批做只换一次号。
+3. **06 开工前先定一件事。** ADR-0364 的档位边界与总额上下限的基数两项，与它共用一次规范化版本换号（决定五），那两项还只是冻结清单上的记录。同批做只换一次号，这要用户定，记在票 06 的 `Blocked by`。「其余邮编」行换的是目录登记那条版本线，不在这一次里。
 4. **05 开工前先核一件事。** 面单渠道服务的包裹，成本今天是不是都能逐件形成。票面「要裁的」里写着没有走通。
 5. **03 随时可以做**，没有人在等它。
 
@@ -87,7 +87,7 @@ Q4 至 Q6 是用户自己的决定。
 | 03 | [合同与协议版本的签署证据](./issues/03-signing-evidence-on-contract-and-agreement-versions.md) | 无；随票立 ADR | ready-for-agent |
 | 04 | [价卡登记时核对它引用的价格方向授权](./issues/04-price-card-registration-verifies-the-direction-authorization-it-cites.md) | 15 | ready-for-agent |
 | 05 | [经营结果按包裹从直接费用与成本派生，先限面单渠道服务](./issues/05-operating-results-are-derived-per-parcel-from-direct-charges-and-costs.md) | 无；随票立 ADR | ready-for-agent |
-| 06 | [票级计价重量的聚合方式落到领域与导入模板](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md) | 无（ADR-0364 已接受） | ready-for-agent |
+| 06 | [票级计价重量的聚合方式落到领域与导入模板](./issues/06-shipment-level-weight-aggregation-lands-in-the-domain-and-the-import-template.md) | 一项用户决定：ADR-0364 另两项是否同批换号（ADR-0364 已接受） | ready-for-agent |
 | 07 | [票级销售计费接进生产](./issues/07-shipment-level-sell-charging-enters-production.md) | 06；随票立 ADR | ready-for-agent |
 | 08 | [ADR 草案「对客报价」的非作者评审、编号与接受](./issues/08-adr-draft-quotation-review-numbering-and-acceptance.md) | 15 | ready-for-agent |
 | 09 | [报价的领域语言与用例落文](./issues/09-quotation-domain-language-and-use-case.md) | 08 | ready-for-agent |
@@ -152,3 +152,10 @@ Q4 至 Q6 是用户自己的决定。
   1. **记下六项决定。** Q1 至 Q3 的答案记为用户认可；Q4 记为重开，票 15 解除阻塞；Q5 记为进首发试点范围，票 08 不再等它；Q6 记为全部激活。「待用户确认」一节改名「用户的决定」。
   2. **激活。** 子票 01 至 15 转 `ready-for-agent`，本规格转 `in-progress`，冻结清单同笔改。分支先合入了当时的 `origin/main`，冻结清单是在合入后的那一版上改的。
   3. **对着最新的 `main` 补正三张票。** 同日 `main` 新接受了 ADR-0377。票 14 原来没有写明它要改的是 ADR-0171 决定四已经定下的做法，评价对象也已是五种，现已补上。票 15 补上第三处登记（仓储计费采用登记），以及 ADR-0190 决定三已有的那条从合同到结算账户的链。票 07 补一条另立 SELL 请求身份的先例。
+- 2026-11-11（非作者评审后的修订）：评审对象是分支提交 `03ec1ac63`，相对 `main` 的 `31d1cd16b`，结论两轴无阻断、六条非阻断。会话逐条对原文核过，都属实，都改了。改之前的版本在提交 `03ec1ac63`。
+  1. **票 06 与本规格读错了 ADR-0364 决定五。** 原写档位边界、总额上下限的基数与「其余邮编」行都和票级聚合共用一次换号。决定五写的是决定一至三同批一次换号，决定四加在目录登记的规范化形状上。改为只有前两项与票 06 共用。
+  2. **票 06 的待用户决定没有进阻塞边。** 票面写着开工前先向用户问一次，`Blocked by` 却是无。改为指向那项用户决定；状态不变。
+  3. **ADR 草案一处位置词指错了节。** 「客户仍按其合同价结算」在 `PILOT-SCOPE.md`「已确认目标」，不在「明确不包含」。改为点名那一节。
+  4. **ADR 草案决定六与票 13 的「没登记不设门」。** 与红线里租户取值拒绝默认值相抵，也与草案自己「三类」一段不一致；票 03 把同一处写进了「要裁的」，这两处没写。补上读面答未配置，并记进草案的越权风险点与票 13「要裁的」。这一条没有裁，只是写明了。
+  5. **票 07 引的 ADR-0190 决定一那一句已被 ADR-0229 部分停用。** 补注自然键另加代次。
+  6. **本规格写「三类归属写在各票」，票 08、09、15 没有这一节。** 改成如实的说法。
