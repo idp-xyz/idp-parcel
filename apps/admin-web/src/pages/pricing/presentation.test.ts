@@ -10,8 +10,10 @@ test('中文说明原样用，英文或缺失的说明改用费用代码的中�
   equal(chargeLineName({ code: 'OVERSIZE_SURCHARGE', description: '' }), '超尺寸费');
 });
 
-// 计价缺项封闭集新两码（ADR-0381 决定二，票 declared-goods-lines/27）：寄件邮编与尺寸也有运营译法。
-test('缺项码新两码有运营译法', () => {
+// 计价缺项封闭集新两码（ADR-0381 决定二，票 declared-goods-lines/27）：寄件邮编与尺寸也有运营译法；重量或量纲是评审顺手
+// 补齐的先在缺漏。译法盖没盖满封闭集由 shipment-request/stall-reasons.contract.test.ts 对着 Go 源核。
+test('缺项码新词条有运营译法', () => {
   equal(estimateMissingLabels.ORIGIN_POSTAL, '寄件邮编（这张价卡的分区目录按始发邮编前缀分区）');
   equal(estimateMissingLabels.DIMENSIONS, '尺寸（这张价卡按尺寸或体积重判价，要逐件给长宽高）');
+  equal(estimateMissingLabels.MEASUREMENT, '重量或量纲（这一件的重量或重量单位读不出，计价只取申报的测量，不替你补）');
 });

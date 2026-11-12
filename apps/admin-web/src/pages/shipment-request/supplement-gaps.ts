@@ -15,6 +15,11 @@ const missingWords: Record<string, string> = {
   ESTIMATE_ORIGIN_POSTAL_MISSING: '寄件邮编',
 };
 
+/** 词表里受理前估价那一族的缺口码,给契约测试对着 Go 源核两边字面是否一致。 */
+export const knownEstimateSupplementGapCodes: readonly string[] = Object.keys(missingWords).filter((code) =>
+  code.startsWith('ESTIMATE_'),
+);
+
 export interface SupplementGapLine {
   /** 包裹号;委托级的缺口为空串。 */
   parcelId: string;

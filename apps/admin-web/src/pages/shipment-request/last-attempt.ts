@@ -97,6 +97,9 @@ interface DeclarationIncompleteView {
  * （lastAttemptEstimateGapCodes），含卡侧两码（ZONE / ADDRESS_NATURE）就是这张卡做不了受理前估价——写明卡缺什么与该登什么，
  * 不催客户补一件白补的事；否则等客户补充时逐条列任务上的补件缺口（指件的带件、委托级的写「委托缺…」），句尾说客户补充后
  * 自动续办。两格都说不出细的（如照旧内部重试那一路）答 undefined，走底句。
+ *
+ * 卡侧分支有意不看续办方：后端若违反 ADR-0381「等运营登记先」、交来卡侧码却配着等客户补充的续办方，屏上仍是卡侧停因，
+ * 不另起续办句、也不带客户补充尾句——宁可少一句，也不照错的那一格催客户去补一件白补的事。
  */
 function declarationIncompleteViewOf(task: AcceptanceTaskRecord): DeclarationIncompleteView | undefined {
   const gapCodes = task.lastAttemptEstimateGapCodes ?? [];
