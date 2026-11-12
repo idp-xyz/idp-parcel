@@ -35,3 +35,10 @@ Blocked by: 无
 - `internal/parcelpricing/domain/weight_only_card_no_dimensions_test.go`：三组用例——实重附加费的卡无尺寸评价形成、阈值照判（25kg 命中 / 10kg 不命中）；自身计价重量拒收条款（`ACTUAL_ONLY`）无尺寸判出拒收答不可计价；读最长边的卡无尺寸照旧停 `PACKAGE_FEATURES_UNAVAILABLE`。既有 `TestMissingDimensionsLeaveTheDerivedWeightsUnavailableNotZero`（`MAX` 策略）不动、仍绿——`MAX` 经 `RequiresDeclaredDimensions` 照旧要尺寸。
 - `docs/adr/0381-…md`：Status 行补读法注记（本票），正文与分流不动。
 - 编排一侧零改动：估价口的分流（`form_estimate_evaluations.go` 用同一判据预点名 `DIMENSIONS`）与结算折叠处照旧；受理前估价、正式 `SELL` 评价与运营试算三条路同走 `evaluate()`，同被修复。
+- **存量注记（评审应-2）**：此前被折成 `ESTIMATE_TRIAL_WITHOUT_TOTAL`、已停进等运营登记的存量委托不随本修复自动解开——按 ADR-0383 决定二，该租户此后任意一封「参数已登记」信封重驱时重问、评到底；等不来登记动作的由运营续办口（`parcel-settlement-register evaluation-resume` 按包裹点名）续办，不做一次性重驱。
+- **重放注记（评审应-3）**：修复前若有「只实重卡 + 缺尺寸」停 `PACKAGE_FEATURES_UNAVAILABLE` 的正式评价已入册，治理重放在新构建下重算会完成、与原判不一致，如实答 `CONFLICT + REPLAY_RESULT_MISMATCH`——这是行为变更的如实报告，不是假冲突，无需迁移；读到这类冲突溯源指本票。
+
+## 评审
+
+- 非作者评审一轮（子代理，隔离检出钉 `052785a88`）：阻断 1——UC-PP-001 `AT-PP-024`「缺尺寸→待判断」与新行为相抵、未同笔更新；应改 3——ADR-0347 缺读法注记、存量等运营登记委托无解法注记、存量停驻评价重放改判没记录；可留 3——`weightOnlyFeatures` 错误分支不可达（防御性，留）、`settleAgainstExisting` 注释说摘要含解释与事实不符（顺手修了）、UC-PP-001「给开发的交接」承接票 26 那行陈旧（顺手补了落地注）。机制核验全过：判据覆盖完备（重量策略封闭两值、五种尺寸派生源全在清单、条件最低计价重量的触发也进 triggers）、解释行不进语义摘要与重放判等、改动只落在「缺尺寸且判据为假」这一必停支、编排与结算消费侧不需跟改（估价路修复后 `PACKAGE_FEATURES_UNAVAILABLE` 不可达，正式路映射照旧成立）。
+- 修订：按阻断与应改各条改 UC-PP-001 `AT-PP-024` 行（补限定与票指针）、ADR-0347 Status 读法注记、票面存量与重放两条注记，并顺手修可留两条。
